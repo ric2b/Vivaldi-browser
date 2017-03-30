@@ -4,8 +4,10 @@
 
 #include "ui/views/animation/ink_drop_hover.h"
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
@@ -23,7 +25,7 @@ class InkDropHoverTest : public testing::Test {
 
  protected:
   // The test target.
-  scoped_ptr<InkDropHover> ink_drop_hover_;
+  std::unique_ptr<InkDropHover> ink_drop_hover_;
 
   // Allows privileged access to the the |ink_drop_hover_|.
   InkDropHoverTestApi test_api_;

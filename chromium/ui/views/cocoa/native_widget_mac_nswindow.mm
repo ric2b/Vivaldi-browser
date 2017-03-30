@@ -12,6 +12,10 @@
 #include "ui/views/widget/native_widget_mac.h"
 #include "ui/views/widget/widget_delegate.h"
 
+@interface NSWindow (Private)
+- (BOOL)hasKeyAppearance;
+@end
+
 @interface NativeWidgetMacNSWindow ()
 - (ViewsNSWindowDelegate*)viewsNSWindowDelegate;
 - (views::Widget*)viewsWidget;
@@ -39,6 +43,12 @@
     commandDispatcher_.reset([[CommandDispatcher alloc] initWithOwner:self]);
   }
   return self;
+}
+
+// This override doesn't do anything, but keeping it helps diagnose lifetime
+// issues in crash stacktraces by inserting a symbol on NativeWidgetMacNSWindow.
+- (void)dealloc {
+  [super dealloc];
 }
 
 // Public methods.
@@ -91,10 +101,10 @@
 }
 
 // Lets the traffic light buttons on the parent window keep their active state.
-- (BOOL)_sharesParentKeyState {
-  // Follow -canBecomeMainWindow unless the window provides its own buttons.
-  return ([self styleMask] & NSClosableWindowMask) == 0 &&
-         ![self canBecomeMainWindow];
+- (BOOL)hasKeyAppearance {
+  if ([self delegate] && [self viewsWidget]->IsAlwaysRenderAsActive())
+    return YES;
+  return [super hasKeyAppearance];
 }
 
 // Override sendEvent to allow key events to be forwarded to a toolkit-views
@@ -199,9 +209,13 @@
   // command handler, defer to AppController.
   if ([item action] == @selector(commandDispatch:) ||
       [item action] == @selector(commandDispatchUsingKeyModifiers:)) {
-    return commandHandler_
-               ? [commandHandler_ validateUserInterfaceItem:item window:self]
-               : [[NSApp delegate] validateUserInterfaceItem:item];
+    if (commandHandler_)
+      return [commandHandler_ validateUserInterfaceItem:item window:self];
+
+    id appController = [NSApp delegate];
+    DCHECK([appController
+        conformsToProtocol:@protocol(NSUserInterfaceValidations)]);
+    return [appController validateUserInterfaceItem:item];
   }
 
   return [super validateUserInterfaceItem:item];

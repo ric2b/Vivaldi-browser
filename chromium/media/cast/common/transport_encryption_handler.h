@@ -9,12 +9,13 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 #include "base/threading/non_thread_safe.h"
+#include "media/cast/common/frame_id.h"
 
 namespace crypto {
 class Encryptor;
@@ -31,19 +32,19 @@ class TransportEncryptionHandler : public base::NonThreadSafe {
 
   bool Initialize(const std::string& aes_key, const std::string& aes_iv_mask);
 
-  bool Encrypt(uint32_t frame_id,
+  bool Encrypt(FrameId frame_id,
                const base::StringPiece& data,
                std::string* encrypted_data);
 
-  bool Decrypt(uint32_t frame_id,
+  bool Decrypt(FrameId frame_id,
                const base::StringPiece& ciphertext,
                std::string* plaintext);
 
   bool is_activated() const { return is_activated_; }
 
  private:
-  scoped_ptr<crypto::SymmetricKey> key_;
-  scoped_ptr<crypto::Encryptor> encryptor_;
+  std::unique_ptr<crypto::SymmetricKey> key_;
+  std::unique_ptr<crypto::Encryptor> encryptor_;
   std::string iv_mask_;
   bool is_activated_;
 

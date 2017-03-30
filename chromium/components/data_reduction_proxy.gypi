@@ -20,6 +20,8 @@
         'data_reduction_proxy/core/browser/data_reduction_proxy_config_service_client.h',
         'data_reduction_proxy/core/browser/data_reduction_proxy_configurator.cc',
         'data_reduction_proxy/core/browser/data_reduction_proxy_configurator.h',
+        'data_reduction_proxy/core/browser/data_reduction_proxy_data.cc',
+        'data_reduction_proxy/core/browser/data_reduction_proxy_data.h',
         #'data_reduction_proxy/core/browser/data_reduction_proxy_debug_ui_service.h',
         'data_reduction_proxy/core/browser/data_reduction_proxy_delegate.cc',
         'data_reduction_proxy/core/browser/data_reduction_proxy_delegate.h',
@@ -77,6 +79,8 @@
         'data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h',
         'data_reduction_proxy/core/common/data_reduction_proxy_switches.cc',
         'data_reduction_proxy/core/common/data_reduction_proxy_switches.h',
+        'data_reduction_proxy/core/common/data_reduction_proxy_util.cc',
+        'data_reduction_proxy/core/common/data_reduction_proxy_util.h',
         'data_reduction_proxy/core/common/lofi_decider.h',
         'data_reduction_proxy/core/common/lofi_ui_service.h',
      ],
@@ -91,9 +95,9 @@
            'type': 'static_library',
            'dependencies': [
              '<@(data_reduction_proxy_core_browser_deps)',
-             '../net/net.gyp:net_small',
-             '../url/url.gyp:url_lib_use_icu_alternatives_on_android',
-             'data_reduction_proxy_core_common_small',
+             '../net/net.gyp:net',
+             '../url/url.gyp:url_lib',
+             'data_reduction_proxy_core_common',
              'data_reduction_proxy_proto',
            ],
            'include_dirs': [
@@ -101,22 +105,6 @@
            ],
            'sources': [
              '<@(data_reduction_proxy_core_browser_sources)'
-           ],
-         },
-         {
-           # GN version: //components/data_reduction_proxy/core/common:common_small
-           'target_name': 'data_reduction_proxy_core_common_small',
-           'type': 'static_library',
-           'dependencies': [
-             '../base/base.gyp:base',
-             '../url/url.gyp:url_lib_use_icu_alternatives_on_android',
-             'data_reduction_proxy_proto',
-           ],
-           'include_dirs': [
-             '..',
-           ],
-           'sources': [
-             '<@(data_reduction_proxy_core_common_sources)'
            ],
          },
       ],
@@ -237,8 +225,6 @@
         # Note: sources list duplicated in GN build.
         'data_reduction_proxy/core/browser/data_reduction_proxy_config_test_utils.cc',
         'data_reduction_proxy/core/browser/data_reduction_proxy_config_test_utils.h',
-        'data_reduction_proxy/core/browser/data_reduction_proxy_configurator_test_utils.cc',
-        'data_reduction_proxy/core/browser/data_reduction_proxy_configurator_test_utils.h',
         'data_reduction_proxy/core/browser/data_reduction_proxy_settings_test_utils.cc',
         'data_reduction_proxy/core/browser/data_reduction_proxy_settings_test_utils.h',
         'data_reduction_proxy/core/browser/data_reduction_proxy_test_utils.cc',

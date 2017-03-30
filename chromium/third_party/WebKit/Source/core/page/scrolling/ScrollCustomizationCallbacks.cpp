@@ -26,6 +26,11 @@ void ScrollCustomizationCallbacks::setApplyScroll(Element* element, ScrollStateC
     m_applyScrollCallbacks.set(element, scrollStateCallback);
 }
 
+void ScrollCustomizationCallbacks::removeApplyScroll(Element* element)
+{
+    m_applyScrollCallbacks.remove(element);
+}
+
 ScrollStateCallback* ScrollCustomizationCallbacks::getApplyScroll(Element* element)
 {
     auto it = m_applyScrollCallbacks.find(element);
@@ -33,13 +38,5 @@ ScrollStateCallback* ScrollCustomizationCallbacks::getApplyScroll(Element* eleme
         return nullptr;
     return it->value.get();
 }
-
-#if !ENABLE(OILPAN)
-void ScrollCustomizationCallbacks::removeCallbacksForElement(Element* element)
-{
-    m_applyScrollCallbacks.remove(element);
-    m_distributeScrollCallbacks.remove(element);
-}
-#endif
 
 } // namespace blink

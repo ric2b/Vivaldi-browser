@@ -48,7 +48,7 @@ class H264VideoToolboxEncoder : public VideoEncoder,
       const FrameEncodedCallback& frame_encoded_callback) final;
   void SetBitRate(int new_bit_rate) final;
   void GenerateKeyFrame() final;
-  scoped_ptr<VideoFrameFactory> CreateVideoFrameFactory() final;
+  std::unique_ptr<VideoFrameFactory> CreateVideoFrameFactory() final;
   void EmitFrames() final;
 
   // base::PowerObserver
@@ -110,8 +110,8 @@ class H264VideoToolboxEncoder : public VideoEncoder,
   // Video frame factory tied to the encoder.
   scoped_refptr<VideoFrameFactoryImpl> video_frame_factory_;
 
-  // The ID of the last frame that was emitted.
-  uint32_t last_frame_id_;
+  // The ID for the next frame to be emitted.
+  FrameId next_frame_id_;
 
   // Force next frame to be a keyframe.
   bool encode_next_frame_as_keyframe_;

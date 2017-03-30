@@ -101,8 +101,9 @@ font-size interpolable, inherited, font, name_for_methods=Size, getter=getSize, 
 font-size-adjust runtime_flag=CSSFontSizeAdjust, interpolable, inherited, font, name_for_methods=SizeAdjust, converter=convertFontSizeAdjust
 font-stretch inherited, font, type_name=FontStretch, name_for_methods=Stretch
 font-style inherited, font, type_name=FontStyle, name_for_methods=Style
-font-variant inherited, font, type_name=FontVariant, name_for_methods=Variant
 font-variant-ligatures inherited, font, type_name=VariantLigatures, name_for_methods=VariantLigatures, converter=convertFontVariantLigatures
+font-variant-caps inherited, font, name_for_methods=VariantCaps, converter=convertFontVariantCaps
+font-variant-numeric inherited, font, name_for_methods=VariantNumeric, converter=convertFontVariantNumeric
 font-weight interpolable, inherited, font, type_name=FontWeight, name_for_methods=Weight, converter=convertFontWeight
 font-feature-settings inherited, font, name_for_methods=FeatureSettings, converter=convertFontFeatureSettings
 -webkit-font-smoothing inherited, font, type_name=FontSmoothingMode
@@ -177,7 +178,7 @@ clip-rule inherited, svg, type_name=WindRule
 color-interpolation inherited, svg
 color-interpolation-filters inherited, svg, type_name=EColorInterpolation
 color-rendering inherited, svg
-column-fill runtime_flag=ColumnFill, type_name=ColumnFill
+column-fill type_name=ColumnFill
 contain runtime_flag=CSSContainment, converter=convertFlags<Containment>
 content custom_all
 counter-increment custom_all
@@ -214,6 +215,7 @@ grid-template-areas runtime_flag=CSSGridLayout, custom_all
 grid-template-columns runtime_flag=CSSGridLayout, custom_all
 grid-template-rows runtime_flag=CSSGridLayout, custom_all
 height interpolable, initial=initialSize, converter=convertLengthSizing
+hyphens runtime_flag=CSSHyphens, inherited, type_name=Hyphens
 image-rendering inherited
 image-orientation runtime_flag=ImageOrientation, inherited, name_for_methods=RespectImageOrientation, converter=convertImageOrientation
 isolation
@@ -249,7 +251,7 @@ object-fit type_name=ObjectFit
 object-position interpolable, converter=convertPosition
 opacity interpolable, type_name=float
 order type_name=int
-orphans interpolable, inherited, type_name=short, custom_all
+orphans interpolable, inherited, type_name=short
 outline-color interpolable, custom_all
 outline-offset interpolable, converter=convertComputedLength<int>
 outline-style custom_all
@@ -399,7 +401,7 @@ column-width interpolable, converter=convertComputedLength<float>, custom_all
 -webkit-user-modify inherited
 -webkit-user-select inherited
 white-space inherited
-widows interpolable, inherited, type_name=short, custom_all
+widows interpolable, inherited, type_name=short
 width interpolable, initial=initialSize, converter=convertLengthSizing, typedom_types=[Length], keywords=[auto], supports_percentage
 will-change custom_all
 word-break inherited
@@ -471,7 +473,8 @@ border-top longhands=border-top-width;border-top-style;border-top-color
 border-width longhands=border-top-width;border-right-width;border-bottom-width;border-left-width
 flex longhands=flex-grow;flex-shrink;flex-basis
 flex-flow longhands=flex-direction;flex-wrap
-font longhands=font-style;font-variant;font-weight;font-stretch;font-size;line-height;font-family
+font longhands=font-style;font-variant-ligatures;font-variant-caps;font-variant-numeric;font-weight;font-stretch;font-size;line-height;font-family
+font-variant longhands=font-variant-ligatures;font-variant-caps;font-variant-numeric
 grid runtime_flag=CSSGridLayout, longhands=grid-template-rows;grid-template-columns;grid-template-areas;grid-auto-flow;grid-auto-rows;grid-auto-columns;grid-column-gap;grid-row-gap
 grid-area runtime_flag=CSSGridLayout, longhands=grid-row-start;grid-column-start;grid-row-end;grid-column-end
 grid-column runtime_flag=CSSGridLayout, longhands=grid-column-start;grid-column-end

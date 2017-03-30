@@ -9,7 +9,8 @@
 #include "modules/ModulesExport.h"
 #include "modules/canvas2d/BaseRenderingContext2D.h"
 #include "platform/graphics/ImageBuffer.h"
-#include "third_party/skia/include/core/SkCanvas.h"
+
+class SkCanvas;
 
 namespace blink {
 
@@ -23,7 +24,7 @@ class MODULES_EXPORT PaintRenderingContext2D : public BaseRenderingContext2D, pu
 public:
     static PaintRenderingContext2D* create(PassOwnPtr<ImageBuffer> imageBuffer)
     {
-        return new PaintRenderingContext2D(imageBuffer);
+        return new PaintRenderingContext2D(std::move(imageBuffer));
     }
 
     // BaseRenderingContext2D
@@ -32,12 +33,12 @@ public:
     // is always clean, and unable to taint it.
     bool originClean() const final { return true; }
     void setOriginTainted() final { }
-    bool wouldTaintOrigin(CanvasImageSource*) final { return false; }
+    bool wouldTaintOrigin(CanvasImageSource*, ExecutionContext*) final { return false; }
 
     int width() const final;
     int height() const final;
 
-    bool hasImageBuffer() const final { return m_imageBuffer; }
+    bool hasImageBuffer() const final { return m_imageBuffer.get(); }
     ImageBuffer* imageBuffer() const final { return m_imageBuffer.get(); }
 
     bool parseColorOrCurrentColor(Color&, const String& colorString) const final;
@@ -56,6 +57,7 @@ public:
     // that we don't have a filter set.
     bool stateHasFilter() final { return false; }
     SkImageFilter* stateGetFilter() final { return nullptr; }
+    void snapshotStateForFilter() final { }
 
     void validateStateStack() final;
 

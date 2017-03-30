@@ -266,8 +266,6 @@ void ToolbarView::Init() {
                          base::Bind(&ToolbarView::OnShowHomeButtonChanged,
                                     base::Unretained(this)));
 
-  browser_actions_->Init();
-
   // Accessibility specific tooltip text.
   if (content::BrowserAccessibilityState::GetInstance()->
           IsAccessibleBrowser()) {
@@ -734,7 +732,6 @@ void ToolbarView::LoadImages() {
   const ui::ThemeProvider* tp = GetThemeProvider();
 
   if (ui::MaterialDesignController::IsModeMaterial()) {
-    const int kButtonSize = 16;
     const SkColor normal_color =
         tp->GetColor(ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON);
     const SkColor disabled_color =
@@ -742,21 +739,21 @@ void ToolbarView::LoadImages() {
 
     back_->SetImage(views::Button::STATE_NORMAL,
                     gfx::CreateVectorIcon(gfx::VectorIconId::NAVIGATE_BACK,
-                                          kButtonSize, normal_color));
+                                          normal_color));
     back_->SetImage(views::Button::STATE_DISABLED,
                     gfx::CreateVectorIcon(gfx::VectorIconId::NAVIGATE_BACK,
-                                          kButtonSize, disabled_color));
+                                          disabled_color));
     forward_->SetImage(
         views::Button::STATE_NORMAL,
-        gfx::CreateVectorIcon(gfx::VectorIconId::NAVIGATE_FORWARD, kButtonSize,
+        gfx::CreateVectorIcon(gfx::VectorIconId::NAVIGATE_FORWARD,
                               normal_color));
     forward_->SetImage(
         views::Button::STATE_DISABLED,
-        gfx::CreateVectorIcon(gfx::VectorIconId::NAVIGATE_FORWARD, kButtonSize,
+        gfx::CreateVectorIcon(gfx::VectorIconId::NAVIGATE_FORWARD,
                               disabled_color));
     home_->SetImage(views::Button::STATE_NORMAL,
                     gfx::CreateVectorIcon(gfx::VectorIconId::NAVIGATE_HOME,
-                                          kButtonSize, normal_color));
+                                          normal_color));
     app_menu_button_->UpdateIcon();
 
     back_->set_ink_drop_base_color(normal_color);
@@ -781,9 +778,8 @@ void ToolbarView::LoadImages() {
 
 void ToolbarView::ShowCriticalNotification() {
 #if defined(OS_WIN)
-  CriticalNotificationBubbleView* bubble_delegate =
-      new CriticalNotificationBubbleView(app_menu_button_);
-  views::BubbleDelegateView::CreateBubble(bubble_delegate)->Show();
+  views::BubbleDialogDelegateView::CreateBubble(
+      new CriticalNotificationBubbleView(app_menu_button_))->Show();
 #endif
 }
 

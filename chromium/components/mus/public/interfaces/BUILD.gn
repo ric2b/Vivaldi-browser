@@ -7,13 +7,17 @@ import("//mojo/public/tools/bindings/mojom.gni")
 mojom("interfaces") {
   sources = [
     "accelerator_registrar.mojom",
+    "channel_handle.mojom",
+    "clipboard.mojom",
     "command_buffer.mojom",
     "compositor_frame.mojom",
     "cursor.mojom",
     "display.mojom",
+    "event_matcher.mojom",
     "gpu.mojom",
+    "gpu_memory_buffer.mojom",
+    "gpu_service.mojom",
     "input_event_constants.mojom",
-    "input_event_matcher.mojom",
     "input_events.mojom",
     "input_key_codes.mojom",
     "mus_constants.mojom",
@@ -23,6 +27,7 @@ mojom("interfaces") {
     "window_manager.mojom",
     "window_manager_constants.mojom",
     "window_manager_factory.mojom",
+    "window_server_test.mojom",
     "window_tree.mojom",
     "window_tree_host.mojom",
   ]
@@ -33,11 +38,8 @@ mojom("interfaces") {
   ]
 
   deps = [
-    "//gpu/command_buffer/common:interfaces",
+    "//gpu/ipc/common:interfaces",
     "//ui/mojo/geometry:interfaces",
     "//ui/mojo/ime:interfaces",
   ]
-
-  typemaps = [ "//gpu/command_buffer/common/mojo.typemap" ]
-  typemap_deps = [ "//gpu/ipc/common:command_buffer_traits" ]
 }

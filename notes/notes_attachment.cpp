@@ -2,7 +2,6 @@
 
 #include <string>
 #include "base/base64.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "base/json/json_string_value_serializer.h"

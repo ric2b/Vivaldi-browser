@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/output/copy_output_result.h"
@@ -24,6 +25,7 @@
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
+#include "content/common/text_input_state.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/browser_plugin_guest_mode.h"
@@ -41,6 +43,9 @@ RenderWidgetHostViewChildFrame::RenderWidgetHostViewChildFrame(
       current_surface_scale_factor_(1.f),
       ack_pending_count_(0),
       frame_connector_(nullptr),
+      begin_frame_source_(nullptr),
+      observing_begin_frame_source_(false),
+      parent_surface_id_namespace_(0),
       weak_factory_(this) {
   id_allocator_ = CreateSurfaceIdAllocator();
   RegisterSurfaceNamespaceId();
@@ -53,9 +58,51 @@ RenderWidgetHostViewChildFrame::~RenderWidgetHostViewChildFrame() {
     surface_factory_->Destroy(surface_id_);
 }
 
+void RenderWidgetHostViewChildFrame::SetCrossProcessFrameConnector(
+    CrossProcessFrameConnector* frame_connector) {
+  if (frame_connector_ == frame_connector)
+    return;
+
+  if (frame_connector_) {
+    if (parent_surface_id_namespace_) {
+      GetSurfaceManager()->UnregisterSurfaceNamespaceHierarchy(
+          parent_surface_id_namespace_, GetSurfaceIdNamespace());
+    }
+    // Unregister the client here, as it is not guaranteed in tests that the
+    // destructor will be called.
+    GetSurfaceManager()->UnregisterSurfaceFactoryClient(
+        id_allocator_->id_namespace());
+
+    parent_surface_id_namespace_ = 0;
+  }
+  frame_connector_ = frame_connector;
+  if (frame_connector_) {
+    GetSurfaceManager()->RegisterSurfaceFactoryClient(
+        id_allocator_->id_namespace(), this);
+    RenderWidgetHostViewBase* parent_view =
+        frame_connector_->GetParentRenderWidgetHostView();
+    if (parent_view) {
+      parent_surface_id_namespace_ = parent_view->GetSurfaceIdNamespace();
+      DCHECK_NE(parent_surface_id_namespace_, 0u);
+      GetSurfaceManager()->RegisterSurfaceNamespaceHierarchy(
+          parent_surface_id_namespace_, GetSurfaceIdNamespace());
+    }
+  }
+}
+
 void RenderWidgetHostViewChildFrame::InitAsChild(
     gfx::NativeView parent_view) {
   NOTREACHED();
+}
+
+bool RenderWidgetHostViewChildFrame::OnMessageReceived(
+    const IPC::Message& message) {
+  bool handled = true;
+  IPC_BEGIN_MESSAGE_MAP(RenderWidgetHostViewChildFrame, message)
+    IPC_MESSAGE_HANDLER(ViewHostMsg_SetNeedsBeginFrames, OnSetNeedsBeginFrames)
+    IPC_MESSAGE_UNHANDLED(handled = false)
+  IPC_END_MESSAGE_MAP()
+  return handled;
 }
 
 RenderWidgetHost* RenderWidgetHostViewChildFrame::GetRenderWidgetHost() const {
@@ -148,18 +195,13 @@ gfx::Vector2dF RenderWidgetHostViewChildFrame::GetLastScrollOffset() const {
 
 gfx::NativeView RenderWidgetHostViewChildFrame::GetNativeView() const {
   NOTREACHED();
-  return NULL;
-}
-
-gfx::NativeViewId RenderWidgetHostViewChildFrame::GetNativeViewId() const {
-  NOTREACHED();
-  return 0;
+  return nullptr;
 }
 
 gfx::NativeViewAccessible
 RenderWidgetHostViewChildFrame::GetNativeViewAccessible() {
   NOTREACHED();
-  return NULL;
+  return nullptr;
 }
 
 void RenderWidgetHostViewChildFrame::SetBackgroundColor(SkColor color) {
@@ -219,7 +261,7 @@ void RenderWidgetHostViewChildFrame::SetIsLoading(bool is_loading) {
 }
 
 void RenderWidgetHostViewChildFrame::TextInputStateChanged(
-    const ViewHostMsg_TextInputState_Params& params) {
+    const TextInputState& params) {
   // TODO(kenrb): Implement.
 }
 
@@ -236,8 +278,8 @@ void RenderWidgetHostViewChildFrame::Destroy() {
   // have already been cleared when RenderWidgetHostViewBase notified its
   // observers of our impending destruction.
   if (frame_connector_) {
-    frame_connector_->set_view(NULL);
-    frame_connector_ = NULL;
+    frame_connector_->set_view(nullptr);
+    SetCrossProcessFrameConnector(nullptr);
   }
 
   // We notify our observers about shutdown here since we are about to release
@@ -245,8 +287,8 @@ void RenderWidgetHostViewChildFrame::Destroy() {
   // RenderWidgetHostInputEventRouter afterwards.
   NotifyObserversAboutShutdown();
 
-  host_->SetView(NULL);
-  host_ = NULL;
+  host_->SetView(nullptr);
+  host_ = nullptr;
   base::MessageLoop::current()->DeleteSoon(FROM_HERE, this);
 }
 
@@ -273,8 +315,8 @@ void RenderWidgetHostViewChildFrame::UnlockCompositingSurface() {
 }
 
 void RenderWidgetHostViewChildFrame::RegisterSurfaceNamespaceId() {
-  DCHECK(host_);
-  if (host_->delegate() && host_->delegate()->GetInputEventRouter()) {
+  // If Destroy() has been called before we get here, host_ may be null.
+  if (host_ && host_->delegate() && host_->delegate()->GetInputEventRouter()) {
     RenderWidgetHostInputEventRouter* router =
         host_->delegate()->GetInputEventRouter();
     if (!router->is_registered(GetSurfaceIdNamespace()))
@@ -288,6 +330,27 @@ void RenderWidgetHostViewChildFrame::UnregisterSurfaceNamespaceId() {
     host_->delegate()->GetInputEventRouter()->RemoveSurfaceIdNamespaceOwner(
         GetSurfaceIdNamespace());
   }
+}
+
+void RenderWidgetHostViewChildFrame::WheelEventAck(
+    const blink::WebMouseWheelEvent& event,
+    InputEventAckState ack_result) {
+  if (frame_connector_ &&
+      (ack_result == INPUT_EVENT_ACK_STATE_NOT_CONSUMED ||
+       ack_result == INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS))
+    frame_connector_->BubbleScrollEvent(event);
+}
+
+void RenderWidgetHostViewChildFrame::GestureEventAck(
+    const blink::WebGestureEvent& event,
+    InputEventAckState ack_result) {
+  bool not_consumed = ack_result == INPUT_EVENT_ACK_STATE_NOT_CONSUMED ||
+                      ack_result == INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS;
+  // GestureScrollBegin/End are always consumed by the target frame, so we only
+  // forward GestureScrollUpdate.
+  if (frame_connector_ &&
+      event.type == blink::WebInputEvent::GestureScrollUpdate && not_consumed)
+    frame_connector_->BubbleScrollEvent(event);
 }
 
 void RenderWidgetHostViewChildFrame::SurfaceDrawn(uint32_t output_surface_id,
@@ -305,7 +368,7 @@ void RenderWidgetHostViewChildFrame::SurfaceDrawn(uint32_t output_surface_id,
 
 void RenderWidgetHostViewChildFrame::OnSwapCompositorFrame(
     uint32_t output_surface_id,
-    scoped_ptr<cc::CompositorFrame> frame) {
+    std::unique_ptr<cc::CompositorFrame> frame) {
   TRACE_EVENT0("content",
                "RenderWidgetHostViewChildFrame::OnSwapCompositorFrame");
 
@@ -337,7 +400,7 @@ void RenderWidgetHostViewChildFrame::OnSwapCompositorFrame(
 
   if (!surface_factory_) {
     cc::SurfaceManager* manager = GetSurfaceManager();
-    surface_factory_ = make_scoped_ptr(new cc::SurfaceFactory(manager, this));
+    surface_factory_ = base::WrapUnique(new cc::SurfaceFactory(manager, this));
   }
 
   if (surface_id_.is_null()) {
@@ -371,7 +434,7 @@ void RenderWidgetHostViewChildFrame::ProcessFrameSwappedCallbacks() {
   // before we start, and discard the old list entries when we are done.
   FrameSwappedCallbackList process_callbacks;
   process_callbacks.swap(frame_swapped_callbacks_);
-  for (scoped_ptr<base::Closure>& callback : process_callbacks)
+  for (std::unique_ptr<base::Closure>& callback : process_callbacks)
     callback->Run();
 }
 
@@ -466,6 +529,11 @@ gfx::Point RenderWidgetHostViewChildFrame::TransformPointToRootCoordSpace(
 }
 
 #if defined(OS_MACOSX)
+ui::AcceleratedWidgetMac*
+RenderWidgetHostViewChildFrame::GetAcceleratedWidgetMac() const {
+  return nullptr;
+}
+
 void RenderWidgetHostViewChildFrame::SetActive(bool active) {
 }
 
@@ -488,7 +556,7 @@ void RenderWidgetHostViewChildFrame::StopSpeaking() {
 #endif  // defined(OS_MACOSX)
 
 void RenderWidgetHostViewChildFrame::RegisterFrameSwappedCallback(
-    scoped_ptr<base::Closure> callback) {
+    std::unique_ptr<base::Closure> callback) {
   frame_swapped_callbacks_.push_back(std::move(callback));
 }
 
@@ -500,7 +568,7 @@ void RenderWidgetHostViewChildFrame::CopyFromCompositingSurface(
   if (!IsSurfaceAvailableForCopy()) {
     // Defer submitting the copy request until after a frame is drawn, at which
     // point we should be guaranteed that the surface is available.
-    RegisterFrameSwappedCallback(make_scoped_ptr(new base::Closure(base::Bind(
+    RegisterFrameSwappedCallback(base::WrapUnique(new base::Closure(base::Bind(
         &RenderWidgetHostViewChildFrame::SubmitSurfaceCopyRequest, AsWeakPtr(),
         src_subrect, output_size, callback, preferred_color_type))));
     return;
@@ -517,7 +585,7 @@ void RenderWidgetHostViewChildFrame::SubmitSurfaceCopyRequest(
     const SkColorType preferred_color_type) {
   DCHECK(IsSurfaceAvailableForCopy());
 
-  scoped_ptr<cc::CopyOutputRequest> request =
+  std::unique_ptr<cc::CopyOutputRequest> request =
       cc::CopyOutputRequest::CreateRequest(
           base::Bind(&CopyFromCompositingSurfaceHasResult, output_size,
                      preferred_color_type, callback));
@@ -564,8 +632,42 @@ void RenderWidgetHostViewChildFrame::ReturnResources(
 }
 
 void RenderWidgetHostViewChildFrame::SetBeginFrameSource(
-    cc::BeginFrameSource* begin_frame_source) {
-  // TODO(tansell): Hook this up.
+    cc::BeginFrameSource* source) {
+  if (begin_frame_source_ && observing_begin_frame_source_)
+    begin_frame_source_->RemoveObserver(this);
+  begin_frame_source_ = source;
+  if (begin_frame_source_ && observing_begin_frame_source_)
+    begin_frame_source_->AddObserver(this);
+}
+
+void RenderWidgetHostViewChildFrame::OnBeginFrame(
+    const cc::BeginFrameArgs& args) {
+  host_->Send(new ViewMsg_BeginFrame(host_->GetRoutingID(), args));
+  last_begin_frame_args_ = args;
+}
+
+const cc::BeginFrameArgs&
+RenderWidgetHostViewChildFrame::LastUsedBeginFrameArgs() const {
+  return last_begin_frame_args_;
+}
+
+void RenderWidgetHostViewChildFrame::OnBeginFrameSourcePausedChanged(
+    bool paused) {
+  // Only used on Android WebView.
+}
+
+void RenderWidgetHostViewChildFrame::OnSetNeedsBeginFrames(
+    bool needs_begin_frames) {
+  if (observing_begin_frame_source_ == needs_begin_frames)
+    return;
+
+  observing_begin_frame_source_ = needs_begin_frames;
+  if (begin_frame_source_) {
+    if (observing_begin_frame_source_)
+      begin_frame_source_->AddObserver(this);
+    else
+      begin_frame_source_->RemoveObserver(this);
+  }
 }
 
 BrowserAccessibilityManager*

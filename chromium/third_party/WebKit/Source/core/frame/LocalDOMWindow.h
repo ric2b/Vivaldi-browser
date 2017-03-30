@@ -82,8 +82,8 @@ public:
 
     // EventTarget overrides:
     ExecutionContext* getExecutionContext() const override;
-    const LocalDOMWindow* toDOMWindow() const override;
-    LocalDOMWindow* toDOMWindow() override;
+    const LocalDOMWindow* toLocalDOMWindow() const override;
+    LocalDOMWindow* toLocalDOMWindow() override;
 
     // DOMWindow overrides:
     bool isLocalDOMWindow() const override { return true; }
@@ -117,14 +117,13 @@ public:
     double devicePixelRatio() const override;
     ApplicationCache* applicationCache() const override;
     int orientation() const override;
-    Console* console() const override;
     DOMSelection* getSelection() override;
     void blur() override;
-    void print() override;
+    void print(ScriptState*) override;
     void stop() override;
-    void alert(const String& message = String()) override;
-    bool confirm(const String& message) override;
-    String prompt(const String& message, const String& defaultValue) override;
+    void alert(ScriptState*, const String& message = String()) override;
+    bool confirm(ScriptState*, const String& message) override;
+    String prompt(ScriptState*, const String& message, const String& defaultValue) override;
     bool find(const String&, bool caseSensitive, bool backwards, bool wrap, bool wholeWord, bool searchInFrames, bool showDialog) const override;
 
     // FIXME: ScrollBehaviorSmooth is currently unsupported in VisualViewport.
@@ -146,7 +145,7 @@ public:
     void cancelAnimationFrame(int id) override;
     int requestIdleCallback(IdleRequestCallback*, const IdleRequestOptions&) override;
     void cancelIdleCallback(int id) override;
-    CustomElementsRegistry* customElements() const override;
+    CustomElementsRegistry* customElements(ScriptState*) const override;
     void schedulePostMessage(MessageEvent*, SecurityOrigin* target, PassRefPtr<ScriptCallStack>);
 
     void registerProperty(DOMWindowProperty*);
@@ -204,33 +203,14 @@ public:
 
 protected:
     // EventTarget overrides.
-    bool addEventListenerInternal(const AtomicString& eventType, EventListener*, const EventListenerOptions&) override;
-    bool removeEventListenerInternal(const AtomicString& eventType, EventListener*, const EventListenerOptions&) override;
+    void addedEventListener(const AtomicString& eventType, RegisteredEventListener&) override;
+    void removedEventListener(const AtomicString& eventType, const RegisteredEventListener&) override;
+
+    // Protected DOMWindow overrides.
+    void schedulePostMessage(MessageEvent*, PassRefPtr<SecurityOrigin> target, Document* source) override;
 
 private:
-    // Rather than simply inheriting LocalFrameLifecycleObserver like most other
-    // classes, LocalDOMWindow hides its LocalFrameLifecycleObserver with
-    // composition. This prevents conflicting overloads between DOMWindow, which
-    // has a frame() accessor that returns Frame* for bindings code, and
-    // LocalFrameLifecycleObserver, which has a frame() accessor that returns a
-    // LocalFrame*.
-    class WindowFrameObserver final : public GarbageCollected<WindowFrameObserver>, public LocalFrameLifecycleObserver {
-        USING_GARBAGE_COLLECTED_MIXIN(WindowFrameObserver);
-    public:
-        static WindowFrameObserver* create(LocalDOMWindow*, LocalFrame&);
-
-        DECLARE_VIRTUAL_TRACE();
-
-        // LocalFrameLifecycleObserver overrides:
-        void willDetachFrameHost() override;
-        void contextDestroyed() override;
-
-    private:
-        WindowFrameObserver(LocalDOMWindow*, LocalFrame&);
-
-        Member<LocalDOMWindow> m_window;
-    };
-    friend WTF::OwnedPtrDeleter<WindowFrameObserver>;
+    class WindowFrameObserver;
 
     explicit LocalDOMWindow(LocalFrame&);
     void dispose();
@@ -246,9 +226,6 @@ private:
     Member<Document> m_document;
 
     bool m_shouldPrintWhenFinishedLoading;
-#if ENABLE(ASSERT)
-    bool m_hasBeenReset;
-#endif
 
     HeapHashSet<WeakMember<DOMWindowProperty>> m_properties;
 
@@ -260,7 +237,6 @@ private:
     mutable Member<BarProp> m_scrollbars;
     mutable Member<BarProp> m_statusbar;
     mutable Member<BarProp> m_toolbar;
-    mutable Member<Console> m_console;
     mutable Member<Navigator> m_navigator;
     mutable Member<StyleMedia> m_media;
     mutable Member<CustomElementsRegistry> m_customElements;

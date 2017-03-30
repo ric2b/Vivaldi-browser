@@ -71,7 +71,7 @@ private:
     FEComponentTransfer(Filter*, const ComponentTransferFunction& redFunc, const ComponentTransferFunction& greenFunc,
         const ComponentTransferFunction& blueFunc, const ComponentTransferFunction& alphaFunc);
 
-    PassRefPtr<SkImageFilter> createImageFilter(SkiaImageFilterBuilder&) override;
+    sk_sp<SkImageFilter> createImageFilter() override;
 
     bool affectsTransparentPixels() override;
 

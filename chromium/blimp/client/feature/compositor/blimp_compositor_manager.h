@@ -14,6 +14,13 @@
 namespace blimp {
 namespace client {
 
+class ClientImageSerializationProcessor;
+
+class BlimpCompositorManagerClient {
+ public:
+  virtual void OnSwapBuffersCompleted() = 0;
+};
+
 // The BlimpCompositorManager manages multiple BlimpCompositor instances, each
 // mapped to a render widget on the engine. The compositor corresponding to
 // the render widget initialized on the engine will be the |active_compositor_|.
@@ -24,7 +31,8 @@ class BlimpCompositorManager
     : public RenderWidgetFeature::RenderWidgetFeatureDelegate,
       public BlimpCompositorClient {
  public:
-  explicit BlimpCompositorManager(RenderWidgetFeature* render_widget_feature);
+  explicit BlimpCompositorManager(RenderWidgetFeature* render_widget_feature,
+                                  BlimpCompositorManagerClient* client);
   ~BlimpCompositorManager() override;
 
   void SetVisible(bool visible);
@@ -61,6 +69,7 @@ class BlimpCompositorManager
       std::unique_ptr<cc::proto::CompositorMessage> message) override;
 
   // BlimpCompositorClient implementation.
+  void DidCompleteSwapBuffers() override;
   cc::LayerTreeSettings* GetLayerTreeSettings() override;
   scoped_refptr<base::SingleThreadTaskRunner>
   GetCompositorTaskRunner() override;
@@ -83,7 +92,7 @@ class BlimpCompositorManager
   std::unique_ptr<BlimpGpuMemoryBufferManager> gpu_memory_buffer_manager_;
 
   // Provides the functionality to deserialize images in SkPicture.
-  std::unique_ptr<BlimpImageSerializationProcessor>
+  std::unique_ptr<ClientImageSerializationProcessor>
       image_serialization_processor_;
 
   // A map of render_widget_ids to the BlimpCompositor instance.
@@ -103,6 +112,7 @@ class BlimpCompositorManager
   // BlimpCompositorManager does not own this and it is expected to outlive this
   // BlimpCompositorManager instance.
   RenderWidgetFeature* render_widget_feature_;
+  BlimpCompositorManagerClient* client_;
 
   DISALLOW_COPY_AND_ASSIGN(BlimpCompositorManager);
 };

@@ -38,7 +38,7 @@ class NotesEventRouter : public NotesModelObserver {
  private:
   // Helper to actually dispatch an event to extension listeners.
   void DispatchEvent(const std::string& event_name,
-                     scoped_ptr<base::ListValue> event_args);
+                     std::unique_ptr<base::ListValue> event_args);
 
   content::BrowserContext* browser_context_;
   Notes_Model* model_;
@@ -72,7 +72,7 @@ class NotesAPI : public BrowserContextKeyedAPI, public EventRouter::Observer {
   static const bool kServiceIsNULLWhileTesting = true;
 
   // Created lazily upon OnListenerAdded.
-  scoped_ptr<NotesEventRouter> notes_event_router_;
+  std::unique_ptr<NotesEventRouter> notes_event_router_;
 };
 
 

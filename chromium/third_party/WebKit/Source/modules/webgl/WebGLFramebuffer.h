@@ -26,6 +26,7 @@
 #ifndef WebGLFramebuffer_h
 #define WebGLFramebuffer_h
 
+#include "bindings/core/v8/ScopedPersistent.h"
 #include "modules/webgl/WebGLContextObject.h"
 #include "modules/webgl/WebGLSharedObject.h"
 
@@ -94,6 +95,8 @@ public:
 
     GLenum getReadBuffer() const { return m_readBuffer; }
 
+    ScopedPersistent<v8::Array>* getPersistentCache();
+
     DECLARE_VIRTUAL_TRACE();
 
 protected:
@@ -127,6 +130,8 @@ private:
     Vector<GLenum> m_filteredDrawBuffers;
 
     GLenum m_readBuffer;
+
+    ScopedPersistent<v8::Array> m_attachmentWrappers;
 };
 
 } // namespace blink

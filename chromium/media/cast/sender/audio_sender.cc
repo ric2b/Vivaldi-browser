@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "media/cast/common/rtp_time.h"
 #include "media/cast/net/cast_transport_config.h"
@@ -68,16 +69,13 @@ AudioSender::AudioSender(scoped_refptr<CastEnvironment> cast_environment,
   transport_config.aes_iv_mask = audio_config.aes_iv_mask;
 
   transport_sender->InitializeAudio(
-      transport_config, base::Bind(&AudioSender::OnReceivedCastFeedback,
-                                   weak_factory_.GetWeakPtr()),
-      base::Bind(&AudioSender::OnMeasuredRoundTripTime,
-                 weak_factory_.GetWeakPtr()),
-      base::Bind(&AudioSender::OnReceivedPli, weak_factory_.GetWeakPtr()));
+      transport_config, base::WrapUnique(new FrameSender::RtcpClient(
+                            weak_factory_.GetWeakPtr())));
 }
 
 AudioSender::~AudioSender() {}
 
-void AudioSender::InsertAudio(scoped_ptr<AudioBus> audio_bus,
+void AudioSender::InsertAudio(std::unique_ptr<AudioBus> audio_bus,
                               const base::TimeTicks& recorded_time) {
   DCHECK(cast_environment_->CurrentlyOn(CastEnvironment::MAIN));
 
@@ -110,7 +108,7 @@ base::TimeDelta AudioSender::GetInFlightMediaDuration() const {
 
 void AudioSender::OnEncodedAudioFrame(
     int encoder_bitrate,
-    scoped_ptr<SenderEncodedFrame> encoded_frame,
+    std::unique_ptr<SenderEncodedFrame> encoded_frame,
     int samples_skipped) {
   DCHECK(cast_environment_->CurrentlyOn(CastEnvironment::MAIN));
 

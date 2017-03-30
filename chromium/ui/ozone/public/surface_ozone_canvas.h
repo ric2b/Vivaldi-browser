@@ -5,8 +5,9 @@
 #ifndef UI_OZONE_PUBLIC_SURFACE_OZONE_CANVAS_H_
 #define UI_OZONE_PUBLIC_SURFACE_OZONE_CANVAS_H_
 
-#include "base/memory/scoped_ptr.h"
-#include "skia/ext/refptr.h"
+#include <memory>
+
+#include "third_party/skia/include/core/SkRefCnt.h"
 #include "ui/ozone/ozone_base_export.h"
 
 class SkSurface;
@@ -47,7 +48,7 @@ class OZONE_BASE_EXPORT SurfaceOzoneCanvas {
   // opening a file descriptor providing vsync events) that must be done
   // outside of the sandbox, they must have been completed in
   // InitializeHardware. Returns an empty scoped_ptr on error.
-  virtual scoped_ptr<gfx::VSyncProvider> CreateVSyncProvider() = 0;
+  virtual std::unique_ptr<gfx::VSyncProvider> CreateVSyncProvider() = 0;
 };
 
 }  // namespace ui

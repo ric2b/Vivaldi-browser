@@ -20,6 +20,10 @@
 #include <queue>
 #include <utility>
 
+#include <openssl/evp.h>
+#include <openssl/ssl.h>
+#include <openssl/x509.h>
+
 #include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
@@ -29,7 +33,7 @@
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "crypto/nss_util.h"
 #include "crypto/rsa_private_key.h"
@@ -64,12 +68,6 @@
 #include "net/test/cert_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
-
-#if defined(USE_OPENSSL)
-#include <openssl/evp.h>
-#include <openssl/ssl.h>
-#include <openssl/x509.h>
-#endif
 
 namespace net {
 
@@ -375,10 +373,11 @@ class SSLServerSocketTest : public PlatformTest {
     server_socket_.reset();
     channel_1_.reset(new FakeDataChannel());
     channel_2_.reset(new FakeDataChannel());
-    scoped_ptr<ClientSocketHandle> client_connection(new ClientSocketHandle);
-    client_connection->SetSocket(scoped_ptr<StreamSocket>(
+    std::unique_ptr<ClientSocketHandle> client_connection(
+        new ClientSocketHandle);
+    client_connection->SetSocket(std::unique_ptr<StreamSocket>(
         new FakeSocket(channel_1_.get(), channel_2_.get())));
-    scoped_ptr<StreamSocket> server_socket(
+    std::unique_ptr<StreamSocket> server_socket(
         new FakeSocket(channel_2_.get(), channel_1_.get()));
 
     HostPortPair host_and_pair("unittest", 0);
@@ -396,7 +395,6 @@ class SSLServerSocketTest : public PlatformTest {
     ASSERT_TRUE(server_socket_);
   }
 
-#if defined(USE_OPENSSL)
   void ConfigureClientCertsForClient(const char* cert_file_name,
                                      const char* private_key_file_name) {
     client_ssl_config_.send_client_cert = true;
@@ -404,7 +402,8 @@ class SSLServerSocketTest : public PlatformTest {
         ImportCertFromFile(GetTestCertsDirectory(), cert_file_name);
     ASSERT_TRUE(client_ssl_config_.client_cert);
 
-    scoped_ptr<crypto::RSAPrivateKey> key = ReadTestKey(private_key_file_name);
+    std::unique_ptr<crypto::RSAPrivateKey> key =
+        ReadTestKey(private_key_file_name);
     ASSERT_TRUE(key);
 
     client_ssl_config_.client_private_key = WrapOpenSSLPrivateKey(
@@ -441,7 +440,8 @@ class SSLServerSocketTest : public PlatformTest {
     server_ssl_config_.client_cert_verifier = client_cert_verifier_.get();
   }
 
-  scoped_ptr<crypto::RSAPrivateKey> ReadTestKey(const base::StringPiece& name) {
+  std::unique_ptr<crypto::RSAPrivateKey> ReadTestKey(
+      const base::StringPiece& name) {
     base::FilePath certs_dir(GetTestCertsDirectory());
     base::FilePath key_path = certs_dir.AppendASCII(name);
     std::string key_string;
@@ -451,24 +451,23 @@ class SSLServerSocketTest : public PlatformTest {
         reinterpret_cast<const uint8_t*>(key_string.data()),
         reinterpret_cast<const uint8_t*>(key_string.data() +
                                          key_string.length()));
-    scoped_ptr<crypto::RSAPrivateKey> key(
+    std::unique_ptr<crypto::RSAPrivateKey> key(
         crypto::RSAPrivateKey::CreateFromPrivateKeyInfo(key_vector));
     return key;
   }
-#endif
 
-  scoped_ptr<FakeDataChannel> channel_1_;
-  scoped_ptr<FakeDataChannel> channel_2_;
+  std::unique_ptr<FakeDataChannel> channel_1_;
+  std::unique_ptr<FakeDataChannel> channel_2_;
   SSLConfig client_ssl_config_;
   SSLServerConfig server_ssl_config_;
-  scoped_ptr<SSLClientSocket> client_socket_;
-  scoped_ptr<SSLServerSocket> server_socket_;
+  std::unique_ptr<SSLClientSocket> client_socket_;
+  std::unique_ptr<SSLServerSocket> server_socket_;
   ClientSocketFactory* socket_factory_;
-  scoped_ptr<MockCertVerifier> cert_verifier_;
-  scoped_ptr<MockClientCertVerifier> client_cert_verifier_;
-  scoped_ptr<TransportSecurityState> transport_security_state_;
-  scoped_ptr<SSLServerContext> server_context_;
-  scoped_ptr<crypto::RSAPrivateKey> server_private_key_;
+  std::unique_ptr<MockCertVerifier> cert_verifier_;
+  std::unique_ptr<MockClientCertVerifier> client_cert_verifier_;
+  std::unique_ptr<TransportSecurityState> transport_security_state_;
+  std::unique_ptr<SSLServerContext> server_context_;
+  std::unique_ptr<crypto::RSAPrivateKey> server_private_key_;
   scoped_refptr<X509Certificate> server_cert_;
 };
 
@@ -516,9 +515,6 @@ TEST_F(SSLServerSocketTest, Handshake) {
   EXPECT_STREQ("ECDHE_RSA", key_exchange);
   EXPECT_TRUE(is_aead);
 }
-
-// NSS ports don't support client certificates and have a global session cache.
-#if defined(USE_OPENSSL)
 
 // This test makes sure the session cache is working.
 TEST_F(SSLServerSocketTest, HandshakeCached) {
@@ -862,7 +858,6 @@ TEST_F(SSLServerSocketTest, HandshakeWithWrongClientCertSuppliedCached) {
   EXPECT_EQ(ERR_BAD_SSL_CLIENT_AUTH_CERT,
             handshake_callback2.GetResult(server_ret2));
 }
-#endif  // defined(USE_OPENSSL)
 
 TEST_F(SSLServerSocketTest, DataTransfer) {
   ASSERT_NO_FATAL_FAILURE(CreateContext());

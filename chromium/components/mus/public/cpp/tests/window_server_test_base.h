@@ -5,14 +5,15 @@
 #ifndef COMPONENTS_MUS_PUBLIC_CPP_TESTS_WINDOW_SERVER_TEST_BASE_H_
 #define COMPONENTS_MUS_PUBLIC_CPP_TESTS_WINDOW_SERVER_TEST_BASE_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "components/mus/public/cpp/tests/window_server_shelltest_base.h"
 #include "components/mus/public/cpp/window_manager_delegate.h"
 #include "components/mus/public/cpp/window_tree_delegate.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "components/mus/public/interfaces/window_tree_host.mojom.h"
-#include "mojo/shell/public/cpp/interface_factory.h"
+#include "services/shell/public/cpp/interface_factory.h"
 
 namespace mus {
 
@@ -24,7 +25,7 @@ class WindowServerTestBase
     : public WindowServerShellTestBase,
       public WindowTreeDelegate,
       public WindowManagerDelegate,
-      public mojo::InterfaceFactory<mojom::WindowTreeClient> {
+      public shell::InterfaceFactory<mojom::WindowTreeClient> {
  public:
   WindowServerTestBase();
   ~WindowServerTestBase() override;
@@ -62,24 +63,26 @@ class WindowServerTestBase
   void SetUp() override;
 
   // WindowServerShellTestBase:
-  bool AcceptConnection(mojo::Connection* connection) override;
+  bool AcceptConnection(shell::Connection* connection) override;
 
   // WindowTreeDelegate:
   void OnEmbed(Window* root) override;
   void OnConnectionLost(WindowTreeConnection* connection) override;
+  void OnEventObserved(const ui::Event& event, Window* target) override;
 
   // WindowManagerDelegate:
   void SetWindowManagerClient(WindowManagerClient* client) override;
   bool OnWmSetBounds(Window* window, gfx::Rect* bounds) override;
-  bool OnWmSetProperty(Window* window,
-                       const std::string& name,
-                       scoped_ptr<std::vector<uint8_t>>* new_data) override;
+  bool OnWmSetProperty(
+      Window* window,
+      const std::string& name,
+      std::unique_ptr<std::vector<uint8_t>>* new_data) override;
   Window* OnWmCreateTopLevelWindow(
       std::map<std::string, std::vector<uint8_t>>* properties) override;
   void OnAccelerator(uint32_t id, const ui::Event& event) override;
 
   // InterfaceFactory<WindowTreeClient>:
-  void Create(mojo::Connection* connection,
+  void Create(shell::Connection* connection,
               mojo::InterfaceRequest<mojom::WindowTreeClient> request) override;
 
   // Used to receive the most recent window tree connection loaded by an embed

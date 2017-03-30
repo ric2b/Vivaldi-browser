@@ -113,7 +113,7 @@ LayoutInline* LayoutInline::inlineElementContinuation() const
     LayoutBoxModelObject* continuation = this->continuation();
     if (!continuation || continuation->isInline())
         return toLayoutInline(continuation);
-    return toLayoutBlock(continuation)->inlineElementContinuation();
+    return toLayoutBlockFlow(continuation)->inlineElementContinuation();
 }
 
 void LayoutInline::updateFromStyle()
@@ -141,12 +141,13 @@ static LayoutObject* inFlowPositionedInlineAncestor(LayoutObject* p)
 static void updateInFlowPositionOfAnonymousBlockContinuations(LayoutObject* block, const ComputedStyle& newStyle, const ComputedStyle& oldStyle, LayoutObject* containingBlockOfEndOfContinuation)
 {
     for (; block && block != containingBlockOfEndOfContinuation && block->isAnonymousBlock(); block = block->nextSibling()) {
-        if (!toLayoutBlock(block)->isAnonymousBlockContinuation())
+        LayoutBlockFlow* blockFlow = toLayoutBlockFlow(block);
+        if (!blockFlow->isAnonymousBlockContinuation())
             continue;
 
         // If we are no longer in-flow positioned but our descendant block(s) still have an in-flow positioned ancestor then
         // their containing anonymous block should keep its in-flow positioning.
-        if (oldStyle.hasInFlowPosition() && inFlowPositionedInlineAncestor(toLayoutBlock(block)->inlineElementContinuation()))
+        if (oldStyle.hasInFlowPosition() && inFlowPositionedInlineAncestor(blockFlow->inlineElementContinuation()))
             continue;
 
         RefPtr<ComputedStyle> newBlockStyle = ComputedStyle::clone(block->styleRef());
@@ -274,7 +275,7 @@ static LayoutBoxModelObject* nextContinuation(LayoutObject* layoutObject)
 {
     if (layoutObject->isInline() && !layoutObject->isAtomicInlineLevel())
         return toLayoutInline(layoutObject)->continuation();
-    return toLayoutBlock(layoutObject)->inlineElementContinuation();
+    return toLayoutBlockFlow(layoutObject)->inlineElementContinuation();
 }
 
 LayoutBoxModelObject* LayoutInline::continuationBefore(LayoutObject* beforeChild)
@@ -436,19 +437,19 @@ void LayoutInline::splitInlines(LayoutBlock* fromBlock, LayoutBlock* toBlock,
 void LayoutInline::splitFlow(LayoutObject* beforeChild, LayoutBlock* newBlockBox,
     LayoutObject* newChild, LayoutBoxModelObject* oldCont)
 {
+    LayoutBlockFlow* containingBlockFlow = toLayoutBlockFlow(containingBlock());
     LayoutBlock* pre = nullptr;
-    LayoutBlock* block = containingBlock();
+    LayoutBlock* block = containingBlockFlow;
 
     // Delete our line boxes before we do the inline split into continuations.
-    block->deleteLineBoxTree();
+    containingBlockFlow->deleteLineBoxTree();
 
     bool madeNewBeforeBlock = false;
     if (block->isAnonymousBlock() && (!block->parent() || !block->parent()->createsAnonymousWrapper())) {
         // We can reuse this block and make it the preBlock of the next continuation.
-        pre = block;
-        pre->removePositionedObjects(nullptr);
-        if (pre->isLayoutBlockFlow())
-            toLayoutBlockFlow(pre)->removeFloatingObjects();
+        containingBlockFlow->removePositionedObjects(nullptr);
+        containingBlockFlow->removeFloatingObjects();
+        pre = containingBlockFlow;
         block = block->containingBlock();
     } else {
         // No anonymous block available for use.  Make one.
@@ -839,7 +840,7 @@ PositionWithAffinity LayoutInline::positionForPoint(const LayoutPoint& point)
         LayoutBox* contBlock = c->isInline() ? c->containingBlock() : toLayoutBlock(c);
         if (c->isInline() || c->slowFirstChild())
             return c->positionForPoint(parentBlockPoint - contBlock->locationOffset());
-        c = toLayoutBlock(c)->inlineElementContinuation();
+        c = toLayoutBlockFlow(c)->inlineElementContinuation();
     }
 
     return LayoutBoxModelObject::positionForPoint(point);
@@ -864,17 +865,17 @@ private:
 
 } // unnamed namespace
 
-IntRect LayoutInline::linesBoundingBox() const
+LayoutRect LayoutInline::linesBoundingBox() const
 {
     if (!alwaysCreateLineBoxes()) {
         ASSERT(!firstLineBox());
         FloatRect floatResult;
         LinesBoundingBoxGeneratorContext context(floatResult);
         generateCulledLineBoxRects(context, this);
-        return enclosingIntRect(floatResult);
+        return enclosingLayoutRect(floatResult);
     }
 
-    IntRect result;
+    LayoutRect result;
 
     // See <rdar://problem/5289721>, for an unknown reason the linked list here is sometimes inconsistent, first is non-zero and last is zero.  We have been
     // unable to reproduce this at all (and consequently unable to figure ot why this is happening).  The assert will hopefully catch the problem in debug
@@ -897,7 +898,7 @@ IntRect LayoutInline::linesBoundingBox() const
         LayoutUnit y = isHorizontal ? firstLineBox()->y() : logicalLeftSide;
         LayoutUnit width = isHorizontal ? logicalRightSide - logicalLeftSide : lastLineBox()->logicalBottom() - x;
         LayoutUnit height = isHorizontal ? lastLineBox()->logicalBottom() - y : logicalRightSide - logicalLeftSide;
-        result = enclosingIntRect(LayoutRect(x, y, width, height));
+        result = LayoutRect(x, y, width, height);
     }
 
     return result;
@@ -1083,8 +1084,8 @@ bool LayoutInline::mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* an
     if (ancestor == this)
         return true;
 
-    bool ancestorSkipped;
-    LayoutObject* container = this->container(ancestor, &ancestorSkipped);
+    LayoutObject* container = this->container();
+    ASSERT(container == parent());
     if (!container)
         return true;
 
@@ -1104,13 +1105,6 @@ bool LayoutInline::mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* an
 
     if (container->isBox() && !toLayoutBox(container)->mapScrollingContentsRectToBoxSpace(rect, container == ancestor ? ApplyNonScrollOverflowClip : ApplyOverflowClip, visualRectFlags))
         return false;
-
-    if (ancestorSkipped) {
-        // If the paintInvalidationContainer is below o, then we need to map the rect into paintInvalidationContainer's coordinates.
-        LayoutSize containerOffset = ancestor->offsetFromAncestorContainer(container);
-        rect.move(-containerOffset);
-        return true;
-    }
 
     return container->mapToVisualRectInAncestorSpace(ancestor, rect, visualRectFlags);
 }

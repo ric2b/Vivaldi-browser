@@ -53,6 +53,7 @@
 <translation id="2673087257647337101">Gairebé esteu al dia! Reinicieu Chromium per completar l'actualització.</translation>
 <translation id="2685838254101182273">Chromium ha deixat d'actualitzar-se i ja no admet aquesta versió del vostre sistema operatiu.</translation>
 <translation id="2705212601509139398">Aquest lloc fa servir el connector Chromium Frame que aviat deixarà de ser compatible. Desinstal·leu-lo i baixeu un navegador compatible.</translation>
+<translation id="2711502716910134313">Pestanya de Chromium</translation>
 <translation id="2770231113462710648">Canvia el navegador predeterminat a:</translation>
 <translation id="2801146392936645542"><ph name="FILE_NAME" /> és maliciós i Chromium l'ha bloquejat.</translation>
 <translation id="2847479871509788944">Suprimeix de Chromium...</translation>
@@ -66,7 +67,6 @@
 <translation id="3130323860337406239">Chromium està utilitzant el micròfon.</translation>
 <translation id="313551035350905294">Esteu iniciant la sessió amb un compte gestionat i atorgant el control del vostre perfil de Chromium a l'administrador corresponent. Les dades de Chromium, com ara aplicacions, adreces d'interès, historial, contrasenyes i altres configuracions, s'enllaçaran permanentment amb <ph name="USER_NAME" />. Aquestes dades es podran suprimir a través del tauler de control de comptes de Google, però no es podran associar amb un altre compte.</translation>
 <translation id="3190315855212034486">Chromium s'ha bloquejat. Voleu tornar-lo a iniciar?</translation>
-<translation id="3197823471738295152">El dispositiu està actualitzat.</translation>
 <translation id="3244477511402911926">Centre de notificacions de Chromium</translation>
 <translation id="3256316712990552818">Copiada a Chromium</translation>
 <translation id="3258596308407688501">Chromium no pot llegir ni escriure en el directori de dades:
@@ -120,6 +120,7 @@
 <translation id="549669000822060376">Espereu mentre Chromium instal·la les darreres actualitzacions del sistema.</translation>
 <translation id="5563479599352954471">Cercar amb un toc</translation>
 <translation id="5620765574781326016">Consulteu més informació sobre els temes en altres llocs web sense sortir de la pàgina.</translation>
+<translation id="5634636535844844681">Chromium requereix Windows 7 o una versió posterior.</translation>
 <translation id="5680901439334282664">Inicieu la sessió a Chromium</translation>
 <translation id="5772805321386874569">(cal <ph name="BEGIN_BUTTON" />reiniciar<ph name="END_BUTTON" /> Chromium)</translation>
 <translation id="5796460469508169315">Chromium ja està quasi llest.</translation>
@@ -179,6 +180,12 @@ Chromium no pot recuperar la configuració.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7339898014177206373">Finestra nova</translation>
 <translation id="734373864078049451">El vostre web, les adreces d'interès i altres coses de Chromium resideixen aquí.</translation>
+<translation id="7344413941077984497">Per definir quins llocs web pot veure <ph name="NEW_PROFILE_NAME" />, podeu configurar diferents restriccions i opcions a la pàgina <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. Si no canvieu la configuració predeterminada, <ph name="NEW_PROFILE_NAME" /> podrà navegar per tot el web.
+
+Per impedir que <ph name="NEW_PROFILE_NAME" /> accedeixi al vostre compte, bloquegeu el vostre perfil quan no utilitzeu Chromium. Per fer-ho, feu clic al vostre nom de perfil, a l'extrem superior dret del navegador, i seleccioneu Surt i estableix el bloqueig infantil.
+<ph name="BEGIN_LINK_2" />Més informació<ph name="END_LINK_2" />
+
+Per obtenir més instruccions, consulteu el correu electrònic a <ph name="ACCOUNT_EMAIL" />.</translation>
 <translation id="7419987137528340081">Si preferiu mantenir les dades de Chromium existents per separat, podeu crear un usuari nou de Chromium per a <ph name="USER_NAME" />.</translation>
 <translation id="7421823331379285070">Chromium necessita Windows XP o una versió posterior. És possible que algunes funcions no estiguin disponibles.</translation>
 <translation id="7463979740390522693">Chromium: notificacions (<ph name="QUANTITY" /> no llegides)</translation>
@@ -207,6 +214,7 @@ Chromium no pot recuperar la configuració.</translation>
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> Els autors de Chromium. Tots els drets reservats.</translation>
 <translation id="8621669128220841554">La instal·lació ha fallat a causa d'un error no especificat. Torneu a baixar Chromium.</translation>
 <translation id="8628626585870903697">Chromium no inclou el lector de PDF que és necessari perquè la previsualització funcioni.</translation>
+<translation id="8667808506758191620">El dispositiu <ph name="DEVICE_TYPE" /> està actualitzat.</translation>
 <translation id="8697124171261953979">També controla la pàgina que es mostra quan inicieu Chromium o quan feu una cerca des de l'omnibox.</translation>
 <translation id="8704119203788522458">Aquest és el vostre Chromium</translation>
 <translation id="872034308864968620">Permet que Chromium s'executi en segon pla</translation>
@@ -215,7 +223,7 @@ Chromium no pot recuperar la configuració.</translation>
 <translation id="8823523095753232532">Enllaça les meves dades de Chromium amb aquest compte</translation>
 <translation id="8851136666856101339">principal</translation>
 <translation id="8862326446509486874">No disposeu dels drets necessaris per instal·lar aplicacions al sistema. Proveu de tornar a executar l'instal·lador com a administrador.</translation>
-<translation id="8897323336392112261">També controla la pàgina que es mostra quan inicieu Chromium o quan feu clic al botó Inici.</translation>
+<translation id="8897323336392112261">També controla la pàgina que es mostra quan inicieu Chromium o quan feu clic al botó d'inici.</translation>
 <translation id="8907580949721785412">Chromium està provant de mostrar contrasenyes. Escriviu la vostra contrasenya de Windows per permetre-ho.</translation>
 <translation id="894903460958736500">El programari que s'executa al vostre ordinador no és compatible amb Chromium.</translation>
 <translation id="8974095189086268230">Chromium OS és possible gràcies a <ph name="BEGIN_LINK_CROS_OSS" />programari addicional de codi obert<ph name="END_LINK_CROS_OSS" />.</translation>
@@ -223,7 +231,6 @@ Chromium no pot recuperar la configuració.</translation>
 
 En iniciar la sessió, sigui amb l'usuari que sigui, es combinarà amb <ph name="ACCOUNT_EMAIL_NEW" /> la informació de Chromium com ara adreces d'interès, historial i altres configuracions.</translation>
 <translation id="9013087743919948559">Addició a Chromium</translation>
-<translation id="9013262824292842194">Chromium requereix Windows Vista o Windows XP amb SP2 o superior.</translation>
 <translation id="9019929317751753759">Per tal que Chromium sigui més segur, hem desactivat algunes de les extensions que no figuren a <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> i que és possible que s'hagin afegit sense que ho sapigueu.</translation>
 <translation id="9022552996538154597">Inici de sessió a Chromium</translation>
 <translation id="9036189287518468038">Menú d'aplicacions de Chromium</translation>

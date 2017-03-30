@@ -26,6 +26,7 @@
 <translation id="1602076796624386989">Aktivera mobildata</translation>
 <translation id="1621499497873603021">Tid som återstår tills batteriet är tomt: <ph name="TIME_LEFT" /></translation>
 <translation id="164969095109328410">Chrome-enhet</translation>
+<translation id="1677472565718498478"><ph name="TIME" /> kvar</translation>
 <translation id="1723752762323179280">Sessionen avslutas</translation>
 <translation id="1747827819627189109">Skärmen på tangentbordet har aktiverats</translation>
 <translation id="1812696562331527143">Inmatningsmetoden har ändrats till <ph name="INPUT_METHOD_ID" />*(<ph name="BEGIN_LINK" />tredje part<ph name="END_LINK" />).
@@ -91,7 +92,6 @@
 <translation id="3621712662352432595">Ljudinställningar</translation>
 <translation id="3625258641415618104">Skärmdumpar har inaktiverats</translation>
 <translation id="3626281679859535460">Ljusstyrka</translation>
-<translation id="3626637461649818317"><ph name="PERCENTAGE" /> % återstår</translation>
 <translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079">Upplösningen för <ph name="DISPLAY_NAME" /> ändrades till <ph name="RESOLUTION" /></translation>
 <translation id="370649949373421643">Aktivera Wi-Fi</translation>
@@ -110,13 +110,13 @@
 <translation id="397105322502079400">Beräknar ...</translation>
 <translation id="3995138139523574647">USB-C-enhet (bakre porten på högra sidan)</translation>
 <translation id="4053612967614057854">Inaktivera skärmtangentbord</translation>
-<translation id="412065659894267608"><ph name="HOUR" /> h <ph name="MINUTE" /> m till fulladdat</translation>
 <translation id="4250680216510889253">Nej</translation>
 <translation id="4279490309300973883">Spegling</translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4421231901400348175">Dela kontroll över skärmen med <ph name="HELPER_NAME" /> via Fjärrhjälp.</translation>
 <translation id="4430019312045809116">Volym</translation>
 <translation id="4527045527269911712">Bluetooth-enheten <ph name="DEVICE_NAME" /> har begärt tillstånd för koppling.</translation>
+<translation id="453661520163887813"><ph name="TIME" /> tills batteriet är fullt</translation>
 <translation id="4544944664594876241">Kortkommandot för att låsa skärmen har ändrats. Använd <ph name="NEW_SHORTCUT" /> i stället för <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="479989351350248267">sök</translation>
 <translation id="4804818685124855865">Koppla från</translation>
@@ -128,7 +128,6 @@
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl+Skift+blanksteg</translation>
 <translation id="5045002648206642691">Inställningar för Google Drive ...</translation>
-<translation id="5102001756192215136"><ph name="HOUR" />:<ph name="MINUTE" /> kvar</translation>
 <translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">Överföringsenheter finns tillgängliga</translation>
 <translation id="5222676887888702881">Logga ut</translation>
@@ -165,7 +164,6 @@
 <translation id="615957422585914272">Visa skärmtangentbordet</translation>
 <translation id="6165508094623778733">Läs mer</translation>
 <translation id="6203030746557259519">Virtuell skärm</translation>
-<translation id="6247708409970142803"><ph name="PERCENTAGE" /> %</translation>
 <translation id="6248847161401822652">Avsluta genom att trycka på Ctrl + Skift + Q två gånger.</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" /> byttes till <ph name="ROTATION" /></translation>
 <translation id="6359806961507272919">SMS från <ph name="PHONE_NUMBER" /></translation>
@@ -205,6 +203,7 @@ Inaktivera funktionen genom att trycka på Ctrl+Alt+Z.</translation>
 <translation id="7510334386202674593">Ctrl+Skift+L</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> har inte stöd för <ph name="SPECIFIED_RESOLUTION" />. Upplösningen ändrades till <ph name="FALLBACK_RESOLUTION" /></translation>
 <translation id="7573962313813535744">Dockat läge</translation>
+<translation id="7580671184200851182">Spela samma ljud i alla högtalare (monoljud)</translation>
 <translation id="7593891976182323525">Sök eller Skift</translation>
 <translation id="7649070708921625228">Hjälp</translation>
 <translation id="7692480393933218409">Laddar anslutna USB-C-enheter</translation>
@@ -223,13 +222,14 @@ Inaktivera funktionen genom att trycka på Ctrl+Alt+Z.</translation>
 <translation id="8308637677604853869">Föregående meny</translation>
 <translation id="8356164830168736643">Stäng <ph name="WINDOW_TITLE" /></translation>
 <translation id="8428213095426709021">Inställningar</translation>
-<translation id="8456362689280298700"><ph name="HOUR" />:<ph name="MINUTE" /> till fulladdat batteri</translation>
 <translation id="8517041960877371778">Din <ph name="DEVICE_TYPE" /> laddas eventuellt inte så länge den är på.</translation>
 <translation id="8528322925433439945">Mobil ...</translation>
+<translation id="8639760480004882931"><ph name="PERCENTAGE" /> återstår</translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">Laddare med låg effekt ansluten</translation>
 <translation id="8814190375133053267">Wi-Fi</translation>
 <translation id="882279321799040148">Klicka för att visa</translation>
+<translation id="8825534185036233643">Det finns inte stöd för spegling på fler än två skärmar.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8850991929411075241">Sök+Escape</translation>
 <translation id="8878886163241303700">Utökad skärm</translation>

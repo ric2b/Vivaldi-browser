@@ -6,6 +6,7 @@ import("//build/config/allocator.gni")
 import("//build/config/chrome_build.gni")
 import("//build/config/chromecast_build.gni")
 import("//build/config/crypto.gni")
+import("//build/config/dcheck_always_on.gni")
 import("//build/config/features.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
@@ -13,7 +14,7 @@ import("//build/toolchain/goma.gni")
 
 # One common error that happens is that GYP-generated headers within gen/ get
 # included rather than the GN-generated ones within gen/ subdirectories.
-# TODO(agrieve): Remove once GYP is gone (as well as exec_script exception).
+# TODO(GYP_GONE): Remove once GYP is gone (as well as exec_script exception).
 assert(
     exec_script("//build/dir_exists.py", [ "obj.host" ], "string") == "False",
     "GYP artifacts detected in $root_build_dir.$0x0A" +
@@ -31,9 +32,6 @@ declare_args() {
   # significantly slow execution.
   enable_iterator_debugging = true
 
-  # Set to true to enable dcheck in Release builds.
-  dcheck_always_on = false
-
   # Normally we try to decide whether to use precompiled headers or
   # not based on the other build arguments, but in some cases it is
   # easiest to force them off explicitly.
@@ -48,11 +46,8 @@ declare_args() {
 #
 # For now we define these globally to match the current GYP build.
 config("feature_flags") {
-  # TODO(brettw) this probably needs to be parameterized.
-  defines = [
-    "V8_DEPRECATION_WARNINGS",  # Don't use deprecated V8 APIs anywhere.
-    "CLD_VERSION=$cld_version",
-  ]
+  # Don't use deprecated V8 APIs anywhere.
+  defines = [ "V8_DEPRECATION_WARNINGS" ]
   if (enable_mdns) {
     defines += [ "ENABLE_MDNS=1" ]
   }
@@ -124,17 +119,11 @@ config("feature_flags") {
   if (use_glib) {
     defines += [ "USE_GLIB=1" ]
   }
-  if (use_openssl) {
-    defines += [ "USE_OPENSSL=1" ]
-  }
   if (use_openssl_certs) {
     defines += [ "USE_OPENSSL_CERTS=1" ]
   }
   if (use_nss_certs) {
     defines += [ "USE_NSS_CERTS=1" ]
-  }
-  if (use_nss_verifier) {
-    defines += [ "USE_NSS_VERIFIER=1" ]
   }
   if (use_ozone) {
     defines += [ "USE_OZONE=1" ]
@@ -211,9 +200,6 @@ config("feature_flags") {
   }
   if (enable_service_discovery) {
     defines += [ "ENABLE_SERVICE_DISCOVERY=1" ]
-  }
-  if (enable_autofill_dialog) {
-    defines += [ "ENABLE_AUTOFILL_DIALOG=1" ]
   }
   if (enable_image_loader_extension) {
     defines += [ "IMAGE_LOADER_EXTENSION=1" ]
@@ -300,8 +286,6 @@ config("release") {
   defines = [ "NDEBUG" ]
 
   # Sanitizers.
-  # TODO(GYP) The GYP build has "release_valgrind_build == 0" for this
-  # condition. When Valgrind is set up, we need to do the same here.
   if (is_tsan) {
     defines += [
       "DYNAMIC_ANNOTATIONS_ENABLED=1",
@@ -361,16 +345,9 @@ config("default_libs") {
       "m",
     ]
   } else if (is_mac) {
-    libs = [
-      "AppKit.framework",
-      "ApplicationServices.framework",
-      "Carbon.framework",
-      "CoreFoundation.framework",
-      "Foundation.framework",
-      "IOKit.framework",
-      "OpenGL.framework",
-      "Security.framework",
-    ]
+    # Targets should choose to explicitly link frameworks they require. Since
+    # linking can have run-time side effects, nothing should be listed here.
+    libs = []
   } else if (is_ios) {
     # The libraries listed here will be specified for both the target and the
     # host. Only the common ones should be listed here.

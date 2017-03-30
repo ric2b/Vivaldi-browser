@@ -8,7 +8,6 @@
 #include <string>
 
 #include "base/compiler_specific.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profiles_state.h"
@@ -153,9 +152,9 @@ gfx::Rect OpaqueBrowserFrameView::GetBoundsForTabStrip(
 }
 
 int OpaqueBrowserFrameView::GetTopInset(bool restored) const {
-  return browser_view()->IsTabStripVisible() ?
-      layout_->GetTabStripInsetsTop(restored) :
-      layout_->NonClientTopBorderHeight(restored);
+  return browser_view()->IsTabStripVisible()
+             ? layout_->GetTabStripInsetsTop(restored)
+             : layout_->NonClientTopHeight(restored);
 }
 
 int OpaqueBrowserFrameView::GetThemeBackgroundXInset() const {

@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -16,12 +17,11 @@
 #include "base/json/json_writer.h"
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"

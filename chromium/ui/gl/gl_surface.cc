@@ -165,9 +165,6 @@ bool GLSurface::OnMakeCurrent(GLContext* context) {
   return true;
 }
 
-void GLSurface::NotifyWasBound() {
-}
-
 bool GLSurface::SetBackbufferAllocation(bool allocated) {
   return true;
 }
@@ -217,7 +214,8 @@ bool GLSurface::ScheduleCALayer(gl::GLImage* contents_image,
                                 bool is_clipped,
                                 const RectF& clip_rect,
                                 const Transform& transform,
-                                int sorting_content_id) {
+                                int sorting_content_id,
+                                unsigned filter) {
   NOTIMPLEMENTED();
   return false;
 }

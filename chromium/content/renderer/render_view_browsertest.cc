@@ -15,7 +15,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "base/win/windows_version.h"
@@ -51,6 +51,7 @@
 #include "content/renderer/history_controller.h"
 #include "content/renderer/history_serialization.h"
 #include "content/renderer/navigation_state_impl.h"
+#include "content/renderer/render_frame_proxy.h"
 #include "content/renderer/render_process.h"
 #include "content/renderer/render_view_impl.h"
 #include "content/shell/browser/shell.h"
@@ -72,6 +73,7 @@
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebPerformance.h"
 #include "third_party/WebKit/public/web/WebRuntimeFeatures.h"
+#include "third_party/WebKit/public/web/WebScriptSource.h"
 #include "third_party/WebKit/public/web/WebSettings.h"
 #include "third_party/WebKit/public/web/WebView.h"
 #include "third_party/WebKit/public/web/WebWindowFeatures.h"
@@ -369,17 +371,19 @@ class RenderViewImplTest : public RenderViewTest {
   }
 
   void SetZoomLevel(double level) {
-    view()->OnSetZoomLevelForView(false, level);
+    view()->OnSetZoomLevel(
+        PageMsg_SetZoomLevel_Command::USE_CURRENT_TEMPORARY_MODE, level);
   }
 
  private:
-  scoped_ptr<MockKeyboard> mock_keyboard_;
+  std::unique_ptr<MockKeyboard> mock_keyboard_;
 };
 
 class DevToolsAgentTest : public RenderViewImplTest {
  public:
   void Attach() {
     notifications_ = std::vector<std::string>();
+    expecting_pause_ = false;
     std::string host_id = "host_id";
     agent()->OnAttach(host_id, 17);
     agent()->send_protocol_message_callback_for_test_ = base::Bind(
@@ -395,8 +399,9 @@ class DevToolsAgentTest : public RenderViewImplTest {
     return agent()->paused_;
   }
 
-  void DispatchDevToolsMessage(const std::string& message) {
-    agent()->OnDispatchOnInspectorBackend(17, message);
+  void DispatchDevToolsMessage(const std::string& method,
+                               const std::string& message) {
+    agent()->OnDispatchOnInspectorBackend(17, 1, method, message);
   }
 
   void CloseWhilePaused() {
@@ -406,15 +411,29 @@ class DevToolsAgentTest : public RenderViewImplTest {
 
   void OnDevToolsMessage(
       int, int, const std::string& message, const std::string&) {
-    last_received_message_ = message;
-    std::unique_ptr<base::DictionaryValue> root(
-        static_cast<base::DictionaryValue*>(
-            base::JSONReader::Read(message).release()));
+    last_message_ = base::WrapUnique(static_cast<base::DictionaryValue*>(
+        base::JSONReader::Read(message).release()));
     int id;
-    if (!root->GetInteger("id", &id)) {
+    if (!last_message_->GetInteger("id", &id)) {
       std::string notification;
-      EXPECT_TRUE(root->GetString("method", &notification));
+      EXPECT_TRUE(last_message_->GetString("method", &notification));
       notifications_.push_back(notification);
+
+      if (notification == "Debugger.paused" && expecting_pause_) {
+        base::ListValue* call_frames;
+        EXPECT_TRUE(last_message_->GetList("params.callFrames", &call_frames));
+        if (call_frames) {
+          EXPECT_EQ(call_frames_count_,
+                    static_cast<int>(call_frames->GetSize()));
+        }
+        expecting_pause_ = false;
+        base::ThreadTaskRunnerHandle::Get()->PostTask(
+            FROM_HERE,
+            base::Bind(&DevToolsAgentTest::DispatchDevToolsMessage,
+                       base::Unretained(this),
+                       "Debugger.resume",
+                       "{\"id\":100,\"method\":\"Debugger.resume\"}"));
+      }
     }
   }
 
@@ -427,7 +446,14 @@ class DevToolsAgentTest : public RenderViewImplTest {
     return result;
   }
 
-  std::string LastReceivedMessage() const { return last_received_message_; }
+  base::DictionaryValue* LastReceivedMessage() {
+    return last_message_.get();
+  }
+
+  void ExpectPauseAndResume(int call_frames_count) {
+    expecting_pause_ = true;
+    call_frames_count_ = call_frames_count;
+  }
 
  private:
   DevToolsAgent* agent() {
@@ -435,7 +461,9 @@ class DevToolsAgentTest : public RenderViewImplTest {
   }
 
   std::vector<std::string> notifications_;
-  std::string last_received_message_;
+  std::unique_ptr<base::DictionaryValue> last_message_;
+  int call_frames_count_;
+  bool expecting_pause_;
 };
 
 class RenderViewImplBlinkSettingsTest : public RenderViewImplTest {
@@ -622,11 +650,11 @@ TEST_F(RenderViewImplTest, OnNavigationHttpPost) {
   FrameHostMsg_DidCommitProvisionalLoad::Param host_nav_params;
   FrameHostMsg_DidCommitProvisionalLoad::Read(frame_navigate_msg,
                                               &host_nav_params);
-  EXPECT_TRUE(base::get<0>(host_nav_params).is_post);
+  EXPECT_EQ("POST", base::get<0>(host_nav_params).method);
 
   // Check post data sent to browser matches
   EXPECT_TRUE(base::get<0>(host_nav_params).page_state.IsValid());
-  scoped_ptr<HistoryEntry> entry =
+  std::unique_ptr<HistoryEntry> entry =
       PageStateToHistoryEntry(base::get<0>(host_nav_params).page_state);
   blink::WebHTTPBody body = entry->root().httpBody();
   blink::WebHTTPBody::Element element;
@@ -635,6 +663,51 @@ TEST_F(RenderViewImplTest, OnNavigationHttpPost) {
   EXPECT_EQ(blink::WebHTTPBody::Element::TypeData, element.type);
   EXPECT_EQ(length, element.data.size());
   EXPECT_EQ(0, memcmp(raw_data, element.data.data(), length));
+}
+
+// Check that page ID will be initialized in case of navigation
+// that replaces current entry.
+TEST_F(RenderViewImplTest, OnBrowserNavigationUpdatePageID) {
+  // An http url will trigger a resource load so cannot be used here.
+  CommonNavigationParams common_params;
+  StartNavigationParams start_params;
+  RequestNavigationParams request_params;
+  common_params.url = GURL("data:text/html,<div>Page</div>");
+  common_params.navigation_type = FrameMsg_Navigate_Type::NORMAL;
+  common_params.transition = ui::PAGE_TRANSITION_TYPED;
+
+  // Set up params to emulate a browser side navigation
+  // that should replace current entry.
+  common_params.should_replace_current_entry = true;
+  request_params.page_id = -1;
+  request_params.nav_entry_id = 1;
+  request_params.current_history_list_length = 1;
+
+  frame()->Navigate(common_params, start_params, request_params);
+  ProcessPendingMessages();
+
+  // Page ID should be initialized.
+  EXPECT_NE(view_page_id(), -1);
+
+  const IPC::Message* frame_navigate_msg =
+      render_thread_->sink().GetUniqueMessageMatching(
+          FrameHostMsg_DidCommitProvisionalLoad::ID);
+  EXPECT_TRUE(frame_navigate_msg);
+
+  FrameHostMsg_DidCommitProvisionalLoad::Param host_nav_params;
+  FrameHostMsg_DidCommitProvisionalLoad::Read(frame_navigate_msg,
+                                              &host_nav_params);
+  EXPECT_TRUE(base::get<0>(host_nav_params).page_state.IsValid());
+
+  const IPC::Message* frame_page_id_msg =
+      render_thread_->sink().GetUniqueMessageMatching(
+          FrameHostMsg_DidAssignPageId::ID);
+  EXPECT_TRUE(frame_page_id_msg);
+
+  FrameHostMsg_DidAssignPageId::Param host_page_id_params;
+  FrameHostMsg_DidAssignPageId::Read(frame_page_id_msg, &host_page_id_params);
+
+  EXPECT_EQ(base::get<0>(host_page_id_params), view_page_id());
 }
 
 #if defined(OS_ANDROID)
@@ -1129,7 +1202,7 @@ TEST_F(RenderViewImplTest, OnImeTypeChanged) {
     EXPECT_EQ(ViewHostMsg_TextInputStateChanged::ID, msg->type());
     ViewHostMsg_TextInputStateChanged::Param params;
     ViewHostMsg_TextInputStateChanged::Read(msg, &params);
-    ViewHostMsg_TextInputState_Params p = base::get<0>(params);
+    TextInputState p = base::get<0>(params);
     ui::TextInputType type = p.type;
     ui::TextInputMode input_mode = p.mode;
     bool can_compose_inline = p.can_compose_inline;
@@ -2375,7 +2448,8 @@ TEST_F(RenderViewImplScaleFactorTest, AutoResizeWithoutZoomForDSF) {
 TEST_F(DevToolsAgentTest, DevToolsResumeOnClose) {
   Attach();
   EXPECT_FALSE(IsPaused());
-  DispatchDevToolsMessage("{\"id\":1,\"method\":\"Debugger.enable\"}");
+  DispatchDevToolsMessage("Debugger.enable",
+                          "{\"id\":1,\"method\":\"Debugger.enable\"}");
 
   // Executing javascript will pause the thread and create nested message loop.
   // Posting task simulates message coming from browser.
@@ -2392,13 +2466,15 @@ TEST_F(DevToolsAgentTest, DevToolsResumeOnClose) {
 TEST_F(DevToolsAgentTest, RuntimeEnableForcesContexts) {
   LoadHTML("<body>page<iframe></iframe></body>");
   Attach();
-  DispatchDevToolsMessage("{\"id\":1,\"method\":\"Runtime.enable\"}");
+  DispatchDevToolsMessage("Runtime.enable",
+                          "{\"id\":1,\"method\":\"Runtime.enable\"}");
   EXPECT_EQ(2, CountNotifications("Runtime.executionContextCreated"));
 }
 
 TEST_F(DevToolsAgentTest, RuntimeEnableForcesContextsAfterNavigation) {
   Attach();
-  DispatchDevToolsMessage("{\"id\":1,\"method\":\"Runtime.enable\"}");
+  DispatchDevToolsMessage("Runtime.enable",
+                          "{\"id\":1,\"method\":\"Runtime.enable\"}");
   EXPECT_EQ(0, CountNotifications("Runtime.executionContextCreated"));
   LoadHTML("<body>page<iframe></iframe></body>");
   EXPECT_EQ(2, CountNotifications("Runtime.executionContextCreated"));
@@ -2407,8 +2483,10 @@ TEST_F(DevToolsAgentTest, RuntimeEnableForcesContextsAfterNavigation) {
 TEST_F(DevToolsAgentTest, RuntimeEvaluateRunMicrotasks) {
   LoadHTML("<body>page</body>");
   Attach();
-  DispatchDevToolsMessage("{\"id\":1,\"method\":\"Console.enable\"}");
-  DispatchDevToolsMessage("{\"id\":2,"
+  DispatchDevToolsMessage("Console.enable",
+                          "{\"id\":1,\"method\":\"Console.enable\"}");
+  DispatchDevToolsMessage("Runtime.evaluate",
+                          "{\"id\":2,"
                           "\"method\":\"Runtime.evaluate\","
                           "\"params\":{"
                           "\"expression\":\"Promise.resolve().then("
@@ -2421,23 +2499,24 @@ TEST_F(DevToolsAgentTest, RuntimeEvaluateRunMicrotasks) {
 TEST_F(DevToolsAgentTest, RuntimeCallFunctionOnRunMicrotasks) {
   LoadHTML("<body>page</body>");
   Attach();
-  DispatchDevToolsMessage("{\"id\":1,\"method\":\"Console.enable\"}");
-  DispatchDevToolsMessage("{\"id\":2,"
+  DispatchDevToolsMessage("Console.enable",
+                          "{\"id\":1,\"method\":\"Console.enable\"}");
+  DispatchDevToolsMessage("Runtime.evaluate",
+                          "{\"id\":2,"
                           "\"method\":\"Runtime.evaluate\","
                           "\"params\":{"
                           "\"expression\":\"window\""
                           "}"
                           "}");
 
-  std::unique_ptr<base::DictionaryValue> root(
-      static_cast<base::DictionaryValue*>(
-          base::JSONReader::Read(LastReceivedMessage()).release()));
+  base::DictionaryValue* root = LastReceivedMessage();
   const base::Value* object_id;
   ASSERT_TRUE(root->Get("result.result.objectId", &object_id));
   std::string object_id_str;
   EXPECT_TRUE(base::JSONWriter::Write(*object_id, &object_id_str));
 
-  DispatchDevToolsMessage("{\"id\":3,"
+  DispatchDevToolsMessage("Runtime.callFunctionOn",
+                          "{\"id\":3,"
                           "\"method\":\"Runtime.callFunctionOn\","
                           "\"params\":{"
                           "\"objectId\":" +
@@ -2449,6 +2528,25 @@ TEST_F(DevToolsAgentTest, RuntimeCallFunctionOnRunMicrotasks) {
                               "}"
                               "}");
   EXPECT_EQ(1, CountNotifications("Console.messageAdded"));
+}
+
+TEST_F(DevToolsAgentTest, CallFramesInIsolatedWorld) {
+  LoadHTML("<body>page</body>");
+  blink::WebScriptSource source1(
+      WebString::fromUTF8("function func1() { debugger; }"));
+  frame()->GetWebFrame()->executeScriptInIsolatedWorld(17, &source1, 1, 1);
+
+  Attach();
+  DispatchDevToolsMessage("Debugger.enable",
+                          "{\"id\":1,\"method\":\"Debugger.enable\"}");
+
+  ExpectPauseAndResume(3);
+  blink::WebScriptSource source2(
+      WebString::fromUTF8("function func2() { func1(); }; func2();"));
+  frame()->GetWebFrame()->executeScriptInIsolatedWorld(17, &source2, 1, 1);
+
+  EXPECT_FALSE(IsPaused());
+  Detach();
 }
 
 }  // namespace content

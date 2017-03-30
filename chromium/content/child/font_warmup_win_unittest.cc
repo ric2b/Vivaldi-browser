@@ -37,7 +37,8 @@ class TestSkTypeface : public SkTypeface {
         data_(data, data + dataLength) {}
 
  protected:
-  SkScalerContext* onCreateScalerContext(const SkDescriptor*) const override {
+  SkScalerContext* onCreateScalerContext(const SkScalerContextEffects&,
+                                         const SkDescriptor*) const override {
     ADD_FAILURE();
     return nullptr;
   }
@@ -200,7 +201,7 @@ class TestSkFontMgr : public SkFontMgr {
   }
 
   SkTypeface* onLegacyCreateTypeface(const char familyName[],
-                                     unsigned styleBits) const override {
+                                     SkFontStyle style) const override {
     ADD_FAILURE();
     return nullptr;
   }

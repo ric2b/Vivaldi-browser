@@ -364,13 +364,6 @@ inline bool isShadowHostWithoutCustomFocusLogic(const Element& element)
     return isShadowHost(element) && !hasCustomFocusLogic(element);
 }
 
-#if ENABLE(ASSERT)
-inline bool isNonFocusableShadowHost(const Element& element)
-{
-    return isShadowHostWithoutCustomFocusLogic(element) && !element.isFocusable();
-}
-#endif
-
 inline bool isNonKeyboardFocusableShadowHost(const Element& element)
 {
     return isShadowHostWithoutCustomFocusLogic(element) && !(element.shadowRootIfV1() ? element.isFocusable() : element.isKeyboardFocusable());
@@ -632,7 +625,7 @@ Element* findFocusableElementDescendingDownIntoFrameDocument(WebFocusType type, 
         HTMLFrameOwnerElement& owner = toHTMLFrameOwnerElement(*element);
         if (!owner.contentFrame() || !owner.contentFrame()->isLocalFrame())
             break;
-        toLocalFrame(owner.contentFrame())->document()->updateLayoutIgnorePendingStylesheets();
+        toLocalFrame(owner.contentFrame())->document()->updateStyleAndLayoutIgnorePendingStylesheets();
         ScopedFocusNavigation scope = ScopedFocusNavigation::ownedByIFrame(owner);
         Element* foundElement = findFocusableElementRecursively(type, scope);
         if (!foundElement)
@@ -646,7 +639,6 @@ Element* findFocusableElementDescendingDownIntoFrameDocument(WebFocusType type, 
 Element* findFocusableElementAcrossFocusScopesForward(ScopedFocusNavigation& scope)
 {
     Element* current = scope.currentElement();
-    ASSERT(!current || !isNonFocusableShadowHost(*current));
     Element* found;
     if (current && isShadowHostWithoutCustomFocusLogic(*current)) {
         ScopedFocusNavigation innerScope = ScopedFocusNavigation::ownedByShadowHost(*current);
@@ -670,7 +662,6 @@ Element* findFocusableElementAcrossFocusScopesForward(ScopedFocusNavigation& sco
 
 Element* findFocusableElementAcrossFocusScopesBackward(ScopedFocusNavigation& scope)
 {
-    ASSERT(!scope.currentElement() || !isNonFocusableShadowHost(*scope.currentElement()));
     Element* found = findFocusableElementRecursivelyBackward(scope);
 
     // If there's no focusable element to advance to, move up the focus scopes until we find one.
@@ -905,6 +896,14 @@ bool FocusController::advanceFocusAcrossFrames(WebFocusType type, RemoteFrame* f
     return advanceFocusInDocumentOrder(to, start, type, false, sourceCapabilities);
 }
 
+
+#if ENABLE(ASSERT)
+inline bool isNonFocusableShadowHost(const Element& element)
+{
+    return isShadowHostWithoutCustomFocusLogic(element) && !element.isFocusable();
+}
+#endif
+
 bool FocusController::advanceFocusInDocumentOrder(LocalFrame* frame, Element* start, WebFocusType type, bool initialFocus, InputDeviceCapabilities* sourceCapabilities)
 {
     ASSERT(frame);
@@ -912,6 +911,7 @@ bool FocusController::advanceFocusInDocumentOrder(LocalFrame* frame, Element* st
     document->updateDistribution();
 
     Element* current = start;
+    ASSERT(!current || !isNonFocusableShadowHost(*current));
     if (!current && !initialFocus)
         current = document->sequentialFocusNavigationStartingPoint(type);
 
@@ -921,7 +921,7 @@ bool FocusController::advanceFocusInDocumentOrder(LocalFrame* frame, Element* st
     if (caretBrowsing && !current)
         current = adjustToElement(frame->selection().start().anchorNode(), type);
 
-    document->updateLayoutIgnorePendingStylesheets();
+    document->updateStyleAndLayoutIgnorePendingStylesheets();
     ScopedFocusNavigation scope = current ? ScopedFocusNavigation::createFor(*current) : ScopedFocusNavigation::createForDocument(*document);
     Element* element = findFocusableElementAcrossFocusScopes(type, scope);
     if (!element) {
@@ -952,8 +952,6 @@ bool FocusController::advanceFocusInDocumentOrder(LocalFrame* frame, Element* st
             return false;
     }
 
-    ASSERT(element);
-
     if (element == document->focusedElement()) {
         // Focus wrapped around to the same element.
         return true;
@@ -978,6 +976,8 @@ bool FocusController::advanceFocusInDocumentOrder(LocalFrame* frame, Element* st
 
         return true;
     }
+
+    ASSERT(element->isFocusable());
 
     // FIXME: It would be nice to just be able to call setFocusedElement(element)
     // here, but we can't do that because some elements (e.g. HTMLInputElement
@@ -1229,7 +1229,7 @@ bool FocusController::advanceFocusDirectionallyInContainer(Node* container, cons
         Element* focusedElement = toLocalFrame(focusedOrMainFrame())->document()->focusedElement();
         if (focusedElement && !hasOffscreenRect(focusedElement))
             rect = nodeRectInAbsoluteCoordinates(focusedElement, true /* ignore border */);
-        toLocalFrame(frameElement->contentFrame())->document()->updateLayoutIgnorePendingStylesheets();
+        toLocalFrame(frameElement->contentFrame())->document()->updateStyleAndLayoutIgnorePendingStylesheets();
         if (!advanceFocusDirectionallyInContainer(toLocalFrame(frameElement->contentFrame())->document(), rect, type)) {
             // The new frame had nothing interesting, need to find another candidate.
             return advanceFocusDirectionallyInContainer(container, nodeRectInAbsoluteCoordinates(focusCandidate.visibleNode, true), type);
@@ -1279,7 +1279,7 @@ bool FocusController::advanceFocusDirectionally(WebFocusType type)
     Node* container = focusedDocument;
 
     if (container->isDocumentNode())
-        toDocument(container)->updateLayoutIgnorePendingStylesheets();
+        toDocument(container)->updateStyleAndLayoutIgnorePendingStylesheets();
 
     // Figure out the starting rect.
     LayoutRect startingRect;
@@ -1300,7 +1300,7 @@ bool FocusController::advanceFocusDirectionally(WebFocusType type)
         startingRect = nodeRectInAbsoluteCoordinates(container, true /* ignore border */);
         container = scrollableEnclosingBoxOrParentFrameForNodeInDirection(type, container);
         if (container && container->isDocumentNode())
-            toDocument(container)->updateLayoutIgnorePendingStylesheets();
+            toDocument(container)->updateStyleAndLayoutIgnorePendingStylesheets();
     } while (!consumed && container);
 
     return consumed;

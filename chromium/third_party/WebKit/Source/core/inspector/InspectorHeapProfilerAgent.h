@@ -38,10 +38,6 @@
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
 
-namespace v8 {
-class Isolate;
-}
-
 namespace blink {
 
 class V8HeapProfilerAgent;
@@ -49,13 +45,12 @@ class V8HeapProfilerAgent;
 class CORE_EXPORT InspectorHeapProfilerAgent final : public InspectorBaseAgent<InspectorHeapProfilerAgent, protocol::Frontend::HeapProfiler>, public protocol::Backend::HeapProfiler {
     WTF_MAKE_NONCOPYABLE(InspectorHeapProfilerAgent);
 public:
-    static RawPtr<InspectorHeapProfilerAgent> create(v8::Isolate*, V8HeapProfilerAgent*);
+    explicit InspectorHeapProfilerAgent(V8HeapProfilerAgent*);
     ~InspectorHeapProfilerAgent() override;
 
     // InspectorBaseAgent overrides.
-    void setState(protocol::DictionaryValue*) override;
-    void setFrontend(protocol::Frontend*) override;
-    void clearFrontend() override;
+    void init(InstrumentingAgents*, protocol::Frontend*, protocol::Dispatcher*, protocol::DictionaryValue*) override;
+    void dispose() override;
     void restore() override;
 
     void enable(ErrorString*) override;
@@ -67,21 +62,11 @@ public:
     void getObjectByHeapObjectId(ErrorString*, const String16& objectId, const Maybe<String16>& objectGroup, OwnPtr<protocol::Runtime::RemoteObject>* result) override;
     void addInspectedHeapObject(ErrorString*, const String16& heapObjectId) override;
     void getHeapObjectId(ErrorString*, const String16& objectId, String16* heapSnapshotObjectId) override;
-    void startSampling(ErrorString*) override;
+    void startSampling(ErrorString*, const Maybe<double>& samplingInterval) override;
     void stopSampling(ErrorString*, OwnPtr<protocol::HeapProfiler::SamplingHeapProfile>*) override;
 
 private:
-    class HeapStatsUpdateTask;
-
-    InspectorHeapProfilerAgent(v8::Isolate*, V8HeapProfilerAgent*);
-
-    void startUpdateStatsTimer();
-    void stopUpdateStatsTimer();
-    bool isInspectableHeapObject(int id);
-
     V8HeapProfilerAgent* m_v8HeapProfilerAgent;
-    OwnPtr<HeapStatsUpdateTask> m_heapStatsUpdateTask;
-    v8::Isolate* m_isolate;
 };
 
 } // namespace blink

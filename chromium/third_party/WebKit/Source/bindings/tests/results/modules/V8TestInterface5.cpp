@@ -13,7 +13,8 @@
 #include "bindings/core/v8/V8Iterator.h"
 #include "bindings/core/v8/V8ObjectConstructor.h"
 #include "bindings/core/v8/V8TestInterfaceEmpty.h"
-#include "bindings/modules/v8/UnionTypesModules.h"
+#include "bindings/modules/v8/BooleanOrString.h"
+#include "bindings/modules/v8/DoubleOrString.h"
 #include "bindings/modules/v8/V8TestInterface5.h"
 #include "core/dom/Document.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -28,7 +29,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8TestInterface5::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterface5::domTemplate, V8TestInterface5::refObject, V8TestInterface5::derefObject, V8TestInterface5::trace, V8TestInterface5::toActiveScriptWrappable, V8TestInterface5::visitDOMWrapper, V8TestInterface5::preparePrototypeAndInterfaceObject, V8TestInterface5::installConditionallyEnabledProperties, "TestInterface5", &V8TestInterfaceEmpty::wrapperTypeInfo, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Dependent, WrapperTypeInfo::RefCountedObject };
+const WrapperTypeInfo V8TestInterface5::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterface5::domTemplate, V8TestInterface5::trace, V8TestInterface5::traceWrappers, V8TestInterface5::toActiveScriptWrappable, V8TestInterface5::visitDOMWrapper, V8TestInterface5::preparePrototypeAndInterfaceObject, nullptr, "TestInterface5", &V8TestInterfaceEmpty::wrapperTypeInfo, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Dependent };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -63,7 +64,7 @@ static void testInterfaceAttributeAttributeSetter(v8::Local<v8::Value> v8Value, 
         exceptionState.throwIfNeeded();
         return;
     }
-    impl->setTestInterfaceAttribute(WTF::getPtr(cppValue));
+    impl->setTestInterfaceAttribute(cppValue);
 }
 
 static void testInterfaceAttributeAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -523,12 +524,12 @@ static void keysMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "keys", "TestInterface5", info.Holder(), info.GetIsolate());
     TestInterface5Implementation* impl = V8TestInterface5::toImpl(info.Holder());
     ScriptState* scriptState = ScriptState::current(info.GetIsolate());
-    RawPtr<Iterator> result = impl->keysForBinding(scriptState, exceptionState);
+    Iterator* result = impl->keysForBinding(scriptState, exceptionState);
     if (exceptionState.hadException()) {
         exceptionState.throwIfNeeded();
         return;
     }
-    v8SetReturnValue(info, result.release());
+    v8SetReturnValue(info, result);
 }
 
 static void keysMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -541,12 +542,12 @@ static void valuesMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "values", "TestInterface5", info.Holder(), info.GetIsolate());
     TestInterface5Implementation* impl = V8TestInterface5::toImpl(info.Holder());
     ScriptState* scriptState = ScriptState::current(info.GetIsolate());
-    RawPtr<Iterator> result = impl->valuesForBinding(scriptState, exceptionState);
+    Iterator* result = impl->valuesForBinding(scriptState, exceptionState);
     if (exceptionState.hadException()) {
         exceptionState.throwIfNeeded();
         return;
     }
-    v8SetReturnValue(info, result.release());
+    v8SetReturnValue(info, result);
 }
 
 static void valuesMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -559,12 +560,12 @@ static void entriesMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "entries", "TestInterface5", info.Holder(), info.GetIsolate());
     TestInterface5Implementation* impl = V8TestInterface5::toImpl(info.Holder());
     ScriptState* scriptState = ScriptState::current(info.GetIsolate());
-    RawPtr<Iterator> result = impl->entriesForBinding(scriptState, exceptionState);
+    Iterator* result = impl->entriesForBinding(scriptState, exceptionState);
     if (exceptionState.hadException()) {
         exceptionState.throwIfNeeded();
         return;
     }
-    v8SetReturnValue(info, result.release());
+    v8SetReturnValue(info, result);
 }
 
 static void entriesMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -621,12 +622,12 @@ static void iteratorMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "iterator", "TestInterface5", info.Holder(), info.GetIsolate());
     TestInterface5Implementation* impl = V8TestInterface5::toImpl(info.Holder());
     ScriptState* scriptState = ScriptState::current(info.GetIsolate());
-    RawPtr<Iterator> result = impl->iterator(scriptState, exceptionState);
+    Iterator* result = impl->iterator(scriptState, exceptionState);
     if (exceptionState.hadException()) {
         exceptionState.throwIfNeeded();
         return;
     }
-    v8SetReturnValue(info, result.release());
+    v8SetReturnValue(info, result);
 }
 
 static void iteratorMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -680,8 +681,6 @@ static void indexedPropertyDeleterCallback(uint32_t index, const v8::PropertyCal
 
 static void namedPropertyGetter(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-    if (!name->IsString())
-        return;
     auto nameString = name.As<v8::String>();
     TestInterface5Implementation* impl = V8TestInterface5::toImpl(info.Holder());
     AtomicString propertyName = toCoreAtomicString(nameString);
@@ -693,13 +692,13 @@ static void namedPropertyGetter(v8::Local<v8::Name> name, const v8::PropertyCall
 
 static void namedPropertyGetterCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
+    if (!name->IsString())
+        return;
     TestInterface5ImplementationV8Internal::namedPropertyGetter(name, info);
 }
 
 static void namedPropertySetter(v8::Local<v8::Name> name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-    if (!name->IsString())
-        return;
     auto nameString = name.As<v8::String>();
     TestInterface5Implementation* impl = V8TestInterface5::toImpl(info.Holder());
     V8StringResource<> propertyName(nameString);
@@ -716,13 +715,13 @@ static void namedPropertySetter(v8::Local<v8::Name> name, v8::Local<v8::Value> v
 
 static void namedPropertySetterCallback(v8::Local<v8::Name> name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
+    if (!name->IsString())
+        return;
     TestInterface5ImplementationV8Internal::namedPropertySetter(name, v8Value, info);
 }
 
 static void namedPropertyQuery(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Integer>& info)
 {
-    if (!name->IsString())
-        return;
     TestInterface5Implementation* impl = V8TestInterface5::toImpl(info.Holder());
     AtomicString propertyName = toCoreAtomicString(name.As<v8::String>());
     v8::String::Utf8Value namedProperty(name);
@@ -737,13 +736,13 @@ static void namedPropertyQuery(v8::Local<v8::Name> name, const v8::PropertyCallb
 
 static void namedPropertyQueryCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Integer>& info)
 {
+    if (!name->IsString())
+        return;
     TestInterface5ImplementationV8Internal::namedPropertyQuery(name, info);
 }
 
 static void namedPropertyDeleter(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Boolean>& info)
 {
-    if (!name->IsString())
-        return;
     TestInterface5Implementation* impl = V8TestInterface5::toImpl(info.Holder());
     AtomicString propertyName = toCoreAtomicString(name.As<v8::String>());
     DeleteResult result = impl->anonymousNamedDeleter(propertyName);
@@ -753,6 +752,8 @@ static void namedPropertyDeleter(v8::Local<v8::Name> name, const v8::PropertyCal
 
 static void namedPropertyDeleterCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Boolean>& info)
 {
+    if (!name->IsString())
+        return;
     TestInterface5ImplementationV8Internal::namedPropertyDeleter(name, info);
 }
 
@@ -766,7 +767,7 @@ static void namedPropertyEnumerator(const v8::PropertyCallbackInfo<v8::Array>& i
         return;
     v8::Local<v8::Array> v8names = v8::Array::New(info.GetIsolate(), names.size());
     for (size_t i = 0; i < names.size(); ++i) {
-        if (!v8CallBoolean(v8names->Set(info.GetIsolate()->GetCurrentContext(), v8::Integer::New(info.GetIsolate(), i), v8String(info.GetIsolate(), names[i]))))
+        if (!v8CallBoolean(v8names->CreateDataProperty(info.GetIsolate()->GetCurrentContext(), i, v8String(info.GetIsolate(), names[i]))))
             return;
     }
     v8SetReturnValue(info, v8names);
@@ -782,12 +783,9 @@ static void namedPropertyEnumeratorCallback(const v8::PropertyCallbackInfo<v8::A
 void V8TestInterface5::visitDOMWrapper(v8::Isolate* isolate, ScriptWrappable* scriptWrappable, const v8::Persistent<v8::Object>& wrapper)
 {
     TestInterface5Implementation* impl = scriptWrappable->toImpl<TestInterface5Implementation>();
-    v8::Local<v8::Object> context = v8::Local<v8::Object>::New(isolate, wrapper);
-    v8::Context::Scope scope(context->CreationContext());
     TestInterface5Implementation* referencedName = impl->referencedName();
     if (referencedName) {
-        if (DOMDataStore::containsWrapper(referencedName, isolate))
-            DOMDataStore::setWrapperReference(wrapper, referencedName, isolate);
+        DOMWrapperWorld::setWrapperReferencesInAllWorlds(wrapper, referencedName, isolate);
     }
 }
 
@@ -830,10 +828,10 @@ const V8DOMConfiguration::MethodConfiguration V8TestInterface5Methods[] = {
     {"toString", TestInterface5ImplementationV8Internal::toStringMethodCallback, 0, 0, static_cast<v8::PropertyAttribute>(v8::DontEnum), V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnPrototype},
 };
 
-static void installV8TestInterface5Template(v8::Local<v8::FunctionTemplate> interfaceTemplate, v8::Isolate* isolate)
+static void installV8TestInterface5Template(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::FunctionTemplate> interfaceTemplate)
 {
     // Initialize the interface object's template.
-    V8DOMConfiguration::initializeDOMInterfaceTemplate(isolate, interfaceTemplate, V8TestInterface5::wrapperTypeInfo.interfaceName, V8TestInterfaceEmpty::domTemplate(isolate), V8TestInterface5::internalFieldCount);
+    V8DOMConfiguration::initializeDOMInterfaceTemplate(isolate, interfaceTemplate, V8TestInterface5::wrapperTypeInfo.interfaceName, V8TestInterfaceEmpty::domTemplate(isolate, world), V8TestInterface5::internalFieldCount);
     v8::Local<v8::Signature> signature = v8::Signature::New(isolate, interfaceTemplate);
     ALLOW_UNUSED_LOCAL(signature);
     v8::Local<v8::ObjectTemplate> instanceTemplate = interfaceTemplate->InstanceTemplate();
@@ -847,10 +845,10 @@ static void installV8TestInterface5Template(v8::Local<v8::FunctionTemplate> inte
             {"CONST_JAVASCRIPT", 1, 0, V8DOMConfiguration::ConstantTypeShort},
         };
         V8DOMConfiguration::installConstants(isolate, interfaceTemplate, prototypeTemplate, V8TestInterface5Constants, WTF_ARRAY_LENGTH(V8TestInterface5Constants));
-        V8DOMConfiguration::installAttributes(isolate, instanceTemplate, prototypeTemplate, V8TestInterface5Attributes, WTF_ARRAY_LENGTH(V8TestInterface5Attributes));
-        V8DOMConfiguration::installAccessors(isolate, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, V8TestInterface5Accessors, WTF_ARRAY_LENGTH(V8TestInterface5Accessors));
-        V8DOMConfiguration::installMethods(isolate, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, V8TestInterface5Methods, WTF_ARRAY_LENGTH(V8TestInterface5Methods));
-    } // if (RuntimeEnabledFeatures::featureNameEnabled())
+        V8DOMConfiguration::installAttributes(isolate, world, instanceTemplate, prototypeTemplate, V8TestInterface5Attributes, WTF_ARRAY_LENGTH(V8TestInterface5Attributes));
+        V8DOMConfiguration::installAccessors(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, V8TestInterface5Accessors, WTF_ARRAY_LENGTH(V8TestInterface5Accessors));
+        V8DOMConfiguration::installMethods(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, V8TestInterface5Methods, WTF_ARRAY_LENGTH(V8TestInterface5Methods));
+    }
 
     // Indexed properties
     v8::IndexedPropertyHandlerConfiguration indexedPropertyHandlerConfig(TestInterface5ImplementationV8Internal::indexedPropertyGetterCallback, TestInterface5ImplementationV8Internal::indexedPropertySetterCallback, 0, TestInterface5ImplementationV8Internal::indexedPropertyDeleterCallback, indexedPropertyEnumerator<TestInterface5Implementation>, v8::Local<v8::Value>(), v8::PropertyHandlerFlags::kNone);
@@ -861,14 +859,14 @@ static void installV8TestInterface5Template(v8::Local<v8::FunctionTemplate> inte
 
     // Iterator (@@iterator)
     const V8DOMConfiguration::SymbolKeyedMethodConfiguration symbolKeyedIteratorConfiguration = { v8::Symbol::GetIterator, TestInterface5ImplementationV8Internal::iteratorMethodCallback, 0, v8::DontDelete, V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnPrototype };
-    V8DOMConfiguration::installMethod(isolate, prototypeTemplate, signature, symbolKeyedIteratorConfiguration);
+    V8DOMConfiguration::installMethod(isolate, world, prototypeTemplate, signature, symbolKeyedIteratorConfiguration);
 
     instanceTemplate->SetCallAsFunctionHandler(V8TestInterface5::legacyCallCustom);
 }
 
-v8::Local<v8::FunctionTemplate> V8TestInterface5::domTemplate(v8::Isolate* isolate)
+v8::Local<v8::FunctionTemplate> V8TestInterface5::domTemplate(v8::Isolate* isolate, const DOMWrapperWorld& world)
 {
-    return V8DOMConfiguration::domClassTemplate(isolate, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestInterface5Template);
+    return V8DOMConfiguration::domClassTemplate(isolate, world, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestInterface5Template);
 }
 
 bool V8TestInterface5::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
@@ -886,57 +884,47 @@ TestInterface5Implementation* V8TestInterface5::toImplWithTypeCheck(v8::Isolate*
     return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : 0;
 }
 
-void V8TestInterface5::preparePrototypeAndInterfaceObject(v8::Local<v8::Context> context, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate)
+void V8TestInterface5::preparePrototypeAndInterfaceObject(v8::Local<v8::Context> context, const DOMWrapperWorld& world, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate)
 {
     v8::Isolate* isolate = context->GetIsolate();
     ExecutionContext* executionContext = toExecutionContext(context);
     v8::Local<v8::Signature> signature = v8::Signature::New(isolate, interfaceTemplate);
     if (executionContext && (executionContext->isWorkerGlobalScope())) {
         const V8DOMConfiguration::AccessorConfiguration accessorConfiguration = {"workerExposedAttribute", TestInterface5ImplementationV8Internal::workerExposedAttributeAttributeGetterCallback, TestInterface5ImplementationV8Internal::workerExposedAttributeAttributeSetterCallback, 0, 0, 0, v8::DEFAULT, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder};
-        V8DOMConfiguration::installAccessor(isolate, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, accessorConfiguration);
+        V8DOMConfiguration::installAccessor(isolate, world, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, accessorConfiguration);
     }
     if (executionContext && (executionContext->isDocument())) {
         const V8DOMConfiguration::AccessorConfiguration accessorConfiguration = {"windowExposedAttribute", TestInterface5ImplementationV8Internal::windowExposedAttributeAttributeGetterCallback, TestInterface5ImplementationV8Internal::windowExposedAttributeAttributeSetterCallback, 0, 0, 0, v8::DEFAULT, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder};
-        V8DOMConfiguration::installAccessor(isolate, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, accessorConfiguration);
+        V8DOMConfiguration::installAccessor(isolate, world, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, accessorConfiguration);
     }
-    v8::Local<v8::Signature> signature = v8::Signature::New(isolate, domTemplate(isolate));
+    v8::Local<v8::Signature> signature = v8::Signature::New(isolate, interfaceTemplate);
     ExecutionContext* executionContext = toExecutionContext(prototypeObject->CreationContext());
     ASSERT(executionContext);
     if (executionContext && (executionContext->isWorkerGlobalScope())) {
         const V8DOMConfiguration::MethodConfiguration workerExposedMethodMethodConfiguration = {"workerExposedMethod", TestInterface5ImplementationV8Internal::workerExposedMethodMethodCallback, 0, 0, v8::None, V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnPrototype};
-        V8DOMConfiguration::installMethod(isolate, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, workerExposedMethodMethodConfiguration);
+        V8DOMConfiguration::installMethod(isolate, world, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, workerExposedMethodMethodConfiguration);
     }
     if (executionContext && (executionContext->isDocument())) {
         const V8DOMConfiguration::MethodConfiguration windowExposedMethodMethodConfiguration = {"windowExposedMethod", TestInterface5ImplementationV8Internal::windowExposedMethodMethodCallback, 0, 0, v8::None, V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnPrototype};
-        V8DOMConfiguration::installMethod(isolate, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, windowExposedMethodMethodConfiguration);
+        V8DOMConfiguration::installMethod(isolate, world, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, windowExposedMethodMethodConfiguration);
     }
     if (executionContext && (executionContext->isWorkerGlobalScope())) {
         const V8DOMConfiguration::MethodConfiguration workerExposedStaticMethodMethodConfiguration = {"workerExposedStaticMethod", TestInterface5ImplementationV8Internal::workerExposedStaticMethodMethodCallback, 0, 0, v8::None, V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnInterface};
-        V8DOMConfiguration::installMethod(isolate, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, workerExposedStaticMethodMethodConfiguration);
+        V8DOMConfiguration::installMethod(isolate, world, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, workerExposedStaticMethodMethodConfiguration);
     }
     if (executionContext && (executionContext->isDocument())) {
         const V8DOMConfiguration::MethodConfiguration windowExposedStaticMethodMethodConfiguration = {"windowExposedStaticMethod", TestInterface5ImplementationV8Internal::windowExposedStaticMethodMethodCallback, 0, 0, v8::None, V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnInterface};
-        V8DOMConfiguration::installMethod(isolate, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, windowExposedStaticMethodMethodConfiguration);
+        V8DOMConfiguration::installMethod(isolate, world, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, windowExposedStaticMethodMethodConfiguration);
     }
     if (executionContext && (executionContext->isDocument() || executionContext->isServiceWorkerGlobalScope())) {
         const V8DOMConfiguration::MethodConfiguration windowAndServiceWorkerExposedMethodMethodConfiguration = {"windowAndServiceWorkerExposedMethod", TestInterface5ImplementationV8Internal::windowAndServiceWorkerExposedMethodMethodCallback, 0, 0, v8::None, V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnPrototype};
-        V8DOMConfiguration::installMethod(isolate, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, windowAndServiceWorkerExposedMethodMethodConfiguration);
+        V8DOMConfiguration::installMethod(isolate, world, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, windowAndServiceWorkerExposedMethodMethodConfiguration);
     }
 }
 
 ActiveScriptWrappable* V8TestInterface5::toActiveScriptWrappable(v8::Local<v8::Object> wrapper)
 {
     return toImpl(wrapper);
-}
-
-void V8TestInterface5::refObject(ScriptWrappable* scriptWrappable)
-{
-    scriptWrappable->toImpl<TestInterface5Implementation>()->ref();
-}
-
-void V8TestInterface5::derefObject(ScriptWrappable* scriptWrappable)
-{
-    scriptWrappable->toImpl<TestInterface5Implementation>()->deref();
 }
 
 } // namespace blink

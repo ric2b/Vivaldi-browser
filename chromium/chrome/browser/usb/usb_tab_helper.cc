@@ -4,9 +4,9 @@
 
 #include "chrome/browser/usb/usb_tab_helper.h"
 
+#include <memory>
 #include <utility>
 
-#include "base/memory/scoped_ptr.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/usb/web_usb_permission_provider.h"
@@ -24,12 +24,13 @@ using content::WebContents;
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(UsbTabHelper);
 
 struct FrameUsbServices {
-  scoped_ptr<WebUSBPermissionProvider> permission_provider;
+  std::unique_ptr<WebUSBPermissionProvider> permission_provider;
 #if defined(OS_ANDROID)
-  scoped_ptr<WebUsbChooserServiceAndroid> chooser_service;
+  std::unique_ptr<WebUsbChooserServiceAndroid> chooser_service;
 #else
-  scoped_ptr<WebUsbChooserService> chooser_service;
+  std::unique_ptr<WebUsbChooserService> chooser_service;
 #endif  // defined(OS_ANDROID)
+  int device_connection_count_ = 0;
 };
 
 // static
@@ -59,26 +60,37 @@ void UsbTabHelper::CreateChooserService(
   GetChooserService(render_frame_host, std::move(request));
 }
 
-void UsbTabHelper::IncrementConnectionCount() {
-  device_connection_count_++;
+void UsbTabHelper::IncrementConnectionCount(
+    RenderFrameHost* render_frame_host) {
+  auto it = frame_usb_services_.find(render_frame_host);
+  DCHECK(it != frame_usb_services_.end());
+  it->second->device_connection_count_++;
   NotifyTabStateChanged();
 }
 
-void UsbTabHelper::DecrementConnectionCount() {
-  DCHECK_GT(device_connection_count_, 0);
-  device_connection_count_--;
+void UsbTabHelper::DecrementConnectionCount(
+    RenderFrameHost* render_frame_host) {
+  auto it = frame_usb_services_.find(render_frame_host);
+  DCHECK(it != frame_usb_services_.end());
+  DCHECK_GT(it->second->device_connection_count_, 0);
+  it->second->device_connection_count_--;
   NotifyTabStateChanged();
 }
 
 bool UsbTabHelper::IsDeviceConnected() const {
-  return device_connection_count_ > 0;
+  for (const auto& map_entry : frame_usb_services_) {
+    if (map_entry.second->device_connection_count_ > 0)
+      return true;
+  }
+  return false;
 }
 
 UsbTabHelper::UsbTabHelper(WebContents* web_contents)
-    : content::WebContentsObserver(web_contents), device_connection_count_(0) {}
+    : content::WebContentsObserver(web_contents) {}
 
 void UsbTabHelper::RenderFrameDeleted(RenderFrameHost* render_frame_host) {
   frame_usb_services_.erase(render_frame_host);
+  NotifyTabStateChanged();
 }
 
 FrameUsbServices* UsbTabHelper::GetFrameUsbService(
@@ -86,7 +98,8 @@ FrameUsbServices* UsbTabHelper::GetFrameUsbService(
   FrameUsbServicesMap::const_iterator it =
       frame_usb_services_.find(render_frame_host);
   if (it == frame_usb_services_.end()) {
-    scoped_ptr<FrameUsbServices> frame_usb_services(new FrameUsbServices());
+    std::unique_ptr<FrameUsbServices> frame_usb_services(
+        new FrameUsbServices());
     it = (frame_usb_services_.insert(
               std::make_pair(render_frame_host, std::move(frame_usb_services))))
              .first;

@@ -8,7 +8,7 @@
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chromeos/dbus/cryptohome_client.h"
 
 namespace chromeos {
@@ -166,6 +166,12 @@ void FakeSessionManagerClient::StartArcInstance(const std::string& socket_path,
 void FakeSessionManagerClient::StopArcInstance(const ArcCallback& callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(callback, arc_available_));
+}
+
+void FakeSessionManagerClient::GetArcStartTime(
+    const GetArcStartTimeCallback& callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(callback, arc_available_, base::TimeTicks::Now()));
 }
 
 const std::string& FakeSessionManagerClient::device_policy() const {

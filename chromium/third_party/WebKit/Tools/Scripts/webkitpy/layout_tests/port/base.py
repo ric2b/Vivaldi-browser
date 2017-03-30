@@ -266,7 +266,7 @@ class Port(object):
             # memory usage may also grow over time, up to a certain point.
             # Relaunching the driver periodically helps keep it under control.
             return 40
-        # The default is infinte batch size.
+        # The default is infinite batch size.
         return None
 
     def default_child_processes(self):
@@ -508,12 +508,12 @@ class Port(object):
 
         executable = self._path_to_image_diff()
         # Note that although we are handed 'old', 'new', image_diff wants 'new', 'old'.
-        comand = [executable, '--diff', native_actual_filename, native_expected_filename, native_diff_filename]
+        command = [executable, '--diff', native_actual_filename, native_expected_filename, native_diff_filename]
 
         result = None
         err_str = None
         try:
-            exit_code = self._executive.run_command(comand, return_exit_code=True)
+            exit_code = self._executive.run_command(command, return_exit_code=True)
             if exit_code == 0:
                 # The images are the same.
                 result = None
@@ -747,7 +747,7 @@ class Port(object):
 
     def tests(self, paths):
         """Return the list of tests found matching paths."""
-        tests = self._real_tests(paths)
+        tests = self.real_tests(paths)
 
         suites = self.virtual_test_suites()
         if paths:
@@ -756,7 +756,7 @@ class Port(object):
             tests.extend(self._all_virtual_tests(suites))
         return tests
 
-    def _real_tests(self, paths):
+    def real_tests(self, paths):
         # When collecting test cases, skip these directories
         skipped_directories = set(['.svn', '_svn', 'platform', 'resources', 'support', 'script-tests', 'reference', 'reftest'])
         files = find_files.find(self._filesystem, self.layout_tests_dir(), paths,
@@ -1307,7 +1307,7 @@ class Port(object):
 
         full_port_name = self.determine_full_port_name(self.host, self._options, self.port_name)
         builder_category = self.get_option('ignore_builder_category', 'layout')
-        factory = BotTestExpectationsFactory()
+        factory = BotTestExpectationsFactory(self.host.builders)
         # FIXME: This only grabs release builder's flakiness data. If we're running debug,
         # when we should grab the debug builder's data.
         expectations = factory.expectations_for_port(full_port_name, builder_category)
@@ -1606,7 +1606,7 @@ class Port(object):
 
     def _populate_virtual_suite(self, suite):
         if not suite.tests:
-            base_tests = self._real_tests([suite.base])
+            base_tests = self.real_tests([suite.base])
             suite.tests = {}
             for test in base_tests:
                 suite.tests[test.replace(suite.base, suite.name, 1)] = test

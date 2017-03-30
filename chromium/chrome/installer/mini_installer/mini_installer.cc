@@ -516,10 +516,6 @@ ProcessExitResult RunSetup(const Configuration& configuration,
     cmd_line.append(L" --vivaldi-force-launch");
   }
 
-  // By appending this option, setup.exe will install Google Breakpad
-  // crashlogging (crash_service.exe).
-  cmd_line.append(L" --vivaldi-crash-logging");
-
   return RunProcessAndWait(NULL, cmd_line.get());
 }
 

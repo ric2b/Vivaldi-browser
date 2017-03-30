@@ -8,16 +8,26 @@
         --checkbox-spacing: 18px;
         --iron-icon-fill-color: var(--paper-grey-600);
         --iron-icon-height: 20px;
+        --iron-icon-spacing: 16px;
         --iron-icon-width: 20px;
+        --paper-checkbox-label-color: inherit;
+        --paper-dialog-color: inherit;
         --paper-icon-button: {
           width: 36px;
           height: 36px;
         };
         --paper-input-max-width: 264px;
+        --paper-item: {
+          font-size: inherit;
+        };
+        --paper-radio-button-label-color: inherit;
+        --paper-radio-group-item-padding: 0;
+
         --settings-background-color: var(--paper-blue-grey-50);
         --settings-secondary: {
           color: var(--paper-grey-600);
           font-weight: 400;
+          margin-top: 4px;
         };
         --settings-error-color: var(--paper-red-700);
         --settings-hover-color: var(--google-grey-300);
@@ -25,28 +35,31 @@
         /* Some colors use non-MD colors.  These custom colors are specified by
          * UX design (bettes@). */
         --settings-nav-grey: rgb(90, 90, 90);
+
+        --settings-row-min-height: 40px;
+        --settings-separator-line: 1px solid rgba(0, 0, 0, 0.06);
+
         --settings-title-bar-background-color: rgb(52, 73, 94);
         --settings-title-bar-color: rgb(255, 255, 255);
+        --settings-title-search-color: rgb(192, 199, 205);
       }
 
       h2 {
         @apply(--layout-center);
-        color: var(--paper-grey-500);
         display: flex;
         font-size: 100%;
         font-weight: 500;
         margin: 0;
-        min-height: 40px;
+        min-height: var(--settings-row-min-height);
       }
 
-      iron-icon[icon=check],
-      iron-icon[icon=done] {
+      iron-icon[icon='cr:check'],
+      iron-icon[icon='settings:done'] {
        --iron-icon-fill-color: var(--google-green-500);
       }
 
       paper-button {
         margin: 0;
-        min-width: auto;
       }
 
       paper-button[toggles][active] {
@@ -82,7 +95,7 @@
 
       paper-button.secondary-button {
         --paper-button: {
-          color: var(--paper-grey-700);
+          color: var(--paper-grey-600);
           text-decoration: none;
           font-weight: 500;
         };
@@ -95,11 +108,26 @@
         };
       }
 
+      paper-checkbox {
+        --paper-checkbox-checked-color: var(--google-blue-500);
+        --paper-checkbox-label-spacing: var(--checkbox-spacing);
+        --paper-checkbox-size: var(--checkbox-size);
+        --paper-checkbox-unchecked-color: var(--paper-grey-600);
+        -webkit-margin-start: var(--checkbox-margin-start);
+      }
+
       paper-radio-button {
+        @apply(--layout-center);
         --paper-radio-button-checked-color: var(--google-blue-500);
         --paper-radio-button-label-spacing: 18px;
         --paper-radio-button-unchecked-color: var(--paper-grey-600);
         -webkit-margin-start: 2px;
+        display: flex;
+        min-height: 40px;
+      }
+
+      paper-radio-group {
+        width: 100%;
       }
 
       .text-elide {
@@ -120,17 +148,21 @@
       .action-button {
         background: var(--google-blue-500);
         color: white;
-        font-weight: 500;
       }
 
       .action-button[disabled] {
         opacity: .25;  /* TODO(dbeam): check this value with bettes. */
       }
 
+      .action-button,
+      .cancel-button {
+        font-weight: 500;
+      }
+
       .list-frame {
         @apply(--layout-center);
         -webkit-padding-end: 20px;
-        -webkit-padding-start: 48px;
+        -webkit-padding-start: 56px;
         display: block;
         padding-bottom: 0;
         padding-top: 0;
@@ -144,12 +176,12 @@
       .list-item {
         @apply(--layout-center);
         display: flex;
-        min-height: 40px;
+        min-height: var(--settings-row-min-height);
         padding: 0;
       }
 
       .list-item.underbar {
-        border-bottom: 1px solid var(--paper-grey-300);
+        border-bottom: var(--settings-separator-line);
       }
 
       .list-item.selected {
@@ -162,7 +194,7 @@
 
       .list-item > .middle {
         flex: 1;
-        margin: 8px 12px;
+        margin: 8px 16px;
         overflow: hidden;
         white-space: nowrap;
       }
@@ -186,13 +218,14 @@
 
       .settings-box {
         @apply(--layout-center);
-        border-top: 1px solid var(--paper-grey-300);
+        border-top: var(--settings-separator-line);
         display: flex;
-        min-height: 40px;
+        min-height: var(--settings-row-min-height);
         padding: 0 20px;
       }
 
-      .settings-box.first {
+      .settings-box.first,
+      .settings-box.continuation {
         border-top: none;
       }
 
@@ -230,7 +263,7 @@
        *  +-------------------------------------------------------+
        */
       .settings-box .secondary-action {
-        -webkit-border-start: 1px solid var(--paper-grey-300);
+        -webkit-border-start: var(--settings-separator-line);
         -webkit-padding-start: 20px;
       }
 
@@ -239,12 +272,8 @@
         padding: 8px;
       }
 
-      .vertical-list > div:first-of-type {
-        border-top: none;
-      }
-
-      .vertical-list > div {
-        border-top: 1px solid var(--paper-grey-300);
+      .vertical-list > *:not(:first-of-type) {
+        border-top: var(--settings-separator-line);
       }
 
       .settings-checkbox-spacer {
@@ -252,6 +281,20 @@
             var(--checkbox-margin-start) +
             var(--checkbox-size) +
             var(--checkbox-spacing));
+      }
+
+      /* Keep the slider color consistent throughout the range. */
+      paper-slider.always-on {
+        --paper-slider-knob-start-border-color: var(--google-blue-700);
+        --paper-slider-knob-start-color: var(--google-blue-700);
+        --paper-slider-pin-start-color: var(--google-blue-700);
+      }
+
+      .favicon-image {
+        background-repeat: no-repeat;
+        background-size: contain;
+        height: 16px;
+        width: 16px;
       }
     </style>
   </template>

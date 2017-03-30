@@ -8,9 +8,12 @@
 #include "ui/message_center/message_center_export.h"
 
 namespace gfx {
-class Display;
 class Point;
 class Rect;
+}
+
+namespace display {
+class Display;
 }
 
 namespace message_center {
@@ -45,7 +48,7 @@ class MESSAGE_CENTER_EXPORT PopupAlignmentDelegate {
   // Called when a new toast appears or toasts are rearranged in the |display|.
   // The subclass may override this method to check the current desktop status
   // so that the toasts are arranged at the correct place.
-  virtual void RecomputeAlignment(const gfx::Display& display) = 0;
+  virtual void RecomputeAlignment(const display::Display& display) = 0;
 
  protected:
   virtual ~PopupAlignmentDelegate();

@@ -2,8 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-from telemetry.page import action_runner
-from telemetry.page import page_test
+from telemetry.page import legacy_page_test
 from telemetry.timeline.model import TimelineModel
 from telemetry.timeline import tracing_config
 from telemetry.value import trace
@@ -43,9 +42,8 @@ class TimelineController(object):
 
   def Start(self, tab):
     # Start the smooth marker for all actions.
-    runner = action_runner.ActionRunner(tab)
     if self._enable_auto_issuing_record:
-      self._interaction = runner.CreateInteraction(
+      self._interaction = tab.action_runner.CreateInteraction(
           RUN_SMOOTH_ACTIONS)
       self._interaction.Begin()
 
@@ -85,7 +83,7 @@ class TimelineController(object):
       self._smooth_records = [run_smooth_actions_record]
 
     if len(self._smooth_records) == 0:
-      raise page_test.Failure('No interaction record was created.')
+      raise legacy_page_test.Failure('No interaction record was created.')
 
   def CleanUp(self, platform):
     if platform.tracing_controller.is_tracing_running:

@@ -7,11 +7,12 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "components/component_updater/default_component_installer.h"
 
 namespace base {
@@ -41,7 +42,7 @@ class STHSetComponentInstallerTraits : public ComponentInstallerTraits {
  public:
   // The |sth_distributor| will be notified each time a new STH is observed.
   explicit STHSetComponentInstallerTraits(
-      scoped_ptr<net::ct::STHObserver> sth_observer);
+      std::unique_ptr<net::ct::STHObserver> sth_observer);
   ~STHSetComponentInstallerTraits() override;
 
  private:
@@ -56,8 +57,8 @@ class STHSetComponentInstallerTraits : public ComponentInstallerTraits {
                           const base::FilePath& install_dir) const override;
   void ComponentReady(const base::Version& version,
                       const base::FilePath& install_dir,
-                      scoped_ptr<base::DictionaryValue> manifest) override;
-  base::FilePath GetBaseDirectory() const override;
+                      std::unique_ptr<base::DictionaryValue> manifest) override;
+  base::FilePath GetRelativeInstallDir() const override;
   void GetHash(std::vector<uint8_t>* hash) const override;
   std::string GetName() const override;
   std::string GetAp() const override;
@@ -68,12 +69,14 @@ class STHSetComponentInstallerTraits : public ComponentInstallerTraits {
 
   // Handle successful parsing of JSON by distributing the new STH.
   void OnJsonParseSuccess(const std::string& log_id,
-                          scoped_ptr<base::Value> parsed_json);
+                          std::unique_ptr<base::Value> parsed_json);
 
   // STH parsing failed - do nothing.
   void OnJsonParseError(const std::string& log_id, const std::string& error);
 
-  scoped_ptr<net::ct::STHObserver> sth_observer_;
+  std::unique_ptr<net::ct::STHObserver> sth_observer_;
+
+  base::WeakPtrFactory<STHSetComponentInstallerTraits> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(STHSetComponentInstallerTraits);
 };

@@ -613,7 +613,6 @@ class IntegrationTest(unittest.TestCase):
             "buildTime": "2013-02-08T15:19:37.460000", "tests": self._event_target_wrapper_and_inspector_results,
             "revisions": {"chromium": {"timestamp": "2013-02-01 08:48:05 +0000", "revision": "5678"}}}])
         self.assertTrue(filesystem.isfile(filesystem.splitext(output_json_path)[0] + '.html'))
-        pass
 
     def test_run_generates_and_show_results_page(self):
         runner, port = self.create_runner_and_setup_results_template(args=['--output-json-path=/mock-checkout/output.json'])
@@ -694,8 +693,13 @@ class IntegrationTest(unittest.TestCase):
             "revisions": {"chromium": {"timestamp": "2013-02-01 08:48:05 +0000", "revision": "5678"}}}])
 
     def test_run_with_upload_json(self):
-        runner, port = self.create_runner_and_setup_results_template(args=['--output-json-path=/mock-checkout/output.json',
-                                                                           '--test-results-server', 'some.host', '--platform', 'platform1', '--builder-name', 'builder1', '--build-number', '123'])
+        runner, port = self.create_runner_and_setup_results_template(args=[
+            '--output-json-path=/mock-checkout/output.json',
+            '--test-results-server', 'some.host',
+            '--platform', 'platform1',
+            '--builder-name', 'builder1',
+            '--build-number', '123'
+        ])
 
         self._test_run_with_json_output(runner, port.host.filesystem, upload_succeeds=True)
         generated_json = json.loads(port.host.filesystem.files['/mock-checkout/output.json'])
@@ -707,9 +711,14 @@ class IntegrationTest(unittest.TestCase):
                                         expected_exit_code=PerfTestsRunner.EXIT_CODE_FAILED_UPLOADING)
 
     def test_run_with_upload_json_should_generate_perf_webkit_json(self):
-        runner, port = self.create_runner_and_setup_results_template(args=['--output-json-path=/mock-checkout/output.json',
-                                                                           '--test-results-server', 'some.host', '--platform', 'platform1', '--builder-name', 'builder1', '--build-number', '123',
-                                                                           '--slave-config-json-path=/mock-checkout/slave-config.json'])
+        runner, port = self.create_runner_and_setup_results_template(args=[
+            '--output-json-path=/mock-checkout/output.json',
+            '--test-results-server', 'some.host',
+            '--platform', 'platform1',
+            '--builder-name', 'builder1',
+            '--build-number', '123',
+            '--slave-config-json-path=/mock-checkout/slave-config.json'
+        ])
         port.host.filesystem.write_text_file('/mock-checkout/slave-config.json', '{"key": "value1"}')
 
         self._test_run_with_json_output(runner, port.host.filesystem, upload_succeeds=True)

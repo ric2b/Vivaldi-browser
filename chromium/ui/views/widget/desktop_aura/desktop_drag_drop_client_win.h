@@ -33,7 +33,8 @@ class VIEWS_EXPORT DesktopDragDropClientWin
                        aura::Window* source_window,
                        const gfx::Point& screen_location,
                        int operation,
-                       ui::DragDropTypes::DragEventSource source) override;
+                       ui::DragDropTypes::DragEventSource source,
+                       bool& cancelled) override;
   void DragUpdate(aura::Window* target, const ui::LocatedEvent& event) override;
   void Drop(aura::Window* target, const ui::LocatedEvent& event) override;
   void DragCancel() override;

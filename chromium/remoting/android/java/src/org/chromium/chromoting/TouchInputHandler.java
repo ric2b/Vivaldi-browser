@@ -107,7 +107,7 @@ public class TouchInputHandler implements TouchInputHandlerInterface {
                 canvasToImage.mapVectors(delta);
             }
 
-            moveViewportWithOffset(-deltaX, -deltaY);
+            moveViewportWithOffset(-delta[0], -delta[1]);
         }
     }
 

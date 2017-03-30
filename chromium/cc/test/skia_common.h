@@ -5,11 +5,11 @@
 #ifndef CC_TEST_SKIA_COMMON_H_
 #define CC_TEST_SKIA_COMMON_H_
 
+#include <memory>
+
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
-#include "skia/ext/refptr.h"
-#include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkImage.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
 
 namespace gfx {
 class Rect;
@@ -27,7 +27,7 @@ bool AreDisplayListDrawingResultsSame(const gfx::Rect& layer_rect,
                                       scoped_refptr<DisplayItemList> list_a,
                                       scoped_refptr<DisplayItemList> list_b);
 
-skia::RefPtr<SkImage> CreateDiscardableImage(const gfx::Size& size);
+sk_sp<SkImage> CreateDiscardableImage(const gfx::Size& size);
 
 }  // namespace cc
 

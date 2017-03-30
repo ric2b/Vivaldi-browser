@@ -16,7 +16,7 @@
 #include "components/mus/public/interfaces/surface_id.mojom.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "mojo/public/cpp/bindings/array.h"
-#include "mojo/shell/public/interfaces/interface_provider.mojom.h"
+#include "services/shell/public/interfaces/interface_provider.mojom.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -32,6 +32,7 @@ class WindowObserver;
 class WindowSurface;
 class WindowSurfaceBinding;
 class WindowTreeClientImpl;
+class WindowTreeClientImplPrivate;
 class WindowTreeConnection;
 
 namespace {
@@ -64,8 +65,10 @@ class Window {
 
   WindowTreeConnection* connection() { return connection_; }
 
-  // Configuration.
-  Id id() const { return id_; }
+  // The local_id is provided for client code. The local_id is not set or
+  // manipulated by mus. The default value is -1.
+  void set_local_id(int id) { local_id_ = id; }
+  int local_id() const { return local_id_; }
 
   // Geometric disposition relative to parent window.
   const gfx::Rect& bounds() const { return bounds_; }
@@ -103,10 +106,10 @@ class Window {
     return *viewport_metrics_;
   }
 
-  scoped_ptr<WindowSurface> RequestSurface(mojom::SurfaceType type);
+  std::unique_ptr<WindowSurface> RequestSurface(mojom::SurfaceType type);
 
   void AttachSurface(mojom::SurfaceType type,
-                     scoped_ptr<WindowSurfaceBinding> surface_binding);
+                     std::unique_ptr<WindowSurfaceBinding> surface_binding);
 
   // The template-ized versions of the following methods rely on the presence
   // of a mojo::TypeConverter<const std::vector<uint8_t>, T>.
@@ -190,7 +193,7 @@ class Window {
   void SetModal();
   bool is_modal() const { return is_modal_; }
 
-  Window* GetChildById(Id id);
+  Window* GetChildByLocalId(int id);
 
   void SetTextInputState(mojo::TextInputStatePtr state);
   void SetImeVisibility(bool visible, mojo::TextInputStatePtr state);
@@ -216,6 +219,9 @@ class Window {
   // to a better place.
   void RequestClose();
 
+  // Returns an internal name, set by a client app when it creates a window.
+  std::string GetName() const;
+
  protected:
   // This class is subclassed only by test classes that provide a public ctor.
   Window();
@@ -224,8 +230,13 @@ class Window {
  private:
   friend class WindowPrivate;
   friend class WindowTreeClientImpl;
+  friend class WindowTreeClientImplPrivate;
 
   Window(WindowTreeConnection* connection, Id id);
+
+  // Used to identify this Window on the server. Clients can not change this
+  // value.
+  Id server_id() const { return server_id_; }
 
   WindowTreeClientImpl* tree_client();
 
@@ -295,7 +306,8 @@ class Window {
   static Window** GetStackingTarget(Window* window);
 
   WindowTreeConnection* connection_;
-  Id id_;
+  Id server_id_;
+  int local_id_ = -1;
   Window* parent_;
   Children children_;
 

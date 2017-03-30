@@ -18,8 +18,8 @@ class DelegatingRendererTest : public LayerTreeTest {
   DelegatingRendererTest() : LayerTreeTest(), output_surface_(NULL) {}
   ~DelegatingRendererTest() override {}
 
-  scoped_ptr<OutputSurface> CreateOutputSurface() override {
-    scoped_ptr<FakeOutputSurface> output_surface =
+  std::unique_ptr<OutputSurface> CreateOutputSurface() override {
+    std::unique_ptr<FakeOutputSurface> output_surface =
         FakeOutputSurface::CreateDelegating3d();
     output_surface_ = output_surface.get();
     return std::move(output_surface);
@@ -116,12 +116,12 @@ class DelegatingRendererTestResources : public DelegatingRendererTest {
     ASSERT_TRUE(last_frame.delegated_frame_data);
 
     EXPECT_EQ(2u, last_frame.delegated_frame_data->render_pass_list.size());
-    // Each render pass has 11 resources in it. And the root render pass has a
+    // Each render pass has 10 resources in it. And the root render pass has a
     // mask resource used when drawing the child render pass, as well as its
-    // replica (it's added twice). The number 11 may change if
+    // replica (it's added twice). The number 10 may change if
     // AppendOneOfEveryQuadType() is updated, and the value here should be
     // updated accordingly.
-    EXPECT_EQ(24u, last_frame.delegated_frame_data->resource_list.size());
+    EXPECT_EQ(22u, last_frame.delegated_frame_data->resource_list.size());
 
     EndTest();
   }

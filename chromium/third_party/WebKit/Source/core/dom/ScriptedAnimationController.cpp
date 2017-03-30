@@ -117,7 +117,7 @@ void ScriptedAnimationController::dispatchEvents(const AtomicString& eventInterf
         // special casting window.
         // FIXME: We should not fire events for nodes that are no longer in the tree.
         InspectorInstrumentation::AsyncTask asyncTask(eventTarget->getExecutionContext(), events[i]);
-        if (LocalDOMWindow* window = eventTarget->toDOMWindow())
+        if (LocalDOMWindow* window = eventTarget->toLocalDOMWindow())
             window->dispatchEvent(events[i], nullptr);
         else
             eventTarget->dispatchEvent(events[i]);
@@ -158,8 +158,6 @@ void ScriptedAnimationController::serviceScriptedAnimations(double monotonicTime
     if (!hasScheduledItems())
         return;
 
-    RawPtr<ScriptedAnimationController> protect(this);
-
     callMediaQueryListListeners();
     dispatchEvents();
     executeCallbacks(monotonicTimeNow);
@@ -174,9 +172,9 @@ void ScriptedAnimationController::enqueueEvent(Event* event)
     scheduleAnimationIfNeeded();
 }
 
-void ScriptedAnimationController::enqueuePerFrameEvent(RawPtr<Event> event)
+void ScriptedAnimationController::enqueuePerFrameEvent(Event* event)
 {
-    if (!m_perFrameEvents.add(eventTargetKey(event.get())).isNewEntry)
+    if (!m_perFrameEvents.add(eventTargetKey(event)).isNewEntry)
         return;
     enqueueEvent(event);
 }

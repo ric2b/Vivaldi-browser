@@ -4,6 +4,8 @@
 
 #include "media/cast/test/utility/net_utility.h"
 
+#include <memory>
+
 #include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
 #include "net/udp/udp_server_socket.h"
@@ -14,7 +16,7 @@ namespace test {
 
 // TODO(hubbe): Move to /net/.
 net::IPEndPoint GetFreeLocalPort() {
-  scoped_ptr<net::UDPServerSocket> receive_socket(
+  std::unique_ptr<net::UDPServerSocket> receive_socket(
       new net::UDPServerSocket(NULL, net::NetLog::Source()));
   receive_socket->AllowAddressReuse();
   CHECK_EQ(net::OK, receive_socket->Listen(

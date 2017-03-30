@@ -57,16 +57,19 @@ class DisplayTest : public testing::Test {
  public:
   DisplayTest()
       : factory_(&manager_, &surface_factory_client_),
+        id_allocator_(kArbitrarySurfaceNamespace),
         software_output_device_(nullptr),
-        task_runner_(new base::NullTaskRunner) {}
+        task_runner_(new base::NullTaskRunner) {
+    id_allocator_.RegisterSurfaceIdNamespace(&manager_);
+  }
 
  protected:
-  void SetUpContext(scoped_ptr<TestWebGraphicsContext3D> context) {
+  void SetUpContext(std::unique_ptr<TestWebGraphicsContext3D> context) {
     if (context) {
       output_surface_ = FakeOutputSurface::Create3d(
           TestContextProvider::Create(std::move(context)));
     } else {
-      scoped_ptr<TestSoftwareOutputDevice> output_device(
+      std::unique_ptr<TestSoftwareOutputDevice> output_device(
           new TestSoftwareOutputDevice);
       software_output_device_ = output_device.get();
       output_surface_ =
@@ -77,25 +80,27 @@ class DisplayTest : public testing::Test {
   }
 
   void SubmitCompositorFrame(RenderPassList* pass_list, SurfaceId surface_id) {
-    scoped_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
+    std::unique_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
     pass_list->swap(frame_data->render_pass_list);
 
-    scoped_ptr<CompositorFrame> frame(new CompositorFrame);
+    std::unique_ptr<CompositorFrame> frame(new CompositorFrame);
     frame->delegated_frame_data = std::move(frame_data);
 
     factory_.SubmitCompositorFrame(surface_id, std::move(frame),
                                    SurfaceFactory::DrawCallback());
   }
 
+  enum { kArbitrarySurfaceNamespace = 3 };
+
   SurfaceManager manager_;
   FakeSurfaceFactoryClient surface_factory_client_;
   SurfaceFactory factory_;
+  SurfaceIdAllocator id_allocator_;
   TestSoftwareOutputDevice* software_output_device_;
-  scoped_ptr<FakeOutputSurface> output_surface_;
+  std::unique_ptr<FakeOutputSurface> output_surface_;
   FakeOutputSurface* output_surface_ptr_;
-  FakeBeginFrameSource fake_begin_frame_source_;
   scoped_refptr<base::NullTaskRunner> task_runner_;
-  scoped_ptr<SharedBitmapManager> shared_bitmap_manager_;
+  std::unique_ptr<SharedBitmapManager> shared_bitmap_manager_;
 };
 
 class TestDisplayClient : public DisplayClient {
@@ -103,8 +108,6 @@ class TestDisplayClient : public DisplayClient {
   TestDisplayClient() {}
   ~TestDisplayClient() override {}
 
-  void CommitVSyncParameters(base::TimeTicks timebase,
-                             base::TimeDelta interval) override {}
   void OutputSurfaceLost() override {}
   void SetMemoryPolicy(const ManagedMemoryPolicy& policy) override {}
 };
@@ -113,14 +116,12 @@ class TestDisplayScheduler : public DisplayScheduler {
  public:
   TestDisplayScheduler(DisplaySchedulerClient* client,
                        BeginFrameSource* begin_frame_source,
-                       base::NullTaskRunner* task_runner)
+                       base::SingleThreadTaskRunner* task_runner)
       : DisplayScheduler(client, begin_frame_source, task_runner, 1),
         damaged(false),
         display_resized_(false),
         has_new_root_surface(false),
-        swapped(false) {
-    begin_frame_source_for_children_.reset(new FakeBeginFrameSource);
-  }
+        swapped(false) {}
 
   ~TestDisplayScheduler() override {}
 
@@ -147,9 +148,38 @@ class TestDisplayScheduler : public DisplayScheduler {
   bool display_resized_;
   bool has_new_root_surface;
   bool swapped;
+
+ private:
+  RendererSettings settings_;
 };
 
-void CopyCallback(bool* called, scoped_ptr<CopyOutputResult> result) {
+class TestDisplay : public Display {
+ public:
+  TestDisplay(DisplayClient* client,
+              SurfaceManager* manager,
+              SharedBitmapManager* bitmap_manager,
+              gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
+              const RendererSettings& settings,
+              uint32_t compositor_surface_namespace)
+      : Display(client,
+                manager,
+                bitmap_manager,
+                gpu_memory_buffer_manager,
+                settings,
+                compositor_surface_namespace) {}
+
+  TestDisplayScheduler& scheduler() {
+    return *static_cast<TestDisplayScheduler*>(scheduler_.get());
+  }
+
+ protected:
+  void CreateScheduler(base::SingleThreadTaskRunner* task_runner) override {
+    scheduler_.reset(
+        new TestDisplayScheduler(this, vsync_begin_frame_source_, task_runner));
+  }
+};
+
+void CopyCallback(bool* called, std::unique_ptr<CopyOutputResult> result) {
   *called = true;
 }
 
@@ -160,14 +190,12 @@ TEST_F(DisplayTest, DisplayDamaged) {
   RendererSettings settings;
   settings.partial_swap_enabled = true;
   settings.finish_rendering_on_resize = true;
-  Display display(&client, &manager_, shared_bitmap_manager_.get(), nullptr,
-                  settings);
+  TestDisplay display(&client, &manager_, shared_bitmap_manager_.get(), nullptr,
+                      settings, id_allocator_.id_namespace());
+  display.Initialize(std::move(output_surface_), task_runner_.get());
+  TestDisplayScheduler& scheduler = display.scheduler();
 
-  TestDisplayScheduler scheduler(&display, &fake_begin_frame_source_,
-                                 task_runner_.get());
-  display.Initialize(std::move(output_surface_), &scheduler);
-
-  SurfaceId surface_id(7u);
+  SurfaceId surface_id(id_allocator_.GenerateId());
   EXPECT_FALSE(scheduler.damaged);
   EXPECT_FALSE(scheduler.has_new_root_surface);
   display.SetSurfaceId(surface_id, 1.f);
@@ -185,7 +213,7 @@ TEST_F(DisplayTest, DisplayDamaged) {
 
   // First draw from surface should have full damage.
   RenderPassList pass_list;
-  scoped_ptr<RenderPass> pass = RenderPass::Create();
+  std::unique_ptr<RenderPass> pass = RenderPass::Create();
   pass->output_rect = gfx::Rect(0, 0, 100, 100);
   pass->damage_rect = gfx::Rect(10, 10, 1, 1);
   pass->id = RenderPassId(1, 1);
@@ -325,10 +353,10 @@ TEST_F(DisplayTest, DisplayDamaged) {
 
     pass_list.push_back(std::move(pass));
     scheduler.ResetDamageForTest();
-    scoped_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
+    std::unique_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
     pass_list.swap(frame_data->render_pass_list);
 
-    scoped_ptr<CompositorFrame> frame(new CompositorFrame);
+    std::unique_ptr<CompositorFrame> frame(new CompositorFrame);
     frame->delegated_frame_data = std::move(frame_data);
     frame->metadata.latency_info.push_back(ui::LatencyInfo());
 
@@ -358,10 +386,10 @@ TEST_F(DisplayTest, DisplayDamaged) {
 
     pass_list.push_back(std::move(pass));
     scheduler.ResetDamageForTest();
-    scoped_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
+    std::unique_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
     pass_list.swap(frame_data->render_pass_list);
 
-    scoped_ptr<CompositorFrame> frame(new CompositorFrame);
+    std::unique_ptr<CompositorFrame> frame(new CompositorFrame);
     frame->delegated_frame_data = std::move(frame_data);
 
     factory_.SubmitCompositorFrame(surface_id, std::move(frame),
@@ -417,23 +445,22 @@ class MockedContext : public TestWebGraphicsContext3D {
 };
 
 TEST_F(DisplayTest, Finish) {
-  scoped_ptr<MockedContext> context(new MockedContext());
+  std::unique_ptr<MockedContext> context(new MockedContext());
   MockedContext* context_ptr = context.get();
   SetUpContext(std::move(context));
 
   EXPECT_CALL(*context_ptr, shallowFinishCHROMIUM()).Times(0);
+
+  SurfaceId surface_id(id_allocator_.GenerateId());
+
   TestDisplayClient client;
   RendererSettings settings;
   settings.partial_swap_enabled = true;
   settings.finish_rendering_on_resize = true;
-  Display display(&client, &manager_, shared_bitmap_manager_.get(), nullptr,
-                  settings);
+  TestDisplay display(&client, &manager_, shared_bitmap_manager_.get(), nullptr,
+                      settings, surface_id.id_namespace());
+  display.Initialize(std::move(output_surface_), task_runner_.get());
 
-  TestDisplayScheduler scheduler(&display, &fake_begin_frame_source_,
-                                 task_runner_.get());
-  display.Initialize(std::move(output_surface_), &scheduler);
-
-  SurfaceId surface_id(7u);
   display.SetSurfaceId(surface_id, 1.f);
 
   display.Resize(gfx::Size(100, 100));
@@ -441,7 +468,7 @@ TEST_F(DisplayTest, Finish) {
 
   {
     RenderPassList pass_list;
-    scoped_ptr<RenderPass> pass = RenderPass::Create();
+    std::unique_ptr<RenderPass> pass = RenderPass::Create();
     pass->output_rect = gfx::Rect(0, 0, 100, 100);
     pass->damage_rect = gfx::Rect(10, 10, 1, 1);
     pass->id = RenderPassId(1, 1);
@@ -467,7 +494,7 @@ TEST_F(DisplayTest, Finish) {
   EXPECT_CALL(*context_ptr, shallowFinishCHROMIUM()).Times(0);
   {
     RenderPassList pass_list;
-    scoped_ptr<RenderPass> pass = RenderPass::Create();
+    std::unique_ptr<RenderPass> pass = RenderPass::Create();
     pass->output_rect = gfx::Rect(0, 0, 200, 200);
     pass->damage_rect = gfx::Rect(10, 10, 1, 1);
     pass->id = RenderPassId(1, 1);

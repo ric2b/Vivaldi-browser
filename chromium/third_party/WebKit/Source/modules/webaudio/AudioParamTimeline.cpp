@@ -114,14 +114,14 @@ AudioParamTimeline::ParamEvent AudioParamTimeline::ParamEvent::createSetValueEve
     return ParamEvent(ParamEvent::SetValue, value, time, 0, 0, nullptr);
 }
 
-AudioParamTimeline::ParamEvent AudioParamTimeline::ParamEvent::createLinearRampEvent(float value, double time)
+AudioParamTimeline::ParamEvent AudioParamTimeline::ParamEvent::createLinearRampEvent(float value, double time, float initialValue, double callTime)
 {
-    return ParamEvent(ParamEvent::LinearRampToValue, value, time, 0, 0, nullptr);
+    return ParamEvent(ParamEvent::LinearRampToValue, value, time, 0, 0, nullptr, initialValue, callTime);
 }
 
-AudioParamTimeline::ParamEvent AudioParamTimeline::ParamEvent::createExponentialRampEvent(float value, double time)
+AudioParamTimeline::ParamEvent AudioParamTimeline::ParamEvent::createExponentialRampEvent(float value, double time, float initialValue, double callTime)
 {
-    return ParamEvent(ParamEvent::ExponentialRampToValue, value, time, 0, 0, nullptr);
+    return ParamEvent(ParamEvent::ExponentialRampToValue, value, time, 0, 0, nullptr, initialValue, callTime);
 }
 
 AudioParamTimeline::ParamEvent AudioParamTimeline::ParamEvent::createSetTargetEvent(float value, double time, double timeConstant)
@@ -144,17 +144,17 @@ void AudioParamTimeline::setValueAtTime(float value, double time, ExceptionState
     insertEvent(ParamEvent::createSetValueEvent(value, time), exceptionState);
 }
 
-void AudioParamTimeline::linearRampToValueAtTime(float value, double time, ExceptionState& exceptionState)
+void AudioParamTimeline::linearRampToValueAtTime(float value, double time, float initialValue, double callTime, ExceptionState& exceptionState)
 {
     ASSERT(isMainThread());
 
     if (!isNonNegativeAudioParamTime(time, exceptionState))
         return;
 
-    insertEvent(ParamEvent::createLinearRampEvent(value, time), exceptionState);
+    insertEvent(ParamEvent::createLinearRampEvent(value, time, initialValue, callTime), exceptionState);
 }
 
-void AudioParamTimeline::exponentialRampToValueAtTime(float value, double time, ExceptionState& exceptionState)
+void AudioParamTimeline::exponentialRampToValueAtTime(float value, double time, float initialValue, double callTime, ExceptionState& exceptionState)
 {
     ASSERT(isMainThread());
 
@@ -171,7 +171,7 @@ void AudioParamTimeline::exponentialRampToValueAtTime(float value, double time, 
         return;
     }
 
-    insertEvent(ParamEvent::createExponentialRampEvent(value, time), exceptionState);
+    insertEvent(ParamEvent::createExponentialRampEvent(value, time, initialValue, callTime), exceptionState);
 }
 
 void AudioParamTimeline::setTargetAtTime(float target, double time, double timeConstant, ExceptionState& exceptionState)
@@ -179,7 +179,7 @@ void AudioParamTimeline::setTargetAtTime(float target, double time, double timeC
     ASSERT(isMainThread());
 
     if (!isNonNegativeAudioParamTime(time, exceptionState)
-        || !isNonNegativeAudioParamTime(timeConstant, exceptionState, "Time constant"))
+        || !isPositiveAudioParamTime(timeConstant, exceptionState, "Time constant"))
         return;
 
     insertEvent(ParamEvent::createSetTargetEvent(target, time, timeConstant), exceptionState);
@@ -218,6 +218,15 @@ void AudioParamTimeline::insertEvent(const ParamEvent& event, ExceptionState& ex
 
     unsigned i = 0;
     double insertTime = event.time();
+
+    if (!m_events.size()
+        && (event.getType() == ParamEvent::LinearRampToValue
+            || event.getType() == ParamEvent::ExponentialRampToValue)) {
+        // There are no events preceding these ramps.  Insert a new setValueAtTime event to set the
+        // starting point for these events.
+        m_events.insert(0,
+            AudioParamTimeline::ParamEvent::createSetValueEvent(event.initialValue(), event.callTime()));
+    }
 
     for (i = 0; i < m_events.size(); ++i) {
         if (event.getType() == ParamEvent::SetValueCurve) {
@@ -293,13 +302,11 @@ void AudioParamTimeline::cancelScheduledValues(double startTime, ExceptionState&
     }
 }
 
-float AudioParamTimeline::valueForContextTime(AbstractAudioContext* context, float defaultValue, bool& hasValue)
+float AudioParamTimeline::valueForContextTime(AudioDestinationHandler& audioDestination, float defaultValue, bool& hasValue)
 {
-    ASSERT(context);
-
     {
         MutexTryLocker tryLocker(m_eventsLock);
-        if (!tryLocker.locked() || !context || !m_events.size() || context->currentTime() < m_events[0].time()) {
+        if (!tryLocker.locked() || !m_events.size() || audioDestination.currentTime() < m_events[0].time()) {
             hasValue = false;
             return defaultValue;
         }
@@ -307,8 +314,8 @@ float AudioParamTimeline::valueForContextTime(AbstractAudioContext* context, flo
 
     // Ask for just a single value.
     float value;
-    double sampleRate = context->sampleRate();
-    size_t startFrame = context->currentSampleFrame();
+    double sampleRate = audioDestination.sampleRate();
+    size_t startFrame = audioDestination.currentSampleFrame();
     double controlRate = sampleRate / AudioHandler::ProcessingSizeInFrames; // one parameter change per render quantum
     value = valuesForFrameRange(startFrame, startFrame + 1, defaultValue, &value, 1, sampleRate, controlRate);
 
@@ -411,6 +418,46 @@ float AudioParamTimeline::valuesForFrameRangeImpl(
                 continue;
         }
 
+        // If there's no next event, set nextEventType to LastType to indicate that.
+        ParamEvent::Type nextEventType = nextEvent ? static_cast<ParamEvent::Type>(nextEvent->getType()) : ParamEvent::LastType;
+
+        // If the current event is SetTarget and the next event is a LinearRampToValue or
+        // ExponentialRampToValue, special handling is needed.  In this case, the linear and
+        // exponential ramp should start at wherever the SetTarget processing has reached.
+        if (event.getType() == ParamEvent::SetTarget
+            && (nextEventType == ParamEvent::LinearRampToValue
+                || nextEventType == ParamEvent::ExponentialRampToValue)) {
+            // Replace the SetTarget with a SetValue to set the starting time and value for the ramp
+            // using the current frame.  We need to update |value| appropriately depending on
+            // whether the ramp has started or not.
+            //
+            // If SetTarget starts somewhere between currentFrame - 1 and currentFrame, we directly
+            // compute the value it would have at currentFrame.  If not, we update the value from
+            // the value from currentFrame - 1.
+            //
+            // Can't use the condition currentFrame - 1 <= t0 * sampleRate <= currentFrame because
+            // currentFrame is unsigned and could be 0.  Instead, compute the condition this way,
+            // where f = currentFrame and Fs = sampleRate:
+            //
+            //    f - 1 <= t0 * Fs <= f
+            //    2 * f - 2 <= 2 * Fs * t0 <= 2 * f
+            //    -2 <= 2 * Fs * t0 - 2 * f <= 0
+            //    -1 <= 2 * Fs * t0 - 2 * f + 1 <= 1
+            //     abs(2 * Fs * t0 - 2 * f + 1) <= 1
+            if (fabs(2 * sampleRate * event.time() - 2 * currentFrame + 1) <= 1) {
+                // SetTarget is starting somewhere between currentFrame - 1 and
+                // currentFrame. Compute the value the SetTarget would have at the currentFrame.
+                value = event.value() + (value - event.value()) * exp(-(currentFrame / sampleRate - event.time()) / event.timeConstant());
+            } else {
+                // SetTarget has already started.  Update |value| one frame because it's the value from
+                // the previous frame.
+                float discreteTimeConstant = static_cast<float>(AudioUtilities::discreteTimeConstantForSampleRate(
+                    event.timeConstant(), controlRate));
+                value += (event.value() - value) * discreteTimeConstant;
+            }
+            m_events[i] = ParamEvent::createSetValueEvent(value, currentFrame / sampleRate);
+        }
+
         float value1 = event.value();
         double time1 = event.time();
 
@@ -438,8 +485,6 @@ float AudioParamTimeline::valuesForFrameRangeImpl(
         ASSERT(fillToEndFrame >= startFrame);
         size_t fillToFrame = fillToEndFrame - startFrame;
         fillToFrame = std::min(fillToFrame, static_cast<size_t>(numberOfValues));
-
-        ParamEvent::Type nextEventType = nextEvent ? static_cast<ParamEvent::Type>(nextEvent->getType()) : ParamEvent::LastType /* unknown */;
 
         // First handle linear and exponential ramps which require looking ahead to the next event.
         if (nextEventType == ParamEvent::LinearRampToValue) {
@@ -527,6 +572,11 @@ float AudioParamTimeline::valuesForFrameRangeImpl(
                 // computed value.
                 if (writeIndex >= 1)
                     value /= multiplier;
+
+                // Due to roundoff it's possible that value exceeds value2.  Clip value to value2 if
+                // we are within 1/2 frame of time2.
+                if (currentFrame > time2 * sampleRate - 0.5)
+                    value = value2;
             }
         } else {
             // Handle event types not requiring looking ahead to the next event.

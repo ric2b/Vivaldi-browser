@@ -50,7 +50,6 @@
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/CullRect.h"
-#include "platform/graphics/paint/DisplayItemCacheSkipper.h"
 #include "platform/inspector_protocol/Values.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebData.h"
@@ -114,8 +113,6 @@ public:
         if (m_overlay->isEmpty())
             return;
 
-        // Skip cache because the following paint may conflict with the view's real painting.
-        DisplayItemCacheSkipper cacheSkipper(graphicsContext);
         FrameView* view = m_overlay->overlayMainFrame()->view();
         DCHECK(!view->needsLayout());
         view->paint(graphicsContext, CullRect(IntRect(0, 0, view->width(), view->height())));
@@ -332,7 +329,7 @@ void InspectorOverlay::setInspectMode(InspectorDOMAgent::SearchMode searchMode, 
     scheduleUpdate();
 
     if (searchMode != InspectorDOMAgent::NotSearching) {
-        m_inspectModeHighlightConfig = highlightConfig;
+        m_inspectModeHighlightConfig = std::move(highlightConfig);
     } else {
         m_hoveredNodeForInspectMode.clear();
         hideHighlight();
@@ -354,7 +351,7 @@ void InspectorOverlay::setInspectedNode(Node* node)
 void InspectorOverlay::highlightQuad(PassOwnPtr<FloatQuad> quad, const InspectorHighlightConfig& highlightConfig)
 {
     m_quadHighlightConfig = highlightConfig;
-    m_highlightQuad = quad;
+    m_highlightQuad = std::move(quad);
     m_omitTooltip = false;
     scheduleUpdate();
 }
@@ -405,7 +402,7 @@ static PassOwnPtr<protocol::DictionaryValue> buildObjectForSize(const IntSize& s
     OwnPtr<protocol::DictionaryValue> result = protocol::DictionaryValue::create();
     result->setNumber("width", size.width());
     result->setNumber("height", size.height());
-    return result.release();
+    return result;
 }
 
 void InspectorOverlay::drawNodeHighlight()
@@ -426,7 +423,7 @@ void InspectorOverlay::drawNodeHighlight()
             Element* element = elements->item(i);
             InspectorHighlight highlight(element, m_nodeHighlightConfig, false);
             OwnPtr<protocol::DictionaryValue> highlightJSON = highlight.asProtocolValue();
-            evaluateInOverlay("drawHighlight", highlightJSON.release());
+            evaluateInOverlay("drawHighlight", std::move(highlightJSON));
         }
     }
 
@@ -436,7 +433,7 @@ void InspectorOverlay::drawNodeHighlight()
         highlight.appendEventTargetQuads(m_eventTargetNode.get(), m_nodeHighlightConfig);
 
     OwnPtr<protocol::DictionaryValue> highlightJSON = highlight.asProtocolValue();
-    evaluateInOverlay("drawHighlight", highlightJSON.release());
+    evaluateInOverlay("drawHighlight", std::move(highlightJSON));
 }
 
 void InspectorOverlay::drawQuadHighlight()
@@ -539,7 +536,7 @@ void InspectorOverlay::reset(const IntSize& viewportSize, const IntPoint& docume
     resetData->setNumber("pageZoomFactor", m_webViewImpl->mainFrameImpl()->frame()->pageZoomFactor());
     resetData->setNumber("scrollX", documentScrollOffset.x());
     resetData->setNumber("scrollY", documentScrollOffset.y());
-    evaluateInOverlay("reset", resetData.release());
+    evaluateInOverlay("reset", std::move(resetData));
 }
 
 void InspectorOverlay::evaluateInOverlay(const String& method, const String& argument)
@@ -556,7 +553,7 @@ void InspectorOverlay::evaluateInOverlay(const String& method, PassOwnPtr<protoc
     ScriptForbiddenScope::AllowUserAgentScript allowScript;
     OwnPtr<protocol::ListValue> command = protocol::ListValue::create();
     command->pushValue(protocol::StringValue::create(method));
-    command->pushValue(argument);
+    command->pushValue(std::move(argument));
     toLocalFrame(overlayPage()->mainFrame())->script().executeScriptInMainWorld("dispatch(" + command->toJSONString() + ")", ScriptController::ExecuteScriptWhenScriptsDisabled);
 }
 
@@ -574,7 +571,7 @@ void InspectorOverlay::onTimer(Timer<InspectorOverlay>*)
     scheduleUpdate();
 }
 
-void InspectorOverlay::clear()
+void InspectorOverlay::clearInternal()
 {
     if (m_layoutEditor)
         m_layoutEditor.clear();
@@ -589,6 +586,15 @@ void InspectorOverlay::clear()
     m_inspectMode = InspectorDOMAgent::NotSearching;
     m_timer.stop();
     hideHighlight();
+}
+
+void InspectorOverlay::clear()
+{
+    clearInternal();
+    m_debuggerAgent.clear();
+    m_domAgent.clear();
+    m_cssAgent.clear();
+    m_overlayHost->setListener(nullptr);
 }
 
 void InspectorOverlay::overlayResumed()
@@ -657,13 +663,13 @@ void InspectorOverlay::overlayClearSelection(bool commitChanges)
     toChromeClientImpl(m_webViewImpl->page()->chromeClient()).setCursor(pointerCursor(), overlayMainFrame());
 }
 
-void InspectorOverlay::profilingStarted()
+void InspectorOverlay::suspend()
 {
     if (!m_suspendCount++)
-        clear();
+        clearInternal();
 }
 
-void InspectorOverlay::profilingStopped()
+void InspectorOverlay::resume()
 {
     --m_suspendCount;
 }
@@ -712,7 +718,8 @@ bool InspectorOverlay::handleMouseMove(const PlatformMouseEvent& event)
 
     if (node && m_inspectModeHighlightConfig) {
         m_hoveredNodeForInspectMode = node;
-        m_domAgent->nodeHighlightedInOverlay(node);
+        if (m_domAgent)
+            m_domAgent->nodeHighlightedInOverlay(node);
         highlightNode(node, eventTarget, *m_inspectModeHighlightConfig, event.ctrlKey() || event.metaKey());
     }
     return true;
@@ -774,7 +781,7 @@ void InspectorOverlay::inspect(Node* node)
 
 void InspectorOverlay::initializeLayoutEditorIfNeeded(Node* node)
 {
-    if (m_inspectMode != InspectorDOMAgent::ShowLayoutEditor || !node || !node->isElementNode() || !node->ownerDocument()->isActive())
+    if (m_inspectMode != InspectorDOMAgent::ShowLayoutEditor || !node || !node->isElementNode() || !node->ownerDocument()->isActive() || !m_cssAgent || !m_domAgent)
         return;
     m_layoutEditor = LayoutEditor::create(toElement(node), m_cssAgent, m_domAgent, &overlayMainFrame()->script());
     toChromeClientImpl(m_webViewImpl->page()->chromeClient()).setCursorOverridden(true);

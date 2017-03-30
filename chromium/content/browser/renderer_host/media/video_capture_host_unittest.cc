@@ -20,7 +20,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
@@ -121,6 +121,7 @@ class MockMediaStreamRequester : public MediaStreamRequester {
                                   int page_request_id,
                                   const std::string& label,
                                   const StreamDeviceInfo& device_info));
+  MOCK_METHOD1(DevicesChanged, void(MediaStreamType type));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockMediaStreamRequester);
@@ -274,7 +275,7 @@ class VideoCaptureHostTest : public testing::Test {
 #endif
 
     // Create our own MediaStreamManager.
-    audio_manager_.reset(media::AudioManager::CreateForTesting());
+    audio_manager_ = media::AudioManager::CreateForTesting(task_runner_);
 #ifndef TEST_REAL_CAPTURE_DEVICE
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kUseFakeDeviceForMediaStream);
@@ -314,7 +315,7 @@ class VideoCaptureHostTest : public testing::Test {
     const int render_process_id = 1;
     const int render_frame_id = 1;
     const int page_request_id = 1;
-    const GURL security_origin("http://test.com");
+    const url::Origin security_origin(GURL("http://test.com"));
 
     ASSERT_TRUE(opened_device_label_.empty());
 
@@ -483,10 +484,13 @@ class VideoCaptureHostTest : public testing::Test {
   scoped_refptr<MockVideoCaptureHost> host_;
 
  private:
+  // media_stream_manager_ needs to outlive thread_bundle_ because it is a
+  // MessageLoop::DestructionObserver. audio_manager_ needs to outlive
+  // thread_bundle_ because it uses the underlying message loop.
   StrictMock<MockMediaStreamRequester> stream_requester_;
-  std::unique_ptr<media::AudioManager> audio_manager_;
   std::unique_ptr<MediaStreamManager> media_stream_manager_;
   content::TestBrowserThreadBundle thread_bundle_;
+  media::ScopedAudioManagerPtr audio_manager_;
   content::TestBrowserContext browser_context_;
   content::TestContentBrowserClient browser_client_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;

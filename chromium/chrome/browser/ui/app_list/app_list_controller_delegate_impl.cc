@@ -34,8 +34,11 @@ gfx::NativeWindow AppListControllerDelegateImpl::GetAppListWindow() {
   return service_->GetAppListWindow();
 }
 
-gfx::ImageSkia AppListControllerDelegateImpl::GetWindowIcon() {
-  return gfx::ImageSkia();
+bool AppListControllerDelegateImpl::IsAppOpen(
+    const std::string& extension_id) const {
+  // Not expected to call in non-ash environment.
+  NOTREACHED();
+  return false;
 }
 
 bool AppListControllerDelegateImpl::IsAppPinned(

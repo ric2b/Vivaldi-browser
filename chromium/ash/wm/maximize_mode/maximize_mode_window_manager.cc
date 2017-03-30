@@ -6,20 +6,22 @@
 
 #include "ash/ash_switches.h"
 #include "ash/root_window_controller.h"
+#include "ash/session/session_state_delegate.h"
 #include "ash/shell.h"
 #include "ash/shell_window_ids.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/common/wm_event.h"
 #include "ash/wm/maximize_mode/maximize_mode_window_state.h"
 #include "ash/wm/maximize_mode/workspace_backdrop_delegate.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/window_selector_controller.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm/wm_event.h"
 #include "ash/wm/workspace_controller.h"
 #include "base/command_line.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
-#include "ui/gfx/screen.h"
+#include "ui/display/screen.h"
 
 namespace ash {
 
@@ -47,7 +49,7 @@ MaximizeModeWindowManager::~MaximizeModeWindowManager() {
 
   Shell::GetInstance()->RemovePreTargetHandler(this);
   Shell::GetInstance()->RemoveShellObserver(this);
-  gfx::Screen::GetScreen()->RemoveObserver(this);
+  display::Screen::GetScreen()->RemoveObserver(this);
   EnableBackdropBehindTopWindowOnEachDisplay(false);
   RemoveWindowCreationObservers();
   RestoreAllWindows();
@@ -147,20 +149,37 @@ void MaximizeModeWindowManager::OnWindowBoundsChanged(
   }
 }
 
-void MaximizeModeWindowManager::OnDisplayAdded(const gfx::Display& display) {
+void MaximizeModeWindowManager::OnDisplayAdded(
+    const display::Display& display) {
   DisplayConfigurationChanged();
 }
 
-void MaximizeModeWindowManager::OnDisplayRemoved(const gfx::Display& display) {
+void MaximizeModeWindowManager::OnDisplayRemoved(
+    const display::Display& display) {
   DisplayConfigurationChanged();
 }
 
-void MaximizeModeWindowManager::OnDisplayMetricsChanged(const gfx::Display&,
+void MaximizeModeWindowManager::OnDisplayMetricsChanged(const display::Display&,
                                                         uint32_t) {
   // Nothing to do here.
 }
 
 void MaximizeModeWindowManager::OnTouchEvent(ui::TouchEvent* event) {
+  const SessionStateDelegate* delegate =
+      Shell::GetInstance()->session_state_delegate();
+
+  if (delegate->IsScreenLocked())
+    return;
+
+  switch (delegate->GetSessionState()) {
+    case SessionStateDelegate::SESSION_STATE_LOGIN_PRIMARY:
+      return;
+    case SessionStateDelegate::SESSION_STATE_ACTIVE:
+      break;
+    case SessionStateDelegate::SESSION_STATE_LOGIN_SECONDARY:
+      return;
+  }
+
   if (event->type() != ui::ET_TOUCH_PRESSED)
     return;
 
@@ -195,7 +214,7 @@ MaximizeModeWindowManager::MaximizeModeWindowManager()
   MaximizeAllWindows();
   AddWindowCreationObservers();
   EnableBackdropBehindTopWindowOnEachDisplay(true);
-  gfx::Screen::GetScreen()->AddObserver(this);
+  display::Screen::GetScreen()->AddObserver(this);
   Shell::GetInstance()->AddShellObserver(this);
   Shell::GetInstance()->AddPreTargetHandler(this);
 }
@@ -325,7 +344,7 @@ void MaximizeModeWindowManager::EnableBackdropBehindTopWindowOnEachDisplay(
     aura::Window* container = Shell::GetContainer(
         controller->GetRootWindow(), kShellWindowId_DefaultContainer);
     controller->workspace_controller()->SetMaximizeBackdropDelegate(
-        std::unique_ptr<WorkspaceLayoutManagerDelegate>(
+        std::unique_ptr<WorkspaceLayoutManagerBackdropDelegate>(
             enable ? new WorkspaceBackdropDelegate(container) : NULL));
   }
 }

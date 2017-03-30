@@ -167,6 +167,9 @@ const char kDisableGpuMemoryBufferVideoFrames[] =
 // This switch is intended only for tests.
 const char kDisableGpuProcessCrashLimit[] = "disable-gpu-process-crash-limit";
 
+// Disable async GL worker context. Overrides kEnableGpuAsyncWorkerContext.
+const char kDisableGpuAsyncWorkerContext[] = "disable-gpu-async-worker-context";
+
 // Disable GPU rasterization, i.e. rasterize on the CPU only.
 // Overrides the kEnableGpuRasterization and kForceGpuRasterization flags.
 const char kDisableGpuRasterization[]       = "disable-gpu-rasterization";
@@ -368,6 +371,9 @@ const char kEnableFeatures[] = "enable-features";
 // Enable Web Bluetooth.
 const char kEnableWebBluetooth[] = "enable-web-bluetooth";
 
+// Makes the GL worker context run asynchronously by using a separate stream.
+const char kEnableGpuAsyncWorkerContext[] = "enable-gpu-async-worker-context";
+
 // Specify that all compositor resources should be backed by GPU memory buffers.
 const char kEnableGpuMemoryBufferCompositorResources[] =
     "enable-gpu-memory-buffer-compositor-resources";
@@ -398,10 +404,6 @@ const char kEnableMemoryBenchmarking[]      = "enable-memory-benchmarking";
 // Enables the network information API.
 const char kEnableNetworkInformation[]      = "enable-network-information";
 
-// Enables action button icons for the Web Notification API.
-const char kEnableNotificationActionIcons[] =
-    "enable-notification-action-icons";
-
 // Enables compositor-accelerated touch-screen pinch gestures.
 const char kEnablePinch[]                   = "enable-pinch";
 
@@ -428,6 +430,10 @@ const char kV8NativesPassedByFD[] = "v8-natives-passed-by-fd";
 // Signals that the V8 startup snapshot file has been transfered to the child
 // process by a file descriptor.
 const char kV8SnapshotPassedByFD[] = "v8-snapshot-passed-by-fd";
+
+// Set strategies to cache V8 data in CacheStorage. (off, normal, or aggressive)
+const char kV8CacheStrategiesForCacheStorage[] =
+    "v8-cache-strategies-for-cache-storage";
 
 // Cause the OS X sandbox write to syslog every time an access to a resource
 // is denied by the sandbox.
@@ -486,6 +492,9 @@ const char kEnableViewport[]                = "enable-viewport";
 // Enable the Vtune profiler support.
 const char kEnableVtune[]                   = "enable-vtune-support";
 
+// Enable Vulkan support, must also have ENABLE_VULKAN defined.
+const char kEnableVulkan[] = "enable-vulkan";
+
 // Enable WebFonts intervention and trigger the signal always.
 const char kEnableWebFontsInterventionTrigger[] =
     "enable-webfonts-intervention-trigger";
@@ -504,6 +513,9 @@ const char kEnableWheelGestures[] = "enable-wheel-gestures";
 
 // Enable rasterizer that writes directly to GPU memory associated with tiles.
 const char kEnableZeroCopy[]                = "enable-zero-copy";
+
+// Enable the video decoder to draw directly to a texture.
+const char kEnableZeroCopyDxgiVideo[] = "enable-zero-copy-dxgi-video";
 
 // Explicitly allows additional ports using a comma-separated list of port
 // numbers.
@@ -542,6 +554,9 @@ const char kGpuDriverVendor[]               = "gpu-driver-vendor";
 
 // Passes gpu driver_version from browser process to GPU process.
 const char kGpuDriverVersion[]              = "gpu-driver-version";
+
+// Passes gpu driver_date from browser process to GPU process.
+const char kGpuDriverDate[]                 = "gpu-driver-date";
 
 // Extra command line options for launching the GPU process (normally used
 // for debugging). Use like renderer-cmd-prefix.
@@ -659,6 +674,13 @@ const char kOverridePluginPowerSaverForTesting[] =
 // Defaults to '1'.
 const char kOverscrollHistoryNavigation[] =
     "overscroll-history-navigation";
+
+// Override the default value for the 'passive' field in javascript
+// addEventListener calls. Values are defined as:
+//  'documentonlytrue' to set the default be true only for document level nodes.
+//  'true' to set the default to be true on all nodes (when not specified).
+//  'forcealltrue' to force the value on all nodes.
+const char kPassiveListenersDefault[] = "passive-listeners-default";
 
 // Argument to the process type that indicates a PPAPI broker process type.
 const char kPpapiBrokerProcess[]            = "ppapi-broker";
@@ -854,12 +876,6 @@ const char kValidateInputEventStream[] = "validate-input-event-stream";
 // kWaitForDebugger flag passed on or not.
 const char kWaitForDebuggerChildren[]       = "wait-for-debugger-children";
 
-// Forces processes to wait for Mojo shell connection initialization before
-// proceeding with main thread startup.
-//
-// TODO(rockot): Remove this. http://crbug.com/594852.
-const char kWaitForMojoShell[]              = "wait-for-mojo-shell";
-
 // The prefix used when starting the zygote process. (i.e. 'gdb --args')
 const char kZygoteCmdPrefix[]               = "zygote-cmd-prefix";
 
@@ -922,9 +938,6 @@ const char kEnableAdaptiveSelectionHandleOrientation[] =
 
 // Enable drag manipulation of longpress-triggered text selections.
 const char kEnableLongpressDragSelection[]  = "enable-longpress-drag-selection";
-
-// Enable IPC-based synchronous compositing. Used by Android WebView.
-const char kIPCSyncCompositing[]            = "ipc-sync-compositing";
 
 // The telephony region (ISO country code) to use in phone number detection.
 const char kNetworkCountryIso[] = "network-country-iso";
@@ -1013,6 +1026,10 @@ const char kEnableWin32kLockDownMimeTypes[] =
 
 // Enables experimental hardware acceleration for VP8/VP9 video decoding.
 const char kEnableAcceleratedVpxDecode[] = "enable-accelerated-vpx-decode";
+
+// Enables H264 HW decode acceleration for WebRtc on Win 7.
+const char kEnableWin7WebRtcHWH264Decoding[] =
+    "enable-win7-webrtc-hw-h264-decoding";
 
 // DirectWrite FontCache is shared by browser to renderers using shared memory.
 // This switch allows us to pass the shared memory handle to the renderer.

@@ -16,6 +16,7 @@
 #include "components/mus/gles2/command_buffer_type_conversions.h"
 #include "components/mus/gles2/mojo_buffer_backing.h"
 #include "components/mus/gles2/mojo_gpu_memory_buffer.h"
+#include "gpu/command_buffer/client/gpu_control_client.h"
 #include "gpu/command_buffer/common/command_buffer_id.h"
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
 #include "gpu/command_buffer/common/sync_token.h"
@@ -61,15 +62,11 @@ void InitializeCallback(mus::mojom::CommandBufferInitializeResultPtr* output,
 
 }  // namespace
 
-CommandBufferDelegate::~CommandBufferDelegate() {}
-
-void CommandBufferDelegate::ContextLost() {}
-
 CommandBufferClientImpl::CommandBufferClientImpl(
-    CommandBufferDelegate* delegate,
     const std::vector<int32_t>& attribs,
     mojo::ScopedMessagePipeHandle command_buffer_handle)
-    : delegate_(delegate),
+    : gpu_control_client_(nullptr),
+      destroyed_(false),
       attribs_(attribs),
       client_binding_(this),
       command_buffer_id_(),
@@ -193,7 +190,7 @@ scoped_refptr<gpu::Buffer> CommandBufferClientImpl::CreateTransferBuffer(
   command_buffer_->RegisterTransferBuffer(*id, std::move(duped),
                                           static_cast<uint32_t>(size));
 
-  scoped_ptr<gpu::BufferBacking> backing(
+  std::unique_ptr<gpu::BufferBacking> backing(
       new mus::MojoBufferBacking(std::move(handle), memory, size));
   scoped_refptr<gpu::Buffer> buffer(new gpu::Buffer(std::move(backing)));
   return buffer;
@@ -201,6 +198,10 @@ scoped_refptr<gpu::Buffer> CommandBufferClientImpl::CreateTransferBuffer(
 
 void CommandBufferClientImpl::DestroyTransferBuffer(int32_t id) {
   command_buffer_->DestroyTransferBuffer(id);
+}
+
+void CommandBufferClientImpl::SetGpuControlClient(gpu::GpuControlClient* c) {
+  gpu_control_client_ = c;
 }
 
 gpu::Capabilities CommandBufferClientImpl::GetCapabilities() {
@@ -268,10 +269,11 @@ int32_t CommandBufferClientImpl::CreateGpuMemoryBufferImage(
     size_t height,
     unsigned internalformat,
     unsigned usage) {
-  scoped_ptr<gfx::GpuMemoryBuffer> buffer(mus::MojoGpuMemoryBufferImpl::Create(
-      gfx::Size(static_cast<int>(width), static_cast<int>(height)),
-      gpu::DefaultBufferFormatForImageFormat(internalformat),
-      gfx::BufferUsage::SCANOUT));
+  std::unique_ptr<gfx::GpuMemoryBuffer> buffer(
+      mus::MojoGpuMemoryBufferImpl::Create(
+          gfx::Size(static_cast<int>(width), static_cast<int>(height)),
+          gpu::DefaultBufferFormatForImageFormat(internalformat),
+          gfx::BufferUsage::SCANOUT));
   if (!buffer)
     return -1;
 
@@ -285,10 +287,14 @@ void CommandBufferClientImpl::SignalQuery(uint32_t query,
 }
 
 void CommandBufferClientImpl::Destroyed(int32_t lost_reason, int32_t error) {
+  if (destroyed_)
+    return;
   last_state_.context_lost_reason =
       static_cast<gpu::error::ContextLostReason>(lost_reason);
   last_state_.error = static_cast<gpu::error::Error>(error);
-  delegate_->ContextLost();
+  if (gpu_control_client_)
+    gpu_control_client_->OnGpuControlLostContext();
+  destroyed_ = true;
 }
 
 void CommandBufferClientImpl::SignalAck(uint32_t id) {
@@ -329,11 +335,6 @@ void CommandBufferClientImpl::MakeProgressAndUpdateState() {
 }
 
 void CommandBufferClientImpl::SetLock(base::Lock* lock) {
-}
-
-bool CommandBufferClientImpl::IsGpuChannelLost() {
-  // This is only possible for out-of-process command buffers.
-  return false;
 }
 
 void CommandBufferClientImpl::EnsureWorkVisible() {

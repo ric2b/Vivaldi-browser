@@ -4,11 +4,12 @@
 
 #include "ui/views/mus/surface_context_factory.h"
 
+#include "base/memory/ptr_util.h"
 #include "cc/output/output_surface.h"
 #include "cc/resources/shared_bitmap_manager.h"
 #include "cc/surfaces/surface_id_allocator.h"
 #include "components/mus/public/cpp/window.h"
-#include "mojo/shell/public/interfaces/connector.mojom.h"
+#include "services/shell/public/interfaces/connector.mojom.h"
 #include "ui/compositor/reflector.h"
 #include "ui/gl/gl_bindings.h"
 
@@ -27,7 +28,7 @@ class FakeReflector : public ui::Reflector {
 }  // namespace
 
 SurfaceContextFactory::SurfaceContextFactory(
-    mojo::Connector* connector,
+    shell::Connector* connector,
     mus::Window* window,
     mus::mojom::SurfaceType surface_type)
     : surface_binding_(connector, window, surface_type),
@@ -38,14 +39,17 @@ SurfaceContextFactory::~SurfaceContextFactory() {}
 void SurfaceContextFactory::CreateOutputSurface(
     base::WeakPtr<ui::Compositor> compositor) {
   // NOTIMPLEMENTED();
-  compositor->SetOutputSurface(surface_binding_.CreateOutputSurface());
+  std::unique_ptr<cc::OutputSurface> surface =
+      surface_binding_.CreateOutputSurface();
+  if (surface)
+    compositor->SetOutputSurface(std::move(surface));
 }
 
-scoped_ptr<ui::Reflector> SurfaceContextFactory::CreateReflector(
+std::unique_ptr<ui::Reflector> SurfaceContextFactory::CreateReflector(
     ui::Compositor* mirroed_compositor,
     ui::Layer* mirroring_layer) {
   // NOTIMPLEMENTED();
-  return make_scoped_ptr(new FakeReflector);
+  return base::WrapUnique(new FakeReflector);
 }
 
 void SurfaceContextFactory::RemoveReflector(ui::Reflector* reflector) {
@@ -86,10 +90,15 @@ cc::TaskGraphRunner* SurfaceContextFactory::GetTaskGraphRunner() {
   return raster_thread_helper_.task_graph_runner();
 }
 
-scoped_ptr<cc::SurfaceIdAllocator>
+std::unique_ptr<cc::SurfaceIdAllocator>
 SurfaceContextFactory::CreateSurfaceIdAllocator() {
-  return make_scoped_ptr(
+  return base::WrapUnique(
       new cc::SurfaceIdAllocator(next_surface_id_namespace_++));
+}
+
+cc::SurfaceManager* SurfaceContextFactory::GetSurfaceManager() {
+  // NOTIMPLEMENTED();
+  return nullptr;
 }
 
 void SurfaceContextFactory::ResizeDisplay(ui::Compositor* compositor,

@@ -31,9 +31,6 @@
 #ifndef PickerIndicatorElement_h
 #define PickerIndicatorElement_h
 
-#include "wtf/build_config.h"
-
-#if ENABLE(INPUT_MULTIPLE_FIELDS_UI)
 #include "core/html/HTMLDivElement.h"
 #include "core/html/forms/DateTimeChooser.h"
 #include "core/html/forms/DateTimeChooserClient.h"
@@ -58,7 +55,7 @@ public:
         virtual bool setupDateTimeChooserParameters(DateTimeChooserParameters&) = 0;
     };
 
-    static RawPtr<PickerIndicatorElement> create(Document&, PickerIndicatorOwner&);
+    static PickerIndicatorElement* create(Document&, PickerIndicatorOwner&);
     ~PickerIndicatorElement() override;
     DECLARE_VIRTUAL_TRACE();
 
@@ -92,5 +89,4 @@ private:
 DEFINE_TYPE_CASTS(PickerIndicatorElement, Element, element, element->isPickerIndicatorElement(), element.isPickerIndicatorElement());
 
 } // namespace blink
-#endif
 #endif

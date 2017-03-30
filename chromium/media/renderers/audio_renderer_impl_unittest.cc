@@ -4,6 +4,7 @@
 
 #include "media/renderers/audio_renderer_impl.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -64,7 +65,7 @@ ACTION_P(EnterPendingDecoderInitStateAction, test) {
   test->EnterPendingDecoderInitState(arg2);
 }
 
-class AudioRendererImplTest : public ::testing::Test {
+class AudioRendererImplTest : public ::testing::Test, public RendererClient {
  public:
   // Give the decoder some non-garbage media properties.
   AudioRendererImplTest()
@@ -115,26 +116,25 @@ class AudioRendererImplTest : public ::testing::Test {
         .WillOnce(DoAll(SaveArg<3>(&output_cb_), RunCallback<2>(false)));
   }
 
-  void OnStatistics(const PipelineStatistics& stats) {
+  // RendererClient implementation.
+  MOCK_METHOD1(OnError, void(PipelineStatus));
+  void OnEnded() override {
+    CHECK(!ended_);
+    ended_ = true;
+  }
+  void OnStatisticsUpdate(const PipelineStatistics& stats) override {
     last_statistics_.audio_memory_usage += stats.audio_memory_usage;
   }
-
   MOCK_METHOD1(OnBufferingStateChange, void(BufferingState));
-  MOCK_METHOD1(OnError, void(PipelineStatus));
   MOCK_METHOD0(OnWaitingForDecryptionKey, void(void));
+  MOCK_METHOD1(OnVideoNaturalSizeChange, void(const gfx::Size&));
+  MOCK_METHOD1(OnVideoOpacityChange, void(bool));
 
   void InitializeRenderer(const PipelineStatusCB& pipeline_status_cb) {
     EXPECT_CALL(*this, OnWaitingForDecryptionKey()).Times(0);
-    renderer_->Initialize(
-        &demuxer_stream_, pipeline_status_cb, nullptr,
-        base::Bind(&AudioRendererImplTest::OnStatistics,
-                   base::Unretained(this)),
-        base::Bind(&AudioRendererImplTest::OnBufferingStateChange,
-                   base::Unretained(this)),
-        base::Bind(&AudioRendererImplTest::OnEnded, base::Unretained(this)),
-        base::Bind(&AudioRendererImplTest::OnError, base::Unretained(this)),
-        base::Bind(&AudioRendererImplTest::OnWaitingForDecryptionKey,
-                   base::Unretained(this)));
+    EXPECT_CALL(*this, OnVideoNaturalSizeChange(_)).Times(0);
+    EXPECT_CALL(*this, OnVideoOpacityChange(_)).Times(0);
+    renderer_->Initialize(&demuxer_stream_, nullptr, this, pipeline_status_cb);
   }
 
   void Initialize() {
@@ -299,7 +299,7 @@ class AudioRendererImplTest : public ::testing::Test {
   // to be consumed.
   bool ConsumeBufferedData(OutputFrames requested_frames,
                            uint32_t delay_frames) {
-    scoped_ptr<AudioBus> bus =
+    std::unique_ptr<AudioBus> bus =
         AudioBus::Create(kChannels, requested_frames.value);
     int frames_read = 0;
     EXPECT_TRUE(sink_->Render(bus.get(), delay_frames, &frames_read));
@@ -363,7 +363,7 @@ class AudioRendererImplTest : public ::testing::Test {
 
   // Fixture members.
   base::MessageLoop message_loop_;
-  scoped_ptr<AudioRendererImpl> renderer_;
+  std::unique_ptr<AudioRendererImpl> renderer_;
   scoped_refptr<FakeAudioRendererSink> sink_;
   AudioHardwareConfig hardware_config_;
   base::SimpleTestTickClock* tick_clock_;
@@ -413,11 +413,6 @@ class AudioRendererImplTest : public ::testing::Test {
     base::RunLoop().RunUntilIdle();
   }
 
-  void OnEnded() {
-    CHECK(!ended_);
-    ended_ = true;
-  }
-
   MockDemuxerStream demuxer_stream_;
   MockAudioDecoder* decoder_;
 
@@ -425,7 +420,7 @@ class AudioRendererImplTest : public ::testing::Test {
   AudioDecoder::OutputCB output_cb_;
   AudioDecoder::DecodeCB decode_cb_;
   base::Closure reset_cb_;
-  scoped_ptr<AudioTimestampHelper> next_timestamp_;
+  std::unique_ptr<AudioTimestampHelper> next_timestamp_;
 
   // Run during DecodeDecoder() to unblock WaitForPendingRead().
   base::Closure wait_for_pending_decode_cb_;
@@ -728,7 +723,7 @@ TEST_F(AudioRendererImplTest, RenderingDelayedForEarlyStartTime) {
   StartTicking();
 
   // Verify the first few buffers are silent.
-  scoped_ptr<AudioBus> bus =
+  std::unique_ptr<AudioBus> bus =
       AudioBus::Create(hardware_config_.GetOutputConfig());
   int frames_read = 0;
   for (int i = 0; i < std::floor(kBuffers); ++i) {
@@ -749,6 +744,34 @@ TEST_F(AudioRendererImplTest, RenderingDelayedForEarlyStartTime) {
   for (int i = 0; i < zero_frames; ++i)
     ASSERT_FLOAT_EQ(0.0f, bus->channel(0)[i]);
   for (int i = zero_frames; i < bus->frames(); ++i)
+    ASSERT_NE(0.0f, bus->channel(0)[i]);
+}
+
+TEST_F(AudioRendererImplTest, RenderingDelayedForSuspend) {
+  Initialize();
+  Preroll(base::TimeDelta(), base::TimeDelta(), PIPELINE_OK);
+  StartTicking();
+
+  // Verify the first buffer is real data.
+  int frames_read = 0;
+  std::unique_ptr<AudioBus> bus =
+      AudioBus::Create(hardware_config_.GetOutputConfig());
+  EXPECT_TRUE(sink_->Render(bus.get(), 0, &frames_read));
+  EXPECT_NE(0, frames_read);
+  for (int i = 0; i < bus->frames(); ++i)
+    ASSERT_NE(0.0f, bus->channel(0)[i]);
+
+  // Verify after suspend we get silence.
+  renderer_->OnSuspend();
+  EXPECT_TRUE(sink_->Render(bus.get(), 0, &frames_read));
+  EXPECT_EQ(0, frames_read);
+
+  // Verify after resume we get audio.
+  bus->Zero();
+  renderer_->OnResume();
+  EXPECT_TRUE(sink_->Render(bus.get(), 0, &frames_read));
+  EXPECT_NE(0, frames_read);
+  for (int i = 0; i < bus->frames(); ++i)
     ASSERT_NE(0.0f, bus->channel(0)[i]);
 }
 
@@ -863,6 +886,16 @@ TEST_F(AudioRendererImplTest, TimeSourceBehavior) {
             ConvertMediaTime(base::TimeDelta(), &is_time_moving));
   EXPECT_TRUE(is_time_moving);
 
+  // A system suspend should freeze the time state and resume restart it.
+  renderer_->OnSuspend();
+  EXPECT_EQ(tick_clock_->NowTicks(),
+            ConvertMediaTime(base::TimeDelta(), &is_time_moving));
+  EXPECT_FALSE(is_time_moving);
+  renderer_->OnResume();
+  EXPECT_EQ(tick_clock_->NowTicks(),
+            ConvertMediaTime(base::TimeDelta(), &is_time_moving));
+  EXPECT_TRUE(is_time_moving);
+
   // Consume some more audio data.
   frames_to_consume = frames_buffered();
   tick_clock_->Advance(
@@ -900,9 +933,10 @@ TEST_F(AudioRendererImplTest, TimeSourceBehavior) {
   EXPECT_TRUE(is_time_moving);
 
   // Advancing once more will exceed the amount of played out frames finally.
+  const base::TimeDelta kOneSample =
+      base::TimeDelta::FromSecondsD(1.0 / kOutputSamplesPerSecond);
   base::TimeTicks current_time = tick_clock_->NowTicks();
-  tick_clock_->Advance(
-      base::TimeDelta::FromSecondsD(1.0 / kOutputSamplesPerSecond));
+  tick_clock_->Advance(kOneSample);
   EXPECT_EQ(current_time, CurrentMediaWallClockTime(&is_time_moving));
   EXPECT_TRUE(is_time_moving);
 
@@ -931,6 +965,14 @@ TEST_F(AudioRendererImplTest, TimeSourceBehavior) {
   EXPECT_EQ(current_time, CurrentMediaWallClockTime(&is_time_moving));
   EXPECT_TRUE(is_time_moving);
   EXPECT_EQ(current_time,
+            ConvertMediaTime(renderer_->CurrentMediaTime(), &is_time_moving));
+  EXPECT_TRUE(is_time_moving);
+
+  tick_clock_->Advance(kOneSample);
+  renderer_->SetPlaybackRate(2);
+  EXPECT_EQ(current_time, CurrentMediaWallClockTime(&is_time_moving));
+  EXPECT_TRUE(is_time_moving);
+  EXPECT_EQ(current_time + kOneSample * 2,
             ConvertMediaTime(renderer_->CurrentMediaTime(), &is_time_moving));
   EXPECT_TRUE(is_time_moving);
 

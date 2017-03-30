@@ -8,27 +8,26 @@
 
 #include <vector>
 
+#include "base/memory/ptr_util.h"
 #include "cc/output/bsp_compare_result.h"
 #include "cc/quads/draw_quad.h"
 
 namespace {
 // This threshold controls how "thick" a plane is. If a point's distance is
-// <= |compare_threshold|, then it is considered on the plane. Only when this
-// boundary is crossed do we consider doing splitting.
-static const float compare_threshold = 0.1f;
-// |split_threshold| is lower in this case because we want the points created
-// during splitting to be well within the range of |compare_threshold| for
-// comparison purposes. The splitting operation will produce intersection points
-// that fit within a tighter distance to the splitting plane as a result of this
-// value. By using a value >= |compare_threshold| we run the risk of creating
-// points that SHOULD be intersecting the "thick plane", but actually fail to
-// test positively for it because |split_threshold| allowed them to be outside
-// this range.
-// This is really supposd to be compare_threshold / 2.0f, but that would
-// create another static initializer.
+// <= |split_threshold|, then it is considered on the plane for the purpose of
+// polygon splitting.
 static const float split_threshold = 0.05f;
 
 static const float normalized_threshold = 0.001f;
+
+void PointInterpolate(const gfx::Point3F& from,
+                      const gfx::Point3F& to,
+                      double delta,
+                      gfx::Point3F* out) {
+  out->SetPoint(from.x() + (to.x() - from.x()) * delta,
+                from.y() + (to.y() - from.y()) * delta,
+                from.z() + (to.z() - from.z()) * delta);
+}
 }  // namespace
 
 namespace cc {
@@ -45,6 +44,8 @@ DrawPolygon::DrawPolygon(const DrawQuad* original,
     points_.push_back(in_points[i]);
   }
   normal_ = normal;
+  DCHECK_LE((ConstructNormal(), (normal_ - normal).Length()),
+            normalized_threshold);
 }
 
 // This takes the original DrawQuad that this polygon should be based on,
@@ -72,14 +73,15 @@ DrawPolygon::DrawPolygon(const DrawQuad* original_ref,
   for (int i = 0; i < num_vertices_in_clipped_quad; i++) {
     points_.push_back(points[i]);
   }
+  transform.TransformVector(&normal_);
   ConstructNormal();
 }
 
 DrawPolygon::~DrawPolygon() {
 }
 
-scoped_ptr<DrawPolygon> DrawPolygon::CreateCopy() {
-  scoped_ptr<DrawPolygon> new_polygon(new DrawPolygon());
+std::unique_ptr<DrawPolygon> DrawPolygon::CreateCopy() {
+  std::unique_ptr<DrawPolygon> new_polygon(new DrawPolygon());
   new_polygon->order_index_ = order_index_;
   new_polygon->original_ref_ = original_ref_;
   new_polygon->points_.reserve(points_.size());
@@ -98,18 +100,22 @@ scoped_ptr<DrawPolygon> DrawPolygon::CreateCopy() {
 // Averaging a few near diagonal cross products is pretty good in that case.
 //
 void DrawPolygon::ConstructNormal() {
-  normal_.set_x(0.0f);
-  normal_.set_y(0.0f);
-  normal_.set_z(0.0f);
+  gfx::Vector3dF new_normal(0.0f, 0.0f, 0.0f);
   int delta = points_.size() / 2;
   for (size_t i = 1; i + delta < points_.size(); i++) {
-    normal_ +=
+    new_normal +=
         CrossProduct(points_[i] - points_[0], points_[i + delta] - points_[0]);
   }
-  float normal_magnitude = normal_.Length();
-  if (normal_magnitude != 0 && normal_magnitude != 1) {
-    normal_.Scale(1.0f / normal_magnitude);
+  float normal_magnitude = new_normal.Length();
+  // Here we constrain the new normal to point in the same sense as the old one.
+  // This allows us to handle winding-reversing transforms better.
+  if (gfx::DotProduct(normal_, new_normal) < 0.0) {
+    normal_magnitude *= -1.0;
   }
+  if (normal_magnitude != 0 && normal_magnitude != 1) {
+    new_normal.Scale(1.0f / normal_magnitude);
+  }
+  normal_ = new_normal;
 }
 
 #if defined(OS_WIN)
@@ -123,89 +129,6 @@ void DrawPolygon::RecomputeNormalForTesting() {
 
 float DrawPolygon::SignedPointDistance(const gfx::Point3F& point) const {
   return gfx::DotProduct(point - points_[0], normal_);
-}
-
-// Checks whether or not shape a lies on the front or back side of b, or
-// whether they should be considered coplanar. If on the back side, we
-// say A_BEFORE_B because it should be drawn in that order.
-// Assumes that layers are split and there are no intersecting planes.
-BspCompareResult DrawPolygon::SideCompare(const DrawPolygon& a,
-                                          const DrawPolygon& b) {
-  // Let's make sure that this is normalized.  Without this SignedPointDistance
-  // will not be right, but putting the check in there will validate it
-  // redundantly for each point.
-  DCHECK_GE(normalized_threshold, std::abs(b.normal_.LengthSquared() - 1.0f));
-
-  int pos_count = 0;
-  int neg_count = 0;
-  for (size_t i = 0; i < a.points_.size(); i++) {
-    float sign = b.SignedPointDistance(a.points_[i]);
-
-    if (sign < -compare_threshold) {
-      ++neg_count;
-    } else if (sign > compare_threshold) {
-      ++pos_count;
-    }
-
-    if (pos_count && neg_count) {
-      return BSP_SPLIT;
-    }
-  }
-
-  if (pos_count) {
-    return BSP_FRONT;
-  }
-  if (neg_count) {
-    return BSP_BACK;
-  }
-
-  double dot = gfx::DotProduct(a.normal_, b.normal_);
-  if ((dot >= 0.0f && a.order_index_ >= b.order_index_) ||
-      (dot <= 0.0f && a.order_index_ <= b.order_index_)) {
-    // The sign of the dot product of the normals along with document order
-    // determine which side it goes on, the vertices are ambiguous.
-    return BSP_COPLANAR_BACK;
-  }
-
-  return BSP_COPLANAR_FRONT;
-}
-
-static bool LineIntersectPlane(const gfx::Point3F& line_start,
-                               const gfx::Point3F& line_end,
-                               const gfx::Point3F& plane_origin,
-                               const gfx::Vector3dF& plane_normal,
-                               gfx::Point3F* intersection,
-                               float distance_threshold) {
-  gfx::Vector3dF start_to_origin_vector = plane_origin - line_start;
-  gfx::Vector3dF end_to_origin_vector = plane_origin - line_end;
-
-  double start_distance = gfx::DotProduct(start_to_origin_vector, plane_normal);
-  double end_distance = gfx::DotProduct(end_to_origin_vector, plane_normal);
-
-  // The case where one vertex lies on the thick-plane and the other
-  // is outside of it.
-  if (std::abs(start_distance) <= distance_threshold &&
-      std::abs(end_distance) > distance_threshold) {
-    intersection->SetPoint(line_start.x(), line_start.y(), line_start.z());
-    return true;
-  }
-
-  // This is the case where we clearly cross the thick-plane.
-  if ((start_distance > distance_threshold &&
-       end_distance < -distance_threshold) ||
-      (start_distance < -distance_threshold &&
-       end_distance > distance_threshold)) {
-    gfx::Vector3dF v = line_end - line_start;
-    float total_distance = std::abs(start_distance) + std::abs(end_distance);
-    float lerp_factor = std::abs(start_distance) / total_distance;
-
-    intersection->SetPoint(line_start.x() + (v.x() * lerp_factor),
-                           line_start.y() + (v.y() * lerp_factor),
-                           line_start.z() + (v.z() * lerp_factor));
-
-    return true;
-  }
-  return false;
 }
 
 // This function is separate from ApplyTransform because it is often unnecessary
@@ -243,6 +166,7 @@ void DrawPolygon::ApplyTransform(const gfx::Transform& transform) {
 // be transformed along with the vertices.
 void DrawPolygon::TransformToScreenSpace(const gfx::Transform& transform) {
   ApplyTransform(transform);
+  transform.TransformVector(&normal_);
   ConstructNormal();
 }
 
@@ -256,84 +180,138 @@ void DrawPolygon::TransformToLayerSpace(
   normal_ = gfx::Vector3dF(0.0f, 0.0f, -1.0f);
 }
 
-bool DrawPolygon::Split(const DrawPolygon& splitter,
-                        scoped_ptr<DrawPolygon>* front,
-                        scoped_ptr<DrawPolygon>* back) {
-  gfx::Point3F intersections[2];
-  std::vector<gfx::Point3F> out_points[2];
-  // vertex_before stores the index of the vertex before its matching
-  // intersection.
-  // i.e. vertex_before[0] stores the vertex we saw before we crossed the plane
-  // which resulted in the line/plane intersection giving us intersections[0].
-  size_t vertex_before[2];
-  size_t points_size = points_.size();
-  size_t current_intersection = 0;
+// Split |polygon| based upon |this|, leaving the results in |front| and |back|.
+// If |polygon| is not split by |this|, then move it to either |front| or |back|
+// depending on its orientation relative to |this|. Sets |is_coplanar| to true
+// if |polygon| is actually coplanar with |this| (in which case whether it is
+// front facing or back facing is determined by the dot products of normals, and
+// document order).
+void DrawPolygon::SplitPolygon(std::unique_ptr<DrawPolygon> polygon,
+                               std::unique_ptr<DrawPolygon>* front,
+                               std::unique_ptr<DrawPolygon>* back,
+                               bool* is_coplanar) const {
+  DCHECK_GE(normalized_threshold, std::abs(normal_.LengthSquared() - 1.0f));
 
-  size_t current_vertex = 0;
-  // We will only have two intersection points because we assume all polygons
-  // are convex.
-  while (current_intersection < 2) {
-    if (LineIntersectPlane(points_[(current_vertex % points_size)],
-                           points_[(current_vertex + 1) % points_size],
-                           splitter.points_[0],
-                           splitter.normal_,
-                           &intersections[current_intersection],
-                           split_threshold)) {
-      vertex_before[current_intersection] = current_vertex % points_size;
-      current_intersection++;
-      // We found both intersection points so we're done already.
-      if (current_intersection == 2) {
-        break;
-      }
+  const size_t num_points = polygon->points_.size();
+  const auto next = [num_points](size_t i) { return (i + 1) % num_points; };
+  const auto prev = [num_points](size_t i) {
+    return (i + num_points - 1) % num_points;
+  };
+
+  std::vector<float> vertex_distance;
+  size_t pos_count = 0;
+  size_t neg_count = 0;
+
+  // Compute plane distances for each vertex of polygon.
+  vertex_distance.resize(num_points);
+  for (size_t i = 0; i < num_points; i++) {
+    vertex_distance[i] = SignedPointDistance(polygon->points_[i]);
+    if (vertex_distance[i] < -split_threshold) {
+      ++neg_count;
+    } else if (vertex_distance[i] > split_threshold) {
+      ++pos_count;
+    } else {
+      vertex_distance[i] = 0.0;
     }
-    if (current_vertex++ > (points_size)) {
-      break;
+  }
+
+  // Handle non-splitting cases.
+  if (!pos_count && !neg_count) {
+    double dot = gfx::DotProduct(normal_, polygon->normal_);
+    if ((dot >= 0.0f && polygon->order_index_ >= order_index_) ||
+        (dot <= 0.0f && polygon->order_index_ <= order_index_)) {
+      *back = std::move(polygon);
+    } else {
+      *front = std::move(polygon);
     }
+    *is_coplanar = true;
+    return;
   }
-  DCHECK_EQ(current_intersection, static_cast<size_t>(2));
 
-  // Since we found both the intersection points, we can begin building the
-  // vertex set for both our new polygons.
-  size_t start1 = (vertex_before[0] + 1) % points_size;
-  size_t start2 = (vertex_before[1] + 1) % points_size;
-  size_t points_remaining = points_size;
-
-  // First polygon.
-  out_points[0].push_back(intersections[0]);
-  DCHECK_GE(vertex_before[1], start1);
-  for (size_t i = start1; i <= vertex_before[1]; i++) {
-    out_points[0].push_back(points_[i]);
-    --points_remaining;
+  *is_coplanar = false;
+  if (!neg_count) {
+    *front = std::move(polygon);
+    return;
+  } else if (!pos_count) {
+    *back = std::move(polygon);
+    return;
   }
-  out_points[0].push_back(intersections[1]);
 
-  // Second polygon.
-  out_points[1].push_back(intersections[1]);
-  size_t index = start2;
-  for (size_t i = 0; i < points_remaining; i++) {
-    out_points[1].push_back(points_[index % points_size]);
-    ++index;
-  }
-  out_points[1].push_back(intersections[0]);
+  // There should be at most two points that are considered to be on the thick
+  // plane. If this is not the case, then the polygon is not convex.
+  DCHECK_LE(num_points - pos_count - neg_count, 2u);
 
-  // Give both polygons the original splitting polygon's ID, so that they'll
-  // still be sorted properly in co-planar instances.
-  scoped_ptr<DrawPolygon> poly1(
-      new DrawPolygon(original_ref_, out_points[0], normal_, order_index_));
-  scoped_ptr<DrawPolygon> poly2(
-      new DrawPolygon(original_ref_, out_points[1], normal_, order_index_));
+  // Handle splitting case.
+  size_t front_begin;
+  size_t back_begin;
+  size_t pre_front_begin;
+  size_t pre_back_begin;
 
-  DCHECK_GE(poly1->points().size(), 3u);
-  DCHECK_GE(poly2->points().size(), 3u);
+  // Find the first vertex that is part of the front split polygon.
+  front_begin = std::find_if(vertex_distance.begin(), vertex_distance.end(),
+                             [](float val) { return val > 0.0; }) -
+                vertex_distance.begin();
+  while (vertex_distance[pre_front_begin = prev(front_begin)] > 0.0)
+    front_begin = pre_front_begin;
 
-  if (SideCompare(*poly1, splitter) == BSP_FRONT) {
-    *front = std::move(poly1);
-    *back = std::move(poly2);
-  } else {
-    *front = std::move(poly2);
-    *back = std::move(poly1);
-  }
-  return true;
+  // Find the first vertex that is part of the back split polygon.
+  back_begin = std::find_if(vertex_distance.begin(), vertex_distance.end(),
+                            [](float val) { return val < 0.0; }) -
+               vertex_distance.begin();
+  while (vertex_distance[pre_back_begin = prev(back_begin)] < 0.0)
+    back_begin = pre_back_begin;
+
+  DCHECK(vertex_distance[front_begin] > 0.0);
+  DCHECK(vertex_distance[pre_front_begin] <= 0.0);
+  DCHECK(vertex_distance[back_begin] < 0.0);
+  DCHECK(vertex_distance[pre_back_begin] >= 0.0);
+
+  gfx::Point3F pre_pos_intersection;
+  gfx::Point3F pre_neg_intersection;
+
+  // Compute the intersection points. N.B.: If the "pre" vertex is on
+  // the thick plane, then the intersection will be at the same point, because
+  // we set vertex_distance to 0 in this case.
+  PointInterpolate(
+      polygon->points_[pre_front_begin], polygon->points_[front_begin],
+      -vertex_distance[pre_front_begin] /
+          gfx::DotProduct(normal_, polygon->points_[front_begin] -
+                                       polygon->points_[pre_front_begin]),
+      &pre_pos_intersection);
+  PointInterpolate(
+      polygon->points_[pre_back_begin], polygon->points_[back_begin],
+      -vertex_distance[pre_back_begin] /
+          gfx::DotProduct(normal_, polygon->points_[back_begin] -
+                                       polygon->points_[pre_back_begin]),
+      &pre_neg_intersection);
+
+  // Build the front and back polygons.
+  std::vector<gfx::Point3F> out_points;
+
+  out_points.push_back(pre_pos_intersection);
+  do {
+    out_points.push_back(polygon->points_[front_begin]);
+    front_begin = next(front_begin);
+  } while (vertex_distance[front_begin] > 0.0);
+  out_points.push_back(pre_neg_intersection);
+  *front =
+      base::MakeUnique<DrawPolygon>(polygon->original_ref_, out_points,
+                                    polygon->normal_, polygon->order_index_);
+
+  out_points.clear();
+
+  out_points.push_back(pre_neg_intersection);
+  do {
+    out_points.push_back(polygon->points_[back_begin]);
+    back_begin = next(back_begin);
+  } while (vertex_distance[back_begin] < 0.0);
+  out_points.push_back(pre_pos_intersection);
+  *back =
+      base::MakeUnique<DrawPolygon>(polygon->original_ref_, out_points,
+                                    polygon->normal_, polygon->order_index_);
+
+  DCHECK_GE((*front)->points().size(), 3u);
+  DCHECK_GE((*back)->points().size(), 3u);
 }
 
 // This algorithm takes the first vertex in the polygon and uses that as a

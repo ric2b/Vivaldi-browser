@@ -6,14 +6,14 @@
 #define GPU_IPC_COMMON_GPU_PARAM_TRAITS_MACROS_H_
 
 #include "gpu/command_buffer/common/constants.h"
+#include "gpu/command_buffer/common/gles2_cmd_utils.h"
 #include "gpu/command_buffer/common/gpu_memory_allocation.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/gpu_export.h"
 #include "gpu/ipc/common/gpu_stream_constants.h"
 #include "ipc/ipc_message_macros.h"
-#include "ui/gfx/gpu_memory_buffer.h"
+#include "ui/gfx/ipc/geometry/gfx_param_traits.h"
 #include "ui/gfx/ipc/gfx_param_traits.h"
-#include "ui/gfx/swap_result.h"
 #include "ui/gl/gpu_preference.h"
 #include "url/ipc/url_param_traits.h"
 
@@ -39,29 +39,8 @@ IPC_STRUCT_TRAITS_BEGIN(gpu::VideoEncodeAcceleratorSupportedProfile)
   IPC_STRUCT_TRAITS_MEMBER(max_framerate_denominator)
 IPC_STRUCT_TRAITS_END()
 
-IPC_ENUM_TRAITS_MAX_VALUE(gfx::GpuMemoryBufferType,
-                          gfx::GPU_MEMORY_BUFFER_TYPE_LAST)
-
-IPC_STRUCT_TRAITS_BEGIN(gfx::GpuMemoryBufferHandle)
-  IPC_STRUCT_TRAITS_MEMBER(id)
-  IPC_STRUCT_TRAITS_MEMBER(type)
-  IPC_STRUCT_TRAITS_MEMBER(handle)
-  IPC_STRUCT_TRAITS_MEMBER(offset)
-  IPC_STRUCT_TRAITS_MEMBER(stride)
-#if defined(USE_OZONE)
-  IPC_STRUCT_TRAITS_MEMBER(native_pixmap_handle)
-#elif defined(OS_MACOSX)
-  IPC_STRUCT_TRAITS_MEMBER(mach_port)
-#endif
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(gfx::GpuMemoryBufferId)
-  IPC_STRUCT_TRAITS_MEMBER(id)
-IPC_STRUCT_TRAITS_END()
-
 IPC_ENUM_TRAITS_MAX_VALUE(gfx::GpuPreference, gfx::GpuPreferenceLast)
 IPC_ENUM_TRAITS_MAX_VALUE(gpu::GpuStreamPriority, gpu::GpuStreamPriority::LAST)
-IPC_ENUM_TRAITS_MAX_VALUE(gfx::SwapResult, gfx::SwapResult::SWAP_RESULT_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(gpu::MemoryAllocation::PriorityCutoff,
                           gpu::MemoryAllocation::CUTOFF_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(gpu::error::ContextLostReason,
@@ -72,6 +51,8 @@ IPC_ENUM_TRAITS_MIN_MAX_VALUE(gpu::CollectInfoResult,
 IPC_ENUM_TRAITS_MIN_MAX_VALUE(gpu::VideoCodecProfile,
                               gpu::VIDEO_CODEC_PROFILE_MIN,
                               gpu::VIDEO_CODEC_PROFILE_MAX)
+IPC_ENUM_TRAITS_MAX_VALUE(gpu::gles2::ContextType,
+                          gpu::gles2::CONTEXT_TYPE_LAST)
 
 IPC_STRUCT_TRAITS_BEGIN(gpu::DxDiagNode)
   IPC_STRUCT_TRAITS_MEMBER(values)
@@ -131,5 +112,22 @@ IPC_STRUCT_TRAITS_BEGIN(gpu::MemoryAllocation)
   IPC_STRUCT_TRAITS_MEMBER(bytes_limit_when_visible)
   IPC_STRUCT_TRAITS_MEMBER(priority_cutoff_when_visible)
 IPC_STRUCT_TRAITS_END()
+
+IPC_STRUCT_TRAITS_BEGIN(gpu::gles2::ContextCreationAttribHelper)
+  IPC_STRUCT_TRAITS_MEMBER(alpha_size)
+  IPC_STRUCT_TRAITS_MEMBER(blue_size)
+  IPC_STRUCT_TRAITS_MEMBER(green_size)
+  IPC_STRUCT_TRAITS_MEMBER(red_size)
+  IPC_STRUCT_TRAITS_MEMBER(depth_size)
+  IPC_STRUCT_TRAITS_MEMBER(stencil_size)
+  IPC_STRUCT_TRAITS_MEMBER(samples)
+  IPC_STRUCT_TRAITS_MEMBER(sample_buffers)
+  IPC_STRUCT_TRAITS_MEMBER(buffer_preserved)
+  IPC_STRUCT_TRAITS_MEMBER(bind_generates_resource)
+  IPC_STRUCT_TRAITS_MEMBER(fail_if_major_perf_caveat)
+  IPC_STRUCT_TRAITS_MEMBER(lose_context_when_out_of_memory)
+  IPC_STRUCT_TRAITS_MEMBER(context_type)
+IPC_STRUCT_TRAITS_END()
+
 
 #endif  // GPU_IPC_COMMON_GPU_PARAM_TRAITS_MACROS_H_

@@ -6,7 +6,7 @@
 #include "content/public/common/common_param_traits.h"
 #include "content/public/common/drop_data.h"
 #include "ipc/ipc_message_macros.h"
-#include "third_party/WebKit/public/web/WebDragOperation.h"
+#include "third_party/WebKit/public/platform/WebDragOperation.h"
 #include "ui/gfx/geometry/point.h"
 
 #define IPC_MESSAGE_START DragMsgStart
@@ -21,6 +21,7 @@ IPC_STRUCT_TRAITS_BEGIN(ui::FileInfo)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::DropData)
+  IPC_STRUCT_TRAITS_MEMBER(key_modifiers)
   IPC_STRUCT_TRAITS_MEMBER(url)
   IPC_STRUCT_TRAITS_MEMBER(url_title)
   IPC_STRUCT_TRAITS_MEMBER(download_metadata)

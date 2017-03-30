@@ -71,7 +71,7 @@ class MockDelegate : public DownloadItemImplDelegate {
   MOCK_METHOD1(ShouldOpenFileBasedOnExtension, bool(const base::FilePath&));
   MOCK_METHOD1(CheckForFileRemoval, void(DownloadItemImpl*));
 
-  void ResumeInterruptedDownload(scoped_ptr<DownloadUrlParameters> params,
+  void ResumeInterruptedDownload(std::unique_ptr<DownloadUrlParameters> params,
                                  uint32_t id) override {
     MockResumeInterruptedDownload(params.get(), id);
   }
@@ -245,14 +245,14 @@ class DownloadItemTest : public testing::Test {
   DownloadItemTest()
       : delegate_(), next_download_id_(DownloadItem::kInvalidId + 1) {
     base::FeatureList::ClearInstanceForTesting();
-    scoped_ptr<base::FeatureList> feature_list(new base::FeatureList);
+    std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
     feature_list->InitializeFromCommandLine(features::kDownloadResumption.name,
                                             std::string());
     base::FeatureList::SetInstance(std::move(feature_list));
 
     create_info_.reset(new DownloadCreateInfo());
     create_info_->save_info =
-        scoped_ptr<DownloadSaveInfo>(new DownloadSaveInfo());
+        std::unique_ptr<DownloadSaveInfo>(new DownloadSaveInfo());
     create_info_->save_info->prompt_for_save_location = false;
     create_info_->url_chain.push_back(GURL("http://example.com/download"));
     create_info_->etag = "SomethingToSatisfyResumption";
@@ -264,7 +264,7 @@ class DownloadItemTest : public testing::Test {
   }
 
   DownloadItemImpl* CreateDownloadItemWithCreateInfo(
-      scoped_ptr<DownloadCreateInfo> info) {
+      std::unique_ptr<DownloadCreateInfo> info) {
     DownloadItemImpl* download = new DownloadItemImpl(
         &delegate_, next_download_id_++, *(info.get()), net::BoundNetLog());
     allocated_downloads_.insert(download);
@@ -289,7 +289,7 @@ class DownloadItemTest : public testing::Test {
       DownloadItemImpl* item,
       DownloadItemImplDelegate::DownloadTargetCallback* callback) {
     MockDownloadFile* mock_download_file = nullptr;
-    scoped_ptr<DownloadFile> download_file;
+    std::unique_ptr<DownloadFile> download_file;
     if (callback) {
       EXPECT_CALL(*mock_delegate(), DetermineDownloadTarget(item, _))
           .WillOnce(SaveArg<1>(callback));
@@ -307,7 +307,7 @@ class DownloadItemTest : public testing::Test {
           .WillRepeatedly(ReturnRefOfCopy(base::FilePath()));
     }
 
-    scoped_ptr<MockRequestHandle> request_handle(
+    std::unique_ptr<MockRequestHandle> request_handle(
         new NiceMock<MockRequestHandle>);
     item->Start(std::move(download_file), std::move(request_handle),
                 *create_info_);
@@ -359,7 +359,7 @@ class DownloadItemTest : public testing::Test {
     EXPECT_CALL(*download_file, Detach());
 
     item->DestinationObserverAsWeakPtr()->DestinationCompleted(
-        0, scoped_ptr<crypto::SecureHash>());
+        0, std::unique_ptr<crypto::SecureHash>());
     RunAllPendingInMessageLoops();
   }
 
@@ -403,7 +403,7 @@ class DownloadItemTest : public testing::Test {
   TestBrowserThreadBundle thread_bundle_;
   StrictMock<MockDelegate> delegate_;
   std::set<DownloadItem*> allocated_downloads_;
-  scoped_ptr<DownloadCreateInfo> create_info_;
+  std::unique_ptr<DownloadCreateInfo> create_info_;
   uint32_t next_download_id_ = DownloadItem::kInvalidId + 1;
   TestBrowserContext browser_context_;
 };
@@ -478,9 +478,8 @@ TEST_F(DownloadItemTest, NotificationAfterInterrupted) {
       .Times(0);
 
   item->DestinationObserverAsWeakPtr()->DestinationError(
-      DOWNLOAD_INTERRUPT_REASON_FILE_FAILED,
-      0,
-      scoped_ptr<crypto::SecureHash>());
+      DOWNLOAD_INTERRUPT_REASON_FILE_FAILED, 0,
+      std::unique_ptr<crypto::SecureHash>());
   ASSERT_TRUE(observer.CheckAndResetDownloadUpdated());
 }
 
@@ -507,9 +506,8 @@ TEST_F(DownloadItemTest, ContinueAfterInterrupted) {
       .WillRepeatedly(Return(browser_context()));
   EXPECT_CALL(*mock_delegate(), MockResumeInterruptedDownload(_, _)).Times(1);
   item->DestinationObserverAsWeakPtr()->DestinationError(
-      DOWNLOAD_INTERRUPT_REASON_FILE_TRANSIENT_ERROR,
-      0,
-      scoped_ptr<crypto::SecureHash>());
+      DOWNLOAD_INTERRUPT_REASON_FILE_TRANSIENT_ERROR, 0,
+      std::unique_ptr<crypto::SecureHash>());
   ASSERT_TRUE(observer.CheckAndResetDownloadUpdated());
   // Since the download is resumed automatically, the interrupt count doesn't
   // increase.
@@ -538,9 +536,8 @@ TEST_F(DownloadItemTest, RestartAfterInterrupted) {
   // Interrupt the download, using a restartable interrupt.
   EXPECT_CALL(*download_file, Cancel());
   item->DestinationObserverAsWeakPtr()->DestinationError(
-      DOWNLOAD_INTERRUPT_REASON_FILE_FAILED,
-      0,
-      scoped_ptr<crypto::SecureHash>());
+      DOWNLOAD_INTERRUPT_REASON_FILE_FAILED, 0,
+      std::unique_ptr<crypto::SecureHash>());
   ASSERT_TRUE(observer.CheckAndResetDownloadUpdated());
   // Should not try to auto-resume.
   ASSERT_EQ(1, observer.interrupt_count());
@@ -568,7 +565,7 @@ TEST_F(DownloadItemTest, UnresumableInterrupt) {
 
   // Complete download to trigger final rename.
   item->DestinationObserverAsWeakPtr()->DestinationCompleted(
-      0, scoped_ptr<crypto::SecureHash>());
+      0, std::unique_ptr<crypto::SecureHash>());
   RunAllPendingInMessageLoops();
 
   ASSERT_TRUE(observer.CheckAndResetDownloadUpdated());
@@ -585,9 +582,9 @@ TEST_F(DownloadItemTest, LimitRestartsAfterInterrupted) {
       item->DestinationObserverAsWeakPtr());
   TestDownloadItemObserver observer(item);
   MockDownloadFile* mock_download_file(nullptr);
-  scoped_ptr<DownloadFile> download_file;
+  std::unique_ptr<DownloadFile> download_file;
   MockRequestHandle* mock_request_handle(nullptr);
-  scoped_ptr<DownloadRequestHandleInterface> request_handle;
+  std::unique_ptr<DownloadRequestHandleInterface> request_handle;
   DownloadItemImplDelegate::DownloadTargetCallback callback;
 
   EXPECT_CALL(*mock_delegate(), DetermineDownloadTarget(item, _))
@@ -629,9 +626,8 @@ TEST_F(DownloadItemTest, LimitRestartsAfterInterrupted) {
 
     // Use a continuable interrupt.
     item->DestinationObserverAsWeakPtr()->DestinationError(
-        DOWNLOAD_INTERRUPT_REASON_FILE_TRANSIENT_ERROR,
-        0,
-        scoped_ptr<crypto::SecureHash>());
+        DOWNLOAD_INTERRUPT_REASON_FILE_TRANSIENT_ERROR, 0,
+        std::unique_ptr<crypto::SecureHash>());
 
     RunAllPendingInMessageLoops();
     ::testing::Mock::VerifyAndClearExpectations(mock_download_file);
@@ -668,9 +664,8 @@ TEST_F(DownloadItemTest, FailedResumptionDoesntUpdateOriginState) {
       .WillRepeatedly(Return(browser_context()));
   EXPECT_CALL(*download_file, Detach());
   item->DestinationObserverAsWeakPtr()->DestinationError(
-      DOWNLOAD_INTERRUPT_REASON_FILE_TRANSIENT_ERROR,
-      0,
-      scoped_ptr<crypto::SecureHash>());
+      DOWNLOAD_INTERRUPT_REASON_FILE_TRANSIENT_ERROR, 0,
+      std::unique_ptr<crypto::SecureHash>());
   RunAllPendingInMessageLoops();
   EXPECT_EQ(DownloadItem::IN_PROGRESS, item->GetState());
 
@@ -724,9 +719,8 @@ TEST_F(DownloadItemTest, ResumeUsingFinalURL) {
                                     _))
       .Times(1);
   item->DestinationObserverAsWeakPtr()->DestinationError(
-      DOWNLOAD_INTERRUPT_REASON_FILE_TRANSIENT_ERROR,
-      0,
-      scoped_ptr<crypto::SecureHash>());
+      DOWNLOAD_INTERRUPT_REASON_FILE_TRANSIENT_ERROR, 0,
+      std::unique_ptr<crypto::SecureHash>());
 
   // Test expectations verify that ResumeInterruptedDownload() is called (by way
   // of MockResumeInterruptedDownload) after the download is interrupted. But
@@ -760,7 +754,7 @@ TEST_F(DownloadItemTest, NotificationAfterOnContentCheckCompleted) {
       DoIntermediateRename(safe_item, DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS);
   TestDownloadItemObserver safe_observer(safe_item);
 
-  safe_item->OnAllDataSaved(0, scoped_ptr<crypto::SecureHash>());
+  safe_item->OnAllDataSaved(0, std::unique_ptr<crypto::SecureHash>());
   EXPECT_TRUE(safe_observer.CheckAndResetDownloadUpdated());
   safe_item->OnContentCheckCompleted(DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS);
   EXPECT_TRUE(safe_observer.CheckAndResetDownloadUpdated());
@@ -773,7 +767,7 @@ TEST_F(DownloadItemTest, NotificationAfterOnContentCheckCompleted) {
       DoIntermediateRename(unsafeurl_item, DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS);
   TestDownloadItemObserver unsafeurl_observer(unsafeurl_item);
 
-  unsafeurl_item->OnAllDataSaved(0, scoped_ptr<crypto::SecureHash>());
+  unsafeurl_item->OnAllDataSaved(0, std::unique_ptr<crypto::SecureHash>());
   EXPECT_TRUE(unsafeurl_observer.CheckAndResetDownloadUpdated());
   unsafeurl_item->OnContentCheckCompleted(DOWNLOAD_DANGER_TYPE_DANGEROUS_URL);
   EXPECT_TRUE(unsafeurl_observer.CheckAndResetDownloadUpdated());
@@ -791,7 +785,7 @@ TEST_F(DownloadItemTest, NotificationAfterOnContentCheckCompleted) {
       DoIntermediateRename(unsafefile_item, DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS);
   TestDownloadItemObserver unsafefile_observer(unsafefile_item);
 
-  unsafefile_item->OnAllDataSaved(0, scoped_ptr<crypto::SecureHash>());
+  unsafefile_item->OnAllDataSaved(0, std::unique_ptr<crypto::SecureHash>());
   EXPECT_TRUE(unsafefile_observer.CheckAndResetDownloadUpdated());
   unsafefile_item->OnContentCheckCompleted(DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE);
   EXPECT_TRUE(unsafefile_observer.CheckAndResetDownloadUpdated());
@@ -838,8 +832,8 @@ TEST_F(DownloadItemTest, NotificationAfterTogglePause) {
   DownloadItemImpl* item = CreateDownloadItem();
   TestDownloadItemObserver observer(item);
   MockDownloadFile* mock_download_file(new MockDownloadFile);
-  scoped_ptr<DownloadFile> download_file(mock_download_file);
-  scoped_ptr<DownloadRequestHandleInterface> request_handle(
+  std::unique_ptr<DownloadFile> download_file(mock_download_file);
+  std::unique_ptr<DownloadRequestHandleInterface> request_handle(
       new NiceMock<MockRequestHandle>);
 
   EXPECT_CALL(*mock_download_file, Initialize(_));
@@ -886,10 +880,10 @@ TEST_F(DownloadItemTest, DisplayName) {
 // Test to make sure that Start method calls DF initialize properly.
 TEST_F(DownloadItemTest, Start) {
   MockDownloadFile* mock_download_file(new MockDownloadFile);
-  scoped_ptr<DownloadFile> download_file(mock_download_file);
+  std::unique_ptr<DownloadFile> download_file(mock_download_file);
   DownloadItemImpl* item = CreateDownloadItem();
   EXPECT_CALL(*mock_download_file, Initialize(_));
-  scoped_ptr<DownloadRequestHandleInterface> request_handle(
+  std::unique_ptr<DownloadRequestHandleInterface> request_handle(
       new NiceMock<MockRequestHandle>);
   EXPECT_CALL(*mock_delegate(), DetermineDownloadTarget(item, _));
   item->Start(std::move(download_file), std::move(request_handle),
@@ -903,8 +897,8 @@ TEST_F(DownloadItemTest, Start) {
 // file initialization failing.
 TEST_F(DownloadItemTest, InitDownloadFileFails) {
   DownloadItemImpl* item = CreateDownloadItem();
-  scoped_ptr<MockDownloadFile> file(new MockDownloadFile());
-  scoped_ptr<MockRequestHandle> request_handle(new MockRequestHandle());
+  std::unique_ptr<MockDownloadFile> file(new MockDownloadFile());
+  std::unique_ptr<MockRequestHandle> request_handle(new MockRequestHandle());
   EXPECT_CALL(*file, Cancel());
   EXPECT_CALL(*request_handle, CancelRequest());
   EXPECT_CALL(*file, Initialize(_))
@@ -939,8 +933,8 @@ TEST_F(DownloadItemTest, StartFailedDownload) {
 
   // DownloadFile and DownloadRequestHandleInterface objects aren't created for
   // failed downloads.
-  scoped_ptr<DownloadFile> null_download_file;
-  scoped_ptr<DownloadRequestHandleInterface> null_request_handle;
+  std::unique_ptr<DownloadFile> null_download_file;
+  std::unique_ptr<DownloadRequestHandleInterface> null_request_handle;
   DownloadItemImplDelegate::DownloadTargetCallback download_target_callback;
   EXPECT_CALL(*mock_delegate(), DetermineDownloadTarget(item, _))
       .WillOnce(SaveArg<1>(&download_target_callback));
@@ -993,7 +987,7 @@ TEST_F(DownloadItemTest, CallbackAfterRename) {
       .WillOnce(ReturnRefOfCopy(base::FilePath()));
   EXPECT_CALL(*download_file, Detach());
   item->DestinationObserverAsWeakPtr()->DestinationCompleted(
-      0, scoped_ptr<crypto::SecureHash>());
+      0, std::unique_ptr<crypto::SecureHash>());
   RunAllPendingInMessageLoops();
   ::testing::Mock::VerifyAndClearExpectations(download_file);
   mock_delegate()->VerifyAndClearExpectations();
@@ -1035,7 +1029,7 @@ TEST_F(DownloadItemTest, Interrupted) {
   // Confirm interrupt sets state properly.
   EXPECT_CALL(*download_file, Cancel());
   item->DestinationObserverAsWeakPtr()->DestinationError(
-      reason, 0, scoped_ptr<crypto::SecureHash>());
+      reason, 0, std::unique_ptr<crypto::SecureHash>());
   RunAllPendingInMessageLoops();
   EXPECT_EQ(DownloadItem::INTERRUPTED, item->GetState());
   EXPECT_EQ(reason, item->GetLastReason());
@@ -1053,9 +1047,8 @@ TEST_F(DownloadItemTest, InterruptedBeforeIntermediateRename_Restart) {
   DownloadItemImplDelegate::DownloadTargetCallback callback;
   MockDownloadFile* download_file = CallDownloadItemStart(item, &callback);
   item->DestinationObserverAsWeakPtr()->DestinationError(
-      DOWNLOAD_INTERRUPT_REASON_FILE_FAILED,
-      0,
-      scoped_ptr<crypto::SecureHash>());
+      DOWNLOAD_INTERRUPT_REASON_FILE_FAILED, 0,
+      std::unique_ptr<crypto::SecureHash>());
   ASSERT_EQ(DownloadItem::IN_PROGRESS, item->GetState());
 
   base::FilePath final_path(
@@ -1088,9 +1081,8 @@ TEST_F(DownloadItemTest, InterruptedBeforeIntermediateRename_Continue) {
   DownloadItemImplDelegate::DownloadTargetCallback callback;
   MockDownloadFile* download_file = CallDownloadItemStart(item, &callback);
   item->DestinationObserverAsWeakPtr()->DestinationError(
-      DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED,
-      0,
-      scoped_ptr<crypto::SecureHash>());
+      DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED, 0,
+      std::unique_ptr<crypto::SecureHash>());
   ASSERT_EQ(DownloadItem::IN_PROGRESS, item->GetState());
 
   base::FilePath final_path(
@@ -1123,9 +1115,8 @@ TEST_F(DownloadItemTest, InterruptedBeforeIntermediateRename_Failed) {
   DownloadItemImplDelegate::DownloadTargetCallback callback;
   MockDownloadFile* download_file = CallDownloadItemStart(item, &callback);
   item->DestinationObserverAsWeakPtr()->DestinationError(
-      DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED,
-      0,
-      scoped_ptr<crypto::SecureHash>());
+      DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED, 0,
+      std::unique_ptr<crypto::SecureHash>());
   ASSERT_EQ(DownloadItem::IN_PROGRESS, item->GetState());
 
   base::FilePath final_path(
@@ -1213,7 +1204,7 @@ TEST_F(DownloadItemTest, DestinationError_NoRestartRequired) {
   EXPECT_EQ(DOWNLOAD_INTERRUPT_REASON_NONE, item->GetLastReason());
   EXPECT_FALSE(observer.CheckAndResetDownloadUpdated());
 
-  scoped_ptr<crypto::SecureHash> hash(
+  std::unique_ptr<crypto::SecureHash> hash(
       crypto::SecureHash::Create(crypto::SecureHash::SHA256));
   hash->Update(kTestData1, sizeof(kTestData1));
 
@@ -1240,7 +1231,7 @@ TEST_F(DownloadItemTest, DestinationError_RestartRequired) {
   EXPECT_EQ(DOWNLOAD_INTERRUPT_REASON_NONE, item->GetLastReason());
   EXPECT_FALSE(observer.CheckAndResetDownloadUpdated());
 
-  scoped_ptr<crypto::SecureHash> hash(
+  std::unique_ptr<crypto::SecureHash> hash(
       crypto::SecureHash::Create(crypto::SecureHash::SHA256));
   hash->Update(kTestData1, sizeof(kTestData1));
 
@@ -1274,7 +1265,7 @@ TEST_F(DownloadItemTest, DestinationCompleted) {
   EXPECT_EQ("", item->GetHash());
   EXPECT_FALSE(item->AllDataSaved());
 
-  scoped_ptr<crypto::SecureHash> hash(
+  std::unique_ptr<crypto::SecureHash> hash(
       crypto::SecureHash::Create(crypto::SecureHash::SHA256));
   hash->Update(kTestData1, sizeof(kTestData1));
 
@@ -1315,7 +1306,7 @@ TEST_F(DownloadItemTest, EnabledActionsForNormalDownload) {
       .WillOnce(ReturnRefOfCopy(base::FilePath()));
   EXPECT_CALL(*download_file, Detach());
   item->DestinationObserverAsWeakPtr()->DestinationCompleted(
-      0, scoped_ptr<crypto::SecureHash>());
+      0, std::unique_ptr<crypto::SecureHash>());
   RunAllPendingInMessageLoops();
 
   ASSERT_EQ(DownloadItem::COMPLETE, item->GetState());
@@ -1346,7 +1337,7 @@ TEST_F(DownloadItemTest, EnabledActionsForTemporaryDownload) {
       .WillOnce(ReturnRefOfCopy(base::FilePath()));
   EXPECT_CALL(*download_file, Detach());
   item->DestinationObserverAsWeakPtr()->DestinationCompleted(
-      0, scoped_ptr<crypto::SecureHash>());
+      0, std::unique_ptr<crypto::SecureHash>());
   RunAllPendingInMessageLoops();
 
   ASSERT_EQ(DownloadItem::COMPLETE, item->GetState());
@@ -1361,9 +1352,8 @@ TEST_F(DownloadItemTest, EnabledActionsForInterruptedDownload) {
 
   EXPECT_CALL(*download_file, Cancel());
   item->DestinationObserverAsWeakPtr()->DestinationError(
-      DOWNLOAD_INTERRUPT_REASON_FILE_FAILED,
-      0,
-      scoped_ptr<crypto::SecureHash>());
+      DOWNLOAD_INTERRUPT_REASON_FILE_FAILED, 0,
+      std::unique_ptr<crypto::SecureHash>());
   RunAllPendingInMessageLoops();
 
   ASSERT_EQ(DownloadItem::INTERRUPTED, item->GetState());
@@ -1400,7 +1390,7 @@ TEST_F(DownloadItemTest, CompleteDelegate_ReturnTrue) {
   EXPECT_CALL(*mock_delegate(), ShouldCompleteDownload(item, _))
       .WillOnce(Return(true));
   item->DestinationObserverAsWeakPtr()->DestinationCompleted(
-      0, scoped_ptr<crypto::SecureHash>());
+      0, std::unique_ptr<crypto::SecureHash>());
   EXPECT_EQ(DownloadItem::IN_PROGRESS, item->GetState());
   EXPECT_FALSE(item->IsDangerous());
 
@@ -1434,7 +1424,7 @@ TEST_F(DownloadItemTest, CompleteDelegate_BlockOnce) {
                       Return(false)))
       .WillOnce(Return(true));
   item->DestinationObserverAsWeakPtr()->DestinationCompleted(
-      0, scoped_ptr<crypto::SecureHash>());
+      0, std::unique_ptr<crypto::SecureHash>());
   ASSERT_FALSE(delegate_callback.is_null());
   copy_delegate_callback = delegate_callback;
   delegate_callback.Reset();
@@ -1474,7 +1464,7 @@ TEST_F(DownloadItemTest, CompleteDelegate_SetDanger) {
                       Return(false)))
       .WillOnce(Return(true));
   item->DestinationObserverAsWeakPtr()->DestinationCompleted(
-      0, scoped_ptr<crypto::SecureHash>());
+      0, std::unique_ptr<crypto::SecureHash>());
   ASSERT_FALSE(delegate_callback.is_null());
   copy_delegate_callback = delegate_callback;
   delegate_callback.Reset();
@@ -1525,7 +1515,7 @@ TEST_F(DownloadItemTest, CompleteDelegate_BlockTwice) {
                       Return(false)))
       .WillOnce(Return(true));
   item->DestinationObserverAsWeakPtr()->DestinationCompleted(
-      0, scoped_ptr<crypto::SecureHash>());
+      0, std::unique_ptr<crypto::SecureHash>());
   ASSERT_FALSE(delegate_callback.is_null());
   copy_delegate_callback = delegate_callback;
   delegate_callback.Reset();
@@ -1584,9 +1574,8 @@ TEST_F(DownloadItemTest, StealInterruptedDangerousDownload) {
   EXPECT_CALL(*download_file, FullPath()).WillOnce(ReturnRefOfCopy(full_path));
   EXPECT_CALL(*download_file, Detach());
   item->DestinationObserverAsWeakPtr()->DestinationError(
-      DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED,
-      0,
-      scoped_ptr<crypto::SecureHash>());
+      DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED, 0,
+      std::unique_ptr<crypto::SecureHash>());
   ASSERT_TRUE(item->IsDangerous());
 
   EXPECT_CALL(*mock_delegate(), DownloadRemoved(_));
@@ -1606,9 +1595,8 @@ TEST_F(DownloadItemTest, StealInterruptedNonResumableDangerousDownload) {
       DoIntermediateRename(item, DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE);
   EXPECT_CALL(*download_file, Cancel());
   item->DestinationObserverAsWeakPtr()->DestinationError(
-      DOWNLOAD_INTERRUPT_REASON_FILE_FAILED,
-      0,
-      scoped_ptr<crypto::SecureHash>());
+      DOWNLOAD_INTERRUPT_REASON_FILE_FAILED, 0,
+      std::unique_ptr<crypto::SecureHash>());
   ASSERT_TRUE(item->IsDangerous());
 
   EXPECT_CALL(*mock_delegate(), DownloadRemoved(_));
@@ -1711,8 +1699,8 @@ void DestinationErrorInvoker(
             << DownloadInterruptReasonToString(reason)
             << ", bytes_so_far:" << bytes_so_far << ") observer:" << !!observer;
   if (observer)
-    observer->DestinationError(
-        reason, bytes_so_far, scoped_ptr<crypto::SecureHash>());
+    observer->DestinationError(reason, bytes_so_far,
+                               std::unique_ptr<crypto::SecureHash>());
 }
 
 void DestinationCompletedInvoker(
@@ -1722,7 +1710,7 @@ void DestinationCompletedInvoker(
             << ") observer:" << !!observer;
   if (observer)
     observer->DestinationCompleted(total_bytes,
-                                   scoped_ptr<crypto::SecureHash>());
+                                   std::unique_ptr<crypto::SecureHash>());
 }
 
 // Given a set of observations (via the range |begin|..|end|), constructs a list
@@ -1835,8 +1823,8 @@ class DownloadItemDestinationUpdateRaceTest
   }
 
   DownloadItemImpl* item_;
-  scoped_ptr<MockDownloadFile> file_;
-  scoped_ptr<MockRequestHandle> request_handle_;
+  std::unique_ptr<MockDownloadFile> file_;
+  std::unique_ptr<MockRequestHandle> request_handle_;
 
   std::queue<base::Closure> successful_update_events_;
   std::queue<base::Closure> failing_update_events_;

@@ -117,6 +117,8 @@ public class ChildProcessService extends Service {
         sContext.set(this);
         super.onCreate();
 
+        ContextUtils.initApplicationContext(getApplicationContext());
+
         mMainThread = new Thread(new Runnable() {
             @Override
             @SuppressFBWarnings("DM_EXIT")
@@ -188,7 +190,6 @@ public class ChildProcessService extends Service {
                             mMainThread.wait();
                         }
                     }
-                    ContextUtils.initApplicationContext(sContext.get().getApplicationContext());
                     for (FileDescriptorInfo fdInfo : mFdInfos) {
                         nativeRegisterGlobalFileDescriptor(
                                 fdInfo.mId, fdInfo.mFd.detachFd(), fdInfo.mOffset, fdInfo.mSize);

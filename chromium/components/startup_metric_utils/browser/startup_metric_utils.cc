@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 
+#include <memory>
+
 #include "base/containers/hash_tables.h"
 #include "base/environment.h"
 #include "base/lazy_instance.h"
@@ -269,8 +271,8 @@ base::TimeTicks StartupTimeToTimeTicks(const base::Time& time) {
   // bumping the priority reduces the likelihood of a context switch interfering
   // with this computation.
 
-// platform_thread_mac.mm unfortunately doesn't properly support base's
-// thread priority APIs (crbug.com/554651).
+// Enabling this logic on OS X causes a significant performance regression.
+// https://crbug.com/601270
 #if !defined(OS_MACOSX)
   static bool statics_initialized = false;
 
@@ -349,7 +351,7 @@ const char kChromeMainTicksEnvVar[] = "CHROME_MAIN_TICKS";
 
 // Returns the time of main entry recorded from RecordExeMainEntryTime.
 base::TimeTicks ExeMainEntryPointTicks() {
-  scoped_ptr<base::Environment> env(base::Environment::Create());
+  std::unique_ptr<base::Environment> env(base::Environment::Create());
   std::string ticks_string;
   int64_t time_int = 0;
   if (env->GetVar(kChromeMainTicksEnvVar, &ticks_string) &&
@@ -536,7 +538,7 @@ void RecordMainEntryPointTime(const base::Time& time) {
 void RecordExeMainEntryPointTime(const base::Time& time) {
   const std::string exe_load_ticks =
       base::Int64ToString(StartupTimeToTimeTicks(time).ToInternalValue());
-  scoped_ptr<base::Environment> env(base::Environment::Create());
+  std::unique_ptr<base::Environment> env(base::Environment::Create());
   env->SetVar(kChromeMainTicksEnvVar, exe_load_ticks);
 }
 

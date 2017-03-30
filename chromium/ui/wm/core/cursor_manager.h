@@ -5,9 +5,10 @@
 #ifndef UI_WM_CORE_CURSOR_MANAGER_H_
 #define UI_WM_CORE_CURSOR_MANAGER_H_
 
+#include <memory>
+
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/base/cursor/cursor.h"
@@ -15,10 +16,6 @@
 #include "ui/gfx/native_widget_types.h"
 #include "ui/wm/core/native_cursor_manager_delegate.h"
 #include "ui/wm/wm_export.h"
-
-namespace gfx {
-class Display;
-}
 
 namespace ui {
 class KeyEvent;
@@ -39,8 +36,11 @@ class NativeCursorManager;
 class WM_EXPORT CursorManager : public aura::client::CursorClient,
                                 public NativeCursorManagerDelegate {
  public:
-  explicit CursorManager(scoped_ptr<NativeCursorManager> delegate);
+  explicit CursorManager(std::unique_ptr<NativeCursorManager> delegate);
   ~CursorManager() override;
+
+  // Resets the last visibility state, etc. Currently only called by tests.
+  static void ResetCursorVisibilityStateForTest();
 
   // Overridden from aura::client::CursorClient:
   void SetCursor(gfx::NativeCursor) override;
@@ -53,7 +53,7 @@ class WM_EXPORT CursorManager : public aura::client::CursorClient,
   void EnableMouseEvents() override;
   void DisableMouseEvents() override;
   bool IsMouseEventsEnabled() const override;
-  void SetDisplay(const gfx::Display& display) override;
+  void SetDisplay(const display::Display& display) override;
   void LockCursor() override;
   void UnlockCursor() override;
   bool IsCursorLocked() const override;
@@ -68,17 +68,17 @@ class WM_EXPORT CursorManager : public aura::client::CursorClient,
   void CommitCursorSet(ui::CursorSetType cursor_set) override;
   void CommitMouseEventsEnabled(bool enabled) override;
 
-  scoped_ptr<NativeCursorManager> delegate_;
+  std::unique_ptr<NativeCursorManager> delegate_;
 
   // Number of times LockCursor() has been invoked without a corresponding
   // UnlockCursor().
   int cursor_lock_count_;
 
   // The current state of the cursor.
-  scoped_ptr<internal::CursorState> current_state_;
+  std::unique_ptr<internal::CursorState> current_state_;
 
   // The cursor state to restore when the cursor is unlocked.
-  scoped_ptr<internal::CursorState> state_on_unlock_;
+  std::unique_ptr<internal::CursorState> state_on_unlock_;
 
   base::ObserverList<aura::client::CursorClientObserver> observers_;
 

@@ -197,6 +197,7 @@ class CONTENT_EXPORT ChildThreadImpl
 
   virtual bool OnControlMessageReceived(const IPC::Message& msg);
   virtual void OnProcessBackgrounded(bool backgrounded);
+  virtual void OnProcessPurgeAndSuspend();
 
   // IPC::Listener implementation:
   bool OnMessageReceived(const IPC::Message& msg) override;
@@ -224,8 +225,7 @@ class CONTENT_EXPORT ChildThreadImpl
 
   // We create the channel first without connecting it so we can add filters
   // prior to any messages being received, then connect it afterwards.
-  void ConnectChannel(bool use_mojo_channel,
-                      mojo::ScopedMessagePipeHandle handle);
+  void ConnectChannel(bool use_mojo_channel, const std::string& ipc_token);
 
   // IPC message handlers.
   void OnShutdown();
@@ -289,8 +289,6 @@ class CONTENT_EXPORT ChildThreadImpl
 
   std::unique_ptr<base::PowerMonitor> power_monitor_;
 
-  scoped_refptr<ChildMessageFilter> geofencing_message_filter_;
-
   scoped_refptr<base::SequencedTaskRunner> browser_process_io_runner_;
 
   base::WeakPtrFactory<ChildThreadImpl> channel_connected_factory_;
@@ -308,7 +306,8 @@ struct ChildThreadImpl::Options {
   bool use_mojo_channel;
   scoped_refptr<base::SequencedTaskRunner> browser_process_io_runner;
   std::vector<IPC::MessageFilter*> startup_filters;
-  mojo::MessagePipeHandle in_process_message_pipe_handle;
+  std::string in_process_ipc_token;
+  std::string in_process_application_token;
 
  private:
   Options();

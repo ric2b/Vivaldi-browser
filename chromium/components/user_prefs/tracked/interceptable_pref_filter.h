@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_USER_PREFS_TRACKED_INTERCEPTABLE_PREF_FILTER_H_
 #define COMPONENTS_USER_PREFS_TRACKED_INTERCEPTABLE_PREF_FILTER_H_
 
+#include <memory>
+
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
@@ -22,15 +24,17 @@ class InterceptablePrefFilter
   // hand back the |prefs| it was handed for early filtering. |prefs_altered|
   // indicates whether the |prefs| were actually altered by the
   // FilterOnLoadInterceptor before being handed back.
-  typedef base::Callback<void(scoped_ptr<base::DictionaryValue> prefs,
-                              bool prefs_altered)> FinalizeFilterOnLoadCallback;
+  typedef base::Callback<void(std::unique_ptr<base::DictionaryValue> prefs,
+                              bool prefs_altered)>
+      FinalizeFilterOnLoadCallback;
 
   // A callback to be invoked from FilterOnLoad. It takes ownership of prefs
   // and may modify them before handing them back to this
   // InterceptablePrefFilter via |finalize_filter_on_load|.
   typedef base::Callback<void(
       const FinalizeFilterOnLoadCallback& finalize_filter_on_load,
-      scoped_ptr<base::DictionaryValue> prefs)> FilterOnLoadInterceptor;
+      std::unique_ptr<base::DictionaryValue> prefs)>
+      FilterOnLoadInterceptor;
 
   InterceptablePrefFilter();
   ~InterceptablePrefFilter() override;
@@ -38,7 +42,7 @@ class InterceptablePrefFilter
   // PrefFilter partial implementation.
   void FilterOnLoad(
       const PostFilterOnLoadCallback& post_filter_on_load_callback,
-      scoped_ptr<base::DictionaryValue> pref_store_contents) override;
+      std::unique_ptr<base::DictionaryValue> pref_store_contents) override;
 
   // Registers |filter_on_load_interceptor| to intercept the next FilterOnLoad
   // event. At most one FilterOnLoadInterceptor should be registered per
@@ -52,7 +56,7 @@ class InterceptablePrefFilter
   // initial caller of FilterOnLoad.
   virtual void FinalizeFilterOnLoad(
       const PostFilterOnLoadCallback& post_filter_on_load_callback,
-      scoped_ptr<base::DictionaryValue> pref_store_contents,
+      std::unique_ptr<base::DictionaryValue> pref_store_contents,
       bool prefs_altered) = 0;
 
   // Callback to be invoked only once (and subsequently reset) on the next

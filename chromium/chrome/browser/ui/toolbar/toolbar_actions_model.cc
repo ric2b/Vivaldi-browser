@@ -12,10 +12,11 @@
 #include "base/metrics/histogram_base.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/component_migration_helper.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
+#include "chrome/browser/extensions/extension_message_bubble_controller.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/tab_helper.h"
@@ -23,6 +24,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/extensions/extension_action_view_controller.h"
+#include "chrome/browser/ui/extensions/extension_message_bubble_factory.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/component_toolbar_actions_factory.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
@@ -53,9 +55,10 @@ ToolbarActionsModel::ToolbarActionsModel(
       component_migration_helper_(
           new extensions::ComponentMigrationHelper(profile_, this)),
       actions_initialized_(false),
-      use_redesign_(extensions::FeatureSwitch::extension_action_redesign()
-                        ->IsEnabled()),
+      use_redesign_(
+          extensions::FeatureSwitch::extension_action_redesign()->IsEnabled()),
       highlight_type_(HIGHLIGHT_NONE),
+      has_active_bubble_(false),
       extension_action_observer_(this),
       extension_registry_observer_(this),
       weak_ptr_factory_(this) {
@@ -468,6 +471,17 @@ void ToolbarActionsModel::RemoveItem(const ToolbarItem& item) {
   UpdatePrefs();
 }
 
+std::unique_ptr<extensions::ExtensionMessageBubbleController>
+ToolbarActionsModel::GetExtensionMessageBubbleController(Browser* browser) {
+  std::unique_ptr<extensions::ExtensionMessageBubbleController> controller;
+  if (has_active_bubble())
+    return controller;
+  controller = ExtensionMessageBubbleFactory(browser).GetController();
+  if (controller)
+    controller->SetIsActiveBubble();
+  return controller;
+}
+
 void ToolbarActionsModel::RemoveExtension(
     const extensions::Extension* extension) {
   RemoveItem(ToolbarItem(extension->id(), EXTENSION_ACTION));
@@ -832,20 +846,6 @@ void ToolbarActionsModel::StopHighlighting() {
     if (saved_icon_count != visible_icon_count_)
       SetVisibleIconCount(saved_icon_count);
   }
-}
-
-bool ToolbarActionsModel::RedesignIsShowingNewIcons() const {
-  for (const ToolbarItem& action : toolbar_items_) {
-    if (action.type == EXTENSION_ACTION) {
-      // Without the redesign, we only show extensions with browser actions.
-      // Any extension without a browser action is an indication that we're
-      // showing something new.
-      if (!GetExtensionById(action.id)->manifest()->HasKey(
-              extensions::manifest_keys::kBrowserAction))
-        return true;
-    }
-  }
-  return false;
 }
 
 const extensions::Extension* ToolbarActionsModel::GetExtensionById(

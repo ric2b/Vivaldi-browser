@@ -140,21 +140,21 @@ class CounterContentData final : public ContentData {
     friend class ContentData;
 public:
     const CounterContent* counter() const { return m_counter.get(); }
-    void setCounter(PassOwnPtr<CounterContent> counter) { m_counter = counter; }
+    void setCounter(PassOwnPtr<CounterContent> counter) { m_counter = std::move(counter); }
 
     bool isCounter() const override { return true; }
     LayoutObject* createLayoutObject(Document&, ComputedStyle&) const override;
 
 private:
     CounterContentData(PassOwnPtr<CounterContent> counter)
-        : m_counter(counter)
+        : m_counter(std::move(counter))
     {
     }
 
     ContentData* cloneInternal() const override
     {
         OwnPtr<CounterContent> counterData = adoptPtr(new CounterContent(*counter()));
-        return create(counterData.release());
+        return create(std::move(counterData));
     }
 
     bool equals(const ContentData& data) const override

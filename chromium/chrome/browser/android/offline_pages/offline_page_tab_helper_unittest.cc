@@ -7,17 +7,18 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "chrome/browser/android/offline_pages/offline_page_model_factory.h"
 #include "chrome/browser/android/offline_pages/test_offline_page_model_builder.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
+#include "components/offline_pages/offline_page_feature.h"
 #include "components/offline_pages/offline_page_item.h"
 #include "components/offline_pages/offline_page_model.h"
-#include "components/offline_pages/offline_page_switches.h"
 #include "components/offline_pages/offline_page_test_archiver.h"
+#include "components/offline_pages/offline_page_types.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/net_errors.h"
@@ -29,7 +30,7 @@ namespace offline_pages {
 namespace {
 
 const GURL kTestPageUrl("http://test.org/page1");
-const ClientId kTestPageBookmarkId = ClientId(BOOKMARK_NAMESPACE, "1234");
+const ClientId kTestClientId = ClientId(kBookmarkNamespace, "1234");
 const int64_t kTestFileSize = 876543LL;
 
 class TestNetworkChangeNotifier : public net::NetworkChangeNotifier {
@@ -67,14 +68,14 @@ class OfflinePageTabHelperTest :
   void RunUntilIdle();
   void SimulateHasNetworkConnectivity(bool has_connectivity);
   void StartLoad(const GURL& url);
-  void CommitLoad(const GURL& url);
   void FailLoad(const GURL& url);
 
   OfflinePageTabHelper* offline_page_tab_helper() const {
     return offline_page_tab_helper_;
   }
 
-  int64_t offline_id() const { return offline_id_; }
+  const GURL& online_url() const { return online_url_; }
+  const GURL& offline_url() const { return offline_url_; }
 
  private:
   // OfflinePageTestArchiver::Observer implementation:
@@ -83,28 +84,32 @@ class OfflinePageTabHelperTest :
   std::unique_ptr<OfflinePageTestArchiver> BuildArchiver(
       const GURL& url,
       const base::FilePath& file_name);
-  void OnSavePageDone(OfflinePageModel::SavePageResult result,
-                      int64_t offline_id);
+  void OnSavePageDone(SavePageResult result, int64_t offline_id);
+  void OnGetPageByOfflineIdDone(const SingleOfflinePageItemResult& result);
 
   std::unique_ptr<TestNetworkChangeNotifier> network_change_notifier_;
   OfflinePageTabHelper* offline_page_tab_helper_;  // Not owned.
 
-  int64_t offline_id_;
+  GURL online_url_;
+  GURL offline_url_;
 
   DISALLOW_COPY_AND_ASSIGN(OfflinePageTabHelperTest);
 };
 
 void OfflinePageTabHelperTest::SetUp() {
+  // Enables offline pages feature.
+  // TODO(jianli): Remove this once the feature is completely enabled.
+  base::FeatureList::ClearInstanceForTesting();
+  std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
+  feature_list->InitializeFromCommandLine(
+      offline_pages::kOfflineBookmarksFeature.name, "");
+  base::FeatureList::SetInstance(std::move(feature_list));
+
   // Creates a test web contents.
   content::RenderViewHostTestHarness::SetUp();
   OfflinePageTabHelper::CreateForWebContents(web_contents());
   offline_page_tab_helper_ =
       OfflinePageTabHelper::FromWebContents(web_contents());
-
-  // Enables offline pages feature.
-  // TODO(jianli): Remove this once the feature is completely enabled.
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kEnableOfflinePages);
 
   // Sets up the factory for testing.
   OfflinePageModelFactory::GetInstance()->SetTestingFactoryAndUse(
@@ -117,7 +122,7 @@ void OfflinePageTabHelperTest::SetUp() {
   std::unique_ptr<OfflinePageTestArchiver> archiver(BuildArchiver(
       kTestPageUrl, base::FilePath(FILE_PATH_LITERAL("page1.mhtml"))));
   model->SavePage(
-      kTestPageUrl, kTestPageBookmarkId, std::move(archiver),
+      kTestPageUrl, kTestClientId, std::move(archiver),
       base::Bind(&OfflinePageTabHelperTest::OnSavePageDone, AsWeakPtr()));
   RunUntilIdle();
 }
@@ -137,12 +142,8 @@ void OfflinePageTabHelperTest::SimulateHasNetworkConnectivity(bool online) {
 void OfflinePageTabHelperTest::StartLoad(const GURL& url) {
   controller().LoadURL(url, content::Referrer(), ui::PAGE_TRANSITION_TYPED,
                        std::string());
-}
-
-void OfflinePageTabHelperTest::CommitLoad(const GURL& url) {
-  int entry_id = controller().GetPendingEntry()->GetUniqueID();
-  content::RenderFrameHostTester::For(main_rfh())
-      ->SendNavigate(0, entry_id, true, url);
+  content::RenderFrameHostTester::For(main_rfh())->
+      SimulateNavigationStart(url);
 }
 
 void OfflinePageTabHelperTest::FailLoad(const GURL& url) {
@@ -170,40 +171,52 @@ OfflinePageTabHelperTest::BuildArchiver(const GURL& url,
   return archiver;
 }
 
-void OfflinePageTabHelperTest::OnSavePageDone(
-    OfflinePageModel::SavePageResult result,
-    int64_t offline_id) {
-  offline_id_ = offline_id;
+void OfflinePageTabHelperTest::OnSavePageDone(SavePageResult result,
+                                              int64_t offline_id) {
+  OfflinePageModel* model =
+      OfflinePageModelFactory::GetForBrowserContext(browser_context());
+  model->GetPageByOfflineId(offline_id,
+      base::Bind(&OfflinePageTabHelperTest::OnGetPageByOfflineIdDone,
+                 AsWeakPtr()));
 }
 
-TEST_F(OfflinePageTabHelperTest, SwitchToOnlineFromOffline) {
+void OfflinePageTabHelperTest::OnGetPageByOfflineIdDone(
+    const SingleOfflinePageItemResult& result) {
+  DCHECK(result);
+  online_url_ = result->url;
+  offline_url_ = result->GetOfflineURL();
+}
+
+TEST_F(OfflinePageTabHelperTest, SwitchToOnlineFromOfflineOnNetwork) {
   SimulateHasNetworkConnectivity(true);
 
-  OfflinePageModel* model =
-      OfflinePageModelFactory::GetForBrowserContext(browser_context());
-  const OfflinePageItem* page = model->GetPageByOfflineId(offline_id());
-  GURL offline_url = page->GetOfflineURL();
-  GURL online_url = page->url;
-
-  StartLoad(offline_url);
-  CommitLoad(online_url);
-  EXPECT_EQ(online_url, controller().GetLastCommittedEntry()->GetURL());
+  StartLoad(offline_url());
+  // Gives a chance to run delayed task to do redirection.
+  RunUntilIdle();
+  // Redirection will be done immediately on navigation start.
+  EXPECT_EQ(online_url(), controller().GetPendingEntry()->GetURL());
 }
 
-TEST_F(OfflinePageTabHelperTest, SwitchToOfflineFromOnline) {
+TEST_F(OfflinePageTabHelperTest, SwitchToOfflineFromOnlineOnNoNetwork) {
   SimulateHasNetworkConnectivity(false);
 
-  OfflinePageModel* model =
-      OfflinePageModelFactory::GetForBrowserContext(browser_context());
-  const OfflinePageItem* page = model->GetPageByOfflineId(offline_id());
-  GURL offline_url = page->GetOfflineURL();
-  GURL online_url = page->url;
+  StartLoad(online_url());
+  // Gives a chance to run delayed task to do redirection.
+  RunUntilIdle();
+  // Redirection will be done immediately on navigation start.
+  EXPECT_EQ(offline_url(), controller().GetPendingEntry()->GetURL());
+}
 
-  StartLoad(online_url);
-  EXPECT_EQ(online_url, controller().GetPendingEntry()->GetURL());
+TEST_F(OfflinePageTabHelperTest, SwitchToOfflineFromOnlineOnError) {
+  SimulateHasNetworkConnectivity(true);
 
-  FailLoad(online_url);
-  EXPECT_EQ(offline_url, controller().GetPendingEntry()->GetURL());
+  StartLoad(online_url());
+  RunUntilIdle();
+  EXPECT_EQ(online_url(), controller().GetPendingEntry()->GetURL());
+
+  // Redirection will be done immediately on navigation end with error.
+  FailLoad(online_url());
+  EXPECT_EQ(offline_url(), controller().GetPendingEntry()->GetURL());
 }
 
 }  // namespace offline_pages

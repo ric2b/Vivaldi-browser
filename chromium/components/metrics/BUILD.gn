@@ -29,6 +29,8 @@ source_set("metrics") {
     "drive_metrics_provider_linux.cc",
     "drive_metrics_provider_mac.mm",
     "drive_metrics_provider_win.cc",
+    "enabled_state_provider.cc",
+    "enabled_state_provider.h",
     "file_metrics_provider.cc",
     "file_metrics_provider.h",
     "histogram_encoder.cc",
@@ -142,6 +144,7 @@ if (is_chromeos) {
 
     deps = [
       "//base",
+      "//components/metrics/proto:proto",
       "//content/public/browser",
     ]
   }
@@ -150,6 +153,8 @@ if (is_chromeos) {
 # GYP version: components/metrics.gypi:metrics_net
 static_library("net") {
   sources = [
+    "net/cellular_logic_helper.cc",
+    "net/cellular_logic_helper.h",
     "net/net_metrics_log_uploader.cc",
     "net/net_metrics_log_uploader.h",
     "net/network_metrics_provider.cc",
@@ -168,6 +173,7 @@ static_library("net") {
   deps = [
     "//base",
     "//components/data_use_measurement/core",
+    "//components/variations",
     "//components/version_info",
     "//net",
     "//url",
@@ -215,6 +221,7 @@ source_set("ui") {
   ]
   deps = [
     "//base",
+    "//ui/display",
     "//ui/gfx",
     "//ui/gfx/geometry",
   ]
@@ -257,7 +264,10 @@ if (!is_ios) {
 
 # GYP version: components/metrics.gypi:metrics_test_support
 source_set("test_support") {
+  testonly = true
   sources = [
+    "test_enabled_state_provider.cc",
+    "test_enabled_state_provider.h",
     "test_metrics_provider.cc",
     "test_metrics_provider.h",
     "test_metrics_service_client.cc",
@@ -302,6 +312,7 @@ if (is_chromeos) {
     deps = [
       ":leak_detector",
       "//base",
+      "//components/metrics/proto:proto",
       "//content/test:test_support",
       "//testing/gtest",
     ]
@@ -316,6 +327,7 @@ source_set("unit_tests") {
     "daily_event_unittest.cc",
     "data_use_tracker_unittest.cc",
     "drive_metrics_provider_unittest.cc",
+    "file_metrics_provider_unittest.cc",
     "histogram_encoder_unittest.cc",
     "machine_id_provider_win_unittest.cc",
     "metrics_log_manager_unittest.cc",
@@ -358,10 +370,6 @@ source_set("unit_tests") {
   # These are only used by the blimp team, which has entirely migrated to gn,
   # so this logic is not replicated in the gyp file.
   if (metrics_use_blimp) {
-    defines = [
-      "OVERRIDE_OS_NAME_TO_BLIMP",
-      "ENABLE_REPORTING_BLIMP",
-    ]
+    defines = [ "OVERRIDE_OS_NAME_TO_BLIMP" ]
   }
 }
-# TODO(GYP): metrics_chromeos

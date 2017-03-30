@@ -8,15 +8,16 @@
 
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/threading/thread_local.h"
 #include "content/public/common/content_switches.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
-#include "mojo/shell/public/cpp/shell_client.h"
-#include "mojo/shell/public/cpp/shell_connection.h"
-#include "mojo/shell/runner/common/client_util.h"
+#include "services/shell/public/cpp/shell_client.h"
+#include "services/shell/public/cpp/shell_connection.h"
+#include "services/shell/runner/common/client_util.h"
 
 namespace content {
 namespace {
@@ -36,13 +37,6 @@ bool IsRunningInMojoShell() {
   return mojo_shell_connection_factory ||
          base::CommandLine::ForCurrentProcess()->HasSwitch(
              mojo::edk::PlatformChannelPair::kMojoPlatformChannelHandleSwitch);
-}
-
-bool ShouldWaitForShell() {
-  return mojo_shell_connection_factory ||
-         (IsRunningInMojoShell() &&
-          base::CommandLine::ForCurrentProcess()->HasSwitch(
-              switches::kWaitForMojoShell));
 }
 
 // static
@@ -65,16 +59,14 @@ void MojoShellConnectionImpl::Create() {
 }
 
 // static
-void MojoShellConnection::Create(mojo::shell::mojom::ShellClientRequest request,
+void MojoShellConnection::Create(shell::mojom::ShellClientRequest request,
                                  bool is_external) {
   DCHECK(!lazy_tls_ptr.Pointer()->Get());
   MojoShellConnectionImpl* connection =
       new MojoShellConnectionImpl(is_external);
   lazy_tls_ptr.Pointer()->Set(connection);
   connection->shell_connection_.reset(
-      new mojo::ShellConnection(connection, std::move(request)));
-  if (is_external)
-    connection->WaitForShellIfNecessary();
+      new shell::ShellConnection(connection, std::move(request)));
 }
 
 // static
@@ -92,9 +84,8 @@ MojoShellConnectionImpl* MojoShellConnectionImpl::Get() {
 
 void MojoShellConnectionImpl::BindToRequestFromCommandLine() {
   DCHECK(!shell_connection_);
-  shell_connection_.reset(new mojo::ShellConnection(
-      this, mojo::shell::GetShellClientRequestFromCommandLine()));
-  WaitForShellIfNecessary();
+  shell_connection_.reset(new shell::ShellConnection(
+      this, shell::GetShellClientRequestFromCommandLine()));
 }
 
 MojoShellConnectionImpl::MojoShellConnectionImpl(bool external)
@@ -104,30 +95,25 @@ MojoShellConnectionImpl::~MojoShellConnectionImpl() {
   STLDeleteElements(&listeners_);
 }
 
-void MojoShellConnectionImpl::WaitForShellIfNecessary() {
-  // TODO(rockot): Remove this. http://crbug.com/594852.
-  if (ShouldWaitForShell()) {
-    base::RunLoop wait_loop;
-    shell_connection_->set_initialize_handler(wait_loop.QuitClosure());
-    wait_loop.Run();
-  }
-}
+void MojoShellConnectionImpl::Initialize(shell::Connector* connector,
+                                         const shell::Identity& identity,
+                                         uint32_t id) {}
 
-void MojoShellConnectionImpl::Initialize(mojo::Connector* connector,
-                                         const mojo::Identity& identity,
-                                         uint32_t id) {
-}
-
-bool MojoShellConnectionImpl::AcceptConnection(mojo::Connection* connection) {
+bool MojoShellConnectionImpl::AcceptConnection(shell::Connection* connection) {
   bool found = false;
   for (auto listener : listeners_)
     found |= listener->AcceptConnection(connection);
   return found;
 }
 
-mojo::Connector* MojoShellConnectionImpl::GetConnector() {
+shell::Connector* MojoShellConnectionImpl::GetConnector() {
   DCHECK(shell_connection_);
   return shell_connection_->connector();
+}
+
+const shell::Identity& MojoShellConnectionImpl::GetIdentity() const {
+  DCHECK(shell_connection_);
+  return shell_connection_->identity();
 }
 
 bool MojoShellConnectionImpl::UsingExternalShell() const {
@@ -136,19 +122,21 @@ bool MojoShellConnectionImpl::UsingExternalShell() const {
 
 void MojoShellConnectionImpl::SetConnectionLostClosure(
     const base::Closure& closure) {
-  shell_connection_->set_connection_lost_closure(closure);
+  shell_connection_->SetConnectionLostClosure(closure);
 }
 
-void MojoShellConnectionImpl::AddListener(Listener* listener) {
-  DCHECK(std::find(listeners_.begin(), listeners_.end(), listener) ==
+void MojoShellConnectionImpl::AddListener(std::unique_ptr<Listener> listener) {
+  DCHECK(std::find(listeners_.begin(), listeners_.end(), listener.get()) ==
          listeners_.end());
-  listeners_.push_back(listener);
+  listeners_.push_back(listener.release());
 }
 
-void MojoShellConnectionImpl::RemoveListener(Listener* listener) {
+std::unique_ptr<MojoShellConnection::Listener>
+MojoShellConnectionImpl::RemoveListener(Listener* listener) {
   auto it = std::find(listeners_.begin(), listeners_.end(), listener);
   DCHECK(it != listeners_.end());
   listeners_.erase(it);
+  return base::WrapUnique(listener);
 }
 
 // static

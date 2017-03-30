@@ -80,19 +80,8 @@ class DataReductionProxyRequestOptions {
   void Init();
 
   // Adds a 'Chrome-Proxy' header to |request_headers| with the data reduction
-  // proxy authentication credentials. Only adds this header if the
-  // provided |proxy_server| is a data reduction proxy and not the data
-  // reduction proxy's CONNECT server.
-  void MaybeAddRequestHeader(const net::ProxyServer& proxy_server,
-                             net::HttpRequestHeaders* request_headers);
-
-  // Adds a 'Chrome-Proxy' header to |request_headers| with the data reduction
-  // proxy authentication credentials. Only adds this header if the provided
-  // |proxy_server| is the data reduction proxy's CONNECT server. Must be called
-  // on the IO thread.
-  void MaybeAddProxyTunnelRequestHandler(
-      const net::HostPortPair& proxy_server,
-      net::HttpRequestHeaders* request_headers);
+  // proxy authentication credentials.
+  void AddRequestHeader(net::HttpRequestHeaders* request_headers);
 
   // Stores the supplied key and sets up credentials suitable for authenticating
   // with the data reduction proxy.
@@ -117,8 +106,6 @@ class DataReductionProxyRequestOptions {
       const net::HttpRequestHeaders& request_headers) const;
 
  protected:
-  void SetHeader(net::HttpRequestHeaders* headers);
-
   // Returns a UTF16 string that's the hash of the configured authentication
   // |key| and |salt|. Returns an empty UTF16 string if no key is configured or
   // the data reduction proxy feature isn't available.
@@ -154,14 +141,6 @@ class DataReductionProxyRequestOptions {
 
   // Generates and updates the session ID and credentials.
   void UpdateCredentials();
-
-  // Adds authentication headers only if |expects_ssl| is true and
-  // |proxy_server| is a data reduction proxy used for ssl tunneling via
-  // HTTP CONNECT, or |expect_ssl| is false and |proxy_server| is a data
-  // reduction proxy for HTTP traffic.
-  void MaybeAddRequestHeaderImpl(const net::HostPortPair& proxy_server,
-                                 bool expect_ssl,
-                                 net::HttpRequestHeaders* request_headers);
 
   // Regenerates the |header_value_| string which is concatenated to the
   // Chrome-proxy header.

@@ -7,8 +7,9 @@
 
 #include <stddef.h>
 
+#include <memory>
+
 #include "base/callback_forward.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "content/common/content_export.h"
 #include "content/public/common/console_message_level.h"
@@ -92,10 +93,6 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
   // Returns the associated WebFrame.
   virtual blink::WebLocalFrame* GetWebFrame() = 0;
 
-  // Gets the focused element. If no such element exists then
-  // the element will be Null.
-  virtual blink::WebElement GetFocusedElement() const = 0;
-
    // Gets WebKit related preferences associated with this frame.
   virtual WebPreferences& GetWebkitPreferences() = 0;
 
@@ -117,16 +114,13 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
   // menu is closed.
   virtual void CancelContextMenu(int request_id) = 0;
 
-  // Gets the node that the context menu was pressed over.
-  virtual blink::WebNode GetContextMenuNode() const = 0;
-
   // Create a new NPAPI/Pepper plugin depending on |info|. Returns NULL if no
   // plugin was found. |throttler| may be empty.
   virtual blink::WebPlugin* CreatePlugin(
       blink::WebFrame* frame,
       const WebPluginInfo& info,
       const blink::WebPluginParams& params,
-      scoped_ptr<PluginInstanceThrottler> throttler) = 0;
+      std::unique_ptr<PluginInstanceThrottler> throttler) = 0;
 
   // The client should handle the navigation externally.
   virtual void LoadURLExternally(const blink::WebURLRequest& request,

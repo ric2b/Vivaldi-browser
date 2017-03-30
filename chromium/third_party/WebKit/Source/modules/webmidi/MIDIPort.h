@@ -43,8 +43,7 @@ namespace blink {
 
 class MIDIAccess;
 
-class MIDIPort : public RefCountedGarbageCollectedEventTargetWithInlineData<MIDIPort>, public ActiveScriptWrappable, public ActiveDOMObject {
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(MIDIPort);
+class MIDIPort : public EventTargetWithInlineData, public ActiveScriptWrappable, public ActiveDOMObject {
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(MIDIPort);
 public:

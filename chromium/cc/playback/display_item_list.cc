@@ -89,10 +89,11 @@ DisplayItemList::DisplayItemList(gfx::Rect layer_rect,
   if (settings_.use_cached_picture) {
     SkRTreeFactory factory;
     recorder_.reset(new SkPictureRecorder());
-    canvas_ = skia::SharePtr(recorder_->beginRecording(
-        layer_rect_.width(), layer_rect_.height(), &factory));
-    canvas_->translate(-layer_rect_.x(), -layer_rect_.y());
-    canvas_->clipRect(gfx::RectToSkRect(layer_rect_));
+
+    SkCanvas* canvas = recorder_->beginRecording(
+        layer_rect_.width(), layer_rect_.height(), &factory);
+    canvas->translate(-layer_rect_.x(), -layer_rect_.y());
+    canvas->clipRect(gfx::RectToSkRect(layer_rect_));
   }
 }
 
@@ -146,8 +147,8 @@ void DisplayItemList::Raster(SkCanvas* canvas,
 
 void DisplayItemList::ProcessAppendedItem(const DisplayItem* item) {
   if (settings_.use_cached_picture) {
-    DCHECK(canvas_);
-    item->Raster(canvas_.get(), gfx::Rect(), nullptr);
+    DCHECK(recorder_);
+    item->Raster(recorder_->getRecordingCanvas(), gfx::Rect(), nullptr);
   }
   if (!retain_individual_display_items_) {
     items_.Clear();
@@ -155,10 +156,10 @@ void DisplayItemList::ProcessAppendedItem(const DisplayItem* item) {
 }
 
 void DisplayItemList::RasterIntoCanvas(const DisplayItem& item) {
-  DCHECK(canvas_);
+  DCHECK(recorder_);
   DCHECK(!retain_individual_display_items_);
 
-  item.Raster(canvas_.get(), gfx::Rect(), nullptr);
+  item.Raster(recorder_->getRecordingCanvas(), gfx::Rect(), nullptr);
 }
 
 bool DisplayItemList::RetainsIndividualDisplayItems() const {
@@ -166,6 +167,7 @@ bool DisplayItemList::RetainsIndividualDisplayItems() const {
 }
 
 void DisplayItemList::Finalize() {
+  TRACE_EVENT0("cc", "DisplayItemList::Finalize");
   // TODO(dtrainor): Need to deal with serializing visual_rects_.
   // http://crbug.com/568757.
   DCHECK(!retain_individual_display_items_ ||
@@ -189,9 +191,6 @@ void DisplayItemList::Finalize() {
     picture_memory_usage_ =
         SkPictureUtils::ApproximateBytesUsed(picture_.get());
     recorder_.reset();
-    canvas_.clear();
-    is_suitable_for_gpu_rasterization_ =
-        picture_->suitableForGpuRasterization(nullptr);
   }
 }
 
@@ -200,7 +199,9 @@ bool DisplayItemList::IsSuitableForGpuRasterization() const {
 }
 
 int DisplayItemList::ApproximateOpCount() const {
-  return approximate_op_count_;
+  if (retain_individual_display_items_)
+    return approximate_op_count_;
+  return picture_ ? picture_->approximateOpCount() : 0;
 }
 
 size_t DisplayItemList::ApproximateMemoryUsage() const {
@@ -237,9 +238,9 @@ bool DisplayItemList::ShouldBeAnalyzedForSolidColor() const {
   return ApproximateOpCount() <= kOpCountThatIsOkToAnalyze;
 }
 
-scoped_ptr<base::trace_event::ConvertableToTraceFormat>
+std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
 DisplayItemList::AsValue(bool include_items) const {
-  scoped_ptr<base::trace_event::TracedValue> state(
+  std::unique_ptr<base::trace_event::TracedValue> state(
       new base::trace_event::TracedValue());
 
   state->BeginDictionary("params");
@@ -306,10 +307,6 @@ void DisplayItemList::GetDiscardableImagesInRect(
     float raster_scale,
     std::vector<DrawImage>* images) {
   image_map_.GetDiscardableImagesInRect(rect, raster_scale, images);
-}
-
-bool DisplayItemList::MayHaveDiscardableImages() const {
-  return !image_map_.empty();
 }
 
 }  // namespace cc

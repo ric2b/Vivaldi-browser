@@ -8,6 +8,7 @@
 #include <functional>
 #include <list>
 #include <map>
+#include <memory>
 #include <set>
 #include <utility>
 #include <vector>
@@ -15,8 +16,6 @@
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_enumerator.h"
-#include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
@@ -149,7 +148,7 @@ class CommitLaterTask : public base::RefCounted<CommitLaterTask> {
 };
 
 QueuedHistoryDBTask::QueuedHistoryDBTask(
-    scoped_ptr<HistoryDBTask> task,
+    std::unique_ptr<HistoryDBTask> task,
     scoped_refptr<base::SingleThreadTaskRunner> origin_loop,
     const base::CancelableTaskTracker::IsCanceledCallback& is_canceled)
     : task_(std::move(task)),
@@ -202,7 +201,7 @@ HistoryBackendHelper::~HistoryBackendHelper() {
 
 HistoryBackend::HistoryBackend(
     Delegate* delegate,
-    scoped_ptr<HistoryBackendClient> backend_client,
+    std::unique_ptr<HistoryBackendClient> backend_client,
     scoped_refptr<base::SequencedTaskRunner> task_runner)
     : delegate_(delegate),
       scheduled_kill_db_(false),
@@ -682,7 +681,8 @@ void HistoryBackend::InitImpl(
   // Fill the in-memory database and send it back to the history service on the
   // main thread.
   {
-    scoped_ptr<InMemoryHistoryBackend> mem_backend(new InMemoryHistoryBackend);
+    std::unique_ptr<InMemoryHistoryBackend> mem_backend(
+        new InMemoryHistoryBackend);
     if (mem_backend->Init(history_name))
       delegate_->SetInMemoryBackend(std::move(mem_backend));
   }
@@ -1376,13 +1376,15 @@ void HistoryBackend::QueryMostVisitedURLs(int result_count,
   if (!db_)
     return;
 
-  ScopedVector<PageUsageData> data;
-  db_->QuerySegmentUsage(
+  auto url_filter = backend_client_
+                        ? base::Bind(&HistoryBackendClient::IsWebSafe,
+                                     base::Unretained(backend_client_.get()))
+                        : base::Callback<bool(const GURL&)>();
+  std::vector<std::unique_ptr<PageUsageData>> data = db_->QuerySegmentUsage(
       base::Time::Now() - base::TimeDelta::FromDays(days_back), result_count,
-      &data.get());
+      url_filter);
 
-  for (size_t i = 0; i < data.size(); ++i) {
-    PageUsageData* current_data = data[i];
+  for (const std::unique_ptr<PageUsageData>& current_data : data) {
     RedirectList redirects;
     QueryRedirectsFrom(current_data->GetURL(), &redirects);
     MostVisitedURL url = MakeMostVisitedURL(*current_data, redirects);
@@ -2280,7 +2282,7 @@ void HistoryBackend::ProcessDBTaskImpl() {
     return;
 
   // Run the first task.
-  scoped_ptr<QueuedHistoryDBTask> task(queued_history_db_tasks_.front());
+  std::unique_ptr<QueuedHistoryDBTask> task(queued_history_db_tasks_.front());
   queued_history_db_tasks_.pop_front();
   if (task->Run(this, db_.get())) {
     // The task is done, notify the callback.
@@ -2476,7 +2478,7 @@ void HistoryBackend::SetUserData(const void* key,
 }
 
 void HistoryBackend::ProcessDBTask(
-    scoped_ptr<HistoryDBTask> task,
+    std::unique_ptr<HistoryDBTask> task,
     scoped_refptr<base::SingleThreadTaskRunner> origin_loop,
     const base::CancelableTaskTracker::IsCanceledCallback& is_canceled) {
   bool scheduled = !queued_history_db_tasks_.empty();

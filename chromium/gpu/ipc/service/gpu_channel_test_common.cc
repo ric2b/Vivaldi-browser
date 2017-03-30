@@ -4,8 +4,9 @@
 
 #include "gpu/ipc/service/gpu_channel_test_common.h"
 
+#include "base/memory/ptr_util.h"
 #include "base/test/test_simple_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/ipc/service/gpu_channel_manager_delegate.h"
 #include "ipc/ipc_test_sink.h"
@@ -18,9 +19,6 @@ TestGpuChannelManagerDelegate::TestGpuChannelManagerDelegate() {}
 TestGpuChannelManagerDelegate::~TestGpuChannelManagerDelegate() {}
 
 void TestGpuChannelManagerDelegate::SetActiveURL(const GURL& url) {}
-
-void TestGpuChannelManagerDelegate::AddSubscription(int32_t client_id,
-                                                    unsigned int target) {}
 
 void TestGpuChannelManagerDelegate::DidCreateOffscreenContext(
     const GURL& active_url) {}
@@ -38,23 +36,10 @@ void TestGpuChannelManagerDelegate::DidLoseContext(
 void TestGpuChannelManagerDelegate::GpuMemoryUmaStats(
     const GPUMemoryUmaStats& params) {}
 
-void TestGpuChannelManagerDelegate::RemoveSubscription(int32_t client_id,
-                                                       unsigned int target) {}
-
 void TestGpuChannelManagerDelegate::StoreShaderToDisk(
     int32_t client_id,
     const std::string& key,
     const std::string& shader) {}
-
-#if defined(OS_MACOSX)
-void TestGpuChannelManagerDelegate::SendAcceleratedSurfaceBuffersSwapped(
-    int32_t surface_id,
-    CAContextID ca_context_id,
-    const gfx::ScopedRefCountedIOSurfaceMachPort& io_surface,
-    const gfx::Size& size,
-    float scale_factor,
-    std::vector<ui::LatencyInfo> latency_info) {}
-#endif
 
 #if defined(OS_WIN)
 void TestGpuChannelManagerDelegate::SendAcceleratedSurfaceCreatedChildWindow(
@@ -84,13 +69,13 @@ TestGpuChannelManager::~TestGpuChannelManager() {
   gpu_channels_.clear();
 }
 
-scoped_ptr<GpuChannel> TestGpuChannelManager::CreateGpuChannel(
+std::unique_ptr<GpuChannel> TestGpuChannelManager::CreateGpuChannel(
     int client_id,
     uint64_t client_tracing_id,
     bool preempts,
     bool allow_view_command_buffers,
     bool allow_real_time_streams) {
-  return make_scoped_ptr(new TestGpuChannel(
+  return base::WrapUnique(new TestGpuChannel(
       this, sync_point_manager(), share_group(), mailbox_manager(),
       preempts ? preemption_flag() : nullptr,
       preempts ? nullptr : preemption_flag(), task_runner_.get(),
@@ -149,21 +134,24 @@ GpuChannelTestCommon::GpuChannelTestCommon()
     : task_runner_(new base::TestSimpleTaskRunner),
       io_task_runner_(new base::TestSimpleTaskRunner),
       sync_point_manager_(new SyncPointManager(false)),
-      channel_manager_delegate_(new TestGpuChannelManagerDelegate()),
-      channel_manager_(
-          new TestGpuChannelManager(gpu_preferences_,
-                                    channel_manager_delegate_.get(),
-                                    task_runner_.get(),
-                                    io_task_runner_.get(),
-                                    sync_point_manager_.get(),
-                                    nullptr)) {}
+      channel_manager_delegate_(new TestGpuChannelManagerDelegate()) {}
 
 GpuChannelTestCommon::~GpuChannelTestCommon() {
-  // Destroying channels causes tasks to run on the IO task runner.
-  channel_manager_ = nullptr;
   // Clear pending tasks to avoid refptr cycles that get flagged by ASAN.
   task_runner_->ClearPendingTasks();
   io_task_runner_->ClearPendingTasks();
 }
+
+void GpuChannelTestCommon::SetUp() {
+  channel_manager_.reset(new TestGpuChannelManager(
+      gpu_preferences_, channel_manager_delegate_.get(), task_runner_.get(),
+      io_task_runner_.get(), sync_point_manager_.get(), nullptr));
+}
+
+void GpuChannelTestCommon::TearDown() {
+  // Destroying channels causes tasks to run on the IO task runner.
+  channel_manager_ = nullptr;
+}
+
 
 }  // namespace gpu

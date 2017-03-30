@@ -18,6 +18,7 @@
 #include "cc/surfaces/surface_sequence.h"
 #include "content/common/content_export.h"
 #include "content/common/content_param_traits.h"
+#include "content/common/content_security_policy_header.h"
 #include "content/common/frame_message_enums.h"
 #include "content/common/frame_replication_state.h"
 #include "content/common/navigation_gesture.h"
@@ -30,7 +31,7 @@
 #include "content/public/common/context_menu_params.h"
 #include "content/public/common/frame_navigate_params.h"
 #include "content/public/common/javascript_message_type.h"
-#include "content/public/common/message_port_types.h"
+#include "content/public/common/mhtml_generation_params.h"
 #include "content/public/common/page_importance_signals.h"
 #include "content/public/common/page_state.h"
 #include "content/public/common/resource_response.h"
@@ -233,8 +234,8 @@ IPC_STRUCT_BEGIN_WITH_PARENT(FrameHostMsg_DidCommitProvisionalLoad_Params,
   // The gesture that initiated this navigation.
   IPC_STRUCT_MEMBER(content::NavigationGesture, gesture)
 
-  // True if this was a post request.
-  IPC_STRUCT_MEMBER(bool, is_post)
+  // The HTTP method used by the navigation.
+  IPC_STRUCT_MEMBER(std::string, method)
 
   // The POST body identifier. -1 if it doesn't exist.
   IPC_STRUCT_MEMBER(int64_t, post_id)
@@ -322,7 +323,7 @@ IPC_STRUCT_BEGIN(FrameMsg_PostMessage_Params)
   IPC_STRUCT_MEMBER(base::string16, target_origin)
 
   // Information about the MessagePorts this message contains.
-  IPC_STRUCT_MEMBER(std::vector<content::TransferredMessagePort>, message_ports)
+  IPC_STRUCT_MEMBER(std::vector<int>, message_ports)
   IPC_STRUCT_MEMBER(std::vector<int>, new_routing_ids)
 IPC_STRUCT_END()
 
@@ -388,6 +389,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::FrameReplicationState)
   IPC_STRUCT_TRAITS_MEMBER(sandbox_flags)
   IPC_STRUCT_TRAITS_MEMBER(name)
   IPC_STRUCT_TRAITS_MEMBER(unique_name)
+  IPC_STRUCT_TRAITS_MEMBER(accumulated_csp_headers)
   IPC_STRUCT_TRAITS_MEMBER(scope)
   IPC_STRUCT_TRAITS_MEMBER(should_enforce_strict_mixed_content_checking)
   IPC_STRUCT_TRAITS_MEMBER(has_potentially_trustworthy_unique_origin)
@@ -497,6 +499,14 @@ IPC_STRUCT_BEGIN(FrameMsg_SerializeAsMHTML_Params)
   // |mhtml_boundary_marker| should be used for serialization of each frame.
   IPC_STRUCT_MEMBER(std::string, mhtml_boundary_marker)
 
+  // Whether to use binary encoding while serializing.  Binary encoding is not
+  // supported outside of Chrome, so this should not be used if the MHTML is
+  // intended for sharing.
+  IPC_STRUCT_MEMBER(bool, mhtml_binary_encoding)
+
+  IPC_STRUCT_MEMBER(content::MHTMLCacheControlPolicy,
+                    mhtml_cache_control_policy)
+
   // Frame to content-id map.
   // Keys are routing ids of either RenderFrames or RenderFrameProxies.
   // Values are MHTML content-ids - see WebFrameSerializer::generateMHTMLParts.
@@ -537,6 +547,12 @@ IPC_STRUCT_BEGIN(FrameHostMsg_CreateChildFrame_Params)
   IPC_STRUCT_MEMBER(blink::WebSandboxFlags, sandbox_flags)
   IPC_STRUCT_MEMBER(blink::WebFrameOwnerProperties, frame_owner_properties)
 IPC_STRUCT_END()
+
+IPC_STRUCT_TRAITS_BEGIN(content::ContentSecurityPolicyHeader)
+  IPC_STRUCT_TRAITS_MEMBER(header_value)
+  IPC_STRUCT_TRAITS_MEMBER(type)
+  IPC_STRUCT_TRAITS_MEMBER(source)
+IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_BEGIN(FrameMsg_ExtendedLoadingProgress_Params)
   // Loading progress between 0.0 and 1.0
@@ -679,7 +695,7 @@ IPC_MESSAGE_ROUTED0(FrameMsg_DidStopLoading)
 IPC_MESSAGE_ROUTED1(FrameMsg_CSSInsertRequest,
                     std::string  /* css */)
 
-// Add message to the devtools console.
+// Add message to the frame console.
 IPC_MESSAGE_ROUTED2(FrameMsg_AddMessageToConsole,
                     content::ConsoleMessageLevel /* level */,
                     std::string /* message */)
@@ -713,12 +729,6 @@ IPC_MESSAGE_ROUTED4(FrameMsg_JavaScriptExecuteRequestInIsolatedWorld,
                     int, /* ID */
                     bool, /* if true, a reply is requested */
                     int /* world_id */)
-
-// Selects between the given start and end offsets in the currently focused
-// editable field.
-IPC_MESSAGE_ROUTED2(FrameMsg_SetEditableSelectionOffsets,
-                    int /* start */,
-                    int /* end */)
 
 // Requests a navigation to the supplied markup, in an iframe with sandbox
 // attributes.
@@ -781,6 +791,13 @@ IPC_MESSAGE_ROUTED1(FrameMsg_DidUpdateSandboxFlags, blink::WebSandboxFlags)
 IPC_MESSAGE_ROUTED2(FrameMsg_DidUpdateName,
                     std::string /* name */,
                     std::string /* unique_name */)
+
+// Updates replicated ContentSecurityPolicy in a frame proxy.
+IPC_MESSAGE_ROUTED1(FrameMsg_AddContentSecurityPolicy,
+                    content::ContentSecurityPolicyHeader)
+
+// Resets ContentSecurityPolicy in a frame proxy / in RemoteSecurityContext.
+IPC_MESSAGE_ROUTED0(FrameMsg_ResetContentSecurityPolicy)
 
 // Update a proxy's replicated enforcement of strict mixed content
 // checking.  Used when the frame's mixed content setting is changed in
@@ -975,6 +992,15 @@ IPC_MESSAGE_ROUTED1(FrameHostMsg_UpdateState, content::PageState /* state */)
 IPC_MESSAGE_ROUTED2(FrameHostMsg_DidChangeName,
                     std::string /* name */,
                     std::string /* unique_name */)
+
+// Notifies the browser process about a new Content Security Policy that needs
+// to be applies to the frame.  This message is sent when a frame commits
+// navigation to a new location (reporting accumulated policies from HTTP
+// headers and/or policies that might have been inherited from the parent frame)
+// or when a new policy has been discovered afterwards (i.e. found in a
+// dynamically added or a static <meta> element).
+IPC_MESSAGE_ROUTED1(FrameHostMsg_DidAddContentSecurityPolicy,
+                    content::ContentSecurityPolicyHeader)
 
 // Sent when the frame starts enforcing strict mixed content
 // checking. Sending this information in DidCommitProvisionalLoad isn't
@@ -1256,8 +1282,7 @@ IPC_MESSAGE_ROUTED1(FrameHostMsg_ContextMenu, content::ContextMenuParams)
 
 // Initial drawing parameters for a child frame that has been swapped out to
 // another process.
-IPC_MESSAGE_ROUTED2(FrameHostMsg_InitializeChildFrame,
-                    gfx::Rect /* frame_rect */,
+IPC_MESSAGE_ROUTED1(FrameHostMsg_InitializeChildFrame,
                     float /* scale_factor */)
 
 // Response for FrameMsg_JavaScriptExecuteRequest, sent when a reply was
@@ -1376,8 +1401,7 @@ IPC_MESSAGE_ROUTED2(FrameHostMsg_DidDisplayContentWithCertificateErrors,
 
 // Sent when the renderer runs content that was loaded with certificate
 // errors.
-IPC_MESSAGE_ROUTED3(FrameHostMsg_DidRunContentWithCertificateErrors,
-                    GURL /* security_origin */,
+IPC_MESSAGE_ROUTED2(FrameHostMsg_DidRunContentWithCertificateErrors,
                     GURL /* resource url */,
                     std::string /* serialized security info */)
 

@@ -6,22 +6,21 @@
 #define CONTENT_BROWSER_MOJO_MOJO_SHELL_CONTEXT_H_
 
 #include <map>
+#include <memory>
 
 #include "base/callback_forward.h"
 #include "base/compiler_specific.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
-#include "base/single_thread_task_runner.h"
 #include "content/common/content_export.h"
-#include "mojo/shell/public/interfaces/connector.mojom.h"
-#include "mojo/shell/shell.h"
+#include "services/shell/public/interfaces/connector.mojom.h"
+#include "services/shell/shell.h"
 
 namespace catalog {
-class Factory;
+class Catalog;
 }
 
-namespace mojo {
+namespace shell {
 class ShellClient;
 }
 
@@ -31,11 +30,7 @@ namespace content {
 // app registration and interconnection.
 class CONTENT_EXPORT MojoShellContext {
  public:
-  using StaticApplicationMap =
-      std::map<std::string, base::Callback<scoped_ptr<mojo::ShellClient>()>>;
-
-  MojoShellContext(scoped_refptr<base::SingleThreadTaskRunner> file_thread,
-                   scoped_refptr<base::SingleThreadTaskRunner> db_thread);
+  MojoShellContext();
   ~MojoShellContext();
 
   // Connects an application at |name| and gets a handle to its exposed
@@ -46,11 +41,9 @@ class CONTENT_EXPORT MojoShellContext {
       const std::string& user_id,
       const std::string& name,
       const std::string& requestor_name,
-      mojo::shell::mojom::InterfaceProviderRequest request,
-      mojo::shell::mojom::InterfaceProviderPtr exposed_services,
-      const mojo::shell::mojom::Connector::ConnectCallback& callback);
-
-  static void SetApplicationsForTest(const StaticApplicationMap* apps);
+      shell::mojom::InterfaceProviderRequest request,
+      shell::mojom::InterfaceProviderPtr exposed_services,
+      const shell::mojom::Connector::ConnectCallback& callback);
 
  private:
   class BuiltinManifestProvider;
@@ -61,15 +54,15 @@ class CONTENT_EXPORT MojoShellContext {
       const std::string& user_id,
       const std::string& name,
       const std::string& requestor_name,
-      mojo::shell::mojom::InterfaceProviderRequest request,
-      mojo::shell::mojom::InterfaceProviderPtr exposed_services,
-      const mojo::shell::mojom::Connector::ConnectCallback& callback);
+      shell::mojom::InterfaceProviderRequest request,
+      shell::mojom::InterfaceProviderPtr exposed_services,
+      const shell::mojom::Connector::ConnectCallback& callback);
 
-  static base::LazyInstance<scoped_ptr<Proxy>> proxy_;
+  static base::LazyInstance<std::unique_ptr<Proxy>> proxy_;
 
-  scoped_ptr<BuiltinManifestProvider> manifest_provider_;
-  scoped_ptr<catalog::Factory> catalog_;
-  scoped_ptr<mojo::shell::Shell> shell_;
+  std::unique_ptr<BuiltinManifestProvider> manifest_provider_;
+  std::unique_ptr<catalog::Catalog> catalog_;
+  std::unique_ptr<shell::Shell> shell_;
 
   DISALLOW_COPY_AND_ASSIGN(MojoShellContext);
 };

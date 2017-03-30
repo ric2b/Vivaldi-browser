@@ -5,8 +5,9 @@
 #ifndef CC_ANIMATION_ANIMATION_H_
 #define CC_ANIMATION_ANIMATION_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "cc/animation/target_property.h"
 #include "cc/base/cc_export.h"
@@ -44,24 +45,15 @@ class CC_EXPORT Animation {
     LAST_RUN_STATE = ABORTED_BUT_NEEDS_COMPLETION
   };
 
-  enum Direction {
-    DIRECTION_NORMAL,
-    DIRECTION_REVERSE,
-    DIRECTION_ALTERNATE,
-    DIRECTION_ALTERNATE_REVERSE
-  };
+  enum class Direction { NORMAL, REVERSE, ALTERNATE_NORMAL, ALTERNATE_REVERSE };
 
-  enum FillMode {
-    FILL_MODE_NONE,
-    FILL_MODE_FORWARDS,
-    FILL_MODE_BACKWARDS,
-    FILL_MODE_BOTH
-  };
+  enum class FillMode { NONE, FORWARDS, BACKWARDS, BOTH };
 
-  static scoped_ptr<Animation> Create(scoped_ptr<AnimationCurve> curve,
-                                      int animation_id,
-                                      int group_id,
-                                      TargetProperty::Type target_property);
+  static std::unique_ptr<Animation> Create(
+      std::unique_ptr<AnimationCurve> curve,
+      int animation_id,
+      int group_id,
+      TargetProperty::Type target_property);
 
   virtual ~Animation();
 
@@ -144,7 +136,8 @@ class CC_EXPORT Animation {
   base::TimeDelta TrimTimeToCurrentIteration(
       base::TimeTicks monotonic_time) const;
 
-  scoped_ptr<Animation> CloneAndInitialize(RunState initial_run_state) const;
+  std::unique_ptr<Animation> CloneAndInitialize(
+      RunState initial_run_state) const;
 
   void set_is_controlling_instance_for_test(bool is_controlling_instance) {
     is_controlling_instance_ = is_controlling_instance;
@@ -156,25 +149,25 @@ class CC_EXPORT Animation {
   void set_is_impl_only(bool is_impl_only) { is_impl_only_ = is_impl_only; }
   bool is_impl_only() const { return is_impl_only_; }
 
-  void set_affects_active_observers(bool affects_active_observers) {
-    affects_active_observers_ = affects_active_observers;
+  void set_affects_active_elements(bool affects_active_elements) {
+    affects_active_elements_ = affects_active_elements;
   }
-  bool affects_active_observers() const { return affects_active_observers_; }
+  bool affects_active_elements() const { return affects_active_elements_; }
 
-  void set_affects_pending_observers(bool affects_pending_observers) {
-    affects_pending_observers_ = affects_pending_observers;
+  void set_affects_pending_elements(bool affects_pending_elements) {
+    affects_pending_elements_ = affects_pending_elements;
   }
-  bool affects_pending_observers() const { return affects_pending_observers_; }
+  bool affects_pending_elements() const { return affects_pending_elements_; }
 
  private:
-  Animation(scoped_ptr<AnimationCurve> curve,
+  Animation(std::unique_ptr<AnimationCurve> curve,
             int animation_id,
             int group_id,
             TargetProperty::Type target_property);
 
   base::TimeDelta ConvertToActiveTime(base::TimeTicks monotonic_time) const;
 
-  scoped_ptr<AnimationCurve> curve_;
+  std::unique_ptr<AnimationCurve> curve_;
 
   // IDs must be unique.
   int id_;
@@ -227,18 +220,18 @@ class CC_EXPORT Animation {
   bool is_impl_only_;
 
   // When pushed from a main-thread controller to a compositor-thread
-  // controller, an animation will initially only affect pending observers
+  // controller, an animation will initially only affect pending elements
   // (corresponding to layers in the pending tree). Animations that only
-  // affect pending observers are able to reach the STARTING state and tick
-  // pending observers, but cannot proceed any further and do not tick active
-  // observers. After activation, such animations affect both kinds of observers
+  // affect pending elements are able to reach the STARTING state and tick
+  // pending elements, but cannot proceed any further and do not tick active
+  // elements. After activation, such animations affect both kinds of elements
   // and are able to proceed past the STARTING state. When the removal of
   // an animation is pushed from a main-thread controller to a
   // compositor-thread controller, this initially only makes the animation
-  // stop affecting pending observers. After activation, such animations no
-  // longer affect any observers, and are deleted.
-  bool affects_active_observers_;
-  bool affects_pending_observers_;
+  // stop affecting pending elements. After activation, such animations no
+  // longer affect any elements, and are deleted.
+  bool affects_active_elements_;
+  bool affects_pending_elements_;
 
   DISALLOW_COPY_AND_ASSIGN(Animation);
 };

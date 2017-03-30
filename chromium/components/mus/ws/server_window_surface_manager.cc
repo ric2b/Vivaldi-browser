@@ -14,7 +14,8 @@ namespace ws {
 
 ServerWindowSurfaceManager::ServerWindowSurfaceManager(ServerWindow* window)
     : window_(window),
-      surface_id_allocator_(WindowIdToTransportId(window->id())),
+      surface_id_allocator_(
+          window->delegate()->GetSurfacesState()->next_id_namespace()),
       waiting_for_initial_frames_(
           window_->properties().count(mus::mojom::kWaitForUnderlay_Property) >
           0) {
@@ -41,8 +42,8 @@ void ServerWindowSurfaceManager::CreateSurface(
     mojom::SurfaceType surface_type,
     mojo::InterfaceRequest<mojom::Surface> request,
     mojom::SurfaceClientPtr client) {
-  scoped_ptr<ServerWindowSurface> surface(new ServerWindowSurface(
-      this, surface_type, std::move(request), std::move(client)));
+  std::unique_ptr<ServerWindowSurface> surface(
+      new ServerWindowSurface(this, std::move(request), std::move(client)));
   if (!HasAnySurface()) {
     // Only one SurfaceFactoryClient can be registered per surface id namespace,
     // so register the first one.  Since all surfaces created by this manager
@@ -53,16 +54,16 @@ void ServerWindowSurfaceManager::CreateSurface(
   type_to_surface_map_[surface_type] = std::move(surface);
 }
 
-ServerWindowSurface* ServerWindowSurfaceManager::GetDefaultSurface() {
+ServerWindowSurface* ServerWindowSurfaceManager::GetDefaultSurface() const {
   return GetSurfaceByType(mojom::SurfaceType::DEFAULT);
 }
 
-ServerWindowSurface* ServerWindowSurfaceManager::GetUnderlaySurface() {
+ServerWindowSurface* ServerWindowSurfaceManager::GetUnderlaySurface() const {
   return GetSurfaceByType(mojom::SurfaceType::UNDERLAY);
 }
 
 ServerWindowSurface* ServerWindowSurfaceManager::GetSurfaceByType(
-    mojom::SurfaceType type) {
+    mojom::SurfaceType type) const {
   auto iter = type_to_surface_map_.find(type);
   return iter == type_to_surface_map_.end() ? nullptr : iter->second.get();
 }
@@ -72,7 +73,7 @@ bool ServerWindowSurfaceManager::HasSurfaceOfType(
   return type_to_surface_map_.count(type) > 0;
 }
 
-bool ServerWindowSurfaceManager::HasAnySurface() {
+bool ServerWindowSurfaceManager::HasAnySurface() const {
   return GetDefaultSurface() || GetUnderlaySurface();
 }
 

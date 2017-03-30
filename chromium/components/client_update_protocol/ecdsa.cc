@@ -6,7 +6,7 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
@@ -90,17 +90,21 @@ Ecdsa::Ecdsa(int key_version, const base::StringPiece& public_key)
 
 Ecdsa::~Ecdsa() {}
 
-scoped_ptr<Ecdsa> Ecdsa::Create(int key_version,
-                                const base::StringPiece& public_key) {
+std::unique_ptr<Ecdsa> Ecdsa::Create(int key_version,
+                                     const base::StringPiece& public_key) {
   DCHECK_GT(key_version, 0);
   DCHECK(!public_key.empty());
 
-  return make_scoped_ptr(new Ecdsa(key_version, public_key));
+  return base::WrapUnique(new Ecdsa(key_version, public_key));
+}
+
+void Ecdsa::OverrideNonceForTesting(int key_version, uint32_t nonce) {
+  DCHECK(!request_query_cup2key_.empty());
+  request_query_cup2key_ = base::StringPrintf("%d:%u", pub_key_version_, nonce);
 }
 
 void Ecdsa::SignRequest(const base::StringPiece& request_body,
                         std::string* query_params) {
-  DCHECK(!request_body.empty());
   DCHECK(query_params);
 
   // Generate a random nonce to use for freshness, build the cup2key query

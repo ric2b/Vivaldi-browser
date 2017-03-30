@@ -30,17 +30,20 @@ public:
     ~WebGL2RenderingContext() override;
 
     CanvasRenderingContext::ContextType getContextType() const override { return CanvasRenderingContext::ContextWebgl2; }
+    ImageBitmap* transferToImageBitmap(ExceptionState&) final;
     unsigned version() const override { return 2; }
     String contextName() const override { return "WebGL2RenderingContext"; }
     void registerContextExtensions() override;
     void setCanvasGetContextResult(RenderingContext&) final;
+    void setOffscreenCanvasGetContextResult(OffscreenRenderingContext&) final;
 
     DECLARE_VIRTUAL_TRACE();
+
+    DECLARE_VIRTUAL_TRACE_WRAPPERS();
 
 protected:
     WebGL2RenderingContext(HTMLCanvasElement* passedCanvas, PassOwnPtr<WebGraphicsContext3DProvider>, const WebGLContextAttributes& requestedAttributes);
 
-    Member<CHROMIUMSubscribeUniform> m_chromiumSubscribeUniform;
     Member<EXTColorBufferFloat> m_extColorBufferFloat;
     Member<EXTDisjointTimerQuery> m_extDisjointTimerQuery;
     Member<EXTTextureFilterAnisotropic> m_extTextureFilterAnisotropic;

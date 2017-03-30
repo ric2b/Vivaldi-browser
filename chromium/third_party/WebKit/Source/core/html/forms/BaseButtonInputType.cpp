@@ -43,6 +43,23 @@ namespace blink {
 
 using namespace HTMLNames;
 
+BaseButtonInputType::BaseButtonInputType(HTMLInputElement& element)
+    : InputType(element)
+    , KeyboardClickableInputTypeView(element)
+{
+}
+
+DEFINE_TRACE(BaseButtonInputType)
+{
+    KeyboardClickableInputTypeView::trace(visitor);
+    InputType::trace(visitor);
+}
+
+InputTypeView* BaseButtonInputType::createView()
+{
+    return this;
+}
+
 void BaseButtonInputType::createShadowSubtree()
 {
     ASSERT(element().userAgentShadowRoot());

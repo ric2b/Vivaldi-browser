@@ -1767,6 +1767,16 @@
     ]
   },
 
+  "PacHttpsUrlStrippingEnabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "PacHttpsUrlStrippingEnabled": true },
+    "pref_mappings": [
+      { "pref": "proxy.pac_https_url_stripping_enabled",
+        "local_state": true
+      }
+    ]
+  },
+
   "RegisteredProtocolHandlers": {
     "os": ["win", "linux", "mac", "chromeos"],
     "can_be_recommended": true,
@@ -1884,6 +1894,14 @@
       { "pref": "browser.suppress_unsupported_os_warning",
         "local_state": true
       }
+    ]
+  },
+
+  "EnableMediaRouter": {
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "test_policy": { "EnableMediaRouter": true },
+    "pref_mappings": [
+      { "pref": "media_router.enable_media_router" }
     ]
   },
 
@@ -2448,10 +2466,24 @@
     ]
   },
 
-  "ArcApplicationPolicy": {
+  "ArcPolicy": {
     "os": ["chromeos"],
     "can_be_recommended": false,
-    "test_policy": { "ArcApplicationPolicy": "" }
+    "test_policy": { "ArcPolicy": "" }
+  },
+
+  "AllowScreenLock": {
+    "os": ["chromeos"],
+    "test_policy": { "AllowScreenLock": true },
+    "pref_mappings": [
+      { "pref": "allow_screen_lock"}
+    ]
+  },
+
+  "ArcCertificatesSyncMode": {
+    "os": ["chromeos"],
+    "can_be_recommended": false,
+    "test_policy": { "ArcCertificatesSyncMode": 0 }
   },
 
   "----- Chrome OS device policies ---------------------------------------": {},
@@ -2675,7 +2707,7 @@
 
   "AllowKioskAppControlChromeVersion": {
   },
-  
+
   "LoginAuthenticationBehavior": {
     "os": ["chromeos"],
     "test_policy": { "LoginAuthenticationBehavior": 1 },
@@ -2704,6 +2736,25 @@
     "test_policy": { "SystemTimezoneAutomaticDetection": 1 },
     "pref_mappings": [
       { "pref": "cros.device.system_timezone_automatic_detection" }
+    ]
+  },
+
+  "TaskManagerEndProcessEnabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "TaskManagerEndProcessEnabled": false },
+    "pref_mappings": [
+      {
+        "pref": "task_manager.end_process_enabled",
+        "local_state": true
+      }
+    ]
+  },
+
+  "LoginVideoCaptureAllowedUrls": {
+    "os": ["chromeos"],
+    "test_policy": { "LoginVideoCaptureAllowedUrls": [ "https://example.com" ] },
+    "pref_mappings": [
+      { "pref": "cros.device.login_video_capture_allowed_urls" }
     ]
   },
 

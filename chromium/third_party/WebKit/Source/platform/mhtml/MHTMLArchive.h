@@ -33,9 +33,6 @@
 
 #include "platform/heap/Handle.h"
 #include "wtf/HashMap.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
-#include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
 #include "wtf/text/StringHash.h"
 
@@ -47,10 +44,9 @@ class SharedBuffer;
 
 struct SerializedResource;
 
-class PLATFORM_EXPORT MHTMLArchive final : public GarbageCollectedFinalized<MHTMLArchive> {
+class PLATFORM_EXPORT MHTMLArchive final : public GarbageCollected<MHTMLArchive> {
 public:
     static MHTMLArchive* create(const KURL&, SharedBuffer*);
-    ~MHTMLArchive();
 
     // Binary encoding results in smaller MHTML files but they might not work in other browsers.
     enum EncodingPolicy {

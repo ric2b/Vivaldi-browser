@@ -5,11 +5,11 @@
 #ifndef COMPONENTS_TEST_RUNNER_WEB_FRAME_TEST_PROXY_H_
 #define COMPONENTS_TEST_RUNNER_WEB_FRAME_TEST_PROXY_H_
 
+#include <memory>
 #include <utility>
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "components/test_runner/test_runner_export.h"
 #include "components/test_runner/web_frame_test_client.h"
 #include "third_party/WebKit/public/platform/WebString.h"
@@ -20,10 +20,17 @@ namespace test_runner {
 
 class TEST_RUNNER_EXPORT WebFrameTestProxyBase {
  public:
-  void set_test_client(scoped_ptr<WebFrameTestClient> client) {
+  void set_test_client(std::unique_ptr<WebFrameTestClient> client) {
     DCHECK(client);
     DCHECK(!test_client_);
     test_client_ = std::move(client);
+  }
+
+  blink::WebLocalFrame* web_frame() const { return web_frame_; }
+  void set_web_frame(blink::WebLocalFrame* frame) {
+    DCHECK(frame);
+    DCHECK(!web_frame_);
+    web_frame_ = frame;
   }
 
  protected:
@@ -32,7 +39,8 @@ class TEST_RUNNER_EXPORT WebFrameTestProxyBase {
   blink::WebFrameClient* test_client() { return test_client_.get(); }
 
  private:
-  scoped_ptr<WebFrameTestClient> test_client_;
+  std::unique_ptr<WebFrameTestClient> test_client_;
+  blink::WebLocalFrame* web_frame_;
 
   DISALLOW_COPY_AND_ASSIGN(WebFrameTestProxyBase);
 };
@@ -155,6 +163,11 @@ class WebFrameTestProxy : public Base, public WebFrameTestProxyBase {
     test_client()->didFinishLoad(frame);
   }
 
+  void didStopLoading() override {
+    Base::didStopLoading();
+    test_client()->didStopLoading();
+  }
+
   void didChangeSelection(bool is_selection_empty) override {
     test_client()->didChangeSelection(is_selection_empty);
     Base::didChangeSelection(is_selection_empty);
@@ -260,18 +273,6 @@ class WebFrameTestProxy : public Base, public WebFrameTestProxyBase {
     return test_client()->userMediaClient();
   }
 
-  bool willCheckAndDispatchMessageEvent(
-      blink::WebLocalFrame* source_frame,
-      blink::WebFrame* target_frame,
-      blink::WebSecurityOrigin target,
-      blink::WebDOMMessageEvent event) override {
-    if (test_client()->willCheckAndDispatchMessageEvent(
-            source_frame, target_frame, target, event))
-      return true;
-    return Base::willCheckAndDispatchMessageEvent(
-        source_frame, target_frame, target, event);
-  }
-
   void postAccessibilityEvent(const blink::WebAXObject& object,
                               blink::WebAXEvent event) override {
     test_client()->postAccessibilityEvent(object, event);
@@ -284,6 +285,11 @@ class WebFrameTestProxy : public Base, public WebFrameTestProxyBase {
       blink::WebSetSinkIdCallbacks* web_callbacks) override {
     test_client()->checkIfAudioSinkExistsAndIsAuthorized(
         sink_id, security_origin, web_callbacks);
+  }
+
+  void didClearWindowObject(blink::WebLocalFrame* frame) override {
+    test_client()->didClearWindowObject(frame);
+    Base::didClearWindowObject(frame);
   }
 
  private:

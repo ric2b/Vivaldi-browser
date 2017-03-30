@@ -80,14 +80,48 @@ static Vector<unsigned char> jpegImage()
     return jpeg;
 }
 
+namespace {
+
+class MockTaskRunner : public blink::WebTaskRunner {
+    void postTask(const WebTraceLocation&, Task*) override { }
+    void postDelayedTask(const WebTraceLocation&, Task*, double) override { }
+    WebTaskRunner* clone() override { return nullptr; }
+    double virtualTimeSeconds() const override { return 0.0; }
+    double monotonicallyIncreasingVirtualTimeSeconds() const override { return 0.0; }
+};
+
+}
+
+class ImageResourceTestMockFetchContext : public FetchContext {
+public:
+    static ImageResourceTestMockFetchContext* create()
+    {
+        return new ImageResourceTestMockFetchContext;
+    }
+
+    virtual ~ImageResourceTestMockFetchContext() { }
+
+    bool allowImage(bool imagesEnabled, const KURL&) const override { return true; }
+    bool canRequest(Resource::Type, const ResourceRequest&, const KURL&, const ResourceLoaderOptions&, bool forPreload, FetchRequest::OriginRestriction) const override { return true; }
+    bool shouldLoadNewResource(Resource::Type) const override { return true; }
+    WebTaskRunner* loadingTaskRunner() const override { return m_runner.get(); }
+
+private:
+    ImageResourceTestMockFetchContext()
+        :  m_runner(adoptPtr(new MockTaskRunner))
+    { }
+
+    OwnPtr<MockTaskRunner> m_runner;
+};
+
 TEST(ImageResourceTest, MultipartImage)
 {
-    ResourceFetcher* fetcher = ResourceFetcher::create(nullptr);
+    ResourceFetcher* fetcher = ResourceFetcher::create(ImageResourceTestMockFetchContext::create());
     KURL testURL(ParsedURLString, "http://www.test.com/cancelTest.html");
     URLTestHelpers::registerMockedURLLoad(testURL, "cancelTest.html", "text/html");
 
     // Emulate starting a real load, but don't expect any "real" WebURLLoaderClient callbacks.
-    ImageResource* cachedImage = ImageResource::create(ResourceRequest(testURL), nullptr);
+    ImageResource* cachedImage = ImageResource::create(ResourceRequest(testURL));
     cachedImage->setIdentifier(createUniqueIdentifier());
     cachedImage->load(fetcher);
     Platform::current()->getURLLoaderMockFactory()->unregisterURL(testURL);
@@ -132,7 +166,7 @@ TEST(ImageResourceTest, MultipartImage)
     ASSERT_EQ(cachedImage->resourceBuffer()->size(), strlen(secondPart) - 1);
 
     // This part finishes. The image is created, callbacks are sent, and the data buffer is cleared.
-    cachedImage->finish();
+    cachedImage->loader()->didFinishLoading(nullptr, 0.0, 0);
     ASSERT_FALSE(cachedImage->resourceBuffer());
     ASSERT_FALSE(cachedImage->errorOccurred());
     ASSERT_TRUE(cachedImage->hasImage());
@@ -148,10 +182,10 @@ TEST(ImageResourceTest, CancelOnDetach)
     KURL testURL(ParsedURLString, "http://www.test.com/cancelTest.html");
     URLTestHelpers::registerMockedURLLoad(testURL, "cancelTest.html", "text/html");
 
-    ResourceFetcher* fetcher = ResourceFetcher::create(nullptr);
+    ResourceFetcher* fetcher = ResourceFetcher::create(ImageResourceTestMockFetchContext::create());
 
     // Emulate starting a real load.
-    ImageResource* cachedImage = ImageResource::create(ResourceRequest(testURL), nullptr);
+    ImageResource* cachedImage = ImageResource::create(ResourceRequest(testURL));
     cachedImage->setIdentifier(createUniqueIdentifier());
 
     cachedImage->load(fetcher);
@@ -175,7 +209,7 @@ TEST(ImageResourceTest, CancelOnDetach)
 
 TEST(ImageResourceTest, DecodedDataRemainsWhileHasClients)
 {
-    ImageResource* cachedImage = ImageResource::create(ResourceRequest(), nullptr);
+    ImageResource* cachedImage = ImageResource::create(ResourceRequest());
     cachedImage->setStatus(Resource::Pending);
 
     MockImageResourceClient client(cachedImage);
@@ -208,7 +242,7 @@ TEST(ImageResourceTest, DecodedDataRemainsWhileHasClients)
 
 TEST(ImageResourceTest, UpdateBitmapImages)
 {
-    ImageResource* cachedImage = ImageResource::create(ResourceRequest(), nullptr);
+    ImageResource* cachedImage = ImageResource::create(ResourceRequest());
     cachedImage->setStatus(Resource::Pending);
 
     MockImageResourceClient client(cachedImage);
@@ -230,11 +264,13 @@ TEST(ImageResourceTest, ReloadIfLoFi)
 {
     KURL testURL(ParsedURLString, "http://www.test.com/cancelTest.html");
     URLTestHelpers::registerMockedURLLoad(testURL, "cancelTest.html", "text/html");
-    ImageResource* cachedImage = ImageResource::create(ResourceRequest(testURL), nullptr);
+    ResourceRequest request = ResourceRequest(testURL);
+    request.setLoFiState(WebURLRequest::LoFiOn);
+    ImageResource* cachedImage = ImageResource::create(request);
     cachedImage->setStatus(Resource::Pending);
 
     MockImageResourceClient client(cachedImage);
-    ResourceFetcher* fetcher = ResourceFetcher::create(nullptr);
+    ResourceFetcher* fetcher = ResourceFetcher::create(ImageResourceTestMockFetchContext::create());
 
     // Send the image response.
     Vector<unsigned char> jpeg = jpegImage();
@@ -250,6 +286,8 @@ TEST(ImageResourceTest, ReloadIfLoFi)
     ASSERT_EQ(client.imageChangedCount(), 2);
     ASSERT_TRUE(client.notifyFinishedCalled());
     ASSERT_TRUE(cachedImage->getImage()->isBitmapImage());
+    EXPECT_EQ(1, cachedImage->getImage()->width());
+    EXPECT_EQ(1, cachedImage->getImage()->height());
 
     cachedImage->reloadIfLoFi(fetcher);
     ASSERT_FALSE(cachedImage->errorOccurred());
@@ -257,14 +295,58 @@ TEST(ImageResourceTest, ReloadIfLoFi)
     ASSERT_FALSE(cachedImage->hasImage());
     ASSERT_EQ(client.imageChangedCount(), 3);
 
-    cachedImage->responseReceived(resourceResponse, nullptr);
-    cachedImage->appendData(reinterpret_cast<const char*>(jpeg.data()), jpeg.size());
-    cachedImage->finish();
+    cachedImage->loader()->didReceiveResponse(nullptr, WrappedResourceResponse(resourceResponse), nullptr);
+    cachedImage->loader()->didReceiveData(nullptr, reinterpret_cast<const char*>(jpeg.data()), jpeg.size(), jpeg.size());
+    cachedImage->loader()->didFinishLoading(nullptr, 0.0, jpeg.size());
     ASSERT_FALSE(cachedImage->errorOccurred());
     ASSERT_TRUE(cachedImage->hasImage());
     ASSERT_FALSE(cachedImage->getImage()->isNull());
     ASSERT_TRUE(client.notifyFinishedCalled());
     ASSERT_TRUE(cachedImage->getImage()->isBitmapImage());
+}
+
+// Tests for pruning.
+
+TEST(ImageResourceTest, AddClientAfterPrune)
+{
+    KURL url(ParsedURLString, "http://127.0.0.1:8000/foo");
+    ImageResource* imageResource = ImageResource::create(ResourceRequest(url));
+
+    // Adds a ResourceClient but not ImageResourceObserver.
+    MockResourceClient client1(imageResource);
+
+    Vector<unsigned char> jpeg = jpegImage();
+    ResourceResponse response;
+    response.setURL(url);
+    response.setHTTPStatusCode(200);
+    response.setMimeType("image/jpeg");
+    imageResource->responseReceived(response, nullptr);
+    imageResource->appendData(reinterpret_cast<const char*>(jpeg.data()), jpeg.size());
+    imageResource->finish();
+
+    EXPECT_FALSE(imageResource->errorOccurred());
+    ASSERT_TRUE(imageResource->hasImage());
+    EXPECT_FALSE(imageResource->getImage()->isNull());
+    EXPECT_EQ(1, imageResource->getImage()->width());
+    EXPECT_EQ(1, imageResource->getImage()->height());
+    EXPECT_TRUE(client1.notifyFinishedCalled());
+
+    client1.removeAsClient();
+
+    EXPECT_FALSE(imageResource->hasClientsOrObservers());
+
+    imageResource->prune();
+
+    EXPECT_FALSE(imageResource->hasImage());
+
+    // Re-adds a ResourceClient but not ImageResourceObserver.
+    MockResourceClient client2(imageResource);
+
+    ASSERT_TRUE(imageResource->hasImage());
+    EXPECT_FALSE(imageResource->getImage()->isNull());
+    EXPECT_EQ(1, imageResource->getImage()->width());
+    EXPECT_EQ(1, imageResource->getImage()->height());
+    EXPECT_TRUE(client2.notifyFinishedCalled());
 }
 
 } // namespace blink

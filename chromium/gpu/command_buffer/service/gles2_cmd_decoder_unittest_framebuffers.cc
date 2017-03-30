@@ -8,6 +8,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
 #include "gpu/command_buffer/common/gles2_cmd_format.h"
@@ -572,8 +574,8 @@ void GLES2DecoderTest::CheckReadPixelsOutOfRange(GLint in_read_x,
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
 
   GLint unpadded_row_size = emu.ComputeImageDataSize(in_read_width, 1);
-  scoped_ptr<int8_t[]> zero(new int8_t[unpadded_row_size]);
-  scoped_ptr<int8_t[]> pack(new int8_t[kPackAlignment]);
+  std::unique_ptr<int8_t[]> zero(new int8_t[unpadded_row_size]);
+  std::unique_ptr<int8_t[]> pack(new int8_t[kPackAlignment]);
   memset(zero.get(), kInitialMemoryValue, unpadded_row_size);
   memset(pack.get(), kInitialMemoryValue, kPackAlignment);
   for (GLint yy = 0; yy < in_read_height; ++yy) {
@@ -3196,47 +3198,37 @@ TEST_P(GLES2DecoderManualInitTest,
   EXPECT_FALSE(framebuffer_manager->IsComplete(framebuffer));
 }
 
-TEST_P(GLES2DecoderManualInitTest, ReadFormatExtension) {
-  InitState init;
-  init.extensions = "GL_OES_read_format";
-  init.bind_generates_resource = true;
-  InitDecoder(init);
-
-  EXPECT_CALL(*gl_, GetError())
-      .WillOnce(Return(GL_NO_ERROR))
-      .WillOnce(Return(GL_NO_ERROR))
-      .WillOnce(Return(GL_NO_ERROR))
-      .WillOnce(Return(GL_NO_ERROR))
-      .RetiresOnSaturation();
-  EXPECT_CALL(*gl_, GetError()).Times(6).RetiresOnSaturation();
-
-  typedef GetIntegerv::Result Result;
-  Result* result = static_cast<Result*>(shared_memory_address_);
-  GetIntegerv cmd;
-  const GLuint kFBOClientTextureId = 4100;
-  const GLuint kFBOServiceTextureId = 4101;
-
-  // Register a texture id.
-  EXPECT_CALL(*gl_, GenTextures(_, _))
-      .WillOnce(SetArgPointee<1>(kFBOServiceTextureId))
-      .RetiresOnSaturation();
-  GenHelper<GenTexturesImmediate>(kFBOClientTextureId);
-
-  // Setup "render to" texture.
-  DoBindTexture(GL_TEXTURE_2D, kFBOClientTextureId, kFBOServiceTextureId);
+TEST_P(GLES2DecoderTest, ImplementationReadColorFormatAndType) {
+  ClearSharedMemory();
+  DoBindTexture(GL_TEXTURE_2D, client_texture_id_, kServiceTextureId);
   DoTexImage2D(
-      GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0, 0);
+      GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+      kSharedMemoryId, kSharedMemoryOffset);
   DoBindFramebuffer(
       GL_FRAMEBUFFER, client_framebuffer_id_, kServiceFramebufferId);
   DoFramebufferTexture2D(GL_FRAMEBUFFER,
                          GL_COLOR_ATTACHMENT0,
                          GL_TEXTURE_2D,
-                         kFBOClientTextureId,
-                         kFBOServiceTextureId,
+                         client_texture_id_,
+                         kServiceTextureId,
                          0,
                          GL_NO_ERROR);
 
+  typedef GetIntegerv::Result Result;
+  Result* result = static_cast<Result*>(shared_memory_address_);
+  GetIntegerv cmd;
+
   result->size = 0;
+  EXPECT_CALL(*gl_, GetError())
+      .WillOnce(Return(GL_NO_ERROR))
+      .WillOnce(Return(GL_NO_ERROR))
+      .WillOnce(Return(GL_NO_ERROR))
+      .WillOnce(Return(GL_NO_ERROR))
+      .WillOnce(Return(GL_NO_ERROR))
+      .RetiresOnSaturation();
+  EXPECT_CALL(*gl_, CheckFramebufferStatusEXT(_))
+      .WillOnce(Return(GL_FRAMEBUFFER_COMPLETE))
+      .RetiresOnSaturation();
   EXPECT_CALL(*gl_, GetIntegerv(_, _)).Times(1).RetiresOnSaturation();
   cmd.Init(GL_IMPLEMENTATION_COLOR_READ_FORMAT,
            shared_memory_id_,
@@ -3246,6 +3238,15 @@ TEST_P(GLES2DecoderManualInitTest, ReadFormatExtension) {
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
 
   result->size = 0;
+  EXPECT_CALL(*gl_, GetError())
+      .WillOnce(Return(GL_NO_ERROR))
+      .WillOnce(Return(GL_NO_ERROR))
+      .WillOnce(Return(GL_NO_ERROR))
+      .WillOnce(Return(GL_NO_ERROR))
+      .WillOnce(Return(GL_NO_ERROR))
+      .RetiresOnSaturation();
+  EXPECT_CALL(*gl_, CheckFramebufferStatusEXT(_))
+      .Times(0);
   EXPECT_CALL(*gl_, GetIntegerv(_, _)).Times(1).RetiresOnSaturation();
   cmd.Init(GL_IMPLEMENTATION_COLOR_READ_TYPE,
            shared_memory_id_,
@@ -3255,60 +3256,38 @@ TEST_P(GLES2DecoderManualInitTest, ReadFormatExtension) {
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
 }
 
-TEST_P(GLES2DecoderManualInitTest, NoReadFormatExtension) {
-  InitState init;
-  init.bind_generates_resource = true;
-  InitDecoder(init);
+TEST_P(GLES3DecoderTest, FramebufferTextureLayerNoBoundFramebuffer) {
+  DoBindTexture(GL_TEXTURE_3D, client_texture_id_, kServiceTextureId);
+  EXPECT_CALL(*gl_, FramebufferTextureLayer(_, _, _, _, _)).Times(0);
+  cmds::FramebufferTextureLayer cmd;
+  cmd.Init(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, client_texture_id_, 4, 5);
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+  EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
+}
 
-  EXPECT_CALL(*gl_, GetError())
-      .WillOnce(Return(GL_NO_ERROR))
-      .WillOnce(Return(GL_NO_ERROR))
-      .WillOnce(Return(GL_NO_ERROR))
-      .WillOnce(Return(GL_NO_ERROR))
-      .RetiresOnSaturation();
-
-  typedef GetIntegerv::Result Result;
-  Result* result = static_cast<Result*>(shared_memory_address_);
-  GetIntegerv cmd;
-  const GLuint kFBOClientTextureId = 4100;
-  const GLuint kFBOServiceTextureId = 4101;
-
-  // Register a texture id.
-  EXPECT_CALL(*gl_, GenTextures(_, _))
-      .WillOnce(SetArgPointee<1>(kFBOServiceTextureId))
-      .RetiresOnSaturation();
-  GenHelper<GenTexturesImmediate>(kFBOClientTextureId);
-
-  // Setup "render to" texture.
-  DoBindTexture(GL_TEXTURE_2D, kFBOClientTextureId, kFBOServiceTextureId);
-  DoTexImage2D(
-      GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0, 0);
+TEST_P(GLES3DecoderTest, FramebufferTextureLayerInvalidTextureTarget) {
   DoBindFramebuffer(
       GL_FRAMEBUFFER, client_framebuffer_id_, kServiceFramebufferId);
-  DoFramebufferTexture2D(GL_FRAMEBUFFER,
-                         GL_COLOR_ATTACHMENT0,
-                         GL_TEXTURE_2D,
-                         kFBOClientTextureId,
-                         kFBOServiceTextureId,
-                         0,
-                         GL_NO_ERROR);
-
-  result->size = 0;
-  EXPECT_CALL(*gl_, GetIntegerv(_, _)).Times(0).RetiresOnSaturation();
-  cmd.Init(GL_IMPLEMENTATION_COLOR_READ_FORMAT,
-           shared_memory_id_,
-           shared_memory_offset_);
+  DoBindTexture(GL_TEXTURE_2D, client_texture_id_, kServiceTextureId);
+  EXPECT_CALL(*gl_, FramebufferTextureLayer(_, _, _, _, _)).Times(0);
+  cmds::FramebufferTextureLayer cmd;
+  cmd.Init(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, client_texture_id_, 4, 5);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
-  EXPECT_EQ(1, result->GetNumResults());
-  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+  EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
+}
 
-  result->size = 0;
-  EXPECT_CALL(*gl_, GetIntegerv(_, _)).Times(0).RetiresOnSaturation();
-  cmd.Init(GL_IMPLEMENTATION_COLOR_READ_TYPE,
-           shared_memory_id_,
-           shared_memory_offset_);
+TEST_P(GLES3DecoderTest, FramebufferTextureLayerValidArgs) {
+  DoBindFramebuffer(
+      GL_FRAMEBUFFER, client_framebuffer_id_, kServiceFramebufferId);
+  DoBindTexture(GL_TEXTURE_3D, client_texture_id_, kServiceTextureId);
+  EXPECT_CALL(*gl_, FramebufferTextureLayer(GL_FRAMEBUFFER,
+                                            GL_COLOR_ATTACHMENT0,
+                                            kServiceTextureId, 4, 5))
+      .Times(1)
+      .RetiresOnSaturation();
+  cmds::FramebufferTextureLayer cmd;
+  cmd.Init(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, client_texture_id_, 4, 5);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
-  EXPECT_EQ(1, result->GetNumResults());
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
 }
 

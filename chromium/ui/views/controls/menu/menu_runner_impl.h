@@ -5,16 +5,17 @@
 #ifndef UI_VIEWS_CONTROLS_MENU_MENU_RUNNER_IMPL_H_
 #define UI_VIEWS_CONTROLS_MENU_MENU_RUNNER_IMPL_H_
 
-#include "ui/views/controls/menu/menu_runner_impl_interface.h"
-
 #include <stdint.h>
 
 #include <set>
 
+#include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "ui/views/controls/menu/menu_controller_delegate.h"
+#include "ui/views/controls/menu/menu_runner_impl_interface.h"
+#include "ui/views/views_export.h"
 
 namespace views {
 
@@ -25,8 +26,9 @@ class MenuItemView;
 namespace internal {
 
 // A menu runner implementation that uses views::MenuItemView to show a menu.
-class MenuRunnerImpl : public MenuRunnerImplInterface,
-                       public MenuControllerDelegate {
+class VIEWS_EXPORT MenuRunnerImpl
+    : NON_EXPORTED_BASE(public MenuRunnerImplInterface),
+      NON_EXPORTED_BASE(public MenuControllerDelegate) {
  public:
   explicit MenuRunnerImpl(MenuItemView* menu);
 
@@ -69,7 +71,7 @@ class MenuRunnerImpl : public MenuRunnerImplInterface,
   // invoked.  This is done to make sure the delegate isn't notified after
   // Release() is invoked. We do this as we assume the delegate is no longer
   // valid if MenuRunner has been deleted.
-  scoped_ptr<MenuDelegate> empty_delegate_;
+  std::unique_ptr<MenuDelegate> empty_delegate_;
 
   // Are we in run waiting for it to return?
   bool running_;

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "base/base_paths.h"
 #include "base/bind.h"
 #include "base/macros.h"
@@ -65,7 +67,7 @@ class ExtensionsTestSuite : public content::ContentTestSuiteBase {
   void Initialize() override;
   void Shutdown() override;
 
-  scoped_ptr<extensions::TestExtensionsClient> client_;
+  std::unique_ptr<extensions::TestExtensionsClient> client_;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionsTestSuite);
 };

@@ -56,10 +56,6 @@
 
     'app/framework-Info.plist',
     '<@(mac_all_xibs)',
-    'app/theme/find_next_Template.pdf',
-    'app/theme/find_prev_Template.pdf',
-    'app/theme/menu_overflow_down.pdf',
-    'app/theme/menu_overflow_up.pdf',
     'browser/mac/install.sh',
     '<(SHARED_INTERMEDIATE_DIR)/repack/vivaldi_100_percent.pak',
     '<(SHARED_INTERMEDIATE_DIR)/repack/resources.pak',
@@ -74,7 +70,6 @@
   'dependencies': [
     'app_mode_app',
     # Bring in pdfsqueeze and run it on all pdfs
-    '../build/temp_gyp/pdfsqueeze.gyp:pdfsqueeze',
     '../crypto/crypto.gyp:crypto',
     # On Mac, Flash gets put into the framework, so we need this
     # dependency here. flash_player.gyp will copy the Flash bundle
@@ -84,21 +79,6 @@
     '../third_party/widevine/cdm/widevine_cdm.gyp:widevinecdmadapter',
     'chrome_resources.gyp:packed_extra_resources',
     'chrome_resources.gyp:packed_resources',
-  ],
-  'rules': [
-    {
-      'rule_name': 'pdfsqueeze',
-      'extension': 'pdf',
-      'inputs': [
-        '<(PRODUCT_DIR)/pdfsqueeze',
-      ],
-      'outputs': [
-        '<(INTERMEDIATE_DIR)/pdfsqueeze/<(RULE_INPUT_ROOT).pdf',
-      ],
-      'action': ['<(PRODUCT_DIR)/pdfsqueeze',
-                 '<(RULE_INPUT_PATH)', '<@(_outputs)'],
-      'message': 'Running pdfsqueeze on <(RULE_INPUT_PATH)',
-    },
   ],
   'variables': {
     'theme_dir_name': '<(branding_path_component)',
@@ -114,6 +94,7 @@
       # but this seems like a really good place to store them.
       'postbuild_name': 'Tweak Info.plist',
       'action': ['<(tweak_info_plist_path)',
+                 '--plist=${TARGET_BUILD_DIR}/${INFOPLIST_PATH}',
                  '--breakpad=<(mac_breakpad_compiled_in)',
                  '--breakpad_uploads=<(mac_breakpad_uploads)',
                  '--keystone=0',
@@ -153,9 +134,9 @@
       ],
     },
     {
-      # This file is used by the component installer.
-      # It is not a complete plugin on its own.
-      'destination': '<(PRODUCT_DIR)/$(CONTENTS_FOLDER_PATH)/Internet Plug-Ins/',
+      # The adapter is not a complete library on its own. It needs the Widevine
+      # CDM to work.
+      'destination': '<(PRODUCT_DIR)/$(CONTENTS_FOLDER_PATH)/Libraries/',
       'files': [],
       'conditions': [
         ['branding == "Chrome" or branding == "vivaldi"', {
@@ -163,13 +144,6 @@
             '<(PRODUCT_DIR)/widevinecdmadapter.plugin',
           ],
         }],
-      ],
-    },
-    {
-      # Copy of resources used by tests.
-      'destination': '<(PRODUCT_DIR)',
-      'files': [
-          '<(SHARED_INTERMEDIATE_DIR)/repack/resources.pak'
       ],
     },
     {

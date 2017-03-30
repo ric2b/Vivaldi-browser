@@ -37,7 +37,7 @@ class TextTrackContainer;
 
 class CORE_EXPORT MediaControls final : public HTMLDivElement {
 public:
-    static RawPtr<MediaControls> create(HTMLMediaElement&);
+    static MediaControls* create(HTMLMediaElement&);
 
     HTMLMediaElement& mediaElement() const { return *m_mediaElement; }
 
@@ -59,6 +59,7 @@ public:
 
     void changedClosedCaptionsVisibility();
     void refreshClosedCaptionsButtonVisibility();
+    void toggleTextTrackList();
 
     void enteredFullscreen();
     void exitedFullscreen();
@@ -141,6 +142,7 @@ private:
     Member<MediaControlMuteButtonElement> m_muteButton;
     Member<MediaControlVolumeSliderElement> m_volumeSlider;
     Member<MediaControlToggleClosedCaptionsButtonElement> m_toggleClosedCaptionsButton;
+    Member<MediaControlTextTrackListElement> m_textTrackList;
     Member<MediaControlCastButtonElement> m_castButton;
     Member<MediaControlFullscreenButtonElement> m_fullScreenButton;
 

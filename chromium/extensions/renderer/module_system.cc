@@ -131,15 +131,18 @@ std::string ModuleSystem::ExceptionHandler::CreateExceptionString(
     error_message.assign(*error_message_v8, error_message_v8.length());
   }
 
-  auto maybe = message->GetLineNumber(context_->v8_context());
-  int line_number = maybe.IsJust() ? maybe.FromJust() : 0;
+  int line_number = 0;
+  if (context_) {  // |context_| can be null in unittests.
+    auto maybe = message->GetLineNumber(context_->v8_context());
+    line_number = maybe.IsJust() ? maybe.FromJust() : 0;
+  }
   return base::StringPrintf("%s:%d: %s",
                             resource_name.c_str(),
                             line_number,
                             error_message.c_str());
 }
 
-ModuleSystem::ModuleSystem(ScriptContext* context, SourceMap* source_map)
+ModuleSystem::ModuleSystem(ScriptContext* context, const SourceMap* source_map)
     : ObjectBackedNativeHandler(context),
       context_(context),
       source_map_(source_map),
@@ -334,7 +337,7 @@ v8::Local<v8::Value> ModuleSystem::CallModuleMethod(
 
 void ModuleSystem::RegisterNativeHandler(
     const std::string& name,
-    scoped_ptr<NativeHandler> native_handler) {
+    std::unique_ptr<NativeHandler> native_handler) {
   ClobberExistingNativeHandler(name);
   native_handler_map_[name] = std::move(native_handler);
 }
@@ -563,7 +566,7 @@ void ModuleSystem::RequireAsync(
   v8::Local<v8::Promise::Resolver> resolver(
       v8::Promise::Resolver::New(v8_context).ToLocalChecked());
   args.GetReturnValue().Set(resolver->GetPromise());
-  scoped_ptr<v8::Global<v8::Promise::Resolver>> global_resolver(
+  std::unique_ptr<v8::Global<v8::Promise::Resolver>> global_resolver(
       new v8::Global<v8::Promise::Resolver>(GetIsolate(), resolver));
   gin::ModuleRegistry* module_registry =
       gin::ModuleRegistry::From(v8_context);
@@ -659,6 +662,7 @@ v8::Local<v8::Value> ModuleSystem::LoadModule(const std::string& module_name) {
   v8::Local<v8::FunctionTemplate> tmpl = v8::FunctionTemplate::New(
       GetIsolate(),
       &SetExportsProperty);
+  tmpl->RemovePrototype();
   v8::Local<v8::String> v8_key;
   if (!v8_helpers::ToV8String(GetIsolate(), "$set", &v8_key)) {
     NOTREACHED();
@@ -736,7 +740,7 @@ void ModuleSystem::OnDidAddPendingModule(
 }
 
 void ModuleSystem::OnModuleLoaded(
-    scoped_ptr<v8::Global<v8::Promise::Resolver>> resolver,
+    std::unique_ptr<v8::Global<v8::Promise::Resolver>> resolver,
     v8::Local<v8::Value> value) {
   if (!is_valid())
     return;

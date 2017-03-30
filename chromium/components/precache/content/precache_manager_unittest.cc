@@ -17,7 +17,7 @@
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/histogram_tester.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/history/core/browser/history_constants.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
@@ -52,11 +52,13 @@ const char kGoodManifestURL[] =
 
 class TestURLFetcherCallback {
  public:
-  scoped_ptr<net::FakeURLFetcher> CreateURLFetcher(
-      const GURL& url, net::URLFetcherDelegate* delegate,
-      const std::string& response_data, net::HttpStatusCode response_code,
+  std::unique_ptr<net::FakeURLFetcher> CreateURLFetcher(
+      const GURL& url,
+      net::URLFetcherDelegate* delegate,
+      const std::string& response_data,
+      net::HttpStatusCode response_code,
       net::URLRequestStatus::Status status) {
-    scoped_ptr<net::FakeURLFetcher> fetcher(new net::FakeURLFetcher(
+    std::unique_ptr<net::FakeURLFetcher> fetcher(new net::FakeURLFetcher(
         url, delegate, response_data, response_code, status));
 
     requested_urls_.insert(url);
@@ -141,6 +143,15 @@ class PrecacheManagerTest : public testing::Test {
                  base::Bind(&TestURLFetcherCallback::CreateURLFetcher,
                             base::Unretained(&url_callback_))) {}
 
+  ~PrecacheManagerTest() {
+    // precache_manager_'s constructor releases a PrecacheDatabase and deletes
+    // it on the DB thread. PrecacheDatabase already has a pending Init call
+    // which will assert in debug builds because the directory passed to it is
+    // deleted. So manually ensure that the task is run before browser_context_
+    // is destructed.
+    base::MessageLoop::current()->RunUntilIdle();
+  }
+
  protected:
   void SetUp() override {
     base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
@@ -156,8 +167,8 @@ class PrecacheManagerTest : public testing::Test {
   }
 
   // Must be declared first so that it is destroyed last.
-  content::TestBrowserContext browser_context_;
   content::TestBrowserThreadBundle test_browser_thread_bundle_;
+  content::TestBrowserContext browser_context_;
   PrecacheManagerUnderTest precache_manager_;
   TestURLFetcherCallback url_callback_;
   net::FakeURLFetcherFactory factory_;

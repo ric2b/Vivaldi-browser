@@ -4,9 +4,9 @@
 
 #include "cc/playback/image_hijack_canvas.h"
 
+#include "base/optional.h"
 #include "cc/playback/discardable_image_map.h"
 #include "cc/tiles/image_decode_controller.h"
-#include "third_party/skia/include/core/SkTLazy.h"
 
 namespace cc {
 namespace {
@@ -20,21 +20,22 @@ SkIRect RoundOutRect(const SkRect& rect) {
 class ScopedDecodedImageLock {
  public:
   ScopedDecodedImageLock(ImageDecodeController* image_decode_controller,
-                         const SkImage* image,
+                         sk_sp<const SkImage> image,
                          const SkRect& src_rect,
                          const SkMatrix& matrix,
                          const SkPaint* paint)
       : image_decode_controller_(image_decode_controller),
-        draw_image_(image,
+        draw_image_(std::move(image),
                     RoundOutRect(src_rect),
                     paint ? paint->getFilterQuality() : kNone_SkFilterQuality,
                     matrix),
         decoded_draw_image_(
             image_decode_controller_->GetDecodedImageForDraw(draw_image_)) {
-    DCHECK(image->isLazyGenerated());
-    if (paint)
-      decoded_paint_.set(*paint)->setFilterQuality(
-          decoded_draw_image_.filter_quality());
+    DCHECK(draw_image_.image()->isLazyGenerated());
+    if (paint) {
+      decoded_paint_ = *paint;
+      decoded_paint_->setFilterQuality(decoded_draw_image_.filter_quality());
+    }
   }
 
   ~ScopedDecodedImageLock() {
@@ -43,14 +44,15 @@ class ScopedDecodedImageLock {
   }
 
   const DecodedDrawImage& decoded_image() const { return decoded_draw_image_; }
-  const SkPaint* decoded_paint() const { return decoded_paint_.getMaybeNull(); }
+  const SkPaint* decoded_paint() const {
+    return decoded_paint_ ? &decoded_paint_.value() : nullptr;
+  }
 
  private:
   ImageDecodeController* image_decode_controller_;
   DrawImage draw_image_;
   DecodedDrawImage decoded_draw_image_;
-  // TODO(fmalita): use base::Optional when it becomes available
-  SkTLazy<SkPaint> decoded_paint_;
+  base::Optional<SkPaint> decoded_paint_;
 };
 
 }  // namespace
@@ -82,7 +84,7 @@ void ImageHijackCanvas::onDrawImage(const SkImage* image,
   SkMatrix ctm = getTotalMatrix();
 
   ScopedDecodedImageLock scoped_lock(
-      image_decode_controller_, image,
+      image_decode_controller_, sk_ref_sp(image),
       SkRect::MakeIWH(image->width(), image->height()), ctm, paint);
   const DecodedDrawImage& decoded_image = scoped_lock.decoded_image();
   if (!decoded_image.image())
@@ -98,7 +100,7 @@ void ImageHijackCanvas::onDrawImage(const SkImage* image,
     SkNWayCanvas::scale(1.f / (decoded_image.scale_adjustment().width()),
                         1.f / (decoded_image.scale_adjustment().height()));
   }
-  SkNWayCanvas::onDrawImage(decoded_image.image(), x, y, decoded_paint);
+  SkNWayCanvas::onDrawImage(decoded_image.image().get(), x, y, decoded_paint);
   if (need_scale)
     SkNWayCanvas::restore();
 }
@@ -122,8 +124,8 @@ void ImageHijackCanvas::onDrawImageRect(const SkImage* image,
   matrix.setRectToRect(*src, dst, SkMatrix::kFill_ScaleToFit);
   matrix.postConcat(getTotalMatrix());
 
-  ScopedDecodedImageLock scoped_lock(image_decode_controller_, image, *src,
-                                     matrix, paint);
+  ScopedDecodedImageLock scoped_lock(image_decode_controller_, sk_ref_sp(image),
+                                     *src, matrix, paint);
   const DecodedDrawImage& decoded_image = scoped_lock.decoded_image();
   if (!decoded_image.image())
     return;
@@ -140,7 +142,7 @@ void ImageHijackCanvas::onDrawImageRect(const SkImage* image,
         adjusted_src.x() * x_scale, adjusted_src.y() * y_scale,
         adjusted_src.width() * x_scale, adjusted_src.height() * y_scale);
   }
-  SkNWayCanvas::onDrawImageRect(decoded_image.image(), &adjusted_src, dst,
+  SkNWayCanvas::onDrawImageRect(decoded_image.image().get(), &adjusted_src, dst,
                                 decoded_paint, constraint);
 }
 

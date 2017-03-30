@@ -92,20 +92,20 @@ void setMinimumArityTypeError(ExceptionState& exceptionState, unsigned expected,
     exceptionState.throwTypeError(ExceptionMessages::notEnoughArguments(expected, provided));
 }
 
-RawPtr<NodeFilter> toNodeFilter(v8::Local<v8::Value> callback, v8::Local<v8::Object> creationContext, ScriptState* scriptState)
+NodeFilter* toNodeFilter(v8::Local<v8::Value> callback, v8::Local<v8::Object> creationContext, ScriptState* scriptState)
 {
     if (callback->IsNull())
         return nullptr;
-    RawPtr<NodeFilter> filter = NodeFilter::create();
+    NodeFilter* filter = NodeFilter::create();
 
-    v8::Local<v8::Value> filterWrapper = toV8(filter.get(), creationContext, scriptState->isolate());
+    v8::Local<v8::Value> filterWrapper = toV8(filter, creationContext, scriptState->isolate());
     if (filterWrapper.IsEmpty())
         return nullptr;
 
-    RawPtr<NodeFilterCondition> condition = V8NodeFilterCondition::create(callback, filterWrapper.As<v8::Object>(), scriptState);
-    filter->setCondition(condition.release());
+    NodeFilterCondition* condition = V8NodeFilterCondition::create(callback, filterWrapper.As<v8::Object>(), scriptState);
+    filter->setCondition(condition);
 
-    return filter.release();
+    return filter;
 }
 
 bool toBooleanSlow(v8::Isolate* isolate, v8::Local<v8::Value> value, ExceptionState& exceptionState)
@@ -818,6 +818,32 @@ v8::Local<v8::Context> toV8ContextEvenIfDetached(Frame* frame, DOMWrapperWorld& 
     return frame->windowProxy(world)->contextIfInitialized();
 }
 
+void installOriginTrialsCore(ScriptState* scriptState)
+{
+    // TODO(iclelland): Generate all of this logic at compile-time, based on the
+    // configuration of origin trial enabled attibutes and interfaces in IDL
+    // files. (crbug.com/615060)
+
+    // Initialization code for origin trials for core bindings, if necessary,
+    // should go here.
+}
+
+namespace {
+InstallOriginTrialsFunction s_installOriginTrialsFunction = &installOriginTrialsCore;
+}
+
+void installOriginTrials(ScriptState* scriptState)
+{
+    (*s_installOriginTrialsFunction)(scriptState);
+}
+
+InstallOriginTrialsFunction setInstallOriginTrialsFunction(InstallOriginTrialsFunction newInstallOriginTrialsFunction)
+{
+    InstallOriginTrialsFunction originalFunction = s_installOriginTrialsFunction;
+    s_installOriginTrialsFunction = newInstallOriginTrialsFunction;
+    return originalFunction;
+}
+
 void crashIfIsolateIsDead(v8::Isolate* isolate)
 {
     if (isolate->IsDead()) {
@@ -862,7 +888,7 @@ bool addHiddenValueToArray(v8::Isolate* isolate, v8::Local<v8::Object> object, v
     }
 
     v8::Local<v8::Array> array = v8::Local<v8::Array>::Cast(arrayValue);
-    return v8CallBoolean(array->Set(isolate->GetCurrentContext(), v8::Integer::New(isolate, array->Length()), value));
+    return v8CallBoolean(array->CreateDataProperty(isolate->GetCurrentContext(), array->Length(), value));
 }
 
 void removeHiddenValueFromArray(v8::Isolate* isolate, v8::Local<v8::Object> object, v8::Local<v8::Value> value, int arrayIndex)
@@ -918,6 +944,12 @@ void v8ConstructorAttributeGetter(v8::Local<v8::Name> propertyName, const v8::Pr
     if (!perContextData)
         return;
     v8SetReturnValue(info, perContextData->constructorForType(WrapperTypeInfo::unwrap(data)));
+}
+
+v8::Local<v8::Value> freezeV8Object(v8::Local<v8::Value> value, v8::Isolate* isolate)
+{
+    v8CallOrCrash(value.As<v8::Object>()->SetIntegrityLevel(isolate->GetCurrentContext(), v8::IntegrityLevel::kFrozen));
+    return value;
 }
 
 } // namespace blink

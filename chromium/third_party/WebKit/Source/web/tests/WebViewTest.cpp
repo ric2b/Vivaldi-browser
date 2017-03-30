@@ -64,9 +64,10 @@
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebClipboard.h"
 #include "public/platform/WebDisplayMode.h"
 #include "public/platform/WebDragData.h"
+#include "public/platform/WebDragOperation.h"
+#include "public/platform/WebMockClipboard.h"
 #include "public/platform/WebSize.h"
 #include "public/platform/WebThread.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
@@ -76,7 +77,6 @@
 #include "public/web/WebDateTimeChooserCompletion.h"
 #include "public/web/WebDeviceEmulationParams.h"
 #include "public/web/WebDocument.h"
-#include "public/web/WebDragOperation.h"
 #include "public/web/WebElement.h"
 #include "public/web/WebFrame.h"
 #include "public/web/WebFrameClient.h"
@@ -324,8 +324,7 @@ TEST_F(WebViewTest, CopyImageAt)
 
     EXPECT_NE(sequence, Platform::current()->clipboard()->sequenceNumber(WebClipboard::BufferStandard));
 
-    WebData data = Platform::current()->clipboard()->readImage(WebClipboard::Buffer());
-    WebImage image = WebImage::fromData(data, WebSize());
+    WebImage image = static_cast<WebMockClipboard*>(Platform::current()->clipboard())->readRawImage(WebClipboard::Buffer());
 
     SkAutoLockPixels autoLock(image.getSkBitmap());
     EXPECT_EQ(SkColorSetARGB(255, 255, 0, 0), image.getSkBitmap().getColor(0, 0));
@@ -347,8 +346,7 @@ TEST_F(WebViewTest, CopyImageAtWithPinchZoom)
 
     EXPECT_NE(sequence, Platform::current()->clipboard()->sequenceNumber(WebClipboard::BufferStandard));
 
-    WebData data = Platform::current()->clipboard()->readImage(WebClipboard::Buffer());
-    WebImage image = WebImage::fromData(data, WebSize());
+    WebImage image = static_cast<WebMockClipboard*>(Platform::current()->clipboard())->readRawImage(WebClipboard::Buffer());
 
     SkAutoLockPixels autoLock(image.getSkBitmap());
     EXPECT_EQ(SkColorSetARGB(255, 255, 0, 0), image.getSkBitmap().getColor(0, 0));
@@ -577,7 +575,7 @@ TEST_F(WebViewTest, SetBaseBackgroundColorAndBlendWithExistingContent)
 
     // Paint the root of the main frame in the way that CompositedLayerMapping would.
     FrameView* view = m_webViewHelper.webViewImpl()->mainFrameImpl()->frameView();
-    PaintLayer* rootLayer = view->layoutView()->layer();
+    PaintLayer* rootLayer = view->layoutViewItem().layer();
     LayoutRect paintRect(0, 0, kWidth, kHeight);
     PaintLayerPaintingInfo paintingInfo(rootLayer, paintRect, GlobalPaintNormalPhase, LayoutSize());
     PaintLayerPainter(*rootLayer).paintLayerContents(pictureBuilder.context(), paintingInfo, PaintLayerPaintingCompositingAllPhases);
@@ -1754,7 +1752,7 @@ TEST_F(WebViewTest, ShowPressOnTransformedLink)
 {
     OwnPtr<FrameTestHelpers::TestWebViewClient> fakeCompositingWebViewClient = adoptPtr(new FrameTestHelpers::TestWebViewClient());
     FrameTestHelpers::WebViewHelper webViewHelper;
-    WebViewImpl* webViewImpl = webViewHelper.initialize(true, 0, fakeCompositingWebViewClient.get(), &configueCompositingWebView);
+    WebViewImpl* webViewImpl = webViewHelper.initialize(true, nullptr, fakeCompositingWebViewClient.get(), nullptr, &configueCompositingWebView);
 
     int pageWidth = 640;
     int pageHeight = 480;
@@ -2052,7 +2050,6 @@ TEST_F(WebViewTest, DispatchesDomFocusOutDomFocusInOnViewToggleFocus)
     EXPECT_STREQ("DOMFocusOutDOMFocusIn", element.textContent().utf8().data());
 }
 
-#if !ENABLE(INPUT_MULTIPLE_FIELDS_UI)
 static void openDateTimeChooser(WebView* webView, HTMLInputElement* inputElement)
 {
     inputElement->focus();
@@ -2067,8 +2064,16 @@ static void openDateTimeChooser(WebView* webView, HTMLInputElement* inputElement
     webView->handleInputEvent(keyEvent);
 }
 
-TEST_F(WebViewTest, ChooseValueFromDateTimeChooser)
+// TODO(crbug.com/605112) This test is crashing on Android (Nexus 4) bot.
+#if OS(ANDROID)
+#define MAYBE_ChooseValueFromDateTimeChooser DISABLED_ChooseValueFromDateTimeChooser
+#else
+#define MAYBE_ChooseValueFromDateTimeChooser ChooseValueFromDateTimeChooser
+#endif
+TEST_F(WebViewTest, MAYBE_ChooseValueFromDateTimeChooser)
 {
+    bool originalMultipleFieldsFlag = RuntimeEnabledFeatures::inputMultipleFieldsUIEnabled();
+    RuntimeEnabledFeatures::setInputMultipleFieldsUIEnabled(false);
     DateTimeChooserWebViewClient client;
     std::string url = m_baseURL + "date_time_chooser.html";
     URLTestHelpers::registerMockedURLLoad(toKURL(url), "date_time_chooser.html");
@@ -2136,8 +2141,8 @@ TEST_F(WebViewTest, ChooseValueFromDateTimeChooser)
     // Clear the WebViewClient from the webViewHelper to avoid use-after-free in the
     // WebViewHelper destructor.
     m_webViewHelper.reset();
+    RuntimeEnabledFeatures::setInputMultipleFieldsUIEnabled(originalMultipleFieldsFlag);
 }
-#endif
 
 TEST_F(WebViewTest, DispatchesFocusBlurOnViewToggle)
 {
@@ -2160,17 +2165,19 @@ TEST_F(WebViewTest, SmartClipData)
         "<div id=\"div4\" style=\"padding: 10px; margin: 10px; border: 2px "
         "solid skyblue; float: left; width: 190px; height: 30px; "
         "color: rgb(0, 0, 0); font-family: myahem; font-size: 8px; font-style: "
-        "normal; font-variant: normal; font-weight: normal; letter-spacing: "
-        "normal; line-height: normal; orphans: auto; text-align: start; "
+        "normal; font-variant-ligatures: normal; font-variant-caps: normal; "
+        "font-weight: normal; letter-spacing: "
+        "normal; line-height: normal; orphans: 2; text-align: start; "
         "text-indent: 0px; text-transform: none; white-space: normal; widows: "
-        "1; word-spacing: 0px; -webkit-text-stroke-width: 0px;\">Air "
+        "2; word-spacing: 0px; -webkit-text-stroke-width: 0px;\">Air "
         "conditioner</div><div id=\"div5\" style=\"padding: 10px; margin: "
         "10px; border: 2px solid skyblue; float: left; width: "
         "190px; height: 30px; color: rgb(0, 0, 0); font-family: myahem; "
-        "font-size: 8px; font-style: normal; font-variant: normal; "
-        "font-weight: normal; letter-spacing: normal; line-height: normal; "
-        "orphans: auto; text-align: start; text-indent: 0px; text-transform: "
-        "none; white-space: normal; widows: 1; word-spacing: 0px; "
+        "font-size: 8px; font-style: normal; font-variant-ligatures: normal; "
+        "font-variant-caps: normal; font-weight: normal; "
+        "letter-spacing: normal; line-height: normal; orphans: 2; "
+        "text-align: start; text-indent: 0px; text-transform: "
+        "none; white-space: normal; widows: 2; word-spacing: 0px; "
         "-webkit-text-stroke-width: 0px;\">Price 10,000,000won</div>";
     WebString clipText;
     WebString clipHtml;
@@ -2193,18 +2200,20 @@ TEST_F(WebViewTest, SmartClipDataWithPinchZoom)
         "<div id=\"div4\" style=\"padding: 10px; margin: 10px; border: 2px "
         "solid skyblue; float: left; width: 190px; height: 30px; "
         "color: rgb(0, 0, 0); font-family: myahem; font-size: 8px; font-style: "
-        "normal; font-variant: normal; font-weight: normal; letter-spacing: "
-        "normal; line-height: normal; orphans: auto; text-align: start; "
+        "normal; font-variant-ligatures: normal; font-variant-caps: normal; "
+        "font-weight: normal; letter-spacing: "
+        "normal; line-height: normal; orphans: 2; text-align: start; "
         "text-indent: 0px; text-transform: none; white-space: normal; widows: "
-        "1; word-spacing: 0px; -webkit-text-stroke-width: 0px;\">Air "
+        "2; word-spacing: 0px; -webkit-text-stroke-width: 0px;\">Air "
         "conditioner</div><div id=\"div5\" style=\"padding: 10px; margin: "
         "10px; border: 2px solid skyblue; float: left; width: "
         "190px; height: 30px; color: rgb(0, 0, 0); font-family: myahem; "
-        "font-size: 8px; font-style: normal; font-variant: normal; "
-        "font-weight: normal; letter-spacing: normal; line-height: normal; "
-        "orphans: auto; text-align: start; text-indent: 0px; text-transform: "
-        "none; white-space: normal; widows: 1; word-spacing: 0px; "
-        "-webkit-text-stroke-width: 0px;\">Price 10,000,000won</div>";
+        "font-size: 8px; font-style: normal; font-variant-ligatures: normal; "
+        "font-variant-caps: normal; font-weight: normal; letter-spacing: normal; "
+        "line-height: normal; orphans: 2; text-align: start; text-indent: 0px; "
+        "text-transform: none; white-space: normal; widows: 2; "
+        "word-spacing: 0px; -webkit-text-stroke-width: 0px;\">"
+        "Price 10,000,000won</div>";
     WebString clipText;
     WebString clipHtml;
     WebRect clipRect;
@@ -2490,13 +2499,13 @@ TEST_F(WebViewTest, DeleteElementWithRegisteredHandler)
 
     TrackExceptionState exceptionState;
     div->remove(exceptionState);
-#if ENABLE(OILPAN)
+
     // For oilpan we have to force a GC to ensure the event handlers have been removed when
     // checking below. We do a precise GC (collectAllGarbage does not scan the stack)
     // to ensure the div element dies. This is also why the Document is in a Persistent
     // since we want that to stay around.
-    Heap::collectAllGarbage();
-#endif
+    ThreadHeap::collectAllGarbage();
+
     EXPECT_FALSE(registry.hasEventHandlers(EventHandlerRegistry::ScrollEvent));
 }
 
@@ -2818,8 +2827,7 @@ TEST_F(WebViewTest, PreferredSizeDirtyLayout)
     EXPECT_EQ(100, size.width);
     EXPECT_EQ(100, size.height);
 
-    bool setStyle = documentElement.setAttribute("style", "display: none");
-    EXPECT_TRUE(setStyle);
+    documentElement.setAttribute("style", "display: none");
 
     size = webView->contentsPreferredMinimumSize();
     EXPECT_EQ(0, size.width);
@@ -2993,249 +3001,6 @@ TEST_F(WebViewTest, ShowUnhandledTapUIIfNeededWithPreventDefault)
 
     m_webViewHelper.reset(); // Remove dependency on locally scoped client.
 }
-
-// Test 3 frames, all on the same layer (i.e. [1 2 3])
-TEST_F(WebViewTest, TestPushFrameTimingRequestRectsToGraphicsLayer1)
-{
-    std::string url = m_baseURL + "frame_timing_inner.html?100px:100px";
-    registerMockedURLLoad(toKURL(url), "frame_timing_inner.html");
-    url = m_baseURL + "frame_timing_inner.html?200px:200px";
-    registerMockedURLLoad(toKURL(url), "frame_timing_inner.html");
-    url = m_baseURL + "frame_timing_inner.html?300px:300px";
-    registerMockedURLLoad(toKURL(url), "frame_timing_inner.html");
-    url = m_baseURL + "frame_timing_1.html";
-    registerMockedURLLoad(toKURL(url), "frame_timing_1.html");
-
-    WebView* webView = m_webViewHelper.initialize(true);
-    loadFrame(webView->mainFrame(), url);
-
-    webView->resize(WebSize(800, 600));
-    webView->updateAllLifecyclePhases();
-
-    WebViewImpl* webViewImpl = toWebViewImpl(webView);
-
-    Frame* frame = webViewImpl->page()->mainFrame();
-    int64_t id = frame->frameID();
-
-    EXPECT_EQ(3u, frame->tree().childCount());
-
-    WebVector<std::pair<int64_t, WebRect>> frameTimingRequests =
-        toLocalFrame(frame)->document()
-        ->layoutView()->enclosingLayer()
-        ->enclosingLayerForPaintInvalidationCrossingFrameBoundaries()
-        ->graphicsLayerBacking()->platformLayer()->frameTimingRequests();
-
-    EXPECT_EQ(4u, frameTimingRequests.size());
-    EXPECT_EQ(id + 0, frameTimingRequests[0].first);
-    EXPECT_EQ(WebRect(0, 0, 800, 600), frameTimingRequests[0].second);
-    EXPECT_EQ(id + 1, frameTimingRequests[1].first);
-    EXPECT_EQ(WebRect(2, 2, 100, 100), frameTimingRequests[1].second);
-    EXPECT_EQ(id + 2, frameTimingRequests[2].first);
-    EXPECT_EQ(WebRect(106, 2, 200, 200), frameTimingRequests[2].second);
-    EXPECT_EQ(id + 3, frameTimingRequests[3].first);
-    EXPECT_EQ(WebRect(310, 2, 300, 300), frameTimingRequests[3].second);
-}
-
-// Test 3 frames, where frame 2 is on a different GraphicsLayer (i.e. [1 2' 3])
-TEST_F(WebViewTest, TestPushFrameTimingRequestRectsToGraphicsLayer2)
-{
-    std::string url = m_baseURL + "frame_timing_inner.html?100px:100px";
-    registerMockedURLLoad(toKURL(url), "frame_timing_inner.html");
-    url = m_baseURL + "frame_timing_inner.html?200px:200px";
-    registerMockedURLLoad(toKURL(url), "frame_timing_inner.html");
-    url = m_baseURL + "frame_timing_inner.html?300px:300px";
-    registerMockedURLLoad(toKURL(url), "frame_timing_inner.html");
-    url = m_baseURL + "frame_timing_2.html";
-    registerMockedURLLoad(toKURL(url), "frame_timing_2.html");
-
-    WebView* webView = m_webViewHelper.initialize(true);
-    loadFrame(webView->mainFrame(), url);
-
-    webView->resize(WebSize(800, 600));
-    webView->updateAllLifecyclePhases();
-
-    WebViewImpl* webViewImpl = toWebViewImpl(webView);
-
-    Frame* frame = webViewImpl->page()->mainFrame();
-    int64_t id = frame->frameID();
-
-    EXPECT_EQ(3u, frame->tree().childCount());
-
-    const WebLayer* graphicsLayer1 =
-        toLocalFrame(webViewImpl->page()->mainFrame())->document()
-        ->layoutView()->enclosingLayer()
-        ->enclosingLayerForPaintInvalidationCrossingFrameBoundaries()
-        ->graphicsLayerBacking()->platformLayer();
-    WebVector<std::pair<int64_t, WebRect>> frameTimingRequests1 =
-        graphicsLayer1->frameTimingRequests();
-
-    EXPECT_EQ(3u, frameTimingRequests1.size());
-    EXPECT_EQ(id + 0, frameTimingRequests1[0].first);
-    EXPECT_EQ(WebRect(0, 0, 800, 600), frameTimingRequests1[0].second);
-    EXPECT_EQ(id + 1, frameTimingRequests1[1].first);
-    EXPECT_EQ(WebRect(2, 2, 100, 100), frameTimingRequests1[1].second);
-    EXPECT_EQ(id + 3, frameTimingRequests1[2].first);
-    EXPECT_EQ(WebRect(310, 2, 300, 300), frameTimingRequests1[2].second);
-
-    const WebLayer* graphicsLayer2 = nullptr;
-    for (Frame* frame = webViewImpl->page()->mainFrame(); frame;
-        frame = frame->tree().traverseNext()) {
-        graphicsLayer2 = toLocalFrame(frame)->document()->layoutView()
-            ->enclosingLayer()
-            ->enclosingLayerForPaintInvalidationCrossingFrameBoundaries()
-            ->graphicsLayerBacking()->platformLayer();
-        if (graphicsLayer2 != graphicsLayer1)
-            break;
-    }
-    WebVector<std::pair<int64_t, WebRect>> frameTimingRequests2 =
-        graphicsLayer2->frameTimingRequests();
-    EXPECT_EQ(1u, frameTimingRequests2.size());
-    EXPECT_EQ(id + 2, frameTimingRequests2[0].first);
-    EXPECT_EQ(WebRect(2, 2, 200, 200), frameTimingRequests2[0].second);
-}
-
-
-// Test nested frames (i.e. [1 2'[4 5'] 3])
-TEST_F(WebViewTest, TestPushFrameTimingRequestRectsToGraphicsLayer3)
-{
-    std::string url = m_baseURL + "frame_timing_inner.html?100px:100px";
-    registerMockedURLLoad(toKURL(url), "frame_timing_inner.html");
-    url = m_baseURL + "frame_timing_inner.html?200px:200px";
-    registerMockedURLLoad(toKURL(url), "frame_timing_inner.html");
-    url = m_baseURL + "frame_timing_inner.html?300px:300px";
-    registerMockedURLLoad(toKURL(url), "frame_timing_inner.html");
-    url = m_baseURL + "frame_timing_b.html";
-    registerMockedURLLoad(toKURL(url), "frame_timing_b.html");
-    url = m_baseURL + "frame_timing_3.html";
-    registerMockedURLLoad(toKURL(url), "frame_timing_3.html");
-
-    WebView* webView = m_webViewHelper.initialize(true);
-    loadFrame(webView->mainFrame(), url);
-
-    webView->resize(WebSize(800, 600));
-    webView->updateAllLifecyclePhases();
-
-    WebViewImpl* webViewImpl = toWebViewImpl(webView);
-
-    Frame* frame = webViewImpl->page()->mainFrame();
-    int64_t id = frame->frameID();
-
-    EXPECT_EQ(3u, frame->tree().childCount());
-
-    const WebLayer* graphicsLayer1 =
-        toLocalFrame(webViewImpl->page()->mainFrame())->document()
-        ->layoutView()->enclosingLayer()
-        ->enclosingLayerForPaintInvalidationCrossingFrameBoundaries()
-        ->graphicsLayerBacking()->platformLayer();
-    WebVector<std::pair<int64_t, WebRect>> frameTimingRequests1 =
-        graphicsLayer1->frameTimingRequests();
-
-    EXPECT_EQ(3u, frameTimingRequests1.size());
-    EXPECT_EQ(id + 0, frameTimingRequests1[0].first);
-    EXPECT_EQ(WebRect(0, 0, 800, 600), frameTimingRequests1[0].second);
-    EXPECT_EQ(WebRect(2, 2, 100, 100), frameTimingRequests1[1].second);
-    EXPECT_EQ(WebRect(410, 2, 200, 200), frameTimingRequests1[2].second);
-
-    const WebLayer* graphicsLayer2 = nullptr;
-    for (Frame* frame = webViewImpl->page()->mainFrame(); frame;
-        frame = frame->tree().traverseNext()) {
-        graphicsLayer2 = toLocalFrame(frame)->document()->layoutView()
-            ->enclosingLayer()
-            ->enclosingLayerForPaintInvalidationCrossingFrameBoundaries()
-            ->graphicsLayerBacking()->platformLayer();
-        if (graphicsLayer2 != graphicsLayer1)
-            break;
-    }
-    WebVector<std::pair<int64_t, WebRect>> frameTimingRequests2 =
-        graphicsLayer2->frameTimingRequests();
-    EXPECT_EQ(2u, frameTimingRequests2.size());
-    EXPECT_EQ(WebRect(0, 0, 300, 300), frameTimingRequests2[0].second);
-    EXPECT_EQ(WebRect(2, 2, 100, 100), frameTimingRequests2[1].second);
-
-    const WebLayer* graphicsLayer3 = nullptr;
-    for (Frame* frame = webViewImpl->page()->mainFrame(); frame;
-        frame = frame->tree().traverseNext()) {
-        graphicsLayer3 = toLocalFrame(frame)->document()->layoutView()
-            ->enclosingLayer()
-            ->enclosingLayerForPaintInvalidationCrossingFrameBoundaries()
-            ->graphicsLayerBacking()->platformLayer();
-        if (graphicsLayer3 != graphicsLayer1 && graphicsLayer3 != graphicsLayer2)
-            break;
-    }
-    WebVector<std::pair<int64_t, WebRect>> frameTimingRequests3 =
-        graphicsLayer3->frameTimingRequests();
-    EXPECT_EQ(1u, frameTimingRequests3.size());
-    EXPECT_EQ(WebRect(2, 2, 100, 100), frameTimingRequests3[0].second);
-}
-
-// Test 3 frames, all on the same layer (i.e. [1 2 3])
-// Fails on android, see crbug.com/488381.
-#if OS(ANDROID)
-TEST_F(WebViewTest, DISABLED_TestRecordFrameTimingEvents)
-#else
-TEST_F(WebViewTest, TestRecordFrameTimingEvents)
-#endif
-{
-    std::string url = m_baseURL + "frame_timing_inner.html?100px:100px";
-    registerMockedURLLoad(toKURL(url), "frame_timing_inner.html");
-    url = m_baseURL + "frame_timing_inner.html?200px:200px";
-    registerMockedURLLoad(toKURL(url), "frame_timing_inner.html");
-    url = m_baseURL + "frame_timing_inner.html?300px:300px";
-    registerMockedURLLoad(toKURL(url), "frame_timing_inner.html");
-    url = m_baseURL + "frame_timing_1.html";
-    registerMockedURLLoad(toKURL(url), "frame_timing_1.html");
-
-    WebView* webView = m_webViewHelper.initialize(true);
-    loadFrame(webView->mainFrame(), url);
-
-    webView->resize(WebSize(800, 600));
-    webView->updateAllLifecyclePhases();
-
-    WebViewImpl* webViewImpl = toWebViewImpl(webView);
-
-    Frame* frame = webViewImpl->page()->mainFrame();
-    int64_t id = frame->frameID();
-
-    Vector<WebFrameTimingEvent> compositePairs;
-    compositePairs.append(WebFrameTimingEvent(1, 2.0));
-    compositePairs.append(WebFrameTimingEvent(2, 3.0));
-    compositePairs.append(WebFrameTimingEvent(3, 4.0));
-    WebVector<WebFrameTimingEvent> compositeEvents(compositePairs);
-    webViewImpl->recordFrameTimingEvent(WebView::CompositeEvent, id, compositeEvents);
-    PerformanceEntryVector composites = DOMWindowPerformance::performance(*frame->domWindow())->getEntriesByType("composite");
-    PerformanceEntryVector renders = DOMWindowPerformance::performance(*frame->domWindow())->getEntriesByType("render");
-    ASSERT_EQ(3ul, composites.size());
-    ASSERT_EQ(0ul, renders.size());
-    for (size_t i = 0; i < composites.size(); ++i) {
-        double docTime = frame->domWindow()->document()->loader()->timing().monotonicTimeToZeroBasedDocumentTime(compositePairs[i].startTime) * 1000.0;
-        ASSERT_EQ(docTime, composites[i]->startTime());
-    }
-
-    // Skip ahead to subframe 2.
-    frame = frame->tree().traverseNext();
-    frame = frame->tree().traverseNext();
-    id += 2;
-
-    Vector<WebFrameTimingEvent> renderPairs;
-    renderPairs.append(WebFrameTimingEvent(4, 5.0, 6.0));
-    renderPairs.append(WebFrameTimingEvent(5, 6.0, 7.0));
-    renderPairs.append(WebFrameTimingEvent(6, 7.0, 8.0));
-    renderPairs.append(WebFrameTimingEvent(7, 8.0, 9.0));
-    WebVector<WebFrameTimingEvent> renderEvents(renderPairs);
-    webViewImpl->recordFrameTimingEvent(WebView::RenderEvent, id, renderEvents);
-    composites = DOMWindowPerformance::performance(*frame->domWindow())->getEntriesByType("composite");
-    renders = DOMWindowPerformance::performance(*frame->domWindow())->getEntriesByType("render");
-    ASSERT_EQ(0ul, composites.size());
-    ASSERT_EQ(4ul, renders.size());
-    for (size_t i = 0; i < renders.size(); ++i) {
-        double docStartTime = frame->domWindow()->document()->loader()->timing().monotonicTimeToZeroBasedDocumentTime(renderPairs[i].startTime) * 1000.0;
-        ASSERT_DOUBLE_EQ(docStartTime, renders[i]->startTime());
-        double docFinishTime = frame->domWindow()->document()->loader()->timing().monotonicTimeToZeroBasedDocumentTime(renderPairs[i].finishTime) * 1000.0;
-        double docDuration = docFinishTime - docStartTime;
-        ASSERT_DOUBLE_EQ(docDuration, renders[i]->duration());
-    }
-}
-
 
 TEST_F(WebViewTest, StopLoadingIfJavaScriptURLReturnsNoStringResult)
 {

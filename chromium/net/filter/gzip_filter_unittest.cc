@@ -2,15 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "net/filter/gzip_filter.h"
+
 #include <fstream>
+#include <memory>
 #include <ostream>
 
 #include "base/bit_cast.h"
 #include "base/files/file_util.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "net/base/io_buffer.h"
-#include "net/filter/gzip_filter.h"
 #include "net/filter/mock_filter_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
@@ -217,7 +218,7 @@ class GZipUnitTest : public PlatformTest {
   void InitFilter(Filter::FilterType type) {
     std::vector<Filter::FilterType> filter_types;
     filter_types.push_back(type);
-    filter_.reset(Filter::Factory(filter_types, filter_context_));
+    filter_ = Filter::Factory(filter_types, filter_context_);
     ASSERT_TRUE(filter_.get());
     ASSERT_GE(filter_->stream_buffer_size(), kDefaultBufferSize);
   }
@@ -225,15 +226,15 @@ class GZipUnitTest : public PlatformTest {
   void InitFilterWithBufferSize(Filter::FilterType type, int buffer_size) {
     std::vector<Filter::FilterType> filter_types;
     filter_types.push_back(type);
-    filter_.reset(Filter::FactoryForTests(filter_types, filter_context_,
-                                          buffer_size));
+    filter_ =
+        Filter::FactoryForTests(filter_types, filter_context_, buffer_size);
     ASSERT_TRUE(filter_.get());
   }
 
   const char* source_buffer() const { return source_buffer_.data(); }
   int source_len() const { return static_cast<int>(source_buffer_.size()); }
 
-  scoped_ptr<Filter> filter_;
+  std::unique_ptr<Filter> filter_;
 
   std::string source_buffer_;
 

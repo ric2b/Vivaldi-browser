@@ -44,7 +44,7 @@ public:
     void paint(const PaintInfo&, const LayoutPoint&) const override;
     void styleDidChange(StyleDifference, const ComputedStyle* oldStyle) override;
     void setNeedsBoundariesUpdate() final { m_needsBoundariesUpdate = true; }
-    virtual bool didTransformToRootUpdate() { return false; }
+    bool didScreenScaleFactorChange() const { return m_didScreenScaleFactorChange; }
     bool isObjectBoundingBoxValid() const { return m_objectBoundingBoxValid; }
 
     bool selfWillPaint() const;
@@ -91,7 +91,8 @@ private:
     FloatRect m_objectBoundingBox;
     FloatRect m_strokeBoundingBox;
     bool m_objectBoundingBoxValid;
-    bool m_needsBoundariesUpdate;
+    bool m_needsBoundariesUpdate : 1;
+    bool m_didScreenScaleFactorChange : 1;
     mutable bool m_hasNonIsolatedBlendingDescendants : 1;
     mutable bool m_hasNonIsolatedBlendingDescendantsDirty : 1;
 };

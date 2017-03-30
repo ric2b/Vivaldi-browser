@@ -60,7 +60,9 @@ std::unique_ptr<blink::WebGestureEvent> ProtoToGestureScrollUpdate(
   event->data.scrollUpdate.previousUpdateInSequencePrevented =
       details.previous_update_in_sequence_prevented();
   event->data.scrollUpdate.preventPropagation = details.prevent_propagation();
-  event->data.scrollUpdate.inertial = details.inertial();
+  event->data.scrollUpdate.inertialPhase =
+      details.inertial() ? blink::WebGestureEvent::MomentumPhase
+                         : blink::WebGestureEvent::UnknownMomentumPhase;
 
   return event;
 }
@@ -126,6 +128,49 @@ std::unique_ptr<blink::WebGestureEvent> ProtoToGesturePinchUpdate(
   return event;
 }
 
+std::unique_ptr<blink::WebGestureEvent> ProtoToGestureTapDown(
+    const InputMessage& proto) {
+  std::unique_ptr<blink::WebGestureEvent> event(
+      BuildCommonWebGesture(proto, blink::WebInputEvent::Type::GestureTapDown));
+
+  const GestureTapDown& details = proto.gesture_tap_down();
+  event->data.tapDown.width = details.width();
+  event->data.tapDown.height = details.height();
+
+  return event;
+}
+
+std::unique_ptr<blink::WebGestureEvent> ProtoToGestureTapCancel(
+    const InputMessage& proto) {
+  return BuildCommonWebGesture(proto,
+                               blink::WebInputEvent::Type::GestureTapCancel);
+}
+
+std::unique_ptr<blink::WebGestureEvent> ProtoToGestureTapUnconfirmed(
+    const InputMessage& proto) {
+  std::unique_ptr<blink::WebGestureEvent> event(BuildCommonWebGesture(
+      proto, blink::WebInputEvent::Type::GestureTapUnconfirmed));
+
+  const GestureTap& details = proto.gesture_tap();
+  event->data.tap.tapCount = details.tap_count();
+  event->data.tap.width = details.width();
+  event->data.tap.height = details.height();
+
+  return event;
+}
+
+std::unique_ptr<blink::WebGestureEvent> ProtoToGestureShowPress(
+    const InputMessage& proto) {
+  std::unique_ptr<blink::WebGestureEvent> event(BuildCommonWebGesture(
+      proto, blink::WebInputEvent::Type::GestureShowPress));
+
+  const GestureShowPress& details = proto.gesture_show_press();
+  event->data.showPress.width = details.width();
+  event->data.showPress.height = details.height();
+
+  return event;
+}
+
 }  // namespace
 
 InputMessageConverter::InputMessageConverter() {}
@@ -163,6 +208,18 @@ std::unique_ptr<blink::WebGestureEvent> InputMessageConverter::ProcessMessage(
       break;
     case InputMessage::Type_GesturePinchUpdate:
       event = ProtoToGesturePinchUpdate(message);
+      break;
+    case InputMessage::Type_GestureTapDown:
+      event = ProtoToGestureTapDown(message);
+      break;
+    case InputMessage::Type_GestureTapCancel:
+      event = ProtoToGestureTapCancel(message);
+      break;
+    case InputMessage::Type_GestureTapUnconfirmed:
+      event = ProtoToGestureTapUnconfirmed(message);
+      break;
+    case InputMessage::Type_GestureShowPress:
+      event = ProtoToGestureShowPress(message);
       break;
     case InputMessage::UNKNOWN:
       DLOG(FATAL) << "Received an InputMessage with an unknown type.";

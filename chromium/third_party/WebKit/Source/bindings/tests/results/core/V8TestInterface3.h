@@ -22,18 +22,21 @@ class V8TestInterface3 {
 public:
     CORE_EXPORT static bool hasInstance(v8::Local<v8::Value>, v8::Isolate*);
     static v8::Local<v8::Object> findInstanceInPrototypeChain(v8::Local<v8::Value>, v8::Isolate*);
-    CORE_EXPORT static v8::Local<v8::FunctionTemplate> domTemplate(v8::Isolate*);
+    CORE_EXPORT static v8::Local<v8::FunctionTemplate> domTemplate(v8::Isolate*, const DOMWrapperWorld&);
     static TestInterface3* toImpl(v8::Local<v8::Object> object)
     {
         return toScriptWrappable(object)->toImpl<TestInterface3>();
     }
     CORE_EXPORT static TestInterface3* toImplWithTypeCheck(v8::Isolate*, v8::Local<v8::Value>);
     CORE_EXPORT static const WrapperTypeInfo wrapperTypeInfo;
-    static void refObject(ScriptWrappable*);
-    static void derefObject(ScriptWrappable*);
+    static void traceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable)
+    {
+        visitor->traceWrappers(scriptWrappable->toImpl<TestInterface3>());
+    }
     template<typename VisitorDispatcher>
     static void trace(VisitorDispatcher visitor, ScriptWrappable* scriptWrappable)
     {
+        visitor->trace(scriptWrappable->toImpl<TestInterface3>());
     }
     static void visitDOMWrapper(v8::Isolate*, ScriptWrappable*, const v8::Persistent<v8::Object>&);
     static void indexedPropertyGetterCustom(uint32_t, const v8::PropertyCallbackInfo<v8::Value>&);
@@ -45,8 +48,7 @@ public:
     static void namedPropertyDeleterCustom(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Boolean>&);
     static void namedPropertyEnumeratorCustom(const v8::PropertyCallbackInfo<v8::Array>&);
     static const int internalFieldCount = v8DefaultWrapperInternalFieldCount + 0;
-    static void installConditionallyEnabledProperties(v8::Local<v8::Object>, v8::Isolate*) { }
-    static void preparePrototypeAndInterfaceObject(v8::Local<v8::Context>, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate) { }
+    CORE_EXPORT static void preparePrototypeAndInterfaceObject(v8::Local<v8::Context>, const DOMWrapperWorld&, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate) { }
 };
 
 template <>

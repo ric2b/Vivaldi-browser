@@ -22,7 +22,6 @@
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_android.h"
-#include "content/common/frame_messages.h"
 #include "content/common/input_messages.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/browser_thread.h"
@@ -264,8 +263,8 @@ void ImeAdapterAndroid::SetEditableSelectionOffsets(
   if (!rfh)
     return;
 
-  rfh->Send(new FrameMsg_SetEditableSelectionOffsets(rfh->GetRoutingID(),
-                                                     start, end));
+  rfh->Send(new InputMsg_SetEditableSelectionOffsets(rfh->GetRoutingID(), start,
+                                                     end));
 }
 
 void ImeAdapterAndroid::SetCharacterBounds(
@@ -276,7 +275,7 @@ void ImeAdapterAndroid::SetCharacterBounds(
     return;
 
   const size_t coordinates_array_size = character_bounds.size() * 4;
-  scoped_ptr<float[]> coordinates_array(new float[coordinates_array_size]);
+  std::unique_ptr<float[]> coordinates_array(new float[coordinates_array_size]);
   for (size_t i = 0; i < character_bounds.size(); ++i) {
     const gfx::RectF& rect = character_bounds[i];
     const size_t coordinates_array_index = i * 4;

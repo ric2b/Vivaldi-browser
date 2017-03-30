@@ -8,6 +8,8 @@
 #include <cstdlib>
 #include <functional>
 
+#include "base/memory/ptr_util.h"
+
 #if defined(OS_POSIX)
 #include <sys/resource.h>
 #endif
@@ -24,8 +26,8 @@
 #include "base/single_thread_task_runner.h"
 #include "base/sys_info.h"
 #include "base/task_runner_util.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "net/base/net_errors.h"
 #include "net/disk_cache/cache_util.h"
@@ -209,11 +211,11 @@ class SimpleBackendImpl::ActiveEntryProxy
     }
   }
 
-  static scoped_ptr<SimpleEntryImpl::ActiveEntryProxy> Create(
+  static std::unique_ptr<SimpleEntryImpl::ActiveEntryProxy> Create(
       int64_t entry_hash,
       SimpleBackendImpl* backend) {
-    scoped_ptr<SimpleEntryImpl::ActiveEntryProxy>
-        proxy(new ActiveEntryProxy(entry_hash, backend));
+    std::unique_ptr<SimpleEntryImpl::ActiveEntryProxy> proxy(
+        new ActiveEntryProxy(entry_hash, backend));
     return proxy;
   }
 
@@ -243,18 +245,16 @@ SimpleBackendImpl::SimpleBackendImpl(
 }
 
 SimpleBackendImpl::~SimpleBackendImpl() {
-  index_->WriteToDisk();
+  index_->WriteToDisk(SimpleIndex::INDEX_WRITE_REASON_SHUTDOWN);
 }
 
 int SimpleBackendImpl::Init(const CompletionCallback& completion_callback) {
   worker_pool_ = g_sequenced_worker_pool.Get().GetTaskRunner();
 
   index_.reset(new SimpleIndex(
-      base::ThreadTaskRunnerHandle::Get(),
-      this,
-      cache_type_,
-      make_scoped_ptr(new SimpleIndexFile(
-          cache_thread_, worker_pool_.get(), cache_type_, path_))));
+      base::ThreadTaskRunnerHandle::Get(), this, cache_type_,
+      base::WrapUnique(new SimpleIndexFile(cache_thread_, worker_pool_.get(),
+                                           cache_type_, path_))));
   index_->ExecuteWhenReady(
       base::Bind(&RecordIndexLoad, cache_type_, base::TimeTicks::Now()));
 
@@ -289,7 +289,7 @@ void SimpleBackendImpl::OnDoomStart(uint64_t entry_hash) {
 
 void SimpleBackendImpl::OnDoomComplete(uint64_t entry_hash) {
   DCHECK_EQ(1u, entries_pending_doom_.count(entry_hash));
-  base::hash_map<uint64_t, std::vector<Closure>>::iterator it =
+  std::unordered_map<uint64_t, std::vector<Closure>>::iterator it =
       entries_pending_doom_.find(entry_hash);
   std::vector<Closure> to_run_closures;
   to_run_closures.swap(it->second);
@@ -301,7 +301,7 @@ void SimpleBackendImpl::OnDoomComplete(uint64_t entry_hash) {
 
 void SimpleBackendImpl::DoomEntries(std::vector<uint64_t>* entry_hashes,
                                     const net::CompletionCallback& callback) {
-  scoped_ptr<std::vector<uint64_t>> mass_doom_entry_hashes(
+  std::unique_ptr<std::vector<uint64_t>> mass_doom_entry_hashes(
       new std::vector<uint64_t>());
   mass_doom_entry_hashes->swap(*entry_hashes);
 
@@ -378,7 +378,7 @@ int SimpleBackendImpl::OpenEntry(const std::string& key,
 
   // TODO(gavinp): Factor out this (not quite completely) repetitive code
   // block from OpenEntry/CreateEntry/DoomEntry.
-  base::hash_map<uint64_t, std::vector<Closure>>::iterator it =
+  std::unordered_map<uint64_t, std::vector<Closure>>::iterator it =
       entries_pending_doom_.find(entry_hash);
   if (it != entries_pending_doom_.end()) {
     Callback<int(const net::CompletionCallback&)> operation =
@@ -390,14 +390,7 @@ int SimpleBackendImpl::OpenEntry(const std::string& key,
   }
   scoped_refptr<SimpleEntryImpl> simple_entry =
       CreateOrFindActiveEntry(entry_hash, key);
-  CompletionCallback backend_callback =
-      base::Bind(&SimpleBackendImpl::OnEntryOpenedFromKey,
-                 AsWeakPtr(),
-                 key,
-                 entry,
-                 simple_entry,
-                 callback);
-  return simple_entry->OpenEntry(entry, backend_callback);
+  return simple_entry->OpenEntry(entry, callback);
 }
 
 int SimpleBackendImpl::CreateEntry(const std::string& key,
@@ -406,7 +399,7 @@ int SimpleBackendImpl::CreateEntry(const std::string& key,
   DCHECK_LT(0u, key.size());
   const uint64_t entry_hash = simple_util::GetEntryHashKey(key);
 
-  base::hash_map<uint64_t, std::vector<Closure>>::iterator it =
+  std::unordered_map<uint64_t, std::vector<Closure>>::iterator it =
       entries_pending_doom_.find(entry_hash);
   if (it != entries_pending_doom_.end()) {
     Callback<int(const net::CompletionCallback&)> operation =
@@ -425,7 +418,7 @@ int SimpleBackendImpl::DoomEntry(const std::string& key,
                                  const net::CompletionCallback& callback) {
   const uint64_t entry_hash = simple_util::GetEntryHashKey(key);
 
-  base::hash_map<uint64_t, std::vector<Closure>>::iterator it =
+  std::unordered_map<uint64_t, std::vector<Closure>>::iterator it =
       entries_pending_doom_.find(entry_hash);
   if (it != entries_pending_doom_.end()) {
     Callback<int(const net::CompletionCallback&)> operation =
@@ -530,12 +523,12 @@ class SimpleBackendImpl::SimpleIterator final : public Iterator {
 
  private:
   base::WeakPtr<SimpleBackendImpl> backend_;
-  scoped_ptr<std::vector<uint64_t>> hashes_to_enumerate_;
+  std::unique_ptr<std::vector<uint64_t>> hashes_to_enumerate_;
   base::WeakPtrFactory<SimpleIterator> weak_factory_;
 };
 
-scoped_ptr<Backend::Iterator> SimpleBackendImpl::CreateIterator() {
-  return scoped_ptr<Iterator>(new SimpleIterator(AsWeakPtr()));
+std::unique_ptr<Backend::Iterator> SimpleBackendImpl::CreateIterator() {
+  return std::unique_ptr<Iterator>(new SimpleIterator(AsWeakPtr()));
 }
 
 void SimpleBackendImpl::GetStats(base::StringPairs* stats) {
@@ -566,7 +559,7 @@ void SimpleBackendImpl::IndexReadyForDoom(Time initial_time,
     callback.Run(result);
     return;
   }
-  scoped_ptr<std::vector<uint64_t>> removed_key_hashes(
+  std::unique_ptr<std::vector<uint64_t>> removed_key_hashes(
       index_->GetEntriesBetween(initial_time, end_time).release());
   DoomEntries(removed_key_hashes.get(), callback);
 }
@@ -631,7 +624,7 @@ scoped_refptr<SimpleEntryImpl> SimpleBackendImpl::CreateOrFindActiveEntry(
 int SimpleBackendImpl::OpenEntryFromHash(uint64_t entry_hash,
                                          Entry** entry,
                                          const CompletionCallback& callback) {
-  base::hash_map<uint64_t, std::vector<Closure>>::iterator it =
+  std::unordered_map<uint64_t, std::vector<Closure>>::iterator it =
       entries_pending_doom_.find(entry_hash);
   if (it != entries_pending_doom_.end()) {
     Callback<int(const net::CompletionCallback&)> operation =
@@ -658,9 +651,9 @@ int SimpleBackendImpl::OpenEntryFromHash(uint64_t entry_hash,
 int SimpleBackendImpl::DoomEntryFromHash(uint64_t entry_hash,
                                          const CompletionCallback& callback) {
   Entry** entry = new Entry*();
-  scoped_ptr<Entry*> scoped_entry(entry);
+  std::unique_ptr<Entry*> scoped_entry(entry);
 
-  base::hash_map<uint64_t, std::vector<Closure>>::iterator pending_it =
+  std::unordered_map<uint64_t, std::vector<Closure>>::iterator pending_it =
       entries_pending_doom_.find(entry_hash);
   if (pending_it != entries_pending_doom_.end()) {
     Callback<int(const net::CompletionCallback&)> operation =
@@ -713,31 +706,8 @@ void SimpleBackendImpl::OnEntryOpenedFromHash(
   }
 }
 
-void SimpleBackendImpl::OnEntryOpenedFromKey(
-    const std::string key,
-    Entry** entry,
-    const scoped_refptr<SimpleEntryImpl>& simple_entry,
-    const CompletionCallback& callback,
-    int error_code) {
-  int final_code = error_code;
-  if (final_code == net::OK) {
-    bool key_matches = key.compare(simple_entry->key()) == 0;
-    if (!key_matches) {
-      // TODO(clamy): Add a unit test to check this code path.
-      DLOG(WARNING) << "Key mismatch on open.";
-      simple_entry->Doom();
-      simple_entry->Close();
-      final_code = net::ERR_FAILED;
-    } else {
-      DCHECK_EQ(simple_entry->entry_hash(), simple_util::GetEntryHashKey(key));
-    }
-    SIMPLE_CACHE_UMA(BOOLEAN, "KeyMatchedOnOpen", cache_type_, key_matches);
-  }
-  callback.Run(final_code);
-}
-
 void SimpleBackendImpl::DoomEntriesComplete(
-    scoped_ptr<std::vector<uint64_t>> entry_hashes,
+    std::unique_ptr<std::vector<uint64_t>> entry_hashes,
     const net::CompletionCallback& callback,
     int result) {
   for (const uint64_t& entry_hash : *entry_hashes)

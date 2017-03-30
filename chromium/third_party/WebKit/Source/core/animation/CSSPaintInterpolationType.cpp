@@ -15,7 +15,7 @@ InterpolationValue CSSPaintInterpolationType::maybeConvertNeutral(const Interpol
     return InterpolationValue(CSSColorInterpolationType::createInterpolableColor(Color::transparent));
 }
 
-InterpolationValue CSSPaintInterpolationType::maybeConvertInitial(const StyleResolverState&) const
+InterpolationValue CSSPaintInterpolationType::maybeConvertInitial(const StyleResolverState&, ConversionCheckers& conversionCheckers) const
 {
     StyleColor initialColor;
     if (!PaintPropertyFunctions::getInitialColor(cssProperty(), initialColor))
@@ -76,7 +76,7 @@ InterpolationValue CSSPaintInterpolationType::maybeConvertValue(const CSSValue& 
     OwnPtr<InterpolableValue> interpolableColor = CSSColorInterpolationType::maybeCreateInterpolableColor(value);
     if (!interpolableColor)
         return nullptr;
-    return InterpolationValue(interpolableColor.release());
+    return InterpolationValue(std::move(interpolableColor));
 }
 
 InterpolationValue CSSPaintInterpolationType::maybeConvertUnderlyingValue(const InterpolationEnvironment& environment) const

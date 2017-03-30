@@ -8,8 +8,12 @@
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/modules/v8/V8CryptoKey.h"
 #include "bindings/modules/v8/V8DOMFileSystem.h"
+#include "bindings/modules/v8/V8RTCCertificate.h"
 #include "modules/filesystem/DOMFileSystem.h"
+#include "modules/mediastream/RTCCertificate.h"
 #include "public/platform/Platform.h"
+#include "public/platform/WebRTCCertificate.h"
+#include "public/platform/WebRTCCertificateGenerator.h"
 
 namespace blink {
 
@@ -73,8 +77,8 @@ enum AssymetricCryptoKeyType {
 };
 
 
-ScriptValueSerializerForModules::ScriptValueSerializerForModules(SerializedScriptValueWriter& writer, MessagePortArray* messagePorts, ArrayBufferArray* arrayBuffers, ImageBitmapArray* imageBitmaps, WebBlobInfoArray* blobInfo, BlobDataHandleMap& blobDataHandles, v8::TryCatch& tryCatch, ScriptState* scriptState)
-    : ScriptValueSerializer(writer, messagePorts, arrayBuffers, imageBitmaps, blobInfo, blobDataHandles, tryCatch, scriptState)
+ScriptValueSerializerForModules::ScriptValueSerializerForModules(SerializedScriptValueWriter& writer, const Transferables* transferables, WebBlobInfoArray* blobInfo, BlobDataHandleMap& blobDataHandles, v8::TryCatch& tryCatch, ScriptState* scriptState)
+    : ScriptValueSerializer(writer, transferables, blobInfo, blobDataHandles, tryCatch, scriptState)
 {
 }
 
@@ -96,6 +100,15 @@ bool ScriptValueSerializerForModules::writeCryptoKey(v8::Local<v8::Value> value)
     if (!key)
         return false;
     return toSerializedScriptValueWriterForModules(writer()).writeCryptoKey(key->key());
+}
+
+ScriptValueSerializer::StateBase* ScriptValueSerializerForModules::writeRTCCertificate(v8::Local<v8::Value> value, ScriptValueSerializer::StateBase* next)
+{
+    RTCCertificate* certificate = V8RTCCertificate::toImpl(value.As<v8::Object>());
+    if (!certificate)
+        return handleError(DataCloneError, "An RTCCertificate object could not be cloned.", next);
+    toSerializedScriptValueWriterForModules(writer()).writeRTCCertificate(*certificate);
+    return nullptr;
 }
 
 void SerializedScriptValueWriterForModules::writeDOMFileSystem(int type, const String& name, const String& url)
@@ -137,6 +150,15 @@ bool SerializedScriptValueWriterForModules::writeCryptoKey(const WebCryptoKey& k
     doWriteUint32(keyData.size());
     append(keyData.data(), keyData.size());
     return true;
+}
+
+void SerializedScriptValueWriterForModules::writeRTCCertificate(const RTCCertificate& certificate)
+{
+    append(RTCCertificateTag);
+
+    WebRTCCertificatePEM pem = certificate.certificateShallowCopy()->toPEM();
+    doWriteWebCoreString(String(pem.privateKey().c_str()));
+    doWriteWebCoreString(String(pem.certificate().c_str()));
 }
 
 void SerializedScriptValueWriterForModules::doWriteHmacKey(const WebCryptoKey& key)
@@ -290,23 +312,26 @@ void SerializedScriptValueWriterForModules::doWriteKeyUsages(const WebCryptoKeyU
     doWriteUint32(value);
 }
 
-ScriptValueSerializer::StateBase* ScriptValueSerializerForModules::doSerializeValue(v8::Local<v8::Value> value, ScriptValueSerializer::StateBase* next)
+ScriptValueSerializer::StateBase* ScriptValueSerializerForModules::doSerializeObject(v8::Local<v8::Object> jsObject, ScriptValueSerializer::StateBase* next)
 {
-    bool isDOMFileSystem = V8DOMFileSystem::hasInstance(value, isolate());
-    if (isDOMFileSystem || V8CryptoKey::hasInstance(value, isolate())) {
-        v8::Local<v8::Object> jsObject = value.As<v8::Object>();
-        if (jsObject.IsEmpty())
-            return handleError(DataCloneError, "An object could not be cloned.", next);
+    DCHECK(!jsObject.IsEmpty());
+
+    if (V8DOMFileSystem::hasInstance(jsObject, isolate())) {
         greyObject(jsObject);
-
-        if (isDOMFileSystem)
-            return writeDOMFileSystem(value, next);
-
-        if (!writeCryptoKey(value))
-            return handleError(DataCloneError, "Couldn't serialize key data", next);
-        return 0;
+        return writeDOMFileSystem(jsObject, next);
     }
-    return ScriptValueSerializer::doSerializeValue(value, next);
+    if (V8CryptoKey::hasInstance(jsObject, isolate())) {
+        greyObject(jsObject);
+        if (!writeCryptoKey(jsObject))
+            return handleError(DataCloneError, "Couldn't serialize key data", next);
+        return nullptr;
+    }
+    if (V8RTCCertificate::hasInstance(jsObject, isolate())) {
+        greyObject(jsObject);
+        return writeRTCCertificate(jsObject, next);
+    }
+
+    return ScriptValueSerializer::doSerializeObject(jsObject, next);
 }
 
 bool SerializedScriptValueReaderForModules::read(v8::Local<v8::Value>* value, ScriptValueCompositeCreator& creator)
@@ -322,6 +347,11 @@ bool SerializedScriptValueReaderForModules::read(v8::Local<v8::Value>* value, Sc
         break;
     case CryptoKeyTag:
         if (!readCryptoKey(value))
+            return false;
+        creator.pushObjectReference(*value);
+        break;
+    case RTCCertificateTag:
+        if (!readRTCCertificate(value))
             return false;
         creator.pushObjectReference(*value);
         break;
@@ -401,6 +431,28 @@ bool SerializedScriptValueReaderForModules::readCryptoKey(v8::Local<v8::Value>* 
     }
 
     *value = toV8(CryptoKey::create(key), getScriptState()->context()->Global(), isolate());
+    return !value->IsEmpty();
+}
+
+bool SerializedScriptValueReaderForModules::readRTCCertificate(v8::Local<v8::Value>* value)
+{
+    String pemPrivateKey;
+    if (!readWebCoreString(&pemPrivateKey))
+        return false;
+    String pemCertificate;
+    if (!readWebCoreString(&pemCertificate))
+        return false;
+
+    OwnPtr<WebRTCCertificateGenerator> certificateGenerator = adoptPtr(
+        Platform::current()->createRTCCertificateGenerator());
+
+    std::unique_ptr<WebRTCCertificate> certificate(
+        certificateGenerator->fromPEM(
+            pemPrivateKey.utf8().data(),
+            pemCertificate.utf8().data()));
+    RTCCertificate* jsCertificate = new RTCCertificate(std::move(certificate));
+
+    *value = toV8(jsCertificate, getScriptState()->context()->Global(), isolate());
     return !value->IsEmpty();
 }
 

@@ -1,6 +1,5 @@
--SessionHistoryTest.FrameBackForward
+# crbug.com/609963: Fix unload in subframes.
 -*.RestoreSubframeFileAccessForHistoryNavigation
 
-# https://crbug.com/590782 - test too eager to assert presence of OOPIFs?
--BrowserSideNavigationBrowserTest.RendererInitiatedCrossSiteNavigation
--BrowserSideNavigationBrowserTest.BrowserInitiatedNavigations
+# crbug.com/612713: Fix in-page renderer kills.
+-NavigationControllerBrowserTest.BackTwiceToIframeWithContent

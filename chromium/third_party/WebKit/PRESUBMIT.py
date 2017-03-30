@@ -15,6 +15,23 @@ import sys
 _EXCLUDED_PATHS = ()
 
 
+def _CheckForNonBlinkVariantMojomIncludes(input_api, output_api):
+    pattern = input_api.re.compile(r'#include\s+.+\.mojom(.*)\.h[>"]')
+    errors = []
+    for f in input_api.AffectedFiles():
+        for line_num, line in f.ChangedContents():
+            m = pattern.match(line)
+            if m and m.group(1) != '-blink':
+                errors.append('    %s:%d %s' % (
+                    f.LocalPath(), line_num, line))
+
+    results = []
+    if errors:
+        results.append(output_api.PresubmitError(
+            'Files that include non-Blink variant mojoms found:', errors))
+    return results
+
+
 def _CheckForVersionControlConflictsInFile(input_api, f):
     pattern = input_api.re.compile('^(?:<<<<<<<|>>>>>>>) |^=======$')
     errors = []
@@ -76,6 +93,7 @@ def _CommonChecks(input_api, output_api):
     results.extend(input_api.canned_checks.PanProjectChecks(
         input_api, output_api, excluded_paths=_EXCLUDED_PATHS,
         maxlen=800, license_header=license_header))
+    results.extend(_CheckForNonBlinkVariantMojomIncludes(input_api, output_api))
     results.extend(_CheckForVersionControlConflicts(input_api, output_api))
     results.extend(_CheckPatchFiles(input_api, output_api))
     results.extend(_CheckTestExpectations(input_api, output_api))
@@ -217,7 +235,8 @@ def _CheckForForbiddenNamespace(input_api, output_api):
     """Checks that Blink uses Chromium namespaces only in permitted code."""
     # This list is not exhaustive, but covers likely ones.
     chromium_namespaces = ["base", "cc", "content", "gfx", "net", "ui"]
-    chromium_classes = ["scoped_refptr"]
+    chromium_forbidden_classes = ["scoped_refptr"]
+    chromium_allowed_classes = ["gfx::CubicBezier"]
 
     def source_file_filter(path):
         return input_api.FilterSourceFile(path,
@@ -227,13 +246,29 @@ def _CheckForForbiddenNamespace(input_api, output_api):
     comment_re = input_api.re.compile(r'^\s*//')
     result = []
     for namespace in chromium_namespaces:
-        namespace_re = input_api.re.compile(r'\b{0}::|^\s*using namespace {0};|^\s*namespace {0} \{{'.format(input_api.re.escape(namespace)))
+        namespace_re = input_api.re.compile(r'\b{0}::([A-Za-z_][A-Za-z0-9_]*)'.format(input_api.re.escape(namespace)))
+
+        def uses_namespace_outside_comments(line):
+            if comment_re.search(line):
+                return False
+            re_result = namespace_re.search(line)
+            if not re_result:
+                return False
+            parsed_class_name = namespace + "::" + re_result.group(1)
+            return not (parsed_class_name in chromium_allowed_classes)
+
+        errors = input_api.canned_checks._FindNewViolationsOfRule(lambda _, line: not uses_namespace_outside_comments(line),
+                                                                  input_api, source_file_filter)
+        if errors:
+            result += [output_api.PresubmitError('Do not use Chromium class from namespace {} inside Blink core:\n{}'.format(namespace, '\n'.join(errors)))]
+    for namespace in chromium_namespaces:
+        namespace_re = input_api.re.compile(r'^\s*using namespace {0};|^\s*namespace {0} \{{'.format(input_api.re.escape(namespace)))
         uses_namespace_outside_comments = lambda line: namespace_re.search(line) and not comment_re.search(line)
         errors = input_api.canned_checks._FindNewViolationsOfRule(lambda _, line: not uses_namespace_outside_comments(line),
                                                                   input_api, source_file_filter)
         if errors:
             result += [output_api.PresubmitError('Do not use Chromium namespace {} inside Blink core:\n{}'.format(namespace, '\n'.join(errors)))]
-    for class_name in chromium_classes:
+    for class_name in chromium_forbidden_classes:
         class_re = input_api.re.compile(r'\b{0}\b'.format(input_api.re.escape(class_name)))
         uses_class_outside_comments = lambda line: class_re.search(line) and not comment_re.search(line)
         errors = input_api.canned_checks._FindNewViolationsOfRule(lambda _, line: not uses_class_outside_comments(line),

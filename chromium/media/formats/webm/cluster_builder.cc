@@ -4,6 +4,7 @@
 
 #include "media/formats/webm/cluster_builder.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/logging.h"
@@ -42,6 +43,11 @@ static const uint8_t kBlockGroupHeaderWithoutBlockDuration[] = {
     0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // Block(size = 0)
 };
 
+static const uint8_t kBlockGroupReferenceBlock[] = {
+    0xFB,        // ReferenceBlock ID
+    0x81, 0x00,  // ReferenceBlock (size=1, value=0)
+};
+
 enum {
   kClusterSizeOffset = 4,
   kClusterTimecodeOffset = 14,
@@ -56,7 +62,7 @@ enum {
   kInitialBufferSize = 32768,
 };
 
-Cluster::Cluster(scoped_ptr<uint8_t[]> data, int size)
+Cluster::Cluster(std::unique_ptr<uint8_t[]> data, int size)
     : data_(std::move(data)), size_(size) {}
 Cluster::~Cluster() {}
 
@@ -101,17 +107,21 @@ void ClusterBuilder::AddBlockGroup(int track_num,
                                    int64_t timecode,
                                    int duration,
                                    int flags,
+                                   bool is_key_frame,
                                    const uint8_t* data,
                                    int size) {
-  AddBlockGroupInternal(track_num, timecode, true, duration, flags, data, size);
+  AddBlockGroupInternal(track_num, timecode, true, duration, flags,
+                        is_key_frame, data, size);
 }
 
 void ClusterBuilder::AddBlockGroupWithoutBlockDuration(int track_num,
                                                        int64_t timecode,
                                                        int flags,
+                                                       bool is_key_frame,
                                                        const uint8_t* data,
                                                        int size) {
-  AddBlockGroupInternal(track_num, timecode, false, 0, flags, data, size);
+  AddBlockGroupInternal(track_num, timecode, false, 0, flags, is_key_frame,
+                        data, size);
 }
 
 void ClusterBuilder::AddBlockGroupInternal(int track_num,
@@ -119,6 +129,7 @@ void ClusterBuilder::AddBlockGroupInternal(int track_num,
                                            bool include_block_duration,
                                            int duration,
                                            int flags,
+                                           bool is_key_frame,
                                            const uint8_t* data,
                                            int size) {
   int block_size = size + 4;
@@ -127,6 +138,9 @@ void ClusterBuilder::AddBlockGroupInternal(int track_num,
     bytes_needed += sizeof(kBlockGroupHeader);
   } else {
     bytes_needed += sizeof(kBlockGroupHeaderWithoutBlockDuration);
+  }
+  if (!is_key_frame) {
+    bytes_needed += sizeof(kBlockGroupReferenceBlock);
   }
 
   int block_group_size = bytes_needed - 9;
@@ -157,6 +171,11 @@ void ClusterBuilder::AddBlockGroupInternal(int track_num,
   flags &= 0x0f;
 
   WriteBlock(buf, track_num, timecode, flags, data, size);
+  buf += size + 4;
+
+  if (!is_key_frame) {
+    memcpy(buf, kBlockGroupReferenceBlock, sizeof(kBlockGroupReferenceBlock));
+  }
 
   bytes_used_ += bytes_needed;
 }
@@ -186,22 +205,22 @@ void ClusterBuilder::WriteBlock(uint8_t* buf,
   memcpy(buf + 4, data, size);
 }
 
-scoped_ptr<Cluster> ClusterBuilder::Finish() {
+std::unique_ptr<Cluster> ClusterBuilder::Finish() {
   DCHECK_NE(cluster_timecode_, -1);
 
   UpdateUInt64(kClusterSizeOffset, bytes_used_ - (kClusterSizeOffset + 8));
 
-  scoped_ptr<Cluster> ret(new Cluster(std::move(buffer_), bytes_used_));
+  std::unique_ptr<Cluster> ret(new Cluster(std::move(buffer_), bytes_used_));
   Reset();
   return ret;
 }
 
-scoped_ptr<Cluster> ClusterBuilder::FinishWithUnknownSize() {
+std::unique_ptr<Cluster> ClusterBuilder::FinishWithUnknownSize() {
   DCHECK_NE(cluster_timecode_, -1);
 
   UpdateUInt64(kClusterSizeOffset, kWebMUnknownSize);
 
-  scoped_ptr<Cluster> ret(new Cluster(std::move(buffer_), bytes_used_));
+  std::unique_ptr<Cluster> ret(new Cluster(std::move(buffer_), bytes_used_));
   Reset();
   return ret;
 }
@@ -220,7 +239,7 @@ void ClusterBuilder::ExtendBuffer(int bytes_needed) {
   while ((new_buffer_size - bytes_used_) < bytes_needed)
     new_buffer_size *= 2;
 
-  scoped_ptr<uint8_t[]> new_buffer(new uint8_t[new_buffer_size]);
+  std::unique_ptr<uint8_t[]> new_buffer(new uint8_t[new_buffer_size]);
 
   memcpy(new_buffer.get(), buffer_.get(), bytes_used_);
   buffer_.reset(new_buffer.release());

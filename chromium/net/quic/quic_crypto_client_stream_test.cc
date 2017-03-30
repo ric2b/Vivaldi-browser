@@ -4,7 +4,8 @@
 
 #include "net/quic/quic_crypto_client_stream.h"
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
 #include "net/quic/crypto/aes_128_gcm_12_encrypter.h"
 #include "net/quic/crypto/quic_decrypter.h"
 #include "net/quic/crypto/quic_encrypter.h"
@@ -39,7 +40,8 @@ class QuicCryptoClientStreamTest : public ::testing::Test {
   }
 
   void CreateConnection() {
-    connection_ = new PacketSavingConnection(&helper_, Perspective::IS_CLIENT);
+    connection_ = new PacketSavingConnection(&helper_, &alarm_factory_,
+                                             Perspective::IS_CLIENT);
     // Advance the time, because timers do not like uninitialized times.
     connection_->AdvanceTime(QuicTime::Delta::FromSeconds(1));
 
@@ -49,8 +51,8 @@ class QuicCryptoClientStreamTest : public ::testing::Test {
 
   void CompleteCryptoHandshake() {
     stream()->CryptoConnect();
-    CryptoTestUtils::HandshakeWithFakeServer(&helper_, connection_, stream(),
-                                             server_options_);
+    CryptoTestUtils::HandshakeWithFakeServer(
+        &helper_, &alarm_factory_, connection_, stream(), server_options_);
   }
 
   void ConstructHandshakeMessage() {
@@ -60,12 +62,13 @@ class QuicCryptoClientStreamTest : public ::testing::Test {
 
   QuicCryptoClientStream* stream() { return session_->GetCryptoStream(); }
 
-  MockConnectionHelper helper_;
+  MockQuicConnectionHelper helper_;
+  MockAlarmFactory alarm_factory_;
   PacketSavingConnection* connection_;
-  scoped_ptr<TestQuicSpdyClientSession> session_;
+  std::unique_ptr<TestQuicSpdyClientSession> session_;
   QuicServerId server_id_;
   CryptoHandshakeMessage message_;
-  scoped_ptr<QuicData> message_data_;
+  std::unique_ptr<QuicData> message_data_;
   QuicCryptoClientConfig crypto_config_;
   CryptoTestUtils::FakeServerOptions server_options_;
 };
@@ -193,7 +196,7 @@ TEST_F(QuicCryptoClientStreamTest, ServerConfigUpdate) {
   server_config_update.SetValue(kSourceAddressTokenTag, stk);
   server_config_update.SetValue(kSCFG, scfg);
 
-  scoped_ptr<QuicData> data(
+  std::unique_ptr<QuicData> data(
       CryptoFramer::ConstructHandshakeMessage(server_config_update));
   stream()->OnStreamFrame(QuicStreamFrame(kCryptoStreamId, /*fin=*/false,
                                           /*offset=*/0, data->AsStringPiece()));
@@ -213,7 +216,7 @@ TEST_F(QuicCryptoClientStreamTest, ServerConfigUpdateBeforeHandshake) {
       CloseConnection(QUIC_CRYPTO_UPDATE_BEFORE_HANDSHAKE_COMPLETE, _, _));
   CryptoHandshakeMessage server_config_update;
   server_config_update.set_tag(kSCUP);
-  scoped_ptr<QuicData> data(
+  std::unique_ptr<QuicData> data(
       CryptoFramer::ConstructHandshakeMessage(server_config_update));
   stream()->OnStreamFrame(QuicStreamFrame(kCryptoStreamId, /*fin=*/false,
                                           /*offset=*/0, data->AsStringPiece()));
@@ -266,11 +269,12 @@ class QuicCryptoClientStreamStatelessTest : public ::testing::Test {
             QuicCompressedCertsCache::kQuicCompressedCertsCacheSize),
         server_id_(kServerHostname, kServerPort, PRIVACY_MODE_DISABLED) {
     TestQuicSpdyClientSession* client_session = nullptr;
-    CreateClientSessionForTest(
-        server_id_,
-        /* supports_stateless_rejects= */ true,
-        QuicTime::Delta::FromSeconds(100000), QuicSupportedVersions(), &helper_,
-        &client_crypto_config_, &client_connection_, &client_session);
+    CreateClientSessionForTest(server_id_,
+                               /* supports_stateless_rejects= */ true,
+                               QuicTime::Delta::FromSeconds(100000),
+                               QuicSupportedVersions(), &helper_,
+                               &alarm_factory_, &client_crypto_config_,
+                               &client_connection_, &client_session);
     CHECK(client_session);
     client_session_.reset(client_session);
   }
@@ -289,10 +293,11 @@ class QuicCryptoClientStreamStatelessTest : public ::testing::Test {
   // Initializes the server_stream_ for stateless rejects.
   void InitializeFakeStatelessRejectServer() {
     TestQuicSpdyServerSession* server_session = nullptr;
-    CreateServerSessionForTest(
-        server_id_, QuicTime::Delta::FromSeconds(100000),
-        QuicSupportedVersions(), &helper_, &server_crypto_config_,
-        &server_compressed_certs_cache_, &server_connection_, &server_session);
+    CreateServerSessionForTest(server_id_, QuicTime::Delta::FromSeconds(100000),
+                               QuicSupportedVersions(), &helper_,
+                               &alarm_factory_, &server_crypto_config_,
+                               &server_compressed_certs_cache_,
+                               &server_connection_, &server_session);
     CHECK(server_session);
     server_session_.reset(server_session);
     CryptoTestUtils::FakeServerOptions options;
@@ -302,16 +307,17 @@ class QuicCryptoClientStreamStatelessTest : public ::testing::Test {
     FLAGS_enable_quic_stateless_reject_support = true;
   }
 
-  MockConnectionHelper helper_;
+  MockQuicConnectionHelper helper_;
+  MockAlarmFactory alarm_factory_;
 
   // Client crypto stream state
   PacketSavingConnection* client_connection_;
-  scoped_ptr<TestQuicSpdyClientSession> client_session_;
+  std::unique_ptr<TestQuicSpdyClientSession> client_session_;
   QuicCryptoClientConfig client_crypto_config_;
 
   // Server crypto stream state
   PacketSavingConnection* server_connection_;
-  scoped_ptr<TestQuicSpdyServerSession> server_session_;
+  std::unique_ptr<TestQuicSpdyServerSession> server_session_;
   QuicCryptoServerConfig server_crypto_config_;
   QuicCompressedCertsCache server_compressed_certs_cache_;
   QuicServerId server_id_;

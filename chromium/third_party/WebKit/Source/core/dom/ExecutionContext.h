@@ -89,7 +89,7 @@ public:
     virtual void disableEval(const String& errorMessage) = 0;
     virtual LocalDOMWindow* executingWindow() { return 0; }
     virtual String userAgent() const = 0;
-    virtual void postTask(const WebTraceLocation&, PassOwnPtr<ExecutionContextTask>) = 0; // Executes the task on context's thread asynchronously.
+    virtual void postTask(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>) = 0; // Executes the task on context's thread asynchronously.
 
     // Gets the DOMTimerCoordinator which maintains the "active timer
     // list" of tasks created by setTimeout and setInterval. The
@@ -104,9 +104,9 @@ public:
     KURL contextCompleteURL(const String& url) const { return virtualCompleteURL(url); }
 
     bool shouldSanitizeScriptError(const String& sourceURL, AccessControlStatus);
-    void reportException(RawPtr<ErrorEvent>, int scriptId, PassRefPtr<ScriptCallStack>, AccessControlStatus);
+    void reportException(ErrorEvent*, int scriptId, PassRefPtr<ScriptCallStack>, AccessControlStatus);
 
-    virtual void addConsoleMessage(RawPtr<ConsoleMessage>) = 0;
+    virtual void addConsoleMessage(ConsoleMessage*) = 0;
     virtual void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack>) = 0;
 
     PublicURLManager& publicURLManager();
@@ -130,10 +130,6 @@ public:
 
     // Called after the construction of an ActiveDOMObject to synchronize suspend state.
     void suspendActiveDOMObjectIfNeeded(ActiveDOMObject*);
-#if !ENABLE(OILPAN)
-    void ref() { refExecutionContext(); }
-    void deref() { derefExecutionContext(); }
-#endif
 
     // Gets the next id in a circular sequence from 1 to 2^31-1.
     int circularSequentialID();
@@ -164,14 +160,8 @@ protected:
     virtual KURL virtualCompleteURL(const String&) const = 0;
 
 private:
-    bool dispatchErrorEvent(RawPtr<ErrorEvent>, AccessControlStatus);
+    bool dispatchErrorEvent(ErrorEvent*, AccessControlStatus);
     void runSuspendableTasks();
-
-#if !ENABLE(OILPAN)
-    virtual void refExecutionContext() = 0;
-    virtual void derefExecutionContext() = 0;
-#endif
-    // LifecycleContext implementation.
 
     unsigned m_circularSequentialID;
 

@@ -175,11 +175,6 @@ public:
     virtual void setTouchEventHandlerRegion(const WebVector<WebRect>&) = 0;
     virtual WebVector<WebRect> touchEventHandlerRegion() const = 0;
 
-    // Setter and getter for Frame Timing rects.
-    // See http://w3c.github.io/frame-timing/ for definition of terms.
-    virtual void setFrameTimingRequests(const WebVector<std::pair<int64_t, WebRect>>&) = 0;
-    virtual WebVector<std::pair<int64_t, WebRect>> frameTimingRequests() const = 0;
-
     virtual void setIsContainerForFixedPositionLayers(bool) = 0;
     virtual bool isContainerForFixedPositionLayers() const = 0;
 
@@ -195,10 +190,6 @@ public:
     // deleting the scroll client.
     virtual void setScrollClient(WebLayerScrollClient*) = 0;
 
-    // Forces this layer to use a render surface. There is no benefit in doing
-    // so, but this is to facilitate benchmarks and tests.
-    virtual void setForceRenderSurface(bool) = 0;
-
     // Sets the cc-side layer client.
     virtual void setLayerClient(cc::LayerClient*) = 0;
 
@@ -211,6 +202,8 @@ public:
 
     virtual void setCompositorMutableProperties(uint32_t) = 0;
     virtual uint32_t compositorMutableProperties() const = 0;
+
+    virtual void setHasWillChangeTransformHint(bool) = 0;
 };
 
 } // namespace blink

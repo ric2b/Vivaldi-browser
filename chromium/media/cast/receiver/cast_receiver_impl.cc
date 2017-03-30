@@ -5,12 +5,14 @@
 #include "media/cast/receiver/cast_receiver_impl.h"
 
 #include <stddef.h>
+
 #include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/trace_event/trace_event.h"
 #include "media/cast/net/rtcp/rtcp_utility.h"
@@ -20,12 +22,12 @@
 namespace media {
 namespace cast {
 
-scoped_ptr<CastReceiver> CastReceiver::Create(
+std::unique_ptr<CastReceiver> CastReceiver::Create(
     scoped_refptr<CastEnvironment> cast_environment,
     const FrameReceiverConfig& audio_config,
     const FrameReceiverConfig& video_config,
     CastTransport* const transport) {
-  return scoped_ptr<CastReceiver>(new CastReceiverImpl(
+  return std::unique_ptr<CastReceiver>(new CastReceiverImpl(
       cast_environment, audio_config, video_config, transport));
 }
 
@@ -46,7 +48,7 @@ CastReceiverImpl::CastReceiverImpl(
 
 CastReceiverImpl::~CastReceiverImpl() {}
 
-void CastReceiverImpl::ReceivePacket(scoped_ptr<Packet> packet) {
+void CastReceiverImpl::ReceivePacket(std::unique_ptr<Packet> packet) {
   const uint8_t* const data = &packet->front();
   const size_t length = packet->size();
 
@@ -114,10 +116,10 @@ void CastReceiverImpl::RequestEncodedVideoFrame(
 
 void CastReceiverImpl::DecodeEncodedAudioFrame(
     const AudioFrameDecodedCallback& callback,
-    scoped_ptr<EncodedFrame> encoded_frame) {
+    std::unique_ptr<EncodedFrame> encoded_frame) {
   DCHECK(cast_environment_->CurrentlyOn(CastEnvironment::MAIN));
   if (!encoded_frame) {
-    callback.Run(make_scoped_ptr<AudioBus>(NULL), base::TimeTicks(), false);
+    callback.Run(base::WrapUnique<AudioBus>(NULL), base::TimeTicks(), false);
     return;
   }
 
@@ -127,7 +129,7 @@ void CastReceiverImpl::DecodeEncodedAudioFrame(
                                           audio_sampling_rate_,
                                           audio_codec_));
   }
-  const uint32_t frame_id = encoded_frame->frame_id;
+  const FrameId frame_id = encoded_frame->frame_id;
   const RtpTimeTicks rtp_timestamp = encoded_frame->rtp_timestamp;
   const base::TimeTicks playout_time = encoded_frame->reference_time;
   audio_decoder_->DecodeFrame(
@@ -138,7 +140,7 @@ void CastReceiverImpl::DecodeEncodedAudioFrame(
 
 void CastReceiverImpl::DecodeEncodedVideoFrame(
     const VideoFrameDecodedCallback& callback,
-    scoped_ptr<EncodedFrame> encoded_frame) {
+    std::unique_ptr<EncodedFrame> encoded_frame) {
   DCHECK(cast_environment_->CurrentlyOn(CastEnvironment::MAIN));
   if (!encoded_frame) {
     callback.Run(
@@ -155,7 +157,7 @@ void CastReceiverImpl::DecodeEncodedVideoFrame(
 
   if (!video_decoder_)
     video_decoder_.reset(new VideoDecoder(cast_environment_, video_codec_));
-  const uint32_t frame_id = encoded_frame->frame_id;
+  const FrameId frame_id = encoded_frame->frame_id;
   const RtpTimeTicks rtp_timestamp = encoded_frame->rtp_timestamp;
   const base::TimeTicks playout_time = encoded_frame->reference_time;
   video_decoder_->DecodeFrame(
@@ -168,17 +170,17 @@ void CastReceiverImpl::DecodeEncodedVideoFrame(
 void CastReceiverImpl::EmitDecodedAudioFrame(
     const scoped_refptr<CastEnvironment>& cast_environment,
     const AudioFrameDecodedCallback& callback,
-    uint32_t frame_id,
+    FrameId frame_id,
     RtpTimeTicks rtp_timestamp,
     const base::TimeTicks& playout_time,
-    scoped_ptr<AudioBus> audio_bus,
+    std::unique_ptr<AudioBus> audio_bus,
     bool is_continuous) {
   DCHECK(cast_environment->CurrentlyOn(CastEnvironment::MAIN));
 
   if (audio_bus.get()) {
     // TODO(miu): This is reporting incorrect timestamp and delay.
     // http://crbug.com/547251
-    scoped_ptr<FrameEvent> playout_event(new FrameEvent());
+    std::unique_ptr<FrameEvent> playout_event(new FrameEvent());
     playout_event->timestamp = cast_environment->Clock()->NowTicks();
     playout_event->type = FRAME_PLAYOUT;
     playout_event->media_type = AUDIO_EVENT;
@@ -195,7 +197,7 @@ void CastReceiverImpl::EmitDecodedAudioFrame(
 void CastReceiverImpl::EmitDecodedVideoFrame(
     const scoped_refptr<CastEnvironment>& cast_environment,
     const VideoFrameDecodedCallback& callback,
-    uint32_t frame_id,
+    FrameId frame_id,
     RtpTimeTicks rtp_timestamp,
     const base::TimeTicks& playout_time,
     const scoped_refptr<VideoFrame>& video_frame,
@@ -205,7 +207,7 @@ void CastReceiverImpl::EmitDecodedVideoFrame(
   if (video_frame.get()) {
     // TODO(miu): This is reporting incorrect timestamp and delay.
     // http://crbug.com/547251
-    scoped_ptr<FrameEvent> playout_event(new FrameEvent());
+    std::unique_ptr<FrameEvent> playout_event(new FrameEvent());
     playout_event->timestamp = cast_environment->Clock()->NowTicks();
     playout_event->type = FRAME_PLAYOUT;
     playout_event->media_type = VIDEO_EVENT;

@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chrome_build.gni")
 import("//build/config/features.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
@@ -53,41 +54,123 @@ source_set("app") {
     "app/blimp_content_browser_client.h",
     "app/blimp_content_main_delegate.cc",
     "app/blimp_content_main_delegate.h",
-    "app/blimp_content_renderer_client.cc",
-    "app/blimp_content_renderer_client.h",
-    "app/blimp_engine_config.cc",
-    "app/blimp_engine_config.h",
-    "app/blimp_network_delegate.cc",
-    "app/blimp_network_delegate.h",
-    "app/blimp_permission_manager.cc",
-    "app/blimp_permission_manager.h",
-    "app/blimp_system_url_request_context_getter.cc",
-    "app/blimp_system_url_request_context_getter.h",
-    "app/blimp_url_request_context_getter.cc",
-    "app/blimp_url_request_context_getter.h",
-    "app/engine_settings.cc",
-    "app/engine_settings.h",
-    "app/settings_manager.cc",
-    "app/settings_manager.h",
-    "app/switches.cc",
-    "app/switches.h",
+  ]
+
+  public_deps = [
+    ":app_metrics",
   ]
 
   deps = [
+    ":app_config",
+    ":app_net",
+    ":app_permissions",
+    ":app_settings",
     ":app_ui",
     ":blob_channel",
     ":common",
+    ":crash",
     ":renderer",
     ":session",
     "//base",
+    "//blimp/common",
     "//blimp/common/proto",
-    "//components/web_cache/renderer",
-    "//content",
+    "//blimp/engine:blob_channel_mojo_cpp_sources",
+    "//blimp/net",
+    "//components/crash/content/app:app_breakpad_mac_win_to_be_deleted",
+    "//components/crash/content/app:lib",
     "//content/public/app:both",
     "//content/public/browser",
     "//content/public/common",
     "//content/public/renderer",
     "//content/public/utility",
+    "//net",
+  ]
+}
+
+source_set("app_config") {
+  sources = [
+    "app/blimp_engine_config.cc",
+    "app/blimp_engine_config.h",
+  ]
+  deps = [
+    "//base",
+    "//blimp/common",
+    "//cc",
+    "//content/public/common",
+    "//ui/gl",
+    "//ui/native_theme",
+  ]
+}
+
+source_set("app_metrics") {
+  sources = [
+    "app/blimp_metrics_service_client.cc",
+    "app/blimp_metrics_service_client.h",
+  ]
+
+  public_deps = [
+    "//components/metrics",
+    "//content/public/browser",
+  ]
+
+  deps = [
+    "//base",
+    "//base:i18n",
+    "//components/metrics:gpu",
+    "//components/metrics:net",
+    "//components/metrics:profiler",
+    "//components/metrics:ui",
+    "//components/prefs",
+    "//components/version_info",
+    "//net",
+  ]
+}
+
+source_set("app_net") {
+  sources = [
+    "app/blimp_network_delegate.cc",
+    "app/blimp_network_delegate.h",
+    "app/blimp_system_url_request_context_getter.cc",
+    "app/blimp_system_url_request_context_getter.h",
+    "app/blimp_url_request_context_getter.cc",
+    "app/blimp_url_request_context_getter.h",
+  ]
+  deps = [
+    ":common_user_agent",
+    "//base",
+    "//content/public/browser",
+    "//net",
+  ]
+}
+
+source_set("app_permissions") {
+  sources = [
+    "app/blimp_permission_manager.cc",
+    "app/blimp_permission_manager.h",
+  ]
+  deps = [
+    "//base",
+    "//content/public/browser",
+  ]
+}
+
+source_set("app_settings") {
+  sources = [
+    "app/engine_settings.h",
+    "app/settings_manager.cc",
+    "app/settings_manager.h",
+  ]
+  deps = [
+    "//blimp/net",
+    "//content/public/browser",
+    "//content/public/common",
+  ]
+}
+
+source_set("app_switches") {
+  sources = [
+    "app/switches.cc",
+    "app/switches.h",
   ]
 }
 
@@ -104,16 +187,36 @@ source_set("app_ui") {
   ]
 
   deps = [
-    "//blimp/common:blimp_common",
+    "//blimp/common",
     "//cc",
     "//cc/surfaces",
     "//ui/aura",
     "//ui/compositor",
+    "//ui/display",
     "//ui/events",
     "//ui/gfx",
     "//ui/platform_window",
     "//ui/platform_window",
     "//ui/platform_window/stub/",
+  ]
+}
+
+source_set("crash") {
+  sources = [
+    "app/blimp_engine_crash_keys.cc",
+    "app/blimp_engine_crash_keys.h",
+    "app/blimp_engine_crash_reporter_client.cc",
+    "app/blimp_engine_crash_reporter_client.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/crash/content/app:app_breakpad_mac_win_to_be_deleted",
+    "//components/crash/content/app:lib",
+    "//components/crash/core/common",
+    "//components/version_info",
+    "//components/version_info:generate_version_info",
+    "//content/public/common",
   ]
 }
 
@@ -126,10 +229,29 @@ source_set("common") {
   ]
 
   deps = [
+    ":app_metrics",
+    ":app_net",
+    ":app_permissions",
+    ":common_user_agent",
     "//base",
+    "//components/metrics",
+    "//components/pref_registry",
+    "//components/prefs",
     "//components/version_info",
     "//content/public/common",
+    "//net",
     "//ui/base",
+  ]
+}
+
+source_set("common_user_agent") {
+  sources = [
+    "common/blimp_user_agent.cc",
+    "common/blimp_user_agent.h",
+  ]
+  deps = [
+    "//components/version_info",
+    "//content/public/common",
   ]
 }
 
@@ -143,7 +265,14 @@ source_set("feature") {
 
   deps = [
     "//base",
+    "//blimp/common",
     "//blimp/common/proto",
+    "//blimp/engine:app_settings",
+    "//blimp/engine:common",
+    "//blimp/net",
+    "//content/public/browser",
+    "//content/public/common",
+    "//net",
     "//ui/base",
     "//ui/base/ime",
     "//ui/resources",
@@ -153,6 +282,8 @@ source_set("feature") {
 
 source_set("renderer") {
   sources = [
+    "renderer/blimp_content_renderer_client.cc",
+    "renderer/blimp_content_renderer_client.h",
     "renderer/engine_image_serialization_processor.cc",
     "renderer/engine_image_serialization_processor.h",
   ]
@@ -160,7 +291,12 @@ source_set("renderer") {
   deps = [
     ":blob_channel_mojo",
     "//base",
+    "//blimp/common",
+    "//blimp/common/proto",
     "//cc",
+    "//components/web_cache/renderer",
+    "//content/public/common",
+    "//content/public/renderer",
     "//skia",
     "//third_party/libwebp",
     "//ui/gfx/geometry",
@@ -175,13 +311,22 @@ source_set("session") {
   ]
 
   deps = [
+    ":app_config",
+    ":app_settings",
+    ":app_switches",
+    ":app_ui",
+    ":common",
     ":feature",
     "//base",
-    "//blimp/common:blimp_common",
+    "//blimp/common",
     "//blimp/common/proto",
-    "//blimp/net:blimp_net",
-    "//content",
+    "//blimp/net",
+    "//content/public/browser",
     "//net",
+    "//ui/aura",
+    "//ui/base/ime",
+    "//ui/gfx/geometry",
+    "//ui/wm",
   ]
 }
 
@@ -202,23 +347,73 @@ mojom("blob_channel_mojo") {
   ]
 }
 
+source_set("test_support") {
+  testonly = true
+
+  sources = [
+    "app/test_content_main_delegate.cc",
+    "app/test_content_main_delegate.h",
+  ]
+
+  deps = [
+    ":app",
+    "//base",
+  ]
+}
+
 source_set("app_unit_tests") {
   testonly = true
 
   sources = [
     "app/blimp_engine_config_unittest.cc",
+    "app/blimp_metrics_service_client_unittest.cc",
+    "app/blimp_system_url_request_context_getter_unittest.cc",
     "app/settings_manager_unittest.cc",
     "app/ui/blimp_screen_unittest.cc",
   ]
 
   deps = [
     ":app",
+    ":app_config",
+    ":app_metrics",
+    ":app_net",
+    ":app_settings",
     "//base",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
+    "//blimp/common",
+    "//blimp/common:test_support",
+    "//blimp/engine:app_ui",
+    "//components/metrics:metrics",
+    "//components/pref_registry:pref_registry",
+    "//components/prefs:prefs",
+    "//content/test:test_support",
+    "//net:test_support",
     "//testing/gmock",
     "//testing/gtest",
+    "//ui/display",
     "//ui/gfx:test_support",
+  ]
+}
+
+source_set("common_unit_tests") {
+  testonly = true
+
+  sources = [
+    "common/blimp_browser_context_unittest.cc",
+  ]
+
+  deps = [
+    ":common",
+    "//base",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//components/metrics:metrics",
+    "//content/public/browser",
+    "//content/test:test_support",
+    "//net:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
   ]
 }
 
@@ -235,10 +430,18 @@ source_set("feature_unit_tests") {
     "//base",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
+    "//blimp/common",
     "//blimp/common/proto",
-    "//content",
+    "//blimp/engine:app_settings",
+    "//blimp/net",
+    "//blimp/net:test_support",
+    "//content/public/browser",
+    "//net",
+    "//net:test_support",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/WebKit/public:blink_headers",
+    "//ui/base/ime",
   ]
 }
 
@@ -247,11 +450,15 @@ source_set("unit_tests") {
 
   deps = [
     ":app_unit_tests",
+    ":common_unit_tests",
     ":feature_unit_tests",
   ]
 }
 
 if (is_linux) {
+  _runtime_deps = "$root_gen_dir/blimp-engine.runtime_deps"
+  _rebased_runtime_deps = rebase_path(_runtime_deps, root_out_dir)
+
   executable("blimp_engine_app") {
     sources = [
       "app/blimp_main.cc",
@@ -259,23 +466,61 @@ if (is_linux) {
 
     deps = [
       ":app",
+      ":app_config",
       ":pak",
-      "//blimp/net:blimp_net",
+      "//base",
+      "//blimp/net",
       "//content/public/app:both",
     ]
-  }
 
-  group("blimp_engine") {
-    deps = [
-      ":blimp_engine_app",
+    data_deps = [
       ":pak",
       "//sandbox/linux:chrome_sandbox",
       "//third_party/blimp_fonts",
     ]
 
-    # List dependencies as both deps and data_deps to ensure changes trigger a
-    # rebuild and "gn desc ... runtime_deps" correctly prints the data_deps.
-    data_deps = deps
+    # Setting this causes GN to write the list of runtime dependencies
+    # for this target to the specified location. We use this list of
+    # files to generate the tarball below in :blimp_engine_bundle,
+    # so that it will contain everything we need to run the engine.
+    write_runtime_deps = _runtime_deps
+  }
+
+  group("engine") {
+    public_deps = [
+      ":blimp_engine_app",
+    ]
+  }
+
+  _manifest = "$root_gen_dir/engine-manifest.txt"
+  _rebased_manifest = rebase_path(_manifest, root_out_dir)
+  _rebased_blacklist =
+      rebase_path("//blimp/tools/engine-manifest-blacklist.txt")
+
+  action("generate_manifest") {
+    script = "//blimp/tools/generate-target-manifest.py"
+    args = [
+      "--blacklist",
+      _rebased_blacklist,
+      "--runtime-deps-file",
+      _rebased_runtime_deps,
+      "--output",
+      _rebased_manifest,
+    ]
+    inputs = [
+      _runtime_deps,
+    ]
+    outputs = [
+      _manifest,
+    ]
+
+    # By specifying a dependency (not a data_dependency) on :engine,
+    # we can be sure that everything is built before the action is
+    # complete (though not necessarily before we generate the manifest
+    # itself).
+    deps = [
+      ":engine",
+    ]
   }
 
   # Builds and bundles the engine into a tarball that can be used to build a
@@ -287,16 +532,17 @@ if (is_linux) {
     _rebased_out_dir = rebase_path(root_out_dir)
     _rebased_dockerfile = rebase_path("//blimp/engine/Dockerfile")
     _rebased_startup_script = rebase_path("//blimp/engine/start_engine.sh")
-    _rebased_manifest = rebase_path("//blimp/engine/engine-manifest.txt")
     _bundle = "$root_out_dir/blimp_engine_bundle.tar.gz"
 
-    # Detail the target & "source"-file dependencies, and output, for GN.
+    # Depending on this ensures that both the manifest is generated
+    # and everything in the manifest has been built.
     deps = [
-      "//blimp/engine:blimp_engine",
+      ":generate_manifest",
     ]
+
     sources = [
+      _manifest,
       _rebased_dockerfile,
-      _rebased_manifest,
       _rebased_startup_script,
     ]
     outputs = [
@@ -316,5 +562,44 @@ if (is_linux) {
       "--output",
       rebase_path(_bundle),
     ]
+  }
+
+  # Crash symbols should only be created and uploaded from official builders.
+  if (is_official_build) {
+    # Action to create a Breakpad symbol file for the Engine. This can take
+    # a long time.
+    action("blimp_symbols") {
+      script = "//build/linux/dump_app_syms.py"
+
+      dump_syms_label = "//breakpad:dump_syms"
+      dump_syms_binary =
+          get_label_info(dump_syms_label, "root_out_dir") + "/" + "dump_syms"
+
+      engine_binary = "$root_out_dir/blimp_engine_app"
+      symbol_file = "$root_out_dir/blimp_engine_app.breakpad.x64"
+
+      inputs = [
+        engine_binary,
+        dump_syms_binary,
+      ]
+      outputs = [
+        symbol_file,
+      ]
+
+      args = [
+        "./" + rebase_path(dump_syms_binary, root_build_dir),
+        "0",  # strip_binary = false
+        rebase_path(engine_binary, root_build_dir),
+        rebase_path(symbol_file, root_build_dir),
+      ]
+
+      # Include symupload target here as it is needed by the buildbots to upload
+      # the symbol file created by dump_syms.
+      deps = [
+        ":blimp_engine_app",
+        "//breakpad:symupload",
+        dump_syms_label,
+      ]
+    }
   }
 }

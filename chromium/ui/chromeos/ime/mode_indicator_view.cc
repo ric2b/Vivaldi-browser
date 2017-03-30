@@ -6,9 +6,8 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "ui/gfx/display.h"
-#include "ui/gfx/screen.h"
-#include "ui/views/bubble/bubble_delegate.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/fill_layout.h"
@@ -35,7 +34,7 @@ class ModeIndicatorFrameView : public views::BubbleFrameView {
  private:
   // views::BubbleFrameView overrides:
   gfx::Rect GetAvailableScreenBounds(const gfx::Rect& rect) const override {
-    return gfx::Screen::GetScreen()
+    return display::Screen::GetScreen()
         ->GetDisplayNearestPoint(rect.CenterPoint())
         .bounds();
   }
@@ -81,6 +80,10 @@ const char* ModeIndicatorView::GetClassName() const {
   return "ModeIndicatorView";
 }
 
+int ModeIndicatorView::GetDialogButtons() const {
+  return ui::DIALOG_BUTTON_NONE;
+}
+
 void ModeIndicatorView::Init() {
   SetLayoutManager(new views::FillLayout());
   AddChildView(label_view_);
@@ -91,9 +94,9 @@ void ModeIndicatorView::Init() {
 views::NonClientFrameView* ModeIndicatorView::CreateNonClientFrameView(
     views::Widget* widget) {
   views::BubbleFrameView* frame = new ModeIndicatorFrameView(margins());
-  // arrow adjustment in BubbleDelegateView is unnecessary because arrow
+  // arrow adjustment in BubbleDialogDelegateView is unnecessary because arrow
   // of this bubble is always center.
-  frame->SetBubbleBorder(scoped_ptr<views::BubbleBorder>(
+  frame->SetBubbleBorder(std::unique_ptr<views::BubbleBorder>(
       new views::BubbleBorder(arrow(), shadow(), color())));
   return frame;
 }

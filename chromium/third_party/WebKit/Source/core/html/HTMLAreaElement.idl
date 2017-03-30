@@ -28,11 +28,11 @@ interface HTMLAreaElement : HTMLElement {
     // FIXME: ping should be a DOMTokenList.
     [Reflect] attribute DOMString ping;
     // FIXME: download, rel, relList are missing
-    [Reflect, ReflectOnly=("","no-referrer","origin","no-referrer-when-downgrade","origin-when-cross-origin","unsafe-url"), ReflectMissing="", ReflectInvalid=""] attribute DOMString referrerpolicy;
+    [Reflect, ReflectOnly=("","no-referrer","origin","no-referrer-when-downgrade","origin-when-cross-origin","unsafe-url"), ReflectMissing="", ReflectInvalid=""] attribute DOMString referrerPolicy;
 
     // obsolete members
     // https://html.spec.whatwg.org/#HTMLAreaElement-partial
     [Reflect] attribute boolean noHref;
 };
 
-HTMLAreaElement implements URLUtils;
+HTMLAreaElement implements HTMLHyperlinkElementUtils;

@@ -6,8 +6,8 @@
 #define ASH_SHELF_SHELF_LAYOUT_MANAGER_OBSERVER_H_
 
 #include "ash/ash_export.h"
-#include "ash/shelf/background_animator.h"
 #include "ash/shelf/shelf_types.h"
+#include "ash/wm/common/background_animator.h"
 
 namespace aura {
 class Window;
@@ -29,9 +29,8 @@ class ASH_EXPORT ShelfLayoutManagerObserver {
   virtual void OnAutoHideStateChanged(ShelfAutoHideState new_state) {}
 
   // Called when shelf background animation is started.
-  virtual void OnBackgroundUpdated(
-      ShelfBackgroundType background_type,
-      BackgroundAnimatorChangeType change_type) {}
+  virtual void OnBackgroundUpdated(wm::ShelfBackgroundType background_type,
+                                   BackgroundAnimatorChangeType change_type) {}
 };
 
 }  // namespace ash

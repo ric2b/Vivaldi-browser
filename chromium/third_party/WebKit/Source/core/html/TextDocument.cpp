@@ -33,9 +33,12 @@ TextDocument::TextDocument(const DocumentInit& initializer)
 {
     setCompatibilityMode(QuirksMode);
     lockCompatibilityMode();
+    UseCounter::count(*this, UseCounter::TextDocument);
+    if (!isInMainFrame())
+        UseCounter::count(*this, UseCounter::TextDocumentInFrame);
 }
 
-RawPtr<DocumentParser> TextDocument::createParser()
+DocumentParser* TextDocument::createParser()
 {
     return TextDocumentParser::create(*this, getParserSynchronizationPolicy());
 }

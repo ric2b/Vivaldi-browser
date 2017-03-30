@@ -29,7 +29,7 @@ interface HTMLAnchorElement : HTMLElement {
     // FIXME: readonly attribute DOMTokenList relList;
     [Reflect] attribute DOMString hreflang;
     [Reflect] attribute DOMString type;
-    [Reflect, ReflectOnly=("","no-referrer","origin","no-referrer-when-downgrade","origin-when-cross-origin","unsafe-url"), ReflectMissing="", ReflectInvalid=""] attribute DOMString referrerpolicy;
+    [Reflect, ReflectOnly=("","no-referrer","origin","no-referrer-when-downgrade","origin-when-cross-origin","unsafe-url"), ReflectMissing="", ReflectInvalid=""] attribute DOMString referrerPolicy;
 
     [ImplementedAs=textContent] attribute DOMString text;
 
@@ -42,4 +42,4 @@ interface HTMLAnchorElement : HTMLElement {
     [Reflect] attribute DOMString shape;
 };
 
-HTMLAnchorElement implements URLUtils;
+HTMLAnchorElement implements HTMLHyperlinkElementUtils;

@@ -4,6 +4,8 @@
 
 #include "net/quic/crypto/strike_register.h"
 
+#include <cstdint>
+#include <memory>
 #include <set>
 #include <string>
 
@@ -291,10 +293,10 @@ TEST_F(StrikeRegisterStressTest, InOrderInsertion) {
 
   unsigned max_entries = 64;
   uint32_t current_time = 10000, window = 200;
-  scoped_ptr<StrikeRegister> s1(
+  std::unique_ptr<StrikeRegister> s1(
       new StrikeRegister(max_entries, current_time, window, kOrbit,
                          StrikeRegister::DENY_REQUESTS_AT_STARTUP));
-  scoped_ptr<SlowStrikeRegister> s2(
+  std::unique_ptr<SlowStrikeRegister> s2(
       new SlowStrikeRegister(max_entries, current_time, window, kOrbit));
 
   uint64_t i;
@@ -342,10 +344,10 @@ TEST_F(StrikeRegisterStressTest, Stress) {
   srand(42);
   unsigned max_entries = 64;
   uint32_t current_time = 10000, window = 200;
-  scoped_ptr<StrikeRegister> s1(
+  std::unique_ptr<StrikeRegister> s1(
       new StrikeRegister(max_entries, current_time, window, kOrbit,
                          StrikeRegister::DENY_REQUESTS_AT_STARTUP));
-  scoped_ptr<SlowStrikeRegister> s2(
+  std::unique_ptr<SlowStrikeRegister> s2(
       new SlowStrikeRegister(max_entries, current_time, window, kOrbit));
   uint64_t i;
 

@@ -4,6 +4,8 @@
 
 #include "content/renderer/android/synchronous_compositor_output_surface.h"
 
+#include <vector>
+
 #include "base/auto_reset.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -11,12 +13,18 @@
 #include "cc/output/context_provider.h"
 #include "cc/output/output_surface_client.h"
 #include "cc/output/software_output_device.h"
+#include "content/common/android/sync_compositor_messages.h"
 #include "content/renderer/android/synchronous_compositor_external_begin_frame_source.h"
+#include "content/renderer/android/synchronous_compositor_filter.h"
 #include "content/renderer/android/synchronous_compositor_registry.h"
 #include "content/renderer/gpu/frame_swap_message_queue.h"
+#include "content/renderer/render_thread_impl.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/gpu_memory_allocation.h"
+#include "ipc/ipc_message.h"
+#include "ipc/ipc_message_macros.h"
+#include "ipc/ipc_sender.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/skia_util.h"
@@ -70,10 +78,12 @@ SynchronousCompositorOutputSurface::SynchronousCompositorOutputSurface(
     : cc::OutputSurface(
           context_provider,
           worker_context_provider,
-          scoped_ptr<cc::SoftwareOutputDevice>(new SoftwareDevice(this))),
+          nullptr,
+          std::unique_ptr<cc::SoftwareOutputDevice>(new SoftwareDevice(this))),
       routing_id_(routing_id),
       output_surface_id_(output_surface_id),
       registry_(registry),
+      sender_(RenderThreadImpl::current()->sync_compositor_message_filter()),
       registered_(false),
       sync_client_(nullptr),
       current_sw_canvas_(nullptr),
@@ -82,8 +92,9 @@ SynchronousCompositorOutputSurface::SynchronousCompositorOutputSurface(
       frame_swap_message_queue_(frame_swap_message_queue),
       fallback_tick_pending_(false),
       fallback_tick_running_(false) {
-  thread_checker_.DetachFromThread();
   DCHECK(registry_);
+  DCHECK(sender_);
+  thread_checker_.DetachFromThread();
   capabilities_.adjust_deadline_for_parent = false;
   capabilities_.delegated_rendering = true;
   memory_policy_.priority_cutoff_when_visible =
@@ -98,6 +109,17 @@ void SynchronousCompositorOutputSurface::SetSyncClient(
   sync_client_ = compositor;
 }
 
+bool SynchronousCompositorOutputSurface::OnMessageReceived(
+    const IPC::Message& message) {
+  bool handled = true;
+  IPC_BEGIN_MESSAGE_MAP(SynchronousCompositorOutputSurface, message)
+    IPC_MESSAGE_HANDLER(SyncCompositorMsg_SetMemoryPolicy, SetMemoryPolicy)
+    IPC_MESSAGE_HANDLER(SyncCompositorMsg_ReclaimResources, OnReclaimResources)
+    IPC_MESSAGE_UNHANDLED(handled = false)
+  IPC_END_MESSAGE_MAP()
+  return handled;
+}
+
 bool SynchronousCompositorOutputSurface::BindToClient(
     cc::OutputSurfaceClient* surface_client) {
   DCHECK(CalledOnValidThread());
@@ -105,8 +127,12 @@ bool SynchronousCompositorOutputSurface::BindToClient(
     return false;
 
   client_->SetMemoryPolicy(memory_policy_);
+  client_->SetTreeActivationCallback(
+      base::Bind(&SynchronousCompositorOutputSurface::DidActivatePendingTree,
+                 base::Unretained(this)));
   registry_->RegisterOutputSurface(routing_id_, this);
   registered_ = true;
+  Send(new SyncCompositorHostMsg_OutputSurfaceCreated(routing_id_));
   return true;
 }
 
@@ -115,6 +141,7 @@ void SynchronousCompositorOutputSurface::DetachFromClient() {
   if (registered_) {
     registry_->UnregisterOutputSurface(routing_id_, this);
   }
+  client_->SetTreeActivationCallback(base::Closure());
   cc::OutputSurface::DetachFromClient();
   CancelFallbackTick();
 }
@@ -129,8 +156,10 @@ void SynchronousCompositorOutputSurface::SwapBuffers(
     cc::CompositorFrame* frame) {
   DCHECK(CalledOnValidThread());
   DCHECK(sync_client_);
-  if (!fallback_tick_running_)
+  if (!fallback_tick_running_) {
     sync_client_->SwapBuffers(output_surface_id_, frame);
+    DeliverMessages();
+  }
   client_->DidSwapBuffers();
   did_swap_ = true;
 }
@@ -223,11 +252,14 @@ void SynchronousCompositorOutputSurface::InvokeComposite(
     client_->DidSwapBuffersComplete();
 }
 
-void SynchronousCompositorOutputSurface::ReturnResources(
+void SynchronousCompositorOutputSurface::OnReclaimResources(
     uint32_t output_surface_id,
-    const cc::CompositorFrameAck& frame_ack) {
-  if (output_surface_id_ == output_surface_id)
-    ReclaimResources(&frame_ack);
+    const cc::CompositorFrameAck& ack) {
+  // Ignore message if it's a stale one coming from a different output surface
+  // (e.g. after a lost context).
+  if (output_surface_id != output_surface_id_)
+    return;
+  ReclaimResources(&ack);
 }
 
 void SynchronousCompositorOutputSurface::SetMemoryPolicy(size_t bytes_limit) {
@@ -252,18 +284,26 @@ void SynchronousCompositorOutputSurface::SetMemoryPolicy(size_t bytes_limit) {
   }
 }
 
-void SynchronousCompositorOutputSurface::SetTreeActivationCallback(
-    const base::Closure& callback) {
-  DCHECK(client_);
-  client_->SetTreeActivationCallback(callback);
+void SynchronousCompositorOutputSurface::DidActivatePendingTree() {
+  DCHECK(CalledOnValidThread());
+  if (sync_client_)
+    sync_client_->DidActivatePendingTree();
+  DeliverMessages();
 }
 
-void SynchronousCompositorOutputSurface::GetMessagesToDeliver(
-    std::vector<scoped_ptr<IPC::Message>>* messages) {
-  DCHECK(CalledOnValidThread());
-  scoped_ptr<FrameSwapMessageQueue::SendMessageScope> send_message_scope =
+void SynchronousCompositorOutputSurface::DeliverMessages() {
+  std::vector<std::unique_ptr<IPC::Message>> messages;
+  std::unique_ptr<FrameSwapMessageQueue::SendMessageScope> send_message_scope =
       frame_swap_message_queue_->AcquireSendMessageScope();
-  frame_swap_message_queue_->DrainMessages(messages);
+  frame_swap_message_queue_->DrainMessages(&messages);
+  for (auto& msg : messages) {
+    Send(msg.release());
+  }
+}
+
+bool SynchronousCompositorOutputSurface::Send(IPC::Message* message) {
+  DCHECK(CalledOnValidThread());
+  return sender_->Send(message);
 }
 
 bool SynchronousCompositorOutputSurface::CalledOnValidThread() const {

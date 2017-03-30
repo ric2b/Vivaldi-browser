@@ -7,7 +7,6 @@
 
 #include "base/cancelable_callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/tick_clock.h"
 #include "media/base/media_export.h"
@@ -36,8 +35,7 @@ class MEDIA_EXPORT NullVideoSink : public VideoRendererSink {
   // VideoRendererSink implementation.
   void Start(RenderCallback* callback) override;
   void Stop() override;
-  void PaintFrameUsingOldRenderingPath(
-      const scoped_refptr<VideoFrame>& frame) override;
+  void PaintSingleFrame(const scoped_refptr<VideoFrame>& frame) override;
 
   void set_tick_clock_for_testing(base::TickClock* tick_clock) {
     tick_clock_ = tick_clock;

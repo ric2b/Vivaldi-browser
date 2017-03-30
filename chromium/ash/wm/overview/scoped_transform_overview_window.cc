@@ -9,9 +9,10 @@
 
 #include "ash/screen_util.h"
 #include "ash/shell_window_ids.h"
+#include "ash/wm/common/window_state.h"
 #include "ash/wm/overview/scoped_overview_animation_settings.h"
 #include "ash/wm/overview/window_selector_item.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/macros.h"
 #include "ui/aura/client/aura_constants.h"
@@ -258,15 +259,22 @@ void ScopedTransformOverviewWindow::OnWindowDestroyed() {
 
 gfx::Rect ScopedTransformOverviewWindow::ShrinkRectToFitPreservingAspectRatio(
     const gfx::Rect& rect,
-    const gfx::Rect& bounds) {
+    const gfx::Rect& bounds,
+    int top_view_inset,
+    int title_height) {
   DCHECK(!rect.IsEmpty());
+  DCHECK_LE(top_view_inset, rect.height());
+  DCHECK_LE(title_height, bounds.height());
   float scale = std::min(
       1.0f, std::min(static_cast<float>(bounds.width()) / rect.width(),
-                     static_cast<float>(bounds.height()) / rect.height()));
-  return gfx::Rect(bounds.x() + 0.5 * (bounds.width() - scale * rect.width()),
-                   bounds.y() + 0.5 * (bounds.height() - scale * rect.height()),
-                   rect.width() * scale,
-                   rect.height() * scale);
+                     static_cast<float>((bounds.height() - title_height)) /
+                         (rect.height() - top_view_inset)));
+  return gfx::Rect(
+      bounds.x() + 0.5 * (bounds.width() - scale * rect.width()),
+      bounds.y() + title_height - scale * top_view_inset +
+          0.5 * (bounds.height() -
+                 (title_height + scale * (rect.height() - top_view_inset))),
+      rect.width() * scale, rect.height() * scale);
 }
 
 gfx::Transform ScopedTransformOverviewWindow::GetTransformForRect(

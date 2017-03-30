@@ -38,7 +38,9 @@
 #include "platform/graphics/skia/ImagePixelLocker.h"
 #include "platform/image-decoders/ImageDecoder.h"
 #include "platform/image-decoders/ImageFrame.h"
-#include "platform/image-encoders/skia/PNGImageEncoder.h"
+#include "platform/image-decoders/SegmentReader.h"
+#include "platform/image-encoders/PNGImageEncoder.h"
+#include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkPictureRecorder.h"
 #include "third_party/skia/include/core/SkStream.h"
@@ -56,15 +58,18 @@ PictureSnapshot::PictureSnapshot(PassRefPtr<const SkPicture> picture)
 
 static bool decodeBitmap(const void* data, size_t length, SkBitmap* result)
 {
-    RefPtr<SharedBuffer> buffer = SharedBuffer::create(static_cast<const char*>(data), length);
-    OwnPtr<ImageDecoder> imageDecoder = ImageDecoder::create(*buffer, ImageDecoder::AlphaPremultiplied, ImageDecoder::GammaAndColorProfileIgnored);
+    OwnPtr<ImageDecoder> imageDecoder = ImageDecoder::create(static_cast<const char*>(data), length,
+        ImageDecoder::AlphaPremultiplied, ImageDecoder::GammaAndColorProfileIgnored);
     if (!imageDecoder)
         return false;
-    imageDecoder->setData(buffer.get(), true);
+
+    // No need to copy the data; this decodes immediately.
+    RefPtr<SegmentReader> segmentReader = SegmentReader::createFromSkData(adoptRef(SkData::NewWithoutCopy(data, length)));
+    imageDecoder->setData(segmentReader.release(), true);
     ImageFrame* frame = imageDecoder->frameBufferAtIndex(0);
     if (!frame)
         return true;
-    *result = frame->getSkBitmap();
+    *result = frame->bitmap();
     return true;
 }
 
@@ -136,7 +141,7 @@ PassOwnPtr<Vector<char>> PictureSnapshot::replay(unsigned fromStep, unsigned toS
         return nullptr;
 
     base64Encode(encodedImage, *base64Data);
-    return base64Data.release();
+    return base64Data;
 }
 
 PassOwnPtr<PictureSnapshot::Timings> PictureSnapshot::profile(unsigned minRepeatCount, double minDuration, const FloatRect* clipRect) const
@@ -164,7 +169,7 @@ PassOwnPtr<PictureSnapshot::Timings> PictureSnapshot::profile(unsigned minRepeat
         m_picture->playback(&canvas);
         now = WTF::monotonicallyIncreasingTime();
     }
-    return timings.release();
+    return timings;
 }
 
 PassRefPtr<JSONArray> PictureSnapshot::snapshotCommandLog() const

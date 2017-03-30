@@ -11,16 +11,18 @@
 #include "ash/shell_window_ids.h"
 #include "ash/wm/window_animations.h"
 #include "base/bind.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/strings/string16.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "ui/aura/window.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/gfx/geometry/insets.h"
-#include "ui/views/bubble/bubble_delegate.h"
+#include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/widget/widget.h"
+#include "ui/wm/core/window_animations.h"
 
 namespace ash {
 namespace {
@@ -45,12 +47,12 @@ const int kArrowOffsetTopBottom = 7;
 
 // The implementation of tooltip of the launcher.
 class ShelfTooltipManager::ShelfTooltipBubble
-    : public views::BubbleDelegateView {
+    : public views::BubbleDialogDelegateView {
  public:
   ShelfTooltipBubble(views::View* anchor,
                      views::BubbleBorder::Arrow arrow,
                      const base::string16& text)
-      : views::BubbleDelegateView(anchor, arrow) {
+      : views::BubbleDialogDelegateView(anchor, arrow) {
     gfx::Insets insets =
         gfx::Insets(kArrowOffsetTopBottom, kArrowOffsetLeftRight);
     // Adjust the anchor location for asymmetrical borders of shelf item.
@@ -58,7 +60,6 @@ class ShelfTooltipManager::ShelfTooltipBubble
       insets += anchor->border()->GetInsets();
 
     set_anchor_view_insets(insets);
-    set_close_on_esc(false);
     set_close_on_deactivate(false);
     set_can_activate(false);
     set_accept_events(false);
@@ -75,17 +76,18 @@ class ShelfTooltipManager::ShelfTooltipBubble
     label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     label->SetEnabledColor(kTooltipTextColor);
     AddChildView(label);
-    views::BubbleDelegateView::CreateBubble(this);
-    SizeToContents();
+    views::BubbleDialogDelegateView::CreateBubble(this);
   }
 
  private:
-  // views::View overrides:
+  // BubbleDialogDelegateView overrides:
   gfx::Size GetPreferredSize() const override {
-    const gfx::Size size = views::BubbleDelegateView::GetPreferredSize();
+    const gfx::Size size = BubbleDialogDelegateView::GetPreferredSize();
     return gfx::Size(std::min(size.width(), kTooltipMaxWidth),
                      std::max(size.height(), kTooltipMinHeight));
   }
+
+  int GetDialogButtons() const override { return ui::DIALOG_BUTTON_NONE; }
 
   DISALLOW_COPY_AND_ASSIGN(ShelfTooltipBubble);
 };
@@ -100,6 +102,9 @@ ShelfTooltipManager::ShelfTooltipManager(ShelfView* shelf_view)
 
 ShelfTooltipManager::~ShelfTooltipManager() {
   WillDeleteShelf();
+
+  Shell::GetInstance()->RemovePointerWatcher(this);
+
   if (root_window_) {
     root_window_->RemoveObserver(this);
     root_window_->RemovePreTargetHandler(this);
@@ -111,10 +116,11 @@ void ShelfTooltipManager::Init() {
   shelf_layout_manager_ = shelf_view_->shelf()->shelf_layout_manager();
   shelf_layout_manager_->AddObserver(this);
 
-  // TODO(msw): Observe events outside the shelf in mash, to close tooltips.
   root_window_ = shelf_view_->GetWidget()->GetNativeWindow()->GetRootWindow();
   root_window_->AddPreTargetHandler(this);
   root_window_->AddObserver(this);
+
+  Shell::GetInstance()->AddPointerWatcher(this);
 }
 
 void ShelfTooltipManager::Close() {
@@ -137,7 +143,8 @@ void ShelfTooltipManager::ShowTooltip(views::View* view) {
   if (bubble_) {
     // Cancel the hiding animation to hide the old bubble immediately.
     gfx::NativeView native_view = bubble_->GetWidget()->GetNativeView();
-    wm::SetWindowVisibilityAnimationTransition(native_view, wm::ANIMATE_NONE);
+    ::wm::SetWindowVisibilityAnimationTransition(native_view,
+                                                 ::wm::ANIMATE_NONE);
     Close();
   }
 
@@ -152,9 +159,9 @@ void ShelfTooltipManager::ShowTooltip(views::View* view) {
   base::string16 text = shelf_view_->GetTitleForView(view);
   bubble_ = new ShelfTooltipBubble(view, arrow, text);
   gfx::NativeView native_view = bubble_->GetWidget()->GetNativeView();
-  wm::SetWindowVisibilityAnimationType(
-      native_view, wm::WINDOW_VISIBILITY_ANIMATION_TYPE_VERTICAL);
-  wm::SetWindowVisibilityAnimationTransition(native_view, wm::ANIMATE_HIDE);
+  ::wm::SetWindowVisibilityAnimationType(
+      native_view, ::wm::WINDOW_VISIBILITY_ANIMATION_TYPE_VERTICAL);
+  ::wm::SetWindowVisibilityAnimationTransition(native_view, ::wm::ANIMATE_HIDE);
   bubble_->GetWidget()->Show();
 }
 
@@ -166,9 +173,28 @@ void ShelfTooltipManager::ShowTooltipWithDelay(views::View* view) {
   }
 }
 
+void ShelfTooltipManager::OnMousePressed(const ui::MouseEvent& event,
+                                         const gfx::Point& location_in_screen,
+                                         views::Widget* target) {
+  // Close on any mouse press events inside or outside the tooltip.
+  Close();
+}
+
+void ShelfTooltipManager::OnTouchPressed(const ui::TouchEvent& event,
+                                         const gfx::Point& location_in_screen,
+                                         views::Widget* target) {
+  // Close on any touch press events inside or outside the tooltip.
+  Close();
+}
+
 void ShelfTooltipManager::OnEvent(ui::Event* event) {
+  // Mouse and touch press events are handled via views::PointerWatcher.
   if (event->type() == ui::ET_MOUSE_PRESSED ||
-      event->type() == ui::ET_MOUSE_EXITED || !event->IsMouseEvent() ||
+      event->type() == ui::ET_TOUCH_PRESSED) {
+    return;
+  }
+
+  if (event->type() == ui::ET_MOUSE_EXITED || !event->IsMouseEvent() ||
       event->target() != shelf_view_->GetWidget()->GetNativeWindow()) {
     if (!event->IsKeyEvent())
       Close();

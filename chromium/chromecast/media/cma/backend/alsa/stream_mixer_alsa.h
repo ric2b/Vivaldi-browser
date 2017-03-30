@@ -14,10 +14,10 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_vector.h"
 #include "base/threading/thread.h"
 #include "base/timer/timer.h"
 #include "chromecast/media/cma/backend/alsa/media_pipeline_backend_alsa.h"
+#include "chromecast/media/cma/backend/alsa/stream_mixer_alsa_input.h"
 #include "chromecast/public/cast_media_shlib.h"
 
 namespace media {
@@ -99,7 +99,7 @@ class StreamMixerAlsa {
             mixer_rendering_delay) = 0;
 
     // This will be called when a fatal error occurs in the mixer.
-    virtual void SignalError() = 0;
+    virtual void SignalError(StreamMixerAlsaInput::MixerError error) = 0;
 
     // Notifies the input that it is being removed by the upper layers, and
     // should do whatever is necessary to become ready to delete from the mixer.
@@ -120,7 +120,6 @@ class StreamMixerAlsa {
   int output_samples_per_second() const { return output_samples_per_second_; }
   bool empty() const { return inputs_.empty(); }
   State state() const { return state_; }
-  int num_output_channels() const { return num_output_channels_; }
 
   const scoped_refptr<base::SingleThreadTaskRunner>& task_runner() const {
     return mixer_task_runner_;
@@ -169,7 +168,7 @@ class StreamMixerAlsa {
   int SetAlsaPlaybackParams();
   void Start();
   void Stop();
-  void ClosePcm();
+  void Close();
   void SignalError();
   void CheckChangeOutputRate(int input_samples_per_second);
   unsigned int DetermineOutputRate(unsigned int requested_rate);
@@ -206,7 +205,6 @@ class StreamMixerAlsa {
   // User-configurable ALSA parameters. This caches the results, so the code
   // only has to interact with the command line parameters once.
   std::string alsa_device_name_;
-  int num_output_channels_;
   snd_pcm_uframes_t alsa_buffer_size_;
   bool alsa_period_explicitly_set;
   snd_pcm_uframes_t alsa_period_size_;
@@ -215,8 +213,8 @@ class StreamMixerAlsa {
 
   State state_;
 
-  ScopedVector<InputQueue> inputs_;
-  ScopedVector<InputQueue> ignored_inputs_;
+  std::vector<std::unique_ptr<InputQueue>> inputs_;
+  std::vector<std::unique_ptr<InputQueue>> ignored_inputs_;
   MediaPipelineBackendAlsa::RenderingDelay rendering_delay_;
   // Buffer to write final interleaved data before sending to snd_pcm_writei().
   std::vector<uint8_t> interleaved_;

@@ -7,9 +7,11 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gl/gl_export.h"
 #include "ui/gl/gl_surface.h"
 
 namespace gfx {
@@ -39,7 +41,7 @@ class GL_EXPORT GLSurfaceOSMesa : public GLSurface {
  private:
   gfx::Size size_;
   GLSurface::Format format_;
-  scoped_ptr<int32_t[]> buffer_;
+  std::unique_ptr<int32_t[]> buffer_;
 
   DISALLOW_COPY_AND_ASSIGN(GLSurfaceOSMesa);
 };

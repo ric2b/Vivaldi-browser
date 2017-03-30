@@ -61,7 +61,7 @@ using namespace HTMLNames;
 
 class HTMLImageElement::ViewportChangeListener final : public MediaQueryListListener {
 public:
-    static RawPtr<ViewportChangeListener> create(HTMLImageElement* element)
+    static ViewportChangeListener* create(HTMLImageElement* element)
     {
         return new ViewportChangeListener(element);
     }
@@ -72,9 +72,6 @@ public:
             m_element->notifyViewportChanged();
     }
 
-#if !ENABLE(OILPAN)
-    void clearElement() { m_element = nullptr; }
-#endif
     DEFINE_INLINE_VIRTUAL_TRACE()
     {
         visitor->trace(m_element);
@@ -99,37 +96,25 @@ HTMLImageElement::HTMLImageElement(Document& document, HTMLFormElement* form, bo
 {
     setHasCustomStyleCallbacks();
     if (form && form->inShadowIncludingDocument()) {
-#if ENABLE(OILPAN)
         m_form = form;
-#else
-        m_form = form->createWeakPtr();
-#endif
         m_formWasSetByParser = true;
         m_form->associate(*this);
         m_form->didAssociateByParser();
     }
 }
 
-RawPtr<HTMLImageElement> HTMLImageElement::create(Document& document)
+HTMLImageElement* HTMLImageElement::create(Document& document)
 {
     return new HTMLImageElement(document);
 }
 
-RawPtr<HTMLImageElement> HTMLImageElement::create(Document& document, HTMLFormElement* form, bool createdByParser)
+HTMLImageElement* HTMLImageElement::create(Document& document, HTMLFormElement* form, bool createdByParser)
 {
     return new HTMLImageElement(document, form, createdByParser);
 }
 
 HTMLImageElement::~HTMLImageElement()
 {
-#if !ENABLE(OILPAN)
-    if (m_listener) {
-        document().mediaQueryMatcher().removeViewportListener(m_listener.get());
-        m_listener->clearElement();
-    }
-    if (m_form)
-        m_form->disassociate(*this);
-#endif
 }
 
 DEFINE_TRACE(HTMLImageElement)
@@ -149,28 +134,28 @@ void HTMLImageElement::notifyViewportChanged()
     selectSourceURL(ImageLoader::UpdateSizeChanged);
 }
 
-RawPtr<HTMLImageElement> HTMLImageElement::createForJSConstructor(Document& document)
+HTMLImageElement* HTMLImageElement::createForJSConstructor(Document& document)
 {
-    RawPtr<HTMLImageElement> image = new HTMLImageElement(document);
+    HTMLImageElement* image = new HTMLImageElement(document);
     image->m_elementCreatedByParser = false;
-    return image.release();
+    return image;
 }
 
-RawPtr<HTMLImageElement> HTMLImageElement::createForJSConstructor(Document& document, int width)
+HTMLImageElement* HTMLImageElement::createForJSConstructor(Document& document, int width)
 {
-    RawPtr<HTMLImageElement> image = new HTMLImageElement(document);
+    HTMLImageElement* image = new HTMLImageElement(document);
     image->setWidth(width);
     image->m_elementCreatedByParser = false;
-    return image.release();
+    return image;
 }
 
-RawPtr<HTMLImageElement> HTMLImageElement::createForJSConstructor(Document& document, int width, int height)
+HTMLImageElement* HTMLImageElement::createForJSConstructor(Document& document, int width, int height)
 {
-    RawPtr<HTMLImageElement> image = new HTMLImageElement(document);
+    HTMLImageElement* image = new HTMLImageElement(document);
     image->setWidth(width);
     image->setHeight(height);
     image->m_elementCreatedByParser = false;
-    return image.release();
+    return image;
 }
 
 bool HTMLImageElement::isPresentationAttribute(const QualifiedName& name) const
@@ -230,18 +215,10 @@ void HTMLImageElement::resetFormOwner()
         m_form->disassociate(*this);
     }
     if (nearestForm) {
-#if ENABLE(OILPAN)
         m_form = nearestForm;
-#else
-        m_form = nearestForm->createWeakPtr();
-#endif
         m_form->associate(*this);
     } else {
-#if ENABLE(OILPAN)
         m_form = nullptr;
-#else
-        m_form = WeakPtr<HTMLFormElement>();
-#endif
     }
 }
 
@@ -381,8 +358,8 @@ void HTMLImageElement::attach(const AttachContext& context)
         if (m_isFallbackImage) {
             float deviceScaleFactor = blink::deviceScaleFactor(layoutImage->frame());
             std::pair<Image*, float> brokenImageAndImageScaleFactor = ImageResource::brokenImage(deviceScaleFactor);
-            RawPtr<ImageResource> newImageResource = ImageResource::create(brokenImageAndImageScaleFactor.first);
-            layoutImage->imageResource()->setImageResource(newImageResource.get());
+            ImageResource* newImageResource = ImageResource::create(brokenImageAndImageScaleFactor.first);
+            layoutImage->imageResource()->setImageResource(newImageResource);
         }
         if (layoutImageResource->hasImage())
             return;
@@ -429,7 +406,7 @@ void HTMLImageElement::removedFrom(ContainerNode* insertionPoint)
 int HTMLImageElement::width()
 {
     if (inActiveDocument())
-        document().updateLayoutIgnorePendingStylesheets();
+        document().updateStyleAndLayoutIgnorePendingStylesheets();
 
     if (!layoutObject()) {
         // check the attribute first for an explicit pixel value
@@ -450,7 +427,7 @@ int HTMLImageElement::width()
 int HTMLImageElement::height()
 {
     if (inActiveDocument())
-        document().updateLayoutIgnorePendingStylesheets();
+        document().updateStyleAndLayoutIgnorePendingStylesheets();
 
     if (!layoutObject()) {
         // check the attribute first for an explicit pixel value
@@ -543,7 +520,7 @@ void HTMLImageElement::setWidth(int value)
 
 int HTMLImageElement::x() const
 {
-    document().updateLayoutIgnorePendingStylesheets();
+    document().updateStyleAndLayoutIgnorePendingStylesheets();
     LayoutObject* r = layoutObject();
     if (!r)
         return 0;
@@ -555,7 +532,7 @@ int HTMLImageElement::x() const
 
 int HTMLImageElement::y() const
 {
-    document().updateLayoutIgnorePendingStylesheets();
+    document().updateStyleAndLayoutIgnorePendingStylesheets();
     LayoutObject* r = layoutObject();
     if (!r)
         return 0;
@@ -707,20 +684,12 @@ void HTMLImageElement::forceReload() const
 
 ScriptPromise HTMLImageElement::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, int sx, int sy, int sw, int sh, const ImageBitmapOptions& options, ExceptionState& exceptionState)
 {
-    ASSERT(eventTarget.toDOMWindow());
-    if (!cachedImage()) {
-        exceptionState.throwDOMException(InvalidStateError, "No image can be retrieved from the provided element.");
-        return ScriptPromise();
-    }
-    if (cachedImage()->getImage()->isSVGImage()) {
-        exceptionState.throwDOMException(InvalidStateError, "The image element contains an SVG image, which is unsupported.");
-        return ScriptPromise();
-    }
+    ASSERT(eventTarget.toLocalDOMWindow());
     if (!sw || !sh) {
         exceptionState.throwDOMException(IndexSizeError, String::format("The source %s provided is 0.", sw ? "height" : "width"));
         return ScriptPromise();
     }
-    return ImageBitmapSource::fulfillImageBitmap(scriptState, ImageBitmap::create(this, IntRect(sx, sy, sw, sh), eventTarget.toDOMWindow()->document(), options));
+    return ImageBitmapSource::fulfillImageBitmap(scriptState, ImageBitmap::create(this, IntRect(sx, sy, sw, sh), eventTarget.toLocalDOMWindow()->document(), options));
 }
 
 void HTMLImageElement::selectSourceURL(ImageLoader::UpdateFromElementBehavior behavior)

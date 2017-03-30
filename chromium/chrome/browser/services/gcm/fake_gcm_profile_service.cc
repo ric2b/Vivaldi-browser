@@ -13,7 +13,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/gcm_driver/fake_gcm_client_factory.h"
 #include "components/gcm_driver/fake_gcm_driver.h"
@@ -119,10 +119,11 @@ void CustomFakeGCMDriver::OnDispatchMessage(const std::string& app_id,
 }  // namespace
 
 // static
-scoped_ptr<KeyedService> FakeGCMProfileService::Build(
+std::unique_ptr<KeyedService> FakeGCMProfileService::Build(
     content::BrowserContext* context) {
   Profile* profile = static_cast<Profile*>(context);
-  scoped_ptr<FakeGCMProfileService> service(new FakeGCMProfileService(profile));
+  std::unique_ptr<FakeGCMProfileService> service(
+      new FakeGCMProfileService(profile));
   service->SetDriverForTesting(new CustomFakeGCMDriver(service.get()));
   return std::move(service);
 }

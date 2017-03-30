@@ -18,8 +18,8 @@
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "crypto/rsa_private_key.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
@@ -131,7 +131,7 @@ void EmbeddedTestServer::InitializeSSLServerContext() {
   std::vector<uint8_t> key_vector;
   key_vector.assign(pem_tokenizer.data().begin(), pem_tokenizer.data().end());
 
-  scoped_ptr<crypto::RSAPrivateKey> server_key(
+  std::unique_ptr<crypto::RSAPrivateKey> server_key(
       crypto::RSAPrivateKey::CreateFromPrivateKeyInfo(key_vector));
   context_ =
       CreateSSLServerContext(GetCertificate().get(), *server_key, ssl_config_);
@@ -167,10 +167,13 @@ void EmbeddedTestServer::ShutdownOnIOThread() {
 }
 
 void EmbeddedTestServer::HandleRequest(HttpConnection* connection,
-                                       scoped_ptr<HttpRequest> request) {
+                                       std::unique_ptr<HttpRequest> request) {
   DCHECK(io_thread_->task_runner()->BelongsToCurrentThread());
 
-  scoped_ptr<HttpResponse> response;
+  for (const auto& monitor : request_monitors_)
+    monitor.Run(*request);
+
+  std::unique_ptr<HttpResponse> response;
 
   for (const auto& handler : request_handlers_) {
     response = handler.Run(*request);
@@ -189,7 +192,8 @@ void EmbeddedTestServer::HandleRequest(HttpConnection* connection,
   if (!response) {
     LOG(WARNING) << "Request not handled. Returning 404: "
                  << request->relative_url;
-    scoped_ptr<BasicHttpResponse> not_found_response(new BasicHttpResponse);
+    std::unique_ptr<BasicHttpResponse> not_found_response(
+        new BasicHttpResponse);
     not_found_response->set_code(HTTP_NOT_FOUND);
     response = std::move(not_found_response);
   }
@@ -284,20 +288,27 @@ void EmbeddedTestServer::AddDefaultHandlers(const base::FilePath& directory) {
 
 void EmbeddedTestServer::RegisterRequestHandler(
     const HandleRequestCallback& callback) {
-  // TODO(svaldez): Add check to prevent RegisterHandler from being called
-  // after the server has started. https://crbug.com/546060
+  // TODO(svaldez): Add check to prevent RegisterRequestHandler from being
+  // called after the server has started. https://crbug.com/546060
   request_handlers_.push_back(callback);
+}
+
+void EmbeddedTestServer::RegisterRequestMonitor(
+    const MonitorRequestCallback& callback) {
+  // TODO(svaldez): Add check to prevent RegisterRequestMonitor from being
+  // called after the server has started. https://crbug.com/546060
+  request_monitors_.push_back(callback);
 }
 
 void EmbeddedTestServer::RegisterDefaultHandler(
     const HandleRequestCallback& callback) {
-  // TODO(svaldez): Add check to prevent RegisterHandler from being called
-  // after the server has started. https://crbug.com/546060
+  // TODO(svaldez): Add check to prevent RegisterDefaultHandler from being
+  // called after the server has started. https://crbug.com/546060
   default_request_handlers_.push_back(callback);
 }
 
-scoped_ptr<StreamSocket> EmbeddedTestServer::DoSSLUpgrade(
-    scoped_ptr<StreamSocket> connection) {
+std::unique_ptr<StreamSocket> EmbeddedTestServer::DoSSLUpgrade(
+    std::unique_ptr<StreamSocket> connection) {
   DCHECK(io_thread_->task_runner()->BelongsToCurrentThread());
 
   return context_->CreateSSLServerSocket(std::move(connection));
@@ -315,6 +326,18 @@ void EmbeddedTestServer::DoAcceptLoop() {
   }
 }
 
+bool EmbeddedTestServer::FlushAllSocketsAndConnectionsOnUIThread() {
+  return PostTaskToIOThreadAndWait(
+      base::Bind(&EmbeddedTestServer::FlushAllSocketsAndConnections,
+                 base::Unretained(this)));
+}
+
+void EmbeddedTestServer::FlushAllSocketsAndConnections() {
+  STLDeleteContainerPairSecondPointers(connections_.begin(),
+                                       connections_.end());
+  connections_.clear();
+}
+
 void EmbeddedTestServer::OnAcceptCompleted(int rv) {
   DCHECK_NE(ERR_IO_PENDING, rv);
   HandleAcceptResult(std::move(accepted_socket_));
@@ -328,7 +351,8 @@ void EmbeddedTestServer::OnHandshakeDone(HttpConnection* connection, int rv) {
     DidClose(connection);
 }
 
-void EmbeddedTestServer::HandleAcceptResult(scoped_ptr<StreamSocket> socket) {
+void EmbeddedTestServer::HandleAcceptResult(
+    std::unique_ptr<StreamSocket> socket) {
   DCHECK(io_thread_->task_runner()->BelongsToCurrentThread());
   if (connection_listener_)
     connection_listener_->AcceptedSocket(*socket);
@@ -375,7 +399,7 @@ void EmbeddedTestServer::OnReadCompleted(HttpConnection* connection, int rv) {
 bool EmbeddedTestServer::HandleReadResult(HttpConnection* connection, int rv) {
   DCHECK(io_thread_->task_runner()->BelongsToCurrentThread());
   if (connection_listener_)
-    connection_listener_->ReadFromSocket(*connection->socket_);
+    connection_listener_->ReadFromSocket(*connection->socket_, rv);
   if (rv <= 0) {
     DidClose(connection);
     return false;
@@ -420,7 +444,7 @@ bool EmbeddedTestServer::PostTaskToIOThreadAndWait(
   //
   // To handle this situation, create temporary message loop to support the
   // PostTaskAndReply operation if the current thread as no message loop.
-  scoped_ptr<base::MessageLoop> temporary_loop;
+  std::unique_ptr<base::MessageLoop> temporary_loop;
   if (!base::MessageLoop::current())
     temporary_loop.reset(new base::MessageLoop());
 

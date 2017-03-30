@@ -10,7 +10,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_registration_handle.h"
@@ -74,7 +74,7 @@ class ServiceWorkerRegistrationTest : public testing::Test {
   };
 
  private:
-  scoped_ptr<EmbeddedWorkerTestHelper> helper_;
+  std::unique_ptr<EmbeddedWorkerTestHelper> helper_;
   TestBrowserThreadBundle thread_bundle_;
 };
 
@@ -152,7 +152,7 @@ TEST_F(ServiceWorkerRegistrationTest, FailedRegistrationNoCrash) {
   scoped_refptr<ServiceWorkerRegistration> registration =
       new ServiceWorkerRegistration(kScope, kRegistrationId,
                                     context()->AsWeakPtr());
-  scoped_ptr<ServiceWorkerRegistrationHandle> handle(
+  std::unique_ptr<ServiceWorkerRegistrationHandle> handle(
       new ServiceWorkerRegistrationHandle(
           context()->AsWeakPtr(), base::WeakPtr<ServiceWorkerProviderHost>(),
           registration.get()));

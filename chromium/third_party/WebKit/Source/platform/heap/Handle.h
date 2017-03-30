@@ -40,11 +40,7 @@
 #include "platform/heap/Visitor.h"
 #include "wtf/Allocator.h"
 #include "wtf/Atomics.h"
-#include "wtf/Functional.h"
 #include "wtf/HashFunctions.h"
-#include "wtf/Locker.h"
-#include "wtf/RawPtr.h"
-#include "wtf/RefCounted.h"
 #include "wtf/TypeTraits.h"
 
 #if defined(LEAK_SANITIZER)
@@ -118,13 +114,6 @@ public:
         checkPointer();
     }
 
-    template<typename U>
-    PersistentBase(const RawPtr<U>& other) : m_raw(other.get())
-    {
-        initialize();
-        checkPointer();
-    }
-
     ~PersistentBase()
     {
         uninitialize();
@@ -143,18 +132,17 @@ public:
         }
     }
 
-    RawPtr<T> release()
+    T* release()
     {
-        RawPtr<T> result = m_raw;
+        T* result = m_raw;
         assign(nullptr);
         return result;
     }
 
     void clear() { assign(nullptr); }
     T& operator*() const { return *m_raw; }
-    bool operator!() const { return !m_raw; }
+    explicit operator bool() const { return m_raw; }
     operator T*() const { return m_raw; }
-    operator RawPtr<T>() const { return m_raw; }
     T* operator->() const { return *this; }
     T* get() const { return m_raw; }
 
@@ -191,24 +179,23 @@ public:
         return *this;
     }
 
-    template<typename U>
-    PersistentBase& operator=(const RawPtr<U>& other)
-    {
-        assign(other);
-        return *this;
-    }
-
-#if defined(LEAK_SANITIZER)
+    // Register the persistent node as a 'static reference',
+    // belonging to the current thread and a persistent that must
+    // be cleared when the ThreadState itself is cleared out and
+    // destructed.
+    //
+    // Static singletons arrange for this to happen, either to ensure
+    // clean LSan leak reports or to register a thread-local persistent
+    // needing to be cleared out before the thread is terminated.
     PersistentBase* registerAsStaticReference()
     {
         if (m_persistentNode) {
             ASSERT(ThreadState::current());
-            ThreadState::current()->registerStaticPersistentNode(m_persistentNode);
+            ThreadState::current()->registerStaticPersistentNode(m_persistentNode, nullptr);
             LEAK_SANITIZER_IGNORE_OBJECT(this);
         }
         return this;
     }
-#endif
 
 protected:
     T* atomicGet() { return reinterpret_cast<T*>(acquireLoad(reinterpret_cast<void* volatile*>(&m_raw))); }
@@ -227,8 +214,7 @@ private:
                 initialize();
             return;
         }
-        if (m_persistentNode && crossThreadnessConfiguration != CrossThreadPersistentConfiguration)
-            uninitialize();
+        uninitialize();
     }
 
     NO_LAZY_SWEEP_SANITIZE_ADDRESS
@@ -240,31 +226,32 @@ private:
 
         TraceCallback traceCallback = TraceMethodDelegate<PersistentBase<T, weaknessConfiguration, crossThreadnessConfiguration>, &PersistentBase<T, weaknessConfiguration, crossThreadnessConfiguration>::trace>::trampoline;
         if (crossThreadnessConfiguration == CrossThreadPersistentConfiguration) {
-            m_persistentNode = ProcessHeap::crossThreadPersistentRegion().allocatePersistentNode(this, traceCallback);
-        } else {
-            ThreadState* state = ThreadStateFor<ThreadingTrait<T>::Affinity>::state();
-            ASSERT(state->checkThread());
-            m_persistentNode = state->getPersistentRegion()->allocatePersistentNode(this, traceCallback);
-#if ENABLE(ASSERT)
-            m_state = state;
-#endif
+            ProcessHeap::crossThreadPersistentRegion().allocatePersistentNode(m_persistentNode, this, traceCallback);
+            return;
         }
+        ThreadState* state = ThreadStateFor<ThreadingTrait<T>::Affinity>::state();
+        ASSERT(state->checkThread());
+        m_persistentNode = state->getPersistentRegion()->allocatePersistentNode(this, traceCallback);
+#if ENABLE(ASSERT)
+        m_state = state;
+#endif
     }
 
     void uninitialize()
     {
+        if (crossThreadnessConfiguration == CrossThreadPersistentConfiguration) {
+            if (acquireLoad(reinterpret_cast<void* volatile*>(&m_persistentNode)))
+                ProcessHeap::crossThreadPersistentRegion().freePersistentNode(m_persistentNode);
+            return;
+        }
+
         if (!m_persistentNode)
             return;
-
-        if (crossThreadnessConfiguration == CrossThreadPersistentConfiguration) {
-            ProcessHeap::crossThreadPersistentRegion().freePersistentNode(m_persistentNode);
-        } else {
-            ThreadState* state = ThreadStateFor<ThreadingTrait<T>::Affinity>::state();
-            ASSERT(state->checkThread());
-            // Persistent handle must be created and destructed in the same thread.
-            ASSERT(m_state == state);
-            state->getPersistentRegion()->freePersistentNode(m_persistentNode);
-        }
+        ThreadState* state = ThreadStateFor<ThreadingTrait<T>::Affinity>::state();
+        ASSERT(state->checkThread());
+        // Persistent handle must be created and destructed in the same thread.
+        ASSERT(m_state == state);
+        state->freePersistentNode(m_persistentNode);
         m_persistentNode = nullptr;
     }
 
@@ -274,15 +261,15 @@ private:
         if (!m_raw)
             return;
 
-        // Heap::isHeapObjectAlive(m_raw) checks that m_raw is a traceable
+        // ThreadHeap::isHeapObjectAlive(m_raw) checks that m_raw is a traceable
         // object. In other words, it checks that the pointer is either of:
         //
         //   (a) a pointer to the head of an on-heap object.
         //   (b) a pointer to the head of an on-heap mixin object.
         //
-        // Otherwise, Heap::isHeapObjectAlive will crash when it calls
+        // Otherwise, ThreadHeap::isHeapObjectAlive will crash when it calls
         // header->checkHeader().
-        Heap::isHeapObjectAlive(m_raw);
+        ThreadHeap::isHeapObjectAlive(m_raw);
 #endif
     }
 
@@ -313,8 +300,6 @@ public:
     Persistent(const Persistent<U>& other) : Parent(other) { }
     template<typename U>
     Persistent(const Member<U>& other) : Parent(other) { }
-    template<typename U>
-    Persistent(const RawPtr<U>& other) : Parent(other.get()) { }
 
     template<typename U>
     Persistent& operator=(U* other)
@@ -348,13 +333,6 @@ public:
         Parent::operator=(other);
         return *this;
     }
-
-    template<typename U>
-    Persistent& operator=(const RawPtr<U>& other)
-    {
-        Parent::operator=(other);
-        return *this;
-    }
 };
 
 // WeakPersistent is a way to create a weak pointer from an off-heap object
@@ -381,8 +359,6 @@ public:
     WeakPersistent(const WeakPersistent<U>& other) : Parent(other) { }
     template<typename U>
     WeakPersistent(const Member<U>& other) : Parent(other) { }
-    template<typename U>
-    WeakPersistent(const RawPtr<U>& other) : Parent(other.get()) { }
 
     template<typename U>
     WeakPersistent& operator=(U* other)
@@ -416,13 +392,6 @@ public:
         Parent::operator=(other);
         return *this;
     }
-
-    template<typename U>
-    WeakPersistent& operator=(const RawPtr<U>& other)
-    {
-        Parent::operator=(other);
-        return *this;
-    }
 };
 
 // Unlike Persistent, we can destruct a CrossThreadPersistent in a thread
@@ -440,8 +409,6 @@ public:
     CrossThreadPersistent(const CrossThreadPersistent<U>& other) : Parent(other) { }
     template<typename U>
     CrossThreadPersistent(const Member<U>& other) : Parent(other) { }
-    template<typename U>
-    CrossThreadPersistent(const RawPtr<U>& other) : Parent(other.get()) { }
 
     T* atomicGet() { return Parent::atomicGet(); }
 
@@ -477,13 +444,6 @@ public:
         Parent::operator=(other);
         return *this;
     }
-
-    template<typename U>
-    CrossThreadPersistent& operator=(const RawPtr<U>& other)
-    {
-        Parent::operator=(other);
-        return *this;
-    }
 };
 
 // Combines the behavior of CrossThreadPersistent and WeakPersistent.
@@ -500,8 +460,6 @@ public:
     CrossThreadWeakPersistent(const CrossThreadWeakPersistent<U>& other) : Parent(other) { }
     template<typename U>
     CrossThreadWeakPersistent(const Member<U>& other) : Parent(other) { }
-    template<typename U>
-    CrossThreadWeakPersistent(const RawPtr<U>& other) : Parent(other.get()) { }
 
     template<typename U>
     CrossThreadWeakPersistent& operator=(U* other)
@@ -531,13 +489,6 @@ public:
 
     template<typename U>
     CrossThreadWeakPersistent& operator=(const Member<U>& other)
-    {
-        Parent::operator=(other);
-        return *this;
-    }
-
-    template<typename U>
-    CrossThreadWeakPersistent& operator=(const RawPtr<U>& other)
     {
         Parent::operator=(other);
         return *this;
@@ -580,19 +531,27 @@ public:
         visitor->trace(*static_cast<Collection*>(this));
     }
 
-#if defined(LEAK_SANITIZER)
+    // See PersistentBase::registerAsStaticReference() comment.
     PersistentHeapCollectionBase* registerAsStaticReference()
     {
         if (m_persistentNode) {
             ASSERT(ThreadState::current());
-            ThreadState::current()->registerStaticPersistentNode(m_persistentNode);
+            ThreadState::current()->registerStaticPersistentNode(m_persistentNode, &PersistentHeapCollectionBase<Collection>::clearPersistentNode);
             LEAK_SANITIZER_IGNORE_OBJECT(this);
         }
         return this;
     }
-#endif
 
 private:
+
+    // Used when the registered PersistentNode of this object is
+    // released during ThreadState shutdown, clearing the association.
+    static void clearPersistentNode(void *self)
+    {
+        PersistentHeapCollectionBase<Collection>* collection = (reinterpret_cast<PersistentHeapCollectionBase<Collection>*>(self));
+        collection->uninitialize();
+        collection->clear();
+    }
 
     NO_LAZY_SWEEP_SANITIZE_ADDRESS
     void initialize()
@@ -608,11 +567,14 @@ private:
 
     void uninitialize()
     {
+        if (!m_persistentNode)
+            return;
         ThreadState* state = ThreadState::current();
         ASSERT(state->checkThread());
         // Persistent handle must be created and destructed in the same thread.
         ASSERT(m_state == state);
-        state->getPersistentRegion()->freePersistentNode(m_persistentNode);
+        state->freePersistentNode(m_persistentNode);
+        m_persistentNode = nullptr;
     }
 
     PersistentNode* m_persistentNode;
@@ -731,12 +693,6 @@ public:
         checkPointer();
     }
 
-    template<typename U>
-    Member(const RawPtr<U>& other) : m_raw(other.get())
-    {
-        checkPointer();
-    }
-
     Member(WTF::HashTableDeletedValueType) : m_raw(reinterpret_cast<T*>(-1))
     {
     }
@@ -767,14 +723,12 @@ public:
         return result;
     }
 
-    bool operator!() const { return !m_raw; }
+    explicit operator bool() const { return m_raw; }
 
     operator T*() const { return m_raw; }
 
     T* operator->() const { return m_raw; }
     T& operator*() const { return *m_raw; }
-    template<typename U>
-    operator RawPtr<U>() const { return m_raw; }
 
     template<typename U>
     Member& operator=(const Persistent<U>& other)
@@ -794,14 +748,6 @@ public:
 
     template<typename U>
     Member& operator=(U* other)
-    {
-        m_raw = other;
-        checkPointer();
-        return *this;
-    }
-
-    template<typename U>
-    Member& operator=(RawPtr<U> other)
     {
         m_raw = other;
         checkPointer();
@@ -844,7 +790,7 @@ protected:
         //   (a) a pointer to the head of an on-heap object.
         //   (b) a pointer to the head of an on-heap mixin object.
         //
-        // We can check it by calling Heap::isHeapObjectAlive(m_raw),
+        // We can check it by calling ThreadHeap::isHeapObjectAlive(m_raw),
         // but we cannot call it here because it requires to include T.h.
         // So we currently only try to implement the check for (a), but do
         // not insist that T's definition is in scope.
@@ -907,14 +853,6 @@ public:
         return *this;
     }
 
-    template<typename U>
-    WeakMember& operator=(const RawPtr<U>& other)
-    {
-        this->m_raw = other;
-        this->checkPointer();
-        return *this;
-    }
-
     WeakMember& operator=(std::nullptr_t)
     {
         this->m_raw = nullptr;
@@ -943,9 +881,6 @@ public:
     UntracedMember(std::nullptr_t) : Member<T>(nullptr) { }
 
     UntracedMember(T* raw) : Member<T>(raw) { }
-
-    template<typename U>
-    UntracedMember(const RawPtr<U>& other) : Member<T>(other) { }
 
     template<typename U>
     UntracedMember(const Persistent<U>& other) : Member<T>(other) { }
@@ -979,14 +914,6 @@ public:
         return *this;
     }
 
-    template<typename U>
-    UntracedMember& operator=(const RawPtr<U>& other)
-    {
-        this->m_raw = other;
-        this->checkPointer();
-        return *this;
-    }
-
     UntracedMember& operator=(std::nullptr_t)
     {
         this->m_raw = nullptr;
@@ -1009,7 +936,7 @@ template<typename T, bool = IsGarbageCollectedType<T>::value>
 class RawPtrOrMemberTrait {
     STATIC_ONLY(RawPtrOrMemberTrait)
 public:
-    using Type = RawPtr<T>;
+    using Type = T*;
 };
 
 template<typename T>
@@ -1137,6 +1064,18 @@ private:
     CrossThreadWeakPersistent<T> m_value;
 };
 
+template <typename T>
+Persistent<T> wrapPersistent(T* value)
+{
+    return Persistent<T>(value);
+}
+
+template <typename T>
+CrossThreadPersistent<T> wrapCrossThreadPersistent(T* value)
+{
+    return CrossThreadPersistent<T>(value);
+}
+
 // LEAK_SANITIZER_DISABLED_SCOPE: all allocations made in the current scope
 // will be exempted from LSan consideration.
 //
@@ -1220,23 +1159,14 @@ struct IsWeak<blink::WeakMember<T>> {
     static const bool value = true;
 };
 
-template<typename T> inline T* getPtr(const blink::Member<T>& p)
-{
-    return p.get();
-}
-
-template<typename T> inline T* getPtr(const blink::Persistent<T>& p)
-{
-    return p.get();
-}
-
 // For wtf/Functional.h
 template<typename T, bool isGarbageCollected> struct PointerParamStorageTraits;
 
+// The condition of 'T must be fully defined' (except for void) is checked in
+// blink::IsGarbageCollectedType<T>::value.
 template<typename T>
 struct PointerParamStorageTraits<T*, false> {
     STATIC_ONLY(PointerParamStorageTraits);
-    static_assert(sizeof(T), "T must be fully defined");
     using StorageType = T*;
 
     static StorageType wrap(T* value) { return value; }
@@ -1246,7 +1176,6 @@ struct PointerParamStorageTraits<T*, false> {
 template<typename T>
 struct PointerParamStorageTraits<T*, true> {
     STATIC_ONLY(PointerParamStorageTraits);
-    static_assert(sizeof(T), "T must be fully defined");
     using StorageType = blink::CrossThreadPersistent<T>;
 
     static StorageType wrap(T* value) { return value; }
@@ -1256,13 +1185,6 @@ struct PointerParamStorageTraits<T*, true> {
 template<typename T>
 struct ParamStorageTraits<T*> : public PointerParamStorageTraits<T*, blink::IsGarbageCollectedType<T>::value> {
     STATIC_ONLY(ParamStorageTraits);
-    static_assert(sizeof(T), "T must be fully defined");
-};
-
-template<typename T>
-struct ParamStorageTraits<RawPtr<T>> : public PointerParamStorageTraits<T*, blink::IsGarbageCollectedType<T>::value> {
-    STATIC_ONLY(ParamStorageTraits);
-    static_assert(sizeof(T), "T must be fully defined");
 };
 
 template<typename T>

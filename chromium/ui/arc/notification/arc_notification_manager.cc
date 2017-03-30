@@ -6,6 +6,7 @@
 
 #include "ash/shell.h"
 #include "ash/system/toast/toast_manager.h"
+#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "ui/arc/notification/arc_notification_item.h"
 
@@ -49,14 +50,15 @@ void ArcNotificationManager::OnNotificationsInstanceClosed() {
   DCHECK(ready_);
   while (!items_.empty()) {
     auto it = items_.begin();
-    scoped_ptr<ArcNotificationItem> item = std::move(it->second);
+    std::unique_ptr<ArcNotificationItem> item = std::move(it->second);
     items_.erase(it);
     item->OnClosedFromAndroid(false /* by_user */);
   }
   ready_ = false;
 }
 
-void ArcNotificationManager::OnNotificationPosted(ArcNotificationDataPtr data) {
+void ArcNotificationManager::OnNotificationPosted(
+    mojom::ArcNotificationDataPtr data) {
   const std::string& key = data->key;
   auto it = items_.find(key);
   if (it == items_.end()) {
@@ -65,7 +67,7 @@ void ArcNotificationManager::OnNotificationPosted(ArcNotificationDataPtr data) {
     ArcNotificationItem* item =
         new ArcNotificationItem(this, message_center_, key, main_profile_id_);
     // TODO(yoshiki): Use emplacement for performance when it's available.
-    auto result = items_.insert(std::make_pair(key, make_scoped_ptr(item)));
+    auto result = items_.insert(std::make_pair(key, base::WrapUnique(item)));
     DCHECK(result.second);
     it = result.first;
   }
@@ -80,7 +82,7 @@ void ArcNotificationManager::OnNotificationRemoved(const mojo::String& key) {
     return;
   }
 
-  scoped_ptr<ArcNotificationItem> item = std::move(it->second);
+  std::unique_ptr<ArcNotificationItem> item = std::move(it->second);
   items_.erase(it);
   item->OnClosedFromAndroid(true /* by_user */);
 }
@@ -96,7 +98,7 @@ void ArcNotificationManager::SendNotificationRemovedFromChrome(
 
   // The removed ArcNotificationItem needs to live in this scope, since the
   // given argument |key| may be a part of the removed item.
-  scoped_ptr<ArcNotificationItem> item = std::move(it->second);
+  std::unique_ptr<ArcNotificationItem> item = std::move(it->second);
   items_.erase(it);
 
   auto notifications_instance = arc_bridge_service()->notifications_instance();
@@ -109,7 +111,7 @@ void ArcNotificationManager::SendNotificationRemovedFromChrome(
   }
 
   notifications_instance->SendNotificationEventToAndroid(
-      key, ArcNotificationEvent::CLOSED);
+      key, mojom::ArcNotificationEvent::CLOSED);
 }
 
 void ArcNotificationManager::SendNotificationClickedOnChrome(
@@ -130,7 +132,7 @@ void ArcNotificationManager::SendNotificationClickedOnChrome(
   }
 
   notifications_instance->SendNotificationEventToAndroid(
-      key, ArcNotificationEvent::BODY_CLICKED);
+      key, mojom::ArcNotificationEvent::BODY_CLICKED);
 }
 
 void ArcNotificationManager::SendNotificationButtonClickedOnChrome(
@@ -150,22 +152,22 @@ void ArcNotificationManager::SendNotificationButtonClickedOnChrome(
     return;
   }
 
-  arc::ArcNotificationEvent command;
+  arc::mojom::ArcNotificationEvent command;
   switch (button_index) {
     case 0:
-      command = ArcNotificationEvent::BUTTON_1_CLICKED;
+      command = mojom::ArcNotificationEvent::BUTTON_1_CLICKED;
       break;
     case 1:
-      command = ArcNotificationEvent::BUTTON_2_CLICKED;
+      command = mojom::ArcNotificationEvent::BUTTON_2_CLICKED;
       break;
     case 2:
-      command = ArcNotificationEvent::BUTTON_3_CLICKED;
+      command = mojom::ArcNotificationEvent::BUTTON_3_CLICKED;
       break;
     case 3:
-      command = ArcNotificationEvent::BUTTON_4_CLICKED;
+      command = mojom::ArcNotificationEvent::BUTTON_4_CLICKED;
       break;
     case 4:
-      command = ArcNotificationEvent::BUTTON_5_CLICKED;
+      command = mojom::ArcNotificationEvent::BUTTON_5_CLICKED;
       break;
     default:
       VLOG(3) << "Invalid button index (key: " << key << ", index: " <<
@@ -176,11 +178,11 @@ void ArcNotificationManager::SendNotificationButtonClickedOnChrome(
   notifications_instance->SendNotificationEventToAndroid(key, command);
 }
 
-void ArcNotificationManager::OnToastPosted(ArcToastDataPtr data) {
+void ArcNotificationManager::OnToastPosted(mojom::ArcToastDataPtr data) {
   ash::Shell::GetInstance()->toast_manager()->Show(data->text, data->duration);
 }
 
-void ArcNotificationManager::OnToastCancelled(ArcToastDataPtr data) {
+void ArcNotificationManager::OnToastCancelled(mojom::ArcToastDataPtr data) {
   // TODO(yoshiki): Implement cancel.
 }
 

@@ -16,12 +16,14 @@ void RunShellDrag(gfx::NativeView view,
                   const gfx::Point& location,
                   int operation,
                   ui::DragDropTypes::DragEventSource source) {
+  bool cancelled;
   gfx::Point screen_location(location);
   wm::ConvertPointToScreen(view, &screen_location);
   aura::Window* root_window = view->GetRootWindow();
   if (aura::client::GetDragDropClient(root_window)) {
     aura::client::GetDragDropClient(root_window)->StartDragAndDrop(
-        data, root_window, view, screen_location, operation, source);
+        data, root_window, view, screen_location, operation, source,
+        cancelled);
   }
 }
 

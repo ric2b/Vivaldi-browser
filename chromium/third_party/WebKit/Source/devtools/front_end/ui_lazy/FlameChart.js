@@ -45,8 +45,6 @@ WebInspector.FlameChartDelegate.prototype = {
      * @param {number} endTime
      */
     updateRangeSelection: function(startTime, endTime) { },
-
-    endRangeSelection: function() { }
 }
 
 /**
@@ -65,7 +63,8 @@ WebInspector.FlameChart = function(dataProvider, flameChartDelegate, groupExpans
     this._groupExpansionSetting = groupExpansionSetting;
     this._groupExpansionState = groupExpansionSetting && groupExpansionSetting.get() || {};
 
-    this._calculator = new WebInspector.FlameChart.Calculator();
+    this._dataProvider = dataProvider;
+    this._calculator = new WebInspector.FlameChart.Calculator(dataProvider);
 
     this._canvas = this.contentElement.createChild("canvas");
     this._canvas.tabIndex = 1;
@@ -75,7 +74,7 @@ WebInspector.FlameChart = function(dataProvider, flameChartDelegate, groupExpans
     this._canvas.addEventListener("mousewheel", this._onMouseWheel.bind(this), false);
     this._canvas.addEventListener("click", this._onClick.bind(this), false);
     this._canvas.addEventListener("keydown", this._onKeyDown.bind(this), false);
-    WebInspector.installDragHandle(this._canvas, this._startCanvasDragging.bind(this), this._canvasDragging.bind(this), this._endCanvasDragging.bind(this), "-webkit-grabbing", null);
+    WebInspector.installInertialDragHandle(this._canvas, this._startCanvasDragging.bind(this), this._canvasDragging.bind(this), this._endCanvasDragging.bind(this), "-webkit-grabbing", null);
     WebInspector.installDragHandle(this._canvas, this._startRangeSelection.bind(this), this._rangeSelectionDragging.bind(this), this._endRangeSelection.bind(this), "text", null);
 
     this._vScrollElement = this.contentElement.createChild("div", "flame-chart-v-scroll");
@@ -89,8 +88,6 @@ WebInspector.FlameChart = function(dataProvider, flameChartDelegate, groupExpans
     this._selectedElement = this.contentElement.createChild("div", "flame-chart-selected-element");
     this._selectionOverlay = this.contentElement.createChild("div", "flame-chart-selection-overlay hidden");
     this._selectedTimeSpanLabel = this._selectionOverlay.createChild("div", "time-span");
-
-    this._dataProvider = dataProvider;
 
     this._windowLeft = 0.0;
     this._windowRight = 1.0;
@@ -108,7 +105,7 @@ WebInspector.FlameChart = function(dataProvider, flameChartDelegate, groupExpans
     /** @const */
     this._arrowSide = 8;
     /** @const */
-    this._expansionArrowX = this._headerLeftPadding + this._arrowSide / 2;
+    this._expansionArrowIndent = this._headerLeftPadding + this._arrowSide / 2;
     /** @const */
     this._headerLabelXPadding = 3;
     /** @const */
@@ -126,7 +123,7 @@ WebInspector.FlameChart = function(dataProvider, flameChartDelegate, groupExpans
 
 WebInspector.FlameChart.DividersBarHeight = 18;
 
-WebInspector.FlameChart.MinimalTimeWindowMs = 0.01;
+WebInspector.FlameChart.MinimalTimeWindowMs = 0.5;
 
 /**
  * @interface
@@ -198,6 +195,13 @@ WebInspector.FlameChartDataProvider.prototype = {
      * @return {number}
      */
     totalTime: function() { },
+
+    /**
+     * @param {number} value
+     * @param {number=} precision
+     * @return {string}
+     */
+    formatValue: function(value, precision) { },
 
     /**
      * @return {number}
@@ -397,9 +401,11 @@ WebInspector.FlameChart.ColorGenerator.prototype = {
 /**
  * @constructor
  * @implements {WebInspector.TimelineGrid.Calculator}
+ * @param {!WebInspector.FlameChartDataProvider} dataProvider
  */
-WebInspector.FlameChart.Calculator = function()
+WebInspector.FlameChart.Calculator = function(dataProvider)
 {
+    this._dataProvider = dataProvider;
     this._paddingLeft = 0;
 }
 
@@ -443,9 +449,9 @@ WebInspector.FlameChart.Calculator.prototype = {
      * @param {number=} precision
      * @return {string}
      */
-    formatTime: function(value, precision)
+    formatValue: function(value, precision)
     {
-        return Number.preciseMillisToString(value - this._zeroTime, precision);
+        return this._dataProvider.formatValue(value - this._zeroTime, precision);
     },
 
     /**
@@ -626,12 +632,13 @@ WebInspector.FlameChart.prototype = {
     },
 
     /**
-     * @param {!MouseEvent} event
+     * @param {number} x
+     * @param {number} y
      */
-    _updateMaxDragOffset: function(event)
+    _updateMaxDragOffset: function(x, y)
     {
-        var dx = event.pageX - this._dragStartX;
-        var dy = event.pageY - this._dragStartY;
+        var dx = x - this._dragStartX;
+        var dy = y - this._dragStartY;
         var dragOffsetSquared = dx * dx + dy * dy;
         this._maxDragOffsetSquared = Math.max(this._maxDragOffsetSquared, dragOffsetSquared);
     },
@@ -645,10 +652,12 @@ WebInspector.FlameChart.prototype = {
     },
 
     /**
+     * @param {number} x
+     * @param {number} y
      * @param {!MouseEvent} event
      * @return {boolean}
      */
-    _startCanvasDragging: function(event)
+    _startCanvasDragging: function(x, y, event)
     {
         if (event.shiftKey)
             return false;
@@ -656,30 +665,29 @@ WebInspector.FlameChart.prototype = {
             return false;
         this._isDragging = true;
         this._initMaxDragOffset(event);
-        this._dragStartPointX = event.pageX;
-        this._dragStartPointY = event.pageY;
+        this._dragStartPointX = x;
+        this._dragStartPointY = y;
         this._dragStartScrollTop = this._vScrollElement.scrollTop;
-        this._dragStartWindowLeft = this._timeWindowLeft;
-        this._dragStartWindowRight = this._timeWindowRight;
         this._canvas.style.cursor = "";
         this.hideHighlight();
         return true;
     },
 
     /**
-     * @param {!MouseEvent} event
+     * @param {number} x
+     * @param {number} y
      */
-    _canvasDragging: function(event)
+    _canvasDragging: function(x, y)
     {
-        var pixelShift = this._dragStartPointX - event.pageX;
-        this._dragStartPointX = event.pageX;
+        var pixelShift = this._dragStartPointX - x;
+        this._dragStartPointX = x;
         this._muteAnimation = true;
         this._handlePanGesture(pixelShift * this._pixelToTime);
         this._muteAnimation = false;
 
-        var pixelScroll = this._dragStartPointY - event.pageY;
+        var pixelScroll = this._dragStartPointY - y;
         this._vScrollElement.scrollTop = this._dragStartScrollTop + pixelScroll;
-        this._updateMaxDragOffset(event);
+        this._updateMaxDragOffset(x, y);
     },
 
     _endCanvasDragging: function()
@@ -713,7 +721,6 @@ WebInspector.FlameChart.prototype = {
     _endRangeSelection: function()
     {
         this._isDragging = false;
-        this._flameChartDelegate.endRangeSelection();
         this._updateHighlight();
     },
 
@@ -727,7 +734,7 @@ WebInspector.FlameChart.prototype = {
      */
     _rangeSelectionDragging: function(event)
     {
-        this._updateMaxDragOffset(event);
+        this._updateMaxDragOffset(event.pageX, event.pageY);
         var x = Number.constrain(event.pageX + this._selectionOffsetShiftX, 0, this._offsetWidth);
         var start = this._cursorTime(this._selectionStartX);
         var end = this._cursorTime(x);
@@ -847,10 +854,10 @@ WebInspector.FlameChart.prototype = {
      */
     _toggleGroupVisibility: function(groupIndex)
     {
+        if (!this._isGroupCollapsible(groupIndex))
+            return;
         var groups = this._rawTimelineData.groups;
         var group = groups[groupIndex];
-        if (!group.style.collapsible)
-            return;
         group.expanded = !group.expanded;
         this._groupExpansionState[group.name] = group.expanded;
         if (this._groupExpansionSetting)
@@ -1371,7 +1378,7 @@ WebInspector.FlameChart.prototype = {
         context.translate(0, -top);
 
         context.fillStyle = WebInspector.themeSupport.patchColor("#eee", colorUsage.Background);
-        forEachGroup((offset, index, group) => {
+        forEachGroup.call(this, (offset, index, group) => {
             var paddingHeight = group.style.padding;
             if (paddingHeight < 5)
                 return;
@@ -1382,7 +1389,7 @@ WebInspector.FlameChart.prototype = {
 
         context.strokeStyle = WebInspector.themeSupport.patchColor("#bbb", colorUsage.Background);
         context.beginPath();
-        forEachGroup((offset, index, group, isFirst) => {
+        forEachGroup.call(this, (offset, index, group, isFirst) => {
             if (isFirst || group.style.padding < 4)
                 return;
             hLine(offset - 2.5);
@@ -1390,12 +1397,14 @@ WebInspector.FlameChart.prototype = {
         hLine(lastGroupOffset + 0.5);
         context.stroke();
 
-        forEachGroup((offset, index, group) => {
-            if (group.style.shareHeaderLine)
+        forEachGroup.call(this, (offset, index, group) => {
+            if (group.style.useFirstLineForOverview)
                 return;
-            if ((!group.style.collapsible || group.expanded)) {
-                context.fillStyle = group.style.backgroundColor;
-                context.fillRect(0, offset, width, group.style.height);
+            if (!this._isGroupCollapsible(index) || group.expanded) {
+                if (!group.style.shareHeaderLine) {
+                    context.fillStyle = group.style.backgroundColor;
+                    context.fillRect(0, offset, width, group.style.height);
+                }
                 return;
             }
             var nextGroup = index + 1;
@@ -1406,23 +1415,23 @@ WebInspector.FlameChart.prototype = {
         });
 
         context.save();
-        forEachGroup((offset, index, group) => {
+        forEachGroup.call(this, (offset, index, group) => {
             context.font = group.style.font;
-            if (group.style.collapsible && !group.expanded || group.style.shareHeaderLine) {
+            if (this._isGroupCollapsible(index) && !group.expanded || group.style.shareHeaderLine) {
                 var width = this._labelWidthForGroup(context, group);
                 context.fillStyle = WebInspector.Color.parse(group.style.backgroundColor).setAlpha(0.7).asString(null);
                 context.fillRect(this._headerLeftPadding - this._headerLabelXPadding, offset + this._headerLabelYPadding, width, barHeight - 2 * this._headerLabelYPadding);
             }
             context.fillStyle = group.style.color;
-            context.fillText(group.name, Math.floor(this._expansionArrowX + this._arrowSide), offset + textBaseHeight);
+            context.fillText(group.name, Math.floor(this._expansionArrowIndent * (group.style.nestingLevel + 1) + this._arrowSide), offset + textBaseHeight);
         });
         context.restore();
 
         context.fillStyle = WebInspector.themeSupport.patchColor("#6e6e6e", colorUsage.Foreground);
         context.beginPath();
-        forEachGroup((offset, index, group) => {
-            if (group.style.collapsible)
-                drawExpansionArrow.call(this, this._expansionArrowX, offset + textBaseHeight - this._arrowSide / 2, !!group.expanded)
+        forEachGroup.call(this, (offset, index, group) => {
+            if (this._isGroupCollapsible(index))
+                drawExpansionArrow.call(this, this._expansionArrowIndent * (group.style.nestingLevel + 1), offset + textBaseHeight - this._arrowSide / 2, !!group.expanded)
         });
         context.fill();
 
@@ -1462,6 +1471,7 @@ WebInspector.FlameChart.prototype = {
 
         /**
          * @param {function(number, number, !WebInspector.FlameChart.Group, boolean)} callback
+         * @this {WebInspector.FlameChart}
          */
         function forEachGroup(callback)
         {
@@ -1478,7 +1488,7 @@ WebInspector.FlameChart.prototype = {
                     firstGroup = false;
                 }
                 var parentGroupVisible = groupStack.peekLast().visible;
-                var thisGroupVisible = parentGroupVisible && (!group.style.collapsible || group.expanded);
+                var thisGroupVisible = parentGroupVisible && (!this._isGroupCollapsible(i) || group.expanded);
                 groupStack.push({nestingLevel: group.style.nestingLevel, visible: thisGroupVisible});
                 if (!parentGroupVisible || groupTop + group.style.height < top)
                     continue;
@@ -1494,7 +1504,7 @@ WebInspector.FlameChart.prototype = {
      */
     _labelWidthForGroup: function(context, group)
     {
-       return this._measureWidth(context, group.name) + 1.5 * this._arrowSide + 2 * this._headerLabelXPadding;
+       return this._measureWidth(context, group.name) + this._expansionArrowIndent * (group.style.nestingLevel + 1) + 2 * this._headerLabelXPadding;
     },
 
     /**
@@ -1709,7 +1719,7 @@ WebInspector.FlameChart.prototype = {
                     groupStack.pop();
                     nextLevel = false;
                 }
-                var thisGroupIsVisible = style.collapsible ? groups[groupIndex].expanded : true;
+                var thisGroupIsVisible = groupIndex >= 0 && this._isGroupCollapsible(groupIndex) ? groups[groupIndex].expanded : true;
                 var parentGroupIsVisible = groupStack.peekLast().visible;
                 visible = thisGroupIsVisible && parentGroupIsVisible;
                 groupStack.push({nestingLevel: style.nestingLevel, visible: visible});
@@ -1719,15 +1729,33 @@ WebInspector.FlameChart.prototype = {
                 if (parentGroupIsVisible && !style.shareHeaderLine)
                     currentOffset += style.height;
             }
-            var thisLevelIsVisible = visible || groupIndex >= 0 && groups[groupIndex].style.useFirstLineForOverview && level === groups[groupIndex].startLevel;
+            var isFirstOnLevel = groupIndex >= 0 && level === groups[groupIndex].startLevel;
+            var thisLevelIsVisible = visible || isFirstOnLevel && groups[groupIndex].style.useFirstLineForOverview;
             this._visibleLevels[level] = thisLevelIsVisible;
             this._visibleLevelOffsets[level] = currentOffset;
-            if (thisLevelIsVisible)
+            if (thisLevelIsVisible || (parentGroupIsVisible && style.shareHeaderLine && isFirstOnLevel))
                 currentOffset += this._barHeight;
         }
         if (groupIndex >= 0)
             this._groupOffsets[groupIndex + 1] = currentOffset;
         this._visibleLevelOffsets[level] = currentOffset;
+    },
+
+    /**
+     * @param {number} index
+     */
+    _isGroupCollapsible: function(index)
+    {
+        var groups = this._rawTimelineData.groups || [];
+        var style = groups[index].style;
+        if (!style.shareHeaderLine || !style.collapsible)
+            return !!style.collapsible;
+        var isLastGroup = index + 1 >= groups.length;
+        if (!isLastGroup && groups[index + 1].style.nestingLevel > style.nestingLevel)
+            return true;
+        var nextGroupLevel = isLastGroup ? this._dataProvider.maxStackDepth() : groups[index + 1].startLevel;
+        // For groups that only have one line and share header line, pretend these are not collapsible.
+        return nextGroupLevel !== groups[index].startLevel + 1;
     },
 
     /**

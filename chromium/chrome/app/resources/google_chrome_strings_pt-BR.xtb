@@ -66,10 +66,16 @@ Se você decidir fazer login assim mesmo, as informações do Google Chrome, com
 <translation id="2997147809295888909">O Chrome verificou que <ph name="ISSUER" /> emitiu o certificado deste website. O servidor não forneceu nenhuma informação de Transparência de certificado.</translation>
 <translation id="3037838751736561277">O Google Chrome está em modo de segundo plano.</translation>
 <translation id="3047079729301751317">Ao desconectar <ph name="USERNAME" />, o histórico, os favoritos, as configurações e outros dados do Google Chrome armazenados neste dispositivo serão excluídos. Os dados armazenados na sua Conta do Google não serão excluídos e poderão ser gerenciados no <ph name="GOOGLE_DASHBOARD_LINK" />Painel de Controle do Google<ph name="END_GOOGLE_DASHBOARD_LINK" />.</translation>
+<translation id="3065168410429928842">Guia do Chrome</translation>
 <translation id="3080151273017101988">Executar aplicativos em segundo plano quando o Google Chrome estiver fechado</translation>
 <translation id="3089968997497233615">Há uma versão nova e mais segura do Google Chrome disponível.</translation>
 <translation id="3149510190863420837">Aplicativos do Google Chrome</translation>
-<translation id="3197823471738295152">O dispositivo está atualizado.</translation>
+<translation id="3251381707915721925">Para definir quais websites <ph name="NEW_PROFILE_NAME" /> pode ver, configure restrições e configurações acessando <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. Se você não alterar as configurações padrão, <ph name="NEW_PROFILE_NAME" /> poderá procurar por tudo na Web.
+
+Para impedir que <ph name="NEW_PROFILE_NAME" /> acesse sua conta, bloqueie seu perfil quando não estiver usando o Chrome. Para fazer isso, clique no nome do perfil no canto superior direito do navegador e selecione "Sair e bloquear".
+<ph name="BEGIN_LINK_2" />Saiba mais<ph name="END_LINK_2" />
+
+Verifique seu e-mail em <ph name="ACCOUNT_EMAIL" /> para ver mais instruções.</translation>
 <translation id="3282568296779691940">Fazer login no Google Chrome</translation>
 <translation id="3311976847535831054">Este computador não receberá mais atualizações do Google Chrome de 32 bits. Faça upgrade para o Google Chrome de 64 bits.</translation>
 <translation id="3360895254066713204">Auxiliar do Google Chrome</translation>
@@ -206,7 +212,6 @@ Se você decidir fazer login assim mesmo, as informações do Google Chrome, com
 <translation id="7808348361785373670">Remover do Chrome</translation>
 <translation id="7825851276765848807">Houve uma falha na instalação devido a um erro não-especificado. Faça o download do Google Chrome novamente.</translation>
 <translation id="7890208801193284374">Se você usa um computador compartilhado, seus amigos e familiares podem navegar separadamente e configurar o Google Chrome da maneira que desejarem.</translation>
-<translation id="8000275528373650868">O Google Chrome requer o Windows Vista ou o Windows XP com SP2 ou superior.</translation>
 <translation id="8005540215158006229">O Google Chrome está quase pronto.</translation>
 <translation id="8008534537613507642">Reinstalar o Google Chrome</translation>
 <translation id="8030318113982266900">Atualizando seu dispositivo para o canal <ph name="CHANNEL_NAME" />...</translation>
@@ -228,6 +233,7 @@ Se você decidir fazer login assim mesmo, as informações do Google Chrome, com
 <translation id="8556340503434111824">Há uma nova versão ainda mais rápida do Google Chrome disponível.</translation>
 <translation id="8568392309447938879">É necessário fazer login no Google Chrome para usar aplicativos. Isso permite que o Chrome sincronize seus aplicativos, favoritos, histórico, senhas e outras configurações entre os dispositivos.</translation>
 <translation id="8614913330719544658">O Google Chrome não responde. Reiniciar agora?</translation>
+<translation id="8667808506758191620">Seu dispositivo <ph name="DEVICE_TYPE" /> está atualizado.</translation>
 <translation id="8669527147644353129">Auxiliar do Google Chrome</translation>
 <translation id="8679801911857917785">Controla também qual página deve ser exibida quando você inicia o Chrome.</translation>
 <translation id="870251953148363156">Atualizar o Google Chrome</translation>
@@ -236,6 +242,7 @@ Se você decidir fazer login assim mesmo, as informações do Google Chrome, com
 <translation id="8851136666856101339">main</translation>
 <translation id="8862326446509486874">Você não tem os direitos adequados para instalação no nível do sistema. Tente executar o instalador novamente como administrador.</translation>
 <translation id="9026991721384951619">O Chrome OS não pôde sincronizar seus dados porque os detalhes de login da sua conta estão desatualizados.</translation>
+<translation id="9067395829937117663">O Google Chrome requer o Windows 7 ou versão superior.</translation>
 <translation id="9102715433345326100">Este arquivo é malicioso e foi bloqueado pelo Google Chrome.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Aviso:<ph name="END_BOLD" /> O Google Chrome não impede que as extensões gravem seu histórico de navegação. Para desativar esta extensão no modo anônimo, desmarque esta opção.</translation>
 <translation id="911206726377975832">Excluir também dados de navegação?</translation>

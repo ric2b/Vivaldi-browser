@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <set>
 #include <string>
 #include <utility>
@@ -17,7 +18,6 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/memory_pressure_listener.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "base/task_runner.h"
@@ -117,6 +117,10 @@ class TabManager : public TabStripModelObserver {
   // |test_tick_clock_| for more details.
   void set_test_tick_clock(base::TickClock* test_tick_clock);
 
+  // Returns the list of the stats for all renderers. Must be called on the UI
+  // thread.
+  TabStatsList GetUnsortedTabStats();
+
  private:
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, ChildProcessNotifications);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, Comparator);
@@ -191,6 +195,9 @@ class TabManager : public TabStripModelObserver {
   // that need to be run periodically (see comment in implementation).
   void UpdateTimerCallback();
 
+  // Purges and suspends renderers in backgrounded tabs.
+  void PurgeAndSuspendBackgroundedTabs();
+
   // Does the actual discard by destroying the WebContents in |model| at |index|
   // and replacing it by an empty one. Returns the new WebContents or NULL if
   // the operation fails (return value used only in testing).
@@ -236,9 +243,8 @@ class TabManager : public TabStripModelObserver {
   // Implementation of DiscardTab.
   bool DiscardTabImpl();
 
-  // Returns the list of the stats for all renderers. Must be called on the UI
-  // thread.
-  TabStatsList GetUnsortedTabStats();
+  // Returns true if tabs can be discarded only once.
+  bool CanOnlyDiscardOnce();
 
   // Timer to periodically update the stats of the renderers.
   base::RepeatingTimer update_timer_;
@@ -248,7 +254,7 @@ class TabManager : public TabStripModelObserver {
   base::RepeatingTimer recent_tab_discard_timer_;
 
   // A listener to global memory pressure events.
-  scoped_ptr<base::MemoryPressureListener> memory_pressure_listener_;
+  std::unique_ptr<base::MemoryPressureListener> memory_pressure_listener_;
 
   // Wall-clock time when the priority manager started running.
   base::TimeTicks start_time_;
@@ -276,7 +282,7 @@ class TabManager : public TabStripModelObserver {
   base::TimeDelta minimum_protection_time_;
 
 #if defined(OS_CHROMEOS)
-  scoped_ptr<TabManagerDelegate> delegate_;
+  std::unique_ptr<TabManagerDelegate> delegate_;
 #endif
 
   // Responsible for automatically registering this class as an observer of all

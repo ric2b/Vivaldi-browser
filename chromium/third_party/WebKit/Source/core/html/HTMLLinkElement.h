@@ -28,6 +28,7 @@
 #include "core/css/CSSStyleSheet.h"
 #include "core/dom/DOMTokenList.h"
 #include "core/dom/IconURL.h"
+#include "core/dom/StyleEngineContext.h"
 #include "core/fetch/ResourceOwner.h"
 #include "core/fetch/StyleSheetResource.h"
 #include "core/fetch/StyleSheetResourceClient.h"
@@ -48,10 +49,10 @@ template<typename T> class EventSender;
 using LinkEventSender = EventSender<HTMLLinkElement>;
 
 //
-// LinkStyle handles dynaically change-able link resources, which is
+// LinkStyle handles dynamically change-able link resources, which is
 // typically @rel="stylesheet".
 //
-// It could be @rel="shortcut icon" or soething else though. Each of
+// It could be @rel="shortcut icon" or something else though. Each of
 // types might better be handled by a separate class, but dynamically
 // changing @rel makes it harder to move such a design so we are
 // sticking current way so far.
@@ -59,7 +60,7 @@ using LinkEventSender = EventSender<HTMLLinkElement>;
 class LinkStyle final : public LinkResource, ResourceOwner<StyleSheetResource> {
     USING_GARBAGE_COLLECTED_MIXIN(LinkStyle);
 public:
-    static RawPtr<LinkStyle> create(HTMLLinkElement* owner);
+    static LinkStyle* create(HTMLLinkElement* owner);
 
     explicit LinkStyle(HTMLLinkElement* owner);
     ~LinkStyle() override;
@@ -121,6 +122,7 @@ private:
     Member<CSSStyleSheet> m_sheet;
     DisabledState m_disabledState;
     PendingSheetType m_pendingSheetType;
+    StyleEngineContext m_styleEngineContext;
     bool m_loading;
     bool m_firedLoad;
     bool m_loadedSheet;
@@ -132,7 +134,7 @@ class CORE_EXPORT HTMLLinkElement final : public HTMLElement, public LinkLoaderC
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(HTMLLinkElement);
 public:
-    static RawPtr<HTMLLinkElement> create(Document&, bool createdByParser);
+    static HTMLLinkElement* create(Document&, bool createdByParser);
     ~HTMLLinkElement() override;
 
     KURL href() const;
@@ -183,6 +185,8 @@ public:
     static void parseSizesAttribute(const AtomicString& value, Vector<IntSize>& iconSizes);
 
     DECLARE_VIRTUAL_TRACE();
+
+    DECLARE_VIRTUAL_TRACE_WRAPPERS();
 
 private:
     HTMLLinkElement(Document&, bool createdByParser);

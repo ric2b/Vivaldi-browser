@@ -6,16 +6,16 @@
 #define EXTENSIONS_COMMON_FEATURES_FEATURE_PROVIDER_H_
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
-#include "base/memory/scoped_ptr.h"
 
 namespace extensions {
 
 class Feature;
 
-using FeatureMap = std::map<std::string, scoped_ptr<Feature>>;
+using FeatureMap = std::map<std::string, std::unique_ptr<Feature>>;
 
 // Implemented by classes that can vend features.
 class FeatureProvider {
@@ -39,6 +39,8 @@ class FeatureProvider {
 
   // Directly get Features from the common FeatureProvider types.
   // Each is equivalent to GetByName('featuretype')->GetFeature(name).
+  // NOTE: These functions may return |nullptr| in case corresponding JSON file
+  // got corrupted.
   static const Feature* GetAPIFeature(const std::string& name);
   static const Feature* GetManifestFeature(const std::string& name);
   static const Feature* GetPermissionFeature(const std::string& name);

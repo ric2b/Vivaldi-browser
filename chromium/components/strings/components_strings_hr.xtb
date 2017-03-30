@@ -21,6 +21,7 @@
 <translation id="112840717907525620">Predmemorija pravila ispravna je</translation>
 <translation id="113188000913989374"><ph name="SITE" /> navodi sljedeće:</translation>
 <translation id="1132774398110320017">Postavke Automatskog popunjavanja u Chromeu...</translation>
+<translation id="113770840981343808">Unesite četveroznamenkasti CVC s prednje strane kartice radi potvrde</translation>
 <translation id="1146673768181266552">ID rušenja <ph name="CRASH_ID" /> (<ph name="CRASH_LOCAL_ID" />)</translation>
 <translation id="1150979032973867961">Poslužitelj nije mogao dokazati da je <ph name="DOMAIN" />; operativni sustav vašeg računala smatra da njegov sigurnosni certifikat nije pouzdan. To može biti uzrokovano pogrešnom konfiguracijom ili napadom na vašu vezu.</translation>
 <translation id="1152921474424827756">Pristupite <ph name="BEGIN_LINK" />predmemoriranoj kopiji<ph name="END_LINK" /> stranice <ph name="URL" /></translation>
@@ -39,9 +40,9 @@
 <translation id="1228893227497259893">Pogrešan identifikator entiteta</translation>
 <translation id="1232569758102978740">Neimenovano</translation>
 <translation id="1254117744268754948">Odabir mape</translation>
-<translation id="1270699273812232624">Dopusti stavke</translation>
 <translation id="1285320974508926690">Nikad nemoj prevoditi ovu web-lokaciju</translation>
 <translation id="129553762522093515">Nedavno zatvoreno</translation>
+<translation id="129863573139666797"><ph name="BEGIN_LINK" />Izbrišite kolačiće<ph name="END_LINK" /></translation>
 <translation id="1339601241726513588">Domena upisa:</translation>
 <translation id="1344588688991793829">Postavke automatskog popunjavanja u Chromiumu...</translation>
 <translation id="1374468813861204354">prijedlozi</translation>
@@ -86,7 +87,6 @@
 <translation id="1898423065542865115">Filtriranje</translation>
 <translation id="1911837502049945214">Host <ph name="HOST_NAME" /> nije prihvatio certifikat za prijavu ili je certifikat za prijavu možda istekao.</translation>
 <translation id="194030505837763158">Posjetite <ph name="LINK" /></translation>
-<translation id="1958820272620550857">Blokirane stavke</translation>
 <translation id="1962204205936693436">Oznake s domene <ph name="DOMAIN" /></translation>
 <translation id="1973335181906896915">Pogreška postavljanja u seriju</translation>
 <translation id="1974060860693918893">Napredno</translation>
@@ -120,7 +120,6 @@
 <translation id="2212735316055980242">Pravilo nije pronađeno</translation>
 <translation id="2213606439339815911">Dohvaćanje unosa...</translation>
 <translation id="2214283295778284209">Web lokacija <ph name="SITE" /> nije dostupna</translation>
-<translation id="2227695659599072496">provjerite mrežni kabel ili usmjerivač</translation>
 <translation id="2230458221926704099">Riješite problem s povezivanjem pomoću <ph name="BEGIN_LINK" />dijagnostičke aplikacije<ph name="END_LINK" /></translation>
 <translation id="225207911366869382">Ta je vrijednost obustavljena za to pravilo.</translation>
 <translation id="2262243747453050782">HTTP pogreška</translation>
@@ -133,6 +132,7 @@
 <translation id="2317259163369394535"><ph name="DOMAIN" /> zahtijeva korisničko ime i zaporku.</translation>
 <translation id="2328300916057834155">Zanemarena nevažeća oznaka u indeksu <ph name="ENTRY_INDEX" /></translation>
 <translation id="2354001756790975382">Druge oznake</translation>
+<translation id="2357783041215512127">Platite karticom <ph name="CREDIT_CARD" /></translation>
 <translation id="2359808026110333948">Nastavi</translation>
 <translation id="2367567093518048410">Razina</translation>
 <translation id="237718015863234333">Nema zamjenskih korisničkih sučelja</translation>
@@ -199,6 +199,7 @@
 <translation id="2969319727213777354">Za uspostavu sigurne veze sat mora biti točno postavljen jer certifikati pomoću kojih se web-lokacije međusobno identificiraju vrijede samo određeno vrijeme. Budući da vaš sat nije točan, Chrome ne može potvrditi te certifikate.</translation>
 <translation id="2972581237482394796">&amp;Vrati poništeno</translation>
 <translation id="2985306909656435243">Ako je to omogućeno, Chromium će pohraniti kopiju vaše kartice na uređaj radi bržeg ispunjavanja obrazaca.</translation>
+<translation id="2989984781570875765">Unesite datum isteka i troznamenkasti CVC s poleđine kartice <ph name="CREDIT_CARD" /></translation>
 <translation id="2991174974383378012">Dijeljenje s web-lokacijama</translation>
 <translation id="3005723025932146533">Prikaži spremljenu kopiju</translation>
 <translation id="3010559122411665027">Unos popisa "<ph name="ENTRY_INDEX" />": <ph name="ERROR" /></translation>
@@ -210,7 +211,6 @@
 <translation id="3105172416063519923">ID uređaja:</translation>
 <translation id="3109728660330352905">Nemate ovlaštenje za prikaz te stranice.</translation>
 <translation id="3118046075435288765">Poslužitelj je neočekivano prekinuo vezu.</translation>
-<translation id="31454997771848827">Domene grupe</translation>
 <translation id="3145945101586104090">Dekodiranje odgovora nije uspjelo</translation>
 <translation id="3147485256806412701">Ta web-lokacija upotrebljava novu generičku vršnu domenu.</translation>
 <translation id="3150653042067488994">Privremena pogreška poslužitelja</translation>
@@ -231,7 +231,6 @@
 <translation id="3254409185687681395">Označi ovu stranicu</translation>
 <translation id="3270847123878663523">&amp;Poništi promjenu rasporeda</translation>
 <translation id="3286538390144397061">Ponovo pokreni sad</translation>
-<translation id="3288003805934695103">ponovo učitajte stranicu</translation>
 <translation id="3305707030755673451">Vaši su podaci šifrirani vašom šifrom za sinkronizaciju <ph name="TIME" />. Unesite je da biste pokrenuli sinkronizaciju.</translation>
 <translation id="333371639341676808">Spriječite ovu stranicu od stvaranja dodatnih dijaloga.</translation>
 <translation id="3340978935015468852">postavke</translation>
@@ -263,6 +262,7 @@
 <translation id="3583757800736429874">&amp;Ponovi premještanje</translation>
 <translation id="3586931643579894722">Sakrij detalje</translation>
 <translation id="3587482841069643663">Sve</translation>
+<translation id="3600246354004376029"><ph name="TITLE" />, <ph name="DOMAIN" />, <ph name="TIME" /></translation>
 <translation id="3608308818141211642">Klijent i poslužitelj ne podržavaju zajedničku verziju SSL protokola niti paket šifri. To se najčešće događa kad poslužitelj treba RC4 koji se više ne smatra sigurnim.</translation>
 <translation id="3609138628363401169">Poslužitelj ne podržava proširenje TLS ponovljenog pregovaranja.</translation>
 <translation id="362276910939193118">Pokaži cijelu povijest</translation>
@@ -283,6 +283,7 @@
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />provjerite proxy, vatrozid i konfiguraciju DNS-a<ph name="END_LINK" /></translation>
 <translation id="3739623965217189342">Veza koju ste kopirali</translation>
 <translation id="3744899669254331632">Trenutačno ne možete otvoriti <ph name="SITE" /> jer je web-lokacija poslala šifrirane vjerodajnice koje Chromium ne može obraditi. Mrežne pogreške i napadi obično su privremeni, tako da će stranica kasnije vjerojatno funkcionirati.</translation>
+<translation id="3748071062818261683">Potvrda kartice</translation>
 <translation id="3748412725338508953">Bilo je previše preusmjeravanja.</translation>
 <translation id="375403751935624634">Prijevod nije uspio zbog poslužiteljske pogreške.</translation>
 <translation id="3759461132968374835">Nemate nedavnih izvješća o padu. Ovdje se neće prikazati padovi do kojih je došlo kada je izvješćivanje o padovima onemogućeno.</translation>
@@ -302,7 +303,6 @@
 <translation id="3963721102035795474">Način čitača</translation>
 <translation id="3973234410852337861">Host <ph name="HOST_NAME" /> je blokiran</translation>
 <translation id="4021036232240155012">DNS je mrežna usluga koja prevodi naziv web-lokacije u njezinu internetsku adresu.</translation>
-<translation id="4021376465026729077">onemogućite proširenja</translation>
 <translation id="4030383055268325496">&amp;Poništi dodavanje</translation>
 <translation id="4032534284272647190">Odbijen je pristup na <ph name="URL" />.</translation>
 <translation id="404928562651467259">UPOZORENJE</translation>
@@ -312,6 +312,7 @@
 <translation id="4103249731201008433">Serijski broj uređaja nije važeći</translation>
 <translation id="4103763322291513355">Posjetite &lt;strong&gt;chrome://policy&lt;/strong&gt; da biste vidjeli popis nedopuštenih URL-ova i druga pravila koja je nametnuo vaš administrator sustava.</translation>
 <translation id="4117700440116928470">Opseg pravila nije podržan.</translation>
+<translation id="4130226655945681476">provjerite mrežne kabele, modem i usmjerivač</translation>
 <translation id="4147376274874979956">Nije moguće pristupiti datoteci.</translation>
 <translation id="4148925816941278100">American Express</translation>
 <translation id="4169947484918424451">Želite li da Chromium spremi tu karticu?</translation>
@@ -325,7 +326,6 @@
 <translation id="4258748452823770588">Potpis nije valjan</translation>
 <translation id="4268298190799576220">Chromium nije uspio potvrditi vašu karticu u ovom trenutku. Pokušajte ponovo kasnije.</translation>
 <translation id="4269787794583293679">(Nema korisničkog imena)</translation>
-<translation id="4278390842282768270">Dopušteno</translation>
 <translation id="4300246636397505754">Nadređeni prijedlozi</translation>
 <translation id="4304224509867189079">Prijavi se</translation>
 <translation id="4325863107915753736">Članak nije pronađen</translation>
@@ -347,11 +347,15 @@
 <translation id="450710068430902550">Dijeljenje s administratorom</translation>
 <translation id="4522570452068850558">Detalji</translation>
 <translation id="4535734014498033861">Povezivanje s proxy poslužiteljem nije uspjelo.</translation>
+<translation id="4553532082208702698">Unesite četveroznamenkasti CVC s prednje strane kartice <ph name="CREDIT_CARD" /></translation>
+<translation id="4558551763791394412">Pokušajte onemogućiti proširenja.</translation>
 <translation id="4587425331216688090">Želite li s Chromea ukloniti adresu?</translation>
 <translation id="4592951414987517459">Vaša veza s domenom <ph name="DOMAIN" /> kriptirana je modernim kriptografskim paketom.</translation>
 <translation id="4594403342090139922">&amp;Poništi brisanje</translation>
 <translation id="4668929960204016307">,</translation>
+<translation id="4670097147947922288">Gledate stranicu proširenja.</translation>
 <translation id="467662567472608290">Poslužitelj nije mogao dokazati da je <ph name="DOMAIN" />; njegov sigurnosni certifikat sadrži pogreške. To može biti uzrokovano pogrešnom konfiguracijom ili napadom na vašu vezu.</translation>
+<translation id="4683417246209150705">Unesite troznamenkasti CVC sa stražnje strane kartice <ph name="CREDIT_CARD" /></translation>
 <translation id="4697214168136963651">Zahtjev <ph name="URL" /> bio je blokiran</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Veza je prekinuta</translation>
@@ -401,7 +405,6 @@
 <translation id="5251803541071282808">Oblak</translation>
 <translation id="5299298092464848405">Pogreška u pravilu analize</translation>
 <translation id="5300589172476337783">Prikaži</translation>
-<translation id="5307361445257083764"><ph name="BEGIN_LINK" />izbrišite kolačiće<ph name="END_LINK" /></translation>
 <translation id="5308689395849655368">Onemogućeno je izvješćivanje o padu.</translation>
 <translation id="5317780077021120954">Spremi</translation>
 <translation id="5327248766486351172">Naziv</translation>
@@ -412,7 +415,6 @@
 <translation id="5431657950005405462">Datoteka nije pronađena</translation>
 <translation id="5435775191620395718">Prikazuje se povijest s ovog uređaja. <ph name="BEGIN_LINK" />Saznajte više<ph name="END_LINK" />.</translation>
 <translation id="5439770059721715174">Pogreška provjere sheme na lokaciji "<ph name="ERROR_PATH" />": <ph name="ERROR" /></translation>
-<translation id="5447330194051379405">Prikaži sve spremljene stranice</translation>
 <translation id="5452270690849572955">Tu stranicu na <ph name="HOST_NAME" /> nije moguće pronaći</translation>
 <translation id="5455374756549232013">Vremenska oznaka pravila koje nije valjano</translation>
 <translation id="5455790498993699893"><ph name="ACTIVE_MATCH" /> od <ph name="TOTAL_MATCHCOUNT" /></translation>
@@ -436,7 +438,10 @@
 <translation id="5629630648637658800">Učitavanje postavki pravila nije uspjelo</translation>
 <translation id="5631439013527180824">Token za upravljanje uređajem nije važeći</translation>
 <translation id="5650551054760837876">Nisu pronađeni rezultati pretraživanja.</translation>
+<translation id="5663999524854166235">Unesite troznamenkasti CVC sa stražnje strane kartice radi potvrde</translation>
 <translation id="5677928146339483299">Blokirano</translation>
+<translation id="5696590819423335174">Unesite datum isteka i četveroznamenkasti CVC s prednje strane kartice <ph name="CREDIT_CARD" /></translation>
+<translation id="5699278517904102888">Unesite troznamenkasti CVC sa stražnje strane kartice <ph name="CREDIT_CARD" /> radi potvrde</translation>
 <translation id="5710435578057952990">Identitet ove web lokacije nije ovjeren.</translation>
 <translation id="5720705177508910913">Trenutačni korisnik:</translation>
 <translation id="5785756445106461925">Nadalje, ova stranica sadrži druge resurse koji nisu sigurni. Te resurse mogu vidjeti drugi tijekom prijenosa i napadač ih može izmijeniti kako bi promijenio izgled stranice.</translation>
@@ -508,7 +513,6 @@
 <translation id="6628463337424475685"><ph name="ENGINE" /> Pretraživanje</translation>
 <translation id="6634865548447745291">Trenutačno ne možete posjetiti <ph name="SITE" /> jer je <ph name="BEGIN_LINK" />taj certifikat opozvan<ph name="END_LINK" />. Mrežne pogreške i napadi uglavnom su privremeni i ta bi stranica kasnije trebala funkcionirati.</translation>
 <translation id="6637478299472506933">Preuzimanje nije uspjelo</translation>
-<translation id="6642894344118208103">ponovo pokrenite modem ili usmjerivač</translation>
 <translation id="6644283850729428850">Ovo je pravilo zastarjelo.</translation>
 <translation id="6646897916597483132">Unesite četveroznamenkasti CVC s prednje strane kartice</translation>
 <translation id="6656103420185847513">Uređivanje mape</translation>
@@ -524,7 +528,6 @@
 <translation id="6753269504797312559">Vrijednost pravila</translation>
 <translation id="6757797048963528358">Uređaj je u stanju mirovanja.</translation>
 <translation id="6781404225664080496">Zahtjevi za taj URL privremeno su ograničeni.</translation>
-<translation id="6800914069727136216">U paketu sadržaja</translation>
 <translation id="6820686453637990663">CVC</translation>
 <translation id="6830600606572693159">Web-stranica na <ph name="URL" /> trenutno nije dostupna.  Možda je preopterećena ili isključena zbog održavanja.</translation>
 <translation id="6831043979455480757">Prevedi</translation>
@@ -562,7 +565,6 @@
 <translation id="7210863904660874423">Host <ph name="HOST_NAME" /> ne pridržava se sigurnosnih standarda.</translation>
 <translation id="721197778055552897"><ph name="BEGIN_LINK" />Saznajte više<ph name="END_LINK" /> o ovom problemu.</translation>
 <translation id="7219179957768738017">Veza upotrebljava <ph name="SSL_VERSION" />.</translation>
-<translation id="7225807090967870017">ID međuverzije</translation>
 <translation id="7231308970288859235">Ups! Moraš pitati roditelja smiješ li otvoriti ovu stranicu.</translation>
 <translation id="7246609911581847514">Ova ti se poruka prikazuje jer tvoj upravitelj mora odobriti web-lokacije koje posjećuješ prvi put.</translation>
 <translation id="725866823122871198">Sigurnu vezu s domenom <ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> nije moguće uspostaviti jer datum i vrijeme na računalu (<ph name="DATE_AND_TIME" />) nisu točni.</translation>
@@ -603,6 +605,7 @@ Psst! Sljedeći bi vam put mogao koristiti anonimni način <ph name="SHORTCUT_KE
 <translation id="7610193165460212391">Vrijednost je izvan raspona <ph name="VALUE" />.</translation>
 <translation id="7613889955535752492">Istječe: <ph name="EXPIRATION_MONTH" />/<ph name="EXPIRATION_YEAR" /></translation>
 <translation id="7615602087246926389">Već imate podatke koji su kriptirani pomoću druge verzije zaporke vašeg Google računa. Unesite je u nastavku.</translation>
+<translation id="7633887239437305289">Unesite četveroznamenkasti CVC s prednje strane kartice <ph name="CREDIT_CARD" /> radi potvrde</translation>
 <translation id="7634554953375732414">Veza s web-lokacijom nije privatna.</translation>
 <translation id="7637571805876720304">Želite li ukloniti kreditnu karticu iz Chromiuma?</translation>
 <translation id="7643817847124207232">Internetska veza je prekinuta.</translation>
@@ -610,7 +613,6 @@ Psst! Sljedeći bi vam put mogao koristiti anonimni način <ph name="SHORTCUT_KE
 <translation id="7658239707568436148">Odustani</translation>
 <translation id="7668654391829183341">Nepoznati uređaj</translation>
 <translation id="7674629440242451245">Zanimaju li vas nove, kul značajke preglednika Chrome? Isprobajte naš razvojni kanal na stranici chrome.com/dev.</translation>
-<translation id="769344199378576125">Prikaži offline oznake</translation>
 <translation id="7704050614460855821"><ph name="BEGIN_LINK" />Idi na web-lokaciju <ph name="SITE" /> (nije sigurno)<ph name="END_LINK" /></translation>
 <translation id="7716424297397655342">Web-lokacija se ne može učitati iz predmemorije</translation>
 <translation id="7733391738235763478">(<ph name="NUMBER_VISITS" />)</translation>
@@ -657,6 +659,7 @@ Psst! Sljedeći bi vam put mogao koristiti anonimni način <ph name="SHORTCUT_KE
 <translation id="8225771182978767009">Osoba koja je postavila računalo blokirala je tu web-lokaciju.</translation>
 <translation id="8241707690549784388">Stranica koju ste tražili koristila je podatke koje ste unijeli. Vraćanje na tu stranicu može dovesti do ponavljanja poduzete radnje. Želite li nastaviti?</translation>
 <translation id="8249320324621329438">Zadnje dohvaćanje:</translation>
+<translation id="8261506727792406068">Izbriši</translation>
 <translation id="8266098793847448402">Kliknite
       <ph name="BEGIN_BOLD" />Start<ph name="END_BOLD" />,
       kliknite

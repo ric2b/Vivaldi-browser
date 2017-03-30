@@ -6,10 +6,13 @@
 
 #include "ash/shell.h"
 #include "ash/shell_window_ids.h"
-#include "ash/wm/window_resizer.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/aura/wm_window_aura.h"
+#include "ash/wm/common/window_resizer.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
@@ -246,7 +249,7 @@ void ShellSurface::Maximize() {
   TRACE_EVENT0("exo", "ShellSurface::Maximize");
 
   if (!widget_)
-    CreateShellSurfaceWidget();
+    CreateShellSurfaceWidget(ui::SHOW_STATE_MAXIMIZED);
 
   // Note: This will ask client to configure its surface even if already
   // maximized.
@@ -270,7 +273,7 @@ void ShellSurface::SetFullscreen(bool fullscreen) {
   TRACE_EVENT1("exo", "ShellSurface::SetFullscreen", "fullscreen", fullscreen);
 
   if (!widget_)
-    CreateShellSurfaceWidget();
+    CreateShellSurfaceWidget(ui::SHOW_STATE_FULLSCREEN);
 
   // Note: This will ask client to configure its surface even if fullscreen
   // state doesn't change.
@@ -347,8 +350,9 @@ Surface* ShellSurface::GetMainSurface(const aura::Window* window) {
   return window->GetProperty(kMainSurfaceKey);
 }
 
-scoped_ptr<base::trace_event::TracedValue> ShellSurface::AsTracedValue() const {
-  scoped_ptr<base::trace_event::TracedValue> value(
+std::unique_ptr<base::trace_event::TracedValue> ShellSurface::AsTracedValue()
+    const {
+  std::unique_ptr<base::trace_event::TracedValue> value(
       new base::trace_event::TracedValue());
   value->SetString("title", base::UTF16ToUTF8(title_));
   value->SetString("application_id", application_id_);
@@ -365,7 +369,7 @@ void ShellSurface::OnSurfaceCommit() {
   geometry_ = pending_geometry_;
 
   if (enabled() && !widget_)
-    CreateShellSurfaceWidget();
+    CreateShellSurfaceWidget(ui::SHOW_STATE_NORMAL);
 
   // Apply the accumulated pending origin offset to reflect acknowledged
   // configure requests.
@@ -378,9 +382,28 @@ void ShellSurface::OnSurfaceCommit() {
   if (widget_) {
     UpdateWidgetBounds();
 
+    gfx::Point surface_origin = GetSurfaceOrigin();
+    gfx::Rect hit_test_bounds =
+        surface_->GetHitTestBounds() + surface_origin.OffsetFromOrigin();
+
+    // Prevent window from being activated when hit test bounds are empty.
+    bool activatable = activatable_ && !hit_test_bounds.IsEmpty();
+    if (activatable != CanActivate()) {
+      set_can_activate(activatable);
+
+      // Activate or deactivate window if activation state changed.
+      aura::client::ActivationClient* activation_client =
+          ash::Shell::GetInstance()->activation_client();
+      if (activatable)
+        activation_client->ActivateWindow(widget_->GetNativeWindow());
+      else if (widget_->IsActive())
+        activation_client->DeactivateWindow(widget_->GetNativeWindow());
+    }
+
+    UpdateTransparentInsets();
+
     // Update surface bounds.
-    surface_->SetBounds(
-        gfx::Rect(GetSurfaceOrigin(), surface_->layer()->size()));
+    surface_->SetBounds(gfx::Rect(surface_origin, surface_->layer()->size()));
 
     // Show widget if not already visible.
     if (!widget_->IsClosed() && !widget_->IsVisible())
@@ -473,7 +496,7 @@ gfx::Size ShellSurface::GetPreferredSize() const {
   if (!geometry_.IsEmpty())
     return geometry_.size();
 
-  return surface_ ? surface_->GetVisibleBounds().size() : gfx::Size();
+  return surface_ ? surface_->layer()->size() : gfx::Size();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -513,6 +536,8 @@ void ShellSurface::OnWindowBoundsChanged(aura::Window* window,
     gfx::Vector2d origin_offset = new_bounds.origin() - old_bounds.origin();
     pending_origin_config_offset_ += origin_offset;
     origin_ -= origin_offset;
+
+    UpdateTransparentInsets();
 
     surface_->SetBounds(
         gfx::Rect(GetSurfaceOrigin(), surface_->layer()->size()));
@@ -616,7 +641,7 @@ void ShellSurface::OnMouseEvent(ui::MouseEvent* event) {
 ////////////////////////////////////////////////////////////////////////////////
 // ShellSurface, private:
 
-void ShellSurface::CreateShellSurfaceWidget() {
+void ShellSurface::CreateShellSurfaceWidget(ui::WindowShowState show_state) {
   DCHECK(enabled());
   DCHECK(!widget_);
 
@@ -626,45 +651,51 @@ void ShellSurface::CreateShellSurfaceWidget() {
   params.delegate = this;
   params.shadow_type = views::Widget::InitParams::SHADOW_TYPE_NONE;
   params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
-  params.show_state = ui::SHOW_STATE_NORMAL;
+  params.show_state = show_state;
   params.parent = ash::Shell::GetContainer(
       ash::Shell::GetPrimaryRootWindow(), ash::kShellWindowId_DefaultContainer);
   if (!initial_bounds_.IsEmpty()) {
-    gfx::Point position(initial_bounds_.origin());
+    params.bounds = initial_bounds_;
     if (parent_) {
-      aura::Window::ConvertPointToTarget(GetMainSurface(parent_), params.parent,
-                                         &position);
+      aura::Window::ConvertRectToTarget(GetMainSurface(parent_), params.parent,
+                                        &params.bounds);
     }
-    params.bounds = gfx::Rect(position + GetVisibleBounds().OffsetFromOrigin(),
-                              initial_bounds_.size());
   }
-  params.activatable = activatable_ ? views::Widget::InitParams::ACTIVATABLE_YES
-                                    : views::Widget::InitParams::ACTIVATABLE_NO;
+  bool activatable = activatable_ && !surface_->GetHitTestBounds().IsEmpty();
+  params.activatable = activatable ? views::Widget::InitParams::ACTIVATABLE_YES
+                                   : views::Widget::InitParams::ACTIVATABLE_NO;
 
   // Note: NativeWidget owns this widget.
   widget_ = new ShellSurfaceWidget(this);
   widget_->Init(params);
-  widget_->GetNativeWindow()->SetName("ExoShellSurface");
-  widget_->GetNativeWindow()->AddChild(surface_);
-  widget_->GetNativeWindow()->SetEventTargeter(
-      make_scoped_ptr(new CustomWindowTargeter));
-  SetApplicationId(widget_->GetNativeWindow(), &application_id_);
-  SetMainSurface(widget_->GetNativeWindow(), surface_);
+
+  aura::Window* window = widget_->GetNativeWindow();
+  window->SetName("ExoShellSurface");
+  window->AddChild(surface_);
+  window->SetEventTargeter(base::WrapUnique(new CustomWindowTargeter));
+  SetApplicationId(window, &application_id_);
+  SetMainSurface(window, surface_);
 
   // Start tracking changes to window bounds and window state.
-  widget_->GetNativeWindow()->AddObserver(this);
-  ash::wm::GetWindowState(widget_->GetNativeWindow())->AddObserver(this);
+  window->AddObserver(this);
+  ash::wm::GetWindowState(window)->AddObserver(this);
 
   // Make shell surface a transient child if |parent_| has been set.
   if (parent_)
-    wm::AddTransientChild(parent_, widget_->GetNativeWindow());
+    wm::AddTransientChild(parent_, window);
 
-  // Ash manages the position of a top-level shell surfaces unless
-  // |initial_bounds_| has been set.
-  if (initial_bounds_.IsEmpty()) {
-    ash::wm::GetWindowState(widget_->GetNativeWindow())
-        ->set_window_position_managed(true);
-  }
+  // Allow Ash to manage the position of a top-level shell surfaces if show
+  // state is one that allows auto positioning and |initial_bounds_| has
+  // not been set.
+  ash::wm::GetWindowState(window)->set_window_position_managed(
+      ash::wm::ToWindowShowState(ash::wm::WINDOW_STATE_TYPE_AUTO_POSITIONED) ==
+          show_state &&
+      initial_bounds_.IsEmpty());
+
+  // The transparent insets cover the whole window until we have some initial
+  // contents.
+  ash::wm::GetWindowState(window)->set_transparent_insets(gfx::Insets(
+      window->bounds().size().width(), window->bounds().size().height()));
 }
 
 void ShellSurface::Configure() {
@@ -757,9 +788,9 @@ void ShellSurface::AttemptToStartDrag(int component) {
       break;
   }
 
-  resizer_ = ash::CreateWindowResizer(widget_->GetNativeWindow(), drag_location,
-                                      component,
-                                      aura::client::WINDOW_MOVE_SOURCE_MOUSE);
+  resizer_ = ash::CreateWindowResizer(
+      ash::wm::WmWindowAura::Get(widget_->GetNativeWindow()), drag_location,
+      component, aura::client::WINDOW_MOVE_SOURCE_MOUSE);
   if (!resizer_)
     return;
 
@@ -810,7 +841,7 @@ bool ShellSurface::IsResizing() const {
 
 gfx::Rect ShellSurface::GetVisibleBounds() const {
   // Use |geometry_| if set, otherwise use the visual bounds of the surface.
-  return geometry_.IsEmpty() ? surface_->GetVisibleBounds() : geometry_;
+  return geometry_.IsEmpty() ? gfx::Rect(surface_->layer()->size()) : geometry_;
 }
 
 gfx::Point ShellSurface::GetSurfaceOrigin() const {
@@ -877,8 +908,26 @@ void ShellSurface::UpdateWidgetBounds() {
   widget_->SetBounds(new_widget_bounds);
   ignore_window_bounds_changes_ = false;
 
+  UpdateTransparentInsets();
+
   // A change to the widget size requires surface bounds to be re-adjusted.
   surface_->SetBounds(gfx::Rect(GetSurfaceOrigin(), surface_->layer()->size()));
+}
+
+void ShellSurface::UpdateTransparentInsets() {
+  DCHECK(widget_);
+
+  gfx::Rect non_transparent_bounds = surface_->GetNonTransparentBounds() +
+                                     GetSurfaceOrigin().OffsetFromOrigin();
+  gfx::Size window_size = widget_->GetNativeWindow()->bounds().size();
+  gfx::Insets transparent_insets =
+      gfx::Rect(window_size).InsetsFrom(non_transparent_bounds);
+  ash::wm::WindowState* window_state =
+      ash::wm::GetWindowState(widget_->GetNativeWindow());
+  if (window_state->transparent_insets() != transparent_insets) {
+    window_state->set_transparent_insets(transparent_insets);
+    ash::Shell::GetInstance()->UpdateShelfVisibility();
+  }
 }
 
 }  // namespace exo

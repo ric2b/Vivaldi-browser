@@ -51,7 +51,7 @@ bool StreamTexture::Create(GpuCommandBufferStub* owner_stub,
                                   GL_UNSIGNED_BYTE, gfx::Rect(size));
     texture_manager->SetLevelStreamTextureImage(
         texture, GL_TEXTURE_EXTERNAL_OES, 0, gl_image.get(),
-        gles2::Texture::UNBOUND);
+        gles2::Texture::UNBOUND, 0);
     return true;
   }
 
@@ -91,8 +91,11 @@ StreamTexture::~StreamTexture() {
 
 // gpu::gles2::GLStreamTextureMatrix implementation
 void StreamTexture::GetTextureMatrix(float xform[16]) {
-  UpdateTexImage();
-  surface_texture_->GetTransformMatrix(xform);
+  if (surface_texture_) {
+    UpdateTexImage();
+    surface_texture_->GetTransformMatrix(current_matrix_);
+  }
+  memcpy(xform, current_matrix_, sizeof(current_matrix_));
 }
 
 void StreamTexture::OnWillDestroyStub() {
@@ -100,7 +103,8 @@ void StreamTexture::OnWillDestroyStub() {
   owner_stub_->channel()->RemoveRoute(route_id_);
 
   if (framebuffer_) {
-    scoped_ptr<ui::ScopedMakeCurrent> scoped_make_current(MakeStubCurrent());
+    std::unique_ptr<ui::ScopedMakeCurrent> scoped_make_current(
+        MakeStubCurrent());
 
     glDeleteProgram(program_);
     glDeleteShader(vertex_shader_);
@@ -126,8 +130,8 @@ void StreamTexture::Destroy(bool have_context) {
   NOTREACHED();
 }
 
-scoped_ptr<ui::ScopedMakeCurrent> StreamTexture::MakeStubCurrent() {
-  scoped_ptr<ui::ScopedMakeCurrent> scoped_make_current;
+std::unique_ptr<ui::ScopedMakeCurrent> StreamTexture::MakeStubCurrent() {
+  std::unique_ptr<ui::ScopedMakeCurrent> scoped_make_current;
   bool needs_make_current =
       !owner_stub_->decoder()->GetGLContext()->IsCurrent(NULL);
   if (needs_make_current) {
@@ -143,7 +147,7 @@ void StreamTexture::UpdateTexImage() {
 
   if (!has_pending_frame_) return;
 
-  scoped_ptr<ui::ScopedMakeCurrent> scoped_make_current(MakeStubCurrent());
+  std::unique_ptr<ui::ScopedMakeCurrent> scoped_make_current(MakeStubCurrent());
 
   surface_texture_->UpdateTexImage();
 
@@ -194,7 +198,7 @@ bool StreamTexture::CopyTexImage(unsigned target) {
     // CopyTexImage() is called each time the surface texture is used for
     // drawing.
     texture->SetLevelStreamTextureImage(GL_TEXTURE_EXTERNAL_OES, 0, this,
-                                        gles2::Texture::UNBOUND);
+                                        gles2::Texture::UNBOUND, 0);
   }
 
   return true;

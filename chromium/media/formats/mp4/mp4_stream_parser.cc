@@ -5,7 +5,9 @@
 #include "media/formats/mp4/mp4_stream_parser.h"
 
 #include <stddef.h>
+
 #include <limits>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -152,7 +154,7 @@ bool MP4StreamParser::ParseBox(bool* err) {
   queue_.Peek(&buf, &size);
   if (!size) return false;
 
-  scoped_ptr<BoxReader> reader(
+  std::unique_ptr<BoxReader> reader(
       BoxReader::ReadTopLevelBox(buf, size, media_log_, err));
   if (reader.get() == NULL) return false;
 
@@ -189,7 +191,7 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
   has_audio_ = false;
   has_video_ = false;
 
-  scoped_ptr<MediaTracks> media_tracks(new MediaTracks());
+  std::unique_ptr<MediaTracks> media_tracks(new MediaTracks());
   AudioDecoderConfig audio_config;
   VideoDecoderConfig video_config;
   int detected_audio_track_count = 0;
@@ -539,7 +541,7 @@ bool MP4StreamParser::EnqueueSample(BufferQueue* audio_buffers,
   queue_.PeekAt(runs_->sample_offset() + moof_head_, &buf, &buf_size);
   if (buf_size < runs_->sample_size()) return false;
 
-  scoped_ptr<DecryptConfig> decrypt_config;
+  std::unique_ptr<DecryptConfig> decrypt_config;
   std::vector<SubsampleEntry> subsamples;
   if (runs_->is_encrypted()) {
     decrypt_config = runs_->GetDecryptConfig();
@@ -552,13 +554,16 @@ bool MP4StreamParser::EnqueueSample(BufferQueue* audio_buffers,
 
   std::vector<uint8_t> frame_buf(buf, buf + runs_->sample_size());
   if (video) {
-    DCHECK(runs_->video_description().frame_bitstream_converter);
-    if (!runs_->video_description().frame_bitstream_converter->ConvertFrame(
-        &frame_buf, runs_->is_keyframe(), &subsamples)) {
-      MEDIA_LOG(ERROR, media_log_)
-          << "Failed to prepare video sample for decode";
-      *err = true;
-      return false;
+    if (runs_->video_description().video_codec == kCodecH264 ||
+        runs_->video_description().video_codec == kCodecHEVC) {
+      DCHECK(runs_->video_description().frame_bitstream_converter);
+      if (!runs_->video_description().frame_bitstream_converter->ConvertFrame(
+              &frame_buf, runs_->is_keyframe(), &subsamples)) {
+        MEDIA_LOG(ERROR, media_log_)
+            << "Failed to prepare video sample for decode";
+        *err = true;
+        return false;
+      }
     }
   }
 

@@ -12,10 +12,6 @@
 Polymer({
   is: 'settings-languages-page',
 
-  behaviors: [
-    I18nBehavior,
-  ],
-
   properties: {
     /**
      * The current active route.
@@ -36,17 +32,11 @@ Polymer({
     /**
      * Read-only reference to the languages model provided by the
      * 'settings-languages' instance.
-     * @type {LanguagesModel|undefined}
+     * @type {!LanguagesModel|undefined}
      */
     languages: {
       type: Object,
       notify: true,
-    },
-
-    /** @private */
-    inputMethodsSecondary_: {
-      type: String,
-      value: 'Placeholder, e.g. US keyboard',
     },
 
     /** @private */
@@ -57,19 +47,24 @@ Polymer({
 
     /**
      * The language to display the details for.
-     * @type {!LanguageInfo|undefined}
+     * @type {!LanguageState|undefined}
      * @private
      */
     detailLanguage_: Object,
+
+    /** @private {!LanguageHelper} */
+    languageHelper_: Object,
   },
 
-  /** @private {!LanguageHelper} */
-  languageHelper_: LanguageHelperImpl.getInstance(),
+  /** @override */
+  created: function() {
+    this.languageHelper_ = LanguageHelperImpl.getInstance();
+  },
 
   /**
    * Handler for clicking a language on the main page, which selects the
    * language as the prospective UI language on Chrome OS and Windows.
-   * @param {!{model: !{item: !LanguageInfo}}} e
+   * @param {!{model: !{item: !LanguageState}}} e
    */
   onLanguageTap_: function(e) {
     // Only change the UI language on platforms that allow it.
@@ -87,7 +82,7 @@ Polymer({
 
   /**
    * Handler for enabling or disabling spell check.
-   * @param {!{target: Element, model: !{item: !LanguageInfo}}} e
+   * @param {!{target: Element, model: !{item: !LanguageState}}} e
    */
   onSpellCheckChange_: function(e) {
     this.languageHelper_.toggleSpellCheck(e.model.item.language.code,
@@ -110,7 +105,7 @@ Polymer({
 
   /**
    * Opens the Language Detail page for the language.
-   * @param {!{model: !{item: !LanguageInfo}}} e
+   * @param {!{model: !{item: !LanguageState}}} e
    * @private
    */
   onShowLanguageDetailTap_: function(e) {
@@ -118,14 +113,52 @@ Polymer({
     this.$.pages.setSubpageChain(['language-detail']);
   },
 
-<if expr="not is_macosx">
+  /**
+   * Opens the Manage Input Methods page.
+   * @private
+   */
+  onManageInputMethodsTap_: function() {
+    assert(cr.isChromeOS);
+    this.$.pages.setSubpageChain(['manage-input-methods']);
+  },
+
+  /**
+   * Handler for clicking an input method on the main page, which sets it as
+   * the current input method.
+   * @param {!{model: !{item: !chrome.languageSettingsPrivate.InputMethod},
+   *           target: !{tagName: string}}} e
+   */
+  onInputMethodTap_: function(e) {
+    assert(cr.isChromeOS);
+
+    // Taps on the paper-icon-button are handled in onInputMethodOptionsTap_.
+    if (e.target.tagName == 'PAPER-ICON-BUTTON')
+      return;
+
+    // Set the input method.
+    this.languageHelper_.setCurrentInputMethod(e.model.item.id);
+  },
+
+  /**
+   * Opens the input method extension's options page in a new tab (or focuses
+   * an existing instance of the IME's options).
+   * @param {!{model: !{item: chrome.languageSettingsPrivate.InputMethod}}} e
+   * @private
+   */
+  onInputMethodOptionsTap_: function(e) {
+    assert(cr.isChromeOS);
+    this.languageHelper_.openInputMethodOptions(e.model.item.id);
+  },
+
   /**
    * Returns the enabled languages which support spell check.
+   * @return {!Array<!LanguageState>}
    * @private
    */
   spellCheckLanguages_: function() {
-    return this.languages.enabledLanguages.filter(function(languageInfo) {
-      return languageInfo.language.supportsSpellcheck;
+    assert(!cr.isMac);
+    return this.languages.enabled.filter(function(languageState) {
+      return languageState.language.supportsSpellcheck;
     });
   },
 
@@ -134,12 +167,11 @@ Polymer({
    * @private
    */
   onEditDictionaryTap_: function() {
+    assert(!cr.isMac);
     this.$.pages.setSubpageChain(['edit-dictionary']);
     this.forceRenderList_('settings-edit-dictionary-page');
   },
-</if>
 
-<if expr="chromeos or is_win">
   /**
    * Checks whether the prospective UI language (the pref that indicates what
    * language to use in Chrome) matches the current language. This pref is only
@@ -151,9 +183,9 @@ Polymer({
    * @private
    */
   isProspectiveUILanguage_: function(languageCode, prospectiveUILanguage) {
+    assert(cr.isChromeOS || cr.isWindows);
     return languageCode == this.languageHelper_.getProspectiveUILanguage();
   },
-</if>
 
    /**
     * @return {string}
@@ -174,14 +206,13 @@ Polymer({
    * @private
    */
   getLanguageItemClass_: function(languageCode, prospectiveUILanguage) {
-<if expr="chromeos or is_win">
-    if (this.isProspectiveUILanguage_(languageCode, prospectiveUILanguage))
+    if ((cr.isChromeOS || cr.isWindows) &&
+        this.isProspectiveUILanguage_(languageCode, prospectiveUILanguage)) {
       return 'selected';
-</if>
+    }
     return '';
   },
 
-<if expr="chromeos">
   /**
    * @param {string} id The input method ID.
    * @param {string} currentId The ID of the currently enabled input method.
@@ -200,9 +231,18 @@ Polymer({
    * @private
    */
   getInputMethodItemClass_: function(id, currentId) {
+    assert(cr.isChromeOS);
     return this.isCurrentInputMethod_(id, currentId) ? 'selected' : '';
   },
-</if>
+
+  getInputMethodName_: function(id) {
+    assert(cr.isChromeOS);
+    var inputMethod = this.languages.inputMethods.enabled.find(
+        function(inputMethod) {
+          return inputMethod.id == id;
+        });
+    return inputMethod ? inputMethod.displayName : '';
+  },
 
   /**
    * HACK(michaelpg): This is necessary to show the list when navigating to

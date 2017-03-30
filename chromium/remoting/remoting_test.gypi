@@ -238,12 +238,14 @@
         'base/rsa_key_pair_unittest.cc',
         'base/run_all_unittests.cc',
         'base/running_samples_unittest.cc',
+        'base/telemetry_log_writer_unittest.cc',
         'base/test_rsa_key_pair.h',
         'base/typed_buffer_unittest.cc',
         'base/util_unittest.cc',
         'client/audio_player_unittest.cc',
         'client/chromoting_client_runtime_unittest.cc',
         'client/client_status_logger_unittest.cc',
+        'client/client_telemetry_logger_unittest.cc',
         'client/empty_cursor_filter_unittest.cc',
         'client/key_event_mapper_unittest.cc',
         'client/normalizing_input_filter_cros_unittest.cc',
@@ -392,11 +394,6 @@
               '-lwtsapi32.lib',
             ],
           },
-        }],
-        [ 'OS=="android"', {
-          'dependencies': [
-            '../testing/android/native_test.gyp:native_test_native_code',
-          ],
         }],
         [ 'chromeos==0', {
           'sources!': [
@@ -584,11 +581,6 @@
               # Linux, so we need the chrome_common.gypi dependency.
               'dependencies': [
                 '../chrome/common_constants.gyp:common_constants',
-              ],
-            }],
-            [ 'OS=="android"', {
-              'dependencies': [
-                '../testing/android/native_test.gyp:native_test_native_code',
               ],
             }],
           ],  # end of 'conditions'

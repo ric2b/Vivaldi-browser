@@ -49,12 +49,12 @@ var SiteSettingsBehaviorImpl = {
    *     for.
    * @param {string} secondaryPattern The secondary pattern to change the
    *     permission for.
-   * @param {number} value What value to set the permission to.
    * @param {number} category The category permission to change.
+   * @param {string} value What value to set the permission to.
    * @protected
    */
   setCategoryPermissionForOrigin: function(
-        primaryPattern, secondaryPattern, value, category) {
+        primaryPattern, secondaryPattern, category, value) {
     this.browserProxy.setCategoryPermissionForOrigin(
         primaryPattern, secondaryPattern, category, value);
   },
@@ -71,8 +71,6 @@ var SiteSettingsBehaviorImpl = {
         return 'camera';
       case settings.ContentSettingsTypes.COOKIES:
         return 'cookies';
-      case settings.ContentSettingsTypes.FULLSCREEN:
-        return 'fullscreen';
       case settings.ContentSettingsTypes.GEOLOCATION:
         return 'location';
       case settings.ContentSettingsTypes.IMAGES:
@@ -91,7 +89,9 @@ var SiteSettingsBehaviorImpl = {
   },
 
   /**
-   * A utility function to compute the icon to use for the category.
+   * A utility function to compute the icon to use for the category, both for
+   * the overall category as well as the individual permission in the details
+   * for a site.
    * @param {number} category The category to show the icon for.
    * @return {string} The id of the icon for the given category.
    * @protected
@@ -99,23 +99,23 @@ var SiteSettingsBehaviorImpl = {
   computeIconForContentCategory: function(category) {
     switch (category) {
       case settings.ContentSettingsTypes.CAMERA:
-        return 'av:videocam';
+        return 'settings:videocam';
       case settings.ContentSettingsTypes.COOKIES:
-        return 'md-settings-icons:cookie';
+        return 'settings:cookie';
       case settings.ContentSettingsTypes.FULLSCREEN:
-        return 'icons:fullscreen';
+        return 'cr:fullscreen';
       case settings.ContentSettingsTypes.GEOLOCATION:
-        return 'communication:location-on';
+        return 'settings:location-on';
       case settings.ContentSettingsTypes.IMAGES:
-        return 'image:photo';
+        return 'settings:photo';
       case settings.ContentSettingsTypes.JAVASCRIPT:
-        return 'icons:input';
+        return 'settings:input';
       case settings.ContentSettingsTypes.MIC:
-        return 'av:mic';
+        return 'settings:mic';
       case settings.ContentSettingsTypes.NOTIFICATIONS:
-        return 'social:notifications';
+        return 'settings:notifications';
       case settings.ContentSettingsTypes.POPUPS:
-        return 'icons:open-in-new';
+        return 'settings:open-in-new';
       default:
         assertNotReached('Invalid category: ' + category);
         return '';
@@ -123,7 +123,9 @@ var SiteSettingsBehaviorImpl = {
   },
 
   /**
-   * A utility function to compute the title of the category.
+   * A utility function to compute the title of the category, both for
+   * the overall category as well as the individual permission in the details
+   * for a site.
    * @param {number} category The category to show the title for.
    * @return {string} The title for the given category.
    * @protected
@@ -150,62 +152,6 @@ var SiteSettingsBehaviorImpl = {
         return loadTimeData.getString('siteSettingsPopups');
       default:
         assertNotReached('Invalid category: ' + category);
-        return '';
-    }
-  },
-
-  /**
-   * A utility function to compute the name of the pref for the category.
-   * @param {number} category The category to find the pref name for.
-   * @return {string} The pref name for the given category.
-   * @protected
-   */
-  computeCategoryPrefName: function(category) {
-    return 'profile.default_content_setting_values.' +
-        this.computeCategorySuffix(category);
-  },
-
-  /**
-   * A utility function to compute the name of the pref for the exceptions
-   * for a given category.
-   * @param {number} category The category to find the pref name for.
-   * @return {string} The pref name for the given category exceptions.
-   * @protected
-   */
-  computeCategoryExceptionsPrefName: function(category) {
-    return 'profile.content_settings.exceptions.' +
-        this.computeCategorySuffix(category);
-  },
-
-  /**
-   * A utility function to convert the category enum into its text
-   * representation, for use with prefs.
-   * @param {number} category The category to find the pref name for.
-   * @return {string} The pref name (suffix) for the given category.
-   * @protected
-   */
-  computeCategorySuffix: function(category) {
-    switch (category) {
-      case settings.ContentSettingsTypes.CAMERA:
-        return 'media_stream_camera';
-      case settings.ContentSettingsTypes.COOKIES:
-        return 'cookies';
-      case settings.ContentSettingsTypes.FULLSCREEN:
-        return 'fullscreen';
-      case settings.ContentSettingsTypes.GEOLOCATION:
-        return 'geolocation';
-      case settings.ContentSettingsTypes.IMAGES:
-        return 'images';
-      case settings.ContentSettingsTypes.JAVASCRIPT:
-        return 'javascript';
-      case settings.ContentSettingsTypes.MIC:
-        return 'media_stream_mic';
-      case settings.ContentSettingsTypes.NOTIFICATIONS:
-        return 'notifications';
-      case settings.ContentSettingsTypes.POPUPS:
-        return 'popups';
-      default:
-        assertNotReached();
         return '';
     }
   },
@@ -256,14 +202,6 @@ var SiteSettingsBehaviorImpl = {
             loadTimeData.getString(
                 'siteSettingsAskBeforeAccessingRecommended') :
             loadTimeData.getString('siteSettingsAskBeforeAccessing');
-      case settings.ContentSettingsTypes.FULLSCREEN:
-        // "Allowed" vs. "Ask first (recommended)".
-        if (categoryEnabled) {
-          return loadTimeData.getString('siteSettingsAllowed');
-        }
-        return showRecommendation ?
-            loadTimeData.getString('siteSettingsAskFirstRecommended') :
-            loadTimeData.getString('siteSettingsAskFirst');
       case settings.ContentSettingsTypes.COOKIES:
         // "Allow sites to save and read cookie data" vs "Blocked".
         if (!categoryEnabled) {
@@ -283,6 +221,45 @@ var SiteSettingsBehaviorImpl = {
         assertNotReached();
         return '';
     }
+  },
+
+  /**
+   * Ensures the URL has a scheme (assumes http if omitted).
+   * @param {string} url The URL with or without a scheme.
+   * @return {string} The URL with a scheme, or an empty string.
+   */
+  ensureUrlHasScheme: function(url) {
+    if (url.length == 0) return url;
+    return url.includes('://') ? url : 'http://' + url;
+  },
+
+  /**
+   * Removes redundant ports, such as port 80 for http and 443 for https.
+   * @param {string} url The URL to sanitize.
+   * @return {string} The URL without redundant ports, if any.
+   */
+  sanitizePort: function(url) {
+    var urlWithScheme = this.ensureUrlHasScheme(url);
+    if (urlWithScheme.startsWith('https://') &&
+        urlWithScheme.endsWith(':443')) {
+      return url.slice(0, -4);
+    }
+    if (urlWithScheme.startsWith('http://') &&
+        urlWithScheme.endsWith(':80')) {
+      return url.slice(0, -3);
+    }
+    return url;
+  },
+
+  /**
+   * Returns the icon to use for a given site.
+   * @param {SiteException} site The url of the site to fetch the icon for.
+   * @return {string} The background-image style with the favicon.
+   * @private
+   */
+  computeSiteIcon: function(site) {
+    var url = this.ensureUrlHasScheme(site.originForDisplay);
+    return 'background-image: ' + cr.icon.getFaviconImageSet(url);
   },
 };
 

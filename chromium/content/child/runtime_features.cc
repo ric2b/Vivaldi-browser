@@ -27,6 +27,8 @@ static void SetRuntimeFeatureDefaultsForPlatform() {
 #if defined(OS_ANDROID)
   // Android does not have support for PagePopup
   WebRuntimeFeatures::enablePagePopup(false);
+  // No plan to support complex UI for date/time INPUT types.
+  WebRuntimeFeatures::enableInputMultipleFieldsUI(false);
   // Android does not yet support SharedWorker. crbug.com/154571
   WebRuntimeFeatures::enableSharedWorker(false);
   // Android does not yet support NavigatorContentUtils.
@@ -59,8 +61,8 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (command_line.HasSwitch(switches::kEnableExperimentalWebPlatformFeatures))
     WebRuntimeFeatures::enableExperimentalFeatures(true);
 
-  WebRuntimeFeatures::enableExperimentalFramework(
-      base::FeatureList::IsEnabled(features::kExperimentalFramework));
+  WebRuntimeFeatures::enableOriginTrials(
+      base::FeatureList::IsEnabled(features::kOriginTrials));
 
   if (command_line.HasSwitch(switches::kEnableWebBluetooth))
     WebRuntimeFeatures::enableWebBluetooth(true);
@@ -79,9 +81,6 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
     // Chrome's Push Messaging implementation relies on Web Notifications.
     WebRuntimeFeatures::enablePushMessaging(false);
   }
-
-  if (command_line.HasSwitch(switches::kEnableNotificationActionIcons))
-    WebRuntimeFeatures::enableNotificationActionIcons(true);
 
   if (command_line.HasSwitch(switches::kDisableSharedWorkers))
     WebRuntimeFeatures::enableSharedWorker(false);
@@ -126,6 +125,11 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
       switches::kEnableGpuMemoryBufferCompositorResources) &&
       !command_line.HasSwitch(switches::kDisableWebGLImageChromium) &&
       !command_line.HasSwitch(switches::kDisableGpu);
+
+  // There are two bugs in WebGL image chromium.
+  // https://bugs.chromium.org/p/chromium/issues/detail?id=581777#c37
+  // TODO(erikchen): When those issues are fixed, reenable this feature.
+  enable_web_gl_image_chromium = false;
 #else
   bool enable_web_gl_image_chromium =
       command_line.HasSwitch(switches::kEnableWebGLImageChromium);
@@ -173,8 +177,8 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (command_line.HasSwitch(switches::kDisablePresentationAPI))
     WebRuntimeFeatures::enablePresentationAPI(false);
 
-  if (base::FeatureList::IsEnabled(features::kWebFontsIntervention)) {
-    WebRuntimeFeatures::enableWebFontsIntervention(true);
+  if (base::FeatureList::IsEnabled(features::kWebFontsInterventionV2)) {
+    WebRuntimeFeatures::enableWebFontsInterventionV2(true);
     if (command_line.HasSwitch(switches::kEnableWebFontsInterventionTrigger))
       WebRuntimeFeatures::enableWebFontsInterventionTrigger(true);
   }
@@ -184,9 +188,6 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
 
   if (command_line.HasSwitch(switches::kEnableSlimmingPaintV2))
     WebRuntimeFeatures::enableSlimmingPaintV2(true);
-
-  if (base::FeatureList::IsEnabled(features::kRenderingPipelineThrottling))
-    WebRuntimeFeatures::enableRenderingPipelineThrottling(true);
 
   // Note that it might already by true for OS_ANDROID, above.  This is for
   // non-android versions.
@@ -198,6 +199,17 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
 
   WebRuntimeFeatures::enableMediaDocumentDownloadButton(
       base::FeatureList::IsEnabled(features::kMediaDocumentDownloadButton));
+
+  if (base::FeatureList::IsEnabled(features::kPointerEvents)) {
+      WebRuntimeFeatures::enableFeatureFromString(
+        std::string("PointerEvent"), true);
+  }
+
+  if (!base::FeatureList::IsEnabled(features::kPaintOptimizations))
+    WebRuntimeFeatures::enableFeatureFromString("PaintOptimizations", false);
+
+  WebRuntimeFeatures::enableRenderingPipelineThrottling(
+    base::FeatureList::IsEnabled(features::kRenderingPipelineThrottling));
 
   // Enable explicitly enabled features, and then disable explicitly disabled
   // ones.

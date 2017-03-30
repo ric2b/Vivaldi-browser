@@ -32,7 +32,7 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptController.h"
-#include "bindings/modules/v8/UnionTypesModules.h"
+#include "bindings/modules/v8/StringOrStringSequence.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMArrayBufferView.h"
 #include "core/dom/Document.h"
@@ -41,7 +41,6 @@
 #include "core/dom/SecurityContext.h"
 #include "core/events/MessageEvent.h"
 #include "core/fileapi/Blob.h"
-#include "core/frame/ConsoleTypes.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
@@ -52,6 +51,7 @@
 #include "platform/Logging.h"
 #include "platform/blob/BlobData.h"
 #include "platform/heap/Handle.h"
+#include "platform/weborigin/KnownPorts.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/Platform.h"
 #include "wtf/Assertions.h"
@@ -307,7 +307,7 @@ void DOMWebSocket::connect(const String& url, const Vector<String>& protocols, E
         return;
     }
 
-    if (!Platform::current()->portAllowed(m_url)) {
+    if (!isPortAllowedForScheme(m_url)) {
         m_state = CLOSED;
         exceptionState.throwSecurityError("The port " + String::number(m_url.port()) + " is not allowed.");
         return;
@@ -646,16 +646,16 @@ void DOMWebSocket::didReceiveBinaryMessage(PassOwnPtr<Vector<char>> binaryData)
         binaryData->swap(*rawData->mutableData());
         OwnPtr<BlobData> blobData = BlobData::create();
         blobData->appendData(rawData.release(), 0, BlobDataItem::toEndOfFile);
-        Blob* blob = Blob::create(BlobDataHandle::create(blobData.release(), size));
+        Blob* blob = Blob::create(BlobDataHandle::create(std::move(blobData), size));
         recordReceiveTypeHistogram(WebSocketReceiveTypeBlob);
         m_eventQueue->dispatch(MessageEvent::create(blob, SecurityOrigin::create(m_url)->toString()));
         break;
     }
 
     case BinaryTypeArrayBuffer:
-        RefPtr<DOMArrayBuffer> arrayBuffer = DOMArrayBuffer::create(binaryData->data(), binaryData->size());
+        DOMArrayBuffer* arrayBuffer = DOMArrayBuffer::create(binaryData->data(), binaryData->size());
         recordReceiveTypeHistogram(WebSocketReceiveTypeArrayBuffer);
-        m_eventQueue->dispatch(MessageEvent::create(arrayBuffer.release(), SecurityOrigin::create(m_url)->toString()));
+        m_eventQueue->dispatch(MessageEvent::create(arrayBuffer, SecurityOrigin::create(m_url)->toString()));
         break;
     }
 }
@@ -716,7 +716,7 @@ DEFINE_TRACE(DOMWebSocket)
     visitor->trace(m_channel);
     visitor->trace(m_eventQueue);
     WebSocketChannelClient::trace(visitor);
-    RefCountedGarbageCollectedEventTargetWithInlineData<DOMWebSocket>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
     ActiveDOMObject::trace(visitor);
 }
 

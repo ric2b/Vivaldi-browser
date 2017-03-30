@@ -178,7 +178,11 @@ AutomationPredicate.leafDomNode = function(node) {
  */
 AutomationPredicate.element = function(node) {
   return (node.state .focusable && node.role != RoleType.rootWebArea) ||
-      AutomationPredicate.leafDomNode(node);
+      (AutomationPredicate.leafDomNode(node) &&
+       (/\S+/.test(node.name) ||
+        (node.role != RoleType.lineBreak &&
+         node.role != RoleType.staticText &&
+         node.role != RoleType.inlineTextBox)));
 };
 
 /**
@@ -203,7 +207,8 @@ AutomationPredicate.container = function(node) {
   if (node.role == RoleType.rootWebArea)
     return !node.parent || node.parent.root.role != RoleType.rootWebArea;
 
-  return node.role == RoleType.toolbar ||
+  return node.role == RoleType.document ||
+      node.role == RoleType.toolbar ||
       node.role == RoleType.window;
 };
 

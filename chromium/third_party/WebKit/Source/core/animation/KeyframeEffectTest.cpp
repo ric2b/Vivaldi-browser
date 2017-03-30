@@ -5,7 +5,7 @@
 #include "core/animation/KeyframeEffect.h"
 
 #include "bindings/core/v8/Dictionary.h"
-#include "bindings/core/v8/UnionTypesCore.h"
+#include "bindings/core/v8/EffectModelOrDictionarySequenceOrDictionary.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
 #include "bindings/core/v8/V8KeyframeEffectOptions.h"
 #include "core/animation/AnimationClock.h"
@@ -15,7 +15,6 @@
 #include "core/animation/KeyframeEffectModel.h"
 #include "core/animation/Timing.h"
 #include "core/dom/Document.h"
-#include "core/dom/ExceptionCode.h"
 #include "core/testing/DummyPageHolder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include <v8.h>
@@ -128,13 +127,6 @@ TEST_F(AnimationKeyframeEffectV8Test, CanOmitSpecifiedDuration)
     EXPECT_TRUE(std::isnan(animation->specifiedTiming().iterationDuration));
 }
 
-TEST_F(AnimationKeyframeEffectV8Test, NegativeDurationIsAuto)
-{
-    Vector<Dictionary, 0> jsKeyframes;
-    KeyframeEffect* animation = createAnimation(element.get(), jsKeyframes, -2, exceptionState);
-    EXPECT_TRUE(std::isnan(animation->specifiedTiming().iterationDuration));
-}
-
 TEST_F(AnimationKeyframeEffectV8Test, SpecifiedGetters)
 {
     Vector<Dictionary, 0> jsKeyframes;
@@ -220,11 +212,13 @@ TEST_F(AnimationKeyframeEffectV8Test, SpecifiedSetters)
     EXPECT_EQ("backwards", specified->fill());
 
     EXPECT_EQ(0, specified->iterationStart());
-    specified->setIterationStart(2);
+    specified->setIterationStart(2, exceptionState);
+    ASSERT_FALSE(exceptionState.hadException());
     EXPECT_EQ(2, specified->iterationStart());
 
     EXPECT_EQ(1, specified->iterations());
-    specified->setIterations(10);
+    specified->setIterations(10, exceptionState);
+    ASSERT_FALSE(exceptionState.hadException());
     EXPECT_EQ(10, specified->iterations());
 
     EXPECT_EQ(1, specified->playbackRate());
@@ -236,7 +230,8 @@ TEST_F(AnimationKeyframeEffectV8Test, SpecifiedSetters)
     EXPECT_EQ("reverse", specified->direction());
 
     EXPECT_EQ("linear", specified->easing());
-    specified->setEasing("step-start");
+    specified->setEasing("step-start", exceptionState);
+    ASSERT_FALSE(exceptionState.hadException());
     EXPECT_EQ("step-start", specified->easing());
 }
 
@@ -258,7 +253,8 @@ TEST_F(AnimationKeyframeEffectV8Test, SetSpecifiedDuration)
 
     UnrestrictedDoubleOrString inDuration;
     inDuration.setUnrestrictedDouble(2.5);
-    specified->setDuration(inDuration);
+    specified->setDuration(inDuration, exceptionState);
+    ASSERT_FALSE(exceptionState.hadException());
     UnrestrictedDoubleOrString duration2;
     specified->duration(duration2);
     EXPECT_TRUE(duration2.isUnrestrictedDouble());

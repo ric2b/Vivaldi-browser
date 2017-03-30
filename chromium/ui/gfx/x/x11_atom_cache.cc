@@ -7,19 +7,20 @@
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
 
+#include <memory>
+
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 
 namespace ui {
 
-X11AtomCache::X11AtomCache(XDisplay* xdisplay, const char** to_cache)
+X11AtomCache::X11AtomCache(XDisplay* xdisplay, const char* const* to_cache)
     : xdisplay_(xdisplay),
       uncached_atoms_allowed_(false) {
   int cache_count = 0;
-  for (const char** i = to_cache; *i != NULL; i++)
-    cache_count++;
+  for (const char* const* i = to_cache; *i; ++i)
+    ++cache_count;
 
-  scoped_ptr<XAtom[]> cached_atoms(new XAtom[cache_count]);
+  std::unique_ptr<XAtom[]> cached_atoms(new XAtom[cache_count]);
 
   // Grab all the atoms we need now to minimize roundtrips to the X11 server.
   XInternAtoms(xdisplay_,

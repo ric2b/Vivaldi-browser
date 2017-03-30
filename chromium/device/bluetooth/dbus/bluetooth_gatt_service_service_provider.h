@@ -10,6 +10,7 @@
 
 #include "base/macros.h"
 #include "dbus/bus.h"
+#include "dbus/message.h"
 #include "dbus/object_path.h"
 #include "device/bluetooth/bluetooth_export.h"
 
@@ -29,6 +30,11 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothGattServiceServiceProvider {
  public:
   virtual ~BluetoothGattServiceServiceProvider();
 
+  // Writes an array of the service's properties into the provided writer.
+  virtual void WriteProperties(dbus::MessageWriter* writer) {}
+
+  virtual const dbus::ObjectPath& object_path() const = 0;
+
   // Creates the instance where |bus| is the D-Bus bus connection to export the
   // object onto, |object_path| is the object path that it should have, |uuid|
   // is the 128-bit GATT service UUID, and |includes| are a list of object paths
@@ -39,6 +45,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothGattServiceServiceProvider {
       dbus::Bus* bus,
       const dbus::ObjectPath& object_path,
       const std::string& uuid,
+      bool is_primary,
       const std::vector<dbus::ObjectPath>& includes);
 
  protected:

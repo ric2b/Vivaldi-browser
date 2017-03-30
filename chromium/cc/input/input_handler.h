@@ -5,8 +5,9 @@
 #ifndef CC_INPUT_INPUT_HANDLER_H_
 #define CC_INPUT_INPUT_HANDLER_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "cc/base/cc_export.h"
 #include "cc/input/event_listener_properties.h"
@@ -99,12 +100,9 @@ class CC_EXPORT InputHandler {
     uint32_t main_thread_scrolling_reasons;
   };
 
-  // TODO(ymalik): Remove ANIMATED_WHEEL once it is no longer special cased.
-  // see crbug.com/575019.
   enum ScrollInputType {
     TOUCHSCREEN,
     WHEEL,
-    ANIMATED_WHEEL,
     NON_BUBBLING_GESTURE
   };
 
@@ -196,8 +194,8 @@ class CC_EXPORT InputHandler {
   // LatencyInfoSwapPromiseMonitor, if SetNeedsRedraw() or SetNeedsRedrawRect()
   // is called on LayerTreeHostImpl, the original latency info will be turned
   // into a LatencyInfoSwapPromise.
-  virtual scoped_ptr<SwapPromiseMonitor> CreateLatencyInfoSwapPromiseMonitor(
-      ui::LatencyInfo* latency) = 0;
+  virtual std::unique_ptr<SwapPromiseMonitor>
+  CreateLatencyInfoSwapPromiseMonitor(ui::LatencyInfo* latency) = 0;
 
   virtual ScrollElasticityHelper* CreateScrollElasticityHelper() = 0;
 

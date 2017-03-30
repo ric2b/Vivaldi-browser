@@ -4,6 +4,9 @@
 
 #include "net/quic/crypto/aes_128_gcm_12_encrypter.h"
 
+#include <memory>
+
+#include "net/quic/quic_utils.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 
 using base::StringPiece;
@@ -158,7 +161,7 @@ QuicData* EncryptWithNonce(Aes128Gcm12Encrypter* encrypter,
                            StringPiece associated_data,
                            StringPiece plaintext) {
   size_t ciphertext_size = encrypter->GetCiphertextSize(plaintext.length());
-  scoped_ptr<char[]> ciphertext(new char[ciphertext_size]);
+  std::unique_ptr<char[]> ciphertext(new char[ciphertext_size]);
 
   if (!encrypter->Encrypt(nonce, associated_data, plaintext,
                           reinterpret_cast<unsigned char*>(ciphertext.get()))) {
@@ -175,18 +178,12 @@ TEST(Aes128Gcm12EncrypterTest, Encrypt) {
     const TestGroupInfo& test_info = test_group_info[i];
     for (size_t j = 0; test_vectors[j].key != nullptr; j++) {
       // Decode the test vector.
-      string key;
-      string iv;
-      string pt;
-      string aad;
-      string ct;
-      string tag;
-      ASSERT_TRUE(DecodeHexString(test_vectors[j].key, &key));
-      ASSERT_TRUE(DecodeHexString(test_vectors[j].iv, &iv));
-      ASSERT_TRUE(DecodeHexString(test_vectors[j].pt, &pt));
-      ASSERT_TRUE(DecodeHexString(test_vectors[j].aad, &aad));
-      ASSERT_TRUE(DecodeHexString(test_vectors[j].ct, &ct));
-      ASSERT_TRUE(DecodeHexString(test_vectors[j].tag, &tag));
+      string key = QuicUtils::HexDecode(test_vectors[j].key);
+      string iv = QuicUtils::HexDecode(test_vectors[j].iv);
+      string pt = QuicUtils::HexDecode(test_vectors[j].pt);
+      string aad = QuicUtils::HexDecode(test_vectors[j].aad);
+      string ct = QuicUtils::HexDecode(test_vectors[j].ct);
+      string tag = QuicUtils::HexDecode(test_vectors[j].tag);
 
       // The test vector's lengths should look sane. Note that the lengths
       // in |test_info| are in bits.
@@ -199,7 +196,7 @@ TEST(Aes128Gcm12EncrypterTest, Encrypt) {
 
       Aes128Gcm12Encrypter encrypter;
       ASSERT_TRUE(encrypter.SetKey(key));
-      scoped_ptr<QuicData> encrypted(EncryptWithNonce(
+      std::unique_ptr<QuicData> encrypted(EncryptWithNonce(
           &encrypter, iv,
           // This deliberately tests that the encrypter can handle an AAD that
           // is set to nullptr, as opposed to a zero-length, non-nullptr

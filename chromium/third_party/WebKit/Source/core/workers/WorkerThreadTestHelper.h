@@ -7,6 +7,7 @@
 #include "bindings/core/v8/V8GCController.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/workers/WorkerBackingThread.h"
 #include "core/workers/WorkerClients.h"
 #include "core/workers/WorkerLoaderProxy.h"
 #include "core/workers/WorkerReportingProxy.h"
@@ -35,12 +36,12 @@ public:
     MockWorkerLoaderProxyProvider() { }
     ~MockWorkerLoaderProxyProvider() override { }
 
-    void postTaskToLoader(PassOwnPtr<ExecutionContextTask>) override
+    void postTaskToLoader(std::unique_ptr<ExecutionContextTask>) override
     {
         NOTIMPLEMENTED();
     }
 
-    bool postTaskToWorkerGlobalScope(PassOwnPtr<ExecutionContextTask>) override
+    bool postTaskToWorkerGlobalScope(std::unique_ptr<ExecutionContextTask>) override
     {
         NOTIMPLEMENTED();
         return false;
@@ -63,71 +64,22 @@ public:
     MOCK_METHOD0(willDestroyWorkerGlobalScope, void());
 };
 
-void notifyScriptLoadedEventToWorkerThreadForTest(WorkerThread*);
-
-class FakeWorkerGlobalScope : public WorkerGlobalScope {
-public:
-    typedef WorkerGlobalScope Base;
-
-    FakeWorkerGlobalScope(const KURL& url, const String& userAgent, WorkerThread* thread, PassOwnPtr<SecurityOrigin::PrivilegeData> starterOriginPrivilegeData, WorkerClients* workerClients)
-        : WorkerGlobalScope(url, userAgent, thread, monotonicallyIncreasingTime(), starterOriginPrivilegeData, workerClients)
-        , m_thread(thread)
-    {
-    }
-
-    ~FakeWorkerGlobalScope() override
-    {
-    }
-
-    void scriptLoaded(size_t, size_t) override
-    {
-        notifyScriptLoadedEventToWorkerThreadForTest(m_thread);
-    }
-
-    // EventTarget
-    const AtomicString& interfaceName() const override
-    {
-        return EventTargetNames::DedicatedWorkerGlobalScope;
-    }
-
-    void logExceptionToConsole(const String&, int, const String&, int, int, PassRefPtr<ScriptCallStack>) override
-    {
-    }
-
-private:
-    WorkerThread* m_thread;
-};
-
 class WorkerThreadForTest : public WorkerThread {
 public:
     WorkerThreadForTest(
         WorkerLoaderProxyProvider* mockWorkerLoaderProxyProvider,
         WorkerReportingProxy& mockWorkerReportingProxy)
         : WorkerThread(WorkerLoaderProxy::create(mockWorkerLoaderProxyProvider), mockWorkerReportingProxy)
-        , m_thread(WebThreadSupportingGC::create("Test thread"))
+        , m_workerBackingThread(WorkerBackingThread::createForTest("Test thread"))
         , m_scriptLoadedEvent(adoptPtr(new WaitableEvent()))
     {
-        ASSERT(m_thread);
     }
 
     ~WorkerThreadForTest() override { }
 
-    // WorkerThread implementation:
-    WebThreadSupportingGC& backingThread() override
-    {
-        ASSERT(m_thread);
-        return *m_thread;
-    }
-    void willDestroyIsolate() override
-    {
-        V8GCController::collectAllGarbageForTesting(v8::Isolate::GetCurrent());
-        WorkerThread::willDestroyIsolate();
-    }
+    WorkerBackingThread& workerBackingThread() override { return *m_workerBackingThread; }
 
-    WorkerGlobalScope* createWorkerGlobalScope(PassOwnPtr<WorkerThreadStartupData> startupData) override
-    {
-        return new FakeWorkerGlobalScope(startupData->m_scriptURL, startupData->m_userAgent, this, startupData->m_starterOriginPrivilegeData.release(), startupData->m_workerClients.release());
-    }
+    WorkerGlobalScope* createWorkerGlobalScope(PassOwnPtr<WorkerThreadStartupData>) override;
 
     void waitUntilScriptLoaded()
     {
@@ -153,28 +105,60 @@ public:
             source,
             nullptr,
             DontPauseWorkerGlobalScopeOnStart,
-            headers.release(),
+            headers.get(),
             securityOrigin,
             clients,
             WebAddressSpaceLocal,
+            nullptr,
             V8CacheOptionsDefault));
     }
 
     void waitForInit()
     {
         OwnPtr<WaitableEvent> completionEvent = adoptPtr(new WaitableEvent());
-        backingThread().postTask(BLINK_FROM_HERE, threadSafeBind(&WaitableEvent::signal, AllowCrossThreadAccess(completionEvent.get())));
+        workerBackingThread().backingThread().postTask(BLINK_FROM_HERE, threadSafeBind(&WaitableEvent::signal, AllowCrossThreadAccess(completionEvent.get())));
         completionEvent->wait();
     }
 
 private:
-    OwnPtr<WebThreadSupportingGC> m_thread;
+    OwnPtr<WorkerBackingThread> m_workerBackingThread;
     OwnPtr<WaitableEvent> m_scriptLoadedEvent;
 };
 
-inline void notifyScriptLoadedEventToWorkerThreadForTest(WorkerThread* thread)
+class FakeWorkerGlobalScope : public WorkerGlobalScope {
+public:
+    FakeWorkerGlobalScope(const KURL& url, const String& userAgent, WorkerThreadForTest* thread, PassOwnPtr<SecurityOrigin::PrivilegeData> starterOriginPrivilegeData, WorkerClients* workerClients)
+        : WorkerGlobalScope(url, userAgent, thread, monotonicallyIncreasingTime(), std::move(starterOriginPrivilegeData), workerClients)
+        , m_thread(thread)
+    {
+    }
+
+    ~FakeWorkerGlobalScope() override
+    {
+    }
+
+    void scriptLoaded(size_t, size_t) override
+    {
+        m_thread->scriptLoaded();
+    }
+
+    // EventTarget
+    const AtomicString& interfaceName() const override
+    {
+        return EventTargetNames::DedicatedWorkerGlobalScope;
+    }
+
+    void logExceptionToConsole(const String&, int, const String&, int, int, PassRefPtr<ScriptCallStack>) override
+    {
+    }
+
+private:
+    WorkerThreadForTest* m_thread;
+};
+
+inline WorkerGlobalScope* WorkerThreadForTest::createWorkerGlobalScope(PassOwnPtr<WorkerThreadStartupData> startupData)
 {
-    static_cast<WorkerThreadForTest*>(thread)->scriptLoaded();
+    return new FakeWorkerGlobalScope(startupData->m_scriptURL, startupData->m_userAgent, this, std::move(startupData->m_starterOriginPrivilegeData), std::move(startupData->m_workerClients));
 }
 
 } // namespace blink

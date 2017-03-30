@@ -19,6 +19,7 @@ namespace content {
 class RenderWidgetHost;
 class RenderWidgetHostImpl;
 struct NativeWebKeyboardEvent;
+struct TextInputState;
 
 // See comments in render_widget_host_view.h about this class and its members.
 // This version of RenderWidgetHostView is for builds of Chrome that run through
@@ -53,7 +54,6 @@ class CONTENT_EXPORT RenderWidgetHostViewMus : public RenderWidgetHostViewBase {
   void Hide() override;
   bool IsShowing() override;
   gfx::NativeView GetNativeView() const override;
-  gfx::NativeViewId GetNativeViewId() const override;
   gfx::NativeViewAccessible GetNativeViewAccessible() override;
   gfx::Rect GetViewBounds() const override;
   gfx::Vector2dF GetLastScrollOffset() const override;
@@ -67,8 +67,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMus : public RenderWidgetHostViewBase {
   void InitAsFullscreen(RenderWidgetHostView* reference_host_view) override;
   void UpdateCursor(const WebCursor& cursor) override;
   void SetIsLoading(bool is_loading) override;
-  void TextInputStateChanged(
-      const ViewHostMsg_TextInputState_Params& params) override;
+  void TextInputStateChanged(const TextInputState& params) override;
   void ImeCancelComposition() override;
 #if defined(OS_MACOSX) || defined(USE_AURA)
   void ImeCompositionRangeChanged(
@@ -104,6 +103,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMus : public RenderWidgetHostViewBase {
 
 #if defined(OS_MACOSX)
   // RenderWidgetHostView implementation.
+  ui::AcceleratedWidgetMac* GetAcceleratedWidgetMac() const override;
   void SetActive(bool active) override;
   void ShowDefinitionForSelection() override;
   bool SupportsSpeech() const override;
@@ -119,7 +119,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMus : public RenderWidgetHostViewBase {
 
   aura::Window* aura_window_;
 
-  scoped_ptr<mus::ScopedWindowPtr> mus_window_;
+  std::unique_ptr<mus::ScopedWindowPtr> mus_window_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewMus);
 };

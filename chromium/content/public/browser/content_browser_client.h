@@ -8,12 +8,12 @@
 #include <stddef.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/callback_forward.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -21,9 +21,11 @@
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/media_stream_request.h"
+#include "content/public/common/mojo_application_info.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/common/socket_permission_request.h"
 #include "content/public/common/window_container_type.h"
+#include "media/audio/audio_manager.h"
 #include "net/base/mime_util.h"
 #include "net/cookies/canonical_cookie.h"
 #include "storage/browser/fileapi/file_system_context.h"
@@ -58,7 +60,7 @@ namespace media {
 class CdmFactory;
 }
 
-namespace mojo {
+namespace shell {
 class ShellClient;
 }
 
@@ -452,7 +454,7 @@ class CONTENT_EXPORT ContentBrowserClient {
 
   // Gives the embedder a chance to register a custom QuotaEvictionPolicy for
   // temporary storage.
-  virtual scoped_ptr<storage::QuotaEvictionPolicy>
+  virtual std::unique_ptr<storage::QuotaEvictionPolicy>
   GetTemporaryStorageEvictionPolicy(BrowserContext* context);
 
   // Informs the embedder that a certificate error has occured.  If
@@ -479,7 +481,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual void SelectClientCertificate(
       WebContents* web_contents,
       net::SSLCertRequestInfo* cert_request_info,
-      scoped_ptr<ClientCertificateDelegate> delegate);
+      std::unique_ptr<ClientCertificateDelegate> delegate);
 
   // Adds a new installable certificate or private key.
   // Typically used to install an X.509 user certificate.
@@ -585,6 +587,11 @@ class CONTENT_EXPORT ContentBrowserClient {
                                     bool private_api,
                                     const SocketPermissionRequest* params);
 
+  // Returns true if the "vpnProvider" permission is allowed from the given
+  // |browser_context| and |url|.
+  virtual bool IsPepperVpnProviderAPIAllowed(BrowserContext* browser_context,
+                                             const GURL& url);
+
   // Returns an implementation of a file selecition policy. Can return nullptr.
   virtual ui::SelectFilePolicy* CreateSelectFilePolicy(
       WebContents* web_contents);
@@ -593,6 +600,12 @@ class CONTENT_EXPORT ContentBrowserClient {
   // FileSystem API.
   virtual void GetAdditionalAllowedSchemesForFileSystem(
       std::vector<std::string>* additional_schemes) {}
+
+  // |schemes| is a return value parameter that gets a whitelist of schemes that
+  // should bypass the Is Privileged Context check.
+  // See http://www.w3.org/TR/powerful-features/#settings-privileged
+  virtual void GetSchemesBypassingSecureContextCheckWhitelist(
+      std::set<std::string>* schemes) {}
 
   // Returns auto mount handlers for URL requests for FileSystem APIs.
   virtual void GetURLRequestAutoMountHandlers(
@@ -633,6 +646,9 @@ class CONTENT_EXPORT ContentBrowserClient {
       BrowserContext* browser_context,
       const GURL& url);
 
+  // Allows the embedder to register MojoShellConnection::Listeners.
+  virtual void AddMojoShellConnectionListeners() {}
+
   // Allows to register browser Mojo services exposed through the
   // RenderProcessHost.
   virtual void RegisterRenderProcessMojoServices(ServiceRegistry* registry) {}
@@ -649,8 +665,7 @@ class CONTENT_EXPORT ContentBrowserClient {
       ServiceRegistry* registry,
       RenderFrameHost* render_frame_host) {}
 
-  using StaticMojoApplicationMap =
-      std::map<std::string, base::Callback<scoped_ptr<mojo::ShellClient>()>>;
+  using StaticMojoApplicationMap = std::map<std::string, MojoApplicationInfo>;
 
   // Registers Mojo applications to be loaded in the browser process by the
   // browser's global Mojo shell.
@@ -674,6 +689,17 @@ class CONTENT_EXPORT ContentBrowserClient {
   // use this method when that approach does not work.
   virtual void RegisterUnsandboxedOutOfProcessMojoApplications(
       OutOfProcessMojoApplicationMap* apps) {}
+
+  // A map of Mojo application names to corresponding manifest contents.
+  using MojoApplicationManifestMap = std::map<std::string, std::string>;
+
+  // Registers manifest contents for Mojo applications.
+  // See "services/shell/manifest.json" for an example Mojo app manifest.
+  //
+  // TODO(rockot): http://crbug.com/610426. Add more documentations about
+  //  Mojo app manifest.
+  virtual void RegisterMojoApplicationManifests(
+      MojoApplicationManifestMap* manifests) {}
 
   // Allows to override the visibility state of a RenderFrameHost.
   // |visibility_state| should not be null. It will only be set if needed.
@@ -704,9 +730,14 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual ScopedVector<NavigationThrottle> CreateThrottlesForNavigation(
       NavigationHandle* navigation_handle);
 
+  // Allows the embedder to provide its own AudioManager implementation.
+  // If this function returns nullptr, a default platform implementation
+  // will be used.
+  virtual media::ScopedAudioManagerPtr CreateAudioManager(
+      media::AudioLogFactory* audio_log_factory);
   // Creates and returns a factory used for creating CDM instances for playing
   // protected content.
-  virtual scoped_ptr<media::CdmFactory> CreateCdmFactory();
+  virtual std::unique_ptr<media::CdmFactory> CreateCdmFactory();
 
   // Populates |mappings| with all files that need to be mapped before launching
   // a child process.

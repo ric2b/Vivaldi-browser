@@ -8,16 +8,18 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "mojo/public/cpp/bindings/callback.h"
-#include "mojo/public/cpp/bindings/lib/scoped_interface_endpoint_handle.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/bindings/message_filter.h"
+#include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 
 namespace mojo {
 
@@ -37,8 +39,9 @@ class InterfaceEndpointClient : public MessageReceiverWithResponder {
   // object.
   InterfaceEndpointClient(ScopedInterfaceEndpointHandle handle,
                           MessageReceiverWithResponderStatus* receiver,
-                          scoped_ptr<MessageFilter> payload_validator,
-                          bool expect_sync_requests);
+                          std::unique_ptr<MessageFilter> payload_validator,
+                          bool expect_sync_requests,
+                          scoped_refptr<base::SingleThreadTaskRunner> runner);
   ~InterfaceEndpointClient() override;
 
   // Sets the error handler to receive notifications when an error is
@@ -86,14 +89,15 @@ class InterfaceEndpointClient : public MessageReceiverWithResponder {
  private:
   // Maps from the id of a response to the MessageReceiver that handles the
   // response.
-  using AsyncResponderMap = std::map<uint64_t, scoped_ptr<MessageReceiver>>;
+  using AsyncResponderMap =
+      std::map<uint64_t, std::unique_ptr<MessageReceiver>>;
 
   struct SyncResponseInfo {
    public:
     explicit SyncResponseInfo(bool* in_response_received);
     ~SyncResponseInfo();
 
-    scoped_ptr<Message> response;
+    std::unique_ptr<Message> response;
 
     // Points to a stack-allocated variable.
     bool* response_received;
@@ -102,7 +106,7 @@ class InterfaceEndpointClient : public MessageReceiverWithResponder {
     DISALLOW_COPY_AND_ASSIGN(SyncResponseInfo);
   };
 
-  using SyncResponseMap = std::map<uint64_t, scoped_ptr<SyncResponseInfo>>;
+  using SyncResponseMap = std::map<uint64_t, std::unique_ptr<SyncResponseInfo>>;
 
   // Used as the sink for |payload_validator_| and forwards messages to
   // HandleValidatedMessage().
@@ -123,11 +127,11 @@ class InterfaceEndpointClient : public MessageReceiverWithResponder {
   bool HandleValidatedMessage(Message* message);
 
   ScopedInterfaceEndpointHandle handle_;
-  scoped_ptr<AssociatedGroup> associated_group_;
+  std::unique_ptr<AssociatedGroup> associated_group_;
   InterfaceEndpointController* controller_;
 
   MessageReceiverWithResponderStatus* const incoming_receiver_;
-  scoped_ptr<MessageFilter> payload_validator_;
+  std::unique_ptr<MessageFilter> payload_validator_;
   HandleIncomingMessageThunk thunk_;
 
   AsyncResponderMap async_responders_;
@@ -137,6 +141,8 @@ class InterfaceEndpointClient : public MessageReceiverWithResponder {
 
   Closure error_handler_;
   bool encountered_error_;
+
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   base::ThreadChecker thread_checker_;
 

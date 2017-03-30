@@ -16,8 +16,9 @@ class CORE_EXPORT RemoteSecurityContext : public GarbageCollectedFinalized<Remot
 public:
     DECLARE_VIRTUAL_TRACE();
 
-    static RawPtr<RemoteSecurityContext> create();
+    static RemoteSecurityContext* create();
     void setReplicatedOrigin(PassRefPtr<SecurityOrigin>);
+    void resetReplicatedContentSecurityPolicy();
 
     // FIXME: implement
     void didUpdateSecurityOrigin() override { }

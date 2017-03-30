@@ -158,6 +158,9 @@ class TabsEventRouter : public TabStripModelObserver,
     bool SetAudible(bool new_val);
     bool SetMuted(bool new_val);
 
+    // Whether the tab content can be discarded via memory::TabManager.
+    bool SetDiscarded(bool new_val);
+
     // content::WebContentsObserver:
     void ExtDataSet(content::WebContents* contents) override;
     void NavigationEntryCommitted(
@@ -176,6 +179,9 @@ class TabsEventRouter : public TabStripModelObserver,
     // Previous audible and muted states
     bool was_audible_;
     bool was_muted_;
+
+    // Previous discarded state, see memory::TabManager.
+    bool was_discarded_;
 
     GURL url_;
 

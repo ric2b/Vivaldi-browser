@@ -13,6 +13,7 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_widget.h"
+#include "ash/wm/common/window_animation_types.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/workspace_controller.h"
 #include "base/command_line.h"
@@ -32,9 +33,10 @@
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/layer_tree_owner.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/geometry/vector3d_f.h"
 #include "ui/gfx/interpolated_transform.h"
-#include "ui/gfx/screen.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/window_util.h"
@@ -227,10 +229,10 @@ bool AnimateShowWindow(aura::Window* window) {
   }
 
   switch (::wm::GetWindowVisibilityAnimationType(window)) {
-    case WINDOW_VISIBILITY_ANIMATION_TYPE_MINIMIZE:
+    case wm::WINDOW_VISIBILITY_ANIMATION_TYPE_MINIMIZE:
       AnimateShowWindow_Minimize(window);
       return true;
-    case WINDOW_VISIBILITY_ANIMATION_TYPE_BRIGHTNESS_GRAYSCALE:
+    case wm::WINDOW_VISIBILITY_ANIMATION_TYPE_BRIGHTNESS_GRAYSCALE:
       AnimateShowWindow_BrightnessGrayscale(window);
       return true;
     default:
@@ -246,10 +248,10 @@ bool AnimateHideWindow(aura::Window* window) {
   }
 
   switch (::wm::GetWindowVisibilityAnimationType(window)) {
-    case WINDOW_VISIBILITY_ANIMATION_TYPE_MINIMIZE:
+    case wm::WINDOW_VISIBILITY_ANIMATION_TYPE_MINIMIZE:
       AnimateHideWindow_Minimize(window);
       return true;
-    case WINDOW_VISIBILITY_ANIMATION_TYPE_BRIGHTNESS_GRAYSCALE:
+    case wm::WINDOW_VISIBILITY_ANIMATION_TYPE_BRIGHTNESS_GRAYSCALE:
       AnimateHideWindow_BrightnessGrayscale(window);
       return true;
     default:
@@ -468,9 +470,9 @@ gfx::Rect GetMinimizeAnimationTargetBoundsInScreen(aura::Window* window) {
   if (item_rect.width() != 0 || item_rect.height() != 0) {
     if (shelf->shelf_layout_manager()->visibility_state() == SHELF_AUTO_HIDE) {
       gfx::Rect shelf_bounds = shelf->shelf_widget()->GetWindowBoundsInScreen();
-      if (shelf->alignment() == SHELF_ALIGNMENT_LEFT)
+      if (shelf->alignment() == wm::SHELF_ALIGNMENT_LEFT)
         item_rect.set_x(shelf_bounds.right());
-      else if (shelf->alignment() == SHELF_ALIGNMENT_RIGHT)
+      else if (shelf->alignment() == wm::SHELF_ALIGNMENT_RIGHT)
         item_rect.set_x(shelf_bounds.x());
       else
         item_rect.set_y(shelf_bounds.y());
@@ -482,7 +484,7 @@ gfx::Rect GetMinimizeAnimationTargetBoundsInScreen(aura::Window* window) {
   // to the location of the application launcher (which is fixed as first item
   // of the shelf).
   gfx::Rect work_area =
-      gfx::Screen::GetScreen()->GetDisplayNearestWindow(window).work_area();
+      display::Screen::GetScreen()->GetDisplayNearestWindow(window).work_area();
   int ltr_adjusted_x = base::i18n::IsRTL() ? work_area.right() : work_area.x();
   return shelf->SelectValueForShelfAlignment(
       gfx::Rect(ltr_adjusted_x, work_area.bottom(), 0, 0),

@@ -200,7 +200,9 @@ void BlinkAXTreeSource::GetChildren(
   if (parent.role() == blink::WebAXRoleStaticText) {
     blink::WebAXObject ancestor = parent;
     while (!ancestor.isDetached()) {
-      if (ancestor.axID() == accessibility_focus_id_) {
+      int32_t focus_id = GetMainDocument().focusedAccessibilityObject().axID();
+      if (ancestor.axID() == accessibility_focus_id_ ||
+          (ancestor.axID() == focus_id && ancestor.isEditable())) {
         parent.loadInlineTextBoxes();
         break;
       }
@@ -318,6 +320,11 @@ void BlinkAXTreeSource::SerializeNode(blink::WebAXObject src,
   if (src.fontSize())
     dst->AddFloatAttribute(ui::AX_ATTR_FONT_SIZE, src.fontSize());
 
+  if (src.ariaCurrentState()) {
+    dst->AddIntAttribute(ui::AX_ATTR_ARIA_CURRENT_STATE,
+                         AXAriaCurrentStateFromBlink(src.ariaCurrentState()));
+  }
+
   if (src.invalidState()) {
     dst->AddIntAttribute(ui::AX_ATTR_INVALID_STATE,
                          AXInvalidStateFromBlink(src.invalidState()));
@@ -401,6 +408,15 @@ void BlinkAXTreeSource::SerializeNode(blink::WebAXObject src,
     dst->AddStringAttribute(
         ui::AX_ATTR_SHORTCUT,
         src.keyboardShortcut().utf8());
+  }
+
+  if (!src.nextOnLine().isDetached()) {
+    dst->AddIntAttribute(ui::AX_ATTR_NEXT_ON_LINE_ID, src.nextOnLine().axID());
+  }
+
+  if (!src.previousOnLine().isDetached()) {
+    dst->AddIntAttribute(ui::AX_ATTR_PREVIOUS_ON_LINE_ID,
+                         src.previousOnLine().axID());
   }
 
   if (!src.ariaActiveDescendant().isDetached()) {
@@ -533,7 +549,7 @@ void BlinkAXTreeSource::SerializeNode(blink::WebAXObject src,
                            src.minValueForRange());
   }
 
-  if (dst->role == ui::AX_ROLE_WEB_AREA) {
+  if (dst->role == ui::AX_ROLE_ROOT_WEB_AREA) {
     dst->AddStringAttribute(ui::AX_ATTR_HTML_TAG, "#document");
     dst->transform.reset(
         new gfx::Transform(src.transformFromLocalParentFrame()));

@@ -200,17 +200,24 @@ static CSSValue* valueForPositionOffset(const ComputedStyle& style, CSSPropertyI
             if (opposite.isAuto())
                 return cssValuePool().createValue(0, CSSPrimitiveValue::UnitType::Pixels);
 
-            if (opposite.hasPercent()) {
-                LayoutUnit containingBlockSize =
-                    (propertyID == CSSPropertyLeft || propertyID == CSSPropertyRight) ?
-                    toLayoutBox(layoutObject)->containingBlockLogicalWidthForContent() :
-                    toLayoutBox(layoutObject)->containingBlockLogicalHeightForGetComputedStyle();
-                return zoomAdjustedPixelValue(-floatValueForLength(opposite, containingBlockSize), style);
+            if (opposite.hasPercent() || opposite.isCalculated()) {
+                if (layoutObject->isBox()) {
+                    LayoutUnit containingBlockSize =
+                        (propertyID == CSSPropertyLeft || propertyID == CSSPropertyRight) ?
+                        toLayoutBox(layoutObject)->containingBlockLogicalWidthForContent() :
+                        toLayoutBox(layoutObject)->containingBlockLogicalHeightForGetComputedStyle();
+                    return zoomAdjustedPixelValue(-floatValueForLength(opposite, containingBlockSize), style);
+                }
+                // FIXME:  fall back to auto for position:relative, display:inline
+                return CSSPrimitiveValue::createIdentifier(CSSValueAuto);
             }
-            return zoomAdjustedPixelValue(-opposite.pixels(), style);
+
+            // Length doesn't provide operator -, so multiply by -1.
+            opposite *= -1.f;
+            return zoomAdjustedPixelValueForLength(opposite, style);
         }
 
-        if (layoutObject->isOutOfFlowPositioned()) {
+        if (layoutObject->isOutOfFlowPositioned() && layoutObject->isBox()) {
             // For fixed and absolute positioned elements, the top, left, bottom, and right
             // are defined relative to the corresponding sides of the containing block.
             LayoutBlock* container = layoutObject->containingBlock();
@@ -472,6 +479,59 @@ static CSSValueList* valuesForShorthandProperty(const StylePropertyShorthand& sh
     return list;
 }
 
+static CSSValue* expandNoneLigaturesValue()
+{
+    CSSValueList* list = CSSValueList::createSpaceSeparated();
+    list->append(cssValuePool().createIdentifierValue(CSSValueNoCommonLigatures));
+    list->append(cssValuePool().createIdentifierValue(CSSValueNoDiscretionaryLigatures));
+    list->append(cssValuePool().createIdentifierValue(CSSValueNoHistoricalLigatures));
+    list->append(cssValuePool().createIdentifierValue(CSSValueNoContextual));
+    return list;
+}
+
+static CSSValue* valuesForFontVariantProperty(const ComputedStyle& style, const LayoutObject* layoutObject, Node* styledNode, bool allowVisitedStyle)
+{
+    enum VariantShorthandCases { AllNormal, NoneLigatures, ConcatenateNonNormal };
+    VariantShorthandCases shorthandCase = AllNormal;
+    for (size_t i = 0; i < fontVariantShorthand().length(); ++i) {
+        CSSValue* value = ComputedStyleCSSValueMapping::get(fontVariantShorthand().properties()[i], style, layoutObject, styledNode, allowVisitedStyle);
+
+        if (shorthandCase == AllNormal
+            && value->isPrimitiveValue()
+            && toCSSPrimitiveValue(value)->getValueID() == CSSValueNone
+            && fontVariantShorthand().properties()[i] == CSSPropertyFontVariantLigatures) {
+            shorthandCase = NoneLigatures;
+        } else if (!(value->isPrimitiveValue() && toCSSPrimitiveValue(value)->getValueID() == CSSValueNormal)) {
+            shorthandCase = ConcatenateNonNormal;
+            break;
+        }
+    }
+
+    switch (shorthandCase) {
+    case AllNormal:
+        return cssValuePool().createIdentifierValue(CSSValueNormal);
+    case NoneLigatures:
+        return cssValuePool().createIdentifierValue(CSSValueNone);
+    case ConcatenateNonNormal:
+        {
+        CSSValueList* list = CSSValueList::createSpaceSeparated();
+        for (size_t i = 0; i < fontVariantShorthand().length(); ++i) {
+            CSSValue* value = ComputedStyleCSSValueMapping::get(fontVariantShorthand().properties()[i], style, layoutObject, styledNode, allowVisitedStyle);
+            ASSERT(value);
+            if (value->isPrimitiveValue() && toCSSPrimitiveValue(value)->getValueID() == CSSValueNone) {
+                list->append(expandNoneLigaturesValue());
+            } else if (!(value->isPrimitiveValue() && toCSSPrimitiveValue(value)->getValueID() == CSSValueNormal)) {
+                list->append(value);
+            }
+        }
+        return list;
+        }
+    default:
+        NOTREACHED();
+        return nullptr;
+    }
+}
+
 static CSSValueList* valuesForBackgroundShorthand(const ComputedStyle& style, const LayoutObject* layoutObject, Node* styledNode, bool allowVisitedStyle)
 {
     CSSValueList* ret = CSSValueList::createCommaSeparated();
@@ -570,15 +630,82 @@ static CSSPrimitiveValue* valueForFontStyle(const ComputedStyle& style)
     return cssValuePool().createValue(style.getFontDescription().style());
 }
 
-static CSSPrimitiveValue* valueForFontVariant(const ComputedStyle& style)
-{
-    return cssValuePool().createValue(style.getFontDescription().variant());
-}
-
 static CSSPrimitiveValue* valueForFontWeight(const ComputedStyle& style)
 {
     return cssValuePool().createValue(style.getFontDescription().weight());
 }
+
+static CSSPrimitiveValue* valueForFontVariantCaps(const ComputedStyle& style)
+{
+    FontDescription::FontVariantCaps variantCaps = style.getFontDescription().variantCaps();
+    switch (variantCaps) {
+    case FontDescription::CapsNormal:
+        return cssValuePool().createIdentifierValue(CSSValueNormal);
+    case FontDescription::SmallCaps:
+        return cssValuePool().createIdentifierValue(CSSValueSmallCaps);
+    case FontDescription::AllSmallCaps:
+        return cssValuePool().createIdentifierValue(CSSValueAllSmallCaps);
+    case FontDescription::PetiteCaps:
+        return cssValuePool().createIdentifierValue(CSSValuePetiteCaps);
+    case FontDescription::AllPetiteCaps:
+        return cssValuePool().createIdentifierValue(CSSValueAllPetiteCaps);
+    case FontDescription::Unicase:
+        return cssValuePool().createIdentifierValue(CSSValueUnicase);
+    case FontDescription::TitlingCaps:
+        return cssValuePool().createIdentifierValue(CSSValueTitlingCaps);
+    default:
+        NOTREACHED();
+        return nullptr;
+    }
+}
+
+static CSSValue* valueForFontVariantLigatures(const ComputedStyle& style)
+{
+    FontDescription::LigaturesState commonLigaturesState = style.getFontDescription().commonLigaturesState();
+    FontDescription::LigaturesState discretionaryLigaturesState = style.getFontDescription().discretionaryLigaturesState();
+    FontDescription::LigaturesState historicalLigaturesState = style.getFontDescription().historicalLigaturesState();
+    FontDescription::LigaturesState contextualLigaturesState = style.getFontDescription().contextualLigaturesState();
+    if (commonLigaturesState == FontDescription::NormalLigaturesState && discretionaryLigaturesState == FontDescription::NormalLigaturesState
+        && historicalLigaturesState == FontDescription::NormalLigaturesState && contextualLigaturesState == FontDescription::NormalLigaturesState)
+        return cssValuePool().createIdentifierValue(CSSValueNormal);
+
+    if (commonLigaturesState == FontDescription::DisabledLigaturesState && discretionaryLigaturesState == FontDescription::DisabledLigaturesState
+        && historicalLigaturesState == FontDescription::DisabledLigaturesState && contextualLigaturesState == FontDescription::DisabledLigaturesState)
+        return cssValuePool().createIdentifierValue(CSSValueNone);
+
+    CSSValueList* valueList = CSSValueList::createSpaceSeparated();
+    if (commonLigaturesState != FontDescription::NormalLigaturesState)
+        valueList->append(cssValuePool().createIdentifierValue(commonLigaturesState == FontDescription::DisabledLigaturesState ? CSSValueNoCommonLigatures : CSSValueCommonLigatures));
+    if (discretionaryLigaturesState != FontDescription::NormalLigaturesState)
+        valueList->append(cssValuePool().createIdentifierValue(discretionaryLigaturesState == FontDescription::DisabledLigaturesState ? CSSValueNoDiscretionaryLigatures : CSSValueDiscretionaryLigatures));
+    if (historicalLigaturesState != FontDescription::NormalLigaturesState)
+        valueList->append(cssValuePool().createIdentifierValue(historicalLigaturesState == FontDescription::DisabledLigaturesState ? CSSValueNoHistoricalLigatures : CSSValueHistoricalLigatures));
+    if (contextualLigaturesState != FontDescription::NormalLigaturesState)
+        valueList->append(cssValuePool().createIdentifierValue(contextualLigaturesState == FontDescription::DisabledLigaturesState ? CSSValueNoContextual : CSSValueContextual));
+    return valueList;
+}
+
+static CSSValue* valueForFontVariantNumeric(const ComputedStyle& style)
+{
+    FontVariantNumeric variantNumeric = style.getFontDescription().variantNumeric();
+    if (variantNumeric.isAllNormal())
+        return cssValuePool().createIdentifierValue(CSSValueNormal);
+
+    CSSValueList* valueList = CSSValueList::createSpaceSeparated();
+    if (variantNumeric.numericFigureValue() != FontVariantNumeric::NormalFigure)
+        valueList->append(cssValuePool().createIdentifierValue(variantNumeric.numericFigureValue() == FontVariantNumeric::LiningNums ? CSSValueLiningNums : CSSValueOldstyleNums));
+    if (variantNumeric.numericSpacingValue() != FontVariantNumeric::NormalSpacing)
+        valueList->append(cssValuePool().createIdentifierValue(variantNumeric.numericSpacingValue() == FontVariantNumeric::ProportionalNums ? CSSValueProportionalNums : CSSValueTabularNums));
+    if (variantNumeric.numericFractionValue() != FontVariantNumeric::NormalFraction)
+        valueList->append(cssValuePool().createIdentifierValue(variantNumeric.numericFractionValue() == FontVariantNumeric::DiagonalFractions ? CSSValueDiagonalFractions : CSSValueStackedFractions));
+    if (variantNumeric.ordinalValue() == FontVariantNumeric::OrdinalOn)
+        valueList->append(cssValuePool().createIdentifierValue(CSSValueOrdinal));
+    if (variantNumeric.slashedZeroValue() == FontVariantNumeric::SlashedZeroOn)
+        valueList->append(cssValuePool().createIdentifierValue(CSSValueSlashedZero));
+
+    return valueList;
+}
+
 
 static CSSValue* specifiedValueForGridTrackBreadth(const GridLength& trackBreadth, const ComputedStyle& style)
 {
@@ -606,16 +733,82 @@ static CSSValue* specifiedValueForGridTrackSize(const GridTrackSize& trackSize, 
     return nullptr;
 }
 
-static void addValuesForNamedGridLinesAtIndex(const OrderedNamedGridLines& orderedNamedGridLines, size_t i, CSSValueList& list)
+class OrderedNamedLinesCollector {
+    STACK_ALLOCATED();
+    WTF_MAKE_NONCOPYABLE(OrderedNamedLinesCollector);
+public:
+    OrderedNamedLinesCollector(const ComputedStyle& style, bool isRowAxis, size_t repetitions)
+        : m_orderedNamedGridLines(isRowAxis ? style.orderedNamedGridColumnLines() : style.orderedNamedGridRowLines())
+        , m_orderedNamedAutoRepeatGridLines(isRowAxis ? style.autoRepeatOrderedNamedGridColumnLines() : style.autoRepeatOrderedNamedGridRowLines())
+        , m_insertionPoint(isRowAxis ? style.gridAutoRepeatColumnsInsertionPoint() : style.gridAutoRepeatRowsInsertionPoint())
+        , m_repetitions(repetitions)
+    {
+    }
+
+    bool isEmpty() const { return m_orderedNamedGridLines.isEmpty() && m_orderedNamedAutoRepeatGridLines.isEmpty(); }
+    void collectLineNamesForIndex(CSSGridLineNamesValue&, size_t index) const;
+
+private:
+
+    enum NamedLinesType { NamedLines, AutoRepeatNamedLines };
+    void appendLines(CSSGridLineNamesValue&, size_t index, NamedLinesType) const;
+
+    const OrderedNamedGridLines& m_orderedNamedGridLines;
+    const OrderedNamedGridLines& m_orderedNamedAutoRepeatGridLines;
+    size_t m_insertionPoint;
+    size_t m_repetitions;
+};
+
+void OrderedNamedLinesCollector::appendLines(CSSGridLineNamesValue& lineNamesValue, size_t index, NamedLinesType type) const
 {
-    const Vector<String>& namedGridLines = orderedNamedGridLines.get(i);
-    if (namedGridLines.isEmpty())
+    auto iter = type == NamedLines ? m_orderedNamedGridLines.find(index) : m_orderedNamedAutoRepeatGridLines.find(index);
+    auto endIter = type == NamedLines ? m_orderedNamedGridLines.end() : m_orderedNamedAutoRepeatGridLines.end();
+    if (iter == endIter)
+        return;
+
+    for (auto lineName : iter->value)
+        lineNamesValue.append(CSSCustomIdentValue::create(lineName));
+}
+
+void OrderedNamedLinesCollector::collectLineNamesForIndex(CSSGridLineNamesValue& lineNamesValue, size_t i) const
+{
+    DCHECK(!isEmpty());
+    if (m_orderedNamedAutoRepeatGridLines.isEmpty() || i < m_insertionPoint) {
+        appendLines(lineNamesValue, i, NamedLines);
+        return;
+    }
+
+    DCHECK(m_repetitions);
+    if (i > m_insertionPoint + m_repetitions) {
+        appendLines(lineNamesValue, i - (m_repetitions - 1), NamedLines);
+        return;
+    }
+
+    if (i == m_insertionPoint) {
+        appendLines(lineNamesValue, i, NamedLines);
+        appendLines(lineNamesValue, 0, AutoRepeatNamedLines);
+        return;
+    }
+
+    if (i == m_insertionPoint + m_repetitions) {
+        appendLines(lineNamesValue, 1, AutoRepeatNamedLines);
+        appendLines(lineNamesValue, m_insertionPoint + 1, NamedLines);
+        return;
+    }
+
+    appendLines(lineNamesValue, 1, AutoRepeatNamedLines);
+    appendLines(lineNamesValue, 0, AutoRepeatNamedLines);
+}
+
+static void addValuesForNamedGridLinesAtIndex(OrderedNamedLinesCollector& collector, size_t i, CSSValueList& list)
+{
+    if (collector.isEmpty())
         return;
 
     CSSGridLineNamesValue* lineNames = CSSGridLineNamesValue::create();
-    for (size_t j = 0; j < namedGridLines.size(); ++j)
-        lineNames->append(CSSCustomIdentValue::create(namedGridLines[j]));
-    list.append(lineNames);
+    collector.collectLineNamesForIndex(*lineNames, i);
+    if (lineNames->length())
+        list.append(lineNames);
 }
 
 static CSSValue* valueForGridTrackList(GridTrackSizingDirection direction, const LayoutObject* layoutObject, const ComputedStyle& style)
@@ -623,8 +816,6 @@ static CSSValue* valueForGridTrackList(GridTrackSizingDirection direction, const
     bool isRowAxis = direction == ForColumns;
     const Vector<GridTrackSize>& trackSizes = isRowAxis ? style.gridTemplateColumns() : style.gridTemplateRows();
     const Vector<GridTrackSize>& autoRepeatTrackSizes = isRowAxis ? style.gridAutoRepeatColumns() : style.gridAutoRepeatRows();
-    const OrderedNamedGridLines& orderedNamedGridLines = isRowAxis ? style.orderedNamedGridColumnLines() : style.orderedNamedGridRowLines();
-
     bool isLayoutGrid = layoutObject && layoutObject->isLayoutGrid();
 
     // Handle the 'none' case.
@@ -636,38 +827,40 @@ static CSSValue* valueForGridTrackList(GridTrackSizingDirection direction, const
         trackListIsEmpty = !toLayoutBlock(layoutObject)->firstChild();
     }
 
-    if (trackListIsEmpty) {
-        ASSERT(orderedNamedGridLines.isEmpty());
+    if (trackListIsEmpty)
         return cssValuePool().createIdentifierValue(CSSValueNone);
-    }
 
+    size_t repetitions = isLayoutGrid ? toLayoutGrid(layoutObject)->autoRepeatCountForDirection(direction) : 0;
+    OrderedNamedLinesCollector collector(style, isRowAxis, repetitions);
     CSSValueList* list = CSSValueList::createSpaceSeparated();
     size_t insertionIndex;
     if (isLayoutGrid) {
-        const Vector<LayoutUnit>& trackPositions = direction == ForColumns ? toLayoutGrid(layoutObject)->columnPositions() : toLayoutGrid(layoutObject)->rowPositions();
+        const auto* grid = toLayoutGrid(layoutObject);
+        const Vector<LayoutUnit>& trackPositions = direction == ForColumns ? grid->columnPositions() : grid->rowPositions();
         // There are at least #tracks + 1 grid lines (trackPositions). Apart from that, the grid container can generate implicit grid tracks,
         // so we'll have more trackPositions than trackSizes as the latter only contain the explicit grid.
         ASSERT(trackPositions.size() - 1 >= trackSizes.size());
 
         size_t i;
-        LayoutUnit gutterSize = toLayoutGrid(layoutObject)->guttersSize(direction, 2);
+        LayoutUnit gutterSize = grid->guttersSize(direction, 2);
+        LayoutUnit offsetBetweenTracks = grid->offsetBetweenTracks(direction);
         for (i = 0; i < trackPositions.size() - 2; ++i) {
-            addValuesForNamedGridLinesAtIndex(orderedNamedGridLines, i, *list);
-            list->append(zoomAdjustedPixelValue(trackPositions[i + 1] - trackPositions[i] - gutterSize, style));
+            addValuesForNamedGridLinesAtIndex(collector, i, *list);
+            list->append(zoomAdjustedPixelValue(trackPositions[i + 1] - trackPositions[i] - gutterSize - offsetBetweenTracks, style));
         }
-        // Last track line does not have any gutter.
-        addValuesForNamedGridLinesAtIndex(orderedNamedGridLines, i, *list);
+        // Last track line does not have any gutter or distribution offset.
+        addValuesForNamedGridLinesAtIndex(collector, i, *list);
         list->append(zoomAdjustedPixelValue(trackPositions[i + 1] - trackPositions[i], style));
         insertionIndex = trackPositions.size() - 1;
     } else {
         for (size_t i = 0; i < trackSizes.size(); ++i) {
-            addValuesForNamedGridLinesAtIndex(orderedNamedGridLines, i, *list);
+            addValuesForNamedGridLinesAtIndex(collector, i, *list);
             list->append(specifiedValueForGridTrackSize(trackSizes[i], style));
         }
         insertionIndex = trackSizes.size();
     }
     // Those are the trailing <string>* allowed in the syntax.
-    addValuesForNamedGridLinesAtIndex(orderedNamedGridLines, insertionIndex, *list);
+    addValuesForNamedGridLinesAtIndex(collector, insertionIndex, *list);
     return list;
 }
 
@@ -884,13 +1077,13 @@ static CSSValue* createTimingFunctionValue(const TimingFunction* timingFunction)
     case TimingFunction::kStepsFunction:
         {
             const StepsTimingFunction* stepsTimingFunction = toStepsTimingFunction(timingFunction);
-            StepsTimingFunction::StepAtPosition position = stepsTimingFunction->getStepAtPosition();
+            StepsTimingFunction::StepPosition position = stepsTimingFunction->getStepPosition();
             int steps = stepsTimingFunction->numberOfSteps();
-            ASSERT(position == StepsTimingFunction::Start || position == StepsTimingFunction::End);
+            DCHECK(position == StepsTimingFunction::StepPosition::START || position == StepsTimingFunction::StepPosition::END);
 
             if (steps > 1)
                 return CSSStepsTimingFunctionValue::create(steps, position);
-            CSSValueID valueId = position == StepsTimingFunction::Start ? CSSValueStepStart : CSSValueStepEnd;
+            CSSValueID valueId = position == StepsTimingFunction::StepPosition::START ? CSSValueStepStart : CSSValueStepEnd;
             return cssValuePool().createIdentifierValue(valueId);
         }
 
@@ -1037,7 +1230,7 @@ static CSSValue* valueForContentData(const ComputedStyle& style)
             const CounterContent* counter = toCounterContentData(contentData)->counter();
             ASSERT(counter);
             CSSCustomIdentValue* identifier = CSSCustomIdentValue::create(counter->identifier());
-            CSSCustomIdentValue* separator = CSSCustomIdentValue::create(counter->separator());
+            CSSStringValue* separator = CSSStringValue::create(counter->separator());
             CSSValueID listStyleIdent = CSSValueNone;
             if (counter->listStyle() != NoneListStyle)
                 listStyleIdent = static_cast<CSSValueID>(CSSValueDisc + counter->listStyle());
@@ -1335,7 +1528,20 @@ CSSValue* ComputedStyleCSSValueMapping::valueForFont(const ComputedStyle& style)
 
     CSSValueList* list = CSSValueList::createSpaceSeparated();
     list->append(valueForFontStyle(style));
-    list->append(valueForFontVariant(style));
+
+    // Check that non-initial font-variant subproperties are not conflicting with this serialization.
+    CSSValue* ligaturesValue = valueForFontVariantLigatures(style);
+    CSSValue* numericValue = valueForFontVariantNumeric(style);
+    if (!ligaturesValue->equals(*cssValuePool().createIdentifierValue(CSSValueNormal))
+        || !numericValue->equals(*cssValuePool().createIdentifierValue(CSSValueNormal)))
+        return nullptr;
+
+    CSSPrimitiveValue* capsValue = valueForFontVariantCaps(style);
+    if (!capsValue->equals(*cssValuePool().createIdentifierValue(CSSValueNormal))
+        && !capsValue->equals(*cssValuePool().createIdentifierValue(CSSValueSmallCaps)))
+        return nullptr;
+    list->append(capsValue);
+
     list->append(valueForFontWeight(style));
     list->append(valueForFontStretch(style));
     list->append(sizeAndLineHeight);
@@ -1614,7 +1820,6 @@ CSSValue* ComputedStyleCSSValueMapping::get(CSSPropertyID propertyID, const Comp
             return cssValuePool().createIdentifierValue(CSSValueAuto);
         return cssValuePool().createValue(style.columnCount(), CSSPrimitiveValue::UnitType::Number);
     case CSSPropertyColumnFill:
-        ASSERT(RuntimeEnabledFeatures::columnFillEnabled());
         return cssValuePool().createValue(style.getColumnFill());
     case CSSPropertyColumnGap:
         if (style.hasNormalColumnGap())
@@ -1714,7 +1919,7 @@ CSSValue* ComputedStyleCSSValueMapping::get(CSSPropertyID propertyID, const Comp
     case CSSPropertyFontStyle:
         return valueForFontStyle(style);
     case CSSPropertyFontVariant:
-        return valueForFontVariant(style);
+        return valuesForFontVariantProperty(style, layoutObject, styledNode, allowVisitedStyle);
     case CSSPropertyFontWeight:
         return valueForFontWeight(style);
     case CSSPropertyFontFeatureSettings: {
@@ -1816,6 +2021,8 @@ CSSValue* ComputedStyleCSSValueMapping::get(CSSPropertyID propertyID, const Comp
         if (style.highlight() == nullAtom)
             return cssValuePool().createIdentifierValue(CSSValueNone);
         return CSSStringValue::create(style.highlight());
+    case CSSPropertyHyphens:
+        return cssValuePool().createValue(style.getHyphens());
     case CSSPropertyWebkitHyphenateCharacter:
         if (style.hyphenationString().isNull())
             return cssValuePool().createIdentifierValue(CSSValueAuto);
@@ -1931,8 +2138,6 @@ CSSValue* ComputedStyleCSSValueMapping::get(CSSPropertyID propertyID, const Comp
     case CSSPropertyOpacity:
         return cssValuePool().createValue(style.opacity(), CSSPrimitiveValue::UnitType::Number);
     case CSSPropertyOrphans:
-        if (style.hasAutoOrphans())
-            return cssValuePool().createIdentifierValue(CSSValueAuto);
         return cssValuePool().createValue(style.orphans(), CSSPrimitiveValue::UnitType::Number);
     case CSSPropertyOutlineColor:
         return allowVisitedStyle ? cssValuePool().createColorValue(style.visitedDependentColor(CSSPropertyOutlineColor).rgb()) : currentColorOrValidColor(style, style.outlineColor());
@@ -2147,26 +2352,12 @@ CSSValue* ComputedStyleCSSValueMapping::get(CSSPropertyID propertyID, const Comp
         return cssValuePool().createValue(style.getFontDescription().getKerning());
     case CSSPropertyWebkitFontSmoothing:
         return cssValuePool().createValue(style.getFontDescription().fontSmoothing());
-    case CSSPropertyFontVariantLigatures: {
-        FontDescription::LigaturesState commonLigaturesState = style.getFontDescription().commonLigaturesState();
-        FontDescription::LigaturesState discretionaryLigaturesState = style.getFontDescription().discretionaryLigaturesState();
-        FontDescription::LigaturesState historicalLigaturesState = style.getFontDescription().historicalLigaturesState();
-        FontDescription::LigaturesState contextualLigaturesState = style.getFontDescription().contextualLigaturesState();
-        if (commonLigaturesState == FontDescription::NormalLigaturesState && discretionaryLigaturesState == FontDescription::NormalLigaturesState
-            && historicalLigaturesState == FontDescription::NormalLigaturesState && contextualLigaturesState == FontDescription::NormalLigaturesState)
-            return cssValuePool().createIdentifierValue(CSSValueNormal);
-
-        CSSValueList* valueList = CSSValueList::createSpaceSeparated();
-        if (commonLigaturesState != FontDescription::NormalLigaturesState)
-            valueList->append(cssValuePool().createIdentifierValue(commonLigaturesState == FontDescription::DisabledLigaturesState ? CSSValueNoCommonLigatures : CSSValueCommonLigatures));
-        if (discretionaryLigaturesState != FontDescription::NormalLigaturesState)
-            valueList->append(cssValuePool().createIdentifierValue(discretionaryLigaturesState == FontDescription::DisabledLigaturesState ? CSSValueNoDiscretionaryLigatures : CSSValueDiscretionaryLigatures));
-        if (historicalLigaturesState != FontDescription::NormalLigaturesState)
-            valueList->append(cssValuePool().createIdentifierValue(historicalLigaturesState == FontDescription::DisabledLigaturesState ? CSSValueNoHistoricalLigatures : CSSValueHistoricalLigatures));
-        if (contextualLigaturesState != FontDescription::NormalLigaturesState)
-            valueList->append(cssValuePool().createIdentifierValue(contextualLigaturesState == FontDescription::DisabledLigaturesState ? CSSValueNoContextual : CSSValueContextual));
-        return valueList;
-    }
+    case CSSPropertyFontVariantLigatures:
+        return valueForFontVariantLigatures(style);
+    case CSSPropertyFontVariantCaps:
+        return valueForFontVariantCaps(style);
+    case CSSPropertyFontVariantNumeric:
+        return valueForFontVariantNumeric(style);
     case CSSPropertyZIndex:
         if (style.hasAutoZIndex())
             return cssValuePool().createIdentifierValue(CSSValueAuto);
@@ -2781,6 +2972,8 @@ CSSValue* ComputedStyleCSSValueMapping::get(CSSPropertyID propertyID, const Comp
             return cssValuePool().createIdentifierValue(CSSValueNone);
         if (style.contain() == ContainsStrict)
             return cssValuePool().createIdentifierValue(CSSValueStrict);
+        if (style.contain() == ContainsContent)
+            return cssValuePool().createIdentifierValue(CSSValueContent);
 
         CSSValueList* list = CSSValueList::createSpaceSeparated();
         if (style.containsStyle())
@@ -2789,6 +2982,8 @@ CSSValue* ComputedStyleCSSValueMapping::get(CSSPropertyID propertyID, const Comp
             list->append(cssValuePool().createIdentifierValue(CSSValueLayout));
         if (style.containsPaint())
             list->append(cssValuePool().createIdentifierValue(CSSValuePaint));
+        if (style.containsSize())
+            list->append(cssValuePool().createIdentifierValue(CSSValueSize));
         ASSERT(list->length());
         return list;
     }

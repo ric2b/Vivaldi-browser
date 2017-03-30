@@ -19,19 +19,13 @@ namespace net {
 
 QuicP2PSession::QuicP2PSession(const QuicConfig& config,
                                const QuicP2PCryptoConfig& crypto_config,
-                               scoped_ptr<QuicConnection> connection,
-                               scoped_ptr<Socket> socket)
+                               std::unique_ptr<QuicConnection> connection,
+                               std::unique_ptr<Socket> socket)
     : QuicSession(connection.release(), config),
       socket_(std::move(socket)),
       crypto_stream_(new QuicP2PCryptoStream(this, crypto_config)),
       read_buffer_(new IOBuffer(static_cast<size_t>(kMaxPacketSize))) {
   DCHECK(config.negotiated());
-
-  // Non-null IP address needs to be passed here because QuicConnection uses
-  // ToString() to format addresses for logging and ToString() is not allowed
-  // for empty addresses.
-  // TODO(sergeyu): Fix QuicConnection and remove SetSelfAddress() call below.
-  this->connection()->SetSelfAddress(IPEndPoint(IPAddress::IPv4AllZeros(), 0));
 }
 
 QuicP2PSession::~QuicP2PSession() {}

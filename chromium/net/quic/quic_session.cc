@@ -45,7 +45,9 @@ QuicSession::QuicSession(QuicConnection* connection, const QuicConfig& config)
                        perspective(),
                        kMinimumFlowControlSendWindow,
                        config_.GetInitialSessionFlowControlWindowToSend(),
-                       false),
+                       FLAGS_quic_enable_autotune_by_default
+                           ? perspective() == Perspective::IS_SERVER
+                           : false),
       currently_writing_stream_id_(0) {}
 
 void QuicSession::Initialize() {
@@ -75,13 +77,13 @@ QuicSession::~QuicSession() {
 void QuicSession::OnStreamFrame(const QuicStreamFrame& frame) {
   // TODO(rch) deal with the error case of stream id 0.
   QuicStreamId stream_id = frame.stream_id;
-  ReliableQuicStream* stream = GetStream(stream_id);
+  ReliableQuicStream* stream = GetOrCreateStream(stream_id);
   if (!stream) {
     // The stream no longer exists, but we may still be interested in the
     // final stream byte offset sent by the peer. A frame with a FIN can give
     // us this offset.
     if (frame.fin) {
-      QuicStreamOffset final_byte_offset = frame.offset + frame.frame_length;
+      QuicStreamOffset final_byte_offset = frame.offset + frame.data_length;
       UpdateFlowControlOnFinalReceivedByteOffset(stream_id, final_byte_offset);
     }
     return;
@@ -100,7 +102,7 @@ void QuicSession::OnRstStream(const QuicRstStreamFrame& frame) {
   ReliableQuicStream* stream = GetOrCreateDynamicStream(frame.stream_id);
   if (!stream) {
     HandleRstOnValidNonexistentStream(frame);
-    return;  // Errors are handled by GetStream.
+    return;  // Errors are handled by GetOrCreateStream.
   }
 
   stream->OnStreamReset(frame);
@@ -148,7 +150,7 @@ void QuicSession::OnWindowUpdateFrame(const QuicWindowUpdateFrame& frame) {
     flow_controller_.UpdateSendWindowOffset(frame.byte_offset);
     return;
   }
-  ReliableQuicStream* stream = GetStream(stream_id);
+  ReliableQuicStream* stream = GetOrCreateStream(stream_id);
   if (stream) {
     stream->OnWindowUpdateFrame(frame);
   }
@@ -200,7 +202,8 @@ void QuicSession::OnCanWrite() {
       return;
     }
     currently_writing_stream_id_ = write_blocked_streams_.PopFront();
-    ReliableQuicStream* stream = GetStream(currently_writing_stream_id_);
+    ReliableQuicStream* stream =
+        GetOrCreateStream(currently_writing_stream_id_);
     if (stream != nullptr && !stream->flow_controller()->IsBlocked()) {
       // If the stream can't write all bytes it'll re-add itself to the blocked
       // list.
@@ -236,11 +239,25 @@ void QuicSession::ProcessUdpPacket(const IPEndPoint& self_address,
 }
 
 QuicConsumedData QuicSession::WritevData(
+    ReliableQuicStream* stream,
     QuicStreamId id,
     QuicIOVector iov,
     QuicStreamOffset offset,
     bool fin,
     QuicAckListenerInterface* ack_notifier_delegate) {
+  // This check is an attempt to deal with potential memory corruption
+  // in which |id| ends up set to 1 (the crypto stream id). If this happen
+  // it might end up resulting in unencrypted stream data being sent.
+  // While this is impossible to avoid given sufficient corruption, this
+  // seems like a reasonable mitigation.
+  if (id == kCryptoStreamId && stream != GetCryptoStream()) {
+    QUIC_BUG << "Stream id mismatch";
+    connection_->CloseConnection(
+        QUIC_INTERNAL_ERROR,
+        "Non-crypto stream attempted to write data as crypto stream.",
+        ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
+    return QuicConsumedData(0, false);
+  }
   if (!IsEncryptionEstablished() && id != kCryptoStreamId) {
     // Do not let streams write without encryption. The calling stream will end
     // up write blocked until OnCanWrite is next called.
@@ -375,7 +392,8 @@ void QuicSession::OnConfigNegotiated() {
   connection_->SetFromConfig(config_);
 
   uint32_t max_streams = config_.MaxStreamsPerConnection();
-  if (perspective() == Perspective::IS_SERVER) {
+  if (!FLAGS_quic_enable_autotune_by_default &&
+      perspective() == Perspective::IS_SERVER) {
     if (config_.HasReceivedConnectionOptions()) {
       if (ContainsQuicTag(config_.ReceivedConnectionOptions(), kAFCW)) {
         // The following variations change the initial receive flow control
@@ -418,6 +436,8 @@ void QuicSession::OnConfigNegotiated() {
   }
 }
 
+// TODO(ckrasic): remove the following two methods when deprecating
+// FLAGS_quic_enable_autotune_by_default.
 void QuicSession::EnableAutoTuneReceiveWindow() {
   DVLOG(1) << ENDPOINT << "Enable auto tune receive windows";
   flow_controller_.set_auto_tune_receive_window(true);
@@ -577,7 +597,8 @@ QuicStreamId QuicSession::GetNextOutgoingStreamId() {
   return id;
 }
 
-ReliableQuicStream* QuicSession::GetStream(const QuicStreamId stream_id) {
+ReliableQuicStream* QuicSession::GetOrCreateStream(
+    const QuicStreamId stream_id) {
   StreamMap::iterator it = static_stream_map_.find(stream_id);
   if (it != static_stream_map_.end()) {
     return it->second;
@@ -749,8 +770,8 @@ size_t QuicSession::GetNumAvailableStreams() const {
 }
 
 void QuicSession::MarkConnectionLevelWriteBlocked(QuicStreamId id) {
-  QUIC_BUG_IF(GetStream(id) == nullptr) << "Marking unknown stream " << id
-                                        << " blocked.";
+  QUIC_BUG_IF(GetOrCreateStream(id) == nullptr) << "Marking unknown stream "
+                                                << id << " blocked.";
 
   write_blocked_streams_.AddStream(id);
 }

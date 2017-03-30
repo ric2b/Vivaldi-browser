@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -99,7 +100,6 @@ void DataSourceSender::ShutDown() {
 }
 
 DataSourceSender::~DataSourceSender() {
-  DCHECK(shut_down_);
 }
 
 void DataSourceSender::Init(uint32_t buffer_size) {
@@ -186,7 +186,7 @@ void DataSourceSender::PendingSend::GetData(uint32_t num_bytes) {
   DCHECK(!buffer_in_use_);
   buffer_in_use_ = true;
   data_.resize(num_bytes);
-  callback_.Run(scoped_ptr<WritableBuffer>(
+  callback_.Run(std::unique_ptr<WritableBuffer>(
       new Buffer(sender_, this, &data_[0], num_bytes)));
 }
 

@@ -9,6 +9,7 @@
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "modules/bluetooth/BluetoothError.h"
 #include "modules/bluetooth/BluetoothRemoteGATTCharacteristic.h"
 #include "modules/bluetooth/BluetoothSupplement.h"
@@ -18,7 +19,7 @@
 namespace blink {
 
 BluetoothRemoteGATTService::BluetoothRemoteGATTService(PassOwnPtr<WebBluetoothRemoteGATTService> webService)
-    : m_webService(webService)
+    : m_webService(std::move(webService))
 {
 }
 
@@ -27,28 +28,61 @@ BluetoothRemoteGATTService* BluetoothRemoteGATTService::take(ScriptPromiseResolv
     if (!webService) {
         return nullptr;
     }
-    return new BluetoothRemoteGATTService(webService);
+    return new BluetoothRemoteGATTService(std::move(webService));
 }
 
-ScriptPromise BluetoothRemoteGATTService::getCharacteristic(ScriptState* scriptState,
-    const StringOrUnsignedLong& characteristic, ExceptionState& exceptionState)
+// Class that allows us to resolve the promise with a single Characteristic or
+// with a vector owning the characteristics.
+class GetCharacteristicsCallback : public WebBluetoothGetCharacteristicsCallbacks {
+public:
+    GetCharacteristicsCallback(mojom::WebBluetoothGATTQueryQuantity quantity, ScriptPromiseResolver* resolver)
+        : m_resolver(resolver)
+        , m_quantity(quantity) {}
+
+    void onSuccess(const WebVector<WebBluetoothRemoteGATTCharacteristicInit*>& webCharacteristics) override
+    {
+        if (!m_resolver->getExecutionContext() || m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+            return;
+
+        if (m_quantity == mojom::WebBluetoothGATTQueryQuantity::SINGLE) {
+            DCHECK_EQ(1u, webCharacteristics.size());
+            m_resolver->resolve(BluetoothRemoteGATTCharacteristic::take(m_resolver, adoptPtr(webCharacteristics[0])));
+            return;
+        }
+
+        HeapVector<Member<BluetoothRemoteGATTCharacteristic>> characteristics;
+        characteristics.reserveInitialCapacity(webCharacteristics.size());
+        for (WebBluetoothRemoteGATTCharacteristicInit* webCharacteristic : webCharacteristics) {
+            characteristics.append(BluetoothRemoteGATTCharacteristic::take(m_resolver, adoptPtr(webCharacteristic)));
+        }
+        m_resolver->resolve(characteristics);
+    }
+
+    void onError(const WebBluetoothError& e) override
+    {
+        if (!m_resolver->getExecutionContext() || m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+            return;
+        m_resolver->reject(BluetoothError::take(m_resolver, e));
+    }
+private:
+    Persistent<ScriptPromiseResolver> m_resolver;
+    mojom::WebBluetoothGATTQueryQuantity m_quantity;
+};
+
+ScriptPromise BluetoothRemoteGATTService::getCharacteristic(ScriptState* scriptState, const StringOrUnsignedLong& characteristic, ExceptionState& exceptionState)
 {
-    WebBluetooth* webbluetooth = BluetoothSupplement::fromScriptState(scriptState);
+#if OS(MACOSX)
+    // TODO(jlebel): Remove when getCharacteristic is implemented.
+    return ScriptPromise::rejectWithDOMException(scriptState,
+        DOMException::create(NotSupportedError,
+            "getCharacteristic is not implemented yet. See https://goo.gl/J6ASzs"));
+#endif // OS(MACOSX)
 
     String characteristicUUID = BluetoothUUID::getCharacteristic(characteristic, exceptionState);
     if (exceptionState.hadException())
         return exceptionState.reject(scriptState);
 
-    ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
-    ScriptPromise promise = resolver->promise();
-    webbluetooth->getCharacteristic(m_webService->serviceInstanceID, characteristicUUID, new CallbackPromiseAdapter<BluetoothRemoteGATTCharacteristic, BluetoothError>(resolver));
-
-    return promise;
-}
-
-ScriptPromise BluetoothRemoteGATTService::getCharacteristics(ScriptState* scriptState, ExceptionState&)
-{
-    return getCharacteristicsImpl(scriptState, String());
+    return getCharacteristicsImpl(scriptState, mojom::WebBluetoothGATTQueryQuantity::SINGLE, characteristicUUID);
 }
 
 ScriptPromise BluetoothRemoteGATTService::getCharacteristics(ScriptState* scriptState, const StringOrUnsignedLong& characteristic, ExceptionState& exceptionState)
@@ -57,33 +91,28 @@ ScriptPromise BluetoothRemoteGATTService::getCharacteristics(ScriptState* script
     if (exceptionState.hadException())
         return exceptionState.reject(scriptState);
 
-    return getCharacteristicsImpl(scriptState, characteristicUUID);
+    return getCharacteristicsImpl(scriptState, mojom::WebBluetoothGATTQueryQuantity::MULTIPLE, characteristicUUID);
 }
 
-// Class that allows us to use CallbackPromiseAdapter to resolve a promise with a
-// vector owning BluetoothRemoteGATTCharacteristics.
-class RemoteCharacteristicArray {
-    STATIC_ONLY(RemoteCharacteristicArray);
-public:
-    using WebType = OwnPtr<WebVector<WebBluetoothRemoteGATTCharacteristicInit*>>;
-    static HeapVector<Member<BluetoothRemoteGATTCharacteristic>> take(ScriptPromiseResolver* resolver, PassOwnPtr<WebVector<WebBluetoothRemoteGATTCharacteristicInit*>> webCharacteristics)
-    {
-        HeapVector<Member<BluetoothRemoteGATTCharacteristic>> characteristics;
-        characteristics.reserveInitialCapacity(webCharacteristics->size());
-        for (WebBluetoothRemoteGATTCharacteristicInit* webCharacteristic : *webCharacteristics) {
-            characteristics.append(BluetoothRemoteGATTCharacteristic::take(resolver, adoptPtr(webCharacteristic)));
-        }
-        return characteristics;
-    }
-};
-
-ScriptPromise BluetoothRemoteGATTService::getCharacteristicsImpl(ScriptState* scriptState, String characteristicsUUID)
+ScriptPromise BluetoothRemoteGATTService::getCharacteristics(ScriptState* scriptState, ExceptionState&)
 {
+    return getCharacteristicsImpl(scriptState, mojom::WebBluetoothGATTQueryQuantity::MULTIPLE);
+}
+
+ScriptPromise BluetoothRemoteGATTService::getCharacteristicsImpl(ScriptState* scriptState, mojom::WebBluetoothGATTQueryQuantity quantity, String characteristicsUUID)
+{
+#if OS(MACOSX)
+    // TODO(jlebel): Remove when getCharacteristics is implemented.
+    return ScriptPromise::rejectWithDOMException(scriptState,
+        DOMException::create(NotSupportedError,
+            "getCharacteristics is not implemented yet. See https://goo.gl/J6ASzs"));
+#endif // OS(MACOSX)
+
     ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
     ScriptPromise promise = resolver->promise();
 
     WebBluetooth* webbluetooth = BluetoothSupplement::fromScriptState(scriptState);
-    webbluetooth->getCharacteristics(m_webService->serviceInstanceID, characteristicsUUID, new CallbackPromiseAdapter<RemoteCharacteristicArray, BluetoothError>(resolver));
+    webbluetooth->getCharacteristics(m_webService->serviceInstanceID, quantity, characteristicsUUID, new GetCharacteristicsCallback(quantity, resolver));
 
     return promise;
 }

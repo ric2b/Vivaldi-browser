@@ -36,30 +36,28 @@
 #include "platform/MIMETypeRegistry.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/GraphicsContext.h"
-#include "platform/graphics/GraphicsTypes3D.h"
 #include "platform/graphics/ImageBufferClient.h"
 #include "platform/graphics/StaticBitmapImage.h"
 #include "platform/graphics/UnacceleratedImageBufferSurface.h"
 #include "platform/graphics/gpu/DrawingBuffer.h"
 #include "platform/graphics/gpu/Extensions3DUtil.h"
 #include "platform/graphics/skia/SkiaUtils.h"
-#include "platform/image-encoders/skia/JPEGImageEncoder.h"
-#include "platform/image-encoders/skia/PNGImageEncoder.h"
-#include "platform/image-encoders/skia/WEBPImageEncoder.h"
+#include "platform/image-encoders/JPEGImageEncoder.h"
+#include "platform/image-encoders/PNGImageEncoder.h"
+#include "platform/image-encoders/WEBPImageEncoder.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebExternalTextureMailbox.h"
-#include "public/platform/WebGraphicsContext3D.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
 #include "skia/ext/texture_handle.h"
 #include "third_party/skia/include/core/SkPicture.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLTypes.h"
-#include "wtf/ArrayBufferContents.h"
 #include "wtf/CheckedNumeric.h"
 #include "wtf/MathExtras.h"
 #include "wtf/Vector.h"
 #include "wtf/text/Base64.h"
 #include "wtf/text/WTFString.h"
+#include "wtf/typed_arrays/ArrayBufferContents.h"
 
 namespace blink {
 
@@ -75,7 +73,7 @@ PassOwnPtr<ImageBuffer> ImageBuffer::create(const IntSize& size, OpacityMode opa
     OwnPtr<ImageBufferSurface> surface(adoptPtr(new UnacceleratedImageBufferSurface(size, opacityMode, initializationMode)));
     if (!surface->isValid())
         return nullptr;
-    return adoptPtr(new ImageBuffer(surface.release()));
+    return adoptPtr(new ImageBuffer(std::move(surface)));
 }
 
 ImageBuffer::ImageBuffer(PassOwnPtr<ImageBufferSurface> surface)
@@ -179,7 +177,7 @@ WebLayer* ImageBuffer::platformLayer() const
     return m_surface->layer();
 }
 
-bool ImageBuffer::copyToPlatformTexture(WebGraphicsContext3D* context, gpu::gles2::GLES2Interface* gl, Platform3DObject texture, GLenum internalFormat, GLenum destType, GLint level, bool premultiplyAlpha, bool flipY)
+bool ImageBuffer::copyToPlatformTexture(gpu::gles2::GLES2Interface* gl, GLuint texture, GLenum internalFormat, GLenum destType, GLint level, bool premultiplyAlpha, bool flipY)
 {
     if (!Extensions3DUtil::canUseCopyTextureCHROMIUM(GL_TEXTURE_2D, internalFormat, destType, level))
         return false;
@@ -219,7 +217,7 @@ bool ImageBuffer::copyToPlatformTexture(WebGraphicsContext3D* context, gpu::gles
     mailbox->validSyncToken = true;
     gl->WaitSyncTokenCHROMIUM(mailbox->syncToken);
 
-    Platform3DObject sourceTexture = gl->CreateAndConsumeTextureCHROMIUM(textureInfo->fTarget, mailbox->name);
+    GLuint sourceTexture = gl->CreateAndConsumeTextureCHROMIUM(textureInfo->fTarget, mailbox->name);
 
     // The canvas is stored in a premultiplied format, so unpremultiply if necessary.
     // The canvas is stored in an inverted position, so the flip semantics are reversed.
@@ -248,15 +246,14 @@ bool ImageBuffer::copyRenderingResultsFromDrawingBuffer(DrawingBuffer* drawingBu
     OwnPtr<WebGraphicsContext3DProvider> provider = adoptPtr(Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
     if (!provider)
         return false;
-    WebGraphicsContext3D* context3D = provider->context3d();
     gpu::gles2::GLES2Interface* gl = provider->contextGL();
-    Platform3DObject textureId = m_surface->getBackingTextureHandleForOverwrite();
+    GLuint textureId = m_surface->getBackingTextureHandleForOverwrite();
     if (!textureId)
         return false;
 
     gl->Flush();
 
-    return drawingBuffer->copyToPlatformTexture(context3D, gl, textureId, GL_RGBA,
+    return drawingBuffer->copyToPlatformTexture(gl, textureId, GL_RGBA,
         GL_UNSIGNED_BYTE, 0, true, false, sourceBuffer);
 }
 

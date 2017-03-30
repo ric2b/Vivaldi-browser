@@ -38,7 +38,10 @@
 #include "WebPrivatePtr.h"
 #include "WebVector.h"
 
-namespace WTF { template <typename T> class PassOwnPtr; }
+#if INSIDE_BLINK
+#include "wtf/OwnPtr.h"
+#include "wtf/PassOwnPtr.h"
+#endif
 
 namespace blink {
 
@@ -64,7 +67,7 @@ public:
     BLINK_PLATFORM_EXPORT void assign(const WebFileSystemCallbacks&);
 
 #if INSIDE_BLINK
-    BLINK_PLATFORM_EXPORT WebFileSystemCallbacks(const WTF::PassOwnPtr<AsyncFileSystemCallbacks>&);
+    BLINK_PLATFORM_EXPORT WebFileSystemCallbacks(WTF::PassOwnPtr<AsyncFileSystemCallbacks>&&);
 #endif
 
     // Callback for WebFileSystem's various operations that don't require

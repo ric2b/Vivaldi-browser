@@ -29,6 +29,7 @@
 #include "bindings/core/v8/V8DOMConfiguration.h"
 
 #include "bindings/core/v8/V8ObjectConstructor.h"
+#include "bindings/core/v8/V8PerContextData.h"
 #include "platform/TraceEvent.h"
 
 namespace blink {
@@ -52,13 +53,40 @@ void installAttributeInternal(v8::Isolate* isolate, v8::Local<v8::ObjectTemplate
     }
     v8::Local<v8::Value> data = v8::External::New(isolate, const_cast<WrapperTypeInfo*>(attribute.data));
 
-    ASSERT(attribute.propertyLocationConfiguration);
+    DCHECK(attribute.propertyLocationConfiguration);
     if (attribute.propertyLocationConfiguration & V8DOMConfiguration::OnInstance)
         instanceTemplate->SetNativeDataProperty(name, getter, setter, data, static_cast<v8::PropertyAttribute>(attribute.attribute), v8::Local<v8::AccessorSignature>(), static_cast<v8::AccessControl>(attribute.settings));
     if (attribute.propertyLocationConfiguration & V8DOMConfiguration::OnPrototype)
         prototypeTemplate->SetNativeDataProperty(name, getter, setter, data, static_cast<v8::PropertyAttribute>(attribute.attribute), v8::Local<v8::AccessorSignature>(), static_cast<v8::AccessControl>(attribute.settings));
     if (attribute.propertyLocationConfiguration & V8DOMConfiguration::OnInterface)
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
+}
+
+void installAttributeInternal(v8::Isolate* isolate, v8::Local<v8::Object> instance, v8::Local<v8::Object> prototype, const V8DOMConfiguration::AttributeConfiguration& attribute, const DOMWrapperWorld& world)
+{
+    if (attribute.exposeConfiguration == V8DOMConfiguration::OnlyExposedToPrivateScript
+        && !world.isPrivateScriptIsolatedWorld())
+        return;
+
+    v8::Local<v8::Name> name = v8AtomicString(isolate, attribute.name);
+
+    // This method is only being used for installing interfaces which are
+    // enabled through origin trials. Assert here that it is being called with
+    // an attribute configuration for a constructor.
+    // TODO(iclelland): Relax this constraint and allow arbitrary data-type
+    // properties to be added here.
+    DCHECK_EQ(&v8ConstructorAttributeGetter, attribute.getter);
+
+    V8PerContextData* perContextData = V8PerContextData::from(isolate->GetCurrentContext());
+    v8::Local<v8::Function> data = perContextData->constructorForType(attribute.data);
+
+    DCHECK(attribute.propertyLocationConfiguration);
+    if (attribute.propertyLocationConfiguration & V8DOMConfiguration::OnInstance)
+        v8CallOrCrash(instance->DefineOwnProperty(isolate->GetCurrentContext(), name, data, static_cast<v8::PropertyAttribute>(attribute.attribute)));
+    if (attribute.propertyLocationConfiguration & V8DOMConfiguration::OnPrototype)
+        v8CallOrCrash(prototype->DefineOwnProperty(isolate->GetCurrentContext(), name, data, static_cast<v8::PropertyAttribute>(attribute.attribute)));
+    if (attribute.propertyLocationConfiguration & V8DOMConfiguration::OnInterface)
+        NOTREACHED();
 }
 
 template<class FunctionOrTemplate>
@@ -118,7 +146,7 @@ void installAccessorInternal(v8::Isolate* isolate, v8::Local<ObjectOrTemplate> i
         signature = v8::Local<v8::Signature>();
     v8::Local<v8::Value> data = v8::External::New(isolate, const_cast<WrapperTypeInfo*>(accessor.data));
 
-    ASSERT(accessor.propertyLocationConfiguration);
+    DCHECK(accessor.propertyLocationConfiguration);
     if (accessor.propertyLocationConfiguration &
         (V8DOMConfiguration::OnInstance | V8DOMConfiguration::OnPrototype)) {
         v8::Local<FunctionOrTemplate> getter = createAccessorFunctionOrTemplate<FunctionOrTemplate>(isolate, getterCallback, data, signature, 0);
@@ -158,7 +186,7 @@ void installConstantInternal(v8::Isolate* isolate, v8::Local<v8::FunctionTemplat
         value = v8::Number::New(isolate, constant.dvalue);
         break;
     default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     }
     interfaceTemplate->Set(constantName, value, attributes);
     prototypeTemplate->Set(constantName, value, attributes);
@@ -174,7 +202,7 @@ void installMethodInternal(v8::Isolate* isolate, v8::Local<v8::ObjectTemplate> i
     v8::Local<v8::Name> name = method.methodName(isolate);
     v8::FunctionCallback callback = method.callbackForWorld(world);
 
-    ASSERT(method.propertyLocationConfiguration);
+    DCHECK(method.propertyLocationConfiguration);
     if (method.propertyLocationConfiguration &
         (V8DOMConfiguration::OnInstance | V8DOMConfiguration::OnPrototype)) {
         v8::Local<v8::FunctionTemplate> functionTemplate = v8::FunctionTemplate::New(isolate, callback, v8::Local<v8::Value>(), signature, method.length);
@@ -203,7 +231,7 @@ void installMethodInternal(v8::Isolate* isolate, v8::Local<v8::Object> instance,
     v8::Local<v8::Name> name = method.methodName(isolate);
     v8::FunctionCallback callback = method.callbackForWorld(world);
 
-    ASSERT(method.propertyLocationConfiguration);
+    DCHECK(method.propertyLocationConfiguration);
     if (method.propertyLocationConfiguration &
         (V8DOMConfiguration::OnInstance | V8DOMConfiguration::OnPrototype)) {
         v8::Local<v8::FunctionTemplate> functionTemplate = v8::FunctionTemplate::New(isolate, callback, v8::Local<v8::Value>(), signature, method.length);
@@ -227,35 +255,35 @@ void installMethodInternal(v8::Isolate* isolate, v8::Local<v8::Object> instance,
 
 } // namespace
 
-void V8DOMConfiguration::installAttributes(v8::Isolate* isolate, v8::Local<v8::ObjectTemplate> instanceTemplate, v8::Local<v8::ObjectTemplate> prototypeTemplate, const AttributeConfiguration* attributes, size_t attributeCount)
+void V8DOMConfiguration::installAttributes(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::ObjectTemplate> instanceTemplate, v8::Local<v8::ObjectTemplate> prototypeTemplate, const AttributeConfiguration* attributes, size_t attributeCount)
 {
-    const DOMWrapperWorld& world = DOMWrapperWorld::current(isolate);
     for (size_t i = 0; i < attributeCount; ++i)
         installAttributeInternal(isolate, instanceTemplate, prototypeTemplate, attributes[i], world);
 }
 
-void V8DOMConfiguration::installAttribute(v8::Isolate* isolate, v8::Local<v8::ObjectTemplate> instanceTemplate, v8::Local<v8::ObjectTemplate> prototypeTemplate, const AttributeConfiguration& attribute)
+void V8DOMConfiguration::installAttribute(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::ObjectTemplate> instanceTemplate, v8::Local<v8::ObjectTemplate> prototypeTemplate, const AttributeConfiguration& attribute)
 {
-    const DOMWrapperWorld& world = DOMWrapperWorld::current(isolate);
     installAttributeInternal(isolate, instanceTemplate, prototypeTemplate, attribute, world);
 }
 
-void V8DOMConfiguration::installAccessors(v8::Isolate* isolate, v8::Local<v8::ObjectTemplate> instanceTemplate, v8::Local<v8::ObjectTemplate> prototypeTemplate, v8::Local<v8::FunctionTemplate> interfaceTemplate, v8::Local<v8::Signature> signature, const AccessorConfiguration* accessors, size_t accessorCount)
+void V8DOMConfiguration::installAttribute(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::Object> instance, v8::Local<v8::Object> prototype, const AttributeConfiguration& attribute)
 {
-    const DOMWrapperWorld& world = DOMWrapperWorld::current(isolate);
+    installAttributeInternal(isolate, instance, prototype, attribute, world);
+}
+
+void V8DOMConfiguration::installAccessors(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::ObjectTemplate> instanceTemplate, v8::Local<v8::ObjectTemplate> prototypeTemplate, v8::Local<v8::FunctionTemplate> interfaceTemplate, v8::Local<v8::Signature> signature, const AccessorConfiguration* accessors, size_t accessorCount)
+{
     for (size_t i = 0; i < accessorCount; ++i)
         installAccessorInternal(isolate, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, accessors[i], world);
 }
 
-void V8DOMConfiguration::installAccessor(v8::Isolate* isolate, v8::Local<v8::ObjectTemplate> instanceTemplate, v8::Local<v8::ObjectTemplate> prototypeTemplate, v8::Local<v8::FunctionTemplate> interfaceTemplate, v8::Local<v8::Signature> signature, const AccessorConfiguration& accessor)
+void V8DOMConfiguration::installAccessor(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::ObjectTemplate> instanceTemplate, v8::Local<v8::ObjectTemplate> prototypeTemplate, v8::Local<v8::FunctionTemplate> interfaceTemplate, v8::Local<v8::Signature> signature, const AccessorConfiguration& accessor)
 {
-    const DOMWrapperWorld& world = DOMWrapperWorld::current(isolate);
     installAccessorInternal(isolate, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, accessor, world);
 }
 
-void V8DOMConfiguration::installAccessor(v8::Isolate* isolate, v8::Local<v8::Object> instance, v8::Local<v8::Object> prototype, v8::Local<v8::Function> interface, v8::Local<v8::Signature> signature, const AccessorConfiguration& accessor)
+void V8DOMConfiguration::installAccessor(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::Object> instance, v8::Local<v8::Object> prototype, v8::Local<v8::Function> interface, v8::Local<v8::Signature> signature, const AccessorConfiguration& accessor)
 {
-    const DOMWrapperWorld& world = DOMWrapperWorld::current(isolate);
     installAccessorInternal(isolate, instance, prototype, interface, signature, accessor, world);
 }
 
@@ -279,28 +307,24 @@ void V8DOMConfiguration::installConstantWithGetter(v8::Isolate* isolate, v8::Loc
     prototypeTemplate->SetNativeDataProperty(constantName, getter, 0, v8::Local<v8::Value>(), attributes);
 }
 
-void V8DOMConfiguration::installMethods(v8::Isolate* isolate, v8::Local<v8::ObjectTemplate> instanceTemplate, v8::Local<v8::ObjectTemplate> prototypeTemplate, v8::Local<v8::FunctionTemplate> interfaceTemplate, v8::Local<v8::Signature> signature, const MethodConfiguration* methods, size_t methodCount)
+void V8DOMConfiguration::installMethods(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::ObjectTemplate> instanceTemplate, v8::Local<v8::ObjectTemplate> prototypeTemplate, v8::Local<v8::FunctionTemplate> interfaceTemplate, v8::Local<v8::Signature> signature, const MethodConfiguration* methods, size_t methodCount)
 {
-    const DOMWrapperWorld& world = DOMWrapperWorld::current(isolate);
     for (size_t i = 0; i < methodCount; ++i)
         installMethodInternal(isolate, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, methods[i], world);
 }
 
-void V8DOMConfiguration::installMethod(v8::Isolate* isolate, v8::Local<v8::ObjectTemplate> instanceTemplate, v8::Local<v8::ObjectTemplate> prototypeTemplate, v8::Local<v8::FunctionTemplate> interfaceTemplate, v8::Local<v8::Signature> signature, const MethodConfiguration& method)
+void V8DOMConfiguration::installMethod(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::ObjectTemplate> instanceTemplate, v8::Local<v8::ObjectTemplate> prototypeTemplate, v8::Local<v8::FunctionTemplate> interfaceTemplate, v8::Local<v8::Signature> signature, const MethodConfiguration& method)
 {
-    const DOMWrapperWorld& world = DOMWrapperWorld::current(isolate);
     installMethodInternal(isolate, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, method, world);
 }
 
-void V8DOMConfiguration::installMethod(v8::Isolate* isolate, v8::Local<v8::Object> instance, v8::Local<v8::Object> prototype, v8::Local<v8::Function> interface, v8::Local<v8::Signature> signature, const MethodConfiguration& method)
+void V8DOMConfiguration::installMethod(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::Object> instance, v8::Local<v8::Object> prototype, v8::Local<v8::Function> interface, v8::Local<v8::Signature> signature, const MethodConfiguration& method)
 {
-    const DOMWrapperWorld& world = DOMWrapperWorld::current(isolate);
     installMethodInternal(isolate, instance, prototype, interface, signature, method, world);
 }
 
-void V8DOMConfiguration::installMethod(v8::Isolate* isolate, v8::Local<v8::ObjectTemplate> prototypeTemplate, v8::Local<v8::Signature> signature, const SymbolKeyedMethodConfiguration& method)
+void V8DOMConfiguration::installMethod(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::ObjectTemplate> prototypeTemplate, v8::Local<v8::Signature> signature, const SymbolKeyedMethodConfiguration& method)
 {
-    const DOMWrapperWorld& world = DOMWrapperWorld::current(isolate);
     installMethodInternal(isolate, v8::Local<v8::ObjectTemplate>(), prototypeTemplate, v8::Local<v8::FunctionTemplate>(), signature, method, world);
 }
 
@@ -326,17 +350,17 @@ void V8DOMConfiguration::initializeDOMInterfaceTemplate(v8::Isolate* isolate, v8
     }
 }
 
-v8::Local<v8::FunctionTemplate> V8DOMConfiguration::domClassTemplate(v8::Isolate* isolate, WrapperTypeInfo* wrapperTypeInfo, void (*configureDOMClassTemplate)(v8::Local<v8::FunctionTemplate>, v8::Isolate*))
+v8::Local<v8::FunctionTemplate> V8DOMConfiguration::domClassTemplate(v8::Isolate* isolate, const DOMWrapperWorld& world, WrapperTypeInfo* wrapperTypeInfo, InstallTemplateFunction configureDOMClassTemplate)
 {
     V8PerIsolateData* data = V8PerIsolateData::from(isolate);
-    v8::Local<v8::FunctionTemplate> result = data->existingDOMTemplate(wrapperTypeInfo);
+    v8::Local<v8::FunctionTemplate> result = data->findInterfaceTemplate(world, wrapperTypeInfo);
     if (!result.IsEmpty())
         return result;
 
     TRACE_EVENT_SCOPED_SAMPLING_STATE("blink", "BuildDOMTemplate");
     result = v8::FunctionTemplate::New(isolate, V8ObjectConstructor::isValidConstructorMode);
-    configureDOMClassTemplate(result, isolate);
-    data->setDOMTemplate(wrapperTypeInfo, result);
+    configureDOMClassTemplate(isolate, world, result);
+    data->setInterfaceTemplate(world, wrapperTypeInfo, result);
     return result;
 }
 

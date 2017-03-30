@@ -211,7 +211,7 @@ void BrowserChildProcessHostImpl::Launch(
 
   const base::CommandLine& browser_command_line =
       *base::CommandLine::ForCurrentProcess();
-  static const char* kForwardSwitches[] = {
+  static const char* const kForwardSwitches[] = {
     switches::kDisableLogging,
     switches::kEnableLogging,
     switches::kIPCConnectionTimeout,
@@ -419,8 +419,8 @@ bool BrowserChildProcessHostImpl::Send(IPC::Message* message) {
   return child_process_host_->Send(message);
 }
 
-void BrowserChildProcessHostImpl::OnProcessLaunchFailed() {
-  delegate_->OnProcessLaunchFailed();
+void BrowserChildProcessHostImpl::OnProcessLaunchFailed(int error_code) {
+  delegate_->OnProcessLaunchFailed(error_code);
   notify_child_disconnected_ = false;
   delete delegate_;  // Will delete us
 }
@@ -430,11 +430,6 @@ void BrowserChildProcessHostImpl::OnProcessLaunched() {
 
   const base::Process& process = child_process_->GetProcess();
   DCHECK(process.IsValid());
-
-  mojo::edk::ScopedPlatformHandle client_pipe =
-      mojo::edk::ChildProcessLaunched(process.Handle());
-  Send(new ChildProcessMsg_SetMojoParentPipeHandle(
-      IPC::GetPlatformFileForTransit(client_pipe.release().handle, true)));
 
 #if defined(OS_WIN)
   // Start a WaitableEventWatcher that will invoke OnProcessExitedEarly if the

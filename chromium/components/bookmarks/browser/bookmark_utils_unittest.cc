@@ -20,6 +20,15 @@
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 
+#if defined(USE_GLIB) && defined(USE_X11)
+
+#include <memory>
+
+#include "ui/events/platform/x11/x11_event_source_glib.h"  // nogncheck
+#include "ui/gfx/x/x11_types.h"                            // nogncheck
+
+#endif  // defined(USE_GLIB) && defined(USE_X11)
+
 using base::ASCIIToUTF16;
 using std::string;
 
@@ -30,8 +39,12 @@ class BookmarkUtilsTest : public testing::Test,
                           public BaseBookmarkModelObserver {
  public:
   BookmarkUtilsTest()
-      : grouped_changes_beginning_count_(0),
-        grouped_changes_ended_count_(0) {}
+      : grouped_changes_beginning_count_(0), grouped_changes_ended_count_(0) {
+#if defined(USE_GLIB) && defined(USE_X11)
+    event_source_.reset(new ui::X11EventSourceGlib(gfx::GetXDisplay()));
+#endif  // defined(USE_GLIB) && defined(USE_X11)
+  }
+
   ~BookmarkUtilsTest() override {}
 
 // Copy and paste is not yet supported on iOS. http://crbug.com/228147
@@ -73,12 +86,17 @@ class BookmarkUtilsTest : public testing::Test,
 
   // Clipboard requires a message loop.
   base::MessageLoopForUI loop_;
+#if defined(USE_GLIB) && defined(USE_X11)
+  // On Linux, Clipboard also depends on an event source being present, to get
+  // the timestamp.
+  std::unique_ptr<ui::X11EventSourceGlib> event_source_;
+#endif  // defined(USE_GLIB) && defined(USE_X11)
 
   DISALLOW_COPY_AND_ASSIGN(BookmarkUtilsTest);
 };
 
 TEST_F(BookmarkUtilsTest, GetBookmarksMatchingPropertiesWordPhraseQuery) {
-  scoped_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
+  std::unique_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
   const BookmarkNode* node1 = model->AddURL(model->other_node(),
                                             0,
                                             ASCIIToUTF16("foo bar"),
@@ -135,7 +153,7 @@ TEST_F(BookmarkUtilsTest, GetBookmarksMatchingPropertiesWordPhraseQuery) {
 
 // Check exact matching against a URL query.
 TEST_F(BookmarkUtilsTest, GetBookmarksMatchingPropertiesUrl) {
-  scoped_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
+  std::unique_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
   const BookmarkNode* node1 = model->AddURL(model->other_node(),
                                             0,
                                             ASCIIToUTF16("Google"),
@@ -170,7 +188,7 @@ TEST_F(BookmarkUtilsTest, GetBookmarksMatchingPropertiesUrl) {
 
 // Check exact matching against a title query.
 TEST_F(BookmarkUtilsTest, GetBookmarksMatchingPropertiesTitle) {
-  scoped_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
+  std::unique_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
   const BookmarkNode* node1 = model->AddURL(model->other_node(),
                                             0,
                                             ASCIIToUTF16("Google"),
@@ -207,7 +225,7 @@ TEST_F(BookmarkUtilsTest, GetBookmarksMatchingPropertiesTitle) {
 
 // Check matching against a query with multiple predicates.
 TEST_F(BookmarkUtilsTest, GetBookmarksMatchingPropertiesConjunction) {
-  scoped_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
+  std::unique_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
   const BookmarkNode* node1 = model->AddURL(model->other_node(),
                                             0,
                                             ASCIIToUTF16("Google"),
@@ -231,12 +249,12 @@ TEST_F(BookmarkUtilsTest, GetBookmarksMatchingPropertiesConjunction) {
   EXPECT_TRUE(nodes[0] == node1);
   nodes.clear();
 
-  scoped_ptr<base::string16>* fields[] = {
-    &query.word_phrase_query, &query.url, &query.title };
+  std::unique_ptr<base::string16>* fields[] = {&query.word_phrase_query,
+                                               &query.url, &query.title};
 
   // Test two fields matching.
   for (size_t i = 0; i < arraysize(fields); i++) {
-    scoped_ptr<base::string16> original_value(fields[i]->release());
+    std::unique_ptr<base::string16> original_value(fields[i]->release());
     GetBookmarksMatchingProperties(model.get(), query, 100, &nodes);
     ASSERT_EQ(1U, nodes.size());
     EXPECT_TRUE(nodes[0] == node1);
@@ -246,7 +264,7 @@ TEST_F(BookmarkUtilsTest, GetBookmarksMatchingPropertiesConjunction) {
 
   // Test two fields matching with one non-matching field.
   for (size_t i = 0; i < arraysize(fields); i++) {
-    scoped_ptr<base::string16> original_value(fields[i]->release());
+    std::unique_ptr<base::string16> original_value(fields[i]->release());
     fields[i]->reset(new base::string16(ASCIIToUTF16("fjdkslafjkldsa")));
     GetBookmarksMatchingProperties(model.get(), query, 100, &nodes);
     ASSERT_EQ(0U, nodes.size());
@@ -258,7 +276,7 @@ TEST_F(BookmarkUtilsTest, GetBookmarksMatchingPropertiesConjunction) {
 // Copy and paste is not yet supported on iOS. http://crbug.com/228147
 #if !defined(OS_IOS)
 TEST_F(BookmarkUtilsTest, PasteBookmarkFromURL) {
-  scoped_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
+  std::unique_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
   const base::string16 url_text = ASCIIToUTF16("http://www.google.com/");
   const BookmarkNode* new_folder = model->AddFolder(
       model->bookmark_bar_node(), 0, ASCIIToUTF16("New_Folder"));
@@ -287,7 +305,7 @@ TEST_F(BookmarkUtilsTest, PasteBookmarkFromURL) {
 }
 
 TEST_F(BookmarkUtilsTest, CopyPaste) {
-  scoped_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
+  std::unique_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
   const BookmarkNode* node = model->AddURL(model->other_node(),
                                            0,
                                            ASCIIToUTF16("foo bar"),
@@ -315,7 +333,7 @@ TEST_F(BookmarkUtilsTest, CopyPaste) {
 // Test for updating title such that url and title pair are unique among the
 // children of parent.
 TEST_F(BookmarkUtilsTest, MakeTitleUnique) {
-  scoped_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
+  std::unique_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
   const base::string16 url_text = ASCIIToUTF16("http://www.google.com/");
   const base::string16 title_text = ASCIIToUTF16("foobar");
   const BookmarkNode* bookmark_bar_node = model->bookmark_bar_node();
@@ -348,7 +366,7 @@ TEST_F(BookmarkUtilsTest, MakeTitleUnique) {
 }
 
 TEST_F(BookmarkUtilsTest, CopyPasteMetaInfo) {
-  scoped_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
+  std::unique_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
   const BookmarkNode* node = model->AddURL(model->other_node(),
                                            0,
                                            ASCIIToUTF16("foo bar"),
@@ -390,7 +408,7 @@ TEST_F(BookmarkUtilsTest, CopyPasteMetaInfo) {
 #define MAYBE_CutToClipboard CutToClipboard
 #endif
 TEST_F(BookmarkUtilsTest, MAYBE_CutToClipboard) {
-  scoped_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
+  std::unique_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
   model->AddObserver(this);
 
   base::string16 title(ASCIIToUTF16("foo"));
@@ -416,13 +434,13 @@ TEST_F(BookmarkUtilsTest, MAYBE_CutToClipboard) {
 
 TEST_F(BookmarkUtilsTest, PasteNonEditableNodes) {
   // Load a model with an extra node that is not editable.
-  scoped_ptr<TestBookmarkClient> client(new TestBookmarkClient());
+  std::unique_ptr<TestBookmarkClient> client(new TestBookmarkClient());
   BookmarkPermanentNode* extra_node = new BookmarkPermanentNode(100);
   BookmarkPermanentNodeList extra_nodes;
   extra_nodes.push_back(extra_node);
   client->SetExtraNodesToLoad(std::move(extra_nodes));
 
-  scoped_ptr<BookmarkModel> model(
+  std::unique_ptr<BookmarkModel> model(
       TestBookmarkClient::CreateModelWithClient(std::move(client)));
   const BookmarkNode* node = model->AddURL(model->other_node(),
                                            0,
@@ -445,7 +463,7 @@ TEST_F(BookmarkUtilsTest, PasteNonEditableNodes) {
 #endif  // !defined(OS_IOS)
 
 TEST_F(BookmarkUtilsTest, GetParentForNewNodes) {
-  scoped_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
+  std::unique_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
   // This tests the case where selection contains one item and that item is a
   // folder.
   std::vector<const BookmarkNode*> nodes;
@@ -486,7 +504,7 @@ TEST_F(BookmarkUtilsTest, GetParentForNewNodes) {
 
 // Verifies that meta info is copied when nodes are cloned.
 TEST_F(BookmarkUtilsTest, CloneMetaInfo) {
-  scoped_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
+  std::unique_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
   // Add a node containing meta info.
   const BookmarkNode* node = model->AddURL(model->other_node(),
                                            0,
@@ -519,7 +537,7 @@ TEST_F(BookmarkUtilsTest, CloneMetaInfo) {
 // Verifies that meta info fields in the non cloned set are not copied when
 // cloning a bookmark.
 TEST_F(BookmarkUtilsTest, CloneBookmarkResetsNonClonedKey) {
-  scoped_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
+  std::unique_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
   model->AddNonClonedKey("foo");
   const BookmarkNode* parent = model->other_node();
   const BookmarkNode* node = model->AddURL(
@@ -544,7 +562,7 @@ TEST_F(BookmarkUtilsTest, CloneBookmarkResetsNonClonedKey) {
 // Verifies that meta info fields in the non cloned set are not copied when
 // cloning a folder.
 TEST_F(BookmarkUtilsTest, CloneFolderResetsNonClonedKey) {
-  scoped_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
+  std::unique_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
   model->AddNonClonedKey("foo");
   const BookmarkNode* parent = model->other_node();
   const BookmarkNode* node = model->AddFolder(parent, 0, ASCIIToUTF16("title"));
@@ -567,13 +585,13 @@ TEST_F(BookmarkUtilsTest, CloneFolderResetsNonClonedKey) {
 
 TEST_F(BookmarkUtilsTest, RemoveAllBookmarks) {
   // Load a model with an extra node that is not editable.
-  scoped_ptr<TestBookmarkClient> client(new TestBookmarkClient());
+  std::unique_ptr<TestBookmarkClient> client(new TestBookmarkClient());
   BookmarkPermanentNode* extra_node = new BookmarkPermanentNode(100);
   BookmarkPermanentNodeList extra_nodes;
   extra_nodes.push_back(extra_node);
   client->SetExtraNodesToLoad(std::move(extra_nodes));
 
-  scoped_ptr<BookmarkModel> model(
+  std::unique_ptr<BookmarkModel> model(
       TestBookmarkClient::CreateModelWithClient(std::move(client)));
   EXPECT_TRUE(model->bookmark_bar_node()->empty());
   EXPECT_TRUE(model->other_node()->empty());

@@ -89,7 +89,7 @@ public:
     void dispatchDidLoadResourceFromMemoryCache(const ResourceRequest&, const ResourceResponse&) override;
     void dispatchDidHandleOnloadEvents() override;
     void dispatchDidReceiveServerRedirectForProvisionalLoad() override;
-    void dispatchDidNavigateWithinPage(HistoryItem*, HistoryCommitType) override;
+    void dispatchDidNavigateWithinPage(HistoryItem*, HistoryCommitType, bool contentInitiated) override;
     void dispatchWillClose() override;
     void dispatchDidStartProvisionalLoad(double triggeringEventTime) override;
     void dispatchDidReceiveTitle(const String&) override;
@@ -115,8 +115,8 @@ public:
     void didRunInsecureContent(SecurityOrigin*, const KURL& insecureURL) override;
     void didDetectXSS(const KURL&, bool didBlockEntirePage) override;
     void didDispatchPingLoader(const KURL&) override;
-    void didDisplayContentWithCertificateErrors(const KURL&, const CString& securityInfo, const WebURL& mainResourceUrl, const CString& mainResourceSecurityInfo) override;
-    void didRunContentWithCertificateErrors(const KURL&, const CString& securityInfo, const WebURL& mainResourceUrl, const CString& mainResourceSecurityInfo) override;
+    void didDisplayContentWithCertificateErrors(const KURL&, const CString& securityInfo) override;
+    void didRunContentWithCertificateErrors(const KURL&, const CString& securityInfo) override;
     void didChangePerformanceTiming() override;
     void didObserveLoadingBehavior(WebLoadingBehaviorFlag) override;
     void selectorMatchChanged(const Vector<String>& addedSelectors, const Vector<String>& removedSelectors) override;
@@ -130,13 +130,12 @@ public:
         HTMLPlugInElement*, const KURL&,
         const Vector<WTF::String>&, const Vector<WTF::String>&,
         const WTF::String&, bool loadManually, DetachedPluginPolicy) override;
-    PassOwnPtr<WebMediaPlayer> createWebMediaPlayer(HTMLMediaElement&, const WebURL&, WebMediaPlayerClient*) override;
+    PassOwnPtr<WebMediaPlayer> createWebMediaPlayer(HTMLMediaElement&, const WebMediaPlayerSource&, WebMediaPlayerClient*) override;
     PassOwnPtr<WebMediaSession> createWebMediaSession() override;
     ObjectContentType getObjectContentType(
         const KURL&, const WTF::String& mimeType, bool shouldPreferPlugInsForImages) override;
     void didChangeScrollOffset() override;
     void didUpdateCurrentHistoryItem() override;
-    void didRemoveAllPendingStylesheet() override;
     bool allowScript(bool enabledPerSettings) override;
     bool allowScriptFromSource(bool enabledPerSettings, const KURL& scriptURL) override;
     bool allowPlugins(bool enabledPerSettings) override;
@@ -144,30 +143,27 @@ public:
     bool allowMedia(const KURL& mediaURL) override;
     bool allowDisplayingInsecureContent(bool enabledPerSettings, const KURL&) override;
     bool allowRunningInsecureContent(bool enabledPerSettings, SecurityOrigin*, const KURL&) override;
+    bool allowAutoplay(bool defaultValue) override;
     void didNotAllowScript() override;
     void didNotAllowPlugins() override;
     void didUseKeygen() override;
 
     WebCookieJar* cookieJar() const override;
-    bool willCheckAndDispatchMessageEvent(SecurityOrigin* target, MessageEvent*, LocalFrame* sourceFrame) const override;
     void frameFocused() const override;
     void didChangeName(const String& name, const String& uniqueName) override;
     void didEnforceStrictMixedContentChecking() override;
     void didUpdateToUniqueOrigin() override;
     void didChangeSandboxFlags(Frame* childFrame, SandboxFlags) override;
+    void didAddContentSecurityPolicy(const String& headerValue, ContentSecurityPolicyHeaderType, ContentSecurityPolicyHeaderSource) override;
     void didChangeFrameOwnerProperties(HTMLFrameElementBase*) override;
 
     void dispatchWillOpenWebSocket(WebSocketHandle*) override;
 
     void dispatchWillStartUsingPeerConnectionHandler(WebRTCPeerConnectionHandler*) override;
 
-    void didRequestAutocomplete(HTMLFormElement*) override;
-
     bool allowWebGL(bool enabledPerSettings) override;
 
     void dispatchWillInsertBody() override;
-
-    v8::Local<v8::Value> createTestInterface(const AtomicString& name) override;
 
     PassOwnPtr<WebServiceWorkerProvider> createServiceWorkerProvider() override;
     bool isControlledByServiceWorker(DocumentLoader&) override;
@@ -185,6 +181,8 @@ public:
     BlameContext* frameBlameContext() override;
 
     LinkResource* createServiceWorkerLinkResource(HTMLLinkElement*) override;
+
+    WebEffectiveConnectionType getEffectiveConnectionType() override;
 
     // VB-6063:
     void extendedProgressEstimateChanged(double progressEstimate, double loaded_bytes, int loaded_elements, int total_elements) override;

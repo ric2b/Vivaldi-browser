@@ -54,34 +54,34 @@ protected:
     Document& document() const { return m_dummyPageHolder->document(); }
     DocumentMarkerController& markerController() const { return document().markers(); }
 
-    RawPtr<Text> createTextNode(const char*);
-    void markNodeContents(RawPtr<Node>);
-    void markNodeContentsWithComposition(RawPtr<Node>);
+    Text* createTextNode(const char*);
+    void markNodeContents(Node*);
+    void markNodeContentsWithComposition(Node*);
     void setBodyInnerHTML(const char*);
 
 private:
     OwnPtr<DummyPageHolder> m_dummyPageHolder;
 };
 
-RawPtr<Text> DocumentMarkerControllerTest::createTextNode(const char* textContents)
+Text* DocumentMarkerControllerTest::createTextNode(const char* textContents)
 {
     return document().createTextNode(String::fromUTF8(textContents));
 }
 
-void DocumentMarkerControllerTest::markNodeContents(RawPtr<Node> node)
+void DocumentMarkerControllerTest::markNodeContents(Node* node)
 {
     // Force layoutObjects to be created; TextIterator, which is used in
     // DocumentMarkerControllerTest::addMarker(), needs them.
-    document().updateLayout();
+    document().updateStyleAndLayout();
     auto range = EphemeralRange::rangeOfContents(*node);
     markerController().addMarker(range.startPosition(), range.endPosition(), DocumentMarker::Spelling);
 }
 
-void DocumentMarkerControllerTest::markNodeContentsWithComposition(RawPtr<Node> node)
+void DocumentMarkerControllerTest::markNodeContentsWithComposition(Node* node)
 {
     // Force layoutObjects to be created; TextIterator, which is used in
     // DocumentMarkerControllerTest::addMarker(), needs them.
-    document().updateLayout();
+    document().updateStyleAndLayout();
     auto range = EphemeralRange::rangeOfContents(*node);
     markerController().addCompositionMarker(range.startPosition(), range.endPosition(), Color::black, false, Color::black);
 }
@@ -94,14 +94,14 @@ void DocumentMarkerControllerTest::setBodyInnerHTML(const char* bodyContent)
 TEST_F(DocumentMarkerControllerTest, DidMoveToNewDocument)
 {
     setBodyInnerHTML("<b><i>foo</i></b>");
-    RawPtr<Element> parent = toElement(document().body()->firstChild()->firstChild());
-    markNodeContents(parent.get());
+    Element* parent = toElement(document().body()->firstChild()->firstChild());
+    markNodeContents(parent);
     EXPECT_EQ(1u, markerController().markers().size());
     Persistent<Document> anotherDocument = Document::create();
-    anotherDocument->adoptNode(parent.get(), ASSERT_NO_EXCEPTION);
+    anotherDocument->adoptNode(parent, ASSERT_NO_EXCEPTION);
 
     // No more reference to marked node.
-    Heap::collectAllGarbage();
+    ThreadHeap::collectAllGarbage();
     EXPECT_EQ(0u, markerController().markers().size());
     EXPECT_EQ(0u, anotherDocument->markers().markers().size());
 }
@@ -110,26 +110,26 @@ TEST_F(DocumentMarkerControllerTest, NodeWillBeRemovedMarkedByNormalize)
 {
     setBodyInnerHTML("<b><i>foo</i></b>");
     {
-        RawPtr<Element> parent = toElement(document().body()->firstChild()->firstChild());
-        parent->appendChild(createTextNode("bar").get());
-        markNodeContents(parent.get());
+        Element* parent = toElement(document().body()->firstChild()->firstChild());
+        parent->appendChild(createTextNode("bar"));
+        markNodeContents(parent);
         EXPECT_EQ(2u, markerController().markers().size());
         parent->normalize();
     }
     // No more reference to marked node.
-    Heap::collectAllGarbage();
+    ThreadHeap::collectAllGarbage();
     EXPECT_EQ(1u, markerController().markers().size());
 }
 
 TEST_F(DocumentMarkerControllerTest, NodeWillBeRemovedMarkedByRemoveChildren)
 {
     setBodyInnerHTML("<b><i>foo</i></b>");
-    RawPtr<Element> parent = toElement(document().body()->firstChild()->firstChild());
-    markNodeContents(parent.get());
+    Element* parent = toElement(document().body()->firstChild()->firstChild());
+    markNodeContents(parent);
     EXPECT_EQ(1u, markerController().markers().size());
     parent->removeChildren();
     // No more reference to marked node.
-    Heap::collectAllGarbage();
+    ThreadHeap::collectAllGarbage();
     EXPECT_EQ(0u, markerController().markers().size());
 }
 
@@ -137,13 +137,13 @@ TEST_F(DocumentMarkerControllerTest, NodeWillBeRemovedByRemoveMarked)
 {
     setBodyInnerHTML("<b><i>foo</i></b>");
     {
-        RawPtr<Element> parent = toElement(document().body()->firstChild()->firstChild());
+        Element* parent = toElement(document().body()->firstChild()->firstChild());
         markNodeContents(parent);
         EXPECT_EQ(1u, markerController().markers().size());
         parent->removeChild(parent->firstChild());
     }
     // No more reference to marked node.
-    Heap::collectAllGarbage();
+    ThreadHeap::collectAllGarbage();
     EXPECT_EQ(0u, markerController().markers().size());
 }
 
@@ -151,13 +151,13 @@ TEST_F(DocumentMarkerControllerTest, NodeWillBeRemovedMarkedByRemoveAncestor)
 {
     setBodyInnerHTML("<b><i>foo</i></b>");
     {
-        RawPtr<Element> parent = toElement(document().body()->firstChild()->firstChild());
+        Element* parent = toElement(document().body()->firstChild()->firstChild());
         markNodeContents(parent);
         EXPECT_EQ(1u, markerController().markers().size());
         parent->parentNode()->parentNode()->removeChild(parent->parentNode());
     }
     // No more reference to marked node.
-    Heap::collectAllGarbage();
+    ThreadHeap::collectAllGarbage();
     EXPECT_EQ(0u, markerController().markers().size());
 }
 
@@ -165,13 +165,13 @@ TEST_F(DocumentMarkerControllerTest, NodeWillBeRemovedMarkedByRemoveParent)
 {
     setBodyInnerHTML("<b><i>foo</i></b>");
     {
-        RawPtr<Element> parent = toElement(document().body()->firstChild()->firstChild());
+        Element* parent = toElement(document().body()->firstChild()->firstChild());
         markNodeContents(parent);
         EXPECT_EQ(1u, markerController().markers().size());
-        parent->parentNode()->removeChild(parent.get());
+        parent->parentNode()->removeChild(parent);
     }
     // No more reference to marked node.
-    Heap::collectAllGarbage();
+    ThreadHeap::collectAllGarbage();
     EXPECT_EQ(0u, markerController().markers().size());
 }
 
@@ -179,13 +179,13 @@ TEST_F(DocumentMarkerControllerTest, NodeWillBeRemovedMarkedByReplaceChild)
 {
     setBodyInnerHTML("<b><i>foo</i></b>");
     {
-        RawPtr<Element> parent = toElement(document().body()->firstChild()->firstChild());
-        markNodeContents(parent.get());
+        Element* parent = toElement(document().body()->firstChild()->firstChild());
+        markNodeContents(parent);
         EXPECT_EQ(1u, markerController().markers().size());
-        parent->replaceChild(createTextNode("bar").get(), parent->firstChild());
+        parent->replaceChild(createTextNode("bar"), parent->firstChild());
     }
     // No more reference to marked node.
-    Heap::collectAllGarbage();
+    ThreadHeap::collectAllGarbage();
     EXPECT_EQ(0u, markerController().markers().size());
 }
 
@@ -193,13 +193,13 @@ TEST_F(DocumentMarkerControllerTest, NodeWillBeRemovedBySetInnerHTML)
 {
     setBodyInnerHTML("<b><i>foo</i></b>");
     {
-        RawPtr<Element> parent = toElement(document().body()->firstChild()->firstChild());
+        Element* parent = toElement(document().body()->firstChild()->firstChild());
         markNodeContents(parent);
         EXPECT_EQ(1u, markerController().markers().size());
         setBodyInnerHTML("");
     }
     // No more reference to marked node.
-    Heap::collectAllGarbage();
+    ThreadHeap::collectAllGarbage();
     EXPECT_EQ(0u, markerController().markers().size());
 }
 
@@ -208,14 +208,14 @@ TEST_F(DocumentMarkerControllerTest, UpdateRenderedRects)
     IntRect invalidRect(RenderedDocumentMarker::create(DocumentMarker(0, 0, false))->renderedRect());
 
     setBodyInnerHTML("<div style='margin: 100px'>foo</div>");
-    RawPtr<Element> div = toElement(document().body()->firstChild());
+    Element* div = toElement(document().body()->firstChild());
     markNodeContents(div);
     Vector<IntRect> renderedRects = markerController().renderedRectsForMarkers(DocumentMarker::Spelling);
     EXPECT_EQ(1u, renderedRects.size());
     EXPECT_NE(invalidRect, renderedRects[0]);
 
     div->setAttribute(HTMLNames::styleAttr, "margin: 200px");
-    document().updateLayout();
+    document().updateStyleAndLayout();
     Vector<IntRect> newRenderedRects = markerController().renderedRectsForMarkers(DocumentMarker::Spelling);
     EXPECT_EQ(1u, newRenderedRects.size());
     EXPECT_NE(renderedRects[0], newRenderedRects[0]);
@@ -226,14 +226,14 @@ TEST_F(DocumentMarkerControllerTest, UpdateRenderedRectsForComposition)
     IntRect invalidRect(RenderedDocumentMarker::create(DocumentMarker(0, 0, false))->renderedRect());
 
     setBodyInnerHTML("<div style='margin: 100px'>foo</div>");
-    RawPtr<Element> div = toElement(document().body()->firstChild());
+    Element* div = toElement(document().body()->firstChild());
     markNodeContentsWithComposition(div);
     Vector<IntRect> renderedRects = markerController().renderedRectsForMarkers(DocumentMarker::Composition);
     EXPECT_EQ(1u, renderedRects.size());
     EXPECT_NE(invalidRect, renderedRects[0]);
 
     div->setAttribute(HTMLNames::styleAttr, "margin: 200px");
-    document().updateLayout();
+    document().updateStyleAndLayout();
     Vector<IntRect> newRenderedRects = markerController().renderedRectsForMarkers(DocumentMarker::Composition);
     EXPECT_EQ(1u, newRenderedRects.size());
     EXPECT_NE(renderedRects[0], newRenderedRects[0]);
@@ -244,8 +244,8 @@ TEST_F(DocumentMarkerControllerTest, CompositionMarkersNotMerged)
     IntRect invalidRect(RenderedDocumentMarker::create(DocumentMarker(0, 0, false))->renderedRect());
 
     setBodyInnerHTML("<div style='margin: 100px'>foo</div>");
-    RawPtr<Node> text = document().body()->firstChild()->firstChild();
-    document().updateLayout();
+    Node* text = document().body()->firstChild()->firstChild();
+    document().updateStyleAndLayout();
     markerController().addCompositionMarker(Position(text, 0), Position(text, 1), Color::black, false, Color::black);
     markerController().addCompositionMarker(Position(text, 1), Position(text, 3), Color::black, true, Color::black);
 
@@ -255,18 +255,18 @@ TEST_F(DocumentMarkerControllerTest, CompositionMarkersNotMerged)
 TEST_F(DocumentMarkerControllerTest, SetMarkerActiveTest)
 {
     setBodyInnerHTML("<b>foo</b>");
-    RawPtr<Element> bElement = toElement(document().body()->firstChild());
+    Element* bElement = toElement(document().body()->firstChild());
     EphemeralRange ephemeralRange = EphemeralRange::rangeOfContents(*bElement);
     Position startBElement = toPositionInDOMTree(ephemeralRange.startPosition());
     Position endBElement = toPositionInDOMTree(ephemeralRange.endPosition());
-    RawPtr<Range> range = Range::create(document(), startBElement, endBElement);
+    Range* range = Range::create(document(), startBElement, endBElement);
     // Try to make active a marker that doesn't exist.
-    EXPECT_FALSE(markerController().setMarkersActive(range.get(), true));
+    EXPECT_FALSE(markerController().setMarkersActive(range, true));
 
     // Add a marker and try it once more.
-    markerController().addTextMatchMarker(range.get(), false);
+    markerController().addTextMatchMarker(range, false);
     EXPECT_EQ(1u, markerController().markers().size());
-    EXPECT_TRUE(markerController().setMarkersActive(range.get(), true));
+    EXPECT_TRUE(markerController().setMarkersActive(range, true));
 }
 
 } // namespace blink

@@ -42,48 +42,45 @@
 namespace blink {
 
 // A class holding a pending action.
-class MediaKeys::PendingAction : public GarbageCollectedFinalized<MediaKeys::PendingAction> {
+class MediaKeys::PendingAction final : public GarbageCollected<MediaKeys::PendingAction> {
 public:
     const Persistent<ContentDecryptionModuleResult> result() const
     {
         return m_result;
     }
 
-    const RefPtr<DOMArrayBuffer> data() const
+    DOMArrayBuffer* data() const
     {
         return m_data;
     }
 
-    static PendingAction* CreatePendingSetServerCertificate(ContentDecryptionModuleResult* result, PassRefPtr<DOMArrayBuffer> serverCertificate)
+    static PendingAction* CreatePendingSetServerCertificate(ContentDecryptionModuleResult* result, DOMArrayBuffer* serverCertificate)
     {
         ASSERT(result);
         ASSERT(serverCertificate);
         return new PendingAction(result, serverCertificate);
     }
 
-    ~PendingAction()
-    {
-    }
-
     DEFINE_INLINE_TRACE()
     {
         visitor->trace(m_result);
+        visitor->trace(m_data);
     }
 
 private:
-    PendingAction(ContentDecryptionModuleResult* result, PassRefPtr<DOMArrayBuffer> data)
+    PendingAction(ContentDecryptionModuleResult* result, DOMArrayBuffer* data)
         : m_result(result)
         , m_data(data)
     {
     }
 
     const Member<ContentDecryptionModuleResult> m_result;
-    const RefPtr<DOMArrayBuffer> m_data;
+    const Member<DOMArrayBuffer> m_data;
 };
 
 MediaKeys* MediaKeys::create(ExecutionContext* context, const WebVector<WebEncryptedMediaSessionType>& supportedSessionTypes, PassOwnPtr<WebContentDecryptionModule> cdm)
 {
-    MediaKeys* mediaKeys = new MediaKeys(context, supportedSessionTypes, cdm);
+    MediaKeys* mediaKeys = new MediaKeys(context, supportedSessionTypes, std::move(cdm));
     mediaKeys->suspendIfNeeded();
     return mediaKeys;
 }
@@ -92,7 +89,7 @@ MediaKeys::MediaKeys(ExecutionContext* context, const WebVector<WebEncryptedMedi
     : ActiveScriptWrappable(this)
     , ActiveDOMObject(context)
     , m_supportedSessionTypes(supportedSessionTypes)
-    , m_cdm(cdm)
+    , m_cdm(std::move(cdm))
     , m_mediaElement(nullptr)
     , m_reservedForMediaElement(false)
     , m_timer(this, &MediaKeys::timerFired)
@@ -153,14 +150,14 @@ ScriptPromise MediaKeys::setServerCertificate(ScriptState* scriptState, const DO
 
     // 3. Let certificate be a copy of the contents of the serverCertificate
     //    parameter.
-    RefPtr<DOMArrayBuffer> serverCertificateBuffer = DOMArrayBuffer::create(serverCertificate.data(), serverCertificate.byteLength());
+    DOMArrayBuffer* serverCertificateBuffer = DOMArrayBuffer::create(serverCertificate.data(), serverCertificate.byteLength());
 
     // 4. Let promise be a new promise.
     SimpleContentDecryptionModuleResultPromise* result = new SimpleContentDecryptionModuleResultPromise(scriptState);
     ScriptPromise promise = result->promise();
 
     // 5. Run the following steps asynchronously (documented in timerFired()).
-    m_pendingActions.append(PendingAction::CreatePendingSetServerCertificate(result, serverCertificateBuffer.release()));
+    m_pendingActions.append(PendingAction::CreatePendingSetServerCertificate(result, serverCertificateBuffer));
     if (!m_timer.isActive())
         m_timer.startOneShot(0, BLINK_FROM_HERE);
 

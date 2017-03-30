@@ -17,7 +17,9 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -43,7 +45,6 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_prefs.h"
-#include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/data_usage/core/data_use_aggregator.h"
 #include "components/data_usage/core/data_use_amortizer.h"
 #include "components/data_usage/core/data_use_annotator.h"
@@ -60,14 +61,12 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/user_agent.h"
-#include "net/base/external_estimate_provider.h"
 #include "net/base/host_mapping_rules.h"
-#include "net/base/network_quality_estimator.h"
+#include "net/base/logging_network_change_observer.h"
 #include "net/base/sdch_manager.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/cert_verify_proc.h"
 #include "net/cert/ct_known_logs.h"
-#include "net/cert/ct_known_logs_static.h"
 #include "net/cert/ct_log_verifier.h"
 #include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/ct_verifier.h"
@@ -83,6 +82,8 @@
 #include "net/http/http_auth_preferences.h"
 #include "net/http/http_network_layer.h"
 #include "net/http/http_server_properties_impl.h"
+#include "net/nqe/external_estimate_provider.h"
+#include "net/nqe/network_quality_estimator.h"
 #include "net/proxy/proxy_config_service.h"
 #include "net/proxy/proxy_script_fetcher_impl.h"
 #include "net/proxy/proxy_service.h"
@@ -125,6 +126,11 @@
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/net/cert_verify_proc_chromeos.h"
 #include "chromeos/network/host_resolver_impl_chromeos.h"
+#endif
+
+#if defined(OS_ANDROID) && defined(ARCH_CPU_ARMEL)
+#include <openssl/cpu.h>
+#include "crypto/openssl_util.h"
 #endif
 
 using content::BrowserThread;
@@ -204,7 +210,7 @@ base::FilePath GetSSLKeyLogFile(const base::CommandLine& command_line) {
     LOG(WARNING) << "ssl-key-log-file argument missing";
   }
 
-  scoped_ptr<base::Environment> env(base::Environment::Create());
+  std::unique_ptr<base::Environment> env(base::Environment::Create());
   std::string path_str;
   env->GetVar("SSLKEYLOGFILE", &path_str);
 #if defined(OS_WIN)
@@ -233,7 +239,8 @@ class SystemURLRequestContext : public net::URLRequestContext {
   }
 };
 
-scoped_ptr<net::HostResolver> CreateGlobalHostResolver(net::NetLog* net_log) {
+std::unique_ptr<net::HostResolver> CreateGlobalHostResolver(
+    net::NetLog* net_log) {
   TRACE_EVENT0("startup", "IOThread::CreateGlobalHostResolver");
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
@@ -253,7 +260,7 @@ scoped_ptr<net::HostResolver> CreateGlobalHostResolver(net::NetLog* net_log) {
     }
   }
 
-  scoped_ptr<net::HostResolver> global_host_resolver;
+  std::unique_ptr<net::HostResolver> global_host_resolver;
 #if defined OS_CHROMEOS
   global_host_resolver =
       chromeos::HostResolverImplChromeOS::CreateSystemResolver(options,
@@ -269,7 +276,7 @@ scoped_ptr<net::HostResolver> CreateGlobalHostResolver(net::NetLog* net_log) {
   if (!command_line.HasSwitch(switches::kHostResolverRules))
     return global_host_resolver;
 
-  scoped_ptr<net::MappedHostResolver> remapped_resolver(
+  std::unique_ptr<net::MappedHostResolver> remapped_resolver(
       new net::MappedHostResolver(std::move(global_host_resolver)));
   remapped_resolver->SetRulesFromString(
       command_line.GetSwitchValueASCII(switches::kHostResolverRules));
@@ -299,64 +306,6 @@ const std::string& GetVariationParam(
 }
 
 }  // namespace
-
-class IOThread::LoggingNetworkChangeObserver
-    : public net::NetworkChangeNotifier::IPAddressObserver,
-      public net::NetworkChangeNotifier::ConnectionTypeObserver,
-      public net::NetworkChangeNotifier::NetworkChangeObserver {
- public:
-  // |net_log| must remain valid throughout our lifetime.
-  explicit LoggingNetworkChangeObserver(net::NetLog* net_log)
-      : net_log_(net_log) {
-    net::NetworkChangeNotifier::AddIPAddressObserver(this);
-    net::NetworkChangeNotifier::AddConnectionTypeObserver(this);
-    net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
-  }
-
-  ~LoggingNetworkChangeObserver() override {
-    net::NetworkChangeNotifier::RemoveIPAddressObserver(this);
-    net::NetworkChangeNotifier::RemoveConnectionTypeObserver(this);
-    net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
-  }
-
-  // NetworkChangeNotifier::IPAddressObserver implementation.
-  void OnIPAddressChanged() override {
-    VLOG(1) << "Observed a change to the network IP addresses";
-
-    net_log_->AddGlobalEntry(net::NetLog::TYPE_NETWORK_IP_ADDRESSES_CHANGED);
-  }
-
-  // NetworkChangeNotifier::ConnectionTypeObserver implementation.
-  void OnConnectionTypeChanged(
-      net::NetworkChangeNotifier::ConnectionType type) override {
-    std::string type_as_string =
-        net::NetworkChangeNotifier::ConnectionTypeToString(type);
-
-    VLOG(1) << "Observed a change to network connectivity state "
-            << type_as_string;
-
-    net_log_->AddGlobalEntry(
-        net::NetLog::TYPE_NETWORK_CONNECTIVITY_CHANGED,
-        net::NetLog::StringCallback("new_connection_type", &type_as_string));
-  }
-
-  // NetworkChangeNotifier::NetworkChangeObserver implementation.
-  void OnNetworkChanged(
-      net::NetworkChangeNotifier::ConnectionType type) override {
-    std::string type_as_string =
-        net::NetworkChangeNotifier::ConnectionTypeToString(type);
-
-    VLOG(1) << "Observed a network change to state " << type_as_string;
-
-    net_log_->AddGlobalEntry(
-        net::NetLog::TYPE_NETWORK_CHANGED,
-        net::NetLog::StringCallback("new_connection_type", &type_as_string));
-  }
-
- private:
-  net::NetLog* net_log_;
-  DISALLOW_COPY_AND_ASSIGN(LoggingNetworkChangeObserver);
-};
 
 class SystemURLRequestContextGetter : public net::URLRequestContextGetter {
  public:
@@ -411,7 +360,8 @@ SystemRequestContextLeakChecker::~SystemRequestContextLeakChecker() {
     globals_->system_request_context->AssertNoURLRequests();
 }
 
-IOThread::Globals::Globals() : system_request_context_leak_checker(this) {}
+IOThread::Globals::Globals() : system_request_context_leak_checker(this),
+                               enable_brotli(false) {}
 
 IOThread::Globals::~Globals() {}
 
@@ -491,6 +441,10 @@ IOThread::IOThread(
   quick_check_enabled_.Init(prefs::kQuickCheckEnabled,
                             local_state);
   quick_check_enabled_.MoveToThread(io_thread_proxy);
+
+  pac_https_url_stripping_enabled_.Init(prefs::kPacHttpsUrlStrippingEnabled,
+                                        local_state);
+  pac_https_url_stripping_enabled_.MoveToThread(io_thread_proxy);
 
   is_spdy_allowed_by_policy_ =
       policy_service
@@ -591,7 +545,7 @@ void IOThread::Init() {
   // Assuming NetworkChangeNotifier dispatches in FIFO order, we should be
   // logging the network change before other IO thread consumers respond to it.
   network_change_observer_.reset(
-      new LoggingNetworkChangeObserver(net_log_));
+      new net::LoggingNetworkChangeObserver(net_log_));
 
   // Setup the HistogramWatcher to run on the IO thread.
   net::NetworkChangeNotifier::InitHistogramWatcher();
@@ -601,13 +555,13 @@ void IOThread::Init() {
       extension_event_router_forwarder_;
 #endif
 
-  scoped_ptr<data_usage::DataUseAmortizer> data_use_amortizer;
+  std::unique_ptr<data_usage::DataUseAmortizer> data_use_amortizer;
 #if BUILDFLAG(ANDROID_JAVA_UI)
   data_use_amortizer.reset(new data_usage::android::TrafficStatsAmortizer());
 #endif
 
   globals_->data_use_aggregator.reset(new data_usage::DataUseAggregator(
-      scoped_ptr<data_usage::DataUseAnnotator>(
+      std::unique_ptr<data_usage::DataUseAnnotator>(
           new chrome_browser_data_usage::TabIdAnnotator()),
       std::move(data_use_amortizer)));
 
@@ -616,7 +570,7 @@ void IOThread::Init() {
   tracked_objects::ScopedTracker tracking_profile3(
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
           "466432 IOThread::InitAsync::ChromeNetworkDelegate"));
-  scoped_ptr<ChromeNetworkDelegate> chrome_network_delegate(
+  std::unique_ptr<ChromeNetworkDelegate> chrome_network_delegate(
       new ChromeNetworkDelegate(extension_event_router_forwarder(),
                                 &system_enable_referrers_,
                                 metrics_data_use_forwarder_));
@@ -645,7 +599,7 @@ void IOThread::Init() {
   variations::GetVariationParams(kNetworkQualityEstimatorFieldTrialName,
                                  &network_quality_estimator_params);
 
-  scoped_ptr<net::ExternalEstimateProvider> external_estimate_provider;
+  std::unique_ptr<net::ExternalEstimateProvider> external_estimate_provider;
 #if BUILDFLAG(ANDROID_JAVA_UI)
   external_estimate_provider.reset(
       new chrome::android::ExternalEstimateProviderAndroid());
@@ -801,7 +755,7 @@ void IOThread::Init() {
           switches::kEnableUserAlternateProtocolPorts)) {
     params_.enable_user_alternate_protocol_ports = true;
   }
-  params_.enable_brotli =
+  globals_->enable_brotli =
       base::FeatureList::IsEnabled(features::kBrotliEncoding);
   params_.enable_token_binding =
       base::FeatureList::IsEnabled(features::kTokenBinding);
@@ -858,6 +812,13 @@ void IOThread::Init() {
                           FROM_HERE,
                           base::Bind(&IOThread::InitSystemRequestContext,
                                      weak_factory_.GetWeakPtr()));
+
+#if defined(OS_ANDROID) && defined(ARCH_CPU_ARMEL)
+  // Record how common CPUs with broken NEON units are. See
+  // https://crbug.com/341598.
+  crypto::EnsureOpenSSLInit();
+  UMA_HISTOGRAM_BOOLEAN("Net.HasBrokenNEON", CRYPTO_has_broken_NEON());
+#endif
 }
 
 void IOThread::CleanUp() {
@@ -1042,8 +1003,7 @@ void IOThread::NetworkSessionConfigurator::ConfigureAltSvcParams(
     const base::CommandLine& command_line,
     base::StringPiece altsvc_trial_group,
     net::HttpNetworkSession::Params* params) {
-  if (command_line.HasSwitch(switches::kEnableAlternativeServices) ||
-      altsvc_trial_group.starts_with(kAltSvcFieldTrialEnabledPrefix)) {
+  if (altsvc_trial_group.starts_with(kAltSvcFieldTrialEnabledPrefix)) {
     params->parse_alternative_services = true;
     return;
   }
@@ -1093,6 +1053,7 @@ void IOThread::RegisterPrefs(PrefRegistrySimple* registry) {
   data_reduction_proxy::RegisterPrefs(registry);
   registry->RegisterBooleanPref(prefs::kBuiltInDnsClientEnabled, true);
   registry->RegisterBooleanPref(prefs::kQuickCheckEnabled, true);
+  registry->RegisterBooleanPref(prefs::kPacHttpsUrlStrippingEnabled, true);
 }
 
 void IOThread::UpdateServerWhitelist() {
@@ -1161,13 +1122,6 @@ base::TimeTicks IOThread::creation_time() const {
 }
 
 // static
-bool IOThread::ShouldEnableQuicForDataReductionProxy() {
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-  return NetworkSessionConfigurator::ShouldEnableQuicForDataReductionProxy(
-      command_line);
-}
-
 net::SSLConfigService* IOThread::GetSSLConfigService() {
   return ssl_config_service_manager_->Get();
 }
@@ -1210,7 +1164,7 @@ void IOThread::InitSystemRequestContextOnIOThread() {
       net_log_, globals_->proxy_script_fetcher_context.get(),
       globals_->system_network_delegate.get(),
       std::move(system_proxy_config_service_), command_line,
-      quick_check_enabled_.GetValue());
+      WpadQuickCheckEnabled(), PacHttpsUrlStrippingEnabled());
 
   globals_->system_request_context.reset(
       ConstructSystemRequestContext(globals_, params_, net_log_));
@@ -1231,16 +1185,10 @@ void IOThread::NetworkSessionConfigurator::ConfigureQuicParams(
                                          is_quic_allowed_by_policy);
   params->disable_quic_on_timeout_with_open_streams =
       ShouldDisableQuicWhenConnectionTimesOutWithOpenStreams(quic_trial_params);
-  params->enable_quic_for_proxies = ShouldEnableQuicForProxies(
-      command_line, quic_trial_group, is_quic_allowed_by_policy);
 
-  if (ShouldQuicEnableAlternativeServicesForDifferentHost(command_line,
-                                                          quic_trial_params)) {
-    params->enable_alternative_service_with_different_host = true;
-    params->parse_alternative_services = true;
-  } else {
-    params->enable_alternative_service_with_different_host = false;
-  }
+  params->enable_alternative_service_with_different_host =
+      ShouldQuicEnableAlternativeServicesForDifferentHost(command_line,
+                                                          quic_trial_params);
 
   if (params->enable_quic) {
     params->quic_always_require_handshake_confirmation =
@@ -1356,26 +1304,6 @@ bool IOThread::NetworkSessionConfigurator::ShouldEnableQuic(
 }
 
 // static
-bool IOThread::NetworkSessionConfigurator::ShouldEnableQuicForProxies(
-    const base::CommandLine& command_line,
-    base::StringPiece quic_trial_group,
-    bool is_quic_allowed_by_policy) {
-  return ShouldEnableQuic(command_line, quic_trial_group,
-                          is_quic_allowed_by_policy) ||
-         ShouldEnableQuicForDataReductionProxy(command_line);
-}
-
-// static
-bool IOThread::NetworkSessionConfigurator::
-    ShouldEnableQuicForDataReductionProxy(
-        const base::CommandLine& command_line) {
-  if (command_line.HasSwitch(switches::kDisableQuic))
-    return false;
-
-  return data_reduction_proxy::params::IsIncludedInQuicFieldTrial();
-}
-
-// static
 bool IOThread::NetworkSessionConfigurator::ShouldEnableQuicPortSelection(
     const base::CommandLine& command_line) {
   if (command_line.HasSwitch(switches::kDisableQuicPortSelection))
@@ -1472,16 +1400,10 @@ bool IOThread::NetworkSessionConfigurator::
     ShouldQuicEnableAlternativeServicesForDifferentHost(
         const base::CommandLine& command_line,
         const VariationParameters& quic_trial_params) {
-  // TODO(bnc): Remove inaccurately named "use_alternative_services" parameter.
-  return command_line.HasSwitch(switches::kEnableAlternativeServices) ||
-         base::LowerCaseEqualsASCII(
-             GetVariationParam(quic_trial_params, "use_alternative_services"),
-             "true") ||
-         base::LowerCaseEqualsASCII(
-             GetVariationParam(
-                 quic_trial_params,
-                 "enable_alternative_service_with_different_host"),
-             "true");
+  return !base::LowerCaseEqualsASCII(
+      GetVariationParam(quic_trial_params,
+                        "enable_alternative_service_with_different_host"),
+      "false");
 }
 
 // static
@@ -1523,8 +1445,8 @@ int IOThread::NetworkSessionConfigurator::GetQuicSocketReceiveBufferSize(
 // static
 bool IOThread::NetworkSessionConfigurator::ShouldQuicDelayTcpRace(
     const VariationParameters& quic_trial_params) {
-  return base::LowerCaseEqualsASCII(
-      GetVariationParam(quic_trial_params, "delay_tcp_race"), "true");
+  return !base::LowerCaseEqualsASCII(
+      GetVariationParam(quic_trial_params, "disable_delay_tcp_race"), "true");
 }
 
 // static
@@ -1641,6 +1563,14 @@ net::QuicVersion IOThread::NetworkSessionConfigurator::ParseQuicVersion(
   return net::QUIC_VERSION_UNSUPPORTED;
 }
 
+bool IOThread::WpadQuickCheckEnabled() const {
+  return quick_check_enabled_.GetValue();
+}
+
+bool IOThread::PacHttpsUrlStrippingEnabled() const {
+  return pac_https_url_stripping_enabled_.GetValue();
+}
+
 // static
 net::URLRequestContext* IOThread::ConstructSystemRequestContext(
     IOThread::Globals* globals,
@@ -1675,6 +1605,8 @@ net::URLRequestContext* IOThread::ConstructSystemRequestContext(
 
   context->set_http_server_properties(
       globals->http_server_properties->GetWeakPtr());
+
+  context->set_enable_brotli(globals->enable_brotli);
 
   net::HttpNetworkSession::Params system_params(params);
   net::URLRequestContextBuilder::SetHttpNetworkSessionComponents(
@@ -1725,6 +1657,8 @@ net::URLRequestContext* IOThread::ConstructProxyScriptFetcherContext(
   context->set_http_server_properties(
       globals->http_server_properties->GetWeakPtr());
 
+  context->set_enable_brotli(globals->enable_brotli);
+
   net::HttpNetworkSession::Params session_params(params);
   net::URLRequestContextBuilder::SetHttpNetworkSessionComponents(
       context, &session_params);
@@ -1747,14 +1681,14 @@ net::URLRequestContext* IOThread::ConstructProxyScriptFetcherContext(
   context->set_http_transaction_factory(
       globals->proxy_script_fetcher_http_transaction_factory.get());
 
-  scoped_ptr<net::URLRequestJobFactoryImpl> job_factory(
+  std::unique_ptr<net::URLRequestJobFactoryImpl> job_factory(
       new net::URLRequestJobFactoryImpl());
 
   job_factory->SetProtocolHandler(
-      url::kDataScheme, make_scoped_ptr(new net::DataProtocolHandler()));
+      url::kDataScheme, base::WrapUnique(new net::DataProtocolHandler()));
   job_factory->SetProtocolHandler(
       url::kFileScheme,
-      make_scoped_ptr(new net::FileProtocolHandler(
+      base::WrapUnique(new net::FileProtocolHandler(
           content::BrowserThread::GetBlockingPool()
               ->GetTaskRunnerWithShutdownBehavior(
                   base::SequencedWorkerPool::SKIP_ON_SHUTDOWN))));
@@ -1763,7 +1697,7 @@ net::URLRequestContext* IOThread::ConstructProxyScriptFetcherContext(
       new net::FtpNetworkLayer(globals->host_resolver.get()));
   job_factory->SetProtocolHandler(
       url::kFtpScheme,
-      make_scoped_ptr(new net::FtpProtocolHandler(
+      base::WrapUnique(new net::FtpProtocolHandler(
           globals->proxy_script_fetcher_ftp_transaction_factory.get())));
 #endif
   globals->proxy_script_fetcher_url_request_job_factory =

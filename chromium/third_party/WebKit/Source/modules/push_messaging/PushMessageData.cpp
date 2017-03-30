@@ -7,7 +7,7 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/V8Binding.h"
-#include "bindings/modules/v8/UnionTypesModules.h"
+#include "bindings/modules/v8/ArrayBufferOrArrayBufferViewOrUSVString.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/fileapi/Blob.h"
 #include "platform/blob/BlobData.h"
@@ -29,7 +29,7 @@ PushMessageData* PushMessageData::create(const String& messageString)
 PushMessageData* PushMessageData::create(const ArrayBufferOrArrayBufferViewOrUSVString& messageData)
 {
     if (messageData.isArrayBuffer() || messageData.isArrayBufferView()) {
-        RefPtr<DOMArrayBuffer> buffer = messageData.isArrayBufferView()
+        DOMArrayBuffer* buffer = messageData.isArrayBufferView()
             ? messageData.getAsArrayBufferView()->buffer()
             : messageData.getAsArrayBuffer();
 
@@ -54,7 +54,7 @@ PushMessageData::~PushMessageData()
 {
 }
 
-PassRefPtr<DOMArrayBuffer> PushMessageData::arrayBuffer() const
+DOMArrayBuffer* PushMessageData::arrayBuffer() const
 {
     return DOMArrayBuffer::create(m_data.data(), m_data.size());
 }
@@ -68,7 +68,7 @@ Blob* PushMessageData::blob() const
     // provided, following the specification.
 
     const long long byteLength = blobData->length();
-    return Blob::create(BlobDataHandle::create(blobData.release(), byteLength));
+    return Blob::create(BlobDataHandle::create(std::move(blobData), byteLength));
 }
 
 ScriptValue PushMessageData::json(ScriptState* scriptState, ExceptionState& exceptionState) const

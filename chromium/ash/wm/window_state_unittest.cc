@@ -2,18 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/wm/window_state.h"
+#include "ash/wm/common/window_state.h"
 
 #include <utility>
 
 #include "ash/screen_util.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/wm/window_state.h"
-#include "ash/wm/wm_event.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/common/wm_event.h"
+#include "ash/wm/window_state_aura.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window.h"
-#include "ui/gfx/screen.h"
+#include "ui/display/screen.h"
 
 namespace ash {
 namespace wm {
@@ -58,7 +59,7 @@ TEST_F(WindowStateTest, SnapWindowBasic) {
 
   UpdateDisplay("0+0-500x400, 0+500-600x400");
   const gfx::Rect kPrimaryDisplayWorkAreaBounds =
-      gfx::Screen::GetScreen()->GetPrimaryDisplay().work_area();
+      display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
   const gfx::Rect kSecondaryDisplayWorkAreaBounds =
       ScreenUtil::GetSecondaryDisplay().work_area();
 
@@ -105,7 +106,7 @@ TEST_F(WindowStateTest, SnapWindowMinimumSize) {
 
   UpdateDisplay("0+0-600x900");
   const gfx::Rect kWorkAreaBounds =
-      gfx::Screen::GetScreen()->GetPrimaryDisplay().work_area();
+      display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
 
   aura::test::TestWindowDelegate delegate;
   std::unique_ptr<aura::Window> window(CreateTestWindowInShellWithDelegate(
@@ -171,7 +172,7 @@ TEST_F(WindowStateTest, TestIgnoreTooBigMinimumSize) {
 
   UpdateDisplay("0+0-1024x768");
   const gfx::Size work_area_size =
-      gfx::Screen::GetScreen()->GetPrimaryDisplay().work_area().size();
+      display::Screen::GetScreen()->GetPrimaryDisplay().work_area().size();
   const gfx::Size illegal_size(1280, 960);
   const gfx::Rect illegal_bounds(gfx::Point(0, 0), illegal_size);
 
@@ -202,7 +203,7 @@ TEST_F(WindowStateTest, SnapWindowSetBounds) {
 
   UpdateDisplay("0+0-900x600");
   const gfx::Rect kWorkAreaBounds =
-      gfx::Screen::GetScreen()->GetPrimaryDisplay().work_area();
+      display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
 
   std::unique_ptr<aura::Window> window(
       CreateTestWindowInShellWithBounds(gfx::Rect(100, 100, 100, 100)));
@@ -278,7 +279,7 @@ TEST_F(WindowStateTest, AutoManaged) {
   window_state->OnWMEvent(&snap_right);
 
   const gfx::Rect kWorkAreaBounds =
-      gfx::Screen::GetScreen()->GetPrimaryDisplay().work_area();
+      display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
   gfx::Rect expected_snapped_bounds(
       kWorkAreaBounds.x() + kWorkAreaBounds.width() / 2,
       kWorkAreaBounds.y(),
@@ -322,7 +323,7 @@ TEST_F(WindowStateTest, RestoredWindowBoundsShrink) {
   WindowState* window_state = GetWindowState(window.get());
   EXPECT_FALSE(window_state->IsMaximized());
   gfx::Rect work_area =
-      gfx::Screen::GetScreen()->GetPrimaryDisplay().work_area();
+      display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
 
   window->SetBounds(work_area);
   window_state->Maximize();

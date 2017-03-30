@@ -54,6 +54,7 @@ import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwContentsStatics;
 import org.chromium.android_webview.AwPrintDocumentAdapter;
 import org.chromium.android_webview.AwSettings;
+import org.chromium.android_webview.ResourcesContextWrapperFactory;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.content.browser.SmartClipProvider;
@@ -268,8 +269,8 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
                 || mAppTargetSdkVersion < Build.VERSION_CODES.LOLLIPOP);
 
         mAwContents = new AwContents(mFactory.getBrowserContext(), mWebView, mContext,
-                new InternalAccessAdapter(), new WebViewNativeGLDelegate(), mContentsClientAdapter,
-                mWebSettings.getAwSettings());
+                new InternalAccessAdapter(), new WebViewNativeDrawGLFunctorFactory(),
+                mContentsClientAdapter, mWebSettings.getAwSettings());
 
         if (mAppTargetSdkVersion >= Build.VERSION_CODES.KITKAT) {
             // On KK and above, favicons are automatically downloaded as the method
@@ -2194,30 +2195,12 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
         checkThread();
         return new AwPrintDocumentAdapter(mAwContents.getPdfExporter(), documentName);
     }
-
-    // AwContents.NativeGLDelegate implementation --------------------------------------
-    private class WebViewNativeGLDelegate implements AwContents.NativeGLDelegate {
+    // AwContents.NativeDrawGLFunctorFactory implementation ----------------------------------
+    private class WebViewNativeDrawGLFunctorFactory
+            implements AwContents.NativeDrawGLFunctorFactory {
         @Override
-        public boolean supportsDrawGLFunctorReleasedCallback() {
-            return DrawGLFunctor.supportsDrawGLFunctorReleasedCallback();
-        }
-
-        @Override
-        public boolean requestDrawGL(Canvas canvas, boolean waitForCompletion, View containerView,
-                Runnable releasedCallback) {
-            if (mGLfunctor == null) {
-                mGLfunctor = new DrawGLFunctor(
-                        mAwContents.getAwDrawGLViewContext(), mFactory.getWebViewDelegate());
-            }
-            return mGLfunctor.requestDrawGL(
-                    canvas, containerView, waitForCompletion, releasedCallback);
-        }
-
-        @Override
-        public void detachGLFunctor() {
-            if (mGLfunctor != null) {
-                mGLfunctor.detach();
-            }
+        public AwContents.NativeDrawGLFunctor createFunctor(long context) {
+            return new DrawGLFunctor(context, mFactory.getWebViewDelegate());
         }
     }
 

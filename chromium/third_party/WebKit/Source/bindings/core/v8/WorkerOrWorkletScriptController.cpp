@@ -46,7 +46,6 @@
 #include "core/inspector/MainThreadDebugger.h"
 #include "core/inspector/WorkerThreadDebugger.h"
 #include "core/workers/MainThreadWorkletGlobalScope.h"
-#include "core/workers/WorkerObjectProxy.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
 #include "core/workers/WorkerThread.h"
 #include "platform/heap/ThreadState.h"
@@ -102,7 +101,7 @@ public:
     ExecutionState* m_outerState;
 };
 
-RawPtr<WorkerOrWorkletScriptController> WorkerOrWorkletScriptController::create(WorkerOrWorkletGlobalScope* globalScope, v8::Isolate* isolate)
+WorkerOrWorkletScriptController* WorkerOrWorkletScriptController::create(WorkerOrWorkletGlobalScope* globalScope, v8::Isolate* isolate)
 {
     return new WorkerOrWorkletScriptController(globalScope, isolate);
 }
@@ -156,7 +155,19 @@ bool WorkerOrWorkletScriptController::initializeContextIfNeeded()
     if (isContextInitialized())
         return true;
 
-    v8::Local<v8::Context> context = v8::Context::New(m_isolate);
+    // Create a new v8::Context with the worker/worklet as the global object
+    // (aka the inner global).
+    ScriptWrappable* scriptWrappable = m_globalScope->getScriptWrappable();
+    const WrapperTypeInfo* wrapperTypeInfo = scriptWrappable->wrapperTypeInfo();
+    v8::Local<v8::FunctionTemplate> globalInterfaceTemplate = wrapperTypeInfo->domTemplate(m_isolate, *m_world);
+    if (globalInterfaceTemplate.IsEmpty())
+        return false;
+    v8::Local<v8::ObjectTemplate> globalTemplate = globalInterfaceTemplate->InstanceTemplate();
+    v8::Local<v8::Context> context;
+    {
+        V8PerIsolateData::UseCounterDisabledScope useCounterDisabled(V8PerIsolateData::from(m_isolate));
+        context = v8::Context::New(m_isolate, nullptr, globalTemplate);
+    }
     if (context.IsEmpty())
         return false;
 
@@ -172,24 +183,13 @@ bool WorkerOrWorkletScriptController::initializeContextIfNeeded()
             debugger->contextCreated(context);
     }
 
-    // Create a new JS object and use it as the prototype for the shadow global object.
-    const WrapperTypeInfo* wrapperTypeInfo = m_globalScope->getScriptWrappable()->wrapperTypeInfo();
+    // The global proxy object.  Note this is not the global object.
+    v8::Local<v8::Object> globalProxy = context->Global();
+    // The global object, aka worker/worklet wrapper object.
+    v8::Local<v8::Object> globalObject = globalProxy->GetPrototype().As<v8::Object>();
+    globalObject = V8DOMWrapper::associateObjectWithWrapper(m_isolate, scriptWrappable, wrapperTypeInfo, globalObject);
 
-    v8::Local<v8::Function> globalScopeConstructor = m_scriptState->perContextData()->constructorForType(wrapperTypeInfo);
-    if (globalScopeConstructor.IsEmpty())
-        return false;
-
-    v8::Local<v8::Object> jsGlobalScope;
-    if (!V8ObjectConstructor::newInstance(m_isolate, globalScopeConstructor).ToLocal(&jsGlobalScope)) {
-        disposeContextIfNeeded();
-        return false;
-    }
-
-    jsGlobalScope = V8DOMWrapper::associateObjectWithWrapper(m_isolate, m_globalScope->getScriptWrappable(), wrapperTypeInfo, jsGlobalScope);
-
-    // Insert the object instance as the prototype of the shadow object.
-    v8::Local<v8::Object> globalObject = v8::Local<v8::Object>::Cast(m_scriptState->context()->Global()->GetPrototype());
-    return v8CallBoolean(globalObject->SetPrototype(context, jsGlobalScope));
+    return true;
 }
 
 ScriptValue WorkerOrWorkletScriptController::evaluate(const CompressibleString& script, const String& fileName, const TextPosition& scriptStartPosition, CachedMetadataHandler* cacheHandler, V8CacheOptions v8CacheOptions)
@@ -267,7 +267,7 @@ bool WorkerOrWorkletScriptController::evaluate(const ScriptSourceCode& sourceCod
             V8ErrorHandler::storeExceptionOnErrorEventWrapper(m_scriptState.get(), *errorEvent, state.exception.v8Value(), m_scriptState->context()->Global());
         } else {
             ASSERT(!m_globalScope->shouldSanitizeScriptError(state.sourceURL, NotSharableCrossOrigin));
-            RawPtr<ErrorEvent> event = nullptr;
+            ErrorEvent* event = nullptr;
             if (state.m_errorEventFromImportedScript)
                 event = state.m_errorEventFromImportedScript.release();
             else
@@ -312,7 +312,7 @@ void WorkerOrWorkletScriptController::disableEval(const String& errorMessage)
     m_disableEvalPending = errorMessage;
 }
 
-void WorkerOrWorkletScriptController::rethrowExceptionFromImportedScript(RawPtr<ErrorEvent> errorEvent, ExceptionState& exceptionState)
+void WorkerOrWorkletScriptController::rethrowExceptionFromImportedScript(ErrorEvent* errorEvent, ExceptionState& exceptionState)
 {
     const String& errorMessage = errorEvent->message();
     if (m_executionState)

@@ -4,13 +4,15 @@
 
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings.h"
 
+#include <memory>
 #include <string>
 #include <utility>
 
 #include "base/base64.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -69,13 +71,14 @@ bool ContainsDataReductionProxyDefaultHostSuffix(
 // Extract the embedded PAC script from the given |pac_url|, and store the
 // extracted script in |pac_script|. Returns true if extraction was successful,
 // otherwise returns false. |pac_script| must not be NULL.
-bool GetEmbeddedPacScript(const std::string& pac_url, std::string* pac_script) {
+bool GetEmbeddedPacScript(base::StringPiece pac_url, std::string* pac_script) {
   DCHECK(pac_script);
-  const std::string kPacURLPrefix =
+  static const char kPacURLPrefix[] =
       "data:application/x-ns-proxy-autoconfig;base64,";
   return base::StartsWith(pac_url, kPacURLPrefix,
                           base::CompareCase::SENSITIVE) &&
-         base::Base64Decode(pac_url.substr(kPacURLPrefix.size()), pac_script);
+         base::Base64Decode(pac_url.substr(arraysize(kPacURLPrefix) - 1),
+                            pac_script);
 }
 
 }  // namespace
@@ -186,7 +189,7 @@ void DataReductionProxyChromeSettings::InitDataReductionProxySettings(
     data_reduction_proxy::DataReductionProxyIOData* io_data,
     PrefService* profile_prefs,
     net::URLRequestContextGetter* request_context_getter,
-    scoped_ptr<data_reduction_proxy::DataStore> store,
+    std::unique_ptr<data_reduction_proxy::DataStore> store,
     const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner,
     const scoped_refptr<base::SequencedTaskRunner>& db_task_runner) {
 #if defined(OS_ANDROID)
@@ -200,8 +203,8 @@ void DataReductionProxyChromeSettings::InitDataReductionProxySettings(
   base::TimeDelta commit_delay = base::TimeDelta::FromMinutes(60);
 #endif
 
-  scoped_ptr<data_reduction_proxy::DataReductionProxyService> service =
-      make_scoped_ptr(new data_reduction_proxy::DataReductionProxyService(
+  std::unique_ptr<data_reduction_proxy::DataReductionProxyService> service =
+      base::WrapUnique(new data_reduction_proxy::DataReductionProxyService(
           this, profile_prefs, request_context_getter, std::move(store),
           ui_task_runner, io_data->io_task_runner(), db_task_runner,
           commit_delay));

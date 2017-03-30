@@ -11,7 +11,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/renderer/pepper/host_array_buffer_var.h"
 #include "content/renderer/pepper/pepper_plugin_instance_impl.h"
 #include "content/renderer/pepper/pepper_try_catch.h"
@@ -372,7 +372,7 @@ void MessageChannel::PostMessageToJavaScriptImpl(
   //     TODO(dmichael):  Add origin if we change to a more iframe-like origin
   //                      policy (see crbug.com/81537)
   WebDOMMessageEvent msg_event(message_data);
-  container->element().dispatchEvent(msg_event);
+  container->enqueueMessageEvent(msg_event);
 }
 
 PluginObject* MessageChannel::GetPluginObject(v8::Isolate* isolate) {

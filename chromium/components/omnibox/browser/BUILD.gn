@@ -50,6 +50,7 @@ source_set("browser") {
     "keyword_extensions_delegate.h",
     "keyword_provider.cc",
     "keyword_provider.h",
+    "match_compare.h",
     "omnibox_client.h",
     "omnibox_controller.cc",
     "omnibox_controller.h",
@@ -190,6 +191,21 @@ static_library("test_support") {
   ]
 }
 
+bundle_data("unit_tests_bundle_data") {
+  visibility = [ ":unit_tests" ]
+  testonly = true
+  sources = [
+    "//components/test/data/omnibox/Shortcuts.no_fill_into_edit.sql",
+    "//components/test/data/omnibox/Shortcuts.v0.sql",
+    "//components/test/data/omnibox/in_memory_url_index_test.db.txt",
+    "//components/test/data/omnibox/in_memory_url_index_test_limited.db.txt",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/" +
+        "{{source_root_relative_dir}}/{{source_file_part}}",
+  ]
+}
+
 source_set("unit_tests") {
   testonly = true
   sources = [
@@ -216,12 +232,14 @@ source_set("unit_tests") {
     "shortcuts_database_unittest.cc",
     "shortcuts_provider_unittest.cc",
     "suggestion_answer_unittest.cc",
+    "url_prefix_unittest.cc",
     "zero_suggest_provider_unittest.cc",
   ]
 
   deps = [
     ":browser",
     ":test_support",
+    ":unit_tests_bundle_data",
     "//base",
     "//base/test:test_support",
     "//components/bookmarks/browser",

@@ -51,7 +51,7 @@ class RenderWidgetHostViewGuestTest : public testing::Test {
   void SetUp() override {
 #if !defined(OS_ANDROID)
     ImageTransportFactory::InitializeForUnitTests(
-        scoped_ptr<ImageTransportFactory>(
+        std::unique_ptr<ImageTransportFactory>(
             new NoTransportImageTransportFactory));
 #endif
     browser_context_.reset(new TestBrowserContext);
@@ -81,7 +81,7 @@ class RenderWidgetHostViewGuestTest : public testing::Test {
 
  protected:
   base::MessageLoopForUI message_loop_;
-  scoped_ptr<BrowserContext> browser_context_;
+  std::unique_ptr<BrowserContext> browser_context_;
   MockRenderWidgetHostDelegate delegate_;
 
   // Tests should set these to NULL if they've already triggered their
@@ -138,7 +138,6 @@ class TestBrowserPluginGuest : public BrowserPluginGuest {
   cc::SurfaceId last_surface_id_received_;
   gfx::Size last_frame_size_received_;
   float last_scale_factor_received_;
-  float update_scale_factor_received_;
 };
 
 // TODO(wjmaclean): we should restructure RenderWidgetHostViewChildFrameTest to
@@ -154,7 +153,7 @@ class RenderWidgetHostViewGuestSurfaceTest
   void SetUp() override {
 #if !defined(OS_ANDROID)
     ImageTransportFactory::InitializeForUnitTests(
-        scoped_ptr<ImageTransportFactory>(
+        std::unique_ptr<ImageTransportFactory>(
             new NoTransportImageTransportFactory));
 #endif
     browser_context_.reset(new TestBrowserContext);
@@ -195,10 +194,10 @@ class RenderWidgetHostViewGuestSurfaceTest
 
  protected:
   TestBrowserThreadBundle thread_bundle_;
-  scoped_ptr<BrowserContext> browser_context_;
+  std::unique_ptr<BrowserContext> browser_context_;
   MockRenderWidgetHostDelegate delegate_;
   BrowserPluginGuestDelegate browser_plugin_guest_delegate_;
-  scoped_ptr<TestWebContents> web_contents_;
+  std::unique_ptr<TestWebContents> web_contents_;
   TestBrowserPluginGuest* browser_plugin_guest_;
 
   // Tests should set these to NULL if they've already triggered their
@@ -211,14 +210,15 @@ class RenderWidgetHostViewGuestSurfaceTest
 };
 
 namespace {
-scoped_ptr<cc::CompositorFrame> CreateDelegatedFrame(float scale_factor,
-                                                     gfx::Size size,
-                                                     const gfx::Rect& damage) {
-  scoped_ptr<cc::CompositorFrame> frame(new cc::CompositorFrame);
+std::unique_ptr<cc::CompositorFrame> CreateDelegatedFrame(
+    float scale_factor,
+    gfx::Size size,
+    const gfx::Rect& damage) {
+  std::unique_ptr<cc::CompositorFrame> frame(new cc::CompositorFrame);
   frame->metadata.device_scale_factor = scale_factor;
   frame->delegated_frame_data.reset(new cc::DelegatedFrameData);
 
-  scoped_ptr<cc::RenderPass> pass = cc::RenderPass::Create();
+  std::unique_ptr<cc::RenderPass> pass = cc::RenderPass::Create();
   pass->SetNew(cc::RenderPassId(1, 1), gfx::Rect(size), damage,
                gfx::Transform());
   frame->delegated_frame_data->render_pass_list.push_back(std::move(pass));

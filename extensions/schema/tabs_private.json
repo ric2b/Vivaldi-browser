@@ -48,6 +48,48 @@
             "description": "data-url for the current icon."
           }
         }
+      },
+      {
+        "id": "DragData",
+        "type": "object",
+        "description": "Provides custom drag data.",
+        "properties": {
+          "mimeType": {
+            "type": "string",
+            "description": "The mime type to use for the custom data."
+          },
+          "customData": {
+            "type": "string",
+            "description": "The custom data."
+          },
+          "url": {
+            "type": "string",
+            "description": "The url for the data. Needed for the html5 drag and drop engine. Not set in the onDropEnd event."
+          },
+          "title": {
+            "type": "string",
+            "description": "The title for the data. Needed for the html5 drag and drop engine. Not set in the onDropEnd event."
+          }
+        }
+      },
+      {
+        "id": "DragImage",
+        "type": "object",
+        "description": "Provides a custom drag image with cursor offset.",
+        "properties": {
+          "image": {
+            "type": "string",
+            "description": "Base 64 encoded jpg or png image to be used as the drag image."
+          },
+          "cursorX": {
+            "type": "integer",
+            "description": "X offset into the image for the cursor during drag."
+          },
+          "cursorY": {
+            "type": "integer",
+            "description": "Y offset into the image for the cursor during drag."
+          }
+        }
       }
     ],
     "functions": [
@@ -101,6 +143,46 @@
             "minimum": 0
           }
         ]
+      },
+      {
+        "name": "insertText",
+        "type": "function",
+        "description": "Insert text into editable fields.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 0
+          },
+          {
+            "type": "string",
+            "name": "text",
+            "description": "The text to insert"
+          }
+        ]
+      },
+      {
+        "name": "startDrag",
+        "type": "function",
+        "description": "Starts the HTML5 drag of the given tabs.",
+        "parameters": [
+          {
+            "$ref": "DragData",
+            "name": "dragData",
+            "description": "The drag data to be transported in the dataobject."
+          },
+          {
+            "$ref": "DragImage",
+            "name": "dragImage",
+            "optional": true
+          },
+          {
+            "name": "isFromTouch",
+            "type": "boolean",
+            "optional": true,
+            "description": "True if the drag was initiated from touch. Default is false."
+          }
+        ]
       }
     ],
     "events": [
@@ -147,8 +229,39 @@
             "$ref": "UpdateTabInfo"
           }
         ]
+      },
+      {
+        "name": "onDragEnd",
+        "type": "function",
+        "description": "Fires when tab dragging ends.",
+        "parameters": [
+          {
+            "$ref": "DragData",
+            "name": "dragData",
+            "description": "The drag data that was passed in on drag start"
+          },
+          {
+            "name": "dragAborted",
+            "type": "boolean",
+            "description": "This is an aborted drag (using ESC or similar)."
+          },
+          {
+            "name": "dropOutsideWindow",
+            "type": "boolean",
+            "description": "This is a valid drop outside any app window."
+          },
+          {
+            "name": "posX",
+            "type": "integer",
+            "description": "X position of the drop in screen coordinates."
+          },
+          {
+            "name": "posY",
+            "type": "integer",
+            "description": "Y position of the drop in screen coordinates."
+          }
+        ]
       }
-
     ]
   }
 ]

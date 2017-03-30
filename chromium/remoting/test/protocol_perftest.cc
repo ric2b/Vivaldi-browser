@@ -14,7 +14,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task_runner_util.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "jingle/glue/thread_wrapper.h"
 #include "net/base/test_data_directory.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -420,36 +420,39 @@ class ProtocolPerfTest
     StartHostAndClient(webrtc, protocol::ChannelConfig::CODEC_VP8);
     ASSERT_NO_FATAL_FAILURE(WaitConnected());
 
+    int skipped_frames = 0;
+    while (skipped_frames < 10) {
+      std::unique_ptr<webrtc::DesktopFrame> frame = ReceiveFrame();
+      test::CyclicFrameGenerator::ChangeInfoList changes =
+          frame_generator->GetChangeList(frame.get());
+      skipped_frames += changes.size();
+    }
+
     base::TimeDelta total_latency_big_frames;
     int big_frame_count = 0;
     base::TimeDelta total_latency_small_frames;
     int small_frame_count = 0;
 
-    int last_frame_id = -1;
-    for (int i = 0; i < 30; ++i) {
+    while (big_frame_count + small_frame_count < 30) {
       std::unique_ptr<webrtc::DesktopFrame> frame = ReceiveFrame();
-      test::CyclicFrameGenerator::FrameInfo frame_info =
-          frame_generator->IdentifyFrame(frame.get());
-      base::TimeDelta latency = base::TimeTicks::Now() - frame_info.timestamp;
-
-      if (frame_info.frame_id > last_frame_id) {
-        last_frame_id = frame_info.frame_id;
-
-        switch (frame_info.type) {
-          case test::CyclicFrameGenerator::FrameType::EMPTY:
+      base::TimeTicks frame_received_time = base::TimeTicks::Now();
+      test::CyclicFrameGenerator::ChangeInfoList changes =
+          frame_generator->GetChangeList(frame.get());
+      for (auto& change_info : changes) {
+        base::TimeDelta latency = frame_received_time - change_info.timestamp;
+        switch (change_info.type) {
+          case test::CyclicFrameGenerator::ChangeType::NO_CHANGES:
             NOTREACHED();
             break;
-          case test::CyclicFrameGenerator::FrameType::FULL:
+          case test::CyclicFrameGenerator::ChangeType::FULL:
             total_latency_big_frames += latency;
             ++big_frame_count;
             break;
-          case test::CyclicFrameGenerator::FrameType::CURSOR:
+          case test::CyclicFrameGenerator::ChangeType::CURSOR:
             total_latency_small_frames += latency;
             ++small_frame_count;
             break;
         }
-      } else {
-        LOG(ERROR) << "Unexpected duplicate frame " << frame_info.frame_id;
       }
     }
 

@@ -13,7 +13,7 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "skia/ext/refptr.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "ui/ozone/platform/drm/gpu/drm_device.h"
 
@@ -109,8 +109,6 @@ class MockDrmDevice : public DrmDevice {
                         uint32_t flags,
                         uint32_t crtc_count,
                         const PageFlipCallback& callback) override;
-  bool SetGammaRamp(uint32_t crtc_id,
-                    const std::vector<GammaRampRGBEntry>& lut) override;
   bool SetColorCorrection(uint32_t crtc_id,
                           const std::vector<GammaRampRGBEntry>& degamma_lut,
                           const std::vector<GammaRampRGBEntry>& gamma_lut,

@@ -6,7 +6,8 @@
  * @fileoverview Login UI based on a stripped down OOBE controller.
  */
 
-<include src="login_common.js">
+<include src="login_shared.js">
+<include src="login_non_lock_shared.js">
 <include src="notification_card.js">
 
 cr.define('cr.ui.Oobe', function() {
@@ -16,9 +17,6 @@ cr.define('cr.ui.Oobe', function() {
      * be invoked to do final setup.
      */
     initialize: function() {
-      // TODO(jdufault): Remove this after resolving crbug.com/452599.
-      console.log('Initializing OOBE');
-
       cr.ui.login.DisplayManager.initialize();
       login.WrongHWIDScreen.register();
       login.AccountPickerScreen.register();

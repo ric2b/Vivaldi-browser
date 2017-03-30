@@ -8,7 +8,6 @@
 #define MEDIA_FILTERS_IPC_AUDIO_DECODER_H_
 
 #include "base/lazy_instance.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_checker.h"
 #include "media/base/media_export.h"
@@ -67,7 +66,7 @@ class MEDIA_EXPORT IPCAudioDecoder {
   void DataReady(DemuxerStream::Status status,
                  const scoped_refptr<DecoderBuffer>& buffer);
 
-  scoped_ptr<InMemoryDataSource> data_source_;
+  std::unique_ptr<InMemoryDataSource> data_source_;
 
   int channels_;
   int sample_rate_;
@@ -79,7 +78,7 @@ class MEDIA_EXPORT IPCAudioDecoder {
   AudioBus* audio_bus_;
   int frames_read_;
 
-  scoped_ptr<IPCMediaPipelineHost> ipc_media_pipeline_host_;
+  std::unique_ptr<IPCMediaPipelineHost> ipc_media_pipeline_host_;
   base::WaitableEvent media_task_done_;
 
   base::ThreadChecker thread_checker_;

@@ -22,6 +22,8 @@
 
 #include "core/style/ComputedStyle.h"
 
+#include "core/css/CSSPaintValue.h"
+#include "core/css/CSSPropertyEquality.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/layout/TextAutosizer.h"
@@ -45,6 +47,7 @@
 #include "platform/transforms/ScaleTransformOperation.h"
 #include "platform/transforms/TranslateTransformOperation.h"
 #include "wtf/MathExtras.h"
+#include "wtf/PtrUtil.h"
 
 #include <algorithm>
 
@@ -479,8 +482,8 @@ StyleDifference ComputedStyle::visualInvalidationDiff(const ComputedStyle& other
             diff.setNeedsPositionedMovementLayout();
     }
 
-    if (diffNeedsPaintInvalidationLayer(other))
-        diff.setNeedsPaintInvalidationLayer();
+    if (diffNeedsPaintInvalidationSubtree(other))
+        diff.setNeedsPaintInvalidationSubtree();
     else if (diffNeedsPaintInvalidationObject(other))
         diff.setNeedsPaintInvalidationObject();
 
@@ -533,13 +536,6 @@ bool ComputedStyle::diffNeedsFullLayoutAndPaintInvalidation(const ComputedStyle&
 
         if (rareNonInheritedData->m_flexibleBox.get() != other.rareNonInheritedData->m_flexibleBox.get()
             && *rareNonInheritedData->m_flexibleBox.get() != *other.rareNonInheritedData->m_flexibleBox.get())
-            return true;
-
-        // FIXME: We should add an optimized form of layout that just recomputes visual overflow.
-        if (!rareNonInheritedData->shadowDataEquivalent(*other.rareNonInheritedData.get()))
-            return true;
-
-        if (!rareNonInheritedData->reflectionDataEquivalent(*other.rareNonInheritedData.get()))
             return true;
 
         if (rareNonInheritedData->m_multiCol.get() != other.rareNonInheritedData->m_multiCol.get()
@@ -659,11 +655,6 @@ bool ComputedStyle::diffNeedsFullLayoutAndPaintInvalidation(const ComputedStyle&
     if ((visibility() == COLLAPSE) != (other.visibility() == COLLAPSE))
         return true;
 
-    if (!m_background->outline().visuallyEqual(other.m_background->outline())) {
-        // FIXME: We only really need to recompute the overflow but we don't have an optimized layout for it.
-        return true;
-    }
-
     if (hasPseudoStyle(PseudoIdScrollbar) != other.hasPseudoStyle(PseudoIdScrollbar))
         return true;
 
@@ -707,12 +698,15 @@ bool ComputedStyle::diffNeedsFullLayout(const ComputedStyle& other) const
             || rareNonInheritedData->m_justifyItems != other.rareNonInheritedData->m_justifyItems
             || rareNonInheritedData->m_justifySelf != other.rareNonInheritedData->m_justifySelf)
             return true;
+
+        if (!RuntimeEnabledFeatures::cssBoxReflectFilterEnabled() && !rareNonInheritedData->reflectionDataEquivalent(*other.rareNonInheritedData.get()))
+            return true;
     }
 
     return false;
 }
 
-bool ComputedStyle::diffNeedsPaintInvalidationLayer(const ComputedStyle& other) const
+bool ComputedStyle::diffNeedsPaintInvalidationSubtree(const ComputedStyle& other) const
 {
     if (position() != StaticPosition && (visual->clip != other.visual->clip || visual->hasAutoClip != other.visual->hasAutoClip))
         return true;
@@ -725,6 +719,9 @@ bool ComputedStyle::diffNeedsPaintInvalidationLayer(const ComputedStyle& other) 
         if (rareNonInheritedData->m_mask != other.rareNonInheritedData->m_mask
             || rareNonInheritedData->m_maskBoxImage != other.rareNonInheritedData->m_maskBoxImage)
             return true;
+
+        if (!RuntimeEnabledFeatures::cssBoxReflectFilterEnabled() && !rareNonInheritedData->reflectionDataEquivalent(*other.rareNonInheritedData.get()))
+            return true;
     }
 
     return false;
@@ -732,6 +729,9 @@ bool ComputedStyle::diffNeedsPaintInvalidationLayer(const ComputedStyle& other) 
 
 bool ComputedStyle::diffNeedsPaintInvalidationObject(const ComputedStyle& other) const
 {
+    if (!m_background->outline().visuallyEqual(other.m_background->outline()))
+        return true;
+
     if (inherited_flags._visibility != other.inherited_flags._visibility
         || inherited_flags.m_printColorAdjust != other.inherited_flags.m_printColorAdjust
         || inherited_flags._insideLink != other.inherited_flags._insideLink
@@ -750,6 +750,7 @@ bool ComputedStyle::diffNeedsPaintInvalidationObject(const ComputedStyle& other)
         if (rareNonInheritedData->userDrag != other.rareNonInheritedData->userDrag
             || rareNonInheritedData->m_objectFit != other.rareNonInheritedData->m_objectFit
             || rareNonInheritedData->m_objectPosition != other.rareNonInheritedData->m_objectPosition
+            || !rareNonInheritedData->shadowDataEquivalent(*other.rareNonInheritedData.get())
             || !rareNonInheritedData->shapeOutsideDataEquivalent(*other.rareNonInheritedData.get())
             || !rareNonInheritedData->clipPathDataEquivalent(*other.rareNonInheritedData.get())
             || (visitedLinkBorderLeftColor() != other.visitedLinkBorderLeftColor() && borderLeftWidth())
@@ -763,6 +764,43 @@ bool ComputedStyle::diffNeedsPaintInvalidationObject(const ComputedStyle& other)
 
     if (resize() != other.resize())
         return true;
+
+    if (rareNonInheritedData->m_paintImages) {
+        for (const auto& image : *rareNonInheritedData->m_paintImages) {
+            if (diffNeedsPaintInvalidationObjectForPaintImage(image, other))
+                return true;
+        }
+    }
+
+    return false;
+}
+
+bool ComputedStyle::diffNeedsPaintInvalidationObjectForPaintImage(const StyleImage* image, const ComputedStyle& other) const
+{
+    CSSPaintValue* value = toCSSPaintValue(image->cssValue());
+
+    // NOTE: If the invalidation properties vectors are null, we are invalid as
+    // we haven't yet been painted (and can't provide the invalidation
+    // properties yet).
+    if (!value->nativeInvalidationProperties() || !value->customInvalidationProperties())
+        return true;
+
+    for (CSSPropertyID propertyID : *value->nativeInvalidationProperties()) {
+        // TODO(ikilpatrick): remove isInterpolableProperty check once
+        // CSSPropertyEquality::propertiesEqual correctly handles all properties.
+        if (!CSSPropertyMetadata::isInterpolableProperty(propertyID) || !CSSPropertyEquality::propertiesEqual(propertyID, *this, other))
+            return true;
+    }
+
+    if (variables() || other.variables()) {
+        for (const AtomicString& property : *value->customInvalidationProperties()) {
+            CSSVariableData* thisVar = variables() ? variables()->getVariable(property) : nullptr;
+            CSSVariableData* otherVar = other.variables() ? other.variables()->getVariable(property) : nullptr;
+
+            if (!dataEquivalent(thisVar, otherVar))
+                return true;
+        }
+    }
 
     return false;
 }
@@ -783,12 +821,18 @@ void ComputedStyle::updatePropertySpecificDifferences(const ComputedStyle& other
         if (rareNonInheritedData->m_filter != other.rareNonInheritedData->m_filter)
             diff.setFilterChanged();
 
+        if (!rareNonInheritedData->shadowDataEquivalent(*other.rareNonInheritedData.get()))
+            diff.setNeedsRecomputeOverflow();
+
         if (rareNonInheritedData->m_backdropFilter != other.rareNonInheritedData->m_backdropFilter)
             diff.setBackdropFilterChanged();
 
-        if (RuntimeEnabledFeatures::cssBoxReflectFilterEnabled() && rareNonInheritedData->m_boxReflect != other.rareNonInheritedData->m_boxReflect)
+        if (RuntimeEnabledFeatures::cssBoxReflectFilterEnabled() && !rareNonInheritedData->reflectionDataEquivalent(*other.rareNonInheritedData.get()))
             diff.setFilterChanged();
     }
+
+    if (!m_background->outline().visuallyEqual(other.m_background->outline()) || !surround->border.visualOverflowEqual(other.surround->border))
+        diff.setNeedsRecomputeOverflow();
 
     if (!diff.needsPaintInvalidation()) {
         if (inherited->color != other.inherited->color
@@ -813,6 +857,13 @@ void ComputedStyle::updatePropertySpecificDifferences(const ComputedStyle& other
                 diff.setTextDecorationOrColorChanged();
         }
     }
+}
+
+void ComputedStyle::addPaintImage(StyleImage* image)
+{
+    if (!rareNonInheritedData.access()->m_paintImages)
+        rareNonInheritedData.access()->m_paintImages = WTF::wrapUnique(new Vector<Persistent<StyleImage>>());
+    rareNonInheritedData.access()->m_paintImages->append(image);
 }
 
 void ComputedStyle::addCursor(StyleImage* image, bool hotSpotSpecified, const IntPoint& hotSpot)
@@ -844,59 +895,9 @@ void ComputedStyle::addCallbackSelector(const String& selector)
         rareNonInheritedData.access()->m_callbackSelectors.append(selector);
 }
 
-void ComputedStyle::clearContent()
+void ComputedStyle::setContent(ContentData* contentData)
 {
-    if (rareNonInheritedData->m_content)
-        rareNonInheritedData.access()->m_content = nullptr;
-}
-
-void ComputedStyle::appendContent(ContentData* contentData)
-{
-    Persistent<ContentData>& content = rareNonInheritedData.access()->m_content;
-    if (!content) {
-        content = contentData;
-        return;
-    }
-    ContentData* lastContent = content.get();
-    while (lastContent->next())
-        lastContent = lastContent->next();
-    lastContent->setNext(contentData);
-}
-
-void ComputedStyle::setContent(StyleImage* image)
-{
-    appendContent(ContentData::create(image));
-}
-
-void ComputedStyle::setContent(const String& string)
-{
-    Persistent<ContentData>& content = rareNonInheritedData.access()->m_content;
-    if (!content) {
-        content = ContentData::create(string);
-        return;
-    }
-
-    ContentData* lastContent = content.get();
-    while (lastContent->next())
-        lastContent = lastContent->next();
-
-    // We attempt to merge with the last ContentData if possible.
-    if (lastContent->isText()) {
-        TextContentData* textContent = toTextContentData(lastContent);
-        textContent->setText(textContent->text() + string);
-    } else {
-        lastContent->setNext(ContentData::create(string));
-    }
-}
-
-void ComputedStyle::setContent(PassOwnPtr<CounterContent> counter)
-{
-    appendContent(ContentData::create(counter));
-}
-
-void ComputedStyle::setContent(QuoteType quote)
-{
-    appendContent(ContentData::create(quote));
+    SET_VAR(rareNonInheritedData, m_content, contentData);
 }
 
 bool ComputedStyle::hasWillChangeCompositingHint() const

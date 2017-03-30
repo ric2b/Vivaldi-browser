@@ -5,9 +5,11 @@
 #ifndef EXTENSIONS_RENDERER_API_DISPLAY_SOURCE_DISPLAY_SOURCE_SESSION_H_
 #define EXTENSIONS_RENDERER_API_DISPLAY_SOURCE_DISPLAY_SOURCE_SESSION_H_
 
+#include <memory>
+#include <string>
+
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "extensions/common/api/display_source.h"
 #include "third_party/WebKit/public/web/WebDOMMediaStreamTrack.h"
 
@@ -93,6 +95,7 @@ class DisplaySourceSession {
 
 struct DisplaySourceSessionParams {
   DisplaySourceSessionParams();
+  DisplaySourceSessionParams(const DisplaySourceSessionParams&);
   ~DisplaySourceSessionParams();
 
   int sink_id;
@@ -105,8 +108,9 @@ struct DisplaySourceSessionParams {
 
 class DisplaySourceSessionFactory {
  public:
-  static scoped_ptr<DisplaySourceSession> CreateSession(
+  static std::unique_ptr<DisplaySourceSession> CreateSession(
       const DisplaySourceSessionParams& params);
+
  private:
   DISALLOW_COPY_AND_ASSIGN(DisplaySourceSessionFactory);
 };

@@ -8,6 +8,7 @@ python pull_sandwich_metrics.py -h
 """
 
 import collections
+import json
 import logging
 import os
 import shutil
@@ -26,28 +27,35 @@ from telemetry.util import image_util
 from telemetry.util import rgba_color
 
 import loading_trace as loading_trace_module
+import sandwich_runner
+import sandwich_misc
 import tracing
 
 
-# List of selected trace event categories when running chrome.
-CATEGORIES = [
-    # Need blink network trace events for prefetch_view.PrefetchSimulationView
-    'blink.net',
-
-    # Need to get mark trace events for _GetWebPageTrackedEvents()
-    'blink.user_timing',
-
-    # Need to memory dump trace event for _GetBrowserDumpEvents()
-    'disabled-by-default-memory-infra']
-
 CSV_FIELD_NAMES = [
-    'id',
+    'repeat_id',
     'url',
+    'chromium_commit',
+    'platform',
+    'subresource_discoverer',
+    'subresource_count',
+    # The amount of subresources detected at SetupBenchmark step.
+    'subresource_count_theoretic',
+    # Amount of subresources for caching as suggested by the subresource
+    # discoverer.
+    'cached_subresource_count_theoretic',
+    'cached_subresource_count',
     'total_load',
-    'onload',
+    'js_onload_event',
     'browser_malloc_avg',
     'browser_malloc_max',
-    'speed_index']
+    'speed_index',
+    'net_emul.name', # Should be in emulation.NETWORK_CONDITIONS.keys()
+    'net_emul.download',
+    'net_emul.upload',
+    'net_emul.latency']
+
+_UNAVAILABLE_CSV_VALUE = 'unavailable'
 
 _TRACKED_EVENT_NAMES = set(['requestStart', 'loadEventStart', 'loadEventEnd'])
 
@@ -87,6 +95,7 @@ def _GetBrowserDumpEvents(tracing_track):
   Returns:
     List of memory dump events.
   """
+  assert sandwich_runner.MEMORY_DUMP_CATEGORY in tracing_track.Categories()
   browser_pid = _GetBrowserPID(tracing_track)
   browser_dumps_events = []
   for event in tracing_track.GetEvents():
@@ -136,19 +145,41 @@ def _GetWebPageTrackedEvents(tracing_track):
   return tracked_events
 
 
-def _PullMetricsFromLoadingTrace(loading_trace):
-  """Pulls all the metrics from a given trace.
+def _ExtractDefaultMetrics(loading_trace):
+  """Extracts all the default metrics from a given trace.
 
   Args:
     loading_trace: loading_trace_module.LoadingTrace.
 
   Returns:
-    Dictionary with all CSV_FIELD_NAMES's field set (except the 'id').
+    Dictionary with all trace extracted fields set.
   """
-  browser_dump_events = _GetBrowserDumpEvents(loading_trace.tracing_track)
   web_page_tracked_events = _GetWebPageTrackedEvents(
       loading_trace.tracing_track)
+  return {
+    'total_load': (web_page_tracked_events['loadEventEnd'].start_msec -
+                   web_page_tracked_events['requestStart'].start_msec),
+    'js_onload_event': (web_page_tracked_events['loadEventEnd'].start_msec -
+                        web_page_tracked_events['loadEventStart'].start_msec)
+  }
 
+
+def _ExtractMemoryMetrics(loading_trace):
+  """Extracts all the memory metrics from a given trace.
+
+  Args:
+    loading_trace: loading_trace_module.LoadingTrace.
+
+  Returns:
+    Dictionary with all trace extracted fields set.
+  """
+  if (sandwich_runner.MEMORY_DUMP_CATEGORY not in
+          loading_trace.tracing_track.Categories()):
+    return {
+      'browser_malloc_avg': _UNAVAILABLE_CSV_VALUE,
+      'browser_malloc_max': _UNAVAILABLE_CSV_VALUE
+    }
+  browser_dump_events = _GetBrowserDumpEvents(loading_trace.tracing_track)
   browser_malloc_sum = 0
   browser_malloc_max = 0
   for dump_event in browser_dump_events:
@@ -157,14 +188,33 @@ def _PullMetricsFromLoadingTrace(loading_trace):
     size = int(attr['value'], 16)
     browser_malloc_sum += size
     browser_malloc_max = max(browser_malloc_max, size)
-
   return {
-    'total_load': (web_page_tracked_events['loadEventEnd'].start_msec -
-                   web_page_tracked_events['requestStart'].start_msec),
-    'onload': (web_page_tracked_events['loadEventEnd'].start_msec -
-               web_page_tracked_events['loadEventStart'].start_msec),
     'browser_malloc_avg': browser_malloc_sum / float(len(browser_dump_events)),
     'browser_malloc_max': browser_malloc_max
+  }
+
+
+def _ExtractBenchmarkStatistics(benchmark_setup, loading_trace):
+  """Extracts some useful statistics from a benchmark run.
+
+  Args:
+    benchmark_setup: benchmark_setup: dict representing the benchmark setup
+        JSON. The JSON format is according to:
+            SandwichTaskBuilder.PopulateLoadBenchmark.SetupBenchmark.
+    loading_trace: loading_trace_module.LoadingTrace.
+
+  Returns:
+    Dictionary with all extracted fields set.
+  """
+  return {
+    'subresource_discoverer': benchmark_setup['subresource_discoverer'],
+    'subresource_count': len(sandwich_misc.ListUrlRequests(
+        loading_trace, sandwich_misc.RequestOutcome.All)),
+    'subresource_count_theoretic': len(benchmark_setup['url_resources']),
+    'cached_subresource_count': len(sandwich_misc.ListUrlRequests(
+        loading_trace, sandwich_misc.RequestOutcome.ServedFromCache)),
+    'cached_subresource_count_theoretic':
+        len(benchmark_setup['cache_whitelist']),
   }
 
 
@@ -227,41 +277,72 @@ def ComputeSpeedIndex(completeness_record):
   return speed_index
 
 
-def PullMetricsFromOutputDirectory(output_directory_path):
-  """Pulls all the metrics from all the traces of a sandwich run directory.
+def _ExtractMetricsFromRunDirectory(benchmark_setup, run_directory_path):
+  """Extracts all the metrics from traces and video of a sandwich run.
 
   Args:
-    output_directory_path: The sandwich run's output directory to pull the
+    benchmark_setup: benchmark_setup: dict representing the benchmark setup
+        JSON. The JSON format is according to:
+            SandwichTaskBuilder.PopulateLoadBenchmark.SetupBenchmark.
+    run_directory_path: Path of the run directory.
+
+  Returns:
+    Dictionary of extracted metrics.
+  """
+  trace_path = os.path.join(run_directory_path, 'trace.json')
+  logging.info('processing trace \'%s\'' % trace_path)
+  loading_trace = loading_trace_module.LoadingTrace.FromJsonFile(trace_path)
+  run_metrics = {
+      'url': loading_trace.url,
+      'chromium_commit': loading_trace.metadata['chromium_commit'],
+      'platform': (loading_trace.metadata['platform']['os'] + '-' +
+          loading_trace.metadata['platform']['product_model'])
+  }
+  run_metrics.update(_ExtractDefaultMetrics(loading_trace))
+  run_metrics.update(_ExtractMemoryMetrics(loading_trace))
+  run_metrics.update(
+      _ExtractBenchmarkStatistics(benchmark_setup, loading_trace))
+  video_path = os.path.join(run_directory_path, 'video.mp4')
+  if os.path.isfile(video_path):
+    logging.info('processing speed-index video \'%s\'' % video_path)
+    completeness_record = _ExtractCompletenessRecordFromVideo(video_path)
+    run_metrics['speed_index'] = ComputeSpeedIndex(completeness_record)
+  else:
+    run_metrics['speed_index'] = _UNAVAILABLE_CSV_VALUE
+  for key, value in loading_trace.metadata['network_emulation'].iteritems():
+    run_metrics['net_emul.' + key] = value
+  return run_metrics
+
+
+def ExtractMetricsFromRunnerOutputDirectory(benchmark_setup_path,
+                                            output_directory_path):
+  """Extracts all the metrics from all the traces of a sandwich runner output
+  directory.
+
+  Args:
+    benchmark_setup_path: Path of the JSON of the benchmark setup.
+    output_directory_path: The sandwich runner's output directory to extract the
         metrics from.
 
   Returns:
-    List of dictionaries with all CSV_FIELD_NAMES's field set.
+    List of dictionaries.
   """
+  benchmark_setup = json.load(open(benchmark_setup_path))
   assert os.path.isdir(output_directory_path)
   metrics = []
   for node_name in os.listdir(output_directory_path):
     if not os.path.isdir(os.path.join(output_directory_path, node_name)):
       continue
     try:
-      page_id = int(node_name)
+      repeat_id = int(node_name)
     except ValueError:
       continue
-    run_path = os.path.join(output_directory_path, node_name)
-    trace_path = os.path.join(run_path, 'trace.json')
-    if not os.path.isfile(trace_path):
-      continue
-    logging.info('processing \'%s\'' % trace_path)
-    loading_trace = loading_trace_module.LoadingTrace.FromJsonFile(trace_path)
-    row_metrics = {key: 'unavailable' for key in CSV_FIELD_NAMES}
-    row_metrics.update(_PullMetricsFromLoadingTrace(loading_trace))
-    row_metrics['id'] = page_id
-    row_metrics['url'] = loading_trace.url
-    video_path = os.path.join(run_path, 'video.mp4')
-    if os.path.isfile(video_path):
-      logging.info('processing \'%s\'' % video_path)
-      completeness_record = _ExtractCompletenessRecordFromVideo(video_path)
-      row_metrics['speed_index'] = ComputeSpeedIndex(completeness_record)
-    metrics.append(row_metrics)
-  assert len(metrics) > 0, ('Looks like \'{}\' was not a sandwich ' +
-                            'run directory.').format(output_directory_path)
+    run_directory_path = os.path.join(output_directory_path, node_name)
+    run_metrics = _ExtractMetricsFromRunDirectory(
+        benchmark_setup, run_directory_path)
+    run_metrics['repeat_id'] = repeat_id
+    assert set(run_metrics.keys()) == set(CSV_FIELD_NAMES)
+    metrics.append(run_metrics)
+  assert len(metrics) > 0, ('Looks like \'{}\' was not a sandwich runner ' +
+                            'output directory.').format(output_directory_path)
   return metrics

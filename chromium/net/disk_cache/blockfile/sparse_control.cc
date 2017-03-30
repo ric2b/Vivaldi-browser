@@ -14,7 +14,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
@@ -79,7 +79,7 @@ class ChildrenDeleter
   std::string name_;
   disk_cache::Bitmap children_map_;
   int64_t signature_;
-  scoped_ptr<char[]> buffer_;
+  std::unique_ptr<char[]> buffer_;
   DISALLOW_COPY_AND_ASSIGN(ChildrenDeleter);
 };
 

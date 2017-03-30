@@ -12,7 +12,6 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/win/scoped_gdi_object.h"
 #include "base/win/scoped_hdc.h"
 #include "base/win/scoped_select_object.h"
@@ -23,15 +22,16 @@
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkColorPriv.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/core/SkShader.h"
 #include "ui/base/material_design/material_design_controller.h"
+#include "ui/display/win/dpi.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/gdi_util.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/skia_util.h"
-#include "ui/gfx/win/dpi.h"
 #include "ui/native_theme/common_theme.h"
 
 // This was removed from Winvers.h but is still used.
@@ -204,7 +204,7 @@ gfx::Size NativeThemeWin::GetPartSize(Part part,
     case kScrollbarVerticalThumb:
     case kScrollbarHorizontalTrack:
     case kScrollbarVerticalTrack: {
-      int size = gfx::win::GetSystemMetricsInDIP(SM_CXVSCROLL);
+      int size = display::win::GetSystemMetricsInDIP(SM_CXVSCROLL);
       if (size == 0)
         size = 17;
       return gfx::Size(size, size);
@@ -676,7 +676,7 @@ void NativeThemeWin::PaintIndirect(SkCanvas* canvas,
   //                  keeping a cache of the resulting bitmaps.
 
   // Create an offscreen canvas that is backed by an HDC.
-  skia::RefPtr<skia::BitmapPlatformDevice> device = skia::AdoptRef(
+  sk_sp<skia::BitmapPlatformDevice> device(
       skia::BitmapPlatformDevice::Create(
           rect.width(), rect.height(), false, NULL));
   DCHECK(device);

@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/chrome_build.gni")
+import("//build/config/features.gni")
 
 content_app_sources = [
   "android/app_jni_registrar.cc",
@@ -29,10 +30,10 @@ content_app_deps = [
   "//content:export",
   "//content:sandbox_helper_win",
   "//content/public/common:common_sources",
-  "//content/public/common:mojo_bindings",
   "//crypto",
-  "//mojo/shell/public/interfaces",
+  "//services/shell/public/interfaces",
   "//mojo/edk/system",
+  "//third_party/WebKit/public:mojo_bindings",
   "//ui/base",
   "//ui/gfx",
   "//ui/gfx/geometry",
@@ -50,6 +51,10 @@ if (is_win) {
     "//third_party/android_tools:cpu_features",
     "//ui/android",
   ]
+}
+
+if (is_linux && enable_plugins) {
+  content_app_deps += [ "//content/ppapi_plugin:ppapi_plugin_sources" ]
 }
 
 content_app_extra_configs = [

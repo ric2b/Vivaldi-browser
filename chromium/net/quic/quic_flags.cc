@@ -37,10 +37,11 @@ int64_t FLAGS_quic_time_wait_list_max_connections = 600000;
 bool FLAGS_enable_quic_stateless_reject_support = true;
 
 // This flag is not in use, just to keep consistency for shared code.
-bool FLAGS_quic_always_log_bugs_for_tests = false;
+bool FLAGS_quic_always_log_bugs_for_tests = true;
 
-// If true, flow controller may grow the receive window size if necessary.
-bool FLAGS_quic_auto_tune_receive_window = true;
+// If true, a QUIC connection option with tag DHDT can be used to disable
+// HPACK\'s dynamic table.
+bool FLAGS_quic_disable_hpack_dynamic_table = true;
 
 // If true, multipath is enabled for the connection.
 bool FLAGS_quic_enable_multipath = false;
@@ -51,7 +52,7 @@ bool FLAGS_quic_enable_multipath = false;
 bool FLAGS_quic_require_handshake_confirmation = false;
 
 // If true, Cubic's epoch is shifted when the sender is application-limited.
-bool FLAGS_shift_quic_cubic_epoch_when_app_limited = true;
+bool FLAGS_shift_quic_cubic_epoch_when_app_limited = false;
 
 // If true, QUIC will measure head of line (HOL) blocking due between
 // streams due to packet losses on the headers stream.  The
@@ -81,46 +82,59 @@ bool FLAGS_quic_cede_correctly = true;
 // AES-GCM.
 bool FLAGS_quic_crypto_server_config_default_has_chacha20 = true;
 
-// If true, always log the cached network parameters, regardless of whether
-// bandwidth-resumption has been enabled.
-bool FLAGS_quic_log_received_parameters = true;
-
 // If true, QUIC will use newly refactored TCP sender code.
 bool FLAGS_quic_use_new_tcp_sender = true;
-
-// If true, the QUIC dispatcher will directly send version negotiation packets
-// without needing to create a QUIC session first.
-bool FLAGS_quic_stateless_version_negotiation = false;
-
-// QUIC Ack Decimation with tolerance for packet reordering.
-bool FLAGS_quic_ack_decimation2 = true;
 
 // If true, QUIC connections will defer responding to ACKs to their send alarms.
 bool FLAGS_quic_connection_defer_ack_response = true;
 
-// If true, SpdyFramer will call OnStreamEnd from SpdyFramerVisitorInterface
-// instead of empty-data sentinel calls when the stream is to be ended.
-bool FLAGS_spdy_on_stream_end = true;
-
-// If true, QuicCryptoServerConfig will use cached compressed certificates
-// if the uncompressed certs to be compressed hits the cache.
-bool FLAGS_quic_use_cached_compressed_certs = true;
-
-// Enable a connection option allowing connections to time out if more than 5
-// consecutive RTOs are sent.
-bool FLAGS_quic_enable_rto_timeout = true;
-
-// Use a byte conservation approach instead of packet conservation in the
-// Slow Start Large Reduction experiment.
-bool FLAGS_quic_sslr_byte_conservation = true;
-
-// Try to use the socket timestamp to determine the time a packet was
-// received instead of Now().
-bool FLAGS_quic_use_socket_timestamp = true;
-
-// If true, handling of errors from invalid stream frames is done in
-// one place in QuicStreamSequencer::OnStreamFrame.
-bool FLAGS_quic_consolidate_onstreamframe_errors = true;
-
 // Resend 0RTT requests in response to an REJ that re-establishes encryption.
 bool FLAGS_quic_reply_to_rej = true;
+
+// If true, QUIC connections can do bandwidth resumption with an initial window
+// of < 10 packets.
+bool FLAGS_quic_no_lower_bw_resumption_limit = true;
+
+// Limit the ruction of slow start large reduction to 1/2 the current CWND once
+// the initial flight has been acked.
+bool FLAGS_quic_sslr_limit_reduction = true;
+
+// Simplify QUIC's loss detection by combining time and nack based portions.
+bool FLAGS_quic_simplify_loss_detection = true;
+
+// If true, respect any configured max pacing rate.
+bool FLAGS_quic_max_pacing_rate = true;
+
+// If true, QuicWriter avoids calling HttpWriter::Write with 0 bytes when
+// last_data == false.
+bool FLAGS_quic_avoid_empty_nonfin_writes = true;
+
+// If true, flow controller may grow the receive window size if necessary.
+bool FLAGS_quic_auto_tune_receive_window = true;
+
+// Add the ability for QUIC's time based loss detection to increase it's
+// threshold after spurious losses.
+bool FLAGS_quic_adaptive_loss_recovery = true;
+
+// If true, enable auto tuning by default (server side).
+bool FLAGS_quic_enable_autotune_by_default = true;
+
+// Use largest acked in the most recent ack instead of largest acked ever in
+// loss recovery.
+bool FLAGS_quic_loss_recovery_use_largest_acked = true;
+
+// Only set one alarm for sending at once, either the send alarm or
+// retransmission alarm.  Disabled because it breaks QUIC time loss detection.
+bool FLAGS_quic_only_one_sending_alarm = false;
+
+// If true, the hash of the CHLO message will be used in the proof generated for
+// an SCUP message.
+bool FLAGS_quic_use_hash_in_scup = true;
+
+// If true, consider receiving crypto frame on non crypto stream as memory
+// corruption.
+bool FLAGS_quic_detect_memory_corrpution = true;
+
+// If true, QUIC public reset packets will have the \"pre-v33\" public header
+// flags.
+bool FLAGS_quic_use_old_public_reset_packets = true;

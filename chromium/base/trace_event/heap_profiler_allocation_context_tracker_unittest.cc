@@ -8,6 +8,7 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/pending_task.h"
+#include "base/trace_event/heap_profiler.h"
 #include "base/trace_event/heap_profiler_allocation_context.h"
 #include "base/trace_event/heap_profiler_allocation_context_tracker.h"
 #include "base/trace_event/trace_event.h"
@@ -18,6 +19,7 @@ namespace trace_event {
 
 // Define all strings once, because the pseudo stack requires pointer equality,
 // and string interning is unreliable.
+const char kThreadName[] = "TestThread";
 const char kCupcake[] = "Cupcake";
 const char kDonut[] = "Donut";
 const char kEclair[] = "Eclair";
@@ -33,7 +35,7 @@ void AssertBacktraceEquals(const StackFrame(&expected_backtrace)[N]) {
           ->GetContextSnapshot();
 
   auto actual = std::begin(ctx.backtrace.frames);
-  auto actual_bottom = std::end(ctx.backtrace.frames);
+  auto actual_bottom = actual + ctx.backtrace.frame_count;
   auto expected = std::begin(expected_backtrace);
   auto expected_bottom = std::end(expected_backtrace);
 
@@ -48,13 +50,14 @@ void AssertBacktraceEquals(const StackFrame(&expected_backtrace)[N]) {
   ASSERT_EQ(expected, expected_bottom);
 }
 
-void AssertBacktraceEmpty() {
+void AssertBacktraceContainsOnlyThreadName() {
+  StackFrame t = StackFrame::FromThreadName(kThreadName);
   AllocationContext ctx =
       AllocationContextTracker::GetInstanceForCurrentThread()
           ->GetContextSnapshot();
 
-  for (StackFrame frame : ctx.backtrace.frames)
-    ASSERT_EQ(nullptr, frame);
+  ASSERT_EQ(1u, ctx.backtrace.frame_count);
+  ASSERT_EQ(t, ctx.backtrace.frames[0]);
 }
 
 class AllocationContextTrackerTest : public testing::Test {
@@ -62,34 +65,36 @@ class AllocationContextTrackerTest : public testing::Test {
   void SetUp() override {
     TraceConfig config("");
     TraceLog::GetInstance()->SetEnabled(config, TraceLog::RECORDING_MODE);
-    AllocationContextTracker::SetCaptureEnabled(true);
+    AllocationContextTracker::SetCaptureMode(
+        AllocationContextTracker::CaptureMode::PSEUDO_STACK);
+    AllocationContextTracker::SetCurrentThreadName(kThreadName);
   }
 
   void TearDown() override {
-    AllocationContextTracker::SetCaptureEnabled(false);
+    AllocationContextTracker::SetCaptureMode(
+        AllocationContextTracker::CaptureMode::DISABLED);
     TraceLog::GetInstance()->SetDisabled();
   }
 };
 
 // Check that |TRACE_EVENT| macros push and pop to the pseudo stack correctly.
-// Also check that |GetContextSnapshot| fills the backtrace with null pointers
-// when the pseudo stack height is less than the capacity.
 TEST_F(AllocationContextTrackerTest, PseudoStackScopedTrace) {
-  StackFrame c = kCupcake;
-  StackFrame d = kDonut;
-  StackFrame e = kEclair;
-  StackFrame f = kFroyo;
+  StackFrame t = StackFrame::FromThreadName(kThreadName);
+  StackFrame c = StackFrame::FromTraceEventName(kCupcake);
+  StackFrame d = StackFrame::FromTraceEventName(kDonut);
+  StackFrame e = StackFrame::FromTraceEventName(kEclair);
+  StackFrame f = StackFrame::FromTraceEventName(kFroyo);
 
-  AssertBacktraceEmpty();
+  AssertBacktraceContainsOnlyThreadName();
 
   {
     TRACE_EVENT0("Testing", kCupcake);
-    StackFrame frame_c[] = {c, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    StackFrame frame_c[] = {t, c};
     AssertBacktraceEquals(frame_c);
 
     {
       TRACE_EVENT0("Testing", kDonut);
-      StackFrame frame_cd[] = {c, d, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+      StackFrame frame_cd[] = {t, c, d};
       AssertBacktraceEquals(frame_cd);
     }
 
@@ -97,38 +102,39 @@ TEST_F(AllocationContextTrackerTest, PseudoStackScopedTrace) {
 
     {
       TRACE_EVENT0("Testing", kEclair);
-      StackFrame frame_ce[] = {c, e, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+      StackFrame frame_ce[] = {t, c, e};
       AssertBacktraceEquals(frame_ce);
     }
 
     AssertBacktraceEquals(frame_c);
   }
 
-  AssertBacktraceEmpty();
+  AssertBacktraceContainsOnlyThreadName();
 
   {
     TRACE_EVENT0("Testing", kFroyo);
-    StackFrame frame_f[] = {f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    StackFrame frame_f[] = {t, f};
     AssertBacktraceEquals(frame_f);
   }
 
-  AssertBacktraceEmpty();
+  AssertBacktraceContainsOnlyThreadName();
 }
 
 // Same as |PseudoStackScopedTrace|, but now test the |TRACE_EVENT_BEGIN| and
 // |TRACE_EVENT_END| macros.
 TEST_F(AllocationContextTrackerTest, PseudoStackBeginEndTrace) {
-  StackFrame c = kCupcake;
-  StackFrame d = kDonut;
-  StackFrame e = kEclair;
-  StackFrame f = kFroyo;
+  StackFrame t = StackFrame::FromThreadName(kThreadName);
+  StackFrame c = StackFrame::FromTraceEventName(kCupcake);
+  StackFrame d = StackFrame::FromTraceEventName(kDonut);
+  StackFrame e = StackFrame::FromTraceEventName(kEclair);
+  StackFrame f = StackFrame::FromTraceEventName(kFroyo);
 
-  StackFrame frame_c[] = {c, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-  StackFrame frame_cd[] = {c, d, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-  StackFrame frame_ce[] = {c, e, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-  StackFrame frame_f[] = {f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+  StackFrame frame_c[] = {t, c};
+  StackFrame frame_cd[] = {t, c, d};
+  StackFrame frame_ce[] = {t, c, e};
+  StackFrame frame_f[] = {t, f};
 
-  AssertBacktraceEmpty();
+  AssertBacktraceContainsOnlyThreadName();
 
   TRACE_EVENT_BEGIN0("Testing", kCupcake);
   AssertBacktraceEquals(frame_c);
@@ -146,27 +152,28 @@ TEST_F(AllocationContextTrackerTest, PseudoStackBeginEndTrace) {
   AssertBacktraceEquals(frame_c);
   TRACE_EVENT_END0("Testing", kCupcake);
 
-  AssertBacktraceEmpty();
+  AssertBacktraceContainsOnlyThreadName();
 
   TRACE_EVENT_BEGIN0("Testing", kFroyo);
   AssertBacktraceEquals(frame_f);
   TRACE_EVENT_END0("Testing", kFroyo);
 
-  AssertBacktraceEmpty();
+  AssertBacktraceContainsOnlyThreadName();
 }
 
 TEST_F(AllocationContextTrackerTest, PseudoStackMixedTrace) {
-  StackFrame c = kCupcake;
-  StackFrame d = kDonut;
-  StackFrame e = kEclair;
-  StackFrame f = kFroyo;
+  StackFrame t = StackFrame::FromThreadName(kThreadName);
+  StackFrame c = StackFrame::FromTraceEventName(kCupcake);
+  StackFrame d = StackFrame::FromTraceEventName(kDonut);
+  StackFrame e = StackFrame::FromTraceEventName(kEclair);
+  StackFrame f = StackFrame::FromTraceEventName(kFroyo);
 
-  StackFrame frame_c[] = {c, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-  StackFrame frame_cd[] = {c, d, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-  StackFrame frame_e[] = {e, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-  StackFrame frame_ef[] = {e, f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+  StackFrame frame_c[] = {t, c};
+  StackFrame frame_cd[] = {t, c, d};
+  StackFrame frame_e[] = {t, e};
+  StackFrame frame_ef[] = {t, e, f};
 
-  AssertBacktraceEmpty();
+  AssertBacktraceContainsOnlyThreadName();
 
   TRACE_EVENT_BEGIN0("Testing", kCupcake);
   AssertBacktraceEquals(frame_c);
@@ -178,7 +185,7 @@ TEST_F(AllocationContextTrackerTest, PseudoStackMixedTrace) {
 
   AssertBacktraceEquals(frame_c);
   TRACE_EVENT_END0("Testing", kCupcake);
-  AssertBacktraceEmpty();
+  AssertBacktraceContainsOnlyThreadName();
 
   {
     TRACE_EVENT0("Testing", kEclair);
@@ -190,12 +197,15 @@ TEST_F(AllocationContextTrackerTest, PseudoStackMixedTrace) {
     AssertBacktraceEquals(frame_e);
   }
 
-  AssertBacktraceEmpty();
+  AssertBacktraceContainsOnlyThreadName();
 }
 
 TEST_F(AllocationContextTrackerTest, BacktraceTakesTop) {
-  // Push 12 events onto the pseudo stack.
-  TRACE_EVENT0("Testing", kCupcake);
+  StackFrame t = StackFrame::FromThreadName(kThreadName);
+  StackFrame c = StackFrame::FromTraceEventName(kCupcake);
+  StackFrame f = StackFrame::FromTraceEventName(kFroyo);
+
+  // Push 11 events onto the pseudo stack.
   TRACE_EVENT0("Testing", kCupcake);
   TRACE_EVENT0("Testing", kCupcake);
   TRACE_EVENT0("Testing", kCupcake);
@@ -217,39 +227,19 @@ TEST_F(AllocationContextTrackerTest, BacktraceTakesTop) {
             ->GetContextSnapshot();
 
     // The pseudo stack relies on pointer equality, not deep string comparisons.
-    ASSERT_EQ(kCupcake, ctx.backtrace.frames[0]);
-    ASSERT_EQ(kFroyo, ctx.backtrace.frames[11]);
+    ASSERT_EQ(t, ctx.backtrace.frames[0]);
+    ASSERT_EQ(c, ctx.backtrace.frames[1]);
+    ASSERT_EQ(f, ctx.backtrace.frames[11]);
   }
 
   {
     AllocationContext ctx =
         AllocationContextTracker::GetInstanceForCurrentThread()
             ->GetContextSnapshot();
-    ASSERT_EQ(kCupcake, ctx.backtrace.frames[0]);
-    ASSERT_EQ(kFroyo, ctx.backtrace.frames[11]);
+    ASSERT_EQ(t, ctx.backtrace.frames[0]);
+    ASSERT_EQ(c, ctx.backtrace.frames[1]);
+    ASSERT_EQ(f, ctx.backtrace.frames[11]);
   }
-}
-
-TEST_F(AllocationContextTrackerTest, SetCurrentThreadName) {
-  TRACE_EVENT0("Testing", kCupcake);
-
-  // Test if the thread name is inserted into backtrace.
-  const char kThread1[] = "thread1";
-  AllocationContextTracker::SetCurrentThreadName(kThread1);
-  AllocationContext ctx1 =
-      AllocationContextTracker::GetInstanceForCurrentThread()
-          ->GetContextSnapshot();
-  ASSERT_EQ(kThread1, ctx1.backtrace.frames[0]);
-  ASSERT_EQ(kCupcake, ctx1.backtrace.frames[1]);
-
-  // Test if the thread name is reset.
-  const char kThread2[] = "thread2";
-  AllocationContextTracker::SetCurrentThreadName(kThread2);
-  AllocationContext ctx2 =
-      AllocationContextTracker::GetInstanceForCurrentThread()
-          ->GetContextSnapshot();
-  ASSERT_EQ(kThread2, ctx2.backtrace.frames[0]);
-  ASSERT_EQ(kCupcake, ctx2.backtrace.frames[1]);
 }
 
 TEST_F(AllocationContextTrackerTest, TrackTaskContext) {
@@ -257,14 +247,14 @@ TEST_F(AllocationContextTrackerTest, TrackTaskContext) {
   const char kContext2[] = "context2";
   {
     // The context from the scoped task event should be used as type name.
-    TRACE_EVENT_API_SCOPED_TASK_EXECUTION_EVENT event1(kContext1);
+    TRACE_HEAP_PROFILER_API_SCOPED_TASK_EXECUTION event1(kContext1);
     AllocationContext ctx1 =
         AllocationContextTracker::GetInstanceForCurrentThread()
             ->GetContextSnapshot();
     ASSERT_EQ(kContext1, ctx1.type_name);
 
     // In case of nested events, the last event's context should be used.
-    TRACE_EVENT_API_SCOPED_TASK_EXECUTION_EVENT event2(kContext2);
+    TRACE_HEAP_PROFILER_API_SCOPED_TASK_EXECUTION event2(kContext2);
     AllocationContext ctx2 =
         AllocationContextTracker::GetInstanceForCurrentThread()
             ->GetContextSnapshot();
@@ -276,6 +266,19 @@ TEST_F(AllocationContextTrackerTest, TrackTaskContext) {
       AllocationContextTracker::GetInstanceForCurrentThread()
           ->GetContextSnapshot();
   ASSERT_FALSE(ctx.type_name);
+}
+
+TEST_F(AllocationContextTrackerTest, IgnoreAllocationTest) {
+  TRACE_EVENT0("Testing", kCupcake);
+  TRACE_EVENT0("Testing", kDonut);
+  HEAP_PROFILER_SCOPED_IGNORE;
+  AllocationContext ctx =
+      AllocationContextTracker::GetInstanceForCurrentThread()
+          ->GetContextSnapshot();
+  const StringPiece kTracingOverhead("tracing_overhead");
+  ASSERT_EQ(kTracingOverhead,
+            static_cast<const char*>(ctx.backtrace.frames[0].value));
+  ASSERT_EQ(1u, ctx.backtrace.frame_count);
 }
 
 }  // namespace trace_event

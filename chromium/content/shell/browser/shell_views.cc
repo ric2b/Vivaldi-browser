@@ -22,8 +22,8 @@
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/display/screen.h"
 #include "ui/events/event.h"
-#include "ui/gfx/screen.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/menu_button.h"
@@ -371,8 +371,8 @@ class ShellWindowDelegateView : public views::WidgetDelegateView,
   views::LabelButton* refresh_button_;
   views::LabelButton* stop_button_;
   views::Textfield* url_entry_;
-  scoped_ptr<ContextMenuModel> context_menu_model_;
-  scoped_ptr<views::MenuRunner> context_menu_runner_;
+  std::unique_ptr<ContextMenuModel> context_menu_model_;
+  std::unique_ptr<views::MenuRunner> context_menu_runner_;
 
   // Contents view contains the web contents view
   View* contents_view_;
@@ -385,7 +385,7 @@ class ShellWindowDelegateView : public views::WidgetDelegateView,
 
 #if defined(OS_CHROMEOS)
 wm::WMTestHelper* Shell::wm_test_helper_ = NULL;
-gfx::Screen* Shell::test_screen_ = NULL;
+display::Screen* Shell::test_screen_ = NULL;
 #endif
 views::ViewsDelegate* Shell::views_delegate_ = NULL;
 
@@ -397,11 +397,11 @@ void Shell::PlatformInitialize(const gfx::Size& default_window_size) {
 #endif
 #if defined(OS_CHROMEOS)
   test_screen_ = aura::TestScreen::Create(gfx::Size());
-  gfx::Screen::SetScreenInstance(test_screen_);
+  display::Screen::SetScreenInstance(test_screen_);
   wm_test_helper_ = new wm::WMTestHelper(default_window_size,
                                          GetContextFactory());
 #else
-  gfx::Screen::SetScreenInstance(views::CreateDesktopScreen());
+  display::Screen::SetScreenInstance(views::CreateDesktopScreen());
 #endif
   views_delegate_ = new views::DesktopTestViewsDelegate();
 }
@@ -418,7 +418,6 @@ void Shell::PlatformExit() {
   views_delegate_ = NULL;
   delete platform_;
   platform_ = NULL;
-  aura::Env::DeleteInstance();
 }
 
 void Shell::PlatformCleanUp() {
@@ -471,6 +470,8 @@ void Shell::PlatformCreateWindow(int width, int height) {
   views::Widget::InitParams params;
   params.bounds = gfx::Rect(0, 0, width, height);
   params.delegate = new ShellWindowDelegateView(this);
+  params.wm_class_class = "chromium-content_shell";
+  params.wm_class_name = params.wm_class_class;
   window_widget_->Init(params);
 #endif
 

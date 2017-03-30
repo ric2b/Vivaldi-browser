@@ -7,13 +7,15 @@
 
 #include <oleacc.h>
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/win/scoped_comptr.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "ui/accessibility/platform/ax_platform_node_win.h"
 
 namespace content {
+class BrowserAccessibilityEventWin;
 class BrowserAccessibilityWin;
 
 // Manages a tree of BrowserAccessibilityWin objects.
@@ -36,18 +38,21 @@ class CONTENT_EXPORT BrowserAccessibilityManagerWin
   // The IAccessible for the parent window.
   IAccessible* GetParentIAccessible();
 
-  // Calls NotifyWinEvent if the parent window's IAccessible pointer is known.
-  void MaybeCallNotifyWinEvent(DWORD event, BrowserAccessibility* node);
-
   // IAccessible2UsageObserver
   void OnIAccessible2Used() override;
 
   // BrowserAccessibilityManager methods
   void UserIsReloading() override;
   void NotifyAccessibilityEvent(
-      ui::AXEvent event_type, BrowserAccessibility* node) override;
+      BrowserAccessibilityEvent::Source source,
+      ui::AXEvent event_type,
+      BrowserAccessibility* node) override;
+  BrowserAccessibilityEvent::Result
+      FireWinAccessibilityEvent(BrowserAccessibilityEventWin* event);
   bool CanFireEvents() override;
-  void FireFocusEvent(BrowserAccessibility* node) override;
+  void FireFocusEvent(
+      BrowserAccessibilityEvent::Source source,
+      BrowserAccessibility* node) override;
 
   // Track this object and post a VISIBLE_DATA_CHANGED notification when
   // its container scrolls.
@@ -74,6 +79,12 @@ class CONTENT_EXPORT BrowserAccessibilityManagerWin
   // post a notification directly on it when it reaches its destination.
   // TODO(dmazzoni): remove once http://crbug.com/113483 is fixed.
   BrowserAccessibilityWin* tracked_scroll_object_;
+
+  // Keep track of if we got a "load complete" event but were unable to fire
+  // it because of no HWND, because otherwise JAWS can get very confused.
+  // TODO(dmazzoni): a better fix would be to always have an HWND.
+  // http://crbug.com/521877
+  bool load_complete_pending_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserAccessibilityManagerWin);
 };

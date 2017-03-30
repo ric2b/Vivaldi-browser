@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/android/jni_android.h"
@@ -14,7 +15,6 @@
 #include "base/compiler_specific.h"
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/process/process.h"
 #include "content/browser/android/content_view_core_impl_observer.h"
 #include "content/browser/renderer_host/render_widget_host_view_android.h"
@@ -61,11 +61,6 @@ class ContentViewCoreImpl : public ContentViewCore,
   ui::WindowAndroid* GetWindowAndroid() const override;
   const scoped_refptr<cc::Layer>& GetLayer() const override;
   bool ShowPastePopup(int x, int y) override;
-  void GetScaledContentBitmap(
-      float scale,
-      SkColorType preferred_color_type,
-      const gfx::Rect& src_subrect,
-      const ReadbackRequestCallback& result_callback) override;
   float GetDpiScale() const override;
   void PauseOrResumeGeolocation(bool should_pause) override;
   void RequestTextSurroundingSelection(

@@ -17,7 +17,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace {
-const std::string kTestingAppId = "pjdjhejcdkeebjehnokfbfnjmgmgdjlc";
+const char kTestingAppId[] = "pjdjhejcdkeebjehnokfbfnjmgmgdjlc";
 }  // namespace
 
 namespace extensions {
@@ -107,6 +107,69 @@ IN_PROC_BROWSER_TEST_F(BluetoothLowEnergyApiTestChromeOs,
       "api_test/bluetooth_low_energy/register_advertisement"))
       << message_;
 }
+
+IN_PROC_BROWSER_TEST_F(BluetoothLowEnergyApiTestChromeOs, CreateService) {
+  ASSERT_TRUE(
+      RunPlatformAppTest("api_test/bluetooth_low_energy/"
+                         "create_service"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(BluetoothLowEnergyApiTestChromeOs,
+                       CreateCharacteristic) {
+  ASSERT_TRUE(
+      RunPlatformAppTest("api_test/bluetooth_low_energy/"
+                         "create_characteristic"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(BluetoothLowEnergyApiTestChromeOs, CreateDescriptor) {
+  ASSERT_TRUE(
+      RunPlatformAppTest("api_test/bluetooth_low_energy/"
+                         "create_descriptor"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(BluetoothLowEnergyApiTestChromeOs, RegisterService) {
+  ASSERT_TRUE(
+      RunPlatformAppTest("api_test/bluetooth_low_energy/"
+                         "register_service"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(BluetoothLowEnergyApiTestChromeOs, UnregisterService) {
+  ASSERT_TRUE(
+      RunPlatformAppTest("api_test/bluetooth_low_energy/"
+                         "unregister_service"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(BluetoothLowEnergyApiTestChromeOs, RemoveService) {
+  ASSERT_TRUE(
+      RunPlatformAppTest("api_test/bluetooth_low_energy/"
+                         "remove_service"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(BluetoothLowEnergyApiTestChromeOs,
+                       NotifyCharacteristicValueChanged) {
+  ASSERT_TRUE(
+      RunPlatformAppTest("api_test/bluetooth_low_energy/"
+                         "notify_characteristic_value_changed"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(BluetoothLowEnergyApiTestChromeOs,
+                       NotifyCharacteristicValueChanged_ErrorConditions) {
+  ASSERT_TRUE(RunPlatformAppTest(
+      "api_test/bluetooth_low_energy/"
+      "notify_characteristic_value_changed_error_conditions"))
+      << message_;
+}
+
+// TODO(rkc): Figure out how to integrate with BluetoothTestBlueZ and write
+// comprehensive tests for GATT server events. See http://crbug.com/607395 for
+// details.
 
 }  // namespace
 }  // namespace extensions

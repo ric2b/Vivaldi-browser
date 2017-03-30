@@ -8,10 +8,9 @@
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/shell_window_ids.h"
-#include "ash/wm/coordinate_conversion.h"
+#include "ash/wm/common/window_state.h"
 #include "ash/wm/system_modal_container_layout_manager.h"
 #include "ash/wm/window_properties.h"
-#include "ash/wm/window_state.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/window.h"
@@ -19,8 +18,8 @@
 #include "ui/aura/window_tracker.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/compositor/dip_util.h"
-#include "ui/gfx/display.h"
-#include "ui/gfx/screen.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/wm/core/window_util.h"
 #include "ui/wm/public/activation_client.h"
 
@@ -36,7 +35,7 @@ bool ShouldStayInSameRootWindow(const aura::Window* window) {
 
 // Move all transient children to |dst_root|, including the ones in
 // the child windows and transient children of the transient children.
-void MoveAllTransientChildrenToNewRoot(const gfx::Display& display,
+void MoveAllTransientChildrenToNewRoot(const display::Display& display,
                                        aura::Window* window) {
   aura::Window* dst_root = Shell::GetInstance()
                                ->window_tree_host_manager()
@@ -124,7 +123,7 @@ void ScreenPositionController::ConvertPointToScreen(
   const aura::Window* root = window->GetRootWindow();
   aura::Window::ConvertPointToTarget(window, root, point);
   const gfx::Point display_origin =
-      gfx::Screen::GetScreen()
+      display::Screen::GetScreen()
           ->GetDisplayNearestWindow(const_cast<aura::Window*>(root))
           .bounds()
           .origin();
@@ -136,7 +135,7 @@ void ScreenPositionController::ConvertPointFromScreen(
     gfx::Point* point) {
   const aura::Window* root = window->GetRootWindow();
   const gfx::Point display_origin =
-      gfx::Screen::GetScreen()
+      display::Screen::GetScreen()
           ->GetDisplayNearestWindow(const_cast<aura::Window*>(root))
           .bounds()
           .origin();
@@ -156,7 +155,7 @@ void ScreenPositionController::ConvertHostPointToScreen(
 
 void ScreenPositionController::SetBounds(aura::Window* window,
                                          const gfx::Rect& bounds,
-                                         const gfx::Display& display) {
+                                         const display::Display& display) {
   DCHECK_NE(-1, display.id());
   if (!window->parent()->GetProperty(kUsesScreenCoordinatesKey)) {
     window->SetBounds(bounds);
@@ -228,7 +227,7 @@ void ScreenPositionController::SetBounds(aura::Window* window,
     }
   }
   gfx::Point origin(bounds.origin());
-  const gfx::Point display_origin = gfx::Screen::GetScreen()
+  const gfx::Point display_origin = display::Screen::GetScreen()
                                         ->GetDisplayNearestWindow(window)
                                         .bounds()
                                         .origin();

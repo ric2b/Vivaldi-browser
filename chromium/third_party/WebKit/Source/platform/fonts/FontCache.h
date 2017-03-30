@@ -49,6 +49,12 @@
 
 class SkTypeface;
 
+namespace base {
+namespace trace_event {
+class ProcessMemoryDump;
+}
+}
+
 namespace blink {
 
 class FontCacheClient;
@@ -58,7 +64,6 @@ class FontDescription;
 class OpenTypeVerticalData;
 class ShapeCache;
 class SimpleFontData;
-class WebProcessMemoryDump;
 
 enum ShouldRetain { Retain, DoNotRetain };
 enum PurgeSeverity { PurgeIfNeeded, ForcePurge };
@@ -103,12 +108,9 @@ public:
     static void setFontManager(const RefPtr<SkFontMgr>&);
 
 #if OS(WIN)
-    bool useSubpixelPositioning() const { return s_useSubpixelPositioning; }
-    static bool useDirectWrite() { return s_useDirectWrite; }
     static bool antialiasedTextEnabled() { return s_antialiasedTextEnabled; }
     static bool lcdTextEnabled() { return s_lcdTextEnabled; }
     static float deviceScaleFactor() { return s_deviceScaleFactor; }
-    static void setUseDirectWrite(bool useDirectWrite) { s_useDirectWrite = useDirectWrite; }
     static void setAntialiasedTextEnabled(bool enabled) { s_antialiasedTextEnabled = enabled; }
     static void setLCDTextEnabled(bool enabled) { s_lcdTextEnabled = enabled; }
     static void setDeviceScaleFactor(float deviceScaleFactor) { s_deviceScaleFactor = deviceScaleFactor; }
@@ -123,6 +125,7 @@ public:
     static const AtomicString& smallCaptionFontFamily() { return *s_smallCaptionFontFamilyName; }
     static int32_t statusFontHeight() { return s_statusFontHeight; }
     static const AtomicString& statusFontFamily() { return *s_statusFontFamilyName; }
+    static void setUseSkiaFontFallback(bool useSkiaFontFallback) { s_useSkiaFontFallback = useSkiaFontFallback; }
 #endif
 
     typedef uint32_t FontFileKey;
@@ -148,8 +151,8 @@ public:
     void invalidateShapeCache();
 
     // Memory reporting
-    void dumpFontPlatformDataCache(WebProcessMemoryDump*);
-    void dumpShapeResultCache(WebProcessMemoryDump*);
+    void dumpFontPlatformDataCache(base::trace_event::ProcessMemoryDump*);
+    void dumpShapeResultCache(base::trace_event::ProcessMemoryDump*);
 
 private:
     FontCache();
@@ -188,11 +191,9 @@ private:
     static SkFontMgr* s_fontManager;
 
 #if OS(WIN)
-    static bool s_useDirectWrite;
     static bool s_antialiasedTextEnabled;
     static bool s_lcdTextEnabled;
     static float s_deviceScaleFactor;
-    static bool s_useSubpixelPositioning;
     static HashMap<String, RefPtr<SkTypeface>>* s_sideloadedFonts;
     // The system font metrics cache.
     static AtomicString* s_menuFontFamilyName;
@@ -201,6 +202,7 @@ private:
     static int32_t s_smallCaptionFontHeight;
     static AtomicString* s_statusFontFamilyName;
     static int32_t s_statusFontHeight;
+    static bool s_useSkiaFontFallback;
 #endif
 
     friend class SimpleFontData; // For fontDataFromFontPlatformData
@@ -214,6 +216,8 @@ public:
     FontCachePurgePreventer() { FontCache::fontCache()->disablePurging(); }
     ~FontCachePurgePreventer() { FontCache::fontCache()->enablePurging(); }
 };
+
+CString toSkFontMgrLocale(const String& locale);
 
 } // namespace blink
 

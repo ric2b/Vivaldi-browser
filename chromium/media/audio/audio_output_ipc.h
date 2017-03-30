@@ -9,7 +9,7 @@
 
 #include "base/memory/shared_memory.h"
 #include "base/sync_socket.h"
-#include "media/audio/audio_parameters.h"
+#include "media/base/audio_parameters.h"
 #include "media/base/media_export.h"
 #include "media/base/output_device_info.h"
 #include "url/origin.h"
@@ -36,9 +36,9 @@ class MEDIA_EXPORT AudioOutputIPCDelegate {
 
   // Called when an authorization request for an output device has been
   // completed
-  virtual void OnDeviceAuthorized(
-      OutputDeviceStatus device_status,
-      const media::AudioParameters& output_params) = 0;
+  virtual void OnDeviceAuthorized(OutputDeviceStatus device_status,
+                                  const media::AudioParameters& output_params,
+                                  const std::string& matched_device_id) = 0;
 
   // Called when an audio stream has been created.
   // The shared memory |handle| points to a memory section that's used to

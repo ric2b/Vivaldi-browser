@@ -7,13 +7,13 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/metrics/proto/omnibox_input_type.pb.h"
@@ -467,6 +467,8 @@ class TemplateURLRef {
   mutable std::string search_term_key_;
   mutable size_t search_term_position_in_path_;
   mutable url::Parsed::ComponentType search_term_key_location_;
+  mutable std::string search_term_value_prefix_;
+  mutable std::string search_term_value_suffix_;
 
   mutable PostParams post_params_;
 
@@ -612,7 +614,8 @@ class TemplateURL {
 
   // This setter shouldn't be used except by TemplateURLService and
   // TemplateURLServiceClient implementations.
-  void set_extension_info(scoped_ptr<AssociatedExtensionInfo> extension_info) {
+  void set_extension_info(
+      std::unique_ptr<AssociatedExtensionInfo> extension_info) {
     extension_info_ = std::move(extension_info);
   }
 
@@ -744,7 +747,7 @@ class TemplateURL {
   TemplateURLRef image_url_ref_;
   TemplateURLRef new_tab_url_ref_;
   TemplateURLRef contextual_search_url_ref_;
-  scoped_ptr<AssociatedExtensionInfo> extension_info_;
+  std::unique_ptr<AssociatedExtensionInfo> extension_info_;
 
   // TODO(sky): Add date last parsed OSD file.
 

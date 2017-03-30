@@ -7,12 +7,16 @@
 #include <stddef.h>
 
 #include "ash/wm/window_util.h"
+#include "chrome/browser/chromeos/arc/arc_support_host.h"
 #include "chrome/browser/extensions/launch_util.h"
+#include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
+#include "chrome/browser/ui/ash/launcher/arc_playstore_shortcut_launcher_item_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_app_menu_item.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_app_menu_item_tab.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/launcher_application_menu_item_model.h"
 #include "chrome/browser/ui/ash/launcher/launcher_context_menu.h"
+#include "chrome/browser/ui/ash/launcher/launcher_controller_helper.h"
 #include "chrome/browser/ui/ash/launcher/launcher_item_controller.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
@@ -56,6 +60,15 @@ bool CanBrowserBeUsedForDirectActivation(Browser* browser,
 }
 
 }  // namespace
+
+// static
+AppShortcutLauncherItemController* AppShortcutLauncherItemController::Create(
+    const std::string& app_id,
+    ChromeLauncherController* controller) {
+  if (app_id == ArcSupportHost::kHostAppId || app_id == arc::kPlayStoreAppId)
+    return new ArcPlaystoreShortcutLauncherItemController(controller);
+  return new AppShortcutLauncherItemController(app_id, controller);
+}
 
 // Item controller for an app shortcut. Shortcuts track app and launcher ids,
 // but do not have any associated windows (opening a shortcut will replace the
@@ -200,7 +213,8 @@ AppShortcutLauncherItemController::ItemSelected(const ui::Event& event) {
 }
 
 base::string16 AppShortcutLauncherItemController::GetTitle() {
-  return GetAppTitle();
+  return LauncherControllerHelper::GetAppTitle(launcher_controller()->profile(),
+                                               app_id());
 }
 
 ash::ShelfMenuModel* AppShortcutLauncherItemController::CreateApplicationMenu(
@@ -213,7 +227,8 @@ bool AppShortcutLauncherItemController::IsDraggable() {
 }
 
 bool AppShortcutLauncherItemController::CanPin() const {
-  return launcher_controller()->CanPin(app_id());
+  return launcher_controller()->GetPinnable(app_id()) ==
+         AppListControllerDelegate::PIN_EDITABLE;
 }
 
 bool AppShortcutLauncherItemController::ShouldShowTooltip() {

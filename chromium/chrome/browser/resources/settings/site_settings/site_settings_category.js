@@ -54,7 +54,6 @@ Polymer({
     this.$.blockList.categorySubtype = settings.PermissionValues.BLOCK;
     this.$.allowList.categorySubtype = settings.PermissionValues.ALLOW;
 
-    this.prefsProxy_ = settings.SiteSettingsPrefsBrowserProxyImpl.getInstance();
     this.addWebUIListener('contentSettingCategoryChanged',
         this.defaultValueForCategoryChanged_.bind(this));
   },
@@ -80,7 +79,7 @@ Polymer({
       case settings.ContentSettingsTypes.JAVASCRIPT:
       case settings.ContentSettingsTypes.POPUPS:
         // "Allowed" vs "Blocked".
-        this.prefsProxy_.setDefaultValueForContentType(
+        this.browserProxy.setDefaultValueForContentType(
             this.category,
             this.categoryEnabled ?
                 settings.PermissionValues.ALLOW :
@@ -91,19 +90,11 @@ Polymer({
       case settings.ContentSettingsTypes.CAMERA:
       case settings.ContentSettingsTypes.MIC:
         // "Ask" vs "Blocked".
-        this.prefsProxy_.setDefaultValueForContentType(
+        this.browserProxy.setDefaultValueForContentType(
             this.category,
             this.categoryEnabled ?
                 settings.PermissionValues.ASK :
                 settings.PermissionValues.BLOCK);
-        break;
-      case settings.ContentSettingsTypes.FULLSCREEN:
-        // "Allowed" vs. "Ask first".
-        this.prefsProxy_.setDefaultValueForContentType(
-            this.category,
-            this.categoryEnabled ?
-                settings.PermissionValues.ALLOW :
-                settings.PermissionValues.ASK);
         break;
       default:
         assertNotReached('Invalid category: ' + this.category);
@@ -120,5 +111,21 @@ Polymer({
             this.category).then(function(enabled) {
               this.categoryEnabled = enabled;
             }.bind(this));
+  },
+
+  /**
+   * A handler for the Add Site button.
+   * @private
+   */
+  onAddSiteTap_: function() {
+    var dialog = document.createElement('add-site-dialog');
+    dialog.category = this.category;
+    this.shadowRoot.appendChild(dialog);
+
+    dialog.open();
+
+    dialog.addEventListener('iron-overlay-closed', function() {
+      dialog.remove();
+    });
   },
 });

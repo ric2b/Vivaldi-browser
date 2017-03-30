@@ -4,6 +4,8 @@
 
 #include "net/base/network_interfaces_linux.h"
 
+#include <memory>
+
 #if !defined(OS_ANDROID)
 #include <linux/ethtool.h>
 #endif  // !defined(OS_ANDROID)
@@ -17,7 +19,6 @@
 #include "base/files/file_path.h"
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
@@ -113,7 +114,7 @@ std::string GetInterfaceSSID(const std::string& ifname) {
 bool GetNetworkListImpl(
     NetworkInterfaceList* networks,
     int policy,
-    const base::hash_set<int>& online_links,
+    const std::unordered_set<int>& online_links,
     const internal::AddressTrackerLinux::AddressMap& address_map,
     GetInterfaceNameFunction get_interface_name) {
   std::map<int, std::string> ifnames;

@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <set>
 
 #include "base/i18n/icu_encoding_detection.h"
@@ -16,7 +17,6 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -298,7 +298,7 @@ FPDF_SYSFONTINFO g_font_info = {
 };
 #endif  // defined(OS_LINUX)
 
-PDFiumEngine* g_engine_for_unsupported;
+PDFiumEngine* g_engine_for_unsupported = nullptr;
 
 void Unsupported_Handler(UNSUPPORT_INFO*, int type) {
   if (!g_engine_for_unsupported) {
@@ -1049,6 +1049,7 @@ void PDFiumEngine::OnPartialDocumentLoaded() {
 
 void PDFiumEngine::OnPendingRequestComplete() {
   if (!doc_ || !form_) {
+    DCHECK(fpdf_availability_);
     LoadDocument();
     return;
   }
@@ -2296,7 +2297,7 @@ std::string PDFiumEngine::GetPageAsJSON(int index) {
   if (index < 0 || static_cast<size_t>(index) > pages_.size() - 1)
     return "{}";
 
-  scoped_ptr<base::Value> node(
+  std::unique_ptr<base::Value> node(
       pages_[index]->GetAccessibleContentAsValue(current_rotation_));
   std::string page_json;
   base::JSONWriter::Write(*node, &page_json);
@@ -2417,8 +2418,13 @@ bool PDFiumEngine::TryLoadingDoc(bool with_password,
                                  const std::string& password,
                                  bool* needs_password) {
   *needs_password = false;
-  if (doc_)
+  if (doc_) {
+    // This is probably not necessary, because it should have already been
+    // called below in the |doc_| initialization path. However, the previous
+    // call may have failed, so call it again for good measure.
+    FPDFAvail_IsDocAvail(fpdf_availability_, &download_hints_);
     return true;
+  }
 
   const char* password_cstr = nullptr;
   if (with_password) {
@@ -2431,11 +2437,16 @@ bool PDFiumEngine::TryLoadingDoc(bool with_password,
   } else {
     doc_ = FPDFAvail_GetDocument(fpdf_availability_, password_cstr);
   }
+  if (!doc_) {
+    if (FPDF_GetLastError() == FPDF_ERR_PASSWORD)
+      *needs_password = true;
+    return false;
+  }
 
-  if (!doc_ && FPDF_GetLastError() == FPDF_ERR_PASSWORD)
-    *needs_password = true;
-
-  return !!doc_;
+  // Always call FPDFAvail_IsDocAvail() so PDFium initializes internal data
+  // structures.
+  FPDFAvail_IsDocAvail(fpdf_availability_, &download_hints_);
+  return true;
 }
 
 void PDFiumEngine::GetPasswordAndLoad() {
@@ -3189,8 +3200,8 @@ void PDFiumEngine::TransformPDFPageForPrinting(
           gfx_content_rect, src_page_width, src_page_height, rotated) : 1.0;
 
   // Calculate positions for the clip box.
-  printing::ClipBox media_box;
-  printing::ClipBox crop_box;
+  printing::PdfRectangle media_box;
+  printing::PdfRectangle crop_box;
   bool has_media_box = !!FPDFPage_GetMediaBox(page,
                                               &media_box.left,
                                               &media_box.bottom,
@@ -3203,9 +3214,9 @@ void PDFiumEngine::TransformPDFPageForPrinting(
                                             &crop_box.top);
   printing::CalculateMediaBoxAndCropBox(
       rotated, has_media_box, has_crop_box, &media_box, &crop_box);
-  printing::ClipBox source_clip_box =
+  printing::PdfRectangle source_clip_box =
       printing::CalculateClipBoxBoundary(media_box, crop_box);
-  printing::ScaleClipBox(scale_factor, &source_clip_box);
+  printing::ScalePdfRectangle(scale_factor, &source_clip_box);
 
   // Calculate the translation offset values.
   double offset_x = 0;

@@ -4,7 +4,8 @@
 
 #include "ui/views/view.h"
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
 #include "ui/aura/window.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_tree_owner.h"
@@ -120,8 +121,8 @@ TEST_F(ViewAuraTest, RecreateLayersWithWindows) {
   EXPECT_EQ(v7_layer, old_w1_root_sublayers[2]);
 
   {
-    scoped_ptr<ui::LayerTreeOwner> cloned_owner(
-        wm::RecreateLayers(w1->GetNativeView()));
+    std::unique_ptr<ui::LayerTreeOwner> cloned_owner(
+        wm::RecreateLayers(w1->GetNativeView(), nullptr));
     EXPECT_EQ(w1_layer, cloned_owner->root());
     EXPECT_NE(w1_layer, w1->GetNativeView()->layer());
 

@@ -19,7 +19,7 @@ namespace browser_sync {
 SyncBackendRegistrar::SyncBackendRegistrar(
     const std::string& name,
     sync_driver::SyncClient* sync_client,
-    scoped_ptr<base::Thread> sync_thread,
+    std::unique_ptr<base::Thread> sync_thread,
     const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
     const scoped_refptr<base::SingleThreadTaskRunner>& db_thread,
     const scoped_refptr<base::SingleThreadTaskRunner>& file_thread)
@@ -52,6 +52,8 @@ SyncBackendRegistrar::SyncBackendRegistrar(
 }
 
 void SyncBackendRegistrar::RegisterNonBlockingType(syncer::ModelType type) {
+  DCHECK(ui_thread_->BelongsToCurrentThread());
+  base::AutoLock lock(lock_);
   DCHECK(routing_info_.find(type) == routing_info_.end() ||
          routing_info_[type] == syncer::GROUP_NON_BLOCKING);
   non_blocking_types_.Put(type);
@@ -85,6 +87,15 @@ void SyncBackendRegistrar::SetInitialTypes(syncer::ModelTypeSet initial_types) {
   }
 
   last_configured_types_ = syncer::GetRoutingInfoTypes(routing_info_);
+}
+
+void SyncBackendRegistrar::AddRestoredNonBlockingType(syncer::ModelType type) {
+  DCHECK(ui_thread_->BelongsToCurrentThread());
+  base::AutoLock lock(lock_);
+  DCHECK(non_blocking_types_.Has(type));
+  DCHECK(routing_info_.find(type) == routing_info_.end());
+  routing_info_[type] = syncer::GROUP_NON_BLOCKING;
+  last_configured_types_.Put(type);
 }
 
 bool SyncBackendRegistrar::IsNigoriEnabled() const {
@@ -338,7 +349,7 @@ void SyncBackendRegistrar::RemoveWorker(syncer::ModelSafeGroup group) {
   }
 }
 
-scoped_ptr<base::Thread> SyncBackendRegistrar::ReleaseSyncThread() {
+std::unique_ptr<base::Thread> SyncBackendRegistrar::ReleaseSyncThread() {
   return std::move(sync_thread_);
 }
 

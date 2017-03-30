@@ -15,7 +15,7 @@ void SendDataPipeControlMessage(NodeController* node_controller,
                                 const ports::PortRef& port,
                                 DataPipeCommand command,
                                 uint32_t num_bytes) {
-  scoped_ptr<PortsMessage> message =
+  std::unique_ptr<PortsMessage> message =
       PortsMessage::NewUserMessage(sizeof(DataPipeControlMessage), 0, 0);
   CHECK(message);
 
@@ -24,7 +24,7 @@ void SendDataPipeControlMessage(NodeController* node_controller,
   data->command = command;
   data->num_bytes = num_bytes;
 
-  int rv = node_controller->SendMessage(port, &message);
+  int rv = node_controller->SendMessage(port, std::move(message));
   if (rv != ports::OK && rv != ports::ERROR_PORT_PEER_CLOSED) {
     DLOG(ERROR) << "Unexpected failure sending data pipe control message: "
                 << rv;

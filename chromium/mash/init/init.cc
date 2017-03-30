@@ -8,8 +8,8 @@
 #include "base/command_line.h"
 #include "base/guid.h"
 #include "mash/login/public/interfaces/login.mojom.h"
-#include "mojo/shell/public/cpp/connection.h"
-#include "mojo/shell/public/cpp/connector.h"
+#include "services/shell/public/cpp/connection.h"
+#include "services/shell/public/cpp/connector.h"
 
 namespace mash {
 namespace init {
@@ -18,17 +18,16 @@ Init::Init()
     : connector_(nullptr) {}
 Init::~Init() {}
 
-void Init::Initialize(mojo::Connector* connector,
-                      const mojo::Identity& identity,
+void Init::Initialize(shell::Connector* connector,
+                      const shell::Identity& identity,
                       uint32_t id) {
   connector_ = connector;
   connector_->Connect("mojo:mus");
   StartTracing();
-  StartResourceProvider();
   StartLogin();
 }
 
-bool Init::AcceptConnection(mojo::Connection* connection) {
+bool Init::AcceptConnection(shell::Connection* connection) {
   connection->AddInterface<mojom::Init>(this);
   return true;
 }
@@ -36,8 +35,9 @@ bool Init::AcceptConnection(mojo::Connection* connection) {
 void Init::StartService(const mojo::String& name,
                         const mojo::String& user_id) {
   if (user_services_.find(user_id) == user_services_.end()) {
-    mojo::Connector::ConnectParams params(mojo::Identity(name, user_id));
-    std::unique_ptr<mojo::Connection> connection = connector_->Connect(&params);
+    shell::Connector::ConnectParams params(shell::Identity(name, user_id));
+    std::unique_ptr<shell::Connection> connection =
+        connector_->Connect(&params);
     connection->SetConnectionLostClosure(
         base::Bind(&Init::UserServiceQuit, base::Unretained(this), user_id));
     user_services_[user_id] = std::move(connection);
@@ -50,7 +50,7 @@ void Init::StopServicesForUser(const mojo::String& user_id) {
     user_services_.erase(it);
 }
 
-void Init::Create(mojo::Connection* connection, mojom::InitRequest request) {
+void Init::Create(shell::Connection* connection, mojom::InitRequest request) {
   init_bindings_.AddBinding(this, std::move(request));
 }
 
@@ -62,10 +62,6 @@ void Init::UserServiceQuit(const std::string& user_id) {
 
 void Init::StartTracing() {
   connector_->Connect("mojo:tracing");
-}
-
-void Init::StartResourceProvider() {
-  connector_->Connect("mojo:resource_provider");
 }
 
 void Init::StartLogin() {

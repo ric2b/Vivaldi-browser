@@ -155,30 +155,15 @@ struct RefPtrHash : PtrHash<T> {
 };
 
 template <typename T>
-struct RawPtrHash : PtrHash<T> {
-    using PtrHash<T>::hash;
-    static unsigned hash(const RawPtr<T>& key) { return hash(key.get()); }
-    using PtrHash<T>::equal;
-    static bool equal(const RawPtr<T>& a, const RawPtr<T>& b) { return a == b; }
-    static bool equal(T* a, const RawPtr<T>& b) { return a == b; }
-    static bool equal(const RawPtr<T>& a, T* b) { return a == b; }
-};
-
-template <typename T>
 struct OwnPtrHash : PtrHash<T> {
     using PtrHash<T>::hash;
     static unsigned hash(const OwnPtr<T>& key) { return hash(key.get()); }
-    static unsigned hash(const PassOwnPtr<T>& key) { return hash(key.get()); }
 
     static bool equal(const OwnPtr<T>& a, const OwnPtr<T>& b)
     {
         return a.get() == b.get();
     }
     static bool equal(const OwnPtr<T>& a, T* b) { return a == b; }
-    static bool equal(const OwnPtr<T>& a, const PassOwnPtr<T>& b)
-    {
-        return a.get() == b.get();
-    }
 };
 
 template <typename T>
@@ -228,10 +213,6 @@ struct DefaultHash<T*> {
 template <typename T>
 struct DefaultHash<RefPtr<T>> {
     using Hash = RefPtrHash<T>;
-};
-template <typename T>
-struct DefaultHash<RawPtr<T>> {
-    using Hash = RawPtrHash<T>;
 };
 template <typename T>
 struct DefaultHash<OwnPtr<T>> {

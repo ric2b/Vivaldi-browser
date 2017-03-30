@@ -16,15 +16,16 @@
 #define CRASHPAD_SNAPSHOT_WIN_PROCESS_SNAPSHOT_WIN_H_
 
 #include <windows.h>
+#include <stdint.h>
 #include <sys/time.h>
 #include <sys/types.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "client/crashpad_info.h"
 #include "snapshot/crashpad_info_client_options.h"
 #include "snapshot/exception_snapshot.h"
@@ -143,7 +144,8 @@ class ProcessSnapshotWin final : public ProcessSnapshot {
 
  private:
   // Initializes threads_ on behalf of Initialize().
-  void InitializeThreads(bool gather_indirectly_referenced_memory);
+  void InitializeThreads(bool gather_indirectly_referenced_memory,
+                         uint32_t indirectly_referenced_memory_cap);
 
   // Initializes modules_ on behalf of Initialize().
   void InitializeModules();
@@ -188,7 +190,7 @@ class ProcessSnapshotWin final : public ProcessSnapshot {
   PointerVector<internal::ThreadSnapshotWin> threads_;
   PointerVector<internal::ModuleSnapshotWin> modules_;
   std::vector<UnloadedModuleSnapshot> unloaded_modules_;
-  scoped_ptr<internal::ExceptionSnapshotWin> exception_;
+  std::unique_ptr<internal::ExceptionSnapshotWin> exception_;
   PointerVector<internal::MemoryMapRegionSnapshotWin> memory_map_;
   ProcessReaderWin process_reader_;
   UUID report_id_;

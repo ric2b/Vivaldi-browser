@@ -8,28 +8,46 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "mojo/services/catalog/public/interfaces/catalog.mojom.h"
-#include "mojo/services/tracing/public/cpp/tracing_impl.h"
-#include "mojo/shell/public/cpp/shell_client.h"
+#include "mash/public/interfaces/launchable.mojom.h"
+#include "mojo/public/cpp/bindings/binding_set.h"
+#include "services/shell/public/cpp/shell_client.h"
+#include "services/tracing/public/cpp/tracing_impl.h"
 
 namespace views {
 class AuraInit;
+class Widget;
 }
 
 namespace mash {
 namespace quick_launch {
 
-class QuickLaunchApplication : public mojo::ShellClient {
+class QuickLaunchApplication
+    : public shell::ShellClient,
+      public mojom::Launchable,
+      public shell::InterfaceFactory<mojom::Launchable> {
  public:
   QuickLaunchApplication();
   ~QuickLaunchApplication() override;
 
+  void RemoveWindow(views::Widget* window);
+
  private:
-  // mojo::ShellClient:
-  void Initialize(mojo::Connector* connector,
-                  const mojo::Identity& identity,
+  // shell::ShellClient:
+  void Initialize(shell::Connector* connector,
+                  const shell::Identity& identity,
                   uint32_t id) override;
-  bool AcceptConnection(mojo::Connection* connection) override;
+  bool AcceptConnection(shell::Connection* connection) override;
+
+  // mojom::Launchable:
+  void Launch(uint32_t what, mojom::LaunchMode how) override;
+
+  // shell::InterfaceFactory<mojom::Launchable>:
+  void Create(shell::Connection* connection,
+              mojom::LaunchableRequest request) override;
+
+  shell::Connector* connector_ = nullptr;
+  mojo::BindingSet<mojom::Launchable> bindings_;
+  std::vector<views::Widget*> windows_;
 
   mojo::TracingImpl tracing_;
   std::unique_ptr<views::AuraInit> aura_init_;

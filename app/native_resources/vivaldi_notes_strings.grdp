@@ -7,4 +7,7 @@
   <message name="IDS_NOTES_TRASH_FOLDER_NAME" desc="The text in the notes folder view for the trash folder.">
     Trash
   </message>
+  <message name="IDS_VIV_CONTENT_INSERT_NOTE" desc="The Insert Note submenu text.">
+    Insert Note
+  </message>
 </grit-part>

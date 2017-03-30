@@ -31,6 +31,7 @@
 #ifndef JavaScriptCallFrame_h
 #define JavaScriptCallFrame_h
 
+#include "platform/inspector_protocol/Collections.h"
 #include "platform/inspector_protocol/String16.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
@@ -63,13 +64,11 @@ private:
     int callV8FunctionReturnInt(const char* name) const;
 
     v8::Isolate* m_isolate;
-    OwnPtr<JavaScriptCallFrame> m_caller;
     v8::Global<v8::Context> m_debuggerContext;
     v8::Global<v8::Object> m_callFrame;
-    v8::Global<v8::FunctionTemplate> m_wrapperTemplate;
 };
 
-using JavaScriptCallFrames = Vector<OwnPtr<JavaScriptCallFrame>>;
+using JavaScriptCallFrames = protocol::Vector<OwnPtr<JavaScriptCallFrame>>;
 
 } // namespace blink
 

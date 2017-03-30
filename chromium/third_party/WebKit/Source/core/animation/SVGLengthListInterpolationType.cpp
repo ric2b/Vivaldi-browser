@@ -22,7 +22,7 @@ InterpolationValue SVGLengthListInterpolationType::maybeConvertNeutral(const Int
     OwnPtr<InterpolableList> result = InterpolableList::create(underlyingLength);
     for (size_t i = 0; i < underlyingLength; i++)
         result->set(i, SVGLengthInterpolationType::neutralInterpolableValue());
-    return InterpolationValue(result.release());
+    return InterpolationValue(std::move(result));
 }
 
 InterpolationValue SVGLengthListInterpolationType::maybeConvertSVGValue(const SVGPropertyBase& svgValue) const
@@ -34,18 +34,18 @@ InterpolationValue SVGLengthListInterpolationType::maybeConvertSVGValue(const SV
     OwnPtr<InterpolableList> result = InterpolableList::create(lengthList.length());
     for (size_t i = 0; i < lengthList.length(); i++) {
         InterpolationValue component = SVGLengthInterpolationType::convertSVGLength(*lengthList.at(i));
-        result->set(i, component.interpolableValue.release());
+        result->set(i, std::move(component.interpolableValue));
     }
-    return InterpolationValue(result.release());
+    return InterpolationValue(std::move(result));
 }
 
-PairwiseInterpolationValue SVGLengthListInterpolationType::mergeSingleConversions(InterpolationValue&& start, InterpolationValue&& end) const
+PairwiseInterpolationValue SVGLengthListInterpolationType::maybeMergeSingles(InterpolationValue&& start, InterpolationValue&& end) const
 {
     size_t startLength = toInterpolableList(*start.interpolableValue).length();
     size_t endLength = toInterpolableList(*end.interpolableValue).length();
     if (startLength != endLength)
         return nullptr;
-    return InterpolationType::mergeSingleConversions(std::move(start), std::move(end));
+    return InterpolationType::maybeMergeSingles(std::move(start), std::move(end));
 }
 
 void SVGLengthListInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value, double interpolationFraction) const

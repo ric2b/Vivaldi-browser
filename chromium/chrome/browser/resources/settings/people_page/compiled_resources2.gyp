@@ -8,7 +8,6 @@
       'dependencies': [
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:util',
-        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:i18n_behavior',
       ],
       'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
@@ -42,8 +41,8 @@
     {
       'target_name': 'easy_unlock_turn_off_dialog',
       'dependencies': [
-        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:i18n_behavior',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:i18n_behavior',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:web_ui_listener_behavior',
         'easy_unlock_browser_proxy',
       ],
@@ -70,12 +69,19 @@
       'dependencies': [
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:assert',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
-        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:i18n_behavior',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:web_ui_listener_behavior',
         '../settings_page/compiled_resources2.gyp:settings_animated_pages',
         'easy_unlock_browser_proxy',
         'easy_unlock_turn_off_dialog',
-        'sync_private_api',
+        'profile_info_browser_proxy',
+        'sync_browser_proxy',
+      ],
+      'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'profile_info_browser_proxy',
+      'dependencies': [
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
       ],
       'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
@@ -83,18 +89,20 @@
       'target_name': 'sync_page',
       'dependencies': [
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:assert',
-        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:i18n_behavior',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:web_ui_listener_behavior',
         '../settings_page/compiled_resources2.gyp:settings_animated_pages',
-        'sync_private_api',
+        'sync_browser_proxy',
       ],
       'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
     {
-      'target_name': 'sync_private_api',
+      'target_name': 'sync_browser_proxy',
       'dependencies': [
-        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:assert',
+        '<(DEPTH)/third_party/closure_compiler/externs/compiled_resources2.gyp:metrics_private',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
       ],
       'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
     },

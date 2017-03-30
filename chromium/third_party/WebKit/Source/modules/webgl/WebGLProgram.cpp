@@ -147,6 +147,11 @@ bool WebGLProgram::detachShader(WebGLShader* shader)
     }
 }
 
+ScopedPersistent<v8::Array>* WebGLProgram::getPersistentCache()
+{
+    return &m_shaderWrappers;
+}
+
 void WebGLProgram::cacheInfoIfNeeded(WebGLRenderingContextBase* context)
 {
     if (m_infoValid)

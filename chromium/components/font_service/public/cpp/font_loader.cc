@@ -9,12 +9,12 @@
 #include "base/bind.h"
 #include "base/trace_event/trace_event.h"
 #include "components/font_service/public/cpp/font_service_thread.h"
-#include "mojo/shell/public/cpp/connector.h"
+#include "services/shell/public/cpp/connector.h"
 
 namespace font_service {
 
-FontLoader::FontLoader(mojo::Connector* connector) {
-  FontServicePtr font_service;
+FontLoader::FontLoader(shell::Connector* connector) {
+  mojom::FontServicePtr font_service;
   connector->ConnectToInterface("mojo:font_service", &font_service);
   thread_ = new internal::FontServiceThread(std::move(font_service));
 }
@@ -27,10 +27,10 @@ void FontLoader::Shutdown() {
 }
 
 bool FontLoader::matchFamilyName(const char family_name[],
-                                 SkTypeface::Style requested,
+                                 SkFontStyle requested,
                                  FontIdentity* out_font_identifier,
                                  SkString* out_family_name,
-                                 SkTypeface::Style* out_style) {
+                                 SkFontStyle* out_style) {
   TRACE_EVENT1("font_service", "FontServiceThread::MatchFamilyName",
                "family_name", family_name);
   return thread_->MatchFamilyName(family_name, requested, out_font_identifier,

@@ -156,7 +156,7 @@ WebInspector.TimelineModel.RecordType = {
     ImplSideFling: "InputHandlerProxy::HandleGestureFling::started",
     GCIdleLazySweep: "ThreadState::performIdleLazySweep",
     GCCompleteSweep: "ThreadState::completeSweep",
-    GCCollectGarbage: "Heap::collectGarbage",
+    GCCollectGarbage: "BlinkGCMarking",
 
     // CpuProfile is a virtual event created on frontend to support
     // serialization of CPU Profiles within tracing timeline data.
@@ -217,35 +217,6 @@ WebInspector.TimelineModel.forEachEvent = function(events, onStartEvent, onEndEv
         onEndEvent(stack.pop());
 }
 
-/**
- * @param {!Array.<!WebInspector.TimelineModel.Record>} recordsArray
- * @param {?function(!WebInspector.TimelineModel.Record)|?function(!WebInspector.TimelineModel.Record,number)} preOrderCallback
- * @param {function(!WebInspector.TimelineModel.Record)|function(!WebInspector.TimelineModel.Record,number)=} postOrderCallback
- * @return {boolean}
- */
-WebInspector.TimelineModel.forAllRecords = function(recordsArray, preOrderCallback, postOrderCallback)
-{
-    /**
-     * @param {!Array.<!WebInspector.TimelineModel.Record>} records
-     * @param {number} depth
-     * @return {boolean}
-     */
-    function processRecords(records, depth)
-    {
-        for (var i = 0; i < records.length; ++i) {
-            var record = records[i];
-            if (preOrderCallback && preOrderCallback(record, depth))
-                return true;
-            if (processRecords(record.children(), depth + 1))
-                return true;
-            if (postOrderCallback && postOrderCallback(record, depth))
-                return true;
-        }
-        return false;
-    }
-    return processRecords(recordsArray, 0);
-}
-
 WebInspector.TimelineModel.DevToolsMetadataEvent = {
     TracingStartedInBrowser: "TracingStartedInBrowser",
     TracingStartedInPage: "TracingStartedInPage",
@@ -303,7 +274,7 @@ WebInspector.TimelineModel.Record.prototype = {
     target: function()
     {
         var threadName = this._event.thread.name();
-        //FIXME: correctly specify target
+        // FIXME: correctly specify target
         return threadName === WebInspector.TimelineModel.RendererMainThreadName ? WebInspector.targetManager.targets()[0] || null : null;
     },
 
@@ -408,12 +379,32 @@ WebInspector.TimelineModel._eventType = function(event)
 
 WebInspector.TimelineModel.prototype = {
     /**
+     * @deprecated Test use only!
      * @param {?function(!WebInspector.TimelineModel.Record)|?function(!WebInspector.TimelineModel.Record,number)} preOrderCallback
      * @param {function(!WebInspector.TimelineModel.Record)|function(!WebInspector.TimelineModel.Record,number)=} postOrderCallback
+     * @return {boolean}
      */
     forAllRecords: function(preOrderCallback, postOrderCallback)
     {
-        WebInspector.TimelineModel.forAllRecords(this._records, preOrderCallback, postOrderCallback);
+        /**
+         * @param {!Array.<!WebInspector.TimelineModel.Record>} records
+         * @param {number} depth
+         * @return {boolean}
+         */
+        function processRecords(records, depth)
+        {
+            for (var i = 0; i < records.length; ++i) {
+                var record = records[i];
+                if (preOrderCallback && preOrderCallback(record, depth))
+                    return true;
+                if (processRecords(record.children(), depth + 1))
+                    return true;
+                if (postOrderCallback && postOrderCallback(record, depth))
+                    return true;
+            }
+            return false;
+        }
+        return processRecords(this._records, 0);
     },
 
     /**
@@ -445,13 +436,20 @@ WebInspector.TimelineModel.prototype = {
             processRecord.call(this, this._records[i], 0);
     },
 
-
     /**
      * @return {!Array.<!WebInspector.TimelineModel.Record>}
      */
     records: function()
     {
         return this._records;
+    },
+
+    /**
+     * @return {!Array<!WebInspector.CPUProfileDataModel>}
+     */
+    cpuProfiles: function()
+    {
+        return this._cpuProfiles;
     },
 
     /**
@@ -499,7 +497,6 @@ WebInspector.TimelineModel.prototype = {
         }
         this._inspectedTargetEvents.sort(WebInspector.TracingModel.Event.compareStartTime);
 
-        this._cpuProfiles = null;
         this._processBrowserEvents(tracingModel);
         this._buildTimelineRecords();
         this._buildGPUEvents(tracingModel);
@@ -728,7 +725,7 @@ WebInspector.TimelineModel.prototype = {
                 var cpuProfile = cpuProfileEvent.args["data"]["cpuProfile"];
                 if (cpuProfile) {
                     var jsProfileModel = new WebInspector.CPUProfileDataModel(cpuProfile);
-                    this._lineLevelCPUProfile.appendCPUProfile(jsProfileModel);
+                    this._cpuProfiles.push(jsProfileModel);
                     jsSamples = WebInspector.TimelineJSProfileProcessor.generateTracingEventsFromCpuProfile(jsProfileModel, thread);
                 }
             }
@@ -755,7 +752,7 @@ WebInspector.TimelineModel.prototype = {
         }
 
         this._eventStack = [];
-        var i = events.lowerBound(startTime, function (time, event) { return time - event.startTime });
+        var i = events.lowerBound(startTime, function(time, event) { return time - event.startTime });
         var length = events.length;
         for (; i < length; i++) {
             var event = events[i];
@@ -782,7 +779,7 @@ WebInspector.TimelineModel.prototype = {
      */
     _processAsyncEvents: function(asyncEventsByGroup, asyncEvents, startTime, endTime)
     {
-        var i = startTime ? asyncEvents.lowerBound(startTime, function (time, asyncEvent) { return time - asyncEvent.startTime }) : 0;
+        var i = startTime ? asyncEvents.lowerBound(startTime, function(time, asyncEvent) { return time - asyncEvent.startTime }) : 0;
         for (; i < asyncEvents.length; ++i) {
             var asyncEvent = asyncEvents[i];
             if (endTime && asyncEvent.startTime >= endTime)
@@ -827,6 +824,7 @@ WebInspector.TimelineModel.prototype = {
         case recordTypes.ResourceSendRequest:
         case recordTypes.WebSocketCreate:
             event.url = event.args["data"]["url"];
+            event.initiator = eventStack.peekLast() || null;
             break;
 
         case recordTypes.ScheduleStyleRecalculation:
@@ -1024,6 +1022,11 @@ WebInspector.TimelineModel.prototype = {
                     return null;
                 if (asyncEvent.name === WebInspector.TimelineModel.RecordType.InputLatencyMouseMove && !asyncEvent.causedFrame)
                     return null;
+                var rendererMain = data["INPUT_EVENT_LATENCY_RENDERER_MAIN_COMPONENT"];
+                if (rendererMain) {
+                    var time = rendererMain["time"] / 1000;
+                    asyncEvent.steps[0].timeWaitingForMainThread = time - asyncEvent.steps[0].startTime;
+                }
             }
             return groups.input;
         }
@@ -1059,7 +1062,6 @@ WebInspector.TimelineModel.prototype = {
 
     reset: function()
     {
-        this._lineLevelCPUProfile = new WebInspector.TimelineModel.LineLevelProfile();
         this._virtualThreads = [];
         /** @type {!Array<!WebInspector.TracingModel.Event>} */
         this._mainThreadEvents = [];
@@ -1079,16 +1081,10 @@ WebInspector.TimelineModel.prototype = {
         this._sessionId = null;
         /** @type {?number} */
         this._mainFrameNodeId = null;
+        /** @type {!Array<!WebInspector.CPUProfileDataModel>} */
+        this._cpuProfiles = [];
         this._minimumRecordTime = 0;
         this._maximumRecordTime = 0;
-    },
-
-    /**
-     * @return {!WebInspector.TimelineModel.LineLevelProfile}
-     */
-    lineLevelCPUProfile: function()
-    {
-        return this._lineLevelCPUProfile;
     },
 
     /**
@@ -1728,53 +1724,5 @@ WebInspector.TimelineAsyncEventTracker.prototype = {
             initiatorMap.set(id, event);
         else
             event.initiator = initiatorMap.get(id) || null;
-    }
-}
-
-/**
- * @constructor
- */
-WebInspector.TimelineModel.LineLevelProfile = function()
-{
-    /** @type {!Map<string, !Map<number, number>>} */
-    this._files = new Map();
-}
-
-WebInspector.TimelineModel.LineLevelProfile.prototype = {
-    /**
-     * @param {!WebInspector.CPUProfileDataModel} profile
-     */
-    appendCPUProfile: function(profile)
-    {
-        var nodesToGo = [profile.profileHead];
-        var sampleDuration = (profile.profileEndTime - profile.profileStartTime) / profile.totalHitCount;
-        while (nodesToGo.length) {
-            var nodes = nodesToGo.pop().children;
-            for (var i = 0; i < nodes.length; ++i) {
-                var node = nodes[i];
-                nodesToGo.push(node);
-                if (!node.url || !node.positionTicks)
-                    continue;
-                var fileInfo = this._files.get(node.url);
-                if (!fileInfo) {
-                    fileInfo = new Map();
-                    this._files.set(node.url, fileInfo);
-                }
-                for (var j = 0; j < node.positionTicks.length; ++j) {
-                    var lineInfo = node.positionTicks[j];
-                    var line = lineInfo.line;
-                    var time = lineInfo.ticks * sampleDuration;
-                    fileInfo.set(line, (fileInfo.get(line) || 0) + time);
-                }
-            }
-        }
-    },
-
-    /**
-     * @return {!Map<string, !Map<number, number>>}
-     */
-    files: function()
-    {
-        return this._files;
     }
 }

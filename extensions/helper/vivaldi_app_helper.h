@@ -12,15 +12,16 @@ namespace extensions {
 // inside a IsVivaldiRunning() block
 class VivaldiAppHelper :
   public content::WebContentsUserData<VivaldiAppHelper> {
- public:
+public:
   ~VivaldiAppHelper() override;
 
- private:
+private:
   explicit VivaldiAppHelper(content::WebContents *contents);
   friend class content::WebContentsUserData<VivaldiAppHelper>;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiAppHelper);
 };
+
 }  // namespace extensions
 
 #endif  // EXTENSIONS_HELPER_VIVALDI_APP_HELPER_H_

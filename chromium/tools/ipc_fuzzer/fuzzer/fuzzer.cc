@@ -1253,17 +1253,6 @@ struct FuzzTraits<gpu::MailboxHolder> {
 };
 
 template <>
-struct FuzzTraits<gpu::ValueState> {
-  static bool Fuzz(gpu::ValueState* p, Fuzzer* fuzzer) {
-    if (!FuzzParamArray(&p->float_value[0], 4, fuzzer))
-      return false;
-    if (!FuzzParamArray(&p->int_value[0], 4, fuzzer))
-      return false;
-    return true;
-  }
-};
-
-template <>
 struct FuzzTraits<GURL> {
   static bool Fuzz(GURL* p, Fuzzer* fuzzer) {
     if (!fuzzer->ShouldGenerate()) {
@@ -1481,15 +1470,27 @@ struct FuzzTraits<net::HostPortPair> {
 };
 
 template <>
+struct FuzzTraits<net::IPAddress> {
+  static bool Fuzz(net::IPAddress* p, Fuzzer* fuzzer) {
+    std::vector<uint8_t> bytes = p->bytes();
+    if (!FuzzParam(&bytes, fuzzer))
+      return false;
+    net::IPAddress ip_address(bytes);
+    *p = ip_address;
+    return true;
+  }
+};
+
+template <>
 struct FuzzTraits<net::IPEndPoint> {
   static bool Fuzz(net::IPEndPoint* p, Fuzzer* fuzzer) {
-    net::IPAddressNumber address_number = p->address().bytes();
+    net::IPAddress ip_address = p->address();
     int port = p->port();
-    if (!FuzzParam(&address_number, fuzzer))
+    if (!FuzzParam(&ip_address, fuzzer))
       return false;
     if (!FuzzParam(&port, fuzzer))
       return false;
-    net::IPEndPoint ip_endpoint(address_number, port);
+    net::IPEndPoint ip_endpoint(ip_address, port);
     *p = ip_endpoint;
     return true;
   }

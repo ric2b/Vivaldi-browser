@@ -6,11 +6,11 @@
 #define COMPONENTS_GCM_DRIVER_INSTANCE_ID_INSTANCE_ID_H_
 
 #include <map>
+#include <memory>
 #include <string>
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 
 namespace gcm {
@@ -20,8 +20,8 @@ class InstanceIDHandler;
 namespace instance_id {
 
 // Encapsulates Instance ID functionalities that need to be implemented for
-// different platform. One instance is created per application. Life of
-// Instance ID is managed by the InstanceIdDriver.
+// different platforms. One instance is created per application. Life of
+// Instance ID is managed by the InstanceIDDriver.
 class InstanceID {
  public:
   enum Result {
@@ -41,7 +41,8 @@ class InstanceID {
     UNKNOWN_ERROR
   };
 
-  // Asynchronous callbacks.
+  // Asynchronous callbacks. Must not synchronously delete |this| (using
+  // InstanceIDDriver::RemoveInstanceID).
   typedef base::Callback<void(const std::string& app_id,
                               bool update_id)> TokenRefreshCallback;
   typedef base::Callback<void(const std::string& id)> GetIDCallback;
@@ -57,9 +58,9 @@ class InstanceID {
   // Creator.
   // |app_id|: identifies the application that uses the Instance ID.
   // |handler|: provides the GCM functionality needed to support Instance ID.
-  //            Must outlive this class.
-  static scoped_ptr<InstanceID> Create(const std::string& app_id,
-                                       gcm::InstanceIDHandler* handler);
+  //            Must outlive this class. On Android, this can be null instead.
+  static std::unique_ptr<InstanceID> Create(const std::string& app_id,
+                                            gcm::InstanceIDHandler* handler);
 
   virtual ~InstanceID();
 
@@ -106,17 +107,11 @@ class InstanceID {
   std::string app_id() const { return app_id_; }
 
  protected:
-  InstanceID(const std::string& app_id, gcm::InstanceIDHandler* handler);
+  InstanceID(const std::string& app_id);
 
   void NotifyTokenRefresh(bool update_id);
 
-  gcm::InstanceIDHandler* handler() const { return handler_; }
-
  private:
-  // Owned by GCMProfileServiceFactory, which is a dependency of
-  // InstanceIDProfileServiceFactory, which owns this.
-  gcm::InstanceIDHandler* handler_;
-
   std::string app_id_;
   TokenRefreshCallback token_refresh_callback_;
 

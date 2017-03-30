@@ -9,7 +9,6 @@
 
 #include "base/callback.h"
 #include "base/memory/free_deleter.h"
-#include "base/memory/scoped_ptr.h"
 
 struct AudioChannelLayout;
 struct AudioStreamBasicDescription;
@@ -24,7 +23,7 @@ class DecoderBuffer;
 class ATCodecHelper {
  public:
   using ScopedAudioChannelLayoutPtr =
-      scoped_ptr<AudioChannelLayout, base::FreeDeleter>;
+      std::unique_ptr<AudioChannelLayout, base::FreeDeleter>;
 
   // Invoked when there is enough information about the audio stream to
   // determine the exact format.  Returns false on failure.

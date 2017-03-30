@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -16,7 +17,6 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/stl_util.h"
 #include "base/synchronization/lock.h"
@@ -34,7 +34,7 @@ class TestContextSupport;
 
 class TestWebGraphicsContext3D {
  public:
-  static scoped_ptr<TestWebGraphicsContext3D> Create();
+  static std::unique_ptr<TestWebGraphicsContext3D> Create();
 
   virtual ~TestWebGraphicsContext3D();
 
@@ -284,7 +284,7 @@ class TestWebGraphicsContext3D {
     return last_waited_sync_token_;
   }
 
-  const ContextProvider::Capabilities& test_capabilities() const {
+  const gpu::Capabilities& test_capabilities() const {
     return test_capabilities_;
   }
 
@@ -311,47 +311,45 @@ class TestWebGraphicsContext3D {
   void ResetUsedTextures() { used_textures_.clear(); }
 
   void set_have_extension_io_surface(bool have) {
-    test_capabilities_.gpu.iosurface = have;
-    test_capabilities_.gpu.texture_rectangle = have;
+    test_capabilities_.iosurface = have;
+    test_capabilities_.texture_rectangle = have;
   }
   void set_have_extension_egl_image(bool have) {
-    test_capabilities_.gpu.egl_image_external = have;
+    test_capabilities_.egl_image_external = have;
   }
   void set_have_post_sub_buffer(bool have) {
-    test_capabilities_.gpu.post_sub_buffer = have;
+    test_capabilities_.post_sub_buffer = have;
   }
   void set_have_commit_overlay_planes(bool have) {
-    test_capabilities_.gpu.commit_overlay_planes = have;
+    test_capabilities_.commit_overlay_planes = have;
   }
   void set_have_discard_framebuffer(bool have) {
-    test_capabilities_.gpu.discard_framebuffer = have;
+    test_capabilities_.discard_framebuffer = have;
   }
   void set_support_compressed_texture_etc1(bool support) {
-    test_capabilities_.gpu.texture_format_etc1 = support;
+    test_capabilities_.texture_format_etc1 = support;
   }
   void set_support_texture_format_bgra8888(bool support) {
-    test_capabilities_.gpu.texture_format_bgra8888 = support;
+    test_capabilities_.texture_format_bgra8888 = support;
   }
   void set_support_texture_storage(bool support) {
-    test_capabilities_.gpu.texture_storage = support;
+    test_capabilities_.texture_storage = support;
   }
   void set_support_texture_usage(bool support) {
-    test_capabilities_.gpu.texture_usage = support;
+    test_capabilities_.texture_usage = support;
   }
   void set_support_sync_query(bool support) {
-    test_capabilities_.gpu.sync_query = support;
+    test_capabilities_.sync_query = support;
   }
-  void set_support_image(bool support) {
-    test_capabilities_.gpu.image = support;
-  }
+  void set_support_image(bool support) { test_capabilities_.image = support; }
   void set_support_texture_rectangle(bool support) {
-    test_capabilities_.gpu.texture_rectangle = support;
+    test_capabilities_.texture_rectangle = support;
   }
   void set_support_texture_half_float_linear(bool support) {
-    test_capabilities_.gpu.texture_half_float_linear = support;
+    test_capabilities_.texture_half_float_linear = support;
   }
   void set_msaa_is_slow(bool msaa_is_slow) {
-    test_capabilities_.gpu.msaa_is_slow = msaa_is_slow;
+    test_capabilities_.msaa_is_slow = msaa_is_slow;
   }
 
   // When this context is lost, all contexts in its share group are also lost.
@@ -376,11 +374,6 @@ class TestWebGraphicsContext3D {
 
   virtual GLuint NextRenderbufferId();
   virtual void RetireRenderbufferId(GLuint id);
-
-  void SetMaxTransferBufferUsageBytes(size_t max_transfer_buffer_usage_bytes);
-  size_t max_used_transfer_buffer_usage_bytes() const {
-    return max_used_transfer_buffer_usage_bytes_;
-  }
 
   void SetMaxSamples(int max_samples);
   void set_test_support(TestContextSupport* test_support) {
@@ -419,7 +412,7 @@ class TestWebGraphicsContext3D {
     ~Buffer();
 
     GLenum target;
-    scoped_ptr<uint8_t[]> pixels;
+    std::unique_ptr<uint8_t[]> pixels;
     size_t size;
 
    private:
@@ -430,7 +423,7 @@ class TestWebGraphicsContext3D {
     Image();
     ~Image();
 
-    scoped_ptr<uint8_t[]> pixels;
+    std::unique_ptr<uint8_t[]> pixels;
 
    private:
     DISALLOW_COPY_AND_ASSIGN(Image);
@@ -445,7 +438,7 @@ class TestWebGraphicsContext3D {
     unsigned next_image_id;
     unsigned next_texture_id;
     unsigned next_renderbuffer_id;
-    std::unordered_map<unsigned, scoped_ptr<Buffer>> buffers;
+    std::unordered_map<unsigned, std::unique_ptr<Buffer>> buffers;
     std::unordered_set<unsigned> images;
     OrderedTextureMap textures;
     std::unordered_set<unsigned> renderbuffer_set;
@@ -465,13 +458,11 @@ class TestWebGraphicsContext3D {
   void CheckTextureIsBound(GLenum target);
 
   unsigned context_id_;
-  ContextProvider::Capabilities test_capabilities_;
+  gpu::Capabilities test_capabilities_;
   int times_bind_texture_succeeds_;
   int times_end_query_succeeds_;
   bool context_lost_;
   int times_map_buffer_chromium_succeeds_;
-  int current_used_transfer_buffer_usage_bytes_;
-  int max_used_transfer_buffer_usage_bytes_;
   base::Closure context_lost_callback_;
   std::unordered_set<unsigned> used_textures_;
   unsigned next_program_id_;

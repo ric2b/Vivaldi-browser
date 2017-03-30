@@ -4,11 +4,11 @@
 
 cr.define('settings', function() {
   /**
-   * The possible contentSettingsTypes (the ones we currently support
-   * configuring in the UI). This is a subset of the constants found under
-   * content_setttings_types.h and the values should be kept in sync.
-   * TODO(finnur): When all categories have been implemented we can just
-   * generate these constants from content_setttings_types.h.
+   * All possible contentSettingsTypes that we currently support configuring in
+   * the UI. Both top-level categories and content settings that represent
+   * individual permissions under Site Details should appear here. This is a
+   * subset of the constants found under content_setttings_types.h and the
+   * values should be kept in sync.
    * @enum {number}
    */
   var ContentSettingsTypes = {
@@ -24,22 +24,14 @@ cr.define('settings', function() {
   };
 
   /**
-   * Contains the possible values for a given contentSettingsType.
-   * @enum {number}
-   */
-  var PermissionValues = {
-    ALLOW: 1,
-    BLOCK: 2,
-    ASK: 3,
-  };
-
-  /**
    * Contains the possible string values for a given contentSettingsType.
    * @enum {string}
    */
-  var PermissionStringValues = {
+  var PermissionValues = {
+    DEFAULT: 'default',
     ALLOW: 'allow',
     BLOCK: 'block',
+    ASK: 'ask',
   };
 
   /**
@@ -50,14 +42,13 @@ cr.define('settings', function() {
 
   /**
    * An invalid subtype value.
-   * @const {number}
+   * @const {string}
    */
-  var INVALID_CATEGORY_SUBTYPE = -1;
+  var INVALID_CATEGORY_SUBTYPE = '';
 
   return {
     ContentSettingsTypes: ContentSettingsTypes,
     PermissionValues: PermissionValues,
-    PermissionStringValues: PermissionStringValues,
     ALL_SITES: ALL_SITES,
     INVALID_CATEGORY_SUBTYPE: INVALID_CATEGORY_SUBTYPE,
   };

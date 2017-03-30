@@ -1,4 +1,9 @@
 {
+  "Linux ChromiumOS Builder": {
+    "additional_compile_targets": [
+      "All"
+    ]
+  },
   "Linux ChromiumOS GN": {
     "additional_compile_targets": [
       "gn_all"
@@ -9,6 +14,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "base_unittests"
+      },
+      {
+        "args": [
+          "--override-use-gl-with-osmesa-for-tests"
+        ],
+        "test": "mash_unittests"
       }
     ]
   },
@@ -22,6 +33,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "base_unittests"
+      },
+      {
+        "args": [
+          "--override-use-gl-with-osmesa-for-tests"
+        ],
+        "test": "mash_unittests"
       }
     ]
   },
@@ -37,7 +54,7 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "app_list_shower_unittests"
+        "test": "app_list_presenter_unittests"
       },
       {
         "swarming": {
@@ -158,7 +175,19 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "gl_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "google_apis_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "gpu_ipc_service_unittests"
       },
       {
         "swarming": {
@@ -328,7 +357,7 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "app_list_shower_unittests"
+        "test": "app_list_presenter_unittests"
       },
       {
         "swarming": {
@@ -468,6 +497,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "google_apis_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "gpu_ipc_service_unittests"
       },
       {
         "swarming": {
@@ -633,7 +668,7 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "app_list_shower_unittests"
+        "test": "app_list_presenter_unittests"
       },
       {
         "swarming": {
@@ -771,6 +806,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "google_apis_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "gpu_ipc_service_unittests"
       },
       {
         "swarming": {

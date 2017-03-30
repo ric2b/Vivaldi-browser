@@ -339,7 +339,7 @@ bool CompositorAnimations::canStartAnimationOnCompositor(const Element& element)
     return element.layoutObject() && element.layoutObject()->compositingState() == PaintsIntoOwnBacking;
 }
 
-bool CompositorAnimations::startAnimationOnCompositor(const Element& element, int group, double startTime, double timeOffset, const Timing& timing, const Animation& animation, const EffectModel& effect, Vector<int>& startedAnimationIds, double animationPlaybackRate)
+void CompositorAnimations::startAnimationOnCompositor(const Element& element, int group, double startTime, double timeOffset, const Timing& timing, const Animation& animation, const EffectModel& effect, Vector<int>& startedAnimationIds, double animationPlaybackRate)
 {
     ASSERT(startedAnimationIds.isEmpty());
     ASSERT(isCandidateForAnimationOnCompositor(timing, element, &animation, effect, animationPlaybackRate));
@@ -358,7 +358,6 @@ bool CompositorAnimations::startAnimationOnCompositor(const Element& element, in
         startedAnimationIds.append(id);
     }
     ASSERT(!startedAnimationIds.isEmpty());
-    return true;
 }
 
 void CompositorAnimations::cancelAnimationOnCompositor(const Element& element, const Animation& animation, int id)
@@ -492,28 +491,6 @@ void getCubicBezierTimingFunctionParameters(const TimingFunction& timingFunction
     }
 }
 
-void getStepsTimingFunctionParameters(const TimingFunction& timingFunction, int& outSteps, float& outStepsStartOffset)
-{
-    const StepsTimingFunction& steps = toStepsTimingFunction(timingFunction);
-
-    outSteps = steps.numberOfSteps();
-    switch (steps.getStepAtPosition()) {
-    case StepsTimingFunction::Start:
-        outStepsStartOffset = 1;
-        break;
-    case StepsTimingFunction::Middle:
-        outStepsStartOffset = 0.5;
-        break;
-    case StepsTimingFunction::End:
-        outStepsStartOffset = 0;
-        break;
-    default:
-        ASSERT_NOT_REACHED();
-        outStepsStartOffset = 0;
-        break;
-    }
-}
-
 template<typename PlatformAnimationCurveType, typename PlatformAnimationKeyframeType>
 void addKeyframeWithTimingFunction(PlatformAnimationCurveType& curve, const PlatformAnimationKeyframeType& keyframe, const TimingFunction* timingFunction)
 {
@@ -542,11 +519,8 @@ void addKeyframeWithTimingFunction(PlatformAnimationCurveType& curve, const Plat
     }
 
     case TimingFunction::kStepsFunction: {
-        int steps;
-        float stepsStartOffset;
-        getStepsTimingFunctionParameters(*timingFunction, steps, stepsStartOffset);
-
-        curve.add(keyframe, steps, stepsStartOffset);
+        const StepsTimingFunction& steps = toStepsTimingFunction(*timingFunction);
+        curve.add(keyframe, steps.numberOfSteps(), steps.getStepPosition());
         break;
     }
 
@@ -583,11 +557,8 @@ void setTimingFunctionOnCurve(PlatformAnimationCurveType& curve, TimingFunction*
     }
 
     case TimingFunction::kStepsFunction: {
-        int steps;
-        float stepsStartOffset;
-        getStepsTimingFunctionParameters(*timingFunction, steps, stepsStartOffset);
-
-        curve.setStepsTimingFunction(steps, stepsStartOffset);
+        const StepsTimingFunction& steps = toStepsTimingFunction(*timingFunction);
+        curve.setStepsTimingFunction(steps.numberOfSteps(), steps.getStepPosition());
         break;
     }
 
@@ -617,7 +588,7 @@ void CompositorAnimationsImpl::addKeyframesToCurve(CompositorAnimationCurve& cur
             OwnPtr<CompositorFilterOperations> ops = adoptPtr(CompositorFactory::current().createFilterOperations());
             toCompositorFilterOperations(toAnimatableFilterOperations(value)->operations(), ops.get());
 
-            CompositorFilterKeyframe filterKeyframe(keyframe->offset(), ops.release());
+            CompositorFilterKeyframe filterKeyframe(keyframe->offset(), std::move(ops));
             CompositorFilterAnimationCurve* filterCurve = static_cast<CompositorFilterAnimationCurve*>(&curve);
             addKeyframeWithTimingFunction(*filterCurve, filterKeyframe, keyframeTimingFunction);
             break;
@@ -632,7 +603,7 @@ void CompositorAnimationsImpl::addKeyframesToCurve(CompositorAnimationCurve& cur
             OwnPtr<CompositorTransformOperations> ops = adoptPtr(CompositorFactory::current().createTransformOperations());
             toCompositorTransformOperations(toAnimatableTransform(value)->transformOperations(), ops.get());
 
-            CompositorTransformKeyframe transformKeyframe(keyframe->offset(), ops.release());
+            CompositorTransformKeyframe transformKeyframe(keyframe->offset(), std::move(ops));
             CompositorTransformAnimationCurve* transformCurve = static_cast<CompositorTransformAnimationCurve*>(&curve);
             addKeyframeWithTimingFunction(*transformCurve, transformKeyframe, keyframeTimingFunction);
             break;
@@ -654,7 +625,14 @@ void CompositorAnimationsImpl::getAnimationOnCompositor(const Timing& timing, in
     ASSERT(!properties.isEmpty());
     for (const auto& property : properties) {
         PropertySpecificKeyframeVector values;
-        getKeyframeValuesForProperty(&effect, property, compositorTiming.scaledDuration, values);
+        // If the animation duration is infinite, it doesn't make sense to scale
+        // the keyframe offset, so use a scale of 1.0. This is connected to
+        // the known issue of how the Web Animations spec handles infinite
+        // durations. See https://github.com/w3c/web-animations/issues/142
+        double scale = compositorTiming.scaledDuration;
+        if (!std::isfinite(scale))
+            scale = 1.0;
+        getKeyframeValuesForProperty(&effect, property, scale, values);
 
         CompositorTargetProperty::Type targetProperty;
         OwnPtr<CompositorAnimationCurve> curve;
@@ -705,16 +683,16 @@ void CompositorAnimationsImpl::getAnimationOnCompositor(const Timing& timing, in
 
         switch (compositorTiming.direction) {
         case Timing::PlaybackDirectionNormal:
-            animation->setDirection(CompositorAnimation::DirectionNormal);
+            animation->setDirection(CompositorAnimation::Direction::NORMAL);
             break;
         case Timing::PlaybackDirectionReverse:
-            animation->setDirection(CompositorAnimation::DirectionReverse);
+            animation->setDirection(CompositorAnimation::Direction::REVERSE);
             break;
         case Timing::PlaybackDirectionAlternate:
-            animation->setDirection(CompositorAnimation::DirectionAlternate);
+            animation->setDirection(CompositorAnimation::Direction::ALTERNATE_NORMAL);
             break;
         case Timing::PlaybackDirectionAlternateReverse:
-            animation->setDirection(CompositorAnimation::DirectionAlternateReverse);
+            animation->setDirection(CompositorAnimation::Direction::ALTERNATE_REVERSE);
             break;
         default:
             ASSERT_NOT_REACHED();
@@ -723,21 +701,21 @@ void CompositorAnimationsImpl::getAnimationOnCompositor(const Timing& timing, in
 
         switch (compositorTiming.fillMode) {
         case Timing::FillModeNone:
-            animation->setFillMode(CompositorAnimation::FillModeNone);
+            animation->setFillMode(CompositorAnimation::FillMode::NONE);
             break;
         case Timing::FillModeForwards:
-            animation->setFillMode(CompositorAnimation::FillModeForwards);
+            animation->setFillMode(CompositorAnimation::FillMode::FORWARDS);
             break;
         case Timing::FillModeBackwards:
-            animation->setFillMode(CompositorAnimation::FillModeBackwards);
+            animation->setFillMode(CompositorAnimation::FillMode::BACKWARDS);
             break;
         case Timing::FillModeBoth:
-            animation->setFillMode(CompositorAnimation::FillModeBoth);
+            animation->setFillMode(CompositorAnimation::FillMode::BOTH);
             break;
         default:
             ASSERT_NOT_REACHED();
         }
-        animations.append(animation.release());
+        animations.append(std::move(animation));
     }
     ASSERT(!animations.isEmpty());
 }

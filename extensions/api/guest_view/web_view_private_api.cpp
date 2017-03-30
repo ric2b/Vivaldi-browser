@@ -87,7 +87,7 @@ WebViewPrivateSetVisibleFunction::~WebViewPrivateSetVisibleFunction() {
 }
 
 bool WebViewPrivateSetVisibleFunction::RunAsyncSafe(WebViewGuest* guest) {
-  scoped_ptr<vivaldi::web_view_private::SetVisible::Params> params(
+  std::unique_ptr<vivaldi::web_view_private::SetVisible::Params> params(
       vivaldi::web_view_private::SetVisible::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   guest->SetVisible(params->is_visible);
@@ -202,7 +202,7 @@ bool WebViewInternalThumbnailFunction::EncodeBitmap(
 
 bool WebViewInternalThumbnailFunction::InternalRunAsyncSafe(
     WebViewGuest* guest,
-    scoped_ptr<vivaldi::web_view_private::ThumbnailParams>& params) {
+    std::unique_ptr<vivaldi::web_view_private::ThumbnailParams>& params) {
   if (params.get()) {
     if (params->scale.get()) {
       scale_ = *params->scale.get();
@@ -271,7 +271,7 @@ WebViewPrivateGetThumbnailFunction::~WebViewPrivateGetThumbnailFunction() {
 }
 
 bool WebViewPrivateGetThumbnailFunction::RunAsyncSafe(WebViewGuest* guest) {
-  scoped_ptr<vivaldi::web_view_private::GetThumbnail::Params> params(
+  std::unique_ptr<vivaldi::web_view_private::GetThumbnail::Params> params(
       vivaldi::web_view_private::GetThumbnail::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -294,7 +294,7 @@ WebViewPrivateGetThumbnailFromServiceFunction::
 
 bool WebViewPrivateGetThumbnailFromServiceFunction::RunAsyncSafe(
     WebViewGuest* guest) {
-  scoped_ptr<vivaldi::web_view_private::AddToThumbnailService::Params> params(
+  std::unique_ptr<vivaldi::web_view_private::AddToThumbnailService::Params> params(
       vivaldi::web_view_private::AddToThumbnailService::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   url_ = guest->web_contents()->GetURL();
@@ -359,7 +359,7 @@ WebViewPrivateAddToThumbnailServiceFunction::
 
 bool WebViewPrivateAddToThumbnailServiceFunction::RunAsyncSafe(
     WebViewGuest* guest) {
-  scoped_ptr<vivaldi::web_view_private::AddToThumbnailService::Params> params(
+  std::unique_ptr<vivaldi::web_view_private::AddToThumbnailService::Params> params(
       vivaldi::web_view_private::AddToThumbnailService::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -450,7 +450,7 @@ WebViewPrivateShowPageInfoFunction::~WebViewPrivateShowPageInfoFunction() {
 }
 
 bool WebViewPrivateShowPageInfoFunction::RunAsyncSafe(WebViewGuest* guest) {
-  scoped_ptr<vivaldi::web_view_private::ShowPageInfo::Params> params(
+  std::unique_ptr<vivaldi::web_view_private::ShowPageInfo::Params> params(
       vivaldi::web_view_private::ShowPageInfo::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   gfx::Point pos(params->position.left, params->position.top);
@@ -467,7 +467,7 @@ WebViewPrivateSetIsFullscreenFunction::
 }
 
 bool WebViewPrivateSetIsFullscreenFunction::RunAsyncSafe(WebViewGuest* guest) {
-  scoped_ptr<vivaldi::web_view_private::SetIsFullscreen::Params> params(
+  std::unique_ptr<vivaldi::web_view_private::SetIsFullscreen::Params> params(
       vivaldi::web_view_private::SetIsFullscreen::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   guest->SetIsFullscreen(params->is_fullscreen);
@@ -482,7 +482,7 @@ WebViewPrivateGetPageHistoryFunction::
 }
 
 bool WebViewPrivateGetPageHistoryFunction::RunAsyncSafe(WebViewGuest* guest) {
-  scoped_ptr<vivaldi::web_view_private::GetPageHistory::Params> params(
+  std::unique_ptr<vivaldi::web_view_private::GetPageHistory::Params> params(
       vivaldi::web_view_private::GetPageHistory::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   content::NavigationController& controller =
@@ -497,7 +497,7 @@ bool WebViewPrivateGetPageHistoryFunction::RunAsyncSafe(WebViewGuest* guest) {
   for (int i = 0; i < controller.GetEntryCount(); i++) {
     content::NavigationEntry* entry = controller.GetEntryAtIndex(i);
     base::string16 name = entry->GetTitleForDisplay();
-    scoped_ptr<
+    std::unique_ptr<
         vivaldi::web_view_private::GetPageHistory::Results::PageHistoryType>
         history_entry(new vivaldi::web_view_private::GetPageHistory::Results::
                           PageHistoryType);
@@ -523,7 +523,7 @@ WebViewPrivateSetExtensionHostFunction::
 
 bool WebViewPrivateSetExtensionHostFunction::RunAsyncSafe(
     WebViewGuest *guest) {
-  scoped_ptr<vivaldi::web_view_private::SetExtensionHost::Params> params(
+  std::unique_ptr<vivaldi::web_view_private::SetExtensionHost::Params> params(
       vivaldi::web_view_private::SetExtensionHost::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   guest->SetExtensionHost(params->extension_id);
@@ -533,7 +533,7 @@ bool WebViewPrivateSetExtensionHostFunction::RunAsyncSafe(
 
 bool WebViewPrivateIsFocusedElementEditableFunction::RunAsyncSafe(
     WebViewGuest *guest) {
-  scoped_ptr<vivaldi::web_view_private::IsFocusedElementEditable::Params>
+  std::unique_ptr<vivaldi::web_view_private::IsFocusedElementEditable::Params>
       params(
           vivaldi::web_view_private::IsFocusedElementEditable::Params::Create(
               *args_));
@@ -552,7 +552,6 @@ WebViewPrivateIsFocusedElementEditableFunction::
 
 WebViewPrivateIsFocusedElementEditableFunction::
     ~WebViewPrivateIsFocusedElementEditableFunction() {}
-
 
 }  // namespace vivaldi
 }  // namespace extensions

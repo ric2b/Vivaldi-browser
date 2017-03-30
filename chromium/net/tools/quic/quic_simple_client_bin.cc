@@ -114,7 +114,7 @@ class FakeCertVerifier : public net::CertVerifier {
              net::CRLSet* crl_set,
              net::CertVerifyResult* verify_result,
              const net::CompletionCallback& callback,
-             scoped_ptr<net::CertVerifier::Request>* out_req,
+             std::unique_ptr<net::CertVerifier::Request>* out_req,
              const net::BoundNetLog& net_log) override {
     return net::OK;
   }
@@ -122,34 +122,6 @@ class FakeCertVerifier : public net::CertVerifier {
   // Returns true if this CertVerifier supports stapled OCSP responses.
   bool SupportsOCSPStapling() override { return false; }
 };
-
-static bool DecodeHexString(const base::StringPiece& hex, std::string* bytes) {
-  bytes->clear();
-  if (hex.empty())
-    return true;
-  std::vector<uint8_t> v;
-  if (!base::HexStringToBytes(hex.as_string(), &v))
-    return false;
-  if (!v.empty())
-    bytes->assign(reinterpret_cast<const char*>(&v[0]), v.size());
-  return true;
-};
-
-// Converts binary data into an ASCII string. Each character in the resulting
-// string is preceeded by a space, and replaced with a '.' if not printable.
-string BinaryToAscii(const string& binary) {
-  string out = "";
-  for (const unsigned char c : binary) {
-    // Leading space.
-    out += " ";
-    if (isprint(c)) {
-      out += c;
-    } else {
-      out += '.';
-    }
-  }
-  return out;
-}
 
 int main(int argc, char* argv[]) {
   base::CommandLine::Init(argc, argv);
@@ -276,13 +248,13 @@ int main(int argc, char* argv[]) {
     versions.push_back(static_cast<net::QuicVersion>(FLAGS_quic_version));
   }
   // For secure QUIC we need to verify the cert chain.
-  scoped_ptr<CertVerifier> cert_verifier(CertVerifier::CreateDefault());
+  std::unique_ptr<CertVerifier> cert_verifier(CertVerifier::CreateDefault());
   if (line->HasSwitch("disable-certificate-verification")) {
     cert_verifier.reset(new FakeCertVerifier());
   }
-  scoped_ptr<TransportSecurityState> transport_security_state(
+  std::unique_ptr<TransportSecurityState> transport_security_state(
       new TransportSecurityState);
-  scoped_ptr<CTVerifier> ct_verifier(new MultiLogCTVerifier());
+  std::unique_ptr<CTVerifier> ct_verifier(new MultiLogCTVerifier());
   ProofVerifierChromium* proof_verifier = new ProofVerifierChromium(
       cert_verifier.get(), nullptr, transport_security_state.get(),
       ct_verifier.get());
@@ -312,7 +284,7 @@ int main(int argc, char* argv[]) {
   string body = FLAGS_body;
   if (!FLAGS_body_hex.empty()) {
     DCHECK(FLAGS_body.empty()) << "Only set one of --body and --body_hex.";
-    DecodeHexString(FLAGS_body_hex, &body);
+    body = net::QuicUtils::HexDecode(FLAGS_body_hex);
   }
 
   // Construct a GET or POST request for supplied URL.
@@ -356,9 +328,9 @@ int main(int argc, char* argv[]) {
     if (!FLAGS_body_hex.empty()) {
       // Print the user provided hex, rather than binary body.
       cout << "body hex:   " << FLAGS_body_hex << endl;
-      string bytes;
-      DecodeHexString(FLAGS_body_hex, &bytes);
-      cout << "body ascii: " << BinaryToAscii(bytes) << endl;
+      cout << "body ascii: " << net::QuicUtils::BinaryToAscii(
+                                    net::QuicUtils::HexDecode(FLAGS_body_hex))
+           << endl;
     } else {
       cout << "body: " << body << endl;
     }
@@ -368,10 +340,10 @@ int main(int argc, char* argv[]) {
     string response_body = client.latest_response_body();
     if (!FLAGS_body_hex.empty()) {
       // Assume response is binary data.
-      string bytes;
-      DecodeHexString(response_body, &bytes);
-      cout << "body hex:   " << bytes << endl;
-      cout << "body ascii: " << BinaryToAscii(response_body) << endl;
+      cout << "body hex:   " << net::QuicUtils::HexEncode(response_body)
+           << endl;
+      cout << "body ascii: " << net::QuicUtils::BinaryToAscii(response_body)
+           << endl;
     } else {
       cout << "body: " << response_body << endl;
     }

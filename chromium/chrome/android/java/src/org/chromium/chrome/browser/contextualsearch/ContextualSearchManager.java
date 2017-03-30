@@ -14,6 +14,7 @@ import org.chromium.base.ObserverList;
 import org.chromium.base.SysUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayContentDelegate;
@@ -50,6 +51,7 @@ import org.chromium.ui.base.WindowAndroid;
 
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.regex.Pattern;
 
 import javax.annotation.Nullable;
 
@@ -63,8 +65,6 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
         ContextualSearchTranslateInterface, ContextualSearchNetworkCommunicator,
         ContextualSearchSelectionHandler, ContextualSearchClient {
 
-    private static final String TAG = "ContextualSearch";
-
     private static final boolean ALWAYS_USE_RESOLVED_SEARCH_TERM = true;
     private static final boolean NEVER_USE_RESOLVED_SEARCH_TERM = false;
 
@@ -77,6 +77,8 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
 
     // We blacklist this URL because malformed URLs may bring up this page.
     private static final String BLACKLISTED_URL = "about:blank";
+
+    private static final Pattern CONTAINS_WHITESPACE_PATTERN = Pattern.compile("\\s");
 
     private final ObserverList<ContextualSearchObserver> mObservers =
             new ObserverList<ContextualSearchObserver>();
@@ -140,6 +142,12 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
      * Whether the Accessibility Mode is enabled.
      */
     private boolean mIsAccessibilityModeEnabled;
+
+    /**
+     * Tap Experiments and other variable behavior.
+     */
+    private ContextualSearchHeuristics mHeuristics;
+    private QuickAnswersHeuristic mQuickAnswersHeuristic;
 
     /**
      * The delegate that is responsible for promoting a {@link ContentViewCore} to a {@link Tab}
@@ -300,6 +308,13 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
     }
 
     /**
+     * Notifies that a Context Menu has been shown.
+     */
+    void onContextMenuShown() {
+        mSelectionController.onContextMenuShown();
+    }
+
+    /**
      * Hides the Contextual Search UX.
      * @param reason The {@link StateChangeReason} for hiding Contextual Search.
      */
@@ -418,6 +433,18 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
             mDidStartLoadingResolvedSearchRequest = false;
             mSearchPanel.setSearchTerm(mSelectionController.getSelectedText());
             if (shouldPrefetch) loadSearchUrl();
+
+            // Record metrics for manual refinement of the search term from long-press.
+            // TODO(donnd): remove this section once metrics have been analyzed.
+            if (mSelectionController.getSelectionType() == SelectionType.LONG_PRESS
+                    && mSearchPanel.isPeeking()) {
+                boolean isSingleWord =
+                        !CONTAINS_WHITESPACE_PATTERN
+                                 .matcher(mSelectionController.getSelectedText().trim())
+                                 .find();
+                RecordUserAction.record(isSingleWord ? "ContextualSearch.ManualRefineSingleWord"
+                                                     : "ContextualSearch.ManualRefineMultiWord");
+            }
         }
 
         if (!didRequestSurroundings) {
@@ -724,9 +751,17 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
      */
     @CalledByNative
     private void onSetCaption(String caption, boolean doesAnswer) {
+        if (TextUtils.isEmpty(caption)) return;
+
         // Notify the UI of the caption.
         mSearchPanel.setCaption(caption);
-        // TODO(donnd): log doesAnswer!
+        if (mQuickAnswersHeuristic != null) {
+            mQuickAnswersHeuristic.setConditionSatisfied(true);
+            mQuickAnswersHeuristic.setDoesAnswer(doesAnswer);
+        }
+
+        // Update Tap counters to account for a possible answer.
+        mPolicy.updateCountersForQuickAnswer(mWasActivatedByTap, doesAnswer);
     }
 
     /**
@@ -1005,7 +1040,7 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
 
     @Override
     public void logCurrentState() {
-        if (ContextualSearchFieldTrial.isEnabled(mActivity)) {
+        if (ContextualSearchFieldTrial.isEnabled()) {
             mPolicy.logCurrentState();
         }
     }
@@ -1176,8 +1211,13 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
     }
 
     @Override
-    public void handleMetricsForWouldSuppressTap(TapSuppressionHeuristics tapHeuristics) {
-        mSearchPanel.getPanelMetrics().setResultsSeenExperiments(tapHeuristics);
+    public void handleMetricsForWouldSuppressTap(ContextualSearchHeuristics tapHeuristics) {
+        mHeuristics = tapHeuristics;
+        if (ContextualSearchFieldTrial.isQuickAnswersEnabled()) {
+            mQuickAnswersHeuristic = new QuickAnswersHeuristic();
+            mHeuristics.add(mQuickAnswersHeuristic);
+        }
+        mSearchPanel.getPanelMetrics().setResultsSeenExperiments(mHeuristics);
     }
 
     @Override
@@ -1241,7 +1281,7 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
             if (selectionValid) {
                 mSearchPanel.setSearchTerm(selection);
             } else {
-                hideContextualSearch(StateChangeReason.INVALID_SELECTION);
+                hideContextualSearch(StateChangeReason.BASE_PAGE_TAP);
             }
         }
     }

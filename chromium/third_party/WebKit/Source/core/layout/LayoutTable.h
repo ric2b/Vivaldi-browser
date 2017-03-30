@@ -213,7 +213,6 @@ public:
     void recalcBordersInRowDirection();
 
     void addChild(LayoutObject* child, LayoutObject* beforeChild = nullptr) override;
-    void addChildIgnoringContinuation(LayoutObject* newChild, LayoutObject* beforeChild = nullptr) override;
 
     struct ColumnStruct {
         DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
@@ -401,6 +400,7 @@ public:
 protected:
     void styleDidChange(StyleDifference, const ComputedStyle* oldStyle) override;
     void simplifiedNormalFlowLayout() override;
+    bool recalcChildOverflowAfterStyleChange() override;
     PaintInvalidationReason invalidatePaintIfNeeded(const PaintInvalidationState&) override;
     void invalidatePaintOfSubtreesIfNeeded(const PaintInvalidationState&) override;
 
@@ -427,7 +427,7 @@ private:
     LayoutUnit convertStyleLogicalWidthToComputedWidth(const Length& styleLogicalWidth, LayoutUnit availableWidth);
     LayoutUnit convertStyleLogicalHeightToComputedHeight(const Length& styleLogicalHeight);
 
-    LayoutRect overflowClipRect(const LayoutPoint& location, OverlayScrollbarSizeRelevancy = IgnoreOverlayScrollbarSize) const override;
+    LayoutRect overflowClipRect(const LayoutPoint& location, OverlayScrollbarClipBehavior = IgnoreOverlayScrollbarSize) const override;
 
     void addOverflowFromChildren() override;
 

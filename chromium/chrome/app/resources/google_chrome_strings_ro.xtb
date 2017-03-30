@@ -66,10 +66,16 @@ Dacă totuși vă conectați, informațiile Chrome cum ar fi marcajele, istoricu
 <translation id="2997147809295888909">Chrome s-a asigurat că certificatul acestui site a fost emis de <ph name="ISSUER" />. Serverul nu a oferit nicio informație privind Certificate Transparency.</translation>
 <translation id="3037838751736561277">Google Chrome este în modul fundal.</translation>
 <translation id="3047079729301751317">Dacă deconectați utilizatorul <ph name="USERNAME" />, vor fi șterse istoricul, marcajele, setările și alte date Chrome salvate pe acest dispozitiv. Datele salvate în Contul Google nu vor fi șterse și pot fi gestionate din <ph name="GOOGLE_DASHBOARD_LINK" />Tabloul de bord Google<ph name="END_GOOGLE_DASHBOARD_LINK" />.</translation>
+<translation id="3065168410429928842">Fila Chrome</translation>
 <translation id="3080151273017101988">Rulează în continuare aplicații în fundal când Google Chrome este închis</translation>
 <translation id="3089968997497233615">Google Chrome este disponibil într-o versiune nouă și mai sigură.</translation>
 <translation id="3149510190863420837">Aplicații Chrome</translation>
-<translation id="3197823471738295152">Dispozitivul dvs. este actualizat.</translation>
+<translation id="3251381707915721925">Pentru a stabili ce site-uri poate accesa utilizatorul <ph name="NEW_PROFILE_NAME" />, poți configura restricții și setări accesând <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. Dacă nu modifici setările prestabilite, utilizatorul <ph name="NEW_PROFILE_NAME" /> poate naviga oriunde pe web.
+
+Pentru a împiedica utilizatorul <ph name="NEW_PROFILE_NAME" /> să îți acceseze contul, asigură-te că îți blochezi profilul când nu folosești Chrome. Pentru a face acest lucru, dă clic pe numele de profil din colțul din dreapta sus al browserului și selectează „Ieși și blochează”.
+<ph name="BEGIN_LINK_2" />Află mai multe<ph name="END_LINK_2" />
+
+Verifică e-mailul la <ph name="ACCOUNT_EMAIL" /> pentru instrucțiuni suplimentare.</translation>
 <translation id="3282568296779691940">Conectați-vă la Chrome</translation>
 <translation id="3311976847535831054">Acest computer nu va mai primi actualizări pentru Google Chrome pe 32 de biți. Fă upgrade la Google Chrome pe 64 de biți.</translation>
 <translation id="3360895254066713204">Chrome Helper</translation>
@@ -205,7 +211,6 @@ Dacă totuși vă conectați, informațiile Chrome cum ar fi marcajele, istoricu
 <translation id="7808348361785373670">Elimină din Chrome...</translation>
 <translation id="7825851276765848807">Instalarea nu a reușit din cauza unei erori neprecizate. Descarci Google Chrome din nou.</translation>
 <translation id="7890208801193284374">Dacă permiteți accesul la un computer, familia și prietenii pot să navigheze separat și să configureze Chrome cum doresc.</translation>
-<translation id="8000275528373650868">Google Chrome necesită Windows Vista sau Windows XP cu SP2 sau o versiune ulterioară.</translation>
 <translation id="8005540215158006229">Chrome este aproape pregătit.</translation>
 <translation id="8008534537613507642">Reinstalați Chrome</translation>
 <translation id="8030318113982266900">Se actualizează dispozitivul pentru canalul <ph name="CHANNEL_NAME" />...</translation>
@@ -227,6 +232,7 @@ Dacă totuși vă conectați, informațiile Chrome cum ar fi marcajele, istoricu
 <translation id="8556340503434111824">Este disponibilă o nouă versiune de Google Chrome, iar aceasta este mai rapidă ca oricând.</translation>
 <translation id="8568392309447938879">Trebuie să vă conectați la Chrome pentru a folosi aplicațiile. Astfel, Chrome vă poate sincroniza aplicațiile, marcajele, istoricul, parolele și alte setări pe toate dispozitivele.</translation>
 <translation id="8614913330719544658">Google Chrome nu mai răspunde. Îl repornești acum?</translation>
+<translation id="8667808506758191620">Dispozitivul <ph name="DEVICE_TYPE" /> este actualizat.</translation>
 <translation id="8669527147644353129">Google Chrome Helper</translation>
 <translation id="8679801911857917785">Stabilește și ce pagină se afișează când porniți Chrome.</translation>
 <translation id="870251953148363156">Actualizați &amp;Google Chrome</translation>
@@ -235,6 +241,7 @@ Dacă totuși vă conectați, informațiile Chrome cum ar fi marcajele, istoricu
 <translation id="8851136666856101339">principal</translation>
 <translation id="8862326446509486874">Nu ai drepturile adecvate pentru instalarea la nivel de sistem. Încearcă să rulezi din nou programul de instalare ca Administrator.</translation>
 <translation id="9026991721384951619">Sistemul de operare Chrome nu a putut sincroniza datele, deoarece detaliile de conectare pentru contul dvs. nu sunt actualizate.</translation>
+<translation id="9067395829937117663">Google Chrome necesită Windows 7 sau o versiune ulterioară.</translation>
 <translation id="9102715433345326100">Acest fișier este rău-intenționat și a fost blocat de Chrome.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Avertisment:<ph name="END_BOLD" /> Google Chrome nu poate împiedica extensiile să înregistreze istoricul navigării. Pentru a dezactiva această extensie în modul incognito, debifează această opțiune.</translation>
 <translation id="911206726377975832">Ștergi și datele de navigare?</translation>

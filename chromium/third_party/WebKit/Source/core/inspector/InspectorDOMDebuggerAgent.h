@@ -47,8 +47,7 @@ class Event;
 class EventTarget;
 class InspectorDOMAgent;
 class Node;
-class V8DebuggerAgent;
-class V8RuntimeAgent;
+class V8InspectorSession;
 
 namespace protocol {
 class DictionaryValue;
@@ -59,10 +58,9 @@ class CORE_EXPORT InspectorDOMDebuggerAgent final
     , public protocol::Backend::DOMDebugger {
     WTF_MAKE_NONCOPYABLE(InspectorDOMDebuggerAgent);
 public:
-    static RawPtr<InspectorDOMDebuggerAgent> create(v8::Isolate*, InspectorDOMAgent*, V8RuntimeAgent*, V8DebuggerAgent*);
-
     static void eventListenersInfoForTarget(v8::Isolate*, v8::Local<v8::Value>, V8EventListenerInfoList& listeners);
 
+    InspectorDOMDebuggerAgent(v8::Isolate*, InspectorDOMAgent*, V8InspectorSession*);
     ~InspectorDOMDebuggerAgent() override;
     DECLARE_VIRTUAL_TRACE();
 
@@ -78,7 +76,6 @@ public:
     void getEventListeners(ErrorString*, const String16& objectId, OwnPtr<protocol::Array<protocol::DOMDebugger::EventListener>>* listeners) override;
 
     // InspectorInstrumentation API
-    void allowNativeBreakpoint(const String& breakpointName, bool sync);
     void willInsertDOMNode(Node* parent);
     void didInvalidateStyleAttr(Node*);
     void didInsertDOMNode(Node*);
@@ -86,19 +83,17 @@ public:
     void didRemoveDOMNode(Node*);
     void willModifyDOMAttr(Element*, const AtomicString&, const AtomicString&);
     void willSendXMLHttpRequest(const String& url);
-    void willHandleEvent(EventTarget*, Event*, EventListener*, bool useCapture);
     void didFireWebGLError(const String& errorName);
     void didFireWebGLWarning();
     void didFireWebGLErrorOrWarning(const String& message);
-    void cancelPauseOnNextStatement();
+    void allowNativeBreakpoint(const String& breakpointName, const String* targetName, bool sync);
+    void cancelNativeBreakpoint();
 
     void disable(ErrorString*) override;
     void restore() override;
     void didCommitLoadForLocalFrame(LocalFrame*) override;
 
 private:
-    InspectorDOMDebuggerAgent(v8::Isolate*, InspectorDOMAgent*, V8RuntimeAgent*, V8DebuggerAgent*);
-
     void pauseOnNativeEventIfNeeded(PassOwnPtr<protocol::DictionaryValue> eventData, bool synchronous);
     PassOwnPtr<protocol::DictionaryValue> preparePauseOnNativeEventData(const String& eventName, const String* targetName);
 
@@ -120,8 +115,7 @@ private:
 
     v8::Isolate* m_isolate;
     Member<InspectorDOMAgent> m_domAgent;
-    V8RuntimeAgent* m_runtimeAgent;
-    V8DebuggerAgent* m_debuggerAgent;
+    V8InspectorSession* m_v8Session;
     HeapHashMap<Member<Node>, uint32_t> m_domBreakpoints;
 };
 

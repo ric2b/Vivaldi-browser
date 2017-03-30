@@ -1,4 +1,12 @@
 {
+    "AllBookmarks": [
+        {
+            "enable_features": [
+                "AllBookmarks"
+            ],
+            "group_name": "Enabled"
+        }
+    ],
     "AndroidSessionNotifications": [
         {
             "group_name": "Disabled"
@@ -43,7 +51,10 @@
     ],
     "ChromotingQUIC": [
         {
-            "group_name": "Enabled"
+            "group_name": "Enabled",
+            "params": {
+                "delay_tcp_race": "true"
+            }
         }
     ],
     "ContextualSearch": [
@@ -102,20 +113,15 @@
             "group_name": "Enabled"
         }
     ],
-    "DisableAutoHidingToolbar": [
-        {
-            "group_name": "Enabled",
-            "params": {
-                "disable_auto_hiding_toolbar_threshold": "800"
-            }
-        }
-    ],
-    "DocumentWriteEvaluator": [
+    "DisallowFetchForDocWrittenScriptsInMainFrame": [
         {
             "enable_features": [
                 "DocumentWriteEvaluator"
             ],
-            "group_name": "Enabled"
+            "group_name": "DocumentWriteEvaluatorGroup",
+            "params": {
+                "disallowFetchForDocWrittenScriptsInMainFrame": "false"
+            }
         }
     ],
     "EnableMediaThreadForMediaPlayback": [
@@ -155,6 +161,14 @@
             }
         }
     ],
+    "MainFrameBeforeActivation": [
+        {
+            "enable_features": [
+                "MainFrameBeforeActivation"
+            ],
+            "group_name": "Enabled"
+        }
+    ],
     "MinidumpDirectoryObserver": [
         {
             "group_name": "ObserverExperimentGroup",
@@ -168,11 +182,15 @@
             "group_name": "Enabled"
         }
     ],
+    "MojoChannel": [
+        {
+            "group_name": "Enabled"
+        }
+    ],
     "NTPPopularSites": [
         {
             "group_name": "Enabled5",
             "params": {
-                "country": "IN",
                 "version": "5"
             }
         }
@@ -201,6 +219,14 @@
             }
         }
     ],
+    "NetworkTimeQueries": [
+        {
+            "enable_features": [
+                "NetworkTimeServiceQuerying"
+            ],
+            "group_name": "NetworkTimeQueriesEnabled"
+        }
+    ],
     "OfferUploadCreditCards": [
         {
             "group_name": "Enabled"
@@ -224,6 +250,11 @@
             "group_name": "SmartLockBrandingSavePromptOnly"
         }
     ],
+    "PasswordManagerSettingsMigration": [
+        {
+            "group_name": "Enable"
+        }
+    ],
     "PhysicalWeb": [
         {
             "enable_features": [
@@ -234,6 +265,14 @@
     ],
     "Precache": [
         {
+            "group_name": "Enabled"
+        }
+    ],
+    "PreconnectMore": [
+        {
+            "enable_features": [
+                "PreconnectMore"
+            ],
             "group_name": "Enabled"
         }
     ],
@@ -250,20 +289,20 @@
             "group_name": "Enabled"
         }
     ],
+    "ReaderModeUI": [
+        {
+            "group_name": "AdaBoost"
+        },
+        {
+            "group_name": "Disabled"
+        }
+    ],
     "ReaderModeUIFeedback": [
         {
             "group_name": "Show"
         },
         {
             "group_name": "DoNotShow"
-        }
-    ],
-    "RenderingPipelineThrottling": [
-        {
-            "enable_features": [
-                "RenderingPipelineThrottling"
-            ],
-            "group_name": "Enabled"
         }
     ],
     "ReportCertificateErrors": [
@@ -297,10 +336,10 @@
     ],
     "ResourcePriorities": [
         {
-            "group_name": "AllExceptAsyncScripts_11011_1_1_10"
+            "group_name": "Launch50pct_11011_1_1_10"
         },
         {
-            "group_name": "Control"
+            "group_name": "Control50pct"
         }
     ],
     "SafeBrowsingAndroid": [
@@ -391,7 +430,9 @@
             "params": {
                 "Enabled": "true",
                 "Optimize": "true",
-                "Sample_Probability": "100"
+                "Sample_Probability": "100",
+                "Uma_Quota": "204800",
+                "Uma_Ratio": "0.05"
             }
         }
     ],
@@ -444,13 +485,23 @@
             }
         }
     ],
-    "V8SerializeOptions": [
+    "UsePredictorDNSQueue": [
         {
-            "enable_features": [
-                "V8_Serialize_Eager",
-                "V8_Serialize_Age_Code"
+            "disable_features": [
+                "UsePredictorDNSQueue"
             ],
-            "group_name": "SerializeEagerAndAgeCode"
+            "group_name": "Disabled"
+        }
+    ],
+    "V8CacheStrategiesForCacheStorage": [
+        {
+            "group_name": "none"
+        },
+        {
+            "group_name": "normal"
+        },
+        {
+            "group_name": "aggressive"
         }
     ],
     "VarationsServiceControl": [
@@ -463,6 +514,14 @@
     ],
     "WebFontsIntervention": [
         {
+            "group_name": "Enabled"
+        }
+    ],
+    "WebRTC-EnableWebRtcEcdsa": [
+        {
+            "enable_features": [
+                "WebRTC-EnableWebRtcEcdsa"
+            ],
             "group_name": "Enabled"
         }
     ],

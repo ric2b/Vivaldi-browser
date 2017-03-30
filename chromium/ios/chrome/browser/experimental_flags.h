@@ -15,9 +15,6 @@ namespace experimental_flags {
 // Whether background crash report upload should generate a local notification.
 bool IsAlertOnBackgroundUploadEnabled();
 
-// Whether the new bookmark collection experience is enabled.
-bool IsBookmarkCollectionEnabled();
-
 // Whether the lru snapshot cache experiment is enabled.
 bool IsLRUSnapshotCacheEnabled();
 
@@ -36,6 +33,9 @@ bool IsTabSwitcherEnabled();
 
 // Whether the reading list is enabled.
 bool IsReadingListEnabled();
+
+// Whether the All Bookmarks view is visible in bookmarks.
+bool IsAllBookmarksEnabled();
 
 }  // namespace experimental_flags
 

@@ -8,8 +8,17 @@
       'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
     {
+      'target_name': 'browser_service',
+      'dependencies': [
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
+        '../history/compiled_resources2.gyp:externs',
+      ],
+      'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
       'target_name': 'history_item',
       'dependencies': [
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:icon',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:util',
         '../history/compiled_resources2.gyp:externs',
@@ -19,10 +28,12 @@
     {
       'target_name': 'history_list',
       'dependencies': [
+        '<(DEPTH)/third_party/polymer/v1_0/components-chromium/iron-scroll-threshold/compiled_resources2.gyp:iron-scroll-threshold-extracted',
         '<(DEPTH)/ui/webui/resources/cr_elements/cr_shared_menu/compiled_resources2.gyp:cr_shared_menu',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:util',
         'constants',
+        'browser_service',
         'history_item',
         '../history/compiled_resources2.gyp:externs',
       ],
@@ -33,13 +44,25 @@
       'dependencies': [
         '<(DEPTH)/ui/webui/resources/cr_elements/cr_search_field/compiled_resources2.gyp:cr_search_field',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:util',
       ],
       'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
     {
       'target_name': 'history',
       'dependencies': [
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:icon',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
+        'constants',
+        'app',
+        '<(EXTERNS_GYP):chrome_send',
+        '../history/compiled_resources2.gyp:externs',
+      ],
+      'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'app',
+      'dependencies': [
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:util',
         'constants',
         'history_list',
@@ -60,7 +83,7 @@
       'target_name': 'synced_device_card',
       'dependencies': [
         '../history/compiled_resources2.gyp:externs',
-        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:util',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:icon',
       ],
       'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
     },

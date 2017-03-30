@@ -30,6 +30,7 @@
 
 #include "modules/webdatabase/DatabaseTracker.h"
 
+#include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/ExecutionContextTask.h"
 #include "modules/webdatabase/Database.h"
@@ -44,6 +45,7 @@
 #include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/WebTraceLocation.h"
 #include "wtf/Assertions.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/StdLibExtras.h"
 
 namespace blink {
@@ -88,7 +90,7 @@ void DatabaseTracker::addOpenDatabase(Database* database)
     if (!m_openDatabaseMap)
         m_openDatabaseMap = adoptPtr(new DatabaseOriginMap);
 
-    String originString = database->getSecurityOrigin()->toString();
+    String originString = database->getSecurityOrigin()->toRawString();
     DatabaseNameMap* nameMap = m_openDatabaseMap->get(originString);
     if (!nameMap) {
         nameMap = new DatabaseNameMap();
@@ -109,7 +111,7 @@ void DatabaseTracker::removeOpenDatabase(Database* database)
 {
     {
         MutexLocker openDatabaseMapLock(m_openDatabaseMapGuard);
-        String originString = database->getSecurityOrigin()->toString();
+        String originString = database->getSecurityOrigin()->toRawString();
         ASSERT(m_openDatabaseMap);
         DatabaseNameMap* nameMap = m_openDatabaseMap->get(originString);
         if (!nameMap)
@@ -166,9 +168,9 @@ unsigned long long DatabaseTracker::getMaxSizeForDatabase(const Database* databa
 
 class DatabaseTracker::CloseOneDatabaseImmediatelyTask final : public ExecutionContextTask {
 public:
-    static PassOwnPtr<CloseOneDatabaseImmediatelyTask> create(const String& originString, const String& name, Database* database)
+    static std::unique_ptr<CloseOneDatabaseImmediatelyTask> create(const String& originString, const String& name, Database* database)
     {
-        return adoptPtr(new CloseOneDatabaseImmediatelyTask(originString, name, database));
+        return wrapUnique(new CloseOneDatabaseImmediatelyTask(originString, name, database));
     }
 
     void performTask(ExecutionContext*) override
@@ -191,7 +193,7 @@ private:
 
 void DatabaseTracker::closeDatabasesImmediately(SecurityOrigin* origin, const String& name)
 {
-    String originString = origin->toString();
+    String originString = origin->toRawString();
     MutexLocker openDatabaseMapLock(m_openDatabaseMapGuard);
     if (!m_openDatabaseMap)
         return;
@@ -207,6 +209,23 @@ void DatabaseTracker::closeDatabasesImmediately(SecurityOrigin* origin, const St
     // We have to call closeImmediately() on the context thread.
     for (DatabaseSet::iterator it = databaseSet->begin(); it != databaseSet->end(); ++it)
         (*it)->getDatabaseContext()->getExecutionContext()->postTask(BLINK_FROM_HERE, CloseOneDatabaseImmediatelyTask::create(originString, name, *it));
+}
+
+void DatabaseTracker::forEachOpenDatabaseInPage(Page* page, std::unique_ptr<DatabaseCallback> callback)
+{
+    MutexLocker openDatabaseMapLock(m_openDatabaseMapGuard);
+    if (!m_openDatabaseMap)
+        return;
+    for (auto& originMap : *m_openDatabaseMap) {
+        for (auto& nameDatabaseSet : *originMap.value) {
+            for (Database* database : *nameDatabaseSet.value) {
+                ExecutionContext* context = database->getExecutionContext();
+                ASSERT(context->isDocument());
+                if (toDocument(context)->frame()->page() == page)
+                    (*callback)(database);
+            }
+        }
+    }
 }
 
 void DatabaseTracker::closeOneDatabaseImmediately(const String& originString, const String& name, Database* database)

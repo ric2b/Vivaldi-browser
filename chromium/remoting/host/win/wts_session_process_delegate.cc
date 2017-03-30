@@ -17,7 +17,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/windows_version.h"
 #include "ipc/attachment_broker.h"
@@ -387,7 +387,7 @@ void WtsSessionProcessDelegate::Core::DoLaunchProcess() {
   IPC::AttachmentBroker::GetGlobal()->RegisterCommunicationChannel(
       channel.get(), io_task_runner_);
   channel->Init(IPC::ChannelHandle(pipe.Get()), IPC::Channel::MODE_SERVER,
-                true);
+                /*create_pipe_now=*/true);
 
   // Pass the name of the IPC channel to use.
   command_line.AppendSwitchNative(kDaemonPipeSwitchName,

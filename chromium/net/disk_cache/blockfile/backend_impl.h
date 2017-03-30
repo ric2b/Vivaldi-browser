@@ -9,7 +9,8 @@
 
 #include <stdint.h>
 
-#include "base/containers/hash_tables.h"
+#include <unordered_map>
+
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -79,7 +80,7 @@ class NET_EXPORT_PRIVATE BackendImpl : public Backend {
   int SyncCalculateSizeOfAllEntries();
   int SyncDoomEntriesSince(base::Time initial_time);
   int SyncOpenNextEntry(Rankings::Iterator* iterator, Entry** next_entry);
-  void SyncEndEnumeration(scoped_ptr<Rankings::Iterator> iterator);
+  void SyncEndEnumeration(std::unique_ptr<Rankings::Iterator> iterator);
   void SyncOnExternalCacheHit(const std::string& key);
 
   // Open or create an entry for the given |key| or |iter|.
@@ -288,12 +289,12 @@ class NET_EXPORT_PRIVATE BackendImpl : public Backend {
   // the iterator (for example, deleting the entry) will invalidate the
   // iterator. Performing operations on an entry that modify the entry may
   // result in loops in the iteration, skipped entries or similar.
-  scoped_ptr<Iterator> CreateIterator() override;
+  std::unique_ptr<Iterator> CreateIterator() override;
   void GetStats(StatsItems* stats) override;
   void OnExternalCacheHit(const std::string& key) override;
 
  private:
-  typedef base::hash_map<CacheAddr, EntryImpl*> EntriesMap;
+  using EntriesMap = std::unordered_map<CacheAddr, EntryImpl*>;
   class IteratorImpl;
 
   // Creates a new backing file for the cache index.
@@ -403,7 +404,7 @@ class NET_EXPORT_PRIVATE BackendImpl : public Backend {
   net::NetLog* net_log_;
 
   Stats stats_;  // Usage statistics.
-  scoped_ptr<base::RepeatingTimer> timer_;  // Usage timer.
+  std::unique_ptr<base::RepeatingTimer> timer_;  // Usage timer.
   base::WaitableEvent done_;  // Signals the end of background work.
   scoped_refptr<TraceObject> trace_object_;  // Initializes internal tracing.
   base::WeakPtrFactory<BackendImpl> ptr_factory_;

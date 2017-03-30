@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/threading/non_thread_safe.h"
 #include "components/sync_driver/device_info.h"
 #include "components/sync_driver/local_device_info_provider.h"
 #include "components/version_info/version_info.h"
@@ -14,7 +15,8 @@
 namespace browser_sync {
 
 class LocalDeviceInfoProviderImpl
-    : public sync_driver::LocalDeviceInfoProvider {
+    : public sync_driver::LocalDeviceInfoProvider,
+      public base::NonThreadSafe {
  public:
   LocalDeviceInfoProviderImpl(version_info::Channel channel,
                               const std::string& version,
@@ -29,8 +31,9 @@ class LocalDeviceInfoProviderImpl
       const std::string& cache_guid,
       const std::string& signin_scoped_device_id,
       const scoped_refptr<base::TaskRunner>& blocking_task_runner) override;
-  scoped_ptr<Subscription> RegisterOnInitializedCallback(
+  std::unique_ptr<Subscription> RegisterOnInitializedCallback(
       const base::Closure& callback) override;
+  void Clear() override;
 
  private:
   void InitializeContinuation(const std::string& guid,
@@ -48,7 +51,7 @@ class LocalDeviceInfoProviderImpl
   const bool is_tablet_;
 
   std::string cache_guid_;
-  scoped_ptr<sync_driver::DeviceInfo> local_device_info_;
+  std::unique_ptr<sync_driver::DeviceInfo> local_device_info_;
   base::CallbackList<void(void)> callback_list_;
   base::WeakPtrFactory<LocalDeviceInfoProviderImpl> weak_factory_;
 

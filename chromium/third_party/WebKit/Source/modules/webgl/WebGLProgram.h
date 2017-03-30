@@ -26,6 +26,7 @@
 #ifndef WebGLProgram_h
 #define WebGLProgram_h
 
+#include "bindings/core/v8/ScopedPersistent.h"
 #include "modules/webgl/WebGLShader.h"
 #include "modules/webgl/WebGLSharedPlatform3DObject.h"
 #include "wtf/PassRefPtr.h"
@@ -58,6 +59,8 @@ public:
     bool attachShader(WebGLShader*);
     bool detachShader(WebGLShader*);
 
+    ScopedPersistent<v8::Array>* getPersistentCache();
+
     DECLARE_VIRTUAL_TRACE();
 
 protected:
@@ -84,6 +87,8 @@ private:
     Member<WebGLShader> m_fragmentShader;
 
     bool m_infoValid;
+
+    ScopedPersistent<v8::Array> m_shaderWrappers;
 };
 
 } // namespace blink

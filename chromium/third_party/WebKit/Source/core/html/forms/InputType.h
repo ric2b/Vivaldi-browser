@@ -37,7 +37,6 @@
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLTextFormControlElement.h"
 #include "core/html/forms/ColorChooserClient.h"
-#include "core/html/forms/InputTypeView.h"
 #include "core/html/forms/StepRange.h"
 
 namespace blink {
@@ -47,19 +46,22 @@ class DragData;
 class ExceptionState;
 class FileList;
 class FormData;
+class InputTypeView;
 
 // An InputType object represents the type-specific part of an HTMLInputElement.
 // Do not expose instances of InputType and classes derived from it to classes
 // other than HTMLInputElement.
 // FIXME: InputType should not inherit InputTypeView. It's conceptually wrong.
-class CORE_EXPORT InputType : public InputTypeView {
+class CORE_EXPORT InputType : public GarbageCollectedFinalized<InputType> {
     WTF_MAKE_NONCOPYABLE(InputType);
 public:
     static InputType* create(HTMLInputElement&, const AtomicString&);
     static InputType* createText(HTMLInputElement&);
     static const AtomicString& normalizeTypeName(const AtomicString&);
-    ~InputType() override;
+    virtual ~InputType();
+    DECLARE_VIRTUAL_TRACE();
 
+    virtual InputTypeView* createView() = 0;
     virtual const AtomicString& formControlType() const = 0;
 
     // Type query functions
@@ -78,8 +80,6 @@ public:
     // Form value functions
 
     virtual bool shouldSaveAndRestoreFormControlState() const;
-    virtual FormControlState saveFormControlState() const;
-    virtual void restoreFormControlState(const FormControlState&);
     virtual bool isFormDataAppendable() const;
     virtual void appendToFormData(FormData&) const;
     virtual String resultForDialogSubmit() const;
@@ -100,7 +100,7 @@ public:
 
     // Returns a validation message as .first, and title attribute value as
     // .second if patternMismatch.
-    virtual std::pair<String, String> validationMessage() const;
+    std::pair<String, String> validationMessage(const InputTypeView&) const;
     virtual bool supportsValidation() const;
     virtual bool typeMismatchFor(const String&) const;
     // Type check for the current input value. We do nothing for some types
@@ -109,7 +109,6 @@ public:
     virtual bool typeMismatch() const;
     virtual bool supportsRequired() const;
     virtual bool valueMissing(const String&) const;
-    virtual bool hasBadInput() const;
     virtual bool patternMismatch(const String&) const;
     virtual bool tooLong(const String&, HTMLTextFormControlElement::NeedsToCheckDirtyFlag) const;
     virtual bool tooShort(const String&, HTMLTextFormControlElement::NeedsToCheckDirtyFlag) const;
@@ -144,7 +143,6 @@ public:
     virtual bool shouldShowFocusRingOnMouseFocus() const;
     virtual void enableSecureTextInput();
     virtual void disableSecureTextInput();
-    virtual void accessKeyAction(bool sendMouseEvents);
     virtual bool canBeSuccessfulSubmitButton();
     virtual bool matchesDefaultPseudoClass();
 
@@ -174,9 +172,8 @@ public:
     virtual int minLength() const;
     virtual bool supportsPlaceholder() const;
     virtual bool supportsReadOnly() const;
-    virtual String defaultToolTip() const;
+    virtual String defaultToolTip(const InputTypeView&) const;
     virtual Decimal findClosestTickMarkValue(const Decimal&);
-    virtual void handleDOMActivateEvent(Event*);
     virtual bool hasLegalLinkAttribute(const QualifiedName&) const;
     virtual const QualifiedName& subResourceAttributeName() const;
     virtual bool supportsAutocapitalize() const;
@@ -204,14 +201,6 @@ public:
     virtual unsigned height() const;
     virtual unsigned width() const;
 
-    virtual TextDirection computedTextDirection();
-
-    void dispatchSimulatedClickIfActive(KeyboardEvent*) const;
-
-    // InputTypeView override
-    bool shouldSubmitImplicitly(Event*) override;
-    bool hasCustomFocusLogic() const override;
-
     virtual bool shouldDispatchFormControlChangeEvent(String&, String&);
     virtual void dispatchSearchEvent();
 
@@ -219,7 +208,8 @@ public:
     virtual ColorChooserClient* colorChooserClient();
 
 protected:
-    InputType(HTMLInputElement& element) : InputTypeView(element) { }
+    InputType(HTMLInputElement& element) : m_element(element) { }
+    HTMLInputElement& element() const { return *m_element; }
     ChromeClient* chromeClient() const;
     Locale& locale() const;
     Decimal parseToNumberOrNaN(const String&) const;
@@ -234,6 +224,8 @@ protected:
 private:
     // Helper for stepUp()/stepDown(). Adds step value * count to the current value.
     void applyStep(const Decimal&, int count, AnyStepHandling, TextFieldEventBehavior, ExceptionState&);
+
+    Member<HTMLInputElement> m_element;
 };
 
 } // namespace blink

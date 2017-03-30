@@ -27,6 +27,15 @@ namespace media {
     }                                                             \
   } while (0)
 
+// Helper macro to skip the test if VP8 decoding isn't supported.
+#define SKIP_TEST_IF_VP8_DECODER_IS_NOT_SUPPORTED()               \
+  do {                                                            \
+    if (!MediaCodecUtil::IsVp8DecoderAvailable()) {               \
+      VLOG(0) << "Could not run test - not supported on device."; \
+      return;                                                     \
+    }                                                             \
+  } while (0)
+
 // Codec direction. Keep this in sync with MediaCodecUtil.java.
 enum MediaCodecDirection {
   MEDIA_CODEC_DECODER,
@@ -57,11 +66,11 @@ class MEDIA_EXPORT MediaCodecUtil {
   static bool IsKnownUnaccelerated(const std::string& mime_type,
                                    MediaCodecDirection direction);
 
-  // Test whether the path of a URL ends with ".m3u8".
-  static bool IsHLSURL(const GURL& url);
-
   // Test whether a URL contains "m3u8". (Using exactly the same logic as
   // NuPlayer does to determine if a stream is HLS.)
+  static bool IsHLSURL(const GURL& url);
+
+  // Test whether the path of a URL ends with ".m3u8".
   static bool IsHLSPath(const GURL& url);
 
   static bool RegisterMediaCodecUtil(JNIEnv* env);

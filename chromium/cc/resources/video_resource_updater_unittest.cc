@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "base/memory/ptr_util.h"
 #include "cc/resources/resource_provider.h"
 #include "cc/test/fake_output_surface.h"
 #include "cc/test/fake_output_surface_client.h"
@@ -70,7 +71,7 @@ class WebGraphicsContext3DUploadCounter : public TestWebGraphicsContext3D {
 
 class SharedBitmapManagerAllocationCounter : public TestSharedBitmapManager {
  public:
-  scoped_ptr<SharedBitmap> AllocateSharedBitmap(
+  std::unique_ptr<SharedBitmap> AllocateSharedBitmap(
       const gfx::Size& size) override {
     ++allocation_count_;
     return TestSharedBitmapManager::AllocateSharedBitmap(size);
@@ -86,7 +87,7 @@ class SharedBitmapManagerAllocationCounter : public TestSharedBitmapManager {
 class VideoResourceUpdaterTest : public testing::Test {
  protected:
   VideoResourceUpdaterTest() {
-    scoped_ptr<WebGraphicsContext3DUploadCounter> context3d(
+    std::unique_ptr<WebGraphicsContext3DUploadCounter> context3d(
         new WebGraphicsContext3DUploadCounter());
 
     context3d_ = context3d.get();
@@ -100,7 +101,7 @@ class VideoResourceUpdaterTest : public testing::Test {
     testing::Test::SetUp();
 
     output_surface_software_ = FakeOutputSurface::CreateSoftware(
-        make_scoped_ptr(new SoftwareOutputDevice));
+        base::WrapUnique(new SoftwareOutputDevice));
     CHECK(output_surface_software_->BindToClient(&client_));
 
     shared_bitmap_manager_.reset(new SharedBitmapManagerAllocationCounter());
@@ -185,15 +186,16 @@ class VideoResourceUpdaterTest : public testing::Test {
     const gpu::SyncToken sync_token(
         gpu::CommandBufferNamespace::GPU_IO, 0,
         gpu::CommandBufferId::FromUnsafeValue(0x123), 7);
+    gpu::MailboxHolder mailbox_holders[media::VideoFrame::kMaxPlanes] = {
+        gpu::MailboxHolder(mailbox, sync_token, target)};
     scoped_refptr<media::VideoFrame> video_frame =
-        media::VideoFrame::WrapNativeTexture(
-            media::PIXEL_FORMAT_ARGB,
-            gpu::MailboxHolder(mailbox, sync_token, target),
-            base::Bind(&ReleaseMailboxCB),
-            size,                // coded_size
-            gfx::Rect(size),     // visible_rect
-            size,                // natural_size
-            base::TimeDelta());  // timestamp
+        media::VideoFrame::WrapNativeTextures(media::PIXEL_FORMAT_ARGB,
+                                              mailbox_holders,
+                                              base::Bind(&ReleaseMailboxCB),
+                                              size,             // coded_size
+                                              gfx::Rect(size),  // visible_rect
+                                              size,             // natural_size
+                                              base::TimeDelta());  // timestamp
     EXPECT_TRUE(video_frame);
     return video_frame;
   }
@@ -215,39 +217,36 @@ class VideoResourceUpdaterTest : public testing::Test {
     const int kDimension = 10;
     gfx::Size size(kDimension, kDimension);
 
-    const int kPlanesNum = 3;
-    gpu::Mailbox mailbox[kPlanesNum];
-    for (int i = 0; i < kPlanesNum; ++i) {
-      mailbox[i].name[0] = 50 + 1;
-    }
     const gpu::SyncToken sync_token(
         gpu::CommandBufferNamespace::GPU_IO, 0,
         gpu::CommandBufferId::FromUnsafeValue(0x123), 7);
     const unsigned target = GL_TEXTURE_RECTANGLE_ARB;
+    const int kPlanesNum = 3;
+    gpu::MailboxHolder mailbox_holders[media::VideoFrame::kMaxPlanes];
+    for (int i = 0; i < kPlanesNum; ++i) {
+      gpu::Mailbox mailbox;
+      mailbox.name[0] = 50 + 1;
+      mailbox_holders[i] = gpu::MailboxHolder(mailbox, sync_token, target);
+    }
     scoped_refptr<media::VideoFrame> video_frame =
-        media::VideoFrame::WrapYUV420NativeTextures(
-            gpu::MailboxHolder(mailbox[media::VideoFrame::kYPlane], sync_token,
-                               target),
-            gpu::MailboxHolder(mailbox[media::VideoFrame::kUPlane], sync_token,
-                               target),
-            gpu::MailboxHolder(mailbox[media::VideoFrame::kVPlane], sync_token,
-                               target),
-            base::Bind(&ReleaseMailboxCB),
-            size,                // coded_size
-            gfx::Rect(size),     // visible_rect
-            size,                // natural_size
-            base::TimeDelta());  // timestamp
+        media::VideoFrame::WrapNativeTextures(media::PIXEL_FORMAT_I420,
+                                              mailbox_holders,
+                                              base::Bind(&ReleaseMailboxCB),
+                                              size,             // coded_size
+                                              gfx::Rect(size),  // visible_rect
+                                              size,             // natural_size
+                                              base::TimeDelta());  // timestamp
     EXPECT_TRUE(video_frame);
     return video_frame;
   }
 
   WebGraphicsContext3DUploadCounter* context3d_;
   FakeOutputSurfaceClient client_;
-  scoped_ptr<FakeOutputSurface> output_surface3d_;
-  scoped_ptr<FakeOutputSurface> output_surface_software_;
-  scoped_ptr<SharedBitmapManagerAllocationCounter> shared_bitmap_manager_;
-  scoped_ptr<ResourceProvider> resource_provider3d_;
-  scoped_ptr<ResourceProvider> resource_provider_software_;
+  std::unique_ptr<FakeOutputSurface> output_surface3d_;
+  std::unique_ptr<FakeOutputSurface> output_surface_software_;
+  std::unique_ptr<SharedBitmapManagerAllocationCounter> shared_bitmap_manager_;
+  std::unique_ptr<ResourceProvider> resource_provider3d_;
+  std::unique_ptr<ResourceProvider> resource_provider_software_;
 };
 
 TEST_F(VideoResourceUpdaterTest, SoftwareFrame) {

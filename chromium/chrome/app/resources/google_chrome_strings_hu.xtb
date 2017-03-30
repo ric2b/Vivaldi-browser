@@ -66,10 +66,16 @@ Ha mindenképp bejelentkezik, akkor egyesíti a(z) <ph name="ACCOUNT_EMAIL_NEW" 
 <translation id="2997147809295888909">A Chrome megerősítette, hogy a(z) <ph name="ISSUER" /> állította ki ennek a webhelynek a tanúsítványát. A szerver nem adott meg tanúsítványátláthatósági adatokat.</translation>
 <translation id="3037838751736561277">A Google Chrome háttérmódban van.</translation>
 <translation id="3047079729301751317"><ph name="USERNAME" /> összekapcsolásának megszüntetésével törli az eszközön tárolt előzményeket, könyvjelzőket, beállításokat és egyéb Chrome-adatokat. A Google-fiókban tárolt adatokat a rendszer nem törli, és azokat Ön a <ph name="GOOGLE_DASHBOARD_LINK" />Google Irányítópulton<ph name="END_GOOGLE_DASHBOARD_LINK" /> kezelheti.</translation>
+<translation id="3065168410429928842">Chrome-lap</translation>
 <translation id="3080151273017101988">A háttéralkalmazások továbbfuttatása, ha a Google Chrome-ot bezárják</translation>
 <translation id="3089968997497233615">Elérhető a Google Chrome új, biztonságosabb verziója.</translation>
 <translation id="3149510190863420837">Chrome-alkalmazások</translation>
-<translation id="3197823471738295152">Eszköze naprakész.</translation>
+<translation id="3251381707915721925">Annak szabályozásához, hogy <ph name="NEW_PROFILE_NAME" /> mely webhelyeket nézheti meg, Önnek lehetősége van korlátozásokat és beállításokat megadni a(z) <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" /> címen. Ha nem módosítja az alapértelmezett beállításokat, akkor <ph name="NEW_PROFILE_NAME" /> minden webhelyen böngészhet az interneten.
+
+Ha szeretné megakadályozni, hogy <ph name="NEW_PROFILE_NAME" /> hozzáférjen az Ön fiókjához, ügyeljen rá, hogy mindig zárolja profilját, amikor nem használja a Chrome-ot. A zároláshoz kattintson profilja nevére a böngésző jobb felső sarkában, majd válassza a „Kilépés és gyermekzár” lehetőséget.
+<ph name="BEGIN_LINK_2" />További információ<ph name="END_LINK_2" />.
+
+További utasításokat a(z) <ph name="ACCOUNT_EMAIL" /> címére küldött e-mailekben talál.</translation>
 <translation id="3282568296779691940">Bejelentkezés a Chrome-ba</translation>
 <translation id="3311976847535831054">Ez a számítógép a továbbiakban nem kapja meg a Google Chrome 32 bites változatának frissítéseit. Kérjük, frissítsen a Google Chrome 64 bites változatára.</translation>
 <translation id="3360895254066713204">Chrome segéd</translation>
@@ -205,7 +211,6 @@ Ha mindenképp bejelentkezik, akkor egyesíti a(z) <ph name="ACCOUNT_EMAIL_NEW" 
 <translation id="7808348361785373670">Eltávolítás a Chrome-ból…</translation>
 <translation id="7825851276765848807">A telepítés egy meg nem határozott hiba miatt nem sikerült. Kérjük, töltse le újra a Google Chrome-ot.</translation>
 <translation id="7890208801193284374">Ha megoszt egy számítógépet, ismerősei és családtagjai külön fiókokban internetezve a saját kívánságaik szerint állíthatják be a Chrome-ot.</translation>
-<translation id="8000275528373650868">A Google Chrome futtatásához Windows Vista, illetve Windows XP SP2 vagy újabb verzió szükséges.</translation>
 <translation id="8005540215158006229">A Chrome majdnem készen áll.</translation>
 <translation id="8008534537613507642">A Chrome újratelepítése</translation>
 <translation id="8030318113982266900">Eszköz frissítése a(z) <ph name="CHANNEL_NAME" /> csatornára...</translation>
@@ -227,6 +232,7 @@ Ha mindenképp bejelentkezik, akkor egyesíti a(z) <ph name="ACCOUNT_EMAIL_NEW" 
 <translation id="8556340503434111824">Elérhető a Google Chrome új verziója, amely gyorsabb, mint ezelőtt bármikor.</translation>
 <translation id="8568392309447938879">Be kell jelentkeznie a Chrome-ba az alkalmazások használatához. Ez lehetővé teszi a Chrome számára, hogy szinkronizálja alkalmazásait, könyvjelzőit, előzményeit, jelszavait és egyéb beállításait a különböző eszközök között.</translation>
 <translation id="8614913330719544658">A Google Chrome nem válaszol. Újraindítja most?</translation>
+<translation id="8667808506758191620"><ph name="DEVICE_TYPE" /> eszköze naprakész.</translation>
 <translation id="8669527147644353129">Google Chrome segéd</translation>
 <translation id="8679801911857917785">Továbbá azt is szabályozza, hogy melyik oldal jelenik meg a Chrome indításakor.</translation>
 <translation id="870251953148363156">A &amp;Google Chrome frissítése</translation>
@@ -235,6 +241,7 @@ Ha mindenképp bejelentkezik, akkor egyesíti a(z) <ph name="ACCOUNT_EMAIL_NEW" 
 <translation id="8851136666856101339">fő</translation>
 <translation id="8862326446509486874">Nincsenek meg a megfelelő jogai a rendszerszintű telepítéshez. Indítsa újra a telepítőt rendszergazdaként.</translation>
 <translation id="9026991721384951619">A Chrome OS nem tudta szinkronizálni az adatokat, mert a fiók bejelentkezési adatai elavultak.</translation>
+<translation id="9067395829937117663">A Google Chrome futtatásához Windows 7 vagy újabb verzió szükséges.</translation>
 <translation id="9102715433345326100">Ez a fájl rosszindulatú, ezért a Chrome letiltotta.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Figyelmeztetés:<ph name="END_BOLD" /> A Google Chrome nem tudja megakadályozni, hogy a bővítmények rögzítsék a böngészési előzményeit. A bővítmény inkognitómódban való használatának letiltásához törölje e lehetőség bejelölését.</translation>
 <translation id="911206726377975832">Törli a böngészési adatait is?</translation>

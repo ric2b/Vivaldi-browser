@@ -4,8 +4,9 @@
 
 #include "components/test_runner/web_frame_test_client.h"
 
+#include <memory>
+
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -15,9 +16,12 @@
 #include "components/test_runner/mock_screen_orientation_client.h"
 #include "components/test_runner/mock_web_user_media_client.h"
 #include "components/test_runner/test_common.h"
+#include "components/test_runner/test_interfaces.h"
 #include "components/test_runner/test_plugin.h"
 #include "components/test_runner/test_runner.h"
+#include "components/test_runner/web_frame_test_proxy.h"
 #include "components/test_runner/web_test_delegate.h"
+#include "components/test_runner/web_test_proxy.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
@@ -177,37 +181,20 @@ const char* WebNavigationTypeToString(blink::WebNavigationType type) {
   return kIllegalString;
 }
 
-enum CheckDoneReason {
-  LoadFinished,
-  MainResourceLoadFailed,
-  ResourceLoadCompleted
-};
-void CheckDone(blink::WebLocalFrame* frame,
-               CheckDoneReason reason,
-               TestRunner* test_runner) {
-  if (frame != test_runner->topLoadingFrame())
-    return;
-  if (reason != MainResourceLoadFailed &&
-      (frame->isResourceLoadInProgress() || frame->isLoading()))
-    return;
-  test_runner->setTopLoadingFrame(frame, true);
-}
-
 }  // namespace
 
 WebFrameTestClient::WebFrameTestClient(
     TestRunner* test_runner,
     WebTestDelegate* delegate,
-    AccessibilityController* accessibility_controller,
-    EventSender* event_sender)
+    WebTestProxyBase* web_test_proxy_base,
+    WebFrameTestProxyBase* web_frame_test_proxy_base)
     : test_runner_(test_runner),
       delegate_(delegate),
-      accessibility_controller_(accessibility_controller),
-      event_sender_(event_sender) {
+      web_test_proxy_base_(web_test_proxy_base),
+      web_frame_test_proxy_base_(web_frame_test_proxy_base) {
   DCHECK(test_runner);
   DCHECK(delegate_);
-  DCHECK(accessibility_controller_);
-  DCHECK(event_sender_);
+  DCHECK(web_test_proxy_base_);
 }
 
 WebFrameTestClient::~WebFrameTestClient() {}
@@ -366,8 +353,10 @@ void WebFrameTestClient::postAccessibilityEvent(const blink::WebAXObject& obj,
       break;
   }
 
-  accessibility_controller_->NotificationReceived(obj, event_name);
-  if (accessibility_controller_->ShouldLogAccessibilityEvents()) {
+  AccessibilityController* accessibility_controller =
+      web_test_proxy_base_->accessibility_controller();
+  accessibility_controller->NotificationReceived(obj, event_name);
+  if (accessibility_controller->ShouldLogAccessibilityEvents()) {
     std::string message("AccessibilityNotification - ");
     message += event_name;
 
@@ -401,7 +390,7 @@ blink::WebPlugin* WebFrameTestClient::createPlugin(
 
 void WebFrameTestClient::showContextMenu(
     const blink::WebContextMenuData& context_menu_data) {
-  event_sender_->SetContextMenuData(context_menu_data);
+  web_test_proxy_base_->event_sender()->SetContextMenuData(context_menu_data);
 }
 
 blink::WebUserMediaClient* WebFrameTestClient::userMediaClient() {
@@ -428,8 +417,7 @@ void WebFrameTestClient::loadURLExternally(
 
 void WebFrameTestClient::didStartProvisionalLoad(blink::WebLocalFrame* frame,
                                                  double trigering_event_time) {
-  if (!test_runner_->topLoadingFrame())
-    test_runner_->setTopLoadingFrame(frame, false);
+  test_runner_->tryToSetTopLoadingFrame(frame);
 
   if (test_runner_->shouldDumpFrameLoadCallbacks()) {
     PrintFrameDescription(delegate_, frame);
@@ -459,7 +447,6 @@ void WebFrameTestClient::didFailProvisionalLoad(
     PrintFrameDescription(delegate_, frame);
     delegate_->PrintMessage(" - didFailProvisionalLoadWithError\n");
   }
-  CheckDone(frame, MainResourceLoadFailed, test_runner_);
 }
 
 void WebFrameTestClient::didCommitProvisionalLoad(
@@ -515,7 +502,6 @@ void WebFrameTestClient::didFailLoad(blink::WebLocalFrame* frame,
     PrintFrameDescription(delegate_, frame);
     delegate_->PrintMessage(" - didFailLoadWithError\n");
   }
-  CheckDone(frame, MainResourceLoadFailed, test_runner_);
 }
 
 void WebFrameTestClient::didFinishLoad(blink::WebLocalFrame* frame) {
@@ -523,7 +509,11 @@ void WebFrameTestClient::didFinishLoad(blink::WebLocalFrame* frame) {
     PrintFrameDescription(delegate_, frame);
     delegate_->PrintMessage(" - didFinishLoadForFrame\n");
   }
-  CheckDone(frame, LoadFinished, test_runner_);
+}
+
+void WebFrameTestClient::didStopLoading() {
+  test_runner_->tryToClearTopLoadingFrame(
+      web_frame_test_proxy_base_->web_frame());
 }
 
 void WebFrameTestClient::didDetectXSS(const blink::WebURL& insecure_url,
@@ -666,7 +656,6 @@ void WebFrameTestClient::didFinishResourceLoad(blink::WebLocalFrame* frame,
     delegate_->PrintMessage(" - didFinishLoading\n");
   }
   resource_identifier_map_.erase(identifier);
-  CheckDone(frame, ResourceLoadCompleted, test_runner_);
 }
 
 void WebFrameTestClient::didAddMessageToConsole(
@@ -674,6 +663,8 @@ void WebFrameTestClient::didAddMessageToConsole(
     const blink::WebString& source_name,
     unsigned source_line,
     const blink::WebString& stack_trace) {
+  if (!test_runner_->ShouldDumpConsoleMessages())
+    return;
   std::string level;
   switch (message.level) {
     case blink::WebConsoleMessage::LevelDebug:
@@ -741,24 +732,11 @@ blink::WebNavigationPolicy WebFrameTestClient::decidePolicyForNavigation(
   return result;
 }
 
-bool WebFrameTestClient::willCheckAndDispatchMessageEvent(
-    blink::WebLocalFrame* source_frame,
-    blink::WebFrame* target_frame,
-    blink::WebSecurityOrigin target,
-    blink::WebDOMMessageEvent event) {
-  if (test_runner_->shouldInterceptPostMessage()) {
-    delegate_->PrintMessage("intercepted postMessage\n");
-    return true;
-  }
-
-  return false;
-}
-
 void WebFrameTestClient::checkIfAudioSinkExistsAndIsAuthorized(
     const blink::WebString& sink_id,
     const blink::WebSecurityOrigin& security_origin,
     blink::WebSetSinkIdCallbacks* web_callbacks) {
-  scoped_ptr<blink::WebSetSinkIdCallbacks> callback(web_callbacks);
+  std::unique_ptr<blink::WebSetSinkIdCallbacks> callback(web_callbacks);
   std::string device_id = sink_id.utf8();
   if (device_id == "valid" || device_id.empty())
     callback->onSuccess();
@@ -766,6 +744,11 @@ void WebFrameTestClient::checkIfAudioSinkExistsAndIsAuthorized(
     callback->onError(blink::WebSetSinkIdError::NotAuthorized);
   else
     callback->onError(blink::WebSetSinkIdError::NotFound);
+}
+
+void WebFrameTestClient::didClearWindowObject(blink::WebLocalFrame* frame) {
+  web_test_proxy_base_->test_interfaces()->BindTo(frame);
+  web_test_proxy_base_->BindTo(frame);
 }
 
 }  // namespace test_runner

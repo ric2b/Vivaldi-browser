@@ -75,6 +75,8 @@ class ScopedHandleBase {
   MOVE_ONLY_TYPE_FOR_CPP_03(ScopedHandleBase);
 
  public:
+  using RawHandleType = HandleType;
+
   ScopedHandleBase() {}
   explicit ScopedHandleBase(HandleType handle) : handle_(handle) {}
   ~ScopedHandleBase() { CloseIfNecessary(); }
@@ -122,11 +124,8 @@ class ScopedHandleBase {
 
  private:
   void CloseIfNecessary() {
-    if (!handle_.is_valid())
-      return;
-    MojoResult result = MojoClose(handle_.value());
-    ALLOW_UNUSED_LOCAL(result);
-    DCHECK_EQ(MOJO_RESULT_OK, result);
+    if (handle_.is_valid())
+      handle_.Close();
   }
 
   HandleType handle_;
@@ -159,6 +158,13 @@ class Handle {
   const MojoHandle& value() const { return value_; }
   MojoHandle* mutable_value() { return &value_; }
   void set_value(MojoHandle value) { value_ = value; }
+
+  void Close() {
+    DCHECK(is_valid());
+    MojoResult result = MojoClose(value_);
+    ALLOW_UNUSED_LOCAL(result);
+    DCHECK_EQ(MOJO_RESULT_OK, result);
+  }
 
  private:
   MojoHandle value_;

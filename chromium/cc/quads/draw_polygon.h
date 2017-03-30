@@ -40,14 +40,11 @@ class CC_EXPORT DrawPolygon {
   // Split will only return true if it determines that we got back 2
   // intersection points. Only when it returns true will front and back both be
   // valid new polygons that are on opposite sides of the splitting plane.
-  bool Split(const DrawPolygon& splitter,
-             scoped_ptr<DrawPolygon>* front,
-             scoped_ptr<DrawPolygon>* back);
+  void SplitPolygon(std::unique_ptr<DrawPolygon> polygon,
+                    std::unique_ptr<DrawPolygon>* front,
+                    std::unique_ptr<DrawPolygon>* back,
+                    bool* is_coplanar) const;
   float SignedPointDistance(const gfx::Point3F& point) const;
-  // Checks polygon a against polygon b and returns which side it lies on, or
-  // whether it crosses (necessitating a split in the BSP tree).
-  static BspCompareResult SideCompare(const DrawPolygon& a,
-                                      const DrawPolygon& b);
   void ToQuads2D(std::vector<gfx::QuadF>* quads) const;
   void TransformToScreenSpace(const gfx::Transform& transform);
   void TransformToLayerSpace(const gfx::Transform& inverse_transform);
@@ -57,7 +54,7 @@ class CC_EXPORT DrawPolygon {
   const DrawQuad* original_ref() const { return original_ref_; }
   int order_index() const { return order_index_; }
   bool is_split() const { return is_split_; }
-  scoped_ptr<DrawPolygon> CreateCopy();
+  std::unique_ptr<DrawPolygon> CreateCopy();
 
   void RecomputeNormalForTesting();
 

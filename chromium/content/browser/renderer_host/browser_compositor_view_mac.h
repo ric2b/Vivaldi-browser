@@ -5,6 +5,8 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_BROWSER_COMPOSITOR_VIEW_MAC_H_
 #define CONTENT_BROWSER_RENDERER_HOST_BROWSER_COMPOSITOR_VIEW_MAC_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "ui/accelerated_widget_mac/accelerated_widget_mac.h"
 #include "ui/compositor/compositor.h"
@@ -21,10 +23,10 @@ class BrowserCompositorMac : public ui::CompositorObserver {
   virtual ~BrowserCompositorMac();
 
   // Create a compositor, or recycle a preexisting one.
-  static scoped_ptr<BrowserCompositorMac> Create();
+  static std::unique_ptr<BrowserCompositorMac> Create();
 
   // Delete a compositor, or allow it to be recycled.
-  static void Recycle(scoped_ptr<BrowserCompositorMac> compositor);
+  static void Recycle(std::unique_ptr<BrowserCompositorMac> compositor);
 
   // Indicate that the recyclable compositor should be destroyed, and no future
   // compositors should be recycled.
@@ -53,7 +55,7 @@ class BrowserCompositorMac : public ui::CompositorObserver {
   void OnCompositingLockStateChanged(ui::Compositor* compositor) override {}
   void OnCompositingShuttingDown(ui::Compositor* compositor) override {}
 
-  scoped_ptr<ui::AcceleratedWidgetMac> accelerated_widget_mac_;
+  std::unique_ptr<ui::AcceleratedWidgetMac> accelerated_widget_mac_;
   ui::Compositor compositor_;
   scoped_refptr<ui::CompositorLock> compositor_suspended_lock_;
 

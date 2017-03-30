@@ -43,6 +43,8 @@
         <structure name="IDR_GUEST_TAB_HTML" file="resources\ntp4\guest_tab.html" flattenhtml="true" type="chrome_html" />
       </if>
       <if expr="chromeos">
+        <structure name="IDR_LOCK_HTML" file="resources\chromeos\login\lock.html" flattenhtml="true" type="chrome_html" variables="OOBE=lock" expand_variables="true"/>
+        <structure name="IDR_LOCK_JS" file="resources\chromeos\login\lock.js" flattenhtml="true" type="chrome_html" variables="OOBE=lock" expand_variables="true" />
         <structure name="IDR_LOGIN_HTML" file="resources\chromeos\login\login.html" flattenhtml="true" type="chrome_html" variables="OOBE=login" expand_variables="true"/>
         <structure name="IDR_LOGIN_JS" file="resources\chromeos\login\login.js" flattenhtml="true" type="chrome_html" />
       </if>
@@ -60,8 +62,12 @@
         <structure name="IDR_KEYBOARD_UTILS_JS" file="resources\chromeos\keyboard\keyboard_utils.js" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_CUSTOM_ELEMENTS_OOBE_HTML" file="resources\chromeos\login\custom_elements_oobe.html" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_CUSTOM_ELEMENTS_OOBE_JS" file="resources\chromeos\login\custom_elements_oobe.js" flattenhtml="true" type="chrome_html" />
+        <structure name="IDR_CUSTOM_ELEMENTS_LOCK_HTML" file="resources\chromeos\login\custom_elements_lock.html" flattenhtml="true" type="chrome_html" />
+        <structure name="IDR_CUSTOM_ELEMENTS_LOCK_JS" file="resources\chromeos\login\custom_elements_lock.js" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_CUSTOM_ELEMENTS_LOGIN_HTML" file="resources\chromeos\login\custom_elements_login.html" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_CUSTOM_ELEMENTS_LOGIN_JS" file="resources\chromeos\login\custom_elements_login.js" flattenhtml="true" type="chrome_html" />
+        <structure name="IDR_CUSTOM_ELEMENTS_PIN_KEYBOARD_HTML" file="resources\chromeos\quick_unlock\pin_keyboard.html" flattenhtml="true" allowexternalscript="true" type="chrome_html" />
+        <structure name="IDR_CUSTOM_ELEMENTS_PIN_KEYBOARD_JS" file="resources\chromeos\quick_unlock\pin_keyboard.js" type="chrome_html" />
       </if>
       <structure name="IDR_READER_OUT_OF_DATE_HTML" file="resources\reader_out_of_date.html" flattenhtml="true" type="chrome_html" />
     </structures>
@@ -106,6 +112,7 @@
       <include name="IDR_DOMAIN_RELIABILITY_INTERNALS_HTML" file="resources\domain_reliability_internals.html" type="BINDATA" />
       <include name="IDR_DOMAIN_RELIABILITY_INTERNALS_CSS" file="resources\domain_reliability_internals.css" type="BINDATA" />
       <include name="IDR_DOMAIN_RELIABILITY_INTERNALS_JS" file="resources\domain_reliability_internals.js" type="BINDATA" />
+      <include name="IDR_DOWNLOAD_FILE_TYPES_PB" file="${root_gen_dir}\chrome\browser\resources\safe_browsing\download_file_types.pb" use_base_dir="false" type="BINDATA" />
       <if expr="not is_android">
         <include name="IDR_MD_DOWNLOADS_1X_INCOGNITO_MARKER_PNG" file="resources\md_downloads\1x\incognito_marker.png" type="BINDATA" />
         <include name="IDR_MD_DOWNLOADS_2X_INCOGNITO_MARKER_PNG" file="resources\md_downloads\2x\incognito_marker.png" type="BINDATA" />
@@ -139,6 +146,9 @@
         <include name="IDR_EXTENSION_COMMAND_LIST_JS" file="resources\extensions\extension_command_list.js" flattenhtml="true" type="BINDATA" />
         <include name="IDR_EXTENSION_LIST_JS" file="resources\extensions\extension_list.js" flattenhtml="true" type="BINDATA" />
         <include name="IDR_EXTENSIONS_JS" file="resources\extensions\extensions.js" flattenhtml="true" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_EXTENSIONS_JS" file="resources\md_extensions\extensions.js" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_DETAIL_VIEW_HTML" file="resources\md_extensions\detail_view.html" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_DETAIL_VIEW_JS" file="resources\md_extensions\detail_view.js" type="BINDATA" />
         <include name="IDR_MD_EXTENSIONS_MANAGER_CSS" file="resources\md_extensions\manager.css" type="BINDATA" />
         <include name="IDR_MD_EXTENSIONS_MANAGER_HTML" file="resources\md_extensions\manager.html" type="BINDATA" />
         <include name="IDR_MD_EXTENSIONS_MANAGER_JS" file="resources\md_extensions\manager.js" type="BINDATA" />
@@ -165,6 +175,11 @@
         <include name="IDR_POPULAR_SITES_INTERNALS_CSS" file="resources\popular_sites_internals.css" type="BINDATA" />
         <include name="IDR_POPULAR_SITES_INTERNALS_JS" file="resources\popular_sites_internals.js" type="BINDATA" />
       </if>
+      <if expr="is_android">
+        <include name="IDR_SNIPPETS_INTERNALS_HTML" file="resources\snippets_internals.html" allowexternalscript="true" type="BINDATA" />
+        <include name="IDR_SNIPPETS_INTERNALS_CSS" file="resources\snippets_internals.css" type="BINDATA" />
+        <include name="IDR_SNIPPETS_INTERNALS_JS" file="resources\snippets_internals.js" type="BINDATA" />
+      </if>
       <include name="IDR_SUPERVISED_USER_INTERNALS_HTML" file="resources\supervised_user_internals.html" allowexternalscript="true" type="BINDATA" />
       <include name="IDR_SUPERVISED_USER_INTERNALS_CSS" file="resources\supervised_user_internals.css" type="BINDATA" />
       <include name="IDR_SUPERVISED_USER_INTERNALS_JS" file="resources\supervised_user_internals.js" type="BINDATA" />
@@ -183,10 +198,13 @@
       <include name="IDR_HISTORY_JS" file="resources\history\history.js" flattenhtml="true" type="BINDATA" />
 
       <if expr="not is_android and not is_ios">
-        <include name="IDR_MD_HISTORY_HISTORY_HTML" file="resources\md_history\history.html" type="BINDATA" />
+        <include name="IDR_MD_HISTORY_APP_HTML" file="resources\md_history\app.html" type="BINDATA" />
+        <include name="IDR_MD_HISTORY_APP_JS" file="resources\md_history\app.js" type="BINDATA" />
+        <include name="IDR_MD_HISTORY_BROWSER_SERVICE_HTML" file="resources\md_history\browser_service.html" type="BINDATA" />
+        <include name="IDR_MD_HISTORY_BROWSER_SERVICE_JS" file="resources\md_history\browser_service.js" type="BINDATA" />
         <include name="IDR_MD_HISTORY_CONSTANTS_HTML" file="resources\md_history\constants.html" type="BINDATA" />
         <include name="IDR_MD_HISTORY_CONSTANTS_JS" file="resources\md_history\constants.js" type="BINDATA" />
-        <include name="IDR_MD_HISTORY_ELEMENTS_HTML" file="resources\md_history\elements.html" type="BINDATA" />
+        <include name="IDR_MD_HISTORY_HISTORY_HTML" file="resources\md_history\history.html" type="BINDATA" />
         <include name="IDR_MD_HISTORY_HISTORY_ITEM_HTML" file="resources\md_history\history_item.html" type="BINDATA" />
         <include name="IDR_MD_HISTORY_HISTORY_ITEM_JS" file="resources\md_history\history_item.js" type="BINDATA" />
         <include name="IDR_MD_HISTORY_HISTORY_JS" file="resources\md_history\history.js" type="BINDATA" />
@@ -391,26 +409,26 @@
         <include name="IDR_USER_MANAGER_HTML" file="resources\user_manager\user_manager.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
       </if>
       <if expr="not is_android and not is_ios and not chromeos">
-        <include name="IDR_MD_CONTROL_BAR_CSS" file="resources\md_user_manager\control_bar.css" flattenhtml="true" type="BINDATA" />
         <include name="IDR_MD_CONTROL_BAR_HTML" file="resources\md_user_manager\control_bar.html" flattenhtml="true" type="BINDATA" />
         <include name="IDR_MD_CONTROL_BAR_JS" file="resources\md_user_manager\control_bar.js" type="BINDATA" />
-        <include name="IDR_MD_CREATE_PROFILE_CSS" file="resources\md_user_manager\create_profile.css" flattenhtml="true" type="BINDATA" />
         <include name="IDR_MD_CREATE_PROFILE_HTML" file="resources\md_user_manager\create_profile.html" flattenhtml="true" type="BINDATA" />
         <include name="IDR_MD_CREATE_PROFILE_JS" file="resources\md_user_manager\create_profile.js" type="BINDATA" />
+        <include name="IDR_MD_IMPORT_SUPERVISED_USER_HTML" file="resources\md_user_manager\import_supervised_user.html" flattenhtml="true" type="BINDATA" />
+        <include name="IDR_MD_IMPORT_SUPERVISED_USER_JS" file="resources\md_user_manager\import_supervised_user.js" type="BINDATA" />
         <include name="IDR_MD_PROFILE_BROWSER_PROXY_HTML" file="resources\md_user_manager\profile_browser_proxy.html" flattenhtml="true" type="BINDATA" />
         <include name="IDR_MD_PROFILE_BROWSER_PROXY_JS" file="resources\md_user_manager\profile_browser_proxy.js" type="BINDATA" />
-        <include name="IDR_MD_SUPERVISED_USER_LEARN_MORE_CSS" file="resources\md_user_manager\supervised_user_learn_more.css" flattenhtml="true" type="BINDATA" />
+        <include name="IDR_MD_SUPERVISED_USER_CREATE_CONFIRM_HTML" file="resources\md_user_manager\supervised_user_create_confirm.html" flattenhtml="true" type="BINDATA" />
+        <include name="IDR_MD_SUPERVISED_USER_CREATE_CONFIRM_JS" file="resources\md_user_manager\supervised_user_create_confirm.js" type="BINDATA" />
         <include name="IDR_MD_SUPERVISED_USER_LEARN_MORE_HTML" file="resources\md_user_manager\supervised_user_learn_more.html" flattenhtml="true" type="BINDATA" />
         <include name="IDR_MD_SUPERVISED_USER_LEARN_MORE_JS" file="resources\md_user_manager\supervised_user_learn_more.js" type="BINDATA" />
         <include name="IDR_MD_USER_MANAGER_HTML" file="resources\md_user_manager\user_manager.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
         <include name="IDR_MD_USER_MANAGER_JS" file="resources\md_user_manager\user_manager.js" flattenhtml="true" type="BINDATA" />
-        <include name="IDR_MD_USER_MANAGER_PAGES_CSS" file="resources\md_user_manager\user_manager_pages.css" flattenhtml="true" type="BINDATA" />
+        <include name="IDR_MD_USER_MANAGER_ICONS_HTML" file="resources\md_user_manager\icons.html" flattenhtml="true" type="BINDATA" />
         <include name="IDR_MD_USER_MANAGER_PAGES_HTML" file="resources\md_user_manager\user_manager_pages.html" flattenhtml="true" type="BINDATA" />
         <include name="IDR_MD_USER_MANAGER_PAGES_JS" file="resources\md_user_manager\user_manager_pages.js" type="BINDATA" />
         <include name="IDR_MD_USER_MANAGER_SHARED_STYLES_HTML" file="resources\md_user_manager\shared_styles.html" flattenhtml="true" type="BINDATA" />
         <include name="IDR_MD_USER_MANAGER_STRINGS_HTML" file="resources\md_user_manager\strings.html" flattenhtml="true" type="BINDATA" />
         <include name="IDR_MD_USER_MANAGER_STYLES_HTML" file="resources\md_user_manager\user_manager_styles.html" flattenhtml="true" type="BINDATA" />
-        <include name="IDR_MD_USER_MANAGER_TUTORIAL_CSS" file="resources\md_user_manager\user_manager_tutorial.css" flattenhtml="true" type="BINDATA" />
         <include name="IDR_MD_USER_MANAGER_TUTORIAL_HTML" file="resources\md_user_manager\user_manager_tutorial.html" flattenhtml="true" type="BINDATA" />
         <include name="IDR_MD_USER_MANAGER_TUTORIAL_JS" file="resources\md_user_manager\user_manager_tutorial.js" type="BINDATA" />
       </if>

@@ -4,6 +4,10 @@
 
 #include "ash/touch/touch_hud_debug.h"
 
+#include <algorithm>
+#include <string>
+#include <vector>
+
 #include "ash/display/display_manager.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
@@ -13,10 +17,10 @@
 #include "base/strings/utf_string_conversions.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/aura/window_event_dispatcher.h"
+#include "ui/display/display.h"
 #include "ui/events/event.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/canvas.h"
-#include "ui/gfx/display.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/transform.h"
@@ -28,7 +32,7 @@
 #include <X11/extensions/XInput2.h>
 #include <X11/Xlib.h>
 
-#include "ui/events/devices/x11/device_data_manager_x11.h"
+#include "ui/events/devices/x11/device_data_manager_x11.h"  // nogncheck
 #endif
 
 namespace ash {
@@ -324,7 +328,7 @@ TouchHudDebug::TouchHudDebug(aura::Window* initial_root)
       touch_log_(new TouchLog()),
       canvas_(NULL),
       label_container_(NULL) {
-  const gfx::Display& display =
+  const display::Display& display =
       Shell::GetInstance()->display_manager()->GetDisplayForId(display_id());
 
   views::View* content = widget()->GetContentsView();
@@ -454,7 +458,7 @@ void TouchHudDebug::OnTouchEvent(ui::TouchEvent* event) {
   label_container_->SetSize(label_container_->GetPreferredSize());
 }
 
-void TouchHudDebug::OnDisplayMetricsChanged(const gfx::Display& display,
+void TouchHudDebug::OnDisplayMetricsChanged(const display::Display& display,
                                             uint32_t metrics) {
   TouchObserverHUD::OnDisplayMetricsChanged(display, metrics);
 

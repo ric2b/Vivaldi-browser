@@ -86,18 +86,6 @@ DEFINE_NODE_FACTORY(SVGSVGElement)
 
 SVGSVGElement::~SVGSVGElement()
 {
-#if !ENABLE(OILPAN)
-    if (m_viewSpec)
-        m_viewSpec->detachContextElement();
-
-    // There are cases where removedFromDocument() is not called.
-    // see ContainerNode::removeAllChildren, called by its destructor.
-    // With Oilpan, either removedFrom is called or the document
-    // is dead as well and there is no reason to clear the extensions.
-    document().accessSVGExtensions().removeTimeContainer(this);
-
-    ASSERT(inShadowIncludingDocument() || !accessDocumentSVGExtensions().isSVGRootWithRelativeLengthDescendents(this));
-#endif
 }
 
 SVGRectTearOff* SVGSVGElement::viewport() const
@@ -373,14 +361,14 @@ StaticNodeList* SVGSVGElement::collectIntersectionOrEnclosureList(const FloatRec
 
 StaticNodeList* SVGSVGElement::getIntersectionList(SVGRectTearOff* rect, SVGElement* referenceElement) const
 {
-    document().updateLayoutIgnorePendingStylesheets();
+    document().updateStyleAndLayoutIgnorePendingStylesheets();
 
     return collectIntersectionOrEnclosureList(rect->target()->value(), referenceElement, CheckIntersection);
 }
 
 StaticNodeList* SVGSVGElement::getEnclosureList(SVGRectTearOff* rect, SVGElement* referenceElement) const
 {
-    document().updateLayoutIgnorePendingStylesheets();
+    document().updateStyleAndLayoutIgnorePendingStylesheets();
 
     return collectIntersectionOrEnclosureList(rect->target()->value(), referenceElement, CheckEnclosure);
 }
@@ -388,7 +376,7 @@ StaticNodeList* SVGSVGElement::getEnclosureList(SVGRectTearOff* rect, SVGElement
 bool SVGSVGElement::checkIntersection(SVGElement* element, SVGRectTearOff* rect) const
 {
     ASSERT(element);
-    document().updateLayoutIgnorePendingStylesheets();
+    document().updateStyleAndLayoutIgnorePendingStylesheets();
 
     return checkIntersectionOrEnclosure(*element, rect->target()->value(), CheckIntersection);
 }
@@ -396,7 +384,7 @@ bool SVGSVGElement::checkIntersection(SVGElement* element, SVGRectTearOff* rect)
 bool SVGSVGElement::checkEnclosure(SVGElement* element, SVGRectTearOff* rect) const
 {
     ASSERT(element);
-    document().updateLayoutIgnorePendingStylesheets();
+    document().updateStyleAndLayoutIgnorePendingStylesheets();
 
     return checkIntersectionOrEnclosure(*element, rect->target()->value(), CheckEnclosure);
 }

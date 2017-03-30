@@ -62,6 +62,12 @@ const String getMessageForResponseError(WebServiceWorkerResponseError error, con
     case WebServiceWorkerResponseErrorNoForeignFetchResponse:
         errorMessage = errorMessage + "an object that was not a ForeignFetchResponse was passed to respondWith().";
         break;
+    case WebServiceWorkerResponseErrorForeignFetchHeadersWithoutOrigin:
+        errorMessage = errorMessage + "headers were specified for a response without an explicit origin.";
+        break;
+    case WebServiceWorkerResponseErrorForeignFetchMismatchedOrigin:
+        errorMessage = errorMessage + "origin in response does not match origin of request.";
+        break;
     case WebServiceWorkerResponseErrorUnknown:
     default:
         errorMessage = errorMessage + "an unexpected error occurred.";
@@ -248,7 +254,7 @@ void RespondWithObserver::responseWasFulfilled(const ScriptValue& value)
         } else {
             Stream* outStream = Stream::create(getExecutionContext(), "");
             webResponse.setStreamURL(outStream->url());
-            buffer->startLoading(getExecutionContext(), FetchDataLoader::createLoaderAsStream(outStream), new NoopLoaderClient);
+            buffer->startLoading(FetchDataLoader::createLoaderAsStream(outStream), new NoopLoaderClient);
         }
     }
     ServiceWorkerGlobalScopeClient::from(getExecutionContext())->didHandleFetchEvent(m_eventID, webResponse);

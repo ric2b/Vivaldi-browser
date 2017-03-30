@@ -5,13 +5,12 @@
 #ifndef USBDevice_h
 #define USBDevice_h
 
+#include "bindings/core/v8/ArrayBufferOrArrayBufferView.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptWrappable.h"
-#include "bindings/modules/v8/UnionTypesModules.h"
 #include "core/dom/ContextLifecycleObserver.h"
+#include "device/usb/public/interfaces/device.mojom-blink.h"
 #include "platform/heap/Handle.h"
-#include "public/platform/modules/webusb/WebUSBDevice.h"
-#include "public/platform/modules/webusb/WebUSBDeviceInfo.h"
 #include "wtf/BitVector.h"
 #include "wtf/Vector.h"
 
@@ -29,42 +28,34 @@ class USBDevice
     USING_GARBAGE_COLLECTED_MIXIN(USBDevice);
     DEFINE_WRAPPERTYPEINFO();
 public:
-    using WebType = OwnPtr<WebUSBDevice>;
-
-    static USBDevice* create(PassOwnPtr<WebUSBDevice> device, ExecutionContext* context)
+    static USBDevice* create(device::usb::blink::DeviceInfoPtr deviceInfo, device::usb::blink::DevicePtr device, ExecutionContext* context)
     {
-        return new USBDevice(device, context);
+        return new USBDevice(std::move(deviceInfo), std::move(device), context);
     }
 
-    static USBDevice* take(ScriptPromiseResolver*, PassOwnPtr<WebUSBDevice>);
+    explicit USBDevice(device::usb::blink::DeviceInfoPtr, device::usb::blink::DevicePtr, ExecutionContext*);
+    virtual ~USBDevice();
 
-    explicit USBDevice(PassOwnPtr<WebUSBDevice>, ExecutionContext*);
-    virtual ~USBDevice() { }
-
-    const WebUSBDeviceInfo& info() const { return m_device->info(); }
-    void onDeviceOpenedOrClosed(bool);
-    void onConfigurationSelected(bool success, size_t configurationIndex);
-    void onInterfaceClaimedOrUnclaimed(bool claimed, size_t interfaceIndex);
-    void onAlternateInterfaceSelected(bool success, size_t interfaceIndex, size_t alternateIndex);
+    const device::usb::blink::DeviceInfo& info() const { return *m_deviceInfo; }
     bool isInterfaceClaimed(size_t configurationIndex, size_t interfaceIndex) const;
     size_t selectedAlternateInterface(size_t interfaceIndex) const;
 
-    // IDL exposed interface:
+    // USBDevice.idl
     String guid() const { return info().guid; }
-    uint8_t usbVersionMajor() { return info().usbVersionMajor; }
-    uint8_t usbVersionMinor() { return info().usbVersionMinor; }
-    uint8_t usbVersionSubminor() { return info().usbVersionSubminor; }
-    uint8_t deviceClass() { return info().deviceClass; }
-    uint8_t deviceSubclass() const { return info().deviceSubclass; }
-    uint8_t deviceProtocol() const { return info().deviceProtocol; }
-    uint16_t vendorId() const { return info().vendorID; }
-    uint16_t productId() const { return info().productID; }
-    uint8_t deviceVersionMajor() const { return info().deviceVersionMajor; }
-    uint8_t deviceVersionMinor() const { return info().deviceVersionMinor; }
-    uint8_t deviceVersionSubminor() const { return info().deviceVersionSubminor; }
-    String manufacturerName() const { return info().manufacturerName; }
-    String productName() const { return info().productName; }
-    String serialNumber() const { return info().serialNumber; }
+    uint8_t usbVersionMajor() const { return info().usb_version_major; }
+    uint8_t usbVersionMinor() const { return info().usb_version_minor; }
+    uint8_t usbVersionSubminor() const { return info().usb_version_subminor; }
+    uint8_t deviceClass() const { return info().class_code; }
+    uint8_t deviceSubclass() const { return info().subclass_code; }
+    uint8_t deviceProtocol() const { return info().protocol_code; }
+    uint16_t vendorId() const { return info().vendor_id; }
+    uint16_t productId() const { return info().product_id; }
+    uint8_t deviceVersionMajor() const { return info().device_version_major; }
+    uint8_t deviceVersionMinor() const { return info().device_version_minor; }
+    uint8_t deviceVersionSubminor() const { return info().device_version_subminor; }
+    String manufacturerName() const { return info().manufacturer_name; }
+    String productName() const { return info().product_name; }
+    String serialNumber() const { return info().serial_number; }
     USBConfiguration* configuration() const;
     HeapVector<Member<USBConfiguration>> configurations() const;
     bool opened() const { return m_opened; }
@@ -99,10 +90,33 @@ private:
     bool ensureInterfaceClaimed(uint8_t interfaceNumber, ScriptPromiseResolver*) const;
     bool ensureEndpointAvailable(bool inTransfer, uint8_t endpointNumber, ScriptPromiseResolver*) const;
     bool anyInterfaceChangeInProgress() const;
-    bool convertControlTransferParameters(WebUSBDevice::TransferDirection, const USBControlTransferParameters&, WebUSBDevice::ControlTransferParameters*, ScriptPromiseResolver*) const;
+    device::usb::blink::ControlTransferParamsPtr convertControlTransferParameters(const USBControlTransferParameters&, ScriptPromiseResolver*) const;
     void setEndpointsForInterface(size_t interfaceIndex, bool set);
 
-    OwnPtr<WebUSBDevice> m_device;
+    void asyncOpen(ScriptPromiseResolver*, device::usb::blink::OpenDeviceError);
+    void asyncClose(ScriptPromiseResolver*);
+    void onDeviceOpenedOrClosed(bool);
+    void asyncSelectConfiguration(size_t configurationIndex, ScriptPromiseResolver*, bool success);
+    void onConfigurationSelected(bool success, size_t configurationIndex);
+    void asyncClaimInterface(size_t interfaceIndex, ScriptPromiseResolver*, bool success);
+    void asyncReleaseInterface(size_t interfaceIndex, ScriptPromiseResolver*, bool success);
+    void onInterfaceClaimedOrUnclaimed(bool claimed, size_t interfaceIndex);
+    void asyncSelectAlternateInterface(size_t interfaceIndex, size_t alternateIndex, ScriptPromiseResolver*, bool success);
+    void asyncControlTransferIn(ScriptPromiseResolver*, device::usb::blink::TransferStatus, mojo::WTFArray<uint8_t>);
+    void asyncControlTransferOut(unsigned, ScriptPromiseResolver*, device::usb::blink::TransferStatus);
+    void asyncClearHalt(ScriptPromiseResolver*, bool success);
+    void asyncTransferIn(ScriptPromiseResolver*, device::usb::blink::TransferStatus, mojo::WTFArray<uint8_t>);
+    void asyncTransferOut(unsigned, ScriptPromiseResolver*, device::usb::blink::TransferStatus);
+    void asyncIsochronousTransferIn(ScriptPromiseResolver*, mojo::WTFArray<uint8_t>, mojo::WTFArray<device::usb::blink::IsochronousPacketPtr>);
+    void asyncIsochronousTransferOut(ScriptPromiseResolver*, mojo::WTFArray<device::usb::blink::IsochronousPacketPtr>);
+    void asyncReset(ScriptPromiseResolver*, bool success);
+
+    void onConnectionError();
+    bool markRequestComplete(ScriptPromiseResolver*);
+
+    device::usb::blink::DeviceInfoPtr m_deviceInfo;
+    device::usb::blink::DevicePtr m_device;
+    HeapHashSet<Member<ScriptPromiseResolver>> m_deviceRequests;
     bool m_opened;
     bool m_deviceStateChangeInProgress;
     int m_configurationIndex;

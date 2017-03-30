@@ -63,12 +63,12 @@
                 '<(angle_path)/src/angle.gyp:translator',
                 '<(DEPTH)/third_party/icu/icu.gyp:icuuc',
                 '<(DEPTH)/ui/gfx/gfx.gyp:gfx_geometry',
-                '<(DEPTH)/v8/tools/gyp/v8.gyp:v8',
+                '<(DEPTH)/v8/src/v8.gyp:v8',
             ],
             'export_dependent_settings': [
                 '<(DEPTH)/skia/skia.gyp:skia',
                 '<(DEPTH)/third_party/icu/icu.gyp:icuuc',
-                '<(DEPTH)/v8/tools/gyp/v8.gyp:v8',
+                '<(DEPTH)/v8/src/v8.gyp:v8',
             ],
             'include_dirs': [
                 '<(angle_path)/include',
@@ -95,13 +95,13 @@
                         '<(DEPTH)/third_party/ots/ots.gyp:ots',
                         '<(DEPTH)/third_party/zlib/zlib.gyp:zlib',
                         '<(DEPTH)/url/url.gyp:url_lib',
-                        '<(DEPTH)/v8/tools/gyp/v8.gyp:v8',
+                        '<(DEPTH)/v8/src/v8.gyp:v8',
                         '<(libjpeg_gyp_path):libjpeg',
                         # We must not add webkit_support here because of cyclic dependency.
                     ],
                     'export_dependent_settings': [
                         '<(DEPTH)/url/url.gyp:url_lib',
-                        '<(DEPTH)/v8/tools/gyp/v8.gyp:v8',
+                        '<(DEPTH)/v8/src/v8.gyp:v8',
                     ],
                     'msvs_settings': {
                       'VCLinkerTool': {
@@ -179,7 +179,7 @@
                 '../modules/modules.gyp:modules_testing',
                 '../wtf/wtf.gyp:wtf',
                 '<(DEPTH)/skia/skia.gyp:skia',
-                '<(DEPTH)/v8/tools/gyp/v8.gyp:v8',
+                '<(DEPTH)/v8/src/v8.gyp:v8',
             ],
             'include_dirs': [
                 '../../',
@@ -200,24 +200,6 @@
                     ],
                 }],
             ],
-        },
-        {
-           'target_name': 'image_decode_bench',
-           'type': 'executable',
-           'dependencies': [
-               '../config.gyp:config',
-               '../core/core.gyp:webcore',
-               '../platform/blink_platform.gyp:blink_common',
-               '../wtf/wtf.gyp:wtf',
-               'blink_web',
-               'blink_web_test_support',
-           ],
-           'defines': [
-               'BLINK_IMPLEMENTATION=1',
-           ],
-           'sources': [
-               'ImageDecodeBench.cpp',
-           ],
         },
     ], # targets
     'conditions': [

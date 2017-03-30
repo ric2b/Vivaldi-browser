@@ -27,9 +27,8 @@ const wchar_t kChromeFrameGuid[] = L"{8BA986DA-5100-405E-AA35-86F34A02ACBF}";
 ChromeFrameDistribution::ChromeFrameDistribution()
     : BrowserDistribution(
           CHROME_FRAME,
-          scoped_ptr<AppRegistrationData>(
-              new UpdatingAppRegistrationData(kChromeFrameGuid))) {
-}
+          std::unique_ptr<AppRegistrationData>(
+              new UpdatingAppRegistrationData(kChromeFrameGuid))) {}
 
 base::string16 ChromeFrameDistribution::GetBaseAppName() {
   return L"Google Chrome Frame";
@@ -53,8 +52,7 @@ base::string16 ChromeFrameDistribution::GetDisplayName() {
 #endif
 }
 
-base::string16 ChromeFrameDistribution::GetShortcutName(
-    ShortcutType shortcut_type) {
+base::string16 ChromeFrameDistribution::GetShortcutName() {
   NOTREACHED();
   return base::string16();
 }
@@ -90,14 +88,8 @@ base::string16 ChromeFrameDistribution::GetIconFilename() {
   return installer::kChromeExe;
 }
 
-int ChromeFrameDistribution::GetIconIndex(ShortcutType shortcut_type) {
-  switch (shortcut_type) {
-    case SHORTCUT_CHROME:
-      return 0;
-    default:
-      NOTREACHED();
-      return 0;
-  }
+int ChromeFrameDistribution::GetIconIndex() {
+  return 0;
 }
 
 BrowserDistribution::DefaultBrowserControlPolicy

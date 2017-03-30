@@ -7,11 +7,11 @@
 
 #import <Cocoa/Cocoa.h>
 
+#include <memory>
 #include <set>
 
 #include "base/mac/scoped_block.h"
 #import "base/mac/scoped_nsobject.h"
-#import "base/memory/scoped_ptr.h"
 #include "ui/message_center/message_center_export.h"
 
 namespace message_center {
@@ -34,7 +34,7 @@ MESSAGE_CENTER_EXPORT
   message_center::MessageCenter* messageCenter_;
 
   // MessageCenterObserver implementation.
-  scoped_ptr<message_center::MessageCenterObserver> observer_;
+  std::unique_ptr<message_center::MessageCenterObserver> observer_;
 
   // Array of all on-screen popup notifications.
   base::scoped_nsobject<NSMutableArray> popups_;

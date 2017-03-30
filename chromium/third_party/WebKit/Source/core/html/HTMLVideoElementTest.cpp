@@ -21,7 +21,7 @@ namespace {
 
 class EmptyWebMediaPlayer : public WebMediaPlayer {
 public:
-    void load(LoadType, const WebURL&, CORSMode) override { };
+    void load(LoadType, const WebMediaPlayerSource&, CORSMode) override { };
     void play() override { };
     void pause() override { };
     bool supportsSave() const override { return false; };
@@ -59,12 +59,12 @@ public:
 
 class StubFrameLoaderClient : public EmptyFrameLoaderClient {
 public:
-    static RawPtr<StubFrameLoaderClient> create()
+    static StubFrameLoaderClient* create()
     {
         return new StubFrameLoaderClient;
     }
 
-    PassOwnPtr<WebMediaPlayer> createWebMediaPlayer(HTMLMediaElement&, const WebURL&, WebMediaPlayerClient*) override
+    PassOwnPtr<WebMediaPlayer> createWebMediaPlayer(HTMLMediaElement&, const WebMediaPlayerSource&, WebMediaPlayerClient*) override
     {
         return adoptPtr(new MockWebMediaPlayer);
     }

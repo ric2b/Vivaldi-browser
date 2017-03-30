@@ -14,8 +14,7 @@
 namespace blink {
 
 template<class T>
-class TrackListBase : public RefCountedGarbageCollectedEventTargetWithInlineData<TrackListBase<T>> {
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(TrackListBase);
+class TrackListBase : public EventTargetWithInlineData {
 public:
     explicit TrackListBase(HTMLMediaElement* mediaElement)
         : m_mediaElement(mediaElement)
@@ -24,10 +23,6 @@ public:
 
     ~TrackListBase() override
     {
-#if !ENABLE(OILPAN)
-        ASSERT(m_tracks.isEmpty());
-        ASSERT(!m_mediaElement);
-#endif
     }
 
     unsigned length() const { return m_tracks.size(); }
@@ -60,14 +55,6 @@ public:
         return nullptr;
     }
 
-#if !ENABLE(OILPAN)
-    void shutdown()
-    {
-        removeAll();
-        m_mediaElement = nullptr;
-    }
-#endif
-
     void add(T* track)
     {
         track->setMediaElement(m_mediaElement);
@@ -99,7 +86,7 @@ public:
 
     void scheduleChangeEvent()
     {
-        RawPtr<Event> event = Event::create(EventTypeNames::change);
+        Event* event = Event::create(EventTypeNames::change);
         event->setTarget(this);
         m_mediaElement->scheduleEvent(event);
     }
@@ -110,13 +97,20 @@ public:
     {
         visitor->trace(m_tracks);
         visitor->trace(m_mediaElement);
-        RefCountedGarbageCollectedEventTargetWithInlineData<TrackListBase<T>>::trace(visitor);
+        EventTargetWithInlineData::trace(visitor);
+    }
+
+    DECLARE_VIRTUAL_TRACE_WRAPPERS()
+    {
+        for (auto track : m_tracks) {
+            visitor->traceWrappers(track);
+        }
     }
 
 private:
     void scheduleTrackEvent(const AtomicString& eventName, T* track)
     {
-        RawPtr<Event> event = TrackEvent::create(eventName, track);
+        Event* event = TrackEvent::create(eventName, track);
         event->setTarget(this);
         m_mediaElement->scheduleEvent(event);
     }

@@ -192,8 +192,8 @@ const char kVivaldiInstallDir[] = "vivaldi-install-dir";
 const char kVivaldiStandalone[] = "vivaldi-standalone";
 const char kVivaldiForceLaunch[] = "vivaldi-force-launch";
 const char kVivaldiUpdate[] = "vivaldi-update";
-const char kVivaldiCrashLogging[] = "vivaldi-crash-logging";
 const char kVivaldiRegisterStandalone[] = "vivaldi-register-standalone";
+const char kVivaldiSilent[] = "vivaldi-silent";
 
 }  // namespace switches
 

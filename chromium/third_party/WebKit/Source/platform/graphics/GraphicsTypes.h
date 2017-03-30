@@ -28,6 +28,7 @@
 
 #include "platform/PlatformExport.h"
 #include "public/platform/WebBlendMode.h"
+#include "third_party/skia/include/core/SkFilterQuality.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "wtf/Forward.h"
@@ -171,13 +172,6 @@ enum ColorFilter {
 enum WindRule {
     RULE_NONZERO = SkPath::kWinding_FillType,
     RULE_EVENODD = SkPath::kEvenOdd_FillType
-};
-
-enum ReflectionDirection {
-    // Vertically flipped (to appear above or below).
-    VerticalReflection,
-    // Horizontally flipped (to appear to the left or right).
-    HorizontalReflection,
 };
 
 PLATFORM_EXPORT String compositeOperatorName(CompositeOperator, WebBlendMode);

@@ -12,6 +12,7 @@
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/pickle.h"
 #include "base/process/process_handle.h"
 #include "base/rand_util.h"
@@ -27,10 +28,7 @@
 
 namespace IPC {
 
-ChannelWin::State::State(ChannelWin* channel) : is_pending(false) {
-  memset(&context.overlapped, 0, sizeof(context.overlapped));
-  context.handler = channel;
-}
+ChannelWin::State::State() = default;
 
 ChannelWin::State::~State() {
   static_assert(offsetof(ChannelWin::State, context) == 0,
@@ -42,8 +40,6 @@ ChannelWin::ChannelWin(const IPC::ChannelHandle& channel_handle,
                        Mode mode,
                        Listener* listener)
     : ChannelReader(listener),
-      input_state_(this),
-      output_state_(this),
       peer_pid_(base::kNullProcessId),
       waiting_connect_(mode & MODE_SERVER_FLAG),
       processing_incoming_(false),
@@ -378,9 +374,8 @@ bool ChannelWin::CreatePipe(const IPC::ChannelHandle &channel_handle,
   }
 
   // Create the Hello message to be sent when Connect is called
-  scoped_ptr<Message> m(new Message(MSG_ROUTING_NONE,
-                                    HELLO_MESSAGE_TYPE,
-                                    IPC::Message::PRIORITY_NORMAL));
+  std::unique_ptr<Message> m(new Message(MSG_ROUTING_NONE, HELLO_MESSAGE_TYPE,
+                                         IPC::Message::PRIORITY_NORMAL));
 
   // Don't send the secret to the untrusted process, and don't send a secret
   // if the value is zero (for IPC backwards compatability).
@@ -585,10 +580,11 @@ void ChannelWin::OnIOCompleted(
 // Channel's methods
 
 // static
-scoped_ptr<Channel> Channel::Create(const IPC::ChannelHandle& channel_handle,
-                                    Mode mode,
-                                    Listener* listener) {
-  return scoped_ptr<Channel>(new ChannelWin(channel_handle, mode, listener));
+std::unique_ptr<Channel> Channel::Create(
+    const IPC::ChannelHandle& channel_handle,
+    Mode mode,
+    Listener* listener) {
+  return base::WrapUnique(new ChannelWin(channel_handle, mode, listener));
 }
 
 // static

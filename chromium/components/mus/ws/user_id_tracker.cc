@@ -5,12 +5,12 @@
 #include "components/mus/ws/user_id_tracker.h"
 
 #include "components/mus/ws/user_id_tracker_observer.h"
-#include "mojo/shell/public/interfaces/connector.mojom.h"
+#include "services/shell/public/interfaces/connector.mojom.h"
 
 namespace mus {
 namespace ws {
 
-UserIdTracker::UserIdTracker() : active_id_(mojo::shell::mojom::kRootUserID) {
+UserIdTracker::UserIdTracker() : active_id_(shell::mojom::kRootUserID) {
   ids_.insert(active_id_);
 }
 UserIdTracker::~UserIdTracker() {

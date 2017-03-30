@@ -12,7 +12,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/sequenced_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #if defined(OS_WIN)
 #include "components/update_client/background_downloader_win.h"
@@ -36,16 +36,16 @@ CrxDownloader::DownloadMetrics::DownloadMetrics()
 
 // On Windows, the first downloader in the chain is a background downloader,
 // which uses the BITS service.
-scoped_ptr<CrxDownloader> CrxDownloader::Create(
+std::unique_ptr<CrxDownloader> CrxDownloader::Create(
     bool is_background_download,
     net::URLRequestContextGetter* context_getter,
     const scoped_refptr<base::SequencedTaskRunner>& task_runner) {
-  scoped_ptr<CrxDownloader> url_fetcher_downloader(
-      scoped_ptr<CrxDownloader>(new UrlFetcherDownloader(
-          scoped_ptr<CrxDownloader>(), context_getter, task_runner)));
+  std::unique_ptr<CrxDownloader> url_fetcher_downloader(
+      std::unique_ptr<CrxDownloader>(new UrlFetcherDownloader(
+          std::unique_ptr<CrxDownloader>(), context_getter, task_runner)));
 #if defined(OS_WIN)
   if (is_background_download) {
-    return scoped_ptr<CrxDownloader>(new BackgroundDownloader(
+    return std::unique_ptr<CrxDownloader>(new BackgroundDownloader(
         std::move(url_fetcher_downloader), context_getter, task_runner));
   }
 #endif
@@ -55,7 +55,7 @@ scoped_ptr<CrxDownloader> CrxDownloader::Create(
 
 CrxDownloader::CrxDownloader(
     const scoped_refptr<base::SequencedTaskRunner>& task_runner,
-    scoped_ptr<CrxDownloader> successor)
+    std::unique_ptr<CrxDownloader> successor)
     : task_runner_(task_runner),
       main_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       successor_(std::move(successor)) {}

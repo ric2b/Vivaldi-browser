@@ -60,7 +60,7 @@ enum {
 class CORE_EXPORT HTMLAnchorElement : public HTMLElement, public DOMURLUtils {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static RawPtr<HTMLAnchorElement> create(Document&);
+    static HTMLAnchorElement* create(Document&);
 
     ~HTMLAnchorElement() override;
 
@@ -92,6 +92,7 @@ protected:
 
     void parseAttribute(const QualifiedName&, const AtomicString&, const AtomicString&) override;
     bool supportsFocus() const override;
+    bool matchesEnabledPseudoClass() const override;
 
 private:
     bool shouldHaveFocusAppearance() const final;

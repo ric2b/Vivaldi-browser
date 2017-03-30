@@ -4,9 +4,10 @@
 
 #include "content/public/test/content_test_suite_base.h"
 
+#include <memory>
+
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/test/test_suite.h"
 #include "base/threading/sequenced_worker_pool.h"
@@ -21,6 +22,7 @@
 #include "content/renderer/in_process_renderer_thread.h"
 #include "content/utility/in_process_utility_thread.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/ui_base_paths.h"
 
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)
@@ -106,6 +108,7 @@ void ContentTestSuiteBase::Initialize() {
 
   testing::UnitTest::GetInstance()->listeners().Append(
       new ContentTestSuiteBaseListener);
+  ui::MaterialDesignController::Initialize();
 }
 
 void ContentTestSuiteBase::RegisterContentSchemes(

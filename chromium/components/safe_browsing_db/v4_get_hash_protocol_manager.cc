@@ -44,9 +44,12 @@ enum ParseResultType {
   // with the other matches.
   INCONSISTENT_THREAT_TYPE_ERROR = 5,
 
+  // A match in the response contained a metadata, but the metadata is invalid.
+  UNEXPECTED_METADATA_VALUE_ERROR = 6,
+
   // Memory space for histograms is determined by the max.  ALWAYS
   // ADD NEW VALUES BEFORE THIS ONE.
-  PARSE_RESULT_TYPE_MAX = 6
+  PARSE_RESULT_TYPE_MAX = 7,
 };
 
 // Record parsing errors of a GetHash result.
@@ -112,7 +115,8 @@ V4GetHashProtocolManager::V4GetHashProtocolManager(
       next_gethash_time_(Time::FromDoubleT(0)),
       config_(config),
       request_context_getter_(request_context_getter),
-      url_fetcher_id_(0) {
+      url_fetcher_id_(0),
+      clock_(new base::DefaultClock()) {
 }
 
 V4GetHashProtocolManager::~V4GetHashProtocolManager() {
@@ -120,6 +124,14 @@ V4GetHashProtocolManager::~V4GetHashProtocolManager() {
   STLDeleteContainerPairFirstPointers(hash_requests_.begin(),
                                       hash_requests_.end());
   hash_requests_.clear();
+}
+
+// static
+void V4GetHashProtocolManager::RegisterFactory(
+    std::unique_ptr<V4GetHashProtocolManagerFactory> factory) {
+  if (factory_)
+    delete factory_;
+  factory_ = factory.release();
 }
 
 std::string V4GetHashProtocolManager::GetHashRequest(
@@ -151,7 +163,7 @@ std::string V4GetHashProtocolManager::GetHashRequest(
 bool V4GetHashProtocolManager::ParseHashResponse(
     const std::string& data,
     std::vector<SBFullHashResult>* full_hashes,
-    base::TimeDelta* negative_cache_duration) {
+    base::Time* negative_cache_expire) {
   FindFullHashesResponse response;
 
   if (!response.ParseFromString(data)) {
@@ -159,16 +171,16 @@ bool V4GetHashProtocolManager::ParseHashResponse(
     return false;
   }
 
-  if (response.has_negative_cache_duration()) {
-    // Seconds resolution is good enough so we ignore the nanos field.
-    *negative_cache_duration = base::TimeDelta::FromSeconds(
-        response.negative_cache_duration().seconds());
-  }
+  // negative_cache_duration should always be set.
+  DCHECK(response.has_negative_cache_duration());
+  // Seconds resolution is good enough so we ignore the nanos field.
+  *negative_cache_expire = clock_->Now() + base::TimeDelta::FromSeconds(
+      response.negative_cache_duration().seconds());
 
   if (response.has_minimum_wait_duration()) {
     // Seconds resolution is good enough so we ignore the nanos field.
     next_gethash_time_ =
-        Time::Now() + base::TimeDelta::FromSeconds(
+        clock_->Now() + base::TimeDelta::FromSeconds(
                           response.minimum_wait_duration().seconds());
   }
 
@@ -203,8 +215,10 @@ bool V4GetHashProtocolManager::ParseHashResponse(
 
     if (match.has_cache_duration()) {
       // Seconds resolution is good enough so we ignore the nanos field.
-      result.cache_duration =
+      result.cache_expire_after = clock_->Now() +
           base::TimeDelta::FromSeconds(match.cache_duration().seconds());
+    } else {
+      result.cache_expire_after = clock_->Now();
     }
 
     // Different threat types will handle the metadata differently.
@@ -217,6 +231,9 @@ bool V4GetHashProtocolManager::ParseHashResponse(
                match.threat_entry_metadata().entries()) {
             if (m.key() == "permission") {
               result.metadata.api_permissions.push_back(m.value());
+            } else {
+              RecordParseGetHashResult(UNEXPECTED_METADATA_VALUE_ERROR);
+              return false;
             }
           }
         } else {
@@ -226,6 +243,48 @@ bool V4GetHashProtocolManager::ParseHashResponse(
       } else {
         RecordParseGetHashResult(UNEXPECTED_PLATFORM_TYPE_ERROR);
         return false;
+      }
+    } else if (match.threat_type() == MALWARE_THREAT ||
+               match.threat_type() == POTENTIALLY_HARMFUL_APPLICATION) {
+      for (const ThreatEntryMetadata::MetadataEntry& m :
+           match.threat_entry_metadata().entries()) {
+        // TODO: Need to confirm the below key/value pairs with CSD backend.
+        if (m.key() == "pha_pattern_type" ||
+            m.key() == "malware_pattern_type") {
+          if (m.value() == "LANDING") {
+            result.metadata.threat_pattern_type =
+                ThreatPatternType::MALWARE_LANDING;
+            break;
+          } else if (m.value() == "DISTRIBUTION") {
+            result.metadata.threat_pattern_type =
+                ThreatPatternType::MALWARE_DISTRIBUTION;
+            break;
+          } else {
+            RecordParseGetHashResult(UNEXPECTED_METADATA_VALUE_ERROR);
+            return false;
+          }
+        }
+      }
+    } else if (match.threat_type() == SOCIAL_ENGINEERING_PUBLIC) {
+      for (const ThreatEntryMetadata::MetadataEntry& m :
+           match.threat_entry_metadata().entries()) {
+        if (m.key() == "se_pattern_type") {
+          if (m.value() == "SOCIAL_ENGINEERING_ADS") {
+            result.metadata.threat_pattern_type =
+                ThreatPatternType::SOCIAL_ENGINEERING_ADS;
+            break;
+          } else if (m.value() == "SOCIAL_ENGINEERING_LANDING") {
+            result.metadata.threat_pattern_type =
+                ThreatPatternType::SOCIAL_ENGINEERING_LANDING;
+            break;
+          } else if (m.value() == "PHISHING") {
+            result.metadata.threat_pattern_type = ThreatPatternType::PHISHING;
+            break;
+          } else {
+            RecordParseGetHashResult(UNEXPECTED_METADATA_VALUE_ERROR);
+            return false;
+          }
+        }
       }
     } else {
       RecordParseGetHashResult(UNEXPECTED_THREAT_TYPE_ERROR);
@@ -247,14 +306,14 @@ void V4GetHashProtocolManager::GetFullHashes(
   // we need to check if we're past the next allowed time. If we are, we can
   // proceed with the request. If not, we are required to return empty results
   // (i.e. treat the page as safe).
-  if (Time::Now() <= next_gethash_time_) {
+  if (clock_->Now() <= next_gethash_time_) {
     if (gethash_error_count_) {
       RecordGetHashResult(V4OperationResult::BACKOFF_ERROR);
     } else {
       RecordGetHashResult(V4OperationResult::MIN_WAIT_DURATION_ERROR);
     }
     std::vector<SBFullHashResult> full_hashes;
-    callback.Run(full_hashes, base::TimeDelta());
+    callback.Run(full_hashes, base::Time());
     return;
   }
 
@@ -279,6 +338,11 @@ void V4GetHashProtocolManager::GetFullHashesWithApis(
   GetFullHashes(prefixes, platform, API_ABUSE, callback);
 }
 
+void V4GetHashProtocolManager::SetClockForTests(
+    std::unique_ptr<base::Clock> clock) {
+  clock_ = std::move(clock);
+}
+
 // net::URLFetcherDelegate implementation ----------------------------------
 
 // SafeBrowsing request responses are handled here.
@@ -291,7 +355,7 @@ void V4GetHashProtocolManager::OnURLFetchComplete(
 
   // FindFullHashes response.
   // Reset the scoped pointer so the fetcher gets destroyed properly.
-  scoped_ptr<const net::URLFetcher> fetcher(it->first);
+  std::unique_ptr<const net::URLFetcher> fetcher(it->first);
 
   int response_code = source->GetResponseCode();
   net::URLRequestStatus status = source->GetStatus();
@@ -300,18 +364,18 @@ void V4GetHashProtocolManager::OnURLFetchComplete(
 
   const FullHashCallback& callback = it->second;
   std::vector<SBFullHashResult> full_hashes;
-  base::TimeDelta negative_cache_duration;
+  base::Time negative_cache_expire;
   if (status.is_success() && response_code == net::HTTP_OK) {
     RecordGetHashResult(V4OperationResult::STATUS_200);
     ResetGetHashErrors();
     std::string data;
     source->GetResponseAsString(&data);
-    if (!ParseHashResponse(data, &full_hashes, &negative_cache_duration)) {
+    if (!ParseHashResponse(data, &full_hashes, &negative_cache_expire)) {
       full_hashes.clear();
       RecordGetHashResult(V4OperationResult::PARSE_ERROR);
     }
   } else {
-    HandleGetHashError(Time::Now());
+    HandleGetHashError(clock_->Now());
 
     DVLOG(1) << "SafeBrowsing GetEncodedFullHashes request for: "
              << source->GetURL() << " failed with error: " << status.error()
@@ -327,7 +391,7 @@ void V4GetHashProtocolManager::OnURLFetchComplete(
   // Invoke the callback with full_hashes, even if there was a parse error or
   // an error response code (in which case full_hashes will be empty). The
   // caller can't be blocked indefinitely.
-  callback.Run(full_hashes, negative_cache_duration);
+  callback.Run(full_hashes, negative_cache_expire);
 
   hash_requests_.erase(it);
 }

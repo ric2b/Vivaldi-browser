@@ -2,12 +2,21 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//mojo/public/tools/bindings/mojom.gni")
 import("//testing/test.gni")
 
 group("common") {
   public_deps = [
     ":common_base",
+    ":common_custom_types",
     ":url_type_converters",
+  ]
+}
+
+# GYP version: mojo/mojo_base.gyp:mojo_common_custom_types
+mojom("common_custom_types") {
+  sources = [
+    "common_custom_types.mojom",
   ]
 }
 
@@ -36,7 +45,6 @@ component("common_base") {
   deps = [
     "//base",
     "//base/third_party/dynamic_annotations",
-    "//mojo/message_pump",
     "//mojo/public/c/system:for_component",
     "//mojo/public/cpp/bindings",
   ]
@@ -58,16 +66,27 @@ source_set("url_type_converters") {
   ]
 }
 
+# GYP version: mojo/mojo_base.gyp:mojo_test_common_custom_types
+mojom("test_common_custom_types") {
+  sources = [
+    "test_common_custom_types.mojom",
+  ]
+  public_deps = [
+    ":common_custom_types",
+  ]
+}
+
 # GYP version: mojo/mojo_base.gyp:mojo_common_unittests
 test("mojo_common_unittests") {
   deps = [
     ":common",
+    ":common_custom_types",
+    ":test_common_custom_types",
     "//base",
     "//base:message_loop_tests",
     "//base/test:test_support",
     "//mojo/edk/test:run_all_unittests",
     "//mojo/edk/test:test_support",
-    "//mojo/message_pump",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/test_support:test_utils",
     "//testing/gtest",
@@ -75,18 +94,9 @@ test("mojo_common_unittests") {
   ]
 
   sources = [
-    # The message_pump tests are so small and some what related to this code
-    # that we put them here.
-    "../message_pump/handle_watcher_unittest.cc",
-    "../message_pump/message_pump_mojo_unittest.cc",
+    "common_custom_types_unittest.cc",
     "common_type_converters_unittest.cc",
   ]
-
-  if (is_linux && !is_component_build) {
-    # This tests dynamically loads libmojo_test_support even in non-component
-    # builds.
-    configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
-  }
 }
 
 test("mojo_common_perftests") {
@@ -94,18 +104,7 @@ test("mojo_common_perftests") {
     ":common",
     "//base",
     "//mojo/edk/test:run_all_perftests",
-    "//mojo/message_pump",
     "//mojo/public/cpp/test_support:test_utils",
     "//testing/gtest",
   ]
-
-  sources = [
-    "../message_pump/handle_watcher_perftest.cc",
-  ]
-
-  if (is_linux && !is_component_build) {
-    # This test dynamically loads libmojo_test_support even in non-component
-    # builds.
-    configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
-  }
 }

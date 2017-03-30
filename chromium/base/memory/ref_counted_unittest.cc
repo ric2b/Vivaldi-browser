@@ -105,6 +105,22 @@ class ScopedRefPtrCountDerived : public ScopedRefPtrCountBase {
 int ScopedRefPtrCountDerived::constructor_count_ = 0;
 int ScopedRefPtrCountDerived::destructor_count_ = 0;
 
+class Other : public base::RefCounted<Other> {
+ private:
+  friend class base::RefCounted<Other>;
+
+  ~Other() {}
+};
+
+scoped_refptr<Other> Overloaded(scoped_refptr<Other> other) {
+  return other;
+}
+
+scoped_refptr<SelfAssign> Overloaded(scoped_refptr<SelfAssign> self_assign) {
+  return self_assign;
+}
+
+
 }  // end namespace
 
 TEST(RefCountedUnitTest, TestSelfAssignment) {
@@ -186,6 +202,16 @@ TEST(RefCountedUnitTest, Equality) {
 
   EXPECT_NE(p1, p2);
   EXPECT_NE(p2, p1);
+}
+
+TEST(RefCountedUnitTest, NullptrEquality) {
+  scoped_refptr<SelfAssign> ptr_to_an_instance(new SelfAssign);
+  scoped_refptr<SelfAssign> ptr_to_nullptr;
+
+  EXPECT_NE(nullptr, ptr_to_an_instance);
+  EXPECT_NE(ptr_to_an_instance, nullptr);
+  EXPECT_EQ(nullptr, ptr_to_nullptr);
+  EXPECT_EQ(ptr_to_nullptr, nullptr);
 }
 
 TEST(RefCountedUnitTest, ConvertibleEquality) {
@@ -461,3 +487,21 @@ TEST(RefCountedUnitTest, MoveConstructorDerived) {
   EXPECT_EQ(1, ScopedRefPtrCountDerived::destructor_count());
 }
 
+TEST(RefCountedUnitTest, TestOverloadResolutionCopy) {
+  scoped_refptr<Derived> derived(new Derived);
+  scoped_refptr<SelfAssign> expected(derived);
+  EXPECT_EQ(expected, Overloaded(derived));
+
+  scoped_refptr<Other> other(new Other);
+  EXPECT_EQ(other, Overloaded(other));
+}
+
+TEST(RefCountedUnitTest, TestOverloadResolutionMove) {
+  scoped_refptr<Derived> derived(new Derived);
+  scoped_refptr<SelfAssign> expected(derived);
+  EXPECT_EQ(expected, Overloaded(std::move(derived)));
+
+  scoped_refptr<Other> other(new Other);
+  scoped_refptr<Other> other2(other);
+  EXPECT_EQ(other2, Overloaded(std::move(other)));
+}

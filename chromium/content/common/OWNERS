@@ -3,10 +3,8 @@
 jln@chromium.org
 
 # For security review of sandboxes
-per-file sandbox_win.cc=set noparent
-per-file sandbox_win.cc=jschuh@chromium.org
-per-file sandbox_win.cc=cpu@chromium.org
-per-file sandbox_win.cc=wfh@chromium.org
+per-file sandbox_win.*=set noparent
+per-file sandbox_win.*=file://sandbox/win/OWNERS
 
 # Mac Sandbox.
 per-file sandbox_init_mac.*=rsesek@chromium.org
@@ -93,14 +91,6 @@ per-file websocket.*=ricea@chromium.org
 per-file websocket.*=tyoshino@chromium.org
 per-file websocket.*=yhirano@chromium.org
 
-# Compositor
-per-file cc_messages_unittest.cc=danakj@chromium.org
-per-file cc_messages_perftest.cc=danakj@chromium.org
-
 # DirectWrite
 per-file dwrite_font_platform_win*=scottmg@chromium.org
 per-file font_warmup_win.cc=scottmg@chromium.org
-
-# Web Notifications
-per-file notification_constants.h=peter@chromium.org
-per-file notification_constants.h=mvanouwerkerk@chromium.org

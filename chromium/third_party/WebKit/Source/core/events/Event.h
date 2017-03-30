@@ -31,7 +31,6 @@
 #include "core/events/EventInit.h"
 #include "core/events/EventPath.h"
 #include "platform/heap/Handle.h"
-#include "wtf/RefCounted.h"
 #include "wtf/text/AtomicString.h"
 
 namespace blink {
@@ -119,6 +118,12 @@ public:
     EventTarget* currentTarget() const;
     void setCurrentTarget(EventTarget* currentTarget) { m_currentTarget = currentTarget; }
 
+    // This callback is invoked when an event listener has been dispatched
+    // at the current target. It should only be used to influence UMA metrics
+    // and not change functionality since observing the presence of listeners
+    // is dangerous.
+    virtual void doneDispatchingEventAtCurrentTarget() {}
+
     unsigned short eventPhase() const { return m_eventPhase; }
     void setEventPhase(unsigned short eventPhase) { m_eventPhase = eventPhase; }
 
@@ -171,6 +176,7 @@ public:
 
     bool propagationStopped() const { return m_propagationStopped || m_immediatePropagationStopped; }
     bool immediatePropagationStopped() const { return m_immediatePropagationStopped; }
+    bool wasInitialized() { return m_wasInitialized; }
 
     bool defaultPrevented() const { return m_defaultPrevented; }
     virtual void preventDefault();
@@ -179,12 +185,13 @@ public:
     bool defaultHandled() const { return m_defaultHandled; }
     void setDefaultHandled() { m_defaultHandled = true; }
 
-    bool cancelBubble() const { return m_cancelBubble; }
-    void setCancelBubble(bool cancel) { m_cancelBubble = cancel; }
+    bool cancelBubble(ExecutionContext* = nullptr) const { return m_cancelBubble; }
+    void setCancelBubble(ExecutionContext*, bool);
 
     Event* underlyingEvent() const { return m_underlyingEvent.get(); }
     void setUnderlyingEvent(Event*);
 
+    bool hasEventPath() { return m_eventPath; }
     EventPath& eventPath() { ASSERT(m_eventPath); return *m_eventPath; }
     void initEventPath(Node&);
 
@@ -217,7 +224,6 @@ protected:
     Event(const AtomicString& type, const EventInit&);
 
     virtual void receivedTarget();
-    bool dispatched() const { return m_target; }
 
     void setCanBubble(bool bubble) { m_canBubble = bubble; }
 
@@ -240,6 +246,7 @@ private:
     unsigned m_defaultPrevented:1;
     unsigned m_defaultHandled:1;
     unsigned m_cancelBubble:1;
+    unsigned m_wasInitialized:1;
     unsigned m_isTrusted : 1;
     unsigned m_handlingPassive : 1;
 

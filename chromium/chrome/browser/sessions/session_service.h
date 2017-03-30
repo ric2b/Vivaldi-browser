@@ -118,6 +118,10 @@ class SessionService : public sessions::BaseSessionServiceDelegate,
                        const gfx::Rect& bounds,
                        ui::WindowShowState show_state);
 
+  // Sets the workspace the window resides in.
+  void SetWindowWorkspace(const SessionID& window_id,
+                          const std::string& workspace);
+
   // Sets the visual index of the tab in its parent window.
   void SetTabIndexInWindow(const SessionID& window_id,
                            const SessionID& tab_id,
@@ -306,7 +310,7 @@ class SessionService : public sessions::BaseSessionServiceDelegate,
   void ScheduleResetCommands();
 
   // Schedules the specified command.
-  void ScheduleCommand(scoped_ptr<sessions::SessionCommand> command);
+  void ScheduleCommand(std::unique_ptr<sessions::SessionCommand> command);
 
   // Converts all pending tab/window closes to commands and schedules them.
   void CommitPendingCloses();
@@ -340,8 +344,6 @@ class SessionService : public sessions::BaseSessionServiceDelegate,
   void RecordUpdatedNavListPruned(base::TimeDelta delta, bool use_long_period);
   void RecordUpdatedNavEntryCommit(base::TimeDelta delta, bool use_long_period);
   void RecordUpdatedSaveTime(base::TimeDelta delta, bool use_long_period);
-  void RecordUpdatedSessionNavigationOrTab(base::TimeDelta delta,
-                                           bool use_long_period);
 
   // Deletes session data if no windows are open for the current profile.
   void MaybeDeleteSessionOnlyData();
@@ -357,7 +359,7 @@ class SessionService : public sessions::BaseSessionServiceDelegate,
   bool should_use_delayed_save_;
 
   // The owned BaseSessionService.
-  scoped_ptr<sessions::BaseSessionService> base_session_service_;
+  std::unique_ptr<sessions::BaseSessionService> base_session_service_;
 
   content::NotificationRegistrar registrar_;
 

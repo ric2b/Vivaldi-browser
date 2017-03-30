@@ -12,7 +12,6 @@
 
 #include "base/containers/small_map.h"
 #include "base/macros.h"
-#include "blimp/client/blimp_client_export.h"
 #include "blimp/net/blimp_message_processor.h"
 #include "blimp/net/input_message_generator.h"
 
@@ -38,11 +37,12 @@ namespace client {
 // notified of incoming messages. This class automatically attaches a specific
 // id so that the engine can drop stale RenderWidget related messages after it
 // sends a RenderWidgetMessage::INITIALIZE message.
-class BLIMP_CLIENT_EXPORT RenderWidgetFeature : public BlimpMessageProcessor {
+class RenderWidgetFeature : public BlimpMessageProcessor {
  public:
   // A delegate to be notified of specific RenderWidget related incoming events.
   class RenderWidgetFeatureDelegate {
    public:
+    virtual ~RenderWidgetFeatureDelegate() {}
     virtual void OnRenderWidgetCreated(int render_widget_id) = 0;
 
     // Called when the engine's RenderWidget has changed for a particular

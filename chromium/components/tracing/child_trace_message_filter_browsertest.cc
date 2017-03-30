@@ -4,11 +4,12 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <tuple>
 
 #include "base/callback.h"
 #include "base/run_loop.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "base/trace_event/trace_event.h"
@@ -161,7 +162,7 @@ class ChildTracingTest : public content::RenderViewTest, public IPC::Listener {
   }
 
   scoped_refptr<ChildTraceMessageFilter> ctmf_;
-  scoped_ptr<MockDumpProvider> mock_dump_provider_;
+  std::unique_ptr<MockDumpProvider> mock_dump_provider_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   base::trace_event::MemoryDumpCallback callback_;
   uint32_t wait_for_ipc_message_type_;

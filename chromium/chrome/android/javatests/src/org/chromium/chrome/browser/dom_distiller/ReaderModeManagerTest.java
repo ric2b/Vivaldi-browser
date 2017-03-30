@@ -106,12 +106,18 @@ public class ReaderModeManagerTest extends InstrumentationTestCase {
      */
     private static class MockReaderModePanel extends ReaderModePanel {
         public MockReaderModePanel(Context context, OverlayPanelManager manager) {
-            super(context, null, manager, null);
+            super(context, null, null, manager, null);
         }
 
         @Override
         public ReaderModeSceneLayer createNewReaderModeSceneLayer() {
             return null;
+        }
+
+        @Override
+        public void peekPanel(StateChangeReason reason) {
+            setHeightForTesting(1);
+            super.peekPanel(reason);
         }
 
         @Override

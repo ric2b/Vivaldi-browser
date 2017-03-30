@@ -15,6 +15,7 @@
 #include "base/timer/timer.h"
 #include "media/base/buffering_state.h"
 #include "media/base/pipeline_status.h"
+#include "media/base/renderer_client.h"
 #include "media/mojo/interfaces/renderer.mojom.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 
@@ -25,22 +26,22 @@ class MediaKeys;
 class MojoCdmServiceContext;
 class Renderer;
 
-// An interfaces::Renderer implementation that use a media::Renderer to render
+// A mojom::Renderer implementation that use a media::Renderer to render
 // media streams.
-class MojoRendererService : interfaces::Renderer {
+class MojoRendererService : public mojom::Renderer, public RendererClient {
  public:
   // |mojo_cdm_service_context| can be used to find the CDM to support
   // encrypted media. If null, encrypted media is not supported.
   MojoRendererService(
       base::WeakPtr<MojoCdmServiceContext> mojo_cdm_service_context,
       std::unique_ptr<media::Renderer> renderer,
-      mojo::InterfaceRequest<interfaces::Renderer> request);
+      mojo::InterfaceRequest<mojom::Renderer> request);
   ~MojoRendererService() final;
 
-  // interfaces::Renderer implementation.
-  void Initialize(interfaces::RendererClientPtr client,
-                  interfaces::DemuxerStreamPtr audio,
-                  interfaces::DemuxerStreamPtr video,
+  // mojom::Renderer implementation.
+  void Initialize(mojom::RendererClientPtr client,
+                  mojom::DemuxerStreamPtr audio,
+                  mojom::DemuxerStreamPtr video,
                   const mojo::Callback<void(bool)>& callback) final;
   void Flush(const mojo::Closure& callback) final;
   void StartPlayingFrom(int64_t time_delta_usec) final;
@@ -57,6 +58,15 @@ class MojoRendererService : interfaces::Renderer {
     STATE_ERROR
   };
 
+  // RendererClient implementation.
+  void OnError(PipelineStatus status) final;
+  void OnEnded() final;
+  void OnStatisticsUpdate(const PipelineStatistics& stats) final;
+  void OnBufferingStateChange(BufferingState state) final;
+  void OnWaitingForDecryptionKey() final;
+  void OnVideoNaturalSizeChange(const gfx::Size& size) final;
+  void OnVideoOpacityChange(bool opaque) final;
+
   // Called when the DemuxerStreamProviderShim is ready to go (has a config,
   // pipe handle, etc) and can be handed off to a renderer for use.
   void OnStreamReady(const mojo::Callback<void(bool)>& callback);
@@ -65,25 +75,12 @@ class MojoRendererService : interfaces::Renderer {
   void OnRendererInitializeDone(const mojo::Callback<void(bool)>& callback,
                                 PipelineStatus status);
 
-  // Callback executed by filters to update statistics.
-  void OnUpdateStatistics(const PipelineStatistics& stats);
-
   // Periodically polls the media time from the renderer and notifies the client
   // if the media time has changed since the last update.  If |force| is true,
   // the client is notified even if the time is unchanged.
   void UpdateMediaTime(bool force);
   void CancelPeriodicMediaTimeUpdates();
   void SchedulePeriodicMediaTimeUpdates();
-
-  // Callback executed by audio renderer when buffering state changes.
-  // TODO(tim): Need old and new.
-  void OnBufferingStateChanged(BufferingState new_buffering_state);
-
-  // Callback executed when a renderer has ended.
-  void OnRendererEnded();
-
-  // Callback executed when a runtime error happens.
-  void OnError(PipelineStatus error);
 
   // Callback executed once Flush() completes.
   void OnFlushCompleted(const mojo::Closure& callback);
@@ -93,7 +90,7 @@ class MojoRendererService : interfaces::Renderer {
                      const mojo::Callback<void(bool)>& callback,
                      bool success);
 
-  mojo::StrongBinding<interfaces::Renderer> binding_;
+  mojo::StrongBinding<mojom::Renderer> binding_;
 
   base::WeakPtr<MojoCdmServiceContext> mojo_cdm_service_context_;
 
@@ -104,7 +101,7 @@ class MojoRendererService : interfaces::Renderer {
   base::RepeatingTimer time_update_timer_;
   uint64_t last_media_time_usec_;
 
-  interfaces::RendererClientPtr client_;
+  mojom::RendererClientPtr client_;
 
   // Hold a reference to the CDM set on the |renderer_| so that the CDM won't be
   // destructed while the |renderer_| is still using it.

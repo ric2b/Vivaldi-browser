@@ -34,6 +34,7 @@ Các máy tính từ xa có bàn phím không phải tiếng Anh-Mỹ có thể 
 <translation id="1779766957982586368">Đóng cửa sổ</translation>
 <translation id="1841799852846221389">Đang tắt kết nối từ xa cho máy tính này…</translation>
 <translation id="189172778771606813">Đóng ngăn điều hướng</translation>
+<translation id="1897488610212723051">Xóa</translation>
 <translation id="195619862187186579">Bố cục bàn phím</translation>
 <translation id="1996161829609978754">Chrome đang tải xuống trình cài đặt máy chủ Kết nối từ xa trên Chrome. Sau khi quá trình tải xuống hoàn tất, vui lòng chạy trình cài đặt trước khi tiếp tục.</translation>
 <translation id="2009755455353575666">Không kết nối được</translation>
@@ -122,9 +123,6 @@ trên Chrome</translation>
 <translation id="3950820424414687140">Đăng nhập</translation>
 <translation id="3989511127559254552">Để tiếp tục, trước tiên, bạn phải cấp các quyền truy cập mở rộng cho máy tính của mình. Bạn chỉ phải thực hiện việc này một lần.</translation>
 <translation id="4006787130661126000">Bạn phải bật kết nối từ xa nếu bạn muốn sử dụng Chrome Remote Desktop để truy cập vào máy tính này.</translation>
-<translation id="4028465833180158312">• Bản cập nhật giao diện người dùng thiết kế material design.
-• Tín dụng cấp phép bên thứ ba.
-• Thông tin được hiển thị cho các máy tính từ xa đang ngoại tuyến.</translation>
 <translation id="405887016757208221">Máy tính từ xa đã không khởi tạo được phiên. Nếu sự cố vẫn tiếp diễn, vui lòng thử định cấu hình lại máy chủ.</translation>
 <translation id="4068946408131579958">Tất cả kết nối</translation>
 <translation id="409800995205263688">LƯU Ý: Cài đặt chính sách chỉ cho phép kết nối giữa các máy tính trong mạng của bạn.</translation>
@@ -168,6 +166,7 @@ Remote Desktop</translation>
 <translation id="4985296110227979402">Trước tiên, bạn cần thiết lập máy tính để truy cập từ xa</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (ngoại tuyến)</translation>
 <translation id="5070121137485264635">Máy chủ lưu trữ từ xa yêu cầu bạn xác thực với một trang web của bên thứ ba. Để tiếp tục, bạn phải cấp cho Chrome Remote Desktop thêm quyền truy cập vào địa chỉ sau:</translation>
+<translation id="507204348399810022">Bạn có chắc chắn muốn tắt kết nối từ xa với <ph name="HOSTNAME" /> không?</translation>
 <translation id="5156271271724754543">Vui lòng nhập cùng một mã PIN vào cả hai hộp.</translation>
 <translation id="5168917394043976756">Mở ngăn điều hướng</translation>
 <translation id="5170982930780719864">Id máy chủ không hợp lệ.</translation>
@@ -178,7 +177,6 @@ Remote Desktop</translation>
 <translation id="533625276787323658">Không có máy tính nào để kết nối</translation>
 <translation id="5363265567587775042">Yêu cầu người dùng có máy tính bạn muốn truy cập nhấp vào “<ph name="SHARE" />” và cung cấp cho bạn mã truy cập.</translation>
 <translation id="5379087427956679853">Chrome Remote Desktop cho phép bạn chia sẻ máy tính của mình một cách an toàn qua Web. Cả hai người dùng đều phải chạy ứng dụng Chrome Remote Desktop mà bạn có thể tìm thấy tại <ph name="URL" />.</translation>
-<translation id="5394895745784982830">Dành cho máy Mac (OS X 10.6 trở lên)</translation>
 <translation id="5397086374758643919">Trình gỡ cài đặt máy chủ Chrome Remote Desktop</translation>
 <translation id="5419185025274123272">Không thể đặt lại ứng dụng. Bạn sẽ vẫn có thể gửi báo cáo lỗi.</translation>
 <translation id="544077782045763683">Máy chủ đã tắt.</translation>
@@ -214,6 +212,10 @@ Remote Desktop</translation>
 <translation id="6324708100353784493">Bạn đã bật chế độ tích hợp Google Cardboard. Để sử dụng chế độ này, hãy cắm thiết bị của bạn vào trình xem tương thích với Google Cardboard.</translation>
 <translation id="6381670701864002291">Vấn đề khác.</translation>
 <translation id="6398765197997659313">Thoát khỏi chế độ toàn màn hình</translation>
+<translation id="6408143143164565232">• Nghe âm thanh từ máy tính Windows hoặc Linux.
+• Xóa kết nối không mong muốn bằng cách nhấn và giữ vào tên máy tính.
+• Cuộn bằng hai ngón tay và chụm để thu phóng dễ dàng hơn.
+• Màn hình Trợ giúp và phản hồi mới.</translation>
 <translation id="6441316101718669559">Tích hợp máy tính để bàn không được hỗ trợ trên nền tảng này. Bạn sẽ vẫn có thể sử dụng ứng dụng nhưng trải nghiệm người dùng sẽ bị giảm.</translation>
 <translation id="652218476070540101">Mã PIN cho máy tính này đang được cập nhật…</translation>
 <translation id="6527303717912515753">Chia sẻ</translation>
@@ -221,6 +223,7 @@ Remote Desktop</translation>
 <translation id="6542902059648396432">Báo cáo sự cố…</translation>
 <translation id="6550675742724504774">Tùy chọn</translation>
 <translation id="6570205395680337606">Đặt lại ứng dụng. Bạn sẽ mất mọi công việc chưa lưu.</translation>
+<translation id="6572345186230665992">Dành cho Mac (OS X Mavericks 10.9 trở lên)</translation>
 <translation id="6612717000975622067">Gửi Ctrl-Alt-Del</translation>
 <translation id="6640610550128933069">trực tuyến lần cuối <ph name="DATE" /></translation>
 <translation id="6668065415969892472">Mã PIN của bạn đã được cập nhật.</translation>
@@ -232,7 +235,6 @@ Remote Desktop</translation>
 <translation id="6930242544192836755">Thời lượng</translation>
 <translation id="6939719207673461467">Hiển thị / ẩn bàn phím.</translation>
 <translation id="6944854424004126054">Khôi phục cửa sổ</translation>
-<translation id="6962773374262604195">Dành cho Windows (XP trở lên)</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942">Bạn có chắc chắn muốn tắt kết nối từ xa với <ph name="HOSTNAME" /> không? Nếu bạn thay đổi ý định, bạn cần truy cập vào máy tính đó để bật lại kết nối.</translation>
 <translation id="6998989275928107238">Đến</translation>
@@ -288,6 +290,7 @@ Remote Desktop</translation>
 <translation id="8759753423332885148">Tìm hiểu thêm.</translation>
 <translation id="8791202241915690908">Tải xuống trình cài đặt máy chủ kết nối từ xa trên Chrome</translation>
 <translation id="894763922177556086">Tốt</translation>
+<translation id="895780780740011433">Dành cho Windows 7 trở lên</translation>
 <translation id="897805526397249209">Để bật kết nối từ xa với một máy tính khác, hãy cài đặt Kết nối từ xa trên Chrome trên máy tính đó và nhấp “<ph name="BUTTON_NAME" />”.</translation>
 <translation id="8998327464021325874">Trình điều khiển máy chủ Chrome Remote Desktop</translation>
 <translation id="9016232822027372900">Vẫn tiếp tục kết nối</translation>

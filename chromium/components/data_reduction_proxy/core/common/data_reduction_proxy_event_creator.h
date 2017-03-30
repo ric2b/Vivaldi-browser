@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_event_storage_delegate.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
@@ -49,8 +48,7 @@ class DataReductionProxyEventCreator {
   void AddProxyEnabledEvent(
       net::NetLog* net_log,
       bool secure_transport_restricted,
-      const std::vector<net::ProxyServer>& proxies_for_http,
-      const std::vector<net::ProxyServer>& proxies_for_https);
+      const std::vector<net::ProxyServer>& proxies_for_http);
 
   // Adds the DATA_REDUCTION_PROXY_ENABLED event (with enabled=false) to the
   // event store.

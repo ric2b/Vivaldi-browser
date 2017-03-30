@@ -6,7 +6,7 @@ package org.chromium.chrome.browser;
 
 import android.content.Context;
 import android.os.AsyncTask;
-import android.text.TextUtils;
+import android.os.SystemClock;
 
 import org.chromium.base.FieldTrialList;
 import org.chromium.base.PowerMonitor;
@@ -14,17 +14,25 @@ import org.chromium.base.SysUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.bookmarkswidget.BookmarkWidgetProvider;
 import org.chromium.chrome.browser.crash.CrashFileManager;
 import org.chromium.chrome.browser.crash.MinidumpUploadService;
 import org.chromium.chrome.browser.media.MediaCaptureNotificationService;
+import org.chromium.chrome.browser.metrics.LaunchMetrics;
+import org.chromium.chrome.browser.metrics.UmaUtils;
+import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.partnerbookmarks.PartnerBookmarksShim;
+import org.chromium.chrome.browser.partnercustomizations.HomepageManager;
+import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.physicalweb.PhysicalWeb;
 import org.chromium.chrome.browser.precache.PrecacheLauncher;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.preferences.privacy.PrivacyPreferencesManager;
 import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.content.browser.ChildProcessLauncher;
+
+import java.util.concurrent.TimeUnit;
 
 /**
  * Handler for application level tasks to be completed on deferred startup.
@@ -58,6 +66,10 @@ public class DeferredStartupHandler {
         if (mDeferredStartupComplete) return;
         ThreadUtils.assertOnUiThread();
 
+        RecordHistogram.recordLongTimesHistogram("UMA.Debug.EnableCrashUpload.DeferredStartUptime",
+                SystemClock.uptimeMillis() - UmaUtils.getMainEntryPointTime(),
+                TimeUnit.MILLISECONDS);
+
         // Punt all tasks that may block the UI thread off onto a background thread.
         new AsyncTask<Void, Void, Void>() {
             @Override
@@ -65,6 +77,10 @@ public class DeferredStartupHandler {
                 try {
                     TraceEvent.begin("ChromeBrowserInitializer.onDeferredStartup.doInBackground");
                     if (!crashDumpUploadingCommandLineDisabled) {
+                        RecordHistogram.recordLongTimesHistogram(
+                                "UMA.Debug.EnableCrashUpload.Uptime2",
+                                SystemClock.uptimeMillis() - UmaUtils.getMainEntryPointTime(),
+                                TimeUnit.MILLISECONDS);
                         PrivacyPreferencesManager.getInstance(application)
                                 .enablePotentialCrashUploading();
                         MinidumpUploadService.tryUploadAllCrashDumps(application);
@@ -92,6 +108,16 @@ public class DeferredStartupHandler {
         }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
 
         AfterStartupTaskUtils.setStartupComplete();
+
+        PartnerBrowserCustomizations.setOnInitializeAsyncFinished(new Runnable() {
+            @Override
+            public void run() {
+                String homepageUrl = HomepageManager.getHomepageUri(application);
+                LaunchMetrics.recordHomePageLaunchMetrics(
+                        HomepageManager.isHomepageEnabled(application),
+                        NewTabPage.isNTPUrl(homepageUrl), homepageUrl);
+            }
+        });
 
         // TODO(aruslan): http://b/6397072 This will be moved elsewhere
         PartnerBookmarksShim.kickOffReading(application);
@@ -122,14 +148,6 @@ public class DeferredStartupHandler {
         PhysicalWeb.onChromeStart(application);
 
         mDeferredStartupComplete = true;
-    }
-
-    private static float parseFloat(String value, float defaultValue) {
-        try {
-            return TextUtils.isEmpty(value) ? defaultValue : Float.parseFloat(value);
-        } catch (NumberFormatException e) {
-            return defaultValue;
-        }
     }
 
     private static void startModerateBindingManagementIfNeeded(Context context) {

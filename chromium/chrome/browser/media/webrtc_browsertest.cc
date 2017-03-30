@@ -23,11 +23,19 @@
 static const char kMainWebrtcTestHtmlPage[] =
     "/webrtc/webrtc_jsep01_test.html";
 
+static const char kKeygenAlgorithmRsa[] =
+    "{ name: \"RSASSA-PKCS1-v1_5\", modulusLength: 2048, publicExponent: "
+    "new Uint8Array([1, 0, 1]), hash: \"SHA-256\" }";
+static const char kKeygenAlgorithmEcdsa[] =
+    "{ name: \"ECDSA\", namedCurve: \"P-256\" }";
+
 // Top-level integration test for WebRTC. It always uses fake devices; see
 // WebRtcWebcamBrowserTest for a test that acquires any real webcam on the
 // system.
 class WebRtcBrowserTest : public WebRtcTestBase {
  public:
+  WebRtcBrowserTest() : left_tab_(nullptr), right_tab_(nullptr) {}
+
   void SetUpInProcessBrowserTestFixture() override {
     DetectErrorsInJavaScript();  // Look for errors in our rather complex js.
   }
@@ -43,33 +51,65 @@ class WebRtcBrowserTest : public WebRtcTestBase {
     command_line->AppendSwitchASCII(switches::kJavaScriptFlags, "--expose-gc");
   }
 
-  void RunsAudioVideoWebRTCCallInTwoTabs(std::string video_codec) {
-    if (OnWinXp()) return;
+  void RunsAudioVideoWebRTCCallInTwoTabs(
+      const std::string& video_codec = WebRtcTestBase::kUseDefaultVideoCodec,
+      const std::string& offer_cert_keygen_alg =
+          WebRtcTestBase::kUseDefaultCertKeygen,
+      const std::string& answer_cert_keygen_alg =
+          WebRtcTestBase::kUseDefaultCertKeygen) {
+    StartServerAndOpenTabs();
 
+    SetupPeerconnectionWithLocalStream(left_tab_, offer_cert_keygen_alg);
+    SetupPeerconnectionWithLocalStream(right_tab_, answer_cert_keygen_alg);
+
+    NegotiateCall(left_tab_, right_tab_, video_codec);
+
+    DetectVideoAndHangUp();
+  }
+
+  void RunsAudioVideoWebRTCCallInTwoTabsWithClonedCertificate(
+      const std::string& cert_keygen_alg =
+          WebRtcTestBase::kUseDefaultCertKeygen) {
+    StartServerAndOpenTabs();
+
+    // Generate and clone a certificate, resulting in JavaScript variable
+    // |gCertificateClone| being set to the resulting clone.
+    DeleteDatabase(left_tab_);
+    OpenDatabase(left_tab_);
+    GenerateAndCloneCertificate(left_tab_, cert_keygen_alg);
+    CloseDatabase(left_tab_);
+    DeleteDatabase(left_tab_);
+
+    SetupPeerconnectionWithCertificateAndLocalStream(
+        left_tab_, "gCertificateClone");
+    SetupPeerconnectionWithLocalStream(right_tab_, cert_keygen_alg);
+
+    NegotiateCall(left_tab_, right_tab_, WebRtcTestBase::kUseDefaultVideoCodec);
+
+    DetectVideoAndHangUp();
+  }
+
+private:
+  void StartServerAndOpenTabs() {
     ASSERT_TRUE(embedded_test_server()->Start());
+    left_tab_ = OpenTestPageAndGetUserMediaInNewTab(kMainWebrtcTestHtmlPage);
+    right_tab_ = OpenTestPageAndGetUserMediaInNewTab(kMainWebrtcTestHtmlPage);
+  }
 
-    content::WebContents* left_tab =
-        OpenTestPageAndGetUserMediaInNewTab(kMainWebrtcTestHtmlPage);
-    content::WebContents* right_tab =
-        OpenTestPageAndGetUserMediaInNewTab(kMainWebrtcTestHtmlPage);
-
-    SetupPeerconnectionWithLocalStream(left_tab);
-    SetupPeerconnectionWithLocalStream(right_tab);
-
-    NegotiateCall(left_tab, right_tab, video_codec);
-
-    StartDetectingVideo(left_tab, "remote-view");
-    StartDetectingVideo(right_tab, "remote-view");
-
+  void DetectVideoAndHangUp() {
+    StartDetectingVideo(left_tab_, "remote-view");
+    StartDetectingVideo(right_tab_, "remote-view");
 #if !defined(OS_MACOSX)
     // Video is choppy on Mac OS X. http://crbug.com/443542.
-    WaitForVideoToPlay(left_tab);
-    WaitForVideoToPlay(right_tab);
+    WaitForVideoToPlay(left_tab_);
+    WaitForVideoToPlay(right_tab_);
 #endif
-
-    HangUp(left_tab);
-    HangUp(right_tab);
+    HangUp(left_tab_);
+    HangUp(right_tab_);
   }
+
+  content::WebContents* left_tab_;
+  content::WebContents* right_tab_;
 };
 
 IN_PROC_BROWSER_TEST_F(WebRtcBrowserTest,
@@ -101,8 +141,6 @@ IN_PROC_BROWSER_TEST_F(WebRtcBrowserTest,
 IN_PROC_BROWSER_TEST_F(WebRtcBrowserTest, TestWebAudioMediaStream) {
   // This tests against crash regressions for the WebAudio-MediaStream
   // integration.
-  if (OnWinXp()) return;
-
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL("/webrtc/webaudio_crash.html"));
   ui_test_utils::NavigateToURL(browser(), url);
@@ -113,4 +151,44 @@ IN_PROC_BROWSER_TEST_F(WebRtcBrowserTest, TestWebAudioMediaStream) {
   test::SleepInJavascript(tab, 1000);
 
   ASSERT_FALSE(tab->IsCrashed());
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcBrowserTest,
+                       RunsAudioVideoWebRTCCallInTwoTabsOfferRsaAnswerRsa) {
+  RunsAudioVideoWebRTCCallInTwoTabs(WebRtcTestBase::kUseDefaultVideoCodec,
+                                    kKeygenAlgorithmRsa,
+                                    kKeygenAlgorithmRsa);
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcBrowserTest,
+                       RunsAudioVideoWebRTCCallInTwoTabsOfferEcdsaAnswerEcdsa) {
+  RunsAudioVideoWebRTCCallInTwoTabs(WebRtcTestBase::kUseDefaultVideoCodec,
+                                    kKeygenAlgorithmEcdsa,
+                                    kKeygenAlgorithmEcdsa);
+}
+
+IN_PROC_BROWSER_TEST_F(
+    WebRtcBrowserTest,
+    RunsAudioVideoWebRTCCallInTwoTabsWithClonedCertificateRsa) {
+  RunsAudioVideoWebRTCCallInTwoTabsWithClonedCertificate(kKeygenAlgorithmRsa);
+}
+
+IN_PROC_BROWSER_TEST_F(
+    WebRtcBrowserTest,
+    RunsAudioVideoWebRTCCallInTwoTabsWithClonedCertificateEcdsa) {
+  RunsAudioVideoWebRTCCallInTwoTabsWithClonedCertificate(kKeygenAlgorithmEcdsa);
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcBrowserTest,
+                       RunsAudioVideoWebRTCCallInTwoTabsOfferRsaAnswerEcdsa) {
+  RunsAudioVideoWebRTCCallInTwoTabs(WebRtcTestBase::kUseDefaultVideoCodec,
+                                    kKeygenAlgorithmRsa,
+                                    kKeygenAlgorithmEcdsa);
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcBrowserTest,
+                       RunsAudioVideoWebRTCCallInTwoTabsOfferEcdsaAnswerRsa) {
+  RunsAudioVideoWebRTCCallInTwoTabs(WebRtcTestBase::kUseDefaultVideoCodec,
+                                    kKeygenAlgorithmEcdsa,
+                                    kKeygenAlgorithmRsa);
 }

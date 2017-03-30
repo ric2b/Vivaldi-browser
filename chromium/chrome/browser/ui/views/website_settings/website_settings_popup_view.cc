@@ -27,7 +27,6 @@
 #include "chrome/browser/ui/views/website_settings/chosen_object_view.h"
 #include "chrome/browser/ui/views/website_settings/permission_selector_view.h"
 #include "chrome/browser/ui/website_settings/website_settings.h"
-#include "chrome/browser/ui/website_settings/website_settings_utils.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
@@ -37,6 +36,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cert_store.h"
 #include "content/public/browser/user_metrics.h"
+#include "extensions/common/constants.h"
 #include "grit/components_chromium_strings.h"
 #include "grit/components_google_chrome_strings.h"
 #include "grit/components_strings.h"
@@ -51,7 +51,7 @@
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/button/image_button.h"
-#include "ui/views/controls/button/label_button.h"
+#include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/link.h"
@@ -162,7 +162,8 @@ class InternalPageInfoPopupView : public views::BubbleDialogDelegateView {
   // If |anchor_view| is nullptr, or has no Widget, |parent_window| may be
   // provided to ensure this bubble is closed when the parent closes.
   InternalPageInfoPopupView(views::View* anchor_view,
-                            gfx::NativeView parent_window);
+                            gfx::NativeView parent_window,
+                            bool is_extension_page);
   ~InternalPageInfoPopupView() override;
 
   // views::BubbleDialogDelegateView:
@@ -298,12 +299,14 @@ void PopupHeaderView::SetSecuritySummary(
 }
 
 void PopupHeaderView::AddResetDecisionsButton() {
-  views::LabelButton* reset_decisions_button = new views::LabelButton(
-      button_listener_,
-      l10n_util::GetStringUTF16(
-          IDS_PAGEINFO_RESET_INVALID_CERTIFICATE_DECISIONS_BUTTON));
+  // TODO(estade): this looks pretty crazy as an MD button because the button
+  // text is very long. See crbug.com/512442
+  views::LabelButton* reset_decisions_button =
+      views::MdTextButton::CreateSecondaryUiButton(
+          button_listener_,
+          l10n_util::GetStringUTF16(
+              IDS_PAGEINFO_RESET_INVALID_CERTIFICATE_DECISIONS_BUTTON));
   reset_decisions_button->set_id(BUTTON_RESET_CERTIFICATE_DECISIONS);
-  reset_decisions_button->SetStyle(views::Button::STYLE_BUTTON);
 
   reset_decisions_button_container_->AddChildView(reset_decisions_button);
 
@@ -320,7 +323,8 @@ void PopupHeaderView::AddResetDecisionsButton() {
 
 InternalPageInfoPopupView::InternalPageInfoPopupView(
     views::View* anchor_view,
-    gfx::NativeView parent_window)
+    gfx::NativeView parent_window,
+    bool is_extension_page)
     : BubbleDialogDelegateView(anchor_view, views::BubbleBorder::TOP_LEFT) {
   set_parent_window(parent_window);
 
@@ -334,11 +338,13 @@ InternalPageInfoPopupView::InternalPageInfoPopupView(
   set_margins(gfx::Insets());
   views::ImageView* icon_view = new views::ImageView();
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-  icon_view->SetImage(rb.GetImageSkiaNamed(IDR_PRODUCT_LOGO_16));
+  icon_view->SetImage(rb.GetImageSkiaNamed(
+      is_extension_page ? IDR_PLUGINS_FAVICON : IDR_PRODUCT_LOGO_16));
   AddChildView(icon_view);
 
-  views::Label* label =
-      new views::Label(l10n_util::GetStringUTF16(IDS_PAGE_INFO_INTERNAL_PAGE));
+  views::Label* label = new views::Label(l10n_util::GetStringUTF16(
+      is_extension_page ? IDS_PAGE_INFO_EXTENSION_PAGE
+                        : IDS_PAGE_INFO_INTERNAL_PAGE));
   label->SetMultiLine(true);
   label->SetAllowCharacterBreak(true);
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -386,20 +392,21 @@ void WebsiteSettingsPopupView::ShowPopup(
   is_popup_showing = true;
   gfx::NativeView parent_window =
       anchor_view ? nullptr : web_contents->GetNativeView();
-  if (InternalChromePage(url)) {
+  if (url.SchemeIs(content::kChromeUIScheme) ||
+      url.SchemeIs(extensions::kExtensionScheme)) {
     // Use the concrete type so that |SetAnchorRect| can be called as a friend.
-    InternalPageInfoPopupView* popup =
-        new InternalPageInfoPopupView(anchor_view, parent_window);
+    InternalPageInfoPopupView* popup = new InternalPageInfoPopupView(
+        anchor_view, parent_window, url.SchemeIs(extensions::kExtensionScheme));
     if (!anchor_view)
       popup->SetAnchorRect(anchor_rect);
     popup->GetWidget()->Show();
-  } else {
-    WebsiteSettingsPopupView* popup = new WebsiteSettingsPopupView(
-        anchor_view, parent_window, profile, web_contents, url, security_info);
-    if (!anchor_view)
-      popup->SetAnchorRect(anchor_rect);
-    popup->GetWidget()->Show();
+    return;
   }
+  WebsiteSettingsPopupView* popup = new WebsiteSettingsPopupView(
+      anchor_view, parent_window, profile, web_contents, url, security_info);
+  if (!anchor_view)
+    popup->SetAnchorRect(anchor_rect);
+  popup->GetWidget()->Show();
 }
 
 // Whole function added by Vivaldi

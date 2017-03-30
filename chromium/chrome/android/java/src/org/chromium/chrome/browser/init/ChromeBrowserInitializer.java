@@ -12,7 +12,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Process;
 import android.os.StrictMode;
-import android.preference.PreferenceManager;
 import android.text.TextUtils;
 
 import com.squareup.leakcanary.LeakCanary;
@@ -23,6 +22,7 @@ import org.chromium.base.ApplicationStatus.ActivityStateListener;
 import org.chromium.base.BaseSwitches;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContentUriUtils;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.PathUtils;
 import org.chromium.base.ResourceExtractor;
@@ -35,14 +35,13 @@ import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.ChromeStrictMode;
 import org.chromium.chrome.browser.ChromeSwitches;
-import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.chrome.browser.FileProviderHelper;
 import org.chromium.chrome.browser.crash.MinidumpDirectoryObserver;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.services.GoogleServicesManager;
 import org.chromium.chrome.browser.tabmodel.document.DocumentTabModelImpl;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.webapps.ActivityAssigner;
+import org.chromium.chrome.browser.webapps.ChromeWebApkHost;
 import org.chromium.components.variations.VariationsAssociatedData;
 import org.chromium.content.app.ContentApplication;
 import org.chromium.content.browser.BrowserStartupController;
@@ -63,7 +62,6 @@ import java.util.Locale;
  */
 public class ChromeBrowserInitializer {
     private static final String TAG = "BrowserInitializer";
-    private static final String PRIVATE_DATA_DIRECTORY_SUFFIX = "chrome";
     private static ChromeBrowserInitializer sChromeBrowserInitiliazer;
 
     private final Handler mHandler;
@@ -75,6 +73,9 @@ public class ChromeBrowserInitializer {
     private boolean mNativeInitializationComplete;
 
     private MinidumpDirectoryObserver mMinidumpDirectoryObserver;
+
+    // Public to allow use in ChromeBackupAgent
+    public static final String PRIVATE_DATA_DIRECTORY_SUFFIX = "chrome";
 
     /**
      * A callback to be executed when there is a new version available in Play Store.
@@ -135,8 +136,6 @@ public class ChromeBrowserInitializer {
     public void handlePreNativeStartup(final BrowserParts parts) {
         assert ThreadUtils.runningOnUiThread() : "Tried to start the browser on the wrong thread";
 
-        PathUtils.setPrivateDataDirectorySuffix(PRIVATE_DATA_DIRECTORY_SUFFIX, mApplication);
-
         preInflationStartup();
         parts.preInflationStartup();
         if (parts.isActivityFinishing()) return;
@@ -169,14 +168,14 @@ public class ChromeBrowserInitializer {
             new AsyncTask<Void, Void, Void>() {
                 @Override
                 protected Void doInBackground(Void... params) {
-                    PreferenceManager.getDefaultSharedPreferences(mApplication);
+                    ContextUtils.getAppSharedPreferences();
                     DocumentTabModelImpl.warmUpSharedPrefs(mApplication);
                     ActivityAssigner.warmUpSharedPrefs(mApplication);
                     return null;
                 }
             }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
         } else {
-            PreferenceManager.getDefaultSharedPreferences(mApplication);
+            ContextUtils.getAppSharedPreferences();
             DocumentTabModelImpl.warmUpSharedPrefs(mApplication);
             ActivityAssigner.warmUpSharedPrefs(mApplication);
         }
@@ -185,6 +184,7 @@ public class ChromeBrowserInitializer {
     private void preInflationStartup() {
         ThreadUtils.assertOnUiThread();
         if (mPreInflationStartupComplete) return;
+        PathUtils.setPrivateDataDirectorySuffix(PRIVATE_DATA_DIRECTORY_SUFFIX, mApplication);
 
         // Ensure critical files are available, so they aren't blocked on the file-system
         // behind long-running accesses in next phase.
@@ -192,6 +192,9 @@ public class ChromeBrowserInitializer {
         ContentApplication.initCommandLine(mApplication);
         waitForDebuggerIfNeeded();
         ChromeStrictMode.configureStrictMode();
+        if (CommandLine.getInstance().hasSwitch(ChromeSwitches.ENABLE_WEBAPK)) {
+            ChromeWebApkHost.init();
+        }
 
         warmUpSharedPrefs();
 
@@ -225,12 +228,6 @@ public class ChromeBrowserInitializer {
     public void handlePostNativeStartup(final boolean isAsync, final BrowserParts delegate)
             throws ProcessInitException {
         assert ThreadUtils.runningOnUiThread() : "Tried to start the browser on the wrong thread";
-
-        // This has to be called to stop mmap in sql connection before any db initialized.
-        // It applies to Work Chrome only as mmap doesn't work properly.
-        if (ChromeVersionInfo.isWorkBuild()) {
-            FeatureUtilities.nativeSetSqlMmapDisabledByDefault();
-        }
 
         final LinkedList<Runnable> initQueue = new LinkedList<Runnable>();
 
@@ -321,6 +318,7 @@ public class ChromeBrowserInitializer {
             // C++ startup to run asynchonously, and set it up to start the Java queue once
             // it has finished.
             startChromeBrowserProcessesAsync(
+                    delegate.shouldStartGpuProcess(),
                     new BrowserStartupController.StartupCallback() {
                         @Override
                         public void onFailure() {
@@ -340,12 +338,13 @@ public class ChromeBrowserInitializer {
     }
 
     private void startChromeBrowserProcessesAsync(
+            boolean startGpuProcess,
             BrowserStartupController.StartupCallback callback) throws ProcessInitException {
         try {
             TraceEvent.begin("ChromeBrowserInitializer.startChromeBrowserProcessesAsync");
             mApplication.registerPolicyProviders(CombinedPolicyProvider.get());
             BrowserStartupController.get(mApplication, LibraryProcessType.PROCESS_BROWSER)
-                    .startBrowserProcessesAsync(callback);
+                    .startBrowserProcessesAsync(startGpuProcess, callback);
         } finally {
             TraceEvent.end("ChromeBrowserInitializer.startChromeBrowserProcessesAsync");
         }

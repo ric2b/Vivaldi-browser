@@ -26,20 +26,21 @@
 <translation id="1602076796624386989">मोबाइल डेटा सक्षम करें</translation>
 <translation id="1621499497873603021">बैटरी के खाली होने में शेष समय, <ph name="TIME_LEFT" /></translation>
 <translation id="164969095109328410">Chrome डिवाइस</translation>
+<translation id="1677472565718498478"><ph name="TIME" /> शेष</translation>
 <translation id="1723752762323179280">सत्र से निकल रहा है</translation>
 <translation id="1747827819627189109">ऑन-स्‍क्रीन कीबोर्ड सक्षम है</translation>
 <translation id="1812696562331527143">आपकी इनपुट विधि <ph name="INPUT_METHOD_ID" />*(<ph name="BEGIN_LINK" />तृतीय पक्ष<ph name="END_LINK" />) में बदल गई है.
 स्विच करने के लिए Shift + Alt दबाएं.</translation>
 <translation id="1864454756846565995">USB-C डिवाइस (पिछला पोर्ट)</translation>
 <translation id="1882897271359938046"><ph name="DISPLAY_NAME" /> पर मिरर कर रहा है</translation>
-<translation id="1919743966458266018">कार्य प्रबंधक को खोलने का शॉर्टकट बदल गया है. कृपया <ph name="OLD_SHORTCUT" /> के बजाय <ph name="NEW_SHORTCUT" /> का उपयोग करें.</translation>
+<translation id="1919743966458266018">काम के प्रबंधक को खोलने का शॉर्टकट बदल गया है. कृपया <ph name="OLD_SHORTCUT" /> के बजाय <ph name="NEW_SHORTCUT" /> का उपयोग करें.</translation>
 <translation id="1923539912171292317">स्वत: क्‍लिक</translation>
 <translation id="1938872420421548906">Shift+Alt</translation>
 <translation id="1957803754585243749">0°</translation>
 <translation id="1969011864782743497"><ph name="DEVICE_NAME" /> (USB)</translation>
 <translation id="2127372758936585790">कम-शक्ति वाला चार्जर</translation>
 <translation id="2204305834655267233">नेटवर्क जानकारी</translation>
-<translation id="2208323208084708176">एकीकृत डेस्कटॉप मोड</translation>
+<translation id="2208323208084708176">संयुक्त डेस्कटॉप मोड</translation>
 <translation id="225680501294068881">डिवाइस स्कैन किए जा रहे हैं...</translation>
 <translation id="2268130516524549846">ब्लूटूथ अक्षम किया गया</translation>
 <translation id="2268813581635650749">सभी प्रस्थान करें</translation>
@@ -92,7 +93,6 @@
 <translation id="3621712662352432595">ऑडियो सेटिंग</translation>
 <translation id="3625258641415618104">स्क्रीनशॉट अक्षम हैं</translation>
 <translation id="3626281679859535460">स्क्रीन की रोशनी</translation>
-<translation id="3626637461649818317"><ph name="PERCENTAGE" />% शेष है</translation>
 <translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079"><ph name="DISPLAY_NAME" /> रिज़ॉल्यूशन को <ph name="RESOLUTION" /> में बदल दिया गया</translation>
 <translation id="370649949373421643">वाई-फ़ाई  सक्षम करें</translation>
@@ -111,13 +111,13 @@
 <translation id="397105322502079400">गणना की जा रही है...</translation>
 <translation id="3995138139523574647">USB-C डिवाइस (दायां पिछला पोर्ट)</translation>
 <translation id="4053612967614057854">ऑन-स्‍क्रीन कीबोर्ड अक्षम करें</translation>
-<translation id="412065659894267608">पूरी तरह से चार्ज होने में <ph name="HOUR" />घं <ph name="MINUTE" />मि शेष</translation>
 <translation id="4250680216510889253">नहीं</translation>
 <translation id="4279490309300973883">मिरर करना</translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4421231901400348175">आपकी स्‍क्रीन का नियंत्रण दूरस्‍थ सहायक के द्वारा <ph name="HELPER_NAME" /> से साझा किया जा रहा है.</translation>
 <translation id="4430019312045809116">मात्रा</translation>
 <translation id="4527045527269911712">ब्लूटूथ डिवाइस "<ph name="DEVICE_NAME" />" युग्मित करने की अनुमति चाहता है.</translation>
+<translation id="453661520163887813">पूरी तरह चार्ज होने में <ph name="TIME" /></translation>
 <translation id="4544944664594876241">स्‍क्रीन को लॉक करने का शॉर्टकट बदल गया है. कृपया <ph name="OLD_SHORTCUT" /> के बजाय <ph name="NEW_SHORTCUT" /> का उपयोग करें.</translation>
 <translation id="479989351350248267">search</translation>
 <translation id="4804818685124855865">डिस्कनेक्ट करें</translation>
@@ -129,7 +129,6 @@
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl+Shift+Space</translation>
 <translation id="5045002648206642691">Google डिस्क सेटिंग...</translation>
-<translation id="5102001756192215136"><ph name="HOUR" />:<ph name="MINUTE" /> शेष</translation>
 <translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">कास्ट डिवाइस उपलब्ध हैं</translation>
 <translation id="5222676887888702881">प्रस्थान करें</translation>
@@ -154,7 +153,7 @@
 <translation id="5932901536148835538">Chromebit</translation>
 <translation id="5947494881799873997">वापस लाएं</translation>
 <translation id="595202126637698455">निष्पादन ट्रेसिंग सक्षम है</translation>
-<translation id="5958529069007801266">पर्यवेक्षित उपयोगकर्ता</translation>
+<translation id="5958529069007801266">निगरानी में रखा गया उपयोगकर्ता</translation>
 <translation id="5977415296283489383">हेडफ़ोन</translation>
 <translation id="5978382165065462689">आपकी स्‍क्रीन का नियंत्रण दूरस्‍थ सहायका के द्वारा साझा किया जा रहा है.</translation>
 <translation id="5980301590375426705">अतिथि सत्र से बाहर निकलें</translation>
@@ -166,7 +165,6 @@
 <translation id="615957422585914272">ऑन-स्क्रीन कीबोर्ड दिखाएं</translation>
 <translation id="6165508094623778733">अधिक जानें</translation>
 <translation id="6203030746557259519">वर्चुअल डिस्प्ले</translation>
-<translation id="6247708409970142803"><ph name="PERCENTAGE" />%</translation>
 <translation id="6248847161401822652">छोड़ने के लिए Control Shift Q दो बार दबाएं.</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" /> को <ph name="ROTATION" /> पर घुमाया गया</translation>
 <translation id="6359806961507272919"><ph name="PHONE_NUMBER" /> से SMS</translation>
@@ -206,6 +204,7 @@
 <translation id="7510334386202674593">Ctrl+Shift+L</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> <ph name="SPECIFIED_RESOLUTION" /> का समर्थन नहीं करता. रिज़ॉल्यूशन को <ph name="FALLBACK_RESOLUTION" /> में बदल दिया गया था</translation>
 <translation id="7573962313813535744">डॉक मोड</translation>
+<translation id="7580671184200851182">सभी स्पीकर से समान ऑडियो चलाएं (मोनो ऑडियो)</translation>
 <translation id="7593891976182323525">Search या Shift</translation>
 <translation id="7649070708921625228">सहायता</translation>
 <translation id="7692480393933218409">कनेक्ट किए गए USB-C डिवाइस चार्ज कर रहा है</translation>
@@ -224,13 +223,14 @@
 <translation id="8308637677604853869">पिछला मेनू</translation>
 <translation id="8356164830168736643"><ph name="WINDOW_TITLE" /> बंद करें</translation>
 <translation id="8428213095426709021">सेटिंग्स</translation>
-<translation id="8456362689280298700">पूरा होने में <ph name="HOUR" />:<ph name="MINUTE" /> शेष</translation>
 <translation id="8517041960877371778">हो सकता है आपका <ph name="DEVICE_TYPE" /> चालू होने पर चार्ज नहीं होता हो.</translation>
 <translation id="8528322925433439945">मोबाइल ...</translation>
+<translation id="8639760480004882931"><ph name="PERCENTAGE" /> शेष</translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">कम-शक्ति वाला चार्जर</translation>
 <translation id="8814190375133053267">वाई-फ़ाई </translation>
 <translation id="882279321799040148">देखने के लिए क्लिक करें</translation>
+<translation id="8825534185036233643">दो से अधिक प्रदर्शनों की मिररिंग समर्थित नहीं है.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8850991929411075241">Search+Esc</translation>
 <translation id="8878886163241303700">स्क्रीन का विस्तार करना</translation>

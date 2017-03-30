@@ -16,10 +16,6 @@
 #include "content/child/child_process.h"
 #include "content/child/thread_safe_sender.h"
 #include "content/common/establish_channel_params.h"
-#include "content/common/gpu/media/gpu_jpeg_decode_accelerator.h"
-#include "content/common/gpu/media/gpu_video_decode_accelerator.h"
-#include "content/common/gpu/media/gpu_video_encode_accelerator.h"
-#include "content/common/gpu/media/media_service.h"
 #include "content/common/gpu_host_messages.h"
 #include "content/gpu/gpu_process_control_impl.h"
 #include "content/gpu/gpu_watchdog_thread.h"
@@ -27,6 +23,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/gpu/content_gpu_client.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
+#include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/config/gpu_info_collector.h"
 #include "gpu/config/gpu_switches.h"
 #include "gpu/config/gpu_util.h"
@@ -34,9 +31,14 @@
 #include "gpu/ipc/service/gpu_memory_buffer_factory.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_sync_message_filter.h"
+#include "media/gpu/ipc/service/gpu_jpeg_decode_accelerator.h"
+#include "media/gpu/ipc/service/gpu_video_decode_accelerator.h"
+#include "media/gpu/ipc/service/gpu_video_encode_accelerator.h"
+#include "media/gpu/ipc/service/media_service.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/gl/gpu_switching_manager.h"
+#include "ui/gl/init/gl_factory.h"
 #include "url/gurl.h"
 
 #if defined(USE_OZONE)
@@ -44,8 +46,9 @@
 #include "ui/ozone/public/ozone_platform.h"
 #endif
 
-#if defined(ENABLE_VULKAN)
-#include "gpu/vulkan/vulkan_surface.h"
+#if defined(OS_ANDROID)
+#include "media/base/android/media_client_android.h"
+#include "media/gpu/avda_surface_tracker.h"
 #endif
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
@@ -166,11 +169,9 @@ GpuChildThread::GpuChildThread(
     bool dead_on_arrival,
     const gpu::GPUInfo& gpu_info,
     const DeferredMessages& deferred_messages,
-    gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory,
-    gpu::SyncPointManager* sync_point_manager)
+    gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory)
     : ChildThreadImpl(GetOptions(gpu_memory_buffer_factory)),
       dead_on_arrival_(dead_on_arrival),
-      sync_point_manager_(sync_point_manager),
       gpu_info_(gpu_info),
       deferred_messages_(deferred_messages),
       in_browser_process_(false),
@@ -186,8 +187,7 @@ GpuChildThread::GpuChildThread(
 GpuChildThread::GpuChildThread(
     const gpu::GpuPreferences& gpu_preferences,
     const InProcessChildThreadParams& params,
-    gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory,
-    gpu::SyncPointManager* sync_point_manager)
+    gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory)
     : ChildThreadImpl(ChildThreadImpl::Options::Builder()
                           .InBrowserProcess(params)
                           .AddStartupFilter(new GpuMemoryBufferMessageFilter(
@@ -195,7 +195,6 @@ GpuChildThread::GpuChildThread(
                           .Build()),
       gpu_preferences_(gpu_preferences),
       dead_on_arrival_(false),
-      sync_point_manager_(sync_point_manager),
       in_browser_process_(true),
       gpu_memory_buffer_factory_(gpu_memory_buffer_factory) {
 #if defined(OS_WIN)
@@ -206,13 +205,8 @@ GpuChildThread::GpuChildThread(
          base::CommandLine::ForCurrentProcess()->HasSwitch(
              switches::kInProcessGPU));
 
-#if defined(ENABLE_VULKAN)
-  // Temporary Vulkan initialization injection.
-  gpu::VulkanSurface::InitializeOneOff();
-#endif
-
-  if (!gfx::GLSurface::InitializeOneOff())
-    VLOG(1) << "gfx::GLSurface::InitializeOneOff failed";
+  if (!gl::init::InitializeGLOneOff())
+    VLOG(1) << "gl::init::InitializeGLOneOff failed";
 
   g_thread_safe_sender.Get() = thread_safe_sender();
   g_lazy_tls.Pointer()->Set(this);
@@ -234,7 +228,16 @@ void GpuChildThread::Shutdown() {
 void GpuChildThread::Init(const base::Time& process_start_time) {
   process_start_time_ = process_start_time;
 
+#if defined(OS_ANDROID)
+  // When running in in-process mode, this has been set in the browser at
+  // ChromeBrowserMainPartsAndroid::PreMainMessageLoopRun().
+  if (!in_browser_process_)
+    media::SetMediaClientAndroid(GetContentClient()->GetMediaClientAndroid());
+#endif
+
+  // Only set once per process instance.
   process_control_.reset(new GpuProcessControlImpl());
+
   // Use of base::Unretained(this) is safe here because |service_registry()|
   // will be destroyed before GpuChildThread is destructed.
   service_registry()->AddService(base::Bind(
@@ -287,17 +290,14 @@ bool GpuChildThread::OnMessageReceived(const IPC::Message& msg) {
 
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(GpuChildThread, msg)
-#if defined(OS_MACOSX)
-    IPC_MESSAGE_HANDLER(AcceleratedSurfaceMsg_BufferPresented,
-                        OnBufferPresented)
-#endif
     IPC_MESSAGE_HANDLER(GpuMsg_EstablishChannel, OnEstablishChannel)
     IPC_MESSAGE_HANDLER(GpuMsg_CloseChannel, OnCloseChannel)
     IPC_MESSAGE_HANDLER(GpuMsg_DestroyGpuMemoryBuffer, OnDestroyGpuMemoryBuffer)
     IPC_MESSAGE_HANDLER(GpuMsg_LoadedShader, OnLoadedShader)
-    IPC_MESSAGE_HANDLER(GpuMsg_UpdateValueState, OnUpdateValueState)
 #if defined(OS_ANDROID)
     IPC_MESSAGE_HANDLER(GpuMsg_WakeUpGpu, OnWakeUpGpu);
+    IPC_MESSAGE_HANDLER(GpuMsg_DestroyingVideoSurface,
+                        OnDestroyingVideoSurface);
 #endif
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
@@ -309,10 +309,6 @@ bool GpuChildThread::OnMessageReceived(const IPC::Message& msg) {
 
 void GpuChildThread::SetActiveURL(const GURL& url) {
   GetContentClient()->SetActiveURL(url);
-}
-
-void GpuChildThread::AddSubscription(int32_t client_id, unsigned int target) {
-  Send(new GpuHostMsg_AddSubscription(client_id, target));
 }
 
 void GpuChildThread::DidCreateOffscreenContext(const GURL& active_url) {
@@ -338,30 +334,6 @@ void GpuChildThread::GpuMemoryUmaStats(const gpu::GPUMemoryUmaStats& params) {
   Send(new GpuHostMsg_GpuMemoryUmaStats(params));
 }
 
-void GpuChildThread::RemoveSubscription(int32_t client_id,
-                                        unsigned int target) {
-  Send(new GpuHostMsg_RemoveSubscription(client_id, target));
-}
-
-#if defined(OS_MACOSX)
-void GpuChildThread::SendAcceleratedSurfaceBuffersSwapped(
-    int32_t surface_id,
-    CAContextID ca_context_id,
-    const gfx::ScopedRefCountedIOSurfaceMachPort& io_surface,
-    const gfx::Size& size,
-    float scale_factor,
-    std::vector<ui::LatencyInfo> latency_info) {
-  AcceleratedSurfaceBuffersSwappedParams params;
-  params.surface_id = surface_id;
-  params.ca_context_id = ca_context_id;
-  params.io_surface = io_surface;
-  params.size = size;
-  params.scale_factor = scale_factor;
-  params.latency_info = std::move(latency_info);
-  Send(new GpuHostMsg_AcceleratedSurfaceBuffersSwapped(params));
-}
-#endif
-
 #if defined(OS_WIN)
 void GpuChildThread::SendAcceleratedSurfaceCreatedChildWindow(
     gpu::SurfaceHandle parent_window,
@@ -381,12 +353,12 @@ void GpuChildThread::OnInitialize(const gpu::GpuPreferences& gpu_preferences) {
   gpu_preferences_ = gpu_preferences;
 
   gpu_info_.video_decode_accelerator_capabilities =
-      content::GpuVideoDecodeAccelerator::GetCapabilities(gpu_preferences_);
+      media::GpuVideoDecodeAccelerator::GetCapabilities(gpu_preferences_);
   gpu_info_.video_encode_accelerator_supported_profiles =
-      content::GpuVideoEncodeAccelerator::GetSupportedProfiles(
+      media::GpuVideoEncodeAccelerator::GetSupportedProfiles(
           gpu_preferences_);
   gpu_info_.jpeg_decode_accelerator_supported =
-      content::GpuJpegDecodeAccelerator::IsSupported();
+      media::GpuJpegDecodeAccelerator::IsSupported();
 
   // Record initialization only after collecting the GPU info because that can
   // take a significant amount of time.
@@ -408,6 +380,17 @@ void GpuChildThread::OnInitialize(const gpu::GpuPreferences& gpu_preferences) {
   if (!in_browser_process_)
     logging::SetLogMessageHandler(GpuProcessLogMessageHandler);
 
+  gpu::SyncPointManager* sync_point_manager = nullptr;
+  // Note SyncPointManager from ContentGpuClient cannot be owned by this.
+  if (GetContentClient()->gpu())
+    sync_point_manager = GetContentClient()->gpu()->GetSyncPointManager();
+  if (!sync_point_manager) {
+    if (!owned_sync_point_manager_) {
+      owned_sync_point_manager_.reset(new gpu::SyncPointManager(false));
+    }
+    sync_point_manager = owned_sync_point_manager_.get();
+  }
+
   // Defer creation of the render thread. This is to prevent it from handling
   // IPC messages before the sandbox has been enabled and all other necessary
   // initialization has succeeded.
@@ -421,9 +404,9 @@ void GpuChildThread::OnInitialize(const gpu::GpuPreferences& gpu_preferences) {
                             base::ThreadTaskRunnerHandle::Get().get(),
                             ChildProcess::current()->io_task_runner(),
                             ChildProcess::current()->GetShutDownEvent(),
-                            sync_point_manager_, gpu_memory_buffer_factory_));
+                            sync_point_manager, gpu_memory_buffer_factory_));
 
-  media_service_.reset(new MediaService(gpu_channel_manager_.get()));
+  media_service_.reset(new media::MediaService(gpu_channel_manager_.get()));
 
 #if defined(USE_OZONE)
   ui::OzonePlatform::GetInstance()
@@ -536,15 +519,6 @@ void GpuChildThread::OnGpuSwitched() {
   ui::GpuSwitchingManager::GetInstance()->NotifyGpuSwitched();
 }
 
-#if defined(OS_MACOSX)
-void GpuChildThread::OnBufferPresented(const BufferPresentedParams& params) {
-  if (gpu_channel_manager_) {
-    gpu_channel_manager_->BufferPresented(
-        params.surface_id, params.vsync_timebase, params.vsync_interval);
-  }
-}
-#endif
-
 void GpuChildThread::OnEstablishChannel(const EstablishChannelParams& params) {
   if (!gpu_channel_manager_)
     return;
@@ -574,17 +548,15 @@ void GpuChildThread::OnDestroyGpuMemoryBuffer(
     gpu_channel_manager_->DestroyGpuMemoryBuffer(id, client_id, sync_token);
 }
 
-void GpuChildThread::OnUpdateValueState(int client_id,
-                                        unsigned int target,
-                                        const gpu::ValueState& state) {
-  if (gpu_channel_manager_)
-    gpu_channel_manager_->UpdateValueState(client_id, target, state);
-}
-
 #if defined(OS_ANDROID)
 void GpuChildThread::OnWakeUpGpu() {
   if (gpu_channel_manager_)
     gpu_channel_manager_->WakeUpGpu();
+}
+
+void GpuChildThread::OnDestroyingVideoSurface(int surface_id) {
+  media::AVDASurfaceTracker::GetInstance()->NotifyDestroyingSurface(surface_id);
+  Send(new GpuHostMsg_DestroyingVideoSurfaceAck(surface_id));
 }
 #endif
 

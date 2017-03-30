@@ -7,7 +7,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "content/browser/streams/stream_handle_impl.h"
 #include "content/browser/streams/stream_read_observer.h"
@@ -165,10 +165,10 @@ Stream::StreamState Stream::ReadRawData(net::IOBuffer* buf,
   return STREAM_HAS_DATA;
 }
 
-scoped_ptr<StreamHandle> Stream::CreateHandle() {
+std::unique_ptr<StreamHandle> Stream::CreateHandle() {
   CHECK(!stream_handle_);
   stream_handle_ = new StreamHandleImpl(weak_ptr_factory_.GetWeakPtr());
-  return scoped_ptr<StreamHandle>(stream_handle_);
+  return std::unique_ptr<StreamHandle>(stream_handle_);
 }
 
 void Stream::CloseHandle() {

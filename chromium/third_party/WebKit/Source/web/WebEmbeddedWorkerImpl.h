@@ -66,7 +66,8 @@ public:
     void attachDevTools(const WebString& hostId, int sessionId) override;
     void reattachDevTools(const WebString& hostId, int sessionId, const WebString& savedState) override;
     void detachDevTools() override;
-    void dispatchDevToolsMessage(int sessionId, const WebString&) override;
+    void dispatchDevToolsMessage(int sessionId, int callId, const WebString& method, const WebString& message) override;
+    void addMessageToConsole(const WebConsoleMessage&) override;
 
     void postMessageToPageInspector(const WTF::String&);
 
@@ -83,13 +84,14 @@ private:
     // WebDevToolsAgentClient overrides.
     void sendProtocolMessage(int sessionId, int callId, const WebString&, const WebString&) override;
     void resumeStartup() override;
+    WebDevToolsAgentClient::WebKitClientMessageLoop* createClientMessageLoop() override;
 
     void onScriptLoaderFinished();
     void startWorkerThread();
 
     // WorkerLoaderProxyProvider
-    void postTaskToLoader(PassOwnPtr<ExecutionContextTask>) override;
-    bool postTaskToWorkerGlobalScope(PassOwnPtr<ExecutionContextTask>) override;
+    void postTaskToLoader(std::unique_ptr<ExecutionContextTask>) override;
+    bool postTaskToWorkerGlobalScope(std::unique_ptr<ExecutionContextTask>) override;
 
     WebEmbeddedWorkerStartData m_workerStartData;
 

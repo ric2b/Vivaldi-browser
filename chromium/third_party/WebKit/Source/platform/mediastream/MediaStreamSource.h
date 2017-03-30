@@ -38,7 +38,6 @@
 #include "wtf/Allocator.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
-#include "wtf/RefCounted.h"
 #include "wtf/ThreadingPrimitives.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
@@ -46,6 +45,7 @@
 namespace blink {
 
 class PLATFORM_EXPORT MediaStreamSource final : public GarbageCollectedFinalized<MediaStreamSource> {
+    USING_PRE_FINALIZER(MediaStreamSource, dispose);
 public:
     class PLATFORM_EXPORT Observer : public GarbageCollectedMixin {
     public:
@@ -54,7 +54,6 @@ public:
     };
 
     class ExtraData {
-        USING_FAST_MALLOC(ExtraData);
     public:
         virtual ~ExtraData() { }
     };
@@ -70,13 +69,13 @@ public:
         ReadyStateEnded = 2
     };
 
-    static MediaStreamSource* create(const String& id, StreamType, const String& name, bool remote, bool readonly, ReadyState = ReadyStateLive, bool requiresConsumer = false);
+    static MediaStreamSource* create(const String& id, StreamType, const String& name, bool remote, ReadyState = ReadyStateLive, bool requiresConsumer = false);
+    void dispose();
 
     const String& id() const { return m_id; }
     StreamType type() const { return m_type; }
     const String& name() const { return m_name; }
     bool remote() const { return m_remote; }
-    bool readonly() const { return m_readonly; }
 
     void setReadyState(ReadyState);
     ReadyState getReadyState() const { return m_readyState; }
@@ -97,19 +96,15 @@ public:
     bool removeAudioConsumer(AudioDestinationConsumer*);
     const HeapHashSet<Member<AudioDestinationConsumer>>& audioConsumers() { return m_audioConsumers; }
 
-    // |m_extraData| may hold pointers to GC objects, and it may touch them in destruction.
-    // So this class is eagerly finalized to finalize |m_extraData| promptly.
-    EAGERLY_FINALIZE();
     DECLARE_TRACE();
 
 private:
-    MediaStreamSource(const String& id, StreamType, const String& name, bool remote, bool readonly, ReadyState, bool requiresConsumer);
+    MediaStreamSource(const String& id, StreamType, const String& name, bool remote, ReadyState, bool requiresConsumer);
 
     String m_id;
     StreamType m_type;
     String m_name;
     bool m_remote;
-    bool m_readonly;
     ReadyState m_readyState;
     bool m_requiresConsumer;
     HeapHashSet<WeakMember<Observer>> m_observers;

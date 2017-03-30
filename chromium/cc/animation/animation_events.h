@@ -5,13 +5,14 @@
 #ifndef CC_ANIMATION_ANIMATION_EVENTS_H_
 #define CC_ANIMATION_ANIMATION_EVENTS_H_
 
+#include <memory>
 #include <vector>
 
-#include "base/memory/scoped_ptr.h"
 #include "cc/animation/animation.h"
 #include "cc/animation/animation_curve.h"
 #include "cc/base/cc_export.h"
 #include "cc/output/filter_operations.h"
+#include "cc/trees/mutator_host_client.h"
 #include "ui/gfx/transform.h"
 
 namespace cc {
@@ -20,7 +21,7 @@ struct CC_EXPORT AnimationEvent {
   enum Type { STARTED, FINISHED, ABORTED, PROPERTY_UPDATE, TAKEOVER };
 
   AnimationEvent(Type type,
-                 int layer_id,
+                 ElementId element_id,
                  int group_id,
                  TargetProperty::Type target_property,
                  base::TimeTicks monotonic_time);
@@ -31,7 +32,7 @@ struct CC_EXPORT AnimationEvent {
   ~AnimationEvent();
 
   Type type;
-  int layer_id;
+  ElementId element_id;
   int group_id;
   TargetProperty::Type target_property;
   base::TimeTicks monotonic_time;
@@ -42,7 +43,7 @@ struct CC_EXPORT AnimationEvent {
 
   // For continuing a scroll offset animation on the main thread.
   double animation_start_time;
-  scoped_ptr<AnimationCurve> curve;
+  std::unique_ptr<AnimationCurve> curve;
 };
 
 class CC_EXPORT AnimationEvents {

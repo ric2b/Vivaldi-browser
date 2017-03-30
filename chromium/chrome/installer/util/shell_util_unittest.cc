@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/base_paths.h"
@@ -17,7 +18,6 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/md5.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/synchronization/cancellation_flag.h"
@@ -135,9 +135,9 @@ class ShellUtilShortcutTest : public testing::Test {
         return base::FilePath();
     }
 
-    base::string16 shortcut_name = properties.has_shortcut_name() ?
-        properties.shortcut_name :
-        dist_->GetShortcutName(BrowserDistribution::SHORTCUT_CHROME);
+    base::string16 shortcut_name = properties.has_shortcut_name()
+                                       ? properties.shortcut_name
+                                       : dist_->GetShortcutName();
     shortcut_name.append(installer::kLnkExt);
     return expected_path.Append(shortcut_name);
   }
@@ -175,7 +175,7 @@ class ShellUtilShortcutTest : public testing::Test {
     if (properties.has_icon()) {
       expected_properties.set_icon(properties.icon, properties.icon_index);
     } else {
-      int icon_index = dist->GetIconIndex(BrowserDistribution::SHORTCUT_CHROME);
+      int icon_index = dist->GetIconIndex();
       expected_properties.set_icon(chrome_exe_, icon_index);
     }
 
@@ -190,7 +190,7 @@ class ShellUtilShortcutTest : public testing::Test {
   }
 
   BrowserDistribution* dist_;
-  scoped_ptr<installer::Product> product_;
+  std::unique_ptr<installer::Product> product_;
 
   // A ShellUtil::ShortcutProperties object with common properties set already.
   ShellUtil::ShortcutProperties test_properties_;
@@ -202,11 +202,11 @@ class ShellUtilShortcutTest : public testing::Test {
   base::ScopedTempDir fake_default_user_quick_launch_;
   base::ScopedTempDir fake_start_menu_;
   base::ScopedTempDir fake_common_start_menu_;
-  scoped_ptr<base::ScopedPathOverride> user_desktop_override_;
-  scoped_ptr<base::ScopedPathOverride> common_desktop_override_;
-  scoped_ptr<base::ScopedPathOverride> user_quick_launch_override_;
-  scoped_ptr<base::ScopedPathOverride> start_menu_override_;
-  scoped_ptr<base::ScopedPathOverride> common_start_menu_override_;
+  std::unique_ptr<base::ScopedPathOverride> user_desktop_override_;
+  std::unique_ptr<base::ScopedPathOverride> common_desktop_override_;
+  std::unique_ptr<base::ScopedPathOverride> user_quick_launch_override_;
+  std::unique_ptr<base::ScopedPathOverride> start_menu_override_;
+  std::unique_ptr<base::ScopedPathOverride> common_start_menu_override_;
 
   base::FilePath chrome_exe_;
   base::FilePath manganese_exe_;
@@ -358,9 +358,7 @@ TEST_F(ShellUtilShortcutTest, CreateIfNoSystemLevel) {
 }
 
 TEST_F(ShellUtilShortcutTest, CreateIfNoSystemLevelWithSystemLevelPresent) {
-  base::string16 shortcut_name(
-      dist_->GetShortcutName(BrowserDistribution::SHORTCUT_CHROME) +
-      installer::kLnkExt);
+  base::string16 shortcut_name(dist_->GetShortcutName() + installer::kLnkExt);
 
   test_properties_.level = ShellUtil::SYSTEM_LEVEL;
   ASSERT_TRUE(ShellUtil::CreateOrUpdateShortcut(
@@ -388,9 +386,7 @@ TEST_F(ShellUtilShortcutTest, CreateIfNoSystemLevelStartMenu) {
 }
 
 TEST_F(ShellUtilShortcutTest, CreateAlwaysUserWithSystemLevelPresent) {
-  base::string16 shortcut_name(
-      dist_->GetShortcutName(BrowserDistribution::SHORTCUT_CHROME) +
-      installer::kLnkExt);
+  base::string16 shortcut_name(dist_->GetShortcutName() + installer::kLnkExt);
 
   test_properties_.level = ShellUtil::SYSTEM_LEVEL;
   ASSERT_TRUE(ShellUtil::CreateOrUpdateShortcut(
@@ -777,9 +773,7 @@ TEST_F(ShellUtilShortcutTest,
                   dist_, test_properties_,
                   ShellUtil::SHELL_SHORTCUT_CREATE_ALWAYS));
 
-  base::string16 shortcut_name(
-      dist_->GetShortcutName(BrowserDistribution::SHORTCUT_CHROME) +
-      installer::kLnkExt);
+  base::string16 shortcut_name(dist_->GetShortcutName() + installer::kLnkExt);
   base::FilePath shortcut_path(
       fake_start_menu_.path().Append(shortcut_name));
 
@@ -806,9 +800,7 @@ TEST_F(ShellUtilShortcutTest, DontRemoveChromeShortcutIfPointsToAnotherChrome) {
                   ShellUtil::SHORTCUT_LOCATION_DESKTOP, dist_, test_properties_,
                   ShellUtil::SHELL_SHORTCUT_CREATE_ALWAYS));
 
-  base::string16 shortcut_name(
-      dist_->GetShortcutName(BrowserDistribution::SHORTCUT_CHROME) +
-      installer::kLnkExt);
+  base::string16 shortcut_name(dist_->GetShortcutName() + installer::kLnkExt);
   base::FilePath shortcut_path(fake_user_desktop_.path().Append(shortcut_name));
   ASSERT_TRUE(base::PathExists(shortcut_path));
 

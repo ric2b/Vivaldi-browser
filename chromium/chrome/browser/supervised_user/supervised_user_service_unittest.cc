@@ -5,13 +5,15 @@
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 
 #include <stddef.h>
+
+#include <memory>
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
@@ -89,7 +91,7 @@ class AsyncTestHelper {
     run_loop_.reset(new base::RunLoop);
   }
 
-  scoped_ptr<base::RunLoop> run_loop_;
+  std::unique_ptr<base::RunLoop> run_loop_;
   bool quit_called_;
 
   DISALLOW_COPY_AND_ASSIGN(AsyncTestHelper);
@@ -196,7 +198,7 @@ class SupervisedUserServiceTest : public ::testing::Test {
   }
 
   content::TestBrowserThreadBundle thread_bundle_;
-  scoped_ptr<TestingProfile> profile_;
+  std::unique_ptr<TestingProfile> profile_;
   SupervisedUserService* supervised_user_service_;
 };
 
@@ -205,7 +207,7 @@ class SupervisedUserServiceTest : public ::testing::Test {
 TEST_F(SupervisedUserServiceTest, ChangesIncludedSessionOnChangedSettings) {
   supervised_user_service_->Init();
   EXPECT_TRUE(supervised_user_service_->IncludesSyncSessionsType());
-  profile_->GetPrefs()->SetBoolean(prefs::kRecordHistory, false);
+  profile_->GetPrefs()->SetBoolean(prefs::kForceSessionSync, false);
   EXPECT_FALSE(supervised_user_service_->IncludesSyncSessionsType());
 }
 
@@ -286,7 +288,7 @@ TEST_F(SupervisedUserServiceTest, CreatePermissionRequest) {
   // Add a disabled permission request creator. This should not change anything.
   MockPermissionRequestCreator* creator = new MockPermissionRequestCreator;
   supervised_user_service_->AddPermissionRequestCreator(
-      make_scoped_ptr(creator));
+      base::WrapUnique(creator));
 
   EXPECT_FALSE(supervised_user_service_->AccessRequestsEnabled());
   {
@@ -323,7 +325,7 @@ TEST_F(SupervisedUserServiceTest, CreatePermissionRequest) {
   MockPermissionRequestCreator* creator_2 = new MockPermissionRequestCreator;
   creator_2->set_enabled(true);
   supervised_user_service_->AddPermissionRequestCreator(
-      make_scoped_ptr(creator_2));
+      base::WrapUnique(creator_2));
 
   {
     AsyncResultHolder result_holder;
@@ -389,7 +391,7 @@ class SupervisedUserServiceExtensionTestBase
 
  protected:
   scoped_refptr<extensions::Extension> MakeThemeExtension() {
-    scoped_ptr<base::DictionaryValue> source(new base::DictionaryValue());
+    std::unique_ptr<base::DictionaryValue> source(new base::DictionaryValue());
     source->SetString(extensions::manifest_keys::kName, "Theme");
     source->Set(extensions::manifest_keys::kTheme, new base::DictionaryValue());
     source->SetString(extensions::manifest_keys::kVersion, "1.0");
@@ -400,10 +402,11 @@ class SupervisedUserServiceExtensionTestBase
   }
 
   scoped_refptr<extensions::Extension> MakeExtension(bool by_custodian) {
-    scoped_ptr<base::DictionaryValue> manifest = extensions::DictionaryBuilder()
-      .Set(extensions::manifest_keys::kName, "Extension")
-      .Set(extensions::manifest_keys::kVersion, "1.0")
-      .Build();
+    std::unique_ptr<base::DictionaryValue> manifest =
+        extensions::DictionaryBuilder()
+            .Set(extensions::manifest_keys::kName, "Extension")
+            .Set(extensions::manifest_keys::kVersion, "1.0")
+            .Build();
     int creation_flags = extensions::Extension::NO_FLAGS;
     if (by_custodian)
       creation_flags |= extensions::Extension::WAS_INSTALLED_BY_CUSTODIAN;

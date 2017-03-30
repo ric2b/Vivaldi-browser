@@ -13,7 +13,7 @@
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/common/accessibility_messages.h"
 #include "content/renderer/accessibility/blink_ax_enum_conversion.h"
@@ -198,6 +198,13 @@ void RendererAccessibility::HandleAXEvent(
                     ui::AX_EVENT_LAYOUT_COMPLETE);
     }
   }
+
+#if defined(OS_ANDROID)
+  // Force the newly focused node to be re-serialized so we include its
+  // inline text boxes.
+  if (event == ui::AX_EVENT_FOCUS)
+    serializer_.DeleteClientSubtree(obj);
+#endif
 
   // Add the accessibility object to our cache and ensure it's valid.
   AccessibilityHostMsg_EventParams acc_event;

@@ -186,6 +186,53 @@ BrowserAccessibility* BrowserAccessibility::GetNextSibling() const {
   return nullptr;
 }
 
+bool BrowserAccessibility::IsPreviousSiblingOnSameLine() const {
+  const BrowserAccessibility* previous_sibling = GetPreviousSibling();
+  if (!previous_sibling)
+    return false;
+
+  // Line linkage information might not be provided on non-leaf objects.
+  const BrowserAccessibility* leaf_object = PlatformDeepestFirstChild();
+  if (!leaf_object)
+    leaf_object = this;
+
+  int32_t previous_on_line_id;
+  if (leaf_object->GetIntAttribute(ui::AX_ATTR_PREVIOUS_ON_LINE_ID,
+                                   &previous_on_line_id)) {
+    const BrowserAccessibility* previous_on_line =
+        manager()->GetFromID(previous_on_line_id);
+    // In the case of a static text sibling, the object designated to be the
+    // previous object on this line might be one of its children, i.e. the last
+    // inline text box.
+    return previous_on_line &&
+           previous_on_line->IsDescendantOf(previous_sibling);
+  }
+  return false;
+}
+
+bool BrowserAccessibility::IsNextSiblingOnSameLine() const {
+  const BrowserAccessibility* next_sibling = GetNextSibling();
+  if (!next_sibling)
+    return false;
+
+  // Line linkage information might not be provided on non-leaf objects.
+  const BrowserAccessibility* leaf_object = PlatformDeepestLastChild();
+  if (!leaf_object)
+    leaf_object = this;
+
+  int32_t next_on_line_id;
+  if (leaf_object->GetIntAttribute(ui::AX_ATTR_NEXT_ON_LINE_ID,
+                                   &next_on_line_id)) {
+    const BrowserAccessibility* next_on_line =
+        manager()->GetFromID(next_on_line_id);
+    // In the case of a static text sibling, the object designated to be the
+    // next object on this line might be one of its children, i.e. the last
+    // inline text box.
+    return next_on_line && next_on_line->IsDescendantOf(next_sibling);
+  }
+  return false;
+}
+
 BrowserAccessibility* BrowserAccessibility::PlatformDeepestFirstChild() const {
   if (!PlatformChildCount())
     return nullptr;
@@ -329,6 +376,7 @@ gfx::Rect BrowserAccessibility::GetLocalBoundsForRange(int start, int len)
 
   // Standard text fields such as textarea have an embedded div inside them that
   // holds all the text.
+  // TODO(nektar): This is fragile! Replace with code that flattens tree.
   if (IsSimpleTextControl() && InternalChildCount() == 1)
     return InternalGetChild(0)->GetLocalBoundsForRange(start, len);
 
@@ -468,6 +516,76 @@ base::string16 BrowserAccessibility::GetValue() const {
   return value;
 }
 
+int BrowserAccessibility::GetLineStartBoundary(
+    int start,
+    ui::TextBoundaryDirection direction) const {
+  DCHECK_GE(start, 0);
+  DCHECK_LE(start, static_cast<int>(GetText().length()));
+
+  if (IsSimpleTextControl()) {
+    const std::vector<int32_t>& line_breaks =
+        GetIntListAttribute(ui::AX_ATTR_LINE_BREAKS);
+    return ui::FindAccessibleTextBoundary(GetText(), line_breaks,
+                                          ui::LINE_BOUNDARY, start, direction);
+  }
+
+  // Keeps track of the start offset of each consecutive line.
+  int line_start = 0;
+  // Keeps track of the length of each consecutive line.
+  int line_length = 0;
+  for (size_t i = 0; i < InternalChildCount(); ++i) {
+    const BrowserAccessibility* child = InternalGetChild(i);
+    DCHECK(child);
+    // Child objects are of length one, since they are represented by a
+    // single embedded object character. The exception is text-only objects.
+    int child_length = 1;
+    if (child->IsTextOnlyObject())
+      child_length = static_cast<int>(child->GetText().length());
+
+    // Stop when we reach both the child containing our start offset and, in
+    // case we are searching forward, the child that is at the end of the line
+    // on which this object is located.
+    if (start < child_length && (direction == ui::BACKWARDS_DIRECTION ||
+                                 !child->IsNextSiblingOnSameLine())) {
+      // Recurse into the inline text boxes.
+      if (child->GetRole() == ui::AX_ROLE_STATIC_TEXT) {
+        switch (direction) {
+          case ui::FORWARDS_DIRECTION:
+            line_length +=
+                child->GetLineStartBoundary(std::max(start, 0), direction);
+            break;
+          case ui::BACKWARDS_DIRECTION:
+            line_start +=
+                child->GetLineStartBoundary(std::max(start, 0), direction);
+            break;
+        }
+      } else {
+        line_length += child_length;
+      }
+
+      break;
+    }
+    line_length += child_length;
+
+    if (!child->IsNextSiblingOnSameLine()) {
+      // We are on a new line.
+      line_start += line_length;
+      line_length = 0;
+    }
+
+    start -= child_length;
+  }
+
+  switch (direction) {
+    case ui::FORWARDS_DIRECTION:
+      return line_start + line_length;
+    case ui::BACKWARDS_DIRECTION:
+      return line_start;
+  }
+  NOTREACHED();
+  return 0;
+}
+
 int BrowserAccessibility::GetWordStartBoundary(
     int start, ui::TextBoundaryDirection direction) const {
   DCHECK_GE(start, -1);
@@ -485,7 +603,7 @@ int BrowserAccessibility::GetWordStartBoundary(
       for (size_t i = 0; i < InternalChildCount(); ++i) {
         // The next child starts where the previous one ended.
         child_start = child_end;
-        BrowserAccessibility* child = InternalGetChild(i);
+        const BrowserAccessibility* child = InternalGetChild(i);
         DCHECK_EQ(child->GetRole(), ui::AX_ROLE_INLINE_TEXT_BOX);
         int child_len = static_cast<int>(child->GetText().size());
         child_end += child_len; // End is one past the last character.
@@ -543,6 +661,7 @@ int BrowserAccessibility::GetWordStartBoundary(
       const BrowserAccessibility* this_object = this;
       // Standard text fields such as textarea have an embedded div inside them
       // that should be skipped.
+      // TODO(nektar): This is fragile. Replace with code that flattens tree.
       if (IsSimpleTextControl() && InternalChildCount() == 1) {
         this_object = InternalGetChild(0);
       }
@@ -553,7 +672,7 @@ int BrowserAccessibility::GetWordStartBoundary(
         // single embedded object character. The exception is text-only objects.
         int child_len = 1;
         if (child->IsTextOnlyObject()) {
-          child_len = static_cast<int>(child->GetText().size());
+          child_len = static_cast<int>(child->GetText().length());
           int child_word_start = child->GetWordStartBoundary(start, direction);
           if (child_word_start < child_len) {
             // We have found a possible word boundary.
@@ -625,7 +744,10 @@ BrowserAccessibility* BrowserAccessibility::BrowserAccessibilityForPoint(
 
 void BrowserAccessibility::Destroy() {
   // Allow the object to fire a TextRemoved notification.
-  manager_->NotifyAccessibilityEvent(ui::AX_EVENT_HIDE, this);
+  manager()->NotifyAccessibilityEvent(
+      BrowserAccessibilityEvent::FromTreeChange,
+      ui::AX_EVENT_HIDE,
+      this);
   node_ = NULL;
   manager_ = NULL;
 

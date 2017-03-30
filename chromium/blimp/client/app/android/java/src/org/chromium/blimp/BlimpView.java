@@ -5,6 +5,7 @@
 package org.chromium.blimp;
 
 import android.content.Context;
+import android.graphics.Color;
 import android.graphics.Point;
 import android.os.Build;
 import android.util.AttributeSet;
@@ -14,8 +15,10 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.WindowManager;
 
+import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.blimp.session.BlimpClientSession;
+import org.chromium.ui.UiUtils;
 
 /**
  * A {@link View} that will visually represent the Blimp rendered content.  This {@link View} starts
@@ -57,6 +60,7 @@ public class BlimpView extends SurfaceView implements SurfaceHolder.Callback {
         mNativeBlimpViewPtr = nativeInit(blimpClientSession, physicalSize.x, physicalSize.y,
                 displaySize.x, displaySize.y, deviceScaleFactor);
         getHolder().addCallback(this);
+        setBackgroundColor(Color.WHITE);
         setVisibility(VISIBLE);
     }
 
@@ -95,6 +99,10 @@ public class BlimpView extends SurfaceView implements SurfaceHolder.Callback {
         if (mNativeBlimpViewPtr == 0) return false;
 
         int eventAction = event.getActionMasked();
+
+        // Close the IME. It might be open for typing URL into toolbar.
+        // TODO(shaktisahu): Detect if the IME was open and return immediately (crbug/606977)
+        UiUtils.hideKeyboard(this);
 
         if (!isValidTouchEventActionForNative(eventAction)) return false;
 
@@ -170,6 +178,13 @@ public class BlimpView extends SurfaceView implements SurfaceHolder.Callback {
                 || eventAction == MotionEvent.ACTION_MOVE
                 || eventAction == MotionEvent.ACTION_POINTER_DOWN
                 || eventAction == MotionEvent.ACTION_POINTER_UP;
+    }
+
+    @CalledByNative
+    public void onSwapBuffersCompleted() {
+        if (getBackground() == null) return;
+
+        setBackgroundResource(0);
     }
 
     // Native Methods

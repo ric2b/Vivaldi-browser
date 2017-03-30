@@ -46,6 +46,8 @@ public interface UrlRequest {
                 new ArrayList<Pair<String, String>>();
         // Disable the cache for just this request.
         boolean mDisableCache;
+        // Disable connection migration for just this request.
+        boolean mDisableConnectionMigration;
         // Priority of request. Default is medium.
         @RequestPriority int mPriority = REQUEST_PRIORITY_MEDIUM;
         // Request reporting annotations. Avoid extra object creation if no annotations added.
@@ -140,13 +142,24 @@ public interface UrlRequest {
             return this;
         }
 
-        /** @deprecated not really deprecated but hidden. */
+        /**
+         * Disables connection migration for the request if enabled for
+         * the session.
+         * @return the builder to facilitate chaining.
+         *
+         * @hide as experimental.
+         */
+        public Builder disableConnectionMigration() {
+            mDisableConnectionMigration = true;
+            return this;
+        }
+
+        /** @hide */
         @IntDef({
                 REQUEST_PRIORITY_IDLE, REQUEST_PRIORITY_LOWEST, REQUEST_PRIORITY_LOW,
                 REQUEST_PRIORITY_MEDIUM, REQUEST_PRIORITY_HIGHEST,
         })
         @Retention(RetentionPolicy.SOURCE)
-        @SuppressWarnings("DepAnn")
         public @interface RequestPriority {}
 
         /**
@@ -222,9 +235,8 @@ public interface UrlRequest {
          * {@link CronetEngine.RequestFinishedListener} with a {@link CronetEngine.UrlRequestInfo}.
          * @return the builder to facilitate chaining.
          *
-         * @deprecated not really deprecated but hidden for now as it's a prototype.
+         * @hide as it's a prototype.
          */
-        @Deprecated
         public Builder addRequestAnnotation(Object annotation) {
             if (annotation == null) {
                 throw new NullPointerException("Invalid metrics annotation.");
@@ -245,13 +257,10 @@ public interface UrlRequest {
          *         this {@link Builder}.
          */
         public UrlRequest build() {
-            final UrlRequest request = mCronetEngine.createRequest(
-                    mUrl, mCallback, mExecutor, mPriority, mRequestAnnotations);
+            final UrlRequest request = mCronetEngine.createRequest(mUrl, mCallback, mExecutor,
+                    mPriority, mRequestAnnotations, mDisableCache, mDisableConnectionMigration);
             if (mMethod != null) {
                 request.setHttpMethod(mMethod);
-            }
-            if (mDisableCache) {
-                request.disableCache();
             }
             for (Pair<String, String> header : mRequestHeaders) {
                 request.addHeader(header.first, header.second);
@@ -301,8 +310,8 @@ public interface UrlRequest {
          * With the exception of {@link Callback#onCanceled onCanceled()},
          * no other {@link Callback} method will be invoked for the request,
          * including {@link Callback#onSucceeded onSucceeded()} and {@link
-         * Callback#onFailed onFailed()}, until {@link UrlRequest#readNew
-         * UrlRequest.readNew()} is called to attempt to start reading the response
+         * Callback#onFailed onFailed()}, until {@link UrlRequest#read
+         * UrlRequest.read()} is called to attempt to start reading the response
          * body.
          *
          * @param request Request that started to get response.
@@ -323,13 +332,13 @@ public interface UrlRequest {
          * no other {@link Callback} method will be invoked for the request,
          * including {@link Callback#onSucceeded onSucceeded()} and {@link
          * Callback#onFailed onFailed()}, until {@link
-         * UrlRequest#readNew UrlRequest.readNew()} is called to attempt to continue
+         * UrlRequest#read UrlRequest.read()} is called to attempt to continue
          * reading the response body.
          *
          * @param request Request that received data.
          * @param info Response information.
          * @param byteBuffer The buffer that was passed in to
-         *         {@link UrlRequest#readNew UrlRequest.readNew()}, now containing the
+         *         {@link UrlRequest#read UrlRequest.read()}, now containing the
          *         received data. The buffer's position is updated to the end of
          *         the received data. The buffer's limit is not changed.
          * @throws Exception if an error occurs while processing a read completion.
@@ -377,7 +386,7 @@ public interface UrlRequest {
      * Request status values returned by {@link #getStatus}.
      */
     public static class Status {
-        /** @deprecated not really deprecated but hidden. */
+        /** @hide */
         @IntDef({
                 INVALID, IDLE, WAITING_FOR_STALLED_SOCKET_POOL, WAITING_FOR_AVAILABLE_SOCKET,
                 WAITING_FOR_DELEGATE, WAITING_FOR_CACHE, DOWNLOADING_PROXY_SCRIPT,
@@ -386,7 +395,6 @@ public interface UrlRequest {
                 READING_RESPONSE,
         })
         @Retention(RetentionPolicy.SOURCE)
-        @SuppressWarnings("DepAnn")
         public @interface StatusValues {}
 
         /**
@@ -398,7 +406,7 @@ public interface UrlRequest {
          * This state corresponds to a resource load that has either not yet begun
          * or is idle waiting for the consumer to do something to move things along
          * (e.g. when the consumer of a {@link UrlRequest} has not called
-         * {@link UrlRequest#readNew readNew()} yet).
+         * {@link UrlRequest#read read()} yet).
          */
         public static final int IDLE = 0;
         /**
@@ -487,7 +495,7 @@ public interface UrlRequest {
          * the period after the response headers have been received and before all
          * of the response body has been downloaded. (NOTE: This state only applies
          * for an {@link UrlRequest} while there is an outstanding
-         * {@link UrlRequest#readNew readNew()} operation.)
+         * {@link UrlRequest#read read()} operation.)
          */
         public static final int READING_RESPONSE = 14;
 
@@ -579,6 +587,7 @@ public interface UrlRequest {
      *
      * @param method "GET", "HEAD", "DELETE", "POST" or "PUT".
      * @deprecated Use {@link Builder#setHttpMethod}.
+     * @hide
      */
     @Deprecated public void setHttpMethod(String method);
 
@@ -588,6 +597,7 @@ public interface UrlRequest {
      * @param header header name.
      * @param value header value.
      * @deprecated Use {@link Builder#setPriority}.
+     * @hide
      */
     @Deprecated public void addHeader(String header, String value);
 
@@ -602,6 +612,7 @@ public interface UrlRequest {
      *     using this {@code Executor}. May optionally be the same
      *     {@code Executor} the request itself is using.
      * @deprecated Use {@link Builder#setUploadDataProvider}.
+     * @hide
      */
     @Deprecated
     public void setUploadDataProvider(UploadDataProvider uploadDataProvider, Executor executor);
@@ -636,8 +647,7 @@ public interface UrlRequest {
      *     position, limit, or data between its position and limit until the
      *     request calls back into the {@link Callback}.
      */
-    // TODO(pauljensen): Rename to read() once original read() is removed.
-    public void readNew(ByteBuffer buffer);
+    public void read(ByteBuffer buffer);
 
     /**
      * Cancels the request. Can be called at any time.
@@ -662,16 +672,6 @@ public interface UrlRequest {
     public boolean isDone();
 
     /**
-     * Disables cache for the request. If context is not set up to use cache,
-     * this call has no effect.
-     * @deprecated Use {@link Builder#disableCache}.
-     */
-    // TODO(pauljensen): When all callers shifted to Builder.disableCache(),
-    // remove this method and instead add constructor argument and make
-    // CronetUrlRequest.mDisableCache final.
-    @Deprecated public void disableCache();
-
-    /**
      * Queries the status of the request.
      * @param listener a {@link StatusListener} that will be invoked with
      *         the request's current status. {@code listener} will be invoked
@@ -684,4 +684,3 @@ public interface UrlRequest {
     // here. Having none removes any ambiguity over when they are populated,
     // particularly in the redirect case.
 }
-

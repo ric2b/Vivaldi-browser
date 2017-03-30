@@ -8,9 +8,10 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/message_port_message_filter.h"
@@ -126,7 +127,7 @@ void ServiceWorkerDispatcherHost::OnFilterAdded(IPC::Sender* sender) {
   TRACE_EVENT0("ServiceWorker",
                "ServiceWorkerDispatcherHost::OnFilterAdded");
   channel_ready_ = true;
-  std::vector<scoped_ptr<IPC::Message>> messages;
+  std::vector<std::unique_ptr<IPC::Message>> messages;
   messages.swap(pending_messages_);
   for (auto& message : messages) {
     BrowserMessageFilter::Send(message.release());
@@ -171,8 +172,6 @@ bool ServiceWorkerDispatcherHost::OnMessageReceived(
                         OnProviderDestroyed)
     IPC_MESSAGE_HANDLER(ServiceWorkerHostMsg_SetVersionId,
                         OnSetHostedVersionId)
-    IPC_MESSAGE_HANDLER(ServiceWorkerHostMsg_DeprecatedPostMessageToWorker,
-                        OnDeprecatedPostMessageToWorker)
     IPC_MESSAGE_HANDLER(ServiceWorkerHostMsg_PostMessageToWorker,
                         OnPostMessageToWorker)
     IPC_MESSAGE_HANDLER(EmbeddedWorkerHostMsg_WorkerReadyForInspection,
@@ -222,18 +221,18 @@ bool ServiceWorkerDispatcherHost::Send(IPC::Message* message) {
     return true;
   }
 
-  pending_messages_.push_back(make_scoped_ptr(message));
+  pending_messages_.push_back(base::WrapUnique(message));
   return true;
 }
 
 void ServiceWorkerDispatcherHost::RegisterServiceWorkerHandle(
-    scoped_ptr<ServiceWorkerHandle> handle) {
+    std::unique_ptr<ServiceWorkerHandle> handle) {
   int handle_id = handle->handle_id();
   handles_.AddWithID(handle.release(), handle_id);
 }
 
 void ServiceWorkerDispatcherHost::RegisterServiceWorkerRegistrationHandle(
-    scoped_ptr<ServiceWorkerRegistrationHandle> handle) {
+    std::unique_ptr<ServiceWorkerRegistrationHandle> handle) {
   int handle_id = handle->handle_id();
   registration_handles_.AddWithID(handle.release(), handle_id);
 }
@@ -266,7 +265,7 @@ ServiceWorkerDispatcherHost::GetOrCreateRegistrationHandle(
     return existing_handle;
   }
 
-  scoped_ptr<ServiceWorkerRegistrationHandle> new_handle(
+  std::unique_ptr<ServiceWorkerRegistrationHandle> new_handle(
       new ServiceWorkerRegistrationHandle(GetContext()->AsWeakPtr(),
                                           provider_host, registration));
   ServiceWorkerRegistrationHandle* new_handle_ptr = new_handle.get();
@@ -681,7 +680,7 @@ void ServiceWorkerDispatcherHost::OnPostMessageToWorker(
     int provider_id,
     const base::string16& message,
     const url::Origin& source_origin,
-    const std::vector<TransferredMessagePort>& sent_message_ports) {
+    const std::vector<int>& sent_message_ports) {
   TRACE_EVENT0("ServiceWorker",
                "ServiceWorkerDispatcherHost::OnPostMessageToWorker");
   if (!GetContext())
@@ -711,11 +710,11 @@ void ServiceWorkerDispatcherHost::DispatchExtendableMessageEvent(
     scoped_refptr<ServiceWorkerVersion> worker,
     const base::string16& message,
     const url::Origin& source_origin,
-    const std::vector<TransferredMessagePort>& sent_message_ports,
+    const std::vector<int>& sent_message_ports,
     ServiceWorkerProviderHost* sender_provider_host,
     const StatusCallback& callback) {
-  for (const TransferredMessagePort& port : sent_message_ports)
-    MessagePortService::GetInstance()->HoldMessages(port.id);
+  for (int port : sent_message_ports)
+    MessagePortService::GetInstance()->HoldMessages(port);
 
   switch (sender_provider_host->provider_type()) {
     case SERVICE_WORKER_PROVIDER_FOR_WINDOW:
@@ -737,37 +736,18 @@ void ServiceWorkerDispatcherHost::DispatchExtendableMessageEvent(
           sender_provider_host->GetOrCreateServiceWorkerHandle(
               sender_provider_host->running_hosted_version())));
       break;
-    case SERVICE_WORKER_PROVIDER_FOR_SANDBOXED_FRAME:
     case SERVICE_WORKER_PROVIDER_UNKNOWN:
+    default:
       NOTREACHED() << sender_provider_host->provider_type();
       break;
   }
 }
 
-void ServiceWorkerDispatcherHost::OnDeprecatedPostMessageToWorker(
-    int handle_id,
-    const base::string16& message,
-    const std::vector<TransferredMessagePort>& sent_message_ports) {
-  TRACE_EVENT0("ServiceWorker",
-               "ServiceWorkerDispatcherHost::OnDeprecatedPostMessageToWorker");
-  if (!GetContext())
-    return;
-
-  ServiceWorkerHandle* handle = handles_.Lookup(handle_id);
-  if (!handle) {
-    bad_message::ReceivedBadMessage(this, bad_message::SWDH_POST_MESSAGE);
-    return;
-  }
-
-  handle->version()->DispatchMessageEvent(
-      message, sent_message_ports,
-      base::Bind(&ServiceWorkerUtils::NoOpStatusCallback));
-}
-
 void ServiceWorkerDispatcherHost::OnProviderCreated(
     int provider_id,
     int route_id,
-    ServiceWorkerProviderType provider_type) {
+    ServiceWorkerProviderType provider_type,
+    bool is_parent_frame_secure) {
   // TODO(pkasting): Remove ScopedTracker below once crbug.com/477117 is fixed.
   tracked_objects::ScopedTracker tracking_profile(
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
@@ -782,15 +762,17 @@ void ServiceWorkerDispatcherHost::OnProviderCreated(
     return;
   }
 
-  scoped_ptr<ServiceWorkerProviderHost> provider_host;
+  std::unique_ptr<ServiceWorkerProviderHost> provider_host;
   if (IsBrowserSideNavigationEnabled() &&
       ServiceWorkerUtils::IsBrowserAssignedProviderId(provider_id)) {
     // PlzNavigate
     // Retrieve the provider host previously created for navigation requests.
     ServiceWorkerNavigationHandleCore* navigation_handle_core =
         GetContext()->GetNavigationHandleCore(provider_id);
-    if (navigation_handle_core != nullptr)
+    if (navigation_handle_core != nullptr) {
       provider_host = navigation_handle_core->RetrievePreCreatedHost();
+      provider_host->set_parent_frame_secure(is_parent_frame_secure);
+    }
 
     // If no host is found, the navigation has been cancelled in the meantime.
     // Just return as the navigation will be stopped in the renderer as well.
@@ -805,10 +787,14 @@ void ServiceWorkerDispatcherHost::OnProviderCreated(
           this, bad_message::SWDH_PROVIDER_CREATED_NO_HOST);
       return;
     }
-    provider_host =
-        scoped_ptr<ServiceWorkerProviderHost>(new ServiceWorkerProviderHost(
+    ServiceWorkerProviderHost::FrameSecurityLevel parent_frame_security_level =
+        is_parent_frame_secure
+            ? ServiceWorkerProviderHost::FrameSecurityLevel::SECURE
+            : ServiceWorkerProviderHost::FrameSecurityLevel::INSECURE;
+    provider_host = std::unique_ptr<ServiceWorkerProviderHost>(
+        new ServiceWorkerProviderHost(
             render_process_id_, route_id, provider_id, provider_type,
-            GetContext()->AsWeakPtr(), this));
+            parent_frame_security_level, GetContext()->AsWeakPtr(), this));
   }
   GetContext()->AddProviderHost(std::move(provider_host));
 }
@@ -884,7 +870,7 @@ void ServiceWorkerDispatcherHost::DispatchExtendableMessageEventInternal(
     scoped_refptr<ServiceWorkerVersion> worker,
     const base::string16& message,
     const url::Origin& source_origin,
-    const std::vector<TransferredMessagePort>& sent_message_ports,
+    const std::vector<int>& sent_message_ports,
     const StatusCallback& callback,
     const SourceInfo& source_info) {
   if (!source_info.IsValid()) {
@@ -909,7 +895,7 @@ void ServiceWorkerDispatcherHost::
         scoped_refptr<ServiceWorkerVersion> worker,
         const base::string16& message,
         const url::Origin& source_origin,
-        const std::vector<TransferredMessagePort>& sent_message_ports,
+        const std::vector<int>& sent_message_ports,
         const ExtendableMessageEventSource& source,
         const StatusCallback& callback) {
   int request_id =
@@ -942,13 +928,13 @@ void ServiceWorkerDispatcherHost::
 
 template <typename SourceInfo>
 void ServiceWorkerDispatcherHost::DidFailToDispatchExtendableMessageEvent(
-    const std::vector<TransferredMessagePort>& sent_message_ports,
+    const std::vector<int>& sent_message_ports,
     const SourceInfo& source_info,
     const StatusCallback& callback,
     ServiceWorkerStatusCode status) {
   // Transfering the message ports failed, so destroy the ports.
-  for (const TransferredMessagePort& port : sent_message_ports)
-    MessagePortService::GetInstance()->ClosePort(port.id);
+  for (int port : sent_message_ports)
+    MessagePortService::GetInstance()->ClosePort(port);
   if (source_info.IsValid())
     ReleaseSourceInfo(source_info);
   callback.Run(status);

@@ -41,8 +41,8 @@
 #include "third_party/skia/include/core/SkShader.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/display/display.h"
 #include "ui/gfx/canvas.h"
-#include "ui/gfx/display.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image.h"
@@ -431,13 +431,25 @@ gfx::FontRenderParams GetGtkFontRenderParams() {
 }
 
 double GetDPI() {
-  GtkSettings* gtk_settings = gtk_settings_get_default();
-  CHECK(gtk_settings);
-  gint gtk_dpi = -1;
-  g_object_get(gtk_settings, "gtk-xft-dpi", &gtk_dpi, NULL);
+  // Linux chrome currently does not support dynamic DPI changes.
+  // Keep using the first value detected.
+  static double dpi = -1.f;
+  if (dpi < 0) {
+    const double kDefaultDPI = 96;
 
-  // GTK multiplies the DPI by 1024 before storing it.
-  return (gtk_dpi > 0) ? gtk_dpi / 1024.0 : 96.0;
+    GtkSettings* gtk_settings = gtk_settings_get_default();
+    CHECK(gtk_settings);
+    gint gtk_dpi = -1;
+    g_object_get(gtk_settings, "gtk-xft-dpi", &gtk_dpi, NULL);
+
+    // GTK multiplies the DPI by 1024 before storing it.
+    dpi = (gtk_dpi > 0) ? gtk_dpi / 1024.0 : kDefaultDPI;
+
+    // DSF is always >=1.0 on win/cros and lower DSF has never been considered
+    // nor tested.
+    dpi = std::max(kDefaultDPI, dpi);
+  }
+  return dpi;
 }
 
 // Queries GTK for its font DPI setting and returns the number of pixels in a
@@ -514,6 +526,10 @@ void Gtk2UI::Initialize() {
 
   // Instantiate the singleton instance of Gtk2EventLoop.
   Gtk2EventLoop::GetInstance();
+}
+
+void Gtk2UI::MaterialDesignControllerReady() {
+  UpdateMaterialDesignColors();
 }
 
 Gtk2UI::~Gtk2UI() {
@@ -900,25 +916,20 @@ void Gtk2UI::LoadGtkValues() {
   GetSelectedEntryForegroundHSL(&selected_entry_tint_);
   SkColor frame_color = BuildFrameColors();
 
-  if (ui::MaterialDesignController::IsModeMaterial()) {
-    colors_[ThemeProperties::COLOR_BACKGROUND_TAB_TEXT] =
-        color_utils::BlendTowardOppositeLuma(label_color, 50);
-  } else {
-    // The inactive frame color never occurs naturally in the theme, as it is a
-    // tinted version of |frame_color|. We generate another color based on the
-    // background tab color, with the lightness and saturation moved in the
-    // opposite direction. (We don't touch the hue, since there should be subtle
-    // hints of the color in the text.)
-    color_utils::HSL inactive_tab_text_hsl;
-    color_utils::SkColorToHSL(
-        theme->GetSystemColor(ui::NativeTheme::kColorId_WindowBackground),
-        &inactive_tab_text_hsl);
-    inactive_tab_text_hsl.s = kInactiveLuminance;
-    inactive_tab_text_hsl.l = kInactiveSaturation;
+  // The inactive frame color never occurs naturally in the theme, as it is a
+  // tinted version of |frame_color|. We generate another color based on the
+  // background tab color, with the lightness and saturation moved in the
+  // opposite direction. (We don't touch the hue, since there should be subtle
+  // hints of the color in the text.)
+  color_utils::HSL inactive_tab_text_hsl;
+  color_utils::SkColorToHSL(
+      theme->GetSystemColor(ui::NativeTheme::kColorId_WindowBackground),
+      &inactive_tab_text_hsl);
+  inactive_tab_text_hsl.s = kInactiveLuminance;
+  inactive_tab_text_hsl.l = kInactiveSaturation;
 
-    colors_[ThemeProperties::COLOR_BACKGROUND_TAB_TEXT] =
-        color_utils::HSLToSkColor(inactive_tab_text_hsl, 255);
-  }
+  colors_[ThemeProperties::COLOR_BACKGROUND_TAB_TEXT] =
+      color_utils::HSLToSkColor(inactive_tab_text_hsl, 255);
 
   // We pick the text and background colors for the NTP out of the colors for a
   // GtkEntry. We do this because GtkEntries background color is never the same
@@ -977,6 +988,23 @@ void Gtk2UI::LoadGtkValues() {
       theme->GetSystemColor(ui::NativeTheme::kColorId_ThrobberSpinningColor);
   colors_[ThemeProperties::COLOR_TAB_THROBBER_WAITING] =
       theme->GetSystemColor(ui::NativeTheme::kColorId_ThrobberWaitingColor);
+}
+
+void Gtk2UI::UpdateMaterialDesignColors() {
+  // TODO(varkha): This should be merged back into LoadGtkValues() once Material
+  // Design is on unconditionally.
+  // Early return when Material Design Controller is not initialized yet. This
+  // is harmless and the colors will get updated when this method is called
+  // again after the initialization. See http://crbug.com/622234.
+  if (!ui::MaterialDesignController::is_mode_initialized() ||
+      !ui::MaterialDesignController::IsModeMaterial()) {
+    return;
+  }
+  NativeThemeGtk2* theme = NativeThemeGtk2::instance();
+  SkColor label_color =
+      theme->GetSystemColor(ui::NativeTheme::kColorId_LabelEnabledColor);
+  colors_[ThemeProperties::COLOR_BACKGROUND_TAB_TEXT] =
+      color_utils::BlendTowardOppositeLuma(label_color, 50);
 }
 
 SkColor Gtk2UI::BuildFrameColors() {
@@ -1157,7 +1185,6 @@ SkBitmap Gtk2UI::GenerateGtkThemeBitmap(int id) const {
     // ResourceBundle. (i.e. in a light on dark theme, the dropdown arrow will
     // be dark on dark)
     case IDR_MENU_DROPARROW:
-    case IDR_BROWSER_ACTIONS_OVERFLOW:
       return GenerateTintedIcon(id, button_tint_);
   }
 
@@ -1359,6 +1386,9 @@ void Gtk2UI::UpdateDefaultFont() {
 void Gtk2UI::ResetStyle() {
   ClearAllThemeData();
   LoadGtkValues();
+  // TODO(varkha): There will be no need to call UpdateMaterialDesignColors()
+  // once Material Design is on unconditionally.
+  UpdateMaterialDesignColors();
   NativeThemeGtk2::instance()->NotifyObservers();
 }
 
@@ -1368,8 +1398,8 @@ void Gtk2UI::UpdateDeviceScaleFactor(float device_scale_factor) {
 }
 
 float Gtk2UI::GetDeviceScaleFactor() const {
-  if (gfx::Display::HasForceDeviceScaleFactor())
-    return gfx::Display::GetForcedDeviceScaleFactor();
+  if (display::Display::HasForceDeviceScaleFactor())
+    return display::Display::GetForcedDeviceScaleFactor();
   const int kCSSDefaultDPI = 96;
   const float scale = GetDPI() / kCSSDefaultDPI;
 

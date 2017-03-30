@@ -8,6 +8,7 @@
 
 #include "android_webview/browser/browser_view_renderer_client.h"
 #include "android_webview/browser/child_frame.h"
+#include "android_webview/browser/compositor_frame_consumer.h"
 #include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/logging.h"
@@ -88,12 +89,10 @@ BrowserViewRenderer* BrowserViewRenderer::FromWebContents(
 
 BrowserViewRenderer::BrowserViewRenderer(
     BrowserViewRendererClient* client,
-    const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner,
-    bool disable_page_visibility)
+    const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner)
     : client_(client),
       ui_task_runner_(ui_task_runner),
-      render_thread_manager_(nullptr),
-      disable_page_visibility_(disable_page_visibility),
+      current_compositor_frame_consumer_(nullptr),
       compositor_(NULL),
       is_paused_(false),
       view_visible_(false),
@@ -111,11 +110,23 @@ BrowserViewRenderer::BrowserViewRenderer(
 
 BrowserViewRenderer::~BrowserViewRenderer() {
   DCHECK(compositor_map_.empty());
+  SetCurrentCompositorFrameConsumer(nullptr);
+  while (compositor_frame_consumers_.size()) {
+    RemoveCompositorFrameConsumer(*compositor_frame_consumers_.begin());
+  }
 }
 
-void BrowserViewRenderer::SetRenderThreadManager(
-    RenderThreadManager* render_thread_manager) {
-  render_thread_manager_ = render_thread_manager;
+void BrowserViewRenderer::SetCurrentCompositorFrameConsumer(
+    CompositorFrameConsumer* compositor_frame_consumer) {
+  if (compositor_frame_consumer == current_compositor_frame_consumer_) {
+    return;
+  }
+  current_compositor_frame_consumer_ = compositor_frame_consumer;
+  if (current_compositor_frame_consumer_) {
+    compositor_frame_consumers_.insert(current_compositor_frame_consumer_);
+    current_compositor_frame_consumer_->SetCompositorFrameProducer(this);
+    OnParentDrawConstraintsUpdated(current_compositor_frame_consumer_);
+  }
 }
 
 void BrowserViewRenderer::RegisterWithWebContents(
@@ -187,22 +198,23 @@ bool BrowserViewRenderer::CanOnDraw() {
 }
 
 bool BrowserViewRenderer::OnDrawHardware() {
-  DCHECK(render_thread_manager_);
+  DCHECK(current_compositor_frame_consumer_);
   TRACE_EVENT0("android_webview", "BrowserViewRenderer::OnDrawHardware");
 
-  render_thread_manager_->InitializeHardwareDrawIfNeededOnUI();
+  current_compositor_frame_consumer_->InitializeHardwareDrawIfNeededOnUI();
 
   if (!CanOnDraw()) {
     return false;
   }
 
-  render_thread_manager_->SetScrollOffsetOnUI(last_on_draw_scroll_offset_);
+  current_compositor_frame_consumer_->SetScrollOffsetOnUI(
+      last_on_draw_scroll_offset_);
   hardware_enabled_ = true;
 
   external_draw_constraints_ =
-      render_thread_manager_->GetParentDrawConstraintsOnUI();
+      current_compositor_frame_consumer_->GetParentDrawConstraintsOnUI();
 
-  ReturnResourceFromParent();
+  ReturnResourceFromParent(current_compositor_frame_consumer_);
   UpdateMemoryPolicy();
 
   gfx::Size surface_size(size_);
@@ -231,7 +243,7 @@ bool BrowserViewRenderer::OnDrawHardware() {
   if (!frame.frame.get()) {
     TRACE_EVENT_INSTANT0("android_webview", "NoNewFrame",
                          TRACE_EVENT_SCOPE_THREAD);
-    return render_thread_manager_->HasFrameOnUI();
+    return current_compositor_frame_consumer_->HasFrameOnUI();
   }
 
   std::unique_ptr<ChildFrame> child_frame = base::WrapUnique(new ChildFrame(
@@ -240,17 +252,37 @@ bool BrowserViewRenderer::OnDrawHardware() {
       transform_for_tile_priority, offscreen_pre_raster_,
       external_draw_constraints_.is_layer));
 
-  ReturnUnusedResource(render_thread_manager_->PassUncommittedFrameOnUI());
-  render_thread_manager_->SetFrameOnUI(std::move(child_frame));
+  ReturnUnusedResource(
+      current_compositor_frame_consumer_->PassUncommittedFrameOnUI());
+  current_compositor_frame_consumer_->SetFrameOnUI(std::move(child_frame));
   return true;
 }
 
-void BrowserViewRenderer::OnParentDrawConstraintsUpdated() {
-  DCHECK(render_thread_manager_);
+void BrowserViewRenderer::OnParentDrawConstraintsUpdated(
+    CompositorFrameConsumer* compositor_frame_consumer) {
+  DCHECK(compositor_frame_consumer);
+  if (compositor_frame_consumer != current_compositor_frame_consumer_)
+    return;
   PostInvalidate();
   external_draw_constraints_ =
-      render_thread_manager_->GetParentDrawConstraintsOnUI();
+      current_compositor_frame_consumer_->GetParentDrawConstraintsOnUI();
   UpdateMemoryPolicy();
+}
+
+void BrowserViewRenderer::RemoveCompositorFrameConsumer(
+    CompositorFrameConsumer* compositor_frame_consumer) {
+  DCHECK(compositor_frame_consumers_.count(compositor_frame_consumer));
+  compositor_frame_consumers_.erase(compositor_frame_consumer);
+  if (current_compositor_frame_consumer_ == compositor_frame_consumer) {
+    SetCurrentCompositorFrameConsumer(nullptr);
+  }
+
+  // At this point the compositor frame consumer has to hand back all resources
+  // to the child compositor.
+  compositor_frame_consumer->DeleteHardwareRendererOnUI();
+  ReturnUnusedResource(compositor_frame_consumer->PassUncommittedFrameOnUI());
+  ReturnResourceFromParent(compositor_frame_consumer);
+  compositor_frame_consumer->SetCompositorFrameProducer(nullptr);
 }
 
 void BrowserViewRenderer::ReturnUnusedResource(
@@ -268,10 +300,10 @@ void BrowserViewRenderer::ReturnUnusedResource(
     compositor->ReturnResources(child_frame->output_surface_id, frame_ack);
 }
 
-void BrowserViewRenderer::ReturnResourceFromParent() {
-  DCHECK(render_thread_manager_);
-  RenderThreadManager::ReturnedResourcesMap returned_resource_map;
-  render_thread_manager_->SwapReturnedResourcesOnUI(&returned_resource_map);
+void BrowserViewRenderer::ReturnResourceFromParent(
+    CompositorFrameConsumer* compositor_frame_consumer) {
+  CompositorFrameConsumer::ReturnedResourcesMap returned_resource_map;
+  compositor_frame_consumer->SwapReturnedResourcesOnUI(&returned_resource_map);
   for (auto iterator = returned_resource_map.begin();
        iterator != returned_resource_map.end(); iterator++) {
     uint32_t compositor_id = iterator->first;
@@ -290,15 +322,15 @@ bool BrowserViewRenderer::OnDrawSoftware(SkCanvas* canvas) {
   return CanOnDraw() && CompositeSW(canvas);
 }
 
-skia::RefPtr<SkPicture> BrowserViewRenderer::CapturePicture(int width,
-                                                            int height) {
+sk_sp<SkPicture> BrowserViewRenderer::CapturePicture(int width,
+                                                     int height) {
   TRACE_EVENT0("android_webview", "BrowserViewRenderer::CapturePicture");
 
   // Return empty Picture objects for empty SkPictures.
   if (width <= 0 || height <= 0) {
     SkPictureRecorder emptyRecorder;
     emptyRecorder.beginRecording(0, 0);
-    return skia::AdoptRef(emptyRecorder.finishRecordingAsPicture());
+    return emptyRecorder.finishRecordingAsPicture();
   }
 
   SkPictureRecorder recorder;
@@ -313,7 +345,7 @@ skia::RefPtr<SkPicture> BrowserViewRenderer::CapturePicture(int width,
     compositor_->DidChangeRootLayerScrollOffset(
         gfx::ScrollOffset(scroll_offset_dip_));
   }
-  return skia::AdoptRef(recorder.finishRecordingAsPicture());
+  return recorder.finishRecordingAsPicture();
 }
 
 void BrowserViewRenderer::EnableOnNewPicture(bool enabled) {
@@ -417,9 +449,11 @@ void BrowserViewRenderer::OnComputeScroll(base::TimeTicks animation_time) {
 }
 
 void BrowserViewRenderer::ReleaseHardware() {
-  ReturnUnusedResource(render_thread_manager_->PassUncommittedFrameOnUI());
-  ReturnResourceFromParent();
-  DCHECK(render_thread_manager_->ReturnedResourcesEmptyOnUI());
+  for (auto compositor_frame_consumer : compositor_frame_consumers_) {
+    ReturnUnusedResource(compositor_frame_consumer->PassUncommittedFrameOnUI());
+    ReturnResourceFromParent(compositor_frame_consumer);
+    DCHECK(compositor_frame_consumer->ReturnedResourcesEmptyOnUI());
+  }
   hardware_enabled_ = false;
   UpdateMemoryPolicy();
 }
@@ -430,9 +464,6 @@ bool BrowserViewRenderer::IsVisible() const {
 }
 
 bool BrowserViewRenderer::IsClientVisible() const {
-  if (disable_page_visibility_)
-    return !is_paused_;
-
   return !is_paused_ && (!attached_to_window_ || window_visible_);
 }
 

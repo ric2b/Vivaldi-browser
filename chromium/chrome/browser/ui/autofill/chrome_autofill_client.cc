@@ -20,7 +20,6 @@
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
-#include "chrome/browser/ui/autofill/autofill_dialog_controller.h"
 #include "chrome/browser/ui/autofill/autofill_popup_controller_impl.h"
 #include "chrome/browser/ui/autofill/create_card_unmask_prompt_view.h"
 #include "chrome/browser/ui/autofill/credit_card_scanner_controller.h"
@@ -34,6 +33,7 @@
 #include "chrome/common/features.h"
 #include "chrome/common/url_constants.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
+#include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/content/common/autofill_messages.h"
 #include "components/autofill/core/browser/ui/card_unmask_prompt_view.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
@@ -61,6 +61,11 @@
 #include "components/infobars/core/infobar.h"
 #endif
 
+#if defined(OS_MACOSX)
+#include "app/vivaldi_apptools.h"
+#include "content/browser/web_contents/web_contents_impl.h"
+#endif
+
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(autofill::ChromeAutofillClient);
 
 namespace autofill {
@@ -70,8 +75,7 @@ ChromeAutofillClient::ChromeAutofillClient(content::WebContents* web_contents)
       unmask_controller_(
           user_prefs::UserPrefs::Get(web_contents->GetBrowserContext()),
           Profile::FromBrowserContext(web_contents->GetBrowserContext())
-              ->IsOffTheRecord()),
-      last_rfh_to_rac_(nullptr) {
+              ->IsOffTheRecord()) {
   DCHECK(web_contents);
 
 #if !BUILDFLAG(ANDROID_JAVA_UI)
@@ -94,11 +98,6 @@ ChromeAutofillClient::~ChromeAutofillClient() {
   // this point (in particular, the WebContentsImpl destructor has already
   // finished running and we are now in the base class destructor).
   DCHECK(!popup_controller_);
-}
-
-void ChromeAutofillClient::TabActivated() {
-  if (dialog_controller_.get())
-    dialog_controller_->TabActivated();
 }
 
 PersonalDataManager* ChromeAutofillClient::GetPersonalDataManager() {
@@ -161,10 +160,11 @@ void ChromeAutofillClient::ShowAutofillSettings() {
 
 void ChromeAutofillClient::ShowUnmaskPrompt(
     const CreditCard& card,
+    UnmaskCardReason reason,
     base::WeakPtr<CardUnmaskDelegate> delegate) {
   unmask_controller_.ShowPrompt(
       CreateCardUnmaskPromptView(&unmask_controller_, web_contents()),
-      card, delegate);
+      card, reason, delegate);
 }
 
 void ChromeAutofillClient::OnUnmaskVerificationResult(
@@ -223,25 +223,6 @@ void ChromeAutofillClient::ScanCreditCard(
   CreditCardScannerController::ScanCreditCard(web_contents(), callback);
 }
 
-void ChromeAutofillClient::ShowRequestAutocompleteDialog(
-    const FormData& form,
-    content::RenderFrameHost* render_frame_host,
-    const ResultCallback& callback) {
-  HideRequestAutocompleteDialog();
-  last_rfh_to_rac_ = render_frame_host;
-  GURL frame_url = render_frame_host->GetLastCommittedURL();
-  dialog_controller_ = AutofillDialogController::Create(web_contents(), form,
-                                                        frame_url, callback);
-  if (dialog_controller_) {
-    dialog_controller_->Show();
-  } else {
-    callback.Run(AutofillClient::AutocompleteResultErrorDisabled,
-                 base::string16(),
-                 NULL);
-    NOTIMPLEMENTED();
-  }
-}
-
 void ChromeAutofillClient::ShowAutofillPopup(
     const gfx::RectF& element_bounds,
     base::i18n::TextDirection text_direction,
@@ -252,6 +233,25 @@ void ChromeAutofillClient::ShowAutofillPopup(
   gfx::RectF element_bounds_in_screen_space =
       element_bounds + client_area.OffsetFromOrigin();
 
+#if defined(OS_MACOSX)
+  // NOTE(tomas@vivaldi.com): when we are vivaldi, the web_contents in autofill
+  // client is wrong, so we use the embedder web contents to send the window web
+  // contents into the popup controller. This does not fix chrome apps.
+  // chromium bug: https://bugs.chromium.org/p/chromium/issues/detail?id=570669
+  if (vivaldi::IsVivaldiRunning()) {
+    content::WebContents* wc = web_contents();
+    content::WebContents* embedder_web_contents =
+        static_cast<content::WebContentsImpl*>(wc)->GetOuterWebContents();
+
+    popup_controller_ =
+        AutofillPopupControllerImpl::GetOrCreate(popup_controller_,
+                                         delegate,
+                                         embedder_web_contents,
+                                         embedder_web_contents->GetNativeView(),
+                                         element_bounds_in_screen_space,
+                                         text_direction);
+  } else {
+#endif
   // Will delete or reuse the old |popup_controller_|.
   popup_controller_ =
       AutofillPopupControllerImpl::GetOrCreate(popup_controller_,
@@ -260,6 +260,9 @@ void ChromeAutofillClient::ShowAutofillPopup(
                                                web_contents()->GetNativeView(),
                                                element_bounds_in_screen_space,
                                                text_direction);
+#if defined(OS_MACOSX)
+  }
+#endif
 
   popup_controller_->Show(suggestions);
 }
@@ -286,25 +289,6 @@ void ChromeAutofillClient::HideAutofillPopup() {
 bool ChromeAutofillClient::IsAutocompleteEnabled() {
   // For browser, Autocomplete is always enabled as part of Autofill.
   return GetPrefs()->GetBoolean(prefs::kAutofillEnabled);
-}
-
-void ChromeAutofillClient::HideRequestAutocompleteDialog() {
-  if (dialog_controller_)
-    dialog_controller_->Hide();
-}
-
-void ChromeAutofillClient::RenderFrameDeleted(
-    content::RenderFrameHost* render_frame_host) {
-  if (dialog_controller_ && render_frame_host == last_rfh_to_rac_)
-    HideRequestAutocompleteDialog();
-}
-
-void ChromeAutofillClient::DidNavigateAnyFrame(
-    content::RenderFrameHost* render_frame_host,
-    const content::LoadCommittedDetails& details,
-    const content::FrameNavigateParams& params) {
-  if (dialog_controller_ && render_frame_host == last_rfh_to_rac_)
-    HideRequestAutocompleteDialog();
 }
 
 void ChromeAutofillClient::MainFrameWasResized(bool width_changed) {
@@ -349,8 +333,19 @@ void ChromeAutofillClient::DidFillOrPreviewField(
 }
 
 void ChromeAutofillClient::OnFirstUserGestureObserved() {
-  web_contents()->SendToAllFrames(
-      new AutofillMsg_FirstUserGestureObservedInTab(routing_id()));
+  ContentAutofillDriverFactory* factory =
+      ContentAutofillDriverFactory::FromWebContents(web_contents());
+  DCHECK(factory);
+
+  for (content::RenderFrameHost* frame : web_contents()->GetAllFrames()) {
+    // No need to notify non-live frames.
+    // And actually they have no corresponding drivers in the factory's map.
+    if (!frame->IsRenderFrameLive())
+      continue;
+    ContentAutofillDriver* driver = factory->DriverForFrame(frame);
+    DCHECK(driver);
+    driver->NotifyFirstUserGestureObservedInTab();
+  }
 }
 
 bool ChromeAutofillClient::IsContextSecure(const GURL& form_origin) {

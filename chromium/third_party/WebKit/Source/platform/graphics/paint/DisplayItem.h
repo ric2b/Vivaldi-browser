@@ -68,6 +68,7 @@ public:
         DragImage,
         SVGImage,
         LinkHighlight,
+        ImageAreaFocusRing,
         PageOverlay,
         PageWidgetDelegateBackgroundFallback,
         PopupContainerBorder,
@@ -107,7 +108,8 @@ public:
         VideoBitmap,
         WebPlugin,
         WebFont,
-        DrawingLast = WebFont,
+        ReflectionMask,
+        DrawingLast = ReflectionMask,
 
         CachedDrawingFirst,
         CachedDrawingLast = CachedDrawingFirst + DrawingLast - DrawingFirst,

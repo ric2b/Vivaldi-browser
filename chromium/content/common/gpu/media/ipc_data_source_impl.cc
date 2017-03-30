@@ -8,7 +8,6 @@
 
 #include <algorithm>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/numerics/safe_conversions.h"
 #include "content/common/media/media_pipeline_messages.h"
 #include "ipc/ipc_sender.h"
@@ -25,7 +24,7 @@ class IPCDataSourceImpl::ReadOperation {
 
   // Fills |data_| with |size_read| bytes from |data_read| and runs
   // |callback_|, deleting the operation afterwards.
-  static void Finish(scoped_ptr<ReadOperation> operation,
+  static void Finish(std::unique_ptr<ReadOperation> operation,
                      const uint8_t* data_read,
                      int size_read) {
     if (size_read > 0) {

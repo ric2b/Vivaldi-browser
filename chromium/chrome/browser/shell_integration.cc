@@ -24,6 +24,12 @@
 #include "chromeos/chromeos_switches.h"
 #endif
 
+#if defined(OS_WIN)
+#include "base/win/windows_version.h"
+#include "chrome/browser/shell_integration_win.h"
+#include "chrome/installer/util/shell_util.h"
+#endif
+
 #if !defined(OS_WIN)
 #include "chrome/common/channel_info.h"
 #include "chrome/grit/chromium_strings.h"
@@ -42,20 +48,8 @@ const struct AppModeInfo* gAppModeInfo = nullptr;
 
 }  // namespace
 
-#if !defined(OS_WIN)
-bool SetAsDefaultBrowserInteractive() {
-  return false;
-}
-
-bool SetAsDefaultProtocolClientInteractive(const std::string& protocol) {
-  return false;
-}
-#endif  // !defined(OS_WIN)
-
-DefaultWebClientSetPermission CanSetAsDefaultProtocolClient() {
-  // Allowed as long as the browser can become the operating system default
-  // browser.
-  return CanSetAsDefaultBrowser();
+bool CanSetAsDefaultBrowser() {
+  return GetDefaultWebClientSetPermission() != SET_DEFAULT_NOT_ALLOWED;
 }
 
 #if !defined(OS_WIN)
@@ -192,8 +186,10 @@ void DefaultWebClientWorker::CheckIsDefault(bool is_following_set_as_default) {
 
 void DefaultWebClientWorker::SetAsDefault() {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
-  SetAsDefaultImpl();
-  CheckIsDefault(true);
+
+  // SetAsDefaultImpl will make sure the callback is executed exactly once.
+  SetAsDefaultImpl(
+      base::Bind(&DefaultWebClientWorker::CheckIsDefault, this, true));
 }
 
 void DefaultWebClientWorker::ReportSetDefaultResult(
@@ -242,8 +238,9 @@ DefaultWebClientState DefaultBrowserWorker::CheckIsDefaultImpl() {
   return GetDefaultBrowser();
 }
 
-void DefaultBrowserWorker::SetAsDefaultImpl() {
-  switch (CanSetAsDefaultBrowser()) {
+void DefaultBrowserWorker::SetAsDefaultImpl(
+    const base::Closure& on_finished_callback) {
+  switch (GetDefaultWebClientSetPermission()) {
     case SET_DEFAULT_NOT_ALLOWED:
       NOTREACHED();
       break;
@@ -251,10 +248,23 @@ void DefaultBrowserWorker::SetAsDefaultImpl() {
       SetAsDefaultBrowser();
       break;
     case SET_DEFAULT_INTERACTIVE:
-      if (interactive_permitted_)
-        SetAsDefaultBrowserInteractive();
+#if defined(OS_WIN)
+      if (interactive_permitted_) {
+        switch (ShellUtil::GetInteractiveSetDefaultMode()) {
+          case ShellUtil::INTENT_PICKER:
+            win::SetAsDefaultBrowserUsingIntentPicker();
+            break;
+          case ShellUtil::SYSTEM_SETTINGS:
+            win::SetAsDefaultBrowserUsingSystemSettings(on_finished_callback);
+            // Early return because the function above takes care of calling
+            // |on_finished_callback|.
+            return;
+        }
+      }
+#endif  // defined(OS_WIN)
       break;
   }
+  on_finished_callback.Run();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -279,8 +289,9 @@ DefaultWebClientState DefaultProtocolClientWorker::CheckIsDefaultImpl() {
   return IsDefaultProtocolClient(protocol_);
 }
 
-void DefaultProtocolClientWorker::SetAsDefaultImpl() {
-  switch (CanSetAsDefaultProtocolClient()) {
+void DefaultProtocolClientWorker::SetAsDefaultImpl(
+    const base::Closure& on_finished_callback) {
+  switch (GetDefaultWebClientSetPermission()) {
     case SET_DEFAULT_NOT_ALLOWED:
       // Not allowed, do nothing.
       break;
@@ -288,11 +299,24 @@ void DefaultProtocolClientWorker::SetAsDefaultImpl() {
       SetAsDefaultProtocolClient(protocol_);
       break;
     case SET_DEFAULT_INTERACTIVE:
+#if defined(OS_WIN)
       if (interactive_permitted_) {
-        SetAsDefaultProtocolClientInteractive(protocol_);
+        switch (ShellUtil::GetInteractiveSetDefaultMode()) {
+          case ShellUtil::INTENT_PICKER:
+            win::SetAsDefaultProtocolClientUsingIntentPicker(protocol_);
+            break;
+          case ShellUtil::SYSTEM_SETTINGS:
+            win::SetAsDefaultProtocolClientUsingSystemSettings(
+                protocol_, on_finished_callback);
+            // Early return because the function above takes care of calling
+            // |on_finished_callback|.
+            return;
+        }
       }
+#endif  // defined(OS_WIN)
       break;
   }
+  on_finished_callback.Run();
 }
 
 }  // namespace shell_integration

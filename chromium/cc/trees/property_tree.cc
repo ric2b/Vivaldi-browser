@@ -8,6 +8,8 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
+#include "base/trace_event/trace_event_argument.h"
 #include "cc/base/math_util.h"
 #include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/input/scroll_state.h"
@@ -45,6 +47,14 @@ void TreeNode<T>::FromProtobuf(const proto::TreeNode& proto) {
   parent_id = proto.parent_id();
   owner_id = proto.owner_id();
   data.FromProtobuf(proto);
+}
+
+template <typename T>
+void TreeNode<T>::AsValueInto(base::trace_event::TracedValue* value) const {
+  value->SetInteger("id", id);
+  value->SetInteger("parent_id", parent_id);
+  value->SetInteger("owner_id", owner_id);
+  data.AsValueInto(value);
 }
 
 template struct TreeNode<TransformNodeData>;
@@ -107,7 +117,9 @@ void PropertyTree<T>::ToProtobuf(proto::PropertyTree* proto) const {
 }
 
 template <typename T>
-void PropertyTree<T>::FromProtobuf(const proto::PropertyTree& proto) {
+void PropertyTree<T>::FromProtobuf(
+    const proto::PropertyTree& proto,
+    std::unordered_map<int, int>* node_id_to_index_map) {
   // Verify that the property tree is empty.
   DCHECK_EQ(static_cast<int>(nodes_.size()), 1);
   DCHECK_EQ(back()->id, 0);
@@ -117,12 +129,25 @@ void PropertyTree<T>::FromProtobuf(const proto::PropertyTree& proto) {
   DCHECK_GT(proto.nodes_size(), 0);
   nodes_.back().FromProtobuf(proto.nodes(0));
 
+  DCHECK(!node_id_to_index_map || (*node_id_to_index_map).empty());
   for (int i = 1; i < proto.nodes_size(); ++i) {
     nodes_.push_back(T());
     nodes_.back().FromProtobuf(proto.nodes(i));
+    (*node_id_to_index_map)[nodes_.back().owner_id] = nodes_.back().id;
   }
 
   needs_update_ = proto.needs_update();
+}
+
+template <typename T>
+void PropertyTree<T>::AsValueInto(base::trace_event::TracedValue* value) const {
+  value->BeginArray("nodes");
+  for (const auto& node : nodes_) {
+    value->BeginDictionary();
+    node.AsValueInto(value);
+    value->EndDictionary();
+  }
+  value->EndArray();
 }
 
 template class PropertyTree<TransformNode>;
@@ -136,9 +161,11 @@ TransformNodeData::TransformNodeData()
       source_node_id(-1),
       sorting_context_id(0),
       needs_local_transform_update(true),
+      node_and_ancestors_are_animated_or_invertible(true),
       is_invertible(true),
       ancestors_are_invertible(true),
-      is_animated(false),
+      has_potential_animation(false),
+      is_currently_animating(false),
       to_screen_is_potentially_animated(false),
       has_only_translation_animations(true),
       to_screen_has_scale_animation(false),
@@ -174,9 +201,12 @@ bool TransformNodeData::operator==(const TransformNodeData& other) const {
          source_node_id == other.source_node_id &&
          sorting_context_id == other.sorting_context_id &&
          needs_local_transform_update == other.needs_local_transform_update &&
+         node_and_ancestors_are_animated_or_invertible ==
+             other.node_and_ancestors_are_animated_or_invertible &&
          is_invertible == other.is_invertible &&
          ancestors_are_invertible == other.ancestors_are_invertible &&
-         is_animated == other.is_animated &&
+         has_potential_animation == other.has_potential_animation &&
+         is_currently_animating == other.is_currently_animating &&
          to_screen_is_potentially_animated ==
              other.to_screen_is_potentially_animated &&
          has_only_translation_animations ==
@@ -256,10 +286,14 @@ void TransformNodeData::ToProtobuf(proto::TreeNode* proto) const {
 
   data->set_needs_local_transform_update(needs_local_transform_update);
 
+  data->set_node_and_ancestors_are_animated_or_invertible(
+      node_and_ancestors_are_animated_or_invertible);
+
   data->set_is_invertible(is_invertible);
   data->set_ancestors_are_invertible(ancestors_are_invertible);
 
-  data->set_is_animated(is_animated);
+  data->set_has_potential_animation(has_potential_animation);
+  data->set_is_currently_animating(is_currently_animating);
   data->set_to_screen_is_potentially_animated(
       to_screen_is_potentially_animated);
   data->set_has_only_translation_animations(has_only_translation_animations);
@@ -323,10 +357,14 @@ void TransformNodeData::FromProtobuf(const proto::TreeNode& proto) {
 
   needs_local_transform_update = data.needs_local_transform_update();
 
+  node_and_ancestors_are_animated_or_invertible =
+      data.node_and_ancestors_are_animated_or_invertible();
+
   is_invertible = data.is_invertible();
   ancestors_are_invertible = data.ancestors_are_invertible();
 
-  is_animated = data.is_animated();
+  has_potential_animation = data.has_potential_animation();
+  is_currently_animating = data.is_currently_animating();
   to_screen_is_potentially_animated = data.to_screen_is_potentially_animated();
   has_only_translation_animations = data.has_only_translation_animations();
   to_screen_has_scale_animation = data.to_screen_has_scale_animation();
@@ -363,6 +401,17 @@ void TransformNodeData::FromProtobuf(const proto::TreeNode& proto) {
   scroll_snap = ProtoToVector2dF(data.scroll_snap());
   source_offset = ProtoToVector2dF(data.source_offset());
   source_to_parent = ProtoToVector2dF(data.source_to_parent());
+}
+
+void TransformNodeData::AsValueInto(
+    base::trace_event::TracedValue* value) const {
+  MathUtil::AddToTracedValue("pre_local", pre_local, value);
+  MathUtil::AddToTracedValue("local", local, value);
+  MathUtil::AddToTracedValue("post_local", post_local, value);
+  value->SetInteger("target_id", target_id);
+  value->SetInteger("content_target_id", content_target_id);
+  value->SetInteger("source_node_id", source_node_id);
+  value->SetInteger("sorting_context_id", sorting_context_id);
 }
 
 ClipNodeData::ClipNodeData()
@@ -434,20 +483,36 @@ void ClipNodeData::FromProtobuf(const proto::TreeNode& proto) {
   resets_clip = data.resets_clip();
 }
 
+void ClipNodeData::AsValueInto(base::trace_event::TracedValue* value) const {
+  MathUtil::AddToTracedValue("clip", clip, value);
+  value->SetInteger("transform_id", transform_id);
+  value->SetInteger("target_id", target_id);
+  value->SetBoolean("applies_local_clip", applies_local_clip);
+  value->SetBoolean("layer_clipping_uses_only_local_clip",
+                    layer_clipping_uses_only_local_clip);
+  value->SetBoolean("target_is_clipped", target_is_clipped);
+  value->SetBoolean("layers_are_clipped", layers_are_clipped);
+  value->SetBoolean("layers_are_clipped_when_surfaces_disabled",
+                    layers_are_clipped_when_surfaces_disabled);
+  value->SetBoolean("resets_clip", resets_clip);
+}
+
 EffectNodeData::EffectNodeData()
     : opacity(1.f),
       screen_space_opacity(1.f),
       has_render_surface(false),
+      render_surface(nullptr),
       has_copy_request(false),
       has_background_filters(false),
-      node_or_ancestor_has_background_filters(false),
-      to_screen_opacity_is_animated(false),
       hidden_by_backface_visibility(false),
       double_sided(false),
       is_drawn(true),
-      has_animated_opacity(false),
+      subtree_hidden(false),
+      has_potential_opacity_animation(false),
+      is_currently_animating_opacity(false),
       effect_changed(false),
       num_copy_requests_in_subtree(0),
+      has_unclipped_descendants(false),
       transform_id(0),
       clip_id(0),
       target_id(0) {}
@@ -460,12 +525,13 @@ bool EffectNodeData::operator==(const EffectNodeData& other) const {
          has_render_surface == other.has_render_surface &&
          has_copy_request == other.has_copy_request &&
          has_background_filters == other.has_background_filters &&
-         node_or_ancestor_has_background_filters ==
-             other.node_or_ancestor_has_background_filters &&
-         to_screen_opacity_is_animated == other.to_screen_opacity_is_animated &&
          hidden_by_backface_visibility == other.hidden_by_backface_visibility &&
          double_sided == other.double_sided && is_drawn == other.is_drawn &&
-         has_animated_opacity == other.has_animated_opacity &&
+         subtree_hidden == other.subtree_hidden &&
+         has_potential_opacity_animation ==
+             other.has_potential_opacity_animation &&
+         is_currently_animating_opacity ==
+             other.is_currently_animating_opacity &&
          effect_changed == other.effect_changed &&
          num_copy_requests_in_subtree == other.num_copy_requests_in_subtree &&
          transform_id == other.transform_id && clip_id == other.clip_id &&
@@ -480,13 +546,12 @@ void EffectNodeData::ToProtobuf(proto::TreeNode* proto) const {
   data->set_has_render_surface(has_render_surface);
   data->set_has_copy_request(has_copy_request);
   data->set_has_background_filters(has_background_filters);
-  data->set_node_or_ancestor_has_background_filters(
-      node_or_ancestor_has_background_filters);
-  data->set_to_screen_opacity_is_animated(to_screen_opacity_is_animated);
   data->set_hidden_by_backface_visibility(hidden_by_backface_visibility);
   data->set_double_sided(double_sided);
   data->set_is_drawn(is_drawn);
-  data->set_has_animated_opacity(has_animated_opacity);
+  data->set_subtree_hidden(subtree_hidden);
+  data->set_has_potential_opacity_animation(has_potential_opacity_animation);
+  data->set_is_currently_animating_opacity(is_currently_animating_opacity);
   data->set_effect_changed(effect_changed);
   data->set_num_copy_requests_in_subtree(num_copy_requests_in_subtree);
   data->set_transform_id(transform_id);
@@ -503,18 +568,34 @@ void EffectNodeData::FromProtobuf(const proto::TreeNode& proto) {
   has_render_surface = data.has_render_surface();
   has_copy_request = data.has_copy_request();
   has_background_filters = data.has_background_filters();
-  node_or_ancestor_has_background_filters =
-      data.node_or_ancestor_has_background_filters();
-  to_screen_opacity_is_animated = data.to_screen_opacity_is_animated();
   hidden_by_backface_visibility = data.hidden_by_backface_visibility();
   double_sided = data.double_sided();
   is_drawn = data.is_drawn();
-  has_animated_opacity = data.has_animated_opacity();
+  subtree_hidden = data.subtree_hidden();
+  has_potential_opacity_animation = data.has_potential_opacity_animation();
+  is_currently_animating_opacity = data.is_currently_animating_opacity();
   effect_changed = data.effect_changed();
   num_copy_requests_in_subtree = data.num_copy_requests_in_subtree();
   transform_id = data.transform_id();
   clip_id = data.clip_id();
   target_id = data.target_id();
+}
+
+void EffectNodeData::AsValueInto(base::trace_event::TracedValue* value) const {
+  value->SetDouble("opacity", opacity);
+  value->SetBoolean("has_render_surface", has_render_surface);
+  value->SetBoolean("has_copy_request", has_copy_request);
+  value->SetBoolean("has_background_filters", has_background_filters);
+  value->SetBoolean("double_sided", double_sided);
+  value->SetBoolean("is_drawn", is_drawn);
+  value->SetBoolean("has_potential_opacity_animation",
+                    has_potential_opacity_animation);
+  value->SetBoolean("effect_changed", effect_changed);
+  value->SetInteger("num_copy_requests_in_subtree",
+                    num_copy_requests_in_subtree);
+  value->SetInteger("transform_id", transform_id);
+  value->SetInteger("clip_id", clip_id);
+  value->SetInteger("target_id", target_id);
 }
 
 ScrollNodeData::ScrollNodeData()
@@ -529,7 +610,8 @@ ScrollNodeData::ScrollNodeData()
       user_scrollable_horizontal(false),
       user_scrollable_vertical(false),
       element_id(0),
-      transform_id(0) {}
+      transform_id(0),
+      num_drawn_descendants(0) {}
 
 ScrollNodeData::ScrollNodeData(const ScrollNodeData& other) = default;
 
@@ -597,6 +679,20 @@ void ScrollNodeData::FromProtobuf(const proto::TreeNode& proto) {
   user_scrollable_vertical = data.user_scrollable_vertical();
   element_id = data.element_id();
   transform_id = data.transform_id();
+}
+
+void ScrollNodeData::AsValueInto(base::trace_event::TracedValue* value) const {
+  value->SetBoolean("scrollable", scrollable);
+  MathUtil::AddToTracedValue("scroll_clip_layer_bounds",
+                             scroll_clip_layer_bounds, value);
+  MathUtil::AddToTracedValue("bounds", bounds, value);
+  MathUtil::AddToTracedValue("offset_to_transform_parent",
+                             offset_to_transform_parent, value);
+  value->SetBoolean("should_flatten", should_flatten);
+  value->SetBoolean("user_scrollable_horizontal", user_scrollable_horizontal);
+  value->SetBoolean("user_scrollable_vertical", user_scrollable_vertical);
+  value->SetInteger("element_id", element_id);
+  value->SetInteger("transform_id", transform_id);
 }
 
 void TransformTree::clear() {
@@ -690,6 +786,7 @@ void TransformTree::UpdateTransforms(int id) {
   UpdateSnapping(node);
   UpdateNodeAndAncestorsHaveIntegerTranslations(node, parent_node);
   UpdateTransformChanged(node, parent_node, source_node);
+  UpdateNodeAndAncestorsAreAnimatedOrInvertible(node, parent_node);
 }
 
 bool TransformTree::IsDescendant(int desc_id, int source_id) const {
@@ -932,7 +1029,7 @@ void TransformTree::UpdateAnimationProperties(TransformNode* node,
         parent_node->data.combined_starting_animation_scale;
   }
   node->data.to_screen_is_potentially_animated =
-      node->data.is_animated || ancestor_is_animating;
+      node->data.has_potential_animation || ancestor_is_animating;
   node->data.to_screen_has_scale_animation =
       !node->data.has_only_translation_animations ||
       ancestor_is_animating_scale;
@@ -1015,20 +1112,20 @@ void TransformTree::UndoSnapping(TransformNode* node) {
 
 void TransformTree::UpdateSnapping(TransformNode* node) {
   if (!node->data.scrolls || node->data.to_screen_is_potentially_animated ||
-      !node->data.to_target.IsScaleOrTranslation() ||
+      !node->data.to_screen.IsScaleOrTranslation() ||
       !node->data.ancestors_are_invertible) {
     return;
   }
 
-  // Scroll snapping must be done in target space (the pixels we care about).
-  // This means we effectively snap the target space transform. If TT is the
-  // target space transform and TT' is TT with its translation components
-  // rounded, then what we're after is the scroll delta X, where TT * X = TT'.
+  // Scroll snapping must be done in screen space (the pixels we care about).
+  // This means we effectively snap the screen space transform. If ST is the
+  // screen space transform and ST' is ST with its translation components
+  // rounded, then what we're after is the scroll delta X, where ST * X = ST'.
   // I.e., we want a transform that will realize our scroll snap. It follows
-  // that X = TT^-1 * TT'. We cache TT and TT^-1 to make this more efficient.
-  gfx::Transform rounded = node->data.to_target;
+  // that X = ST^-1 * ST'. We cache ST and ST^-1 to make this more efficient.
+  gfx::Transform rounded = node->data.to_screen;
   rounded.RoundTranslationComponents();
-  gfx::Transform delta = node->data.from_target;
+  gfx::Transform delta = node->data.from_screen;
   delta *= rounded;
 
   DCHECK(delta.IsApproximatelyIdentityOrTranslation(SkDoubleToMScalar(1e-4)))
@@ -1038,12 +1135,12 @@ void TransformTree::UpdateSnapping(TransformNode* node) {
 
   // Now that we have our scroll delta, we must apply it to each of our
   // combined, to/from matrices.
-  node->data.to_target = rounded;
+  node->data.to_screen = rounded;
   node->data.to_parent.Translate(translation.x(), translation.y());
-  node->data.from_target.matrix().postTranslate(-translation.x(),
-                                                -translation.y(), 0);
-  node->data.to_screen.Translate(translation.x(), translation.y());
   node->data.from_screen.matrix().postTranslate(-translation.x(),
+                                                -translation.y(), 0);
+  node->data.to_target.Translate(translation.x(), translation.y());
+  node->data.from_target.matrix().postTranslate(-translation.x(),
                                                 -translation.y(), 0);
 
   node->data.scroll_snap = translation;
@@ -1060,6 +1157,29 @@ void TransformTree::UpdateTransformChanged(TransformNode* node,
   if (source_node && source_node->id != parent_node->id &&
       source_to_parent_updates_allowed_ && source_node->data.transform_changed)
     node->data.transform_changed = true;
+}
+
+void TransformTree::UpdateNodeAndAncestorsAreAnimatedOrInvertible(
+    TransformNode* node,
+    TransformNode* parent_node) {
+  if (!parent_node) {
+    node->data.node_and_ancestors_are_animated_or_invertible =
+        node->data.has_potential_animation || node->data.is_invertible;
+    return;
+  }
+  if (!parent_node->data.node_and_ancestors_are_animated_or_invertible) {
+    node->data.node_and_ancestors_are_animated_or_invertible = false;
+    return;
+  }
+  bool is_invertible = node->data.is_invertible;
+  // Even when the current node's transform and the parent's screen space
+  // transform are invertible, the current node's screen space transform can
+  // become uninvertible due to floating-point arithmetic.
+  if (!node->data.ancestors_are_invertible &&
+      parent_node->data.ancestors_are_invertible)
+    is_invertible = false;
+  node->data.node_and_ancestors_are_animated_or_invertible =
+      node->data.has_potential_animation || is_invertible;
 }
 
 void TransformTree::SetDeviceTransform(const gfx::Transform& transform,
@@ -1170,11 +1290,13 @@ void TransformTree::ToProtobuf(proto::PropertyTree* proto) const {
     data->add_nodes_affected_by_outer_viewport_bounds_delta(i);
 }
 
-void TransformTree::FromProtobuf(const proto::PropertyTree& proto) {
+void TransformTree::FromProtobuf(
+    const proto::PropertyTree& proto,
+    std::unordered_map<int, int>* node_id_to_index_map) {
   DCHECK(proto.has_property_type());
   DCHECK_EQ(proto.property_type(), proto::PropertyTree::Transform);
 
-  PropertyTree::FromProtobuf(proto);
+  PropertyTree::FromProtobuf(proto, node_id_to_index_map);
   const proto::TransformTreeData& data = proto.transform_tree_data();
 
   source_to_parent_updates_allowed_ = data.source_to_parent_updates_allowed();
@@ -1197,8 +1319,12 @@ void TransformTree::FromProtobuf(const proto::PropertyTree& proto) {
   }
 }
 
+float EffectTree::EffectiveOpacity(const EffectNode* node) const {
+  return node->data.subtree_hidden ? 0.f : node->data.opacity;
+}
+
 void EffectTree::UpdateOpacities(EffectNode* node, EffectNode* parent_node) {
-  node->data.screen_space_opacity = node->data.opacity;
+  node->data.screen_space_opacity = EffectiveOpacity(node);
 
   if (parent_node)
     node->data.screen_space_opacity *= parent_node->data.screen_space_opacity;
@@ -1210,11 +1336,13 @@ void EffectTree::UpdateIsDrawn(EffectNode* node, EffectNode* parent_node) {
   // 1) Nodes that contribute to copy requests, whether hidden or not, must be
   //    drawn.
   // 2) Nodes that have a background filter.
-  // 3) Nodes with animating screen space opacity are drawn if their parent is
-  //    drawn irrespective of their opacity.
+  // 3) Nodes with animating screen space opacity on main thread or pending tree
+  //    are drawn if their parent is drawn irrespective of their opacity.
   if (node->data.has_copy_request)
     node->data.is_drawn = true;
-  else if (node->data.opacity == 0.f && !node->data.has_animated_opacity &&
+  else if (EffectiveOpacity(node) == 0.f &&
+           (!node->data.has_potential_opacity_animation ||
+            property_trees()->is_active) &&
            !node->data.has_background_filters)
     node->data.is_drawn = false;
   else if (parent_node)
@@ -1294,13 +1422,7 @@ bool EffectTree::ContributesToDrawnSurface(int id) {
   // copy requests.
   EffectNode* node = Node(id);
   EffectNode* parent_node = parent(node);
-  bool contributes_to_drawn_surface =
-      node->data.is_drawn &&
-      (node->data.opacity != 0.f || node->data.has_animated_opacity ||
-       node->data.has_background_filters);
-  if (parent_node && !parent_node->data.is_drawn)
-    contributes_to_drawn_surface = false;
-  return contributes_to_drawn_surface;
+  return node->data.is_drawn && (!parent_node || parent_node->data.is_drawn);
 }
 
 void EffectTree::ResetChangeTracking() {
@@ -1348,11 +1470,13 @@ void ClipTree::ToProtobuf(proto::PropertyTree* proto) const {
   PropertyTree::ToProtobuf(proto);
 }
 
-void ClipTree::FromProtobuf(const proto::PropertyTree& proto) {
+void ClipTree::FromProtobuf(
+    const proto::PropertyTree& proto,
+    std::unordered_map<int, int>* node_id_to_index_map) {
   DCHECK(proto.has_property_type());
   DCHECK_EQ(proto.property_type(), proto::PropertyTree::Clip);
 
-  PropertyTree::FromProtobuf(proto);
+  PropertyTree::FromProtobuf(proto, node_id_to_index_map);
 }
 
 bool EffectTree::operator==(const EffectTree& other) const {
@@ -1366,11 +1490,13 @@ void EffectTree::ToProtobuf(proto::PropertyTree* proto) const {
   PropertyTree::ToProtobuf(proto);
 }
 
-void EffectTree::FromProtobuf(const proto::PropertyTree& proto) {
+void EffectTree::FromProtobuf(
+    const proto::PropertyTree& proto,
+    std::unordered_map<int, int>* node_id_to_index_map) {
   DCHECK(proto.has_property_type());
   DCHECK_EQ(proto.property_type(), proto::PropertyTree::Effect);
 
-  PropertyTree::FromProtobuf(proto);
+  PropertyTree::FromProtobuf(proto, node_id_to_index_map);
 }
 
 ScrollTree::ScrollTree()
@@ -1435,15 +1561,20 @@ void ScrollTree::ToProtobuf(proto::PropertyTree* proto) const {
   }
 }
 
-void ScrollTree::FromProtobuf(const proto::PropertyTree& proto) {
+void ScrollTree::FromProtobuf(
+    const proto::PropertyTree& proto,
+    std::unordered_map<int, int>* node_id_to_index_map) {
   DCHECK(proto.has_property_type());
   DCHECK_EQ(proto.property_type(), proto::PropertyTree::Scroll);
 
-  PropertyTree::FromProtobuf(proto);
+  PropertyTree::FromProtobuf(proto, node_id_to_index_map);
   const proto::ScrollTreeData& data = proto.scroll_tree_data();
 
   currently_scrolling_node_id_ = data.currently_scrolling_node_id();
 
+  // TODO(khushalsagar): This should probably be removed if the copy constructor
+  // for ScrollTree copies the |layer_id_to_scroll_offset_map_| as well.
+  layer_id_to_scroll_offset_map_.clear();
   for (int i = 0; i < data.layer_id_to_scroll_offset_map_size(); ++i) {
     const proto::ScrollOffsetMapEntry entry =
         data.layer_id_to_scroll_offset_map(i);
@@ -1796,6 +1927,12 @@ bool PropertyTrees::operator==(const PropertyTrees& other) const {
   return transform_tree == other.transform_tree &&
          effect_tree == other.effect_tree && clip_tree == other.clip_tree &&
          scroll_tree == other.scroll_tree &&
+         transform_id_to_index_map == other.transform_id_to_index_map &&
+         effect_id_to_index_map == other.effect_id_to_index_map &&
+         clip_id_to_index_map == other.clip_id_to_index_map &&
+         scroll_id_to_index_map == other.scroll_id_to_index_map &&
+         always_use_active_tree_opacity_effect_ids ==
+             other.always_use_active_tree_opacity_effect_ids &&
          needs_rebuild == other.needs_rebuild && changed == other.changed &&
          full_tree_damaged == other.full_tree_damaged &&
          is_main_thread == other.is_main_thread &&
@@ -1809,6 +1946,12 @@ PropertyTrees& PropertyTrees::operator=(const PropertyTrees& from) {
   effect_tree = from.effect_tree;
   clip_tree = from.clip_tree;
   scroll_tree = from.scroll_tree;
+  transform_id_to_index_map = from.transform_id_to_index_map;
+  effect_id_to_index_map = from.effect_id_to_index_map;
+  always_use_active_tree_opacity_effect_ids =
+      from.always_use_active_tree_opacity_effect_ids;
+  clip_id_to_index_map = from.clip_id_to_index_map;
+  scroll_id_to_index_map = from.scroll_id_to_index_map;
   needs_rebuild = from.needs_rebuild;
   changed = from.changed;
   full_tree_damaged = from.full_tree_damaged;
@@ -1846,14 +1989,18 @@ void PropertyTrees::ToProtobuf(proto::PropertyTrees* proto) const {
   // TODO(khushalsagar): Consider using the sequence number to decide if
   // property trees need to be serialized again for a commit. See crbug/555370.
   proto->set_sequence_number(sequence_number);
+
+  for (auto i : always_use_active_tree_opacity_effect_ids)
+    proto->add_always_use_active_tree_opacity_effect_ids(i);
 }
 
 // static
 void PropertyTrees::FromProtobuf(const proto::PropertyTrees& proto) {
-  transform_tree.FromProtobuf(proto.transform_tree());
-  effect_tree.FromProtobuf(proto.effect_tree());
-  clip_tree.FromProtobuf(proto.clip_tree());
-  scroll_tree.FromProtobuf(proto.scroll_tree());
+  transform_tree.FromProtobuf(proto.transform_tree(),
+                              &transform_id_to_index_map);
+  effect_tree.FromProtobuf(proto.effect_tree(), &effect_id_to_index_map);
+  clip_tree.FromProtobuf(proto.clip_tree(), &clip_id_to_index_map);
+  scroll_tree.FromProtobuf(proto.scroll_tree(), &scroll_id_to_index_map);
 
   needs_rebuild = proto.needs_rebuild();
   changed = proto.changed();
@@ -1867,6 +2014,8 @@ void PropertyTrees::FromProtobuf(const proto::PropertyTrees& proto) {
   effect_tree.SetPropertyTrees(this);
   clip_tree.SetPropertyTrees(this);
   scroll_tree.SetPropertyTrees(this);
+  for (auto i : proto.always_use_active_tree_opacity_effect_ids())
+    always_use_active_tree_opacity_effect_ids.push_back(i);
 }
 
 void PropertyTrees::SetInnerViewportContainerBoundsDelta(
@@ -1890,6 +2039,23 @@ void PropertyTrees::SetOuterViewportContainerBoundsDelta(
 void PropertyTrees::SetInnerViewportScrollBoundsDelta(
     gfx::Vector2dF bounds_delta) {
   inner_viewport_scroll_bounds_delta_ = bounds_delta;
+}
+
+void PropertyTrees::PushOpacityIfNeeded(PropertyTrees* target_tree) {
+  for (int id : target_tree->always_use_active_tree_opacity_effect_ids) {
+    if (effect_id_to_index_map.find(id) == effect_id_to_index_map.end())
+      continue;
+    EffectNode* source_effect_node =
+        effect_tree.Node(effect_id_to_index_map[id]);
+    EffectNode* target_effect_node =
+        target_tree->effect_tree.Node(target_tree->effect_id_to_index_map[id]);
+    float source_opacity = source_effect_node->data.opacity;
+    float target_opacity = target_effect_node->data.opacity;
+    if (source_opacity == target_opacity)
+      continue;
+    target_effect_node->data.opacity = source_opacity;
+    target_tree->effect_tree.set_needs_update(true);
+  }
 }
 
 void PropertyTrees::UpdateChangeTracking() {
@@ -1927,20 +2093,36 @@ void PropertyTrees::PushChangeTrackingTo(PropertyTrees* tree) {
   tree->full_tree_damaged = full_tree_damaged;
 }
 
-void PropertyTrees::ResetAllChangeTracking(ResetFlags flag) {
-  switch (flag) {
-    case EFFECT_TREE:
-      effect_tree.ResetChangeTracking();
-      break;
-    case TRANSFORM_TREE:
-      transform_tree.ResetChangeTracking();
-      break;
-    case ALL_TREES:
-      transform_tree.ResetChangeTracking();
-      effect_tree.ResetChangeTracking();
-  }
+void PropertyTrees::ResetAllChangeTracking() {
+  transform_tree.ResetChangeTracking();
+  effect_tree.ResetChangeTracking();
   changed = false;
   full_tree_damaged = false;
+}
+
+std::unique_ptr<base::trace_event::TracedValue> PropertyTrees::AsTracedValue()
+    const {
+  auto value = base::WrapUnique(new base::trace_event::TracedValue);
+
+  value->SetInteger("sequence_number", sequence_number);
+
+  value->BeginDictionary("transform_tree");
+  transform_tree.AsValueInto(value.get());
+  value->EndDictionary();
+
+  value->BeginDictionary("effect_tree");
+  effect_tree.AsValueInto(value.get());
+  value->EndDictionary();
+
+  value->BeginDictionary("clip_tree");
+  clip_tree.AsValueInto(value.get());
+  value->EndDictionary();
+
+  value->BeginDictionary("scroll_tree");
+  scroll_tree.AsValueInto(value.get());
+  value->EndDictionary();
+
+  return value;
 }
 
 }  // namespace cc

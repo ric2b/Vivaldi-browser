@@ -33,13 +33,13 @@
 
 namespace blink {
 
-RemoveCSSPropertyCommand::RemoveCSSPropertyCommand(Document& document, RawPtr<Element> element, CSSPropertyID property)
+RemoveCSSPropertyCommand::RemoveCSSPropertyCommand(Document& document, Element* element, CSSPropertyID property)
     : SimpleEditCommand(document)
     , m_element(element)
     , m_property(property)
     , m_important(false)
 {
-    ASSERT(m_element);
+    DCHECK(m_element);
 }
 
 RemoveCSSPropertyCommand::~RemoveCSSPropertyCommand()

@@ -4,7 +4,8 @@
 
 #include "ui/platform_window/win/win_window.h"
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
 #include "base/strings/string16.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
@@ -41,10 +42,13 @@ WinWindow::WinWindow(PlatformWindowDelegate* delegate,
                      const gfx::Rect& bounds)
     : delegate_(delegate) {
   CHECK(delegate_);
-  if (use_popup_as_root_window_for_test)
+  DWORD window_style = WS_OVERLAPPEDWINDOW;
+  if (use_popup_as_root_window_for_test) {
     set_window_style(WS_POPUP);
-  gfx::Rect window_bounds = GetWindowBoundsForClientBounds(
-      WS_OVERLAPPEDWINDOW, window_ex_style(), bounds);
+    window_style = WS_POPUP;
+  }
+  gfx::Rect window_bounds =
+      GetWindowBoundsForClientBounds(window_style, window_ex_style(), bounds);
   gfx::WindowImpl::Init(NULL, window_bounds);
   SetWindowText(hwnd(), L"WinWindow");
 }
@@ -126,7 +130,7 @@ LRESULT WinWindow::OnMouseRange(UINT message, WPARAM w_param, LPARAM l_param) {
   MSG msg = { hwnd(), message, w_param, l_param,
               static_cast<DWORD>(GetMessageTime()),
               { CR_GET_X_LPARAM(l_param), CR_GET_Y_LPARAM(l_param) } };
-  scoped_ptr<Event> event = EventFromNative(msg);
+  std::unique_ptr<Event> event = EventFromNative(msg);
   if (IsMouseEventFromTouch(message))
     event->set_flags(event->flags() | EF_FROM_TOUCH);
   if (!(event->flags() & ui::EF_IS_NON_CLIENT))

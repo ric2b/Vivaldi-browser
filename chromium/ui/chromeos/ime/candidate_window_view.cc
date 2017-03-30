@@ -12,8 +12,9 @@
 #include "base/strings/utf_string_conversions.h"
 #include "ui/chromeos/ime/candidate_view.h"
 #include "ui/chromeos/ime/candidate_window_constants.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/color_utils.h"
-#include "ui/gfx/screen.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
@@ -55,8 +56,9 @@ class CandidateWindowBorder : public views::BubbleBorder {
     // It cannot use the normal logic of arrow offset for horizontal offscreen,
     // because the arrow must be in the content's edge. But CandidateWindow has
     // to be visible even when |anchor_rect| is out of the screen.
-    gfx::Rect work_area =
-        gfx::Screen::GetScreen()->GetDisplayNearestWindow(parent_).work_area();
+    gfx::Rect work_area = display::Screen::GetScreen()
+                              ->GetDisplayNearestWindow(parent_)
+                              .work_area();
     if (bounds.right() > work_area.right())
       bounds.set_x(work_area.right() - bounds.width());
     if (bounds.x() < work_area.x())
@@ -191,13 +193,13 @@ CandidateWindowView::~CandidateWindowView() {
 }
 
 views::Widget* CandidateWindowView::InitWidget() {
-  views::Widget* widget = BubbleDelegateView::CreateBubble(this);
+  views::Widget* widget = BubbleDialogDelegateView::CreateBubble(this);
 
   wm::SetWindowVisibilityAnimationType(
       widget->GetNativeView(),
       wm::WINDOW_VISIBILITY_ANIMATION_TYPE_FADE);
 
-  GetBubbleFrameView()->SetBubbleBorder(scoped_ptr<views::BubbleBorder>(
+  GetBubbleFrameView()->SetBubbleBorder(std::unique_ptr<views::BubbleBorder>(
       new CandidateWindowBorder(parent_window())));
   return widget;
 }
@@ -397,6 +399,10 @@ void CandidateWindowView::SelectCandidateAt(int index_in_page) {
 
 const char* CandidateWindowView::GetClassName() const {
   return "CandidateWindowView";
+}
+
+int CandidateWindowView::GetDialogButtons() const {
+  return ui::DIALOG_BUTTON_NONE;
 }
 
 void CandidateWindowView::ButtonPressed(views::Button* sender,

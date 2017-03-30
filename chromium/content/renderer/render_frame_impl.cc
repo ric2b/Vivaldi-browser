@@ -20,6 +20,7 @@
 #include "base/i18n/char_iterator.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial.h"
@@ -28,7 +29,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "build/build_config.h"
@@ -50,8 +51,10 @@
 #include "content/child/weburlresponse_extradata_impl.h"
 #include "content/common/accessibility_messages.h"
 #include "content/common/clipboard_messages.h"
+#include "content/common/content_security_policy_header.h"
 #include "content/common/frame_messages.h"
 #include "content/common/frame_replication_state.h"
+#include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "content/common/input_messages.h"
 #include "content/common/navigation_params.h"
 #include "content/common/page_messages.h"
@@ -68,6 +71,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/context_menu_params.h"
 #include "content/public/common/isolated_world_ids.h"
+#include "content/public/common/mhtml_generation_params.h"
 #include "content/public/common/page_state.h"
 #include "content/public/common/resource_response.h"
 #include "content/public/common/url_constants.h"
@@ -87,13 +91,14 @@
 #include "content/renderer/context_menu_params_builder.h"
 #include "content/renderer/devtools/devtools_agent.h"
 #include "content/renderer/dom_automation_controller.h"
+#include "content/renderer/effective_connection_type_helper.h"
 #include "content/renderer/external_popup_menu.h"
-#include "content/renderer/geolocation_dispatcher.h"
 #include "content/renderer/gpu/gpu_benchmarking_extension.h"
 #include "content/renderer/history_controller.h"
 #include "content/renderer/history_serialization.h"
 #include "content/renderer/image_downloader/image_downloader_impl.h"
 #include "content/renderer/ime_event_guard.h"
+#include "content/renderer/input/input_handler_manager.h"
 #include "content/renderer/internal_document_state_data.h"
 #include "content/renderer/manifest/manifest_manager.h"
 #include "content/renderer/media/audio_device_factory.h"
@@ -104,6 +109,7 @@
 #include "content/renderer/media/render_media_log.h"
 #include "content/renderer/media/renderer_webmediaplayer_delegate.h"
 #include "content/renderer/media/user_media_client_impl.h"
+#include "content/renderer/media/web_media_element_source_utils.h"
 #include "content/renderer/media/webmediaplayer_ms.h"
 #include "content/renderer/mojo/service_registry_js_wrapper.h"
 #include "content/renderer/mojo_bindings_controller.h"
@@ -124,8 +130,6 @@
 #include "content/renderer/shared_worker_repository.h"
 #include "content/renderer/skia_benchmarking_extension.h"
 #include "content/renderer/stats_collection_controller.h"
-#include "content/renderer/usb/web_usb_client_impl.h"
-#include "content/renderer/wake_lock/wake_lock_dispatcher.h"
 #include "content/renderer/web_frame_utils.h"
 #include "content/renderer/web_ui_extension.h"
 #include "content/renderer/websharedworker_proxy.h"
@@ -153,6 +157,7 @@
 #include "third_party/WebKit/public/platform/WebCachePolicy.h"
 #include "third_party/WebKit/public/platform/WebData.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayer.h"
+#include "third_party/WebKit/public/platform/WebMediaPlayerSource.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebStorageQuotaCallbacks.h"
 #include "third_party/WebKit/public/platform/WebString.h"
@@ -160,8 +165,8 @@
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
-#include "third_party/WebKit/public/platform/modules/webusb/WebUSBClient.h"
 #include "third_party/WebKit/public/web/WebColorSuggestion.h"
+#include "third_party/WebKit/public/web/WebConsoleMessage.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebFindOptions.h"
 #include "third_party/WebKit/public/web/WebFrameSerializer.h"
@@ -184,12 +189,14 @@
 #include "third_party/WebKit/public/web/WebSurroundingText.h"
 #include "third_party/WebKit/public/web/WebUserGestureIndicator.h"
 #include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/WebKit/public/web/WebWidget.h"
 #include "url/url_constants.h"
 #include "url/url_util.h"
 
 #if defined(ENABLE_PLUGINS)
 #include "content/renderer/pepper/pepper_browser_connection.h"
 #include "content/renderer/pepper/pepper_plugin_instance_impl.h"
+#include "content/renderer/pepper/pepper_plugin_registry.h"
 #include "content/renderer/pepper/pepper_webplugin_impl.h"
 #include "content/renderer/pepper/plugin_module.h"
 #endif
@@ -201,18 +208,15 @@
 #if defined(OS_ANDROID)
 #include <cpu-features.h>
 
-#include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "content/renderer/java/gin_java_bridge_dispatcher.h"
 #include "content/renderer/media/android/renderer_media_player_manager.h"
 #include "content/renderer/media/android/renderer_media_session_manager.h"
 #include "content/renderer/media/android/renderer_surface_view_manager.h"
-#include "content/renderer/media/android/stream_texture_factory_impl.h"
+#include "content/renderer/media/android/stream_texture_factory.h"
 #include "content/renderer/media/android/webmediaplayer_android.h"
 #include "content/renderer/media/android/webmediasession_android.h"
 #include "media/base/android/media_codec_util.h"
 #include "third_party/WebKit/public/platform/WebFloatPoint.h"
-#else
-#include "cc/blink/context_provider_web_context.h"
 #endif
 
 #if defined(ENABLE_PEPPER_CDMS)
@@ -239,10 +243,6 @@
 
 #if defined(ENABLE_MOJO_AUDIO_DECODER) || defined(ENABLE_MOJO_VIDEO_DECODER)
 #include "media/mojo/services/mojo_decoder_factory.h"  // nogncheck
-#endif
-
-#if defined(ENABLE_WEBVR)
-#include "content/renderer/vr/vr_dispatcher.h"
 #endif
 
 using blink::WebCachePolicy;
@@ -507,7 +507,7 @@ bool IsTopLevelNavigation(WebFrame* frame) {
 
 WebURLRequest CreateURLRequestForNavigation(
     const CommonNavigationParams& common_params,
-    scoped_ptr<StreamOverrideParameters> stream_override,
+    std::unique_ptr<StreamOverrideParameters> stream_override,
     bool is_view_source_mode_enabled) {
   WebURLRequest request(common_params.url);
   if (is_view_source_mode_enabled)
@@ -523,10 +523,11 @@ WebURLRequest CreateURLRequestForNavigation(
   }
 
   request.setHTTPMethod(WebString::fromUTF8(common_params.method));
+  request.setLoFiState(
+      static_cast<WebURLRequest::LoFiState>(common_params.lofi_state));
 
   RequestExtraData* extra_data = new RequestExtraData();
   extra_data->set_stream_override(std::move(stream_override));
-  extra_data->set_lofi_state(common_params.lofi_state);
   request.setExtraData(extra_data);
 
   // Set the ui timestamp for this navigation. Currently the timestamp here is
@@ -598,29 +599,60 @@ CommonNavigationParams MakeCommonNavigationParams(
   return CommonNavigationParams(
       request->url(), referrer, extra_data->transition_type(),
       FrameMsg_Navigate_Type::NORMAL, true, should_replace_current_entry,
-      ui_timestamp, report_type, GURL(), GURL(), extra_data->lofi_state(),
-      base::TimeTicks::Now(), request->httpMethod().latin1());
+      ui_timestamp, report_type, GURL(), GURL(),
+      static_cast<LoFiState>(request->getLoFiState()),base::TimeTicks::Now(),
+      request->httpMethod().latin1());
 }
 
-media::Context3D GetSharedMainThreadContext3D() {
-  cc::ContextProvider* provider =
-      RenderThreadImpl::current()->SharedMainThreadContextProvider().get();
+media::Context3D GetSharedMainThreadContext3D(
+    scoped_refptr<ContextProviderCommandBuffer> provider) {
   if (!provider)
     return media::Context3D();
   return media::Context3D(provider->ContextGL(), provider->GrContext());
 }
 
 bool IsReload(FrameMsg_Navigate_Type::Value navigation_type) {
-  return navigation_type == FrameMsg_Navigate_Type::RELOAD ||
-         navigation_type == FrameMsg_Navigate_Type::RELOAD_BYPASSING_CACHE ||
-         navigation_type == FrameMsg_Navigate_Type::RELOAD_ORIGINAL_REQUEST_URL;
+  switch (navigation_type) {
+    case FrameMsg_Navigate_Type::RELOAD:
+    case FrameMsg_Navigate_Type::RELOAD_MAIN_RESOURCE:
+    case FrameMsg_Navigate_Type::RELOAD_BYPASSING_CACHE:
+    case FrameMsg_Navigate_Type::RELOAD_ORIGINAL_REQUEST_URL:
+      return true;
+    case FrameMsg_Navigate_Type::RESTORE:
+    case FrameMsg_Navigate_Type::RESTORE_WITH_POST:
+    case FrameMsg_Navigate_Type::NORMAL:
+      return false;
+  }
+  NOTREACHED();
+  return false;
+}
+
+WebFrameLoadType ReloadFrameLoadTypeFor(
+    FrameMsg_Navigate_Type::Value navigation_type) {
+  switch (navigation_type) {
+    case FrameMsg_Navigate_Type::RELOAD:
+    case FrameMsg_Navigate_Type::RELOAD_ORIGINAL_REQUEST_URL:
+      return WebFrameLoadType::Reload;
+    case FrameMsg_Navigate_Type::RELOAD_MAIN_RESOURCE:
+      return WebFrameLoadType::ReloadMainResource;
+    case FrameMsg_Navigate_Type::RELOAD_BYPASSING_CACHE:
+      return WebFrameLoadType::ReloadBypassingCache;
+    case FrameMsg_Navigate_Type::RESTORE:
+    case FrameMsg_Navigate_Type::RESTORE_WITH_POST:
+    case FrameMsg_Navigate_Type::NORMAL:
+      NOTREACHED();
+      return WebFrameLoadType::Standard;
+  }
+  NOTREACHED();
+  return WebFrameLoadType::Standard;
 }
 
 RenderFrameImpl::CreateRenderFrameImplFunction g_create_render_frame_impl =
     nullptr;
 
-void OnGotInstanceID(mojo::shell::mojom::ConnectResult result,
-                     const std::string& user_id, uint32_t instance_id) {}
+void OnGotInstanceID(shell::mojom::ConnectResult result,
+                     const std::string& user_id,
+                     uint32_t instance_id) {}
 
 WebString ConvertRelativePathToHtmlAttribute(const base::FilePath& path) {
   DCHECK(!path.IsAbsolute());
@@ -717,29 +749,44 @@ class MHTMLPartsGenerationDelegate
   DISALLOW_COPY_AND_ASSIGN(MHTMLPartsGenerationDelegate);
 };
 
+// Returns true if a subresource certificate error (described by |url|
+// and |security_info|) is "interesting" to the browser process. The
+// browser process is interested in certificate errors that differ from
+// certificate errors encountered while loading the main frame's main
+// resource. In other words, it would be confusing to mark a page as
+// having displayed/run insecure content when the whole page has already
+// been marked as insecure for the same reason, so subresources with the
+// same certificate errors as the main resource are not sent to the
+// browser process.
 bool IsContentWithCertificateErrorsRelevantToUI(
+    blink::WebFrame* frame,
     const blink::WebURL& url,
-    const blink::WebCString& security_info,
-    const blink::WebURL& main_resource_url,
-    const blink::WebCString& main_resource_security_info) {
+    const blink::WebCString& security_info) {
+  blink::WebFrame* main_frame = frame->top();
+
+  // If the main frame is remote, then it must be cross-site and
+  // therefore this subresource's certificate errors are potentially
+  // interesting to the browser (not redundant with the main frame's
+  // main resource).
+  if (main_frame->isWebRemoteFrame())
+    return true;
+
+  WebDataSource* main_ds = main_frame->toWebLocalFrame()->dataSource();
   content::SSLStatus ssl_status;
   content::SSLStatus main_resource_ssl_status;
   CHECK(DeserializeSecurityInfo(security_info, &ssl_status));
-  CHECK(DeserializeSecurityInfo(main_resource_security_info,
+  CHECK(DeserializeSecurityInfo(main_ds->response().securityInfo(),
                                 &main_resource_ssl_status));
 
-  if (!GURL(main_resource_url).SchemeIsCryptographic())
-    return false;
-
-  // Do not handle subresource certificate errors if they are the same
+  // Do not send subresource certificate errors if they are the same
   // as errors that occured during the main page load. This compares
   // most, but not all, fields of SSLStatus. For example, this check
   // does not compare |content_status| because the navigation entry
   // might have mixed content but also have the exact same SSL
   // connection properties as the subresource, thereby making the
   // subresource errors duplicative.
-  return (!url::Origin(GURL(url))
-               .IsSameOriginWith(url::Origin(GURL(main_resource_url))) ||
+  return (!url::Origin(GURL(url)).IsSameOriginWith(
+              url::Origin(GURL(main_ds->request().url()))) ||
           main_resource_ssl_status.security_style !=
               ssl_status.security_style ||
           main_resource_ssl_status.cert_id != ssl_status.cert_id ||
@@ -766,6 +813,10 @@ bool UseWebMediaPlayerImpl(const GURL& url) {
       !media::HasPlatformDecoderSupport()) {
     return false;
   }
+
+  // Indicates if the Android MediaPlayer should be used instead of WMPI.
+  if (GetContentClient()->renderer()->ShouldUseMediaPlayerForURL(url))
+    return false;
 
   // Otherwise enable WMPI if indicated via experiment or command line.
   return media::IsUnifiedMediaPipelineEnabled();
@@ -989,7 +1040,6 @@ RenderFrameImpl::RenderFrameImpl(const CreateParams& params)
       in_frame_tree_(false),
       render_view_(params.render_view->AsWeakPtr()),
       routing_id_(params.routing_id),
-      render_frame_proxy_(NULL),
       is_detaching_(false),
       proxy_routing_id_(MSG_ROUTING_NONE),
 #if defined(ENABLE_PLUGINS)
@@ -1015,8 +1065,6 @@ RenderFrameImpl::RenderFrameImpl(const CreateParams& params)
       contains_media_player_(false),
 #endif
       devtools_agent_(nullptr),
-      wakelock_dispatcher_(nullptr),
-      geolocation_dispatcher_(NULL),
       push_messaging_dispatcher_(NULL),
       presentation_dispatcher_(NULL),
       blink_service_registry_(service_registry_.GetWeakPtr()),
@@ -1026,9 +1074,15 @@ RenderFrameImpl::RenderFrameImpl(const CreateParams& params)
       renderer_accessibility_(NULL),
       media_player_delegate_(NULL),
       is_using_lofi_(false),
+      effective_connection_type_(
+          blink::WebEffectiveConnectionType::TypeUnknown),
       is_pasting_(false),
       suppress_further_dialogs_(false),
       blame_context_(nullptr),
+#if defined(ENABLE_PLUGINS)
+      focused_pepper_plugin_(nullptr),
+      pepper_last_mouse_event_target_(nullptr),
+#endif
       weak_factory_(this) {
   std::pair<RoutingIDFrameMap::iterator, bool> result =
       g_routing_id_frame_map.Get().insert(std::make_pair(routing_id_, this));
@@ -1084,6 +1138,13 @@ RenderFrameImpl::~RenderFrameImpl() {
     render_view_->UnregisterVideoHoleFrame(this);
 #endif
 
+  // Unregister from InputHandlerManager. render_thread may be NULL in tests.
+  RenderThreadImpl* render_thread = RenderThreadImpl::current();
+  InputHandlerManager* input_handler_manager =
+      render_thread ? render_thread->input_handler_manager() : nullptr;
+  if (input_handler_manager)
+    input_handler_manager->UnregisterRoutingID(GetRoutingID());
+
   if (is_main_frame_) {
     // Ensure the RenderView doesn't point to this object, once it is destroyed.
     // TODO(nasko): Add a check that the |main_render_frame_| of |render_view_|
@@ -1112,8 +1173,10 @@ void RenderFrameImpl::Initialize() {
 
   RenderFrameImpl* parent_frame = RenderFrameImpl::FromWebFrame(
       frame_->parent());
-  if (parent_frame)
+  if (parent_frame) {
     is_using_lofi_ = parent_frame->IsUsingLoFi();
+    effective_connection_type_ = parent_frame->getEffectiveConnectionType();
+  }
 
   bool is_tracing = false;
   TRACE_EVENT_CATEGORY_GROUP_ENABLED("navigation", &is_tracing);
@@ -1142,6 +1205,15 @@ void RenderFrameImpl::Initialize() {
   // We delay calling this until we have the WebFrame so that any observer or
   // embedder can call GetWebFrame on any RenderFrame.
   GetContentClient()->renderer()->RenderFrameCreated(this);
+
+  RenderThreadImpl* render_thread = RenderThreadImpl::current();
+  // render_thread may be NULL in tests.
+  InputHandlerManager* input_handler_manager =
+      render_thread ? render_thread->input_handler_manager() : nullptr;
+  if (input_handler_manager) {
+    DCHECK(render_view_->HasAddedInputHandler());
+    input_handler_manager->RegisterRoutingID(GetRoutingID());
+  }
 }
 
 void RenderFrameImpl::InitializeBlameContext(RenderFrameImpl* parent_frame) {
@@ -1174,18 +1246,18 @@ void RenderFrameImpl::PepperDidChangeCursor(
   // picked up until the plugin gets the next input event. That is bad if, e.g.,
   // the plugin would like to set an invisible cursor when there isn't any user
   // input for a while.
-  if (instance == render_view_->pepper_last_mouse_event_target())
+  if (instance == pepper_last_mouse_event_target_)
     GetRenderWidget()->didChangeCursor(cursor);
 }
 
 void RenderFrameImpl::PepperDidReceiveMouseEvent(
     PepperPluginInstanceImpl* instance) {
-  render_view_->set_pepper_last_mouse_event_target(instance);
+  set_pepper_last_mouse_event_target(instance);
 }
 
 void RenderFrameImpl::PepperTextInputTypeChanged(
     PepperPluginInstanceImpl* instance) {
-  if (instance != render_view_->focused_pepper_plugin())
+  if (instance != focused_pepper_plugin_)
     return;
 
   GetRenderWidget()->UpdateTextInputState(ShowIme::HIDE_IME,
@@ -1196,14 +1268,14 @@ void RenderFrameImpl::PepperTextInputTypeChanged(
 
 void RenderFrameImpl::PepperCaretPositionChanged(
     PepperPluginInstanceImpl* instance) {
-  if (instance != render_view_->focused_pepper_plugin())
+  if (instance != focused_pepper_plugin_)
     return;
   GetRenderWidget()->UpdateSelectionBounds();
 }
 
 void RenderFrameImpl::PepperCancelComposition(
     PepperPluginInstanceImpl* instance) {
-  if (instance != render_view_->focused_pepper_plugin())
+  if (instance != focused_pepper_plugin_)
     return;
   Send(new InputHostMsg_ImeCancelComposition(render_view_->GetRoutingID()));
 #if defined(OS_MACOSX) || defined(USE_AURA)
@@ -1213,7 +1285,7 @@ void RenderFrameImpl::PepperCancelComposition(
 
 void RenderFrameImpl::PepperSelectionChanged(
     PepperPluginInstanceImpl* instance) {
-  if (instance != render_view_->focused_pepper_plugin())
+  if (instance != focused_pepper_plugin_)
     return;
   SyncSelectionIfRequired();
 }
@@ -1221,20 +1293,19 @@ void RenderFrameImpl::PepperSelectionChanged(
 RenderWidgetFullscreenPepper* RenderFrameImpl::CreatePepperFullscreenContainer(
     PepperPluginInstanceImpl* plugin) {
   GURL active_url;
-  if (render_view_->webview() && render_view_->webview()->mainFrame())
-    active_url = GURL(render_view_->webview()->mainFrame()->document().url());
+  if (render_view_->webview())
+    active_url = render_view()->GetURLForGraphicsContext3D();
   RenderWidgetFullscreenPepper* widget = RenderWidgetFullscreenPepper::Create(
-      GetRenderWidget()->routing_id(), GetRenderWidget()->compositor_deps(),
+      render_view()->routing_id(), GetRenderWidget()->compositor_deps(),
       plugin, active_url, GetRenderWidget()->screenInfo());
   widget->show(blink::WebNavigationPolicyIgnore);
   return widget;
 }
 
 bool RenderFrameImpl::IsPepperAcceptingCompositionEvents() const {
-  if (!render_view_->focused_pepper_plugin())
+  if (!focused_pepper_plugin_)
     return false;
-  return render_view_->focused_pepper_plugin()->
-      IsPluginAcceptingCompositionEvents();
+  return focused_pepper_plugin_->IsPluginAcceptingCompositionEvents();
 }
 
 void RenderFrameImpl::PluginCrashed(const base::FilePath& plugin_path,
@@ -1276,20 +1347,17 @@ void RenderFrameImpl::OnImeSetComposition(
 
     // Empty -> nonempty: composition started.
     if (pepper_composition_text_.empty() && !text.empty()) {
-      render_view_->focused_pepper_plugin()->HandleCompositionStart(
-          base::string16());
+      focused_pepper_plugin_->HandleCompositionStart(base::string16());
     }
     // Nonempty -> empty: composition canceled.
     if (!pepper_composition_text_.empty() && text.empty()) {
-      render_view_->focused_pepper_plugin()->HandleCompositionEnd(
-          base::string16());
+      focused_pepper_plugin_->HandleCompositionEnd(base::string16());
     }
     pepper_composition_text_ = text;
     // Nonempty: composition is ongoing.
     if (!pepper_composition_text_.empty()) {
-      render_view_->focused_pepper_plugin()->HandleCompositionUpdate(
-          pepper_composition_text_, underlines, selection_start,
-          selection_end);
+      focused_pepper_plugin_->HandleCompositionUpdate(
+          pepper_composition_text_, underlines, selection_start, selection_end);
     }
   }
 }
@@ -1333,8 +1401,8 @@ void RenderFrameImpl::OnImeConfirmComposition(
   } else {
     // Mimics the order of events sent by WebKit.
     // See WebCore::Editor::setComposition() for the corresponding code.
-    render_view_->focused_pepper_plugin()->HandleCompositionEnd(last_text);
-    render_view_->focused_pepper_plugin()->HandleTextInput(last_text);
+    focused_pepper_plugin_->HandleCompositionEnd(last_text);
+    focused_pepper_plugin_->HandleTextInput(last_text);
   }
   pepper_composition_text_.clear();
 }
@@ -1423,6 +1491,8 @@ bool RenderFrameImpl::OnMessageReceived(const IPC::Message& msg) {
                         OnExtendSelectionAndDelete)
     IPC_MESSAGE_HANDLER(InputMsg_SetCompositionFromExistingText,
                         OnSetCompositionFromExistingText)
+    IPC_MESSAGE_HANDLER(InputMsg_SetEditableSelectionOffsets,
+                        OnSetEditableSelectionOffsets)
     IPC_MESSAGE_HANDLER(InputMsg_ExecuteNoValueEditCommand,
                         OnExecuteNoValueEditCommand)
     IPC_MESSAGE_HANDLER(FrameMsg_CSSInsertRequest, OnCSSInsertRequest)
@@ -1435,8 +1505,6 @@ bool RenderFrameImpl::OnMessageReceived(const IPC::Message& msg) {
                         OnJavaScriptExecuteRequestInIsolatedWorld)
     IPC_MESSAGE_HANDLER(FrameMsg_VisualStateRequest,
                         OnVisualStateRequest)
-    IPC_MESSAGE_HANDLER(FrameMsg_SetEditableSelectionOffsets,
-                        OnSetEditableSelectionOffsets)
     IPC_MESSAGE_HANDLER(FrameMsg_Reload, OnReload)
     IPC_MESSAGE_HANDLER(FrameMsg_ReloadLoFiImages, OnReloadLoFiImages)
     IPC_MESSAGE_HANDLER(FrameMsg_TextSurroundingSelectionRequest,
@@ -1505,12 +1573,12 @@ void RenderFrameImpl::OnNavigate(
   TRACE_EVENT2("navigation", "RenderFrameImpl::OnNavigate", "id", routing_id_,
                "url", common_params.url.possibly_invalid_spec());
   NavigateInternal(common_params, start_params, request_params,
-                   scoped_ptr<StreamOverrideParameters>());
+                   std::unique_ptr<StreamOverrideParameters>());
 }
 
 void RenderFrameImpl::BindServiceRegistry(
-    mojo::shell::mojom::InterfaceProviderRequest services,
-    mojo::shell::mojom::InterfaceProviderPtr exposed_services) {
+    shell::mojom::InterfaceProviderRequest services,
+    shell::mojom::InterfaceProviderPtr exposed_services) {
   service_registry_.Bind(std::move(services));
   service_registry_.BindRemoteServiceProvider(std::move(exposed_services));
 }
@@ -1520,7 +1588,7 @@ ManifestManager* RenderFrameImpl::manifest_manager() {
 }
 
 void RenderFrameImpl::SetPendingNavigationParams(
-    scoped_ptr<NavigationParams> navigation_params) {
+    std::unique_ptr<NavigationParams> navigation_params) {
   pending_navigation_params_ = std::move(navigation_params);
 }
 
@@ -1561,12 +1629,11 @@ void RenderFrameImpl::OnSwapOut(
   else
     render_view_->SendUpdateState();
 
-  // If we need a proxy to replace this, create it now so its routing id is
-  // registered for receiving IPC messages.
-  if (proxy_routing_id != MSG_ROUTING_NONE) {
-    proxy = RenderFrameProxy::CreateProxyToReplaceFrame(
-        this, proxy_routing_id, replicated_frame_state.scope);
-  }
+  // There should always be a proxy to replace this RenderFrame.  Create it now
+  // so its routing id is registered for receiving IPC messages.
+  CHECK_NE(proxy_routing_id, MSG_ROUTING_NONE);
+  proxy = RenderFrameProxy::CreateProxyToReplaceFrame(
+      this, proxy_routing_id, replicated_frame_state.scope);
 
   // Synchronously run the unload handler before sending the ACK.
   // TODO(creis): Call dispatchUnloadEvent unconditionally here to support
@@ -1578,15 +1645,9 @@ void RenderFrameImpl::OnSwapOut(
   if (is_main_frame_)
     render_view_->SetSwappedOut(true);
 
-  // Set the proxy here, since OnStop() below could cause an onload event
-  // handler to execute, which could trigger code such as
-  // willCheckAndDispatchMessageEvent() that needs the proxy.
-  if (proxy)
-    set_render_frame_proxy(proxy);
-
   // Transfer settings such as initial drawing parameters to the remote frame,
   // if one is created, that will replace this frame.
-  if (!is_main_frame_ && proxy)
+  if (!is_main_frame_)
     proxy->web_frame()->initializeFromFrame(frame_);
 
   // Let WebKit know that this view is hidden so it can drop resources and
@@ -1597,50 +1658,62 @@ void RenderFrameImpl::OnSwapOut(
         blink::WebPageVisibilityStateHidden, false);
   }
 
-  Send(new FrameHostMsg_SwapOut_ACK(routing_id_));
-
   RenderViewImpl* render_view = render_view_.get();
   bool is_main_frame = is_main_frame_;
   int routing_id = GetRoutingID();
 
   // Now that all of the cleanup is complete and the browser side is notified,
-  // start using the RenderFrameProxy, if one is created.
-  if (proxy) {
-    // The swap call deletes this RenderFrame via frameDetached.  Do not access
-    // any members after this call.
-    // TODO(creis): WebFrame::swap() can return false.  Most of those cases
-    // should be due to the frame being detached during unload (in which case
-    // the necessary cleanup has happened anyway), but it might be possible for
-    // it to return false without detaching.  Catch those cases below to track
-    // down https://crbug.com/575245.
-    frame_->swap(proxy->web_frame());
+  // start using the RenderFrameProxy.
+  //
+  // The swap call deletes this RenderFrame via frameDetached.  Do not access
+  // any members after this call.
+  //
+  // TODO(creis): WebFrame::swap() can return false.  Most of those cases
+  // should be due to the frame being detached during unload (in which case
+  // the necessary cleanup has happened anyway), but it might be possible for
+  // it to return false without detaching.  Catch any cases that the
+  // RenderView's main_render_frame_ isn't cleared below (whether swap returns
+  // false or not), to track down https://crbug.com/575245.
+  bool success = frame_->swap(proxy->web_frame());
 
-    // For main frames, the swap should have cleared the RenderView's pointer to
-    // this frame.
-    if (is_main_frame) {
-      base::debug::SetCrashKeyValue("swapout_frame_id",
-                                    base::IntToString(routing_id));
-      base::debug::SetCrashKeyValue("swapout_proxy_id",
-                                    base::IntToString(proxy->routing_id()));
-      base::debug::SetCrashKeyValue(
-          "swapout_view_id", base::IntToString(render_view->GetRoutingID()));
-      CHECK(!render_view->main_render_frame_);
-    }
-
-    if (is_loading)
-      proxy->OnDidStartLoading();
+  // For main frames, the swap should have cleared the RenderView's pointer to
+  // this frame.
+  if (is_main_frame) {
+    base::debug::SetCrashKeyValue("swapout_frame_id",
+                                  base::IntToString(routing_id));
+    base::debug::SetCrashKeyValue("swapout_proxy_id",
+                                  base::IntToString(proxy->routing_id()));
+    base::debug::SetCrashKeyValue(
+        "swapout_view_id", base::IntToString(render_view->GetRoutingID()));
+    CHECK(!render_view->main_render_frame_);
   }
+
+  if (!success) {
+    // The swap can fail when the frame is detached during swap (this can
+    // happen while running the unload handlers). When that happens, delete
+    // the proxy.
+    // TODO(lfg): Handle the case where a navigation started during swap.
+    // See https://crbug.com/590054 for more details.
+    proxy->frameDetached(blink::WebRemoteFrameClient::DetachType::Swap);
+    return;
+  }
+
+  if (is_loading)
+    proxy->OnDidStartLoading();
 
   // Initialize the WebRemoteFrame with the replication state passed by the
   // process that is now rendering the frame.
-  if (proxy)
-    proxy->SetReplicatedState(replicated_frame_state);
+  proxy->SetReplicatedState(replicated_frame_state);
 
   // Safe to exit if no one else is using the process.
   // TODO(nasko): Remove the dependency on RenderViewImpl here and ref count
   // the process based on the lifetime of this RenderFrameImpl object.
   if (is_main_frame)
     render_view->WasSwappedOut();
+
+  // Notify the browser that this frame was swapped. Use the RenderThread
+  // directly because |this| is deleted.
+  RenderThread::Get()->Send(new FrameHostMsg_SwapOut_ACK(routing_id));
 }
 
 void RenderFrameImpl::OnDeleteFrame() {
@@ -1667,9 +1740,7 @@ void RenderFrameImpl::OnContextMenuClosed(
     }
   } else {
     if (custom_context.link_followed.is_valid())
-        frame_->sendPings(context_menu_node_, custom_context.link_followed);
-    // Internal request, forward to WebKit.
-    context_menu_node_.reset();
+      frame_->sendPings(custom_context.link_followed);
   }
 
   render_view()->webview()->didCloseContextMenu();
@@ -1691,35 +1762,32 @@ void RenderFrameImpl::OnCustomContextMenuAction(
 }
 
 void RenderFrameImpl::OnUndo() {
-  frame_->executeCommand(WebString::fromUTF8("Undo"), GetFocusedElement());
+  frame_->executeCommand(WebString::fromUTF8("Undo"));
 }
 
 void RenderFrameImpl::OnRedo() {
-  frame_->executeCommand(WebString::fromUTF8("Redo"), GetFocusedElement());
+  frame_->executeCommand(WebString::fromUTF8("Redo"));
 }
 
 void RenderFrameImpl::OnCut() {
   base::AutoReset<bool> handling_select_range(&handling_select_range_, true);
-  frame_->executeCommand(WebString::fromUTF8("Cut"), GetFocusedElement());
+  frame_->executeCommand(WebString::fromUTF8("Cut"));
 }
 
 void RenderFrameImpl::OnCopy() {
   base::AutoReset<bool> handling_select_range(&handling_select_range_, true);
-  WebNode current_node = context_menu_node_.isNull() ?
-      GetFocusedElement() : context_menu_node_;
-  frame_->executeCommand(WebString::fromUTF8("Copy"), current_node);
+  frame_->executeCommand(WebString::fromUTF8("Copy"));
 }
 
 void RenderFrameImpl::OnPaste() {
   base::AutoReset<bool> handling_select_range(&handling_select_range_, true);
   base::AutoReset<bool> handling_paste(&is_pasting_, true);
-  frame_->executeCommand(WebString::fromUTF8("Paste"), GetFocusedElement());
+  frame_->executeCommand(WebString::fromUTF8("Paste"));
 }
 
 void RenderFrameImpl::OnPasteAndMatchStyle() {
   base::AutoReset<bool> handling_select_range(&handling_select_range_, true);
-  frame_->executeCommand(
-      WebString::fromUTF8("PasteAndMatchStyle"), GetFocusedElement());
+  frame_->executeCommand(WebString::fromUTF8("PasteAndMatchStyle"));
 }
 
 #if defined(OS_MACOSX)
@@ -1735,12 +1803,12 @@ void RenderFrameImpl::OnCopyToFindPboard() {
 #endif
 
 void RenderFrameImpl::OnDelete() {
-  frame_->executeCommand(WebString::fromUTF8("Delete"), GetFocusedElement());
+  frame_->executeCommand(WebString::fromUTF8("Delete"));
 }
 
 void RenderFrameImpl::OnSelectAll() {
   base::AutoReset<bool> handling_select_range(&handling_select_range_, true);
-  frame_->executeCommand(WebString::fromUTF8("SelectAll"), GetFocusedElement());
+  frame_->executeCommand(WebString::fromUTF8("SelectAll"));
 }
 
 void RenderFrameImpl::OnSelectRange(const gfx::Point& base,
@@ -1779,7 +1847,7 @@ void RenderFrameImpl::OnAdjustSelectionByCharacterOffset(int start_adjust,
 
 void RenderFrameImpl::OnUnselect() {
   base::AutoReset<bool> handling_select_range(&handling_select_range_, true);
-  frame_->executeCommand(WebString::fromUTF8("Unselect"), GetFocusedElement());
+  frame_->executeCommand(WebString::fromUTF8("Unselect"));
 }
 
 void RenderFrameImpl::OnMoveRangeSelectionExtent(const gfx::Point& point) {
@@ -1840,7 +1908,7 @@ void RenderFrameImpl::OnJavaScriptExecuteRequestForTests(
 
   // A bunch of tests expect to run code in the context of a user gesture, which
   // can grant additional privileges (e.g. the ability to create popups).
-  scoped_ptr<blink::WebScopedUserGesture> gesture(
+  std::unique_ptr<blink::WebScopedUserGesture> gesture(
       has_user_gesture ? new blink::WebScopedUserGesture : nullptr);
   v8::HandleScope handle_scope(blink::mainThreadIsolate());
   v8::Local<v8::Value> result =
@@ -1909,7 +1977,7 @@ void RenderFrameImpl::JavaScriptIsolatedWorldRequest::completed(
       converter.SetDateAllowed(true);
       converter.SetRegExpAllowed(true);
       for (const auto& value : result) {
-        scoped_ptr<base::Value> result_value(
+        std::unique_ptr<base::Value> result_value(
             converter.FromV8Value(value, context));
         list.Append(result_value ? std::move(result_value)
                                  : base::Value::CreateNullValue());
@@ -1937,7 +2005,7 @@ void RenderFrameImpl::HandleJavascriptExecutionResult(
       V8ValueConverterImpl converter;
       converter.SetDateAllowed(true);
       converter.SetRegExpAllowed(true);
-      scoped_ptr<base::Value> result_value(
+      std::unique_ptr<base::Value> result_value(
           converter.FromV8Value(result, context));
       list.Set(0, result_value ? std::move(result_value)
                                : base::Value::CreateNullValue());
@@ -1972,7 +2040,7 @@ void RenderFrameImpl::OnSetCompositionFromExistingText(
 }
 
 void RenderFrameImpl::OnExecuteNoValueEditCommand(const std::string& name) {
-  frame_->executeCommand(WebString::fromUTF8(name), GetFocusedElement());
+  frame_->executeCommand(WebString::fromUTF8(name));
 }
 
 void RenderFrameImpl::OnExtendSelectionAndDelete(int before, int after) {
@@ -2096,7 +2164,7 @@ void RenderFrameImpl::OnPostMessageEvent(
     V8ValueConverterImpl converter;
     converter.SetDateAllowed(true);
     converter.SetRegExpAllowed(true);
-    scoped_ptr<base::Value> value(new base::StringValue(params.data));
+    std::unique_ptr<base::Value> value(new base::StringValue(params.data));
     v8::Local<v8::Value> result_value = converter.ToV8Value(value.get(),
                                                              context);
     serialized_script_value = WebSerializedScriptValue::serialize(result_value);
@@ -2150,18 +2218,6 @@ void RenderFrameImpl::OnTextSurroundingSelectionRequest(uint32_t max_length) {
       surroundingText.endOffsetInTextContent()));
 }
 
-bool RenderFrameImpl::SendAndRunNestedMessageLoop(IPC::SyncMessage* message) {
-  // Before Blink asks us to show an alert (etc.), it takes care of doing the
-  // equivalent of WebView::willEnterModalLoop.  In this case it is particularly
-  // important that we do not call willEnterModalLoop as that would defer
-  // resource loads for the dialog itself.
-  if (RenderThreadImpl::current())  // Will be NULL during unit tests.
-    RenderThreadImpl::current()->DoNotNotifyWebKitOfModalLoop();
-
-  message->EnableMessagePumping();  // Runs a nested message loop.
-  return Send(message);
-}
-
 bool RenderFrameImpl::RunJavaScriptMessage(JavaScriptMessageType type,
                                            const base::string16& message,
                                            const base::string16& default_value,
@@ -2177,7 +2233,7 @@ bool RenderFrameImpl::RunJavaScriptMessage(JavaScriptMessageType type,
   if (!result)
     result = &result_temp;
 
-  SendAndRunNestedMessageLoop(new FrameHostMsg_RunJavaScriptMessage(
+  Send(new FrameHostMsg_RunJavaScriptMessage(
       routing_id_, message, default_value, frame_url, type, &success, result));
   return success;
 }
@@ -2209,6 +2265,19 @@ void RenderFrameImpl::DidCommitCompositorFrame() {
       RenderFrameObserver, observers_, DidCommitCompositorFrame());
 }
 
+void RenderFrameImpl::DidCommitAndDrawCompositorFrame() {
+#if defined(ENABLE_PLUGINS)
+  // Notify all instances that we painted.  The same caveats apply as for
+  // ViewFlushedPaint regarding instances closing themselves, so we take
+  // similar precautions.
+  PepperPluginSet plugins = active_pepper_instances_;
+  for (auto* plugin : plugins) {
+    if (active_pepper_instances_.find(plugin) != active_pepper_instances_.end())
+      plugin->ViewInitiatedPaint();
+  }
+#endif
+}
+
 RenderView* RenderFrameImpl::GetRenderView() {
   return render_view_.get();
 }
@@ -2220,14 +2289,6 @@ int RenderFrameImpl::GetRoutingID() {
 blink::WebLocalFrame* RenderFrameImpl::GetWebFrame() {
   DCHECK(frame_);
   return frame_;
-}
-
-WebElement RenderFrameImpl::GetFocusedElement() const {
-  WebDocument doc = frame_->document();
-  if (!doc.isNull())
-    return doc.focusedElement();
-
-  return WebElement();
 }
 
 WebPreferences& RenderFrameImpl::GetWebkitPreferences() {
@@ -2254,15 +2315,11 @@ void RenderFrameImpl::CancelContextMenu(int request_id) {
   pending_context_menus_.Remove(request_id);
 }
 
-blink::WebNode RenderFrameImpl::GetContextMenuNode() const {
-  return context_menu_node_;
-}
-
 blink::WebPlugin* RenderFrameImpl::CreatePlugin(
     blink::WebFrame* frame,
     const WebPluginInfo& info,
     const blink::WebPluginParams& params,
-    scoped_ptr<content::PluginInstanceThrottler> throttler) {
+    std::unique_ptr<content::PluginInstanceThrottler> throttler) {
   DCHECK_EQ(frame_, frame);
 #if defined(ENABLE_PLUGINS)
   if (info.type == WebPluginInfo::PLUGIN_TYPE_BROWSER_PLUGIN) {
@@ -2281,7 +2338,7 @@ blink::WebPlugin* RenderFrameImpl::CreatePlugin(
     if (pepper_module.get()) {
       return new PepperWebPluginImpl(
           pepper_module.get(), params, this,
-          make_scoped_ptr(
+          base::WrapUnique(
               static_cast<PluginInstanceThrottlerImpl*>(throttler.release())));
     }
   }
@@ -2377,8 +2434,25 @@ void RenderFrameImpl::EnsureMojoBuiltinsAreAvailable(
 
 void RenderFrameImpl::AddMessageToConsole(ConsoleMessageLevel level,
                                           const std::string& message) {
-  if (devtools_agent_)
-    devtools_agent_->AddMessageToConsole(level, message);
+  blink::WebConsoleMessage::Level target_level =
+      blink::WebConsoleMessage::LevelLog;
+  switch (level) {
+    case CONSOLE_MESSAGE_LEVEL_DEBUG:
+      target_level = blink::WebConsoleMessage::LevelDebug;
+      break;
+    case CONSOLE_MESSAGE_LEVEL_LOG:
+      target_level = blink::WebConsoleMessage::LevelLog;
+      break;
+    case CONSOLE_MESSAGE_LEVEL_WARNING:
+      target_level = blink::WebConsoleMessage::LevelWarning;
+      break;
+    case CONSOLE_MESSAGE_LEVEL_ERROR:
+      target_level = blink::WebConsoleMessage::LevelError;
+      break;
+  }
+
+  blink::WebConsoleMessage wcm(target_level, WebString::fromUTF8(message));
+  frame_->addMessageToConsole(wcm);
 }
 
 bool RenderFrameImpl::IsUsingLoFi() const {
@@ -2433,7 +2507,7 @@ blink::WebPlugin* RenderFrameImpl::createPlugin(
 }
 
 blink::WebMediaPlayer* RenderFrameImpl::createMediaPlayer(
-    const blink::WebURL& url,
+    const blink::WebMediaPlayerSource& source,
     WebMediaPlayerClient* client,
     WebMediaPlayerEncryptedMediaClient* encrypted_client,
     WebContentDecryptionModule* initial_cdm,
@@ -2445,12 +2519,16 @@ blink::WebMediaPlayer* RenderFrameImpl::createMediaPlayer(
     contains_media_player_ = true;
   }
 #endif  // defined(VIDEO_HOLE)
-
-  blink::WebMediaStream web_stream(
-      blink::WebMediaStreamRegistry::lookupMediaStreamDescriptor(url));
+  blink::WebMediaStream web_stream =
+      GetWebMediaStreamFromWebMediaPlayerSource(source);
   if (!web_stream.isNull())
     return CreateWebMediaPlayerForMediaStream(client, sink_id,
                                               frame_->getSecurityOrigin());
+
+  // If |source| was not a MediaStream, it must be a URL.
+  // TODO(guidou): Fix this when support for other srcObject types is added.
+  DCHECK(source.isURL());
+  blink::WebURL url = source.getAsURL();
 
   RenderThreadImpl* render_thread = RenderThreadImpl::current();
 
@@ -2458,12 +2536,18 @@ blink::WebMediaPlayer* RenderFrameImpl::createMediaPlayer(
       AudioDeviceFactory::NewSwitchableAudioRendererSink(
           AudioDeviceFactory::kSourceMediaElement, routing_id_, 0,
           sink_id.utf8(), frame_->getSecurityOrigin());
-  media::WebMediaPlayerParams::Context3DCB context_3d_cb =
-      base::Bind(&GetSharedMainThreadContext3D);
+  // We need to keep a reference to the context provider (see crbug.com/610527)
+  // but media/ can't depend on cc/, so for now, just keep a reference in the
+  // callback.
+  // TODO(piman): replace media::Context3D to scoped_refptr<ContextProvider> in
+  // media/ once ContextProvider is in gpu/.
+  media::WebMediaPlayerParams::Context3DCB context_3d_cb = base::Bind(
+      &GetSharedMainThreadContext3D,
+      RenderThreadImpl::current()->SharedMainThreadContextProvider());
 
   scoped_refptr<media::MediaLog> media_log(new RenderMediaLog());
 #if defined(OS_ANDROID)
-  if (!media_surface_manager_)
+  if (UseWebMediaPlayerImpl(url) && !media_surface_manager_)
     media_surface_manager_ = new RendererSurfaceViewManager(this);
 #endif
   media::WebMediaPlayerParams params(
@@ -2483,17 +2567,19 @@ blink::WebMediaPlayer* RenderFrameImpl::createMediaPlayer(
       initial_cdm, media_surface_manager_, media_session);
 
 #if defined(OS_ANDROID)
-  if (GetContentClient()->renderer()->ShouldUseMediaPlayerForURL(url) ||
-      !UseWebMediaPlayerImpl(url)) {
+  if (!UseWebMediaPlayerImpl(url)) {
     return CreateAndroidWebMediaPlayer(client, encrypted_client, params);
   }
 #endif  // defined(OS_ANDROID)
 
 #if defined(ENABLE_MOJO_RENDERER)
-  scoped_ptr<media::RendererFactory> media_renderer_factory(
-      new media::MojoRendererFactory(GetMediaInterfaceProvider()));
+  std::unique_ptr<media::RendererFactory> media_renderer_factory(
+      new media::MojoRendererFactory(
+          base::Bind(&RenderThreadImpl::GetGpuFactories,
+                     base::Unretained(render_thread)),
+          GetMediaInterfaceProvider()));
 #else
-  scoped_ptr<media::RendererFactory> media_renderer_factory =
+  std::unique_ptr<media::RendererFactory> media_renderer_factory =
       GetContentClient()->renderer()->CreateMediaRendererFactory(
           this, render_thread->GetGpuFactories(), media_log);
 
@@ -2601,6 +2687,9 @@ RenderFrameImpl::createServiceWorkerProvider() {
 }
 
 void RenderFrameImpl::didAccessInitialDocument() {
+  // NOTE: Do not call back into JavaScript here, since this call is made from a
+  // V8 security check.
+
   // If the request hasn't yet committed, notify the browser process that it is
   // no longer safe to show the pending URL of the main frame, since a URL spoof
   // is now possible. (If the request has committed, the browser already knows.)
@@ -2777,6 +2866,20 @@ void RenderFrameImpl::didChangeSandboxFlags(blink::WebFrame* child_frame,
       routing_id_, GetRoutingIdForFrameOrProxy(child_frame), flags));
 }
 
+void RenderFrameImpl::didAddContentSecurityPolicy(
+    const blink::WebString& header_value,
+    blink::WebContentSecurityPolicyType type,
+    blink::WebContentSecurityPolicySource source) {
+  if (!SiteIsolationPolicy::AreCrossProcessFramesPossible())
+    return;
+
+  ContentSecurityPolicyHeader header;
+  header.header_value = base::UTF16ToUTF8(base::StringPiece16(header_value));
+  header.type = type;
+  header.source = source;
+  Send(new FrameHostMsg_DidAddContentSecurityPolicy(routing_id_, header));
+}
+
 void RenderFrameImpl::didChangeFrameOwnerProperties(
     blink::WebFrame* child_frame,
     const blink::WebFrameOwnerProperties& frame_owner_properties) {
@@ -2930,7 +3033,8 @@ void RenderFrameImpl::didCreateDataSource(blink::WebLocalFrame* frame,
 
   // The rest of RenderView assumes that a WebDataSource will always have a
   // non-null NavigationState.
-  UpdateNavigationState(document_state, false /* was_within_same_page */);
+  UpdateNavigationState(document_state, false /* was_within_same_page */,
+                        content_initiated);
 
   // DocumentState::referred_by_prefetcher_ is true if we are
   // navigating from a page that used prefetching using a link on that
@@ -3001,8 +3105,8 @@ void RenderFrameImpl::didCreateDataSource(blink::WebLocalFrame* frame,
   ServiceWorkerNetworkProvider::AttachToDocumentState(
       DocumentState::FromDataSource(datasource),
       ServiceWorkerNetworkProvider::CreateForNavigation(
-          routing_id_, navigation_state->request_params(),
-          frame->effectiveSandboxFlags(), content_initiated));
+          routing_id_, navigation_state->request_params(), frame,
+          content_initiated));
 }
 
 void RenderFrameImpl::didStartProvisionalLoad(blink::WebLocalFrame* frame,
@@ -3135,10 +3239,16 @@ void RenderFrameImpl::didCommitProvisionalLoad(
       static_cast<NavigationStateImpl*>(document_state->navigation_state());
   WebURLResponseExtraDataImpl* extra_data =
       GetExtraDataFromResponse(frame->dataSource()->response());
-  // Only update LoFi state for new main frame documents. Subframes inherit from
-  // the main frame and should not change at commit time.
+  // Only update the Lo-Fi and effective connection type states for new main
+  // frame documents. Subframes inherit from the main frame and should not
+  // change at commit time.
   if (is_main_frame_ && !navigation_state->WasWithinSamePage()) {
     is_using_lofi_ = extra_data && extra_data->is_using_lofi();
+    if (extra_data) {
+      effective_connection_type_ =
+          EffectiveConnectionTypeToWebEffectiveConnectionType(
+              extra_data->effective_connection_type());
+    }
   }
 
   if (proxy_routing_id_ != MSG_ROUTING_NONE) {
@@ -3196,12 +3306,14 @@ void RenderFrameImpl::didCommitProvisionalLoad(
   // before updating the current history item.
   if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
     SendUpdateState();
-    current_history_item_ = item;
   } else {
     render_view_->SendUpdateState();
     render_view_->history_controller()->UpdateForCommit(
         this, item, commit_type, navigation_state->WasWithinSamePage());
   }
+  // Update the current history item for this frame (both in default Chrome and
+  // subframe FrameNavigationEntry modes).
+  current_history_item_ = item;
 
   InternalDocumentStateData* internal_data =
       InternalDocumentStateData::FromDocumentState(document_state);
@@ -3214,8 +3326,18 @@ void RenderFrameImpl::didCommitProvisionalLoad(
     internal_data->set_must_reset_scroll_and_scale_state(false);
   }
 
+  const RequestNavigationParams& request_params =
+      navigation_state->request_params();
   bool is_new_navigation = commit_type == blink::WebStandardCommit;
-  if (is_new_navigation) {
+
+  // Ensure that we allocate a page ID if this is the first navigation for the
+  // page in this process.  This can happen even when is_new_navigation
+  // is false, such as after a cross-process location.replace navigation.
+  bool should_init_page_id = render_view_->page_id_ == -1 &&
+                             request_params.page_id == -1 &&
+                             request_params.nav_entry_id != 0 &&
+                             !navigation_state->IsContentInitiated();
+  if (is_new_navigation || should_init_page_id) {
     // We bump our Page ID to correspond with the new session history entry.
     render_view_->page_id_ = render_view_->next_page_id_++;
 
@@ -3231,8 +3353,6 @@ void RenderFrameImpl::didCommitProvisionalLoad(
           render_view_->history_list_offset_ + 1;
     }
   } else {
-    const RequestNavigationParams& request_params =
-        navigation_state->request_params();
     if (request_params.nav_entry_id != 0 &&
         !request_params.intended_as_new_entry) {
       // This is a successful session history navigation!
@@ -3523,22 +3643,18 @@ void RenderFrameImpl::didFinishLoad(blink::WebLocalFrame* frame) {
                                       ds->request().url()));
 }
 
-void RenderFrameImpl::didNavigateWithinPage(blink::WebLocalFrame* frame,
+void RenderFrameImpl::didNavigateWithinPage(
+    blink::WebLocalFrame* frame,
     const blink::WebHistoryItem& item,
-    blink::WebHistoryCommitType commit_type) {
+    blink::WebHistoryCommitType commit_type,
+    bool content_initiated) {
   TRACE_EVENT1("navigation", "RenderFrameImpl::didNavigateWithinPage",
                "id", routing_id_);
   DCHECK_EQ(frame_, frame);
-  // If this was a reference fragment navigation that we initiated, then we
-  // could end up having a non-null pending navigation params.  We just need to
-  // update the ExtraData on the datasource so that others who read the
-  // ExtraData will get the new NavigationState.  Similarly, if we did not
-  // initiate this navigation, then we need to take care to reset any pre-
-  // existing navigation state to a content-initiated navigation state.
-  // UpdateNavigationState conveniently takes care of this for us.
   DocumentState* document_state =
       DocumentState::FromDataSource(frame->dataSource());
-  UpdateNavigationState(document_state, true /* was_within_same_page */);
+  UpdateNavigationState(document_state, true /* was_within_same_page */,
+                        content_initiated);
   static_cast<NavigationStateImpl*>(document_state->navigation_state())
       ->set_was_within_same_page(true);
 
@@ -3559,6 +3675,11 @@ void RenderFrameImpl::didChangeThemeColor() {
 
 void RenderFrameImpl::dispatchLoad() {
   Send(new FrameHostMsg_DispatchLoad(routing_id_));
+}
+
+blink::WebEffectiveConnectionType
+RenderFrameImpl::getEffectiveConnectionType() {
+  return effective_connection_type_;
 }
 
 void RenderFrameImpl::requestNotificationPermission(
@@ -3645,7 +3766,7 @@ bool RenderFrameImpl::runModalBeforeUnloadDialog(bool is_reload) {
   // This is an ignored return value, but is included so we can accept the same
   // response as RunJavaScriptMessage.
   base::string16 ignored_result;
-  SendAndRunNestedMessageLoop(new FrameHostMsg_RunBeforeUnloadConfirm(
+  Send(new FrameHostMsg_RunBeforeUnloadConfirm(
       routing_id_, frame_->document().url(), is_reload, &success,
       &ignored_result));
   return success;
@@ -3672,7 +3793,6 @@ void RenderFrameImpl::showContextMenu(const blink::WebContextMenuData& data) {
   //                 data encoded images.  We should have a way to save them.
   if (params.src_url.spec().size() > url::kMaxURLChars)
     params.src_url = GURL();
-  context_menu_node_ = data.node;
 
 #if defined(OS_ANDROID)
   gfx::Rect start_rect;
@@ -3683,10 +3803,6 @@ void RenderFrameImpl::showContextMenu(const blink::WebContextMenuData& data) {
 #endif
 
   Send(new FrameHostMsg_ContextMenu(routing_id_, params));
-}
-
-void RenderFrameImpl::clearContextMenu() {
-  context_menu_node_.reset();
 }
 
 void RenderFrameImpl::willSendRequest(
@@ -3758,7 +3874,7 @@ void RenderFrameImpl::willSendRequest(
   // PlzNavigate: there may also be a stream url associated with the request.
   WebString custom_user_agent;
   WebString requested_with;
-  scoped_ptr<StreamOverrideParameters> stream_override;
+  std::unique_ptr<StreamOverrideParameters> stream_override;
   if (request.getExtraData()) {
     RequestExtraData* old_extra_data =
         static_cast<RequestExtraData*>(request.getExtraData());
@@ -3837,13 +3953,17 @@ void RenderFrameImpl::willSendRequest(
       navigation_state->start_params().transferred_request_request_id);
   extra_data->set_service_worker_provider_id(provider_id);
   extra_data->set_stream_override(std::move(stream_override));
-  if (request.getLoFiState() != WebURLRequest::LoFiUnspecified)
-    extra_data->set_lofi_state(static_cast<LoFiState>(request.getLoFiState()));
-  else if (is_main_frame_ && !navigation_state->request_committed())
-    extra_data->set_lofi_state(navigation_state->common_params().lofi_state);
-  else
-    extra_data->set_lofi_state(is_using_lofi_ ? LOFI_ON : LOFI_OFF);
   request.setExtraData(extra_data);
+
+  if (request.getLoFiState() == WebURLRequest::LoFiUnspecified) {
+    if (is_main_frame_ && !navigation_state->request_committed()) {
+      request.setLoFiState(static_cast<WebURLRequest::LoFiState>(
+          navigation_state->common_params().lofi_state));
+    } else {
+      request.setLoFiState(
+          is_using_lofi_ ? WebURLRequest::LoFiOn : WebURLRequest::LoFiOff);
+    }
+  }
 
   // TODO(creis): Update prefetching to work with out-of-process iframes.
   WebFrame* top_frame = frame->top();
@@ -3963,28 +4083,20 @@ void RenderFrameImpl::didRunInsecureContent(
 
 void RenderFrameImpl::didDisplayContentWithCertificateErrors(
     const blink::WebURL& url,
-    const blink::WebCString& security_info,
-    const blink::WebURL& main_resource_url,
-    const blink::WebCString& main_resource_security_info) {
-  if (!IsContentWithCertificateErrorsRelevantToUI(
-          url, security_info, main_resource_url, main_resource_security_info)) {
-    return;
+    const blink::WebCString& security_info) {
+  if (IsContentWithCertificateErrorsRelevantToUI(frame_, url, security_info)) {
+    Send(new FrameHostMsg_DidDisplayContentWithCertificateErrors(
+        routing_id_, url, security_info));
   }
-  Send(new FrameHostMsg_DidDisplayContentWithCertificateErrors(routing_id_, url,
-                                                               security_info));
 }
 
 void RenderFrameImpl::didRunContentWithCertificateErrors(
     const blink::WebURL& url,
-    const blink::WebCString& security_info,
-    const blink::WebURL& main_resource_url,
-    const blink::WebCString& main_resource_security_info) {
-  if (!IsContentWithCertificateErrorsRelevantToUI(
-          url, security_info, main_resource_url, main_resource_security_info)) {
-    return;
+    const blink::WebCString& security_info) {
+  if (IsContentWithCertificateErrorsRelevantToUI(frame_, url, security_info)) {
+    Send(new FrameHostMsg_DidRunContentWithCertificateErrors(routing_id_, url,
+                                                             security_info));
   }
-  Send(new FrameHostMsg_DidRunContentWithCertificateErrors(
-      routing_id_, GURL(main_resource_url).GetOrigin(), url, security_info));
 }
 
 void RenderFrameImpl::didChangePerformanceTiming() {
@@ -4076,18 +4188,6 @@ void RenderFrameImpl::willOpenWebSocket(blink::WebSocketHandle* handle) {
   impl->set_render_frame_id(routing_id_);
 }
 
-blink::WebWakeLockClient* RenderFrameImpl::wakeLockClient() {
-  if (!wakelock_dispatcher_)
-    wakelock_dispatcher_ = new WakeLockDispatcher(this);
-  return wakelock_dispatcher_;
-}
-
-blink::WebGeolocationClient* RenderFrameImpl::geolocationClient() {
-  if (!geolocation_dispatcher_)
-    geolocation_dispatcher_ = new GeolocationDispatcher(this);
-  return geolocation_dispatcher_;
-}
-
 blink::WebPresentationClient* RenderFrameImpl::presentationClient() {
   if (!presentation_dispatcher_)
     presentation_dispatcher_ = new PresentationDispatcher(this);
@@ -4130,34 +4230,6 @@ blink::WebMIDIClient* RenderFrameImpl::webMIDIClient() {
   if (!midi_dispatcher_)
     midi_dispatcher_ = new MidiDispatcher(this);
   return midi_dispatcher_;
-}
-
-bool RenderFrameImpl::willCheckAndDispatchMessageEvent(
-    blink::WebLocalFrame* source_frame,
-    blink::WebFrame* target_frame,
-    blink::WebSecurityOrigin target_origin,
-    blink::WebDOMMessageEvent event) {
-  DCHECK(!frame_ || frame_ == target_frame);
-
-  // TODO(alexmos, nasko): When swapped-out:// disappears, this should be
-  // cleaned up so that RenderFrameProxy::postMessageEvent is the only path for
-  // cross-process postMessages.
-
-  // It is possible to get here on a swapped-out frame without a
-  // |render_frame_proxy_|. This happens when:
-  // - This process only has one active RenderView and is about to go away
-  //   (e.g., due to cross-process navigation).
-  // - The top frame has a subframe with an unload handler.
-  // - The subframe sends a postMessage to the top-level frame in its unload
-  //   handler.
-  // See https://crbug.com/475651 for details.  We return false here, since we
-  // don't want to deliver the message to the new process in this case.
-  if (!render_frame_proxy_)
-    return false;
-
-  render_frame_proxy_->postMessageEvent(
-      source_frame, render_frame_proxy_->web_frame(), target_origin, event);
-  return true;
 }
 
 blink::WebString RenderFrameImpl::userAgentOverride() {
@@ -4312,25 +4384,6 @@ blink::WebBluetooth* RenderFrameImpl::bluetooth() {
   return bluetooth_.get();
 }
 
-blink::WebUSBClient* RenderFrameImpl::usbClient() {
-  if (!base::FeatureList::IsEnabled(features::kWebUsb))
-    return nullptr;
-
-  if (!usb_client_)
-    usb_client_.reset(new WebUSBClientImpl(GetServiceRegistry()));
-
-  return usb_client_.get();
-}
-
-#if defined(ENABLE_WEBVR)
-blink::WebVRClient* RenderFrameImpl::webVRClient() {
-  if (!vr_dispatcher_)
-    vr_dispatcher_.reset(new VRDispatcher(GetServiceRegistry()));
-
-  return vr_dispatcher_.get();
-}
-#endif
-
 void RenderFrameImpl::didSerializeDataForFrame(
     const WebCString& data,
     WebFrameSerializerClient::FrameSerializationStatus status) {
@@ -4359,6 +4412,11 @@ void RenderFrameImpl::OnStop() {
 
 void RenderFrameImpl::WasHidden() {
   FOR_EACH_OBSERVER(RenderFrameObserver, observers_, WasHidden());
+
+#if defined(ENABLE_PLUGINS)
+  for (auto* plugin : active_pepper_instances_)
+    plugin->PageVisibilityChanged(false);
+#endif  // ENABLE_PLUGINS
 }
 
 void RenderFrameImpl::WasShown() {
@@ -4375,6 +4433,11 @@ void RenderFrameImpl::WasShown() {
         setVisibilityState(blink::WebPageVisibilityStateVisible, false);
   }
   FOR_EACH_OBSERVER(RenderFrameObserver, observers_, WasShown());
+
+#if defined(ENABLE_PLUGINS)
+  for (auto* plugin : active_pepper_instances_)
+    plugin->PageVisibilityChanged(true);
+#endif  // ENABLE_PLUGINS
 }
 
 void RenderFrameImpl::WidgetWillClose() {
@@ -4390,10 +4453,10 @@ bool RenderFrameImpl::IsHidden() {
 }
 
 bool RenderFrameImpl::IsLocalRoot() const {
-  bool is_local_root = render_widget_ != nullptr;
+  bool is_local_root = static_cast<bool>(render_widget_);
   DCHECK_EQ(is_local_root,
             !(frame_->parent() && frame_->parent()->isWebLocalFrame()));
-  return render_widget_ != nullptr;
+  return is_local_root;
 }
 
 // Tell the embedding application that the URL of the active page has changed.
@@ -4417,7 +4480,7 @@ void RenderFrameImpl::SendDidCommitProvisionalLoad(
   FrameHostMsg_DidCommitProvisionalLoad_Params params;
   params.http_status_code = response.httpStatusCode();
   params.url_is_unreachable = ds->hasUnreachableURL();
-  params.is_post = false;
+  params.method = "GET";
   params.intended_as_new_entry =
       navigation_state->request_params().intended_as_new_entry;
   params.did_create_new_entry = commit_type == blink::WebStandardCommit;
@@ -4485,6 +4548,15 @@ void RenderFrameImpl::SendDidCommitProvisionalLoad(
     params.page_state = SingleHistoryItemToPageState(item);
     post_id = ExtractPostId(item);
   }
+
+  // When using subframe navigation entries, method and post id are set for all
+  // frames. Otherwise, they are only set for the main frame navigation.
+  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
+    params.method = request.httpMethod().latin1();
+    if (params.method == "POST")
+      params.post_id = post_id;
+  }
+
   params.frame_unique_name = item.target().utf8();
   params.item_sequence_number = item.itemSequenceNumber();
   params.document_sequence_number = item.documentSequenceNumber();
@@ -4508,12 +4580,12 @@ void RenderFrameImpl::SendDidCommitProvisionalLoad(
     if (render_view_->webview()->mainFrame()->isWebLocalFrame() &&
         render_view_->webview()->mainFrame()->document().isPluginDocument()) {
       // Reset the zoom levels for plugins.
-      render_view_->webview()->setZoomLevel(0);
+      render_view_->SetZoomLevel(0);
     } else {
       // If the zoom level is not found, then do nothing. In-page navigation
       // relies on not changing the zoom level in this case.
       if (host_zoom != render_view_->host_zoom_levels_.end())
-        render_view_->webview()->setZoomLevel(host_zoom->second);
+        render_view_->SetZoomLevel(host_zoom->second);
     }
 
     if (host_zoom != render_view_->host_zoom_levels_.end()) {
@@ -4554,10 +4626,12 @@ void RenderFrameImpl::SendDidCommitProvisionalLoad(
           frame, ds->request());
     }
 
-    base::string16 method = request.httpMethod();
-    if (base::EqualsASCII(method, "POST")) {
-      params.is_post = true;
-      params.post_id = post_id;
+    // When using subframe navigation entries, method and post id have already
+    // been set.
+    if (!SiteIsolationPolicy::UseSubframeNavigationEntries()) {
+      params.method = request.httpMethod().latin1();
+      if (params.method == "POST")
+        params.post_id = post_id;
     }
 
     // Send the user agent override back.
@@ -4588,6 +4662,8 @@ void RenderFrameImpl::SendDidCommitProvisionalLoad(
     DCHECK(!navigation_state->request_params().should_clear_history_list);
     params.history_list_was_cleared = false;
     params.report_type = FrameMsg_UILoadMetricsReportType::NO_REPORT;
+    // Subframes should match the zoom level of the main frame.
+    render_view_->SetZoomLevel(render_view_->page_zoom_level());
   }
 
   // This message needs to be sent before any of allowScripts(),
@@ -4661,7 +4737,7 @@ void RenderFrameImpl::OnCommitNavigation(
   CHECK(IsBrowserSideNavigationEnabled());
   // This will override the url requested by the WebURLLoader, as well as
   // provide it with the response to the request.
-  scoped_ptr<StreamOverrideParameters> stream_override(
+  std::unique_ptr<StreamOverrideParameters> stream_override(
       new StreamOverrideParameters());
   stream_override->stream_url = stream_url;
   stream_override->response = response;
@@ -4702,7 +4778,7 @@ void RenderFrameImpl::OnFailedNavigation(
   blink::WebURLError error =
       CreateWebURLError(common_params.url, has_stale_copy_in_cache, error_code);
   WebURLRequest failed_request = CreateURLRequestForNavigation(
-      common_params, scoped_ptr<StreamOverrideParameters>(),
+      common_params, std::unique_ptr<StreamOverrideParameters>(),
       frame_->isViewSourceModeEnabled());
   SendFailedProvisionalLoad(failed_request, error, frame_);
 
@@ -4946,17 +5022,20 @@ void RenderFrameImpl::OnSerializeAsMHTML(
 
   // Generate MHTML header if needed.
   if (IsMainFrame()) {
-    data =
-        WebFrameSerializer::generateMHTMLHeader(mhtml_boundary, GetWebFrame());
-    if (file.WriteAtCurrentPos(data.data(), data.size()) < 0) {
+    blink::WebFrameSerializerCacheControlPolicy policy =
+        static_cast<blink::WebFrameSerializerCacheControlPolicy>(
+            params.mhtml_cache_control_policy);
+    success = WebFrameSerializer::generateMHTMLHeader(mhtml_boundary, policy,
+                                                      GetWebFrame(), &data);
+    if (success && file.WriteAtCurrentPos(data.data(), data.size()) < 0) {
       success = false;
     }
   }
 
   // Generate MHTML parts.
   if (success) {
-    data = WebFrameSerializer::generateMHTMLParts(mhtml_boundary, GetWebFrame(),
-                                                  false, &delegate);
+    data = WebFrameSerializer::generateMHTMLParts(
+        mhtml_boundary, GetWebFrame(), params.mhtml_binary_encoding, &delegate);
     // TODO(jcivelli): write the chunks in deferred tasks to give a chance to
     //                 the message loop to process other events.
     if (file.WriteAtCurrentPos(data.data(), data.size()) < 0) {
@@ -5034,8 +5113,7 @@ void RenderFrameImpl::OnFind(int request_id,
 
     if (!result) {
       // Don't leave text selected as you move to the next frame.
-      search_frame->executeCommand(WebString::fromUTF8("Unselect"),
-                                   GetFocusedElement());
+      search_frame->executeCommand(WebString::fromUTF8("Unselect"));
 
       // Find the next frame, but skip the invisible ones.
       do {
@@ -5048,8 +5126,7 @@ void RenderFrameImpl::OnFind(int request_id,
                search_frame != focused_frame);
 
       // Make sure selection doesn't affect the search operation in new frame.
-      search_frame->executeCommand(WebString::fromUTF8("Unselect"),
-                                   GetFocusedElement());
+      search_frame->executeCommand(WebString::fromUTF8("Unselect"));
 
       // If we have multiple frames and we have wrapped back around to the
       // focused frame, we need to search it once more allowing wrap within
@@ -5128,8 +5205,7 @@ void RenderFrameImpl::OnStopFinding(StopFindAction action) {
 
   bool clear_selection = action == STOP_FIND_ACTION_CLEAR_SELECTION;
   if (clear_selection) {
-    view->focusedFrame()->executeCommand(WebString::fromUTF8("Unselect"),
-                                         GetFocusedElement());
+    view->focusedFrame()->executeCommand(WebString::fromUTF8("Unselect"));
   }
 
   WebLocalFrame* frame = GetWebFrame();
@@ -5263,7 +5339,7 @@ void RenderFrameImpl::NavigateInternal(
     const CommonNavigationParams& common_params,
     const StartNavigationParams& start_params,
     const RequestNavigationParams& request_params,
-    scoped_ptr<StreamOverrideParameters> stream_params) {
+    std::unique_ptr<StreamOverrideParameters> stream_params) {
   bool browser_side_navigation = IsBrowserSideNavigationEnabled();
 
   // Lower bound for browser initiated navigation start time.
@@ -5342,10 +5418,7 @@ void RenderFrameImpl::NavigateInternal(
   // corresponds to a back/forward navigation event. Update the parameters
   // depending on the navigation type.
   if (is_reload) {
-    bool bypass_cache = (common_params.navigation_type ==
-                         FrameMsg_Navigate_Type::RELOAD_BYPASSING_CACHE);
-    load_type = bypass_cache ? WebFrameLoadType::ReloadBypassingCache
-                             : WebFrameLoadType::Reload;
+    load_type = ReloadFrameLoadTypeFor(common_params.navigation_type);
 
     if (!browser_side_navigation) {
       const GURL override_url =
@@ -5363,7 +5436,7 @@ void RenderFrameImpl::NavigateInternal(
     // which should be the case because history navigations are routed via the
     // browser.
     DCHECK_NE(0, request_params.nav_entry_id);
-    scoped_ptr<HistoryEntry> entry =
+    std::unique_ptr<HistoryEntry> entry =
         PageStateToHistoryEntry(request_params.page_state);
     if (entry) {
       if (!SiteIsolationPolicy::UseSubframeNavigationEntries()) {
@@ -5372,7 +5445,7 @@ void RenderFrameImpl::NavigateInternal(
         // process.
         DCHECK(!frame_->parent());
         DCHECK(!browser_side_navigation);
-        scoped_ptr<NavigationParams> navigation_params(
+        std::unique_ptr<NavigationParams> navigation_params(
             new NavigationParams(*pending_navigation_params_.get()));
         has_history_navigation_in_frame =
             render_view_->history_controller()->GoToEntry(
@@ -5502,8 +5575,8 @@ void RenderFrameImpl::SyncSelectionIfRequired() {
   size_t offset;
   gfx::Range range;
 #if defined(ENABLE_PLUGINS)
-  if (render_view_->focused_pepper_plugin_) {
-    render_view_->focused_pepper_plugin_->GetSurroundingText(&text, &range);
+  if (focused_pepper_plugin_) {
+    focused_pepper_plugin_->GetSurroundingText(&text, &range);
     offset = 0;  // Pepper API does not support offset reporting.
     // TODO(kinaba): cut as needed.
   } else
@@ -5563,7 +5636,7 @@ void RenderFrameImpl::InitializeUserMediaClient() {
   DCHECK(!web_user_media_client_);
   web_user_media_client_ = new UserMediaClientImpl(
       this, RenderThreadImpl::current()->GetPeerConnectionDependencyFactory(),
-      make_scoped_ptr(new MediaStreamDispatcher(this)));
+      base::WrapUnique(new MediaStreamDispatcher(this)));
 #endif
 }
 
@@ -5595,17 +5668,17 @@ WebMediaPlayer* RenderFrameImpl::CreateWebMediaPlayerForMediaStream(
 #endif  // defined(ENABLE_WEBRTC)
 }
 
-scoped_ptr<MediaStreamRendererFactory>
+std::unique_ptr<MediaStreamRendererFactory>
 RenderFrameImpl::CreateRendererFactory() {
-  scoped_ptr<MediaStreamRendererFactory> factory =
+  std::unique_ptr<MediaStreamRendererFactory> factory =
       GetContentClient()->renderer()->CreateMediaStreamRendererFactory();
   if (factory.get())
     return factory;
 #if defined(ENABLE_WEBRTC)
-  return scoped_ptr<MediaStreamRendererFactory>(
+  return std::unique_ptr<MediaStreamRendererFactory>(
       new MediaStreamRendererFactoryImpl());
 #else
-  return scoped_ptr<MediaStreamRendererFactory>(
+  return std::unique_ptr<MediaStreamRendererFactory>(
       static_cast<MediaStreamRendererFactory*>(NULL));
 #endif
 }
@@ -5617,8 +5690,10 @@ void RenderFrameImpl::PrepareRenderViewForNavigation(
 
   MaybeHandleDebugURL(url);
 
-  FOR_EACH_OBSERVER(
-      RenderViewObserver, render_view_->observers_, Navigate(url));
+  if (is_main_frame_) {
+    FOR_EACH_OBSERVER(RenderViewObserver, render_view_->observers_,
+                      Navigate(url));
+  }
 
   render_view_->history_list_offset_ =
       request_params.current_history_list_offset;
@@ -5801,11 +5876,6 @@ bool RenderFrameImpl::ShouldDisplayErrorPageForFailedLoad(
     return false;
   }
 
-  if (RenderThreadImpl::current() &&
-      RenderThreadImpl::current()->layout_test_mode()) {
-    return false;
-  }
-
   return true;
 }
 
@@ -5873,35 +5943,41 @@ NavigationState* RenderFrameImpl::CreateNavigationStateFromPending() {
 }
 
 void RenderFrameImpl::UpdateNavigationState(DocumentState* document_state,
-                                            bool was_within_same_page) {
-  if (pending_navigation_params_) {
-    // If this is a browser-initiated load that doesn't override
-    // navigation_start, set it here.
-    if (pending_navigation_params_->common_params.navigation_start.is_null()) {
-      pending_navigation_params_->common_params.navigation_start =
-          base::TimeTicks::Now();
-    }
-    document_state->set_navigation_state(CreateNavigationStateFromPending());
-
-    const CommonNavigationParams& common_params =
-        pending_navigation_params_->common_params;
-    // The |set_was_load_data_with_base_url_request| state should not change for
-    // an in-page navigation, so skip updating it from the in-page navigation
-    // params in this case.
-    if (!was_within_same_page) {
-      bool load_data = !common_params.base_url_for_data_url.is_empty() &&
-                       !common_params.history_url_for_data_url.is_empty() &&
-                       common_params.url.SchemeIs(url::kDataScheme);
-      document_state->set_was_load_data_with_base_url_request(load_data);
-      if (load_data)
-        document_state->set_data_url(common_params.url);
-    }
-
-    pending_navigation_params_.reset();
-  } else {
+                                            bool was_within_same_page,
+                                            bool content_initiated) {
+  // If this was a browser-initiated navigation, then there could be pending
+  // navigation params, so use them. Otherwise, just reset the document state
+  // here, since if pending navigation params exist they are for some other
+  // navigation <https://crbug.com/597239>.
+  if (!pending_navigation_params_ || content_initiated) {
     document_state->set_navigation_state(
         NavigationStateImpl::CreateContentInitiated());
+    return;
   }
+
+  // If this is a browser-initiated load that doesn't override
+  // navigation_start, set it here.
+  if (pending_navigation_params_->common_params.navigation_start.is_null()) {
+    pending_navigation_params_->common_params.navigation_start =
+        base::TimeTicks::Now();
+  }
+  document_state->set_navigation_state(CreateNavigationStateFromPending());
+
+  // The |set_was_load_data_with_base_url_request| state should not change for
+  // an in-page navigation, so skip updating it from the in-page navigation
+  // params in this case.
+  if (!was_within_same_page) {
+    const CommonNavigationParams& common_params =
+        pending_navigation_params_->common_params;
+    bool load_data = !common_params.base_url_for_data_url.is_empty() &&
+                     !common_params.history_url_for_data_url.is_empty() &&
+                     common_params.url.SchemeIs(url::kDataScheme);
+    document_state->set_was_load_data_with_base_url_request(load_data);
+    if (load_data)
+      document_state->set_data_url(common_params.url);
+  }
+
+  pending_navigation_params_.reset();
 }
 
 #if defined(OS_ANDROID)
@@ -5948,8 +6024,7 @@ media::MediaPermission* RenderFrameImpl::GetMediaPermission() {
 }
 
 #if defined(ENABLE_MOJO_MEDIA)
-mojo::shell::mojom::InterfaceProvider*
-RenderFrameImpl::GetMediaInterfaceProvider() {
+shell::mojom::InterfaceProvider* RenderFrameImpl::GetMediaInterfaceProvider() {
   if (!media_interface_provider_) {
     media_interface_provider_.reset(new MediaInterfaceProvider(base::Bind(
         &RenderFrameImpl::ConnectToApplication, base::Unretained(this))));
@@ -6016,14 +6091,14 @@ void RenderFrameImpl::GetInterface(mojo::InterfaceRequest<Interface> request) {
   GetServiceRegistry()->ConnectToRemoteService(std::move(request));
 }
 
-mojo::shell::mojom::InterfaceProviderPtr RenderFrameImpl::ConnectToApplication(
+shell::mojom::InterfaceProviderPtr RenderFrameImpl::ConnectToApplication(
     const GURL& url) {
   if (!connector_)
     GetServiceRegistry()->ConnectToRemoteService(mojo::GetProxy(&connector_));
-  mojo::shell::mojom::InterfaceProviderPtr interface_provider;
-  mojo::shell::mojom::IdentityPtr target(mojo::shell::mojom::Identity::New());
+  shell::mojom::InterfaceProviderPtr interface_provider;
+  shell::mojom::IdentityPtr target(shell::mojom::Identity::New());
   target->name = url.spec();
-  target->user_id = mojo::shell::mojom::kInheritUserID;
+  target->user_id = shell::mojom::kInheritUserID;
   target->instance = "";
   connector_->Connect(std::move(target), GetProxy(&interface_provider), nullptr,
                       nullptr, base::Bind(&OnGotInstanceID));
@@ -6075,6 +6150,64 @@ void RenderFrameImpl::SendFindReply(int request_id,
   Send(new FrameHostMsg_Find_Reply(routing_id_, request_id, match_count,
                                    selection_rect, ordinal,
                                    final_status_update));
+}
+
+#if defined(ENABLE_PLUGINS)
+void RenderFrameImpl::PepperInstanceCreated(
+    PepperPluginInstanceImpl* instance) {
+  active_pepper_instances_.insert(instance);
+
+  Send(new FrameHostMsg_PepperInstanceCreated(routing_id_));
+}
+
+void RenderFrameImpl::PepperInstanceDeleted(
+    PepperPluginInstanceImpl* instance) {
+  active_pepper_instances_.erase(instance);
+
+  if (pepper_last_mouse_event_target_ == instance)
+    pepper_last_mouse_event_target_ = nullptr;
+  if (focused_pepper_plugin_ == instance)
+    PepperFocusChanged(instance, false);
+
+  RenderFrameImpl* const render_frame = instance->render_frame();
+  if (render_frame)
+    render_frame->Send(
+        new FrameHostMsg_PepperInstanceDeleted(render_frame->GetRoutingID()));
+}
+
+void RenderFrameImpl::PepperFocusChanged(PepperPluginInstanceImpl* instance,
+                                         bool focused) {
+  if (focused)
+    focused_pepper_plugin_ = instance;
+  else if (focused_pepper_plugin_ == instance)
+    focused_pepper_plugin_ = nullptr;
+
+  GetRenderWidget()->UpdateTextInputState(ShowIme::HIDE_IME,
+                                          ChangeSource::FROM_NON_IME);
+  GetRenderWidget()->UpdateSelectionBounds();
+}
+
+#endif  // ENABLE_PLUGINS
+
+void RenderFrameImpl::RenderWidgetSetFocus(bool enable) {
+#if defined(ENABLE_PLUGINS)
+  // Notify all Pepper plugins.
+  for (auto* plugin : active_pepper_instances_)
+    plugin->SetContentAreaFocus(enable);
+#endif
+}
+
+void RenderFrameImpl::RenderWidgetWillHandleMouseEvent() {
+#if defined(ENABLE_PLUGINS)
+  // This method is called for every mouse event that the RenderWidget receives.
+  // And then the mouse event is forwarded to blink, which dispatches it to the
+  // event target. Potentially a Pepper plugin will receive the event.
+  // In order to tell whether a plugin gets the last mouse event and which it
+  // is, we set |pepper_last_mouse_event_target_| to null here. If a plugin gets
+  // the event, it will notify us via DidReceiveMouseEvent() and set itself as
+  // |pepper_last_mouse_event_target_|.
+  pepper_last_mouse_event_target_ = nullptr;
+#endif
 }
 
 }  // namespace content

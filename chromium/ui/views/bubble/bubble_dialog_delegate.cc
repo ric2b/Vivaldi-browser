@@ -21,6 +21,8 @@
 #include "ui/base/win/shell.h"
 #endif
 
+#include "app/vivaldi_apptools.h"
+
 namespace views {
 
 namespace {
@@ -72,8 +74,17 @@ Widget* BubbleDialogDelegateView::CreateBubble(
   // the parent frame and let DWM handle compositing.  If not, then we don't
   // want to allow the bubble to extend the frame because it will be clipped.
   bubble_delegate->set_adjust_if_offscreen(ui::win::IsAeroGlassEnabled());
-#elif (defined(OS_LINUX) && !defined(OS_CHROMEOS)) || defined(OS_MACOSX)
-  // Linux clips bubble windows that extend outside their parent window bounds.
+#elif (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+  if (vivaldi::IsVivaldiRunning()) {
+    // In Vivaldi we use some of these bubbles at the bottom of the window, so
+    // we must adjust to try to fit inside the window.
+    bubble_delegate->set_adjust_if_offscreen(true);
+  } else {
+    // Linux clips bubble windows that extend outside their parent window
+    // bounds.
+    bubble_delegate->set_adjust_if_offscreen(false);
+  }
+#elif defined(OS_MACOSX)
   // Mac never adjusts.
   bubble_delegate->set_adjust_if_offscreen(false);
 #endif
@@ -94,6 +105,7 @@ bool BubbleDialogDelegateView::ShouldShowCloseButton() const {
 ClientView* BubbleDialogDelegateView::CreateClientView(Widget* widget) {
   DialogClientView* client = new DialogClientView(widget, GetContentsView());
   client->set_button_row_insets(gfx::Insets());
+  widget->non_client_view()->set_mirror_client_in_rtl(mirror_arrow_in_rtl_);
   return client;
 }
 
@@ -108,15 +120,11 @@ NonClientFrameView* BubbleDialogDelegateView::CreateNonClientFrameView(
   frame->SetFootnoteView(CreateFootnoteView());
 
   BubbleBorder::Arrow adjusted_arrow = arrow();
-  if (base::i18n::IsRTL())
+  if (base::i18n::IsRTL() && mirror_arrow_in_rtl_)
     adjusted_arrow = BubbleBorder::horizontal_mirror(adjusted_arrow);
-  frame->SetBubbleBorder(scoped_ptr<BubbleBorder>(
+  frame->SetBubbleBorder(std::unique_ptr<BubbleBorder>(
       new BubbleBorder(adjusted_arrow, shadow(), color())));
   return frame;
-}
-
-void BubbleDialogDelegateView::GetAccessibleState(ui::AXViewState* state) {
-  state->role = ui::AX_ROLE_DIALOG;
 }
 
 const char* BubbleDialogDelegateView::GetClassName() const {
@@ -205,6 +213,7 @@ BubbleDialogDelegateView::BubbleDialogDelegateView(View* anchor_view,
       anchor_view_storage_id_(ViewStorage::GetInstance()->CreateStorageID()),
       anchor_widget_(NULL),
       arrow_(arrow),
+      mirror_arrow_in_rtl_(true),
       shadow_(BubbleBorder::SMALL_SHADOW),
       color_explicitly_set_(false),
       margins_(kPanelVertMargin,

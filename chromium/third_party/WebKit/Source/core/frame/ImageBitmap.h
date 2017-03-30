@@ -17,7 +17,6 @@
 #include "platform/graphics/StaticBitmapImage.h"
 #include "platform/heap/Handle.h"
 #include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
 
 namespace blink {
 
@@ -37,11 +36,15 @@ public:
     static ImageBitmap* create(HTMLImageElement*, const IntRect&, Document*, const ImageBitmapOptions& = ImageBitmapOptions());
     static ImageBitmap* create(HTMLVideoElement*, const IntRect&, Document*, const ImageBitmapOptions& = ImageBitmapOptions());
     static ImageBitmap* create(HTMLCanvasElement*, const IntRect&, const ImageBitmapOptions& = ImageBitmapOptions());
-    static ImageBitmap* create(ImageData*, const IntRect&, const ImageBitmapOptions& = ImageBitmapOptions(), const bool& isImageDataPremultiplied = false);
+    static ImageBitmap* create(ImageData*, const IntRect&, const ImageBitmapOptions& = ImageBitmapOptions(), const bool& isImageDataPremultiplied = false, const bool& isImageDataOriginClean = true);
     static ImageBitmap* create(ImageBitmap*, const IntRect&, const ImageBitmapOptions& = ImageBitmapOptions());
     static ImageBitmap* create(PassRefPtr<StaticBitmapImage>);
     static ImageBitmap* create(PassRefPtr<StaticBitmapImage>, const IntRect&, const ImageBitmapOptions& = ImageBitmapOptions());
     static PassRefPtr<SkImage> getSkImageFromDecoder(PassOwnPtr<ImageDecoder>);
+
+    // Type and helper function required by CallbackPromiseAdapter:
+    using WebType = sk_sp<SkImage>;
+    static ImageBitmap* take(ScriptPromiseResolver*, sk_sp<SkImage>);
 
     StaticBitmapImage* bitmapImage() const { return (m_image) ? m_image.get() : nullptr; }
     PassOwnPtr<uint8_t[]> copyBitmapData(AlphaDisposition alphaOp = DontPremultiplyAlpha);
@@ -62,6 +65,7 @@ public:
     bool wouldTaintOrigin(SecurityOrigin*) const override { return !m_image->originClean(); }
     void adjustDrawRects(FloatRect* srcRect, FloatRect* dstRect) const override;
     FloatSize elementSize(const FloatSize&) const override;
+    bool isImageBitmap() const override { return true; }
 
     // ImageBitmapSource implementation
     IntSize bitmapSourceSize() const override { return size(); }
@@ -73,7 +77,7 @@ private:
     ImageBitmap(HTMLImageElement*, const IntRect&, Document*, const ImageBitmapOptions&);
     ImageBitmap(HTMLVideoElement*, const IntRect&, Document*, const ImageBitmapOptions&);
     ImageBitmap(HTMLCanvasElement*, const IntRect&, const ImageBitmapOptions&);
-    ImageBitmap(ImageData*, const IntRect&, const ImageBitmapOptions&, const bool&);
+    ImageBitmap(ImageData*, const IntRect&, const ImageBitmapOptions&, const bool&, const bool&);
     ImageBitmap(ImageBitmap*, const IntRect&, const ImageBitmapOptions&);
     ImageBitmap(PassRefPtr<StaticBitmapImage>);
     ImageBitmap(PassRefPtr<StaticBitmapImage>, const IntRect&, const ImageBitmapOptions&);

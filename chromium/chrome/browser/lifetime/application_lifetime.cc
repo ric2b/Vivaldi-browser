@@ -4,9 +4,10 @@
 
 #include "chrome/browser/lifetime/application_lifetime.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/process/process.h"
 #include "base/process/process_handle.h"
@@ -39,6 +40,7 @@
 #include "base/sys_info.h"
 #include "chrome/browser/chromeos/boot_times_recorder.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/power_policy_controller.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/dbus/update_engine_client.h"
 #endif
@@ -89,11 +91,13 @@ bool g_send_stop_request_to_session_manager = false;
 
 }  // namespace
 
+#if !defined(OS_ANDROID)
 void MarkAsCleanShutdown() {
   // TODO(beng): Can this use ProfileManager::GetLoadedProfiles() instead?
   for (auto* browser : *BrowserList::GetInstance())
     browser->profile()->SetExitType(Profile::EXIT_NORMAL);
 }
+#endif
 
 void AttemptExitInternal(bool try_to_quit_application) {
   // On Mac, the platform-specific part handles setting this.
@@ -196,11 +200,13 @@ void AttemptUserExit() {
 #else
   // Reset the restart bit that might have been set in cancelled restart
   // request.
+#if !defined(OS_ANDROID)
   UserManager::Hide();
+#endif
   PrefService* pref_service = g_browser_process->local_state();
   pref_service->SetBoolean(prefs::kRestartLastSessionOnShutdown, false);
   AttemptExitInternal(false);
-#endif
+#endif  // defined(OS_CHROMEOS)
 }
 
 // The Android implementation is in application_lifetime_android.cc
@@ -343,6 +349,9 @@ void NotifyAndTerminate(bool fast_path) {
     NotifyAppTerminating();
 
 #if defined(OS_CHROMEOS)
+  if (chromeos::PowerPolicyController::IsInitialized())
+    chromeos::PowerPolicyController::Get()->NotifyChromeIsExiting();
+
   if (base::SysInfo::IsRunningOnChromeOS()) {
     // If we're on a ChromeOS device, reboot if an update has been applied,
     // or else signal the session manager to log out.

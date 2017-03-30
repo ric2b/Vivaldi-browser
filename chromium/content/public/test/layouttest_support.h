@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -53,8 +54,14 @@ void EnableBrowserLayoutTestMode();
 void EnableRendererLayoutTestMode();
 
 // "Casts" |render_view| to |WebTestProxyBase|.  Caller has to ensure that prior
-// to construciton of |render_view|, EnableWebTestProxyCreation was called.
+// to construction of |render_view|, EnableWebTestProxyCreation was called.
 test_runner::WebTestProxyBase* GetWebTestProxyBase(RenderView* render_view);
+
+// "Casts" |render_frame| to |WebFrameTestProxyBase|.  Caller has to ensure
+// that prior to construction of |render_frame|, EnableWebTestProxyCreation was
+// called.
+test_runner::WebFrameTestProxyBase* GetWebFrameTestProxyBase(
+    RenderFrame* render_frame);
 
 // Enable injecting of a WebTestProxy between WebViews and RenderViews
 // and WebFrameTestProxy between WebFrames and RenderFrames.
@@ -74,7 +81,7 @@ void FetchManifest(blink::WebView* view, const GURL& url,
                    const FetchManifestCallback&);
 
 // Sets gamepad provider to be used for layout tests.
-void SetMockGamepadProvider(scoped_ptr<RendererGamepadProvider> provider);
+void SetMockGamepadProvider(std::unique_ptr<RendererGamepadProvider> provider);
 
 // Sets a double that should be used when registering
 // a listener through BlinkPlatformImpl::setDeviceLightListener().
@@ -113,17 +120,6 @@ void SetDeviceColorProfile(RenderView* render_view, const std::string& name);
 void SetBluetoothAdapter(int render_process_id,
                          scoped_refptr<device::BluetoothAdapter> adapter);
 
-// Enables mock geofencing service while running a layout test.
-// |service_available| indicates if the mock service should mock geofencing
-// being available or not.
-void SetGeofencingMockProvider(bool service_available);
-
-// Disables mock geofencing service while running a layout test.
-void ClearGeofencingMockProvider();
-
-// Set the mock geofencing position while running a layout test.
-void SetGeofencingMockPosition(double latitude, double longitude);
-
 // Enables or disables synchronous resize mode. When enabled, all window-sizing
 // machinery is short-circuited inside the renderer. This mode is necessary for
 // some tests that were written before browsers had multi-process architecture
@@ -141,6 +137,9 @@ void DisableAutoResizeMode(RenderView* render_view,
 // Provides a text dump of the contents of the given page state.
 std::string DumpBackForwardList(std::vector<PageState>& page_state,
                                 size_t current_index);
+
+// Run all pending idle tasks immediately, and then invoke callback.
+void SchedulerRunIdleTasks(const base::Closure& callback);
 
 }  // namespace content
 

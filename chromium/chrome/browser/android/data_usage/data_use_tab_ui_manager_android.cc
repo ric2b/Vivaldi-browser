@@ -15,7 +15,11 @@
 #include "chrome/browser/profiles/profile_android.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/sessions/core/session_id.h"
+#include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/web_contents.h"
 #include "jni/DataUseTabUIManager_jni.h"
+#include "net/android/network_library.h"
+#include "net/base/network_change_notifier.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace {
@@ -113,11 +117,15 @@ void UserClickedContinueOnDialogBox(JNIEnv* env,
 // static
 jboolean WouldDataUseTrackingEnd(JNIEnv* env,
                                  const JavaParamRef<jclass>& clazz,
+                                 const JavaParamRef<jobject>& j_web_contents,
                                  jint tab_id,
                                  const JavaParamRef<jstring>& url,
                                  jint transition_type,
                                  const JavaParamRef<jobject>& jprofile) {
   DCHECK_LE(0, static_cast<SessionID::id_type>(tab_id));
+  content::WebContents* web_contents =
+      content::WebContents::FromJavaWebContents(j_web_contents);
+  DCHECK(web_contents);
 
   Profile* profile = ProfileAndroid::FromProfileAndroid(jprofile);
   chrome::android::DataUseUITabModel* data_use_ui_tab_model =
@@ -127,7 +135,8 @@ jboolean WouldDataUseTrackingEnd(JNIEnv* env,
 
   return data_use_ui_tab_model->WouldDataUseTrackingEnd(
       ConvertJavaStringToUTF8(env, url), transition_type,
-      static_cast<SessionID::id_type>(tab_id));
+      static_cast<SessionID::id_type>(tab_id),
+      web_contents->GetController().GetPendingEntry());
 }
 
 // static
@@ -166,6 +175,14 @@ ScopedJavaLocalRef<jstring> GetDataUseUIString(
   DCHECK_LT(message_id, DATA_USE_UI_MESSAGE_MAX);
   return base::android::ConvertUTF8ToJavaString(
       env, l10n_util::GetStringUTF8(data_use_ui_message_id_map[message_id]));
+}
+
+// static
+jboolean IsNonRoamingCellularConnection(JNIEnv* env,
+                                        const JavaParamRef<jclass>& clazz) {
+  return net::NetworkChangeNotifier::IsConnectionCellular(
+             net::NetworkChangeNotifier::GetConnectionType()) &&
+         !net::android::GetIsRoaming();
 }
 
 bool RegisterDataUseTabUIManager(JNIEnv* env) {

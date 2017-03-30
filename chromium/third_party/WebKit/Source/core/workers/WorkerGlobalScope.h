@@ -57,7 +57,6 @@ class ConsoleMessageStorage;
 class ExceptionState;
 class V8AbstractEventListener;
 class WorkerClients;
-class WorkerConsole;
 class WorkerInspectorController;
 class WorkerLocation;
 class WorkerNavigator;
@@ -65,7 +64,6 @@ class WorkerThread;
 
 class CORE_EXPORT WorkerGlobalScope : public EventTargetWithInlineData, public SecurityContext, public WorkerOrWorkletGlobalScope, public Supplementable<WorkerGlobalScope>, public DOMWindowBase64 {
     DEFINE_WRAPPERTYPEINFO();
-    REFCOUNTED_EVENT_TARGET(WorkerGlobalScope);
     USING_GARBAGE_COLLECTED_MIXIN(WorkerGlobalScope);
 public:
     ~WorkerGlobalScope() override;
@@ -94,11 +92,10 @@ public:
 
     WorkerThread* thread() const { return m_thread; }
 
-    void postTask(const WebTraceLocation&, PassOwnPtr<ExecutionContextTask>) final; // Executes the task on context's thread asynchronously.
+    void postTask(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>) final; // Executes the task on context's thread asynchronously.
 
     // WorkerGlobalScope
     WorkerGlobalScope* self() { return this; }
-    WorkerConsole* console();
     WorkerLocation* location() const;
     void close();
 
@@ -128,7 +125,11 @@ public:
 
     WorkerInspectorController* workerInspectorController() { return m_workerInspectorController.get(); }
 
-    bool isClosing() { return m_closing; }
+    // Returns true when the WorkerGlobalScope is closing (e.g. via close()
+    // method). If this returns true, the worker is going to be shutdown after
+    // the current task execution. Workers that don't support close operation
+    // should always return false.
+    bool isClosing() const { return m_closing; }
 
     double timeOrigin() const { return m_timeOrigin; }
 
@@ -137,7 +138,7 @@ public:
     using SecurityContext::getSecurityOrigin;
     using SecurityContext::contentSecurityPolicy;
 
-    void addConsoleMessage(RawPtr<ConsoleMessage>) final;
+    void addConsoleMessage(ConsoleMessage*) final;
     ConsoleMessageStorage* messageStorage();
 
     void exceptionHandled(int exceptionId, bool isHandled);
@@ -179,7 +180,6 @@ private:
     String m_userAgent;
     V8CacheOptions m_v8CacheOptions;
 
-    mutable Member<WorkerConsole> m_console;
     mutable Member<WorkerLocation> m_location;
     mutable Member<WorkerNavigator> m_navigator;
 

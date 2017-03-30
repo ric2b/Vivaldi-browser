@@ -8,9 +8,11 @@
     '../gpu/gpu.gyp:command_buffer_traits',
     '../gpu/gpu.gyp:gpu',
     '../gpu/gpu.gyp:gpu_ipc_service',
+    '../media/gpu/ipc/media_ipc.gyp:media_gpu_ipc_service',
+    '../media/media.gyp:media_gpu',
     '../skia/skia.gyp:skia',
     '../ui/gl/gl.gyp:gl',
-    '../mojo/mojo_base.gyp:mojo_application_base',
+    '../ui/gl/init/gl_init.gyp:gl_init',
     'content_common_mojo_bindings.gyp:content_common_mojo_bindings',
   ],
   'sources': [
@@ -25,6 +27,7 @@
     'gpu/gpu_watchdog_thread.h',
     'gpu/in_process_gpu_thread.cc',
     'gpu/in_process_gpu_thread.h',
+    'public/gpu/content_gpu_client.cc',
     'public/gpu/content_gpu_client.h',
     'public/gpu/gpu_video_decode_accelerator_factory.cc',
     'public/gpu/gpu_video_decode_accelerator_factory.h',
@@ -43,7 +46,18 @@
       'link_settings': {
         'libraries': [
           '-lsetupapi.lib',
+          '-lPropsys.lib',
         ],
+      },
+    }],
+    ['system_proprietary_codecs==1 and OS=="mac"', {
+      'configurations': {
+        'Release_Base': {
+          'xcode_settings': {
+            # VB-18038 audio doesn't work with -O2
+            'GCC_OPTIMIZATION_LEVEL': '1',
+           },
+         },
       },
     }],
     ['system_proprietary_codecs==1 and OS=="win"', {
@@ -95,6 +109,11 @@
     ['target_arch!="arm" and chromeos == 1', {
       'include_dirs': [
         '<(DEPTH)/third_party/libva',
+      ],
+    }],
+    ['OS=="android"', {
+      'dependencies': [
+        '<(DEPTH)/media/media.gyp:player_android',
       ],
     }],
   ],

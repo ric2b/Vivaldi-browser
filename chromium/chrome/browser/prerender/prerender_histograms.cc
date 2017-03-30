@@ -47,7 +47,7 @@ std::string GetHistogramName(Origin origin, bool is_wash,
     case ORIGIN_LINK_REL_PRERENDER_CROSSDOMAIN:
       return ComposeHistogramName("webcross", name);
     case ORIGIN_EXTERNAL_REQUEST:
-        return ComposeHistogramName("externalrequest", name);
+      return ComposeHistogramName("externalrequest", name);
     case ORIGIN_INSTANT:
       return ComposeHistogramName("Instant", name);
     case ORIGIN_LINK_REL_NEXT:
@@ -56,6 +56,8 @@ std::string GetHistogramName(Origin origin, bool is_wash,
       return ComposeHistogramName("gws", name);
     case ORIGIN_EXTERNAL_REQUEST_FORCED_CELLULAR:
       return ComposeHistogramName("externalrequestforced", name);
+    case ORIGIN_OFFLINE:
+      return ComposeHistogramName("offline", name);
     default:
       NOTREACHED();
       break;
@@ -91,6 +93,7 @@ do { \
   } \
   /* Do not rename.  HISTOGRAM expects a local variable "name". */ \
   std::string name = GetHistogramName(origin, wash, histogram_name); \
+  /* Branching because HISTOGRAM is caching the histogram into a static. */ \
   if (wash) { \
     HISTOGRAM; \
   } else if (origin == ORIGIN_OMNIBOX) { \
@@ -108,6 +111,8 @@ do { \
   } else if (origin == ORIGIN_LINK_REL_NEXT) { \
     HISTOGRAM; \
   } else if (origin == ORIGIN_EXTERNAL_REQUEST_FORCED_CELLULAR) { \
+    HISTOGRAM; \
+  } else if (origin == ORIGIN_OFFLINE) { \
     HISTOGRAM; \
   } else { \
     HISTOGRAM; \
@@ -201,9 +206,6 @@ base::TimeTicks PrerenderHistograms::GetCurrentTimeTicks() const {
 // and Control group cases, while nothing ever gets swapped in, we do keep
 // track of what would be prerendered and would be swapped in -- and those
 // cases are what is classified as Match for these groups.
-// ...MatchedComplete -- A prerendered page that was swapped in + a few
-// that were not swapped in so that the set of pages lines up more closely with
-// the control group.
 // ...FirstAfterMiss -- First page to finish loading after a prerender, which
 // is different from the page that was prerendered.
 // ...FirstAfterMissNonOverlapping -- Same as FirstAfterMiss, but only
@@ -344,23 +346,11 @@ void PrerenderHistograms::RecordTimeBetweenPrerenderRequests(
 
 void PrerenderHistograms::RecordFinalStatus(
     Origin origin,
-    PrerenderContents::MatchCompleteStatus mc_status,
     FinalStatus final_status) const {
   DCHECK(final_status != FINAL_STATUS_MAX);
-
-  if (mc_status == PrerenderContents::MATCH_COMPLETE_DEFAULT ||
-      mc_status == PrerenderContents::MATCH_COMPLETE_REPLACED) {
-    PREFIXED_HISTOGRAM_ORIGIN_EXPERIMENT(
-        "FinalStatus", origin,
-        UMA_HISTOGRAM_ENUMERATION(name, final_status, FINAL_STATUS_MAX));
-  }
-  if (mc_status == PrerenderContents::MATCH_COMPLETE_DEFAULT ||
-      mc_status == PrerenderContents::MATCH_COMPLETE_REPLACEMENT ||
-      mc_status == PrerenderContents::MATCH_COMPLETE_REPLACEMENT_PENDING) {
-    PREFIXED_HISTOGRAM_ORIGIN_EXPERIMENT(
-        "FinalStatusMatchComplete", origin,
-        UMA_HISTOGRAM_ENUMERATION(name, final_status, FINAL_STATUS_MAX));
-  }
+  PREFIXED_HISTOGRAM_ORIGIN_EXPERIMENT(
+      "FinalStatus", origin,
+      UMA_HISTOGRAM_ENUMERATION(name, final_status, FINAL_STATUS_MAX));
 }
 
 void PrerenderHistograms::RecordNetworkBytes(Origin origin,

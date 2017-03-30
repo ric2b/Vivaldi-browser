@@ -45,7 +45,6 @@
 #endif  // !defined(NACL_WIN64)
 
 static sandbox::BrokerServices* g_broker_services = NULL;
-static sandbox::TargetServices* g_target_services = NULL;
 
 namespace content {
 namespace {
@@ -77,6 +76,7 @@ const wchar_t* const kTroublesomeDlls[] = {
   L"esspd.dll",                   // Samsung Smart Security ESCORT.
   L"googledesktopnetwork3.dll",   // Google Desktop Search v5.
   L"fwhook.dll",                  // PC Tools Firewall Plus.
+  L"guard64.dll",                 // Comodo Internet Security x64.
   L"hookprocesscreation.dll",     // Blumentals Program protector.
   L"hookterminateapis.dll",       // Blumentals and Cyberprinter.
   L"hookprintapis.dll",           // Cyberprinter.
@@ -280,16 +280,8 @@ bool ShouldSetJobLevel(const base::CommandLine& cmd_line) {
 }
 
 // Adds the generic policy rules to a sandbox TargetPolicy.
-bool AddGenericPolicy(sandbox::TargetPolicy* policy) {
+sandbox::ResultCode AddGenericPolicy(sandbox::TargetPolicy* policy) {
   sandbox::ResultCode result;
-
-  // Renderers need to copy sections for plugin DIBs and GPU.
-  // GPU needs to copy sections to renderers.
-  result = policy->AddRule(sandbox::TargetPolicy::SUBSYS_HANDLES,
-                           sandbox::TargetPolicy::HANDLES_DUP_ANY,
-                           L"Section");
-  if (result != sandbox::SBOX_ALL_OK)
-    return false;
 
   // Add the policy for the client side of a pipe. It is just a file
   // in the \pipe\ namespace. We restrict it to pipes that start with
@@ -298,7 +290,7 @@ bool AddGenericPolicy(sandbox::TargetPolicy* policy) {
                            sandbox::TargetPolicy::FILES_ALLOW_ANY,
                            L"\\??\\pipe\\chrome.*");
   if (result != sandbox::SBOX_ALL_OK)
-    return false;
+    return result;
 
   // Add the policy for the server side of nacl pipe. It is just a file
   // in the \pipe\ namespace. We restrict it to pipes that start with
@@ -308,7 +300,7 @@ bool AddGenericPolicy(sandbox::TargetPolicy* policy) {
                            sandbox::TargetPolicy::NAMEDPIPES_ALLOW_ANY,
                            L"\\\\.\\pipe\\chrome.nacl.*");
   if (result != sandbox::SBOX_ALL_OK)
-    return false;
+    return result;
 
   // Allow the server side of sync sockets, which are pipes that have
   // the "chrome.sync" namespace and a randomly generated suffix.
@@ -316,20 +308,20 @@ bool AddGenericPolicy(sandbox::TargetPolicy* policy) {
                            sandbox::TargetPolicy::NAMEDPIPES_ALLOW_ANY,
                            L"\\\\.\\pipe\\chrome.sync.*");
   if (result != sandbox::SBOX_ALL_OK)
-    return false;
+    return result;
 
   // Add the policy for debug message only in debug
 #ifndef NDEBUG
   base::FilePath app_dir;
   if (!PathService::Get(base::DIR_MODULE, &app_dir))
-    return false;
+    return sandbox::SBOX_ERROR_GENERIC;
 
   wchar_t long_path_buf[MAX_PATH];
   DWORD long_path_return_value = GetLongPathName(app_dir.value().c_str(),
                                                  long_path_buf,
                                                  MAX_PATH);
   if (long_path_return_value == 0 || long_path_return_value >= MAX_PATH)
-    return false;
+    return sandbox::SBOX_ERROR_NO_SPACE;
 
   base::FilePath debug_message(long_path_buf);
   debug_message = debug_message.AppendASCII("debug_message.exe");
@@ -337,20 +329,20 @@ bool AddGenericPolicy(sandbox::TargetPolicy* policy) {
                            sandbox::TargetPolicy::PROCESS_MIN_EXEC,
                            debug_message.value().c_str());
   if (result != sandbox::SBOX_ALL_OK)
-    return false;
+    return result;
 #endif  // NDEBUG
 
   // Add the policy for read-only PDB file access for stack traces.
 #if !defined(OFFICIAL_BUILD)
   base::FilePath exe;
   if (!PathService::Get(base::FILE_EXE, &exe))
-    return false;
+    return sandbox::SBOX_ERROR_GENERIC;
   base::FilePath pdb_path = exe.DirName().Append(L"*.pdb");
   result = policy->AddRule(sandbox::TargetPolicy::SUBSYS_FILES,
                            sandbox::TargetPolicy::FILES_ALLOW_READONLY,
                            pdb_path.value().c_str());
   if (result != sandbox::SBOX_ALL_OK)
-    return false;
+    return result;
 #endif
 
 #if defined(SANITIZER_COVERAGE)
@@ -371,28 +363,23 @@ bool AddGenericPolicy(sandbox::TargetPolicy* policy) {
                              sandbox::TargetPolicy::FILES_ALLOW_ANY,
                              sancov_path.value().c_str());
     if (result != sandbox::SBOX_ALL_OK)
-      return false;
+      return result;
   }
 #endif
 
   AddGenericDllEvictionPolicy(policy);
-  return true;
+  return sandbox::SBOX_ALL_OK;
 }
 
-bool AddPolicyForSandboxedProcess(sandbox::TargetPolicy* policy) {
-  sandbox::ResultCode result;
-  // Renderers need to share events with plugins.
-  result = policy->AddRule(sandbox::TargetPolicy::SUBSYS_HANDLES,
-                           sandbox::TargetPolicy::HANDLES_DUP_ANY,
-                           L"Event");
-  if (result != sandbox::SBOX_ALL_OK)
-    return false;
+sandbox::ResultCode AddPolicyForSandboxedProcess(
+    sandbox::TargetPolicy* policy) {
+  sandbox::ResultCode result = sandbox::SBOX_ALL_OK;
 
   // Win8+ adds a device DeviceApi that we don't need.
   if (base::win::GetVersion() > base::win::VERSION_WIN7)
     result = policy->AddKernelObjectToClose(L"File", L"\\Device\\DeviceApi");
   if (result != sandbox::SBOX_ALL_OK)
-    return false;
+    return result;
 
   // Close the proxy settings on XP.
   if (base::win::GetVersion() <= base::win::VERSION_SERVER_2003)
@@ -400,7 +387,7 @@ bool AddPolicyForSandboxedProcess(sandbox::TargetPolicy* policy) {
                  L"HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\" \
                      L"CurrentVersion\\Internet Settings");
   if (result != sandbox::SBOX_ALL_OK)
-    return false;
+    return result;
 
   sandbox::TokenLevel initial_token = sandbox::USER_UNPROTECTED;
   if (base::win::GetVersion() > base::win::VERSION_XP) {
@@ -409,17 +396,25 @@ bool AddPolicyForSandboxedProcess(sandbox::TargetPolicy* policy) {
     initial_token = sandbox::USER_RESTRICTED_SAME_ACCESS;
   }
 
-  policy->SetTokenLevel(initial_token, sandbox::USER_LOCKDOWN);
+  result = policy->SetTokenLevel(initial_token, sandbox::USER_LOCKDOWN);
+  if (result != sandbox::SBOX_ALL_OK)
+    return result;
   // Prevents the renderers from manipulating low-integrity processes.
-  policy->SetDelayedIntegrityLevel(sandbox::INTEGRITY_LEVEL_UNTRUSTED);
-  policy->SetIntegrityLevel(sandbox::INTEGRITY_LEVEL_LOW);
+  result = policy->SetDelayedIntegrityLevel(sandbox::INTEGRITY_LEVEL_UNTRUSTED);
+  if (result != sandbox::SBOX_ALL_OK)
+    return result;
+  result = policy->SetIntegrityLevel(sandbox::INTEGRITY_LEVEL_LOW);
+  if (result != sandbox::SBOX_ALL_OK)
+    return result;
   policy->SetLockdownDefaultDacl();
 
-  if (sandbox::SBOX_ALL_OK !=  policy->SetAlternateDesktop(true)) {
+  result = policy->SetAlternateDesktop(true);
+  if (result != sandbox::SBOX_ALL_OK) {
     DLOG(WARNING) << "Failed to apply desktop security to the renderer";
+    return result;
   }
 
-  return true;
+  return result;
 }
 
 // Updates the command line arguments with debug-related flags. If debug flags
@@ -459,8 +454,7 @@ NtQueryObject g_QueryObject = NULL;
 
 static const char* kDuplicateHandleWarning =
     "You are attempting to duplicate a privileged handle into a sandboxed"
-    " process.\n Please use the sandbox::BrokerDuplicateHandle API or"
-    " contact security@chromium.org for assistance.";
+    " process.\n Please contact security@chromium.org for assistance.";
 
 void CheckDuplicateHandle(HANDLE handle) {
   // Get the object type (32 characters is safe; current max is 14).
@@ -562,57 +556,65 @@ bool IsAppContainerEnabled() {
 
 }  // namespace
 
-void SetJobLevel(const base::CommandLine& cmd_line,
-                 sandbox::JobLevel job_level,
-                 uint32_t ui_exceptions,
-                 sandbox::TargetPolicy* policy) {
-  if (ShouldSetJobLevel(cmd_line)) {
+sandbox::ResultCode SetJobLevel(const base::CommandLine& cmd_line,
+                                sandbox::JobLevel job_level,
+                                uint32_t ui_exceptions,
+                                sandbox::TargetPolicy* policy) {
+  if (!ShouldSetJobLevel(cmd_line))
+    return policy->SetJobLevel(sandbox::JOB_NONE, 0);
+
 #ifdef _WIN64
-    policy->SetJobMemoryLimit(4ULL * 1024 * 1024 * 1024);
+  sandbox::ResultCode ret =
+      policy->SetJobMemoryLimit(4ULL * 1024 * 1024 * 1024);
+  if (ret != sandbox::SBOX_ALL_OK)
+    return ret;
 #endif
-    policy->SetJobLevel(job_level, ui_exceptions);
-  } else {
-    policy->SetJobLevel(sandbox::JOB_NONE, 0);
-  }
+  return policy->SetJobLevel(job_level, ui_exceptions);
 }
 
 // TODO(jschuh): Need get these restrictions applied to NaCl and Pepper.
 // Just have to figure out what needs to be warmed up first.
-void AddBaseHandleClosePolicy(sandbox::TargetPolicy* policy) {
+sandbox::ResultCode AddBaseHandleClosePolicy(sandbox::TargetPolicy* policy) {
   // TODO(cpu): Add back the BaseNamedObjects policy.
   base::string16 object_path = PrependWindowsSessionPath(
       L"\\BaseNamedObjects\\windows_shell_global_counters");
-  policy->AddKernelObjectToClose(L"Section", object_path.data());
+  return policy->AddKernelObjectToClose(L"Section", object_path.data());
 }
 
-void AddAppContainerPolicy(sandbox::TargetPolicy* policy, const wchar_t* sid) {
+sandbox::ResultCode AddAppContainerPolicy(sandbox::TargetPolicy* policy,
+                                          const wchar_t* sid) {
   if (IsAppContainerEnabled())
-    policy->SetLowBox(sid);
+    return policy->SetLowBox(sid);
+  return sandbox::SBOX_ALL_OK;
 }
 
-bool AddWin32kLockdownPolicy(sandbox::TargetPolicy* policy) {
+sandbox::ResultCode AddWin32kLockdownPolicy(sandbox::TargetPolicy* policy,
+                                            bool enable_opm) {
 #if !defined(NACL_WIN64)
   if (!IsWin32kRendererLockdownEnabled())
-    return true;
+    return sandbox::SBOX_ALL_OK;
 
   // Enable win32k lockdown if not already.
   sandbox::MitigationFlags flags = policy->GetProcessMitigations();
   if ((flags & sandbox::MITIGATION_WIN32K_DISABLE) ==
       sandbox::MITIGATION_WIN32K_DISABLE)
-    return true;
+    return sandbox::SBOX_ALL_OK;
 
   sandbox::ResultCode result =
       policy->AddRule(sandbox::TargetPolicy::SUBSYS_WIN32K_LOCKDOWN,
-                      sandbox::TargetPolicy::FAKE_USER_GDI_INIT, nullptr);
+                      enable_opm ? sandbox::TargetPolicy::IMPLEMENT_OPM_APIS
+                                 : sandbox::TargetPolicy::FAKE_USER_GDI_INIT,
+                      nullptr);
   if (result != sandbox::SBOX_ALL_OK)
-    return false;
+    return result;
+  if (enable_opm)
+    policy->SetEnableOPMRedirection();
 
   flags |= sandbox::MITIGATION_WIN32K_DISABLE;
-  result = policy->SetProcessMitigations(flags);
-  if (result != sandbox::SBOX_ALL_OK)
-    return false;
+  return policy->SetProcessMitigations(flags);
+#else
+  return sandbox::SBOX_ALL_OK;
 #endif
-  return true;
 }
 
 bool InitBrokerServices(sandbox::BrokerServices* broker_services) {
@@ -656,16 +658,15 @@ bool InitBrokerServices(sandbox::BrokerServices* broker_services) {
 
 bool InitTargetServices(sandbox::TargetServices* target_services) {
   DCHECK(target_services);
-  DCHECK(!g_target_services);
   sandbox::ResultCode result = target_services->Init();
-  g_target_services = target_services;
   return sandbox::SBOX_ALL_OK == result;
 }
 
-base::Process StartSandboxedProcess(
+sandbox::ResultCode StartSandboxedProcess(
     SandboxedProcessLauncherDelegate* delegate,
     base::CommandLine* cmd_line,
-    const base::HandlesToInheritVector& handles_to_inherit) {
+    const base::HandlesToInheritVector& handles_to_inherit,
+    base::Process* process) {
   DCHECK(delegate);
   const base::CommandLine& browser_command_line =
       *base::CommandLine::ForCurrentProcess();
@@ -691,11 +692,10 @@ base::Process StartSandboxedProcess(
       options.inherit_handles = true;
       options.handles_to_inherit = &handles;
     }
-    base::Process process = base::LaunchProcess(*cmd_line, options);
+    base::Process unsandboxed_process = base::LaunchProcess(*cmd_line, options);
 
-    // TODO(rvargas) crbug.com/417532: Don't share a raw handle.
-    g_broker_services->AddTargetPeer(process.Handle());
-    return process;
+    *process = std::move(unsandboxed_process);
+    return sandbox::SBOX_ALL_OK;
   }
 
   sandbox::TargetPolicy* policy = g_broker_services->CreatePolicy();
@@ -714,20 +714,20 @@ base::Process StartSandboxedProcess(
       sandbox::MITIGATION_NONSYSTEM_FONT_DISABLE |
       sandbox::MITIGATION_IMAGE_LOAD_NO_REMOTE |
       sandbox::MITIGATION_IMAGE_LOAD_NO_LOW_LABEL;
-#if !defined(NACL_WIN64)
-  // Don't block font loading with GDI.
-  if (!gfx::win::ShouldUseDirectWrite())
-    mitigations ^= sandbox::MITIGATION_NONSYSTEM_FONT_DISABLE;
-#endif
 
-  if (policy->SetProcessMitigations(mitigations) != sandbox::SBOX_ALL_OK)
-    return base::Process();
+  sandbox::ResultCode result = sandbox::SBOX_ERROR_GENERIC;
+
+  result = policy->SetProcessMitigations(mitigations);
+
+  if (result != sandbox::SBOX_ALL_OK)
+    return result;
 
 #if !defined(NACL_WIN64)
   if (type_str == switches::kRendererProcess &&
       IsWin32kRendererLockdownEnabled()) {
-    if (!AddWin32kLockdownPolicy(policy))
-      return base::Process();
+    result = AddWin32kLockdownPolicy(policy, false);
+    if (result != sandbox::SBOX_ALL_OK)
+      return result;
   }
 #endif
 
@@ -735,29 +735,25 @@ base::Process StartSandboxedProcess(
   mitigations = sandbox::MITIGATION_STRICT_HANDLE_CHECKS |
                 sandbox::MITIGATION_DLL_SEARCH_ORDER;
 
-  if (policy->SetDelayedProcessMitigations(mitigations) != sandbox::SBOX_ALL_OK)
-    return base::Process();
+  result = policy->SetDelayedProcessMitigations(mitigations);
+  if (result != sandbox::SBOX_ALL_OK)
+    return result;
 
-  SetJobLevel(*cmd_line, sandbox::JOB_LOCKDOWN, 0, policy);
+  result = SetJobLevel(*cmd_line, sandbox::JOB_LOCKDOWN, 0, policy);
+  if (result != sandbox::SBOX_ALL_OK)
+    return result;
 
   if (!delegate->DisableDefaultPolicy()) {
-    if (!AddPolicyForSandboxedProcess(policy))
-      return base::Process();
+    result = AddPolicyForSandboxedProcess(policy);
+    if (result != sandbox::SBOX_ALL_OK)
+      return result;
   }
 
 #if !defined(NACL_WIN64)
-  // NOTE: This is placed at function scope so that it stays alive through
-  // process launch.
-  base::SharedMemory direct_write_font_cache_section;
   if (type_str == switches::kRendererProcess ||
       type_str == switches::kPpapiPluginProcess) {
-    if (gfx::win::ShouldUseDirectWrite()) {
-      AddDirectory(base::DIR_WINDOWS_FONTS,
-                  NULL,
-                  true,
-                  sandbox::TargetPolicy::FILES_ALLOW_READONLY,
-                  policy);
-    }
+    AddDirectory(base::DIR_WINDOWS_FONTS, NULL, true,
+                 sandbox::TargetPolicy::FILES_ALLOW_READONLY, policy);
   }
 #endif
 
@@ -768,9 +764,11 @@ base::Process StartSandboxedProcess(
     cmd_line->AppendSwitchASCII("ignored", " --type=renderer ");
   }
 
-  if (!AddGenericPolicy(policy)) {
+  result = AddGenericPolicy(policy);
+
+  if (result != sandbox::SBOX_ALL_OK) {
     NOTREACHED();
-    return base::Process();
+    return result;
   }
 
   // Allow the renderer and gpu processes to access the log file.
@@ -778,26 +776,28 @@ base::Process StartSandboxedProcess(
       type_str == switches::kGpuProcess) {
     if (logging::IsLoggingToFileEnabled()) {
       DCHECK(base::FilePath(logging::GetLogFileFullPath()).IsAbsolute());
-      policy->AddRule(sandbox::TargetPolicy::SUBSYS_FILES,
-                      sandbox::TargetPolicy::FILES_ALLOW_ANY,
-                      logging::GetLogFileFullPath().c_str());
+      result = policy->AddRule(sandbox::TargetPolicy::SUBSYS_FILES,
+                               sandbox::TargetPolicy::FILES_ALLOW_ANY,
+                               logging::GetLogFileFullPath().c_str());
+      if (result != sandbox::SBOX_ALL_OK)
+        return result;
     }
   }
 
 #if !defined(OFFICIAL_BUILD)
   // If stdout/stderr point to a Windows console, these calls will
-  // have no effect.
+  // have no effect. These calls can fail with SBOX_ERROR_BAD_PARAMS.
   policy->SetStdoutHandle(GetStdHandle(STD_OUTPUT_HANDLE));
   policy->SetStderrHandle(GetStdHandle(STD_ERROR_HANDLE));
 #endif
 
   if (!delegate->PreSpawnTarget(policy))
-    return base::Process();
+    return sandbox::SBOX_ERROR_DELEGATE_PRE_SPAWN;
 
   TRACE_EVENT_BEGIN0("startup", "StartProcessWithAccess::LAUNCHPROCESS");
 
   PROCESS_INFORMATION temp_process_info = {};
-  sandbox::ResultCode result = g_broker_services->SpawnTarget(
+  result = g_broker_services->SpawnTarget(
       cmd_line->GetProgram().value().c_str(),
       cmd_line->GetCommandLineString().c_str(), policy, &temp_process_info);
   DWORD last_error = ::GetLastError();
@@ -806,64 +806,20 @@ base::Process StartSandboxedProcess(
   TRACE_EVENT_END0("startup", "StartProcessWithAccess::LAUNCHPROCESS");
 
   if (sandbox::SBOX_ALL_OK != result) {
+    UMA_HISTOGRAM_SPARSE_SLOWLY("Process.Sandbox.Launch.Error", last_error);
     if (result == sandbox::SBOX_ERROR_GENERIC)
       DPLOG(ERROR) << "Failed to launch process";
-    else if (result == sandbox::SBOX_ERROR_CREATE_PROCESS) {
-      // TODO(shrikant): Remove this special case handling after determining
-      // cause for lowbox/createprocess errors.
-      sandbox::PolicyBase* policy_base =
-          static_cast<sandbox::PolicyBase*>(policy);
-      UMA_HISTOGRAM_SPARSE_SLOWLY(policy_base->GetLowBoxSid() ?
-                                      "Process.Sandbox.Lowbox.Launch.Error" :
-                                      "Process.Sandbox.Launch.Error",
-                                  last_error);
-    } else
+    else
       DLOG(ERROR) << "Failed to launch process. Error: " << result;
 
-    return base::Process();
+    return result;
   }
 
   delegate->PostSpawnTarget(target.process_handle());
 
   CHECK(ResumeThread(target.thread_handle()) != static_cast<DWORD>(-1));
-  return base::Process(target.TakeProcessHandle());
-}
-
-bool BrokerDuplicateHandle(HANDLE source_handle,
-                           DWORD target_process_id,
-                           HANDLE* target_handle,
-                           DWORD desired_access,
-                           DWORD options) {
-  // If our process is the target just duplicate the handle.
-  if (::GetCurrentProcessId() == target_process_id) {
-    return !!::DuplicateHandle(::GetCurrentProcess(), source_handle,
-                               ::GetCurrentProcess(), target_handle,
-                               desired_access, FALSE, options);
-  }
-
-  // Try the broker next
-  if (g_target_services &&
-      g_target_services->DuplicateHandle(source_handle, target_process_id,
-                                         target_handle, desired_access,
-                                         options) == sandbox::SBOX_ALL_OK) {
-    return true;
-  }
-
-  // Finally, see if we already have access to the process.
-  base::win::ScopedHandle target_process;
-  target_process.Set(::OpenProcess(PROCESS_DUP_HANDLE, FALSE,
-                                    target_process_id));
-  if (target_process.IsValid()) {
-    return !!::DuplicateHandle(::GetCurrentProcess(), source_handle,
-                                target_process.Get(), target_handle,
-                                desired_access, FALSE, options);
-  }
-
-  return false;
-}
-
-bool BrokerAddTargetPeer(HANDLE peer_process) {
-  return g_broker_services->AddTargetPeer(peer_process) == sandbox::SBOX_ALL_OK;
+  *process = base::Process(target.TakeProcessHandle());
+  return sandbox::SBOX_ALL_OK;
 }
 
 }  // namespace content

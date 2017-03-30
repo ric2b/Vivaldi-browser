@@ -9,11 +9,7 @@
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/renderer/media/mock_peer_connection_impl.h"
-#include "content/renderer/media/webaudio_capturer_source.h"
-#include "content/renderer/media/webrtc/webrtc_local_audio_track_adapter.h"
 #include "content/renderer/media/webrtc/webrtc_video_capturer_adapter.h"
-#include "content/renderer/media/webrtc_audio_capturer.h"
-#include "content/renderer/media/webrtc_local_audio_track.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
 #include "third_party/webrtc/api/mediastreaminterface.h"
 #include "third_party/webrtc/base/scoped_ref_ptr.h"
@@ -155,30 +151,6 @@ class MockRtcVideoCapturer : public WebRtcVideoCapturerAdapter {
   int width_;
   int height_;
 };
-
-MockAudioSource::MockAudioSource(const cricket::AudioOptions& options,
-                                 bool remote)
-    : remote_(remote), state_(MediaSourceInterface::kLive) {}
-
-MockAudioSource::~MockAudioSource() {}
-
-void MockAudioSource::RegisterObserver(webrtc::ObserverInterface* observer) {
-  DCHECK(observers_.find(observer) == observers_.end());
-  observers_.insert(observer);
-}
-
-void MockAudioSource::UnregisterObserver(webrtc::ObserverInterface* observer) {
-  DCHECK(observers_.find(observer) != observers_.end());
-  observers_.erase(observer);
-}
-
-webrtc::MediaSourceInterface::SourceState MockAudioSource::state() const {
-  return state_;
-}
-
-bool MockAudioSource::remote() const {
-  return remote_;
-}
 
 scoped_refptr<MockWebRtcAudioTrack> MockWebRtcAudioTrack::Create(
     const std::string& id) {
@@ -380,7 +352,9 @@ class MockIceCandidate : public IceCandidateInterface {
 
 MockPeerConnectionDependencyFactory::MockPeerConnectionDependencyFactory()
     : PeerConnectionDependencyFactory(NULL),
-      fail_to_create_next_audio_capturer_(false) {
+      signaling_thread_("MockPCFactory WebRtc Signaling Thread") {
+  EnsureWebRtcAudioDeviceImpl();
+  CHECK(signaling_thread_.Start());
 }
 
 MockPeerConnectionDependencyFactory::~MockPeerConnectionDependencyFactory() {}
@@ -391,14 +365,6 @@ MockPeerConnectionDependencyFactory::CreatePeerConnection(
     blink::WebFrame* frame,
     webrtc::PeerConnectionObserver* observer) {
   return new rtc::RefCountedObject<MockPeerConnectionImpl>(this, observer);
-}
-
-scoped_refptr<webrtc::AudioSourceInterface>
-MockPeerConnectionDependencyFactory::CreateLocalAudioSource(
-    const cricket::AudioOptions& options) {
-  last_audio_source_ =
-      new rtc::RefCountedObject<MockAudioSource>(options, false);
-  return last_audio_source_;
 }
 
 WebRtcVideoCapturerAdapter*
@@ -415,9 +381,6 @@ MockPeerConnectionDependencyFactory::CreateVideoSource(
   NOTIMPLEMENTED();
   return nullptr;
 }
-
-void MockPeerConnectionDependencyFactory::CreateWebAudioSource(
-    blink::WebMediaStreamSource* source) {}
 
 scoped_refptr<webrtc::MediaStreamInterface>
 MockPeerConnectionDependencyFactory::CreateLocalMediaStream(
@@ -458,19 +421,9 @@ MockPeerConnectionDependencyFactory::CreateIceCandidate(
   return new MockIceCandidate(sdp_mid, sdp_mline_index, sdp);
 }
 
-std::unique_ptr<WebRtcAudioCapturer>
-MockPeerConnectionDependencyFactory::CreateAudioCapturer(
-    int render_frame_id,
-    const StreamDeviceInfo& device_info,
-    const blink::WebMediaConstraints& constraints,
-    MediaStreamAudioSource* audio_source) {
-  if (fail_to_create_next_audio_capturer_) {
-    fail_to_create_next_audio_capturer_ = false;
-    return NULL;
-  }
-  DCHECK(audio_source);
-  return WebRtcAudioCapturer::CreateCapturer(-1, device_info, constraints, NULL,
-                                             audio_source);
+scoped_refptr<base::SingleThreadTaskRunner>
+MockPeerConnectionDependencyFactory::GetWebRtcSignalingThread() const {
+  return signaling_thread_.task_runner();
 }
 
 }  // namespace content

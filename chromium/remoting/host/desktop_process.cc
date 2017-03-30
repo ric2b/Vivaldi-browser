@@ -25,6 +25,10 @@
 #include "remoting/host/desktop_environment.h"
 #include "remoting/host/desktop_session_agent.h"
 
+#if defined(OS_WIN)
+#include "base/win/windows_version.h"
+#endif  // defined(OS_WIN)
+
 namespace remoting {
 
 DesktopProcess::DesktopProcess(
@@ -59,6 +63,22 @@ void DesktopProcess::InjectSas() {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
   daemon_channel_->Send(new ChromotingDesktopDaemonMsg_InjectSas());
+}
+
+void DesktopProcess::LockWorkStation() {
+  DCHECK(caller_task_runner_->BelongsToCurrentThread());
+#if defined(OS_WIN)
+  if (base::win::OSInfo::GetInstance()->version_type() ==
+      base::win::VersionType::SUITE_HOME) {
+    return;
+  }
+
+  if (!::LockWorkStation()) {
+    LOG(ERROR) << "LockWorkStation() failed: " << ::GetLastError();
+  }
+#else
+  NOTREACHED();
+#endif  // defined(OS_WIN)
 }
 
 bool DesktopProcess::OnMessageReceived(const IPC::Message& message) {
@@ -102,6 +122,8 @@ bool DesktopProcess::Start(
   DCHECK(!desktop_environment_factory_);
   DCHECK(desktop_environment_factory);
 
+  IPC::AttachmentBrokerUnprivileged::CreateBrokerIfNeeded();
+
   desktop_environment_factory_ = std::move(desktop_environment_factory);
 
   // Launch the audio capturing thread.
@@ -141,11 +163,12 @@ bool DesktopProcess::Start(
 
   // Connect to the daemon.
   daemon_channel_.reset(new IPC::ChannelProxy(this, io_task_runner.get()));
-  IPC::AttachmentBrokerUnprivileged::CreateBrokerIfNeeded();
   IPC::AttachmentBroker* broker = IPC::AttachmentBroker::GetGlobal();
-  if (broker && !broker->IsPrivilegedBroker())
+  if (broker && !broker->IsPrivilegedBroker()) {
     broker->RegisterBrokerCommunicationChannel(daemon_channel_.get());
-  daemon_channel_->Init(daemon_channel_name_, IPC::Channel::MODE_CLIENT, true);
+  }
+  daemon_channel_->Init(daemon_channel_name_, IPC::Channel::MODE_CLIENT,
+                        /*create_pipe_now=*/true);
 
   // Pass |desktop_pipe| to the daemon.
   daemon_channel_->Send(

@@ -46,10 +46,6 @@ const char kDisableTouchFeedback[] = "disable-touch-feedback";
 // Enables large icons on the New Tab page.
 const char kEnableIconNtp[] = "enable-icon-ntp";
 
-// Enables a zoomed popup bubble that allows the user to select a link.
-const char kEnableLinkDisambiguationPopup[] =
-    "enable-link-disambiguation-popup";
-
 // Enables touch event based drag and drop.
 const char kEnableTouchDragDrop[] = "enable-touch-drag-drop";
 
@@ -67,7 +63,6 @@ const char kMaterialDesignInkDropAnimationSpeedFast[] = "fast";
 // Defines that Material Design visual feedback animations should be slow.
 const char kMaterialDesignInkDropAnimationSpeedSlow[] = "slow";
 
-#if defined(ENABLE_TOPCHROME_MD)
 // Enables top Chrome material design elements.
 const char kTopChromeMD[] = "top-chrome-md";
 
@@ -80,6 +75,9 @@ const char kTopChromeMDMaterialHybrid[] = "material-hybrid";
 
 // Classic, non-material, mode for the |kTopChromeMD| switch.
 const char kTopChromeMDNonMaterial[] = "non-material";
-#endif  // defined(ENABLE_TOPCHROME_MD)
+
+// Applies the material design mode passed via --top-chrome-md to elements
+// throughout Chrome (not just top Chrome).
+const char kExtendMdToSecondaryUi[] = "secondary-ui-md";
 
 }  // namespace switches

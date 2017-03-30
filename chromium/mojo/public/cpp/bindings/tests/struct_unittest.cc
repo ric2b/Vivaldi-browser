@@ -50,16 +50,18 @@ MultiVersionStructPtr MakeMultiVersionStruct() {
 
 template <typename U, typename T>
 U SerializeAndDeserialize(T input) {
-  typedef typename mojo::internal::WrapperTraits<T>::DataType InputDataType;
-  typedef typename mojo::internal::WrapperTraits<U>::DataType OutputDataType;
+  using InputDataType = typename std::remove_pointer<decltype(
+      std::declval<T>().get())>::type::Data_*;
+  using OutputDataType = typename std::remove_pointer<decltype(
+      std::declval<U>().get())>::type::Data_*;
 
-  size_t size = GetSerializedSize_(input, nullptr);
+  mojo::internal::SerializationContext context;
+  size_t size = mojo::internal::PrepareToSerialize<T>(input, &context);
   mojo::internal::FixedBufferForTesting buf(size + 32);
   InputDataType data;
-  Serialize_(std::move(input), &buf, &data, nullptr);
+  mojo::internal::Serialize<T>(input, &buf, &data, &context);
 
-  std::vector<Handle> handles;
-  data->EncodePointersAndHandles(&handles);
+  data->EncodePointers();
 
   // Set the subsequent area to a special value, so that we can find out if we
   // mistakenly access the area.
@@ -67,10 +69,10 @@ U SerializeAndDeserialize(T input) {
   memset(subsequent_area, 0xAA, 32);
 
   OutputDataType output_data = reinterpret_cast<OutputDataType>(data);
-  output_data->DecodePointersAndHandles(&handles);
+  output_data->DecodePointers();
 
   U output;
-  Deserialize_(output_data, &output, nullptr);
+  mojo::internal::Deserialize<U>(output_data, &output, &context);
   return std::move(output);
 }
 
@@ -134,15 +136,15 @@ TEST_F(StructTest, Clone) {
 TEST_F(StructTest, Serialization_Basic) {
   RectPtr rect(MakeRect());
 
-  size_t size = GetSerializedSize_(rect, nullptr);
+  size_t size = mojo::internal::PrepareToSerialize<RectPtr>(rect, nullptr);
   EXPECT_EQ(8U + 16U, size);
 
   mojo::internal::FixedBufferForTesting buf(size);
   internal::Rect_Data* data;
-  Serialize_(std::move(rect), &buf, &data, nullptr);
+  mojo::internal::Serialize<RectPtr>(rect, &buf, &data, nullptr);
 
   RectPtr rect2;
-  Deserialize_(data, &rect2, nullptr);
+  mojo::internal::Deserialize<RectPtr>(data, &rect2, nullptr);
 
   CheckRect(*rect2);
 }
@@ -167,15 +169,15 @@ TEST_F(StructTest, Serialization_StructPointers) {
   pair->first = MakeRect();
   pair->second = MakeRect();
 
-  size_t size = GetSerializedSize_(pair, nullptr);
+  size_t size = mojo::internal::PrepareToSerialize<RectPairPtr>(pair, nullptr);
   EXPECT_EQ(8U + 16U + 2 * (8U + 16U), size);
 
   mojo::internal::FixedBufferForTesting buf(size);
   internal::RectPair_Data* data;
-  Serialize_(std::move(pair), &buf, &data, nullptr);
+  mojo::internal::Serialize<RectPairPtr>(pair, &buf, &data, nullptr);
 
   RectPairPtr pair2;
-  Deserialize_(data, &pair2, nullptr);
+  mojo::internal::Deserialize<RectPairPtr>(data, &pair2, nullptr);
 
   CheckRect(*pair2->first);
   CheckRect(*pair2->second);
@@ -189,7 +191,8 @@ TEST_F(StructTest, Serialization_ArrayPointers) {
   for (size_t i = 0; i < region->rects.size(); ++i)
     region->rects[i] = MakeRect(static_cast<int32_t>(i) + 1);
 
-  size_t size = GetSerializedSize_(region, nullptr);
+  size_t size =
+      mojo::internal::PrepareToSerialize<NamedRegionPtr>(region, nullptr);
   EXPECT_EQ(8U +            // header
                 8U +        // name pointer
                 8U +        // rects pointer
@@ -203,10 +206,10 @@ TEST_F(StructTest, Serialization_ArrayPointers) {
 
   mojo::internal::FixedBufferForTesting buf(size);
   internal::NamedRegion_Data* data;
-  Serialize_(std::move(region), &buf, &data, nullptr);
+  mojo::internal::Serialize<NamedRegionPtr>(region, &buf, &data, nullptr);
 
   NamedRegionPtr region2;
-  Deserialize_(data, &region2, nullptr);
+  mojo::internal::Deserialize<NamedRegionPtr>(data, &region2, nullptr);
 
   EXPECT_EQ(String("region"), region2->name);
 
@@ -221,7 +224,8 @@ TEST_F(StructTest, Serialization_NullArrayPointers) {
   EXPECT_TRUE(region->name.is_null());
   EXPECT_TRUE(region->rects.is_null());
 
-  size_t size = GetSerializedSize_(region, nullptr);
+  size_t size =
+      mojo::internal::PrepareToSerialize<NamedRegionPtr>(region, nullptr);
   EXPECT_EQ(8U +      // header
                 8U +  // name pointer
                 8U,   // rects pointer
@@ -229,10 +233,10 @@ TEST_F(StructTest, Serialization_NullArrayPointers) {
 
   mojo::internal::FixedBufferForTesting buf(size);
   internal::NamedRegion_Data* data;
-  Serialize_(std::move(region), &buf, &data, nullptr);
+  mojo::internal::Serialize<NamedRegionPtr>(region, &buf, &data, nullptr);
 
   NamedRegionPtr region2;
-  Deserialize_(data, &region2, nullptr);
+  mojo::internal::Deserialize<NamedRegionPtr>(data, &region2, nullptr);
 
   EXPECT_TRUE(region2->name.is_null());
   EXPECT_TRUE(region2->rects.is_null());
@@ -414,5 +418,77 @@ TEST_F(StructTest, Versioning_NewToOld) {
     EXPECT_TRUE(output->Equals(*expected_output));
   }
 }
+
+// Serialization test for native struct.
+TEST_F(StructTest, Serialization_NativeStruct) {
+  using Data = mojo::internal::NativeStruct_Data;
+  {
+    // Serialization of a null native struct.
+    NativeStructPtr native;
+    size_t size =
+        mojo::internal::PrepareToSerialize<NativeStructPtr>(native, nullptr);
+    EXPECT_EQ(0u, size);
+    mojo::internal::FixedBufferForTesting buf(size);
+
+    Data* data = nullptr;
+    mojo::internal::Serialize<NativeStructPtr>(std::move(native), &buf, &data,
+                                               nullptr);
+
+    EXPECT_EQ(nullptr, data);
+
+    NativeStructPtr output_native;
+    mojo::internal::Deserialize<NativeStructPtr>(data, &output_native, nullptr);
+    EXPECT_TRUE(output_native.is_null());
+  }
+
+  {
+    // Serialization of a native struct with null data.
+    NativeStructPtr native(NativeStruct::New());
+    size_t size =
+        mojo::internal::PrepareToSerialize<NativeStructPtr>(native, nullptr);
+    EXPECT_EQ(0u, size);
+    mojo::internal::FixedBufferForTesting buf(size);
+
+    Data* data = nullptr;
+    mojo::internal::Serialize<NativeStructPtr>(std::move(native), &buf, &data,
+                                               nullptr);
+
+    EXPECT_EQ(nullptr, data);
+
+    NativeStructPtr output_native;
+    mojo::internal::Deserialize<NativeStructPtr>(data, &output_native, nullptr);
+    EXPECT_TRUE(output_native.is_null());
+  }
+
+  {
+    NativeStructPtr native(NativeStruct::New());
+    native->data = Array<uint8_t>(2);
+    native->data[0] = 'X';
+    native->data[1] = 'Y';
+
+    size_t size =
+        mojo::internal::PrepareToSerialize<NativeStructPtr>(native, nullptr);
+    EXPECT_EQ(16u, size);
+    mojo::internal::FixedBufferForTesting buf(size);
+
+    Data* data = nullptr;
+    mojo::internal::Serialize<NativeStructPtr>(std::move(native), &buf, &data,
+                                               nullptr);
+
+    EXPECT_NE(nullptr, data);
+
+    data->EncodePointers();
+    data->DecodePointers();
+
+    NativeStructPtr output_native;
+    mojo::internal::Deserialize<NativeStructPtr>(data, &output_native, nullptr);
+    EXPECT_FALSE(output_native.is_null());
+    EXPECT_FALSE(output_native->data.is_null());
+    EXPECT_EQ(2u, output_native->data.size());
+    EXPECT_EQ('X', output_native->data[0]);
+    EXPECT_EQ('Y', output_native->data[1]);
+  }
+}
+
 }  // namespace test
 }  // namespace mojo

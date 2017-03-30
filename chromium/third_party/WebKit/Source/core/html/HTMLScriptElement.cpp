@@ -43,7 +43,7 @@ inline HTMLScriptElement::HTMLScriptElement(Document& document, bool wasInserted
 {
 }
 
-RawPtr<HTMLScriptElement> HTMLScriptElement::create(Document& document, bool wasInsertedByParser, bool alreadyStarted, bool createdDuringDocumentWrite)
+HTMLScriptElement* HTMLScriptElement::create(Document& document, bool wasInsertedByParser, bool alreadyStarted, bool createdDuringDocumentWrite)
 {
     return new HTMLScriptElement(document, wasInsertedByParser, alreadyStarted, createdDuringDocumentWrite);
 }
@@ -174,7 +174,7 @@ void HTMLScriptElement::dispatchLoadEvent()
     dispatchEvent(Event::create(EventTypeNames::load));
 }
 
-RawPtr<Element> HTMLScriptElement::cloneElementWithoutAttributesAndChildren()
+Element* HTMLScriptElement::cloneElementWithoutAttributesAndChildren()
 {
     return new HTMLScriptElement(document(), false, m_loader->alreadyStarted(), false);
 }

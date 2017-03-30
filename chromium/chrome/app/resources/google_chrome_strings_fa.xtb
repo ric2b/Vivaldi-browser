@@ -66,10 +66,16 @@
 <translation id="2997147809295888909">‏Chrome تأیید کرد <ph name="ISSUER" /> گواهی‌نامه این وب‌سایت را صادر کرده است. سرور هیچ اطلاعات «شفافیت گواهی‌نامه» معتبری ارائه نکرد.</translation>
 <translation id="3037838751736561277">‏Google Chrome در حالت پس‌زمینه است.</translation>
 <translation id="3047079729301751317">‏با قطع اتصال <ph name="USERNAME" />، سابقه، نشانک‌ها، تنظیمات و سایر داده‌های Chrome شما که در این دستگاه ذخیره شده‌اند، پاک می‌شود. داده‌های ذخیره شده در حساب Google شما پاک نمی‌شوند و در <ph name="GOOGLE_DASHBOARD_LINK" />داشبورد Google<ph name="END_GOOGLE_DASHBOARD_LINK" /> قابل مدیریت هستند.</translation>
+<translation id="3065168410429928842">‏برگه Chrome</translation>
 <translation id="3080151273017101988">‏ادامه اجرای برنامه‌ها در پس‌زمینه هنگامیکه Google Chrome بسته می‌شود</translation>
 <translation id="3089968997497233615">‏نسخه جدید و امن تری از Google Chrome موجود است.</translation>
 <translation id="3149510190863420837">‏برنامه‌های Chrome</translation>
-<translation id="3197823471738295152">دستگاه شما به‌روزرسانی شده است.</translation>
+<translation id="3251381707915721925">‏برای تنظیم وب‌سایت‌هایی که <ph name="NEW_PROFILE_NAME" /> می‌تواند ببیند، می‌توانید با رفتن به <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" /> محدودیت‌ها و تنظیمات را اعمال کنید. اگر تنظیمات پیش‌فرض را تغییر ندهید، <ph name="NEW_PROFILE_NAME" /> می‌تواند همه محتوای وب را مرور کند.
+
+برای اینکه <ph name="NEW_PROFILE_NAME" /> نتواند به محتوای شما دسترسی داشته باشد، حتماً در زمان‌هایی که از Chrome استفاده نمی‌کنید نمایه‌تان را قفل کنید. برای انجام این کار، روی نام نمایه در گوشه چپ بالای مرورگر کلیک کنید و «خروج و قفل کودک» را انتخاب نمایید.
+<ph name="BEGIN_LINK_2" />بیشتر بدانید<ph name="END_LINK_2" />
+
+برای دستورالعمل‌های بیشتر، لطفاً رایانامه‌تان (<ph name="ACCOUNT_EMAIL" />) را بررسی کنید.</translation>
 <translation id="3282568296779691940">‏ورود به Chrome</translation>
 <translation id="3311976847535831054">‏این رایانه دیگر به‌روزرسانی‌های Google Chrome ‏۳۲ بیتی را دریافت نخواهد کرد. لطفاً به Google Chrome ‏۶۴ بیتی ارتقا دهید.</translation>
 <translation id="3360895254066713204">‏راهنمای Chrome</translation>
@@ -206,7 +212,6 @@
 <translation id="7808348361785373670">‏حذف از Chrome...</translation>
 <translation id="7825851276765848807">‏بدلیل خطای نامشخص، نصب ناموفق بود. لطفاً دوباره Google Chrome را بارگیری کنید.</translation>
 <translation id="7890208801193284374">‏اگر رایانه‌ای را به صورت مشترک استفاده می‌کنید، دوستان و خانواده می‌توانند به صورت جداگانه مرور کنند و Chrome را به صورتی که مایلند تنظیم کنند.</translation>
-<translation id="8000275528373650868">‏Google Chrome به Windows Vista یا Windows XP با SP2 یا بالاتر نیاز دارد.</translation>
 <translation id="8005540215158006229">‏Chrome تقریباً آماده است.</translation>
 <translation id="8008534537613507642">‏نصب مجدد Chrome</translation>
 <translation id="8030318113982266900">درحال به روزرسانی دستگاه شما به کانال <ph name="CHANNEL_NAME" />...</translation>
@@ -228,6 +233,7 @@
 <translation id="8556340503434111824">‏نسخه جدیدی از Google Chrome وجود دارد که سریعتر از همیشه است.</translation>
 <translation id="8568392309447938879">‏برای استفاده از برنامه‌ها باید به سیستم Chrome وارد شوید. این کار به Chrome امکان می‌دهد برنامه‌ها، نشانک‌ها، سابقه، گذرواژه‌ها و دیگر تنظیماتتان را در بین دستگاه‌ها همگام‌سازی کند.</translation>
 <translation id="8614913330719544658">‏Google Chrome پاسخ نمی‌دهد. مجدداً راه‌اندازی شود؟</translation>
+<translation id="8667808506758191620"><ph name="DEVICE_TYPE" /> شما به‌ روز است.</translation>
 <translation id="8669527147644353129">‏راهنمای Google Chrome</translation>
 <translation id="8679801911857917785">‏این برنامه همچنین صفحه‌ای را که هنگام راه‌اندازی Chrome نشان داده می‌شود، کنترل می‌کند.</translation>
 <translation id="870251953148363156">‏به‌روزرسانی Goo&amp;gle Chrome</translation>
@@ -236,6 +242,7 @@
 <translation id="8851136666856101339">اصلی</translation>
 <translation id="8862326446509486874">شما حقوق لازم برای نصب در سطح سیستم را ندارید. دوباره به‌عنوان سرپرست نصب کننده را اجرا کنید.</translation>
 <translation id="9026991721384951619">‏سیستم‌عامل Chrome قادر به همگام‌سازی داده‌هایتان نبود زیرا جزئیات ورود به سیستم حساب شما به‌روز نیست.</translation>
+<translation id="9067395829937117663">‏Google Chrome به Windows 7 یا بالاتر نیاز دارد.</translation>
 <translation id="9102715433345326100">‏این فایل خرابکار است و Chrome آن را مسدود کرده است.</translation>
 <translation id="9107728822479888688">‏<ph name="BEGIN_BOLD" />هشدار:<ph name="END_BOLD" /> Google Chrome نمی‌تواند مانع از ثبت سابقه مرور شما توسط افزونه‌ها شود. برای غیرفعال کردن این افزونه در حالت ناشناس، این گزینه را از حالت انتخاب خارج کنید.</translation>
 <translation id="911206726377975832">داده‌های مرور شما نیز حذف شود؟</translation>

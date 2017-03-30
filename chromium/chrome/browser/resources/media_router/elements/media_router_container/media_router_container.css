@@ -24,12 +24,16 @@
   width: 100%;
 }
 
+#content {
+  position: relative;
+}
+
 #device-missing {
   align-items: center;
   background-color: white;
   display: flex;
   justify-content: center;
-  margin: 60px 0;
+  padding: 60px 0;
 }
 
 #device-missing a {
@@ -144,6 +148,20 @@ paper-menu {
   flex-grow: 1;
 }
 
+#search-results-container {
+  bottom: 0;
+  left: 0;
+  overflow-x: hidden;
+  /* overflow-y is set to auto when the results are actually displayed to allow
+   * scrolling. It is set to hidden by default so the scrollbar isn't displayed
+   * while animating.
+   */
+  overflow-y: hidden;
+  position: absolute;
+  right: 0;
+  top: 100%;
+}
+
 #searching-devices-spinner {
   height: 30px;
   width: 30px;
@@ -175,8 +193,8 @@ paper-menu {
   /* TODO(crbug/589697): Handle overflow of very long domain names. */
 }
 
-#sink-list {
-  padding-bottom: 0;
+#sink-list-view {
+  position: relative;
 }
 
 .sink-name {
@@ -185,8 +203,18 @@ paper-menu {
   text-overflow: ellipsis;
 }
 
-#sink-search.bottom {
+#sink-search {
+  padding-bottom: 0;
+  padding-top: 4px;
+  position: absolute;
+  top: 100%;
+  width: 100%;
+  z-index: 1;
+}
+
+:host([search-use-bottom-padding]) #sink-search {
   padding-bottom: 16px;
+  padding-top: 0;
 }
 
 /* Separate icon class is a consequence of box-sizing: border-box set by

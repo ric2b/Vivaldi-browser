@@ -28,6 +28,7 @@ UserManagerBrowserTest.prototype = {
     '../settings/test_browser_proxy.js',
     'control_bar_tests.js',
     'create_profile_tests.js',
+    'import_supervised_user_tests.js',
     'test_profile_browser_proxy.js',
     'user_manager_pages_tests.js',
   ]),
@@ -36,12 +37,14 @@ UserManagerBrowserTest.prototype = {
   runAccessibilityChecks: false,
 };
 
-TEST_F('UserManagerBrowserTest', 'UserManagerTest', function() {
+// Flaky timeout failures on all platforms; see https://crbug.com/613191.
+TEST_F('UserManagerBrowserTest', 'DISABLED_UserManagerTest', function() {
   // Disable 'pod-row' so it won't handle click events after we clear the body.
   $('pod-row').disabled = true;
 
   user_manager.control_bar_tests.registerTests();
   user_manager.create_profile_tests.registerTests();
+  user_manager.import_supervised_user_tests.registerTests();
   user_manager.user_manager_pages_tests.registerTests();
   mocha.run();
 });

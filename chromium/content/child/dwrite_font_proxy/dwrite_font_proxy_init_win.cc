@@ -11,8 +11,11 @@
 #include "base/debug/alias.h"
 #include "base/win/iat_patch_function.h"
 #include "base/win/windows_version.h"
+#include "content/child/child_thread_impl.h"
 #include "content/child/dwrite_font_proxy/dwrite_font_proxy_win.h"
+#include "content/child/dwrite_font_proxy/font_fallback_win.h"
 #include "content/child/font_warmup_win.h"
+#include "content/child/thread_safe_sender.h"
 #include "skia/ext/fontmgr_default_win.h"
 #include "third_party/WebKit/public/web/win/WebFontRendering.h"
 #include "third_party/skia/include/ports/SkFontMgr.h"
@@ -66,19 +69,47 @@ void InitializeDWriteFontProxy() {
 
   CreateDirectWriteFactory(&factory);
 
+  IPC::Sender* sender = g_sender_override;
+
+  // Hack for crbug.com/631254: set the sender if we can get one, so that when
+  // Flash calls into the font proxy from a different thread we will have a
+  // sender available.
+  if (!sender && ChildThreadImpl::current())
+    sender = ChildThreadImpl::current()->thread_safe_sender();
+
   if (!g_font_collection) {
     mswr::MakeAndInitialize<DWriteFontCollectionProxy>(
-        &g_font_collection, factory.Get(), g_sender_override);
+        &g_font_collection, factory.Get(), sender);
   }
 
-  sk_sp<SkFontMgr> skia_font_manager(
-      SkFontMgr_New_DirectWrite(factory.Get(), g_font_collection.Get()));
+  mswr::ComPtr<IDWriteFontFallback> font_fallback;
+  mswr::ComPtr<IDWriteFactory2> factory2;
+
+  if (SUCCEEDED(factory.As(&factory2)) && factory2.Get()) {
+    mswr::MakeAndInitialize<FontFallback>(
+        &font_fallback, g_font_collection.Get(), sender);
+  }
+
+  sk_sp<SkFontMgr> skia_font_manager(SkFontMgr_New_DirectWrite(
+      factory.Get(), g_font_collection.Get(), font_fallback.Get()));
   blink::WebFontRendering::setSkiaFontManager(skia_font_manager.get());
 
   // Add an extra ref for SetDefaultSkiaFactory, which keeps a ref but doesn't
   // addref.
   skia_font_manager->ref();
   SetDefaultSkiaFactory(skia_font_manager.get());
+
+  // When IDWriteFontFallback is not available (prior to Win8.1) Skia will
+  // still attempt to use DirectWrite to determine fallback fonts (in
+  // SkFontMgr_DirectWrite::onMatchFamilyStyleCharacter), which will likely
+  // result in trying to load the system font collection. To avoid that and
+  // instead fall back on WebKit's fallback logic, we don't use Skia's font
+  // fallback if IDWriteFontFallback is not available.
+  // This flag can be removed when Win8.0 and earlier are no longer supported.
+  bool fallback_available = font_fallback.Get() != nullptr;
+  DCHECK_EQ(fallback_available,
+    base::win::GetVersion() > base::win::VERSION_WIN8);
+  blink::WebFontRendering::setUseSkiaFontFallback(fallback_available);
 }
 
 void UninitializeDWriteFontProxy() {

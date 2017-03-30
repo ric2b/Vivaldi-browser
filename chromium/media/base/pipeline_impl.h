@@ -5,6 +5,8 @@
 #ifndef MEDIA_BASE_PIPELINE_IMPL_H_
 #define MEDIA_BASE_PIPELINE_IMPL_H_
 
+#include <memory>
+
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -19,6 +21,7 @@
 #include "media/base/pipeline.h"
 #include "media/base/pipeline_status.h"
 #include "media/base/ranges.h"
+#include "media/base/renderer_client.h"
 #include "media/base/serial_runner.h"
 #include "media/base/text_track.h"
 
@@ -72,11 +75,15 @@ class TextRenderer;
 // TODO(sandersd): It should be possible to pass through Suspended when going
 // from InitDemuxer to InitRenderer, thereby eliminating the Resuming state.
 // Some annoying differences between the two paths need to be removed first.
-class MEDIA_EXPORT PipelineImpl : public Pipeline, public DemuxerHost {
+class MEDIA_EXPORT PipelineImpl : public Pipeline,
+                                  public DemuxerHost,
+                                  public RendererClient {
  public:
-  // Constructs a media pipeline that will execute on |task_runner|.
-  PipelineImpl(const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-               MediaLog* media_log);
+  // Constructs a media pipeline that will execute media tasks on
+  // |media_task_runner|.
+  PipelineImpl(
+      const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+      MediaLog* media_log);
   ~PipelineImpl() override;
 
   void SetErrorForTesting(PipelineStatus status);
@@ -84,22 +91,16 @@ class MEDIA_EXPORT PipelineImpl : public Pipeline, public DemuxerHost {
 
   // Pipeline implementation.
   void Start(Demuxer* demuxer,
-             scoped_ptr<Renderer> renderer,
-             const base::Closure& ended_cb,
-             const PipelineStatusCB& error_cb,
-             const PipelineStatusCB& seek_cb,
-             const PipelineMetadataCB& metadata_cb,
-             const BufferingStateCB& buffering_state_cb,
-             const base::Closure& duration_change_cb,
-             const AddTextTrackCB& add_text_track_cb,
-             const base::Closure& waiting_for_decryption_key_cb) override;
-  void Stop(const base::Closure& stop_cb) override;
+             std::unique_ptr<Renderer> renderer,
+             Client* client,
+             const PipelineStatusCB& seek_cb) override;
+  void Stop() override;
   void Seek(base::TimeDelta time, const PipelineStatusCB& seek_cb) override;
   bool IsRunning() const override;
   double GetPlaybackRate() const override;
   void SetPlaybackRate(double playback_rate) override;
   void Suspend(const PipelineStatusCB& suspend_cb) override;
-  void Resume(scoped_ptr<Renderer> renderer,
+  void Resume(std::unique_ptr<Renderer> renderer,
               base::TimeDelta timestamp,
               const PipelineStatusCB& seek_cb) override;
   float GetVolume() const override;
@@ -149,12 +150,14 @@ class MEDIA_EXPORT PipelineImpl : public Pipeline, public DemuxerHost {
                      const TextTrackConfig& config) override;
   void RemoveTextStream(DemuxerStream* text_stream) override;
 
-  // Callback executed when a rendering error happened, initiating the teardown
-  // sequence.
-  void OnError(PipelineStatus error);
-
-  // Callback executed by filters to update statistics.
-  void OnUpdateStatistics(const PipelineStatistics& stats_delta);
+  // RendererClient implementation.
+  void OnError(PipelineStatus error) override;
+  void OnEnded() override;
+  void OnStatisticsUpdate(const PipelineStatistics& stats) override;
+  void OnBufferingStateChange(BufferingState state) override;
+  void OnWaitingForDecryptionKey() override;
+  void OnVideoNaturalSizeChange(const gfx::Size& size) override;
+  void OnVideoOpacityChange(bool opaque) override;
 
   // The following "task" methods correspond to the public methods, but these
   // methods are run as the result of posting a task to the Pipeline's
@@ -165,7 +168,7 @@ class MEDIA_EXPORT PipelineImpl : public Pipeline, public DemuxerHost {
   void SuspendTask(const PipelineStatusCB& suspend_cb);
 
   // Resumes the pipeline with a new renderer, and initializes it with a seek.
-  void ResumeTask(scoped_ptr<Renderer> renderer,
+  void ResumeTask(std::unique_ptr<Renderer> renderer,
                   base::TimeDelta timestamp,
                   const PipelineStatusCB& seek_sb);
 
@@ -195,12 +198,11 @@ class MEDIA_EXPORT PipelineImpl : public Pipeline, public DemuxerHost {
                      CdmContext* cdm_context,
                      bool success);
 
-  // Callbacks executed when a renderer has ended.
-  void OnRendererEnded();
+  // Callbacks executed when text renderer has ended.
   void OnTextRendererEnded();
   void RunEndedCallbackIfNeeded();
 
-  scoped_ptr<TextRenderer> CreateTextRenderer();
+  std::unique_ptr<TextRenderer> CreateTextRenderer();
 
   // Carries out adding a new text stream to the text renderer.
   void AddTextStreamTask(DemuxerStream* text_stream,
@@ -224,17 +226,17 @@ class MEDIA_EXPORT PipelineImpl : public Pipeline, public DemuxerHost {
   // executing |done_cb| with the final status when completed.
   void DoSeek(base::TimeDelta seek_timestamp, const PipelineStatusCB& done_cb);
 
-  // Initiates an asynchronous pause-flush-stop call sequence executing
-  // |done_cb| when completed.
-  void DoStop(const PipelineStatusCB& done_cb);
-  void OnStopCompleted(PipelineStatus status);
+  // Stops media rendering and executes |stop_cb_| when done.
+  void DoStop();
 
   void ReportMetadata();
 
-  void BufferingStateChanged(BufferingState new_buffering_state);
+  // Task runner of the thread on which this class is constructed.
+  // Also used to post notifications on Pipeline::Client object.
+  const scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
 
   // Task runner used to execute pipeline tasks.
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  const scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_;
 
   // MediaLog to which to log events.
   scoped_refptr<MediaLog> media_log_;
@@ -298,26 +300,24 @@ class MEDIA_EXPORT PipelineImpl : public Pipeline, public DemuxerHost {
   // Temporary callback used for Suspend().
   PipelineStatusCB suspend_cb_;
 
-  // Permanent callbacks passed in via Start().
-  base::Closure ended_cb_;
-  PipelineStatusCB error_cb_;
-  PipelineMetadataCB metadata_cb_;
-  BufferingStateCB buffering_state_cb_;
-  base::Closure duration_change_cb_;
-  AddTextTrackCB add_text_track_cb_;
-  base::Closure waiting_for_decryption_key_cb_;
-
   // Holds the initialized demuxer. Used for seeking. Owned by client.
   Demuxer* demuxer_;
 
   // Holds the initialized renderers. Used for setting the volume,
   // playback rate, and determining when playback has finished.
-  scoped_ptr<Renderer> renderer_;
-  scoped_ptr<TextRenderer> text_renderer_;
+  std::unique_ptr<Renderer> renderer_;
+  std::unique_ptr<TextRenderer> text_renderer_;
+
+  // Holds the client passed on Start().
+  // Initialized, Dereferenced, and Invalidated on |main_task_runner_|.
+  // Used on |media_task_runner_| to post tasks on |main_task_runner_|.
+  base::WeakPtr<Client> weak_client_;
+  // Created and destroyed on |main_task_runner_|.
+  std::unique_ptr<base::WeakPtrFactory<Client>> client_weak_factory_;
 
   PipelineStatistics statistics_;
 
-  scoped_ptr<SerialRunner> pending_callbacks_;
+  std::unique_ptr<SerialRunner> pending_callbacks_;
 
   // The CdmContext to be used to decrypt (and decode) encrypted stream in this
   // pipeline. It is set when SetCdm() succeeds on the renderer (or when

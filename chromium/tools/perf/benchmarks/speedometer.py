@@ -20,15 +20,18 @@ import os
 
 from core import perf_benchmark
 
+from benchmarks import v8_helper
+
+from telemetry import benchmark
 from telemetry import page as page_module
-from telemetry.page import page_test
+from telemetry.page import legacy_page_test
 from telemetry import story
 from telemetry.value import list_of_scalar_values
 
 from metrics import keychain_metric
 
 
-class SpeedometerMeasurement(page_test.PageTest):
+class SpeedometerMeasurement(legacy_page_test.LegacyPageTest):
   enabled_suites = [
       'VanillaJS-TodoMVC',
       'EmberJS-TodoMVC',
@@ -100,3 +103,14 @@ class Speedometer(perf_benchmark.PerfBenchmark):
         'http://browserbench.org/Speedometer/', ps, ps.base_dir,
         make_javascript_deterministic=False))
     return ps
+
+
+@benchmark.Disabled('reference')  # crbug.com/579546
+class SpeedometerIgnition(Speedometer):
+  def SetExtraBrowserOptions(self, options):
+    super(SpeedometerIgnition, self).SetExtraBrowserOptions(options)
+    v8_helper.EnableIgnition(options)
+
+  @classmethod
+  def Name(cls):
+    return 'speedometer-ignition'

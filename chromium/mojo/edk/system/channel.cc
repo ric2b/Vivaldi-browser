@@ -12,6 +12,7 @@
 
 #include "base/macros.h"
 #include "base/memory/aligned_memory.h"
+#include "base/process/process_handle.h"
 #include "mojo/edk/embedder/platform_handle.h"
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)
@@ -53,7 +54,10 @@ Channel::Message::Message(size_t payload_size,
   // serialised into the message buffer. Since there could be a mix of fds and
   // mach ports, we store the mach ports as an <index, port> pair (of uint32_t),
   // so that the original ordering of handles can be re-created.
-  extra_header_size = max_handles * sizeof(MachPortsEntry);
+  if (max_handles) {
+    extra_header_size =
+        sizeof(MachPortsExtraHeader) + (max_handles * sizeof(MachPortsEntry));
+  }
 #endif
   // Pad extra header data to be aliged to |kChannelMessageAlignment| bytes.
   if (extra_header_size % kChannelMessageAlignment) {
@@ -96,10 +100,14 @@ Channel::Message::Message(size_t payload_size,
     for (size_t i = 0; i < max_handles_; ++i)
       handles()[i] = PlatformHandle();
 #elif defined(OS_MACOSX) && !defined(OS_IOS)
-    mach_ports_ = reinterpret_cast<MachPortsEntry*>(mutable_extra_header());
+    mach_ports_header_ =
+        reinterpret_cast<MachPortsExtraHeader*>(mutable_extra_header());
+    mach_ports_header_->num_ports = 0;
     // Initialize all handles to invalid values.
-    for (size_t i = 0; i < max_handles_; ++i)
-      mach_ports_[i] = {0, static_cast<uint32_t>(MACH_PORT_NULL)};
+    for (size_t i = 0; i < max_handles_; ++i) {
+      mach_ports_header_->entries[i] =
+          {0, static_cast<uint32_t>(MACH_PORT_NULL)};
+    }
 #endif
   }
 }
@@ -132,7 +140,8 @@ Channel::MessagePtr Channel::Message::Deserialize(const void* data,
     return nullptr;
   }
 
-  if (header->num_bytes < header->num_header_bytes) {
+  if (header->num_bytes < header->num_header_bytes ||
+      header->num_header_bytes < sizeof(Header)) {
     DLOG(ERROR) << "Decoding invalid message: " << header->num_bytes << " < "
                 << header->num_header_bytes;
     return nullptr;
@@ -142,9 +151,15 @@ Channel::MessagePtr Channel::Message::Deserialize(const void* data,
 #if defined(OS_WIN)
   uint32_t max_handles = extra_header_size / sizeof(PlatformHandle);
 #elif defined(OS_MACOSX) && !defined(OS_IOS)
-  uint32_t max_handles = extra_header_size / sizeof(MachPortsEntry);
+  if (extra_header_size < sizeof(MachPortsExtraHeader)) {
+    DLOG(ERROR) << "Decoding invalid message: " << extra_header_size << " < "
+                << sizeof(MachPortsExtraHeader);
+    return nullptr;
+  }
+  uint32_t max_handles = (extra_header_size - sizeof(MachPortsExtraHeader)) /
+      sizeof(MachPortsEntry);
 #endif
-  if (header->num_handles > max_handles) {
+  if (header->num_handles > max_handles || max_handles > kMaxAttachedHandles) {
     DLOG(ERROR) << "Decoding invalid message:" << header->num_handles
                 << " > " << max_handles;
     return nullptr;
@@ -247,16 +262,21 @@ void Channel::Message::SetHandles(ScopedPlatformHandleVectorPtr new_handles) {
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)
   size_t mach_port_index = 0;
-  for (size_t i = 0; i < max_handles_; ++i)
-    mach_ports_[i] = {0, static_cast<uint32_t>(MACH_PORT_NULL)};
-  for (size_t i = 0; i < handle_vector_->size(); i++) {
-    if ((*handle_vector_)[i].type == PlatformHandle::Type::MACH ||
-        (*handle_vector_)[i].type == PlatformHandle::Type::MACH_NAME) {
-      mach_port_t port = (*handle_vector_)[i].port;
-      mach_ports_[mach_port_index].index = i;
-      mach_ports_[mach_port_index].mach_port = port;
-      mach_port_index++;
+  if (mach_ports_header_) {
+    for (size_t i = 0; i < max_handles_; ++i) {
+      mach_ports_header_->entries[i] =
+          {0, static_cast<uint32_t>(MACH_PORT_NULL)};
     }
+    for (size_t i = 0; i < handle_vector_->size(); i++) {
+      if ((*handle_vector_)[i].type == PlatformHandle::Type::MACH ||
+          (*handle_vector_)[i].type == PlatformHandle::Type::MACH_NAME) {
+        mach_port_t port = (*handle_vector_)[i].port;
+        mach_ports_header_->entries[mach_port_index].index = i;
+        mach_ports_header_->entries[mach_port_index].mach_port = port;
+        mach_port_index++;
+      }
+    }
+    mach_ports_header_->num_ports = static_cast<uint16_t>(mach_port_index);
   }
 #endif
 }
@@ -272,8 +292,13 @@ ScopedPlatformHandleVectorPtr Channel::Message::TakeHandles() {
   header_->num_handles = 0;
   return moved_handles;
 #elif defined(OS_MACOSX) && !defined(OS_IOS)
-  for (size_t i = 0; i < max_handles_; ++i)
-    mach_ports_[i] = {0, static_cast<uint32_t>(MACH_PORT_NULL)};
+  if (mach_ports_header_) {
+    for (size_t i = 0; i < max_handles_; ++i) {
+      mach_ports_header_->entries[i] =
+          {0, static_cast<uint32_t>(MACH_PORT_NULL)};
+    }
+    mach_ports_header_->num_ports = 0;
+  }
   header_->num_handles = 0;
   return std::move(handle_vector_);
 #else
@@ -319,12 +344,22 @@ bool Channel::Message::RewriteHandles(base::ProcessHandle from_process,
       DLOG(ERROR) << "Refusing to duplicate invalid handle.";
       continue;
     }
+    DCHECK_EQ(handles[i].owning_process, from_process);
     BOOL result = DuplicateHandle(
         from_process, handles[i].handle, to_process,
-        reinterpret_cast<HANDLE*>(handles + i), 0, FALSE,
+        &handles[i].handle, 0, FALSE,
         DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE);
-    if (!result)
+    if (result) {
+      handles[i].owning_process = to_process;
+    } else {
       success = false;
+
+      // If handle duplication fails, the source handle will already be closed
+      // due to DUPLICATE_CLOSE_SOURCE. Replace the handle in the message with
+      // an invalid handle.
+      handles[i].handle = INVALID_HANDLE_VALUE;
+      handles[i].owning_process = base::GetCurrentProcessHandle();
+    }
   }
   return success;
 }
@@ -343,6 +378,9 @@ bool Channel::Message::RewriteHandles(base::ProcessHandle from_process,
 //
 // Discard() marks occupied bytes as discarded, signifying that their contents
 // can be forgotten or overwritten.
+//
+// Realign() moves occupied bytes to the front of the buffer so that those
+// occupied bytes are properly aligned.
 //
 // The most common Channel behavior in practice should result in very few
 // allocations and copies, as memory is claimed and discarded shortly after
@@ -426,6 +464,13 @@ class Channel::ReadBuffer {
     }
   }
 
+  void Realign() {
+    size_t num_bytes = num_occupied_bytes();
+    memmove(data_, occupied_bytes(), num_bytes);
+    num_discarded_bytes_ = 0;
+    num_occupied_bytes_ = num_bytes;
+  }
+
  private:
   char* data_ = nullptr;
 
@@ -467,6 +512,13 @@ bool Channel::OnReadComplete(size_t bytes_read, size_t *next_read_size_hint) {
   bool did_dispatch_message = false;
   read_buffer_->Claim(bytes_read);
   while (read_buffer_->num_occupied_bytes() >= sizeof(Message::Header)) {
+    // Ensure the occupied data is properly aligned. If it isn't, a SIGBUS could
+    // happen on architectures that don't allow misaligned words access (i.e.
+    // anything other than x86). Only re-align when necessary to avoid copies.
+    if (reinterpret_cast<uintptr_t>(read_buffer_->occupied_bytes()) %
+        kChannelMessageAlignment != 0)
+      read_buffer_->Realign();
+
     // We have at least enough data available for a MessageHeader.
     const Message::Header* header = reinterpret_cast<const Message::Header*>(
         read_buffer_->occupied_bytes());

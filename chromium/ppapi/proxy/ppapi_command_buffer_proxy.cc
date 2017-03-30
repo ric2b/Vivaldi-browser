@@ -41,10 +41,6 @@ PpapiCommandBufferProxy::~PpapiCommandBufferProxy() {
   // deleted, closing the handle in this process.
 }
 
-bool PpapiCommandBufferProxy::Initialize() {
-  return true;
-}
-
 gpu::CommandBuffer::State PpapiCommandBufferProxy::GetLastState() {
   ppapi::ProxyLock::AssertAcquiredDebugOnly();
   return last_state_;
@@ -179,11 +175,6 @@ void PpapiCommandBufferProxy::SetLock(base::Lock*) {
   NOTIMPLEMENTED();
 }
 
-bool PpapiCommandBufferProxy::IsGpuChannelLost() {
-  NOTIMPLEMENTED();
-  return false;
-}
-
 void PpapiCommandBufferProxy::EnsureWorkVisible() {
   DCHECK_GE(flushed_fence_sync_release_, validated_fence_sync_release_);
   Send(new PpapiHostMsg_PPBGraphics3D_EnsureWorkVisible(
@@ -239,6 +230,11 @@ int32_t PpapiCommandBufferProxy::GetExtraCommandBufferData() const {
 void PpapiCommandBufferProxy::SignalQuery(uint32_t query,
                                           const base::Closure& callback) {
   NOTREACHED();
+}
+
+void PpapiCommandBufferProxy::SetGpuControlClient(gpu::GpuControlClient*) {
+  // TODO(piman): The lost context callback skips past here and goes directly
+  // to the plugin instance. Make it more uniform and use the GpuControlClient.
 }
 
 gpu::Capabilities PpapiCommandBufferProxy::GetCapabilities() {

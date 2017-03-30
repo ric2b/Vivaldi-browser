@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/test/fake_output_surface_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -51,7 +51,7 @@ class FakeSoftwareOutputDevice : public cc::SoftwareOutputDevice {
   }
 
  private:
-  scoped_ptr<gfx::VSyncProvider> vsync_provider_;
+  std::unique_ptr<gfx::VSyncProvider> vsync_provider_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeSoftwareOutputDevice);
 };
@@ -66,14 +66,14 @@ class SoftwareBrowserCompositorOutputSurfaceTest : public testing::Test {
   void SetUp() override;
   void TearDown() override;
 
-  scoped_ptr<content::BrowserCompositorOutputSurface> CreateSurface(
-      scoped_ptr<cc::SoftwareOutputDevice> device);
+  std::unique_ptr<content::BrowserCompositorOutputSurface> CreateSurface(
+      std::unique_ptr<cc::SoftwareOutputDevice> device);
 
  protected:
-  scoped_ptr<content::BrowserCompositorOutputSurface> output_surface_;
+  std::unique_ptr<content::BrowserCompositorOutputSurface> output_surface_;
 
-  scoped_ptr<base::MessageLoop> message_loop_;
-  scoped_ptr<ui::Compositor> compositor_;
+  std::unique_ptr<base::MessageLoop> message_loop_;
+  std::unique_ptr<ui::Compositor> compositor_;
 
   DISALLOW_COPY_AND_ASSIGN(SoftwareBrowserCompositorOutputSurfaceTest);
 };
@@ -104,17 +104,18 @@ void SoftwareBrowserCompositorOutputSurfaceTest::TearDown() {
   ui::TerminateContextFactoryForTests();
 }
 
-scoped_ptr<content::BrowserCompositorOutputSurface>
+std::unique_ptr<content::BrowserCompositorOutputSurface>
 SoftwareBrowserCompositorOutputSurfaceTest::CreateSurface(
-    scoped_ptr<cc::SoftwareOutputDevice> device) {
-  return scoped_ptr<content::BrowserCompositorOutputSurface>(
+    std::unique_ptr<cc::SoftwareOutputDevice> device) {
+  return std::unique_ptr<content::BrowserCompositorOutputSurface>(
       new content::SoftwareBrowserCompositorOutputSurface(
-          std::move(device), compositor_->vsync_manager()));
+          std::move(device), compositor_->vsync_manager(),
+          message_loop_->task_runner().get()));
 }
 
 TEST_F(SoftwareBrowserCompositorOutputSurfaceTest, NoVSyncProvider) {
   cc::FakeOutputSurfaceClient output_surface_client;
-  scoped_ptr<cc::SoftwareOutputDevice> software_device(
+  std::unique_ptr<cc::SoftwareOutputDevice> software_device(
       new cc::SoftwareOutputDevice());
   output_surface_ = CreateSurface(std::move(software_device));
   CHECK(output_surface_->BindToClient(&output_surface_client));
@@ -128,7 +129,7 @@ TEST_F(SoftwareBrowserCompositorOutputSurfaceTest, NoVSyncProvider) {
 
 TEST_F(SoftwareBrowserCompositorOutputSurfaceTest, VSyncProviderUpdates) {
   cc::FakeOutputSurfaceClient output_surface_client;
-  scoped_ptr<cc::SoftwareOutputDevice> software_device(
+  std::unique_ptr<cc::SoftwareOutputDevice> software_device(
       new FakeSoftwareOutputDevice());
   output_surface_ = CreateSurface(std::move(software_device));
   CHECK(output_surface_->BindToClient(&output_surface_client));

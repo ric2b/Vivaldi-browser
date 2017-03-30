@@ -13,16 +13,17 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.media.AudioManager;
 import android.os.Build;
 import android.os.IBinder;
-import android.support.v4.app.NotificationCompat;
 import android.support.v4.app.NotificationManagerCompat;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
+import android.support.v7.app.NotificationCompat;
 import android.support.v7.media.MediaRouter;
 import android.text.TextUtils;
 import android.util.SparseArray;
@@ -33,6 +34,8 @@ import android.widget.RemoteViews;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.content_public.common.MediaMetadata;
 
 import javax.annotation.Nullable;
 
@@ -43,7 +46,6 @@ import javax.annotation.Nullable;
  * There's one service started for a distinct notification id.
  */
 public class MediaNotificationManager {
-
     private static final String TAG = "MediaNotification";
 
     // We're always used on the UI thread but the LOCK is required by lint when creating the
@@ -379,8 +381,7 @@ public class MediaNotificationManager {
     private NotificationCompat.Builder mNotificationBuilder;
 
     private Bitmap mNotificationIcon;
-
-    private final Bitmap mDefaultMediaSessionImage;
+    private Bitmap mDefaultLargeIcon;
 
     // |mMediaNotificationInfo| should be not null if and only if the notification is showing.
     private MediaNotificationInfo mMediaNotificationInfo;
@@ -407,12 +408,6 @@ public class MediaNotificationManager {
         mPlayDescription = context.getResources().getString(R.string.accessibility_play);
         mPauseDescription = context.getResources().getString(R.string.accessibility_pause);
         mStopDescription = context.getResources().getString(R.string.accessibility_stop);
-
-        // The MediaSession icon is a plain color.
-        int size = context.getResources().getDimensionPixelSize(R.dimen.media_session_icon_size);
-        mDefaultMediaSessionImage = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
-        mDefaultMediaSessionImage.eraseColor(ApiCompatibilityUtils.getColor(
-                context.getResources(), R.color.media_session_icon_color));
     }
 
     /**
@@ -482,83 +477,20 @@ public class MediaNotificationManager {
         clearNotification();
     }
 
-    private RemoteViews createContentView() {
-        RemoteViews contentView =
-                new RemoteViews(mContext.getPackageName(), R.layout.playback_notification_bar);
-
-        // By default, play/pause button is the only one.
-        int playPauseButtonId = R.id.button1;
-        // On Android pre-L, dismissing the notification when the service is no longer in foreground
-        // doesn't work. Instead, a STOP button is shown.
-        if (mMediaNotificationInfo.supportsSwipeAway()
-                && Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP
-                || mMediaNotificationInfo.supportsStop()) {
-            contentView.setOnClickPendingIntent(R.id.button1,
-                    createPendingIntent(ListenerService.ACTION_STOP));
-            contentView.setContentDescription(R.id.button1, mStopDescription);
-
-            // If the play/pause needs to be shown, it moves over to the second button from the end.
-            playPauseButtonId = R.id.button2;
-        }
-
-        contentView.setTextViewText(R.id.title, mMediaNotificationInfo.metadata.getTitle());
-        contentView.setTextViewText(R.id.status, mMediaNotificationInfo.origin);
-        if (mNotificationIcon != null) {
-            contentView.setImageViewBitmap(R.id.icon, mNotificationIcon);
-        } else {
-            contentView.setImageViewResource(R.id.icon, mMediaNotificationInfo.icon);
-        }
-
-        if (mMediaNotificationInfo.supportsPlayPause()) {
-            if (mMediaNotificationInfo.isPaused) {
-                contentView.setImageViewResource(playPauseButtonId, R.drawable.ic_vidcontrol_play);
-                contentView.setContentDescription(playPauseButtonId, mPlayDescription);
-                contentView.setOnClickPendingIntent(playPauseButtonId,
-                        createPendingIntent(ListenerService.ACTION_PLAY));
-            } else {
-                // If we're here, the notification supports play/pause button and is playing.
-                contentView.setImageViewResource(playPauseButtonId, R.drawable.ic_vidcontrol_pause);
-                contentView.setContentDescription(playPauseButtonId, mPauseDescription);
-                contentView.setOnClickPendingIntent(playPauseButtonId,
-                        createPendingIntent(ListenerService.ACTION_PAUSE));
-            }
-
-            contentView.setViewVisibility(playPauseButtonId, View.VISIBLE);
-        } else {
-            contentView.setViewVisibility(playPauseButtonId, View.GONE);
-        }
-
-        return contentView;
-    }
-
     private MediaMetadataCompat createMetadata() {
         MediaMetadataCompat.Builder metadataBuilder = new MediaMetadataCompat.Builder();
-
-        // Choose the image to use as the icon.
-        Bitmap mediaSessionImage = mMediaNotificationInfo.image == null ? mDefaultMediaSessionImage
-                : mMediaNotificationInfo.image;
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE,
                     mMediaNotificationInfo.metadata.getTitle());
             metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE,
                     mMediaNotificationInfo.origin);
-            metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON,
-                    mediaSessionImage);
-            // METADATA_KEY_ART is optional and should only be used if we can provide something
-            // better than the default image.
-            if (mMediaNotificationInfo.image != null) {
-                metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART,
-                        mMediaNotificationInfo.image);
-            }
         } else {
             metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_TITLE,
                     mMediaNotificationInfo.metadata.getTitle());
             metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ARTIST,
                     mMediaNotificationInfo.origin);
-            metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, mediaSessionImage);
         }
-
         if (!TextUtils.isEmpty(mMediaNotificationInfo.metadata.getArtist())) {
             metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ARTIST,
                     mMediaNotificationInfo.metadata.getArtist());
@@ -576,21 +508,17 @@ public class MediaNotificationManager {
 
         if (mMediaNotificationInfo == null) return;
 
-        // Android doesn't badge the icons for RemoteViews automatically when
-        // running the app under the Work profile.
-        if (mNotificationIcon == null) {
-            Drawable notificationIconDrawable = ApiCompatibilityUtils.getUserBadgedIcon(
-                    mContext, mMediaNotificationInfo.icon);
-            mNotificationIcon = drawableToBitmap(notificationIconDrawable);
-        }
+        updateMediaSession();
 
-        if (mNotificationBuilder == null) {
-            mNotificationBuilder = new NotificationCompat.Builder(mContext)
-                .setSmallIcon(mMediaNotificationInfo.icon)
-                .setAutoCancel(false)
-                .setLocalOnly(true)
-                .setDeleteIntent(createPendingIntent(ListenerService.ACTION_STOP));
+        mNotificationBuilder = new NotificationCompat.Builder(mContext);
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.MEDIA_STYLE_NOTIFICATION)) {
+            setMediaStyleLayoutForNotificationBuilder(mNotificationBuilder);
+        } else {
+            setCustomLayoutForNotificationBuilder(mNotificationBuilder);
         }
+        mNotificationBuilder.setSmallIcon(mMediaNotificationInfo.icon);
+        mNotificationBuilder.setAutoCancel(false);
+        mNotificationBuilder.setLocalOnly(true);
 
         if (mMediaNotificationInfo.supportsSwipeAway()) {
             mNotificationBuilder.setOngoing(!mMediaNotificationInfo.isPaused);
@@ -600,42 +528,15 @@ public class MediaNotificationManager {
         // TODO(avayvod) work out what we should do in this case. See https://crbug.com/585395.
         if (mMediaNotificationInfo.contentIntent != null) {
             mNotificationBuilder.setContentIntent(PendingIntent.getActivity(mContext,
-                    mMediaNotificationInfo.tabId,
-                    mMediaNotificationInfo.contentIntent, 0));
+                    mMediaNotificationInfo.tabId, mMediaNotificationInfo.contentIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT));
+            // Set FLAG_UPDATE_CURRENT so that the intent extras is updated, otherwise the
+            // intent extras will stay the same for the same tab.
         }
 
-        mNotificationBuilder.setContent(createContentView());
         mNotificationBuilder.setVisibility(
                 mMediaNotificationInfo.isPrivate ? NotificationCompat.VISIBILITY_PRIVATE
                                                  : NotificationCompat.VISIBILITY_PUBLIC);
-
-
-        if (mMediaNotificationInfo.supportsPlayPause()) {
-
-            if (mMediaSession == null) mMediaSession = createMediaSession();
-            try {
-                // Tell the MediaRouter about the session, so that Chrome can control the volume
-                // on the remote cast device (if any).
-                // Pre-MR1 versions of JB do not have the complete MediaRouter APIs,
-                // so getting the MediaRouter instance will throw an exception.
-                MediaRouter.getInstance(mContext).setMediaSessionCompat(mMediaSession);
-            } catch (NoSuchMethodError e) {
-                // Do nothing. Chrome can't be casting without a MediaRouter, so there is nothing
-                // to do here.
-            }
-            mMediaSession.setMetadata(createMetadata());
-
-            PlaybackStateCompat.Builder playbackStateBuilder = new PlaybackStateCompat.Builder()
-                    .setActions(PlaybackStateCompat.ACTION_PLAY | PlaybackStateCompat.ACTION_PAUSE);
-            if (mMediaNotificationInfo.isPaused) {
-                playbackStateBuilder.setState(PlaybackStateCompat.STATE_PAUSED,
-                        PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1.0f);
-            } else {
-                playbackStateBuilder.setState(PlaybackStateCompat.STATE_PLAYING,
-                        PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1.0f);
-            }
-            mMediaSession.setPlaybackState(playbackStateBuilder.build());
-        }
 
         Notification notification = mNotificationBuilder.build();
 
@@ -651,6 +552,38 @@ public class MediaNotificationManager {
         } else {
             mService.startForeground(mMediaNotificationInfo.id, notification);
         }
+    }
+
+    private void updateMediaSession() {
+        if (!mMediaNotificationInfo.supportsPlayPause()) return;
+
+        if (mMediaSession == null) mMediaSession = createMediaSession();
+
+        try {
+            // Tell the MediaRouter about the session, so that Chrome can control the volume
+            // on the remote cast device (if any).
+            // Pre-MR1 versions of JB do not have the complete MediaRouter APIs,
+            // so getting the MediaRouter instance will throw an exception.
+            MediaRouter.getInstance(mContext).setMediaSessionCompat(mMediaSession);
+        } catch (NoSuchMethodError e) {
+            // Do nothing. Chrome can't be casting without a MediaRouter, so there is nothing
+            // to do here.
+        }
+
+        mMediaSession.setMetadata(createMetadata());
+
+        PlaybackStateCompat.Builder playbackStateBuilder =
+                new PlaybackStateCompat.Builder().setActions(
+                        PlaybackStateCompat.ACTION_PLAY | PlaybackStateCompat.ACTION_PAUSE);
+        if (mMediaNotificationInfo.isPaused) {
+            playbackStateBuilder.setState(PlaybackStateCompat.STATE_PAUSED,
+                    PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1.0f);
+        } else {
+            // If notification only supports stop, still pretend
+            playbackStateBuilder.setState(PlaybackStateCompat.STATE_PLAYING,
+                    PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1.0f);
+        }
+        mMediaSession.setPlaybackState(playbackStateBuilder.build());
     }
 
     private MediaSessionCompat createMediaSession() {
@@ -680,10 +613,142 @@ public class MediaNotificationManager {
         return mediaSession;
     }
 
+    private void setMediaStyleLayoutForNotificationBuilder(NotificationCompat.Builder builder) {
+        setMediaStyleNotificationText(builder);
+        if (!mMediaNotificationInfo.supportsPlayPause()) {
+            builder.setLargeIcon(null);
+        } else if (mMediaNotificationInfo.largeIcon != null) {
+            builder.setLargeIcon(mMediaNotificationInfo.largeIcon);
+        } else if (!isRunningN()) {
+            if (mDefaultLargeIcon == null) {
+                int resourceId = (mMediaNotificationInfo.defaultLargeIcon != 0)
+                        ? mMediaNotificationInfo.defaultLargeIcon : R.drawable.audio_playing_square;
+                mDefaultLargeIcon = BitmapFactory.decodeResource(
+                        mContext.getResources(), resourceId);
+            }
+            builder.setLargeIcon(mDefaultLargeIcon);
+        }
+        // TODO(zqzhang): It's weird that setShowWhen() don't work on K. Calling setWhen() to force
+        // removing the time.
+        builder.setShowWhen(false).setWhen(0);
+
+        // Only apply MediaStyle when NotificationInfo supports play/pause.
+        if (mMediaNotificationInfo.supportsPlayPause()) {
+            NotificationCompat.MediaStyle style = new NotificationCompat.MediaStyle();
+            style.setMediaSession(mMediaSession.getSessionToken());
+
+            if (mMediaNotificationInfo.isPaused) {
+                builder.addAction(R.drawable.ic_vidcontrol_play, mPlayDescription,
+                        createPendingIntent(ListenerService.ACTION_PLAY));
+            } else {
+                // If we're here, the notification supports play/pause button and is playing.
+                builder.addAction(R.drawable.ic_vidcontrol_pause, mPauseDescription,
+                        createPendingIntent(ListenerService.ACTION_PAUSE));
+            }
+            style.setShowActionsInCompactView(0);
+            style.setCancelButtonIntent(createPendingIntent(ListenerService.ACTION_STOP));
+            style.setShowCancelButton(true);
+            builder.setStyle(style);
+        }
+
+        if (mMediaNotificationInfo.supportsStop()) {
+            builder.addAction(R.drawable.ic_vidcontrol_stop, mStopDescription,
+                    createPendingIntent(ListenerService.ACTION_STOP));
+        }
+    }
+
+    private void setCustomLayoutForNotificationBuilder(NotificationCompat.Builder builder) {
+        builder.setContent(createContentView());
+    }
+
+    private RemoteViews createContentView() {
+        RemoteViews contentView =
+                new RemoteViews(mContext.getPackageName(), R.layout.playback_notification_bar);
+
+        // By default, play/pause button is the only one.
+        int playPauseButtonId = R.id.button1;
+        // On Android pre-L, dismissing the notification when the service is no longer in foreground
+        // doesn't work. Instead, a STOP button is shown.
+        if (mMediaNotificationInfo.supportsSwipeAway()
+                        && Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP
+                || mMediaNotificationInfo.supportsStop()) {
+            contentView.setOnClickPendingIntent(
+                    R.id.button1, createPendingIntent(ListenerService.ACTION_STOP));
+            contentView.setContentDescription(R.id.button1, mStopDescription);
+
+            // If the play/pause needs to be shown, it moves over to the second button from the end.
+            playPauseButtonId = R.id.button2;
+        }
+
+        contentView.setTextViewText(R.id.title, mMediaNotificationInfo.metadata.getTitle());
+        contentView.setTextViewText(R.id.status, mMediaNotificationInfo.origin);
+
+        // Android doesn't badge the icons for RemoteViews automatically when
+        // running the app under the Work profile.
+        if (mNotificationIcon == null) {
+            Drawable notificationIconDrawable =
+                    ApiCompatibilityUtils.getUserBadgedIcon(mContext, mMediaNotificationInfo.icon);
+            mNotificationIcon = drawableToBitmap(notificationIconDrawable);
+        }
+
+        if (mNotificationIcon != null) {
+            contentView.setImageViewBitmap(R.id.icon, mNotificationIcon);
+        } else {
+            contentView.setImageViewResource(R.id.icon, mMediaNotificationInfo.icon);
+        }
+
+        if (mMediaNotificationInfo.supportsPlayPause()) {
+            if (mMediaNotificationInfo.isPaused) {
+                contentView.setImageViewResource(playPauseButtonId, R.drawable.ic_vidcontrol_play);
+                contentView.setContentDescription(playPauseButtonId, mPlayDescription);
+                contentView.setOnClickPendingIntent(
+                        playPauseButtonId, createPendingIntent(ListenerService.ACTION_PLAY));
+            } else {
+                // If we're here, the notification supports play/pause button and is playing.
+                contentView.setImageViewResource(playPauseButtonId, R.drawable.ic_vidcontrol_pause);
+                contentView.setContentDescription(playPauseButtonId, mPauseDescription);
+                contentView.setOnClickPendingIntent(
+                        playPauseButtonId, createPendingIntent(ListenerService.ACTION_PAUSE));
+            }
+
+            contentView.setViewVisibility(playPauseButtonId, View.VISIBLE);
+        } else {
+            contentView.setViewVisibility(playPauseButtonId, View.GONE);
+        }
+
+        return contentView;
+    }
+
     private Bitmap drawableToBitmap(Drawable drawable) {
         if (!(drawable instanceof BitmapDrawable)) return null;
 
         BitmapDrawable bitmapDrawable = (BitmapDrawable) drawable;
         return bitmapDrawable.getBitmap();
+    }
+
+    private void setMediaStyleNotificationText(NotificationCompat.Builder builder) {
+        builder.setContentTitle(mMediaNotificationInfo.metadata.getTitle());
+        String artistAndAlbumText = getArtistAndAlbumText(mMediaNotificationInfo.metadata);
+        if (isRunningN() || !artistAndAlbumText.isEmpty()) {
+            builder.setContentText(artistAndAlbumText);
+            builder.setSubText(mMediaNotificationInfo.origin);
+        } else {
+            // Leaving ContentText empty looks bad, so move origin up to the ContentText.
+            builder.setContentText(mMediaNotificationInfo.origin);
+        }
+    }
+
+    private String getArtistAndAlbumText(MediaMetadata metadata) {
+        String artist = (metadata.getArtist() == null) ? "" : metadata.getArtist();
+        String album = (metadata.getAlbum() == null) ? "" : metadata.getAlbum();
+        if (artist.isEmpty() || album.isEmpty()) {
+            return artist + album;
+        }
+        return artist + " - " + album;
+    }
+
+    private boolean isRunningN() {
+        // TODO(zqzhang): update this when N is released.
+        return Build.VERSION.CODENAME.equals("N") || Build.VERSION.SDK_INT > Build.VERSION_CODES.M;
     }
 }

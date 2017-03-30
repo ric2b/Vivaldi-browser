@@ -60,9 +60,9 @@ public:
         return toView()->layoutSize(scrollbars);
     }
 
-    LayoutRect overflowClipRect(const LayoutPoint& location, OverlayScrollbarSizeRelevancy scrollbars = IgnoreOverlayScrollbarSize) const
+    LayoutRect overflowClipRect(const LayoutPoint& location) const
     {
-        return toView()->overflowClipRect(location, scrollbars);
+        return toView()->overflowClipRect(location);
     }
 
     void clearSelection()
@@ -75,9 +75,42 @@ public:
         return toView()->hitTest(result);
     }
 
+    bool hitTestNoLifecycleUpdate(HitTestResult& result)
+    {
+        return toView()->hitTestNoLifecycleUpdate(result);
+    }
+
     IntRect selectionBounds()
     {
         return toView()->selectionBounds();
+    }
+
+    void invalidatePaintForSelection()
+    {
+        return toView()->invalidatePaintForSelection();
+    }
+
+//    bool hitTest(HitTestResult&);
+//    bool hitTestNoLifecycleUpdate(HitTestResult&);
+
+    unsigned hitTestCount() const
+    {
+        return toView()->hitTestCount();
+    }
+
+    unsigned hitTestCacheHits() const
+    {
+        return toView()->hitTestCacheHits();
+    }
+
+    void clearHitTestCache()
+    {
+        toView()->clearHitTestCache();
+    }
+
+    void invalidatePaintForViewAndCompositedLayers()
+    {
+        toView()->invalidatePaintForViewAndCompositedLayers();
     }
 
 private:

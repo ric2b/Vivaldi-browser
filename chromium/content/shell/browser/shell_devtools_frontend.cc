@@ -19,6 +19,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
 #include "content/shell/browser/shell.h"
@@ -187,7 +188,7 @@ void ShellDevToolsFrontend::HandleMessageFromDevToolsFrontend(
   std::string method;
   base::ListValue* params = NULL;
   base::DictionaryValue* dict = NULL;
-  scoped_ptr<base::Value> parsed_message = base::JSONReader::Read(message);
+  std::unique_ptr<base::Value> parsed_message = base::JSONReader::Read(message);
   if (!parsed_message ||
       !parsed_message->GetAsDictionary(&dict) ||
       !dict->GetString("method", &method)) {
@@ -228,11 +229,14 @@ void ShellDevToolsFrontend::HandleMessageFromDevToolsFrontend(
     net::URLFetcher* fetcher =
         net::URLFetcher::Create(gurl, net::URLFetcher::GET, this).release();
     pending_requests_[fetcher] = request_id;
-    fetcher->SetRequestContext(web_contents()->GetBrowserContext()->
-        GetRequestContext());
+    fetcher->SetRequestContext(
+        BrowserContext::GetDefaultStoragePartition(
+            web_contents()->GetBrowserContext())->
+                GetURLRequestContext());
     fetcher->SetExtraRequestHeaders(headers);
-    fetcher->SaveResponseWithWriter(scoped_ptr<net::URLFetcherResponseWriter>(
-        new ResponseWriter(weak_factory_.GetWeakPtr(), stream_id)));
+    fetcher->SaveResponseWithWriter(
+        std::unique_ptr<net::URLFetcherResponseWriter>(
+            new ResponseWriter(weak_factory_.GetWeakPtr(), stream_id)));
     fetcher->Start();
     return;
   } else if (method == "getPreferences") {

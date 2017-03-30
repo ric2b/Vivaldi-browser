@@ -8,12 +8,14 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
-#include "core/dom/Element.h"
 #include "core/page/scrolling/ScrollStateInit.h"
 #include "platform/scroll/ScrollStateData.h"
+#include "wtf/Forward.h"
 #include <deque>
 
 namespace blink {
+
+class Element;
 
 class CORE_EXPORT ScrollState final : public GarbageCollectedFinalized<ScrollState>, public ScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
@@ -32,11 +34,11 @@ public:
     void consumeDelta(double x, double y, ExceptionState&);
     // Pops the first element off of |m_scrollChain| and calls |distributeScroll| on it.
     void distributeToScrollChainDescendant();
-    int startPositionX() { return m_data->start_position_x; };
-    int startPositionY() { return m_data->start_position_y; };
-    // Positive when scrolling left.
+    int positionX() { return m_data->position_x; };
+    int positionY() { return m_data->position_y; };
+    // Positive when scrolling right.
     double deltaX() const { return m_data->delta_x; };
-    // Positive when scrolling up.
+    // Positive when scrolling down.
     double deltaY() const { return m_data->delta_y; };
     // Indicates the smallest delta the input device can produce. 0 for unquantized inputs.
     double deltaGranularity() const { return m_data->delta_granularity; };
@@ -90,8 +92,9 @@ public:
 
 private:
     ScrollState();
-    ScrollState(PassOwnPtr<ScrollStateData>);
-    PassOwnPtr<ScrollStateData> m_data;
+    explicit ScrollState(PassOwnPtr<ScrollStateData>);
+
+    OwnPtr<ScrollStateData> m_data;
     std::deque<int> m_scrollChain;
 };
 

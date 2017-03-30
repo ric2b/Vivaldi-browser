@@ -80,8 +80,8 @@ namespace {
 
 // If the same property is specified for the inner and outer bounds, raise an
 // error.
-bool CheckBoundsConflict(const scoped_ptr<int>& inner_property,
-                         const scoped_ptr<int>& outer_property,
+bool CheckBoundsConflict(const std::unique_ptr<int>& inner_property,
+                         const std::unique_ptr<int>& outer_property,
                          const std::string& property_name,
                          std::string* error) {
   if (inner_property.get() && outer_property.get()) {
@@ -129,7 +129,7 @@ bool AppWindowCreateFunction::RunAsync() {
   if (ExtensionsBrowserClient::Get()->IsShuttingDown())
     return false;
 
-  scoped_ptr<Create::Params> params(Create::Params::Create(*args_));
+  std::unique_ptr<Create::Params> params(Create::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   GURL url = extension()->GetResourceURL(params->url);
@@ -155,6 +155,9 @@ bool AppWindowCreateFunction::RunAsync() {
   if (options) {
     if (options->thumbnail_window.get()) {
       create_params.thumbnail_window = *options->thumbnail_window;
+    }
+    if (options->avoid_cached_positions.get()) {
+      create_params.avoid_cached_positions = *options->avoid_cached_positions;
     }
     if (options->id.get()) {
       // TODO(mek): use URL if no id specified?

@@ -10,6 +10,7 @@
 
 #include <list>
 #include <map>
+#include <memory>
 #include <queue>
 #include <set>
 #include <string>
@@ -18,7 +19,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "gpu/command_buffer/client/buffer_tracker.h"
@@ -26,6 +26,7 @@
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_impl_export.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/command_buffer/client/gpu_control_client.h"
 #include "gpu/command_buffer/client/mapped_memory.h"
 #include "gpu/command_buffer/client/ref_counted.h"
 #include "gpu/command_buffer/client/share_group.h"
@@ -111,12 +112,6 @@ class GLES2CmdHelper;
 class VertexArrayObjectManager;
 class QueryTracker;
 
-class GLES2ImplementationErrorMessageCallback {
- public:
-  virtual ~GLES2ImplementationErrorMessageCallback() { }
-  virtual void OnErrorMessage(const char* msg, int id) = 0;
-};
-
 // This class emulates GLES2 over command buffers. It can be used by a client
 // program so that the program does not need deal with shared memory and command
 // buffer management. See gl2_lib.h.  Note that there is a performance gain to
@@ -126,12 +121,9 @@ class GLES2ImplementationErrorMessageCallback {
 class GLES2_IMPL_EXPORT GLES2Implementation
     : NON_EXPORTED_BASE(public GLES2Interface),
       NON_EXPORTED_BASE(public ContextSupport),
+      NON_EXPORTED_BASE(public GpuControlClient),
       NON_EXPORTED_BASE(public base::trace_event::MemoryDumpProvider) {
  public:
-  enum MappedMemoryLimit {
-    kNoLimit = MappedMemoryManager::kNoLimit,
-  };
-
   // Stores GL state that never changes.
   struct GLES2_IMPL_EXPORT GLStaticState {
     GLStaticState();
@@ -168,7 +160,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   static const size_t kMaxSwapBuffers = 2;
 
   GLES2Implementation(GLES2CmdHelper* helper,
-                      ShareGroup* share_group,
+                      scoped_refptr<ShareGroup> share_group,
                       TransferBufferInterface* transfer_buffer,
                       bool bind_generates_resource,
                       bool lose_context_when_out_of_memory,
@@ -212,6 +204,12 @@ class GLES2_IMPL_EXPORT GLES2Implementation
                             const gfx::Rect& display_bounds,
                             const gfx::RectF& uv_rect) override;
   uint64_t ShareGroupTracingGUID() const override;
+  void SetErrorMessageCallback(
+      const base::Callback<void(const char*, int32_t)>& callback) override;
+
+  // TODO(danakj): Move to ContextSupport once ContextProvider doesn't need to
+  // intercept it.
+  void SetLostContextCallback(const base::Closure& callback);
 
   void GetProgramInfoCHROMIUMHelper(GLuint program,
                                     std::vector<int8_t>* result);
@@ -264,14 +262,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
                     base::trace_event::ProcessMemoryDump* pmd) override;
 
-  void SetErrorMessageCallback(
-      GLES2ImplementationErrorMessageCallback* callback) {
-    error_message_callback_ = callback;
-  }
-
-  ShareGroup* share_group() const {
-    return share_group_.get();
-  }
+  const scoped_refptr<ShareGroup>& share_group() const { return share_group_; }
 
   const Capabilities& capabilities() const {
     return capabilities_;
@@ -418,6 +409,11 @@ class GLES2_IMPL_EXPORT GLES2Implementation
     return static_cast<T>(GetResultBuffer());
   }
 
+  // GpuControlClient implementation.
+  void OnGpuControlLostContext() final;
+  void OnGpuControlLostContextMaybeReentrant() final;
+  void OnGpuControlErrorMessage(const char* message, int32_t id) final;
+
   void* GetResultBuffer();
   int32_t GetResultShmId();
   uint32_t GetResultShmOffset();
@@ -470,7 +466,6 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   bool IsTextureReservedId(GLuint id) { return false; }
   bool IsVertexArrayReservedId(GLuint id) { return false; }
   bool IsProgramReservedId(GLuint id) { return false; }
-  bool IsValuebufferReservedId(GLuint id) { return false; }
   bool IsSamplerReservedId(GLuint id) { return false; }
   bool IsTransformFeedbackReservedId(GLuint id) { return false; }
 
@@ -484,7 +479,6 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   void BindTextureHelper(GLenum target, GLuint texture);
   void BindTransformFeedbackHelper(GLenum target, GLuint transformfeedback);
   void BindVertexArrayOESHelper(GLuint array);
-  void BindValuebufferCHROMIUMHelper(GLenum target, GLuint valuebuffer);
   void UseProgramHelper(GLuint program);
 
   void BindBufferStub(GLenum target, GLuint buffer);
@@ -494,7 +488,6 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   void BindFramebufferStub(GLenum target, GLuint framebuffer);
   void BindRenderbufferStub(GLenum target, GLuint renderbuffer);
   void BindTextureStub(GLenum target, GLuint texture);
-  void BindValuebufferCHROMIUMStub(GLenum target, GLuint valuebuffer);
 
   void GenBuffersHelper(GLsizei n, const GLuint* buffers);
   void GenFramebuffersHelper(GLsizei n, const GLuint* framebuffers);
@@ -502,7 +495,6 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   void GenTexturesHelper(GLsizei n, const GLuint* textures);
   void GenVertexArraysOESHelper(GLsizei n, const GLuint* arrays);
   void GenQueriesEXTHelper(GLsizei n, const GLuint* queries);
-  void GenValuebuffersCHROMIUMHelper(GLsizei n, const GLuint* valuebuffers);
   void GenSamplersHelper(GLsizei n, const GLuint* samplers);
   void GenTransformFeedbacksHelper(GLsizei n, const GLuint* transformfeedbacks);
 
@@ -514,7 +506,6 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   bool DeleteShaderHelper(GLuint shader);
   void DeleteQueriesEXTHelper(GLsizei n, const GLuint* queries);
   void DeleteVertexArraysOESHelper(GLsizei n, const GLuint* arrays);
-  void DeleteValuebuffersCHROMIUMHelper(GLsizei n, const GLuint* valuebuffers);
   void DeleteSamplersHelper(GLsizei n, const GLuint* samplers);
   void DeleteTransformFeedbacksHelper(
       GLsizei n, const GLuint* transformfeedbacks);
@@ -528,7 +519,6 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   void DeleteProgramStub(GLsizei n, const GLuint* programs);
   void DeleteShaderStub(GLsizei n, const GLuint* shaders);
   void DeleteVertexArraysOESStub(GLsizei n, const GLuint* arrays);
-  void DeleteValuebuffersCHROMIUMStub(GLsizei n, const GLuint* valuebuffers);
   void DeleteSamplersStub(GLsizei n, const GLuint* samplers);
   void DeleteTransformFeedbacksStub(
       GLsizei n, const GLuint* transformfeedbacks);
@@ -746,7 +736,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   // unpack skip images as last set by glPixelStorei
   GLint unpack_skip_images_;
 
-  scoped_ptr<TextureUnit[]> texture_units_;
+  std::unique_ptr<TextureUnit[]> texture_units_;
 
   // 0 to gl_state_.max_combined_texture_image_units.
   GLuint active_texture_unit_;
@@ -754,7 +744,6 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   GLuint bound_framebuffer_;
   GLuint bound_read_framebuffer_;
   GLuint bound_renderbuffer_;
-  GLuint bound_valuebuffer_;
 
   // The program in use by glUseProgram
   GLuint current_program_;
@@ -773,7 +762,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
 
   // Client side management for vertex array objects. Needed to correctly
   // track client side arrays.
-  scoped_ptr<VertexArrayObjectManager> vertex_array_object_manager_;
+  std::unique_ptr<VertexArrayObjectManager> vertex_array_object_manager_;
 
   GLuint reserved_ids_[2];
 
@@ -815,17 +804,19 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   typedef std::map<const void*, MappedTexture> MappedTextureMap;
   MappedTextureMap mapped_textures_;
 
-  scoped_ptr<MappedMemoryManager> mapped_memory_;
+  std::unique_ptr<MappedMemoryManager> mapped_memory_;
 
   scoped_refptr<ShareGroup> share_group_;
   ShareGroupContextData share_group_context_data_;
 
-  scoped_ptr<QueryTracker> query_tracker_;
-  scoped_ptr<IdAllocator> query_id_allocator_;
+  std::unique_ptr<QueryTracker> query_tracker_;
+  std::unique_ptr<IdAllocator> query_id_allocator_;
 
-  scoped_ptr<BufferTracker> buffer_tracker_;
+  std::unique_ptr<BufferTracker> buffer_tracker_;
 
-  GLES2ImplementationErrorMessageCallback* error_message_callback_;
+  base::Callback<void(const char*, int32_t)> error_message_callback_;
+  base::Closure lost_context_callback_;
+  bool lost_context_callback_run_ = false;
 
   int current_trace_stack_;
 

@@ -32,19 +32,15 @@
         ],
         'chromium_child_dependencies': [
           'child',
+          'gpu',
           'renderer',
           'utility',
           '../content/content.gyp:content_gpu',
           '../content/content.gyp:content_ppapi_plugin',
+          '../third_party/cld_2/cld_2.gyp:cld2_platform_impl',
           '../third_party/WebKit/public/blink_devtools.gyp:blink_devtools_frontend_resources',
         ],
         'conditions': [
-          [ 'cld_version==0 or cld_version==2', {
-            'chromium_child_dependencies': [
-              # Use whatever CLD2 data access mode that the application
-              # embedder is using.
-              '<(DEPTH)/third_party/cld_2/cld_2.gyp:cld2_platform_impl', ],
-          }],
           ['enable_plugins==1 and disable_nacl==0', {
             'chromium_child_dependencies': [
               '<(DEPTH)/components/nacl/renderer/plugin/plugin.gyp:nacl_trusted_plugin',
@@ -101,6 +97,7 @@
     'chrome_browser.gypi',
     'chrome_browser_ui.gypi',
     'chrome_common.gypi',
+    'chrome_installer_static.gypi',
     'chrome_installer_util.gypi',
     'chrome_features.gypi',
   ],
@@ -112,6 +109,7 @@
         'chrome_debugger.gypi',
         'chrome_dll.gypi',
         'chrome_exe.gypi',
+        'chrome_gpu.gypi',
         'chrome_installer.gypi',
         'chrome_renderer.gypi',
         'chrome_tests.gypi',
@@ -228,6 +226,7 @@
               # never placed into the helper.
               'postbuild_name': 'Tweak Info.plist',
               'action': ['<(tweak_info_plist_path)',
+                         '--plist=${TARGET_BUILD_DIR}/${INFOPLIST_PATH}',
                          '--breakpad=0',
                          '--keystone=0',
                          '--scm=0',
@@ -299,8 +298,6 @@
             'chrome_resources.gyp:chrome_strings',
             '../base/base.gyp:base',
             '../ui/base/ui_base.gyp:ui_data_pack',
-            '../ui/gfx/gfx.gyp:gfx',
-            '../ui/gfx/gfx.gyp:gfx_geometry',
           ],
           'include_dirs': [
             '<(grit_out_dir)',
@@ -392,28 +389,6 @@
           ],
         },
         {
-          # GN version: //chrome/tools/crash_service
-          'target_name': 'crash_service',
-          'type': 'executable',
-          'dependencies': [
-            'installer_util',
-            '../base/base.gyp:base',
-            '../chrome/common_constants.gyp:common_constants',
-            '../components/components.gyp:breakpad_crash_service',
-          ],
-          'include_dirs': [
-            '..',
-          ],
-          'sources': [
-            'tools/crash_service/main.cc',
-          ],
-          'msvs_settings': {
-            'VCLinkerTool': {
-              'SubSystem': '2',         # Set /SUBSYSTEM:WINDOWS
-            },
-          },
-        },
-        {
           'target_name': 'sb_sigutil',
           'type': 'executable',
           'dependencies': [
@@ -466,38 +441,6 @@
             },
           },
         },
-        {
-          # GN version: //chrome/tools/crash_service:crash_service_win64
-          'target_name': 'crash_service_win64',
-          'type': 'executable',
-          'product_name': 'crash_service64',
-          'dependencies': [
-            'installer_util_nacl_win64',
-            '../base/base.gyp:base_static_win64',
-            '../chrome/common_constants.gyp:common_constants_win64',
-            '../components/components.gyp:breakpad_crash_service_win64',
-          ],
-          'include_dirs': [
-            '..',
-          ],
-          'sources': [
-            '../content/public/common/content_switches.cc',
-            'tools/crash_service/main.cc',
-          ],
-          'defines': [
-            'COMPILE_CONTENT_STATICALLY',
-          ],
-          'msvs_settings': {
-            'VCLinkerTool': {
-              'SubSystem': '2',         # Set /SUBSYSTEM:WINDOWS
-            },
-          },
-          'configurations': {
-            'Common_Base': {
-              'msvs_target_platform': 'x64',
-            },
-          },
-        },
       ]},  # 'targets'
     ],  # OS=="win" and target_arch=="ia32"
     ['chromeos==1', {
@@ -526,6 +469,7 @@
             'infobar_action_type_java',
             'most_visited_tile_type_java',
             'page_info_connection_type_java',
+            'policy_auditor_java',
             'profile_account_management_metrics_java',
             'resource_id_java',
             'shortcut_source_java',
@@ -543,10 +487,10 @@
             '../components/components.gyp:dom_distiller_core_java',
             '../components/components.gyp:gcm_driver_java',
             '../components/components.gyp:infobar_delegate_java',
+            '../components/components.gyp:instance_id_driver_java',
             '../components/components.gyp:invalidation_java',
             '../components/components.gyp:investigated_scenario_java',
             '../components/components.gyp:navigation_interception_java',
-            '../components/components.gyp:offline_page_feature_enums_java',
             '../components/components.gyp:offline_page_model_enums_java',
             '../components/components.gyp:policy_java',
             '../components/components.gyp:precache_java',

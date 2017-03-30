@@ -9,7 +9,7 @@
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "content/browser/bad_message.h"
-#include "content/browser/fileapi/chrome_blob_storage_context.h"
+#include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/common/fileapi/webblob_messages.h"
 #include "ipc/ipc_platform_file.h"
 #include "storage/browser/blob/blob_storage_context.h"
@@ -304,9 +304,9 @@ storage::BlobStorageContext* BlobDispatcherHost::context() {
 
 void BlobDispatcherHost::SendMemoryRequest(
     const std::string& uuid,
-    scoped_ptr<std::vector<storage::BlobItemBytesRequest>> requests,
-    scoped_ptr<std::vector<base::SharedMemoryHandle>> memory_handles,
-    scoped_ptr<std::vector<base::File>> files) {
+    std::unique_ptr<std::vector<storage::BlobItemBytesRequest>> requests,
+    std::unique_ptr<std::vector<base::SharedMemoryHandle>> memory_handles,
+    std::unique_ptr<std::vector<base::File>> files) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   std::vector<IPC::PlatformFileForTransit> file_handles;
   // TODO(dmurph): Support file-backed blob transportation.

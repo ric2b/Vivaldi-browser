@@ -45,6 +45,11 @@ namespace {
 const double kDefaultRefreshRate = 60.0;
 const double kTestRefreshRate = 200.0;
 
+bool IsRunningInMojoShell(base::CommandLine* command_line) {
+  const char kMojoShellFlag[] = "mojo-platform-channel-handle";
+  return command_line->HasSwitch(kMojoShellFlag);
+}
+
 }  // namespace
 
 namespace ui {
@@ -149,6 +154,9 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
   if (command_line->HasSwitch(switches::kUIEnableRGBA4444Textures))
     settings.renderer_settings.preferred_tile_format = cc::RGBA_4444;
 
+  settings.use_layer_lists =
+      command_line->HasSwitch(cc::switches::kUIEnableLayerLists);
+
   // UI compositor always uses partial raster if not using zero-copy. Zero copy
   // doesn't currently support partial raster.
   settings.use_partial_raster = !settings.use_zero_copy;
@@ -171,6 +179,11 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
   // Note: Only enable image decode tasks if we have more than one worker
   // thread.
   settings.image_decode_tasks_enabled = false;
+
+  // TODO(crbug.com/603600): This should always be turned on once mus tells its
+  // clients about BeginFrame.
+  settings.use_output_surface_begin_frame_source =
+      !IsRunningInMojoShell(command_line);
 
 #if !defined(OS_ANDROID)
   // TODO(sohanjg): Revisit this memory usage in tile manager.
@@ -229,7 +242,7 @@ Compositor::~Compositor() {
 }
 
 void Compositor::SetOutputSurface(
-    scoped_ptr<cc::OutputSurface> output_surface) {
+    std::unique_ptr<cc::OutputSurface> output_surface) {
   output_surface_requested_ = false;
   host_->SetOutputSurface(std::move(output_surface));
 }
@@ -283,7 +296,7 @@ void Compositor::DisableSwapUntilResize() {
 }
 
 void Compositor::SetLatencyInfo(const ui::LatencyInfo& latency_info) {
-  scoped_ptr<cc::SwapPromise> swap_promise(
+  std::unique_ptr<cc::SwapPromise> swap_promise(
       new cc::LatencyInfoSwapPromise(latency_info));
   host_->QueueSwapPromise(std::move(swap_promise));
 }
@@ -319,13 +332,11 @@ bool Compositor::IsVisible() {
 
 void Compositor::SetAuthoritativeVSyncInterval(
     const base::TimeDelta& interval) {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+  context_factory_->SetAuthoritativeVSyncInterval(this, interval);
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
          cc::switches::kEnableBeginFrameScheduling)) {
-    host_->SetAuthoritativeVSyncInterval(interval);
-    return;
+    vsync_manager_->SetAuthoritativeVSyncInterval(interval);
   }
-
-  vsync_manager_->SetAuthoritativeVSyncInterval(interval);
 }
 
 void Compositor::SetAcceleratedWidget(gfx::AcceleratedWidget widget) {
@@ -382,24 +393,6 @@ void Compositor::RemoveAnimationObserver(
 bool Compositor::HasAnimationObserver(
     const CompositorAnimationObserver* observer) const {
   return animation_observer_list_.HasObserver(observer);
-}
-
-void Compositor::AddBeginFrameObserver(CompositorBeginFrameObserver* observer) {
-  if (!begin_frame_observer_list_.might_have_observers())
-    host_->SetChildrenNeedBeginFrames(true);
-
-  begin_frame_observer_list_.AddObserver(observer);
-
-  if (missed_begin_frame_args_.IsValid())
-    observer->OnSendBeginFrame(missed_begin_frame_args_);
-}
-
-void Compositor::RemoveBeginFrameObserver(
-    CompositorBeginFrameObserver* observer) {
-  begin_frame_observer_list_.RemoveObserver(observer);
-
-  // As this call may take place while iterating over observers, unsubscription
-  // from |host_| is performed after iteration in |SendBeginFramesToChildren()|.
 }
 
 void Compositor::BeginMainFrame(const cc::BeginFrameArgs& args) {
@@ -469,26 +462,7 @@ void Compositor::DidAbortSwapBuffers() {
 }
 
 void Compositor::SetOutputIsSecure(bool output_is_secure) {
-  host_->SetOutputIsSecure(output_is_secure);
-  host_->SetNeedsRedraw();
-}
-
-void Compositor::SendBeginFramesToChildren(const cc::BeginFrameArgs& args) {
-  FOR_EACH_OBSERVER(CompositorBeginFrameObserver, begin_frame_observer_list_,
-                    OnSendBeginFrame(args));
-
-  // Unsubscription is performed here, after iteration, to handle the case where
-  // the last BeginFrame observer is removed while iterating over the observers.
-  if (!begin_frame_observer_list_.might_have_observers()) {
-    host_->SetChildrenNeedBeginFrames(false);
-    // Unsubscription should reset |missed_begin_frame_args_|, avoiding stale
-    // BeginFrame dispatch when the next BeginFrame observer is added.
-    missed_begin_frame_args_ = cc::BeginFrameArgs();
-    return;
-  }
-
-  missed_begin_frame_args_ = args;
-  missed_begin_frame_args_.type = cc::BeginFrameArgs::MISSED;
+  context_factory_->SetOutputIsSecure(this, output_is_secure);
 }
 
 const cc::LayerTreeDebugState& Compositor::GetLayerTreeDebugState() const {

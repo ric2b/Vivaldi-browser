@@ -4,17 +4,20 @@
 
 #include "net/quic/spdy_utils.h"
 
+#include <memory>
 #include <vector>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "net/spdy/spdy_frame_builder.h"
 #include "net/spdy/spdy_framer.h"
 #include "net/spdy/spdy_protocol.h"
 #include "url/gurl.h"
 
+using base::StringPiece;
 using std::string;
 using std::vector;
 
@@ -104,6 +107,115 @@ bool SpdyUtils::ParseTrailers(const char* data,
   }
 
   DVLOG(1) << "Successfully parsed Trailers.";
+  return true;
+}
+
+bool SpdyUtils::CopyAndValidateHeaders(const QuicHeaderList& header_list,
+                                       int64_t* content_length,
+                                       SpdyHeaderBlock* headers) {
+  for (const auto& p : header_list) {
+    const string& name = p.first;
+    if (name.empty()) {
+      DVLOG(1) << "Header name must not be empty.";
+      return false;
+    }
+
+    if (std::any_of(name.begin(), name.end(), base::IsAsciiUpper<char>)) {
+      DLOG(ERROR) << "Malformed header: Header name " << name
+                  << " contains upper-case characters.";
+      return false;
+    }
+
+    auto iter = headers->find(name);
+    if (iter == headers->end()) {
+      (*headers)[name] = p.second;
+    } else if (name == "cookie") {
+      // Obeys section 8.1.2.5 in RFC 7540 for cookie reconstruction.
+      headers->ReplaceOrAppendHeader(
+          name, base::StringPrintf("%s; %s", iter->second.as_string().c_str(),
+                                   p.second.c_str()));
+    } else {
+      // This header had multiple values, so it must be reconstructed.
+      string value = base::StringPrintf(
+          "%s%c%s", iter->second.as_string().c_str(), '\0', p.second.c_str());
+      headers->ReplaceOrAppendHeader(name, value);
+    }
+  }
+
+  if (ContainsKey(*headers, "content-length")) {
+    // Check whether multiple values are consistent.
+    StringPiece content_length_header = (*headers)["content-length"];
+    vector<string> values =
+        base::SplitString(content_length_header, base::StringPiece("\0", 1),
+                          base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+    for (const string& value : values) {
+      int64_t new_value;
+      if (!base::StringToInt64(value, &new_value) || new_value < 0) {
+        DLOG(ERROR) << "Content length was either unparseable or negative.";
+        return false;
+      }
+      if (*content_length < 0) {
+        *content_length = new_value;
+        continue;
+      }
+      if (new_value != *content_length) {
+        DLOG(ERROR) << "Parsed content length " << new_value << " is "
+                    << "inconsistent with previously detected content length "
+                    << *content_length;
+        return false;
+      }
+    }
+  }
+
+  DVLOG(1) << "Successfully parsed headers: " << headers->DebugString();
+  return true;
+}
+
+bool SpdyUtils::CopyAndValidateTrailers(const QuicHeaderList& header_list,
+                                        size_t* final_byte_offset,
+                                        SpdyHeaderBlock* trailers) {
+  bool found_final_byte_offset = false;
+  for (const auto& p : header_list) {
+    const string& name = p.first;
+
+    // Pull out the final offset pseudo header which indicates the number of
+    // response body bytes expected.
+    int offset;
+    if (!found_final_byte_offset && name == kFinalOffsetHeaderKey &&
+        base::StringToInt(p.second, &offset)) {
+      *final_byte_offset = offset;
+      found_final_byte_offset = true;
+      continue;
+    }
+
+    if (name.empty() || name[0] == ':') {
+      DVLOG(1) << "Trailers must not be empty, and must not contain pseudo-"
+               << "headers. Found: '" << name << "'";
+      return false;
+    }
+
+    if (std::any_of(name.begin(), name.end(), base::IsAsciiUpper<char>)) {
+      DVLOG(1) << "Malformed header: Header name " << name
+               << " contains upper-case characters.";
+      return false;
+    }
+
+    if (trailers->find(name) != trailers->end()) {
+      DVLOG(1) << "Duplicate header '" << name << "' found in trailers.";
+      return false;
+    }
+
+    (*trailers)[name] = p.second;
+  }
+
+  if (!found_final_byte_offset) {
+    DVLOG(1) << "Required key '" << kFinalOffsetHeaderKey << "' not present";
+    return false;
+  }
+
+  // TODO(rjshade): Check for other forbidden keys, following the HTTP/2 spec.
+
+  DVLOG(1) << "Successfully parsed Trailers: " << trailers->DebugString();
   return true;
 }
 

@@ -30,14 +30,17 @@ class CC_SURFACES_EXPORT SurfaceDisplayOutputSurface
       SurfaceIdAllocator* allocator,
       scoped_refptr<ContextProvider> context_provider,
       scoped_refptr<ContextProvider> worker_context_provider);
+  SurfaceDisplayOutputSurface(
+      SurfaceManager* surface_manager,
+      SurfaceIdAllocator* allocator,
+      scoped_refptr<VulkanContextProvider> vulkan_context_provider);
   ~SurfaceDisplayOutputSurface() override;
 
   void set_display_client(OnscreenDisplayClient* display_client) {
+    DCHECK(!display_client_);
     display_client_ = display_client;
   }
   SurfaceFactory* factory() { return &factory_; }
-  void ReceivedVSyncParameters(base::TimeTicks timebase,
-                               base::TimeDelta interval);
 
   // OutputSurface implementation.
   void SwapBuffers(CompositorFrame* frame) override;

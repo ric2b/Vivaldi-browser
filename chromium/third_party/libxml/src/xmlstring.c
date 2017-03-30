@@ -457,6 +457,8 @@ xmlStrncat(xmlChar *cur, const xmlChar *add, int len) {
         return(xmlStrndup(add, len));
 
     size = xmlStrlen(cur);
+    if (size < 0)
+        return(NULL);
     ret = (xmlChar *) xmlRealloc(cur, (size + len + 1) * sizeof(xmlChar));
     if (ret == NULL) {
         xmlErrMemory(NULL, NULL);
@@ -484,14 +486,19 @@ xmlStrncatNew(const xmlChar *str1, const xmlChar *str2, int len) {
     int size;
     xmlChar *ret;
 
-    if (len < 0)
+    if (len < 0) {
         len = xmlStrlen(str2);
+        if (len < 0)
+            return(NULL);
+    }
     if ((str2 == NULL) || (len == 0))
         return(xmlStrdup(str1));
     if (str1 == NULL)
         return(xmlStrndup(str2, len));
 
     size = xmlStrlen(str1);
+    if (size < 0)
+        return(NULL);
     ret = (xmlChar *) xmlMalloc((size + len + 1) * sizeof(xmlChar));
     if (ret == NULL) {
         xmlErrMemory(NULL, NULL);
@@ -538,7 +545,7 @@ xmlStrcat(xmlChar *cur, const xmlChar *add) {
  * Returns the number of characters written to @buf or -1 if an error occurs.
  */
 int XMLCDECL
-xmlStrPrintf(xmlChar *buf, int len, const xmlChar *msg, ...) {
+xmlStrPrintf(xmlChar *buf, int len, const char *msg, ...) {
     va_list args;
     int ret;
 
@@ -566,7 +573,7 @@ xmlStrPrintf(xmlChar *buf, int len, const xmlChar *msg, ...) {
  * Returns the number of characters written to @buf or -1 if an error occurs.
  */
 int
-xmlStrVPrintf(xmlChar *buf, int len, const xmlChar *msg, va_list ap) {
+xmlStrVPrintf(xmlChar *buf, int len, const char *msg, va_list ap) {
     int ret;
 
     if((buf == NULL) || (msg == NULL)) {
@@ -821,13 +828,6 @@ xmlCheckUTF8(const unsigned char *utf)
  * the first 'len' characters of ARRAY
  */
 
-#if _MSC_FULL_VER && _MSC_FULL_VER == 190023918
-// Workaround for a /O1 ("s") optimization bug in VS 2015 Update 2, remove once
-// the fix is released. crbug.com/599427
-// https://connect.microsoft.com/VisualStudio/feedback/details/2582138
-#pragma optimize("t", on)
-#endif
-
 int
 xmlUTF8Strsize(const xmlChar *utf, int len) {
     const xmlChar   *ptr=utf;
@@ -842,19 +842,19 @@ xmlUTF8Strsize(const xmlChar *utf, int len) {
     while ( len-- > 0) {
         if ( !*ptr )
             break;
-        if ( (ch = *ptr++) & 0x80)
-            while ((ch<<=1) & 0x80 ) {
+        if ( (ch = *ptr++) & 0x80) {
+            // Workaround for an optimization bug in VS 2015 Update 2, remove
+            // once the fix is released. crbug.com/599427
+            // https://connect.microsoft.com/VisualStudio/feedback/details/2582138
+            xmlChar ch2 = ch;
+            while ((ch2<<=1) & 0x80 ) {
                 ptr++;
-		if (*ptr == 0) break;
-	    }
+                if (*ptr == 0) break;
+            }
+        }
     }
     return (ptr - utf);
 }
-
-#if _MSC_FULL_VER && _MSC_FULL_VER == 190023918
-// Restore the original optimization settings.
-#pragma optimize("", on)
-#endif
 
 /**
  * xmlUTF8Strndup:
@@ -989,6 +989,61 @@ xmlUTF8Strsub(const xmlChar *utf, int start, int len) {
     }
 
     return(xmlUTF8Strndup(utf, len));
+}
+
+/**
+ * xmlEscapeFormatString:
+ * @msg:  a pointer to the string in which to escape '%' characters.
+ * Must be a heap-allocated buffer created by libxml2 that may be
+ * returned, or that may be freed and replaced.
+ *
+ * Replaces the string pointed to by 'msg' with an escaped string.
+ * Returns the same string with all '%' characters escaped.
+ */
+xmlChar *
+xmlEscapeFormatString(xmlChar **msg)
+{
+    xmlChar *msgPtr = NULL;
+    xmlChar *result = NULL;
+    xmlChar *resultPtr = NULL;
+    size_t count = 0;
+    size_t msgLen = 0;
+    size_t resultLen = 0;
+
+    if (!msg || !*msg)
+        return(NULL);
+
+    for (msgPtr = *msg; *msgPtr != '\0'; ++msgPtr) {
+        ++msgLen;
+        if (*msgPtr == '%')
+            ++count;
+    }
+
+    if (count == 0)
+        return(*msg);
+
+    resultLen = msgLen + count + 1;
+    result = (xmlChar *) xmlMallocAtomic(resultLen * sizeof(xmlChar));
+    if (result == NULL) {
+        /* Clear *msg to prevent format string vulnerabilities in
+           out-of-memory situations. */
+        xmlFree(*msg);
+        *msg = NULL;
+        xmlErrMemory(NULL, NULL);
+        return(NULL);
+    }
+
+    for (msgPtr = *msg, resultPtr = result; *msgPtr != '\0'; ++msgPtr, ++resultPtr) {
+        *resultPtr = *msgPtr;
+        if (*msgPtr == '%')
+            *(++resultPtr) = '%';
+    }
+    result[resultLen - 1] = '\0';
+
+    xmlFree(*msg);
+    *msg = result;
+
+    return *msg;
 }
 
 #define bottom_xmlstring

@@ -32,7 +32,7 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/UnionTypesCore.h"
+#include "bindings/core/v8/StringOrArrayBufferOrArrayBufferView.h"
 #include "core/CSSValueKeywords.h"
 #include "core/css/BinaryDataFontFaceSource.h"
 #include "core/css/CSSFontFace.h"
@@ -93,14 +93,14 @@ FontFace* FontFace::create(ExecutionContext* context, const AtomicString& family
     return fontFace;
 }
 
-FontFace* FontFace::create(ExecutionContext* context, const AtomicString& family, PassRefPtr<DOMArrayBuffer> source, const FontFaceDescriptors& descriptors)
+FontFace* FontFace::create(ExecutionContext* context, const AtomicString& family, DOMArrayBuffer* source, const FontFaceDescriptors& descriptors)
 {
     FontFace* fontFace = new FontFace(context, family, descriptors);
     fontFace->initCSSFontFace(static_cast<const unsigned char*>(source->data()), source->byteLength());
     return fontFace;
 }
 
-FontFace* FontFace::create(ExecutionContext* context, const AtomicString& family, PassRefPtr<DOMArrayBufferView> source, const FontFaceDescriptors& descriptors)
+FontFace* FontFace::create(ExecutionContext* context, const AtomicString& family, DOMArrayBufferView* source, const FontFaceDescriptors& descriptors)
 {
     FontFace* fontFace = new FontFace(context, family, descriptors);
     fontFace->initCSSFontFace(static_cast<const unsigned char*>(source->baseAddress()), source->byteLength());
@@ -395,7 +395,6 @@ void FontFace::loadInternal(ExecutionContext* context)
         return;
 
     m_cssFontFace->load();
-    toDocument(context)->styleEngine().fontSelector()->fontLoader()->loadPendingFonts();
 }
 
 FontTraits FontFace::traits() const
@@ -501,37 +500,7 @@ FontTraits FontFace::traits() const
         }
     }
 
-    FontVariant variant = FontVariantNormal;
-    if (CSSValue* fontVariant = m_variant) {
-        // font-variant descriptor can be a value list.
-        if (fontVariant->isPrimitiveValue()) {
-            CSSValueList* list = CSSValueList::createCommaSeparated();
-            list->append(fontVariant);
-            fontVariant = list;
-        } else if (!fontVariant->isValueList()) {
-            return 0;
-        }
-
-        CSSValueList* variantList = toCSSValueList(fontVariant);
-        unsigned numVariants = variantList->length();
-        if (!numVariants)
-            return 0;
-
-        for (unsigned i = 0; i < numVariants; ++i) {
-            switch (toCSSPrimitiveValue(variantList->item(i))->getValueID()) {
-            case CSSValueNormal:
-                variant = FontVariantNormal;
-                break;
-            case CSSValueSmallCaps:
-                variant = FontVariantSmallCaps;
-                break;
-            default:
-                break;
-            }
-        }
-    }
-
-    return FontTraits(style, variant, weight, stretch);
+    return FontTraits(style, weight, stretch);
 }
 
 static FontDisplay CSSValueToFontDisplay(CSSValue* value)
@@ -592,8 +561,8 @@ void FontFace::initCSSFontFace(Document* document, CSSValue* src)
             if (allowDownloading && item->isSupportedFormat() && document) {
                 FontResource* fetched = item->fetch(document);
                 if (fetched) {
-                    FontLoader* fontLoader = document->styleEngine().fontSelector()->fontLoader();
-                    source = new RemoteFontFaceSource(fetched, fontLoader, CSSValueToFontDisplay(m_display.get()));
+                    CSSFontSelector* fontSelector = document->styleEngine().fontSelector();
+                    source = new RemoteFontFaceSource(fetched, fontSelector, CSSValueToFontDisplay(m_display.get()));
                 }
             }
         } else {

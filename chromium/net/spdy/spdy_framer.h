@@ -13,7 +13,6 @@
 #include <string>
 #include <utility>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 #include "base/sys_byteorder.h"
 #include "net/base/net_export.h"
@@ -112,12 +111,9 @@ class NET_EXPORT_PRIVATE SpdyFramerVisitorInterface {
   // |stream_id| The stream receiving data.
   // |data| A buffer containing the data received.
   // |len| The length of the data buffer.
-  // When the other side has finished sending data on this stream,
-  // this method will be called with a zero-length buffer.
   virtual void OnStreamFrameData(SpdyStreamId stream_id,
                                  const char* data,
-                                 size_t len,
-                                 bool fin) = 0;
+                                 size_t len) = 0;
 
   // Called when the other side has finished sending data on this stream.
   // |stream_id| The stream that was receivin data.
@@ -329,6 +325,7 @@ class NET_EXPORT_PRIVATE SpdyFramer {
   // SPDY error codes.
   enum SpdyError {
     SPDY_NO_ERROR,
+    SPDY_INVALID_STREAM_ID,            // Stream ID is invalid
     SPDY_INVALID_CONTROL_FRAME,        // Control frame is mal-formatted.
     SPDY_CONTROL_PAYLOAD_TOO_LARGE,    // Control frame payload was too large.
     SPDY_ZLIB_INIT_FAILURE,            // The Zlib library could not initialize.
@@ -337,6 +334,7 @@ class NET_EXPORT_PRIVATE SpdyFramer {
     SPDY_COMPRESS_FAILURE,             // There was an error compressing.
     SPDY_GOAWAY_FRAME_CORRUPT,         // GOAWAY frame could not be parsed.
     SPDY_RST_STREAM_FRAME_CORRUPT,     // RST_STREAM frame could not be parsed.
+    SPDY_INVALID_PADDING,              // HEADERS or DATA frame padding invalid
     SPDY_INVALID_DATA_FRAME_FLAGS,     // Data frame has invalid flags.
     SPDY_INVALID_CONTROL_FRAME_FLAGS,  // Control frame has invalid flags.
     SPDY_UNEXPECTED_FRAME,             // Frame received out of order.
@@ -544,12 +542,14 @@ class NET_EXPORT_PRIVATE SpdyFramer {
 
   bool probable_http_response() const { return probable_http_response_; }
 
-  SpdyPriority GetLowestPriority() const { return 7; }
+  SpdyPriority GetLowestPriority() const { return kV3LowestPriority; }
 
-  SpdyPriority GetHighestPriority() const { return 0; }
+  SpdyPriority GetHighestPriority() const { return kV3HighestPriority; }
 
-  // Interpolates SpdyPriority values into SPDY4/HTTP2 priority weights,
-  // and vice versa.
+  // Interpolates SpdyPriority values into SPDY4/HTTP2 priority weights, and
+  // vice versa. Note that these methods accept/return weight values in their
+  // on-the-wire form, i.e. in range [0, 255], rather than their effective
+  // values in range [1, 256].
   static uint8_t MapPriorityToWeight(SpdyPriority priority);
   static SpdyPriority MapWeightToPriority(uint8_t weight);
 
@@ -592,7 +592,7 @@ class NET_EXPORT_PRIVATE SpdyFramer {
     size_t len() const { return len_; }
 
    private:
-    scoped_ptr<char[]> buffer_;
+    std::unique_ptr<char[]> buffer_;
     size_t capacity_;
     size_t len_;
   };
@@ -631,6 +631,18 @@ class NET_EXPORT_PRIVATE SpdyFramer {
   size_t ProcessSettingsFramePayload(const char* data, size_t len);
   size_t ProcessAltSvcFramePayload(const char* data, size_t len);
   size_t ProcessIgnoredControlFramePayload(/*const char* data,*/ size_t len);
+
+  // Validates the frame header against the current protocol, e.g.
+  // Frame type must be known, must specify a non-zero stream id.
+  //
+  // is_control_frame: the control bit for SPDY3
+  // frame_type_field: the unparsed frame type octet(s)
+  //
+  // For valid frames, returns the correct SpdyFrameType.
+  // Otherwise returns a best guess at invalid frame type,
+  // after setting the appropriate SpdyError.
+  SpdyFrameType ValidateFrameHeader(bool is_control_frame,
+                                    int frame_type_field);
 
   // TODO(jgraettinger): To be removed with migration to
   // SpdyHeadersHandlerInterface.  Serializes the last-processed
@@ -697,10 +709,11 @@ class NET_EXPORT_PRIVATE SpdyFramer {
   // frame data is streamed to the visitor.
   static const size_t kControlFrameBufferSize;
 
-  // The maximum size of the control frames that we support.
-  // This limit is arbitrary. We can enforce it here or at the application
-  // layer. We chose the framing layer, but this can be changed (or removed)
-  // if necessary later down the line.
+  // The maximum size of the control frames that we send, including the size of
+  // the header. This limit is arbitrary. We can enforce it here or at the
+  // application layer. We chose the framing layer, but this can be changed (or
+  // removed) if necessary later down the line.
+  // TODO(diannahu): Rename to make it clear that this limit is for sending.
   static const size_t kMaxControlFrameSize;
 
   SpdyState state_;
@@ -742,14 +755,14 @@ class NET_EXPORT_PRIVATE SpdyFramer {
   // current_frame_buffer_.
   SpdySettingsScratch settings_scratch_;
 
-  scoped_ptr<CharBuffer> altsvc_scratch_;
+  std::unique_ptr<CharBuffer> altsvc_scratch_;
 
   // SPDY header compressors.
-  scoped_ptr<z_stream> header_compressor_;
-  scoped_ptr<z_stream> header_decompressor_;
+  std::unique_ptr<z_stream> header_compressor_;
+  std::unique_ptr<z_stream> header_decompressor_;
 
-  scoped_ptr<HpackEncoder> hpack_encoder_;
-  scoped_ptr<HpackDecoder> hpack_decoder_;
+  std::unique_ptr<HpackEncoder> hpack_encoder_;
+  std::unique_ptr<HpackDecoder> hpack_decoder_;
 
   SpdyFramerVisitorInterface* visitor_;
   SpdyFramerDebugVisitorInterface* debug_visitor_;
@@ -789,11 +802,6 @@ class NET_EXPORT_PRIVATE SpdyFramer {
   // If true, then ProcessInput returns after processing a full frame,
   // rather than reading all available input.
   bool process_single_input_frame_ = false;
-
-  // Latched value of --FLAGS_spdy_on_stream_end.
-  // If true, OnStreamEnd will be called instead of the sentinel call of
-  // OnStreamFrameData(stream_id, nullptr, 0, true)
-  bool spdy_on_stream_end_;
 };
 
 }  // namespace net

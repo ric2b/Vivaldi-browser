@@ -5,11 +5,17 @@
 #ifndef CONTENT_BROWSER_COMPOSITOR_GPU_BROWSER_COMPOSITOR_OUTPUT_SURFACE_H_
 #define CONTENT_BROWSER_COMPOSITOR_GPU_BROWSER_COMPOSITOR_OUTPUT_SURFACE_H_
 
+#include <memory>
+
 #include "base/cancelable_callback.h"
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "content/browser/compositor/browser_compositor_output_surface.h"
 #include "ui/gfx/swap_result.h"
+
+namespace display_compositor {
+class CompositorOverlayCandidateValidator;
+}
 
 namespace gpu {
 class CommandBufferProxyImpl;
@@ -20,7 +26,6 @@ class CompositorVSyncManager;
 }
 
 namespace content {
-class BrowserCompositorOverlayCandidateValidator;
 class ReflectorTexture;
 
 // Adapts a WebGraphicsContext3DCommandBufferImpl into a
@@ -30,10 +35,10 @@ class GpuBrowserCompositorOutputSurface
     : public BrowserCompositorOutputSurface {
  public:
   GpuBrowserCompositorOutputSurface(
-      const scoped_refptr<ContextProviderCommandBuffer>& context,
-      const scoped_refptr<ContextProviderCommandBuffer>& worker_context,
-      const scoped_refptr<ui::CompositorVSyncManager>& vsync_manager,
-      scoped_ptr<BrowserCompositorOverlayCandidateValidator>
+      scoped_refptr<ContextProviderCommandBuffer> context,
+      scoped_refptr<ui::CompositorVSyncManager> vsync_manager,
+      base::SingleThreadTaskRunner* task_runner,
+      std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
           overlay_candidate_validator);
 
   ~GpuBrowserCompositorOutputSurface() override;
@@ -43,7 +48,8 @@ class GpuBrowserCompositorOutputSurface
   void OnReflectorChanged() override;
   void OnGpuSwapBuffersCompleted(
       const std::vector<ui::LatencyInfo>& latency_info,
-      gfx::SwapResult result) override;
+      gfx::SwapResult result,
+      const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac) override;
 
   // cc::OutputSurface implementation.
   void SwapBuffers(cc::CompositorFrame* frame) override;
@@ -52,7 +58,6 @@ class GpuBrowserCompositorOutputSurface
 
 #if defined(OS_MACOSX)
   void SetSurfaceSuspendedForRecycle(bool suspended) override;
-  bool SurfaceShouldNotShowFramesAfterSuspendForRecycle() const override;
   enum ShouldShowFramesState {
     // Frames that come from the GPU process should appear on-screen.
     SHOULD_SHOW_FRAMES,
@@ -69,14 +74,16 @@ class GpuBrowserCompositorOutputSurface
 
   gpu::CommandBufferProxyImpl* GetCommandBufferProxy();
 
-  base::CancelableCallback<void(const std::vector<ui::LatencyInfo>&,
-                                gfx::SwapResult)>
+  base::CancelableCallback<void(
+      const std::vector<ui::LatencyInfo>&,
+      gfx::SwapResult,
+      const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac)>
       swap_buffers_completion_callback_;
   base::CancelableCallback<void(base::TimeTicks timebase,
                                 base::TimeDelta interval)>
       update_vsync_parameters_callback_;
 
-  scoped_ptr<ReflectorTexture> reflector_texture_;
+  std::unique_ptr<ReflectorTexture> reflector_texture_;
 
   DISALLOW_COPY_AND_ASSIGN(GpuBrowserCompositorOutputSurface);
 };

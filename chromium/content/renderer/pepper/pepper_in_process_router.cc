@@ -7,7 +7,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/renderer/pepper/renderer_ppapi_host_impl.h"
 #include "content/renderer/render_frame_impl.h"
@@ -101,7 +101,7 @@ bool PepperInProcessRouter::OnPluginMsgReceived(const IPC::Message& msg) {
 }
 
 bool PepperInProcessRouter::SendToHost(IPC::Message* msg) {
-  scoped_ptr<IPC::Message> message(msg);
+  std::unique_ptr<IPC::Message> message(msg);
 
   if (!message->is_sync()) {
     // If this is a resource destroyed message, post a task to dispatch it.
@@ -137,7 +137,7 @@ bool PepperInProcessRouter::SendToHost(IPC::Message* msg) {
 }
 
 bool PepperInProcessRouter::SendToPlugin(IPC::Message* msg) {
-  scoped_ptr<IPC::Message> message(msg);
+  std::unique_ptr<IPC::Message> message(msg);
   CHECK(!msg->is_sync());
   if (IPC::SyncMessage::IsMessageReplyTo(*message, pending_message_id_)) {
     if (!msg->is_reply_error())

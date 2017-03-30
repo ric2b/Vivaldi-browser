@@ -52,14 +52,14 @@ public:
     ScrollingCoordinatorTest()
         : m_baseURL("http://www.test.com/")
     {
-        m_helper.initialize(true, 0, &m_mockWebViewClient, &configureSettings);
+        m_helper.initialize(true, nullptr, &m_mockWebViewClient, nullptr, &configureSettings);
         webViewImpl()->resize(IntSize(320, 240));
 
         // OSX attaches main frame scrollbars to the VisualViewport so the VisualViewport layers need
         // to be initialized.
         webViewImpl()->updateAllLifecyclePhases();
         webViewImpl()->setRootGraphicsLayer(
-            webViewImpl()->mainFrameImpl()->frame()->view()->layoutView()->compositor()->rootGraphicsLayer());
+            webViewImpl()->mainFrameImpl()->frame()->view()->layoutViewItem().compositor()->rootGraphicsLayer());
     }
 
     ~ScrollingCoordinatorTest() override
@@ -489,10 +489,10 @@ TEST_F(ScrollingCoordinatorTest, iframeScrolling)
     ASSERT_TRUE(layoutPart->widget()->isFrameView());
 
     FrameView* innerFrameView = toFrameView(layoutPart->widget());
-    LayoutView* innerLayoutView = innerFrameView->layoutView();
-    ASSERT_TRUE(innerLayoutView);
+    LayoutViewItem innerLayoutViewItem = innerFrameView->layoutViewItem();
+    ASSERT_FALSE(innerLayoutViewItem.isNull());
 
-    PaintLayerCompositor* innerCompositor = innerLayoutView->compositor();
+    PaintLayerCompositor* innerCompositor = innerLayoutViewItem.compositor();
     ASSERT_TRUE(innerCompositor->inCompositingMode());
     ASSERT_TRUE(innerCompositor->scrollLayer());
 
@@ -533,10 +533,10 @@ TEST_F(ScrollingCoordinatorTest, rtlIframe)
     ASSERT_TRUE(layoutPart->widget()->isFrameView());
 
     FrameView* innerFrameView = toFrameView(layoutPart->widget());
-    LayoutView* innerLayoutView = innerFrameView->layoutView();
-    ASSERT_TRUE(innerLayoutView);
+    LayoutViewItem innerLayoutViewItem = innerFrameView->layoutViewItem();
+    ASSERT_FALSE(innerLayoutViewItem.isNull());
 
-    PaintLayerCompositor* innerCompositor = innerLayoutView->compositor();
+    PaintLayerCompositor* innerCompositor = innerLayoutViewItem.compositor();
     ASSERT_TRUE(innerCompositor->inCompositingMode());
     ASSERT_TRUE(innerCompositor->scrollLayer());
 

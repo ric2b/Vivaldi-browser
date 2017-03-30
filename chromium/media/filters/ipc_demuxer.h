@@ -10,7 +10,6 @@
 #include <string>
 
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "media/base/demuxer.h"
 #include "media/base/media_export.h"
@@ -38,7 +37,7 @@ class MEDIA_EXPORT IPCDemuxer : public Demuxer {
  public:
   IPCDemuxer(const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
              DataSource* data_source,
-             scoped_ptr<IPCMediaPipelineHost> ipc_media_pipeline_host,
+             std::unique_ptr<IPCMediaPipelineHost> ipc_media_pipeline_host,
              const std::string& content_type,
              const GURL& url,
              const scoped_refptr<MediaLog>& media_log);
@@ -90,9 +89,9 @@ class MEDIA_EXPORT IPCDemuxer : public Demuxer {
 
   bool stopping_;
 
-  scoped_ptr<IPCMediaPipelineHost> ipc_media_pipeline_host_;
-  scoped_ptr<IPCDemuxerStream> audio_stream_;
-  scoped_ptr<IPCDemuxerStream> video_stream_;
+  std::unique_ptr<IPCMediaPipelineHost> ipc_media_pipeline_host_;
+  std::unique_ptr<IPCDemuxerStream> audio_stream_;
+  std::unique_ptr<IPCDemuxerStream> video_stream_;
 
   scoped_refptr<MediaLog> media_log_;
 

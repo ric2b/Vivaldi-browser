@@ -17,6 +17,10 @@ namespace base {
 class SingleThreadTaskRunner;
 }  // namespace base
 
+namespace webrtc {
+class DesktopCaptureOptions;
+}  // namespace webrtc
+
 namespace remoting {
 
 namespace protocol {
@@ -29,12 +33,12 @@ class DesktopCapturerProxy : public webrtc::DesktopCapturer {
  public:
   DesktopCapturerProxy(
       scoped_refptr<base::SingleThreadTaskRunner> capture_task_runner,
-      std::unique_ptr<webrtc::DesktopCapturer> capturer);
+      const webrtc::DesktopCaptureOptions& options);
   ~DesktopCapturerProxy() override;
 
   // webrtc::DesktopCapturer interface.
   void Start(Callback* callback) override;
-  void SetSharedMemoryFactory(rtc::scoped_ptr<webrtc::SharedMemoryFactory>
+  void SetSharedMemoryFactory(std::unique_ptr<webrtc::SharedMemoryFactory>
                                   shared_memory_factory) override;
   void Capture(const webrtc::DesktopRegion& rect) override;
 

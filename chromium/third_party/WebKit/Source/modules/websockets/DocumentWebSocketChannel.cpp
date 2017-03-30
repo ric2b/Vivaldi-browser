@@ -56,8 +56,6 @@
 #include "public/platform/modules/websockets/WebSocketHandshakeRequestInfo.h"
 #include "public/platform/modules/websockets/WebSocketHandshakeResponseInfo.h"
 
-using blink::WebSocketHandle;
-
 namespace blink {
 
 class DocumentWebSocketChannel::BlobLoader final : public GarbageCollectedFinalized<DocumentWebSocketChannel::BlobLoader>, public FileReaderLoaderClient {
@@ -81,6 +79,31 @@ public:
 private:
     Member<DocumentWebSocketChannel> m_channel;
     FileReaderLoader m_loader;
+};
+
+class DocumentWebSocketChannel::Message : public GarbageCollectedFinalized<DocumentWebSocketChannel::Message> {
+public:
+    explicit Message(const CString&);
+    explicit Message(PassRefPtr<BlobDataHandle>);
+    explicit Message(DOMArrayBuffer*);
+    // For WorkerWebSocketChannel
+    explicit Message(PassOwnPtr<Vector<char>>, MessageType);
+    // Close message
+    Message(unsigned short code, const String& reason);
+
+    DEFINE_INLINE_TRACE()
+    {
+        visitor->trace(arrayBuffer);
+    }
+
+    MessageType type;
+
+    CString text;
+    RefPtr<BlobDataHandle> blobDataHandle;
+    Member<DOMArrayBuffer> arrayBuffer;
+    OwnPtr<Vector<char>> vectorData;
+    unsigned short code;
+    String reason;
 };
 
 DocumentWebSocketChannel::BlobLoader::BlobLoader(PassRefPtr<BlobDataHandle> blobDataHandle, DocumentWebSocketChannel* channel)
@@ -158,7 +181,7 @@ bool DocumentWebSocketChannel::connect(const KURL& url, const String& protocol)
 
     if (document()->frame())
         document()->frame()->loader().client()->dispatchWillOpenWebSocket(m_handle.get());
-    m_handle->connect(url, webProtocols, WebSecurityOrigin(getExecutionContext()->getSecurityOrigin()), this);
+    m_handle->connect(url, webProtocols, WebSecurityOrigin(getExecutionContext()->getSecurityOrigin()), document()->firstPartyForCookies(), this);
 
     flowControlIfNecessary();
     TRACE_EVENT_INSTANT1("devtools.timeline", "WebSocketCreate", TRACE_EVENT_SCOPE_THREAD, "data", InspectorWebSocketCreateEvent::data(document(), m_identifier, url, protocol));
@@ -172,7 +195,7 @@ void DocumentWebSocketChannel::send(const CString& message)
     // FIXME: Change the inspector API to show the entire message instead
     // of individual frames.
     InspectorInstrumentation::didSendWebSocketFrame(document(), m_identifier, WebSocketFrame::OpCodeText, true, message.data(), message.length());
-    m_messages.append(adoptPtr(new Message(message)));
+    m_messages.append(new Message(message));
     processSendQueue();
 }
 
@@ -185,7 +208,7 @@ void DocumentWebSocketChannel::send(PassRefPtr<BlobDataHandle> blobDataHandle)
     // Since Binary data are not displayed in Inspector, this does not
     // affect actual behavior.
     InspectorInstrumentation::didSendWebSocketFrame(document(), m_identifier, WebSocketFrame::OpCodeBinary, true, "", 0);
-    m_messages.append(adoptPtr(new Message(blobDataHandle)));
+    m_messages.append(new Message(blobDataHandle));
     processSendQueue();
 }
 
@@ -198,7 +221,7 @@ void DocumentWebSocketChannel::send(const DOMArrayBuffer& buffer, unsigned byteO
     // buffer.slice copies its contents.
     // FIXME: Reduce copy by sending the data immediately when we don't need to
     // queue the data.
-    m_messages.append(adoptPtr(new Message(buffer.slice(byteOffset, byteOffset + byteLength))));
+    m_messages.append(new Message(buffer.slice(byteOffset, byteOffset + byteLength)));
     processSendQueue();
 }
 
@@ -208,7 +231,7 @@ void DocumentWebSocketChannel::sendTextAsCharVector(PassOwnPtr<Vector<char>> dat
     // FIXME: Change the inspector API to show the entire message instead
     // of individual frames.
     InspectorInstrumentation::didSendWebSocketFrame(document(), m_identifier, WebSocketFrame::OpCodeText, true, data->data(), data->size());
-    m_messages.append(adoptPtr(new Message(data, MessageTypeTextAsCharVector)));
+    m_messages.append(new Message(std::move(data), MessageTypeTextAsCharVector));
     processSendQueue();
 }
 
@@ -218,7 +241,7 @@ void DocumentWebSocketChannel::sendBinaryAsCharVector(PassOwnPtr<Vector<char>> d
     // FIXME: Change the inspector API to show the entire message instead
     // of individual frames.
     InspectorInstrumentation::didSendWebSocketFrame(document(), m_identifier, WebSocketFrame::OpCodeBinary, true, data->data(), data->size());
-    m_messages.append(adoptPtr(new Message(data, MessageTypeBinaryAsCharVector)));
+    m_messages.append(new Message(std::move(data), MessageTypeBinaryAsCharVector));
     processSendQueue();
 }
 
@@ -227,7 +250,7 @@ void DocumentWebSocketChannel::close(int code, const String& reason)
     WTF_LOG(Network, "DocumentWebSocketChannel %p close(%d, %s)", this, code, reason.utf8().data());
     ASSERT(m_handle);
     unsigned short codeToSend = static_cast<unsigned short>(code == CloseEventCodeNotSpecified ? CloseEventCodeNoStatusRcvd : code);
-    m_messages.append(adoptPtr(new Message(codeToSend, reason)));
+    m_messages.append(new Message(codeToSend, reason));
     processSendQueue();
 }
 
@@ -269,13 +292,13 @@ DocumentWebSocketChannel::Message::Message(PassRefPtr<BlobDataHandle> blobDataHa
     : type(MessageTypeBlob)
     , blobDataHandle(blobDataHandle) { }
 
-DocumentWebSocketChannel::Message::Message(PassRefPtr<DOMArrayBuffer> arrayBuffer)
+DocumentWebSocketChannel::Message::Message(DOMArrayBuffer* arrayBuffer)
     : type(MessageTypeArrayBuffer)
     , arrayBuffer(arrayBuffer) { }
 
 DocumentWebSocketChannel::Message::Message(PassOwnPtr<Vector<char>> vectorData, MessageType type)
     : type(type)
-    , vectorData(vectorData)
+    , vectorData(std::move(vectorData))
 {
     ASSERT(type == MessageTypeTextAsCharVector || type == MessageTypeBinaryAsCharVector);
 }
@@ -483,7 +506,7 @@ void DocumentWebSocketChannel::didReceiveData(WebSocketHandle* handle, bool fin,
     } else {
         OwnPtr<Vector<char>> binaryData = adoptPtr(new Vector<char>);
         binaryData->swap(m_receivingMessageData);
-        m_client->didReceiveBinaryMessage(binaryData.release());
+        m_client->didReceiveBinaryMessage(std::move(binaryData));
     }
 }
 
@@ -529,14 +552,14 @@ void DocumentWebSocketChannel::didStartClosingHandshake(WebSocketHandle* handle)
         m_client->didStartClosingHandshake();
 }
 
-void DocumentWebSocketChannel::didFinishLoadingBlob(PassRefPtr<DOMArrayBuffer> buffer)
+void DocumentWebSocketChannel::didFinishLoadingBlob(DOMArrayBuffer* buffer)
 {
     m_blobLoader.clear();
     ASSERT(m_handle);
     // The loaded blob is always placed on m_messages[0].
     ASSERT(m_messages.size() > 0 && m_messages.first()->type == MessageTypeBlob);
     // We replace it with the loaded blob.
-    m_messages.first() = adoptPtr(new Message(buffer));
+    m_messages.first() = new Message(buffer);
     processSendQueue();
 }
 
@@ -555,6 +578,7 @@ void DocumentWebSocketChannel::didFailLoadingBlob(FileError::ErrorCode errorCode
 DEFINE_TRACE(DocumentWebSocketChannel)
 {
     visitor->trace(m_blobLoader);
+    visitor->trace(m_messages);
     visitor->trace(m_client);
     WebSocketChannel::trace(visitor);
     ContextLifecycleObserver::trace(visitor);

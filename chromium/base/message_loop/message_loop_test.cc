@@ -378,6 +378,66 @@ void RunTest_Nesting(MessagePumpFactory factory) {
   EXPECT_EQ(depth, 0);
 }
 
+// A NestingObserver that tracks the number of nested message loop starts it
+// has seen.
+class TestNestingObserver : public MessageLoop::NestingObserver {
+ public:
+  TestNestingObserver() {}
+  ~TestNestingObserver() override {}
+
+  int begin_nested_loop_count() const { return begin_nested_loop_count_; }
+
+  // MessageLoop::NestingObserver:
+  void OnBeginNestedMessageLoop() override { begin_nested_loop_count_++; }
+
+ private:
+  int begin_nested_loop_count_ = 0;
+
+  DISALLOW_COPY_AND_ASSIGN(TestNestingObserver);
+};
+
+void ExpectOneBeginNestedLoop(TestNestingObserver* observer) {
+  EXPECT_EQ(1, observer->begin_nested_loop_count());
+}
+
+// Starts a nested message loop.
+void RunNestedLoop(TestNestingObserver* observer,
+                   const Closure& quit_outer_loop) {
+  // The nested loop hasn't started yet.
+  EXPECT_EQ(0, observer->begin_nested_loop_count());
+
+  MessageLoop::ScopedNestableTaskAllower allow(MessageLoop::current());
+  RunLoop nested_loop;
+  // Verify that by the time the first task is run the observer has seen the
+  // message loop begin.
+  MessageLoop::current()->PostTask(FROM_HERE,
+                                   Bind(&ExpectOneBeginNestedLoop, observer));
+  MessageLoop::current()->PostTask(FROM_HERE, nested_loop.QuitClosure());
+  nested_loop.Run();
+
+  // Quitting message loops doesn't change the begin count.
+  EXPECT_EQ(1, observer->begin_nested_loop_count());
+
+  quit_outer_loop.Run();
+}
+
+// Tests that a NestingObserver is notified when a nested message loop begins.
+void RunTest_NestingObserver(MessagePumpFactory factory) {
+  std::unique_ptr<MessagePump> pump(factory());
+  MessageLoop outer_loop(std::move(pump));
+
+  // Observe the outer loop for nested message loops beginning.
+  TestNestingObserver nesting_observer;
+  outer_loop.AddNestingObserver(&nesting_observer);
+
+  // Post a task that runs a nested message loop.
+  outer_loop.PostTask(FROM_HERE, Bind(&RunNestedLoop, &nesting_observer,
+                                      outer_loop.QuitWhenIdleClosure()));
+  outer_loop.Run();
+
+  outer_loop.RemoveNestingObserver(&nesting_observer);
+}
+
 enum TaskType {
   MESSAGEBOX,
   ENDDIALOG,
@@ -602,13 +662,14 @@ void RunTest_NonNestableWithNoNesting(MessagePumpFactory factory) {
 
   TaskList order;
 
-  MessageLoop::current()->PostNonNestableTask(
+  MessageLoop::current()->task_runner()->PostNonNestableTask(
       FROM_HERE,
       Bind(&OrderedFunc, &order, 1));
-  MessageLoop::current()->PostTask(FROM_HERE,
-                                   Bind(&OrderedFunc, &order, 2));
-  MessageLoop::current()->PostTask(FROM_HERE,
-                                   Bind(&QuitFunc, &order, 3));
+  MessageLoop::current()->task_runner()->PostTask(
+      FROM_HERE,
+      Bind(&OrderedFunc, &order, 2));
+  MessageLoop::current()->task_runner()->PostTask(FROM_HERE,
+                                                  Bind(&QuitFunc, &order, 3));
   MessageLoop::current()->Run();
 
   // FIFO order.
@@ -637,43 +698,30 @@ void SleepFunc(TaskList* order, int cookie, TimeDelta delay) {
 }
 
 // Tests that non nestable tasks don't run when there's code in the call stack.
-void RunTest_NonNestableInNestedLoop(MessagePumpFactory factory,
-                                     bool use_delayed) {
+void RunTest_NonNestableInNestedLoop(MessagePumpFactory factory) {
   std::unique_ptr<MessagePump> pump(factory());
   MessageLoop loop(std::move(pump));
 
   TaskList order;
 
-  MessageLoop::current()->PostTask(
+  MessageLoop::current()->task_runner()->PostTask(
       FROM_HERE,
       Bind(&FuncThatPumps, &order, 1));
-  if (use_delayed) {
-    MessageLoop::current()->PostNonNestableDelayedTask(
-        FROM_HERE,
-        Bind(&OrderedFunc, &order, 2),
-        TimeDelta::FromMilliseconds(1));
-  } else {
-    MessageLoop::current()->PostNonNestableTask(
-        FROM_HERE,
-        Bind(&OrderedFunc, &order, 2));
-  }
-  MessageLoop::current()->PostTask(FROM_HERE,
-                                   Bind(&OrderedFunc, &order, 3));
-  MessageLoop::current()->PostTask(
+  MessageLoop::current()->task_runner()->PostNonNestableTask(
+      FROM_HERE,
+      Bind(&OrderedFunc, &order, 2));
+  MessageLoop::current()->task_runner()->PostTask(
+      FROM_HERE,
+      Bind(&OrderedFunc, &order, 3));
+  MessageLoop::current()->task_runner()->PostTask(
       FROM_HERE,
       Bind(&SleepFunc, &order, 4, TimeDelta::FromMilliseconds(50)));
-  MessageLoop::current()->PostTask(FROM_HERE,
-                                   Bind(&OrderedFunc, &order, 5));
-  if (use_delayed) {
-    MessageLoop::current()->PostNonNestableDelayedTask(
-        FROM_HERE,
-        Bind(&QuitFunc, &order, 6),
-        TimeDelta::FromMilliseconds(2));
-  } else {
-    MessageLoop::current()->PostNonNestableTask(
-        FROM_HERE,
-        Bind(&QuitFunc, &order, 6));
-  }
+  MessageLoop::current()->task_runner()->PostTask(
+      FROM_HERE,
+      Bind(&OrderedFunc, &order, 5));
+  MessageLoop::current()->task_runner()->PostNonNestableTask(
+      FROM_HERE,
+      Bind(&QuitFunc, &order, 6));
 
   MessageLoop::current()->Run();
 

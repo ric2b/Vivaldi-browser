@@ -11,11 +11,11 @@
 #ifndef NET_URL_REQUEST_SDCH_DICTIONARY_FETCHER_H_
 #define NET_URL_REQUEST_SDCH_DICTIONARY_FETCHER_H_
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/threading/non_thread_safe.h"
 #include "net/base/sdch_manager.h"
 #include "net/url_request/url_fetcher_delegate.h"
@@ -62,6 +62,9 @@ class NET_EXPORT SdchDictionaryFetcher : public URLRequest::Delegate,
   virtual void Cancel();
 
   // Implementation of URLRequest::Delegate methods.
+  void OnReceivedRedirect(URLRequest* request,
+                          const RedirectInfo& redirect_info,
+                          bool* defer_redirect) override;
   void OnResponseStarted(URLRequest* request) override;
   void OnReadCompleted(URLRequest* request, int bytes_read) override;
 
@@ -69,7 +72,8 @@ class NET_EXPORT SdchDictionaryFetcher : public URLRequest::Delegate,
   enum State {
     STATE_NONE,
     STATE_SEND_REQUEST,
-    STATE_SEND_REQUEST_COMPLETE,
+    STATE_RECEIVED_REDIRECT,
+    STATE_SEND_REQUEST_PENDING,
     STATE_READ_BODY,
     STATE_READ_BODY_COMPLETE,
     STATE_REQUEST_COMPLETE,
@@ -90,7 +94,8 @@ class NET_EXPORT SdchDictionaryFetcher : public URLRequest::Delegate,
   // State machine implementation.
   int DoLoop(int rv);
   int DoSendRequest(int rv);
-  int DoSendRequestComplete(int rv);
+  int DoReceivedRedirect(int rv);
+  int DoSendRequestPending(int rv);
   int DoReadBody(int rv);
   int DoReadBodyComplete(int rv);
   int DoCompleteRequest(int rv);
@@ -99,11 +104,11 @@ class NET_EXPORT SdchDictionaryFetcher : public URLRequest::Delegate,
   bool in_loop_;
 
   // A queue of URLs that are being used to download dictionaries.
-  scoped_ptr<UniqueFetchQueue> fetch_queue_;
+  std::unique_ptr<UniqueFetchQueue> fetch_queue_;
 
   // The request, buffer, and consumer supplied data used for getting
   // the current dictionary.  All are null when a fetch is not in progress.
-  scoped_ptr<URLRequest> current_request_;
+  std::unique_ptr<URLRequest> current_request_;
   scoped_refptr<IOBuffer> buffer_;
   OnDictionaryFetchedCallback current_callback_;
 

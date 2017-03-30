@@ -28,6 +28,7 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/fileapi/FilePropertyBag.h"
+#include "core/frame/UseCounter.h"
 #include "platform/FileMetadata.h"
 #include "platform/MIMETypeRegistry.h"
 #include "platform/blob/BlobData.h"
@@ -58,7 +59,7 @@ static PassOwnPtr<BlobData> createBlobDataForFileWithType(const String& path, co
     OwnPtr<BlobData> blobData = BlobData::create();
     blobData->setContentType(contentType);
     blobData->appendFile(path);
-    return blobData.release();
+    return blobData;
 }
 
 static PassOwnPtr<BlobData> createBlobDataForFile(const String& path, File::ContentTypeLookupPolicy policy)
@@ -76,7 +77,7 @@ static PassOwnPtr<BlobData> createBlobDataForFileWithMetadata(const String& file
     OwnPtr<BlobData> blobData = BlobData::create();
     blobData->setContentType(getContentTypeFromFileName(fileSystemName, File::WellKnownContentTypes));
     blobData->appendFile(metadata.platformPath, 0, metadata.length, metadata.modificationTime / msPerSecond);
-    return blobData.release();
+    return blobData;
 }
 
 static PassOwnPtr<BlobData> createBlobDataForFileSystemURL(const KURL& fileSystemURL, const FileMetadata& metadata)
@@ -84,11 +85,11 @@ static PassOwnPtr<BlobData> createBlobDataForFileSystemURL(const KURL& fileSyste
     OwnPtr<BlobData> blobData = BlobData::create();
     blobData->setContentType(getContentTypeFromFileName(fileSystemURL.path(), File::WellKnownContentTypes));
     blobData->appendFileSystemURL(fileSystemURL, 0, metadata.length, metadata.modificationTime / msPerSecond);
-    return blobData.release();
+    return blobData;
 }
 
 // static
-File* File::create(const HeapVector<BlobOrStringOrArrayBufferViewOrArrayBuffer>& fileBits, const String& fileName, const FilePropertyBag& options, ExceptionState& exceptionState)
+File* File::create(ExecutionContext* context, const HeapVector<ArrayBufferOrArrayBufferViewOrBlobOrUSVString>& fileBits, const String& fileName, const FilePropertyBag& options, ExceptionState& exceptionState)
 {
     ASSERT(options.hasType());
     if (!options.type().containsOnlyASCII()) {
@@ -103,13 +104,15 @@ File* File::create(const HeapVector<BlobOrStringOrArrayBufferViewOrArrayBuffer>&
         lastModified = currentTimeMS();
     ASSERT(options.hasEndings());
     bool normalizeLineEndingsToNative = options.endings() == "native";
+    if (normalizeLineEndingsToNative)
+        UseCounter::count(context, UseCounter::FileAPINativeLineEndings);
 
     OwnPtr<BlobData> blobData = BlobData::create();
     blobData->setContentType(options.type().lower());
     populateBlobData(blobData.get(), fileBits, normalizeLineEndingsToNative);
 
     long long fileSize = blobData->length();
-    return File::create(fileName, lastModified, BlobDataHandle::create(blobData.release(), fileSize));
+    return File::create(fileName, lastModified, BlobDataHandle::create(std::move(blobData), fileSize));
 }
 
 File* File::createWithRelativePath(const String& path, const String& relativePath)
@@ -259,7 +262,7 @@ unsigned long long File::size() const
 
 Blob* File::slice(long long start, long long end, const String& contentType, ExceptionState& exceptionState) const
 {
-    if (hasBeenClosed()) {
+    if (isClosed()) {
         exceptionState.throwDOMException(InvalidStateError, "File has been closed.");
         return nullptr;
     }
@@ -282,7 +285,7 @@ Blob* File::slice(long long start, long long end, const String& contentType, Exc
         ASSERT(!m_path.isEmpty());
         blobData->appendFile(m_path, start, length, modificationTimeMS / msPerSecond);
     }
-    return Blob::create(BlobDataHandle::create(blobData.release(), length));
+    return Blob::create(BlobDataHandle::create(std::move(blobData), length));
 }
 
 void File::captureSnapshot(long long& snapshotSize, double& snapshotModificationTimeMS) const
@@ -308,7 +311,7 @@ void File::captureSnapshot(long long& snapshotSize, double& snapshotModification
 
 void File::close(ExecutionContext* executionContext, ExceptionState& exceptionState)
 {
-    if (hasBeenClosed()) {
+    if (isClosed()) {
         exceptionState.throwDOMException(InvalidStateError, "Blob has been closed.");
         return;
     }

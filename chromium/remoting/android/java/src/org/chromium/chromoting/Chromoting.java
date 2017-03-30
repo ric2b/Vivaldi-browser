@@ -5,7 +5,6 @@
 package org.chromium.chromoting;
 
 import android.annotation.SuppressLint;
-import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -18,8 +17,10 @@ import android.provider.Settings;
 import android.support.v4.graphics.drawable.DrawableCompat;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.ActionBarDrawerToggle;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
+import android.view.ContextMenu;
 import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -32,8 +33,11 @@ import android.widget.Toast;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Log;
+import org.chromium.chromoting.NavigationMenuAdapter.NavigationMenuItem;
 import org.chromium.chromoting.accountswitcher.AccountSwitcher;
 import org.chromium.chromoting.accountswitcher.AccountSwitcherFactory;
+import org.chromium.chromoting.base.OAuthTokenFetcher;
+import org.chromium.chromoting.help.CreditsActivity;
 import org.chromium.chromoting.help.HelpContext;
 import org.chromium.chromoting.help.HelpSingleton;
 import org.chromium.chromoting.jni.Client;
@@ -48,11 +52,15 @@ import java.util.Arrays;
  * also requests and renews authentication tokens using the system account manager.
  */
 public class Chromoting extends AppCompatActivity implements ConnectionListener,
-        AccountSwitcher.Callback, HostListLoader.Callback, View.OnClickListener {
+        AccountSwitcher.Callback, HostListManager.Callback, View.OnClickListener {
     private static final String TAG = "Chromoting";
 
     /** Only accounts of this type will be selectable for authentication. */
     private static final String ACCOUNT_TYPE = "com.google";
+
+    /** Scope to use when fetching the OAuth token. */
+    private static final String TOKEN_SCOPE = "oauth2:https://www.googleapis.com/auth/chromoting "
+            + "https://www.googleapis.com/auth/googletalk";
 
     /** Result code used for starting {@link DesktopActivity}. */
     public static final int DESKTOP_ACTIVITY = 0;
@@ -68,11 +76,8 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
     /** User's account name (email). */
     private String mAccount;
 
-    /** Account auth token. */
-    private String mToken;
-
     /** Helper for fetching the host list. */
-    private HostListLoader mHostListLoader;
+    private HostListManager mHostListManager;
 
     /** List of hosts. */
     private HostInfo[] mHosts = new HostInfo[0];
@@ -98,19 +103,11 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
      */
     private SessionAuthenticator mAuthenticator;
 
-    /**
-     * This is set when receiving an authentication error from the HostListLoader. If that occurs,
-     * this flag is set and a fresh authentication token is fetched from the AccountsService, and
-     * used to request the host list a second time.
-     */
-    boolean mTriedNewAuthToken;
+    private OAuthTokenConsumer mHostConnectingConsumer;
 
-    /**
-     * Flag to track whether a call to AccountManager.getAuthToken() is currently pending.
-     * This avoids infinitely-nested calls in case onStart() gets triggered a second time
-     * while a token is being fetched.
-     */
-    private boolean mWaitingForAuthToken = false;
+    private OAuthTokenConsumer mHostListRetrievingConsumer;
+
+    private OAuthTokenConsumer mHostDeletingConsumer;
 
     private DrawerLayout mDrawerLayout;
 
@@ -175,6 +172,34 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
         mProgressView.setVisibility(View.GONE);
     }
 
+    private ListView createNavigationMenu() {
+        ListView navigationMenu = (ListView) getLayoutInflater()
+                .inflate(R.layout.navigation_list, null);
+
+        NavigationMenuItem helpItem = new NavigationMenuItem(R.menu.help_list_item,
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        HelpSingleton.getInstance().launchHelp(Chromoting.this,
+                                HelpContext.HOST_LIST);
+                    }
+                });
+
+        NavigationMenuItem creditsItem = new NavigationMenuItem(R.menu.credits_list_item,
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        startActivity(new Intent(Chromoting.this, CreditsActivity.class));
+                    }
+                });
+
+        NavigationMenuItem[] navigationMenuItems = { helpItem, creditsItem };
+        NavigationMenuAdapter adapter = new NavigationMenuAdapter(this, navigationMenuItems);
+        navigationMenu.setAdapter(adapter);
+        navigationMenu.setOnItemClickListener(adapter);
+        return navigationMenu;
+    }
+
     /**
      * Called when the activity is first created. Loads the native library and requests an
      * authentication token from the system.
@@ -187,11 +212,11 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
-        mTriedNewAuthToken = false;
-        mHostListLoader = new HostListLoader();
+        mHostListManager = new HostListManager();
 
         // Get ahold of our view widgets.
         mHostListView = (ListView) findViewById(R.id.hostList_chooser);
+        registerForContextMenu(mHostListView);
         mEmptyView = findViewById(R.id.hostList_empty);
         mHostListView.setOnItemClickListener(
                 new AdapterView.OnItemClickListener() {
@@ -245,30 +270,8 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
                 ChromotingUtil.getColorAttribute(this, R.attr.colorControlNormal));
         getSupportActionBar().setHomeAsUpIndicator(menuIcon);
 
-        ListView navigationMenu = new ListView(this);
-        navigationMenu.setChoiceMode(ListView.CHOICE_MODE_SINGLE);
-        navigationMenu.setLayoutParams(new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.MATCH_PARENT));
-
-        String[] navigationMenuItems = new String[] {
-            getString(R.string.actionbar_help)
-        };
-        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, R.layout.navigation_list_item,
-                navigationMenuItems);
-        navigationMenu.setAdapter(adapter);
-        navigationMenu.setOnItemClickListener(
-                new AdapterView.OnItemClickListener() {
-                    @Override
-                    public void onItemClick(AdapterView<?> parent, View view, int position,
-                            long id) {
-                        HelpSingleton.getInstance().launchHelp(Chromoting.this,
-                                HelpContext.HOST_LIST);
-                    }
-                });
-
         mAccountSwitcher = AccountSwitcherFactory.getInstance().createAccountSwitcher(this, this);
-        mAccountSwitcher.setNavigation(navigationMenu);
+        mAccountSwitcher.setNavigation(createNavigationMenu());
         LinearLayout navigationDrawer = (LinearLayout) findViewById(R.id.navigation_drawer);
         mAccountSwitcher.setDrawer(navigationDrawer);
         View switcherView = mAccountSwitcher.getView();
@@ -277,8 +280,9 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
         navigationDrawer.addView(switcherView, 0);
 
-        // Bring native components online.
-        JniInterface.loadLibrary(this);
+        mHostConnectingConsumer = new OAuthTokenConsumer(this, TOKEN_SCOPE);
+        mHostListRetrievingConsumer = new OAuthTokenConsumer(this, TOKEN_SCOPE);
+        mHostDeletingConsumer = new OAuthTokenConsumer(this, TOKEN_SCOPE);
     }
 
     @Override
@@ -370,10 +374,13 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
             if (resultCode == RESULT_OK) {
                 // User gave OAuth permission to this app (or recovered from any OAuth failure),
                 // so retry fetching the token.
-                requestAuthToken(false);
+
+                // We actually don't know which consumer triggers the startActivityForResult() but
+                // refreshing the host list is the safest action.
+                // TODO(yuweih): Distinguish token consumer.
+                refreshHostList();
             } else {
                 // User denied permission or cancelled the dialog, so cancel the request.
-                mWaitingForAuthToken = false;
                 updateHostListView();
             }
         }
@@ -401,6 +408,35 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
         super.onConfigurationChanged(newConfig);
 
         mDrawerToggle.onConfigurationChanged(newConfig);
+    }
+
+    private static int getHostIndexForMenu(ContextMenu.ContextMenuInfo menuInfo) {
+        return ((AdapterView.AdapterContextMenuInfo) menuInfo).position;
+    }
+
+    @Override
+    public void onCreateContextMenu(ContextMenu menu, View v,
+            ContextMenu.ContextMenuInfo menuInfo) {
+        super.onCreateContextMenu(menu, v, menuInfo);
+        if (v.getId() == R.id.hostList_chooser) {
+            getMenuInflater().inflate(R.menu.host_context_menu, menu);
+            HostInfo info = mHosts[getHostIndexForMenu(menuInfo)];
+            menu.setHeaderTitle(info.name);
+        }
+    }
+
+    @Override
+    public boolean onContextItemSelected(MenuItem item) {
+        int itemId = item.getItemId();
+        int hostIndex = getHostIndexForMenu(item.getMenuInfo());
+        if (itemId == R.id.connect) {
+            onHostClicked(hostIndex);
+        } else if (itemId == R.id.delete) {
+            onDeleteHostClicked(hostIndex);
+        } else {
+            return false;
+        }
+        return true;
     }
 
     /** Called to initialize the action bar. */
@@ -440,6 +476,24 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
         HelpSingleton.getInstance().launchHelp(this, HelpContext.HOST_SETUP);
     }
 
+    private void onDeleteHostClicked(int hostIndex) {
+        HostInfo hostInfo = mHosts[hostIndex];
+        final String hostId = hostInfo.id;
+        String message = getString(R.string.confirm_host_delete_android, hostInfo.name);
+        new AlertDialog.Builder(this)
+                .setMessage(message)
+                .setPositiveButton(android.R.string.yes,
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                deleteHost(hostId);
+                                dialog.dismiss();
+                            }
+                        })
+                .setNegativeButton(android.R.string.no, null)
+                .create().show();
+    }
+
     /** Called when the user taps on a host entry. */
     private void onHostClicked(int index) {
         HostInfo host = mHosts[index];
@@ -451,7 +505,7 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
         }
     }
 
-    private void connectToHost(HostInfo host) {
+    private void connectToHost(final HostInfo host) {
         if (mClient != null) {
             mClient.destroy();
         }
@@ -473,56 +527,68 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
                     }
                 });
 
-        SessionConnector connector = new SessionConnector(mClient, this, this, mHostListLoader);
+        final SessionConnector connector =
+                new SessionConnector(mClient, this, this, mHostListManager);
         mAuthenticator = new SessionAuthenticator(this, mClient, host);
-        connector.connectToHost(mAccount, mToken, host, mAuthenticator,
-                getPreferences(MODE_PRIVATE).getString(PREFERENCE_EXPERIMENTAL_FLAGS, ""));
+        mHostConnectingConsumer.consume(mAccount, new OAuthTokenFetcher.Callback() {
+            @Override
+            public void onTokenFetched(String token) {
+                connector.connectToHost(mAccount, token, host, mAuthenticator,
+                        getPreferences(MODE_PRIVATE).getString(PREFERENCE_EXPERIMENTAL_FLAGS, ""));
+            }
+
+            @Override
+            public void onError(OAuthTokenFetcher.Error error) {
+                showAuthErrorMessage(error);
+            }
+        });
+    }
+
+    private void showAuthErrorMessage(OAuthTokenFetcher.Error error) {
+        String explanation = getString(error == OAuthTokenFetcher.Error.NETWORK
+                ? R.string.error_network_error : R.string.error_unexpected);
+        Toast.makeText(Chromoting.this, explanation, Toast.LENGTH_LONG).show();
     }
 
     private void refreshHostList() {
-        if (mWaitingForAuthToken) {
-            return;
-        }
-
-        mTriedNewAuthToken = false;
         showHostListLoadingIndicator();
 
         // The refresh button simply makes use of the currently-chosen account.
-        requestAuthToken(false);
+        mHostListRetrievingConsumer.consume(mAccount, new OAuthTokenFetcher.Callback() {
+            @Override
+            public void onTokenFetched(String token) {
+                mHostListManager.retrieveHostList(token, Chromoting.this);
+            }
+
+            @Override
+            public void onError(OAuthTokenFetcher.Error error) {
+                showAuthErrorMessage(error);
+                updateHostListView();
+            }
+        });
     }
 
-    private void requestAuthToken(boolean expireCurrentToken) {
-        mWaitingForAuthToken = true;
+    private void deleteHost(final String hostId) {
+        showHostListLoadingIndicator();
 
-        OAuthTokenFetcher fetcher = new OAuthTokenFetcher(this, mAccount,
-                new OAuthTokenFetcher.Callback() {
-                    @Override
-                    public void onTokenFetched(String token) {
-                        mWaitingForAuthToken = false;
-                        mToken = token;
-                        mHostListLoader.retrieveHostList(mToken, Chromoting.this);
-                    }
+        mHostDeletingConsumer.consume(mAccount, new OAuthTokenFetcher.Callback() {
+            @Override
+            public void onTokenFetched(String token) {
+                mHostListManager.deleteHost(token, hostId, Chromoting.this);
+            }
 
-                    @Override
-                    public void onError(int errorResource) {
-                        mWaitingForAuthToken = false;
-                        updateHostListView();
-                        String explanation = getString(errorResource);
-                        Toast.makeText(Chromoting.this, explanation, Toast.LENGTH_LONG).show();
-                    }
-                });
-
-        if (expireCurrentToken) {
-            fetcher.clearAndFetch(mToken);
-            mToken = null;
-        } else {
-            fetcher.fetch();
-        }
+            @Override
+            public void onError(OAuthTokenFetcher.Error error) {
+                showAuthErrorMessage(error);
+                updateHostListView();
+            }
+        });
     }
 
     @Override
     public void onAccountSelected(String accountName) {
         mAccount = accountName;
+        JniInterface.setAccountForLogging(accountName);
 
         // The current host list is no longer valid for the new account, so clear the list.
         mHosts = new HostInfo[0];
@@ -542,7 +608,7 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
 
     @Override
     public void onHostListReceived(HostInfo[] hosts) {
-        // Store a copy of the array, so that it can't be mutated by the HostListLoader. HostInfo
+        // Store a copy of the array, so that it can't be mutated by the HostListManager. HostInfo
         // is an immutable type, so a shallow copy of the array is sufficient here.
         mHosts = Arrays.copyOf(hosts, hosts.length);
         updateHostListView();
@@ -550,7 +616,19 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
     }
 
     @Override
-    public void onError(HostListLoader.Error error) {
+    public void onHostUpdated() {
+        // Not implemented Yet.
+    }
+
+    @Override
+    public void onHostDeleted() {
+        // Refresh the host list. there is no need to refetch the auth token again.
+        // onHostListReceived is in charge to hide the progress indicator.
+        mHostListManager.retrieveHostList(mHostDeletingConsumer.getLatestToken(), this);
+    }
+
+    @Override
+    public void onError(HostListManager.Error error) {
         String explanation = null;
         switch (error) {
             case AUTH_FAILED:
@@ -574,22 +652,14 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
             return;
         }
 
-        // This is the AUTH_FAILED case.
-
-        if (!mTriedNewAuthToken) {
-            // This was our first connection attempt.
-            mTriedNewAuthToken = true;
-            requestAuthToken(true);
-
-            // We're not in an error state *yet*.
-            return;
-        } else {
-            // Authentication truly failed.
-            Log.e(TAG, "Fresh auth token was rejected.");
-            explanation = getString(R.string.error_authentication_failed);
-            Toast.makeText(this, explanation, Toast.LENGTH_LONG).show();
-            updateHostListView();
-        }
+        // We don't know which consumer triggers onError. Refreshing host list is the most common
+        // use case and the latest token should be mostly the same on all consumers.
+        // TODO(yuweih): distinguish token consumer.
+        mHostListRetrievingConsumer.revokeLatestToken(null);
+        Log.e(TAG, "Fresh auth token was rejected.");
+        explanation = getString(R.string.error_authentication_failed);
+        Toast.makeText(this, explanation, Toast.LENGTH_LONG).show();
+        updateHostListView();
     }
 
     /**

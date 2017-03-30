@@ -85,6 +85,18 @@ class MockMediaRouteProvider : public interfaces::MediaRouteProvider {
   MOCK_METHOD1(StopObservingMediaRoutes, void(const mojo::String& source));
   MOCK_METHOD0(EnableMdnsDiscovery, void());
   MOCK_METHOD1(UpdateMediaSinks, void(const mojo::String& source));
+  void SearchSinks(
+      const mojo::String& sink_id,
+      const mojo::String& media_source,
+      interfaces::SinkSearchCriteriaPtr search_criteria,
+      const SearchSinksCallback& callback) override {
+    SearchSinks_(sink_id, media_source, search_criteria, callback);
+  }
+  MOCK_METHOD4(SearchSinks_,
+               void(const mojo::String& sink_id,
+                    const mojo::String& media_source,
+                    interfaces::SinkSearchCriteriaPtr& search_criteria,
+                    const SearchSinksCallback& callback));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockMediaRouteProvider);
@@ -110,6 +122,7 @@ class MediaRouterMojoTest : public ::testing::Test {
 
  protected:
   void SetUp() override;
+  void TearDown() override;
 
   void ProcessEventLoop();
 

@@ -38,7 +38,6 @@
 #include "core/paint/PaintPhase.h"
 #include "platform/Supplementable.h"
 #include "platform/graphics/ImageOrientation.h"
-#include "platform/graphics/paint/DisplayItem.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "wtf/HashSet.h"
@@ -67,18 +66,17 @@ class LocalDOMWindow;
 class NavigationScheduler;
 class Node;
 class NodeTraversal;
+class PluginData;
 class Range;
 class LayoutView;
-class TreeScope;
 class ScriptController;
 class ServiceRegistry;
 class SpellChecker;
-class TreeScope;
 class WebFrameHostScheduler;
 class WebFrameScheduler;
 template <typename Strategy> class PositionWithAffinityTemplate;
 
-class CORE_EXPORT LocalFrame : public Frame, public LocalFrameLifecycleNotifier, public Supplementable<LocalFrame>, public DisplayItemClient {
+class CORE_EXPORT LocalFrame : public Frame, public LocalFrameLifecycleNotifier, public Supplementable<LocalFrame> {
     USING_GARBAGE_COLLECTED_MIXIN(LocalFrame);
 public:
     static LocalFrame* create(FrameLoaderClient*, FrameHost*, FrameOwner*, ServiceRegistry* = nullptr);
@@ -103,6 +101,7 @@ public:
     SecurityContext* securityContext() const override;
     void printNavigationErrorMessage(const Frame&, const char* reason) override;
     bool prepareForCommit() override;
+    void didChangeVisibilityState() override;
 
     void willDetachFrameHost();
 
@@ -126,15 +125,13 @@ public:
     SpellChecker& spellChecker() const;
     FrameConsole& console() const;
 
-    void didChangeVisibilityState();
-
     // This method is used to get the highest level LocalFrame in this
     // frame's in-process subtree.
     // FIXME: This is a temporary hack to support RemoteFrames, and callers
     // should be updated to avoid storing things on the main frame.
     LocalFrame* localFrameRoot();
 
-    InstrumentingAgents* instrumentingAgents() const { return m_instrumentingAgents.get(); }
+    InstrumentingAgents* instrumentingAgents() { return m_instrumentingAgents.get(); }
 
     // ======== All public functions below this point are candidates to move out of LocalFrame into another class. ========
 
@@ -171,15 +168,6 @@ public:
     bool shouldReuseDefaultView(const KURL&) const;
     void removeSpellingMarkersUnderWords(const Vector<String>& words);
 
-    // FIXME: once scroll customization is enabled everywhere
-    // (crbug.com/416862), this should take a ScrollState object.
-    ScrollResult applyScrollDelta(ScrollGranularity, const FloatSize& delta, bool isScrollBegin);
-
-    // DisplayItemClient methods
-    String debugName() const final { return "LocalFrame"; }
-    // TODO(chrishtr): fix this.
-    LayoutRect visualRect() const override { return LayoutRect(); }
-
     bool shouldThrottleRendering() const;
 
     // Returns the frame scheduler, creating one if needed.
@@ -190,12 +178,14 @@ public:
 
     ServiceRegistry* serviceRegistry() { return m_serviceRegistry; }
 
+    FrameLoaderClient* client() const;
+
+    PluginData* pluginData() const;
+
 private:
     friend class FrameNavigationDisabler;
 
     LocalFrame(FrameLoaderClient*, FrameHost*, FrameOwner*, ServiceRegistry*);
-
-    bool shouldScrollTopControls(ScrollGranularity, const FloatSize& delta) const;
 
     // Internal Frame helper overrides:
     WindowProxyManager* getWindowProxyManager() const override;

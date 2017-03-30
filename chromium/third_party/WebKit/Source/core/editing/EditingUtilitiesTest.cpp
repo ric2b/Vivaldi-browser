@@ -18,7 +18,6 @@ TEST_F(EditingUtilitiesTest, directionOfEnclosingBlock)
     const char* shadowContent = "<content select=#two></content><p dir=rtl><content select=#one></content><p>";
     setBodyContent(bodyContent);
     setShadowContent(shadowContent, "host");
-    updateLayoutAndStyleForPainting();
     Node* one = document().getElementById("one");
 
     EXPECT_EQ(LTR, directionOfEnclosingBlock(Position(one, 0)));
@@ -30,8 +29,7 @@ TEST_F(EditingUtilitiesTest, firstEditablePositionAfterPositionInRoot)
     const char* bodyContent = "<p id='host' contenteditable><b id='one'>1</b><b id='two'>22</b></p>";
     const char* shadowContent = "<content select=#two></content><content select=#one></content><b id='three'>333</b>";
     setBodyContent(bodyContent);
-    RawPtr<ShadowRoot> shadowRoot = setShadowContent(shadowContent, "host");
-    updateLayoutAndStyleForPainting();
+    ShadowRoot* shadowRoot = setShadowContent(shadowContent, "host");
     Element* host = document().getElementById("host");
     Node* one = document().getElementById("one");
     Node* two = document().getElementById("two");
@@ -54,8 +52,7 @@ TEST_F(EditingUtilitiesTest, enclosingBlock)
     const char* bodyContent = "<p id='host'><b id='one'>11</b></p>";
     const char* shadowContent = "<content select=#two></content><div id='three'><content select=#one></content></div>";
     setBodyContent(bodyContent);
-    RawPtr<ShadowRoot> shadowRoot = setShadowContent(shadowContent, "host");
-    updateLayoutAndStyleForPainting();
+    ShadowRoot* shadowRoot = setShadowContent(shadowContent, "host");
     Node* host = document().getElementById("host");
     Node* one = document().getElementById("one");
     Node* three = shadowRoot->getElementById("three");
@@ -69,8 +66,7 @@ TEST_F(EditingUtilitiesTest, enclosingNodeOfType)
     const char* bodyContent = "<p id='host'><b id='one'>11</b></p>";
     const char* shadowContent = "<content select=#two></content><div id='three'><content select=#one></div></content>";
     setBodyContent(bodyContent);
-    RawPtr<ShadowRoot> shadowRoot = setShadowContent(shadowContent, "host");
-    updateLayoutAndStyleForPainting();
+    ShadowRoot* shadowRoot = setShadowContent(shadowContent, "host");
     Node* host = document().getElementById("host");
     Node* one = document().getElementById("one");
     Node* three = shadowRoot->getElementById("three");
@@ -86,41 +82,40 @@ TEST_F(EditingUtilitiesTest, isEditablePositionWithTable)
     // However, |setBodyContent()| automatically creates HTML, HEAD and BODY
     // element. So, we build DOM tree manually.
     // Note: This is unusual HTML taken from http://crbug.com/574230
-    RawPtr<Element> table = document().createElement("table", ASSERT_NO_EXCEPTION);
+    Element* table = document().createElement("table", ASSERT_NO_EXCEPTION);
     table->setInnerHTML("<caption>foo</caption>", ASSERT_NO_EXCEPTION);
     while (document().firstChild())
         document().firstChild()->remove();
     document().appendChild(table);
     document().setDesignMode("on");
-    updateLayoutAndStyleForPainting();
+    updateAllLifecyclePhases();
 
-    EXPECT_FALSE(isEditablePosition(Position(table.get(), 0)));
+    EXPECT_FALSE(isEditablePosition(Position(table, 0)));
 }
 
-TEST_F(EditingUtilitiesTest, isFirstPositionAfterTable)
+TEST_F(EditingUtilitiesTest, tableElementJustBefore)
 {
     const char* bodyContent = "<div contenteditable id=host><table id=table><tr><td>1</td></tr></table><b id=two>22</b></div>";
     const char* shadowContent = "<content select=#two></content><content select=#table></content>";
     setBodyContent(bodyContent);
     setShadowContent(shadowContent, "host");
-    updateLayoutAndStyleForPainting();
     Node* host = document().getElementById("host");
     Node* table = document().getElementById("table");
 
-    EXPECT_EQ(table, isFirstPositionAfterTable(createVisiblePosition(Position::afterNode(table))));
-    EXPECT_EQ(table, isFirstPositionAfterTable(createVisiblePosition(PositionInFlatTree::afterNode(table))));
+    EXPECT_EQ(table, tableElementJustBefore(createVisiblePosition(Position::afterNode(table))));
+    EXPECT_EQ(table, tableElementJustBefore(createVisiblePosition(PositionInFlatTree::afterNode(table))));
 
-    EXPECT_EQ(table, isFirstPositionAfterTable(createVisiblePosition(Position::lastPositionInNode(table))));
-    EXPECT_EQ(table, isFirstPositionAfterTable(createVisiblePosition(PositionInFlatTree::lastPositionInNode(table))));
+    EXPECT_EQ(table, tableElementJustBefore(createVisiblePosition(Position::lastPositionInNode(table))));
+    EXPECT_EQ(table, tableElementJustBefore(createVisiblePosition(PositionInFlatTree::lastPositionInNode(table))));
 
-    EXPECT_EQ(nullptr, isFirstPositionAfterTable(createVisiblePosition(Position(host, 2))));
-    EXPECT_EQ(table, isFirstPositionAfterTable(createVisiblePosition(PositionInFlatTree(host, 2))));
+    EXPECT_EQ(nullptr, tableElementJustBefore(createVisiblePosition(Position(host, 2))));
+    EXPECT_EQ(table, tableElementJustBefore(createVisiblePosition(PositionInFlatTree(host, 2))));
 
-    EXPECT_EQ(nullptr, isFirstPositionAfterTable(createVisiblePosition(Position::afterNode(host))));
-    EXPECT_EQ(nullptr, isFirstPositionAfterTable(createVisiblePosition(PositionInFlatTree::afterNode(host))));
+    EXPECT_EQ(nullptr, tableElementJustBefore(createVisiblePosition(Position::afterNode(host))));
+    EXPECT_EQ(nullptr, tableElementJustBefore(createVisiblePosition(PositionInFlatTree::afterNode(host))));
 
-    EXPECT_EQ(nullptr, isFirstPositionAfterTable(createVisiblePosition(Position::lastPositionInNode(host))));
-    EXPECT_EQ(table, isFirstPositionAfterTable(createVisiblePosition(PositionInFlatTree::lastPositionInNode(host))));
+    EXPECT_EQ(nullptr, tableElementJustBefore(createVisiblePosition(Position::lastPositionInNode(host))));
+    EXPECT_EQ(table, tableElementJustBefore(createVisiblePosition(PositionInFlatTree::lastPositionInNode(host))));
 }
 
 TEST_F(EditingUtilitiesTest, lastEditablePositionBeforePositionInRoot)
@@ -128,8 +123,7 @@ TEST_F(EditingUtilitiesTest, lastEditablePositionBeforePositionInRoot)
     const char* bodyContent = "<p id='host' contenteditable><b id='one'>1</b><b id='two'>22</b></p>";
     const char* shadowContent = "<content select=#two></content><content select=#one></content><b id='three'>333</b>";
     setBodyContent(bodyContent);
-    RawPtr<ShadowRoot> shadowRoot = setShadowContent(shadowContent, "host");
-    updateLayoutAndStyleForPainting();
+    ShadowRoot* shadowRoot = setShadowContent(shadowContent, "host");
     Element* host = document().getElementById("host");
     Node* one = document().getElementById("one");
     Node* two = document().getElementById("two");
@@ -166,7 +160,6 @@ TEST_F(EditingUtilitiesTest, NextVisuallyDistinctCandidate)
     const char* shadowContent = "<content select=#two></content><content select=#one></content><content select=#three></content>";
     setBodyContent(bodyContent);
     setShadowContent(shadowContent, "host");
-    updateLayoutAndStyleForPainting();
     Node* one = document().getElementById("one");
     Node* two = document().getElementById("two");
     Node* three = document().getElementById("three");
@@ -178,9 +171,8 @@ TEST_F(EditingUtilitiesTest, NextVisuallyDistinctCandidate)
 TEST_F(EditingUtilitiesTest, AreaIdenticalElements)
 {
     setBodyContent("<style>li:nth-child(even) { -webkit-user-modify: read-write; }</style><ul><li>first item</li><li>second item</li><li class=foo>third</li><li>fourth</li></ul>");
-    updateLayoutAndStyleForPainting();
-    RawPtr<StaticElementList> items = document().querySelectorAll("li", ASSERT_NO_EXCEPTION);
-    ASSERT(items->length() == 4);
+    StaticElementList* items = document().querySelectorAll("li", ASSERT_NO_EXCEPTION);
+    DCHECK_EQ(items->length(), 4u);
 
     EXPECT_FALSE(areIdenticalElements(*items->item(0)->firstChild(), *items->item(1)->firstChild()))
         << "Can't merge non-elements.  e.g. Text nodes";
@@ -211,7 +203,7 @@ TEST_F(EditingUtilitiesTest, uncheckedPreviousNextOffset_FirstLetter)
     EXPECT_EQ(2, nextGraphemeBoundaryOf(node, 1));
     EXPECT_EQ(3, nextGraphemeBoundaryOf(node, 2));
 
-    updateLayoutAndStyleForPainting();
+    updateAllLifecyclePhases();
     EXPECT_NE(nullptr, node->layoutObject());
     EXPECT_EQ(2, previousGraphemeBoundaryOf(node, 3));
     EXPECT_EQ(1, previousGraphemeBoundaryOf(node, 2));
@@ -232,7 +224,7 @@ TEST_F(EditingUtilitiesTest, uncheckedPreviousNextOffset_textTransform)
     EXPECT_EQ(2, nextGraphemeBoundaryOf(node, 1));
     EXPECT_EQ(3, nextGraphemeBoundaryOf(node, 2));
 
-    updateLayoutAndStyleForPainting();
+    updateAllLifecyclePhases();
     EXPECT_NE(nullptr, node->layoutObject());
     EXPECT_EQ(2, previousGraphemeBoundaryOf(node, 3));
     EXPECT_EQ(1, previousGraphemeBoundaryOf(node, 2));
@@ -550,6 +542,15 @@ TEST_F(EditingUtilitiesTest, uncheckedPreviousNextOffset)
     EXPECT_EQ(4, nextGraphemeBoundaryOf(node, 0));
     EXPECT_EQ(5, nextGraphemeBoundaryOf(node, 4));
 
+    // Not only Glue_After_ZWJ or EBG but also other emoji shouldn't break
+    // before ZWJ.
+    // U+1F5FA(WORLD MAP) doesn't have either Glue_After_Zwj or EBG but has
+    // Emoji property.
+    setBodyContent("<p id='target'>&#x200D;&#x1F5FA;</p>");
+    node = document().getElementById("target")->firstChild();
+    EXPECT_EQ(0, previousGraphemeBoundaryOf(node, 3));
+    EXPECT_EQ(3, nextGraphemeBoundaryOf(node, 0));
+
     // GB999: Otherwise break everywhere.
     // Breaks between Hangul syllable except for GB6, GB7, GB8.
     setBodyContent("<p id='target'>" + L + T + "</p>");
@@ -626,9 +627,9 @@ TEST_F(EditingUtilitiesTest, uncheckedPreviousNextOffset)
 
     // For GB11, if trailing character is not Glue_After_Zwj or EBG, break happens after ZWJ.
     // U+1F5FA(WORLD MAP) doesn't have either Glue_After_Zwj or EBG.
-    setBodyContent("<p id='target'>&#x200D;&#x1F5FA;</p>");
+    setBodyContent("<p id='target'>&#x200D;a</p>");
     node = document().getElementById("target")->firstChild();
-    EXPECT_EQ(1, previousGraphemeBoundaryOf(node, 3));
+    EXPECT_EQ(1, previousGraphemeBoundaryOf(node, 2));
     EXPECT_EQ(1, nextGraphemeBoundaryOf(node, 0));
 }
 

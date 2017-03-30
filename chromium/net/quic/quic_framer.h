@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -15,7 +16,6 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 #include "net/base/net_export.h"
 #include "net/quic/quic_protocol.h"
@@ -55,12 +55,14 @@ const size_t kQuicDeltaTimeLargestObservedSize = 2;
 const size_t kQuicNumTimestampsSize = 1;
 // Size in bytes reserved for the number of missing packets in ack frames.
 const size_t kNumberOfNackRangesSize = 1;
+// Size in bytes reserved for the number of ack blocks in ack frames.
+const size_t kNumberOfAckBlocksSize = 1;
 // Maximum number of missing packet ranges that can fit within an ack frame.
 const size_t kMaxNackRanges = (1 << (kNumberOfNackRangesSize * 8)) - 1;
+// Maximum number of ack blocks that can fit within an ack frame.
+const size_t kMaxAckBlocks = (1 << (kNumberOfAckBlocksSize * 8)) - 1;
 // Size in bytes reserved for the number of revived packets in ack frames.
 const size_t kNumberOfRevivedPacketsSize = 1;
-// Maximum number of revived packets that can fit within an ack frame.
-const size_t kMaxRevivedPackets = (1 << (kNumberOfRevivedPacketsSize * 8)) - 1;
 
 // This class receives callbacks from the framer when packets
 // are processed.
@@ -118,6 +120,9 @@ class NET_EXPORT_PRIVATE QuicFramerVisitorInterface {
 
   // Called when a StopWaitingFrame has been parsed.
   virtual bool OnStopWaitingFrame(const QuicStopWaitingFrame& frame) = 0;
+
+  // Called when a QuicPaddingFrame has been parsed.
+  virtual bool OnPaddingFrame(const QuicPaddingFrame& frame) = 0;
 
   // Called when a PingFrame has been parsed.
   virtual bool OnPingFrame(const QuicPingFrame& frame) = 0;
@@ -219,11 +224,14 @@ class NET_EXPORT_PRIVATE QuicFramer {
   static size_t GetMinStreamFrameSize(QuicStreamId stream_id,
                                       QuicStreamOffset offset,
                                       bool last_frame_in_packet);
-  // Size in bytes of all ack frame fields without the missing packets.
+  // Size in bytes of all ack frame fields without the missing packets or ack
+  // blocks.
   static size_t GetMinAckFrameSize(
+      QuicVersion version,
       QuicPacketNumberLength largest_observed_length);
   // Size in bytes of a stop waiting frame.
   static size_t GetStopWaitingFrameSize(
+      QuicVersion version,
       QuicPacketNumberLength packet_number_length);
   // Size in bytes of all reset stream frame without the error details.
   // Used before QUIC_VERSION_25.
@@ -260,10 +268,12 @@ class NET_EXPORT_PRIVATE QuicFramer {
   // Returns the associated data from the encrypted packet |encrypted| as a
   // stringpiece.
   static base::StringPiece GetAssociatedDataFromEncryptedPacket(
+      QuicVersion version,
       const QuicEncryptedPacket& encrypted,
       QuicConnectionIdLength connection_id_length,
       bool includes_version,
       bool includes_path_id,
+      bool includes_diversification_nonce,
       QuicPacketNumberLength packet_number_length);
 
   // Serializes a packet containing |frames| into |buffer|.
@@ -370,6 +380,30 @@ class NET_EXPORT_PRIVATE QuicFramer {
     NackRangeMap nack_ranges;
   };
 
+  struct AckBlock {
+    AckBlock(uint8_t gap, QuicPacketNumber length);
+    AckBlock(const AckBlock& other);
+    ~AckBlock();
+
+    // Gap to the next ack block.
+    uint8_t gap;
+    // Length of this ack block.
+    QuicPacketNumber length;
+  };
+
+  struct NewAckFrameInfo {
+    NewAckFrameInfo();
+    NewAckFrameInfo(const NewAckFrameInfo& other);
+    ~NewAckFrameInfo();
+
+    // The maximum ack block length.
+    QuicPacketNumber max_block_length;
+    // Length of first ack block.
+    QuicPacketNumber first_block_length;
+    // Ack blocks starting with gaps to next block and ack block lengths.
+    std::vector<AckBlock> ack_blocks;
+  };
+
   bool ProcessDataPacket(QuicDataReader* reader,
                          const QuicPacketPublicHeader& public_header,
                          const QuicEncryptedPacket& packet,
@@ -407,6 +441,9 @@ class NET_EXPORT_PRIVATE QuicFramer {
   bool ProcessAckFrame(QuicDataReader* reader,
                        uint8_t frame_type,
                        QuicAckFrame* frame);
+  bool ProcessNewAckFrame(QuicDataReader* reader,
+                          uint8_t frame_type,
+                          QuicAckFrame* frame);
   bool ProcessTimestampsInAckFrame(QuicDataReader* reader, QuicAckFrame* frame);
   bool ProcessStopWaitingFrame(QuicDataReader* reader,
                                const QuicPacketHeader& public_header,
@@ -432,6 +469,10 @@ class NET_EXPORT_PRIVATE QuicFramer {
   // otherwise.
   bool IsValidPath(QuicPathId path_id, QuicPacketNumber* last_packet_number);
 
+  // Sets last_packet_number_. This can only be called after the packet is
+  // successfully decrypted.
+  void SetLastPacketNumber(const QuicPacketHeader& header);
+
   // Returns the full packet number from the truncated
   // wire format version and the last seen packet number.
   QuicPacketNumber CalculatePacketNumberFromWire(
@@ -443,9 +484,15 @@ class NET_EXPORT_PRIVATE QuicFramer {
   // was created.
   const QuicTime::Delta CalculateTimestampFromWire(uint32_t time_delta_us);
 
+  // Computes the wire size in bytes of time stamps in |ack|.
+  size_t GetAckFrameTimeStampSize(const QuicAckFrame& ack);
+
   // Computes the wire size in bytes of the |ack| frame, assuming no truncation.
   size_t GetAckFrameSize(const QuicAckFrame& ack,
                          QuicPacketNumberLength packet_number_length);
+
+  // Computes the wire size in bytes of the |ack| frame.
+  size_t GetNewAckFrameSize(const QuicAckFrame& ack);
 
   // Computes the wire size in bytes of the payload of |frame|.
   size_t ComputeFrameLength(const QuicFrame& frame,
@@ -461,6 +508,8 @@ class NET_EXPORT_PRIVATE QuicFramer {
       QuicPacketNumberLength packet_number_length);
 
   static AckFrameInfo GetAckFrameInfo(const QuicAckFrame& frame);
+
+  static NewAckFrameInfo GetNewAckFrameInfo(const QuicAckFrame& frame);
 
   // The Append* methods attempt to write the provided header or frame using the
   // |writer|, and return true if successful.
@@ -479,6 +528,8 @@ class NET_EXPORT_PRIVATE QuicFramer {
   bool AppendAckFrameAndTypeByte(const QuicPacketHeader& header,
                                  const QuicAckFrame& frame,
                                  QuicDataWriter* builder);
+  bool AppendNewAckFrameAndTypeByte(const QuicAckFrame& frame,
+                                    QuicDataWriter* builder);
   bool AppendTimestampToAckFrame(const QuicAckFrame& frame,
                                  QuicDataWriter* builder);
   bool AppendStopWaitingFrame(const QuicPacketHeader& header,
@@ -530,9 +581,9 @@ class NET_EXPORT_PRIVATE QuicFramer {
   // skipped as necessary).
   QuicVersionVector supported_versions_;
   // Primary decrypter used to decrypt packets during parsing.
-  scoped_ptr<QuicDecrypter> decrypter_;
+  std::unique_ptr<QuicDecrypter> decrypter_;
   // Alternative decrypter that can also be used to decrypt packets.
-  scoped_ptr<QuicDecrypter> alternative_decrypter_;
+  std::unique_ptr<QuicDecrypter> alternative_decrypter_;
   // The encryption level of |decrypter_|.
   EncryptionLevel decrypter_level_;
   // The encryption level of |alternative_decrypter_|.
@@ -542,7 +593,7 @@ class NET_EXPORT_PRIVATE QuicFramer {
   // decrypter.
   bool alternative_decrypter_latch_;
   // Encrypters used to encrypt packets via EncryptPayload().
-  scoped_ptr<QuicEncrypter> encrypter_[NUM_ENCRYPTION_LEVELS];
+  std::unique_ptr<QuicEncrypter> encrypter_[NUM_ENCRYPTION_LEVELS];
   // Tracks if the framer is being used by the entity that received the
   // connection or the entity that initiated it.
   Perspective perspective_;
@@ -554,6 +605,8 @@ class NET_EXPORT_PRIVATE QuicFramer {
   // The time delta computed for the last timestamp frame. This is relative to
   // the creation_time.
   QuicTime::Delta last_timestamp_;
+  // The diversification nonce from the last received packet.
+  DiversificationNonce last_nonce_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicFramer);
 };

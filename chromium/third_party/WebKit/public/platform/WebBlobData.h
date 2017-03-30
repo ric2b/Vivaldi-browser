@@ -38,7 +38,8 @@
 #include "WebURL.h"
 
 #if INSIDE_BLINK
-namespace WTF { template <typename T> class PassOwnPtr; }
+#include "wtf/OwnPtr.h"
+#include "wtf/PassOwnPtr.h"
 #endif
 
 namespace blink {
@@ -77,8 +78,8 @@ public:
     BLINK_PLATFORM_EXPORT WebString contentType() const;
 
 #if INSIDE_BLINK
-    BLINK_PLATFORM_EXPORT WebBlobData(const WTF::PassOwnPtr<BlobData>&);
-    BLINK_PLATFORM_EXPORT WebBlobData& operator=(const WTF::PassOwnPtr<BlobData>&);
+    BLINK_PLATFORM_EXPORT WebBlobData(WTF::PassOwnPtr<BlobData>);
+    BLINK_PLATFORM_EXPORT WebBlobData& operator=(WTF::PassOwnPtr<BlobData>);
     BLINK_PLATFORM_EXPORT operator WTF::PassOwnPtr<BlobData>();
 #endif
 

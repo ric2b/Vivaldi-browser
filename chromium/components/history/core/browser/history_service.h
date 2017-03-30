@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -19,7 +20,6 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
@@ -70,7 +70,6 @@ class HistoryServiceObserver;
 class HistoryServiceTest;
 class InMemoryHistoryBackend;
 struct KeywordSearchTermVisit;
-class PageUsageData;
 class URLDatabase;
 class VisitDelegate;
 class WebHistoryService;
@@ -82,9 +81,6 @@ class WebHistoryService;
 // thread that made the request.
 class HistoryService : public syncer::SyncableService, public KeyedService {
  public:
-  // Miscellaneous commonly-used types.
-  typedef std::vector<PageUsageData*> PageUsageDataList;
-
   // Callback for value asynchronously returned by TopHosts().
   typedef base::Callback<void(const TopHostsList&)> TopHostsCallback;
 
@@ -93,8 +89,8 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
   // null during testing, while |visit_delegate| may be null if the embedder use
   // another way to track visited links.
   HistoryService();
-  HistoryService(scoped_ptr<HistoryClient> history_client,
-                 scoped_ptr<VisitDelegate> visit_delegate);
+  HistoryService(std::unique_ptr<HistoryClient> history_client,
+                 std::unique_ptr<VisitDelegate> visit_delegate);
   ~HistoryService() override;
 
   // Initializes the history service, returning true on success. On false, do
@@ -134,15 +130,6 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
   // Following functions get URL information from in-memory database.
   // They return false if database is not available (e.g. not loaded yet) or the
   // URL does not exist.
-
-  // Reads the number of times the user has typed the given URL.
-  bool GetTypedCountForURL(const GURL& url, int* typed_count);
-
-  // Reads the last visit time for the given URL.
-  bool GetLastVisitTimeForURL(const GURL& url, base::Time* last_visit);
-
-  // Reads the number of times this URL has been visited.
-  bool GetVisitCountForURL(const GURL& url, int* visit_count);
 
   // Returns a pointer to the TypedUrlSyncableService owned by HistoryBackend.
   // This method should only be called from the history thread, because the
@@ -429,7 +416,7 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
 
   // Implemented by the caller of 'QueryDownloads' below, and is called when the
   // history service has retrieved a list of all download state. The call
-  typedef base::Callback<void(scoped_ptr<std::vector<DownloadRow>>)>
+  typedef base::Callback<void(std::unique_ptr<std::vector<DownloadRow>>)>
       DownloadQueryCallback;
 
   // Begins a history request to retrieve the state of all downloads in the
@@ -482,7 +469,7 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
   // Schedules a HistoryDBTask for running on the history backend thread. See
   // HistoryDBTask for details on what this does. Takes ownership of |task|.
   virtual base::CancelableTaskTracker::TaskId ScheduleDBTask(
-      scoped_ptr<HistoryDBTask> task,
+      std::unique_ptr<HistoryDBTask> task,
       base::CancelableTaskTracker* tracker);
 
   // Callback for when favicon data changes. Contains a std::set of page URLs
@@ -496,8 +483,8 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
   // Add a callback to the list. The callback will remain registered until the
   // returned Subscription is destroyed. The Subscription must be destroyed
   // before HistoryService is destroyed.
-  scoped_ptr<base::CallbackList<void(const std::set<GURL>&,
-                                     const GURL&)>::Subscription>
+  std::unique_ptr<base::CallbackList<void(const std::set<GURL>&,
+                                          const GURL&)>::Subscription>
   AddFaviconsChangedCallback(const OnFaviconsChangedCallback& callback)
       WARN_UNUSED_RESULT;
 
@@ -545,8 +532,8 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
   syncer::SyncMergeResult MergeDataAndStartSyncing(
       syncer::ModelType type,
       const syncer::SyncDataList& initial_sync_data,
-      scoped_ptr<syncer::SyncChangeProcessor> sync_processor,
-      scoped_ptr<syncer::SyncErrorFactory> error_handler) override;
+      std::unique_ptr<syncer::SyncChangeProcessor> sync_processor,
+      std::unique_ptr<syncer::SyncErrorFactory> error_handler) override;
   void StopSyncing(syncer::ModelType type) override;
   syncer::SyncDataList GetAllSyncData(syncer::ModelType type) const override;
   syncer::SyncError ProcessSyncChanges(
@@ -575,8 +562,9 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
   friend class ::InMemoryURLIndexTest;
   friend class ::SyncBookmarkDataTypeControllerTest;
   friend class ::TestingProfile;
-  friend scoped_ptr<HistoryService> CreateHistoryService(
-      const base::FilePath& history_dir, bool create_db);
+  friend std::unique_ptr<HistoryService> CreateHistoryService(
+      const base::FilePath& history_dir,
+      bool create_db);
 
   // Called on shutdown, this will tell the history backend to complete and
   // will release pointers to it. No other functions should be called once
@@ -602,11 +590,6 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
   // Notification from the backend that it has finished loading. Sends
   // notification (NOTIFY_HISTORY_LOADED) and sets backend_loaded_ to true.
   void OnDBLoaded();
-
-  // Helper function for getting URL information.
-  // Reads a URLRow from in-memory database. Returns false if database is not
-  // available or the URL does not exist.
-  bool GetRowForURL(const GURL& url, URLRow* url_row);
 
   // Observers ----------------------------------------------------------------
 
@@ -798,7 +781,7 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
 
   // Sets the in-memory URL database. This is called by the backend once the
   // database is loaded to make it available.
-  void SetInMemoryBackend(scoped_ptr<InMemoryHistoryBackend> mem_backend);
+  void SetInMemoryBackend(std::unique_ptr<InMemoryHistoryBackend> mem_backend);
 
   // Called by our BackendDelegate when there is a problem reading the database.
   void NotifyProfileError(sql::InitStatus init_status);
@@ -833,14 +816,14 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
   // autocomplete system. This will be null until the database has been created
   // on the background thread.
   // TODO(mrossetti): Consider changing ownership. See http://crbug.com/138321
-  scoped_ptr<InMemoryHistoryBackend> in_memory_backend_;
+  std::unique_ptr<InMemoryHistoryBackend> in_memory_backend_;
 
   // The history client, may be null when testing.
-  scoped_ptr<HistoryClient> history_client_;
+  std::unique_ptr<HistoryClient> history_client_;
 
   // The history service will inform its VisitDelegate of URLs recorded and
   // removed from the history database. This may be null during testing.
-  scoped_ptr<VisitDelegate> visit_delegate_;
+  std::unique_ptr<VisitDelegate> visit_delegate_;
 
   // Has the backend finished loading? The backend is loaded once Init has
   // completed.

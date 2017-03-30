@@ -21,7 +21,6 @@
 #include <string>
 
 #include "base/containers/scoped_ptr_hash_map.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_checker.h"
@@ -117,16 +116,16 @@ class WMFMediaPipeline : public PlatformMediaPipeline {
 
   GUID input_video_subtype_guid_;
 
-  scoped_ptr<AudioTimestampCalculator> audio_timestamp_calculator_;
+  std::unique_ptr<AudioTimestampCalculator> audio_timestamp_calculator_;
 
   media::PlatformVideoConfig video_config_;
   GUID source_reader_output_video_format_;
 
   MakeGLContextCurrentCB make_gl_context_current_cb_;
   EGLConfig egl_config_;
-  scoped_ptr<Direct3DContext> direct3d_context_;
+  std::unique_ptr<Direct3DContext> direct3d_context_;
   DXVAPictureBuffer* current_dxva_picture_buffer_;
-  base::ScopedPtrHashMap<uint32_t, scoped_ptr<DXVAPictureBuffer>>
+  base::ScopedPtrHashMap<uint32_t, std::unique_ptr<DXVAPictureBuffer>>
       known_picture_buffers_;
 
   ReadDataCB read_audio_data_cb_;

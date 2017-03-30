@@ -16,8 +16,11 @@
 
 @class AppListAnimationController;
 
-namespace gfx {
+namespace display {
 class Display;
+}
+
+namespace gfx {
 class Point;
 }
 
@@ -37,7 +40,7 @@ class AppListServiceMac : public AppListServiceImpl,
   // from. Coordinates are for the bottom-left coordinate of the window, in
   // AppKit space (Y positive is up).
   static void FindAnchorPoint(const gfx::Size& window_size,
-                              const gfx::Display& display,
+                              const display::Display& display,
                               int primary_display_height,
                               bool cursor_is_visible,
                               const gfx::Point& cursor,

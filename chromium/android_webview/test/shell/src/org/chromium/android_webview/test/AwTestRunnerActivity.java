@@ -13,6 +13,7 @@ import android.widget.LinearLayout;
 
 import org.chromium.android_webview.AwBrowserProcess;
 import org.chromium.android_webview.shell.AwShellResourceProvider;
+import org.chromium.base.ContextUtils;
 
 /**
  * This is a lightweight activity for tests that only require WebView functionality.
@@ -28,7 +29,8 @@ public class AwTestRunnerActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         AwShellResourceProvider.registerResources(this);
-        AwBrowserProcess.loadLibrary(this);
+        ContextUtils.initApplicationContext(getApplicationContext());
+        AwBrowserProcess.loadLibrary();
 
         mLinearLayout = new LinearLayout(this);
         mLinearLayout.setOrientation(LinearLayout.VERTICAL);

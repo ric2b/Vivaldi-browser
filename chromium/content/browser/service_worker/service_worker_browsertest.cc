@@ -4,24 +4,29 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
 #include <map>
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "content/browser/fileapi/chrome_blob_storage_context.h"
+#include "content/browser/blob_storage/chrome_blob_storage_context.h"
+#include "content/browser/cache_storage/cache_storage_cache.h"
+#include "content/browser/cache_storage/cache_storage_context_impl.h"
+#include "content/browser/cache_storage/cache_storage_manager.h"
 #include "content/browser/service_worker/embedded_worker_instance.h"
 #include "content/browser/service_worker/embedded_worker_registry.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
@@ -63,6 +68,7 @@
 #include "net/url_request/url_request_test_job.h"
 #include "storage/browser/blob/blob_data_handle.h"
 #include "storage/browser/blob/blob_data_snapshot.h"
+#include "storage/browser/blob/blob_reader.h"
 #include "storage/browser/blob/blob_storage_context.h"
 
 namespace content {
@@ -73,7 +79,7 @@ struct FetchResult {
   ServiceWorkerStatusCode status;
   ServiceWorkerFetchEventResult result;
   ServiceWorkerResponse response;
-  scoped_ptr<storage::BlobDataHandle> blob_data_handle;
+  std::unique_ptr<storage::BlobDataHandle> blob_data_handle;
 };
 
 void RunAndQuit(const base::Closure& closure,
@@ -142,7 +148,7 @@ ServiceWorkerStorage::FindRegistrationCallback CreateFindRegistrationReceiver(
 void ReadResponseBody(std::string* body,
                       storage::BlobDataHandle* blob_data_handle) {
   ASSERT_TRUE(blob_data_handle);
-  scoped_ptr<storage::BlobDataSnapshot> data =
+  std::unique_ptr<storage::BlobDataSnapshot> data =
       blob_data_handle->CreateSnapshot();
   ASSERT_EQ(1U, data->items().size());
   *body = std::string(data->items()[0]->bytes(), data->items()[0]->length());
@@ -189,39 +195,40 @@ class WorkerActivatedObserver
   DISALLOW_COPY_AND_ASSIGN(WorkerActivatedObserver);
 };
 
-scoped_ptr<net::test_server::HttpResponse> VerifyServiceWorkerHeaderInRequest(
+std::unique_ptr<net::test_server::HttpResponse>
+VerifyServiceWorkerHeaderInRequest(
     const net::test_server::HttpRequest& request) {
   EXPECT_EQ(request.relative_url, "/service_worker/generated_sw.js");
   auto it = request.headers.find("Service-Worker");
   EXPECT_TRUE(it != request.headers.end());
   EXPECT_EQ("script", it->second);
 
-  scoped_ptr<net::test_server::BasicHttpResponse> http_response(
+  std::unique_ptr<net::test_server::BasicHttpResponse> http_response(
       new net::test_server::BasicHttpResponse());
   http_response->set_content_type("text/javascript");
   return std::move(http_response);
 }
 
-scoped_ptr<net::test_server::HttpResponse> VerifySaveDataHeaderInRequest(
+std::unique_ptr<net::test_server::HttpResponse> VerifySaveDataHeaderInRequest(
     const net::test_server::HttpRequest& request) {
   auto it = request.headers.find("Save-Data");
   EXPECT_NE(request.headers.end(), it);
   EXPECT_EQ("on", it->second);
 
-  scoped_ptr<net::test_server::BasicHttpResponse> http_response(
+  std::unique_ptr<net::test_server::BasicHttpResponse> http_response(
       new net::test_server::BasicHttpResponse());
   http_response->set_content_type("text/javascript");
   return std::move(http_response);
 }
 
-scoped_ptr<net::test_server::HttpResponse> VerifySaveDataHeaderNotInRequest(
-    const net::test_server::HttpRequest& request) {
+std::unique_ptr<net::test_server::HttpResponse>
+VerifySaveDataHeaderNotInRequest(const net::test_server::HttpRequest& request) {
   auto it = request.headers.find("Save-Data");
   EXPECT_EQ(request.headers.end(), it);
-  return make_scoped_ptr(new net::test_server::BasicHttpResponse());
+  return base::WrapUnique(new net::test_server::BasicHttpResponse());
 }
 
-scoped_ptr<net::test_server::HttpResponse>
+std::unique_ptr<net::test_server::HttpResponse>
 VerifySaveDataNotInAccessControlRequestHeader(
     const net::test_server::HttpRequest& request) {
   // Save-Data should be present.
@@ -229,7 +236,7 @@ VerifySaveDataNotInAccessControlRequestHeader(
   EXPECT_NE(request.headers.end(), it);
   EXPECT_EQ("on", it->second);
 
-  scoped_ptr<net::test_server::BasicHttpResponse> http_response(
+  std::unique_ptr<net::test_server::BasicHttpResponse> http_response(
       new net::test_server::BasicHttpResponse());
   if (request.method == net::test_server::METHOD_OPTIONS) {
     // Access-Control-Request-Headers should contain 'X-Custom-Header' and not
@@ -282,7 +289,7 @@ class LongLivedResourceInterceptor : public net::URLRequestInterceptor {
 void CreateLongLivedResourceInterceptors(
     const GURL& worker_url, const GURL& import_url) {
   ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
-  scoped_ptr<net::URLRequestInterceptor> interceptor;
+  std::unique_ptr<net::URLRequestInterceptor> interceptor;
 
   interceptor.reset(new LongLivedResourceInterceptor(
       "importScripts('long_lived_import.js');"));
@@ -457,7 +464,7 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
   void FetchOnRegisteredWorker(
       ServiceWorkerFetchEventResult* result,
       ServiceWorkerResponse* response,
-      scoped_ptr<storage::BlobDataHandle>* blob_data_handle) {
+      std::unique_ptr<storage::BlobDataHandle>* blob_data_handle) {
     blob_context_ = ChromeBlobStorageContext::GetFor(
         shell()->web_contents()->GetBrowserContext());
     bool prepare_result = false;
@@ -479,10 +486,11 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
     ASSERT_EQ(SERVICE_WORKER_OK, fetch_result.status);
   }
 
-  void FetchTestHelper(const std::string& worker_url,
-                       ServiceWorkerFetchEventResult* result,
-                       ServiceWorkerResponse* response,
-                       scoped_ptr<storage::BlobDataHandle>* blob_data_handle) {
+  void FetchTestHelper(
+      const std::string& worker_url,
+      ServiceWorkerFetchEventResult* result,
+      ServiceWorkerResponse* response,
+      std::unique_ptr<storage::BlobDataHandle>* blob_data_handle) {
     RunOnIOThread(
         base::Bind(&self::SetUpRegistrationOnIOThread, this, worker_url));
     FetchOnRegisteredWorker(result, response, blob_data_handle);
@@ -519,11 +527,13 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
 
   void AddControlleeOnIOThread() {
     ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
-    scoped_ptr<ServiceWorkerProviderHost> host(new ServiceWorkerProviderHost(
-        33 /* dummy render process id */,
-        MSG_ROUTING_NONE /* render_frame_id */, 1 /* dummy provider_id */,
-        SERVICE_WORKER_PROVIDER_FOR_WINDOW, wrapper()->context()->AsWeakPtr(),
-        NULL));
+    std::unique_ptr<ServiceWorkerProviderHost> host(
+        new ServiceWorkerProviderHost(
+            33 /* dummy render process id */,
+            MSG_ROUTING_NONE /* render_frame_id */, 1 /* dummy provider_id */,
+            SERVICE_WORKER_PROVIDER_FOR_WINDOW,
+            ServiceWorkerProviderHost::FrameSecurityLevel::SECURE,
+            wrapper()->context()->AsWeakPtr(), NULL));
     host->SetDocumentUrl(
         embedded_test_server()->GetURL("/service_worker/host"));
     host->AssociateRegistration(registration_.get(),
@@ -682,9 +692,10 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
                        bool* prepare_result,
                        FetchResult* result) {
     ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
-    scoped_ptr<ServiceWorkerFetchRequest> request(new ServiceWorkerFetchRequest(
-        embedded_test_server()->GetURL("/service_worker/empty.html"), "GET",
-        ServiceWorkerHeaderMap(), Referrer(), false));
+    std::unique_ptr<ServiceWorkerFetchRequest> request(
+        new ServiceWorkerFetchRequest(
+            embedded_test_server()->GetURL("/service_worker/empty.html"), "GET",
+            ServiceWorkerHeaderMap(), Referrer(), false));
     version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
     fetch_dispatcher_.reset(new ServiceWorkerFetchDispatcher(
         std::move(request), version_.get(), RESOURCE_TYPE_MAIN_FRAME,
@@ -737,7 +748,7 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
   scoped_refptr<ServiceWorkerRegistration> registration_;
   scoped_refptr<ServiceWorkerVersion> version_;
   scoped_refptr<ChromeBlobStorageContext> blob_context_;
-  scoped_ptr<ServiceWorkerFetchDispatcher> fetch_dispatcher_;
+  std::unique_ptr<ServiceWorkerFetchDispatcher> fetch_dispatcher_;
 };
 
 IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, StartAndStop) {
@@ -984,7 +995,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, TimeoutWorkerInEvent) {
 IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, FetchEvent_Response) {
   ServiceWorkerFetchEventResult result;
   ServiceWorkerResponse response;
-  scoped_ptr<storage::BlobDataHandle> blob_data_handle;
+  std::unique_ptr<storage::BlobDataHandle> blob_data_handle;
   FetchTestHelper("/service_worker/fetch_event.js",
                   &result, &response, &blob_data_handle);
   ASSERT_EQ(SERVICE_WORKER_FETCH_EVENT_RESULT_RESPONSE, result);
@@ -1007,7 +1018,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,
   ServiceWorkerFetchEventResult result;
   ServiceWorkerResponse response1;
   ServiceWorkerResponse response2;
-  scoped_ptr<storage::BlobDataHandle> blob_data_handle;
+  std::unique_ptr<storage::BlobDataHandle> blob_data_handle;
   const base::Time start_time(base::Time::Now());
 
   RunOnIOThread(
@@ -1035,7 +1046,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,
                        FetchEvent_respondWithRejection) {
   ServiceWorkerFetchEventResult result;
   ServiceWorkerResponse response;
-  scoped_ptr<storage::BlobDataHandle> blob_data_handle;
+  std::unique_ptr<storage::BlobDataHandle> blob_data_handle;
 
   RunOnIOThread(base::Bind(&self::SetUpRegistrationOnIOThread, this,
                            "/service_worker/fetch_event_rejected.js"));
@@ -1158,7 +1169,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, CrossOriginFetchWithSaveData) {
   cross_origin_server.ServeFilesFromSourceDirectory("content/test/data");
   cross_origin_server.RegisterRequestHandler(
       base::Bind(&VerifySaveDataNotInAccessControlRequestHeader));
-  cross_origin_server.Start();
+  ASSERT_TRUE(cross_origin_server.Start());
 
   MockContentBrowserClient content_browser_client;
   content_browser_client.set_data_saver_enabled(true);
@@ -1567,6 +1578,267 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserV8CacheTest, Restart) {
   StartWorker(SERVICE_WORKER_OK);
   // Stop the worker.
   StopWorker(SERVICE_WORKER_OK);
+}
+
+class CacheStorageSideDataSizeChecker
+    : public base::RefCountedThreadSafe<CacheStorageSideDataSizeChecker> {
+ public:
+  static int GetSize(CacheStorageContextImpl* cache_storage_context,
+                     storage::FileSystemContext* file_system_context,
+                     const GURL& origin,
+                     const std::string& cache_name,
+                     const GURL& url) {
+    scoped_refptr<CacheStorageSideDataSizeChecker> checker(
+        new CacheStorageSideDataSizeChecker(cache_storage_context,
+                                            file_system_context, origin,
+                                            cache_name, url));
+    return checker->GetSizeImpl();
+  }
+
+ private:
+  using self = CacheStorageSideDataSizeChecker;
+  friend class base::RefCountedThreadSafe<self>;
+
+  CacheStorageSideDataSizeChecker(
+      CacheStorageContextImpl* cache_storage_context,
+      storage::FileSystemContext* file_system_context,
+      const GURL& origin,
+      const std::string& cache_name,
+      const GURL& url)
+      : cache_storage_context_(cache_storage_context),
+        file_system_context_(file_system_context),
+        origin_(origin),
+        cache_name_(cache_name),
+        url_(url) {}
+
+  ~CacheStorageSideDataSizeChecker() {}
+
+  int GetSizeImpl() {
+    int result = 0;
+    RunOnIOThread(base::Bind(&self::OpenCacheOnIOThread, this, &result));
+    return result;
+  }
+
+  void OpenCacheOnIOThread(int* result, const base::Closure& continuation) {
+    cache_storage_context_->cache_manager()->OpenCache(
+        origin_, cache_name_, base::Bind(&self::OnCacheStorageOpenCallback,
+                                         this, result, continuation));
+  }
+
+  void OnCacheStorageOpenCallback(int* result,
+                                  const base::Closure& continuation,
+                                  scoped_refptr<CacheStorageCache> cache,
+                                  CacheStorageError error) {
+    ASSERT_EQ(CACHE_STORAGE_OK, error);
+    std::unique_ptr<ServiceWorkerFetchRequest> scoped_request(
+        new ServiceWorkerFetchRequest());
+    scoped_request->url = url_;
+    cache->Match(std::move(scoped_request),
+                 base::Bind(&self::OnCacheStorageCacheMatchCallback, this,
+                            result, continuation));
+  }
+
+  void OnCacheStorageCacheMatchCallback(
+      int* result,
+      const base::Closure& continuation,
+      CacheStorageError error,
+      std::unique_ptr<ServiceWorkerResponse> response,
+      std::unique_ptr<storage::BlobDataHandle> blob_data_handle) {
+    ASSERT_EQ(CACHE_STORAGE_OK, error);
+    blob_data_handle_ = std::move(blob_data_handle);
+    blob_reader_ = blob_data_handle_->CreateReader(
+        file_system_context_,
+        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE).get());
+    const storage::BlobReader::Status status = blob_reader_->CalculateSize(
+        base::Bind(&self::OnBlobReaderCalculateSizeCallback, this, result,
+                   continuation));
+
+    ASSERT_NE(storage::BlobReader::Status::NET_ERROR, status);
+    if (status == storage::BlobReader::Status::DONE)
+      OnBlobReaderCalculateSizeCallback(result, continuation, net::OK);
+  }
+
+  void OnBlobReaderCalculateSizeCallback(int* result,
+                                         const base::Closure& continuation,
+                                         int size_result) {
+    ASSERT_EQ(net::OK, size_result);
+    if (!blob_reader_->has_side_data()) {
+      continuation.Run();
+      return;
+    }
+    const storage::BlobReader::Status status = blob_reader_->ReadSideData(
+        base::Bind(&self::OnBlobReaderReadSideDataCallback, this, result,
+                   continuation));
+    ASSERT_NE(storage::BlobReader::Status::NET_ERROR, status);
+    if (status == storage::BlobReader::Status::DONE) {
+      OnBlobReaderReadSideDataCallback(result, continuation,
+                                       storage::BlobReader::Status::DONE);
+    }
+  }
+
+  void OnBlobReaderReadSideDataCallback(int* result,
+                                        const base::Closure& continuation,
+                                        storage::BlobReader::Status status) {
+    ASSERT_NE(storage::BlobReader::Status::NET_ERROR, status);
+    *result = blob_reader_->side_data()->size();
+    continuation.Run();
+  }
+
+  CacheStorageContextImpl* cache_storage_context_;
+  storage::FileSystemContext* file_system_context_;
+  const GURL origin_;
+  const std::string cache_name_;
+  const GURL url_;
+  std::unique_ptr<storage::BlobDataHandle> blob_data_handle_;
+  std::unique_ptr<storage::BlobReader> blob_reader_;
+  DISALLOW_COPY_AND_ASSIGN(CacheStorageSideDataSizeChecker);
+};
+
+class ServiceWorkerV8CacheStrategiesTest : public ServiceWorkerBrowserTest {
+ public:
+  ServiceWorkerV8CacheStrategiesTest() {}
+  ~ServiceWorkerV8CacheStrategiesTest() override {}
+
+ protected:
+  static const std::string kPageUrl;
+  static const std::string kWorkerUrl;
+  static const std::string kScriptUrl;
+  static const int kV8CacheTimeStampDataSize;
+
+  void RegisterAndActivateServiceWorker() {
+    scoped_refptr<WorkerActivatedObserver> observer =
+        new WorkerActivatedObserver(wrapper());
+    observer->Init();
+    public_context()->RegisterServiceWorker(
+        embedded_test_server()->GetURL(kPageUrl),
+        embedded_test_server()->GetURL(kWorkerUrl),
+        base::Bind(&ExpectResultAndRun, true, base::Bind(&base::DoNothing)));
+    observer->Wait();
+  }
+
+  void NavigateToTestPage() {
+    const base::string16 title =
+        base::ASCIIToUTF16("Title was changed by the script.");
+    TitleWatcher title_watcher(shell()->web_contents(), title);
+    NavigateToURL(shell(), embedded_test_server()->GetURL(kPageUrl));
+    EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
+  }
+
+  int GetSideDataSize() {
+    StoragePartition* partition = BrowserContext::GetDefaultStoragePartition(
+        shell()->web_contents()->GetBrowserContext());
+    return CacheStorageSideDataSizeChecker::GetSize(
+        static_cast<CacheStorageContextImpl*>(
+            partition->GetCacheStorageContext()),
+        partition->GetFileSystemContext(), embedded_test_server()->base_url(),
+        std::string("cache_name"), embedded_test_server()->GetURL(kScriptUrl));
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerV8CacheStrategiesTest);
+};
+
+const std::string ServiceWorkerV8CacheStrategiesTest::kPageUrl =
+    "/service_worker/v8_cache_test.html";
+const std::string ServiceWorkerV8CacheStrategiesTest::kWorkerUrl =
+    "/service_worker/fetch_event_response_via_cache.js";
+const std::string ServiceWorkerV8CacheStrategiesTest::kScriptUrl =
+    "/service_worker/v8_cache_test.js";
+// V8ScriptRunner::setCacheTimeStamp() stores 12 byte data (tag + timestamp).
+const int ServiceWorkerV8CacheStrategiesTest::kV8CacheTimeStampDataSize =
+    sizeof(unsigned) + sizeof(double);
+
+class ServiceWorkerV8CacheStrategiesNoneTest
+    : public ServiceWorkerV8CacheStrategiesTest {
+ public:
+  ServiceWorkerV8CacheStrategiesNoneTest() {}
+  ~ServiceWorkerV8CacheStrategiesNoneTest() override {}
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitchASCII(switches::kV8CacheStrategiesForCacheStorage,
+                                    "none");
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerV8CacheStrategiesNoneTest);
+};
+
+IN_PROC_BROWSER_TEST_F(ServiceWorkerV8CacheStrategiesNoneTest,
+                       V8CacheOnCacheStorage) {
+  RegisterAndActivateServiceWorker();
+
+  NavigateToTestPage();
+  EXPECT_EQ(0, GetSideDataSize());
+
+  NavigateToTestPage();
+  EXPECT_EQ(0, GetSideDataSize());
+
+  NavigateToTestPage();
+  EXPECT_EQ(0, GetSideDataSize());
+}
+
+class ServiceWorkerV8CacheStrategiesNormalTest
+    : public ServiceWorkerV8CacheStrategiesTest {
+ public:
+  ServiceWorkerV8CacheStrategiesNormalTest() {}
+  ~ServiceWorkerV8CacheStrategiesNormalTest() override {}
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitchASCII(switches::kV8CacheStrategiesForCacheStorage,
+                                    "normal");
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerV8CacheStrategiesNormalTest);
+};
+
+IN_PROC_BROWSER_TEST_F(ServiceWorkerV8CacheStrategiesNormalTest,
+                       V8CacheOnCacheStorage) {
+  RegisterAndActivateServiceWorker();
+
+  NavigateToTestPage();
+  // fetch_event_response_via_cache.js returns |cloned_response| for the first
+  // load. So the V8 code cache should not be stored to the CacheStorage.
+  EXPECT_EQ(0, GetSideDataSize());
+
+  NavigateToTestPage();
+  // V8ScriptRunner::setCacheTimeStamp() stores 12 byte data (tag + timestamp).
+  EXPECT_EQ(kV8CacheTimeStampDataSize, GetSideDataSize());
+
+  NavigateToTestPage();
+  // The V8 code cache must be stored to the CacheStorage which must be bigger
+  // than 12 byte.
+  EXPECT_GT(GetSideDataSize(), kV8CacheTimeStampDataSize);
+}
+
+class ServiceWorkerV8CacheStrategiesAggressiveTest
+    : public ServiceWorkerV8CacheStrategiesTest {
+ public:
+  ServiceWorkerV8CacheStrategiesAggressiveTest() {}
+  ~ServiceWorkerV8CacheStrategiesAggressiveTest() override {}
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitchASCII(switches::kV8CacheStrategiesForCacheStorage,
+                                    "aggressive");
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerV8CacheStrategiesAggressiveTest);
+};
+
+IN_PROC_BROWSER_TEST_F(ServiceWorkerV8CacheStrategiesAggressiveTest,
+                       V8CacheOnCacheStorage) {
+  RegisterAndActivateServiceWorker();
+
+  NavigateToTestPage();
+  // fetch_event_response_via_cache.js returns |cloned_response| for the first
+  // load. So the V8 code cache should not be stored to the CacheStorage.
+  EXPECT_EQ(0, GetSideDataSize());
+
+  NavigateToTestPage();
+  // The V8 code cache must be stored to the CacheStorage which must be bigger
+  // than 12 byte.
+  EXPECT_GT(GetSideDataSize(), kV8CacheTimeStampDataSize);
+
+  NavigateToTestPage();
+  EXPECT_GT(GetSideDataSize(), kV8CacheTimeStampDataSize);
 }
 
 }  // namespace content

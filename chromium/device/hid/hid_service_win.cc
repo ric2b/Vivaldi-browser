@@ -4,6 +4,8 @@
 
 #include "device/hid/hid_service_win.h"
 
+#include <memory>
+
 #define INITGUID
 
 #include <dbt.h>
@@ -20,8 +22,8 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/device_event_log/device_event_log.h"
 #include "device/hid/hid_connection_win.h"
 #include "device/hid/hid_device_info.h"
@@ -96,7 +98,7 @@ void HidServiceWin::EnumerateOnFileThread(
       SetupDiGetDeviceInterfaceDetail(device_info_set, &device_interface_data,
                                       NULL, 0, &required_size, NULL);
 
-      scoped_ptr<SP_DEVICE_INTERFACE_DETAIL_DATA, base::FreeDeleter>
+      std::unique_ptr<SP_DEVICE_INTERFACE_DETAIL_DATA, base::FreeDeleter>
       device_interface_detail_data(
           static_cast<SP_DEVICE_INTERFACE_DETAIL_DATA*>(malloc(required_size)));
       device_interface_detail_data->cbSize =
@@ -129,7 +131,7 @@ void HidServiceWin::CollectInfoFromButtonCaps(
     USHORT button_caps_length,
     HidCollectionInfo* collection_info) {
   if (button_caps_length > 0) {
-    scoped_ptr<HIDP_BUTTON_CAPS[]> button_caps(
+    std::unique_ptr<HIDP_BUTTON_CAPS[]> button_caps(
         new HIDP_BUTTON_CAPS[button_caps_length]);
     if (HidP_GetButtonCaps(report_type,
                            &button_caps[0],
@@ -152,7 +154,7 @@ void HidServiceWin::CollectInfoFromValueCaps(
     USHORT value_caps_length,
     HidCollectionInfo* collection_info) {
   if (value_caps_length > 0) {
-    scoped_ptr<HIDP_VALUE_CAPS[]> value_caps(
+    std::unique_ptr<HIDP_VALUE_CAPS[]> value_caps(
         new HIDP_VALUE_CAPS[value_caps_length]);
     if (HidP_GetValueCaps(
             report_type, &value_caps[0], &value_caps_length, preparsed_data) ==

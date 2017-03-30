@@ -270,11 +270,11 @@ bool WebViewInternalCaptureVisibleRegionFunction::RunAsyncSafe(
     WebViewGuest* guest) {
   using api::extension_types::ImageDetails;
 
-  scoped_ptr<web_view_internal::CaptureVisibleRegion::Params> params(
+  std::unique_ptr<web_view_internal::CaptureVisibleRegion::Params> params(
       web_view_internal::CaptureVisibleRegion::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  scoped_ptr<ImageDetails> image_details;
+  std::unique_ptr<ImageDetails> image_details;
   if (args_->GetSize() > 1) {
     base::Value* spec = NULL;
     EXTENSION_FUNCTION_VALIDATE(args_->Get(1, &spec) && spec);
@@ -328,7 +328,7 @@ void WebViewInternalCaptureVisibleRegionFunction::OnCaptureFailure(
 }
 
 bool WebViewInternalNavigateFunction::RunAsyncSafe(WebViewGuest* guest) {
-  scoped_ptr<web_view_internal::Navigate::Params> params(
+  std::unique_ptr<web_view_internal::Navigate::Params> params(
       web_view_internal::Navigate::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   std::string src = params->src;
@@ -369,7 +369,7 @@ bool WebViewInternalExecuteCodeFunction::Init() {
   base::DictionaryValue* details_value = NULL;
   if (!args_->GetDictionary(2, &details_value))
     return false;
-  scoped_ptr<InjectDetails> details(new InjectDetails());
+  std::unique_ptr<InjectDetails> details(new InjectDetails());
   if (!InjectDetails::Populate(*details_value, details.get()))
     return false;
 
@@ -483,7 +483,7 @@ WebViewInternalAddContentScriptsFunction::
 
 ExecuteCodeFunction::ResponseAction
 WebViewInternalAddContentScriptsFunction::Run() {
-  scoped_ptr<web_view_internal::AddContentScripts::Params> params(
+  std::unique_ptr<web_view_internal::AddContentScripts::Params> params(
       web_view_internal::AddContentScripts::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -523,7 +523,7 @@ WebViewInternalRemoveContentScriptsFunction::
 
 ExecuteCodeFunction::ResponseAction
 WebViewInternalRemoveContentScriptsFunction::Run() {
-  scoped_ptr<web_view_internal::RemoveContentScripts::Params> params(
+  std::unique_ptr<web_view_internal::RemoveContentScripts::Params> params(
       web_view_internal::RemoveContentScripts::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -553,7 +553,7 @@ WebViewInternalSetNameFunction::~WebViewInternalSetNameFunction() {
 }
 
 bool WebViewInternalSetNameFunction::RunAsyncSafe(WebViewGuest* guest) {
-  scoped_ptr<web_view_internal::SetName::Params> params(
+  std::unique_ptr<web_view_internal::SetName::Params> params(
       web_view_internal::SetName::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   guest->SetName(params->frame_name);
@@ -571,7 +571,7 @@ WebViewInternalSetAllowTransparencyFunction::
 
 bool WebViewInternalSetAllowTransparencyFunction::RunAsyncSafe(
     WebViewGuest* guest) {
-  scoped_ptr<web_view_internal::SetAllowTransparency::Params> params(
+  std::unique_ptr<web_view_internal::SetAllowTransparency::Params> params(
       web_view_internal::SetAllowTransparency::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   guest->SetAllowTransparency(params->allow);
@@ -588,7 +588,7 @@ WebViewInternalSetAllowScalingFunction::
 }
 
 bool WebViewInternalSetAllowScalingFunction::RunAsyncSafe(WebViewGuest* guest) {
-  scoped_ptr<web_view_internal::SetAllowScaling::Params> params(
+  std::unique_ptr<web_view_internal::SetAllowScaling::Params> params(
       web_view_internal::SetAllowScaling::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   guest->SetAllowScaling(params->allow);
@@ -603,7 +603,7 @@ WebViewInternalSetZoomFunction::~WebViewInternalSetZoomFunction() {
 }
 
 bool WebViewInternalSetZoomFunction::RunAsyncSafe(WebViewGuest* guest) {
-  scoped_ptr<web_view_internal::SetZoom::Params> params(
+  std::unique_ptr<web_view_internal::SetZoom::Params> params(
       web_view_internal::SetZoom::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   guest->SetZoom(params->zoom_factor);
@@ -619,7 +619,7 @@ WebViewInternalGetZoomFunction::~WebViewInternalGetZoomFunction() {
 }
 
 bool WebViewInternalGetZoomFunction::RunAsyncSafe(WebViewGuest* guest) {
-  scoped_ptr<web_view_internal::GetZoom::Params> params(
+  std::unique_ptr<web_view_internal::GetZoom::Params> params(
       web_view_internal::GetZoom::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -636,7 +636,7 @@ WebViewInternalSetZoomModeFunction::~WebViewInternalSetZoomModeFunction() {
 }
 
 bool WebViewInternalSetZoomModeFunction::RunAsyncSafe(WebViewGuest* guest) {
-  scoped_ptr<web_view_internal::SetZoomMode::Params> params(
+  std::unique_ptr<web_view_internal::SetZoomMode::Params> params(
       web_view_internal::SetZoomMode::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -668,7 +668,7 @@ WebViewInternalGetZoomModeFunction::~WebViewInternalGetZoomModeFunction() {
 }
 
 bool WebViewInternalGetZoomModeFunction::RunAsyncSafe(WebViewGuest* guest) {
-  scoped_ptr<web_view_internal::GetZoomMode::Params> params(
+  std::unique_ptr<web_view_internal::GetZoomMode::Params> params(
       web_view_internal::GetZoomMode::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -699,7 +699,7 @@ WebViewInternalFindFunction::~WebViewInternalFindFunction() {
 }
 
 bool WebViewInternalFindFunction::RunAsyncSafe(WebViewGuest* guest) {
-  scoped_ptr<web_view_internal::Find::Params> params(
+  std::unique_ptr<web_view_internal::Find::Params> params(
       web_view_internal::Find::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -728,7 +728,7 @@ WebViewInternalStopFindingFunction::~WebViewInternalStopFindingFunction() {
 }
 
 bool WebViewInternalStopFindingFunction::RunAsyncSafe(WebViewGuest* guest) {
-  scoped_ptr<web_view_internal::StopFinding::Params> params(
+  std::unique_ptr<web_view_internal::StopFinding::Params> params(
       web_view_internal::StopFinding::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -762,7 +762,7 @@ WebViewInternalLoadDataWithBaseUrlFunction::
 
 bool WebViewInternalLoadDataWithBaseUrlFunction::RunAsyncSafe(
     WebViewGuest* guest) {
-  scoped_ptr<web_view_internal::LoadDataWithBaseUrl::Params> params(
+  std::unique_ptr<web_view_internal::LoadDataWithBaseUrl::Params> params(
       web_view_internal::LoadDataWithBaseUrl::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -784,7 +784,7 @@ WebViewInternalGoFunction::~WebViewInternalGoFunction() {
 }
 
 bool WebViewInternalGoFunction::RunAsyncSafe(WebViewGuest* guest) {
-  scoped_ptr<web_view_internal::Go::Params> params(
+  std::unique_ptr<web_view_internal::Go::Params> params(
       web_view_internal::Go::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -812,7 +812,7 @@ WebViewInternalSetPermissionFunction::~WebViewInternalSetPermissionFunction() {
 }
 
 bool WebViewInternalSetPermissionFunction::RunAsyncSafe(WebViewGuest* guest) {
-  scoped_ptr<web_view_internal::SetPermission::Params> params(
+  std::unique_ptr<web_view_internal::SetPermission::Params> params(
       web_view_internal::SetPermission::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -861,7 +861,7 @@ WebViewInternalOverrideUserAgentFunction::
 
 bool WebViewInternalOverrideUserAgentFunction::RunAsyncSafe(
     WebViewGuest* guest) {
-  scoped_ptr<web_view_internal::OverrideUserAgent::Params> params(
+  std::unique_ptr<web_view_internal::OverrideUserAgent::Params> params(
       web_view_internal::OverrideUserAgent::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 

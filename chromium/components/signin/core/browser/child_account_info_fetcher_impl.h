@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_SIGNIN_CORE_BROWSER_CHILD_ACCOUNT_INFO_FETCHER_IMPL_H_
 #define COMPONENTS_SIGNIN_CORE_BROWSER_CHILD_ACCOUNT_INFO_FETCHER_IMPL_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "base/timer/timer.h"
@@ -63,8 +65,8 @@ class ChildAccountInfoFetcherImpl : public ChildAccountInfoFetcher,
   base::OneShotTimer timer_;
   net::BackoffEntry backoff_;
 
-  scoped_ptr<OAuth2TokenService::Request> login_token_request_;
-  scoped_ptr<GaiaAuthFetcher> gaia_auth_fetcher_;
+  std::unique_ptr<OAuth2TokenService::Request> login_token_request_;
+  std::unique_ptr<GaiaAuthFetcher> gaia_auth_fetcher_;
 
   bool fetch_in_progress_;
   base::ThreadChecker thread_checker_;

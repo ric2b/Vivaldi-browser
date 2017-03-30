@@ -598,7 +598,11 @@ DebuggerScript._frameMirrorToJSCallFrame = function(frameMirror)
      */
     function contextId()
     {
-        var context = ensureFuncMirror().context();
+        var mirror = ensureFuncMirror();
+        // Old V8 do not have context() function on these objects
+        if (!mirror.context)
+            return DebuggerScript._executionContextId(mirror.script().value().context_data);
+        var context = mirror.context();
         if (context)
             return DebuggerScript._executionContextId(context.data());
         return 0;
@@ -681,8 +685,8 @@ DebuggerScript._buildScopeObject = function(scopeType, scopeObject)
         result = { __proto__: null };
         for (var j = 0; j < properties.length; j++) {
             var name = properties[j].name();
-            if (name.charAt(0) === ".")
-                continue; // Skip internal variables like ".arguments"
+            if (name.length === 0 || name.charAt(0) === ".")
+                continue; // Skip internal variables like ".arguments" and variables with empty name
             result[name] = properties[j].value_;
         }
         break;

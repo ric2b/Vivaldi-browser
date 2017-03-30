@@ -2,15 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "cc/playback/raster_source.h"
+
 #include <stddef.h>
 
-#include "base/memory/scoped_ptr.h"
-#include "cc/playback/raster_source.h"
+#include <memory>
+
 #include "cc/test/fake_recording_source.h"
 #include "cc/test/skia_common.h"
-#include "skia/ext/refptr.h"
+#include "cc/tiles/software_image_decode_controller.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkPixelRef.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/core/SkShader.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -21,7 +24,7 @@ namespace {
 TEST(RasterSourceTest, AnalyzeIsSolidUnscaled) {
   gfx::Size layer_bounds(400, 400);
 
-  scoped_ptr<FakeRecordingSource> recording_source =
+  std::unique_ptr<FakeRecordingSource> recording_source =
       FakeRecordingSource::CreateFilledRecordingSource(layer_bounds);
 
   SkPaint solid_paint;
@@ -92,7 +95,7 @@ TEST(RasterSourceTest, AnalyzeIsSolidUnscaled) {
 TEST(RasterSourceTest, AnalyzeIsSolidScaled) {
   gfx::Size layer_bounds(400, 400);
 
-  scoped_ptr<FakeRecordingSource> recording_source =
+  std::unique_ptr<FakeRecordingSource> recording_source =
       FakeRecordingSource::CreateFilledRecordingSource(layer_bounds);
 
   SkColor solid_color = SkColorSetARGB(255, 12, 23, 34);
@@ -163,7 +166,7 @@ TEST(RasterSourceTest, AnalyzeIsSolidScaled) {
 TEST(RasterSourceTest, AnalyzeIsSolidEmpty) {
   gfx::Size layer_bounds(400, 400);
 
-  scoped_ptr<FakeRecordingSource> recording_source =
+  std::unique_ptr<FakeRecordingSource> recording_source =
       FakeRecordingSource::CreateFilledRecordingSource(layer_bounds);
   recording_source->Rerecord();
 
@@ -181,10 +184,10 @@ TEST(RasterSourceTest, AnalyzeIsSolidEmpty) {
 TEST(RasterSourceTest, PixelRefIteratorDiscardableRefsOneTile) {
   gfx::Size layer_bounds(512, 512);
 
-  scoped_ptr<FakeRecordingSource> recording_source =
+  std::unique_ptr<FakeRecordingSource> recording_source =
       FakeRecordingSource::CreateFilledRecordingSource(layer_bounds);
 
-  skia::RefPtr<SkImage> discardable_image[2][2];
+  sk_sp<SkImage> discardable_image[2][2];
   discardable_image[0][0] = CreateDiscardableImage(gfx::Size(32, 32));
   discardable_image[0][1] = CreateDiscardableImage(gfx::Size(32, 32));
   discardable_image[1][1] = CreateDiscardableImage(gfx::Size(32, 32));
@@ -195,11 +198,9 @@ TEST(RasterSourceTest, PixelRefIteratorDiscardableRefsOneTile) {
   // |---|---|
   // |   | x |
   // |---|---|
-  recording_source->add_draw_image(discardable_image[0][0].get(),
-                                   gfx::Point(0, 0));
-  recording_source->add_draw_image(discardable_image[0][1].get(),
-                                   gfx::Point(260, 0));
-  recording_source->add_draw_image(discardable_image[1][1].get(),
+  recording_source->add_draw_image(discardable_image[0][0], gfx::Point(0, 0));
+  recording_source->add_draw_image(discardable_image[0][1], gfx::Point(260, 0));
+  recording_source->add_draw_image(discardable_image[1][1],
                                    gfx::Point(260, 260));
   recording_source->SetGenerateDiscardableImagesMetadata(true);
   recording_source->Rerecord();
@@ -212,7 +213,7 @@ TEST(RasterSourceTest, PixelRefIteratorDiscardableRefsOneTile) {
     std::vector<DrawImage> images;
     raster->GetDiscardableImagesInRect(gfx::Rect(0, 0, 256, 256), 1.f, &images);
     EXPECT_EQ(1u, images.size());
-    EXPECT_EQ(discardable_image[0][0].get(), images[0].image());
+    EXPECT_EQ(discardable_image[0][0], images[0].image());
   }
   // Shifted tile sized iterators. These should find only one pixel ref.
   {
@@ -220,7 +221,7 @@ TEST(RasterSourceTest, PixelRefIteratorDiscardableRefsOneTile) {
     raster->GetDiscardableImagesInRect(gfx::Rect(260, 260, 256, 256), 1.f,
                                        &images);
     EXPECT_EQ(1u, images.size());
-    EXPECT_EQ(discardable_image[1][1].get(), images[0].image());
+    EXPECT_EQ(discardable_image[1][1], images[0].image());
   }
   // Ensure there's no discardable pixel refs in the empty cell
   {
@@ -234,9 +235,9 @@ TEST(RasterSourceTest, PixelRefIteratorDiscardableRefsOneTile) {
     std::vector<DrawImage> images;
     raster->GetDiscardableImagesInRect(gfx::Rect(0, 0, 512, 512), 1.f, &images);
     EXPECT_EQ(3u, images.size());
-    EXPECT_EQ(discardable_image[0][0].get(), images[0].image());
-    EXPECT_EQ(discardable_image[0][1].get(), images[1].image());
-    EXPECT_EQ(discardable_image[1][1].get(), images[2].image());
+    EXPECT_EQ(discardable_image[0][0], images[0].image());
+    EXPECT_EQ(discardable_image[0][1], images[1].image());
+    EXPECT_EQ(discardable_image[1][1], images[2].image());
   }
 }
 
@@ -245,7 +246,7 @@ TEST(RasterSourceTest, RasterFullContents) {
   float contents_scale = 1.5f;
   float raster_divisions = 2.f;
 
-  scoped_ptr<FakeRecordingSource> recording_source =
+  std::unique_ptr<FakeRecordingSource> recording_source =
       FakeRecordingSource::CreateFilledRecordingSource(layer_bounds);
   recording_source->SetBackgroundColor(SK_ColorBLACK);
   recording_source->SetClearCanvasWithDebugColor(false);
@@ -311,7 +312,7 @@ TEST(RasterSourceTest, RasterPartialContents) {
   gfx::Size layer_bounds(3, 5);
   float contents_scale = 1.5f;
 
-  scoped_ptr<FakeRecordingSource> recording_source =
+  std::unique_ptr<FakeRecordingSource> recording_source =
       FakeRecordingSource::CreateFilledRecordingSource(layer_bounds);
   recording_source->SetBackgroundColor(SK_ColorGREEN);
   recording_source->SetClearCanvasWithDebugColor(false);
@@ -403,7 +404,7 @@ TEST(RasterSourceTest, RasterPartialClear) {
   gfx::Size partial_bounds(2, 4);
   float contents_scale = 1.5f;
 
-  scoped_ptr<FakeRecordingSource> recording_source =
+  std::unique_ptr<FakeRecordingSource> recording_source =
       FakeRecordingSource::CreateFilledRecordingSource(layer_bounds);
   recording_source->SetBackgroundColor(SK_ColorGREEN);
   recording_source->SetRequiresClear(true);
@@ -449,7 +450,7 @@ TEST(RasterSourceTest, RasterPartialClear) {
     }
   }
 
-  scoped_ptr<FakeRecordingSource> recording_source_light =
+  std::unique_ptr<FakeRecordingSource> recording_source_light =
       FakeRecordingSource::CreateFilledRecordingSource(layer_bounds);
   recording_source_light->SetBackgroundColor(SK_ColorGREEN);
   recording_source_light->SetRequiresClear(true);
@@ -492,7 +493,7 @@ TEST(RasterSourceTest, RasterContentsTransparent) {
   gfx::Size layer_bounds(5, 3);
   float contents_scale = 0.5f;
 
-  scoped_ptr<FakeRecordingSource> recording_source =
+  std::unique_ptr<FakeRecordingSource> recording_source =
       FakeRecordingSource::CreateFilledRecordingSource(layer_bounds);
   recording_source->SetBackgroundColor(SK_ColorTRANSPARENT);
   recording_source->SetRequiresClear(true);
@@ -524,7 +525,7 @@ TEST(RasterSourceTest, RasterContentsTransparent) {
 TEST(RasterSourceTest, GetPictureMemoryUsageIncludesClientReportedMemory) {
   const size_t kReportedMemoryUsageInBytes = 100 * 1024 * 1024;
   gfx::Size layer_bounds(5, 3);
-  scoped_ptr<FakeRecordingSource> recording_source =
+  std::unique_ptr<FakeRecordingSource> recording_source =
       FakeRecordingSource::CreateFilledRecordingSource(layer_bounds);
   recording_source->set_reported_memory_usage(kReportedMemoryUsageInBytes);
   recording_source->Rerecord();
@@ -534,6 +535,65 @@ TEST(RasterSourceTest, GetPictureMemoryUsageIncludesClientReportedMemory) {
   size_t total_memory_usage = raster->GetPictureMemoryUsage();
   EXPECT_GE(total_memory_usage, kReportedMemoryUsageInBytes);
   EXPECT_LT(total_memory_usage, 2 * kReportedMemoryUsageInBytes);
+}
+
+TEST(RasterSourceTest, ImageHijackCanvasRespectsSharedCanvasTransform) {
+  gfx::Size size(100, 100);
+
+  // Create a recording source that is filled with red and every corner is
+  // green (4x4 rects in the corner are green to account for blending when
+  // scaling). Note that we paint an image first, so that we can force image
+  // hijack canvas to be used.
+  std::unique_ptr<FakeRecordingSource> recording_source =
+      FakeRecordingSource::CreateFilledRecordingSource(size);
+
+  // 1. Paint the image.
+  recording_source->add_draw_image(CreateDiscardableImage(gfx::Size(5, 5)),
+                                   gfx::Point(0, 0));
+
+  // 2. Cover everything in red.
+  SkPaint paint;
+  paint.setColor(SK_ColorRED);
+  recording_source->add_draw_rect_with_paint(gfx::Rect(size), paint);
+
+  // 3. Draw 4x4 green rects into every corner.
+  paint.setColor(SK_ColorGREEN);
+  recording_source->add_draw_rect_with_paint(gfx::Rect(0, 0, 4, 4), paint);
+  recording_source->add_draw_rect_with_paint(
+      gfx::Rect(size.width() - 4, 0, 4, 4), paint);
+  recording_source->add_draw_rect_with_paint(
+      gfx::Rect(0, size.height() - 4, 4, 4), paint);
+  recording_source->add_draw_rect_with_paint(
+      gfx::Rect(size.width() - 4, size.height() - 4, 4, 4), paint);
+
+  recording_source->SetGenerateDiscardableImagesMetadata(true);
+  recording_source->Rerecord();
+
+  bool can_use_lcd = true;
+  scoped_refptr<RasterSource> raster_source =
+      recording_source->CreateRasterSource(can_use_lcd);
+  SoftwareImageDecodeController controller;
+  raster_source->set_image_decode_controller(&controller);
+
+  SkBitmap bitmap;
+  bitmap.allocN32Pixels(size.width() * 0.5f, size.height() * 0.25f);
+  SkCanvas canvas(bitmap);
+  canvas.scale(0.5f, 0.25f);
+
+  RasterSource::PlaybackSettings settings;
+  settings.playback_to_shared_canvas = true;
+  settings.use_image_hijack_canvas = true;
+  raster_source->PlaybackToCanvas(&canvas, gfx::Rect(size), gfx::Rect(size),
+                                  1.f, settings);
+
+  EXPECT_EQ(SK_ColorGREEN, bitmap.getColor(0, 0));
+  EXPECT_EQ(SK_ColorGREEN, bitmap.getColor(49, 0));
+  EXPECT_EQ(SK_ColorGREEN, bitmap.getColor(0, 24));
+  EXPECT_EQ(SK_ColorGREEN, bitmap.getColor(49, 24));
+  for (int x = 0; x < 49; ++x)
+    EXPECT_EQ(SK_ColorRED, bitmap.getColor(x, 12));
+  for (int y = 0; y < 24; ++y)
+    EXPECT_EQ(SK_ColorRED, bitmap.getColor(24, y));
 }
 
 }  // namespace

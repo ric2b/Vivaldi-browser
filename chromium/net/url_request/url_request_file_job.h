@@ -44,7 +44,7 @@ class NET_EXPORT URLRequestFileJob : public URLRequestJob {
   void Kill() override;
   int ReadRawData(IOBuffer* buf, int buf_size) override;
   bool IsRedirectResponse(GURL* location, int* http_status_code) override;
-  Filter* SetupFilter() const override;
+  std::unique_ptr<Filter> SetupFilter() const override;
   bool GetMimeType(std::string* mime_type) const override;
   void SetExtraRequestHeaders(const HttpRequestHeaders& headers) override;
 
@@ -97,7 +97,7 @@ class NET_EXPORT URLRequestFileJob : public URLRequestJob {
   // Callback after data is asynchronously read from the file into |buf|.
   void DidRead(scoped_refptr<IOBuffer> buf, int result);
 
-  scoped_ptr<FileStream> stream_;
+  std::unique_ptr<FileStream> stream_;
   FileMetaInfo meta_info_;
   const scoped_refptr<base::TaskRunner> file_task_runner_;
 

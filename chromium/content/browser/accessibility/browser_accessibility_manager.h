@@ -7,14 +7,15 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/callback_forward.h"
 #include "base/containers/hash_tables.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "build/build_config.h"
 #include "content/browser/accessibility/ax_tree_id_registry.h"
+#include "content/browser/accessibility/browser_accessibility_event.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/ax_event_notification_details.h"
 #include "third_party/WebKit/public/web/WebAXEnums.h"
@@ -142,19 +143,22 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
   static ui::AXTreeUpdate GetEmptyDocument();
 
   virtual void NotifyAccessibilityEvent(
-      ui::AXEvent event_type, BrowserAccessibility* node) { }
+      BrowserAccessibilityEvent::Source source,
+      ui::AXEvent event_type,
+      BrowserAccessibility* node);
 
   // Checks whether focus has changed since the last time it was checked,
   // taking into account whether the window has focus and which frame within
   // the frame tree has focus. If focus has changed, calls FireFocusEvent.
-  void FireFocusEventsIfNeeded();
+  void FireFocusEventsIfNeeded(BrowserAccessibilityEvent::Source source);
 
   // Return whether or not we are currently able to fire events.
   virtual bool CanFireEvents();
 
   // Fire a focus event. Virtual so that some platforms can customize it,
   // like firing a focus event on the root first, on Windows.
-  virtual void FireFocusEvent(BrowserAccessibility* node);
+  virtual void FireFocusEvent(BrowserAccessibilityEvent::Source source,
+                              BrowserAccessibility* node);
 
   // Return a pointer to the root of the tree, does not make a new reference.
   BrowserAccessibility* GetRoot();
@@ -185,10 +189,6 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
   virtual void UserIsReloading();
   void NavigationSucceeded();
   void NavigationFailed();
-
-  // Called to notify the accessibility manager that a mouse down event
-  // occurred in the tab.
-  void GotMouseDown();
 
   // Send a message to the renderer to set focus to this node.
   void SetFocus(const BrowserAccessibility& node);
@@ -400,10 +400,10 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
   BrowserAccessibilityDelegate* delegate_;
 
   // Factory to create BrowserAccessibility objects (for dependency injection).
-  scoped_ptr<BrowserAccessibilityFactory> factory_;
+  std::unique_ptr<BrowserAccessibilityFactory> factory_;
 
   // The underlying tree of accessibility objects.
-  scoped_ptr<ui::AXSerializableTree> tree_;
+  std::unique_ptr<ui::AXSerializableTree> tree_;
 
   // A mapping from a node id to its wrapper of type BrowserAccessibility.
   base::hash_map<int32_t, BrowserAccessibility*> id_wrapper_map_;

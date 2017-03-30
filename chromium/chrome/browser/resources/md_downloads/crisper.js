@@ -1,3 +1,75 @@
+// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+/**
+ * @fileoverview Assertion support.
+ */
+
+/**
+ * Verify |condition| is truthy and return |condition| if so.
+ * @template T
+ * @param {T} condition A condition to check for truthiness.  Note that this
+ *     may be used to test whether a value is defined or not, and we don't want
+ *     to force a cast to Boolean.
+ * @param {string=} opt_message A message to show on failure.
+ * @return {T} A non-null |condition|.
+ */
+function assert(condition, opt_message) {
+  if (!condition) {
+    var message = 'Assertion failed';
+    if (opt_message)
+      message = message + ': ' + opt_message;
+    var error = new Error(message);
+    var global = function() { return this; }();
+    if (global.traceAssertionsForTesting)
+      console.warn(error.stack);
+    throw error;
+  }
+  return condition;
+}
+
+/**
+ * Call this from places in the code that should never be reached.
+ *
+ * For example, handling all the values of enum with a switch() like this:
+ *
+ *   function getValueFromEnum(enum) {
+ *     switch (enum) {
+ *       case ENUM_FIRST_OF_TWO:
+ *         return first
+ *       case ENUM_LAST_OF_TWO:
+ *         return last;
+ *     }
+ *     assertNotReached();
+ *     return document;
+ *   }
+ *
+ * This code should only be hit in the case of serious programmer error or
+ * unexpected input.
+ *
+ * @param {string=} opt_message A message to show when this is hit.
+ */
+function assertNotReached(opt_message) {
+  assert(false, opt_message || 'Unreachable code hit');
+}
+
+/**
+ * @param {*} value The value to check.
+ * @param {function(new: T, ...)} type A user-defined constructor.
+ * @param {string=} opt_message A message to show when this is hit.
+ * @return {T}
+ * @template T
+ */
+function assertInstanceof(value, type, opt_message) {
+  // We don't use assert immediately here so that we avoid constructing an error
+  // message if we don't have to.
+  if (!(value instanceof type)) {
+    assertNotReached(opt_message || 'Value ' + value +
+                     ' is not a[n] ' + (type.name || typeof type));
+  }
+  return value;
+};
 // Copyright 2016 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
@@ -21,17 +93,31 @@
  * @template T
  */
 function PromiseResolver() {
-  /** @type {function(T): void} */
-  this.resolve;
+  /** @private {function(T=): void} */
+  this.resolve_;
 
-  /** @type {function(*=): void} */
-  this.reject;
+  /** @private {function(*=): void} */
+  this.reject_;
 
-  /** @type {!Promise<T>} */
-  this.promise = new Promise(function(resolve, reject) {
-    this.resolve = resolve;
-    this.reject = reject;
+  /** @private {!Promise<T>} */
+  this.promise_ = new Promise(function(resolve, reject) {
+    this.resolve_ = resolve;
+    this.reject_ = reject;
   }.bind(this));
+}
+
+PromiseResolver.prototype = {
+  /** @return {!Promise<T>} */
+  get promise() { return this.promise_; },
+  set promise(p) { assertNotReached(); },
+
+  /** @return {function(T=): void} */
+  get resolve() { return this.resolve_; },
+  set resolve(r) { assertNotReached(); },
+
+  /** @return {function(*=): void} */
+  get reject() { return this.reject_; },
+  set reject(s) { assertNotReached(); },
 };
 // Copyright (c) 2012 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
@@ -1103,30 +1189,6 @@ function announceAccessibleMessage(msg) {
 }
 
 /**
- * Returns the scale factors supported by this platform for webui
- * resources.
- * @return {Array} The supported scale factors.
- */
-function getSupportedScaleFactors() {
-  var supportedScaleFactors = [];
-  if (cr.isMac || cr.isChromeOS || cr.isWindows || cr.isLinux) {
-    // All desktop platforms support zooming which also updates the
-    // renderer's device scale factors (a.k.a devicePixelRatio), and
-    // these platforms has high DPI assets for 2.0x. Use 1x and 2x in
-    // image-set on these platforms so that the renderer can pick the
-    // closest image for the current device scale factor.
-    supportedScaleFactors.push(1);
-    supportedScaleFactors.push(2);
-  } else {
-    // For other platforms that use fixed device scale factor, use
-    // the window's device pixel ratio.
-    // TODO(oshima): Investigate if Android/iOS need to use image-set.
-    supportedScaleFactors.push(window.devicePixelRatio);
-  }
-  return supportedScaleFactors;
-}
-
-/**
  * Generates a CSS url string.
  * @param {string} s The URL to generate the CSS url for.
  * @return {string} The CSS url string.
@@ -1143,51 +1205,6 @@ function url(s) {
     s2 += ' ';
   }
   return 'url("' + s2 + '")';
-}
-
-/**
- * Returns the URL of the image, or an image set of URLs for the profile avatar.
- * Default avatars have resources available for multiple scalefactors, whereas
- * the GAIA profile image only comes in one size.
- *
- * @param {string} path The path of the image.
- * @return {string} The url, or an image set of URLs of the avatar image.
- */
-function getProfileAvatarIcon(path) {
-  var chromeThemePath = 'chrome://theme';
-  var isDefaultAvatar =
-      (path.slice(0, chromeThemePath.length) == chromeThemePath);
-  return isDefaultAvatar ? imageset(path + '@scalefactorx'): url(path);
-}
-
-/**
- * Generates a CSS -webkit-image-set for a chrome:// url.
- * An entry in the image set is added for each of getSupportedScaleFactors().
- * The scale-factor-specific url is generated by replacing the first instance of
- * 'scalefactor' in |path| with the numeric scale factor.
- * @param {string} path The URL to generate an image set for.
- *     'scalefactor' should be a substring of |path|.
- * @return {string} The CSS -webkit-image-set.
- */
-function imageset(path) {
-  var supportedScaleFactors = getSupportedScaleFactors();
-
-  var replaceStartIndex = path.indexOf('scalefactor');
-  if (replaceStartIndex < 0)
-    return url(path);
-
-  var s = '';
-  for (var i = 0; i < supportedScaleFactors.length; ++i) {
-    var scaleFactor = supportedScaleFactors[i];
-    var pathWithScaleFactor = path.substr(0, replaceStartIndex) + scaleFactor +
-        path.substr(replaceStartIndex + 'scalefactor'.length);
-
-    s += url(pathWithScaleFactor) + ' ' + scaleFactor + 'x';
-
-    if (i != supportedScaleFactors.length - 1)
-      s += ', ';
-  }
-  return '-webkit-image-set(' + s + ')';
 }
 
 /**
@@ -1379,39 +1396,6 @@ function appendParam(url, key, value) {
   if (url.indexOf('?') == -1)
     return url + '?' + param;
   return url + '&' + param;
-}
-
-/**
- * Creates a CSS -webkit-image-set for a favicon request.
- * @param {string} url The url for the favicon.
- * @param {number=} opt_size Optional preferred size of the favicon.
- * @param {string=} opt_type Optional type of favicon to request. Valid values
- *     are 'favicon' and 'touch-icon'. Default is 'favicon'.
- * @return {string} -webkit-image-set for the favicon.
- */
-function getFaviconImageSet(url, opt_size, opt_type) {
-  var size = opt_size || 16;
-  var type = opt_type || 'favicon';
-  return imageset(
-      'chrome://' + type + '/size/' + size + '@scalefactorx/' + url);
-}
-
-/**
- * Creates a new URL for a favicon request for the current device pixel ratio.
- * The URL must be updated when the user moves the browser to a screen with a
- * different device pixel ratio. Use getFaviconImageSet() for the updating to
- * occur automatically.
- * @param {string} url The url for the favicon.
- * @param {number=} opt_size Optional preferred size of the favicon.
- * @param {string=} opt_type Optional type of favicon to request. Valid values
- *     are 'favicon' and 'touch-icon'. Default is 'favicon'.
- * @return {string} Updated URL for the favicon.
- */
-function getFaviconUrlForCurrentDevicePixelRatio(url, opt_size, opt_type) {
-  var size = opt_size || 16;
-  var type = opt_type || 'favicon';
-  return 'chrome://' + type + '/size/' + size + '@' +
-      window.devicePixelRatio + 'x/' + url;
 }
 
 /**
@@ -2176,20 +2160,31 @@ function quoteString(str) {
 
       /**
        * Specifies the element that will handle the scroll event
-       * on the behalf of the current element. This is typically a reference to an `Element`,
+       * on the behalf of the current element. This is typically a reference to an element,
        * but there are a few more posibilities:
        *
        * ### Elements id
        *
        *```html
-       * <div id="scrollable-element" style="overflow-y: auto;">
+       * <div id="scrollable-element" style="overflow: auto;">
        *  <x-element scroll-target="scrollable-element">
-       *    Content
+       *    \x3c!-- Content--\x3e
        *  </x-element>
        * </div>
        *```
-       * In this case, `scrollTarget` will point to the outer div element. Alternatively,
-       * you can set the property programatically:
+       * In this case, the `scrollTarget` will point to the outer div element. 
+       *
+       * ### Document scrolling
+       *
+       * For document scrolling, you can use the reserved word `document`:
+       *
+       *```html
+       * <x-element scroll-target="document">
+       *   \x3c!-- Content --\x3e
+       * </x-element>
+       *```
+       *
+       * ### Elements reference
        *
        *```js
        * appHeader.scrollTarget = document.querySelector('#scrollable-element');
@@ -2210,42 +2205,39 @@ function quoteString(str) {
     ],
 
     _scrollTargetChanged: function(scrollTarget, isAttached) {
-      // Remove lister to the current scroll target
+      var eventTarget;
+
       if (this._oldScrollTarget) {
-        if (this._oldScrollTarget === this._doc) {
-          window.removeEventListener('scroll', this._boundScrollHandler);
-        } else if (this._oldScrollTarget.removeEventListener) {
-          this._oldScrollTarget.removeEventListener('scroll', this._boundScrollHandler);
-        }
+        eventTarget = this._oldScrollTarget === this._doc ? window : this._oldScrollTarget;
+        eventTarget.removeEventListener('scroll', this._boundScrollHandler);
         this._oldScrollTarget = null;
       }
-      if (isAttached) {
-        // Support element id references
-        if (typeof scrollTarget === 'string') {
 
-          var host = this.domHost;
-          this.scrollTarget = host && host.$ ? host.$[scrollTarget] : 
-              Polymer.dom(this.ownerDocument).querySelector('#' + scrollTarget);
+      if (!isAttached) {
+        return;
+      }
+      // Support element id references
+      if (scrollTarget === 'document') {
 
-        } else if (this._scrollHandler) {
+        this.scrollTarget = this._doc;
 
-          this._boundScrollHandler = this._boundScrollHandler || this._scrollHandler.bind(this);
-          // Add a new listener
-          if (scrollTarget === this._doc) {
-            window.addEventListener('scroll', this._boundScrollHandler);
-            if (this._scrollTop !== 0 || this._scrollLeft !== 0) {
-              this._scrollHandler();
-            }
-          } else if (scrollTarget && scrollTarget.addEventListener) {
-            scrollTarget.addEventListener('scroll', this._boundScrollHandler);
-          }
-          this._oldScrollTarget = scrollTarget;
-        }
+      } else if (typeof scrollTarget === 'string') {
+
+        this.scrollTarget = this.domHost ? this.domHost.$[scrollTarget] :
+            Polymer.dom(this.ownerDocument).querySelector('#' + scrollTarget);
+
+      } else if (this._isValidScrollTarget()) {
+
+        eventTarget = scrollTarget === this._doc ? window : scrollTarget;
+        this._boundScrollHandler = this._boundScrollHandler || this._scrollHandler.bind(this);
+        this._oldScrollTarget = scrollTarget;
+
+        eventTarget.addEventListener('scroll', this._boundScrollHandler);
       }
     },
 
     /**
-     * Runs on every scroll event. Consumer of this behavior may want to override this method.
+     * Runs on every scroll event. Consumer of this behavior may override this method.
      *
      * @protected
      */
@@ -2374,8 +2366,8 @@ function quoteString(str) {
   var IOS = navigator.userAgent.match(/iP(?:hone|ad;(?: U;)? CPU) OS (\d+)/);
   var IOS_TOUCH_SCROLLING = IOS && IOS[1] >= 8;
   var DEFAULT_PHYSICAL_COUNT = 3;
-  var MAX_PHYSICAL_COUNT = 500;
   var HIDDEN_Y = '-10000px';
+  var DEFAULT_GRID_SIZE = 200;
 
   Polymer({
 
@@ -2389,6 +2381,14 @@ function quoteString(str) {
        */
       items: {
         type: Array
+      },
+
+      /**
+       * The max count of physical items the pool can extend to.
+       */
+      maxPhysicalCount: {
+        type: Number,
+        value: 500
       },
 
       /**
@@ -2416,6 +2416,24 @@ function quoteString(str) {
       selectedAs: {
         type: String,
         value: 'selected'
+      },
+
+      /**
+       * When true, the list is rendered as a grid. Grid items must have
+       * fixed width and height set via CSS. e.g.
+       *
+       * ```html
+       * <iron-list grid>
+       *   <template>
+       *      <div style="width: 100px; height: 100px;"> 100x100 </div>
+       *   </template>
+       * </iron-list>
+       * ```
+       */
+      grid: {
+        type: Boolean,
+        value: false,
+        reflectToAttribute: true
       },
 
       /**
@@ -2471,10 +2489,6 @@ function quoteString(str) {
       Polymer.IronA11yKeysBehavior,
       Polymer.IronScrollTargetBehavior
     ],
-
-    listeners: {
-      'iron-resize': '_resizeHandler'
-    },
 
     keyBindings: {
       'up': '_didMoveUp',
@@ -2542,7 +2556,12 @@ function quoteString(str) {
     /**
      * The height of the list. This is referred as the viewport in the context of list.
      */
-    _viewportSize: 0,
+    _viewportHeight: 0,
+
+    /**
+     * The width of the list. This is referred as the viewport in the context of list.
+     */
+    _viewportWidth: 0,
 
     /**
      * An array of DOM nodes that are currently in the tree
@@ -2615,6 +2634,21 @@ function quoteString(str) {
     _focusBackfillItem: null,
 
     /**
+     * The maximum items per row
+     */
+    _itemsPerRow: 1,
+
+    /**
+     * The width of each grid item
+     */
+    _itemWidth: 0,
+
+    /**
+     * The height of the row in grid layout.
+     */
+    _rowHeight: 0,
+
+    /**
      * The bottom of the physical content.
      */
     get _physicalBottom() {
@@ -2625,7 +2659,7 @@ function quoteString(str) {
      * The bottom of the scroll.
      */
     get _scrollBottom() {
-      return this._scrollPosition + this._viewportSize;
+      return this._scrollPosition + this._viewportHeight;
     },
 
     /**
@@ -2639,14 +2673,15 @@ function quoteString(str) {
      * The height of the physical content that isn't on the screen.
      */
     get _hiddenContentSize() {
-      return this._physicalSize - this._viewportSize;
+      var size = this.grid ? this._physicalRows * this._rowHeight : this._physicalSize;
+      return size - this._viewportHeight;
     },
 
     /**
      * The maximum scroll top value.
      */
     get _maxScrollTop() {
-      return this._estScrollHeight - this._viewportSize + this._scrollerPaddingTop;
+      return this._estScrollHeight - this._viewportHeight + this._scrollerPaddingTop;
     },
 
     /**
@@ -2718,7 +2753,14 @@ function quoteString(str) {
      * to a viewport of physical items above and below the user's viewport.
      */
     get _optPhysicalSize() {
-      return this._viewportSize * this._maxPages;
+      if (this.grid) {
+        return this._estRowsInView * this._rowHeight * this._maxPages;
+      }
+      return this._viewportHeight * this._maxPages;
+    },
+
+    get _optPhysicalCount() {
+      return this._estRowsInView * this._itemsPerRow * this._maxPages;
     },
 
    /**
@@ -2735,13 +2777,19 @@ function quoteString(str) {
      */
     get firstVisibleIndex() {
       if (this._firstVisibleIndexVal === null) {
-        var physicalOffset = this._physicalTop + this._scrollerPaddingTop;
+        var physicalOffset = Math.floor(this._physicalTop + this._scrollerPaddingTop);
 
         this._firstVisibleIndexVal = this._iterateItems(
           function(pidx, vidx) {
-            physicalOffset += this._physicalSizes[pidx];
+            physicalOffset += this._getPhysicalSizeIncrement(pidx);
+
             if (physicalOffset > this._scrollPosition) {
-              return vidx;
+              return this.grid ? vidx - (vidx % this._itemsPerRow) : vidx;
+            }
+
+            // Handle a partially rendered final row in grid mode
+            if (this.grid && this._virtualCount - 1 === vidx) {
+              return vidx - (vidx % this._itemsPerRow);
             }
           }) || 0;
       }
@@ -2755,21 +2803,42 @@ function quoteString(str) {
      */
     get lastVisibleIndex() {
       if (this._lastVisibleIndexVal === null) {
-        var physicalOffset = this._physicalTop;
+        if (this.grid) {
+          var lastIndex = this.firstVisibleIndex + this._estRowsInView * this._itemsPerRow - 1;
+          this._lastVisibleIndexVal = lastIndex > this._virtualCount ? this._virtualCount : lastIndex;
+        } else {
+          var physicalOffset = this._physicalTop;
 
-        this._iterateItems(function(pidx, vidx) {
-          physicalOffset += this._physicalSizes[pidx];
+          this._iterateItems(function(pidx, vidx) {
+            physicalOffset += this._getPhysicalSizeIncrement(pidx);
 
-          if (physicalOffset <= this._scrollBottom) {
-            this._lastVisibleIndexVal = vidx;
-          }
-        });
+            if(physicalOffset <= this._scrollBottom) {
+              if (this.grid) {
+                var lastIndex = vidx - vidx % this._itemsPerRow + this._itemsPerRow - 1;
+                this._lastVisibleIndexVal = lastIndex > this._virtualCount ? this._virtualCount : lastIndex;
+              } else {
+                this._lastVisibleIndexVal = vidx;
+              }
+            }
+          });
+        }
       }
       return this._lastVisibleIndexVal;
     },
 
     get _defaultScrollTarget() {
       return this;
+    },
+    get _virtualRowCount() {
+      return Math.ceil(this._virtualCount / this._itemsPerRow);
+    },
+
+    get _estRowsInView() {
+      return Math.ceil(this._viewportHeight / this._rowHeight);
+    },
+
+    get _physicalRows() {
+      return Math.ceil(this._physicalCount / this._itemsPerRow);
     },
 
     ready: function() {
@@ -2779,10 +2848,14 @@ function quoteString(str) {
     attached: function() {
       this.updateViewportBoundaries();
       this._render();
+      // `iron-resize` is fired when the list is attached if the event is added
+      // before attached causing unnecessary work.
+      this.listen(this, 'iron-resize', '_resizeHandler');
     },
 
     detached: function() {
       this._itemsRendered = false;
+      this.unlisten(this, 'iron-resize', '_resizeHandler');
     },
 
     /**
@@ -2803,7 +2876,10 @@ function quoteString(str) {
       this._scrollerPaddingTop = this.scrollTarget === this ? 0 :
           parseInt(window.getComputedStyle(this)['padding-top'], 10);
 
-      this._viewportSize = this._scrollTargetHeight;
+      this._viewportHeight = this._scrollTargetHeight;
+      if (this.grid) {
+        this._updateGridMetrics();
+      }
     },
 
     /**
@@ -2855,10 +2931,10 @@ function quoteString(str) {
             // ensure that these recycled tiles are needed
             virtualStart - recycledTiles > 0 &&
             // ensure that the tile is not visible
-            physicalBottom - this._physicalSizes[kth] > scrollBottom
+            physicalBottom - this._getPhysicalSizeIncrement(kth) > scrollBottom
         ) {
 
-          tileHeight = this._physicalSizes[kth];
+          tileHeight = this._getPhysicalSizeIncrement(kth);
           currentRatio += tileHeight / hiddenContentSize;
           physicalBottom -= tileHeight;
           recycledTileSet.push(kth);
@@ -2889,10 +2965,10 @@ function quoteString(str) {
             // ensure that these recycled tiles are needed
             virtualEnd + recycledTiles < lastVirtualItemIndex &&
             // ensure that the tile is not visible
-            this._physicalTop + this._physicalSizes[kth] < scrollTop
+            this._physicalTop + this._getPhysicalSizeIncrement(kth) < scrollTop
           ) {
 
-          tileHeight = this._physicalSizes[kth];
+          tileHeight = this._getPhysicalSizeIncrement(kth);
           currentRatio += tileHeight / hiddenContentSize;
 
           this._physicalTop += tileHeight;
@@ -2903,11 +2979,9 @@ function quoteString(str) {
       }
 
       if (recycledTiles === 0) {
-        // If the list ever reach this case, the physical average is not significant enough
-        // to create all the items needed to cover the entire viewport.
-        // e.g. A few items have a height that differs from the average by serveral order of magnitude.
+        // Try to increase the pool if the list's client height isn't filled up with physical items
         if (physicalBottom < scrollBottom || this._physicalTop > scrollTop) {
-          this.async(this._increasePool.bind(this, 1));
+          this._increasePoolIfNeeded();
         }
       } else {
         this._virtualStart = this._virtualStart + recycledTiles;
@@ -2931,7 +3005,8 @@ function quoteString(str) {
       // adjust offset after measuring
       if (movingUp) {
         while (movingUp.length) {
-          this._physicalTop -= this._physicalSizes[movingUp.pop()];
+          var idx = movingUp.pop();
+          this._physicalTop -= this._getPhysicalSizeIncrement(idx);
         }
       }
       // update the position of the items
@@ -2962,27 +3037,37 @@ function quoteString(str) {
 
     /**
      * Increases the pool of physical items only if needed.
-     * This function will allocate additional physical items
-     * if the physical size is shorter than `_optPhysicalSize`
+     *
+     * @return {boolean} True if the pool was increased.
      */
     _increasePoolIfNeeded: function() {
-      if (this._viewportSize === 0 || this._physicalSize >= this._optPhysicalSize) {
+      // Base case 1: the list has no height.
+      if (this._viewportHeight === 0) {
         return false;
       }
-      // 0 <= `currentPage` <= `_maxPages`
-      var currentPage = Math.floor(this._physicalSize / this._viewportSize);
+      // Base case 2: If the physical size is optimal and the list's client height is full
+      // with physical items, don't increase the pool.
+      var isClientHeightFull = this._physicalBottom >= this._scrollBottom && this._physicalTop <= this._scrollPosition;
+      if (this._physicalSize >= this._optPhysicalSize && isClientHeightFull) {
+        return false;
+      }
+      // this value should range between [0 <= `currentPage` <= `_maxPages`]
+      var currentPage = Math.floor(this._physicalSize / this._viewportHeight);
+
       if (currentPage === 0) {
         // fill the first page
         this._debounceTemplate(this._increasePool.bind(this, Math.round(this._physicalCount * 0.5)));
-      } else if (this._lastPage !== currentPage) {
+      } else if (this._lastPage !== currentPage && isClientHeightFull) {
         // paint the page and defer the next increase
         // wait 16ms which is rough enough to get paint cycle.
-        Polymer.dom.addDebouncer(this.debounce('_debounceTemplate', this._increasePool.bind(this, 1), 16));
+        Polymer.dom.addDebouncer(this.debounce('_debounceTemplate', this._increasePool.bind(this, this._itemsPerRow), 16));
       } else {
         // fill the rest of the pages
-        this._debounceTemplate(this._increasePool.bind(this, 1));
+        this._debounceTemplate(this._increasePool.bind(this, this._itemsPerRow));
       }
+
       this._lastPage = currentPage;
+
       return true;
     },
 
@@ -2993,7 +3078,7 @@ function quoteString(str) {
       var nextPhysicalCount = Math.min(
           this._physicalCount + missingItems,
           this._virtualCount - this._virtualStart,
-          MAX_PHYSICAL_COUNT
+          Math.max(this.maxPhysicalCount, DEFAULT_PHYSICAL_COUNT)
         );
       var prevPhysicalCount = this._physicalCount;
       var delta = nextPhysicalCount - prevPhysicalCount;
@@ -3028,7 +3113,6 @@ function quoteString(str) {
       if (this.isAttached && !this._itemsRendered && this._isVisible && requiresUpdate) {
         this._lastPage = 0;
         this._update();
-        this._scrollHandler();
         this._itemsRendered = true;
       }
     },
@@ -3123,7 +3207,7 @@ function quoteString(str) {
       if (!el) {
         return;
       }
-        
+
       inst = el._templateInstance;
 
       if (inst.__key__ !== key) {
@@ -3219,11 +3303,7 @@ function quoteString(str) {
       if (arguments.length === 2 && itemSet) {
         for (i = 0; i < itemSet.length; i++) {
           pidx = itemSet[i];
-          if (pidx >= this._physicalStart) {
-            vidx = this._virtualStart + (pidx - this._physicalStart);
-          } else {
-            vidx = this._virtualStart + (this._physicalCount - this._physicalStart) + pidx;
-          }
+          vidx = this._computeVidx(pidx);
           if ((rtn = fn.call(this, pidx, vidx)) != null) {
             return rtn;
           }
@@ -3243,6 +3323,19 @@ function quoteString(str) {
           }
         }
       }
+    },
+
+    /**
+     * Returns the virtual index for a given physical index
+     *
+     * @param {number} pidx Physical index
+     * @return {number}
+     */
+    _computeVidx: function(pidx) {
+      if (pidx >= this._physicalStart) {
+        return this._virtualStart + (pidx - this._physicalStart);
+      }
+      return this._virtualStart + (this._physicalCount - this._physicalStart) + pidx;
     },
 
     /**
@@ -3294,8 +3387,13 @@ function quoteString(str) {
 
       }, itemSet);
 
-      this._physicalSize = this._physicalSize + newPhysicalSize - oldPhysicalSize;
-      this._viewportSize = this._scrollTargetHeight;
+      this._viewportHeight = this._scrollTargetHeight;
+      if (this.grid) {
+        this._updateGridMetrics();
+        this._physicalSize = Math.ceil(this._physicalCount / this._itemsPerRow) * this._rowHeight;
+      } else {
+        this._physicalSize = this._physicalSize + newPhysicalSize - oldPhysicalSize;
+      }
 
       // update the average if we measured something
       if (this._physicalAverageCount !== prevAvgCount) {
@@ -3303,6 +3401,16 @@ function quoteString(str) {
             ((prevPhysicalAvg * prevAvgCount) + newPhysicalSize) /
             this._physicalAverageCount);
       }
+    },
+
+    _updateGridMetrics: function() {
+      this._viewportWidth = this._scrollTargetWidth;
+      // Set item width to the value of the _physicalItems offsetWidth
+      this._itemWidth = this._physicalCount > 0 ? this._physicalItems[0].offsetWidth : DEFAULT_GRID_SIZE;
+      // Set row height to the value of the _physicalItems offsetHeight
+      this._rowHeight = this._physicalCount > 0 ? this._physicalItems[0].offsetHeight : DEFAULT_GRID_SIZE;
+      // If in grid mode compute how many items with exist in each row
+      this._itemsPerRow = this._itemWidth ? Math.floor(this._viewportWidth / this._itemWidth) : this._itemsPerRow;
     },
 
     /**
@@ -3313,10 +3421,52 @@ function quoteString(str) {
 
       var y = this._physicalTop;
 
-      this._iterateItems(function(pidx) {
-        this.translate3d(0, y + 'px', 0, this._physicalItems[pidx]);
-        y += this._physicalSizes[pidx];
-      });
+      if (this.grid) {
+        var totalItemWidth = this._itemsPerRow * this._itemWidth;
+        var rowOffset = (this._viewportWidth - totalItemWidth) / 2;
+
+        this._iterateItems(function(pidx, vidx) {
+
+          var modulus = vidx % this._itemsPerRow;
+          var x = Math.floor((modulus * this._itemWidth) + rowOffset);
+
+          this.translate3d(x + 'px', y + 'px', 0, this._physicalItems[pidx]);
+
+          if (this._shouldRenderNextRow(vidx)) {
+            y += this._rowHeight;
+          }
+
+        });
+      } else {
+        this._iterateItems(function(pidx, vidx) {
+
+          this.translate3d(0, y + 'px', 0, this._physicalItems[pidx]);
+          y += this._physicalSizes[pidx];
+
+        });
+      }
+    },
+
+    _getPhysicalSizeIncrement: function(pidx) {
+      if (!this.grid) {
+        return this._physicalSizes[pidx];
+      }
+      if (this._computeVidx(pidx) % this._itemsPerRow !== this._itemsPerRow - 1) {
+        return 0;
+      }
+      return this._rowHeight;
+    },
+
+    /**
+     * Returns, based on the current index,
+     * whether or not the next index will need
+     * to be rendered on a new row.
+     *
+     * @param {number} vidx Virtual index
+     * @return {boolean}
+     */
+    _shouldRenderNextRow: function(vidx) {
+      return vidx % this._itemsPerRow === this._itemsPerRow - 1;
     },
 
     /**
@@ -3351,11 +3501,16 @@ function quoteString(str) {
      * @param {boolean=} forceUpdate If true, updates the height no matter what.
      */
     _updateScrollerSize: function(forceUpdate) {
-      this._estScrollHeight = (this._physicalBottom +
-          Math.max(this._virtualCount - this._physicalCount - this._virtualStart, 0) * this._physicalAverage);
+      if (this.grid) {
+        this._estScrollHeight = this._virtualRowCount * this._rowHeight;
+      } else {
+        this._estScrollHeight = (this._physicalBottom +
+            Math.max(this._virtualCount - this._physicalCount - this._virtualStart, 0) * this._physicalAverage);
+      }
 
       forceUpdate = forceUpdate || this._scrollHeight === 0;
       forceUpdate = forceUpdate || this._scrollPosition >= this._estScrollHeight - this._physicalSize;
+      forceUpdate = forceUpdate || this.grid && this.$.items.style.height < this._estScrollHeight;
 
       // amortize height adjustment, so it won't trigger repaints very often
       if (forceUpdate || Math.abs(this._estScrollHeight - this._scrollHeight) >= this._optPhysicalSize) {
@@ -3380,7 +3535,7 @@ function quoteString(str) {
       idx = Math.min(Math.max(idx, 0), this._virtualCount-1);
       // update the virtual start only when needed
       if (!this._isIndexRendered(idx) || idx >= this._maxVirtualStart) {
-        this._virtualStart = idx - 1;
+        this._virtualStart = this.grid ? (idx - this._itemsPerRow * 2) : (idx - 1);
       }
       // manage focus
       this._manageFocus();
@@ -3388,8 +3543,10 @@ function quoteString(str) {
       this._assignModels();
       // measure the new sizes
       this._updateMetrics();
+
       // estimate new physical offset
-      this._physicalTop = this._virtualStart * this._physicalAverage;
+      var estPhysicalTop = Math.floor(this._virtualStart / this._itemsPerRow)  * this._physicalAverage;
+      this._physicalTop = estPhysicalTop;
 
       var currentTopItem = this._physicalStart;
       var currentVirtualItem = this._virtualStart;
@@ -3397,8 +3554,8 @@ function quoteString(str) {
       var hiddenContentSize = this._hiddenContentSize;
 
       // scroll to the item as much as we can
-      while (currentVirtualItem < idx && targetOffsetTop < hiddenContentSize) {
-        targetOffsetTop = targetOffsetTop + this._physicalSizes[currentTopItem];
+      while (currentVirtualItem < idx && targetOffsetTop <= hiddenContentSize) {
+        targetOffsetTop = targetOffsetTop + this._getPhysicalSizeIncrement(currentTopItem);
         currentTopItem = (currentTopItem + 1) % this._physicalCount;
         currentVirtualItem++;
       }
@@ -3407,7 +3564,7 @@ function quoteString(str) {
       // update the position of the items
       this._positionItems();
       // set the new scroll position
-      this._resetScrollPosition(this._physicalTop + this._scrollerPaddingTop + targetOffsetTop + 1);
+      this._resetScrollPosition(this._physicalTop + this._scrollerPaddingTop + targetOffsetTop);
       // increase the pool of physical items if needed
       this._increasePoolIfNeeded();
       // clear cached visible index
@@ -3429,17 +3586,21 @@ function quoteString(str) {
      */
     _resizeHandler: function() {
       // iOS fires the resize event when the address bar slides up
-      if (IOS && Math.abs(this._viewportSize - this._scrollTargetHeight) < 100) {
+      if (IOS && Math.abs(this._viewportHeight - this._scrollTargetHeight) < 100) {
         return;
       }
-      this._debounceTemplate(function() {
+      // In Desktop Safari 9.0.3, if the scroll bars are always shown,
+      // changing the scroll position from a resize handler would result in
+      // the scroll position being reset. Waiting 1ms fixes the issue.
+      Polymer.dom.addDebouncer(this.debounce('_debounceTemplate', function() {
+        this.updateViewportBoundaries();
         this._render();
+
         if (this._itemsRendered && this._physicalItems && this._isVisible) {
           this._resetAverage();
-          this.updateViewportBoundaries();
           this.scrollToIndex(this.firstVisibleIndex);
         }
-      });
+      }.bind(this), 1));
     },
 
     _getModelFromItem: function(item) {
@@ -3750,7 +3911,9 @@ function quoteString(str) {
       this._focusPhysicalItem(this._focusedIndex - 1);
     },
 
-    _didMoveDown: function() {
+    _didMoveDown: function(e) {
+      // disable scroll when pressing the down key
+      e.detail.keyboardEvent.preventDefault();
       this._focusPhysicalItem(this._focusedIndex + 1);
     },
 
@@ -3761,78 +3924,6 @@ function quoteString(str) {
   });
 
 })();
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-
-/**
- * @fileoverview Assertion support.
- */
-
-/**
- * Verify |condition| is truthy and return |condition| if so.
- * @template T
- * @param {T} condition A condition to check for truthiness.  Note that this
- *     may be used to test whether a value is defined or not, and we don't want
- *     to force a cast to Boolean.
- * @param {string=} opt_message A message to show on failure.
- * @return {T} A non-null |condition|.
- */
-function assert(condition, opt_message) {
-  if (!condition) {
-    var message = 'Assertion failed';
-    if (opt_message)
-      message = message + ': ' + opt_message;
-    var error = new Error(message);
-    var global = function() { return this; }();
-    if (global.traceAssertionsForTesting)
-      console.warn(error.stack);
-    throw error;
-  }
-  return condition;
-}
-
-/**
- * Call this from places in the code that should never be reached.
- *
- * For example, handling all the values of enum with a switch() like this:
- *
- *   function getValueFromEnum(enum) {
- *     switch (enum) {
- *       case ENUM_FIRST_OF_TWO:
- *         return first
- *       case ENUM_LAST_OF_TWO:
- *         return last;
- *     }
- *     assertNotReached();
- *     return document;
- *   }
- *
- * This code should only be hit in the case of serious programmer error or
- * unexpected input.
- *
- * @param {string=} opt_message A message to show when this is hit.
- */
-function assertNotReached(opt_message) {
-  assert(false, opt_message || 'Unreachable code hit');
-}
-
-/**
- * @param {*} value The value to check.
- * @param {function(new: T, ...)} type A user-defined constructor.
- * @param {string=} opt_message A message to show when this is hit.
- * @return {T}
- * @template T
- */
-function assertInstanceof(value, type, opt_message) {
-  // We don't use assert immediately here so that we avoid constructing an error
-  // message if we don't have to.
-  if (!(value instanceof type)) {
-    assertNotReached(opt_message || 'Value ' + value +
-                     ' is not a[n] ' + (type.name || typeof type));
-  }
-  return value;
-};
 // Copyright 2015 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
@@ -4492,185 +4583,6 @@ Polymer({
 
     });
 /**
-   * The `iron-iconset-svg` element allows users to define their own icon sets
-   * that contain svg icons. The svg icon elements should be children of the
-   * `iron-iconset-svg` element. Multiple icons should be given distinct id's.
-   *
-   * Using svg elements to create icons has a few advantages over traditional
-   * bitmap graphics like jpg or png. Icons that use svg are vector based so
-   * they are resolution independent and should look good on any device. They
-   * are stylable via css. Icons can be themed, colorized, and even animated.
-   *
-   * Example:
-   *
-   *     <iron-iconset-svg name="my-svg-icons" size="24">
-   *       <svg>
-   *         <defs>
-   *           <g id="shape">
-   *             <rect x="12" y="0" width="12" height="24" />
-   *             <circle cx="12" cy="12" r="12" />
-   *           </g>
-   *         </defs>
-   *       </svg>
-   *     </iron-iconset-svg>
-   *
-   * This will automatically register the icon set "my-svg-icons" to the iconset
-   * database.  To use these icons from within another element, make a
-   * `iron-iconset` element and call the `byId` method
-   * to retrieve a given iconset. To apply a particular icon inside an
-   * element use the `applyIcon` method. For example:
-   *
-   *     iconset.applyIcon(iconNode, 'car');
-   *
-   * @element iron-iconset-svg
-   * @demo demo/index.html
-   * @implements {Polymer.Iconset}
-   */
-  Polymer({
-    is: 'iron-iconset-svg',
-
-    properties: {
-
-      /**
-       * The name of the iconset.
-       */
-      name: {
-        type: String,
-        observer: '_nameChanged'
-      },
-
-      /**
-       * The size of an individual icon. Note that icons must be square.
-       */
-      size: {
-        type: Number,
-        value: 24
-      }
-
-    },
-
-    attached: function() {
-      this.style.display = 'none';
-    },
-
-    /**
-     * Construct an array of all icon names in this iconset.
-     *
-     * @return {!Array} Array of icon names.
-     */
-    getIconNames: function() {
-      this._icons = this._createIconMap();
-      return Object.keys(this._icons).map(function(n) {
-        return this.name + ':' + n;
-      }, this);
-    },
-
-    /**
-     * Applies an icon to the given element.
-     *
-     * An svg icon is prepended to the element's shadowRoot if it exists,
-     * otherwise to the element itself.
-     *
-     * @method applyIcon
-     * @param {Element} element Element to which the icon is applied.
-     * @param {string} iconName Name of the icon to apply.
-     * @return {?Element} The svg element which renders the icon.
-     */
-    applyIcon: function(element, iconName) {
-      // insert svg element into shadow root, if it exists
-      element = element.root || element;
-      // Remove old svg element
-      this.removeIcon(element);
-      // install new svg element
-      var svg = this._cloneIcon(iconName);
-      if (svg) {
-        var pde = Polymer.dom(element);
-        pde.insertBefore(svg, pde.childNodes[0]);
-        return element._svgIcon = svg;
-      }
-      return null;
-    },
-
-    /**
-     * Remove an icon from the given element by undoing the changes effected
-     * by `applyIcon`.
-     *
-     * @param {Element} element The element from which the icon is removed.
-     */
-    removeIcon: function(element) {
-      // Remove old svg element
-      if (element._svgIcon) {
-        Polymer.dom(element).removeChild(element._svgIcon);
-        element._svgIcon = null;
-      }
-    },
-
-    /**
-     *
-     * When name is changed, register iconset metadata
-     *
-     */
-    _nameChanged: function() {
-      new Polymer.IronMeta({type: 'iconset', key: this.name, value: this});
-      this.async(function() {
-        this.fire('iron-iconset-added', this, {node: window});
-      });
-    },
-
-    /**
-     * Create a map of child SVG elements by id.
-     *
-     * @return {!Object} Map of id's to SVG elements.
-     */
-    _createIconMap: function() {
-      // Objects chained to Object.prototype (`{}`) have members. Specifically,
-      // on FF there is a `watch` method that confuses the icon map, so we
-      // need to use a null-based object here.
-      var icons = Object.create(null);
-      Polymer.dom(this).querySelectorAll('[id]')
-        .forEach(function(icon) {
-          icons[icon.id] = icon;
-        });
-      return icons;
-    },
-
-    /**
-     * Produce installable clone of the SVG element matching `id` in this
-     * iconset, or `undefined` if there is no matching element.
-     *
-     * @return {Element} Returns an installable clone of the SVG element
-     * matching `id`.
-     */
-    _cloneIcon: function(id) {
-      // create the icon map on-demand, since the iconset itself has no discrete
-      // signal to know when it's children are fully parsed
-      this._icons = this._icons || this._createIconMap();
-      return this._prepareSvgClone(this._icons[id], this.size);
-    },
-
-    /**
-     * @param {Element} sourceSvg
-     * @param {number} size
-     * @return {Element}
-     */
-    _prepareSvgClone: function(sourceSvg, size) {
-      if (sourceSvg) {
-        var content = sourceSvg.cloneNode(true),
-            svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'),
-            viewBox = content.getAttribute('viewBox') || '0 0 ' + size + ' ' + size;
-        svg.setAttribute('viewBox', viewBox);
-        svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-        // TODO(dfreedm): `pointer-events: none` works around https://crbug.com/370136
-        // TODO(sjmiles): inline style may not be ideal, but avoids requiring a shadow-root
-        svg.style.cssText = 'pointer-events: none; display: block; width: 100%; height: 100%;';
-        svg.appendChild(content).removeAttribute('id');
-        return svg;
-      }
-      return null;
-    }
-
-  });
-/**
    * @demo demo/index.html
    * @polymerBehavior
    */
@@ -4731,12 +4643,15 @@ Polymer({
 
       if (event.target === this) {
         this._setFocused(event.type === 'focus');
-      } else if (!this.shadowRoot && !this.isLightDescendant(event.target)) {
-        this.fire(event.type, {sourceEvent: event}, {
-          node: this,
-          bubbles: event.bubbles,
-          cancelable: event.cancelable
-        });
+      } else if (!this.shadowRoot) {
+        var target = /** @type {Node} */(Polymer.dom(event).localTarget);
+        if (!this.isLightDescendant(target)) {
+          this.fire(event.type, {sourceEvent: event}, {
+            node: this,
+            bubbles: event.bubbles,
+            cancelable: event.cancelable
+          });
+        }
       }
     },
 
@@ -4745,7 +4660,7 @@ Polymer({
       this.style.pointerEvents = disabled ? 'none' : '';
       if (disabled) {
         this._oldTabIndex = this.tabIndex;
-        this.focused = false;
+        this._setFocused(false);
         this.tabIndex = -1;
         this.blur();
       } else if (this._oldTabIndex !== undefined) {
@@ -6064,6 +5979,185 @@ Polymer({
       return secondaryRatio === 0;
     }
   });
+/**
+   * The `iron-iconset-svg` element allows users to define their own icon sets
+   * that contain svg icons. The svg icon elements should be children of the
+   * `iron-iconset-svg` element. Multiple icons should be given distinct id's.
+   *
+   * Using svg elements to create icons has a few advantages over traditional
+   * bitmap graphics like jpg or png. Icons that use svg are vector based so
+   * they are resolution independent and should look good on any device. They
+   * are stylable via css. Icons can be themed, colorized, and even animated.
+   *
+   * Example:
+   *
+   *     <iron-iconset-svg name="my-svg-icons" size="24">
+   *       <svg>
+   *         <defs>
+   *           <g id="shape">
+   *             <rect x="12" y="0" width="12" height="24" />
+   *             <circle cx="12" cy="12" r="12" />
+   *           </g>
+   *         </defs>
+   *       </svg>
+   *     </iron-iconset-svg>
+   *
+   * This will automatically register the icon set "my-svg-icons" to the iconset
+   * database.  To use these icons from within another element, make a
+   * `iron-iconset` element and call the `byId` method
+   * to retrieve a given iconset. To apply a particular icon inside an
+   * element use the `applyIcon` method. For example:
+   *
+   *     iconset.applyIcon(iconNode, 'car');
+   *
+   * @element iron-iconset-svg
+   * @demo demo/index.html
+   * @implements {Polymer.Iconset}
+   */
+  Polymer({
+    is: 'iron-iconset-svg',
+
+    properties: {
+
+      /**
+       * The name of the iconset.
+       */
+      name: {
+        type: String,
+        observer: '_nameChanged'
+      },
+
+      /**
+       * The size of an individual icon. Note that icons must be square.
+       */
+      size: {
+        type: Number,
+        value: 24
+      }
+
+    },
+
+    attached: function() {
+      this.style.display = 'none';
+    },
+
+    /**
+     * Construct an array of all icon names in this iconset.
+     *
+     * @return {!Array} Array of icon names.
+     */
+    getIconNames: function() {
+      this._icons = this._createIconMap();
+      return Object.keys(this._icons).map(function(n) {
+        return this.name + ':' + n;
+      }, this);
+    },
+
+    /**
+     * Applies an icon to the given element.
+     *
+     * An svg icon is prepended to the element's shadowRoot if it exists,
+     * otherwise to the element itself.
+     *
+     * @method applyIcon
+     * @param {Element} element Element to which the icon is applied.
+     * @param {string} iconName Name of the icon to apply.
+     * @return {?Element} The svg element which renders the icon.
+     */
+    applyIcon: function(element, iconName) {
+      // insert svg element into shadow root, if it exists
+      element = element.root || element;
+      // Remove old svg element
+      this.removeIcon(element);
+      // install new svg element
+      var svg = this._cloneIcon(iconName);
+      if (svg) {
+        var pde = Polymer.dom(element);
+        pde.insertBefore(svg, pde.childNodes[0]);
+        return element._svgIcon = svg;
+      }
+      return null;
+    },
+
+    /**
+     * Remove an icon from the given element by undoing the changes effected
+     * by `applyIcon`.
+     *
+     * @param {Element} element The element from which the icon is removed.
+     */
+    removeIcon: function(element) {
+      // Remove old svg element
+      if (element._svgIcon) {
+        Polymer.dom(element).removeChild(element._svgIcon);
+        element._svgIcon = null;
+      }
+    },
+
+    /**
+     *
+     * When name is changed, register iconset metadata
+     *
+     */
+    _nameChanged: function() {
+      new Polymer.IronMeta({type: 'iconset', key: this.name, value: this});
+      this.async(function() {
+        this.fire('iron-iconset-added', this, {node: window});
+      });
+    },
+
+    /**
+     * Create a map of child SVG elements by id.
+     *
+     * @return {!Object} Map of id's to SVG elements.
+     */
+    _createIconMap: function() {
+      // Objects chained to Object.prototype (`{}`) have members. Specifically,
+      // on FF there is a `watch` method that confuses the icon map, so we
+      // need to use a null-based object here.
+      var icons = Object.create(null);
+      Polymer.dom(this).querySelectorAll('[id]')
+        .forEach(function(icon) {
+          icons[icon.id] = icon;
+        });
+      return icons;
+    },
+
+    /**
+     * Produce installable clone of the SVG element matching `id` in this
+     * iconset, or `undefined` if there is no matching element.
+     *
+     * @return {Element} Returns an installable clone of the SVG element
+     * matching `id`.
+     */
+    _cloneIcon: function(id) {
+      // create the icon map on-demand, since the iconset itself has no discrete
+      // signal to know when it's children are fully parsed
+      this._icons = this._icons || this._createIconMap();
+      return this._prepareSvgClone(this._icons[id], this.size);
+    },
+
+    /**
+     * @param {Element} sourceSvg
+     * @param {number} size
+     * @return {Element}
+     */
+    _prepareSvgClone: function(sourceSvg, size) {
+      if (sourceSvg) {
+        var content = sourceSvg.cloneNode(true),
+            svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'),
+            viewBox = content.getAttribute('viewBox') || '0 0 ' + size + ' ' + size;
+        svg.setAttribute('viewBox', viewBox);
+        svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+        // TODO(dfreedm): `pointer-events: none` works around https://crbug.com/370136
+        // TODO(sjmiles): inline style may not be ideal, but avoids requiring a shadow-root
+        svg.style.cssText = 'pointer-events: none; display: block; width: 100%; height: 100%;';
+        svg.appendChild(content).removeAttribute('id');
+        return svg;
+      }
+      return null;
+    }
+
+  });
 // Copyright 2015 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
@@ -6101,23 +6195,6 @@ cr.define('downloads', function() {
         computed: 'computeControlledBy_(data.by_ext_id, data.by_ext_name)',
         type: String,
         value: '',
-      },
-
-      i18n_: {
-        readOnly: true,
-        type: Object,
-        value: function() {
-          return {
-            cancel: loadTimeData.getString('controlCancel'),
-            discard: loadTimeData.getString('dangerDiscard'),
-            pause: loadTimeData.getString('controlPause'),
-            remove: loadTimeData.getString('controlRemoveFromList'),
-            resume: loadTimeData.getString('controlResume'),
-            restore: loadTimeData.getString('dangerRestore'),
-            retry: loadTimeData.getString('controlRetry'),
-            save: loadTimeData.getString('dangerSave'),
-          };
-        },
       },
 
       isActive_: {
@@ -6162,7 +6239,7 @@ cr.define('downloads', function() {
       // TODO(dbeam): this gets called way more when I observe data.by_ext_id
       // and data.by_ext_name directly. Why?
       'observeControlledBy_(controlledBy_)',
-      'observeIsDangerous_(isDangerous_, data.file_path)',
+      'observeIsDangerous_(isDangerous_, data)',
     ],
 
     ready: function() {
@@ -6212,9 +6289,9 @@ cr.define('downloads', function() {
         case downloads.DangerType.DANGEROUS_URL:
         case downloads.DangerType.POTENTIALLY_UNWANTED:
         case downloads.DangerType.UNCOMMON_CONTENT:
-          return 'remove-circle';
+          return 'downloads:remove-circle';
         default:
-          return 'warning';
+          return 'cr:warning';
       }
     },
 
@@ -6329,7 +6406,13 @@ cr.define('downloads', function() {
 
     /** @private */
     observeIsDangerous_: function() {
-      if (this.data && !this.isDangerous_) {
+      if (!this.data)
+        return;
+
+      if (this.isDangerous_) {
+        this.$.url.removeAttribute('href');
+      } else {
+        this.$.url.href = assert(this.data.url);
         var filePath = encodeURIComponent(this.data.file_path);
         var scaleFactor = '?scale=' + window.devicePixelRatio + 'x';
         this.$['file-icon'].src = 'chrome://fileicon/' + filePath + scaleFactor;
@@ -6557,8 +6640,14 @@ Polymer({
     properties: {
 
       /**
-       * If you want to use the attribute value of an element for `selected` instead of the index,
-       * set this to the name of the attribute.
+       * If you want to use an attribute value or property of an element for
+       * `selected` instead of the index, set this to the name of the attribute
+       * or property. Hyphenated values are converted to camel case when used to
+       * look up the property of a selectable element. Camel cased values are
+       * *not* converted to hyphenated values for attribute lookup. It's
+       * recommended that you provide the hyphenated form of the name so that
+       * selection works in both cases. (Use `attr-or-property-name` instead of
+       * `attrOrPropertyName`.)
        */
       attrForSelected: {
         type: String,
@@ -6619,6 +6708,15 @@ Polymer({
       },
 
       /**
+       * Default fallback if the selection based on selected with `attrForSelected`
+       * is not found.
+       */
+      fallbackSelection: {
+        type: String,
+        value: null
+      },
+
+      /**
        * The list of items from which a selection can be made.
        */
       items: {
@@ -6648,7 +6746,8 @@ Polymer({
 
     observers: [
       '_updateAttrForSelected(attrForSelected)',
-      '_updateSelected(selected)'
+      '_updateSelected(selected)',
+      '_checkFallback(fallbackSelection)'
     ],
 
     created: function() {
@@ -6715,6 +6814,15 @@ Polymer({
     },
 
     /**
+     * Selects the item at the given index.
+     *
+     * @method selectIndex
+     */
+    selectIndex: function(index) {
+      this.select(this._indexToValue(index));
+    },
+
+    /**
      * Force a synchronous update of the `items` property.
      *
      * NOTE: Consider listening for the `iron-items-changed` event to respond to
@@ -6732,6 +6840,12 @@ Polymer({
 
     get _shouldUpdateSelection() {
       return this.selected != null;
+    },
+
+    _checkFallback: function() {
+      if (this._shouldUpdateSelection) {
+        this._updateSelected();
+      }
     },
 
     _addListener: function(eventName) {
@@ -6755,7 +6869,7 @@ Polymer({
 
     _updateAttrForSelected: function() {
       if (this._shouldUpdateSelection) {
-        this.selected = this._indexToValue(this.indexOf(this.selectedItem));        
+        this.selected = this._indexToValue(this.indexOf(this.selectedItem));
       }
     },
 
@@ -6765,6 +6879,11 @@ Polymer({
 
     _selectSelected: function(selected) {
       this._selection.select(this._valueToItem(this.selected));
+      // Check for items, since this array is populated only when attached
+      // Since Number(0) is falsy, explicitly check for undefined
+      if (this.fallbackSelection && this.items.length && (this._selection.get() === undefined)) {
+        this.selected = this.fallbackSelection;
+      }
     },
 
     _filterItem: function(node) {
@@ -6799,7 +6918,7 @@ Polymer({
     },
 
     _valueForItem: function(item) {
-      var propValue = item[this.attrForSelected];
+      var propValue = item[Polymer.CaseMap.dashToCamelCase(this.attrForSelected)];
       return propValue != undefined ? propValue : item.getAttribute(this.attrForSelected);
     },
 
@@ -6892,7 +7011,7 @@ Polymer({
     },
 
     observers: [
-      '_updateSelected(selectedValues)'
+      '_updateSelected(selectedValues.splices)'
     ],
 
     /**
@@ -6928,7 +7047,7 @@ Polymer({
         Polymer.IronSelectableBehavior._updateAttrForSelected.apply(this);
       } else if (this._shouldUpdateSelection) {
         this.selectedValues = this.selectedItems.map(function(selectedItem) {
-          return this._indexToValue(this.indexOf(selectedItem));        
+          return this._indexToValue(this.indexOf(selectedItem));
         }, this).filter(function(unfilteredValue) {
           return unfilteredValue != null;
         }, this);
@@ -6951,6 +7070,13 @@ Polymer({
         // select only those not selected yet
         for (var i = 0; i < selectedItems.length; i++) {
           this._selection.setItemSelected(selectedItems[i], true);
+        }
+        // Check for items, since this array is populated only when attached
+        if (this.fallbackSelection && this.items.length && !this._selection.get().length) {
+          var fallback = this._valueToItem(this.fallbackSelection);
+          if (fallback) {
+            this.selectedValues = [this.fallbackSelection];
+          }
         }
       } else {
         this._selection.clear();
@@ -6975,7 +7101,6 @@ Polymer({
       } else {
         this.splice('selectedValues',i,1);
       }
-      this._selection.setItemSelected(this._valueToItem(value), unselected);
     },
 
     _valuesToItems: function(values) {
@@ -7053,6 +7178,8 @@ Polymer({
      * @param {string|number} value the value to select.
      */
     select: function(value) {
+      // Cancel automatically focusing a default item if the menu received focus
+      // through a user action selecting a particular item.
       if (this._defaultFocusAsync) {
         this.cancelAsync(this._defaultFocusAsync);
         this._defaultFocusAsync = null;
@@ -7102,7 +7229,8 @@ Polymer({
         var attr = this.attrForItemTitle || 'textContent';
         var title = item[attr] || item.getAttribute(attr);
 
-        if (title && title.trim().charAt(0).toLowerCase() === String.fromCharCode(event.keyCode).toLowerCase()) {
+        if (!item.hasAttribute('disabled') && title && 
+            title.trim().charAt(0).toLowerCase() === String.fromCharCode(event.keyCode).toLowerCase()) {
           this._setFocusedItem(item);
           break;
         }
@@ -7111,21 +7239,34 @@ Polymer({
 
     /**
      * Focuses the previous item (relative to the currently focused item) in the
-     * menu.
+     * menu, disabled items will be skipped.
      */
     _focusPrevious: function() {
       var length = this.items.length;
-      var index = (Number(this.indexOf(this.focusedItem)) - 1 + length) % length;
-      this._setFocusedItem(this.items[index]);
+      var curFocusIndex = Number(this.indexOf(this.focusedItem));
+      for (var i = 1; i < length; i++) {
+        var item = this.items[(curFocusIndex - i + length) % length];
+        if (!item.hasAttribute('disabled')) {
+          this._setFocusedItem(item);
+          return;
+        }
+      }
     },
 
     /**
      * Focuses the next item (relative to the currently focused item) in the
-     * menu.
+     * menu, disabled items will be skipped.
      */
     _focusNext: function() {
-      var index = (Number(this.indexOf(this.focusedItem)) + 1) % this.items.length;
-      this._setFocusedItem(this.items[index]);
+      var length = this.items.length;
+      var curFocusIndex = Number(this.indexOf(this.focusedItem));
+      for (var i = 1; i < length; i++) {
+        var item = this.items[(curFocusIndex + i) % length];
+        if (!item.hasAttribute('disabled')) {
+          this._setFocusedItem(item);
+          return;
+        }
+      }
     },
 
     /**
@@ -7223,8 +7364,6 @@ Polymer({
         return;
       }
 
-      this.blur();
-
       // clear the cached focus item
       this._defaultFocusAsync = this.async(function() {
         // focus the selected item when the menu receives focus, or the first item
@@ -7235,11 +7374,11 @@ Polymer({
 
         if (selectedItem) {
           this._setFocusedItem(selectedItem);
-        } else {
-          this._setFocusedItem(this.items[0]);
+        } else if (this.items[0]) {
+          // We find the first none-disabled item (if one exists)
+          this._focusNext();
         }
-      // async 1ms to wait for `select` to get called from `_itemActivate`
-      }, 1);
+      });
     },
 
     /**
@@ -7311,7 +7450,7 @@ Polymer({
       });
     })();
 /**
-Polymer.IronFitBehavior fits an element in another element using `max-height` and `max-width`, and
+`Polymer.IronFitBehavior` fits an element in another element using `max-height` and `max-width`, and
 optionally centers it in the window or another element.
 
 The element will only be sized and/or positioned if it has not already been sized and/or positioned
@@ -7322,8 +7461,25 @@ CSS properties               | Action
 `position` set               | Element is not centered horizontally or vertically
 `top` or `bottom` set        | Element is not vertically centered
 `left` or `right` set        | Element is not horizontally centered
-`max-height` or `height` set | Element respects `max-height` or `height`
-`max-width` or `width` set   | Element respects `max-width` or `width`
+`max-height` set             | Element respects `max-height`
+`max-width` set              | Element respects `max-width`
+
+`Polymer.IronFitBehavior` can position an element into another element using
+`verticalAlign` and `horizontalAlign`. This will override the element's css position.
+
+      <div class="container">
+        <iron-fit-impl vertical-align="top" horizontal-align="auto">
+          Positioned into the container
+        </iron-fit-impl>
+      </div>
+
+Use `noOverlap` to position the element around another element without overlapping it.
+
+      <div class="container">
+        <iron-fit-impl no-overlap vertical-align="auto" horizontal-align="auto">
+          Positioned around the container
+        </iron-fit-impl>
+      </div>
 
 @demo demo/index.html
 @polymerBehavior
@@ -7355,6 +7511,66 @@ CSS properties               | Action
       },
 
       /**
+       * Will position the element around the positionTarget without overlapping it.
+       */
+      noOverlap: {
+        type: Boolean
+      },
+
+      /**
+       * The element that should be used to position the element. If not set, it will
+       * default to the parent node.
+       * @type {!Element}
+       */
+      positionTarget: {
+        type: Element
+      },
+
+      /**
+       * The orientation against which to align the element horizontally
+       * relative to the `positionTarget`. Possible values are "left", "right", "auto".
+       */
+      horizontalAlign: {
+        type: String
+      },
+
+      /**
+       * The orientation against which to align the element vertically
+       * relative to the `positionTarget`. Possible values are "top", "bottom", "auto".
+       */
+      verticalAlign: {
+        type: String
+      },
+
+      /**
+       * If true, it will use `horizontalAlign` and `verticalAlign` values as preferred alignment
+       * and if there's not enough space, it will pick the values which minimize the cropping.
+       */
+      dynamicAlign: {
+        type: Boolean
+      },
+
+      /**
+       * The same as setting margin-left and margin-right css properties.
+       * @deprecated
+       */
+      horizontalOffset: {
+        type: Number,
+        value: 0,
+        notify: true
+      },
+
+      /**
+       * The same as setting margin-top and margin-bottom css properties.
+       * @deprecated
+       */
+      verticalOffset: {
+        type: Number,
+        value: 0,
+        notify: true
+      },
+
+      /**
        * Set to true to auto-fit on attach.
        */
       autoFitOnAttach: {
@@ -7366,7 +7582,6 @@ CSS properties               | Action
       _fitInfo: {
         type: Object
       }
-
     },
 
     get _fitWidth() {
@@ -7409,7 +7624,40 @@ CSS properties               | Action
       return fitTop;
     },
 
+    /**
+     * The element that should be used to position the element,
+     * if no position target is configured.
+     */
+    get _defaultPositionTarget() {
+      var parent = Polymer.dom(this).parentNode;
+
+      if (parent && parent.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+        parent = parent.host;
+      }
+
+      return parent;
+    },
+
+    /**
+     * The horizontal align value, accounting for the RTL/LTR text direction.
+     */
+    get _localeHorizontalAlign() {
+      if (this._isRTL) {
+        // In RTL, "left" becomes "right".
+        if (this.horizontalAlign === 'right') {
+          return 'left';
+        }
+        if (this.horizontalAlign === 'left') {
+          return 'right';
+        }
+      }
+      return this.horizontalAlign;
+    },
+
     attached: function() {
+      // Memoize this to avoid expensive calculations & relayouts.
+      this._isRTL = window.getComputedStyle(this).direction == 'rtl';
+      this.positionTarget = this.positionTarget || this._defaultPositionTarget;
       if (this.autoFitOnAttach) {
         if (window.getComputedStyle(this).display === 'none') {
           setTimeout(function() {
@@ -7422,10 +7670,11 @@ CSS properties               | Action
     },
 
     /**
-     * Fits and optionally centers the element into the window, or `fitInfo` if specified.
+     * Positions and fits the element into the `fitInto` element.
      */
     fit: function() {
       this._discoverInfo();
+      this.position();
       this.constrain();
       this.center();
     },
@@ -7439,21 +7688,29 @@ CSS properties               | Action
       }
       var target = window.getComputedStyle(this);
       var sizer = window.getComputedStyle(this.sizingTarget);
+
       this._fitInfo = {
         inlineStyle: {
           top: this.style.top || '',
-          left: this.style.left || ''
+          left: this.style.left || '',
+          position: this.style.position || ''
+        },
+        sizerInlineStyle: {
+          maxWidth: this.sizingTarget.style.maxWidth || '',
+          maxHeight: this.sizingTarget.style.maxHeight || '',
+          boxSizing: this.sizingTarget.style.boxSizing || ''
         },
         positionedBy: {
           vertically: target.top !== 'auto' ? 'top' : (target.bottom !== 'auto' ?
             'bottom' : null),
           horizontally: target.left !== 'auto' ? 'left' : (target.right !== 'auto' ?
-            'right' : null),
-          css: target.position
+            'right' : null)
         },
         sizedBy: {
           height: sizer.maxHeight !== 'none',
-          width: sizer.maxWidth !== 'none'
+          width: sizer.maxWidth !== 'none',
+          minWidth: parseInt(sizer.minWidth, 10) || 0,
+          minHeight: parseInt(sizer.minHeight, 10) || 0
         },
         margin: {
           top: parseInt(target.marginTop, 10) || 0,
@@ -7462,6 +7719,20 @@ CSS properties               | Action
           left: parseInt(target.marginLeft, 10) || 0
         }
       };
+
+      // Support these properties until they are removed.
+      if (this.verticalOffset) {
+        this._fitInfo.margin.top = this._fitInfo.margin.bottom = this.verticalOffset;
+        this._fitInfo.inlineStyle.marginTop = this.style.marginTop || '';
+        this._fitInfo.inlineStyle.marginBottom = this.style.marginBottom || '';
+        this.style.marginTop = this.style.marginBottom = this.verticalOffset + 'px';
+      }
+      if (this.horizontalOffset) {
+        this._fitInfo.margin.left = this._fitInfo.margin.right = this.horizontalOffset;
+        this._fitInfo.inlineStyle.marginLeft = this.style.marginLeft || '';
+        this._fitInfo.inlineStyle.marginRight = this.style.marginRight || '';
+        this.style.marginLeft = this.style.marginRight = this.horizontalOffset + 'px';
+      }
     },
 
     /**
@@ -7469,23 +7740,21 @@ CSS properties               | Action
      * the memoized data.
      */
     resetFit: function() {
-      if (!this._fitInfo || !this._fitInfo.sizedBy.width) {
-        this.sizingTarget.style.maxWidth = '';
+      var info = this._fitInfo || {};
+      for (var property in info.sizerInlineStyle) {
+        this.sizingTarget.style[property] = info.sizerInlineStyle[property];
       }
-      if (!this._fitInfo || !this._fitInfo.sizedBy.height) {
-        this.sizingTarget.style.maxHeight = '';
+      for (var property in info.inlineStyle) {
+        this.style[property] = info.inlineStyle[property];
       }
-      this.style.top = this._fitInfo ? this._fitInfo.inlineStyle.top : '';
-      this.style.left = this._fitInfo ? this._fitInfo.inlineStyle.left : '';
-      if (this._fitInfo) {
-        this.style.position = this._fitInfo.positionedBy.css;
-      }
+
       this._fitInfo = null;
     },
 
     /**
-     * Equivalent to calling `resetFit()` and `fit()`. Useful to call this after the element,
-     * the window, or the `fitInfo` element has been resized.
+     * Equivalent to calling `resetFit()` and `fit()`. Useful to call this after
+     * the element or the `fitInto` element has been resized, or if any of the
+     * positioning properties (e.g. `horizontalAlign, verticalAlign`) is updated.
      */
     refit: function() {
       this.resetFit();
@@ -7493,37 +7762,111 @@ CSS properties               | Action
     },
 
     /**
-     * Constrains the size of the element to the window or `fitInfo` by setting `max-height`
+     * Positions the element according to `horizontalAlign, verticalAlign`.
+     */
+    position: function() {
+      if (!this.horizontalAlign && !this.verticalAlign) {
+        // needs to be centered, and it is done after constrain.
+        return;
+      }
+
+      this.style.position = 'fixed';
+      // Need border-box for margin/padding.
+      this.sizingTarget.style.boxSizing = 'border-box';
+      // Set to 0, 0 in order to discover any offset caused by parent stacking contexts.
+      this.style.left = '0px';
+      this.style.top = '0px';
+
+      var rect = this.getBoundingClientRect();
+      var positionRect = this.__getNormalizedRect(this.positionTarget);
+      var fitRect = this.__getNormalizedRect(this.fitInto);
+
+      var margin = this._fitInfo.margin;
+
+      // Consider the margin as part of the size for position calculations.
+      var size = {
+        width: rect.width + margin.left + margin.right,
+        height: rect.height + margin.top + margin.bottom
+      };
+
+      var position = this.__getPosition(this._localeHorizontalAlign, this.verticalAlign, size, positionRect, fitRect);
+
+      var left = position.left + margin.left;
+      var top = position.top + margin.top;
+
+      // Use original size (without margin).
+      var right = Math.min(fitRect.right - margin.right, left + rect.width);
+      var bottom = Math.min(fitRect.bottom - margin.bottom, top + rect.height);
+
+      var minWidth = this._fitInfo.sizedBy.minWidth;
+      var minHeight = this._fitInfo.sizedBy.minHeight;
+      if (left < margin.left) {
+        left = margin.left;
+        if (right - left < minWidth) {
+          left = right - minWidth;
+        }
+      }
+      if (top < margin.top) {
+        top = margin.top;
+        if (bottom - top < minHeight) {
+          top = bottom - minHeight;
+        }
+      }
+
+      this.sizingTarget.style.maxWidth = (right - left) + 'px';
+      this.sizingTarget.style.maxHeight = (bottom - top) + 'px';
+
+      // Remove the offset caused by any stacking context.
+      this.style.left = (left - rect.left) + 'px';
+      this.style.top = (top - rect.top) + 'px';
+    },
+
+    /**
+     * Constrains the size of the element to `fitInto` by setting `max-height`
      * and/or `max-width`.
      */
     constrain: function() {
+      if (this.horizontalAlign || this.verticalAlign) {
+        return;
+      }
       var info = this._fitInfo;
       // position at (0px, 0px) if not already positioned, so we can measure the natural size.
-      if (!this._fitInfo.positionedBy.vertically) {
+      if (!info.positionedBy.vertically) {
+        this.style.position = 'fixed';
         this.style.top = '0px';
       }
-      if (!this._fitInfo.positionedBy.horizontally) {
+      if (!info.positionedBy.horizontally) {
+        this.style.position = 'fixed';
         this.style.left = '0px';
       }
-      if (!this._fitInfo.positionedBy.vertically || !this._fitInfo.positionedBy.horizontally) {
-        // need position:fixed to properly size the element
-        this.style.position = 'fixed';
-      }
+
       // need border-box for margin/padding
       this.sizingTarget.style.boxSizing = 'border-box';
       // constrain the width and height if not already set
       var rect = this.getBoundingClientRect();
       if (!info.sizedBy.height) {
-        this._sizeDimension(rect, info.positionedBy.vertically, 'top', 'bottom', 'Height');
+        this.__sizeDimension(rect, info.positionedBy.vertically, 'top', 'bottom', 'Height');
       }
       if (!info.sizedBy.width) {
-        this._sizeDimension(rect, info.positionedBy.horizontally, 'left', 'right', 'Width');
+        this.__sizeDimension(rect, info.positionedBy.horizontally, 'left', 'right', 'Width');
       }
     },
 
+    /**
+     * @protected
+     * @deprecated
+     */
     _sizeDimension: function(rect, positionedBy, start, end, extent) {
+      this.__sizeDimension(rect, positionedBy, start, end, extent);
+    },
+
+    /**
+     * @private
+     */
+    __sizeDimension: function(rect, positionedBy, start, end, extent) {
       var info = this._fitInfo;
-      var max = extent === 'Width' ? this._fitWidth : this._fitHeight;
+      var fitRect = this.__getNormalizedRect(this.fitInto);
+      var max = extent === 'Width' ? fitRect.width : fitRect.height;
       var flip = (positionedBy === end);
       var offset = flip ? max - rect[end] : rect[start];
       var margin = info.margin[flip ? start : end];
@@ -7537,6 +7880,9 @@ CSS properties               | Action
      * `position:fixed`.
      */
     center: function() {
+      if (this.horizontalAlign || this.verticalAlign) {
+        return;
+      }
       var positionedBy = this._fitInfo.positionedBy;
       if (positionedBy.vertically && positionedBy.horizontally) {
         // Already positioned.
@@ -7555,213 +7901,126 @@ CSS properties               | Action
       }
       // It will take in consideration margins and transforms
       var rect = this.getBoundingClientRect();
+      var fitRect = this.__getNormalizedRect(this.fitInto);
       if (!positionedBy.vertically) {
-        var top = this._fitTop - rect.top + (this._fitHeight - rect.height) / 2;
+        var top = fitRect.top - rect.top + (fitRect.height - rect.height) / 2;
         this.style.top = top + 'px';
       }
       if (!positionedBy.horizontally) {
-        var left = this._fitLeft - rect.left + (this._fitWidth - rect.width) / 2;
+        var left = fitRect.left - rect.left + (fitRect.width - rect.width) / 2;
         this.style.left = left + 'px';
       }
-    }
+    },
 
-  };
-/**
-   * @struct
-   * @constructor
-   */
-  Polymer.IronOverlayManagerClass = function() {
-    this._overlays = [];
-    // Used to keep track of the last focused node before an overlay gets opened.
-    this._lastFocusedNodes = [];
+    __getNormalizedRect: function(target) {
+      if (target === document.documentElement || target === window) {
+        return {
+          top: 0,
+          left: 0,
+          width: window.innerWidth,
+          height: window.innerHeight,
+          right: window.innerWidth,
+          bottom: window.innerHeight
+        };
+      }
+      return target.getBoundingClientRect();
+    },
 
-    /**
-     * iframes have a default z-index of 100, so this default should be at least
-     * that.
-     * @private {number}
-     */
-    this._minimumZ = 101;
+    __getCroppedArea: function(position, size, fitRect) {
+      var verticalCrop = Math.min(0, position.top) + Math.min(0, fitRect.bottom - (position.top + size.height));
+      var horizontalCrop = Math.min(0, position.left) + Math.min(0, fitRect.right - (position.left + size.width));
+      return Math.abs(verticalCrop) * size.width + Math.abs(horizontalCrop) * size.height;
+    },
 
-    this._backdrops = [];
 
-    this._backdropElement = null;
-    Object.defineProperty(this, 'backdropElement', {
-      get: function() {
-        if (!this._backdropElement) {
-          this._backdropElement = document.createElement('iron-overlay-backdrop');
+    __getPosition: function(hAlign, vAlign, size, positionRect, fitRect) {
+      // All the possible configurations.
+      // Ordered as top-left, top-right, bottom-left, bottom-right.
+      var positions = [{
+        verticalAlign: 'top',
+        horizontalAlign: 'left',
+        top: positionRect.top,
+        left: positionRect.left
+      }, {
+        verticalAlign: 'top',
+        horizontalAlign: 'right',
+        top: positionRect.top,
+        left: positionRect.right - size.width
+      }, {
+        verticalAlign: 'bottom',
+        horizontalAlign: 'left',
+        top: positionRect.bottom - size.height,
+        left: positionRect.left
+      }, {
+        verticalAlign: 'bottom',
+        horizontalAlign: 'right',
+        top: positionRect.bottom - size.height,
+        left: positionRect.right - size.width
+      }];
+
+      if (this.noOverlap) {
+        // Duplicate.
+        for (var i = 0, l = positions.length; i < l; i++) {
+          var copy = {};
+          for (var key in positions[i]) {
+            copy[key] = positions[i][key];
+          }
+          positions.push(copy);
         }
-        return this._backdropElement;
-      }.bind(this)
-    });
+        // Horizontal overlap only.
+        positions[0].top = positions[1].top += positionRect.height;
+        positions[2].top = positions[3].top -= positionRect.height;
+        // Vertical overlap only.
+        positions[4].left = positions[6].left += positionRect.width;
+        positions[5].left = positions[7].left -= positionRect.width;
+      }
 
-    /**
-     * The deepest active element.
-     * returns {?Node} element the active element
-     */
-    this.deepActiveElement = null;
-    Object.defineProperty(this, 'deepActiveElement', {
-      get: function() {
-        var active = document.activeElement;
-        // document.activeElement can be null
-        // https://developer.mozilla.org/en-US/docs/Web/API/Document/activeElement
-        while (active && active.root && Polymer.dom(active.root).activeElement) {
-          active = Polymer.dom(active.root).activeElement;
+      // Consider auto as null for coding convenience.
+      vAlign = vAlign === 'auto' ? null : vAlign;
+      hAlign = hAlign === 'auto' ? null : hAlign;
+
+      var position;
+      for (var i = 0; i < positions.length; i++) {
+        var pos = positions[i];
+        // Align is ok if:
+        // - Horizontal AND vertical are required and match, or
+        // - Only vertical is required and matches, or
+        // - Only horizontal is required and matches.
+        var alignOk = (pos.verticalAlign === vAlign && pos.horizontalAlign === hAlign) ||
+                      (pos.verticalAlign === vAlign && !hAlign) ||
+                      (pos.horizontalAlign === hAlign && !vAlign);
+
+        // If both vAlign and hAlign are defined, return exact match.
+        // For dynamicAlign and noOverlap we'll have more than one candidate, so
+        // we'll have to check the croppedArea to make the best choice.
+        if (!this.dynamicAlign && !this.noOverlap && vAlign && hAlign && alignOk) {
+          position = pos;
+          break;
         }
-        return active;
-      }.bind(this)
-    });
-  };
 
-  /**
-   * If a node is contained in an overlay.
-   * @private
-   * @param {Node} node
-   * @returns {Boolean}
-   */
-  Polymer.IronOverlayManagerClass.prototype._isChildOfOverlay = function(node) {
-    while (node && node !== document.body) {
-      // Use logical parentNode, or native ShadowRoot host.
-      node = Polymer.dom(node).parentNode || node.host;
-      // Check if it is an overlay.
-      if (node && node.behaviors && node.behaviors.indexOf(Polymer.IronOverlayBehaviorImpl) !== -1) {
-        return true;
+        // Filter out elements that don't match the alignment (if defined).
+        // With dynamicAlign, we need to consider all the positions to find the
+        // one that minimizes the cropped area.
+        if (!this.dynamicAlign && (vAlign || hAlign) && !alignOk) {
+          continue;
+        }
+
+        position = position || pos;
+        pos.croppedArea = this.__getCroppedArea(pos, size, fitRect);
+        var diff = pos.croppedArea - position.croppedArea;
+        // Check which crops less. If it crops equally,
+        // check for alignment preferences.
+        if (diff < 0 || (diff === 0 && alignOk)) {
+          position = pos;
+        }
       }
+
+      return position;
     }
-    return false;
+
   };
-
-  Polymer.IronOverlayManagerClass.prototype._applyOverlayZ = function(overlay, aboveZ) {
-    this._setZ(overlay, aboveZ + 2);
-  };
-
-  Polymer.IronOverlayManagerClass.prototype._setZ = function(element, z) {
-    element.style.zIndex = z;
-  };
-
-  /**
-   * track overlays for z-index and focus managemant
-   */
-  Polymer.IronOverlayManagerClass.prototype.addOverlay = function(overlay) {
-    var minimumZ = Math.max(this.currentOverlayZ(), this._minimumZ);
-    this._overlays.push(overlay);
-    var newZ = this.currentOverlayZ();
-    if (newZ <= minimumZ) {
-      this._applyOverlayZ(overlay, minimumZ);
-    }
-    var element = this.deepActiveElement;
-    // If already in other overlay, don't reset focus there.
-    if (this._isChildOfOverlay(element)) {
-      element = null;
-    }
-    this._lastFocusedNodes.push(element);
-  };
-
-  Polymer.IronOverlayManagerClass.prototype.removeOverlay = function(overlay) {
-    var i = this._overlays.indexOf(overlay);
-    if (i >= 0) {
-      this._overlays.splice(i, 1);
-      this._setZ(overlay, '');
-
-      var node = this._lastFocusedNodes[i];
-      // Focus only if still contained in document.body
-      if (overlay.restoreFocusOnClose && node && Polymer.dom(document.body).deepContains(node)) {
-        node.focus();
-      }
-      this._lastFocusedNodes.splice(i, 1);
-    }
-  };
-
-  Polymer.IronOverlayManagerClass.prototype.currentOverlay = function() {
-    var i = this._overlays.length - 1;
-    while (this._overlays[i] && !this._overlays[i].opened) {
-      --i;
-    }
-    return this._overlays[i];
-  };
-
-  Polymer.IronOverlayManagerClass.prototype.currentOverlayZ = function() {
-    return this._getOverlayZ(this.currentOverlay());
-  };
-
-  /**
-   * Ensures that the minimum z-index of new overlays is at least `minimumZ`.
-   * This does not effect the z-index of any existing overlays.
-   *
-   * @param {number} minimumZ
-   */
-  Polymer.IronOverlayManagerClass.prototype.ensureMinimumZ = function(minimumZ) {
-    this._minimumZ = Math.max(this._minimumZ, minimumZ);
-  };
-
-  Polymer.IronOverlayManagerClass.prototype.focusOverlay = function() {
-    var current = this.currentOverlay();
-    // We have to be careful to focus the next overlay _after_ any current
-    // transitions are complete (due to the state being toggled prior to the
-    // transition). Otherwise, we risk infinite recursion when a transitioning
-    // (closed) overlay becomes the current overlay.
-    //
-    // NOTE: We make the assumption that any overlay that completes a transition
-    // will call into focusOverlay to kick the process back off. Currently:
-    // transitionend -> _applyFocus -> focusOverlay.
-    if (current && !current.transitioning) {
-      current._applyFocus();
-    }
-  };
-
-  Polymer.IronOverlayManagerClass.prototype.trackBackdrop = function(element) {
-    // backdrops contains the overlays with a backdrop that are currently
-    // visible
-    var index = this._backdrops.indexOf(element);
-    if (element.opened && element.withBackdrop) {
-      // no duplicates
-      if (index === -1) {
-        this._backdrops.push(element);
-      }
-    } else if (index >= 0) {
-      this._backdrops.splice(index, 1);
-    }
-  };
-
-  Polymer.IronOverlayManagerClass.prototype.getBackdrops = function() {
-    return this._backdrops;
-  };
-
-  /**
-   * Returns the z-index for the backdrop.
-   */
-  Polymer.IronOverlayManagerClass.prototype.backdropZ = function() {
-    return this._getOverlayZ(this._overlayWithBackdrop()) - 1;
-  };
-
-  /**
-   * Returns the first opened overlay that has a backdrop.
-   */
-  Polymer.IronOverlayManagerClass.prototype._overlayWithBackdrop = function() {
-    for (var i = 0; i < this._overlays.length; i++) {
-      if (this._overlays[i].opened && this._overlays[i].withBackdrop) {
-        return this._overlays[i];
-      }
-    }
-  };
-
-  /**
-   * Calculates the minimum z-index for the overlay.
-   */
-  Polymer.IronOverlayManagerClass.prototype._getOverlayZ = function(overlay) {
-    var z = this._minimumZ;
-    if (overlay) {
-      var z1 = Number(window.getComputedStyle(overlay).zIndex);
-      // Check if is a number
-      // Number.isNaN not supported in IE 10+
-      if (z1 === z1) {
-        z = z1;
-      }
-    }
-    return z;
-  };
-
-  Polymer.IronOverlayManager = new Polymer.IronOverlayManagerClass();
 (function() {
+'use strict';
 
   Polymer({
 
@@ -7773,82 +8032,489 @@ CSS properties               | Action
        * Returns true if the backdrop is opened.
        */
       opened: {
-        readOnly: true,
         reflectToAttribute: true,
         type: Boolean,
-        value: false
-      },
-
-      _manager: {
-        type: Object,
-        value: Polymer.IronOverlayManager
+        value: false,
+        observer: '_openedChanged'
       }
 
     },
 
     listeners: {
-      'transitionend' : '_onTransitionend'
+      'transitionend': '_onTransitionend'
+    },
+
+    created: function() {
+      // Used to cancel previous requestAnimationFrame calls when opened changes.
+      this.__openedRaf = null;
+    },
+
+    attached: function() {
+      this.opened && this._openedChanged(this.opened);
     },
 
     /**
-     * Appends the backdrop to document body and sets its `z-index` to be below the latest overlay.
+     * Appends the backdrop to document body if needed.
      */
     prepare: function() {
-      // Always update z-index
-      this.style.zIndex = this._manager.backdropZ();
-      if (!this.parentNode) {
+      if (this.opened && !this.parentNode) {
         Polymer.dom(document.body).appendChild(this);
       }
     },
 
     /**
-     * Shows the backdrop if needed.
+     * Shows the backdrop.
      */
     open: function() {
-      // only need to make the backdrop visible if this is called by the first overlay with a backdrop
-      if (this._manager.getBackdrops().length < 2) {
-        this._setOpened(true);
-      }
+      this.opened = true;
     },
 
     /**
-     * Hides the backdrop if needed.
+     * Hides the backdrop.
      */
     close: function() {
-      // Always update z-index
-      this.style.zIndex = this._manager.backdropZ();
-      // close only if no element with backdrop is left
-      if (this._manager.getBackdrops().length === 0) {
-        // Read style before setting opened.
-        var cs = getComputedStyle(this);
-        var noAnimation = (cs.transitionDuration === '0s' || cs.opacity == 0);
-        this._setOpened(false);
-        // In case of no animations, complete
-        if (noAnimation) {
-          this.complete();
-        }
-      }
+      this.opened = false;
     },
 
     /**
      * Removes the backdrop from document body if needed.
      */
     complete: function() {
-      // only remove the backdrop if there are no more overlays with backdrops
-      if (this._manager.getBackdrops().length === 0 && this.parentNode) {
+      if (!this.opened && this.parentNode === document.body) {
         Polymer.dom(this.parentNode).removeChild(this);
       }
     },
 
-    _onTransitionend: function (event) {
+    _onTransitionend: function(event) {
       if (event && event.target === this) {
         this.complete();
       }
-    }
+    },
 
+    /**
+     * @param {boolean} opened
+     * @private
+     */
+    _openedChanged: function(opened) {
+      if (opened) {
+        // Auto-attach.
+        this.prepare();
+      } else {
+        // Animation might be disabled via the mixin or opacity custom property.
+        // If it is disabled in other ways, it's up to the user to call complete.
+        var cs = window.getComputedStyle(this);
+        if (cs.transitionDuration === '0s' || cs.opacity == 0) {
+          this.complete();
+        }
+      }
+
+      if (!this.isAttached) {
+        return;
+      }
+
+      // Always cancel previous requestAnimationFrame.
+      if (this.__openedRaf) {
+        window.cancelAnimationFrame(this.__openedRaf);
+        this.__openedRaf = null;
+      }
+      // Force relayout to ensure proper transitions.
+      this.scrollTop = this.scrollTop;
+      this.__openedRaf = window.requestAnimationFrame(function() {
+        this.__openedRaf = null;
+        this.toggleClass('opened', this.opened);
+      }.bind(this));
+    }
   });
 
 })();
+/**
+   * @struct
+   * @constructor
+   * @private
+   */
+  Polymer.IronOverlayManagerClass = function() {
+    /**
+     * Used to keep track of the opened overlays.
+     * @private {Array<Element>}
+     */
+    this._overlays = [];
+
+    /**
+     * iframes have a default z-index of 100,
+     * so this default should be at least that.
+     * @private {number}
+     */
+    this._minimumZ = 101;
+
+    /**
+     * Memoized backdrop element.
+     * @private {Element|null}
+     */
+    this._backdropElement = null;
+
+    // Listen to mousedown or touchstart to be sure to be the first to capture
+    // clicks outside the overlay.
+    var clickEvent = ('ontouchstart' in window) ? 'touchstart' : 'mousedown';
+    document.addEventListener(clickEvent, this._onCaptureClick.bind(this), true);
+    document.addEventListener('focus', this._onCaptureFocus.bind(this), true);
+    document.addEventListener('keydown', this._onCaptureKeyDown.bind(this), true);
+  };
+
+  Polymer.IronOverlayManagerClass.prototype = {
+
+    constructor: Polymer.IronOverlayManagerClass,
+
+    /**
+     * The shared backdrop element.
+     * @type {!Element} backdropElement
+     */
+    get backdropElement() {
+      if (!this._backdropElement) {
+        this._backdropElement = document.createElement('iron-overlay-backdrop');
+      }
+      return this._backdropElement;
+    },
+
+    /**
+     * The deepest active element.
+     * @type {!Element} activeElement the active element
+     */
+    get deepActiveElement() {
+      // document.activeElement can be null
+      // https://developer.mozilla.org/en-US/docs/Web/API/Document/activeElement
+      // In case of null, default it to document.body.
+      var active = document.activeElement || document.body;
+      while (active.root && Polymer.dom(active.root).activeElement) {
+        active = Polymer.dom(active.root).activeElement;
+      }
+      return active;
+    },
+
+    /**
+     * Brings the overlay at the specified index to the front.
+     * @param {number} i
+     * @private
+     */
+    _bringOverlayAtIndexToFront: function(i) {
+      var overlay = this._overlays[i];
+      if (!overlay) {
+        return;
+      }
+      var lastI = this._overlays.length - 1;
+      var currentOverlay = this._overlays[lastI];
+      // Ensure always-on-top overlay stays on top.
+      if (currentOverlay && this._shouldBeBehindOverlay(overlay, currentOverlay)) {
+        lastI--;
+      }
+      // If already the top element, return.
+      if (i >= lastI) {
+        return;
+      }
+      // Update z-index to be on top.
+      var minimumZ = Math.max(this.currentOverlayZ(), this._minimumZ);
+      if (this._getZ(overlay) <= minimumZ) {
+        this._applyOverlayZ(overlay, minimumZ);
+      }
+
+      // Shift other overlays behind the new on top.
+      while (i < lastI) {
+        this._overlays[i] = this._overlays[i + 1];
+        i++;
+      }
+      this._overlays[lastI] = overlay;
+    },
+
+    /**
+     * Adds the overlay and updates its z-index if it's opened, or removes it if it's closed.
+     * Also updates the backdrop z-index.
+     * @param {!Element} overlay
+     */
+    addOrRemoveOverlay: function(overlay) {
+      if (overlay.opened) {
+        this.addOverlay(overlay);
+      } else {
+        this.removeOverlay(overlay);
+      }
+      this.trackBackdrop();
+    },
+
+    /**
+     * Tracks overlays for z-index and focus management.
+     * Ensures the last added overlay with always-on-top remains on top.
+     * @param {!Element} overlay
+     */
+    addOverlay: function(overlay) {
+      var i = this._overlays.indexOf(overlay);
+      if (i >= 0) {
+        this._bringOverlayAtIndexToFront(i);
+        return;
+      }
+      var insertionIndex = this._overlays.length;
+      var currentOverlay = this._overlays[insertionIndex - 1];
+      var minimumZ = Math.max(this._getZ(currentOverlay), this._minimumZ);
+      var newZ = this._getZ(overlay);
+
+      // Ensure always-on-top overlay stays on top.
+      if (currentOverlay && this._shouldBeBehindOverlay(overlay, currentOverlay)) {
+        // This bumps the z-index of +2.
+        this._applyOverlayZ(currentOverlay, minimumZ);
+        insertionIndex--;
+        // Update minimumZ to match previous overlay's z-index.
+        var previousOverlay = this._overlays[insertionIndex - 1];
+        minimumZ = Math.max(this._getZ(previousOverlay), this._minimumZ);
+      }
+
+      // Update z-index and insert overlay.
+      if (newZ <= minimumZ) {
+        this._applyOverlayZ(overlay, minimumZ);
+      }
+      this._overlays.splice(insertionIndex, 0, overlay);
+
+      // Get focused node.
+      var element = this.deepActiveElement;
+      overlay.restoreFocusNode = this._overlayParent(element) ? null : element;
+    },
+
+    /**
+     * @param {!Element} overlay
+     */
+    removeOverlay: function(overlay) {
+      var i = this._overlays.indexOf(overlay);
+      if (i === -1) {
+        return;
+      }
+      this._overlays.splice(i, 1);
+
+      var node = overlay.restoreFocusOnClose ? overlay.restoreFocusNode : null;
+      overlay.restoreFocusNode = null;
+      // Focus back only if still contained in document.body
+      if (node && Polymer.dom(document.body).deepContains(node)) {
+        node.focus();
+      }
+    },
+
+    /**
+     * Returns the current overlay.
+     * @return {Element|undefined}
+     */
+    currentOverlay: function() {
+      var i = this._overlays.length - 1;
+      return this._overlays[i];
+    },
+
+    /**
+     * Returns the current overlay z-index.
+     * @return {number}
+     */
+    currentOverlayZ: function() {
+      return this._getZ(this.currentOverlay());
+    },
+
+    /**
+     * Ensures that the minimum z-index of new overlays is at least `minimumZ`.
+     * This does not effect the z-index of any existing overlays.
+     * @param {number} minimumZ
+     */
+    ensureMinimumZ: function(minimumZ) {
+      this._minimumZ = Math.max(this._minimumZ, minimumZ);
+    },
+
+    focusOverlay: function() {
+      var current = /** @type {?} */ (this.currentOverlay());
+      // We have to be careful to focus the next overlay _after_ any current
+      // transitions are complete (due to the state being toggled prior to the
+      // transition). Otherwise, we risk infinite recursion when a transitioning
+      // (closed) overlay becomes the current overlay.
+      //
+      // NOTE: We make the assumption that any overlay that completes a transition
+      // will call into focusOverlay to kick the process back off. Currently:
+      // transitionend -> _applyFocus -> focusOverlay.
+      if (current && !current.transitioning) {
+        current._applyFocus();
+      }
+    },
+
+    /**
+     * Updates the backdrop z-index.
+     */
+    trackBackdrop: function() {
+      var overlay = this._overlayWithBackdrop();
+      // Avoid creating the backdrop if there is no overlay with backdrop.
+      if (!overlay && !this._backdropElement) {
+        return;
+      }
+      this.backdropElement.style.zIndex = this._getZ(overlay) - 1;
+      this.backdropElement.opened = !!overlay;
+    },
+
+    /**
+     * @return {Array<Element>}
+     */
+    getBackdrops: function() {
+      var backdrops = [];
+      for (var i = 0; i < this._overlays.length; i++) {
+        if (this._overlays[i].withBackdrop) {
+          backdrops.push(this._overlays[i]);
+        }
+      }
+      return backdrops;
+    },
+
+    /**
+     * Returns the z-index for the backdrop.
+     * @return {number}
+     */
+    backdropZ: function() {
+      return this._getZ(this._overlayWithBackdrop()) - 1;
+    },
+
+    /**
+     * Returns the first opened overlay that has a backdrop.
+     * @return {Element|undefined}
+     * @private
+     */
+    _overlayWithBackdrop: function() {
+      for (var i = 0; i < this._overlays.length; i++) {
+        if (this._overlays[i].withBackdrop) {
+          return this._overlays[i];
+        }
+      }
+    },
+
+    /**
+     * Calculates the minimum z-index for the overlay.
+     * @param {Element=} overlay
+     * @private
+     */
+    _getZ: function(overlay) {
+      var z = this._minimumZ;
+      if (overlay) {
+        var z1 = Number(overlay.style.zIndex || window.getComputedStyle(overlay).zIndex);
+        // Check if is a number
+        // Number.isNaN not supported in IE 10+
+        if (z1 === z1) {
+          z = z1;
+        }
+      }
+      return z;
+    },
+
+    /**
+     * @param {!Element} element
+     * @param {number|string} z
+     * @private
+     */
+    _setZ: function(element, z) {
+      element.style.zIndex = z;
+    },
+
+    /**
+     * @param {!Element} overlay
+     * @param {number} aboveZ
+     * @private
+     */
+    _applyOverlayZ: function(overlay, aboveZ) {
+      this._setZ(overlay, aboveZ + 2);
+    },
+
+    /**
+     * Returns the overlay containing the provided node. If the node is an overlay,
+     * it returns the node.
+     * @param {Element=} node
+     * @return {Element|undefined}
+     * @private
+     */
+    _overlayParent: function(node) {
+      while (node && node !== document.body) {
+        // Check if it is an overlay.
+        if (node._manager === this) {
+          return node;
+        }
+        // Use logical parentNode, or native ShadowRoot host.
+        node = Polymer.dom(node).parentNode || node.host;
+      }
+    },
+
+    /**
+     * Returns the deepest overlay in the path.
+     * @param {Array<Element>=} path
+     * @return {Element|undefined}
+     * @private
+     */
+    _overlayInPath: function(path) {
+      path = path || [];
+      for (var i = 0; i < path.length; i++) {
+        if (path[i]._manager === this) {
+          return path[i];
+        }
+      }
+    },
+
+    /**
+     * Ensures the click event is delegated to the right overlay.
+     * @param {!Event} event
+     * @private
+     */
+    _onCaptureClick: function(event) {
+      var overlay = /** @type {?} */ (this.currentOverlay());
+      // Check if clicked outside of top overlay.
+      if (overlay && this._overlayInPath(Polymer.dom(event).path) !== overlay) {
+        if (overlay.withBackdrop) {
+          // There's no need to stop the propagation as the backdrop element
+          // already got this mousedown/touchstart event. Calling preventDefault
+          // on this event ensures that click/tap won't be triggered at all.
+          event.preventDefault();
+        }
+        overlay._onCaptureClick(event);
+      }
+    },
+
+    /**
+     * Ensures the focus event is delegated to the right overlay.
+     * @param {!Event} event
+     * @private
+     */
+    _onCaptureFocus: function(event) {
+      var overlay = /** @type {?} */ (this.currentOverlay());
+      if (overlay) {
+        overlay._onCaptureFocus(event);
+      }
+    },
+
+    /**
+     * Ensures TAB and ESC keyboard events are delegated to the right overlay.
+     * @param {!Event} event
+     * @private
+     */
+    _onCaptureKeyDown: function(event) {
+      var overlay = /** @type {?} */ (this.currentOverlay());
+      if (overlay) {
+        if (Polymer.IronA11yKeysBehavior.keyboardEventMatchesKeys(event, 'esc')) {
+          overlay._onCaptureEsc(event);
+        } else if (Polymer.IronA11yKeysBehavior.keyboardEventMatchesKeys(event, 'tab')) {
+          overlay._onCaptureTab(event);
+        }
+      }
+    },
+
+    /**
+     * Returns if the overlay1 should be behind overlay2.
+     * @param {!Element} overlay1
+     * @param {!Element} overlay2
+     * @return {boolean}
+     * @private
+     */
+    _shouldBeBehindOverlay: function(overlay1, overlay2) {
+      var o1 = /** @type {?} */ (overlay1);
+      var o2 = /** @type {?} */ (overlay2);
+      return !o1.alwaysOnTop && o2.alwaysOnTop;
+    }
+  };
+
+  Polymer.IronOverlayManager = new Polymer.IronOverlayManagerClass();
+(function() {
+'use strict';
+
 /**
 Use `Polymer.IronOverlayBehavior` to implement an element that can be hidden or shown, and displays
 on top of other content. It includes an optional backdrop, and can be used to implement a variety
@@ -7943,21 +8609,14 @@ context. You should place this element as a child of `<body>` whenever possible.
       },
 
       /**
-       * Returns the reason this dialog was last closed.
+       * Contains the reason(s) this overlay was last closed (see `iron-overlay-closed`).
+       * `IronOverlayBehavior` provides the `canceled` reason; implementers of the
+       * behavior can provide other reasons in addition to `canceled`.
        */
       closingReason: {
         // was a getter before, but needs to be a property so other
         // behaviors can override this.
         type: Object
-      },
-
-      /**
-       * The HTMLElement that will be firing relevant KeyboardEvents.
-       * Used for capturing esc and tab. Overridden from `IronA11yKeysBehavior`.
-       */
-      keyEventTarget: {
-        type: Object,
-        value: document
       },
 
       /**
@@ -7968,23 +8627,21 @@ context. You should place this element as a child of `<body>` whenever possible.
         value: false
       },
 
+      /**
+       * Set to true to keep overlay always on top.
+       */
+      alwaysOnTop: {
+        type: Boolean
+      },
+
+      /**
+       * Shortcut to access to the overlay manager.
+       * @private
+       * @type {Polymer.IronOverlayManagerClass}
+       */
       _manager: {
         type: Object,
         value: Polymer.IronOverlayManager
-      },
-
-      _boundOnCaptureClick: {
-        type: Function,
-        value: function() {
-          return this._onCaptureClick.bind(this);
-        }
-      },
-
-      _boundOnCaptureFocus: {
-        type: Function,
-        value: function() {
-          return this._onCaptureFocus.bind(this);
-        }
       },
 
       /**
@@ -7997,18 +8654,13 @@ context. You should place this element as a child of `<body>` whenever possible.
 
     },
 
-    keyBindings: {
-      'esc': '__onEsc',
-      'tab': '__onTab'
-    },
-
     listeners: {
       'iron-resize': '_onIronResize'
     },
 
     /**
      * The backdrop element.
-     * @type {Node}
+     * @type {Element}
      */
     get backdropElement() {
       return this._manager.backdropElement;
@@ -8029,7 +8681,7 @@ context. You should place this element as a child of `<body>` whenever possible.
      *
      * If you know what is your content (specifically the first and last focusable children),
      * you can override this method to return only `[firstFocusable, lastFocusable];`
-     * @type {[Node]}
+     * @type {Array<Node>}
      * @protected
      */
     get _focusableNodes() {
@@ -8075,11 +8727,17 @@ context. You should place this element as a child of `<body>` whenever possible.
     },
 
     ready: function() {
+      // Used to skip calls to notifyResize and refit while the overlay is animating.
+      this.__isAnimating = false;
       // with-backdrop needs tabindex to be set in order to trap the focus.
       // If it is not set, IronOverlayBehavior will set it, and remove it if with-backdrop = false.
       this.__shouldRemoveTabIndex = false;
       // Used for wrapping the focus on TAB / Shift+TAB.
       this.__firstFocusableNode = this.__lastFocusableNode = null;
+      // Used for requestAnimationFrame when opened changes.
+      this.__openChangedAsync = null;
+      // Used for requestAnimationFrame when iron-resize is fired.
+      this.__onIronResizeAsync = null;
       this._ensureSetup();
     },
 
@@ -8095,8 +8753,6 @@ context. You should place this element as a child of `<body>` whenever possible.
       Polymer.dom(this).unobserveNodes(this._observer);
       this._observer = null;
       this.opened = false;
-      this._manager.trackBackdrop(this);
-      this._manager.removeOverlay(this);
     },
 
     /**
@@ -8125,7 +8781,7 @@ context. You should place this element as a child of `<body>` whenever possible.
 
     /**
      * Cancels the overlay.
-     * @param {?Event} event The original event
+     * @param {Event=} event The original event
      */
     cancel: function(event) {
       var cancelEvent = this.fire('iron-overlay-canceled', event, {cancelable: true});
@@ -8158,31 +8814,30 @@ context. You should place this element as a child of `<body>` whenever possible.
         return;
       }
 
-      this._manager.trackBackdrop(this);
+      this._manager.addOrRemoveOverlay(this);
 
-      if (this.opened) {
-        this._prepareRenderOpened();
+      if (this.__openChangedAsync) {
+        window.cancelAnimationFrame(this.__openChangedAsync);
       }
 
-      if (this._openChangedAsync) {
-        this.cancelAsync(this._openChangedAsync);
+      // Defer any animation-related code on attached
+      // (_openedChanged gets called again on attached).
+      if (!this.isAttached) {
+        return;
       }
-      // Async here to allow overlay layer to become visible, and to avoid
-      // listeners to immediately close via a click.
-      this._openChangedAsync = this.async(function() {
-        // overlay becomes visible here
-        this.style.display = '';
-        // Force layout to ensure transition will go. Set offsetWidth to itself
-        // so that compilers won't remove it.
-        this.offsetWidth = this.offsetWidth;
+
+      this.__isAnimating = true;
+
+      // requestAnimationFrame for non-blocking rendering
+      this.__openChangedAsync = window.requestAnimationFrame(function() {
+        this.__openChangedAsync = null;
         if (this.opened) {
+          this._prepareRenderOpened();
           this._renderOpened();
         } else {
           this._renderClosed();
         }
-        this._toggleListeners();
-        this._openChangedAsync = null;
-      }, 1);
+      }.bind(this));
     },
 
     _canceledChanged: function() {
@@ -8200,54 +8855,21 @@ context. You should place this element as a child of `<body>` whenever possible.
         this.__shouldRemoveTabIndex = false;
       }
       if (this.opened) {
-        this._manager.trackBackdrop(this);
-        if (this.withBackdrop) {
-          this.backdropElement.prepare();
-          // Give time to be added to document.
-          this.async(function(){
-            this.backdropElement.open();
-          }, 1);
-        } else {
-          this.backdropElement.close();
-        }
+        this._manager.trackBackdrop();
       }
     },
 
-    _toggleListener: function(enable, node, event, boundListener, capture) {
-      if (enable) {
-        // enable document-wide tap recognizer
-        if (event === 'tap') {
-          Polymer.Gestures.add(document, 'tap', null);
-        }
-        node.addEventListener(event, boundListener, capture);
-      } else {
-        // disable document-wide tap recognizer
-        if (event === 'tap') {
-          Polymer.Gestures.remove(document, 'tap', null);
-        }
-        node.removeEventListener(event, boundListener, capture);
-      }
-    },
-
-    _toggleListeners: function() {
-      this._toggleListener(this.opened, document, 'tap', this._boundOnCaptureClick, true);
-      this._toggleListener(this.opened, document, 'focus', this._boundOnCaptureFocus, true);
-    },
-
-    // tasks which must occur before opening; e.g. making the element visible
+    /**
+     * tasks which must occur before opening; e.g. making the element visible.
+     * @protected
+     */
     _prepareRenderOpened: function() {
-
-      this._manager.addOverlay(this);
 
       // Needed to calculate the size of the overlay so that transitions on its size
       // will have the correct starting points.
       this._preparePositioning();
-      this.fit();
+      this.refit();
       this._finishPositioning();
-
-      if (this.withBackdrop) {
-        this.backdropElement.prepare();
-      }
 
       // Safari will apply the focus to the autofocus element when displayed for the first time,
       // so we blur it. Later, _applyFocus will set the focus if necessary.
@@ -8256,41 +8878,49 @@ context. You should place this element as a child of `<body>` whenever possible.
       }
     },
 
-    // tasks which cause the overlay to actually open; typically play an
-    // animation
+    /**
+     * Tasks which cause the overlay to actually open; typically play an animation.
+     * @protected
+     */
     _renderOpened: function() {
-      if (this.withBackdrop) {
-        this.backdropElement.open();
-      }
       this._finishRenderOpened();
     },
 
+    /**
+     * Tasks which cause the overlay to actually close; typically play an animation.
+     * @protected
+     */
     _renderClosed: function() {
-      if (this.withBackdrop) {
-        this.backdropElement.close();
-      }
       this._finishRenderClosed();
     },
 
+    /**
+     * Tasks to be performed at the end of open action. Will fire `iron-overlay-opened`.
+     * @protected
+     */
     _finishRenderOpened: function() {
-      // This ensures the overlay is visible before we set the focus
-      // (by calling _onIronResize -> refit).
-      this.notifyResize();
       // Focus the child node with [autofocus]
       this._applyFocus();
 
+      this.notifyResize();
+      this.__isAnimating = false;
       this.fire('iron-overlay-opened');
     },
 
+    /**
+     * Tasks to be performed at the end of close action. Will fire `iron-overlay-closed`.
+     * @protected
+     */
     _finishRenderClosed: function() {
       // Hide the overlay and remove the backdrop.
-      this.resetFit();
       this.style.display = 'none';
-      this._manager.removeOverlay(this);
+      // Reset z-index only at the end of the animation.
+      this.style.zIndex = '';
 
       this._applyFocus();
-      this.notifyResize();
 
+      this.notifyResize();
+      this.__isAnimating = false;
       this.fire('iron-overlay-closed', this.closingReason);
     },
 
@@ -8301,14 +8931,24 @@ context. You should place this element as a child of `<body>` whenever possible.
     },
 
     _finishPositioning: function() {
+      // First, make it invisible & reactivate animations.
       this.style.display = 'none';
-      this.style.transform = this.style.webkitTransform = '';
-      // Force layout layout to avoid application of transform.
-      // Set offsetWidth to itself so that compilers won't remove it.
-      this.offsetWidth = this.offsetWidth;
+      // Force reflow before re-enabling animations so that they don't start.
+      // Set scrollTop to itself so that Closure Compiler doesn't remove this.
+      this.scrollTop = this.scrollTop;
       this.style.transition = this.style.webkitTransition = '';
+      this.style.transform = this.style.webkitTransform = '';
+      // Now that animations are enabled, make it visible again
+      this.style.display = '';
+      // Force reflow, so that following animations are properly started.
+      // Set scrollTop to itself so that Closure Compiler doesn't remove this.
+      this.scrollTop = this.scrollTop;
     },
 
+    /**
+     * Applies focus according to the opened state.
+     * @protected
+     */
     _applyFocus: function() {
       if (this.opened) {
         if (!this.noAutoFocus) {
@@ -8321,191 +8961,132 @@ context. You should place this element as a child of `<body>` whenever possible.
       }
     },
 
+    /**
+     * Cancels (closes) the overlay. Call when click happens outside the overlay.
+     * @param {!Event} event
+     * @protected
+     */
     _onCaptureClick: function(event) {
-      if (this._manager.currentOverlay() === this &&
-          Polymer.dom(event).path.indexOf(this) === -1) {
-        if (this.noCancelOnOutsideClick) {
-          this._applyFocus();
-        } else {
-          this.cancel(event);
-        }
-      }
-    },
-
-    _onCaptureFocus: function (event) {
-      if (this._manager.currentOverlay() === this && this.withBackdrop) {
-        var path = Polymer.dom(event).path;
-        if (path.indexOf(this) === -1) {
-          event.stopPropagation();
-          this._applyFocus();
-        } else {
-          this._focusedChild = path[0];
-        }
-      }
-    },
-
-    _onIronResize: function() {
-      if (this.opened) {
-        this.refit();
+      if (!this.noCancelOnOutsideClick) {
+        this.cancel(event);
       }
     },
 
     /**
+     * Keeps track of the focused child. If withBackdrop, traps focus within overlay.
+     * @param {!Event} event
      * @protected
+     */
+    _onCaptureFocus: function (event) {
+      if (!this.withBackdrop) {
+        return;
+      }
+      var path = Polymer.dom(event).path;
+      if (path.indexOf(this) === -1) {
+        event.stopPropagation();
+        this._applyFocus();
+      } else {
+        this._focusedChild = path[0];
+      }
+    },
+
+    /**
+     * Handles the ESC key event and cancels (closes) the overlay.
+     * @param {!Event} event
+     * @protected
+     */
+    _onCaptureEsc: function(event) {
+      if (!this.noCancelOnEscKey) {
+        this.cancel(event);
+      }
+    },
+
+    /**
+     * Handles TAB key events to track focus changes.
+     * Will wrap focus for overlays withBackdrop.
+     * @param {!Event} event
+     * @protected
+     */
+    _onCaptureTab: function(event) {
+      // TAB wraps from last to first focusable.
+      // Shift + TAB wraps from first to last focusable.
+      var shift = event.shiftKey;
+      var nodeToCheck = shift ? this.__firstFocusableNode : this.__lastFocusableNode;
+      var nodeToSet = shift ? this.__lastFocusableNode : this.__firstFocusableNode;
+      if (this.withBackdrop && this._focusedChild === nodeToCheck) {
+        // When the overlay contains the last focusable element of the document
+        // and it's already focused, pressing TAB would move the focus outside
+        // the document (e.g. to the browser search bar). Similarly, when the
+        // overlay contains the first focusable element of the document and it's
+        // already focused, pressing Shift+TAB would move the focus outside the
+        // document (e.g. to the browser search bar).
+        // In both cases, we would not receive a focus event, but only a blur.
+        // In order to achieve focus wrapping, we prevent this TAB event and
+        // force the focus. This will also prevent the focus to temporarily move
+        // outside the overlay, which might cause scrolling.
+        event.preventDefault();
+        this._focusedChild = nodeToSet;
+        this._applyFocus();
+      }
+    },
+
+    /**
+     * Refits if the overlay is opened and not animating.
+     * @protected
+     */
+    _onIronResize: function() {
+      if (this.__onIronResizeAsync) {
+        window.cancelAnimationFrame(this.__onIronResizeAsync);
+        this.__onIronResizeAsync = null;
+      }
+      if (this.opened && !this.__isAnimating) {
+        this.__onIronResizeAsync = window.requestAnimationFrame(function() {
+          this.__onIronResizeAsync = null;
+          this.refit();
+        }.bind(this));
+      }
+    },
+
+    /**
      * Will call notifyResize if overlay is opened.
      * Can be overridden in order to avoid multiple observers on the same node.
+     * @protected
      */
     _onNodesChange: function() {
-      if (this.opened) {
+      if (this.opened && !this.__isAnimating) {
         this.notifyResize();
       }
       // Store it so we don't query too much.
       var focusableNodes = this._focusableNodes;
       this.__firstFocusableNode = focusableNodes[0];
       this.__lastFocusableNode = focusableNodes[focusableNodes.length - 1];
-    },
-
-    __onEsc: function(event) {
-      // Not opened or not on top, so return.
-      if (this._manager.currentOverlay() !== this) {
-        return;
-      }
-      if (!this.noCancelOnEscKey) {
-        this.cancel(event);
-      }
-    },
-
-    __onTab: function(event) {
-      // Not opened or not on top, so return.
-      if (this._manager.currentOverlay() !== this) {
-        return;
-      }
-      // TAB wraps from last to first focusable.
-      // Shift + TAB wraps from first to last focusable.
-      var shift = event.detail.keyboardEvent.shiftKey;
-      var nodeToCheck = shift ? this.__firstFocusableNode : this.__lastFocusableNode;
-      var nodeToSet = shift ? this.__lastFocusableNode : this.__firstFocusableNode;
-      if (this.withBackdrop && this._focusedChild === nodeToCheck) {
-        // We set here the _focusedChild so that _onCaptureFocus will handle the
-        // wrapping of the focus (the next event after tab is focus).
-        this._focusedChild = nodeToSet;
-      }
     }
   };
 
   /** @polymerBehavior */
-  Polymer.IronOverlayBehavior = [Polymer.IronA11yKeysBehavior, Polymer.IronFitBehavior, Polymer.IronResizableBehavior, Polymer.IronOverlayBehaviorImpl];
+  Polymer.IronOverlayBehavior = [Polymer.IronFitBehavior, Polymer.IronResizableBehavior, Polymer.IronOverlayBehaviorImpl];
 
   /**
-  * Fired after the `iron-overlay` opens.
-  * @event iron-overlay-opened
-  */
-
-  /**
-  * Fired when the `iron-overlay` is canceled, but before it is closed.
-  * Cancel the event to prevent the `iron-overlay` from closing.
-  * @event iron-overlay-canceled
-  * @param {Event} event The closing of the `iron-overlay` can be prevented
-  * by calling `event.preventDefault()`. The `event.detail` is the original event that originated
-  * the canceling (e.g. ESC keyboard event or click event outside the `iron-overlay`).
-  */
-
-  /**
-  * Fired after the `iron-overlay` closes.
-  * @event iron-overlay-closed
-  * @param {{canceled: (boolean|undefined)}} closingReason Contains `canceled` (whether the overlay was canceled).
-  */
-/**
-   * Use `Polymer.NeonAnimationBehavior` to implement an animation.
-   * @polymerBehavior
+   * Fired after the overlay opens.
+   * @event iron-overlay-opened
    */
-  Polymer.NeonAnimationBehavior = {
 
-    properties: {
+  /**
+   * Fired when the overlay is canceled, but before it is closed.
+   * @event iron-overlay-canceled
+   * @param {Event} event The closing of the overlay can be prevented
+   * by calling `event.preventDefault()`. The `event.detail` is the original event that
+   * originated the canceling (e.g. ESC keyboard event or click event outside the overlay).
+   */
 
-      /**
-       * Defines the animation timing.
-       */
-      animationTiming: {
-        type: Object,
-        value: function() {
-          return {
-            duration: 500,
-            easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
-            fill: 'both'
-          }
-        }
-      }
+  /**
+   * Fired after the overlay closes.
+   * @event iron-overlay-closed
+   * @param {Event} event The `event.detail` is the `closingReason` property
+   * (contains `canceled`, whether the overlay was canceled).
+   */
 
-    },
-
-    registered: function() {
-      new Polymer.IronMeta({type: 'animation', key: this.is, value: this.constructor});
-    },
-
-    /**
-     * Do any animation configuration here.
-     */
-    // configure: function(config) {
-    // },
-
-    /**
-     * Returns the animation timing by mixing in properties from `config` to the defaults defined
-     * by the animation.
-     */
-    timingFromConfig: function(config) {
-      if (config.timing) {
-        for (var property in config.timing) {
-          this.animationTiming[property] = config.timing[property];
-        }
-      }
-      return this.animationTiming;
-    },
-
-    /**
-     * Sets `transform` and `transformOrigin` properties along with the prefixed versions.
-     */
-    setPrefixedProperty: function(node, property, value) {
-      var map = {
-        'transform': ['webkitTransform'],
-        'transformOrigin': ['mozTransformOrigin', 'webkitTransformOrigin']
-      };
-      var prefixes = map[property];
-      for (var prefix, index = 0; prefix = prefixes[index]; index++) {
-        node.style[prefix] = value;
-      }
-      node.style[property] = value;
-    },
-
-    /**
-     * Called when the animation finishes.
-     */
-    complete: function() {}
-
-  };
-Polymer({
-
-    is: 'opaque-animation',
-
-    behaviors: [
-      Polymer.NeonAnimationBehavior
-    ],
-
-    configure: function(config) {
-      var node = config.node;
-      node.style.opacity = '0';
-      this._effect = new KeyframeEffect(node, [
-        {'opacity': '1'},
-        {'opacity': '1'}
-      ], this.timingFromConfig(config));
-      return this._effect;
-    },
-
-    complete: function(config) {
-      config.node.style.opacity = '';
-    }
-
-  });
+})();
 /**
    * `Polymer.NeonAnimatableBehavior` is implemented by elements containing animations for use with
    * elements implementing `Polymer.NeonAnimationRunnerBehavior`.
@@ -8544,21 +9125,10 @@ Polymer({
 
     _entryAnimationChanged: function() {
       this.animationConfig = this.animationConfig || {};
-      if (this.entryAnimation !== 'fade-in-animation') {
-        // insert polyfill hack
-        this.animationConfig['entry'] = [{
-          name: 'opaque-animation',
-          node: this
-        }, {
-          name: this.entryAnimation,
-          node: this
-        }];
-      } else {
-        this.animationConfig['entry'] = [{
-          name: this.entryAnimation,
-          node: this
-        }];
-      }
+      this.animationConfig['entry'] = [{
+        name: this.entryAnimation,
+        node: this
+      }];
     },
 
     _exitAnimationChanged: function() {
@@ -8660,13 +9230,6 @@ Polymer({
 
     properties: {
 
-      _animationMeta: {
-        type: Object,
-        value: function() {
-          return new Polymer.IronMeta({type: 'animation'});
-        }
-      },
-
       /** @type {?Object} */
       _player: {
         type: Object
@@ -8678,9 +9241,9 @@ Polymer({
       var allAnimations = [];
       if (allConfigs.length > 0) {
         for (var config, index = 0; config = allConfigs[index]; index++) {
-          var animationConstructor = this._animationMeta.byKey(config.name);
-          if (animationConstructor) {
-            var animation = animationConstructor && new animationConstructor();
+          var animation = document.createElement(config.name);
+          // is this element actually a neon animation?
+          if (animation.isNeonAnimation) {
             var effect = animation.configure(config);
             if (effect) {
               allAnimations.push({
@@ -8717,27 +9280,30 @@ Polymer({
       if (!allConfigs) {
         return;
       }
-      var allAnimations = this._configureAnimationEffects(allConfigs);
-      var allEffects = allAnimations.map(function(animation) {
-        return animation.effect;
-      });
+      try {
+        var allAnimations = this._configureAnimationEffects(allConfigs);
+        var allEffects = allAnimations.map(function(animation) {
+          return animation.effect;
+        });
 
-      if (allEffects.length > 0) {
-        this._player = this._runAnimationEffects(allEffects);
-        this._player.onfinish = function() {
-          this._completeAnimations(allAnimations);
+        if (allEffects.length > 0) {
+          this._player = this._runAnimationEffects(allEffects);
+          this._player.onfinish = function() {
+            this._completeAnimations(allAnimations);
 
-          if (this._player) {
-            this._player.cancel();
-            this._player = null;
-          }
+            if (this._player) {
+              this._player.cancel();
+              this._player = null;
+            }
 
-          this.fire('neon-animation-finish', cookie, {bubbles: false});
-        }.bind(this);
-
-      } else {
-        this.fire('neon-animation-finish', cookie, {bubbles: false});
+            this.fire('neon-animation-finish', cookie, {bubbles: false});
+          }.bind(this);
+          return;
+        }
+      } catch (e) {
+        console.warn('Couldnt play', '(', type, allConfigs, ').', e);
       }
+      this.fire('neon-animation-finish', cookie, {bubbles: false});
     },
 
     /**
@@ -8755,6 +9321,98 @@ Polymer({
     Polymer.NeonAnimatableBehavior,
     Polymer.NeonAnimationRunnerBehaviorImpl
   ];
+/**
+   * Use `Polymer.NeonAnimationBehavior` to implement an animation.
+   * @polymerBehavior
+   */
+  Polymer.NeonAnimationBehavior = {
+
+    properties: {
+
+      /**
+       * Defines the animation timing.
+       */
+      animationTiming: {
+        type: Object,
+        value: function() {
+          return {
+            duration: 500,
+            easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+            fill: 'both'
+          }
+        }
+      }
+
+    },
+
+    /**
+     * Can be used to determine that elements implement this behavior.
+     */
+    isNeonAnimation: true,
+
+    /**
+     * Do any animation configuration here.
+     */
+    // configure: function(config) {
+    // },
+
+    /**
+     * Returns the animation timing by mixing in properties from `config` to the defaults defined
+     * by the animation.
+     */
+    timingFromConfig: function(config) {
+      if (config.timing) {
+        for (var property in config.timing) {
+          this.animationTiming[property] = config.timing[property];
+        }
+      }
+      return this.animationTiming;
+    },
+
+    /**
+     * Sets `transform` and `transformOrigin` properties along with the prefixed versions.
+     */
+    setPrefixedProperty: function(node, property, value) {
+      var map = {
+        'transform': ['webkitTransform'],
+        'transformOrigin': ['mozTransformOrigin', 'webkitTransformOrigin']
+      };
+      var prefixes = map[property];
+      for (var prefix, index = 0; prefix = prefixes[index]; index++) {
+        node.style[prefix] = value;
+      }
+      node.style[property] = value;
+    },
+
+    /**
+     * Called when the animation finishes.
+     */
+    complete: function() {}
+
+  };
+Polymer({
+
+    is: 'opaque-animation',
+
+    behaviors: [
+      Polymer.NeonAnimationBehavior
+    ],
+
+    configure: function(config) {
+      var node = config.node;
+      this._effect = new KeyframeEffect(node, [
+        {'opacity': '1'},
+        {'opacity': '1'}
+      ], this.timingFromConfig(config));
+      node.style.opacity = '0';
+      return this._effect;
+    },
+
+    complete: function(config) {
+      config.node.style.opacity = '';
+    }
+
+  });
 (function() {
     'use strict';
 
@@ -8918,9 +9576,11 @@ Polymer({
       },
 
       _scrollInteractionHandler: function(event) {
+        var scrolledElement =
+            /** @type {HTMLElement} */(Polymer.dom(event).rootTarget);
         if (Polymer
               .IronDropdownScrollManager
-              .elementIsScrollLocked(Polymer.dom(event).rootTarget)) {
+              .elementIsScrollLocked(scrolledElement)) {
           if (event.type === 'keydown' &&
               !Polymer.IronDropdownScrollManager._isScrollingKeypress(event)) {
             return;
@@ -8988,6 +9648,7 @@ Polymer({
           /**
            * The orientation against which to align the dropdown content
            * horizontally relative to the dropdown trigger.
+           * Overridden from `Polymer.IronFitBehavior`.
            */
           horizontalAlign: {
             type: String,
@@ -8998,60 +9659,12 @@ Polymer({
           /**
            * The orientation against which to align the dropdown content
            * vertically relative to the dropdown trigger.
+           * Overridden from `Polymer.IronFitBehavior`.
            */
           verticalAlign: {
             type: String,
             value: 'top',
             reflectToAttribute: true
-          },
-
-          /**
-           * A pixel value that will be added to the position calculated for the
-           * given `horizontalAlign`, in the direction of alignment. You can think
-           * of it as increasing or decreasing the distance to the side of the
-           * screen given by `horizontalAlign`.
-           *
-           * If `horizontalAlign` is "left", this offset will increase or decrease
-           * the distance to the left side of the screen: a negative offset will
-           * move the dropdown to the left; a positive one, to the right.
-           *
-           * Conversely if `horizontalAlign` is "right", this offset will increase
-           * or decrease the distance to the right side of the screen: a negative
-           * offset will move the dropdown to the right; a positive one, to the left.
-           */
-          horizontalOffset: {
-            type: Number,
-            value: 0,
-            notify: true
-          },
-
-          /**
-           * A pixel value that will be added to the position calculated for the
-           * given `verticalAlign`, in the direction of alignment. You can think
-           * of it as increasing or decreasing the distance to the side of the
-           * screen given by `verticalAlign`.
-           *
-           * If `verticalAlign` is "top", this offset will increase or decrease
-           * the distance to the top side of the screen: a negative offset will
-           * move the dropdown upwards; a positive one, downwards.
-           *
-           * Conversely if `verticalAlign` is "bottom", this offset will increase
-           * or decrease the distance to the bottom side of the screen: a negative
-           * offset will move the dropdown downwards; a positive one, upwards.
-           */
-          verticalOffset: {
-            type: Number,
-            value: 0,
-            notify: true
-          },
-
-          /**
-           * The element that should be used to position the dropdown when
-           * it is opened.
-           */
-          positionTarget: {
-            type: Object,
-            observer: '_positionTargetChanged'
           },
 
           /**
@@ -9096,15 +9709,6 @@ Polymer({
           allowOutsideScroll: {
             type: Boolean,
             value: false
-          },
-
-          /**
-           * We memoize the positionTarget bounding rectangle so that we can
-           * limit the number of times it is queried per resize / relayout.
-           * @type {?Object}
-           */
-          _positionRectMemo: {
-            type: Object
           }
         },
 
@@ -9113,14 +9717,8 @@ Polymer({
         },
 
         observers: [
-          '_updateOverlayPosition(verticalAlign, horizontalAlign, verticalOffset, horizontalOffset)'
+          '_updateOverlayPosition(positionTarget, verticalAlign, horizontalAlign, verticalOffset, horizontalOffset)'
         ],
-
-        attached: function() {
-          if (this.positionTarget === undefined) {
-            this.positionTarget = this._defaultPositionTarget;
-          }
-        },
 
         /**
          * The element that is contained by the dropdown, if any.
@@ -9138,97 +9736,21 @@ Polymer({
         },
 
         /**
-         * Whether the text direction is RTL
-         */
-        _isRTL: function() {
-          return window.getComputedStyle(this).direction == 'rtl';
-        },
-
-        /**
-         * The element that should be used to position the dropdown when
-         * it opens, if no position target is configured.
-         */
-        get _defaultPositionTarget() {
-          var parent = Polymer.dom(this).parentNode;
-
-          if (parent.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
-            parent = parent.host;
-          }
-
-          return parent;
-        },
-
-        /**
-         * The bounding rect of the position target.
-         */
-        get _positionRect() {
-          if (!this._positionRectMemo && this.positionTarget) {
-            this._positionRectMemo = this.positionTarget.getBoundingClientRect();
-          }
-
-          return this._positionRectMemo;
-        },
-
-        /**
-         * The horizontal offset value used to position the dropdown.
-         */
-        get _horizontalAlignTargetValue() {
-          var target;
-
-          // In RTL, the direction flips, so what is "right" in LTR becomes "left".
-          var isRTL = this._isRTL();
-          if ((!isRTL && this.horizontalAlign === 'right') ||
-              (isRTL && this.horizontalAlign === 'left')) {
-            target = document.documentElement.clientWidth - this._positionRect.right;
-          } else {
-            target = this._positionRect.left;
-          }
-
-          target += this.horizontalOffset;
-
-          return Math.max(target, 0);
-        },
-
-        /**
-         * The vertical offset value used to position the dropdown.
-         */
-        get _verticalAlignTargetValue() {
-          var target;
-
-          if (this.verticalAlign === 'bottom') {
-            target = document.documentElement.clientHeight - this._positionRect.bottom;
-          } else {
-            target = this._positionRect.top;
-          }
-
-          target += this.verticalOffset;
-
-          return Math.max(target, 0);
-        },
-
-        /**
-         * The horizontal align value, accounting for the RTL/LTR text direction.
-         */
-        get _localeHorizontalAlign() {
-          // In RTL, "left" becomes "right".
-          if (this._isRTL()) {
-            return this.horizontalAlign === 'right' ? 'left' : 'right';
-          } else {
-            return this.horizontalAlign;
-          }
-        },
-
-        /**
          * Called when the value of `opened` changes.
-         *
-         * @param {boolean} opened True if the dropdown is opened.
+         * Overridden from `IronOverlayBehavior`
          */
-        _openedChanged: function(opened) {
-          if (opened && this.disabled) {
+        _openedChanged: function() {
+          if (this.opened && this.disabled) {
             this.cancel();
           } else {
             this.cancelAnimation();
-            this._prepareDropdown();
+            this.sizingTarget = this.containedElement || this.sizingTarget;
+            this._updateAnimationConfig();
+            if (this.opened && !this.allowOutsideScroll) {
+              Polymer.IronDropdownScrollManager.pushScrollLock(this);
+            } else {
+              Polymer.IronDropdownScrollManager.removeScrollLock(this);
+            }
             Polymer.IronOverlayBehaviorImpl._openedChanged.apply(this, arguments);
           }
         },
@@ -9237,11 +9759,10 @@ Polymer({
          * Overridden from `IronOverlayBehavior`.
          */
         _renderOpened: function() {
-          if (!this.allowOutsideScroll) {
-            Polymer.IronDropdownScrollManager.pushScrollLock(this);
-          }
-
           if (!this.noAnimations && this.animationConfig && this.animationConfig.open) {
+            if (this.withBackdrop) {
+              this.backdropElement.open();
+            }
             this.$.contentWrapper.classList.add('animating');
             this.playAnimation('open');
           } else {
@@ -9253,8 +9774,10 @@ Polymer({
          * Overridden from `IronOverlayBehavior`.
          */
         _renderClosed: function() {
-          Polymer.IronDropdownScrollManager.removeScrollLock(this);
           if (!this.noAnimations && this.animationConfig && this.animationConfig.close) {
+            if (this.withBackdrop) {
+              this.backdropElement.close();
+            }
             this.$.contentWrapper.classList.add('animating');
             this.playAnimation('close');
           } else {
@@ -9271,42 +9794,10 @@ Polymer({
         _onNeonAnimationFinish: function() {
           this.$.contentWrapper.classList.remove('animating');
           if (this.opened) {
-            Polymer.IronOverlayBehaviorImpl._renderOpened.apply(this);
+            Polymer.IronOverlayBehaviorImpl._finishRenderOpened.apply(this);
           } else {
-            Polymer.IronOverlayBehaviorImpl._renderClosed.apply(this);
+            Polymer.IronOverlayBehaviorImpl._finishRenderClosed.apply(this);
           }
-        },
-
-        /**
-         * Called when an `iron-resize` event fires.
-         */
-        _onIronResize: function() {
-          var containedElement = this.containedElement;
-          var scrollTop;
-          var scrollLeft;
-
-          if (this.opened && containedElement) {
-            scrollTop = containedElement.scrollTop;
-            scrollLeft = containedElement.scrollLeft;
-          }
-
-          if (this.opened) {
-            this._updateOverlayPosition();
-          }
-
-          Polymer.IronOverlayBehaviorImpl._onIronResize.apply(this, arguments);
-
-          if (this.opened && containedElement) {
-            containedElement.scrollTop = scrollTop;
-            containedElement.scrollLeft = scrollLeft;
-          }
-        },
-
-        /**
-         * Called when the `positionTarget` property changes.
-         */
-        _positionTargetChanged: function() {
-          this._updateOverlayPosition();
         },
 
         /**
@@ -9341,42 +9832,37 @@ Polymer({
         },
 
         /**
-         * Prepares the dropdown for opening by updating measured layout
-         * values.
+         * Updates the overlay position based on configured horizontal
+         * and vertical alignment.
          */
-        _prepareDropdown: function() {
-          this.sizingTarget = this.containedElement || this.sizingTarget;
-          this._updateAnimationConfig();
-          this._updateOverlayPosition();
+        _updateOverlayPosition: function() {
+          if (this.isAttached) {
+            // This triggers iron-resize, and iron-overlay-behavior will call refit if needed.
+            this.notifyResize();
+          }
         },
 
         /**
-         * Updates the overlay position based on configured horizontal
-         * and vertical alignment, and re-memoizes these values for the sake
-         * of behavior in `IronFitBehavior`.
+         * Useful to call this after the element, the window, or the `fitInfo`
+         * element has been resized. Will maintain the scroll position.
          */
-        _updateOverlayPosition: function() {
-          this._positionRectMemo = null;
-
-          if (!this.positionTarget) {
-            return;
+        refit: function () {
+          if (!this.opened) {
+            return
           }
+          var containedElement = this.containedElement;
+          var scrollTop;
+          var scrollLeft;
 
-          this.style[this._localeHorizontalAlign] =
-            this._horizontalAlignTargetValue + 'px';
+          if (containedElement) {
+            scrollTop = containedElement.scrollTop;
+            scrollLeft = containedElement.scrollLeft;
+          }
+          Polymer.IronFitBehavior.refit.apply(this, arguments);
 
-          this.style[this.verticalAlign] =
-            this._verticalAlignTargetValue + 'px';
-
-          // NOTE(cdata): We re-memoize inline styles here, otherwise
-          // calling `refit` from `IronFitBehavior` will reset inline styles
-          // to whatever they were when the dropdown first opened.
-          if (this._fitInfo) {
-            this._fitInfo.inlineStyle[this.horizontalAlign] =
-              this.style[this.horizontalAlign];
-
-            this._fitInfo.inlineStyle[this.verticalAlign] =
-              this.style[this.verticalAlign];
+          if (containedElement) {
+            containedElement.scrollTop = scrollTop;
+            containedElement.scrollLeft = scrollLeft;
           }
         },
 
@@ -9522,257 +10008,278 @@ Polymer({
     }
   });
 (function() {
-    'use strict';
+      'use strict';
 
-    var PaperMenuButton = Polymer({
-      is: 'paper-menu-button',
-
-      /**
-       * Fired when the dropdown opens.
-       *
-       * @event paper-dropdown-open
-       */
-
-      /**
-       * Fired when the dropdown closes.
-       *
-       * @event paper-dropdown-close
-       */
-
-      behaviors: [
-        Polymer.IronA11yKeysBehavior,
-        Polymer.IronControlState
-      ],
-
-      properties: {
+      var PaperMenuButton = Polymer({
+        is: 'paper-menu-button',
 
         /**
-         * True if the content is currently displayed.
+         * Fired when the dropdown opens.
+         *
+         * @event paper-dropdown-open
          */
-        opened: {
-          type: Boolean,
-          value: false,
-          notify: true,
-          observer: '_openedChanged'
+
+        /**
+         * Fired when the dropdown closes.
+         *
+         * @event paper-dropdown-close
+         */
+
+        behaviors: [
+          Polymer.IronA11yKeysBehavior,
+          Polymer.IronControlState
+        ],
+
+        properties: {
+          /**
+           * True if the content is currently displayed.
+           */
+          opened: {
+            type: Boolean,
+            value: false,
+            notify: true,
+            observer: '_openedChanged'
+          },
+
+          /**
+           * The orientation against which to align the menu dropdown
+           * horizontally relative to the dropdown trigger.
+           */
+          horizontalAlign: {
+            type: String,
+            value: 'left',
+            reflectToAttribute: true
+          },
+
+          /**
+           * The orientation against which to align the menu dropdown
+           * vertically relative to the dropdown trigger.
+           */
+          verticalAlign: {
+            type: String,
+            value: 'top',
+            reflectToAttribute: true
+          },
+
+          /**
+           * A pixel value that will be added to the position calculated for the
+           * given `horizontalAlign`. Use a negative value to offset to the
+           * left, or a positive value to offset to the right.
+           */
+          horizontalOffset: {
+            type: Number,
+            value: 0,
+            notify: true
+          },
+
+          /**
+           * A pixel value that will be added to the position calculated for the
+           * given `verticalAlign`. Use a negative value to offset towards the
+           * top, or a positive value to offset towards the bottom.
+           */
+          verticalOffset: {
+            type: Number,
+            value: 0,
+            notify: true
+          },
+
+          /**
+           * Set to true to disable animations when opening and closing the
+           * dropdown.
+           */
+          noAnimations: {
+            type: Boolean,
+            value: false
+          },
+
+          /**
+           * Set to true to disable automatically closing the dropdown after
+           * a selection has been made.
+           */
+          ignoreSelect: {
+            type: Boolean,
+            value: false
+          },
+
+          /**
+           * An animation config. If provided, this will be used to animate the
+           * opening of the dropdown.
+           */
+          openAnimationConfig: {
+            type: Object,
+            value: function() {
+              return [{
+                name: 'fade-in-animation',
+                timing: {
+                  delay: 100,
+                  duration: 200
+                }
+              }, {
+                name: 'paper-menu-grow-width-animation',
+                timing: {
+                  delay: 100,
+                  duration: 150,
+                  easing: PaperMenuButton.ANIMATION_CUBIC_BEZIER
+                }
+              }, {
+                name: 'paper-menu-grow-height-animation',
+                timing: {
+                  delay: 100,
+                  duration: 275,
+                  easing: PaperMenuButton.ANIMATION_CUBIC_BEZIER
+                }
+              }];
+            }
+          },
+
+          /**
+           * An animation config. If provided, this will be used to animate the
+           * closing of the dropdown.
+           */
+          closeAnimationConfig: {
+            type: Object,
+            value: function() {
+              return [{
+                name: 'fade-out-animation',
+                timing: {
+                  duration: 150
+                }
+              }, {
+                name: 'paper-menu-shrink-width-animation',
+                timing: {
+                  delay: 100,
+                  duration: 50,
+                  easing: PaperMenuButton.ANIMATION_CUBIC_BEZIER
+                }
+              }, {
+                name: 'paper-menu-shrink-height-animation',
+                timing: {
+                  duration: 200,
+                  easing: 'ease-in'
+                }
+              }];
+            }
+          },
+
+          /**
+           * This is the element intended to be bound as the focus target
+           * for the `iron-dropdown` contained by `paper-menu-button`.
+           */
+          _dropdownContent: {
+            type: Object
+          }
+        },
+
+        hostAttributes: {
+          role: 'group',
+          'aria-haspopup': 'true'
+        },
+
+        listeners: {
+          'iron-select': '_onIronSelect'
         },
 
         /**
-         * The orientation against which to align the menu dropdown
-         * horizontally relative to the dropdown trigger.
+         * The content element that is contained by the menu button, if any.
          */
-        horizontalAlign: {
-          type: String,
-          value: 'left',
-          reflectToAttribute: true
+        get contentElement() {
+          return Polymer.dom(this.$.content).getDistributedNodes()[0];
         },
 
         /**
-         * The orientation against which to align the menu dropdown
-         * vertically relative to the dropdown trigger.
+         * Toggles the drowpdown content between opened and closed.
          */
-        verticalAlign: {
-          type: String,
-          value: 'top',
-          reflectToAttribute: true
+        toggle: function() {
+          if (this.opened) {
+            this.close();
+          } else {
+            this.open();
+          }
         },
 
         /**
-         * A pixel value that will be added to the position calculated for the
-         * given `horizontalAlign`. Use a negative value to offset to the
-         * left, or a positive value to offset to the right.
+         * Make the dropdown content appear as an overlay positioned relative
+         * to the dropdown trigger.
          */
-        horizontalOffset: {
-          type: Number,
-          value: 0,
-          notify: true
+        open: function() {
+          if (this.disabled) {
+            return;
+          }
+
+          this.$.dropdown.open();
         },
 
         /**
-         * A pixel value that will be added to the position calculated for the
-         * given `verticalAlign`. Use a negative value to offset towards the
-         * top, or a positive value to offset towards the bottom.
+         * Hide the dropdown content.
          */
-        verticalOffset: {
-          type: Number,
-          value: 0,
-          notify: true
+        close: function() {
+          this.$.dropdown.close();
         },
 
         /**
-         * Set to true to disable animations when opening and closing the
+         * When an `iron-select` event is received, the dropdown should
+         * automatically close on the assumption that a value has been chosen.
+         *
+         * @param {CustomEvent} event A CustomEvent instance with type
+         * set to `"iron-select"`.
+         */
+        _onIronSelect: function(event) {
+          if (!this.ignoreSelect) {
+            this.close();
+          }
+        },
+
+        /**
+         * When the dropdown opens, the `paper-menu-button` fires `paper-open`.
+         * When the dropdown closes, the `paper-menu-button` fires `paper-close`.
+         *
+         * @param {boolean} opened True if the dropdown is opened, otherwise false.
+         * @param {boolean} oldOpened The previous value of `opened`.
+         */
+        _openedChanged: function(opened, oldOpened) {
+          if (opened) {
+            // TODO(cdata): Update this when we can measure changes in distributed
+            // children in an idiomatic way.
+            // We poke this property in case the element has changed. This will
+            // cause the focus target for the `iron-dropdown` to be updated as
+            // necessary:
+            this._dropdownContent = this.contentElement;
+            this.fire('paper-dropdown-open');
+          } else if (oldOpened != null) {
+            this.fire('paper-dropdown-close');
+          }
+        },
+
+        /**
+         * If the dropdown is open when disabled becomes true, close the
          * dropdown.
+         *
+         * @param {boolean} disabled True if disabled, otherwise false.
          */
-        noAnimations: {
-          type: Boolean,
-          value: false
-        },
-
-        /**
-         * Set to true to disable automatically closing the dropdown after
-         * a selection has been made.
-         */
-        ignoreSelect: {
-          type: Boolean,
-          value: false
-        },
-
-        /**
-         * An animation config. If provided, this will be used to animate the
-         * opening of the dropdown.
-         */
-        openAnimationConfig: {
-          type: Object,
-          value: function() {
-            return [{
-              name: 'fade-in-animation',
-              timing: {
-                delay: 100,
-                duration: 200
-              }
-            }, {
-              name: 'paper-menu-grow-width-animation',
-              timing: {
-                delay: 100,
-                duration: 150,
-                easing: PaperMenuButton.ANIMATION_CUBIC_BEZIER
-              }
-            }, {
-              name: 'paper-menu-grow-height-animation',
-              timing: {
-                delay: 100,
-                duration: 275,
-                easing: PaperMenuButton.ANIMATION_CUBIC_BEZIER
-              }
-            }];
+        _disabledChanged: function(disabled) {
+          Polymer.IronControlState._disabledChanged.apply(this, arguments);
+          if (disabled && this.opened) {
+            this.close();
           }
         },
 
-        /**
-         * An animation config. If provided, this will be used to animate the
-         * closing of the dropdown.
-         */
-        closeAnimationConfig: {
-          type: Object,
-          value: function() {
-            return [{
-              name: 'fade-out-animation',
-              timing: {
-                duration: 150
-              }
-            }, {
-              name: 'paper-menu-shrink-width-animation',
-              timing: {
-                delay: 100,
-                duration: 50,
-                easing: PaperMenuButton.ANIMATION_CUBIC_BEZIER
-              }
-            }, {
-              name: 'paper-menu-shrink-height-animation',
-              timing: {
-                duration: 200,
-                easing: 'ease-in'
-              }
-            }];
+        __onIronOverlayCanceled: function(event) {
+          var uiEvent = event.detail;
+          var target = Polymer.dom(uiEvent).rootTarget;
+          var trigger = this.$.trigger;
+          var path = Polymer.dom(uiEvent).path;
+
+          if (path.indexOf(trigger) > -1) {
+            event.preventDefault();
           }
-        },
-
-        /**
-         * This is the element intended to be bound as the focus target
-         * for the `iron-dropdown` contained by `paper-menu-button`.
-         */
-        _dropdownContent: {
-          type: Object
         }
-      },
+      });
 
-      hostAttributes: {
-        role: 'group',
-        'aria-haspopup': 'true'
-      },
+      PaperMenuButton.ANIMATION_CUBIC_BEZIER = 'cubic-bezier(.3,.95,.5,1)';
+      PaperMenuButton.MAX_ANIMATION_TIME_MS = 400;
 
-      listeners: {
-        'iron-select': '_onIronSelect'
-      },
-
-      /**
-       * The content element that is contained by the menu button, if any.
-       */
-      get contentElement() {
-        return Polymer.dom(this.$.content).getDistributedNodes()[0];
-      },
-
-      /**
-       * Make the dropdown content appear as an overlay positioned relative
-       * to the dropdown trigger.
-       */
-      open: function() {
-        if (this.disabled) {
-          return;
-        }
-
-        this.$.dropdown.open();
-      },
-
-      /**
-       * Hide the dropdown content.
-       */
-      close: function() {
-        this.$.dropdown.close();
-      },
-
-      /**
-       * When an `iron-select` event is received, the dropdown should
-       * automatically close on the assumption that a value has been chosen.
-       *
-       * @param {CustomEvent} event A CustomEvent instance with type
-       * set to `"iron-select"`.
-       */
-      _onIronSelect: function(event) {
-        if (!this.ignoreSelect) {
-          this.close();
-        }
-      },
-
-      /**
-       * When the dropdown opens, the `paper-menu-button` fires `paper-open`.
-       * When the dropdown closes, the `paper-menu-button` fires `paper-close`.
-       *
-       * @param {boolean} opened True if the dropdown is opened, otherwise false.
-       * @param {boolean} oldOpened The previous value of `opened`.
-       */
-      _openedChanged: function(opened, oldOpened) {
-        if (opened) {
-          // TODO(cdata): Update this when we can measure changes in distributed
-          // children in an idiomatic way.
-          // We poke this property in case the element has changed. This will
-          // cause the focus target for the `iron-dropdown` to be updated as
-          // necessary:
-          this._dropdownContent = this.contentElement;
-          this.fire('paper-dropdown-open');
-        } else if (oldOpened != null) {
-          this.fire('paper-dropdown-close');
-        }
-      },
-
-      /**
-       * If the dropdown is open when disabled becomes true, close the
-       * dropdown.
-       *
-       * @param {boolean} disabled True if disabled, otherwise false.
-       */
-      _disabledChanged: function(disabled) {
-        Polymer.IronControlState._disabledChanged.apply(this, arguments);
-        if (disabled && this.opened) {
-          this.close();
-        }
-      }
-    });
-
-    PaperMenuButton.ANIMATION_CUBIC_BEZIER = 'cubic-bezier(.3,.95,.5,1)';
-    PaperMenuButton.MAX_ANIMATION_TIME_MS = 400;
-
-    Polymer.PaperMenuButton = PaperMenuButton;
-  })();
+      Polymer.PaperMenuButton = PaperMenuButton;
+    })();
 Polymer({
       is: 'paper-icon-button',
 
@@ -9821,7 +10328,73 @@ Polymer({
         }
       }
     });
+(function() {
+      'use strict';
+
+      Polymer.IronA11yAnnouncer = Polymer({
+        is: 'iron-a11y-announcer',
+
+        properties: {
+
+          /**
+           * The value of mode is used to set the `aria-live` attribute
+           * for the element that will be announced. Valid values are: `off`,
+           * `polite` and `assertive`.
+           */
+          mode: {
+            type: String,
+            value: 'polite'
+          },
+
+          _text: {
+            type: String,
+            value: ''
+          }
+        },
+
+        created: function() {
+          if (!Polymer.IronA11yAnnouncer.instance) {
+            Polymer.IronA11yAnnouncer.instance = this;
+          }
+
+          document.body.addEventListener('iron-announce', this._onIronAnnounce.bind(this));
+        },
+
+        /**
+         * Cause a text string to be announced by screen readers.
+         *
+         * @param {string} text The text that should be announced.
+         */
+        announce: function(text) {
+          this._text = '';
+          this.async(function() {
+            this._text = text;
+          }, 100);
+        },
+
+        _onIronAnnounce: function(event) {
+          if (event.detail && event.detail.text) {
+            this.announce(event.detail.text);
+          }
+        }
+      });
+
+      Polymer.IronA11yAnnouncer.instance = null;
+
+      Polymer.IronA11yAnnouncer.requestAvailability = function() {
+        if (!Polymer.IronA11yAnnouncer.instance) {
+          Polymer.IronA11yAnnouncer.instance = document.createElement('iron-a11y-announcer');
+        }
+
+        document.body.appendChild(Polymer.IronA11yAnnouncer.instance);
+      };
+    })();
 /**
+   * Singleton IronMeta instance.
+   */
+  Polymer.IronValidatableBehaviorMeta = null;
+
+  /**
    * `Use Polymer.IronValidatableBehavior` to implement an element that validates user input.
    * Use the related `Polymer.IronValidatorBehavior` to add custom validation logic to an iron-input.
    *
@@ -9850,14 +10423,6 @@ Polymer({
     properties: {
 
       /**
-       * Namespace for this validator.
-       */
-      validatorType: {
-        type: String,
-        value: 'validator'
-      },
-
-      /**
        * Name of the validator to use.
        */
       validator: {
@@ -9874,22 +10439,36 @@ Polymer({
         value: false
       },
 
+      /**
+       * This property is deprecated and should not be used. Use the global
+       * validator meta singleton, `Polymer.IronValidatableBehaviorMeta` instead.
+       */
       _validatorMeta: {
         type: Object
-      }
+      },
 
+      /**
+       * Namespace for this validator. This property is deprecated and should
+       * not be used. For all intents and purposes, please consider it a
+       * read-only, config-time property.
+       */
+      validatorType: {
+        type: String,
+        value: 'validator'
+      },
+
+      _validator: {
+        type: Object,
+        computed: '__computeValidator(validator)'
+      }
     },
 
     observers: [
       '_invalidChanged(invalid)'
     ],
 
-    get _validator() {
-      return this._validatorMeta && this._validatorMeta.byKey(this.validator);
-    },
-
-    ready: function() {
-      this._validatorMeta = new Polymer.IronMeta({type: this.validatorType});
+    registered: function() {
+      Polymer.IronValidatableBehaviorMeta = new Polymer.IronMeta({type: 'validator'});
     },
 
     _invalidChanged: function() {
@@ -9936,6 +10515,11 @@ Polymer({
         return this._validator.validate(value);
       }
       return true;
+    },
+
+    __computeValidator: function() {
+      return Polymer.IronValidatableBehaviorMeta &&
+          Polymer.IronValidatableBehaviorMeta.byKey(this.validator);
     }
   };
 /*
@@ -9993,18 +10577,22 @@ is separate from validation, and `allowed-pattern` does not affect how the input
       },
 
       /**
-       * Set to true to prevent the user from entering invalid input. The new input characters are
-       * matched with `allowedPattern` if it is set, otherwise it will use the `type` attribute (only
-       * supported for `type=number`).
+       * Set to true to prevent the user from entering invalid input. If `allowedPattern` is set,
+       * any character typed by the user will be matched against that pattern, and rejected if it's not a match.
+       * Pasted input will have each character checked individually; if any character
+       * doesn't match `allowedPattern`, the entire pasted string will be rejected.
+       * If `allowedPattern` is not set, it will use the `type` attribute (only supported for `type=number`).
        */
       preventInvalidInput: {
         type: Boolean
       },
 
       /**
-       * Regular expression expressing a set of characters to enforce the validity of input characters.
-       * The recommended value should follow this format: `[a-ZA-Z0-9.+-!;:]` that list the characters 
-       * allowed as input.
+       * Regular expression that list the characters allowed as input.
+       * This pattern represents the allowed characters for the field; as the user inputs text,
+       * each individual character will be checked against the pattern (rather than checking
+       * the entire value as a whole). The recommended format should be a list of allowed characters;
+       * for example, `[a-zA-Z0-9.+-!;:]`
        */
       allowedPattern: {
         type: String,
@@ -10026,6 +10614,47 @@ is separate from validation, and `allowed-pattern` does not affect how the input
     listeners: {
       'input': '_onInput',
       'keypress': '_onKeypress'
+    },
+
+    /** @suppress {checkTypes} */
+    registered: function() {
+      // Feature detect whether we need to patch dispatchEvent (i.e. on FF and IE).
+      if (!this._canDispatchEventOnDisabled()) {
+        this._origDispatchEvent = this.dispatchEvent;
+        this.dispatchEvent = this._dispatchEventFirefoxIE;
+      }
+    },
+
+    created: function() {
+      Polymer.IronA11yAnnouncer.requestAvailability();
+    },
+
+    _canDispatchEventOnDisabled: function() {
+      var input = document.createElement('input');
+      var canDispatch = false;
+      input.disabled = true;
+
+      input.addEventListener('feature-check-dispatch-event', function() {
+        canDispatch = true;
+      });
+
+      try {
+        input.dispatchEvent(new Event('feature-check-dispatch-event'));
+      } catch(e) {}
+
+      return canDispatch;
+    },
+
+    _dispatchEventFirefoxIE: function() {
+      // Due to Firefox bug, events fired on disabled form controls can throw
+      // errors; furthermore, neither IE nor Firefox will actually dispatch
+      // events from disabled form controls; as such, we toggle disable around
+      // the dispatch to allow notifying properties to notify
+      // See issue #47 for details
+      var disabled = this.disabled;
+      this.disabled = false;
+      this._origDispatchEvent.apply(this, arguments);
+      this.disabled = disabled;
     },
 
     get _patternRegExp() {
@@ -10068,6 +10697,7 @@ is separate from validation, and `allowed-pattern` does not affect how the input
       if (this.preventInvalidInput && !this._patternAlreadyChecked) {
         var valid = this._checkPatternValidity();
         if (!valid) {
+          this._announceInvalidCharacter('Invalid string of characters not entered.');
           this.value = this._previousValidInput;
         }
       }
@@ -10128,6 +10758,7 @@ is separate from validation, and `allowed-pattern` does not affect how the input
       var thisChar = String.fromCharCode(event.charCode);
       if (this._isPrintable(event) && !regexp.test(thisChar)) {
         event.preventDefault();
+        this._announceInvalidCharacter('Invalid character ' + thisChar + ' not entered.');
       }
     },
 
@@ -10150,23 +10781,29 @@ is separate from validation, and `allowed-pattern` does not affect how the input
      * @return {boolean} True if the value is valid.
      */
     validate: function() {
-      // Empty, non-required input is valid.
-      if (!this.required && this.value == '') {
-        this.invalid = false;
-        return true;
+      // First, check what the browser thinks. Some inputs (like type=number)
+      // behave weirdly and will set the value to "" if something invalid is
+      // entered, but will set the validity correctly.
+      var valid =  this.checkValidity();
+
+      // Only do extra checking if the browser thought this was valid.
+      if (valid) {
+        // Empty, required input is invalid
+        if (this.required && this.value === '') {
+          valid = false;
+        } else if (this.hasValidator()) {
+          valid = Polymer.IronValidatableBehavior.validate.call(this, this.value);
+        }
       }
 
-      var valid;
-      if (this.hasValidator()) {
-        valid = Polymer.IronValidatableBehavior.validate.call(this, this.value);
-      } else {
-        valid = this.checkValidity();
-        this.invalid = !valid;
-      }
+      this.invalid = !valid;
       this.fire('iron-input-validate');
       return valid;
-    }
+    },
 
+    _announceInvalidCharacter: function(message) {
+      this.fire('iron-announce', { text: message });
+    }
   });
 
   /*
@@ -10303,14 +10940,15 @@ Polymer({
       }
       this.addEventListener('focus', this._boundOnFocus, true);
       this.addEventListener('blur', this._boundOnBlur, true);
+    },
+
+    attached: function() {
       if (this.attrForValue) {
         this._inputElement.addEventListener(this._valueChangedEvent, this._boundValueChanged);
       } else {
         this.addEventListener('input', this._onInput);
       }
-    },
 
-    attached: function() {
       // Only validate when attached if the input already has a value.
       if (this._inputElementValue != '') {
         this._handleValueAndAutoValidate(this._inputElement);
@@ -10857,13 +11495,6 @@ cr.define('downloads', function() {
 
   return {Manager: Manager};
 });
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-
-// <include src="../../../../ui/webui/resources/js/i18n_template_no_process.js">
-
-i18nTemplate.process(document, loadTimeData);
 // Copyright 2015 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.

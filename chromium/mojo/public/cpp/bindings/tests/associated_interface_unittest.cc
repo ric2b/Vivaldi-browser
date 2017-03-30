@@ -11,7 +11,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/threading/thread.h"
-#include "mojo/message_pump/message_pump_mojo.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
 #include "mojo/public/cpp/bindings/associated_group.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
@@ -26,10 +26,7 @@ namespace mojo {
 namespace test {
 namespace {
 
-using mojo::internal::AssociatedInterfacePtrInfoHelper;
-using mojo::internal::AssociatedInterfaceRequestHelper;
 using mojo::internal::MultiplexRouter;
-using mojo::internal::ScopedInterfaceEndpointHandle;
 
 class IntegerSenderImpl : public IntegerSender {
  public:
@@ -90,7 +87,7 @@ class IntegerSenderConnectionImpl : public IntegerSenderConnection {
 
 class AssociatedInterfaceTest : public testing::Test {
  public:
-  AssociatedInterfaceTest() : loop_(common::MessagePumpMojo::Create()) {}
+  AssociatedInterfaceTest() {}
   ~AssociatedInterfaceTest() override { loop_.RunUntilIdle(); }
 
   void PumpMessages() { loop_.RunUntilIdle(); }
@@ -99,33 +96,21 @@ class AssociatedInterfaceTest : public testing::Test {
   AssociatedInterfacePtrInfo<T> EmulatePassingAssociatedPtrInfo(
       AssociatedInterfacePtrInfo<T> ptr_info,
       scoped_refptr<MultiplexRouter> target) {
-    ScopedInterfaceEndpointHandle handle =
-        AssociatedInterfacePtrInfoHelper::PassHandle(&ptr_info);
+    ScopedInterfaceEndpointHandle handle = ptr_info.PassHandle();
     CHECK(!handle.is_local());
-
-    ScopedInterfaceEndpointHandle new_handle =
-        target->CreateLocalEndpointHandle(handle.release());
-
-    AssociatedInterfacePtrInfo<T> result;
-    AssociatedInterfacePtrInfoHelper::SetHandle(&result, std::move(new_handle));
-    result.set_version(ptr_info.version());
-    return std::move(result);
+    return AssociatedInterfacePtrInfo<T>(
+        target->CreateLocalEndpointHandle(handle.release()),
+        ptr_info.version());
   }
 
   template <typename T>
   AssociatedInterfaceRequest<T> EmulatePassingAssociatedRequest(
       AssociatedInterfaceRequest<T> request,
       scoped_refptr<MultiplexRouter> target) {
-    ScopedInterfaceEndpointHandle handle =
-        AssociatedInterfaceRequestHelper::PassHandle(&request);
+    ScopedInterfaceEndpointHandle handle = request.PassHandle();
     CHECK(!handle.is_local());
-
-    ScopedInterfaceEndpointHandle new_handle =
-        target->CreateLocalEndpointHandle(handle.release());
-
-    AssociatedInterfaceRequest<T> result;
-    AssociatedInterfaceRequestHelper::SetHandle(&result, std::move(new_handle));
-    return std::move(result);
+    return MakeAssociatedRequest<T>(
+        target->CreateLocalEndpointHandle(handle.release()));
   }
 
   // Okay to call from any thread.
@@ -149,10 +134,10 @@ TEST_F(AssociatedInterfaceTest, InterfacesAtBothEnds) {
   // at different ends. Test that the two don't interfere with each other.
 
   MessagePipe pipe;
-  scoped_refptr<MultiplexRouter> router0(
-      new MultiplexRouter(true, std::move(pipe.handle0)));
-  scoped_refptr<MultiplexRouter> router1(
-      new MultiplexRouter(false, std::move(pipe.handle1)));
+  scoped_refptr<MultiplexRouter> router0(new MultiplexRouter(
+      true, std::move(pipe.handle0), base::ThreadTaskRunnerHandle::Get()));
+  scoped_refptr<MultiplexRouter> router1(new MultiplexRouter(
+      false, std::move(pipe.handle1), base::ThreadTaskRunnerHandle::Get()));
 
   AssociatedInterfaceRequest<IntegerSender> request;
   IntegerSenderAssociatedPtrInfo ptr_info;
@@ -223,10 +208,7 @@ class TestSender {
       : sender_thread_("TestSender"),
         next_sender_(nullptr),
         max_value_to_send_(-1) {
-    base::Thread::Options thread_options;
-    thread_options.message_pump_factory =
-        base::Bind(&common::MessagePumpMojo::Create);
-    sender_thread_.StartWithOptions(thread_options);
+    sender_thread_.Start();
   }
 
   // The following three methods are called on the corresponding sender thread.
@@ -272,10 +254,7 @@ class TestSender {
 class TestReceiver {
  public:
   TestReceiver() : receiver_thread_("TestReceiver"), max_value_to_receive_(-1) {
-    base::Thread::Options thread_options;
-    thread_options.message_pump_factory =
-        base::Bind(&common::MessagePumpMojo::Create);
-    receiver_thread_.StartWithOptions(thread_options);
+    receiver_thread_.Start();
   }
 
   void SetUp(AssociatedInterfaceRequest<IntegerSender> request0,
@@ -316,8 +295,8 @@ class TestReceiver {
   base::Thread receiver_thread_;
   int32_t max_value_to_receive_;
 
-  scoped_ptr<IntegerSenderImpl> impl0_;
-  scoped_ptr<IntegerSenderImpl> impl1_;
+  std::unique_ptr<IntegerSenderImpl> impl0_;
+  std::unique_ptr<IntegerSenderImpl> impl1_;
 
   std::vector<int32_t> values_;
 
@@ -361,10 +340,10 @@ TEST_F(AssociatedInterfaceTest, MultiThreadAccess) {
 
   const int32_t kMaxValue = 1000;
   MessagePipe pipe;
-  scoped_refptr<MultiplexRouter> router0(
-      new MultiplexRouter(true, std::move(pipe.handle0)));
-  scoped_refptr<MultiplexRouter> router1(
-      new MultiplexRouter(false, std::move(pipe.handle1)));
+  scoped_refptr<MultiplexRouter> router0(new MultiplexRouter(
+      true, std::move(pipe.handle0), base::ThreadTaskRunnerHandle::Get()));
+  scoped_refptr<MultiplexRouter> router1(new MultiplexRouter(
+      false, std::move(pipe.handle1), base::ThreadTaskRunnerHandle::Get()));
 
   AssociatedInterfaceRequest<IntegerSender> requests[4];
   IntegerSenderAssociatedPtrInfo ptr_infos[4];
@@ -450,10 +429,10 @@ TEST_F(AssociatedInterfaceTest, FIFO) {
 
   const int32_t kMaxValue = 100;
   MessagePipe pipe;
-  scoped_refptr<MultiplexRouter> router0(
-      new MultiplexRouter(true, std::move(pipe.handle0)));
-  scoped_refptr<MultiplexRouter> router1(
-      new MultiplexRouter(false, std::move(pipe.handle1)));
+  scoped_refptr<MultiplexRouter> router0(new MultiplexRouter(
+      true, std::move(pipe.handle0), base::ThreadTaskRunnerHandle::Get()));
+  scoped_refptr<MultiplexRouter> router1(new MultiplexRouter(
+      false, std::move(pipe.handle1), base::ThreadTaskRunnerHandle::Get()));
 
   AssociatedInterfaceRequest<IntegerSender> requests[4];
   IntegerSenderAssociatedPtrInfo ptr_infos[4];

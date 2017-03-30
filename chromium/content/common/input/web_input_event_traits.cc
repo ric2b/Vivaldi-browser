@@ -432,6 +432,7 @@ const char* WebInputEventTraits::GetName(WebInputEvent::Type type) {
     CASE_TYPE(TouchMove);
     CASE_TYPE(TouchEnd);
     CASE_TYPE(TouchCancel);
+    CASE_TYPE(TouchScrollStarted);
     default:
       // Must include default to let blink::WebInputEvent add new event types
       // before they're added here.
@@ -502,8 +503,9 @@ bool WebInputEventTraits::ShouldBlockEventStream(const WebInputEvent& event) {
     case WebInputEvent::GesturePinchEnd:
       return false;
 
-    // TouchCancel should always be non-blocking.
+    // TouchCancel and TouchScrollStarted should always be non-blocking.
     case WebInputEvent::TouchCancel:
+    case WebInputEvent::TouchScrollStarted:
       DCHECK_NE(WebInputEvent::Blocking,
                 static_cast<const WebTouchEvent&>(event).dispatchType);
       return false;

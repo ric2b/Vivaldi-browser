@@ -12,6 +12,8 @@
 #include "base/time/time.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_window.h"
+#include "content/public/browser/notification_observer.h"
+#include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/web_ui_message_handler.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 
@@ -25,16 +27,42 @@ class SupervisedUserRegistrationUtility;
 #endif
 
 // Handler for the 'create profile' page.
-class SigninCreateProfileHandler : public content::WebUIMessageHandler {
+class SigninCreateProfileHandler : public content::WebUIMessageHandler,
+                                   public content::NotificationObserver {
  public:
   SigninCreateProfileHandler();
   ~SigninCreateProfileHandler() override;
 
   void GetLocalizedValues(base::DictionaryValue* localized_strings);
 
- private:
+ protected:
+  FRIEND_TEST_ALL_PREFIXES(SigninCreateProfileHandlerTest,
+                           ReturnDefaultProfileNameAndIcons);
+  FRIEND_TEST_ALL_PREFIXES(SigninCreateProfileHandlerTest,
+                           ReturnSignedInProfiles);
+  FRIEND_TEST_ALL_PREFIXES(SigninCreateProfileHandlerTest,
+                           CreateProfile);
+  FRIEND_TEST_ALL_PREFIXES(SigninCreateProfileHandlerTest,
+                           CreateSupervisedUser);
+  FRIEND_TEST_ALL_PREFIXES(SigninCreateProfileHandlerTest,
+                           ImportSupervisedUser);
+  FRIEND_TEST_ALL_PREFIXES(SigninCreateProfileHandlerTest,
+                           ImportSupervisedUserAlreadyOnDevice);
+  FRIEND_TEST_ALL_PREFIXES(SigninCreateProfileHandlerTest,
+                           CustodianNotAuthenticated);
+  FRIEND_TEST_ALL_PREFIXES(SigninCreateProfileHandlerTest,
+                           CustodianHasAuthError);
+  FRIEND_TEST_ALL_PREFIXES(SigninCreateProfileHandlerTest,
+                           NotAllowedToCreateSupervisedUser);
+
   // WebUIMessageHandler implementation.
   void RegisterMessages() override;
+
+  // content::NotificationObserver implementation:
+  void Observe(int type,
+               const content::NotificationSource& source,
+               const content::NotificationDetails& details) override;
+
   // Represents the final profile creation status. It is used to map
   // the status to the javascript method to be called.
   enum ProfileCreationStatus {
@@ -98,7 +126,9 @@ class SigninCreateProfileHandler : public content::WebUIMessageHandler {
 
   // Creates desktop shortcut and updates the UI to indicate success
   // when creating a profile.
-  void CreateShortcutAndShowSuccess(bool create_shortcut, Profile* profile);
+  void CreateShortcutAndShowSuccess(bool create_shortcut,
+                                    Profile* custodian_profile,
+                                    Profile* profile);
 
   // Updates the UI to show an error when creating a profile.
   void ShowProfileCreationError(Profile* profile, const base::string16& error);
@@ -118,7 +148,7 @@ class SigninCreateProfileHandler : public content::WebUIMessageHandler {
 
   base::StringValue GetWebUIListenerName(ProfileCreationStatus status) const;
 
-  // Used to allow cancelling a profile creation (particularly a supervised-user
+  // Used to allow canceling a profile creation (particularly a supervised-user
   // registration) in progress. Set when profile creation is begun, and
   // cleared when all the callbacks have been run and creation is complete.
   base::FilePath profile_path_being_created_;
@@ -131,11 +161,11 @@ class SigninCreateProfileHandler : public content::WebUIMessageHandler {
   ProfileCreationOperationType profile_creation_type_;
 
   // Asynchronously creates and initializes a new profile.
-  void DoCreateProfile(const base::string16& name,
-                       const std::string& icon_url,
-                       bool create_shortcut,
-                       const std::string& supervised_user_id,
-                       Profile* custodian_profile);
+  virtual void DoCreateProfile(const base::string16& name,
+                               const std::string& icon_url,
+                               bool create_shortcut,
+                               const std::string& supervised_user_id,
+                               Profile* custodian_profile);
 
 #if defined(ENABLE_SUPERVISED_USERS)
   // Extracts the supervised user ID and the custodian user profile path from
@@ -168,13 +198,14 @@ class SigninCreateProfileHandler : public content::WebUIMessageHandler {
 
   // After a new supervised-user profile has been created, registers the user
   // with the management server.
-  void RegisterSupervisedUser(bool create_shortcut,
-                              const std::string& managed_user_id,
-                              Profile* custodian_profile,
-                              Profile* new_profile);
+  virtual void RegisterSupervisedUser(bool create_shortcut,
+                                      const std::string& managed_user_id,
+                                      Profile* custodian_profile,
+                                      Profile* new_profile);
 
   // Called back with the result of the supervised user registration.
   void OnSupervisedUserRegistered(bool create_shortcut,
+                                  Profile* custodian_profile,
                                   Profile* profile,
                                   const GoogleServiceAuthError& error);
 
@@ -192,6 +223,14 @@ class SigninCreateProfileHandler : public content::WebUIMessageHandler {
                                  Profile* custodian_profile,
                                  const base::DictionaryValue* dict);
 
+  // Opens a new window for |profile|.
+  virtual void OpenNewWindowForProfile(Profile* profile,
+                                       Profile::CreateStatus status);
+
+  // Callback for the "switchToProfile" message. Opens a new window for the
+  // profile. The profile file path is passed as a string argument.
+  void SwitchToProfile(const base::ListValue* args);
+
   std::unique_ptr<SupervisedUserRegistrationUtility>
       supervised_user_registration_utility_;
 #endif
@@ -201,8 +240,16 @@ class SigninCreateProfileHandler : public content::WebUIMessageHandler {
   // Returns true if profile has authentication error.
   bool HasAuthError(Profile* profile) const;
 
+  // This callback is run after a new browser (but not the window) has been
+  // created for the new profile.
+  void OnBrowserReadyCallback(Profile* profile,
+                              Profile::CreateStatus status);
+
+  content::NotificationRegistrar registrar_;
+
   base::WeakPtrFactory<SigninCreateProfileHandler> weak_ptr_factory_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(SigninCreateProfileHandler);
 };
 

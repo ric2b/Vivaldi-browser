@@ -34,7 +34,7 @@ InterpolationValue CSSShadowListInterpolationType::maybeConvertNeutral(const Int
     return createNeutralValue();
 }
 
-InterpolationValue CSSShadowListInterpolationType::maybeConvertInitial(const StyleResolverState&) const
+InterpolationValue CSSShadowListInterpolationType::maybeConvertInitial(const StyleResolverState&, ConversionCheckers&) const
 {
     return convertShadowList(ShadowListPropertyFunctions::getInitialShadowList(cssProperty()), 1);
 }
@@ -89,9 +89,9 @@ InterpolationValue CSSShadowListInterpolationType::maybeConvertValue(const CSSVa
     });
 }
 
-PairwiseInterpolationValue CSSShadowListInterpolationType::mergeSingleConversions(InterpolationValue&& start, InterpolationValue&& end) const
+PairwiseInterpolationValue CSSShadowListInterpolationType::maybeMergeSingles(InterpolationValue&& start, InterpolationValue&& end) const
 {
-    return ListInterpolationFunctions::mergeSingleConversions(std::move(start), std::move(end), ShadowInterpolationFunctions::mergeSingleConversions);
+    return ListInterpolationFunctions::maybeMergeSingles(std::move(start), std::move(end), ShadowInterpolationFunctions::maybeMergeSingles);
 }
 
 InterpolationValue CSSShadowListInterpolationType::maybeConvertUnderlyingValue(const InterpolationEnvironment& environment) const

@@ -79,7 +79,7 @@ public:
     {
     }
 
-    AttributeChange(RawPtr<Element> element, const QualifiedName& name, const String& value)
+    AttributeChange(Element* element, const QualifiedName& name, const String& value)
         : m_element(element), m_name(name), m_value(value)
     {
     }
@@ -127,7 +127,7 @@ static void completeURLs(DocumentFragment& fragment, const String& baseURL)
 
 static bool isHTMLBlockElement(const Node* node)
 {
-    ASSERT(node);
+    DCHECK(node);
     return isHTMLTableCellElement(*node)
         || isNonTableCellHTMLBlockElement(node);
 }
@@ -161,12 +161,12 @@ bool propertyMissingOrEqualToNone(StylePropertySet* style, CSSPropertyID propert
 {
     if (!style)
         return false;
-    RawPtr<CSSValue> value = style->getPropertyCSSValue(propertyID);
+    CSSValue* value = style->getPropertyCSSValue(propertyID);
     if (!value)
         return true;
     if (!value->isPrimitiveValue())
         return false;
-    return toCSSPrimitiveValue(value.get())->getValueID() == CSSValueNone;
+    return toCSSPrimitiveValue(value)->getValueID() == CSSValueNone;
 }
 
 static bool isPresentationalHTMLElement(const Node* node)
@@ -186,7 +186,7 @@ static HTMLElement* highestAncestorToWrapMarkup(const PositionTemplate<Strategy>
     // For compatibility reason, we use container node of start and end
     // positions rather than first node and last node in selection.
     Node* commonAncestor = Strategy::commonAncestor(*startPosition.computeContainerNode(), *endPosition.computeContainerNode());
-    ASSERT(commonAncestor);
+    DCHECK(commonAncestor);
     HTMLElement* specialCommonAncestor = nullptr;
     if (shouldAnnotate == AnnotateForInterchange) {
         // Include ancestors that aren't completely inside the range but are required to retain
@@ -210,7 +210,7 @@ static HTMLElement* highestAncestorToWrapMarkup(const PositionTemplate<Strategy>
 
     Node* checkAncestor = specialCommonAncestor ? specialCommonAncestor : commonAncestor;
     if (checkAncestor->layoutObject()) {
-        HTMLElement* newSpecialCommonAncestor = toHTMLElement(highestEnclosingNodeOfType(firstPositionInNode(checkAncestor), &isPresentationalHTMLElement, CanCrossEditingBoundary, constrainingAncestor));
+        HTMLElement* newSpecialCommonAncestor = toHTMLElement(highestEnclosingNodeOfType(Position::firstPositionInNode(checkAncestor), &isPresentationalHTMLElement, CanCrossEditingBoundary, constrainingAncestor));
         if (newSpecialCommonAncestor)
             specialCommonAncestor = newSpecialCommonAncestor;
     }
@@ -224,7 +224,7 @@ static HTMLElement* highestAncestorToWrapMarkup(const PositionTemplate<Strategy>
     if (!specialCommonAncestor && isTabHTMLSpanElement(commonAncestor))
         specialCommonAncestor = toHTMLSpanElement(commonAncestor);
 
-    if (HTMLAnchorElement* enclosingAnchor = toHTMLAnchorElement(enclosingElementWithTag(firstPositionInNode(specialCommonAncestor ? specialCommonAncestor : commonAncestor), aTag)))
+    if (HTMLAnchorElement* enclosingAnchor = toHTMLAnchorElement(enclosingElementWithTag(Position::firstPositionInNode(specialCommonAncestor ? specialCommonAncestor : commonAncestor), aTag)))
         specialCommonAncestor = enclosingAnchor;
 
     return specialCommonAncestor;
@@ -255,7 +255,7 @@ String CreateMarkupAlgorithm<Strategy>::createMarkup(const PositionTemplate<Stra
         return emptyString();
 
     Document* document = startPosition.document();
-    document->updateLayoutIgnorePendingStylesheets();
+    document->updateStyleAndLayoutIgnorePendingStylesheets();
 
     HTMLElement* specialCommonAncestor = highestAncestorToWrapMarkup<Strategy>(startPosition, endPosition, shouldAnnotate, constrainingAncestor);
     StyledMarkupSerializer<Strategy> serializer(shouldResolveURLs, shouldAnnotate, startPosition, endPosition, specialCommonAncestor, convertBlocksToInlines);
@@ -272,23 +272,23 @@ String createMarkup(const PositionInFlatTree& startPosition, const PositionInFla
     return CreateMarkupAlgorithm<EditingInFlatTreeStrategy>::createMarkup(startPosition, endPosition, shouldAnnotate, convertBlocksToInlines, shouldResolveURLs, constrainingAncestor);
 }
 
-RawPtr<DocumentFragment> createFragmentFromMarkup(Document& document, const String& markup, const String& baseURL, ParserContentPolicy parserContentPolicy)
+DocumentFragment* createFragmentFromMarkup(Document& document, const String& markup, const String& baseURL, ParserContentPolicy parserContentPolicy)
 {
     // We use a fake body element here to trick the HTML parser to using the InBody insertion mode.
-    RawPtr<HTMLBodyElement> fakeBody = HTMLBodyElement::create(document);
-    RawPtr<DocumentFragment> fragment = DocumentFragment::create(document);
+    HTMLBodyElement* fakeBody = HTMLBodyElement::create(document);
+    DocumentFragment* fragment = DocumentFragment::create(document);
 
-    fragment->parseHTML(markup, fakeBody.get(), parserContentPolicy);
+    fragment->parseHTML(markup, fakeBody, parserContentPolicy);
 
     if (!baseURL.isEmpty() && baseURL != blankURL() && baseURL != document.baseURL())
         completeURLs(*fragment, baseURL);
 
-    return fragment.release();
+    return fragment;
 }
 
 static const char fragmentMarkerTag[] = "webkit-fragment-marker";
 
-static bool findNodesSurroundingContext(DocumentFragment* fragment, RawPtr<Comment>& nodeBeforeContext, RawPtr<Comment>& nodeAfterContext)
+static bool findNodesSurroundingContext(DocumentFragment* fragment, Comment*& nodeBeforeContext, Comment*& nodeAfterContext)
 {
     for (Node& node : NodeTraversal::startsAt(fragment->firstChild())) {
         if (node.getNodeType() == Node::COMMENT_NODE && toComment(node).data() == fragmentMarkerTag) {
@@ -305,27 +305,27 @@ static bool findNodesSurroundingContext(DocumentFragment* fragment, RawPtr<Comme
 
 static void trimFragment(DocumentFragment* fragment, Comment* nodeBeforeContext, Comment* nodeAfterContext)
 {
-    RawPtr<Node> next = nullptr;
-    for (RawPtr<Node> node = fragment->firstChild(); node; node = next) {
-        if (nodeBeforeContext->isDescendantOf(node.get())) {
+    Node* next = nullptr;
+    for (Node* node = fragment->firstChild(); node; node = next) {
+        if (nodeBeforeContext->isDescendantOf(node)) {
             next = NodeTraversal::next(*node);
             continue;
         }
         next = NodeTraversal::nextSkippingChildren(*node);
-        ASSERT(!node->contains(nodeAfterContext));
-        node->parentNode()->removeChild(node.get(), ASSERT_NO_EXCEPTION);
+        DCHECK(!node->contains(nodeAfterContext)) << node << " " << nodeAfterContext;
+        node->parentNode()->removeChild(node, ASSERT_NO_EXCEPTION);
         if (nodeBeforeContext == node)
             break;
     }
 
-    ASSERT(nodeAfterContext->parentNode());
-    for (RawPtr<Node> node = nodeAfterContext; node; node = next) {
+    DCHECK(nodeAfterContext->parentNode()) << nodeAfterContext;
+    for (Node* node = nodeAfterContext; node; node = next) {
         next = NodeTraversal::nextSkippingChildren(*node);
-        node->parentNode()->removeChild(node.get(), ASSERT_NO_EXCEPTION);
+        node->parentNode()->removeChild(node, ASSERT_NO_EXCEPTION);
     }
 }
 
-RawPtr<DocumentFragment> createFragmentFromMarkupWithContext(Document& document, const String& markup, unsigned fragmentStart, unsigned fragmentEnd,
+DocumentFragment* createFragmentFromMarkupWithContext(Document& document, const String& markup, unsigned fragmentStart, unsigned fragmentEnd,
     const String& baseURL, ParserContentPolicy parserContentPolicy)
 {
     // FIXME: Need to handle the case where the markup already contains these markers.
@@ -337,23 +337,23 @@ RawPtr<DocumentFragment> createFragmentFromMarkupWithContext(Document& document,
     MarkupFormatter::appendComment(taggedMarkup, fragmentMarkerTag);
     taggedMarkup.append(markup.substring(fragmentEnd));
 
-    RawPtr<DocumentFragment> taggedFragment = createFragmentFromMarkup(document, taggedMarkup.toString(), baseURL, parserContentPolicy);
+    DocumentFragment* taggedFragment = createFragmentFromMarkup(document, taggedMarkup.toString(), baseURL, parserContentPolicy);
 
-    RawPtr<Comment> nodeBeforeContext = nullptr;
-    RawPtr<Comment> nodeAfterContext = nullptr;
-    if (!findNodesSurroundingContext(taggedFragment.get(), nodeBeforeContext, nodeAfterContext))
+    Comment* nodeBeforeContext = nullptr;
+    Comment* nodeAfterContext = nullptr;
+    if (!findNodesSurroundingContext(taggedFragment, nodeBeforeContext, nodeAfterContext))
         return nullptr;
 
-    RawPtr<Document> taggedDocument = Document::create();
+    Document* taggedDocument = Document::create();
     taggedDocument->setContextFeatures(document.contextFeatures());
 
-    RawPtr<Element> root = Element::create(QualifiedName::null(), taggedDocument.get());
-    root->appendChild(taggedFragment.get());
+    Element* root = Element::create(QualifiedName::null(), taggedDocument);
+    root->appendChild(taggedFragment);
     taggedDocument->appendChild(root);
 
-    RawPtr<Range> range = Range::create(*taggedDocument.get(),
-        positionAfterNode(nodeBeforeContext.get()).parentAnchoredEquivalent(),
-        positionBeforeNode(nodeAfterContext.get()).parentAnchoredEquivalent());
+    Range* range = Range::create(*taggedDocument,
+        Position::afterNode(nodeBeforeContext).parentAnchoredEquivalent(),
+        positionBeforeNode(nodeAfterContext).parentAnchoredEquivalent());
 
     Node* commonAncestor = range->commonAncestorContainer();
     HTMLElement* specialCommonAncestor = ancestorToRetainStructureAndAppearanceWithNoLayoutObject(commonAncestor);
@@ -361,13 +361,13 @@ RawPtr<DocumentFragment> createFragmentFromMarkupWithContext(Document& document,
     // When there's a special common ancestor outside of the fragment, we must include it as well to
     // preserve the structure and appearance of the fragment. For example, if the fragment contains
     // TD, we need to include the enclosing TABLE tag as well.
-    RawPtr<DocumentFragment> fragment = DocumentFragment::create(document);
+    DocumentFragment* fragment = DocumentFragment::create(document);
     if (specialCommonAncestor)
         fragment->appendChild(specialCommonAncestor);
     else
         fragment->parserTakeAllChildrenFrom(toContainerNode(*commonAncestor));
 
-    trimFragment(fragment.get(), nodeBeforeContext.get(), nodeAfterContext.get());
+    trimFragment(fragment, nodeBeforeContext, nodeAfterContext);
 
     return fragment;
 }
@@ -390,7 +390,7 @@ static void fillContainerFromString(ContainerNode* paragraph, const String& stri
         return;
     }
 
-    ASSERT(string.find('\n') == kNotFound);
+    DCHECK_EQ(string.find('\n'), kNotFound) << string;
 
     Vector<String> tabList;
     string.split('\t', true, tabList);
@@ -406,8 +406,8 @@ static void fillContainerFromString(ContainerNode* paragraph, const String& stri
                 paragraph->appendChild(createTabSpanElement(document, tabText.toString()));
                 tabText.clear();
             }
-            RawPtr<Text> textNode = document.createTextNode(stringWithRebalancedWhitespace(s, first, i + 1 == numEntries));
-            paragraph->appendChild(textNode.release());
+            Text* textNode = document.createTextNode(stringWithRebalancedWhitespace(s, first, i + 1 == numEntries));
+            paragraph->appendChild(textNode);
         }
 
         // there is a tab after every entry, except the last entry
@@ -423,7 +423,7 @@ static void fillContainerFromString(ContainerNode* paragraph, const String& stri
 
 bool isPlainTextMarkup(Node* node)
 {
-    ASSERT(node);
+    DCHECK(node);
     if (!isHTMLDivElement(*node))
         return false;
 
@@ -452,16 +452,16 @@ static bool shouldPreserveNewline(const EphemeralRange& range)
     return false;
 }
 
-RawPtr<DocumentFragment> createFragmentFromText(const EphemeralRange& context, const String& text)
+DocumentFragment* createFragmentFromText(const EphemeralRange& context, const String& text)
 {
     if (context.isNull())
         return nullptr;
 
     Document& document = context.document();
-    RawPtr<DocumentFragment> fragment = document.createDocumentFragment();
+    DocumentFragment* fragment = document.createDocumentFragment();
 
     if (text.isEmpty())
-        return fragment.release();
+        return fragment;
 
     String string = text;
     string.replace("\r\n", "\n");
@@ -470,17 +470,17 @@ RawPtr<DocumentFragment> createFragmentFromText(const EphemeralRange& context, c
     if (!isRichlyEditablePosition(context.startPosition()) || shouldPreserveNewline(context)) {
         fragment->appendChild(document.createTextNode(string));
         if (string.endsWith('\n')) {
-            RawPtr<HTMLBRElement> element = HTMLBRElement::create(document);
+            HTMLBRElement* element = HTMLBRElement::create(document);
             element->setAttribute(classAttr, AppleInterchangeNewline);
-            fragment->appendChild(element.release());
+            fragment->appendChild(element);
         }
-        return fragment.release();
+        return fragment;
     }
 
     // A string with no newlines gets added inline, rather than being put into a paragraph.
     if (string.find('\n') == kNotFound) {
-        fillContainerFromString(fragment.get(), string);
-        return fragment.release();
+        fillContainerFromString(fragment, string);
+        return fragment;
     }
 
     // Break string into paragraphs. Extra line breaks turn into empty paragraphs.
@@ -496,7 +496,7 @@ RawPtr<DocumentFragment> createFragmentFromText(const EphemeralRange& context, c
     for (size_t i = 0; i < numLines; ++i) {
         const String& s = list[i];
 
-        RawPtr<Element> element = nullptr;
+        Element* element = nullptr;
         if (s.isEmpty() && i + 1 == numLines) {
             // For last line, use the "magic BR" rather than a P.
             element = HTMLBRElement::create(document);
@@ -506,18 +506,18 @@ RawPtr<DocumentFragment> createFragmentFromText(const EphemeralRange& context, c
                 element = block->cloneElementWithoutChildren();
             else
                 element = createDefaultParagraphElement(document);
-            fillContainerFromString(element.get(), s);
+            fillContainerFromString(element, s);
         }
-        fragment->appendChild(element.release());
+        fragment->appendChild(element);
     }
-    return fragment.release();
+    return fragment;
 }
 
-RawPtr<DocumentFragment> createFragmentForInnerOuterHTML(const String& markup, Element* contextElement, ParserContentPolicy parserContentPolicy, const char* method, ExceptionState& exceptionState)
+DocumentFragment* createFragmentForInnerOuterHTML(const String& markup, Element* contextElement, ParserContentPolicy parserContentPolicy, const char* method, ExceptionState& exceptionState)
 {
-    ASSERT(contextElement);
+    DCHECK(contextElement);
     Document& document = isHTMLTemplateElement(*contextElement) ? contextElement->document().ensureTemplateDocument() : contextElement->document();
-    RawPtr<DocumentFragment> fragment = DocumentFragment::create(document);
+    DocumentFragment* fragment = DocumentFragment::create(document);
 
     if (document.isHTMLDocument()) {
         fragment->parseHTML(markup, contextElement, parserContentPolicy);
@@ -529,20 +529,20 @@ RawPtr<DocumentFragment> createFragmentForInnerOuterHTML(const String& markup, E
         exceptionState.throwDOMException(SyntaxError, "The provided markup is invalid XML, and therefore cannot be inserted into an XML document.");
         return nullptr;
     }
-    return fragment.release();
+    return fragment;
 }
 
-RawPtr<DocumentFragment> createFragmentForTransformToFragment(const String& sourceString, const String& sourceMIMEType, Document& outputDoc)
+DocumentFragment* createFragmentForTransformToFragment(const String& sourceString, const String& sourceMIMEType, Document& outputDoc)
 {
-    RawPtr<DocumentFragment> fragment = outputDoc.createDocumentFragment();
+    DocumentFragment* fragment = outputDoc.createDocumentFragment();
 
     if (sourceMIMEType == "text/html") {
         // As far as I can tell, there isn't a spec for how transformToFragment is supposed to work.
         // Based on the documentation I can find, it looks like we want to start parsing the fragment in the InBody insertion mode.
         // Unfortunately, that's an implementation detail of the parser.
         // We achieve that effect here by passing in a fake body element as context for the fragment.
-        RawPtr<HTMLBodyElement> fakeBody = HTMLBodyElement::create(outputDoc);
-        fragment->parseHTML(sourceString, fakeBody.get());
+        HTMLBodyElement* fakeBody = HTMLBodyElement::create(outputDoc);
+        fragment->parseHTML(sourceString, fakeBody);
     } else if (sourceMIMEType == "text/plain") {
         fragment->parserAppendChild(Text::create(outputDoc, sourceString));
     } else {
@@ -553,15 +553,15 @@ RawPtr<DocumentFragment> createFragmentForTransformToFragment(const String& sour
 
     // FIXME: Do we need to mess with URLs here?
 
-    return fragment.release();
+    return fragment;
 }
 
-static inline void removeElementPreservingChildren(RawPtr<DocumentFragment> fragment, HTMLElement* element)
+static inline void removeElementPreservingChildren(DocumentFragment* fragment, HTMLElement* element)
 {
-    RawPtr<Node> nextChild = nullptr;
-    for (RawPtr<Node> child = element->firstChild(); child; child = nextChild) {
+    Node* nextChild = nullptr;
+    for (Node* child = element->firstChild(); child; child = nextChild) {
         nextChild = child->nextSibling();
-        element->removeChild(child.get());
+        element->removeChild(child);
         fragment->insertBefore(child, element);
     }
     fragment->removeChild(element);
@@ -569,7 +569,7 @@ static inline void removeElementPreservingChildren(RawPtr<DocumentFragment> frag
 
 static inline bool isSupportedContainer(Element* element)
 {
-    ASSERT(element);
+    DCHECK(element);
     if (!element->isHTMLElement())
         return true;
 
@@ -581,15 +581,15 @@ static inline bool isSupportedContainer(Element* element)
     return !htmlElement.ieForbidsInsertHTML();
 }
 
-RawPtr<DocumentFragment> createContextualFragment(const String& markup, Element* element, ParserContentPolicy parserContentPolicy, ExceptionState& exceptionState)
+DocumentFragment* createContextualFragment(const String& markup, Element* element, ParserContentPolicy parserContentPolicy, ExceptionState& exceptionState)
 {
-    ASSERT(element);
+    DCHECK(element);
     if (!isSupportedContainer(element)) {
         exceptionState.throwDOMException(NotSupportedError, "The range's container is '" + element->localName() + "', which is not supported.");
         return nullptr;
     }
 
-    RawPtr<DocumentFragment> fragment = createFragmentForInnerOuterHTML(markup, element, parserContentPolicy, "createContextualFragment", exceptionState);
+    DocumentFragment* fragment = createFragmentForInnerOuterHTML(markup, element, parserContentPolicy, "createContextualFragment", exceptionState);
     if (!fragment)
         return nullptr;
 
@@ -597,8 +597,8 @@ RawPtr<DocumentFragment> createContextualFragment(const String& markup, Element*
     // accommodate folks passing complete HTML documents to make the
     // child of an element.
 
-    RawPtr<Node> nextNode = nullptr;
-    for (RawPtr<Node> node = fragment->firstChild(); node; node = nextNode) {
+    Node* nextNode = nullptr;
+    for (Node* node = fragment->firstChild(); node; node = nextNode) {
         nextNode = node->nextSibling();
         if (isHTMLHtmlElement(*node) || isHTMLHeadElement(*node) || isHTMLBodyElement(*node)) {
             HTMLElement* element = toHTMLElement(node);
@@ -607,13 +607,13 @@ RawPtr<DocumentFragment> createContextualFragment(const String& markup, Element*
             removeElementPreservingChildren(fragment, element);
         }
     }
-    return fragment.release();
+    return fragment;
 }
 
-void replaceChildrenWithFragment(ContainerNode* container, RawPtr<DocumentFragment> fragment, ExceptionState& exceptionState)
+void replaceChildrenWithFragment(ContainerNode* container, DocumentFragment* fragment, ExceptionState& exceptionState)
 {
-    ASSERT(container);
-    RawPtr<ContainerNode> containerNode(container);
+    DCHECK(container);
+    ContainerNode* containerNode(container);
 
     ChildListMutationScope mutation(*containerNode);
 
@@ -640,8 +640,8 @@ void replaceChildrenWithFragment(ContainerNode* container, RawPtr<DocumentFragme
 
 void replaceChildrenWithText(ContainerNode* container, const String& text, ExceptionState& exceptionState)
 {
-    ASSERT(container);
-    RawPtr<ContainerNode> containerNode(container);
+    DCHECK(container);
+    ContainerNode* containerNode(container);
 
     ChildListMutationScope mutation(*containerNode);
 
@@ -661,26 +661,26 @@ void replaceChildrenWithText(ContainerNode* container, const String& text, Excep
     }
 
     // NOTE: This method currently always creates a text node, even if that text node will be empty.
-    RawPtr<Text> textNode = Text::create(containerNode->document(), text);
+    Text* textNode = Text::create(containerNode->document(), text);
 
     // FIXME: No need to replace the child it is a text node and its contents are already == text.
     if (containerNode->hasOneChild()) {
-        containerNode->replaceChild(textNode.release(), containerNode->firstChild(), exceptionState);
+        containerNode->replaceChild(textNode, containerNode->firstChild(), exceptionState);
         return;
     }
 
     containerNode->removeChildren();
-    containerNode->appendChild(textNode.release(), exceptionState);
+    containerNode->appendChild(textNode, exceptionState);
 }
 
 void mergeWithNextTextNode(Text* textNode, ExceptionState& exceptionState)
 {
-    ASSERT(textNode);
+    DCHECK(textNode);
     Node* next = textNode->nextSibling();
     if (!next || !next->isTextNode())
         return;
 
-    RawPtr<Text> textNext = toText(next);
+    Text* textNext = toText(next);
     textNode->appendData(textNext->data());
     if (textNext->parentNode()) // Might have been removed by mutation event.
         textNext->remove(exceptionState);

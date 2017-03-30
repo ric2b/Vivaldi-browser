@@ -7,10 +7,10 @@
 #include "V8TestInterfaceOriginTrialEnabled.h"
 
 #include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/V8DOMConfiguration.h"
 #include "bindings/core/v8/V8ObjectConstructor.h"
 #include "core/dom/Document.h"
-#include "core/inspector/ConsoleMessage.h"
 #include "core/origin_trials/OriginTrials.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "wtf/GetPtr.h"
@@ -24,7 +24,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8TestInterfaceOriginTrialEnabled::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceOriginTrialEnabled::domTemplate, V8TestInterfaceOriginTrialEnabled::refObject, V8TestInterfaceOriginTrialEnabled::derefObject, V8TestInterfaceOriginTrialEnabled::trace, 0, 0, V8TestInterfaceOriginTrialEnabled::preparePrototypeAndInterfaceObject, V8TestInterfaceOriginTrialEnabled::installConditionallyEnabledProperties, "TestInterfaceOriginTrialEnabled", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent, WrapperTypeInfo::RefCountedObject };
+const WrapperTypeInfo V8TestInterfaceOriginTrialEnabled::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceOriginTrialEnabled::domTemplate, V8TestInterfaceOriginTrialEnabled::trace, V8TestInterfaceOriginTrialEnabled::traceWrappers, 0, 0, V8TestInterfaceOriginTrialEnabled::preparePrototypeAndInterfaceObject, nullptr, "TestInterfaceOriginTrialEnabled", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -227,7 +227,7 @@ const V8DOMConfiguration::MethodConfiguration V8TestInterfaceOriginTrialEnabledM
     {"voidMethodPartialOverload", TestInterfaceOriginTrialEnabledV8Internal::voidMethodPartialOverloadMethodCallback, 0, 0, v8::None, V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnPrototype},
 };
 
-static void installV8TestInterfaceOriginTrialEnabledTemplate(v8::Local<v8::FunctionTemplate> interfaceTemplate, v8::Isolate* isolate)
+static void installV8TestInterfaceOriginTrialEnabledTemplate(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::FunctionTemplate> interfaceTemplate)
 {
     // Initialize the interface object's template.
     V8DOMConfiguration::initializeDOMInterfaceTemplate(isolate, interfaceTemplate, V8TestInterfaceOriginTrialEnabled::wrapperTypeInfo.interfaceName, v8::Local<v8::FunctionTemplate>(), V8TestInterfaceOriginTrialEnabled::internalFieldCount);
@@ -245,25 +245,25 @@ static void installV8TestInterfaceOriginTrialEnabledTemplate(v8::Local<v8::Funct
     V8DOMConfiguration::installConstants(isolate, interfaceTemplate, prototypeTemplate, V8TestInterfaceOriginTrialEnabledConstants, WTF_ARRAY_LENGTH(V8TestInterfaceOriginTrialEnabledConstants));
     static_assert(0 == TestInterfaceOriginTrialEnabled::UNSIGNED_LONG, "the value of TestInterfaceOriginTrialEnabled_UNSIGNED_LONG does not match with implementation");
     static_assert(1 == TestInterfaceOriginTrialEnabled::CONST_JAVASCRIPT, "the value of TestInterfaceOriginTrialEnabled_CONST_JAVASCRIPT does not match with implementation");
-    V8DOMConfiguration::installAccessors(isolate, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, V8TestInterfaceOriginTrialEnabledAccessors, WTF_ARRAY_LENGTH(V8TestInterfaceOriginTrialEnabledAccessors));
-    V8DOMConfiguration::installMethods(isolate, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, V8TestInterfaceOriginTrialEnabledMethods, WTF_ARRAY_LENGTH(V8TestInterfaceOriginTrialEnabledMethods));
+    V8DOMConfiguration::installAccessors(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, V8TestInterfaceOriginTrialEnabledAccessors, WTF_ARRAY_LENGTH(V8TestInterfaceOriginTrialEnabledAccessors));
+    V8DOMConfiguration::installMethods(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, V8TestInterfaceOriginTrialEnabledMethods, WTF_ARRAY_LENGTH(V8TestInterfaceOriginTrialEnabledMethods));
 
     if (RuntimeEnabledFeatures::featureNameEnabled()) {
         const V8DOMConfiguration::AccessorConfiguration accessorconditionalReadOnlyLongAttributeConfiguration = \
         {"conditionalReadOnlyLongAttribute", TestInterfaceOriginTrialEnabledV8Internal::conditionalReadOnlyLongAttributeAttributeGetterCallback, 0, 0, 0, 0, v8::DEFAULT, static_cast<v8::PropertyAttribute>(v8::ReadOnly), V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder};
-        V8DOMConfiguration::installAccessor(isolate, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, accessorconditionalReadOnlyLongAttributeConfiguration);
+        V8DOMConfiguration::installAccessor(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, accessorconditionalReadOnlyLongAttributeConfiguration);
         const V8DOMConfiguration::AccessorConfiguration accessorstaticConditionalReadOnlyLongAttributeConfiguration = \
         {"staticConditionalReadOnlyLongAttribute", TestInterfaceOriginTrialEnabledV8Internal::staticConditionalReadOnlyLongAttributeAttributeGetterCallback, 0, 0, 0, 0, v8::DEFAULT, static_cast<v8::PropertyAttribute>(v8::ReadOnly), V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnInterface, V8DOMConfiguration::CheckHolder};
-        V8DOMConfiguration::installAccessor(isolate, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, accessorstaticConditionalReadOnlyLongAttributeConfiguration);
+        V8DOMConfiguration::installAccessor(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, accessorstaticConditionalReadOnlyLongAttributeConfiguration);
         const V8DOMConfiguration::AccessorConfiguration accessorconditionalLongAttributeConfiguration = \
         {"conditionalLongAttribute", TestInterfaceOriginTrialEnabledV8Internal::conditionalLongAttributeAttributeGetterCallback, TestInterfaceOriginTrialEnabledV8Internal::conditionalLongAttributeAttributeSetterCallback, 0, 0, 0, v8::DEFAULT, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder};
-        V8DOMConfiguration::installAccessor(isolate, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, accessorconditionalLongAttributeConfiguration);
+        V8DOMConfiguration::installAccessor(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, accessorconditionalLongAttributeConfiguration);
     }
 }
 
-v8::Local<v8::FunctionTemplate> V8TestInterfaceOriginTrialEnabled::domTemplate(v8::Isolate* isolate)
+v8::Local<v8::FunctionTemplate> V8TestInterfaceOriginTrialEnabled::domTemplate(v8::Isolate* isolate, const DOMWrapperWorld& world)
 {
-    return V8DOMConfiguration::domClassTemplate(isolate, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestInterfaceOriginTrialEnabledTemplate);
+    return V8DOMConfiguration::domClassTemplate(isolate, world, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestInterfaceOriginTrialEnabledTemplate);
 }
 
 bool V8TestInterfaceOriginTrialEnabled::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
@@ -279,16 +279,6 @@ v8::Local<v8::Object> V8TestInterfaceOriginTrialEnabled::findInstanceInPrototype
 TestInterfaceOriginTrialEnabled* V8TestInterfaceOriginTrialEnabled::toImplWithTypeCheck(v8::Isolate* isolate, v8::Local<v8::Value> value)
 {
     return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : 0;
-}
-
-void V8TestInterfaceOriginTrialEnabled::refObject(ScriptWrappable* scriptWrappable)
-{
-    scriptWrappable->toImpl<TestInterfaceOriginTrialEnabled>()->ref();
-}
-
-void V8TestInterfaceOriginTrialEnabled::derefObject(ScriptWrappable* scriptWrappable)
-{
-    scriptWrappable->toImpl<TestInterfaceOriginTrialEnabled>()->deref();
 }
 
 } // namespace blink

@@ -9,7 +9,7 @@
 
 #include <stddef.h>
 
-#include "android_webview/renderer/aw_render_process_observer.h"
+#include "android_webview/renderer/aw_render_thread_observer.h"
 #include "base/compiler_specific.h"
 
 namespace visitedlink {
@@ -36,7 +36,9 @@ class AwContentRendererClient : public content::ContentRendererClient {
   unsigned long long VisitedLinkHash(const char* canonical_url,
                                      size_t length) override;
   bool IsLinkVisited(unsigned long long link_hash) override;
-  void AddKeySystems(std::vector<media::KeySystemInfo>* key_systems) override;
+  void AddSupportedKeySystems(
+      std::vector<std::unique_ptr<::media::KeySystemProperties>>* key_systems)
+      override;
 
   bool HandleNavigation(content::RenderFrame* render_frame,
                         bool is_content_initiated,
@@ -47,14 +49,10 @@ class AwContentRendererClient : public content::ContentRendererClient {
                         blink::WebNavigationPolicy default_policy,
                         bool is_redirect) override;
   bool ShouldUseMediaPlayerForURL(const GURL& url) override;
-  bool ShouldOverridePageVisibilityState(
-      const content::RenderFrame* render_frame,
-      blink::WebPageVisibilityState* override_state) override;
 
  private:
-  std::unique_ptr<AwRenderProcessObserver> aw_render_process_observer_;
+  std::unique_ptr<AwRenderThreadObserver> aw_render_thread_observer_;
   std::unique_ptr<visitedlink::VisitedLinkSlave> visited_link_slave_;
-  const bool disable_page_visibility_;
 };
 
 }  // namespace android_webview

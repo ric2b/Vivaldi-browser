@@ -12,7 +12,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "components/gcm_driver/gcm_driver.h"
 #include "google_apis/gaia/google_service_auth_error.h"
@@ -45,14 +45,13 @@ GCMAccountTracker::AccountInfo::~AccountInfo() {
 }
 
 GCMAccountTracker::GCMAccountTracker(
-    scoped_ptr<gaia::AccountTracker> account_tracker,
+    std::unique_ptr<gaia::AccountTracker> account_tracker,
     GCMDriver* driver)
     : OAuth2TokenService::Consumer(kGCMAccountTrackerName),
       account_tracker_(account_tracker.release()),
       driver_(driver),
       shutdown_called_(false),
-      reporting_weak_ptr_factory_(this) {
-}
+      reporting_weak_ptr_factory_(this) {}
 
 GCMAccountTracker::~GCMAccountTracker() {
   DCHECK(shutdown_called_);
@@ -260,7 +259,7 @@ void GCMAccountTracker::SanitizeTokens() {
 }
 
 bool GCMAccountTracker::IsTokenReportingRequired() const {
-  if (GetTimeToNextTokenReporting() == base::TimeDelta())
+  if (GetTimeToNextTokenReporting().is_zero())
     return true;
 
   bool reporting_required = false;
@@ -339,7 +338,7 @@ void GCMAccountTracker::GetToken(AccountInfos::iterator& account_iter) {
   OAuth2TokenService::ScopeSet scopes;
   scopes.insert(kGCMGroupServerScope);
   scopes.insert(kGCMCheckinServerScope);
-  scoped_ptr<OAuth2TokenService::Request> request =
+  std::unique_ptr<OAuth2TokenService::Request> request =
       GetTokenService()->StartRequest(account_iter->first, scopes, this);
 
   pending_token_requests_.push_back(request.release());

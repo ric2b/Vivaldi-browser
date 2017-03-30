@@ -252,7 +252,7 @@ class UnitTestPrerenderManager : public PrerenderManager {
 
   Time time_;
   TimeTicks time_ticks_;
-  scoped_ptr<PrerenderContents> next_prerender_contents_;
+  std::unique_ptr<PrerenderContents> next_prerender_contents_;
   // PrerenderContents with an |expected_final_status| of FINAL_STATUS_USED,
   // tracked so they will be automatically deleted.
   ScopedVector<PrerenderContents> used_prerender_contents_;
@@ -401,8 +401,8 @@ class PrerenderTest : public testing::Test {
   base::MessageLoop message_loop_;
   TestingProfile profile_;
   content::TestBrowserThread ui_thread_;
-  scoped_ptr<UnitTestPrerenderManager> prerender_manager_;
-  scoped_ptr<PrerenderLinkManager> prerender_link_manager_;
+  std::unique_ptr<UnitTestPrerenderManager> prerender_manager_;
+  std::unique_ptr<PrerenderLinkManager> prerender_link_manager_;
   int last_prerender_id_;
   base::FieldTrialList field_trial_list_;
 };
@@ -427,6 +427,24 @@ TEST_F(PrerenderTest, PrerenderRespectsThirdPartyCookiesPref) {
   EXPECT_FALSE(AddSimplePrerender(url));
 }
 
+TEST_F(PrerenderTest, OfflinePrerenderIgnoresThirdPartyCookiesPref) {
+  GURL url("http://www.google.com/");
+  RestorePrerenderMode restore_prerender_mode;
+  ASSERT_TRUE(PrerenderManager::IsPrerenderingPossible());
+
+  profile()->GetPrefs()->SetBoolean(prefs::kBlockThirdPartyCookies, true);
+  DummyPrerenderContents* prerender_contents =
+      prerender_manager()->CreateNextPrerenderContents(
+          url, ORIGIN_OFFLINE, FINAL_STATUS_MANAGER_SHUTDOWN);
+  std::unique_ptr<PrerenderHandle> prerender_handle(
+      prerender_manager()->AddPrerenderForOffline(url, nullptr, kSize));
+  EXPECT_TRUE(prerender_handle);
+  EXPECT_TRUE(prerender_handle->IsPrerendering());
+  EXPECT_TRUE(prerender_contents->prerendering_has_started());
+  EXPECT_EQ(prerender_contents, prerender_handle->contents());
+  EXPECT_EQ(ORIGIN_OFFLINE, prerender_handle->contents()->origin());
+}
+
 TEST_F(PrerenderTest, FoundTest) {
   GURL url("http://www.google.com/");
   DummyPrerenderContents* prerender_contents =
@@ -436,6 +454,19 @@ TEST_F(PrerenderTest, FoundTest) {
   EXPECT_TRUE(AddSimplePrerender(url));
   EXPECT_TRUE(prerender_contents->prerendering_has_started());
   ASSERT_EQ(prerender_contents, prerender_manager()->FindAndUseEntry(url));
+}
+
+TEST_F(PrerenderTest, UnfindableOfflinePrerenderTest) {
+  GURL url("http://www.google.com/");
+  DummyPrerenderContents* prerender_contents =
+      prerender_manager()->CreateNextPrerenderContents(
+          url, ORIGIN_OFFLINE, FINAL_STATUS_MANAGER_SHUTDOWN);
+  std::unique_ptr<PrerenderHandle> prerender_handle(
+      prerender_manager()->AddPrerenderForOffline(url, nullptr, kSize));
+  EXPECT_TRUE(prerender_handle);
+  EXPECT_TRUE(prerender_handle->IsPrerendering());
+  EXPECT_TRUE(prerender_contents->prerendering_has_started());
+  ASSERT_EQ(nullptr, prerender_manager()->FindAndUseEntry(url));
 }
 
 // Make sure that if queue a request, and a second prerender request for the
@@ -924,83 +955,6 @@ TEST_F(PrerenderTest, NotSoRecentlyVisited) {
   ASSERT_EQ(prerender_contents, prerender_manager()->FindAndUseEntry(url));
 }
 
-// Tests that our PPLT dummy prerender gets created properly.
-TEST_F(PrerenderTest, PPLTDummy) {
-  RestorePrerenderMode restore_prerender_mode;
-  PrerenderManager::SetMode(
-      PrerenderManager::PRERENDER_MODE_EXPERIMENT_MATCH_COMPLETE_GROUP);
-
-  GURL url("http://www.google.com/");
-  DummyPrerenderContents* prerender_contents =
-      prerender_manager()->CreateNextPrerenderContents(
-          url, FINAL_STATUS_UNSUPPORTED_SCHEME);
-  EXPECT_TRUE(AddSimplePrerender(url));
-  EXPECT_TRUE(prerender_contents->prerendering_has_started());
-  EXPECT_FALSE(IsEmptyPrerenderLinkManager());
-
-  DummyPrerenderContents* pplt_dummy_contents =
-      prerender_manager()->CreateNextPrerenderContents(url,
-                                                       FINAL_STATUS_USED);
-  GURL ftp_url("ftp://ftp.google.com/");
-  // Adding this ftp URL will force the expected unsupported scheme error.
-  prerender_contents->AddAliasURL(ftp_url);
-  EXPECT_FALSE(IsEmptyPrerenderLinkManager());
-
-  ASSERT_EQ(pplt_dummy_contents, prerender_manager()->FindAndUseEntry(url));
-  EXPECT_TRUE(IsEmptyPrerenderLinkManager());
-}
-
-// Tests that our PPLT dummy prerender gets created properly, even
-// when navigating to a page that has been recently navigated to.
-TEST_F(PrerenderTest, RecentlyVisitedPPLTDummy) {
-  RestorePrerenderMode restore_prerender_mode;
-  PrerenderManager::SetMode(
-      PrerenderManager::PRERENDER_MODE_EXPERIMENT_MATCH_COMPLETE_GROUP);
-
-  GURL url("http://www.google.com/");
-  DummyPrerenderContents* prerender_contents =
-      prerender_manager()->CreateNextPrerenderContents(
-          url, FINAL_STATUS_UNSUPPORTED_SCHEME);
-  EXPECT_TRUE(AddSimplePrerender(url));
-  EXPECT_TRUE(prerender_contents->prerendering_has_started());
-
-  DummyPrerenderContents* pplt_dummy_contents =
-      prerender_manager()->CreateNextPrerenderContents(url,
-                                                       FINAL_STATUS_USED);
-  prerender_manager()->RecordNavigation(url);
-  GURL ftp_url("ftp://ftp.google.com/");
-  prerender_contents->AddAliasURL(ftp_url);
-
-  ASSERT_EQ(pplt_dummy_contents, prerender_manager()->FindAndUseEntry(url));
-}
-
-TEST_F(PrerenderTest, PPLTLateCancel) {
-  RestorePrerenderMode restore_prerender_mode;
-  PrerenderManager::SetMode(
-      PrerenderManager::PRERENDER_MODE_EXPERIMENT_MATCH_COMPLETE_GROUP);
-
-  GURL url("http://www.google.com");
-  DummyPrerenderContents* prerender_contents =
-      prerender_manager()->CreateNextPrerenderContents(
-          url, FINAL_STATUS_JAVASCRIPT_ALERT);
-  EXPECT_TRUE(AddSimplePrerender(url));
-  EXPECT_TRUE(prerender_contents->prerendering_has_started());
-  // Force the creation of a match complete dummy.
-  DummyPrerenderContents* duplicate_prerender_contents =
-      prerender_manager()->CreateNextPrerenderContents(url,
-                                                       FINAL_STATUS_CANCELLED);
-  ASSERT_EQ(prerender_contents, prerender_manager()->FindEntry(url));
-  prerender_contents->Destroy(FINAL_STATUS_JAVASCRIPT_ALERT);
-  ASSERT_EQ(duplicate_prerender_contents, prerender_manager()->FindEntry(url));
-
-  // Make sure that events on prerender handles propogate to the match
-  // complete replacement.
-  DummyPrerenderContents* null = NULL;
-  prerender_link_manager()->OnCancelPrerender(kDefaultChildId,
-                                              last_prerender_id());
-  ASSERT_EQ(null, prerender_manager()->FindEntry(url));
-}
-
 // Tests that the prerender manager matches include the fragment.
 TEST_F(PrerenderTest, FragmentMatchesTest) {
   GURL fragment_url("http://www.google.com/#test");
@@ -1080,7 +1034,7 @@ TEST_F(PrerenderTest, LinkRelStillAllowedWhenDisabled) {
 TEST_F(PrerenderTest, LinkRelAllowedOnCellular) {
   EnablePrerender();
   GURL url("http://www.example.com");
-  scoped_ptr<net::NetworkChangeNotifier> mock(
+  std::unique_ptr<net::NetworkChangeNotifier> mock(
       new MockNetworkChangeNotifier4G);
   EXPECT_TRUE(net::NetworkChangeNotifier::IsConnectionCellular(
       net::NetworkChangeNotifier::GetConnectionType()));
@@ -1094,7 +1048,7 @@ TEST_F(PrerenderTest, LinkRelAllowedOnCellular) {
 
 TEST_F(PrerenderTest, PrerenderNotAllowedOnCellularWithExternalOrigin) {
   EnablePrerender();
-  scoped_ptr<net::NetworkChangeNotifier> mock(
+  std::unique_ptr<net::NetworkChangeNotifier> mock(
       new MockNetworkChangeNotifier4G);
   EXPECT_TRUE(net::NetworkChangeNotifier::IsConnectionCellular(
       net::NetworkChangeNotifier::GetConnectionType()));
@@ -1104,35 +1058,48 @@ TEST_F(PrerenderTest, PrerenderNotAllowedOnCellularWithExternalOrigin) {
           url,
           ORIGIN_EXTERNAL_REQUEST,
           FINAL_STATUS_MANAGER_SHUTDOWN);
-  scoped_ptr<PrerenderHandle> prerender_handle(
+  std::unique_ptr<PrerenderHandle> prerender_handle(
       prerender_manager()->AddPrerenderFromExternalRequest(
           url, content::Referrer(), nullptr, kSize));
   EXPECT_FALSE(prerender_handle);
   EXPECT_FALSE(prerender_contents->prerendering_has_started());
 }
 
-TEST_F(PrerenderTest,PrerenderAllowedOnCellularWithForcedOrigin) {
+TEST_F(PrerenderTest, PrerenderAllowedForOfflineAndForcedCellular) {
+  const Origin origins[] = {
+    ORIGIN_EXTERNAL_REQUEST_FORCED_CELLULAR,
+    ORIGIN_OFFLINE,
+  };
+
   EnablePrerender();
-  scoped_ptr<net::NetworkChangeNotifier> mock(
+  std::unique_ptr<net::NetworkChangeNotifier> mock(
       new MockNetworkChangeNotifier4G);
   EXPECT_TRUE(net::NetworkChangeNotifier::IsConnectionCellular(
       net::NetworkChangeNotifier::GetConnectionType()));
   GURL url("http://www.google.com/");
-  DummyPrerenderContents* prerender_contents =
-      prerender_manager()->CreateNextPrerenderContents(
-          url,
-          ORIGIN_EXTERNAL_REQUEST_FORCED_CELLULAR,
-          FINAL_STATUS_USED);
-  scoped_ptr<PrerenderHandle> prerender_handle(
-      prerender_manager()->AddPrerenderOnCellularFromExternalRequest(
-          url, content::Referrer(), nullptr, kSize));
-  EXPECT_TRUE(prerender_handle);
-  EXPECT_TRUE(prerender_handle->IsPrerendering());
-  EXPECT_TRUE(prerender_contents->prerendering_has_started());
-  EXPECT_EQ(prerender_contents, prerender_handle->contents());
-  EXPECT_EQ(ORIGIN_EXTERNAL_REQUEST_FORCED_CELLULAR,
-    prerender_handle->contents()->origin());
-  ASSERT_EQ(prerender_contents, prerender_manager()->FindAndUseEntry(url));
+  for (Origin origin: origins) {
+    DummyPrerenderContents* prerender_contents = nullptr;
+    std::unique_ptr<PrerenderHandle> prerender_handle;
+    if (origin == ORIGIN_OFFLINE) {
+      prerender_contents = prerender_manager()->CreateNextPrerenderContents(
+          url, origin, FINAL_STATUS_MANAGER_SHUTDOWN);
+      prerender_handle.reset(prerender_manager()->AddPrerenderForOffline(
+          url, nullptr, kSize));
+    } else {
+      prerender_contents = prerender_manager()->CreateNextPrerenderContents(
+          url, origin, FINAL_STATUS_USED);
+      prerender_handle.reset(
+          prerender_manager()->AddPrerenderOnCellularFromExternalRequest(
+              url, content::Referrer(), nullptr, kSize));
+    }
+    EXPECT_TRUE(prerender_handle);
+    EXPECT_TRUE(prerender_handle->IsPrerendering());
+    EXPECT_TRUE(prerender_contents->prerendering_has_started());
+    EXPECT_EQ(prerender_contents, prerender_handle->contents());
+    EXPECT_EQ(origin, prerender_handle->contents()->origin());
+    if (origin != ORIGIN_OFFLINE)
+      ASSERT_EQ(prerender_contents, prerender_manager()->FindAndUseEntry(url));
+  }
 }
 
 TEST_F(PrerenderTest, LinkManagerCancel) {
@@ -1651,7 +1618,7 @@ TEST_F(PrerenderTest, PrerenderContentsForInstantSearch) {
   DummyPrerenderContents* prerender_contents =
       prerender_manager()->CreateNextPrerenderContents(url, ORIGIN_INSTANT,
                                                        FINAL_STATUS_USED);
-  scoped_ptr<PrerenderHandle> prerender_handle(
+  std::unique_ptr<PrerenderHandle> prerender_handle(
       prerender_manager()->AddPrerenderForInstant(url, NULL, kSize));
   CHECK(prerender_handle.get());
   EXPECT_TRUE(prerender_handle->IsPrerendering());

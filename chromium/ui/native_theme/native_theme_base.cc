@@ -5,10 +5,10 @@
 #include "ui/native_theme/native_theme_base.h"
 
 #include <limits>
+#include <memory>
 
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
@@ -19,6 +19,7 @@
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/skia_util.h"
@@ -358,50 +359,57 @@ void NativeThemeBase::PaintArrow(SkCanvas* gc,
                                  const gfx::Rect& rect,
                                  Part direction,
                                  SkColor color) const {
-  int width_middle, length_middle;
-  if (direction == kScrollbarUpArrow || direction == kScrollbarDownArrow) {
-    width_middle = rect.width() / 2 + 1;
-    length_middle = rect.height() / 2 + 1;
-  } else {
-    length_middle = rect.width() / 2 + 1;
-    width_middle = rect.height() / 2 + 1;
-  }
-
   SkPaint paint;
   paint.setColor(color);
-  paint.setAntiAlias(false);
-  paint.setStyle(SkPaint::kFill_Style);
 
-  SkPath path;
-  // The constants in this block of code are hand-tailored to produce good
-  // looking arrows without anti-aliasing.
-  switch (direction) {
-    case kScrollbarUpArrow:
-      path.moveTo(rect.x() + width_middle - 4, rect.y() + length_middle + 2);
-      path.rLineTo(7, 0);
-      path.rLineTo(-4, -4);
-      break;
-    case kScrollbarDownArrow:
-      path.moveTo(rect.x() + width_middle - 4, rect.y() + length_middle - 3);
-      path.rLineTo(7, 0);
-      path.rLineTo(-4, 4);
-      break;
-    case kScrollbarRightArrow:
-      path.moveTo(rect.x() + length_middle - 3, rect.y() + width_middle - 4);
-      path.rLineTo(0, 7);
-      path.rLineTo(4, -4);
-      break;
-    case kScrollbarLeftArrow:
-      path.moveTo(rect.x() + length_middle + 1, rect.y() + width_middle - 5);
-      path.rLineTo(0, 9);
-      path.rLineTo(-4, -4);
-      break;
-    default:
-      break;
-  }
-  path.close();
+  SkPath path = PathForArrow(rect, direction);
 
   gc->drawPath(path, paint);
+}
+
+SkPath NativeThemeBase::PathForArrow(const gfx::Rect& rect,
+                                     Part direction) const {
+  gfx::Rect bounding_rect = BoundingRectForArrow(rect);
+  const gfx::PointF center = gfx::RectF(bounding_rect).CenterPoint();
+  SkPath path;
+  SkMatrix transform;
+  transform.setIdentity();
+  if (direction == kScrollbarUpArrow || direction == kScrollbarDownArrow) {
+    int arrow_altitude = bounding_rect.height() / 2 + 1;
+    path.moveTo(bounding_rect.x(), bounding_rect.bottom());
+    path.rLineTo(bounding_rect.width(), 0);
+    path.rLineTo(-bounding_rect.width() / 2.0f, -arrow_altitude);
+    path.close();
+    path.offset(0, -arrow_altitude / 2 + 1);
+    if (direction == kScrollbarDownArrow) {
+      transform.setScale(1, -1, center.x(), center.y());
+    }
+  } else {
+    int arrow_altitude = bounding_rect.width() / 2 + 1;
+    path.moveTo(bounding_rect.x(), bounding_rect.y());
+    path.rLineTo(0, bounding_rect.height());
+    path.rLineTo(arrow_altitude, -bounding_rect.height() / 2.0f);
+    path.close();
+    path.offset(arrow_altitude / 2, 0);
+    if (direction == kScrollbarLeftArrow) {
+      transform.setScale(-1, 1, center.x(), center.y());
+    }
+  }
+  path.transform(transform);
+
+  return path;
+}
+
+gfx::Rect NativeThemeBase::BoundingRectForArrow(const gfx::Rect& rect) const {
+  const std::pair<int, int> rect_sides =
+      std::minmax(rect.width(), rect.height());
+  const int side_length_inset = 2 * std::ceil(rect_sides.second / 4.f);
+  const int side_length =
+      std::min(rect_sides.first, rect_sides.second - side_length_inset);
+  // When there are an odd number of pixels, put the extra on the top/left.
+  return gfx::Rect(rect.x() + (rect.width() - side_length + 1) / 2,
+                   rect.y() + (rect.height() - side_length + 1) / 2,
+                   side_length, side_length);
 }
 
 void NativeThemeBase::PaintScrollbarTrack(SkCanvas* canvas,
@@ -916,24 +924,6 @@ void NativeThemeBase::PaintProgressBar(
 void NativeThemeBase::AdjustCheckboxRadioRectForPadding(SkRect* rect) const {
   // By default we only take 1px from right and bottom for the drop shadow.
   rect->iset(rect->x(), rect->y(), rect->right() - 1, rect->bottom() - 1);
-}
-
-void NativeThemeBase::DrawImageInt(
-    SkCanvas* sk_canvas, const gfx::ImageSkia& image,
-    int src_x, int src_y, int src_w, int src_h,
-    int dest_x, int dest_y, int dest_w, int dest_h) const {
-  scoped_ptr<gfx::Canvas> canvas(CommonThemeCreateCanvas(sk_canvas));
-  canvas->DrawImageInt(image, src_x, src_y, src_w, src_h,
-      dest_x, dest_y, dest_w, dest_h, true);
-}
-
-void NativeThemeBase::DrawTiledImage(SkCanvas* sk_canvas,
-    const gfx::ImageSkia& image,
-    int src_x, int src_y, float tile_scale_x, float tile_scale_y,
-    int dest_x, int dest_y, int w, int h) const {
-  scoped_ptr<gfx::Canvas> canvas(CommonThemeCreateCanvas(sk_canvas));
-  canvas->TileImageInt(image, src_x, src_y, tile_scale_x,
-      tile_scale_y, dest_x, dest_y, w, h);
 }
 
 SkColor NativeThemeBase::SaturateAndBrighten(SkScalar* hsv,

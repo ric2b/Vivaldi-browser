@@ -65,7 +65,7 @@ void DatabaseThread::start()
     if (m_thread)
         return;
     m_thread = WebThreadSupportingGC::create("WebCore: Database");
-    m_thread->postTask(BLINK_FROM_HERE, threadSafeBind(&DatabaseThread::setupDatabaseThread, this));
+    m_thread->postTask(BLINK_FROM_HERE, threadSafeBind(&DatabaseThread::setupDatabaseThread, wrapCrossThreadPersistent(this)));
 }
 
 void DatabaseThread::setupDatabaseThread()
@@ -83,7 +83,7 @@ void DatabaseThread::terminate()
         m_terminationRequested = true;
         m_cleanupSync = &sync;
         WTF_LOG(StorageAPI, "DatabaseThread %p was asked to terminate\n", this);
-        m_thread->postTask(BLINK_FROM_HERE, threadSafeBind(&DatabaseThread::cleanupDatabaseThread, this));
+        m_thread->postTask(BLINK_FROM_HERE, threadSafeBind(&DatabaseThread::cleanupDatabaseThread, wrapCrossThreadPersistent(this)));
     }
     sync.waitForTaskCompletion();
     // The WebThread destructor blocks until all the tasks of the database
@@ -169,7 +169,7 @@ void DatabaseThread::scheduleTask(PassOwnPtr<DatabaseTask> task)
     }
 #endif
     // WebThread takes ownership of the task.
-    m_thread->postTask(BLINK_FROM_HERE, threadSafeBind(&DatabaseTask::run, task));
+    m_thread->postTask(BLINK_FROM_HERE, threadSafeBind(&DatabaseTask::run, std::move(task)));
 }
 
 } // namespace blink

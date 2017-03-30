@@ -27,8 +27,6 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import base64
-import copy
-import sys
 import time
 
 from webkitpy.layout_tests.port.base import Port, VirtualTestSuite
@@ -87,7 +85,7 @@ class TestList(object):
         self.tests[name] = test
 
     def add_reftest(self, name, reference_name, same_image, crash=False):
-        self.add(name, actual_checksum='xxx', actual_image='XXX', is_reftest=True, crash=crash)
+        self.add(name, actual_text='reftest', actual_checksum='xxx', actual_image='XXX', is_reftest=True, crash=crash)
         if same_image:
             self.add(reference_name, actual_checksum='xxx', actual_image='XXX', is_reftest=True)
         else:

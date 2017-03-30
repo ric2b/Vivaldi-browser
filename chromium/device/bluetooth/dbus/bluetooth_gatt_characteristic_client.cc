@@ -10,18 +10,13 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/values.h"
 #include "dbus/bus.h"
 #include "dbus/object_manager.h"
+#include "dbus/values_util.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
 namespace bluez {
-
-namespace {
-
-// TODO(armansito): Move this constant to cros_system_api.
-const char kValueProperty[] = "Value";
-
-}  // namespace
 
 // static
 const char BluetoothGattCharacteristicClient::kNoResponseError[] =
@@ -37,12 +32,10 @@ BluetoothGattCharacteristicClient::Properties::Properties(
     : dbus::PropertySet(object_proxy, interface_name, callback) {
   RegisterProperty(bluetooth_gatt_characteristic::kUUIDProperty, &uuid);
   RegisterProperty(bluetooth_gatt_characteristic::kServiceProperty, &service);
-  RegisterProperty(kValueProperty, &value);
+  RegisterProperty(bluetooth_gatt_characteristic::kValueProperty, &value);
   RegisterProperty(bluetooth_gatt_characteristic::kNotifyingProperty,
                    &notifying);
   RegisterProperty(bluetooth_gatt_characteristic::kFlagsProperty, &flags);
-  RegisterProperty(bluetooth_gatt_characteristic::kDescriptorsProperty,
-                   &descriptors);
 }
 
 BluetoothGattCharacteristicClient::Properties::~Properties() {}
@@ -104,6 +97,11 @@ class BluetoothGattCharacteristicClientImpl
         bluetooth_gatt_characteristic::kBluetoothGattCharacteristicInterface,
         bluetooth_gatt_characteristic::kReadValue);
 
+    // Append empty option dict
+    dbus::MessageWriter writer(&method_call);
+    base::DictionaryValue dict;
+    dbus::AppendValueData(&writer, dict);
+
     object_proxy->CallMethodWithErrorCallback(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
         base::Bind(&BluetoothGattCharacteristicClientImpl::OnValueSuccess,
@@ -129,6 +127,10 @@ class BluetoothGattCharacteristicClientImpl
         bluetooth_gatt_characteristic::kWriteValue);
     dbus::MessageWriter writer(&method_call);
     writer.AppendArrayOfBytes(value.data(), value.size());
+
+    // Append empty option dict
+    base::DictionaryValue dict;
+    dbus::AppendValueData(&writer, dict);
 
     object_proxy->CallMethodWithErrorCallback(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,

@@ -4,6 +4,7 @@
 
 #include "extensions/browser/api/system_display/system_display_api.h"
 
+#include <memory>
 #include <string>
 
 #include "build/build_config.h"
@@ -11,9 +12,7 @@
 #include "extensions/common/api/system_display.h"
 
 #if defined(OS_CHROMEOS)
-#include "base/memory/scoped_ptr.h"
 #include "extensions/common/manifest_handlers/kiosk_mode_info.h"
-#include "ui/gfx/screen.h"
 #endif
 
 namespace extensions {
@@ -23,7 +22,7 @@ using api::system_display::DisplayUnitInfo;
 namespace SetDisplayProperties = api::system_display::SetDisplayProperties;
 
 bool SystemDisplayGetInfoFunction::RunSync() {
-  DisplayInfo all_displays_info =
+  DisplayUnitInfoList all_displays_info =
       DisplayInfoProvider::Get()->GetAllDisplaysInfo();
   results_ = api::system_display::GetInfo::Results::Create(all_displays_info);
   return true;
@@ -34,18 +33,18 @@ bool SystemDisplaySetDisplayPropertiesFunction::RunSync() {
   SetError("Function available only on ChromeOS.");
   return false;
 #else
-  if (!KioskModeInfo::IsKioskEnabled(extension())) {
+  if (extension() && !KioskModeInfo::IsKioskEnabled(extension())) {
     SetError("The extension needs to be kiosk enabled to use the function.");
     return false;
   }
   std::string error;
-  scoped_ptr<SetDisplayProperties::Params> params(
+  std::unique_ptr<SetDisplayProperties::Params> params(
       SetDisplayProperties::Params::Create(*args_));
-  bool success =
+  bool result =
       DisplayInfoProvider::Get()->SetInfo(params->id, params->info, &error);
-  if (!success)
+  if (!result)
     SetError(error);
-  return true;
+  return result;
 #endif
 }
 
@@ -54,7 +53,7 @@ bool SystemDisplayEnableUnifiedDesktopFunction::RunSync() {
   SetError("Function available only on ChromeOS.");
   return false;
 #else
-  scoped_ptr<api::system_display::EnableUnifiedDesktop::Params> params(
+  std::unique_ptr<api::system_display::EnableUnifiedDesktop::Params> params(
       api::system_display::EnableUnifiedDesktop::Params::Create(*args_));
   DisplayInfoProvider::Get()->EnableUnifiedDesktop(params->enabled);
   return true;

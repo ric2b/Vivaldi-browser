@@ -122,7 +122,7 @@ public:
 
     bool canRenderCombiningCharacterSequence(const UChar*, size_t) const;
 
-    PassRefPtr<CustomFontData> customFontData() const { return m_customFontData; }
+    CustomFontData* customFontData() const { return m_customFontData.get(); }
 
     // Implemented by the platform.
     virtual bool fillGlyphPage(GlyphPage* pageToFill, unsigned offset, unsigned length, UChar* buffer, unsigned bufferLength) const;
@@ -137,7 +137,6 @@ private:
     void platformGlyphInit();
 
     PassRefPtr<SimpleFontData> createScaledFontData(const FontDescription&, float scaleFactor) const;
-    PassRefPtr<SimpleFontData> platformCreateScaledFontData(const FontDescription&, float scaleFactor) const;
 
     FontMetrics m_fontMetrics;
     float m_maxCharWidth;

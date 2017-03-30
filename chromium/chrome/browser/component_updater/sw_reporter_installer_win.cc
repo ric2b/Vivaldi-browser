@@ -19,7 +19,7 @@
 #include "base/metrics/sparse_histogram.h"
 #include "base/path_service.h"
 #include "base/strings/string_tokenizer.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/threading/worker_pool.h"
 #include "base/time/time.h"
 #include "base/win/registry.h"
@@ -122,30 +122,25 @@ class SwReporterInstallerTraits : public ComponentInstallerTraits {
     return true;
   }
 
-  void ComponentReady(const base::Version& version,
-                      const base::FilePath& install_dir,
-                      scoped_ptr<base::DictionaryValue> manifest) override {
+  void ComponentReady(
+      const base::Version& version,
+      const base::FilePath& install_dir,
+      std::unique_ptr<base::DictionaryValue> manifest) override {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
     safe_browsing::RunSwReporter(install_dir.Append(kSwReporterExeName),
                                  version, base::ThreadTaskRunnerHandle::Get(),
                                  base::WorkerPool::GetTaskRunner(true));
   }
 
-  base::FilePath GetBaseDirectory() const override { return install_dir(); }
+  base::FilePath GetRelativeInstallDir() const override {
+    return base::FilePath(FILE_PATH_LITERAL("SwReporter"));
+  }
 
   void GetHash(std::vector<uint8_t>* hash) const override { GetPkHash(hash); }
 
   std::string GetName() const override { return "Software Reporter Tool"; }
 
   std::string GetAp() const override { return std::string(); }
-
-  static base::FilePath install_dir() {
-    // The base directory on windows looks like:
-    // <profile>\AppData\Local\Google\Chrome\User Data\SwReporter\.
-    base::FilePath result;
-    PathService::Get(DIR_SW_REPORTER, &result);
-    return result;
-  }
 
   static std::string ID() {
     update_client::CrxComponent component;
@@ -240,7 +235,8 @@ void RegisterSwReporterComponent(ComponentUpdateService* cus) {
   }
 
   // Install the component.
-  scoped_ptr<ComponentInstallerTraits> traits(new SwReporterInstallerTraits());
+  std::unique_ptr<ComponentInstallerTraits> traits(
+      new SwReporterInstallerTraits());
   // |cus| will take ownership of |installer| during installer->Register(cus).
   DefaultComponentInstaller* installer =
       new DefaultComponentInstaller(std::move(traits));

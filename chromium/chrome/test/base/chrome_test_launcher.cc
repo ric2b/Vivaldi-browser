@@ -20,7 +20,6 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/chrome_test_suite.h"
-#include "chrome/test/base/test_switches.h"
 #include "components/crash/content/app/crashpad.h"
 #include "content/public/app/content_main.h"
 #include "content/public/common/content_switches.h"
@@ -44,8 +43,12 @@
 #include "ash/test/ui_controls_factory_ash.h"
 #endif
 
-#if defined(OS_LINUX) || defined(OS_ANDROID) || defined(OS_WIN)
+#if defined(OS_LINUX) || defined(OS_ANDROID)
 #include "chrome/app/chrome_crash_reporter_client.h"
+#endif
+
+#if defined(OS_WIN)
+#include "chrome/app/chrome_crash_reporter_client_win.h"
 #endif
 
 #if defined(VIVALDI_BUILD)
@@ -98,17 +101,6 @@ ChromeTestLauncherDelegate::CreateContentMainDelegate() {
 #else
   return new ChromeMainDelegate();
 #endif
-}
-
-void ChromeTestLauncherDelegate::AdjustDefaultParallelJobs(int* default_jobs) {
-#if defined(OS_WIN)
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshBrowserTests)) {
-    *default_jobs = 1;
-    fprintf(stdout, "Disabling test parallelization for --ash-browsertests.\n");
-    fflush(stdout);
-  }
-#endif  // defined(OS_WIN)
 }
 
 int LaunchChromeTests(int default_jobs,

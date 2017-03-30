@@ -23,7 +23,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8Uint8ClampedArray::wrapperTypeInfo = { gin::kEmbedderBlink, 0, V8Uint8ClampedArray::refObject, V8Uint8ClampedArray::derefObject, V8Uint8ClampedArray::trace, 0, 0, V8Uint8ClampedArray::preparePrototypeAndInterfaceObject, V8Uint8ClampedArray::installConditionallyEnabledProperties, "Uint8ClampedArray", &V8ArrayBufferView::wrapperTypeInfo, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent, WrapperTypeInfo::RefCountedObject };
+const WrapperTypeInfo V8Uint8ClampedArray::wrapperTypeInfo = { gin::kEmbedderBlink, 0, V8Uint8ClampedArray::trace, V8Uint8ClampedArray::traceWrappers, 0, 0, V8Uint8ClampedArray::preparePrototypeAndInterfaceObject, nullptr, "Uint8ClampedArray", &V8ArrayBufferView::wrapperTypeInfo, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -46,7 +46,7 @@ TestUint8ClampedArray* V8Uint8ClampedArray::toImpl(v8::Local<v8::Object> object)
 
     v8::Local<v8::Uint8ClampedArray> v8View = object.As<v8::Uint8ClampedArray>();
     v8::Local<v8::Object> arrayBuffer = v8View->Buffer();
-    RefPtr<TestUint8ClampedArray> typedArray;
+    TestUint8ClampedArray* typedArray = nullptr;
     if (arrayBuffer->IsArrayBuffer()) {
         typedArray = TestUint8ClampedArray::create(V8ArrayBuffer::toImpl(arrayBuffer), v8View->ByteOffset(), v8View->Length());
     } else if (arrayBuffer->IsSharedArrayBuffer()) {
@@ -63,16 +63,6 @@ TestUint8ClampedArray* V8Uint8ClampedArray::toImpl(v8::Local<v8::Object> object)
 TestUint8ClampedArray* V8Uint8ClampedArray::toImplWithTypeCheck(v8::Isolate* isolate, v8::Local<v8::Value> value)
 {
     return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : 0;
-}
-
-void V8Uint8ClampedArray::refObject(ScriptWrappable* scriptWrappable)
-{
-    scriptWrappable->toImpl<TestUint8ClampedArray>()->ref();
-}
-
-void V8Uint8ClampedArray::derefObject(ScriptWrappable* scriptWrappable)
-{
-    scriptWrappable->toImpl<TestUint8ClampedArray>()->deref();
 }
 
 } // namespace blink

@@ -35,6 +35,7 @@ from devil.android import device_temp_file
 from devil.android import device_utils
 from devil.android.sdk import keyevent
 from devil.android.sdk import version_codes
+from devil.constants import exit_codes
 from devil.utils import run_tests_helper
 from devil.utils import timeout_retry
 from pylib import constants
@@ -295,15 +296,26 @@ def SetProperties(device, options):
                            check_return=True)
 
   if options.remove_system_webview:
-    if device.HasRoot():
-      # This is required, e.g., to replace the system webview on a device.
-      device.adb.Remount()
-      device.RunShellCommand(['stop'], check_return=True)
-      device.RunShellCommand(['rm', '-rf'] + _SYSTEM_WEBVIEW_PATHS,
-                             check_return=True)
-      device.RunShellCommand(['start'], check_return=True)
+    if any(device.PathExists(p) for p in _SYSTEM_WEBVIEW_PATHS):
+      logging.info('System WebView exists and needs to be removed')
+      if device.HasRoot():
+        # Disabled Marshmallow's Verity security feature
+        if device.build_version_sdk >= version_codes.MARSHMALLOW:
+          device.adb.DisableVerity()
+          device.Reboot()
+          device.WaitUntilFullyBooted()
+          device.EnableRoot()
+
+        # This is required, e.g., to replace the system webview on a device.
+        device.adb.Remount()
+        device.RunShellCommand(['stop'], check_return=True)
+        device.RunShellCommand(['rm', '-rf'] + _SYSTEM_WEBVIEW_PATHS,
+                               check_return=True)
+        device.RunShellCommand(['start'], check_return=True)
+      else:
+        logging.warning('Cannot remove system webview from a non-rooted device')
     else:
-      logging.warning('Cannot remove system webview from a non-rooted device')
+      logging.info('System WebView already removed')
 
   # Some device types can momentarily disappear after setting properties.
   device.adb.WaitForDevice()
@@ -358,17 +370,22 @@ def FinishProvisioning(device, options):
   def _set_and_verify_date():
     if device.build_version_sdk >= version_codes.MARSHMALLOW:
       date_format = '%m%d%H%M%Y.%S'
-      set_date_command = ['date']
+      set_date_command = ['date', '-u']
+      get_date_command = ['date', '-u']
     else:
       date_format = '%Y%m%d.%H%M%S'
       set_date_command = ['date', '-s']
+      get_date_command = ['date']
+
+    # TODO(jbudorick): This is wrong on pre-M devices -- get/set are
+    # dealing in local time, but we're setting based on GMT.
     strgmtime = time.strftime(date_format, time.gmtime())
     set_date_command.append(strgmtime)
     device.RunShellCommand(set_date_command, as_root=True, check_return=True)
 
+    get_date_command.append('+"%Y%m%d.%H%M%S"')
     device_time = device.RunShellCommand(
-        ['date', '+"%Y%m%d.%H%M%S"'], as_root=True,
-        single_line=True).replace('"', '')
+        get_date_command, as_root=True, single_line=True).replace('"', '')
     device_time = datetime.datetime.strptime(device_time, "%Y%m%d.%H%M%S")
     correct_time = datetime.datetime.strptime(strgmtime, date_format)
     tdelta = (correct_time - device_time).seconds
@@ -538,7 +555,10 @@ def main():
 
   devil_chromium.Initialize(custom_deps=devil_custom_deps)
 
-  return ProvisionDevices(args)
+  try:
+    return ProvisionDevices(args)
+  except (device_errors.DeviceUnreachableError, device_errors.NoDevicesError):
+    return exit_codes.INFRA
 
 
 if __name__ == '__main__':

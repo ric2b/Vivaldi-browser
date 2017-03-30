@@ -87,7 +87,8 @@ void WidgetExample::BuildButton(View* container,
                                 const std::string& label,
                                 int tag) {
   LabelButton* button = new LabelButton(this, ASCIIToUTF16(label));
-  button->SetFocusable(true);
+  button->SetFocusForPlatform();
+  button->set_request_focus_on_press(true);
   button->set_tag(tag);
   container->AddChildView(button);
 }

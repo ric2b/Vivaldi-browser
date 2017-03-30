@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
 #include <utility>
 
 #include "base/files/file_util.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/browser_sync/browser/profile_sync_test_util.h"
@@ -155,7 +155,7 @@ class ProfileSyncServiceStartupTest : public testing::Test {
 
   base::MessageLoop message_loop_;
   browser_sync::ProfileSyncServiceBundle profile_sync_service_bundle_;
-  scoped_ptr<ProfileSyncService> sync_service_;
+  std::unique_ptr<ProfileSyncService> sync_service_;
   SyncServiceObserverMock observer_;
   sync_driver::DataTypeStatusTable data_type_status_table_;
   SyncApiComponentFactoryMock* component_factory_ = nullptr;
@@ -429,14 +429,14 @@ TEST_F(ProfileSyncServiceStartupTest, SwitchManaged) {
   EXPECT_FALSE(sync_service_->IsBackendInitialized());
   // Note that PSS no longer references |data_type_manager| after stopping.
 
-  // When switching back to unmanaged, the state should change and sync should
-  // start but not become active because IsFirstSetupComplete() will be false.
-  SetUpSyncBackendHost();
+  // When switching back to unmanaged, the state should change but sync should
+  // not start automatically because IsFirstSetupComplete() will be false.
   // A new DataTypeManager should not be created.
+  Mock::VerifyAndClearExpectations(data_type_manager);
   EXPECT_CALL(*component_factory_, CreateDataTypeManager(_, _, _, _, _))
       .Times(0);
   pref_service()->ClearPref(sync_driver::prefs::kSyncManaged);
-  EXPECT_TRUE(sync_service_->IsBackendInitialized());
+  EXPECT_FALSE(sync_service_->IsBackendInitialized());
   EXPECT_FALSE(sync_service_->IsSyncActive());
 }
 

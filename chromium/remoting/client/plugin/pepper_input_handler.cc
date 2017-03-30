@@ -91,12 +91,11 @@ protocol::KeyEvent MakeKeyEvent(const pp::KeyboardInputEvent& pp_key_event) {
   // keys, which means that if the client plugin is compiled against a
   // different version of the mapping table, the lookup will fail. The long-
   // term solution is to use JavaScript input events, but for now just check
-  // explicitly for the new names and convert them to the old ones (because
-  // this code is compiled against the old table in the M51 branch).
-  if (dom_code == "MetaLeft") {
-    dom_code = "OSLeft";
-  } else if (dom_code == "MetaRight") {
-    dom_code = "OSRight";
+  // explicitly for the old names and convert them to the new ones.
+  if (dom_code == "OSLeft") {
+    dom_code = "MetaLeft";
+  } else if (dom_code == "OSRight") {
+    dom_code = "MetaRight";
   }
   key_event.set_usb_keycode(ui::KeycodeConverter::CodeToUsbKeycode(dom_code));
   key_event.set_pressed(pp_key_event.GetType() == PP_INPUTEVENT_TYPE_KEYDOWN);

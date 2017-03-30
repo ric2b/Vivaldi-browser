@@ -6,6 +6,7 @@
 
 #include <vector>
 
+#include "base/memory/ptr_util.h"
 #include "cc/layers/layer.h"
 #include "cc/test/fake_layer_tree_host.h"
 #include "cc/test/test_task_graph_runner.h"
@@ -24,8 +25,8 @@ namespace {
 
 class TestLayerImpl : public LayerImpl {
  public:
-  static scoped_ptr<TestLayerImpl> Create(LayerTreeImpl* tree, int id) {
-    return make_scoped_ptr(new TestLayerImpl(tree, id));
+  static std::unique_ptr<TestLayerImpl> Create(LayerTreeImpl* tree, int id) {
+    return base::WrapUnique(new TestLayerImpl(tree, id));
   }
   ~TestLayerImpl() override {}
 
@@ -98,7 +99,7 @@ class LayerIteratorTest : public testing::Test {
                    &task_graph_runner_),
         id_(1) {}
 
-  scoped_ptr<TestLayerImpl> CreateLayer() {
+  std::unique_ptr<TestLayerImpl> CreateLayer() {
     return TestLayerImpl::Create(host_impl_.active_tree(), id_++);
   }
 
@@ -118,11 +119,11 @@ TEST_F(LayerIteratorTest, EmptyTree) {
 }
 
 TEST_F(LayerIteratorTest, SimpleTree) {
-  scoped_ptr<TestLayerImpl> root_layer = CreateLayer();
-  scoped_ptr<TestLayerImpl> first = CreateLayer();
-  scoped_ptr<TestLayerImpl> second = CreateLayer();
-  scoped_ptr<TestLayerImpl> third = CreateLayer();
-  scoped_ptr<TestLayerImpl> fourth = CreateLayer();
+  std::unique_ptr<TestLayerImpl> root_layer = CreateLayer();
+  std::unique_ptr<TestLayerImpl> first = CreateLayer();
+  std::unique_ptr<TestLayerImpl> second = CreateLayer();
+  std::unique_ptr<TestLayerImpl> third = CreateLayer();
+  std::unique_ptr<TestLayerImpl> fourth = CreateLayer();
 
   TestLayerImpl* root_ptr = root_layer.get();
   TestLayerImpl* first_ptr = first.get();
@@ -138,11 +139,9 @@ TEST_F(LayerIteratorTest, SimpleTree) {
   host_impl_.active_tree()->SetRootLayer(std::move(root_layer));
 
   LayerImplList render_surface_layer_list;
-  host_impl_.active_tree()->IncrementRenderSurfaceListIdForTesting();
   LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting inputs(
-      root_ptr, root_ptr->bounds(), &render_surface_layer_list,
-      host_impl_.active_tree()->current_render_surface_list_id());
-  LayerTreeHostCommon::CalculateDrawProperties(&inputs);
+      root_ptr, root_ptr->bounds(), &render_surface_layer_list);
+  LayerTreeHostCommon::CalculateDrawPropertiesForTesting(&inputs);
 
   IterateFrontToBack(&render_surface_layer_list);
   EXPECT_COUNT(root_ptr, 5, -1, 4);
@@ -153,15 +152,15 @@ TEST_F(LayerIteratorTest, SimpleTree) {
 }
 
 TEST_F(LayerIteratorTest, ComplexTree) {
-  scoped_ptr<TestLayerImpl> root_layer = CreateLayer();
-  scoped_ptr<TestLayerImpl> root1 = CreateLayer();
-  scoped_ptr<TestLayerImpl> root2 = CreateLayer();
-  scoped_ptr<TestLayerImpl> root3 = CreateLayer();
-  scoped_ptr<TestLayerImpl> root21 = CreateLayer();
-  scoped_ptr<TestLayerImpl> root22 = CreateLayer();
-  scoped_ptr<TestLayerImpl> root23 = CreateLayer();
-  scoped_ptr<TestLayerImpl> root221 = CreateLayer();
-  scoped_ptr<TestLayerImpl> root231 = CreateLayer();
+  std::unique_ptr<TestLayerImpl> root_layer = CreateLayer();
+  std::unique_ptr<TestLayerImpl> root1 = CreateLayer();
+  std::unique_ptr<TestLayerImpl> root2 = CreateLayer();
+  std::unique_ptr<TestLayerImpl> root3 = CreateLayer();
+  std::unique_ptr<TestLayerImpl> root21 = CreateLayer();
+  std::unique_ptr<TestLayerImpl> root22 = CreateLayer();
+  std::unique_ptr<TestLayerImpl> root23 = CreateLayer();
+  std::unique_ptr<TestLayerImpl> root221 = CreateLayer();
+  std::unique_ptr<TestLayerImpl> root231 = CreateLayer();
 
   TestLayerImpl* root_ptr = root_layer.get();
   TestLayerImpl* root1_ptr = root1.get();
@@ -185,11 +184,9 @@ TEST_F(LayerIteratorTest, ComplexTree) {
   host_impl_.active_tree()->SetRootLayer(std::move(root_layer));
 
   LayerImplList render_surface_layer_list;
-  host_impl_.active_tree()->IncrementRenderSurfaceListIdForTesting();
   LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting inputs(
-      root_ptr, root_ptr->bounds(), &render_surface_layer_list,
-      host_impl_.active_tree()->current_render_surface_list_id());
-  LayerTreeHostCommon::CalculateDrawProperties(&inputs);
+      root_ptr, root_ptr->bounds(), &render_surface_layer_list);
+  LayerTreeHostCommon::CalculateDrawPropertiesForTesting(&inputs);
 
   IterateFrontToBack(&render_surface_layer_list);
   EXPECT_COUNT(root_ptr, 9, -1, 8);
@@ -204,15 +201,15 @@ TEST_F(LayerIteratorTest, ComplexTree) {
 }
 
 TEST_F(LayerIteratorTest, ComplexTreeMultiSurface) {
-  scoped_ptr<TestLayerImpl> root_layer = CreateLayer();
-  scoped_ptr<TestLayerImpl> root1 = CreateLayer();
-  scoped_ptr<TestLayerImpl> root2 = CreateLayer();
-  scoped_ptr<TestLayerImpl> root3 = CreateLayer();
-  scoped_ptr<TestLayerImpl> root21 = CreateLayer();
-  scoped_ptr<TestLayerImpl> root22 = CreateLayer();
-  scoped_ptr<TestLayerImpl> root23 = CreateLayer();
-  scoped_ptr<TestLayerImpl> root221 = CreateLayer();
-  scoped_ptr<TestLayerImpl> root231 = CreateLayer();
+  std::unique_ptr<TestLayerImpl> root_layer = CreateLayer();
+  std::unique_ptr<TestLayerImpl> root1 = CreateLayer();
+  std::unique_ptr<TestLayerImpl> root2 = CreateLayer();
+  std::unique_ptr<TestLayerImpl> root3 = CreateLayer();
+  std::unique_ptr<TestLayerImpl> root21 = CreateLayer();
+  std::unique_ptr<TestLayerImpl> root22 = CreateLayer();
+  std::unique_ptr<TestLayerImpl> root23 = CreateLayer();
+  std::unique_ptr<TestLayerImpl> root221 = CreateLayer();
+  std::unique_ptr<TestLayerImpl> root231 = CreateLayer();
 
   TestLayerImpl* root_ptr = root_layer.get();
   TestLayerImpl* root1_ptr = root1.get();
@@ -224,9 +221,9 @@ TEST_F(LayerIteratorTest, ComplexTreeMultiSurface) {
   TestLayerImpl* root221_ptr = root221.get();
   TestLayerImpl* root231_ptr = root231.get();
 
-  root22->SetForceRenderSurface(true);
-  root23->SetForceRenderSurface(true);
-  root2->SetForceRenderSurface(true);
+  root22->test_properties()->force_render_surface = true;
+  root23->test_properties()->force_render_surface = true;
+  root2->test_properties()->force_render_surface = true;
   root22->AddChild(std::move(root221));
   root23->AddChild(std::move(root231));
   root2->SetDrawsContent(false);
@@ -240,11 +237,9 @@ TEST_F(LayerIteratorTest, ComplexTreeMultiSurface) {
   host_impl_.active_tree()->SetRootLayer(std::move(root_layer));
 
   LayerImplList render_surface_layer_list;
-  host_impl_.active_tree()->IncrementRenderSurfaceListIdForTesting();
   LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting inputs(
-      root_ptr, root_ptr->bounds(), &render_surface_layer_list,
-      host_impl_.active_tree()->current_render_surface_list_id());
-  LayerTreeHostCommon::CalculateDrawProperties(&inputs);
+      root_ptr, root_ptr->bounds(), &render_surface_layer_list);
+  LayerTreeHostCommon::CalculateDrawPropertiesForTesting(&inputs);
 
   IterateFrontToBack(&render_surface_layer_list);
   EXPECT_COUNT(root_ptr, 14, -1, 13);

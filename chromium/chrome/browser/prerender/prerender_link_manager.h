@@ -109,10 +109,6 @@ class PrerenderLinkManager : public KeyedService,
     // by this struct, and must be deleted before destructing this struct.
     PrerenderHandle* handle;
 
-    // True if this prerender has become a MatchComplete replacement. This state
-    // is maintained so the renderer is not notified of a stop twice.
-    bool is_match_complete_replacement;
-
     // True if this prerender has been abandoned by its launcher.
     bool has_been_abandoned;
   };
@@ -155,8 +151,6 @@ class PrerenderLinkManager : public KeyedService,
   void OnPrerenderStopLoading(PrerenderHandle* prerender_handle) override;
   void OnPrerenderDomContentLoaded(PrerenderHandle* prerender_handle) override;
   void OnPrerenderStop(PrerenderHandle* prerender_handle) override;
-  void OnPrerenderCreatedMatchCompleteReplacement(
-      PrerenderHandle* handle) override;
 
   bool has_shutdown_;
 
@@ -169,7 +163,7 @@ class PrerenderLinkManager : public KeyedService,
 
   // Helper object to manage prerenders which are launched by other prerenders
   // and must be deferred until the launcher is swapped in.
-  scoped_ptr<PendingPrerenderManager> pending_prerender_manager_;
+  std::unique_ptr<PendingPrerenderManager> pending_prerender_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(PrerenderLinkManager);
 };

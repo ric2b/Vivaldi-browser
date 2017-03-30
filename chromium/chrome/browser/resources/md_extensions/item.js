@@ -2,6 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// Closure compiler won't let this be declared inside cr.define().
+/** @enum {string} */
+var SourceType = {
+  WEBSTORE: 'webstore',
+  POLICY: 'policy',
+  SIDELOADED: 'sideloaded',
+  UNPACKED: 'unpacked',
+};
+
 cr.define('extensions', function() {
   /** @interface */
   var ItemDelegate = function() {};
@@ -16,9 +25,6 @@ cr.define('extensions', function() {
      */
     setItemEnabled: assertNotReached,
 
-    /** @param {string} id */
-    showItemDetails: assertNotReached,
-
     /**
      * @param {string} id
      * @param {boolean} isAllowedIncognito
@@ -26,10 +32,31 @@ cr.define('extensions', function() {
     setItemAllowedIncognito: assertNotReached,
 
     /**
+     * @param {string} id
+     * @param {boolean} isAllowedOnFileUrls
+     */
+    setItemAllowedOnFileUrls: assertNotReached,
+
+    /**
+     * @param {string} id
+     * @param {boolean} isAllowedOnAllSites
+     */
+    setItemAllowedOnAllSites: assertNotReached,
+
+    /**
+     * @param {string} id
+     * @param {boolean} collectsErrors
+     */
+    setItemCollectsErrors: assertNotReached,
+
+    /**
      * @param {string} id,
      * @param {chrome.developerPrivate.ExtensionView} view
      */
     inspectItemView: assertNotReached,
+
+    /** @param {string} id */
+    repairItem: assertNotReached,
   };
 
   var Item = Polymer({
@@ -81,29 +108,19 @@ cr.define('extensions', function() {
     },
 
     /** @private */
-    onShowDetailsTap_: function() {
-      this.showingDetails_ = !this.showingDetails_;
-    },
-
-    /** @private */
-    onDeleteTap_: function() {
+    onRemoveTap_: function() {
       this.delegate.deleteItem(this.data.id);
     },
 
     /** @private */
     onEnableChange_: function() {
-      this.delegate.setItemEnabled(this.data.id, this.$.enabled.checked);
+      this.delegate.setItemEnabled(this.data.id,
+                                   this.$['enable-toggle'].checked);
     },
 
     /** @private */
     onDetailsTap_: function() {
-      this.delegate.showItemDetails(this.data.id);
-    },
-
-    /** @private */
-    onAllowIncognitoChange_: function() {
-      this.delegate.setItemAllowedIncognito(
-          this.data.id, this.$$('#allow-incognito').checked);
+      this.fire('extension-item-show-details', {element: this});
     },
 
     /**
@@ -112,6 +129,11 @@ cr.define('extensions', function() {
      */
     onInspectTap_: function(e) {
       this.delegate.inspectItemView(this.data.id, e.model.item);
+    },
+
+    /** @private */
+    onRepairTap_: function() {
+      this.delegate.repairItem(this.data.id);
     },
 
     /**
@@ -136,14 +158,59 @@ cr.define('extensions', function() {
       return this.isEnabled_() ? 'enabled' : 'disabled';
     },
 
-    /** @private */
-    computeExpandIcon_: function() {
-      return this.showingDetails_ ? 'expand-less' : 'expand-more';
+    /**
+     * @return {SourceType}
+     * @private
+     */
+    computeSource_: function() {
+      if (this.data.controlledInfo &&
+          this.data.controlledInfo.type ==
+              chrome.developerPrivate.ControllerType.POLICY) {
+        return SourceType.POLICY;
+      } else if (this.data.location ==
+                     chrome.developerPrivate.Location.THIRD_PARTY) {
+        return SourceType.SIDELOADED;
+      } else if (this.data.location ==
+                     chrome.developerPrivate.Location.UNPACKED) {
+        return SourceType.UNPACKED;
+      }
+      return SourceType.WEBSTORE;
     },
 
-    /** @private */
-    computeEnableCheckboxLabel_: function() {
-      return this.i18n(this.isEnabled_() ? 'itemEnabled' : 'itemDisabled');
+    /**
+     * @return {string}
+     * @private
+     */
+    computeSourceIndicatorIcon_: function() {
+      switch (this.computeSource_()) {
+        case SourceType.POLICY:
+          return 'communication:business';
+        case SourceType.SIDELOADED:
+          return 'input';
+        case SourceType.UNPACKED:
+          return 'extensions-icons:unpacked';
+        case SourceType.WEBSTORE:
+          return '';
+      }
+      assertNotReached();
+    },
+
+    /**
+     * @return {string}
+     * @private
+     */
+    computeSourceIndicatorText_: function() {
+      switch (this.computeSource_()) {
+        case SourceType.POLICY:
+          return loadTimeData.getString('itemSourcePolicy');
+        case SourceType.SIDELOADED:
+          return loadTimeData.getString('itemSourceSideloaded');
+        case SourceType.UNPACKED:
+          return loadTimeData.getString('itemSourceUnpacked');
+        case SourceType.WEBSTORE:
+          return '';
+      }
+      assertNotReached();
     },
 
     /**

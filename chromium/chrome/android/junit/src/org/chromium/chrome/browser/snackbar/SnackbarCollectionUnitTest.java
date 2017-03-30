@@ -13,7 +13,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.snackbar.SnackbarManager.ActionDataMatcher;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
 import org.junit.Before;
 import org.junit.Test;
@@ -147,42 +146,14 @@ public class SnackbarCollectionUnitTest {
         }
     }
 
-    @Test
-    @Feature({"Browser", "Snackbar"})
-    public void testRemoveMatchingSnackbarsWithMatcher() throws Exception {
-        SnackbarCollection collection = new SnackbarCollection();
-        for (int i = 0; i < 3; i++) {
-            collection.add(makeActionSnackbar().setAction(ACTION_TITLE, i));
-            collection.add(makeNotificationSnackbar().setAction(NOTIFICATION_TITLE, i));
-        }
-        SnackbarController anotherController = mock(SnackbarController.class);
-        for (int i = 0; i < 3; i++) {
-            collection.add(makeActionSnackbar(anotherController).setAction(ACTION_TITLE, i));
-            collection.add(
-                    makeNotificationSnackbar(anotherController).setAction(NOTIFICATION_TITLE, i));
-        }
-
-        final Integer dataToRemove = 0;
-        ActionDataMatcher matcher = new ActionDataMatcher() {
-            @Override
-            public boolean match(Object data) {
-                return dataToRemove.equals(data);
-            }
-        };
-        collection.removeMatchingSnackbars(mMockController, matcher);
-        while (!collection.isEmpty()) {
-            Snackbar removed = collection.removeCurrentDueToAction();
-            assertFalse(mMockController == removed.getController()
-                    && dataToRemove.equals(removed.getActionData()));
-        }
-    }
-
     private Snackbar makeActionSnackbar(SnackbarController controller) {
-        return Snackbar.make(ACTION_TITLE, controller, Snackbar.TYPE_ACTION);
+        return Snackbar.make(ACTION_TITLE, controller, Snackbar.TYPE_ACTION,
+                Snackbar.UMA_TEST_SNACKBAR);
     }
 
     private Snackbar makeNotificationSnackbar(SnackbarController controller) {
-        return Snackbar.make(NOTIFICATION_TITLE, controller, Snackbar.TYPE_NOTIFICATION);
+        return Snackbar.make(NOTIFICATION_TITLE, controller, Snackbar.TYPE_NOTIFICATION,
+                Snackbar.UMA_TEST_SNACKBAR);
     }
 
     private Snackbar makeActionSnackbar() {

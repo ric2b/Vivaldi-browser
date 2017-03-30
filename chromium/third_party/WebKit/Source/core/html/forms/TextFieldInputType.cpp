@@ -68,7 +68,7 @@ private:
         return new LayoutDetailsMarker(this);
     }
 
-    void* preDispatchEventHandler(Event* event) override
+    EventDispatchHandlingState* preDispatchEventHandler(Event* event) override
     {
         // Chromium opens autofill popup in a mousedown event listener
         // associated to the document. We don't want to open it in this case
@@ -109,15 +109,23 @@ public:
 
 TextFieldInputType::TextFieldInputType(HTMLInputElement& element)
     : InputType(element)
+    , InputTypeView(element)
 {
 }
 
 TextFieldInputType::~TextFieldInputType()
 {
-#if !ENABLE(OILPAN)
-    if (SpinButtonElement* spinButton = spinButtonElement())
-        spinButton->removeSpinButtonOwner();
-#endif
+}
+
+DEFINE_TRACE(TextFieldInputType)
+{
+    InputTypeView::trace(visitor);
+    InputType::trace(visitor);
+}
+
+InputTypeView* TextFieldInputType::createView()
+{
+    return this;
 }
 
 SpinButtonElement* TextFieldInputType::spinButtonElement() const
@@ -245,13 +253,13 @@ void TextFieldInputType::forwardEvent(Event* event)
 
 void TextFieldInputType::handleFocusEvent(Element* oldFocusedNode, WebFocusType focusType)
 {
-    InputType::handleFocusEvent(oldFocusedNode, focusType);
+    InputTypeView::handleFocusEvent(oldFocusedNode, focusType);
     element().beginEditing();
 }
 
 void TextFieldInputType::handleBlurEvent()
 {
-    InputType::handleBlurEvent();
+    InputTypeView::handleBlurEvent();
     element().endEditing();
     if (SpinButtonElement *spinButton = spinButtonElement())
         spinButton->releaseCapture();
@@ -259,7 +267,7 @@ void TextFieldInputType::handleBlurEvent()
 
 bool TextFieldInputType::shouldSubmitImplicitly(Event* event)
 {
-    return (event->type() == EventTypeNames::textInput && event->hasInterface(EventNames::TextEvent) && toTextEvent(event)->data() == "\n") || InputType::shouldSubmitImplicitly(event);
+    return (event->type() == EventTypeNames::textInput && event->hasInterface(EventNames::TextEvent) && toTextEvent(event)->data() == "\n") || InputTypeView::shouldSubmitImplicitly(event);
 }
 
 LayoutObject* TextFieldInputType::createLayoutObject(const ComputedStyle&) const
@@ -315,7 +323,7 @@ Element* TextFieldInputType::containerElement() const
 
 void TextFieldInputType::destroyShadowSubtree()
 {
-    InputType::destroyShadowSubtree();
+    InputTypeView::destroyShadowSubtree();
     if (SpinButtonElement* spinButton = spinButtonElement())
         spinButton->removeSpinButtonOwner();
 }

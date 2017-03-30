@@ -23,12 +23,13 @@
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
+#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "ui/gfx/display_observer.h"
+#include "ui/display/display_observer.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/keyboard/keyboard_controller_observer.h"
 #include "ui/views/widget/widget_removals_observer.h"
@@ -59,8 +60,9 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
                              public chromeos::CrasAudioHandler::AudioObserver,
                              public ash::VirtualKeyboardStateObserver,
                              public keyboard::KeyboardControllerObserver,
-                             public gfx::DisplayObserver,
-                             public views::WidgetRemovalsObserver {
+                             public display::DisplayObserver,
+                             public views::WidgetRemovalsObserver,
+                             public chrome::MultiUserWindowManager::Observer {
  public:
   explicit LoginDisplayHostImpl(const gfx::Rect& background_bounds);
   ~LoginDisplayHostImpl() override;
@@ -80,6 +82,7 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
   WizardController* GetWizardController() override;
   AppLaunchController* GetAppLaunchController() override;
   void StartUserAdding(const base::Closure& completion_callback) override;
+  void CancelUserAdding() override;
   void StartSignInScreen(const LoginScreenContext& context) override;
   void OnPreferencesChanged() override;
   void PrewarmAuthentication() override;
@@ -127,14 +130,17 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
   // Overridden from keyboard::KeyboardControllerObserver:
   void OnKeyboardBoundsChanging(const gfx::Rect& new_bounds) override;
 
-  // Overridden from gfx::DisplayObserver:
-  void OnDisplayAdded(const gfx::Display& new_display) override;
-  void OnDisplayRemoved(const gfx::Display& old_display) override;
-  void OnDisplayMetricsChanged(const gfx::Display& display,
+  // Overridden from display::DisplayObserver:
+  void OnDisplayAdded(const display::Display& new_display) override;
+  void OnDisplayRemoved(const display::Display& old_display) override;
+  void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t changed_metrics) override;
 
   // Overriden from views::WidgetRemovalsObserver:
   void OnWillRemoveView(views::Widget* widget, views::View* view) override;
+
+  // Overriden from chrome::MultiUserWindowManager::Observer:
+  void OnUserSwitchAnimationFinished() override;
 
  private:
   // Way to restore if renderer have crashed.
@@ -151,8 +157,8 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
     ANIMATION_WORKSPACE,  // Use initial workspace animation (drop and
                           // and fade in workspace). Used for user login.
     ANIMATION_FADE_OUT,   // Fade out login screen. Used for app launch.
-    ANIMATION_ADD_USER,   // Use fade out animation for adding user into
-                          // session.
+    ANIMATION_ADD_USER,   // Use UserSwitchAnimatorChromeOS animation when
+                          // adding a user into multi-profile session.
   };
 
   // Marks display host for deletion.

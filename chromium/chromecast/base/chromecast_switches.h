@@ -44,8 +44,10 @@ extern const char kAlsaOutputPeriodSize[];
 extern const char kAlsaOutputStartThreshold[];
 extern const char kAlsaOutputAvailMin[];
 extern const char kAlsaCheckCloseTimeout[];
-extern const char kAlsaNumOutputChannels[];
 extern const char kAlsaFixedOutputSampleRate[];
+
+// Memory pressure switches
+extern const char kMemPressureSystemReservedKb[];
 
 }  // namespace switches
 

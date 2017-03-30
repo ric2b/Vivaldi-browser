@@ -2,8 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <stdint.h>
+#include "media/cdm/aes_decryptor.h"
 
+#include <stdint.h>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -19,9 +21,9 @@
 #include "media/base/decrypt_config.h"
 #include "media/base/decryptor.h"
 #include "media/base/mock_filters.h"
-#include "media/cdm/aes_decryptor.h"
 #include "media/cdm/api/content_decryption_module.h"
 #include "media/cdm/cdm_adapter.h"
+#include "media/cdm/cdm_file_io.h"
 #include "media/cdm/external_clear_key_test_helper.h"
 #include "media/cdm/simple_cdm_allocator.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -41,7 +43,7 @@ MATCHER(IsEmpty, "") { return arg.empty(); }
 MATCHER(IsNotEmpty, "") { return !arg.empty(); }
 MATCHER(IsJSONDictionary, "") {
   std::string result(arg.begin(), arg.end());
-  scoped_ptr<base::Value> root(base::JSONReader().ReadToValue(result));
+  std::unique_ptr<base::Value> root(base::JSONReader().ReadToValue(result));
   return (root.get() && root->GetType() == base::Value::TYPE_DICTIONARY);
 }
 
@@ -201,7 +203,7 @@ static scoped_refptr<DecoderBuffer> CreateEncryptedBuffer(
       key_id.size());
   std::string iv_string(
       reinterpret_cast<const char*>(iv.empty() ? NULL : &iv[0]), iv.size());
-  encrypted_buffer->set_decrypt_config(scoped_ptr<DecryptConfig>(
+  encrypted_buffer->set_decrypt_config(std::unique_ptr<DecryptConfig>(
       new DecryptConfig(key_id_string, iv_string, subsample_entries)));
   return encrypted_buffer;
 }
@@ -245,11 +247,13 @@ class AesDecryptorTest : public testing::TestWithParam<std::string> {
       CdmConfig cdm_config;  // default settings of false are sufficient.
 
       helper_.reset(new ExternalClearKeyTestHelper());
-      scoped_ptr<CdmAllocator> allocator(new SimpleCdmAllocator());
+      std::unique_ptr<CdmAllocator> allocator(new SimpleCdmAllocator());
       CdmAdapter::Create(
           helper_->KeySystemName(), helper_->LibraryPath(), cdm_config,
-          std::move(allocator), base::Bind(&AesDecryptorTest::OnSessionMessage,
+          std::move(allocator), base::Bind(&AesDecryptorTest::CreateCdmFileIO,
                                            base::Unretained(this)),
+          base::Bind(&AesDecryptorTest::OnSessionMessage,
+                     base::Unretained(this)),
           base::Bind(&AesDecryptorTest::OnSessionClosed,
                      base::Unretained(this)),
           base::Bind(&AesDecryptorTest::OnLegacySessionError,
@@ -295,26 +299,23 @@ class AesDecryptorTest : public testing::TestWithParam<std::string> {
         << "Unexpectedly rejected with message: " << error_message;
   }
 
-  scoped_ptr<SimpleCdmPromise> CreatePromise(ExpectedResult expected_result) {
-    scoped_ptr<SimpleCdmPromise> promise(
-        new CdmCallbackPromise<>(base::Bind(&AesDecryptorTest::OnResolve,
-                                            base::Unretained(this),
-                                            expected_result),
-                                 base::Bind(&AesDecryptorTest::OnReject,
-                                            base::Unretained(this),
-                                            expected_result)));
+  std::unique_ptr<SimpleCdmPromise> CreatePromise(
+      ExpectedResult expected_result) {
+    std::unique_ptr<SimpleCdmPromise> promise(new CdmCallbackPromise<>(
+        base::Bind(&AesDecryptorTest::OnResolve, base::Unretained(this),
+                   expected_result),
+        base::Bind(&AesDecryptorTest::OnReject, base::Unretained(this),
+                   expected_result)));
     return promise;
   }
 
-  scoped_ptr<NewSessionCdmPromise> CreateSessionPromise(
+  std::unique_ptr<NewSessionCdmPromise> CreateSessionPromise(
       ExpectedResult expected_result) {
-    scoped_ptr<NewSessionCdmPromise> promise(
+    std::unique_ptr<NewSessionCdmPromise> promise(
         new CdmCallbackPromise<std::string>(
             base::Bind(&AesDecryptorTest::OnResolveWithSession,
-                       base::Unretained(this),
-                       expected_result),
-            base::Bind(&AesDecryptorTest::OnReject,
-                       base::Unretained(this),
+                       base::Unretained(this), expected_result),
+            base::Bind(&AesDecryptorTest::OnReject, base::Unretained(this),
                        expected_result)));
     return promise;
   }
@@ -455,6 +456,11 @@ class AesDecryptorTest : public testing::TestWithParam<std::string> {
     }
   }
 
+  std::unique_ptr<CdmFileIO> CreateCdmFileIO(cdm::FileIOClient* client) {
+    ADD_FAILURE() << "Should never be called";
+    return nullptr;
+  }
+
   MOCK_METHOD4(OnSessionMessage,
                void(const std::string& session_id,
                     MediaKeys::MessageType message_type,
@@ -477,7 +483,7 @@ class AesDecryptorTest : public testing::TestWithParam<std::string> {
   CdmKeysInfo keys_info_;
 
   // Helper class to load/unload External Clear Key Library, if necessary.
-  scoped_ptr<ExternalClearKeyTestHelper> helper_;
+  std::unique_ptr<ExternalClearKeyTestHelper> helper_;
 
   base::MessageLoop message_loop_;
 

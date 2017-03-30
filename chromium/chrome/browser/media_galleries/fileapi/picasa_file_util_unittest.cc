@@ -23,7 +23,7 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/media_galleries/fileapi/media_file_system_backend.h"
 #include "chrome/browser/media_galleries/fileapi/media_path_filter.h"
@@ -222,7 +222,7 @@ class TestMediaFileSystemBackend : public MediaFileSystemBackend {
   }
 
  private:
-  scoped_ptr<storage::AsyncFileUtil> test_file_util_;
+  std::unique_ptr<storage::AsyncFileUtil> test_file_util_;
 };
 
 class PicasaFileUtilTest : public testing::Test {
@@ -379,8 +379,8 @@ class PicasaFileUtilTest : public testing::Test {
   base::ScopedTempDir profile_dir_;
 
   scoped_refptr<storage::FileSystemContext> file_system_context_;
-  scoped_ptr<PicasaDataProvider> picasa_data_provider_;
-  scoped_ptr<MediaPathFilter> media_path_filter_;
+  std::unique_ptr<PicasaDataProvider> picasa_data_provider_;
+  std::unique_ptr<MediaPathFilter> media_path_filter_;
 
   DISALLOW_COPY_AND_ASSIGN(PicasaFileUtilTest);
 };

@@ -9,10 +9,10 @@
 #include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_local.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "blimp/client/feature/compositor/blimp_context_provider.h"
 #include "blimp/client/feature/compositor/blimp_output_surface.h"
 #include "cc/layers/layer.h"
@@ -108,15 +108,11 @@ void BlimpCompositor::DidCommit() {}
 
 void BlimpCompositor::DidCommitAndDrawFrame() {}
 
-void BlimpCompositor::DidCompleteSwapBuffers() {}
+void BlimpCompositor::DidCompleteSwapBuffers() {
+  client_->DidCompleteSwapBuffers();
+}
 
 void BlimpCompositor::DidCompletePageScaleAnimation() {}
-
-void BlimpCompositor::RecordFrameTimingEvents(
-    std::unique_ptr<cc::FrameTimingTracker::CompositeTimingSet>
-        composite_events,
-    std::unique_ptr<cc::FrameTimingTracker::MainFrameTimingSet>
-        main_frame_events) {}
 
 void BlimpCompositor::SetProtoReceiver(ProtoReceiver* receiver) {
   remote_proto_channel_receiver_ = receiver;

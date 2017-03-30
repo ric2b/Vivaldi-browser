@@ -7,13 +7,14 @@
 #include <shlobj.h>
 #include <stddef.h>
 
+#include <memory>
+
 #include "base/command_line.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/md5.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
@@ -22,6 +23,7 @@
 #include "base/win/shortcut.h"
 #include "base/win/windows_version.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/shell_integration_win.h"
 #include "chrome/browser/web_applications/update_shortcut_worker_win.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/installer/util/browser_distribution.h"
@@ -213,7 +215,7 @@ bool CreateShortcutsInPaths(
 
   // Generates app id from web app url and profile path.
   std::string app_name(web_app::GenerateApplicationNameFromInfo(shortcut_info));
-  base::string16 app_id(shell_integration::GetAppModelIdForProfile(
+  base::string16 app_id(shell_integration::win::GetAppModelIdForProfile(
       base::UTF8ToUTF16(app_name), shortcut_info.profile_path));
 
   bool success = true;
@@ -336,7 +338,7 @@ void GetShortcutLocationsAndDeleteShortcuts(
 void CreateIconAndSetRelaunchDetails(
     const base::FilePath& web_app_path,
     const base::FilePath& icon_file,
-    scoped_ptr<web_app::ShortcutInfo> shortcut_info,
+    std::unique_ptr<web_app::ShortcutInfo> shortcut_info,
     HWND hwnd) {
   DCHECK(content::BrowserThread::GetBlockingPool()->RunsTasksOnCurrentThread());
 
@@ -363,7 +365,7 @@ void CreateIconAndSetRelaunchDetails(
 
 void OnShortcutInfoLoadedForSetRelaunchDetails(
     HWND hwnd,
-    scoped_ptr<web_app::ShortcutInfo> shortcut_info) {
+    std::unique_ptr<web_app::ShortcutInfo> shortcut_info) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   // Set window's icon to the one we're about to create/update in the web app
@@ -384,7 +386,7 @@ namespace web_app {
 
 base::FilePath CreateShortcutInWebAppDir(
     const base::FilePath& web_app_dir,
-    scoped_ptr<ShortcutInfo> shortcut_info) {
+    std::unique_ptr<ShortcutInfo> shortcut_info) {
   std::vector<base::FilePath> paths;
   paths.push_back(web_app_dir);
   std::vector<base::FilePath> out_filenames;
@@ -441,7 +443,7 @@ bool CheckAndSaveIcon(const base::FilePath& icon_file,
 
 bool CreatePlatformShortcuts(
     const base::FilePath& web_app_path,
-    scoped_ptr<ShortcutInfo> shortcut_info,
+    std::unique_ptr<ShortcutInfo> shortcut_info,
     const extensions::FileHandlersInfo& file_handlers_info,
     const ShortcutLocations& creation_locations,
     ShortcutCreationReason creation_reason) {
@@ -488,7 +490,7 @@ bool CreatePlatformShortcuts(
 void UpdatePlatformShortcuts(
     const base::FilePath& web_app_path,
     const base::string16& old_app_title,
-    scoped_ptr<ShortcutInfo> shortcut_info,
+    std::unique_ptr<ShortcutInfo> shortcut_info,
     const extensions::FileHandlersInfo& file_handlers_info) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::FILE);
 
@@ -527,7 +529,7 @@ void UpdatePlatformShortcuts(
 }
 
 void DeletePlatformShortcuts(const base::FilePath& web_app_path,
-                             scoped_ptr<ShortcutInfo> shortcut_info) {
+                             std::unique_ptr<ShortcutInfo> shortcut_info) {
   GetShortcutLocationsAndDeleteShortcuts(web_app_path,
                                          shortcut_info->profile_path,
                                          shortcut_info->title, NULL, NULL);

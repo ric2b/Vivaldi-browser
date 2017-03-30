@@ -169,6 +169,7 @@ extern "C" void  hb_free_impl(void *ptr);
 #  if defined(_WIN32_WCE)
      /* Some things not defined on Windows CE. */
 #    define strdup _strdup
+#    define vsnprintf _vsnprintf
 #    define getenv(Name) NULL
 #    if _WIN32_WCE < 0x800
 #      define setlocale(Category, Locale) "C"
@@ -610,6 +611,15 @@ static inline unsigned char TOLOWER (unsigned char c)
 
 /* Debug */
 
+
+/* HB_NDEBUG disables some sanity checks that are very safe to disable and
+ * should be disabled in production systems.  If NDEBUG is defined, enable
+ * HB_NDEBUG; but if it's desirable that normal assert()s (which are very
+ * light-weight) to be enabled, then HB_DEBUG can be defined to disable
+ * the costlier checks. */
+#ifdef NDEBUG
+#define HB_NDEBUG
+#endif
 
 #ifndef HB_DEBUG
 #define HB_DEBUG 0

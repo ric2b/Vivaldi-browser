@@ -7,8 +7,10 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ref_counted.h"
 #include "net/base/net_export.h"
 #include "net/socket/next_proto.h"
 
@@ -35,13 +37,15 @@ class NET_EXPORT_PRIVATE BidirectionalStreamImpl {
    public:
     Delegate();
 
-    // Called when the request headers have been sent.
+    // Called when the stream is ready for reading and writing.
     // The delegate may call BidirectionalStreamImpl::ReadData to start reading,
     // call BidirectionalStreamImpl::SendData to send data,
     // or call BidirectionalStreamImpl::Cancel to cancel the stream.
     // The delegate should not call BidirectionalStreamImpl::Cancel
     // during this callback.
-    virtual void OnHeadersSent() = 0;
+    // |request_headers_sent| if true, request headers have been sent. If false,
+    // SendRequestHeaders() needs to be explicitly called.
+    virtual void OnStreamReady(bool request_headers_sent) = 0;
 
     // Called when response headers are received.
     // This is called at most once for the lifetime of a stream.
@@ -70,8 +74,8 @@ class NET_EXPORT_PRIVATE BidirectionalStreamImpl {
     // EOF has not been received, or to send data if there is no pending send.
     virtual void OnTrailersReceived(const SpdyHeaderBlock& trailers) = 0;
 
-    // Called when an error occurred.
-    // No other delegate functions will be called after this.
+    // Called when an error occurred. Do not call into the stream after this
+    // point. No other delegate functions will be called after this.
     virtual void OnFailed(int status) = 0;
 
    protected:
@@ -88,10 +92,27 @@ class NET_EXPORT_PRIVATE BidirectionalStreamImpl {
   virtual ~BidirectionalStreamImpl();
 
   // Starts the BidirectionalStreamImpl and sends request headers.
+  // |send_request_headers_automatically| if true, request headers will be sent
+  // automatically when stream is negotiated. If false, request headers will be
+  // sent only when SendRequestHeaders() is invoked or with next
+  // SendData/SendvData.
   virtual void Start(const BidirectionalStreamRequestInfo* request_info,
                      const BoundNetLog& net_log,
+                     bool send_request_headers_automatically,
                      BidirectionalStreamImpl::Delegate* delegate,
-                     scoped_ptr<base::Timer> timer) = 0;
+                     std::unique_ptr<base::Timer> timer) = 0;
+
+  // Sends request headers to server.
+  // When |send_request_headers_automatically_| is
+  // false and OnStreamReady() is invoked with request_headers_sent = false,
+  // headers will be combined with next SendData/SendvData unless this
+  // method is called first, in which case headers will be sent separately
+  // without delay.
+  // (This method cannot be called when |send_request_headers_automatically_| is
+  // true nor when OnStreamReady() is invoked with request_headers_sent = true,
+  // since headers have been sent by the stream when stream is negotiated
+  // successfully.)
+  virtual void SendRequestHeaders() = 0;
 
   // Reads at most |buf_len| bytes into |buf|. Returns the number of bytes read,
   // ERR_IO_PENDING if the read is to be completed asynchronously, or an error
@@ -105,7 +126,13 @@ class NET_EXPORT_PRIVATE BidirectionalStreamImpl {
   // Delegate::OnHeadersSent is invoked, and should not be called again until
   // Delegate::OnDataSent is invoked. If |end_stream| is true, the DATA frame
   // will have an END_STREAM flag.
-  virtual void SendData(IOBuffer* data, int length, bool end_stream) = 0;
+  virtual void SendData(const scoped_refptr<IOBuffer>& data,
+                        int length,
+                        bool end_stream) = 0;
+
+  virtual void SendvData(const std::vector<scoped_refptr<IOBuffer>>& buffers,
+                         const std::vector<int>& lengths,
+                         bool end_stream) = 0;
 
   // Cancels the stream. No Delegate method will be called. Any pending
   // operations may or may not succeed.

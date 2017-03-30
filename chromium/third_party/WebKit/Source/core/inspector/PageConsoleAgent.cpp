@@ -45,8 +45,8 @@ namespace blink {
 
 int PageConsoleAgent::s_enabledAgentCount = 0;
 
-PageConsoleAgent::PageConsoleAgent(V8RuntimeAgent* runtimeAgent, V8DebuggerAgent* debuggerAgent, InspectorDOMAgent* domAgent, InspectedFrames* inspectedFrames)
-    : InspectorConsoleAgent(runtimeAgent, debuggerAgent)
+PageConsoleAgent::PageConsoleAgent(V8InspectorSession* v8Session, InspectorDOMAgent* domAgent, InspectedFrames* inspectedFrames)
+    : InspectorConsoleAgent(v8Session)
     , m_inspectorDOMAgent(domAgent)
     , m_inspectedFrames(inspectedFrames)
 {
@@ -54,10 +54,6 @@ PageConsoleAgent::PageConsoleAgent(V8RuntimeAgent* runtimeAgent, V8DebuggerAgent
 
 PageConsoleAgent::~PageConsoleAgent()
 {
-#if !ENABLE(OILPAN)
-    m_inspectorDOMAgent = nullptr;
-    m_instrumentingAgents->setPageConsoleAgent(nullptr);
-#endif
 }
 
 DEFINE_TRACE(PageConsoleAgent)
@@ -72,19 +68,18 @@ void PageConsoleAgent::enable(ErrorString* errorString)
 {
     InspectorConsoleAgent::enable(errorString);
     m_workersWithEnabledConsole.clear();
-    m_instrumentingAgents->setPageConsoleAgent(this);
+    m_instrumentingAgents->addPageConsoleAgent(this);
 }
 
 void PageConsoleAgent::disable(ErrorString* errorString)
 {
-    m_instrumentingAgents->setPageConsoleAgent(nullptr);
+    m_instrumentingAgents->removePageConsoleAgent(this);
     InspectorConsoleAgent::disable(errorString);
     m_workersWithEnabledConsole.clear();
 }
 
 void PageConsoleAgent::clearMessages(ErrorString* errorString)
 {
-    m_inspectorDOMAgent->releaseDanglingNodes();
     messageStorage()->clear(m_inspectedFrames->root()->document());
 }
 
@@ -115,6 +110,12 @@ void PageConsoleAgent::workerTerminated(WorkerInspectorProxy* workerInspectorPro
             sendConsoleMessageToFrontend(message, false);
         }
     }
+}
+
+void PageConsoleAgent::consoleMessagesCleared()
+{
+    m_inspectorDOMAgent->releaseDanglingNodes();
+    InspectorConsoleAgent::consoleMessagesCleared();
 }
 
 void PageConsoleAgent::enableStackCapturingIfNeeded()

@@ -18,13 +18,13 @@
 #include "base/memory/singleton.h"
 #include "base/sys_info.h"
 #include "build/build_config.h"
+#include "ui/display/display.h"
 #include "ui/events/devices/keyboard_device.h"
 #include "ui/events/devices/x11/device_list_cache_x11.h"
 #include "ui/events/devices/x11/touch_factory_x11.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/event_switches.h"
 #include "ui/events/keycodes/keyboard_code_conversion_x.h"
-#include "ui/gfx/display.h"
 #include "ui/gfx/geometry/point3_f.h"
 #include "ui/gfx/x/x11_types.h"
 
@@ -772,6 +772,10 @@ void DeviceDataManagerX11::UpdateScrollClassDevice(
   DCHECK(deviceid >= 0 && deviceid < kMaxDeviceNum);
   ScrollInfo& info = scroll_data_[deviceid];
 
+  // TODO: xinput2 is disabled until edge cases are fixed.
+  // http://crbug.com/616308
+  return;
+
   bool legacy_scroll_available =
       (scroll_class_info->flags & XIScrollFlagNoEmulation) == 0;
   // If the device's highest resolution is lower than the resolution of xinput1
@@ -809,7 +813,7 @@ double DeviceDataManagerX11::ExtractAndUpdateScrollOffset(
 }
 
 void DeviceDataManagerX11::SetDisabledKeyboardAllowedKeys(
-    scoped_ptr<std::set<KeyboardCode> > excepted_keys) {
+    std::unique_ptr<std::set<KeyboardCode>> excepted_keys) {
   DCHECK(!excepted_keys.get() ||
          !blocked_keyboard_allowed_keys_.get());
   blocked_keyboard_allowed_keys_ = std::move(excepted_keys);

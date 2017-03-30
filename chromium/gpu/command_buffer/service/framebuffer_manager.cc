@@ -129,6 +129,8 @@ class RenderbufferAttachment
     return false;
   }
 
+  bool EmulatingRGB() const override { return false; }
+
  protected:
   ~RenderbufferAttachment() override {}
 
@@ -275,6 +277,10 @@ class TextureAttachment
 
   bool FormsFeedbackLoop(TextureRef* texture, GLint level) const override {
     return texture == texture_ref_.get() && level == level_;
+  }
+
+  bool EmulatingRGB() const override {
+    return texture_ref_->texture()->EmulatingRGB();
   }
 
  protected:
@@ -438,7 +444,7 @@ void Framebuffer::ClearUnclearedIntRenderbufferAttachments(
 }
 
 bool Framebuffer::PrepareDrawBuffersForClear() const {
-  scoped_ptr<GLenum[]> buffers(new GLenum[manager_->max_draw_buffers_]);
+  std::unique_ptr<GLenum[]> buffers(new GLenum[manager_->max_draw_buffers_]);
   for (uint32_t i = 0; i < manager_->max_draw_buffers_; ++i)
     buffers[i] = GL_NONE;
   for (AttachmentMap::const_iterator it = attachments_.begin();
@@ -537,6 +543,10 @@ GLenum Framebuffer::GetReadBufferInternalFormat() const {
     return 0;
   }
   const Attachment* attachment = it->second.get();
+  if (attachment->EmulatingRGB()) {
+    DCHECK_EQ(static_cast<GLenum>(GL_RGBA), attachment->internal_format());
+    return GL_RGB;
+  }
   return attachment->internal_format();
 }
 

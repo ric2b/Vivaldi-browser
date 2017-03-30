@@ -10,8 +10,8 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/gpu/shader_disk_cache.h"
 #include "content/browser/quota/mock_quota_manager.h"
@@ -23,11 +23,14 @@
 #include "content/public/test/test_browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/base/test_completion_callback.h"
+#include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_store.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+using net::CanonicalCookie;
 
 namespace content {
 namespace {
@@ -65,6 +68,14 @@ const uint32_t kAllQuotaRemoveMask =
     StoragePartition::REMOVE_DATA_MASK_FILE_SYSTEMS |
     StoragePartition::REMOVE_DATA_MASK_INDEXEDDB |
     StoragePartition::REMOVE_DATA_MASK_WEBSQL;
+
+bool AlwaysTrueCookiePredicate(const net::CanonicalCookie& cookie) {
+  return true;
+}
+
+bool AlwaysFalseCookiePredicate(const net::CanonicalCookie& cookie) {
+  return false;
+}
 
 class AwaitCompletionHelper {
  public:
@@ -298,6 +309,19 @@ void ClearCookies(content::StoragePartition* partition,
       delete_begin, delete_end, run_loop->QuitClosure());
 }
 
+void ClearCookiesWithMatcher(
+    content::StoragePartition* partition,
+    const base::Time delete_begin,
+    const base::Time delete_end,
+    const StoragePartition::CookieMatcherFunction& cookie_matcher,
+    base::RunLoop* run_loop) {
+  partition->ClearData(StoragePartition::REMOVE_DATA_MASK_COOKIES,
+                       StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL,
+                       StoragePartition::OriginMatcherFunction(),
+                       cookie_matcher, delete_begin, delete_end,
+                       run_loop->QuitClosure());
+}
+
 void ClearStuff(uint32_t remove_mask,
                 content::StoragePartition* partition,
                 const base::Time delete_begin,
@@ -347,7 +371,7 @@ class StoragePartitionImplTest : public testing::Test {
 
  private:
   content::TestBrowserThreadBundle thread_bundle_;
-  scoped_ptr<TestBrowserContext> browser_context_;
+  std::unique_ptr<TestBrowserContext> browser_context_;
   scoped_refptr<MockQuotaManager> quota_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(StoragePartitionImplTest);
@@ -392,7 +416,7 @@ class StoragePartitionShaderClearTest : public testing::Test {
 
  private:
   content::TestBrowserThreadBundle thread_bundle_;
-  scoped_ptr<TestBrowserContext> browser_context_;
+  std::unique_ptr<TestBrowserContext> browser_context_;
 
   scoped_refptr<ShaderDiskCache> cache_;
 };
@@ -826,6 +850,38 @@ TEST_F(StoragePartitionImplTest, RemoveCookieLastHour) {
   EXPECT_FALSE(tester.ContainsCookie());
 }
 
+TEST_F(StoragePartitionImplTest, RemoveCookieWithMatcher) {
+  RemoveCookieTester tester(browser_context());
+  StoragePartition::CookieMatcherFunction true_predicate =
+      base::Bind(&AlwaysTrueCookiePredicate);
+
+  StoragePartition::CookieMatcherFunction false_predicate =
+      base::Bind(&AlwaysFalseCookiePredicate);
+
+  tester.AddCookie();
+  ASSERT_TRUE(tester.ContainsCookie());
+
+  StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
+      BrowserContext::GetDefaultStoragePartition(browser_context()));
+  partition->SetURLRequestContext(browser_context()->GetRequestContext());
+
+  // Return false from our predicate, and make sure the cookies is still around.
+  base::RunLoop run_loop;
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(&ClearCookiesWithMatcher, partition, base::Time(),
+                            base::Time::Max(), false_predicate, &run_loop));
+  run_loop.RunUntilIdle();
+  EXPECT_TRUE(tester.ContainsCookie());
+
+  // Now we return true from our predicate.
+  base::RunLoop run_loop2;
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(&ClearCookiesWithMatcher, partition, base::Time(),
+                            base::Time::Max(), true_predicate, &run_loop2));
+  run_loop2.RunUntilIdle();
+  EXPECT_FALSE(tester.ContainsCookie());
+}
+
 TEST_F(StoragePartitionImplTest, RemoveUnprotectedLocalStorageForever) {
   // Protect kOrigin1.
   scoped_refptr<MockSpecialStoragePolicy> mock_policy =
@@ -917,6 +973,34 @@ TEST_F(StoragePartitionImplTest, RemoveLocalStorageForLastWeek) {
   EXPECT_FALSE(tester.DOMStorageExistsForOrigin(kOrigin1));
   EXPECT_FALSE(tester.DOMStorageExistsForOrigin(kOrigin2));
   EXPECT_TRUE(tester.DOMStorageExistsForOrigin(kOrigin3));
+}
+
+TEST(StoragePartitionImplStaticTest, CreatePredicateForHostCookies) {
+  GURL url("http://www.example.com/");
+  GURL url2("https://www.example.com/");
+  GURL url3("https://www.google.com/");
+
+  net::CookieOptions options;
+  net::CookieStore::CookiePredicate predicate =
+      StoragePartitionImpl::CreatePredicateForHostCookies(url);
+
+  base::Time now = base::Time::Now();
+  std::vector<std::unique_ptr<CanonicalCookie>> valid_cookies;
+  valid_cookies.push_back(CanonicalCookie::Create(url, "A=B", now, options));
+  valid_cookies.push_back(CanonicalCookie::Create(url, "C=F", now, options));
+  // We should match a different scheme with the same host.
+  valid_cookies.push_back(CanonicalCookie::Create(url2, "A=B", now, options));
+
+  std::vector<std::unique_ptr<CanonicalCookie>> invalid_cookies;
+  // We don't match domain cookies.
+  invalid_cookies.push_back(
+      CanonicalCookie::Create(url2, "A=B;domain=.example.com", now, options));
+  invalid_cookies.push_back(CanonicalCookie::Create(url3, "A=B", now, options));
+
+  for (const auto& cookie : valid_cookies)
+    EXPECT_TRUE(predicate.Run(*cookie)) << cookie->DebugString();
+  for (const auto& cookie : invalid_cookies)
+    EXPECT_FALSE(predicate.Run(*cookie)) << cookie->DebugString();
 }
 
 }  // namespace content

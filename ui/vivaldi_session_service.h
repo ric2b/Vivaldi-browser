@@ -39,7 +39,7 @@ class VivaldiSessionService {
   ~VivaldiSessionService();
 
   bool ShouldTrackWindow(Browser* browser, Profile* profile);
-  void ScheduleCommand(scoped_ptr<sessions::SessionCommand> command);
+  void ScheduleCommand(std::unique_ptr<sessions::SessionCommand> command);
   void BuildCommandsForTab(const SessionID& window_id,
                           content::WebContents* tab, int index_in_window,
                           bool is_pinned);
@@ -93,7 +93,7 @@ class VivaldiSessionService {
   IdToRange tab_to_available_range_;
 
   // Handle to the target file.
-  scoped_ptr<base::File> current_session_file_;
+  std::unique_ptr<base::File> current_session_file_;
 
   // Whether an error condition has been detected
   bool errored_;

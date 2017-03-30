@@ -5,17 +5,17 @@
 #ifndef MEDIA_CAST_SENDER_AUDIO_SENDER_H_
 #define MEDIA_CAST_SENDER_AUDIO_SENDER_H_
 
+#include <memory>
+
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "media/base/audio_bus.h"
 #include "media/cast/cast_config.h"
-#include "media/cast/cast_defines.h"
 #include "media/cast/cast_sender.h"
 #include "media/cast/sender/frame_sender.h"
 
@@ -44,7 +44,7 @@ class AudioSender : public FrameSender,
   // Note: It is not guaranteed that |audio_frame| will actually be encoded and
   // sent, if AudioSender detects too many frames in flight.  Therefore, clients
   // should be careful about the rate at which this method is called.
-  void InsertAudio(scoped_ptr<AudioBus> audio_bus,
+  void InsertAudio(std::unique_ptr<AudioBus> audio_bus,
                    const base::TimeTicks& recorded_time);
 
  protected:
@@ -54,11 +54,11 @@ class AudioSender : public FrameSender,
  private:
   // Called by the |audio_encoder_| with the next EncodedFrame to send.
   void OnEncodedAudioFrame(int encoder_bitrate,
-                           scoped_ptr<SenderEncodedFrame> encoded_frame,
+                           std::unique_ptr<SenderEncodedFrame> encoded_frame,
                            int samples_skipped);
 
   // Encodes AudioBuses into EncodedFrames.
-  scoped_ptr<AudioEncoder> audio_encoder_;
+  std::unique_ptr<AudioEncoder> audio_encoder_;
 
   // The number of audio samples enqueued in |audio_encoder_|.
   int samples_in_encoder_;

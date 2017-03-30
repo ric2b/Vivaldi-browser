@@ -22,6 +22,8 @@ bool BASE_EXPORT IsVivaldiRunning();
 bool BASE_EXPORT IsDebuggingVivaldi();
 bool BASE_EXPORT IsVivaldiRunning(const base::CommandLine &cmd_line);
 bool BASE_EXPORT IsDebuggingVivaldi(const base::CommandLine &cmd_line);
+bool BASE_EXPORT IsTabDragInProgress();
+void BASE_EXPORT SetTabDragInProgress(bool tab_drag_in_progress);
 
 }  // namespace vivaldi
 

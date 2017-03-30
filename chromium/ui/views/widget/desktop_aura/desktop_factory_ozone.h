@@ -7,9 +7,12 @@
 
 #include "ui/views/views_export.h"
 
+namespace display {
+class Screen;
+}
+
 namespace gfx {
 class Rect;
-class Screen;
 }
 
 namespace views {
@@ -39,7 +42,7 @@ class VIEWS_EXPORT DesktopFactoryOzone {
 
   // Delegates implementation of DesktopScreen externally to
   // Ozone implementation.
-  virtual gfx::Screen* CreateDesktopScreen() = 0;
+  virtual display::Screen* CreateDesktopScreen() = 0;
 
  private:
   static DesktopFactoryOzone* impl_; // not owned

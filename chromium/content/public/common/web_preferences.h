@@ -52,6 +52,8 @@ enum ImageAnimationPolicy {
   IMAGE_ANIMATION_POLICY_NO_ANIMATION
 };
 
+enum class ViewportStyle { DEFAULT, MOBILE, TELEVISION, LAST = TELEVISION };
+
 // The ISO 15924 script code for undetermined script aka Common. It's the
 // default used on WebKit's side to get/set a font setting when no script is
 // specified.
@@ -166,6 +168,7 @@ struct CONTENT_EXPORT WebPreferences {
   bool supports_multiple_windows;
   bool viewport_enabled;
   bool viewport_meta_enabled;
+  ViewportStyle viewport_style;
   bool main_frame_resizes_are_orientation_changes;
   bool initialize_at_minimum_page_scale;
   bool smart_insert_delete_enabled;
@@ -222,8 +225,11 @@ struct CONTENT_EXPORT WebPreferences {
   // Used by Android_WebView only to support legacy apps that inject script into
   // a top-level initial empty document and expect it to persist on navigation.
   bool resue_global_for_unowned_main_frame;
-  std::string autoplay_experiment_mode;
 #endif
+
+  // String that describes how media element autoplay behavior should be
+  // affected by experiment.
+  std::string autoplay_experiment_mode;
 
   // Default (used if the page or UA doesn't override these) values for page
   // scale limits. These are set directly on the WebView so there's no analogue

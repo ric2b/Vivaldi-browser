@@ -7,13 +7,17 @@
 
 #include "base/macros.h"
 #include "ui/gl/gl_context.h"
+#include "ui/gl/gl_export.h"
 
 namespace gfx {
+
+class GLShareGroup;
 
 // A GLContext that does nothing for unit tests.
 class GL_EXPORT GLContextStub : public GLContextReal {
  public:
   GLContextStub();
+  explicit GLContextStub(GLShareGroup* share_group);
 
   // Implement GLContext.
   bool Initialize(GLSurface* compatible_surface,
@@ -23,7 +27,6 @@ class GL_EXPORT GLContextStub : public GLContextReal {
   bool IsCurrent(GLSurface* surface) override;
   void* GetHandle() override;
   void OnSetSwapInterval(int interval) override;
-  std::string GetExtensions() override;
   std::string GetGLRenderer() override;
 
  protected:

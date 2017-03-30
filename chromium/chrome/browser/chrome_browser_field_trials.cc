@@ -14,6 +14,7 @@
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "chrome/browser/metrics/chrome_metrics_service_client.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/metrics/metrics_pref_names.h"
 
@@ -26,19 +27,21 @@
 namespace {
 
 // Check for feature enabling the use of persistent histogram storage and
-// create an appropriate allocator for such if so.
+// enable the global allocator if so.
 void InstantiatePersistentHistograms() {
   if (base::FeatureList::IsEnabled(base::kPersistentHistogramsFeature)) {
-    const char kAllocatorName[] = "BrowserMetrics";
-    // Create persistent/shared memory and allow histograms to be stored in it.
-    // Memory that is not actualy used won't be physically mapped by the system.
-    // BrowserMetrics usage peaked around 95% of 2MiB as of 2016-02-20.
+    // Create persistent/shared memory and allow histograms to be stored in
+    // it. Memory that is not actualy used won't be physically mapped by the
+    // system. BrowserMetrics usage, as reported in UMA, peaked around 1.9MiB
+    // as of 2016-02-20.
     base::GlobalHistogramAllocator::CreateWithLocalMemory(
         3 << 20,     // 3 MiB
         0x935DDD43,  // SHA1(BrowserMetrics)
-        kAllocatorName);
-    base::GlobalHistogramAllocator::Get()->CreateTrackingHistograms(
-        kAllocatorName);
+        ChromeMetricsServiceClient::kBrowserMetricsName);
+    base::GlobalHistogramAllocator* allocator =
+        base::GlobalHistogramAllocator::Get();
+    allocator->CreateTrackingHistograms(
+        ChromeMetricsServiceClient::kBrowserMetricsName);
   }
 }
 

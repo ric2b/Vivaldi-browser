@@ -67,6 +67,12 @@ class MediaRouterAndroid : public MediaRouterBase {
   void AddIssue(const Issue& issue) override;
   void ClearIssue(const Issue::Id& issue_id) override;
   void OnUserGesture() override;
+  void SearchSinks(
+      const MediaSink::Id& sink_id,
+      const MediaSource::Id& source_id,
+      const std::string& search_input,
+      const std::string& domain,
+      const MediaSinkSearchResponseCallback& sink_callback) override;
 
   // The methods called by the Java counterpart.
 
@@ -98,6 +104,13 @@ class MediaRouterAndroid : public MediaRouterBase {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jstring>& jmedia_route_id);
+
+  // Notifies the media router when the route was closed with an error.
+  void OnRouteClosedWithError(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jstring>& jmedia_route_id,
+      const base::android::JavaParamRef<jstring>& jmessage);
 
   // Notifies the media router about the result of sending a message.
   void OnMessageSentResult(JNIEnv* env,

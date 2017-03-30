@@ -31,15 +31,13 @@
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/SecurityContext.h"
 #include "core/fetch/Resource.h"
-#include "core/frame/ConsoleTypes.h"
 #include "platform/heap/Handle.h"
 #include "platform/network/ContentSecurityPolicyParsers.h"
 #include "platform/network/HTTPParsers.h"
+#include "platform/v8_inspector/public/ConsoleTypes.h"
 #include "platform/weborigin/ReferrerPolicy.h"
 #include "wtf/HashSet.h"
 #include "wtf/PassOwnPtr.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 #include "wtf/text/StringHash.h"
 #include "wtf/text/TextPosition.h"
@@ -57,6 +55,7 @@ class ConsoleMessage;
 class CSPDirectiveList;
 class CSPSource;
 class Document;
+class FrameLoaderClient;
 class KURL;
 class ResourceRequest;
 class SecurityOrigin;
@@ -131,6 +130,11 @@ public:
         URLViolation
     };
 
+    enum class InlineType {
+        Block,
+        Attribute
+    };
+
     static ContentSecurityPolicy* create()
     {
         return new ContentSecurityPolicy();
@@ -139,16 +143,19 @@ public:
     DECLARE_TRACE();
 
     void bindToExecutionContext(ExecutionContext*);
+    void setupSelf(const SecurityOrigin&);
     void copyStateFrom(const ContentSecurityPolicy*);
     void copyPluginTypesFrom(const ContentSecurityPolicy*);
 
     void didReceiveHeaders(const ContentSecurityPolicyResponseHeaders&);
     void didReceiveHeader(const String&, ContentSecurityPolicyHeaderType, ContentSecurityPolicyHeaderSource);
+    void addPolicyFromHeaderValue(const String&, ContentSecurityPolicyHeaderType, ContentSecurityPolicyHeaderSource);
+    void reportAccumulatedHeaders(FrameLoaderClient*) const;
 
-    const PassOwnPtr<Vector<CSPHeaderAndType>> headers() const;
+    PassOwnPtr<Vector<CSPHeaderAndType>> headers() const;
 
     bool allowJavaScriptURLs(const String& contextURL, const WTF::OrdinalNumber& contextLine, ReportingStatus = SendReport) const;
-    bool allowInlineEventHandlers(const String& contextURL, const WTF::OrdinalNumber& contextLine, ReportingStatus = SendReport) const;
+    bool allowInlineEventHandler(const String& source, const String& contextURL, const WTF::OrdinalNumber& contextLine, ReportingStatus = SendReport) const;
     bool allowInlineScript(const String& contextURL, const WTF::OrdinalNumber& contextLine, const String& scriptContent, ReportingStatus = SendReport) const;
     bool allowInlineStyle(const String& contextURL, const WTF::OrdinalNumber& contextLine, const String& styleContent, ReportingStatus = SendReport) const;
     // When the reporting status is |SendReport|, the |ExceptionStatus|
@@ -195,8 +202,8 @@ public:
     // issue a load and be safe disabling any further CSP checks.
     bool allowScriptWithNonce(const String& nonce) const;
     bool allowStyleWithNonce(const String& nonce) const;
-    bool allowScriptWithHash(const String& source) const;
-    bool allowStyleWithHash(const String& source) const;
+    bool allowScriptWithHash(const String& source, InlineType) const;
+    bool allowStyleWithHash(const String& source, InlineType) const;
 
     bool allowRequest(WebURLRequest::RequestContext, const KURL&, RedirectStatus = DidNotRedirect, ReportingStatus = SendReport) const;
 
@@ -268,11 +275,11 @@ private:
 
     void applyPolicySideEffectsToExecutionContext();
 
-    SecurityOrigin* getSecurityOrigin() const;
     KURL completeURL(const String&) const;
 
     void logToConsole(const String& message, MessageLevel = ErrorMessageLevel);
-    void addPolicyFromHeaderValue(const String&, ContentSecurityPolicyHeaderType, ContentSecurityPolicyHeaderSource);
+
+    void addAndReportPolicyFromHeaderValue(const String&, ContentSecurityPolicyHeaderType, ContentSecurityPolicyHeaderSource);
 
     bool shouldSendViolationReport(const String&) const;
     void didSendViolationReport(const String&);

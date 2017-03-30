@@ -8,9 +8,10 @@ import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Intent;
 import android.os.Build;
+import android.provider.Browser;
 import android.text.TextUtils;
 
-import org.chromium.base.ApplicationStatus;
+import org.chromium.base.ContextUtils;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity2;
@@ -40,7 +41,7 @@ public class MultiWindowUtils {
     public static MultiWindowUtils getInstance() {
         if (sInstance.get() == null) {
             ChromeApplication application =
-                    (ChromeApplication) ApplicationStatus.getApplicationContext();
+                    (ChromeApplication) ContextUtils.getApplicationContext();
             sInstance.compareAndSet(null, application.createMultiWindowUtils());
         }
         return sInstance.get();
@@ -93,6 +94,25 @@ public class MultiWindowUtils {
         } else {
             return null;
         }
+    }
+
+    /**
+     * Sets extras on the intent used when handling "open in other window" or
+     * "move to other window". Specifically, sets the class, adds the launch adjacent flag, and
+     * adds extras so that Chrome behaves correctly when the back button is pressed.
+     * @param intent The intent to set details on.
+     * @param activity The activity firing the intent.
+     * @param targetActivity The class of the activity receiving the intent.
+     */
+    public static void setOpenInOtherWindowIntentExtras(
+            Intent intent, Activity activity, Class<? extends Activity> targetActivity) {
+        intent.setClass(activity, targetActivity);
+        intent.addFlags(MultiWindowUtils.FLAG_ACTIVITY_LAUNCH_ADJACENT);
+
+        // Let Chrome know that this intent is from Chrome, so that it does not close the app when
+        // the user presses 'back' button.
+        intent.putExtra(Browser.EXTRA_APPLICATION_ID, activity.getPackageName());
+        intent.putExtra(Browser.EXTRA_CREATE_NEW_TAB, true);
     }
 
     /**

@@ -38,16 +38,6 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // Returns nullptr if the IDs do not correspond to a live RenderFrameHost.
   static RenderFrameHost* FromID(int render_process_id, int render_frame_id);
 
-  // Returns the current RenderFrameHost associated with the frame identified by
-  // the given FrameTreeNode ID, in any WebContents. The frame may change its
-  // current RenderFrameHost over time, so the returned RenderFrameHost can be
-  // different from the RenderFrameHost that returned the ID via
-  // GetFrameTreeNodeId(). See GetFrameTreeNodeId for more details.
-  // Use WebContents::FindFrameByFrameTreeNodeId to find a RenderFrameHost in
-  // a specific WebContents.
-  // Returns nullptr if the frame does not exist.
-  static RenderFrameHost* FromFrameTreeNodeId(int frame_tree_node_id);
-
 #if defined(OS_ANDROID)
   // Globally allows for injecting JavaScript into the main world. This feature
   // is present only to support Android WebView and must not be used in other
@@ -190,15 +180,6 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // Get the number of proxies to this frame, in all processes. Exposed for
   // use by resource metrics.
   virtual int GetProxyCount() = 0;
-
-#if defined(OS_ANDROID)
-  // Selects and zooms to the find result nearest to the point (x,y)
-  // defined in find-in-page coordinates.
-  virtual void ActivateNearestFindResult(int request_id, float x, float y) = 0;
-
-  // Asks the renderer process to send the rects of the current find matches.
-  virtual void RequestFindMatchRects(int current_version) = 0;
-#endif
 
  private:
   // This interface should only be implemented inside content.

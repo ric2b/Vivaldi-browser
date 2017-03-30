@@ -10,7 +10,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/proximity_auth/bluetooth_connection.h"
 #include "components/proximity_auth/logging/logging.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
@@ -51,8 +51,9 @@ void BluetoothConnectionFinder::Find(
                  weak_ptr_factory_.GetWeakPtr()));
 }
 
-scoped_ptr<Connection> BluetoothConnectionFinder::CreateConnection() {
-  return scoped_ptr<Connection>(new BluetoothConnection(remote_device_, uuid_));
+std::unique_ptr<Connection> BluetoothConnectionFinder::CreateConnection() {
+  return std::unique_ptr<Connection>(
+      new BluetoothConnection(remote_device_, uuid_));
 }
 
 void BluetoothConnectionFinder::SeekDeviceByAddress(

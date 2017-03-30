@@ -58,12 +58,14 @@
       # GN version: //media:media_features
       'target_name': 'media_features',
       'includes': [ '../build/buildflag_header.gypi' ],
+      'hard_dependency': 1,
       'variables': {
         'buildflag_header_path': 'media/media_features.h',
         'buildflag_flags': [
           "ENABLE_AC3_EAC3_AUDIO_DEMUXING=<(enable_ac3_eac3_audio_demuxing)",
           "ENABLE_HEVC_DEMUXING=<(enable_hevc_demuxing)",
           "ENABLE_MSE_MPEG2TS_STREAM_PARSER=<(enable_mse_mpeg2ts_stream_parser)",
+          "ENABLE_MP4_VP9_DEMUXING=0",
         ],
       },
     },
@@ -82,14 +84,18 @@
         '../third_party/libwebm/libwebm.gyp:libwebm',
         '../third_party/libyuv/libyuv.gyp:libyuv',
         '../third_party/opus/opus.gyp:opus',
+        '../ui/display/display.gyp:display',
         '../ui/events/events.gyp:events_base',
         '../ui/gfx/gfx.gyp:gfx',
         '../ui/gfx/gfx.gyp:gfx_geometry',
         '../url/url.gyp:url_lib',
         'shared_memory_support',
       ],
+      'hard_dependency': 1,
       'export_dependent_settings': [
+        '../third_party/libwebm/libwebm.gyp:libwebm',
         '../third_party/opus/opus.gyp:opus',
+        'media_features',
       ],
       'defines': [
         'MEDIA_IMPLEMENTATION',
@@ -124,6 +130,8 @@
         'audio/android/opensles_util.cc',
         'audio/android/opensles_util.h',
         'audio/android/opensles_wrapper.cc',
+        'audio/audio_device_description.cc',
+        'audio/audio_device_description.h',
         'audio/audio_device_name.cc',
         'audio/audio_device_name.h',
         'audio/audio_device_thread.cc',
@@ -335,8 +343,10 @@
         'base/eme_constants.h',
         'base/encryption_scheme.cc',
         'base/encryption_scheme.h',
-        'base/key_system_info.cc',
-        'base/key_system_info.h',
+        'base/key_system_names.cc',
+        'base/key_system_names.h',
+        'base/key_system_properties.cc',
+        'base/key_system_properties.h',
         'base/key_systems.cc',
         'base/key_systems.h',
         'base/keyboard_event_counter.cc',
@@ -392,6 +402,7 @@
         'base/pipeline.h',
         'base/pipeline_impl.cc',
         'base/pipeline_impl.h',
+        'base/pipeline_metadata.h',
         'base/pipeline_status.h',
         'base/player_tracker.cc',
         'base/player_tracker.h',
@@ -472,14 +483,14 @@
         'cdm/cdm_adapter.h',
         'cdm/cdm_allocator.cc',
         'cdm/cdm_allocator.h',
+        'cdm/cdm_file_io.h',
+        'cdm/cdm_file_io.h',
         'cdm/cdm_helpers.cc',
         'cdm/cdm_helpers.h',
         'cdm/default_cdm_factory.cc',
         'cdm/default_cdm_factory.h',
         'cdm/json_web_key.cc',
         'cdm/json_web_key.h',
-        'cdm/key_system_names.cc',
-        'cdm/key_system_names.h',
         'cdm/player_tracker_impl.cc',
         'cdm/player_tracker_impl.h',
         'cdm/supported_cdm_versions.cc',
@@ -606,6 +617,8 @@
         'renderers/renderer_impl.h',
         'renderers/skcanvas_video_renderer.cc',
         'renderers/skcanvas_video_renderer.h',
+        'renderers/video_overlay_factory.cc',
+        'renderers/video_overlay_factory.h',
         'renderers/video_renderer_impl.cc',
         'renderers/video_renderer_impl.h',
         'video/fake_video_encode_accelerator.cc',
@@ -836,6 +849,7 @@
                 '../build/linux/system.gyp:xext',
                 '../build/linux/system.gyp:xfixes',
                 '../build/linux/system.gyp:xtst',
+                '../ui/events/keycodes/events_keycodes.gyp:keycodes_x11',
                 '../ui/gfx/x/gfx_x11.gyp:gfx_x11',
               ],
             }, {  # else: use_x11==0
@@ -1168,6 +1182,7 @@
       'dependencies': [
         'audio_test_config',
         'media',
+        'media_features',
         'media_test_support',
         'shared_memory_support',
         '../base/base.gyp:base',
@@ -1207,6 +1222,8 @@
         'base/audio_fifo_unittest.cc',
         'base/audio_hardware_config_unittest.cc',
         'base/audio_hash_unittest.cc',
+        'base/audio_parameters_unittest.cc',
+        'base/audio_point_unittest.cc',
         'base/audio_pull_fifo_unittest.cc',
         'base/audio_push_fifo_unittest.cc',
         'base/audio_renderer_mixer_input_unittest.cc',
@@ -1444,6 +1461,7 @@
         '../ui/gfx/gfx.gyp:gfx_geometry',
         '../ui/gfx/gfx.gyp:gfx_test_support',
         'media',
+        'media_features',
         'media_test_support',
         'shared_memory_support',
       ],
@@ -1495,16 +1513,13 @@
         'sources': [
           'audio/audio_input_controller_unittest.cc',
           'audio/audio_input_unittest.cc',
-          'audio/audio_manager_factory_unittest.cc',
           'audio/audio_manager_unittest.cc',
           'audio/audio_output_controller_unittest.cc',
           'audio/audio_output_device_unittest.cc',
           'audio/audio_output_proxy_unittest.cc',
-          'audio/audio_parameters_unittest.cc',
           'audio/audio_power_monitor_unittest.cc',
           'audio/audio_streams_tracker_unittest.cc',
           'audio/fake_audio_worker_unittest.cc',
-          'audio/point_unittest.cc',
           'audio/simple_sources_unittest.cc',
           'audio/virtual_audio_input_stream_unittest.cc',
           'audio/virtual_audio_output_stream_unittest.cc',
@@ -1597,11 +1612,13 @@
       'type': 'static_library',
       'dependencies': [
         'media',
+        'media_features',
         'shared_memory_support',
         '../base/base.gyp:base',
         '../skia/skia.gyp:skia',
         '../testing/gmock.gyp:gmock',
         '../testing/gtest.gyp:gtest',
+        '../ui/gfx/gfx.gyp:gfx_test_support',
       ],
       'sources': [
         'audio/audio_unittest_util.cc',
@@ -1683,6 +1700,12 @@
           ],
         }],
       ],
+    },
+    {
+      # GN version: //media/gpu
+      'target_name': 'media_gpu',
+      'type': '<(component)',
+      'includes': [ 'media_gpu.gypi' ],
     },
   ],
   'conditions': [
@@ -2149,6 +2172,205 @@
           ],
         },
       ],
+    }],
+    ['chromeos==1', {
+      'targets': [
+        {
+          'target_name': 'jpeg_decode_accelerator_unittest',
+          'type': 'executable',
+          'dependencies': [
+            '../base/base.gyp:base',
+            '../media/media.gyp:media',
+            '../media/media.gyp:media_gpu',
+            '../media/media.gyp:media_test_support',
+            '../testing/gtest.gyp:gtest',
+            '../third_party/libyuv/libyuv.gyp:libyuv',
+            '../ui/gfx/gfx.gyp:gfx',
+            '../ui/gfx/gfx.gyp:gfx_geometry',
+            '../ui/gl/gl.gyp:gl',
+            '../ui/gl/gl.gyp:gl_test_support',
+          ],
+          'sources': [
+            'gpu/jpeg_decode_accelerator_unittest.cc',
+          ],
+          'include_dirs': [
+            '<(DEPTH)/third_party/libva',
+            '<(DEPTH)/third_party/libyuv',
+          ],
+        }
+      ]
+    }],
+    ['chromeos==1 or OS=="mac"', {
+      'targets': [
+        {
+          'target_name': 'video_encode_accelerator_unittest',
+          'type': 'executable',
+          'dependencies': [
+            '../base/base.gyp:base',
+            '../media/media.gyp:media',
+            '../media/media.gyp:media_gpu',
+            '../media/media.gyp:media_test_support',
+            '../testing/gtest.gyp:gtest',
+            '../ui/base/ui_base.gyp:ui_base',
+            '../ui/gfx/gfx.gyp:gfx',
+            '../ui/gfx/gfx.gyp:gfx_geometry',
+            '../ui/gfx/gfx.gyp:gfx_test_support',
+            '../ui/gl/gl.gyp:gl',
+            '../ui/gl/gl.gyp:gl_test_support',
+          ],
+          'sources': [
+            'gpu/video_accelerator_unittest_helpers.h',
+            'gpu/video_encode_accelerator_unittest.cc',
+          ],
+          'include_dirs': [
+            '<(DEPTH)/third_party/libva',
+            '<(DEPTH)/third_party/libyuv',
+          ],
+          'conditions': [
+            ['OS=="mac"', {
+              'dependencies': [
+                '../third_party/webrtc/common_video/common_video.gyp:common_video',
+              ],
+            }],
+            ['use_x11==1', {
+              'dependencies': [
+                '../ui/gfx/x/gfx_x11.gyp:gfx_x11',
+              ],
+            }],
+            ['use_ozone==1', {
+              'dependencies': [
+                '../ui/ozone/ozone.gyp:ozone',
+              ],
+            }],
+          ],
+        }
+      ]
+    }],
+    ['chromeos==1 or OS=="win" or OS=="android"', {
+      'targets': [
+          {
+            # GN: //media/gpu:video_decode_accelerator_unittest
+            'target_name': 'video_decode_accelerator_unittest',
+            'type': '<(gtest_target_type)',
+            'dependencies': [
+              '../base/base.gyp:base',
+              '../gpu/gpu.gyp:command_buffer_service',
+              '../media/gpu/ipc/media_ipc.gyp:media_gpu_ipc_service',
+              '../media/media.gyp:media',
+              '../media/media.gyp:media_gpu',
+              '../testing/gtest.gyp:gtest',
+              '../ui/base/ui_base.gyp:ui_base',
+              '../ui/gfx/gfx.gyp:gfx',
+              '../ui/gfx/gfx.gyp:gfx_geometry',
+              '../ui/gfx/gfx.gyp:gfx_test_support',
+              '../ui/gl/gl.gyp:gl',
+              '../ui/gl/gl.gyp:gl_test_support',
+            ],
+            'include_dirs': [
+              '<(DEPTH)/third_party/khronos',
+            ],
+            'sources': [
+              'gpu/android_video_decode_accelerator_unittest.cc',
+              'gpu/rendering_helper.cc',
+              'gpu/rendering_helper.h',
+              'gpu/video_accelerator_unittest_helpers.h',
+              'gpu/video_decode_accelerator_unittest.cc',
+            ],
+            'conditions': [
+              ['OS=="android"', {
+                'sources/': [
+                  ['exclude', '^gpu/rendering_helper.h'],
+                  ['exclude', '^gpu/rendering_helper.cc'],
+                  ['exclude', '^gpu/video_decode_accelerator_unittest.cc'],
+                ],
+                'dependencies': [
+                  '../media/media.gyp:player_android',
+                  '../testing/gmock.gyp:gmock',
+                  '../testing/android/native_test.gyp:native_test_native_code',
+                  '../gpu/gpu.gyp:gpu_unittest_utils',
+                ],
+              }, {  # OS!="android"
+                'sources/': [
+                  ['exclude', '^gpu/android_video_decode_accelerator_unittest.cc'],
+                ],
+              }],
+              ['OS=="win"', {
+                'dependencies': [
+                  '<(angle_path)/src/angle.gyp:libEGL',
+                  '<(angle_path)/src/angle.gyp:libGLESv2',
+                ],
+              }],
+              ['target_arch != "arm" and (OS=="linux" or chromeos == 1)', {
+                'include_dirs': [
+                  '<(DEPTH)/third_party/libva',
+                ],
+              }],
+              ['use_x11==1', {
+                'dependencies': [
+                  '../build/linux/system.gyp:x11',  # Used by rendering_helper.cc
+                  '../ui/gfx/x/gfx_x11.gyp:gfx_x11',
+                ],
+              }],
+              ['use_ozone==1 and chromeos==1', {
+                'dependencies': [
+                  '../ui/display/display.gyp:display',  # Used by rendering_helper.cc
+                  '../ui/ozone/ozone.gyp:ozone',  # Used by rendering_helper.cc
+                ],
+              }],
+            ],
+            # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+            'msvs_disabled_warnings': [ 4267 ],
+          },
+        ],
+    }],
+    ['OS=="android"', {
+      'targets': [
+        {
+          'target_name': 'video_decode_accelerator_unittest_apk',
+          'type': 'none',
+          'dependencies': [
+            'video_decode_accelerator_unittest',
+          ],
+          'variables': {
+            'test_suite_name': 'video_decode_accelerator_unittest',
+          },
+          'includes': [ '../build/apk_test.gypi' ],
+        },
+      ],
+    }],
+
+    ['chromeos==1 and target_arch != "arm"', {
+      'targets': [
+          {
+            'target_name': 'vaapi_jpeg_decoder_unittest',
+            'type': '<(gtest_target_type)',
+            'dependencies': [
+              '../media/media.gyp:media_gpu',
+              '../base/base.gyp:base',
+              '../media/media.gyp:media',
+              '../media/media.gyp:media_test_support',
+              '../testing/gtest.gyp:gtest',
+            ],
+            'sources': [
+              'gpu/vaapi_jpeg_decoder_unittest.cc',
+            ],
+            'include_dirs': [
+              '<(DEPTH)/third_party/libva',
+            ],
+            'conditions': [
+              ['use_x11==1', {
+                'dependencies': [
+                  '../build/linux/system.gyp:x11',
+                  '../ui/gfx/x/gfx_x11.gyp:gfx_x11',
+                ]
+              }, {
+                'dependencies': [
+                  '../build/linux/system.gyp:libdrm',
+                ]
+              }],
+            ],
+          }
+        ]
     }],
   ],
 }

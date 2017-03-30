@@ -34,6 +34,7 @@
 #include "../platform/PointerProperties.h"
 #include "../platform/WebCommon.h"
 #include "../platform/WebSize.h"
+#include "../platform/WebViewportStyle.h"
 #include <unicode/uscript.h>
 
 namespace blink {
@@ -65,6 +66,13 @@ public:
         V8CacheOptionsCode,
     };
 
+    enum class V8CacheStrategiesForCacheStorage {
+        Default,
+        None,
+        Normal,
+        Aggressive,
+    };
+
     // Selection strategy defines how the selection granularity changes when the
     // selection extent is moved.
     enum class SelectionStrategyType {
@@ -85,6 +93,15 @@ public:
         Captions,
         // If available, display subtitles track in preferred language, else display captions.
         Subtitles
+    };
+
+    // Defines the default for 'passive' field used in the AddEventListenerOptions interface
+    // when javascript calls addEventListener.
+    enum class PassiveEventListenerDefault {
+        False, // Default of false.
+        True, // Default of true.
+        DocumentTrue, // Default of true for document level elements, false otherwise.
+        ForceAllTrue // Force all values to be true even when specified.
     };
 
     // Sets value of a setting by its string identifier from Settings.in and
@@ -176,6 +193,7 @@ public:
     virtual void setMinimumLogicalFontSize(int) = 0;
     virtual void setMockScrollbarsEnabled(bool) = 0;
     virtual void setOfflineWebApplicationCacheEnabled(bool) = 0;
+    virtual void setPassiveEventListenerDefault(PassiveEventListenerDefault) = 0;
     virtual void setPasswordEchoDurationInSeconds(double) = 0;
     virtual void setPasswordEchoEnabled(bool) = 0;
     virtual void setPerTilePaintingEnabled(bool) = 0;
@@ -236,12 +254,13 @@ public:
     virtual void setTouchDragDropEnabled(bool) = 0;
     virtual void setUnifiedTextCheckerEnabled(bool) = 0;
     virtual void setUseLegacyBackgroundSizeShorthandBehavior(bool) = 0;
-    virtual void setUseMobileViewportStyle(bool) = 0;
+    virtual void setViewportStyle(WebViewportStyle) = 0;
     virtual void setUseSolidColorScrollbars(bool) = 0;
     virtual void setUseWideViewport(bool) = 0;
     virtual void setUsesEncodingDetector(bool) = 0;
     virtual void setServeResourceFromCacheOnly(bool) = 0;
     virtual void setV8CacheOptions(V8CacheOptions) = 0;
+    virtual void setV8CacheStrategiesForCacheStorage(V8CacheStrategiesForCacheStorage) = 0;
     virtual void setValidationMessageTimerMagnification(int) = 0;
     virtual void setViewportEnabled(bool) = 0;
     virtual void setViewportMetaEnabled(bool) = 0;

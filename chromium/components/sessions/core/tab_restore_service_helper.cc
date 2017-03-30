@@ -76,7 +76,7 @@ void TabRestoreServiceHelper::CreateHistoricalTab(LiveTab* live_tab,
   if (closing_contexts_.find(context) != closing_contexts_.end())
     return;
 
-  scoped_ptr<Tab> local_tab(new Tab());
+  std::unique_ptr<Tab> local_tab(new Tab());
   PopulateTab(local_tab.get(), index, context, live_tab);
   if (local_tab->navigations.empty())
     return;
@@ -87,7 +87,7 @@ void TabRestoreServiceHelper::CreateHistoricalTab(LiveTab* live_tab,
 void TabRestoreServiceHelper::BrowserClosing(LiveTabContext* context) {
   closing_contexts_.insert(context);
 
-  scoped_ptr<Window> window(new Window());
+  std::unique_ptr<Window> window(new Window());
   window->selected_tab_index = context->GetSelectedIndex();
   window->timestamp = TimeNow();
   window->app_name = context->GetAppName();
@@ -382,8 +382,8 @@ void TabRestoreServiceHelper::PopulateTab(Tab* tab,
   tab->extension_app_id = client_->GetExtensionAppIDForTab(live_tab);
 
   tab->user_agent_override = live_tab->GetUserAgentOverride();
-  if (context)
-    tab->ext_data = context->GetExtData();
+
+  tab->ext_data = live_tab->GetExtData();
 
   tab->platform_data = live_tab->GetPlatformSpecificTabData();
 

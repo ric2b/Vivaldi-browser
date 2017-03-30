@@ -323,6 +323,13 @@ LayoutRect LayoutView::visualOverflowRect() const
     return LayoutRect(documentRect());
 }
 
+LayoutRect LayoutView::localOverflowRectForPaintInvalidation() const
+{
+    // TODO(wangxianzhu): This is only required without rootLayerScrolls (though it is also correct
+    // but unnecessary with rootLayerScrolls) because of the special LayoutView overflow model.
+    return visualOverflowRect();
+}
+
 void LayoutView::mapLocalToAncestor(const LayoutBoxModelObject* ancestor, TransformState& transformState, MapCoordinatesFlags mode) const
 {
     if (!ancestor && mode & UseTransforms && shouldUseTransformFromContainer(0)) {
@@ -332,7 +339,7 @@ void LayoutView::mapLocalToAncestor(const LayoutBoxModelObject* ancestor, Transf
     }
 
     if ((mode & IsFixed) && m_frameView) {
-        transformState.move(toIntSize(m_frameView->scrollPosition()));
+        transformState.move(LayoutSize(m_frameView->scrollOffset()));
         if (hasOverflowClip())
             transformState.move(scrolledContentOffset());
         // IsFixed flag is only applicable within this LayoutView.
@@ -365,7 +372,7 @@ const LayoutObject* LayoutView::pushMappingToContainer(const LayoutBoxModelObjec
     LayoutObject* container = nullptr;
 
     if (m_frameView) {
-        offsetForFixedPosition = LayoutSize(toIntSize(m_frameView->scrollPosition()));
+        offsetForFixedPosition = LayoutSize(LayoutSize(m_frameView->scrollOffset()));
         if (hasOverflowClip())
             offsetForFixedPosition = LayoutSize(scrolledContentOffset());
     }
@@ -399,7 +406,7 @@ void LayoutView::mapAncestorToLocal(const LayoutBoxModelObject* ancestor, Transf
         return;
 
     if (mode & IsFixed && m_frameView)
-        transformState.move(toIntSize(m_frameView->scrollPosition()));
+        transformState.move(m_frameView->scrollOffset());
 
     if (mode & UseTransforms && shouldUseTransformFromContainer(0)) {
         TransformationMatrix t;
@@ -412,9 +419,10 @@ void LayoutView::mapAncestorToLocal(const LayoutBoxModelObject* ancestor, Transf
             // A LayoutView is a containing block for fixed-position elements, so don't carry this state across frames.
             mode &= ~IsFixed;
 
-            parentDocLayoutObject->mapAncestorToLocal(ancestor, transformState, mode);
-            transformState.move(parentDocLayoutObject->contentBoxOffset());
             transformState.move(-frame()->view()->scrollOffset());
+            transformState.move(parentDocLayoutObject->contentBoxOffset());
+
+            parentDocLayoutObject->mapAncestorToLocal(ancestor, transformState, mode);
         }
     } else {
         ASSERT(!ancestor);
@@ -486,9 +494,6 @@ bool LayoutView::mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ance
 
 bool LayoutView::mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect& rect, MapCoordinatesFlags mode, VisualRectFlags visualRectFlags) const
 {
-    if (document().printing())
-        return true;
-
     // Convert the rect into the physical coordinates space of this LayoutView.
     flipForWritingMode(rect);
 
@@ -503,7 +508,7 @@ bool LayoutView::mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ance
     if (ancestor == this)
         return true;
 
-    Element* owner = document().ownerElement();
+    Element* owner = document().localOwner();
     if (!owner)
         return true;
 
@@ -537,7 +542,7 @@ bool LayoutView::mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ance
 void LayoutView::adjustOffsetForFixedPosition(LayoutRect& rect) const
 {
     if (m_frameView) {
-        rect.move(toIntSize(m_frameView->scrollPosition()));
+        rect.move(LayoutSize(m_frameView->scrollOffset()));
         if (hasOverflowClip())
             rect.move(scrolledContentOffset());
 
@@ -857,15 +862,15 @@ LayoutRect LayoutView::viewRect() const
     return LayoutRect();
 }
 
-LayoutRect LayoutView::overflowClipRect(const LayoutPoint& location, OverlayScrollbarSizeRelevancy relevancy) const
+LayoutRect LayoutView::overflowClipRect(const LayoutPoint& location, OverlayScrollbarClipBehavior overlayScrollbarClipBehavior) const
 {
     LayoutRect rect = viewRect();
     if (rect.isEmpty())
-        return LayoutBox::overflowClipRect(location, relevancy);
+        return LayoutBox::overflowClipRect(location, overlayScrollbarClipBehavior);
 
     rect.setLocation(location);
     if (hasOverflowClip())
-        excludeScrollbars(rect, relevancy);
+        excludeScrollbars(rect, overlayScrollbarClipBehavior);
 
     return rect;
 }
@@ -1021,7 +1026,7 @@ void LayoutView::updateFromStyle()
     LayoutBlockFlow::updateFromStyle();
 
     // LayoutView of the main frame is responsible for painting base background.
-    if (!document().ownerElement())
+    if (document().isInMainFrame())
         setHasBoxDecorationBackground(true);
 }
 
@@ -1032,10 +1037,16 @@ bool LayoutView::allowsOverflowClip() const
 
 ScrollResult LayoutView::scroll(ScrollGranularity granularity, const FloatSize& delta)
 {
-    if (!frameView())
-        return ScrollResult();
+    // TODO(bokan): This should never get called on the main frame but it
+    // currently does via the Windows pan scrolling path. That should go through
+    // a more normalized EventHandler-like scrolling path and we should
+    // ASSERT(!frame()->isMainFrame()) here. All main frame scrolling should
+    // be handled by the ViewportScrollCallback.
 
-    return frame()->applyScrollDelta(granularity, delta, false);
+    if (!frameView())
+        return ScrollResult(false, false, delta.width(), delta.height());
+
+    return frameView()->getScrollableArea()->userScroll(granularity, delta);
 }
 
 } // namespace blink

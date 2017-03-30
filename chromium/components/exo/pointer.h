@@ -5,12 +5,14 @@
 #ifndef COMPONENTS_EXO_POINTER_H_
 #define COMPONENTS_EXO_POINTER_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "components/exo/surface_delegate.h"
 #include "components/exo/surface_observer.h"
 #include "ui/events/event_handler.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/point_f.h"
 
 namespace ui {
 class Event;
@@ -64,7 +66,7 @@ class Pointer : public ui::EventHandler,
   PointerDelegate* delegate_;
 
   // The widget for the pointer cursor.
-  scoped_ptr<views::Widget> widget_;
+  std::unique_ptr<views::Widget> widget_;
 
   // The current pointer surface.
   Surface* surface_;
@@ -73,7 +75,7 @@ class Pointer : public ui::EventHandler,
   Surface* focus_;
 
   // The location of the pointer in the current focus surface.
-  gfx::Point location_;
+  gfx::PointF location_;
 
   // The position of the pointer surface relative to the pointer location.
   gfx::Point hotspot_;

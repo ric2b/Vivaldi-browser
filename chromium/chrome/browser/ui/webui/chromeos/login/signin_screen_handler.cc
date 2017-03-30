@@ -53,6 +53,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/signin/easy_unlock_service.h"
+#include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/webui/chromeos/login/error_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/l10n_util.h"
@@ -272,8 +273,12 @@ SigninScreenHandler::SigninScreenHandler(
   if (keyboard)
     keyboard->AddObserver(this);
 
-  max_mode_delegate_.reset(new TouchViewControllerDelegate());
-  max_mode_delegate_->AddObserver(this);
+  if (!chrome::IsRunningInMash()) {
+    max_mode_delegate_.reset(new TouchViewControllerDelegate());
+    max_mode_delegate_->AddObserver(this);
+  } else {
+    NOTIMPLEMENTED();
+  }
 }
 
 SigninScreenHandler::~SigninScreenHandler() {
@@ -434,6 +439,7 @@ void SigninScreenHandler::DeclareLocalizedValues(
   builder->Add("removeUserWarningButtonTitle",
                IDS_LOGIN_POD_USER_REMOVE_WARNING_BUTTON);
   builder->Add("samlNotice", IDS_LOGIN_SAML_NOTICE);
+  builder->Add("samlNoticeWithVideo", IDS_LOGIN_SAML_NOTICE_WITH_VIDEO);
   builder->AddF("confirmPasswordTitle", IDS_LOGIN_CONFIRM_PASSWORD_TITLE,
                 ash::GetChromeOSDeviceName());
   builder->Add("confirmPasswordLabel", IDS_LOGIN_CONFIRM_PASSWORD_LABEL);
@@ -463,6 +469,8 @@ void SigninScreenHandler::DeclareLocalizedValues(
 
 void SigninScreenHandler::RegisterMessages() {
   AddCallback("authenticateUser", &SigninScreenHandler::HandleAuthenticateUser);
+  AddCallback("authenticateUserWithPin",
+              &SigninScreenHandler::HandleAuthenticateUserWithPin);
   AddCallback("launchIncognito", &SigninScreenHandler::HandleLaunchIncognito);
   AddCallback("showSupervisedUserCreationScreen",
               &SigninScreenHandler::HandleShowSupervisedUserCreationScreen);
@@ -1001,6 +1009,17 @@ void SigninScreenHandler::HandleAuthenticateUser(const AccountId& account_id,
   UserContext user_context(account_id);
   user_context.SetKey(Key(password));
   delegate_->Login(user_context, SigninSpecifics());
+}
+
+void SigninScreenHandler::HandleAuthenticateUserWithPin(
+    const AccountId& account_id, const std::string& password) {
+  if (!delegate_)
+    return;
+  DCHECK_EQ(account_id.GetUserEmail(),
+            gaia::SanitizeEmail(account_id.GetUserEmail()));
+
+  // TODO(jdufault): Implement this.
+  NOTIMPLEMENTED();
 }
 
 void SigninScreenHandler::HandleLaunchIncognito() {

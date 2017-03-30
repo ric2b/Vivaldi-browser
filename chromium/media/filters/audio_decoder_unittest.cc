@@ -302,7 +302,7 @@ class AudioDecoderTest : public testing::TestWithParam<DecoderTestData> {
     CHECK_LT(i, decoded_audio_.size());
     const scoped_refptr<AudioBuffer>& buffer = decoded_audio_[i];
 
-    scoped_ptr<AudioBus> output =
+    std::unique_ptr<AudioBus> output =
         AudioBus::Create(buffer->channel_count(), buffer->frame_count());
     buffer->ReadFrames(buffer->frame_count(), 0, 0, output.get());
 
@@ -344,7 +344,7 @@ class AudioDecoderTest : public testing::TestWithParam<DecoderTestData> {
     EXPECT_EQ(sample_info.duration, buffer->duration().InMicroseconds());
     EXPECT_FALSE(buffer->end_of_stream());
 
-    scoped_ptr<AudioBus> output =
+    std::unique_ptr<AudioBus> output =
         AudioBus::Create(buffer->channel_count(), buffer->frame_count());
     buffer->ReadFrames(buffer->frame_count(), 0, 0, output.get());
 
@@ -375,10 +375,10 @@ class AudioDecoderTest : public testing::TestWithParam<DecoderTestData> {
  private:
   base::MessageLoop message_loop_;
   scoped_refptr<DecoderBuffer> data_;
-  scoped_ptr<InMemoryUrlProtocol> protocol_;
-  scoped_ptr<AudioFileReader> reader_;
+  std::unique_ptr<InMemoryUrlProtocol> protocol_;
+  std::unique_ptr<AudioFileReader> reader_;
 
-  scoped_ptr<AudioDecoder> decoder_;
+  std::unique_ptr<AudioDecoder> decoder_;
   bool pending_decode_;
   bool pending_reset_;
   DecodeStatus last_decode_status_;

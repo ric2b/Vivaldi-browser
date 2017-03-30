@@ -4,10 +4,7 @@
 
 #include "components/sync_driver/glue/sync_backend_host_core.h"
 
-#include <map>
-#include <string>
 #include <utility>
-#include <vector>
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
@@ -71,29 +68,29 @@ namespace browser_sync {
 DoInitializeOptions::DoInitializeOptions(
     base::MessageLoop* sync_loop,
     SyncBackendRegistrar* registrar,
-    const syncer::ModelSafeRoutingInfo& routing_info,
     const std::vector<scoped_refptr<syncer::ModelSafeWorker>>& workers,
     const scoped_refptr<syncer::ExtensionsActivity>& extensions_activity,
     const syncer::WeakHandle<syncer::JsEventHandler>& event_handler,
     const GURL& service_url,
     const std::string& sync_user_agent,
-    scoped_ptr<syncer::HttpPostProviderFactory> http_bridge_factory,
+    std::unique_ptr<syncer::HttpPostProviderFactory> http_bridge_factory,
     const syncer::SyncCredentials& credentials,
     const std::string& invalidator_client_id,
-    scoped_ptr<syncer::SyncManagerFactory> sync_manager_factory,
+    std::unique_ptr<syncer::SyncManagerFactory> sync_manager_factory,
     bool delete_sync_data_folder,
     const std::string& restored_key_for_bootstrapping,
     const std::string& restored_keystore_key_for_bootstrapping,
-    scoped_ptr<syncer::InternalComponentsFactory> internal_components_factory,
+    std::unique_ptr<syncer::InternalComponentsFactory>
+        internal_components_factory,
     const syncer::WeakHandle<syncer::UnrecoverableErrorHandler>&
         unrecoverable_error_handler,
     const base::Closure& report_unrecoverable_error_function,
-    scoped_ptr<syncer::SyncEncryptionHandler::NigoriState> saved_nigori_state,
+    std::unique_ptr<syncer::SyncEncryptionHandler::NigoriState>
+        saved_nigori_state,
     syncer::PassphraseTransitionClearDataOption clear_data_option,
     const std::map<syncer::ModelType, int64_t>& invalidation_versions)
     : sync_loop(sync_loop),
       registrar(registrar),
-      routing_info(routing_info),
       workers(workers),
       extensions_activity(extensions_activity),
       event_handler(event_handler),
@@ -382,7 +379,7 @@ void SyncBackendHostCore::OnProtocolEvent(
     const syncer::ProtocolEvent& event) {
   // TODO(rlarocque): Find a way to pass event_clone as a scoped_ptr.
   if (forward_protocol_events_) {
-    scoped_ptr<syncer::ProtocolEvent> event_clone(event.Clone());
+    std::unique_ptr<syncer::ProtocolEvent> event_clone(event.Clone());
     host_.Call(
         FROM_HERE,
         &SyncBackendHostImpl::HandleProtocolEventOnFrontendLoop,
@@ -420,7 +417,7 @@ void SyncBackendHostCore::DoOnIncomingInvalidation(
                    << last_invalidation->second;
           continue;
         }
-        scoped_ptr<syncer::InvalidationInterface> inv_adapter(
+        std::unique_ptr<syncer::InvalidationInterface> inv_adapter(
             new InvalidationAdapter(invalidation));
         sync_manager_->OnIncomingInvalidation(type, std::move(inv_adapter));
         if (!invalidation.is_unknown_version())
@@ -436,7 +433,7 @@ void SyncBackendHostCore::DoOnIncomingInvalidation(
 }
 
 void SyncBackendHostCore::DoInitialize(
-    scoped_ptr<DoInitializeOptions> options) {
+    std::unique_ptr<DoInitializeOptions> options) {
   DCHECK(!sync_loop_);
   sync_loop_ = options->sync_loop;
   DCHECK(sync_loop_);
@@ -551,7 +548,7 @@ void SyncBackendHostCore::DoInitialProcessControlTypes() {
   host_.Call(FROM_HERE,
              &SyncBackendHostImpl::HandleInitializationSuccessOnFrontendLoop,
              js_backend_, debug_info_listener_,
-             base::Passed(sync_manager_->GetSyncContextProxy()),
+             base::Passed(sync_manager_->GetModelTypeConnectorProxy()),
              sync_manager_->cache_guid());
 
   js_backend_.Reset();
@@ -786,9 +783,10 @@ void SyncBackendHostCore::DoClearServerData(
   sync_manager_->ClearServerData(callback);
 }
 
-void SyncBackendHostCore::DoOnCookieJarChanged(bool account_mismatch) {
+void SyncBackendHostCore::DoOnCookieJarChanged(bool account_mismatch,
+                                               bool empty_jar) {
   DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
-  sync_manager_->OnCookieJarChanged(account_mismatch);
+  sync_manager_->OnCookieJarChanged(account_mismatch, empty_jar);
 }
 
 void SyncBackendHostCore::ClearServerDataDone(

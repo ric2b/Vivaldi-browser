@@ -44,5 +44,15 @@ executable("crashpad_handler") {
     ":handler_lib",
     "../compat",
     "//base",
+    "//build/win:default_exe_manifest",
   ]
+
+  if (is_mac && is_component_build) {
+    # The handler is in Chromium.app/Contents/Versions/X/Chromium Framework.framework/Helpers/
+    # so set rpath up to the base.
+    ldflags = [
+      "-rpath",
+      "@loader_path/../../../../../..",
+    ]
+  }
 }

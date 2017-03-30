@@ -40,7 +40,7 @@ class CORE_EXPORT HTMLOutputElement final : public HTMLFormControlElement, priva
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(HTMLOutputElement);
 public:
-    static RawPtr<HTMLOutputElement> create(Document&, HTMLFormElement*);
+    static HTMLOutputElement* create(Document&, HTMLFormElement*);
     ~HTMLOutputElement() override;
 
     bool willValidate() const override { return false; }
@@ -62,6 +62,7 @@ private:
     void parseAttribute(const QualifiedName&, const AtomicString&, const AtomicString&) override;
     const AtomicString& formControlType() const override;
     bool isDisabledFormControl() const override;
+    bool matchesEnabledPseudoClass() const override;
     bool isEnumeratable() const override { return true; }
     bool supportLabels() const override { return true; }
     bool supportsFocus() const override;

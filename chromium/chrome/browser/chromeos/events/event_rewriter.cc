@@ -9,7 +9,8 @@
 #include <vector>
 
 #include "ash/sticky_keys/sticky_keys_controller.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
 #include "base/logging.h"
@@ -94,7 +95,7 @@ const struct ModifierRemapping {
     {ui::EF_COMMAND_DOWN,
      input_method::kSearchKey,
      prefs::kLanguageRemapSearchKeyTo,
-     {ui::EF_COMMAND_DOWN, ui::DomCode::OS_LEFT, ui::DomKey::META,
+     {ui::EF_COMMAND_DOWN, ui::DomCode::META_LEFT, ui::DomKey::META,
       ui::VKEY_LWIN}},
     {ui::EF_ALT_DOWN,
      input_method::kAltKey,
@@ -282,9 +283,9 @@ ui::DomCode RelocateModifier(ui::DomCode code, ui::DomKeyLocation location) {
     case ui::DomCode::ALT_LEFT:
     case ui::DomCode::ALT_RIGHT:
       return right ? ui::DomCode::ALT_RIGHT : ui::DomCode::ALT_LEFT;
-    case ui::DomCode::OS_LEFT:
-    case ui::DomCode::OS_RIGHT:
-      return right ? ui::DomCode::OS_RIGHT : ui::DomCode::OS_LEFT;
+    case ui::DomCode::META_LEFT:
+    case ui::DomCode::META_RIGHT:
+      return right ? ui::DomCode::META_RIGHT : ui::DomCode::META_LEFT;
     default:
       break;
   }
@@ -598,6 +599,7 @@ ui::EventRewriteStatus EventRewriter::RewriteMouseWheelEvent(
   if (!sticky_keys_controller_)
     return ui::EVENT_REWRITE_CONTINUE;
   int flags = wheel_event.flags();
+  RewriteLocatedEvent(wheel_event, &flags);
   ui::EventRewriteStatus status =
       sticky_keys_controller_->RewriteMouseEvent(wheel_event, &flags);
   if ((wheel_event.flags() == flags) &&
@@ -753,8 +755,8 @@ bool EventRewriter::RewriteModifierKeys(const ui::KeyEvent& key_event,
       remapped_key =
           GetRemappedKey(prefs::kLanguageRemapCapsLockKeyTo, *pref_service);
       break;
-    case ui::DomCode::OS_LEFT:
-    case ui::DomCode::OS_RIGHT:
+    case ui::DomCode::META_LEFT:
+    case ui::DomCode::META_RIGHT:
       characteristic_flag = ui::EF_COMMAND_DOWN;
       // Rewrite Command-L/R key presses on an Apple keyboard to Control.
       if (IsAppleKeyboard()) {

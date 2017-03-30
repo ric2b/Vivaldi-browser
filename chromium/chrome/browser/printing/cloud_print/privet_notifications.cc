@@ -4,6 +4,7 @@
 
 #include "chrome/browser/printing/cloud_print/privet_notifications.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -13,7 +14,7 @@
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/local_discovery/service_discovery_shared_client.h"
 #include "chrome/browser/notifications/notification.h"
@@ -35,6 +36,7 @@
 #include "components/signin/core/browser/signin_manager_base.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -76,7 +78,7 @@ void ReportPrivetUmaEvent(PrivetNotificationsEvent privet_event) {
 }  // namespace
 
 PrivetNotificationsListener::PrivetNotificationsListener(
-    scoped_ptr<PrivetHTTPAsynchronousFactory> privet_http_factory,
+    std::unique_ptr<PrivetHTTPAsynchronousFactory> privet_http_factory,
     Delegate* delegate)
     : delegate_(delegate), devices_active_(0) {
   privet_http_factory_.swap(privet_http_factory);
@@ -100,7 +102,7 @@ void PrivetNotificationsListener::DeviceChanged(
     return;  // Already saw this device.
   }
 
-  scoped_ptr<DeviceContext>& device_context = devices_seen_[name];
+  std::unique_ptr<DeviceContext>& device_context = devices_seen_[name];
   device_context.reset(new DeviceContext);
   device_context->notification_may_be_active = false;
   device_context->registered = !description.id.empty();
@@ -116,7 +118,7 @@ void PrivetNotificationsListener::DeviceChanged(
 }
 
 void PrivetNotificationsListener::CreateInfoOperation(
-    scoped_ptr<PrivetHTTPClient> http_client) {
+    std::unique_ptr<PrivetHTTPClient> http_client) {
   if (!http_client) {
     // Do nothing if resolution fails.
     return;
@@ -341,9 +343,10 @@ void PrivetNotificationService::StartLister() {
   device_lister_->Start();
   device_lister_->DiscoverNewDevices(false);
 
-  scoped_ptr<PrivetHTTPAsynchronousFactory> http_factory(
+  std::unique_ptr<PrivetHTTPAsynchronousFactory> http_factory(
       PrivetHTTPAsynchronousFactory::CreateInstance(
-          profile_->GetRequestContext()));
+          content::BrowserContext::GetDefaultStoragePartition(profile_)->
+              GetURLRequestContext()));
 
   privet_notifications_listener_.reset(
       new PrivetNotificationsListener(std::move(http_factory), this));

@@ -6,19 +6,19 @@
 #define CC_PLAYBACK_DISPLAY_ITEM_LIST_H_
 
 #include <stddef.h>
+
+#include <memory>
 #include <utility>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/base/cc_export.h"
 #include "cc/base/contiguous_container.h"
 #include "cc/playback/discardable_image_map.h"
 #include "cc/playback/display_item.h"
 #include "cc/playback/display_item_list_settings.h"
-#include "skia/ext/refptr.h"
 #include "third_party/skia/include/core/SkPicture.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -66,7 +66,7 @@ class CC_EXPORT DisplayItemList
 
   // This is a fast path for use only if canvas_ is set and
   // retain_individual_display_items_ is false. This method also updates
-  // is_suitable_for_gpu_rasterization_ and approximate_op_count_.
+  // approximate_op_count_.
   void RasterIntoCanvas(const DisplayItem& display_item);
 
   // Because processing happens in this function, all the set up for
@@ -79,10 +79,6 @@ class CC_EXPORT DisplayItemList
     auto* item = &items_.AllocateAndConstruct<DisplayItemType>(
         std::forward<Args>(args)...);
     approximate_op_count_ += item->ApproximateOpCount();
-    // TODO(crbug.com/513016): None of the items might individually trigger a
-    // veto even though they collectively have enough "bad" operations that a
-    // corresponding flattened Picture would get vetoed.
-    is_suitable_for_gpu_rasterization_ &= item->IsSuitableForGpuRasterization();
     ProcessAppendedItem(item);
     return *item;
   }
@@ -91,6 +87,9 @@ class CC_EXPORT DisplayItemList
   // applicable, create an internally cached SkPicture.
   void Finalize();
 
+  void SetIsSuitableForGpuRasterization(bool is_suitable) {
+    is_suitable_for_gpu_rasterization_ = is_suitable;
+  }
   bool IsSuitableForGpuRasterization() const;
   int ApproximateOpCount() const;
   size_t ApproximateMemoryUsage() const;
@@ -98,7 +97,7 @@ class CC_EXPORT DisplayItemList
 
   bool RetainsIndividualDisplayItems() const;
 
-  scoped_ptr<base::trace_event::ConvertableToTraceFormat> AsValue(
+  std::unique_ptr<base::trace_event::ConvertableToTraceFormat> AsValue(
       bool include_items) const;
 
   void EmitTraceSnapshot() const;
@@ -107,7 +106,6 @@ class CC_EXPORT DisplayItemList
   void GetDiscardableImagesInRect(const gfx::Rect& rect,
                                   float raster_scale,
                                   std::vector<DrawImage>* images);
-  bool MayHaveDiscardableImages() const;
 
   gfx::Rect VisualRectForTesting(int index) { return visual_rects_[index]; }
 
@@ -128,8 +126,7 @@ class CC_EXPORT DisplayItemList
   std::vector<gfx::Rect> visual_rects_;
   sk_sp<SkPicture> picture_;
 
-  scoped_ptr<SkPictureRecorder> recorder_;
-  skia::RefPtr<SkCanvas> canvas_;
+  std::unique_ptr<SkPictureRecorder> recorder_;
   const DisplayItemListSettings settings_;
   bool retain_individual_display_items_;
 

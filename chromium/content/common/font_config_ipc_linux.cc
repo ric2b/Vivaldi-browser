@@ -14,11 +14,11 @@
 #include <unistd.h>
 
 #include <functional>
+#include <memory>
 
 #include "base/files/file_util.h"
 #include "base/files/memory_mapped_file.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/pickle.h"
 #include "base/posix/unix_domain_socket_linux.h"
 #include "base/threading/thread_restrictions.h"
@@ -64,10 +64,10 @@ FontConfigIPC::~FontConfigIPC() {
 }
 
 bool FontConfigIPC::matchFamilyName(const char familyName[],
-                                    SkTypeface::Style requestedStyle,
+                                    SkFontStyle requestedStyle,
                                     FontIdentity* outFontIdentity,
                                     SkString* outFamilyName,
-                                    SkTypeface::Style* outStyle) {
+                                    SkFontStyle* outStyle) {
   TRACE_EVENT0("sandbox_ipc", "FontConfigIPC::matchFamilyName");
   size_t familyNameLen = familyName ? strlen(familyName) : 0;
   if (familyNameLen > kMaxFontFamilyLength)
@@ -76,7 +76,7 @@ bool FontConfigIPC::matchFamilyName(const char familyName[],
   base::Pickle request;
   request.WriteInt(METHOD_MATCH);
   request.WriteData(familyName, familyNameLen);
-  request.WriteUInt32(requestedStyle);
+  skia::WriteSkFontStyle(&request, requestedStyle);
 
   uint8_t reply_buf[2048];
   const ssize_t r = base::UnixDomainSocket::SendRecvMsg(
@@ -94,10 +94,10 @@ bool FontConfigIPC::matchFamilyName(const char familyName[],
 
   SkString     reply_family;
   FontIdentity reply_identity;
-  uint32_t     reply_style;
+  SkFontStyle  reply_style;
   if (!skia::ReadSkString(&iter, &reply_family) ||
       !skia::ReadSkFontIdentity(&iter, &reply_identity) ||
-      !iter.ReadUInt32(&reply_style)) {
+      !skia::ReadSkFontStyle(&iter, &reply_style)) {
     return false;
   }
 
@@ -106,7 +106,7 @@ bool FontConfigIPC::matchFamilyName(const char familyName[],
   if (outFamilyName)
     *outFamilyName = reply_family;
   if (outStyle)
-    *outStyle = static_cast<SkTypeface::Style>(reply_style);
+    *outStyle = reply_style;
 
   return true;
 }
@@ -117,7 +117,7 @@ static void DestroyMemoryMappedFile(const void*, void* context) {
 }
 
 SkMemoryStream* FontConfigIPC::mapFileDescriptorToStream(int fd) {
-  scoped_ptr<base::MemoryMappedFile> mapped_font_file(
+  std::unique_ptr<base::MemoryMappedFile> mapped_font_file(
       new base::MemoryMappedFile);
   base::ThreadRestrictions::ScopedAllowIO allow_mmap;
   mapped_font_file->Initialize(base::File(fd));

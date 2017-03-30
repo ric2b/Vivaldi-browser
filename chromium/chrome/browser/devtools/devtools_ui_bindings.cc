@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <utility>
 
+#include "base/base64.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/json/string_escape.h"
@@ -267,17 +268,21 @@ int ResponseWriter::Write(net::IOBuffer* buffer,
                           int num_bytes,
                           const net::CompletionCallback& callback) {
   std::string chunk = std::string(buffer->data(), num_bytes);
-  if (!base::IsStringUTF8(chunk))
-    return num_bytes;
+  bool encoded = false;
+  if (!base::IsStringUTF8(chunk)) {
+    encoded = true;
+    base::Base64Encode(chunk, &chunk);
+  }
 
   base::FundamentalValue* id = new base::FundamentalValue(stream_id_);
   base::StringValue* chunkValue = new base::StringValue(chunk);
+  base::FundamentalValue* encodedValue = new base::FundamentalValue(encoded);
 
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&DevToolsUIBindings::CallClientFunction,
-                 bindings_, "DevToolsAPI.streamWrite",
-                 base::Owned(id), base::Owned(chunkValue), nullptr));
+      base::Bind(&DevToolsUIBindings::CallClientFunction, bindings_,
+                 "DevToolsAPI.streamWrite", base::Owned(id),
+                 base::Owned(chunkValue), base::Owned(encodedValue)));
   return num_bytes;
 }
 
@@ -442,7 +447,7 @@ void DevToolsUIBindings::HandleMessageFromDevToolsFrontend(
   base::ListValue* params = &empty_params;
 
   base::DictionaryValue* dict = NULL;
-  scoped_ptr<base::Value> parsed_message = base::JSONReader::Read(message);
+  std::unique_ptr<base::Value> parsed_message = base::JSONReader::Read(message);
   if (!parsed_message ||
       !parsed_message->GetAsDictionary(&dict) ||
       !dict->GetString(kFrontendHostMethod, &method) ||
@@ -552,8 +557,9 @@ void DevToolsUIBindings::LoadNetworkResource(const DispatchCallback& callback,
   pending_requests_[fetcher] = callback;
   fetcher->SetRequestContext(profile_->GetRequestContext());
   fetcher->SetExtraRequestHeaders(headers);
-  fetcher->SaveResponseWithWriter(scoped_ptr<net::URLFetcherResponseWriter>(
-      new ResponseWriter(weak_factory_.GetWeakPtr(), stream_id)));
+  fetcher->SaveResponseWithWriter(
+      std::unique_ptr<net::URLFetcherResponseWriter>(
+          new ResponseWriter(weak_factory_.GetWeakPtr(), stream_id)));
   fetcher->Start();
 }
 
@@ -688,7 +694,7 @@ void DevToolsUIBindings::SetDevicesDiscoveryConfig(
     bool port_forwarding_enabled,
     const std::string& port_forwarding_config) {
   base::DictionaryValue* config_dict = nullptr;
-  scoped_ptr<base::Value> parsed_config =
+  std::unique_ptr<base::Value> parsed_config =
       base::JSONReader::Read(port_forwarding_config);
   if (!parsed_config || !parsed_config->GetAsDictionary(&config_dict))
     return;
@@ -905,7 +911,7 @@ void DevToolsUIBindings::AppendedTo(const std::string& url) {
 
 void DevToolsUIBindings::FileSystemAdded(
     const DevToolsFileHelper::FileSystem& file_system) {
-  scoped_ptr<base::DictionaryValue> file_system_value(
+  std::unique_ptr<base::DictionaryValue> file_system_value(
       CreateFileSystemValue(file_system));
   CallClientFunction("DevToolsAPI.fileSystemAdded",
                      file_system_value.get(), NULL, NULL);
@@ -984,7 +990,7 @@ void DevToolsUIBindings::ShowDevToolsConfirmInfoBar(
     callback.Run(false);
     return;
   }
-  scoped_ptr<DevToolsConfirmInfoBarDelegate> delegate(
+  std::unique_ptr<DevToolsConfirmInfoBarDelegate> delegate(
       new DevToolsConfirmInfoBarDelegate(callback, message));
   GlobalConfirmInfoBar::Show(std::move(delegate));
 }

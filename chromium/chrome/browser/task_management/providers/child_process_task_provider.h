@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_TASK_MANAGEMENT_PROVIDERS_CHILD_PROCESS_TASK_PROVIDER_H_
 
 #include <map>
+#include <memory>
 #include <vector>
 
 #include "base/macros.h"
@@ -52,7 +53,8 @@ class ChildProcessTaskProvider
   // When that is done, we will be notified on the UI thread by receiving a call
   // to this method.
   void ChildProcessDataCollected(
-      scoped_ptr<const std::vector<content::ChildProcessData>> child_processes);
+      std::unique_ptr<const std::vector<content::ChildProcessData>>
+          child_processes);
 
   // Creates a ChildProcessTask from the given |data| and notifies the observer
   // of its addition.

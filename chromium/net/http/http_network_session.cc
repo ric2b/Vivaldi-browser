@@ -48,7 +48,8 @@ ClientSocketPoolManager* CreateSocketPoolManager(
       params.net_log,
       params.client_socket_factory ? params.client_socket_factory
                                    : ClientSocketFactory::GetDefaultFactory(),
-      params.host_resolver, params.cert_verifier, params.channel_id_service,
+      params.socket_performance_watcher_factory, params.host_resolver,
+      params.cert_verifier, params.channel_id_service,
       params.transport_security_state, params.cert_transparency_verifier,
       params.ct_policy_enforcer, ssl_session_cache_shard,
       params.ssl_config_service, pool_type);
@@ -95,14 +96,13 @@ HttpNetworkSession::Params::Params()
       spdy_session_max_recv_window_size(kSpdySessionMaxRecvWindowSize),
       spdy_stream_max_recv_window_size(kSpdyStreamMaxRecvWindowSize),
       time_func(&base::TimeTicks::Now),
-      parse_alternative_services(false),
-      enable_alternative_service_with_different_host(false),
+      parse_alternative_services(true),
+      enable_alternative_service_with_different_host(true),
+      enable_alternative_service_for_insecure_origins(false),
       enable_npn(false),
-      enable_brotli(false),
       enable_priority_dependencies(true),
       enable_quic(false),
       disable_quic_on_timeout_with_open_streams(false),
-      enable_quic_for_proxies(false),
       enable_quic_port_selection(true),
       quic_always_require_handshake_confirmation(false),
       quic_disable_connection_pooling(false),
@@ -114,7 +114,7 @@ HttpNetworkSession::Params::Params()
       quic_max_number_of_lossy_connections(0),
       quic_packet_loss_threshold(1.0f),
       quic_socket_receive_buffer_size(kQuicSocketReceiveBufferSize),
-      quic_delay_tcp_race(false),
+      quic_delay_tcp_race(true),
       quic_max_server_configs_stored_in_properties(0u),
       quic_clock(NULL),
       quic_random(NULL),
@@ -133,7 +133,7 @@ HttpNetworkSession::Params::Params()
       quic_disable_bidirectional_streams(false),
       proxy_delegate(NULL),
       enable_token_binding(false) {
-  quic_supported_versions.push_back(QUIC_VERSION_30);
+  quic_supported_versions.push_back(QUIC_VERSION_32);
 }
 
 HttpNetworkSession::Params::Params(const Params& other) = default;
@@ -294,23 +294,23 @@ SSLClientSocketPool* HttpNetworkSession::GetSocketPoolForSSLWithProxy(
       proxy_server);
 }
 
-scoped_ptr<base::Value> HttpNetworkSession::SocketPoolInfoToValue() const {
+std::unique_ptr<base::Value> HttpNetworkSession::SocketPoolInfoToValue() const {
   // TODO(yutak): Should merge values from normal pools and WebSocket pools.
   return normal_socket_pool_manager_->SocketPoolInfoToValue();
 }
 
-scoped_ptr<base::Value> HttpNetworkSession::SpdySessionPoolInfoToValue() const {
+std::unique_ptr<base::Value> HttpNetworkSession::SpdySessionPoolInfoToValue()
+    const {
   return spdy_session_pool_.SpdySessionPoolInfoToValue();
 }
 
-scoped_ptr<base::Value> HttpNetworkSession::QuicInfoToValue() const {
-  scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+std::unique_ptr<base::Value> HttpNetworkSession::QuicInfoToValue() const {
+  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->Set("sessions", quic_stream_factory_.QuicStreamFactoryInfoToValue());
   dict->SetBoolean("quic_enabled", params_.enable_quic);
-  dict->SetBoolean("quic_enabled_for_proxies", params_.enable_quic_for_proxies);
   dict->SetBoolean("enable_quic_port_selection",
                    params_.enable_quic_port_selection);
-  scoped_ptr<base::ListValue> connection_options(new base::ListValue);
+  std::unique_ptr<base::ListValue> connection_options(new base::ListValue);
   for (QuicTagVector::const_iterator it =
            params_.quic_connection_options.begin();
        it != params_.quic_connection_options.end(); ++it) {
@@ -318,7 +318,8 @@ scoped_ptr<base::Value> HttpNetworkSession::QuicInfoToValue() const {
   }
   dict->Set("connection_options", std::move(connection_options));
 
-  scoped_ptr<base::ListValue> origins_to_force_quic_on(new base::ListValue);
+  std::unique_ptr<base::ListValue> origins_to_force_quic_on(
+      new base::ListValue);
   for (const auto& origin : params_.origins_to_force_quic_on) {
     origins_to_force_quic_on->AppendString("'" + origin.ToString() + "'");
   }
@@ -379,6 +380,20 @@ void HttpNetworkSession::GetNpnProtos(NextProtoVector* npn_protos) const {
     *npn_protos = next_protos_;
   } else {
     npn_protos->clear();
+  }
+}
+
+void HttpNetworkSession::GetSSLConfig(const HttpRequestInfo& request,
+                                      SSLConfig* server_config,
+                                      SSLConfig* proxy_config) const {
+  ssl_config_service_->GetSSLConfig(server_config);
+  GetAlpnProtos(&server_config->alpn_protos);
+  GetNpnProtos(&server_config->npn_protos);
+  *proxy_config = *server_config;
+  if (request.privacy_mode == PRIVACY_MODE_ENABLED) {
+    server_config->channel_id_enabled = false;
+  } else if (params_.enable_token_binding && params_.channel_id_service) {
+    server_config->token_binding_params.push_back(TB_PARAM_ECDSAP256);
   }
 }
 

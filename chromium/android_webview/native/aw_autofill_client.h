@@ -66,10 +66,10 @@ class AwAutofillClient : public autofill::AutofillClient,
   sync_driver::SyncService* GetSyncService() override;
   IdentityProvider* GetIdentityProvider() override;
   rappor::RapporService* GetRapporService() override;
-  void HideRequestAutocompleteDialog() override;
   void ShowAutofillSettings() override;
   void ShowUnmaskPrompt(
       const autofill::CreditCard& card,
+      UnmaskCardReason reason,
       base::WeakPtr<autofill::CardUnmaskDelegate> delegate) override;
   void OnUnmaskVerificationResult(PaymentsRpcResult result) override;
   void ConfirmSaveCreditCardLocally(const autofill::CreditCard& card,
@@ -82,9 +82,6 @@ class AwAutofillClient : public autofill::AutofillClient,
       const base::Callback<void(const std::string&)>& callback) override;
   bool HasCreditCardScanFeature() override;
   void ScanCreditCard(const CreditCardScanCallback& callback) override;
-  void ShowRequestAutocompleteDialog(const autofill::FormData& form,
-                                     content::RenderFrameHost* rfh,
-                                     const ResultCallback& callback) override;
   void ShowAutofillPopup(
       const gfx::RectF& element_bounds,
       base::i18n::TextDirection text_direction,

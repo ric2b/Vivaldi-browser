@@ -110,6 +110,7 @@
 #include "base/win/windows_version.h"
 #include "chrome/browser/apps/app_launch_for_metro_restart_win.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/browser/shell_integration_win.h"
 #include "components/search_engines/desktop_search_redirection_infobar_delegate.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
@@ -165,7 +166,7 @@ LaunchMode GetLaunchShortcutKind() {
     std::string appdata_path;
     env->GetVar("USERPROFILE", &appdata_path);
     if (!appdata_path.empty() &&
-        shortcut.find(base::ASCIIToUTF16(appdata_path)) != base::string16::npos)
+        shortcut.find(base::UTF8ToUTF16(appdata_path)) != base::string16::npos)
       return LM_SHORTCUT_DESKTOP;
     return LM_SHORTCUT_UNKNOWN;
   }
@@ -391,7 +392,7 @@ bool StartupBrowserCreatorImpl::Launch(Profile* profile,
   // Active Setup versioning and on OS upgrades) instead of every startup.
   // http://crbug.com/577697
   if (process_startup)
-    shell_integration::MigrateTaskbarPins();
+    shell_integration::win::MigrateTaskbarPins();
 #endif  // defined(OS_WIN)
 
   return true;
@@ -967,6 +968,10 @@ void StartupBrowserCreatorImpl::InitializeWelcomeRunType(
   } else {
     // Otherwise, do not welcome pre-Win10.
     if (base::win::GetVersion() < base::win::VERSION_WIN10)
+      return;
+
+    // Do not welcome if this is not first-run. Ref. VB-19418.
+    if (vivaldi::IsVivaldiRunning() && !first_run::IsChromeFirstRun())
       return;
 
     // Do not welcome if launching into incognito.

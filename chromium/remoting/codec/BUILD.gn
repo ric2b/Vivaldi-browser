@@ -33,6 +33,7 @@ source_set("codec") {
       "audio_encoder_opus.h",
       "audio_encoder_verbatim.cc",
       "audio_encoder_verbatim.h",
+      "video_encoder.cc",
       "video_encoder.h",
       "video_encoder_helper.cc",
       "video_encoder_helper.h",
@@ -40,6 +41,8 @@ source_set("codec") {
       "video_encoder_verbatim.h",
       "video_encoder_vpx.cc",
       "video_encoder_vpx.h",
+      "webrtc_video_encoder_vpx.cc",
+      "webrtc_video_encoder_vpx.h",
     ]
   }
 }

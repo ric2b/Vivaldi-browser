@@ -41,6 +41,9 @@ struct AXTreeUpdateState {
 
   // The new root in this update, if any.
   AXNode* new_root;
+
+  // Keeps track of any nodes removed. Used to identify re-parented nodes.
+  std::set<int> removed_node_ids;
 };
 
 AXTreeDelegate::AXTreeDelegate() {
@@ -53,9 +56,9 @@ AXTree::AXTree()
     : delegate_(NULL), root_(NULL) {
   AXNodeData root;
   root.id = -1;
-  root.role = AX_ROLE_ROOT_WEB_AREA;
 
   AXTreeUpdate initial_state;
+  initial_state.root_id = -1;
   initial_state.nodes.push_back(root);
   CHECK(Unserialize(initial_state)) << error();
 }
@@ -114,9 +117,16 @@ bool AXTree::Unserialize(const AXTreeUpdate& update) {
     }
   }
 
+  bool root_exists = GetFromId(update.root_id) != nullptr;
   for (size_t i = 0; i < update.nodes.size(); ++i) {
-    if (!UpdateNode(update.nodes[i], &update_state))
+    bool is_new_root = !root_exists && update.nodes[i].id == update.root_id;
+    if (!UpdateNode(update.nodes[i], is_new_root, &update_state))
       return false;
+  }
+
+  if (!root_) {
+    error_ = "Tree has no root.";
+    return false;
   }
 
   if (!update_state.pending_nodes.empty()) {
@@ -134,18 +144,24 @@ bool AXTree::Unserialize(const AXTreeUpdate& update) {
     changes.reserve(update.nodes.size());
     for (size_t i = 0; i < update.nodes.size(); ++i) {
       AXNode* node = GetFromId(update.nodes[i].id);
-      if (new_nodes.find(node) != new_nodes.end()) {
-        if (new_nodes.find(node->parent()) == new_nodes.end()) {
-          changes.push_back(
-              AXTreeDelegate::Change(node, AXTreeDelegate::SUBTREE_CREATED));
+      bool is_new_node = new_nodes.find(node) != new_nodes.end();
+      bool is_reparented_node =
+          is_new_node &&
+          update_state.removed_node_ids.find(node->id()) !=
+              update_state.removed_node_ids.end();
+
+      AXTreeDelegate::ChangeType change = AXTreeDelegate::NODE_CHANGED;
+      if (is_new_node) {
+        bool is_subtree = new_nodes.find(node->parent()) == new_nodes.end();
+        if (is_reparented_node) {
+          change = is_subtree ? AXTreeDelegate::SUBTREE_REPARENTED
+                              : AXTreeDelegate::NODE_REPARENTED;
         } else {
-          changes.push_back(
-              AXTreeDelegate::Change(node, AXTreeDelegate::NODE_CREATED));
+          change = is_subtree ? AXTreeDelegate::SUBTREE_CREATED
+                              : AXTreeDelegate::NODE_CREATED;
         }
-      } else {
-        changes.push_back(
-            AXTreeDelegate::Change(node, AXTreeDelegate::NODE_CHANGED));
       }
+      changes.push_back(AXTreeDelegate::Change(node, change));
     }
     delegate_->OnAtomicUpdateFinished(
         this, root_->id() != old_root_id, changes);
@@ -169,6 +185,7 @@ AXNode* AXTree::CreateNode(AXNode* parent,
 }
 
 bool AXTree::UpdateNode(const AXNodeData& src,
+                        bool is_new_root,
                         AXTreeUpdateState* update_state) {
   // This method updates one node in the tree based on serialized data
   // received in an AXTreeUpdate. See AXTreeUpdate for pre and post
@@ -180,18 +197,14 @@ bool AXTree::UpdateNode(const AXNodeData& src,
   AXNode* node = GetFromId(src.id);
   if (node) {
     update_state->pending_nodes.erase(node);
-    if (delegate_)
+    if (delegate_ &&
+        update_state->new_nodes.find(node) == update_state->new_nodes.end())
       delegate_->OnNodeDataWillChange(this, node->data(), src);
     node->SetData(src);
   } else {
-    if (src.role != AX_ROLE_ROOT_WEB_AREA &&
-        src.role != AX_ROLE_DESKTOP) {
+    if (!is_new_root) {
       error_ = base::StringPrintf(
           "%d is not in the tree and not the new root", src.id);
-      return false;
-    }
-    if (update_state->new_root) {
-      error_ = "Tree update contains two new roots";
       return false;
     }
 
@@ -220,8 +233,7 @@ bool AXTree::UpdateNode(const AXNodeData& src,
   node->SwapChildren(new_children);
 
   // Update the root of the tree if needed.
-  if ((src.role == AX_ROLE_ROOT_WEB_AREA || src.role == AX_ROLE_DESKTOP) &&
-      (!root_ || root_->id() != src.id)) {
+  if (is_new_root) {
     // Make sure root_ always points to something valid or null_, even inside
     // DestroySubtree.
     AXNode* old_root = root_;
@@ -249,6 +261,7 @@ void AXTree::DestroyNodeAndSubtree(AXNode* node,
     DestroyNodeAndSubtree(node->ChildAtIndex(i), update_state);
   if (update_state) {
     update_state->pending_nodes.erase(node);
+    update_state->removed_node_ids.insert(node->id());
   }
   node->Destroy();
 }

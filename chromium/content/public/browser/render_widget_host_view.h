@@ -5,7 +5,8 @@
 #ifndef CONTENT_PUBLIC_BROWSER_RENDER_WIDGET_HOST_VIEW_H_
 #define CONTENT_PUBLIC_BROWSER_RENDER_WIDGET_HOST_VIEW_H_
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
@@ -24,6 +25,7 @@ class Size;
 
 namespace ui {
 class TextInputClient;
+class AcceleratedWidgetMac;
 }
 
 namespace content {
@@ -81,7 +83,6 @@ class CONTENT_EXPORT RenderWidgetHostView {
   // Retrieves the native view used to contain plugins and identify the
   // renderer in IPC messages.
   virtual gfx::NativeView GetNativeView() const = 0;
-  virtual gfx::NativeViewId GetNativeViewId() const = 0;
   virtual gfx::NativeViewAccessible GetNativeViewAccessible() = 0;
 
   // Returns a ui::TextInputClient to support text input or nullptr if this RWHV
@@ -161,13 +162,17 @@ class CONTENT_EXPORT RenderWidgetHostView {
   // |subscriber| is now owned by this object, it will be called only on the
   // UI thread.
   virtual void BeginFrameSubscription(
-      scoped_ptr<RenderWidgetHostViewFrameSubscriber> subscriber) = 0;
+      std::unique_ptr<RenderWidgetHostViewFrameSubscriber> subscriber) = 0;
 
   // End subscribing for frame presentation events. FrameSubscriber will be
   // deleted after this call.
   virtual void EndFrameSubscription() = 0;
 
 #if defined(OS_MACOSX)
+  // Return the accelerated widget which hosts the CALayers that draw the
+  // content of the view in GetNativeView. This may be null.
+  virtual ui::AcceleratedWidgetMac* GetAcceleratedWidgetMac() const = 0;
+
   // Set the view's active state (i.e., tint state of controls).
   virtual void SetActive(bool active) = 0;
 

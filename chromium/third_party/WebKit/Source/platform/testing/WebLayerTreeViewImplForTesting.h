@@ -15,6 +15,7 @@
 
 namespace cc {
 class LayerTreeHost;
+class LayerTreeSettings;
 }
 
 namespace blink {
@@ -29,7 +30,11 @@ class WebLayerTreeViewImplForTesting : public blink::WebLayerTreeView,
     WTF_MAKE_NONCOPYABLE(WebLayerTreeViewImplForTesting);
 public:
     WebLayerTreeViewImplForTesting();
+    explicit WebLayerTreeViewImplForTesting(const cc::LayerTreeSettings&);
     ~WebLayerTreeViewImplForTesting() override;
+
+    static cc::LayerTreeSettings defaultLayerTreeSettings();
+    cc::LayerTreeHost* layerTreeHost() { return m_layerTreeHost.get(); }
 
     // blink::WebLayerTreeView implementation.
     void setRootLayer(const blink::WebLayer&) override;
@@ -88,10 +93,9 @@ public:
     void DidCommitAndDrawFrame() override {}
     void DidCompleteSwapBuffers() override {}
     void DidCompletePageScaleAnimation() override {}
-    void RecordFrameTimingEvents(
-        std::unique_ptr<cc::FrameTimingTracker::CompositeTimingSet> compositeEvents,
-        std::unique_ptr<cc::FrameTimingTracker::MainFrameTimingSet> mainFrameEvents)
-        override {}
+    void ReportFixedRasterScaleUseCounters(
+        bool hasBlurryContent,
+        bool hasPotentialPerformanceRegression) override {}
 
     // cc::LayerTreeHostSingleThreadClient implementation.
     void DidPostSwapBuffers() override {}

@@ -29,7 +29,6 @@
 #include "base/threading/worker_pool.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
-#include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/net_log/chrome_net_log.h"
 #include "components/prefs/pref_service.h"
 #include "components/proxy_config/pref_proxy_config_tracker.h"
@@ -43,19 +42,15 @@
 #include "ios/web/public/user_agent.h"
 #include "ios/web/public/web_client.h"
 #include "ios/web/public/web_thread.h"
-#include "net/base/external_estimate_provider.h"
-#include "net/base/network_quality_estimator.h"
 #include "net/base/sdch_manager.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/cert_verify_proc.h"
 #include "net/cert/ct_known_logs.h"
-#include "net/cert/ct_known_logs_static.h"
 #include "net/cert/ct_log_verifier.h"
 #include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/ct_verifier.h"
 #include "net/cert/multi_log_ct_verifier.h"
 #include "net/cert/multi_threaded_cert_verifier.h"
-#include "net/cert_net/nss_ocsp.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/cookies/cookie_store.h"
 #include "net/dns/host_cache.h"
@@ -67,6 +62,8 @@
 #include "net/http/http_network_layer.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_server_properties_impl.h"
+#include "net/nqe/external_estimate_provider.h"
+#include "net/nqe/network_quality_estimator.h"
 #include "net/proxy/proxy_config_service.h"
 #include "net/proxy/proxy_script_fetcher_impl.h"
 #include "net/proxy/proxy_service.h"
@@ -147,17 +144,11 @@ const char kSpdyDepencenciesFieldTrialDisable[] = "Disable";
 class SystemURLRequestContext : public net::URLRequestContext {
  public:
   SystemURLRequestContext() {
-#if defined(USE_NSS_VERIFIER)
-    net::SetURLRequestContextForNSSHttpIO(this);
-#endif
   }
 
  private:
   ~SystemURLRequestContext() override {
     AssertNoURLRequests();
-#if defined(USE_NSS_VERIFIER)
-    net::SetURLRequestContextForNSSHttpIO(nullptr);
-#endif
   }
 };
 
@@ -390,10 +381,6 @@ void IOSChromeIOThread::Init() {
   TRACE_EVENT0("startup", "IOSChromeIOThread::Init");
   DCHECK_CURRENTLY_ON(web::WebThread::IO);
 
-#if defined(USE_NSS_VERIFIER)
-  net::SetMessageLoopForNSSHttpIO();
-#endif
-
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
 
@@ -492,10 +479,6 @@ void IOSChromeIOThread::Init() {
 }
 
 void IOSChromeIOThread::CleanUp() {
-#if defined(USE_NSS_VERIFIER)
-  net::ShutdownNSSHttpIO();
-#endif
-
   system_url_request_context_getter_ = nullptr;
 
   // Release objects that the net::URLRequestContext could have been pointing
@@ -661,7 +644,6 @@ void IOSChromeIOThread::InitializeNetworkSessionParamsFromGlobals(
       &params->enable_priority_dependencies);
 
   globals.enable_quic.CopyToIfSet(&params->enable_quic);
-  globals.enable_quic_for_proxies.CopyToIfSet(&params->enable_quic_for_proxies);
   globals.quic_always_require_handshake_confirmation.CopyToIfSet(
       &params->quic_always_require_handshake_confirmation);
   globals.quic_disable_connection_pooling.CopyToIfSet(
@@ -769,15 +751,9 @@ void IOSChromeIOThread::ConfigureQuicGlobals(
     IOSChromeIOThread::Globals* globals) {
   bool enable_quic = ShouldEnableQuic(quic_trial_group);
   globals->enable_quic.set(enable_quic);
-  bool enable_quic_for_proxies = ShouldEnableQuicForProxies(quic_trial_group);
-  globals->enable_quic_for_proxies.set(enable_quic_for_proxies);
 
-  if (ShouldQuicEnableAlternativeServicesForDifferentHost(quic_trial_params)) {
-    globals->enable_alternative_service_with_different_host.set(true);
-    globals->parse_alternative_services.set(true);
-  } else {
-    globals->enable_alternative_service_with_different_host.set(false);
-  }
+  globals->enable_alternative_service_with_different_host.set(
+      ShouldQuicEnableAlternativeServicesForDifferentHost(quic_trial_params));
 
   if (enable_quic) {
     globals->quic_always_require_handshake_confirmation.set(
@@ -844,16 +820,6 @@ bool IOSChromeIOThread::ShouldEnableQuic(base::StringPiece quic_trial_group) {
          quic_trial_group.starts_with(kQuicFieldTrialHttpsEnabledGroupName);
 }
 
-bool IOSChromeIOThread::ShouldEnableQuicForProxies(
-    base::StringPiece quic_trial_group) {
-  return ShouldEnableQuic(quic_trial_group) ||
-         ShouldEnableQuicForDataReductionProxy();
-}
-
-bool IOSChromeIOThread::ShouldEnableQuicForDataReductionProxy() {
-  return data_reduction_proxy::params::IsIncludedInQuicFieldTrial();
-}
-
 net::QuicTagVector IOSChromeIOThread::GetQuicConnectionOptions(
     const VariationParameters& quic_trial_params) {
   VariationParameters::const_iterator it =
@@ -917,15 +883,10 @@ bool IOSChromeIOThread::ShouldQuicPreferAes(
 
 bool IOSChromeIOThread::ShouldQuicEnableAlternativeServicesForDifferentHost(
     const VariationParameters& quic_trial_params) {
-  // TODO(bnc): Remove inaccurately named "use_alternative_services" parameter.
-  return base::LowerCaseEqualsASCII(
-             GetVariationParam(quic_trial_params, "use_alternative_services"),
-             "true") ||
-         base::LowerCaseEqualsASCII(
-             GetVariationParam(
-                 quic_trial_params,
-                 "enable_alternative_service_with_different_host"),
-             "true");
+  return !base::LowerCaseEqualsASCII(
+      GetVariationParam(quic_trial_params,
+                        "enable_alternative_service_with_different_host"),
+      "false");
 }
 
 int IOSChromeIOThread::GetQuicMaxNumberOfLossyConnections(

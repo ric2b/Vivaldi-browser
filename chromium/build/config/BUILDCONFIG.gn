@@ -458,7 +458,6 @@ _native_compiler_configs = [
   "//build/config/compiler:no_rtti",
   "//build/config/compiler:runtime_library",
   "//build/config/sanitizers:default_sanitizer_flags",
-  "//build/config/sanitizers:default_sanitizer_coverage_flags",
 ]
 if (is_win) {
   _native_compiler_configs += [
@@ -554,6 +553,16 @@ if (is_component_build) {
     if (is_android) {
       configs -= [ "//build/config/android:hide_native_jni_exports" ]
     }
+  }
+}
+if (is_ios) {
+  set_defaults("ios_framework_bundle") {
+    configs = _shared_library_configs
+  }
+}
+if (is_mac) {
+  set_defaults("mac_framework_bundle") {
+    configs = _shared_library_configs
   }
 }
 

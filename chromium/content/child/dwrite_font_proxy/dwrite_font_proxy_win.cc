@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "base/debug/crash_logging.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
@@ -241,6 +242,22 @@ bool DWriteFontCollectionProxy::LoadFamily(
   return SUCCEEDED(hr);
 }
 
+bool DWriteFontCollectionProxy::GetFontFamily(UINT32 family_index,
+                                              const base::string16& family_name,
+                                              IDWriteFontFamily** font_family) {
+  DCHECK(font_family);
+  DCHECK(!family_name.empty());
+  if (!CreateFamily(family_index))
+    return false;
+
+  mswr::ComPtr<DWriteFontFamilyProxy>& family = families_[family_index];
+  if (!family->IsLoaded() || family->GetName().empty())
+    family->SetName(family_name);
+
+  family.CopyTo(font_family);
+  return true;
+}
+
 bool DWriteFontCollectionProxy::LoadFamilyNames(
     UINT32 family_index,
     IDWriteLocalizedStrings** localized_strings) {
@@ -400,6 +417,10 @@ void DWriteFontFamilyProxy::SetName(const base::string16& family_name) {
   family_name_.assign(family_name);
 }
 
+const base::string16& DWriteFontFamilyProxy::GetName() {
+  return family_name_;
+}
+
 bool DWriteFontFamilyProxy::IsLoaded() {
   return family_ != nullptr;
 }
@@ -463,7 +484,7 @@ HRESULT FontFileEnumerator::GetCurrentFontFile(IDWriteFontFile** file) {
     return E_FAIL;
   }
 
-  TRACE_EVENT0("dwrite", "FontFileEnumerator::GetCurrentFontFile (memmap)");
+  TRACE_EVENT0("dwrite", "FontFileEnumerator::GetCurrentFontFile");
   // CreateCustomFontFileReference ends up calling
   // DWriteFontCollectionProxy::CreateStreamFromKey.
   HRESULT hr = factory_->CreateCustomFontFileReference(

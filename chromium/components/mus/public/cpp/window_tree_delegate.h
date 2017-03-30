@@ -8,7 +8,11 @@
 #include <string>
 
 #include "components/mus/public/interfaces/window_tree.mojom.h"
-#include "mojo/shell/public/interfaces/interface_provider.mojom.h"
+#include "services/shell/public/interfaces/interface_provider.mojom.h"
+
+namespace ui {
+class Event;
+}
 
 namespace mus {
 
@@ -46,6 +50,11 @@ class WindowTreeDelegate {
   // Called from the destructor of WindowTreeConnection after all the Windows
   // have been destroyed. |connection| is no longer valid after this call.
   virtual void OnConnectionLost(WindowTreeConnection* connection) = 0;
+
+  // Called when the WindowTreeConnection receives an input event observed via
+  // SetEventObserver(). |target| may be null for events that were sent to
+  // windows owned by other processes.
+  virtual void OnEventObserved(const ui::Event& event, Window* target) = 0;
 
  protected:
   virtual ~WindowTreeDelegate() {}

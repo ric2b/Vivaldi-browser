@@ -28,7 +28,6 @@
 #define SVGImage_h
 
 #include "platform/graphics/Image.h"
-#include "platform/graphics/paint/DisplayItemClient.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "wtf/Allocator.h"
@@ -42,7 +41,7 @@ class LayoutReplaced;
 class SVGImageChromeClient;
 class SVGImageForContainer;
 
-class SVGImage final : public Image, public DisplayItemClient {
+class SVGImage final : public Image {
 public:
     static PassRefPtr<SVGImage> create(ImageObserver* observer)
     {
@@ -82,9 +81,7 @@ public:
     // thus also independent of current zoom level.
     FloatSize concreteObjectSize(const FloatSize& defaultObjectSize) const;
 
-    // DisplayItemClient methods.
-    String debugName() const final { return "SVGImage"; }
-    LayoutRect visualRect() const override;
+    bool hasIntrinsicDimensions() const;
 
 private:
     friend class AXLayoutObject;
@@ -137,17 +134,15 @@ public:
     ImageObserverDisabler(Image* image)
         : m_image(image)
     {
-        m_observer = m_image->getImageObserver();
-        m_image->setImageObserver(0);
+        m_image->setImageObserverDisabled(true);
     }
 
     ~ImageObserverDisabler()
     {
-        m_image->setImageObserver(m_observer);
+        m_image->setImageObserverDisabled(false);
     }
 private:
     Image* m_image;
-    Member<ImageObserver> m_observer;
 };
 
 } // namespace blink

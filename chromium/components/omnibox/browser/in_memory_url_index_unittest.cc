@@ -157,9 +157,9 @@ class InMemoryURLIndexTest : public testing::Test {
   base::MessageLoop message_loop_;
   base::SequencedWorkerPoolOwner pool_owner_;
   base::ScopedTempDir history_dir_;
-  scoped_ptr<history::HistoryService> history_service_;
+  std::unique_ptr<history::HistoryService> history_service_;
   history::HistoryDatabase* history_database_;
-  scoped_ptr<InMemoryURLIndex> url_index_;
+  std::unique_ptr<InMemoryURLIndex> url_index_;
 };
 
 InMemoryURLIndexTest::InMemoryURLIndexTest()
@@ -248,8 +248,7 @@ void InMemoryURLIndexTest::SetUp() {
       proto_file.getline(sql_cmd_line, kCommandBufferMaxSize);
       if (!proto_file.eof()) {
         // We only process lines which begin with a upper-case letter.
-        // TODO(mrossetti): Can iswupper() be used here?
-        if (sql_cmd_line[0] >= 'A' && sql_cmd_line[0] <= 'Z') {
+        if (base::IsAsciiUpper(sql_cmd_line[0])) {
           std::string sql_cmd(sql_cmd_line);
           sql::Statement sql_stmt(db.GetUniqueStatement(sql_cmd_line));
           EXPECT_TRUE(sql_stmt.Run());
@@ -1271,7 +1270,7 @@ class InMemoryURLIndexCacheTest : public testing::Test {
   base::MessageLoop message_loop_;
   base::SequencedWorkerPoolOwner pool_owner_;
   base::ScopedTempDir temp_dir_;
-  scoped_ptr<InMemoryURLIndex> url_index_;
+  std::unique_ptr<InMemoryURLIndex> url_index_;
 };
 
 InMemoryURLIndexCacheTest::InMemoryURLIndexCacheTest()

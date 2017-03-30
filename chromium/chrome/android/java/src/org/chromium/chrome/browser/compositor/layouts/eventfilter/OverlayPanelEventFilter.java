@@ -50,10 +50,19 @@ public class OverlayPanelEventFilter extends GestureEventFilter {
     private static final float VERTICAL_DETERMINATION_BOOST = 1.25f;
 
     /** The OverlayPanel that this filter is for. */
-    private OverlayPanel mPanel;
+    private final OverlayPanel mPanel;
 
     /** The {@link GestureDetector} used to distinguish tap and scroll gestures. */
     private final GestureDetector mGestureDetector;
+
+    /** The @{link SwipeRecognizer} that recognizes directional swipe gestures. */
+    private final SwipeRecognizer mSwipeRecognizer;
+
+    /**
+     * The square of ViewConfiguration.getScaledTouchSlop() in pixels used to calculate whether
+     * the finger has moved beyond the established threshold.
+     */
+    private final float mTouchSlopSquarePx;
 
     /** The target to propagate events to. */
     private EventTarget mEventTarget;
@@ -100,15 +109,6 @@ public class OverlayPanelEventFilter extends GestureEventFilter {
 
     /** The initial Y position of the current gesture. */
     private float mInitialEventY;
-
-    /**
-     * The square of ViewConfiguration.getScaledTouchSlop() in pixels used to calculate whether
-     * the finger has moved beyond the established threshold.
-     */
-    private final float mTouchSlopSquarePx;
-
-    /** The @{link SwipeRecognizer} that recognizes directional swipe gestures. */
-    private final SwipeRecognizer mSwipeRecognizer;
 
     private class SwipeRecognizerImpl extends SwipeRecognizer {
         public SwipeRecognizerImpl(Context context) {
@@ -158,17 +158,19 @@ public class OverlayPanelEventFilter extends GestureEventFilter {
 
     @Override
     public boolean onInterceptTouchEventInternal(MotionEvent e, boolean isKeyboardShowing) {
-        boolean touchIsOnPanel =
-                mPanel.isCoordinateInsideBar(e.getX() * mPxToDp, e.getY() * mPxToDp)
-                || mPanel.isCoordinateInsideContent(e.getX() * mPxToDp, e.getY() * mPxToDp);
-        boolean panelIsShowing = mPanel.getPanelState() != PanelState.CLOSED
-                && mPanel.getPanelState() != PanelState.UNDEFINED;
+        if (!mPanel.isShowing()) return false;
 
-        // If the panel is showing and being touched or is opened past the peek state, intercept
-        // the touch.
-        if ((panelIsShowing && touchIsOnPanel) || mPanel.isPanelOpened()) {
+        boolean isTouchInsidePanel =
+                mPanel.isCoordinateInsideOverlayPanel(e.getX() * mPxToDp, e.getY() * mPxToDp);
+
+        if (isTouchInsidePanel
+                // When the Panel is opened, all events should be forwarded to the Panel,
+                // even those who are not inside the Panel. This is to prevent any events
+                // being forward to the base page when the Panel is expanded.
+                || mPanel.isPanelOpened()) {
             return super.onInterceptTouchEventInternal(e, isKeyboardShowing);
         }
+
         return false;
     }
 
@@ -432,6 +434,11 @@ public class OverlayPanelEventFilter extends GestureEventFilter {
      * @return Whether the event has been consumed.
      */
     protected boolean handleScroll(MotionEvent e1, MotionEvent e2, float distanceY) {
+        // TODO(mdjones): It seems impossible that either of the two MotionEvents passed into this
+        // function would be null provided the InternalGestureDetector checks them. However, it
+        // still seems to be possible...
+        if (e1 == null || e2 == null) return false;
+
         // Only determines the gesture orientation if it hasn't been determined yet,
         // affectively "locking" the orientation once the gesture has started.
         if (!mHasDeterminedGestureOrientation && isDistanceGreaterThanTouchSlop(e1, e2)) {
@@ -540,11 +547,15 @@ public class OverlayPanelEventFilter extends GestureEventFilter {
     private class InternalGestureDetector extends GestureDetector.SimpleOnGestureListener {
         @Override
         public boolean onSingleTapUp(MotionEvent e) {
+            // TODO(mdjones): Investigate how this is ever the case. The API docs do not say this
+            // can happen (https://crbug.com/613069).
+            if (e == null) return false;
             return handleSingleTapUp(e);
         }
 
         @Override
         public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
+            if (e1 == null || e2 == null) return false;
             return handleScroll(e1, e2, distanceY);
         }
     }

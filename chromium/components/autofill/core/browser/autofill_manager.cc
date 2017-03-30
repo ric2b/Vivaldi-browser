@@ -20,10 +20,9 @@
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
-#include "base/metrics/field_trial.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/strings/string16.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -174,6 +173,14 @@ void SelectRightNameType(const ServerFieldTypeSet& old_types,
   }
 }
 
+bool IsCreditCardExpirationType(ServerFieldType type) {
+  return type == CREDIT_CARD_EXP_MONTH ||
+         type == CREDIT_CARD_EXP_2_DIGIT_YEAR ||
+         type == CREDIT_CARD_EXP_4_DIGIT_YEAR ||
+         type == CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR ||
+         type == CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR;
+}
+
 }  // namespace
 
 AutofillManager::AutofillManager(
@@ -240,12 +247,6 @@ bool AutofillManager::ShouldShowScanCreditCard(const FormData& form,
                                                const FormFieldData& field) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableCreditCardScan)) {
-    return false;
-  }
-
-  if (base::FieldTrialList::FindFullName("CreditCardScan") == "Control" &&
-      !base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableCreditCardScan)) {
     return false;
   }
 
@@ -541,10 +542,18 @@ void AutofillManager::OnQueryFormFieldAutofill(int query_id,
     }
   }
 
-  if (suggestions.empty() && field.should_autocomplete) {
-    // Show autocomplete. Suggestions come back asynchronously, so the
-    // autocomplete manager will handle sending the results back to the
-    // renderer.
+  // If there are no Autofill suggestions, consider showing Autocomplete
+  // suggestions. We will not show Autocomplete suggestions for a field that
+  // specifies autocomplete=off or a field that we think is a credit card
+  // expiration, cvc or number.
+  if (suggestions.empty() && field.should_autocomplete &&
+      !(autofill_field &&
+        (IsCreditCardExpirationType(autofill_field->Type().GetStorableType()) ||
+         autofill_field->Type().GetStorableType() == CREDIT_CARD_NUMBER ||
+         autofill_field->Type().GetStorableType() ==
+             CREDIT_CARD_VERIFICATION_CODE))) {
+    // Suggestions come back asynchronously, so the Autocomplete manager will
+    // handle sending the results back to the renderer.
     autocomplete_history_manager_->OnGetAutocompleteSuggestions(
         query_id, field.name, field.value, field.form_control_type);
     return;
@@ -599,15 +608,13 @@ void AutofillManager::FillOrPreviewCreditCardForm(
   if (action == AutofillDriver::FORM_DATA_ACTION_FILL) {
     if (credit_card.record_type() == CreditCard::MASKED_SERVER_CARD &&
         WillFillCreditCardNumber(form, field)) {
-      unmask_request_.card = credit_card;
       unmasking_query_id_ = query_id;
       unmasking_form_ = form;
       unmasking_field_ = field;
-      payments_client_->Prepare();
-      client_->ShowUnmaskPrompt(unmask_request_.card,
-                                weak_ptr_factory_.GetWeakPtr());
-      client_->LoadRiskData(base::Bind(&AutofillManager::OnDidGetUnmaskRiskData,
-                                       weak_ptr_factory_.GetWeakPtr()));
+      masked_card_ = credit_card;
+      GetOrCreateFullCardRequest()->GetFullCard(
+          masked_card_, AutofillClient::UNMASK_FOR_AUTOFILL,
+          weak_ptr_factory_.GetWeakPtr());
       credit_card_form_event_logger_->OnDidSelectMaskedServerCardSuggestion();
       return;
     }
@@ -615,7 +622,8 @@ void AutofillManager::FillOrPreviewCreditCardForm(
   }
 
   FillOrPreviewDataModelForm(action, query_id, form, field, credit_card,
-                             true /* is_credit_card */);
+                             true /* is_credit_card */,
+                             base::string16() /* cvc */);
 }
 
 void AutofillManager::FillOrPreviewProfileForm(
@@ -628,7 +636,8 @@ void AutofillManager::FillOrPreviewProfileForm(
     address_form_event_logger_->OnDidFillSuggestion(profile);
 
   FillOrPreviewDataModelForm(action, query_id, form, field, profile,
-                             false /* is_credit_card */);
+                             false /* is_credit_card */,
+                             base::string16() /* cvc */);
 }
 
 void AutofillManager::FillOrPreviewForm(
@@ -657,14 +666,15 @@ void AutofillManager::FillOrPreviewForm(
 void AutofillManager::FillCreditCardForm(int query_id,
                                          const FormData& form,
                                          const FormFieldData& field,
-                                         const CreditCard& credit_card) {
+                                         const CreditCard& credit_card,
+                                         const base::string16& cvc) {
   if (!IsValidFormData(form) || !IsValidFormFieldData(field) ||
       !driver_->RendererIsAvailable()) {
     return;
   }
 
   FillOrPreviewDataModelForm(AutofillDriver::FORM_DATA_ACTION_FILL, query_id,
-                             form, field, credit_card, true);
+                             form, field, credit_card, true, cvc);
 }
 
 void AutofillManager::OnFocusNoLongerOnForm() {
@@ -712,10 +722,11 @@ void AutofillManager::DidShowSuggestions(bool is_new_popup,
           AutofillMetrics::SUGGESTIONS_SHOWN_ONCE);
     }
 
-    if (autofill_field->Type().group() == CREDIT_CARD)
+    if (autofill_field->Type().group() == CREDIT_CARD) {
       credit_card_form_event_logger_->OnDidShowSuggestions();
-    else
+    } else {
       address_form_event_logger_->OnDidShowSuggestions();
+    }
   }
 }
 
@@ -811,11 +822,20 @@ void AutofillManager::RemoveAutocompleteEntry(const base::string16& name,
 }
 
 bool AutofillManager::IsShowingUnmaskPrompt() {
-  return unmask_request_.card.Compare(CreditCard()) != 0;
+  return full_card_request_ && full_card_request_->IsGettingFullCard();
 }
 
 const std::vector<FormStructure*>& AutofillManager::GetFormStructures() {
   return form_structures_.get();
+}
+
+payments::FullCardRequest* AutofillManager::GetOrCreateFullCardRequest() {
+  if (!full_card_request_) {
+    full_card_request_.reset(new payments::FullCardRequest(
+        client_, payments_client_.get(), personal_data_));
+  }
+
+  return full_card_request_.get();
 }
 
 void AutofillManager::SetTestDelegate(AutofillManagerTestDelegate* delegate) {
@@ -866,49 +886,14 @@ void AutofillManager::OnLoadedServerPredictions(
   driver_->SendAutofillTypePredictionsToRenderer(queried_forms);
 }
 
-void AutofillManager::OnUnmaskResponse(const UnmaskResponse& response) {
-  unmask_request_.user_response = response;
-  if (!unmask_request_.risk_data.empty()) {
-    real_pan_request_timestamp_ = base::Time::Now();
-    payments_client_->UnmaskCard(unmask_request_);
-  }
-}
-
-void AutofillManager::OnUnmaskPromptClosed() {
-  payments_client_->CancelRequest();
-  driver_->RendererShouldClearPreviewedForm();
-  unmask_request_ = payments::PaymentsClient::UnmaskRequestDetails();
-}
-
 IdentityProvider* AutofillManager::GetIdentityProvider() {
   return client_->GetIdentityProvider();
 }
 
 void AutofillManager::OnDidGetRealPan(AutofillClient::PaymentsRpcResult result,
                                       const std::string& real_pan) {
-  AutofillMetrics::LogRealPanDuration(
-      base::Time::Now() - real_pan_request_timestamp_, result);
-  if (!real_pan.empty()) {
-    DCHECK_EQ(AutofillClient::SUCCESS, result);
-    credit_card_form_event_logger_->OnDidFillSuggestion(unmask_request_.card);
-    unmask_request_.card.set_record_type(CreditCard::FULL_SERVER_CARD);
-    unmask_request_.card.SetNumber(base::UTF8ToUTF16(real_pan));
-    if (!unmask_request_.user_response.exp_month.empty()) {
-      unmask_request_.card.SetRawInfo(CREDIT_CARD_EXP_MONTH,
-                                      unmask_request_.user_response.exp_month);
-    }
-    if (!unmask_request_.user_response.exp_year.empty()) {
-      unmask_request_.card.SetRawInfo(CREDIT_CARD_EXP_4_DIGIT_YEAR,
-                                      unmask_request_.user_response.exp_year);
-    }
-    if (unmask_request_.user_response.should_store_pan)
-      personal_data_->UpdateServerCreditCard(unmask_request_.card);
-
-    FillCreditCardForm(unmasking_query_id_, unmasking_form_, unmasking_field_,
-                       unmask_request_.card);
-  }
-
-  client_->OnUnmaskVerificationResult(result);
+  DCHECK(full_card_request_);
+  full_card_request_->OnDidGetRealPan(result, real_pan);
 }
 
 void AutofillManager::OnDidGetUploadDetails(
@@ -957,12 +942,16 @@ void AutofillManager::OnDidUploadCard(
   // TODO(jdonnelly): Log duration.
 }
 
-void AutofillManager::OnDidGetUnmaskRiskData(const std::string& risk_data) {
-  unmask_request_.risk_data = risk_data;
-  if (!unmask_request_.user_response.cvc.empty()) {
-    real_pan_request_timestamp_ = base::Time::Now();
-    payments_client_->UnmaskCard(unmask_request_);
-  }
+void AutofillManager::OnFullCardDetails(const CreditCard& card,
+                                        const base::string16& cvc) {
+  credit_card_form_event_logger_->OnDidFillSuggestion(masked_card_);
+  FillCreditCardForm(unmasking_query_id_, unmasking_form_, unmasking_field_,
+                     card, cvc);
+  masked_card_ = CreditCard();
+}
+
+void AutofillManager::OnFullCardError() {
+  driver_->RendererShouldClearPreviewedForm();
 }
 
 void AutofillManager::OnUserDidAcceptUpload() {
@@ -1065,8 +1054,10 @@ void AutofillManager::ImportFormData(const FormStructure& submitted_form) {
     // their card. If no CVC is present, do nothing. We could fall back to a
     // local save but we believe that sometimes offering upload and sometimes
     // offering local save is a confusing user experience.
+    int cvc;
     for (const AutofillField* field : submitted_form) {
-      if (field->Type().GetStorableType() == CREDIT_CARD_VERIFICATION_CODE) {
+      if (field->Type().GetStorableType() == CREDIT_CARD_VERIFICATION_CODE &&
+          base::StringToInt(field->value, &cvc)) {
         upload_request_.cvc = field->value;
         break;
       }
@@ -1247,7 +1238,7 @@ void AutofillManager::Reset() {
   user_did_type_ = false;
   user_did_autofill_ = false;
   user_did_edit_autofilled_field_ = false;
-  unmask_request_ = payments::PaymentsClient::UnmaskRequestDetails();
+  masked_card_ = CreditCard();
   unmasking_query_id_ = -1;
   unmasking_form_ = FormData();
   unmasking_field_ = FormFieldData();
@@ -1332,15 +1323,6 @@ bool AutofillManager::RefreshDataModels() {
   return true;
 }
 
-bool AutofillManager::IsCreditCard(int unique_id) {
-  // Unpack the |unique_id| into component parts.
-  std::string credit_card_id;
-  std::string profile_id;
-  SplitFrontendID(unique_id, &credit_card_id, &profile_id);
-  DCHECK(!base::IsValidGUID(credit_card_id) || !base::IsValidGUID(profile_id));
-  return base::IsValidGUID(credit_card_id);
-}
-
 bool AutofillManager::GetProfile(int unique_id,
                                  const AutofillProfile** profile) {
   // Unpack the |unique_id| into component parts.
@@ -1371,7 +1353,8 @@ void AutofillManager::FillOrPreviewDataModelForm(
     const FormData& form,
     const FormFieldData& field,
     const AutofillDataModel& data_model,
-    bool is_credit_card) {
+    bool is_credit_card,
+    const base::string16& cvc) {
   FormStructure* form_structure = NULL;
   AutofillField* autofill_field = NULL;
   if (!GetCachedFormAndField(form, field, &form_structure, &autofill_field))
@@ -1446,10 +1429,13 @@ void AutofillManager::FillOrPreviewDataModelForm(
     if (is_credit_card &&
         cached_field->Type().GetStorableType() ==
             CREDIT_CARD_VERIFICATION_CODE) {
-      // If this is |unmask_request_.card|, |unmask_request_.user_response.cvc|
-      // should be non-empty and vice versa.
-      value = unmask_request_.user_response.cvc;
-      DCHECK_EQ(&unmask_request_.card == &data_model, !value.empty());
+      value = cvc;
+    } else if (is_credit_card && IsCreditCardExpirationType(
+                                     cached_field->Type().GetStorableType()) &&
+               static_cast<const CreditCard*>(&data_model)
+                   ->IsExpired(base::Time::Now())) {
+      // Don't fill expired cards expiration date.
+      value = base::string16();
     }
 
     // Must match ForEachMatchingFormField() in form_autofill_util.cc.
@@ -1646,6 +1632,8 @@ std::vector<Suggestion> AutofillManager::GetProfileSuggestions(
     const FormStructure& form,
     const FormFieldData& field,
     const AutofillField& autofill_field) const {
+  address_form_event_logger_->OnDidPollSuggestions();
+
   std::vector<ServerFieldType> field_types(form.field_count());
   for (size_t i = 0; i < form.field_count(); ++i) {
     field_types.push_back(form.field(i)->Type().GetStorableType());
@@ -1672,6 +1660,8 @@ std::vector<Suggestion> AutofillManager::GetProfileSuggestions(
 std::vector<Suggestion> AutofillManager::GetCreditCardSuggestions(
     const FormFieldData& field,
     const AutofillType& type) const {
+  credit_card_form_event_logger_->OnDidPollSuggestions();
+
   // The field value is sanitized before attempting to match it to the user's
   // data.
   std::vector<Suggestion> suggestions =

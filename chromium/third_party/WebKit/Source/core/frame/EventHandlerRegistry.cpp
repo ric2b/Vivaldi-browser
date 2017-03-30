@@ -5,6 +5,7 @@
 #include "core/frame/EventHandlerRegistry.h"
 
 #include "core/events/EventListenerOptions.h"
+#include "core/events/EventUtil.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLFrameOwnerElement.h"
@@ -15,20 +16,6 @@
 namespace blink {
 
 namespace {
-
-inline bool isPointerEventType(const AtomicString& eventType)
-{
-    return eventType == EventTypeNames::gotpointercapture
-        || eventType == EventTypeNames::lostpointercapture
-        || eventType == EventTypeNames::pointercancel
-        || eventType == EventTypeNames::pointerdown
-        || eventType == EventTypeNames::pointerenter
-        || eventType == EventTypeNames::pointerleave
-        || eventType == EventTypeNames::pointermove
-        || eventType == EventTypeNames::pointerout
-        || eventType == EventTypeNames::pointerover
-        || eventType == EventTypeNames::pointerup;
-}
 
 WebEventListenerProperties webEventListenerProperties(bool hasBlocking, bool hasPassive)
 {
@@ -53,7 +40,7 @@ EventHandlerRegistry::~EventHandlerRegistry()
     checkConsistency();
 }
 
-bool EventHandlerRegistry::eventTypeToClass(const AtomicString& eventType, const EventListenerOptions& options, EventHandlerClass* result)
+bool EventHandlerRegistry::eventTypeToClass(const AtomicString& eventType, const AddEventListenerOptions& options, EventHandlerClass* result)
 {
     if (eventType == EventTypeNames::scroll) {
         *result = ScrollEvent;
@@ -63,7 +50,7 @@ bool EventHandlerRegistry::eventTypeToClass(const AtomicString& eventType, const
         *result = options.passive() ? TouchEndOrCancelEventPassive : TouchEndOrCancelEventBlocking;
     } else if (eventType == EventTypeNames::touchstart || eventType == EventTypeNames::touchmove) {
         *result = options.passive() ? TouchStartOrMoveEventPassive : TouchStartOrMoveEventBlocking;
-    } else if (isPointerEventType(eventType)) {
+    } else if (EventUtil::isPointerEventType(eventType)) {
         // The EventHandlerClass is TouchStartOrMoveEventPassive since
         // the pointer events never block scrolling and the compositor
         // only needs to know about the touch listeners.
@@ -129,7 +116,7 @@ void EventHandlerRegistry::updateEventHandlerInternal(ChangeOperation op, EventH
         notifyDidAddOrRemoveEventHandlerTarget(handlerClass);
 }
 
-void EventHandlerRegistry::updateEventHandlerOfType(ChangeOperation op, const AtomicString& eventType, const EventListenerOptions& options, EventTarget* target)
+void EventHandlerRegistry::updateEventHandlerOfType(ChangeOperation op, const AtomicString& eventType, const AddEventListenerOptions& options, EventTarget* target)
 {
     EventHandlerClass handlerClass;
     if (!eventTypeToClass(eventType, options, &handlerClass))
@@ -137,12 +124,12 @@ void EventHandlerRegistry::updateEventHandlerOfType(ChangeOperation op, const At
     updateEventHandlerInternal(op, handlerClass, target);
 }
 
-void EventHandlerRegistry::didAddEventHandler(EventTarget& target, const AtomicString& eventType, const EventListenerOptions& options)
+void EventHandlerRegistry::didAddEventHandler(EventTarget& target, const AtomicString& eventType, const AddEventListenerOptions& options)
 {
     updateEventHandlerOfType(Add, eventType, options, &target);
 }
 
-void EventHandlerRegistry::didRemoveEventHandler(EventTarget& target, const AtomicString& eventType, const EventListenerOptions& options)
+void EventHandlerRegistry::didRemoveEventHandler(EventTarget& target, const AtomicString& eventType, const AddEventListenerOptions& options)
 {
     updateEventHandlerOfType(Remove, eventType, options, &target);
 }
@@ -252,10 +239,10 @@ void EventHandlerRegistry::clearWeakMembers(Visitor* visitor)
         const EventTargetSet* targets = &m_targets[handlerClass];
         for (const auto& eventTarget : *targets) {
             Node* node = eventTarget.key->toNode();
-            LocalDOMWindow* window = eventTarget.key->toDOMWindow();
-            if (node && !Heap::isHeapObjectAlive(node)) {
+            LocalDOMWindow* window = eventTarget.key->toLocalDOMWindow();
+            if (node && !ThreadHeap::isHeapObjectAlive(node)) {
                 deadTargets.append(node);
-            } else if (window && !Heap::isHeapObjectAlive(window)) {
+            } else if (window && !ThreadHeap::isHeapObjectAlive(window)) {
                 deadTargets.append(window);
             }
         }
@@ -273,13 +260,13 @@ void EventHandlerRegistry::documentDetached(Document& document)
         const EventTargetSet* targets = &m_targets[handlerClass];
         for (const auto& eventTarget : *targets) {
             if (Node* node = eventTarget.key->toNode()) {
-                for (Document* doc = &node->document(); doc; doc = doc->ownerElement() ? &doc->ownerElement()->document() : 0) {
+                for (Document* doc = &node->document(); doc; doc = doc->localOwner() ? &doc->localOwner()->document() : 0) {
                     if (doc == &document) {
                         targetsToRemove.append(eventTarget.key);
                         break;
                     }
                 }
-            } else if (eventTarget.key->toDOMWindow()) {
+            } else if (eventTarget.key->toLocalDOMWindow()) {
                 // DOMWindows may outlive their documents, so we shouldn't remove their handlers
                 // here.
             } else {
@@ -302,7 +289,7 @@ void EventHandlerRegistry::checkConsistency() const
                 // See the comment for |documentDetached| if either of these assertions fails.
                 ASSERT(node->document().frameHost());
                 ASSERT(node->document().frameHost() == m_frameHost);
-            } else if (LocalDOMWindow* window = eventTarget.key->toDOMWindow()) {
+            } else if (LocalDOMWindow* window = eventTarget.key->toLocalDOMWindow()) {
                 // If any of these assertions fail, LocalDOMWindow failed to unregister its handlers
                 // properly.
                 ASSERT(window->frame());

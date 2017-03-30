@@ -45,7 +45,6 @@
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/gpu/Extensions3DUtil.h"
 #include "public/platform/WebCanvas.h"
-#include "public/platform/WebGraphicsContext3D.h"
 
 namespace blink {
 
@@ -58,12 +57,12 @@ inline HTMLVideoElement::HTMLVideoElement(Document& document)
         m_defaultPosterURL = AtomicString(document.settings()->defaultVideoPosterURL());
 }
 
-RawPtr<HTMLVideoElement> HTMLVideoElement::create(Document& document)
+HTMLVideoElement* HTMLVideoElement::create(Document& document)
 {
-    RawPtr<HTMLVideoElement> video = new HTMLVideoElement(document);
+    HTMLVideoElement* video = new HTMLVideoElement(document);
     video->ensureUserAgentShadowRoot();
     video->suspendIfNeeded();
-    return video.release();
+    return video;
 }
 
 DEFINE_TRACE(HTMLVideoElement)
@@ -207,7 +206,7 @@ void HTMLVideoElement::paintCurrentFrame(SkCanvas* canvas, const IntRect& destRe
     webMediaPlayer()->paint(canvas, destRect, paint ? paint->getAlpha() : 0xFF, mode);
 }
 
-bool HTMLVideoElement::copyVideoTextureToPlatformTexture(gpu::gles2::GLES2Interface* gl, Platform3DObject texture, GLenum internalFormat, GLenum type, bool premultiplyAlpha, bool flipY)
+bool HTMLVideoElement::copyVideoTextureToPlatformTexture(gpu::gles2::GLES2Interface* gl, GLuint texture, GLenum internalFormat, GLenum type, bool premultiplyAlpha, bool flipY)
 {
     if (!webMediaPlayer())
         return false;
@@ -328,7 +327,7 @@ IntSize HTMLVideoElement::bitmapSourceSize() const
 
 ScriptPromise HTMLVideoElement::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, int sx, int sy, int sw, int sh, const ImageBitmapOptions& options, ExceptionState& exceptionState)
 {
-    ASSERT(eventTarget.toDOMWindow());
+    ASSERT(eventTarget.toLocalDOMWindow());
     if (getNetworkState() == HTMLMediaElement::NETWORK_EMPTY) {
         exceptionState.throwDOMException(InvalidStateError, "The provided element has not retrieved data.");
         return ScriptPromise();
@@ -341,7 +340,7 @@ ScriptPromise HTMLVideoElement::createImageBitmap(ScriptState* scriptState, Even
         exceptionState.throwDOMException(IndexSizeError, String::format("The source %s provided is 0.", sw ? "height" : "width"));
         return ScriptPromise();
     }
-    return ImageBitmapSource::fulfillImageBitmap(scriptState, ImageBitmap::create(this, IntRect(sx, sy, sw, sh), eventTarget.toDOMWindow()->document(), options));
+    return ImageBitmapSource::fulfillImageBitmap(scriptState, ImageBitmap::create(this, IntRect(sx, sy, sw, sh), eventTarget.toLocalDOMWindow()->document(), options));
 }
 
 } // namespace blink

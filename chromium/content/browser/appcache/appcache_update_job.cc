@@ -9,7 +9,7 @@
 #include "base/compiler_specific.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/appcache/appcache_group.h"
 #include "content/browser/appcache/appcache_histograms.h"
 #include "content/public/browser/browser_thread.h"
@@ -498,8 +498,7 @@ void AppCacheUpdateJob::StartUpdate(AppCacheHost* host,
 
 AppCacheResponseWriter* AppCacheUpdateJob::CreateResponseWriter() {
   AppCacheResponseWriter* writer =
-      storage_->CreateResponseWriter(manifest_url_,
-                                                group_->group_id());
+      storage_->CreateResponseWriter(manifest_url_);
   stored_response_ids_.push_back(writer->response_id());
   return writer;
 }
@@ -564,8 +563,7 @@ void AppCacheUpdateJob::FetchManifest(bool is_first_fetch) {
         group_->newest_complete_cache()->GetEntry(manifest_url_) : NULL;
     if (entry && !doing_full_update_check_) {
       // Asynchronously load response info for manifest from newest cache.
-      storage_->LoadResponseInfo(manifest_url_, group_->group_id(),
-                                 entry->response_id(), this);
+      storage_->LoadResponseInfo(manifest_url_, entry->response_id(), this);
       return;
     }
     manifest_fetcher_->Start();
@@ -612,7 +610,7 @@ void AppCacheUpdateJob::HandleManifestFetchCompleted(
              update_type_ == UPGRADE_ATTEMPT) {
     storage_->MakeGroupObsolete(group_, this, response_code);  // async
   } else {
-    const char* kFormatString = "Manifest fetch failed (%d) %s";
+    const char kFormatString[] = "Manifest fetch failed (%d) %s";
     std::string message = FormatUrlErrorMessage(
         kFormatString, manifest_url_, fetcher->result(), response_code);
     HandleCacheFailure(AppCacheErrorDetails(message,
@@ -672,7 +670,7 @@ void AppCacheUpdateJob::ContinueHandleManifestFetchCompleted(bool changed) {
                         PARSE_MANIFEST_ALLOWING_INTERCEPTS :
                         PARSE_MANIFEST_PER_STANDARD,
                      manifest)) {
-    const char* kFormatString = "Failed to parse manifest %s";
+    const char kFormatString[] = "Failed to parse manifest %s";
     const std::string message = base::StringPrintf(kFormatString,
         manifest_url_.spec().c_str());
     HandleCacheFailure(
@@ -761,7 +759,7 @@ void AppCacheUpdateJob::HandleUrlFetchCompleted(URLFetcher* fetcher) {
         entry.set_response_size(fetcher->existing_entry().response_size());
         inprogress_cache_->AddOrModifyEntry(url, entry);
       } else {
-        const char* kFormatString = "Resource fetch failed (%d) %s";
+        const char kFormatString[] = "Resource fetch failed (%d) %s";
         std::string message = FormatUrlErrorMessage(
             kFormatString, url, fetcher->result(), response_code);
         ResultType result = fetcher->result();
@@ -875,7 +873,7 @@ void AppCacheUpdateJob::HandleMasterEntryFetchCompleted(
 
     failed_master_entries_.insert(url);
 
-    const char* kFormatString = "Manifest fetch failed (%d) %s";
+    const char kFormatString[] = "Manifest fetch failed (%d) %s";
     std::string message = FormatUrlErrorMessage(
         kFormatString, request->url(), fetcher->result(), response_code);
     host_notifier.SendErrorNotifications(
@@ -950,7 +948,7 @@ void AppCacheUpdateJob::HandleManifestRefetchCompleted(
                          MANIFEST_ERROR,
                          GURL());
     } else {
-      const char* kFormatString = "Manifest re-fetch failed (%d) %s";
+      const char kFormatString[] = "Manifest re-fetch failed (%d) %s";
       std::string message = FormatUrlErrorMessage(
           kFormatString, manifest_url_, fetcher->result(), response_code);
       HandleCacheFailure(AppCacheErrorDetails(message,
@@ -1160,7 +1158,6 @@ void AppCacheUpdateJob::CheckIfManifestChanged() {
   // Load manifest data from storage to compare against fetched manifest.
   manifest_response_reader_.reset(
       storage_->CreateResponseReader(manifest_url_,
-                                     group_->group_id(),
                                      entry->response_id()));
   read_manifest_buffer_ = new net::IOBuffer(kBufferSize);
   manifest_response_reader_->ReadData(
@@ -1259,8 +1256,8 @@ void AppCacheUpdateJob::FetchUrls() {
     } else {
       URLFetcher* fetcher = new URLFetcher(
           url_to_fetch.url, URLFetcher::URL_FETCH, this);
-      if (url_to_fetch.existing_response_info.get()) {
-        DCHECK(group_->newest_complete_cache());
+      if (url_to_fetch.existing_response_info.get() &&
+          group_->newest_complete_cache()) {
         AppCacheEntry* existing_entry =
             group_->newest_complete_cache()->GetEntry(url_to_fetch.url);
         DCHECK(existing_entry);
@@ -1443,9 +1440,7 @@ bool AppCacheUpdateJob::MaybeLoadFromNewestCache(const GURL& url,
   // Load HTTP headers for entry from newest cache.
   loading_responses_.insert(
       LoadingResponses::value_type(copy_me->response_id(), url));
-  storage_->LoadResponseInfo(manifest_url_, group_->group_id(),
-                             copy_me->response_id(),
-                             this);
+  storage_->LoadResponseInfo(manifest_url_, copy_me->response_id(), this);
   // Async: wait for OnResponseInfoLoaded to complete.
   return true;
 }

@@ -20,6 +20,7 @@ import android.util.Pair;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.ChromeApplication;
@@ -86,7 +87,7 @@ public class IncognitoNotificationService extends IntentService {
             for (int i = 0; i < TabWindowManager.MAX_SIMULTANEOUS_SELECTORS; i++) {
                 if (processedSelectors.contains(i)) continue;
                 clearedIncognito &= deleteIncognitoStateFilesInDirectory(
-                        TabPersistentStore.getStateDirectory(this, i));
+                        TabPersistentStore.getOrCreateSelectorStateDirectory(i));
             }
         }
 
@@ -139,7 +140,7 @@ public class IncognitoNotificationService extends IntentService {
         // snapshot that would need to be regenerated.
         if (visibleTaskIds.contains(tabbedTaskId)) return;
 
-        Context context = ApplicationStatus.getApplicationContext();
+        Context context = ContextUtils.getApplicationContext();
         Intent startIntent = new Intent(Intent.ACTION_MAIN);
         startIntent.setPackage(context.getPackageName());
         startIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -150,7 +151,7 @@ public class IncognitoNotificationService extends IntentService {
     private void removeNonVisibleChromeTabbedRecentEntries() {
         Set<Integer> visibleTaskIds = getTaskIdsForVisibleActivities();
 
-        Context context = ApplicationStatus.getApplicationContext();
+        Context context = ContextUtils.getApplicationContext();
         ActivityManager manager =
                 (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
         PackageManager pm = getPackageManager();

@@ -9,6 +9,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/compiler_specific.h"
 #include "gpu/command_buffer/client/client_test_helper.h"
 #include "gpu/command_buffer/client/cmd_buffer_helper.h"
@@ -56,15 +58,14 @@ class TransferBufferTest : public testing::Test {
     return command_buffer_.get();
   }
 
-  scoped_ptr<MockClientCommandBufferMockFlush> command_buffer_;
-  scoped_ptr<CommandBufferHelper> helper_;
-  scoped_ptr<TransferBuffer> transfer_buffer_;
+  std::unique_ptr<MockClientCommandBufferMockFlush> command_buffer_;
+  std::unique_ptr<CommandBufferHelper> helper_;
+  std::unique_ptr<TransferBuffer> transfer_buffer_;
   int32_t transfer_buffer_id_;
 };
 
 void TransferBufferTest::SetUp() {
   command_buffer_.reset(new StrictMock<MockClientCommandBufferMockFlush>());
-  ASSERT_TRUE(command_buffer_->Initialize());
 
   helper_.reset(new CommandBufferHelper(command_buffer()));
   ASSERT_TRUE(helper_->Initialize(kCommandBufferSizeBytes));
@@ -260,15 +261,14 @@ class TransferBufferExpandContractTest : public testing::Test {
     return command_buffer_.get();
   }
 
-  scoped_ptr<MockClientCommandBufferCanFail> command_buffer_;
-  scoped_ptr<CommandBufferHelper> helper_;
-  scoped_ptr<TransferBuffer> transfer_buffer_;
+  std::unique_ptr<MockClientCommandBufferCanFail> command_buffer_;
+  std::unique_ptr<CommandBufferHelper> helper_;
+  std::unique_ptr<TransferBuffer> transfer_buffer_;
   int32_t transfer_buffer_id_;
 };
 
 void TransferBufferExpandContractTest::SetUp() {
   command_buffer_.reset(new StrictMock<MockClientCommandBufferCanFail>());
-  ASSERT_TRUE(command_buffer_->Initialize());
 
   EXPECT_CALL(*command_buffer(),
               CreateTransferBuffer(kCommandBufferSizeBytes, _))

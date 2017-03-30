@@ -70,7 +70,7 @@ component("libgtk2ui") {
       "gconf_listener.cc",
       "gconf_listener.h",
     ]
-    configs += [ "//build/config/linux:gconf" ]
+    configs += [ "//build/config/linux/gconf" ]
   }
   defines = [ "LIBGTK2UI_IMPLEMENTATION" ]
 
@@ -106,6 +106,7 @@ component("libgtk2ui") {
     "//ui/aura",
     "//ui/base",
     "//ui/base/ime",
+    "//ui/display",
     "//ui/events",
     "//ui/events:events_base",
     "//ui/gfx",

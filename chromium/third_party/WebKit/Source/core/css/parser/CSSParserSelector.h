@@ -37,7 +37,7 @@ public:
 
     ~CSSParserSelector();
 
-    PassOwnPtr<CSSSelector> releaseSelector() { return m_selector.release(); }
+    PassOwnPtr<CSSSelector> releaseSelector() { return std::move(m_selector); }
 
     CSSSelector::RelationType relation() const { return m_selector->relation(); }
     void setValue(const AtomicString& value, bool matchLowerCase = false) { m_selector->setValue(value, matchLowerCase); }
@@ -61,12 +61,12 @@ public:
     CSSSelector::PseudoType pseudoType() const { return m_selector->getPseudoType(); }
     const CSSSelectorList* selectorList() const { return m_selector->selectorList(); }
 
-    bool needsImplicitShadowCombinatorForMatching() const { return pseudoType() == CSSSelector::PseudoWebKitCustomElement || pseudoType() == CSSSelector::PseudoCue || pseudoType() == CSSSelector::PseudoShadow || pseudoType() == CSSSelector::PseudoSlotted; }
+    bool needsImplicitShadowCombinatorForMatching() const { return pseudoType() == CSSSelector::PseudoWebKitCustomElement || pseudoType() == CSSSelector::PseudoBlinkInternalElement || pseudoType() == CSSSelector::PseudoCue || pseudoType() == CSSSelector::PseudoShadow || pseudoType() == CSSSelector::PseudoSlotted; }
 
     bool isSimple() const;
 
     CSSParserSelector* tagHistory() const { return m_tagHistory.get(); }
-    void setTagHistory(PassOwnPtr<CSSParserSelector> selector) { m_tagHistory = selector; }
+    void setTagHistory(PassOwnPtr<CSSParserSelector> selector) { m_tagHistory = std::move(selector); }
     void clearTagHistory() { m_tagHistory.clear(); }
     void appendTagHistory(CSSSelector::RelationType, PassOwnPtr<CSSParserSelector>);
     PassOwnPtr<CSSParserSelector> releaseTagHistory();

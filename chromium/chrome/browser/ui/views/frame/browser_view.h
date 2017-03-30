@@ -13,6 +13,7 @@
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "chrome/browser/devtools/devtools_window.h"
@@ -53,6 +54,7 @@ class DownloadShelfView;
 class ExclusiveAccessBubbleViews;
 class InfoBarContainerView;
 class LocationBarView;
+class NewBackShortcutBubble;
 class StatusBubbleViews;
 class TabStrip;
 class ToolbarView;
@@ -295,6 +297,8 @@ class BrowserView : public BrowserWindow,
   bool ShouldHideUIForFullscreen() const override;
   bool IsFullscreen() const override;
   bool IsFullscreenBubbleVisible() const override;
+  void MaybeShowNewBackShortcutBubble(bool forward) override;
+  void HideNewBackShortcutBubble() override;
   LocationBar* GetLocationBar() const override;
   void SetFocusToLocationBar(bool select_all) override;
   void UpdateReloadStopState(bool is_loading, bool force) override;
@@ -313,8 +317,6 @@ class BrowserView : public BrowserWindow,
   bool IsTabStripEditable() const override;
   bool IsToolbarVisible() const override;
   gfx::Rect GetRootWindowResizerRect() const override;
-  void ConfirmAddSearchProvider(TemplateURL* template_url,
-                                Profile* profile) override;
   void ShowUpdateChromeDialog() override;
   void ShowBookmarkBubble(const GURL& url, bool already_bookmarked) override;
   void ShowBookmarkAppBubble(
@@ -329,10 +331,8 @@ class BrowserView : public BrowserWindow,
                            translate::TranslateErrors::Type error_type,
                            bool is_user_gesture) override;
 #if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
-  void ShowOneClickSigninBubble(
-      OneClickSigninBubbleType type,
+  void ShowOneClickSigninConfirmation(
       const base::string16& email,
-      const base::string16& error_message,
       const StartSyncCallback& start_sync_callback) override;
 #endif
   // TODO(beng): Not an override, move somewhere else.
@@ -374,6 +374,7 @@ class BrowserView : public BrowserWindow,
       const extensions::Extension* extension,
       const base::Callback<void(ImeWarningBubblePermissionStatus status)>&
           callback) override;
+  std::string GetWorkspace() const override;
 
   BookmarkBarView* GetBookmarkBarView() const;
   LocationBarView* GetLocationBarView() const;
@@ -677,6 +678,9 @@ class BrowserView : public BrowserWindow,
 
   std::unique_ptr<ExclusiveAccessBubbleViews> exclusive_access_bubble_;
 
+  std::unique_ptr<NewBackShortcutBubble> new_back_shortcut_bubble_;
+  base::TimeTicks last_back_shortcut_press_time_;
+
 #if defined(OS_WIN)
   // Helper class to listen for completion of first page load.
   std::unique_ptr<LoadCompleteListener> load_complete_listener_;
@@ -689,9 +693,6 @@ class BrowserView : public BrowserWindow,
   base::RepeatingTimer loading_animation_timer_;
 
   views::UnhandledKeyboardEventHandler unhandled_keyboard_event_handler_;
-
-  // Used to measure the loading spinner animation rate.
-  base::TimeTicks last_animation_time_;
 
   // If this flag is set then SetFocusToLocationBar() will set focus to the
   // location bar even if the browser window is not active.

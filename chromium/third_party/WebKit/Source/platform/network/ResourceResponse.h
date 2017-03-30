@@ -36,6 +36,7 @@
 #include "platform/weborigin/KURL.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerResponseType.h"
 #include "wtf/PassOwnPtr.h"
+#include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
 #include "wtf/text/CString.h"
 
@@ -137,12 +138,12 @@ public:
 
     // These functions return parsed values of the corresponding response headers.
     // NaN means that the header was not present or had invalid value.
-    bool cacheControlContainsNoCache();
-    bool cacheControlContainsNoStore();
-    bool cacheControlContainsMustRevalidate();
+    bool cacheControlContainsNoCache() const;
+    bool cacheControlContainsNoStore() const;
+    bool cacheControlContainsMustRevalidate() const;
     bool hasCacheValidatorFields() const;
-    double cacheControlMaxAge();
-    double cacheControlStaleWhileRevalidate();
+    double cacheControlMaxAge() const;
+    double cacheControlStaleWhileRevalidate() const;
     double date() const;
     double age() const;
     double expires() const;
@@ -270,7 +271,7 @@ private:
 
     bool m_isNull : 1;
 
-    CacheControlHeader m_cacheControlHeader;
+    mutable CacheControlHeader m_cacheControlHeader;
 
     mutable bool m_haveParsedAgeHeader : 1;
     mutable bool m_haveParsedDateHeader : 1;

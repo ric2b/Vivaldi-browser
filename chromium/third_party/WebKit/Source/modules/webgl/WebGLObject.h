@@ -27,14 +27,9 @@
 #define WebGLObject_h
 
 #include "bindings/core/v8/ScriptWrappable.h"
-#include "platform/graphics/GraphicsTypes3D.h"
 #include "platform/heap/Handle.h"
+#include "third_party/khronos/GLES2/gl2.h"
 #include "wtf/Assertions.h"
-#include "wtf/RefCounted.h"
-
-namespace blink {
-class WebGraphicsContext3D;
-}
 
 namespace gpu {
 namespace gles2 {

@@ -418,6 +418,25 @@ const char kAllowCircularIncludesFrom_Help[] =
     "    public_deps = [ \":c\" ]\n"
     "  }\n";
 
+const char kArflags[] = "arflags";
+const char kArflags_HelpShort[] =
+    "arflags: [string list] Arguments passed to static_library archiver.";
+const char kArflags_Help[] =
+    "arflags: Arguments passed to static_library archiver.\n"
+    "\n"
+    "  A list of flags passed to the archive/lib command that creates static\n"
+    "  libraries.\n"
+    "\n"
+    "  arflags are NOT pushed to dependents, so applying arflags to source\n"
+    "  sets or any other target type will be a no-op. As with ldflags,\n"
+    "  you could put the arflags in a config and set that as a public or\n"
+    "  \"all dependent\" config, but that will likely not be what you want.\n"
+    "  If you have a chain of static libraries dependent on each other,\n"
+    "  this can cause the flags to propagate up to other static libraries.\n"
+    "  Due to the nature of how arflags are typically used, you will normally\n"
+    "  want to apply them directly on static_library targets themselves.\n"
+    COMMON_ORDERING_HELP;
+
 const char kArgs[] = "args";
 const char kArgs_HelpShort[] =
     "args: [string list] Arguments passed to an action.";
@@ -645,9 +664,16 @@ const char kCompleteStaticLib_Help[] =
     "  In some cases the static library might be the final desired output.\n"
     "  For example, you may be producing a static library for distribution to\n"
     "  third parties. In this case, the static library should include code\n"
-    "  for all dependencies in one complete package. Since GN does not unpack\n"
-    "  static libraries to forward their contents up the dependency chain,\n"
-    "  it is an error for complete static libraries to depend on other static\n"
+    "  for all dependencies in one complete package. However, complete static\n"
+    "  libraries themselves are never linked into other complete static\n"
+    "  libraries. All complete static libraries are for distribution and\n"
+    "  linking them in would cause code duplication in this case. If the\n"
+    "  static library is not for distribution, it should not be complete.\n"
+    "\n"
+    "  GN treats non-complete static libraries as source sets when they are\n"
+    "  linked into complete static libraries. This is done because some tools\n"
+    "  like AR do not handle dependent static libraries properly. This makes\n"
+    "  it easier to write \"alink\" rules.\n"
     "\n"
     "  In rare cases it makes sense to list a header in more than one\n"
     "  target if it could be considered conceptually a member of both.\n"
@@ -737,7 +763,7 @@ const char kConfigs_Help[] =
 
 const char kConsole[] = "console";
 const char kConsole_HelpShort[] =
-    "console [boolean]: Run this action in the console pool.";
+    "console: [boolean] Run this action in the console pool.";
 const char kConsole_Help[] =
     "console: Run this action in the console pool.\n"
     "\n"
@@ -781,7 +807,7 @@ const char kData_Help[] =
     "  generated files both in the \"outputs\" list as well as the \"data\"\n"
     "  list.\n"
     "\n"
-    "  By convention, directories are be listed with a trailing slash:\n"
+    "  By convention, directories are listed with a trailing slash:\n"
     "    data = [ \"test/data/\" ]\n"
     "  However, no verification is done on these so GN doesn't enforce this.\n"
     "  The paths are just rebased and passed along when requested.\n"
@@ -1119,6 +1145,34 @@ const char kOutputExtension_Help[] =
     "    }\n"
     "  }\n";
 
+const char kOutputDir[] = "output_dir";
+const char kOutputDir_HelpShort[] =
+    "output_dir: [directory] Directory to put output file in.";
+const char kOutputDir_Help[] =
+    "output_dir: [directory] Directory to put output file in.\n"
+    "\n"
+    "  For library and executable targets, overrides the directory for the\n"
+    "  final output. This must be in the root_build_dir or a child thereof.\n"
+    "\n"
+    "  This should generally be in the root_out_dir or a subdirectory thereof\n"
+    "  (the root_out_dir will be the same as the root_build_dir for the\n"
+    "  default toolchain, and will be a subdirectory for other toolchains).\n"
+    "  Not putting the output in a subdirectory of root_out_dir can result\n"
+    "  in collisions between different toolchains, so you will need to take\n"
+    "  steps to ensure that your target is only present in one toolchain.\n"
+    "\n"
+    "  Normally the toolchain specifies the output directory for libraries\n"
+    "  and executables (see \"gn help tool\"). You will have to consult that\n"
+    "  for the default location. The default location will be used if\n"
+    "  output_dir is undefined or empty.\n"
+    "\n"
+    "Example\n"
+    "\n"
+    "  shared_library(\"doom_melon\") {\n"
+    "    output_dir = \"$root_out_dir/plugin_libs\"\n"
+    "    ...\n"
+    "  }\n";
+
 const char kOutputName[] = "output_name";
 const char kOutputName_HelpShort[] =
     "output_name: [string] Name for the output file other than the default.";
@@ -1271,6 +1325,19 @@ const char kPrecompiledSource_Help[] =
     "  The source file that goes along with the precompiled_header when\n"
     "  using \"msvc\"-style precompiled headers. It will be implicitly added\n"
     "  to the sources of the target. See \"gn help precompiled_header\".\n";
+
+const char kProductType[] = "product_type";
+const char kProductType_HelpShort[] =
+    "product_type: [string] Product type for Xcode projects.";
+const char kProductType_Help[] =
+    "product_type: Product type for Xcode projects.\n"
+    "\n"
+    "  Correspond to the type of the product of a create_bundle target. Only\n"
+    "  meaningful to Xcode (used as part of the Xcode project generation).\n"
+    "\n"
+    "  When generating Xcode project files, only create_bundle target with\n"
+    "  a non-empty product_type will have a corresponding target in Xcode\n"
+    "  project.\n";
 
 const char kPublic[] = "public";
 const char kPublic_HelpShort[] =
@@ -1610,6 +1677,7 @@ const VariableInfoMap& GetTargetVariables() {
   if (info_map.empty()) {
     INSERT_VARIABLE(AllDependentConfigs)
     INSERT_VARIABLE(AllowCircularIncludesFrom)
+    INSERT_VARIABLE(Arflags)
     INSERT_VARIABLE(Args)
     INSERT_VARIABLE(Asmflags)
     INSERT_VARIABLE(AssertNoDeps)
@@ -1636,12 +1704,14 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(Ldflags)
     INSERT_VARIABLE(Libs)
     INSERT_VARIABLE(LibDirs)
+    INSERT_VARIABLE(OutputDir)
     INSERT_VARIABLE(OutputExtension)
     INSERT_VARIABLE(OutputName)
     INSERT_VARIABLE(OutputPrefixOverride)
     INSERT_VARIABLE(Outputs)
     INSERT_VARIABLE(PrecompiledHeader)
     INSERT_VARIABLE(PrecompiledSource)
+    INSERT_VARIABLE(ProductType)
     INSERT_VARIABLE(Public)
     INSERT_VARIABLE(PublicConfigs)
     INSERT_VARIABLE(PublicDeps)

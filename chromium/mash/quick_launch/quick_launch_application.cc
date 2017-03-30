@@ -9,11 +9,13 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "mash/public/interfaces/launchable.mojom.h"
 #include "mojo/public/c/system/main.h"
-#include "mojo/services/tracing/public/cpp/tracing_impl.h"
-#include "mojo/shell/public/cpp/application_runner.h"
-#include "mojo/shell/public/cpp/connector.h"
-#include "mojo/shell/public/cpp/shell_client.h"
+#include "services/catalog/public/interfaces/catalog.mojom.h"
+#include "services/shell/public/cpp/application_runner.h"
+#include "services/shell/public/cpp/connector.h"
+#include "services/shell/public/cpp/shell_client.h"
+#include "services/tracing/public/cpp/tracing_impl.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
@@ -32,8 +34,11 @@ namespace quick_launch {
 class QuickLaunchUI : public views::WidgetDelegateView,
                       public views::TextfieldController {
  public:
-  QuickLaunchUI(mojo::Connector* connector, catalog::mojom::CatalogPtr catalog)
-      : connector_(connector),
+  QuickLaunchUI(QuickLaunchApplication* quick_launch,
+                shell::Connector* connector,
+                catalog::mojom::CatalogPtr catalog)
+      : quick_launch_(quick_launch),
+        connector_(connector),
         prompt_(new views::Textfield),
         catalog_(std::move(catalog)) {
     set_background(views::Background::CreateStandardPanelBackground());
@@ -42,7 +47,9 @@ class QuickLaunchUI : public views::WidgetDelegateView,
 
     UpdateEntries();
   }
-  ~QuickLaunchUI() override {}
+  ~QuickLaunchUI() override {
+    quick_launch_->RemoveWindow(GetWidget());
+  }
 
  private:
   // Overridden from views::WidgetDelegate:
@@ -70,8 +77,7 @@ class QuickLaunchUI : public views::WidgetDelegateView,
     suggestion_rejected_ = false;
     switch (key_event.key_code()) {
       case ui::VKEY_RETURN: {
-        std::string url = Canonicalize(prompt_->text());
-        connections_.push_back(connector_->Connect(url));
+        Launch(Canonicalize(prompt_->text()), key_event.IsControlDown());
         prompt_->SetText(base::string16());
         UpdateEntries();
       } break;
@@ -99,7 +105,8 @@ class QuickLaunchUI : public views::WidgetDelegateView,
         base::string16 suffix = name;
         base::ReplaceSubstringsAfterOffset(&suffix, 0, new_contents,
                                            base::string16());
-        gfx::Range range(new_contents.size(), name.size());
+        gfx::Range range(static_cast<uint32_t>(new_contents.size()),
+                         static_cast<uint32_t>(name.size()));
         prompt_->SetText(name);
         prompt_->SelectRange(range);
         break;
@@ -117,20 +124,31 @@ class QuickLaunchUI : public views::WidgetDelegateView,
   }
 
   void UpdateEntries() {
-    catalog_->GetEntries(nullptr,
-                         base::Bind(&QuickLaunchUI::OnGotCatalogEntries,
-                                    base::Unretained(this)));
+    catalog_->GetEntriesProvidingClass(
+        "mash:launchable",
+        base::Bind(&QuickLaunchUI::OnGotCatalogEntries,
+                   base::Unretained(this)));
   }
 
-  void OnGotCatalogEntries(
-      mojo::Map<mojo::String, catalog::mojom::CatalogEntryPtr> entries) {
+  void OnGotCatalogEntries(mojo::Array<catalog::mojom::EntryPtr> entries) {
     for (const auto& entry : entries)
-      app_names_.insert(base::UTF8ToUTF16(entry.first.get()));
+      app_names_.insert(base::UTF8ToUTF16(entry->name.get()));
   }
 
-  mojo::Connector* connector_;
+  void Launch(const std::string& name, bool new_window) {
+    std::unique_ptr<shell::Connection> connection = connector_->Connect(name);
+    mojom::LaunchablePtr launchable;
+    connection->GetInterface(&launchable);
+    connections_.push_back(std::move(connection));
+    launchable->Launch(mojom::kWindow,
+                       new_window ? mojom::LaunchMode::MAKE_NEW
+                                  : mojom::LaunchMode::REUSE);
+  }
+
+  QuickLaunchApplication* quick_launch_;
+  shell::Connector* connector_;
   views::Textfield* prompt_;
-  std::vector<std::unique_ptr<mojo::Connection>> connections_;
+  std::vector<std::unique_ptr<shell::Connection>> connections_;
   catalog::mojom::CatalogPtr catalog_;
   std::set<base::string16> app_names_;
   bool suggestion_rejected_ = false;
@@ -141,25 +159,51 @@ class QuickLaunchUI : public views::WidgetDelegateView,
 QuickLaunchApplication::QuickLaunchApplication() {}
 QuickLaunchApplication::~QuickLaunchApplication() {}
 
-void QuickLaunchApplication::Initialize(mojo::Connector* connector,
-                                        const mojo::Identity& identity,
+void QuickLaunchApplication::RemoveWindow(views::Widget* window) {
+  auto it = std::find(windows_.begin(), windows_.end(), window);
+  DCHECK(it != windows_.end());
+  windows_.erase(it);
+  if (windows_.empty())
+    base::MessageLoop::current()->QuitWhenIdle();
+}
+
+void QuickLaunchApplication::Initialize(shell::Connector* connector,
+                                        const shell::Identity& identity,
                                         uint32_t id) {
+  connector_ = connector;
   tracing_.Initialize(connector, identity.name());
 
   aura_init_.reset(new views::AuraInit(connector, "views_mus_resources.pak"));
-  views::WindowManagerConnection::Create(connector);
+  views::WindowManagerConnection::Create(connector, identity);
 
-  catalog::mojom::CatalogPtr catalog;
-  connector->ConnectToInterface("mojo:catalog", &catalog);
-
-  views::Widget* window = views::Widget::CreateWindowWithContextAndBounds(
-      new QuickLaunchUI(connector, std::move(catalog)), nullptr,
-      gfx::Rect(10, 640, 0, 0));
-  window->Show();
+  Launch(mojom::kWindow, mojom::LaunchMode::MAKE_NEW);
 }
 
-bool QuickLaunchApplication::AcceptConnection(mojo::Connection* connection) {
+bool QuickLaunchApplication::AcceptConnection(shell::Connection* connection) {
+  connection->AddInterface<mojom::Launchable>(this);
   return true;
+}
+
+void QuickLaunchApplication::Launch(uint32_t what, mojom::LaunchMode how) {
+  bool reuse = how == mojom::LaunchMode::REUSE ||
+               how == mojom::LaunchMode::DEFAULT;
+  if (reuse && !windows_.empty()) {
+    windows_.back()->Activate();
+    return;
+  }
+  catalog::mojom::CatalogPtr catalog;
+  connector_->ConnectToInterface("mojo:catalog", &catalog);
+
+  views::Widget* window = views::Widget::CreateWindowWithContextAndBounds(
+      new QuickLaunchUI(this, connector_, std::move(catalog)), nullptr,
+      gfx::Rect(10, 640, 0, 0));
+  window->Show();
+  windows_.push_back(window);
+}
+
+void QuickLaunchApplication::Create(shell::Connection* connection,
+                                    mojom::LaunchableRequest request) {
+  bindings_.AddBinding(this, std::move(request));
 }
 
 }  // namespace quick_launch

@@ -31,8 +31,9 @@
 #include "sandbox/win/src/sandbox.h"
 #include "third_party/WebKit/public/web/win/WebFontRendering.h"
 #include "third_party/skia/include/ports/SkTypeface_win.h"
+#include "ui/display/win/dpi.h"
+#include "ui/gfx/font_render_params.h"
 #include "ui/gfx/win/direct_write.h"
-#include "ui/gfx/win/dpi.h"
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -58,18 +59,6 @@ void* g_target_services = 0;
 #endif
 
 namespace content {
-
-namespace {
-
-#if defined(OS_WIN)
-// Windows-only skia sandbox support
-void SkiaPreCacheFont(const LOGFONT& logfont) {
-  ppapi::proxy::PluginGlobals::Get()->PreCacheFontForFlash(
-      reinterpret_cast<const void*>(&logfont));
-}
-#endif
-
-}  // namespace
 
 // Main function for starting the PPAPI plugin process.
 int PpapiPluginMain(const MainFunctionParams& parameters) {
@@ -141,15 +130,16 @@ int PpapiPluginMain(const MainFunctionParams& parameters) {
 #if defined(OS_WIN)
   if (!base::win::IsUser32AndGdi32Available())
     gfx::win::MaybeInitializeDirectWrite();
-  bool use_direct_write = gfx::win::IsDirectWriteEnabled();
-  if (use_direct_write) {
-    InitializeDWriteFontProxy();
-  } else {
-    SkTypeface_SetEnsureLOGFONTAccessibleProc(SkiaPreCacheFont);
-  }
+  InitializeDWriteFontProxy();
 
-  blink::WebFontRendering::setUseDirectWrite(use_direct_write);
-  blink::WebFontRendering::setDeviceScaleFactor(gfx::GetDPIScale());
+  blink::WebFontRendering::setDeviceScaleFactor(display::win::GetDPIScale());
+
+  const gfx::FontRenderParams font_params =
+      gfx::GetFontRenderParams(gfx::FontRenderParamsQuery(), nullptr);
+  blink::WebFontRendering::setAntialiasedTextEnabled(font_params.antialiasing);
+  blink::WebFontRendering::setLCDTextEnabled(
+      font_params.subpixel_rendering !=
+      gfx::FontRenderParams::SUBPIXEL_RENDERING_NONE);
 #endif
 
   main_message_loop.Run();

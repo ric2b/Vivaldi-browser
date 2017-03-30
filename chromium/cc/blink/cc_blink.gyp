@@ -26,7 +26,7 @@
       # This sources list is duplicated in //cc/blink/BUILD.gn
       'sources': [
         'cc_blink_export.h',
-        'context_provider_web_context.h',
+        #'context_provider_web_context.h',
         'scrollbar_impl.cc',
         'scrollbar_impl.h',
         'web_compositor_support_impl.cc',

@@ -39,7 +39,6 @@
 #include "platform/AsyncMethodRunner.h"
 #include "platform/weborigin/KURL.h"
 #include "public/platform/WebSourceBufferClient.h"
-#include "wtf/RefCounted.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
@@ -57,14 +56,14 @@ class VideoTrackList;
 class WebSourceBuffer;
 
 class SourceBuffer final
-    : public RefCountedGarbageCollectedEventTargetWithInlineData<SourceBuffer>
+    : public EventTargetWithInlineData
     , public ActiveScriptWrappable
     , public ActiveDOMObject
     , public FileReaderLoaderClient
     , public WebSourceBufferClient {
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(SourceBuffer);
     USING_GARBAGE_COLLECTED_MIXIN(SourceBuffer);
     DEFINE_WRAPPERTYPEINFO();
+    USING_PRE_FINALIZER(SourceBuffer, dispose);
 public:
     static SourceBuffer* create(PassOwnPtr<WebSourceBuffer>, MediaSource*, GenericEventQueue*);
     static const AtomicString& segmentsKeyword();
@@ -79,8 +78,8 @@ public:
     TimeRanges* buffered(ExceptionState&) const;
     double timestampOffset() const;
     void setTimestampOffset(double, ExceptionState&);
-    void appendBuffer(PassRefPtr<DOMArrayBuffer> data, ExceptionState&);
-    void appendBuffer(PassRefPtr<DOMArrayBufferView> data, ExceptionState&);
+    void appendBuffer(DOMArrayBuffer* data, ExceptionState&);
+    void appendBuffer(DOMArrayBufferView* data, ExceptionState&);
     void appendStream(Stream*, ExceptionState&);
     void appendStream(Stream*, unsigned long long maxSize, ExceptionState&);
     void abort(ExceptionState&);
@@ -111,14 +110,13 @@ public:
     const AtomicString& interfaceName() const override;
 
     // WebSourceBufferClient interface
-    std::vector<WebMediaPlayer::TrackId> initializationSegmentReceived(const std::vector<MediaTrackInfo>&) override;
+    WebVector<WebMediaPlayer::TrackId> initializationSegmentReceived(const WebVector<MediaTrackInfo>&) override;
 
-    // Oilpan: eagerly release owned m_webSourceBuffer
-    EAGERLY_FINALIZE();
     DECLARE_VIRTUAL_TRACE();
 
 private:
     SourceBuffer(PassOwnPtr<WebSourceBuffer>, MediaSource*, GenericEventQueue*);
+    void dispose();
 
     bool isRemoved() const;
     void scheduleEvent(const AtomicString& eventName);
@@ -135,6 +133,8 @@ private:
     void appendStreamAsyncPart();
     void appendStreamDone(bool success);
     void clearAppendStreamState();
+
+    void removeMediaTracks();
 
     // FileReaderLoaderClient interface
     void didStartLoading() override;

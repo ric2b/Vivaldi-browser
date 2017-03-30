@@ -16,14 +16,18 @@
 #include "base/containers/hash_tables.h"
 #include "base/gtest_prod_util.h"
 #include "base/id_map.h"
+#include "base/memory/ptr_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/simple_test_clock.h"
 #include "base/time/clock.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
-#include "chrome/browser/geolocation/geolocation_permission_context_factory.h"
+#include "chrome/browser/geolocation/geolocation_permission_context.h"
 #include "chrome/browser/infobars/infobar_service.h"
+#include "chrome/browser/permissions/permission_context_base.h"
+#include "chrome/browser/permissions/permission_manager.h"
 #include "chrome/browser/permissions/permission_request_id.h"
 #include "chrome/browser/ui/website_settings/permission_bubble_request.h"
 #include "chrome/common/chrome_switches.h"
@@ -162,9 +166,9 @@ class GeolocationPermissionContextTests
   // owned by the browser context
   GeolocationPermissionContext* geolocation_permission_context_;
   ClosedInfoBarTracker closed_infobar_tracker_;
-  std::vector<scoped_ptr<content::WebContents>> extra_tabs_;
+  std::vector<std::unique_ptr<content::WebContents>> extra_tabs_;
 #if !BUILDFLAG(ANDROID_JAVA_UI)
-  std::vector<scoped_ptr<MockPermissionBubbleFactory>>
+  std::vector<std::unique_ptr<MockPermissionBubbleFactory>>
       mock_permission_bubble_factories_;
 #endif
 
@@ -252,7 +256,7 @@ void GeolocationPermissionContextTests::AddNewTab(const GURL& url) {
   SetupBubbleManager(new_tab);
 #endif
 
-  extra_tabs_.push_back(make_scoped_ptr(new_tab));
+  extra_tabs_.push_back(base::WrapUnique(new_tab));
 }
 
 void GeolocationPermissionContextTests::CheckTabContentsState(
@@ -280,13 +284,14 @@ void GeolocationPermissionContextTests::SetUp() {
 #endif
   InfoBarService::CreateForWebContents(web_contents());
   TabSpecificContentSettings::CreateForWebContents(web_contents());
-  geolocation_permission_context_ =
-      GeolocationPermissionContextFactory::GetForProfile(profile());
+  geolocation_permission_context_ = static_cast<GeolocationPermissionContext*>(
+      PermissionManager::Get(profile())->GetPermissionContext(
+          content::PermissionType::GEOLOCATION));
 #if BUILDFLAG(ANDROID_JAVA_UI)
   static_cast<GeolocationPermissionContextAndroid*>(
       geolocation_permission_context_)
       ->SetLocationSettingsForTesting(
-          scoped_ptr<LocationSettings>(new MockLocationSettings()));
+          std::unique_ptr<LocationSettings>(new MockLocationSettings()));
   MockLocationSettings::SetLocationStatus(true, true);
 #else
   SetupBubbleManager(web_contents());
@@ -310,7 +315,7 @@ void GeolocationPermissionContextTests::SetupBubbleManager(
       PermissionBubbleManager::FromWebContents(web_contents);
 
   // Create a MockPermissionBubbleFactory for the PermissionBubbleManager.
-  mock_permission_bubble_factories_.push_back(make_scoped_ptr(
+  mock_permission_bubble_factories_.push_back(base::WrapUnique(
       new MockPermissionBubbleFactory(false, permission_bubble_manager)));
 
   // Prepare the PermissionBubbleManager to display a mock bubble.
@@ -387,7 +392,9 @@ base::string16 GeolocationPermissionContextTests::GetPromptText() {
 #if !BUILDFLAG(ANDROID_JAVA_UI)
   PermissionBubbleManager* manager =
       PermissionBubbleManager::FromWebContents(web_contents());
-  return manager->requests_.front()->GetMessageText();
+  PermissionBubbleRequest* request = manager->requests_.front();
+  return base::ASCIIToUTF16(request->GetOrigin().spec()) +
+         request->GetMessageTextFragment();
 #else
   infobars::InfoBar* infobar = infobar_service()->infobar_at(0);
   ConfirmInfoBarDelegate* infobar_delegate =
@@ -854,7 +861,7 @@ TEST_F(GeolocationPermissionContextTests, LastUsageAudited) {
 
   HostContentSettingsMap* map =
       HostContentSettingsMapFactory::GetForProfile(profile());
-  map->SetPrefClockForTesting(scoped_ptr<base::Clock>(test_clock));
+  map->SetPrefClockForTesting(std::unique_ptr<base::Clock>(test_clock));
 
   // The permission shouldn't have been used yet.
   EXPECT_EQ(map->GetLastUsage(requesting_frame.GetOrigin(),
@@ -892,7 +899,7 @@ TEST_F(GeolocationPermissionContextTests, LastUsageAuditedMultipleFrames) {
 
   HostContentSettingsMap* map =
       HostContentSettingsMapFactory::GetForProfile(profile());
-  map->SetPrefClockForTesting(scoped_ptr<base::Clock>(test_clock));
+  map->SetPrefClockForTesting(std::unique_ptr<base::Clock>(test_clock));
 
   GURL requesting_frame_0("https://www.example.com/geolocation");
   GURL requesting_frame_1("https://www.example-2.com/geolocation");

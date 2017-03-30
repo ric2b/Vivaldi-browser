@@ -85,134 +85,61 @@ struct TextStyle {
   ui::ResourceBundle::FontStyle font;
   ui::NativeTheme::ColorId colors[OmniboxResultView::NUM_STATES];
   gfx::BaselineStyle baseline;
-} const kTextStyles[] = {
-    // 1  ANSWER_TEXT
-    {ui::ResourceBundle::LargeFont,
-     {NativeTheme::kColorId_ResultsTableNormalText,
-      NativeTheme::kColorId_ResultsTableHoveredText,
-      NativeTheme::kColorId_ResultsTableSelectedText},
-     gfx::NORMAL_BASELINE},
-    // 2  HEADLINE_TEXT
-    {ui::ResourceBundle::LargeFont,
-     {NativeTheme::kColorId_ResultsTableNormalHeadline,
-      NativeTheme::kColorId_ResultsTableHoveredHeadline,
-      NativeTheme::kColorId_ResultsTableSelectedHeadline},
-     gfx::NORMAL_BASELINE},
-    // 3  TOP_ALIGNED_TEXT
-    {ui::ResourceBundle::LargeFont,
-     {NativeTheme::kColorId_ResultsTableNormalDimmedText,
-      NativeTheme::kColorId_ResultsTableHoveredDimmedText,
-      NativeTheme::kColorId_ResultsTableSelectedDimmedText},
-     gfx::SUPERIOR},
-    // 4  DESCRIPTION_TEXT
-    {ui::ResourceBundle::BaseFont,
-     {NativeTheme::kColorId_ResultsTableNormalDimmedText,
-      NativeTheme::kColorId_ResultsTableHoveredDimmedText,
-      NativeTheme::kColorId_ResultsTableSelectedDimmedText},
-     gfx::NORMAL_BASELINE},
-    // 5  DESCRIPTION_TEXT_NEGATIVE
-    {ui::ResourceBundle::LargeFont,
-     {NativeTheme::kColorId_ResultsTableNegativeText,
-      NativeTheme::kColorId_ResultsTableNegativeHoveredText,
-      NativeTheme::kColorId_ResultsTableNegativeSelectedText},
-     gfx::INFERIOR},
-    // 6  DESCRIPTION_TEXT_POSITIVE
-    {ui::ResourceBundle::LargeFont,
-     {NativeTheme::kColorId_ResultsTablePositiveText,
-      NativeTheme::kColorId_ResultsTablePositiveHoveredText,
-      NativeTheme::kColorId_ResultsTablePositiveSelectedText},
-     gfx::INFERIOR},
-    // 7  MORE_INFO_TEXT
-    {ui::ResourceBundle::BaseFont,
-     {NativeTheme::kColorId_ResultsTableNormalDimmedText,
-      NativeTheme::kColorId_ResultsTableHoveredDimmedText,
-      NativeTheme::kColorId_ResultsTableSelectedDimmedText},
-     gfx::INFERIOR},
-    // 8  SUGGESTION_TEXT
-    {ui::ResourceBundle::BaseFont,
-     {NativeTheme::kColorId_ResultsTableNormalText,
-      NativeTheme::kColorId_ResultsTableHoveredText,
-      NativeTheme::kColorId_ResultsTableSelectedText},
-     gfx::NORMAL_BASELINE},
-    // 9  SUGGESTION_TEXT_POSITIVE
-    {ui::ResourceBundle::BaseFont,
-     {NativeTheme::kColorId_ResultsTablePositiveText,
-      NativeTheme::kColorId_ResultsTablePositiveHoveredText,
-      NativeTheme::kColorId_ResultsTablePositiveSelectedText},
-     gfx::NORMAL_BASELINE},
-    // 10 SUGGESTION_TEXT_NEGATIVE
-    {ui::ResourceBundle::BaseFont,
-     {NativeTheme::kColorId_ResultsTableNegativeText,
-      NativeTheme::kColorId_ResultsTableNegativeHoveredText,
-      NativeTheme::kColorId_ResultsTableNegativeSelectedText},
-     gfx::NORMAL_BASELINE},
-    // 11 SUGGESTION_LINK_COLOR
-    {ui::ResourceBundle::BaseFont,
-     {NativeTheme::kColorId_ResultsTableNormalUrl,
-      NativeTheme::kColorId_ResultsTableHoveredUrl,
-      NativeTheme::kColorId_ResultsTableSelectedUrl},
-     gfx::NORMAL_BASELINE},
-    // 12 STATUS_TEXT
-    {ui::ResourceBundle::LargeFont,
-     {NativeTheme::kColorId_ResultsTableNormalDimmedText,
-      NativeTheme::kColorId_ResultsTableHoveredDimmedText,
-      NativeTheme::kColorId_ResultsTableSelectedDimmedText},
-     gfx::INFERIOR},
-    // 13 PERSONALIZED_SUGGESTION_TEXT
-    {ui::ResourceBundle::BaseFont,
-     {NativeTheme::kColorId_ResultsTableNormalText,
-      NativeTheme::kColorId_ResultsTableHoveredText,
-      NativeTheme::kColorId_ResultsTableSelectedText},
-     gfx::NORMAL_BASELINE},
-    // 14 IMMERSIVE_DESCRIPTION_TEXT (deprecated)
-    {ui::ResourceBundle::BaseFont,
-     {NativeTheme::kColorId_ResultsTableNormalText,
-      NativeTheme::kColorId_ResultsTableHoveredText,
-      NativeTheme::kColorId_ResultsTableSelectedText},
-     gfx::NORMAL_BASELINE},
-    // 15 DATE_TEXT (deprecated)
-    {ui::ResourceBundle::BaseFont,
-     {NativeTheme::kColorId_ResultsTableNormalText,
-      NativeTheme::kColorId_ResultsTableHoveredText,
-      NativeTheme::kColorId_ResultsTableSelectedText},
-     gfx::NORMAL_BASELINE},
-    // 16 PREVIEW_TEXT (deprecated)
-    {ui::ResourceBundle::BaseFont,
-     {NativeTheme::kColorId_ResultsTableNormalText,
-      NativeTheme::kColorId_ResultsTableHoveredText,
-      NativeTheme::kColorId_ResultsTableSelectedText},
-     gfx::NORMAL_BASELINE},
-    // 17 ANSWER_TEXT_MEDIUM
-    {ui::ResourceBundle::BaseFont,
-     {NativeTheme::kColorId_ResultsTableNormalText,
-      NativeTheme::kColorId_ResultsTableHoveredText,
-      NativeTheme::kColorId_ResultsTableSelectedText},
-     gfx::NORMAL_BASELINE},
-    // 18 ANSWER_TEXT_LARGE
-    {ui::ResourceBundle::LargeFont,
-     {NativeTheme::kColorId_ResultsTableNormalText,
-      NativeTheme::kColorId_ResultsTableHoveredText,
-      NativeTheme::kColorId_ResultsTableSelectedText},
-     gfx::NORMAL_BASELINE},
-    // 19 SUGGESTION_SECONDARY_TEXT_SMALL
-    {ui::ResourceBundle::BaseFont,
-     {NativeTheme::kColorId_ResultsTableNormalDimmedText,
-      NativeTheme::kColorId_ResultsTableHoveredDimmedText,
-      NativeTheme::kColorId_ResultsTableSelectedDimmedText},
-     gfx::NORMAL_BASELINE},
-    // 20 SUGGESTION_SECONDARY_TEXT_MEDIUM
-    {ui::ResourceBundle::BaseFont,
-     {NativeTheme::kColorId_ResultsTableNormalDimmedText,
-      NativeTheme::kColorId_ResultsTableHoveredDimmedText,
-      NativeTheme::kColorId_ResultsTableSelectedDimmedText},
-     gfx::NORMAL_BASELINE},
 };
 
-const TextStyle& GetTextStyle(int type) {
-  if (type < 1 || static_cast<size_t>(type) > arraysize(kTextStyles))
-    type = 8;
-  // Subtract one because the types are one based (not zero based).
-  return kTextStyles[type - 1];
+TextStyle GetTextStyle(int type) {
+  switch (type) {
+    case SuggestionAnswer::TOP_ALIGNED:
+      return {ui::ResourceBundle::LargeFont,
+              {NativeTheme::kColorId_ResultsTableNormalDimmedText,
+               NativeTheme::kColorId_ResultsTableHoveredDimmedText,
+               NativeTheme::kColorId_ResultsTableSelectedDimmedText},
+              gfx::SUPERIOR};
+    case SuggestionAnswer::DESCRIPTION_NEGATIVE:
+      return {ui::ResourceBundle::LargeFont,
+              {NativeTheme::kColorId_ResultsTableNegativeText,
+               NativeTheme::kColorId_ResultsTableNegativeHoveredText,
+               NativeTheme::kColorId_ResultsTableNegativeSelectedText},
+              gfx::INFERIOR};
+    case SuggestionAnswer::DESCRIPTION_POSITIVE:
+      return {ui::ResourceBundle::LargeFont,
+              {NativeTheme::kColorId_ResultsTablePositiveText,
+               NativeTheme::kColorId_ResultsTablePositiveHoveredText,
+               NativeTheme::kColorId_ResultsTablePositiveSelectedText},
+              gfx::INFERIOR};
+    case SuggestionAnswer::PERSONALIZED_SUGGESTION:
+      return {ui::ResourceBundle::BaseFont,
+              {NativeTheme::kColorId_ResultsTableNormalText,
+               NativeTheme::kColorId_ResultsTableHoveredText,
+               NativeTheme::kColorId_ResultsTableSelectedText},
+              gfx::NORMAL_BASELINE};
+    case SuggestionAnswer::ANSWER_TEXT_MEDIUM:
+      return {ui::ResourceBundle::BaseFont,
+              {NativeTheme::kColorId_ResultsTableNormalText,
+               NativeTheme::kColorId_ResultsTableHoveredText,
+               NativeTheme::kColorId_ResultsTableSelectedText},
+              gfx::NORMAL_BASELINE};
+    case SuggestionAnswer::ANSWER_TEXT_LARGE:
+      return {ui::ResourceBundle::LargeFont,
+              {NativeTheme::kColorId_ResultsTableNormalText,
+               NativeTheme::kColorId_ResultsTableHoveredText,
+               NativeTheme::kColorId_ResultsTableSelectedText},
+              gfx::NORMAL_BASELINE};
+    case SuggestionAnswer::SUGGESTION_SECONDARY_TEXT_SMALL:  // Fall through.
+    case SuggestionAnswer::SUGGESTION_SECONDARY_TEXT_MEDIUM:
+      return {ui::ResourceBundle::BaseFont,
+              {NativeTheme::kColorId_ResultsTableNormalDimmedText,
+               NativeTheme::kColorId_ResultsTableHoveredDimmedText,
+               NativeTheme::kColorId_ResultsTableSelectedDimmedText},
+              gfx::NORMAL_BASELINE};
+    case SuggestionAnswer::SUGGESTION:  // Fall through.
+    default:
+      return {ui::ResourceBundle::BaseFont,
+              {NativeTheme::kColorId_ResultsTableNormalText,
+               NativeTheme::kColorId_ResultsTableHoveredText,
+               NativeTheme::kColorId_ResultsTableSelectedText},
+              gfx::NORMAL_BASELINE};
+  }
 }
 
 }  // namespace
@@ -416,9 +343,12 @@ void OmniboxResultView::PaintMatch(const AutocompleteMatch& match,
             answer_image_,
             0, 0, answer_image_.width(), answer_image_.height(),
             GetMirroredXInView(x), y, answer_icon_size, answer_icon_size, true);
-        // See TODO in Layout().
-        x += answer_icon_size +
-             GetLayoutConstant(ICON_LABEL_VIEW_TRAILING_PADDING);
+        // TODO(dschuyler): Perhaps this should be based on the font size
+        // instead of hardcoded to 2 dp (e.g. by adding a space in an
+        // appropriate font to the beginning of the description, then reducing
+        // the additional padding here to zero).
+        const int kAnswerIconToTextPadding = 2;
+        x += answer_icon_size + kAnswerIconToTextPadding;
       }
     } else {
       x = DrawRenderText(match, separator_rendertext_.get(), SEPARATOR, canvas,
@@ -697,11 +627,19 @@ void OmniboxResultView::Layout() {
   const int end_x = width() - EndMargin() - horizontal_padding;
 
   const gfx::ImageSkia icon = GetIcon();
-  icon_bounds_.SetRect(
-      start_x + ((icon.width() == default_icon_size_) ?
-          0 : GetLayoutConstant(ICON_LABEL_VIEW_TRAILING_PADDING)),
-      (GetContentLineHeight() - icon.height()) / 2,
-      icon.width(), icon.height());
+  // Pre-MD, normal icons are 19 px wide, while extension icons are 16 px wide.
+  // The code in IconLabelBubbleView::Layout() positions these icons in the
+  // omnibox using ICON_LABEL_VIEW_TRAILING_PADDING, so we use that here as well
+  // so the icons will line up.
+  //
+  // Technically we don't need the IsModeMaterial() check here, but it will make
+  // it easier to see that all this code is dead once we switch to MD.
+  int icon_x = start_x;
+  if (!ui::MaterialDesignController::IsModeMaterial() &&
+      (icon.width() != default_icon_size_))
+    icon_x += GetLayoutConstant(ICON_LABEL_VIEW_TRAILING_PADDING);
+  icon_bounds_.SetRect(icon_x, (GetContentLineHeight() - icon.height()) / 2,
+                       icon.width(), icon.height());
 
   const int text_x = start_x + default_icon_size_ + horizontal_padding;
   int text_width = end_x - text_x;
@@ -784,10 +722,10 @@ void OmniboxResultView::AnimationProgressed(const gfx::Animation* animation) {
 }
 
 int OmniboxResultView::GetAnswerLineHeight() const {
-  // GetTextStyle(1) is the largest font used and so defines the boundary that
+  // ANSWER_TEXT_LARGE is the largest font used and so defines the boundary that
   // all the other answer styles fit within.
   return ui::ResourceBundle::GetSharedInstance()
-      .GetFontList(GetTextStyle(1).font)
+      .GetFontList(GetTextStyle(SuggestionAnswer::ANSWER_TEXT_LARGE).font)
       .GetHeight();
 }
 

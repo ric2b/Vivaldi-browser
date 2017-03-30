@@ -4,8 +4,9 @@
 
 #include "ui/events/blink/input_handler_proxy.h"
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/test/histogram_tester.h"
 #include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/trees/swap_promise_monitor.h"
@@ -117,9 +118,9 @@ class MockInputHandler : public cc::InputHandler {
   MOCK_METHOD1(ScrollEnd, void(cc::ScrollState*));
   MOCK_METHOD0(FlingScrollBegin, cc::InputHandler::ScrollStatus());
 
-  scoped_ptr<cc::SwapPromiseMonitor> CreateLatencyInfoSwapPromiseMonitor(
+  std::unique_ptr<cc::SwapPromiseMonitor> CreateLatencyInfoSwapPromiseMonitor(
       ui::LatencyInfo* latency) override {
-    return scoped_ptr<cc::SwapPromiseMonitor>();
+    return std::unique_ptr<cc::SwapPromiseMonitor>();
   }
 
   cc::ScrollElasticityHelper* CreateScrollElasticityHelper() override {
@@ -220,6 +221,7 @@ class MockInputHandlerProxyClient
                     const gfx::Vector2dF& latest_overscroll_delta,
                     const gfx::Vector2dF& current_fling_velocity,
                     const gfx::PointF& causal_event_viewport_point));
+  void DidStartFlinging() override {}
   void DidStopFlinging() override {}
   void DidAnimateForInput() override {}
 
@@ -265,9 +267,9 @@ class TestInputHandlerProxy : public InputHandlerProxy {
   TestInputHandlerProxy(cc::InputHandler* input_handler,
                         InputHandlerProxyClient* client)
       : InputHandlerProxy(input_handler, client) {}
-  void RecordMainThreadScrollingReasonsForTest(blink::WebInputEvent::Type type,
+  void RecordMainThreadScrollingReasonsForTest(blink::WebGestureDevice device,
                                                uint32_t reasons) {
-    RecordMainThreadScrollingReasons(type, reasons);
+    RecordMainThreadScrollingReasons(device, reasons);
   }
 };
 
@@ -397,7 +399,7 @@ class InputHandlerProxyTest
   testing::StrictMock<MockInputHandler> mock_input_handler_;
   testing::StrictMock<MockSynchronousInputHandler>
       mock_synchronous_input_handler_;
-  scoped_ptr<TestInputHandlerProxy> input_handler_;
+  std::unique_ptr<TestInputHandlerProxy> input_handler_;
   testing::StrictMock<MockInputHandlerProxyClient> mock_client_;
   WebGestureEvent gesture_;
   InputHandlerProxy::EventDisposition expected_disposition_;
@@ -2846,7 +2848,7 @@ TEST(SynchronousInputHandlerProxyTest, SetOffset) {
 
 TEST_P(InputHandlerProxyTest, MainThreadScrollingMouseWheelHistograms) {
   input_handler_->RecordMainThreadScrollingReasonsForTest(
-      WebInputEvent::MouseWheel,
+      blink::WebGestureDeviceTouchpad,
       cc::MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects |
           cc::MainThreadScrollingReason::kThreadedScrollingDisabled |
           cc::MainThreadScrollingReason::kPageOverlay |

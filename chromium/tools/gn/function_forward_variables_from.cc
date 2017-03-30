@@ -54,6 +54,18 @@ void ForwardValuesFromList(Scope* source,
         return;
       }
 
+      // Don't allow clobbering existing values.
+      const Value* existing_value = dest->GetValue(storage_key);
+      if (existing_value) {
+        *err = Err(cur, "Clobbering existing value.",
+            "The current scope already defines a value \"" +
+             cur.string_value() + "\".\nforward_variables_from() won't clobber "
+             "existing values. If you want to\nmerge lists, you'll need to "
+             "do this explicitly.");
+        err->AppendSubErr(Err(*existing_value, "value being clobbered."));
+        return;
+      }
+
       // Keep the origin information from the original value. The normal
       // usage is for this to be used in a template, and if there's an error,
       // the user expects to see the line where they set the variable
@@ -153,7 +165,7 @@ Value RunForwardVariablesFrom(Scope* scope,
                               const FunctionCallNode* function,
                               const ListNode* args_list,
                               Err* err) {
-  const std::vector<const ParseNode*>& args_vector = args_list->contents();
+  const auto& args_vector = args_list->contents();
   if (args_vector.size() != 2 && args_vector.size() != 3) {
     *err = Err(function, "Wrong number of arguments.",
                "Expecting two or three arguments.");
@@ -166,7 +178,7 @@ Value RunForwardVariablesFrom(Scope* scope,
   // to execute the ParseNode and get the value out if it's not an identifer.
   const IdentifierNode* identifier = args_vector[0]->AsIdentifier();
   if (!identifier) {
-    *err = Err(args_vector[0], "Expected an identifier for the scope.");
+    *err = Err(args_vector[0].get(), "Expected an identifier for the scope.");
     return Value();
   }
 

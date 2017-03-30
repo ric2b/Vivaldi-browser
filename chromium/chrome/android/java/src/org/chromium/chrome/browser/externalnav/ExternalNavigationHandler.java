@@ -49,6 +49,7 @@ public class ExternalNavigationHandler {
 
     /**
      * Result types for checking if we should override URL loading.
+     * NOTE: this enum is used in UMA, do not reorder values. Changes should be append only.
      */
     public enum OverrideUrlLoadingResult {
         /* We should override the URL loading and launch an intent. */
@@ -384,6 +385,7 @@ public class ExternalNavigationHandler {
                         params.shouldCloseContentsOnOverrideUrlLoadingAndLaunchIntent());
                 return OverrideUrlLoadingResult.OVERRIDE_WITH_ASYNC_ACTION;
             } else {
+
                 // Some third-party app launched Chrome with an intent, and the URL got redirected.
                 // The user has explicitly chosen Chrome over other intent handlers, so stay in
                 // Chrome unless there was a new intent handler after redirection or Chrome cannot
@@ -399,6 +401,7 @@ public class ExternalNavigationHandler {
                 if (params.hasUserGesture()) {
                     IntentWithGesturesHandler.getInstance().onNewIntentWithGesture(intent);
                 }
+
                 if (mDelegate.startActivityIfNeeded(intent)) {
                     return OverrideUrlLoadingResult.OVERRIDE_WITH_EXTERNAL_INTENT;
                 } else {

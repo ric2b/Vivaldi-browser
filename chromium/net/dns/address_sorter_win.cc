@@ -14,8 +14,8 @@
 #include "base/macros.h"
 #include "base/memory/free_deleter.h"
 #include "base/threading/worker_pool.h"
-#include "base/win/windows_version.h"
 #include "net/base/address_list.h"
+#include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/winsock_init.h"
 
@@ -60,8 +60,8 @@ class AddressSorterWin : public AddressSorter {
       for (size_t i = 0; i < list.size(); ++i) {
         IPEndPoint ipe = list[i];
         // Addresses must be sockaddr_in6.
-        if (ipe.GetFamily() == ADDRESS_FAMILY_IPV4) {
-          ipe = IPEndPoint(ConvertIPv4NumberToIPv6Number(ipe.address().bytes()),
+        if (ipe.address().IsIPv4()) {
+          ipe = IPEndPoint(ConvertIPv4ToIPv4MappedIPv6(ipe.address()),
                            ipe.port());
         }
 
@@ -117,8 +117,8 @@ class AddressSorterWin : public AddressSorter {
           DCHECK(result) << "Unable to roundtrip between IPEndPoint and "
                          << "SOCKET_ADDRESS!";
           // Unmap V4MAPPED IPv6 addresses so that Happy Eyeballs works.
-          if (IsIPv4Mapped(ipe.address().bytes())) {
-            ipe = IPEndPoint(ConvertIPv4MappedToIPv4(ipe.address().bytes()),
+          if (ipe.address().IsIPv4MappedIPv6()) {
+            ipe = IPEndPoint(ConvertIPv4MappedIPv6ToIPv4(ipe.address()),
                              ipe.port());
           }
           list.push_back(ipe);
@@ -129,8 +129,8 @@ class AddressSorterWin : public AddressSorter {
 
     const CallbackType callback_;
     const size_t buffer_size_;
-    scoped_ptr<SOCKET_ADDRESS_LIST, base::FreeDeleter> input_buffer_;
-    scoped_ptr<SOCKET_ADDRESS_LIST, base::FreeDeleter> output_buffer_;
+    std::unique_ptr<SOCKET_ADDRESS_LIST, base::FreeDeleter> input_buffer_;
+    std::unique_ptr<SOCKET_ADDRESS_LIST, base::FreeDeleter> output_buffer_;
     bool success_;
 
     DISALLOW_COPY_AND_ASSIGN(Job);
@@ -139,64 +139,11 @@ class AddressSorterWin : public AddressSorter {
   DISALLOW_COPY_AND_ASSIGN(AddressSorterWin);
 };
 
-// Merges |list_ipv4| and |list_ipv6| before passing it to |callback|, but
-// only if |success| is true.
-void MergeResults(const AddressSorter::CallbackType& callback,
-                  const AddressList& list_ipv4,
-                  bool success,
-                  const AddressList& list_ipv6) {
-  if (!success) {
-    callback.Run(false, AddressList());
-    return;
-  }
-  AddressList list;
-  list.insert(list.end(), list_ipv6.begin(), list_ipv6.end());
-  list.insert(list.end(), list_ipv4.begin(), list_ipv4.end());
-  callback.Run(true, list);
-}
-
-// Wrapper for AddressSorterWin which does not sort IPv4 or IPv4-mapped
-// addresses but always puts them at the end of the list. Needed because the
-// SIO_ADDRESS_LIST_SORT does not support IPv4 addresses on Windows XP.
-class AddressSorterWinXP : public AddressSorter {
- public:
-  AddressSorterWinXP() {}
-  ~AddressSorterWinXP() override {}
-
-  // AddressSorter:
-  void Sort(const AddressList& list,
-            const CallbackType& callback) const override {
-    AddressList list_ipv4;
-    AddressList list_ipv6;
-    for (size_t i = 0; i < list.size(); ++i) {
-      const IPEndPoint& ipe = list[i];
-      if (ipe.GetFamily() == ADDRESS_FAMILY_IPV4) {
-        list_ipv4.push_back(ipe);
-      } else {
-        list_ipv6.push_back(ipe);
-      }
-    }
-    if (!list_ipv6.empty()) {
-      sorter_.Sort(list_ipv6, base::Bind(&MergeResults, callback, list_ipv4));
-    } else {
-      NOTREACHED() << "Should not be called with IPv4-only addresses.";
-      callback.Run(true, list);
-    }
-  }
-
- private:
-  AddressSorterWin sorter_;
-
-  DISALLOW_COPY_AND_ASSIGN(AddressSorterWinXP);
-};
-
 }  // namespace
 
 // static
-scoped_ptr<AddressSorter> AddressSorter::CreateAddressSorter() {
-  if (base::win::GetVersion() < base::win::VERSION_VISTA)
-    return scoped_ptr<AddressSorter>(new AddressSorterWinXP());
-  return scoped_ptr<AddressSorter>(new AddressSorterWin());
+std::unique_ptr<AddressSorter> AddressSorter::CreateAddressSorter() {
+  return std::unique_ptr<AddressSorter>(new AddressSorterWin());
 }
 
 }  // namespace net

@@ -83,7 +83,7 @@ WebInspector.Main.prototype = {
                 var settings = JSON.parse(window.decodeURI(settingsParam));
                 for (var key in settings)
                     prefs[key] = settings[key];
-            } catch(e) {
+            } catch (e) {
                 // Ignore malformed settings.
             }
         }
@@ -105,23 +105,20 @@ WebInspector.Main.prototype = {
         Runtime.experiments.register("applyCustomStylesheet", "Allow custom UI themes");
         Runtime.experiments.register("blackboxJSFramesOnTimeline", "Blackbox JavaScript frames on Timeline", true);
         Runtime.experiments.register("colorContrastRatio", "Contrast ratio line in color picker", true);
-        Runtime.experiments.register("cpuThrottling", "CPU throttling", true);
+        Runtime.experiments.register("continueToFirstInvocation", "Continue to first invocation");
+        Runtime.experiments.register("cpuThrottling", "CPU throttling");
         Runtime.experiments.register("emptySourceMapAutoStepping", "Empty sourcemap auto-stepping");
         Runtime.experiments.register("inputEventsOnTimelineOverview", "Input events on Timeline overview", true);
         Runtime.experiments.register("layersPanel", "Layers panel");
         Runtime.experiments.register("layoutEditor", "Layout editor", true);
         Runtime.experiments.register("inspectTooltip", "Dark inspect element tooltip");
         Runtime.experiments.register("liveSASS", "Live SASS", true);
-        Runtime.experiments.register("multipleTimelineViews", "Multiple main views on Timeline", true);
-        Runtime.experiments.register("networkRequestHeadersFilterInDetailsView", "Network request headers filter in details view", true);
-        Runtime.experiments.register("networkRequestsOnTimeline", "Network requests on Timeline", true);
         Runtime.experiments.register("privateScriptInspection", "Private script inspection");
-        Runtime.experiments.register("reducedIndentation", "Reduced indentation in Elements DOM tree");
         Runtime.experiments.register("requestBlocking", "Request blocking", true);
-        Runtime.experiments.register("resolveVariableNames", "Resolve variable names", true);
+        Runtime.experiments.register("resolveVariableNames", "Resolve variable names");
         Runtime.experiments.register("timelineShowAllEvents", "Show all events on Timeline", true);
-        Runtime.experiments.register("timelineLatencyInfo", "Show input latency events on the Timeline", true);
         Runtime.experiments.register("securityPanel", "Security panel");
+        Runtime.experiments.register("sourceDiff", "Source diff");
         Runtime.experiments.register("timelineFlowEvents", "Timeline flow events", true);
         Runtime.experiments.register("timelineInvalidationTracking", "Timeline invalidation tracking", true);
         Runtime.experiments.register("timelineRecordingPerspectives", "Timeline recording perspectives UI");
@@ -142,7 +139,8 @@ WebInspector.Main.prototype = {
 
         Runtime.experiments.setDefaultExperiments([
             "inspectTooltip",
-            "securityPanel"
+            "securityPanel",
+            "resolveVariableNames"
         ]);
     },
 
@@ -185,6 +183,7 @@ WebInspector.Main.prototype = {
 
         WebInspector.fileManager = new WebInspector.FileManager();
         WebInspector.workspace = new WebInspector.Workspace();
+        WebInspector.formatterWorkerPool = new WebInspector.FormatterWorkerPool();
         WebInspector.fileSystemMapping = new WebInspector.FileSystemMapping();
 
         var fileSystemWorkspaceBinding = new WebInspector.FileSystemWorkspaceBinding(WebInspector.isolatedFileSystemManager, WebInspector.workspace);
@@ -236,7 +235,9 @@ WebInspector.Main.prototype = {
         app.presentUI(document);
 
         var toggleSearchNodeAction = WebInspector.actionRegistry.action("elements.toggle-element-search");
-        InspectorFrontendHost.events.addEventListener(InspectorFrontendHostAPI.Events.EnterInspectElementMode, toggleSearchNodeAction.execute.bind(toggleSearchNodeAction), this);
+        // TODO: we should not access actions from other modules.
+        if (toggleSearchNodeAction)
+            InspectorFrontendHost.events.addEventListener(InspectorFrontendHostAPI.Events.EnterInspectElementMode, toggleSearchNodeAction.execute.bind(toggleSearchNodeAction), this);
         WebInspector.inspectorView.createToolbars();
         InspectorFrontendHost.loadCompleted();
 
@@ -448,7 +449,8 @@ WebInspector.Main.prototype = {
         section.addKey(advancedSearchShortcut, WebInspector.UIString("Search across all sources"));
 
         var inspectElementModeShortcuts = WebInspector.shortcutRegistry.shortcutDescriptorsForAction("elements.toggle-element-search");
-        section.addKey(inspectElementModeShortcuts[0], WebInspector.UIString("Select node to inspect"));
+        if (inspectElementModeShortcuts.length)
+            section.addKey(inspectElementModeShortcuts[0], WebInspector.UIString("Select node to inspect"));
 
         var openResourceShortcut = WebInspector.KeyboardShortcut.makeDescriptor("p", WebInspector.KeyboardShortcut.Modifiers.CtrlOrMeta);
         section.addKey(openResourceShortcut, WebInspector.UIString("Go to source"));
@@ -592,7 +594,7 @@ WebInspector.Main.prototype = {
             }
         }
 
-        this._mainConnection.runAfterPendingDispatches(invokeMethod);
+        this._mainConnection.deprecatedRunAfterPendingDispatches(invokeMethod);
     }
 }
 
@@ -885,6 +887,9 @@ WebInspector.Main.MainMenuItem.prototype = {
  */
 WebInspector.NetworkPanelIndicator = function()
 {
+    // TODO: we should not access network from other modules.
+    if (!WebInspector.inspectorView.hasPanel("network"))
+        return;
     var manager = WebInspector.multitargetNetworkManager;
     manager.addEventListener(WebInspector.MultitargetNetworkManager.Events.ConditionsChanged, updateVisibility);
     var blockedURLsSetting = WebInspector.moduleSetting("blockedURLs");
@@ -1052,16 +1057,26 @@ WebInspector.BackendSettingsSync = function()
     this._autoAttachSetting.addChangeListener(this._update, this);
     this._disableJavascriptSetting = WebInspector.settings.moduleSetting("javaScriptDisabled");
     this._disableJavascriptSetting.addChangeListener(this._update, this);
+    this._blockedEventsWarningSetting = WebInspector.settings.moduleSetting("blockedEventsWarningEnabled");
+    this._blockedEventsWarningSetting.addChangeListener(this._update, this);
     WebInspector.targetManager.observeTargets(this, WebInspector.Target.Type.Page);
 }
 
 WebInspector.BackendSettingsSync.prototype = {
+    /**
+     * @param {!WebInspector.Target} target
+     */
+    _updateTarget: function(target)
+    {
+        var blockedEventsWarningThresholdSeconds = 0.1;
+        target.pageAgent().setBlockedEventsWarningThreshold(this._blockedEventsWarningSetting.get() ? blockedEventsWarningThresholdSeconds : 0);
+        target.pageAgent().setAutoAttachToCreatedPages(this._autoAttachSetting.get());
+        target.emulationAgent().setScriptExecutionDisabled(this._disableJavascriptSetting.get());
+    },
+
     _update: function()
     {
-        for (var target of WebInspector.targetManager.targets(WebInspector.Target.Type.Page)) {
-            target.pageAgent().setAutoAttachToCreatedPages(this._autoAttachSetting.get());
-            target.emulationAgent().setScriptExecutionDisabled(this._disableJavascriptSetting.get());
-        }
+        WebInspector.targetManager.targets(WebInspector.Target.Type.Page).forEach(this._updateTarget, this);
     },
 
     /**
@@ -1070,8 +1085,7 @@ WebInspector.BackendSettingsSync.prototype = {
      */
     targetAdded: function(target)
     {
-        target.pageAgent().setAutoAttachToCreatedPages(this._autoAttachSetting.get());
-        target.emulationAgent().setScriptExecutionDisabled(this._disableJavascriptSetting.get());
+        this._updateTarget(target);
         target.renderingAgent().setShowViewportSizeOnResize(true);
     },
 

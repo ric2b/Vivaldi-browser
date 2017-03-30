@@ -5,10 +5,12 @@
 #include "chrome/browser/devtools/device/adb/adb_client_socket.h"
 
 #include <stddef.h>
+
 #include <utility>
 
 #include "base/bind.h"
 #include "base/compiler_specific.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -81,7 +83,7 @@ class AdbTransportSocket : public AdbClientSocket {
   bool CheckNetResultOrDie(int result) {
     if (result >= 0)
       return true;
-    callback_.Run(result, make_scoped_ptr<net::StreamSocket>(NULL));
+    callback_.Run(result, base::WrapUnique<net::StreamSocket>(NULL));
     delete this;
     return false;
   }
@@ -181,7 +183,7 @@ void AdbClientSocket::Connect(const net::CompletionCallback& callback) {
 
   net::AddressList address_list =
       net::AddressList::CreateFromIPAddress(ip_address, port_);
-  socket_.reset(new net::TCPClientSocket(address_list, NULL,
+  socket_.reset(new net::TCPClientSocket(address_list, NULL, NULL,
                                          net::NetLog::Source()));
   int result = socket_->Connect(callback);
   if (result != net::ERR_IO_PENDING)

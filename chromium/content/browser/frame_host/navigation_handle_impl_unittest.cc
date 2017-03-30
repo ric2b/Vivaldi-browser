@@ -64,9 +64,9 @@ class NavigationHandleImplTest : public RenderViewHostImplTestHarness {
 
   void SetUp() override {
     RenderViewHostImplTestHarness::SetUp();
-    test_handle_ =
-        NavigationHandleImpl::Create(GURL(), main_test_rfh()->frame_tree_node(),
-                                     false, false, base::TimeTicks::Now(), 0);
+    test_handle_ = NavigationHandleImpl::Create(
+        GURL(), main_test_rfh()->frame_tree_node(), true, false, false,
+        base::TimeTicks::Now(), 0);
   }
 
   void TearDown() override {
@@ -102,7 +102,7 @@ class NavigationHandleImplTest : public RenderViewHostImplTestHarness {
     // It's safe to use base::Unretained since the NavigationHandle is owned by
     // the NavigationHandleImplTest.
     test_handle_->WillStartRequest(
-        false, Referrer(), false, ui::PAGE_TRANSITION_LINK, false,
+        "GET", Referrer(), false, ui::PAGE_TRANSITION_LINK, false,
         base::Bind(&NavigationHandleImplTest::UpdateThrottleCheckResult,
                    base::Unretained(this)));
   }
@@ -119,7 +119,7 @@ class NavigationHandleImplTest : public RenderViewHostImplTestHarness {
     // It's safe to use base::Unretained since the NavigationHandle is owned by
     // the NavigationHandleImplTest.
     test_handle_->WillRedirectRequest(
-        GURL(), false, GURL(), false, scoped_refptr<net::HttpResponseHeaders>(),
+        GURL(), "GET", GURL(), false, scoped_refptr<net::HttpResponseHeaders>(),
         base::Bind(&NavigationHandleImplTest::UpdateThrottleCheckResult,
                    base::Unretained(this)));
   }
@@ -160,7 +160,7 @@ class NavigationHandleImplTest : public RenderViewHostImplTestHarness {
     TestNavigationThrottle* test_throttle =
         new TestNavigationThrottle(test_handle(), result);
     test_handle()->RegisterThrottleForTesting(
-        scoped_ptr<TestNavigationThrottle>(test_throttle));
+        std::unique_ptr<TestNavigationThrottle>(test_throttle));
     return test_throttle;
   }
 
@@ -173,7 +173,7 @@ class NavigationHandleImplTest : public RenderViewHostImplTestHarness {
     was_callback_called_ = true;
   }
 
-  scoped_ptr<NavigationHandleImpl> test_handle_;
+  std::unique_ptr<NavigationHandleImpl> test_handle_;
   bool was_callback_called_;
   NavigationThrottle::ThrottleCheckResult callback_result_;
 };

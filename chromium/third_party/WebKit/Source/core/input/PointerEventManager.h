@@ -8,6 +8,7 @@
 #include "core/CoreExport.h"
 #include "core/events/PointerEvent.h"
 #include "core/events/PointerEventFactory.h"
+#include "core/input/TouchEventManager.h"
 #include "public/platform/WebInputEventResult.h"
 #include "public/platform/WebPointerProperties.h"
 #include "wtf/Allocator.h"
@@ -15,13 +16,14 @@
 
 namespace blink {
 
+class LocalFrame;
 
 // This class takes care of dispatching all pointer events and keeps track of
 // properties of active pointer events.
 class CORE_EXPORT PointerEventManager {
     DISALLOW_NEW();
 public:
-    PointerEventManager();
+    explicit PointerEventManager(LocalFrame*);
     ~PointerEventManager();
     DECLARE_TRACE();
 
@@ -29,20 +31,12 @@ public:
         Node*, const AtomicString& type,
         int clickCount, const PlatformMouseEvent&,
         Node* relatedTarget,
-        AbstractView*,
         Node* lastNodeUnderMouse);
 
-    // Returns whether the event is consumed or not
-    WebInputEventResult sendTouchPointerEvent(
-        EventTarget*,
-        const PlatformTouchPoint&, PlatformEvent::Modifiers,
-        const double width, const double height,
-        const double clientX, const double clientY);
+    WebInputEventResult handleTouchEvents(
+        const PlatformTouchEvent&);
 
-    void sendTouchCancelPointerEvent(EventTarget*,
-        const PlatformTouchPoint&);
-
-    // Sends node transition events mouseout/leave/over/enter to the
+    // Sends boundary events mouseout/leave/over/enter to the
     // corresponding targets. This function sends pointerout/leave/over/enter
     // only when isFrameBoundaryTransition is true which indicates the
     // transition is over the document boundary and not only the elements border
@@ -50,26 +44,30 @@ public:
     // then the event is a compatibility event like those created by touch
     // and in that case the corresponding pointer events will be handled by
     // sendTouchPointerEvent for example and there is no need to send pointer
-    // transition events. Note that normal mouse events (e.g. mousemove/down/up)
-    // and their corresponding transition events will be handled altogether by
+    // boundary events. Note that normal mouse events (e.g. mousemove/down/up)
+    // and their corresponding boundary events will be handled altogether by
     // sendMousePointerEvent function.
-    void sendMouseAndPossiblyPointerNodeTransitionEvents(
+    void sendMouseAndPossiblyPointerBoundaryEvents(
         Node* exitedNode,
         Node* enteredNode,
         const PlatformMouseEvent&,
-        AbstractView*, bool isFrameBoundaryTransition);
+        bool isFrameBoundaryTransition);
 
-    // Clear all the existing ids.
+    // Resets the internal state of this object.
     void clear();
 
     void elementRemoved(EventTarget*);
     void setPointerCapture(int, EventTarget*);
     void releasePointerCapture(int, EventTarget*);
-    bool isActive(const int);
-    WebPointerProperties::PointerType getPointerEventType(const int);
+    bool isActive(const int) const;
+    WebPointerProperties::PointerType getPointerEventType(const int) const;
+
+    // Returns whether there is any touch on the screen.
+    bool isAnyTouchActive() const;
 
 private:
-    typedef HeapHashMap<int, Member<EventTarget>> PointerCapturingMap;
+    typedef HeapHashMap<int, Member<EventTarget>, WTF::IntHash<int>,
+        WTF::UnsignedWithZeroKeyHashTraits<int>> PointerCapturingMap;
     class EventTargetAttributes {
         DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
     public:
@@ -88,7 +86,24 @@ private:
         , hasRecievedOverEvent(hasRecievedOverEvent) {}
     };
 
-    void sendNodeTransitionEvents(
+    // Inhibits firing of touch-type PointerEvents until unblocked by unblockTouchPointers(). Also
+    // sends pointercancels for existing touch-type PointerEvents.
+    // See: www.w3.org/TR/pointerevents/#declaring-candidate-regions-for-default-touch-behaviors
+    void blockTouchPointers();
+
+    // Enables firing of touch-type PointerEvents after they were inhibited by blockTouchPointers().
+    void unblockTouchPointers();
+
+    // Sends touch pointer events and sets consumed bits in TouchInfo array
+    // based on the return value of pointer event handlers.
+    void dispatchTouchPointerEvents(
+        const PlatformTouchEvent&,
+        HeapVector<TouchEventManager::TouchInfo>&);
+
+    // Returns whether the event is consumed or not.
+    WebInputEventResult sendTouchPointerEvent(EventTarget*, PointerEvent*);
+
+    void sendBoundaryEvents(
         EventTarget* exitedTarget,
         EventTarget* enteredTarget,
         PointerEvent*,
@@ -97,9 +112,11 @@ private:
     void setNodeUnderPointer(PointerEvent*,
         EventTarget*, bool sendEvent = true);
 
-    // Returns whether the pointer capture is changed. In this case this
-    // function will take care of transition events and setNodeUnderPointer
-    // should not send transition events.
+    // Processes the assignment of |m_pointerCaptureTarget| from |m_pendingPointerCaptureTarget|
+    // and sends the got/lostpointercapture events, as per the spec:
+    // https://w3c.github.io/pointerevents/#process-pending-pointer-capture
+    // Returns whether the pointer capture is changed. When pointer capture is changed,
+    // this function will take care of boundary events.
     bool processPendingPointerCapture(
         PointerEvent*,
         EventTarget*,
@@ -107,8 +124,8 @@ private:
         bool sendMouseEvent = false);
 
     // Processes the capture state of a pointer, updates node under
-    // pointer, and sends corresponding transition events for pointer if
-    // setPointerPosition is true. It also sends corresponding transition events
+    // pointer, and sends corresponding boundary events for pointer if
+    // setPointerPosition is true. It also sends corresponding boundary events
     // for mouse if sendMouseEvent is true.
     void processCaptureAndPositionOfPointerEvent(
         PointerEvent*,
@@ -130,20 +147,33 @@ private:
         bool checkForListener = false);
     void releasePointerCapture(int);
 
+    // NOTE: If adding a new field to this class please ensure that it is
+    // cleared in |PointerEventManager::clear()|.
+
+    const Member<LocalFrame> m_frame;
+
     // Prevents firing mousedown, mousemove & mouseup in-between a canceled pointerdown and next pointerup/pointercancel.
     // See "PREVENT MOUSE EVENT flag" in the spec:
     //   https://w3c.github.io/pointerevents/#compatibility-mapping-with-mouse-events
-    bool m_preventMouseEventForPointerTypeMouse;
+    bool m_preventMouseEventForPointerType[static_cast<size_t>(WebPointerProperties::PointerType::LastEntry) + 1];
+
+    // Set upon sending a pointercancel for touch, prevents PE dispatches for touches until
+    // all touch-points become inactive.
+    bool m_inCanceledStateForPointerTypeTouch;
 
     // Note that this map keeps track of node under pointer with id=1 as well
     // which might be different than m_nodeUnderMouse in EventHandler. That one
     // keeps track of any compatibility mouse event positions but this map for
     // the pointer with id=1 is only taking care of true mouse related events.
-    HeapHashMap<int, EventTargetAttributes> m_nodeUnderPointer;
+    using NodeUnderPointerMap = HeapHashMap<int, EventTargetAttributes,
+        WTF::IntHash<int>, WTF::UnsignedWithZeroKeyHashTraits<int>>;
+    NodeUnderPointerMap m_nodeUnderPointer;
 
     PointerCapturingMap m_pointerCaptureTarget;
     PointerCapturingMap m_pendingPointerCaptureTarget;
     PointerEventFactory m_pointerEventFactory;
+    TouchEventManager m_touchEventManager;
+
 };
 
 } // namespace blink

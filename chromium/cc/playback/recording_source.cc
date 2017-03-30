@@ -9,7 +9,6 @@
 #include <algorithm>
 
 #include "base/numerics/safe_math.h"
-#include "cc/base/histograms.h"
 #include "cc/base/region.h"
 #include "cc/layers/content_layer_client.h"
 #include "cc/playback/display_item_list.h"
@@ -25,15 +24,6 @@ const bool kDefaultClearCanvasSetting = false;
 #else
 const bool kDefaultClearCanvasSetting = true;
 #endif
-
-// Note that the name of the historgram doesn't match the class name
-// (DisplayListRecordingSource vs RecordingSource). This is due to the fact that
-// the histograms are being monitored under this particular name.
-// TODO(vmpstr): Update the histograms.
-DEFINE_SCOPED_UMA_HISTOGRAM_AREA_TIMER(
-    ScopedRecordingSourceUpdateTimer,
-    "Compositing.%s.DisplayListRecordingSource.UpdateUs",
-    "Compositing.%s.DisplayListRecordingSource.UpdateInvalidatedAreaPerMs");
 
 }  // namespace
 
@@ -114,6 +104,7 @@ void RecordingSource::UpdateInvalidationForNewViewport(
 }
 
 void RecordingSource::FinishDisplayItemListUpdate() {
+  TRACE_EVENT0("cc", "RecordingSource::FinishDisplayItemListUpdate");
   DetermineIfSolidColor();
   display_list_->EmitTraceSnapshot();
   if (generate_discardable_images_metadata_)
@@ -133,14 +124,10 @@ bool RecordingSource::UpdateAndExpandInvalidation(
     const gfx::Size& layer_size,
     int frame_number,
     RecordingMode recording_mode) {
-  ScopedRecordingSourceUpdateTimer timer;
   bool updated = false;
 
-  // TODO(chrishtr): delete this conditional once synchronized paint launches.
-  if (size_ != layer_size) {
+  if (size_ != layer_size)
     size_ = layer_size;
-    updated = true;
-  }
 
   invalidation_.Swap(invalidation);
   invalidation_.Clear();
@@ -152,12 +139,6 @@ bool RecordingSource::UpdateAndExpandInvalidation(
     recorded_viewport_ = new_recorded_viewport;
     updated = true;
   }
-
-  // Count the area that is being invalidated.
-  Region recorded_invalidation(*invalidation);
-  recorded_invalidation.Intersect(recorded_viewport_);
-  for (Region::Iterator it(recorded_invalidation); it.has_rect(); it.next())
-    timer.AddArea(it.rect().size().GetCheckedArea());
 
   if (!updated && !invalidation->Intersects(recorded_viewport_))
     return false;
@@ -247,6 +228,8 @@ void RecordingSource::DetermineIfSolidColor() {
   if (!display_list_->ShouldBeAnalyzedForSolidColor())
     return;
 
+  TRACE_EVENT1("cc", "RecordingSource::DetermineIfSolidColor", "opcount",
+               display_list_->ApproximateOpCount());
   gfx::Size layer_size = GetSize();
   skia::AnalysisCanvas canvas(layer_size.width(), layer_size.height());
   display_list_->Raster(&canvas, nullptr, gfx::Rect(), 1.f);

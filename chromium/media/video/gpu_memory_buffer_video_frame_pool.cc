@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <list>
+#include <memory>
 #include <utility>
 
 #include "base/barrier_closure.h"
@@ -75,7 +76,7 @@ class GpuMemoryBufferVideoFramePool::PoolImpl
   // Resource to represent a plane.
   struct PlaneResource {
     gfx::Size size;
-    scoped_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer;
+    std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer;
     unsigned texture_id = 0u;
     unsigned image_id = 0u;
     gpu::Mailbox mailbox;
@@ -540,7 +541,7 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::
         const scoped_refptr<VideoFrame>& video_frame,
         FrameResources* frame_resources,
         const FrameReadyCB& frame_ready_cb) {
-  scoped_ptr<GpuVideoAcceleratorFactories::ScopedGLContextLock> lock(
+  std::unique_ptr<GpuVideoAcceleratorFactories::ScopedGLContextLock> lock(
       gpu_factories_->GetGLContextLock());
   if (!lock) {
     frame_ready_cb.Run(video_frame);
@@ -589,43 +590,38 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::
   for (size_t i = 0; i < num_planes; i += planes_per_copy)
     mailbox_holders[i].sync_token = sync_token;
 
-  scoped_refptr<VideoFrame> frame;
 
   auto release_mailbox_callback = BindToCurrentLoop(
       base::Bind(&PoolImpl::MailboxHoldersReleased, this, frame_resources));
 
   // Create the VideoFrame backed by native textures.
   gfx::Size visible_size = video_frame->visible_rect().size();
-  switch (output_format_) {
-    case PIXEL_FORMAT_I420:
-      frame = VideoFrame::WrapYUV420NativeTextures(
-          mailbox_holders[VideoFrame::kYPlane],
-          mailbox_holders[VideoFrame::kUPlane],
-          mailbox_holders[VideoFrame::kVPlane], release_mailbox_callback,
-          coded_size, gfx::Rect(visible_size), video_frame->natural_size(),
-          video_frame->timestamp());
-      if (frame &&
-          video_frame->metadata()->IsTrue(VideoFrameMetadata::ALLOW_OVERLAY))
-        frame->metadata()->SetBoolean(VideoFrameMetadata::ALLOW_OVERLAY, true);
-      break;
-    case PIXEL_FORMAT_NV12:
-    case PIXEL_FORMAT_UYVY:
-      frame = VideoFrame::WrapNativeTexture(
-          output_format_, mailbox_holders[VideoFrame::kYPlane],
-          release_mailbox_callback, coded_size, gfx::Rect(visible_size),
-          video_frame->natural_size(), video_frame->timestamp());
-      if (frame)
-        frame->metadata()->SetBoolean(VideoFrameMetadata::ALLOW_OVERLAY, true);
-      break;
-    default:
-      NOTREACHED();
-  }
+  scoped_refptr<VideoFrame> frame = VideoFrame::WrapNativeTextures(
+      output_format_, mailbox_holders, release_mailbox_callback, coded_size,
+      gfx::Rect(visible_size), video_frame->natural_size(),
+      video_frame->timestamp());
 
   if (!frame) {
     release_mailbox_callback.Run(gpu::SyncToken());
     frame_ready_cb.Run(video_frame);
     return;
   }
+
+  bool allow_overlay = false;
+  switch (output_format_) {
+    case PIXEL_FORMAT_I420:
+      allow_overlay =
+          video_frame->metadata()->IsTrue(VideoFrameMetadata::ALLOW_OVERLAY);
+      break;
+    case PIXEL_FORMAT_NV12:
+    case PIXEL_FORMAT_UYVY:
+      allow_overlay = true;
+      break;
+    default:
+      break;
+  }
+  frame->metadata()->SetBoolean(VideoFrameMetadata::ALLOW_OVERLAY,
+                                allow_overlay);
 
   base::TimeTicks render_time;
   if (video_frame->metadata()->GetTimeTicks(VideoFrameMetadata::REFERENCE_TIME,
@@ -677,7 +673,7 @@ GpuMemoryBufferVideoFramePool::PoolImpl::GetOrCreateFrameResources(
   }
 
   // Create the resources.
-  scoped_ptr<GpuVideoAcceleratorFactories::ScopedGLContextLock> lock(
+  std::unique_ptr<GpuVideoAcceleratorFactories::ScopedGLContextLock> lock(
       gpu_factories_->GetGLContextLock());
   if (!lock)
     return nullptr;
@@ -719,7 +715,7 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::DeleteFrameResources(
   // make sure that we won't execute this callback (use a weak pointer to
   // the old context).
 
-  scoped_ptr<GpuVideoAcceleratorFactories::ScopedGLContextLock> lock(
+  std::unique_ptr<GpuVideoAcceleratorFactories::ScopedGLContextLock> lock(
       gpu_factories->GetGLContextLock());
   if (!lock)
     return;

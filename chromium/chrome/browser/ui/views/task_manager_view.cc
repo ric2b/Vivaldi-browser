@@ -47,7 +47,7 @@
 #endif
 
 #if defined(OS_WIN)
-#include "chrome/browser/shell_integration.h"
+#include "chrome/browser/shell_integration_win.h"
 #include "ui/base/win/shell.h"
 #include "ui/views/win/hwnd_util.h"
 #endif
@@ -155,7 +155,7 @@ class TaskManagerView : public views::ButtonListener,
   ~TaskManagerView() override;
 
   // Shows the Task Manager window, or re-activates an existing one.
-  static void Show(Browser* browser);
+  static ui::TableModel* Show(Browser* browser);
 
   // Hides the Task Manager if it is showing.
   static void Hide();
@@ -179,7 +179,7 @@ class TaskManagerView : public views::ButtonListener,
   std::string GetWindowName() const override;
   int GetDialogButtons() const override;
   void WindowClosing() override;
-  bool UseNewStyleForThisDialog() const override;
+  bool ShouldUseCustomFrame() const override;
 
   // views::TableViewObserver:
   void OnSelectionChanged() override;
@@ -425,11 +425,11 @@ bool TaskManagerView::AcceleratorPressed(const ui::Accelerator& accelerator) {
 }
 
 // static
-void TaskManagerView::Show(Browser* browser) {
+ui::TableModel* TaskManagerView::Show(Browser* browser) {
   if (instance_) {
     // If there's a Task manager window open already, just activate it.
     instance_->GetWidget()->Activate();
-    return;
+    return instance_->table_model_.get();
   }
   instance_ = new TaskManagerView();
   gfx::NativeWindow window =
@@ -451,9 +451,10 @@ void TaskManagerView::Show(Browser* browser) {
   // no parent is specified, the app id will default to that of the initial
   // process.
   if (browser) {
-    ui::win::SetAppIdForWindow(shell_integration::GetChromiumModelIdForProfile(
-                                   browser->profile()->GetPath()),
-                               views::HWNDForWidget(instance_->GetWidget()));
+    ui::win::SetAppIdForWindow(
+        shell_integration::win::GetChromiumModelIdForProfile(
+            browser->profile()->GetPath()),
+        views::HWNDForWidget(instance_->GetWidget()));
   }
 #endif
   instance_->GetWidget()->Show();
@@ -468,6 +469,7 @@ void TaskManagerView::Show(Browser* browser) {
   ash::SetShelfItemDetailsForDialogWindow(
       native_window, IDR_ASH_SHELF_ICON_TASK_MANAGER, native_window->title());
 #endif
+  return instance_->table_model_.get();
 }
 
 // static
@@ -527,7 +529,7 @@ void TaskManagerView::WindowClosing() {
   task_manager_->OnWindowClosed();
 }
 
-bool TaskManagerView::UseNewStyleForThisDialog() const {
+bool TaskManagerView::ShouldUseCustomFrame() const {
   return false;
 }
 
@@ -543,7 +545,8 @@ void TaskManagerView::OnSelectionChanged() {
     }
   }
   kill_button_->SetEnabled(!selection_contains_browser_process &&
-                           !selection.empty());
+                           !selection.empty() &&
+                           TaskManager::IsEndProcessEnabled());
 }
 
 void TaskManagerView::OnDoubleClick() {
@@ -619,13 +622,12 @@ bool TaskManagerView::GetSavedAlwaysOnTopState(bool* always_on_top) const {
 namespace chrome {
 
 // Declared in browser_dialogs.h so others don't need to depend on our header.
-void ShowTaskManager(Browser* browser) {
+ui::TableModel* ShowTaskManager(Browser* browser) {
   if (switches::NewTaskManagerEnabled()) {
-    task_management::NewTaskManagerView::Show(browser);
-    return;
+    return task_management::NewTaskManagerView::Show(browser);
   }
 
-  TaskManagerView::Show(browser);
+  return TaskManagerView::Show(browser);
 }
 
 void HideTaskManager() {

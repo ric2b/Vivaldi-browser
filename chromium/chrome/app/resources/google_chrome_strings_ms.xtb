@@ -66,10 +66,16 @@ Teruskan juga log masuk akan menggabungkan maklumat Chrome seperti penanda halam
 <translation id="2997147809295888909">Chrome mengesahkan bahawa <ph name="ISSUER" /> mengeluarkan sijil tapak web ini. Pelayan tidak membekalkan sebarang maklumat Ketelusan Sijil.</translation>
 <translation id="3037838751736561277">Google Chrome dalam mod latar belakang.</translation>
 <translation id="3047079729301751317">Memutuskan sambungan <ph name="USERNAME" /> akan mengosongkan sejarah anda, penanda halaman, tetapan dan data Chrome lain yang tersimpan pada peranti ini. Data yang disimpan dalam Akaun Google anda tidak akan dikosongkan dan boleh diurus pada <ph name="GOOGLE_DASHBOARD_LINK" />Papan Pemuka Google<ph name="END_GOOGLE_DASHBOARD_LINK" />.</translation>
+<translation id="3065168410429928842">Tab Chrome</translation>
 <translation id="3080151273017101988">Terus menjalankan apl latar belakang apabila Google Chrome ditutup</translation>
 <translation id="3089968997497233615">Terdapat versi Google Chrome baharu yang lebih selamat tersedia.</translation>
 <translation id="3149510190863420837">Chrome Apps</translation>
-<translation id="3197823471738295152">Peranti anda telah dikemas kini.</translation>
+<translation id="3251381707915721925">Untuk menetapkan tapak web yang boleh dilihat oleh <ph name="NEW_PROFILE_NAME" />, anda boleh mengkonfigurasi sekatan dan tetapan dengan melawati <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. Jika anda tidak menukar tetapan lalainya, <ph name="NEW_PROFILE_NAME" /> boleh menyemak imbas apa sahaja di web.
+
+Untuk menghalang <ph name="NEW_PROFILE_NAME" /> daripada mengakses akaun anda, pastikan profil anda dikunci apabila tidak menggunakan Chrome. Untuk melakukannya, klik pada nama profil anda di penjuru atas sebelah kanan penyemak imbas dan pilih "Keluar dan kunci kanak-kanak".
+<ph name="BEGIN_LINK_2" />Ketahui lebih lanjut<ph name="END_LINK_2" />
+
+Sila semak e-mel anda di <ph name="ACCOUNT_EMAIL" /> untuk arahan lanjut.</translation>
 <translation id="3282568296779691940">Log masuk ke Chrome</translation>
 <translation id="3311976847535831054">Komputer ini tidak akan menerima kemas kini Google Chrome 32 bit lagi. Sila tingkatkan kepada Google Chrome 64 bit.</translation>
 <translation id="3360895254066713204">Chrome Helper</translation>
@@ -205,7 +211,6 @@ Teruskan juga log masuk akan menggabungkan maklumat Chrome seperti penanda halam
 <translation id="7808348361785373670">Alih keluar daripada Chrome...</translation>
 <translation id="7825851276765848807">Gagal pemasangan disebabkan ralat yang tidak dinyatakan. Sila muat turun semula Google Chrome.</translation>
 <translation id="7890208801193284374">Jika anda berkongsi komputer, rakan dan keluarga boleh menyemak imbas secara berasingan dan menyediakan Chrome sebagaimana yang mereka mahukan.</translation>
-<translation id="8000275528373650868">Google Chrome memerlukan Windows Vista atau Windows XP dengan SP2 atau lebih tinggi.</translation>
 <translation id="8005540215158006229">Chrome hampir sedia.</translation>
 <translation id="8008534537613507642">Pasang Semula Chrome</translation>
 <translation id="8030318113982266900">Mengemas kini peranti anda kepada saluran <ph name="CHANNEL_NAME" />...</translation>
@@ -227,6 +232,7 @@ Teruskan juga log masuk akan menggabungkan maklumat Chrome seperti penanda halam
 <translation id="8556340503434111824">Terdapat versi baharu Google Chrome yang tersedia, dan ia lebih pantas daripada biasa.</translation>
 <translation id="8568392309447938879">Anda perlu melog masuk ke Chrome untuk menggunakan apl. Ini membenarkan Chrome menyegerakkan apl, penanda halaman, sejarah, kata laluan dan tetapan anda yang lain pada semua peranti.</translation>
 <translation id="8614913330719544658">Google Chrome tidak responsif. Lancarkan semula sekarang?</translation>
+<translation id="8667808506758191620"><ph name="DEVICE_TYPE" /> anda sudah dikemas kini.</translation>
 <translation id="8669527147644353129">Pembantu Google Chrome</translation>
 <translation id="8679801911857917785">Sambungan turut mengawal halaman yang ditunjukkan apabila anda memulakan Chrome.</translation>
 <translation id="870251953148363156">Kemas kini &amp;Google Chrome</translation>
@@ -235,6 +241,7 @@ Teruskan juga log masuk akan menggabungkan maklumat Chrome seperti penanda halam
 <translation id="8851136666856101339">utama</translation>
 <translation id="8862326446509486874">Anda tidak mempunyai hak wajar untuk pemasangan peringkat sistem. Cuba jalankan pemasang semula sebagai Pentadbir.</translation>
 <translation id="9026991721384951619">OS Chrome tidak dapat menyegerakkan data anda kerana butiran log masuk akaun anda sudah lapuk.</translation>
+<translation id="9067395829937117663">Google Chrome memerlukan Windows 7 atau lebih tinggi.</translation>
 <translation id="9102715433345326100">Fail ini bersifat hasad dan Chrome telah menyekatnya.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Amaran:<ph name="END_BOLD" /> Google Chrome tidak dapat menghalang sambungan daripada merekodkan sejarah penyemakan imbas anda. Untuk melumpuhkan sambungan ini dalam mod inkognito, nyahpilih pilihan ini.</translation>
 <translation id="911206726377975832">Padamkan juga data menyemak imbas anda?</translation>

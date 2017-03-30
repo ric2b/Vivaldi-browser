@@ -22,7 +22,7 @@
 #include "build/build_config.h"
 #include "cc/test/test_context_provider.h"
 #include "cc/test/test_web_graphics_context_3d.h"
-#include "content/browser/compositor/buffer_queue.h"
+#include "components/display_compositor/buffer_queue.h"
 #include "content/browser/gpu/browser_gpu_memory_buffer_manager.h"
 #include "content/browser/renderer_host/media/video_capture_controller.h"
 #include "media/base/video_frame.h"
@@ -109,24 +109,9 @@ class VideoCaptureBufferPoolTest
         const gfx::Size& size,
         gfx::BufferFormat format,
         gfx::BufferUsage usage,
-        int32_t surface_id) override {
+        gpu::SurfaceHandle surface_handle) override {
       return base::WrapUnique(new MockGpuMemoryBuffer(size));
     }
-  };
-  class MockBufferQueue : public BufferQueue {
-   public:
-    MockBufferQueue(scoped_refptr<cc::ContextProvider> context_provider,
-                    BrowserGpuMemoryBufferManager* gpu_memory_buffer_manager,
-                    unsigned int target,
-                    unsigned int internalformat)
-        : BufferQueue(context_provider,
-                      target,
-                      internalformat,
-                      nullptr,
-                      gpu_memory_buffer_manager,
-                      1) {}
-    MOCK_METHOD4(CopyBufferDamage,
-                 void(int, int, const gfx::Rect&, const gfx::Rect&));
   };
 #endif
 
@@ -154,14 +139,7 @@ class VideoCaptureBufferPoolTest
 
 #if !defined(OS_ANDROID)
   void SetUp() override {
-    scoped_refptr<cc::TestContextProvider> context_provider =
-        cc::TestContextProvider::Create(cc::TestWebGraphicsContext3D::Create());
-    context_provider->BindToCurrentThread();
     gpu_memory_buffer_manager_.reset(new StubBrowserGpuMemoryBufferManager);
-    output_surface_.reset(new MockBufferQueue(context_provider,
-                                              gpu_memory_buffer_manager_.get(),
-                                              GL_TEXTURE_2D, GL_RGBA));
-    output_surface_->Initialize();
   }
 #endif
 
@@ -211,7 +189,6 @@ class VideoCaptureBufferPoolTest
  private:
 #if !defined(OS_ANDROID)
   std::unique_ptr<StubBrowserGpuMemoryBufferManager> gpu_memory_buffer_manager_;
-  std::unique_ptr<MockBufferQueue> output_surface_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(VideoCaptureBufferPoolTest);

@@ -8,19 +8,19 @@
 #include <stddef.h>
 
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "v8/include/v8.h"
 
-class ChromeRenderProcessObserver;
+class ChromeRenderThreadObserver;
 #if defined(ENABLE_PRINT_PREVIEW)
 class ChromePDFPrintClient;
 #endif
@@ -59,7 +59,7 @@ class VisitedLinkSlave;
 }
 
 namespace web_cache {
-class WebCacheRenderProcessObserver;
+class WebCacheImpl;
 }
 
 namespace blink {
@@ -129,7 +129,9 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
   CreateWorkerContentSettingsClientProxy(content::RenderFrame* render_frame,
                                          blink::WebFrame* frame) override;
   bool AllowPepperMediaStreamAPI(const GURL& url) override;
-  void AddKeySystems(std::vector<media::KeySystemInfo>* key_systems) override;
+  void AddSupportedKeySystems(
+      std::vector<std::unique_ptr<::media::KeySystemProperties>>* key_systems)
+      override;
   bool IsPluginAllowedToUseDevChannelAPIs() override;
   bool IsPluginAllowedToUseCameraDeviceAPI(const GURL& url) override;
   bool IsPluginAllowedToUseCompositorAPI(const GURL& url) override;
@@ -140,7 +142,7 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
   void RecordRappor(const std::string& metric,
                     const std::string& sample) override;
   void RecordRapporURL(const std::string& metric, const GURL& url) override;
-  scoped_ptr<blink::WebAppBannerClient> CreateAppBannerClient(
+  std::unique_ptr<blink::WebAppBannerClient> CreateAppBannerClient(
       content::RenderFrame* render_frame) override;
   void AddImageContextMenuProperties(
       const blink::WebURLResponse& response,
@@ -196,23 +198,23 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
                             blink::WebPluginParams* params);
 #endif
 
-  scoped_ptr<ChromeRenderProcessObserver> chrome_observer_;
-  scoped_ptr<web_cache::WebCacheRenderProcessObserver> web_cache_observer_;
+  std::unique_ptr<ChromeRenderThreadObserver> chrome_observer_;
+  std::unique_ptr<web_cache::WebCacheImpl> web_cache_impl_;
 
-  scoped_ptr<network_hints::PrescientNetworkingDispatcher>
+  std::unique_ptr<network_hints::PrescientNetworkingDispatcher>
       prescient_networking_dispatcher_;
 
 #if defined(ENABLE_SPELLCHECK)
-  scoped_ptr<SpellCheck> spellcheck_;
+  std::unique_ptr<SpellCheck> spellcheck_;
 #endif
-  scoped_ptr<visitedlink::VisitedLinkSlave> visited_link_slave_;
-  scoped_ptr<safe_browsing::PhishingClassifierFilter> phishing_classifier_;
-  scoped_ptr<prerender::PrerenderDispatcher> prerender_dispatcher_;
+  std::unique_ptr<visitedlink::VisitedLinkSlave> visited_link_slave_;
+  std::unique_ptr<safe_browsing::PhishingClassifierFilter> phishing_classifier_;
+  std::unique_ptr<prerender::PrerenderDispatcher> prerender_dispatcher_;
 #if defined(ENABLE_WEBRTC)
   scoped_refptr<WebRtcLoggingMessageFilter> webrtc_logging_message_filter_;
 #endif
 #if defined(ENABLE_PRINT_PREVIEW)
-  scoped_ptr<ChromePDFPrintClient> pdf_print_client_;
+  std::unique_ptr<ChromePDFPrintClient> pdf_print_client_;
 #endif
 #if defined(ENABLE_PLUGINS)
   std::set<std::string> allowed_camera_device_origins_;

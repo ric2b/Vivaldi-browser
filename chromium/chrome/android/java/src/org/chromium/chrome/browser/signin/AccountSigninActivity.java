@@ -75,13 +75,9 @@ public class AccountSigninActivity extends AppCompatActivity
         mAccessPoint = getIntent().getIntExtra(INTENT_SIGNIN_ACCESS_POINT, -1);
         assert mAccessPoint == SigninAccessPoint.BOOKMARK_MANAGER
                 || mAccessPoint == SigninAccessPoint.RECENT_TABS
-                || mAccessPoint == SigninAccessPoint.SETTINGS 
-                || mAccessPoint == SigninAccessPoint.SIGNIN_PROMO 
-                : "invalid access point";
-
-        if (savedInstanceState == null && getAccessPoint() == SigninAccessPoint.BOOKMARK_MANAGER) {
-            RecordUserAction.record("Stars_SignInPromoActivity_Launched");
-        }
+                || mAccessPoint == SigninAccessPoint.SETTINGS
+                || mAccessPoint == SigninAccessPoint.SIGNIN_PROMO
+                : "invalid access point: " + mAccessPoint;
 
         mView = (AccountSigninView) LayoutInflater.from(this).inflate(
                 R.layout.account_signin_view, null);
@@ -94,9 +90,10 @@ public class AccountSigninActivity extends AppCompatActivity
             mView.configureForRecentTabsOrBookmarksPage();
         }
 
-        SigninManager.logSigninStartAccessPoint(getAccessPoint());
-
         setContentView(mView);
+
+        SigninManager.logSigninStartAccessPoint(getAccessPoint());
+        recordSigninStartedUserAction();
     }
 
     @Override
@@ -127,29 +124,11 @@ public class AccountSigninActivity extends AppCompatActivity
 
     @Override
     public void onNewAccount() {
-        if (getAccessPoint() == SigninAccessPoint.BOOKMARK_MANAGER) {
-            RecordUserAction.record("Stars_SignInPromoActivity_NewAccount");
-        }
-
         AccountAdder.getInstance().addAccount(this, AccountAdder.ADD_ACCOUNT_RESULT);
     }
 
     @Override
     public void onAccountSelected(final String accountName, final boolean settingsClicked) {
-        switch (getAccessPoint()) {
-            case SigninAccessPoint.BOOKMARK_MANAGER:
-                RecordUserAction.record("Stars_SignInPromoActivity_SignedIn");
-                RecordUserAction.record("Signin_Signin_FromBookmarkManager");
-                break;
-            case SigninAccessPoint.RECENT_TABS:
-                RecordUserAction.record("Signin_Signin_FromRecentTabs");
-                break;
-            case SigninAccessPoint.SETTINGS:
-                RecordUserAction.record("Signin_Signin_FromSettings");
-                break;
-            default:
-        }
-
         final Context context = this;
         SigninManager.get(this).signIn(accountName, this, new SignInCallback(){
 
@@ -171,4 +150,23 @@ public class AccountSigninActivity extends AppCompatActivity
 
     @Override
     public void onFailedToSetForcedAccount(String forcedAccountName) {}
+
+    private void recordSigninStartedUserAction() {
+        switch (getAccessPoint()) {
+            case SigninAccessPoint.BOOKMARK_MANAGER:
+                RecordUserAction.record("Signin_Signin_FromBookmarkManager");
+                break;
+            case SigninAccessPoint.RECENT_TABS:
+                RecordUserAction.record("Signin_Signin_FromRecentTabs");
+                break;
+            case SigninAccessPoint.SETTINGS:
+                RecordUserAction.record("Signin_Signin_FromSettings");
+                break;
+            case SigninAccessPoint.SIGNIN_PROMO:
+                RecordUserAction.record("Signin_Signin_FromSigninPromo");
+                break;
+            default:
+                assert false : "Invalid access point.";
+        }
+    }
 }

@@ -36,7 +36,6 @@
 #include "core/animation/ElementAnimations.h"
 #include "core/animation/KeyframeEffect.h"
 #include "core/dom/Document.h"
-#include "core/dom/ExceptionCode.h"
 #include "core/dom/QualifiedName.h"
 #include "core/testing/DummyPageHolder.h"
 #include "platform/weborigin/KURL.h"
@@ -737,7 +736,7 @@ TEST_F(AnimationAnimationTest, AttachedAnimations)
     timeline->serviceAnimations(TimingUpdateForAnimationFrame);
     EXPECT_EQ(1U, element->elementAnimations()->animations().find(animation)->value);
 
-    Heap::collectAllGarbage();
+    ThreadHeap::collectAllGarbage();
     EXPECT_TRUE(element->elementAnimations()->animations().isEmpty());
 }
 

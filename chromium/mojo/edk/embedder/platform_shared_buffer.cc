@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
 #include "base/process/process_handle.h"
 #include "base/sys_info.h"
@@ -27,14 +28,7 @@ ScopedPlatformHandle SharedMemoryToPlatformHandle(
 #elif defined(OS_WIN)
   return ScopedPlatformHandle(PlatformHandle(memory_handle.GetHandle()));
 #else
-  if (memory_handle.GetType() == base::SharedMemoryHandle::MACH) {
-    return ScopedPlatformHandle(PlatformHandle(
-        memory_handle.GetMemoryObject()));
-  } else {
-    DCHECK(memory_handle.GetType() == base::SharedMemoryHandle::POSIX);
-    return ScopedPlatformHandle(PlatformHandle(
-        memory_handle.GetFileDescriptor().fd));
-  }
+  return ScopedPlatformHandle(PlatformHandle(memory_handle.GetMemoryObject()));
 #endif
 }
 
@@ -74,6 +68,27 @@ PlatformSharedBuffer* PlatformSharedBuffer::CreateFromPlatformHandle(
 }
 
 // static
+PlatformSharedBuffer* PlatformSharedBuffer::CreateFromPlatformHandlePair(
+    size_t num_bytes,
+    ScopedPlatformHandle rw_platform_handle,
+    ScopedPlatformHandle ro_platform_handle) {
+  DCHECK_GT(num_bytes, 0u);
+  DCHECK(rw_platform_handle.is_valid());
+  DCHECK(ro_platform_handle.is_valid());
+
+  PlatformSharedBuffer* rv = new PlatformSharedBuffer(num_bytes, false);
+  if (!rv->InitFromPlatformHandlePair(std::move(rw_platform_handle),
+                                      std::move(ro_platform_handle))) {
+    // We can't just delete it directly, due to the "in destructor" (debug)
+    // check.
+    scoped_refptr<PlatformSharedBuffer> deleter(rv);
+    return nullptr;
+  }
+
+  return rv;
+}
+
+// static
 PlatformSharedBuffer* PlatformSharedBuffer::CreateFromSharedMemoryHandle(
     size_t num_bytes,
     bool read_only,
@@ -91,10 +106,10 @@ size_t PlatformSharedBuffer::GetNumBytes() const {
 }
 
 bool PlatformSharedBuffer::IsReadOnly() const {
-    return read_only_;
+  return read_only_;
 }
 
-scoped_ptr<PlatformSharedBufferMapping> PlatformSharedBuffer::Map(
+std::unique_ptr<PlatformSharedBufferMapping> PlatformSharedBuffer::Map(
     size_t offset,
     size_t length) {
   if (!IsValidMap(offset, length))
@@ -115,7 +130,7 @@ bool PlatformSharedBuffer::IsValidMap(size_t offset, size_t length) {
   return true;
 }
 
-scoped_ptr<PlatformSharedBufferMapping> PlatformSharedBuffer::MapNoCheck(
+std::unique_ptr<PlatformSharedBufferMapping> PlatformSharedBuffer::MapNoCheck(
     size_t offset,
     size_t length) {
   DCHECK(IsValidMap(offset, length));
@@ -128,10 +143,10 @@ scoped_ptr<PlatformSharedBufferMapping> PlatformSharedBuffer::MapNoCheck(
   if (handle == base::SharedMemory::NULLHandle())
     return nullptr;
 
-  scoped_ptr<PlatformSharedBufferMapping> mapping(
+  std::unique_ptr<PlatformSharedBufferMapping> mapping(
       new PlatformSharedBufferMapping(handle, read_only_, offset, length));
   if (mapping->Map())
-    return make_scoped_ptr(mapping.release());
+    return base::WrapUnique(mapping.release());
 
   return nullptr;
 }
@@ -170,6 +185,16 @@ base::SharedMemoryHandle PlatformSharedBuffer::DuplicateSharedMemoryHandle() {
 
 PlatformSharedBuffer* PlatformSharedBuffer::CreateReadOnlyDuplicate() {
   DCHECK(shared_memory_);
+
+  if (ro_shared_memory_) {
+    base::AutoLock locker(lock_);
+    base::SharedMemoryHandle handle;
+    handle = base::SharedMemory::DuplicateHandle(ro_shared_memory_->handle());
+    if (handle == base::SharedMemory::NULLHandle())
+      return nullptr;
+    return CreateFromSharedMemoryHandle(num_bytes_, true, handle);
+  }
+
   base::SharedMemoryHandle handle;
   bool success;
   {
@@ -196,9 +221,6 @@ bool PlatformSharedBuffer::Init() {
   options.size = num_bytes_;
   // By default, we can share as read-only.
   options.share_read_only = true;
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-  options.type = base::SharedMemoryHandle::MACH;
-#endif
 
   shared_memory_.reset(new base::SharedMemory);
   return shared_memory_->Create(options);
@@ -213,18 +235,34 @@ bool PlatformSharedBuffer::InitFromPlatformHandle(
                                   base::GetCurrentProcId());
 #elif defined(OS_MACOSX) && !defined(OS_IOS)
   base::SharedMemoryHandle handle;
-  if (platform_handle.get().type == PlatformHandle::Type::MACH) {
-    handle = base::SharedMemoryHandle(
-        platform_handle.release().port, num_bytes_, base::GetCurrentProcId());
-  } else {
-    handle = base::SharedMemoryHandle(platform_handle.release().handle, false);
-  }
+  handle = base::SharedMemoryHandle(platform_handle.release().port, num_bytes_,
+                                    base::GetCurrentProcId());
 #else
   base::SharedMemoryHandle handle(platform_handle.release().handle, false);
 #endif
 
   shared_memory_.reset(new base::SharedMemory(handle, read_only_));
   return true;
+}
+
+bool PlatformSharedBuffer::InitFromPlatformHandlePair(
+    ScopedPlatformHandle rw_platform_handle,
+    ScopedPlatformHandle ro_platform_handle) {
+#if defined(OS_WIN) || defined(OS_MACOSX)
+  NOTREACHED();
+  return false;
+#else
+  DCHECK(!shared_memory_);
+
+  base::SharedMemoryHandle handle(rw_platform_handle.release().handle, false);
+  shared_memory_.reset(new base::SharedMemory(handle, false));
+
+  base::SharedMemoryHandle ro_handle(ro_platform_handle.release().handle,
+                                     false);
+  ro_shared_memory_.reset(new base::SharedMemory(ro_handle, true));
+
+  return true;
+#endif
 }
 
 void PlatformSharedBuffer::InitFromSharedMemoryHandle(

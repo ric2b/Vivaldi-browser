@@ -4,43 +4,56 @@
 
 #include "content/public/gpu/gpu_video_decode_accelerator_factory.h"
 
-#include "content/common/gpu/media/gpu_video_decode_accelerator_factory_impl.h"
+#include "base/memory/ptr_util.h"
 #include "content/gpu/gpu_child_thread.h"
+#include "media/gpu/gpu_video_decode_accelerator_factory_impl.h"
 
 namespace content {
 
 GpuVideoDecodeAcceleratorFactory::~GpuVideoDecodeAcceleratorFactory() {}
 
 // static
-scoped_ptr<GpuVideoDecodeAcceleratorFactory>
+std::unique_ptr<GpuVideoDecodeAcceleratorFactory>
 GpuVideoDecodeAcceleratorFactory::Create(
     const GetGLContextCallback& get_gl_context_cb,
     const MakeGLContextCurrentCallback& make_context_current_cb,
     const BindGLImageCallback& bind_image_cb) {
-  auto gvdafactory_impl = GpuVideoDecodeAcceleratorFactoryImpl::Create(
+  auto gvdafactory_impl = media::GpuVideoDecodeAcceleratorFactoryImpl::Create(
       get_gl_context_cb, make_context_current_cb, bind_image_cb);
   if (!gvdafactory_impl)
     return nullptr;
 
-  return make_scoped_ptr(
+  return base::WrapUnique(
       new GpuVideoDecodeAcceleratorFactory(std::move(gvdafactory_impl)));
 }
 
 // static
-scoped_ptr<GpuVideoDecodeAcceleratorFactory>
+std::unique_ptr<GpuVideoDecodeAcceleratorFactory>
 GpuVideoDecodeAcceleratorFactory::CreateWithGLES2Decoder(
     const GetGLContextCallback& get_gl_context_cb,
     const MakeGLContextCurrentCallback& make_context_current_cb,
     const BindGLImageCallback& bind_image_cb,
     const GetGLES2DecoderCallback& get_gles2_decoder_cb) {
   auto gvdafactory_impl =
-      GpuVideoDecodeAcceleratorFactoryImpl::CreateWithGLES2Decoder(
+      media::GpuVideoDecodeAcceleratorFactoryImpl::CreateWithGLES2Decoder(
           get_gl_context_cb, make_context_current_cb, bind_image_cb,
           get_gles2_decoder_cb);
   if (!gvdafactory_impl)
     return nullptr;
 
-  return make_scoped_ptr(
+  return base::WrapUnique(
+      new GpuVideoDecodeAcceleratorFactory(std::move(gvdafactory_impl)));
+}
+
+// static
+std::unique_ptr<GpuVideoDecodeAcceleratorFactory>
+GpuVideoDecodeAcceleratorFactory::CreateWithNoGL() {
+  auto gvdafactory_impl =
+      media::GpuVideoDecodeAcceleratorFactoryImpl::CreateWithNoGL();
+  if (!gvdafactory_impl)
+    return nullptr;
+
+  return base::WrapUnique(
       new GpuVideoDecodeAcceleratorFactory(std::move(gvdafactory_impl)));
 }
 
@@ -49,11 +62,11 @@ gpu::VideoDecodeAcceleratorCapabilities
 GpuVideoDecodeAcceleratorFactory::GetDecoderCapabilities() {
   const gpu::GpuPreferences gpu_preferences =
       GpuChildThread::current()->gpu_preferences();
-  return GpuVideoDecodeAcceleratorFactoryImpl::GetDecoderCapabilities(
+  return media::GpuVideoDecodeAcceleratorFactoryImpl::GetDecoderCapabilities(
       gpu_preferences);
 }
 
-scoped_ptr<media::VideoDecodeAccelerator>
+std::unique_ptr<media::VideoDecodeAccelerator>
 GpuVideoDecodeAcceleratorFactory::CreateVDA(
     media::VideoDecodeAccelerator::Client* client,
     const media::VideoDecodeAccelerator::Config& config) {
@@ -66,7 +79,7 @@ GpuVideoDecodeAcceleratorFactory::CreateVDA(
 }
 
 GpuVideoDecodeAcceleratorFactory::GpuVideoDecodeAcceleratorFactory(
-    scoped_ptr<GpuVideoDecodeAcceleratorFactoryImpl> gvdafactory_impl)
-    : gvdafactory_impl_(std::move(gvdafactory_impl)) {}
+    std::unique_ptr<media::GpuVideoDecodeAcceleratorFactoryImpl>
+    gvdafactory_impl) : gvdafactory_impl_(std::move(gvdafactory_impl)) {}
 
 }  // namespace content

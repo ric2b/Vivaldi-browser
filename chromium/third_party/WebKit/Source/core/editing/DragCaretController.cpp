@@ -26,17 +26,17 @@
 #include "core/editing/DragCaretController.h"
 
 #include "core/editing/EditingUtilities.h"
-#include "core/layout/LayoutView.h"
+#include "core/layout/api/LayoutViewItem.h"
 #include "core/paint/PaintLayer.h"
 
 namespace blink {
 
 DragCaretController::DragCaretController()
-    : CaretBase(CaretVisibility::Visible)
+    : m_caretBase(new CaretBase(CaretVisibility::Visible))
 {
 }
 
-RawPtr<DragCaretController> DragCaretController::create()
+DragCaretController* DragCaretController::create()
 {
     return new DragCaretController;
 }
@@ -54,18 +54,18 @@ void DragCaretController::setCaretPosition(const PositionWithAffinity& position)
     DisableCompositingQueryAsserts disabler;
 
     if (Node* node = m_position.deepEquivalent().anchorNode())
-        invalidateCaretRect(node);
+        m_caretBase->invalidateCaretRect(node);
     m_position = createVisiblePosition(position);
     Document* document = nullptr;
     if (Node* node = m_position.deepEquivalent().anchorNode()) {
-        invalidateCaretRect(node);
+        m_caretBase->invalidateCaretRect(node);
         document = &node->document();
     }
     if (m_position.isNull() || m_position.isOrphan()) {
-        clearCaretRect();
+        m_caretBase->clearCaretRect();
     } else {
-        document->updateLayoutTree();
-        updateCaretRect(m_position);
+        document->updateStyleAndLayoutTree();
+        m_caretBase->updateCaretRect(m_position);
     }
 }
 
@@ -92,7 +92,7 @@ void DragCaretController::nodeWillBeRemoved(Node& node)
     if (!removingNodeRemovesPosition(node, m_position.deepEquivalent()))
         return;
 
-    m_position.deepEquivalent().document()->layoutView()->clearSelection();
+    m_position.deepEquivalent().document()->layoutViewItem().clearSelection();
     clear();
 }
 
@@ -114,7 +114,7 @@ bool DragCaretController::isContentEditable() const
 void DragCaretController::paintDragCaret(LocalFrame* frame, GraphicsContext& context, const LayoutPoint& paintOffset) const
 {
     if (m_position.deepEquivalent().anchorNode()->document().frame() == frame)
-        paintCaret(m_position.deepEquivalent().anchorNode(), context, paintOffset);
+        m_caretBase->paintCaret(m_position.deepEquivalent().anchorNode(), context, paintOffset);
 }
 
 } // namespace blink

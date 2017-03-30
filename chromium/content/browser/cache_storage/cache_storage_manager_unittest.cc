@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
 #include <utility>
 
 #include "base/files/file_path.h"
@@ -13,17 +14,19 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/guid.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/sha1.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/cache_storage/cache_storage.pb.h"
 #include "content/browser/cache_storage/cache_storage_quota_client.h"
-#include "content/browser/fileapi/chrome_blob_storage_context.h"
 #include "content/browser/quota/mock_quota_manager_proxy.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cache_storage_usage_info.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/test/mock_special_storage_policy.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -41,11 +44,11 @@ namespace content {
 
 // Returns a BlobProtocolHandler that uses |blob_storage_context|. Caller owns
 // the memory.
-scoped_ptr<storage::BlobProtocolHandler> CreateMockBlobProtocolHandler(
+std::unique_ptr<storage::BlobProtocolHandler> CreateMockBlobProtocolHandler(
     storage::BlobStorageContext* blob_storage_context) {
   // The FileSystemContext and thread task runner are not actually used but a
   // task runner is needed to avoid a DCHECK in BlobURLRequestJob ctor.
-  return make_scoped_ptr(new storage::BlobProtocolHandler(
+  return base::WrapUnique(new storage::BlobProtocolHandler(
       blob_storage_context, NULL, base::ThreadTaskRunnerHandle::Get().get()));
 }
 
@@ -72,7 +75,8 @@ class CacheStorageManagerTest : public testing::Test {
         "blob", CreateMockBlobProtocolHandler(blob_storage_context->context()));
 
     net::URLRequestContext* url_request_context =
-        browser_context_.GetRequestContext()->GetURLRequestContext();
+        BrowserContext::GetDefaultStoragePartition(&browser_context_)->
+              GetURLRequestContext()->GetURLRequestContext();
 
     url_request_context->set_job_factory(url_request_job_factory_.get());
 
@@ -97,7 +101,8 @@ class CacheStorageManagerTest : public testing::Test {
         quota_manager_proxy_);
 
     cache_manager_->SetBlobParametersForCache(
-        browser_context_.GetRequestContext(),
+        BrowserContext::GetDefaultStoragePartition(&browser_context_)->
+            GetURLRequestContext(),
         blob_storage_context->context()->AsWeakPtr());
   }
 
@@ -140,8 +145,8 @@ class CacheStorageManagerTest : public testing::Test {
   void CacheMatchCallback(
       base::RunLoop* run_loop,
       CacheStorageError error,
-      scoped_ptr<ServiceWorkerResponse> response,
-      scoped_ptr<storage::BlobDataHandle> blob_data_handle) {
+      std::unique_ptr<ServiceWorkerResponse> response,
+      std::unique_ptr<storage::BlobDataHandle> blob_data_handle) {
     callback_error_ = error;
     callback_cache_response_ = std::move(response);
     callback_data_handle_ = std::move(blob_data_handle);
@@ -199,7 +204,7 @@ class CacheStorageManagerTest : public testing::Test {
   bool StorageMatch(const GURL& origin,
                     const std::string& cache_name,
                     const GURL& url) {
-    scoped_ptr<ServiceWorkerFetchRequest> request(
+    std::unique_ptr<ServiceWorkerFetchRequest> request(
         new ServiceWorkerFetchRequest());
     request->url = url;
     base::RunLoop loop;
@@ -213,7 +218,7 @@ class CacheStorageManagerTest : public testing::Test {
   }
 
   bool StorageMatchAll(const GURL& origin, const GURL& url) {
-    scoped_ptr<ServiceWorkerFetchRequest> request(
+    std::unique_ptr<ServiceWorkerFetchRequest> request(
         new ServiceWorkerFetchRequest());
     request->url = url;
     base::RunLoop loop;
@@ -236,11 +241,11 @@ class CacheStorageManagerTest : public testing::Test {
     ServiceWorkerFetchRequest request;
     request.url = url;
 
-    scoped_ptr<storage::BlobDataBuilder> blob_data(
+    std::unique_ptr<storage::BlobDataBuilder> blob_data(
         new storage::BlobDataBuilder(base::GenerateGUID()));
     blob_data->AppendData(url.spec());
 
-    scoped_ptr<storage::BlobDataHandle> blob_handle =
+    std::unique_ptr<storage::BlobDataHandle> blob_handle =
         blob_storage_context_->AddFinishedBlob(blob_data.get());
     ServiceWorkerResponse response(
         url, status_code, "OK", blink::WebServiceWorkerResponseTypeDefault,
@@ -265,7 +270,7 @@ class CacheStorageManagerTest : public testing::Test {
   }
 
   bool CacheMatch(CacheStorageCache* cache, const GURL& url) {
-    scoped_ptr<ServiceWorkerFetchRequest> request(
+    std::unique_ptr<ServiceWorkerFetchRequest> request(
         new ServiceWorkerFetchRequest());
     request->url = url;
     base::RunLoop loop;
@@ -334,21 +339,21 @@ class CacheStorageManagerTest : public testing::Test {
   // Temporary directory must be allocated first so as to be destroyed last.
   base::ScopedTempDir temp_dir_;
 
-  TestBrowserContext browser_context_;
   TestBrowserThreadBundle browser_thread_bundle_;
-  scoped_ptr<net::URLRequestJobFactoryImpl> url_request_job_factory_;
+  TestBrowserContext browser_context_;
+  std::unique_ptr<net::URLRequestJobFactoryImpl> url_request_job_factory_;
   storage::BlobStorageContext* blob_storage_context_;
 
   scoped_refptr<MockSpecialStoragePolicy> quota_policy_;
   scoped_refptr<MockQuotaManager> mock_quota_manager_;
   scoped_refptr<MockQuotaManagerProxy> quota_manager_proxy_;
-  scoped_ptr<CacheStorageManager> cache_manager_;
+  std::unique_ptr<CacheStorageManager> cache_manager_;
 
   scoped_refptr<CacheStorageCache> callback_cache_;
   int callback_bool_;
   CacheStorageError callback_error_;
-  scoped_ptr<ServiceWorkerResponse> callback_cache_response_;
-  scoped_ptr<storage::BlobDataHandle> callback_data_handle_;
+  std::unique_ptr<ServiceWorkerResponse> callback_cache_response_;
+  std::unique_ptr<storage::BlobDataHandle> callback_data_handle_;
   std::vector<std::string> callback_strings_;
 
   const GURL origin1_;
@@ -516,7 +521,7 @@ TEST_F(CacheStorageManagerTest, StorageReuseCacheName) {
   EXPECT_TRUE(Open(origin1_, "foo"));
   EXPECT_TRUE(CachePut(callback_cache_.get(), kTestURL));
   EXPECT_TRUE(CacheMatch(callback_cache_.get(), kTestURL));
-  scoped_ptr<storage::BlobDataHandle> data_handle =
+  std::unique_ptr<storage::BlobDataHandle> data_handle =
       std::move(callback_data_handle_);
 
   EXPECT_TRUE(Delete(origin1_, "foo"));
@@ -1036,7 +1041,7 @@ class CacheStorageQuotaClientTest : public CacheStorageManagerTest {
     return quota_client_->DoesSupport(type);
   }
 
-  scoped_ptr<CacheStorageQuotaClient> quota_client_;
+  std::unique_ptr<CacheStorageQuotaClient> quota_client_;
 
   storage::QuotaStatusCode callback_status_;
   int64_t callback_quota_usage_ = 0;

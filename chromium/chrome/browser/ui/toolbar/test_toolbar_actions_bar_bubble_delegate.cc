@@ -15,8 +15,14 @@ class TestToolbarActionsBarBubbleDelegate::DelegateImpl
   ~DelegateImpl() override {}
 
  private:
+  bool ShouldShow() override { return true; }
+  bool ShouldCloseOnDeactivate() override {
+    return parent_->close_on_deactivate_;
+  }
   base::string16 GetHeadingText() override { return parent_->heading_; }
-  base::string16 GetBodyText() override { return parent_->body_; }
+  base::string16 GetBodyText(bool anchored_to_action) override {
+    return parent_->body_;
+  }
   base::string16 GetItemListText() override { return parent_->item_list_; }
   base::string16 GetActionButtonText() override { return parent_->action_; }
   base::string16 GetDismissButtonText() override { return parent_->dismiss_; }
@@ -45,7 +51,8 @@ TestToolbarActionsBarBubbleDelegate::TestToolbarActionsBarBubbleDelegate(
     : shown_(false),
       heading_(heading),
       body_(body),
-      action_(action) {
+      action_(action),
+      close_on_deactivate_(true) {
 }
 
 TestToolbarActionsBarBubbleDelegate::~TestToolbarActionsBarBubbleDelegate() {

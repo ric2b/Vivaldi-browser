@@ -8,16 +8,17 @@
 #include <stddef.h>
 
 #include <map>
+#include <set>
 
+#include "android_webview/browser/compositor_frame_producer.h"
 #include "android_webview/browser/parent_compositor_draw_constraints.h"
-#include "android_webview/browser/render_thread_manager.h"
 #include "base/callback.h"
 #include "base/cancelable_callback.h"
 #include "base/macros.h"
 #include "base/trace_event/trace_event.h"
 #include "content/public/browser/android/synchronous_compositor.h"
 #include "content/public/browser/android/synchronous_compositor_client.h"
-#include "skia/ext/refptr.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/vector2d_f.h"
@@ -33,10 +34,12 @@ namespace android_webview {
 
 class BrowserViewRendererClient;
 class ChildFrame;
+class CompositorFrameConsumer;
 
 // Interface for all the WebView-specific content rendering operations.
 // Provides software and hardware rendering and the Capture Picture API.
-class BrowserViewRenderer : public content::SynchronousCompositorClient {
+class BrowserViewRenderer : public content::SynchronousCompositorClient,
+                            public CompositorFrameProducer {
  public:
   static void CalculateTileMemoryPolicy();
   static BrowserViewRenderer* FromWebContents(
@@ -44,16 +47,18 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient {
 
   BrowserViewRenderer(
       BrowserViewRendererClient* client,
-      const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner,
-      bool disable_page_visibility);
+      const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner);
 
   ~BrowserViewRenderer() override;
 
   void RegisterWithWebContents(content::WebContents* web_contents);
 
-  // The BrowserViewRenderer client is responsible for ensuring that the
-  // RenderThreadManager has been set correctly via this method.
-  void SetRenderThreadManager(RenderThreadManager* render_thread_manager);
+  // The BrowserViewRenderer client is responsible for ensuring that
+  // the current compositor frame consumer has been set correctly via
+  // this method.  The consumer is added to the set of registered
+  // consumers if it is not already registered.
+  void SetCurrentCompositorFrameConsumer(
+      CompositorFrameConsumer* compositor_frame_consumer);
 
   // Called before either OnDrawHardware or OnDrawSoftware to set the view
   // state of this frame. |scroll| is the view's current scroll offset.
@@ -68,7 +73,7 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient {
   bool OnDrawSoftware(SkCanvas* canvas);
 
   // CapturePicture API methods.
-  skia::RefPtr<SkPicture> CapturePicture(int width, int height);
+  sk_sp<SkPicture> CapturePicture(int width, int height);
   void EnableOnNewPicture(bool enabled);
 
   void ClearView();
@@ -120,8 +125,11 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient {
                      const gfx::Vector2dF& latest_overscroll_delta,
                      const gfx::Vector2dF& current_fling_velocity) override;
 
-  void OnParentDrawConstraintsUpdated();
-  void DetachFunctorFromView();
+  // CompositorFrameProducer overrides
+  void OnParentDrawConstraintsUpdated(
+      CompositorFrameConsumer* compositor_frame_consumer) override;
+  void RemoveCompositorFrameConsumer(
+      CompositorFrameConsumer* compositor_frame_consumer) override;
 
  private:
   void SetTotalRootLayerScrollOffset(const gfx::Vector2dF& new_value_dip);
@@ -133,7 +141,8 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient {
                         const gfx::SizeF& scrollable_size_dip);
 
   void ReturnUnusedResource(std::unique_ptr<ChildFrame> frame);
-  void ReturnResourceFromParent();
+  void ReturnResourceFromParent(
+      CompositorFrameConsumer* compositor_frame_consumer);
   void ReleaseHardware();
 
   gfx::Vector2d max_scroll_offset() const;
@@ -147,8 +156,8 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient {
 
   BrowserViewRendererClient* const client_;
   const scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner_;
-  RenderThreadManager* render_thread_manager_;
-  bool disable_page_visibility_;
+  CompositorFrameConsumer* current_compositor_frame_consumer_;
+  std::set<CompositorFrameConsumer*> compositor_frame_consumers_;
 
   // The current compositor that's owned by the current RVH.
   content::SynchronousCompositor* compositor_;

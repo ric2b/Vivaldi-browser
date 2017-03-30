@@ -1,0 +1,22 @@
+{
+  "manifest_version": 1,
+  "name": "mojo:lifecycle_unittest",
+  "display_name": "Lifecycle Unittest",
+  "capabilities": {
+    "required": {
+      "*": {
+        "interfaces": [ "shell::test::mojom::LifecycleControl" ]
+      },
+      "mojo:lifecycle_unittest_parent": {
+        "interfaces": [ "shell::test::mojom::Parent" ]
+      },
+      "mojo:shell": {
+        "classes": [
+          "shell:instance_name",
+          "shell:client_process"
+        ],
+        "interfaces": [ "shell::mojom::Shell" ]
+      }
+    }
+  }
+}

@@ -78,7 +78,7 @@ std::string ChangeToDescription(const Change& change,
 
     case CHANGE_TYPE_NODE_HIERARCHY_CHANGED:
       return base::StringPrintf(
-          "HierarchyChanged window=%s new_parent=%s old_parent=%s",
+          "HierarchyChanged window=%s old_parent=%s new_parent=%s",
           WindowIdToString(change.window_id).c_str(),
           WindowIdToString(change.window_id2).c_str(),
           WindowIdToString(change.window_id3).c_str());
@@ -109,10 +109,20 @@ std::string ChangeToDescription(const Change& change,
                                 WindowIdToString(change.window_id).c_str(),
                                 change.bool_value ? "true" : "false");
 
-    case CHANGE_TYPE_INPUT_EVENT:
-      return base::StringPrintf("InputEvent window=%s event_action=%d",
-                                WindowIdToString(change.window_id).c_str(),
-                                change.event_action);
+    case CHANGE_TYPE_INPUT_EVENT: {
+      std::string result = base::StringPrintf(
+          "InputEvent window=%s event_action=%d",
+          WindowIdToString(change.window_id).c_str(), change.event_action);
+      if (change.event_observer_id != 0)
+        base::StringAppendF(&result, " event_observer_id=%u",
+                            change.event_observer_id);
+      return result;
+    }
+
+    case CHANGE_TYPE_EVENT_OBSERVED:
+      return base::StringPrintf(
+          "EventObserved event_action=%d event_observer_id=%u",
+          change.event_action, change.event_observer_id);
 
     case CHANGE_TYPE_PROPERTY_CHANGED:
       return base::StringPrintf("PropertyChanged window=%s key=%s value=%s",
@@ -216,8 +226,11 @@ Change::Change()
       window_id2(0),
       window_id3(0),
       event_action(0),
+      event_observer_id(0u),
       direction(mojom::OrderDirection::ABOVE),
       bool_value(false),
+      float_value(0.f),
+      cursor_id(0),
       change_id(0u) {}
 
 Change::Change(const Change& other) = default;
@@ -306,14 +319,14 @@ void TestChangeTracker::OnWindowViewportMetricsChanged(
 
 void TestChangeTracker::OnWindowHierarchyChanged(
     Id window_id,
-    Id new_parent_id,
     Id old_parent_id,
+    Id new_parent_id,
     Array<mojom::WindowDataPtr> windows) {
   Change change;
   change.type = CHANGE_TYPE_NODE_HIERARCHY_CHANGED;
   change.window_id = window_id;
-  change.window_id2 = new_parent_id;
-  change.window_id3 = old_parent_id;
+  change.window_id2 = old_parent_id;
+  change.window_id3 = new_parent_id;
   WindowDatasToTestWindows(windows, &change.windows);
   AddChange(change);
 }
@@ -362,11 +375,22 @@ void TestChangeTracker::OnWindowParentDrawnStateChanged(Id window_id,
 }
 
 void TestChangeTracker::OnWindowInputEvent(Id window_id,
-                                           mojom::EventPtr event) {
+                                           mojom::EventPtr event,
+                                           uint32_t event_observer_id) {
   Change change;
   change.type = CHANGE_TYPE_INPUT_EVENT;
   change.window_id = window_id;
   change.event_action = static_cast<int32_t>(event->action);
+  change.event_observer_id = event_observer_id;
+  AddChange(change);
+}
+
+void TestChangeTracker::OnEventObserved(mojom::EventPtr event,
+                                        uint32_t event_observer_id) {
+  Change change;
+  change.type = CHANGE_TYPE_EVENT_OBSERVED;
+  change.event_action = static_cast<int32_t>(event->action);
+  change.event_observer_id = event_observer_id;
   AddChange(change);
 }
 

@@ -6,11 +6,11 @@ package org.chromium.chrome.browser.tabmodel;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.preference.PreferenceManager;
 import android.test.MoreAsserts;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.test.suitebuilder.annotation.SmallTest;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.StreamUtil;
 import org.chromium.base.ThreadUtils;
@@ -297,7 +297,7 @@ public class DocumentModeAssassinTest extends NativeLibraryTestBase {
         };
 
         // Indicate that migration has already failed multiple times.
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
+        SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
         SharedPreferences.Editor editor = prefs.edit();
         editor.putInt(DocumentModeAssassin.PREF_NUM_MIGRATION_ATTEMPTS,
                 DocumentModeAssassin.MAX_MIGRATION_ATTEMPTS_BEFORE_FAILURE);
@@ -447,7 +447,7 @@ public class DocumentModeAssassinTest extends NativeLibraryTestBase {
 
         // Load up the TabModel metadata.
         int numExpectedTabs = TEST_INFO.numRegularTabs + TEST_INFO.numIncognitoTabs;
-        store.loadState();
+        store.loadState(false /* ignoreIncognitoFiles */);
         mockObserver.initializedCallback.waitForCallback(0, 1);
         assertEquals(numExpectedTabs, mockObserver.mTabCountAtStartup);
         mockObserver.detailsReadCallback.waitForCallback(0, TEST_INFO.contents.length);

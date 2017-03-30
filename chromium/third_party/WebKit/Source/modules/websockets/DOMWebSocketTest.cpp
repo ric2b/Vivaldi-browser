@@ -12,9 +12,9 @@
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/SecurityContext.h"
 #include "core/fileapi/Blob.h"
-#include "core/frame/ConsoleTypes.h"
 #include "core/testing/DummyPageHolder.h"
 #include "platform/heap/Handle.h"
+#include "platform/v8_inspector/public/ConsoleTypes.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "wtf/OwnPtr.h"
@@ -50,8 +50,16 @@ public:
     MOCK_METHOD1(send, void(const CString&));
     MOCK_METHOD3(send, void(const DOMArrayBuffer&, unsigned, unsigned));
     MOCK_METHOD1(send, void(PassRefPtr<BlobDataHandle>));
-    MOCK_METHOD1(sendTextAsCharVector, void(PassOwnPtr<Vector<char>>));
-    MOCK_METHOD1(sendBinaryAsCharVector, void(PassOwnPtr<Vector<char>>));
+    MOCK_METHOD1(sendTextAsCharVectorMock, void(Vector<char>*));
+    void sendTextAsCharVector(PassOwnPtr<Vector<char>> vector)
+    {
+        sendTextAsCharVectorMock(vector.get());
+    }
+    MOCK_METHOD1(sendBinaryAsCharVectorMock, void(Vector<char>*));
+    void sendBinaryAsCharVector(PassOwnPtr<Vector<char>> vector)
+    {
+        sendBinaryAsCharVectorMock(vector.get());
+    }
     MOCK_CONST_METHOD0(bufferedAmount, unsigned());
     MOCK_METHOD2(close, void(int, const String&));
     MOCK_METHOD4(fail, void(const String&, MessageLevel, const String&, unsigned));
@@ -598,7 +606,7 @@ TEST_F(DOMWebSocketTest, sendNonLatin1String)
 
 TEST_F(DOMWebSocketTest, sendArrayBufferWhenConnecting)
 {
-    RefPtr<DOMArrayBufferView> view = DOMUint8Array::create(8);
+    DOMArrayBufferView* view = DOMUint8Array::create(8);
     {
         InSequence s;
         EXPECT_CALL(channel(), connect(KURL(KURL(), "ws://example.com/"), String())).WillOnce(Return(true));
@@ -607,7 +615,7 @@ TEST_F(DOMWebSocketTest, sendArrayBufferWhenConnecting)
 
     EXPECT_FALSE(m_exceptionState.hadException());
 
-    m_websocket->send(view->buffer().get(), m_exceptionState);
+    m_websocket->send(view->buffer(), m_exceptionState);
 
     EXPECT_TRUE(m_exceptionState.hadException());
     EXPECT_EQ(InvalidStateError, m_exceptionState.code());
@@ -617,7 +625,7 @@ TEST_F(DOMWebSocketTest, sendArrayBufferWhenConnecting)
 
 TEST_F(DOMWebSocketTest, sendArrayBufferWhenClosing)
 {
-    RefPtr<DOMArrayBufferView> view = DOMUint8Array::create(8);
+    DOMArrayBufferView* view = DOMUint8Array::create(8);
     {
         InSequence s;
         EXPECT_CALL(channel(), connect(KURL(KURL(), "ws://example.com/"), String())).WillOnce(Return(true));
@@ -630,7 +638,7 @@ TEST_F(DOMWebSocketTest, sendArrayBufferWhenClosing)
     m_websocket->close(m_exceptionState);
     EXPECT_FALSE(m_exceptionState.hadException());
 
-    m_websocket->send(view->buffer().get(), m_exceptionState);
+    m_websocket->send(view->buffer(), m_exceptionState);
 
     EXPECT_FALSE(m_exceptionState.hadException());
     EXPECT_EQ(DOMWebSocket::CLOSING, m_websocket->readyState());
@@ -639,7 +647,7 @@ TEST_F(DOMWebSocketTest, sendArrayBufferWhenClosing)
 TEST_F(DOMWebSocketTest, sendArrayBufferWhenClosed)
 {
     Checkpoint checkpoint;
-    RefPtr<DOMArrayBufferView> view = DOMUint8Array::create(8);
+    DOMArrayBufferView* view = DOMUint8Array::create(8);
     {
         InSequence s;
         EXPECT_CALL(channel(), connect(KURL(KURL(), "ws://example.com/"), String())).WillOnce(Return(true));
@@ -653,7 +661,7 @@ TEST_F(DOMWebSocketTest, sendArrayBufferWhenClosed)
     m_websocket->didClose(WebSocketChannelClient::ClosingHandshakeIncomplete, 1006, "");
     checkpoint.Call(1);
 
-    m_websocket->send(view->buffer().get(), m_exceptionState);
+    m_websocket->send(view->buffer(), m_exceptionState);
 
     EXPECT_FALSE(m_exceptionState.hadException());
     EXPECT_EQ(DOMWebSocket::CLOSED, m_websocket->readyState());
@@ -661,7 +669,7 @@ TEST_F(DOMWebSocketTest, sendArrayBufferWhenClosed)
 
 TEST_F(DOMWebSocketTest, sendArrayBufferSuccess)
 {
-    RefPtr<DOMArrayBufferView> view = DOMUint8Array::create(8);
+    DOMArrayBufferView* view = DOMUint8Array::create(8);
     {
         InSequence s;
         EXPECT_CALL(channel(), connect(KURL(KURL(), "ws://example.com/"), String())).WillOnce(Return(true));
@@ -672,7 +680,7 @@ TEST_F(DOMWebSocketTest, sendArrayBufferSuccess)
     EXPECT_FALSE(m_exceptionState.hadException());
 
     m_websocket->didConnect("", "");
-    m_websocket->send(view->buffer().get(), m_exceptionState);
+    m_websocket->send(view->buffer(), m_exceptionState);
 
     EXPECT_FALSE(m_exceptionState.hadException());
     EXPECT_EQ(DOMWebSocket::OPEN, m_websocket->readyState());

@@ -8,8 +8,11 @@
 #include "base/macros.h"
 #include "ui/gfx/native_widget_types.h"
 
-namespace gfx {
+namespace display {
 class Display;
+}
+
+namespace gfx {
 class Point;
 class Rect;
 }
@@ -31,8 +34,9 @@ class PopupViewCommon {
  protected:
   // A helper function to get the display closest to the given point (virtual
   // for testing).
-  virtual gfx::Display GetDisplayNearestPoint(const gfx::Point& point,
-                                              gfx::NativeView container_view);
+  virtual display::Display GetDisplayNearestPoint(
+      const gfx::Point& point,
+      gfx::NativeView container_view);
 };
 
 }  // namespace autofill

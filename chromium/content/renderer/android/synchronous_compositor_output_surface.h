@@ -7,14 +7,13 @@
 
 #include <stddef.h>
 
-#include <vector>
+#include <memory>
 
 #include "base/callback.h"
 #include "base/cancelable_callback.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/managed_memory_policy.h"
@@ -29,6 +28,7 @@ class CompositorFrameMetadata;
 
 namespace IPC {
 class Message;
+class Sender;
 }
 
 namespace content {
@@ -39,6 +39,7 @@ class WebGraphicsContext3DCommandBufferImpl;
 
 class SynchronousCompositorOutputSurfaceClient {
  public:
+  virtual void DidActivatePendingTree() = 0;
   virtual void Invalidate() = 0;
   virtual void SwapBuffers(uint32_t output_surface_id,
                            cc::CompositorFrame* frame) = 0;
@@ -68,6 +69,7 @@ class SynchronousCompositorOutputSurface
   ~SynchronousCompositorOutputSurface() override;
 
   void SetSyncClient(SynchronousCompositorOutputSurfaceClient* compositor);
+  bool OnMessageReceived(const IPC::Message& message);
 
   // OutputSurface.
   bool BindToClient(cc::OutputSurfaceClient* surface_client) override;
@@ -85,16 +87,7 @@ class SynchronousCompositorOutputSurface
                     const gfx::Rect& clip,
                     const gfx::Rect& viewport_rect_for_tile_priority,
                     const gfx::Transform& transform_for_tile_priority);
-  void ReturnResources(uint32_t output_surface_id,
-                       const cc::CompositorFrameAck& frame_ack);
   void DemandDrawSw(SkCanvas* canvas);
-  void SetMemoryPolicy(size_t bytes_limit);
-  void SetTreeActivationCallback(const base::Closure& callback);
-  void GetMessagesToDeliver(std::vector<scoped_ptr<IPC::Message>>* messages);
-
-  size_t GetMemoryPolicy() const {
-    return memory_policy_.bytes_limit_when_visible;
-  }
 
  private:
   class SoftwareDevice;
@@ -104,14 +97,23 @@ class SynchronousCompositorOutputSurface
                        const gfx::Rect& viewport,
                        const gfx::Rect& clip,
                        bool hardware_draw);
+  bool Send(IPC::Message* message);
+  void DidActivatePendingTree();
+  void DeliverMessages();
   bool CalledOnValidThread() const;
 
   void CancelFallbackTick();
   void FallbackTickFired();
 
+  // IPC handlers.
+  void SetMemoryPolicy(size_t bytes_limit);
+  void OnReclaimResources(uint32_t output_surface_id,
+                          const cc::CompositorFrameAck& ack);
+
   const int routing_id_;
   const uint32_t output_surface_id_;
-  SynchronousCompositorRegistry* const registry_;  // unowned
+  SynchronousCompositorRegistry* const registry_;  // Not owned.
+  IPC::Sender* const sender_;  // Not owned.
   bool registered_;
 
   // Not owned.

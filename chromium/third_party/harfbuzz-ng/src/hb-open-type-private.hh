@@ -101,7 +101,8 @@ static inline Type& StructAfter(TObject &X)
 #define DEFINE_SIZE_STATIC(size) \
   DEFINE_INSTANCE_ASSERTION (sizeof (*this) == (size)); \
   static const unsigned int static_size = (size); \
-  static const unsigned int min_size = (size)
+  static const unsigned int min_size = (size); \
+  inline unsigned int get_size (void) const { return (size); }
 
 #define DEFINE_SIZE_UNION(size, _member) \
   DEFINE_INSTANCE_ASSERTION (this->u._member.static_size == (size)); \
@@ -661,6 +662,24 @@ typedef SHORT FWORD;
 
 /* 16-bit unsigned integer (USHORT) that describes a quantity in FUnits. */
 typedef USHORT UFWORD;
+
+/* 16-bit signed fixed number with the low 14 bits of fraction (2.14). */
+struct F2DOT14 : SHORT
+{
+  //inline float to_float (void) const { return ???; }
+  //inline void set_float (float f) { v.set (f * ???); }
+  public:
+  DEFINE_SIZE_STATIC (2);
+};
+
+/* 32-bit signed fixed-point number (16.16). */
+struct Fixed: LONG
+{
+  //inline float to_float (void) const { return ???; }
+  //inline void set_float (float f) { v.set (f * ???); }
+  public:
+  DEFINE_SIZE_STATIC (4);
+};
 
 /* Date represented in number of seconds since 12:00 midnight, January 1,
  * 1904. The value is represented as a signed 64-bit integer. */

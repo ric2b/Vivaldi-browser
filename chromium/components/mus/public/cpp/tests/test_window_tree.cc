@@ -121,6 +121,9 @@ void TestWindowTree::ReleaseCapture(uint32_t change_id, uint32_t window_id) {
   change_id_ = change_id;
 }
 
+void TestWindowTree::SetEventObserver(mojom::EventMatcherPtr matcher,
+                                      uint32_t observer_id) {}
+
 void TestWindowTree::Embed(uint32_t window_id,
                            mojom::WindowTreeClientPtr client,
                            const EmbedCallback& callback) {}
@@ -143,12 +146,18 @@ void TestWindowTree::SetImeVisibility(uint32_t window_id,
                                       bool visible,
                                       mojo::TextInputStatePtr state) {}
 
-void TestWindowTree::OnWindowInputEventAck(uint32_t event_id, bool handled) {
+void TestWindowTree::OnWindowInputEventAck(uint32_t event_id,
+                                           mus::mojom::EventResult result) {
   EXPECT_FALSE(acked_events_.count(event_id));
   acked_events_.insert(event_id);
 }
 
 void TestWindowTree::GetWindowManagerClient(
     mojo::AssociatedInterfaceRequest<mojom::WindowManagerClient> internal) {}
+
+void TestWindowTree::GetCursorLocationMemory(
+    const GetCursorLocationMemoryCallback& callback) {
+  callback.Run(mojo::ScopedSharedBufferHandle());
+}
 
 }  // namespace mus

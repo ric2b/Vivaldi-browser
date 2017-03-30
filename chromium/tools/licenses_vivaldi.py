@@ -40,22 +40,26 @@ for m in re.findall(r"(.*node_modules/([^/]+))", maindeps):
   f = open(basepath+"/"+moduledir+"/package.json")
   pjson = json.loads(f.read())
   f.close()
+  preferred = None
   if "license" in pjson:
-    entry["licensetype"] = pjson["license"]
+    preferred = "license"
   elif "licence" in pjson: # typo in react-list
-    entry["licensetype"] = pjson["licence"]
+    preferred = "licence"
   elif "licenses" in pjson:
-    if type(pjson["licenses"]) is str:
-      entry["licensetype"] = pjson["licenses"]
-    elif type(pjson["licenses"]) is list:
-      entry["licensetype"] = pjson["licenses"][0]["type"]
-      entry["licenseurl"] = pjson["licenses"][0]["url"]
-    elif type(pjson["licenses"]) is dict:
-      entry["licensetype"] = pjson["licenses"]["type"]
-      entry["licenseurl"] = pjson["licenses"]["url"]
+    preferred = "licenses"
+
+  if preferred:
+    if type(pjson[preferred]) is list:
+      entry["licensetype"] = pjson[preferred][0]["type"]
+      entry["licenseurl"] = pjson[preferred][0]["url"]
+    elif type(pjson[preferred]) is dict:
+      entry["licensetype"] = pjson[preferred]["type"]
+      entry["licenseurl"] = pjson[preferred]["url"]
+    else:
+      entry["licensetype"] = pjson[preferred]
   if "licensetype" in entry and entry["licensetype"] not in ["MIT", "BSD",
       "Apache 2.0", "Apache-2.0", "Apache License, Version 2.0", "Creative Commons Attribution 2.5 License", "MPL",
-      "BSD-3-Clause", "ISC", "MPL-2.0 OR Apache-2.0"]:
+      "BSD-3-Clause", "ISC", "MPL-2.0 OR Apache-2.0", "WTFPL"]:
     print("ERROR: " + moduledir + " uses a license that hasn't been reviewed for Vivaldi: " + entry["licensetype"])
     exit(1)
 

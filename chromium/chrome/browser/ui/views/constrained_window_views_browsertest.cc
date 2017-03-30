@@ -32,7 +32,7 @@ namespace {
 
 class TestDialog : public views::DialogDelegateView {
  public:
-  TestDialog() { SetFocusable(true); }
+  TestDialog() { SetFocusBehavior(FocusBehavior::ALWAYS); }
   ~TestDialog() override {}
 
   views::View* GetInitiallyFocusedView() override { return this; }
@@ -180,17 +180,38 @@ IN_PROC_BROWSER_TEST_F(ConstrainedWindowViewTest, NavigationOnBackspace) {
   EXPECT_EQ(GURL(chrome::kChromeUIVersionURL), web_contents->GetURL());
 
   std::unique_ptr<TestDialog> dialog = ShowModalDialog(web_contents);
-  EXPECT_TRUE(dialog->GetWidget()->IsVisible());
-  EXPECT_EQ(dialog->GetContentsView(),
-            dialog->GetWidget()->GetFocusManager()->GetFocusedView());
 
-  // Pressing backspace should navigate back and close the dialog.
+  views::Widget* widget = dialog->GetWidget();
+
+  EXPECT_TRUE(widget->IsVisible());
+  EXPECT_EQ(dialog->GetContentsView(),
+            widget->GetFocusManager()->GetFocusedView());
+
+  // Pressing backspace should not navigate back and close the dialog
+  // with the Finch flag disabled.
   EXPECT_TRUE(chrome::CanGoBack(browser()));
   EXPECT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_BACK,
                                               false, false, false, false));
   content::RunAllPendingInMessageLoop();
   content::WaitForLoadStop(web_contents);
-  EXPECT_EQ(NULL, dialog->GetWidget());
+
+  EXPECT_EQ(widget, dialog->GetWidget());
+  EXPECT_EQ(GURL(chrome::kChromeUIVersionURL), web_contents->GetURL());
+
+  // Pressing backspace should navigate back and close the dialog with the
+  // Finch flag enabled.
+  base::FeatureList::ClearInstanceForTesting();
+  std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
+  feature_list->InitializeFromCommandLine("BackspaceGoesBack", std::string());
+  base::FeatureList::SetInstance(std::move(feature_list));
+
+  EXPECT_TRUE(chrome::CanGoBack(browser()));
+  EXPECT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_BACK,
+                                              false, false, false, false));
+  content::RunAllPendingInMessageLoop();
+  content::WaitForLoadStop(web_contents);
+
+  EXPECT_EQ(nullptr, dialog->GetWidget());
   EXPECT_EQ(original_url, web_contents->GetURL());
 }
 

@@ -19,10 +19,10 @@ class Range;
 // position.
 //
 //  Example usage:
-//    RawPtr<Range> range = produceRange();
-//    consumeRange(range.get());
+//    Range* range = produceRange();
+//    consumeRange(range);
 //    ... no DOM modification ...
-//    consumeRange2(range.get());
+//    consumeRange2(range);
 //
 //  Above code should be:
 //    EphemeralRangeTemplate range = produceRange();
@@ -60,7 +60,7 @@ public:
     bool isCollapsed() const;
     bool isNull() const
     {
-        ASSERT(isValid());
+        DCHECK(isValid());
         return m_startPosition.isNull();
     }
     bool isNotNull() const { return !isNull(); }
@@ -93,7 +93,7 @@ using EphemeralRangeInFlatTree = EphemeralRangeTemplate<EditingInFlatTreeStrateg
 
 // Returns a newly created |Range| object from |range| or |nullptr| if
 // |range.isNull()| returns true.
-CORE_EXPORT RawPtr<Range> createRange(const EphemeralRange& /* range */);
+CORE_EXPORT Range* createRange(const EphemeralRange& /* range */);
 
 } // namespace blink
 

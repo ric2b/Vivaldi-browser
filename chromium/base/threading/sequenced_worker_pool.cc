@@ -25,12 +25,13 @@
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/condition_variable.h"
 #include "base/synchronization/lock.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/simple_thread.h"
 #include "base/threading/thread_local.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "base/trace_event/heap_profiler.h"
 #include "base/trace_event/trace_event.h"
 #include "base/tracked_objects.h"
 #include "build/build_config.h"
@@ -130,7 +131,7 @@ bool SequencedWorkerPoolTaskRunner::PostDelayedTask(
     const tracked_objects::Location& from_here,
     const Closure& task,
     TimeDelta delay) {
-  if (delay == TimeDelta()) {
+  if (delay.is_zero()) {
     return pool_->PostWorkerTaskWithShutdownBehavior(
         from_here, task, shutdown_behavior_);
   }
@@ -192,7 +193,7 @@ bool SequencedWorkerPoolSequencedTaskRunner::PostDelayedTask(
     const tracked_objects::Location& from_here,
     const Closure& task,
     TimeDelta delay) {
-  if (delay == TimeDelta()) {
+  if (delay.is_zero()) {
     return pool_->PostSequencedWorkerTaskWithShutdownBehavior(
         token_, from_here, task, shutdown_behavior_);
   }
@@ -610,7 +611,7 @@ bool SequencedWorkerPool::Inner::PostTask(
     const tracked_objects::Location& from_here,
     const Closure& task,
     TimeDelta delay) {
-  DCHECK(delay == TimeDelta() || shutdown_behavior == SKIP_ON_SHUTDOWN);
+  DCHECK(delay.is_zero() || shutdown_behavior == SKIP_ON_SHUTDOWN);
   SequencedTask sequenced(from_here);
   sequenced.sequence_token_id = sequence_token.id_;
   sequenced.shutdown_behavior = shutdown_behavior;
@@ -810,6 +811,8 @@ void SequencedWorkerPool::Inner::ThreadLoop(Worker* this_worker) {
             TRACE_EVENT_FLAG_FLOW_IN,
             "src_file", task.posted_from.file_name(),
             "src_func", task.posted_from.function_name());
+        TRACE_HEAP_PROFILER_API_SCOPED_TASK_EXECUTION task_event(
+            task.posted_from.file_name());
         int new_thread_id = WillRunWorkerTask(task);
         {
           AutoUnlock unlock(lock_);
@@ -1314,7 +1317,7 @@ bool SequencedWorkerPool::PostDelayedWorkerTask(
     const Closure& task,
     TimeDelta delay) {
   WorkerShutdown shutdown_behavior =
-      delay == TimeDelta() ? BLOCK_SHUTDOWN : SKIP_ON_SHUTDOWN;
+      delay.is_zero() ? BLOCK_SHUTDOWN : SKIP_ON_SHUTDOWN;
   return inner_->PostTask(NULL, SequenceToken(), shutdown_behavior,
                           from_here, task, delay);
 }
@@ -1341,7 +1344,7 @@ bool SequencedWorkerPool::PostDelayedSequencedWorkerTask(
     const Closure& task,
     TimeDelta delay) {
   WorkerShutdown shutdown_behavior =
-      delay == TimeDelta() ? BLOCK_SHUTDOWN : SKIP_ON_SHUTDOWN;
+      delay.is_zero() ? BLOCK_SHUTDOWN : SKIP_ON_SHUTDOWN;
   return inner_->PostTask(NULL, sequence_token, shutdown_behavior,
                           from_here, task, delay);
 }

@@ -12,6 +12,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "base/containers/hash_tables.h"
@@ -20,7 +21,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/media/router/issue.h"
 #include "chrome/browser/media/router/issue_manager.h"
@@ -100,6 +101,12 @@ class MediaRouterMojoImpl : public MediaRouterBase,
   void AddIssue(const Issue& issue) override;
   void ClearIssue(const Issue::Id& issue_id) override;
   void OnUserGesture() override;
+  void SearchSinks(
+      const MediaSink::Id& sink_id,
+      const MediaSource::Id& source_id,
+      const std::string& search_input,
+      const std::string& domain,
+      const MediaSinkSearchResponseCallback& sink_callback) override;
 
   const std::string& media_route_provider_extension_id() const {
     return media_route_provider_extension_id_;
@@ -113,6 +120,12 @@ class MediaRouterMojoImpl : public MediaRouterBase,
   friend class MediaRouterFactory;
   friend class MediaRouterMojoExtensionTest;
   friend class MediaRouterMojoTest;
+  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest, JoinRoute);
+  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest, JoinRouteTimedOutFails);
+  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
+                           JoinRouteOffTheRecordMismatchFails);
+  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
+                           OffTheRecordRoutesTerminatedOnProfileShutdown);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
                            RegisterAndUnregisterMediaSinksObserver);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
@@ -253,6 +266,12 @@ class MediaRouterMojoImpl : public MediaRouterBase,
   void DoStopObservingMediaSinks(const MediaSource::Id& source_id);
   void DoStartObservingMediaRoutes(const MediaSource::Id& source_id);
   void DoStopObservingMediaRoutes(const MediaSource::Id& source_id);
+  void DoSearchSinks(
+      const MediaSink::Id& sink_id,
+      const MediaSource::Id& source_id,
+      const std::string& search_input,
+      const std::string& domain,
+      const MediaSinkSearchResponseCallback& sink_callback);
 
   // Invoked when the next batch of messages arrives.
   // |route_id|: ID of route of the messages.

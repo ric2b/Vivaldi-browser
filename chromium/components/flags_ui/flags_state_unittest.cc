@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 
@@ -125,7 +126,7 @@ class FlagsStateTest : public ::testing::Test {
 
   TestingPrefServiceSimple prefs_;
   PrefServiceFlagsStorage flags_storage_;
-  scoped_ptr<FlagsState> flags_state_;
+  std::unique_ptr<FlagsState> flags_state_;
 };
 
 TEST_F(FlagsStateTest, NoChangeNoRestart) {

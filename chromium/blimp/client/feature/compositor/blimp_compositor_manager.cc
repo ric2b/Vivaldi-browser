@@ -7,7 +7,7 @@
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "blimp/client/feature/compositor/blimp_layer_tree_settings.h"
-#include "blimp/common/compositor/blimp_image_serialization_processor.h"
+#include "blimp/client/feature/compositor/client_image_serialization_processor.h"
 #include "blimp/common/compositor/blimp_task_graph_runner.h"
 #include "cc/proto/compositor_message.pb.h"
 
@@ -22,15 +22,15 @@ const int kDummyTabId = 0;
 }  // namespace
 
 BlimpCompositorManager::BlimpCompositorManager(
-    RenderWidgetFeature* render_widget_feature)
+    RenderWidgetFeature* render_widget_feature,
+    BlimpCompositorManagerClient* client)
     : visible_(false),
       window_(gfx::kNullAcceleratedWidget),
       gpu_memory_buffer_manager_(new BlimpGpuMemoryBufferManager),
-      image_serialization_processor_(
-          new BlimpImageSerializationProcessor(
-              BlimpImageSerializationProcessor::Mode::DESERIALIZATION)),
+      image_serialization_processor_(new ClientImageSerializationProcessor),
       active_compositor_(nullptr),
-      render_widget_feature_(render_widget_feature) {
+      render_widget_feature_(render_widget_feature),
+      client_(client) {
   DCHECK(render_widget_feature_);
   render_widget_feature_->SetDelegate(kDummyTabId, this);
 }
@@ -137,6 +137,11 @@ cc::LayerTreeSettings* BlimpCompositorManager::GetLayerTreeSettings() {
   }
 
   return settings_.get();
+}
+
+void BlimpCompositorManager::DidCompleteSwapBuffers() {
+  DCHECK(client_);
+  client_->OnSwapBuffersCompleted();
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>

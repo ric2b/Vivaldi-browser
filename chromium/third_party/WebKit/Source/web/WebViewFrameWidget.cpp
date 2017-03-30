@@ -76,11 +76,6 @@ void WebViewFrameWidget::paint(WebCanvas* canvas, const WebRect& viewPort)
     return m_webView->paint(canvas, viewPort);
 }
 
-void WebViewFrameWidget::paintCompositedDeprecated(WebCanvas* canvas, const WebRect& viewPort)
-{
-    return m_webView->paintCompositedDeprecated(canvas, viewPort);
-}
-
 void WebViewFrameWidget::layoutAndPaintAsync(WebLayoutAndPaintAsyncCallback* callback)
 {
     return m_webView->layoutAndPaintAsync(callback);
@@ -119,11 +114,6 @@ void WebViewFrameWidget::applyViewportDeltas(
     float topControlsShownRatioDelta)
 {
     return m_webView->applyViewportDeltas(visualViewportDelta, layoutViewportDelta, elasticOverscrollDelta, scaleFactor, topControlsShownRatioDelta);
-}
-
-void WebViewFrameWidget::recordFrameTimingEvent(FrameTimingEventType eventType, int64_t rectId, const WebVector<WebFrameTimingEvent>& events)
-{
-    return m_webView->recordFrameTimingEvent(eventType, rectId, events);
 }
 
 void WebViewFrameWidget::mouseCaptureLost()
@@ -238,11 +228,6 @@ WebColor WebViewFrameWidget::backgroundColor() const
 WebPagePopup* WebViewFrameWidget::pagePopup() const
 {
     return m_webView->pagePopup();
-}
-
-void WebViewFrameWidget::setTopControlsHeight(float height, bool topControlsShrinkLayoutSize)
-{
-    return m_webView->setTopControlsHeight(height, topControlsShrinkLayoutSize);
 }
 
 void WebViewFrameWidget::updateTopControlsState(WebTopControlsState constraints, WebTopControlsState current, bool animate)

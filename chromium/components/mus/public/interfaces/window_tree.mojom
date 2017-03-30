@@ -6,6 +6,7 @@ module mus.mojom;
 
 import "components/mus/public/interfaces/compositor_frame.mojom";
 import "components/mus/public/interfaces/cursor.mojom";
+import "components/mus/public/interfaces/event_matcher.mojom";
 import "components/mus/public/interfaces/input_events.mojom";
 import "components/mus/public/interfaces/mus_constants.mojom";
 import "components/mus/public/interfaces/surface_id.mojom";
@@ -50,6 +51,12 @@ enum SurfaceType {
   // Only the embedded app may obtain this surface. If an app is not embedded
   // in the Window than the owner may also render to this surface as well.
   DEFAULT,
+};
+
+// The result of an input event sent to a client app.
+enum EventResult {
+  HANDLED,
+  UNHANDLED,
 };
 
 // Windows are identified by a uint32. The upper 16 bits are the connection id,
@@ -103,6 +110,14 @@ interface WindowTree {
   // if |window_id| does not currently have capture.
   ReleaseCapture(uint32 change_id, uint32 window_id);
 
+  // Sets an observer that monitors all events, even if they are not targeted
+  // at a window in this tree. If an event matchs |matcher| the observer reports
+  // it to the WindowTreeClient via OnWindowInputEvent (if the event target is
+  // this window tree) or OnEventObserved (if the target is another tree). The
+  // client must supply a non-zero |observer_id|, which is reported back with
+  // observed events.  Set the matcher to null to clear the observer.
+  SetEventObserver(EventMatcher? matcher, uint32 observer_id);
+
   // Sets the specified bounds of the specified window.
   SetWindowBounds(uint32 change_id, uint32 window_id, mojo.Rect bounds);
 
@@ -155,11 +170,12 @@ interface WindowTree {
   // visible to connection B.
   RemoveWindowFromParent(uint32 change_id, uint32 window_id);
 
-  // Ties the lifetime of |child| to the lifetime of |parent|. This also
-  // places |child| always on top of |parent|.
+  // Ties the lifetime of |transient_window_id| to the lifetime of |window_id|.
+  // This also places |transient_window_id| on top of |window_id|.
   // This fails for any of the following reasons:
   // . |window_id| or |transient_window_id| does not identify a valid window.
   // . |transient_window_id| is an ancestor of |window_id|.
+  // . |transient_window_id| is modal to system.
   AddTransientWindow(uint32 change_id,
                      uint32 window_id,
                      uint32 transient_window_id);
@@ -168,11 +184,12 @@ interface WindowTree {
   // This does not change transient window's position in the window hierarchy.
   RemoveTransientWindowFromParent(uint32 change_id, uint32 transient_window_id);
 
-  // Sets |window_id| to be modal to its transient parent.
-  // This fails if |window_id| does not identify a valid window.
-  // TODO(mohsen): If |window_id| does not have a transient parent, this will
-  // have no effect. Plan is to make a window modal to system if it does not
-  // have a transient parent.
+  // Sets |window_id| to be modal. If the window has a transient parent, then
+  // the window is modal to the transient parent. Otherwise, the window is modal
+  // to the system. This releases capture if necessary.
+  // This fails for any of the following reasons:
+  // . |window_id| does not identify a valid window.
+  // . Client does not have a valid user id (i.e., it is an embedded app).
   SetModal(uint32 change_id, uint32 window_id);
 
   // Reorders a window in its parent, relative to |relative_window_id| according
@@ -241,10 +258,15 @@ interface WindowTree {
   SetImeVisibility(uint32 window_id, bool visible, mojo.TextInputState? state);
 
   // See documentation for WindowTreeClient::OnWindowInputEvent().
-  OnWindowInputEventAck(uint32 event_id, bool handled);
+  OnWindowInputEventAck(uint32 event_id, EventResult result);
 
   // See description of WindowManager for details.
   GetWindowManagerClient(associated WindowManagerClient& internal);
+
+  // Returns a shared memory segment that contains two 16-bit ints packed into a
+  // single Atomic32, which represent the current location of the mouse cursor
+  // where the location is (x << 16) | y.
+  GetCursorLocationMemory() => (handle<shared_buffer> cursor_buffer);
 };
 
 // Changes to windows are not sent to the connection that originated the
@@ -313,8 +335,8 @@ interface WindowTreeClient {
   // about. This is not sent for hierarchy changes of windows not known to this
   // client or not attached to the tree.
   OnWindowHierarchyChanged(uint32 window,
-                           uint32 new_parent,
                            uint32 old_parent,
+                           uint32 new_parent,
                            array<WindowData> windows);
 
   // Invoked when the order of windows within a parent changes.
@@ -351,10 +373,19 @@ interface WindowTreeClient {
 
   // Invoked when an event is targeted at the specified window. The client must
   // call WindowTree::OnWindowInputEventAck() with the same |event_id| to notify
-  // that the event has been processed, and with a boolean |handled| to notify
-  // if the event was consumed. The client will not receive farther events until
-  // the event is ack'ed.
-  OnWindowInputEvent(uint32 event_id, uint32 window, Event event);
+  // that the event has been processed, and with an EventResult value to notify
+  // if the event was consumed. |event_observer_id| is non-zero if the event
+  // also matched the active event observer for this client. The client will not
+  // receive farther events until the event is ack'ed.
+  OnWindowInputEvent(uint32 event_id,
+                     uint32 window,
+                     Event event,
+                     uint32 event_observer_id);
+
+  // Invoked when an |event| is sent via the EventObserver and not targeted at a
+  // specific window. The |event_observer_id| is the one supplied to
+  // SetEventObserver. The client should not acknowledge these events.
+  OnEventObserved(Event event, uint32 event_observer_id);
 
   // Called in two distinct cases: when a window known to the connection gains
   // focus, or when focus moves from a window known to the connection to a

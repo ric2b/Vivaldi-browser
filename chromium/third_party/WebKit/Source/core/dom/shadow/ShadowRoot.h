@@ -32,7 +32,6 @@
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/Element.h"
 #include "core/dom/TreeScope.h"
-#include "wtf/DoublyLinkedList.h"
 
 namespace blink {
 
@@ -40,8 +39,10 @@ class Document;
 class ElementShadow;
 class ExceptionState;
 class HTMLShadowElement;
+class HTMLSlotElement;
 class InsertionPoint;
-class ShadowRootRareData;
+class ShadowRootRareDataV0;
+class SlotAssignment;
 class StyleSheetList;
 
 enum class ShadowRootType {
@@ -51,114 +52,112 @@ enum class ShadowRootType {
     Closed
 };
 
-class CORE_EXPORT ShadowRoot final : public DocumentFragment, public TreeScope, public DoublyLinkedListNode<ShadowRoot> {
+class CORE_EXPORT ShadowRoot final : public DocumentFragment, public TreeScope {
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(ShadowRoot);
-    friend class WTF::DoublyLinkedListNode<ShadowRoot>;
 public:
     // FIXME: Current implementation does not work well if a shadow root is dynamically created.
     // So multiple shadow subtrees in several elements are prohibited.
     // See https://github.com/w3c/webcomponents/issues/102 and http://crbug.com/234020
-    static RawPtr<ShadowRoot> create(Document& document, ShadowRootType type)
+    static ShadowRoot* create(Document& document, ShadowRootType type)
     {
         return new ShadowRoot(document, type);
     }
-
-    void recalcStyle(StyleRecalcChange);
 
     // Disambiguate between Node and TreeScope hierarchies; TreeScope's implementation is simpler.
     using TreeScope::document;
     using TreeScope::getElementById;
 
+    // Make protected methods from base class public here.
+    using TreeScope::setDocument;
+    using TreeScope::setParentTreeScope;
+
     // TODO(kochi): crbug.com/507413 In non-Oilpan, host() may return null during queued
     // event handling (e.g. during execCommand()).
     Element* host() const { return toElement(parentOrShadowHostNode()); }
     ElementShadow* owner() const { return host() ? host()->shadow() : 0; }
-
-    ShadowRoot* youngerShadowRoot() const { return prev(); }
-
-    ShadowRoot* olderShadowRootForBindings() const;
-
+    ShadowRootType type() const { return static_cast<ShadowRootType>(m_type); }
     String mode() const { return (type() == ShadowRootType::V0 || type() == ShadowRootType::Open) ? "open" : "closed"; };
 
     bool isOpenOrV0() const { return type() == ShadowRootType::V0 || type() == ShadowRootType::Open; }
-
     bool isV1() const { return type() == ShadowRootType::Open || type() == ShadowRootType::Closed; }
-
-    bool isYoungest() const { return !youngerShadowRoot(); }
-    bool isOldest() const { return !olderShadowRoot(); }
 
     void attach(const AttachContext& = AttachContext()) override;
 
     InsertionNotificationRequest insertedInto(ContainerNode*) override;
     void removedFrom(ContainerNode*) override;
 
-    void registerScopedHTMLStyleChild();
-    void unregisterScopedHTMLStyleChild();
-
+    // For V0
+    ShadowRoot* youngerShadowRoot() const;
+    ShadowRoot* olderShadowRoot() const;
+    ShadowRoot* olderShadowRootForBindings() const;
+    void setYoungerShadowRoot(ShadowRoot&);
+    void setOlderShadowRoot(ShadowRoot&);
+    bool isYoungest() const { return !youngerShadowRoot(); }
+    bool isOldest() const { return !olderShadowRoot(); }
     bool containsShadowElements() const;
     bool containsContentElements() const;
     bool containsInsertionPoints() const { return containsShadowElements() || containsContentElements(); }
-    bool containsShadowRoots() const;
-
     unsigned descendantShadowElementCount() const;
-
-    // For Internals, don't use this.
-    unsigned childShadowRootCount() const;
-    unsigned numberOfStyles() const { return m_numberOfStyles; }
-
     HTMLShadowElement* shadowInsertionPointOfYoungerShadowRoot() const;
-    void setShadowInsertionPointOfYoungerShadowRoot(RawPtr<HTMLShadowElement>);
-
+    void setShadowInsertionPointOfYoungerShadowRoot(HTMLShadowElement*);
     void didAddInsertionPoint(InsertionPoint*);
     void didRemoveInsertionPoint(InsertionPoint*);
     const HeapVector<Member<InsertionPoint>>& descendantInsertionPoints();
 
-    ShadowRootType type() const { return static_cast<ShadowRootType>(m_type); }
+    // For Internals, don't use this.
+    unsigned childShadowRootCount() const { return m_childShadowRootCount; }
+    unsigned numberOfStyles() const { return m_numberOfStyles; }
+
+    void recalcStyle(StyleRecalcChange);
+
+    void registerScopedHTMLStyleChild();
+    void unregisterScopedHTMLStyleChild();
+
+    SlotAssignment& ensureSlotAssignment();
 
     void didAddSlot();
     void didRemoveSlot();
     const HeapVector<Member<HTMLSlotElement>>& descendantSlots();
 
-    // Make protected methods from base class public here.
-    using TreeScope::setDocument;
-    using TreeScope::setParentTreeScope;
+    void assignV1();
+    void distributeV1();
 
-public:
+    HTMLSlotElement* assignedSlotFor(const Node&) const;
+
     Element* activeElement() const;
-
-    ShadowRoot* olderShadowRoot() const { return next(); }
 
     String innerHTML() const;
     void setInnerHTML(const String&, ExceptionState&);
 
-    RawPtr<Node> cloneNode(bool, ExceptionState&);
-
-    StyleSheetList* styleSheets();
+    Node* cloneNode(bool, ExceptionState&);
 
     void setDelegatesFocus(bool flag) { m_delegatesFocus = flag; }
     bool delegatesFocus() const { return m_delegatesFocus; }
 
+    bool containsShadowRoots() const { return m_childShadowRootCount; }
+
+    StyleSheetList& styleSheets();
+    void setStyleSheets(StyleSheetList* styleSheetList) { m_styleSheetList = styleSheetList; }
+
     DECLARE_VIRTUAL_TRACE();
+
+    DECLARE_VIRTUAL_TRACE_WRAPPERS();
 
 private:
     ShadowRoot(Document&, ShadowRootType);
     ~ShadowRoot() override;
 
-#if !ENABLE(OILPAN)
-    void dispose() override;
-#endif
-
     void childrenChanged(const ChildrenChange&) override;
 
-    ShadowRootRareData* ensureShadowRootRareData();
+    ShadowRootRareDataV0& ensureShadowRootRareDataV0();
 
-    void addChildShadowRoot();
-    void removeChildShadowRoot();
+    void addChildShadowRoot() { ++m_childShadowRootCount; }
+    void removeChildShadowRoot() { DCHECK_GT(m_childShadowRootCount, 0u); --m_childShadowRootCount; }
     void invalidateDescendantInsertionPoints();
 
     // ShadowRoots should never be cloned.
-    RawPtr<Node> cloneNode(bool) override { return nullptr; }
+    Node* cloneNode(bool) override { return nullptr; }
 
     // FIXME: This shouldn't happen. https://bugs.webkit.org/show_bug.cgi?id=88834
     bool isOrphan() const { return !host(); }
@@ -166,10 +165,11 @@ private:
     void invalidateDescendantSlots();
     unsigned descendantSlotCount() const;
 
-    Member<ShadowRoot> m_prev;
-    Member<ShadowRoot> m_next;
-    Member<ShadowRootRareData> m_shadowRootRareData;
-    unsigned m_numberOfStyles : 26;
+    Member<ShadowRootRareDataV0> m_shadowRootRareDataV0;
+    Member<StyleSheetList> m_styleSheetList;
+    Member<SlotAssignment> m_slotAssignment;
+    unsigned m_numberOfStyles : 13;
+    unsigned m_childShadowRootCount : 13;
     unsigned m_type : 2;
     unsigned m_registeredWithParentShadowRoot : 1;
     unsigned m_descendantInsertionPointsIsValid : 1;
@@ -182,9 +182,19 @@ inline Element* ShadowRoot::activeElement() const
     return adjustedFocusedElement();
 }
 
+inline ShadowRoot* Element::shadowRootIfV1() const
+{
+    ShadowRoot* root = this->shadowRoot();
+    if (root && root->isV1())
+        return root;
+    return nullptr;
+}
+
 DEFINE_NODE_TYPE_CASTS(ShadowRoot, isShadowRoot());
 DEFINE_TYPE_CASTS(ShadowRoot, TreeScope, treeScope, treeScope->rootNode().isShadowRoot(), treeScope.rootNode().isShadowRoot());
 DEFINE_TYPE_CASTS(TreeScope, ShadowRoot, shadowRoot, true, true);
+
+CORE_EXPORT std::ostream& operator<<(std::ostream&, const ShadowRootType&);
 
 } // namespace blink
 

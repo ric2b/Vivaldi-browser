@@ -6,12 +6,13 @@
 #define COMPONENTS_DATA_REDUCTION_PROXY_CORE_BROWSER_DATA_STORE_IMPL_H_
 
 #include <map>
+#include <memory>
 #include <string>
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/sequence_checker.h"
+#include "base/strings/string_piece.h"
 #include "components/data_reduction_proxy/core/browser/data_store.h"
 
 namespace leveldb {
@@ -29,11 +30,11 @@ class DataStoreImpl : public DataStore {
   // Overrides of DataStore.
   void InitializeOnDBThread() override;
 
-  Status Get(const std::string& key, std::string* value) override;
+  Status Get(base::StringPiece key, std::string* value) override;
 
   Status Put(const std::map<std::string, std::string>& map) override;
 
-  Status Delete(const std::string& key) override;
+  Status Delete(base::StringPiece key) override;
 
  private:
   // Opens the underlying LevelDB for read and write.
@@ -44,7 +45,7 @@ class DataStoreImpl : public DataStore {
   void RecreateDB();
 
   // The underlying LevelDB used by this implementation.
-  scoped_ptr<leveldb::DB> db_;
+  std::unique_ptr<leveldb::DB> db_;
 
   // Path to the profile using this store.
   const base::FilePath profile_path_;

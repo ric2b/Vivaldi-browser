@@ -14,6 +14,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/process/process_handle.h"
+#include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "crypto/random.h"
 #include "mojo/edk/embedder/embedder_internal.h"
@@ -173,13 +174,9 @@ void NodeController::ClosePort(const ports::PortRef& port) {
 }
 
 int NodeController::SendMessage(const ports::PortRef& port,
-                                scoped_ptr<PortsMessage>* message) {
-  ports::ScopedMessage ports_message(message->release());
-  int rv = node_->SendMessage(port, &ports_message);
-  if (rv != ports::OK) {
-    DCHECK(ports_message);
-    message->reset(static_cast<PortsMessage*>(ports_message.release()));
-  }
+                                std::unique_ptr<PortsMessage> message) {
+  ports::ScopedMessage ports_message(message.release());
+  int rv = node_->SendMessage(port, std::move(ports_message));
 
   AcceptIncomingMessages();
   return rv;
@@ -193,10 +190,19 @@ void NodeController::ReservePort(const std::string& token,
   base::AutoLock lock(reserved_ports_lock_);
   auto result = reserved_ports_.insert(std::make_pair(token, port));
   DCHECK(result.second);
+
+  // Safeguard against unpredictable and exceptional cases where a reservation
+  // holder may disappear without ever claiming their reservation.
+  io_task_runner_->PostDelayedTask(
+      FROM_HERE,
+      base::Bind(&NodeController::CancelReservation,
+                 base::Unretained(this), token),
+      base::TimeDelta::FromMinutes(1));
 }
 
 void NodeController::MergePortIntoParent(const std::string& token,
                                          const ports::PortRef& port) {
+  bool was_merged = false;
   {
     // This request may be coming from within the process that reserved the
     // "parent" side (e.g. for Chrome single-process mode), so if this token is
@@ -206,8 +212,12 @@ void NodeController::MergePortIntoParent(const std::string& token,
     if (it != reserved_ports_.end()) {
       node_->MergePorts(port, name_, it->second.name());
       reserved_ports_.erase(it);
-      return;
+      was_merged = true;
     }
+  }
+  if (was_merged) {
+    AcceptIncomingMessages();
+    return;
   }
 
   scoped_refptr<NodeChannel> parent;
@@ -251,6 +261,7 @@ void NodeController::RequestShutdown(const base::Closure& callback) {
   {
     base::AutoLock lock(shutdown_lock_);
     shutdown_callback_ = callback;
+    shutdown_callback_flag_.Set(true);
   }
 
   AttemptShutdownIfRequested();
@@ -475,7 +486,7 @@ void NodeController::SendPeerMessage(const ports::NodeName& name,
 }
 
 void NodeController::AcceptIncomingMessages() {
-  for (;;) {
+  while (incoming_messages_flag_) {
     // TODO: We may need to be more careful to avoid starving the rest of the
     // thread here. Revisit this if it turns out to be a problem. One
     // alternative would be to schedule a task to continue pumping messages
@@ -490,6 +501,7 @@ void NodeController::AcceptIncomingMessages() {
     // the size is 0. So avoid creating it until it is necessary.
     std::queue<ports::ScopedMessage> messages;
     std::swap(messages, incoming_messages_);
+    incoming_messages_flag_.Set(false);
     messages_lock_.Release();
 
     while (!messages.empty()) {
@@ -535,6 +547,19 @@ void NodeController::DropAllPeers() {
     delete this;
 }
 
+void NodeController::CancelReservation(const std::string& token) {
+  ports::PortRef reserved_port;
+  {
+    base::AutoLock lock(reserved_ports_lock_);
+    auto iter = reserved_ports_.find(token);
+    if (iter == reserved_ports_.end())  // Already claimed!
+      return;
+    reserved_port = iter->second;
+    reserved_ports_.erase(iter);
+  }
+  node_->ClosePort(reserved_port);
+}
+
 void NodeController::GenerateRandomPortName(ports::PortName* port_name) {
   GenerateRandomName(port_name);
 }
@@ -553,6 +578,7 @@ void NodeController::ForwardMessage(const ports::NodeName& node,
     // AcceptMessage, we flush the queue after calling any of those methods.
     base::AutoLock lock(messages_lock_);
     incoming_messages_.emplace(std::move(message));
+    incoming_messages_flag_.Set(true);
   } else {
     SendPeerMessage(node, std::move(message));
   }
@@ -875,6 +901,8 @@ void NodeController::OnIntroduce(const ports::NodeName& from_node,
   DCHECK(io_task_runner_->RunsTasksOnCurrentThread());
 
   if (!channel_handle.is_valid()) {
+    node_->LostConnectionToNode(name);
+
     DLOG(ERROR) << "Could not be introduced to peer " << name;
     base::AutoLock lock(peers_lock_);
     pending_peer_messages_.erase(name);
@@ -911,6 +939,12 @@ void NodeController::OnRelayPortsMessage(const ports::NodeName& from_node,
   // process before going out (see NodeChannel::WriteChannelMessage).
   //
   // TODO: We could avoid double-duplication.
+  //
+  // Note that we explicitly mark the handles as being owned by the sending
+  // process before rewriting them, in order to accommodate RewriteHandles'
+  // internal sanity checks.
+  for (size_t i = 0; i < message->num_handles(); ++i)
+    message->handles()[i].owning_process = from_process;
   if (!Channel::Message::RewriteHandles(from_process,
                                         base::GetCurrentProcessHandle(),
                                         message->handles(),
@@ -978,17 +1012,22 @@ void NodeController::DestroyOnIOThreadShutdown() {
 }
 
 void NodeController::AttemptShutdownIfRequested() {
+  if (!shutdown_callback_flag_)
+    return;
+
   base::Closure callback;
   {
     base::AutoLock lock(shutdown_lock_);
     if (shutdown_callback_.is_null())
       return;
     if (!node_->CanShutdownCleanly(true /* allow_local_ports */)) {
-      DVLOG(2) << "Unable to cleanly shut down node " << name_ << ".";
+      DVLOG(2) << "Unable to cleanly shut down node " << name_;
       return;
     }
+
     callback = shutdown_callback_;
     shutdown_callback_.Reset();
+    shutdown_callback_flag_.Set(false);
   }
 
   DCHECK(!callback.is_null());

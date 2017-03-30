@@ -11,7 +11,6 @@
 #include "ash/ash_export.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "ui/gfx/display.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace aura {
@@ -42,6 +41,12 @@ class ASH_EXPORT DragWindowController {
   void Update(const gfx::Rect& bounds_in_screen,
               const gfx::Point& drag_location_in_screen);
 
+ private:
+  class DragWindowDetails;
+  FRIEND_TEST_ALL_PREFIXES(DragWindowResizerTest, DragWindowController);
+  FRIEND_TEST_ALL_PREFIXES(DragWindowResizerTest,
+                           DragWindowControllerAcrossThreeDisplays);
+
   // Returns the currently active drag windows.
   int GetDragWindowsCountForTest() const;
 
@@ -50,8 +55,8 @@ class ASH_EXPORT DragWindowController {
   const aura::Window* GetDragWindowForTest(size_t index) const;
   const ui::LayerTreeOwner* GetDragLayerOwnerForTest(size_t index) const;
 
- private:
-  class DragWindowDetails;
+  // Call Layer::OnPaintLayer on all layers under the drag_windows_.
+  void RequestLayerPaintForTest();
 
   // Window the drag window is placed beneath.
   aura::Window* window_;

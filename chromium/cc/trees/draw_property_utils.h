@@ -56,9 +56,6 @@ void CC_EXPORT BuildPropertyTreesAndComputeVisibleRects(
     PropertyTrees* property_trees,
     LayerImplList* visible_layer_list);
 
-void CC_EXPORT UpdateRenderSurfaces(Layer* root_layer,
-                                    PropertyTrees* property_trees);
-
 void CC_EXPORT UpdatePropertyTrees(PropertyTrees* property_trees,
                                    bool can_render_to_separate_surface);
 
@@ -97,6 +94,9 @@ bool CC_EXPORT LayerNeedsUpdate(Layer* layer,
 bool CC_EXPORT LayerNeedsUpdate(LayerImpl* layer,
                                 bool layer_is_drawn,
                                 const TransformTree& tree);
+
+void CC_EXPORT VerifyClipTreeCalculations(const LayerImplList& layer_list,
+                                          PropertyTrees* property_trees);
 
 gfx::Transform CC_EXPORT DrawTransform(const LayerImpl* layer,
                                        const TransformTree& tree);

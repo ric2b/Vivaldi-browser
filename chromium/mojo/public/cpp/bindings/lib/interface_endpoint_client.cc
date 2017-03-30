@@ -5,15 +5,15 @@
 #include "mojo/public/cpp/bindings/lib/interface_endpoint_client.h"
 
 #include <stdint.h>
+
 #include <utility>
 
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
-#include "base/thread_task_runner_handle.h"
 #include "mojo/public/cpp/bindings/associated_group.h"
 #include "mojo/public/cpp/bindings/lib/interface_endpoint_controller.h"
 #include "mojo/public/cpp/bindings/lib/multiplex_router.h"
@@ -38,18 +38,24 @@ void DCheckIfInvalid(const base::WeakPtr<InterfaceEndpointClient>& client,
 class ResponderThunk : public MessageReceiverWithStatus {
  public:
   explicit ResponderThunk(
-      const base::WeakPtr<InterfaceEndpointClient>& endpoint_client)
-      : endpoint_client_(endpoint_client), accept_was_invoked_(false),
-        task_runner_(base::ThreadTaskRunnerHandle::Get()) {}
+      const base::WeakPtr<InterfaceEndpointClient>& endpoint_client,
+      scoped_refptr<base::SingleThreadTaskRunner> runner)
+      : endpoint_client_(endpoint_client),
+        accept_was_invoked_(false),
+        task_runner_(std::move(runner)) {}
   ~ResponderThunk() override {
     if (!accept_was_invoked_) {
       // The Mojo application handled a message that was expecting a response
       // but did not send a response.
+      // We raise an error to signal the calling application that an error
+      // condition occurred. Without this the calling application would have no
+      // way of knowing it should stop waiting for a response.
       if (task_runner_->RunsTasksOnCurrentThread()) {
+        // Please note that even if this code is run from a different task
+        // runner on the same thread as |task_runner_|, it is okay to directly
+        // call InterfaceEndpointClient::RaiseError(), because it will raise
+        // error from the correct task runner asynchronously.
         if (endpoint_client_) {
-          // We raise an error to signal the calling application that an error
-          // condition occurred. Without this the calling application would have
-          // no way of knowing it should stop waiting for a response.
           endpoint_client_->RaiseError();
         }
       } else {
@@ -126,14 +132,16 @@ bool InterfaceEndpointClient::HandleIncomingMessageThunk::Accept(
 InterfaceEndpointClient::InterfaceEndpointClient(
     ScopedInterfaceEndpointHandle handle,
     MessageReceiverWithResponderStatus* receiver,
-    scoped_ptr<MessageFilter> payload_validator,
-    bool expect_sync_requests)
+    std::unique_ptr<MessageFilter> payload_validator,
+    bool expect_sync_requests,
+    scoped_refptr<base::SingleThreadTaskRunner> runner)
     : handle_(std::move(handle)),
       incoming_receiver_(receiver),
       payload_validator_(std::move(payload_validator)),
       thunk_(this),
       next_request_id_(1),
       encountered_error_(false),
+      task_runner_(std::move(runner)),
       weak_ptr_factory_(this) {
   DCHECK(handle_.is_valid());
   DCHECK(handle_.is_local());
@@ -142,7 +150,8 @@ InterfaceEndpointClient::InterfaceEndpointClient(
   // directly is a little awkward.
   payload_validator_->set_sink(&thunk_);
 
-  controller_ = handle_.router()->AttachEndpointClient(handle_, this);
+  controller_ =
+      handle_.router()->AttachEndpointClient(handle_, this, task_runner_);
   if (expect_sync_requests)
     controller_->AllowWokenUpBySyncWatchOnSameThread();
 }
@@ -210,19 +219,20 @@ bool InterfaceEndpointClient::AcceptWithResponder(Message* message,
 
   message->set_request_id(request_id);
 
+  bool is_sync = message->has_flag(kMessageIsSync);
   if (!controller_->SendMessage(message))
     return false;
 
-  if (!message->has_flag(kMessageIsSync)) {
+  if (!is_sync) {
     // We assume ownership of |responder|.
-    async_responders_[request_id] = make_scoped_ptr(responder);
+    async_responders_[request_id] = base::WrapUnique(responder);
     return true;
   }
 
   bool response_received = false;
-  scoped_ptr<MessageReceiver> sync_responder(responder);
+  std::unique_ptr<MessageReceiver> sync_responder(responder);
   sync_responses_.insert(std::make_pair(
-      request_id, make_scoped_ptr(new SyncResponseInfo(&response_received))));
+      request_id, base::WrapUnique(new SyncResponseInfo(&response_received))));
 
   base::WeakPtr<InterfaceEndpointClient> weak_self =
       weak_ptr_factory_.GetWeakPtr();
@@ -233,7 +243,7 @@ bool InterfaceEndpointClient::AcceptWithResponder(Message* message,
     auto iter = sync_responses_.find(request_id);
     DCHECK_EQ(&response_received, iter->second->response_received);
     if (response_received) {
-      scoped_ptr<Message> response = std::move(iter->second->response);
+      std::unique_ptr<Message> response = std::move(iter->second->response);
       ignore_result(sync_responder->Accept(response.get()));
     }
     sync_responses_.erase(iter);
@@ -266,7 +276,7 @@ bool InterfaceEndpointClient::HandleValidatedMessage(Message* message) {
       return false;
 
     MessageReceiverWithStatus* responder =
-        new ResponderThunk(weak_ptr_factory_.GetWeakPtr());
+        new ResponderThunk(weak_ptr_factory_.GetWeakPtr(), task_runner_);
     bool ok = incoming_receiver_->AcceptWithResponder(message, responder);
     if (!ok)
       delete responder;
@@ -287,7 +297,7 @@ bool InterfaceEndpointClient::HandleValidatedMessage(Message* message) {
     auto it = async_responders_.find(request_id);
     if (it == async_responders_.end())
       return false;
-    scoped_ptr<MessageReceiver> responder = std::move(it->second);
+    std::unique_ptr<MessageReceiver> responder = std::move(it->second);
     async_responders_.erase(it);
     return responder->Accept(message);
   } else {

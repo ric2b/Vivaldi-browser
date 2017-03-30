@@ -24,10 +24,10 @@ class TestHooks : public AnimationDelegate {
 
   void ReadSettings(const LayerTreeSettings& settings);
 
-  virtual void CreateResourceAndTileTaskWorkerPool(
+  virtual void CreateResourceAndRasterBufferProvider(
       LayerTreeHostImpl* host_impl,
-      scoped_ptr<TileTaskWorkerPool>* tile_task_worker_pool,
-      scoped_ptr<ResourcePool>* resource_pool);
+      std::unique_ptr<RasterBufferProvider>* raster_buffer_provider,
+      std::unique_ptr<ResourcePool>* resource_pool);
   virtual void WillBeginImplFrameOnThread(LayerTreeHostImpl* host_impl,
                                           const BeginFrameArgs& args) {}
   virtual void DidFinishImplFrameOnThread(LayerTreeHostImpl* host_impl) {}
@@ -90,7 +90,6 @@ class TestHooks : public AnimationDelegate {
   virtual void ScheduledActionBeginOutputSurfaceCreation() {}
   virtual void ScheduledActionPrepareTiles() {}
   virtual void ScheduledActionInvalidateOutputSurface() {}
-  virtual void SendBeginFramesToChildren(const BeginFrameArgs& args) {}
   virtual void SendBeginMainFrameNotExpectedSoon() {}
 
   // Hooks for ProxyImpl
@@ -139,7 +138,8 @@ class TestHooks : public AnimationDelegate {
   void NotifyAnimationTakeover(base::TimeTicks monotonic_time,
                                TargetProperty::Type target_property,
                                double animation_start_time,
-                               scoped_ptr<AnimationCurve> curve) override {}
+                               std::unique_ptr<AnimationCurve> curve) override {
+  }
 
   virtual void RequestNewOutputSurface() = 0;
 

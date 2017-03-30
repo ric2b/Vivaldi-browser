@@ -36,15 +36,10 @@ class ExceptionState;
 
 class DatasetDOMStringMap final : public DOMStringMap {
 public:
-    static RawPtr<DatasetDOMStringMap> create(Element* element)
+    static DatasetDOMStringMap* create(Element* element)
     {
         return new DatasetDOMStringMap(element);
     }
-
-#if !ENABLE(OILPAN)
-    void ref() override;
-    void deref() override;
-#endif
 
     void getNames(Vector<String>&) override;
     String item(const String& name) override;

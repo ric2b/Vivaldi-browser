@@ -34,7 +34,6 @@
 #include "core/loader/FrameLoaderClient.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/ContextMenuClient.h"
-#include "core/page/DragClient.h"
 #include "core/page/EditorClient.h"
 #include "core/page/Page.h"
 #include "core/page/SpellCheckerClient.h"
@@ -90,7 +89,12 @@ public:
 
     void didOverscroll(const FloatSize&, const FloatSize&, const FloatPoint&, const FloatSize&) override {}
 
+    void beginLifecycleUpdates() override { }
+
     bool hadFormInteraction() const override { return false; }
+
+    void startDragging(LocalFrame*, const WebDragData&, WebDragOperationsMask, const WebImage& dragImage, const WebPoint& dragImageOffset) {}
+    bool acceptsLoadDrops() const override { return true; }
 
     void setToolbarsVisible(bool) override {}
     bool toolbarsVisible() override { return false; }
@@ -239,13 +243,13 @@ public:
     void didRunInsecureContent(SecurityOrigin*, const KURL&) override {}
     void didDetectXSS(const KURL&, bool) override {}
     void didDispatchPingLoader(const KURL&) override {}
-    void didDisplayContentWithCertificateErrors(const KURL&, const CString&, const WebURL& mainResourceUrl, const CString& mainResourceSecurityInfo) override {}
-    void didRunContentWithCertificateErrors(const KURL&, const CString&, const WebURL& mainResourceUrl, const CString& mainResourceSecurityInfo) override {}
+    void didDisplayContentWithCertificateErrors(const KURL&, const CString&) override {}
+    void didRunContentWithCertificateErrors(const KURL&, const CString&) override {}
     void selectorMatchChanged(const Vector<String>&, const Vector<String>&) override {}
     LocalFrame* createFrame(const FrameLoadRequest&, const AtomicString&, HTMLFrameOwnerElement*) override;
     Widget* createPlugin(HTMLPlugInElement*, const KURL&, const Vector<String>&, const Vector<String>&, const String&, bool, DetachedPluginPolicy) override;
     bool canCreatePluginWithoutRenderer(const String& mimeType) const override { return false; }
-    PassOwnPtr<WebMediaPlayer> createWebMediaPlayer(HTMLMediaElement&, const WebURL&, WebMediaPlayerClient*) override;
+    PassOwnPtr<WebMediaPlayer> createWebMediaPlayer(HTMLMediaElement&, const WebMediaPlayerSource&, WebMediaPlayerClient*) override;
     PassOwnPtr<WebMediaSession> createWebMediaSession() override;
 
     ObjectContentType getObjectContentType(const KURL&, const String&, bool) override { return ObjectContentType(); }
@@ -260,11 +264,7 @@ public:
     void willReleaseScriptContext(v8::Local<v8::Context>, int worldId) override {}
     bool allowScriptExtension(const String& extensionName, int extensionGroup, int worldId) override { return false; }
 
-    v8::Local<v8::Value> createTestInterface(const AtomicString& name) override;
-
     WebCookieJar* cookieJar() const override { return 0; }
-
-    void didRequestAutocomplete(HTMLFormElement*) override;
 
     PassOwnPtr<WebServiceWorkerProvider> createServiceWorkerProvider() override;
     bool isControlledByServiceWorker(DocumentLoader&) override { return false; }
@@ -326,15 +326,6 @@ public:
     ~EmptyContextMenuClient() override {}
     void showContextMenu(const ContextMenu*) override {}
     void clearContextMenu() override {}
-};
-
-class EmptyDragClient final : public DragClient {
-    WTF_MAKE_NONCOPYABLE(EmptyDragClient); USING_FAST_MALLOC(EmptyDragClient);
-public:
-    EmptyDragClient() {}
-    ~EmptyDragClient() override {}
-    DragDestinationAction actionMaskForDrag(DragData*) override { return DragDestinationActionNone; }
-    void startDrag(DragImage*, const IntPoint&, const IntPoint&, DataTransfer*, LocalFrame*, bool) override {}
 };
 
 CORE_EXPORT void fillWithEmptyClients(Page::PageClients&);

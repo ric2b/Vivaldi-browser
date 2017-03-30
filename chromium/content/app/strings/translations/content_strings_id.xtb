@@ -59,7 +59,7 @@
 <translation id="3078740164268491126">tabel</translation>
 <translation id="3086746722712840547">note</translation>
 <translation id="310520048233152454">Masukkan URL.</translation>
-<translation id="3175736971608411871">pewaktu</translation>
+<translation id="3175736971608411871">timer</translation>
 <translation id="3199563858620722075">kotak kombo</translation>
 <translation id="3450233048674729344">Nilai harus lebih kecil atau sama dengan <ph name="MAXIMUM" />.</translation>
 <translation id="3486220673238053218">definisi</translation>
@@ -109,7 +109,9 @@
 <translation id="561939826962581046">waktu</translation>
 <translation id="5641012560118721995">jeda pemutaran</translation>
 <translation id="5643186887447432888">tombol</translation>
+<translation id="583281660410589416">Tidak dikenal</translation>
 <translation id="5843503607508392247">Lainnya...</translation>
+<translation id="5860033963881614850">Nonaktif</translation>
 <translation id="5939518447894949180">Setel ulang</translation>
 <translation id="5944544982112848342">2048 (Tingkat Tinggi)</translation>
 <translation id="5966707198760109579">Minggu</translation>

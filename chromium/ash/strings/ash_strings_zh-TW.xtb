@@ -26,6 +26,7 @@
 <translation id="1602076796624386989">啟用行動數據</translation>
 <translation id="1621499497873603021">電池剩餘使用時間：<ph name="TIME_LEFT" /></translation>
 <translation id="164969095109328410">Chrome 裝置</translation>
+<translation id="1677472565718498478"><ph name="TIME" /> 後用盡</translation>
 <translation id="1723752762323179280">結束工作階段</translation>
 <translation id="1747827819627189109">螢幕小鍵盤已啟用</translation>
 <translation id="1812696562331527143">您的輸入法已變更為 <ph name="INPUT_METHOD_ID" />*(<ph name="BEGIN_LINK" />第三方<ph name="END_LINK" />)。
@@ -92,7 +93,6 @@
 <translation id="3621712662352432595">音訊設定</translation>
 <translation id="3625258641415618104">已停用螢幕擷取畫面</translation>
 <translation id="3626281679859535460">亮度</translation>
-<translation id="3626637461649818317">剩餘電量：<ph name="PERCENTAGE" />%</translation>
 <translation id="3678715477168044796"><ph name="DISPLAY_NAME" />：<ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079"><ph name="DISPLAY_NAME" /> 的解析度已變更為 <ph name="RESOLUTION" /></translation>
 <translation id="370649949373421643">啟用 Wi-Fi</translation>
@@ -105,19 +105,19 @@
 <translation id="3799026279081545374">您的充電器可能有問題。如需相關協助或索取新的充電器，請致電 866-628-1371 (美國)、0800-026-0613 (英國)、1-800-832-664 (愛爾蘭)、866-628-1372 (加拿大) 或 1-800-067-460 (澳洲)。</translation>
 <translation id="3866182280516392520">IPv6 位址</translation>
 <translation id="3891340733213178823">按兩下 Ctrl+Shift+Q 鍵即可登出。</translation>
-<translation id="3892641579809465218">內部畫面</translation>
+<translation id="3892641579809465218">内建顯示器</translation>
 <translation id="3963445509666917109">喇叭 (內部)</translation>
 <translation id="3967919079500697218">您的管理員已停用拍攝螢幕擷取畫面功能。</translation>
 <translation id="397105322502079400">計算中…</translation>
 <translation id="3995138139523574647">USB-C 裝置 (右後方連接埠)</translation>
 <translation id="4053612967614057854">停用螢幕小鍵盤</translation>
-<translation id="412065659894267608">尚需 <ph name="HOUR" /> 小時 <ph name="MINUTE" /> 分鐘才能充滿電</translation>
 <translation id="4250680216510889253">否</translation>
 <translation id="4279490309300973883">鏡像</translation>
 <translation id="4321179778687042513">Ctrl</translation>
 <translation id="4421231901400348175">透過遠端協助與<ph name="HELPER_NAME" />分享螢幕控制功能。</translation>
 <translation id="4430019312045809116">音量</translation>
 <translation id="4527045527269911712">藍牙裝置「<ph name="DEVICE_NAME" />」要求配對權限。</translation>
+<translation id="453661520163887813"><ph name="TIME" /> 後充飽</translation>
 <translation id="4544944664594876241">螢幕鎖定快速鍵已變更，請改用 <ph name="NEW_SHORTCUT" /> (停用 <ph name="OLD_SHORTCUT" />)。</translation>
 <translation id="479989351350248267">search</translation>
 <translation id="4804818685124855865">中斷連線</translation>
@@ -129,7 +129,6 @@
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl + Shift + 空格鍵</translation>
 <translation id="5045002648206642691">Google 雲端硬碟設定...</translation>
-<translation id="5102001756192215136">電量剩餘時間：<ph name="HOUR" />:<ph name="MINUTE" /></translation>
 <translation id="511445211639755999"><ph name="RESOLUTION" />，<ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">可用的投放裝置</translation>
 <translation id="5222676887888702881">登出</translation>
@@ -166,7 +165,6 @@
 <translation id="615957422585914272">顯示螢幕小鍵盤</translation>
 <translation id="6165508094623778733">瞭解詳情</translation>
 <translation id="6203030746557259519">虛擬顯示</translation>
-<translation id="6247708409970142803"><ph name="PERCENTAGE" />%</translation>
 <translation id="6248847161401822652">按兩下 Control、Shift 和 Q 鍵即可結束。</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" /> 已旋轉到<ph name="ROTATION" /></translation>
 <translation id="6359806961507272919">來自 <ph name="PHONE_NUMBER" /> 的簡訊</translation>
@@ -207,6 +205,7 @@
 <translation id="7510334386202674593">Ctrl + Shift + L 鍵</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> 不支援 <ph name="SPECIFIED_RESOLUTION" />，解析度已變更為 <ph name="FALLBACK_RESOLUTION" /></translation>
 <translation id="7573962313813535744">停駐模式</translation>
+<translation id="7580671184200851182">透過所有喇叭播放相同的音效 (單聲道音訊)</translation>
 <translation id="7593891976182323525">搜尋鍵或 Shift 鍵</translation>
 <translation id="7649070708921625228">說明</translation>
 <translation id="7692480393933218409">正在為連接的 USB-C 裝置充電</translation>
@@ -225,13 +224,14 @@
 <translation id="8308637677604853869">前一個選單</translation>
 <translation id="8356164830168736643">關閉「<ph name="WINDOW_TITLE" />」</translation>
 <translation id="8428213095426709021">設定</translation>
-<translation id="8456362689280298700">完成充電尚需 <ph name="HOUR" /> 小時 <ph name="MINUTE" /> 分鐘</translation>
 <translation id="8517041960877371778"><ph name="DEVICE_TYPE" /> 在開啟時可能無法充電。</translation>
 <translation id="8528322925433439945">行動服務 ...</translation>
+<translation id="8639760480004882931">剩餘電量：<ph name="PERCENTAGE" /></translation>
 <translation id="8673028979667498656">270 度</translation>
 <translation id="8676770494376880701">已連接低功率充電器</translation>
 <translation id="8814190375133053267">Wi-Fi</translation>
 <translation id="882279321799040148">按這裡瀏覽</translation>
+<translation id="8825534185036233643">鏡像處理作業最多支援兩部顯示器。</translation>
 <translation id="8828714802988429505">90 度</translation>
 <translation id="8850991929411075241">搜尋鍵 + Esc 鍵</translation>
 <translation id="8878886163241303700">延伸螢幕</translation>

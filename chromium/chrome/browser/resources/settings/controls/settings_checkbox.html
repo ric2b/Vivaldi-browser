@@ -9,22 +9,14 @@
 <dom-module id="settings-checkbox">
   <link rel="import" type="css" href="chrome://resources/cr_elements/shared.css">
   <template>
-    <style is="custom-style" include="settings-shared">
+    <style include="settings-shared">
       :host {
         align-items: center;
         display: flex;
         min-height: 40px;
       }
 
-      paper-checkbox {
-        --paper-checkbox-label-spacing: var(--checkbox-spacing);
-        --paper-checkbox-size: var(--checkbox-size);
-        --paper-checkbox-checked-color: var(--google-blue-500);
-        --paper-checkbox-unchecked-color: var(--paper-grey-600);
-        -webkit-margin-start: var(--checkbox-margin-start);
-      }
-
-      .secondary {
+      .secondary:not(:empty) {
         @apply(--settings-secondary);
       }
 

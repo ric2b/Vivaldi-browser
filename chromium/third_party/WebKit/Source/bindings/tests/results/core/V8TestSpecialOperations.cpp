@@ -7,7 +7,7 @@
 #include "V8TestSpecialOperations.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/UnionTypesCore.h"
+#include "bindings/core/v8/NodeOrNodeList.h"
 #include "bindings/core/v8/V8DOMConfiguration.h"
 #include "bindings/core/v8/V8Node.h"
 #include "bindings/core/v8/V8NodeList.h"
@@ -28,7 +28,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8TestSpecialOperations::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestSpecialOperations::domTemplate, V8TestSpecialOperations::refObject, V8TestSpecialOperations::derefObject, V8TestSpecialOperations::trace, 0, 0, V8TestSpecialOperations::preparePrototypeAndInterfaceObject, V8TestSpecialOperations::installConditionallyEnabledProperties, "TestSpecialOperations", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent, WrapperTypeInfo::RefCountedObject };
+const WrapperTypeInfo V8TestSpecialOperations::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestSpecialOperations::domTemplate, V8TestSpecialOperations::trace, V8TestSpecialOperations::traceWrappers, 0, 0, V8TestSpecialOperations::preparePrototypeAndInterfaceObject, nullptr, "TestSpecialOperations", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -65,8 +65,6 @@ static void namedItemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& i
 
 static void namedPropertyGetter(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-    if (!name->IsString())
-        return;
     auto nameString = name.As<v8::String>();
     TestSpecialOperations* impl = V8TestSpecialOperations::toImpl(info.Holder());
     AtomicString propertyName = toCoreAtomicString(nameString);
@@ -79,13 +77,13 @@ static void namedPropertyGetter(v8::Local<v8::Name> name, const v8::PropertyCall
 
 static void namedPropertyGetterCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
+    if (!name->IsString())
+        return;
     TestSpecialOperationsV8Internal::namedPropertyGetter(name, info);
 }
 
 static void namedPropertySetter(v8::Local<v8::Name> name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-    if (!name->IsString())
-        return;
     auto nameString = name.As<v8::String>();
     TestSpecialOperations* impl = V8TestSpecialOperations::toImpl(info.Holder());
     V8StringResource<> propertyName(nameString);
@@ -105,13 +103,13 @@ static void namedPropertySetter(v8::Local<v8::Name> name, v8::Local<v8::Value> v
 
 static void namedPropertySetterCallback(v8::Local<v8::Name> name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
+    if (!name->IsString())
+        return;
     TestSpecialOperationsV8Internal::namedPropertySetter(name, v8Value, info);
 }
 
 static void namedPropertyQuery(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Integer>& info)
 {
-    if (!name->IsString())
-        return;
     TestSpecialOperations* impl = V8TestSpecialOperations::toImpl(info.Holder());
     AtomicString propertyName = toCoreAtomicString(name.As<v8::String>());
     v8::String::Utf8Value namedProperty(name);
@@ -126,6 +124,8 @@ static void namedPropertyQuery(v8::Local<v8::Name> name, const v8::PropertyCallb
 
 static void namedPropertyQueryCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Integer>& info)
 {
+    if (!name->IsString())
+        return;
     TestSpecialOperationsV8Internal::namedPropertyQuery(name, info);
 }
 
@@ -139,7 +139,7 @@ static void namedPropertyEnumerator(const v8::PropertyCallbackInfo<v8::Array>& i
         return;
     v8::Local<v8::Array> v8names = v8::Array::New(info.GetIsolate(), names.size());
     for (size_t i = 0; i < names.size(); ++i) {
-        if (!v8CallBoolean(v8names->Set(info.GetIsolate()->GetCurrentContext(), v8::Integer::New(info.GetIsolate(), i), v8String(info.GetIsolate(), names[i]))))
+        if (!v8CallBoolean(v8names->CreateDataProperty(info.GetIsolate()->GetCurrentContext(), i, v8String(info.GetIsolate(), names[i]))))
             return;
     }
     v8SetReturnValue(info, v8names);
@@ -156,7 +156,7 @@ const V8DOMConfiguration::MethodConfiguration V8TestSpecialOperationsMethods[] =
     {"namedItem", TestSpecialOperationsV8Internal::namedItemMethodCallback, 0, 1, v8::None, V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnPrototype},
 };
 
-static void installV8TestSpecialOperationsTemplate(v8::Local<v8::FunctionTemplate> interfaceTemplate, v8::Isolate* isolate)
+static void installV8TestSpecialOperationsTemplate(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::FunctionTemplate> interfaceTemplate)
 {
     // Initialize the interface object's template.
     V8DOMConfiguration::initializeDOMInterfaceTemplate(isolate, interfaceTemplate, V8TestSpecialOperations::wrapperTypeInfo.interfaceName, v8::Local<v8::FunctionTemplate>(), V8TestSpecialOperations::internalFieldCount);
@@ -167,15 +167,15 @@ static void installV8TestSpecialOperationsTemplate(v8::Local<v8::FunctionTemplat
     v8::Local<v8::ObjectTemplate> prototypeTemplate = interfaceTemplate->PrototypeTemplate();
     ALLOW_UNUSED_LOCAL(prototypeTemplate);
     // Register DOM constants, attributes and operations.
-    V8DOMConfiguration::installMethods(isolate, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, V8TestSpecialOperationsMethods, WTF_ARRAY_LENGTH(V8TestSpecialOperationsMethods));
+    V8DOMConfiguration::installMethods(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, V8TestSpecialOperationsMethods, WTF_ARRAY_LENGTH(V8TestSpecialOperationsMethods));
     // Named properties
     v8::NamedPropertyHandlerConfiguration namedPropertyHandlerConfig(TestSpecialOperationsV8Internal::namedPropertyGetterCallback, TestSpecialOperationsV8Internal::namedPropertySetterCallback, TestSpecialOperationsV8Internal::namedPropertyQueryCallback, 0, TestSpecialOperationsV8Internal::namedPropertyEnumeratorCallback, v8::Local<v8::Value>(), static_cast<v8::PropertyHandlerFlags>(int(v8::PropertyHandlerFlags::kOnlyInterceptStrings)));
     instanceTemplate->SetHandler(namedPropertyHandlerConfig);
 }
 
-v8::Local<v8::FunctionTemplate> V8TestSpecialOperations::domTemplate(v8::Isolate* isolate)
+v8::Local<v8::FunctionTemplate> V8TestSpecialOperations::domTemplate(v8::Isolate* isolate, const DOMWrapperWorld& world)
 {
-    return V8DOMConfiguration::domClassTemplate(isolate, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestSpecialOperationsTemplate);
+    return V8DOMConfiguration::domClassTemplate(isolate, world, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestSpecialOperationsTemplate);
 }
 
 bool V8TestSpecialOperations::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
@@ -191,16 +191,6 @@ v8::Local<v8::Object> V8TestSpecialOperations::findInstanceInPrototypeChain(v8::
 TestSpecialOperations* V8TestSpecialOperations::toImplWithTypeCheck(v8::Isolate* isolate, v8::Local<v8::Value> value)
 {
     return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : 0;
-}
-
-void V8TestSpecialOperations::refObject(ScriptWrappable* scriptWrappable)
-{
-    scriptWrappable->toImpl<TestSpecialOperations>()->ref();
-}
-
-void V8TestSpecialOperations::derefObject(ScriptWrappable* scriptWrappable)
-{
-    scriptWrappable->toImpl<TestSpecialOperations>()->deref();
 }
 
 } // namespace blink

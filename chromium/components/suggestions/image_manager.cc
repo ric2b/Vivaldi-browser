@@ -4,13 +4,15 @@
 
 #include "components/suggestions/image_manager.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/task_runner_util.h"
+#include "components/image_fetcher/image_fetcher.h"
 #include "components/suggestions/image_encoder.h"
-#include "components/suggestions/image_fetcher.h"
+#include "ui/gfx/image/image.h"
 
 using leveldb_proto::ProtoDatabase;
 
@@ -22,10 +24,23 @@ namespace {
 // browsers still reporting the previous values.
 const char kDatabaseUMAClientName[] = "ImageManager";
 
-scoped_ptr<SkBitmap> DecodeImage(
+std::unique_ptr<SkBitmap> DecodeImage(
     scoped_refptr<base::RefCountedMemory> encoded_data) {
-  return scoped_ptr<SkBitmap>(suggestions::DecodeJPEGToSkBitmap(
-      encoded_data->front(), encoded_data->size()));
+  return suggestions::DecodeJPEGToSkBitmap(encoded_data->front(),
+                                           encoded_data->size());
+}
+
+// Wraps an ImageManager callback so that it can be used with the ImageFetcher.
+// ImageManager callbacks expect SkBitmaps while ImageFetcher callbacks expect
+// gfx::Images. The image can be empty. In this case it is mapped to nullptr.
+void WrapImageManagerCallback(
+    const base::Callback<void(const GURL&, const SkBitmap*)>& wrapped_callback,
+    const GURL& url,
+    const gfx::Image& image) {
+  const SkBitmap* bitmap = nullptr;
+  if (!image.IsEmpty())
+    bitmap = image.ToSkBitmap();
+  wrapped_callback.Run(url, bitmap);
 }
 
 }  // namespace
@@ -35,8 +50,8 @@ namespace suggestions {
 ImageManager::ImageManager() : weak_ptr_factory_(this) {}
 
 ImageManager::ImageManager(
-    scoped_ptr<ImageFetcher> image_fetcher,
-    scoped_ptr<ProtoDatabase<ImageData>> database,
+    std::unique_ptr<image_fetcher::ImageFetcher> image_fetcher,
+    std::unique_ptr<ProtoDatabase<ImageData>> database,
     const base::FilePath& database_dir,
     scoped_refptr<base::TaskRunner> background_task_runner)
     : image_fetcher_(std::move(image_fetcher)),
@@ -82,7 +97,7 @@ void ImageManager::GetImageForURL(
   // NULL since there is no associated image for this |url|.
   GURL image_url;
   if (!GetImageURL(url, &image_url)) {
-    callback.Run(url, NULL);
+    callback.Run(url, nullptr);
     return;
   }
 
@@ -97,9 +112,10 @@ void ImageManager::GetImageForURL(
   ServeFromCacheOrNetwork(url, image_url, callback);
 }
 
-void ImageManager::OnImageFetched(const GURL& url, const SkBitmap* bitmap) {
-  if (bitmap)  // |bitmap| can be nullptr if image fetch was unsuccessful.
-    SaveImage(url, *bitmap);
+void ImageManager::OnImageFetched(const GURL& url, const gfx::Image& image) {
+  // |image| can be empty if image fetch was unsuccessful.
+  if (!image.IsEmpty())
+    SaveImage(url, *image.ToSkBitmap());
 }
 
 bool ImageManager::GetImageURL(const GURL& url, GURL* image_url) {
@@ -131,11 +147,12 @@ void ImageManager::OnCacheImageDecoded(
     const GURL& url,
     const GURL& image_url,
     base::Callback<void(const GURL&, const SkBitmap*)> callback,
-    scoped_ptr<SkBitmap> bitmap) {
+    std::unique_ptr<SkBitmap> bitmap) {
   if (bitmap.get()) {
     callback.Run(url, bitmap.get());
   } else {
-    image_fetcher_->StartOrQueueNetworkRequest(url, image_url, callback);
+    image_fetcher_->StartOrQueueNetworkRequest(
+        url, image_url, base::Bind(&WrapImageManagerCallback, callback));
   }
 }
 
@@ -161,7 +178,8 @@ void ImageManager::ServeFromCacheOrNetwork(
         base::Bind(&ImageManager::OnCacheImageDecoded,
                    weak_ptr_factory_.GetWeakPtr(), url, image_url, callback));
   } else {
-    image_fetcher_->StartOrQueueNetworkRequest(url, image_url, callback);
+    image_fetcher_->StartOrQueueNetworkRequest(
+        url, image_url, base::Bind(&WrapImageManagerCallback, callback));
   }
 }
 
@@ -181,9 +199,9 @@ void ImageManager::SaveImage(const GURL& url, const SkBitmap& bitmap) {
   ImageData data;
   data.set_url(url.spec());
   data.set_data(encoded_data->front(), encoded_data->size());
-  scoped_ptr<ProtoDatabase<ImageData>::KeyEntryVector> entries_to_save(
+  std::unique_ptr<ProtoDatabase<ImageData>::KeyEntryVector> entries_to_save(
       new ProtoDatabase<ImageData>::KeyEntryVector());
-  scoped_ptr<std::vector<std::string>> keys_to_remove(
+  std::unique_ptr<std::vector<std::string>> keys_to_remove(
       new std::vector<std::string>());
   entries_to_save->push_back(std::make_pair(data.url(), data));
   database_->UpdateEntries(std::move(entries_to_save),
@@ -204,7 +222,7 @@ void ImageManager::OnDatabaseInit(bool success) {
 }
 
 void ImageManager::OnDatabaseLoad(bool success,
-                                  scoped_ptr<ImageDataVector> entries) {
+                                  std::unique_ptr<ImageDataVector> entries) {
   if (!success) {
     DVLOG(1) << "Image database load failed.";
     database_.reset();
@@ -225,7 +243,8 @@ void ImageManager::OnDatabaseSave(bool success) {
   }
 }
 
-void ImageManager::LoadEntriesInCache(scoped_ptr<ImageDataVector> entries) {
+void ImageManager::LoadEntriesInCache(
+    std::unique_ptr<ImageDataVector> entries) {
   for (ImageDataVector::iterator it = entries->begin(); it != entries->end();
        ++it) {
     std::vector<unsigned char> encoded_data(it->data().begin(),

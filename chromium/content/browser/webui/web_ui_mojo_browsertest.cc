@@ -104,7 +104,7 @@ class TestWebUIController : public WebUIController {
 
  protected:
   base::RunLoop* run_loop_;
-  scoped_ptr<BrowserTargetImpl> browser_target_;
+  std::unique_ptr<BrowserTargetImpl> browser_target_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(TestWebUIController);
@@ -226,23 +226,6 @@ IN_PROC_BROWSER_TEST_F(WebUIMojoTest, EndToEndPing) {
   EXPECT_TRUE(got_message);
   EXPECT_EQ(shell()->web_contents()->GetRenderProcessHost(),
             other_shell->web_contents()->GetRenderProcessHost());
-}
-
-// Loads a webui page that connects to a test Mojo application via the browser's
-// Mojo shell interface.
-IN_PROC_BROWSER_TEST_F(WebUIMojoTest, ConnectToApplication) {
-  if (!IsGeneratedResourceAvailable(
-          "content/public/test/test_mojo_service.mojom"))
-    return;
-
-  ASSERT_TRUE(embedded_test_server()->Start());
-  NavigateToURL(shell(),
-                GURL("chrome://mojo-web-ui/web_ui_mojo_shell_test.html"));
-
-  DOMMessageQueue message_queue;
-  std::string message;
-  ASSERT_TRUE(message_queue.WaitForMessage(&message));
-  EXPECT_EQ("true", message);
 }
 
 }  // namespace

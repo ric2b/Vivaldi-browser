@@ -64,15 +64,18 @@
     ],
     "dependencies": [
         "components",
+        "components_lazy",
         "ui_lazy"
     ],
     "scripts": [
         "ProfilesPanel.js",
-        "CPUProfileDataGrid.js",
-        "CPUProfileBottomUpDataGrid.js",
-        "CPUProfileTopDownDataGrid.js",
+        "ProfileView.js",
+        "ProfileDataGrid.js",
+        "BottomUpProfileDataGrid.js",
+        "TopDownProfileDataGrid.js",
         "CPUProfileFlameChart.js",
         "CPUProfileView.js",
+        "HeapProfileView.js",
         "HeapSnapshotCommon.js",
         "HeapSnapshotProxy.js",
         "HeapSnapshotDataGrids.js",

@@ -13,6 +13,7 @@
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -29,9 +30,12 @@
 #include "chrome/browser/prerender/prerender_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_io_data.h"
+#include "chrome/browser/renderer_host/chrome_navigation_data.h"
 #include "chrome/browser/renderer_host/safe_browsing_resource_throttle.h"
 #include "chrome/browser/renderer_host/thread_hop_resource_throttle.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
+#include "chrome/browser/search/search.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/signin/chrome_signin_helper.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/browser/ui/login/login_handler.h"
@@ -39,11 +43,15 @@
 #include "chrome/common/features.h"
 #include "chrome/common/url_constants.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_data.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/policy/core/common/cloud/policy_header_io_helper.h"
+#include "components/search_engines/template_url_prepopulate_data.h"
+#include "components/search_engines/template_url_service.h"
 #include "components/variations/net/variations_http_headers.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/navigation_data.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/browser/plugin_service_filter.h"
@@ -171,13 +179,14 @@ void UpdatePrerenderNetworkBytesCallback(
 }
 
 #if defined(ENABLE_EXTENSIONS)
-void SendExecuteMimeTypeHandlerEvent(scoped_ptr<content::StreamInfo> stream,
-                                     int64_t expected_content_size,
-                                     int render_process_id,
-                                     int render_frame_id,
-                                     const std::string& extension_id,
-                                     const std::string& view_id,
-                                     bool embedded) {
+void SendExecuteMimeTypeHandlerEvent(
+    std::unique_ptr<content::StreamInfo> stream,
+    int64_t expected_content_size,
+    int render_process_id,
+    int render_frame_id,
+    const std::string& extension_id,
+    const std::string& view_id,
+    bool embedded) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   content::WebContents* web_contents =
@@ -262,6 +271,68 @@ void AppendComponentUpdaterThrottles(
   }
 }
 #endif  // !defined(DISABLE_NACL)
+
+// This function is called in RequestComplete to log metrics about main frame
+// resources.
+void LogMainFrameMetricsOnUIThread(
+    const GURL& url,
+    int net_error,
+    base::TimeDelta request_loading_time,
+    const content::ResourceRequestInfo::WebContentsGetter&
+        web_contents_getter) {
+  content::WebContents* web_contents = web_contents_getter.Run();
+  if (!web_contents)
+    return;
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+
+  // The rest of the function is only concerned about NTP metrics.
+  if (!profile || !search::IsNTPURL(url, profile))
+    return;
+
+  // A http/s scheme implies that the new tab page is remote. The local NTP is
+  // served from chrome-search://. To segment out remote NTPs, use the
+  // TemplateURLService to find the default search engine. Note that if the
+  // default search engine does not have a remote NTP, then the local NTP will
+  // be shown. As of April 2016, only Bing and Google have remote NTPs.
+  if (url.SchemeIsHTTPOrHTTPS()) {
+    TemplateURLService* template_url_service =
+        TemplateURLServiceFactory::GetForProfile(profile);
+    if (!template_url_service)
+      return;
+    TemplateURL* default_provider =
+        template_url_service->GetDefaultSearchProvider();
+    if (!default_provider)
+      return;
+    if (TemplateURLPrepopulateData::GetEngineType(
+            *default_provider, template_url_service->search_terms_data()) ==
+        SearchEngineType::SEARCH_ENGINE_GOOGLE) {
+      if (net_error == net::OK) {
+        UMA_HISTOGRAM_LONG_TIMES("Net.NTP.Google.RequestTime2.Success",
+                                 request_loading_time);
+      } else if (net_error == net::ERR_ABORTED) {
+        UMA_HISTOGRAM_LONG_TIMES("Net.NTP.Google.RequestTime2.ErrAborted",
+                                 request_loading_time);
+      }
+    } else {
+      if (net_error == net::OK) {
+        UMA_HISTOGRAM_LONG_TIMES("Net.NTP.ThirdParty.RequestTime2.Success",
+                                 request_loading_time);
+      } else if (net_error == net::ERR_ABORTED) {
+        UMA_HISTOGRAM_LONG_TIMES("Net.NTP.ThirdParty.RequestTime2.ErrAborted",
+                                 request_loading_time);
+      }
+    }
+  } else {
+    if (net_error == net::OK) {
+      UMA_HISTOGRAM_LONG_TIMES("Net.NTP.Local.RequestTime2.Success",
+                               request_loading_time);
+    } else if (net_error == net::ERR_ABORTED) {
+      UMA_HISTOGRAM_LONG_TIMES("Net.NTP.Local.RequestTime2.ErrAborted",
+                               request_loading_time);
+    }
+  }
+}
 
 }  // namespace
 
@@ -524,7 +595,7 @@ void ChromeResourceDispatcherHostDelegate::AppendStandardResourceThrottles(
   extensions::ExtensionThrottleManager* extension_throttle_manager =
       io_data->GetExtensionThrottleManager();
   if (extension_throttle_manager) {
-    scoped_ptr<content::ResourceThrottle> extension_throttle =
+    std::unique_ptr<content::ResourceThrottle> extension_throttle =
         extension_throttle_manager->MaybeCreateThrottle(request);
     if (extension_throttle)
       throttles->push_back(extension_throttle.release());
@@ -609,7 +680,7 @@ bool ChromeResourceDispatcherHostDelegate::ShouldInterceptResourceAsStream(
 
 void ChromeResourceDispatcherHostDelegate::OnStreamCreated(
     net::URLRequest* request,
-    scoped_ptr<content::StreamInfo> stream) {
+    std::unique_ptr<content::StreamInfo> stream) {
 #if defined(ENABLE_EXTENSIONS)
   const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(request);
   std::map<net::URLRequest*, StreamTargetInfo>::iterator ix =
@@ -715,6 +786,16 @@ void ChromeResourceDispatcherHostDelegate::RequestComplete(
                                        info->GetWebContentsGetterForRequest(),
                                        url_request->GetTotalReceivedBytes()));
   }
+
+  if (url_request &&
+      info->GetResourceType() == content::RESOURCE_TYPE_MAIN_FRAME) {
+    BrowserThread::PostTask(
+        BrowserThread::UI, FROM_HERE,
+        base::Bind(&LogMainFrameMetricsOnUIThread, url_request->url(),
+                   url_request->status().error(),
+                   base::TimeTicks::Now() - url_request->creation_time(),
+                   info->GetWebContentsGetterForRequest()));
+  }
 }
 
 bool ChromeResourceDispatcherHostDelegate::ShouldEnableLoFiMode(
@@ -734,4 +815,23 @@ void ChromeResourceDispatcherHostDelegate::
     SetExternalProtocolHandlerDelegateForTesting(
     ExternalProtocolHandler::Delegate* delegate) {
   g_external_protocol_handler_delegate = delegate;
+}
+
+content::NavigationData*
+ChromeResourceDispatcherHostDelegate::GetNavigationData(
+    net::URLRequest* request) const {
+  ChromeNavigationData* data =
+      ChromeNavigationData::GetDataAndCreateIfNecessary(request);
+  if (!request)
+    return data;
+
+  data_reduction_proxy::DataReductionProxyData* data_reduction_proxy_data =
+      data_reduction_proxy::DataReductionProxyData::GetData(*request);
+  // DeepCopy the DataReductionProxyData from the URLRequest to prevent the
+  // URLRequest and DataReductionProxyData from both having ownership of the
+  // same object. This copy will be shortlived as it will be deep copied again
+  // when content makes a clone of NavigationData for the UI thread.
+  if (data_reduction_proxy_data)
+    data->SetDataReductionProxyData(data_reduction_proxy_data->DeepCopy());
+  return data;
 }

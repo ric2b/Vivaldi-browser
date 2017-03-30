@@ -34,6 +34,7 @@ Adatvédelmi információkért tekintse meg a Google adatvédelmi irányelveit (
 <translation id="1779766957982586368">Ablak bezárása</translation>
 <translation id="1841799852846221389">Távoli kapcsolatok letiltása ezen a számítógépen...</translation>
 <translation id="189172778771606813">Navigációs fiók bezárása</translation>
+<translation id="1897488610212723051">Törlés</translation>
 <translation id="195619862187186579">Billentyűzetkiosztások</translation>
 <translation id="1996161829609978754">A Chrome letölti a Chromoting gazdagépekhez való telepítőjét. Miután a letöltés befejeződött, futtassa a telepítőt a folytatás előtt.</translation>
 <translation id="2009755455353575666">Sikertelen kapcsolódás</translation>
@@ -122,9 +123,6 @@ gazdagép</translation>
 <translation id="3950820424414687140">Bejelentkezés</translation>
 <translation id="3989511127559254552">A folytatáshoz előbb kiterjesztett hozzáférési jogosultságokat kell adnia a számítógépének. Ezt csak egyszer kell elvégezni.</translation>
 <translation id="4006787130661126000">Engedélyeznie kell a távoli kapcsolatokat, ha a Chrome távoliasztal-szolgáltatást szeretné használni ennek a számítógépnek az eléréséhez.</translation>
-<translation id="4028465833180158312">• Frissítések az anyagszerű megjelenés kezelőfelülethez.
-• Harmadik felek licenceinek feltüntetése.
-• Offline távoli számítógépekkel kapcsolatos információk megjelenítése.</translation>
 <translation id="405887016757208221">A távoli számítógépnek nem sikerült inicializálnia a munkamenetet. Ha a probléma továbbra is fennáll, próbálja meg újra beállítani a gazdagépet.</translation>
 <translation id="4068946408131579958">Minden kapcsolat</translation>
 <translation id="409800995205263688">MEGJEGYZÉS: az irányelv-beállítások a csatlakozást csak a saját hálózaton belül található számítógépek között teszik lehetővé.</translation>
@@ -168,6 +166,7 @@ gazdagép</translation>
 <translation id="4985296110227979402">Előbb be kell állítania számítógépén a távoli hozzáférést.</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (offline)</translation>
 <translation id="5070121137485264635">A távoli gazdagép hitelesítést kér egy harmadik féltől származó webhelyhez. A folytatáshoz további engedélyeket kell adnia a Chrome távoliasztal-szolgáltatásnak a cím eléréséhez:</translation>
+<translation id="507204348399810022">Biztosan szeretné letiltani a távoli kapcsolatokat a(z) <ph name="HOSTNAME" /> gazdagéppel?</translation>
 <translation id="5156271271724754543">Kérjük, ugyanazt a PIN kódot adja meg mindkét mezőben.</translation>
 <translation id="5168917394043976756">Navigációs fiók megnyitása</translation>
 <translation id="5170982930780719864">Érvénytelen gazdagép-azonosító</translation>
@@ -178,7 +177,6 @@ gazdagép</translation>
 <translation id="533625276787323658">Nincs mihez csatlakozni.</translation>
 <translation id="5363265567587775042">Kérje meg a felhasználót, akinek számítógépéhez megpróbál hozzáférni, hogy kattintson a „<ph name="SHARE" />” lehetőségre, és adja meg Önnek a hozzáférési kódot.</translation>
 <translation id="5379087427956679853">A Chrome távoliasztal-szolgáltatás lehetővé teszi a számítógép biztonságos megosztását az interneten keresztül. Mindkét felhasználónál futnia kell a Chrome távoliasztal-szolgáltatás alkalmazásnak, amely itt található: <ph name="URL" />.</translation>
-<translation id="5394895745784982830">Mac típusú számítógépekhez (OS X 10.6 és újabb)</translation>
 <translation id="5397086374758643919">Chrome távoliasztal-szolgáltatási gazdagép eltávolítóprogramja</translation>
 <translation id="5419185025274123272">Nem sikerült az alkalmazás visszaállítása. Küldhet egy jelentést a programhibáról.</translation>
 <translation id="544077782045763683">A gazdagép leállt.</translation>
@@ -214,6 +212,10 @@ gazdagép</translation>
 <translation id="6324708100353784493">Engedélyezte a Google Cardboard integrációs módot. A mód használatához helyezze be eszközét egy Google Cardboarddal kompatibilis szemüvegbe.</translation>
 <translation id="6381670701864002291">Valami más.</translation>
 <translation id="6398765197997659313">Kilépés a teljes képernyős módból</translation>
+<translation id="6408143143164565232">• Audió hallgatása Windows vagy Linux rendszerű számítógépről.
+• A nem kívánt csatlakozások eltávolítása a számítógép nevének hosszan tartó lenyomásával.
+• Finomabb kétujjas nagyítás és görgetés.
+• Új képernyő a súgó és a visszajelzések számára.</translation>
 <translation id="6441316101718669559">Ez az operációs rendszer nem támogatja az asztali integrációt. Az alkalmazást használhatja, de a felhasználói élmény nem lesz teljes.</translation>
 <translation id="652218476070540101">A számítógéphez tartozó PIN-kód frissítése folyamatban...</translation>
 <translation id="6527303717912515753">Megosztás</translation>
@@ -221,6 +223,7 @@ gazdagép</translation>
 <translation id="6542902059648396432">Hiba bejelentése…</translation>
 <translation id="6550675742724504774">Beállítások</translation>
 <translation id="6570205395680337606">Alkalmazás visszaállítása. A nem mentett munkája el fog veszni.</translation>
+<translation id="6572345186230665992">Mac típusú számítógépekhez (OS X Mavericks 10.9 és újabb)</translation>
 <translation id="6612717000975622067">Ctrl-Alt-Del küldése</translation>
 <translation id="6640610550128933069">utoljára ekkor volt online: <ph name="DATE" /></translation>
 <translation id="6668065415969892472">A PIN-kód frissült.</translation>
@@ -232,7 +235,6 @@ gazdagép</translation>
 <translation id="6930242544192836755">Időtartam</translation>
 <translation id="6939719207673461467">Billentyűzet megjelenítése/elrejtése.</translation>
 <translation id="6944854424004126054">Ablak visszaállítása</translation>
-<translation id="6962773374262604195">Windows rendszerhez (XP és újabb)</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942">Biztosan le szeretné tiltani a távoli kapcsolatokat a(z) <ph name="HOSTNAME" /> gazdagéppel? Ha meggondolja magát, akkor azon a számítógépen kell majd újból engedélyeznie a kapcsolatokat.</translation>
 <translation id="6998989275928107238">Ide:</translation>
@@ -288,6 +290,7 @@ gazdagép</translation>
 <translation id="8759753423332885148">További információ.</translation>
 <translation id="8791202241915690908">Chromoting gazdagép-telepítő letöltése</translation>
 <translation id="894763922177556086">Jó</translation>
+<translation id="895780780740011433">Windows 7 és újabb rendszerhez</translation>
 <translation id="897805526397249209">Ahhoz, hogy engedélyezhesse a távoli kapcsolatokat egy másik számítógépen, telepítse a gépre a Chromoting alkalmazást, majd kattintson a következő gombra: „<ph name="BUTTON_NAME" />”.</translation>
 <translation id="8998327464021325874">Chrome távoliasztal-szolgáltatás – gazdagépvezérlő</translation>
 <translation id="9016232822027372900">Csatlakozás mindenképp</translation>

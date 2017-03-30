@@ -7,15 +7,14 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
-#include "base/containers/hash_tables.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/pickle.h"
 #include "net/base/cache_type.h"
 #include "net/base/net_export.h"
@@ -37,16 +36,16 @@ struct NET_EXPORT_PRIVATE SimpleIndexLoadResult {
 
   bool did_load;
   SimpleIndex::EntrySet entries;
+  SimpleIndex::IndexWriteToDiskReason index_write_reason;
   SimpleIndex::IndexInitMethod init_method;
   bool flush_required;
 };
 
-// Simple Index File format is a pickle serialized data of IndexMetadata and
-// EntryMetadata objects. The file format is as follows: one instance of
-// serialized |IndexMetadata| followed serialized |EntryMetadata| entries
-// repeated |number_of_entries| amount of times. To know more about the format,
-// see SimpleIndexFile::Serialize() and SeeSimpleIndexFile::LoadFromDisk()
-// methods.
+// Simple Index File format is a pickle of IndexMetadata and EntryMetadata
+// objects. The file format is as follows: one instance of |IndexMetadata|
+// followed by |EntryMetadata| repeated |entry_count| times. To learn more about
+// the format see |SimpleIndexFile::Serialize()| and
+// |SimpleIndexFile::LoadFromDisk()|.
 //
 // The non-static methods must run on the IO thread. All the real
 // work is done in the static methods, which are run on the cache thread
@@ -57,22 +56,28 @@ class NET_EXPORT_PRIVATE SimpleIndexFile {
   class NET_EXPORT_PRIVATE IndexMetadata {
    public:
     IndexMetadata();
-    IndexMetadata(uint64_t number_of_entries, uint64_t cache_size);
+    IndexMetadata(SimpleIndex::IndexWriteToDiskReason reason,
+                  uint64_t entry_count,
+                  uint64_t cache_size);
 
-    void Serialize(base::Pickle* pickle) const;
+    virtual void Serialize(base::Pickle* pickle) const;
     bool Deserialize(base::PickleIterator* it);
 
     bool CheckIndexMetadata();
 
-    uint64_t GetNumberOfEntries() { return number_of_entries_; }
+    SimpleIndex::IndexWriteToDiskReason reason() const { return reason_; }
+    uint64_t entry_count() const { return entry_count_; }
 
    private:
     FRIEND_TEST_ALL_PREFIXES(IndexMetadataTest, Basics);
     FRIEND_TEST_ALL_PREFIXES(IndexMetadataTest, Serialize);
+    FRIEND_TEST_ALL_PREFIXES(IndexMetadataTest, ReadV6Format);
+    friend class V6IndexMetadataForTest;
 
     uint64_t magic_number_;
     uint32_t version_;
-    uint64_t number_of_entries_;
+    SimpleIndex::IndexWriteToDiskReason reason_;
+    uint64_t entry_count_;
     uint64_t cache_size_;  // Total cache storage size in bytes.
   };
 
@@ -89,7 +94,8 @@ class NET_EXPORT_PRIVATE SimpleIndexFile {
                                 SimpleIndexLoadResult* out_result);
 
   // Write the specified set of entries to disk.
-  virtual void WriteToDisk(const SimpleIndex::EntrySet& entry_set,
+  virtual void WriteToDisk(SimpleIndex::IndexWriteToDiskReason reason,
+                           const SimpleIndex::EntrySet& entry_set,
                            uint64_t cache_size,
                            const base::TimeTicks& start,
                            bool app_on_background,
@@ -122,7 +128,7 @@ class NET_EXPORT_PRIVATE SimpleIndexFile {
   // data to be written to a file. Note: the pickle is not in a consistent state
   // immediately after calling this menthod, one needs to call
   // SerializeFinalData to make it ready to write to a file.
-  static scoped_ptr<base::Pickle> Serialize(
+  static std::unique_ptr<base::Pickle> Serialize(
       const SimpleIndexFile::IndexMetadata& index_metadata,
       const SimpleIndex::EntrySet& entries);
 
@@ -153,7 +159,7 @@ class NET_EXPORT_PRIVATE SimpleIndexFile {
                               const base::FilePath& cache_directory,
                               const base::FilePath& index_filename,
                               const base::FilePath& temp_index_filename,
-                              scoped_ptr<base::Pickle> pickle,
+                              std::unique_ptr<base::Pickle> pickle,
                               const base::TimeTicks& start_time,
                               bool app_on_background);
 

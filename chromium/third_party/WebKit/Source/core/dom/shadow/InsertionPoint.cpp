@@ -92,11 +92,9 @@ void InsertionPoint::setDistributedNodes(DistributedNodes& distributedNodes)
         distributedNodes.at(j)->lazyReattachIfAttached();
 
     m_distributedNodes.swap(distributedNodes);
-#if ENABLE(OILPAN)
-    // Deallocate a Vector and a HashMap explicitly in order that Oilpan can
-    // recycle them without GC.
+    // Deallocate a Vector and a HashMap explicitly so that
+    // Oilpan can recycle them without an intervening GC.
     distributedNodes.clear();
-#endif
     m_distributedNodes.shrinkToFit();
 }
 
@@ -169,7 +167,7 @@ bool InsertionPoint::isContentInsertionPoint() const
     return isHTMLContentElement(*this) && isActive();
 }
 
-RawPtr<StaticNodeList> InsertionPoint::getDistributedNodes()
+StaticNodeList* InsertionPoint::getDistributedNodes()
 {
     updateDistribution();
 

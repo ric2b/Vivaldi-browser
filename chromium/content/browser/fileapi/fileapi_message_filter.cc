@@ -4,6 +4,7 @@
 
 #include "content/browser/fileapi/fileapi_message_filter.h"
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -12,16 +13,15 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/browser/bad_message.h"
+#include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/fileapi/browser_file_system_helper.h"
-#include "content/browser/fileapi/chrome_blob_storage_context.h"
 #include "content/browser/streams/stream_registry.h"
 #include "content/common/fileapi/file_system_messages.h"
 #include "content/common/fileapi/webblob_messages.h"
@@ -387,7 +387,7 @@ void FileAPIMessageFilter::OnWrite(int request_id,
     return;
   }
 
-  scoped_ptr<storage::BlobDataHandle> blob =
+  std::unique_ptr<storage::BlobDataHandle> blob =
       blob_storage_context_->context()->GetBlobDataFromUUID(blob_uuid);
 
   operations_[request_id] = operation_runner()->Write(
@@ -497,7 +497,7 @@ void FileAPIMessageFilter::OnStartBuildingStream(
     const GURL& url, const std::string& content_type) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   // Only an internal Blob URL is expected here. See the BlobURL of the Blink.
-  if (!base::StartsWith(url.path(), "blobinternal%3A///",
+  if (!base::StartsWith(url.path(), "blobinternal:///",
                         base::CompareCase::SENSITIVE)) {
     NOTREACHED() << "Malformed Stream URL: " << url.spec();
     bad_message::ReceivedBadMessage(this,

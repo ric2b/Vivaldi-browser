@@ -33,8 +33,6 @@
 #include "platform/heap/Handle.h"
 #include "wtf/HashMap.h"
 #include "wtf/HashSet.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
 #include "wtf/text/StringHash.h"
 #include "wtf/text/WTFString.h"
 
@@ -64,7 +62,7 @@ public:
     void resume();
     void setElapsed(SMILTime);
 
-    void serviceAnimations(double monotonicAnimationStartTime);
+    void serviceAnimations();
     bool hasAnimations() const;
 
     void setDocumentOrderIndexesDirty() { m_documentOrderIndexesDirty = true; }

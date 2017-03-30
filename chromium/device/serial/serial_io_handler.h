@@ -7,13 +7,15 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/callback.h"
 #include "base/files/file.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/non_thread_safe.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "device/serial/buffer.h"
 #include "device/serial/serial.mojom.h"
@@ -69,12 +71,12 @@ class SerialIoHandler : public base::NonThreadSafe,
   // Performs an async Read operation. Behavior is undefined if this is called
   // while a Read is already pending. Otherwise, the Done or DoneWithError
   // method on |buffer| will eventually be called with a result.
-  void Read(scoped_ptr<WritableBuffer> buffer);
+  void Read(std::unique_ptr<WritableBuffer> buffer);
 
   // Performs an async Write operation. Behavior is undefined if this is called
   // while a Write is already pending. Otherwise, the Done or DoneWithError
   // method on |buffer| will eventually be called with a result.
-  void Write(scoped_ptr<ReadOnlyBuffer> buffer);
+  void Write(std::unique_ptr<ReadOnlyBuffer> buffer);
 
   // Indicates whether or not a read is currently pending.
   bool IsReadPending() const;
@@ -238,11 +240,11 @@ class SerialIoHandler : public base::NonThreadSafe,
   // Currently applied connection options.
   serial::ConnectionOptions options_;
 
-  scoped_ptr<WritableBuffer> pending_read_buffer_;
+  std::unique_ptr<WritableBuffer> pending_read_buffer_;
   serial::ReceiveError read_cancel_reason_;
   bool read_canceled_;
 
-  scoped_ptr<ReadOnlyBuffer> pending_write_buffer_;
+  std::unique_ptr<ReadOnlyBuffer> pending_write_buffer_;
   serial::SendError write_cancel_reason_;
   bool write_canceled_;
 

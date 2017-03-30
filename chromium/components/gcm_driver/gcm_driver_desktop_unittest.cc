@@ -11,12 +11,11 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/test/test_simple_task_runner.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/gcm_driver/crypto/gcm_encryption_provider.h"
 #include "components/gcm_driver/fake_gcm_app_handler.h"
 #include "components/gcm_driver/fake_gcm_client.h"
@@ -167,10 +166,9 @@ class GCMDriverTest : public testing::Test {
   TestingPrefServiceSimple prefs_;
   base::MessageLoopForUI message_loop_;
   base::Thread io_thread_;
-  base::FieldTrialList field_trial_list_;
-  scoped_ptr<GCMDriverDesktop> driver_;
-  scoped_ptr<FakeGCMAppHandler> gcm_app_handler_;
-  scoped_ptr<FakeGCMConnectionObserver> gcm_connection_observer_;
+  std::unique_ptr<GCMDriverDesktop> driver_;
+  std::unique_ptr<FakeGCMAppHandler> gcm_app_handler_;
+  std::unique_ptr<FakeGCMConnectionObserver> gcm_connection_observer_;
 
   base::Closure async_operation_completed_callback_;
 
@@ -187,7 +185,6 @@ class GCMDriverTest : public testing::Test {
 
 GCMDriverTest::GCMDriverTest()
     : io_thread_("IOThread"),
-      field_trial_list_(NULL),
       registration_result_(GCMClient::UNKNOWN_ERROR),
       send_result_(GCMClient::UNKNOWN_ERROR),
       unregistration_result_(GCMClient::UNKNOWN_ERROR) {
@@ -242,7 +239,7 @@ void GCMDriverTest::CreateDriver() {
   scoped_refptr<net::URLRequestContextGetter> request_context =
       new net::TestURLRequestContextGetter(io_thread_.task_runner());
   driver_.reset(new GCMDriverDesktop(
-      scoped_ptr<GCMClientFactory>(new FakeGCMClientFactory(
+      std::unique_ptr<GCMClientFactory>(new FakeGCMClientFactory(
           base::ThreadTaskRunnerHandle::Get(), io_thread_.task_runner())),
       GCMClient::ChromeBuildInfo(), "http://channel.status.request.url",
       "user-agent-string", &prefs_, temp_dir_.path(), request_context,
@@ -950,9 +947,6 @@ void GCMChannelStatusSyncerTest::SetUp() {
   GCMDriverTest::SetUp();
 
   url_fetcher_factory_.set_remove_fetcher_on_delete(true);
-
-  // Turn on all-user support.
-  ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial("GCM", "Enabled"));
 }
 
 void GCMChannelStatusSyncerTest::CompleteGCMChannelStatusRequest(

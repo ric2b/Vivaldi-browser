@@ -8,11 +8,11 @@
 #include <stdint.h>
 
 #include <list>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/non_thread_safe.h"
@@ -81,8 +81,8 @@ class PrerenderManager : public base::SupportsWeakPtr<PrerenderManager>,
     PRERENDER_MODE_EXPERIMENT_NO_USE_GROUP = 5,
     PRERENDER_MODE_EXPERIMENT_MULTI_PRERENDER_GROUP = 6,
     PRERENDER_MODE_EXPERIMENT_15MIN_TTL_GROUP = 7,
-    PRERENDER_MODE_EXPERIMENT_MATCH_COMPLETE_GROUP = 8,
-    PRERENDER_MODE_MAX
+    // Obsolete: PRERENDER_MODE_EXPERIMENT_MATCH_COMPLETE_GROUP = 8,
+    PRERENDER_MODE_MAX = 9
   };
 
   // One or more of these flags must be passed to ClearData() to specify just
@@ -147,6 +147,22 @@ class PrerenderManager : public base::SupportsWeakPtr<PrerenderManager>,
   // time the prerender is generated. Returns a caller-owned PrerenderHandle* or
   // NULL.
   PrerenderHandle* AddPrerenderForInstant(
+      const GURL& url,
+      content::SessionStorageNamespace* session_storage_namespace,
+      const gfx::Size& size);
+
+  // Adds a prerender for the background loader. Returns a caller-owned
+  // PrerenderHandle* if the URL was added, NULL if it was not.
+  //
+  // The caller may set an observer on the handle to receive load events. When
+  // the caller is done using the WebContents, it should call OnCancel() on the
+  // handle to free the resources associated with the prerender.
+  //
+  // The caller must provide two guarantees:
+  // 1. It must never ask for a swap-in;
+  // 2. The SessionStorageNamespace must not be shared with any tab / page load
+  //    to avoid swapping in from there.
+  PrerenderHandle* AddPrerenderForOffline(
       const GURL& url,
       content::SessionStorageNamespace* session_storage_namespace,
       const gfx::Size& size);
@@ -257,12 +273,7 @@ class PrerenderManager : public base::SupportsWeakPtr<PrerenderManager>,
   void ClearData(int clear_flags);
 
   // Record a final status of a prerendered page in a histogram.
-  // This variation allows specifying whether prerendering had been started
-  // (necessary to flag MatchComplete dummies).
-  void RecordFinalStatusWithMatchCompleteStatus(
-      Origin origin,
-      PrerenderContents::MatchCompleteStatus mc_status,
-      FinalStatus final_status) const;
+  void RecordFinalStatus(Origin origin, FinalStatus final_status) const;
 
   // content::NotificationObserver
   void Observe(int type,
@@ -319,10 +330,6 @@ class PrerenderManager : public base::SupportsWeakPtr<PrerenderManager>,
 
     ~PrerenderData();
 
-    // Turn this PrerenderData into a Match Complete replacement for itself,
-    // placing the current prerender contents into |to_delete_prerenders_|.
-    void MakeIntoMatchCompleteReplacement();
-
     // A new PrerenderHandle has been created for this PrerenderData.
     void OnHandleCreated(PrerenderHandle* prerender_handle);
 
@@ -352,7 +359,7 @@ class PrerenderManager : public base::SupportsWeakPtr<PrerenderManager>,
 
    private:
     PrerenderManager* manager_;
-    scoped_ptr<PrerenderContents> contents_;
+    std::unique_ptr<PrerenderContents> contents_;
 
     // The number of distinct PrerenderHandles created for |this|, including
     // ones that have called PrerenderData::OnHandleNavigatedAway(), but not
@@ -396,8 +403,6 @@ class PrerenderManager : public base::SupportsWeakPtr<PrerenderManager>,
 
   // Time window for which we record old navigations, in milliseconds.
   static const int kNavigationRecordWindowMs = 5000;
-
-  void OnCancelPrerenderHandle(PrerenderData* prerender_data);
 
   // Returns whether prerendering is currently enabled or the reason why it is
   // disabled.
@@ -487,16 +492,8 @@ class PrerenderManager : public base::SupportsWeakPtr<PrerenderManager>,
   // Used both on destruction, and when clearing the browsing history.
   void DestroyAllContents(FinalStatus final_status);
 
-  // Helper function to destroy a PrerenderContents with the specified
-  // final_status, while at the same time recording that for the MatchComplete
-  // case, that this prerender would have been used.
-  void DestroyAndMarkMatchCompleteAsUsed(PrerenderContents* prerender_contents,
-                                         FinalStatus final_status);
-
   // Records the final status a prerender in the case that a PrerenderContents
   // was never created, and also adds a PrerenderHistory entry.
-  // This is a helper function which will ultimately call
-  // RecordFinalStatusWthMatchCompleteStatus, using MATCH_COMPLETE_DEFAULT.
   void RecordFinalStatusWithoutCreatingPrerenderContents(
       const GURL& url, Origin origin, FinalStatus final_status) const;
 
@@ -526,7 +523,7 @@ class PrerenderManager : public base::SupportsWeakPtr<PrerenderManager>,
   // navigate_time_.
   std::list<NavigationRecord> navigations_;
 
-  scoped_ptr<PrerenderContents::Factory> prerender_contents_factory_;
+  std::unique_ptr<PrerenderContents::Factory> prerender_contents_factory_;
 
   static PrerenderManagerMode mode_;
 
@@ -545,9 +542,9 @@ class PrerenderManager : public base::SupportsWeakPtr<PrerenderManager>,
 
   ScopedVector<OnCloseWebContentsDeleter> on_close_web_contents_deleters_;
 
-  scoped_ptr<PrerenderHistory> prerender_history_;
+  std::unique_ptr<PrerenderHistory> prerender_history_;
 
-  scoped_ptr<PrerenderHistograms> histograms_;
+  std::unique_ptr<PrerenderHistograms> histograms_;
 
   content::NotificationRegistrar notification_registrar_;
 

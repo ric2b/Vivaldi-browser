@@ -16,6 +16,7 @@
 #include "base/mac/mac_util.h"
 #include "base/mac/scoped_cftyperef.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "skia/ext/skia_utils_mac.h"
 #include "third_party/skia/include/ports/SkTypeface_mac.h"
@@ -65,12 +66,14 @@ namespace gfx {
 
 namespace internal {
 
-skia::RefPtr<SkTypeface> CreateSkiaTypeface(const gfx::Font& font, int style) {
+// Note: this is only used by RenderTextHarfbuzz.
+sk_sp<SkTypeface> CreateSkiaTypeface(const gfx::Font& font, int style) {
   gfx::Font font_with_style = font.Derive(0, style);
   if (!font_with_style.GetNativeFont())
     return nullptr;
-  return skia::AdoptRef(SkCreateTypefaceFromCTFont(
-      static_cast<CTFontRef>(font_with_style.GetNativeFont())));
+
+  return sk_sp<SkTypeface>(SkCreateTypefaceFromCTFont(
+      base::mac::NSToCFCast(font_with_style.GetNativeFont())));
 }
 
 }  // namespace internal
@@ -79,8 +82,8 @@ RenderTextMac::RenderTextMac() : common_baseline_(0), runs_valid_(false) {}
 
 RenderTextMac::~RenderTextMac() {}
 
-scoped_ptr<RenderText> RenderTextMac::CreateInstanceOfSameType() const {
-  return make_scoped_ptr(new RenderTextMac);
+std::unique_ptr<RenderText> RenderTextMac::CreateInstanceOfSameType() const {
+  return base::WrapUnique(new RenderTextMac);
 }
 
 bool RenderTextMac::MultilineSupported() const {
@@ -115,7 +118,8 @@ std::vector<RenderText::FontSpan> RenderTextMac::GetFontSpansForTesting() {
   for (size_t i = 0; i < runs_.size(); ++i) {
     const CFRange cf_range = CTRunGetStringRange(runs_[i].ct_run);
     const Range range(cf_range.location, cf_range.location + cf_range.length);
-    spans.push_back(RenderText::FontSpan(runs_[i].font, range));
+    spans.push_back(RenderText::FontSpan(
+        gfx::Font(base::mac::CFToNSCast(runs_[i].ct_font.get())), range));
   }
 
   return spans;
@@ -210,17 +214,11 @@ void RenderTextMac::DrawVisualText(internal::SkiaTextRenderer* renderer) {
   for (size_t i = 0; i < runs_.size(); ++i) {
     const TextRun& run = runs_[i];
     renderer->SetForegroundColor(run.foreground);
+    renderer->SetTextSize(CTFontGetSize(run.ct_font));
 
-    CTFontRef ct_font = static_cast<CTFontRef>(run.font.GetNativeFont());
-    renderer->SetTextSize(CTFontGetSize(ct_font));
-
-    int font_style = Font::NORMAL;
-    CTFontSymbolicTraits traits = CTFontGetSymbolicTraits(ct_font);
-    if (traits & kCTFontBoldTrait)
-      font_style |= Font::BOLD;
-    if (traits & kCTFontItalicTrait)
-      font_style |= Font::ITALIC;
-    renderer->SetFontWithStyle(run.font, font_style);
+    // The painter adds its own ref. So don't |release()| it from the ref ptr in
+    // TextRun.
+    renderer->SetTypeface(run.typeface.get());
 
     renderer->DrawPosText(&run.glyph_positions[0], &run.glyphs[0],
                           run.glyphs.size());
@@ -240,7 +238,7 @@ RenderTextMac::TextRun::TextRun()
       strike(false),
       diagonal_strike(false) {}
 
-RenderTextMac::TextRun::TextRun(const TextRun& other) = default;
+RenderTextMac::TextRun::TextRun(TextRun&& other) = default;
 
 RenderTextMac::TextRun::~TextRun() {}
 
@@ -383,7 +381,7 @@ void RenderTextMac::ComputeRuns() {
       continue;
     }
 
-    runs_.push_back(TextRun());
+    runs_.emplace_back();
     TextRun* run = &runs_.back();
     run->ct_run = ct_run;
     run->origin = run_origin;
@@ -418,7 +416,8 @@ void RenderTextMac::ComputeRuns() {
     CFDictionaryRef attributes = CTRunGetAttributes(ct_run);
     CTFontRef ct_font = base::mac::GetValueFromDictionary<CTFontRef>(
         attributes, kCTFontAttributeName);
-    run->font = Font(static_cast<NSFont*>(ct_font));
+    run->ct_font.reset(ct_font, base::scoped_policy::RETAIN);
+    run->typeface.reset(SkCreateTypefaceFromCTFont(ct_font));
 
     const CGColorRef foreground = base::mac::GetValueFromDictionary<CGColorRef>(
         attributes, kCTForegroundColorAttributeName);

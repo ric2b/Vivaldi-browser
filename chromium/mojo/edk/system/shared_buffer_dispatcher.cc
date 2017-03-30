@@ -8,10 +8,10 @@
 #include <stdint.h>
 
 #include <limits>
+#include <memory>
 #include <utility>
 
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "mojo/edk/embedder/embedder_internal.h"
 #include "mojo/edk/system/configuration.h"
 #include "mojo/edk/system/node_controller.h"
@@ -218,7 +218,7 @@ MojoResult SharedBufferDispatcher::MapBuffer(
     uint64_t offset,
     uint64_t num_bytes,
     MojoMapBufferFlags flags,
-    scoped_ptr<PlatformSharedBufferMapping>* mapping) {
+    std::unique_ptr<PlatformSharedBufferMapping>* mapping) {
   if (offset > static_cast<uint64_t>(std::numeric_limits<size_t>::max()))
     return MOJO_RESULT_INVALID_ARGUMENT;
   if (num_bytes > static_cast<uint64_t>(std::numeric_limits<size_t>::max()))
@@ -276,7 +276,7 @@ bool SharedBufferDispatcher::BeginTransit() {
   base::AutoLock lock(lock_);
   if (in_transit_)
     return false;
-  in_transit_ = shared_buffer_ != nullptr;
+  in_transit_ = static_cast<bool>(shared_buffer_);
   return in_transit_;
 }
 

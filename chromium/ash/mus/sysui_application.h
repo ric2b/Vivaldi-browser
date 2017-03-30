@@ -8,28 +8,40 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "mojo/services/tracing/public/cpp/tracing_impl.h"
-#include "mojo/shell/public/cpp/shell_client.h"
+#include "mash/shelf/public/interfaces/shelf.mojom.h"
+#include "mojo/public/cpp/bindings/binding_set.h"
+#include "services/shell/public/cpp/shell_client.h"
+#include "services/tracing/public/cpp/tracing_impl.h"
 
 namespace ash {
 namespace sysui {
 
 class AshInit;
 
-class SysUIApplication : public mojo::ShellClient {
+class SysUIApplication
+    : public shell::ShellClient,
+      public shell::InterfaceFactory<mash::shelf::mojom::ShelfController> {
  public:
   SysUIApplication();
   ~SysUIApplication() override;
 
  private:
-  // mojo::ShellClient:
-  void Initialize(mojo::Connector* connector,
-                  const mojo::Identity& identity,
+  // shell::ShellClient:
+  void Initialize(::shell::Connector* connector,
+                  const ::shell::Identity& identity,
                   uint32_t id) override;
-  bool AcceptConnection(mojo::Connection* connection) override;
+  bool AcceptConnection(shell::Connection* connection) override;
+
+  // InterfaceFactory<mash::shelf::mojom::ShelfController>:
+  void Create(shell::Connection* connection,
+              mojo::InterfaceRequest<mash::shelf::mojom::ShelfController>
+                  request) override;
 
   mojo::TracingImpl tracing_;
   std::unique_ptr<AshInit> ash_init_;
+
+  mojo::BindingSet<mash::shelf::mojom::ShelfController>
+      shelf_controller_bindings_;
 
   DISALLOW_COPY_AND_ASSIGN(SysUIApplication);
 };

@@ -41,7 +41,7 @@ class LocalFrame;
 class Range;
 class Text;
 
-class CORE_EXPORT InputMethodController final : public GarbageCollectedFinalized<InputMethodController> {
+class CORE_EXPORT InputMethodController final : public GarbageCollected<InputMethodController> {
     WTF_MAKE_NONCOPYABLE(InputMethodController);
 public:
     enum ConfirmCompositionBehavior {
@@ -49,13 +49,12 @@ public:
         KeepSelection,
     };
 
-    static RawPtr<InputMethodController> create(LocalFrame&);
-    ~InputMethodController();
+    static InputMethodController* create(LocalFrame&);
     DECLARE_TRACE();
 
     // international text input composition
     bool hasComposition() const;
-    void setComposition(const String&, const Vector<CompositionUnderline>&, unsigned selectionStart, unsigned selectionEnd);
+    void setComposition(const String&, const Vector<CompositionUnderline>&, int selectionStart, int selectionEnd);
     void setCompositionFromExistingText(const Vector<CompositionUnderline>&, unsigned compositionStart, unsigned compositionEnd);
     // Inserts the text that is being composed as a regular text and returns true
     // if composition exists.
@@ -70,7 +69,7 @@ public:
     void cancelComposition();
     void cancelCompositionIfSelectionIsInvalid();
     EphemeralRange compositionEphemeralRange() const;
-    RawPtr<Range> compositionRange() const;
+    Range* compositionRange() const;
 
     void clear();
     void documentDetached();
@@ -103,7 +102,7 @@ private:
     Editor& editor() const;
     LocalFrame& frame() const
     {
-        ASSERT(m_frame);
+        DCHECK(m_frame);
         return *m_frame;
     }
 

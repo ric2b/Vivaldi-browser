@@ -57,7 +57,7 @@ void SurfaceManager::DeregisterSurface(SurfaceId surface_id) {
   surface_map_.erase(it);
 }
 
-void SurfaceManager::Destroy(scoped_ptr<Surface> surface) {
+void SurfaceManager::Destroy(std::unique_ptr<Surface> surface) {
   DCHECK(thread_checker_.CalledOnValidThread());
   surface->set_destroyed(true);
   surfaces_to_destroy_.push_back(surface.release());
@@ -127,7 +127,7 @@ void SurfaceManager::GarbageCollectSurfaces() {
   for (SurfaceDestroyList::iterator dest_it = surfaces_to_destroy_.begin();
        dest_it != surfaces_to_destroy_.end();) {
     if (!live_surfaces_set.count((*dest_it)->surface_id())) {
-      scoped_ptr<Surface> surf(*dest_it);
+      std::unique_ptr<Surface> surf(*dest_it);
       DeregisterSurface(surf->surface_id());
       dest_it = surfaces_to_destroy_.erase(dest_it);
     } else {
@@ -284,8 +284,11 @@ void SurfaceManager::RegisterSurfaceNamespaceHierarchy(
 void SurfaceManager::UnregisterSurfaceNamespaceHierarchy(
     uint32_t parent_namespace,
     uint32_t child_namespace) {
-  DCHECK_EQ(valid_surface_id_namespaces_.count(parent_namespace), 1u);
-  DCHECK_EQ(valid_surface_id_namespaces_.count(child_namespace), 1u);
+  // Deliberately do not check validity of either parent or child namespace
+  // here.  They were valid during the registration, so were valid at some
+  // point in time.  This makes it possible to invalidate parent and child
+  // namespaces independently of each other and not have an ordering dependency
+  // of unregistering the hierarchy first before either of them.
   DCHECK_EQ(namespace_client_map_.count(parent_namespace), 1u);
 
   auto iter = namespace_client_map_.find(parent_namespace);

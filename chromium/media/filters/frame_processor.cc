@@ -354,7 +354,7 @@ bool FrameProcessor::HandlePartialAppendWindowTrimming(
     base::TimeDelta append_window_start,
     base::TimeDelta append_window_end,
     const scoped_refptr<StreamParserBuffer>& buffer) {
-  DCHECK(buffer->duration() > base::TimeDelta());
+  DCHECK(buffer->duration() >= base::TimeDelta());
   DCHECK_EQ(DemuxerStream::AUDIO, buffer->type());
   DCHECK(buffer->is_key_frame());
 
@@ -545,7 +545,7 @@ bool FrameProcessor::ProcessFrame(
     }
 
     // 5. If timestampOffset is not 0, then run the following steps:
-    if (*timestamp_offset != base::TimeDelta()) {
+    if (!timestamp_offset->is_zero()) {
       // 5.1. Add timestampOffset to the presentation timestamp.
       // Note: |frame| PTS is only updated if it survives discontinuity
       // processing.

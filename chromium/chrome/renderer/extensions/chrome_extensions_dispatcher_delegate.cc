@@ -4,6 +4,8 @@
 
 #include "chrome/renderer/extensions/chrome_extensions_dispatcher_delegate.h"
 
+#include <memory>
+
 #include "base/command_line.h"
 #include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
@@ -36,7 +38,10 @@
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/common/switches.h"
+#include "extensions/renderer/css_native_handler.h"
 #include "extensions/renderer/dispatcher.h"
+#include "extensions/renderer/i18n_custom_bindings.h"
+#include "extensions/renderer/lazy_background_page_native_handler.h"
 #include "extensions/renderer/native_handler.h"
 #include "extensions/renderer/resource_bundle_source_map.h"
 #include "extensions/renderer/script_context.h"
@@ -77,52 +82,67 @@ void ChromeExtensionsDispatcherDelegate::RegisterNativeHandlers(
     extensions::ModuleSystem* module_system,
     extensions::ScriptContext* context) {
   module_system->RegisterNativeHandler(
-      "app",
-      scoped_ptr<NativeHandler>(
-          new extensions::AppBindings(dispatcher, context)));
+      "app", std::unique_ptr<NativeHandler>(
+                 new extensions::AppBindings(dispatcher, context)));
   module_system->RegisterNativeHandler(
       "sync_file_system",
-      scoped_ptr<NativeHandler>(
+      std::unique_ptr<NativeHandler>(
           new extensions::SyncFileSystemCustomBindings(context)));
   module_system->RegisterNativeHandler(
       "file_browser_handler",
-      scoped_ptr<NativeHandler>(
+      std::unique_ptr<NativeHandler>(
           new extensions::FileBrowserHandlerCustomBindings(context)));
   module_system->RegisterNativeHandler(
       "file_manager_private",
-      scoped_ptr<NativeHandler>(
+      std::unique_ptr<NativeHandler>(
           new extensions::FileManagerPrivateCustomBindings(context)));
   module_system->RegisterNativeHandler(
       "notifications_private",
-      scoped_ptr<NativeHandler>(
+      std::unique_ptr<NativeHandler>(
           new extensions::NotificationsNativeHandler(context)));
   module_system->RegisterNativeHandler(
       "mediaGalleries",
-      scoped_ptr<NativeHandler>(
+      std::unique_ptr<NativeHandler>(
           new extensions::MediaGalleriesCustomBindings(context)));
   module_system->RegisterNativeHandler(
-      "page_capture",
-      scoped_ptr<NativeHandler>(
-          new extensions::PageCaptureCustomBindings(context)));
+      "page_capture", std::unique_ptr<NativeHandler>(
+                          new extensions::PageCaptureCustomBindings(context)));
   module_system->RegisterNativeHandler(
       "platform_keys_natives",
-      scoped_ptr<NativeHandler>(new extensions::PlatformKeysNatives(context)));
+      std::unique_ptr<NativeHandler>(
+          new extensions::PlatformKeysNatives(context)));
   module_system->RegisterNativeHandler(
-      "tabs",
-      scoped_ptr<NativeHandler>(new extensions::TabsCustomBindings(context)));
+      "tabs", std::unique_ptr<NativeHandler>(
+                  new extensions::TabsCustomBindings(context)));
   module_system->RegisterNativeHandler(
-      "webstore",
-      scoped_ptr<NativeHandler>(new extensions::WebstoreBindings(context)));
+      "webstore", std::unique_ptr<NativeHandler>(
+                      new extensions::WebstoreBindings(context)));
 #if defined(ENABLE_WEBRTC)
   module_system->RegisterNativeHandler(
       "cast_streaming_natives",
-      scoped_ptr<NativeHandler>(
+      std::unique_ptr<NativeHandler>(
           new extensions::CastStreamingNativeHandler(context)));
 #endif
   module_system->RegisterNativeHandler(
       "automationInternal",
-      scoped_ptr<NativeHandler>(
+      std::unique_ptr<NativeHandler>(
           new extensions::AutomationInternalCustomBindings(context)));
+
+  // The following are native handlers that are defined in //extensions, but
+  // are only used for APIs defined in Chrome.
+  // TODO(devlin): We should clean this up. If an API is defined in Chrome,
+  // there's no reason to have its native handlers residing and being compiled
+  // in //extensions.
+  module_system->RegisterNativeHandler(
+      "i18n", std::unique_ptr<NativeHandler>(
+                  new extensions::I18NCustomBindings(context)));
+  module_system->RegisterNativeHandler(
+      "lazy_background_page",
+      std::unique_ptr<NativeHandler>(
+          new extensions::LazyBackgroundPageNativeHandler(context)));
+  module_system->RegisterNativeHandler(
+      "css_natives", std::unique_ptr<NativeHandler>(
+                         new extensions::CssNativeHandler(context)));
 }
 
 void ChromeExtensionsDispatcherDelegate::PopulateSourceMap(

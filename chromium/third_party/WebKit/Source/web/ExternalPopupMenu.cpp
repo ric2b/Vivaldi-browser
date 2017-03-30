@@ -162,7 +162,7 @@ void ExternalPopupMenu::update()
 {
     if (!m_webExternalPopupMenu || !m_ownerElement)
         return;
-    m_ownerElement->document().updateLayoutTree();
+    m_ownerElement->document().updateStyleAndLayoutTree();
     // disconnectClient() might have been called.
     if (!m_ownerElement)
         return;
@@ -205,7 +205,7 @@ void ExternalPopupMenu::didAcceptIndices(const WebVector<int>& indices)
         return;
     }
 
-    RawPtr<HTMLSelectElement> ownerElement(m_ownerElement.get());
+    HTMLSelectElement* ownerElement = m_ownerElement;
     ownerElement->popupDidHide();
 
     if (indices.size() == 0) {

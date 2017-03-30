@@ -5,6 +5,7 @@
 #ifndef ASH_SHELL_DELEGATE_H_
 #define ASH_SHELL_DELEGATE_H_
 
+#include <memory>
 #include <string>
 
 #include "ash/ash_export.h"
@@ -15,6 +16,7 @@
 class GURL;
 
 namespace app_list {
+class AppListPresenter;
 class AppListViewDelegate;
 }
 
@@ -26,19 +28,25 @@ namespace gfx {
 class Image;
 }
 
+namespace keyboard {
+class KeyboardUI;
+}
+
 namespace ui {
 class MenuModel;
 }
 
-namespace keyboard {
-class KeyboardUI;
+namespace views {
+class Widget;
 }
 
 namespace ash {
 
 class AccessibilityDelegate;
+class ContainerDelegate;
 class MediaDelegate;
 class NewWindowDelegate;
+class PointerWatcherDelegate;
 class SessionStateDelegate;
 class ShelfDelegate;
 class ShelfModel;
@@ -112,9 +120,8 @@ class ASH_EXPORT ShellDelegate {
   // Opens the |url| in a new browser tab.
   virtual void OpenUrl(const GURL& url) = 0;
 
-  // Get the AppListViewDelegate, creating one if it does not yet exist.
-  // Ownership stays with Chrome's AppListService, or the ShellDelegate.
-  virtual app_list::AppListViewDelegate* GetAppListViewDelegate() = 0;
+  // Get the AppListPresenter. Ownership stays with Chrome.
+  virtual app_list::AppListPresenter* GetAppListPresenter() = 0;
 
   // Creates a new ShelfDelegate. Shell takes ownership of the returned
   // value.
@@ -137,6 +144,11 @@ class ASH_EXPORT ShellDelegate {
 
   // Creates a media delegate. Shell takes ownership of the delegate.
   virtual MediaDelegate* CreateMediaDelegate() = 0;
+
+  virtual std::unique_ptr<PointerWatcherDelegate>
+  CreatePointerWatcherDelegate() = 0;
+
+  virtual std::unique_ptr<ContainerDelegate> CreateContainerDelegate() = 0;
 
   // Creates a menu model for the |shelf| and optional shelf |item|.
   // If |item| is null, this creates a context menu for the desktop or shelf.

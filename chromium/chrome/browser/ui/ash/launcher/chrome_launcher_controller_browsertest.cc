@@ -14,11 +14,11 @@
 #include "ash/shelf/shelf_util.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shell.h"
-#include "ash/test/app_list_controller_test_api.h"
 #include "ash/test/shelf_test_api.h"
 #include "ash/test/shelf_view_test_api.h"
 #include "ash/test/shell_test_api.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
@@ -33,6 +33,7 @@
 #include "chrome/browser/extensions/launch_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_service.h"
+#include "chrome/browser/ui/ash/app_list/test/app_list_service_ash_test_api.h"
 #include "chrome/browser/ui/ash/launcher/browser_shortcut_launcher_item_controller.h"
 #include "chrome/browser/ui/ash/launcher/launcher_application_menu_item_model.h"
 #include "chrome/browser/ui/ash/launcher/launcher_item_controller.h"
@@ -126,10 +127,9 @@ void ClickAllAppsButtonFromStartPage(ui::test::EventGenerator* generator,
   if (!app_list::switches::IsExperimentalAppListEnabled())
     return;
 
-  ash::test::AppListControllerTestApi controller_test(
-      ash::Shell::GetInstance());
+  AppListServiceAshTestApi service_test;
 
-  app_list::StartPageView* start_page_view = controller_test.GetStartPageView();
+  app_list::StartPageView* start_page_view = service_test.GetStartPageView();
   DCHECK(start_page_view);
 
   app_list::TileItemView* all_apps_button = start_page_view->all_apps_button();
@@ -140,7 +140,7 @@ void ClickAllAppsButtonFromStartPage(ui::test::EventGenerator* generator,
   generator->ClickLeftButton();
   base::MessageLoop::current()->RunUntilIdle();
   // Run Layout() to effectively complete the animation to the apps page.
-  controller_test.LayoutContentsView();
+  service_test.LayoutContentsView();
 }
 
 // Find the browser that associated with |app_name|.
@@ -1626,8 +1626,7 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, DISABLED_DragAndDrop) {
 
   EXPECT_TRUE(service->IsAppListVisible());
   app_list::AppsGridView* grid_view =
-      ash::test::AppListControllerTestApi(ash::Shell::GetInstance()).
-          GetRootGridView();
+      AppListServiceAshTestApi().GetRootGridView();
   ASSERT_TRUE(grid_view);
   ASSERT_TRUE(grid_view->has_drag_and_drop_host_for_test());
 
@@ -1724,7 +1723,6 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, DISABLED_DragAndDrop) {
   generator.ReleaseLeftButton();
 }
 
-#if !defined(OS_WIN)
 // Used to test drag & drop an item between app list and shelf with multi
 // display environment.
 class ShelfAppBrowserTestWithMultiMonitor
@@ -1765,8 +1763,9 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTestWithMultiMonitor,
   // Open the app list menu and check that the drag and drop host was set.
   gfx::Rect app_list_bounds =
       test.shelf_view()->GetAppListButtonView()->GetBoundsInScreen();
-  gfx::Display display =
-      gfx::Screen::GetScreen()->GetDisplayNearestWindow(secondary_root_window);
+  display::Display display =
+      display::Screen::GetScreen()->GetDisplayNearestWindow(
+          secondary_root_window);
   const gfx::Point& origin = display.bounds().origin();
   app_list_bounds.Offset(-origin.x(), -origin.y());
 
@@ -1781,8 +1780,7 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTestWithMultiMonitor,
   EXPECT_TRUE(service->IsAppListVisible());
 
   app_list::AppsGridView* grid_view =
-      ash::test::AppListControllerTestApi(ash::Shell::GetInstance()).
-          GetRootGridView();
+      AppListServiceAshTestApi().GetRootGridView();
   ASSERT_TRUE(grid_view);
   ASSERT_TRUE(grid_view->has_drag_and_drop_host_for_test());
 
@@ -1833,7 +1831,6 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTestWithMultiMonitor,
   base::MessageLoop::current()->RunUntilIdle();
   EXPECT_EQ(2, model_->item_count());
 }
-#endif
 
 // Do tests for removal of items from the shelf by dragging.
 // Disabled due to flake: http://crbug.com/448482
@@ -1965,8 +1962,7 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, ClickItem) {
 
   // Click an app icon in the app grid view.
   app_list::AppsGridView* grid_view =
-      ash::test::AppListControllerTestApi(ash::Shell::GetInstance()).
-          GetRootGridView();
+      AppListServiceAshTestApi().GetRootGridView();
   ASSERT_TRUE(grid_view);
   const views::ViewModelT<app_list::AppListItemView>* vm_grid =
       grid_view->view_model_for_test();

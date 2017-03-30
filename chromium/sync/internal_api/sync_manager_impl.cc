@@ -14,15 +14,17 @@
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/json/json_writer.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram.h"
 #include "base/observer_list.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "sync/engine/sync_scheduler.h"
 #include "sync/engine/syncer_types.h"
 #include "sync/internal_api/change_reorder_buffer.h"
+#include "sync/internal_api/model_type_connector_proxy.h"
 #include "sync/internal_api/public/base/cancelation_signal.h"
 #include "sync/internal_api/public/base/invalidation_interface.h"
 #include "sync/internal_api/public/base/model_type.h"
@@ -37,7 +39,6 @@
 #include "sync/internal_api/public/util/experiments.h"
 #include "sync/internal_api/public/write_node.h"
 #include "sync/internal_api/public/write_transaction.h"
-#include "sync/internal_api/sync_context_proxy.h"
 #include "sync/internal_api/syncapi_internal.h"
 #include "sync/internal_api/syncapi_server_connection_manager.h"
 #include "sync/protocol/proto_value_conversions.h"
@@ -162,7 +163,8 @@ bool SyncManagerImpl::VisiblePropertiesDiffer(
 }
 
 ModelTypeSet SyncManagerImpl::InitialSyncEndedTypes() {
-  return directory()->InitialSyncEndedTypes();
+  DCHECK(initialized_);
+  return model_type_registry_->GetInitialSyncEndedTypes();
 }
 
 ModelTypeSet SyncManagerImpl::GetTypesWithEmptyProgressMarkerToken(
@@ -458,7 +460,7 @@ bool SyncManagerImpl::OpenDirectory(const std::string& username) {
 
 bool SyncManagerImpl::PurgePartiallySyncedTypes() {
   ModelTypeSet partially_synced_types = ModelTypeSet::All();
-  partially_synced_types.RemoveAll(InitialSyncEndedTypes());
+  partially_synced_types.RemoveAll(directory()->InitialSyncEndedTypes());
   partially_synced_types.RemoveAll(GetTypesWithEmptyProgressMarkerToken(
       ModelTypeSet::All()));
 
@@ -927,9 +929,10 @@ UserShare* SyncManagerImpl::GetUserShare() {
   return &share_;
 }
 
-scoped_ptr<syncer_v2::SyncContext> SyncManagerImpl::GetSyncContextProxy() {
+std::unique_ptr<syncer_v2::ModelTypeConnector>
+SyncManagerImpl::GetModelTypeConnectorProxy() {
   DCHECK(initialized_);
-  return make_scoped_ptr(new syncer_v2::SyncContextProxy(
+  return base::WrapUnique(new syncer_v2::ModelTypeConnectorProxy(
       base::ThreadTaskRunnerHandle::Get(), model_type_registry_->AsWeakPtr()));
 }
 
@@ -1023,9 +1026,11 @@ void SyncManagerImpl::ClearServerData(const ClearServerDataCallback& callback) {
   scheduler_->ScheduleClearServerData(params);
 }
 
-void SyncManagerImpl::OnCookieJarChanged(bool account_mismatch) {
+void SyncManagerImpl::OnCookieJarChanged(bool account_mismatch,
+                                         bool empty_jar) {
   DCHECK(thread_checker_.CalledOnValidThread());
   session_context_->set_cookie_jar_mismatch(account_mismatch);
+  session_context_->set_cookie_jar_empty(empty_jar);
 }
 
 }  // namespace syncer

@@ -10,6 +10,10 @@
 #include "base/macros.h"
 #include "chrome/browser/ui/toolbar/browser_actions_bar_browsertest.h"
 
+namespace extensions {
+class TestExtensionDir;
+}
+
 class ExtensionMessageBubbleBrowserTest
     : public BrowserActionsBarBrowserTest {
  protected:
@@ -26,14 +30,36 @@ class ExtensionMessageBubbleBrowserTest
   void TearDownOnMainThread() override;
 
   // Checks the position of the bubble present in the given |browser|, when the
-  // bubble should be anchored at the given |anchor|.
-  virtual void CheckBubble(Browser* browser, AnchorPosition anchor) = 0;
+  // bubble should be anchored at the given |anchor| and that the toolbar model
+  // is correctly highlighting.
+  void CheckBubble(Browser* browser,
+                   AnchorPosition anchor,
+                   bool should_be_highlighting);
+  // Performs the platform-specific checks.
+  virtual void CheckBubbleNative(Browser* browser, AnchorPosition anchor) = 0;
 
   // Closes the bubble present in the given |browser|.
-  virtual void CloseBubble(Browser* browser) = 0;
+  void CloseBubble(Browser* browser);
+  // Performs the platform-specific close.
+  virtual void CloseBubbleNative(Browser* browser) = 0;
 
   // Checks that there is no active bubble for the given |browser|.
-  virtual void CheckBubbleIsNotPresent(Browser* browser) = 0;
+  // We specify whether or not the toolbar model should be highlighting or there
+  // is a bubble active since another browser window may have an active bubble.
+  void CheckBubbleIsNotPresent(Browser* browser,
+                               bool should_profile_have_bubble,
+                               bool should_be_highlighting);
+  // Performs the platform-specific checks.
+  virtual void CheckBubbleIsNotPresentNative(Browser* browser) = 0;
+
+  // Clicks on the corresponding button in the bubble.
+  virtual void ClickLearnMoreButton(Browser* browser) = 0;
+  virtual void ClickActionButton(Browser* browser) = 0;
+  virtual void ClickDismissButton(Browser* browser) = 0;
+
+  // Adds a new extension that uses the chrome_settings_overrides api to
+  // override a setting specified in |settings_override_value|.
+  void AddSettingsOverrideExtension(const std::string& settings_override_value);
 
   // The following are essentially the different tests, but we can't define the
   // tests in this file, since it relies on platform-specific implementation
@@ -63,9 +89,41 @@ class ExtensionMessageBubbleBrowserTest
   void PreBubbleShowsOnStartup();
   void TestBubbleShowsOnStartup();
 
+  // Tests that the developer mode warning bubble is only shown once per
+  // profile.
+  // Regression test for crbug.com/607099.
+  void TestDevModeBubbleIsntShownTwice();
+
+  // Tests that the bubble indicating an extension is controlling a user's
+  // new tab page is shown.
+  void TestControlledNewTabPageBubbleShown();
+
+  // Tests that the bubble indicating an extension is controlling a user's
+  // home page is shown.
+  void TestControlledHomeBubbleShown();
+
+  // Tests that the bubble indicating an extension is controlling a user's
+  // search engine is shown.
+  void TestControlledSearchBubbleShown();
+
+  // Tests that having multiple windows, all of which could be vying to show a
+  // warning bubble, behaves properly.
+  void TestBubbleWithMultipleWindows();
+
+  // Tests clicking on the corresponding button in the bubble view. The logic
+  // for these is tested more thoroughly in the unit tests, but this ensures
+  // that nothing goes wrong end-to-end.
+  void TestClickingLearnMoreButton();
+  void TestClickingActionButton();
+  void TestClickingDismissButton();
+
  private:
   std::unique_ptr<extensions::FeatureSwitch::ScopedOverride>
       dev_mode_bubble_override_;
+
+  // The backing directory for a custom extension loaded during a test. Null if
+  // no custom extension is loaded.
+  std::unique_ptr<extensions::TestExtensionDir> custom_extension_dir_;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionMessageBubbleBrowserTest);
 };

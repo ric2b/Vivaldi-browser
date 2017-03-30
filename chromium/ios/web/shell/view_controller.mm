@@ -4,6 +4,8 @@
 
 #import "ios/web/shell/view_controller.h"
 
+#import <MobileCoreServices/MobileCoreServices.h>
+
 #include <stdint.h>
 
 #include <memory>
@@ -15,13 +17,14 @@
 #include "ios/net/cookies/cookie_store_ios.h"
 #import "ios/net/crn_http_protocol_handler.h"
 #import "ios/net/empty_nsurlcache.h"
+#import "ios/net/request_tracker.h"
+#import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/referrer.h"
-#import "ios/web/public/web_controller_factory.h"
+#import "ios/web/public/web_state/context_menu_params.h"
 #include "ios/web/public/web_state/web_state.h"
+#import "ios/web/public/web_state/web_state_delegate_bridge.h"
 #import "ios/web/public/web_state/web_state_observer_bridge.h"
-#include "ios/web/shell/shell_browser_state.h"
-#include "ios/web/web_state/ui/crw_web_controller.h"
-#include "ios/web/web_state/web_state_impl.h"
+#import "net/base/mac/url_conversions.h"
 #include "ui/base/page_transition_types.h"
 
 NSString* const kWebShellBackButtonAccessibilityLabel = @"Back";
@@ -30,14 +33,16 @@ NSString* const kWebShellAddressFieldAccessibilityLabel = @"Address field";
 
 using web::NavigationManager;
 
-@interface ViewController ()<CRWWebStateObserver> {
+@interface ViewController ()<CRWWebStateDelegate,
+                             CRWWebStateObserver,
+                             UITextFieldDelegate> {
   web::BrowserState* _browserState;
-  base::scoped_nsobject<CRWWebController> _webController;
+  std::unique_ptr<web::WebState> _webState;
   std::unique_ptr<web::WebStateObserverBridge> _webStateObserver;
+  std::unique_ptr<web::WebStateDelegateBridge> _webStateDelegate;
 
   base::mac::ObjCPropertyReleaser _propertyReleaser_ViewController;
 }
-@property(nonatomic, assign, readonly) web::WebState* webState;
 @property(nonatomic, assign, readonly) NavigationManager* navigationManager;
 @property(nonatomic, readwrite, retain) UITextField* field;
 @end
@@ -110,16 +115,16 @@ using web::NavigationManager;
   // Set up the network stack before creating the WebState.
   [self setUpNetworkStack];
 
-  std::unique_ptr<web::WebStateImpl> webState(
-      new web::WebStateImpl(_browserState));
-  webState->GetNavigationManagerImpl().InitializeSession(nil, nil, NO, 0);
-  _webController.reset(web::CreateWebController(std::move(webState)));
-  [_webController setDelegate:self];
-  [_webController setWebUsageEnabled:YES];
+  web::WebState::CreateParams webStateCreateParams(_browserState);
+  _webState = web::WebState::Create(webStateCreateParams);
+  _webState->SetWebUsageEnabled(true);
 
-  _webStateObserver.reset(new web::WebStateObserverBridge(self.webState, self));
+  _webStateObserver.reset(
+      new web::WebStateObserverBridge(_webState.get(), self));
+  _webStateDelegate.reset(new web::WebStateDelegateBridge(self));
+  _webState->SetDelegate(_webStateDelegate.get());
 
-  UIView* view = self.webState->GetView();
+  UIView* view = _webState->GetView();
   [view setFrame:[_containerView bounds]];
   [_containerView addSubview:view];
 
@@ -128,12 +133,12 @@ using web::NavigationManager;
   self.navigationManager->LoadURLWithParams(params);
 }
 
-- (web::WebState*)webState {
-  return [_webController webState];
+- (NavigationManager*)navigationManager {
+  return _webState->GetNavigationManager();
 }
 
-- (NavigationManager*)navigationManager {
-  return self.webState->GetNavigationManager();
+- (web::WebState*)webState {
+  return _webState.get();
 }
 
 - (void)setUpNetworkStack {
@@ -186,7 +191,7 @@ using web::NavigationManager;
     return;
   }
 
-  const GURL& visibleURL = self.webState->GetVisibleURL();
+  const GURL& visibleURL = _webState->GetVisibleURL();
   [_field setText:base::SysUTF8ToNSString(visibleURL.spec())];
 }
 
@@ -257,101 +262,47 @@ using web::NavigationManager;
 }
 
 - (void)webStateDidLoadPage:(web::WebState*)webState {
-  DCHECK_EQ(self.webState, webState);
+  DCHECK_EQ(_webState.get(), webState);
   [self updateToolbar];
 }
 
 // -----------------------------------------------------------------------
-// WebDelegate implementation.
+// WebStateDelegate implementation.
 
-- (void)webWillAddPendingURL:(const GURL&)url
-                  transition:(ui::PageTransition)transition {
-}
-- (void)webDidAddPendingURL {
-}
-- (void)webCancelStartLoadingRequest {
-}
-- (void)webDidStartLoadingURL:(const GURL&)currentUrl
-          shouldUpdateHistory:(BOOL)updateHistory {
-}
-- (void)webDidFinishWithURL:(const GURL&)url loadSuccess:(BOOL)loadSuccess {
-}
+- (BOOL)webState:(web::WebState*)webState
+    handleContextMenu:(const web::ContextMenuParams&)params {
+  GURL link = params.link_url;
+  if (!link.is_valid()) {
+    return NO;
+  }
 
-- (CRWWebController*)webPageOrderedOpen:(const GURL&)url
-                               referrer:(const web::Referrer&)referrer
-                             windowName:(NSString*)windowName
-                           inBackground:(BOOL)inBackground {
-  return nil;
-}
-
-- (CRWWebController*)webPageOrderedOpen {
-  return nil;
-}
-
-- (void)webPageOrderedClose {
-}
-- (void)goDelta:(int)delta {
-}
-- (void)openURLWithParams:(const web::WebState::OpenURLParams&)params {
-}
-- (BOOL)openExternalURL:(const GURL&)URL linkClicked:(BOOL)linkClicked {
-  return NO;
-}
-
-- (void)presentSSLError:(const net::SSLInfo&)info
-           forSSLStatus:(const web::SSLStatus&)status
-            recoverable:(BOOL)recoverable
-               callback:(SSLErrorCallback)shouldContinue {
   UIAlertController* alert = [UIAlertController
-      alertControllerWithTitle:@"Your connection is not private"
+      alertControllerWithTitle:params.menu_title
                        message:nil
                 preferredStyle:UIAlertControllerStyleActionSheet];
-  [alert addAction:[UIAlertAction actionWithTitle:@"Go Back"
+  alert.popoverPresentationController.sourceView = params.view;
+  alert.popoverPresentationController.sourceRect =
+      CGRectMake(params.location.x, params.location.y, 1.0, 1.0);
+
+  void (^handler)(UIAlertAction*) = ^(UIAlertAction*) {
+    NSDictionary* item = @{
+      static_cast<NSString*>(kUTTypeURL) : net::NSURLWithGURL(link),
+      static_cast<NSString*>(kUTTypeUTF8PlainText) : [base::SysUTF8ToNSString(
+          link.spec()) dataUsingEncoding:NSUTF8StringEncoding],
+    };
+    [[UIPasteboard generalPasteboard] setItems:@[ item ]];
+  };
+  [alert addAction:[UIAlertAction actionWithTitle:@"Copy"
+                                            style:UIAlertActionStyleDefault
+                                          handler:handler]];
+
+  [alert addAction:[UIAlertAction actionWithTitle:@"Cancel"
                                             style:UIAlertActionStyleCancel
-                                          handler:^(UIAlertAction*) {
-                                            shouldContinue(NO);
-                                          }]];
+                                          handler:nil]];
 
-  if (recoverable) {
-    [alert addAction:[UIAlertAction actionWithTitle:@"Continue"
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction*) {
-                                              shouldContinue(YES);
-                                            }]];
-  }
   [self presentViewController:alert animated:YES completion:nil];
-}
 
-- (void)presentSpoofingError {
-}
-- (void)webLoadCancelled:(const GURL&)url {
-}
-- (void)webDidUpdateHistoryStateWithPageURL:(const GURL&)pageUrl {
-}
-- (void)webController:(CRWWebController*)webController
-    retrievePlaceholderOverlayImage:(void (^)(UIImage*))block {
-}
-- (void)webController:(CRWWebController*)webController
-    onFormResubmissionForRequest:(NSURLRequest*)request
-                   continueBlock:(ProceduralBlock)continueBlock
-                     cancelBlock:(ProceduralBlock)cancelBlock {
-}
-- (void)webWillReload {
-}
-- (void)webWillInitiateLoadWithParams:
-    (NavigationManager::WebLoadParams&)params {
-}
-- (void)webDidUpdateSessionForLoadWithParams:
-            (const NavigationManager::WebLoadParams&)params
-                        wasInitialNavigation:(BOOL)initialNavigation {
-}
-- (void)webWillFinishHistoryNavigationFromEntry:(CRWSessionEntry*)fromEntry {
-}
-- (int)downloadImageAtUrl:(const GURL&)url
-            maxBitmapSize:(uint32_t)maxBitmapSize
-                 callback:
-                     (const web::WebState::ImageDownloadCallback&)callback {
-  return -1;
+  return YES;
 }
 
 @end

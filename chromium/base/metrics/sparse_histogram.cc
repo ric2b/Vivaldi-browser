@@ -74,7 +74,7 @@ HistogramBase* SparseHistogram::FactoryGet(const std::string& name,
 
 // static
 std::unique_ptr<HistogramBase> SparseHistogram::PersistentCreate(
-    PersistentMemoryAllocator* allocator,
+    PersistentHistogramAllocator* allocator,
     const std::string& name,
     HistogramSamples::Metadata* meta,
     HistogramSamples::Metadata* logged_meta) {
@@ -126,6 +126,8 @@ std::unique_ptr<HistogramSamples> SparseHistogram::SnapshotSamples() const {
 }
 
 std::unique_ptr<HistogramSamples> SparseHistogram::SnapshotDelta() {
+  DCHECK(!final_delta_created_);
+
   std::unique_ptr<SampleMap> snapshot(new SampleMap(name_hash()));
   base::AutoLock auto_lock(lock_);
   snapshot->Add(*samples_);
@@ -133,6 +135,19 @@ std::unique_ptr<HistogramSamples> SparseHistogram::SnapshotDelta() {
   // Subtract what was previously logged and update that information.
   snapshot->Subtract(*logged_samples_);
   logged_samples_->Add(*snapshot);
+  return std::move(snapshot);
+}
+
+std::unique_ptr<HistogramSamples> SparseHistogram::SnapshotFinalDelta() const {
+  DCHECK(!final_delta_created_);
+  final_delta_created_ = true;
+
+  std::unique_ptr<SampleMap> snapshot(new SampleMap(name_hash()));
+  base::AutoLock auto_lock(lock_);
+  snapshot->Add(*samples_);
+
+  // Subtract what was previously logged and then return.
+  snapshot->Subtract(*logged_samples_);
   return std::move(snapshot);
 }
 
@@ -165,7 +180,7 @@ SparseHistogram::SparseHistogram(const std::string& name)
       samples_(new SampleMap(HashMetricName(name))),
       logged_samples_(new SampleMap(samples_->id())) {}
 
-SparseHistogram::SparseHistogram(PersistentMemoryAllocator* allocator,
+SparseHistogram::SparseHistogram(PersistentHistogramAllocator* allocator,
                                  const std::string& name,
                                  HistogramSamples::Metadata* meta,
                                  HistogramSamples::Metadata* logged_meta)

@@ -5,6 +5,8 @@
 #include "courgette/disassembler_elf_32.h"
 
 #include <algorithm>
+#include <iterator>
+#include <utility>
 
 #include "base/logging.h"
 #include "courgette/assembly_program.h"
@@ -12,10 +14,38 @@
 
 namespace courgette {
 
+namespace {
+
+// Sorts |section_headers| by file offset and stores the resulting permutation
+// of section ids in |order|.
+std::vector<Elf32_Half> GetSectionHeaderFileOffsetOrder(
+    const std::vector<Elf32_Shdr>& section_headers) {
+  size_t size = section_headers.size();
+  std::vector<Elf32_Half> order(size);
+  for (size_t i = 0; i < size; ++i)
+    order[i] = static_cast<Elf32_Half>(i);
+
+  auto comp = [&](int idx1, int idx2) {
+    return section_headers[idx1].sh_offset < section_headers[idx2].sh_offset;
+  };
+  std::stable_sort(order.begin(), order.end(), comp);
+  return order;
+}
+
+}  // namespace
+
+DisassemblerElf32::Elf32RvaVisitor_Rel32::Elf32RvaVisitor_Rel32(
+    const std::vector<std::unique_ptr<TypedRVA>>& rva_locations)
+    : VectorRvaVisitor<std::unique_ptr<TypedRVA>>(rva_locations) {
+}
+
+RVA DisassemblerElf32::Elf32RvaVisitor_Rel32::Get() const {
+  return (*it_)->rva() + (*it_)->relative_target();
+}
+
 DisassemblerElf32::DisassemblerElf32(const void* start, size_t length)
     : Disassembler(start, length),
       header_(nullptr),
-      section_header_table_(nullptr),
       section_header_table_size_(0),
       program_header_table_(nullptr),
       program_header_table_size_(0),
@@ -27,8 +57,8 @@ RVA DisassemblerElf32::FileOffsetToRVA(FileOffset offset) const {
   // executables and so only need to support 32-bit file sizes.
   uint32_t offset32 = static_cast<uint32_t>(offset);
 
-  for (Elf32_Half section_id = 0; section_id < SectionHeaderCount();
-       ++section_id) {
+  // Visit section headers ordered by file offset.
+  for (Elf32_Half section_id : section_header_file_offset_order_) {
     const Elf32_Shdr* section_header = SectionHeader(section_id);
     // These can appear to have a size in the file, but don't.
     if (section_header->sh_type == SHT_NOBITS)
@@ -95,9 +125,18 @@ bool DisassemblerElf32::ParseHeader() {
   if (!IsArrayInBounds(header_->e_shoff, header_->e_shnum, sizeof(Elf32_Shdr)))
     return Bad("Out of bounds section header table");
 
-  section_header_table_ = reinterpret_cast<const Elf32_Shdr*>(
-      FileOffsetToPointer(header_->e_shoff));
+  // Extract |section_header_table_|, ordered by section id.
+  const Elf32_Shdr* section_header_table_raw =
+      reinterpret_cast<const Elf32_Shdr*>(
+          FileOffsetToPointer(header_->e_shoff));
   section_header_table_size_ = header_->e_shnum;
+  section_header_table_.assign(section_header_table_raw,
+      section_header_table_raw + section_header_table_size_);
+
+  // TODO(huangs): Validate offsets of all section headers.
+
+  section_header_file_offset_order_ =
+      GetSectionHeaderFileOffsetOrder(section_header_table_);
 
   if (!IsArrayInBounds(header_->e_phoff, header_->e_phnum, sizeof(Elf32_Phdr)))
     return Bad("Out of bounds program header table");
@@ -106,11 +145,18 @@ bool DisassemblerElf32::ParseHeader() {
       FileOffsetToPointer(header_->e_phoff));
   program_header_table_size_ = header_->e_phnum;
 
-  if (header_->e_shstrndx >= header_->e_shnum)
+  Elf32_Half string_section_id = header_->e_shstrndx;
+  if (string_section_id >= header_->e_shnum)
     return Bad("Out of bounds string section index");
 
-  default_string_section_ = reinterpret_cast<const char*>(
-      SectionBody(static_cast<int>(header_->e_shstrndx)));
+  default_string_section_ =
+      reinterpret_cast<const char*>(SectionBody(string_section_id));
+  default_string_section_size_ = SectionHeader(string_section_id)->sh_size;
+  // String section may be empty. If nonempty, then last byte must be null.
+  if (default_string_section_size_ > 0) {
+    if (default_string_section_[default_string_section_size_ - 1] != '\0')
+      return Bad("String section does not terminate");
+  }
 
   if (!UpdateLength())
     return Bad("Out of bounds section or segment");
@@ -128,14 +174,46 @@ bool DisassemblerElf32::Disassemble(AssemblyProgram* target) {
   if (!ParseAbs32Relocs())
     return false;
 
-  if (!ParseRel32RelocsFromSections())
+  if (!ParseRel32RelocsFromSections())  // Does not sort rel32 locations.
     return false;
+
+  PrecomputeLabels(target);
+  RemoveUnusedRel32Locations(target);
 
   if (!ParseFile(target))
     return false;
 
+  // Finally sort rel32 locations.
+  std::sort(rel32_locations_.begin(),
+            rel32_locations_.end(),
+            TypedRVA::IsLessThanByRVA);
+  DCHECK(rel32_locations_.empty() ||
+         rel32_locations_.back()->rva() != kUnassignedRVA);
+
   target->DefaultAssignIndexes();
   return true;
+}
+
+CheckBool DisassemblerElf32::IsValidTargetRVA(RVA rva) const {
+  if (rva == kUnassignedRVA)
+    return false;
+
+  // |rva| is valid if it's contained in any program segment.
+  for (Elf32_Half segment_id = 0; segment_id < ProgramSegmentHeaderCount();
+       ++segment_id) {
+    const Elf32_Phdr* segment_header = ProgramSegmentHeader(segment_id);
+
+    if (segment_header->p_type != PT_LOAD)
+      continue;
+
+    Elf32_Addr begin = segment_header->p_vaddr;
+    Elf32_Addr end = segment_header->p_vaddr + segment_header->p_memsz;
+
+    if (rva >= begin && rva < end)
+      return true;
+  }
+
+  return false;
 }
 
 bool DisassemblerElf32::UpdateLength() {
@@ -180,32 +258,27 @@ bool DisassemblerElf32::UpdateLength() {
   return true;
 }
 
-CheckBool DisassemblerElf32::IsValidTargetRVA(RVA rva) const {
-  if (rva == kUnassignedRVA)
-    return false;
-
-  // It's valid if it's contained in any program segment
-  for (Elf32_Half segment_id = 0; segment_id < ProgramSegmentHeaderCount();
-       ++segment_id) {
-    const Elf32_Phdr* segment_header = ProgramSegmentHeader(segment_id);
-
-    if (segment_header->p_type != PT_LOAD)
-      continue;
-
-    Elf32_Addr begin = segment_header->p_vaddr;
-    Elf32_Addr end = segment_header->p_vaddr + segment_header->p_memsz;
-
-    if (rva >= begin && rva < end)
-      return true;
+CheckBool DisassemblerElf32::SectionName(const Elf32_Shdr& shdr,
+                                         std::string* name) const {
+  DCHECK(name);
+  size_t string_pos = shdr.sh_name;
+  if (string_pos == 0) {
+    // Empty string by convention. Valid even if string section is empty.
+    name->clear();
+  } else {
+    if (string_pos >= default_string_section_size_)
+      return false;
+    // Safe because string section must terminate with null.
+    *name = default_string_section_ + string_pos;
   }
-
-  return false;
+  return true;
 }
 
 CheckBool DisassemblerElf32::RVAsToFileOffsets(
     const std::vector<RVA>& rvas,
     std::vector<FileOffset>* file_offsets) {
   file_offsets->clear();
+  file_offsets->reserve(rvas.size());
   for (RVA rva : rvas) {
     FileOffset file_offset = RVAToFileOffset(rva);
     if (file_offset == kNoFileOffset)
@@ -216,8 +289,8 @@ CheckBool DisassemblerElf32::RVAsToFileOffsets(
 }
 
 CheckBool DisassemblerElf32::RVAsToFileOffsets(
-    ScopedVector<TypedRVA>* typed_rvas) {
-  for (TypedRVA* typed_rva : *typed_rvas) {
+    std::vector<std::unique_ptr<TypedRVA>>* typed_rvas) {
+  for (auto& typed_rva : *typed_rvas) {
     FileOffset file_offset = RVAToFileOffset(typed_rva->rva());
     if (file_offset == kNoFileOffset)
       return false;
@@ -226,26 +299,61 @@ CheckBool DisassemblerElf32::RVAsToFileOffsets(
   return true;
 }
 
+RvaVisitor* DisassemblerElf32::CreateAbs32TargetRvaVisitor() {
+  return new RvaVisitor_Abs32(abs32_locations_, *this);
+}
+
+RvaVisitor* DisassemblerElf32::CreateRel32TargetRvaVisitor() {
+  return new Elf32RvaVisitor_Rel32(rel32_locations_);
+}
+
+void DisassemblerElf32::RemoveUnusedRel32Locations(AssemblyProgram* program) {
+  auto tail_it = rel32_locations_.begin();
+  for (auto head_it = rel32_locations_.begin();
+       head_it != rel32_locations_.end(); ++head_it) {
+    RVA target_rva = (*head_it)->rva() + (*head_it)->relative_target();
+    if (program->FindRel32Label(target_rva) == nullptr) {
+      // If address does not match a Label (because it was removed), deallocate.
+      (*head_it).reset(nullptr);
+    } else {
+      // Else squeeze nullptr to end to compactify.
+      if (tail_it != head_it)
+        (*tail_it).swap(*head_it);
+      ++tail_it;
+    }
+  }
+  rel32_locations_.resize(std::distance(rel32_locations_.begin(), tail_it));
+}
+
 CheckBool DisassemblerElf32::ParseFile(AssemblyProgram* program) {
   // Walk all the bytes in the file, whether or not in a section.
   FileOffset file_offset = 0;
 
   std::vector<FileOffset> abs_offsets;
 
+  // File parsing follows file offset order, and we visit abs32 and rel32
+  // locations in lockstep. Therefore we need to extract and sort file offsets
+  // of all abs32 and rel32 locations.
   if (!RVAsToFileOffsets(abs32_locations_, &abs_offsets))
     return false;
+  std::sort(abs32_locations_.begin(), abs32_locations_.end());
 
   if (!RVAsToFileOffsets(&rel32_locations_))
     return false;
+  std::sort(rel32_locations_.begin(),
+            rel32_locations_.end(),
+            TypedRVA::IsLessThanByFileOffset);
 
   std::vector<FileOffset>::iterator current_abs_offset = abs_offsets.begin();
-  ScopedVector<TypedRVA>::iterator current_rel = rel32_locations_.begin();
-
   std::vector<FileOffset>::iterator end_abs_offset = abs_offsets.end();
-  ScopedVector<TypedRVA>::iterator end_rel = rel32_locations_.end();
 
-  for (Elf32_Half section_id = 0; section_id < SectionHeaderCount();
-       ++section_id) {
+  std::vector<std::unique_ptr<TypedRVA>>::iterator current_rel =
+      rel32_locations_.begin();
+  std::vector<std::unique_ptr<TypedRVA>>::iterator end_rel =
+      rel32_locations_.end();
+
+  // Visit section headers ordered by file offset.
+  for (Elf32_Half section_id : section_header_file_offset_order_) {
     const Elf32_Shdr* section_header = SectionHeader(section_id);
 
     if (section_header->sh_type == SHT_NOBITS)
@@ -310,8 +418,8 @@ CheckBool DisassemblerElf32::ParseProgbitsSection(
     const Elf32_Shdr* section_header,
     std::vector<FileOffset>::iterator* current_abs_offset,
     std::vector<FileOffset>::iterator end_abs_offset,
-    ScopedVector<TypedRVA>::iterator* current_rel,
-    ScopedVector<TypedRVA>::iterator end_rel,
+    std::vector<std::unique_ptr<TypedRVA>>::iterator* current_rel,
+    std::vector<std::unique_ptr<TypedRVA>>::iterator end_rel,
     AssemblyProgram* program) {
   // Walk all the bytes in the file, whether or not in a section.
   FileOffset file_offset = section_header->sh_offset;
@@ -358,7 +466,9 @@ CheckBool DisassemblerElf32::ParseProgbitsSection(
       RVA target_rva = PointerToTargetRVA(FileOffsetToPointer(file_offset));
       DCHECK_NE(kNoRVA, target_rva);
 
-      if (!program->EmitAbs32(program->FindOrMakeAbs32Label(target_rva)))
+      Label* label = program->FindAbs32Label(target_rva);
+      CHECK(label);
+      if (!program->EmitAbs32(label))
         return false;
       file_offset += sizeof(RVA);
       ++(*current_abs_offset);
@@ -368,12 +478,17 @@ CheckBool DisassemblerElf32::ParseProgbitsSection(
     if (*current_rel != end_rel &&
         file_offset == (**current_rel)->file_offset()) {
       uint32_t relative_target = (**current_rel)->relative_target();
+      CHECK_EQ(RVA(origin + (file_offset - origin_offset)),
+               (**current_rel)->rva());
       // This cast is for 64 bit systems, and is only safe because we
       // are working on 32 bit executables.
       RVA target_rva = (RVA)(origin + (file_offset - origin_offset) +
                              relative_target);
 
-      if (!(**current_rel)->EmitInstruction(program, target_rva))
+      Label* label = program->FindRel32Label(target_rva);
+      CHECK(label);
+
+      if (!(**current_rel)->EmitInstruction(program, label))
         return false;
       file_offset += (**current_rel)->op_size();
       ++(*current_rel);
@@ -461,27 +576,32 @@ CheckBool DisassemblerElf32::CheckSection(RVA rva) {
 
 CheckBool DisassemblerElf32::ParseRel32RelocsFromSections() {
   rel32_locations_.clear();
+  bool found_rel32 = false;
 
   // Loop through sections for relocation sections
   for (Elf32_Half section_id = 0; section_id < SectionHeaderCount();
        ++section_id) {
     const Elf32_Shdr* section_header = SectionHeader(section_id);
 
-    // TODO(huangs): Add better checks to skip non-code sections.
     // Some debug sections can have sh_type=SHT_PROGBITS but sh_addr=0.
     if (section_header->sh_type != SHT_PROGBITS ||
         section_header->sh_addr == 0)
       continue;
 
+    // Heuristic: Only consider ".text" section.
+    std::string section_name;
+    if (!SectionName(*section_header, &section_name))
+      return false;
+    if (section_name != ".text")
+      continue;
+
+    found_rel32 = true;
     if (!ParseRel32RelocsFromSection(section_header))
       return false;
   }
+  if (!found_rel32)
+    VLOG(1) << "Warning: Found no rel32 addresses. Missing .text section?";
 
-  std::sort(rel32_locations_.begin(),
-            rel32_locations_.end(),
-            TypedRVA::IsLessThan);
-  DCHECK(rel32_locations_.empty() ||
-         rel32_locations_.back()->rva() != kUnassignedRVA);
   return true;
 }
 

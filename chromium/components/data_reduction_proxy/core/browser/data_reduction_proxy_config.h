@@ -7,13 +7,15 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "net/base/net_errors.h"
@@ -24,6 +26,10 @@
 #include "net/proxy/proxy_retry_info.h"
 
 class GURL;
+
+namespace base {
+class SingleThreadTaskRunner;
+}
 
 namespace net {
 class HostPortPair;
@@ -84,15 +90,15 @@ class DataReductionProxyConfig
  public:
   // The caller must ensure that all parameters remain alive for the lifetime
   // of the |DataReductionProxyConfig| instance, with the exception of
-  // |config_values| which is owned by |this|. |io_task_runner| is used to
-  // validate calls on the correct thread. |event_creator| is used for logging
-  // the start and end of a secure proxy check; |net_log| is used to create a
-  // net::BoundNetLog for correlating the start and end of the check.
+  // |config_values| which is owned by |this|. |event_creator| is used for
+  // logging the start and end of a secure proxy check; |net_log| is used to
+  // create a net::BoundNetLog for correlating the start and end of the check.
   // |config_values| contains the Data Reduction Proxy configuration values.
   // |configurator| is the target for a configuration update.
   DataReductionProxyConfig(
+      scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
       net::NetLog* net_log,
-      scoped_ptr<DataReductionProxyConfigValues> config_values,
+      std::unique_ptr<DataReductionProxyConfigValues> config_values,
       DataReductionProxyConfigurator* configurator,
       DataReductionProxyEventCreator* event_creator);
   ~DataReductionProxyConfig() override;
@@ -117,9 +123,8 @@ class DataReductionProxyConfig
   // proxy that was used. Subsequent entries in |proxy_info.proxy_servers| will
   // contain the names of the Data Reduction Proxy servers that would be used if
   // |proxy_info.proxy_servers.front()| is bypassed, if any exist. In addition,
-  // |proxy_info| will note if the proxy used was a fallback, or a proxy for
-  // ssl; these are not mutually exclusive. |proxy_info| can be NULL if the
-  // caller isn't interested in its values.
+  // |proxy_info| will note if the proxy used was a fallback. |proxy_info| can
+  // be NULL if the caller isn't interested in its values.
   virtual bool WasDataReductionProxyUsed(
       const net::URLRequest* request,
       DataReductionProxyTypeInfo* proxy_info) const;
@@ -129,10 +134,9 @@ class DataReductionProxyConfig
   // the proxy that matches. Subsequent entries in |proxy_info.proxy_servers|
   // will contain the name of the Data Reduction Proxy servers that would be
   // used if |proxy_info.proxy_servers.front()| is bypassed, if any exist. In
-  // addition, |proxy_info| will note if the proxy was a fallback or a proxy for
-  // ssl; these are not mutually exclusive. |proxy_info| can be NULL if the
-  // caller isn't interested in its values.
-  // Virtual for testing.
+  // addition, |proxy_info| will note if the proxy was a fallback. |proxy_info|
+  // can be NULL if the caller isn't interested in its values. Virtual for
+  // testing.
   virtual bool IsDataReductionProxy(
       const net::HostPortPair& host_port_pair,
       DataReductionProxyTypeInfo* proxy_info) const;
@@ -169,9 +173,6 @@ class DataReductionProxyConfig
   virtual bool ContainsDataReductionProxy(
       const net::ProxyConfig::ProxyRules& proxy_rules) const;
 
-  // Returns true if the proxy was using the HTTP tunnel for a HTTPS origin.
-  bool UsingHTTPTunnel(const net::HostPortPair& proxy_server) const;
-
   // Returns true if the Data Reduction Proxy configuration may be used.
   bool allowed() const;
 
@@ -205,6 +206,13 @@ class DataReductionProxyConfig
   virtual void GetNetworkList(net::NetworkInterfaceList* interfaces,
                               int policy);
 
+  // Virtualized for testing. Returns the list of intervals at which accuracy of
+  // network quality prediction should be recorded.
+  virtual const std::vector<base::TimeDelta>&
+  GetLofiAccuracyRecordingIntervals() const;
+
+  virtual base::TimeTicks GetTicksNow() const;
+
  private:
   friend class DataReductionProxyConfigTest;
   friend class MockDataReductionProxyConfig;
@@ -224,7 +232,9 @@ class DataReductionProxyConfig
   FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfigTest, AutoLoFiParams);
   FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfigTest,
                            AutoLoFiParamsSlowConnectionsFlag);
-  FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfigTest, AutoLoFiAccuracy);
+  FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfigTest, LoFiAccuracy);
+  FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfigTest,
+                           LoFiAccuracyNonZeroDelay);
 
   // Values of the estimated network quality at the beginning of the most
   // recent query of the Network Quality Estimator.
@@ -286,11 +296,15 @@ class DataReductionProxyConfig
   virtual bool IsNetworkQualityProhibitivelySlow(
       const net::NetworkQualityEstimator* network_quality_estimator);
 
-  // Records Lo-Fi accuracy metric.
+  // Records Lo-Fi accuracy metric. |measuring_duration| should belong to the
+  // vector returned by LofiAccuracyRecordingIntervals().
+  // RecordAutoLoFiAccuracyRate should be called |measuring_duration| after a
+  // main frame request is observed.
   void RecordAutoLoFiAccuracyRate(
-      const net::NetworkQualityEstimator* network_quality_estimator) const;
+      const net::NetworkQualityEstimator* network_quality_estimator,
+      const base::TimeDelta& measuring_duration) const;
 
-  scoped_ptr<SecureProxyChecker> secure_proxy_checker_;
+  std::unique_ptr<SecureProxyChecker> secure_proxy_checker_;
 
   // Indicates if the secure Data Reduction Proxy can be used or not.
   bool secure_proxy_allowed_;
@@ -299,7 +313,9 @@ class DataReductionProxyConfig
   bool enabled_by_user_;
 
   // Contains the configuration data being used.
-  scoped_ptr<DataReductionProxyConfigValues> config_values_;
+  std::unique_ptr<DataReductionProxyConfigValues> config_values_;
+
+  scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
 
   // The caller must ensure that the |net_log_|, if set, outlives this instance.
   // It is used to create new instances of |bound_net_log_| on secure proxy
@@ -361,6 +377,12 @@ class DataReductionProxyConfig
   // because it is only used to report changes in request headers, and the
   // request headers are never modified in the control group.
   bool previous_state_lofi_on_;
+
+  // Intervals after the main frame request arrives at which accuracy of network
+  // quality prediction is recorded.
+  std::vector<base::TimeDelta> lofi_accuracy_recording_intervals_;
+
+  base::WeakPtrFactory<DataReductionProxyConfig> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(DataReductionProxyConfig);
 };

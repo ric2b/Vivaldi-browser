@@ -8,20 +8,10 @@ function InjectedScriptHostClass()
 }
 
 /**
- */
-InjectedScriptHostClass.prototype.clearConsoleMessages = function() {}
-
-/**
  * @param {*} objectId
  * @param {!Object} hints
  */
 InjectedScriptHostClass.prototype.inspect = function(objectId, hints) {}
-
-/**
- * @param {number} num
- * @return {*}
- */
-InjectedScriptHostClass.prototype.inspectedObject = function(num) {}
 
 /**
  * @param {*} obj
@@ -37,15 +27,15 @@ InjectedScriptHostClass.prototype.formatAccessorsAsProperties = function(obj) {}
 
 /**
  * @param {*} obj
- * @return {boolean}
- */
-InjectedScriptHostClass.prototype.isTypedArray = function(obj) {}
-
-/**
- * @param {*} obj
  * @return {string}
  */
 InjectedScriptHostClass.prototype.subtype = function(obj) {}
+
+/**
+ * @param {*} obj
+ * @return {boolean}
+ */
+InjectedScriptHostClass.prototype.isTypedArray = function(obj) {}
 
 /**
  * @param {!Object} obj
@@ -64,34 +54,6 @@ InjectedScriptHostClass.prototype.getInternalProperties = function(obj) {}
  * @return {!Object|undefined}
  */
 InjectedScriptHostClass.prototype.getEventListeners = function(target) {}
-
-/**
- * @param {*} fn
- */
-InjectedScriptHostClass.prototype.debugFunction = function(fn) {}
-
-/**
- * @param {*} fn
- */
-InjectedScriptHostClass.prototype.undebugFunction = function(fn) {}
-
-/**
- * @param {*} fn
- */
-InjectedScriptHostClass.prototype.monitorFunction = function(fn) {}
-
-/**
- * @param {*} fn
- */
-InjectedScriptHostClass.prototype.unmonitorFunction = function(fn) {}
-
-/**
- * @param {!Function} fn
- * @param {*} receiver
- * @param {!Array.<*>=} argv
- * @return {*}
- */
-InjectedScriptHostClass.prototype.callFunction = function(fn, receiver, argv) {}
 
 /**
  * @param {!Function} fn
@@ -114,6 +76,18 @@ InjectedScriptHostClass.prototype.setNonEnumProperty = function(obj, key, value)
  * @return {number}
  */
 InjectedScriptHostClass.prototype.bind = function(value, groupName) {}
+
+/**
+ * @param {!Object} object
+ * @return {!Object}
+ */
+InjectedScriptHostClass.prototype.proxyTargetValue = function(object) {}
+
+/**
+ * @param {!Object} object
+ * @return {Object|undefined}
+ */
+InjectedScriptHostClass.prototype.prototype = function(object) {}
 
 /** @type {!InjectedScriptHostClass} */
 var InjectedScriptHost;

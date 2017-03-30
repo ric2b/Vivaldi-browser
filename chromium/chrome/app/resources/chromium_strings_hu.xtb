@@ -53,6 +53,7 @@
 <translation id="2673087257647337101">Már majdnem naprakész! Indítsa újra a Chromiumot a frissítés befejezéséhez.</translation>
 <translation id="2685838254101182273">A Chromium a továbbiakban nem frissül, és már nem támogatja az Ön operációs rendszerének ezen verzióját.</translation>
 <translation id="2705212601509139398">Ez a webhely a Chromium Frame beépülő modult használja, amelynek támogatása hamarosan megszűnik. Kérjük, távolítsa el, majd töltsön le egy kompatibilis böngészőt.</translation>
+<translation id="2711502716910134313">Chromium lap</translation>
 <translation id="2770231113462710648">Alapértelmezett böngésző beállítása:</translation>
 <translation id="2801146392936645542">A(z) <ph name="FILE_NAME" /> fájl rosszindulatú, ezért a Chromium letiltotta.</translation>
 <translation id="2847479871509788944">Eltávolítás a Chromiumból…</translation>
@@ -66,7 +67,6 @@
 <translation id="3130323860337406239">A Chromium használja a mikrofont.</translation>
 <translation id="313551035350905294">Felügyelt fiókkal jelentkezik be, és annak adminisztrátora számára hozzáférést biztosít Chromium-profiljához. Chromium-adatait – például alkalmazásait, könyvjelzőit, előzményeit, jelszavait és más beállításait – a rendszer véglegesen társítja a(z) <ph name="USER_NAME" /> fiókhoz. Ezen adatokat a Google-fiók Irányítópultján törölheti, ám más fiókhoz nem társíthatja őket.</translation>
 <translation id="3190315855212034486">Ó! A Chromium összeomlott. Újraindítja most?</translation>
-<translation id="3197823471738295152">Eszköze naprakész.</translation>
 <translation id="3244477511402911926">Chromium értesítési központ</translation>
 <translation id="3256316712990552818">A Chromiumra másolva</translation>
 <translation id="3258596308407688501">A Chromium nem tudja olvasni és írni az adatkönyvtárát:
@@ -120,6 +120,7 @@
 <translation id="549669000822060376">Kérjük, várjon, amíg a Chromium telepíti a legutóbbi rendszerfrissítéseket.</translation>
 <translation id="5563479599352954471">Keresés egyetlen érintéssel</translation>
 <translation id="5620765574781326016">Tudjon meg többet a webhelyeken lévő egyes témákról anélkül, hogy elhagyná az adott oldalt.</translation>
+<translation id="5634636535844844681">A Chromium futtatásához Windows 7 vagy újabb verzió szükséges.</translation>
 <translation id="5680901439334282664">bejelentkezés a Chromiumba</translation>
 <translation id="5772805321386874569">(a Chromium <ph name="BEGIN_BUTTON" />újraindítását<ph name="END_BUTTON" /> igényli)</translation>
 <translation id="5796460469508169315">A Chromium majdnem készen áll.</translation>
@@ -177,6 +178,12 @@ A Chromium nem tudja visszaállítani a beállításait.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7339898014177206373">Új ablak</translation>
 <translation id="734373864078049451">Az Ön könyvjelzői, valamint az internetezéssel és a Chromiummal kapcsolatos egyéb dolgai vannak itt.</translation>
+<translation id="7344413941077984497">Annak szabályozásához, hogy <ph name="NEW_PROFILE_NAME" /> mely webhelyeket nézheti meg, Önnek lehetősége van korlátozásokat és beállításokat megadni a(z) <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" /> címen. Ha nem módosítja az alapértelmezett beállításokat, akkor <ph name="NEW_PROFILE_NAME" /> minden webhelyen böngészhet az interneten.
+
+Ha szeretné megakadályozni, hogy <ph name="NEW_PROFILE_NAME" /> hozzáférjen az Ön fiókjához, ügyeljen rá, hogy mindig zárolja profilját, amikor nem használja a Chromiumot. A zároláshoz kattintson profilja nevére a böngésző jobb felső sarkában, majd válassza a „Kilépés és gyermekzár” lehetőséget.
+<ph name="BEGIN_LINK_2" />További információ<ph name="END_LINK_2" />.
+
+További utasításokat a(z) <ph name="ACCOUNT_EMAIL" /> címére küldött e-mailekben talál.</translation>
 <translation id="7419987137528340081">Ha meglévő Chromium-adatait külön szeretné tárolni, új Chromium-felhasználót hozhat létre <ph name="USER_NAME" /> számára.</translation>
 <translation id="7421823331379285070">A Chromium Windows XP-t vagy újabb operációs rendszert igényel. Lehet, hogy korábbi verziójú operációs rendszeren néhány funkció nem fog működni.</translation>
 <translation id="7463979740390522693">Chromium – Értesítések (<ph name="QUANTITY" /> olvasatlan)</translation>
@@ -205,6 +212,7 @@ A Chromium nem tudja visszaállítani a beállításait.</translation>
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> – A Chromium szerzői. Minden jog fenntartva.</translation>
 <translation id="8621669128220841554">A telepítés egy meg nem határozott hiba miatt nem sikerült. Kérjük, töltse le újra a Chromiumot.</translation>
 <translation id="8628626585870903697">A Chromium nem tartalmazza a PDF Viewer alkalmazást, amely a Nyomtatási előnézet működéséhez szükséges.</translation>
+<translation id="8667808506758191620"><ph name="DEVICE_TYPE" /> eszköze naprakész.</translation>
 <translation id="8697124171261953979">Továbbá azt is szabályozza, hogy melyik oldal jelenik meg a Chromium indításakor vagy a cím- és keresősávban indított kereséskor.</translation>
 <translation id="8704119203788522458">Ez az Ön Chromiumja</translation>
 <translation id="872034308864968620">A Chromium fusson a háttérben</translation>
@@ -221,7 +229,6 @@ A Chromium nem tudja visszaállítani a beállításait.</translation>
 
 Ha mindenképp bejelentkezik, akkor egyesíti a(z) <ph name="ACCOUNT_EMAIL_NEW" /> fiókkal az olyan Chromium-adatokat, mint a könyvjelzők, az előzmények és más beállítások.</translation>
 <translation id="9013087743919948559">Hozzáadás a Chromiumhoz</translation>
-<translation id="9013262824292842194">A Chromium futtatásához Windows Vista, illetve Windows XP SP2 vagy újabb verzió szükséges.</translation>
 <translation id="9019929317751753759">A Chromium biztonságosabbá tétele érdekében kikapcsoltuk a következő bővítményt, amely nem a(z) <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> szolgáltatásból származik, és előfordulhat, hogy az Ön tudta nélkül lett telepítve.</translation>
 <translation id="9022552996538154597">Bejelentkezés a Chromiumba</translation>
 <translation id="9036189287518468038">Chromium Alkalmazásindító</translation>

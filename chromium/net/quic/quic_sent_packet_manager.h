@@ -8,12 +8,12 @@
 #include <stddef.h>
 
 #include <map>
+#include <memory>
 #include <set>
 #include <utility>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "net/base/linked_hash_map.h"
 #include "net/quic/congestion_control/loss_detection_interface.h"
 #include "net/quic/congestion_control/rtt_stats.h"
@@ -95,12 +95,8 @@ class NET_EXPORT_PRIVATE QuicSentPacketManager {
    public:
     virtual ~NetworkChangeVisitor() {}
 
-    // Called when congestion window may have changed.
-    virtual void OnCongestionWindowChange() = 0;
-
-    // Called when RTT may have changed, including when an RTT is read from
-    // the config.
-    virtual void OnRttChange() = 0;
+    // Called when congestion window or RTT may have changed.
+    virtual void OnCongestionChange() = 0;
 
     // Called with the path may be degrading. Note that the path may only be
     // temporarily degrading.
@@ -126,6 +122,8 @@ class NET_EXPORT_PRIVATE QuicSentPacketManager {
       bool max_bandwidth_resumption);
 
   void SetNumOpenStreams(size_t num_streams);
+
+  void SetMaxPacingRate(QuicBandwidth max_pacing_rate);
 
   void SetHandshakeConfirmed() { handshake_confirmed_ = true; }
 
@@ -160,6 +158,7 @@ class NET_EXPORT_PRIVATE QuicSentPacketManager {
   bool HasRetransmittableFrames(QuicPacketNumber packet_number) const;
 
   // Returns true if there are pending retransmissions.
+  // Not const because retransmissions may be cancelled before returning.
   bool HasPendingRetransmissions() const;
 
   // Retrieves the next pending retransmission.  You must ensure that
@@ -176,6 +175,7 @@ class NET_EXPORT_PRIVATE QuicSentPacketManager {
   // the number of bytes sent and if they were retransmitted.  Returns true if
   // the sender should reset the retransmission timer.
   virtual bool OnPacketSent(SerializedPacket* serialized_packet,
+                            QuicPathId /*original_path_id*/,
                             QuicPacketNumber original_packet_number,
                             QuicTime sent_time,
                             TransmissionType transmission_type,
@@ -237,6 +237,8 @@ class NET_EXPORT_PRIVATE QuicSentPacketManager {
   void OnConnectionMigration(PeerAddressChangeType type);
 
   bool using_pacing() const { return using_pacing_; }
+
+  bool handshake_confirmed() const { return handshake_confirmed_; }
 
   void set_debug_delegate(DebugDelegate* debug_delegate) {
     debug_delegate_ = debug_delegate;
@@ -404,8 +406,8 @@ class NET_EXPORT_PRIVATE QuicSentPacketManager {
   NetworkChangeVisitor* network_change_visitor_;
   const QuicPacketCount initial_congestion_window_;
   RttStats rtt_stats_;
-  scoped_ptr<SendAlgorithmInterface> send_algorithm_;
-  scoped_ptr<LossDetectionInterface> loss_algorithm_;
+  std::unique_ptr<SendAlgorithmInterface> send_algorithm_;
+  std::unique_ptr<LossDetectionInterface> loss_algorithm_;
   bool n_connection_simulation_;
 
   // Receiver side buffer in bytes.
@@ -433,10 +435,15 @@ class NET_EXPORT_PRIVATE QuicSentPacketManager {
   // If true, use the new RTO with loss based CWND reduction instead of the send
   // algorithms's OnRetransmissionTimeout to reduce the congestion window.
   bool use_new_rto_;
+  // If true, cancel pending retransmissions if they're larger than
+  // largest_newly_acked.
+  bool undo_pending_retransmits_;
 
   // Vectors packets acked and lost as a result of the last congestion event.
   SendAlgorithmInterface::CongestionVector packets_acked_;
   SendAlgorithmInterface::CongestionVector packets_lost_;
+  // Largest newly acknowledged packet.
+  QuicPacketNumber largest_newly_acked_;
 
   // Set to true after the crypto handshake has successfully completed. After
   // this is true we no longer use HANDSHAKE_MODE, and further frames sent on

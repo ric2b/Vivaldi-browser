@@ -10,7 +10,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
 #include "base/stl_util.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "media/base/cdm_factory.h"
 #include "media/base/cdm_key_information.h"
@@ -26,33 +26,19 @@ namespace {
 const char kMediaEME[] = "Media.EME.";
 const char kDot[] = ".";
 const char kTimeToCreateCdmUMAName[] = "CreateCdmTime";
-
-void ReleaseCdm(scoped_refptr<MediaKeys> cdm) {
-  // |cdm| will be freed now.
-}
-
 }  // namespace
 
 CdmSessionAdapter::CdmSessionAdapter()
     : trace_id_(0), weak_ptr_factory_(this) {}
 
-CdmSessionAdapter::~CdmSessionAdapter() {
-  // Freeing |cdm_| may take a while, so post a task to do it asynchronously.
-  // Note that freeing the CDM will cause any unfullfilled promises to be
-  // rejected, and that needs to be done outside of blink gc (which most
-  // likely triggered our destruction).
-  if (cdm_) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&ReleaseCdm, cdm_));
-  }
-}
+CdmSessionAdapter::~CdmSessionAdapter() {}
 
 void CdmSessionAdapter::CreateCdm(
     CdmFactory* cdm_factory,
     const std::string& key_system,
     const GURL& security_origin,
     const CdmConfig& cdm_config,
-    scoped_ptr<blink::WebContentDecryptionModuleResult> result) {
+    std::unique_ptr<blink::WebContentDecryptionModuleResult> result) {
   TRACE_EVENT_ASYNC_BEGIN0("media", "CdmSessionAdapter::CreateCdm",
                            ++trace_id_);
 
@@ -79,7 +65,7 @@ void CdmSessionAdapter::CreateCdm(
 
 void CdmSessionAdapter::SetServerCertificate(
     const std::vector<uint8_t>& certificate,
-    scoped_ptr<SimpleCdmPromise> promise) {
+    std::unique_ptr<SimpleCdmPromise> promise) {
   cdm_->SetServerCertificate(certificate, std::move(promise));
 }
 
@@ -107,30 +93,34 @@ void CdmSessionAdapter::InitializeNewSession(
     EmeInitDataType init_data_type,
     const std::vector<uint8_t>& init_data,
     MediaKeys::SessionType session_type,
-    scoped_ptr<NewSessionCdmPromise> promise) {
+    std::unique_ptr<NewSessionCdmPromise> promise) {
   cdm_->CreateSessionAndGenerateRequest(session_type, init_data_type, init_data,
                                         std::move(promise));
 }
 
-void CdmSessionAdapter::LoadSession(MediaKeys::SessionType session_type,
-                                    const std::string& session_id,
-                                    scoped_ptr<NewSessionCdmPromise> promise) {
+void CdmSessionAdapter::LoadSession(
+    MediaKeys::SessionType session_type,
+    const std::string& session_id,
+    std::unique_ptr<NewSessionCdmPromise> promise) {
   cdm_->LoadSession(session_type, session_id, std::move(promise));
 }
 
-void CdmSessionAdapter::UpdateSession(const std::string& session_id,
-                                      const std::vector<uint8_t>& response,
-                                      scoped_ptr<SimpleCdmPromise> promise) {
+void CdmSessionAdapter::UpdateSession(
+    const std::string& session_id,
+    const std::vector<uint8_t>& response,
+    std::unique_ptr<SimpleCdmPromise> promise) {
   cdm_->UpdateSession(session_id, response, std::move(promise));
 }
 
-void CdmSessionAdapter::CloseSession(const std::string& session_id,
-                                     scoped_ptr<SimpleCdmPromise> promise) {
+void CdmSessionAdapter::CloseSession(
+    const std::string& session_id,
+    std::unique_ptr<SimpleCdmPromise> promise) {
   cdm_->CloseSession(session_id, std::move(promise));
 }
 
-void CdmSessionAdapter::RemoveSession(const std::string& session_id,
-                                      scoped_ptr<SimpleCdmPromise> promise) {
+void CdmSessionAdapter::RemoveSession(
+    const std::string& session_id,
+    std::unique_ptr<SimpleCdmPromise> promise) {
   cdm_->RemoveSession(session_id, std::move(promise));
 }
 

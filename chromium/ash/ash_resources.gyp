@@ -32,6 +32,7 @@
       'dependencies': [
         '<(DEPTH)/ui/resources/ui_resources.gyp:ui_resources',
         'ash_resources',
+        '../ash/wm/common/ash_wm_common_resources.gyp:ash_wm_common_resources',
       ],
       'actions': [
         {
@@ -40,6 +41,7 @@
             'pak_output': '<(PRODUCT_DIR)/ash_test_resources_100_percent.pak',
             'pak_inputs': [
               '<(SHARED_INTERMEDIATE_DIR)/ash/resources/ash_resources_100_percent.pak',
+              '<(SHARED_INTERMEDIATE_DIR)/ash/wm/common/resources/ash_wm_common_resources_100_percent.pak',
               '<(SHARED_INTERMEDIATE_DIR)/ui/resources/ui_resources_100_percent.pak',
               '<(SHARED_INTERMEDIATE_DIR)/ui/resources/webui_resources.pak',
             ],
@@ -53,12 +55,8 @@
                 'pak_inputs': [
                   # TODO(msw): This seems bad, but follows repack_ui_test_pack's example.
                   '<(SHARED_INTERMEDIATE_DIR)/blink/public/resources/blink_resources.pak',
-                  '<(SHARED_INTERMEDIATE_DIR)/ui/views/resources/views_resources_100_percent.pak',
-                ],
-              }],
-              ['enable_app_list==1', {
-                'pak_inputs': [
                   '<(SHARED_INTERMEDIATE_DIR)/ui/app_list/resources/app_list_resources_100_percent.pak',
+                  '<(SHARED_INTERMEDIATE_DIR)/ui/views/resources/views_resources_100_percent.pak',
                 ],
               }],
             ],
@@ -89,6 +87,7 @@
       'dependencies': [
         '<(DEPTH)/ui/resources/ui_resources.gyp:ui_resources',
         'ash_resources',
+        '../ash/wm/common/ash_wm_common_resources.gyp:ash_wm_common_resources',
       ],
       'actions': [
         {
@@ -97,6 +96,7 @@
             'pak_output': '<(PRODUCT_DIR)/ash_test_resources_200_percent.pak',
             'pak_inputs': [
               '<(SHARED_INTERMEDIATE_DIR)/ash/resources/ash_resources_200_percent.pak',
+              '<(SHARED_INTERMEDIATE_DIR)/ash/wm/common/resources/ash_wm_common_resources_200_percent.pak',
               '<(SHARED_INTERMEDIATE_DIR)/ui/resources/ui_resources_200_percent.pak',
             ],
             'conditions': [
@@ -107,12 +107,8 @@
               }],
               ['toolkit_views==1', {
                 'pak_inputs': [
-                  '<(SHARED_INTERMEDIATE_DIR)/ui/views/resources/views_resources_200_percent.pak',
-                ],
-              }],
-              ['enable_app_list==1', {
-                'pak_inputs': [
                   '<(SHARED_INTERMEDIATE_DIR)/ui/app_list/resources/app_list_resources_200_percent.pak',
+                  '<(SHARED_INTERMEDIATE_DIR)/ui/views/resources/views_resources_200_percent.pak',
                 ],
               }],
             ],

@@ -8,17 +8,18 @@
 #include "base/memory/ref_counted.h"
 #include "cc/playback/decoded_draw_image.h"
 #include "cc/playback/draw_image.h"
+#include "cc/tiles/tile_priority.h"
 
 namespace cc {
 
-class ImageDecodeTask;
+class TileTask;
 
 // ImageDecodeController is responsible for generating decode tasks, decoding
 // images, storing images in cache, and being able to return the decoded images
 // when requested.
 
 // ImageDecodeController is responsible for the following things:
-// 1. Given a DrawImage, it can return an ImageDecodeTask which when run will
+// 1. Given a DrawImage, it can return an TileTask which when run will
 //    decode and cache the resulting image. If the image does not need a task to
 //    be decoded, then nullptr will be returned. The return value of the
 //    function indicates whether the image was or is going to be locked, so an
@@ -33,17 +34,33 @@ class ImageDecodeTask;
 //    thread.
 class CC_EXPORT ImageDecodeController {
  public:
+  // This information should be used strictly in tracing, UMA, and any other
+  // reporting systems.
+  struct TracingInfo {
+    TracingInfo(uint64_t prepare_tiles_id,
+                TilePriority::PriorityBin requesting_tile_bin)
+        : prepare_tiles_id(prepare_tiles_id),
+          requesting_tile_bin(requesting_tile_bin) {}
+    TracingInfo() : TracingInfo(0, TilePriority::NOW) {}
+
+    // ID for the current prepare tiles call.
+    const uint64_t prepare_tiles_id;
+
+    // The bin of the tile that caused this image to be requested.
+    const TilePriority::PriorityBin requesting_tile_bin;
+  };
+
   virtual ~ImageDecodeController() {}
 
-  // Fill in an ImageDecodeTask which will decode the given image when run. In
+  // Fill in an TileTask which will decode the given image when run. In
   // case the image is already cached, fills in nullptr. Returns true if the
   // image needs to be unreffed when the caller is finished with it.
   //
   // This is called by the tile manager (on the compositor thread) when creating
   // a raster task.
   virtual bool GetTaskForImageAndRef(const DrawImage& image,
-                                     uint64_t prepare_tiles_id,
-                                     scoped_refptr<ImageDecodeTask>* task) = 0;
+                                     const TracingInfo& tracing_info,
+                                     scoped_refptr<TileTask>* task) = 0;
   // Unrefs an image. When the tile is finished, this should be called for every
   // GetTaskForImageAndRef call that returned true.
   virtual void UnrefImage(const DrawImage& image) = 0;
@@ -62,6 +79,11 @@ class CC_EXPORT ImageDecodeController {
   // This function informs the controller that now is a good time to clean up
   // memory. This is called periodically from the compositor thread.
   virtual void ReduceCacheUsage() = 0;
+
+  // This function informs the controller that we are hidden and should not be
+  // retaining cached resources longer than needed.
+  virtual void SetShouldAggressivelyFreeResources(
+      bool aggressively_free_resources) = 0;
 };
 
 }  // namespace cc

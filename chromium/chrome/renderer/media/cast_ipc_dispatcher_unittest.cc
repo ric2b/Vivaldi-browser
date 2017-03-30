@@ -4,7 +4,7 @@
 
 #include "base/message_loop/message_loop.h"
 #include "base/test/simple_test_tick_clock.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/common/cast_messages.h"
 #include "chrome/renderer/media/cast_ipc_dispatcher.h"
 #include "ipc/ipc_message_macros.h"
@@ -45,7 +45,7 @@ TEST_F(CastIPCDispatcherTest, RawEvents) {
 
   media::cast::FrameEvent frame_event;
   frame_event.rtp_timestamp = media::cast::RtpTimeTicks().Expand(UINT32_C(100));
-  frame_event.frame_id = 5;
+  frame_event.frame_id = media::cast::FrameId::first() + 5;
   frame_event.size = 512;
   frame_event.timestamp = base::SimpleTestTickClock().NowTicks();
   frame_event.media_type = media::cast::VIDEO_EVENT;

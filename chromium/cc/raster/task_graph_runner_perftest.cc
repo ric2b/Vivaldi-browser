@@ -5,10 +5,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "cc/base/completion_event.h"
 #include "cc/debug/lap_timer.h"
@@ -32,7 +33,7 @@ class PerfTaskImpl : public Task {
   // Overridden from Task:
   void RunOnWorkerThread() override {}
 
-  void Reset() { did_run_ = false; }
+  void Reset() { state().Reset(); }
 
  private:
   ~PerfTaskImpl() override {}
@@ -49,7 +50,7 @@ class TaskGraphRunnerPerfTest : public testing::Test {
 
   // Overridden from testing::Test:
   void SetUp() override {
-    task_graph_runner_ = make_scoped_ptr(new SynchronousTaskGraphRunner);
+    task_graph_runner_ = base::WrapUnique(new SynchronousTaskGraphRunner);
     namespace_token_ = task_graph_runner_->GetNamespaceToken();
   }
   void TearDown() override { task_graph_runner_ = nullptr; }
@@ -144,11 +145,15 @@ class TaskGraphRunnerPerfTest : public testing::Test {
     size_t count = 0;
     timer_.Reset();
     do {
+      size_t current_version = count % kNumVersions;
       graph.Reset();
-      BuildTaskGraph(top_level_tasks[count % kNumVersions],
-                     tasks[count % kNumVersions],
-                     leaf_tasks[count % kNumVersions],
-                     &graph);
+      // Reset tasks as we are not letting them execute, they get cancelled
+      // when next ScheduleTasks() happens.
+      ResetTasks(&top_level_tasks[current_version]);
+      ResetTasks(&tasks[current_version]);
+      ResetTasks(&leaf_tasks[current_version]);
+      BuildTaskGraph(top_level_tasks[current_version], tasks[current_version],
+                     leaf_tasks[current_version], &graph);
       task_graph_runner_->ScheduleTasks(namespace_token_, &graph);
       CollectCompletedTasks(&completed_tasks);
       completed_tasks.clear();
@@ -272,7 +277,7 @@ class TaskGraphRunnerPerfTest : public testing::Test {
 
   // Test uses SynchronousTaskGraphRunner, as this implementation introduces
   // minimal additional complexity over the TaskGraphWorkQueue helpers.
-  scoped_ptr<SynchronousTaskGraphRunner> task_graph_runner_;
+  std::unique_ptr<SynchronousTaskGraphRunner> task_graph_runner_;
   NamespaceToken namespace_token_;
   LapTimer timer_;
 };

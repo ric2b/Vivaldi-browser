@@ -90,16 +90,6 @@ int DetermineBaselineCenteringText(const Rect& display_rect,
   return baseline + std::max(min_shift, std::min(max_shift, baseline_shift));
 }
 
-#if !defined(OS_MACOSX)
-// Converts |Font::FontStyle| flags to |SkTypeface::Style| flags.
-SkTypeface::Style ConvertFontStyleToSkiaTypefaceStyle(int font_style) {
-  int skia_style = SkTypeface::kNormal;
-  skia_style |= (font_style & Font::BOLD) ? SkTypeface::kBold : 0;
-  skia_style |= (font_style & Font::ITALIC) ? SkTypeface::kItalic : 0;
-  return static_cast<SkTypeface::Style>(skia_style);
-}
-#endif
-
 int round(float value) {
   return static_cast<int>(floor(value + 0.5f));
 }
@@ -257,18 +247,6 @@ void SkiaTextRenderer::SetTextSize(SkScalar size) {
   paint_.setTextSize(size);
 }
 
-void SkiaTextRenderer::SetFontWithStyle(const Font& font, int style) {
-  skia::RefPtr<SkTypeface> typeface = CreateSkiaTypeface(font, style);
-  if (typeface) {
-    // |paint_| adds its own ref. So don't |release()| it from the ref ptr here.
-    SetTypeface(typeface.get());
-
-    // Enable fake bold text if bold style is needed but new typeface does not
-    // have it.
-    paint_.setFakeBoldText((style & Font::BOLD) && !typeface->isBold());
-  }
-}
-
 void SkiaTextRenderer::SetForegroundColor(SkColor foreground) {
   paint_.setColor(foreground);
 }
@@ -423,14 +401,6 @@ Line::Line(const Line& other) = default;
 
 Line::~Line() {}
 
-#if !defined(OS_MACOSX)
-skia::RefPtr<SkTypeface> CreateSkiaTypeface(const gfx::Font& font, int style) {
-  SkTypeface::Style skia_style = ConvertFontStyleToSkiaTypefaceStyle(style);
-  return skia::AdoptRef(
-      SkTypeface::CreateFromName(font.GetFontName().c_str(), skia_style));
-}
-#endif
-
 void ApplyRenderParams(const FontRenderParams& params,
                        bool subpixel_rendering_suppressed,
                        SkPaint* paint) {
@@ -462,6 +432,21 @@ RenderText* RenderText::CreateInstance() {
 // static
 RenderText* RenderText::CreateInstanceForEditing() {
   return new RenderTextHarfBuzz;
+}
+
+std::unique_ptr<RenderText> RenderText::CreateInstanceOfSameStyle(
+    const base::string16& text) const {
+  std::unique_ptr<RenderText> render_text = CreateInstanceOfSameType();
+  // |SetText()| must be called before styles are set.
+  render_text->SetText(text);
+  render_text->SetFontList(font_list_);
+  render_text->SetDirectionalityMode(directionality_mode_);
+  render_text->SetCursorEnabled(cursor_enabled_);
+  render_text->set_truncate_length(truncate_length_);
+  render_text->styles_ = styles_;
+  render_text->baselines_ = baselines_;
+  render_text->colors_ = colors_;
+  return render_text;
 }
 
 void RenderText::SetText(const base::string16& text) {
@@ -553,6 +538,15 @@ void RenderText::SetMultiline(bool multiline) {
     lines_.clear();
     OnTextAttributeChanged();
   }
+}
+
+void RenderText::SetMaxLines(size_t max_lines) {
+  max_lines_ = max_lines;
+  OnDisplayTextAttributeChanged();
+}
+
+size_t RenderText::GetNumLines() {
+  return lines_.size();
 }
 
 void RenderText::SetWordWrapBehavior(WordWrapBehavior behavior) {
@@ -1012,13 +1006,13 @@ RenderText::RenderText()
       text_elided_(false),
       min_line_height_(0),
       multiline_(false),
+      max_lines_(0),
       word_wrap_behavior_(IGNORE_LONG_WORDS),
       replace_newline_chars_with_symbols_(true),
       subpixel_rendering_suppressed_(false),
       clip_to_display_rect_(true),
       baseline_(kInvalidBaseline),
-      cached_bounds_and_offset_valid_(false) {
-}
+      cached_bounds_and_offset_valid_(false) {}
 
 SelectionModel RenderText::GetAdjacentSelectionModel(
     const SelectionModel& current,
@@ -1051,25 +1045,53 @@ void RenderText::OnTextColorChanged() {
 }
 
 void RenderText::UpdateDisplayText(float text_width) {
-  // TODO(oshima): Consider support eliding for multi-line text.
-  // This requires max_line support first.
-  if (multiline_ ||
-      elide_behavior() == NO_ELIDE ||
-      elide_behavior() == FADE_TAIL ||
-      text_width < display_rect_.width() ||
+  // TODO(krb): Consider other elision modes for multiline.
+  if ((multiline_ && (!max_lines_ || elide_behavior() != ELIDE_TAIL)) ||
+      elide_behavior() == NO_ELIDE || elide_behavior() == FADE_TAIL ||
+      (text_width > 0 && text_width < display_rect_.width()) ||
       layout_text_.empty()) {
     text_elided_ = false;
     display_text_.clear();
     return;
   }
 
-  // This doesn't trim styles so ellipsis may get rendered as a different
-  // style than the preceding text. See crbug.com/327850.
-  display_text_.assign(Elide(layout_text_,
-                             text_width,
-                             static_cast<float>(display_rect_.width()),
-                             elide_behavior_));
+  if (!multiline_) {
+    // This doesn't trim styles so ellipsis may get rendered as a different
+    // style than the preceding text. See crbug.com/327850.
+    display_text_.assign(Elide(layout_text_, text_width,
+                               static_cast<float>(display_rect_.width()),
+                               elide_behavior_));
+  } else {
+    bool was_elided = text_elided_;
+    text_elided_ = false;
+    display_text_.clear();
 
+    std::unique_ptr<RenderText> render_text(
+        CreateInstanceOfSameStyle(layout_text_));
+    render_text->SetMultiline(true);
+    render_text->SetDisplayRect(display_rect_);
+    // Have it arrange words on |lines_|.
+    render_text->EnsureLayout();
+
+    if (render_text->lines_.size() > max_lines_) {
+      size_t start_of_elision = render_text->lines_[max_lines_ - 1]
+                                    .segments.front()
+                                    .char_range.start();
+      base::string16 text_to_elide = layout_text_.substr(start_of_elision);
+      display_text_.assign(layout_text_.substr(0, start_of_elision) +
+                           Elide(text_to_elide, 0,
+                                 static_cast<float>(display_rect_.width()),
+                                 ELIDE_TAIL));
+      // Have GetLineBreaks() re-calculate.
+      line_breaks_.SetMax(0);
+    } else {
+      // If elision changed, re-calculate.
+      if (was_elided)
+        line_breaks_.SetMax(0);
+      // Initial state above is fine.
+      return;
+    }
+  }
   text_elided_ = display_text_ != layout_text_;
   if (!text_elided_)
     display_text_.clear();
@@ -1375,24 +1397,16 @@ base::string16 RenderText::Elide(const base::string16& text,
     return base::string16();
   if (behavior == ELIDE_EMAIL)
     return ElideEmail(text, available_width);
-  if (text_width > 0 && text_width < available_width)
+  if (text_width > 0 && text_width <= available_width)
     return text;
 
   TRACE_EVENT0("ui", "RenderText::Elide");
 
   // Create a RenderText copy with attributes that affect the rendering width.
-  scoped_ptr<RenderText> render_text = CreateInstanceOfSameType();
-  render_text->SetFontList(font_list_);
-  render_text->SetDirectionalityMode(directionality_mode_);
-  render_text->SetCursorEnabled(cursor_enabled_);
-  render_text->set_truncate_length(truncate_length_);
-  render_text->styles_ = styles_;
-  render_text->baselines_ = baselines_;
-  render_text->colors_ = colors_;
-  if (text_width == 0) {
-    render_text->SetText(text);
+  std::unique_ptr<RenderText> render_text = CreateInstanceOfSameStyle(text);
+  render_text->UpdateStyleLengths();
+  if (text_width == 0)
     text_width = render_text->GetContentWidthF();
-  }
   if (text_width <= available_width)
     return text;
 

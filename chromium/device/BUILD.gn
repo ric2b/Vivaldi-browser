@@ -27,13 +27,18 @@ test("device_unittests") {
     "bluetooth/bluetooth_device_unittest.cc",
     "bluetooth/bluetooth_device_win_unittest.cc",
     "bluetooth/bluetooth_discovery_filter_unittest.cc",
-    "bluetooth/bluetooth_gatt_characteristic_unittest.cc",
-    "bluetooth/bluetooth_gatt_descriptor_unittest.cc",
-    "bluetooth/bluetooth_gatt_service_unittest.cc",
+    "bluetooth/bluetooth_local_gatt_characteristic_unittest.cc",
+    "bluetooth/bluetooth_local_gatt_descriptor_unittest.cc",
+    "bluetooth/bluetooth_local_gatt_service_unittest.cc",
     "bluetooth/bluetooth_low_energy_win_unittest.cc",
+    "bluetooth/bluetooth_remote_gatt_characteristic_unittest.cc",
+    "bluetooth/bluetooth_remote_gatt_descriptor_unittest.cc",
+    "bluetooth/bluetooth_remote_gatt_service_unittest.cc",
     "bluetooth/bluetooth_service_record_win_unittest.cc",
     "bluetooth/bluetooth_task_manager_win_unittest.cc",
     "bluetooth/bluetooth_uuid_unittest.cc",
+    "bluetooth/test/bluetooth_gatt_server_test.cc",
+    "bluetooth/test/bluetooth_gatt_server_test.h",
     "bluetooth/test/bluetooth_test.cc",
     "bluetooth/test/bluetooth_test.h",
     "bluetooth/test/bluetooth_test_android.cc",
@@ -44,10 +49,14 @@ test("device_unittests") {
     "bluetooth/test/bluetooth_test_win.h",
     "bluetooth/test/mock_bluetooth_cbperipheral_mac.h",
     "bluetooth/test/mock_bluetooth_cbperipheral_mac.mm",
+    "bluetooth/test/mock_bluetooth_cbservice_mac.h",
+    "bluetooth/test/mock_bluetooth_cbservice_mac.mm",
     "bluetooth/test/mock_bluetooth_central_manager_mac.h",
     "bluetooth/test/mock_bluetooth_central_manager_mac.mm",
     "bluetooth/test/test_bluetooth_adapter_observer.cc",
     "bluetooth/test/test_bluetooth_adapter_observer.h",
+    "bluetooth/test/test_bluetooth_local_gatt_service_delegate.cc",
+    "bluetooth/test/test_bluetooth_local_gatt_service_delegate.h",
     "nfc/nfc_chromeos_unittest.cc",
     "nfc/nfc_ndef_record_unittest.cc",
     "test/run_all_unittests.cc",
@@ -154,15 +163,18 @@ test("device_unittests") {
   }
 
   if ((is_chromeos || is_linux) && use_dbus) {
-    configs += [ "//build/config/linux:dbus" ]
+    configs += [ "//build/config/linux/dbus" ]
 
     sources += [
-      "bluetooth/bluetooth_adapter_profile_bluez_unittest.cc",
-      "bluetooth/bluetooth_advertisement_bluez_unittest.cc",
-      "bluetooth/bluetooth_audio_sink_bluez_unittest.cc",
-      "bluetooth/bluetooth_bluez_unittest.cc",
-      "bluetooth/bluetooth_gatt_bluez_unittest.cc",
-      "bluetooth/bluetooth_socket_bluez_unittest.cc",
+      "bluetooth/bluez/bluetooth_adapter_profile_bluez_unittest.cc",
+      "bluetooth/bluez/bluetooth_advertisement_bluez_unittest.cc",
+      "bluetooth/bluez/bluetooth_audio_sink_bluez_unittest.cc",
+      "bluetooth/bluez/bluetooth_bluez_unittest.cc",
+      "bluetooth/bluez/bluetooth_gatt_bluez_unittest.cc",
+      "bluetooth/bluez/bluetooth_socket_bluez_unittest.cc",
+      "bluetooth/dbus/bluetooth_gatt_application_service_provider_unittest.cc",
+      "bluetooth/test/bluetooth_test_bluez.cc",
+      "bluetooth/test/bluetooth_test_bluez.h",
     ]
 
     deps += [ "//dbus" ]
@@ -171,7 +183,10 @@ test("device_unittests") {
   if (is_mac) {
     deps += [ "//third_party/ocmock" ]
     ldflags = [ "-ObjC" ]
-    libs = [ "IOBluetooth.framework" ]
+    libs = [
+      "IOBluetooth.framework",
+      "IOKit.framework",
+    ]
 
     # In the OSX 10.10 SDK, CoreBluetooth became a top level framework.
     # Previously, it was nested in IOBluetooth. In order for Chrome to run on

@@ -9,7 +9,6 @@
 
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
-#include "blimp/client/blimp_client_export.h"
 #include "net/base/ip_endpoint.h"
 #include "net/url_request/url_fetcher_delegate.h"
 #include "url/gurl.h"
@@ -29,12 +28,9 @@ class X509Certificate;
 namespace blimp {
 namespace client {
 
-// TODO(kmarshall): Take values from configuration data.
-const char kDummyClientToken[] = "MyVoiceIsMyPassport";
-
 // An Assignment contains the configuration data needed for a client
 // to connect to the engine.
-struct BLIMP_CLIENT_EXPORT Assignment {
+struct Assignment {
   enum TransportProtocol {
     UNKNOWN = 0,
     SSL = 1,
@@ -64,7 +60,7 @@ struct BLIMP_CLIENT_EXPORT Assignment {
 
 // AssignmentSource provides functionality to find out how a client should
 // connect to an engine.
-class BLIMP_CLIENT_EXPORT AssignmentSource : public net::URLFetcherDelegate {
+class AssignmentSource : public net::URLFetcherDelegate {
  public:
   // A Java counterpart will be generated for this enum.
   // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.blimp.assignment

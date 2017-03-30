@@ -338,10 +338,11 @@ WebContents* TabStripModel::ReplaceWebContentsAt(int index,
   WebContents* old_contents = GetWebContentsAtImpl(index);
 
   if (vivaldi::IsVivaldiRunning()) {
-    // For Vivaldi we will reuse the tab_id because ReplaceWebContentsAt is used
-    // when a tab is discarded. We want to use the same for the replaced tab.
+    // For Vivaldi we will reuse the tab_id because it is used scattered around
+    // on the client side, and it was too much room for errors before the BETA.
     const int old_tab_id = extensions::ExtensionTabUtil::GetTabId(old_contents);
     SessionTabHelper* sth = SessionTabHelper::FromWebContents(new_contents);
+    // This is not Kosher
     const_cast<SessionID&>(sth->session_id()).set_id(old_tab_id);
   }
 

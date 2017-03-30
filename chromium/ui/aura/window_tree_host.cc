@@ -4,7 +4,7 @@
 
 #include "ui/aura/window_tree_host.h"
 
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/cursor_client.h"
@@ -18,13 +18,13 @@
 #include "ui/base/view_prop.h"
 #include "ui/compositor/dip_util.h"
 #include "ui/compositor/layer.h"
-#include "ui/gfx/display.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/point3_f.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
-#include "ui/gfx/screen.h"
 
 namespace aura {
 
@@ -32,8 +32,8 @@ const char kWindowTreeHostForAcceleratedWidget[] =
     "__AURA_WINDOW_TREE_HOST_ACCELERATED_WIDGET__";
 
 float GetDeviceScaleFactorFromDisplay(Window* window) {
-  gfx::Display display =
-      gfx::Screen::GetScreen()->GetDisplayNearestWindow(window);
+  display::Display display =
+      display::Screen::GetScreen()->GetDisplayNearestWindow(window);
   DCHECK(display.is_valid());
   return display.device_scale_factor();
 }
@@ -250,7 +250,7 @@ void WindowTreeHost::CreateCompositor() {
     window()->set_host(this);
     window()->SetName("RootWindow");
     window()->SetEventTargeter(
-        scoped_ptr<ui::EventTargeter>(new WindowTargeter()));
+        std::unique_ptr<ui::EventTargeter>(new WindowTargeter()));
     dispatcher_.reset(new WindowEventDispatcher(this));
   }
 }
@@ -285,6 +285,11 @@ void WindowTreeHost::OnHostResized(const gfx::Size& new_size) {
   FOR_EACH_OBSERVER(WindowTreeHostObserver, observers_, OnHostResized(this));
 }
 
+void WindowTreeHost::OnHostWorkspaceChanged() {
+  FOR_EACH_OBSERVER(WindowTreeHostObserver, observers_,
+                    OnHostWorkspaceChanged(this));
+}
+
 void WindowTreeHost::OnHostCloseRequested() {
   FOR_EACH_OBSERVER(WindowTreeHostObserver, observers_,
                     OnHostCloseRequested(this));
@@ -313,8 +318,8 @@ void WindowTreeHost::MoveCursorToInternal(const gfx::Point& root_location,
   MoveCursorToNative(host_location);
   client::CursorClient* cursor_client = client::GetCursorClient(window());
   if (cursor_client) {
-    const gfx::Display& display =
-        gfx::Screen::GetScreen()->GetDisplayNearestWindow(window());
+    const display::Display& display =
+        display::Screen::GetScreen()->GetDisplayNearestWindow(window());
     cursor_client->SetDisplay(display);
   }
   dispatcher()->OnCursorMovedToRootLocation(root_location);

@@ -17,7 +17,7 @@ class VivaldiExtensionsClient : public ChromeExtensionsClient {
 
   bool IsAPISchemaGenerated(const std::string& name) const override;
   base::StringPiece GetAPISchema(const std::string& name) const override;
-  scoped_ptr<JSONFeatureProviderSource> CreateFeatureProviderSource(
+  std::unique_ptr<JSONFeatureProviderSource> CreateFeatureProviderSource(
       const std::string& name) const override;
 
   // Get the LazyInstance for ChromeExtensionsClient.

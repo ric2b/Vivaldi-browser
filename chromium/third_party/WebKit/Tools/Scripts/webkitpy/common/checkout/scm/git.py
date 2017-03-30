@@ -29,7 +29,6 @@
 
 import datetime
 import logging
-import os
 import re
 
 import webkitpy.common.config
@@ -232,7 +231,8 @@ class Git(SCM):
             order = "-O%s" % order_file
 
         command = [self.executable_name, 'diff', '--binary', '--no-color', "--no-ext-diff",
-                   "--full-index", "--no-renames", order, self._merge_base(git_commit), "--"]
+                   "--full-index", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/",
+                   order, self._merge_base(git_commit), "--"]
         if changed_files:
             command += changed_files
         return self._run(command, decode_output=False, cwd=self.checkout_root)

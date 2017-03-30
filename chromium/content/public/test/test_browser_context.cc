@@ -62,25 +62,8 @@ void TestBrowserContext::SetSpecialStoragePolicy(
 }
 
 void TestBrowserContext::SetPermissionManager(
-    scoped_ptr<PermissionManager> permission_manager) {
+    std::unique_ptr<PermissionManager> permission_manager) {
   permission_manager_ = std::move(permission_manager);
-}
-
-base::FilePath TestBrowserContext::GetPath() const {
-  return browser_context_dir_.path();
-}
-
-scoped_ptr<ZoomLevelDelegate> TestBrowserContext::CreateZoomLevelDelegate(
-    const base::FilePath& partition_path) {
-  return scoped_ptr<ZoomLevelDelegate>();
-}
-
-bool TestBrowserContext::IsOffTheRecord() const {
-  return false;
-}
-
-DownloadManagerDelegate* TestBrowserContext::GetDownloadManagerDelegate() {
-  return NULL;
 }
 
 net::URLRequestContextGetter* TestBrowserContext::GetRequestContext() {
@@ -90,20 +73,20 @@ net::URLRequestContextGetter* TestBrowserContext::GetRequestContext() {
   return request_context_.get();
 }
 
-net::URLRequestContextGetter* TestBrowserContext::GetMediaRequestContext() {
-  return NULL;
+base::FilePath TestBrowserContext::GetPath() const {
+  return browser_context_dir_.path();
 }
 
-net::URLRequestContextGetter*
-TestBrowserContext::GetMediaRequestContextForRenderProcess(
-    int renderer_child_id) {
-  return NULL;
+std::unique_ptr<ZoomLevelDelegate> TestBrowserContext::CreateZoomLevelDelegate(
+    const base::FilePath& partition_path) {
+  return std::unique_ptr<ZoomLevelDelegate>();
 }
 
-net::URLRequestContextGetter*
-TestBrowserContext::GetMediaRequestContextForStoragePartition(
-    const base::FilePath& partition_path,
-    bool in_memory) {
+bool TestBrowserContext::IsOffTheRecord() const {
+  return false;
+}
+
+DownloadManagerDelegate* TestBrowserContext::GetDownloadManagerDelegate() {
   return NULL;
 }
 
@@ -156,6 +139,17 @@ TestBrowserContext::CreateRequestContextForStoragePartition(
     ProtocolHandlerMap* protocol_handlers,
     URLRequestInterceptorScopedVector request_interceptors) {
   return nullptr;
+}
+
+net::URLRequestContextGetter* TestBrowserContext::CreateMediaRequestContext() {
+  return NULL;
+}
+
+net::URLRequestContextGetter*
+TestBrowserContext::CreateMediaRequestContextForStoragePartition(
+    const base::FilePath& partition_path,
+    bool in_memory) {
+  return NULL;
 }
 
 }  // namespace content

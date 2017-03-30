@@ -1,11 +1,11 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-collapse/iron-collapse.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/iron-icons.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-checkbox/paper-checkbox.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_expand_button/cr_expand_button.html">
+<link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/cr_elements/network/cr_network_icon.html">
 <link rel="import" href="chrome://resources/cr_elements/network/cr_onc_types.html">
 <link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_network_behavior.html">
@@ -19,9 +19,58 @@
 <link rel="import" href="network_siminfo.html">
 
 <dom-module id="settings-internet-detail-page">
-  <link rel="import" type="css" href="internet_detail_page.css">
   <template>
-    <style include="settings-shared"></style>
+    <style include="settings-shared">
+      .section {
+        margin-bottom: 5px;
+      }
+
+      iron-collapse {
+        margin: 10px;
+      }
+
+      cr-network-icon {
+        height: 32px;
+        width: 32px;
+      }
+
+      cr-policy-network-indicator {
+        -webkit-margin-start: 10px;
+      }
+
+      #networkName,
+      #networkState {
+        -webkit-margin-start: 10px;
+        font-size: 20px;
+      }
+
+      #networkName {
+        font-weight: bold;
+      }
+
+      #networkState[connected] {
+        color: green;
+      }
+
+      #outerDiv {
+        margin: 10px 20px;
+      }
+
+      #ipAddressLabel {
+        -webkit-margin-end: 10px;
+        font-weight: bold;
+      }
+
+      #preferButton {
+        -webkit-margin-end: 8px;
+        -webkit-margin-start: -3px;
+        padding: 0
+      }
+
+      #proxyDiv {
+        max-width: 500px;
+      }
+    </style>
     <div class="layout vertical">
       <!-- Title section: Icon + name + connection state. -->
       <div id="titleDiv" class="layout horizontal center">

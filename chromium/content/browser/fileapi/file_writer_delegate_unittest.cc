@@ -16,7 +16,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/public/test/async_file_test_helper.h"
 #include "content/public/test/test_file_system_context.h"
 #include "net/base/io_buffer.h"
@@ -130,8 +130,9 @@ class FileWriterDelegateTest : public PlatformTest {
             offset,
             *file_system_context_->GetUpdateObservers(kFileSystemType));
     writer->set_default_quota(allowed_growth);
-    return new FileWriterDelegate(scoped_ptr<storage::FileStreamWriter>(writer),
-                                  storage::FlushPolicy::FLUSH_ON_COMPLETION);
+    return new FileWriterDelegate(
+        std::unique_ptr<storage::FileStreamWriter>(writer),
+        storage::FlushPolicy::FLUSH_ON_COMPLETION);
   }
 
   FileWriterDelegate::DelegateWriteCallback GetWriteCallback(Result* result) {
@@ -156,9 +157,9 @@ class FileWriterDelegateTest : public PlatformTest {
   scoped_refptr<storage::FileSystemContext> file_system_context_;
 
   net::URLRequestContext empty_context_;
-  scoped_ptr<FileWriterDelegate> file_writer_delegate_;
-  scoped_ptr<net::URLRequest> request_;
-  scoped_ptr<BlobURLRequestJobFactory> job_factory_;
+  std::unique_ptr<FileWriterDelegate> file_writer_delegate_;
+  std::unique_ptr<net::URLRequest> request_;
+  std::unique_ptr<BlobURLRequestJobFactory> job_factory_;
 
   base::ScopedTempDir dir_;
 
@@ -359,8 +360,8 @@ TEST_F(FileWriterDelegateTest, WriteZeroBytesSuccessfullyWithZeroQuota) {
 }
 
 TEST_F(FileWriterDelegateTest, WriteSuccessWithoutQuotaLimitConcurrent) {
-  scoped_ptr<FileWriterDelegate> file_writer_delegate2;
-  scoped_ptr<net::URLRequest> request2;
+  std::unique_ptr<FileWriterDelegate> file_writer_delegate2;
+  std::unique_ptr<net::URLRequest> request2;
 
   ASSERT_EQ(base::File::FILE_OK,
             AsyncFileTestHelper::CreateFile(file_system_context_.get(),

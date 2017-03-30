@@ -53,6 +53,7 @@
 <translation id="2673087257647337101">即將更新成最新版本！重新啟動 Chromium，即可完成更新程序。</translation>
 <translation id="2685838254101182273">Chromium 已停止更新，無法繼續支援這個作業系統版本。</translation>
 <translation id="2705212601509139398">我們即將停止支援這個網站使用的 Chromium 內嵌框架外掛程式。請解除安裝該外掛程式，並下載相容的瀏覽器。</translation>
+<translation id="2711502716910134313">Chromium 分頁</translation>
 <translation id="2770231113462710648">將預設瀏覽器變更為：</translation>
 <translation id="2801146392936645542"><ph name="FILE_NAME" /> 是惡意軟體，因此已遭到 Chromium 封鎖。</translation>
 <translation id="2847479871509788944">從 Chromium 中移除...</translation>
@@ -66,7 +67,6 @@
 <translation id="3130323860337406239">Chromium 正在使用您的麥克風。</translation>
 <translation id="313551035350905294">您已登入管理化環境下的帳戶，並將管理控制權授予您的 Chromium 設定檔。您的 Chromium 資料 (例如應用程式、書籤、紀錄、密碼和其他設定) 均將永久與 <ph name="USER_NAME" /> 建立關聯。您可以透過 Google 帳戶資訊主頁刪除這些資料，但您無法將這些資料與其他帳戶建立關聯。</translation>
 <translation id="3190315855212034486">Chromium 當機了，要立即重新啟動嗎？</translation>
-<translation id="3197823471738295152">您的裝置已更新。</translation>
 <translation id="3244477511402911926">Chromium 通知中心</translation>
 <translation id="3256316712990552818">已複製到 Chromium</translation>
 <translation id="3258596308407688501">Chromium 無法讀取及寫入資料目錄：
@@ -120,6 +120,7 @@
 <translation id="549669000822060376">請稍候，Chromium 正在安裝最新的系統更新。</translation>
 <translation id="5563479599352954471">輕觸即可搜尋</translation>
 <translation id="5620765574781326016">不必離開所在頁面即可瞭解網站上有哪些主題。</translation>
+<translation id="5634636535844844681">Chromium 僅支援 Windows 7 以上版本的作業系統。</translation>
 <translation id="5680901439334282664">登入 Chromium</translation>
 <translation id="5772805321386874569">(必須<ph name="BEGIN_BUTTON" />重新啟動<ph name="END_BUTTON" /> Chromium)</translation>
 <translation id="5796460469508169315">Chromium 即將準備就緒。</translation>
@@ -179,6 +180,12 @@ Chromium 無法復原您的設定。</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7339898014177206373">新視窗</translation>
 <translation id="734373864078049451">您瀏覽的網頁、書籤和其他 Chromium 設定都在這裡。</translation>
+<translation id="7344413941077984497">如要設定「<ph name="NEW_PROFILE_NAME" />」可瀏覽哪些網站，您可以前往 <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" /> 調整限制與設定。如果您未變更預設設定，「<ph name="NEW_PROFILE_NAME" />」將可瀏覽網路上的所有網站。
+
+如要禁止「<ph name="NEW_PROFILE_NAME" />」存取您的帳戶，當您不使用 Chromium 時，請務必鎖定您的設定檔。方法是按一下瀏覽器右上角的設定檔名稱，然後選取 [結束並執行 Childlock]。
+<ph name="BEGIN_LINK_2" />瞭解詳情<ph name="END_LINK_2" />
+
+如需進一步的操作說明，請登入您的 <ph name="ACCOUNT_EMAIL" /> 帳戶，查看系統寄給您的電子郵件。</translation>
 <translation id="7419987137528340081">如果您想要另行保留現有的 Chromium 資料，可以為 <ph name="USER_NAME" /> 建立新的 Chromium 使用者。</translation>
 <translation id="7421823331379285070">Chromium 需要 Windows XP 或更新版本的作業系統，否則部分功能無法正確運作。</translation>
 <translation id="7463979740390522693">Chromium - 通知 (<ph name="QUANTITY" /> 則未讀)</translation>
@@ -207,6 +214,7 @@ Chromium 無法復原您的設定。</translation>
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> The Chromium Authors. 版權所有。</translation>
 <translation id="8621669128220841554">不明錯誤導致安裝失敗，請重新下載 Chromium。</translation>
 <translation id="8628626585870903697">Chromium 不含 PDF 檢視器，因此無法執行預覽列印功能。</translation>
+<translation id="8667808506758191620">您的 <ph name="DEVICE_TYPE" /> 已搭載最新版作業系統。</translation>
 <translation id="8697124171261953979">這個擴充功能也會控管 Chromium 啟動時或您使用網址列搜尋時所顯示的網頁。</translation>
 <translation id="8704119203788522458">這是您專屬的 Chromium</translation>
 <translation id="872034308864968620">讓 Chromium 在背景執行</translation>
@@ -223,7 +231,6 @@ Chromium 無法復原您的設定。</translation>
 
 如果您仍要繼續登入帳戶，各項 Chromium 資訊 (例如書籤、紀錄和其他設定) 則會合併至 <ph name="ACCOUNT_EMAIL_NEW" />。</translation>
 <translation id="9013087743919948559">新增至 Chromium</translation>
-<translation id="9013262824292842194">Chromium 僅支援 Windows Vista 或 Windows XP SP2 以上版本。</translation>
 <translation id="9019929317751753759">為了讓 Chromium 的安全性更有保障，我們停用了以下這個未列在「<ph name="IDS_EXTENSION_WEB_STORE_TITLE" />」中的擴充功能 (它可能是在您不知情的情況下加入瀏覽器)。</translation>
 <translation id="9022552996538154597">登入 Chromium</translation>
 <translation id="9036189287518468038">Chromium 應用程式啟動器</translation>

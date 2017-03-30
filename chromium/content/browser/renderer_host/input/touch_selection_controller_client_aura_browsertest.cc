@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "content/browser/renderer_host/render_widget_host_view_aura.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -16,16 +17,16 @@
 #include "content/shell/browser/shell.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/display/display_switches.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/test/event_generator.h"
-#include "ui/gfx/switches.h"
 #include "ui/touch_selection/touch_selection_controller_test_api.h"
 
 namespace content {
 namespace {
 
 bool JSONToPoint(const std::string& str, gfx::PointF* point) {
-  scoped_ptr<base::Value> value = base::JSONReader::Read(str);
+  std::unique_ptr<base::Value> value = base::JSONReader::Read(str);
   if (!value)
     return false;
   base::DictionaryValue* root;
@@ -110,7 +111,7 @@ class TestTouchSelectionControllerClientAura
   }
 
   ui::SelectionEventType expected_event_;
-  scoped_ptr<base::RunLoop> run_loop_;
+  std::unique_ptr<base::RunLoop> run_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(TestTouchSelectionControllerClientAura);
 };
@@ -169,7 +170,7 @@ class TouchSelectionControllerClientAuraTest : public ContentBrowserTest {
     selection_controller_client_ =
         new TestTouchSelectionControllerClientAura(rwhva);
     rwhva->SetSelectionControllerClientForTest(
-        make_scoped_ptr(selection_controller_client_));
+        base::WrapUnique(selection_controller_client_));
   }
 
  private:
@@ -185,7 +186,7 @@ class TouchSelectionControllerClientAuraTest : public ContentBrowserTest {
     ContentBrowserTest::TearDownOnMainThread();
   }
 
-  scoped_ptr<TestTouchSelectionMenuRunner> menu_runner_;
+  std::unique_ptr<TestTouchSelectionMenuRunner> menu_runner_;
 
   TestTouchSelectionControllerClientAura* selection_controller_client_ =
       nullptr;

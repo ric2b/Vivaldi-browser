@@ -9,6 +9,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/message_center/fake_notifier_settings_provider.h"
 #include "ui/message_center/views/notifier_settings_view.h"
+#include "ui/views/test/views_test_base.h"
 
 namespace message_center {
 
@@ -53,12 +54,12 @@ class TestingNotifierSettingsProvider
  private:
   NotifierId settings_handler_id_;
   size_t request_count_;
-  scoped_ptr<NotifierId> last_notifier_id_settings_requested_;
+  std::unique_ptr<NotifierId> last_notifier_id_settings_requested_;
 };
 
 }  // namespace
 
-class NotifierSettingsViewTest : public testing::Test {
+class NotifierSettingsViewTest : public views::ViewsTestBase {
  public:
   NotifierSettingsViewTest();
   ~NotifierSettingsViewTest() override;
@@ -72,8 +73,8 @@ class NotifierSettingsViewTest : public testing::Test {
   }
 
  private:
-  scoped_ptr<TestingNotifierSettingsProvider> settings_provider_;
-  scoped_ptr<NotifierSettingsView> notifier_settings_view_;
+  std::unique_ptr<TestingNotifierSettingsProvider> settings_provider_;
+  std::unique_ptr<NotifierSettingsView> notifier_settings_view_;
 
   DISALLOW_COPY_AND_ASSIGN(NotifierSettingsViewTest);
 };
@@ -83,6 +84,7 @@ NotifierSettingsViewTest::NotifierSettingsViewTest() {}
 NotifierSettingsViewTest::~NotifierSettingsViewTest() {}
 
 void NotifierSettingsViewTest::SetUp() {
+  views::ViewsTestBase::SetUp();
   std::vector<Notifier*> notifiers;
   notifiers.push_back(NewNotifier("id", "title", /*enabled=*/true));
   notifiers.push_back(NewNotifier("id2", "other title", /*enabled=*/false));
@@ -95,6 +97,7 @@ void NotifierSettingsViewTest::SetUp() {
 void NotifierSettingsViewTest::TearDown() {
   notifier_settings_view_.reset();
   settings_provider_.reset();
+  views::ViewsTestBase::TearDown();
 }
 
 NotifierSettingsView* NotifierSettingsViewTest::GetView() const {

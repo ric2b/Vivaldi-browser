@@ -5,6 +5,8 @@
 #ifndef UI_VIEWS_WIDGET_NATIVE_WIDGET_PRIVATE_H_
 #define UI_VIEWS_WIDGET_NATIVE_WIDGET_PRIVATE_H_
 
+#include <string>
+
 #include "base/strings/string16.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/native_widget_types.h"
@@ -70,6 +72,10 @@ class VIEWS_EXPORT NativeWidgetPrivate : public NativeWidget {
   static bool IsMouseButtonDown();
 
   static gfx::FontList GetWindowTitleFontList();
+
+  // Returns the NativeView with capture, otherwise NULL if there is no current
+  // capture set, or if |native_view| has no root.
+  static gfx::NativeView GetGlobalCapture(gfx::NativeView native_view);
 
   // Initializes the NativeWidget.
   virtual void InitNativeWidget(const Widget::InitParams& params) = 0;
@@ -165,6 +171,7 @@ class VIEWS_EXPORT NativeWidgetPrivate : public NativeWidget {
   virtual gfx::Rect GetWindowBoundsInScreen() const = 0;
   virtual gfx::Rect GetClientAreaBoundsInScreen() const = 0;
   virtual gfx::Rect GetRestoredBounds() const = 0;
+  virtual std::string GetWorkspace() const = 0;
   virtual void SetBounds(const gfx::Rect& bounds) = 0;
   virtual void SetSize(const gfx::Size& size) = 0;
   virtual void StackAbove(gfx::NativeView native_view) = 0;
@@ -222,6 +229,9 @@ class VIEWS_EXPORT NativeWidgetPrivate : public NativeWidget {
 
   // Repost an unhandled event to the native widget for default OS processing.
   virtual void RepostNativeEvent(gfx::NativeEvent native_event) = 0;
+
+  // Returns an internal name that matches the name of the associated Widget.
+  virtual std::string GetName() const = 0;
 
   // Overridden from NativeWidget:
   internal::NativeWidgetPrivate* AsNativeWidgetPrivate() override;

@@ -59,7 +59,9 @@ QuicConsumedData QuicPacketGenerator::ConsumeData(
     QuicStreamOffset offset,
     bool fin,
     QuicAckListenerInterface* listener) {
-  bool has_handshake = id == kCryptoStreamId;
+  bool has_handshake = (id == kCryptoStreamId);
+  QUIC_BUG_IF(has_handshake && fin)
+      << "Handshake packets should never send a fin";
   // To make reasoning about crypto frames easier, we don't combine them with
   // other retransmittable frames in a single packet.
   const bool flush =
@@ -91,7 +93,7 @@ QuicConsumedData QuicPacketGenerator::ConsumeData(
     }
 
     // A stream frame is created and added.
-    size_t bytes_consumed = frame.stream_frame->frame_length;
+    size_t bytes_consumed = frame.stream_frame->data_length;
     if (listener != nullptr) {
       packet_creator_.AddAckListener(listener, bytes_consumed);
     }
@@ -238,6 +240,11 @@ void QuicPacketGenerator::StopSendingVersion() {
   packet_creator_.StopSendingVersion();
 }
 
+void QuicPacketGenerator::SetDiversificationNonce(
+    const DiversificationNonce nonce) {
+  packet_creator_.SetDiversificationNonce(nonce);
+}
+
 QuicPacketNumber QuicPacketGenerator::packet_number() const {
   return packet_creator_.packet_number();
 }
@@ -273,10 +280,6 @@ void QuicPacketGenerator::UpdateSequenceNumberLength(
 void QuicPacketGenerator::SetConnectionIdLength(uint32_t length) {
   if (length == 0) {
     packet_creator_.set_connection_id_length(PACKET_0BYTE_CONNECTION_ID);
-  } else if (length == 1) {
-    packet_creator_.set_connection_id_length(PACKET_1BYTE_CONNECTION_ID);
-  } else if (length <= 4) {
-    packet_creator_.set_connection_id_length(PACKET_4BYTE_CONNECTION_ID);
   } else {
     packet_creator_.set_connection_id_length(PACKET_8BYTE_CONNECTION_ID);
   }

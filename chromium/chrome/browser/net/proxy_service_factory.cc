@@ -44,27 +44,24 @@ namespace {
 
 #if !defined(OS_ANDROID)
 bool EnableOutOfProcessV8Pac(const base::CommandLine& command_line) {
-  const std::string group_name =
-      base::FieldTrialList::FindFullName("OutOfProcessPac");
-
   if (command_line.HasSwitch(switches::kDisableOutOfProcessPac))
     return false;
   if (command_line.HasSwitch(switches::kV8PacMojoOutOfProcess))
     return true;
-  return group_name == "Enabled";
+  return true;
 }
 #endif  // !defined(OS_ANDROID)
 
 }  // namespace
 
 // static
-scoped_ptr<net::ProxyConfigService>
+std::unique_ptr<net::ProxyConfigService>
 ProxyServiceFactory::CreateProxyConfigService(PrefProxyConfigTracker* tracker) {
   // The linux gconf-based proxy settings getter relies on being initialized
   // from the UI thread.
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  scoped_ptr<net::ProxyConfigService> base_service;
+  std::unique_ptr<net::ProxyConfigService> base_service;
 
 #if !defined(OS_CHROMEOS)
   // On ChromeOS, base service is NULL; chromeos::ProxyConfigServiceImpl
@@ -114,13 +111,14 @@ ProxyServiceFactory::CreatePrefProxyConfigTrackerOfLocalState(
 }
 
 // static
-scoped_ptr<net::ProxyService> ProxyServiceFactory::CreateProxyService(
+std::unique_ptr<net::ProxyService> ProxyServiceFactory::CreateProxyService(
     net::NetLog* net_log,
     net::URLRequestContext* context,
     net::NetworkDelegate* network_delegate,
-    scoped_ptr<net::ProxyConfigService> proxy_config_service,
+    std::unique_ptr<net::ProxyConfigService> proxy_config_service,
     const base::CommandLine& command_line,
-    bool quick_check_enabled) {
+    bool quick_check_enabled,
+    bool pac_https_url_stripping_enabled) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   bool use_v8 = !command_line.HasSwitch(switches::kWinHttpProxyResolver);
   // TODO(eroman): Figure out why this doesn't work in single-process mode.
@@ -147,9 +145,9 @@ scoped_ptr<net::ProxyService> ProxyServiceFactory::CreateProxyService(
     }
   }
 
-  scoped_ptr<net::ProxyService> proxy_service;
+  std::unique_ptr<net::ProxyService> proxy_service;
   if (use_v8) {
-    scoped_ptr<net::DhcpProxyScriptFetcher> dhcp_proxy_script_fetcher;
+    std::unique_ptr<net::DhcpProxyScriptFetcher> dhcp_proxy_script_fetcher;
 #if defined(OS_CHROMEOS)
     dhcp_proxy_script_fetcher.reset(
         new chromeos::DhcpProxyScriptFetcherChromeos(context));
@@ -190,6 +188,10 @@ scoped_ptr<net::ProxyService> ProxyServiceFactory::CreateProxyService(
   }
 
   proxy_service->set_quick_check_enabled(quick_check_enabled);
+  proxy_service->set_sanitize_url_policy(
+      pac_https_url_stripping_enabled
+          ? net::ProxyService::SanitizeUrlPolicy::SAFE
+          : net::ProxyService::SanitizeUrlPolicy::UNSAFE);
 
   return proxy_service;
 }

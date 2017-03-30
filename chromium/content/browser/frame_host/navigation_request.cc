@@ -21,6 +21,7 @@
 #include "content/common/resource_request_body.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/navigation_data.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/stream_handle.h"
 #include "content/public/common/content_client.h"
@@ -62,7 +63,7 @@ int LoadFlagFromNavigationType(FrameMsg_Navigate_Type::Value navigation_type) {
 }  // namespace
 
 // static
-scoped_ptr<NavigationRequest> NavigationRequest::CreateBrowserInitiated(
+std::unique_ptr<NavigationRequest> NavigationRequest::CreateBrowserInitiated(
     FrameTreeNode* frame_tree_node,
     const GURL& dest_url,
     const Referrer& dest_referrer,
@@ -90,7 +91,7 @@ scoped_ptr<NavigationRequest> NavigationRequest::CreateBrowserInitiated(
         entry.GetBrowserInitiatedPostData()->size());
   }
 
-  scoped_ptr<NavigationRequest> navigation_request(new NavigationRequest(
+  std::unique_ptr<NavigationRequest> navigation_request(new NavigationRequest(
       frame_tree_node, entry.ConstructCommonNavigationParams(
                            dest_url, dest_referrer, navigation_type, lofi_state,
                            navigation_start),
@@ -111,7 +112,7 @@ scoped_ptr<NavigationRequest> NavigationRequest::CreateBrowserInitiated(
 }
 
 // static
-scoped_ptr<NavigationRequest> NavigationRequest::CreateRendererInitiated(
+std::unique_ptr<NavigationRequest> NavigationRequest::CreateRendererInitiated(
     FrameTreeNode* frame_tree_node,
     const CommonNavigationParams& common_params,
     const BeginNavigationParams& begin_params,
@@ -139,7 +140,7 @@ scoped_ptr<NavigationRequest> NavigationRequest::CreateRendererInitiated(
       current_history_list_offset, current_history_list_length,
       false,                   // is_view_source
       false);                  // should_clear_history_list
-  scoped_ptr<NavigationRequest> navigation_request(
+  std::unique_ptr<NavigationRequest> navigation_request(
       new NavigationRequest(frame_tree_node, common_params, begin_params,
                             request_params, body, false, nullptr, nullptr));
   return navigation_request;
@@ -166,10 +167,12 @@ NavigationRequest::NavigationRequest(
       associated_site_instance_type_(AssociatedSiteInstanceType::NONE) {
   DCHECK(!browser_initiated || (entry != nullptr && frame_entry != nullptr));
   if (browser_initiated) {
-    // TODO(clamy): use the FrameNavigationEntry for the source SiteInstance
-    // once it has been moved from the NavigationEntry.
-    source_site_instance_ = entry->source_site_instance();
-    dest_site_instance_ = frame_entry->site_instance();
+    FrameNavigationEntry* frame_entry = entry->GetFrameEntry(frame_tree_node);
+    if (frame_entry) {
+      source_site_instance_ = frame_entry->source_site_instance();
+      dest_site_instance_ = frame_entry->site_instance();
+    }
+
     restore_type_ = entry->restore_type();
     is_view_source_ = entry->IsViewSourceMode();
     bindings_ = entry->bindings();
@@ -212,9 +215,8 @@ void NavigationRequest::BeginNavigation() {
     // TODO(clamy): pass the method to the NavigationHandle instead of a
     // boolean.
     navigation_handle_->WillStartRequest(
-        common_params_.method == "POST",
-        Referrer::SanitizeForRequest(common_params_.url,
-                                     common_params_.referrer),
+        common_params_.method, Referrer::SanitizeForRequest(
+                                   common_params_.url, common_params_.referrer),
         begin_params_.has_user_gesture, common_params_.transition, false,
         base::Bind(&NavigationRequest::OnStartChecksComplete,
                    base::Unretained(this)));
@@ -242,6 +244,7 @@ void NavigationRequest::CreateNavigationHandle(int pending_nav_entry_id) {
   // proper values are specified for is_synchronous and is_srcdoc.
   navigation_handle_ = NavigationHandleImpl::Create(
       common_params_.url, frame_tree_node_,
+      !browser_initiated_,
       false,  // is_synchronous
       false,  // is_srcdoc
       common_params_.navigation_start, pending_nav_entry_id);
@@ -266,15 +269,16 @@ void NavigationRequest::OnRequestRedirected(
   // NavigationHandle where the callback will be stored.
   // TODO(clamy): pass the real value for |is_external_protocol| if needed.
   navigation_handle_->WillRedirectRequest(
-      common_params_.url, common_params_.method == "POST",
-      common_params_.referrer.url, false, response->head.headers,
+      common_params_.url, common_params_.method, common_params_.referrer.url,
+      false, response->head.headers,
       base::Bind(&NavigationRequest::OnRedirectChecksComplete,
                  base::Unretained(this)));
 }
 
 void NavigationRequest::OnResponseStarted(
     const scoped_refptr<ResourceResponse>& response,
-    scoped_ptr<StreamHandle> body) {
+    std::unique_ptr<StreamHandle> body,
+    std::unique_ptr<NavigationData> navigation_data) {
   DCHECK(state_ == STARTED);
   state_ = RESPONSE_STARTED;
 
@@ -320,6 +324,9 @@ void NavigationRequest::OnResponseStarted(
     frame_tree_node_->ResetNavigationRequest(false);
     return;
   }
+
+  if (navigation_data)
+    navigation_handle_->set_navigation_data(std::move(navigation_data));
 
   // Store the response and the StreamHandle until checks have been processed.
   response_ = response;

@@ -113,17 +113,17 @@ class Map_Data {
 
   StructHeader header_;
 
-  ArrayPointer<Key> keys;
-  ArrayPointer<Value> values;
+  Pointer<Array_Data<Key>> keys;
+  Pointer<Array_Data<Value>> values;
 
-  void EncodePointersAndHandles(std::vector<mojo::Handle>* handles) {
-    Encode(&keys, handles);
-    Encode(&values, handles);
+  void EncodePointers() {
+    Encode(&keys);
+    Encode(&values);
   }
 
-  void DecodePointersAndHandles(std::vector<mojo::Handle>* handles) {
-    Decode(&keys, handles);
-    Decode(&values, handles);
+  void DecodePointers() {
+    Decode(&keys);
+    Decode(&values);
   }
 
  private:

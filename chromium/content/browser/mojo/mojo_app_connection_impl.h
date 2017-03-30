@@ -7,7 +7,7 @@
 
 #include "base/macros.h"
 #include "content/public/browser/mojo_app_connection.h"
-#include "mojo/shell/public/interfaces/interface_provider.mojom.h"
+#include "services/shell/public/interfaces/interface_provider.mojom.h"
 
 namespace content {
 
@@ -26,7 +26,7 @@ class MojoAppConnectionImpl : public MojoAppConnection {
   void GetInterface(const std::string& interface_name,
                     mojo::ScopedMessagePipeHandle handle) override;
 
-  mojo::shell::mojom::InterfaceProviderPtr interfaces_;
+  shell::mojom::InterfaceProviderPtr interfaces_;
 
   DISALLOW_COPY_AND_ASSIGN(MojoAppConnectionImpl);
 };

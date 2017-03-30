@@ -1061,7 +1061,7 @@ WebInspector.HeapSnapshotProfileType.prototype = {
 
     get buttonTooltip()
     {
-        return WebInspector.UIString("Take heap snapshot.");
+        return WebInspector.UIString("Take heap snapshot");
     },
 
     /**
@@ -1177,7 +1177,7 @@ WebInspector.HeapSnapshotProfileType.prototype = {
  */
 WebInspector.TrackingHeapSnapshotProfileType = function()
 {
-    WebInspector.HeapSnapshotProfileType.call(this, WebInspector.TrackingHeapSnapshotProfileType.TypeId, WebInspector.UIString("Record Heap Allocations"));
+    WebInspector.HeapSnapshotProfileType.call(this, WebInspector.TrackingHeapSnapshotProfileType.TypeId, WebInspector.UIString("Record Allocation Timeline"));
 }
 
 WebInspector.TrackingHeapSnapshotProfileType.TypeId = "HEAP-RECORD";
@@ -1239,7 +1239,7 @@ WebInspector.TrackingHeapSnapshotProfileType.prototype = {
         var index;
         for (var i = 0; i < samples.length; i += 3) {
             index = samples[i];
-            var size  = samples[i+2];
+            var size  = samples[i + 2];
             this._profileSamples.sizes[index] = size;
             if (!this._profileSamples.max[index])
                 this._profileSamples.max[index] = size;
@@ -1279,7 +1279,7 @@ WebInspector.TrackingHeapSnapshotProfileType.prototype = {
 
     get buttonTooltip()
     {
-        return this._recording ? WebInspector.UIString("Stop recording heap profile.") : WebInspector.UIString("Start recording heap profile.");
+        return this._recording ? WebInspector.UIString("Stop recording heap profile") : WebInspector.UIString("Start recording heap profile");
     },
 
     /**
@@ -1364,12 +1364,12 @@ WebInspector.TrackingHeapSnapshotProfileType.prototype = {
 
     get treeItemTitle()
     {
-        return WebInspector.UIString("HEAP TIMELINES");
+        return WebInspector.UIString("ALLOCATION TIMELINES");
     },
 
     get description()
     {
-        return WebInspector.UIString("Record JavaScript object allocations over time. Use this profile type to isolate memory leaks.");
+        return WebInspector.UIString("Allocation timelines show memory allocations from your heap over time. Use this profile type to isolate memory leaks.");
     },
 
     /**
@@ -1687,7 +1687,7 @@ WebInspector.HeapSnapshotLoadFromFileDelegate.prototype = {
     onError: function(reader, e)
     {
         var subtitle;
-        switch(e.target.error.code) {
+        switch (e.target.error.code) {
         case e.target.error.NOT_FOUND_ERR:
             subtitle = WebInspector.UIString("'%s' not found.", reader.fileName());
             break;
@@ -2101,7 +2101,7 @@ WebInspector.HeapTrackingOverviewGrid.OverviewCalculator.prototype = {
      * @param {number=} precision
      * @return {string}
      */
-    formatTime: function(value, precision)
+    formatValue: function(value, precision)
     {
         return Number.secondsToString(value / 1000, !!precision);
     },

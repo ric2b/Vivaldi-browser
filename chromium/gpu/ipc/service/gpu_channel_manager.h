@@ -8,27 +8,23 @@
 #include <stdint.h>
 
 #include <deque>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/constants.h"
+#include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "gpu/gpu_export.h"
 #include "gpu/ipc/service/gpu_memory_manager.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gl/gl_surface.h"
 #include "url/gurl.h"
-
-#if defined(OS_MACOSX)
-#include "base/callback.h"
-#include "base/containers/hash_tables.h"
-#endif
 
 namespace base {
 class WaitableEvent;
@@ -44,7 +40,6 @@ class PreemptionFlag;
 class SyncPointClient;
 class SyncPointManager;
 struct SyncToken;
-union ValueState;
 namespace gles2 {
 class FramebufferCompletenessCache;
 class MailboxManager;
@@ -68,11 +63,6 @@ class GpuWatchdog;
 // browser process to them based on the corresponding renderer ID.
 class GPU_EXPORT GpuChannelManager {
  public:
-#if defined(OS_MACOSX)
-  typedef base::Callback<
-      void(int32_t, const base::TimeTicks&, const base::TimeDelta&)>
-      BufferPresentedCallback;
-#endif
   GpuChannelManager(const GpuPreferences& gpu_preferences,
                     GpuChannelManagerDelegate* delegate,
                     GpuWatchdog* watchdog,
@@ -95,9 +85,6 @@ class GPU_EXPORT GpuChannelManager {
   void DestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
                               int client_id,
                               const SyncToken& sync_token);
-  void UpdateValueState(int client_id,
-                        unsigned int target,
-                        const ValueState& state);
 #if defined(OS_ANDROID)
   void WakeUpGpu();
 #endif
@@ -109,17 +96,11 @@ class GPU_EXPORT GpuChannelManager {
   void LoseAllContexts();
   void MaybeExitOnContextLost();
 
-#if defined(OS_MACOSX)
-  void AddBufferPresentedCallback(int32_t routing_id,
-                                  const BufferPresentedCallback& callback);
-  void RemoveBufferPresentedCallback(int32_t routing_id);
-  void BufferPresented(int32_t surface_id,
-                       const base::TimeTicks& vsync_timebase,
-                       const base::TimeDelta& vsync_interval);
-#endif
-
   const GpuPreferences& gpu_preferences() const {
     return gpu_preferences_;
+  }
+  const GpuDriverBugWorkarounds& gpu_driver_bug_workarounds() const {
+    return gpu_driver_bug_workarounds_;
   }
   gles2::ProgramCache* program_cache();
   gles2::ShaderTranslatorCache* shader_translator_cache();
@@ -152,7 +133,7 @@ class GPU_EXPORT GpuChannelManager {
   }
 
  protected:
-  virtual scoped_ptr<GpuChannel> CreateGpuChannel(
+  virtual std::unique_ptr<GpuChannel> CreateGpuChannel(
       int client_id,
       uint64_t client_tracing_id,
       bool preempts,
@@ -178,7 +159,7 @@ class GPU_EXPORT GpuChannelManager {
   // These objects manage channels to individual renderer processes there is
   // one channel for each renderer process that has connected to this GPU
   // process.
-  base::ScopedPtrHashMap<int32_t, scoped_ptr<GpuChannel>> gpu_channels_;
+  base::ScopedPtrHashMap<int32_t, std::unique_ptr<GpuChannel>> gpu_channels_;
 
  private:
   void InternalDestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id, int client_id);
@@ -190,12 +171,9 @@ class GPU_EXPORT GpuChannelManager {
 #endif
 
   const GpuPreferences& gpu_preferences_;
+  GpuDriverBugWorkarounds gpu_driver_bug_workarounds_;
 
   GpuChannelManagerDelegate* const delegate_;
-#if defined(OS_MACOSX)
-  base::hash_map<int32_t, BufferPresentedCallback>
-      buffer_presented_callback_map_;
-#endif
 
   GpuWatchdog* watchdog_;
 
@@ -207,8 +185,8 @@ class GPU_EXPORT GpuChannelManager {
   GpuMemoryManager gpu_memory_manager_;
   // SyncPointManager guaranteed to outlive running MessageLoop.
   SyncPointManager* sync_point_manager_;
-  scoped_ptr<SyncPointClient> sync_point_client_waiter_;
-  scoped_ptr<gles2::ProgramCache> program_cache_;
+  std::unique_ptr<SyncPointClient> sync_point_client_waiter_;
+  std::unique_ptr<gles2::ProgramCache> program_cache_;
   scoped_refptr<gles2::ShaderTranslatorCache> shader_translator_cache_;
   scoped_refptr<gles2::FramebufferCompletenessCache>
       framebuffer_completeness_cache_;

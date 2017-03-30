@@ -33,6 +33,7 @@ For Chromium contributors that have different nicks on other domains.
 | feng              | feng            | fqian           |
 | fmeawad           | fmeawad-cr      | fmeawad         |
 | gab               | gabc            | gab             |
+| gsathya           | gsathya         | gunasekaran     |
 | hans              | hwennborg       | hwennborg       |
 | haven             | periodic        | haven           |
 | ian               | ifette          | ifette          |
@@ -58,6 +59,7 @@ For Chromium contributors that have different nicks on other domains.
 | kuchhal           | kuchhal         | rahulk          |
 | levin             | dave\_levin     | levin           |
 | lfg               | lfg\_           | lfg             |
+| littledan         | littledan       | dehrenberg      |
 | luken             | luken_chromium  | luken           |
 | mark              | markmentovai    | mmentovai       |
 | mattm             | mattm\_c, mattm\_g | mattm           |

@@ -8,11 +8,13 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <queue>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "mojo/public/cpp/bindings/callback.h"
 #include "mojo/public/cpp/bindings/lib/connector.h"
@@ -27,7 +29,8 @@ class Router : public MessageReceiverWithResponder {
  public:
   Router(ScopedMessagePipeHandle message_pipe,
          FilterChain filters,
-         bool expects_sync_requests);
+         bool expects_sync_requests,
+         scoped_refptr<base::SingleThreadTaskRunner> runner);
   ~Router() override;
 
   // Sets the receiver to handle messages read from the message pipe that do
@@ -113,14 +116,15 @@ class Router : public MessageReceiverWithResponder {
  private:
   // Maps from the id of a response to the MessageReceiver that handles the
   // response.
-  using AsyncResponderMap = std::map<uint64_t, scoped_ptr<MessageReceiver>>;
+  using AsyncResponderMap =
+      std::map<uint64_t, std::unique_ptr<MessageReceiver>>;
 
   struct SyncResponseInfo {
    public:
     explicit SyncResponseInfo(bool* in_response_received);
     ~SyncResponseInfo();
 
-    scoped_ptr<Message> response;
+    std::unique_ptr<Message> response;
 
     // Points to a stack-allocated variable.
     bool* response_received;
@@ -129,7 +133,7 @@ class Router : public MessageReceiverWithResponder {
     DISALLOW_COPY_AND_ASSIGN(SyncResponseInfo);
   };
 
-  using SyncResponseMap = std::map<uint64_t, scoped_ptr<SyncResponseInfo>>;
+  using SyncResponseMap = std::map<uint64_t, std::unique_ptr<SyncResponseInfo>>;
 
   class HandleIncomingMessageThunk : public MessageReceiver {
    public:
@@ -157,7 +161,7 @@ class Router : public MessageReceiverWithResponder {
   SyncResponseMap sync_responses_;
   uint64_t next_request_id_;
   bool testing_mode_;
-  std::queue<scoped_ptr<Message>> pending_messages_;
+  std::queue<std::unique_ptr<Message>> pending_messages_;
   // Whether a task has been posted to trigger processing of
   // |pending_messages_|.
   bool pending_task_for_messages_;

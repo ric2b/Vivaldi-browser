@@ -40,8 +40,7 @@ class DataReductionProxyConfigurator {
   // proxy. If true, |secure_transport_restricted| indicates that proxies going
   // over secure transports (HTTPS) should/can not be used.
   virtual void Enable(bool secure_transport_restricted,
-                      const std::vector<net::ProxyServer>& proxies_for_http,
-                      const std::vector<net::ProxyServer>& proxies_for_https);
+                      const std::vector<net::ProxyServer>& proxies_for_http);
 
   // Constructs a proxy configuration suitable for disabling the Data Reduction
   // proxy.
@@ -53,11 +52,6 @@ class DataReductionProxyConfigurator {
   // Bypass settings persist for the life of this object and are applied
   // each time the proxy is enabled, but are not updated while it is enabled.
   virtual void AddHostPatternToBypass(const std::string& pattern);
-
-  // Adds a URL pattern to bypass the proxy. The base implementation strips
-  // everything in |pattern| after the first single slash and then treats it
-  // as a hostname pattern.
-  virtual void AddURLPatternToBypass(const std::string& pattern);
 
   // Returns the current data reduction proxy config, even if it is not the
   // effective configuration used by the proxy service.

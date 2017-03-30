@@ -50,6 +50,7 @@ import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.TabsOpenedFromExternalAppTest;
+import org.chromium.chrome.browser.appmenu.AppMenuHandler;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.prerender.ExternalPrerenderHandler;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -139,6 +140,18 @@ public class CustomTabActivityTest extends CustomTabActivityTestBase {
     @Override
     protected void tearDown() throws Exception {
         mTestServer.stopAndDestroyServer();
+
+        // finish() is called on a non-UI thread by the testing harness. Must hide the menu
+        // first, otherwise the UI is manipulated on a non-UI thread.
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                if (mActivity == null) return;
+                AppMenuHandler handler = mActivity.getAppMenuHandler();
+                if (handler != null) handler.hideAppMenu();
+            }
+        });
+
         super.tearDown();
     }
 
@@ -339,8 +352,8 @@ public class CustomTabActivityTest extends CustomTabActivityTestBase {
         assertNotNull(menu.findItem(R.id.reload_menu_id));
         assertNotNull(menu.findItem(R.id.find_in_page_id));
         assertNotNull(menu.findItem(R.id.open_in_browser_id));
-        assertFalse(menu.findItem(R.id.share_menu_id).isVisible());
-        assertFalse(menu.findItem(R.id.share_menu_id).isEnabled());
+        assertFalse(menu.findItem(R.id.share_row_menu_id).isVisible());
+        assertFalse(menu.findItem(R.id.share_row_menu_id).isEnabled());
         assertNull(menu.findItem(R.id.bookmark_this_page_id));
     }
 
@@ -1245,14 +1258,14 @@ public class CustomTabActivityTest extends CustomTabActivityTestBase {
                 assertNull(mActivity.getActivityTab());
             }
         });
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return getInstrumentation().checkMonitorHit(monitor, 1);
-            }
-        });
-        assertTrue(monitor.getLastActivity() instanceof ChromeActivity);
-        final ChromeActivity newActivity = (ChromeActivity) monitor.getLastActivity();
+        // Use the extended CriteriaHelper timeout to make sure we get an activity
+        final Activity lastActivity =
+                monitor.waitForActivityWithTimeout(CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL);
+        assertNotNull("Monitor did not get an activity before hitting the timeout", lastActivity);
+        assertTrue("Expected lastActivity to be a ChromeActivity, was "
+                + lastActivity.getClass().getName(),
+                lastActivity instanceof ChromeActivity);
+        final ChromeActivity newActivity = (ChromeActivity) lastActivity;
         CriteriaHelper.pollUiThread((new Criteria() {
             @Override
             public boolean isSatisfied() {

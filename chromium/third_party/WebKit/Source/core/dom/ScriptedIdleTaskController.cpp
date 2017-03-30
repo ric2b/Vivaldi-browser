@@ -16,6 +16,7 @@
 #include "public/platform/WebTraceLocation.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/Functional.h"
+#include "wtf/RefCounted.h"
 
 namespace blink {
 
@@ -23,7 +24,7 @@ namespace internal {
 
 class IdleRequestCallbackWrapper : public RefCounted<IdleRequestCallbackWrapper> {
 public:
-    static PassRefPtr<IdleRequestCallbackWrapper> create(ScriptedIdleTaskController::CallbackId id, RawPtr<ScriptedIdleTaskController> controller)
+    static PassRefPtr<IdleRequestCallbackWrapper> create(ScriptedIdleTaskController::CallbackId id, ScriptedIdleTaskController* controller)
     {
         return adoptRef(new IdleRequestCallbackWrapper(id, controller));
     }
@@ -34,14 +35,14 @@ public:
     static void idleTaskFired(PassRefPtr<IdleRequestCallbackWrapper> callbackWrapper, double deadlineSeconds)
     {
         // TODO(rmcilroy): Implement clamping of deadline in some form.
-        if (RawPtr<ScriptedIdleTaskController> controller = callbackWrapper->controller())
+        if (ScriptedIdleTaskController* controller = callbackWrapper->controller())
             controller->callbackFired(callbackWrapper->id(), deadlineSeconds, IdleDeadline::CallbackType::CalledWhenIdle);
         callbackWrapper->cancel();
     }
 
     static void timeoutFired(PassRefPtr<IdleRequestCallbackWrapper> callbackWrapper)
     {
-        if (RawPtr<ScriptedIdleTaskController> controller = callbackWrapper->controller())
+        if (ScriptedIdleTaskController* controller = callbackWrapper->controller())
             controller->callbackFired(callbackWrapper->id(), monotonicallyIncreasingTime(), IdleDeadline::CallbackType::CalledByTimeout);
         callbackWrapper->cancel();
     }
@@ -52,10 +53,10 @@ public:
     }
 
     ScriptedIdleTaskController::CallbackId id() const { return m_id; }
-    RawPtr<ScriptedIdleTaskController> controller() const { return m_controller; }
+    ScriptedIdleTaskController* controller() const { return m_controller; }
 
 private:
-    IdleRequestCallbackWrapper(ScriptedIdleTaskController::CallbackId id, RawPtr<ScriptedIdleTaskController> controller)
+    IdleRequestCallbackWrapper(ScriptedIdleTaskController::CallbackId id, ScriptedIdleTaskController* controller)
         : m_id(id)
         , m_controller(controller)
     {
@@ -86,9 +87,22 @@ DEFINE_TRACE(ScriptedIdleTaskController)
     ActiveDOMObject::trace(visitor);
 }
 
+int ScriptedIdleTaskController::nextCallbackId()
+{
+    while (true) {
+        ++m_nextCallbackId;
+
+        if (!isValidCallbackId(m_nextCallbackId))
+            m_nextCallbackId = 1;
+
+        if (!m_callbacks.contains(m_nextCallbackId))
+            return m_nextCallbackId;
+    }
+}
+
 ScriptedIdleTaskController::CallbackId ScriptedIdleTaskController::registerCallback(IdleRequestCallback* callback, const IdleRequestOptions& options)
 {
-    CallbackId id = ++m_nextCallbackId;
+    CallbackId id = nextCallbackId();
     m_callbacks.set(id, callback);
     long long timeoutMillis = options.timeout();
 
@@ -103,6 +117,9 @@ ScriptedIdleTaskController::CallbackId ScriptedIdleTaskController::registerCallb
 void ScriptedIdleTaskController::cancelCallback(CallbackId id)
 {
     TRACE_EVENT_INSTANT1("devtools.timeline", "CancelIdleCallback", TRACE_EVENT_SCOPE_THREAD, "data", InspectorIdleCallbackCancelEvent::data(getExecutionContext(), id));
+    if (!isValidCallbackId(id))
+        return;
+
     m_callbacks.remove(id);
 }
 

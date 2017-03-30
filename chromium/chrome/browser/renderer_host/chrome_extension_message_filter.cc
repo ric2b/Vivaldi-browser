@@ -10,6 +10,7 @@
 #include "base/bind_helpers.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -166,7 +167,6 @@ void ChromeExtensionMessageFilter::OpenChannelToExtensionOnUIThread(
 
 void ChromeExtensionMessageFilter::OnOpenChannelToNativeApp(
     int routing_id,
-    const std::string& source_extension_id,
     const std::string& native_app_name,
     int* port_id) {
   int port2_id;
@@ -176,13 +176,12 @@ void ChromeExtensionMessageFilter::OnOpenChannelToNativeApp(
       BrowserThread::UI, FROM_HERE,
       base::Bind(
           &ChromeExtensionMessageFilter::OpenChannelToNativeAppOnUIThread,
-          this, routing_id, port2_id, source_extension_id, native_app_name));
+          this, routing_id, port2_id, native_app_name));
 }
 
 void ChromeExtensionMessageFilter::OpenChannelToNativeAppOnUIThread(
     int source_routing_id,
     int receiver_port_id,
-    const std::string& source_extension_id,
     const std::string& native_app_name) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (profile_) {
@@ -190,7 +189,6 @@ void ChromeExtensionMessageFilter::OpenChannelToNativeAppOnUIThread(
         ->OpenChannelToNativeApp(render_process_id_,
                                  source_routing_id,
                                  receiver_port_id,
-                                 source_extension_id,
                                  native_app_name);
   }
 }
@@ -276,7 +274,7 @@ void ChromeExtensionMessageFilter::OnGetExtMessageBundleOnBlockingPool(
   const extensions::ExtensionSet& extension_set =
       extension_info_map_->extensions();
 
-  scoped_ptr<extensions::MessageBundle::SubstitutionMap> dictionary_map(
+  std::unique_ptr<extensions::MessageBundle::SubstitutionMap> dictionary_map(
       extensions::file_util::LoadMessageBundleSubstitutionMapWithImports(
           extension_id, extension_set));
 
@@ -291,7 +289,7 @@ void ChromeExtensionMessageFilter::OnAddAPIActionToExtensionActivityLog(
   scoped_refptr<extensions::Action> action = new extensions::Action(
       extension_id, base::Time::Now(), extensions::Action::ACTION_API_CALL,
       params.api_call);
-  action->set_args(make_scoped_ptr(params.arguments.DeepCopy()));
+  action->set_args(base::WrapUnique(params.arguments.DeepCopy()));
   if (!params.extra.empty()) {
     action->mutable_other()->SetString(
         activity_log_constants::kActionExtra, params.extra);
@@ -305,7 +303,7 @@ void ChromeExtensionMessageFilter::OnAddDOMActionToExtensionActivityLog(
   scoped_refptr<extensions::Action> action = new extensions::Action(
       extension_id, base::Time::Now(), extensions::Action::ACTION_DOM_ACCESS,
       params.api_call);
-  action->set_args(make_scoped_ptr(params.arguments.DeepCopy()));
+  action->set_args(base::WrapUnique(params.arguments.DeepCopy()));
   action->set_page_url(params.url);
   action->set_page_title(base::UTF16ToUTF8(params.url_title));
   action->mutable_other()->SetInteger(activity_log_constants::kActionDomVerb,
@@ -319,7 +317,7 @@ void ChromeExtensionMessageFilter::OnAddEventToExtensionActivityLog(
   scoped_refptr<extensions::Action> action = new extensions::Action(
       extension_id, base::Time::Now(), extensions::Action::ACTION_API_EVENT,
       params.api_call);
-  action->set_args(make_scoped_ptr(params.arguments.DeepCopy()));
+  action->set_args(base::WrapUnique(params.arguments.DeepCopy()));
   if (!params.extra.empty()) {
     action->mutable_other()->SetString(activity_log_constants::kActionExtra,
                                        params.extra);

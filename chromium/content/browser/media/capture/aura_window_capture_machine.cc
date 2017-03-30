@@ -11,7 +11,7 @@
 #include "base/metrics/histogram.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/output/copy_output_result.h"
-#include "content/browser/compositor/gl_helper.h"
+#include "components/display_compositor/gl_helper.h"
 #include "content/browser/compositor/image_transport_factory.h"
 #include "content/browser/media/capture/desktop_capture_device_uma_types.h"
 #include "content/public/browser/browser_thread.h"
@@ -31,7 +31,6 @@
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/dip_util.h"
 #include "ui/compositor/layer.h"
-#include "ui/gfx/screen.h"
 #include "ui/wm/public/activation_client.h"
 
 namespace content {
@@ -278,7 +277,7 @@ bool AuraWindowCaptureMachine::ProcessCopyOutputResponse(
   }
 
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-  GLHelper* gl_helper = factory->GetGLHelper();
+  display_compositor::GLHelper* gl_helper = factory->GetGLHelper();
   if (!gl_helper) {
     VLOG(1) << "Aborting capture: No GLHelper available for YUV readback.";
     return false;
@@ -298,22 +297,25 @@ bool AuraWindowCaptureMachine::ProcessCopyOutputResponse(
       yuv_readback_pipeline_->scaler()->SrcSize() != result_rect.size() ||
       yuv_readback_pipeline_->scaler()->SrcSubrect() != result_rect ||
       yuv_readback_pipeline_->scaler()->DstSize() != region_in_frame.size()) {
-    yuv_readback_pipeline_.reset(
-        gl_helper->CreateReadbackPipelineYUV(GLHelper::SCALER_QUALITY_FAST,
-                                             result_rect.size(),
-                                             result_rect,
-                                             region_in_frame.size(),
-                                             true,
-                                             true));
+    yuv_readback_pipeline_.reset(gl_helper->CreateReadbackPipelineYUV(
+        display_compositor::GLHelper::SCALER_QUALITY_FAST, result_rect.size(),
+        result_rect, region_in_frame.size(), true, true));
   }
 
   cursor_renderer_->SnapshotCursorState(region_in_frame);
   yuv_readback_pipeline_->ReadbackYUV(
       texture_mailbox.mailbox(), texture_mailbox.sync_token(),
-      video_frame.get(), region_in_frame.origin(),
+      video_frame->visible_rect(),
+      video_frame->stride(media::VideoFrame::kYPlane),
+      video_frame->data(media::VideoFrame::kYPlane),
+      video_frame->stride(media::VideoFrame::kUPlane),
+      video_frame->data(media::VideoFrame::kUPlane),
+      video_frame->stride(media::VideoFrame::kVPlane),
+      video_frame->data(media::VideoFrame::kVPlane), region_in_frame.origin(),
       base::Bind(&CopyOutputFinishedForVideo, weak_factory_.GetWeakPtr(),
                  event_time, capture_frame_cb, video_frame,
                  base::Passed(&release_callback)));
+  media::LetterboxYUV(video_frame.get(), region_in_frame);
   return true;
 }
 

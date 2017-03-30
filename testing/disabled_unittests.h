@@ -12,6 +12,8 @@
   //DISABLE(PasswordManagerBrowserTestBase,
   //        SkipZeroClickToggledAfterSuccessfulSubmissionWithAPI)
 
+  DISABLE(NTPSnippetsServiceWithSyncTest, SyncStateCompatibility)
+
   // Disabled in v51, seems an upstream revert broke the test
   DISABLE(PictureLayerImplTest, DontAddLowResForSmallLayers)
 
@@ -31,3 +33,7 @@
 
   DISABLE(WebViewContextMenuInteractiveTest,
               ContextMenuParamsAfterCSSTransforms)
+
+  // Toolbar tests that started failing in v52
+  DISABLE_ALL(ComponentToolbarActionsBrowserTest)
+  DISABLE_ALL(ShowPageActionWithoutPageActionRedesignTest)

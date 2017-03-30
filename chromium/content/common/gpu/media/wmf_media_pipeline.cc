@@ -224,7 +224,7 @@ struct WMFMediaPipeline::Direct3DContext {
 class WMFMediaPipeline::DXVAPictureBuffer {
  public:
   ~DXVAPictureBuffer();
-  static scoped_ptr<DXVAPictureBuffer> Create(
+  static std::unique_ptr<DXVAPictureBuffer> Create(
       uint32_t texture_id,
       gfx::Size texture_size,
       EGLConfig EGL_config,
@@ -321,7 +321,7 @@ WMFMediaPipeline::DXVAPictureBuffer::~DXVAPictureBuffer() {
   }
 }
 
-scoped_ptr<WMFMediaPipeline::DXVAPictureBuffer>
+std::unique_ptr<WMFMediaPipeline::DXVAPictureBuffer>
 WMFMediaPipeline::DXVAPictureBuffer::Create(
     uint32_t texture_id,
     gfx::Size texture_size,
@@ -330,7 +330,7 @@ WMFMediaPipeline::DXVAPictureBuffer::Create(
   if (!gfx::GLContext::GetCurrent())
     return nullptr;
 
-  scoped_ptr<DXVAPictureBuffer> dxva_picture_buffer(
+  std::unique_ptr<DXVAPictureBuffer> dxva_picture_buffer(
       new DXVAPictureBuffer(texture_id, texture_size, egl_config));
 
   EGLDisplay egl_display = gfx::GLSurfaceEGL::GetHardwareDisplay();
@@ -1548,7 +1548,7 @@ WMFMediaPipeline::DXVAPictureBuffer* WMFMediaPipeline::GetDXVAPictureBuffer(
     return dxva_picture_buffer;
   }
 
-  scoped_ptr<DXVAPictureBuffer> new_dxva_picture_buffer =
+  std::unique_ptr<DXVAPictureBuffer> new_dxva_picture_buffer =
       DXVAPictureBuffer::Create(texture_id, video_config_.coded_size,
                                 egl_config_, direct3d_context_->device.get());
   if (!new_dxva_picture_buffer.get())

@@ -16,7 +16,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "browser/vivaldi_download_status.h"
@@ -60,8 +60,9 @@
 #include "extensions/helper/vivaldi_app_helper.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/events/keycodes/keyboard_codes.h"
-#include "ui/gfx/screen.h"
 
 #if !defined(OS_MACOSX)
 #include "components/prefs/pref_service.h"
@@ -73,6 +74,9 @@
 #endif
 
 #include "app/vivaldi_apptools.h"
+#if defined(OS_WIN)
+#include "ui/display/win/screen_win.h"
+#endif
 
 using content::BrowserContext;
 using content::ConsoleMessageLevel;
@@ -101,7 +105,7 @@ void SetBoundsProperties(const gfx::Rect& bounds,
                          const gfx::Size& max_size,
                          const std::string& bounds_name,
                          base::DictionaryValue* window_properties) {
-  scoped_ptr<base::DictionaryValue> bounds_properties(
+  std::unique_ptr<base::DictionaryValue> bounds_properties(
       new base::DictionaryValue());
 
   bounds_properties->SetInteger("left", bounds.x());
@@ -184,8 +188,7 @@ AppWindow::CreateParams::CreateParams()
       resizable(true),
       focused(true),
       always_on_top(false),
-      visible_on_all_workspaces(false),
-      thumbnail_window(false) {
+      visible_on_all_workspaces(false) {
 }
 
 AppWindow::CreateParams::CreateParams(const CreateParams& other) = default;
@@ -266,7 +269,6 @@ AppWindow::AppWindow(BrowserContext* context,
       initial_state_(ui::SHOW_STATE_NORMAL),
       delayed_show_type_(SHOW_ACTIVE),
       cached_always_on_top_(false),
-      dialoghost_guestwebview_(NULL),
       requested_alpha_enabled_(false),
       is_ime_window_(false),
       image_loader_ptr_factory_(this) {
@@ -316,6 +318,21 @@ void AppWindow::Init(const GURL& url,
       new_params.state == ui::SHOW_STATE_FULLSCREEN)
     new_params.state = ui::SHOW_STATE_DEFAULT;
 #endif
+  if (vivaldi::IsVivaldiRunning() && new_params.avoid_cached_positions) {
+    // NOTE(pettern@vivaldi.com): If we are using un-cached bounds, we need to
+    // force the window within the screen.
+    display::Screen* screen = display::Screen::GetScreen();
+    display::Display display =
+        screen->GetDisplayMatching(params.window_spec.bounds);
+    gfx::Rect current_screen_bounds = display.work_area();
+    SizeConstraints constraints(new_params.GetWindowMinimumSize(gfx::Insets()),
+                                new_params.GetWindowMaximumSize(gfx::Insets()));
+    AdjustBoundsToBeVisibleOnScreen(new_params.window_spec.bounds,
+                                    gfx::Rect(),
+                                    current_screen_bounds,
+                                    constraints.GetMinimumSize(),
+                                    &new_params.window_spec.bounds);
+  }
 
   // Windows cannot be always-on-top in fullscreen mode for security reasons.
   cached_always_on_top_ = new_params.always_on_top;
@@ -636,7 +653,7 @@ void AppWindow::SetAppIconUrl(const GURL& url) {
                  image_loader_ptr_factory_.GetWeakPtr()));
 }
 
-void AppWindow::UpdateShape(scoped_ptr<SkRegion> region) {
+void AppWindow::UpdateShape(std::unique_ptr<SkRegion> region) {
   native_app_window_->UpdateShape(std::move(region));
 }
 
@@ -919,13 +936,12 @@ void AppWindow::SetNativeWindowFullscreen() {
 
 bool AppWindow::IntersectsWithTaskbar() const {
 #if defined(OS_WIN)
-  gfx::Screen* screen = gfx::Screen::GetScreen();
+  display::Screen* screen = display::Screen::GetScreen();
   gfx::Rect window_bounds = native_app_window_->GetRestoredBounds();
-  std::vector<gfx::Display> displays = screen->GetAllDisplays();
+  std::vector<display::Display> displays = screen->GetAllDisplays();
 
-  for (std::vector<gfx::Display>::const_iterator it = displays.begin();
-       it != displays.end();
-       ++it) {
+  for (std::vector<display::Display>::const_iterator it = displays.begin();
+       it != displays.end(); ++it) {
     gfx::Rect taskbar_bounds = it->bounds();
     taskbar_bounds.Subtract(it->work_area());
     if (taskbar_bounds.IsEmpty())
@@ -1063,14 +1079,11 @@ void AppWindow::SetWebContentsBlocked(content::WebContents* web_contents,
 }
 
 bool AppWindow::IsWebContentsVisible(content::WebContents* web_contents) {
-  //if a vivaldiview shown, ask this for visible state.
-  if (dialoghost_guestwebview_) {
-    return false;//return dialoghost_guestwebview_->IsWebContentsVisible(web_contents);
-  }
-  else
-  {
+  // In Vivaldi we will use the AppWindow as WebContentsModalDialogHost and
+  // the contents will always be visible.
+  if (vivaldi::IsVivaldiRunning())
+    return true;
   return app_delegate_->IsWebContentsVisible(web_contents);
-  }
 }
 
 WebContentsModalDialogHost* AppWindow::GetWebContentsModalDialogHost() {
@@ -1087,7 +1100,7 @@ void AppWindow::SaveWindowPosition() {
 
   gfx::Rect bounds = native_app_window_->GetRestoredBounds();
   gfx::Rect screen_bounds =
-      gfx::Screen::GetScreen()->GetDisplayMatching(bounds).work_area();
+      display::Screen::GetScreen()->GetDisplayMatching(bounds).work_area();
   ui::WindowShowState window_state = native_app_window_->GetRestoredState();
   cache->SaveGeometry(
       extension_id(), window_key_, bounds, screen_bounds, window_state);
@@ -1134,6 +1147,10 @@ AppWindow::CreateParams AppWindow::LoadDefaults(CreateParams params)
       params.window_spec.bounds.height() == 0) {
     params.content_spec.bounds.set_height(kDefaultHeight);
   }
+  // NOTE(pettern@vivaldi.com): We will not use the cached positions
+  // for this window.
+  if (params.avoid_cached_positions)
+    return params;
 
   // If left and top are left undefined, the native app window will center
   // the window on the main screen in a platform-defined manner.
@@ -1153,8 +1170,8 @@ AppWindow::CreateParams AppWindow::LoadDefaults(CreateParams params)
                            &cached_state)) {
       // App window has cached screen bounds, make sure it fits on screen in
       // case the screen resolution changed.
-      gfx::Screen* screen = gfx::Screen::GetScreen();
-      gfx::Display display = screen->GetDisplayMatching(cached_bounds);
+      display::Screen* screen = display::Screen::GetScreen();
+      display::Display display = screen->GetDisplayMatching(cached_bounds);
       gfx::Rect current_screen_bounds = display.work_area();
       SizeConstraints constraints(params.GetWindowMinimumSize(gfx::Insets()),
                                   params.GetWindowMaximumSize(gfx::Insets()));

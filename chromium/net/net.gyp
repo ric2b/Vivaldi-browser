@@ -106,20 +106,57 @@
       # GN version: //net
       'target_name': 'net',
       'dependencies': [
-        '../base/base.gyp:base_i18n',
-        '../third_party/brotli/brotli.gyp:brotli',
-        '../third_party/icu/icu.gyp:icui18n',
-        '../third_party/icu/icu.gyp:icuuc',
-        '../third_party/protobuf/protobuf.gyp:protobuf_lite',
         '../url/url.gyp:url_lib',
-        'net_quic_proto',
-      ],
-      'sources': [
-        'base/filename_util_icu.cc',
-        'base/net_string_util_icu.cc',
-        'filter/brotli_filter.cc',
       ],
       'includes': [ 'net_common.gypi' ],
+
+      'conditions': [
+        # ICU Alternatives
+        ['use_platform_icu_alternatives == 1', {
+          'conditions': [
+            ['OS == "android"', {
+              'sources': [
+                'base/net_string_util_icu_alternatives_android.cc',
+                'base/net_string_util_icu_alternatives_android.h',
+              ],
+            }],
+            ['OS == "ios"', {
+              'sources': [
+                'base/net_string_util_icu_alternatives_ios.mm',
+              ],
+            }],
+          ],
+        },
+        # 'use_platform_icu_alternatives != 1'
+        {
+          'sources': [
+            'base/filename_util_icu.cc',
+            'base/net_string_util_icu.cc',
+          ],
+          'dependencies': [
+            '../base/base.gyp:base_i18n',
+            '../third_party/icu/icu.gyp:icui18n',
+            '../third_party/icu/icu.gyp:icuuc',
+            '../third_party/protobuf/protobuf.gyp:protobuf_lite',
+            'net_quic_proto',
+          ],
+        }],
+        # Brotli support.
+        ['disable_brotli_filter == 1', {
+          'sources': [
+            'filter/brotli_filter_disabled.cc',
+          ],
+        },
+        # 'disable_brotli_filter != 1'
+        {
+          'sources': [
+            'filter/brotli_filter.cc',
+          ],
+          'dependencies': [
+            '../third_party/brotli/brotli.gyp:brotli',
+          ],
+        }],
+      ],
     },
     {
       # GN version: //net:net_unittests
@@ -133,7 +170,9 @@
         '../crypto/crypto.gyp:crypto_test_support',
         '../testing/gmock.gyp:gmock',
         '../testing/gtest.gyp:gtest',
+        '../third_party/boringssl/boringssl.gyp:boringssl',
         '../third_party/zlib/zlib.gyp:zlib',
+        '../url/url.gyp:url_url_features',
         '../url/url.gyp:url_lib',
         'balsa',
         'net',
@@ -169,10 +208,6 @@
           ],
         }],
         [ 'OS == "android"', {
-          'sources!': [
-            # See bug http://crbug.com/344533.
-            'disk_cache/blockfile/index_table_v3_unittest.cc',
-          ],
           'dependencies': [
             'net_javatests',
           ],
@@ -185,17 +220,11 @@
             'ssl/client_cert_store_nss_unittest.cc',
           ],
         }],
-        [ 'use_openssl == 1', {
-          # Avoid compiling/linking with the system library.
-          'dependencies': [
-            '../third_party/boringssl/boringssl.gyp:boringssl',
-          ],
-        }],
-        [ 'use_nss_verifier == 1', {
+        [ 'use_nss_certs == 1', {
           'conditions': [
             [ 'desktop_linux == 1 or chromeos == 1', {
               'dependencies': [
-                '../build/linux/system.gyp:ssl',
+                '../build/linux/system.gyp:nss',
               ],
             }, {  # desktop_linux == 0 and chromeos == 0
               'dependencies': [
@@ -220,18 +249,18 @@
             'http/mock_gssapi_library_posix.h',
           ],
         }],
-       [ 'use_kerberos==0', {
+        [ 'use_kerberos==0', {
           'sources!': [
             'http/http_auth_handler_negotiate_unittest.cc',
           ],
         }],
-        [ 'use_nss_verifier == 0', {
+        [ 'use_nss_certs == 0', {
           # Only include this test when using NSS for cert verification.
           'sources!': [
             'cert_net/nss_ocsp_unittest.cc',
           ],
         }],
-        [ 'use_nss_verifier == 0 and OS == "ios"', {
+        [ 'OS == "ios"', {
           # Only include these files on iOS when using NSS for cert 
           # verification.
           'sources!': [
@@ -239,24 +268,6 @@
            'cert/x509_util_ios.h',
           ],
         }],
-        [ 'use_nss_verifier == 1 and OS == "ios"', {
-          'sources!': [
-            'cert/cert_verify_proc_ios.cc',
-            'cert/cert_verify_proc_ios.h',
-            'cert/x509_certificate_openssl_ios.cc',
-          ],
-        }],
-        [ 'use_openssl==1', {
-            'sources!': [
-              'quic/test_tools/crypto_test_utils_nss.cc',
-            ],
-          }, {  # else !use_openssl: remove the unneeded files and pull in NSS.
-            'sources!': [
-              'quic/test_tools/crypto_test_utils_openssl.cc',
-              'ssl/ssl_client_session_cache_openssl_unittest.cc',
-            ],
-          },
-        ],
         [ 'use_openssl_certs == 0', {
             'sources!': [
               'ssl/openssl_client_key_store_unittest.cc',
@@ -360,16 +371,8 @@
                 'action_name': 'copy_test_data',
                 'variables': {
                   'test_data_files': [
-                    'data/certificate_policies_unittest/',
-                    'data/name_constraints_unittest/',
-                    'data/parse_certificate_unittest/',
-                    'data/parse_ocsp_unittest/',
-                    'data/ssl/certificates/',
-                    'data/test.html',
-                    'data/url_request_unittest/',
-                    'data/verify_certificate_chain_unittest/',
-                    'data/verify_name_match_unittest/names/',
-                    'data/verify_signed_data_unittest/',
+                    '<@(net_test_support_data_sources)',
+                    '<@(net_unittests_data_sources)',
                   ],
                   'test_data_prefix': 'net',
                 },
@@ -402,9 +405,6 @@
               # OS is not "linux" or "freebsd" or "openbsd".
               'socket/unix_domain_client_socket_posix_unittest.cc',
               'socket/unix_domain_server_socket_posix_unittest.cc',
-
-              # See bug http://crbug.com/344533.
-              'disk_cache/blockfile/index_table_v3_unittest.cc',
             ],
         }],
         ['OS == "android"', {
@@ -418,6 +418,39 @@
           'dependencies': [
             '../gin/gin.gyp:gin',
           ]
+        }],
+        # Unit tests that are not supported by the current ICU alternatives on Android.
+        ['OS == "android" and use_platform_icu_alternatives == 1', {
+          'sources!': [
+            'base/filename_util_unittest.cc',
+            'url_request/url_request_job_unittest.cc',
+          ],
+        }],
+        # Unit tests that are not supported by the current ICU alternatives on iOS.
+        ['OS == "ios" and use_platform_icu_alternatives == 1', {
+          'sources!': [
+            'base/filename_util_unittest.cc',
+            'base/url_util_unittest.cc',
+            'cert/x509_certificate_unittest.cc',
+            'socket/ssl_client_socket_pool_unittest.cc',
+            'http/http_auth_handler_basic_unittest.cc',
+            'http/http_auth_handler_digest_unittest.cc',
+            'http/http_auth_handler_factory_unittest.cc',
+            'http/http_auth_unittest.cc',
+            'http/http_content_disposition_unittest.cc',
+            'http/http_network_transaction_unittest.cc',
+            'http/http_proxy_client_socket_pool_unittest.cc',
+            'spdy/spdy_network_transaction_unittest.cc',
+            'spdy/spdy_proxy_client_socket_unittest.cc',
+            'url_request/url_request_job_unittest.cc',
+            'url_request/url_request_unittest.cc',
+          ],
+        }],
+        # Exclude brotli test if the support for brotli is disabled.
+        ['disable_brotli_filter == 1', {
+          'sources!': [
+            'filter/brotli_filter_unittest.cc',
+          ],
         }],
       ],
       'target_conditions': [
@@ -453,7 +486,7 @@
       'sources': [
         'base/mime_sniffer_perftest.cc',
         'cookies/cookie_monster_perftest.cc',
-        'disk_cache/blockfile/disk_cache_perftest.cc',
+        'disk_cache/disk_cache_perftest.cc',
         'extras/sqlite/sqlite_persistent_cookie_store_perftest.cc',
         'proxy/proxy_resolver_perftest.cc',
         'udp/udp_socket_perftest.cc',
@@ -578,10 +611,13 @@
         'test/embedded_test_server/request_handler_util.cc',
         'test/embedded_test_server/request_handler_util.h',
         'test/event_waiter.h',
+        'test/gtest_util.h',
         'test/net_test_suite.cc',
         'test/net_test_suite.h',
         'test/python_utils.cc',
         'test/python_utils.h',
+        'test/scoped_disable_exit_on_dfatal.cc',
+        'test/scoped_disable_exit_on_dfatal.h',
         'test/spawned_test_server/base_test_server.cc',
         'test/spawned_test_server/base_test_server.h',
         'test/spawned_test_server/local_test_server.cc',
@@ -594,6 +630,8 @@
         'test/url_request/ssl_certificate_error_job.h',
         'test/url_request/url_request_failed_job.cc',
         'test/url_request/url_request_failed_job.h',
+        'test/url_request/url_request_hanging_read_job.cc',
+        'test/url_request/url_request_hanging_read_job.h',
         'test/url_request/url_request_mock_data_job.cc',
         'test/url_request/url_request_mock_data_job.h',
         'test/url_request/url_request_slow_download_job.cc',
@@ -619,11 +657,11 @@
             'test/spawned_test_server/spawned_test_server.h',
           ],
         }],
-        ['use_nss_verifier == 1', {
+        ['use_nss_certs == 1', {
           'conditions': [
             [ 'desktop_linux == 1 or chromeos == 1', {
               'dependencies': [
-                '../build/linux/system.gyp:ssl',
+                '../build/linux/system.gyp:nss',
               ],
             }, {  # desktop_linux == 0 and chromeos == 0
               'dependencies': [
@@ -783,6 +821,8 @@
         'net_quic_proto',
       ],
       'sources': [
+        'tools/quic/chlo_extractor.cc',
+	'tools/quic/chlo_extractor.h',
         'tools/quic/quic_client_base.cc',
         'tools/quic/quic_client_base.h',
         'tools/quic/quic_client_session.cc',
@@ -842,7 +882,7 @@
             '../base/base.gyp:base',
             '../gin/gin.gyp:gin',
             '../url/url.gyp:url_lib',
-            '../v8/tools/gyp/v8.gyp:v8',
+            '../v8/src/v8.gyp:v8',
             'net'
           ],
           'defines': [
@@ -1105,6 +1145,30 @@
           ],
         },
         {
+          'target_name': 'quic_packet_printer',
+          'type': 'executable',
+          'dependencies': [
+            '../base/base.gyp:base',
+            'net',
+            'net_quic_proto',
+            'simple_quic_tools',
+          ],
+          'sources': [
+            'tools/quic/quic_packet_printer_bin.cc',
+          ],
+        },
+	{
+          'target_name': 'crypto_message_printer',
+          'type': 'executable',
+          'dependencies': [
+            '../base/base.gyp:base',
+            'net',
+          ],
+          'sources': [
+            'tools/quic/crypto_message_printer_bin.cc',
+          ],
+        },
+        {
           'target_name': 'quic_server',
           'type': 'executable',
           'dependencies': [
@@ -1261,6 +1325,8 @@
             'tools/quic/quic_client.h',
             'tools/quic/quic_default_packet_writer.cc',
             'tools/quic/quic_default_packet_writer.h',
+            'tools/quic/quic_epoll_alarm_factory.cc',
+            'tools/quic/quic_epoll_alarm_factory.h',
             'tools/quic/quic_epoll_clock.cc',
             'tools/quic/quic_epoll_clock.h',
             'tools/quic/quic_epoll_connection_helper.cc',
@@ -1306,29 +1372,6 @@
     }],
     ['OS=="android"', {
       'targets': [
-        { # The same target as 'net', but with smaller binary size due to
-          # exclusion of ICU, FTP, FILE and WebSockets support.
-          'target_name': 'net_small',
-          'variables': {
-            'disable_ftp_support': 1,
-            'disable_file_support': 1,
-            'enable_websockets': 0,
-          },
-          'dependencies': [
-            '../url/url.gyp:url_lib_use_icu_alternatives_on_android',
-          ],
-          'defines': [
-            'USE_ICU_ALTERNATIVES_ON_ANDROID=1',
-            'DISABLE_FILE_SUPPORT=1',
-            'DISABLE_FTP_SUPPORT=1',
-          ],
-          'sources': [
-            'filter/brotli_filter_disabled.cc',
-            'base/net_string_util_icu_alternatives_android.cc',
-            'base/net_string_util_icu_alternatives_android.h',
-          ],
-          'includes': [ 'net_common.gypi' ],
-        },
         {
           'target_name': 'net_jni_headers',
           'type': 'none',
@@ -1559,7 +1602,7 @@
           'conditions': [
             ['v8_use_external_startup_data==1', {
               'dependencies': [
-                '../v8/tools/gyp/v8.gyp:v8_external_snapshot',
+                '../v8/src/v8.gyp:v8_external_snapshot',
               ],
               'variables': {
                 'dest_path': '<(asset_location)',
@@ -1581,6 +1624,7 @@
             'isolate_file': 'net_unittests.isolate',
             'android_manifest_path': 'android/unittest_support/AndroidManifest.xml',
             'resource_dir': 'android/unittest_support/res',
+            'shard_timeout': 300,
             'conditions': [
               ['v8_use_external_startup_data==1', {
                 'asset_location': '<(PRODUCT_DIR)/net_unittests_apk/assets',
@@ -1657,7 +1701,7 @@
         },
       ],
     }],
-    ['OS == "linux"', {
+    ['OS == "linux" or OS == "mac"', {
       'targets': [
         {
           'target_name': 'cachetool',

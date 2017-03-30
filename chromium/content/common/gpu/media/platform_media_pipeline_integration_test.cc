@@ -42,14 +42,14 @@ class PlatformMediaPipelineIntegrationTest
   }
 
  protected:
-  void CreateDemuxer(scoped_ptr<media::DataSource> data_source) override {
+  void CreateDemuxer(std::unique_ptr<media::DataSource> data_source) override {
     PipelineIntegrationTestBase::CreateDemuxer(std::move(data_source));
 
     const std::string content_type;
     const GURL url("file://" +
                    media::GetTestDataFilePath(filename_).AsUTF8Unsafe());
     if (media::IPCDemuxer::CanPlayType(content_type, url)) {
-      scoped_ptr<media::IPCMediaPipelineHost> pipeline_host(
+      std::unique_ptr<media::IPCMediaPipelineHost> pipeline_host(
           new TestPipelineHost(data_source_.get()));
       demuxer_.reset(new media::IPCDemuxer(
           message_loop_.task_runner(), data_source_.get(),

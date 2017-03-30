@@ -24,12 +24,11 @@ class ScriptPromiseResolver;
 // then subscribe to receive callbacks if the status for |url| were to
 // change. The object will only listen to changes when required.
 class MODULES_EXPORT PresentationAvailability final
-    : public RefCountedGarbageCollectedEventTargetWithInlineData<PresentationAvailability>
+    : public EventTargetWithInlineData
     , public ActiveScriptWrappable
     , public ActiveDOMObject
     , public PageLifecycleObserver
     , public WebPresentationAvailabilityObserver {
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(PresentationAvailability);
     USING_GARBAGE_COLLECTED_MIXIN(PresentationAvailability);
     DEFINE_WRAPPERTYPEINFO();
 public:
@@ -63,7 +62,7 @@ public:
 
 protected:
     // EventTarget implementation.
-    bool addEventListenerInternal(const AtomicString& eventType, EventListener*, const EventListenerOptions&) override;
+    void addedEventListener(const AtomicString& eventType, RegisteredEventListener&) override;
 
 private:
     // Current state of the ActiveDOMObject. It is Active when created. It

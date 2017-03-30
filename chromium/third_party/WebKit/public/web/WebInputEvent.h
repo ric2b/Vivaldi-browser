@@ -139,7 +139,8 @@ public:
         TouchMove,
         TouchEnd,
         TouchCancel,
-        TouchTypeLast = TouchCancel,
+        TouchScrollStarted,
+        TouchTypeLast = TouchScrollStarted,
 
         TypeLast = TouchTypeLast
     };
@@ -182,11 +183,10 @@ public:
         IsComposing      = 1 << 14,
 
         AltGrKey         = 1 << 15,
-        OSKey            = 1 << 16,
-        FnKey            = 1 << 17,
-        SymbolKey        = 1 << 18,
+        FnKey            = 1 << 16,
+        SymbolKey        = 1 << 17,
 
-        ScrollLockOn     = 1 << 19,
+        ScrollLockOn     = 1 << 18,
     };
 
     // Indicates whether the browser needs to block on the ACK result for
@@ -331,7 +331,7 @@ public:
 
     // Sets keyIdentifier based on the value of windowsKeyCode.  This is
     // handy for generating synthetic keyboard events.
-    BLINK_EXPORT void setKeyIdentifierFromWindowsKeyCode();
+    BLINK_COMMON_EXPORT void setKeyIdentifierFromWindowsKeyCode();
 };
 
 // WebMouseEvent --------------------------------------------------------------
@@ -484,6 +484,12 @@ public:
         Page // page (visible viewport) based scrolling.
     };
 
+    enum InertialPhaseState {
+        UnknownMomentumPhase = 0, // No phase information.
+        NonMomentumPhase, // Regular scrolling phase.
+        MomentumPhase, // Momentum phase.
+    };
+
     int x;
     int y;
     int globalX;
@@ -535,11 +541,10 @@ public:
             // If true, this event will skip hit testing to find a scroll
             // target and instead just scroll the viewport.
             bool targetViewport;
-            // If true, this event comes after a non-inertial gesture
-            // scroll sequence; OSX has unique phases for normal and
-            // momentum scroll events. Should always be false for touch based
+            // The state of inertial phase scrolling. OSX has unique phases for normal and
+            // momentum scroll events. Should always be UnknownMomentumPhase for touch based
             // input as it generates GestureFlingStart instead.
-            bool inertial;
+            InertialPhaseState inertialPhase;
             // True if this event was synthesized in order to force a hit test; avoiding scroll
             // latching behavior until crbug.com/526463 is fully implemented.
             bool synthetic;
@@ -557,7 +562,7 @@ public:
             // the entirety of the generative motion.
             bool previousUpdateInSequencePrevented;
             bool preventPropagation;
-            bool inertial;
+            InertialPhaseState inertialPhase;
             // Default initialized to ScrollUnits::PrecisePixels.
             ScrollUnits deltaUnits;
         } scrollUpdate;
@@ -566,11 +571,10 @@ public:
             // The original delta units the scrollBegin and scrollUpdates
             // were sent as.
             ScrollUnits deltaUnits;
-            // If true, this event comes after an inertial gesture
-            // scroll sequence; OSX has unique phases for normal and
-            // momentum scroll events. Should always be false for touch based
+            // The state of inertial phase scrolling. OSX has unique phases for normal and
+            // momentum scroll events. Should always be UnknownMomentumPhase for touch based
             // input as it generates GestureFlingStart instead.
-            bool inertial;
+            InertialPhaseState inertialPhase;
             // True if this event was synthesized in order to generate the proper
             // GSB/GSU/GSE matching sequences. This is a temporary so that a future
             // GSB will generate a hit test so latching behavior is avoided
@@ -633,6 +637,10 @@ public:
     // touch-point has moved (by whatever amount).
     bool movedBeyondSlopRegion;
 
+    // Whether there was an active fling animation when the event was
+    // dispatched.
+    bool dispatchedDuringFling;
+
     // A unique identifier for the touch event.
     uint32_t uniqueTouchEventId;
 
@@ -641,6 +649,7 @@ public:
         , touchesLength(0)
         , dispatchType(Blocking)
         , movedBeyondSlopRegion(false)
+        , dispatchedDuringFling(false)
         , uniqueTouchEventId(0)
     {
     }

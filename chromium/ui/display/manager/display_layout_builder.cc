@@ -44,6 +44,12 @@ DisplayLayoutBuilder& DisplayLayoutBuilder::AddDisplayPlacement(
   placement.offset = offset;
   placement.display_id = display_id;
   placement.parent_display_id = parent_display_id;
+  AddDisplayPlacement(placement);
+  return *this;
+}
+
+DisplayLayoutBuilder& DisplayLayoutBuilder::AddDisplayPlacement(
+    const DisplayPlacement& placement) {
   layout_->placement_list.push_back(placement);
   return *this;
 }
@@ -57,7 +63,7 @@ DisplayLayoutBuilder& DisplayLayoutBuilder::SetSecondaryPlacement(
   return *this;
 }
 
-scoped_ptr<DisplayLayout> DisplayLayoutBuilder::Build() {
+std::unique_ptr<DisplayLayout> DisplayLayoutBuilder::Build() {
   std::sort(layout_->placement_list.begin(), layout_->placement_list.end(),
             [](const DisplayPlacement& a, const DisplayPlacement& b) {
               return a.display_id < b.display_id;

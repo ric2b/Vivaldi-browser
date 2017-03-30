@@ -11,14 +11,22 @@
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "media/base/demuxer_stream_provider.h"
+#include "media/base/renderer_client.h"
+#include "media/base/video_renderer_sink.h"
 #include "media/mojo/services/mojo_demuxer_stream_impl.h"
+#include "media/renderers/video_overlay_factory.h"
+#include "mojo/converters/geometry/geometry_type_converters.h"
 
 namespace media {
 
 MojoRendererImpl::MojoRendererImpl(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-    interfaces::RendererPtr remote_renderer)
+    std::unique_ptr<VideoOverlayFactory> video_overlay_factory,
+    VideoRendererSink* video_renderer_sink,
+    mojom::RendererPtr remote_renderer)
     : task_runner_(task_runner),
+      video_overlay_factory_(std::move(video_overlay_factory)),
+      video_renderer_sink_(video_renderer_sink),
       remote_renderer_info_(remote_renderer.PassInterface()),
       binding_(this) {
   DVLOG(1) << __FUNCTION__;
@@ -29,16 +37,10 @@ MojoRendererImpl::~MojoRendererImpl() {
   DCHECK(task_runner_->BelongsToCurrentThread());
 }
 
-// TODO(xhwang): Support |waiting_for_decryption_key_cb| and |statictics_cb|.
-// See http://crbug.com/585287
 void MojoRendererImpl::Initialize(
     DemuxerStreamProvider* demuxer_stream_provider,
-    const PipelineStatusCB& init_cb,
-    const StatisticsCB& /* statistics_cb */,
-    const BufferingStateCB& buffering_state_cb,
-    const base::Closure& ended_cb,
-    const PipelineStatusCB& error_cb,
-    const base::Closure& /* waiting_for_decryption_key_cb */) {
+    media::RendererClient* client,
+    const PipelineStatusCB& init_cb) {
   DVLOG(1) << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(demuxer_stream_provider);
@@ -61,23 +63,21 @@ void MojoRendererImpl::Initialize(
       base::Bind(&MojoRendererImpl::OnConnectionError, base::Unretained(this)));
 
   demuxer_stream_provider_ = demuxer_stream_provider;
+  client_ = client;
   init_cb_ = init_cb;
-  buffering_state_cb_ = buffering_state_cb;
-  ended_cb_ = ended_cb;
-  error_cb_ = error_cb;
 
-  // Create audio and video interfaces::DemuxerStream and bind its lifetime to
+  // Create audio and video mojom::DemuxerStream and bind its lifetime to
   // the pipe.
   DemuxerStream* const audio =
       demuxer_stream_provider_->GetStream(DemuxerStream::AUDIO);
   DemuxerStream* const video =
       demuxer_stream_provider_->GetStream(DemuxerStream::VIDEO);
 
-  interfaces::DemuxerStreamPtr audio_stream;
+  mojom::DemuxerStreamPtr audio_stream;
   if (audio)
     new MojoDemuxerStreamImpl(audio, GetProxy(&audio_stream));
 
-  interfaces::DemuxerStreamPtr video_stream;
+  mojom::DemuxerStreamPtr video_stream;
   if (video)
     new MojoDemuxerStreamImpl(video, GetProxy(&video_stream));
 
@@ -163,17 +163,16 @@ void MojoRendererImpl::OnTimeUpdate(int64_t time_usec, int64_t max_time_usec) {
   time_ = base::TimeDelta::FromMicroseconds(time_usec);
 }
 
-void MojoRendererImpl::OnBufferingStateChange(
-    interfaces::BufferingState state) {
+void MojoRendererImpl::OnBufferingStateChange(mojom::BufferingState state) {
   DVLOG(2) << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
-  buffering_state_cb_.Run(static_cast<media::BufferingState>(state));
+  client_->OnBufferingStateChange(static_cast<media::BufferingState>(state));
 }
 
 void MojoRendererImpl::OnEnded() {
   DVLOG(1) << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
-  ended_cb_.Run();
+  client_->OnEnded();
 }
 
 void MojoRendererImpl::OnError() {
@@ -183,7 +182,23 @@ void MojoRendererImpl::OnError() {
 
   // TODO(tim): Should we plumb error code from remote renderer?
   // http://crbug.com/410451.
-  error_cb_.Run(PIPELINE_ERROR_DECODE);
+  client_->OnError(PIPELINE_ERROR_DECODE);
+}
+
+void MojoRendererImpl::OnVideoNaturalSizeChange(mojo::SizePtr size) {
+  gfx::Size new_size = size.To<gfx::Size>();
+  DVLOG(2) << __FUNCTION__ << ": " << new_size.ToString();
+  DCHECK(task_runner_->BelongsToCurrentThread());
+
+  video_renderer_sink_->PaintSingleFrame(
+      video_overlay_factory_->CreateFrame(new_size));
+  client_->OnVideoNaturalSizeChange(new_size);
+}
+
+void MojoRendererImpl::OnVideoOpacityChange(bool opaque) {
+  DVLOG(2) << __FUNCTION__ << ": " << opaque;
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  client_->OnVideoOpacityChange(opaque);
 }
 
 void MojoRendererImpl::OnConnectionError() {
@@ -195,7 +210,7 @@ void MojoRendererImpl::OnConnectionError() {
     return;
   }
 
-  error_cb_.Run(PIPELINE_ERROR_DECODE);
+  client_->OnError(PIPELINE_ERROR_DECODE);
 }
 
 void MojoRendererImpl::OnInitialized(bool success) {

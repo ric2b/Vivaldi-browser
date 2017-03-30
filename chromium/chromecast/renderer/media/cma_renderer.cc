@@ -12,7 +12,7 @@
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chromecast/media/cma/base/balanced_media_task_runner_factory.h"
 #include "chromecast/media/cma/base/cma_logging.h"
 #include "chromecast/media/cma/base/demuxer_stream_adapter.h"
@@ -20,15 +20,15 @@
 #include "chromecast/media/cma/pipeline/media_pipeline_client.h"
 #include "chromecast/media/cma/pipeline/video_pipeline_client.h"
 #include "chromecast/renderer/media/audio_pipeline_proxy.h"
-#include "chromecast/renderer/media/hole_frame_factory.h"
 #include "chromecast/renderer/media/media_pipeline_proxy.h"
 #include "chromecast/renderer/media/video_pipeline_proxy.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/demuxer_stream_provider.h"
 #include "media/base/pipeline_status.h"
+#include "media/base/renderer_client.h"
 #include "media/base/time_delta_interpolator.h"
 #include "media/base/video_renderer_sink.h"
-#include "media/renderers/gpu_video_accelerator_factories.h"
+#include "media/renderers/video_overlay_factory.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace chromecast {
@@ -60,8 +60,6 @@ CmaRenderer::CmaRenderer(std::unique_ptr<MediaPipelineProxy> media_pipeline,
       has_video_(false),
       received_audio_eos_(false),
       received_video_eos_(false),
-      initial_natural_size_(gfx::Size()),
-      initial_video_hole_created_(false),
       gpu_factories_(gpu_factories),
       time_interpolator_(
           new ::media::TimeDeltaInterpolator(&default_tick_clock_)),
@@ -86,38 +84,27 @@ CmaRenderer::~CmaRenderer() {
 
 void CmaRenderer::Initialize(
     ::media::DemuxerStreamProvider* demuxer_stream_provider,
-    const ::media::PipelineStatusCB& init_cb,
-    const ::media::StatisticsCB& statistics_cb,
-    const ::media::BufferingStateCB& buffering_state_cb,
-    const base::Closure& ended_cb,
-    const ::media::PipelineStatusCB& error_cb,
-    const base::Closure& waiting_for_decryption_key_cb) {
+    ::media::RendererClient* client,
+    const ::media::PipelineStatusCB& init_cb) {
   CMALOG(kLogControl) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK_EQ(state_, kUninitialized) << state_;
   DCHECK(!init_cb.is_null());
-  DCHECK(!statistics_cb.is_null());
-  DCHECK(!ended_cb.is_null());
-  DCHECK(!error_cb.is_null());
-  DCHECK(!buffering_state_cb.is_null());
-  DCHECK(!waiting_for_decryption_key_cb.is_null());
   DCHECK(demuxer_stream_provider->GetStream(::media::DemuxerStream::AUDIO) ||
          demuxer_stream_provider->GetStream(::media::DemuxerStream::VIDEO));
 
   // Deferred from ctor so as to initialise on correct thread.
-  hole_frame_factory_.reset(new HoleFrameFactory(gpu_factories_));
+  video_overlay_factory_.reset(
+      new ::media::VideoOverlayFactory(gpu_factories_));
 
   BeginStateTransition();
 
   demuxer_stream_provider_ = demuxer_stream_provider;
-  statistics_cb_ = statistics_cb;
-  buffering_state_cb_ = buffering_state_cb;
-  ended_cb_ = ended_cb;
-  error_cb_ = error_cb;
-  waiting_for_decryption_key_cb_ = waiting_for_decryption_key_cb;
+  client_ = client;
 
   MediaPipelineClient media_pipeline_client;
-  media_pipeline_client.error_cb = ::media::BindToCurrentLoop(error_cb_);
+  media_pipeline_client.error_cb =
+      ::media::BindToCurrentLoop(base::Bind(&CmaRenderer::OnError, weak_this_));
   media_pipeline_client.buffering_state_cb = ::media::BindToCurrentLoop(
       base::Bind(&CmaRenderer::OnBufferingNotification, weak_this_));
   media_pipeline_client.time_update_cb = ::media::BindToCurrentLoop(
@@ -161,22 +148,9 @@ void CmaRenderer::StartPlayingFrom(base::TimeDelta time) {
   BeginStateTransition();
 
   if (state_ == kError) {
-    error_cb_.Run(::media::PIPELINE_ERROR_ABORT);
+    client_->OnError(::media::PIPELINE_ERROR_ABORT);
     CompleteStateTransition(kError);
     return;
-  }
-
-  // Create a video hole frame just before starting playback.
-  // Note that instead of creating the video hole frame in Initialize(), we do
-  // it here because paint_cb_ (which eventually calls OnOpacityChanged)
-  // expects the current state to not be HaveNothing. And the place where
-  // the ready state is changed to HaveMetadata (OnPipelineMetadata) is
-  // right before the pipeline calls StartPlayingFrom (in
-  // Pipeline::StateTransitionTask).
-  if (!initial_video_hole_created_) {
-    initial_video_hole_created_ = true;
-    video_renderer_sink_->PaintFrameUsingOldRenderingPath(
-        hole_frame_factory_->CreateHoleFrame(initial_natural_size_));
   }
 
   {
@@ -341,8 +315,6 @@ void CmaRenderer::InitializeVideoPipeline() {
   if (config.codec() == ::media::kCodecH264)
     stream->EnableBitstreamConverter();
 
-  initial_natural_size_ = config.natural_size();
-
   std::vector<::media::VideoDecoderConfig> configs;
   configs.push_back(config);
   media_pipeline_->InitializeVideo(configs, std::move(frame_provider),
@@ -372,7 +344,7 @@ void CmaRenderer::OnVideoPipelineInitializeDone(
 }
 
 void CmaRenderer::OnWaitForKey(bool is_audio) {
-  waiting_for_decryption_key_cb_.Run();
+  client_->OnWaitingForDecryptionKey();
 }
 
 void CmaRenderer::OnEosReached(bool is_audio) {
@@ -395,19 +367,20 @@ void CmaRenderer::OnEosReached(bool is_audio) {
   CMALOG(kLogControl) << __FUNCTION__ << " audio_finished=" << audio_finished
                       << " video_finished=" << video_finished;
   if (audio_finished && video_finished)
-    ended_cb_.Run();
+    client_->OnEnded();
 }
 
 void CmaRenderer::OnStatisticsUpdated(
     const ::media::PipelineStatistics& stats) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  statistics_cb_.Run(stats);
+  client_->OnStatisticsUpdate(stats);
 }
 
 void CmaRenderer::OnNaturalSizeChanged(const gfx::Size& size) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  video_renderer_sink_->PaintFrameUsingOldRenderingPath(
-      hole_frame_factory_->CreateHoleFrame(size));
+  video_renderer_sink_->PaintSingleFrame(
+      video_overlay_factory_->CreateFrame(size));
+  client_->OnVideoNaturalSizeChange(size);
 }
 
 void CmaRenderer::OnPlaybackTimeUpdated(base::TimeDelta time,
@@ -433,7 +406,8 @@ void CmaRenderer::OnBufferingNotification(
     ::media::BufferingState buffering_state) {
   CMALOG(kLogControl) << __FUNCTION__ << ": state=" << state_
                       << ", buffering=" << buffering_state;
-  buffering_state_cb_.Run(buffering_state);
+  DCHECK(thread_checker_.CalledOnValidThread());
+  client_->OnBufferingStateChange(buffering_state);
 }
 
 void CmaRenderer::OnFlushDone() {
@@ -463,7 +437,7 @@ void CmaRenderer::OnError(::media::PipelineStatus error) {
       base::ResetAndReturn(&init_cb_).Run(error);
       return;
     }
-    error_cb_.Run(error);
+    client_->OnError(error);
   }
 
   // After OnError() returns, the pipeline may destroy |this|.

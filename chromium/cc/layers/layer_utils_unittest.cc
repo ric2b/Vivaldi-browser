@@ -56,7 +56,8 @@ class LayerUtilsGetAnimationBoundsTest : public testing::Test {
 
  private:
   static LayerImpl* CreateTwoForkTree(LayerTreeHostImpl* host_impl) {
-    scoped_ptr<LayerImpl> root = LayerImpl::Create(host_impl->active_tree(), 1);
+    std::unique_ptr<LayerImpl> root =
+        LayerImpl::Create(host_impl->active_tree(), 1);
     LayerImpl* root_ptr = root.get();
     root->AddChild(LayerImpl::Create(host_impl->active_tree(), 2));
     root->children()[0]->AddChild(
@@ -209,8 +210,8 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, RotateXNoPerspective) {
   child1()->SetDrawsContent(true);
   child1()->SetPosition(gfx::PointF(150.f, 50.f));
   child1()->SetBounds(bounds);
-  child1()->SetTransformOrigin(
-      gfx::Point3F(bounds.width() * 0.5f, bounds.height() * 0.5f, 0));
+  child1()->test_properties()->transform_origin =
+      gfx::Point3F(bounds.width() * 0.5f, bounds.height() * 0.5f, 0);
 
   host_impl().active_tree()->BuildPropertyTreesForTesting();
 
@@ -234,8 +235,8 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, RotateXWithPerspective) {
 
   // Make the anchor point not the default 0.5 value and line up with the
   // child center to make the math easier.
-  parent1()->SetTransformOrigin(
-      gfx::Point3F(0.375f * 400.f, 0.375f * 400.f, 0.f));
+  parent1()->test_properties()->transform_origin =
+      gfx::Point3F(0.375f * 400.f, 0.375f * 400.f, 0.f);
   parent1()->SetBounds(gfx::Size(400, 400));
 
   gfx::Transform perspective;
@@ -246,8 +247,8 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, RotateXWithPerspective) {
   child1()->SetDrawsContent(true);
   child1()->SetPosition(gfx::PointF(100.f, 100.f));
   child1()->SetBounds(bounds);
-  child1()->SetTransformOrigin(
-      gfx::Point3F(bounds.width() * 0.5f, bounds.height() * 0.5f, 0));
+  child1()->test_properties()->transform_origin =
+      gfx::Point3F(bounds.width() * 0.5f, bounds.height() * 0.5f, 0);
 
   host_impl().active_tree()->BuildPropertyTreesForTesting();
 
@@ -275,8 +276,8 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, RotateXWithPerspectiveOnSameLayer) {
 
   // Make the anchor point not the default 0.5 value and line up
   // with the child center to make the math easier.
-  parent1()->SetTransformOrigin(
-      gfx::Point3F(0.375f * 400.f, 0.375f * 400.f, 0.f));
+  parent1()->test_properties()->transform_origin =
+      gfx::Point3F(0.375f * 400.f, 0.375f * 400.f, 0.f);
   parent1()->SetBounds(gfx::Size(400, 400));
 
   gfx::Transform perspective;
@@ -287,8 +288,8 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, RotateXWithPerspectiveOnSameLayer) {
   child1()->SetDrawsContent(true);
   child1()->SetPosition(gfx::PointF(100.f, 100.f));
   child1()->SetBounds(bounds);
-  child1()->SetTransformOrigin(
-      gfx::Point3F(bounds.width() * 0.5f, bounds.height() * 0.5f, 0));
+  child1()->test_properties()->transform_origin =
+      gfx::Point3F(bounds.width() * 0.5f, bounds.height() * 0.5f, 0);
 
   host_impl().active_tree()->BuildPropertyTreesForTesting();
 
@@ -315,8 +316,8 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, RotateZ) {
   child1()->SetDrawsContent(true);
   child1()->SetPosition(gfx::PointF(150.f, 50.f));
   child1()->SetBounds(bounds);
-  child1()->SetTransformOrigin(
-      gfx::Point3F(bounds.width() * 0.5f, bounds.height() * 0.5f, 0));
+  child1()->test_properties()->transform_origin =
+      gfx::Point3F(bounds.width() * 0.5f, bounds.height() * 0.5f, 0);
 
   host_impl().active_tree()->BuildPropertyTreesForTesting();
 
@@ -415,8 +416,8 @@ TEST_F(LayerUtilsGetAnimationBoundsTest,
   gfx::Size bounds(100, 100);
   grand_child()->SetPosition(gfx::PointF(150.f, 50.f));
   grand_child()->SetBounds(bounds);
-  grand_child()->SetTransformOrigin(
-      gfx::Point3F(bounds.width() * 0.5f, bounds.height() * 0.5f, 0));
+  grand_child()->test_properties()->transform_origin =
+      gfx::Point3F(bounds.width() * 0.5f, bounds.height() * 0.5f, 0);
 
   great_grand_child()->SetPosition(gfx::PointF(25.f, 25.f));
   great_grand_child()->SetBounds(gfx::Size(50.f, 50.f));
@@ -467,11 +468,11 @@ TEST_F(LayerUtilsGetAnimationBoundsTest,
   grand_child()->SetPosition(gfx::PointF(150.f, 50.f));
   grand_child()->SetBounds(bounds);
   grand_child()->SetTransform(perspective);
-  grand_child()->SetTransformOrigin(
-      gfx::Point3F(bounds.width() * 0.5f, bounds.height() * 0.5f, 0));
+  grand_child()->test_properties()->transform_origin =
+      gfx::Point3F(bounds.width() * 0.5f, bounds.height() * 0.5f, 0);
 
-  great_grand_child()->SetTransformOrigin(
-      gfx::Point3F(bounds.width() * 0.25f, bounds.height() * 0.25f, 0));
+  great_grand_child()->test_properties()->transform_origin =
+      gfx::Point3F(bounds.width() * 0.25f, bounds.height() * 0.25f, 0);
   great_grand_child()->SetPosition(gfx::PointF(25.f, 25.f));
   great_grand_child()->SetBounds(gfx::Size(50.f, 50.f));
   great_grand_child()->SetDrawsContent(true);
@@ -545,8 +546,8 @@ TEST_F(LayerUtilsGetAnimationBoundsTest,
   grand_child()->SetPosition(gfx::PointF(150.f, 50.f));
   grand_child()->SetBounds(bounds);
 
-  great_grand_child()->SetTransformOrigin(
-      gfx::Point3F(bounds.width() * 0.25f, bounds.height() * 0.25f, 0));
+  great_grand_child()->test_properties()->transform_origin =
+      gfx::Point3F(bounds.width() * 0.25f, bounds.height() * 0.25f, 0);
   great_grand_child()->SetPosition(gfx::PointF(25.f, 25.f));
   great_grand_child()->SetBounds(
       gfx::Size(bounds.width() * 0.5f, bounds.height() * 0.5f));

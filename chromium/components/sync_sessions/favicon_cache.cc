@@ -10,7 +10,7 @@
 #include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
@@ -241,8 +241,8 @@ FaviconCache::~FaviconCache() {}
 syncer::SyncMergeResult FaviconCache::MergeDataAndStartSyncing(
     syncer::ModelType type,
     const syncer::SyncDataList& initial_sync_data,
-    scoped_ptr<syncer::SyncChangeProcessor> sync_processor,
-    scoped_ptr<syncer::SyncErrorFactory> error_handler) {
+    std::unique_ptr<syncer::SyncChangeProcessor> sync_processor,
+    std::unique_ptr<syncer::SyncErrorFactory> error_handler) {
   DCHECK(type == syncer::FAVICON_IMAGES || type == syncer::FAVICON_TRACKING);
   if (type == syncer::FAVICON_IMAGES)
     favicon_images_sync_processor_ = std::move(sync_processor);

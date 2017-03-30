@@ -6,6 +6,7 @@
 
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/views/status_bubble_views.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/theme_provider.h"
 #include "ui/compositor/layer_tree_owner.h"
@@ -64,6 +65,14 @@ void ContentsWebView::OnThemeChanged() {
       SkColorGetG(ntp_background) * kBackgroundBrightness / 0xFF,
       SkColorGetB(ntp_background) * kBackgroundBrightness / 0xFF,
       SkColorGetA(ntp_background)));
+
+
+  if (web_contents()) {
+    content::RenderWidgetHostView* rwhv =
+        web_contents()->GetRenderWidgetHostView();
+    if (rwhv)
+     rwhv->SetBackgroundColor(ntp_background);
+  }
 }
 
 void ContentsWebView::OnLayerRecreated(ui::Layer* old_layer,
@@ -89,7 +98,8 @@ void ContentsWebView::CloneWebContentsLayer() {
 #if defined(USE_AURA)
   // We don't need to clone the layers on non-Aura (Mac), because closing an
   // NSWindow does not animate.
-  cloned_layer_tree_ = wm::RecreateLayers(web_contents()->GetNativeView());
+  cloned_layer_tree_ =
+      wm::RecreateLayers(web_contents()->GetNativeView(), nullptr);
 #endif
   if (!cloned_layer_tree_ || !cloned_layer_tree_->root()) {
     cloned_layer_tree_.reset();
@@ -113,4 +123,10 @@ void ContentsWebView::DestroyClonedLayer() {
   cloned_layer_tree_.reset();
   SetPaintToLayer(false);
   set_layer_owner_delegate(nullptr);
+}
+
+void ContentsWebView::RenderViewReady() {
+  // Apply the theme color to be the default background on startup.
+  OnThemeChanged();
+  WebView::RenderViewReady();
 }

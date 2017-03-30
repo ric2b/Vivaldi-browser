@@ -11,24 +11,18 @@
 
 #include "gpu/command_buffer/client/gles2_cmd_helper.h"
 #include "gpu/command_buffer/client/gles2_implementation.h"
+#include "gpu/command_buffer/client/shared_memory_limits.h"
 #include "gpu/command_buffer/client/transfer_buffer.h"
 #include "mojo/public/c/gles2/gles2.h"
 #include "mojo/public/cpp/system/core.h"
 
 namespace gles2 {
 
-namespace {
-const size_t kDefaultCommandBufferSize = 1024 * 1024;
-const size_t kDefaultStartTransferBufferSize = 1 * 1024 * 1024;
-const size_t kDefaultMinTransferBufferSize = 1 * 256 * 1024;
-const size_t kDefaultMaxTransferBufferSize = 16 * 1024 * 1024;
-}
-
 GLES2Context::GLES2Context(const std::vector<int32_t>& attribs,
                            mojo::ScopedMessagePipeHandle command_buffer_handle,
                            MojoGLES2ContextLost lost_callback,
                            void* closure)
-    : command_buffer_(this, attribs, std::move(command_buffer_handle)),
+    : command_buffer_(attribs, std::move(command_buffer_handle)),
       lost_callback_(lost_callback),
       closure_(closure) {}
 
@@ -37,8 +31,10 @@ GLES2Context::~GLES2Context() {}
 bool GLES2Context::Initialize() {
   if (!command_buffer_.Initialize())
     return false;
+
+  constexpr gpu::SharedMemoryLimits default_limits;
   gles2_helper_.reset(new gpu::gles2::GLES2CmdHelper(&command_buffer_));
-  if (!gles2_helper_->Initialize(kDefaultCommandBufferSize))
+  if (!gles2_helper_->Initialize(default_limits.command_buffer_size))
     return false;
   gles2_helper_->SetAutomaticFlushes(false);
   transfer_buffer_.reset(new gpu::TransferBuffer(gles2_helper_.get()));
@@ -57,12 +53,18 @@ bool GLES2Context::Initialize() {
                                           lose_context_when_out_of_memory,
                                           support_client_side_arrays,
                                           &command_buffer_));
-  return implementation_->Initialize(kDefaultStartTransferBufferSize,
-                                     kDefaultMinTransferBufferSize,
-                                     kDefaultMaxTransferBufferSize,
-                                     gpu::gles2::GLES2Implementation::kNoLimit);
+  if (!implementation_->Initialize(default_limits.start_transfer_buffer_size,
+                                   default_limits.min_transfer_buffer_size,
+                                   default_limits.max_transfer_buffer_size,
+                                   default_limits.mapped_memory_reclaim_limit))
+    return false;
+  implementation_->SetLostContextCallback(
+      base::Bind(&GLES2Context::OnLostContext, base::Unretained(this)));
+  return true;
 }
 
-void GLES2Context::ContextLost() { lost_callback_(closure_); }
+void GLES2Context::OnLostContext() {
+  lost_callback_(closure_);
+}
 
 }  // namespace gles2

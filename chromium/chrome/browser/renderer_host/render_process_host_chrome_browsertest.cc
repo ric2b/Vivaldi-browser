@@ -18,7 +18,6 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "chrome/test/base/test_switches.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_process_host.h"
@@ -51,7 +50,7 @@ int RenderProcessHostCount() {
 }
 
 WebContents* FindFirstDevToolsContents() {
-  scoped_ptr<content::RenderWidgetHostIterator> widgets(
+  std::unique_ptr<content::RenderWidgetHostIterator> widgets(
       RenderWidgetHost::GetRenderWidgetHosts());
   while (content::RenderWidgetHost* widget = widgets->GetNextHost()) {
     if (!widget->GetProcess()->HasConnection())
@@ -232,8 +231,8 @@ class ChromeRenderProcessHostTestWithCommandLine
   }
 };
 
-// Disable on Mac due to ongoing flakiness. (crbug.com/442785)
-#if defined(OS_MACOSX)
+// Disable on Windows and Mac due to ongoing flakiness. (crbug.com/442785)
+#if defined(OS_WIN) || defined(OS_MACOSX)
 #define MAYBE_ProcessPerTab DISABLED_ProcessPerTab
 #else
 #define MAYBE_ProcessPerTab ProcessPerTab
@@ -361,8 +360,8 @@ IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostTest, Backgrounding) {
 #endif
 
 // TODO(nasko): crbug.com/173137
-// Disable on Mac 10.9 due to ongoing flakiness. (crbug.com/442785)
-#if defined(OS_MACOSX)
+// Disable on Windows and Mac due to ongoing flakiness. (crbug.com/442785)
+#if defined(OS_WIN) || defined(OS_MACOSX)
 #define MAYBE_ProcessOverflow DISABLED_ProcessOverflow
 #else
 #define MAYBE_ProcessOverflow ProcessOverflow
@@ -374,8 +373,8 @@ IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostTest, MAYBE_ProcessOverflow) {
   TestProcessOverflow();
 }
 
-// Disable on Mac 10.9 due to ongoing flakiness. (crbug.com/442785)
-#if defined(OS_MACOSX)
+// Disable on Windows and Mac due to ongoing flakiness. (crbug.com/442785)
+#if defined(OS_WIN) || defined(OS_MACOSX)
 #define MAYBE_ProcessOverflowCommandLine DISABLED_ProcessOverflowCommandLine
 #else
 #define MAYBE_ProcessOverflowCommandLine ProcessOverflowCommandLine
@@ -392,13 +391,6 @@ IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostTestWithCommandLine,
 // process when --process-per-tab is set. See crbug.com/69873.
 IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostTest,
                        DevToolsOnSelfInOwnProcessPPT) {
-#if defined(OS_WIN) && defined(USE_ASH)
-  // Disable this test in Metro+Ash for now (http://crbug.com/262796).
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshBrowserTests))
-    return;
-#endif
-
   base::CommandLine& parsed_command_line =
       *base::CommandLine::ForCurrentProcess();
   parsed_command_line.AppendSwitch(switches::kProcessPerTab);
@@ -444,13 +436,6 @@ IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostTest,
 // process. See crbug.com/69873.
 IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostTest,
                        DevToolsOnSelfInOwnProcess) {
-#if defined(OS_WIN) && defined(USE_ASH)
-  // Disable this test in Metro+Ash for now (http://crbug.com/262796).
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshBrowserTests))
-    return;
-#endif
-
   int tab_count = 1;
   int host_count = 1;
 
@@ -515,8 +500,15 @@ class WindowDestroyer : public content::WebContentsObserver {
 // Test to ensure that while iterating through all listeners in
 // RenderProcessHost and invalidating them, we remove them properly and don't
 // access already freed objects. See http://crbug.com/255524.
+// Crashes on Win/Linux only.  http://crbug.com/606485.
+#if defined(OS_WIN) || defined(OS_LINUX)
+#define MAYBE_CloseAllTabsDuringProcessDied \
+  DISABLED_CloseAllTabsDuringProcessDied
+#else
+#define MAYBE_CloseAllTabsDuringProcessDied CloseAllTabsDuringProcessDied
+#endif
 IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostTest,
-                       CloseAllTabsDuringProcessDied) {
+                       MAYBE_CloseAllTabsDuringProcessDied) {
   GURL url(chrome::kChromeUIOmniboxURL);
 
   ui_test_utils::NavigateToURL(browser(), url);

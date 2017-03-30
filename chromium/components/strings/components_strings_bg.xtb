@@ -21,6 +21,7 @@
 <translation id="112840717907525620">Кешът на правилото е в добро състояние</translation>
 <translation id="113188000913989374"><ph name="SITE" /> изпраща подкана:</translation>
 <translation id="1132774398110320017">Настройки за Автоматично попълване в Chrome...</translation>
+<translation id="113770840981343808">За потвърждение въведете четирицифрения код за проверка от лицевата страна на картата си</translation>
 <translation id="1146673768181266552">Идентификатор на срива <ph name="CRASH_ID" /> (<ph name="CRASH_LOCAL_ID" />)</translation>
 <translation id="1150979032973867961">Сървърът не можа да докаже, че е <ph name="DOMAIN" />; операционната система на компютъра ви няма доверие на сертификата му за сигурност. Това може да се дължи на неправилно конфигуриране или на прихващане на връзката ви от атакуващ.</translation>
 <translation id="1152921474424827756">Вижте <ph name="BEGIN_LINK" />кеширано копие<ph name="END_LINK" /> на <ph name="URL" /></translation>
@@ -39,9 +40,9 @@
 <translation id="1228893227497259893">Грешен идентификатор на обект</translation>
 <translation id="1232569758102978740">Неозаглавен</translation>
 <translation id="1254117744268754948">Избор на папка</translation>
-<translation id="1270699273812232624">Разрешаване на елементите</translation>
 <translation id="1285320974508926690">Този сайт да не се превежда никога</translation>
 <translation id="129553762522093515">Наскоро затворени</translation>
+<translation id="129863573139666797"><ph name="BEGIN_LINK" />Опитайте да изчистите „бисквитките“ си<ph name="END_LINK" /></translation>
 <translation id="1339601241726513588">Домейн за записване:</translation>
 <translation id="1344588688991793829">Настройки за Автоматично попълване в Chromium...</translation>
 <translation id="1374468813861204354">предложения</translation>
@@ -86,7 +87,6 @@
 <translation id="1898423065542865115">Филтриране</translation>
 <translation id="1911837502049945214"><ph name="HOST_NAME" /> не прие сертификата ви за вход или той може да е с изтекла валидност.</translation>
 <translation id="194030505837763158">Към <ph name="LINK" /></translation>
-<translation id="1958820272620550857">Блокиране на елементите</translation>
 <translation id="1962204205936693436">Отметки от <ph name="DOMAIN" /></translation>
 <translation id="1973335181906896915">Грешка при сериализирането</translation>
 <translation id="1974060860693918893">Разширени</translation>
@@ -120,7 +120,6 @@
 <translation id="2212735316055980242">Правилото не е намерено</translation>
 <translation id="2213606439339815911">Записите се извличат...</translation>
 <translation id="2214283295778284209">Няма достъп до <ph name="SITE" /></translation>
-<translation id="2227695659599072496">Проверете мрежовия кабел или маршрутизатора.</translation>
 <translation id="2230458221926704099">Поправете връзката си посредством <ph name="BEGIN_LINK" />приложението за диагностика<ph name="END_LINK" /></translation>
 <translation id="225207911366869382">Стойността е оттеглена за това правило.</translation>
 <translation id="2262243747453050782">HTTP грешка</translation>
@@ -133,6 +132,7 @@
 <translation id="2317259163369394535">Изискват се потребителско име и парола за <ph name="DOMAIN" />.</translation>
 <translation id="2328300916057834155">Пренебрегната бе невалидна отметка в индекс <ph name="ENTRY_INDEX" /></translation>
 <translation id="2354001756790975382">Други отметки</translation>
+<translation id="2357783041215512127">Плащане чрез <ph name="CREDIT_CARD" /></translation>
 <translation id="2359808026110333948">Напред</translation>
 <translation id="2367567093518048410">Ниво</translation>
 <translation id="237718015863234333">Няма алтернативи на потребителския интерфейс</translation>
@@ -199,6 +199,7 @@
 <translation id="2969319727213777354">За установяване на сигурна връзка е необходимо часовникът ви да е верен. Това е така, защото сертификатите, с които уебсайтовете се идентифицират, са валидни само за конкретни периоди от време. Тъй като часовникът на устройството ви не е верен, Google Chrome не може да потвърди тези сертификати.</translation>
 <translation id="2972581237482394796">&amp;Възстановяване</translation>
 <translation id="2985306909656435243">Ако настройката е активирана, Chromium ще съхранява на това устройство копие на картата ви с цел по-бързо попълване на формуляри.</translation>
+<translation id="2989984781570875765">Въведете датата на валидност и трицифрения код за проверка от гърба на картата си <ph name="CREDIT_CARD" /></translation>
 <translation id="2991174974383378012">Споделяне с уебсайтове</translation>
 <translation id="3005723025932146533">Показване на запазено копие</translation>
 <translation id="3010559122411665027">Списъчен запис „<ph name="ENTRY_INDEX" />“: <ph name="ERROR" /></translation>
@@ -210,7 +211,6 @@
 <translation id="3105172416063519923">ID на актива:</translation>
 <translation id="3109728660330352905">Нямате пълномощия за преглед на тази страница.</translation>
 <translation id="3118046075435288765">Сървърът неочаквано прекъсна връзката.</translation>
-<translation id="31454997771848827">Домейни на групи</translation>
 <translation id="3145945101586104090">Декодирането на отговора не бе успешно</translation>
 <translation id="3147485256806412701">Този сайт използва нов общ домейн от първо ниво.</translation>
 <translation id="3150653042067488994">Временна грешка в сървъра</translation>
@@ -231,7 +231,6 @@
 <translation id="3254409185687681395">Запазване на отметка към тази страница</translation>
 <translation id="3270847123878663523">&amp;Отмяна на пренареждането</translation>
 <translation id="3286538390144397061">Рестартиране сега</translation>
-<translation id="3288003805934695103">Презаредете страницата.</translation>
 <translation id="3305707030755673451">На <ph name="TIME" /> данните ви бяха шифровани с пропуска ви за синхронизиране. Въведете го, за да стартирате синхронизирането.</translation>
 <translation id="333371639341676808">Да не се показват допълнителни диалогови прозорци от тази страница.</translation>
 <translation id="3340978935015468852">настройки</translation>
@@ -263,6 +262,7 @@
 <translation id="3583757800736429874">&amp;Възстановяване на преместването</translation>
 <translation id="3586931643579894722">Скриване на подробностите</translation>
 <translation id="3587482841069643663">Всички</translation>
+<translation id="3600246354004376029"><ph name="TITLE" />, <ph name="DOMAIN" />, <ph name="TIME" /></translation>
 <translation id="3608308818141211642">Клиентът и сървърът не поддържат обща версия на протокола SSL или общ комплект за шифроване през него. Вероятна причина за това е, че сървърът се нуждае от алгоритъма RC4, който вече не се смята за надежден.</translation>
 <translation id="3609138628363401169">Този сървър не поддържа разширението за предоговаряне на TLS.</translation>
 <translation id="362276910939193118">Показване на пълната история</translation>
@@ -284,6 +284,7 @@
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Проверете конфигурацията на прокси сървъра, защитната стена и DNS<ph name="END_LINK" />.</translation>
 <translation id="3739623965217189342">Копирана от вас връзка</translation>
 <translation id="3744899669254331632">В момента не можете да посетите <ph name="SITE" />, защото уебсайтът изпрати кодирани идентификационни данни, които Chromium не може да обработи. Обикновено грешките в мрежата и атаките срещу нея са временни, така че тази страница вероятно ще работи по-късно.</translation>
+<translation id="3748071062818261683">Потвърждаване на картата</translation>
 <translation id="3748412725338508953">Имаше твърде много пренасочвания.</translation>
 <translation id="375403751935624634">Преводът не бе успешен поради грешка в сървъра.</translation>
 <translation id="3759461132968374835">Наскоро не сте съобщавали за сривове. Тези, възникнали при деактивирано изпращане на сигнали за сривове, не се показват тук.</translation>
@@ -303,7 +304,6 @@
 <translation id="3963721102035795474">Режим за четене</translation>
 <translation id="3973234410852337861">Хостът <ph name="HOST_NAME" /> е блокиран</translation>
 <translation id="4021036232240155012">DNS е услугата за мрежи, която преобразува имената на уебсайтовете към техните адреси в интернет.</translation>
-<translation id="4021376465026729077">Деактивирайте разширенията си.</translation>
 <translation id="4030383055268325496">&amp;Отмяна на добавянето</translation>
 <translation id="4032534284272647190">Достъпът до <ph name="URL" /> бе отказан.</translation>
 <translation id="404928562651467259">ПРЕДУПРЕЖДЕНИЕ</translation>
@@ -313,6 +313,7 @@
 <translation id="4103249731201008433">Серийният номер на устройството е невалиден</translation>
 <translation id="4103763322291513355">Посетете &lt;strong&gt;chrome://policy&lt;/strong&gt;, за да видите изброени URL адресите в черния списък и другите правила, наложени от системния ви администратор.</translation>
 <translation id="4117700440116928470">Обхватът на правилата не се поддържа.</translation>
+<translation id="4130226655945681476">Проверете мрежовите кабели, модема и маршрутизатора.</translation>
 <translation id="4147376274874979956">Нямаме достъп до файла.</translation>
 <translation id="4148925816941278100">American Express</translation>
 <translation id="4169947484918424451">Искате ли Chromium да запази тази карта?</translation>
@@ -326,7 +327,6 @@
 <translation id="4258748452823770588">Невалиден подпис</translation>
 <translation id="4268298190799576220">Chromium не можа да потвърди картата ви. Моля, опитайте отново по-късно.</translation>
 <translation id="4269787794583293679">(Няма потребителско име)</translation>
-<translation id="4278390842282768270">Разрешено</translation>
 <translation id="4300246636397505754">Основни предложения</translation>
 <translation id="4304224509867189079">Вход</translation>
 <translation id="4325863107915753736">Намирането на статията не бе успешно</translation>
@@ -348,11 +348,15 @@
 <translation id="450710068430902550">Споделяне с администратор</translation>
 <translation id="4522570452068850558">Подробности</translation>
 <translation id="4535734014498033861">Връзката с прокси сървъра не бе успешна.</translation>
+<translation id="4553532082208702698">Въведете четирицифрения код за проверка от лицевата страна на картата си <ph name="CREDIT_CARD" /></translation>
+<translation id="4558551763791394412">Опитайте да деактивирате разширенията.</translation>
 <translation id="4587425331216688090">Адресът да се премахне ли от Chrome?</translation>
 <translation id="4592951414987517459">Връзката ви с/ъс <ph name="DOMAIN" /> е шифрована със съвременен криптографски пакет.</translation>
 <translation id="4594403342090139922">&amp;Отмяна на изтриването</translation>
 <translation id="4668929960204016307">,</translation>
+<translation id="4670097147947922288">Преглеждате страница на разширение.</translation>
 <translation id="467662567472608290">Сървърът не можа да докаже, че е <ph name="DOMAIN" />; сертификатът му за сигурност съдържа грешки. Това може да се дължи на неправилно конфигуриране или на прихващане на връзката ви от атакуващ.</translation>
+<translation id="4683417246209150705">Въведете трицифрения код за проверка от гърба на картата си <ph name="CREDIT_CARD" /></translation>
 <translation id="4697214168136963651">Заявката <ph name="URL" /> бе блокирана</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Връзката ви бе прекъсната</translation>
@@ -402,7 +406,6 @@
 <translation id="5251803541071282808">Облак</translation>
 <translation id="5299298092464848405">Грешка при синтактичния анализ на правилото</translation>
 <translation id="5300589172476337783">Показване</translation>
-<translation id="5307361445257083764"><ph name="BEGIN_LINK" />Изчистете „бисквитките“<ph name="END_LINK" />.</translation>
 <translation id="5308689395849655368">Изпращането на сигнали за сривове е деактивирано.</translation>
 <translation id="5317780077021120954">Запазване</translation>
 <translation id="5327248766486351172">Име</translation>
@@ -413,7 +416,6 @@
 <translation id="5431657950005405462">Файлът ви не бе намерен</translation>
 <translation id="5435775191620395718">Показва се историята от това устройство. <ph name="BEGIN_LINK" />Научете повече<ph name="END_LINK" />.</translation>
 <translation id="5439770059721715174">При потвърждаване на схемата възникна грешка в/ъв „<ph name="ERROR_PATH" />“: <ph name="ERROR" /></translation>
-<translation id="5447330194051379405">Показване на всички запазени страници</translation>
 <translation id="5452270690849572955">Тази страница на <ph name="HOST_NAME" /> не може да бъде намерена</translation>
 <translation id="5455374756549232013">Невалидно клеймо за дата и час на правилото</translation>
 <translation id="5455790498993699893"><ph name="ACTIVE_MATCH" /> от <ph name="TOTAL_MATCHCOUNT" /></translation>
@@ -437,7 +439,10 @@
 <translation id="5629630648637658800">Зареждането на настройките за правилото не бе успешно</translation>
 <translation id="5631439013527180824">Невалидно означение за управление на устройството</translation>
 <translation id="5650551054760837876">Не са намерени резултати от търсенето.</translation>
+<translation id="5663999524854166235">За потвърждение въведете трицифрения код за проверка от гърба на картата си</translation>
 <translation id="5677928146339483299">Блокирано</translation>
+<translation id="5696590819423335174">Въведете датата на валидност и четирицифрения код за проверка от лицевата страна на картата си <ph name="CREDIT_CARD" /></translation>
+<translation id="5699278517904102888">За потвърждение въведете трицифрения код за проверка от гърба на картата си <ph name="CREDIT_CARD" /></translation>
 <translation id="5710435578057952990">Самоличността на този уебсайт не е потвърдена.</translation>
 <translation id="5720705177508910913">Текущият потребител</translation>
 <translation id="5785756445106461925">Освен това тази страница включва други ресурси, които не са защитени. Докато се предават, те могат да бъдат видени от други хора и да бъдат модифицирани от извършител на атака, така че да се промени изгледът на страницата.</translation>
@@ -509,7 +514,6 @@
 <translation id="6628463337424475685">Търсене с/ъс <ph name="ENGINE" /></translation>
 <translation id="6634865548447745291">В момента не можете да посетите <ph name="SITE" />, защото <ph name="BEGIN_LINK" />този сертификат е анулиран<ph name="END_LINK" />. Обикновено грешките в мрежата и атаките срещу нея са временни, така че тази страница вероятно ще работи по-късно.</translation>
 <translation id="6637478299472506933">Неуспешно изтегляне</translation>
-<translation id="6642894344118208103">Рестартирайте модема или маршрутизатора.</translation>
 <translation id="6644283850729428850">Това правило е оттеглено.</translation>
 <translation id="6646897916597483132">Въведете четирицифрения код за проверка от лицевата страна на картата си</translation>
 <translation id="6656103420185847513">Редактиране на папката</translation>
@@ -525,7 +529,6 @@
 <translation id="6753269504797312559">Стойност за правилото</translation>
 <translation id="6757797048963528358">Устройството ви премина в спящ режим.</translation>
 <translation id="6781404225664080496">Временно спряхме заявките до този URL адрес.</translation>
-<translation id="6800914069727136216">В пакет със съдържание</translation>
 <translation id="6820686453637990663">Код за сигурност</translation>
 <translation id="6830600606572693159">Уеб страницата на адрес <ph name="URL" /> понастоящем не е налице. Възможно е да е претоварена или да не работи поради профилактика.</translation>
 <translation id="6831043979455480757">Превод</translation>
@@ -563,7 +566,6 @@
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> не се придържа към стандартите за сигурност.</translation>
 <translation id="721197778055552897"><ph name="BEGIN_LINK" />Научете повече<ph name="END_LINK" /> за този проблем.</translation>
 <translation id="7219179957768738017">Връзката използва <ph name="SSL_VERSION" />.</translation>
-<translation id="7225807090967870017">Идентификационен номер на версията</translation>
 <translation id="7231308970288859235">Ами сега! Трябва да попитате родителя си дали може да посетите тази страница.</translation>
 <translation id="7246609911581847514">Виждате това съобщение, защото мениджърът ви трябва да одобри новите сайтове при първото ви посещение.</translation>
 <translation id="725866823122871198">Не може да се установи частна връзка с/ъс <ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" />, тъй като датата и часът на компютъра ви (<ph name="DATE_AND_TIME" />) са неправилни.</translation>
@@ -604,6 +606,7 @@
 <translation id="7610193165460212391">Стойността е извън обхват <ph name="VALUE" />.</translation>
 <translation id="7613889955535752492">Валидна до: <ph name="EXPIRATION_MONTH" />/<ph name="EXPIRATION_YEAR" /></translation>
 <translation id="7615602087246926389">Вече имате данни, които са шифровани посредством друга версия на паролата за профила ви в Google. Моля, въведете я по-долу.</translation>
+<translation id="7633887239437305289">За потвърждение въведете четирицифрения код за проверка от лицевата страна на картата си <ph name="CREDIT_CARD" /></translation>
 <translation id="7634554953375732414">Връзката ви с този сайт не е поверителна.</translation>
 <translation id="7637571805876720304">Кредитната карта да се премахне ли от Chromium?</translation>
 <translation id="7643817847124207232">Връзката с интернет прекъсна.</translation>
@@ -611,7 +614,6 @@
 <translation id="7658239707568436148">Отказ</translation>
 <translation id="7668654391829183341">Неизвестно устройство</translation>
 <translation id="7674629440242451245">Търсите интересни нови функции на Chrome? Изпробвайте канала за програмисти на адрес chrome.com/dev.</translation>
-<translation id="769344199378576125">Показване на офлайн отметките</translation>
 <translation id="7704050614460855821"><ph name="BEGIN_LINK" />Продължаване към <ph name="SITE" /> (опасно)<ph name="END_LINK" /></translation>
 <translation id="7716424297397655342">Този сайт не може да се зареди от кеш паметта</translation>
 <translation id="7733391738235763478">(<ph name="NUMBER_VISITS" />)</translation>
@@ -658,6 +660,7 @@
 <translation id="8225771182978767009">Човекът, който е настроил компютъра, е блокирал този сайт.</translation>
 <translation id="8241707690549784388">Страницата, която търсите, използва въведената от вас информация. Ако се върнете на тази страница, действията, които вече сте изпълнили, може да бъдат повторени. Искате ли да продължите?</translation>
 <translation id="8249320324621329438">Последно извличане:</translation>
+<translation id="8261506727792406068">Изтриване</translation>
 <translation id="8266098793847448402">Кликнете върху
 <ph name="BEGIN_BOLD" />Старт<ph name="END_BOLD" /> и
 след това – върху

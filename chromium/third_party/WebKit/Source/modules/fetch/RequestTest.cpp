@@ -78,7 +78,7 @@ TEST_F(ServiceWorkerRequestTest, FromAndToWebRequest)
         webRequest.setHeader(WebString::fromUTF8(headers[i].key), WebString::fromUTF8(headers[i].value));
     webRequest.setReferrer(referrer, referrerPolicy);
 
-    Request* request = Request::create(getExecutionContext(), webRequest);
+    Request* request = Request::create(getScriptState(), webRequest);
     ASSERT(request);
     EXPECT_EQ(url, request->url());
     EXPECT_EQ(method, request->method());
@@ -104,7 +104,7 @@ TEST_F(ServiceWorkerRequestTest, FromAndToWebRequest)
     EXPECT_EQ(method, String(secondWebRequest.method()));
     EXPECT_EQ(context, secondWebRequest.requestContext());
     EXPECT_EQ(referrer, KURL(secondWebRequest.referrerUrl()));
-    EXPECT_EQ(WebReferrerPolicyDefault, secondWebRequest.referrerPolicy());
+    EXPECT_EQ(WebReferrerPolicyAlways, secondWebRequest.referrerPolicy());
     EXPECT_EQ(webRequest.headers(), secondWebRequest.headers());
     EXPECT_EQ(WebURLRequest::FetchRequestModeNoCORS, secondWebRequest.mode());
 }

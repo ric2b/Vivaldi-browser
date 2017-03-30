@@ -135,7 +135,8 @@ PassRefPtr<Image> createTransparentImage(const IntSize& size)
 
 inline HTMLCanvasElement::HTMLCanvasElement(Document& document)
     : HTMLElement(canvasTag, document)
-    , DocumentVisibilityObserver(document)
+    , ContextLifecycleObserver(&document)
+    , PageLifecycleObserver(document.page())
     , m_size(DefaultWidth, DefaultHeight)
     , m_ignoreReset(false)
     , m_externallyAllocatedMemory(0)
@@ -151,10 +152,6 @@ DEFINE_NODE_FACTORY(HTMLCanvasElement)
 HTMLCanvasElement::~HTMLCanvasElement()
 {
     v8::Isolate::GetCurrent()->AdjustAmountOfExternalAllocatedMemory(-m_externallyAllocatedMemory);
-#if !ENABLE(OILPAN)
-    // Ensure these go away before the ImageBuffer.
-    m_context.clear();
-#endif
 }
 
 void HTMLCanvasElement::parseAttribute(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& value)
@@ -206,7 +203,7 @@ void HTMLCanvasElement::registerRenderingContextFactory(PassOwnPtr<CanvasRenderi
     CanvasRenderingContext::ContextType type = renderingContextFactory->getContextType();
     ASSERT(type < CanvasRenderingContext::ContextTypeCount);
     ASSERT(!renderingContextFactories()[type]);
-    renderingContextFactories()[type] = renderingContextFactory;
+    renderingContextFactories()[type] = std::move(renderingContextFactory);
 }
 
 CanvasRenderingContext* HTMLCanvasElement::getCanvasRenderingContext(const String& type, const CanvasContextCreationAttributes& attributes)
@@ -272,7 +269,13 @@ void HTMLCanvasElement::didDraw(const FloatRect& rect)
     clearCopiedImage();
     if (layoutObject())
         layoutObject()->setMayNeedPaintInvalidation();
-    m_dirtyRect.unite(rect);
+    if (m_context && m_context->is2d() && m_context->shouldAntialias() && page() && page()->deviceScaleFactor() > 1.0f) {
+        FloatRect inflatedRect = rect;
+        inflatedRect.inflate(1);
+        m_dirtyRect.unite(inflatedRect);
+    } else {
+        m_dirtyRect.unite(rect);
+    }
     if (m_context && m_context->is2d() && hasImageBuffer())
         buffer()->didDraw(rect);
 }
@@ -599,7 +602,6 @@ String HTMLCanvasElement::toDataURLInternal(const String& mimeType, const double
     String encodingMimeType = toEncodingMimeType(mimeType, EncodeReasonToDataURL);
 
     ImageData* imageData = toImageData(sourceBuffer, SnapshotReasonToDataURL);
-    ScopedDisposal<ImageData> disposer(imageData);
 
     return ImageDataBuffer(imageData->size(), imageData->data()->data()).toDataURL(encodingMimeType, quality);
 }
@@ -644,18 +646,11 @@ void HTMLCanvasElement::toBlob(BlobCallback* callback, const String& mimeType, c
     String encodingMimeType = toEncodingMimeType(mimeType, EncodeReasonToBlobCallback);
 
     ImageData* imageData = toImageData(BackBuffer, SnapshotReasonToBlob);
-    // imageData unref its data, which we still keep alive for the async toBlob thread
-    ScopedDisposal<ImageData> disposer(imageData);
-    // Add a ref to keep image data alive until completion of encoding
-    RefPtr<DOMUint8ClampedArray> imageDataRef(imageData->data());
 
-    RefPtr<CanvasAsyncBlobCreator> asyncCreatorRef = CanvasAsyncBlobCreator::create(imageDataRef.release(), encodingMimeType, imageData->size(), callback);
+    CanvasAsyncBlobCreator* asyncCreator = CanvasAsyncBlobCreator::create(imageData->data(), encodingMimeType, imageData->size(), callback);
 
-    if (encodingMimeType == DefaultMimeType) {
-        asyncCreatorRef->scheduleAsyncBlobCreation(true);
-    } else {
-        asyncCreatorRef->scheduleAsyncBlobCreation(false, quality);
-    }
+    bool useIdlePeriodScheduling = (encodingMimeType != "image/webp");
+    asyncCreator->scheduleAsyncBlobCreation(useIdlePeriodScheduling, quality);
 }
 
 void HTMLCanvasElement::addListener(CanvasDrawListener* listener)
@@ -765,7 +760,7 @@ PassOwnPtr<ImageBufferSurface> HTMLCanvasElement::createImageBufferSurface(const
         OwnPtr<ImageBufferSurface> surface = adoptPtr(new Canvas2DImageBufferSurface(deviceSize, *msaaSampleCount, opacityMode, Canvas2DLayerBridge::EnableAcceleration));
         if (surface->isValid()) {
             CanvasMetrics::countCanvasContextUsage(CanvasMetrics::GPUAccelerated2DCanvasImageBufferCreated);
-            return surface.release();
+            return surface;
         }
         CanvasMetrics::countCanvasContextUsage(CanvasMetrics::GPUAccelerated2DCanvasImageBufferCreationFailed);
     }
@@ -773,10 +768,10 @@ PassOwnPtr<ImageBufferSurface> HTMLCanvasElement::createImageBufferSurface(const
     OwnPtr<RecordingImageBufferFallbackSurfaceFactory> surfaceFactory = adoptPtr(new UnacceleratedSurfaceFactory());
 
     if (shouldUseDisplayList(deviceSize)) {
-        OwnPtr<ImageBufferSurface> surface = adoptPtr(new RecordingImageBufferSurface(deviceSize, surfaceFactory.release(), opacityMode));
+        OwnPtr<ImageBufferSurface> surface = adoptPtr(new RecordingImageBufferSurface(deviceSize, std::move(surfaceFactory), opacityMode));
         if (surface->isValid()) {
             CanvasMetrics::countCanvasContextUsage(CanvasMetrics::DisplayList2DCanvasImageBufferCreated);
-            return surface.release();
+            return surface;
         }
         surfaceFactory = adoptPtr(new UnacceleratedSurfaceFactory()); // recreate because previous one was released
     }
@@ -809,11 +804,11 @@ void HTMLCanvasElement::createImageBufferInternal(PassOwnPtr<ImageBufferSurface>
     int msaaSampleCount = 0;
     OwnPtr<ImageBufferSurface> surface;
     if (externalSurface) {
-        surface = externalSurface;
+        surface = std::move(externalSurface);
     } else {
         surface = createImageBufferSurface(size(), &msaaSampleCount);
     }
-    m_imageBuffer = ImageBuffer::create(surface.release());
+    m_imageBuffer = ImageBuffer::create(std::move(surface));
     if (!m_imageBuffer)
         return;
     m_imageBuffer->setClient(this);
@@ -848,8 +843,15 @@ DEFINE_TRACE(HTMLCanvasElement)
 {
     visitor->trace(m_listeners);
     visitor->trace(m_context);
-    DocumentVisibilityObserver::trace(visitor);
+    ContextLifecycleObserver::trace(visitor);
+    PageLifecycleObserver::trace(visitor);
     HTMLElement::trace(visitor);
+}
+
+DEFINE_TRACE_WRAPPERS(HTMLCanvasElement)
+{
+    visitor->traceWrappers(m_context);
+    HTMLElement::traceWrappers(visitor);
 }
 
 void HTMLCanvasElement::updateExternallyAllocatedMemory() const
@@ -914,7 +916,7 @@ void HTMLCanvasElement::createImageBufferUsingSurfaceForTesting(PassOwnPtr<Image
     discardImageBuffer();
     setWidth(surface->size().width());
     setHeight(surface->size().height());
-    createImageBufferInternal(surface);
+    createImageBufferInternal(std::move(surface));
 }
 
 void HTMLCanvasElement::ensureUnacceleratedImageBuffer()
@@ -967,12 +969,12 @@ AffineTransform HTMLCanvasElement::baseTransform() const
     return m_imageBuffer->baseTransform();
 }
 
-void HTMLCanvasElement::didChangeVisibilityState(PageVisibilityState visibility)
+void HTMLCanvasElement::pageVisibilityChanged()
 {
     if (!m_context)
         return;
 
-    bool hidden = visibility != PageVisibilityStateVisible;
+    bool hidden = !page()->isPageVisible();
     m_context->setIsHidden(hidden);
     if (hidden) {
         clearCopiedImage();
@@ -982,7 +984,7 @@ void HTMLCanvasElement::didChangeVisibilityState(PageVisibilityState visibility)
     }
 }
 
-void HTMLCanvasElement::willDetachDocument()
+void HTMLCanvasElement::contextDestroyed()
 {
     if (m_context)
         m_context->stop();
@@ -996,7 +998,8 @@ void HTMLCanvasElement::styleDidChange(const ComputedStyle* oldStyle, const Comp
 
 void HTMLCanvasElement::didMoveToNewDocument(Document& oldDocument)
 {
-    setObservedDocument(document());
+    ContextLifecycleObserver::setContext(&document());
+    PageLifecycleObserver::setContext(document().page());
     HTMLElement::didMoveToNewDocument(oldDocument);
 }
 
@@ -1048,7 +1051,7 @@ IntSize HTMLCanvasElement::bitmapSourceSize() const
 
 ScriptPromise HTMLCanvasElement::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, int sx, int sy, int sw, int sh, const ImageBitmapOptions& options, ExceptionState& exceptionState)
 {
-    ASSERT(eventTarget.toDOMWindow());
+    ASSERT(eventTarget.toLocalDOMWindow());
     if (!sw || !sh) {
         exceptionState.throwDOMException(IndexSizeError, String::format("The source %s provided is 0.", sw ? "height" : "width"));
         return ScriptPromise();
@@ -1124,6 +1127,13 @@ std::pair<Element*, String> HTMLCanvasElement::getControlAndIdIfHitRegionExists(
     if (m_context && m_context->is2d())
         return m_context->getControlAndIdIfHitRegionExists(location);
     return std::make_pair(nullptr, String());
+}
+
+String HTMLCanvasElement::getIdFromControl(const Element* element)
+{
+    if (m_context)
+        return m_context->getIdFromControl(element);
+    return String();
 }
 
 } // namespace blink

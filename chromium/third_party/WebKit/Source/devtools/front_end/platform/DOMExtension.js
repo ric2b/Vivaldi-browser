@@ -186,7 +186,7 @@ Element.prototype.isScrolledToBottom = function()
  */
 function removeSubsequentNodes(fromNode, toNode)
 {
-    for (var node = fromNode; node && node !== toNode; ) {
+    for (var node = fromNode; node && node !== toNode;) {
         var nodeToRemove = node;
         node = node.nextSibling;
         nodeToRemove.remove();
@@ -301,7 +301,8 @@ Node.prototype.isComponentSelectionCollapsed = function()
 {
     // FIXME: crbug.com/447523, use selection.isCollapsed when it is fixed for shadow dom.
     var selection = this.getComponentSelection();
-    return selection && selection.rangeCount ? selection.getRangeAt(0).collapsed : true;
+    var range = selection && selection.rangeCount ? selection.getRangeAt(0) : null;
+    return range ? range.collapsed : true;
 }
 
 /**
@@ -745,7 +746,7 @@ Node.prototype.appendChildren = function(var_args)
  */
 Node.prototype.deepTextContent = function()
 {
-    return this.childTextNodes().map(function (node) { return node.textContent; }).join("");
+    return this.childTextNodes().map(function(node) { return node.textContent; }).join("");
 }
 
 /**

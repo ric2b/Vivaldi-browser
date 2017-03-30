@@ -26,6 +26,7 @@
 <translation id="1602076796624386989">Wezesha data ya simu</translation>
 <translation id="1621499497873603021">Muda unaosalia mpaka betri inapoisha, <ph name="TIME_LEFT" /></translation>
 <translation id="164969095109328410">Kifaa cha Chrome</translation>
+<translation id="1677472565718498478">Zimesalia <ph name="TIME" /></translation>
 <translation id="1723752762323179280">Inaondoka kwenye Kipindi</translation>
 <translation id="1747827819627189109">Kibodi ya skrini imewashwa</translation>
 <translation id="1812696562331527143">Mbinu yako ingizo imebadilika hadi <ph name="INPUT_METHOD_ID" />*(<ph name="BEGIN_LINK" />mhusika mwingine<ph name="END_LINK" />).
@@ -92,7 +93,6 @@ Bonyeza Alt + Utafutaji au Hama ili kughairi.</translation>
 <translation id="3621712662352432595">Mipangilio ya Sauti</translation>
 <translation id="3625258641415618104">Picha za skrini zimezimwa</translation>
 <translation id="3626281679859535460">Ung'aavu</translation>
-<translation id="3626637461649818317"><ph name="PERCENTAGE" />% inayobaki</translation>
 <translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079">Ubora wa <ph name="DISPLAY_NAME" /> ulibadilishwa hadi <ph name="RESOLUTION" /></translation>
 <translation id="370649949373421643">Wezesha Wi-Fi</translation>
@@ -111,13 +111,13 @@ Bonyeza Alt + Utafutaji au Hama ili kughairi.</translation>
 <translation id="397105322502079400">Inakokotoa...</translation>
 <translation id="3995138139523574647">Kifaa cha USB-C (mlango wa upande wa kulia nyuma)</translation>
 <translation id="4053612967614057854">Zima kibodi ya skrini</translation>
-<translation id="412065659894267608">Saa<ph name="HOUR" /> dakika<ph name="MINUTE" /> ili ijae</translation>
 <translation id="4250680216510889253">La</translation>
 <translation id="4279490309300973883">Kuakisi</translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4421231901400348175">Kushiriki udhibiti wa skrini yako na <ph name="HELPER_NAME" /> kupitia Usaidizi wa Mbali.</translation>
 <translation id="4430019312045809116">Kiwango</translation>
 <translation id="4527045527269911712">Kifaa cha Bluetooth cha "<ph name="DEVICE_NAME" />" kinaomba idhini ya kuoanisha.</translation>
+<translation id="453661520163887813">Zimesalia <ph name="TIME" /> ili ijae</translation>
 <translation id="4544944664594876241">Njia ya mkato ya kufunga skrini imebadilika. Tafadhali tumia <ph name="NEW_SHORTCUT" /> badala ya <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="479989351350248267">tafuta</translation>
 <translation id="4804818685124855865">Tenganisha</translation>
@@ -129,7 +129,6 @@ Bonyeza Alt + Utafutaji au Hama ili kughairi.</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl+Shift+Space</translation>
 <translation id="5045002648206642691">Mipangilio ya Hifadhi ya Google...</translation>
-<translation id="5102001756192215136">Imesalia <ph name="HOUR" />:<ph name="MINUTE" /></translation>
 <translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">Vifaa vinavyorusha midia vinapatikana</translation>
 <translation id="5222676887888702881">Ondoka</translation>
@@ -166,7 +165,6 @@ Bonyeza Shift + Alt ili kubadili.</translation>
 <translation id="615957422585914272">Onyesha kibodi ya skrini</translation>
 <translation id="6165508094623778733">Pata maelezo zaidi</translation>
 <translation id="6203030746557259519">Onyesho Pepe</translation>
-<translation id="6247708409970142803"><ph name="PERCENTAGE" />%</translation>
 <translation id="6248847161401822652">Bofya "Control" na "Shift" na Q kwa pamoja mara mbili ili kuacha.</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" /> ilizungushwa hadi <ph name="ROTATION" /></translation>
 <translation id="6359806961507272919">SMS kutoka <ph name="PHONE_NUMBER" /></translation>
@@ -206,6 +204,7 @@ Bonyeza Alt + Utafutaji au Hama ili kughairi.</translation>
 <translation id="7510334386202674593">Ctrl+Shift+L</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> haitumiki kwa <ph name="SPECIFIED_RESOLUTION" />. Ubora ulibadilishwa hadi <ph name="FALLBACK_RESOLUTION" /></translation>
 <translation id="7573962313813535744">Hali ya kituo</translation>
+<translation id="7580671184200851182">Cheza sauti moja kupitia spika zote (sauti ya mono)</translation>
 <translation id="7593891976182323525">Utafutaji au Hama</translation>
 <translation id="7649070708921625228">Usaidizi</translation>
 <translation id="7692480393933218409">Kinachaji vifaa vilivyounganishwa vya USB-C</translation>
@@ -224,13 +223,14 @@ Bonyeza Alt + Utafutaji au Hama ili kughairi.</translation>
 <translation id="8308637677604853869">Menyu ya awali</translation>
 <translation id="8356164830168736643">Funga <ph name="WINDOW_TITLE" /></translation>
 <translation id="8428213095426709021">Mipangilio</translation>
-<translation id="8456362689280298700"><ph name="HOUR" />:<ph name="MINUTE" /> mpaka ijae</translation>
 <translation id="8517041960877371778">Huenda kifaa chako cha <ph name="DEVICE_TYPE" /> kisichaji kikiwa kimewashwa.</translation>
 <translation id="8528322925433439945">Simu ya mkononi ...</translation>
+<translation id="8639760480004882931">Imebaki <ph name="PERCENTAGE" />%</translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">Chaja ya nguvu ya chini imeunganishwa</translation>
 <translation id="8814190375133053267">Wi-Fi</translation>
 <translation id="882279321799040148">Bofya ili kutazama</translation>
+<translation id="8825534185036233643">Kuakisi ukitumia zaidi ya skrini mbili hakuruhusiwi.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8850991929411075241">Search+Esc</translation>
 <translation id="8878886163241303700">Kuongeza skrini</translation>

@@ -49,9 +49,12 @@ typedef GoogleServiceAuthError AuthError;
 
 namespace {
 
-MATCHER_P(ModelTypeSetMatches, value, "") { return arg.Equals(value); }
+MATCHER_P(ModelTypeSetMatches, value, "") {
+  return arg == value;
+}
 
 const char kTestUser[] = "chrome.p13n.test@gmail.com";
+const char kTestCallbackId[] = "test-callback-id";
 
 // Returns a ModelTypeSet with all user selectable types set.
 syncer::ModelTypeSet GetAllTypes() {
@@ -60,8 +63,7 @@ syncer::ModelTypeSet GetAllTypes() {
 
 enum SyncAllDataConfig {
   SYNC_ALL_DATA,
-  CHOOSE_WHAT_TO_SYNC,
-  SYNC_NOTHING
+  CHOOSE_WHAT_TO_SYNC
 };
 
 enum EncryptAllConfig {
@@ -70,7 +72,7 @@ enum EncryptAllConfig {
 };
 
 // Create a json-format string with the key/value pairs appropriate for a call
-// to HandleConfigure(). If |extra_values| is non-null, then the values from
+// to HandleSetEncryption(). If |extra_values| is non-null, then the values from
 // the passed dictionary are added to the json.
 std::string GetConfiguration(const base::DictionaryValue* extra_values,
                              SyncAllDataConfig sync_all,
@@ -81,9 +83,7 @@ std::string GetConfiguration(const base::DictionaryValue* extra_values,
   if (extra_values)
     result.MergeDictionary(extra_values);
   result.SetBoolean("syncAllDataTypes", sync_all == SYNC_ALL_DATA);
-  result.SetBoolean("syncNothing", sync_all == SYNC_NOTHING);
   result.SetBoolean("encryptAllData", encrypt_all == ENCRYPT_ALL_DATA);
-  result.SetBoolean("usePassphrase", !passphrase.empty());
   if (!passphrase.empty())
     result.SetString("passphrase", passphrase);
   // Add all of our data types.
@@ -96,8 +96,6 @@ std::string GetConfiguration(const base::DictionaryValue* extra_values,
   result.SetBoolean("tabsSynced", types.Has(syncer::PROXY_TABS));
   result.SetBoolean("themesSynced", types.Has(syncer::THEMES));
   result.SetBoolean("typedUrlsSynced", types.Has(syncer::TYPED_URLS));
-  result.SetBoolean("wifiCredentialsSynced",
-                    types.Has(syncer::WIFI_CREDENTIALS));
   std::string args;
   base::JSONWriter::Write(result, &args);
   return args;
@@ -135,7 +133,6 @@ void CheckConfigDataTypeArguments(const base::DictionaryValue* dictionary,
                                   SyncAllDataConfig config,
                                   syncer::ModelTypeSet types) {
   CheckBool(dictionary, "syncAllDataTypes", config == SYNC_ALL_DATA);
-  CheckBool(dictionary, "syncNothing", config == SYNC_NOTHING);
   CheckBool(dictionary, "appsSynced", types.Has(syncer::APPS));
   CheckBool(dictionary, "autofillSynced", types.Has(syncer::AUTOFILL));
   CheckBool(dictionary, "bookmarksSynced", types.Has(syncer::BOOKMARKS));
@@ -145,8 +142,6 @@ void CheckConfigDataTypeArguments(const base::DictionaryValue* dictionary,
   CheckBool(dictionary, "tabsSynced", types.Has(syncer::PROXY_TABS));
   CheckBool(dictionary, "themesSynced", types.Has(syncer::THEMES));
   CheckBool(dictionary, "typedUrlsSynced", types.Has(syncer::TYPED_URLS));
-  CheckBool(dictionary, "wifiCredentialsSynced",
-            types.Has(syncer::WIFI_CREDENTIALS));
 }
 
 }  // namespace
@@ -219,6 +214,7 @@ class PeopleHandlerTest : public testing::Test {
     mock_pss_->Initialize();
 
     handler_.reset(new TestingPeopleHandler(&web_ui_, profile_));
+    handler_->AllowJavascript();
   }
 
   // Setup the expectations for calls made when displaying the config page.
@@ -244,41 +240,52 @@ class PeopleHandlerTest : public testing::Test {
         .WillRepeatedly(Return(true));
   }
 
-  void ExpectConfig() {
-    ASSERT_EQ(1U, web_ui_.call_data().size());
-    const content::TestWebUI::CallData& data = *web_ui_.call_data()[0];
-    EXPECT_EQ("settings.SyncPrivateApi.showSyncSetupPage",
-              data.function_name());
-    std::string page;
-    ASSERT_TRUE(data.arg1()->GetAsString(&page));
-    EXPECT_EQ(page, "configure");
+  void ExpectPageStatusResponse(const std::string& expected_status) {
+    auto& data = *web_ui_.call_data().back();
+    EXPECT_EQ("cr.webUIResponse", data.function_name());
+    std::string callback_id;
+    ASSERT_TRUE(data.arg1()->GetAsString(&callback_id));
+    EXPECT_EQ(kTestCallbackId, callback_id);
+    bool success = false;
+    ASSERT_TRUE(data.arg2()->GetAsBoolean(&success));
+    EXPECT_TRUE(success);
+    std::string status;
+    ASSERT_TRUE(data.arg3()->GetAsString(&status));
+    EXPECT_EQ(expected_status, status);
   }
 
-  void ExpectDone() {
-    ASSERT_EQ(1U, web_ui_.call_data().size());
-    const content::TestWebUI::CallData& data = *web_ui_.call_data()[0];
-    EXPECT_EQ("settings.SyncPrivateApi.showSyncSetupPage",
-              data.function_name());
-    std::string page;
-    ASSERT_TRUE(data.arg1()->GetAsString(&page));
-    EXPECT_EQ(page, "done");
+  void ExpectPageStatusChanged(const std::string& expected_status) {
+    auto& data = *web_ui_.call_data().back();
+    EXPECT_EQ("cr.webUIListenerCallback", data.function_name());
+    std::string event;
+    ASSERT_TRUE(data.arg1()->GetAsString(&event));
+    EXPECT_EQ("page-status-changed", event);
+    std::string status;
+    ASSERT_TRUE(data.arg2()->GetAsString(&status));
+    EXPECT_EQ(expected_status, status);
   }
 
   void ExpectSpinnerAndClose() {
-    // We expect a call to settings.SyncPrivateApi.showSyncSetupPage.
-    EXPECT_EQ(1U, web_ui_.call_data().size());
-    const content::TestWebUI::CallData& data = *web_ui_.call_data()[0];
-    EXPECT_EQ("settings.SyncPrivateApi.showSyncSetupPage",
-              data.function_name());
+    ExpectPageStatusChanged(PeopleHandler::kSpinnerPageStatus);
 
-    std::string page;
-    ASSERT_TRUE(data.arg1()->GetAsString(&page));
-    EXPECT_EQ(page, "spinner");
     // Cancelling the spinner dialog will cause CloseSyncSetup().
     handler_->CloseSyncSetup();
     EXPECT_EQ(NULL,
               LoginUIServiceFactory::GetForProfile(
                   profile_)->current_login_ui());
+  }
+
+  const base::DictionaryValue* ExpectSyncPrefsChanged() {
+    const content::TestWebUI::CallData& data1 = *web_ui_.call_data().back();
+    EXPECT_EQ("cr.webUIListenerCallback", data1.function_name());
+
+    std::string event;
+    EXPECT_TRUE(data1.arg1()->GetAsString(&event));
+    EXPECT_EQ(event, "sync-prefs-changed");
+
+    const base::DictionaryValue* dictionary = nullptr;
+    EXPECT_TRUE(data1.arg2()->GetAsDictionary(&dictionary));
+    return dictionary;
   }
 
   // It's difficult to notify sync listeners when using a ProfileSyncServiceMock
@@ -306,9 +313,6 @@ class PeopleHandlerTest : public testing::Test {
 class PeopleHandlerFirstSigninTest : public PeopleHandlerTest {
   std::string GetTestUser() override { return std::string(); }
 };
-
-TEST_F(PeopleHandlerTest, Basic) {
-}
 
 #if !defined(OS_CHROMEOS)
 TEST_F(PeopleHandlerFirstSigninTest, DisplayBasicLogin) {
@@ -339,10 +343,7 @@ TEST_F(PeopleHandlerTest, ShowSyncSetupWhenNotSignedIn) {
   EXPECT_CALL(*mock_pss_, IsFirstSetupComplete()).WillRepeatedly(Return(false));
   handler_->HandleShowSetupUI(NULL);
 
-  // We expect a call to settings.SyncPrivateApi.showSyncSetupPage.
-  ASSERT_EQ(1U, web_ui_.call_data().size());
-  const content::TestWebUI::CallData& data = *web_ui_.call_data()[0];
-  EXPECT_EQ("settings.SyncPrivateApi.showSyncSetupPage", data.function_name());
+  ExpectPageStatusChanged(PeopleHandler::kDonePageStatus);
 
   ASSERT_FALSE(handler_->is_configuring_sync());
   EXPECT_EQ(NULL,
@@ -399,14 +400,8 @@ TEST_F(PeopleHandlerTest,
 
   handler_->OpenSyncSetup(false /* creating_supervised_user */);
 
-  // We expect a call to settings.SyncPrivateApi.showSyncSetupPage.
   EXPECT_EQ(1U, web_ui_.call_data().size());
-
-  const content::TestWebUI::CallData& data0 = *web_ui_.call_data()[0];
-  EXPECT_EQ("settings.SyncPrivateApi.showSyncSetupPage", data0.function_name());
-  std::string page;
-  ASSERT_TRUE(data0.arg1()->GetAsString(&page));
-  EXPECT_EQ(page, "spinner");
+  ExpectPageStatusChanged(PeopleHandler::kSpinnerPageStatus);
 
   Mock::VerifyAndClearExpectations(mock_pss_);
   // Now, act as if the ProfileSyncService has started up.
@@ -414,21 +409,15 @@ TEST_F(PeopleHandlerTest,
   EXPECT_CALL(*mock_pss_, IsBackendInitialized()).WillRepeatedly(Return(true));
   error_ = GoogleServiceAuthError::AuthErrorNone();
   EXPECT_CALL(*mock_pss_, GetAuthError()).WillRepeatedly(ReturnRef(error_));
-  NotifySyncListeners();
+  handler_->SyncStartupCompleted();
 
-  // We expect a second call to settings.SyncPrivateApi.showSyncSetupPage.
   EXPECT_EQ(2U, web_ui_.call_data().size());
-  const content::TestWebUI::CallData& data1 = *web_ui_.call_data().back();
-  EXPECT_EQ("settings.SyncPrivateApi.showSyncSetupPage", data1.function_name());
-  ASSERT_TRUE(data1.arg1()->GetAsString(&page));
-  EXPECT_EQ(page, "configure");
-  const base::DictionaryValue* dictionary = nullptr;
-  ASSERT_TRUE(data1.arg2()->GetAsDictionary(&dictionary));
-  CheckBool(dictionary, "passphraseFailed", false);
+
+  const base::DictionaryValue* dictionary = ExpectSyncPrefsChanged();
   CheckBool(dictionary, "syncAllDataTypes", true);
   CheckBool(dictionary, "encryptAllDataAllowed", true);
   CheckBool(dictionary, "encryptAllData", false);
-  CheckBool(dictionary, "usePassphrase", false);
+  CheckBool(dictionary, "passphraseRequired", false);
 }
 
 // Verifies the case where the user cancels after the sync backend has
@@ -467,11 +456,7 @@ TEST_F(PeopleHandlerTest,
   EXPECT_CALL(*mock_pss_, IsBackendInitialized()).WillRepeatedly(Return(false));
 
   handler_->OpenSyncSetup(false /* creating_supervised_user */);
-  const content::TestWebUI::CallData& data = *web_ui_.call_data()[0];
-  EXPECT_EQ("settings.SyncPrivateApi.showSyncSetupPage", data.function_name());
-  std::string page;
-  ASSERT_TRUE(data.arg1()->GetAsString(&page));
-  EXPECT_EQ(page, "spinner");
+  ExpectPageStatusChanged(PeopleHandler::kSpinnerPageStatus);
   Mock::VerifyAndClearExpectations(mock_pss_);
   error_ = GoogleServiceAuthError(
       GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS);
@@ -527,6 +512,7 @@ TEST_F(PeopleHandlerTest, TestSyncEverything) {
   std::string args = GetConfiguration(
       NULL, SYNC_ALL_DATA, GetAllTypes(), std::string(), ENCRYPT_PASSWORDS);
   base::ListValue list_args;
+  list_args.Append(new base::StringValue(kTestCallbackId));
   list_args.Append(new base::StringValue(args));
   EXPECT_CALL(*mock_pss_, IsPassphraseRequiredForDecryption())
       .WillRepeatedly(Return(false));
@@ -534,53 +520,16 @@ TEST_F(PeopleHandlerTest, TestSyncEverything) {
       .WillRepeatedly(Return(false));
   SetupInitializedProfileSyncService();
   EXPECT_CALL(*mock_pss_, OnUserChoseDatatypes(true, _));
-  handler_->HandleConfigure(&list_args);
+  handler_->HandleSetDatatypes(&list_args);
 
-  // Ensure that we navigated to the "done" state since we don't need a
-  // passphrase.
-  ExpectDone();
-}
-
-TEST_F(PeopleHandlerTest, TestSyncNothing) {
-  std::string args = GetConfiguration(
-      NULL, SYNC_NOTHING, GetAllTypes(), std::string(), ENCRYPT_PASSWORDS);
-  base::ListValue list_args;
-  list_args.Append(new base::StringValue(args));
-  EXPECT_CALL(*mock_pss_, RequestStop(ProfileSyncService::CLEAR_DATA));
-  SetupInitializedProfileSyncService();
-  handler_->HandleConfigure(&list_args);
-
-  // We expect a call to settings.SyncPrivateApi.showSyncSetupPage.
-  ASSERT_EQ(1U, web_ui_.call_data().size());
-  const content::TestWebUI::CallData& data = *web_ui_.call_data()[0];
-  EXPECT_EQ("settings.SyncPrivateApi.showSyncSetupPage", data.function_name());
-}
-
-TEST_F(PeopleHandlerTest, TurnOnEncryptAll) {
-  std::string args = GetConfiguration(
-      NULL, SYNC_ALL_DATA, GetAllTypes(), std::string(), ENCRYPT_ALL_DATA);
-  base::ListValue list_args;
-  list_args.Append(new base::StringValue(args));
-  EXPECT_CALL(*mock_pss_, IsPassphraseRequiredForDecryption())
-      .WillRepeatedly(Return(false));
-  EXPECT_CALL(*mock_pss_, IsPassphraseRequired())
-      .WillRepeatedly(Return(false));
-  EXPECT_CALL(*mock_pss_, IsEncryptEverythingAllowed())
-      .WillRepeatedly(Return(true));
-  SetupInitializedProfileSyncService();
-  EXPECT_CALL(*mock_pss_, EnableEncryptEverything());
-  EXPECT_CALL(*mock_pss_, OnUserChoseDatatypes(true, _));
-  handler_->HandleConfigure(&list_args);
-
-  // Ensure that we navigated to the "done" state since we don't need a
-  // passphrase.
-  ExpectDone();
+  ExpectPageStatusResponse(PeopleHandler::kConfigurePageStatus);
 }
 
 TEST_F(PeopleHandlerTest, TestPassphraseStillRequired) {
   std::string args = GetConfiguration(
       NULL, SYNC_ALL_DATA, GetAllTypes(), std::string(), ENCRYPT_PASSWORDS);
   base::ListValue list_args;
+  list_args.Append(new base::StringValue(kTestCallbackId));
   list_args.Append(new base::StringValue(args));
   EXPECT_CALL(*mock_pss_, IsPassphraseRequiredForDecryption())
       .WillRepeatedly(Return(true));
@@ -589,24 +538,20 @@ TEST_F(PeopleHandlerTest, TestPassphraseStillRequired) {
   EXPECT_CALL(*mock_pss_, IsUsingSecondaryPassphrase())
       .WillRepeatedly(Return(false));
   SetupInitializedProfileSyncService();
-  EXPECT_CALL(*mock_pss_, OnUserChoseDatatypes(_, _));
   SetDefaultExpectationsForConfigPage();
 
+  handler_->HandleSetEncryption(&list_args);
   // We should navigate back to the configure page since we need a passphrase.
-  handler_->HandleConfigure(&list_args);
-
-  ExpectConfig();
+  ExpectPageStatusResponse(PeopleHandler::kPassphraseFailedPageStatus);
 }
 
-TEST_F(PeopleHandlerTest, SuccessfullySetPassphrase) {
+TEST_F(PeopleHandlerTest, EnterExistingFrozenImplicitPassword) {
   base::DictionaryValue dict;
-  dict.SetBoolean("isGooglePassphrase", true);
-  std::string args = GetConfiguration(&dict,
-                                      SYNC_ALL_DATA,
-                                      GetAllTypes(),
-                                      "gaiaPassphrase",
-                                      ENCRYPT_PASSWORDS);
+  dict.SetBoolean("setNewPassphrase", false);
+  std::string args = GetConfiguration(&dict, SYNC_ALL_DATA, GetAllTypes(),
+                                      "oldGaiaPassphrase", ENCRYPT_PASSWORDS);
   base::ListValue list_args;
+  list_args.Append(new base::StringValue(kTestCallbackId));
   list_args.Append(new base::StringValue(args));
   // Act as if an encryption passphrase is required the first time, then never
   // again after that.
@@ -616,24 +561,20 @@ TEST_F(PeopleHandlerTest, SuccessfullySetPassphrase) {
   EXPECT_CALL(*mock_pss_, IsUsingSecondaryPassphrase())
       .WillRepeatedly(Return(false));
   SetupInitializedProfileSyncService();
-  EXPECT_CALL(*mock_pss_, OnUserChoseDatatypes(_, _));
-  EXPECT_CALL(*mock_pss_, SetDecryptionPassphrase("gaiaPassphrase")).
-      WillOnce(Return(true));
+  EXPECT_CALL(*mock_pss_, SetDecryptionPassphrase("oldGaiaPassphrase"))
+      .WillOnce(Return(true));
 
-  handler_->HandleConfigure(&list_args);
-  // We should navigate to "done" page since we finished configuring.
-  ExpectDone();
+  handler_->HandleSetEncryption(&list_args);
+  ExpectPageStatusResponse(PeopleHandler::kConfigurePageStatus);
 }
 
-TEST_F(PeopleHandlerTest, SelectCustomEncryption) {
+TEST_F(PeopleHandlerTest, SetNewCustomPassphrase) {
   base::DictionaryValue dict;
-  dict.SetBoolean("isGooglePassphrase", false);
-  std::string args = GetConfiguration(&dict,
-                                      SYNC_ALL_DATA,
-                                      GetAllTypes(),
-                                      "custom_passphrase",
-                                      ENCRYPT_PASSWORDS);
+  dict.SetBoolean("setNewPassphrase", true);
+  std::string args = GetConfiguration(&dict, SYNC_ALL_DATA, GetAllTypes(),
+                                      "custom_passphrase", ENCRYPT_ALL_DATA);
   base::ListValue list_args;
+  list_args.Append(new base::StringValue(kTestCallbackId));
   list_args.Append(new base::StringValue(args));
   EXPECT_CALL(*mock_pss_, IsPassphraseRequiredForDecryption())
       .WillRepeatedly(Return(false));
@@ -642,25 +583,21 @@ TEST_F(PeopleHandlerTest, SelectCustomEncryption) {
   EXPECT_CALL(*mock_pss_, IsUsingSecondaryPassphrase())
       .WillRepeatedly(Return(false));
   SetupInitializedProfileSyncService();
-  EXPECT_CALL(*mock_pss_, OnUserChoseDatatypes(_, _));
   EXPECT_CALL(*mock_pss_,
               SetEncryptionPassphrase("custom_passphrase",
                                       ProfileSyncService::EXPLICIT));
 
-  handler_->HandleConfigure(&list_args);
-  // We should navigate to "done" page since we finished configuring.
-  ExpectDone();
+  handler_->HandleSetEncryption(&list_args);
+  ExpectPageStatusResponse(PeopleHandler::kConfigurePageStatus);
 }
 
-TEST_F(PeopleHandlerTest, UnsuccessfullySetPassphrase) {
+TEST_F(PeopleHandlerTest, EnterWrongExistingPassphrase) {
   base::DictionaryValue dict;
-  dict.SetBoolean("isGooglePassphrase", true);
-  std::string args = GetConfiguration(&dict,
-                                      SYNC_ALL_DATA,
-                                      GetAllTypes(),
-                                      "invalid_passphrase",
-                                      ENCRYPT_PASSWORDS);
+  dict.SetBoolean("setNewPassphrase", false);
+  std::string args = GetConfiguration(&dict, SYNC_ALL_DATA, GetAllTypes(),
+                                      "invalid_passphrase", ENCRYPT_ALL_DATA);
   base::ListValue list_args;
+  list_args.Append(new base::StringValue(kTestCallbackId));
   list_args.Append(new base::StringValue(args));
   EXPECT_CALL(*mock_pss_, IsPassphraseRequiredForDecryption())
       .WillRepeatedly(Return(true));
@@ -669,22 +606,40 @@ TEST_F(PeopleHandlerTest, UnsuccessfullySetPassphrase) {
   EXPECT_CALL(*mock_pss_, IsUsingSecondaryPassphrase())
       .WillRepeatedly(Return(false));
   SetupInitializedProfileSyncService();
-  EXPECT_CALL(*mock_pss_, OnUserChoseDatatypes(_, _));
   EXPECT_CALL(*mock_pss_, SetDecryptionPassphrase("invalid_passphrase")).
       WillOnce(Return(false));
 
   SetDefaultExpectationsForConfigPage();
+
+  handler_->HandleSetEncryption(&list_args);
   // We should navigate back to the configure page since we need a passphrase.
-  handler_->HandleConfigure(&list_args);
+  ExpectPageStatusResponse(PeopleHandler::kPassphraseFailedPageStatus);
+}
 
-  ExpectConfig();
+TEST_F(PeopleHandlerTest, EnterBlankExistingPassphrase) {
+  base::DictionaryValue dict;
+  dict.SetBoolean("setNewPassphrase", false);
+  std::string args = GetConfiguration(&dict,
+                                      SYNC_ALL_DATA,
+                                      GetAllTypes(),
+                                      "",
+                                      ENCRYPT_PASSWORDS);
+  base::ListValue list_args;
+  list_args.Append(new base::StringValue(kTestCallbackId));
+  list_args.Append(new base::StringValue(args));
+  EXPECT_CALL(*mock_pss_, IsPassphraseRequiredForDecryption())
+      .WillRepeatedly(Return(true));
+  EXPECT_CALL(*mock_pss_, IsPassphraseRequired())
+      .WillRepeatedly(Return(true));
+  EXPECT_CALL(*mock_pss_, IsUsingSecondaryPassphrase())
+      .WillRepeatedly(Return(false));
+  SetupInitializedProfileSyncService();
 
-  // Make sure we display an error message to the user due to the failed
-  // passphrase.
-  const content::TestWebUI::CallData& data = *web_ui_.call_data()[0];
-  const base::DictionaryValue* dictionary = nullptr;
-  ASSERT_TRUE(data.arg2()->GetAsDictionary(&dictionary));
-  CheckBool(dictionary, "passphraseFailed", true);
+  SetDefaultExpectationsForConfigPage();
+
+  handler_->HandleSetEncryption(&list_args);
+  // We should navigate back to the configure page since we need a passphrase.
+  ExpectPageStatusResponse(PeopleHandler::kPassphraseFailedPageStatus);
 }
 
 // Walks through each user selectable type, and tries to sync just that single
@@ -701,6 +656,7 @@ TEST_F(PeopleHandlerTest, TestSyncIndividualTypes) {
                                         std::string(),
                                         ENCRYPT_PASSWORDS);
     base::ListValue list_args;
+    list_args.Append(new base::StringValue(kTestCallbackId));
     list_args.Append(new base::StringValue(args));
     EXPECT_CALL(*mock_pss_, IsPassphraseRequiredForDecryption())
         .WillRepeatedly(Return(false));
@@ -709,11 +665,10 @@ TEST_F(PeopleHandlerTest, TestSyncIndividualTypes) {
     SetupInitializedProfileSyncService();
     EXPECT_CALL(*mock_pss_,
                 OnUserChoseDatatypes(false, ModelTypeSetMatches(type_to_set)));
-    handler_->HandleConfigure(&list_args);
 
-    ExpectDone();
+    handler_->HandleSetDatatypes(&list_args);
+    ExpectPageStatusResponse(PeopleHandler::kConfigurePageStatus);
     Mock::VerifyAndClearExpectations(mock_pss_);
-    web_ui_.ClearTrackedCalls();
   }
 }
 
@@ -724,6 +679,7 @@ TEST_F(PeopleHandlerTest, TestSyncAllManually) {
                                       std::string(),
                                       ENCRYPT_PASSWORDS);
   base::ListValue list_args;
+  list_args.Append(new base::StringValue(kTestCallbackId));
   list_args.Append(new base::StringValue(args));
   EXPECT_CALL(*mock_pss_, IsPassphraseRequiredForDecryption())
       .WillRepeatedly(Return(false));
@@ -732,9 +688,9 @@ TEST_F(PeopleHandlerTest, TestSyncAllManually) {
   SetupInitializedProfileSyncService();
   EXPECT_CALL(*mock_pss_,
               OnUserChoseDatatypes(false, ModelTypeSetMatches(GetAllTypes())));
-  handler_->HandleConfigure(&list_args);
+  handler_->HandleSetDatatypes(&list_args);
 
-  ExpectDone();
+  ExpectPageStatusResponse(PeopleHandler::kConfigurePageStatus);
 }
 
 TEST_F(PeopleHandlerTest, ShowSyncSetup) {
@@ -747,7 +703,7 @@ TEST_F(PeopleHandlerTest, ShowSyncSetup) {
   SetDefaultExpectationsForConfigPage();
   handler_->OpenSyncSetup(false /* creating_supervised_user */);
 
-  ExpectConfig();
+  ExpectSyncPrefsChanged();
 }
 
 // We do not display signin on chromeos in the case of auth error.
@@ -801,10 +757,7 @@ TEST_F(PeopleHandlerTest, ShowSetupSyncEverything) {
   // This should display the sync setup dialog (not login).
   handler_->OpenSyncSetup(false /* creating_supervised_user */);
 
-  ExpectConfig();
-  const content::TestWebUI::CallData& data = *web_ui_.call_data()[0];
-  const base::DictionaryValue* dictionary = nullptr;
-  ASSERT_TRUE(data.arg2()->GetAsDictionary(&dictionary));
+  const base::DictionaryValue* dictionary = ExpectSyncPrefsChanged();
   CheckBool(dictionary, "syncAllDataTypes", true);
   CheckBool(dictionary, "appsRegistered", true);
   CheckBool(dictionary, "autofillRegistered", true);
@@ -812,13 +765,11 @@ TEST_F(PeopleHandlerTest, ShowSetupSyncEverything) {
   CheckBool(dictionary, "extensionsRegistered", true);
   CheckBool(dictionary, "passwordsRegistered", true);
   CheckBool(dictionary, "preferencesRegistered", true);
-  CheckBool(dictionary, "wifiCredentialsRegistered", true);
   CheckBool(dictionary, "tabsRegistered", true);
   CheckBool(dictionary, "themesRegistered", true);
   CheckBool(dictionary, "typedUrlsRegistered", true);
-  CheckBool(dictionary, "showPassphrase", false);
-  CheckBool(dictionary, "usePassphrase", false);
-  CheckBool(dictionary, "passphraseFailed", false);
+  CheckBool(dictionary, "passphraseRequired", false);
+  CheckBool(dictionary, "passphraseTypeIsCustom", false);
   CheckBool(dictionary, "encryptAllData", false);
   CheckConfigDataTypeArguments(dictionary, SYNC_ALL_DATA, GetAllTypes());
 }
@@ -835,10 +786,7 @@ TEST_F(PeopleHandlerTest, ShowSetupManuallySyncAll) {
   // This should display the sync setup dialog (not login).
   handler_->OpenSyncSetup(false /* creating_supervised_user */);
 
-  ExpectConfig();
-  const content::TestWebUI::CallData& data = *web_ui_.call_data()[0];
-  const base::DictionaryValue* dictionary = nullptr;
-  ASSERT_TRUE(data.arg2()->GetAsDictionary(&dictionary));
+  const base::DictionaryValue* dictionary = ExpectSyncPrefsChanged();
   CheckConfigDataTypeArguments(dictionary, CHOOSE_WHAT_TO_SYNC, GetAllTypes());
 }
 
@@ -862,13 +810,11 @@ TEST_F(PeopleHandlerTest, ShowSetupSyncForAllTypesIndividually) {
     // This should display the sync setup dialog (not login).
     handler_->OpenSyncSetup(false /* creating_supervised_user */);
 
-    ExpectConfig();
     // Close the config overlay.
     LoginUIServiceFactory::GetForProfile(profile_)->LoginUIClosed(
         handler_.get());
-    const content::TestWebUI::CallData& data = *web_ui_.call_data()[0];
-    const base::DictionaryValue* dictionary = nullptr;
-    ASSERT_TRUE(data.arg2()->GetAsDictionary(&dictionary));
+
+    const base::DictionaryValue* dictionary = ExpectSyncPrefsChanged();
     CheckConfigDataTypeArguments(dictionary, CHOOSE_WHAT_TO_SYNC, types);
     Mock::VerifyAndClearExpectations(mock_pss_);
     // Clean up so we can loop back to display the dialog again.
@@ -876,30 +822,24 @@ TEST_F(PeopleHandlerTest, ShowSetupSyncForAllTypesIndividually) {
   }
 }
 
-TEST_F(PeopleHandlerTest, ShowSetupGaiaPassphraseRequired) {
+TEST_F(PeopleHandlerTest, ShowSetupOldGaiaPassphraseRequired) {
   EXPECT_CALL(*mock_pss_, IsPassphraseRequired())
       .WillRepeatedly(Return(true));
-  EXPECT_CALL(*mock_pss_, IsUsingSecondaryPassphrase())
-      .WillRepeatedly(Return(false));
+  EXPECT_CALL(*mock_pss_, GetPassphraseType())
+      .WillRepeatedly(Return(syncer::FROZEN_IMPLICIT_PASSPHRASE));
   SetupInitializedProfileSyncService();
   SetDefaultExpectationsForConfigPage();
 
   // This should display the sync setup dialog (not login).
   handler_->OpenSyncSetup(false /* creating_supervised_user */);
 
-  ExpectConfig();
-  const content::TestWebUI::CallData& data = *web_ui_.call_data()[0];
-  const base::DictionaryValue* dictionary = nullptr;
-  ASSERT_TRUE(data.arg2()->GetAsDictionary(&dictionary));
-  CheckBool(dictionary, "showPassphrase", true);
-  CheckBool(dictionary, "usePassphrase", false);
-  CheckBool(dictionary, "passphraseFailed", false);
+  const base::DictionaryValue* dictionary = ExpectSyncPrefsChanged();
+  CheckBool(dictionary, "passphraseRequired", true);
+  CheckBool(dictionary, "passphraseTypeIsCustom", false);
 }
 
 TEST_F(PeopleHandlerTest, ShowSetupCustomPassphraseRequired) {
   EXPECT_CALL(*mock_pss_, IsPassphraseRequired())
-      .WillRepeatedly(Return(true));
-  EXPECT_CALL(*mock_pss_, IsUsingSecondaryPassphrase())
       .WillRepeatedly(Return(true));
   EXPECT_CALL(*mock_pss_, GetPassphraseType())
       .WillRepeatedly(Return(syncer::CUSTOM_PASSPHRASE));
@@ -909,13 +849,9 @@ TEST_F(PeopleHandlerTest, ShowSetupCustomPassphraseRequired) {
   // This should display the sync setup dialog (not login).
   handler_->OpenSyncSetup(false /* creating_supervised_user */);
 
-  ExpectConfig();
-  const content::TestWebUI::CallData& data = *web_ui_.call_data()[0];
-  const base::DictionaryValue* dictionary = nullptr;
-  ASSERT_TRUE(data.arg2()->GetAsDictionary(&dictionary));
-  CheckBool(dictionary, "showPassphrase", true);
-  CheckBool(dictionary, "usePassphrase", true);
-  CheckBool(dictionary, "passphraseFailed", false);
+  const base::DictionaryValue* dictionary = ExpectSyncPrefsChanged();
+  CheckBool(dictionary, "passphraseRequired", true);
+  CheckBool(dictionary, "passphraseTypeIsCustom", true);
 }
 
 TEST_F(PeopleHandlerTest, ShowSetupEncryptAll) {
@@ -931,10 +867,7 @@ TEST_F(PeopleHandlerTest, ShowSetupEncryptAll) {
   // This should display the sync setup dialog (not login).
   handler_->OpenSyncSetup(false /* creating_supervised_user */);
 
-  ExpectConfig();
-  const content::TestWebUI::CallData& data = *web_ui_.call_data()[0];
-  const base::DictionaryValue* dictionary = nullptr;
-  ASSERT_TRUE(data.arg2()->GetAsDictionary(&dictionary));
+  const base::DictionaryValue* dictionary = ExpectSyncPrefsChanged();
   CheckBool(dictionary, "encryptAllData", true);
 }
 
@@ -951,10 +884,7 @@ TEST_F(PeopleHandlerTest, ShowSetupEncryptAllDisallowed) {
   // This should display the sync setup dialog (not login).
   handler_->OpenSyncSetup(false /* creating_supervised_user */);
 
-  ExpectConfig();
-  const content::TestWebUI::CallData& data = *web_ui_.call_data()[0];
-  const base::DictionaryValue* dictionary = nullptr;
-  ASSERT_TRUE(data.arg2()->GetAsDictionary(&dictionary));
+  const base::DictionaryValue* dictionary = ExpectSyncPrefsChanged();
   CheckBool(dictionary, "encryptAllData", false);
   CheckBool(dictionary, "encryptAllDataAllowed", false);
 }
@@ -963,6 +893,7 @@ TEST_F(PeopleHandlerTest, TurnOnEncryptAllDisallowed) {
   std::string args = GetConfiguration(
       NULL, SYNC_ALL_DATA, GetAllTypes(), std::string(), ENCRYPT_ALL_DATA);
   base::ListValue list_args;
+  list_args.Append(new base::StringValue(kTestCallbackId));
   list_args.Append(new base::StringValue(args));
   EXPECT_CALL(*mock_pss_, IsPassphraseRequiredForDecryption())
       .WillRepeatedly(Return(false));
@@ -972,12 +903,9 @@ TEST_F(PeopleHandlerTest, TurnOnEncryptAllDisallowed) {
   EXPECT_CALL(*mock_pss_, IsEncryptEverythingAllowed())
       .WillRepeatedly(Return(false));
   EXPECT_CALL(*mock_pss_, EnableEncryptEverything()).Times(0);
-  EXPECT_CALL(*mock_pss_, OnUserChoseDatatypes(true, _));
-  handler_->HandleConfigure(&list_args);
+  handler_->HandleSetEncryption(&list_args);
 
-  // Ensure that we navigated to the "done" state since we don't need a
-  // passphrase.
-  ExpectDone();
+  ExpectPageStatusResponse(PeopleHandler::kConfigurePageStatus);
 }
 
 }  // namespace settings

@@ -6,13 +6,13 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <set>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
@@ -24,8 +24,8 @@
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/common/api/system_display.h"
 #include "extensions/common/api/system_storage.h"
-#include "ui/gfx/display_observer.h"
-#include "ui/gfx/screen.h"
+#include "ui/display/display_observer.h"
+#include "ui/display/screen.h"
 
 namespace extensions {
 
@@ -49,7 +49,7 @@ bool IsSystemStorageEvent(const std::string& event_name) {
 
 // Event router for systemInfo API. It is a singleton instance shared by
 // multiple profiles.
-class SystemInfoEventRouter : public gfx::DisplayObserver,
+class SystemInfoEventRouter : public display::DisplayObserver,
                               public storage_monitor::RemovableStorageObserver {
  public:
   static SystemInfoEventRouter* GetInstance();
@@ -62,10 +62,10 @@ class SystemInfoEventRouter : public gfx::DisplayObserver,
   void RemoveEventListener(const std::string& event_name);
 
  private:
-  // gfx::DisplayObserver:
-  void OnDisplayAdded(const gfx::Display& new_display) override;
-  void OnDisplayRemoved(const gfx::Display& old_display) override;
-  void OnDisplayMetricsChanged(const gfx::Display& display,
+  // display::DisplayObserver:
+  void OnDisplayAdded(const display::Display& new_display) override;
+  void OnDisplayRemoved(const display::Display& old_display) override;
+  void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t metrics) override;
 
   // RemovableStorageObserver implementation.
@@ -78,7 +78,7 @@ class SystemInfoEventRouter : public gfx::DisplayObserver,
   // processes cross multiple profiles.
   void DispatchEvent(events::HistogramValue histogram_value,
                      const std::string& event_name,
-                     scoped_ptr<base::ListValue> args);
+                     std::unique_ptr<base::ListValue> args);
 
   // Called to dispatch the systemInfo.display.onDisplayChanged event.
   void OnDisplayChanged();
@@ -119,7 +119,7 @@ void SystemInfoEventRouter::AddEventListener(const std::string& event_name) {
     return;
 
   if (IsDisplayChangedEvent(event_name)) {
-    gfx::Screen* screen = gfx::Screen::GetScreen();
+    display::Screen* screen = display::Screen::GetScreen();
     if (screen)
       screen->AddObserver(this);
   }
@@ -145,7 +145,7 @@ void SystemInfoEventRouter::RemoveEventListener(const std::string& event_name) {
   }
 
   if (IsDisplayChangedEvent(event_name)) {
-    gfx::Screen* screen = gfx::Screen::GetScreen();
+    display::Screen* screen = display::Screen::GetScreen();
     if (screen)
       screen->RemoveObserver(this);
   }
@@ -166,7 +166,7 @@ void SystemInfoEventRouter::OnRemovableStorageAttached(
     const storage_monitor::StorageInfo& info) {
   StorageUnitInfo unit;
   systeminfo::BuildStorageUnitInfo(info, &unit);
-  scoped_ptr<base::ListValue> args(new base::ListValue);
+  std::unique_ptr<base::ListValue> args(new base::ListValue);
   args->Append(unit.ToValue().release());
   DispatchEvent(events::SYSTEM_STORAGE_ON_ATTACHED,
                 system_storage::OnAttached::kEventName, std::move(args));
@@ -174,7 +174,7 @@ void SystemInfoEventRouter::OnRemovableStorageAttached(
 
 void SystemInfoEventRouter::OnRemovableStorageDetached(
     const storage_monitor::StorageInfo& info) {
-  scoped_ptr<base::ListValue> args(new base::ListValue);
+  std::unique_ptr<base::ListValue> args(new base::ListValue);
   std::string transient_id =
       StorageMonitor::GetInstance()->GetTransientIdForDeviceId(
           info.device_id());
@@ -184,21 +184,24 @@ void SystemInfoEventRouter::OnRemovableStorageDetached(
                 system_storage::OnDetached::kEventName, std::move(args));
 }
 
-void SystemInfoEventRouter::OnDisplayAdded(const gfx::Display& new_display) {
+void SystemInfoEventRouter::OnDisplayAdded(
+    const display::Display& new_display) {
   OnDisplayChanged();
 }
 
-void SystemInfoEventRouter::OnDisplayRemoved(const gfx::Display& old_display) {
+void SystemInfoEventRouter::OnDisplayRemoved(
+    const display::Display& old_display) {
   OnDisplayChanged();
 }
 
-void SystemInfoEventRouter::OnDisplayMetricsChanged(const gfx::Display& display,
-                                                    uint32_t metrics) {
+void SystemInfoEventRouter::OnDisplayMetricsChanged(
+    const display::Display& display,
+    uint32_t metrics) {
   OnDisplayChanged();
 }
 
 void SystemInfoEventRouter::OnDisplayChanged() {
-  scoped_ptr<base::ListValue> args(new base::ListValue());
+  std::unique_ptr<base::ListValue> args(new base::ListValue());
   DispatchEvent(events::SYSTEM_DISPLAY_ON_DISPLAY_CHANGED,
                 system_display::OnDisplayChanged::kEventName, std::move(args));
 }
@@ -206,7 +209,7 @@ void SystemInfoEventRouter::OnDisplayChanged() {
 void SystemInfoEventRouter::DispatchEvent(
     events::HistogramValue histogram_value,
     const std::string& event_name,
-    scoped_ptr<base::ListValue> args) {
+    std::unique_ptr<base::ListValue> args) {
   ExtensionsBrowserClient::Get()->BroadcastEventToRenderers(
       histogram_value, event_name, std::move(args));
 }

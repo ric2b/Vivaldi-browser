@@ -41,8 +41,7 @@
   DISABLE(EncryptedMediaSupportedTypesClearKeyTest, Video_MP4)
   DISABLE(EncryptedMediaSupportedTypesExternalClearKeyTest, Audio_MP4)
   DISABLE(EncryptedMediaSupportedTypesExternalClearKeyTest, Video_MP4)
-  DISABLE(EncryptedMediaSupportedTypesWidevineTest, Audio_MP4)
-  DISABLE(EncryptedMediaSupportedTypesWidevineTest, Video_MP4)
+  DISABLE_ALL(EncryptedMediaSupportedTypesWidevineTest)
   DISABLE(MediaCanPlayTypeTest, CodecSupportTest_mp4)
   DISABLE(WebRtcBrowserTest, RunsAudioVideoWebRTCCallInTwoTabsH264)
 

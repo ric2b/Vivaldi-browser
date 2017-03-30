@@ -7,6 +7,8 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -23,7 +25,6 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_base.h"
@@ -81,7 +82,7 @@
 #include "base/trace_event/trace_event_etw_export_win.h"
 #include "base/win/process_startup_helper.h"
 #include "ui/base/win/atl_module.h"
-#include "ui/gfx/win/dpi.h"
+#include "ui/display/win/dpi.h"
 #elif defined(OS_MACOSX)
 #include "base/mac/scoped_nsautorelease_pool.h"
 #include "base/power_monitor/power_monitor_device_source.h"
@@ -133,11 +134,9 @@ namespace {
 // |field_trial_list| singleton lives on the stack and must outlive the Run()
 // method of the process.
 void InitializeFieldTrialAndFeatureList(
-    scoped_ptr<base::FieldTrialList>* field_trial_list) {
+    std::unique_ptr<base::FieldTrialList>* field_trial_list) {
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
-  std::string process_type =
-      command_line.GetSwitchValueASCII(switches::kProcessType);
 
   // Initialize statistical testing infrastructure.  We set the entropy
   // provider to nullptr to disallow non-browser processes from creating
@@ -154,7 +153,7 @@ void InitializeFieldTrialAndFeatureList(
     DCHECK(result);
   }
 
-  scoped_ptr<base::FeatureList> feature_list(new base::FeatureList);
+  std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
   feature_list->InitializeFromCommandLine(
       command_line.GetSwitchValueASCII(switches::kEnableFeatures),
       command_line.GetSwitchValueASCII(switches::kDisableFeatures));
@@ -263,9 +262,10 @@ class ContentClientInitializer {
 #endif  // !CHROME_MULTIPLE_DLL_CHILD
 
 #if !defined(CHROME_MULTIPLE_DLL_BROWSER)
+    base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
     if (process_type == switches::kGpuProcess ||
-        base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kSingleProcess)) {
+        cmd->HasSwitch(switches::kSingleProcess) ||
+        (process_type.empty() && cmd->HasSwitch(switches::kInProcessGPU))) {
       if (delegate)
         content_client->gpu_ = delegate->CreateContentGpuClient();
       if (!content_client->gpu_)
@@ -273,8 +273,7 @@ class ContentClientInitializer {
     }
 
     if (process_type == switches::kRendererProcess ||
-        base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kSingleProcess)) {
+        cmd->HasSwitch(switches::kSingleProcess)) {
       if (delegate)
         content_client->renderer_ = delegate->CreateContentRendererClient();
       if (!content_client->renderer_)
@@ -282,8 +281,7 @@ class ContentClientInitializer {
     }
 
     if (process_type == switches::kUtilityProcess ||
-        base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kSingleProcess)) {
+        cmd->HasSwitch(switches::kSingleProcess)) {
       if (delegate)
         content_client->utility_ = delegate->CreateContentUtilityClient();
       // TODO(scottmg): http://crbug.com/237249 Should be in _child.
@@ -339,7 +337,7 @@ int RunZygote(const MainFunctionParams& main_function_params,
   MainFunctionParams main_params(command_line);
   main_params.zygote_child = true;
 
-  scoped_ptr<base::FieldTrialList> field_trial_list;
+  std::unique_ptr<base::FieldTrialList> field_trial_list;
   InitializeFieldTrialAndFeatureList(&field_trial_list);
 
   for (size_t i = 0; i < arraysize(kMainFunctions); ++i) {
@@ -573,7 +571,7 @@ class ContentMainRunnerImpl : public ContentMainRunner {
           switches::kDeviceScaleFactor);
       double scale_factor = 0;
       if (base::StringToDouble(scale_factor_string, &scale_factor))
-        gfx::SetDefaultDeviceScaleFactor(scale_factor);
+        display::win::SetDefaultDeviceScaleFactor(scale_factor);
     }
 #endif
 
@@ -772,7 +770,7 @@ class ContentMainRunnerImpl : public ContentMainRunner {
 
     // Run this logic on all child processes. Zygotes will run this at a later
     // point in time when the command line has been updated.
-    scoped_ptr<base::FieldTrialList> field_trial_list;
+    std::unique_ptr<base::FieldTrialList> field_trial_list;
     if (!process_type.empty() && process_type != switches::kZygoteProcess)
       InitializeFieldTrialAndFeatureList(&field_trial_list);
 
@@ -834,11 +832,11 @@ class ContentMainRunnerImpl : public ContentMainRunner {
   // The delegate will outlive this object.
   ContentMainDelegate* delegate_;
 
-  scoped_ptr<base::AtExitManager> exit_manager_;
+  std::unique_ptr<base::AtExitManager> exit_manager_;
 #if defined(OS_WIN)
   sandbox::SandboxInterfaceInfo sandbox_info_;
 #elif defined(OS_MACOSX)
-  scoped_ptr<base::mac::ScopedNSAutoreleasePool> autorelease_pool_;
+  std::unique_ptr<base::mac::ScopedNSAutoreleasePool> autorelease_pool_;
 #endif
 
   base::Closure* ui_task_;

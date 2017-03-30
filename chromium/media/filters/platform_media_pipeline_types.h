@@ -70,6 +70,7 @@ struct MEDIA_EXPORT PlatformVideoConfig {
   };
 
   PlatformVideoConfig();
+  PlatformVideoConfig(const PlatformVideoConfig& other);
   ~PlatformVideoConfig();
 
   bool is_valid() const {

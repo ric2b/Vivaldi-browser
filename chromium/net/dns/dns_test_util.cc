@@ -12,7 +12,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/sys_byteorder.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/dns/address_sorter.h"
@@ -108,8 +108,9 @@ class MockTransaction : public DnsTransaction,
           const uint32_t kTTL = 86400;  // One day.
 
           // Size of RDATA which is a IPv4 or IPv6 address.
-          size_t rdata_size = qtype_ == dns_protocol::kTypeA ? kIPv4AddressSize
-                                                             : kIPv6AddressSize;
+          size_t rdata_size = qtype_ == dns_protocol::kTypeA
+                                  ? IPAddress::kIPv4AddressSize
+                                  : IPAddress::kIPv6AddressSize;
 
           // 12 is the sum of sizes of the compressed name reference, TYPE,
           // CLASS, TTL and RDLENGTH.
@@ -166,7 +167,7 @@ class MockTransactionFactory : public DnsTransactionFactory {
 
   ~MockTransactionFactory() override {}
 
-  scoped_ptr<DnsTransaction> CreateTransaction(
+  std::unique_ptr<DnsTransaction> CreateTransaction(
       const std::string& hostname,
       uint16_t qtype,
       const DnsTransactionFactory::CallbackType& callback,
@@ -175,7 +176,7 @@ class MockTransactionFactory : public DnsTransactionFactory {
         new MockTransaction(rules_, hostname, qtype, callback);
     if (transaction->delayed())
       delayed_transactions_.push_back(transaction->AsWeakPtr());
-    return scoped_ptr<DnsTransaction>(transaction);
+    return std::unique_ptr<DnsTransaction>(transaction);
   }
 
   void CompleteDelayedTransactions() {

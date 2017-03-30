@@ -9,7 +9,7 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/value_conversions.h"
 #include "components/prefs/pref_service.h"
 
@@ -107,7 +107,7 @@ void PrefMemberBase::Internal::UpdateValue(
     bool is_managed,
     bool is_user_modifiable,
     const base::Closure& callback) const {
-  scoped_ptr<base::Value> value(v);
+  std::unique_ptr<base::Value> value(v);
   base::ScopedClosureRunner closure_runner(callback);
   if (IsOnCorrectThread()) {
     bool rv = UpdateValueInternal(*value);

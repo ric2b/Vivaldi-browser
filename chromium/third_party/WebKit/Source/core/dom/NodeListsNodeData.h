@@ -33,7 +33,7 @@
 
 namespace blink {
 
-class NodeListsNodeData final : public GarbageCollectedFinalized<NodeListsNodeData> {
+class NodeListsNodeData final : public GarbageCollected<NodeListsNodeData> {
     WTF_MAKE_NONCOPYABLE(NodeListsNodeData);
 public:
     ChildNodeList* childNodeList(ContainerNode& node)
@@ -42,41 +42,23 @@ public:
         return toChildNodeList(m_childNodeList);
     }
 
-    RawPtr<ChildNodeList> ensureChildNodeList(ContainerNode& node)
+    ChildNodeList* ensureChildNodeList(ContainerNode& node)
     {
         if (m_childNodeList)
             return toChildNodeList(m_childNodeList);
-        RawPtr<ChildNodeList> list = ChildNodeList::create(node);
-        m_childNodeList = list.get();
-        return list.release();
+        ChildNodeList* list = ChildNodeList::create(node);
+        m_childNodeList = list;
+        return list;
     }
 
-    RawPtr<EmptyNodeList> ensureEmptyChildNodeList(Node& node)
+    EmptyNodeList* ensureEmptyChildNodeList(Node& node)
     {
         if (m_childNodeList)
             return toEmptyNodeList(m_childNodeList);
-        RawPtr<EmptyNodeList> list = EmptyNodeList::create(node);
-        m_childNodeList = list.get();
-        return list.release();
+        EmptyNodeList* list = EmptyNodeList::create(node);
+        m_childNodeList = list;
+        return list;
     }
-
-#if !ENABLE(OILPAN)
-    void removeChildNodeList(ChildNodeList* list)
-    {
-        DCHECK_EQ(m_childNodeList, list);
-        if (deleteThisAndUpdateNodeRareDataIfAboutToRemoveLastList(list->ownerNode()))
-            return;
-        m_childNodeList = nullptr;
-    }
-
-    void removeEmptyChildNodeList(EmptyNodeList* list)
-    {
-        DCHECK_EQ(m_childNodeList, list);
-        if (deleteThisAndUpdateNodeRareDataIfAboutToRemoveLastList(list->ownerNode()))
-            return;
-        m_childNodeList = nullptr;
-    }
-#endif
 
     struct NodeListAtomicCacheMapEntryHash {
         STATIC_ONLY(NodeListAtomicCacheMapEntryHash);
@@ -89,44 +71,34 @@ public:
     };
 
     // Oilpan: keep a weak reference to the collection objects.
-    // Explicit object unregistration in a non-Oilpan setting
-    // on object destruction is replaced by the garbage collector
-    // clearing out their weak reference.
+    // Object unregistration is handled by GC's weak processing.
     typedef HeapHashMap<std::pair<unsigned char, StringImpl*>, WeakMember<LiveNodeListBase>, NodeListAtomicCacheMapEntryHash> NodeListAtomicNameCacheMap;
     typedef HeapHashMap<QualifiedName, WeakMember<TagCollection>> TagCollectionCacheNS;
 
     template<typename T>
-    RawPtr<T> addCache(ContainerNode& node, CollectionType collectionType, const AtomicString& name)
+    T* addCache(ContainerNode& node, CollectionType collectionType, const AtomicString& name)
     {
         NodeListAtomicNameCacheMap::AddResult result = m_atomicNameCaches.add(namedNodeListKey(collectionType, name), nullptr);
         if (!result.isNewEntry) {
-#if ENABLE(OILPAN)
             return static_cast<T*>(result.storedValue->value.get());
-#else
-            return static_cast<T*>(result.storedValue->value);
-#endif
         }
 
-        RawPtr<T> list = T::create(node, collectionType, name);
-        result.storedValue->value = list.get();
-        return list.release();
+        T* list = T::create(node, collectionType, name);
+        result.storedValue->value = list;
+        return list;
     }
 
     template<typename T>
-    RawPtr<T> addCache(ContainerNode& node, CollectionType collectionType)
+    T* addCache(ContainerNode& node, CollectionType collectionType)
     {
         NodeListAtomicNameCacheMap::AddResult result = m_atomicNameCaches.add(namedNodeListKey(collectionType, starAtom), nullptr);
         if (!result.isNewEntry) {
-#if ENABLE(OILPAN)
             return static_cast<T*>(result.storedValue->value.get());
-#else
-            return static_cast<T*>(result.storedValue->value);
-#endif
         }
 
-        RawPtr<T> list = T::create(node, collectionType);
-        result.storedValue->value = list.get();
-        return list.release();
+        T* list = T::create(node, collectionType);
+        result.storedValue->value = list;
+        return list;
     }
 
     template<typename T>
@@ -135,38 +107,19 @@ public:
         return static_cast<T*>(m_atomicNameCaches.get(namedNodeListKey(collectionType, starAtom)));
     }
 
-    RawPtr<TagCollection> addCache(ContainerNode& node, const AtomicString& namespaceURI, const AtomicString& localName)
+    TagCollection* addCache(ContainerNode& node, const AtomicString& namespaceURI, const AtomicString& localName)
     {
         QualifiedName name(nullAtom, localName, namespaceURI);
         TagCollectionCacheNS::AddResult result = m_tagCollectionCacheNS.add(name, nullptr);
         if (!result.isNewEntry)
             return result.storedValue->value;
 
-        RawPtr<TagCollection> list = TagCollection::create(node, namespaceURI, localName);
-        result.storedValue->value = list.get();
-        return list.release();
+        TagCollection* list = TagCollection::create(node, namespaceURI, localName);
+        result.storedValue->value = list;
+        return list;
     }
 
-#if !ENABLE(OILPAN)
-    void removeCache(LiveNodeListBase* list, CollectionType collectionType, const AtomicString& name = starAtom)
-    {
-        DCHECK_EQ(list, m_atomicNameCaches.get(namedNodeListKey(collectionType, name)));
-        if (deleteThisAndUpdateNodeRareDataIfAboutToRemoveLastList(list->ownerNode()))
-            return;
-        m_atomicNameCaches.remove(namedNodeListKey(collectionType, name));
-    }
-
-    void removeCache(LiveNodeListBase* list, const AtomicString& namespaceURI, const AtomicString& localName)
-    {
-        QualifiedName name(nullAtom, localName, namespaceURI);
-        DCHECK_EQ(list, m_tagCollectionCacheNS.get(name));
-        if (deleteThisAndUpdateNodeRareDataIfAboutToRemoveLastList(list->ownerNode()))
-            return;
-        m_tagCollectionCacheNS.remove(name);
-    }
-#endif
-
-    static RawPtr<NodeListsNodeData> create()
+    static NodeListsNodeData* create()
     {
         return new NodeListsNodeData;
     }
@@ -203,6 +156,8 @@ public:
 
     DECLARE_TRACE();
 
+    DECLARE_TRACE_WRAPPERS();
+
 private:
     NodeListsNodeData()
         : m_childNodeList(nullptr)
@@ -215,41 +170,26 @@ private:
         return std::pair<unsigned char, StringImpl*>(type, name.impl());
     }
 
-#if !ENABLE(OILPAN)
-    bool deleteThisAndUpdateNodeRareDataIfAboutToRemoveLastList(Node&);
-#endif
-
     // Can be a ChildNodeList or an EmptyNodeList.
     WeakMember<NodeList> m_childNodeList;
     NodeListAtomicNameCacheMap m_atomicNameCaches;
     TagCollectionCacheNS m_tagCollectionCacheNS;
 };
 
-#if !ENABLE(OILPAN)
-inline bool NodeListsNodeData::deleteThisAndUpdateNodeRareDataIfAboutToRemoveLastList(Node& ownerNode)
-{
-    DCHECK_EQ(ownerNode.nodeLists(), this);
-    if ((m_childNodeList ? 1 : 0) + m_atomicNameCaches.size() + m_tagCollectionCacheNS.size() != 1)
-        return false;
-    ownerNode.clearNodeLists();
-    return true;
-}
-#endif
-
 template <typename Collection>
-inline RawPtr<Collection> ContainerNode::ensureCachedCollection(CollectionType type)
+inline Collection* ContainerNode::ensureCachedCollection(CollectionType type)
 {
     return ensureNodeLists().addCache<Collection>(*this, type);
 }
 
 template <typename Collection>
-inline RawPtr<Collection> ContainerNode::ensureCachedCollection(CollectionType type, const AtomicString& name)
+inline Collection* ContainerNode::ensureCachedCollection(CollectionType type, const AtomicString& name)
 {
     return ensureNodeLists().addCache<Collection>(*this, type, name);
 }
 
 template <typename Collection>
-inline RawPtr<Collection> ContainerNode::ensureCachedCollection(CollectionType type, const AtomicString& namespaceURI, const AtomicString& localName)
+inline Collection* ContainerNode::ensureCachedCollection(CollectionType type, const AtomicString& namespaceURI, const AtomicString& localName)
 {
     ASSERT_UNUSED(type, type == TagCollectionType);
     return ensureNodeLists().addCache(*this, namespaceURI, localName);

@@ -14,6 +14,7 @@
 #include "extensions/common/extension_api.h"
 #include "extensions/renderer/object_backed_native_handler.h"
 #include "extensions/renderer/script_context.h"
+#include "extensions/renderer/v8_helpers.h"
 
 using content::V8ValueConverter;
 
@@ -40,12 +41,15 @@ void DeepFreeze(const v8::Local<v8::Object>& object,
 class SchemaRegistryNativeHandler : public ObjectBackedNativeHandler {
  public:
   SchemaRegistryNativeHandler(V8SchemaRegistry* registry,
-                              scoped_ptr<ScriptContext> context)
+                              std::unique_ptr<ScriptContext> context)
       : ObjectBackedNativeHandler(context.get()),
         context_(std::move(context)),
         registry_(registry) {
     RouteFunction("GetSchema",
                   base::Bind(&SchemaRegistryNativeHandler::GetSchema,
+                             base::Unretained(this)));
+    RouteFunction("GetObjectType",
+                  base::Bind(&SchemaRegistryNativeHandler::GetObjectType,
                              base::Unretained(this)));
   }
 
@@ -57,7 +61,20 @@ class SchemaRegistryNativeHandler : public ObjectBackedNativeHandler {
         registry_->GetSchema(*v8::String::Utf8Value(args[0])));
   }
 
-  scoped_ptr<ScriptContext> context_;
+  void GetObjectType(const v8::FunctionCallbackInfo<v8::Value>& args) {
+    CHECK(args.Length() == 1 && args[0]->IsObject());
+    std::string type;
+    if (args[0]->IsArray())
+      type = "array";
+    else if (args[0]->IsArrayBuffer())
+      type = "binary";
+    else
+      type = "object";
+    args.GetReturnValue().Set(
+        v8_helpers::ToV8StringUnsafe(context()->isolate(), type.c_str()));
+  }
+
+  std::unique_ptr<ScriptContext> context_;
   V8SchemaRegistry* registry_;
 };
 
@@ -69,15 +86,15 @@ V8SchemaRegistry::V8SchemaRegistry() {
 V8SchemaRegistry::~V8SchemaRegistry() {
 }
 
-scoped_ptr<NativeHandler> V8SchemaRegistry::AsNativeHandler() {
-  scoped_ptr<ScriptContext> context(
+std::unique_ptr<NativeHandler> V8SchemaRegistry::AsNativeHandler() {
+  std::unique_ptr<ScriptContext> context(
       new ScriptContext(GetOrCreateContext(v8::Isolate::GetCurrent()),
                         NULL,  // no frame
                         NULL,  // no extension
                         Feature::UNSPECIFIED_CONTEXT,
                         NULL,  // no effective extension
                         Feature::UNSPECIFIED_CONTEXT));
-  return scoped_ptr<NativeHandler>(
+  return std::unique_ptr<NativeHandler>(
       new SchemaRegistryNativeHandler(this, std::move(context)));
 }
 
@@ -115,7 +132,8 @@ v8::Local<v8::Object> V8SchemaRegistry::GetSchema(const std::string& api) {
   const base::DictionaryValue* schema =
       ExtensionAPI::GetSharedInstance()->GetSchema(api);
   CHECK(schema) << api;
-  scoped_ptr<V8ValueConverter> v8_value_converter(V8ValueConverter::create());
+  std::unique_ptr<V8ValueConverter> v8_value_converter(
+      V8ValueConverter::create());
   v8::Local<v8::Value> value = v8_value_converter->ToV8Value(schema, context);
   CHECK(!value.IsEmpty());
 

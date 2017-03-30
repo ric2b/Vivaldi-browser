@@ -58,6 +58,15 @@ const user_manager::User* FakeChromeUserManager::AddUserWithAffiliation(
   return user;
 }
 
+user_manager::User* FakeChromeUserManager::AddKioskAppUser(
+    const AccountId& account_id) {
+  user_manager::User* user = user_manager::User::CreateKioskAppUser(account_id);
+  user->set_username_hash(ProfileHelper::GetUserIdHashByUserIdForTesting(
+      account_id.GetUserEmail()));
+  users_.push_back(user);
+  return user;
+}
+
 const user_manager::User* FakeChromeUserManager::AddPublicAccountUser(
     const AccountId& account_id) {
   user_manager::User* user =
@@ -69,16 +78,8 @@ const user_manager::User* FakeChromeUserManager::AddPublicAccountUser(
                              IDR_PROFILE_PICTURE_LOADING))),
                      user_manager::User::USER_IMAGE_PROFILE, false);
   users_.push_back(user);
+  chromeos::ProfileHelper::Get()->SetProfileToUserMappingForTesting(user);
   return user;
-}
-
-void FakeChromeUserManager::AddKioskAppUser(
-    const AccountId& kiosk_app_account_id) {
-  user_manager::User* user =
-      user_manager::User::CreateKioskAppUser(kiosk_app_account_id);
-  user->set_username_hash(ProfileHelper::GetUserIdHashByUserIdForTesting(
-      kiosk_app_account_id.GetUserEmail()));
-  users_.push_back(user);
 }
 
 void FakeChromeUserManager::LoginUser(const AccountId& account_id) {
@@ -138,9 +139,16 @@ void FakeChromeUserManager::SwitchActiveUser(const AccountId& account_id) {
   ProfileHelper::Get()->ActiveUserHashChanged(
       ProfileHelper::GetUserIdHashByUserIdForTesting(
           account_id.GetUserEmail()));
+  active_user_ = nullptr;
   if (!users_.empty() && active_account_id_.is_valid()) {
-    for (user_manager::User* user : users_)
-      user->set_is_active(user->GetAccountId() == active_account_id_);
+    for (user_manager::User* const user : users_) {
+      if (user->GetAccountId() == active_account_id_) {
+        active_user_ = user;
+        user->set_is_active(true);
+      } else {
+        user->set_is_active(false);
+      }
+    }
   }
 }
 

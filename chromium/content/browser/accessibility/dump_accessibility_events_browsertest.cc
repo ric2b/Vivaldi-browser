@@ -75,7 +75,7 @@ class DumpAccessibilityEventsTest : public DumpAccessibilityTestBase {
 std::vector<std::string> DumpAccessibilityEventsTest::Dump() {
   WebContentsImpl* web_contents = static_cast<WebContentsImpl*>(
       shell()->web_contents());
-  scoped_ptr<AccessibilityEventRecorder> event_recorder(
+  std::unique_ptr<AccessibilityEventRecorder> event_recorder(
       AccessibilityEventRecorder::Create(
           web_contents->GetRootBrowserAccessibilityManager()));
 
@@ -87,7 +87,7 @@ std::vector<std::string> DumpAccessibilityEventsTest::Dump() {
   // This will ensure that after calling the go() function, we
   // block until we've received an accessibility event generated as
   // a result of this function.
-  scoped_ptr<AccessibilityNotificationWaiter> waiter;
+  std::unique_ptr<AccessibilityNotificationWaiter> waiter;
   waiter.reset(new AccessibilityNotificationWaiter(
       shell(), AccessibilityModeComplete, ui::AX_EVENT_NONE));
 
@@ -195,6 +195,11 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityEventsTest,
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityEventsTest,
                        AccessibilityEventsDescriptionChange) {
   RunEventTest(FILE_PATH_LITERAL("description-change.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityEventsTest,
+                       AccessibilityEventsExpandedChange) {
+  RunEventTest(FILE_PATH_LITERAL("expanded-change.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityEventsTest,

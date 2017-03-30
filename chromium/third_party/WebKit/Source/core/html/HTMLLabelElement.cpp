@@ -49,10 +49,10 @@ inline HTMLLabelElement::HTMLLabelElement(Document& document, HTMLFormElement* f
     FormAssociatedElement::associateByParser(form);
 }
 
-RawPtr<HTMLLabelElement> HTMLLabelElement::create(Document& document, HTMLFormElement* form)
+HTMLLabelElement* HTMLLabelElement::create(Document& document, HTMLFormElement* form)
 {
-    RawPtr<HTMLLabelElement> labelElement = new HTMLLabelElement(document, form);
-    return labelElement.release();
+    HTMLLabelElement* labelElement = new HTMLLabelElement(document, form);
+    return labelElement;
 }
 
 LabelableElement* HTMLLabelElement::control() const
@@ -149,7 +149,7 @@ bool HTMLLabelElement::isInInteractiveContent(Node* node) const
 void HTMLLabelElement::defaultEventHandler(Event* evt)
 {
     if (evt->type() == EventTypeNames::click && !m_processingClick) {
-        RawPtr<HTMLElement> element = control();
+        HTMLElement* element = control();
 
         // If we can't find a control or if the control received the click
         // event, then there's no need for us to do anything.
@@ -194,7 +194,7 @@ void HTMLLabelElement::defaultEventHandler(Event* evt)
 
         m_processingClick = true;
 
-        document().updateLayoutIgnorePendingStylesheets();
+        document().updateStyleAndLayoutIgnorePendingStylesheets();
         if (element->isMouseFocusable()) {
             // If the label is *not* selected, or if the click happened on
             // selection of label, only then focus the control element.
@@ -225,7 +225,7 @@ bool HTMLLabelElement::willRespondToMouseClickEvents()
 
 void HTMLLabelElement::focus(const FocusParams& params)
 {
-    document().updateLayoutTreeForNode(this);
+    document().updateStyleAndLayoutTreeForNode(this);
     if (isFocusable()) {
         HTMLElement::focus(params);
         return;

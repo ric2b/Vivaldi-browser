@@ -14,6 +14,7 @@
 #include "base/location.h"
 #include "base/mac/mac_logging.h"
 #include "base/mac/mac_util.h"
+#include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/single_thread_task_runner.h"
 #include "media/base/audio_buffer.h"
@@ -116,13 +117,13 @@ OSStatus ProvideData(AudioConverterRef inAudioConverter,
   return noErr;
 }
 
-scoped_ptr<ATCodecHelper> CreateCodecHelper(AudioCodec codec) {
+std::unique_ptr<ATCodecHelper> CreateCodecHelper(AudioCodec codec) {
   switch (codec) {
     case kCodecAAC:
-      return make_scoped_ptr(new ATAACHelper);
+      return base::WrapUnique(new ATAACHelper);
     case kCodecMP3:
       return base::IsFeatureEnabled(base::kFeatureMseAudioMpegAac)
-                 ? make_scoped_ptr(new ATMP3Helper)
+                 ? base::WrapUnique(new ATMP3Helper)
                  : nullptr;
     default:
       return nullptr;

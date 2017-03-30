@@ -148,7 +148,6 @@ void MediaRouterMojoImpl::RegisterMediaRouteProvider(
     const interfaces::MediaRouter::RegisterMediaRouteProviderCallback&
         callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
-
 #if defined(OS_WIN)
   // The MRPM may have been upgraded or otherwise reload such that we could be
   // seeing an MRPM that doesn't know mDNS is enabled, even if we've told a
@@ -290,8 +289,6 @@ void MediaRouterMojoImpl::RouteResponseReceived(
   } else {
     result = RouteRequestResult::FromSuccess(
         media_route.To<std::unique_ptr<MediaRoute>>(), presentation_id);
-    if (result->route()->off_the_record())
-      OnOffTheRecordRouteCreated(result->route()->media_route_id());
   }
 
   // TODO(imcheng): Add UMA histogram based on result code (crbug.com/583044).
@@ -311,10 +308,11 @@ void MediaRouterMojoImpl::CreateRoute(
 
   if (!origin.is_valid()) {
     DVLOG_WITH_INSTANCE(1) << "Invalid origin: " << origin;
-    std::unique_ptr<RouteRequestResult> result = RouteRequestResult::FromError(
-        "Invalid origin", RouteRequestResult::INVALID_ORIGIN);
+    std::unique_ptr<RouteRequestResult> error_result(
+        RouteRequestResult::FromError("Invalid origin",
+                                      RouteRequestResult::INVALID_ORIGIN));
     for (const MediaRouteResponseCallback& callback : callbacks)
-      callback.Run(*result);
+      callback.Run(*error_result);
     return;
   }
 
@@ -336,12 +334,20 @@ void MediaRouterMojoImpl::JoinRoute(
     bool off_the_record) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
+  std::unique_ptr<RouteRequestResult> error_result;
   if (!origin.is_valid()) {
     DVLOG_WITH_INSTANCE(1) << "Invalid origin: " << origin;
-    std::unique_ptr<RouteRequestResult> result = RouteRequestResult::FromError(
+    error_result = RouteRequestResult::FromError(
         "Invalid origin", RouteRequestResult::INVALID_ORIGIN);
+  } else if (!HasJoinableRoute()) {
+    DVLOG_WITH_INSTANCE(1) << "No joinable routes";
+    error_result = RouteRequestResult::FromError(
+        "Route not found", RouteRequestResult::ROUTE_NOT_FOUND);
+  }
+
+  if (error_result) {
     for (const MediaRouteResponseCallback& callback : callbacks)
-      callback.Run(*result);
+      callback.Run(*error_result);
     return;
   }
 
@@ -437,6 +443,20 @@ void MediaRouterMojoImpl::OnUserGesture() {
 #if defined(OS_WIN)
   EnsureMdnsDiscoveryEnabled();
 #endif
+}
+
+void MediaRouterMojoImpl::SearchSinks(
+    const MediaSink::Id& sink_id,
+    const MediaSource::Id& source_id,
+    const std::string& search_input,
+    const std::string& domain,
+    const MediaSinkSearchResponseCallback& sink_callback) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  SetWakeReason(MediaRouteProviderWakeReason::SEARCH_SINKS);
+  RunOrDefer(base::Bind(&MediaRouterMojoImpl::DoSearchSinks,
+                        base::Unretained(this), sink_id, source_id,
+                        search_input, domain, sink_callback));
 }
 
 bool MediaRouterMojoImpl::RegisterMediaSinksObserver(
@@ -604,8 +624,7 @@ void MediaRouterMojoImpl::DoCreateRoute(
     const std::vector<MediaRouteResponseCallback>& callbacks,
     base::TimeDelta timeout,
     bool off_the_record) {
-  std::string presentation_id("mr_");
-  presentation_id += base::GenerateGUID();
+  std::string presentation_id = MediaRouterBase::CreatePresentationId();
   DVLOG_WITH_INSTANCE(1) << "DoCreateRoute " << source_id << "=>" << sink_id
                          << ", presentation ID: " << presentation_id;
 
@@ -644,8 +663,7 @@ void MediaRouterMojoImpl::DoConnectRouteByRouteId(
     const std::vector<MediaRouteResponseCallback>& callbacks,
     base::TimeDelta timeout,
     bool off_the_record) {
-  std::string presentation_id("mr_");
-  presentation_id += base::GenerateGUID();
+  std::string presentation_id = MediaRouterBase::CreatePresentationId();
   DVLOG_WITH_INSTANCE(1) << "DoConnectRouteByRouteId " << source_id
                          << ", route ID: " << route_id
                          << ", presentation ID: " << presentation_id;
@@ -661,7 +679,6 @@ void MediaRouterMojoImpl::DoConnectRouteByRouteId(
 void MediaRouterMojoImpl::DoTerminateRoute(const MediaRoute::Id& route_id) {
   DVLOG_WITH_INSTANCE(1) << "DoTerminateRoute " << route_id;
   media_route_provider_->TerminateRoute(route_id);
-  OnRouteTerminated(route_id);
 }
 
 void MediaRouterMojoImpl::DoDetachRoute(const MediaRoute::Id& route_id) {
@@ -707,6 +724,20 @@ void MediaRouterMojoImpl::DoStopListeningForRouteMessages(
   // It will be removed when there are no more observers by the time
   // |OnRouteMessagesReceived| is invoked.
   media_route_provider_->StopListeningForRouteMessages(route_id);
+}
+
+void MediaRouterMojoImpl::DoSearchSinks(
+    const MediaSink::Id& sink_id,
+    const MediaSource::Id& source_id,
+    const std::string& search_input,
+    const std::string& domain,
+    const MediaSinkSearchResponseCallback& sink_callback) {
+  DVLOG_WITH_INSTANCE(1) << "SearchSinks";
+  auto sink_search_criteria = interfaces::SinkSearchCriteria::New();
+  sink_search_criteria->input = search_input;
+  sink_search_criteria->domain = domain;
+  media_route_provider_->SearchSinks(
+      sink_id, source_id, std::move(sink_search_criteria), sink_callback);
 }
 
 void MediaRouterMojoImpl::OnRouteMessagesReceived(

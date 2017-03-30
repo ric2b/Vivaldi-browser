@@ -249,7 +249,7 @@ void fillWidgetStates(AXObject* axObject, protocol::Array<AXProperty>* propertie
 PassOwnPtr<AXProperty> createRelatedNodeListProperty(const String& key, AXRelatedObjectVector& nodes)
 {
     OwnPtr<AXValue> nodeListValue = createRelatedNodeListValue(nodes, AXValueTypeEnum::NodeList);
-    return createProperty(key, nodeListValue.release());
+    return createProperty(key, std::move(nodeListValue));
 }
 
 PassOwnPtr<AXProperty> createRelatedNodeListProperty(const String& key, AXObject::AXObjectVector& nodes, const QualifiedName& attr, AXObject* axObject)
@@ -257,7 +257,7 @@ PassOwnPtr<AXProperty> createRelatedNodeListProperty(const String& key, AXObject
     OwnPtr<AXValue> nodeListValue = createRelatedNodeListValue(nodes);
     const AtomicString& attrValue = axObject->getAttribute(attr);
     nodeListValue->setValue(protocol::StringValue::create(attrValue));
-    return createProperty(key, nodeListValue.release());
+    return createProperty(key, std::move(nodeListValue));
 }
 
 void fillRelationships(AXObject* axObject, protocol::Array<AXProperty>* properties)
@@ -297,7 +297,7 @@ PassOwnPtr<AXValue> createRoleNameValue(AccessibilityRole role)
     } else {
         roleNameValue = createValue(AXObject::internalRoleName(role), AXValueTypeEnum::InternalRole);
     }
-    return roleNameValue.release();
+    return roleNameValue;
 }
 
 PassOwnPtr<AXNode> buildObjectForIgnoredNode(Node* node, AXObject* axObject, AXObjectCacheImpl* cacheImpl)
@@ -318,9 +318,9 @@ PassOwnPtr<AXNode> buildObjectForIgnoredNode(Node* node, AXObject* axObject, AXO
     OwnPtr<protocol::Array<AXProperty>> ignoredReasonProperties = protocol::Array<AXProperty>::create();
     for (size_t i = 0; i < ignoredReasons.size(); i++)
         ignoredReasonProperties->addItem(createProperty(ignoredReasons[i]));
-    ignoredNodeObject->setIgnoredReasons(ignoredReasonProperties.release());
+    ignoredNodeObject->setIgnoredReasons(std::move(ignoredReasonProperties));
 
-    return ignoredNodeObject.release();
+    return ignoredNodeObject;
 }
 
 PassOwnPtr<AXNode> buildObjectForNode(Node* node, AXObject* axObject, AXObjectCacheImpl* cacheImpl, PassOwnPtr<protocol::Array<AXProperty>> properties)
@@ -344,23 +344,24 @@ PassOwnPtr<AXNode> buildObjectForNode(Node* node, AXObject* axObject, AXObjectCa
                     properties->addItem(createRelatedNodeListProperty(AXRelationshipAttributesEnum::Labelledby, nameSource.relatedObjects));
                 }
             }
-            name->setSources(nameSourceProperties.release());
+            name->setSources(std::move(nameSourceProperties));
         }
-        nodeObject->setProperties(properties);
-        nodeObject->setName(name.release());
+        nodeObject->setProperties(std::move(properties));
+        nodeObject->setName(std::move(name));
     } else {
-        nodeObject->setProperties(properties);
+        nodeObject->setProperties(std::move(properties));
     }
 
     fillCoreProperties(axObject, nodeObject.get());
-    return nodeObject.release();
+    return nodeObject;
 }
 
 } // namespace
 
-InspectorAccessibilityAgent::InspectorAccessibilityAgent(Page* page)
+InspectorAccessibilityAgent::InspectorAccessibilityAgent(Page* page, InspectorDOMAgent* domAgent)
     : InspectorBaseAgent<InspectorAccessibilityAgent, protocol::Frontend::Accessibility>("Accessibility")
     , m_page(page)
+    , m_domAgent(domAgent)
 {
 }
 
@@ -372,12 +373,11 @@ void InspectorAccessibilityAgent::getAXNode(ErrorString* errorString, int nodeId
         return;
     }
 
-    InspectorDOMAgent* domAgent = toLocalFrame(mainFrame)->instrumentingAgents()->inspectorDOMAgent();
-    if (!domAgent) {
+    if (!m_domAgent->enabled()) {
         *errorString = "DOM agent must be enabled";
         return;
     }
-    Node* node = domAgent->assertNode(errorString, nodeId);
+    Node* node = m_domAgent->assertNode(errorString, nodeId);
     if (!node)
         return;
 
@@ -397,12 +397,13 @@ void InspectorAccessibilityAgent::getAXNode(ErrorString* errorString, int nodeId
     fillWidgetStates(axObject, properties.get());
     fillRelationships(axObject, properties.get());
 
-    *accessibilityNode = buildObjectForNode(node, axObject, cacheImpl, properties.release());
+    *accessibilityNode = buildObjectForNode(node, axObject, cacheImpl, std::move(properties));
 }
 
 DEFINE_TRACE(InspectorAccessibilityAgent)
 {
     visitor->trace(m_page);
+    visitor->trace(m_domAgent);
     InspectorBaseAgent::trace(visitor);
 }
 

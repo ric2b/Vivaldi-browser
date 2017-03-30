@@ -12,6 +12,7 @@ from pylib import constants
 from pylib.constants import host_paths
 from pylib.base import base_test_result
 from pylib.base import test_instance
+from pylib.utils import isolator
 
 with host_paths.SysPath(host_paths.BUILD_COMMON_PATH):
   import unittest_util # pylint: disable=import-error
@@ -31,7 +32,6 @@ _DEFAULT_ISOLATE_FILE_PATHS = {
       'third_party/WebKit/Source/platform/heap/BlinkHeapUnitTests.isolate',
     'blink_platform_unittests':
       'third_party/WebKit/Source/platform/blink_platform_unittests.isolate',
-    'breakpad_unittests': 'breakpad/breakpad_unittests.isolate',
     'cc_perftests': 'cc/cc_perftests.isolate',
     'components_browsertests': 'components/components_browsertests.isolate',
     'components_unittests': 'components/components_unittests.isolate',
@@ -142,7 +142,6 @@ class GtestTestInstance(test_instance.TestInstance):
       raise ValueError('Platform mode currently supports only 1 gtest suite')
     self._extract_test_list_from_filter = args.extract_test_list_from_filter
     self._shard_timeout = args.shard_timeout
-    self._skip_clear_data = args.skip_clear_data
     self._suite = args.suite_name[0]
     self._exe_dist_dir = None
 
@@ -178,7 +177,7 @@ class GtestTestInstance(test_instance.TestInstance):
       if self._suite in BROWSER_TEST_SUITES:
         self._extras[_EXTRA_SHARD_SIZE_LIMIT] = 1
         self._extras[EXTRA_SHARD_NANO_TIMEOUT] = int(1e9 * self._shard_timeout)
-        self._shard_timeout = 900
+        self._shard_timeout = 10 * self._shard_timeout
 
     if not self._apk_helper and not self._exe_dist_dir:
       error_func('Could not find apk or executable for %s' % self._suite)
@@ -198,7 +197,8 @@ class GtestTestInstance(test_instance.TestInstance):
         args.isolate_file_path = os.path.join(
             host_paths.DIR_SOURCE_ROOT, default_isolate_file_path)
 
-    if args.isolate_file_path:
+    if (args.isolate_file_path and
+        not isolator.IsIsolateEmpty(args.isolate_file_path)):
       self._isolate_abs_path = os.path.abspath(args.isolate_file_path)
       self._isolate_delegate = isolate_delegate
       self._isolated_abs_path = os.path.join(
@@ -269,10 +269,6 @@ class GtestTestInstance(test_instance.TestInstance):
     return self._shard_timeout
 
   @property
-  def skip_clear_data(self):
-    return self._skip_clear_data
-
-  @property
   def suite(self):
     return self._suite
 
@@ -301,8 +297,6 @@ class GtestTestInstance(test_instance.TestInstance):
       self._isolate_delegate.PurgeExcluded(_DEPS_EXCLUSION_LIST)
       self._isolate_delegate.MoveOutputDeps()
       dest_dir = None
-      if self._suite == 'breakpad_unittests':
-        dest_dir = '/data/local/tmp/'
       self._data_deps.extend([
           (self._isolate_delegate.isolate_deps_dir, dest_dir)])
 

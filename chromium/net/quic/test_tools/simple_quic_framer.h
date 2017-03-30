@@ -7,10 +7,10 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 #include "net/quic/quic_framer.h"
 #include "net/quic/quic_protocol.h"
@@ -32,6 +32,8 @@ class SimpleQuicFramer {
  public:
   SimpleQuicFramer();
   explicit SimpleQuicFramer(const QuicVersionVector& supported_versions);
+  SimpleQuicFramer(const QuicVersionVector& supported_versions,
+                   Perspective perspective);
   ~SimpleQuicFramer();
 
   bool ProcessPacket(const QuicEncryptedPacket& packet);
@@ -56,7 +58,7 @@ class SimpleQuicFramer {
 
  private:
   QuicFramer framer_;
-  scoped_ptr<SimpleFramerVisitor> visitor_;
+  std::unique_ptr<SimpleFramerVisitor> visitor_;
   DISALLOW_COPY_AND_ASSIGN(SimpleQuicFramer);
 };
 

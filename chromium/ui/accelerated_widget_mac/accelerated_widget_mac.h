@@ -31,6 +31,7 @@ class SoftwareFrameData;
 namespace ui {
 
 class AcceleratedWidgetMac;
+class FullscreenLowPowerCoordinator;
 
 // A class through which an AcceleratedWidget may be bound to draw the contents
 // of an NSView. An AcceleratedWidget may be bound to multiple different views
@@ -59,6 +60,12 @@ class ACCELERATED_WIDGET_MAC_EXPORT AcceleratedWidgetMac {
   void SetNSView(AcceleratedWidgetMacNSView* view);
   void ResetNSView();
 
+  // Fullscreen low power mode interface.
+  void SetFullscreenLowPowerCoordinator(
+      FullscreenLowPowerCoordinator* coordinator);
+  void ResetFullscreenLowPowerCoordinator();
+  CALayer* GetFullscreenLowPowerLayer() const;
+
   // Return true if the last frame swapped has a size in DIP of |dip_size|.
   bool HasFrameOfSize(const gfx::Size& dip_size) const;
 
@@ -67,12 +74,16 @@ class ACCELERATED_WIDGET_MAC_EXPORT AcceleratedWidgetMac {
       base::TimeTicks* timebase, base::TimeDelta* interval) const;
 
   void GotFrame(CAContextID ca_context_id,
+                bool fullscreen_low_power_ca_context_valid,
+                CAContextID fullscreen_low_power_ca_context_id,
                 base::ScopedCFTypeRef<IOSurfaceRef> io_surface,
                 const gfx::Size& pixel_size,
                 float scale_factor);
 
  private:
   void GotCAContextFrame(CAContextID ca_context_id,
+                         bool fullscreen_low_power_ca_context_valid,
+                         CAContextID fullscreen_low_power_ca_context_id,
                          const gfx::Size& pixel_size,
                          float scale_factor);
 
@@ -95,6 +106,10 @@ class ACCELERATED_WIDGET_MAC_EXPORT AcceleratedWidgetMac {
   // A phony NSView handle used to identify this.
   gfx::AcceleratedWidget native_widget_;
 
+  // The fullscreen low power coordinator. Weak, reset by
+  // SetFullscreenLowPowerCoordinator when it is destroyed.
+  FullscreenLowPowerCoordinator* fslp_coordinator_ = nullptr;
+
   // A flipped layer, which acts as the parent of the compositing and software
   // layers. This layer is flipped so that the we don't need to recompute the
   // origin for sub-layers when their position changes (this is impossible when
@@ -104,8 +119,9 @@ class ACCELERATED_WIDGET_MAC_EXPORT AcceleratedWidgetMac {
   // behavior.
   base::scoped_nsobject<CALayer> flipped_layer_;
 
-  // The accelerated CoreAnimation layer hosted by the GPU process.
+  // The accelerated CoreAnimation layers hosted by the GPU process.
   base::scoped_nsobject<CALayerHost> ca_context_layer_;
+  base::scoped_nsobject<CALayerHost> fullscreen_low_power_layer_;
 
   // The locally drawn layer, which has its contents set to an IOSurface.
   base::scoped_nsobject<CALayer> local_layer_;
@@ -122,6 +138,8 @@ ACCELERATED_WIDGET_MAC_EXPORT
 void AcceleratedWidgetMacGotFrame(
     gfx::AcceleratedWidget widget,
     CAContextID ca_context_id,
+    bool fullscreen_low_power_ca_context_valid,
+    CAContextID fullscreen_low_power_ca_context_id,
     base::ScopedCFTypeRef<IOSurfaceRef> io_surface,
     const gfx::Size& pixel_size,
     float scale_factor,

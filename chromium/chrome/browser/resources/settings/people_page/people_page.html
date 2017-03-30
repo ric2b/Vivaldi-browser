@@ -1,4 +1,3 @@
-<link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
@@ -7,13 +6,15 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-dialog/paper-dialog.html">
 <link rel="import" href="chrome://md-settings/controls/settings_checkbox.html">
 <link rel="import" href="chrome://md-settings/people_page/sync_page.html">
-<link rel="import" href="chrome://md-settings/people_page/sync_private_api.html">
+<link rel="import" href="chrome://md-settings/people_page/profile_info_browser_proxy.html">
+<link rel="import" href="chrome://md-settings/people_page/sync_browser_proxy.html">
 <link rel="import" href="chrome://md-settings/settings_page/settings_animated_pages.html">
 <link rel="import" href="chrome://md-settings/settings_page/settings_subpage.html">
 <link rel="import" href="chrome://md-settings/settings_shared_css.html">
 
 <if expr="chromeos">
 <link rel="import" href="chrome://md-settings/people_page/change_picture.html">
+<link rel="import" href="chrome://md-settings/people_page/pin_keyboard.html">
 <link rel="import" href="chrome://md-settings/people_page/easy_unlock_browser_proxy.html">
 <link rel="import" href="chrome://md-settings/people_page/easy_unlock_turn_off_dialog.html">
 <link rel="import" href="chrome://md-settings/people_page/users_page.html">
@@ -25,8 +26,12 @@
 <dom-module id="settings-people-page">
   <template>
     <style include="settings-shared">
-      #account-picture {
-        -webkit-margin-end: 4px;
+      setting-box.middle {
+        /* Per spec, middle text is indented 20px in this section. */
+        -webkit-margin-start: 20px;
+      }
+
+      #profile-icon {
         border-radius: 20px;
         height: 40px;
         object-fit: cover;
@@ -34,7 +39,8 @@
         width: 40px;
       }
 
-      #account-picture:hover {
+      #profile-icon:hover,
+      #activity-controls:hover {
         cursor: pointer;
       }
 
@@ -43,12 +49,37 @@
         cursor: pointer;
       }
 </if>
+
+      #sync-icon {
+        margin: 0 10px;
+      }
+
+      iron-icon[icon="settings:sync-problem"] {
+       --iron-icon-fill-color: var(--settings-error-color);
+      }
+
+      .settings-box .sync-error {
+        color: var(--settings-error-color);
+      }
+
+      #googleg-logo-container {
+        display: flex;
+        justify-content: center;
+        width: 40px;
+      }
+
+      #googleg-logo {
+        background-image: url(../../../../../ui/webui/resources/images/200-logo_googleg.png);
+        background-size: cover;
+        height: var(--iron-icon-height);
+        width: var(--iron-icon-width);
+      }
     </style>
     <settings-animated-pages id="pages" current-route="{{currentRoute}}"
         section="people">
       <neon-animatable id="main">
         <div class="settings-box first two-line">
-          <img id="account-picture" src="[[profileIconUrl_]]"
+          <img id="profile-icon" src="[[profileIconUrl_]]"
               on-tap="onPictureTap_">
           <div class="middle">
 <if expr="chromeos">
@@ -66,82 +97,105 @@
           <template is="dom-if" if="[[!syncStatus.signedIn]]">
             <paper-button class="action-button" on-tap="onSigninTap_"
                 disabled="[[syncStatus.setupInProgress]]">
-              [[i18n('syncSignin')]]
+              $i18n{syncSignin}
             </paper-button>
           </template>
           <template is="dom-if" if="[[syncStatus.signedIn]]">
             <span class="secondary-action">
               <paper-button class="secondary-button" on-tap="onDisconnectTap_"
                   disabled="[[syncStatus.setupInProgress]]">
-                [[i18n('syncDisconnect')]]
+                $i18n{syncDisconnect}
               </paper-button>
             </span>
           </template>
 </if>
         </div>
         <div class="settings-box two-line" hidden="[[syncStatus.signedIn]]">
-          [[i18n('syncOverview')]]
-        </div>
-
-        <div class="settings-box" hidden="[[!isStatusTextSet_(syncStatus)]]">
-          <span id="syncStatusText"></span>
-          <paper-button on-tap="onActionLinkTap_">
-            [[syncStatus.actionLinkText]]
-          </paper-button>
+          $i18n{syncOverview}
         </div>
 
         <template is="dom-if"
             if="[[isAdvancedSyncSettingsVisible_(syncStatus)]]">
-          <div class="settings-box">
-            <paper-button on-tap="onSyncTap_" class="primary-button">
-              [[i18n('syncPageTitle')]]
-            </paper-button>
+          <div class="settings-box two-line" on-tap="onSyncTap_">
+            <iron-icon id="sync-icon" icon$="[[getSyncIcon_(syncStatus)]]">
+            </iron-icon>
+            <div class="middle">
+              <div>$i18n{sync}</div>
+              <div class="secondary" hidden="[[syncStatus.hasError]]">
+                [[syncStatus.statusText]]
+              </div>
+              <div class="secondary sync-error"
+                  hidden="[[!syncStatus.hasError]]">
+                [[syncStatus.statusText]]
+              </div>
+            </div>
           </div>
         </template>
 
+        <div class="settings-box" id="activity-controls"
+            on-tap="onActivityControlsTap_">
+          <div id="googleg-logo-container">
+            <div id="googleg-logo"></div>
+          </div>
+          <div class="middle">
+            <div>$i18n{personalizeGoogleServicesTitle}</div>
+            <div class="secondary">$i18n{personalizeGoogleServicesText}</div>
+          </div>
+        </div>
+
 <if expr="chromeos">
+        <!-- TODO(jdufault): Confirm if this goes above or below easy unlock
+             settings. -->
+        <template is="dom-if" if=[[pinUnlockAllowed_]]>
+          <div class="settings-box">
+            <!-- TODO(jdufault): i18n -->
+            <p>Quick Unlock PIN</p>
+            <pin-keyboard></pin-keyboard>
+          </div>
+        </template>
+
         <div class="settings-box">
           <settings-checkbox pref="{{prefs.settings.enable_screen_lock}}"
-              i18n-values="label:enableScreenlock">
+              label="$i18n{enableScreenlock}">
           </settings-checkbox>
         </div>
 
-        <template is="dom-if" if=[[easyUnlockAllowed_]]>
+        <template is="dom-if" if="[[easyUnlockAllowed_]]">
           <div class="settings-box">
             <div class="middle">
-              <div>[[i18n('easyUnlockSectionTitle')]]</div>
+              <div>$i18n{easyUnlockSectionTitle}</div>
               <div class="secondary">
-                <template is="dom-if" if=[[!easyUnlockEnabled_]]>
-                  [[i18n('easyUnlockSetupIntro')]]
+                <template is="dom-if" if="[[!easyUnlockEnabled_]]">
+                  $i18n{easyUnlockSetupIntro}
                 </template>
-                <template is="dom-if" if=[[easyUnlockEnabled_]]>
-                  [[i18n('easyUnlockDescription')]]
+                <template is="dom-if" if="[[easyUnlockEnabled_]]">
+                  $i18n{easyUnlockDescription}
                 </template>
-                <a target="_blank" href$="[[i18n('easyUnlockLearnMoreURL')]]">
-                  [[i18n('learnMore')]]
+                <a target="_blank" href$="$i18n{easyUnlockLearnMoreURL}">
+                  $i18n{learnMore}
                 </a>
-                <template is="dom-if" if=[[easyUnlockEnabled_]]>
+                <template is="dom-if" if="[[easyUnlockEnabled_]]">
                   <template is="dom-if"
-                      if=[[easyUnlockProximityDetectionAllowed_]]>
+                      if="[[easyUnlockProximityDetectionAllowed_]]">
                     <settings-checkbox
                         pref="{{prefs.easy_unlock.proximity_required}}"
-                        i18n-values="label:easyUnlockRequireProximityLabel">
+                        label="$i18n{easyUnlockRequireProximityLabel}">
                     </settings-checkbox>
                   </template>
                 </template>
               </div>
             </div>
             <div class="secondary-action">
-              <template is="dom-if" if=[[!easyUnlockEnabled_]]>
+              <template is="dom-if" if="[[!easyUnlockEnabled_]]">
                 <paper-button id="easyUnlockSetup" class="secondary-button"
                     on-tap="onEasyUnlockSetupTap_">
-                  [[i18n('easyUnlockSetupButton')]]
+                  $i18n{easyUnlockSetupButton}
                 </paper-button>
               </template>
-              <template is="dom-if" if=[[easyUnlockEnabled_]]>
+              <template is="dom-if" if="[[easyUnlockEnabled_]]">
                 <paper-button id="easyUnlockTurnOff" class="secondary-button"
                     on-tap="onEasyUnlockTurnOffTap_">
-                  [[i18n('easyUnlockTurnOffButton')]]
+                  $i18n{easyUnlockTurnOffButton}
                 </paper-button>
               </template>
             </div>
@@ -150,32 +204,32 @@
 </if>
 
         <div class="settings-box">
-          <paper-button class="primary-button" i18n-content="manageOtherPeople"
-              on-tap="onManageOtherPeople_">
+          <paper-button class="primary-button" on-tap="onManageOtherPeople_">
+            $i18n{manageOtherPeople}
           </paper-button>
         </div>
       </neon-animatable>
       <template is="dom-if" name="sync">
-        <settings-subpage page-title="[[i18n('syncPageTitle')]]">
+        <settings-subpage page-title="$i18n{syncPageTitle}">
           <settings-sync-page current-route="[[currentRoute]]">
           </settings-sync-page>
         </settings-subpage>
       </template>
 <if expr="chromeos">
       <template is="dom-if" name="users">
-        <settings-subpage page-title="[[i18n('usersPageTitle')]]">
+        <settings-subpage page-title="$i18n{usersPageTitle}">
           <settings-users-page prefs="{{prefs}}"></settings-users-page>
         </settings-subpage>
       </template>
       <template is="dom-if" name="changePicture">
-        <settings-subpage page-title="[[i18n('changePictureTitle')]]">
+        <settings-subpage page-title="$i18n{changePictureTitle}">
           <settings-change-picture></settings-change-picture>
         </settings-subpage>
       </template>
 </if>
 <if expr="not chromeos">
       <template is="dom-if" name="manageProfile">
-        <settings-subpage page-title="[[i18n('editPerson')]]">
+        <settings-subpage page-title="$i18n{editPerson}">
           <settings-manage-profile profile-icon-url="[[profileIconUrl_]]"
               profile-name="[[profileName_]]">
           </settings-manage-profile>
@@ -185,18 +239,18 @@
     </settings-animated-pages>
 
     <paper-dialog modal id="disconnectDialog">
-      <h2 i18n-content="syncDisconnectTitle"></h2>
-      <div i18n-values=".innerHTML:syncDisconnectExplanation"></div>
+      <h2>$i18n{syncDisconnectTitle}</h2>
+      <div>$i18nRaw{syncDisconnectExplanation}"</div>
 <if expr="(not chromeos and is_posix) or is_win or is_macosx">
-      <paper-checkbox id="deleteProfile"
-          i18n-content="syncDisconnectDeleteProfile">
+      <paper-checkbox id="deleteProfile">
+        $i18n{syncDisconnectDeleteProfile}
       </paper-checkbox>
 </if>
       <div class="button-strip">
-        <paper-button dialog-dismiss i18n-content="cancel">
-        </paper-button>
+        <paper-button dialog-dismiss>$i18n{cancel}</paper-button>
         <paper-button dialog-confirm class="action-button"
-            on-tap="onDisconnectConfirm_" i18n-content="syncDisconnectConfirm">
+            on-tap="onDisconnectConfirm_">
+          $i18n{syncDisconnectConfirm}
         </paper-button>
       </div>
     </paper-dialog>

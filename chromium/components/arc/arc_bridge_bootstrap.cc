@@ -14,10 +14,11 @@
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/task_runner_util.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread_checker.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/threading/worker_pool.h"
 #include "chromeos/dbus/dbus_method_call_status.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -33,16 +34,6 @@
 namespace arc {
 
 namespace {
-
-// We do not know the PID of ARC, since Chrome does not create it directly.
-// Since Mojo in POSIX does not use the child PID except as an unique
-// identifier for the routing table, rather than doing a lot of plumbing in the
-// whole system to get the correct PID, just use an arbitrary number that will
-// never be used by a legitimate process. Chrome OS assigns unassigned PIDs
-// sequentially until it reaches a certain maximum value (Chrome OS uses the
-// default value of 32k), at which point it loops around to zero. An arbitrary
-// number larger than the maximum should be safe.
-const pid_t kArcPid = 0x3DE0EA7C;
 
 const base::FilePath::CharType kArcBridgeSocketPath[] =
     FILE_PATH_LITERAL("/var/run/chrome/arc_bridge.sock");
@@ -137,7 +128,7 @@ ArcBridgeBootstrapImpl::ArcBridgeBootstrapImpl() : weak_factory_(this) {}
 
 ArcBridgeBootstrapImpl::~ArcBridgeBootstrapImpl() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(state_ == State::STOPPED);
+  DCHECK(state_ == State::STOPPED || state_ == State::STOPPING);
 }
 
 void ArcBridgeBootstrapImpl::Start() {
@@ -260,8 +251,10 @@ base::ScopedFD ArcBridgeBootstrapImpl::AcceptInstanceConnection(
   }
   base::ScopedFD scoped_fd(raw_fd);
 
+  // Hardcode pid 0 since it is unused in mojo.
+  const base::ProcessHandle kUnusedChildProcessHandle = 0;
   mojo::edk::ScopedPlatformHandle child_handle =
-      mojo::edk::ChildProcessLaunched(kArcPid);
+      mojo::edk::ChildProcessLaunched(kUnusedChildProcessHandle);
 
   mojo::edk::ScopedPlatformHandleVectorPtr handles(
       new mojo::edk::PlatformHandleVector{child_handle.release()});
@@ -295,9 +288,9 @@ void ArcBridgeBootstrapImpl::OnInstanceConnected(base::ScopedFD fd) {
     return;
   }
   SetState(State::READY);
-  ArcBridgeInstancePtr instance;
-  instance.Bind(
-      mojo::InterfacePtrInfo<ArcBridgeInstance>(std::move(server_pipe), 0u));
+  mojom::ArcBridgeInstancePtr instance;
+  instance.Bind(mojo::InterfacePtrInfo<mojom::ArcBridgeInstance>(
+      std::move(server_pipe), 0u));
   delegate_->OnConnectionEstablished(std::move(instance));
 }
 
@@ -336,17 +329,14 @@ void ArcBridgeBootstrapImpl::SetState(State state) {
   // DCHECK on enum classes not supported.
   DCHECK(state_ != state);
   state_ = state;
+  VLOG(2) << "State: " << static_cast<uint32_t>(state_);
 }
 
 }  // namespace
 
-ArcBridgeBootstrap::ArcBridgeBootstrap() {}
-
-ArcBridgeBootstrap::~ArcBridgeBootstrap() {}
-
 // static
-scoped_ptr<ArcBridgeBootstrap> ArcBridgeBootstrap::Create() {
-  return make_scoped_ptr(new ArcBridgeBootstrapImpl());
+std::unique_ptr<ArcBridgeBootstrap> ArcBridgeBootstrap::Create() {
+  return base::WrapUnique(new ArcBridgeBootstrapImpl());
 }
 
 }  // namespace arc

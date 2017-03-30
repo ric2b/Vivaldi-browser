@@ -27,6 +27,10 @@ static_library("dom_keycode_converter") {
   deps = [
     "//base",
   ]
+
+  if (!is_ios) {
+    deps += [ "//ipc:param_traits" ]
+  }
 }
 
 component("events_base") {
@@ -62,43 +66,28 @@ component("events_base") {
 
   deps = [
     "//base/third_party/dynamic_annotations",
-    "//skia",
   ]
 
   public_deps = [
     ":dom_keycode_converter",
     "//base",
     "//ui/events/platform",
-    "//ui/gfx",
     "//ui/gfx/geometry",
   ]
 
-  # TODO(kylechar): move keycodes/ files into own component and x/ files into
-  # ui/events/x component
-  if (use_x11 || ozone_platform_x11) {
-    configs += [ "//build/config/linux:x11" ]
-
-    sources += [
-      "keycodes/keyboard_code_conversion_x.cc",
-      "keycodes/keyboard_code_conversion_x.h",
-      "x/keysym_to_unicode.cc",
-      "x/keysym_to_unicode.h",
-    ]
-
-    deps += [ "//ui/gfx/x" ]
-  }
-
-  if (use_x11 || ozone_platform_x11 || use_xkbcommon) {
-    sources += [
-      "keycodes/keyboard_code_conversion_xkb.cc",
-      "keycodes/keyboard_code_conversion_xkb.h",
-      "keycodes/scoped_xkb.h",
-      "keycodes/xkb_keysym.h",
-    ]
+  if (use_x11) {
+    public_deps += [ "//ui/events/keycodes:x11" ]
   }
 
   if (!is_ios) {
     deps += [ "//ipc:param_traits" ]
+  }
+
+  if (is_mac) {
+    libs = [
+      "AppKit.framework",
+      "Carbon.framework",
+    ]
   }
 }
 
@@ -149,6 +138,7 @@ component("events") {
     ":gesture_detection",
     "//base/third_party/dynamic_annotations",
     "//skia",
+    "//ui/display",
     "//ui/gfx",
     "//ui/gfx/geometry",
   ]
@@ -161,12 +151,10 @@ component("events") {
     ]
     deps += [
       "//ui/events/devices",
+      "//ui/events/devices/x11",
+      "//ui/events/x",
       "//ui/gfx/x",
     ]
-  }
-
-  if (use_x11 || ozone_platform_x11) {
-    deps += [ "//ui/events/x" ]
   }
 
   if (!is_chromeos && is_linux) {
@@ -220,6 +208,10 @@ component("events") {
       ":motionevent_jni_headers",
     ]
   }
+
+  if (is_mac) {
+    libs = [ "AppKit.framework" ]
+  }
 }
 
 component("gesture_detection") {
@@ -268,6 +260,7 @@ component("gesture_detection") {
     ":events_base",
     "//base",
     "//base/third_party/dynamic_annotations",
+    "//ui/display",
     "//ui/gfx",
     "//ui/gfx/geometry",
   ]
@@ -318,6 +311,7 @@ source_set("test_support") {
     "//base",
     "//skia",
     "//ui/events/platform",
+    "//ui/gfx",
     "//ui/gfx/geometry",
   ]
 
@@ -334,9 +328,13 @@ source_set("test_support") {
       "test/events_test_utils_x11.h",
     ]
     deps += [
-      "//ui/events/devices",
+      "//ui/events/devices/x11",
       "//ui/gfx/x",
     ]
+  }
+
+  if (use_x11 || ozone_platform_x11) {
+    deps += [ "//ui/events/x" ]
   }
 
   if (use_x11 || use_ozone) {
@@ -350,6 +348,7 @@ source_set("test_support") {
 test("events_unittests") {
   sources = [
     "android/scroller_unittest.cc",
+    "blink/blink_event_util_unittest.cc",
     "cocoa/events_mac_unittest.mm",
     "event_dispatcher_unittest.cc",
     "event_processor_unittest.cc",
@@ -421,6 +420,7 @@ test("events_unittests") {
     ]
     configs += [ "//build/config/linux:x11" ]
     deps += [
+      "//ui/events/devices/x11",
       "//ui/events/x",
       "//ui/gfx/x",
     ]

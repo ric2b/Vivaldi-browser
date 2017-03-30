@@ -8,14 +8,16 @@
 #include <GLES2/gl2ext.h>
 #include <GLES2/gl2extchromium.h>
 #include <stdint.h>
+
 #include <algorithm>
 #include <utility>
 
 #include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
@@ -43,6 +45,7 @@ GLenum GLInternalFormat(gfx::BufferFormat format) {
       GL_COMPRESSED_RGBA_S3TC_DXT5_EXT,    // DXT5
       GL_ETC1_RGB8_OES,                    // ETC1
       GL_R8_EXT,                           // R_8
+      GL_RGB,                              // BGR_565
       GL_RGBA,                             // RGBA_4444
       GL_RGB,                              // RGBX_8888
       GL_RGBA,                             // RGBA_8888
@@ -341,7 +344,7 @@ void Buffer::Texture::WaitForRelease() {
 ////////////////////////////////////////////////////////////////////////////////
 // Buffer, public:
 
-Buffer::Buffer(scoped_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer)
+Buffer::Buffer(std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer)
     : gpu_memory_buffer_(std::move(gpu_memory_buffer)),
       texture_target_(GL_TEXTURE_2D),
       query_type_(GL_COMMANDS_COMPLETED_CHROMIUM),
@@ -349,7 +352,7 @@ Buffer::Buffer(scoped_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer)
       is_overlay_candidate_(false),
       use_count_(0) {}
 
-Buffer::Buffer(scoped_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer,
+Buffer::Buffer(std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer,
                unsigned texture_target,
                unsigned query_type,
                bool use_zero_copy,
@@ -363,7 +366,7 @@ Buffer::Buffer(scoped_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer,
 
 Buffer::~Buffer() {}
 
-scoped_ptr<cc::SingleReleaseCallback> Buffer::ProduceTextureMailbox(
+std::unique_ptr<cc::SingleReleaseCallback> Buffer::ProduceTextureMailbox(
     cc::TextureMailbox* texture_mailbox,
     bool secure_output_only,
     bool lost_context) {
@@ -404,7 +407,7 @@ scoped_ptr<cc::SingleReleaseCallback> Buffer::ProduceTextureMailbox(
   // if one doesn't already exist. The contents of this buffer are copied to
   // |texture| using a call to CopyTexImage.
   if (!contents_texture_) {
-    contents_texture_ = make_scoped_ptr(
+    contents_texture_ = base::WrapUnique(
         new Texture(context_provider.get(), gpu_memory_buffer_.get(),
                     texture_target_, query_type_));
   }
@@ -416,10 +419,10 @@ scoped_ptr<cc::SingleReleaseCallback> Buffer::ProduceTextureMailbox(
     // This binds the latest contents of this buffer to |texture|.
     gpu::SyncToken sync_token = texture->BindTexImage();
 
-    *texture_mailbox =
-        cc::TextureMailbox(texture->mailbox(), sync_token, texture_target_,
-                           gpu_memory_buffer_->GetSize(), is_overlay_candidate_,
-                           secure_output_only);
+    *texture_mailbox = cc::TextureMailbox(
+        texture->mailbox(), sync_token, texture_target_,
+        gpu_memory_buffer_->GetSize(), gpu_memory_buffer_->GetId(),
+        is_overlay_candidate_, secure_output_only);
     // The contents texture will be released when no longer used by the
     // compositor.
     return cc::SingleReleaseCallback::Create(
@@ -430,7 +433,7 @@ scoped_ptr<cc::SingleReleaseCallback> Buffer::ProduceTextureMailbox(
 
   // Create a mailbox texture that we copy the buffer contents to.
   if (!texture_)
-    texture_ = make_scoped_ptr(new Texture(context_provider.get()));
+    texture_ = base::WrapUnique(new Texture(context_provider.get()));
 
   // Copy the contents of |contents_texture| to |texture| and produce a
   // texture mailbox from the result in |texture|.
@@ -441,10 +444,10 @@ scoped_ptr<cc::SingleReleaseCallback> Buffer::ProduceTextureMailbox(
   gpu::SyncToken sync_token = contents_texture->CopyTexImage(
       texture, base::Bind(&Buffer::ReleaseContentsTexture, AsWeakPtr(),
                           base::Passed(&contents_texture_)));
-  *texture_mailbox =
-      cc::TextureMailbox(texture->mailbox(), sync_token, GL_TEXTURE_2D,
-                         gpu_memory_buffer_->GetSize(),
-                         false /* is_overlay_candidate */, secure_output_only);
+  *texture_mailbox = cc::TextureMailbox(
+      texture->mailbox(), sync_token, GL_TEXTURE_2D,
+      gpu_memory_buffer_->GetSize(), gfx::GpuMemoryBufferId(),
+      false /* is_overlay_candidate */, secure_output_only);
   // The mailbox texture will be released when no longer used by the
   // compositor.
   return cc::SingleReleaseCallback::Create(
@@ -457,8 +460,8 @@ gfx::Size Buffer::GetSize() const {
   return gpu_memory_buffer_->GetSize();
 }
 
-scoped_ptr<base::trace_event::TracedValue> Buffer::AsTracedValue() const {
-  scoped_ptr<base::trace_event::TracedValue> value(
+std::unique_ptr<base::trace_event::TracedValue> Buffer::AsTracedValue() const {
+  std::unique_ptr<base::trace_event::TracedValue> value(
       new base::trace_event::TracedValue());
   gfx::Size size = gpu_memory_buffer_->GetSize();
   value->SetInteger("width", size.width());
@@ -481,11 +484,11 @@ void Buffer::Release() {
     release_callback_.Run();
 }
 
-void Buffer::ReleaseTexture(scoped_ptr<Texture> texture) {
+void Buffer::ReleaseTexture(std::unique_ptr<Texture> texture) {
   texture_ = std::move(texture);
 }
 
-void Buffer::ReleaseContentsTexture(scoped_ptr<Texture> texture) {
+void Buffer::ReleaseContentsTexture(std::unique_ptr<Texture> texture) {
   TRACE_EVENT0("exo", "Buffer::ReleaseContentsTexture");
 
   contents_texture_ = std::move(texture);

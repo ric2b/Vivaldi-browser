@@ -56,20 +56,40 @@
     "matches": ["<all_urls>"]
   },
   "app.getDetails": {
-    "contexts": ["blessed_extension", "unblessed_extension", "content_script"],
-    "matches": []
+    "contexts": [
+      "blessed_extension",
+      "unblessed_extension",
+      "content_script",
+      "blessed_web_page",
+      "web_page"
+    ]
   },
   "app.getIsInstalled": {
-    "contexts": ["blessed_extension", "unblessed_extension", "content_script"],
-    "matches": []
+    "contexts": [
+      "blessed_extension",
+      "unblessed_extension",
+      "content_script",
+      "blessed_web_page",
+      "web_page"
+    ]
   },
   "app.installState": {
-    "contexts": ["blessed_extension", "unblessed_extension", "content_script"],
-    "matches": []
+    "contexts": [
+      "blessed_extension",
+      "unblessed_extension",
+      "content_script",
+      "blessed_web_page",
+      "web_page"
+    ]
   },
   "app.runningState": {
-    "contexts": ["blessed_extension", "unblessed_extension", "content_script"],
-    "matches": []
+    "contexts": [
+      "blessed_extension",
+      "unblessed_extension",
+      "content_script",
+      "blessed_web_page",
+      "web_page"
+    ]
   },
   "appviewTag": {
     "internal": true,
@@ -498,20 +518,6 @@
     "dependencies": ["permission:gcm"],
     "contexts": ["blessed_extension"]
   },
-  "hangoutsPrivate": {
-    "channel": "stable",
-    "contexts": ["blessed_extension"],
-    "whitelist": [
-      // http://crbug.com/309737.
-      // Keep this list in sync with extensions_misc::kHangoutsExtensionIds.
-      "nckgahadagoaajjgafhacjanaoiihapd",  // Hangouts Production.
-      "ljclpkphhpbpinifbeabbhlfddcpfdde",  // Hangouts Debug.
-      "ppleadejekpmccmnpjdimmlfljlkdfej",  // Hangouts Alpha.
-      "eggnbpckecmjlblplehfpjjdhhidfdoj",  // Hangouts Beta.
-      "jfjjdfefebklmdbmenmlehlopoocnoeh",  // Hangouts Packaged App Debug.
-      "knipolnnllmklapflnccelgolnpehhpl"   // Hangouts Packaged App Prod.
-    ]
-  },
   "history": {
     "dependencies": ["permission:history"],
     "contexts": ["blessed_extension"]
@@ -550,10 +556,16 @@
     "dependencies": ["permission:input"],
     "contexts": ["blessed_extension"]
   },
-  "inputMethodPrivate": {
+  "inputMethodPrivate": [{
     "dependencies": ["permission:inputMethodPrivate"],
     "contexts": ["blessed_extension"]
-  },
+  }, {
+    "channel": "stable",
+    "contexts": ["webui"],
+    "matches": [
+      "chrome://md-settings/*"
+    ]
+  }],
   "instanceID": {
     "dependencies": ["permission:gcm"],
     "contexts": ["blessed_extension"]

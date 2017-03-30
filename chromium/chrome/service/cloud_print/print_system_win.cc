@@ -4,14 +4,15 @@
 
 #include "chrome/service/cloud_print/print_system.h"
 
+#include <memory>
+
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/json/json_writer.h"
 #include "base/macros.h"
 #include "base/memory/free_deleter.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/win/object_watcher.h"
 #include "base/win/scoped_bstr.h"
 #include "base/win/scoped_comptr.h"
@@ -559,7 +560,7 @@ class PrinterCapsHandler : public ServiceUtilityProcessHost::Client {
     printing::PrinterCapsAndDefaults printer_info;
     if (succeeded) {
       printer_info.caps_mime_type = kContentTypeJSON;
-      scoped_ptr<base::DictionaryValue> description(
+      std::unique_ptr<base::DictionaryValue> description(
           PrinterSemanticCapsAndDefaultsToCdd(semantic_info));
       if (description) {
         base::JSONWriter::WriteWithOptions(
@@ -769,7 +770,7 @@ bool PrintSystemWin::GetJobDetails(const std::string& printer_name,
     if (ERROR_INVALID_PARAMETER != last_error) {
       // ERROR_INVALID_PARAMETER normally means that the job id is not valid.
       DCHECK(last_error == ERROR_INSUFFICIENT_BUFFER);
-      scoped_ptr<BYTE[]> job_info_buffer(new BYTE[bytes_needed]);
+      std::unique_ptr<BYTE[]> job_info_buffer(new BYTE[bytes_needed]);
       if (GetJob(printer_handle.Get(), job_id, 1, job_info_buffer.get(),
                  bytes_needed, &bytes_needed)) {
         JOB_INFO_1 *job_info =

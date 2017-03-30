@@ -26,7 +26,6 @@
 #include "base/threading/worker_pool.h"
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_filter.h"
-#include "crypto/nss_util.h"
 #include "ios/crnet/sdch_owner_pref_storage.h"
 #include "ios/net/cookies/cookie_store_ios.h"
 #include "ios/net/crn_http_protocol_handler.h"
@@ -38,7 +37,6 @@
 #include "net/base/network_change_notifier.h"
 #include "net/base/sdch_manager.h"
 #include "net/cert/cert_verifier.h"
-#include "net/cert_net/nss_ocsp.h"
 #include "net/cookies/cookie_store.h"
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_cache.h"
@@ -59,6 +57,7 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_context_storage.h"
 #include "net/url_request/url_request_job_factory_impl.h"
+#include "url/url_features.h"
 #include "url/url_util.h"
 
 namespace {
@@ -150,17 +149,11 @@ void CrNetEnvironment::Initialize() {
   if (!g_at_exit_)
     g_at_exit_ = new base::AtExitManager;
 
+#if !BUILDFLAG(USE_PLATFORM_ICU_ALTERNATIVES)
   CHECK(base::i18n::InitializeICU());
+#endif
   url::Initialize();
   base::CommandLine::Init(0, nullptr);
-
-#if defined(USE_NSS_VERIFIER)
-  // This needs to happen on the main thread. NSPR's initialization sets up its
-  // memory allocator; if this is not done before other threads are created,
-  // this initialization can race to cause accidental free/allocation
-  // mismatches.
-  crypto::EnsureNSPRInit();
-#endif
 
   // Without doing this, StatisticsRecorder::FactoryGet() leaks one histogram
   // per call after the first for a given name.
@@ -292,9 +285,6 @@ void CrNetEnvironment::Install() {
   proxy_config_service_ = net::ProxyService::CreateSystemProxyConfigService(
       network_io_thread_->task_runner(), nullptr);
 
-#if defined(USE_NSS_VERIFIER)
-  net::SetURLRequestContextForNSSHttpIO(main_context_.get());
-#endif
   main_context_getter_ = new CrNetURLRequestContextGetter(
       main_context_.get(), network_io_thread_->task_runner());
   base::subtle::MemoryBarrier();
@@ -312,9 +302,6 @@ void CrNetEnvironment::InstallIntoSessionConfiguration(
 
 CrNetEnvironment::~CrNetEnvironment() {
   net::HTTPProtocolHandlerDelegate::SetInstance(nullptr);
-#if defined(USE_NSS_VERIFIER)
-  net::SetURLRequestContextForNSSHttpIO(nullptr);
-#endif
 }
 
 net::URLRequestContextGetter* CrNetEnvironment::GetMainContextGetter() {
@@ -442,7 +429,7 @@ void CrNetEnvironment::InitializeOnNetworkThread() {
   params.net_log = main_context_->net_log();
   params.enable_spdy31 = spdy_enabled();
   params.enable_http2 = spdy_enabled();
-  params.parse_alternative_services = false;
+  params.parse_alternative_services = true;
   params.enable_quic = quic_enabled();
 
   if (!params.channel_id_service) {
@@ -473,9 +460,11 @@ void CrNetEnvironment::InitializeOnNetworkThread() {
       new net::URLRequestJobFactoryImpl;
   job_factory->SetProtocolHandler(
       "data", base::WrapUnique(new net::DataProtocolHandler));
+#if !defined(DISABLE_FILE_SUPPORT)
   job_factory->SetProtocolHandler(
       "file", base::WrapUnique(
                   new net::FileProtocolHandler(file_thread_->task_runner())));
+#endif   // !defined(DISABLE_FILE_SUPPORT)
   main_context_->set_job_factory(job_factory);
 
   main_context_->set_net_log(net_log_.get());

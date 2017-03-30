@@ -65,7 +65,7 @@ class ExtensionActionUtil : public KeyedService,
  public:
 
   static void BroadcastEvent(const std::string& eventname,
-                             scoped_ptr<base::ListValue> args,
+                             std::unique_ptr<base::ListValue> args,
                              content::BrowserContext* context);
 
   // Implementing ExtensionActionAPI::Observer.

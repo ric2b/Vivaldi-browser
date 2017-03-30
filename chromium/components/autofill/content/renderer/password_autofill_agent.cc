@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "base/bind.h"
@@ -433,7 +434,11 @@ bool FillUserNameAndPassword(
     bool set_selection,
     std::map<const blink::WebInputElement, blink::WebString>*
         nonscript_modified_values,
-    base::Callback<void(blink::WebInputElement*)> registration_callback) {
+    base::Callback<void(blink::WebInputElement*)> registration_callback,
+    RendererSavePasswordProgressLogger* logger) {
+  if (logger)
+    logger->LogMessage(Logger::STRING_FILL_USERNAME_AND_PASSWORD_METHOD);
+
   // Don't fill username if password can't be set.
   if (!IsElementAutocompletable(*password_element))
     return false;
@@ -452,6 +457,8 @@ bool FillUserNameAndPassword(
                        exact_username_match)) {
     username = fill_data.username_field.value;
     password = fill_data.password_field.value;
+    if (logger)
+      logger->LogMessage(Logger::STRING_USERNAMES_MATCH);
   } else {
     // Scan additional logins for a match.
     for (const auto& it : fill_data.additional_logins) {
@@ -460,6 +467,10 @@ bool FillUserNameAndPassword(
         password = it.second.password;
         break;
       }
+    }
+    if (logger) {
+      logger->LogBoolean(Logger::STRING_MATCH_IN_ADDITIONAL,
+                         !(username.empty() && password.empty()));
     }
 
     // Check possible usernames.
@@ -487,10 +498,12 @@ bool FillUserNameAndPassword(
   // Input matches the username, fill in required values.
   if (!username_element->isNull() &&
       IsElementAutocompletable(*username_element)) {
-    // TODO(vabr): Why not setSuggestedValue? http://crbug.com/507714
+    // TODO(crbug.com/507714): Why not setSuggestedValue?
     username_element->setValue(username, true);
     (*nonscript_modified_values)[*username_element] = username;
     username_element->setAutofilled(true);
+    if (logger)
+      logger->LogElementName(Logger::STRING_USERNAME_FILLED, *username_element);
     if (set_selection) {
       form_util::PreviewSuggestion(username, current_username,
                                    username_element);
@@ -509,6 +522,8 @@ bool FillUserNameAndPassword(
   registration_callback.Run(password_element);
 
   password_element->setAutofilled(true);
+  if (logger)
+    logger->LogElementName(Logger::STRING_PASSWORD_FILLED, *password_element);
   return true;
 }
 
@@ -526,7 +541,8 @@ bool FillFormOnPasswordReceived(
     blink::WebInputElement password_element,
     std::map<const blink::WebInputElement, blink::WebString>*
         nonscript_modified_values,
-    base::Callback<void(blink::WebInputElement*)> registration_callback) {
+    base::Callback<void(blink::WebInputElement*)> registration_callback,
+    RendererSavePasswordProgressLogger* logger) {
   // Do not fill if the password field is in a chain of iframes not having
   // identical origin.
   blink::WebFrame* cur_frame = password_element.document().frame();
@@ -594,13 +610,10 @@ bool FillFormOnPasswordReceived(
 
   // Fill if we have an exact match for the username. Note that this sets
   // username to autofilled.
-  return FillUserNameAndPassword(&username_element,
-                                 &password_element,
-                                 fill_data,
-                                 true /* exact_username_match */,
-                                 false /* set_selection */,
-                                 nonscript_modified_values,
-                                 registration_callback);
+  return FillUserNameAndPassword(
+      &username_element, &password_element, fill_data,
+      true /* exact_username_match */, false /* set_selection */,
+      nonscript_modified_values, registration_callback, logger);
 }
 
 // Takes a |map| with pointers as keys and linked_ptr as values, and returns
@@ -625,8 +638,7 @@ PasswordAutofillAgent::PasswordAutofillAgent(content::RenderFrame* render_frame)
     : content::RenderFrameObserver(render_frame),
       logging_state_active_(false),
       was_username_autofilled_(false),
-      was_password_autofilled_(false),
-      weak_ptr_factory_(this) {
+      was_password_autofilled_(false) {
   Send(new AutofillHostMsg_PasswordAutofillAgentConstructed(routing_id()));
 }
 
@@ -694,11 +706,11 @@ bool PasswordAutofillAgent::TextFieldDidEndEditing(
 
   // Do not set selection when ending an editing session, otherwise it can
   // mess with focus.
-  FillUserNameAndPassword(
-      &username, &password, fill_data, true, false,
-      &nonscript_modified_values_,
-      base::Bind(&PasswordValueGatekeeper::RegisterElement,
-                 base::Unretained(&gatekeeper_)));
+  FillUserNameAndPassword(&username, &password, fill_data, true, false,
+                          &nonscript_modified_values_,
+                          base::Bind(&PasswordValueGatekeeper::RegisterElement,
+                                     base::Unretained(&gatekeeper_)),
+                          nullptr);
   return true;
 }
 
@@ -1315,10 +1327,24 @@ void PasswordAutofillAgent::DidStartProvisionalLoad() {
 void PasswordAutofillAgent::OnFillPasswordForm(
     int key,
     const PasswordFormFillData& form_data) {
+  std::unique_ptr<RendererSavePasswordProgressLogger> logger;
+  if (logging_state_active_) {
+    logger.reset(new RendererSavePasswordProgressLogger(this, routing_id()));
+    logger->LogMessage(Logger::STRING_ON_FILL_PASSWORD_FORM_METHOD);
+  }
+
   bool ambiguous_or_empty_names =
       DoesFormContainAmbiguousOrEmptyNames(form_data);
   FormElementsList forms;
   FindFormElements(render_frame(), form_data, ambiguous_or_empty_names, &forms);
+  if (logger) {
+    logger->LogBoolean(Logger::STRING_AMBIGUOUS_OR_EMPTY_NAMES,
+                       ambiguous_or_empty_names);
+    logger->LogNumber(Logger::STRING_NUMBER_OF_POTENTIAL_FORMS_TO_FILL,
+                      forms.size());
+    logger->LogBoolean(Logger::STRING_FORM_DATA_WAIT,
+                       form_data.wait_for_username);
+  }
   for (const auto& form : forms) {
     base::string16 username_field_name;
     base::string16 password_field_name =
@@ -1328,6 +1354,14 @@ void PasswordAutofillAgent::OnFillPasswordForm(
     if (form_contains_fillable_username_field) {
       username_field_name =
           FieldName(form_data.username_field, ambiguous_or_empty_names);
+    }
+    if (logger) {
+      logger->LogBoolean(Logger::STRING_CONTAINS_FILLABLE_USERNAME_FIELD,
+                         form_contains_fillable_username_field);
+      logger->LogBoolean(Logger::STRING_USERNAME_FIELD_NAME_EMPTY,
+                         username_field_name.empty());
+      logger->LogBoolean(Logger::STRING_PASSWORD_FIELD_NAME_EMPTY,
+                         password_field_name.empty());
     }
 
     // Attach autocomplete listener to enable selecting alternate logins.
@@ -1366,12 +1400,11 @@ void PasswordAutofillAgent::OnFillPasswordForm(
     // until the user types in a valid username.
     if (!form_data.wait_for_username) {
       FillFormOnPasswordReceived(
-          form_data,
-          username_element,
-          password_element,
+          form_data, username_element, password_element,
           &nonscript_modified_values_,
           base::Bind(&PasswordValueGatekeeper::RegisterElement,
-                     base::Unretained(&gatekeeper_)));
+                     base::Unretained(&gatekeeper_)),
+          logger.get());
     }
 
     PasswordInfo password_info;
@@ -1396,7 +1429,8 @@ void PasswordAutofillAgent::OnAutofillUsernameAndPasswordDataReceived(
 void PasswordAutofillAgent::OnFindFocusedPasswordForm() {
   std::unique_ptr<PasswordForm> password_form;
 
-  blink::WebElement element = render_frame()->GetFocusedElement();
+  blink::WebElement element =
+      render_frame()->GetWebFrame()->document().focusedElement();
   if (!element.isNull() && element.hasHTMLTagName("input")) {
     blink::WebInputElement input = element.to<blink::WebInputElement>();
     if (input.isPasswordField() && !input.form().isNull()) {

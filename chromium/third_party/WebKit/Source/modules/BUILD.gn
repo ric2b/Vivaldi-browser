@@ -46,9 +46,12 @@ component("modules") {
 
   deps = [
     ":make_modules_generated",
-    "//device/battery:mojo_bindings",
+    "//device/battery:mojo_bindings_blink",
+    "//device/usb/public/interfaces:interfaces_blink",
+    "//device/vibration:mojo_bindings_blink",
     "//mojo/public/c/system:for_component",
     "//third_party/WebKit/Source/core",
+    "//third_party/WebKit/public:mojo_bindings",
     "//third_party/WebKit/public:mojo_bindings_blink",
     "//third_party/icu",
     "//third_party/sqlite",
@@ -57,12 +60,6 @@ component("modules") {
 
   if (is_win) {
     cflags = [ "/wd4334" ]  # Result of 32-bit shift implicitly converted to 64 bits.
-    # TODO(GYP)
-    # Shard this taret into parts to work around linker limitations.
-    # on link time code generation builds.
-    #[buildtype=="Official"', {
-    #  'msvs_shard': 5,
-    #}],
   }
 
   if (remove_webcore_debug_symbols) {

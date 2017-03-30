@@ -5,7 +5,8 @@
 #ifndef CC_OUTPUT_VULKAN_IN_PROCESS_CONTEXT_PROVIDER_H_
 #define CC_OUTPUT_VULKAN_IN_PROCESS_CONTEXT_PROVIDER_H_
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
 #include "cc/base/cc_export.h"
 #include "cc/output/vulkan_context_provider.h"
 
@@ -22,6 +23,7 @@ class CC_EXPORT VulkanInProcessContextProvider : public VulkanContextProvider {
   bool Initialize();
   void Destroy();
 
+  // VulkanContextProvider implementation
   gpu::VulkanDeviceQueue* GetDeviceQueue() override;
 
  protected:
@@ -29,7 +31,11 @@ class CC_EXPORT VulkanInProcessContextProvider : public VulkanContextProvider {
   ~VulkanInProcessContextProvider() override;
 
  private:
-  scoped_ptr<gpu::VulkanDeviceQueue> device_queue_;
+#if defined(ENABLE_VULKAN)
+  std::unique_ptr<gpu::VulkanDeviceQueue> device_queue_;
+#endif
+
+  DISALLOW_COPY_AND_ASSIGN(VulkanInProcessContextProvider);
 };
 
 }  // namespace cc

@@ -33,8 +33,6 @@
 #include "net/quic/quic_protocol.h"
 #include "net/quic/quic_stream_sequencer.h"
 #include "net/quic/quic_types.h"
-// TODO(alyssar) remove this after cleaning Priority logic from this class.
-#include "net/quic/quic_write_blocked_list.h"
 
 namespace net {
 
@@ -170,6 +168,9 @@ class NET_EXPORT_PRIVATE ReliableQuicStream {
   // TODO(dworley): There should be machinery to send a RST_STREAM/NO_ERROR and
   // stop sending stream-level flow-control updates when this end sends FIN.
   virtual void StopReading();
+
+  // Get peer IP of the lastest packet which connection is dealing/delt with.
+  virtual const IPEndPoint& PeerAddressOfLatestPacket() const;
 
  protected:
   // Sends as much of 'data' to the connection as the connection will consume,

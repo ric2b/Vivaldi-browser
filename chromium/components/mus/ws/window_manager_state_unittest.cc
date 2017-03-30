@@ -4,12 +4,14 @@
 
 #include "components/mus/ws/window_manager_state.h"
 
+#include <memory>
+
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/test/test_simple_task_runner.h"
-#include "base/thread_task_runner_handle.h"
-#include "components/mus/public/cpp/event_matcher.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "components/mus/common/event_matcher_util.h"
 #include "components/mus/surfaces/surfaces_state.h"
 #include "components/mus/ws/accelerator.h"
 #include "components/mus/ws/display_binding.h"
@@ -23,7 +25,7 @@
 #include "components/mus/ws/window_manager_state.h"
 #include "components/mus/ws/window_server.h"
 #include "components/mus/ws/window_tree.h"
-#include "mojo/shell/public/interfaces/connector.mojom.h"
+#include "services/shell/public/interfaces/connector.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event.h"
 
@@ -36,7 +38,7 @@ class WindowManagerStateTest : public testing::Test {
   WindowManagerStateTest();
   ~WindowManagerStateTest() override {}
 
-  scoped_ptr<Accelerator> CreateAccelerator();
+  std::unique_ptr<Accelerator> CreateAccelerator();
 
   // Creates a child |server_window| with associataed |window_tree| and
   // |test_client|. The window is setup for processing input.
@@ -50,56 +52,41 @@ class WindowManagerStateTest : public testing::Test {
                                   Accelerator* accelerator);
   void OnEventAckTimeout();
 
-  WindowTree* tree() { return tree_; }
+  WindowTree* tree() {
+    return window_event_targeting_helper_.window_server()->GetTreeWithId(1);
+  }
   ServerWindow* window() { return window_; }
   TestWindowManager* window_manager() { return &window_manager_; }
-  TestWindowTreeClient* wm_client() { return wm_client_; }
+  TestWindowTreeClient* wm_client() {
+    return window_event_targeting_helper_.wm_client();
+  }
   WindowManagerState* window_manager_state() { return window_manager_state_; }
 
   // testing::Test:
   void SetUp() override;
 
  private:
-  int32_t cursor_id_;
+  WindowEventTargetingHelper window_event_targeting_helper_;
 
-  // Owned by WindowServer's DisplayManager.
-  Display* display_;
-  // Owned by Display.
   WindowManagerState* window_manager_state_;
-  // Owned by WindowServer.
-  TestDisplayBinding* display_binding_;
-  // Destroyed in TearDown.
-  WindowTree* tree_;
-  // Owned by Display.
-  WindowTree* original_tree_;
-  // TestWindowTreeClient that is used for the WM connection. Owned by
-  // |window_server_delegate_|
-  TestWindowTreeClient* wm_client_;
 
-  TestWindowServerDelegate window_server_delegate_;
-  scoped_ptr<WindowServer> window_server_;
   // Handles WindowStateManager ack timeouts.
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
-  TestPlatformDisplayFactory platform_display_factory_;
   TestWindowManager window_manager_;
   ServerWindow* window_;
-  // Needed to Bind to |wm_client_|
-  base::MessageLoop message_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowManagerStateTest);
 };
 
 WindowManagerStateTest::WindowManagerStateTest()
-    : cursor_id_(0),
-      task_runner_(new base::TestSimpleTaskRunner),
-      platform_display_factory_(&cursor_id_) {}
+    : task_runner_(new base::TestSimpleTaskRunner), window_(nullptr) {}
 
-scoped_ptr<Accelerator> WindowManagerStateTest::CreateAccelerator() {
+std::unique_ptr<Accelerator> WindowManagerStateTest::CreateAccelerator() {
   mojom::EventMatcherPtr matcher = mus::CreateKeyMatcher(
       mus::mojom::KeyboardCode::W, mus::mojom::kEventFlagControlDown);
   matcher->accelerator_phase = mojom::AcceleratorPhase::POST_TARGET;
   uint32_t accelerator_id = 1;
-  scoped_ptr<Accelerator> accelerator(
+  std::unique_ptr<Accelerator> accelerator(
       new Accelerator(accelerator_id, *matcher));
   return accelerator;
 }
@@ -108,31 +95,9 @@ void WindowManagerStateTest::CreateSecondaryTree(
     TestWindowTreeClient** test_client,
     WindowTree** window_tree,
     ServerWindow** server_window) {
-  WindowTree* tree1 = window_server_->GetTreeWithRoot(window_);
-  ASSERT_TRUE(tree1 != nullptr);
-  ASSERT_NE(tree1, tree());
-
-  const ClientWindowId child1_id(
-      WindowIdToTransportId(WindowId(tree1->id(), 1)));
-  EXPECT_TRUE(tree1->NewWindow(child1_id, ServerWindow::Properties()));
-  ServerWindow* child1 = tree1->GetWindowByClientId(child1_id);
-  ASSERT_TRUE(child1);
-  ClientWindowId window_id;
-  tree1->IsWindowKnown(window_, &window_id);
-  EXPECT_TRUE(tree1->AddWindow(window_id, child1_id));
-  tree1->GetDisplay(window_)->AddActivationParent(window_);
-
-  child1->SetVisible(true);
-  child1->SetBounds(gfx::Rect(20, 20, 20, 20));
-
-  TestWindowTreeClient* embed_connection =
-      window_server_delegate_.last_client();
-  embed_connection->tracker()->changes()->clear();
-  wm_client()->tracker()->changes()->clear();
-
-  *test_client = embed_connection;
-  *window_tree = tree1;
-  *server_window = child1;
+  window_event_targeting_helper_.CreateSecondaryTree(
+      window_, gfx::Rect(20, 20, 20, 20), test_client, window_tree,
+      server_window);
 }
 
 void WindowManagerStateTest::DispatchInputEventToWindow(
@@ -151,41 +116,14 @@ void WindowManagerStateTest::OnEventAckTimeout() {
 }
 
 void WindowManagerStateTest::SetUp() {
-  message_loop_.SetTaskRunner(task_runner_);
+  window_event_targeting_helper_.SetTaskRunner(task_runner_);
+  window_manager_state_ =
+      window_event_targeting_helper_.display()->GetActiveWindowManagerState();
+  window_ = window_event_targeting_helper_.CreatePrimaryTree(
+      gfx::Rect(0, 0, 100, 100), gfx::Rect(0, 0, 50, 50));
 
-  PlatformDisplay::set_factory_for_testing(&platform_display_factory_);
-  window_server_.reset(new WindowServer(&window_server_delegate_,
-                                        scoped_refptr<SurfacesState>()));
-
-  PlatformDisplayInitParams display_init_params;
-  display_ = new Display(window_server_.get(), display_init_params);
-  display_binding_ = new TestDisplayBinding(display_, window_server_.get());
-  display_->Init(make_scoped_ptr(display_binding_));
-
-  wm_client_ = window_server_delegate_.last_client();
-  window_manager_state_ = display_->GetActiveWindowManagerState();
-
-  tree_ = window_server_->GetTreeWithId(1);
-  const ClientWindowId embed_window_id(WindowIdToTransportId(WindowId(1, 1)));
-  EXPECT_TRUE(tree_->NewWindow(embed_window_id, ServerWindow::Properties()));
-  ClientWindowId root_id;
-  if (tree_->roots().size() == 1u) {
-    // If window isn't known we'll return 0, which should then error out.
-    tree_->IsWindowKnown(*(tree_->roots().begin()), &root_id);
-  }
-
-  EXPECT_TRUE(tree_->SetWindowVisibility(embed_window_id, true));
-  EXPECT_TRUE(tree_->AddWindow(root_id, embed_window_id));
-  display_->root_window()->SetBounds(gfx::Rect(0, 0, 100, 100));
-  mojom::WindowTreeClientPtr client;
-  mojom::WindowTreeClientRequest client_request = GetProxy(&client);
-  wm_client_->Bind(std::move(client_request));
-  tree_->Embed(embed_window_id, std::move(client));
-  window_ = tree_->GetWindowByClientId(embed_window_id);
-  window_->SetBounds(gfx::Rect(0, 0, 50, 50));
-
-  WindowTreeTestApi(tree_).set_window_manager_internal(&window_manager_);
-  wm_client_->tracker()->changes()->clear();
+  WindowTreeTestApi(tree()).set_window_manager_internal(&window_manager_);
+  wm_client()->tracker()->changes()->clear();
 }
 
 // Tests that when an event is dispatched with no accelerator, that post target
@@ -203,7 +141,7 @@ TEST_F(WindowManagerStateTest, NullAccelerator) {
   EXPECT_EQ("InputEvent window=1,1 event_action=1",
             ChangesToDescription1(*tracker->changes())[0]);
 
-  state->OnEventAck(target_tree, false);
+  state->OnEventAck(target_tree, mojom::EventResult::UNHANDLED);
   EXPECT_FALSE(window_manager()->on_accelerator_called());
 }
 
@@ -211,7 +149,7 @@ TEST_F(WindowManagerStateTest, NullAccelerator) {
 // called on ack.
 TEST_F(WindowManagerStateTest, PostTargetAccelerator) {
   ui::KeyEvent key(ui::ET_KEY_PRESSED, ui::VKEY_W, ui::EF_CONTROL_DOWN);
-  scoped_ptr<Accelerator> accelerator = CreateAccelerator();
+  std::unique_ptr<Accelerator> accelerator = CreateAccelerator();
 
   ServerWindow* target = window();
   DispatchInputEventToWindow(target, true, key, accelerator.get());
@@ -220,7 +158,7 @@ TEST_F(WindowManagerStateTest, PostTargetAccelerator) {
   EXPECT_EQ("InputEvent window=1,1 event_action=1",
             ChangesToDescription1(*tracker->changes())[0]);
 
-  window_manager_state()->OnEventAck(tree(), false);
+  window_manager_state()->OnEventAck(tree(), mojom::EventResult::UNHANDLED);
   EXPECT_TRUE(window_manager()->on_accelerator_called());
   EXPECT_EQ(accelerator->id(), window_manager()->on_accelerator_id());
 }
@@ -229,7 +167,7 @@ TEST_F(WindowManagerStateTest, PostTargetAccelerator) {
 // not called.
 TEST_F(WindowManagerStateTest, ClientHandlesEvent) {
   ui::KeyEvent key(ui::ET_KEY_PRESSED, ui::VKEY_W, ui::EF_CONTROL_DOWN);
-  scoped_ptr<Accelerator> accelerator = CreateAccelerator();
+  std::unique_ptr<Accelerator> accelerator = CreateAccelerator();
 
   ServerWindow* target = window();
   DispatchInputEventToWindow(target, true, key, accelerator.get());
@@ -238,7 +176,7 @@ TEST_F(WindowManagerStateTest, ClientHandlesEvent) {
   EXPECT_EQ("InputEvent window=1,1 event_action=1",
             ChangesToDescription1(*tracker->changes())[0]);
 
-  window_manager_state()->OnEventAck(tree(), true);
+  window_manager_state()->OnEventAck(tree(), mojom::EventResult::HANDLED);
   EXPECT_FALSE(window_manager()->on_accelerator_called());
 }
 
@@ -246,7 +184,7 @@ TEST_F(WindowManagerStateTest, ClientHandlesEvent) {
 // called.
 TEST_F(WindowManagerStateTest, AcceleratorDeleted) {
   ui::KeyEvent key(ui::ET_KEY_PRESSED, ui::VKEY_W, ui::EF_CONTROL_DOWN);
-  scoped_ptr<Accelerator> accelerator(CreateAccelerator());
+  std::unique_ptr<Accelerator> accelerator(CreateAccelerator());
 
   ServerWindow* target = window();
   DispatchInputEventToWindow(target, true, key, accelerator.get());
@@ -256,7 +194,7 @@ TEST_F(WindowManagerStateTest, AcceleratorDeleted) {
             ChangesToDescription1(*tracker->changes())[0]);
 
   accelerator.reset();
-  window_manager_state()->OnEventAck(tree(), false);
+  window_manager_state()->OnEventAck(tree(), mojom::EventResult::UNHANDLED);
   EXPECT_FALSE(window_manager()->on_accelerator_called());
 }
 
@@ -266,7 +204,7 @@ TEST_F(WindowManagerStateTest, EnqueuedAccelerators) {
   WindowManagerState* state = window_manager_state();
 
   ui::KeyEvent key(ui::ET_KEY_PRESSED, ui::VKEY_W, ui::EF_CONTROL_DOWN);
-  scoped_ptr<Accelerator> accelerator(CreateAccelerator());
+  std::unique_ptr<Accelerator> accelerator(CreateAccelerator());
 
   ServerWindow* target = window();
   DispatchInputEventToWindow(target, true, key, accelerator.get());
@@ -281,14 +219,14 @@ TEST_F(WindowManagerStateTest, EnqueuedAccelerators) {
       mus::mojom::KeyboardCode::Y, mus::mojom::kEventFlagControlDown);
   matcher->accelerator_phase = mojom::AcceleratorPhase::POST_TARGET;
   uint32_t accelerator_id = 2;
-  scoped_ptr<Accelerator> accelerator2(
+  std::unique_ptr<Accelerator> accelerator2(
       new Accelerator(accelerator_id, *matcher));
   DispatchInputEventToWindow(target, true, key2, accelerator2.get());
   EXPECT_TRUE(tracker->changes()->empty());
 
   WindowTree* target_tree = tree();
   WindowTreeTestApi(target_tree).ClearAck();
-  state->OnEventAck(target_tree, false);
+  state->OnEventAck(target_tree, mojom::EventResult::UNHANDLED);
   EXPECT_EQ(1u, tracker->changes()->size());
   EXPECT_EQ("InputEvent window=1,1 event_action=1",
             ChangesToDescription1(*tracker->changes())[0]);
@@ -299,7 +237,7 @@ TEST_F(WindowManagerStateTest, EnqueuedAccelerators) {
 // Tests that the accelerator is not sent when the tree is dying.
 TEST_F(WindowManagerStateTest, DeleteTree) {
   ui::KeyEvent key(ui::ET_KEY_PRESSED, ui::VKEY_W, ui::EF_CONTROL_DOWN);
-  scoped_ptr<Accelerator> accelerator = CreateAccelerator();
+  std::unique_ptr<Accelerator> accelerator = CreateAccelerator();
 
   ServerWindow* target = window();
   DispatchInputEventToWindow(target, true, key, accelerator.get());
@@ -324,7 +262,7 @@ TEST_F(WindowManagerStateTest, DeleteNonRootTree) {
       .set_window_manager_internal(&target_window_manager);
 
   ui::KeyEvent key(ui::ET_KEY_PRESSED, ui::VKEY_W, ui::EF_CONTROL_DOWN);
-  scoped_ptr<Accelerator> accelerator = CreateAccelerator();
+  std::unique_ptr<Accelerator> accelerator = CreateAccelerator();
   DispatchInputEventToWindow(target, true, key, accelerator.get());
   TestChangeTracker* tracker = embed_connection->tracker();
   EXPECT_EQ(1u, tracker->changes()->size());
@@ -340,7 +278,7 @@ TEST_F(WindowManagerStateTest, DeleteNonRootTree) {
 // Tests that when an ack times out that the accelerator is notified.
 TEST_F(WindowManagerStateTest, AckTimeout) {
   ui::KeyEvent key(ui::ET_KEY_PRESSED, ui::VKEY_W, ui::EF_CONTROL_DOWN);
-  scoped_ptr<Accelerator> accelerator = CreateAccelerator();
+  std::unique_ptr<Accelerator> accelerator = CreateAccelerator();
   DispatchInputEventToWindow(window(), true, key, accelerator.get());
   TestChangeTracker* tracker = wm_client()->tracker();
   EXPECT_EQ(1u, tracker->changes()->size());

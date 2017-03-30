@@ -5,7 +5,6 @@
 #include "core/dom/DocumentStatisticsCollector.h"
 
 #include "core/dom/Document.h"
-#include "core/dom/DocumentVisibilityObserver.h"
 #include "core/frame/FrameView.h"
 #include "core/html/HTMLHeadElement.h"
 #include "core/html/HTMLLinkElement.h"
@@ -27,12 +26,10 @@ class DocumentStatisticsCollectorTest : public ::testing::Test {
 protected:
     void SetUp() override;
 
-#if ENABLE(OILPAN)
     void TearDown() override
     {
-        Heap::collectAllGarbage();
+        ThreadHeap::collectAllGarbage();
     }
-#endif
 
     Document& document() const { return m_dummyPageHolder->document(); }
 

@@ -18,7 +18,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/autofill/content/common/autofill_messages.h"
@@ -35,6 +35,7 @@
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/password_form.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/service_registry.h"
 #include "content/public/common/ssl_status.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/render_frame.h"
@@ -178,6 +179,10 @@ AutofillAgent::AutofillAgent(content::RenderFrame* render_frame,
       weak_ptr_factory_(this) {
   render_frame->GetWebFrame()->setAutofillClient(this);
 
+  // AutofillAgent is guaranteed to outlive |render_frame|.
+  render_frame->GetServiceRegistry()->AddService(
+      base::Bind(&AutofillAgent::BindRequest, base::Unretained(this)));
+
   // This owns itself, and will delete itself when |render_frame| is destructed
   // (same as AutofillAgent). This object must be constructed after
   // AutofillAgent so that password generation UI is shown before password
@@ -186,6 +191,10 @@ AutofillAgent::AutofillAgent(content::RenderFrame* render_frame,
 }
 
 AutofillAgent::~AutofillAgent() {}
+
+void AutofillAgent::BindRequest(mojom::AutofillAgentRequest request) {
+  bindings_.AddBinding(this, std::move(request));
+}
 
 bool AutofillAgent::FormDataCompare::operator()(const FormData& lhs,
                                                 const FormData& rhs) const {
@@ -196,8 +205,6 @@ bool AutofillAgent::FormDataCompare::operator()(const FormData& lhs,
 bool AutofillAgent::OnMessageReceived(const IPC::Message& message) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(AutofillAgent, message)
-  IPC_MESSAGE_HANDLER(AutofillMsg_FirstUserGestureObservedInTab,
-                      OnFirstUserGestureObservedInTab)
     IPC_MESSAGE_HANDLER(AutofillMsg_FillForm, OnFillForm)
     IPC_MESSAGE_HANDLER(AutofillMsg_PreviewForm, OnPreviewForm)
     IPC_MESSAGE_HANDLER(AutofillMsg_FieldTypePredictionsAvailable,
@@ -213,8 +220,6 @@ bool AutofillAgent::OnMessageReceived(const IPC::Message& message) {
                         OnFillPasswordSuggestion)
     IPC_MESSAGE_HANDLER(AutofillMsg_PreviewPasswordSuggestion,
                         OnPreviewPasswordSuggestion)
-    IPC_MESSAGE_HANDLER(AutofillMsg_RequestAutocompleteResult,
-                        OnRequestAutocompleteResult)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -333,57 +338,6 @@ void AutofillAgent::FocusChangeComplete() {
     is_generation_popup_possibly_visible_ = true;
     is_popup_possibly_visible_ = true;
   }
-}
-
-void AutofillAgent::didRequestAutocomplete(
-    const WebFormElement& form) {
-  DCHECK_EQ(form.document().frame(), render_frame()->GetWebFrame());
-
-  // Disallow the dialog over non-https or broken https, except when the
-  // ignore SSL flag is passed. See http://crbug.com/272512.
-  // TODO(palmer): this should be moved to the browser process after frames
-  // get their own processes.
-  GURL url(form.document().url());
-  content::SSLStatus ssl_status =
-      render_frame()->GetRenderView()->GetSSLStatusOfFrame(
-          form.document().frame());
-  bool is_safe = url.SchemeIsCryptographic() &&
-                 !net::IsCertStatusError(ssl_status.cert_status);
-  bool allow_unsafe = base::CommandLine::ForCurrentProcess()->HasSwitch(
-      ::switches::kReduceSecurityForTesting);
-  FormData form_data;
-  std::string error_message;
-  if (!in_flight_request_form_.isNull()) {
-    error_message = "already active.";
-  } else if (!is_safe && !allow_unsafe) {
-    error_message =
-        "must use a secure connection or --reduce-security-for-testing.";
-  } else if (!WebFormElementToFormData(
-                 form, WebFormControlElement(),
-                 static_cast<form_util::ExtractMask>(
-                     form_util::EXTRACT_VALUE | form_util::EXTRACT_OPTION_TEXT |
-                     form_util::EXTRACT_OPTIONS),
-                 &form_data, NULL)) {
-    error_message = "failed to parse form.";
-  }
-
-  if (!error_message.empty()) {
-    WebConsoleMessage console_message = WebConsoleMessage(
-        WebConsoleMessage::LevelLog,
-        WebString(base::ASCIIToUTF16("requestAutocomplete: ") +
-                      base::ASCIIToUTF16(error_message)));
-    form.document().frame()->addMessageToConsole(console_message);
-    WebFormElement(form).finishRequestAutocomplete(
-        WebFormElement::AutocompleteResultErrorDisabled);
-    return;
-  }
-
-  // Cancel any pending Autofill requests and hide any currently showing popups.
-  ++autofill_query_id_;
-  HidePopup();
-
-  in_flight_request_form_ = form;
-  Send(new AutofillHostMsg_RequestAutocomplete(routing_id(), form_data));
 }
 
 void AutofillAgent::setIgnoreTextChanges(bool ignore) {
@@ -511,7 +465,9 @@ void AutofillAgent::dataListOptionsChanged(const WebInputElement& element) {
 
 void AutofillAgent::firstUserGestureObserved() {
   password_autofill_agent_->FirstUserGestureObserved();
-  Send(new AutofillHostMsg_FirstUserGestureObserved(routing_id()));
+
+  ConnectToMojoAutofillDriverIfNeeded();
+  mojo_autofill_driver_->FirstUserGestureObserved();
 }
 
 void AutofillAgent::AcceptDataListSuggestion(
@@ -564,7 +520,8 @@ void AutofillAgent::OnFillForm(int query_id, const FormData& form) {
                                                    base::TimeTicks::Now()));
 }
 
-void AutofillAgent::OnFirstUserGestureObservedInTab() {
+// mojom::AutofillAgent:
+void AutofillAgent::FirstUserGestureObservedInTab() {
   password_autofill_agent_->FirstUserGestureObserved();
 }
 
@@ -652,33 +609,6 @@ void AutofillAgent::OnSamePageNavigationCompleted() {
   WillSendSubmitEvent(last_interacted_form_);
   WillSubmitForm(last_interacted_form_);
   last_interacted_form_.reset();
-}
-
-void AutofillAgent::OnRequestAutocompleteResult(
-    WebFormElement::AutocompleteResult result,
-    const base::string16& message,
-    const FormData& form_data) {
-  if (in_flight_request_form_.isNull())
-    return;
-
-  if (result == WebFormElement::AutocompleteResultSuccess) {
-    form_util::FillFormIncludingNonFocusableElements(form_data,
-                                                     in_flight_request_form_);
-    if (!in_flight_request_form_.checkValidity())
-      result = WebFormElement::AutocompleteResultErrorInvalid;
-  }
-
-  in_flight_request_form_.finishRequestAutocomplete(result);
-
-  if (!message.empty()) {
-    const base::string16 prefix(base::ASCIIToUTF16("requestAutocomplete: "));
-    WebConsoleMessage console_message = WebConsoleMessage(
-        WebConsoleMessage::LevelLog, WebString(prefix + message));
-    in_flight_request_form_.document().frame()->addMessageToConsole(
-        console_message);
-  }
-
-  in_flight_request_form_.reset();
 }
 
 void AutofillAgent::ShowSuggestions(const WebFormControlElement& element,
@@ -841,6 +771,14 @@ void AutofillAgent::didAssociateFormControls(const WebVector<WebNode>& nodes) {
 void AutofillAgent::ajaxSucceeded() {
   OnSamePageNavigationCompleted();
   password_autofill_agent_->AJAXSucceeded();
+}
+
+void AutofillAgent::ConnectToMojoAutofillDriverIfNeeded() {
+  if (mojo_autofill_driver_)
+    return;
+
+  render_frame()->GetServiceRegistry()->ConnectToRemoteService(
+      mojo::GetProxy(&mojo_autofill_driver_));
 }
 
 // LegacyAutofillAgent ---------------------------------------------------------

@@ -94,14 +94,14 @@ TEST(VideoLayerImplTest, OccludesOtherLayers) {
   auto active_tree = impl.host_impl()->active_tree();
 
   // Create a video layer with no frame on top of another layer.
-  scoped_ptr<LayerImpl> layer_impl = LayerImpl::Create(active_tree, 3);
-  layer_impl->SetForceRenderSurface(true);
+  std::unique_ptr<LayerImpl> layer_impl = LayerImpl::Create(active_tree, 3);
+  layer_impl->test_properties()->force_render_surface = true;
   layer_impl->SetBounds(layer_size);
   layer_impl->SetDrawsContent(true);
   const auto& draw_properties = layer_impl->draw_properties();
 
   FakeVideoFrameProvider provider;
-  scoped_ptr<VideoLayerImpl> video_layer_impl = VideoLayerImpl::Create(
+  std::unique_ptr<VideoLayerImpl> video_layer_impl = VideoLayerImpl::Create(
       active_tree, 4, &provider, media::VIDEO_ROTATION_0);
   video_layer_impl->SetBounds(layer_size);
   video_layer_impl->SetDrawsContent(true);
@@ -312,6 +312,7 @@ TEST(VideoLayerImplTest, SoftwareVideoFrameGeneratesYUVQuad) {
       impl.AddChildToRoot<VideoLayerImpl>(&provider, media::VIDEO_ROTATION_0);
   video_layer_impl->SetBounds(layer_size);
   video_layer_impl->SetDrawsContent(true);
+  impl.host_impl()->active_tree()->BuildPropertyTreesForTesting();
 
   gfx::Rect occluded;
   impl.AppendQuadsWithOcclusion(video_layer_impl, occluded);
@@ -335,14 +336,16 @@ TEST(VideoLayerImplTest, NativeYUVFrameGeneratesYUVQuad) {
   LayerTestCommon::LayerImplTest impl;
   DebugSetImplThreadAndMainThreadBlocked(impl.task_runner_provider());
 
-  gpu::MailboxHolder mailbox_holder;
-  mailbox_holder.mailbox.name[0] = 1;
+  gpu::MailboxHolder mailbox_holders[media::VideoFrame::kMaxPlanes];
+  mailbox_holders[0].mailbox.name[0] = 1;
+  mailbox_holders[1].mailbox.name[0] = 1;
+  mailbox_holders[2].mailbox.name[0] = 1;
 
   scoped_refptr<media::VideoFrame> video_frame =
-      media::VideoFrame::WrapYUV420NativeTextures(
-          mailbox_holder, mailbox_holder, mailbox_holder,
-          base::Bind(EmptyCallback), gfx::Size(10, 10), gfx::Rect(10, 10),
-          gfx::Size(10, 10), base::TimeDelta());
+      media::VideoFrame::WrapNativeTextures(
+          media::PIXEL_FORMAT_I420, mailbox_holders, base::Bind(EmptyCallback),
+          gfx::Size(10, 10), gfx::Rect(10, 10), gfx::Size(10, 10),
+          base::TimeDelta());
   ASSERT_TRUE(video_frame);
   video_frame->metadata()->SetBoolean(media::VideoFrameMetadata::ALLOW_OVERLAY,
                                       true);
@@ -353,6 +356,7 @@ TEST(VideoLayerImplTest, NativeYUVFrameGeneratesYUVQuad) {
       impl.AddChildToRoot<VideoLayerImpl>(&provider, media::VIDEO_ROTATION_0);
   video_layer_impl->SetBounds(layer_size);
   video_layer_impl->SetDrawsContent(true);
+  impl.host_impl()->active_tree()->BuildPropertyTreesForTesting();
 
   gfx::Rect occluded;
   impl.AppendQuadsWithOcclusion(video_layer_impl, occluded);

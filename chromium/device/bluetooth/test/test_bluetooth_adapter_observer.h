@@ -2,10 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef DEVICE_BLUETOOTH_TEST_BLUETOOTH_ADAPTER_OBSERVER_H_
-#define DEVICE_BLUETOOTH_TEST_BLUETOOTH_ADAPTER_OBSERVER_H_
+#ifndef DEVICE_BLUETOOTH_TEST_TEST_BLUETOOTH_ADAPTER_OBSERVER_H_
+#define DEVICE_BLUETOOTH_TEST_TEST_BLUETOOTH_ADAPTER_OBSERVER_H_
 
 #include <stdint.h>
+#include <string>
+#include <vector>
 
 #include "base/macros.h"
 #include "device/bluetooth/bluetooth_adapter.h"
@@ -16,7 +18,8 @@ namespace device {
 // caching last reported values.
 class TestBluetoothAdapterObserver : public BluetoothAdapter::Observer {
  public:
-  TestBluetoothAdapterObserver(scoped_refptr<BluetoothAdapter> adapter);
+  explicit TestBluetoothAdapterObserver(
+      scoped_refptr<BluetoothAdapter> adapter);
   ~TestBluetoothAdapterObserver() override;
 
   // Reset counters and cached values.
@@ -35,36 +38,43 @@ class TestBluetoothAdapterObserver : public BluetoothAdapter::Observer {
   void DeviceAddressChanged(device::BluetoothAdapter* adapter,
                             device::BluetoothDevice* device,
                             const std::string& old_address) override;
+#if defined(OS_CHROMEOS) || defined(OS_LINUX)
+  void DevicePairedChanged(device::BluetoothAdapter* adapter,
+                           device::BluetoothDevice* device,
+                           bool new_paired_status) override;
+#endif
   void DeviceRemoved(BluetoothAdapter* adapter,
                      BluetoothDevice* device) override;
   void GattServiceAdded(BluetoothAdapter* adapter,
                         BluetoothDevice* device,
-                        BluetoothGattService* service) override;
+                        BluetoothRemoteGattService* service) override;
   void GattServiceRemoved(BluetoothAdapter* adapter,
                           BluetoothDevice* device,
-                          BluetoothGattService* service) override;
+                          BluetoothRemoteGattService* service) override;
   void GattServicesDiscovered(BluetoothAdapter* adapter,
                               BluetoothDevice* device) override;
-  void GattDiscoveryCompleteForService(BluetoothAdapter* adapter,
-                                       BluetoothGattService* service) override;
+  void GattDiscoveryCompleteForService(
+      BluetoothAdapter* adapter,
+      BluetoothRemoteGattService* service) override;
   void GattServiceChanged(BluetoothAdapter* adapter,
-                          BluetoothGattService* service) override;
+                          BluetoothRemoteGattService* service) override;
   void GattCharacteristicAdded(
       BluetoothAdapter* adapter,
-      BluetoothGattCharacteristic* characteristic) override;
+      BluetoothRemoteGattCharacteristic* characteristic) override;
   void GattCharacteristicRemoved(
       BluetoothAdapter* adapter,
-      BluetoothGattCharacteristic* characteristic) override;
+      BluetoothRemoteGattCharacteristic* characteristic) override;
   void GattDescriptorAdded(BluetoothAdapter* adapter,
-                           BluetoothGattDescriptor* descriptor) override;
-  void GattDescriptorRemoved(BluetoothAdapter* adapter,
-                             BluetoothGattDescriptor* descriptor) override;
+                           BluetoothRemoteGattDescriptor* descriptor) override;
+  void GattDescriptorRemoved(
+      BluetoothAdapter* adapter,
+      BluetoothRemoteGattDescriptor* descriptor) override;
   void GattCharacteristicValueChanged(
       BluetoothAdapter* adapter,
-      BluetoothGattCharacteristic* characteristic,
+      BluetoothRemoteGattCharacteristic* characteristic,
       const std::vector<uint8_t>& value) override;
   void GattDescriptorValueChanged(BluetoothAdapter* adapter,
-                                  BluetoothGattDescriptor* descriptor,
+                                  BluetoothRemoteGattDescriptor* descriptor,
                                   const std::vector<uint8_t>& value) override;
 
   // Adapter related:
@@ -80,6 +90,10 @@ class TestBluetoothAdapterObserver : public BluetoothAdapter::Observer {
   int device_added_count() { return device_added_count_; }
   int device_changed_count() { return device_changed_count_; }
   int device_address_changed_count() { return device_address_changed_count_; }
+#if defined(OS_CHROMEOS) || defined(OS_LINUX)
+  int device_paired_changed_count() { return device_paired_changed_count_; }
+  bool device_new_paired_status() { return device_new_paired_status_; }
+#endif
   int device_removed_count() { return device_removed_count_; }
   BluetoothDevice* last_device() { return last_device_; }
   std::string last_device_address() { return last_device_address_; }
@@ -145,6 +159,10 @@ class TestBluetoothAdapterObserver : public BluetoothAdapter::Observer {
   int device_added_count_;
   int device_changed_count_;
   int device_address_changed_count_;
+#if defined(OS_CHROMEOS) || defined(OS_LINUX)
+  int device_paired_changed_count_;
+  bool device_new_paired_status_;
+#endif
   int device_removed_count_;
   BluetoothDevice* last_device_;
   std::string last_device_address_;
@@ -175,4 +193,4 @@ class TestBluetoothAdapterObserver : public BluetoothAdapter::Observer {
 
 }  // namespace device
 
-#endif  // DEVICE_BLUETOOTH_TEST_BLUETOOTH_ADAPTER_OBSERVER_H_
+#endif  // DEVICE_BLUETOOTH_TEST_TEST_BLUETOOTH_ADAPTER_OBSERVER_H_

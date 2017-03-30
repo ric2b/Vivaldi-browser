@@ -43,6 +43,11 @@ static const LanguageRegion g_supported_spellchecker_languages[] = {
   {"en-GB", "en-GB"},
   {"en-US", "en-US"},
   {"es", "es-ES"},
+  {"es-419", "es-ES"},
+  {"es-AR", "es-ES"},
+  {"es-ES", "es-ES"},
+  {"es-MX", "es-ES"},
+  {"es-US", "es-ES"},
   {"et", "et-EE"},
   {"fa", "fa-IR"},
   {"fo", "fo-FO"},
@@ -114,11 +119,10 @@ base::FilePath GetVersionedFileName(const std::string& input_language,
                         // crash.
     {"tg-TG", "-5-0"},  // Mar 4, 2014: Add Tajik dictionary.
 
-    // March 2016: Update from upstream
-    {"en-AU", "-7-0"},
-    {"en-CA", "-7-0"},
-    {"en-GB", "-7-0"},
-    {"en-US", "-7-0"},
+    // April 2016: Local fixes
+    {"en-CA", "-7-1"},
+    {"en-GB", "-7-1"},
+    {"en-US", "-7-1"},
 
     // March 2016: Initial check-in of Persian
     {"fa-IR", "-7-0"},
@@ -141,6 +145,7 @@ base::FilePath GetVersionedFileName(const std::string& input_language,
 }
 
 std::string GetCorrespondingSpellCheckLanguage(const std::string& language) {
+  std::string best_match;
   // Look for exact match in the Spell Check language list.
   for (size_t i = 0; i < arraysize(g_supported_spellchecker_languages);
        ++i) {
@@ -153,12 +158,14 @@ std::string GetCorrespondingSpellCheckLanguage(const std::string& language) {
     // Next, look for exact match in the language_region part of the list.
     std::string spellcheck_language_region(
         g_supported_spellchecker_languages[i].language_region);
-    if (spellcheck_language_region == language)
-      return g_supported_spellchecker_languages[i].language;
+    if (spellcheck_language_region == language) {
+      if (best_match.empty())
+        best_match = g_supported_spellchecker_languages[i].language;
+    }
   }
 
-  // No match found - return blank.
-  return std::string();
+  // No match found - return best match, if any.
+  return best_match;
 }
 
 void SpellCheckLanguages(std::vector<std::string>* languages) {

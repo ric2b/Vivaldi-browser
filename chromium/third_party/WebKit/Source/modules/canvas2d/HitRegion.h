@@ -45,22 +45,21 @@ private:
     WindRule m_fillRule;
 };
 
-class HitRegionManager final : public GarbageCollectedFinalized<HitRegionManager> {
+class HitRegionManager final : public GarbageCollected<HitRegionManager> {
     WTF_MAKE_NONCOPYABLE(HitRegionManager);
 public:
     static HitRegionManager* create() { return new HitRegionManager; }
-    ~HitRegionManager() { }
 
     void addHitRegion(HitRegion*);
 
     void removeHitRegion(HitRegion*);
     void removeHitRegionById(const String& id);
-    void removeHitRegionByControl(Element*);
+    void removeHitRegionByControl(const Element*);
     void removeHitRegionsInRect(const FloatRect&, const AffineTransform&);
     void removeAllHitRegions();
 
     HitRegion* getHitRegionById(const String& id) const;
-    HitRegion* getHitRegionByControl(Element*) const;
+    HitRegion* getHitRegionByControl(const Element*) const;
     HitRegion* getHitRegionAtPoint(const FloatPoint&) const;
 
     unsigned getHitRegionsCount() const;
@@ -73,7 +72,7 @@ private:
     typedef HeapListHashSet<Member<HitRegion>> HitRegionList;
     typedef HitRegionList::const_reverse_iterator HitRegionIterator;
     typedef HeapHashMap<String, Member<HitRegion>> HitRegionIdMap;
-    typedef HeapHashMap<Member<Element>, Member<HitRegion>> HitRegionControlMap;
+    typedef HeapHashMap<Member<const Element>, Member<HitRegion>> HitRegionControlMap;
 
     HitRegionList m_hitRegionList;
     HitRegionIdMap m_hitRegionIdMap;

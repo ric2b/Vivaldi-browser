@@ -32,6 +32,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContextTask.h"
+#include "core/frame/Settings.h"
 #include "core/html/HTMLMediaElement.h"
 #include "modules/mediastream/MediaStream.h"
 #include "modules/webaudio/AnalyserNode.h"
@@ -60,15 +61,30 @@
 #include "modules/webaudio/OscillatorNode.h"
 #include "modules/webaudio/PannerNode.h"
 #include "modules/webaudio/PeriodicWave.h"
+#include "modules/webaudio/PeriodicWaveConstraints.h"
 #include "modules/webaudio/ScriptProcessorNode.h"
 #include "modules/webaudio/StereoPannerNode.h"
 #include "modules/webaudio/WaveShaperNode.h"
+#include "platform/Histogram.h"
 #include "platform/ThreadSafeFunctional.h"
+#include "platform/UserGestureIndicator.h"
 #include "platform/audio/IIRFilter.h"
 #include "public/platform/Platform.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
+
+namespace {
+
+enum UserGestureRecord {
+    UserGestureRequiredAndAvailable = 0,
+    UserGestureRequiredAndNotAvailable,
+    UserGestureNotRequiredAndAvailable,
+    UserGestureNotRequiredAndNotAvailable,
+    UserGestureRecordMax
+};
+
+} // anonymous namespace
 
 AbstractAudioContext* AbstractAudioContext::create(Document& document, ExceptionState& exceptionState)
 {
@@ -85,8 +101,8 @@ AbstractAudioContext::AbstractAudioContext(Document* document)
     , m_destinationNode(nullptr)
     , m_isCleared(false)
     , m_isResolvingResumePromises(false)
+    , m_userGestureRequired(false)
     , m_connectionCount(0)
-    , m_didInitializeContextGraphMutex(false)
     , m_deferredTaskHandler(DeferredTaskHandler::create())
     , m_contextState(Suspended)
     , m_closedContextSampleRate(-1)
@@ -95,7 +111,12 @@ AbstractAudioContext::AbstractAudioContext(Document* document)
     , m_periodicWaveSawtooth(nullptr)
     , m_periodicWaveTriangle(nullptr)
 {
-    m_didInitializeContextGraphMutex = true;
+    // TODO(mlamouri): we might want to use other ways of checking for this but
+    // in order to record metrics, re-using the HTMLMediaElement setting is
+    // probably the simplest solution.
+    if (document->settings() && document->settings()->mediaPlaybackRequiresUserGesture())
+        m_userGestureRequired = true;
+
     m_destinationNode = DefaultAudioDestinationNode::create(this);
 
     initialize();
@@ -108,8 +129,8 @@ AbstractAudioContext::AbstractAudioContext(Document* document, unsigned numberOf
     , m_destinationNode(nullptr)
     , m_isCleared(false)
     , m_isResolvingResumePromises(false)
+    , m_userGestureRequired(false)
     , m_connectionCount(0)
-    , m_didInitializeContextGraphMutex(false)
     , m_deferredTaskHandler(DeferredTaskHandler::create())
     , m_contextState(Suspended)
     , m_closedContextSampleRate(-1)
@@ -118,7 +139,11 @@ AbstractAudioContext::AbstractAudioContext(Document* document, unsigned numberOf
     , m_periodicWaveSawtooth(nullptr)
     , m_periodicWaveTriangle(nullptr)
 {
-    m_didInitializeContextGraphMutex = true;
+    // TODO(mlamouri): we might want to use other ways of checking for this but
+    // in order to record metrics, re-using the HTMLMediaElement setting is
+    // probably the simplest solution.
+    if (document->settings() && document->settings()->mediaPlaybackRequiresUserGesture())
+        m_userGestureRequired = true;
 }
 
 AbstractAudioContext::~AbstractAudioContext()
@@ -138,10 +163,12 @@ void AbstractAudioContext::initialize()
         return;
 
     FFTFrame::initialize();
-    m_listener = AudioListener::create();
 
-    if (m_destinationNode.get()) {
+    if (m_destinationNode) {
         m_destinationNode->handler().initialize();
+        // The AudioParams in the listener need access to the destination node, so only create the
+        // listener if the destination node exists.
+        m_listener = AudioListener::create(*this);
     }
 }
 
@@ -187,6 +214,14 @@ bool AbstractAudioContext::hasPendingActivity() const
 {
     // There's no pending activity if the audio context has been cleared.
     return !m_isCleared;
+}
+
+AudioDestinationNode* AbstractAudioContext::destination() const
+{
+    // Cannot be called from the audio thread because this method touches objects managed by Oilpan,
+    // and the audio thread is not managed by Oilpan.
+    ASSERT(!isAudioThread());
+    return m_destinationNode;
 }
 
 void AbstractAudioContext::throwExceptionForClosedState(ExceptionState& exceptionState)
@@ -304,7 +339,7 @@ MediaStreamAudioSourceNode* AbstractAudioContext::createMediaStreamSource(MediaS
     // Use the first audio track in the media stream.
     MediaStreamTrack* audioTrack = audioTracks[0];
     OwnPtr<AudioSourceProvider> provider = audioTrack->createWebAudioSource();
-    MediaStreamAudioSourceNode* node = MediaStreamAudioSourceNode::create(*this, *mediaStream, audioTrack, provider.release());
+    MediaStreamAudioSourceNode* node = MediaStreamAudioSourceNode::create(*this, *mediaStream, audioTrack, std::move(provider));
 
     // FIXME: Only stereo streams are supported right now. We should be able to accept multi-channel streams.
     node->setFormat(2, sampleRate());
@@ -570,7 +605,7 @@ PeriodicWave* AbstractAudioContext::createPeriodicWave(DOMFloat32Array* real, DO
     return PeriodicWave::create(sampleRate(), real, imag, false);
 }
 
-PeriodicWave* AbstractAudioContext::createPeriodicWave(DOMFloat32Array* real, DOMFloat32Array* imag, const Dictionary& options, ExceptionState& exceptionState)
+PeriodicWave* AbstractAudioContext::createPeriodicWave(DOMFloat32Array* real, DOMFloat32Array* imag, const PeriodicWaveConstraints& options, ExceptionState& exceptionState)
 {
     ASSERT(isMainThread());
 
@@ -588,10 +623,9 @@ PeriodicWave* AbstractAudioContext::createPeriodicWave(DOMFloat32Array* real, DO
         return nullptr;
     }
 
-    bool isNormalizationDisabled = false;
-    DictionaryHelper::getWithUndefinedOrNullCheck(options, "disableNormalization", isNormalizationDisabled);
+    bool disable = options.hasDisableNormalization() ? options.disableNormalization() : false;
 
-    return PeriodicWave::create(sampleRate(), real, imag, isNormalizationDisabled);
+    return PeriodicWave::create(sampleRate(), real, imag, disable);
 }
 
 IIRFilterNode* AbstractAudioContext::createIIRFilter(Vector<double> feedforwardCoef, Vector<double> feedbackCoef,  ExceptionState& exceptionState)
@@ -707,6 +741,25 @@ PeriodicWave* AbstractAudioContext::periodicWave(int type)
     }
 }
 
+void AbstractAudioContext::recordUserGestureState()
+{
+    DEFINE_STATIC_LOCAL(EnumerationHistogram, userGestureHistogram, ("WebAudio.UserGesture", UserGestureRecordMax));
+
+    if (!m_userGestureRequired) {
+        if (UserGestureIndicator::processingUserGesture())
+            userGestureHistogram.count(UserGestureNotRequiredAndAvailable);
+        else
+            userGestureHistogram.count(UserGestureNotRequiredAndNotAvailable);
+        return;
+    }
+    if (!UserGestureIndicator::processingUserGesture()) {
+        userGestureHistogram.count(UserGestureRequiredAndNotAvailable);
+        return;
+    }
+    userGestureHistogram.count(UserGestureRequiredAndAvailable);
+    m_userGestureRequired = false;
+}
+
 String AbstractAudioContext::state() const
 {
     // These strings had better match the strings for AudioContextState in AudioContext.idl.
@@ -763,19 +816,39 @@ void AbstractAudioContext::notifySourceNodeFinishedProcessing(AudioHandler* hand
     m_finishedSourceHandlers.append(handler);
 }
 
+void AbstractAudioContext::removeFinishedSourceNodes()
+{
+    ASSERT(isMainThread());
+    AutoLocker locker(this);
+    // Quadratic worst case, but sizes of both vectors are considered
+    // manageable, especially |m_finishedSourceNodes| is likely to be short.
+    for (AudioNode* node : m_finishedSourceNodes) {
+        size_t i = m_activeSourceNodes.find(node);
+        if (i != kNotFound)
+            m_activeSourceNodes.remove(i);
+    }
+    m_finishedSourceNodes.clear();
+}
+
 void AbstractAudioContext::releaseFinishedSourceNodes()
 {
     ASSERT(isGraphOwner());
     ASSERT(isAudioThread());
+    bool didRemove = false;
     for (AudioHandler* handler : m_finishedSourceHandlers) {
-        for (unsigned i = 0; i < m_activeSourceNodes.size(); ++i) {
-            if (handler == &m_activeSourceNodes[i]->handler()) {
+        for (AudioNode* node : m_activeSourceNodes) {
+            if (m_finishedSourceNodes.contains(node))
+                continue;
+            if (handler == &node->handler()) {
                 handler->breakConnection();
-                m_activeSourceNodes.remove(i);
+                m_finishedSourceNodes.add(node);
+                didRemove = true;
                 break;
             }
         }
     }
+    if (didRemove)
+        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&AbstractAudioContext::removeFinishedSourceNodes, wrapCrossThreadPersistent(this)));
 
     m_finishedSourceHandlers.clear();
 }
@@ -804,6 +877,12 @@ void AbstractAudioContext::handleStoppableSourceNodes()
 
     // Find AudioBufferSourceNodes to see if we can stop playing them.
     for (AudioNode* node : m_activeSourceNodes) {
+        // If the AudioNode has been marked as finished and released by
+        // the audio thread, but not yet removed by the main thread
+        // (see releaseActiveSourceNodes() above), |node| must not be
+        // touched as its handler may have been released already.
+        if (m_finishedSourceNodes.contains(node))
+            continue;
         if (node->handler().getNodeType() == AudioHandler::NodeTypeAudioBufferSource) {
             AudioBufferSourceNode* sourceNode = static_cast<AudioBufferSourceNode*>(node);
             sourceNode->audioBufferSourceHandler().handleStoppableSourceNode();
@@ -824,6 +903,9 @@ void AbstractAudioContext::handlePreRenderTasks()
 
         // Check to see if source nodes can be stopped because the end time has passed.
         handleStoppableSourceNodes();
+
+        // Update the dirty state of the listener.
+        listener()->updateState();
 
         unlock();
     }
@@ -879,8 +961,16 @@ void AbstractAudioContext::resolvePromisesForResume()
     // promises in the main thread.
     if (!m_isResolvingResumePromises && m_resumeResolvers.size() > 0) {
         m_isResolvingResumePromises = true;
-        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&AbstractAudioContext::resolvePromisesForResumeOnMainThread, this));
+        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&AbstractAudioContext::resolvePromisesForResumeOnMainThread, wrapCrossThreadPersistent(this)));
     }
+}
+
+void AbstractAudioContext::rejectPendingDecodeAudioDataResolvers()
+{
+    // Now reject any pending decodeAudioData resolvers
+    for (auto& resolver : m_decodeAudioResolvers)
+        resolver->reject(DOMException::create(InvalidStateError, "Audio context is going away"));
+    m_decodeAudioResolvers.clear();
 }
 
 void AbstractAudioContext::rejectPendingResolvers()
@@ -895,10 +985,7 @@ void AbstractAudioContext::rejectPendingResolvers()
     m_resumeResolvers.clear();
     m_isResolvingResumePromises = false;
 
-    // Now reject any pending decodeAudioData resolvers
-    for (auto& resolver : m_decodeAudioResolvers)
-        resolver->reject(DOMException::create(InvalidStateError, "Audio context is going away"));
-    m_decodeAudioResolvers.clear();
+    rejectPendingDecodeAudioDataResolvers();
 }
 
 const AtomicString& AbstractAudioContext::interfaceName() const
@@ -917,6 +1004,8 @@ void AbstractAudioContext::startRendering()
     ASSERT(isMainThread());
     ASSERT(m_destinationNode);
 
+    recordUserGestureState();
+
     if (m_contextState == Suspended) {
         destination()->audioDestinationHandler().startRendering();
         setContextState(Running);
@@ -927,14 +1016,7 @@ DEFINE_TRACE(AbstractAudioContext)
 {
     visitor->trace(m_destinationNode);
     visitor->trace(m_listener);
-    // trace() can be called in AbstractAudioContext constructor, and
-    // m_contextGraphMutex might be unavailable.
-    if (m_didInitializeContextGraphMutex) {
-        AutoLocker lock(this);
-        visitor->trace(m_activeSourceNodes);
-    } else {
-        visitor->trace(m_activeSourceNodes);
-    }
+    visitor->trace(m_activeSourceNodes);
     visitor->trace(m_resumeResolvers);
     visitor->trace(m_decodeAudioResolvers);
 
@@ -942,7 +1024,7 @@ DEFINE_TRACE(AbstractAudioContext)
     visitor->trace(m_periodicWaveSquare);
     visitor->trace(m_periodicWaveSawtooth);
     visitor->trace(m_periodicWaveTriangle);
-    RefCountedGarbageCollectedEventTargetWithInlineData<AbstractAudioContext>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
     ActiveDOMObject::trace(visitor);
 }
 
@@ -955,4 +1037,3 @@ SecurityOrigin* AbstractAudioContext::getSecurityOrigin() const
 }
 
 } // namespace blink
-

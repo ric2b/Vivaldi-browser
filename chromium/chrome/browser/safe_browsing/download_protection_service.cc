@@ -6,16 +6,19 @@
 
 #include <stddef.h>
 
+#include <memory>
+
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/format_macros.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/sparse_histogram.h"
+#include "base/rand_util.h"
 #include "base/sequenced_task_runner_helpers.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -41,6 +44,7 @@
 #include "chrome/common/safe_browsing/binary_feature_extractor.h"
 #include "chrome/common/safe_browsing/csd.pb.h"
 #include "chrome/common/safe_browsing/download_protection_util.h"
+#include "chrome/common/safe_browsing/file_type_policies.h"
 #include "chrome/common/safe_browsing/zip_analyzer_results.h"
 #include "chrome/common/url_constants.h"
 #include "components/google/core/browser/google_util.h"
@@ -69,6 +73,8 @@ using content::BrowserThread;
 
 namespace {
 static const int64_t kDownloadRequestTimeoutMs = 7000;
+// We sample 1% of whitelisted downloads to still send out download pings.
+static const double kWhitelistDownloadSampleRate = 0.01;
 }  // namespace
 
 namespace safe_browsing {
@@ -80,14 +86,13 @@ namespace {
 void RecordFileExtensionType(const base::FilePath& file) {
   UMA_HISTOGRAM_SPARSE_SLOWLY(
       "SBClientDownload.DownloadExtensions",
-      download_protection_util::GetSBClientDownloadExtensionValueForUMA(file));
+      FileTypePolicies::GetInstance()->UmaValueForFile(file));
 }
 
-void RecordArchivedArchiveFileExtensionType(const base::FilePath& file_name) {
+void RecordArchivedArchiveFileExtensionType(const base::FilePath& file) {
   UMA_HISTOGRAM_SPARSE_SLOWLY(
       "SBClientDownload.ArchivedArchiveExtensions",
-      download_protection_util::GetSBClientDownloadExtensionValueForUMA(
-          file_name));
+      FileTypePolicies::GetInstance()->UmaValueForFile(file));
 }
 
 // Enumerate for histogramming purposes.
@@ -293,6 +298,10 @@ class DownloadProtectionService::CheckClientDownloadRequest
         finished_(false),
         type_(ClientDownloadRequest::WIN_EXECUTABLE),
         start_time_(base::TimeTicks::Now()),
+        skipped_url_whitelist_(false),
+        skipped_certificate_whitelist_(false),
+        is_extended_reporting_(false),
+        is_incognito_(false),
         weakptr_factory_(this) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     item_->AddObserver(this);
@@ -302,6 +311,14 @@ class DownloadProtectionService::CheckClientDownloadRequest
     DVLOG(2) << "Starting SafeBrowsing download check for: "
              << item_->DebugString(true);
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
+    if (item_->GetBrowserContext()) {
+      Profile* profile =
+          Profile::FromBrowserContext(item_->GetBrowserContext());
+      is_extended_reporting_ = profile &&
+             profile->GetPrefs()->GetBoolean(
+                 prefs::kSafeBrowsingExtendedReportingEnabled);
+      is_incognito_ = item_->GetBrowserContext()->IsOffTheRecord();
+    }
     // TODO(noelutz): implement some cache to make sure we don't issue the same
     // request over and over again if a user downloads the same binary multiple
     // times.
@@ -341,7 +358,31 @@ class DownloadProtectionService::CheckClientDownloadRequest
                item_->GetTargetFilePath().MatchesExtension(
                    FILE_PATH_LITERAL(".iso")) ||
                item_->GetTargetFilePath().MatchesExtension(
-                   FILE_PATH_LITERAL(".smi"))) {
+                   FILE_PATH_LITERAL(".smi")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".cdr")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".dart")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".dc42")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".diskcopy42")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".dmgpart")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".dvdr")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".imgpart")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".ndif")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".sparsebundle")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".sparseimage")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".toast")) ||
+               item_->GetTargetFilePath().MatchesExtension(
+                   FILE_PATH_LITERAL(".udif"))) {
       StartExtractDmgFeatures();
 #endif
     } else {
@@ -476,7 +517,7 @@ class DownloadProtectionService::CheckClientDownloadRequest
       *reason = REASON_INVALID_URL;
       return false;
     }
-    if (!download_protection_util::IsSupportedBinaryFile(target_path)) {
+    if (!FileTypePolicies::GetInstance()->IsCheckedBinaryFile(target_path)) {
       *reason = REASON_NOT_BINARY_FILE;
       return false;
     }
@@ -659,9 +700,8 @@ class DownloadProtectionService::CheckClientDownloadRequest
              << ", has_executable=" << results.has_executable
              << ", success=" << results.success;
 
-    int uma_file_type =
-        download_protection_util::GetSBClientDownloadExtensionValueForUMA(
-            item_->GetTargetFilePath());
+    int64_t uma_file_type = FileTypePolicies::GetInstance()->UmaValueForFile(
+        item_->GetTargetFilePath());
 
     if (results.success) {
       UMA_HISTOGRAM_SPARSE_SLOWLY("SBClientDownload.DmgFileSuccessByType",
@@ -708,6 +748,13 @@ class DownloadProtectionService::CheckClientDownloadRequest
                               WHITELIST_TYPE_MAX);
   }
 
+  virtual bool ShouldSampleWhitelistedDownload() {
+    // We currently sample 1% whitelisted downloads from users who opted
+    // in extended reporting and are not in incognito mode.
+    return service_ && is_extended_reporting_ && !is_incognito_ &&
+        base::RandDouble() < service_->whitelist_sample_rate();
+  }
+
   void CheckWhitelists() {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
@@ -721,23 +768,33 @@ class DownloadProtectionService::CheckClientDownloadRequest
     if (url.is_valid() && database_manager_->MatchDownloadWhitelistUrl(url)) {
       DVLOG(2) << url << " is on the download whitelist.";
       RecordCountOfWhitelistedDownload(URL_WHITELIST);
-      // TODO(grt): Continue processing without uploading so that
-      // ClientDownloadRequest callbacks can be run even for this type of safe
-      // download.
-      PostFinishTask(SAFE, REASON_WHITELISTED_URL);
-      return;
+      if (ShouldSampleWhitelistedDownload()) {
+        skipped_url_whitelist_ = true;
+      } else {
+        // TODO(grt): Continue processing without uploading so that
+        // ClientDownloadRequest callbacks can be run even for this type of safe
+        // download.
+        PostFinishTask(SAFE, REASON_WHITELISTED_URL);
+        return;
+      }
     }
 
+    bool should_sample_for_certificate = ShouldSampleWhitelistedDownload();
     if (signature_info_.trusted()) {
       for (int i = 0; i < signature_info_.certificate_chain_size(); ++i) {
         if (CertificateChainIsWhitelisted(
                 signature_info_.certificate_chain(i))) {
           RecordCountOfWhitelistedDownload(SIGNATURE_WHITELIST);
-          // TODO(grt): Continue processing without uploading so that
-          // ClientDownloadRequest callbacks can be run even for this type of
-          // safe download.
-          PostFinishTask(SAFE, REASON_TRUSTED_EXECUTABLE);
-          return;
+          if (should_sample_for_certificate) {
+            skipped_certificate_whitelist_ = true;
+            break;
+          } else {
+            // TODO(grt): Continue processing without uploading so that
+            // ClientDownloadRequest callbacks can be run even for this type of
+            // safe download.
+            PostFinishTask(SAFE, REASON_TRUSTED_EXECUTABLE);
+            return;
+          }
         }
       }
     }
@@ -818,17 +875,9 @@ class DownloadProtectionService::CheckClientDownloadRequest
     // before sending it.
     if (!service_)
       return;
-    bool is_extended_reporting = false;
-    if (item_->GetBrowserContext()) {
-      Profile* profile =
-          Profile::FromBrowserContext(item_->GetBrowserContext());
-      is_extended_reporting = profile &&
-                              profile->GetPrefs()->GetBoolean(
-                                  prefs::kSafeBrowsingExtendedReportingEnabled);
-    }
 
     ClientDownloadRequest request;
-    if (is_extended_reporting) {
+    if (is_extended_reporting_) {
       request.mutable_population()->set_user_population(
           ChromeUserPopulation::EXTENDED_REPORTING);
     } else {
@@ -838,6 +887,8 @@ class DownloadProtectionService::CheckClientDownloadRequest
     request.set_url(SanitizeUrl(item_->GetUrlChain().back()));
     request.mutable_digests()->set_sha256(item_->GetHash());
     request.set_length(item_->GetReceivedBytes());
+    request.set_skipped_url_whitelist(skipped_url_whitelist_);
+    request.set_skipped_certificate_whitelist(skipped_certificate_whitelist_);
     for (size_t i = 0; i < item_->GetUrlChain().size(); ++i) {
       ClientDownloadRequest::Resource* resource = request.add_resources();
       resource->set_url(SanitizeUrl(item_->GetUrlChain()[i]));
@@ -1033,7 +1084,7 @@ class DownloadProtectionService::CheckClientDownloadRequest
   ArchiveValid archive_is_valid_;
 
   ClientDownloadRequest_SignatureInfo signature_info_;
-  scoped_ptr<ClientDownloadRequest_ImageHeaders> image_headers_;
+  std::unique_ptr<ClientDownloadRequest_ImageHeaders> image_headers_;
   google::protobuf::RepeatedPtrField<ClientDownloadRequest_ArchivedBinary>
       archived_binary_;
   CheckDownloadCallback callback_;
@@ -1042,7 +1093,7 @@ class DownloadProtectionService::CheckClientDownloadRequest
   scoped_refptr<BinaryFeatureExtractor> binary_feature_extractor_;
   scoped_refptr<SafeBrowsingDatabaseManager> database_manager_;
   const bool pingback_enabled_;
-  scoped_ptr<net::URLFetcher> fetcher_;
+  std::unique_ptr<net::URLFetcher> fetcher_;
   scoped_refptr<SandboxedZipAnalyzer> analyzer_;
   base::TimeTicks zip_analysis_start_time_;
 #if defined(OS_MACOSX)
@@ -1056,21 +1107,315 @@ class DownloadProtectionService::CheckClientDownloadRequest
   base::TimeTicks start_time_;  // Used for stats.
   base::TimeTicks timeout_start_time_;
   base::TimeTicks request_start_time_;
+  bool skipped_url_whitelist_;
+  bool skipped_certificate_whitelist_;
+  bool is_extended_reporting_;
+  bool is_incognito_;
   base::WeakPtrFactory<CheckClientDownloadRequest> weakptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(CheckClientDownloadRequest);
 };
 
+// A request for checking whether a PPAPI initiated download is safe.
+//
+// These are considered different from DownloadManager mediated downloads
+// because:
+//
+// * The download bytes are produced by the PPAPI plugin *after* the check
+//   returns due to architectural constraints.
+//
+// * Since the download bytes are produced by the PPAPI plugin, there's no
+//   reliable network request information to associate with the download.
+//
+// PPAPIDownloadRequest objects are owned by the DownloadProtectionService
+// indicated by |service|.
+class DownloadProtectionService::PPAPIDownloadRequest
+    : public net::URLFetcherDelegate {
+ public:
+  // The outcome of the request. These values are used for UMA. New values
+  // should only be added at the end.
+  enum class RequestOutcome : int {
+    UNKNOWN,
+    REQUEST_DESTROYED,
+    UNSUPPORTED_FILE_TYPE,
+    TIMEDOUT,
+    WHITELIST_HIT,
+    REQUEST_MALFORMED,
+    FETCH_FAILED,
+    RESPONSE_MALFORMED,
+    SUCCEEDED
+  };
+
+  PPAPIDownloadRequest(
+      const GURL& requestor_url,
+      const base::FilePath& default_file_path,
+      const std::vector<base::FilePath::StringType>& alternate_extensions,
+      const CheckDownloadCallback& callback,
+      DownloadProtectionService* service,
+      scoped_refptr<SafeBrowsingDatabaseManager> database_manager)
+      : requestor_url_(requestor_url),
+        default_file_path_(default_file_path),
+        alternate_extensions_(alternate_extensions),
+        callback_(callback),
+        service_(service),
+        database_manager_(database_manager),
+        start_time_(base::TimeTicks::Now()),
+        supported_path_(
+            GetSupportedFilePath(default_file_path, alternate_extensions)),
+        weakptr_factory_(this) {}
+
+  ~PPAPIDownloadRequest() override {
+    if (fetcher_ && !callback_.is_null())
+      Finish(RequestOutcome::REQUEST_DESTROYED, UNKNOWN);
+  }
+
+  // Start the process of checking the download request. The callback passed as
+  // the |callback| parameter to the constructor will be invoked with the result
+  // of the check at some point in the future.
+  //
+  // From the this point on, the code is arranged to follow the most common
+  // workflow.
+  //
+  // Note that |this| should be added to the list of pending requests in the
+  // associated DownloadProtectionService object *before* calling Start().
+  // Otherwise a synchronous Finish() call may result in leaking the
+  // PPAPIDownloadRequest object. This is enforced via a DCHECK in
+  // DownloadProtectionService.
+  void Start() {
+    DVLOG(2) << "Starting SafeBrowsing download check for PPAPI download from "
+             << requestor_url_ << " for [" << default_file_path_.value() << "] "
+             << "supported path is [" << supported_path_.value() << "]";
+
+    if (supported_path_.empty()) {
+      // Neither the default_file_path_ nor any path resulting of trying out
+      // |alternate_extensions_| are supported by SafeBrowsing.
+      Finish(RequestOutcome::UNSUPPORTED_FILE_TYPE, SAFE);
+      return;
+    }
+
+    // In case the request take too long, the check will abort with an UNKNOWN
+    // verdict. The weak pointer used for the timeout will be invalidated (and
+    // hence would prevent the timeout) if the check completes on time and
+    // execution reaches Finish().
+    BrowserThread::PostDelayedTask(
+        BrowserThread::UI, FROM_HERE,
+        base::Bind(&PPAPIDownloadRequest::OnRequestTimedOut,
+                   weakptr_factory_.GetWeakPtr()),
+        base::TimeDelta::FromMilliseconds(
+            service_->download_request_timeout_ms()));
+
+    BrowserThread::PostTask(
+        BrowserThread::IO, FROM_HERE,
+        base::Bind(&PPAPIDownloadRequest::CheckWhitelistsOnIOThread,
+                   requestor_url_, database_manager_,
+                   weakptr_factory_.GetWeakPtr()));
+  }
+
+ private:
+  // Whitelist checking needs to the done on the IO thread.
+  static void CheckWhitelistsOnIOThread(
+      const GURL& requestor_url,
+      scoped_refptr<SafeBrowsingDatabaseManager> database_manager,
+      base::WeakPtr<PPAPIDownloadRequest> download_request) {
+    DCHECK_CURRENTLY_ON(BrowserThread::IO);
+    DVLOG(2) << " checking whitelists for requestor URL:" << requestor_url;
+
+    bool url_was_whitelisted =
+        requestor_url.is_valid() && database_manager &&
+        database_manager->MatchDownloadWhitelistUrl(requestor_url);
+    BrowserThread::PostTask(
+        BrowserThread::UI, FROM_HERE,
+        base::Bind(&PPAPIDownloadRequest::WhitelistCheckComplete,
+                   download_request, url_was_whitelisted));
+  }
+
+  void WhitelistCheckComplete(bool was_on_whitelist) {
+    DVLOG(2) << __FUNCTION__ << " was_on_whitelist:" << was_on_whitelist;
+    if (was_on_whitelist) {
+      // TODO(asanka): Should sample whitelisted downloads based on
+      // service_->whitelist_sample_rate(). http://crbug.com/610924
+      Finish(RequestOutcome::WHITELIST_HIT, SAFE);
+      return;
+    }
+
+    // Not on whitelist, so we are going to check with the SafeBrowsing
+    // backend.
+    SendRequest();
+  }
+
+  void SendRequest() {
+    DVLOG(2) << __FUNCTION__;
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+    ClientDownloadRequest request;
+    request.set_download_type(ClientDownloadRequest::PPAPI_SAVE_REQUEST);
+    ClientDownloadRequest::Resource* resource = request.add_resources();
+    resource->set_type(ClientDownloadRequest::PPAPI_DOCUMENT);
+    resource->set_url(requestor_url_.spec());
+    request.set_url(requestor_url_.spec());
+    request.set_file_basename(supported_path_.BaseName().AsUTF8Unsafe());
+    request.set_length(0);
+    request.mutable_digests()->set_md5(std::string());
+    for (const auto& alternate_extension : alternate_extensions_) {
+      if (alternate_extension.empty())
+        continue;
+      DCHECK_EQ(base::FilePath::kExtensionSeparator, alternate_extension[0]);
+      *(request.add_alternate_extensions()) =
+          base::FilePath(alternate_extension).AsUTF8Unsafe();
+    }
+    if (supported_path_ != default_file_path_) {
+      *(request.add_alternate_extensions()) =
+          base::FilePath(default_file_path_.FinalExtension()).AsUTF8Unsafe();
+    }
+
+    if (!request.SerializeToString(&client_download_request_data_)) {
+      // More of an internal error than anything else. Note that the UNKNOWN
+      // verdict gets interpreted as "allowed".
+      Finish(RequestOutcome::REQUEST_MALFORMED, UNKNOWN);
+      return;
+    }
+
+    fetcher_ = net::URLFetcher::Create(0, GetDownloadRequestUrl(),
+                                       net::URLFetcher::POST, this);
+    fetcher_->SetLoadFlags(net::LOAD_DISABLE_CACHE);
+    fetcher_->SetAutomaticallyRetryOn5xx(false);
+    fetcher_->SetRequestContext(service_->request_context_getter_.get());
+    fetcher_->SetUploadData("application/octet-stream",
+                            client_download_request_data_);
+    fetcher_->Start();
+  }
+
+  // net::URLFetcherDelegate
+  void OnURLFetchComplete(const net::URLFetcher* source) override {
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+    if (!source->GetStatus().is_success() ||
+        net::HTTP_OK != source->GetResponseCode()) {
+      Finish(RequestOutcome::FETCH_FAILED, UNKNOWN);
+      return;
+    }
+
+    ClientDownloadResponse response;
+    std::string response_body;
+    bool got_data = source->GetResponseAsString(&response_body);
+    DCHECK(got_data);
+
+    if (response.ParseFromString(response_body)) {
+      Finish(RequestOutcome::SUCCEEDED,
+             DownloadCheckResultFromClientDownloadResponse(response.verdict()));
+    } else {
+      Finish(RequestOutcome::RESPONSE_MALFORMED, UNKNOWN);
+    }
+  }
+
+  void OnRequestTimedOut() {
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
+    DVLOG(2) << __FUNCTION__;
+    Finish(RequestOutcome::TIMEDOUT, UNKNOWN);
+  }
+
+  void Finish(RequestOutcome reason, DownloadCheckResult response) {
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
+    DVLOG(2) << __FUNCTION__ << " response: " << response;
+    UMA_HISTOGRAM_SPARSE_SLOWLY(
+        "SBClientDownload.PPAPIDownloadRequest.RequestOutcome",
+        static_cast<int>(reason));
+    UMA_HISTOGRAM_SPARSE_SLOWLY("SBClientDownload.PPAPIDownloadRequest.Result",
+                                response);
+    UMA_HISTOGRAM_TIMES("SBClientDownload.PPAPIDownloadRequest.RequestDuration",
+                        start_time_ - base::TimeTicks::Now());
+    if (!callback_.is_null())
+      base::ResetAndReturn(&callback_).Run(response);
+    fetcher_.reset();
+    weakptr_factory_.InvalidateWeakPtrs();
+    service_->PPAPIDownloadCheckRequestFinished(this);
+    // |this| is deleted.
+  }
+
+  static DownloadCheckResult DownloadCheckResultFromClientDownloadResponse(
+      ClientDownloadResponse::Verdict verdict) {
+    switch (verdict) {
+      case ClientDownloadResponse::SAFE:
+        return SAFE;
+      case ClientDownloadResponse::UNCOMMON:
+        return UNCOMMON;
+      case ClientDownloadResponse::POTENTIALLY_UNWANTED:
+        return POTENTIALLY_UNWANTED;
+      case ClientDownloadResponse::DANGEROUS:
+        return DANGEROUS;
+      case ClientDownloadResponse::DANGEROUS_HOST:
+        return DANGEROUS_HOST;
+    }
+    return UNKNOWN;
+  }
+
+  // Given a |default_file_path| and a list of |alternate_extensions|,
+  // constructs a FilePath with each possible extension and returns one that
+  // satisfies download_protection_util::IsSupportedBinaryFile(). If none are
+  // supported, returns an empty FilePath.
+  static base::FilePath GetSupportedFilePath(
+      const base::FilePath& default_file_path,
+      const std::vector<base::FilePath::StringType>& alternate_extensions) {
+    const FileTypePolicies* file_type_policies =
+        FileTypePolicies::GetInstance();
+    if (file_type_policies->IsCheckedBinaryFile(default_file_path))
+      return default_file_path;
+
+    for (const auto& extension : alternate_extensions) {
+      base::FilePath alternative_file_path =
+          default_file_path.ReplaceExtension(extension);
+      if (file_type_policies->IsCheckedBinaryFile(alternative_file_path))
+        return alternative_file_path;
+    }
+
+    return base::FilePath();
+  }
+
+  std::unique_ptr<net::URLFetcher> fetcher_;
+  std::string client_download_request_data_;
+
+  // URL of document that requested the PPAPI download.
+  const GURL requestor_url_;
+
+  // Default download path requested by the PPAPI plugin.
+  const base::FilePath default_file_path_;
+
+  // List of alternate extensions provided by the PPAPI plugin. Each extension
+  // must begin with a leading extension separator.
+  const std::vector<base::FilePath::StringType> alternate_extensions_;
+
+  // Callback to invoke with the result of the PPAPI download request check.
+  CheckDownloadCallback callback_;
+
+  DownloadProtectionService* service_;
+  const scoped_refptr<SafeBrowsingDatabaseManager> database_manager_;
+
+  // Time request was started.
+  const base::TimeTicks start_time_;
+
+  // A download path that is supported by SafeBrowsing. This is determined by
+  // invoking GetSupportedFilePath(). If non-empty,
+  // safe_browsing::IsSupportedBinaryFile(supported_path_) is always true. This
+  // path is therefore used as the download target when sending the SafeBrowsing
+  // ping.
+  const base::FilePath supported_path_;
+
+  base::WeakPtrFactory<PPAPIDownloadRequest> weakptr_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(PPAPIDownloadRequest);
+};
+
 DownloadProtectionService::DownloadProtectionService(
-    SafeBrowsingService* sb_service,
-    net::URLRequestContextGetter* request_context_getter)
-    : request_context_getter_(request_context_getter),
+    SafeBrowsingService* sb_service)
+    : request_context_getter_(sb_service ? sb_service->url_request_context()
+                                         : nullptr),
       enabled_(false),
       binary_feature_extractor_(new BinaryFeatureExtractor()),
       download_request_timeout_ms_(kDownloadRequestTimeoutMs),
-      feedback_service_(new DownloadFeedbackService(
-          request_context_getter, BrowserThread::GetBlockingPool())) {
-
+      feedback_service_(
+          new DownloadFeedbackService(request_context_getter_.get(),
+                                      BrowserThread::GetBlockingPool())),
+      whitelist_sample_rate_(kWhitelistDownloadSampleRate) {
   if (sb_service) {
     ui_manager_ = sb_service->ui_manager();
     database_manager_ = sb_service->database_manager();
@@ -1154,6 +1499,23 @@ bool DownloadProtectionService::IsSupportedDownload(
           (ClientDownloadRequest::CHROME_EXTENSION != type));
 }
 
+void DownloadProtectionService::CheckPPAPIDownloadRequest(
+    const GURL& requestor_url,
+    const base::FilePath& default_file_path,
+    const std::vector<base::FilePath::StringType>& alternate_extensions,
+    const CheckDownloadCallback& callback) {
+  DVLOG(1) << __FUNCTION__ << " url:" << requestor_url
+           << " default_file_path:" << default_file_path.value();
+  std::unique_ptr<PPAPIDownloadRequest> request(new PPAPIDownloadRequest(
+      requestor_url, default_file_path, alternate_extensions, callback, this,
+      database_manager_));
+  PPAPIDownloadRequest* request_copy = request.get();
+  auto insertion_result = ppapi_download_requests_.insert(
+      std::make_pair(request_copy, std::move(request)));
+  DCHECK(insertion_result.second);
+  insertion_result.first->second->Start();
+}
+
 DownloadProtectionService::ClientDownloadRequestSubscription
 DownloadProtectionService::RegisterClientDownloadRequestCallback(
     const ClientDownloadRequestCallback& callback) {
@@ -1163,24 +1525,32 @@ DownloadProtectionService::RegisterClientDownloadRequestCallback(
 
 void DownloadProtectionService::CancelPendingRequests() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  for (std::set<scoped_refptr<CheckClientDownloadRequest> >::iterator it =
-           download_requests_.begin();
-       it != download_requests_.end();) {
+  for (auto it = download_requests_.begin(); it != download_requests_.end();) {
     // We need to advance the iterator before we cancel because canceling
     // the request will invalidate it when RequestFinished is called below.
     scoped_refptr<CheckClientDownloadRequest> tmp = *it++;
     tmp->Cancel();
   }
   DCHECK(download_requests_.empty());
+
+  // It is sufficient to delete the list of PPAPI download requests.
+  ppapi_download_requests_.clear();
 }
 
 void DownloadProtectionService::RequestFinished(
     CheckClientDownloadRequest* request) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  std::set<scoped_refptr<CheckClientDownloadRequest> >::iterator it =
-      download_requests_.find(request);
+  auto it = download_requests_.find(request);
   DCHECK(it != download_requests_.end());
   download_requests_.erase(*it);
+}
+
+void DownloadProtectionService::PPAPIDownloadCheckRequestFinished(
+    PPAPIDownloadRequest* request) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  auto it = ppapi_download_requests_.find(request);
+  DCHECK(it != ppapi_download_requests_.end());
+  ppapi_download_requests_.erase(it);
 }
 
 void DownloadProtectionService::ShowDetailsForDownload(

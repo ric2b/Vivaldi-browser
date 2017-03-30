@@ -77,6 +77,7 @@ static WTF::String specialDrawingTypeAsDebugString(DisplayItem::Type type)
         DEBUG_STRING_CASE(DragImage);
         DEBUG_STRING_CASE(SVGImage);
         DEBUG_STRING_CASE(LinkHighlight);
+        DEBUG_STRING_CASE(ImageAreaFocusRing);
         DEBUG_STRING_CASE(PageOverlay);
         DEBUG_STRING_CASE(PageWidgetDelegateBackgroundFallback);
         DEBUG_STRING_CASE(PopupContainerBorder);
@@ -110,6 +111,7 @@ static WTF::String specialDrawingTypeAsDebugString(DisplayItem::Type type)
         DEBUG_STRING_CASE(VideoBitmap);
         DEBUG_STRING_CASE(WebPlugin);
         DEBUG_STRING_CASE(WebFont);
+        DEBUG_STRING_CASE(ReflectionMask);
 
         DEFAULT_CASE;
     }

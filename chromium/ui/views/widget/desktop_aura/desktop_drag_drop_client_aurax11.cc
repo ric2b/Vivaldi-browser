@@ -4,13 +4,14 @@
 
 #include "ui/views/widget/desktop_aura/desktop_drag_drop_client_aurax11.h"
 
+#include <X11/Xatom.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <X11/Xatom.h>
 
 #include "base/event_types.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -24,11 +25,11 @@
 #include "ui/base/x/selection_utils.h"
 #include "ui/base/x/x11_foreign_window_manager.h"
 #include "ui/base/x/x11_util.h"
+#include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/platform/platform_event_source.h"
 #include "ui/gfx/image/image_skia.h"
-#include "ui/gfx/screen.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/widget/desktop_aura/desktop_native_cursor_manager.h"
 #include "ui/views/widget/desktop_aura/x11_topmost_window_finder.h"
@@ -659,7 +660,8 @@ int DesktopDragDropClientAuraX11::StartDragAndDrop(
     aura::Window* source_window,
     const gfx::Point& screen_location,
     int operation,
-    ui::DragDropTypes::DragEventSource source) {
+    ui::DragDropTypes::DragEventSource source,
+    bool& cancelled) {
   UMA_HISTOGRAM_ENUMERATION("Event.DragDrop.Start", source,
                             ui::DragDropTypes::DRAG_EVENT_SOURCE_COUNT);
 
@@ -717,9 +719,11 @@ int DesktopDragDropClientAuraX11::StartDragAndDrop(
 
   if (alive) {
     if (negotiated_operation_ == ui::DragDropTypes::DRAG_NONE) {
+      cancelled = true;
       UMA_HISTOGRAM_ENUMERATION("Event.DragDrop.Cancel", source,
                                 ui::DragDropTypes::DRAG_EVENT_SOURCE_COUNT);
     } else {
+      cancelled = false;
       UMA_HISTOGRAM_ENUMERATION("Event.DragDrop.Drop", source,
                                 ui::DragDropTypes::DRAG_EVENT_SOURCE_COUNT);
     }
@@ -733,6 +737,7 @@ int DesktopDragDropClientAuraX11::StartDragAndDrop(
 
     return negotiated_operation_;
   }
+  cancelled = true;
   UMA_HISTOGRAM_ENUMERATION("Event.DragDrop.Cancel", source,
                             ui::DragDropTypes::DRAG_EVENT_SOURCE_COUNT);
   return ui::DragDropTypes::DRAG_NONE;
@@ -838,9 +843,9 @@ void DesktopDragDropClientAuraX11::OnMoveLoopEnded() {
   end_move_loop_timer_.Stop();
 }
 
-scoped_ptr<X11MoveLoop> DesktopDragDropClientAuraX11::CreateMoveLoop(
+std::unique_ptr<X11MoveLoop> DesktopDragDropClientAuraX11::CreateMoveLoop(
     X11MoveLoopDelegate* delegate) {
-  return make_scoped_ptr(new X11WholeScreenMoveLoop(this));
+  return base::WrapUnique(new X11WholeScreenMoveLoop(this));
 }
 
 XID DesktopDragDropClientAuraX11::FindWindowFor(
@@ -952,8 +957,8 @@ void DesktopDragDropClientAuraX11::EndMoveLoop() {
 
 void DesktopDragDropClientAuraX11::DragTranslate(
     const gfx::Point& root_window_location,
-    scoped_ptr<ui::OSExchangeData>* data,
-    scoped_ptr<ui::DropTargetEvent>* event,
+    std::unique_ptr<ui::OSExchangeData>* data,
+    std::unique_ptr<ui::DropTargetEvent>* event,
     aura::client::DragDropDelegate** delegate) {
   gfx::Point root_location = root_window_location;
   root_window_->GetHost()->ConvertPointFromNativeScreen(&root_location);
@@ -1065,8 +1070,8 @@ void DesktopDragDropClientAuraX11::CompleteXdndPosition(
     ::Window source_window,
     const gfx::Point& screen_point) {
   int drag_operation = ui::DragDropTypes::DRAG_NONE;
-  scoped_ptr<ui::OSExchangeData> data;
-  scoped_ptr<ui::DropTargetEvent> drop_target_event;
+  std::unique_ptr<ui::OSExchangeData> data;
+  std::unique_ptr<ui::DropTargetEvent> drop_target_event;
   DragDropDelegate* delegate = NULL;
   DragTranslate(screen_point, &data, &drop_target_event, &delegate);
   if (delegate)
@@ -1186,8 +1191,8 @@ void DesktopDragDropClientAuraX11::CreateDragWidget(
   params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.accept_events = false;
 
-  gfx::Point location =
-      gfx::Screen::GetScreen()->GetCursorScreenPoint() - drag_widget_offset_;
+  gfx::Point location = display::Screen::GetScreen()->GetCursorScreenPoint() -
+                        drag_widget_offset_;
   params.bounds = gfx::Rect(location, image.size());
   widget->set_focus_on_creation(false);
   widget->set_frame_type(Widget::FRAME_TYPE_FORCE_NATIVE);

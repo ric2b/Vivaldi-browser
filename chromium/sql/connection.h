@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -17,7 +18,6 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "sql/sql_export.h"
@@ -149,11 +149,8 @@ class SQL_EXPORT Connection {
   // other platforms.
   void set_restrict_to_user() { restrict_to_user_ = true; }
 
-  // Call to opt out of memory-mapped file I/O on per connection basis.
+  // Call to opt out of memory-mapped file I/O.
   void set_mmap_disabled() { mmap_disabled_ = true; }
-
-  // Call to opt out of memory-mapped file I/O on all connections.
-  static void set_mmap_disabled_by_default();
 
   // Set an error-handling callback.  On errors, the error number (and
   // statement, if available) will be passed to the callback.
@@ -792,10 +789,10 @@ class SQL_EXPORT Connection {
 
   // Source for timing information, provided to allow tests to inject time
   // changes.
-  scoped_ptr<TimeSource> clock_;
+  std::unique_ptr<TimeSource> clock_;
 
   // Stores the dump provider object when db is open.
-  scoped_ptr<ConnectionMemoryDumpProvider> memory_dump_provider_;
+  std::unique_ptr<ConnectionMemoryDumpProvider> memory_dump_provider_;
 
   DISALLOW_COPY_AND_ASSIGN(Connection);
 };

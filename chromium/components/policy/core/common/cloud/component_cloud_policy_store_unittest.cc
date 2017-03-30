@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/test/test_simple_task_runner.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
@@ -85,18 +86,12 @@ class ComponentCloudPolicyStoreTest : public testing::Test {
 
     PolicyNamespace ns(POLICY_DOMAIN_EXTENSIONS, kTestExtension);
     PolicyMap& policy = expected_bundle_.Get(ns);
-    policy.Set("Name",
-               POLICY_LEVEL_MANDATORY,
-               POLICY_SCOPE_USER,
+    policy.Set("Name", POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
                POLICY_SOURCE_CLOUD,
-               new base::StringValue("disabled"),
-               NULL);
-    policy.Set("Second",
-               POLICY_LEVEL_RECOMMENDED,
-               POLICY_SCOPE_USER,
+               base::WrapUnique(new base::StringValue("disabled")), nullptr);
+    policy.Set("Second", POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_USER,
                POLICY_SOURCE_CLOUD,
-               new base::StringValue("maybe"),
-               NULL);
+               base::WrapUnique(new base::StringValue("maybe")), nullptr);
   }
 
   // Returns true if the policy exposed by the |store_| is empty.
@@ -104,9 +99,9 @@ class ComponentCloudPolicyStoreTest : public testing::Test {
     return store_->policy().begin() == store_->policy().end();
   }
 
-  scoped_ptr<em::PolicyFetchResponse> CreateResponse() {
+  std::unique_ptr<em::PolicyFetchResponse> CreateResponse() {
     builder_.Build();
-    return make_scoped_ptr(new em::PolicyFetchResponse(builder_.policy()));
+    return base::WrapUnique(new em::PolicyFetchResponse(builder_.policy()));
   }
 
   std::string CreateSerializedResponse() {
@@ -115,8 +110,8 @@ class ComponentCloudPolicyStoreTest : public testing::Test {
   }
 
   base::ScopedTempDir temp_dir_;
-  scoped_ptr<ResourceCache> cache_;
-  scoped_ptr<ComponentCloudPolicyStore> store_;
+  std::unique_ptr<ResourceCache> cache_;
+  std::unique_ptr<ComponentCloudPolicyStore> store_;
   MockComponentCloudPolicyStoreDelegate store_delegate_;
   ComponentPolicyBuilder builder_;
   PolicyBundle expected_bundle_;

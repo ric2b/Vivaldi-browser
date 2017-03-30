@@ -73,6 +73,11 @@ WebInspector.Toolbar.prototype = {
         this._contentElement.classList.add("toolbar-toggled-gray");
     },
 
+    renderAsLinks: function()
+    {
+        this._contentElement.classList.add("toolbar-render-as-links");
+    },
+
     /**
      * @param {boolean} enabled
      */
@@ -485,25 +490,18 @@ WebInspector.ToolbarToggle.prototype = {
  */
 WebInspector.Toolbar.createActionButton = function(action, toggledOptions, untoggledOptions)
 {
-    var button = new WebInspector.ToolbarButton(action.title(), action.icon());
+    var button = new WebInspector.ToolbarToggle(action.title(), action.icon());
     button.addEventListener("click", action.execute, action);
     action.addEventListener(WebInspector.Action.Events.Enabled, enabledChanged);
-    action.addEventListener(WebInspector.Action.Events.StateChanged, stateChanged);
-    action.addEventListener(WebInspector.Action.Events.TitleChanged, titleChanged);
+    action.addEventListener(WebInspector.Action.Events.Toggled, toggled);
     /** @type {?WebInspector.LongClickController} */
     var longClickController = null;
     /** @type {?Array<!WebInspector.ToolbarButton>} */
     var longClickButtons = null;
     /** @type {?Element} */
     var longClickGlyph = null;
-    titleChanged();
-    stateChanged();
+    toggled();
     return button;
-
-    function titleChanged()
-    {
-        WebInspector.Tooltip.install(button.element, action.title(), action.id());
-    }
 
     /**
      * @param {!WebInspector.Event} event
@@ -513,17 +511,16 @@ WebInspector.Toolbar.createActionButton = function(action, toggledOptions, untog
         button.setEnabled(/** @type {boolean} */ (event.data));
     }
 
-    function stateChanged()
+    function toggled()
     {
-        button.setState(action.state());
+        button.setToggled(action.toggled());
+        if (action.title())
+            WebInspector.Tooltip.install(button.element, action.title(), action.id());
         updateOptions();
     }
 
     function updateOptions()
     {
-        if (action.statesCount() !== 2)
-            return;
-
         var buttons = action.toggled() ? (toggledOptions || null) : (untoggledOptions || null);
 
         if (buttons && buttons.length) {
@@ -546,7 +543,7 @@ WebInspector.Toolbar.createActionButton = function(action, toggledOptions, untog
     function showOptions()
     {
         var buttons = longClickButtons.slice();
-        var mainButtonClone = new WebInspector.ToolbarButton(action.title(), action.icon());
+        var mainButtonClone = new WebInspector.ToolbarToggle(action.title(), action.icon());
         mainButtonClone.addEventListener("click", clicked);
 
         /**
@@ -557,7 +554,7 @@ WebInspector.Toolbar.createActionButton = function(action, toggledOptions, untog
             button._clicked(/** @type {!Event} */ (event.data));
         }
 
-        mainButtonClone.setState(action.state());
+        mainButtonClone.setToggled(action.toggled());
         buttons.push(mainButtonClone);
 
         var document = button.element.ownerDocument;
@@ -889,8 +886,9 @@ WebInspector.ToolbarComboBox.prototype = {
  * @param {string} text
  * @param {string=} title
  * @param {!WebInspector.Setting=} setting
+ * @param {function()=} listener
  */
-WebInspector.ToolbarCheckbox = function(text, title, setting)
+WebInspector.ToolbarCheckbox = function(text, title, setting, listener)
 {
     WebInspector.ToolbarItem.call(this, createCheckboxLabel(text));
     this.element.classList.add("checkbox");
@@ -899,6 +897,8 @@ WebInspector.ToolbarCheckbox = function(text, title, setting)
         this.element.title = title;
     if (setting)
         WebInspector.SettingsUI.bindCheckbox(this.inputElement, setting);
+    if (listener)
+        this.inputElement.addEventListener("click", listener, false);
 }
 
 WebInspector.ToolbarCheckbox.prototype = {
@@ -908,6 +908,14 @@ WebInspector.ToolbarCheckbox.prototype = {
     checked: function()
     {
         return this.inputElement.checked;
+    },
+
+    /**
+     * @param {boolean} value
+     */
+    setChecked: function(value)
+    {
+        this.inputElement.checked = value;
     },
 
     __proto__: WebInspector.ToolbarItem.prototype
@@ -948,8 +956,10 @@ WebInspector.ExtensibleToolbar.prototype = {
             var descriptor = extension.descriptor();
             if (descriptor["separator"])
                 return Promise.resolve(/** @type {?WebInspector.ToolbarItem} */(new WebInspector.ToolbarSeparator()));
-            if (descriptor["actionId"])
-                return Promise.resolve(/** @type {?WebInspector.ToolbarItem} */(WebInspector.Toolbar.createActionButton(WebInspector.actionRegistry.action(descriptor["actionId"]))));
+            if (descriptor["actionId"]) {
+                var action = WebInspector.actionRegistry.action(descriptor["actionId"]);
+                return Promise.resolve(/** @type {?WebInspector.ToolbarItem} */(action ? WebInspector.Toolbar.createActionButton(action) : null));
+            }
             return extension.instancePromise().then(fetchItemFromProvider);
 
             /**

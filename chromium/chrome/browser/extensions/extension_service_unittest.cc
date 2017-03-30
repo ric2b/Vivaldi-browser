@@ -35,7 +35,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/version.h"
 #include "build/build_config.h"
 #include "chrome/browser/after_startup_task_utils.h"
@@ -1410,13 +1410,265 @@ TEST_F(ExtensionServiceTest, GrantedPermissions) {
 
   std::unique_ptr<const PermissionSet> known_perms =
       prefs->GetGrantedPermissions(extension->id());
-  EXPECT_TRUE(known_perms.get());
+  ASSERT_TRUE(known_perms.get());
   EXPECT_FALSE(known_perms->IsEmpty());
   EXPECT_EQ(expected_api_perms, known_perms->apis());
   EXPECT_FALSE(known_perms->HasEffectiveFullAccess());
   EXPECT_EQ(expected_host_perms, known_perms->effective_hosts());
 }
 
+// This tests that the granted permissions preferences are correctly set when
+// updating an extension, and the extension is disabled in case of a permission
+// escalation.
+TEST_F(ExtensionServiceTest, GrantedPermissionsOnUpdate) {
+  InitializeEmptyExtensionService();
+  const base::FilePath base_path = data_dir().AppendASCII("permissions");
+
+  const base::FilePath pem_path = base_path.AppendASCII("update.pem");
+  const base::FilePath path1 = base_path.AppendASCII("update_1");
+  const base::FilePath path2 = base_path.AppendASCII("update_2");
+  const base::FilePath path3 = base_path.AppendASCII("update_3");
+  const base::FilePath path4 = base_path.AppendASCII("update_4");
+  const base::FilePath path5 = base_path.AppendASCII("update_5");
+
+  ASSERT_TRUE(base::PathExists(pem_path));
+  ASSERT_TRUE(base::PathExists(path1));
+  ASSERT_TRUE(base::PathExists(path2));
+  ASSERT_TRUE(base::PathExists(path3));
+  ASSERT_TRUE(base::PathExists(path4));
+  ASSERT_TRUE(base::PathExists(path5));
+
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
+
+  // Install version 1, which has the kHistory permission.
+  const Extension* extension = PackAndInstallCRX(path1, pem_path, INSTALL_NEW);
+  const std::string id = extension->id();
+
+  EXPECT_EQ(0u, GetErrors().size());
+  ASSERT_TRUE(registry()->enabled_extensions().Contains(id));
+
+  // Verify that the history permission has been recognized.
+  APIPermissionSet expected_api_perms;
+  expected_api_perms.insert(APIPermission::kHistory);
+  {
+    std::unique_ptr<const PermissionSet> known_perms =
+        prefs->GetGrantedPermissions(id);
+    ASSERT_TRUE(known_perms.get());
+    EXPECT_EQ(expected_api_perms, known_perms->apis());
+  }
+
+  // Update to version 2 that adds the kTopSites permission, which has a
+  // separate message, but is implied by kHistory. The extension should remain
+  // enabled.
+  PackCRXAndUpdateExtension(id, path2, pem_path, ENABLED);
+  extension = service()->GetInstalledExtension(id);
+  ASSERT_TRUE(extension);
+  EXPECT_TRUE(registry()->enabled_extensions().Contains(id));
+
+  // The extra permission should have been granted automatically.
+  expected_api_perms.insert(APIPermission::kTopSites);
+  {
+    std::unique_ptr<const PermissionSet> known_perms =
+        prefs->GetGrantedPermissions(id);
+    ASSERT_TRUE(known_perms.get());
+    EXPECT_EQ(expected_api_perms, known_perms->apis());
+  }
+
+  // Update to version 3 that adds the kStorage permission, which does not have
+  // a message. The extension should remain enabled.
+  PackCRXAndUpdateExtension(id, path3, pem_path, ENABLED);
+  extension = service()->GetInstalledExtension(id);
+  ASSERT_TRUE(extension);
+  EXPECT_TRUE(registry()->enabled_extensions().Contains(id));
+
+  // The extra permission should have been granted automatically.
+  expected_api_perms.insert(APIPermission::kStorage);
+  {
+    std::unique_ptr<const PermissionSet> known_perms =
+        prefs->GetGrantedPermissions(id);
+    ASSERT_TRUE(known_perms.get());
+    EXPECT_EQ(expected_api_perms, known_perms->apis());
+  }
+
+  // Update to version 4 that adds the kNotifications permission, which has a
+  // message and hence is considered a permission increase. Now the extension
+  // should get disabled.
+  PackCRXAndUpdateExtension(id, path4, pem_path, DISABLED);
+  extension = service()->GetInstalledExtension(id);
+  ASSERT_TRUE(extension);
+  EXPECT_TRUE(registry()->disabled_extensions().Contains(id));
+
+  // No new permissions should have been granted.
+  {
+    std::unique_ptr<const PermissionSet> known_perms =
+        prefs->GetGrantedPermissions(id);
+    ASSERT_TRUE(known_perms.get());
+    EXPECT_EQ(expected_api_perms, known_perms->apis());
+  }
+}
+
+TEST_F(ExtensionServiceTest, ReenableWithAllPermissionsGranted) {
+  InitializeEmptyExtensionService();
+  const base::FilePath base_path = data_dir().AppendASCII("permissions");
+
+  const base::FilePath pem_path = base_path.AppendASCII("update.pem");
+  const base::FilePath path1 = base_path.AppendASCII("update_1");
+  const base::FilePath path4 = base_path.AppendASCII("update_4");
+  const base::FilePath path5 = base_path.AppendASCII("update_5");
+
+  ASSERT_TRUE(base::PathExists(pem_path));
+  ASSERT_TRUE(base::PathExists(path1));
+  ASSERT_TRUE(base::PathExists(path4));
+  ASSERT_TRUE(base::PathExists(path5));
+
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
+
+  // Install version 1, which has the kHistory permission.
+  const Extension* extension = PackAndInstallCRX(path1, pem_path, INSTALL_NEW);
+  const std::string id = extension->id();
+
+  EXPECT_EQ(0u, GetErrors().size());
+  ASSERT_TRUE(registry()->enabled_extensions().Contains(id));
+
+  // Update to version 4 that adds the kNotifications permission, which has a
+  // message and hence is considered a permission increase. The extension
+  // should get disabled due to a permissions increase.
+  PackCRXAndUpdateExtension(id, path4, pem_path, DISABLED);
+  extension = service()->GetInstalledExtension(id);
+  ASSERT_TRUE(extension);
+  EXPECT_TRUE(registry()->disabled_extensions().Contains(id));
+  EXPECT_TRUE(
+      prefs->HasDisableReason(id, Extension::DISABLE_PERMISSIONS_INCREASE));
+
+  // Update to version 5 that removes the kNotifications permission again.
+  // The extension should get re-enabled.
+  PackCRXAndUpdateExtension(id, path5, pem_path, ENABLED);
+  extension = service()->GetInstalledExtension(id);
+  ASSERT_TRUE(extension);
+  EXPECT_TRUE(registry()->enabled_extensions().Contains(id));
+}
+
+TEST_F(ExtensionServiceTest, ReenableWithAllPermissionsGrantedOnStartup) {
+  InitializeEmptyExtensionService();
+  const base::FilePath base_path = data_dir().AppendASCII("permissions");
+
+  const base::FilePath pem_path = base_path.AppendASCII("update.pem");
+  const base::FilePath path1 = base_path.AppendASCII("update_1");
+
+  ASSERT_TRUE(base::PathExists(pem_path));
+  ASSERT_TRUE(base::PathExists(path1));
+
+  // Install an extension which has the kHistory permission.
+  const Extension* extension = PackAndInstallCRX(path1, pem_path, INSTALL_NEW);
+  const std::string id = extension->id();
+
+  EXPECT_EQ(0u, GetErrors().size());
+  ASSERT_TRUE(registry()->enabled_extensions().Contains(id));
+
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
+
+  // Disable the extension due to a supposed permission increase, but retain its
+  // granted permissions.
+  service()->DisableExtension(id, Extension::DISABLE_PERMISSIONS_INCREASE);
+  EXPECT_TRUE(registry()->disabled_extensions().Contains(id));
+  EXPECT_TRUE(
+      prefs->HasDisableReason(id, Extension::DISABLE_PERMISSIONS_INCREASE));
+
+  // Simulate a Chrome restart. Since the extension has all required
+  // permissions, it should get re-enabled.
+  service()->ReloadExtensionsForTest();
+  EXPECT_TRUE(registry()->enabled_extensions().Contains(id));
+  EXPECT_FALSE(
+      prefs->HasDisableReason(id, Extension::DISABLE_PERMISSIONS_INCREASE));
+}
+
+TEST_F(ExtensionServiceTest,
+       DontReenableWithAllPermissionsGrantedButOtherReason) {
+  InitializeEmptyExtensionService();
+  const base::FilePath base_path = data_dir().AppendASCII("permissions");
+
+  const base::FilePath pem_path = base_path.AppendASCII("update.pem");
+  const base::FilePath path1 = base_path.AppendASCII("update_1");
+  const base::FilePath path4 = base_path.AppendASCII("update_4");
+  const base::FilePath path5 = base_path.AppendASCII("update_5");
+
+  ASSERT_TRUE(base::PathExists(pem_path));
+  ASSERT_TRUE(base::PathExists(path1));
+  ASSERT_TRUE(base::PathExists(path4));
+  ASSERT_TRUE(base::PathExists(path5));
+
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
+
+  // Install version 1, which has the kHistory permission.
+  const Extension* extension = PackAndInstallCRX(path1, pem_path, INSTALL_NEW);
+  const std::string id = extension->id();
+
+  EXPECT_EQ(0u, GetErrors().size());
+  ASSERT_TRUE(registry()->enabled_extensions().Contains(id));
+
+  // Disable the extension.
+  service()->DisableExtension(id, Extension::DISABLE_USER_ACTION);
+  EXPECT_TRUE(registry()->disabled_extensions().Contains(id));
+  EXPECT_TRUE(prefs->HasDisableReason(id, Extension::DISABLE_USER_ACTION));
+
+  // Update to version 4 that adds the kNotifications permission, which has a
+  // message and hence is considered a permission increase. The extension
+  // should get disabled due to a permissions increase.
+  PackCRXAndUpdateExtension(id, path4, pem_path, DISABLED);
+  extension = service()->GetInstalledExtension(id);
+  ASSERT_TRUE(extension);
+  EXPECT_TRUE(registry()->disabled_extensions().Contains(id));
+  EXPECT_TRUE(
+      prefs->HasDisableReason(id, Extension::DISABLE_PERMISSIONS_INCREASE));
+  // The USER_ACTION reason should also still be there.
+  EXPECT_TRUE(prefs->HasDisableReason(id, Extension::DISABLE_USER_ACTION));
+
+  // Update to version 5 that removes the kNotifications permission again.
+  // The PERMISSIONS_INCREASE should be removed, but the extension should stay
+  // disabled since USER_ACTION is still there.
+  PackCRXAndUpdateExtension(id, path5, pem_path, DISABLED);
+  extension = service()->GetInstalledExtension(id);
+  ASSERT_TRUE(extension);
+  EXPECT_TRUE(registry()->disabled_extensions().Contains(id));
+  EXPECT_EQ(Extension::DISABLE_USER_ACTION, prefs->GetDisableReasons(id));
+}
+
+TEST_F(ExtensionServiceTest,
+       DontReenableWithAllPermissionsGrantedOnStartupButOtherReason) {
+  InitializeEmptyExtensionService();
+  const base::FilePath base_path = data_dir().AppendASCII("permissions");
+
+  const base::FilePath pem_path = base_path.AppendASCII("update.pem");
+  const base::FilePath path1 = base_path.AppendASCII("update_1");
+
+  ASSERT_TRUE(base::PathExists(pem_path));
+  ASSERT_TRUE(base::PathExists(path1));
+
+  // Install an extension which has the kHistory permission.
+  const Extension* extension = PackAndInstallCRX(path1, pem_path, INSTALL_NEW);
+  const std::string id = extension->id();
+
+  EXPECT_EQ(0u, GetErrors().size());
+  ASSERT_TRUE(registry()->enabled_extensions().Contains(id));
+
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
+
+  // Disable the extension due to a supposed permission increase, but retain its
+  // granted permissions.
+  service()->DisableExtension(
+      id,
+      Extension::DISABLE_PERMISSIONS_INCREASE | Extension::DISABLE_USER_ACTION);
+  EXPECT_TRUE(registry()->disabled_extensions().Contains(id));
+  EXPECT_TRUE(
+      prefs->HasDisableReason(id, Extension::DISABLE_PERMISSIONS_INCREASE));
+
+  // Simulate a Chrome restart. Since the extension has all required
+  // permissions, the DISABLE_PERMISSIONS_INCREASE should get removed, but it
+  // should stay disabled due to the remaining DISABLE_USER_ACTION reason.
+  service()->ReloadExtensionsForTest();
+  EXPECT_TRUE(registry()->disabled_extensions().Contains(id));
+  EXPECT_EQ(Extension::DISABLE_USER_ACTION, prefs->GetDisableReasons(id));
+}
 
 #if !defined(OS_CHROMEOS)
 // This tests that the granted permissions preferences are correctly set for

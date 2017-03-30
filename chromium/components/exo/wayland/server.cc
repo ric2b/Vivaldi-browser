@@ -4,6 +4,7 @@
 
 #include "components/exo/wayland/server.h"
 
+#include <alpha-compositing-unstable-v1-server-protocol.h>
 #include <grp.h>
 #include <linux/input.h>
 #include <scaler-server-protocol.h>
@@ -21,13 +22,13 @@
 
 #include "ash/display/display_info.h"
 #include "ash/display/display_manager.h"
-#include "ash/display/screen_ash.h"
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/cancelable_callback.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/free_deleter.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/exo/buffer.h"
@@ -46,8 +47,9 @@
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/aura/window_property.h"
 #include "ui/base/hit_test.h"
+#include "ui/display/display_observer.h"
+#include "ui/display/screen.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
-#include "ui/gfx/display_observer.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
 
@@ -59,7 +61,7 @@
 
 #if defined(USE_XKBCOMMON)
 #include <xkbcommon/xkbcommon.h>
-#include "ui/events/keycodes/scoped_xkb.h"
+#include "ui/events/keycodes/scoped_xkb.h"  // nogncheck
 #endif
 
 DECLARE_WINDOW_PROPERTY_TYPE(wl_resource*);
@@ -80,8 +82,8 @@ T* GetUserDataAs(wl_resource* resource) {
 }
 
 template <class T>
-scoped_ptr<T> TakeUserDataAs(wl_resource* resource) {
-  scoped_ptr<T> user_data = make_scoped_ptr(GetUserDataAs<T>(resource));
+std::unique_ptr<T> TakeUserDataAs(wl_resource* resource) {
+  std::unique_ptr<T> user_data = base::WrapUnique(GetUserDataAs<T>(resource));
   wl_resource_set_user_data(resource, nullptr);
   return user_data;
 }
@@ -94,7 +96,7 @@ void DestroyUserData(wl_resource* resource) {
 template <class T>
 void SetImplementation(wl_resource* resource,
                        const void* implementation,
-                       scoped_ptr<T> user_data) {
+                       std::unique_ptr<T> user_data) {
   wl_resource_set_implementation(resource, implementation, user_data.release(),
                                  DestroyUserData<T>);
 }
@@ -110,6 +112,10 @@ DEFINE_WINDOW_PROPERTY_KEY(bool, kSurfaceHasViewportKey, false);
 // A property key containing a boolean set to true if a security object is
 // associated with window.
 DEFINE_WINDOW_PROPERTY_KEY(bool, kSurfaceHasSecurityKey, false);
+
+// A property key containing a boolean set to true if a blending object is
+// associated with window.
+DEFINE_WINDOW_PROPERTY_KEY(bool, kSurfaceHasBlendingKey, false);
 
 ////////////////////////////////////////////////////////////////////////////////
 // wl_buffer_interface:
@@ -173,7 +179,7 @@ void surface_frame(wl_client* client,
       wl_resource_create(client, &wl_callback_interface, 1, callback);
 
   // base::Unretained is safe as the resource owns the callback.
-  scoped_ptr<base::CancelableCallback<void(base::TimeTicks)>>
+  std::unique_ptr<base::CancelableCallback<void(base::TimeTicks)>>
   cancelable_callback(
       new base::CancelableCallback<void(base::TimeTicks)>(base::Bind(
           &HandleSurfaceFrameCallback, base::Unretained(callback_resource))));
@@ -271,7 +277,7 @@ const struct wl_region_interface region_implementation = {
 void compositor_create_surface(wl_client* client,
                                wl_resource* resource,
                                uint32_t id) {
-  scoped_ptr<Surface> surface =
+  std::unique_ptr<Surface> surface =
       GetUserDataAs<Display>(resource)->CreateSurface();
 
   wl_resource* surface_resource = wl_resource_create(
@@ -291,7 +297,7 @@ void compositor_create_region(wl_client* client,
       wl_resource_create(client, &wl_region_interface, 1, id);
 
   SetImplementation(region_resource, &region_implementation,
-                    make_scoped_ptr(new SkRegion));
+                    base::WrapUnique(new SkRegion));
 }
 
 const struct wl_compositor_interface compositor_implementation = {
@@ -350,10 +356,10 @@ void shm_pool_create_buffer(wl_client* client,
     return;
   }
 
-  scoped_ptr<Buffer> buffer =
-      GetUserDataAs<SharedMemory>(resource)
-          ->CreateBuffer(gfx::Size(width, height),
-                         supported_format->buffer_format, offset, stride);
+  std::unique_ptr<Buffer> buffer =
+      GetUserDataAs<SharedMemory>(resource)->CreateBuffer(
+          gfx::Size(width, height), supported_format->buffer_format, offset,
+          stride);
   if (!buffer) {
     wl_resource_post_no_memory(resource);
     return;
@@ -387,9 +393,9 @@ void shm_create_pool(wl_client* client,
                      uint32_t id,
                      int fd,
                      int32_t size) {
-  scoped_ptr<SharedMemory> shared_memory =
-      GetUserDataAs<Display>(resource)
-          ->CreateSharedMemory(base::FileDescriptor(fd, true), size);
+  std::unique_ptr<SharedMemory> shared_memory =
+      GetUserDataAs<Display>(resource)->CreateSharedMemory(
+          base::FileDescriptor(fd, true), size);
   if (!shared_memory) {
     wl_resource_post_no_memory(resource);
     return;
@@ -422,6 +428,7 @@ const struct drm_supported_format {
   uint32_t drm_format;
   gfx::BufferFormat buffer_format;
 } drm_supported_formats[] = {
+    {WL_DRM_FORMAT_RGB565, gfx::BufferFormat::BGR_565},
     {WL_DRM_FORMAT_XBGR8888, gfx::BufferFormat::RGBX_8888},
     {WL_DRM_FORMAT_ABGR8888, gfx::BufferFormat::RGBA_8888},
     {WL_DRM_FORMAT_XRGB8888, gfx::BufferFormat::BGRX_8888},
@@ -486,7 +493,7 @@ void drm_create_prime_buffer(wl_client* client,
     return;
   }
 
-  scoped_ptr<Buffer> buffer =
+  std::unique_ptr<Buffer> buffer =
       GetUserDataAs<Display>(resource)->CreateLinuxDMABufBuffer(
           base::ScopedFD(name), gfx::Size(width, height),
           supported_format->buffer_format, stride0);
@@ -530,6 +537,7 @@ const struct dmabuf_supported_format {
   uint32_t dmabuf_format;
   gfx::BufferFormat buffer_format;
 } dmabuf_supported_formats[] = {
+    {DRM_FORMAT_RGB565, gfx::BufferFormat::BGR_565},
     {DRM_FORMAT_XBGR8888, gfx::BufferFormat::RGBX_8888},
     {DRM_FORMAT_ABGR8888, gfx::BufferFormat::RGBA_8888},
     {DRM_FORMAT_XRGB8888, gfx::BufferFormat::BGRX_8888},
@@ -618,7 +626,7 @@ void linux_buffer_params_create(wl_client* client,
     return;
   }
 
-  scoped_ptr<Buffer> buffer =
+  std::unique_ptr<Buffer> buffer =
       linux_buffer_params->display->CreateLinuxDMABufBuffer(
           std::move(linux_buffer_params->fd), gfx::Size(width, height),
           supported_format->buffer_format, linux_buffer_params->stride);
@@ -651,8 +659,8 @@ void linux_dmabuf_destroy(wl_client* client, wl_resource* resource) {
 void linux_dmabuf_create_params(wl_client* client,
                                 wl_resource* resource,
                                 uint32_t id) {
-  scoped_ptr<LinuxBufferParams> linux_buffer_params =
-      make_scoped_ptr(new LinuxBufferParams(GetUserDataAs<Display>(resource)));
+  std::unique_ptr<LinuxBufferParams> linux_buffer_params =
+      base::WrapUnique(new LinuxBufferParams(GetUserDataAs<Display>(resource)));
 
   wl_resource* linux_buffer_params_resource =
       wl_resource_create(client, &zwp_linux_buffer_params_v1_interface, 1, id);
@@ -733,7 +741,7 @@ void subcompositor_get_subsurface(wl_client* client,
                                   uint32_t id,
                                   wl_resource* surface,
                                   wl_resource* parent) {
-  scoped_ptr<SubSurface> subsurface =
+  std::unique_ptr<SubSurface> subsurface =
       GetUserDataAs<Display>(resource)->CreateSubSurface(
           GetUserDataAs<Surface>(surface), GetUserDataAs<Surface>(parent));
   if (!subsurface) {
@@ -901,9 +909,9 @@ void shell_get_shell_surface(wl_client* client,
                              wl_resource* resource,
                              uint32_t id,
                              wl_resource* surface) {
-  scoped_ptr<ShellSurface> shell_surface =
-      GetUserDataAs<Display>(resource)
-          ->CreateShellSurface(GetUserDataAs<Surface>(surface));
+  std::unique_ptr<ShellSurface> shell_surface =
+      GetUserDataAs<Display>(resource)->CreateShellSurface(
+          GetUserDataAs<Surface>(surface));
   if (!shell_surface) {
     wl_resource_post_error(resource, WL_SHELL_ERROR_ROLE,
                            "surface has already been assigned a role");
@@ -938,37 +946,37 @@ void bind_shell(wl_client* client, void* data, uint32_t version, uint32_t id) {
 ////////////////////////////////////////////////////////////////////////////////
 // wl_output_interface:
 
-wl_output_transform OutputTransform(gfx::Display::Rotation rotation) {
+wl_output_transform OutputTransform(display::Display::Rotation rotation) {
   switch (rotation) {
-    case gfx::Display::ROTATE_0:
+    case display::Display::ROTATE_0:
       return WL_OUTPUT_TRANSFORM_NORMAL;
-    case gfx::Display::ROTATE_90:
+    case display::Display::ROTATE_90:
       return WL_OUTPUT_TRANSFORM_90;
-    case gfx::Display::ROTATE_180:
+    case display::Display::ROTATE_180:
       return WL_OUTPUT_TRANSFORM_180;
-    case gfx::Display::ROTATE_270:
+    case display::Display::ROTATE_270:
       return WL_OUTPUT_TRANSFORM_270;
   }
   NOTREACHED();
   return WL_OUTPUT_TRANSFORM_NORMAL;
 }
 
-class WaylandDisplayObserver : public gfx::DisplayObserver {
+class WaylandDisplayObserver : public display::DisplayObserver {
  public:
-  WaylandDisplayObserver(const gfx::Display& display,
+  WaylandDisplayObserver(const display::Display& display,
                          wl_resource* output_resource)
       : display_id_(display.id()), output_resource_(output_resource) {
-    gfx::Screen::GetScreen()->AddObserver(this);
+    display::Screen::GetScreen()->AddObserver(this);
     SendDisplayMetrics(display);
   }
   ~WaylandDisplayObserver() override {
-    gfx::Screen::GetScreen()->RemoveObserver(this);
+    display::Screen::GetScreen()->RemoveObserver(this);
   }
 
-  // Overridden from gfx::DisplayObserver:
-  void OnDisplayAdded(const gfx::Display& new_display) override {}
-  void OnDisplayRemoved(const gfx::Display& new_display) override {}
-  void OnDisplayMetricsChanged(const gfx::Display& display,
+  // Overridden from display::DisplayObserver:
+  void OnDisplayAdded(const display::Display& new_display) override {}
+  void OnDisplayRemoved(const display::Display& new_display) override {}
+  void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t changed_metrics) override {
     if (display.id() != display_id_)
       return;
@@ -981,7 +989,7 @@ class WaylandDisplayObserver : public gfx::DisplayObserver {
   }
 
  private:
-  void SendDisplayMetrics(const gfx::Display& display) {
+  void SendDisplayMetrics(const display::Display& display) {
     const ash::DisplayInfo& info =
         ash::Shell::GetInstance()->display_manager()->GetDisplayInfo(
             display.id());
@@ -1030,13 +1038,13 @@ void bind_output(wl_client* client, void* data, uint32_t version, uint32_t id) {
       client, &wl_output_interface, std::min(version, output_version), id);
 
   // TODO(reveman): Multi-display support.
-  const gfx::Display& display = ash::Shell::GetInstance()
-                                    ->display_manager()
-                                    ->GetPrimaryDisplayCandidate();
+  const display::Display& display = ash::Shell::GetInstance()
+                                        ->display_manager()
+                                        ->GetPrimaryDisplayCandidate();
 
   SetImplementation(
       resource, nullptr,
-      make_scoped_ptr(new WaylandDisplayObserver(display, resource)));
+      base::WrapUnique(new WaylandDisplayObserver(display, resource)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1246,9 +1254,9 @@ void xdg_shell_get_xdg_surface(wl_client* client,
                                wl_resource* resource,
                                uint32_t id,
                                wl_resource* surface) {
-  scoped_ptr<ShellSurface> shell_surface =
-      GetUserDataAs<Display>(resource)
-          ->CreateShellSurface(GetUserDataAs<Surface>(surface));
+  std::unique_ptr<ShellSurface> shell_surface =
+      GetUserDataAs<Display>(resource)->CreateShellSurface(
+          GetUserDataAs<Surface>(surface));
   if (!shell_surface) {
     wl_resource_post_error(resource, XDG_SHELL_ERROR_ROLE,
                            "surface has already been assigned a role");
@@ -1304,7 +1312,7 @@ void xdg_shell_get_xdg_popup(wl_client* client,
 
   // TODO(reveman): Automatically close popup when clicking outside the
   // popup window.
-  scoped_ptr<ShellSurface> shell_surface =
+  std::unique_ptr<ShellSurface> shell_surface =
       GetUserDataAs<Display>(resource)->CreatePopupShellSurface(
           GetUserDataAs<Surface>(surface),
           // Shell surface widget delegate implementation of GetContentsView()
@@ -1425,15 +1433,15 @@ class WaylandPointerDelegate : public PointerDelegate {
            wl_resource_get_client(surface_resource) == client();
   }
   void OnPointerEnter(Surface* surface,
-                      const gfx::Point& location,
+                      const gfx::PointF& location,
                       int button_flags) override {
     wl_resource* surface_resource = surface->GetProperty(kSurfaceResourceKey);
     DCHECK(surface_resource);
     // Should we be sending button events to the client before the enter event
     // if client's pressed button state is different from |button_flags|?
     wl_pointer_send_enter(pointer_resource_, next_serial(), surface_resource,
-                          wl_fixed_from_int(location.x()),
-                          wl_fixed_from_int(location.y()));
+                          wl_fixed_from_double(location.x()),
+                          wl_fixed_from_double(location.y()));
   }
   void OnPointerLeave(Surface* surface) override {
     wl_resource* surface_resource = surface->GetProperty(kSurfaceResourceKey);
@@ -1441,10 +1449,10 @@ class WaylandPointerDelegate : public PointerDelegate {
     wl_pointer_send_leave(pointer_resource_, next_serial(), surface_resource);
   }
   void OnPointerMotion(base::TimeDelta time_stamp,
-                       const gfx::Point& location) override {
+                       const gfx::PointF& location) override {
     wl_pointer_send_motion(pointer_resource_, time_stamp.InMilliseconds(),
-                           wl_fixed_from_int(location.x()),
-                           wl_fixed_from_int(location.y()));
+                           wl_fixed_from_double(location.x()),
+                           wl_fixed_from_double(location.y()));
   }
   void OnPointerButton(base::TimeDelta time_stamp,
                        int button_flags,
@@ -1572,7 +1580,7 @@ class WaylandKeyboardDelegate : public KeyboardDelegate {
                                               nullptr,
                                               XKB_KEYMAP_COMPILE_NO_FLAGS)),
         xkb_state_(xkb_state_new(xkb_keymap_.get())) {
-    scoped_ptr<char, base::FreeDeleter> keymap_string(
+    std::unique_ptr<char, base::FreeDeleter> keymap_string(
         xkb_keymap_get_as_string(xkb_keymap_.get(), XKB_KEYMAP_FORMAT_TEXT_V1));
     DCHECK(keymap_string.get());
     size_t keymap_size = strlen(keymap_string.get()) + 1;
@@ -1691,9 +1699,9 @@ class WaylandKeyboardDelegate : public KeyboardDelegate {
   wl_resource* const keyboard_resource_;
 
   // The Xkb state used for the keyboard.
-  scoped_ptr<xkb_context, ui::XkbContextDeleter> xkb_context_;
-  scoped_ptr<xkb_keymap, ui::XkbKeymapDeleter> xkb_keymap_;
-  scoped_ptr<xkb_state, ui::XkbStateDeleter> xkb_state_;
+  std::unique_ptr<xkb_context, ui::XkbContextDeleter> xkb_context_;
+  std::unique_ptr<xkb_keymap, ui::XkbKeymapDeleter> xkb_keymap_;
+  std::unique_ptr<xkb_state, ui::XkbStateDeleter> xkb_state_;
 
   DISALLOW_COPY_AND_ASSIGN(WaylandKeyboardDelegate);
 };
@@ -1784,7 +1792,7 @@ void seat_get_pointer(wl_client* client, wl_resource* resource, uint32_t id) {
       client, &wl_pointer_interface, wl_resource_get_version(resource), id);
 
   SetImplementation(pointer_resource, &pointer_implementation,
-                    make_scoped_ptr(new Pointer(
+                    base::WrapUnique(new Pointer(
                         new WaylandPointerDelegate(pointer_resource))));
 }
 
@@ -1795,7 +1803,7 @@ void seat_get_keyboard(wl_client* client, wl_resource* resource, uint32_t id) {
       wl_resource_create(client, &wl_keyboard_interface, version, id);
 
   SetImplementation(keyboard_resource, &keyboard_implementation,
-                    make_scoped_ptr(new Keyboard(
+                    base::WrapUnique(new Keyboard(
                         new WaylandKeyboardDelegate(keyboard_resource))));
 
   // TODO(reveman): Keep repeat info synchronized with chromium and the host OS.
@@ -1812,7 +1820,7 @@ void seat_get_touch(wl_client* client, wl_resource* resource, uint32_t id) {
 
   SetImplementation(
       touch_resource, &touch_implementation,
-      make_scoped_ptr(new Touch(new WaylandTouchDelegate(touch_resource))));
+      base::WrapUnique(new Touch(new WaylandTouchDelegate(touch_resource))));
 }
 
 void seat_release(wl_client* client, wl_resource* resource) {
@@ -1843,6 +1851,10 @@ void bind_seat(wl_client* client, void* data, uint32_t version, uint32_t id) {
 ////////////////////////////////////////////////////////////////////////////////
 // wl_viewport_interface:
 
+// Implements the viewport interface to a Surface. The "viewport"-state is set
+// to null upon destruction. A window property will be set during the lifetime
+// of this class to prevent multiple instances from being created for the same
+// Surface.
 class Viewport : public SurfaceObserver {
  public:
   explicit Viewport(Surface* surface) : surface_(surface) {
@@ -1943,7 +1955,7 @@ void scaler_get_viewport(wl_client* client,
       client, &wl_viewport_interface, wl_resource_get_version(resource), id);
 
   SetImplementation(viewport_resource, &viewport_implementation,
-                    make_scoped_ptr(new Viewport(surface)));
+                    base::WrapUnique(new Viewport(surface)));
 }
 
 const struct wl_scaler_interface scaler_implementation = {scaler_destroy,
@@ -1962,6 +1974,10 @@ void bind_scaler(wl_client* client, void* data, uint32_t version, uint32_t id) {
 ////////////////////////////////////////////////////////////////////////////////
 // security_interface:
 
+// Implements the security interface to a Surface. The "only visible on secure
+// output"-state is set to false upon destruction. A window property will be set
+// during the lifetime of this class to prevent multiple instances from being
+// created for the same Surface.
 class Security : public SurfaceObserver {
  public:
   explicit Security(Surface* surface) : surface_(surface) {
@@ -2027,7 +2043,7 @@ void secure_output_get_security(wl_client* client,
       wl_resource_create(client, &zwp_security_v1_interface, 1, id);
 
   SetImplementation(security_resource, &security_implementation,
-                    make_scoped_ptr(new Security(surface)));
+                    base::WrapUnique(new Security(surface)));
 }
 
 const struct zwp_secure_output_v1_interface secure_output_implementation = {
@@ -2042,6 +2058,124 @@ void bind_secure_output(wl_client* client,
 
   wl_resource_set_implementation(resource, &secure_output_implementation, data,
                                  nullptr);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// blending_interface:
+
+// Implements the blending interface to a Surface. The "blend mode" and
+// "alpha"-state is set to SrcOver and 1 upon destruction. A window property
+// will be set during the lifetime of this class to prevent multiple instances
+// from being created for the same Surface.
+class Blending : public SurfaceObserver {
+ public:
+  explicit Blending(Surface* surface) : surface_(surface) {
+    surface_->AddSurfaceObserver(this);
+    surface_->SetProperty(kSurfaceHasBlendingKey, true);
+  }
+  ~Blending() override {
+    if (surface_) {
+      surface_->RemoveSurfaceObserver(this);
+      surface_->SetBlendMode(SkXfermode::kSrcOver_Mode);
+      surface_->SetAlpha(1.0f);
+      surface_->SetProperty(kSurfaceHasBlendingKey, false);
+    }
+  }
+
+  void SetBlendMode(SkXfermode::Mode blend_mode) {
+    if (surface_)
+      surface_->SetBlendMode(blend_mode);
+  }
+
+  void SetAlpha(float value) {
+    if (surface_)
+      surface_->SetAlpha(value);
+  }
+
+  // Overridden from SurfaceObserver:
+  void OnSurfaceDestroying(Surface* surface) override {
+    surface->RemoveSurfaceObserver(this);
+    surface_ = nullptr;
+  }
+
+ private:
+  Surface* surface_;
+
+  DISALLOW_COPY_AND_ASSIGN(Blending);
+};
+
+void blending_destroy(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void blending_set_blending(wl_client* client,
+                           wl_resource* resource,
+                           uint32_t equation) {
+  switch (equation) {
+    case ZWP_BLENDING_V1_BLENDING_EQUATION_NONE:
+      GetUserDataAs<Blending>(resource)->SetBlendMode(SkXfermode::kSrc_Mode);
+      break;
+    case ZWP_BLENDING_V1_BLENDING_EQUATION_PREMULT:
+      GetUserDataAs<Blending>(resource)->SetBlendMode(
+          SkXfermode::kSrcOver_Mode);
+      break;
+    case ZWP_BLENDING_V1_BLENDING_EQUATION_COVERAGE:
+      NOTIMPLEMENTED();
+      break;
+    default:
+      DLOG(WARNING) << "Unsupported blending equation: " << equation;
+      break;
+  }
+}
+
+void blending_set_alpha(wl_client* client,
+                        wl_resource* resource,
+                        wl_fixed_t alpha) {
+  GetUserDataAs<Blending>(resource)->SetAlpha(wl_fixed_to_double(alpha));
+}
+
+const struct zwp_blending_v1_interface blending_implementation = {
+    blending_destroy, blending_set_blending, blending_set_alpha};
+
+////////////////////////////////////////////////////////////////////////////////
+// alpha_compositing_interface:
+
+void alpha_compositing_destroy(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void alpha_compositing_get_blending(wl_client* client,
+                                    wl_resource* resource,
+                                    uint32_t id,
+                                    wl_resource* surface_resource) {
+  Surface* surface = GetUserDataAs<Surface>(surface_resource);
+  if (surface->GetProperty(kSurfaceHasBlendingKey)) {
+    wl_resource_post_error(resource,
+                           ZWP_ALPHA_COMPOSITING_V1_ERROR_BLENDING_EXISTS,
+                           "a blending object for that surface already exists");
+    return;
+  }
+
+  wl_resource* blending_resource =
+      wl_resource_create(client, &zwp_blending_v1_interface, 1, id);
+
+  SetImplementation(blending_resource, &blending_implementation,
+                    base::WrapUnique(new Blending(surface)));
+}
+
+const struct zwp_alpha_compositing_v1_interface
+    alpha_compositing_implementation = {alpha_compositing_destroy,
+                                        alpha_compositing_get_blending};
+
+void bind_alpha_compositing(wl_client* client,
+                            void* data,
+                            uint32_t version,
+                            uint32_t id) {
+  wl_resource* resource =
+      wl_resource_create(client, &zwp_alpha_compositing_v1_interface, 1, id);
+
+  wl_resource_set_implementation(resource, &alpha_compositing_implementation,
+                                 data, nullptr);
 }
 
 }  // namespace
@@ -2076,13 +2210,15 @@ Server::Server(Display* display)
                    display_, bind_scaler);
   wl_global_create(wl_display_.get(), &zwp_secure_output_v1_interface, 1,
                    display_, bind_secure_output);
+  wl_global_create(wl_display_.get(), &zwp_alpha_compositing_v1_interface, 1,
+                   display_, bind_alpha_compositing);
 }
 
 Server::~Server() {}
 
 // static
-scoped_ptr<Server> Server::Create(Display* display) {
-  scoped_ptr<Server> server(new Server(display));
+std::unique_ptr<Server> Server::Create(Display* display) {
+  std::unique_ptr<Server> server(new Server(display));
 
   char* runtime_dir = getenv("XDG_RUNTIME_DIR");
   if (!runtime_dir) {

@@ -7,7 +7,6 @@
 #ifndef CONTENT_COMMON_GPU_MEDIA_IPC_DATA_SOURCE_IMPL_H_
 #define CONTENT_COMMON_GPU_MEDIA_IPC_DATA_SOURCE_IMPL_H_
 
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "base/synchronization/lock.h"
 #include "content/common/gpu/media/ipc_data_source.h"
@@ -56,7 +55,7 @@ class IPCDataSourceImpl : public IPCDataSource {
   const bool streaming_;
 
   class ReadOperation;
-  scoped_ptr<ReadOperation> read_operation_;
+  std::unique_ptr<ReadOperation> read_operation_;
 
   bool stopped_;
   bool suspended_;
@@ -68,7 +67,7 @@ class IPCDataSourceImpl : public IPCDataSource {
 
   // A buffer for raw media data, shared with the render process.  Filled in the
   // render process, consumed in the GPU process.
-  scoped_ptr<base::SharedMemory> shared_data_;
+  std::unique_ptr<base::SharedMemory> shared_data_;
 
   DISALLOW_COPY_AND_ASSIGN(IPCDataSourceImpl);
 };

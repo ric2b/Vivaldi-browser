@@ -22,20 +22,11 @@
 #define WTF_HashMap_h
 
 #include "wtf/HashTable.h"
-#include "wtf/PartitionAllocator.h"
+#include "wtf/allocator/PartitionAllocator.h"
 
 namespace WTF {
 
 template <typename KeyTraits, typename MappedTraits> struct HashMapValueTraits;
-
-template <typename T> struct ReferenceTypeMaker {
-    STATIC_ONLY(ReferenceTypeMaker);
-    typedef T& ReferenceType;
-};
-template <typename T> struct ReferenceTypeMaker<T&> {
-    STATIC_ONLY(ReferenceTypeMaker);
-    typedef T& ReferenceType;
-};
 
 struct KeyValuePairKeyExtractor {
     STATIC_ONLY(KeyValuePairKeyExtractor);
@@ -67,11 +58,7 @@ public:
     typedef typename ValueTraits::TraitType ValueType;
 
 private:
-    typedef typename MappedTraits::PassInType MappedPassInType;
-    typedef typename MappedTraits::PassOutType MappedPassOutType;
     typedef typename MappedTraits::PeekOutType MappedPeekType;
-
-    typedef typename ReferenceTypeMaker<MappedPassInType>::ReferenceType MappedPassInReferenceType;
 
     typedef HashArg HashFunctions;
 
@@ -89,12 +76,6 @@ public:
 public:
     void swap(HashMap& ref)
     {
-        m_impl.swap(ref.m_impl);
-    }
-
-    void swap(typename Allocator::template OtherType<HashMap>::Type other)
-    {
-        HashMap& ref = Allocator::getOther(other);
         m_impl.swap(ref.m_impl);
     }
 
@@ -142,7 +123,7 @@ public:
     template <typename Collection>
     void removeAll(const Collection& toBeRemoved) { WTF::removeAll(*this, toBeRemoved); }
 
-    MappedPassOutType take(KeyPeekInType); // efficient combination of get with remove
+    MappedType take(KeyPeekInType); // efficient combination of get with remove
 
     // An alternate version of find() that finds the object by hashing and
     // comparing with some other type, to avoid the cost of type
@@ -160,7 +141,8 @@ public:
     //   static unsigned hash(const T&);
     //   static bool equal(const ValueType&, const T&);
     //   static translate(ValueType&, const T&, unsigned hashCode);
-    template <typename HashTranslator, typename T> AddResult add(const T&, MappedPassInType);
+    template <typename HashTranslator, typename IncomingKeyType, typename IncomingMappedType>
+    AddResult add(IncomingKeyType&&, IncomingMappedType&&);
 
     static bool isValidKey(KeyPeekInType);
 
@@ -395,11 +377,11 @@ HashMap<T, U, V, W, X, Y>::set(IncomingKeyType&& key, IncomingMappedType&& mappe
 }
 
 template <typename T, typename U, typename V, typename W, typename X, typename Y>
-template <typename HashTranslator, typename TYPE>
-typename HashMap<T, U, V, W, X, Y>::AddResult
-HashMap<T, U, V, W, X, Y>::add(const TYPE& key, MappedPassInType value)
+template <typename HashTranslator, typename IncomingKeyType, typename IncomingMappedType>
+auto HashMap<T, U, V, W, X, Y>::add(IncomingKeyType&& key, IncomingMappedType&& mapped) -> AddResult
 {
-    return m_impl.template addPassingHashCode<HashMapTranslatorAdapter<ValueTraits, HashTranslator>>(key, value);
+    return m_impl.template addPassingHashCode<HashMapTranslatorAdapter<ValueTraits, HashTranslator>>(
+        std::forward<IncomingKeyType>(key), std::forward<IncomingMappedType>(mapped));
 }
 
 template <typename T, typename U, typename V, typename W, typename X, typename Y>
@@ -439,13 +421,12 @@ inline void HashMap<T, U, V, W, X, Y>::clear()
 }
 
 template <typename T, typename U, typename V, typename W, typename X, typename Y>
-typename HashMap<T, U, V, W, X, Y>::MappedPassOutType
-HashMap<T, U, V, W, X, Y>::take(KeyPeekInType key)
+auto HashMap<T, U, V, W, X, Y>::take(KeyPeekInType key) -> MappedType
 {
     iterator it = find(key);
     if (it == end())
-        return MappedTraits::passOut(MappedTraits::emptyValue());
-    MappedPassOutType result = MappedTraits::passOut(it->value);
+        return MappedTraits::emptyValue();
+    MappedType result = std::move(it->value);
     remove(it);
     return result;
 }

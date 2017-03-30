@@ -4,8 +4,9 @@
 
 #include "ui/views/controls/button/menu_button.h"
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
@@ -104,7 +105,7 @@ class MenuButtonTest : public ViewsTestBase {
 
   Widget* widget_;
   TestMenuButton* button_;
-  scoped_ptr<ui::test::EventGenerator> generator_;
+  std::unique_ptr<ui::test::EventGenerator> generator_;
 
   DISALLOW_COPY_AND_ASSIGN(MenuButtonTest);
 };
@@ -184,7 +185,7 @@ class PressStateMenuButtonListener : public MenuButtonListener {
  private:
   MenuButton* menu_button_;
 
-  scoped_ptr<MenuButton::PressedLock> pressed_lock_;
+  std::unique_ptr<MenuButton::PressedLock> pressed_lock_;
 
   // The |pressed_lock_| will be released when true.
   bool release_lock_;
@@ -233,7 +234,8 @@ class TestDragDropClient : public aura::client::DragDropClient,
                        aura::Window* source_window,
                        const gfx::Point& screen_location,
                        int operation,
-                       ui::DragDropTypes::DragEventSource source) override;
+                       ui::DragDropTypes::DragEventSource source,
+                       bool& cancelled) override;
   void DragUpdate(aura::Window* target, const ui::LocatedEvent& event) override;
   void Drop(aura::Window* target, const ui::LocatedEvent& event) override;
   void DragCancel() override;
@@ -265,7 +267,8 @@ int TestDragDropClient::StartDragAndDrop(
     aura::Window* source_window,
     const gfx::Point& screen_location,
     int operation,
-    ui::DragDropTypes::DragEventSource source) {
+    ui::DragDropTypes::DragEventSource source,
+    bool& cancelled) {
   if (IsDragDropInProgress())
     return ui::DragDropTypes::DRAG_NONE;
   drag_in_progress_ = true;
@@ -349,7 +352,7 @@ TEST_F(MenuButtonTest, ButtonStateForMenuButtonsWithPressedLocks) {
   EXPECT_EQ(Button::STATE_HOVERED, button()->state());
 
   // Introduce a PressedLock, which should make the button pressed.
-  scoped_ptr<MenuButton::PressedLock> pressed_lock1(
+  std::unique_ptr<MenuButton::PressedLock> pressed_lock1(
       new MenuButton::PressedLock(button()));
   EXPECT_EQ(Button::STATE_PRESSED, button()->state());
 
@@ -358,7 +361,7 @@ TEST_F(MenuButtonTest, ButtonStateForMenuButtonsWithPressedLocks) {
   EXPECT_EQ(Button::STATE_PRESSED, button()->state());
 
   // Creating a new lock should obviously keep the button pressed.
-  scoped_ptr<MenuButton::PressedLock> pressed_lock2(
+  std::unique_ptr<MenuButton::PressedLock> pressed_lock2(
       new MenuButton::PressedLock(button()));
   EXPECT_EQ(Button::STATE_PRESSED, button()->state());
 
@@ -436,7 +439,7 @@ TEST_F(MenuButtonTest, InkDropStateForMenuButtonActivationsWithoutListener) {
   button()->set_ink_drop_delegate(&ink_drop_delegate);
   button()->Activate(nullptr);
 
-  EXPECT_EQ(InkDropState::HIDDEN, ink_drop_delegate.state());
+  EXPECT_EQ(InkDropState::HIDDEN, ink_drop_delegate.GetTargetInkDropState());
 }
 
 TEST_F(MenuButtonTest,
@@ -447,7 +450,8 @@ TEST_F(MenuButtonTest,
   button()->set_ink_drop_delegate(&ink_drop_delegate);
   button()->Activate(nullptr);
 
-  EXPECT_EQ(InkDropState::ACTION_TRIGGERED, ink_drop_delegate.state());
+  EXPECT_EQ(InkDropState::ACTION_TRIGGERED,
+            ink_drop_delegate.GetTargetInkDropState());
 }
 
 TEST_F(
@@ -460,7 +464,7 @@ TEST_F(
   button()->set_ink_drop_delegate(&ink_drop_delegate);
   button()->Activate(nullptr);
 
-  EXPECT_EQ(InkDropState::ACTIVATED, ink_drop_delegate.state());
+  EXPECT_EQ(InkDropState::ACTIVATED, ink_drop_delegate.GetTargetInkDropState());
 
   // Prevent the button from accessing invalid memory during clean up.
   button()->set_ink_drop_delegate(nullptr);
@@ -475,7 +479,8 @@ TEST_F(MenuButtonTest,
   button()->set_ink_drop_delegate(&ink_drop_delegate);
   button()->Activate(nullptr);
 
-  EXPECT_EQ(InkDropState::DEACTIVATED, ink_drop_delegate.state());
+  EXPECT_EQ(InkDropState::DEACTIVATED,
+            ink_drop_delegate.GetTargetInkDropState());
 }
 
 TEST_F(MenuButtonTest, InkDropStateForMenuButtonsWithPressedLocks) {
@@ -483,21 +488,22 @@ TEST_F(MenuButtonTest, InkDropStateForMenuButtonsWithPressedLocks) {
   TestInkDropDelegate ink_drop_delegate;
   button()->set_ink_drop_delegate(&ink_drop_delegate);
 
-  scoped_ptr<MenuButton::PressedLock> pressed_lock1(
+  std::unique_ptr<MenuButton::PressedLock> pressed_lock1(
       new MenuButton::PressedLock(button()));
 
-  EXPECT_EQ(InkDropState::ACTIVATED, ink_drop_delegate.state());
+  EXPECT_EQ(InkDropState::ACTIVATED, ink_drop_delegate.GetTargetInkDropState());
 
-  scoped_ptr<MenuButton::PressedLock> pressed_lock2(
+  std::unique_ptr<MenuButton::PressedLock> pressed_lock2(
       new MenuButton::PressedLock(button()));
 
-  EXPECT_EQ(InkDropState::ACTIVATED, ink_drop_delegate.state());
+  EXPECT_EQ(InkDropState::ACTIVATED, ink_drop_delegate.GetTargetInkDropState());
 
   pressed_lock1.reset();
-  EXPECT_EQ(InkDropState::ACTIVATED, ink_drop_delegate.state());
+  EXPECT_EQ(InkDropState::ACTIVATED, ink_drop_delegate.GetTargetInkDropState());
 
   pressed_lock2.reset();
-  EXPECT_EQ(InkDropState::DEACTIVATED, ink_drop_delegate.state());
+  EXPECT_EQ(InkDropState::DEACTIVATED,
+            ink_drop_delegate.GetTargetInkDropState());
 }
 
 // Verifies only one ink drop animation is triggered when multiple PressedLocks
@@ -507,16 +513,17 @@ TEST_F(MenuButtonTest, OneInkDropAnimationForReentrantPressedLocks) {
   TestInkDropDelegate ink_drop_delegate;
   button()->set_ink_drop_delegate(&ink_drop_delegate);
 
-  scoped_ptr<MenuButton::PressedLock> pressed_lock1(
+  std::unique_ptr<MenuButton::PressedLock> pressed_lock1(
       new MenuButton::PressedLock(button()));
 
-  EXPECT_EQ(InkDropState::ACTIVATED, ink_drop_delegate.state());
+  EXPECT_EQ(InkDropState::ACTIVATED, ink_drop_delegate.GetTargetInkDropState());
   ink_drop_delegate.OnAction(InkDropState::ACTION_PENDING);
 
-  scoped_ptr<MenuButton::PressedLock> pressed_lock2(
+  std::unique_ptr<MenuButton::PressedLock> pressed_lock2(
       new MenuButton::PressedLock(button()));
 
-  EXPECT_EQ(InkDropState::ACTION_PENDING, ink_drop_delegate.state());
+  EXPECT_EQ(InkDropState::ACTION_PENDING,
+            ink_drop_delegate.GetTargetInkDropState());
 }
 
 // Verifies the InkDropState is left as ACTIVATED if a PressedLock is active
@@ -531,7 +538,7 @@ TEST_F(MenuButtonTest,
 
   button()->Activate(nullptr);
 
-  EXPECT_EQ(InkDropState::ACTIVATED, ink_drop_delegate.state());
+  EXPECT_EQ(InkDropState::ACTIVATED, ink_drop_delegate.GetTargetInkDropState());
 }
 
 #if defined(USE_AURA)

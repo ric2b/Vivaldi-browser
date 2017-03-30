@@ -24,23 +24,27 @@
 #include "storage/browser/quota/quota_manager.h"
 #include "storage/browser/quota/special_storage_policy.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/origin.h"
+
+using url::Origin;
 
 namespace content {
 
 class IndexedDBTest : public testing::Test {
  public:
-  const GURL kNormalOrigin;
-  const GURL kSessionOnlyOrigin;
+  const Origin kNormalOrigin;
+  const Origin kSessionOnlyOrigin;
 
   IndexedDBTest()
-      : kNormalOrigin("http://normal/"),
-        kSessionOnlyOrigin("http://session-only/"),
+      : kNormalOrigin(GURL("http://normal/")),
+        kSessionOnlyOrigin(GURL("http://session-only/")),
         task_runner_(new base::TestSimpleTaskRunner),
         special_storage_policy_(new MockSpecialStoragePolicy),
         quota_manager_proxy_(new MockQuotaManagerProxy(nullptr, nullptr)),
         file_thread_(BrowserThread::FILE_USER_BLOCKING, &message_loop_),
         io_thread_(BrowserThread::IO, &message_loop_) {
-    special_storage_policy_->AddSessionOnly(kSessionOnlyOrigin);
+    special_storage_policy_->AddSessionOnly(
+        GURL(kSessionOnlyOrigin.Serialize()));
   }
   ~IndexedDBTest() override {
     quota_manager_proxy_->SimulateQuotaManagerDestroyed();
@@ -131,17 +135,17 @@ TEST_F(IndexedDBTest, SetForceKeepSessionState) {
 class ForceCloseDBCallbacks : public IndexedDBCallbacks {
  public:
   ForceCloseDBCallbacks(scoped_refptr<IndexedDBContextImpl> idb_context,
-                        const GURL& origin_url)
+                        const Origin& origin)
       : IndexedDBCallbacks(NULL, 0, 0),
         idb_context_(idb_context),
-        origin_url_(origin_url) {}
+        origin_(origin) {}
 
   void OnSuccess() override {}
   void OnSuccess(const std::vector<base::string16>&) override {}
-  void OnSuccess(scoped_ptr<IndexedDBConnection> connection,
+  void OnSuccess(std::unique_ptr<IndexedDBConnection> connection,
                  const IndexedDBDatabaseMetadata& metadata) override {
     connection_ = std::move(connection);
-    idb_context_->ConnectionOpened(origin_url_, connection_.get());
+    idb_context_->ConnectionOpened(origin_, connection_.get());
   }
 
   IndexedDBConnection* connection() { return connection_.get(); }
@@ -151,8 +155,8 @@ class ForceCloseDBCallbacks : public IndexedDBCallbacks {
 
  private:
   scoped_refptr<IndexedDBContextImpl> idb_context_;
-  GURL origin_url_;
-  scoped_ptr<IndexedDBConnection> connection_;
+  Origin origin_;
+  std::unique_ptr<IndexedDBConnection> connection_;
   DISALLOW_COPY_AND_ASSIGN(ForceCloseDBCallbacks);
 };
 
@@ -171,7 +175,7 @@ TEST_F(IndexedDBTest, ForceCloseOpenDatabasesOnDelete) {
   {
     TestBrowserContext browser_context;
 
-    const GURL kTestOrigin("http://test/");
+    const Origin kTestOrigin(GURL("http://test/"));
 
     scoped_refptr<IndexedDBContextImpl> idb_context =
         new IndexedDBContextImpl(temp_dir.path(),
@@ -194,28 +198,26 @@ TEST_F(IndexedDBTest, ForceCloseOpenDatabasesOnDelete) {
                                                0 /* child_process_id */,
                                                0 /* host_transaction_id */,
                                                0 /* version */);
-    factory->Open(base::ASCIIToUTF16("opendb"),
-                  open_connection,
-                  NULL /* request_context */,
-                  kTestOrigin,
+    factory->Open(base::ASCIIToUTF16("opendb"), open_connection,
+                  NULL /* request_context */, Origin(kTestOrigin),
                   idb_context->data_path());
     IndexedDBPendingConnection closed_connection(closed_callbacks,
                                                  closed_db_callbacks,
                                                  0 /* child_process_id */,
                                                  0 /* host_transaction_id */,
                                                  0 /* version */);
-    factory->Open(base::ASCIIToUTF16("closeddb"),
-                  closed_connection,
-                  NULL /* request_context */,
-                  kTestOrigin,
+    factory->Open(base::ASCIIToUTF16("closeddb"), closed_connection,
+                  NULL /* request_context */, Origin(kTestOrigin),
                   idb_context->data_path());
 
     closed_callbacks->connection()->Close();
 
+    // TODO(jsbell): Remove static_cast<> when overloads are eliminated.
     idb_context->TaskRunner()->PostTask(
         FROM_HERE,
-        base::Bind(
-            &IndexedDBContextImpl::DeleteForOrigin, idb_context, kTestOrigin));
+        base::Bind(static_cast<void (IndexedDBContextImpl::*)(const Origin&)>(
+                       &IndexedDBContextImpl::DeleteForOrigin),
+                   idb_context, kTestOrigin));
     FlushIndexedDBTaskRunner();
     message_loop_.RunUntilIdle();
   }
@@ -231,7 +233,7 @@ TEST_F(IndexedDBTest, ForceCloseOpenDatabasesOnDelete) {
 TEST_F(IndexedDBTest, DeleteFailsIfDirectoryLocked) {
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-  const GURL kTestOrigin("http://test/");
+  const Origin kTestOrigin(GURL("http://test/"));
 
   scoped_refptr<IndexedDBContextImpl> idb_context = new IndexedDBContextImpl(
       temp_dir.path(), special_storage_policy_.get(),
@@ -240,21 +242,23 @@ TEST_F(IndexedDBTest, DeleteFailsIfDirectoryLocked) {
   base::FilePath test_path = idb_context->GetFilePathForTesting(kTestOrigin);
   ASSERT_TRUE(base::CreateDirectory(test_path));
 
-  scoped_ptr<LevelDBLock> lock =
+  std::unique_ptr<LevelDBLock> lock =
       LevelDBDatabase::LockForTesting(test_path);
   ASSERT_TRUE(lock);
 
+  // TODO(jsbell): Remove static_cast<> when overloads are eliminated.
   idb_context->TaskRunner()->PostTask(
       FROM_HERE,
-      base::Bind(
-          &IndexedDBContextImpl::DeleteForOrigin, idb_context, kTestOrigin));
+      base::Bind(static_cast<void (IndexedDBContextImpl::*)(const Origin&)>(
+                     &IndexedDBContextImpl::DeleteForOrigin),
+                 idb_context, kTestOrigin));
   FlushIndexedDBTaskRunner();
 
   EXPECT_TRUE(base::DirectoryExists(test_path));
 }
 
 TEST_F(IndexedDBTest, ForceCloseOpenDatabasesOnCommitFailure) {
-  const GURL kTestOrigin("http://test/");
+  const Origin kTestOrigin(GURL("http://test/"));
 
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
@@ -273,10 +277,8 @@ TEST_F(IndexedDBTest, ForceCloseOpenDatabasesOnCommitFailure) {
   IndexedDBPendingConnection connection(
       callbacks, db_callbacks, 0 /* child_process_id */, transaction_id,
       IndexedDBDatabaseMetadata::DEFAULT_VERSION);
-  factory->Open(base::ASCIIToUTF16("db"),
-                connection,
-                NULL /* request_context */,
-                kTestOrigin,
+  factory->Open(base::ASCIIToUTF16("db"), connection,
+                NULL /* request_context */, Origin(kTestOrigin),
                 temp_dir.path());
 
   EXPECT_TRUE(callbacks->connection());

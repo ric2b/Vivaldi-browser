@@ -24,10 +24,12 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
 #include <cstddef>
 #include <deque>
 #include <list>
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <utility>
@@ -35,7 +37,6 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -68,7 +69,7 @@ class NET_EXPORT_PRIVATE ConnectJob {
     virtual ~Delegate() {}
 
     // Alerts the delegate that the connection completed. |job| must
-    // be destroyed by the delegate. A scoped_ptr<> isn't used because
+    // be destroyed by the delegate. A std::unique_ptr<> isn't used because
     // the caller of this function doesn't own |job|.
     virtual void OnConnectJobComplete(int result,
                                       ConnectJob* job) = 0;
@@ -93,7 +94,7 @@ class NET_EXPORT_PRIVATE ConnectJob {
   // Releases ownership of the underlying socket to the caller.
   // Returns the released socket, or NULL if there was a connection
   // error.
-  scoped_ptr<StreamSocket> PassSocket();
+  std::unique_ptr<StreamSocket> PassSocket();
 
   // Begins connecting the socket.  Returns OK on success, ERR_IO_PENDING if it
   // cannot complete synchronously without blocking, or another net error code
@@ -121,7 +122,7 @@ class NET_EXPORT_PRIVATE ConnectJob {
   ClientSocketPool::RespectLimits respect_limits() const {
     return respect_limits_;
   }
-  void SetSocket(scoped_ptr<StreamSocket> socket);
+  void SetSocket(std::unique_ptr<StreamSocket> socket);
   StreamSocket* socket() { return socket_.get(); }
   void NotifyDelegateOfCompletion(int rv);
   void ResetTimer(base::TimeDelta remainingTime);
@@ -146,7 +147,7 @@ class NET_EXPORT_PRIVATE ConnectJob {
   // Timer to abort jobs that take too long.
   base::OneShotTimer timer_;
   Delegate* delegate_;
-  scoped_ptr<StreamSocket> socket_;
+  std::unique_ptr<StreamSocket> socket_;
   BoundNetLog net_log_;
   // A ConnectJob is idle until Connect() has been called.
   bool idle_;
@@ -222,7 +223,7 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
     ConnectJobFactory() {}
     virtual ~ConnectJobFactory() {}
 
-    virtual scoped_ptr<ConnectJob> NewConnectJob(
+    virtual std::unique_ptr<ConnectJob> NewConnectJob(
         const std::string& group_name,
         const Request& request,
         ConnectJob::Delegate* delegate) const = 0;
@@ -257,7 +258,7 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
 
   // See ClientSocketPool::RequestSocket for documentation on this function.
   int RequestSocket(const std::string& group_name,
-                    scoped_ptr<const Request> request);
+                    std::unique_ptr<const Request> request);
 
   // See ClientSocketPool::RequestSocket for documentation on this function.
   void RequestSockets(const std::string& group_name,
@@ -270,7 +271,7 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
 
   // See ClientSocketPool::ReleaseSocket for documentation on this function.
   void ReleaseSocket(const std::string& group_name,
-                     scoped_ptr<StreamSocket> socket,
+                     std::unique_ptr<StreamSocket> socket,
                      int id);
 
   // See ClientSocketPool::FlushWithError for documentation on this function.
@@ -313,14 +314,6 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
 
   bool HasGroup(const std::string& group_name) const;
 
-  // Called to enable/disable cleaning up idle sockets. When enabled,
-  // idle sockets that have been around for longer than a period defined
-  // by kCleanupInterval are cleaned up using a timer. Otherwise they are
-  // closed next time client makes a request. This may reduce network
-  // activity and power consumption.
-  static bool cleanup_timer_enabled();
-  static bool set_cleanup_timer_enabled(bool enabled);
-
   // Closes all idle sockets if |force| is true.  Else, only closes idle
   // sockets that timed out or can't be reused.  Made public for testing.
   void CleanupIdleSockets(bool force);
@@ -336,7 +329,7 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
   bool CloseOneIdleConnectionInHigherLayeredPool();
 
   // See ClientSocketPool::GetInfoAsValue for documentation on this function.
-  scoped_ptr<base::DictionaryValue> GetInfoAsValue(
+  std::unique_ptr<base::DictionaryValue> GetInfoAsValue(
       const std::string& name,
       const std::string& type) const;
 
@@ -433,7 +426,7 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
     // Otherwise, returns false.
     bool TryToUseUnassignedConnectJob();
 
-    void AddJob(scoped_ptr<ConnectJob> job, bool is_preconnect);
+    void AddJob(std::unique_ptr<ConnectJob> job, bool is_preconnect);
     // Remove |job| from this group, which must already own |job|.
     void RemoveJob(ConnectJob* job);
     void RemoveAllJobs();
@@ -456,15 +449,15 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
     // Inserts the request into the queue based on priority
     // order. Older requests are prioritized over requests of equal
     // priority.
-    void InsertPendingRequest(scoped_ptr<const Request> request);
+    void InsertPendingRequest(std::unique_ptr<const Request> request);
 
     // Gets and removes the next pending request. Returns NULL if
     // there are no pending requests.
-    scoped_ptr<const Request> PopNextPendingRequest();
+    std::unique_ptr<const Request> PopNextPendingRequest();
 
     // Finds the pending request for |handle| and removes it. Returns
     // the removed pending request, or NULL if there was none.
-    scoped_ptr<const Request> FindAndRemovePendingRequest(
+    std::unique_ptr<const Request> FindAndRemovePendingRequest(
         ClientSocketHandle* handle);
 
     void IncrementActiveSocketCount() { active_socket_count_++; }
@@ -479,7 +472,7 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
    private:
     // Returns the iterator's pending request after removing it from
     // the queue.
-    scoped_ptr<const Request> RemovePendingRequest(
+    std::unique_ptr<const Request> RemovePendingRequest(
         const RequestQueue::Pointer& pointer);
 
     // Called when the backup socket timer fires.
@@ -532,20 +525,11 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
   void IncrementIdleCount();
   void DecrementIdleCount();
 
-  // Start cleanup timer for idle sockets.
-  void StartIdleSocketTimer();
-
   // Scans the group map for groups which have an available socket slot and
   // at least one pending request. Returns true if any groups are stalled, and
   // if so (and if both |group| and |group_name| are not NULL), fills |group|
   // and |group_name| with data of the stalled group having highest priority.
   bool FindTopStalledGroup(Group** group, std::string* group_name) const;
-
-  // Called when timer_ fires.  This method scans the idle sockets removing
-  // sockets that timed out or can't be reused.
-  void OnCleanupTimerFired() {
-    CleanupIdleSockets(false);
-  }
 
   // Removes |job| from |group|, which must already own |job|.
   void RemoveConnectJob(ConnectJob* job, Group* group);
@@ -557,7 +541,7 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
   void ProcessPendingRequest(const std::string& group_name, Group* group);
 
   // Assigns |socket| to |handle| and updates |group|'s counters appropriately.
-  void HandOutSocket(scoped_ptr<StreamSocket> socket,
+  void HandOutSocket(std::unique_ptr<StreamSocket> socket,
                      ClientSocketHandle::SocketReuseType reuse_type,
                      const LoadTimingInfo::ConnectTiming& connect_timing,
                      ClientSocketHandle* handle,
@@ -566,7 +550,7 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
                      const BoundNetLog& net_log);
 
   // Adds |socket| to the list of idle sockets for |group|.
-  void AddIdleSocket(scoped_ptr<StreamSocket> socket, Group* group);
+  void AddIdleSocket(std::unique_ptr<StreamSocket> socket, Group* group);
 
   // Iterates through |group_map_|, canceling all ConnectJobs and deleting
   // groups if they are no longer needed.
@@ -624,10 +608,6 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
   // possible that the request is cancelled.
   PendingCallbackMap pending_callback_map_;
 
-  // Timer used to periodically prune idle sockets that timed out or can't be
-  // reused.
-  base::RepeatingTimer timer_;
-
   // The total number of idle sockets in the system.
   int idle_socket_count_;
 
@@ -643,14 +623,11 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
   // The maximum number of sockets kept per group.
   const int max_sockets_per_group_;
 
-  // Whether to use timer to cleanup idle sockets.
-  bool use_cleanup_timer_;
-
   // The time to wait until closing idle sockets.
   const base::TimeDelta unused_idle_socket_timeout_;
   const base::TimeDelta used_idle_socket_timeout_;
 
-  const scoped_ptr<ConnectJobFactory> connect_job_factory_;
+  const std::unique_ptr<ConnectJobFactory> connect_job_factory_;
 
   // TODO(vandebo) Remove when backup jobs move to TransportClientSocketPool
   bool connect_backup_jobs_enabled_;
@@ -711,7 +688,7 @@ class ClientSocketPoolBase {
     ConnectJobFactory() {}
     virtual ~ConnectJobFactory() {}
 
-    virtual scoped_ptr<ConnectJob> NewConnectJob(
+    virtual std::unique_ptr<ConnectJob> NewConnectJob(
         const std::string& group_name,
         const Request& request,
         ConnectJob::Delegate* delegate) const = 0;
@@ -765,7 +742,7 @@ class ClientSocketPoolBase {
                     ClientSocketHandle* handle,
                     const CompletionCallback& callback,
                     const BoundNetLog& net_log) {
-    scoped_ptr<const Request> request(new Request(
+    std::unique_ptr<const Request> request(new Request(
         handle, callback, priority, respect_limits,
         internal::ClientSocketPoolBaseHelper::NORMAL, params, net_log));
     return helper_.RequestSocket(group_name, std::move(request));
@@ -791,7 +768,7 @@ class ClientSocketPoolBase {
   }
 
   void ReleaseSocket(const std::string& group_name,
-                     scoped_ptr<StreamSocket> socket,
+                     std::unique_ptr<StreamSocket> socket,
                      int id) {
     return helper_.ReleaseSocket(group_name, std::move(socket), id);
   }
@@ -837,8 +814,9 @@ class ClientSocketPoolBase {
     return helper_.CleanupIdleSockets(force);
   }
 
-  scoped_ptr<base::DictionaryValue> GetInfoAsValue(const std::string& name,
-                                        const std::string& type) const {
+  std::unique_ptr<base::DictionaryValue> GetInfoAsValue(
+      const std::string& name,
+      const std::string& type) const {
     return helper_.GetInfoAsValue(name, type);
   }
 
@@ -870,7 +848,7 @@ class ClientSocketPoolBase {
         : connect_job_factory_(connect_job_factory) {}
     ~ConnectJobFactoryAdaptor() override {}
 
-    scoped_ptr<ConnectJob> NewConnectJob(
+    std::unique_ptr<ConnectJob> NewConnectJob(
         const std::string& group_name,
         const internal::ClientSocketPoolBaseHelper::Request& request,
         ConnectJob::Delegate* delegate) const override {
@@ -883,7 +861,7 @@ class ClientSocketPoolBase {
       return connect_job_factory_->ConnectionTimeout();
     }
 
-    const scoped_ptr<ConnectJobFactory> connect_job_factory_;
+    const std::unique_ptr<ConnectJobFactory> connect_job_factory_;
   };
 
   internal::ClientSocketPoolBaseHelper helper_;

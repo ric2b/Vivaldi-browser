@@ -7,15 +7,16 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/event_types.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
+#include "ui/display/display.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/events_export.h"
 #include "ui/events/keycodes/keyboard_codes.h"
-#include "ui/gfx/display.h"
 #include "ui/gfx/native_widget_types.h"
 
 #if defined(OS_WIN)
@@ -38,12 +39,9 @@ class Event;
 class MouseEvent;
 enum class DomCode;
 
-// Updates the list of devices for cached properties.
-EVENTS_EXPORT void UpdateDeviceList();
-
 // Returns a ui::Event wrapping a native event. Ownership of the returned value
 // is transferred to the caller.
-EVENTS_EXPORT scoped_ptr<Event> EventFromNative(
+EVENTS_EXPORT std::unique_ptr<Event> EventFromNative(
     const base::NativeEvent& native_event);
 
 // Get the EventType from a native event.
@@ -151,7 +149,7 @@ EVENTS_EXPORT bool GetScrollOffsets(const base::NativeEvent& native_event,
 EVENTS_EXPORT bool ShouldDefaultToNaturalScroll();
 
 // Returns whether or not the internal display produces touch events.
-EVENTS_EXPORT gfx::Display::TouchSupport GetInternalDisplayTouchSupport();
+EVENTS_EXPORT display::Display::TouchSupport GetInternalDisplayTouchSupport();
 
 #if defined(OS_WIN)
 EVENTS_EXPORT int GetModifiersFromKeyState();

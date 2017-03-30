@@ -66,7 +66,6 @@ class Value;
 class InspectorOverlay final
     : public GarbageCollectedFinalized<InspectorOverlay>
     , public InspectorDOMAgent::Client
-    , public InspectorProfilerAgent::Client
     , public InspectorOverlayHost::Listener {
     USING_GARBAGE_COLLECTED_MIXIN(InspectorOverlay);
 public:
@@ -81,6 +80,8 @@ public:
     void init(InspectorCSSAgent*, InspectorDebuggerAgent*, InspectorDOMAgent*);
 
     void clear();
+    void suspend();
+    void resume();
     bool handleInputEvent(const WebInputEvent&);
     void pageLayoutInvalidated(bool resized);
     void setShowViewportSizeOnResize(bool);
@@ -107,10 +108,6 @@ private:
     void overlayNextSelector() override;
     void overlayPreviousSelector() override;
 
-    // InspectorProfilerAgent::Client implementation.
-    void profilingStarted() override;
-    void profilingStopped() override;
-
     // InspectorDOMAgent::Client implementation.
     void hideHighlight() override;
     void highlightNode(Node*, const InspectorHighlightConfig&, bool omitTooltip) override;
@@ -134,6 +131,7 @@ private:
     void rebuildOverlayPage();
     void invalidate();
     void scheduleUpdate();
+    void clearInternal();
 
     bool handleMousePress();
     bool handleGestureEvent(const PlatformGestureEvent&);

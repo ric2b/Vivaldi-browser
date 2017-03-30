@@ -17,6 +17,8 @@
       'xcode_create_dependents_test_runner': 1,
       'dependencies': [
         'chromium/chrome/chrome.gyp:chrome',
+        'chromium/third_party/boringssl/boringssl.gyp:*',
+        #'chromium/third_party/boringssl/boringssl_tests.gyp:*',
         'testing/vivaldi_testing.gyp:*',
         'vivaldi.gyp:*',
       ],
@@ -54,7 +56,6 @@
         }],
         ['OS=="win"', {
           'dependencies': [
-            'chromium/chrome/chrome.gyp:crash_service',
             'chromium/chrome/installer/mini_installer.gyp:mini_installer',
             'chromium/courgette/courgette.gyp:courgette_unittests',
             'chromium/sandbox/sandbox.gyp:sbox_integration_tests',
@@ -107,11 +108,6 @@
             'chromium/mojo/mojo_base.gyp:mojo_common_lib',
           ],
         }],
-        ['use_openssl==0 and (OS=="mac" or OS=="ios" or OS=="win")', {
-          'dependencies': [
-            'chromium/third_party/nss/nss.gyp:*',
-           ],
-        }],
         ['OS=="win" or OS=="ios" or OS=="linux"', {
           'dependencies': [
             'chromium/breakpad/breakpad.gyp:*',
@@ -151,6 +147,8 @@
         }],
         ['use_aura==1', {
           'dependencies': [
+            'chromium/ash/ash.gyp:*',
+            'chromium/ui/app_list/app_list.gyp:*',
             'chromium/ui/aura/aura.gyp:*',
             'chromium/ui/aura_extra/aura_extra.gyp:*',
           ],
@@ -158,17 +156,6 @@
         ['use_ash==1', {
           'dependencies': [
             'chromium/ash/ash.gyp:*',
-          ],
-        }],
-        ['use_openssl==0', {
-          'dependencies': [
-            'chromium/net/third_party/nss/ssl.gyp:*',
-          ],
-        }],
-        ['use_openssl==1', {
-          'dependencies': [
-            'chromium/third_party/boringssl/boringssl.gyp:*',
-            #'chromium/third_party/boringssl/boringssl_tests.gyp:*',
           ],
         }],
         ['enable_basic_printing==1 or enable_print_preview==1', {

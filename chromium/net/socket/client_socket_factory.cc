@@ -10,14 +10,9 @@
 #include "build/build_config.h"
 #include "net/cert/cert_database.h"
 #include "net/socket/client_socket_handle.h"
+#include "net/socket/ssl_client_socket_impl.h"
 #include "net/socket/tcp_client_socket.h"
 #include "net/udp/udp_client_socket.h"
-
-#if defined(USE_OPENSSL)
-#include "net/socket/ssl_client_socket_openssl.h"
-#else
-#include "net/socket/ssl_client_socket_nss.h"
-#endif
 
 namespace net {
 
@@ -49,35 +44,31 @@ class DefaultClientSocketFactory : public ClientSocketFactory,
     ClearSSLSessionCache();
   }
 
-  scoped_ptr<DatagramClientSocket> CreateDatagramClientSocket(
+  std::unique_ptr<DatagramClientSocket> CreateDatagramClientSocket(
       DatagramSocket::BindType bind_type,
       const RandIntCallback& rand_int_cb,
       NetLog* net_log,
       const NetLog::Source& source) override {
-    return scoped_ptr<DatagramClientSocket>(
+    return std::unique_ptr<DatagramClientSocket>(
         new UDPClientSocket(bind_type, rand_int_cb, net_log, source));
   }
 
-  scoped_ptr<StreamSocket> CreateTransportClientSocket(
+  std::unique_ptr<StreamSocket> CreateTransportClientSocket(
       const AddressList& addresses,
+      std::unique_ptr<SocketPerformanceWatcher> socket_performance_watcher,
       NetLog* net_log,
       const NetLog::Source& source) override {
-    return scoped_ptr<StreamSocket>(
-        new TCPClientSocket(addresses, net_log, source));
+    return std::unique_ptr<StreamSocket>(new TCPClientSocket(
+        addresses, std::move(socket_performance_watcher), net_log, source));
   }
 
-  scoped_ptr<SSLClientSocket> CreateSSLClientSocket(
-      scoped_ptr<ClientSocketHandle> transport_socket,
+  std::unique_ptr<SSLClientSocket> CreateSSLClientSocket(
+      std::unique_ptr<ClientSocketHandle> transport_socket,
       const HostPortPair& host_and_port,
       const SSLConfig& ssl_config,
       const SSLClientSocketContext& context) override {
-#if defined(USE_OPENSSL)
-    return scoped_ptr<SSLClientSocket>(new SSLClientSocketOpenSSL(
+    return std::unique_ptr<SSLClientSocket>(new SSLClientSocketImpl(
         std::move(transport_socket), host_and_port, ssl_config, context));
-#else
-    return scoped_ptr<SSLClientSocket>(new SSLClientSocketNSS(
-        std::move(transport_socket), host_and_port, ssl_config, context));
-#endif
   }
 
   void ClearSSLSessionCache() override { SSLClientSocket::ClearSessionCache(); }

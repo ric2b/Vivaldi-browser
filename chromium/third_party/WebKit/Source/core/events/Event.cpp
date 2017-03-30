@@ -51,6 +51,7 @@ static bool defaultScopedFromEventType(const AtomicString& eventType)
 Event::Event()
     : Event("", false, false, false)
 {
+    m_wasInitialized = false;
 }
 
 Event::Event(const AtomicString& eventType, bool canBubbleArg, bool cancelableArg)
@@ -89,6 +90,7 @@ Event::Event(const AtomicString& eventType, bool canBubbleArg, bool cancelableAr
     , m_defaultPrevented(false)
     , m_defaultHandled(false)
     , m_cancelBubble(false)
+    , m_wasInitialized(true)
     , m_isTrusted(false)
     , m_handlingPassive(false)
     , m_eventPhase(0)
@@ -114,9 +116,10 @@ void Event::initEvent(const AtomicString& eventTypeArg, bool canBubbleArg, bool 
 
 void Event::initEvent(const AtomicString& eventTypeArg, bool canBubbleArg, bool cancelableArg, EventTarget* relatedTarget)
 {
-    if (dispatched())
+    if (isBeingDispatched())
         return;
 
+    m_wasInitialized = true;
     m_propagationStopped = false;
     m_immediatePropagationStopped = false;
     m_defaultPrevented = false;
@@ -314,7 +317,7 @@ HeapVector<Member<EventTarget>> Event::pathInternal(ScriptState* scriptState, Ev
 
     // Returns [window] for events that are directly dispatched to the window object;
     // e.g., window.load, pageshow, etc.
-    if (LocalDOMWindow* window = m_currentTarget->toDOMWindow())
+    if (LocalDOMWindow* window = m_currentTarget->toLocalDOMWindow())
         return HeapVector<Member<EventTarget>>(1, window);
 
     return HeapVector<Member<EventTarget>>();
@@ -353,6 +356,15 @@ double Event::timeStamp(ScriptState* scriptState) const
     }
 
     return timeStamp;
+}
+
+void Event::setCancelBubble(ExecutionContext* context, bool cancel)
+{
+    if (!m_cancelBubble && cancel)
+        UseCounter::count(context, UseCounter::EventCancelBubbleWasChangedToTrue);
+    else if (m_cancelBubble && !cancel)
+        UseCounter::count(context, UseCounter::EventCancelBubbleWasChangedToFalse);
+    m_cancelBubble = cancel;
 }
 
 DEFINE_TRACE(Event)

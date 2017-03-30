@@ -26,7 +26,6 @@
 
 [
     SetWrapperReferenceFrom=element,
-    GarbageCollected,
 ] interface DOMTokenList {
     readonly attribute unsigned long length;
     getter DOMString? item(unsigned long index);
@@ -36,8 +35,7 @@
     [RaisesException, CustomElementCallbacks] boolean toggle(DOMString token, optional boolean force);
     [RaisesException, CustomElementCallbacks] boolean supports(DOMString token);
     attribute DOMString value;
-    // FIXME: stringifier should be enumerable.
-    [NotEnumerable] stringifier;
+    stringifier;
     iterable<DOMString>;
 
 

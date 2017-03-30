@@ -20,16 +20,18 @@
 #include "ash/test/shelf_view_test_api.h"
 #include "ash/test/shell_test_api.h"
 #include "ash/test/test_shelf_delegate.h"
+#include "ash/wm/aura/wm_window_aura.h"
+#include "ash/wm/common/panels/panel_layout_manager.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/common/wm_event.h"
 #include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/window_grid.h"
 #include "ash/wm/overview/window_selector.h"
 #include "ash/wm/overview/window_selector_controller.h"
 #include "ash/wm/overview/window_selector_item.h"
-#include "ash/wm/panels/panel_layout_manager.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm/wm_event.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/memory/scoped_vector.h"
@@ -37,7 +39,7 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/user_action_tester.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/client/focus_client.h"
@@ -1213,7 +1215,7 @@ TEST_F(WindowSelectorTest, DISABLED_DragDropInProgress) {
   data.SetString(base::UTF8ToUTF16("I am being dragged"));
   drag_drop_controller->StartDragAndDrop(data, window->GetRootWindow(),
       window.get(), gfx::Point(5, 5), ui::DragDropTypes::DRAG_MOVE,
-      ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE);
+      ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE, drag_canceled_by_test);
   RunAllPendingInMessageLoop();
   EXPECT_FALSE(drag_canceled_by_test);
   ASSERT_TRUE(IsSelecting());
@@ -1483,30 +1485,25 @@ TEST_F(WindowSelectorTest, SelectWindowWithReturnKey) {
 TEST_F(WindowSelectorTest, WindowOverviewHidesCalloutWidgets) {
   std::unique_ptr<aura::Window> panel1(
       CreatePanelWindow(gfx::Rect(0, 0, 100, 100)));
+  wm::WmWindow* wm_panel1 = wm::WmWindowAura::Get(panel1.get());
   std::unique_ptr<aura::Window> panel2(
       CreatePanelWindow(gfx::Rect(0, 0, 100, 100)));
-  PanelLayoutManager* panel_manager =
-        static_cast<PanelLayoutManager*>(panel1->parent()->layout_manager());
+  wm::WmWindow* wm_panel2 = wm::WmWindowAura::Get(panel2.get());
+  PanelLayoutManager* panel_manager = PanelLayoutManager::Get(wm_panel1);
 
   // By default, panel callout widgets are visible.
-  EXPECT_TRUE(
-      panel_manager->GetCalloutWidgetForPanel(panel1.get())->IsVisible());
-  EXPECT_TRUE(
-      panel_manager->GetCalloutWidgetForPanel(panel2.get())->IsVisible());
+  EXPECT_TRUE(panel_manager->GetCalloutWidgetForPanel(wm_panel1)->IsVisible());
+  EXPECT_TRUE(panel_manager->GetCalloutWidgetForPanel(wm_panel2)->IsVisible());
 
   // Toggling the overview should hide the callout widgets.
   ToggleOverview();
-  EXPECT_FALSE(
-      panel_manager->GetCalloutWidgetForPanel(panel1.get())->IsVisible());
-  EXPECT_FALSE(
-      panel_manager->GetCalloutWidgetForPanel(panel2.get())->IsVisible());
+  EXPECT_FALSE(panel_manager->GetCalloutWidgetForPanel(wm_panel1)->IsVisible());
+  EXPECT_FALSE(panel_manager->GetCalloutWidgetForPanel(wm_panel2)->IsVisible());
 
   // Ending the overview should show them again.
   ToggleOverview();
-  EXPECT_TRUE(
-      panel_manager->GetCalloutWidgetForPanel(panel1.get())->IsVisible());
-  EXPECT_TRUE(
-      panel_manager->GetCalloutWidgetForPanel(panel2.get())->IsVisible());
+  EXPECT_TRUE(panel_manager->GetCalloutWidgetForPanel(wm_panel1)->IsVisible());
+  EXPECT_TRUE(panel_manager->GetCalloutWidgetForPanel(wm_panel2)->IsVisible());
 }
 
 // Creates three windows and tests filtering them by title.
@@ -1644,6 +1641,85 @@ TEST_F(WindowSelectorTest, CancelOverviewOnTap) {
   // Tap should now exit overview mode.
   generator.GestureTapAt(point_in_background_page);
   EXPECT_FALSE(IsSelecting());
+}
+
+// Tests that transformed Rect scaling preserves its aspect ratio.
+TEST_F(WindowSelectorTest, TransformedRectMaintainsAspect) {
+  gfx::Rect rect(50, 50, 200, 400);
+  gfx::Rect bounds(100, 100, 50, 50);
+  gfx::Rect transformed_rect =
+      ScopedTransformOverviewWindow::ShrinkRectToFitPreservingAspectRatio(
+          rect, bounds, 0, 0);
+  EXPECT_EQ(rect.height() / rect.width(),
+            transformed_rect.height() / transformed_rect.width());
+
+  rect = gfx::Rect(50, 50, 400, 200);
+  transformed_rect =
+      ScopedTransformOverviewWindow::ShrinkRectToFitPreservingAspectRatio(
+          rect, bounds, 0, 0);
+  EXPECT_EQ(rect.height() / rect.width(),
+            transformed_rect.height() / transformed_rect.width());
+
+  rect = gfx::Rect(50, 50, 25, 25);
+  transformed_rect =
+      ScopedTransformOverviewWindow::ShrinkRectToFitPreservingAspectRatio(
+          rect, bounds, 0, 0);
+  EXPECT_EQ(rect.height() / rect.width(),
+            transformed_rect.height() / transformed_rect.width());
+
+  rect = gfx::Rect(50, 50, 25, 50);
+  transformed_rect =
+      ScopedTransformOverviewWindow::ShrinkRectToFitPreservingAspectRatio(
+          rect, bounds, 0, 0);
+  EXPECT_EQ(rect.height() / rect.width(),
+            transformed_rect.height() / transformed_rect.width());
+
+  rect = gfx::Rect(50, 50, 50, 25);
+  transformed_rect =
+      ScopedTransformOverviewWindow::ShrinkRectToFitPreservingAspectRatio(
+          rect, bounds, 0, 0);
+  EXPECT_EQ(rect.height() / rect.width(),
+            transformed_rect.height() / transformed_rect.width());
+}
+
+// Tests that transformed Rect fits in target bounds and is vertically centered.
+TEST_F(WindowSelectorTest, TransformedRectIsCentered) {
+  gfx::Rect rect(50, 50, 200, 400);
+  gfx::Rect bounds(100, 100, 50, 50);
+  gfx::Rect transformed_rect =
+      ScopedTransformOverviewWindow::ShrinkRectToFitPreservingAspectRatio(
+          rect, bounds, 0, 0);
+  EXPECT_GE(transformed_rect.x(), bounds.x());
+  EXPECT_LE(transformed_rect.right(), bounds.right());
+  EXPECT_GE(transformed_rect.y(), bounds.y());
+  EXPECT_LE(transformed_rect.bottom(), bounds.bottom());
+  EXPECT_NEAR(transformed_rect.x() - bounds.x(),
+              bounds.right() - transformed_rect.right(), 1);
+  EXPECT_NEAR(transformed_rect.y() - bounds.y(),
+              bounds.bottom() - transformed_rect.bottom(), 1);
+}
+
+// Tests that transformed Rect fits in target bounds and is vertically centered
+// when inset and header height are specified.
+TEST_F(WindowSelectorTest, TransformedRectIsCenteredWithInset) {
+  gfx::Rect rect(50, 50, 400, 200);
+  gfx::Rect bounds(100, 100, 50, 50);
+  const float scale = static_cast<float>(bounds.width()) / rect.width();
+  const int inset = 20;
+  const int header_height = 10;
+  gfx::Rect transformed_rect =
+      ScopedTransformOverviewWindow::ShrinkRectToFitPreservingAspectRatio(
+          rect, bounds, inset, header_height);
+  EXPECT_GE(transformed_rect.x(), bounds.x());
+  EXPECT_LE(transformed_rect.right(), bounds.right());
+  EXPECT_GE(transformed_rect.y() + (int)(scale * inset) - header_height,
+            bounds.y());
+  EXPECT_LE(transformed_rect.bottom(), bounds.bottom());
+  EXPECT_NEAR(transformed_rect.x() - bounds.x(),
+              bounds.right() - transformed_rect.right(), 1);
+  EXPECT_NEAR(
+      transformed_rect.y() + (int)(scale * inset) - header_height - bounds.y(),
+      bounds.bottom() - transformed_rect.bottom(), 1);
 }
 
 }  // namespace ash

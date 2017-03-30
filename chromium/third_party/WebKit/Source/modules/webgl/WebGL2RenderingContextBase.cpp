@@ -25,7 +25,6 @@
 #include "modules/webgl/WebGLUniformLocation.h"
 #include "modules/webgl/WebGLVertexArrayObject.h"
 #include "platform/CheckedInt.h"
-#include "public/platform/WebGraphicsContext3D.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
@@ -116,7 +115,7 @@ const GLenum kCompressedTextureFormatsETC2EAC[] = {
 };
 
 WebGL2RenderingContextBase::WebGL2RenderingContextBase(HTMLCanvasElement* passedCanvas, PassOwnPtr<WebGraphicsContext3DProvider> contextProvider, const WebGLContextAttributes& requestedAttributes)
-    : WebGLRenderingContextBase(passedCanvas, contextProvider, requestedAttributes)
+    : WebGLRenderingContextBase(passedCanvas, std::move(contextProvider), requestedAttributes)
 {
     m_supportedInternalFormatsStorage.insert(kSupportedInternalFormatsStorage, kSupportedInternalFormatsStorage + WTF_ARRAY_LENGTH(kSupportedInternalFormatsStorage));
     m_supportedInternalFormatsStorage.insert(kCompressedTextureFormatsETC2EAC, kCompressedTextureFormatsETC2EAC + WTF_ARRAY_LENGTH(kCompressedTextureFormatsETC2EAC));
@@ -322,11 +321,11 @@ void WebGL2RenderingContextBase::framebufferTextureLayer(ScriptState* scriptStat
         // We divide it here so in WebGLFramebuffer, we don't have to handle DEPTH_STENCIL_ATTACHMENT in WebGL 2.
         framebufferBinding->setAttachmentForBoundFramebuffer(target, GL_DEPTH_ATTACHMENT, textarget, texture, level, layer);
         framebufferBinding->setAttachmentForBoundFramebuffer(target, GL_STENCIL_ATTACHMENT, textarget, texture, level, layer);
-        preserveObjectWrapper(scriptState, framebufferBinding, "attachment", GL_DEPTH_ATTACHMENT, texture);
-        preserveObjectWrapper(scriptState, framebufferBinding, "attachment", GL_STENCIL_ATTACHMENT, texture);
+        preserveObjectWrapper(scriptState, framebufferBinding, V8HiddenValue::webglAttachments(scriptState->isolate()), framebufferBinding->getPersistentCache(), GL_DEPTH_ATTACHMENT, texture);
+        preserveObjectWrapper(scriptState, framebufferBinding, V8HiddenValue::webglAttachments(scriptState->isolate()), framebufferBinding->getPersistentCache(), GL_STENCIL_ATTACHMENT, texture);
     } else {
         framebufferBinding->setAttachmentForBoundFramebuffer(target, attachment, textarget, texture, level, layer);
-        preserveObjectWrapper(scriptState, framebufferBinding, "attachment", attachment, texture);
+        preserveObjectWrapper(scriptState, framebufferBinding, V8HiddenValue::webglAttachments(scriptState->isolate()), framebufferBinding->getPersistentCache(), attachment, texture);
     }
     applyStencilTest();
 }
@@ -430,49 +429,31 @@ ScriptValue WebGL2RenderingContextBase::getInternalformatParameter(ScriptState* 
     }
 }
 
-bool WebGL2RenderingContextBase::checkAndTranslateAttachments(const char* functionName, GLenum target, const Vector<GLenum>& attachments, Vector<GLenum>& translatedAttachments)
+bool WebGL2RenderingContextBase::checkAndTranslateAttachments(const char* functionName, GLenum target, Vector<GLenum>& attachments)
 {
-    GLsizei size = attachments.size();
-    translatedAttachments.resize(size);
+    if (!validateFramebufferTarget(target)) {
+        synthesizeGLError(GL_INVALID_ENUM, functionName, "invalid target");
+        return false;
+    }
 
     WebGLFramebuffer* framebufferBinding = getFramebufferBinding(target);
     ASSERT(framebufferBinding || drawingBuffer());
     if (!framebufferBinding) {
         // For the default framebuffer
         // Translate GL_COLOR/GL_DEPTH/GL_STENCIL, because the default framebuffer of WebGL is not fb 0, it is an internal fbo
-        for (GLsizei i = 0; i < size; ++i) {
+        for (size_t i = 0; i < attachments.size(); ++i) {
             switch (attachments[i]) {
             case GL_COLOR:
-                translatedAttachments[i] = GL_COLOR_ATTACHMENT0;
+                attachments[i] = GL_COLOR_ATTACHMENT0;
                 break;
             case GL_DEPTH:
-                translatedAttachments[i] = GL_DEPTH_ATTACHMENT;
+                attachments[i] = GL_DEPTH_ATTACHMENT;
                 break;
             case GL_STENCIL:
-                translatedAttachments[i] = GL_STENCIL_ATTACHMENT;
+                attachments[i] = GL_STENCIL_ATTACHMENT;
                 break;
             default:
                 synthesizeGLError(GL_INVALID_ENUM, functionName, "invalid attachment");
-                return false;
-            }
-        }
-    } else {
-        // For the FBO
-        for (GLsizei i = 0; i < size; ++i) {
-            switch (attachments[i]) {
-            case GL_COLOR_ATTACHMENT0:
-            case GL_DEPTH_ATTACHMENT:
-            case GL_STENCIL_ATTACHMENT:
-            case GL_DEPTH_STENCIL_ATTACHMENT:
-                translatedAttachments[i] = attachments[i];
-                break;
-            default:
-                if (attachments[i] > GL_COLOR_ATTACHMENT0
-                    && attachments[i] < static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + maxColorAttachments())) {
-                    translatedAttachments[i] = attachments[i];
-                    break;
-                }
-                synthesizeGLError(GL_INVALID_OPERATION, functionName, "invalid attachment");
                 return false;
             }
         }
@@ -485,15 +466,9 @@ void WebGL2RenderingContextBase::invalidateFramebuffer(GLenum target, const Vect
     if (isContextLost())
         return;
 
-    if (!validateFramebufferTarget(target)) {
-        synthesizeGLError(GL_INVALID_ENUM, "invalidateFramebuffer", "invalid target");
+    Vector<GLenum> translatedAttachments = attachments;
+    if (!checkAndTranslateAttachments("invalidateFramebuffer", target, translatedAttachments))
         return;
-    }
-
-    Vector<GLenum> translatedAttachments;
-    if (!checkAndTranslateAttachments("invalidateFramebuffer", target, attachments, translatedAttachments))
-        return;
-
     contextGL()->InvalidateFramebuffer(target, translatedAttachments.size(), translatedAttachments.data());
 }
 
@@ -502,20 +477,9 @@ void WebGL2RenderingContextBase::invalidateSubFramebuffer(GLenum target, const V
     if (isContextLost())
         return;
 
-    if (!validateFramebufferTarget(target)) {
-        synthesizeGLError(GL_INVALID_ENUM, "invalidateFramebuffer", "invalid target");
+    Vector<GLenum> translatedAttachments = attachments;
+    if (!checkAndTranslateAttachments("invalidateSubFramebuffer", target, translatedAttachments))
         return;
-    }
-
-    if (width < 0 || height < 0) {
-        synthesizeGLError(GL_INVALID_VALUE, "invalidateSubFramebuffer", "invalid width or height");
-        return;
-    }
-
-    Vector<GLenum> translatedAttachments;
-    if (!checkAndTranslateAttachments("invalidateSubFramebuffer", target, attachments, translatedAttachments))
-        return;
-
     contextGL()->InvalidateSubFramebuffer(target, translatedAttachments.size(), translatedAttachments.data(), x, y, width, height);
 }
 
@@ -815,7 +779,8 @@ bool WebGL2RenderingContextBase::validateTexStorage(const char* functionName, GL
         return false;
     }
 
-    if (m_supportedInternalFormatsStorage.find(internalformat) == m_supportedInternalFormatsStorage.end()) {
+    if (m_supportedInternalFormatsStorage.find(internalformat) == m_supportedInternalFormatsStorage.end()
+        && (functionType == TexStorageType2D && !m_compressedTextureFormats.contains(internalformat))) {
         synthesizeGLError(GL_INVALID_ENUM, functionName, "invalid internalformat");
         return false;
     }
@@ -1548,6 +1513,7 @@ void WebGL2RenderingContextBase::drawArraysInstanced(GLenum mode, GLint first, G
     if (!validateDrawArrays("drawArraysInstanced"))
         return;
 
+    ScopedRGBEmulationColorMask emulationColorMask(contextGL(), m_colorMask, m_drawingBuffer.get());
     clearIfComposited();
     contextGL()->DrawArraysInstancedANGLE(mode, first, count, instanceCount);
     markContextChanged(CanvasChanged);
@@ -1563,6 +1529,7 @@ void WebGL2RenderingContextBase::drawElementsInstanced(GLenum mode, GLsizei coun
         return;
     }
 
+    ScopedRGBEmulationColorMask emulationColorMask(contextGL(), m_colorMask, m_drawingBuffer.get());
     clearIfComposited();
     contextGL()->DrawElementsInstancedANGLE(mode, count, type, reinterpret_cast<void*>(static_cast<intptr_t>(offset)), instanceCount);
     markContextChanged(CanvasChanged);
@@ -1578,6 +1545,7 @@ void WebGL2RenderingContextBase::drawRangeElements(GLenum mode, GLuint start, GL
         return;
     }
 
+    ScopedRGBEmulationColorMask emulationColorMask(contextGL(), m_colorMask, m_drawingBuffer.get());
     clearIfComposited();
     contextGL()->DrawRangeElements(mode, start, end, count, type, reinterpret_cast<void*>(static_cast<intptr_t>(offset)));
     markContextChanged(CanvasChanged);
@@ -1588,6 +1556,7 @@ void WebGL2RenderingContextBase::drawBuffers(const Vector<GLenum>& buffers)
     if (isContextLost())
         return;
 
+    ScopedRGBEmulationColorMask emulationColorMask(contextGL(), m_colorMask, m_drawingBuffer.get());
     GLsizei n = buffers.size();
     const GLenum* bufs = buffers.data();
     for (GLsizei i = 0; i < n; ++i) {
@@ -2748,8 +2717,9 @@ void WebGL2RenderingContextBase::bindFramebuffer(ScriptState* scriptState, GLenu
     }
 
     setFramebuffer(target, buffer);
-    if (scriptState)
-        preserveObjectWrapper(scriptState, this, "framebuffer", 0, buffer);
+    if (scriptState) {
+        preserveObjectWrapper(scriptState, this, V8HiddenValue::webglMisc(scriptState->isolate()), &m_miscWrappers, static_cast<uint32_t>(PreservedFramebuffer), buffer);
+    }
 }
 
 void WebGL2RenderingContextBase::deleteFramebuffer(WebGLFramebuffer* framebuffer)

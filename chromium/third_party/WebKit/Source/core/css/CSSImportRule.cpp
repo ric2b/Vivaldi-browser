@@ -37,13 +37,6 @@ CSSImportRule::CSSImportRule(StyleRuleImport* importRule, CSSStyleSheet* parent)
 
 CSSImportRule::~CSSImportRule()
 {
-#if !ENABLE(OILPAN)
-    if (m_styleSheetCSSOMWrapper)
-        m_styleSheetCSSOMWrapper->clearOwnerRule();
-
-    if (m_mediaCSSOMWrapper)
-        m_mediaCSSOMWrapper->clearParentRule();
-#endif // ENABLE(OILPAN)
 }
 
 String CSSImportRule::href() const
@@ -79,6 +72,8 @@ String CSSImportRule::cssText() const
 
 CSSStyleSheet* CSSImportRule::styleSheet() const
 {
+    // TODO(yukishiino): CSSImportRule.styleSheet attribute is not nullable,
+    // thus this function must not return nullptr.
     if (!m_importRule->styleSheet())
         return nullptr;
 

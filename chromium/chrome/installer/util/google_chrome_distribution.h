@@ -35,11 +35,11 @@ class GoogleChromeDistribution : public BrowserDistribution {
 
   base::string16 GetActiveSetupGuid() override;
 
-  base::string16 GetShortcutName(ShortcutType shortcut_type) override;
+  base::string16 GetShortcutName() override;
 
   base::string16 GetIconFilename() override;
 
-  int GetIconIndex(ShortcutType shortcut_type) override;
+  int GetIconIndex() override;
 
   base::string16 GetBaseAppName() override;
 
@@ -80,7 +80,7 @@ class GoogleChromeDistribution : public BrowserDistribution {
   GoogleChromeDistribution();
 
   explicit GoogleChromeDistribution(
-      scoped_ptr<AppRegistrationData> app_reg_data);
+      std::unique_ptr<AppRegistrationData> app_reg_data);
 
  private:
   friend class BrowserDistribution;

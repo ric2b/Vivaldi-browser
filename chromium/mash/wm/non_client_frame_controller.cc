@@ -7,6 +7,8 @@
 #include <stdint.h>
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "base/macros.h"
 #include "components/mus/public/cpp/property_type_converters.h"
@@ -15,6 +17,7 @@
 #include "components/mus/public/cpp/window_property.h"
 #include "components/mus/public/interfaces/window_manager.mojom.h"
 #include "components/mus/public/interfaces/window_tree_host.mojom.h"
+#include "mash/wm/bridge/wm_window_mus.h"
 #include "mash/wm/frame/frame_border_hit_test_controller.h"
 #include "mash/wm/frame/move_event_handler.h"
 #include "mash/wm/frame/non_client_frame_view_mash.h"
@@ -92,10 +95,14 @@ class ContentWindowLayoutManager : public aura::LayoutManager {
 class WmNativeWidgetMus : public views::NativeWidgetMus {
  public:
   WmNativeWidgetMus(views::internal::NativeWidgetDelegate* delegate,
-                    mojo::Connector* connector,
-                    mus::Window* window)
-      : NativeWidgetMus(delegate, connector, window,
-                        mus::mojom::SurfaceType::UNDERLAY) {}
+                    shell::Connector* connector,
+                    mus::Window* window,
+                    mus::WindowManagerClient* window_manager_client)
+      : NativeWidgetMus(delegate,
+                        connector,
+                        window,
+                        mus::mojom::SurfaceType::UNDERLAY),
+        window_manager_client_(window_manager_client) {}
   ~WmNativeWidgetMus() override {
   }
 
@@ -105,7 +112,8 @@ class WmNativeWidgetMus : public views::NativeWidgetMus {
         static_cast<views::internal::NativeWidgetPrivate*>(this)->GetWidget();
     NonClientFrameViewMash* frame_view =
         new NonClientFrameViewMash(widget, window());
-    move_event_handler_.reset(new MoveEventHandler(window(), GetNativeView()));
+    move_event_handler_.reset(new MoveEventHandler(
+        window(), window_manager_client_, GetNativeView()));
     return frame_view;
   }
   void InitNativeWidget(const views::Widget::InitParams& params) override {
@@ -146,6 +154,8 @@ class WmNativeWidgetMus : public views::NativeWidgetMus {
 
   std::unique_ptr<MoveEventHandler> move_event_handler_;
 
+  mus::WindowManagerClient* window_manager_client_;
+
   DISALLOW_COPY_AND_ASSIGN(WmNativeWidgetMus);
 };
 
@@ -177,10 +187,12 @@ class ClientViewMus : public views::ClientView {
 
 // static
 void NonClientFrameController::Create(
-    mojo::Connector* connector,
+    shell::Connector* connector,
+    mus::Window* parent,
     mus::Window* window,
     mus::WindowManagerClient* window_manager_client) {
-  new NonClientFrameController(connector, window, window_manager_client);
+  new NonClientFrameController(connector, parent, window,
+                               window_manager_client);
 }
 
 // static
@@ -194,10 +206,12 @@ int NonClientFrameController::GetMaxTitleBarButtonWidth() {
 }
 
 NonClientFrameController::NonClientFrameController(
-    mojo::Connector* connector,
+    shell::Connector* connector,
+    mus::Window* parent,
     mus::Window* window,
     mus::WindowManagerClient* window_manager_client)
     : widget_(new views::Widget), window_(window) {
+  WmWindowMus::Get(window)->set_widget(widget_);
   window_->AddObserver(this);
 
   // To simplify things this code creates a Widget. While a Widget is created
@@ -208,8 +222,12 @@ NonClientFrameController::NonClientFrameController(
   // We initiate focus at the mus level, not at the views level.
   params.activatable = views::Widget::InitParams::ACTIVATABLE_NO;
   params.delegate = this;
-  params.native_widget = new WmNativeWidgetMus(widget_, connector, window);
+  params.native_widget =
+      new WmNativeWidgetMus(widget_, connector, window, window_manager_client);
   widget_->Init(params);
+
+  parent->AddChild(window);
+
   widget_->ShowInactive();
 
   const int shadow_inset =
@@ -254,6 +272,12 @@ bool NonClientFrameController::CanMinimize() const {
   return window_ &&
          (GetResizeBehavior(window_) &
           mus::mojom::kResizeBehaviorCanMinimize) != 0;
+}
+
+bool NonClientFrameController::ShouldShowWindowTitle() const {
+  // Only draw the title if the client hasn't declared any additional client
+  // areas which might conflict with it.
+  return window_ && window_->additional_client_areas().empty();
 }
 
 views::ClientView* NonClientFrameController::CreateClientView(

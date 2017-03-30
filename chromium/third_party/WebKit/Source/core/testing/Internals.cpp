@@ -97,12 +97,11 @@
 #include "core/inspector/InspectorConsoleAgent.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InstanceCounters.h"
-#include "core/inspector/InstrumentingAgents.h"
 #include "core/layout/LayoutMenuList.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutTreeAsText.h"
-#include "core/layout/LayoutView.h"
 #include "core/layout/api/LayoutMenuListItem.h"
+#include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/loader/DocumentLoader.h"
@@ -122,6 +121,7 @@
 #include "core/testing/InternalSettings.h"
 #include "core/testing/LayerRect.h"
 #include "core/testing/LayerRectList.h"
+#include "core/testing/MockHyphenation.h"
 #include "core/testing/PrivateScriptTest.h"
 #include "core/testing/TypeConversions.h"
 #include "core/testing/UnionTypesTest.h"
@@ -141,7 +141,6 @@
 #include "platform/weborigin/SchemeRegistry.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebConnectionType.h"
-#include "public/platform/WebGraphicsContext3D.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
 #include "public/platform/WebLayer.h"
 #include "wtf/InstanceCounter.h"
@@ -313,7 +312,7 @@ unsigned Internals::updateStyleAndReturnAffectedElementCount(ExceptionState& exc
     }
 
     unsigned beforeCount = document->styleEngine().styleForElementCount();
-    document->updateLayoutTree();
+    document->updateStyleAndLayoutTree();
     return document->styleEngine().styleForElementCount() - beforeCount;
 }
 
@@ -339,7 +338,7 @@ unsigned Internals::hitTestCount(Document* doc, ExceptionState& exceptionState) 
         return 0;
     }
 
-    return doc->layoutView()->hitTestCount();
+    return doc->layoutViewItem().hitTestCount();
 }
 
 unsigned Internals::hitTestCacheHits(Document* doc, ExceptionState& exceptionState) const
@@ -349,7 +348,7 @@ unsigned Internals::hitTestCacheHits(Document* doc, ExceptionState& exceptionSta
         return 0;
     }
 
-    return doc->layoutView()->hitTestCacheHits();
+    return doc->layoutViewItem().hitTestCacheHits();
 }
 
 Element* Internals::elementFromPoint(Document* doc, double x, double y, bool ignoreClipping, bool allowChildFrameContent, ExceptionState& exceptionState) const
@@ -359,7 +358,7 @@ Element* Internals::elementFromPoint(Document* doc, double x, double y, bool ign
         return 0;
     }
 
-    if (!doc->layoutView())
+    if (doc->layoutViewItem().isNull())
         return 0;
 
     HitTestRequest::HitTestRequestType hitType = HitTestRequest::ReadOnly | HitTestRequest::Active;
@@ -380,10 +379,10 @@ void Internals::clearHitTestCache(Document* doc, ExceptionState& exceptionState)
         return;
     }
 
-    if (!doc->layoutView())
+    if (doc->layoutViewItem().isNull())
         return;
 
-    doc->layoutView()->clearHitTestCache();
+    doc->layoutViewItem().clearHitTestCache();
 }
 
 bool Internals::isPreloaded(const String& url)
@@ -823,7 +822,7 @@ ClientRect* Internals::boundingBox(Element* element)
 {
     ASSERT(element);
 
-    element->document().updateLayoutIgnorePendingStylesheets();
+    element->document().updateStyleAndLayoutIgnorePendingStylesheets();
     LayoutObject* layoutObject = element->layoutObject();
     if (!layoutObject)
         return ClientRect::create();
@@ -894,7 +893,7 @@ String Internals::markerDescriptionForNode(Node* node, const String& markerType,
 void Internals::addTextMatchMarker(const Range* range, bool isActive)
 {
     ASSERT(range);
-    range->ownerDocument().updateLayoutIgnorePendingStylesheets();
+    range->ownerDocument().updateStyleAndLayoutIgnorePendingStylesheets();
     range->ownerDocument().markers().addTextMatchMarker(range, isActive);
 }
 
@@ -936,7 +935,7 @@ String Internals::viewportAsText(Document* document, float, int availableWidth, 
         return String();
     }
 
-    document->updateLayoutIgnorePendingStylesheets();
+    document->updateStyleAndLayoutIgnorePendingStylesheets();
 
     Page* page = document->page();
 
@@ -1045,7 +1044,7 @@ Range* Internals::rangeFromLocationAndLength(Element* scope, int rangeLocation, 
     ASSERT(scope);
 
     // TextIterator depends on Layout information, make sure layout it up to date.
-    scope->document().updateLayoutIgnorePendingStylesheets();
+    scope->document().updateStyleAndLayoutIgnorePendingStylesheets();
 
     return createRange(PlainTextRange(rangeLocation, rangeLocation + rangeLength).createRange(*scope));
 }
@@ -1054,7 +1053,7 @@ unsigned Internals::locationFromRange(Element* scope, const Range* range)
 {
     ASSERT(scope && range);
     // PlainTextRange depends on Layout information, make sure layout it up to date.
-    scope->document().updateLayoutIgnorePendingStylesheets();
+    scope->document().updateStyleAndLayoutIgnorePendingStylesheets();
 
     return PlainTextRange::create(*scope, *range).start();
 }
@@ -1063,7 +1062,7 @@ unsigned Internals::lengthFromRange(Element* scope, const Range* range)
 {
     ASSERT(scope && range);
     // PlainTextRange depends on Layout information, make sure layout it up to date.
-    scope->document().updateLayoutIgnorePendingStylesheets();
+    scope->document().updateStyleAndLayoutIgnorePendingStylesheets();
 
     return PlainTextRange::create(*scope, *range).length();
 }
@@ -1085,7 +1084,7 @@ DOMPoint* Internals::touchPositionAdjustedToBestClickableNode(long x, long y, lo
         return 0;
     }
 
-    document->updateLayout();
+    document->updateStyleAndLayout();
 
     IntSize radius(width / 2, height / 2);
     IntPoint point(x + radius.width(), y + radius.height());
@@ -1112,7 +1111,7 @@ Node* Internals::touchNodeAdjustedToBestClickableNode(long x, long y, long width
         return 0;
     }
 
-    document->updateLayout();
+    document->updateStyleAndLayout();
 
     IntSize radius(width / 2, height / 2);
     IntPoint point(x + radius.width(), y + radius.height());
@@ -1135,7 +1134,7 @@ DOMPoint* Internals::touchPositionAdjustedToBestContextMenuNode(long x, long y, 
         return 0;
     }
 
-    document->updateLayout();
+    document->updateStyleAndLayout();
 
     IntSize radius(width / 2, height / 2);
     IntPoint point(x + radius.width(), y + radius.height());
@@ -1162,7 +1161,7 @@ Node* Internals::touchNodeAdjustedToBestContextMenuNode(long x, long y, long wid
         return 0;
     }
 
-    document->updateLayout();
+    document->updateStyleAndLayout();
 
     IntSize radius(width / 2, height / 2);
     IntPoint point(x + radius.width(), y + radius.height());
@@ -1185,7 +1184,7 @@ ClientRect* Internals::bestZoomableAreaForTouchPoint(long x, long y, long width,
         return nullptr;
     }
 
-    document->updateLayout();
+    document->updateStyleAndLayout();
 
     IntSize radius(width / 2, height / 2);
     IntPoint point(x + radius.width(), y + radius.height());
@@ -1439,8 +1438,9 @@ LayerRectList* Internals::touchEventTargetLayerRects(Document* document, Excepti
     if (ScrollingCoordinator* scrollingCoordinator = document->page()->scrollingCoordinator())
         scrollingCoordinator->updateAfterCompositingChangeIfNeeded();
 
-    if (LayoutView* view = document->layoutView()) {
-        if (PaintLayerCompositor* compositor = view->compositor()) {
+    LayoutViewItem view = document->layoutViewItem();
+    if (!view.isNull()) {
+        if (PaintLayerCompositor* compositor = view.compositor()) {
             if (GraphicsLayer* rootLayer = compositor->rootGraphicsLayer()) {
                 LayerRectList* rects = LayerRectList::create();
                 accumulateLayerRectList(compositor, rootLayer, rects);
@@ -1503,9 +1503,9 @@ StaticNodeList* Internals::nodesFromRect(Document* document, int centerX, int ce
 
     LocalFrame* frame = document->frame();
     FrameView* frameView = document->view();
-    LayoutView* layoutView = document->layoutView();
+    LayoutViewItem layoutViewItem = document->layoutViewItem();
 
-    if (!layoutView)
+    if (layoutViewItem.isNull())
         return nullptr;
 
     float zoomFactor = frame->pageZoomFactor();
@@ -1525,7 +1525,7 @@ StaticNodeList* Internals::nodesFromRect(Document* document, int centerX, int ce
 
     HeapVector<Member<Node>> matches;
     HitTestResult result(request, point, topPadding, rightPadding, bottomPadding, leftPadding);
-    layoutView->hitTest(result);
+    layoutViewItem.hitTest(result);
     copyToVector(result.listBasedTestResult(), matches);
 
     return StaticNodeList::adopt(matches);
@@ -1547,6 +1547,11 @@ void Internals::setContinuousSpellCheckingEnabled(bool enabled)
 
     if (enabled != contextDocument()->frame()->spellChecker().isContinuousSpellCheckingEnabled())
         contextDocument()->frame()->spellChecker().toggleContinuousSpellChecking();
+}
+
+void Internals::setMockHyphenation(const AtomicString& locale)
+{
+    Hyphenation::setForTesting(locale, adoptRef(new MockHyphenation));
 }
 
 bool Internals::isOverwriteModeEnabled(Document* document)
@@ -1695,7 +1700,7 @@ String Internals::layerTreeAsText(Document* document, unsigned flags, ExceptionS
 String Internals::elementLayerTreeAsText(Element* element, unsigned flags, ExceptionState& exceptionState) const
 {
     ASSERT(element);
-    element->document().updateLayout();
+    element->document().updateStyleAndLayout();
 
     LayoutObject* layoutObject = element->layoutObject();
     if (!layoutObject || !layoutObject->isBox()) {
@@ -1989,7 +1994,7 @@ void Internals::updateLayoutIgnorePendingStylesheetsAndRunPostLayoutTasks(Node* 
         exceptionState.throwTypeError("The node provided is neither a document nor an IFrame.");
         return;
     }
-    document->updateLayoutIgnorePendingStylesheets(Document::RunPostLayoutTasksSynchronously);
+    document->updateStyleAndLayoutIgnorePendingStylesheets(Document::RunPostLayoutTasksSynchronously);
 }
 
 void Internals::forceFullRepaint(Document* document, ExceptionState& exceptionState)
@@ -2000,14 +2005,15 @@ void Internals::forceFullRepaint(Document* document, ExceptionState& exceptionSt
         return;
     }
 
-    if (LayoutView *layoutView = document->layoutView())
-        layoutView->invalidatePaintForViewAndCompositedLayers();
+    LayoutViewItem layoutViewItem = document->layoutViewItem();
+    if (!layoutViewItem.isNull())
+        layoutViewItem.invalidatePaintForViewAndCompositedLayers();
 }
 
 void Internals::startTrackingPaintInvalidationObjects()
 {
     ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
-    GraphicsLayer* graphicsLayer = toLocalFrame(frame()->page()->mainFrame())->view()->layoutView()->layer()->graphicsLayerBacking();
+    GraphicsLayer* graphicsLayer = toLocalFrame(frame()->page()->mainFrame())->view()->layoutViewItem().layer()->graphicsLayerBacking();
     if (graphicsLayer->drawsContent())
         graphicsLayer->getPaintController().startTrackingPaintInvalidationObjects();
 }
@@ -2015,7 +2021,7 @@ void Internals::startTrackingPaintInvalidationObjects()
 void Internals::stopTrackingPaintInvalidationObjects()
 {
     ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
-    GraphicsLayer* graphicsLayer = toLocalFrame(frame()->page()->mainFrame())->view()->layoutView()->layer()->graphicsLayerBacking();
+    GraphicsLayer* graphicsLayer = toLocalFrame(frame()->page()->mainFrame())->view()->layoutViewItem().layer()->graphicsLayerBacking();
     if (graphicsLayer->drawsContent())
         graphicsLayer->getPaintController().stopTrackingPaintInvalidationObjects();
 }
@@ -2023,7 +2029,7 @@ void Internals::stopTrackingPaintInvalidationObjects()
 Vector<String> Internals::trackedPaintInvalidationObjects()
 {
     ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
-    GraphicsLayer* graphicsLayer = toLocalFrame(frame()->page()->mainFrame())->view()->layoutView()->layer()->graphicsLayerBacking();
+    GraphicsLayer* graphicsLayer = toLocalFrame(frame()->page()->mainFrame())->view()->layoutViewItem().layer()->graphicsLayerBacking();
     if (!graphicsLayer->drawsContent())
         return Vector<String>();
     return graphicsLayer->getPaintController().trackedPaintInvalidationObjects();
@@ -2047,7 +2053,7 @@ ClientRectList* Internals::annotatedRegions(Document* document, bool draggable, 
         return ClientRectList::create();
     }
 
-    document->updateLayout();
+    document->updateStyleAndLayout();
     document->view()->updateDocumentAnnotatedRegions();
     Vector<AnnotatedRegionValue> regions = document->annotatedRegions();
 
@@ -2144,15 +2150,15 @@ bool Internals::cursorUpdatePending() const
     return frame()->eventHandler().cursorUpdatePending();
 }
 
-PassRefPtr<DOMArrayBuffer> Internals::serializeObject(PassRefPtr<SerializedScriptValue> value) const
+DOMArrayBuffer* Internals::serializeObject(PassRefPtr<SerializedScriptValue> value) const
 {
     String stringValue = value->toWireString();
-    RefPtr<DOMArrayBuffer> buffer = DOMArrayBuffer::createUninitialized(stringValue.length(), sizeof(UChar));
+    DOMArrayBuffer* buffer = DOMArrayBuffer::createUninitialized(stringValue.length(), sizeof(UChar));
     stringValue.copyTo(static_cast<UChar*>(buffer->data()), 0, stringValue.length());
-    return buffer.release();
+    return buffer;
 }
 
-PassRefPtr<SerializedScriptValue> Internals::deserializeBuffer(PassRefPtr<DOMArrayBuffer> buffer) const
+PassRefPtr<SerializedScriptValue> Internals::deserializeBuffer(DOMArrayBuffer* buffer) const
 {
     String value(static_cast<const UChar*>(buffer->data()), buffer->byteLength() / sizeof(UChar));
     return SerializedScriptValueFactory::instance().createFromWire(value);
@@ -2252,7 +2258,7 @@ bool Internals::loseSharedGraphicsContext3D()
 void Internals::forceCompositingUpdate(Document* document, ExceptionState& exceptionState)
 {
     ASSERT(document);
-    if (!document->layoutView()) {
+    if (document->layoutViewItem().isNull()) {
         exceptionState.throwDOMException(InvalidAccessError, "The document provided is invalid.");
         return;
     }
@@ -2547,11 +2553,6 @@ bool Internals::setScrollbarVisibilityInScrollableArea(Node* node, bool visible)
     if (ScrollableArea* scrollableArea = scrollableAreaForNode(node))
         return scrollableArea->scrollAnimator().setScrollbarsVisibleForTesting(visible);
     return false;
-}
-
-void Internals::forceRestrictIFramePermissions()
-{
-    RuntimeEnabledFeatures::setRestrictIFramePermissionsEnabled(true);
 }
 
 double Internals::monotonicTimeToZeroBasedDocumentTime(double platformTime, ExceptionState& exceptionState)

@@ -26,9 +26,8 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import StringIO
 import optparse
-import sys
+import os
 import time
 import unittest
 
@@ -50,7 +49,7 @@ INVALID_ENTRY_TOMBSTONE_TEST_TYPE = 3
 INVALID_ENTRIES_TOMBSTONE_TEST_TYPE = 4
 
 # Any "adb" commands will be interpret by this class instead of executing actual
-# commansd on the file system, which we don't want to do.
+# commands on the file system, which we don't want to do.
 
 
 class MockAndroidDebugBridge:
@@ -149,7 +148,8 @@ class AndroidCommandsTest(unittest.TestCase):
         self.assertEquals('adb -s 123456789ABCDEF0 shell ls -d /some_directory', self._mock_executive.last_command())
 
         android_commands.push('foo', 'bar')
-        self.assertEquals('adb -s 123456789ABCDEF0 push foo bar', self._mock_executive.last_command())
+        self.assertEquals('adb -s 123456789ABCDEF0 push %s bar' % os.path.realpath('foo'),
+                          self._mock_executive.last_command())
 
         android_commands.pull('bar', 'foo')
         self.assertEquals('adb -s 123456789ABCDEF0 pull bar foo', self._mock_executive.last_command())

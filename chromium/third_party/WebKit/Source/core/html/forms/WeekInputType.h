@@ -31,23 +31,16 @@
 #ifndef WeekInputType_h
 #define WeekInputType_h
 
-#include "core/html/forms/BaseChooserOnlyDateAndTimeInputType.h"
-#include "core/html/forms/BaseMultipleFieldsDateAndTimeInputType.h"
+#include "core/html/forms/BaseTemporalInputType.h"
 
 namespace blink {
 
-#if ENABLE(INPUT_MULTIPLE_FIELDS_UI)
-using BaseWeekInputType = BaseMultipleFieldsDateAndTimeInputType;
-#else
-using BaseWeekInputType = BaseChooserOnlyDateAndTimeInputType;
-#endif
-
-class WeekInputType final : public BaseWeekInputType {
+class WeekInputType final : public BaseTemporalInputType {
 public:
     static InputType* create(HTMLInputElement&);
 
 private:
-    explicit WeekInputType(HTMLInputElement& element) : BaseWeekInputType(element) { }
+    explicit WeekInputType(HTMLInputElement& element) : BaseTemporalInputType(element) {}
 
     void countUsage() override;
     const AtomicString& formControlType() const override;
@@ -56,12 +49,10 @@ private:
     bool setMillisecondToDateComponents(double, DateComponents*) const override;
     void warnIfValueIsInvalid(const String&) const override;
 
-#if ENABLE(INPUT_MULTIPLE_FIELDS_UI)
-    // BaseMultipleFieldsDateAndTimeInputType functions
+    // BaseTemporalInputType functions
     String formatDateTimeFieldsState(const DateTimeFieldsState&) const override;
     void setupLayoutParameters(DateTimeEditElement::LayoutParameters&, const DateComponents&) const override;
     bool isValidFormat(bool hasYear, bool hasMonth, bool hasWeek, bool hasDay, bool hasAMPM, bool hasHour, bool hasMinute, bool hasSecond) const override;
-#endif
 };
 
 } // namespace blink

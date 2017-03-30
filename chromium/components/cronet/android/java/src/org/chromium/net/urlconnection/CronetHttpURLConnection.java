@@ -31,11 +31,10 @@ import java.util.TreeMap;
 /**
  * An implementation of {@link HttpURLConnection} that uses Cronet to send
  * requests and receive responses.
- * @deprecated use {@link CronetEngine#openConnection}.
+ * {@hide}
  */
-@Deprecated
 public class CronetHttpURLConnection extends HttpURLConnection {
-    private static final String TAG = "cr.CronetHttpURLConn";
+    private static final String TAG = "cr_CronetHttpURLConn";
     private static final String CONTENT_LENGTH = "Content-Length";
     private final CronetEngine mCronetEngine;
     private final MessageLoop mMessageLoop;
@@ -397,6 +396,15 @@ public class CronetHttpURLConnection extends HttpURLConnection {
         return false;
     }
 
+    @Override
+    public void setConnectTimeout(int timeout) {
+        // Per-request connect timeout is not supported because of late binding.
+        // Sockets are assigned to requests according to request priorities
+        // when sockets are connected. This requires requests with the same host,
+        // domain and port to have same timeout.
+        Log.e(TAG, "setConnectTimeout is not supported by CronetHttpURLConnection");
+    }
+
     /**
      * Used by {@link CronetInputStream} to get more data from the network
      * stack. This should only be called after the request has started. Note
@@ -405,8 +413,8 @@ public class CronetHttpURLConnection extends HttpURLConnection {
      * ByteBuffer.
      */
     void getMoreData(ByteBuffer byteBuffer) throws IOException {
-        mRequest.readNew(byteBuffer);
-        mMessageLoop.loop();
+        mRequest.read(byteBuffer);
+        mMessageLoop.loop(getReadTimeout());
     }
 
     /**

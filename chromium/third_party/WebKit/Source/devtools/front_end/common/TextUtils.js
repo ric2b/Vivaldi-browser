@@ -108,7 +108,7 @@ WebInspector.TextUtils = {
     textToWords: function(text, isWordChar, wordCallback)
     {
         var startWord = -1;
-        for(var i = 0; i < text.length; ++i) {
+        for (var i = 0; i < text.length; ++i) {
             if (!isWordChar(text.charAt(i))) {
                 if (startWord !== -1)
                     wordCallback(text.substring(startWord, i));
@@ -148,39 +148,6 @@ WebInspector.TextUtils = {
     isLowerCase: function(text)
     {
         return text === text.toLowerCase();
-    },
-
-    /**
-     * @param {string} text
-     * @param {string} delimiter
-     * @return {string}
-     */
-    _lastSectionBeforeQuery: function(text, delimiter)
-    {
-        var lastIndexOfDot = text.lastIndexOf(delimiter);
-        var extension = lastIndexOfDot !== -1 ? text.substr(lastIndexOfDot + 1) : "";
-        var indexOfQuestionMark = extension.indexOf("?");
-        if (indexOfQuestionMark !== -1)
-            extension = extension.substr(0, indexOfQuestionMark);
-        return extension;
-    },
-
-    /**
-     * @param {string} text
-     * @return {string}
-     */
-    extension: function(text)
-    {
-        return WebInspector.TextUtils._lastSectionBeforeQuery(text, ".");
-    },
-
-    /**
-     * @param {string} text
-     * @return {string}
-     */
-    fileName: function(text)
-    {
-        return WebInspector.TextUtils._lastSectionBeforeQuery(text, "/");
     }
 }
 

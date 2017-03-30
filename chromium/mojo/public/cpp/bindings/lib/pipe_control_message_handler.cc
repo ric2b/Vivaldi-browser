@@ -7,6 +7,7 @@
 #include "base/logging.h"
 #include "mojo/public/cpp/bindings/lib/message_builder.h"
 #include "mojo/public/cpp/bindings/lib/pipe_control_message_handler_delegate.h"
+#include "mojo/public/cpp/bindings/lib/serialization.h"
 #include "mojo/public/cpp/bindings/lib/validation_util.h"
 #include "mojo/public/interfaces/bindings/pipe_control_messages.mojom.h"
 
@@ -51,10 +52,11 @@ bool PipeControlMessageHandler::RunOrClosePipe(Message* message) {
       reinterpret_cast<
           pipe_control::internal::RunOrClosePipeMessageParams_Data*>(
           message->mutable_payload());
-  params->DecodePointersAndHandles(message->mutable_handles());
+  params->DecodePointers();
 
   pipe_control::RunOrClosePipeMessageParamsPtr params_ptr;
-  Deserialize_(params, &params_ptr, nullptr);
+  Deserialize<pipe_control::RunOrClosePipeMessageParamsPtr>(params, &params_ptr,
+                                                            &context_);
 
   if (params_ptr->input->is_peer_associated_endpoint_closed_event()) {
     return delegate_->OnPeerAssociatedEndpointClosed(

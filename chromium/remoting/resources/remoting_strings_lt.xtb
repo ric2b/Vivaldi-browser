@@ -34,6 +34,7 @@ Jei reikia informacijos apie privatumą, žr. „Google“ privatumo politiką (
 <translation id="1779766957982586368">Uždaryti langą</translation>
 <translation id="1841799852846221389">Neleidžiamas nuotolinis ryšys šiame kompiuteryje…</translation>
 <translation id="189172778771606813">Uždaryti naršymo skydelį</translation>
+<translation id="1897488610212723051">Ištrinti</translation>
 <translation id="195619862187186579">Klaviatūros išdėstymai</translation>
 <translation id="1996161829609978754">„Chrome“ atsisiunčiama „Chrome“ nuotolinio ryšio prieglobos diegimo programa. Kai atsisiuntimas bus baigtas, prieš tęsdami paleiskite ją.</translation>
 <translation id="2009755455353575666">Nepavyko užmegzti ryšio</translation>
@@ -122,9 +123,6 @@ priegloba</translation>
 <translation id="3950820424414687140">Prisijungti</translation>
 <translation id="3989511127559254552">Jei norite tęsti, pirmiausia turite suteikti išplėstinės prieigos prie kompiuterio leidimus. Tai reikės atlikti tik vieną kartą.</translation>
 <translation id="4006787130661126000">Jei norite naudoti „Chrome“ nuotolinį kompiuterio valdymą šiam kompiuteriui pasiekti, turite įgalinti nuotolinį ryšį.</translation>
-<translation id="4028465833180158312">• Trimačių objektų dizaino NS naujiniai.
-• Trečiosios šalies licencijavimo kreditai.
-• Rodoma nuotolinių kompiuterių, kurie neprijungti prie interneto, informacija.</translation>
 <translation id="405887016757208221">Nuotoliniam kompiuteriui nepavyko inicijuoti sesijos. Jei problema išlieka, pabandykite dar kartą sukonfigūruoti prieglobą.</translation>
 <translation id="4068946408131579958">Visi ryšiai</translation>
 <translation id="409800995205263688">PASTABA: pagal politikos nustatymus leidžiama užmegzti ryšį tik tarp tinkle esančių kompiuterių.</translation>
@@ -168,6 +166,7 @@ valdymo priegloba</translation>
 <translation id="4985296110227979402">Pirmiausia turite nustatyti nuotolinę kompiuterio prieigą</translation>
 <translation id="5064360042339518108">„<ph name="HOSTNAME" />“ (neprisijungta)</translation>
 <translation id="5070121137485264635">Nuotolinė priegloba reikalauja autentifikuoti trečiosios šalies svetainę. Jei norite tęsti, turite suteikti „Chrome“ nuotolinio kompiuterio valdymo programai papildomas teises pasiekti šį adresą</translation>
+<translation id="507204348399810022">Ar tikrai norite išjungti nuotolinį ryšį su „<ph name="HOSTNAME" />“?</translation>
 <translation id="5156271271724754543">Įveskite tą patį PIN kodą abiejuose laukeliuose.</translation>
 <translation id="5168917394043976756">Atidaryti naršymo skydelį</translation>
 <translation id="5170982930780719864">Netinkamas prieglobos ID.</translation>
@@ -178,7 +177,6 @@ valdymo priegloba</translation>
 <translation id="533625276787323658">Nėra prie ko prisijungti</translation>
 <translation id="5363265567587775042">Paprašykite naudotojo, kurio kompiuterį norite pasiekti, spustelėti „<ph name="SHARE" />“ ir suteikti pasiekiamumo kodą.</translation>
 <translation id="5379087427956679853">Naudodami „Chrome“ nuotolinį kompiuterio valdymą, galite saugiai bendrinti kompiuterį žiniatinklyje. Abu naudotojai turi paleisti „Chrome“ nuotolinio kompiuterio valdymo programą, kurią galima rasti adresu <ph name="URL" />.</translation>
-<translation id="5394895745784982830">Skirta „Mac“ (10.6 ir naujesnės versijos „OS X“)</translation>
 <translation id="5397086374758643919">„Chrome“ nuotolinio kompiuterio valdymo prieglobos pašalinimo priemonė</translation>
 <translation id="5419185025274123272">Nepavyko iš naujo nustatyti programos. Vis tiek galite išsiųsti rikto ataskaitą.</translation>
 <translation id="544077782045763683">Priegloba išjungta.</translation>
@@ -214,6 +212,10 @@ valdymo priegloba</translation>
 <translation id="6324708100353784493">Įgalinote „Google Cardboard“ integravimo režimą. Kad galėtumėte naudoti šį režimą, įdėkite įrenginį į žiūriklį, suderinamą su „Google Cardboard“.</translation>
 <translation id="6381670701864002291">Kažkas kita.</translation>
 <translation id="6398765197997659313">Išeiti iš viso ekrano režimo</translation>
+<translation id="6408143143164565232">• Klausykitės garso įrašų „Windows“ arba „Linux“ kompiuteriais.
+• Pašalinkite nepageidaujamus prijungtus įrenginius paspausdami ir ilgai palaikydami kompiuterio pavadinimą.
+• Sklandžiau veikia mastelio keitimo suėmus pirštais ir slinkimo dviem pirštais funkcijos.
+• Nauji pagalbos ir atsiliepimų ekranai.</translation>
 <translation id="6441316101718669559">Kompiuterio integravimas nepalaikomas šioje platformoje. Vis tiek galite naudoti programą, bet bus teikiamos ne visos funkcijos.</translation>
 <translation id="652218476070540101">Šio kompiuterio PIN kodas atnaujinamas…</translation>
 <translation id="6527303717912515753">Bendrinti</translation>
@@ -221,6 +223,7 @@ valdymo priegloba</translation>
 <translation id="6542902059648396432">Pranešimas apie problemą...</translation>
 <translation id="6550675742724504774">Parinktys</translation>
 <translation id="6570205395680337606">Iš naujo nustatykite programą. Prarasite visus neišsaugotus duomenis.</translation>
+<translation id="6572345186230665992">Skirta „Mac“ (10.9 („Mavericks“) ir naujesnės versijos „OS X“)</translation>
 <translation id="6612717000975622067">Siųsti „Ctrl“ + „Alt“ + „Del“</translation>
 <translation id="6640610550128933069">paskutinį kartą prisijungta <ph name="DATE" /></translation>
 <translation id="6668065415969892472">PIN kodas atnaujintas.</translation>
@@ -232,7 +235,6 @@ valdymo priegloba</translation>
 <translation id="6930242544192836755">Trukmė</translation>
 <translation id="6939719207673461467">Rodyti / slėpti klaviatūrą.</translation>
 <translation id="6944854424004126054">Atkurti langą</translation>
-<translation id="6962773374262604195">Skirta „Windows“ (XP ir naujesnės versijos)</translation>
 <translation id="6965382102122355670">Gerai</translation>
 <translation id="6985691951107243942">Ar tikrai norite neleisti nuotolinio ryšio su „<ph name="HOSTNAME" />“? Jei apsigalvosite, turėsite iš naujo įgalinti ryšį tame kompiuteryje.</translation>
 <translation id="6998989275928107238">Ryšys užmezgamas su</translation>
@@ -288,6 +290,7 @@ valdymo priegloba</translation>
 <translation id="8759753423332885148">Sužinokite daugiau.</translation>
 <translation id="8791202241915690908">„Chrome“ nuotolinio ryšio prieglobos diegimo programos atsisiuntimas</translation>
 <translation id="894763922177556086">Geras</translation>
+<translation id="895780780740011433">Skirta 7 ir naujesnės versijos „Windows“</translation>
 <translation id="897805526397249209">Jei norite įgalinti nuotolinį ryšį su kitu kompiuteriu, jame įdiekite „Chrome“ nuotolinį ryšį ir spustelėkite „<ph name="BUTTON_NAME" />“.</translation>
 <translation id="8998327464021325874">„Chrome“ nuotolinio kompiuterio valdymo prieglobos valdymo priemonė</translation>
 <translation id="9016232822027372900">Vis tiek prijungti</translation>

@@ -48,14 +48,6 @@ void BeginFrameObserverBase::OnBeginFrame(const BeginFrameArgs& args) {
   }
 }
 
-void BeginFrameObserverBase::AsValueInto(
-    base::trace_event::TracedValue* dict) const {
-  dict->BeginDictionary("last_begin_frame_args_");
-  last_begin_frame_args_.AsValueInto(dict);
-  dict->EndDictionary();
-  dict->SetInteger("dropped_begin_frame_args_", dropped_begin_frame_args_);
-}
-
 // BeginFrameSourceBase ------------------------------------------------------
 BeginFrameSourceBase::BeginFrameSourceBase()
     : paused_(false), inside_as_value_into_(false) {}
@@ -90,8 +82,8 @@ void BeginFrameSourceBase::CallOnBeginFrame(const BeginFrameArgs& args) {
   DEBUG_FRAMES("BeginFrameSourceBase::CallOnBeginFrame", "num observers",
                observers_.size(), "args", args.AsValue());
   std::set<BeginFrameObserver*> observers(observers_);
-  for (auto& it : observers)
-    it->OnBeginFrame(args);
+  for (BeginFrameObserver* obs : observers)
+    obs->OnBeginFrame(args);
 }
 
 void BeginFrameSourceBase::SetBeginFrameSourcePaused(bool paused) {
@@ -99,31 +91,8 @@ void BeginFrameSourceBase::SetBeginFrameSourcePaused(bool paused) {
     return;
   paused_ = paused;
   std::set<BeginFrameObserver*> observers(observers_);
-  for (auto& it : observers)
-    it->OnBeginFrameSourcePausedChanged(paused_);
-}
-
-// Tracing support
-void BeginFrameSourceBase::AsValueInto(
-    base::trace_event::TracedValue* dict) const {
-  // As the observer might try to trace the source, prevent an infinte loop
-  // from occuring.
-  if (inside_as_value_into_) {
-    dict->SetString("observer", "<loop detected>");
-    return;
-  }
-
-  {
-    base::AutoReset<bool> prevent_loops(
-        const_cast<bool*>(&inside_as_value_into_), true);
-    dict->BeginArray("observers");
-    for (const auto& it : observers_) {
-      dict->BeginDictionary();
-      it->AsValueInto(dict);
-      dict->EndDictionary();
-    }
-    dict->EndArray();
-  }
+  for (BeginFrameObserver* obs : observers)
+    obs->OnBeginFrameSourcePausedChanged(paused_);
 }
 
 // BackToBackBeginFrameSource --------------------------------------------
@@ -142,49 +111,52 @@ base::TimeTicks BackToBackBeginFrameSource::Now() {
 
 // BeginFrameSourceBase support
 void BackToBackBeginFrameSource::AddObserver(BeginFrameObserver* obs) {
-  DCHECK(observers_.empty())
-      << "BackToBackBeginFrameSource only supports a single observer";
   BeginFrameSourceBase::AddObserver(obs);
+  pending_begin_frame_observers_.insert(obs);
+  PostPendingBeginFramesTask();
 }
 
-void BackToBackBeginFrameSource::OnNeedsBeginFramesChanged(
-    bool needs_begin_frames) {
-  if (needs_begin_frames) {
-    PostBeginFrame();
-  } else {
+void BackToBackBeginFrameSource::RemoveObserver(BeginFrameObserver* obs) {
+  BeginFrameSourceBase::RemoveObserver(obs);
+  pending_begin_frame_observers_.erase(obs);
+  if (pending_begin_frame_observers_.empty())
     begin_frame_task_.Cancel();
+}
+
+void BackToBackBeginFrameSource::DidFinishFrame(BeginFrameObserver* obs,
+                                                size_t remaining_frames) {
+  BeginFrameSourceBase::DidFinishFrame(obs, remaining_frames);
+  if (remaining_frames == 0 && observers_.find(obs) != observers_.end()) {
+    pending_begin_frame_observers_.insert(obs);
+    PostPendingBeginFramesTask();
   }
 }
 
-void BackToBackBeginFrameSource::PostBeginFrame() {
+void BackToBackBeginFrameSource::PostPendingBeginFramesTask() {
   DCHECK(needs_begin_frames());
-  begin_frame_task_.Reset(base::Bind(&BackToBackBeginFrameSource::BeginFrame,
-                                     weak_factory_.GetWeakPtr()));
-  task_runner_->PostTask(FROM_HERE, begin_frame_task_.callback());
+  DCHECK(!pending_begin_frame_observers_.empty());
+  if (begin_frame_task_.IsCancelled()) {
+    begin_frame_task_.Reset(
+        base::Bind(&BackToBackBeginFrameSource::SendPendingBeginFrames,
+                   weak_factory_.GetWeakPtr()));
+    task_runner_->PostTask(FROM_HERE, begin_frame_task_.callback());
+  }
 }
 
-void BackToBackBeginFrameSource::BeginFrame() {
+void BackToBackBeginFrameSource::SendPendingBeginFrames() {
   DCHECK(needs_begin_frames());
   DCHECK(!begin_frame_task_.IsCancelled());
   begin_frame_task_.Cancel();
+
   base::TimeTicks now = Now();
   BeginFrameArgs args = BeginFrameArgs::Create(
       BEGINFRAME_FROM_HERE, now, now + BeginFrameArgs::DefaultInterval(),
       BeginFrameArgs::DefaultInterval(), BeginFrameArgs::NORMAL);
-  CallOnBeginFrame(args);
-}
 
-void BackToBackBeginFrameSource::DidFinishFrame(size_t remaining_frames) {
-  BeginFrameSourceBase::DidFinishFrame(remaining_frames);
-  if (needs_begin_frames() && remaining_frames == 0)
-    PostBeginFrame();
-}
-
-// Tracing support
-void BackToBackBeginFrameSource::AsValueInto(
-    base::trace_event::TracedValue* dict) const {
-  dict->SetString("type", "BackToBackBeginFrameSource");
-  BeginFrameSourceBase::AsValueInto(dict);
+  std::set<BeginFrameObserver*> pending_observers;
+  pending_observers.swap(pending_begin_frame_observers_);
+  for (BeginFrameObserver* obs : pending_observers)
+    obs->OnBeginFrame(args);
 }
 
 // SyntheticBeginFrameSource ---------------------------------------------
@@ -197,7 +169,7 @@ SyntheticBeginFrameSource::SyntheticBeginFrameSource(
 }
 
 SyntheticBeginFrameSource::SyntheticBeginFrameSource(
-    scoped_ptr<DelayBasedTimeSource> time_source)
+    std::unique_ptr<DelayBasedTimeSource> time_source)
     : time_source_(std::move(time_source)) {
   time_source_->SetClient(this);
 }
@@ -205,9 +177,19 @@ SyntheticBeginFrameSource::SyntheticBeginFrameSource(
 SyntheticBeginFrameSource::~SyntheticBeginFrameSource() {}
 
 void SyntheticBeginFrameSource::OnUpdateVSyncParameters(
-    base::TimeTicks new_vsync_timebase,
-    base::TimeDelta new_vsync_interval) {
-  time_source_->SetTimebaseAndInterval(new_vsync_timebase, new_vsync_interval);
+    base::TimeTicks timebase,
+    base::TimeDelta interval) {
+  if (!authoritative_interval_.is_zero())
+    interval = authoritative_interval_;
+
+  last_timebase_ = timebase;
+  time_source_->SetTimebaseAndInterval(timebase, interval);
+}
+
+void SyntheticBeginFrameSource::SetAuthoritativeVSyncInterval(
+    base::TimeDelta interval) {
+  authoritative_interval_ = interval;
+  OnUpdateVSyncParameters(last_timebase_, interval);
 }
 
 BeginFrameArgs SyntheticBeginFrameSource::CreateBeginFrameArgs(
@@ -250,17 +232,6 @@ void SyntheticBeginFrameSource::OnTimerTick() {
       it->OnBeginFrame(args);
     }
   }
-}
-
-// Tracing support
-void SyntheticBeginFrameSource::AsValueInto(
-    base::trace_event::TracedValue* dict) const {
-  dict->SetString("type", "SyntheticBeginFrameSource");
-  BeginFrameSourceBase::AsValueInto(dict);
-
-  dict->BeginDictionary("time_source");
-  time_source_->AsValueInto(dict);
-  dict->EndDictionary();
 }
 
 }  // namespace cc

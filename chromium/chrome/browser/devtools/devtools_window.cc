@@ -223,9 +223,9 @@ class DevToolsEventForwarder {
 
 void DevToolsEventForwarder::SetWhitelistedShortcuts(
     const std::string& message) {
-  scoped_ptr<base::Value> parsed_message = base::JSONReader::Read(message);
+  std::unique_ptr<base::Value> parsed_message = base::JSONReader::Read(message);
   base::ListValue* shortcut_list;
-  if (!parsed_message->GetAsList(&shortcut_list))
+  if (!parsed_message || !parsed_message->GetAsList(&shortcut_list))
       return;
   base::ListValue::iterator it = shortcut_list->begin();
   for (; it != shortcut_list->end(); ++it) {
@@ -663,7 +663,7 @@ bool DevToolsWindow::InterceptPageBeforeUnload(WebContents* contents) {
   // Handle case of devtools inspecting another devtools instance by passing
   // the call up to the inspecting devtools instance.
   if (!DevToolsWindow::InterceptPageBeforeUnload(window->main_web_contents_)) {
-    window->main_web_contents_->DispatchBeforeUnload(false);
+    window->main_web_contents_->DispatchBeforeUnload();
   }
   return true;
 }
@@ -793,7 +793,7 @@ DevToolsWindow* DevToolsWindow::Create(
                           shared_worker_frontend,
                           remote_frontend,
                           can_dock, settings));
-  scoped_ptr<WebContents> main_web_contents(
+  std::unique_ptr<WebContents> main_web_contents(
       WebContents::Create(WebContents::CreateParams(profile)));
   main_web_contents->GetController().LoadURL(
       DecorateFrontendURL(url), content::Referrer(),
@@ -981,7 +981,7 @@ void DevToolsWindow::BeforeUnloadFired(WebContents* tab,
     // Inspected page is attempting to close.
     WebContents* inspected_web_contents = GetInspectedWebContents();
     if (proceed) {
-      inspected_web_contents->DispatchBeforeUnload(false);
+      inspected_web_contents->DispatchBeforeUnload();
     } else {
       bool should_proceed;
       inspected_web_contents->GetDelegate()->BeforeUnloadFired(
@@ -1058,7 +1058,7 @@ void DevToolsWindow::ActivateWindow() {
 void DevToolsWindow::CloseWindow() {
   DCHECK(is_docked_);
   life_stage_ = kClosing;
-  main_web_contents_->DispatchBeforeUnload(false);
+  main_web_contents_->DispatchBeforeUnload();
 }
 
 void DevToolsWindow::SetInspectedPageBounds(const gfx::Rect& rect) {

@@ -8,12 +8,13 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/sync_token.h"
-#include "gpu/command_buffer/common/value_state.h"
 #include "gpu/command_buffer/service/feature_info.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/memory_program_cache.h"
@@ -26,6 +27,7 @@
 #include "gpu/ipc/service/gpu_memory_manager.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_share_group.h"
+#include "ui/gl/init/gl_factory.h"
 
 namespace gpu {
 
@@ -52,6 +54,7 @@ GpuChannelManager::GpuChannelManager(
     : task_runner_(task_runner),
       io_task_runner_(io_task_runner),
       gpu_preferences_(gpu_preferences),
+      gpu_driver_bug_workarounds_(base::CommandLine::ForCurrentProcess()),
       delegate_(delegate),
       watchdog_(watchdog),
       shutdown_event_(shutdown_event),
@@ -113,42 +116,18 @@ void GpuChannelManager::RemoveChannel(int client_id) {
   gpu_channels_.erase(client_id);
 }
 
-#if defined(OS_MACOSX)
-void GpuChannelManager::AddBufferPresentedCallback(
-    int32_t surface_id,
-    const BufferPresentedCallback& callback) {
-  DCHECK(buffer_presented_callback_map_.find(surface_id) ==
-         buffer_presented_callback_map_.end());
-  buffer_presented_callback_map_[surface_id] = callback;
-}
-
-void GpuChannelManager::RemoveBufferPresentedCallback(int32_t surface_id) {
-  auto it = buffer_presented_callback_map_.find(surface_id);
-  DCHECK(it != buffer_presented_callback_map_.end());
-  buffer_presented_callback_map_.erase(it);
-}
-
-void GpuChannelManager::BufferPresented(int32_t surface_id,
-                                        const base::TimeTicks& vsync_timebase,
-                                        const base::TimeDelta& vsync_interval) {
-  auto it = buffer_presented_callback_map_.find(surface_id);
-  if (it != buffer_presented_callback_map_.end())
-    it->second.Run(surface_id, vsync_timebase, vsync_interval);
-}
-#endif
-
 GpuChannel* GpuChannelManager::LookupChannel(int32_t client_id) const {
   const auto& it = gpu_channels_.find(client_id);
   return it != gpu_channels_.end() ? it->second : nullptr;
 }
 
-scoped_ptr<GpuChannel> GpuChannelManager::CreateGpuChannel(
+std::unique_ptr<GpuChannel> GpuChannelManager::CreateGpuChannel(
     int client_id,
     uint64_t client_tracing_id,
     bool preempts,
     bool allow_view_command_buffers,
     bool allow_real_time_streams) {
-  return make_scoped_ptr(
+  return base::WrapUnique(
       new GpuChannel(this, sync_point_manager(), watchdog_, share_group(),
                      mailbox_manager(), preempts ? preemption_flag() : nullptr,
                      preempts ? nullptr : preemption_flag(), task_runner_.get(),
@@ -162,7 +141,7 @@ IPC::ChannelHandle GpuChannelManager::EstablishChannel(
     bool preempts,
     bool allow_view_command_buffers,
     bool allow_real_time_streams) {
-  scoped_ptr<GpuChannel> channel(
+  std::unique_ptr<GpuChannel> channel(
       CreateGpuChannel(client_id, client_tracing_id, preempts,
                        allow_view_command_buffers, allow_real_time_streams));
   IPC::ChannelHandle channel_handle = channel->Init(shutdown_event_);
@@ -204,16 +183,6 @@ void GpuChannelManager::DestroyGpuMemoryBuffer(
 
   // No sync token or invalid sync token, destroy immediately.
   InternalDestroyGpuMemoryBuffer(id, client_id);
-}
-
-void GpuChannelManager::UpdateValueState(int client_id,
-                                         unsigned int target,
-                                         const ValueState& state) {
-  // Only pass updated state to the channel corresponding to the
-  // render_widget_host where the event originated.
-  auto it = gpu_channels_.find(client_id);
-  if (it != gpu_channels_.end())
-    it->second->HandleUpdateValueState(target, state);
 }
 
 void GpuChannelManager::PopulateShaderCache(const std::string& program_proto) {
@@ -266,7 +235,7 @@ void GpuChannelManager::DestroyAllChannels() {
 gfx::GLSurface* GpuChannelManager::GetDefaultOffscreenSurface() {
   if (!default_offscreen_surface_.get()) {
     default_offscreen_surface_ =
-        gfx::GLSurface::CreateOffscreenGLSurface(gfx::Size());
+        gl::init::CreateOffscreenGLSurface(gfx::Size());
   }
   return default_offscreen_surface_.get();
 }

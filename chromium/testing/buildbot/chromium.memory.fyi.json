@@ -9,6 +9,7 @@
       "display_unittests",
       "extensions_unittests",
       "gcm_unit_tests",
+      "gpu_ipc_service_unittests",
       "gpu_unittests",
       "ipc_tests",
       "jingle_unittests",
@@ -88,7 +89,7 @@
         "test": "app_list_unittests"
       },
       {
-        "test": "app_list_shower_unittests"
+        "test": "app_list_presenter_unittests"
       },
       {
         "test": "display_unittests"
@@ -178,6 +179,9 @@
   "Chromium OS (valgrind)(5)": {
     "gtest_tests": [
       {
+        "test": "gpu_ipc_service_unittests"
+      },
+      {
         "test": "gpu_unittests"
       },
       {
@@ -208,7 +212,7 @@
   "Chromium OS Builder (valgrind)": {
     "additional_compile_targets": [
       "app_list_unittests",
-      "app_list_shower_unittests",
+      "app_list_presenter_unittests",
       "ash_unittests",
       "aura_unittests",
       "base_unittests",
@@ -222,6 +226,7 @@
       "events_unittests",
       "extensions_unittests",
       "gcm_unit_tests",
+      "gpu_ipc_service_unittests",
       "gpu_unittests",
       "ipc_tests",
       "jingle_unittests",
@@ -247,7 +252,7 @@
       "accessibility_unittests",
       "angle_unittests",
       "app_list_unittests",
-      "app_list_shower_unittests",
+      "app_list_presenter_unittests",
       "aura_unittests",
       "base_unittests",
       "blink_heap_unittests",
@@ -271,6 +276,7 @@
       "gfx_unittests",
       "gin_unittests",
       "google_apis_unittests",
+      "gpu_ipc_service_unittests",
       "gpu_unittests",
       "installer_util_unittests",
       "ipc_tests",
@@ -297,7 +303,7 @@
       "accessibility_unittests",
       "angle_unittests",
       "app_list_unittests",
-      "app_list_shower_unittests",
+      "app_list_presenter_unittests",
       "aura_unittests",
       "base_unittests",
       "blink_heap_unittests",
@@ -315,6 +321,7 @@
       "device_unittests",
       "jingle_unittests",
       "gcm_unit_tests",
+      "gpu_ipc_service_unittests",
       "gpu_unittests",
       "content_unittests",
       "cacheinvalidation_unittests",
@@ -356,7 +363,7 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "app_list_shower_unittests"
+        "test": "app_list_presenter_unittests"
       },
       {
         "swarming": {
@@ -486,6 +493,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "gpu_ipc_service_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "gpu_unittests"
       },
       {
@@ -496,6 +509,9 @@
         "test": "interactive_ui_tests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "ipc_mojo_unittests"
       },
       {
@@ -547,6 +563,9 @@
         "test": "mojo_public_system_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_system_unittests"
       },
       {
@@ -647,7 +666,7 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "app_list_shower_unittests"
+        "test": "app_list_presenter_unittests"
       },
       {
         "swarming": {
@@ -783,6 +802,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "gpu_ipc_service_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "gpu_unittests"
       },
       {
@@ -792,6 +817,9 @@
         "test": "interactive_ui_tests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "ipc_mojo_unittests"
       },
       {
@@ -843,6 +871,9 @@
         "test": "mojo_public_system_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_system_unittests"
       },
       {
@@ -955,7 +986,7 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "app_list_shower_unittests"
+        "test": "app_list_presenter_unittests"
       },
       {
         "swarming": {
@@ -1066,9 +1097,18 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "gpu_ipc_service_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "gpu_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "ipc_mojo_unittests"
       },
       {
@@ -1451,6 +1491,17 @@
         "name": "memory_test: base_unittests",
         "override_compile_targets": [
           "base_unittests"
+        ],
+        "script": "run_under_valgrind.py"
+      },
+      {
+        "args": [
+          "--test",
+          "gpu_ipc_service_unittests"
+        ],
+        "name": "memory_test: gpu_ipc_service_unittests",
+        "override_compile_targets": [
+          "gpu_ipc_service_unittests"
         ],
         "script": "run_under_valgrind.py"
       },
@@ -2169,6 +2220,9 @@
         "test": "gcm_unit_tests"
       },
       {
+        "test": "gpu_ipc_service_unittests"
+      },
+      {
         "test": "gpu_unittests"
       },
       {
@@ -2233,7 +2287,7 @@
         "test": "app_list_unittests"
       },
       {
-        "test": "app_list_shower_unittests"
+        "test": "app_list_presenter_unittests"
       },
       {
         "test": "aura_unittests"
@@ -2303,7 +2357,7 @@
         "test": "app_list_unittests"
       },
       {
-        "test": "app_list_shower_unittests"
+        "test": "app_list_presenter_unittests"
       },
       {
         "test": "aura_unittests"
@@ -2373,6 +2427,9 @@
       },
       {
         "test": "google_apis_unittests"
+      },
+      {
+        "test": "gpu_ipc_service_unittests"
       },
       {
         "test": "gpu_unittests"
@@ -2445,7 +2502,7 @@
         "test": "app_list_unittests"
       },
       {
-        "test": "app_list_shower_unittests"
+        "test": "app_list_presenter_unittests"
       },
       {
         "test": "aura_unittests"
@@ -2512,6 +2569,9 @@
       },
       {
         "test": "google_apis_unittests"
+      },
+      {
+        "test": "gpu_ipc_service_unittests"
       },
       {
         "test": "gpu_unittests"

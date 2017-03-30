@@ -7,9 +7,12 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/macros.h"
 #include "base/memory/shared_memory.h"
 #include "base/memory/weak_ptr.h"
+#include "gpu/command_buffer/client/gpu_control_client.h"
 #include "gpu/command_buffer/common/command_buffer_id.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/sync_token.h"
@@ -19,12 +22,12 @@
 namespace gpu {
 struct Capabilities;
 class CommandBufferProxyImpl;
-class GpuChannelHost;
 }
 
 namespace content {
 
-class PPB_Graphics3D_Impl : public ppapi::PPB_Graphics3D_Shared {
+class PPB_Graphics3D_Impl : public ppapi::PPB_Graphics3D_Shared,
+                            public gpu::GpuControlClient {
  public:
   static PP_Resource CreateRaw(PP_Instance instance,
                                PP_Resource share_context,
@@ -63,8 +66,6 @@ class PPB_Graphics3D_Impl : public ppapi::PPB_Graphics3D_Shared {
 
   gpu::CommandBufferProxyImpl* GetCommandBufferProxy();
 
-  gpu::GpuChannelHost* channel() { return channel_.get(); }
-
  protected:
   ~PPB_Graphics3D_Impl() override;
   // ppapi::PPB_Graphics3D_Shared overrides.
@@ -81,10 +82,13 @@ class PPB_Graphics3D_Impl : public ppapi::PPB_Graphics3D_Shared {
                base::SharedMemoryHandle* shared_state_handle,
                gpu::CommandBufferId* command_buffer_id);
 
-  // Notifications received from the GPU process.
+  // GpuControlClient implementation.
+  void OnGpuControlLostContext() final;
+  void OnGpuControlLostContextMaybeReentrant() final;
+  void OnGpuControlErrorMessage(const char* msg, int id) final;
+
+  // Other notifications from the GPU process.
   void OnSwapBuffers();
-  void OnContextLost();
-  void OnConsoleMessage(const std::string& msg, int id);
   // Notifications sent to plugin.
   void SendContextLost();
 
@@ -93,11 +97,14 @@ class PPB_Graphics3D_Impl : public ppapi::PPB_Graphics3D_Shared {
   // True when waiting for compositor to commit our backing texture.
   bool commit_pending_;
 
+#if DCHECK_IS_ON()
+  bool lost_context_ = false;
+#endif
+
   gpu::Mailbox mailbox_;
   gpu::SyncToken sync_token_;
   bool has_alpha_;
-  scoped_refptr<gpu::GpuChannelHost> channel_;
-  scoped_ptr<gpu::CommandBufferProxyImpl> command_buffer_;
+  std::unique_ptr<gpu::CommandBufferProxyImpl> command_buffer_;
 
   base::WeakPtrFactory<PPB_Graphics3D_Impl> weak_ptr_factory_;
 

@@ -7,7 +7,7 @@
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/browser.h"
@@ -151,11 +151,8 @@ void AppMenuButton::UpdateIcon() {
       break;
   }
 
-  // TODO(estade): find a home for this constant.
-  const int kButtonSize = 16;
   SetImage(views::Button::STATE_NORMAL,
-           gfx::CreateVectorIcon(gfx::VectorIconId::BROWSER_TOOLS, kButtonSize,
-                                 color));
+           gfx::CreateVectorIcon(gfx::VectorIconId::BROWSER_TOOLS, color));
 }
 
 void AppMenuButton::SetTrailingMargin(int margin) {

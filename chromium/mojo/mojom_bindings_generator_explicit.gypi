@@ -8,38 +8,43 @@
   ],
   'variables': {
     'variables': {
-      'mojom_variant%': 'none',
+      'variables': {
+        'for_blink%': 'false',
+      },
       'for_blink%': 'false',
+      'conditions': [
+        ['for_blink=="true"', {
+          'mojom_output_languages%': 'c++',
+          'mojom_variant%': 'blink',
+          'mojom_generator_wtf_arg%': [
+            '--for_blink',
+          ],
+          'wtf_dependencies%': [
+            '<(DEPTH)/mojo/mojo_public.gyp:mojo_cpp_bindings_wtf_support',
+            '<(DEPTH)/third_party/WebKit/Source/wtf/wtf.gyp:wtf',
+          ],
+        }, {
+          'mojom_output_languages%': 'c++,javascript,java',
+          'mojom_variant%': 'none',
+          'mojom_generator_wtf_arg%': [],
+          'wtf_dependencies%': [],
+        }],
+      ],
     },
-    'mojom_variant%': '<(mojom_variant)',
     'for_blink%': '<(for_blink)',
+    'mojom_variant%': '<(mojom_variant)',
+    'mojom_generator_wtf_arg%': '<(mojom_generator_wtf_arg)',
+    'wtf_dependencies%': '<(wtf_dependencies)',
+    'mojom_output_languages%': '<(mojom_output_languages)',
+    'mojom_typemaps%': [],
     'mojom_base_output_dir':
         '<!(python <(DEPTH)/build/inverse_depth.py <(DEPTH))',
     'mojom_generated_outputs': [
       '<!@(python <(DEPTH)/mojo/public/tools/bindings/mojom_list_outputs.py --basedir <(mojom_base_output_dir) --variant <(mojom_variant) <@(mojom_files))',
     ],
+    'generated_typemap_file': '<(SHARED_INTERMEDIATE_DIR)/<(mojom_base_output_dir)/<(_target_name)_type_mappings',
     'mojom_include_path%': '<(DEPTH)',
-    'mojom_extra_generator_args%': [],
     'require_interface_bindings%': 1,
-    'conditions': [
-      ['mojom_variant=="none"', {
-        'mojom_output_languages%': 'c++,javascript,java',
-      }, {
-        'mojom_output_languages%': 'c++',
-      }],
-      ['for_blink=="true"', {
-        'mojom_generator_wtf_arg%': [
-          '--for_blink',
-        ],
-        'wtf_dependencies%': [
-          '<(DEPTH)/mojo/mojo_public.gyp:mojo_cpp_bindings_wtf_support',
-          '<(DEPTH)/third_party/WebKit/Source/wtf/wtf.gyp:wtf',
-        ],
-      }, {
-        'mojom_generator_wtf_arg%': [],
-        'wtf_dependencies%': [],
-      }],
-    ],
   },
   # Given mojom files as inputs, generate sources.  These sources will be
   # exported to another target (via dependent_settings) to be compiled.  This
@@ -65,6 +70,22 @@
       'outputs': [ '<(stamp_filename)' ],
     },
     {
+      'variables': {
+        'output': '<(generated_typemap_file)',
+      },
+      'action_name': '<(_target_name)_type_mappings',
+      'action': [
+        'python', '<(DEPTH)/mojo/public/tools/bindings/generate_type_mappings.py',
+        '--output',
+        '<(output)',
+        '<!@(python <(DEPTH)/mojo/public/tools/bindings/format_typemap_generator_args.py <@(mojom_typemaps))',
+      ],
+      'inputs':[
+        '<(DEPTH)/mojo/public/tools/bindings/generate_type_mappings.py',
+      ],
+      'outputs': [ '<(output)' ],
+    },
+    {
       'action_name': '<(_target_name)_mojom_bindings_generator',
       'variables': {
         'java_out_dir': '<(PRODUCT_DIR)/java_mojo/<(_target_name)/src',
@@ -79,6 +100,7 @@
         '<@(mojom_bindings_generator_sources)',
         '<@(mojom_files)',
         '<(stamp_filename)',
+        '<(generated_typemap_file)',
         '<(SHARED_INTERMEDIATE_DIR)/mojo/public/tools/bindings/cpp_templates.zip',
         '<(SHARED_INTERMEDIATE_DIR)/mojo/public/tools/bindings/java_templates.zip',
         '<(SHARED_INTERMEDIATE_DIR)/mojo/public/tools/bindings/js_templates.zip',
@@ -96,7 +118,8 @@
         '--java_output_directory=<(java_out_dir)',
         '--variant', '<(mojom_variant)',
         '-g', '<(mojom_output_languages)',
-        '<@(mojom_extra_generator_args)',
+        '--typemap',
+        '<(generated_typemap_file)',
         '<@(mojom_generator_wtf_arg)',
         '--bytecode_path',
         '<(SHARED_INTERMEDIATE_DIR)/mojo/public/tools/bindings',

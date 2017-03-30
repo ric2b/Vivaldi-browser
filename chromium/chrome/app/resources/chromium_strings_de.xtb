@@ -53,6 +53,7 @@
 <translation id="2673087257647337101">Fast fertig! Starten Sie Chromium neu, um die Aktualisierung abzuschließen.</translation>
 <translation id="2685838254101182273">Chromium wird nicht mehr aktualisiert und unterstützt Ihre Betriebssystemversion nicht länger.</translation>
 <translation id="2705212601509139398">Diese Website verwendet das Chromium Frame-Plug-in, das bald nicht mehr unterstützt wird. Bitte deinstallieren Sie das Plug-in und laden Sie einen kompatiblen Browser herunter.</translation>
+<translation id="2711502716910134313">Chromium-Tab</translation>
 <translation id="2770231113462710648">Standardbrowser ändern in:</translation>
 <translation id="2801146392936645542"><ph name="FILE_NAME" /> ist schädlich und wurde von Chromium blockiert.</translation>
 <translation id="2847479871509788944">Aus Chromium entfernen...</translation>
@@ -66,7 +67,6 @@
 <translation id="3130323860337406239">Chromium verwendet Ihr Mikrofon.</translation>
 <translation id="313551035350905294">Sie melden sich mit einem verwalteten Konto an und ermöglichen dessen Administrator Zugriff auf Ihr Chromium-Profil. Ihre Chromium-Daten, wie Apps, Lesezeichen, Verlauf, Passwörter und andere Einstellungen, werden dauerhaft mit <ph name="USER_NAME" /> verknüpft. Sie können diese Daten über das Google Dashboard löschen, aber nicht mit einem anderen Konto verknüpfen.</translation>
 <translation id="3190315855212034486">Chromium ist abgestürzt. Jetzt neu starten?</translation>
-<translation id="3197823471738295152">Ihr Gerät ist auf dem neuesten Stand.</translation>
 <translation id="3244477511402911926">Chromium-Benachrichtigungscenter</translation>
 <translation id="3256316712990552818">In Chromium kopiert</translation>
 <translation id="3258596308407688501">Chromium kann im folgenden Datenverzeichnis weder lesen noch schreiben:
@@ -120,6 +120,7 @@
 <translation id="549669000822060376">Bitte warten Sie, bis die aktuellen Systemupdates von Chromium installiert wurden.</translation>
 <translation id="5563479599352954471">Suchen durch einfaches Tippen</translation>
 <translation id="5620765574781326016">Erfahren Sie mehr über Website-Themen, ohne die Seite zu verlassen.</translation>
+<translation id="5634636535844844681">Für Chromium ist Windows 7 oder höher erforderlich.</translation>
 <translation id="5680901439334282664">In Chromium anmelden</translation>
 <translation id="5772805321386874569">Ein <ph name="BEGIN_BUTTON" />Neustart<ph name="END_BUTTON" /> von Chromium ist erforderlich.</translation>
 <translation id="5796460469508169315">Chromium ist gleich bereit.</translation>
@@ -179,6 +180,12 @@ Chromium kann Ihre Einstellungen nicht wiederherstellen.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7339898014177206373">Neues Fenster</translation>
 <translation id="734373864078049451">Hier können Sie im Web surfen und Ihre Lesezeichen und andere Chromium-Inhalte speichern.</translation>
+<translation id="7344413941077984497">Zum Auswählen der Websites, die <ph name="NEW_PROFILE_NAME" /> besuchen kann, können Sie unter <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" /> Beschränkungen und Einstellungen festlegen. Wenn Sie die Standardeinstellungen nicht ändern, kann <ph name="NEW_PROFILE_NAME" /> alle Websites im Internet aufrufen.
+
+Um zu verhindern, dass <ph name="NEW_PROFILE_NAME" /> auf Ihr Konto zugreift, schließen Sie Chromium, wenn Sie es nicht verwenden, und aktivieren Sie die Kindersicherung. Klicken Sie dazu auf Ihren Profilnamen in der Ecke rechts oben und wählen sie "Beenden und Kindersicherung aktivieren".
+<ph name="BEGIN_LINK_2" />Weitere Infos<ph name="END_LINK_2" />
+
+Weitere Informationen wurden per E-Mail an <ph name="ACCOUNT_EMAIL" /> gesendet.</translation>
 <translation id="7419987137528340081">Wenn Sie Ihre bestehenden Chromium-Daten getrennt verwenden möchten, können Sie einen neuen Chromium-Nutzer für <ph name="USER_NAME" /> erstellen.</translation>
 <translation id="7421823331379285070">Für Chromium ist Windows XP oder höher erforderlich. Einige Funktionen sind möglicherweise nicht verfügbar.</translation>
 <translation id="7463979740390522693">Chromium – Benachrichtigungen (<ph name="QUANTITY" /> ungelesen)</translation>
@@ -207,6 +214,7 @@ Chromium kann Ihre Einstellungen nicht wiederherstellen.</translation>
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> Die Chromium-Autoren. Alle Rechte vorbehalten.</translation>
 <translation id="8621669128220841554">Die Installation konnte aufgrund eines undefinierten Fehlers nicht abgeschlossen werden. Bitte laden Sie Chromium erneut herunter.</translation>
 <translation id="8628626585870903697">Chromium verfügt nicht über den PDF-Viewer, der für die Druckvorschau erforderlich ist.</translation>
+<translation id="8667808506758191620">Ihr <ph name="DEVICE_TYPE" /> ist auf dem neuesten Stand.</translation>
 <translation id="8697124171261953979">Die Erweiterung legt auch fest, welche Seite beim Start von Chromium oder bei der Suche über die Omnibox angezeigt wird.</translation>
 <translation id="8704119203788522458">Dies ist Ihr persönlicher Chromium-Browser</translation>
 <translation id="872034308864968620">Chromium im Hintergrund ausführen</translation>
@@ -223,7 +231,6 @@ Chromium kann Ihre Einstellungen nicht wiederherstellen.</translation>
 
 Sollten Sie sich trotzdem anmelden, werden die Chromium-Daten wie Lesezeichen, Verlauf und andere Einstellungen in <ph name="ACCOUNT_EMAIL_NEW" /> zusammengeführt.</translation>
 <translation id="9013087743919948559">Zu Chromium hinzufügen</translation>
-<translation id="9013262824292842194">Für Chromium ist Windows Vista oder Windows XP SP2 oder höher erforderlich.</translation>
 <translation id="9019929317751753759">Um Chromium sicherer zu machen, haben wir die folgende Erweiterung deaktiviert. Sie ist nicht im <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> aufgeführt und wurde möglicherweise ohne Ihr Wissen hinzugefügt.</translation>
 <translation id="9022552996538154597">In Chromium anmelden</translation>
 <translation id="9036189287518468038">Chromium App Launcher</translation>

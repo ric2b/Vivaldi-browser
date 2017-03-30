@@ -32,13 +32,13 @@
 
 namespace blink {
 
-RemoveNodeCommand::RemoveNodeCommand(RawPtr<Node> node, ShouldAssumeContentIsAlwaysEditable shouldAssumeContentIsAlwaysEditable)
+RemoveNodeCommand::RemoveNodeCommand(Node* node, ShouldAssumeContentIsAlwaysEditable shouldAssumeContentIsAlwaysEditable)
     : SimpleEditCommand(node->document())
     , m_node(node)
     , m_shouldAssumeContentIsAlwaysEditable(shouldAssumeContentIsAlwaysEditable)
 {
-    ASSERT(m_node);
-    ASSERT(m_node->parentNode());
+    DCHECK(m_node);
+    DCHECK(m_node->parentNode());
 }
 
 void RemoveNodeCommand::doApply(EditingState* editingState)
@@ -47,7 +47,7 @@ void RemoveNodeCommand::doApply(EditingState* editingState)
     if (!parent || (m_shouldAssumeContentIsAlwaysEditable == DoNotAssumeContentIsAlwaysEditable
         && !parent->isContentEditable(Node::UserSelectAllIsAlwaysNonEditable) && parent->inActiveDocument()))
         return;
-    ASSERT(parent->isContentEditable(Node::UserSelectAllIsAlwaysNonEditable) || !parent->inActiveDocument());
+    DCHECK(parent->isContentEditable(Node::UserSelectAllIsAlwaysNonEditable) || !parent->inActiveDocument()) << parent;
 
     m_parent = parent;
     m_refChild = m_node->nextSibling();
@@ -62,12 +62,12 @@ void RemoveNodeCommand::doApply(EditingState* editingState)
 
 void RemoveNodeCommand::doUnapply()
 {
-    RawPtr<ContainerNode> parent = m_parent.release();
-    RawPtr<Node> refChild = m_refChild.release();
+    ContainerNode* parent = m_parent.release();
+    Node* refChild = m_refChild.release();
     if (!parent || !parent->hasEditableStyle())
         return;
 
-    parent->insertBefore(m_node.get(), refChild.get(), IGNORE_EXCEPTION);
+    parent->insertBefore(m_node.get(), refChild, IGNORE_EXCEPTION);
 }
 
 DEFINE_TRACE(RemoveNodeCommand)

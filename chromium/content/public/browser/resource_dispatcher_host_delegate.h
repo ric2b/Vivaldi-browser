@@ -5,10 +5,10 @@
 #ifndef CONTENT_PUBLIC_BROWSER_RESOURCE_DISPATCHER_HOST_DELEGATE_H_
 #define CONTENT_PUBLIC_BROWSER_RESOURCE_DISPATCHER_HOST_DELEGATE_H_
 
+#include <memory>
 #include <string>
 
 #include "base/files/file_path.h"
-#include "base/memory/scoped_ptr.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/resource_type.h"
@@ -29,6 +29,7 @@ class URLRequest;
 namespace content {
 
 class AppCacheService;
+class NavigationData;
 class ResourceContext;
 class ResourceDispatcherHostLoginDelegate;
 class ResourceThrottle;
@@ -108,7 +109,7 @@ class CONTENT_EXPORT ResourceDispatcherHostDelegate {
   // Informs the delegate that a Stream was created. The Stream can be read from
   // the blob URL of the Stream, but can only be read once.
   virtual void OnStreamCreated(net::URLRequest* request,
-                               scoped_ptr<content::StreamInfo> stream);
+                               std::unique_ptr<content::StreamInfo> stream);
 
   // Informs the delegate that a response has started.
   virtual void OnResponseStarted(net::URLRequest* request,
@@ -129,6 +130,10 @@ class CONTENT_EXPORT ResourceDispatcherHostDelegate {
   // is only called for requests with an unspecified Lo-Fi value.
   virtual bool ShouldEnableLoFiMode(const net::URLRequest& url_request,
                                     content::ResourceContext* resource_context);
+
+  // Asks the embedder for NavigationData related to this request. It is only
+  // called for navigation requests.
+  virtual NavigationData* GetNavigationData(net::URLRequest* request) const;
 
  protected:
   ResourceDispatcherHostDelegate();

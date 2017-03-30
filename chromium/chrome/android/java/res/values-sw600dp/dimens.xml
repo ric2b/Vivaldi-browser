@@ -35,7 +35,6 @@
     <!-- The combined height of the tab strip and toolbar. -->
     <dimen name="tab_strip_and_toolbar_height">96dp</dimen>
 
-    <dimen name="location_bar_url_text_size">18sp</dimen>
     <dimen name="location_bar_icon_width">40dp</dimen>
 
     <!-- NTP dimensions -->
@@ -51,4 +50,7 @@
     <!-- Web app dimensions -->
     <dimen name="webapp_splash_offset">48dp</dimen>
     <dimen name="webapp_splash_large_title_margin_bottom">8dp</dimen>
+
+    <!-- Payments UI -->
+    <dimen name="payments_ui_max_dialog_width">600dp</dimen>
 </resources>

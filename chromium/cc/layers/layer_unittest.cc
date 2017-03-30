@@ -6,7 +6,7 @@
 
 #include <stddef.h>
 
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "cc/animation/animation_host.h"
 #include "cc/animation/animation_id_provider.h"
 #include "cc/animation/keyframed_animation_curve.h"
@@ -14,6 +14,7 @@
 #include "cc/base/math_util.h"
 #include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/layers/layer_impl.h"
+#include "cc/layers/solid_color_scrollbar_layer.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/output/copy_output_result.h"
 #include "cc/proto/layer.pb.h"
@@ -155,7 +156,6 @@ class LayerSerializationTest : public testing::Test {
     EXPECT_EQ(src->double_sided_, dest->double_sided_);
     EXPECT_EQ(src->draws_content_, dest->draws_content_);
     EXPECT_EQ(src->hide_layer_and_subtree_, dest->hide_layer_and_subtree_);
-    EXPECT_EQ(src->has_render_surface_, dest->has_render_surface_);
     EXPECT_EQ(src->masks_to_bounds_, dest->masks_to_bounds_);
     EXPECT_EQ(src->main_thread_scrolling_reasons_,
               dest->main_thread_scrolling_reasons_);
@@ -179,7 +179,6 @@ class LayerSerializationTest : public testing::Test {
     EXPECT_EQ(src->use_parent_backface_visibility_,
               dest->use_parent_backface_visibility_);
     EXPECT_EQ(src->transform_, dest->transform_);
-    EXPECT_EQ(src->transform_is_invertible_, dest->transform_is_invertible_);
     EXPECT_EQ(src->sorting_context_id_, dest->sorting_context_id_);
     EXPECT_EQ(src->num_descendants_that_draw_content_,
               dest->num_descendants_that_draw_content_);
@@ -264,7 +263,6 @@ class LayerSerializationTest : public testing::Test {
     layer->double_sided_ = true;
     layer->draws_content_ = true;
     layer->hide_layer_and_subtree_ = false;
-    layer->has_render_surface_ = false;
     layer->masks_to_bounds_ = true;
     layer->main_thread_scrolling_reasons_ =
         MainThreadScrollingReason::kNotScrollingOnMain;
@@ -286,7 +284,6 @@ class LayerSerializationTest : public testing::Test {
     gfx::Transform transform;
     transform.Rotate(90);
     layer->transform_ = transform;
-    layer->transform_is_invertible_ = true;
     layer->sorting_context_id_ = 0;
     layer->num_descendants_that_draw_content_ = 5;
     layer->scroll_clip_layer_id_ = Layer::INVALID_ID;
@@ -310,7 +307,6 @@ class LayerSerializationTest : public testing::Test {
     layer->double_sided_ = !layer->double_sided_;
     layer->draws_content_ = !layer->draws_content_;
     layer->hide_layer_and_subtree_ = !layer->hide_layer_and_subtree_;
-    layer->has_render_surface_ = !layer->has_render_surface_;
     layer->masks_to_bounds_ = !layer->masks_to_bounds_;
     layer->main_thread_scrolling_reasons_ =
         MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects;
@@ -335,7 +331,6 @@ class LayerSerializationTest : public testing::Test {
     gfx::Transform transform;
     transform.Rotate(90);
     layer->transform_ = transform;
-    layer->transform_is_invertible_ = !layer->transform_is_invertible_;
     layer->sorting_context_id_ = 42;
     layer->num_descendants_that_draw_content_ = 5;
     layer->scroll_clip_layer_id_ = 17;
@@ -345,6 +340,36 @@ class LayerSerializationTest : public testing::Test {
     layer->update_rect_ = gfx::Rect(14, 15);
 
     VerifyBaseLayerPropertiesSerializationAndDeserialization(layer.get());
+  }
+
+  void VerifySolidColorScrollbarLayerAfterSerializationAndDeserialization(
+      scoped_refptr<SolidColorScrollbarLayer> source_scrollbar) {
+    proto::LayerProperties serialized_scrollbar;
+    source_scrollbar->LayerSpecificPropertiesToProto(&serialized_scrollbar);
+
+    scoped_refptr<SolidColorScrollbarLayer> deserialized_scrollbar =
+        SolidColorScrollbarLayer::Create(ScrollbarOrientation::HORIZONTAL, -1,
+                                         -1, false, Layer::INVALID_ID);
+    deserialized_scrollbar->layer_id_ = source_scrollbar->layer_id_;
+
+    // FromLayerSpecificPropertiesProto expects a non-null LayerTreeHost to be
+    // set.
+    deserialized_scrollbar->SetLayerTreeHost(layer_tree_host_.get());
+    deserialized_scrollbar->FromLayerSpecificPropertiesProto(
+        serialized_scrollbar);
+
+    EXPECT_EQ(source_scrollbar->track_start_,
+              deserialized_scrollbar->track_start_);
+    EXPECT_EQ(source_scrollbar->thumb_thickness_,
+              deserialized_scrollbar->thumb_thickness_);
+    EXPECT_EQ(source_scrollbar->scroll_layer_id_,
+              deserialized_scrollbar->scroll_layer_id_);
+    EXPECT_EQ(source_scrollbar->is_left_side_vertical_scrollbar_,
+              deserialized_scrollbar->is_left_side_vertical_scrollbar_);
+    EXPECT_EQ(source_scrollbar->orientation_,
+              deserialized_scrollbar->orientation_);
+
+    deserialized_scrollbar->SetLayerTreeHost(nullptr);
   }
 
   void RunScrollAndClipLayersTest() {
@@ -816,7 +841,7 @@ class LayerSerializationTest : public testing::Test {
 
   TestTaskGraphRunner task_graph_runner_;
   FakeLayerTreeHostClient fake_client_;
-  scoped_ptr<FakeLayerTreeHost> layer_tree_host_;
+  std::unique_ptr<FakeLayerTreeHost> layer_tree_host_;
 };
 
 namespace {
@@ -929,7 +954,7 @@ class LayerTest : public testing::Test {
   FakeLayerTreeHostImpl host_impl_;
 
   FakeLayerTreeHostClient fake_client_;
-  scoped_ptr<StrictMock<MockLayerTreeHost>> layer_tree_host_;
+  std::unique_ptr<StrictMock<MockLayerTreeHost>> layer_tree_host_;
   scoped_refptr<Layer> parent_;
   scoped_refptr<Layer> child1_;
   scoped_refptr<Layer> child2_;
@@ -969,21 +994,21 @@ TEST_F(LayerTest, LayerPropertyChangedForSubtree) {
   root->AddChild(child2);
   child->AddChild(grand_child);
   EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(AtLeast(1));
-  child->SetForceRenderSurface(true);
+  child->SetForceRenderSurfaceForTesting(true);
   EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(AtLeast(1));
   child2->SetScrollParent(grand_child.get());
   SkXfermode::Mode arbitrary_blend_mode = SkXfermode::kMultiply_Mode;
-  scoped_ptr<LayerImpl> root_impl =
+  std::unique_ptr<LayerImpl> root_impl =
       LayerImpl::Create(host_impl_.active_tree(), root->id());
-  scoped_ptr<LayerImpl> child_impl =
+  std::unique_ptr<LayerImpl> child_impl =
       LayerImpl::Create(host_impl_.active_tree(), child->id());
-  scoped_ptr<LayerImpl> child2_impl =
+  std::unique_ptr<LayerImpl> child2_impl =
       LayerImpl::Create(host_impl_.active_tree(), child2->id());
-  scoped_ptr<LayerImpl> grand_child_impl =
+  std::unique_ptr<LayerImpl> grand_child_impl =
       LayerImpl::Create(host_impl_.active_tree(), grand_child->id());
-  scoped_ptr<LayerImpl> dummy_layer1_impl =
+  std::unique_ptr<LayerImpl> dummy_layer1_impl =
       LayerImpl::Create(host_impl_.active_tree(), dummy_layer1->id());
-  scoped_ptr<LayerImpl> dummy_layer2_impl =
+  std::unique_ptr<LayerImpl> dummy_layer2_impl =
       LayerImpl::Create(host_impl_.active_tree(), dummy_layer2->id());
 
   EXPECT_CALL(*layer_tree_host_, SetNeedsFullTreeSync()).Times(1);
@@ -1093,8 +1118,7 @@ TEST_F(LayerTest, LayerPropertyChangedForSubtree) {
       child->PushPropertiesTo(child_impl.get());
       child2->PushPropertiesTo(child2_impl.get());
       grand_child->PushPropertiesTo(grand_child_impl.get());
-      layer_tree_host_->property_trees()->ResetAllChangeTracking(
-          PropertyTrees::ResetFlags::ALL_TREES));
+      layer_tree_host_->property_trees()->ResetAllChangeTracking());
   EXPECT_FALSE(node->data.transform_changed);
 
   EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(1);
@@ -1112,8 +1136,7 @@ TEST_F(LayerTest, LayerPropertyChangedForSubtree) {
   EXECUTE_AND_VERIFY_SUBTREE_CHANGES_RESET(
       child->PushPropertiesTo(child_impl.get());
       grand_child->PushPropertiesTo(grand_child_impl.get());
-      layer_tree_host_->property_trees()->ResetAllChangeTracking(
-          PropertyTrees::ResetFlags::ALL_TREES));
+      layer_tree_host_->property_trees()->ResetAllChangeTracking());
   node = layer_tree_host_->property_trees()->transform_tree.Node(
       child->transform_tree_index());
   EXPECT_FALSE(node->data.transform_changed);
@@ -1129,8 +1152,7 @@ TEST_F(LayerTest, LayerPropertyChangedForSubtree) {
       child->PushPropertiesTo(child_impl.get());
       child2->PushPropertiesTo(child2_impl.get());
       grand_child->PushPropertiesTo(grand_child_impl.get());
-      layer_tree_host_->property_trees()->ResetAllChangeTracking(
-          PropertyTrees::ResetFlags::ALL_TREES));
+      layer_tree_host_->property_trees()->ResetAllChangeTracking());
 
   gfx::Transform arbitrary_transform;
   arbitrary_transform.Scale3d(0.1f, 0.2f, 0.3f);
@@ -1660,7 +1682,7 @@ TEST_F(LayerTest, CheckPropertyChangeCausesCorrectBehavior) {
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetDoubleSided(false));
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetTouchEventHandlerRegion(
       gfx::Rect(10, 10)));
-  EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetForceRenderSurface(true));
+  EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetForceRenderSurfaceForTesting(true));
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetHideLayerAndSubtree(true));
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetElementId(2));
   EXPECT_SET_NEEDS_COMMIT(
@@ -1680,7 +1702,7 @@ TEST_F(LayerTest, CheckPropertyChangeCausesCorrectBehavior) {
 
 TEST_F(LayerTest, PushPropertiesAccumulatesUpdateRect) {
   scoped_refptr<Layer> test_layer = Layer::Create();
-  scoped_ptr<LayerImpl> impl_layer =
+  std::unique_ptr<LayerImpl> impl_layer =
       LayerImpl::Create(host_impl_.active_tree(), 1);
 
   EXPECT_SET_NEEDS_FULL_TREE_SYNC(1,
@@ -1702,8 +1724,7 @@ TEST_F(LayerTest, PushPropertiesAccumulatesUpdateRect) {
 
   // If we do clear the LayerImpl side, then the next update_rect() should be
   // fresh without accumulation.
-  host_impl_.active_tree()->ResetAllChangeTracking(
-      PropertyTrees::ResetFlags::ALL_TREES);
+  host_impl_.active_tree()->ResetAllChangeTracking();
   test_layer->SetNeedsDisplayRect(gfx::Rect(10, 10, 5, 5));
   test_layer->PushPropertiesTo(impl_layer_ptr);
   EXPECT_FLOAT_RECT_EQ(gfx::RectF(10.f, 10.f, 5.f, 5.f),
@@ -1712,7 +1733,7 @@ TEST_F(LayerTest, PushPropertiesAccumulatesUpdateRect) {
 
 TEST_F(LayerTest, PushPropertiesCausesLayerPropertyChangedForTransform) {
   scoped_refptr<Layer> test_layer = Layer::Create();
-  scoped_ptr<LayerImpl> impl_layer =
+  std::unique_ptr<LayerImpl> impl_layer =
       LayerImpl::Create(host_impl_.active_tree(), 1);
 
   EXPECT_SET_NEEDS_FULL_TREE_SYNC(1,
@@ -1731,7 +1752,7 @@ TEST_F(LayerTest, PushPropertiesCausesLayerPropertyChangedForTransform) {
 
 TEST_F(LayerTest, PushPropertiesCausesLayerPropertyChangedForOpacity) {
   scoped_refptr<Layer> test_layer = Layer::Create();
-  scoped_ptr<LayerImpl> impl_layer =
+  std::unique_ptr<LayerImpl> impl_layer =
       LayerImpl::Create(host_impl_.active_tree(), 1);
 
   EXPECT_SET_NEEDS_FULL_TREE_SYNC(1,
@@ -1781,76 +1802,15 @@ TEST_F(LayerTest, MaskAndReplicaHasParent) {
   EXPECT_EQ(replica.get(), replica->mask_layer()->parent());
 }
 
-TEST_F(LayerTest, CheckTransformIsInvertible) {
-  scoped_refptr<Layer> layer = Layer::Create();
-  scoped_ptr<LayerImpl> impl_layer =
-      LayerImpl::Create(host_impl_.active_tree(), 1);
-  EXPECT_CALL(*layer_tree_host_, SetNeedsFullTreeSync()).Times(1);
-  EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(AnyNumber());
-  layer_tree_host_->SetRootLayer(layer);
-
-  EXPECT_TRUE(layer->transform_is_invertible());
-
-  gfx::Transform singular_transform;
-  singular_transform.Scale3d(
-      SkDoubleToMScalar(1.0), SkDoubleToMScalar(1.0), SkDoubleToMScalar(0.0));
-
-  layer->SetTransform(singular_transform);
-  layer->PushPropertiesTo(impl_layer.get());
-
-  EXPECT_FALSE(layer->transform_is_invertible());
-  EXPECT_FALSE(impl_layer->transform_is_invertible());
-
-  gfx::Transform rotation_transform;
-  rotation_transform.RotateAboutZAxis(-45.0);
-
-  layer->SetTransform(rotation_transform);
-  layer->PushPropertiesTo(impl_layer.get());
-  EXPECT_TRUE(layer->transform_is_invertible());
-  EXPECT_TRUE(impl_layer->transform_is_invertible());
-
-  Mock::VerifyAndClearExpectations(layer_tree_host_.get());
-}
-
-TEST_F(LayerTest, TransformIsInvertibleAnimation) {
-  scoped_refptr<Layer> layer = Layer::Create();
-  scoped_ptr<LayerImpl> impl_layer =
-      LayerImpl::Create(host_impl_.active_tree(), 1);
-  EXPECT_CALL(*layer_tree_host_, SetNeedsFullTreeSync()).Times(1);
-  EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(AnyNumber());
-  layer_tree_host_->SetRootLayer(layer);
-
-  EXPECT_TRUE(layer->transform_is_invertible());
-
-  gfx::Transform singular_transform;
-  singular_transform.Scale3d(
-      SkDoubleToMScalar(1.0), SkDoubleToMScalar(1.0), SkDoubleToMScalar(0.0));
-
-  layer->SetTransform(singular_transform);
-  layer->PushPropertiesTo(impl_layer.get());
-
-  EXPECT_FALSE(layer->transform_is_invertible());
-  EXPECT_FALSE(impl_layer->transform_is_invertible());
-
-  gfx::Transform identity_transform;
-
-  EXPECT_CALL(*layer_tree_host_, SetNeedsUpdateLayers()).Times(1);
-  layer->SetTransform(identity_transform);
-  layer->OnTransformAnimated(singular_transform);
-  layer->PushPropertiesTo(impl_layer.get());
-  EXPECT_FALSE(layer->transform_is_invertible());
-  EXPECT_FALSE(impl_layer->transform_is_invertible());
-
-  Mock::VerifyAndClearExpectations(layer_tree_host_.get());
-}
-
 class LayerTreeHostFactory {
  public:
   LayerTreeHostFactory() : client_(FakeLayerTreeHostClient::DIRECT_3D) {}
 
-  scoped_ptr<LayerTreeHost> Create() { return Create(LayerTreeSettings()); }
+  std::unique_ptr<LayerTreeHost> Create() {
+    return Create(LayerTreeSettings());
+  }
 
-  scoped_ptr<LayerTreeHost> Create(LayerTreeSettings settings) {
+  std::unique_ptr<LayerTreeHost> Create(LayerTreeSettings settings) {
     LayerTreeHost::InitParams params;
     params.client = &client_;
     params.shared_bitmap_manager = &shared_bitmap_manager_;
@@ -1900,7 +1860,7 @@ TEST_F(LayerLayerTreeHostTest, EnteringTree) {
   AssertLayerTreeHostMatchesForSubtree(parent.get(), nullptr);
 
   LayerTreeHostFactory factory;
-  scoped_ptr<LayerTreeHost> layer_tree_host = factory.Create();
+  std::unique_ptr<LayerTreeHost> layer_tree_host = factory.Create();
   // Setting the root layer should set the host pointer for all layers in the
   // tree.
   layer_tree_host->SetRootLayer(parent.get());
@@ -1917,7 +1877,7 @@ TEST_F(LayerLayerTreeHostTest, EnteringTree) {
 TEST_F(LayerLayerTreeHostTest, AddingLayerSubtree) {
   scoped_refptr<Layer> parent = Layer::Create();
   LayerTreeHostFactory factory;
-  scoped_ptr<LayerTreeHost> layer_tree_host = factory.Create();
+  std::unique_ptr<LayerTreeHost> layer_tree_host = factory.Create();
 
   layer_tree_host->SetRootLayer(parent.get());
 
@@ -1957,7 +1917,7 @@ TEST_F(LayerLayerTreeHostTest, ChangeHost) {
   replica->SetMaskLayer(replica_mask.get());
 
   LayerTreeHostFactory factory;
-  scoped_ptr<LayerTreeHost> first_layer_tree_host = factory.Create();
+  std::unique_ptr<LayerTreeHost> first_layer_tree_host = factory.Create();
   first_layer_tree_host->SetRootLayer(parent.get());
 
   AssertLayerTreeHostMatchesForSubtree(parent.get(),
@@ -1965,7 +1925,7 @@ TEST_F(LayerLayerTreeHostTest, ChangeHost) {
 
   // Now re-root the tree to a new host (simulating what we do on a context lost
   // event). This should update the host pointers for all layers in the tree.
-  scoped_ptr<LayerTreeHost> second_layer_tree_host = factory.Create();
+  std::unique_ptr<LayerTreeHost> second_layer_tree_host = factory.Create();
   second_layer_tree_host->SetRootLayer(parent.get());
 
   AssertLayerTreeHostMatchesForSubtree(parent.get(),
@@ -1987,7 +1947,7 @@ TEST_F(LayerLayerTreeHostTest, ChangeHostInSubtree) {
   first_parent->AddChild(second_child);
 
   LayerTreeHostFactory factory;
-  scoped_ptr<LayerTreeHost> first_layer_tree_host = factory.Create();
+  std::unique_ptr<LayerTreeHost> first_layer_tree_host = factory.Create();
   first_layer_tree_host->SetRootLayer(first_parent.get());
 
   AssertLayerTreeHostMatchesForSubtree(first_parent.get(),
@@ -1995,7 +1955,7 @@ TEST_F(LayerLayerTreeHostTest, ChangeHostInSubtree) {
 
   // Now reparent the subtree starting at second_child to a layer in a different
   // tree.
-  scoped_ptr<LayerTreeHost> second_layer_tree_host = factory.Create();
+  std::unique_ptr<LayerTreeHost> second_layer_tree_host = factory.Create();
   second_layer_tree_host->SetRootLayer(second_parent.get());
 
   second_parent->AddChild(second_child);
@@ -2025,7 +1985,7 @@ TEST_F(LayerLayerTreeHostTest, ReplaceMaskAndReplicaLayer) {
   replica->AddChild(replica_child);
 
   LayerTreeHostFactory factory;
-  scoped_ptr<LayerTreeHost> layer_tree_host = factory.Create();
+  std::unique_ptr<LayerTreeHost> layer_tree_host = factory.Create();
   layer_tree_host->SetRootLayer(parent.get());
 
   AssertLayerTreeHostMatchesForSubtree(parent.get(), layer_tree_host.get());
@@ -2049,13 +2009,13 @@ TEST_F(LayerLayerTreeHostTest, DestroyHostWithNonNullRootLayer) {
   scoped_refptr<Layer> child = Layer::Create();
   root->AddChild(child);
   LayerTreeHostFactory factory;
-  scoped_ptr<LayerTreeHost> layer_tree_host = factory.Create();
+  std::unique_ptr<LayerTreeHost> layer_tree_host = factory.Create();
   layer_tree_host->SetRootLayer(root);
 }
 
 TEST_F(LayerTest, SafeOpaqueBackgroundColor) {
   LayerTreeHostFactory factory;
-  scoped_ptr<LayerTreeHost> layer_tree_host = factory.Create();
+  std::unique_ptr<LayerTreeHost> layer_tree_host = factory.Create();
 
   scoped_refptr<Layer> layer = Layer::Create();
   layer_tree_host->SetRootLayer(layer);
@@ -2132,7 +2092,7 @@ TEST_F(LayerTest, DrawsContentChangedInSetLayerTreeHost) {
 }
 
 void ReceiveCopyOutputResult(int* result_count,
-                             scoped_ptr<CopyOutputResult> result) {
+                             std::unique_ptr<CopyOutputResult> result) {
   ++(*result_count);
 }
 
@@ -2142,7 +2102,7 @@ TEST_F(LayerTest, DedupesCopyOutputRequestsBySource) {
 
   // Create identical requests without the source being set, and expect the
   // layer does not abort either one.
-  scoped_ptr<CopyOutputRequest> request = CopyOutputRequest::CreateRequest(
+  std::unique_ptr<CopyOutputRequest> request = CopyOutputRequest::CreateRequest(
       base::Bind(&ReceiveCopyOutputResult, &result_count));
   layer->RequestCopyOfOutput(std::move(request));
   EXPECT_EQ(0, result_count);
@@ -2493,9 +2453,27 @@ TEST_F(LayerSerializationTest, ScrollAndClipLayers) {
   RunScrollAndClipLayersTest();
 }
 
+TEST_F(LayerSerializationTest, SolidColorScrollbarSerialization) {
+  std::vector<scoped_refptr<SolidColorScrollbarLayer>> scrollbar_layers;
+
+  scrollbar_layers.push_back(SolidColorScrollbarLayer::Create(
+      ScrollbarOrientation::HORIZONTAL, 20, 5, true, 3));
+  scrollbar_layers.push_back(SolidColorScrollbarLayer::Create(
+      ScrollbarOrientation::VERTICAL, 20, 5, false, 3));
+  scrollbar_layers.push_back(SolidColorScrollbarLayer::Create(
+      ScrollbarOrientation::HORIZONTAL, 0, 0, true, 0));
+  scrollbar_layers.push_back(SolidColorScrollbarLayer::Create(
+      ScrollbarOrientation::VERTICAL, 10, 35, true, 3));
+
+  for (size_t i = 0; i < scrollbar_layers.size(); i++) {
+    VerifySolidColorScrollbarLayerAfterSerializationAndDeserialization(
+        scrollbar_layers[i]);
+  }
+}
+
 TEST_F(LayerTest, ElementIdAndMutablePropertiesArePushed) {
   scoped_refptr<Layer> test_layer = Layer::Create();
-  scoped_ptr<LayerImpl> impl_layer =
+  std::unique_ptr<LayerImpl> impl_layer =
       LayerImpl::Create(host_impl_.active_tree(), 1);
 
   EXPECT_SET_NEEDS_FULL_TREE_SYNC(1,

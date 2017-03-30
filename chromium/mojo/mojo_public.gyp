@@ -27,10 +27,7 @@
       'public/interfaces/bindings/tests/serialization_test_structs.mojom',
       'public/interfaces/bindings/tests/test_constants.mojom',
       'public/interfaces/bindings/tests/test_native_types.mojom',
-      'public/interfaces/bindings/tests/test_structs.mojom',
       'public/interfaces/bindings/tests/test_sync_methods.mojom',
-      'public/interfaces/bindings/tests/test_unions.mojom',
-      'public/interfaces/bindings/tests/validation_test_interfaces.mojom',
     ]
   },
   'targets': [
@@ -103,6 +100,7 @@
         'public/cpp/system/data_pipe.h',
         'public/cpp/system/functions.h',
         'public/cpp/system/handle.h',
+        'public/cpp/system/message.h',
         'public/cpp/system/message_pipe.h',
         'public/cpp/system/watcher.cc',
         'public/cpp/system/watcher.h',
@@ -121,6 +119,9 @@
       ],
       'sources': [
         'public/cpp/bindings/array.h',
+        'public/cpp/bindings/array_traits.h',
+        'public/cpp/bindings/array_traits_standard.h',
+        'public/cpp/bindings/array_traits_stl.h',
         'public/cpp/bindings/associated_binding.h',
         'public/cpp/bindings/associated_group.h',
         'public/cpp/bindings/associated_interface_ptr.h',
@@ -135,13 +136,10 @@
         'public/cpp/bindings/lib/array_internal.cc',
         'public/cpp/bindings/lib/array_internal.h',
         'public/cpp/bindings/lib/array_serialization.h',
-        'public/cpp/bindings/lib/array_serialization_traits.h',
         'public/cpp/bindings/lib/associated_group.cc',
         'public/cpp/bindings/lib/associated_interface_ptr_state.h',
         'public/cpp/bindings/lib/binding_state.h',
         'public/cpp/bindings/lib/bindings_internal.h',
-        'public/cpp/bindings/lib/bindings_serialization.cc',
-        'public/cpp/bindings/lib/bindings_serialization.h',
         'public/cpp/bindings/lib/bounds_checker.cc',
         'public/cpp/bindings/lib/bounds_checker.h',
         'public/cpp/bindings/lib/buffer.h',
@@ -155,17 +153,18 @@
         'public/cpp/bindings/lib/filter_chain.cc',
         'public/cpp/bindings/lib/filter_chain.h',
         'public/cpp/bindings/lib/fixed_buffer.cc',
-        'public/cpp/bindings/lib/interface_id.h',
         'public/cpp/bindings/lib/fixed_buffer.h',
         'public/cpp/bindings/lib/interface_endpoint_client.cc',
         'public/cpp/bindings/lib/interface_endpoint_client.h',
         'public/cpp/bindings/lib/interface_endpoint_controller.h',
+        'public/cpp/bindings/lib/interface_id.h',
         'public/cpp/bindings/lib/interface_ptr_state.h',
-        'public/cpp/bindings/lib/macros.h',
         'public/cpp/bindings/lib/map_data_internal.h',
         'public/cpp/bindings/lib/map_internal.h',
         'public/cpp/bindings/lib/map_serialization.h',
         'public/cpp/bindings/lib/message.cc',
+        'public/cpp/bindings/lib/message_buffer.cc',
+        'public/cpp/bindings/lib/message_buffer.h',
         'public/cpp/bindings/lib/message_builder.cc',
         'public/cpp/bindings/lib/message_builder.h',
         'public/cpp/bindings/lib/message_filter.cc',
@@ -174,9 +173,12 @@
         'public/cpp/bindings/lib/message_internal.h',
         'public/cpp/bindings/lib/multiplex_router.cc',
         'public/cpp/bindings/lib/multiplex_router.h',
+        'public/cpp/bindings/lib/native_struct.cc',
+        'public/cpp/bindings/lib/native_struct_data.cc',
+        'public/cpp/bindings/lib/native_struct_data.h',
+        'public/cpp/bindings/lib/native_struct_serialization.cc',
+        'public/cpp/bindings/lib/native_struct_serialization.h',
         'public/cpp/bindings/lib/no_interface.cc',
-        'public/cpp/bindings/lib/pickle_buffer.cc',
-        'public/cpp/bindings/lib/pickle_buffer.h',
         'public/cpp/bindings/lib/pipe_control_message_handler.cc',
         'public/cpp/bindings/lib/pipe_control_message_handler.h',
         'public/cpp/bindings/lib/pipe_control_message_handler_delegate.h',
@@ -185,13 +187,17 @@
         'public/cpp/bindings/lib/router.cc',
         'public/cpp/bindings/lib/router.h',
         'public/cpp/bindings/lib/scoped_interface_endpoint_handle.cc',
-        'public/cpp/bindings/lib/scoped_interface_endpoint_handle.h',
-        'public/cpp/bindings/lib/serialization_forward.h',
         'public/cpp/bindings/lib/serialization.h',
+        'public/cpp/bindings/lib/serialization_context.cc',
+        'public/cpp/bindings/lib/serialization_context.h',
+        'public/cpp/bindings/lib/serialization_forward.h',
+        'public/cpp/bindings/lib/serialization_forward.h',
+        'public/cpp/bindings/lib/serialization_util.cc',
+        'public/cpp/bindings/lib/serialization_util.h',
         'public/cpp/bindings/lib/shared_data.h',
         'public/cpp/bindings/lib/shared_ptr.h',
-        'public/cpp/bindings/lib/string_serialization.cc',
         'public/cpp/bindings/lib/string_serialization.h',
+        'public/cpp/bindings/lib/string_traits_string16.cc',
         'public/cpp/bindings/lib/sync_handle_registry.cc',
         'public/cpp/bindings/lib/sync_handle_registry.h',
         'public/cpp/bindings/lib/sync_handle_watcher.cc',
@@ -202,15 +208,20 @@
         'public/cpp/bindings/lib/validation_util.cc',
         'public/cpp/bindings/lib/validation_util.h',
         'public/cpp/bindings/lib/value_traits.h',
-        # Include the .h but not the .cc file. The .h file is used by
-        # serialization_forward.h.
-        'public/cpp/bindings/lib/wtf_string_serialization.h',
         'public/cpp/bindings/message.h',
         'public/cpp/bindings/message_filter.h',
+        'public/cpp/bindings/native_struct.h',
         'public/cpp/bindings/no_interface.h',
+        'public/cpp/bindings/scoped_interface_endpoint_handle.h',
         'public/cpp/bindings/stl_converters.h',
         'public/cpp/bindings/string.h',
+        'public/cpp/bindings/string_traits.h',
+        'public/cpp/bindings/string_traits_standard.h',
+        'public/cpp/bindings/string_traits_stl.h',
+        'public/cpp/bindings/string_traits_string16.h',
+        'public/cpp/bindings/string_traits_string_piece.h',
         'public/cpp/bindings/strong_binding.h',
+        'public/cpp/bindings/struct_ptr.h',
         'public/cpp/bindings/type_converter.h',
         # This comes from the mojo_interface_bindings_cpp_sources dependency.
         '>@(mojom_generated_sources)',
@@ -229,10 +240,11 @@
         '..'
       ],
       'sources': [
-        'public/cpp/bindings/lib/wtf_array_serialization.h',
+        'public/cpp/bindings/array_traits_wtf.h',
+        'public/cpp/bindings/array_traits_wtf_vector.h',
+        'public/cpp/bindings/lib/string_traits_wtf.cc',
         'public/cpp/bindings/lib/wtf_serialization.h',
-        'public/cpp/bindings/lib/wtf_string_serialization.cc',
-        'public/cpp/bindings/lib/wtf_string_serialization.h',
+        'public/cpp/bindings/string_traits_wtf.h',
         'public/cpp/bindings/wtf_array.h',
       ],
       'dependencies': [
@@ -319,9 +331,7 @@
     {
       # GN version: //mojo/public/c/test_support
       'target_name': 'mojo_public_test_support',
-      'defines': [
-        'MOJO_TEST_SUPPORT_IMPLEMENTATION',
-      ],
+      'type': 'static_library',
       'include_dirs': [
         '..',
       ],
@@ -332,23 +342,9 @@
       },
       'sources': [
         'public/c/test_support/test_support.h',
-        'public/c/test_support/test_support_export.h',
         # TODO(vtl): Convert this to thunks http://crbug.com/386799
         'public/tests/test_support_private.cc',
         'public/tests/test_support_private.h',
-      ],
-      'conditions': [
-        ['OS=="ios"', {
-          'type': 'static_library',
-        }, {
-          'type': 'shared_library',
-        }],
-        ['OS=="mac"', {
-          'xcode_settings': {
-            # Make it a run-path dependent library.
-            'DYLIB_INSTALL_NAME_BASE': '@loader_path',
-          },
-        }],
       ],
     },
     {
@@ -382,7 +378,16 @@
       'target_name': 'mojo_public_test_interfaces_mojom',
       'type': 'none',
       'variables': {
-        'mojom_files': '<(mojo_public_test_interfaces_mojom_files)',
+        'mojom_files': [
+          'public/interfaces/bindings/tests/test_structs.mojom',
+          'public/interfaces/bindings/tests/test_unions.mojom',
+          'public/interfaces/bindings/tests/validation_test_interfaces.mojom',
+          '<@(mojo_public_test_interfaces_mojom_files)',
+        ],
+        'mojom_typemaps': [
+          'public/cpp/bindings/tests/rect_chromium.typemap',
+          'public/cpp/bindings/tests/test_native_types_chromium.typemap',
+        ],
       },
       'includes': [ 'mojom_bindings_generator_explicit.gypi' ],
     },
@@ -390,12 +395,13 @@
       'target_name': 'mojo_public_test_interfaces_struct_traits',
       'type': 'static_library',
       'variables': {
-        'mojom_extra_generator_args': [
-          '--typemap', '<(DEPTH)/mojo/public/interfaces/bindings/tests/struct_with_traits.typemap',
+        'mojom_typemaps': [
+          'public/cpp/bindings/tests/struct_with_traits.typemap',
         ],
       },
       'sources': [
         'public/interfaces/bindings/tests/struct_with_traits.mojom',
+        'public/cpp/bindings/tests/struct_with_traits_impl_traits.cc',
       ],
       'includes': [ 'mojom_bindings_generator.gypi' ],
     },
@@ -403,31 +409,14 @@
       'target_name': 'mojo_public_test_interfaces_mojom_blink',
       'type': 'none',
       'variables': {
-        'mojom_variant': 'blink',
-        'mojom_extra_generator_args': [
-          '--typemap', '<(DEPTH)/mojo/public/interfaces/bindings/tests/blink_test.typemap',
+        'for_blink': 'true',
+        'mojom_typemaps': [
+          'public/cpp/bindings/tests/rect_blink.typemap',
+          'public/cpp/bindings/tests/test_native_types_blink.typemap',
         ],
         'mojom_files': '<(mojo_public_test_interfaces_mojom_files)',
       },
       'includes': [ 'mojom_bindings_generator_explicit.gypi' ],
-      'dependencies': [
-        'mojo_public_test_interfaces_mojom',
-      ],
-    },
-    {
-      'target_name': 'mojo_public_test_interfaces_mojom_chromium',
-      'type': 'none',
-      'variables': {
-        'mojom_variant': 'chromium',
-        'mojom_extra_generator_args': [
-          '--typemap', '<(DEPTH)/mojo/public/interfaces/bindings/tests/chromium_test.typemap',
-        ],
-        'mojom_files': '<(mojo_public_test_interfaces_mojom_files)',
-      },
-      'includes': [ 'mojom_bindings_generator_explicit.gypi' ],
-      'dependencies': [
-        'mojo_public_test_interfaces_mojom',
-      ],
     },
     {
       # GN version: //mojo/public/interfaces/bindings/tests:test_interfaces
@@ -435,6 +424,9 @@
       'type': 'static_library',
       'export_dependent_settings': [
         'mojo_cpp_bindings',
+      ],
+      'sources': [
+        'public/cpp/bindings/tests/pickled_struct_chromium.cc',
       ],
       'dependencies': [
         'mojo_public_test_interfaces_mojom',
@@ -446,22 +438,14 @@
       'target_name': 'mojo_public_test_interfaces_blink',
       'type': 'static_library',
       'export_dependent_settings': [
-        'mojo_cpp_bindings',
-      ],
-      'dependencies': [
         'mojo_public_test_interfaces_mojom_blink',
         'mojo_cpp_bindings',
       ],
-    },
-    {
-      # GN version: //mojo/public/interfaces/bindings/tests:test_interfaces_chromium
-      'target_name': 'mojo_public_test_interfaces_chromium',
-      'type': 'static_library',
-      'export_dependent_settings': [
-        'mojo_cpp_bindings',
+      'sources': [
+        'public/cpp/bindings/tests/pickled_struct_blink.cc',
       ],
       'dependencies': [
-        'mojo_public_test_interfaces_mojom_chromium',
+        'mojo_public_test_interfaces_mojom_blink',
         'mojo_cpp_bindings',
       ],
     },
@@ -503,23 +487,10 @@
       'target_name': 'mojo_public_test_wtf_types_blink',
       'type': 'static_library',
       'variables': {
-        'mojom_variant': 'blink',
         'for_blink': 'true',
       },
       'sources': [
         'public/interfaces/bindings/tests/test_wtf_types.mojom',
-      ],
-      'includes': [ 'mojom_bindings_generator.gypi' ],
-    },
-    {
-      'target_name': 'mojo_public_test_variant',
-      'type': 'static_library',
-      'variables': {
-        'mojom_variant': 'test_variant',
-      },
-      'sources': [
-        'public/interfaces/bindings/tests/test_variant_import.mojom',
-        'public/interfaces/bindings/tests/test_variant.mojom',
       ],
       'includes': [ 'mojom_bindings_generator.gypi' ],
     },

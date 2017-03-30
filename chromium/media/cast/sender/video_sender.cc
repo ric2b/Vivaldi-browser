@@ -12,8 +12,8 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
-#include "media/cast/cast_defines.h"
 #include "media/cast/net/cast_transport_config.h"
 #include "media/cast/sender/performance_metrics_overlay.h"
 #include "media/cast/sender/video_encoder.h"
@@ -52,12 +52,12 @@ const int64_t kMinKeyFrameRequestOnPliIntervalMs = 500;
 void LogVideoCaptureTimestamps(CastEnvironment* cast_environment,
                                const media::VideoFrame& video_frame,
                                RtpTimeTicks rtp_timestamp) {
-  scoped_ptr<FrameEvent> capture_begin_event(new FrameEvent());
+  std::unique_ptr<FrameEvent> capture_begin_event(new FrameEvent());
   capture_begin_event->type = FRAME_CAPTURE_BEGIN;
   capture_begin_event->media_type = VIDEO_EVENT;
   capture_begin_event->rtp_timestamp = rtp_timestamp;
 
-  scoped_ptr<FrameEvent> capture_end_event(new FrameEvent());
+  std::unique_ptr<FrameEvent> capture_end_event(new FrameEvent());
   capture_end_event->type = FRAME_CAPTURE_END;
   capture_end_event->media_type = VIDEO_EVENT;
   capture_end_event->rtp_timestamp = rtp_timestamp;
@@ -140,11 +140,8 @@ VideoSender::VideoSender(
   transport_config.aes_iv_mask = video_config.aes_iv_mask;
 
   transport_sender->InitializeVideo(
-      transport_config, base::Bind(&VideoSender::OnReceivedCastFeedback,
-                                   weak_factory_.GetWeakPtr()),
-      base::Bind(&VideoSender::OnMeasuredRoundTripTime,
-                 weak_factory_.GetWeakPtr()),
-      base::Bind(&VideoSender::OnReceivedPli, weak_factory_.GetWeakPtr()));
+      transport_config, base::WrapUnique(new FrameSender::RtcpClient(
+                            weak_factory_.GetWeakPtr())));
 }
 
 VideoSender::~VideoSender() {
@@ -300,7 +297,7 @@ void VideoSender::InsertRawVideoFrame(
   }
 }
 
-scoped_ptr<VideoFrameFactory> VideoSender::CreateVideoFrameFactory() {
+std::unique_ptr<VideoFrameFactory> VideoSender::CreateVideoFrameFactory() {
   return video_encoder_ ? video_encoder_->CreateVideoFrameFactory() : nullptr;
 }
 
@@ -310,7 +307,7 @@ int VideoSender::GetNumberOfFramesInEncoder() const {
 
 base::TimeDelta VideoSender::GetInFlightMediaDuration() const {
   if (GetUnacknowledgedFrameCount() > 0) {
-    const uint32_t oldest_unacked_frame_id = latest_acked_frame_id_ + 1;
+    const FrameId oldest_unacked_frame_id = latest_acked_frame_id_ + 1;
     return last_enqueued_frame_reference_time_ -
         GetRecordedReferenceTime(oldest_unacked_frame_id);
   } else {
@@ -321,11 +318,15 @@ base::TimeDelta VideoSender::GetInFlightMediaDuration() const {
 void VideoSender::OnEncodedVideoFrame(
     const scoped_refptr<media::VideoFrame>& video_frame,
     int encoder_bitrate,
-    scoped_ptr<SenderEncodedFrame> encoded_frame) {
+    std::unique_ptr<SenderEncodedFrame> encoded_frame) {
   DCHECK(cast_environment_->CurrentlyOn(CastEnvironment::MAIN));
 
   frames_in_encoder_--;
   DCHECK_GE(frames_in_encoder_, 0);
+
+  // Encoding was exited with errors.
+  if (!encoded_frame)
+    return;
 
   duration_in_encoder_ =
       last_enqueued_frame_reference_time_ - encoded_frame->reference_time;

@@ -5,12 +5,15 @@
 #include "ash/wm/toplevel_window_event_handler.h"
 
 #include "ash/shell.h"
+#include "ash/wm/aura/wm_window_aura.h"
+#include "ash/wm/common/window_resizer.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/common/window_state_observer.h"
+#include "ash/wm/common/wm_event.h"
+#include "ash/wm/common/wm_window_observer.h"
 #include "ash/wm/resize_shadow_controller.h"
-#include "ash/wm/window_resizer.h"
-#include "ash/wm/window_state.h"
-#include "ash/wm/window_state_observer.h"
+#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm/wm_event.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "ui/aura/client/cursor_client.h"
@@ -27,7 +30,6 @@
 #include "ui/events/event_utils.h"
 #include "ui/events/gestures/gesture_recognizer.h"
 #include "ui/gfx/geometry/point_conversions.h"
-#include "ui/gfx/screen.h"
 
 namespace {
 const double kMinHorizVelocityForWindowSwipe = 1100;
@@ -87,7 +89,7 @@ int GetWindowComponent(aura::Window* window, const ui::LocatedEvent& event) {
 // the window is destroyed ResizerWindowDestroyed() is invoked back on the
 // ToplevelWindowEventHandler to clean up.
 class ToplevelWindowEventHandler::ScopedWindowResizer
-    : public aura::WindowObserver,
+    : public wm::WmWindowObserver,
       public wm::WindowStateObserver {
  public:
   ScopedWindowResizer(ToplevelWindowEventHandler* handler,
@@ -100,7 +102,7 @@ class ToplevelWindowEventHandler::ScopedWindowResizer
   WindowResizer* resizer() { return resizer_.get(); }
 
   // WindowObserver overrides:
-  void OnWindowDestroying(aura::Window* window) override;
+  void OnWindowDestroying(wm::WmWindow* window) override;
 
   // WindowStateObserver overrides:
   void OnPreWindowStateTypeChange(wm::WindowState* window_state,
@@ -122,9 +124,9 @@ ToplevelWindowEventHandler::ScopedWindowResizer::ScopedWindowResizer(
     : handler_(handler),
       resizer_(resizer),
       grabbed_capture_(false) {
-  aura::Window* target = resizer_->GetTarget();
+  wm::WmWindow* target = resizer_->GetTarget();
   target->AddObserver(this);
-  wm::GetWindowState(target)->AddObserver(this);
+  target->GetWindowState()->AddObserver(this);
 
   if (!target->HasCapture()) {
     grabbed_capture_ = true;
@@ -133,9 +135,9 @@ ToplevelWindowEventHandler::ScopedWindowResizer::ScopedWindowResizer(
 }
 
 ToplevelWindowEventHandler::ScopedWindowResizer::~ScopedWindowResizer() {
-  aura::Window* target = resizer_->GetTarget();
+  wm::WmWindow* target = resizer_->GetTarget();
   target->RemoveObserver(this);
-  wm::GetWindowState(target)->RemoveObserver(this);
+  target->GetWindowState()->RemoveObserver(this);
   if (grabbed_capture_)
     target->ReleaseCapture();
 }
@@ -153,7 +155,7 @@ ToplevelWindowEventHandler::ScopedWindowResizer::OnPreWindowStateTypeChange(
 }
 
 void ToplevelWindowEventHandler::ScopedWindowResizer::OnWindowDestroying(
-    aura::Window* window) {
+    wm::WmWindow* window) {
   DCHECK_EQ(resizer_->GetTarget(), window);
   handler_->ResizerWindowDestroyed();
 }
@@ -233,7 +235,8 @@ void ToplevelWindowEventHandler::OnGestureEvent(ui::GestureEvent* event) {
     return;
 
   if (window_resizer_.get() &&
-      window_resizer_->resizer()->GetTarget() != target) {
+      wm::WmWindowAura::GetAuraWindow(
+          window_resizer_->resizer()->GetTarget()) != target) {
     return;
   }
 
@@ -450,8 +453,10 @@ bool ToplevelWindowEventHandler::AttemptToStartDrag(
     aura::client::WindowMoveSource source) {
   if (window_resizer_.get())
     return false;
-  WindowResizer* resizer = CreateWindowResizer(window, point_in_parent,
-      window_component, source).release();
+  WindowResizer* resizer =
+      CreateWindowResizer(wm::WmWindowAura::Get(window), point_in_parent,
+                          window_component, source)
+          .release();
   if (!resizer)
     return false;
 
@@ -476,7 +481,7 @@ bool ToplevelWindowEventHandler::CompleteDrag(DragCompletionStatus status) {
       break;
     case DRAG_RESIZER_WINDOW_DESTROYED:
       // We explicitly do not invoke RevertDrag() since that may do things to
-      // WindowResizer::GetTarget() which was destroyed.
+      // WindowResizer::GetAuraTarget() which was destroyed.
       break;
   }
   drag_reverted_ = (status != DRAG_COMPLETE);

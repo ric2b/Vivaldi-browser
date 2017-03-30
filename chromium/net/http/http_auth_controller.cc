@@ -186,7 +186,7 @@ bool HttpAuthController::SelectPreemptiveAuth(const BoundNetLog& net_log) {
     return false;
 
   // Try to create a handler using the previous auth challenge.
-  scoped_ptr<HttpAuthHandler> handler_preemptive;
+  std::unique_ptr<HttpAuthHandler> handler_preemptive;
   int rv_create = http_auth_handler_factory_->
       CreatePreemptiveAuthHandlerFromString(entry->auth_challenge(), target_,
                                             auth_origin_,
@@ -465,7 +465,7 @@ void HttpAuthController::PopulateAuthChallenge() {
 
   auth_info_ = new AuthChallengeInfo;
   auth_info_->is_proxy = (target_ == HttpAuth::AUTH_PROXY);
-  auth_info_->challenger = HostPortPair::FromURL(auth_origin_);
+  auth_info_->challenger = url::Origin(auth_origin_);
   auth_info_->scheme = HttpAuth::SchemeToString(handler_->auth_scheme());
   auth_info_->realm = handler_->realm();
 }

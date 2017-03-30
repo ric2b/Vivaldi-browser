@@ -40,7 +40,7 @@ EditcommandExecuteFunction::~EditcommandExecuteFunction() {
 bool EditcommandExecuteFunction::RunAsync() {
   WebContents* web_contents = webContents();
   if (web_contents) {
-    scoped_ptr<vivaldi::editcommand::Execute::Params> params(
+    std::unique_ptr<vivaldi::editcommand::Execute::Params> params(
       vivaldi::editcommand::Execute::Params::Create(*args_));
 
     if (params->command == "undo")

@@ -11,7 +11,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/trace_event/trace_event.h"
-#include "content/public/browser/android/synchronous_compositor.h"
 #include "content/public/browser/gpu_utils.h"
 #include "content/public/common/content_switches.h"
 #include "gpu/command_buffer/service/framebuffer_completeness_cache.h"
@@ -59,10 +58,8 @@ ScopedAllowGL::~ScopedAllowGL() {
 
 // static
 void DeferredGpuCommandService::SetInstance() {
-  if (!g_service.Get().get()) {
+  if (!g_service.Get().get())
     g_service.Get() = new DeferredGpuCommandService;
-    content::SynchronousCompositor::SetGpuService(g_service.Get());
-  }
 }
 
 // static
@@ -91,7 +88,7 @@ void DeferredGpuCommandService::RequestProcessGL(bool for_idle) {
     LOG(ERROR) << "No hardware renderer. Deadlock likely";
     return;
   }
-  renderer_state->ClientRequestDrawGL(for_idle);
+  renderer_state->ClientRequestInvokeGL(for_idle);
 }
 
 // Called from different threads!

@@ -8,27 +8,27 @@
 #include "base/macros.h"
 #include "components/filesystem/public/interfaces/file_system.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "mojo/shell/public/cpp/shell_test.h"
+#include "services/shell/public/cpp/shell_test.h"
 
 namespace filesystem {
 
-class FilesTestBase : public mojo::test::ShellTest {
+class FilesTestBase : public shell::test::ShellTest {
  public:
   FilesTestBase();
   ~FilesTestBase() override;
 
-  // Overridden from mojo::test::ShellTest:
+  // Overridden from shell::test::ShellTest:
   void SetUp() override;
 
  protected:
   // Note: This has an out parameter rather than returning the |DirectoryPtr|,
   // since |ASSERT_...()| doesn't work with return values.
-  void GetTemporaryRoot(DirectoryPtr* directory);
+  void GetTemporaryRoot(mojom::DirectoryPtr* directory);
 
-  FileSystemPtr& files() { return files_; }
+  mojom::FileSystemPtr& files() { return files_; }
 
  private:
-  FileSystemPtr files_;
+  mojom::FileSystemPtr files_;
 
   DISALLOW_COPY_AND_ASSIGN(FilesTestBase);
 };

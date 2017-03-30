@@ -4,6 +4,7 @@
 
 import collections
 import itertools
+import logging
 import os
 import posixpath
 
@@ -311,9 +312,13 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
     @local_device_test_run.handle_shard_failures_with(
         on_failure=self._env.BlacklistDevice)
     def list_tests(dev):
-      tests = self._delegate.Run(
-          None, dev, flags='--gtest_list_tests', timeout=20)
-      tests = gtest_test_instance.ParseGTestListTests(tests)
+      raw_test_list = self._delegate.Run(
+          None, dev, flags='--gtest_list_tests', timeout=30)
+      tests = gtest_test_instance.ParseGTestListTests(raw_test_list)
+      if not tests:
+        logging.info('No tests found. Output:')
+        for l in raw_test_list:
+          logging.info('  %s', l)
       tests = self._test_instance.FilterTests(tests)
       return tests
 
@@ -321,7 +326,8 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
     test_lists = self._env.parallel_devices.pMap(list_tests).pGet(None)
 
     # If all devices failed to list tests, raise an exception.
-    if all([tl is None for tl in test_lists]):
+    # Check that tl is not None and is not empty.
+    if all(not tl for tl in test_lists):
       raise device_errors.CommandFailedError(
           'Failed to list tests on any device')
     return list(sorted(set().union(*[set(tl) for tl in test_lists if tl])))
@@ -339,7 +345,7 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
     if self._test_instance.app_files:
       self._delegate.PullAppFiles(device, self._test_instance.app_files,
                                   self._test_instance.app_file_dir)
-    if not self._test_instance.skip_clear_data:
+    if not self._env.skip_clear_data:
       self._delegate.Clear(device)
 
     # Parse the output.

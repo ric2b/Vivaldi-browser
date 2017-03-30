@@ -24,7 +24,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/synchronization/lock.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
@@ -32,12 +32,10 @@
 #include "build/build_config.h"
 #include "content/public/common/content_switches.h"
 #include "gpu/command_buffer/common/mailbox.h"
-#include "gpu/command_buffer/common/value_state.h"
 #include "gpu/command_buffer/service/command_executor.h"
 #include "gpu/command_buffer/service/image_factory.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
-#include "gpu/command_buffer/service/valuebuffer_manager.h"
 #include "gpu/ipc/common/gpu_messages.h"
 #include "gpu/ipc/service/gpu_channel_manager.h"
 #include "gpu/ipc/service/gpu_channel_manager_delegate.h"
@@ -195,7 +193,7 @@ bool GpuChannelMessageQueue::PushBackMessage(const IPC::Message& message) {
 
     uint32_t order_num = sync_point_order_data_->GenerateUnprocessedOrderNumber(
         sync_point_manager_);
-    scoped_ptr<GpuChannelMessage> msg(
+    std::unique_ptr<GpuChannelMessage> msg(
         new GpuChannelMessage(message, order_num, base::TimeTicks::Now()));
 
     if (channel_messages_.empty()) {
@@ -603,8 +601,6 @@ GpuChannel::GpuChannel(GpuChannelManager* gpu_channel_manager,
       io_task_runner_(io_task_runner),
       share_group_(share_group),
       mailbox_manager_(mailbox),
-      subscription_ref_set_(new gles2::SubscriptionRefSet),
-      pending_valuebuffer_state_(new ValueStateMap),
       watchdog_(watchdog),
       allow_view_command_buffers_(allow_view_command_buffers),
       allow_real_time_streams_(allow_real_time_streams),
@@ -617,8 +613,6 @@ GpuChannel::GpuChannel(GpuChannelManager* gpu_channel_manager,
   scoped_refptr<GpuChannelMessageQueue> control_queue =
       CreateStream(GPU_STREAM_DEFAULT, GpuStreamPriority::HIGH);
   AddRouteToStream(MSG_ROUTING_CONTROL, GPU_STREAM_DEFAULT);
-
-  subscription_ref_set_->AddObserver(this);
 }
 
 GpuChannel::~GpuChannel() {
@@ -628,7 +622,6 @@ GpuChannel::~GpuChannel() {
   for (auto& kv : streams_)
     kv.second->Disable();
 
-  subscription_ref_set_->RemoveObserver(this);
   if (preempting_flag_.get())
     preempting_flag_->Reset();
 }
@@ -710,14 +703,6 @@ bool GpuChannel::Send(IPC::Message* message) {
   }
 
   return channel_->Send(message);
-}
-
-void GpuChannel::OnAddSubscription(unsigned int target) {
-  gpu_channel_manager()->delegate()->AddSubscription(client_id_, target);
-}
-
-void GpuChannel::OnRemoveSubscription(unsigned int target) {
-  gpu_channel_manager()->delegate()->RemoveSubscription(client_id_, target);
 }
 
 void GpuChannel::OnStreamRescheduled(int32_t stream_id, bool scheduled) {
@@ -906,19 +891,36 @@ const GpuCommandBufferStub* GpuChannel::GetOneStub() const {
 #endif
 
 void GpuChannel::OnCreateCommandBuffer(
-    SurfaceHandle surface_handle,
-    const gfx::Size& size,
     const GPUCreateCommandBufferConfig& init_params,
     int32_t route_id,
-    bool* succeeded) {
+    base::SharedMemoryHandle shared_state_handle,
+    bool* result,
+    gpu::Capabilities* capabilities) {
   TRACE_EVENT2("gpu", "GpuChannel::OnCreateCommandBuffer", "route_id", route_id,
-               "offscreen", (surface_handle == kNullSurfaceHandle));
-  *succeeded = false;
-  if (surface_handle != kNullSurfaceHandle &&
+               "offscreen", (init_params.surface_handle == kNullSurfaceHandle));
+  std::unique_ptr<base::SharedMemory> shared_state_shm(
+      new base::SharedMemory(shared_state_handle, false));
+  std::unique_ptr<GpuCommandBufferStub> stub =
+      CreateCommandBuffer(init_params, route_id, std::move(shared_state_shm));
+  if (stub) {
+    *result = true;
+    *capabilities = stub->decoder()->GetCapabilities();
+    stubs_.set(route_id, std::move(stub));
+  } else {
+    *result = false;
+    *capabilities = gpu::Capabilities();
+  }
+}
+
+std::unique_ptr<GpuCommandBufferStub> GpuChannel::CreateCommandBuffer(
+    const GPUCreateCommandBufferConfig& init_params,
+    int32_t route_id,
+    std::unique_ptr<base::SharedMemory> shared_state_shm) {
+  if (init_params.surface_handle != kNullSurfaceHandle &&
       !allow_view_command_buffers_) {
     DLOG(ERROR) << "GpuChannel::CreateCommandBuffer(): attempt to create a "
                    "view context on a non-priviledged channel";
-    return;
+    return nullptr;
   }
 
   int32_t share_group_id = init_params.share_group_id;
@@ -926,51 +928,65 @@ void GpuChannel::OnCreateCommandBuffer(
 
   if (!share_group && share_group_id != MSG_ROUTING_NONE) {
     DLOG(ERROR)
-        << "GpuChannel::OnCreateCommandBuffer(): invalid share group id";
-    return;
+        << "GpuChannel::CreateCommandBuffer(): invalid share group id";
+    return nullptr;
   }
 
   int32_t stream_id = init_params.stream_id;
   if (share_group && stream_id != share_group->stream_id()) {
-    DLOG(ERROR) << "GpuChannel::OnCreateCommandBuffer(): stream id does not "
+    DLOG(ERROR) << "GpuChannel::CreateCommandBuffer(): stream id does not "
                    "match share group stream id";
-    return;
+    return nullptr;
   }
 
   GpuStreamPriority stream_priority = init_params.stream_priority;
   if (!allow_real_time_streams_ &&
       stream_priority == GpuStreamPriority::REAL_TIME) {
-    DLOG(ERROR) << "GpuChannel::OnCreateCommandBuffer(): real time stream "
+    DLOG(ERROR) << "GpuChannel::CreateCommandBuffer(): real time stream "
                    "priority not allowed";
-    return;
+    return nullptr;
   }
 
-  scoped_ptr<GpuCommandBufferStub> stub(new GpuCommandBufferStub(
-      this, sync_point_manager_, task_runner_.get(), share_group,
-      surface_handle, mailbox_manager_.get(), preempted_flag_.get(),
-      subscription_ref_set_.get(), pending_valuebuffer_state_.get(), size,
-      disallowed_features_, init_params.attribs, init_params.gpu_preference,
-      init_params.stream_id, route_id, watchdog_, init_params.active_url));
+  if (share_group && !share_group->decoder()) {
+    // This should catch test errors where we did not Initialize the
+    // share_group's CommandBuffer.
+    DLOG(ERROR) << "GpuChannel::CreateCommandBuffer(): shared context was "
+                   "not initialized";
+    return nullptr;
+  }
+
+  if (share_group && share_group->decoder()->WasContextLost()) {
+    DLOG(ERROR) << "GpuChannel::CreateCommandBuffer(): shared context was "
+                   "already lost";
+    return nullptr;
+  }
 
   scoped_refptr<GpuChannelMessageQueue> queue = LookupStream(stream_id);
   if (!queue)
     queue = CreateStream(stream_id, stream_priority);
 
-  if (!AddRoute(route_id, stream_id, stub.get())) {
+  std::unique_ptr<GpuCommandBufferStub> stub(GpuCommandBufferStub::Create(
+      this, share_group, init_params, route_id, std::move(shared_state_shm)));
+
+  if (!stub) {
     DestroyStreamIfNecessary(queue);
-    DLOG(ERROR) << "GpuChannel::OnCreateCommandBuffer(): failed to add route";
-    return;
+    return nullptr;
   }
 
-  stubs_.set(route_id, std::move(stub));
-  *succeeded = true;
+  if (!AddRoute(route_id, stream_id, stub.get())) {
+    DestroyStreamIfNecessary(queue);
+    DLOG(ERROR) << "GpuChannel::CreateCommandBuffer(): failed to add route";
+    return nullptr;
+  }
+
+  return stub;
 }
 
 void GpuChannel::OnDestroyCommandBuffer(int32_t route_id) {
   TRACE_EVENT1("gpu", "GpuChannel::OnDestroyCommandBuffer",
                "route_id", route_id);
 
-  scoped_ptr<GpuCommandBufferStub> stub = stubs_.take_and_erase(route_id);
+  std::unique_ptr<GpuCommandBufferStub> stub = stubs_.take_and_erase(route_id);
   // In case the renderer is currently blocked waiting for a sync reply from the
   // stub, we need to make sure to reschedule the correct stream here.
   if (stub && !stub->IsScheduled()) {
@@ -983,16 +999,9 @@ void GpuChannel::OnDestroyCommandBuffer(int32_t route_id) {
 
 void GpuChannel::OnGetDriverBugWorkArounds(
     std::vector<std::string>* gpu_driver_bug_workarounds) {
-  // TODO(j.isorce): http://crbug.com/599964 Do the extraction of workarounds in
-  // the GpuChannelManager constructor. Currently it is done in the FeatureInfo
-  // constructor. There is no need to extract them from the command-line every
-  // time a new FeatureInfo is created (i.e. per ContextGroup) since parsing
-  // result is a constant.
-  scoped_refptr<gpu::gles2::FeatureInfo> feature_info =
-      new gpu::gles2::FeatureInfo;
   gpu_driver_bug_workarounds->clear();
-#define GPU_OP(type, name)              \
-  if (feature_info->workarounds().name) \
+#define GPU_OP(type, name)                                     \
+  if (gpu_channel_manager_->gpu_driver_bug_workarounds().name) \
     gpu_driver_bug_workarounds->push_back(#name);
   GPU_DRIVER_BUG_WORKAROUNDS(GPU_OP)
 #undef GPU_OP
@@ -1063,11 +1072,6 @@ scoped_refptr<gl::GLImage> GpuChannel::CreateImageForGpuMemoryBuffer(
                                           client_id_);
     }
   }
-}
-
-void GpuChannel::HandleUpdateValueState(
-    unsigned int target, const ValueState& state) {
-  pending_valuebuffer_state_->UpdateState(target, state);
 }
 
 }  // namespace gpu

@@ -8,6 +8,18 @@
  */
 cr.define('settings', function() {
   /**
+   * Returns a function that calls assertNotReached with the given name.
+   * Necessary to include the callee in the stack trace.
+   * @param {string} name
+   * @return {function()}
+   */
+  function wrapAssertNotReached(name) {
+    return function() {
+      assertNotReached('Not implemented in fake: ' + name);
+    };
+  }
+
+  /**
    * Fake of the chrome.languageSettingsPrivate API.
    * @constructor
    * @implements {LanguageSettingsPrivate}
@@ -61,6 +73,19 @@ cr.define('settings', function() {
       supportsSpellcheck: true,
       supportsUI: true,
     }];
+
+    /** @type {!Array<!chrome.languageSettingsPrivate.InputMethod>} */
+    this.componentExtensionImes = [{
+      id: '_comp_ime_fgoepimhcoialccpbmpnnblemnepkkaoxkb:us::eng',
+      displayName: 'US keyboard',
+      languageCodes: ['en', 'en-US'],
+      enabled: true,
+    }, {
+      id: '_comp_ime_fgoepimhcoialccpbmpnnblemnepkkaoxkb:us:dvorak:eng',
+      displayName: 'US Dvorak keyboard',
+      languageCodes: ['en', 'en-US'],
+      enabled: true,
+    }];
   }
 
   FakeLanguageSettingsPrivate.prototype = {
@@ -104,25 +129,26 @@ cr.define('settings', function() {
      *     !chrome.languageSettingsPrivate.SpellcheckDictionaryStatus>):void}
      *     callback
      */
-    getSpellcheckDictionaryStatuses: assertNotReached,
+    getSpellcheckDictionaryStatuses:
+        wrapAssertNotReached('getSpellcheckDictionaryStatuses'),
 
     /**
      * Gets the custom spell check words, in sorted order.
      * @param {function(!Array<string>):void} callback
      */
-    getSpellcheckWords: assertNotReached,
+    getSpellcheckWords: wrapAssertNotReached('getSpellcheckWords'),
 
     /**
      * Adds a word to the custom dictionary.
      * @param {string} word
      */
-    addSpellcheckWord: assertNotReached,
+    addSpellcheckWord: wrapAssertNotReached('addSpellcheckWord'),
 
     /**
      * Removes a word from the custom dictionary.
      * @param {string} word
      */
-    removeSpellcheckWord: assertNotReached,
+    removeSpellcheckWord: wrapAssertNotReached('removeSpellcheckWord'),
 
     /**
      * Gets the translate target language (in most cases, the display locale).
@@ -138,21 +164,40 @@ cr.define('settings', function() {
      * @param {function(!chrome.languageSettingsPrivate.InputMethodLists):void}
      *     callback
      */
-    getInputMethodLists: assertNotReached,
+    getInputMethodLists: function(callback) {
+      if (!cr.isChromeOS)
+        assertNotReached();
+      callback({
+        componentExtensionImes:
+            JSON.parse(JSON.stringify(this.componentExtensionImes)),
+        thirdPartyExtensionImes: [],
+      });
+    },
 
     /**
      * Adds the input method to the current user's list of enabled input
      * methods, enabling the input method for the current user. Chrome OS only.
      * @param {string} inputMethodId
      */
-    addInputMethod: assertNotReached,
+    addInputMethod: wrapAssertNotReached('addInputMethod'),
 
     /**
      * Removes the input method from the current user's list of enabled input
      * methods, disabling the input method for the current user. Chrome OS only.
      * @param {string} inputMethodId
      */
-    removeInputMethod: assertNotReached,
+    removeInputMethod: function(inputMethodId) {
+      assert(cr.isChromeOS);
+      var inputMethod = this.componentExtensionImes.find(function(ime) {
+        return ime.id == inputMethodId;
+      });
+      assertTrue(!!inputMethod);
+      inputMethod.enabled = false;
+      this.settingsPrefs_.set(
+          'prefs.settings.language.preload_engines.value',
+          this.settingsPrefs_.prefs.settings.language.preload_engines.value
+              .replace(inputMethodId, ''));
+    },
 
     /**
      * Called when the pref for the dictionaries used for spell checking changes

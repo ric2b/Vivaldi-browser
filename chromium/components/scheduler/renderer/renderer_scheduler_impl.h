@@ -42,7 +42,7 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
   ~RendererSchedulerImpl() override;
 
   // RendererScheduler implementation:
-  scoped_ptr<blink::WebThread> CreateMainThread() override;
+  std::unique_ptr<blink::WebThread> CreateMainThread() override;
   scoped_refptr<TaskQueue> DefaultTaskRunner() override;
   scoped_refptr<SingleThreadIdleTaskRunner> IdleTaskRunner() override;
   scoped_refptr<TaskQueue> CompositorTaskRunner() override;
@@ -50,7 +50,7 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
   scoped_refptr<TaskQueue> TimerTaskRunner() override;
   scoped_refptr<TaskQueue> NewLoadingTaskRunner(const char* name) override;
   scoped_refptr<TaskQueue> NewTimerTaskRunner(const char* name) override;
-  scoped_ptr<RenderWidgetSchedulingState> NewRenderWidgetSchedulingState()
+  std::unique_ptr<RenderWidgetSchedulingState> NewRenderWidgetSchedulingState()
       override;
   void WillBeginFrame(const cc::BeginFrameArgs& args) override;
   void BeginFrameNotExpectedSoon() override;
@@ -63,8 +63,11 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
   void DidAnimateForInputOnCompositorThread() override;
   void OnRendererBackgrounded() override;
   void OnRendererForegrounded() override;
-  void AddPendingNavigation() override;
-  void RemovePendingNavigation() override;
+  void SuspendRenderer() override;
+  void AddPendingNavigation(
+      blink::WebScheduler::NavigatingFrameType type) override;
+  void RemovePendingNavigation(
+      blink::WebScheduler::NavigatingFrameType type) override;
   void OnNavigationStarted() override;
   bool IsHighPriorityWorkAnticipated() override;
   bool ShouldYieldForHighPriorityWork() override;
@@ -106,6 +109,10 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
   TaskCostEstimator* GetTimerTaskCostEstimatorForTesting();
   IdleTimeEstimator* GetIdleTimeEstimatorForTesting();
   base::TimeTicks CurrentIdleTaskDeadlineForTesting() const;
+  void RunIdleTasksForTesting(const base::Closure& callback);
+  void EndIdlePeriodForTesting(const base::Closure& callback,
+                               base::TimeTicks time_remaining);
+  bool PolicyNeedsUpdateForTesting();
 
   base::TickClock* tick_clock() const;
 
@@ -186,9 +193,9 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
   void EndIdlePeriod();
 
   // Returns the serialized scheduler state for tracing.
-  scoped_ptr<base::trace_event::ConvertableToTraceFormat> AsValue(
+  std::unique_ptr<base::trace_event::ConvertableToTraceFormat> AsValue(
       base::TimeTicks optional_now) const;
-  scoped_ptr<base::trace_event::ConvertableToTraceFormat> AsValueLocked(
+  std::unique_ptr<base::trace_event::ConvertableToTraceFormat> AsValueLocked(
       base::TimeTicks optional_now) const;
 
   static bool ShouldPrioritizeInputEvent(
@@ -257,10 +264,6 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
       base::TimeTicks now,
       base::TimeDelta* expected_use_case_duration) const;
 
-  // Works out if a gesture appears to be in progress based on the current
-  // input signals. Can be called from any thread.
-  bool InputSignalsSuggestGestureInProgress(base::TimeTicks now) const;
-
   // An input event of some sort happened, the policy may need updating.
   void UpdateForInputEventOnCompositorThread(blink::WebInputEvent::Type type,
                                              InputEventState input_event_state);
@@ -294,7 +297,7 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
 
   SchedulerHelper helper_;
   IdleHelper idle_helper_;
-  scoped_ptr<ThrottlingHelper> throttling_helper_;
+  std::unique_ptr<ThrottlingHelper> throttling_helper_;
   RenderWidgetSignals render_widget_scheduler_signals_;
 
   const scoped_refptr<TaskQueue> control_task_runner_;
@@ -343,6 +346,7 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
     bool has_visible_render_widget_with_touch_handler;
     bool begin_frame_not_expected_soon;
     bool expensive_task_blocking_allowed;
+    bool in_idle_period_for_testing;
     std::set<WebViewSchedulerImpl*> web_view_schedulers_;  // Not owned.
   };
 
@@ -358,6 +362,7 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
     bool in_idle_period;
     bool begin_main_frame_on_critical_path;
     bool last_gesture_was_compositor_driven;
+    bool default_gesture_prevented;
     bool have_seen_touchstart;
   };
 
@@ -366,7 +371,7 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
     ~CompositorThreadOnly();
 
     blink::WebInputEvent::Type last_input_type;
-    scoped_ptr<base::ThreadChecker> compositor_thread_checker;
+    std::unique_ptr<base::ThreadChecker> compositor_thread_checker;
 
     void CheckOnValidThread() {
 #if DCHECK_IS_ON()

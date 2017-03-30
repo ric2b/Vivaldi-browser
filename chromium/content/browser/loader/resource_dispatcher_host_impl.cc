@@ -36,12 +36,12 @@
 #include "content/browser/appcache/appcache_interceptor.h"
 #include "content/browser/appcache/chrome_appcache_service.h"
 #include "content/browser/bad_message.h"
+#include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/cert_store_impl.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/download/download_resource_handler.h"
 #include "content/browser/download/save_file_manager.h"
 #include "content/browser/download/save_file_resource_handler.h"
-#include "content/browser/fileapi/chrome_blob_storage_context.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/navigation_request_info.h"
 #include "content/browser/frame_host/navigator.h"
@@ -75,6 +75,8 @@
 #include "content/common/navigation_params.h"
 #include "content/common/net/url_request_service_worker_data.h"
 #include "content/common/resource_messages.h"
+#include "content/common/resource_request.h"
+#include "content/common/resource_request_completion_status.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/common/ssl_status_serialization.h"
 #include "content/common/view_messages.h"
@@ -235,7 +237,7 @@ void AbortRequestBeforeItStarts(ResourceMessageFilter* filter,
     filter->Send(sync_result);
   } else {
     // Tell the renderer that this request was disallowed.
-    ResourceMsg_RequestCompleteData request_complete_data;
+    ResourceRequestCompletionStatus request_complete_data;
     request_complete_data.error_code = net::ERR_ABORTED;
     request_complete_data.was_ignored_by_handler = false;
     request_complete_data.exists_in_cache = false;
@@ -273,13 +275,16 @@ void SetReferrerForRequest(net::URLRequest* request, const Referrer& referrer) {
           net::URLRequest::ORIGIN_ONLY_ON_TRANSITION_CROSS_ORIGIN;
       break;
     case blink::WebReferrerPolicyDefault:
-    default:
       net_referrer_policy =
           command_line->HasSwitch(switches::kReducedReferrerGranularity)
               ? net::URLRequest::
                     REDUCE_REFERRER_GRANULARITY_ON_TRANSITION_CROSS_ORIGIN
               : net::URLRequest::
                     CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE;
+      break;
+    case blink::WebReferrerPolicyNoReferrerWhenDowngradeOriginWhenCrossOrigin:
+      net_referrer_policy = net::URLRequest::
+          REDUCE_REFERRER_GRANULARITY_ON_TRANSITION_CROSS_ORIGIN;
       break;
   }
   request->set_referrer_policy(net_referrer_policy);
@@ -291,7 +296,7 @@ void SetReferrerForRequest(net::URLRequest* request, const Referrer& referrer) {
 // if the renderer is attempting to upload an unauthorized file.
 bool ShouldServiceRequest(int process_type,
                           int child_id,
-                          const ResourceHostMsg_Request& request_data,
+                          const ResourceRequest& request_data,
                           const net::HttpRequestHeaders& headers,
                           ResourceMessageFilter* filter,
                           ResourceContext* resource_context) {
@@ -1212,7 +1217,7 @@ bool ResourceDispatcherHostImpl::OnMessageReceived(
 void ResourceDispatcherHostImpl::OnRequestResource(
     int routing_id,
     int request_id,
-    const ResourceHostMsg_Request& request_data) {
+    const ResourceRequest& request_data) {
   // TODO(pkasting): Remove ScopedTracker below once crbug.com/477117 is fixed.
   tracked_objects::ScopedTracker tracking_profile(
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
@@ -1244,10 +1249,9 @@ void ResourceDispatcherHostImpl::OnRequestResource(
 //
 // If sync_result is non-null, then a SyncLoad reply will be generated, else
 // a normal asynchronous set of response messages will be generated.
-void ResourceDispatcherHostImpl::OnSyncLoad(
-    int request_id,
-    const ResourceHostMsg_Request& request_data,
-    IPC::Message* sync_result) {
+void ResourceDispatcherHostImpl::OnSyncLoad(int request_id,
+                                            const ResourceRequest& request_data,
+                                            IPC::Message* sync_result) {
   BeginRequest(request_id, request_data, sync_result,
                sync_result->routing_id());
 }
@@ -1270,7 +1274,7 @@ void ResourceDispatcherHostImpl::UpdateRequestForTransfer(
     int child_id,
     int route_id,
     int request_id,
-    const ResourceHostMsg_Request& request_data,
+    const ResourceRequest& request_data,
     LoaderMap::iterator iter) {
   ResourceRequestInfoImpl* info = iter->second->GetRequestInfo();
   GlobalFrameRoutingId old_routing_id(request_data.transferred_request_child_id,
@@ -1362,7 +1366,7 @@ void ResourceDispatcherHostImpl::UpdateRequestForTransfer(
 
 void ResourceDispatcherHostImpl::BeginRequest(
     int request_id,
-    const ResourceHostMsg_Request& request_data,
+    const ResourceRequest& request_data,
     IPC::Message* sync_result,  // only valid for sync
     int route_id) {
   int process_type = filter_->process_type();
@@ -1632,7 +1636,7 @@ void ResourceDispatcherHostImpl::BeginRequest(
 std::unique_ptr<ResourceHandler>
 ResourceDispatcherHostImpl::CreateResourceHandler(
     net::URLRequest* request,
-    const ResourceHostMsg_Request& request_data,
+    const ResourceRequest& request_data,
     IPC::Message* sync_result,
     int route_id,
     int process_type,
@@ -1729,7 +1733,7 @@ ResourceDispatcherHostImpl::AddStandardHandlers(
   // PlzNavigate: the throttle is unnecessary as communication with the UI
   // thread is handled by the NavigationURLloader.
   if (!IsBrowserSideNavigationEnabled() && IsResourceTypeFrame(resource_type))
-    throttles.push_back(new NavigationResourceThrottle(request));
+    throttles.push_back(new NavigationResourceThrottle(request, delegate()));
 
   if (delegate_) {
     delegate_->RequestBeginning(request,
@@ -2326,7 +2330,7 @@ void ResourceDispatcherHostImpl::BeginNavigationRequest(
   // TODO(davidben): Attach AppCacheInterceptor.
 
   std::unique_ptr<ResourceHandler> handler(
-      new NavigationResourceHandler(new_request.get(), loader));
+      new NavigationResourceHandler(new_request.get(), loader, delegate()));
 
   // TODO(davidben): Pass in the appropriate appcache_service. Also fix the
   // dependency on child_id/route_id. Those are used by the ResourceScheduler;
@@ -2644,7 +2648,7 @@ void ResourceDispatcherHostImpl::UnregisterResourceMessageDelegate(
 }
 
 int ResourceDispatcherHostImpl::BuildLoadFlagsForRequest(
-    const ResourceHostMsg_Request& request_data,
+    const ResourceRequest& request_data,
     int child_id,
     bool is_sync_load) {
   int load_flags = request_data.load_flags;

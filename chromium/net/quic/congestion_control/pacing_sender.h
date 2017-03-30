@@ -14,9 +14,9 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "net/quic/congestion_control/send_algorithm_interface.h"
 #include "net/quic/quic_bandwidth.h"
 #include "net/quic/quic_config.h"
@@ -35,6 +35,8 @@ class NET_EXPORT_PRIVATE PacingSender : public SendAlgorithmInterface {
                QuicTime::Delta alarm_granularity,
                uint32_t initial_packet_burst);
   ~PacingSender() override;
+
+  void SetMaxPacingRate(QuicBandwidth max_pacing_rate);
 
   // SendAlgorithmInterface methods.
   void SetFromConfig(const QuicConfig& config,
@@ -68,12 +70,15 @@ class NET_EXPORT_PRIVATE PacingSender : public SendAlgorithmInterface {
   // End implementation of SendAlgorithmInterface.
 
  private:
-  scoped_ptr<SendAlgorithmInterface> sender_;  // Underlying sender.
+  std::unique_ptr<SendAlgorithmInterface> sender_;  // Underlying sender.
   // The estimated system alarm granularity.
   const QuicTime::Delta alarm_granularity_;
   // Configured maximum size of the burst coming out of quiescence.  The burst
   // is never larger than the current CWND in packets.
   const uint32_t initial_packet_burst_;
+  // If not QuicBandidth::Zero, the maximum rate the PacingSender will use.
+  QuicBandwidth max_pacing_rate_;
+
   // Number of unpaced packets to be sent before packets are delayed.
   uint32_t burst_tokens_;
   // Send time of the last packet considered delayed.

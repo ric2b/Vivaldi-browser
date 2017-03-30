@@ -143,6 +143,24 @@ void AXNodeObject::alterSliderValue(bool increase)
     axObjectCache().postNotification(getNode(), AXObjectCacheImpl::AXValueChanged);
 }
 
+AXObject* AXNodeObject::activeDescendant() const
+{
+    if (!getNode() || !getNode()->isElementNode())
+        return nullptr;
+
+    const AtomicString& activeDescendantAttr = getAttribute(aria_activedescendantAttr);
+    if (activeDescendantAttr.isNull() || activeDescendantAttr.isEmpty())
+        return nullptr;
+
+    Element* element = toElement(getNode());
+    Element* descendant = element->treeScope().getElementById(activeDescendantAttr);
+    if (!descendant)
+        return nullptr;
+
+    AXObject* axDescendant = axObjectCache().getOrCreate(descendant);
+    return axDescendant;
+}
+
 String AXNodeObject::ariaAccessibilityDescription() const
 {
     String ariaLabelledby = ariaLabelledbyAttribute();
@@ -519,7 +537,7 @@ AccessibilityRole AXNodeObject::determineAccessibilityRole()
     if (getNode()->isElementNode()) {
         Element* element = toElement(getNode());
         if (element->isInCanvasSubtree()) {
-            getDocument()->updateLayoutTreeForNode(element);
+            getDocument()->updateStyleAndLayoutTreeForNode(element);
             if (element->isFocusable())
                 return GroupRole;
         }
@@ -1065,19 +1083,21 @@ bool AXNodeObject::isRequired() const
 
 bool AXNodeObject::canSetFocusAttribute() const
 {
-    Node* node = this->getNode();
+    Node* node = getNode();
     if (!node)
         return false;
 
     if (isWebArea())
         return true;
 
+    // Children of elements with an aria-activedescendant attribute should be
+    // focusable if they have an ARIA role.
+    if (ariaRoleAttribute() != UnknownRole && ancestorExposesActiveDescendant())
+        return true;
+
     // NOTE: It would be more accurate to ask the document whether setFocusedNode() would
     // do anything. For example, setFocusedNode() will do nothing if the current focused
     // node will not relinquish the focus.
-    if (!node)
-        return false;
-
     if (isDisabledFormControl(node))
         return false;
 
@@ -1098,6 +1118,15 @@ bool AXNodeObject::canSetValueAttribute() const
     // Any node could be contenteditable, so isReadOnly should be relied upon
     // for this information for all elements.
     return !isReadOnly();
+}
+
+bool AXNodeObject::canSetSelectedAttribute() const
+{
+    // ARIA list box options can be selected if they are children of an element
+    // with an aria-activedescendant attribute.
+    if (ariaRoleAttribute() == ListBoxOptionRole && ancestorExposesActiveDescendant())
+        return true;
+    return AXObject::canSetSelectedAttribute();
 }
 
 bool AXNodeObject::canvasHasFallbackContent() const
@@ -1280,6 +1309,33 @@ RGBA32 AXNodeObject::colorValue() const
     return color.rgb();
 }
 
+AriaCurrentState AXNodeObject::ariaCurrentState() const
+{
+    if (!hasAttribute(aria_currentAttr))
+        return AXObject::ariaCurrentState();
+
+    const AtomicString& attributeValue = getAttribute(aria_currentAttr);
+    if (attributeValue.isEmpty() || equalIgnoringCase(attributeValue, "false"))
+        return AriaCurrentStateFalse;
+    if (equalIgnoringCase(attributeValue, "true"))
+        return AriaCurrentStateTrue;
+    if (equalIgnoringCase(attributeValue, "page"))
+        return AriaCurrentStatePage;
+    if (equalIgnoringCase(attributeValue, "step"))
+        return AriaCurrentStateStep;
+    if (equalIgnoringCase(attributeValue, "location"))
+        return AriaCurrentStateLocation;
+    if (equalIgnoringCase(attributeValue, "date"))
+        return AriaCurrentStateDate;
+    if (equalIgnoringCase(attributeValue, "time"))
+        return AriaCurrentStateTime;
+    // An unknown value should return true.
+    if (!attributeValue.isEmpty())
+        return AriaCurrentStateTrue;
+
+    return AXObject::ariaCurrentState();
+}
+
 InvalidState AXNodeObject::getInvalidState() const
 {
     if (hasAttribute(aria_invalidAttr)) {
@@ -1307,7 +1363,7 @@ InvalidState AXNodeObject::getInvalidState() const
         return isInvalid ? InvalidStateTrue : InvalidStateFalse;
     }
 
-    return InvalidStateUndefined;
+    return AXObject::getInvalidState();
 }
 
 int AXNodeObject::posInSet() const

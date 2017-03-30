@@ -44,10 +44,10 @@ namespace {
 class BustedLevelDBDatabase : public LevelDBDatabase {
  public:
   BustedLevelDBDatabase() {}
-  static scoped_ptr<LevelDBDatabase> Open(
+  static std::unique_ptr<LevelDBDatabase> Open(
       const base::FilePath& file_name,
       const LevelDBComparator* /*comparator*/) {
-    return scoped_ptr<LevelDBDatabase>(new BustedLevelDBDatabase);
+    return std::unique_ptr<LevelDBDatabase>(new BustedLevelDBDatabase);
   }
   leveldb::Status Get(const base::StringPiece& key,
                       std::string* value,
@@ -64,7 +64,7 @@ class BustedLevelDBFactory : public LevelDBFactory {
  public:
   leveldb::Status OpenLevelDB(const base::FilePath& file_name,
                               const LevelDBComparator* comparator,
-                              scoped_ptr<LevelDBDatabase>* db,
+                              std::unique_ptr<LevelDBDatabase>* db,
                               bool* is_disk_full = 0) override {
     if (open_error_.ok())
       *db = BustedLevelDBDatabase::Open(file_name, comparator);
@@ -83,7 +83,7 @@ class BustedLevelDBFactory : public LevelDBFactory {
 
 TEST(IndexedDBIOErrorTest, CleanUpTest) {
   content::IndexedDBFactory* factory = NULL;
-  const GURL origin("http://localhost:81");
+  const url::Origin origin(GURL("http://localhost:81"));
   base::ScopedTempDir temp_directory;
   ASSERT_TRUE(temp_directory.CreateUniqueTempDir());
   const base::FilePath path = temp_directory.path();
@@ -120,7 +120,7 @@ TEST(IndexedDBIOErrorTest, CleanUpTest) {
 
 TEST(IndexedDBNonRecoverableIOErrorTest, NuancedCleanupTest) {
   content::IndexedDBFactory* factory = NULL;
-  const GURL origin("http://localhost:81");
+  const url::Origin origin(GURL("http://localhost:81"));
   net::URLRequestContext* request_context = NULL;
   base::ScopedTempDir temp_directory;
   ASSERT_TRUE(temp_directory.CreateUniqueTempDir());

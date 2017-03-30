@@ -156,9 +156,9 @@ public class PhysicalWebDiagnosticsPage implements NativePage {
     private void appendUrlManagerReport(StringBuilder sb) {
         UrlManager urlManager = UrlManager.getInstance(mContext);
 
-        Set<String> nearbyUrls = urlManager.getCachedNearbyUrls();
-        Set<String> resolvedUrls = urlManager.getCachedResolvedUrls();
-        Set<String> union = new HashSet<String>(nearbyUrls);
+        Set<String> nearbyUrls = new HashSet<>(urlManager.getNearbyUrls());
+        Set<String> resolvedUrls = new HashSet<>(urlManager.getResolvedUrls());
+        Set<String> union = new HashSet<>(nearbyUrls);
         union.addAll(resolvedUrls);
 
         sb.append("<h2>Nearby web pages</h2>");

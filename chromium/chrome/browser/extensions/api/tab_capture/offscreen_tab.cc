@@ -18,7 +18,7 @@
 
 #if defined(USE_AURA)
 #include "base/memory/weak_ptr.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -402,7 +402,7 @@ bool OffscreenTab::CheckMediaAccessPermission(
       type == content::MEDIA_TAB_VIDEO_CAPTURE;
 }
 
-void OffscreenTab::DidShowFullscreenWidget(int routing_id) {
+void OffscreenTab::DidShowFullscreenWidget() {
   if (offscreen_tab_web_contents_->GetCapturerCount() == 0 ||
       offscreen_tab_web_contents_->GetPreferredSize().IsEmpty())
     return;  // Do nothing, since no preferred size is specified.

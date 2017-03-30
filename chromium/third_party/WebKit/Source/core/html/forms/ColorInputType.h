@@ -31,19 +31,24 @@
 #ifndef ColorInputType_h
 #define ColorInputType_h
 
-#include "core/html/forms/BaseClickableWithKeyInputType.h"
 #include "core/html/forms/ColorChooserClient.h"
+#include "core/html/forms/InputType.h"
+#include "core/html/forms/KeyboardClickableInputTypeView.h"
 
 namespace blink {
 
 class ColorChooser;
 
-class ColorInputType final : public BaseClickableWithKeyInputType, public ColorChooserClient {
+class ColorInputType final
+    : public InputType
+    , public KeyboardClickableInputTypeView
+    , public ColorChooserClient {
     USING_GARBAGE_COLLECTED_MIXIN(ColorInputType);
 public:
     static InputType* create(HTMLInputElement&);
     ~ColorInputType() override;
     DECLARE_VIRTUAL_TRACE();
+    using InputType::element;
 
     // ColorChooserClient implementation.
     void didChooseColor(const Color&) override;
@@ -56,7 +61,8 @@ public:
     ColorChooserClient* colorChooserClient() override;
 
 private:
-    ColorInputType(HTMLInputElement& element) : BaseClickableWithKeyInputType(element) { }
+    explicit ColorInputType(HTMLInputElement&);
+    InputTypeView* createView() override;
     void valueAttributeChanged() override;
     void countUsage() override;
     const AtomicString& formControlType() const override;

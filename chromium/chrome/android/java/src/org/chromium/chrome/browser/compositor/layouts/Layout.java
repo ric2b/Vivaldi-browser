@@ -463,6 +463,9 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
         mUpdateHost.startHiding(nextTabId, hintAtTabSelection);
         mIsHiding = true;
         mNextTabId = nextTabId;
+        for (int i = 0; i < mSceneOverlays.size(); i++) {
+            mSceneOverlays.get(i).onHideLayout();
+        }
     }
 
     /**
@@ -634,15 +637,6 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
     }
 
     /**
-     * @param currentOffset The current top controls offset in dp.
-     * @return {@link Float#NaN} if no offset should be used, or a value in dp if the top controls
-     *         offset should be overridden.
-     */
-    public float getTopControlsOffset(float currentOffset) {
-        return Float.NaN;
-    }
-
-    /**
      * Initializes a {@link LayoutTab} with data from the {@link LayoutUpdateHost}. This function
      * eventually needs to be called but may be overridden to manage the posting traffic.
      *
@@ -738,6 +732,10 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
      * @return Whether or not the layout consumed the event.
      */
     public boolean onBackPressed() {
+        for (int i = 0; i < mSceneOverlays.size(); i++) {
+            // If the back button was consumed by any overlays, return true.
+            if (mSceneOverlays.get(i).onBackPressed()) return true;
+        }
         return false;
     }
 
@@ -1070,6 +1068,15 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
      * @return Whether the layout is handling the model updates when a tab is creating.
      */
     public boolean handlesTabCreating() {
+        if (mLayoutTabs == null || mLayoutTabs.length != 1) return false;
+        for (int i = 0; i < mSceneOverlays.size(); i++) {
+            if (mSceneOverlays.get(i).handlesTabCreating()) {
+                // Prevent animation from happening if the overlay handles creation.
+                startHiding(mLayoutTabs[0].getId(), false);
+                doneHiding();
+                return true;
+            }
+        }
         return false;
     }
 
@@ -1124,6 +1131,7 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
         // filter added should have the first chance to intercept any touch events.
         for (int i = mSceneOverlays.size() - 1; i >= 0; i--) {
             EventFilter eventFilter = mSceneOverlays.get(i).getEventFilter();
+            if (eventFilter == null) continue;
             if (offsets != null) eventFilter.setCurrentMotionEventOffsets(offsets.x, offsets.y);
             if (eventFilter.onInterceptTouchEvent(e, isKeyboardShowing)) return eventFilter;
         }
@@ -1138,7 +1146,8 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
     /**
      * Build a {@link SceneLayer} if it hasn't already been built, and update it and return it.
      *
-     * @param contentViewport   A viewport in which to display content.
+     * @param viewport          A viewport in which to display content.
+     * @param contentViewport   The visible section of the viewport.
      * @param layerTitleCache   A layer title cache.
      * @param tabContentManager A tab content manager.
      * @param resourceManager   A resource manager.
@@ -1146,21 +1155,21 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
      * @return                  A {@link SceneLayer} that represents the content for this
      *                          {@link Layout}.
      */
-    public final SceneLayer getUpdatedSceneLayer(Rect viewport,
-            Rect contentViewport, LayerTitleCache layerTitleCache,
-            TabContentManager tabContentManager, ResourceManager resourceManager,
-            ChromeFullscreenManager fullscreenManager) {
+    public final SceneLayer getUpdatedSceneLayer(Rect viewport, Rect contentViewport,
+            LayerTitleCache layerTitleCache, TabContentManager tabContentManager,
+            ResourceManager resourceManager, ChromeFullscreenManager fullscreenManager) {
         updateSceneLayer(viewport, contentViewport, layerTitleCache, tabContentManager,
                 resourceManager, fullscreenManager);
 
         float offsetPx = fullscreenManager != null ? fullscreenManager.getControlOffset() : 0.f;
         float dpToPx = getContext().getResources().getDisplayMetrics().density;
         float offsetDp = offsetPx / dpToPx;
-        float offsetOverride = getTopControlsOffset(offsetDp);
-        if (!Float.isNaN(offsetOverride)) offsetDp = offsetOverride;
 
         SceneLayer content = getSceneLayer();
         for (int i = 0; i < mSceneOverlays.size(); i++) {
+            // If the SceneOverlay is not showing, don't bother adding it to the tree.
+            if (!mSceneOverlays.get(i).isSceneOverlayTreeShowing()) continue;
+
             SceneOverlayLayer overlayLayer = mSceneOverlays.get(i).getUpdatedSceneOverlayTree(
                     layerTitleCache, resourceManager, offsetDp);
 
@@ -1180,13 +1189,6 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
             if (mSceneOverlays.get(i).shouldHideAndroidTopControls()) return true;
         }
         return false;
-    }
-
-    /**
-     * @return The toolbar brightness.
-     */
-    public float getToolbarBrightness() {
-        return 1.0f;
     }
 
     /**

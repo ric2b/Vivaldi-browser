@@ -6,14 +6,13 @@
 #define BLIMP_CLIENT_FEATURE_SETTINGS_FEATURE_H_
 
 #include "base/macros.h"
-#include "blimp/client/blimp_client_export.h"
 #include "blimp/net/blimp_message_processor.h"
 
 namespace blimp {
 namespace client {
 
 // The feature is used to send global settings to the engine.
-class BLIMP_CLIENT_EXPORT SettingsFeature : public BlimpMessageProcessor {
+class SettingsFeature : public BlimpMessageProcessor {
  public:
   SettingsFeature();
   ~SettingsFeature() override;
@@ -24,6 +23,7 @@ class BLIMP_CLIENT_EXPORT SettingsFeature : public BlimpMessageProcessor {
       std::unique_ptr<BlimpMessageProcessor> processor);
 
   void SetRecordWholeDocument(bool record_whole_document);
+  void SendUserAgentOSVersionInfo(const std::string& client_os_info);
 
  private:
   // BlimpMessageProcessor implementation.

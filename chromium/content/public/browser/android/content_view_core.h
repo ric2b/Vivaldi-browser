@@ -12,7 +12,6 @@
 #include "base/strings/string16.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/readback_types.h"
-#include "third_party/skia/include/core/SkImageInfo.h"
 #include "ui/android/view_android.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -48,14 +47,6 @@ class CONTENT_EXPORT ContentViewCore : public ui::ViewAndroid {
   virtual const scoped_refptr<cc::Layer>& GetLayer() const = 0;
   virtual bool ShowPastePopup(int x, int y) = 0;
 
-  // Request a scaled content readback. The result is passed through the
-  // callback. The boolean parameter indicates whether the readback was a
-  // success or not. The content is passed through the SkBitmap parameter.
-  virtual void GetScaledContentBitmap(
-      float scale,
-      SkColorType color_type,
-      const gfx::Rect& src_rect,
-      const ReadbackRequestCallback& result_callback) = 0;
   virtual float GetDpiScale() const = 0;
   virtual void PauseOrResumeGeolocation(bool should_pause) = 0;
 

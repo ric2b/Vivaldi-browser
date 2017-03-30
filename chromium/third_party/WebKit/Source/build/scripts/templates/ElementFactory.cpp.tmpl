@@ -10,8 +10,8 @@
 {% if fallback_interface %}
 #include "core/{{namespace|lower}}/{{fallback_interface}}.h"
 {% endif %}
-#include "core/dom/custom/CustomElement.h"
-#include "core/dom/custom/CustomElementRegistrationContext.h"
+#include "core/dom/custom/V0CustomElement.h"
+#include "core/dom/custom/V0CustomElementRegistrationContext.h"
 #include "core/dom/Document.h"
 #include "core/frame/Settings.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -21,7 +21,7 @@ namespace blink {
 
 using namespace {{namespace}}Names;
 
-typedef RawPtr<{{namespace}}Element> (*ConstructorFunction)(
+typedef {{namespace}}Element* (*ConstructorFunction)(
     Document&,
     {% if namespace == 'HTML' %}
     HTMLFormElement*,
@@ -33,7 +33,7 @@ typedef HashMap<AtomicString, ConstructorFunction> FunctionMap;
 static FunctionMap* g_constructors = 0;
 
 {% for tag in tags|sort if not tag.noConstructor %}
-static RawPtr<{{namespace}}Element> {{tag|symbol}}Constructor(
+static {{namespace}}Element* {{tag|symbol}}Constructor(
     Document& document,
     {% if namespace == 'HTML' %}
     HTMLFormElement* formElement,
@@ -73,7 +73,7 @@ static void create{{namespace}}FunctionMap()
         g_constructors->set(data[i].tag.localName(), data[i].func);
 }
 
-RawPtr<{{namespace}}Element> {{namespace}}ElementFactory::create{{namespace}}Element(
+{{namespace}}Element* {{namespace}}ElementFactory::create{{namespace}}Element(
     const AtomicString& localName,
     Document& document,
     {% if namespace == 'HTML' %}
@@ -86,10 +86,10 @@ RawPtr<{{namespace}}Element> {{namespace}}ElementFactory::create{{namespace}}Ele
     if (ConstructorFunction function = g_constructors->get(localName))
         return function(document, {% if namespace == 'HTML' %}formElement, {% endif %}createdByParser);
 
-    if (document.registrationContext() && CustomElement::isValidName(localName)) {
-        RawPtr<Element> element = document.registrationContext()->createCustomTagElement(document, QualifiedName(nullAtom, localName, {{namespace_prefix}}NamespaceURI));
+    if (document.registrationContext() && V0CustomElement::isValidName(localName)) {
+        Element* element = document.registrationContext()->createCustomTagElement(document, QualifiedName(nullAtom, localName, {{namespace_prefix}}NamespaceURI));
         ASSERT_WITH_SECURITY_IMPLICATION(element->is{{namespace}}Element());
-        return static_pointer_cast<{{namespace}}Element>(element.release());
+        return to{{namespace}}Element(element);
     }
 
     return {{fallback_interface}}::create(QualifiedName(nullAtom, localName, {{namespace_prefix}}NamespaceURI), document);

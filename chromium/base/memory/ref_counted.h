@@ -5,8 +5,11 @@
 #ifndef BASE_MEMORY_REF_COUNTED_H_
 #define BASE_MEMORY_REF_COUNTED_H_
 
+#include <stddef.h>
+
 #include <cassert>
 #include <iosfwd>
+#include <type_traits>
 
 #include "base/atomic_ref_count.h"
 #include "base/base_export.h"
@@ -283,7 +286,9 @@ class scoped_refptr {
   }
 
   // Copy conversion constructor.
-  template <typename U>
+  template <typename U,
+            typename = typename std::enable_if<
+                std::is_convertible<U*, T*>::value>::type>
   scoped_refptr(const scoped_refptr<U>& r) : ptr_(r.get()) {
     if (ptr_)
       AddRef(ptr_);
@@ -294,7 +299,9 @@ class scoped_refptr {
   scoped_refptr(scoped_refptr&& r) : ptr_(r.get()) { r.ptr_ = nullptr; }
 
   // Move conversion constructor.
-  template <typename U>
+  template <typename U,
+            typename = typename std::enable_if<
+                std::is_convertible<U*, T*>::value>::type>
   scoped_refptr(scoped_refptr<U>&& r) : ptr_(r.get()) {
     r.ptr_ = nullptr;
   }
@@ -357,30 +364,7 @@ class scoped_refptr {
     swap(&r.ptr_);
   }
 
- private:
-  template <typename U> friend class scoped_refptr;
-
-  // Implement "Safe Bool Idiom"
-  // https://en.wikibooks.org/wiki/More_C%2B%2B_Idioms/Safe_bool
-  //
-  // Allow scoped_refptr<T> to be used in boolean expressions such as
-  //   if (ref_ptr_instance)
-  // But do not become convertible to a real bool (which is dangerous).
-  //   Implementation requires:
-  //     typedef Testable
-  //     operator Testable() const
-  //     operator==
-  //     operator!=
-  //
-  // == and != operators must be declared explicitly or dissallowed, as
-  // otherwise "ptr1 == ptr2" will compile but do the wrong thing (i.e., convert
-  // to Testable and then do the comparison).
-  //
-  // C++11 provides for "explicit operator bool()", however it is currently
-  // banned due to MSVS2013. https://chromium-cpp.appspot.com/#core-blacklist
-  typedef T* scoped_refptr::*Testable;
- public:
-  operator Testable() const { return ptr_ ? &scoped_refptr::ptr_ : nullptr; }
+  explicit operator bool() const { return ptr_ != nullptr; }
 
   template <typename U>
   bool operator==(const scoped_refptr<U>& rhs) const {
@@ -401,6 +385,10 @@ class scoped_refptr {
   T* ptr_;
 
  private:
+  // Friend required for move constructors that set r.ptr_ to null.
+  template <typename U>
+  friend class scoped_refptr;
+
   // Non-inline helpers to allow:
   //     class Opaque;
   //     extern template class scoped_refptr<Opaque>;
@@ -436,6 +424,16 @@ bool operator==(const T* lhs, const scoped_refptr<U>& rhs) {
   return lhs == rhs.get();
 }
 
+template <typename T>
+bool operator==(const scoped_refptr<T>& lhs, std::nullptr_t null) {
+  return !static_cast<bool>(lhs);
+}
+
+template <typename T>
+bool operator==(std::nullptr_t null, const scoped_refptr<T>& rhs) {
+  return !static_cast<bool>(rhs);
+}
+
 template <typename T, typename U>
 bool operator!=(const scoped_refptr<T>& lhs, const U* rhs) {
   return !operator==(lhs, rhs);
@@ -444,6 +442,16 @@ bool operator!=(const scoped_refptr<T>& lhs, const U* rhs) {
 template <typename T, typename U>
 bool operator!=(const T* lhs, const scoped_refptr<U>& rhs) {
   return !operator==(lhs, rhs);
+}
+
+template <typename T>
+bool operator!=(const scoped_refptr<T>& lhs, std::nullptr_t null) {
+  return !operator==(lhs, null);
+}
+
+template <typename T>
+bool operator!=(std::nullptr_t null, const scoped_refptr<T>& rhs) {
+  return !operator==(null, rhs);
 }
 
 template <typename T>

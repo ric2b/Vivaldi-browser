@@ -59,13 +59,13 @@ class MockRenderThread : public RenderThread {
   int GenerateRoutingID() override;
   void AddFilter(IPC::MessageFilter* filter) override;
   void RemoveFilter(IPC::MessageFilter* filter) override;
-  void AddObserver(RenderProcessObserver* observer) override;
-  void RemoveObserver(RenderProcessObserver* observer) override;
+  void AddObserver(RenderThreadObserver* observer) override;
+  void RemoveObserver(RenderThreadObserver* observer) override;
   void SetResourceDispatcherDelegate(
       ResourceDispatcherDelegate* delegate) override;
   void RecordAction(const base::UserMetricsAction& action) override;
   void RecordComputedAction(const std::string& action) override;
-  scoped_ptr<base::SharedMemory> HostAllocateSharedMemoryBuffer(
+  std::unique_ptr<base::SharedMemory> HostAllocateSharedMemoryBuffer(
       size_t buffer_size) override;
   cc::SharedBitmapManager* GetSharedBitmapManager() override;
   void RegisterExtension(v8::Extension* extension) override;
@@ -107,7 +107,7 @@ class MockRenderThread : public RenderThread {
   // Dispatches control messages to observers.
   bool OnControlMessageReceived(const IPC::Message& msg);
 
-  base::ObserverList<RenderProcessObserver>& observers() { return observers_; }
+  base::ObserverList<RenderThreadObserver>& observers() { return observers_; }
 
  protected:
   // This function operates as a regular IPC listener. Subclasses
@@ -149,16 +149,16 @@ class MockRenderThread : public RenderThread {
   int32_t new_frame_routing_id_;
 
   // The last known good deserializer for sync messages.
-  scoped_ptr<IPC::MessageReplyDeserializer> reply_deserializer_;
+  std::unique_ptr<IPC::MessageReplyDeserializer> reply_deserializer_;
 
   // A list of message filters added to this thread.
   std::vector<scoped_refptr<IPC::MessageFilter> > filters_;
 
   // Observers to notify.
-  base::ObserverList<RenderProcessObserver> observers_;
+  base::ObserverList<RenderThreadObserver> observers_;
 
   cc::TestSharedBitmapManager shared_bitmap_manager_;
-  scoped_ptr<ServiceRegistry> service_registry_;
+  std::unique_ptr<ServiceRegistry> service_registry_;
 };
 
 }  // namespace content

@@ -20,6 +20,7 @@ aria-autocomplete
 aria-busy
 aria-checked
 aria-controls
+aria-current
 aria-describedby
 aria-disabled
 aria-dropeffect
@@ -165,8 +166,6 @@ onabort
 onanimationstart
 onanimationiteration
 onanimationend
-onautocomplete
-onautocompleteerror
 onbeforecopy
 onbeforecut
 onbeforepaste
@@ -265,7 +264,6 @@ onwheel
 open
 optimum
 pattern
-permissions
 placeholder
 ping
 poster

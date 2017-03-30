@@ -22,7 +22,7 @@ class PermissionProvider;
 
 struct FrameUsbServices;
 
-typedef std::map<content::RenderFrameHost*, scoped_ptr<FrameUsbServices>>
+typedef std::map<content::RenderFrameHost*, std::unique_ptr<FrameUsbServices>>
     FrameUsbServicesMap;
 
 // Per-tab owner of USB services provided to render frames within that tab.
@@ -42,8 +42,8 @@ class UsbTabHelper : public content::WebContentsObserver,
       content::RenderFrameHost* render_frame_host,
       mojo::InterfaceRequest<device::usb::ChooserService> request);
 
-  void IncrementConnectionCount();
-  void DecrementConnectionCount();
+  void IncrementConnectionCount(content::RenderFrameHost* render_frame_host);
+  void DecrementConnectionCount(content::RenderFrameHost* render_frame_host);
   bool IsDeviceConnected() const;
 
  private:
@@ -66,7 +66,6 @@ class UsbTabHelper : public content::WebContentsObserver,
   void NotifyTabStateChanged() const;
 
   FrameUsbServicesMap frame_usb_services_;
-  int device_connection_count_;
 
   DISALLOW_COPY_AND_ASSIGN(UsbTabHelper);
 };

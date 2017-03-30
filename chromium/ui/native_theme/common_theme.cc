@@ -5,6 +5,7 @@
 #include "ui/native_theme/common_theme.h"
 
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -94,6 +95,19 @@ SkColor GetAuraColor(NativeTheme::ColorId color_id,
       case NativeTheme::kColorId_ResultsTableNegativeHoveredText:
       case NativeTheme::kColorId_ResultsTableNegativeSelectedText:
         return kNegativeTextColorMd;
+
+      default:
+        break;
+    }
+  }
+
+  if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
+    switch (color_id) {
+      // FocusableBorder
+      case NativeTheme::kColorId_FocusedBorderColor:
+        return gfx::kGoogleBlue500;
+      case NativeTheme::kColorId_UnfocusedBorderColor:
+        return SkColorSetA(SK_ColorBLACK, 0x66);
 
       default:
         break;
@@ -432,16 +446,6 @@ void CommonThemePaintMenuItemBackground(
     return;
   }
   canvas->drawRect(gfx::RectToSkRect(rect), paint);
-}
-
-// static
-scoped_ptr<gfx::Canvas> CommonThemeCreateCanvas(SkCanvas* sk_canvas) {
-  // TODO(pkotwicz): Do something better and don't infer device
-  // scale factor from canvas scale.
-  SkMatrix m = sk_canvas->getTotalMatrix();
-  float device_scale = static_cast<float>(SkScalarAbs(m.getScaleX()));
-  return make_scoped_ptr(new gfx::Canvas(skia::SharePtr(sk_canvas),
-                                         device_scale));
 }
 
 }  // namespace ui

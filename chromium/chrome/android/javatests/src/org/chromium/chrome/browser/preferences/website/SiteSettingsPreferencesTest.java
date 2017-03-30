@@ -131,6 +131,15 @@ public class SiteSettingsPreferencesTest extends ChromeActivityTestCaseBase<Chro
         assertTrue(getInfoBars().isEmpty());
     }
 
+    private Preferences startSiteSettingsMenu(String category) {
+        Bundle fragmentArgs = new Bundle();
+        fragmentArgs.putString(SingleCategoryPreferences.EXTRA_CATEGORY, category);
+        Intent intent = PreferencesLauncher.createIntentForSettingsPage(
+                getInstrumentation().getTargetContext(), SiteSettingsPreferences.class.getName());
+        intent.putExtra(Preferences.EXTRA_SHOW_FRAGMENT_ARGUMENTS, fragmentArgs);
+        return (Preferences) getInstrumentation().startActivitySync(intent);
+    }
+
     private Preferences startSiteSettingsCategory(String category) {
         Bundle fragmentArgs = new Bundle();
         fragmentArgs.putString(SingleCategoryPreferences.EXTRA_CATEGORY, category);
@@ -318,6 +327,8 @@ public class SiteSettingsPreferencesTest extends ChromeActivityTestCaseBase<Chro
         });
     }
 
+    // TODO(finnur): Write test for Autoplay.
+
     /**
      * Tests that disabling cookies turns off the third-party cookie toggle.
      * @throws Exception
@@ -455,6 +466,49 @@ public class SiteSettingsPreferencesTest extends ChromeActivityTestCaseBase<Chro
     }
 
     /**
+     * Test that showing the Site Settings menu doesn't crash (crbug.com/610576).
+     * @throws Exception
+     */
+    @SmallTest
+    @Feature({"Preferences"})
+    public void testSiteSettingsMenu() throws Exception {
+        final Preferences preferenceActivity = startSiteSettingsMenu("");
+        preferenceActivity.finish();
+    }
+
+    /**
+     * Test the Media Menu.
+     * @throws Exception
+     */
+    @SmallTest
+    @Feature({"Preferences"})
+    public void testMediaMenu() throws Exception {
+        final Preferences preferenceActivity =
+                startSiteSettingsMenu(SiteSettingsPreferences.MEDIA_KEY);
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                SiteSettingsPreferences siteSettings = (SiteSettingsPreferences)
+                        preferenceActivity.getFragmentForTest();
+
+                SiteSettingsPreference allSites  = (SiteSettingsPreference)
+                        siteSettings.findPreference(SiteSettingsPreferences.ALL_SITES_KEY);
+                assertEquals(null, allSites);
+
+                SiteSettingsPreference autoplay  = (SiteSettingsPreference)
+                        siteSettings.findPreference(SiteSettingsPreferences.AUTOPLAY_KEY);
+                assertFalse(autoplay == null);
+
+                SiteSettingsPreference protectedContent = (SiteSettingsPreference)
+                        siteSettings.findPreference(SiteSettingsPreferences.PROTECTED_CONTENT_KEY);
+                assertFalse(protectedContent == null);
+
+                preferenceActivity.finish();
+            }
+        });
+    }
+
+    /**
      * Tests Reset Site not crashing on host names (issue 600232).
      * @throws Exception
      */
@@ -584,7 +638,7 @@ public class SiteSettingsPreferencesTest extends ChromeActivityTestCaseBase<Chro
      * Helper function to test allowing and blocking background sync.
      * @param enabled true to test enabling background sync, false to test disabling the feature.
      */
-    private void testBackgroundSyncPermission(final boolean enabled) {
+    private void doTestBackgroundSyncPermission(final boolean enabled) {
         setEnableBackgroundSync(enabled);
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
@@ -598,13 +652,13 @@ public class SiteSettingsPreferencesTest extends ChromeActivityTestCaseBase<Chro
     @SmallTest
     @Feature({"Preferences"})
     public void testAllowBackgroundSync() {
-        testBackgroundSyncPermission(true);
+        doTestBackgroundSyncPermission(true);
     }
 
     @SmallTest
     @Feature({"Preferences"})
     public void testBlockBackgroundSync() {
-        testBackgroundSyncPermission(false);
+        doTestBackgroundSyncPermission(false);
     }
 
     private int getTabCount() {

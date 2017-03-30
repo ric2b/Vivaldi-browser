@@ -5,6 +5,7 @@
 #include "cc/trees/single_thread_proxy.h"
 
 #include "base/auto_reset.h"
+#include "base/memory/ptr_util.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/animation/animation_events.h"
@@ -24,11 +25,11 @@
 
 namespace cc {
 
-scoped_ptr<Proxy> SingleThreadProxy::Create(
+std::unique_ptr<Proxy> SingleThreadProxy::Create(
     LayerTreeHost* layer_tree_host,
     LayerTreeHostSingleThreadClient* client,
     TaskRunnerProvider* task_runner_provider) {
-  return make_scoped_ptr(
+  return base::WrapUnique(
       new SingleThreadProxy(layer_tree_host, client, task_runner_provider));
 }
 
@@ -56,7 +57,7 @@ SingleThreadProxy::SingleThreadProxy(LayerTreeHost* layer_tree_host,
 }
 
 void SingleThreadProxy::Start(
-    scoped_ptr<BeginFrameSource> external_begin_frame_source) {
+    std::unique_ptr<BeginFrameSource> external_begin_frame_source) {
   DebugScopedSetImplThread impl(task_runner_provider_);
   external_begin_frame_source_ = std::move(external_begin_frame_source);
 
@@ -66,24 +67,27 @@ void SingleThreadProxy::Start(
         layer_tree_host_->settings().ToSchedulerSettings());
     scheduler_settings.commit_to_active_tree = CommitToActiveTree();
 
-    scoped_ptr<CompositorTimingHistory> compositor_timing_history(
+    std::unique_ptr<CompositorTimingHistory> compositor_timing_history(
         new CompositorTimingHistory(
             scheduler_settings.using_synchronous_renderer_compositor,
             CompositorTimingHistory::BROWSER_UMA,
             layer_tree_host_->rendering_stats_instrumentation()));
 
-    BeginFrameSource* frame_source = external_begin_frame_source_.get();
-    if (!scheduler_settings.throttle_frame_production) {
-      // Unthrottled source takes precedence over external sources.
-      unthrottled_begin_frame_source_.reset(new BackToBackBeginFrameSource(
-          task_runner_provider_->MainThreadTaskRunner()));
-      frame_source = unthrottled_begin_frame_source_.get();
-    }
-    if (!frame_source) {
-      synthetic_begin_frame_source_.reset(new SyntheticBeginFrameSource(
-          task_runner_provider_->MainThreadTaskRunner(),
-          BeginFrameArgs::DefaultInterval()));
-      frame_source = synthetic_begin_frame_source_.get();
+    BeginFrameSource* frame_source = nullptr;
+    if (!layer_tree_host_->settings().use_output_surface_begin_frame_source) {
+      frame_source = external_begin_frame_source_.get();
+      if (!scheduler_settings.throttle_frame_production) {
+        // Unthrottled source takes precedence over external sources.
+        unthrottled_begin_frame_source_.reset(new BackToBackBeginFrameSource(
+            task_runner_provider_->MainThreadTaskRunner()));
+        frame_source = unthrottled_begin_frame_source_.get();
+      }
+      if (!frame_source) {
+        synthetic_begin_frame_source_.reset(new SyntheticBeginFrameSource(
+            task_runner_provider_->MainThreadTaskRunner(),
+            BeginFrameArgs::DefaultInterval()));
+        frame_source = synthetic_begin_frame_source_.get();
+      }
     }
 
     scheduler_on_impl_thread_ =
@@ -214,6 +218,11 @@ void SingleThreadProxy::DoCommit() {
   devtools_instrumentation::ScopedCommitTrace commit_task(
       layer_tree_host_->id());
 
+  layer_tree_host_->ReportFixedRasterScaleUseCounters(
+      layer_tree_host_impl_->has_fixed_raster_scale_blurry_content(),
+      layer_tree_host_impl_
+          ->HasFixedRasterScalePotentialPerformanceRegression());
+
   // Commit immediately.
   {
     // TODO(robliao): Remove ScopedTracker below once https://crbug.com/461509
@@ -250,7 +259,7 @@ void SingleThreadProxy::DoCommit() {
 #if DCHECK_IS_ON()
     // In the single-threaded case, the scale and scroll deltas should never be
     // touched on the impl layer tree.
-    scoped_ptr<ScrollAndScaleSet> scroll_info =
+    std::unique_ptr<ScrollAndScaleSet> scroll_info =
         layer_tree_host_impl_->ProcessScrollDeltas();
     DCHECK(!scroll_info->scrolls.size());
     DCHECK_EQ(1.f, scroll_info->page_scale_delta);
@@ -423,7 +432,7 @@ void SingleThreadProxy::SetVideoNeedsBeginFrames(bool needs_begin_frames) {
 }
 
 void SingleThreadProxy::PostAnimationEventsToMainThreadOnImplThread(
-    scoped_ptr<AnimationEvents> events) {
+    std::unique_ptr<AnimationEvents> events) {
   TRACE_EVENT0(
       "cc", "SingleThreadProxy::PostAnimationEventsToMainThreadOnImplThread");
   DCHECK(task_runner_provider_->IsImplThread());
@@ -477,17 +486,23 @@ void SingleThreadProxy::DidLoseOutputSurfaceOnImplThread() {
 
 void SingleThreadProxy::CommitVSyncParameters(base::TimeTicks timebase,
                                               base::TimeDelta interval) {
-  if (authoritative_vsync_interval_ != base::TimeDelta()) {
-    interval = authoritative_vsync_interval_;
-  } else if (interval == base::TimeDelta()) {
+  if (interval.is_zero()) {
     // TODO(brianderson): We should not be receiving 0 intervals.
     interval = BeginFrameArgs::DefaultInterval();
   }
 
-  last_vsync_timebase_ = timebase;
-
   if (synthetic_begin_frame_source_)
     synthetic_begin_frame_source_->OnUpdateVSyncParameters(timebase, interval);
+}
+
+void SingleThreadProxy::SetBeginFrameSource(BeginFrameSource* source) {
+  DCHECK(layer_tree_host_->settings().single_thread_proxy_scheduler);
+  // TODO(enne): this overrides any preexisting begin frame source.  Those
+  // other sources will eventually be removed and this will be the only path.
+  if (!layer_tree_host_->settings().use_output_surface_begin_frame_source)
+    return;
+  if (scheduler_on_impl_thread_)
+    scheduler_on_impl_thread_->SetBeginFrameSource(source);
 }
 
 void SingleThreadProxy::SetEstimatedParentDrawTime(base::TimeDelta draw_time) {
@@ -513,13 +528,6 @@ void SingleThreadProxy::DidSwapBuffersCompleteOnImplThread() {
 void SingleThreadProxy::OnDrawForOutputSurface(
     bool resourceless_software_draw) {
   NOTREACHED() << "Implemented by ThreadProxy for synchronous compositor.";
-}
-
-void SingleThreadProxy::PostFrameTimingEventsOnImplThread(
-    scoped_ptr<FrameTimingTracker::CompositeTimingSet> composite_events,
-    scoped_ptr<FrameTimingTracker::MainFrameTimingSet> main_frame_events) {
-  layer_tree_host_->RecordFrameTimingEvents(std::move(composite_events),
-                                            std::move(main_frame_events));
 }
 
 void SingleThreadProxy::CompositeImmediately(base::TimeTicks frame_begin_time) {
@@ -714,21 +722,6 @@ bool SingleThreadProxy::MainFrameWillHappenForTesting() {
   return scheduler_on_impl_thread_->MainFrameForTestingWillHappen();
 }
 
-void SingleThreadProxy::SetChildrenNeedBeginFrames(
-    bool children_need_begin_frames) {
-  scheduler_on_impl_thread_->SetChildrenNeedBeginFrames(
-      children_need_begin_frames);
-}
-
-void SingleThreadProxy::SetAuthoritativeVSyncInterval(
-    const base::TimeDelta& interval) {
-  authoritative_vsync_interval_ = interval;
-  if (synthetic_begin_frame_source_) {
-    synthetic_begin_frame_source_->OnUpdateVSyncParameters(last_vsync_timebase_,
-                                                           interval);
-  }
-}
-
 void SingleThreadProxy::WillBeginImplFrame(const BeginFrameArgs& args) {
   DebugScopedSetImplThread impl(task_runner_provider_);
 #if DCHECK_IS_ON()
@@ -887,10 +880,6 @@ void SingleThreadProxy::UpdateTopControlsState(TopControlsState constraints,
   NOTREACHED() << "Top Controls are used only in threaded mode";
 }
 
-void SingleThreadProxy::SetOutputIsSecure(bool output_is_secure) {
-  layer_tree_host_impl_->set_output_is_secure(output_is_secure);
-}
-
 void SingleThreadProxy::DidFinishImplFrame() {
   layer_tree_host_impl_->DidFinishImplFrame();
 #if DCHECK_IS_ON()
@@ -898,10 +887,6 @@ void SingleThreadProxy::DidFinishImplFrame() {
       << "DidFinishImplFrame called while not inside an impl frame!";
   inside_impl_frame_ = false;
 #endif
-}
-
-void SingleThreadProxy::SendBeginFramesToChildren(const BeginFrameArgs& args) {
-  layer_tree_host_->SendBeginFramesToChildren(args);
 }
 
 }  // namespace cc

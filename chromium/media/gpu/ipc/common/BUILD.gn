@@ -6,11 +6,8 @@ source_set("common") {
   sources = [
     "create_video_encoder_params.cc",
     "create_video_encoder_params.h",
-    "gpu_video_accelerator_util.cc",
-    "gpu_video_accelerator_util.h",
     "media_message_generator.cc",
     "media_message_generator.h",
-    "media_messages.cc",
     "media_messages.h",
     "media_param_traits.cc",
     "media_param_traits.h",
@@ -19,11 +16,14 @@ source_set("common") {
 
   deps = [
     "//base",
+    "//gpu/config",
     "//gpu/ipc/common",
     "//ipc",
     "//media",
+    "//media/base/ipc",
     "//ui/gfx:memory_buffer",
     "//ui/gfx/geometry",
     "//ui/gfx/ipc",
+    "//ui/gfx/ipc/geometry",
   ]
 }

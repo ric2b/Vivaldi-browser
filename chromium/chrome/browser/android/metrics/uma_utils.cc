@@ -6,16 +6,28 @@
 
 #include <stdint.h>
 
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/metrics/metrics_reporting_state.h"
 #include "jni/UmaUtils_jni.h"
+
+class PrefService;
 
 namespace chrome {
 namespace android {
 
 base::Time GetMainEntryPointTime() {
   JNIEnv* env = base::android::AttachCurrentThread();
-  int64_t startTimeUnixMs = Java_UmaUtils_getMainEntryPointTime(env);
+  int64_t startTimeUnixMs = Java_UmaUtils_getMainEntryPointWallTime(env);
   return base::Time::UnixEpoch() +
          base::TimeDelta::FromMilliseconds(startTimeUnixMs);
+}
+
+static void RecordMetricsReportingDefaultOptIn(JNIEnv* env,
+                                               const JavaParamRef<jclass>& obj,
+                                               jboolean opt_in) {
+  DCHECK(g_browser_process);
+  PrefService* local_state = g_browser_process->local_state();
+  ::RecordMetricsReportingDefaultOptIn(local_state, opt_in);
 }
 
 bool RegisterStartupMetricUtils(JNIEnv* env) {

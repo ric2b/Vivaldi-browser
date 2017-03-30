@@ -12,10 +12,13 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
+#include "components/autofill/content/public/interfaces/autofill_agent.mojom.h"
+#include "components/autofill/content/public/interfaces/autofill_driver.mojom.h"
 #include "components/autofill/content/renderer/form_cache.h"
 #include "components/autofill/content/renderer/page_click_listener.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_view_observer.h"
+#include "mojo/public/cpp/bindings/binding_set.h"
 #include "third_party/WebKit/public/web/WebAutofillClient.h"
 #include "third_party/WebKit/public/web/WebFormControlElement.h"
 #include "third_party/WebKit/public/web/WebFormElement.h"
@@ -42,7 +45,8 @@ class PasswordGenerationAgent;
 
 class AutofillAgent : public content::RenderFrameObserver,
                       public PageClickListener,
-                      public blink::WebAutofillClient {
+                      public blink::WebAutofillClient,
+                      public mojom::AutofillAgent {
  public:
   // PasswordAutofillAgent is guaranteed to outlive AutofillAgent.
   // PasswordGenerationAgent may be NULL. If it is not, then it is also
@@ -51,6 +55,13 @@ class AutofillAgent : public content::RenderFrameObserver,
                 PasswordAutofillAgent* password_autofill_manager,
                 PasswordGenerationAgent* password_generation_agent);
   ~AutofillAgent() override;
+
+  void BindRequest(mojom::AutofillAgentRequest request);
+
+ protected:
+  // blink::WebAutofillClient:
+  void didAssociateFormControls(
+      const blink::WebVector<blink::WebNode>& nodes) override;
 
  private:
   // Functor used as a simplified comparison function for FormData. Only
@@ -139,10 +150,7 @@ class AutofillAgent : public content::RenderFrameObserver,
   void textFieldDidReceiveKeyDown(
       const blink::WebInputElement& element,
       const blink::WebKeyboardEvent& event) override;
-  void didRequestAutocomplete(const blink::WebFormElement& form) override;
   void setIgnoreTextChanges(bool ignore) override;
-  void didAssociateFormControls(
-      const blink::WebVector<blink::WebNode>& nodes) override;
   void openTextDataListChooser(const blink::WebInputElement& element) override;
   void dataListOptionsChanged(const blink::WebInputElement& element) override;
   void firstUserGestureObserved() override;
@@ -151,9 +159,11 @@ class AutofillAgent : public content::RenderFrameObserver,
   void OnFieldTypePredictionsAvailable(
       const std::vector<FormDataPredictions>& forms);
   void OnFillForm(int query_id, const FormData& form);
-  void OnFirstUserGestureObservedInTab();
   void OnPing();
   void OnPreviewForm(int query_id, const FormData& form);
+
+  // mojom::AutofillAgent:
+  void FirstUserGestureObservedInTab() override;
 
   // For external Autofill selection.
   void OnClearForm();
@@ -168,17 +178,6 @@ class AutofillAgent : public content::RenderFrameObserver,
 
   // Called when a same-page navigation is detected.
   void OnSamePageNavigationCompleted();
-
-  // Called when interactive autocomplete finishes. |message| is printed to
-  // the console if non-empty.
-  void OnRequestAutocompleteResult(
-      blink::WebFormElement::AutocompleteResult result,
-      const base::string16& message,
-      const FormData& form_data);
-
-  // Called when an autocomplete request succeeds or fails with the |result|.
-  void FinishAutocompleteRequest(
-      blink::WebFormElement::AutocompleteResult result);
 
   // Called in a posted task by textFieldDidChange() to work-around a WebKit bug
   // http://bugs.webkit.org/show_bug.cgi?id=16976
@@ -232,6 +231,8 @@ class AutofillAgent : public content::RenderFrameObserver,
   // overriden in tests.
   virtual bool IsUserGesture() const;
 
+  void ConnectToMojoAutofillDriverIfNeeded();
+
   // Formerly cached forms for all frames, now only caches forms for the current
   // frame.
   FormCache form_cache_;
@@ -281,6 +282,10 @@ class AutofillAgent : public content::RenderFrameObserver,
   // This is needed because generation is shown on field focus vs. field click
   // for the password manager. TODO(gcasto): Have both UIs show on focus.
   bool is_generation_popup_possibly_visible_;
+
+  mojo::BindingSet<mojom::AutofillAgent> bindings_;
+
+  mojom::AutofillDriverPtr mojo_autofill_driver_;
 
   base::WeakPtrFactory<AutofillAgent> weak_ptr_factory_;
 

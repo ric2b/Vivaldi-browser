@@ -69,10 +69,16 @@ Si vous vous connectez quand même, toutes les informations Chrome, comme les fa
 <translation id="2997147809295888909">Il a été confirmé dans Chrome que le certificat de ce site a bien été fourni par <ph name="ISSUER" />. Aucune information relative à la transparence du certificat n'a été fournie via le serveur.</translation>
 <translation id="3037838751736561277">Google Chrome est exécuté en mode arrière-plan.</translation>
 <translation id="3047079729301751317">La déconnexion de <ph name="USERNAME" /> a pour effet d'effacer votre historique, vos favoris, vos paramètres et les autres données Chrome stockées sur cet appareil. Les données stockées dans votre compte Google ne sont pas effacées ; vous pouvez les gérer dans <ph name="GOOGLE_DASHBOARD_LINK" />Google Dashboard<ph name="END_GOOGLE_DASHBOARD_LINK" />.</translation>
+<translation id="3065168410429928842">Onglet Chrome</translation>
 <translation id="3080151273017101988">Poursuivre l'exécution d'applications en arrière-plan après la fermeture de Google Chrome</translation>
 <translation id="3089968997497233615">Une nouvelle version de Google Chrome encore plus sûre est disponible.</translation>
 <translation id="3149510190863420837">Applications Chrome</translation>
-<translation id="3197823471738295152">Votre appareil est à jour.</translation>
+<translation id="3251381707915721925">Pour définir les sites Web que l'utilisateur <ph name="NEW_PROFILE_NAME" /> peut consulter, vous pouvez configurer des restrictions et des paramètres sur le site <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. Si vous conservez les paramètres par défaut, <ph name="NEW_PROFILE_NAME" /> peut parcourir l'ensemble des sites du Web.
+
+Pour empêcher <ph name="NEW_PROFILE_NAME" /> d'accéder à votre compte, assurez-vous de verrouiller votre profil lorsque vous n'utilisez pas Chrome. Pour ce faire, cliquez sur le nom de votre profil dans l'angle supérieur droit du navigateur, puis sélectionnez "Fermer et activer le verrouillage enfant".
+<ph name="BEGIN_LINK_2" />En savoir plus<ph name="END_LINK_2" />
+
+Pour obtenir plus d'informations, veuillez consulter votre compte de messagerie (<ph name="ACCOUNT_EMAIL" />).</translation>
 <translation id="3282568296779691940">Connectez-vous à Chrome</translation>
 <translation id="3311976847535831054">Cet ordinateur ne recevra plus les mises à jour de Google Chrome 32 bits. Veuillez passer à Google Chrome 64 bits.</translation>
 <translation id="3360895254066713204">Aide de Chrome</translation>
@@ -213,7 +219,6 @@ Google Chrome ne peut pas récupérer vos paramètres.</translation>
 <translation id="7808348361785373670">Supprimer de Chrome</translation>
 <translation id="7825851276765848807">Échec de l'installation en raison d'erreurs non spécifiées. Veuillez télécharger Google Chrome à nouveau.</translation>
 <translation id="7890208801193284374">Si vous partagez un ordinateur avec vos proches, ceux-ci peuvent configurer Chrome comme bon leur semble et naviguer sur le Web à leur manière.</translation>
-<translation id="8000275528373650868">Google Chrome requiert Windows Vista ou Windows XP avec SP2 ou une version ultérieure.</translation>
 <translation id="8005540215158006229">Google Chrome est presque prêt</translation>
 <translation id="8008534537613507642">Réinstaller Chrome</translation>
 <translation id="8030318113982266900">Passage de votre appareil à la version <ph name="CHANNEL_NAME" />…</translation>
@@ -235,14 +240,16 @@ Google Chrome ne peut pas récupérer vos paramètres.</translation>
 <translation id="8556340503434111824">Une nouvelle version de Google Chrome encore plus rapide est disponible.</translation>
 <translation id="8568392309447938879">Vous devez être connecté à Chrome pour utiliser les applications. Cela permet de synchroniser vos applications, vos favoris, votre historique, vos mots de passe et d'autres paramètres dans Chrome sur tous vos appareils.</translation>
 <translation id="8614913330719544658">Google Chrome ne répond pas. Voulez-vous le relancer maintenant ?</translation>
+<translation id="8667808506758191620">Votre <ph name="DEVICE_TYPE" /> est à jour.</translation>
 <translation id="8669527147644353129">Application d'aide de Google Chrome</translation>
 <translation id="8679801911857917785">Elle contrôle également la page qui s'affiche au démarrage de Chrome.</translation>
 <translation id="870251953148363156">Mettre à jour &amp;Google Chrome</translation>
 <translation id="8823341990149967727">Version de Chrome obsolète</translation>
-<translation id="884296878221830158">Elle contrôle également la page qui s'affiche au démarrage de Chrome ou lorsque vous cliquez sur le bouton "Accueil".</translation>
+<translation id="884296878221830158">Elle contrôle également la page qui s'affiche au démarrage de Chrome ou lorsque vous cliquez sur le bouton Accueil.</translation>
 <translation id="8851136666856101339">principal</translation>
 <translation id="8862326446509486874">Vous ne disposez pas des droits requis pour installer la version système. Relancez l'installation en vous connectant comme administrateur.</translation>
 <translation id="9026991721384951619">Impossible de synchroniser vos données dans Chrome OS, car les informations de connexion de votre compte ne sont plus à jour.</translation>
+<translation id="9067395829937117663">Vous devez disposer de Windows 7 ou version ultérieure pour utiliser Google Chrome.</translation>
 <translation id="9102715433345326100">Ce fichier est malveillant. Il a donc été bloqué dans Chrome.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Avertissement<ph name="END_BOLD" /> : Google Chrome ne peut pas empêcher les extensions d'enregistrer votre historique de navigation. Pour désactiver cette extension en mode navigation privée, désélectionnez-la.</translation>
 <translation id="911206726377975832">Supprimer également vos données de navigation ?</translation>

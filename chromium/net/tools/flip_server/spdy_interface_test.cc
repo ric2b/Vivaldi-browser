@@ -5,8 +5,8 @@
 #include "net/tools/flip_server/spdy_interface.h"
 
 #include <list>
+#include <memory>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 #include "net/spdy/buffered_spdy_framer.h"
 #include "net/tools/balsa/balsa_enums.h"
@@ -66,10 +66,8 @@ class SpdyFramerVisitor : public BufferedSpdyFramerVisitorInterface {
                     bool fin,
                     const SpdyHeaderBlock& headers));
   MOCK_METHOD3(OnDataFrameHeader, void(SpdyStreamId, size_t, bool));
-  MOCK_METHOD4(OnStreamFrameData, void(SpdyStreamId,
-                                       const char*,
-                                       size_t,
-                                       bool));
+  MOCK_METHOD3(OnStreamFrameData, void(SpdyStreamId, const char*, size_t));
+  MOCK_METHOD1(OnStreamEnd, void(SpdyStreamId));
   MOCK_METHOD2(OnStreamPadding, void(SpdyStreamId, size_t));
   MOCK_METHOD1(OnHeaderFrameStart,
                SpdyHeadersHandlerInterface*(SpdyStreamId stream_id));
@@ -194,14 +192,14 @@ class SpdySMTestBase : public ::testing::TestWithParam<SpdyMajorVersion> {
   }
 
  protected:
-  scoped_ptr<MockSMInterface> mock_another_interface_;
-  scoped_ptr<MemoryCache> memory_cache_;
-  scoped_ptr<FlipAcceptor> acceptor_;
-  scoped_ptr<EpollServer> epoll_server_;
-  scoped_ptr<FakeSMConnection> connection_;
-  scoped_ptr<TestSpdySM> interface_;
-  scoped_ptr<BufferedSpdyFramer> spdy_framer_;
-  scoped_ptr<SpdyFramerVisitor> spdy_framer_visitor_;
+  std::unique_ptr<MockSMInterface> mock_another_interface_;
+  std::unique_ptr<MemoryCache> memory_cache_;
+  std::unique_ptr<FlipAcceptor> acceptor_;
+  std::unique_ptr<EpollServer> epoll_server_;
+  std::unique_ptr<FakeSMConnection> connection_;
+  std::unique_ptr<TestSpdySM> interface_;
+  std::unique_ptr<BufferedSpdyFramer> spdy_framer_;
+  std::unique_ptr<SpdyFramerVisitor> spdy_framer_visitor_;
 };
 
 class SpdySMProxyTest : public SpdySMTestBase {
@@ -230,13 +228,13 @@ TEST_P(SpdySMProxyTest, InitSMConnection) {
 
 TEST_P(SpdySMProxyTest, OnStreamFrameData) {
   BufferedSpdyFramerVisitorInterface* visitor = interface_.get();
-  scoped_ptr<MockSMInterface> mock_interface(new MockSMInterface);
+  std::unique_ptr<MockSMInterface> mock_interface(new MockSMInterface);
   uint32_t stream_id = 92;
   uint32_t associated_id = 43;
   SpdyHeaderBlock block;
   testing::MockFunction<void(int)> checkpoint;  // NOLINT
 
-  scoped_ptr<SpdySerializedFrame> frame(
+  std::unique_ptr<SpdySerializedFrame> frame(
       spdy_framer_->CreatePingFrame(12, false));
   block[":method"] = "GET";
   block[":host"] = "www.example.com";
@@ -257,7 +255,7 @@ TEST_P(SpdySMProxyTest, OnStreamFrameData) {
 
   visitor->OnSynStream(stream_id, associated_id, 0, false, false, block);
   checkpoint.Call(0);
-  visitor->OnStreamFrameData(stream_id, frame->data(), frame->size(), true);
+  visitor->OnStreamFrameData(stream_id, frame->data(), frame->size());
 }
 
 TEST_P(SpdySMProxyTest, OnRstStream) {
@@ -388,12 +386,11 @@ TEST_P(SpdySMProxyTest, SendErrorNotFound) {
     EXPECT_CALL(checkpoint, Call(0));
     EXPECT_CALL(*spdy_framer_visitor_,
                 OnDataFrameHeader(stream_id, _, true));
-    EXPECT_CALL(*spdy_framer_visitor_,
-                OnStreamFrameData(stream_id, _, _, false)).Times(1)
-        .WillOnce(DoAll(SaveArg<1>(&actual_data),
-                        SaveArg<2>(&actual_size)));
-    EXPECT_CALL(*spdy_framer_visitor_,
-                OnStreamFrameData(stream_id, NULL, 0, true)).Times(1);
+    EXPECT_CALL(*spdy_framer_visitor_, OnStreamFrameData(stream_id, _, _))
+        .Times(1)
+        .WillOnce(DoAll(SaveArg<1>(&actual_data), SaveArg<2>(&actual_size)));
+    EXPECT_CALL(*spdy_framer_visitor_, OnStreamFrameData(stream_id, NULL, 0))
+        .Times(1);
   }
 
   std::list<DataFrame*>::const_iterator i = connection_->output_list()->begin();
@@ -491,8 +488,7 @@ TEST_P(SpdySMProxyTest, SendDataFrame) {
     InSequence s;
     EXPECT_CALL(*spdy_framer_visitor_,
                 OnDataFrameHeader(stream_id, _, false));
-    EXPECT_CALL(*spdy_framer_visitor_,
-                OnStreamFrameData(stream_id, _, _, false))
+    EXPECT_CALL(*spdy_framer_visitor_, OnStreamFrameData(stream_id, _, _))
         .WillOnce(DoAll(SaveArg<1>(&actual_data), SaveArg<2>(&actual_size)));
   }
 
@@ -516,10 +512,9 @@ TEST_P(SpdySMProxyTest, SendLongDataFrame) {
     for (int i = 0; i < 3; ++i) {
         EXPECT_CALL(*spdy_framer_visitor_,
                     OnDataFrameHeader(stream_id, _, false));
-        EXPECT_CALL(*spdy_framer_visitor_,
-                    OnStreamFrameData(stream_id, _, _, false))
-            .WillOnce(DoAll(SaveArg<1>(&actual_data),
-                            SaveArg<2>(&actual_size)));
+        EXPECT_CALL(*spdy_framer_visitor_, OnStreamFrameData(stream_id, _, _))
+            .WillOnce(
+                DoAll(SaveArg<1>(&actual_data), SaveArg<2>(&actual_size)));
     }
   }
 
@@ -595,12 +590,11 @@ TEST_P(SpdySMServerTest, NewStreamError) {
     EXPECT_CALL(checkpoint, Call(0));
     EXPECT_CALL(*spdy_framer_visitor_,
                 OnDataFrameHeader(stream_id, _, true));
-    EXPECT_CALL(*spdy_framer_visitor_,
-                OnStreamFrameData(stream_id, _, _, false)).Times(1)
-        .WillOnce(DoAll(SaveArg<1>(&actual_data),
-                        SaveArg<2>(&actual_size)));
-    EXPECT_CALL(*spdy_framer_visitor_,
-                OnStreamFrameData(stream_id, NULL, 0, true)).Times(1);
+    EXPECT_CALL(*spdy_framer_visitor_, OnStreamFrameData(stream_id, _, _))
+        .Times(1)
+        .WillOnce(DoAll(SaveArg<1>(&actual_data), SaveArg<2>(&actual_size)));
+    EXPECT_CALL(*spdy_framer_visitor_, OnStreamFrameData(stream_id, NULL, 0))
+        .Times(1);
   }
 
   std::list<DataFrame*>::const_iterator i = connection_->output_list()->begin();

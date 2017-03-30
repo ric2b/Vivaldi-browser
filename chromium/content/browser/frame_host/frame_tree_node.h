@@ -7,12 +7,12 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/frame_host/render_frame_host_manager.h"
 #include "content/common/content_export.h"
@@ -27,6 +27,7 @@ class FrameTree;
 class NavigationRequest;
 class Navigator;
 class RenderFrameHostImpl;
+struct ContentSecurityPolicyHeader;
 
 // When a page contains iframes, its renderer process maintains a tree structure
 // of those frames. We are mirroring this tree in the browser process. This
@@ -56,9 +57,9 @@ class CONTENT_EXPORT FrameTreeNode {
   FrameTreeNode(FrameTree* frame_tree,
                 Navigator* navigator,
                 RenderFrameHostDelegate* render_frame_delegate,
-                RenderViewHostDelegate* render_view_delegate,
                 RenderWidgetHostDelegate* render_widget_delegate,
                 RenderFrameHostManager::Delegate* manager_delegate,
+                FrameTreeNode* parent,
                 blink::WebTreeScopeType scope,
                 const std::string& name,
                 const std::string& unique_name,
@@ -71,7 +72,7 @@ class CONTENT_EXPORT FrameTreeNode {
 
   bool IsMainFrame() const;
 
-  FrameTreeNode* AddChild(scoped_ptr<FrameTreeNode> child,
+  FrameTreeNode* AddChild(std::unique_ptr<FrameTreeNode> child,
                           int process_id,
                           int frame_routing_id);
   void RemoveChild(FrameTreeNode* child);
@@ -97,6 +98,10 @@ class CONTENT_EXPORT FrameTreeNode {
 
   const std::string& frame_name() const {
     return replication_state_.name;
+  }
+
+  const std::string& unique_name() const {
+    return replication_state_.unique_name;
   }
 
   size_t child_count() const {
@@ -141,6 +146,14 @@ class CONTENT_EXPORT FrameTreeNode {
 
   // Set the current name and notify proxies about the update.
   void SetFrameName(const std::string& name, const std::string& unique_name);
+
+  // Add CSP header to replication state and notify proxies about the update.
+  void AddContentSecurityPolicy(const ContentSecurityPolicyHeader& header);
+
+  // Discards previous CSP headers and notifies proxies about the update.
+  // Typically invoked after committing navigation to a new document (since the
+  // new document comes with a fresh set of CSP http headers).
+  void ResetContentSecurityPolicy();
 
   // Sets the current enforcement of strict mixed content checking and
   // notifies proxies about the update.
@@ -203,6 +216,10 @@ class CONTENT_EXPORT FrameTreeNode {
   // |children_|, or nullptr if there is no such node.
   FrameTreeNode* PreviousSibling() const;
 
+  // Return the node immediately following this node in its parent's
+  // |children_|, or nullptr if there is no such node.
+  FrameTreeNode* NextSibling() const;
+
   // Returns true if this node is in a loading state.
   bool IsLoading() const;
 
@@ -220,7 +237,7 @@ class CONTENT_EXPORT FrameTreeNode {
   // navigation. If there was an ongoing navigation request before calling this
   // function, it is canceled. |navigation_request| should not be null.
   void CreatedNavigationRequest(
-      scoped_ptr<NavigationRequest> navigation_request);
+      std::unique_ptr<NavigationRequest> navigation_request);
 
   // PlzNavigate
   // Resets the current navigation request. If |keep_state| is true, any state
@@ -276,9 +293,9 @@ class CONTENT_EXPORT FrameTreeNode {
  private:
   class OpenerDestroyedObserver;
 
-  void set_parent(FrameTreeNode* parent) { parent_ = parent; }
-
   void TraceSnapshot() const;
+
+  FrameTreeNode* GetSibling(int relative_offset) const;
 
   // The next available browser-global FrameTreeNode ID.
   static int next_frame_tree_node_id_;
@@ -300,8 +317,7 @@ class CONTENT_EXPORT FrameTreeNode {
   // even if the frame does a cross-process navigation.
   const int frame_tree_node_id_;
 
-  // The parent node of this frame. NULL if this node is the root or if it has
-  // not yet been attached to the frame tree.
+  // The parent node of this frame. |nullptr| if this node is the root.
   FrameTreeNode* parent_;
 
   // The frame that opened this frame, if any.  Will be set to null if the
@@ -314,10 +330,10 @@ class CONTENT_EXPORT FrameTreeNode {
   // is set to a non-null node, and it is removed from that list when |opener_|
   // changes or when this node is destroyed.  It is also cleared if |opener_|
   // is disowned.
-  scoped_ptr<OpenerDestroyedObserver> opener_observer_;
+  std::unique_ptr<OpenerDestroyedObserver> opener_observer_;
 
   // The immediate children of this specific frame.
-  std::vector<scoped_ptr<FrameTreeNode>> children_;
+  std::vector<std::unique_ptr<FrameTreeNode>> children_;
 
   // Whether this frame has committed any real load, replacing its initial
   // about:blank page.
@@ -353,7 +369,7 @@ class CONTENT_EXPORT FrameTreeNode {
   // PlzNavigate
   // Owns an ongoing NavigationRequest until it is ready to commit. It will then
   // be reset and a RenderFrameHost will be responsible for the navigation.
-  scoped_ptr<NavigationRequest> navigation_request_;
+  std::unique_ptr<NavigationRequest> navigation_request_;
 
   // List of objects observing this FrameTreeNode.
   base::ObserverList<Observer> observers_;

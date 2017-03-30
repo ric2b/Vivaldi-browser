@@ -90,9 +90,9 @@ public class CustomTabActivity extends ChromeActivity {
     // change the package name.
     private boolean mShouldOverridePackage;
 
-    private boolean mRecordedStartupUma;
     private boolean mShouldReplaceCurrentEntry;
     private boolean mHasCreatedTabEarly;
+    private boolean mIsInitialStart = true;
     private CustomTabObserver mTabObserver;
 
     private String mPrerenderedUrl;
@@ -348,6 +348,9 @@ public class CustomTabActivity extends ChromeActivity {
             loadUrlInTab(mMainTab, new LoadUrlParams(url),
                     IntentHandler.getTimestampFromIntent(getIntent()));
         }
+
+        // Put Sync in the correct state by calling tab state initialized. crbug.com/581811.
+        getTabModelSelector().markTabStateInitialized();
         super.finishNativeInitialization();
     }
 
@@ -414,13 +417,17 @@ public class CustomTabActivity extends ChromeActivity {
         super.onStartWithNative();
         setActiveContentHandler(mCustomTabContentHandler);
 
-        if (!mRecordedStartupUma) {
-            mRecordedStartupUma = true;
+        if (getSavedInstanceState() != null || !mIsInitialStart) {
+            RecordUserAction.record("CustomTabs.StartedReopened");
+        } else {
             ExternalAppId externalId =
                     IntentHandler.determineExternalIntentSource(getPackageName(), getIntent());
             RecordHistogram.recordEnumeratedHistogram("CustomTabs.ClientAppId",
                     externalId.ordinal(), ExternalAppId.INDEX_BOUNDARY.ordinal());
+
+            RecordUserAction.record("CustomTabs.StartedInitially");
         }
+        mIsInitialStart = false;
     }
 
     @Override
@@ -530,6 +537,9 @@ public class CustomTabActivity extends ChromeActivity {
 
     @Override
     public void finish() {
+        // Prevent the menu window from leaking.
+        if (getAppMenuHandler() != null) getAppMenuHandler().hideAppMenu();
+
         super.finish();
         if (mIntentDataProvider != null && mIntentDataProvider.shouldAnimateOnFinish()) {
             mShouldOverridePackage = true;
@@ -662,8 +672,10 @@ public class CustomTabActivity extends ChromeActivity {
             }
             return true;
         } else if (id == R.id.info_menu_id) {
-            WebsiteSettingsPopup.show(this, getTabModelSelector().getCurrentTab(),
-                    getToolbarManager().getContentPublisher());
+            WebsiteSettingsPopup.show(
+                    this, getTabModelSelector().getCurrentTab(),
+                    getToolbarManager().getContentPublisher(),
+                    WebsiteSettingsPopup.OPENED_FROM_MENU);
             return true;
         }
         return super.onMenuOrKeyboardAction(id, fromMenu);

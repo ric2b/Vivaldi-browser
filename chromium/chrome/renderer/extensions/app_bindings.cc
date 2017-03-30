@@ -4,6 +4,8 @@
 
 #include "chrome/renderer/extensions/app_bindings.h"
 
+#include <memory>
+
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
@@ -41,13 +43,16 @@ const char kInvalidCallbackIdError[] = "Invalid callbackId";
 AppBindings::AppBindings(Dispatcher* dispatcher, ScriptContext* context)
     : ObjectBackedNativeHandler(context),
       dispatcher_(dispatcher) {
-  RouteFunction("GetIsInstalled",
+  RouteFunction(
+      "GetIsInstalled", "app.getIsInstalled",
       base::Bind(&AppBindings::GetIsInstalled, base::Unretained(this)));
-  RouteFunction("GetDetails",
-      base::Bind(&AppBindings::GetDetails, base::Unretained(this)));
-  RouteFunction("GetInstallState",
+  RouteFunction("GetDetails", "app.getDetails",
+                base::Bind(&AppBindings::GetDetails, base::Unretained(this)));
+  RouteFunction(
+      "GetInstallState", "app.installState",
       base::Bind(&AppBindings::GetInstallState, base::Unretained(this)));
-  RouteFunction("GetRunningState",
+  RouteFunction(
+      "GetRunningState", "app.runningState",
       base::Bind(&AppBindings::GetRunningState, base::Unretained(this)));
 }
 
@@ -83,10 +88,10 @@ v8::Local<v8::Value> AppBindings::GetDetailsImpl(blink::WebLocalFrame* frame) {
   if (!extension)
     return v8::Null(isolate);
 
-  scoped_ptr<base::DictionaryValue> manifest_copy(
+  std::unique_ptr<base::DictionaryValue> manifest_copy(
       extension->manifest()->value()->DeepCopy());
   manifest_copy->SetString("id", extension->id());
-  scoped_ptr<V8ValueConverter> converter(V8ValueConverter::create());
+  std::unique_ptr<V8ValueConverter> converter(V8ValueConverter::create());
   return converter->ToV8Value(manifest_copy.get(),
                               frame->mainWorldScriptContext());
 }

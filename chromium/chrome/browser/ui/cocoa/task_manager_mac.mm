@@ -14,6 +14,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #import "chrome/browser/ui/cocoa/window_size_autosaver.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
@@ -411,7 +412,8 @@ class SortHelper {
     [tableView_ selectRowIndexes:indexSet byExtendingSelection:YES];
   }
 
-  bool enabled = [selection count] > 0 && !selectionContainsBrowserProcess;
+  bool enabled = [selection count] > 0 && !selectionContainsBrowserProcess &&
+    TaskManager::IsEndProcessEnabled();
   [endProcessButton_ setEnabled:enabled];
 }
 
@@ -593,11 +595,20 @@ void TaskManagerMac::Hide() {
 namespace chrome {
 
 // Declared in browser_dialogs.h.
-void ShowTaskManager(Browser* browser) {
+ui::TableModel* ShowTaskManager(Browser* browser) {
+  if (chrome::ToolkitViewsDialogsEnabled())
+    return chrome::ShowTaskManagerViews(browser);
+
   TaskManagerMac::Show();
+  return nullptr;  // No ui::TableModel* to return on Mac, so return nullptr.
 }
 
 void HideTaskManager() {
+  if (chrome::ToolkitViewsDialogsEnabled()) {
+    chrome::HideTaskManagerViews();
+    return;
+  }
+
   TaskManagerMac::Hide();
 }
 

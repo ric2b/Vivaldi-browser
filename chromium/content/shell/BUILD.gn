@@ -13,6 +13,10 @@ import("//tools/grit/repack.gni")
 import("//tools/grit/grit_rule.gni")
 if (is_android) {
   import("//build/config/android/config.gni")
+} else if (is_mac) {
+  import("//build/config/mac/rules.gni")
+  import("//build_overrides/v8.gni")
+  import("//build/mac/tweak_info_plist.gni")
 }
 
 declare_args() {
@@ -84,8 +88,8 @@ static_library("content_shell_lib") {
     "browser/layout_test/layout_test_resource_dispatcher_host_delegate.h",
     "browser/layout_test/layout_test_url_request_context_getter.cc",
     "browser/layout_test/layout_test_url_request_context_getter.h",
-    "browser/layout_test/notify_done_forwarder.cc",
-    "browser/layout_test/notify_done_forwarder.h",
+    "browser/layout_test/secondary_test_window_observer.cc",
+    "browser/layout_test/secondary_test_window_observer.h",
     "browser/layout_test/test_info_extractor.cc",
     "browser/layout_test/test_info_extractor.h",
     "browser/shell.cc",
@@ -167,8 +171,8 @@ static_library("content_shell_lib") {
     "renderer/layout_test/layout_test_content_renderer_client.h",
     "renderer/layout_test/layout_test_render_frame_observer.cc",
     "renderer/layout_test/layout_test_render_frame_observer.h",
-    "renderer/layout_test/layout_test_render_process_observer.cc",
-    "renderer/layout_test/layout_test_render_process_observer.h",
+    "renderer/layout_test/layout_test_render_thread_observer.cc",
+    "renderer/layout_test/layout_test_render_thread_observer.h",
     "renderer/layout_test/leak_detector.cc",
     "renderer/layout_test/leak_detector.h",
     "renderer/layout_test/test_media_stream_renderer_factory.cc",
@@ -229,7 +233,6 @@ static_library("content_shell_lib") {
     "//gpu",
     "//ipc",
     "//media",
-    "//media/mojo/services:application_factory",
     "//net",
     "//net:net_resources",
     "//skia",
@@ -247,6 +250,7 @@ static_library("content_shell_lib") {
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/gfx/ipc",
+    "//ui/gfx/ipc/geometry",
     "//ui/gfx/ipc/skia",
     "//ui/gl",
     "//url",
@@ -261,11 +265,10 @@ static_library("content_shell_lib") {
     ]
   }
   if (mojo_media_host == "browser") {
-    deps += [ "//media/mojo/services:application_factory" ]
+    deps += [ "//media/mojo/services" ]
   }
 
   if (is_win) {
-    #'LinkIncremental': '<(msvs_large_module_debug_link_mode)',  TODO(GYP)
     sources += [
       "common/v8_breakpad_support_win.cc",
       "common/v8_breakpad_support_win.h",
@@ -286,7 +289,7 @@ static_library("content_shell_lib") {
       "//tools/xdisplaycheck",
     ]
 
-    deps += [ "//ui/events/devices" ]
+    deps += [ "//ui/events/devices/x11" ]
   }
 
   if (is_android) {
@@ -419,21 +422,54 @@ repack("pak") {
   output = "$root_out_dir/content_shell.pak"
 }
 
-# TODO(GYP): Figure out what this should be on android
-# and make linking this work on the Mac.
-if (!is_android && !is_mac) {
+if (is_android) {
+  group("content_shell") {
+    testonly = true
+    deps = [
+      "//content/shell/android:content_shell_apk",
+    ]
+  }
+} else if (is_mac) {
+  tweak_info_plist("content_shell_plist") {
+    testonly = true
+    info_plist = "app/app-Info.plist"
+    args = [
+      "--scm=1",
+      "--version",
+      content_shell_version,
+    ]
+  }
+  mac_app_bundle("content_shell") {
+    testonly = true
+    output_name = content_shell_product_name
+    sources = [
+      "app/shell_main.cc",
+    ]
+    deps = [
+      ":content_shell_framework_bundle_data",
+      ":content_shell_resources_bundle_data",
+
+      # TODO(rsesek): Remove this after GYP is gone, since it only needs to
+      # be here per the comment in blink_test_platform_support_mac.mm about
+      # the bundle structure.
+      "//components/test_runner:resources",
+    ]
+    info_plist_target = ":content_shell_plist"
+  }
+} else {
   # TODO(brettw) when GYP is no longer necessary, delete
   # content/shell/app/shell.exe.manifest. This file is not used in GN.
   executable("content_shell") {
     testonly = true
 
     # TODO(GYP) mac resource bundle stuff for this target.
-    # TODO(GYP) Windows content shell settings:
-    #  - RC file.
-    #  - 'LinkIncremental': '<(msvs_large_module_debug_link_mode)',
     sources = [
       "app/shell_main.cc",
     ]
+
+    if (is_win) {
+      sources += [ "app/shell.rc" ]
+    }
 
     defines = []
 
@@ -446,6 +482,11 @@ if (!is_android && !is_mac) {
 
     if (is_win) {
       deps += [ "//sandbox" ]
+
+      # This is a large module that can't do incremental linking in some cases.
+      configs -= [ "//build/config/win:default_incremental_linking" ]
+      configs +=
+          [ "//build/config/win:default_large_module_incremental_linking" ]
       if (win_console_app) {
         defines += [ "WIN_CONSOLE_APP" ]
       } else {
@@ -455,34 +496,10 @@ if (!is_android && !is_mac) {
       }
     }
 
-    if (is_mac) {
-      # TODO(GYP) lots of stuff from GYP file here including helper_app and
-      # postbuilds.
-      output_name = content_shell_product_name
-      deps = [
-        ":framework",
-      ]
-    }
-
-    if (is_android) {
-      # Some tests rely on this tool. It might be nicer if these tests relied on
-      # image diff rather than having content shell depend on it.
-      data_deps = [
-        "//tools/imagediff($host_toolchain)",
-      ]
-    }
-
     if (is_linux && !is_component_build) {
       # Set rpath to find our own libfreetype even in a non-component build.
       configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
     }
-  }
-} else {
-  group("content_shell") {
-    testonly = true
-    deps = [
-      ":content_shell_lib",
-    ]
   }
 }
 
@@ -496,6 +513,7 @@ if (is_win) {
     deps = [
       "//base",
       "//build/config/sanitizers:deps",
+      "//build/win:default_exe_manifest",
       "//components/crash/content/tools:crash_service",
     ]
 
@@ -505,22 +523,200 @@ if (is_win) {
 }
 
 if (is_mac) {
-  # TODO(GYP) this should be a bundle. Lots of other stuff in this target.
-  # GYP version: content/content_shell.gypi:content_shell_framework
-  shared_library("framework") {
+  mac_xib_bundle_data("content_shell_framework_xibs") {
+    sources = [
+      "app/English.lproj/HttpAuth.xib",
+      "app/English.lproj/MainMenu.xib",
+    ]
+    output_path = "{{bundle_resources_dir}}/English.lproj"
+  }
+
+  bundle_data("content_shell_framework_resources") {
+    sources = [
+      "$root_out_dir/content_shell.pak",
+      "$root_out_dir/icudtl.dat",
+      "resources/missingImage.png",
+      "resources/textAreaResizeCorner.png",
+    ]
+
+    public_deps = [
+      ":pak",
+    ]
+
+    deps = [
+      "//third_party/icu:icudata",
+    ]
+
+    if (v8_use_external_startup_data) {
+      sources += [
+        "$root_out_dir/natives_blob.bin",
+        "$root_out_dir/snapshot_blob.bin",
+      ]
+      public_deps += [ "//v8" ]
+    }
+
+    outputs = [
+      "{{bundle_resources_dir}}/{{source_file_part}}",
+    ]
+  }
+
+  if (enable_plugins) {
+    bundle_data("content_shell_framework_plugins") {
+      sources = [
+        "$root_out_dir/blink_deprecated_test_plugin.plugin",
+        "$root_out_dir/blink_test_plugin.plugin",
+      ]
+
+      outputs = [
+        "{{bundle_root_dir}}/{{source_file_part}}",
+      ]
+
+      public_deps = [
+        "//ppapi:blink_deprecated_test_plugin",
+        "//ppapi:blink_test_plugin",
+      ]
+    }
+  }
+
+  content_shell_framework_name = "$content_shell_product_name Framework"
+  content_shell_helper_name = "$content_shell_product_name Helper"
+
+  tweak_info_plist("content_shell_framework_plist") {
+    testonly = true
+    info_plist = "app/framework-Info.plist"
+    args = [
+      "--breakpad=1",
+      "--keystone=0",
+      "--scm=1",
+      "--version",
+      content_shell_version,
+      "--branding",
+      content_shell_product_name,
+    ]
+  }
+
+  mac_framework_bundle("content_shell_framework") {
     testonly = true
 
-    # TODO(GYP) bug 546894: Fix GN and toolchains to handle spaces here.
-    #output_name = "$content_shell_product_name Framework"
-    output_name = "content_shell_framework"  # Temporary one with no spaces.
+    output_name = content_shell_framework_name
 
     sources = [
       "app/shell_content_main.cc",
       "app/shell_content_main.h",
     ]
 
+    # TODO(rsesek): Handle these missing pieces:
+    #   - crash_inspector
+    #   - crash_report_sender.app
+
     deps = [
+      ":content_shell_framework_resources",
+      ":content_shell_framework_xibs",
       ":content_shell_lib",
+      "//third_party/icu:icudata",
+    ]
+
+    if (enable_plugins) {
+      deps += [ ":content_shell_framework_plugins" ]
+    }
+
+    ldflags = [ "-Wl,-install_name,@executable_path/../Frameworks/$output_name.framework/$output_name" ]
+
+    info_plist_target = ":content_shell_framework_plist"
+  }
+
+  tweak_info_plist("content_shell_helper_plist") {
+    testonly = true
+    info_plist = "app/helper-Info.plist"
+    args = [
+      "--breakpad=0",
+      "--keystone=0",
+      "--scm=0",
+      "--version",
+      content_shell_version,
+    ]
+  }
+
+  mac_app_bundle("content_shell_helper_app") {
+    testonly = true
+    output_name = content_shell_helper_name
+    sources = [
+      "app/shell_main.cc",
+    ]
+    deps = [
+      ":content_shell_framework+link",
+    ]
+    ldflags = [
+      # The helper is in Content Shell.app/Contents/Frameworks/Content Shell Helper.app/Contents/MacOS/
+      # so set rpath up to the base.
+      "-rpath",
+      "@loader_path/../../../../../..",
+    ]
+    info_plist_target = ":content_shell_helper_plist"
+  }
+
+  # The install_name_tool can only operate in-place, rather than producing a
+  # unique output. Use the xcrun wrapper script to write a fake stamp output
+  # file. After :content_shell_helper_app has been built and bundled, this
+  # will run, modifying the executable in the bundle and writing out the
+  # --stamp specified. This will change the mtime on the executable, but
+  # because the stamp will also be updated, the
+  # :content_shell_framework_bundle_data will re-copy the output. This only
+  # works because nothing else depends on the output of
+  # :content_shell_helper_app.
+  # TODO(rsesek): After GYP is gone, re-write content_shell_main to be like
+  # chrome_main and use dlopen() instead of a linked framework.
+  action("fix_helper_link_framework") {
+    testonly = true
+    script = "//build/config/mac/xcrun.py"
+    inputs = [
+      "$root_out_dir/$content_shell_helper_name.app/Contents/MacOS/$content_shell_helper_name",
+    ]
+
+    stamp_file = "$target_out_dir/xcrun_$target_name.stamp"
+    outputs = [
+      stamp_file,
+    ]
+
+    # TODO(rsesek): Figure out something like GYP's postbuilds to allow
+    # install_name_tool to operate in-place <https://crbug.com/607292>.
+    args = [
+             "--stamp",
+             rebase_path(stamp_file, root_build_dir),
+
+             # xcrun arguments:
+             "install_name_tool",
+             "-change",
+             "@executable_path/../Frameworks/$content_shell_framework_name.framework/$content_shell_framework_name",
+             "@executable_path/../../../$content_shell_framework_name.framework/$content_shell_framework_name",
+           ] + rebase_path(inputs, root_build_dir)
+    public_deps = [
+      ":content_shell_helper_app",
+    ]
+  }
+
+  bundle_data("content_shell_framework_bundle_data") {
+    testonly = true
+    sources = [
+      "$root_out_dir/$content_shell_framework_name.framework",
+      "$root_out_dir/$content_shell_helper_name.app",
+    ]
+    outputs = [
+      "{{bundle_root_dir}}/Frameworks/{{source_file_part}}",
+    ]
+    public_deps = [
+      ":content_shell_framework+link",
+      ":fix_helper_link_framework",
+    ]
+  }
+
+  bundle_data("content_shell_resources_bundle_data") {
+    testonly = true
+    sources = [
+      "app/app.icns",
+    ]
+    outputs = [
+      "{{bundle_resources_dir}}/{{source_file_part}}",
     ]
   }
 }

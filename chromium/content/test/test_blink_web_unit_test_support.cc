@@ -9,17 +9,19 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/platform_thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "cc/blink/web_layer_impl.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "components/scheduler/renderer/renderer_scheduler_impl.h"
 #include "components/scheduler/renderer/webthread_impl_for_renderer_scheduler.h"
 #include "components/scheduler/test/lazy_scheduler_message_loop_delegate_for_tests.h"
+#include "content/child/web_url_loader_impl.h"
 #include "content/test/mock_webclipboard_impl.h"
 #include "content/test/web_gesture_curve_mock.h"
 #include "media/base/media.h"
@@ -29,6 +31,8 @@
 #include "third_party/WebKit/public/platform/WebData.h"
 #include "third_party/WebKit/public/platform/WebPluginListBuilder.h"
 #include "third_party/WebKit/public/platform/WebString.h"
+#include "third_party/WebKit/public/platform/WebTaskRunner.h"
+#include "third_party/WebKit/public/platform/WebThread.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/web/WebKit.h"
 #include "third_party/WebKit/public/web/WebNetworkStateNotifier.h"
@@ -94,7 +98,7 @@ TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport() {
 #endif
 
   scoped_refptr<base::SingleThreadTaskRunner> dummy_task_runner;
-  scoped_ptr<base::ThreadTaskRunnerHandle> dummy_task_runner_handle;
+  std::unique_ptr<base::ThreadTaskRunnerHandle> dummy_task_runner_handle;
   if (!base::ThreadTaskRunnerHandle::IsSet()) {
     // Dummy task runner is initialized here because the blink::initialize
     // creates IsolateHolder which needs the current task runner handle. There
@@ -107,13 +111,13 @@ TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport() {
     dummy_task_runner_handle.reset(
         new base::ThreadTaskRunnerHandle(dummy_task_runner));
   }
-  renderer_scheduler_ = make_scoped_ptr(new scheduler::RendererSchedulerImpl(
+  renderer_scheduler_ = base::WrapUnique(new scheduler::RendererSchedulerImpl(
       scheduler::LazySchedulerMessageLoopDelegateForTests::Create()));
   web_thread_ = renderer_scheduler_->CreateMainThread();
 
   // Set up a FeatureList instance, so that code using that API will not hit a
   // an error that it's not set. Cleared by ClearInstanceForTesting() below.
-  base::FeatureList::SetInstance(make_scoped_ptr(new base::FeatureList));
+  base::FeatureList::SetInstance(base::WrapUnique(new base::FeatureList));
 
   blink::initialize(this);
   blink::setLayoutTestMode(true);
@@ -184,32 +188,16 @@ blink::WebMimeRegistry* TestBlinkWebUnitTestSupport::mimeRegistry() {
 }
 
 blink::WebURLLoader* TestBlinkWebUnitTestSupport::createURLLoader() {
-  return url_loader_factory_->createURLLoader(
-      BlinkPlatformImpl::createURLLoader());
+  blink::WebThread* currentThread = Platform::current()->currentThread();
+  // This loader should be used only for process-local resources such as
+  // data URLs.
+  blink::WebURLLoader* default_loader = new WebURLLoaderImpl(
+      nullptr, base::WrapUnique(currentThread->getWebTaskRunner()->clone()));
+  return url_loader_factory_->createURLLoader(default_loader);
 }
 
 blink::WebString TestBlinkWebUnitTestSupport::userAgent() {
   return blink::WebString::fromUTF8("test_runner/0.0.0.0");
-}
-
-blink::WebData TestBlinkWebUnitTestSupport::loadResource(const char* name) {
-  if (!strcmp(name, "deleteButton")) {
-    // Create a red 30x30 square.
-    const char red_square[] =
-        "\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00\x00\x00\x0d\x49\x48\x44\x52"
-        "\x00\x00\x00\x1e\x00\x00\x00\x1e\x04\x03\x00\x00\x00\xc9\x1e\xb3"
-        "\x91\x00\x00\x00\x30\x50\x4c\x54\x45\x00\x00\x00\x80\x00\x00\x00"
-        "\x80\x00\x80\x80\x00\x00\x00\x80\x80\x00\x80\x00\x80\x80\x80\x80"
-        "\x80\xc0\xc0\xc0\xff\x00\x00\x00\xff\x00\xff\xff\x00\x00\x00\xff"
-        "\xff\x00\xff\x00\xff\xff\xff\xff\xff\x7b\x1f\xb1\xc4\x00\x00\x00"
-        "\x09\x70\x48\x59\x73\x00\x00\x0b\x13\x00\x00\x0b\x13\x01\x00\x9a"
-        "\x9c\x18\x00\x00\x00\x17\x49\x44\x41\x54\x78\x01\x63\x98\x89\x0a"
-        "\x18\x50\xb9\x33\x47\xf9\xa8\x01\x32\xd4\xc2\x03\x00\x33\x84\x0d"
-        "\x02\x3a\x91\xeb\xa5\x00\x00\x00\x00\x49\x45\x4e\x44\xae\x42\x60"
-        "\x82";
-    return blink::WebData(red_square, arraysize(red_square));
-  }
-  return BlinkPlatformImpl::loadResource(name);
 }
 
 blink::WebString TestBlinkWebUnitTestSupport::queryLocalizedString(

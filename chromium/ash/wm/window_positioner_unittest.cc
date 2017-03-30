@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/wm/window_positioner.h"
+#include "ash/wm/common/window_positioner.h"
 
 #include <string>
 
@@ -10,11 +10,12 @@
 #include "ash/shell/toplevel_window.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/test_shell_delegate.h"
-#include "ash/wm/window_positioner.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/common/window_positioner.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "base/strings/string_number_conversions.h"
 #include "ui/aura/window_event_dispatcher.h"
-#include "ui/gfx/screen.h"
+#include "ui/display/screen.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 
@@ -60,7 +61,7 @@ TEST_F(WindowPositionerTest, OpenDefaultWindowOnSecondDisplay) {
   // The window should be in the 2nd display with the default size.
   EXPECT_EQ("300x300", bounds.size().ToString());
 #endif
-  EXPECT_TRUE(gfx::Screen::GetScreen()
+  EXPECT_TRUE(display::Screen::GetScreen()
                   ->GetDisplayNearestWindow(second_root_window)
                   .bounds()
                   .Contains(bounds));
@@ -179,8 +180,7 @@ TEST_F(WindowPositionerTest, FirstRunMaximizeWindowHighResloution) {
   delegate->SetForceMaximizeOnFirstRun(true);
 
   WindowPositioner::GetBoundsAndShowStateForNewWindow(
-      gfx::Screen::GetScreen(), nullptr, false, ui::SHOW_STATE_DEFAULT,
-      &bounds_in_out, &show_state_out);
+      nullptr, false, ui::SHOW_STATE_DEFAULT, &bounds_in_out, &show_state_out);
 
   EXPECT_EQ(show_state_out, ui::SHOW_STATE_MAXIMIZED);
 }
@@ -199,8 +199,7 @@ TEST_F(WindowPositionerTest, FirstRunMaximizeWindowLowResolution) {
   delegate->SetForceMaximizeOnFirstRun(true);
 
   WindowPositioner::GetBoundsAndShowStateForNewWindow(
-      gfx::Screen::GetScreen(), nullptr, false, ui::SHOW_STATE_DEFAULT,
-      &bounds_in_out, &show_state_out);
+      nullptr, false, ui::SHOW_STATE_DEFAULT, &bounds_in_out, &show_state_out);
 
   EXPECT_EQ(show_state_out, ui::SHOW_STATE_MAXIMIZED);
 }

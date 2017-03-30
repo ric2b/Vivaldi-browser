@@ -9,7 +9,6 @@
 #include <string>
 #include "base/files/important_file_writer.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -59,7 +58,7 @@ class NotesLoadDetails {
   }
 
  private:
-  scoped_ptr<Notes_Node> notes_node_;
+  std::unique_ptr<Notes_Node> notes_node_;
   std::string computed_checksum_;
   std::string stored_checksum_;
   int64_t highest_id_found_;
@@ -83,7 +82,7 @@ class NotesStorage : public base::ImportantFileWriter::DataSerializer {
 
   // Loads the notes into the model, notifying the model when done. This
   // takes ownership of |details|. See NotesLoadDetails for details.
-  void LoadNotes(scoped_ptr<NotesLoadDetails> details);
+  void LoadNotes(std::unique_ptr<NotesLoadDetails> details);
 
   // Schedules saving the bookmark bar model to disk.
   void ScheduleSave();
@@ -93,7 +92,7 @@ class NotesStorage : public base::ImportantFileWriter::DataSerializer {
   void NotesModelDeleted();
 
   // Callback from backend after loading the bookmark file.
-  void OnLoadFinished(scoped_ptr<NotesLoadDetails> details);
+  void OnLoadFinished(std::unique_ptr<NotesLoadDetails> details);
 
   // ImportantFileWriter::DataSerializer implementation.
   bool SerializeData(std::string* output) override;

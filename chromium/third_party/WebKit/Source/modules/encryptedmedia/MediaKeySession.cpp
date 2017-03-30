@@ -136,7 +136,7 @@ public:
         return m_result;
     }
 
-    const PassRefPtr<DOMArrayBuffer> data() const
+    DOMArrayBuffer* data() const
     {
         ASSERT(m_type == GenerateRequest || m_type == Update);
         return m_data;
@@ -154,7 +154,7 @@ public:
         return m_stringData;
     }
 
-    static PendingAction* CreatePendingGenerateRequest(ContentDecryptionModuleResult* result, WebEncryptedMediaInitDataType initDataType, PassRefPtr<DOMArrayBuffer> initData)
+    static PendingAction* CreatePendingGenerateRequest(ContentDecryptionModuleResult* result, WebEncryptedMediaInitDataType initDataType, DOMArrayBuffer* initData)
     {
         ASSERT(result);
         ASSERT(initData);
@@ -164,10 +164,10 @@ public:
     static PendingAction* CreatePendingLoadRequest(ContentDecryptionModuleResult* result, const String& sessionId)
     {
         ASSERT(result);
-        return new PendingAction(Load, result, WebEncryptedMediaInitDataType::Unknown, PassRefPtr<DOMArrayBuffer>(), sessionId);
+        return new PendingAction(Load, result, WebEncryptedMediaInitDataType::Unknown, nullptr, sessionId);
     }
 
-    static PendingAction* CreatePendingUpdate(ContentDecryptionModuleResult* result, PassRefPtr<DOMArrayBuffer> data)
+    static PendingAction* CreatePendingUpdate(ContentDecryptionModuleResult* result, DOMArrayBuffer* data)
     {
         ASSERT(result);
         ASSERT(data);
@@ -177,13 +177,13 @@ public:
     static PendingAction* CreatePendingClose(ContentDecryptionModuleResult* result)
     {
         ASSERT(result);
-        return new PendingAction(Close, result, WebEncryptedMediaInitDataType::Unknown, PassRefPtr<DOMArrayBuffer>(), String());
+        return new PendingAction(Close, result, WebEncryptedMediaInitDataType::Unknown, nullptr, String());
     }
 
     static PendingAction* CreatePendingRemove(ContentDecryptionModuleResult* result)
     {
         ASSERT(result);
-        return new PendingAction(Remove, result, WebEncryptedMediaInitDataType::Unknown, PassRefPtr<DOMArrayBuffer>(), String());
+        return new PendingAction(Remove, result, WebEncryptedMediaInitDataType::Unknown, nullptr, String());
     }
 
     ~PendingAction()
@@ -193,10 +193,11 @@ public:
     DEFINE_INLINE_TRACE()
     {
         visitor->trace(m_result);
+        visitor->trace(m_data);
     }
 
 private:
-    PendingAction(Type type, ContentDecryptionModuleResult* result, WebEncryptedMediaInitDataType initDataType, PassRefPtr<DOMArrayBuffer> data, const String& stringData)
+    PendingAction(Type type, ContentDecryptionModuleResult* result, WebEncryptedMediaInitDataType initDataType, DOMArrayBuffer* data, const String& stringData)
         : m_type(type)
         , m_result(result)
         , m_initDataType(initDataType)
@@ -208,7 +209,7 @@ private:
     const Type m_type;
     const Member<ContentDecryptionModuleResult> m_result;
     const WebEncryptedMediaInitDataType m_initDataType;
-    const RefPtr<DOMArrayBuffer> m_data;
+    const Member<DOMArrayBuffer> m_data;
     const String m_stringData;
 };
 
@@ -322,6 +323,7 @@ MediaKeySession::MediaKeySession(ScriptState* scriptState, MediaKeys* mediaKeys,
     , m_actionTimer(this, &MediaKeySession::actionTimerFired)
 {
     WTF_LOG(Media, "MediaKeySession(%p)::MediaKeySession", this);
+    ThreadState::current()->registerPreFinalizer(this);
 
     // Create the matching Chromium object. It will not be usable until
     // initializeNewSession() is called in response to the user calling
@@ -364,13 +366,13 @@ MediaKeySession::MediaKeySession(ScriptState* scriptState, MediaKeys* mediaKeys,
 MediaKeySession::~MediaKeySession()
 {
     WTF_LOG(Media, "MediaKeySession(%p)::~MediaKeySession", this);
+}
+
+void MediaKeySession::dispose()
+{
+    // Promptly clears a raw reference from content/ to an on-heap object
+    // so that content/ doesn't access it in a lazy sweeping phase.
     m_session.clear();
-#if !ENABLE(OILPAN)
-    // MediaKeySession and m_asyncEventQueue always become unreachable
-    // together. So MediaKeySession and m_asyncEventQueue are destructed in the
-    // same GC. We don't need to call cancelAllEvents explicitly in Oilpan.
-    m_asyncEventQueue->cancelAllEvents();
-#endif
 }
 
 String MediaKeySession::sessionId() const
@@ -433,7 +435,7 @@ ScriptPromise MediaKeySession::generateRequest(ScriptState* scriptState, const S
     }
 
     // 6. Let init data be a copy of the contents of the initData parameter.
-    RefPtr<DOMArrayBuffer> initDataBuffer = DOMArrayBuffer::create(initData.data(), initData.byteLength());
+    DOMArrayBuffer* initDataBuffer = DOMArrayBuffer::create(initData.data(), initData.byteLength());
 
     // 7. Let session type be this object's session type.
     //    (Done in constructor.)
@@ -444,7 +446,7 @@ ScriptPromise MediaKeySession::generateRequest(ScriptState* scriptState, const S
 
     // 9. Run the following steps asynchronously (documented in
     //    actionTimerFired())
-    m_pendingActions.append(PendingAction::CreatePendingGenerateRequest(result, initDataType, initDataBuffer.release()));
+    m_pendingActions.append(PendingAction::CreatePendingGenerateRequest(result, initDataType, initDataBuffer));
     ASSERT(!m_actionTimer.isActive());
     m_actionTimer.startOneShot(0, BLINK_FROM_HERE);
 
@@ -528,7 +530,7 @@ ScriptPromise MediaKeySession::update(ScriptState* scriptState, const DOMArrayPi
     }
 
     // 3. Let response copy be a copy of the contents of the response parameter.
-    RefPtr<DOMArrayBuffer> responseCopy = DOMArrayBuffer::create(response.data(), response.byteLength());
+    DOMArrayBuffer* responseCopy = DOMArrayBuffer::create(response.data(), response.byteLength());
 
     // 4. Let promise be a new promise.
     SimpleContentDecryptionModuleResultPromise* result = new SimpleContentDecryptionModuleResultPromise(scriptState);
@@ -536,7 +538,7 @@ ScriptPromise MediaKeySession::update(ScriptState* scriptState, const DOMArrayPi
 
     // 5. Run the following steps asynchronously (documented in
     //    actionTimerFired())
-    m_pendingActions.append(PendingAction::CreatePendingUpdate(result, responseCopy.release()));
+    m_pendingActions.append(PendingAction::CreatePendingUpdate(result, responseCopy));
     if (!m_actionTimer.isActive())
         m_actionTimer.startOneShot(0, BLINK_FROM_HERE);
 
@@ -924,7 +926,7 @@ DEFINE_TRACE(MediaKeySession)
     visitor->trace(m_mediaKeys);
     visitor->trace(m_keyStatusesMap);
     visitor->trace(m_closedPromise);
-    RefCountedGarbageCollectedEventTargetWithInlineData<MediaKeySession>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
     ActiveDOMObject::trace(visitor);
 }
 

@@ -25,6 +25,7 @@
 #include "ui/gfx/skia_util.h"
 
 #include "app/vivaldi_apptools.h"
+#import "chrome/browser/app_controller_mac.h"
 
 // NOTE: State Before Update.
 //
@@ -48,6 +49,23 @@ using extensions::AppWindow;
 @interface NSWindow (NSPrivateApis)
 - (void)setBottomCornerRounded:(BOOL)rounded;
 - (BOOL)_isTitleHidden;
+@end
+
+// Content view for frameless window mode.
+@interface VivaldiContentView : NSView
+@end
+
+@implementation VivaldiContentView
+- (void)setFrame:(NSRect)rect {
+  // This view must cover the entire framless window area.
+  [super setFrame:self.superview.frame];
+}
+
+- (void)setFrameSize:(NSSize)size {
+  // This view must cover the entire framless window area.
+  [super setFrameSize:self.superview.frame.size];
+}
+
 @end
 
 namespace {
@@ -244,6 +262,12 @@ std::vector<gfx::Rect> CalculateNonDraggableRegions(
   return view;
 }
 
+// NOTE(espen@ovivaldi.com): Hook up for swipe navigation without animation.
+- (void)swipeWithEvent:(NSEvent*)event {
+  AppController* appController = static_cast<AppController*>([NSApp delegate]);
+  [appController swipeWithEvent:event];
+}
+
 // NOTE(espen@vivaldi.com) Reimplemented for swipe workaround.
 - (void)sendEvent:(NSEvent*)event {
   // NOTE(espen@vivaldi.com). Brute force workaround for swiping in frameless
@@ -255,43 +279,19 @@ std::vector<gfx::Rect> CalculateNonDraggableRegions(
   // RenderWidgetHostViewCocoa which is the view that normally receive these
   // calls (works fine in framed window mode). This need to be tested for each
   // chrome upgrade.
-  if (vivaldi::IsVivaldiRunning()) {
-    // 10.11 and later has changed to use phase to determine state.
-    if (base::mac::IsOSElCapitanOrLater()) {
-      if (event.type == NSEventTypeGesture) {
-        NSView* view = [self VivaldiGetTouchView];
-        static bool phase_has_begun = false;
-        if (event.phase == NSTouchPhaseBegan) {
-          phase_has_begun = true;
-          [view touchesBeganWithEvent:event];
-        } else if (event.phase == NSTouchPhaseEnded) {
-          phase_has_begun = false;
-          [view touchesEndedWithEvent:event];
-        } else {
-          int count = [[event touchesMatchingPhase:NSTouchPhaseAny
-                                            inView:nil] count];
-          if (count > 0) {
-            if (!phase_has_begun) {
-              [view touchesBeganWithEvent:event];
-              phase_has_begun = true;
-            }
-            [view touchesMovedWithEvent:event];
-          }
-        }
-      }
-    } else {
-      // 10.9 and 10.10 (we do not support any older version).
-      if (event.type == NSEventTypeGesture ||
-          event.type == NSEventTypeBeginGesture ||
-          event.type == NSEventTypeEndGesture) {
-        NSView* view = [self VivaldiGetTouchView];
-        if (event.type == NSEventTypeGesture)
-          [view touchesMovedWithEvent:event];
-        else if (event.type == NSEventTypeBeginGesture)
-          [view touchesBeganWithEvent:event];
-        else
-          [view touchesEndedWithEvent:event];
-      }
+  if (vivaldi::IsVivaldiRunning() && !base::mac::IsOSYosemiteOrLater()) {
+    // 10.10 and later uses a modified view layout that will call the functions
+    // automatically. See InstallView()
+    if (event.type == NSEventTypeGesture ||
+        event.type == NSEventTypeBeginGesture ||
+        event.type == NSEventTypeEndGesture) {
+      NSView* view = [self VivaldiGetTouchView];
+      if (event.type == NSEventTypeGesture)
+        [view touchesMovedWithEvent:event];
+      else if (event.type == NSEventTypeBeginGesture)
+        [view touchesBeganWithEvent:event];
+      else
+        [view touchesEndedWithEvent:event];
     }
   }
 
@@ -318,6 +318,7 @@ std::vector<gfx::Rect> CalculateNonDraggableRegions(
 @interface NSView (WebContentsView)
 - (void)setMouseDownCanMoveWindow:(BOOL)can_move;
 - (void)_addKnownSubview:(NSView *)subview;
+- (void)VivaldiSetInFramelessContentView:(BOOL)framelessContentView;
 @end
 
 NativeAppWindowCocoa::NativeAppWindowCocoa(
@@ -352,6 +353,8 @@ NativeAppWindowCocoa::NativeAppWindowCocoa(
 
   if (vivaldi::IsVivaldiRunning() && !has_frame_) {
     [(AppFramelessNSWindow*)window VivaldiSetAppWindowCocoa:this];
+    window.contentView = [[VivaldiContentView alloc] initWithFrame:NSZeroRect];
+    [window.contentView release];
   }
 
   std::string name;
@@ -429,10 +432,19 @@ void NativeAppWindowCocoa::InstallView() {
 
     NSView* frameView = [[window() contentView] superview];
     [view setFrame:[frameView bounds]];
-    if ([frameView respondsToSelector:@selector(_addKnownSubview:)])
-      [frameView _addKnownSubview:view];
-    else
-      [frameView addSubview:view];
+    if (vivaldi::IsVivaldiRunning() && base::mac::IsOSYosemiteOrLater()) {
+      DCHECK([view
+        respondsToSelector:@selector(VivaldiSetInFramelessContentView:)]);
+      [view VivaldiSetInFramelessContentView:YES];
+      [[window() contentView] addSubview:view];
+      [[window() contentView] setFrame:[frameView bounds]];
+      // This hides the NSTitlebarView (parent of the zoom button). It will
+      // otherwise overlay the tabs. We have to have a title because automatic
+      // tests use it to locate the window (but it does not have to be visible).
+      [[[window() standardWindowButton:NSWindowZoomButton] superview]
+          setHidden:YES];
+    } else
+    [frameView addSubview:view];
 
     [[window() standardWindowButton:NSWindowZoomButton] setHidden:YES];
     [[window() standardWindowButton:NSWindowMiniaturizeButton] setHidden:YES];

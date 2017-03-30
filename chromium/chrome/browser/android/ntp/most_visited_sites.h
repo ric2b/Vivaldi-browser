@@ -5,26 +5,27 @@
 #ifndef CHROME_BROWSER_ANDROID_NTP_MOST_VISITED_SITES_H_
 #define CHROME_BROWSER_ANDROID_NTP_MOST_VISITED_SITES_H_
 
-#include <jni.h>
 #include <stddef.h>
 
 #include <memory>
 #include <string>
 #include <vector>
 
-#include "base/android/scoped_java_ref.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
-#include "chrome/browser/supervised_user/supervised_user_service.h"
-#include "chrome/browser/supervised_user/supervised_user_service_observer.h"
+#include "chrome/browser/android/ntp/popular_sites.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/browser/top_sites_observer.h"
 #include "components/suggestions/proto/suggestions.pb.h"
 #include "components/suggestions/suggestions_service.h"
 #include "url/gurl.h"
+
+namespace history {
+class TopSites;
+}
 
 namespace suggestions {
 class SuggestionsService;
@@ -34,53 +35,73 @@ namespace user_prefs {
 class PrefRegistrySyncable;
 }
 
-class PopularSites;
-class Profile;
+namespace variations {
+class VariationsService;
+}
 
-// Provides the list of most visited sites and their thumbnails to Java.
-class MostVisitedSites : public history::TopSitesObserver,
-                         public SupervisedUserServiceObserver {
+// Shim interface for SupervisedUserService.
+class MostVisitedSitesSupervisor {
  public:
-  explicit MostVisitedSites(Profile* profile);
-  void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
-  void SetMostVisitedURLsObserver(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
-      const base::android::JavaParamRef<jobject>& j_observer,
-      jint num_sites);
-  void GetURLThumbnail(JNIEnv* env,
-                       const base::android::JavaParamRef<jobject>& obj,
-                       const base::android::JavaParamRef<jstring>& url,
-                       const base::android::JavaParamRef<jobject>& j_callback);
+  struct Whitelist {
+    base::string16 title;
+    GURL entry_point;
+    base::FilePath large_icon_path;
+  };
 
-  void AddOrRemoveBlacklistedUrl(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
-      const base::android::JavaParamRef<jstring>& j_url,
-      jboolean add_url);
-  void RecordTileTypeMetrics(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
-      const base::android::JavaParamRef<jintArray>& jtile_types);
-  void RecordOpenedMostVisitedItem(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
-      jint index,
-      jint tile_type);
+  class Observer {
+   public:
+    virtual void OnBlockedSitesChanged() = 0;
 
-  // SupervisedUserServiceObserver implementation.
-  void OnURLFilterChanged() override;
+   protected:
+    ~Observer() {}
+  };
 
-  // Registers JNI methods.
-  static bool Register(JNIEnv* env);
+  // Pass non-null to set observer, or null to remove observer.
+  // If setting observer, there must not yet be an observer set.
+  // If removing observer, there must already be one to remove.
+  // Does not take ownership. Observer must outlive this object.
+  virtual void SetObserver(Observer* new_observer) = 0;
 
-  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+  // If true, |url| should not be shown on the NTP.
+  virtual bool IsBlocked(const GURL& url) = 0;
 
- private:
-  friend class MostVisitedSitesTest;
+  // Explicit suggestions for sites to show on NTP.
+  virtual std::vector<Whitelist> whitelists() = 0;
+
+  // If true, be conservative about suggesting sites from outside sources.
+  virtual bool IsChildProfile() = 0;
+
+ protected:
+  virtual ~MostVisitedSitesSupervisor() {}
+};
+
+// Tracks the list of most visited sites and their thumbnails.
+//
+// Do not use, except from MostVisitedSitesBridge. The interface is in flux
+// while we are extracting the functionality of the Java class to make available
+// in C++.
+//
+// TODO(sfiera): finalize interface.
+class MostVisitedSites : public history::TopSitesObserver,
+                         public MostVisitedSitesSupervisor::Observer {
+ public:
+  struct Suggestion;
+  using SuggestionsVector = std::vector<Suggestion>;
+  using PopularSitesVector = std::vector<PopularSites::Site>;
 
   // The source of the Most Visited sites.
   enum MostVisitedSource { TOP_SITES, SUGGESTIONS_SERVICE, POPULAR, WHITELIST };
+
+  // The observer to be notified when the list of most visited sites changes.
+  class Observer {
+   public:
+    virtual void OnMostVisitedURLsAvailable(
+        const SuggestionsVector& suggestions) = 0;
+    virtual void OnPopularURLsAvailable(const PopularSitesVector& sites) = 0;
+
+   protected:
+    virtual ~Observer() {}
+  };
 
   struct Suggestion {
     base::string16 title;
@@ -96,21 +117,50 @@ class MostVisitedSites : public history::TopSitesObserver,
     Suggestion();
     ~Suggestion();
 
-    // Get the Histogram name associated with the source.
-    std::string GetSourceHistogramName() const;
+    Suggestion(Suggestion&&);
+    Suggestion& operator=(Suggestion&&);
 
    private:
     DISALLOW_COPY_AND_ASSIGN(Suggestion);
   };
 
-  using SuggestionsVector = std::vector<std::unique_ptr<Suggestion>>;
+  MostVisitedSites(PrefService* prefs,
+                   const TemplateURLService* template_url_service,
+                   variations::VariationsService* variations_service,
+                   net::URLRequestContextGetter* download_context,
+                   const base::FilePath& popular_sites_directory,
+                   scoped_refptr<history::TopSites> top_sites,
+                   suggestions::SuggestionsService* suggestions,
+                   MostVisitedSitesSupervisor* supervisor);
 
   ~MostVisitedSites() override;
 
+  // Does not take ownership of |observer|, which must outlive this object and
+  // must not be null.
+  void SetMostVisitedURLsObserver(Observer* observer, int num_sites);
+
+  using ThumbnailCallback = base::Callback<
+      void(bool /* is_local_thumbnail */, const SkBitmap* /* bitmap */)>;
+  void GetURLThumbnail(const GURL& url, const ThumbnailCallback& callback);
+  void AddOrRemoveBlacklistedUrl(const GURL& url, bool add_url);
+  void RecordTileTypeMetrics(const std::vector<int>& tile_types);
+  void RecordOpenedMostVisitedItem(int index, int tile_type);
+
+  // MostVisitedSitesSupervisor::Observer implementation.
+  void OnBlockedSitesChanged() override;
+
+  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+
+ private:
+  friend class MostVisitedSitesTest;
+
+  // TODO(treib): use SuggestionsVector in internal functions. crbug.com/601734
+  using SuggestionsPtrVector = std::vector<std::unique_ptr<Suggestion>>;
+
   void BuildCurrentSuggestions();
 
-  // Initialize the query to Top Sites. Called if the SuggestionsService is not
-  // enabled, or if it returns no data.
+  // Initialize the query to Top Sites. Called if the SuggestionsService
+  // returned no data.
   void InitiateTopSitesQuery();
 
   // If there's a whitelist entry point for the URL, return the large icon path.
@@ -126,55 +176,33 @@ class MostVisitedSites : public history::TopSitesObserver,
 
   // Takes the personal suggestions and creates whitelist entry point
   // suggestions if necessary.
-  SuggestionsVector CreateWhitelistEntryPointSuggestions(
-      const SuggestionsVector& personal_suggestions);
+  SuggestionsPtrVector CreateWhitelistEntryPointSuggestions(
+      const SuggestionsPtrVector& personal_suggestions);
 
   // Takes the personal and whitelist suggestions and creates popular
   // suggestions if necessary.
-  SuggestionsVector CreatePopularSitesSuggestions(
-      const SuggestionsVector& personal_suggestions,
-      const SuggestionsVector& whitelist_suggestions);
+  SuggestionsPtrVector CreatePopularSitesSuggestions(
+      const SuggestionsPtrVector& personal_suggestions,
+      const SuggestionsPtrVector& whitelist_suggestions);
 
   // Takes the personal suggestions, creates and merges in whitelist and popular
   // suggestions if appropriate, and saves the new suggestions.
-  void SaveNewNTPSuggestions(SuggestionsVector* personal_suggestions);
+  void SaveNewSuggestions(SuggestionsPtrVector* personal_suggestions);
 
-  // Workhorse for SaveNewNTPSuggestions above. Implemented as a separate static
+  // Workhorse for SaveNewSuggestions above. Implemented as a separate static
   // method for ease of testing.
-  static SuggestionsVector MergeSuggestions(
-      SuggestionsVector* personal_suggestions,
-      SuggestionsVector* whitelist_suggestions,
-      SuggestionsVector* popular_suggestions,
-      const std::vector<std::string>& old_sites_url,
-      const std::vector<bool>& old_sites_is_personal);
+  static SuggestionsPtrVector MergeSuggestions(
+      SuggestionsPtrVector* personal_suggestions,
+      SuggestionsPtrVector* whitelist_suggestions,
+      SuggestionsPtrVector* popular_suggestions);
 
-  void GetPreviousNTPSites(size_t num_tiles,
-                           std::vector<std::string>* old_sites_url,
-                           std::vector<bool>* old_sites_source) const;
+  // Appends suggestions from |src| to |dst|.
+  static void AppendSuggestions(SuggestionsPtrVector* src,
+                                SuggestionsPtrVector* dst);
 
-  void SaveCurrentNTPSites();
+  void SaveCurrentSuggestionsToPrefs();
 
-  // Takes suggestions from |src_suggestions| and moves them to
-  // |dst_suggestions| if the suggestion's url/host matches
-  // |match_urls|/|match_hosts| respectively. Unmatched suggestion indices from
-  // |src_suggestions| are returned for ease of insertion later.
-  static std::vector<size_t> InsertMatchingSuggestions(
-      SuggestionsVector* src_suggestions,
-      SuggestionsVector* dst_suggestions,
-      const std::vector<std::string>& match_urls,
-      const std::vector<std::string>& match_hosts);
-
-  // Inserts suggestions from |src_suggestions| at positions |insert_positions|
-  // into |dst_suggestions| where ever empty starting from |start_position|.
-  // Returns the last filled position so that future insertions can start from
-  // there.
-  static size_t InsertAllSuggestions(
-      size_t start_position,
-      const std::vector<size_t>& insert_positions,
-      SuggestionsVector* src_suggestions,
-      SuggestionsVector* dst_suggestions);
-
-  // Notifies the Java side observer about the availability of suggestions.
+  // Notifies the observer about the availability of suggestions.
   // Also records impressions UMA if not done already.
   void NotifyMostVisitedURLsObserver();
 
@@ -183,14 +211,14 @@ class MostVisitedSites : public history::TopSitesObserver,
   // Runs on the UI Thread.
   void OnLocalThumbnailFetched(
       const GURL& url,
-      std::unique_ptr<base::android::ScopedJavaGlobalRef<jobject>> j_callback,
+      const ThumbnailCallback& callback,
       std::unique_ptr<SkBitmap> bitmap);
 
   // Callback for when the thumbnail lookup is complete.
   // Runs on the UI Thread.
   void OnObtainedThumbnail(
       bool is_local_thumbnail,
-      std::unique_ptr<base::android::ScopedJavaGlobalRef<jobject>> j_callback,
+      const ThumbnailCallback& callback,
       const GURL& url,
       const SkBitmap* bitmap);
 
@@ -205,11 +233,16 @@ class MostVisitedSites : public history::TopSitesObserver,
   void TopSitesChanged(history::TopSites* top_sites,
                        ChangeReason change_reason) override;
 
-  // The profile whose most visited sites will be queried.
-  Profile* profile_;
+  PrefService* prefs_;
+  const TemplateURLService* template_url_service_;
+  variations::VariationsService* variations_service_;
+  net::URLRequestContextGetter* download_context_;
+  base::FilePath popular_sites_directory_;
+  scoped_refptr<history::TopSites> top_sites_;
+  suggestions::SuggestionsService* suggestions_service_;
+  MostVisitedSitesSupervisor* supervisor_;
 
-  // The observer to be notified when the list of most visited sites changes.
-  base::android::ScopedJavaGlobalRef<jobject> observer_;
+  Observer* observer_;
 
   // The maximum number of most visited sites to return.
   int num_sites_;

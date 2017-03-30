@@ -24,9 +24,9 @@
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/sys_info.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/memory_allocator_dump_guid.h"
 #include "base/trace_event/memory_dump_manager.h"
@@ -42,7 +42,6 @@
 #include "content/child/background_sync/background_sync_provider.h"
 #include "content/child/child_thread_impl.h"
 #include "content/child/content_child_helpers.h"
-#include "content/child/geofencing/web_geofencing_provider_impl.h"
 #include "content/child/notifications/notification_dispatcher.h"
 #include "content/child/notifications/notification_manager.h"
 #include "content/child/permissions/permission_dispatcher.h"
@@ -56,9 +55,7 @@
 #include "content/child/worker_thread_registry.h"
 #include "content/public/common/content_client.h"
 #include "net/base/data_url.h"
-#include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
-#include "net/base/port_util.h"
 #include "third_party/WebKit/public/platform/WebData.h"
 #include "third_party/WebKit/public/platform/WebFloatPoint.h"
 #include "third_party/WebKit/public/platform/WebMemoryDumpProvider.h"
@@ -338,6 +335,10 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_FORM_INPUT_WEEK_TEMPLATE;
     case WebLocalizedString::WeekNumberLabel:
       return IDS_FORM_WEEK_NUMBER_LABEL;
+    case WebLocalizedString::TextTracksNoLabel:
+      return IDS_MEDIA_TRACKS_NO_LABEL;
+    case WebLocalizedString::TextTracksOff:
+      return IDS_MEDIA_TRACKS_OFF;
     // This "default:" line exists to avoid compile warnings about enum
     // coverage when we add a new symbol to WebLocalizedString.h in WebKit.
     // After a planned WebKit patch is landed, we need to add a case statement
@@ -382,8 +383,6 @@ BlinkPlatformImpl::BlinkPlatformImpl(
 void BlinkPlatformImpl::InternalInit() {
   // ChildThread may not exist in some tests.
   if (ChildThreadImpl::current()) {
-    geofencing_provider_.reset(new WebGeofencingProviderImpl(
-        ChildThreadImpl::current()->thread_safe_sender()));
     thread_safe_sender_ = ChildThreadImpl::current()->thread_safe_sender();
     notification_dispatcher_ =
         ChildThreadImpl::current()->notification_dispatcher();
@@ -415,15 +414,6 @@ void BlinkPlatformImpl::UpdateWebThreadTLS(blink::WebThread* thread,
 BlinkPlatformImpl::~BlinkPlatformImpl() {
 }
 
-WebURLLoader* BlinkPlatformImpl::createURLLoader() {
-  ChildThreadImpl* child_thread = ChildThreadImpl::current();
-  // There may be no child thread in RenderViewTests.  These tests can still use
-  // data URLs to bypass the ResourceDispatcher.
-  return new WebURLLoaderImpl(
-      child_thread ? child_thread->resource_dispatcher() : NULL,
-      base::WrapUnique(currentThread()->getWebTaskRunner()->clone()));
-}
-
 blink::WebSocketHandle* BlinkPlatformImpl::createWebSocketHandle() {
   return new WebSocketBridge;
 }
@@ -448,23 +438,6 @@ WebData BlinkPlatformImpl::parseDataURL(const WebURL& url,
 WebURLError BlinkPlatformImpl::cancelledError(
     const WebURL& unreachableURL) const {
   return CreateWebURLError(unreachableURL, false, net::ERR_ABORTED);
-}
-
-bool BlinkPlatformImpl::isReservedIPAddress(
-    const blink::WebString& host) const {
-  net::IPAddress address;
-  if (!net::ParseURLHostnameToAddress(host.utf8(), &address))
-    return false;
-  return address.IsReserved();
-}
-
-bool BlinkPlatformImpl::portAllowed(const blink::WebURL& url) const {
-  GURL gurl = GURL(url);
-  // Return true for URLs without a port specified.  This is needed to let
-  // through non-network schemes that don't go over the network.
-  if (!gurl.has_port())
-    return true;
-  return net::IsPortAllowedForScheme(gurl.EffectiveIntPort(), gurl.scheme());
 }
 
 bool BlinkPlatformImpl::parseMultipartHeadersFromBody(
@@ -498,12 +471,6 @@ blink::WebThread* BlinkPlatformImpl::currentThread() {
 void BlinkPlatformImpl::recordAction(const blink::UserMetricsAction& name) {
     if (ChildThread* child_thread = ChildThread::Get())
         child_thread->RecordComputedAction(name.action());
-}
-
-blink::Platform::WebMemoryAllocatorDumpGuid
-BlinkPlatformImpl::createWebMemoryAllocatorDumpGuid(
-    const blink::WebString& guidStr) {
-  return base::trace_event::MemoryAllocatorDumpGuid(guidStr.utf8()).ToUint64();
 }
 
 void BlinkPlatformImpl::addTraceLogEnabledStateObserver(
@@ -689,6 +656,24 @@ const DataResource kDataResources[] = {
     {"mediaplayerOverlayPlayNew",
      IDR_MEDIAPLAYER_OVERLAY_PLAY_BUTTON_NEW,
      ui::SCALE_FACTOR_100P},
+    {"mediaplayerTrackSelectionCheckmark",
+     IDR_MEDIAPLAYER_TRACKSELECTION_CHECKMARK,
+     ui::SCALE_FACTOR_100P},
+    {"mediaplayerTrackSelectionCheckmarkNew",
+     IDR_MEDIAPLAYER_TRACKSELECTION_CHECKMARK_NEW,
+     ui::SCALE_FACTOR_100P},
+    {"mediaplayerClosedCaptionsIcon",
+     IDR_MEDIAPLAYER_CLOSEDCAPTIONS_ICON,
+     ui::SCALE_FACTOR_100P},
+    {"mediaplayerClosedCaptionsIconNew",
+     IDR_MEDIAPLAYER_CLOSEDCAPTIONS_ICON_NEW,
+     ui::SCALE_FACTOR_100P},
+    {"mediaplayerSubtitlesIcon",
+     IDR_MEDIAPLAYER_SUBTITLES_ICON,
+     ui::SCALE_FACTOR_100P},
+    {"mediaplayerSubtitlesIconNew",
+     IDR_MEDIAPLAYER_SUBTITLES_ICON_NEW,
+     ui::SCALE_FACTOR_100P},
     {"searchCancel", IDR_SEARCH_CANCEL, ui::SCALE_FACTOR_100P},
     {"searchCancelPressed", IDR_SEARCH_CANCEL_PRESSED, ui::SCALE_FACTOR_100P},
     {"searchMagnifier", IDR_SEARCH_MAGNIFIER, ui::SCALE_FACTOR_100P},
@@ -708,6 +693,9 @@ const DataResource kDataResources[] = {
     {"themeChromiumAndroid.css",
      IDR_UASTYLE_THEME_CHROMIUM_ANDROID_CSS,
      ui::SCALE_FACTOR_NONE},
+    {"fullscreenAndroid.css",
+      IDR_UASTYLE_FULLSCREEN_ANDROID_CSS,
+      ui::SCALE_FACTOR_NONE},
     {"mediaControlsAndroid.css",
      IDR_UASTYLE_MEDIA_CONTROLS_ANDROID_CSS,
      ui::SCALE_FACTOR_NONE},
@@ -742,6 +730,9 @@ const DataResource kDataResources[] = {
     {"xhtmlmp.css", IDR_UASTYLE_XHTMLMP_CSS, ui::SCALE_FACTOR_NONE},
     {"viewportAndroid.css",
      IDR_UASTYLE_VIEWPORT_ANDROID_CSS,
+     ui::SCALE_FACTOR_NONE},
+    {"viewportTelevision.css",
+     IDR_UASTYLE_VIEWPORT_TELEVISION_CSS,
      ui::SCALE_FACTOR_NONE},
     {"InspectorOverlayPage.html",
      IDR_INSPECTOR_OVERLAY_PAGE_HTML,
@@ -871,10 +862,6 @@ blink::WebCrypto* BlinkPlatformImpl::crypto() {
   return &web_crypto_;
 }
 
-blink::WebGeofencingProvider* BlinkPlatformImpl::geofencingProvider() {
-  return geofencing_provider_.get();
-}
-
 blink::WebNotificationManager*
 BlinkPlatformImpl::notificationManager() {
   if (!thread_safe_sender_.get() || !notification_dispatcher_.get())
@@ -882,7 +869,6 @@ BlinkPlatformImpl::notificationManager() {
 
   return NotificationManager::ThreadSpecificInstance(
       thread_safe_sender_.get(),
-      main_thread_task_runner_.get(),
       notification_dispatcher_.get());
 }
 

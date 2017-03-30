@@ -7,12 +7,12 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
 #include "media/base/data_source.h"
@@ -114,6 +114,10 @@ class BufferedDataSourceInterface : public DataSource {
 
   // Returns an estimate of the number of bytes held by the data source.
   virtual int64_t GetMemoryUsage() const = 0;
+
+  // Returns the post-Initialize() URL after redirects have been followed; this
+  // value may change at a later time.
+  virtual GURL GetUrlAfterRedirects() const = 0;
 };
 
 // A data source capable of loading URLs and buffering the data using an
@@ -193,6 +197,8 @@ class MEDIA_BLINK_EXPORT BufferedDataSource
 
   // Returns an estimate of the number of bytes held by the data source.
   int64_t GetMemoryUsage() const override;
+
+  GURL GetUrlAfterRedirects() const override;
 
   // DataSource implementation.
   // Called from demuxer thread.
@@ -277,7 +283,7 @@ class MEDIA_BLINK_EXPORT BufferedDataSource
   blink::WebFrame* frame_;
 
   // A resource loader for the media resource.
-  scoped_ptr<BufferedResourceLoader> loader_;
+  std::unique_ptr<BufferedResourceLoader> loader_;
 
   // Callback method from the pipeline for initialization.
   InitializeCB init_cb_;
@@ -285,7 +291,7 @@ class MEDIA_BLINK_EXPORT BufferedDataSource
   // Read parameters received from the Read() method call. Must be accessed
   // under |lock_|.
   class ReadOperation;
-  scoped_ptr<ReadOperation> read_op_;
+  std::unique_ptr<ReadOperation> read_op_;
 
   // This buffer is intermediate, we use it for BufferedResourceLoader to write
   // to. And when read in BufferedResourceLoader is done, we copy data from

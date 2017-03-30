@@ -10,6 +10,7 @@
 #include <stddef.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -17,7 +18,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 #include "net/base/ip_endpoint.h"
 #include "net/quic/quic_connection.h"
@@ -98,6 +98,7 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   // If provided, |ack_notifier_delegate| will be registered to be notified when
   // we have seen ACKs for all packets resulting from this call.
   virtual QuicConsumedData WritevData(
+      ReliableQuicStream* stream,
       QuicStreamId id,
       QuicIOVector iov,
       QuicStreamOffset offset,
@@ -213,7 +214,11 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
 
   size_t MaxAvailableStreams() const;
 
-  ReliableQuicStream* GetStream(const QuicStreamId stream_id);
+  // Returns existing static or dynamic stream with id = |stream_id|. If no
+  // such stream exists, and |stream_id| is a peer-created dynamic stream id,
+  // then a new stream is created and returned. In all other cases, nullptr is
+  // returned.
+  ReliableQuicStream* GetOrCreateStream(const QuicStreamId stream_id);
 
   // Mark a stream as draining.
   virtual void StreamDraining(QuicStreamId id);
@@ -348,7 +353,7 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   std::map<QuicStreamId, QuicStreamOffset>
       locally_closed_streams_highest_offset_;
 
-  scoped_ptr<QuicConnection> connection_;
+  std::unique_ptr<QuicConnection> connection_;
 
   std::vector<ReliableQuicStream*> closed_streams_;
 

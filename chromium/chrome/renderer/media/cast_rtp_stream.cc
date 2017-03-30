@@ -5,7 +5,9 @@
 #include "chrome/renderer/media/cast_rtp_stream.h"
 
 #include <stdint.h>
+
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -18,7 +20,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/trace_event.h"
 #include "chrome/common/chrome_switches.h"
@@ -29,9 +31,9 @@
 #include "content/public/renderer/media_stream_video_sink.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/video_encode_accelerator.h"
-#include "media/audio/audio_parameters.h"
 #include "media/base/audio_bus.h"
 #include "media/base/audio_converter.h"
+#include "media/base/audio_parameters.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/limits.h"
 #include "media/base/video_frame.h"
@@ -343,6 +345,7 @@ class CastVideoSink : public base::SupportsWeakPtr<CastVideoSink>,
   // Attach this sink to a video track represented by |track_|.
   // Data received from the track will be submitted to |frame_input|.
   void AddToTrack(
+      bool is_sink_secure,
       const scoped_refptr<media::cast::VideoFrameInput>& frame_input) {
     DCHECK(deliverer_);
     deliverer_->WillConnectToTrack(AsWeakPtr(), frame_input);
@@ -351,9 +354,9 @@ class CastVideoSink : public base::SupportsWeakPtr<CastVideoSink>,
         base::TimeDelta::FromMilliseconds(kRefreshIntervalMilliseconds),
         base::Bind(&CastVideoSink::OnRefreshTimerFired,
                    base::Unretained(this)));
-    MediaStreamVideoSink::ConnectToTrack(track_,
-                                         base::Bind(&Deliverer::OnVideoFrame,
-                                                    deliverer_));
+    MediaStreamVideoSink::ConnectToTrack(
+        track_, base::Bind(&Deliverer::OnVideoFrame, deliverer_),
+        is_sink_secure);
   }
 
  private:
@@ -526,7 +529,7 @@ class CastAudioSink : public base::SupportsWeakPtr<CastAudioSink>,
     // provided as input is always the same, the chunk size (and the size of the
     // |audio_bus| here) can be variable.  This is not an issue since
     // media::cast::AudioFrameInput can handle variable-sized AudioBuses.
-    scoped_ptr<media::AudioBus> audio_bus =
+    std::unique_ptr<media::AudioBus> audio_bus =
         media::AudioBus::Create(output_channels_, converter_->ChunkSize());
     // AudioConverter will call ProvideInput() to fetch from |current_data_|.
     current_input_bus_ = &input_bus;
@@ -584,7 +587,7 @@ class CastAudioSink : public base::SupportsWeakPtr<CastAudioSink>,
 
   // These members are accessed on the real-time audio time only.
   media::AudioParameters input_params_;
-  scoped_ptr<media::AudioConverter> converter_;
+  std::unique_ptr<media::AudioConverter> converter_;
   const media::AudioBus* current_input_bus_;
   int64_t sample_frames_in_;
   int64_t sample_frames_out_;
@@ -683,8 +686,8 @@ void CastRtpStream::Start(const CastRtpParams& params,
         media::BindToCurrentLoop(base::Bind(&CastRtpStream::DidEncounterError,
                                             weak_factory_.GetWeakPtr()))));
     cast_session_->StartVideo(
-        config,
-        base::Bind(&CastVideoSink::AddToTrack, video_sink_->AsWeakPtr()),
+        config, base::Bind(&CastVideoSink::AddToTrack, video_sink_->AsWeakPtr(),
+                           !params.payload.aes_key.empty()),
         base::Bind(&CastRtpStream::DidEncounterError,
                    weak_factory_.GetWeakPtr()));
     start_callback.Run();
@@ -709,7 +712,7 @@ void CastRtpStream::ToggleLogging(bool enable) {
 }
 
 void CastRtpStream::GetRawEvents(
-    const base::Callback<void(scoped_ptr<base::BinaryValue>)>& callback,
+    const base::Callback<void(std::unique_ptr<base::BinaryValue>)>& callback,
     const std::string& extra_data) {
   DVLOG(1) << "CastRtpStream::GetRawEvents = "
            << (IsAudio() ? "audio" : "video");
@@ -717,7 +720,8 @@ void CastRtpStream::GetRawEvents(
 }
 
 void CastRtpStream::GetStats(
-    const base::Callback<void(scoped_ptr<base::DictionaryValue>)>& callback) {
+    const base::Callback<void(std::unique_ptr<base::DictionaryValue>)>&
+        callback) {
   DVLOG(1) << "CastRtpStream::GetStats = "
            << (IsAudio() ? "audio" : "video");
   cast_session_->GetStatsAndReset(IsAudio(), callback);

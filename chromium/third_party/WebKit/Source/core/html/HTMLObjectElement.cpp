@@ -56,16 +56,13 @@ inline HTMLObjectElement::HTMLObjectElement(Document& document, HTMLFormElement*
 
 inline HTMLObjectElement::~HTMLObjectElement()
 {
-#if !ENABLE(OILPAN)
-    setForm(0);
-#endif
 }
 
-RawPtr<HTMLObjectElement> HTMLObjectElement::create(Document& document, HTMLFormElement* form, bool createdByParser)
+HTMLObjectElement* HTMLObjectElement::create(Document& document, HTMLFormElement* form, bool createdByParser)
 {
-    RawPtr<HTMLObjectElement> element = new HTMLObjectElement(document, form, createdByParser);
+    HTMLObjectElement* element = new HTMLObjectElement(document, form, createdByParser);
     element->ensureUserAgentShadowRoot();
-    return element.release();
+    return element;
 }
 
 DEFINE_TRACE(HTMLObjectElement)

@@ -7,8 +7,10 @@
 
 #include <stdint.h>
 
+#include <memory>
+#include <vector>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "ui/display/types/native_display_delegate.h"
 
@@ -54,8 +56,13 @@ class NativeDisplayDelegateOzone : public NativeDisplayDelegate {
   void AddObserver(NativeDisplayObserver* observer) override;
   void RemoveObserver(NativeDisplayObserver* observer) override;
 
+ protected:
+  std::vector<std::unique_ptr<DisplaySnapshot>>& displays() {
+    return displays_;
+  }
+
  private:
-  std::vector<scoped_ptr<DisplaySnapshot>> displays_;
+  std::vector<std::unique_ptr<DisplaySnapshot>> displays_;
 
   DISALLOW_COPY_AND_ASSIGN(NativeDisplayDelegateOzone);
 };

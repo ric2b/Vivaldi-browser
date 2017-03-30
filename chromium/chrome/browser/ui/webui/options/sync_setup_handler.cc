@@ -77,7 +77,6 @@ struct SyncConfigInfo {
 
   bool encrypt_all;
   bool sync_everything;
-  bool sync_nothing;
   syncer::ModelTypeSet data_types;
   bool payments_integration_enabled;
   std::string passphrase;
@@ -87,7 +86,6 @@ struct SyncConfigInfo {
 SyncConfigInfo::SyncConfigInfo()
     : encrypt_all(false),
       sync_everything(false),
-      sync_nothing(false),
       payments_integration_enabled(false),
       passphrase_is_gaia(false) {}
 
@@ -105,14 +103,6 @@ bool GetConfiguration(const std::string& json, SyncConfigInfo* config) {
     DLOG(ERROR) << "GetConfiguration() not passed a syncAllDataTypes value";
     return false;
   }
-
-  if (!result->GetBoolean("syncNothing", &config->sync_nothing)) {
-    DLOG(ERROR) << "GetConfiguration() not passed a syncNothing value";
-    return false;
-  }
-
-  DCHECK(!(config->sync_everything && config->sync_nothing))
-      << "syncAllDataTypes and syncNothing cannot both be true";
 
   if (!result->GetBoolean("paymentsIntegrationEnabled",
                           &config->payments_integration_enabled)) {
@@ -248,7 +238,6 @@ void SyncSetupHandler::GetStaticLocalizedValues(
       {"settingUp", IDS_SYNC_LOGIN_SETTING_UP},
       {"syncAllDataTypes", IDS_SYNC_EVERYTHING},
       {"chooseDataTypes", IDS_SYNC_CHOOSE_DATATYPES},
-      {"syncNothing", IDS_SYNC_NOTHING},
       {"bookmarks", IDS_SYNC_DATATYPE_BOOKMARKS},
       {"preferences", IDS_SYNC_DATATYPE_PREFERENCES},
       {"autofill", IDS_SYNC_DATATYPE_AUTOFILL},
@@ -257,7 +246,6 @@ void SyncSetupHandler::GetStaticLocalizedValues(
       {"extensions", IDS_SYNC_DATATYPE_EXTENSIONS},
       {"typedURLs", IDS_SYNC_DATATYPE_TYPED_URLS},
       {"apps", IDS_SYNC_DATATYPE_APPS},
-      {"wifiCredentials", IDS_SYNC_DATATYPE_WIFI_CREDENTIALS},
       {"openTabs", IDS_SYNC_DATATYPE_TABS},
       {"enablePaymentsIntegration", IDS_AUTOFILL_USE_PAYMENTS_DATA},
       {"serviceUnavailableError", IDS_SYNC_SETUP_ABORTED_BY_PENDING_CLEAR},
@@ -531,19 +519,6 @@ void SyncSetupHandler::HandleConfigure(const base::ListValue* args) {
     return;
   }
 
-  // Disable sync, but remain signed in if the user selected "Sync nothing" in
-  // the advanced settings dialog. Note: In order to disable sync across
-  // restarts on Chrome OS, we must call RequestStop(CLEAR_DATA), which
-  // suppresses sync startup in addition to disabling it.
-  if (configuration.sync_nothing) {
-    ProfileSyncService::SyncEvent(
-        ProfileSyncService::STOP_FROM_ADVANCED_DIALOG);
-    CloseUI();
-    service->RequestStop(ProfileSyncService::CLEAR_DATA);
-    service->SetSetupInProgress(false);
-    return;
-  }
-
   // Don't allow "encrypt all" if the ProfileSyncService doesn't allow it.
   // The UI is hidden, but the user may have enabled it e.g. by fiddling with
   // the web inspector.
@@ -693,7 +668,9 @@ void SyncSetupHandler::HandleStopSyncing(const base::ListValue* args) {
 
   if (delete_profile) {
     // Do as BrowserOptionsHandler::DeleteProfile().
-    webui::DeleteProfileAtPath(GetProfile()->GetPath(), web_ui());
+    webui::DeleteProfileAtPath(GetProfile()->GetPath(),
+                               web_ui(),
+                               ProfileMetrics::DELETE_PROFILE_SETTINGS);
   }
 }
 #endif

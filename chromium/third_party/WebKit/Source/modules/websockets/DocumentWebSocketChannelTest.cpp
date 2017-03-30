@@ -7,11 +7,11 @@
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/Document.h"
 #include "core/fileapi/Blob.h"
-#include "core/frame/ConsoleTypes.h"
 #include "core/testing/DummyPageHolder.h"
 #include "modules/websockets/DocumentWebSocketChannel.h"
 #include "modules/websockets/WebSocketChannelClient.h"
 #include "platform/heap/Handle.h"
+#include "platform/v8_inspector/public/ConsoleTypes.h"
 #include "platform/weborigin/KURL.h"
 #include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/WebString.h"
@@ -30,7 +30,7 @@ using testing::_;
 using testing::InSequence;
 using testing::PrintToString;
 using testing::AnyNumber;
-
+using testing::SaveArg;
 
 namespace blink {
 
@@ -80,7 +80,7 @@ public:
 
     ~MockWebSocketHandle() override { }
 
-    MOCK_METHOD4(connect, void(const WebURL&, const WebVector<WebString>&, const WebSecurityOrigin&, WebSocketHandleClient*));
+    MOCK_METHOD5(connect, void(const WebURL&, const WebVector<WebString>&, const WebSecurityOrigin&, const WebURL&, WebSocketHandleClient*));
     MOCK_METHOD4(send, void(bool, WebSocketHandle::MessageType, const char*, size_t));
     MOCK_METHOD1(flowControl, void(int64_t));
     MOCK_METHOD2(close, void(unsigned short, const WebString&));
@@ -132,7 +132,7 @@ public:
     {
         {
             InSequence s;
-            EXPECT_CALL(*handle(), connect(WebURL(KURL(KURL(), "ws://localhost/")), _, _, handleClient()));
+            EXPECT_CALL(*handle(), connect(WebURL(KURL(KURL(), "ws://localhost/")), _, _, _, handleClient()));
             EXPECT_CALL(*handle(), flowControl(65536));
             EXPECT_CALL(*channelClient(), didConnect(String("a"), String("b")));
         }
@@ -158,18 +158,46 @@ MATCHER_P2(MemEq, p, len,
     return memcmp(arg, p, len) == 0;
 }
 
+MATCHER_P(WebURLEq, urlString,
+    std::string(negation ? "doesn't equal" : "equals")
+    + " to \"" + urlString + "\""
+)
+{
+    WebURL url(KURL(KURL(), urlString));
+    *result_listener << "where the url is \"" << arg.string().utf8() << "\"";
+    return arg == url;
+}
+
 TEST_F(DocumentWebSocketChannelTest, connectSuccess)
 {
+    WebVector<WebString> protocols;
+    WebSecurityOrigin origin;
+
     Checkpoint checkpoint;
     {
         InSequence s;
-        EXPECT_CALL(*handle(), connect(WebURL(KURL(KURL(), "ws://localhost/")), _, _, handleClient()));
+        EXPECT_CALL(*handle(), connect(WebURLEq("ws://localhost/"), _, _, WebURLEq("http://example.com/"), handleClient())).WillOnce(DoAll(
+            SaveArg<1>(&protocols),
+            SaveArg<2>(&origin)));
         EXPECT_CALL(*handle(), flowControl(65536));
         EXPECT_CALL(checkpoint, Call(1));
         EXPECT_CALL(*channelClient(), didConnect(String("a"), String("b")));
     }
 
+    KURL pageUrl(KURL(), "http://example.com/");
+    m_pageHolder->frame().securityContext()->setSecurityOrigin(SecurityOrigin::create(pageUrl));
+    Document& document = m_pageHolder->document();
+    document.setURL(pageUrl);
+    // Make sure that firstPartyForCookies() is set to the given value.
+    EXPECT_STREQ("http://example.com/", document.firstPartyForCookies().getString().utf8().data());
+
     EXPECT_TRUE(channel()->connect(KURL(KURL(), "ws://localhost/"), "x"));
+
+    EXPECT_EQ(1U, protocols.size());
+    EXPECT_STREQ("x", protocols[0].utf8().data());
+
+    EXPECT_STREQ("http://example.com", origin.toString().utf8().data());
+
     checkpoint.Call(1);
     handleClient()->didConnect(handle(), WebString("a"), WebString("b"));
 }
@@ -348,7 +376,7 @@ TEST_F(DocumentWebSocketChannelTest, sendBinaryInArrayBuffer)
     handleClient()->didReceiveFlowControl(handle(), 16);
     EXPECT_CALL(*channelClient(), didConsumeBufferedAmount(_)).Times(AnyNumber());
 
-    RefPtr<DOMArrayBuffer> fooBuffer = DOMArrayBuffer::create("foo", 3);
+    DOMArrayBuffer* fooBuffer = DOMArrayBuffer::create("foo", 3);
     channel()->send(*fooBuffer, 0, 3);
 
     EXPECT_EQ(3ul, m_sumOfConsumedBufferedAmount);
@@ -368,8 +396,8 @@ TEST_F(DocumentWebSocketChannelTest, sendBinaryInArrayBufferPartial)
     handleClient()->didReceiveFlowControl(handle(), 16);
     EXPECT_CALL(*channelClient(), didConsumeBufferedAmount(_)).Times(AnyNumber());
 
-    RefPtr<DOMArrayBuffer> foobarBuffer = DOMArrayBuffer::create("foobar", 6);
-    RefPtr<DOMArrayBuffer> qbazuxBuffer = DOMArrayBuffer::create("qbazux", 6);
+    DOMArrayBuffer* foobarBuffer = DOMArrayBuffer::create("foobar", 6);
+    DOMArrayBuffer* qbazuxBuffer = DOMArrayBuffer::create("qbazux", 6);
     channel()->send(*foobarBuffer, 0, 3);
     channel()->send(*foobarBuffer, 3, 3);
     channel()->send(*qbazuxBuffer, 1, 3);
@@ -393,19 +421,19 @@ TEST_F(DocumentWebSocketChannelTest, sendBinaryInArrayBufferWithNullBytes)
     EXPECT_CALL(*channelClient(), didConsumeBufferedAmount(_)).Times(AnyNumber());
 
     {
-        RefPtr<DOMArrayBuffer> b = DOMArrayBuffer::create("\0ar", 3);
+        DOMArrayBuffer* b = DOMArrayBuffer::create("\0ar", 3);
         channel()->send(*b, 0, 3);
     }
     {
-        RefPtr<DOMArrayBuffer> b = DOMArrayBuffer::create("b\0z", 3);
+        DOMArrayBuffer* b = DOMArrayBuffer::create("b\0z", 3);
         channel()->send(*b, 0, 3);
     }
     {
-        RefPtr<DOMArrayBuffer> b = DOMArrayBuffer::create("qu\0", 3);
+        DOMArrayBuffer* b = DOMArrayBuffer::create("qu\0", 3);
         channel()->send(*b, 0, 3);
     }
     {
-        RefPtr<DOMArrayBuffer> b = DOMArrayBuffer::create("\0\0\0", 3);
+        DOMArrayBuffer* b = DOMArrayBuffer::create("\0\0\0", 3);
         channel()->send(*b, 0, 3);
     }
 
@@ -420,7 +448,7 @@ TEST_F(DocumentWebSocketChannelTest, sendBinaryInArrayBufferNonLatin1UTF8)
     handleClient()->didReceiveFlowControl(handle(), 16);
     EXPECT_CALL(*channelClient(), didConsumeBufferedAmount(_)).Times(AnyNumber());
 
-    RefPtr<DOMArrayBuffer> b = DOMArrayBuffer::create("\xe7\x8b\x90", 3);
+    DOMArrayBuffer* b = DOMArrayBuffer::create("\xe7\x8b\x90", 3);
     channel()->send(*b, 0, 3);
 
     EXPECT_EQ(3ul, m_sumOfConsumedBufferedAmount);
@@ -434,7 +462,7 @@ TEST_F(DocumentWebSocketChannelTest, sendBinaryInArrayBufferNonUTF8)
     handleClient()->didReceiveFlowControl(handle(), 16);
     EXPECT_CALL(*channelClient(), didConsumeBufferedAmount(_)).Times(AnyNumber());
 
-    RefPtr<DOMArrayBuffer> b = DOMArrayBuffer::create("\x80\xff\xe7", 3);
+    DOMArrayBuffer* b = DOMArrayBuffer::create("\x80\xff\xe7", 3);
     channel()->send(*b, 0, 3);
 
     EXPECT_EQ(3ul, m_sumOfConsumedBufferedAmount);
@@ -454,7 +482,7 @@ TEST_F(DocumentWebSocketChannelTest, sendBinaryInArrayBufferNonLatin1UTF8Continu
     handleClient()->didReceiveFlowControl(handle(), 16);
     EXPECT_CALL(*channelClient(), didConsumeBufferedAmount(_)).Times(AnyNumber());
 
-    RefPtr<DOMArrayBuffer> b = DOMArrayBuffer::create("\xe7\x8b\x90\xe7\x8b\x90\xe7\x8b\x90\xe7\x8b\x90\xe7\x8b\x90\xe7\x8b\x90", 18);
+    DOMArrayBuffer* b = DOMArrayBuffer::create("\xe7\x8b\x90\xe7\x8b\x90\xe7\x8b\x90\xe7\x8b\x90\xe7\x8b\x90\xe7\x8b\x90", 18);
     channel()->send(*b, 0, 18);
     checkpoint.Call(1);
 

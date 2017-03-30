@@ -119,7 +119,7 @@ void ExtensionIconManager::OnImageLoaded(const std::string& extension_id,
     info.id = extension_id;
     info.badge_icon.reset(
         extensions::ExtensionActionUtil::EncodeBitmapToPng(image.ToSkBitmap()));
-    scoped_ptr<base::ListValue> args =
+    std::unique_ptr<base::ListValue> args =
         extensions::vivaldi::extension_action_utils::OnIconLoaded::Create(info);
 
     extensions::ExtensionActionUtil::BroadcastEvent(

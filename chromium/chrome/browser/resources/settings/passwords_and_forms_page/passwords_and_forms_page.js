@@ -19,16 +19,18 @@ PasswordManager.PasswordUiEntry;
 /** @typedef {chrome.passwordsPrivate.LoginPair} */
 PasswordManager.LoginPair;
 
+/** @typedef {chrome.passwordsPrivate.ExceptionPair} */
+PasswordManager.ExceptionPair;
+
 /** @typedef {chrome.passwordsPrivate.PlaintextPasswordEventParameters} */
 PasswordManager.PlaintextPasswordEvent;
 
 PasswordManager.prototype = {
   /**
-   * Register a callback for when the list of passwords is updated.
-   * Calling this function should trigger an update.
+   * Request the list of saved passwords and observe future changes.
    * @param {function(!Array<!PasswordManager.PasswordUiEntry>):void} callback
    */
-  onSavedPasswordListChangedCallback: assertNotReached,
+  setSavedPasswordListChangedCallback: assertNotReached,
 
   /**
    * Should remove the saved password and notify that the list has changed.
@@ -38,11 +40,10 @@ PasswordManager.prototype = {
   removeSavedPassword: assertNotReached,
 
   /**
-   * Register a callback for when the list of exceptions is updated.
-   * Calling this function should trigger an update.
-   * @param {function(!Array<!string>):void} callback
+   * Request the list of password exceptions and observe future changes.
+   * @param {function(!Array<!PasswordManager.ExceptionPair>):void} callback
    */
-  onExceptionListChangedCallback: assertNotReached,
+  setExceptionListChangedCallback: assertNotReached,
 
   /**
    * Should remove the password exception and notify that the list has changed.
@@ -77,7 +78,10 @@ PasswordManagerImpl.prototype = {
   __proto__: PasswordManager,
 
   /** @override */
-  onSavedPasswordListChangedCallback: function(callback) {
+  setSavedPasswordListChangedCallback: function(callback) {
+    // Get the list of passwords...
+    chrome.passwordsPrivate.getSavedPasswordList(callback);
+    // ...and listen for future changes.
     chrome.passwordsPrivate.onSavedPasswordsListChanged.addListener(callback);
   },
 
@@ -87,7 +91,10 @@ PasswordManagerImpl.prototype = {
   },
 
   /** @override */
-  onExceptionListChangedCallback: function(callback) {
+  setExceptionListChangedCallback: function(callback) {
+    // Get the list of exceptions...
+    chrome.passwordsPrivate.getPasswordExceptionList(callback);
+    // ...and listen for future changes.
     chrome.passwordsPrivate.onPasswordExceptionsListChanged.addListener(
         callback);
   },
@@ -115,7 +122,6 @@ Polymer({
   is: 'settings-passwords-and-forms-page',
 
   behaviors: [
-    I18nBehavior,
     PrefsBehavior,
   ],
 
@@ -143,7 +149,7 @@ Polymer({
 
     /**
      * An array of sites to display.
-     * @type {!Array<!string>}
+     * @type {!Array<!PasswordManager.ExceptionPair>}
      */
     passwordExceptions: {
       type: Array,
@@ -161,10 +167,10 @@ Polymer({
   ready: function() {
     this.passwordManager_ = PasswordManagerImpl.getInstance();
 
-    this.passwordManager_.onSavedPasswordListChangedCallback(function(list) {
+    this.passwordManager_.setSavedPasswordListChangedCallback(function(list) {
       this.savedPasswords = list;
     }.bind(this));
-    this.passwordManager_.onExceptionListChangedCallback(function(list) {
+    this.passwordManager_.setExceptionListChangedCallback(function(list) {
       this.passwordExceptions = list;
     }.bind(this));
     this.passwordManager_.onPlaintextPasswordRequestedCallback(function(e) {
@@ -188,6 +194,19 @@ Polymer({
    */
   removeSavedPassword_: function(event) {
     this.passwordManager_.removeSavedPassword(event.detail);
+  },
+
+  /**
+   * Shows the manage autofill sub page.
+   * @param {!Event} event
+   * @private
+   */
+  onAutofillTap_: function(event) {
+    // Ignore clicking on the toggle button and verify autofill is enabled.
+    if (Polymer.dom(event).localTarget != this.$.autofillToggle &&
+        this.getPref('autofill.enabled').value) {
+      this.$.pages.setSubpageChain(['manage-autofill']);
+    }
   },
 
   /**

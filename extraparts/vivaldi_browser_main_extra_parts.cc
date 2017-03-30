@@ -23,6 +23,7 @@
 #include "extensions/api/import_data/import_data_api.h"
 #include "extensions/api/show_menu/show_menu_api.h"
 #include "extensions/api/settings/settings_api.h"
+#include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "extensions/api/zoom/zoom_api.h"
 #include "extensions/vivaldi_extensions_init.h"
@@ -63,6 +64,7 @@ void VivaldiBrowserMainExtraParts::
   extensions::ExtensionActionUtilFactory::GetInstance();
   extensions::ImportDataAPI::GetFactoryInstance();
   extensions::NotesAPI::GetFactoryInstance();
+  extensions::TabsPrivateAPI::GetFactoryInstance();
   extensions::ShowMenuAPI::GetFactoryInstance();
   extensions::VivaldiExtensionInit::GetFactoryInstance();
   extensions::VivaldiSettingsApiNotificationFactory::GetInstance();

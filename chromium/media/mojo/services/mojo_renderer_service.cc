@@ -11,6 +11,7 @@
 #include "media/base/renderer.h"
 #include "media/mojo/services/demuxer_stream_provider_shim.h"
 #include "media/mojo/services/mojo_cdm_service_context.h"
+#include "mojo/converters/geometry/geometry_type_converters.h"
 
 namespace media {
 
@@ -20,7 +21,7 @@ const int kTimeUpdateIntervalMs = 50;
 MojoRendererService::MojoRendererService(
     base::WeakPtr<MojoCdmServiceContext> mojo_cdm_service_context,
     std::unique_ptr<media::Renderer> renderer,
-    mojo::InterfaceRequest<interfaces::Renderer> request)
+    mojo::InterfaceRequest<mojom::Renderer> request)
     : binding_(this, std::move(request)),
       mojo_cdm_service_context_(mojo_cdm_service_context),
       state_(STATE_UNINITIALIZED),
@@ -37,9 +38,9 @@ MojoRendererService::~MojoRendererService() {
 }
 
 void MojoRendererService::Initialize(
-    interfaces::RendererClientPtr client,
-    interfaces::DemuxerStreamPtr audio,
-    interfaces::DemuxerStreamPtr video,
+    mojom::RendererClientPtr client,
+    mojom::DemuxerStreamPtr audio,
+    mojom::DemuxerStreamPtr video,
     const mojo::Callback<void(bool)>& callback) {
   DVLOG(1) << __FUNCTION__;
   DCHECK_EQ(state_, STATE_UNINITIALIZED);
@@ -103,19 +104,49 @@ void MojoRendererService::SetCdm(int32_t cdm_id,
                                             weak_this_, cdm, callback));
 }
 
+void MojoRendererService::OnError(PipelineStatus error) {
+  DVLOG(1) << __FUNCTION__ << "(" << error << ")";
+  state_ = STATE_ERROR;
+  client_->OnError();
+}
+
+void MojoRendererService::OnEnded() {
+  DVLOG(1) << __FUNCTION__;
+  CancelPeriodicMediaTimeUpdates();
+  client_->OnEnded();
+}
+
+void MojoRendererService::OnStatisticsUpdate(const PipelineStatistics& stats) {
+  // TODO(alokp): Plumb the event to mojom::RendererClient. crbug/585287
+}
+
+void MojoRendererService::OnBufferingStateChange(BufferingState state) {
+  DVLOG(2) << __FUNCTION__ << "(" << state << ")";
+  client_->OnBufferingStateChange(static_cast<mojom::BufferingState>(state));
+}
+
+void MojoRendererService::OnWaitingForDecryptionKey() {
+  // TODO(alokp): Plumb the event to mojom::RendererClient. crbug/585287
+}
+
+void MojoRendererService::OnVideoNaturalSizeChange(const gfx::Size& size) {
+  DVLOG(2) << __FUNCTION__ << "(" << size.ToString() << ")";
+  client_->OnVideoNaturalSizeChange(mojo::Size::From(size));
+}
+
+void MojoRendererService::OnVideoOpacityChange(bool opaque) {
+  DVLOG(2) << __FUNCTION__ << "(" << opaque << ")";
+  client_->OnVideoOpacityChange(opaque);
+}
+
 void MojoRendererService::OnStreamReady(
     const mojo::Callback<void(bool)>& callback) {
   DCHECK_EQ(state_, STATE_INITIALIZING);
 
   renderer_->Initialize(
-      stream_provider_.get(),
-      base::Bind(
-          &MojoRendererService::OnRendererInitializeDone, weak_this_, callback),
-      base::Bind(&MojoRendererService::OnUpdateStatistics, weak_this_),
-      base::Bind(&MojoRendererService::OnBufferingStateChanged, weak_this_),
-      base::Bind(&MojoRendererService::OnRendererEnded, weak_this_),
-      base::Bind(&MojoRendererService::OnError, weak_this_),
-      base::Bind(base::DoNothing));
+      stream_provider_.get(), this,
+      base::Bind(&MojoRendererService::OnRendererInitializeDone, weak_this_,
+                 callback));
 }
 
 void MojoRendererService::OnRendererInitializeDone(
@@ -132,9 +163,6 @@ void MojoRendererService::OnRendererInitializeDone(
 
   state_ = STATE_PLAYING;
   callback.Run(true);
-}
-
-void MojoRendererService::OnUpdateStatistics(const PipelineStatistics& stats) {
 }
 
 void MojoRendererService::UpdateMediaTime(bool force) {
@@ -159,25 +187,6 @@ void MojoRendererService::SchedulePeriodicMediaTimeUpdates() {
       FROM_HERE,
       base::TimeDelta::FromMilliseconds(kTimeUpdateIntervalMs),
       base::Bind(&MojoRendererService::UpdateMediaTime, weak_this_, false));
-}
-
-void MojoRendererService::OnBufferingStateChanged(
-    BufferingState new_buffering_state) {
-  DVLOG(2) << __FUNCTION__ << "(" << new_buffering_state << ")";
-  client_->OnBufferingStateChange(
-      static_cast<interfaces::BufferingState>(new_buffering_state));
-}
-
-void MojoRendererService::OnRendererEnded() {
-  DVLOG(1) << __FUNCTION__;
-  CancelPeriodicMediaTimeUpdates();
-  client_->OnEnded();
-}
-
-void MojoRendererService::OnError(PipelineStatus error) {
-  DVLOG(1) << __FUNCTION__ << "(" << error << ")";
-  state_ = STATE_ERROR;
-  client_->OnError();
 }
 
 void MojoRendererService::OnFlushCompleted(const mojo::Closure& callback) {

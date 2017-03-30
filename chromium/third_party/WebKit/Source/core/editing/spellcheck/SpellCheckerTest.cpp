@@ -16,8 +16,8 @@ class SpellCheckerTest : public EditingTestBase {
 TEST_F(SpellCheckerTest, AdvanceToNextMisspellingWithEmptyInputNoCrash)
 {
     setBodyContent("<input placeholder='placeholder'>abc");
-    updateLayoutAndStyleForPainting();
-    RawPtr<Element> input = document().querySelector("input", ASSERT_NO_EXCEPTION);
+    updateAllLifecyclePhases();
+    Element* input = document().querySelector("input", ASSERT_NO_EXCEPTION);
     input->focus();
     document().settings()->setUnifiedTextCheckerEnabled(true);
     // Do not crash in AdvanceToNextMisspelling command.

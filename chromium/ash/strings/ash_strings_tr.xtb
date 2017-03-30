@@ -26,6 +26,7 @@
 <translation id="1602076796624386989">Mobil verileri etkinleştir</translation>
 <translation id="1621499497873603021">Pilin boşalması için kalan süre, <ph name="TIME_LEFT" /></translation>
 <translation id="164969095109328410">Chrome cihaz</translation>
+<translation id="1677472565718498478">Kalan süre: <ph name="TIME" /></translation>
 <translation id="1723752762323179280">Oturumdan Çıkış Yapılıyor</translation>
 <translation id="1747827819627189109">Dokunmatik klavye etkin</translation>
 <translation id="1812696562331527143">Giriş yönteminiz <ph name="INPUT_METHOD_ID" />*(<ph name="BEGIN_LINK" />3. taraf<ph name="END_LINK" />) olarak değiştirildi.
@@ -92,7 +93,6 @@ Geçiş yapmak için ÜstKrktr + Alt tuşlarına basın.</translation>
 <translation id="3621712662352432595">Ses Ayarları</translation>
 <translation id="3625258641415618104">Ekran görüntüleri devre dışı</translation>
 <translation id="3626281679859535460">Parlaklık</translation>
-<translation id="3626637461649818317">%<ph name="PERCENTAGE" /> kaldı</translation>
 <translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079"><ph name="DISPLAY_NAME" /> çözünürlüğü <ph name="RESOLUTION" /> olarak değiştirildi</translation>
 <translation id="370649949373421643">Kablosuzu Etkinleştir</translation>
@@ -111,13 +111,13 @@ Geçiş yapmak için ÜstKrktr + Alt tuşlarına basın.</translation>
 <translation id="397105322502079400">Hesaplanııyor...</translation>
 <translation id="3995138139523574647">USB-C cihaz (sağ arka bağlantı noktası)</translation>
 <translation id="4053612967614057854">Ekran klavyesini devre dışı bırak</translation>
-<translation id="412065659894267608">Tam dolana kadar <ph name="HOUR" /> sa <ph name="MINUTE" /> dk var</translation>
 <translation id="4250680216510889253">Hayır</translation>
 <translation id="4279490309300973883">Yansıtılıyor</translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4421231901400348175">Ekranınızın kontrolü, Uzaktan Yardım kullanılarak <ph name="HELPER_NAME" /> ile paylaşılıyor.</translation>
 <translation id="4430019312045809116">Ses</translation>
 <translation id="4527045527269911712">"<ph name="DEVICE_NAME" />" adlı Bluetooth cihaz eşleme izni istiyor.</translation>
+<translation id="453661520163887813">Dolması için gereken süre: <ph name="TIME" /></translation>
 <translation id="4544944664594876241">Ekranı kilitleme kısayolu değişti. Lütfen <ph name="OLD_SHORTCUT" /> yerine <ph name="NEW_SHORTCUT" /> kısayolunu kullanın.</translation>
 <translation id="479989351350248267">ara</translation>
 <translation id="4804818685124855865">Bağlantıyı kes</translation>
@@ -129,7 +129,6 @@ Geçiş yapmak için ÜstKrktr + Alt tuşlarına basın.</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl+Üst Karakter+Boşluk</translation>
 <translation id="5045002648206642691">Google Drive ayarları...</translation>
-<translation id="5102001756192215136"><ph name="HOUR" />:<ph name="MINUTE" /> kaldı</translation>
 <translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">Yayın cihazları kullanılabilir</translation>
 <translation id="5222676887888702881">Çıkış</translation>
@@ -167,7 +166,6 @@ Geçiş yapmak için ÜstKrktr + Alt tuşlarına basın.</translation>
 <translation id="615957422585914272">Dokunmatik klavyeyi göster</translation>
 <translation id="6165508094623778733">Daha fazla bilgi edinin</translation>
 <translation id="6203030746557259519">Sanal Görüntü</translation>
-<translation id="6247708409970142803">%<ph name="PERCENTAGE" /></translation>
 <translation id="6248847161401822652">Çıkmak için Ctrl+ÜstKrktr+Q tuşlarına iki kez basın.</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" /> dönme ayarı <ph name="ROTATION" /> olarak değiştirildi</translation>
 <translation id="6359806961507272919"><ph name="PHONE_NUMBER" /> numaradan SMS alındı</translation>
@@ -208,6 +206,7 @@ Devre dışı bırakmak için Ctrl+Alt+Z tuşlarına basın.</translation>
 <translation id="7510334386202674593">Ctrl + Üst Karakter + L</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" />, <ph name="SPECIFIED_RESOLUTION" /> çözünürlüğünü desteklemiyor. Çözünürlük <ph name="FALLBACK_RESOLUTION" /> olarak değiştirildi</translation>
 <translation id="7573962313813535744">Yuva modu</translation>
+<translation id="7580671184200851182">Tüm hoparlörlerden aynı sesi çal (mono ses)</translation>
 <translation id="7593891976182323525">Arama veya Üst Karakter</translation>
 <translation id="7649070708921625228">Yardım</translation>
 <translation id="7692480393933218409">Bağlı USB-C cihazlar şarj ediliyor</translation>
@@ -226,13 +225,14 @@ Devre dışı bırakmak için Ctrl+Alt+Z tuşlarına basın.</translation>
 <translation id="8308637677604853869">Önceki menü</translation>
 <translation id="8356164830168736643"><ph name="WINDOW_TITLE" /> penceresini kapat</translation>
 <translation id="8428213095426709021">Ayarlar</translation>
-<translation id="8456362689280298700">Dolması için gereken süre: <ph name="HOUR" />:<ph name="MINUTE" /> </translation>
 <translation id="8517041960877371778"><ph name="DEVICE_TYPE" /> cihazınız açıkken şarj olmayabilir.</translation>
 <translation id="8528322925433439945">Mobile...</translation>
+<translation id="8639760480004882931"><ph name="PERCENTAGE" /> kaldı</translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">Düşük güçlü şarj cihazı bağlandı</translation>
 <translation id="8814190375133053267">Kablosuz</translation>
 <translation id="882279321799040148">Görüntülemek için tıklayın</translation>
+<translation id="8825534185036233643">İkiden fazla ekranla yansıtma desteklenmez.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8850991929411075241">Ara+Esc</translation>
 <translation id="8878886163241303700">Genişletilmiş ekran</translation>

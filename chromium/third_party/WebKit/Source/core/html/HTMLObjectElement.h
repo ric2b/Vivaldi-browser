@@ -35,7 +35,7 @@ class CORE_EXPORT HTMLObjectElement final : public HTMLPlugInElement, public For
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(HTMLObjectElement);
 public:
-    static RawPtr<HTMLObjectElement> create(Document&, HTMLFormElement*, bool createdByParser);
+    static HTMLObjectElement* create(Document&, HTMLFormElement*, bool createdByParser);
     ~HTMLObjectElement() override;
     DECLARE_VIRTUAL_TRACE();
 
@@ -60,11 +60,6 @@ public:
     bool checkValidity() { return true; }
     bool reportValidity() { return true; }
     void setCustomValidity(const String&) override { }
-
-#if !ENABLE(OILPAN)
-    using Node::ref;
-    using Node::deref;
-#endif
 
     bool canContainRangeEndPoint() const override { return useFallbackContent(); }
 
@@ -103,11 +98,6 @@ private:
     bool hasValidClassId();
 
     void reloadPluginOnAttributeChange(const QualifiedName&);
-
-#if !ENABLE(OILPAN)
-    void refFormAssociatedElement() override { ref(); }
-    void derefFormAssociatedElement() override { deref(); }
-#endif
 
     bool shouldRegisterAsNamedItem() const override { return true; }
     bool shouldRegisterAsExtraNamedItem() const override { return true; }

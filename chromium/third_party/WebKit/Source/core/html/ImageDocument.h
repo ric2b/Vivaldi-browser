@@ -35,7 +35,7 @@ class ImageResource;
 
 class CORE_EXPORT ImageDocument final : public HTMLDocument {
 public:
-    static RawPtr<ImageDocument> create(const DocumentInit& initializer = DocumentInit())
+    static ImageDocument* create(const DocumentInit& initializer = DocumentInit())
     {
         return new ImageDocument(initializer);
     }
@@ -57,10 +57,7 @@ public:
 private:
     explicit ImageDocument(const DocumentInit&);
 
-    RawPtr<DocumentParser> createParser() override;
-#if !ENABLE(OILPAN)
-    void dispose() override;
-#endif
+    DocumentParser* createParser() override;
 
     void createDocumentStructure();
 

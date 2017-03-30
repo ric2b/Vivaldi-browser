@@ -4,6 +4,7 @@
 
 #include "components/safe_browsing_db/remote_database_manager.h"
 
+#include <memory>
 #include <vector>
 
 #include "base/metrics/histogram_macros.h"
@@ -206,12 +207,6 @@ bool RemoteSafeBrowsingDatabaseManager::MatchDownloadWhitelistString(
   return true;
 }
 
-bool RemoteSafeBrowsingDatabaseManager::MatchInclusionWhitelistUrl(
-    const GURL& url) {
-  NOTREACHED();
-  return true;
-}
-
 bool RemoteSafeBrowsingDatabaseManager::MatchModuleWhitelistString(
     const std::string& str) {
   NOTREACHED();
@@ -245,7 +240,7 @@ bool RemoteSafeBrowsingDatabaseManager::CheckBrowseUrl(const GURL& url,
   if (!can_check_url)
     return true;  // Safe, continue right away.
 
-  scoped_ptr<ClientRequest> req(new ClientRequest(client, this, url));
+  std::unique_ptr<ClientRequest> req(new ClientRequest(client, this, url));
   std::vector<SBThreatType> threat_types;  // Not currently used.
 
   DVLOG(1) << "Checking for client " << client << " and URL " << url;

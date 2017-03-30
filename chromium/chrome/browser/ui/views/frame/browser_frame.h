@@ -19,7 +19,6 @@ class BrowserView;
 class NativeBrowserFrame;
 class NonClientFrameView;
 class SystemMenuModelBuilder;
-class ThemeService;
 
 namespace gfx {
 class FontList;
@@ -105,6 +104,7 @@ class BrowserFrame
   const ui::NativeTheme* GetNativeTheme() const override;
   void SchedulePaintInRect(const gfx::Rect& rect) override;
   void OnNativeWidgetActivationChanged(bool active) override;
+  void OnNativeWidgetWorkspaceChanged() override;
 
   // Overridden from views::ContextMenuController:
   void ShowContextMenuForView(views::View* source,
@@ -137,8 +137,6 @@ class BrowserFrame
   // Used to show the system menu. Only used if
   // NativeBrowserFrame::UsesNativeSystemMenu() returns false.
   std::unique_ptr<views::MenuRunner> menu_runner_;
-
-  const ThemeService* theme_service_;
 
   std::unique_ptr<ui::EventHandler> browser_command_handler_;
 

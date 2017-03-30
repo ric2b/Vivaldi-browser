@@ -9,10 +9,10 @@
 #include <stdint.h>
 
 #include <deque>
+#include <memory>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/condition_variable.h"
@@ -64,21 +64,20 @@ class MEDIA_EXPORT VideoRendererImpl
 
   // VideoRenderer implementation.
   void Initialize(DemuxerStream* stream,
-                  const PipelineStatusCB& init_cb,
                   CdmContext* cdm_context,
-                  const StatisticsCB& statistics_cb,
-                  const BufferingStateCB& buffering_state_cb,
-                  const base::Closure& ended_cb,
-                  const PipelineStatusCB& error_cb,
+                  RendererClient* client,
                   const TimeSource::WallClockTimeCB& wall_clock_time_cb,
-                  const base::Closure& waiting_for_decryption_key_cb) override;
+                  const PipelineStatusCB& init_cb) override;
   void Flush(const base::Closure& callback) override;
   void StartPlayingFrom(base::TimeDelta timestamp) override;
   void OnTimeStateChanged(bool time_progressing) override;
 
-  void SetTickClockForTesting(scoped_ptr<base::TickClock> tick_clock);
+  void SetTickClockForTesting(std::unique_ptr<base::TickClock> tick_clock);
   void SetGpuMemoryBufferVideoForTesting(
-      scoped_ptr<GpuMemoryBufferVideoFramePool> gpu_memory_buffer_pool);
+      std::unique_ptr<GpuMemoryBufferVideoFramePool> gpu_memory_buffer_pool);
+  size_t frames_queued_for_testing() const {
+    return algorithm_->frames_queued();
+  }
 
   // VideoRendererSink::RenderCallback implementation.
   scoped_refptr<VideoFrame> Render(base::TimeTicks deadline_min,
@@ -89,6 +88,13 @@ class MEDIA_EXPORT VideoRendererImpl
  private:
   // Callback for |video_frame_stream_| initialization.
   void OnVideoFrameStreamInitialized(bool success);
+
+  // Functions to notify certain events to the RendererClient.
+  void OnPlaybackError(PipelineStatus error);
+  void OnPlaybackEnded();
+  void OnStatisticsUpdate(const PipelineStatistics& stats);
+  void OnBufferingStateChange(BufferingState state);
+  void OnWaitingForDecryptionKey();
 
   // Callback for |video_frame_stream_| to deliver decoded video frames and
   // report video decoding status. If a frame is available the planes will be
@@ -109,7 +115,6 @@ class MEDIA_EXPORT VideoRendererImpl
   // Helper method that schedules an asynchronous read from the
   // |video_frame_stream_| as long as there isn't a pending read and we have
   // capacity.
-  void AttemptRead();
   void AttemptRead_Locked();
 
   // Called when VideoFrameStream::Reset() completes.
@@ -125,10 +130,6 @@ class MEDIA_EXPORT VideoRendererImpl
   // them to 0.
   void UpdateStats_Locked();
 
-  // Called after we've painted the first frame.  If |time_progressing_| is
-  // false it Stop() on |sink_|.
-  void MaybeStopSinkAfterFirstPaint();
-
   // Returns true if there is no more room for additional buffered frames.
   bool HaveReachedBufferingCap();
 
@@ -142,11 +143,9 @@ class MEDIA_EXPORT VideoRendererImpl
   //
   // When called from the media thread, |time_progressing| should reflect the
   // value of |time_progressing_|.  When called from Render() on the sink
-  // callback thread, the inverse of |render_first_frame_and_stop_| should be
-  // used as a proxy for |time_progressing_|.
-  //
-  // Returns algorithm_->EffectiveFramesQueued().
-  size_t MaybeFireEndedCallback_Locked(bool time_progressing);
+  // callback thread, |time_progressing| must be true since Render() could not
+  // have been called otherwise.
+  void MaybeFireEndedCallback_Locked(bool time_progressing);
 
   // Helper method for converting a single media timestamp to wall clock time.
   base::TimeTicks ConvertMediaTimestamp(base::TimeDelta media_timestamp);
@@ -156,6 +155,32 @@ class MEDIA_EXPORT VideoRendererImpl
   // Helper method for checking if a frame timestamp plus the frame's expected
   // duration is before |start_timestamp_|.
   bool IsBeforeStartTime(base::TimeDelta timestamp);
+
+  // Attempts to remove frames which are no longer effective for rendering when
+  // |buffering_state_| == BUFFERING_HAVE_NOTHING or |was_background_rendering_|
+  // is true.  If the current media time as provided by |wall_clock_time_cb_| is
+  // null, no frame expiration will be done.
+  //
+  // When background rendering the method will expire all frames before the
+  // current wall clock time since it's expected that there will be long delays
+  // between each Render() call in this state.
+  //
+  // When in the underflow state the method will first attempt to remove expired
+  // frames before the current media time plus duration. If |sink_started_| is
+  // true, nothing more can be done. However, if false, and there are still no
+  // effective frames in the queue, the entire frame queue will be released to
+  // avoid any stalling.
+  void RemoveFramesForUnderflowOrBackgroundRendering();
+
+  // Notifies |client_| in the event of frame size or opacity changes. Must be
+  // called on |task_runner_|.
+  void CheckForMetadataChanges(VideoPixelFormat pixel_format,
+                               const gfx::Size& natural_size);
+
+  // Both calls AttemptRead_Locked() and CheckForMetadataChanges(). Must be
+  // called on |task_runner_|.
+  void AttemptReadAndCheckForMetadataChanges(VideoPixelFormat pixel_format,
+                                             const gfx::Size& natural_size);
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
@@ -170,11 +195,13 @@ class MEDIA_EXPORT VideoRendererImpl
   // Used for accessing data members.
   base::Lock lock_;
 
+  RendererClient* client_;
+
   // Provides video frames to VideoRendererImpl.
-  scoped_ptr<VideoFrameStream> video_frame_stream_;
+  std::unique_ptr<VideoFrameStream> video_frame_stream_;
 
   // Pool of GpuMemoryBuffers and resources used to create hardware frames.
-  scoped_ptr<GpuMemoryBufferVideoFramePool> gpu_memory_buffer_pool_;
+  std::unique_ptr<GpuMemoryBufferVideoFramePool> gpu_memory_buffer_pool_;
 
   scoped_refptr<MediaLog> media_log_;
 
@@ -227,14 +254,8 @@ class MEDIA_EXPORT VideoRendererImpl
   BufferingState buffering_state_;
 
   // Playback operation callbacks.
-  base::Closure flush_cb_;
-
-  // Event callbacks.
   PipelineStatusCB init_cb_;
-  StatisticsCB statistics_cb_;
-  BufferingStateCB buffering_state_cb_;
-  base::Closure ended_cb_;
-  PipelineStatusCB error_cb_;
+  base::Closure flush_cb_;
   TimeSource::WallClockTimeCB wall_clock_time_cb_;
 
   base::TimeDelta start_timestamp_;
@@ -244,11 +265,11 @@ class MEDIA_EXPORT VideoRendererImpl
   int frames_decoded_;
   int frames_dropped_;
 
-  scoped_ptr<base::TickClock> tick_clock_;
+  std::unique_ptr<base::TickClock> tick_clock_;
 
   // Algorithm for selecting which frame to render; manages frames and all
   // timing related information.
-  scoped_ptr<VideoRendererAlgorithm> algorithm_;
+  std::unique_ptr<VideoRendererAlgorithm> algorithm_;
 
   // Indicates that Render() was called with |background_rendering| set to true,
   // so we've entered a background rendering mode where dropped frames are not
@@ -259,15 +280,16 @@ class MEDIA_EXPORT VideoRendererImpl
   // only be accessed from |task_runner_|.
   bool time_progressing_;
 
-  // Indicates that Render() should only render the first frame and then request
-  // that the sink be stopped.  |posted_maybe_stop_after_first_paint_| is used
-  // to avoid repeated task posts.
-  bool render_first_frame_and_stop_;
-  bool posted_maybe_stop_after_first_paint_;
-
   // Memory usage of |algorithm_| recorded during the last UpdateStats_Locked()
   // call.
   int64_t last_video_memory_usage_;
+
+  // Indicates if a frame has been processed by CheckForMetadataChanges().
+  bool have_renderered_frames_;
+
+  // Tracks last frame properties to detect and notify client of any changes.
+  gfx::Size last_frame_natural_size_;
+  bool last_frame_opaque_;
 
   // NOTE: Weak pointers must be invalidated before all other member variables.
   base::WeakPtrFactory<VideoRendererImpl> weak_factory_;

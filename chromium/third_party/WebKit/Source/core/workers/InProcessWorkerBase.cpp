@@ -10,7 +10,7 @@
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/InspectorInstrumentation.h"
-#include "core/workers/WorkerGlobalScopeProxy.h"
+#include "core/workers/InProcessWorkerGlobalScopeProxy.h"
 #include "core/workers/WorkerScriptLoader.h"
 #include "core/workers/WorkerThread.h"
 #include "platform/network/ContentSecurityPolicyResponseHeaders.h"
@@ -26,20 +26,20 @@ InProcessWorkerBase::InProcessWorkerBase(ExecutionContext* context)
 
 InProcessWorkerBase::~InProcessWorkerBase()
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
     if (!m_contextProxy)
         return;
     m_contextProxy->workerObjectDestroyed();
 }
 
-void InProcessWorkerBase::postMessage(ExecutionContext* context, PassRefPtr<SerializedScriptValue> message, const MessagePortArray* ports, ExceptionState& exceptionState)
+void InProcessWorkerBase::postMessage(ExecutionContext* context, PassRefPtr<SerializedScriptValue> message, const MessagePortArray& ports, ExceptionState& exceptionState)
 {
-    ASSERT(m_contextProxy);
+    DCHECK(m_contextProxy);
     // Disentangle the port in preparation for sending it to the remote context.
     OwnPtr<MessagePortChannelArray> channels = MessagePort::disentanglePorts(context, ports, exceptionState);
     if (exceptionState.hadException())
         return;
-    m_contextProxy->postMessageToWorkerGlobalScope(message, channels.release());
+    m_contextProxy->postMessageToWorkerGlobalScope(message, std::move(channels));
 }
 
 bool InProcessWorkerBase::initialize(ExecutionContext* context, const String& url, ExceptionState& exceptionState)
@@ -59,7 +59,7 @@ bool InProcessWorkerBase::initialize(ExecutionContext* context, const String& ur
         bind(&InProcessWorkerBase::onResponse, this),
         bind(&InProcessWorkerBase::onFinished, this));
 
-    m_contextProxy = createWorkerGlobalScopeProxy(context);
+    m_contextProxy = createInProcessWorkerGlobalScopeProxy(context);
 
     return true;
 }
@@ -98,7 +98,7 @@ void InProcessWorkerBase::onFinished()
     if (m_scriptLoader->failed()) {
         dispatchEvent(Event::createCancelable(EventTypeNames::error));
     } else {
-        ASSERT(m_contextProxy);
+        DCHECK(m_contextProxy);
         m_contextProxy->startWorkerGlobalScope(m_scriptLoader->url(), getExecutionContext()->userAgent(), m_scriptLoader->script());
         InspectorInstrumentation::scriptImported(getExecutionContext(), m_scriptLoader->identifier(), m_scriptLoader->script());
     }

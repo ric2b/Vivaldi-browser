@@ -30,15 +30,15 @@ class TestInkDropHost : public InkDropHost {
   // TestInkDropHost:
   void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
   void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override;
-  scoped_ptr<InkDropAnimation> CreateInkDropAnimation() const override;
-  scoped_ptr<InkDropHover> CreateInkDropHover() const override;
+  std::unique_ptr<InkDropRipple> CreateInkDropRipple() const override;
+  std::unique_ptr<InkDropHover> CreateInkDropHover() const override;
 
  private:
   int num_ink_drop_layers_;
 
   bool should_show_hover_;
 
-  // When true, the InkDropAnimation/InkDropHover instances will have their
+  // When true, the InkDropRipple/InkDropHover instances will have their
   // timers disabled after creation.
   bool disable_timers_for_test_;
 

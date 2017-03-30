@@ -1,5 +1,5 @@
 include_rules = [
-  "+media/capture/content",
+  "+components/display_compositor",
   "+third_party/libyuv",  # For scaling in desktop_capture_device.cc.
 ]
 
@@ -9,4 +9,3 @@ specific_include_rules = {
     "+ui/base/resource/resource_bundle.h",
   ],
 }
-

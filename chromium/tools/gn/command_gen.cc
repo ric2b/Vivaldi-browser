@@ -13,6 +13,7 @@
 #include "tools/gn/eclipse_writer.h"
 #include "tools/gn/ninja_target_writer.h"
 #include "tools/gn/ninja_writer.h"
+#include "tools/gn/qt_creator_writer.h"
 #include "tools/gn/runtime_deps.h"
 #include "tools/gn/scheduler.h"
 #include "tools/gn/setup.h"
@@ -20,6 +21,7 @@
 #include "tools/gn/switches.h"
 #include "tools/gn/target.h"
 #include "tools/gn/visual_studio_writer.h"
+#include "tools/gn/xcode_writer.h"
 
 namespace commands {
 
@@ -29,10 +31,15 @@ const char kSwitchCheck[] = "check";
 const char kSwitchFilters[] = "filters";
 const char kSwitchIde[] = "ide";
 const char kSwitchIdeValueEclipse[] = "eclipse";
+const char kSwitchIdeValueQtCreator[] = "qtcreator";
 const char kSwitchIdeValueVs[] = "vs";
 const char kSwitchIdeValueVs2013[] = "vs2013";
 const char kSwitchIdeValueVs2015[] = "vs2015";
+const char kSwitchIdeValueXcode[] = "xcode";
+const char kSwitchNinjaExtraArgs[] = "ninja-extra-args";
+const char kSwitchRootTarget[] = "root-target";
 const char kSwitchSln[] = "sln";
+const char kSwitchWorkspace[] = "workspace";
 
 // Called on worker thread to write the ninja file.
 void BackgroundDoWrite(const Target* target) {
@@ -188,6 +195,31 @@ bool RunIdeWriter(const std::string& ide,
                    "ms\n");
     }
     return res;
+  } else if (ide == kSwitchIdeValueXcode) {
+    bool res = XcodeWriter::RunAndWriteFiles(
+        command_line->GetSwitchValueASCII(kSwitchWorkspace),
+        command_line->GetSwitchValueASCII(kSwitchRootTarget),
+        command_line->GetSwitchValueASCII(kSwitchNinjaExtraArgs),
+        command_line->GetSwitchValueASCII(kSwitchFilters), build_settings,
+        builder, err);
+    if (res && !command_line->HasSwitch(switches::kQuiet)) {
+      OutputString("Generating Xcode projects took " +
+                   base::Int64ToString(timer.Elapsed().InMilliseconds()) +
+                   "ms\n");
+    }
+    return res;
+  } else if (ide == kSwitchIdeValueQtCreator) {
+    std::string root_target;
+    if (command_line->HasSwitch(kSwitchRootTarget))
+      root_target = command_line->GetSwitchValueASCII(kSwitchRootTarget);
+    bool res = QtCreatorWriter::RunAndWriteFile(build_settings, builder, err,
+                                                root_target);
+    if (res && !command_line->HasSwitch(switches::kQuiet)) {
+      OutputString("Generating QtCreator projects took " +
+                   base::Int64ToString(timer.Elapsed().InMilliseconds()) +
+                   "ms\n");
+    }
+    return res;
   }
 
   *err = Err(Location(), "Unknown IDE: " + ide);
@@ -225,16 +257,44 @@ const char kGen_Help[] =
     "             (default Visual Studio version: 2015)\n"
     "      \"vs2013\" - Visual Studio 2013 project/solution files.\n"
     "      \"vs2015\" - Visual Studio 2015 project/solution files.\n"
-    "\n"
-    "  --sln=<file_name>\n"
-    "      Override default sln file name (\"all\"). Solution file is written\n"
-    "      to the root build directory. Only for Visual Studio.\n"
+    "      \"xcode\" - Xcode workspace/solution files.\n"
+    "      \"qtcreator\" - QtCreator project files.\n"
     "\n"
     "  --filters=<path_prefixes>\n"
     "      Semicolon-separated list of label patterns used to limit the set\n"
     "      of generated projects (see \"gn help label_pattern\"). Only\n"
-    "      matching targets will be included to the solution. Only for Visual\n"
-    "      Studio.\n"
+    "      matching targets will be included to the solution. Only used for\n"
+    "      Visual Studio and Xcode.\n"
+    "\n"
+    "Visual Studio Flags\n"
+    "\n"
+    "  --sln=<file_name>\n"
+    "      Override default sln file name (\"all\"). Solution file is written\n"
+    "      to the root build directory.\n"
+    "\n"
+    "Xcode Flags\n"
+    "\n"
+    "  --workspace=<file_name>\n"
+    "      Override defaut workspace file name (\"all\"). The workspace file\n"
+    "      is written to the root build directory.\n"
+    "\n"
+    "  --ninja-extra-args=<string>\n"
+    "      This string is passed without any quoting to the ninja invocation\n"
+    "      command-line. Can be used to configure ninja flags, like \"-j\" if\n"
+    "      using goma for example.\n"
+    "\n"
+    "  --root-target=<target_name>\n"
+    "      Name of the target corresponding to \"All\" target in Xcode.\n"
+    "      If unset, \"All\" invokes ninja without any target\n"
+    "      and builds everything.\n"
+    "\n"
+    "QtCreator Flags\n"
+    "\n"
+    "  --root-target=<target_name>\n"
+    "      Name of the root target for which the QtCreator project will be\n"
+    "      generated to contain files of it and its dependencies. If unset, \n"
+    "      the whole build graph will be emitted.\n"
+    "\n"
     "\n"
     "Eclipse IDE Support\n"
     "\n"

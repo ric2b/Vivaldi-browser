@@ -18,9 +18,9 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -70,7 +70,6 @@
 #include "extensions/browser/app_sorting.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_host.h"
-#include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extensions_browser_client.h"
@@ -103,6 +102,8 @@
 #include "storage/browser/fileapi/file_system_backend.h"
 #include "storage/browser/fileapi/file_system_context.h"
 #endif
+
+#include "app/vivaldi_apptools.h"
 
 using content::BrowserContext;
 using content::BrowserThread;
@@ -519,7 +520,8 @@ bool ExtensionService::UpdateExtension(const extensions::CRXFileInfo& file,
                  << " because it is not installed or pending";
     // Delete extension_path since we're not creating a CrxInstaller
     // that would do it for us.
-    if (!GetFileTaskRunner()->PostTask(
+    if (file_ownership_passed &&
+        !GetFileTaskRunner()->PostTask(
             FROM_HERE,
             base::Bind(&extensions::file_util::DeleteFile, file.path, false)))
       NOTREACHED();
@@ -692,12 +694,12 @@ void ExtensionService::ReloadExtensionImpl(
 }
 
 void ExtensionService::ReloadExtension(const std::string& extension_id) {
-  ReloadExtensionImpl(extension_id, true); // be_noisy
+  ReloadExtensionImpl(extension_id, true);  // be_noisy
 }
 
 void ExtensionService::ReloadExtensionWithQuietFailure(
     const std::string& extension_id) {
-  ReloadExtensionImpl(extension_id, false); // be_noisy
+  ReloadExtensionImpl(extension_id, false);  // be_noisy
 }
 
 bool ExtensionService::UninstallExtension(
@@ -848,11 +850,6 @@ void ExtensionService::EnableExtension(const std::string& extension_id) {
   // Move it over to the enabled list.
   registry_->AddEnabled(make_scoped_refptr(extension));
   registry_->RemoveDisabled(extension->id());
-
-  // NOTE(andre@vivaldi.com): We need to set the new permissions in prefs so
-  // that the extension is not disabled the next time we start due to possible
-  // changed permissions.
-  GrantPermissions(extension);
 
   NotifyExtensionLoaded(extension);
 
@@ -1098,6 +1095,14 @@ void ExtensionService::NotifyExtensionLoaded(const Extension* extension) {
           GURL(chrome::kChromeUIThumbnailURL))) {
     ThumbnailSource* thumbnail_source = new ThumbnailSource(profile_, false);
     content::URLDataSource::Add(profile_, thumbnail_source);
+  }
+
+  // NOTE(andre@vivaldi.com): This is to assign a content prefs map to Vivaldi
+  // so that we can always access content settings with. See bug VB-20016
+  if (vivaldi::IsVivaldiRunning() && vivaldi::IsVivaldiApp(extension->id())) {
+    extension_prefs_->OnExtensionInstalled(
+        extension, Extension::ENABLED, syncer::StringOrdinal(),
+        extensions::kInstallFlagNone, std::string());
   }
 }
 
@@ -1442,10 +1447,10 @@ void ExtensionService::AddExtension(const Extension* extension) {
   }
 
   bool is_extension_upgrade = false;
-  bool is_extension_installed = false;
+  bool is_extension_loaded = false;
   const Extension* old = GetInstalledExtension(extension->id());
   if (old) {
-    is_extension_installed = true;
+    is_extension_loaded = true;
     int version_compare_result =
         extension->version()->CompareTo(*(old->version()));
     is_extension_upgrade = version_compare_result > 0;
@@ -1469,9 +1474,9 @@ void ExtensionService::AddExtension(const Extension* extension) {
 
   // Check if the extension's privileges have changed and mark the
   // extension disabled if necessary.
-  CheckPermissionsIncrease(extension, is_extension_installed);
+  CheckPermissionsIncrease(extension, is_extension_loaded);
 
-  if (is_extension_installed && !reloading) {
+  if (is_extension_loaded && !reloading) {
     // To upgrade an extension in place, unload the old one and then load the
     // new one.  ReloadExtension disables the extension, which is sufficient.
     UnloadExtension(extension->id(), UnloadedExtensionInfo::REASON_UPDATE);
@@ -1526,24 +1531,6 @@ void ExtensionService::AddExtension(const Extension* extension) {
     NotifyExtensionLoaded(extension);
   }
 
-  // Need to check if it's in the list of extensions already before setting up prefs.
-  // Content settings could fail otherwise. See Vivaldi Bug VB-3153.
-  bool prefsIsInitializedforExtension = false;
-  scoped_ptr<extensions::ExtensionPrefs::ExtensionsInfo> extensions_info(
-      extension_prefs_->GetInstalledExtensionsInfo());
-  for (size_t i = 0; i < extensions_info->size(); ++i) {
-    ExtensionInfo* info = extensions_info->at(i).get();
-    if (info->extension_id == extension->id()) {
-      prefsIsInitializedforExtension = true;
-      break;
-    }
-  }
-
-  if(!prefsIsInitializedforExtension) {
-    // Make sure all the preferences is created for all the extensions.
-    extension_prefs_->SetUpPrefsForComponentExtension(extension);
-  }
-
   system_->runtime_data()->SetBeingUpgraded(extension->id(), false);
 }
 
@@ -1570,7 +1557,7 @@ void ExtensionService::AddComponentExtension(const Extension* extension) {
 }
 
 void ExtensionService::CheckPermissionsIncrease(const Extension* extension,
-                                                bool is_extension_installed) {
+                                                bool is_extension_loaded) {
   extensions::PermissionsUpdater(profile_).InitializePermissions(extension);
 
   // We keep track of all permissions the user has granted each extension.
@@ -1633,14 +1620,13 @@ void ExtensionService::CheckPermissionsIncrease(const Extension* extension,
       GrantPermissions(extension);
   }
 
-  if (is_extension_installed) {
-    // If the extension was already disabled, suppress any alerts for becoming
-    // disabled on permissions increase.
-    bool previously_disabled =
-        extension_prefs_->IsExtensionDisabled(extension->id());
+  bool previously_disabled =
+      extension_prefs_->IsExtensionDisabled(extension->id());
+  // TODO(treib): Is the |is_extension_loaded| check needed here?
+  if (is_extension_loaded && previously_disabled) {
     // Legacy disabled extensions do not have a disable reason. Infer that it
     // was likely disabled by the user.
-    if (previously_disabled && disable_reasons == Extension::DISABLE_NONE)
+    if (disable_reasons == Extension::DISABLE_NONE)
       disable_reasons |= Extension::DISABLE_USER_ACTION;
 
     // Extensions that came to us disabled from sync need a similar inference,
@@ -1648,8 +1634,7 @@ void ExtensionService::CheckPermissionsIncrease(const Extension* extension,
     // TODO(treib,devlin): Since M48, DISABLE_UNKNOWN_FROM_SYNC isn't used
     // anymore; this code is still here to migrate any existing old state.
     // Remove it after some grace period.
-    if (previously_disabled &&
-        (disable_reasons & Extension::DEPRECATED_DISABLE_UNKNOWN_FROM_SYNC)) {
+    if (disable_reasons & Extension::DEPRECATED_DISABLE_UNKNOWN_FROM_SYNC) {
       // Remove the DISABLE_UNKNOWN_FROM_SYNC reason.
       disable_reasons &= ~Extension::DEPRECATED_DISABLE_UNKNOWN_FROM_SYNC;
       extension_prefs_->RemoveDisableReason(
@@ -1658,6 +1643,22 @@ void ExtensionService::CheckPermissionsIncrease(const Extension* extension,
       if (!is_privilege_increase)
         disable_reasons |= Extension::DISABLE_USER_ACTION;
     }
+  }
+
+  // If the extension is disabled due to a permissions increase, but does in
+  // fact have all permissions, remove that disable reason.
+  // TODO(devlin): This was added to fix crbug.com/616474, but it's unclear
+  // if this behavior should stay forever.
+  if (disable_reasons & Extension::DISABLE_PERMISSIONS_INCREASE) {
+    bool reset_permissions_increase = false;
+    if (!is_privilege_increase) {
+      reset_permissions_increase = true;
+      disable_reasons &= ~Extension::DISABLE_PERMISSIONS_INCREASE;
+      extension_prefs_->RemoveDisableReason(
+          extension->id(), Extension::DISABLE_PERMISSIONS_INCREASE);
+    }
+    UMA_HISTOGRAM_BOOLEAN("Extensions.ResetPermissionsIncrease",
+                          reset_permissions_increase);
   }
 
   // Extension has changed permissions significantly. Disable it. A
@@ -1686,7 +1687,10 @@ void ExtensionService::CheckPermissionsIncrease(const Extension* extension,
     }
 #endif
   }
-  if (disable_reasons != Extension::DISABLE_NONE)
+
+  if (disable_reasons == Extension::DISABLE_NONE)
+    extension_prefs_->SetExtensionEnabled(extension->id());
+  else
     extension_prefs_->SetExtensionDisabled(extension->id(), disable_reasons);
 }
 
@@ -1801,55 +1805,38 @@ void ExtensionService::OnExtensionInstalled(
   else
     extension_prefs_->SetExtensionDisabled(id, disable_reasons);
 
-  if (ShouldDelayExtensionUpdate(
-          id,
-          !!(install_flags & extensions::kInstallFlagInstallImmediately))) {
-    extension_prefs_->SetDelayedInstallInfo(
-        extension,
-        initial_state,
-        install_flags,
-        extensions::ExtensionPrefs::DELAY_REASON_WAIT_FOR_IDLE,
-        page_ordinal,
-        install_parameter);
+  extensions::ExtensionPrefs::DelayReason delay_reason;
+  extensions::InstallGate::Action action = ShouldDelayExtensionInstall(
+      extension, !!(install_flags & extensions::kInstallFlagInstallImmediately),
+      &delay_reason);
+  switch (action) {
+    case extensions::InstallGate::INSTALL:
+      AddNewOrUpdatedExtension(extension, initial_state, install_flags,
+                               page_ordinal, install_parameter);
+      return;
+    case extensions::InstallGate::DELAY:
+      extension_prefs_->SetDelayedInstallInfo(extension, initial_state,
+                                              install_flags, delay_reason,
+                                              page_ordinal, install_parameter);
 
-    // Transfer ownership of |extension|.
-    delayed_installs_.Insert(extension);
-
-    // Notify observers that app update is available.
-    FOR_EACH_OBSERVER(extensions::UpdateObserver, update_observers_,
-                      OnAppUpdateAvailable(extension));
-    return;
-  }
-
-  extensions::SharedModuleService::ImportStatus status =
-      shared_module_service_->SatisfyImports(extension);
-  if (installs_delayed_for_gc_) {
-    extension_prefs_->SetDelayedInstallInfo(
-        extension,
-        initial_state,
-        install_flags,
-        extensions::ExtensionPrefs::DELAY_REASON_GC,
-        page_ordinal,
-        install_parameter);
-    delayed_installs_.Insert(extension);
-  } else if (status != SharedModuleService::IMPORT_STATUS_OK) {
-    if (status == SharedModuleService::IMPORT_STATUS_UNSATISFIED) {
-      extension_prefs_->SetDelayedInstallInfo(
-          extension,
-          initial_state,
-          install_flags,
-          extensions::ExtensionPrefs::DELAY_REASON_WAIT_FOR_IMPORTS,
-          page_ordinal,
-          install_parameter);
+      // Transfer ownership of |extension|.
       delayed_installs_.Insert(extension);
-    }
-  } else {
-    AddNewOrUpdatedExtension(extension,
-                             initial_state,
-                             install_flags,
-                             page_ordinal,
-                             install_parameter);
+
+      if (delay_reason ==
+          extensions::ExtensionPrefs::DELAY_REASON_WAIT_FOR_IDLE) {
+        // Notify observers that app update is available.
+        FOR_EACH_OBSERVER(extensions::UpdateObserver, update_observers_,
+                          OnAppUpdateAvailable(extension));
+      }
+      return;
+    case extensions::InstallGate::ABORT:
+      // Do nothing to abort the install. One such case is the shared module
+      // service gets IMPORT_STATUS_UNRECOVERABLE status for the pending
+      // install.
+      return;
   }
+
+  NOTREACHED() << "Unknown action for delayed install: " << action;
 }
 
 void ExtensionService::OnExtensionManagementSettingsChanged() {
@@ -1900,33 +1887,26 @@ void ExtensionService::AddNewOrUpdatedExtension(
 void ExtensionService::MaybeFinishDelayedInstallation(
     const std::string& extension_id) {
   // Check if the extension already got installed.
-  if (!delayed_installs_.Contains(extension_id))
-    return;
-  extensions::ExtensionPrefs::DelayReason reason =
-      extension_prefs_->GetDelayedInstallReason(extension_id);
-
-  // Check if the extension is idle. DELAY_REASON_NONE is used for older
-  // preferences files that will not have set this field but it was previously
-  // only used for idle updates.
-  if ((reason == extensions::ExtensionPrefs::DELAY_REASON_WAIT_FOR_IDLE ||
-       reason == extensions::ExtensionPrefs::DELAY_REASON_NONE) &&
-       is_ready() && !extensions::util::IsExtensionIdle(extension_id, profile_))
-    return;
-
   const Extension* extension = delayed_installs_.GetByID(extension_id);
-  if (reason == extensions::ExtensionPrefs::DELAY_REASON_WAIT_FOR_IMPORTS) {
-    extensions::SharedModuleService::ImportStatus status =
-        shared_module_service_->SatisfyImports(extension);
-    if (status != SharedModuleService::IMPORT_STATUS_OK) {
-      if (status == SharedModuleService::IMPORT_STATUS_UNRECOVERABLE) {
-        delayed_installs_.Remove(extension_id);
-        // Make sure no version of the extension is actually installed, (i.e.,
-        // that this delayed install was not an update).
-        CHECK(!extension_prefs_->GetInstalledExtensionInfo(extension_id).get());
-        extension_prefs_->DeleteExtensionPrefs(extension_id);
-      }
+  if (!extension)
+    return;
+
+  extensions::ExtensionPrefs::DelayReason reason;
+  const extensions::InstallGate::Action action = ShouldDelayExtensionInstall(
+      extension, false /* install_immediately*/, &reason);
+  switch (action) {
+    case extensions::InstallGate::INSTALL:
+      break;
+    case extensions::InstallGate::DELAY:
+      // Bail out and continue to delay the install.
       return;
-    }
+    case extensions::InstallGate::ABORT:
+      delayed_installs_.Remove(extension_id);
+      // Make sure no version of the extension is actually installed, (i.e.,
+      // that this delayed install was not an update).
+      CHECK(!extension_prefs_->GetInstalledExtensionInfo(extension_id).get());
+      extension_prefs_->DeleteExtensionPrefs(extension_id);
+      return;
   }
 
   FinishDelayedInstallation(extension_id);
@@ -2277,41 +2257,21 @@ bool ExtensionService::CanBlockExtension(const Extension* extension) const {
          !system_->management_policy()->MustRemainEnabled(extension, nullptr);
 }
 
-bool ExtensionService::ShouldDelayExtensionUpdate(
-    const std::string& extension_id,
-    bool install_immediately) const {
-  const char kOnUpdateAvailableEvent[] = "runtime.onUpdateAvailable";
-
-  // If delayed updates are globally disabled, or just for this extension,
-  // don't delay.
-  if (!install_updates_when_idle_ || install_immediately)
-    return false;
-
-  const Extension* old = GetInstalledExtension(extension_id);
-  // If there is no old extension, this is not an update, so don't delay.
-  if (!old)
-    return false;
-
-  if (extensions::BackgroundInfo::HasPersistentBackgroundPage(old)) {
-    // Delay installation if the extension listens for the onUpdateAvailable
-    // event.
-    return extensions::EventRouter::Get(profile_)
-        ->ExtensionHasEventListener(extension_id, kOnUpdateAvailableEvent);
-  } else {
-    // Delay installation if the extension is not idle.
-    return !extensions::util::IsExtensionIdle(extension_id, profile_);
+extensions::InstallGate::Action ExtensionService::ShouldDelayExtensionInstall(
+    const extensions::Extension* extension,
+    bool install_immediately,
+    extensions::ExtensionPrefs::DelayReason* reason) const {
+  for (const auto& entry : install_delayer_registry_) {
+    extensions::InstallGate* const delayer = entry.second;
+    extensions::InstallGate::Action action =
+        delayer->ShouldDelay(extension, install_immediately);
+    if (action != extensions::InstallGate::INSTALL) {
+      *reason = entry.first;
+      return action;
+    }
   }
-}
 
-void ExtensionService::OnGarbageCollectIsolatedStorageStart() {
-  DCHECK(!installs_delayed_for_gc_);
-  installs_delayed_for_gc_ = true;
-}
-
-void ExtensionService::OnGarbageCollectIsolatedStorageFinished() {
-  DCHECK(installs_delayed_for_gc_);
-  installs_delayed_for_gc_ = false;
-  MaybeFinishDelayedInstallations();
+  return extensions::InstallGate::INSTALL;
 }
 
 void ExtensionService::MaybeFinishDelayedInstallations() {
@@ -2467,6 +2427,25 @@ void ExtensionService::AddUpdateObserver(extensions::UpdateObserver* observer) {
 void ExtensionService::RemoveUpdateObserver(
     extensions::UpdateObserver* observer) {
   update_observers_.RemoveObserver(observer);
+}
+
+void ExtensionService::RegisterInstallGate(
+    extensions::ExtensionPrefs::DelayReason reason,
+    extensions::InstallGate* install_delayer) {
+  DCHECK(install_delayer_registry_.end() ==
+         install_delayer_registry_.find(reason));
+  install_delayer_registry_[reason] = install_delayer;
+}
+
+void ExtensionService::UnregisterInstallGate(
+    extensions::InstallGate* install_delayer) {
+  for (auto it = install_delayer_registry_.begin();
+       it != install_delayer_registry_.end(); ++it) {
+    if (it->second == install_delayer) {
+      install_delayer_registry_.erase(it);
+      return;
+    }
+  }
 }
 
 // Used only by test code.

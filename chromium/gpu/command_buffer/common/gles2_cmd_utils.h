@@ -220,6 +220,12 @@ class GLES2_UTILS_EXPORT GLES2Util {
   static bool IsIntegerFormat(uint32_t internal_format);
   static bool IsFloatFormat(uint32_t internal_format);
 
+  // Computes the data size for certain gl commands like glUniform.
+  static bool ComputeDataSize(uint32_t count,
+                              size_t size,
+                              unsigned int elements_per_unit,
+                              uint32_t* dst);
+
   #include "../common/gles2_cmd_utils_autogen.h"
 
  private:
@@ -267,14 +273,14 @@ enum ContextType {
   CONTEXT_TYPE_WEBGL1,
   CONTEXT_TYPE_WEBGL2,
   CONTEXT_TYPE_OPENGLES2,
-  CONTEXT_TYPE_OPENGLES3
+  CONTEXT_TYPE_OPENGLES3,
+  CONTEXT_TYPE_LAST = CONTEXT_TYPE_OPENGLES3
 };
 
 struct GLES2_UTILS_EXPORT ContextCreationAttribHelper {
   ContextCreationAttribHelper();
   ContextCreationAttribHelper(const ContextCreationAttribHelper& other);
 
-  void Serialize(std::vector<int32_t>* attribs) const;
   bool Parse(const std::vector<int32_t>& attribs);
 
   // -1 if invalid or unspecified.

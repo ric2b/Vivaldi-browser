@@ -5,14 +5,15 @@
 #ifndef UI_VIEWS_WIDGET_DESKTOP_AURA_DESKTOP_CURSOR_LOADER_UPDATER_H_
 #define UI_VIEWS_WIDGET_DESKTOP_AURA_DESKTOP_CURSOR_LOADER_UPDATER_H_
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
 #include "ui/views/views_export.h"
 
 namespace aura {
 class RootWindow;
 }
 
-namespace gfx {
+namespace display {
 class Display;
 }
 
@@ -30,7 +31,7 @@ class VIEWS_EXPORT DesktopCursorLoaderUpdater {
 
   // Creates a new DesktopCursorLoaderUpdater, or NULL if the platform doesn't
   // support one.
-  static scoped_ptr<DesktopCursorLoaderUpdater> Create();
+  static std::unique_ptr<DesktopCursorLoaderUpdater> Create();
 
   // Called when a CursorLoader is created.
   virtual void OnCreate(float device_scale_factor,
@@ -38,7 +39,7 @@ class VIEWS_EXPORT DesktopCursorLoaderUpdater {
 
   // Called when the display has changed (as we may need to reload the cursor
   // assets in response to a device scale factor or rotation change).
-  virtual void OnDisplayUpdated(const gfx::Display& display,
+  virtual void OnDisplayUpdated(const display::Display& display,
                                 ui::CursorLoader* loader) = 0;
 };
 

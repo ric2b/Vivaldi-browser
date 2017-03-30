@@ -4,26 +4,67 @@
 
 #include "ui/views/mus/native_widget_mus.h"
 
+#include "base/callback.h"
 #include "base/macros.h"
 #include "components/mus/public/cpp/property_type_converters.h"
+#include "components/mus/public/cpp/tests/window_tree_client_impl_private.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_property.h"
+#include "components/mus/public/cpp/window_tree_connection.h"
 #include "components/mus/public/interfaces/window_manager.mojom.h"
+#include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/aura/window.h"
+#include "ui/events/event.h"
+#include "ui/events/test/test_event_handler.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/skia_util.h"
+#include "ui/views/controls/native/native_view_host.h"
 #include "ui/views/test/focus_manager_test.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/widget/widget_observer.h"
+#include "ui/wm/public/activation_client.h"
+
+using mus::mojom::EventResult;
 
 namespace views {
 namespace {
+
+// A view that reports any mouse press as handled.
+class HandleMousePressView : public View {
+ public:
+  HandleMousePressView() {}
+  ~HandleMousePressView() override {}
+
+  // View:
+  bool OnMousePressed(const ui::MouseEvent& event) override { return true; }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(HandleMousePressView);
+};
+
+// A view that deletes a widget on mouse press.
+class DeleteWidgetView : public View {
+ public:
+  explicit DeleteWidgetView(std::unique_ptr<Widget>* widget_ptr)
+      : widget_ptr_(widget_ptr) {}
+  ~DeleteWidgetView() override {}
+
+  // View:
+  bool OnMousePressed(const ui::MouseEvent& event) override {
+    widget_ptr_->reset();
+    return true;
+  }
+
+ private:
+  std::unique_ptr<Widget>* widget_ptr_;
+  DISALLOW_COPY_AND_ASSIGN(DeleteWidgetView);
+};
 
 // Returns a small colored bitmap.
 SkBitmap MakeBitmap(SkColor color) {
@@ -80,14 +121,16 @@ class TestWidgetDelegate : public WidgetDelegateView {
   DISALLOW_COPY_AND_ASSIGN(TestWidgetDelegate);
 };
 
+}  // namespace
+
 class NativeWidgetMusTest : public ViewsTestBase {
  public:
   NativeWidgetMusTest() {}
   ~NativeWidgetMusTest() override {}
 
   // Creates a test widget. Takes ownership of |delegate|.
-  scoped_ptr<Widget> CreateWidget(TestWidgetDelegate* delegate) {
-    scoped_ptr<Widget> widget(new Widget());
+  std::unique_ptr<Widget> CreateWidget(TestWidgetDelegate* delegate) {
+    std::unique_ptr<Widget> widget(new Widget());
     Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
     params.delegate = delegate;
     params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
@@ -96,14 +139,42 @@ class NativeWidgetMusTest : public ViewsTestBase {
     return widget;
   }
 
+  int ack_callback_count() { return ack_callback_count_; }
+
+  void AckCallback(mus::mojom::EventResult result) {
+    ack_callback_count_++;
+    EXPECT_EQ(mus::mojom::EventResult::HANDLED, result);
+  }
+
+  // Returns a mouse pressed event inside the widget. Tests that place views
+  // within the widget that respond to the event must be constructed within the
+  // widget coordinate space such that they respond correctly.
+  std::unique_ptr<ui::MouseEvent> CreateMouseEvent() {
+    return base::WrapUnique(new ui::MouseEvent(
+        ui::ET_MOUSE_PRESSED, gfx::Point(50, 50), gfx::Point(50, 50),
+        base::TimeDelta(), ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
+  }
+
+  // Simulates an input event to the NativeWidget.
+  void OnWindowInputEvent(
+      NativeWidgetMus* native_widget,
+      const ui::Event& event,
+      std::unique_ptr<base::Callback<void(mus::mojom::EventResult)>>*
+      ack_callback) {
+    native_widget->OnWindowInputEvent(native_widget->window(), event,
+                                      ack_callback);
+  }
+
  private:
+  int ack_callback_count_ = 0;
+
   DISALLOW_COPY_AND_ASSIGN(NativeWidgetMusTest);
 };
 
 // Tests communication of activation and focus between Widget and
 // NativeWidgetMus.
 TEST_F(NativeWidgetMusTest, OnActivationChanged) {
-  scoped_ptr<Widget> widget(CreateWidget(nullptr));
+  std::unique_ptr<Widget> widget(CreateWidget(nullptr));
   widget->Show();
 
   // Track activation, focus and blur events.
@@ -132,11 +203,31 @@ TEST_F(NativeWidgetMusTest, OnActivationChanged) {
   WidgetFocusManager::GetInstance()->RemoveFocusChangeListener(&focus_listener);
 }
 
+// Tests that showing a non-activatable widget does not activate it.
+// TODO(jamescook): Remove this test when widget_interactive_uittests.cc runs
+// under mus.
+TEST_F(NativeWidgetMusTest, ShowNonActivatableWidget) {
+  Widget widget;
+  WidgetActivationObserver activation_observer(&widget);
+  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_BUBBLE);
+  params.activatable = Widget::InitParams::ACTIVATABLE_NO;
+  params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  params.bounds = gfx::Rect(10, 20, 100, 200);
+  widget.Init(params);
+  widget.Show();
+
+  // The widget is not currently active.
+  EXPECT_FALSE(widget.IsActive());
+
+  // The widget was never active.
+  EXPECT_EQ(0u, activation_observer.changes().size());
+}
+
 // Tests that a window with an icon sets the mus::Window icon property.
 TEST_F(NativeWidgetMusTest, AppIcon) {
   // Create a Widget with a bitmap as the icon.
   SkBitmap source_bitmap = MakeBitmap(SK_ColorRED);
-  scoped_ptr<Widget> widget(
+  std::unique_ptr<Widget> widget(
       CreateWidget(new TestWidgetDelegate(source_bitmap)));
 
   // The mus::Window has the icon property.
@@ -155,7 +246,7 @@ TEST_F(NativeWidgetMusTest, AppIcon) {
 // property.
 TEST_F(NativeWidgetMusTest, NoAppIcon) {
   // Create a Widget without a special icon.
-  scoped_ptr<Widget> widget(CreateWidget(nullptr));
+  std::unique_ptr<Widget> widget(CreateWidget(nullptr));
 
   // The mus::Window does not have an icon property.
   mus::Window* window =
@@ -170,7 +261,7 @@ TEST_F(NativeWidgetMusTest, ChangeAppIcon) {
   // Create a Widget with an icon.
   SkBitmap bitmap1 = MakeBitmap(SK_ColorRED);
   TestWidgetDelegate* delegate = new TestWidgetDelegate(bitmap1);
-  scoped_ptr<Widget> widget(CreateWidget(delegate));
+  std::unique_ptr<Widget> widget(CreateWidget(delegate));
 
   // Update the icon to a new image.
   SkBitmap bitmap2 = MakeBitmap(SK_ColorGREEN);
@@ -186,12 +277,163 @@ TEST_F(NativeWidgetMusTest, ChangeAppIcon) {
 }
 
 TEST_F(NativeWidgetMusTest, ValidLayerTree) {
-  scoped_ptr<Widget> widget(CreateWidget(nullptr));
+  std::unique_ptr<Widget> widget(CreateWidget(nullptr));
   View* content = new View;
   content->SetPaintToLayer(true);
   widget->GetContentsView()->AddChildView(content);
   EXPECT_TRUE(widget->GetNativeWindow()->layer()->Contains(content->layer()));
 }
 
-}  // namespace
+// Tests that the internal name is propagated from the Widget to the
+// mus::Window.
+TEST_F(NativeWidgetMusTest, GetName) {
+  Widget widget;
+  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
+  params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  params.name = "MyWidget";
+  widget.Init(params);
+  mus::Window* window =
+      static_cast<NativeWidgetMus*>(widget.native_widget_private())->window();
+  EXPECT_EQ("MyWidget", window->GetName());
+}
+
+// Verifies changing the visibility of a child mus::Window doesn't change the
+// visibility of the parent.
+TEST_F(NativeWidgetMusTest, ChildVisibilityDoesntEffectParent) {
+  Widget widget;
+  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
+  params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  widget.Init(params);
+  widget.Show();
+  mus::Window* window =
+      static_cast<NativeWidgetMus*>(widget.native_widget_private())->window();
+  ASSERT_TRUE(window->visible());
+
+  // Create a child window, make it visible and parent it to the Widget's
+  // window.
+  mus::Window* child_window = window->connection()->NewWindow();
+  child_window->SetVisible(true);
+  window->AddChild(child_window);
+
+  // Hide the child, this should not impact the visibility of the parent.
+  child_window->SetVisible(false);
+  EXPECT_TRUE(window->visible());
+}
+
+// Tests that child aura::Windows cannot be activated.
+TEST_F(NativeWidgetMusTest, FocusChildAuraWindow) {
+  Widget widget;
+  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
+  params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  widget.Init(params);
+
+  View* focusable = new View;
+  focusable->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  widget.GetContentsView()->AddChildView(focusable);
+
+  NativeViewHost* native_host = new NativeViewHost;
+  widget.GetContentsView()->AddChildView(native_host);
+
+  std::unique_ptr<aura::Window> window(new aura::Window(nullptr));
+  window->Init(ui::LayerType::LAYER_SOLID_COLOR);
+  native_host->SetBounds(5, 10, 20, 30);
+  native_host->Attach(window.get());
+  widget.Show();
+  window->Show();
+  widget.SetBounds(gfx::Rect(10, 20, 30, 40));
+
+  // Sanity check that the |window| is a descendent of the Widget's window.
+  ASSERT_TRUE(widget.GetNativeView()->Contains(window->parent()));
+
+  // Focusing the child window should not activate it.
+  window->Focus();
+  EXPECT_TRUE(window->HasFocus());
+  aura::Window* active_window =
+      aura::client::GetActivationClient(window.get()->GetRootWindow())
+          ->GetActiveWindow();
+  EXPECT_NE(window.get(), active_window);
+  EXPECT_EQ(widget.GetNativeView(), active_window);
+
+  // Moving focus to a child View should move focus away from |window|, and to
+  // the Widget's window instead.
+  focusable->RequestFocus();
+  EXPECT_FALSE(window->HasFocus());
+  EXPECT_TRUE(widget.GetNativeView()->HasFocus());
+  active_window =
+      aura::client::GetActivationClient(window.get()->GetRootWindow())
+          ->GetActiveWindow();
+  EXPECT_EQ(widget.GetNativeView(), active_window);
+}
+
+TEST_F(NativeWidgetMusTest, WidgetReceivesEvent) {
+  std::unique_ptr<Widget> widget(CreateWidget(nullptr));
+  widget->Show();
+
+  View* content = new HandleMousePressView;
+  content->SetBounds(10, 20, 90, 180);
+  widget->GetContentsView()->AddChildView(content);
+
+  ui::test::TestEventHandler handler;
+  content->AddPreTargetHandler(&handler);
+
+  std::unique_ptr<ui::MouseEvent> mouse = CreateMouseEvent();
+  NativeWidgetMus* native_widget =
+      static_cast<NativeWidgetMus*>(widget->native_widget_private());
+  mus::WindowTreeClientImplPrivate test_api(native_widget->window());
+  test_api.CallOnWindowInputEvent(native_widget->window(), *mouse);
+  EXPECT_EQ(1, handler.num_mouse_events());
+}
+
+// Tests that an incoming UI event is acked with the handled status.
+TEST_F(NativeWidgetMusTest, EventAcked) {
+  std::unique_ptr<Widget> widget(CreateWidget(nullptr));
+  widget->Show();
+
+  View* content = new HandleMousePressView;
+  content->SetBounds(10, 20, 90, 180);
+  widget->GetContentsView()->AddChildView(content);
+
+  // Dispatch an input event to the window and view.
+  std::unique_ptr<ui::MouseEvent> event = CreateMouseEvent();
+  std::unique_ptr<base::Callback<void(EventResult)>> ack_callback(
+      new base::Callback<void(EventResult)>(base::Bind(
+          &NativeWidgetMusTest::AckCallback, base::Unretained(this))));
+  OnWindowInputEvent(
+      static_cast<NativeWidgetMus*>(widget->native_widget_private()),
+      *event,
+      &ack_callback);
+
+  // The test took ownership of the callback and called it.
+  EXPECT_FALSE(ack_callback);
+  EXPECT_EQ(1, ack_callback_count());
+}
+
+// Tests that a window that is deleted during event handling properly acks the
+// event.
+TEST_F(NativeWidgetMusTest, EventAckedWithWindowDestruction) {
+  std::unique_ptr<Widget> widget(CreateWidget(nullptr));
+  widget->Show();
+
+  View* content = new DeleteWidgetView(&widget);
+  content->SetBounds(10, 20, 90, 180);
+  widget->GetContentsView()->AddChildView(content);
+
+  // Dispatch an input event to the window and view.
+  std::unique_ptr<ui::MouseEvent> event = CreateMouseEvent();
+  std::unique_ptr<base::Callback<void(EventResult)>> ack_callback(
+      new base::Callback<void(EventResult)>(base::Bind(
+          &NativeWidgetMusTest::AckCallback, base::Unretained(this))));
+  OnWindowInputEvent(
+      static_cast<NativeWidgetMus*>(widget->native_widget_private()),
+      *event,
+      &ack_callback);
+
+  // The widget was deleted.
+  EXPECT_FALSE(widget.get());
+
+  // The test took ownership of the callback and called it.
+  EXPECT_FALSE(ack_callback);
+  EXPECT_EQ(1, ack_callback_count());
+}
+
 }  // namespace views

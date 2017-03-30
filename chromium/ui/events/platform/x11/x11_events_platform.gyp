@@ -16,8 +16,10 @@
     'dependencies': [
       '../../../../base/base.gyp:base',
       '../../../../build/linux/system.gyp:x11',
+      '../../../gfx/gfx.gyp:gfx',
       '../../../gfx/x/gfx_x11.gyp:gfx_x11',
       '../../devices/events_devices.gyp:events_devices',
+      '../../devices/x11/events_devices_x11.gyp:events_devices_x11',
       '../../events.gyp:events',
       '../../events.gyp:events_base',
       '../../x/events_x.gyp:events_x',
@@ -43,6 +45,9 @@
         'sources': [
           'x11_event_source_libevent.cc',
           'x11_event_source_libevent.h',
+        ],
+        'dependencies': [
+          '../../keycodes/events_keycodes.gyp:keycodes_x11',
         ],
       }],
     ],

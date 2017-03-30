@@ -22,8 +22,8 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "net/base/net_errors.h"
@@ -387,7 +387,7 @@ int BackendImpl::SyncDoomEntriesBetween(const base::Time initial_time,
     return net::ERR_FAILED;
 
   EntryImpl* node;
-  scoped_ptr<Rankings::Iterator> iterator(new Rankings::Iterator());
+  std::unique_ptr<Rankings::Iterator> iterator(new Rankings::Iterator());
   EntryImpl* next = OpenNextEntryImpl(iterator.get());
   if (!next)
     return net::OK;
@@ -429,7 +429,7 @@ int BackendImpl::SyncDoomEntriesSince(const base::Time initial_time) {
 
   stats_.OnEvent(Stats::DOOM_RECENT);
   for (;;) {
-    scoped_ptr<Rankings::Iterator> iterator(new Rankings::Iterator());
+    std::unique_ptr<Rankings::Iterator> iterator(new Rankings::Iterator());
     EntryImpl* entry = OpenNextEntryImpl(iterator.get());
     if (!entry)
       return net::OK;
@@ -453,7 +453,8 @@ int BackendImpl::SyncOpenNextEntry(Rankings::Iterator* iterator,
   return (*next_entry) ? net::OK : net::ERR_FAILED;
 }
 
-void BackendImpl::SyncEndEnumeration(scoped_ptr<Rankings::Iterator> iterator) {
+void BackendImpl::SyncEndEnumeration(
+    std::unique_ptr<Rankings::Iterator> iterator) {
   iterator->Reset();
 }
 
@@ -497,12 +498,6 @@ EntryImpl* BackendImpl::OpenEntryImpl(const std::string& key) {
   int64_t use_hours = total_hours - no_use_hours;
 
   if (!cache_entry) {
-    CACHE_UMA(AGE_MS, "OpenTime.Miss", 0, start);
-    CACHE_UMA(COUNTS_10000, "AllOpenBySize.Miss", 0, current_size);
-    CACHE_UMA(HOURS, "AllOpenByTotalHours.Miss", 0,
-              static_cast<base::HistogramBase::Sample>(total_hours));
-    CACHE_UMA(HOURS, "AllOpenByUseHours.Miss", 0,
-              static_cast<base::HistogramBase::Sample>(use_hours));
     stats_.OnEvent(Stats::OPEN_MISS);
     return NULL;
   }
@@ -1296,11 +1291,12 @@ class BackendImpl::IteratorImpl : public Backend::Iterator {
 
  private:
   const base::WeakPtr<InFlightBackendIO> background_queue_;
-  scoped_ptr<Rankings::Iterator> iterator_;
+  std::unique_ptr<Rankings::Iterator> iterator_;
 };
 
-scoped_ptr<Backend::Iterator> BackendImpl::CreateIterator() {
-  return scoped_ptr<Backend::Iterator>(new IteratorImpl(GetBackgroundQueue()));
+std::unique_ptr<Backend::Iterator> BackendImpl::CreateIterator() {
+  return std::unique_ptr<Backend::Iterator>(
+      new IteratorImpl(GetBackgroundQueue()));
 }
 
 void BackendImpl::GetStats(StatsItems* stats) {
@@ -1456,7 +1452,7 @@ bool BackendImpl::InitStats() {
   if (!file)
     return false;
 
-  scoped_ptr<char[]> data(new char[size]);
+  std::unique_ptr<char[]> data(new char[size]);
   size_t offset = address.start_block() * address.BlockSize() +
                   kBlockHeaderSize;
   if (!file->Read(data.get(), size, offset))
@@ -1471,7 +1467,7 @@ bool BackendImpl::InitStats() {
 
 void BackendImpl::StoreStats() {
   int size = stats_.StorageSize();
-  scoped_ptr<char[]> data(new char[size]);
+  std::unique_ptr<char[]> data(new char[size]);
   Addr address;
   size = stats_.SerializeStats(data.get(), size, &address);
   DCHECK(size);
@@ -1545,7 +1541,7 @@ int BackendImpl::NewEntry(Addr address, EntryImpl** entry) {
 
   STRESS_DCHECK(block_files_.IsValid(address));
 
-  if (!address.SanityCheckForEntryV2()) {
+  if (!address.SanityCheckForEntry()) {
     LOG(WARNING) << "Wrong entry address.";
     STRESS_NOTREACHED();
     return ERR_INVALID_ADDRESS;

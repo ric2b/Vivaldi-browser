@@ -34,12 +34,11 @@ class ScriptState;
 // "Interface required by CallbackPromiseAdapter" section and the
 // CallbackPromiseAdapter class comments.
 class BluetoothRemoteGATTCharacteristic final
-    : public RefCountedGarbageCollectedEventTargetWithInlineData<BluetoothRemoteGATTCharacteristic>
+    : public EventTargetWithInlineData
     , public ActiveDOMObject
     , public WebBluetoothRemoteGATTCharacteristic {
     USING_PRE_FINALIZER(BluetoothRemoteGATTCharacteristic, dispose);
     DEFINE_WRAPPERTYPEINFO();
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(BluetoothRemoteGATTCharacteristic);
     USING_GARBAGE_COLLECTED_MIXIN(BluetoothRemoteGATTCharacteristic);
 public:
     explicit BluetoothRemoteGATTCharacteristic(ExecutionContext*, PassOwnPtr<WebBluetoothRemoteGATTCharacteristicInit>);
@@ -49,7 +48,7 @@ public:
     static BluetoothRemoteGATTCharacteristic* take(ScriptPromiseResolver*, PassOwnPtr<WebBluetoothRemoteGATTCharacteristicInit>);
 
     // Save value.
-    void setValue(const PassRefPtr<DOMDataView>&);
+    void setValue(DOMDataView*);
 
     // WebBluetoothRemoteGATTCharacteristic interface:
     void dispatchCharacteristicValueChanged(const WebVector<uint8_t>&) override;
@@ -76,7 +75,7 @@ public:
     String uuid() { return m_webCharacteristic->uuid; }
 
     BluetoothCharacteristicProperties* properties() { return m_properties; }
-    PassRefPtr<DOMDataView> value() const { return m_value; }
+    DOMDataView* value() const { return m_value; }
     ScriptPromise readValue(ScriptState*);
     ScriptPromise writeValue(ScriptState*, const DOMArrayPiece&);
     ScriptPromise startNotifications(ScriptState*);
@@ -86,13 +85,13 @@ public:
 
 protected:
     // EventTarget overrides.
-    bool addEventListenerInternal(const AtomicString& eventType, EventListener*, const EventListenerOptions&) override;
+    void addedEventListener(const AtomicString& eventType, RegisteredEventListener&) override;
 
 private:
     OwnPtr<WebBluetoothRemoteGATTCharacteristicInit> m_webCharacteristic;
     bool m_stopped;
     Member<BluetoothCharacteristicProperties> m_properties;
-    RefPtr<DOMDataView> m_value;
+    Member<DOMDataView> m_value;
 };
 
 } // namespace blink

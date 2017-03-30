@@ -77,10 +77,9 @@ Layer::Layer()
       use_parent_backface_visibility_(false),
       use_local_transform_for_backface_visibility_(false),
       should_check_backface_visibility_(false),
-      force_render_surface_(false),
-      transform_is_invertible_(true),
-      has_render_surface_(false),
+      force_render_surface_for_testing_(false),
       subtree_property_changed_(false),
+      has_will_change_transform_hint_(false),
       background_color_(0),
       safe_opaque_background_color_(0),
       opacity_(1.f),
@@ -90,8 +89,7 @@ Layer::Layer()
       clip_parent_(nullptr),
       replica_layer_(nullptr),
       client_(nullptr),
-      num_unclipped_descendants_(0),
-      frame_timing_requests_dirty_(false) {}
+      num_unclipped_descendants_(0) {}
 
 Layer::~Layer() {
   // Our parent should be holding a reference to us so there should be no
@@ -351,14 +349,14 @@ bool Layer::HasAncestor(const Layer* ancestor) const {
   return false;
 }
 
-void Layer::RequestCopyOfOutput(
-    scoped_ptr<CopyOutputRequest> request) {
+void Layer::RequestCopyOfOutput(std::unique_ptr<CopyOutputRequest> request) {
   DCHECK(IsPropertyChangeAllowed());
   if (void* source = request->source()) {
-    auto it = std::find_if(copy_requests_.begin(), copy_requests_.end(),
-                           [source](const scoped_ptr<CopyOutputRequest>& x) {
-                             return x->source() == source;
-                           });
+    auto it =
+        std::find_if(copy_requests_.begin(), copy_requests_.end(),
+                     [source](const std::unique_ptr<CopyOutputRequest>& x) {
+                       return x->source() == source;
+                     });
     if (it != copy_requests_.end())
       copy_requests_.erase(it);
   }
@@ -470,8 +468,24 @@ void Layer::SetOpacity(float opacity) {
   DCHECK(IsPropertyChangeAllowed());
   if (opacity_ == opacity)
     return;
+  // We need to force a property tree rebuild when opacity changes from 1 to a
+  // non-1 value or vice-versa as render surfaces can change.
+  bool force_rebuild = opacity == 1.f || opacity_ == 1.f;
   opacity_ = opacity;
   SetSubtreePropertyChanged();
+  if (layer_tree_host_ && !force_rebuild) {
+    PropertyTrees* property_trees = layer_tree_host_->property_trees();
+    auto effect_id_to_index = property_trees->effect_id_to_index_map.find(id());
+    if (effect_id_to_index != property_trees->effect_id_to_index_map.end()) {
+      EffectNode* node =
+          property_trees->effect_tree.Node(effect_id_to_index->second);
+      node->data.opacity = opacity;
+      node->data.effect_changed = true;
+      property_trees->effect_tree.set_needs_update(true);
+      SetNeedsCommitNoRebuild();
+      return;
+    }
+  }
   SetNeedsCommit();
 }
 
@@ -489,6 +503,10 @@ bool Layer::HasPotentiallyRunningOpacityAnimation() const {
 }
 
 bool Layer::OpacityCanAnimateOnImplThread() const {
+  return false;
+}
+
+bool Layer::AlwaysUseActiveTreeOpacity() const {
   return false;
 }
 
@@ -594,19 +612,19 @@ bool Layer::IsContainerForFixedPositionLayers() const {
   return is_container_for_fixed_position_layers_;
 }
 
-bool Are2dAxisAligned(const gfx::Transform& a,
-                      const gfx::Transform& b,
-                      bool* is_invertible) {
+bool Are2dAxisAligned(const gfx::Transform& a, const gfx::Transform& b) {
   if (a.IsScaleOrTranslation() && b.IsScaleOrTranslation()) {
-    *is_invertible = b.IsInvertible();
     return true;
   }
 
   gfx::Transform inverse(gfx::Transform::kSkipInitialization);
-  *is_invertible = b.GetInverse(&inverse);
-
-  inverse *= a;
-  return inverse.Preserves2dAxisAlignment();
+  if (b.GetInverse(&inverse)) {
+    inverse *= a;
+    return inverse.Preserves2dAxisAlignment();
+  } else {
+    // TODO(weiliangc): Should return false because b is not invertible.
+    return a.Preserves2dAxisAlignment();
+  }
 }
 
 void Layer::SetTransform(const gfx::Transform& transform) {
@@ -623,9 +641,8 @@ void Layer::SetTransform(const gfx::Transform& transform) {
         // We need to trigger a rebuild if we could have affected 2d axis
         // alignment. We'll check to see if transform and transform_ are axis
         // align with respect to one another.
-        bool invertible = false;
         bool preserves_2d_axis_alignment =
-            Are2dAxisAligned(transform_, transform, &invertible);
+            Are2dAxisAligned(transform_, transform);
         transform_node->data.local = transform;
         transform_node->data.needs_local_transform_update = true;
         transform_node->data.transform_changed = true;
@@ -636,14 +653,12 @@ void Layer::SetTransform(const gfx::Transform& transform) {
         else
           SetNeedsCommit();
         transform_ = transform;
-        transform_is_invertible_ = invertible;
         return;
       }
     }
   }
 
   transform_ = transform;
-  transform_is_invertible_ = transform.IsInvertible();
 
   SetNeedsCommit();
 }
@@ -903,11 +918,11 @@ void Layer::SetTouchEventHandlerRegion(const Region& region) {
   SetNeedsCommit();
 }
 
-void Layer::SetForceRenderSurface(bool force) {
+void Layer::SetForceRenderSurfaceForTesting(bool force) {
   DCHECK(IsPropertyChangeAllowed());
-  if (force_render_surface_ == force)
+  if (force_render_surface_for_testing_ == force)
     return;
-  force_render_surface_ = force;
+  force_render_surface_for_testing_ = force;
   SetNeedsCommit();
 }
 
@@ -1096,15 +1111,16 @@ void Layer::SetPositionConstraint(const LayerPositionConstraint& constraint) {
   SetNeedsCommit();
 }
 
-static void RunCopyCallbackOnMainThread(scoped_ptr<CopyOutputRequest> request,
-                                        scoped_ptr<CopyOutputResult> result) {
+static void RunCopyCallbackOnMainThread(
+    std::unique_ptr<CopyOutputRequest> request,
+    std::unique_ptr<CopyOutputResult> result) {
   request->SendResult(std::move(result));
 }
 
 static void PostCopyCallbackToMainThread(
     scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner,
-    scoped_ptr<CopyOutputRequest> request,
-    scoped_ptr<CopyOutputResult> result) {
+    std::unique_ptr<CopyOutputRequest> request,
+    std::unique_ptr<CopyOutputResult> result) {
   main_thread_task_runner->PostTask(FROM_HERE,
                                     base::Bind(&RunCopyCallbackOnMainThread,
                                                base::Passed(&request),
@@ -1120,7 +1136,6 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
   bool use_paint_properties = paint_properties_.source_frame_number ==
                               layer_tree_host_->source_frame_number();
 
-  layer->SetTransformOrigin(transform_origin_);
   layer->SetBackgroundColor(background_color_);
   layer->SetSafeOpaqueBackgroundColor(safe_opaque_background_color_);
   layer->SetBounds(use_paint_properties ? paint_properties_.bounds
@@ -1138,34 +1153,23 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
   layer->SetClipTreeIndex(clip_tree_index());
   layer->SetScrollTreeIndex(scroll_tree_index());
   layer->set_offset_to_transform_parent(offset_to_transform_parent_);
-  layer->SetDoubleSided(double_sided_);
   layer->SetDrawsContent(DrawsContent());
-  layer->SetHideLayerAndSubtree(hide_layer_and_subtree_);
-  layer->SetHasRenderSurface(has_render_surface_);
   // subtree_property_changed_ is propagated to all descendants while building
   // property trees. So, it is enough to check it only for the current layer.
   if (subtree_property_changed_)
     layer->NoteLayerPropertyChanged();
-  layer->SetForceRenderSurface(force_render_surface_);
-  if (!layer->FilterIsAnimatingOnImplOnly() && !FilterIsAnimating())
+  if (!FilterIsAnimating())
     layer->SetFilters(filters_);
-  DCHECK(!(FilterIsAnimating() && layer->FilterIsAnimatingOnImplOnly()));
   layer->SetBackgroundFilters(background_filters());
   layer->SetMasksToBounds(masks_to_bounds_);
   layer->set_main_thread_scrolling_reasons(main_thread_scrolling_reasons_);
   layer->SetNonFastScrollableRegion(non_fast_scrollable_region_);
   layer->SetTouchEventHandlerRegion(touch_event_handler_region_);
   layer->SetContentsOpaque(contents_opaque_);
-  if (!layer->OpacityIsAnimatingOnImplOnly() && !OpacityIsAnimating())
+  if (!OpacityIsAnimating())
     layer->SetOpacity(opacity_);
-  DCHECK(!(OpacityIsAnimating() && layer->OpacityIsAnimatingOnImplOnly()));
   layer->SetBlendMode(blend_mode_);
-  layer->SetIsRootForIsolatedGroup(is_root_for_isolated_group_);
   layer->SetPosition(position_);
-  layer->SetIsContainerForFixedPositionLayers(
-      IsContainerForFixedPositionLayers());
-  layer->SetPositionConstraint(position_constraint_);
-  layer->SetShouldFlattenTransform(should_flatten_transform_);
   layer->set_should_flatten_transform_from_property_tree(
       should_flatten_transform_from_property_tree_);
   layer->set_draw_blend_mode(draw_blend_mode_);
@@ -1173,62 +1177,15 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
   layer->SetUseLocalTransformForBackfaceVisibility(
       use_local_transform_for_backface_visibility_);
   layer->SetShouldCheckBackfaceVisibility(should_check_backface_visibility_);
-  if (!layer->TransformIsAnimatingOnImplOnly() && !TransformIsAnimating())
-    layer->SetTransformAndInvertibility(transform_, transform_is_invertible_);
-  DCHECK(!(TransformIsAnimating() && layer->TransformIsAnimatingOnImplOnly()));
+  if (!TransformIsAnimating())
+    layer->SetTransform(transform_);
   layer->Set3dSortingContextId(sorting_context_id_);
-  layer->SetNumDescendantsThatDrawContent(num_descendants_that_draw_content_);
 
   layer->SetScrollClipLayer(scroll_clip_layer_id_);
   layer->set_user_scrollable_horizontal(user_scrollable_horizontal_);
   layer->set_user_scrollable_vertical(user_scrollable_vertical_);
   layer->SetElementId(element_id_);
   layer->SetMutableProperties(mutable_properties_);
-
-  LayerImpl* scroll_parent = nullptr;
-  if (scroll_parent_) {
-    scroll_parent = layer->layer_tree_impl()->LayerById(scroll_parent_->id());
-    DCHECK(scroll_parent);
-  }
-
-  layer->SetScrollParent(scroll_parent);
-  if (scroll_children_) {
-    std::set<LayerImpl*>* scroll_children = new std::set<LayerImpl*>;
-    for (std::set<Layer*>::iterator it = scroll_children_->begin();
-         it != scroll_children_->end();
-         ++it) {
-      DCHECK_EQ((*it)->scroll_parent(), this);
-      LayerImpl* scroll_child =
-          layer->layer_tree_impl()->LayerById((*it)->id());
-      DCHECK(scroll_child);
-      scroll_children->insert(scroll_child);
-    }
-    layer->SetScrollChildren(scroll_children);
-  } else {
-    layer->SetScrollChildren(nullptr);
-  }
-
-  LayerImpl* clip_parent = nullptr;
-  if (clip_parent_) {
-    clip_parent =
-        layer->layer_tree_impl()->LayerById(clip_parent_->id());
-    DCHECK(clip_parent);
-  }
-
-  layer->SetClipParent(clip_parent);
-  if (clip_children_) {
-    std::set<LayerImpl*>* clip_children = new std::set<LayerImpl*>;
-    for (std::set<Layer*>::iterator it = clip_children_->begin();
-        it != clip_children_->end(); ++it) {
-      DCHECK_EQ((*it)->clip_parent(), this);
-      LayerImpl* clip_child = layer->layer_tree_impl()->LayerById((*it)->id());
-      DCHECK(clip_child);
-      clip_children->insert(clip_child);
-    }
-    layer->SetClipChildren(clip_children);
-  } else {
-    layer->SetClipChildren(nullptr);
-  }
 
   // When a scroll offset animation is interrupted the new scroll position on
   // the pending tree will clobber any impl-side scrolling occuring on the
@@ -1242,13 +1199,13 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
   {
     TRACE_EVENT0("cc", "Layer::PushPropertiesTo::CopyOutputRequests");
     // Wrap the copy_requests_ in a PostTask to the main thread.
-    std::vector<scoped_ptr<CopyOutputRequest>> main_thread_copy_requests;
+    std::vector<std::unique_ptr<CopyOutputRequest>> main_thread_copy_requests;
     for (auto it = copy_requests_.begin(); it != copy_requests_.end(); ++it) {
       scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner =
           layer_tree_host()->task_runner_provider()->MainThreadTaskRunner();
-      scoped_ptr<CopyOutputRequest> original_request = std::move(*it);
+      std::unique_ptr<CopyOutputRequest> original_request = std::move(*it);
       const CopyOutputRequest& original_request_ref = *original_request;
-      scoped_ptr<CopyOutputRequest> main_thread_request =
+      std::unique_ptr<CopyOutputRequest> main_thread_request =
           CopyOutputRequest::CreateRelayRequest(
               original_request_ref,
               base::Bind(&PostCopyCallbackToMainThread, main_thread_task_runner,
@@ -1269,10 +1226,7 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
   update_rect_.Union(layer->update_rect());
   layer->SetUpdateRect(update_rect_);
 
-  if (frame_timing_requests_dirty_) {
-    layer->SetFrameTimingRequests(frame_timing_requests_);
-    frame_timing_requests_dirty_ = false;
-  }
+  layer->SetHasWillChangeTransformHint(has_will_change_transform_hint());
 
   // Reset any state that should be cleared for the next update.
   subtree_property_changed_ = false;
@@ -1415,7 +1369,6 @@ void Layer::LayerSpecificPropertiesToProto(proto::LayerProperties* proto) {
   base->set_double_sided(double_sided_);
   base->set_draws_content(draws_content_);
   base->set_hide_layer_and_subtree(hide_layer_and_subtree_);
-  base->set_has_render_surface(has_render_surface_);
   base->set_subtree_property_changed(subtree_property_changed_);
 
   // TODO(nyquist): Add support for serializing FilterOperations for
@@ -1441,7 +1394,6 @@ void Layer::LayerSpecificPropertiesToProto(proto::LayerProperties* proto) {
   base->set_draw_blend_mode(SkXfermodeModeToProto(draw_blend_mode_));
   base->set_use_parent_backface_visibility(use_parent_backface_visibility_);
   TransformToProto(transform_, base->mutable_transform());
-  base->set_transform_is_invertible(transform_is_invertible_);
   base->set_sorting_context_id(sorting_context_id_);
   base->set_num_descendants_that_draw_content(
       num_descendants_that_draw_content_);
@@ -1473,12 +1425,12 @@ void Layer::LayerSpecificPropertiesToProto(proto::LayerProperties* proto) {
 
   RectToProto(update_rect_, base->mutable_update_rect());
 
-  // TODO(nyquist): Figure out what to do with LayerAnimationController.
+  // TODO(nyquist): Figure out what to do with ElementAnimations.
   // See crbug.com/570376.
-  // TODO(nyquist): Figure out what to do with FrameTimingRequests. See
-  // crbug.com/570377.
 
   update_rect_ = gfx::Rect();
+
+  base->set_has_will_change_transform_hint(has_will_change_transform_hint_);
 }
 
 void Layer::FromLayerSpecificPropertiesProto(
@@ -1501,7 +1453,6 @@ void Layer::FromLayerSpecificPropertiesProto(
   double_sided_ = base.double_sided();
   draws_content_ = base.draws_content();
   hide_layer_and_subtree_ = base.hide_layer_and_subtree();
-  has_render_surface_ = base.has_render_surface();
   subtree_property_changed_ = base.subtree_property_changed();
   masks_to_bounds_ = base.masks_to_bounds();
   main_thread_scrolling_reasons_ = base.main_thread_scrolling_reasons();
@@ -1523,7 +1474,6 @@ void Layer::FromLayerSpecificPropertiesProto(
   draw_blend_mode_ = SkXfermodeModeFromProto(base.draw_blend_mode());
   use_parent_backface_visibility_ = base.use_parent_backface_visibility();
   transform_ = ProtoToTransform(base.transform());
-  transform_is_invertible_ = base.transform_is_invertible();
   sorting_context_id_ = base.sorting_context_id();
   num_descendants_that_draw_content_ = base.num_descendants_that_draw_content();
 
@@ -1572,9 +1522,11 @@ void Layer::FromLayerSpecificPropertiesProto(
   scroll_offset_ = ProtoToScrollOffset(base.scroll_offset());
 
   update_rect_.Union(ProtoToRect(base.update_rect()));
+
+  has_will_change_transform_hint_ = base.has_will_change_transform_hint();
 }
 
-scoped_ptr<LayerImpl> Layer::CreateLayerImpl(LayerTreeImpl* tree_impl) {
+std::unique_ptr<LayerImpl> Layer::CreateLayerImpl(LayerTreeImpl* tree_impl) {
   return LayerImpl::Create(tree_impl, layer_id_);
 }
 
@@ -1625,20 +1577,12 @@ bool Layer::IsSuitableForGpuRasterization() const {
   return true;
 }
 
-scoped_ptr<base::trace_event::ConvertableToTraceFormat> Layer::TakeDebugInfo() {
+std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
+Layer::TakeDebugInfo() {
   if (client_)
     return client_->TakeDebugInfo(this);
   else
     return nullptr;
-}
-
-void Layer::SetHasRenderSurface(bool has_render_surface) {
-  if (has_render_surface_ == has_render_surface)
-    return;
-  has_render_surface_ = has_render_surface;
-  // We do not need SetNeedsCommit here, since this is only ever called
-  // during a commit, from CalculateDrawProperties using property trees.
-  SetNeedsPushProperties();
 }
 
 void Layer::SetSubtreePropertyChanged() {
@@ -1682,7 +1626,6 @@ void Layer::OnTransformAnimated(const gfx::Transform& transform) {
   if (transform_ == transform)
     return;
   transform_ = transform;
-  transform_is_invertible_ = transform.IsInvertible();
   // Changing the transform may change the visible part of this layer, so a new
   // recording may be needed.
   SetNeedsUpdate();
@@ -1693,7 +1636,7 @@ void Layer::OnTransformAnimated(const gfx::Transform& transform) {
       if (node->owner_id == id()) {
         node->data.local = transform;
         node->data.needs_local_transform_update = true;
-        node->data.is_animated = true;
+        node->data.has_potential_animation = true;
         layer_tree_host_->property_trees()->transform_tree.set_needs_update(
             true);
       }
@@ -1707,7 +1650,21 @@ void Layer::OnScrollOffsetAnimated(const gfx::ScrollOffset& scroll_offset) {
   // compositor-driven scrolling.
 }
 
-void Layer::OnTransformIsPotentiallyAnimatingChanged(bool is_animating) {
+void Layer::OnTransformIsCurrentlyAnimatingChanged(
+    bool is_currently_animating) {
+  DCHECK(layer_tree_host_);
+  TransformTree& transform_tree =
+      layer_tree_host_->property_trees()->transform_tree;
+  TransformNode* node = transform_tree.Node(transform_tree_index());
+  if (!node)
+    return;
+
+  if (node->owner_id == id())
+    node->data.is_currently_animating = is_currently_animating;
+}
+
+void Layer::OnTransformIsPotentiallyAnimatingChanged(
+    bool has_potential_animation) {
   if (!layer_tree_host_)
     return;
   TransformTree& transform_tree =
@@ -1717,8 +1674,8 @@ void Layer::OnTransformIsPotentiallyAnimatingChanged(bool is_animating) {
     return;
 
   if (node->owner_id == id()) {
-    node->data.is_animated = is_animating;
-    if (is_animating) {
+    node->data.has_potential_animation = has_potential_animation;
+    if (has_potential_animation) {
       float maximum_target_scale = 0.f;
       node->data.local_maximum_animation_target_scale =
           MaximumTargetScale(&maximum_target_scale) ? maximum_target_scale
@@ -1741,9 +1698,41 @@ void Layer::OnTransformIsPotentiallyAnimatingChanged(bool is_animating) {
   }
 }
 
+void Layer::OnOpacityIsCurrentlyAnimatingChanged(bool is_currently_animating) {
+  DCHECK(layer_tree_host_);
+  EffectTree& effect_tree = layer_tree_host_->property_trees()->effect_tree;
+  EffectNode* node = effect_tree.Node(effect_tree_index());
+  if (!node)
+    return;
+
+  if (node->owner_id == id())
+    node->data.is_currently_animating_opacity = is_currently_animating;
+}
+
+void Layer::OnOpacityIsPotentiallyAnimatingChanged(
+    bool has_potential_animation) {
+  DCHECK(layer_tree_host_);
+  EffectTree& effect_tree = layer_tree_host_->property_trees()->effect_tree;
+  EffectNode* node = effect_tree.Node(effect_tree_index());
+  if (!node)
+    return;
+  if (node->owner_id == id()) {
+    node->data.has_potential_opacity_animation =
+        has_potential_animation || OpacityCanAnimateOnImplThread();
+    effect_tree.set_needs_update(true);
+  }
+}
+
 bool Layer::HasActiveAnimationForTesting() const {
   return layer_tree_host_ ? layer_tree_host_->HasActiveAnimationForTesting(this)
                           : false;
+}
+
+void Layer::SetHasWillChangeTransformHint(bool has_will_change) {
+  if (has_will_change_transform_hint_ == has_will_change)
+    return;
+  has_will_change_transform_hint_ = has_will_change;
+  SetNeedsCommit();
 }
 
 ScrollbarLayerInterface* Layer::ToScrollbarLayer() {
@@ -1789,16 +1778,6 @@ void Layer::AddDrawableDescendants(int num) {
 
 void Layer::RunMicroBenchmark(MicroBenchmark* benchmark) {
   benchmark->RunOnLayer(this);
-}
-
-void Layer::SetFrameTimingRequests(
-    const std::vector<FrameTimingRequest>& requests) {
-  // TODO(vmpstr): Early out if there are no changes earlier in the call stack.
-  if (requests == frame_timing_requests_)
-    return;
-  frame_timing_requests_ = requests;
-  frame_timing_requests_dirty_ = true;
-  SetNeedsCommit();
 }
 
 void Layer::SetElementId(uint64_t id) {

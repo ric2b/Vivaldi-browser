@@ -2,13 +2,11 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="pl">
 <translation id="101438888985615157">Obróć ekran o 180 stopni</translation>
-<translation id="1015272884520659144">Definiuje listę urządzeń USB, które można odłączać od sterownika jądra i stosować za pomocą interfejsu chrome.usb API bezpośrednio w aplikacji internetowej. W celu wskazania konkretnego urządzenia lista obejmuje pary identyfikatora dostawcy urządzenia USB i identyfikatora produktu.
-
-      Jeśli nie skonfigurujesz tej zasady, lista odłączanych urządzeń USB będzie uważana za pustą.</translation>
 <translation id="1017967144265860778">Zarządzanie energią na ekranie logowania</translation>
 <translation id="1019101089073227242">Ustaw katalog danych użytkownika</translation>
 <translation id="1022361784792428773">Identyfikatory rozszerzeń, których nie może instalować użytkownik (wartość * oznacza wszystkie)</translation>
 <translation id="102492767056134033">Ustaw domyślny stan klawiatury ekranowej na ekranie logowania</translation>
+<translation id="1040446814317236570">Włącz wycinanie elementów adresów URL PAC (na potrzeby https://)</translation>
 <translation id="1044878202534415707">Raportuj statystki sprzętu, np. użycie procesora i pamięci RAM.
 
       Jeśli ta zasada jest wyłączona, statystyki nie będą raportowane.
@@ -64,7 +62,6 @@
       Jeśli ta zasada nie jest ustawiona lub jest wyłączona, to mechanizmy szyfrowania RC4 w TLS będą wyłączone. Można ją włączyć dla zachowania zgodności z przestarzałym serwerem. Jest to rozwiązanie tymczasowe i konieczna jest zmiana konfiguracji serwera.</translation>
 <translation id="1297182715641689552">Używaj skryptu PAC serwera proxy</translation>
 <translation id="1304973015437969093">Identyfikatory rozszerzeń/aplikacji i adresy URL aktualizacji, które mają być instalowane dyskretnie</translation>
-<translation id="1310699457130669094">W tym miejscu możesz podać URL pliku PAC serwera proxy. Ta zasada obowiązuje tylko po wybraniu ręcznego konfigurowania ustawień proxy za pomocą opcji „Wybierz sposób określenia ustawień serwera proxy”. Szczegółowe przykłady można znaleźć na  <ph name="PROXY_HELP_URL" /></translation>
 <translation id="1313457536529613143">Określa wartość procentową skalowania opóźnienia przyciemnienia ekranu, gdy aktywność użytkownika zostanie wykryta po przyciemnieniu lub wkrótce po wyłączeniu ekranu.
 
           Ustawienie tej zasady pozwala określić wartość procentową skalowania opóźnienia przyciemnienia ekranu, gdy aktywność użytkownika zostanie wykryta po przyciemnieniu lub wkrótce po wyłączeniu ekranu. Skalowanie opóźnienia przyciemnienia powoduje, że opóźnienia wyłączenia i zablokowania ekranu oraz opóźnienie bezczynności są tak dostosowywane, by zachować pierwotnie ustawione odstępy od opóźnienia przyciemnienia ekranu.
@@ -149,6 +146,11 @@
 <translation id="1608755754295374538">Adresy URL, które bez pytania otrzymają dostęp do urządzeń do nagrywania dźwięku</translation>
 <translation id="1617235075406854669">Włącz usuwanie historii przeglądarki i pobierania</translation>
 <translation id="1617384279878333801">Włącz dodawanie osób w menedżerze profili</translation>
+<translation id="163200210584085447">Wzorce na tej liście są dopasowywane do źródła zabezpieczeń adresu URL,
+      z którego pochodzi żądanie. Po znalezieniu odpowiednika dostęp do urządzeń
+      rejestrujących wideo jest udzielany na stronach logowania SAML. Jeśli
+      odpowiednik nie zostanie znaleziony, następuje automatyczna odmowa
+      dostępu. Wzorce z użyciem symboli wieloznacznych są niedozwolone.</translation>
 <translation id="1655229863189977773">Ustaw rozmiar dyskowej pamięci podręcznej w bajtach</translation>
 <translation id="166427968280387991">Serwer proxy</translation>
 <translation id="1675002386741412210">Obsługiwana przez:</translation>
@@ -223,7 +225,6 @@
       Po włączeniu tej opcji, gdy sesja jest aktywna a ekran niezablokowany, na pasku zadań jest wyświetlany duży czerwony przycisk wylogowania.
 
       Jeśli ta opcja jest wyłączona, na pasku zadań nie jest wyświetlany duży czerwony przycisk wylogowania.</translation>
-<translation id="1942957375738056236">W tym miejscu możesz podać URL serwera proxy. Ta zasada obowiązuje tylko wówczas, gdy zdecydujesz się ręcznie wprowadzić ustawienia serwera proxy za pomocą opcji „Wybierz sposób określenia ustawień serwera proxy”. Nie ustawiaj tej zasady w przypadku wybrania innego trybu ustawiania zasad proxy. Więcej opcji i szczegółowych przykładów znajdziesz na <ph name="PROXY_HELP_URL" /></translation>
 <translation id="1956493342242507974">Konfiguruje zarządzanie energią na ekranie logowania w <ph name="PRODUCT_OS_NAME" />.
 
       Zasada pozwala skonfigurować, jak <ph name="PRODUCT_OS_NAME" /> ma się zachować, gdy po wyświetleniu ekranu logowania użytkownik przez pewien czas nie wykona żadnej czynności. Kontroluje ona wiele ustawień. Ich objaśnienia i zakresy wartości znajdziesz w opisach odpowiednich zasad, które sterują zarządzaniem energią podczas sesji. Jedyne różnice w stosunku do tych zasad to:
@@ -257,6 +258,7 @@
 <translation id="2113068765175018713">Ogranicz czas działania urządzenia przez automatyczne ponowne uruchamianie</translation>
 <translation id="2127599828444728326">Zezwalaj na powiadomienia w tych witrynach.</translation>
 <translation id="2131902621292742709">Opóźnienie przyciemnienia ekranu przy zasilaniu z baterii</translation>
+<translation id="2134437727173969994">Zezwól na blokowanie ekranu</translation>
 <translation id="2137064848866899664">Kiedy ta zasada jest skonfigurowana, każdy ekran jest obracany do określonej
       orientacji po każdym ponownym uruchomieniu urządzenia
       oraz przy pierwszym podłączeniu po zmianie wartości tej zasady.
@@ -311,6 +313,7 @@
 <translation id="2309390639296060546">Domyślne ustawienie geolokalizacji</translation>
 <translation id="2312134445771258233">Umożliwia skonfigurowanie stron wczytywanych po uruchomieniu. Zawartość listy „Adresy URL otwierane po uruchomieniu” jest ignorowana, chyba że wybierzesz opcję „Otwórz adresy URL z listy” w ustawieniu „Działanie po uruchomieniu”.</translation>
 <translation id="2337466621458842053">Umożliwia skonfigurowanie listy wzorcowych URL-i określających witryny, w których mogą być wyświetlane obrazy. Jeśli ta zasada nie zostanie skonfigurowana, dla wszystkich witryn będzie używana globalna wartość domyślna pochodząca z zasady „DefaultImagesSettings” (jeśli została skonfigurowana) lub z osobistej konfiguracji użytkownika.</translation>
+<translation id="2366415278352956652">Włącza przesyłanie</translation>
 <translation id="2371309782685318247">Pozwala określić w milisekundach okres wysyłania zapytań dotyczących zasad użytkownika do usługi zarządzania urządzeniem. 
 
       Ustawienie tej zasady powoduje zastąpienie wartości domyślnej wynoszącej 3 godziny. Akceptowane są wartości z zakresu od 1 800 000 (30 minut) do 86 400 000 (1 dzień). Wszelkie wartości spoza tego zakresu są zmieniane na odpowiednie wartości graniczne.
@@ -462,7 +465,6 @@
       Jeśli nie skonfigurujesz tej zasady, użytkownicy będą mogli sami wybrać, czy chcą używać serwera proxy kompresowania danych czy nie.</translation>
 <translation id="2587719089023392205">Ustaw <ph name="PRODUCT_NAME" /> jako przeglądarkę domyślną</translation>
 <translation id="2592091433672667839">Czas bezczynności, po upływie którego w trybie sklepu na ekranie logowania jest wyświetlany wygaszacz ekranu</translation>
-<translation id="260705825237536216">Konfigurowanie aplikacji ARC</translation>
 <translation id="2623014935069176671">Poczekaj na początkową aktywność użytkownika</translation>
 <translation id="262740370354162807">Włącz wysyłanie dokumentów do <ph name="CLOUD_PRINT_NAME" />.</translation>
 <translation id="2633084400146331575">Włącz potwierdzenia głosowe</translation>
@@ -472,6 +474,7 @@
 <translation id="267596348720209223">Pozwala określić kodowania znaków obsługiwane przez dostawcę wyszukiwania. Kodowania są określane za pomocą nazw stron kodowych, np. UTF-8, GB2312 czy ISO-8859-1. Są stosowane w podanej kolejności. Ta zasada jest opcjonalna. Jeśli nie zostanie skonfigurowana, będzie używana wartość domyślna, czyli UTF-8. Zasada ta jest stosowana tylko przy włączonej zasadzie „DefaultSearchProviderEnabled”.</translation>
 <translation id="2682225790874070339">Wyłącz Dysk w aplikacji Pliki w <ph name="PRODUCT_OS_NAME" /></translation>
 <translation id="268577405881275241">Włącz serwer proxy kompresowania danych</translation>
+<translation id="2731627323327011390">Wyłącz korzystanie z certyfikatów <ph name="PRODUCT_OS_NAME" /> w aplikacjach ARC</translation>
 <translation id="2742843273354638707">Ukrywa aplikację Chrome Web Store i link w stopce na stronie Nowa karta oraz w menu z aplikacjami <ph name="PRODUCT_OS_NAME" />.
 
       Jeśli zasada ma wartość prawda, ikony są ukryte.
@@ -522,6 +525,22 @@
           Każda pozycja na liście to wzorzec dopasowania rozszerzenia (zobacz na https://developer.chrome.com/extensions/match_patterns). Użytkownicy mogą łatwo instalować elementy z każdego URL-a, który pasuje do pozycji na liście. Wzorce muszą zezwalać na dostęp zarówno do lokalizacji pliku CRX, jak i strony, na której rozpoczyna się pobieranie (strony odsyłającej).
 
           ExtensionInstallBlacklist ma pierwszeństwo przed tą zasadą. Oznacza to, że rozszerzenie z czarnej listy nie zostanie zainstalowane, nawet jeśli pochodzi ze strony wymienionej w tej zasadzie.</translation>
+<translation id="2813740161943223811">Ta zasada jest wycofana. Zamiast niej użyj ProxyMode.
+
+          Pozwala określić serwer proxy używany przez <ph name="PRODUCT_NAME" /> i uniemożliwia użytkownikom zmianę jego ustawień. Tego serwera proxy będą mogły używać też aplikacje ARC.
+
+          Jeśli wybierzesz, że serwer proxy ma nie być używany, a połączenie ma być zawsze bezpośrednie, wszystkie pozostałe opcje zostaną zignorowane.
+
+          Jeśli wybierzesz korzystanie z systemowych ustawień serwera proxy lub automatyczne wykrywanie serwera proxy, wszystkie pozostałe opcje zostaną zignorowane.
+
+          Jeśli wybierzesz ręczne ustawienia serwera proxy, możesz podać kolejne opcje w polach „Adres IP lub URL serwera proxy”, „Adres URL pliku PAC serwera proxy” i „Lista rozdzielanych przecinkami reguł omijania serwera proxy”. Dla aplikacji ARC jest dostępny tylko serwer proxy HTTP o najwyższym priorytecie.
+
+          Szczegółowe informacje znajdziesz na:
+          <ph name="PROXY_HELP_URL" />.
+
+          Jeśli włączysz to ustawienie, <ph name="PRODUCT_NAME" /> zignoruje wszystkie opcje związane z serwerem proxy podane w wierszu poleceń.
+
+          Jeśli ta zasada pozostanie nieustawiona, użytkownicy będą mogli samodzielnie wybrać ustawienia serwera proxy.</translation>
 <translation id="2824715612115726353">Włącz tryb incognito</translation>
 <translation id="2844404652289407061">Pozwala korzystać z funkcji „Dotknij, by wyszukać” w widoku treści w <ph name="PRODUCT_NAME" />.
 
@@ -628,6 +647,18 @@
           </translation>
 <translation id="3205825995289802549">Zmaksymalizuj pierwsze okno wyświetlone przy pierwszym uruchomieniu przeglądarki</translation>
 <translation id="3206731874112238027">Wyłącz podgląd wydruku (wycofane)</translation>
+<translation id="3208854390109736596">Pozwala określić serwer proxy używany przez <ph name="PRODUCT_NAME" /> i uniemożliwia użytkownikom zmianę jego ustawień. Tego serwera proxy będą mogły używać też aplikacje ARC.
+
+          Jeśli wybierzesz, że serwer proxy ma nie być używany, a połączenie ma być zawsze bezpośrednie, wszystkie pozostałe opcje zostaną zignorowane.
+
+          Jeśli wybierzesz automatyczne wykrywanie serwera proxy, wszystkie pozostałe opcje zostaną zignorowane.
+
+      Szczegółowe przykłady znajdziesz na:
+      <ph name="PROXY_HELP_URL" />.
+
+      Jeśli włączysz to ustawienie, <ph name="PRODUCT_NAME" /> i aplikacje ARC będą ignorować wszystkie opcje związane z serwerem proxy podane w wierszu poleceń.
+
+          Jeśli te zasady pozostaną nieustawione, użytkownicy będą mogli samodzielnie wybrać ustawienia serwera proxy.</translation>
 <translation id="3213821784736959823">Określa, czy w <ph name="PRODUCT_NAME" /> jest używany wbudowany klient DNS.
 
       W przypadku włączenia tej opcji będzie używany wbudowany klient DNS (jeśli będzie dostępny).
@@ -655,6 +686,7 @@
       Jeśli to ustawienie jest włączone lub nieskonfigurowane, użytkownicy mogą włączyć serwer proxy drukowania w chmurze, uwierzytelniając się na swoim koncie Google.
 
       W przypadku wyłączenia ustawienia użytkownicy nie mogą włączyć serwera proxy ani udostępnić w <ph name="CLOUD_PRINT_NAME" /> drukarek podłączonych do komputera.</translation>
+<translation id="3297010562646015826">Umożliwia kończenie procesów w Menedżerze zadań</translation>
 <translation id="3322771899429619102">Umożliwia skonfigurowanie listy wzorcowych URL-i określających witryny, w których mogą być generowane klucze. Jeśli wzorzec adresu URL znajduje się w zasadzie „KeygenBlockedForUrls”, zastępuje to te wyjątki.
 
           Jeśli ta zasada nie zostanie skonfigurowana, dla wszystkich witryn będzie używana globalna wartość domyślna pochodząca z zasady „DefaultKeygenSetting” (jeśli została skonfigurowana) lub z osobistej konfiguracji użytkownika.</translation>
@@ -678,6 +710,9 @@
 
       W przypadku wyłączenia tej zasady <ph name="PRODUCT_OS_NAME" /> nie będzie zezwalać na uruchamianie sesji gościa.</translation>
 <translation id="3428247105888806363">Włącz przewidywanie działań sieciowych</translation>
+<translation id="3449886121729668969">Konfiguruje ustawienia serwera proxy dla <ph name="PRODUCT_NAME" />. Będą one też dostępne dla aplikacji ARC.
+
+      Zasada nie jest jeszcze gotowa, więc nie należy jej używać.</translation>
 <translation id="3460784402832014830">Określa adres URL, którego wyszukiwarka ma używać do otwierania strony nowej karty.
 
           Ta zasada jest opcjonalna. Jeśli jej nie skonfigurujesz, na stronie nowej karty nie będzie otwierana żadna strona.
@@ -688,28 +723,19 @@
           W przypadku włączenia tej zasady odliczanie opóźnień związanych z zarządzaniem energią oraz czasu związanego z limitem długości sesji nie będzie rozpoczynane do momentu zarejestrowania pierwszej aktywności użytkownika w sesji.
 
          Jeśli ta zasada będzie wyłączona lub nieustawiona, odliczanie opóźnień związanych z zarządzaniem energią oraz czasu związanego z limitem długości sesji będzie rozpoczynane od razu po rozpoczęciu sesji.</translation>
+<translation id="3469657928310999477">W przypadku hostów wymienionych na tej liście <ph name="PRODUCT_NAME" /> omija serwer proxy.
+
+          Ta zasada obowiązuje tylko wtedy, gdy ręcznie wprowadzisz ustawienia serwera proxy za pomocą opcji „Wybierz sposób określenia ustawień serwera proxy”.
+
+          Jeśli został wybrany inny tryb ustawiania zasad proxy, nie ustawiaj tej zasady.
+
+          Szczegółowe przykłady znajdziesz na:
+          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="3478024346823118645">Wyczyść dane użytkownika przy wylogowaniu</translation>
 <translation id="348495353354674884">Włącz wirtualną klawiaturę</translation>
 <translation id="3496296378755072552">Menedżer haseł</translation>
 <translation id="349667858031092827">Nigdy nie wykrywaj automatycznie strefy czasowej.</translation>
-<translation id="3502472987829488885">Pozwala określić serwer proxy, którego używają <ph name="PRODUCT_NAME" /> oraz aplikacje ARC, i uniemożliwia użytkownikom zmianę ustawień proxy.
-
-          Jeśli zdecydujesz się nie używać serwera proxy i zawsze łączyć się bezpośrednio, wszystkie pozostałe opcje będą ignorowane. Aplikacje ARC będą korzystać z domyślnego serwera proxy aktualnej sieci, jeśli taki istnieje.
-
-          Jeśli zdecydujesz się korzystać z systemowych ustawień serwera proxy, wszystkie pozostałe opcje będą ignorowane. Aplikacje ARC będą korzystać z domyślnego serwera proxy aktualnej sieci, jeśli taki istnieje.
-
-          Jeśli wybierzesz automatyczne wykrywanie serwera proxy, wszystkie pozostałe opcje będą ignorowane.
-
-          Jeśli wybierzesz tryb stałego serwera proxy, możesz określić dodatkowe opcje w ustawieniach „Adres IP lub URL serwera proxy” i „Lista rozdzielonych przecinkami reguł omijania serwera proxy”. Aplikacje ARC będą używać tylko serwera proxy HTTP o najwyższym priorytecie.
-
-          Jeśli zdecydujesz się użyć skryptu PAC serwera proxy, musisz podać adres URL do skryptu w opcji „URL do pliku PAC serwera proxy”.
-
-          Szczegółowe przykłady znajdziesz na:
-          <ph name="PROXY_HELP_URL" />
-
-          Po włączeniu tego ustawienia <ph name="PRODUCT_NAME" /> i aplikacje ARC będą ignorować wszystkie opcje dotyczące serwera proxy określone w wierszu poleceń.
-
-          Jeśli pozostawisz tę zasadę nieskonfigurowaną, użytkownicy będą mogli samodzielnie wybrać ustawienia serwera</translation>
+<translation id="350443680860256679">Konfigurowanie aplikacji ARC</translation>
 <translation id="3504791027627803580">Określa adres URL wyszukiwarki używanej do wyszukiwania obrazem. Żądania wyszukiwania będą wysyłane przy użyciu metody GET. Jeśli zasada DefaultSearchProviderImageURLPostParams jest ustawiona, wtedy takie żądania będą używać metody POST.
 
           Ta zasada jest opcjonalna. Jeśli nie jest ustawiona, nie będzie używane wyszukiwanie obrazem.
@@ -826,6 +852,7 @@
 <translation id="3967075520570946456">Włącz wyświetlanie strony powitalnej przy pierwszym uruchomieniu przeglądarki po uaktualnieniu systemu operacyjnego.</translation>
 <translation id="3973371701361892765">Nigdy nie autoukrywaj półki</translation>
 <translation id="3984028218719007910">Określa, czy <ph name="PRODUCT_OS_NAME" /> przechowuje po wylogowaniu dane konta lokalnego. W przypadku włączenia trwałe konta nie są przechowywane przez <ph name="PRODUCT_OS_NAME" /> i po wylogowaniu wszystkie dane z sesji użytkownika są usuwane. Jeśli ta zasada będzie wyłączona lub nieskonfigurowana, urządzenie może przechowywać zaszyfrowane lokalne dane użytkownika.</translation>
+<translation id="3997519162482760140">Adresy URL, które będą mieć dostęp do urządzeń rejestrujących wideo na stronach logowania SAML</translation>
 <translation id="4001275826058808087">Administratorzy IT urządzeń firmowych mogą przy użyciu tej flagi określić, czy użytkownicy mogą korzystać z ofert w procesie rejestracji systemu operacyjnego Chrome.
 
       Jeśli nie skonfigurujesz tej zasady lub ustawisz dla niej wartość prawda, użytkownicy będą mogli wykorzystywać oferty przy rejestracji systemu operacyjnego Chrome.
@@ -845,22 +872,6 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
           Jeśli ta zasada zostanie ustawiona na „Zachowaj pliki cookie na czas trwania sesji”, pliki cookie będą usuwane przy zamknięciu sesji. Pamiętaj, że jeśli <ph name="PRODUCT_NAME" /> działa w tle, nawet po zamknięciu ostatniego okna sesja może pozostać aktywna. Przeczytaj o zasadzie BackgroundModeEnabled, by dowiedzieć się więcej o konfigurowaniu tego działania.
 
           Jeśli ta zasada pozostanie nieskonfigurowana, będzie używane ustawienie AllowCookies, a użytkownik będzie mógł je zmienić.</translation>
-<translation id="4098957623809244159">Ta zasada jest przestarzała. Zamiast niej użyj zasady ProxyMode.
-
-          Pozwala określić serwer proxy używany w <ph name="PRODUCT_NAME" /> oraz aplikacjach ARC i uniemożliwia użytkownikom zmianę jego ustawień.
-
-          Jeśli zdecydujesz się nie korzystać z serwera proxy i zawsze bezpośrednio nawiązywać połączenia, wszystkie pozostałe opcje będą ignorowane.
-
-          Są one też ignorowane w przypadku użycia systemowych ustawień serwera proxy lub automatycznego wykrywania serwera proxy.
-
-          Jeśli chcesz ręcznie wprowadzić ustawienia serwera proxy, możesz określić dodatkowe opcje w polach „Adres IP lub URL serwera proxy”, „Adres URL pliku PAC serwera proxy” i „Lista rozdzielonych przecinkami reguł omijania serwera proxy”.
-
-          Szczegółowe przykłady znajdziesz na stronie:
-          <ph name="PROXY_HELP_URL" />
-
-          Jeśli ustawienie jest włączone, <ph name="PRODUCT_NAME" /> ignoruje wszystkie opcje dotyczące serwera proxy określone w wierszu polecenia.
-
-          Jeśli ta zasada nie zostanie ustawiona, użytkownicy mogą samodzielnie określić ustawienia serwera proxy.</translation>
 <translation id="4103289232974211388">Przekieruj do dostawcy tożsamości SAML po potwierdzeniu przez użytkownika</translation>
 <translation id="410478022164847452">Określa, po jakim czasie nieaktywności użytkownika podejmowane jest działanie po bezczynności przy zasilaniu z sieci.
 
@@ -869,6 +880,9 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
           Jeśli ta zasada nie jest ustawiona, używana jest domyślna wartość długości czasu.
 
           Wartość tej zasady powinna być określona w milisekundach.</translation>
+<translation id="4115096483386877940">Uprawnienie do blokowania ekranu.
+
+      Jeśli ta zasada jest ustawiona na wartość fałsz, użytkownicy nie mogą blokować ekranu (mogą się tylko wylogować z sesji użytkownika). Jeśli ustawiona jest wartość prawda lub zasada nie została skonfigurowana, użytkownicy, którzy przeprowadzili uwierzytelnianie hasłem, mogą blokować ekran.</translation>
 <translation id="4121350739760194865">Zablokuj wyświetlanie promocji aplikacji na stronie Nowa karta</translation>
 <translation id="4147054660081653009">Certyfikat klienta umożliwiający nawiązanie połączenia z RemoteAccessHostTokenValidationUrl.
 
@@ -940,6 +954,7 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
 <translation id="4449545651113180484">Obróć ekran w prawo o 270 stopni</translation>
 <translation id="4467952432486360968">Blokuj pliki cookie innych firm</translation>
 <translation id="4474167089968829729">Włącz zapisywanie haseł w menedżerze haseł</translation>
+<translation id="447686899376429408">Jeśli nie skonfigurujesz tej zasady lub ustawisz dla niej wartość prawda, użytkownicy będą mogli przesyłać karty, witryny lub pulpit z przeglądarki. Jeśli ustawisz tu wartość fałsz, ta opcja zostanie wyłączona.</translation>
 <translation id="4480694116501920047">Wymuś stosowanie filtra SafeSearch</translation>
 <translation id="4482640907922304445">Powoduje pokazanie przycisku strony startowej na pasku narzędzi <ph name="PRODUCT_NAME" />. Jeśli włączysz to ustawienie, przycisk strony startowej będzie zawsze widoczny. W przypadku wyłączenia ustawienia przycisk nigdy nie jest widoczny. Jeśli ustawienie jest włączone lub wyłączone, użytkownicy nie mogą go zmienić ani zastąpić w <ph name="PRODUCT_NAME" />. W przypadku nieskonfigurowania tej zasady użytkownik będzie mógł wybrać, czy chce, aby przycisk strony startowej był pokazywany.</translation>
 <translation id="4492287494009043413">Wyłącza tworzenie zrzutów ekranu</translation>
@@ -1141,11 +1156,6 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
 <translation id="5307432759655324440">Dostępność trybu incognito</translation>
 <translation id="5318185076587284965">Zezwalaj hostowi zdalnego dostępu na korzystanie z serwerów przekazujących</translation>
 <translation id="5330684698007383292">Zezwalaj <ph name="PRODUCT_FRAME_NAME" /> na obsługę tych typów treści</translation>
-<translation id="5345267406698765263">Określa zasady aplikacji ARC jako ciąg znaków JSON, który może zostać
-      przekazany w niezmienionej postaci do środowiska wykonawczego ARC. Aktualnie to ustawienie jest używane
-      wyłącznie do określania wymuszonej instalacji aplikacji.
-
-      Jeśli ta zasada nie jest ustawiona, aplikacje nie są instalowane automatycznie.</translation>
 <translation id="5365946944967967336">Pokaż przycisk strony startowej na pasku narzędzi</translation>
 <translation id="5366977351895725771">Jeśli ta zasada ma wartość „fałsz”, ten użytkownik nie może tworzyć użytkowników nadzorowanych. Dotychczasowi użytkownicy nadzorowani będą nadal dostępni.
 
@@ -1262,7 +1272,6 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
       Gdy ta opcja nie jest ustawiona, obowiązuje domyślny katalog profilu.</translation>
 <translation id="5826047473100157858">Określa, czy użytkownik może otwierać strony w trybie incognito w <ph name="PRODUCT_NAME" />. W przypadku opcji „Włączone” lub nieskonfigurowania zasady strony mogą być otwierane w tym trybie. Opcja „Wyłączone” uniemożliwia otwieranie stron w tym trybie. Po wybraniu opcji „Wymuszone” strony można otwierać TYLKO w trybie incognito.</translation>
 <translation id="5836064773277134605">Ogranicz zakres portów UDP używanych przez host zdalnego dostępu</translation>
-<translation id="5845159892130426052">Włącz interfejs ShowModalDialog API do 30.04.2015</translation>
 <translation id="5862253018042179045">Ustawia domyślny stan funkcji ułatwień dostępu w postaci potwierdzeń głosowych na ekranie logowania.
 
           Jeśli ta zasada ma wartość „prawda”, po wyświetleniu ekranu logowania potwierdzenia głosowe są włączone.
@@ -1293,14 +1302,6 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
 <translation id="5893553533827140852">Jeśli włączysz to ustawienie, żądania uwierzytelniania Gnubby będą przesyłane przez serwer proxy podczas zdalnego połączenia z hostem.
 
           Jeśli wyłączysz to ustawienie lub go nie skonfigurujesz, żądania uwierzytelniania Gnubby nie będą przesyłane przez serwer proxy.</translation>
-<translation id="5900959132054596599">W przypadku hostów wymienionych na tej liście <ph name="PRODUCT_NAME" /> i aplikacje ARC omijają serwer proxy.
-
-          Ta zasada obowiązuje tylko wtedy, gdy ręcznie wprowadzisz ustawienia serwera proxy za pomocą opcji „Wybierz sposób określenia ustawień serwera proxy”.
-
-          Nie ustawiaj tej zasady w przypadku wybrania innego trybu ustawiania zasad serwera proxy.
-
-          Szczegółowe przykłady znajdziesz na stronie:
-          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="5921713479449475707">Zezwalaj na pobieranie aktualizacji automatycznych przez HTTP</translation>
 <translation id="5921888683953999946">Ustawia domyślny stan funkcji ułatwień dostępu w postaci dużego kursora na ekranie logowania.
 
@@ -1346,6 +1347,9 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
       Ta zasada dotyczy wszystkich typów nośników pamięci, takich jak na przykład napędy flash USB, zewnętrzne dyski twarde, karty pamięci SD i inne, pamięci optyczne itd. Pamięć wewnętrzna nie podlega tej zasadzie, więc nadal będzie można otwierać pliki z folderu Pobrane. Ta zasada nie dotyczy również Dysku Google.
 
       W przypadku wyłączenia lub nieskonfigurowania tego ustawienia użytkownicy będą mogli korzystać na urządzeniu ze wszystkich obsługiwanych typów pamięci zewnętrznych.</translation>
+<translation id="6076099373507468537">Definiuje listę urządzeń USB, które można odłączać od sterownika jądra i stosować za pomocą interfejsu chrome.usb API bezpośrednio w aplikacji internetowej. W celu wskazania konkretnego urządzenia lista obejmuje pary identyfikatora dostawcy urządzenia USB i identyfikatora produktu.
+
+      Jeśli nie skonfigurujesz tej zasady, lista odłączanych urządzeń USB będzie pusta.</translation>
 <translation id="6095999036251797924">Określa czas, po jakim ekran jest blokowany przy pracy na zasilaniu sieciowym lub bateryjnym, jeśli użytkownik jest nieaktywny.
 
           Gdy ustawisz czas większy od zera, określa on, jak długo użytkownik musi pozostać nieaktywny, zanim <ph name="PRODUCT_OS_NAME" /> zablokuje ekran.
@@ -1674,11 +1678,6 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
 
           Jeśli zgodnie z ustawieniem zasady RestoreOnStartup adresy URL z poprzednich sesji mają być wznawiane, ta zasada nie będzie przestrzegana, a pliki cookie witryn będą trwale zapisywane.</translation>
 <translation id="7207095846245296855">Wymuś stosowanie filtra Google SafeSearch</translation>
-<translation id="7213425178181578730">Jeśli ta zasada ma wartość Fałsz, <ph name="PRODUCT_OS_NAME" /> wyłącza moduł Bluetooth i użytkownik nie może włączyć go ponownie.
-
-      Jeśli zasada ma wartość Prawda lub nie ma wartości, użytkownik może swobodnie włączać i wyłączać moduł Bluetooth.
-
-      Jeśli ustawisz wartość tej zasady, użytkownik nie może jej zmienić ani zastąpić.</translation>
 <translation id="7216442368414164495">Umożliwia użytkownikom wyrażenie zgody na generowanie rozszerzonych raportów przez usługę Bezpieczne przeglądanie</translation>
 <translation id="7227967227357489766">Określa listę użytkowników, którzy mogą logować się do urządzenia. Pozycje mają postać <ph name="USER_WHITELIST_ENTRY_FORMAT" />, np. <ph name="USER_WHITELIST_ENTRY_EXAMPLE" />. Aby zezwolić na logowanie dowolnym użytkownikom z domeny, użyj wpisów w postaci <ph name="USER_WHITELIST_ENTRY_WILDCARD" />.
 
@@ -1691,6 +1690,7 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
           Gdy ją ustawisz, użytkownicy mogą ją chwilowo zastąpić, włączając lub wyłączając lupę. Wybór użytkownika nie jest jednak trwały i wartość domyślna jest przywracana po ponownym wyświetleniu ekranu logowania lub wtedy, gdy użytkownik przez minutę będzie nieaktywny na tym ekranie.
 
           Jeśli zasada pozostanie nieustawiona, po pierwszym wyświetleniu ekranu logowania lupa jest wyłączona. Użytkownicy mogą ją w każdej chwili włączyć lub wyłączyć i jej stan na ekranie logowania jest trwały dla wszystkich użytkowników.</translation>
+<translation id="7249828445670652637">Włącz korzystanie z certyfikatów CA <ph name="PRODUCT_OS_NAME" /> w aplikacjach ARC</translation>
 <translation id="7258823566580374486">Włącz separację hostów zdalnego dostępu</translation>
 <translation id="7260277299188117560">Sieć P2P aktualizacji automatycznych włączona</translation>
 <translation id="7267809745244694722">Klawisze multimediów domyślnie ustawione jako funkcyjne</translation>
@@ -1779,9 +1779,6 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
 <translation id="7632724434767231364">Nazwa biblioteki GSSAPI</translation>
 <translation id="7635471475589566552">Pozwala skonfigurować język w przeglądarce <ph name="PRODUCT_NAME" /> i uniemożliwia użytkownikom jego zmianę. Jeśli włączysz to ustawienie, w <ph name="PRODUCT_NAME" /> będzie używany określony język. W przypadku, gdy skonfigurowany język nie jest obsługiwany, wybierana jest opcja „en-US”. Jeśli ustawienie jest wyłączone lub nieskonfigurowane, w <ph name="PRODUCT_NAME" /> używany jest preferowany język określony przez użytkownika (jeśli został skonfigurowany), język ustawiony w systemie lub zastępcza opcja „en-US”.</translation>
 <translation id="7651739109954974365">Określa, czy na urządzeniu powinno być włączone przesyłanie danych w roamingu. W przypadku włączenia tej zasady przesyłanie danych w roamingu będzie dozwolone. Jeśli zasada będzie wyłączona lub nieskonfigurowana, przesyłanie danych w roamingu będzie niedostępne.</translation>
-<translation id="7667184304362487902">Konfiguruje ustawienia serwera proxy dla <ph name="PRODUCT_NAME" /> i aplikacji ARC.
-
-      Zasada nie jest jeszcze gotowa, więc nie należy jej używać.</translation>
 <translation id="76810863974142048">Adres URL, pod którym klienty zdalnego dostępu otrzymują token uwierzytelniania.
 
           Jeśli ustawisz tę zasadę, host zdalnego dostępu będzie wymagał od łączących się klientów uzyskania tokena uwierzytelniania z tego adresu URL. Musisz jej używać w połączeniu z zasadą RemoteAccessHostTokenValidationUrl.
@@ -1838,6 +1835,14 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
       Jeśli zasada jest włączona lub nieustawiona, informacje o sesji
       będą przesyłane.</translation>
 <translation id="7774768074957326919">Używaj systemowych ustawień serwera proxy</translation>
+<translation id="7775831859772431793">W tym miejscu możesz podać URL serwera proxy.
+
+          Ta zasada obowiązuje tylko wtedy, gdy zdecydujesz się ręcznie wprowadzić ustawienia serwera proxy za pomocą opcji „Wybierz sposób określenia ustawień serwera proxy”.
+
+          Nie ustawiaj tej zasady w przypadku wybrania innego trybu ustawiania zasad proxy.
+
+Więcej opcji i szczegółowych przykładów znajdziesz na:
+          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="7788511847830146438">Według profilu</translation>
 <translation id="7796141075993499320">Umożliwia skonfigurowanie listy wzorcowych URL-i określających witryny, w których mogą być uruchamiane wtyczki. Jeśli ta zasada nie zostanie skonfigurowana, dla wszystkich witryn będzie używana globalna wartość domyślna pochodząca z zasady „DefaultPluginsSetting” (jeśli została skonfigurowana) lub z osobistej konfiguracji użytkownika.</translation>
 <translation id="7818131573217430250">Ustaw domyślny stan trybu wysokiego kontrastu na ekranie logowania</translation>
@@ -1863,25 +1868,25 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
       Jeśli ta zasada nie jest ustawiona, stosowana jest wartość TimezoneAutomaticDetectionUsersDecide.
 
       Tę zasadę zastępuje włączona zasada SystemTimezone. Jeśli obowiązuje zasada SystemTimezone, automatyczne wykrywanie strefy czasowej jest całkowicie wyłączone.</translation>
+<translation id="787125417158068494">Jeśli ustawisz wartość SyncDisabled lub pozostawisz tę opcję nieskonfigurowaną, certyfikaty <ph name="PRODUCT_OS_NAME" /> nie będą dostępne dla aplikacji ARC.
+
+      Jeśli ustawisz wartość CopyCaCerts, dla aplikacji ARC będą dostępne wszystkie certyfikaty CA zainstalowane w ONC z <ph name="WEB_TRUSTED_BIT" />.</translation>
 <translation id="7882585827992171421">Ta zasada jest aktywna tylko w trybie sklepu.
 
       Określa identyfikator rozszerzenia używanego jako wygaszacz ekranu na ekranie logowania. Rozszerzenie musi być częścią pakietu aplikacji skonfigurowanego dla tej domeny przez zasadę DeviceAppPack.</translation>
 <translation id="7882890448959833986">Ukryj ostrzeżenie o nieobsługiwanym systemie operacyjnym</translation>
 <translation id="7912255076272890813">Skonfiguruj dozwolone typy aplikacji/rozszerzeń</translation>
-<translation id="7928112526630078979">Pozwala określić serwer proxy, którego używają <ph name="PRODUCT_NAME" /> oraz aplikacje ARC, i uniemożliwia użytkownikom zmianę ustawień proxy.
+<translation id="7915236031252389808">W tym miejscu możesz podać URL pliku PAC serwera proxy.
 
-      Jeśli zdecydujesz się nie używać serwera proxy i zawsze łączyć się bezpośrednio, wszystkie pozostałe opcje będą ignorowane. Aplikacje ARC będą korzystać z domyślnego serwera proxy aktualnej sieci, jeśli taki istnieje.
+          Ta zasada obowiązuje tylko po wybraniu ręcznego konfigurowania ustawień proxy za pomocą opcji „Wybierz sposób określenia ustawień serwera proxy”.
 
-      Jeśli wybierzesz automatyczne wykrywanie serwera proxy, wszystkie pozostałe opcje będą ignorowane.
+          Nie ustawiaj tej zasady w przypadku wybrania innego trybu ustawiania zasad proxy.
 
-      Szczegółowe przykłady znajdziesz na:
-      <ph name="PROXY_HELP_URL" />
-
-      Po włączeniu tego ustawienia <ph name="PRODUCT_NAME" /> i aplikacje ARC będą ignorować wszystkie opcje dotyczące serwera proxy określone w wierszu poleceń.
-
-      Jeśli pozostawisz te zasady nieskonfigurowane, użytkownicy będą mogli samodzielnie wybrać ustawienia serwera proxy.</translation>
+          Szczegółowe przykłady znajdziesz na:
+          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="793134539373873765">Określa, czy do pobierania aktualizacji systemu operacyjnego ma być używana sieć P2P. Jeśli w tej opcji ustawisz wartość Prawda, urządzenia będą dzieliły aktualizacje w sieci LAN i próbowały pobierać je z tej sieci, co może zmniejszyć wykorzystanie i obciążenie łącza internetowego. Jeśli aktualizacje nie będą dostępne w sieci LAN, urządzenie przełączy się na pobieranie aktualizacji z serwera. Jeśli ustawisz w tej opcji wartość Fałsz, sieć P2P nie będzie używana.</translation>
 <translation id="7933141401888114454">Włącz tworzenie użytkowników nadzorowanych</translation>
+<translation id="793473937901685727">Ustaw dostępność certyfikatu dla aplikacji ARC</translation>
 <translation id="7936098023732125869">Włącza korzystanie z usług domyślnego dostawcy usługi wyszukiwania.
 
           Jeśli włączysz to ustawienie, wpisanie w omniboksie tekstu, który nie jest adresem URL, będzie powodować użycie wyszukiwarki domyślnej.
@@ -1987,6 +1992,30 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
       Jeśli ta opcja nie zostanie ustawiona, <ph name="PRODUCT_OS_NAME" /> użyje identyfikatora konta e-mail lokalnego konta na urządzeniu jako nazwy wyświetlanej na ekranie logowania.
 
       Ta zasada jest ignorowana w przypadku zwykłych kont użytkownika.</translation>
+<translation id="8279832363395120715">Wycina poufne pod względem prywatności i bezpieczeństwa fragmenty adresów URL https:// przed przekazaniem tych adresów do skryptów PAC (Proxy Auto Config), których <ph name="PRODUCT_NAME" /> używa podczas rozpoznawania serwerów proxy.
+
+      Jeśli ustawisz wartość prawda, funkcja zabezpieczeń zostanie
+      włączona, a fragmenty adresów URL https:// będą usuwane przed
+      przekazaniem tych adresów do skryptów PAC. w ten sposób skrypt PAC nie
+      będzie mógł odczytać danych, które są zwykle chronione przez
+      szyfrowany kanał (np. ścieżki lub zapytania adresu URL).
+
+      Jeśli ustawisz wartość fałsz, funkcja zabezpieczeń zostanie wyłączona,
+      a skrypty PAC będą domyślnie mogły odczytać wszystkie składniki 
+      adresu URL https://. Dotyczy to wszystkich skryptów PAC bez względu
+      na ich pochodzenie (włączając te pobrane przez niezabezpieczony
+      kanał lub odkryte w niezabezpieczony sposób przez protokół WPAD).
+
+      Domyślne ustawienie to prawda (włączona funkcja zabezpieczeń).
+      Wyjątek stanowią użytkownicy korporacyjni Chrome OS, w przypadku
+      których ta zasada jest domyślnie ustawiona na fałsz.
+
+
+      Zaleca się ustawienie tej zasady na wartość prawda. Wartość fałsz
+      należy ustawić tylko wtedy, gdy występuje problem ze zgodnością
+      z istniejącymi skryptami PAC.
+
+      Planujemy usunąć ten problem w przyszłości.</translation>
 <translation id="8285435910062771358">Pełnoekranowa lupa włączona</translation>
 <translation id="8294750666104911727">Normalnie strony, które w tagu X-UA-Compatible mają wartość chrome=1, będą renderowane w <ph name="PRODUCT_FRAME_NAME" /> niezależnie od ustawienia zasady „ChromeFrameRendererSettings”.
 
@@ -2007,6 +2036,7 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
 
       Wartość zasady należy podać w milisekundach.</translation>
 <translation id="8344454543174932833">Importuj zakładki z przeglądarki domyślnej przy pierwszym uruchomieniu</translation>
+<translation id="8359734107661430198">Włącz interfejs API ExampleDeprecatedFeature od 2 września 2008 r.</translation>
 <translation id="8360452361555133173">Włącz wyświetlanie strony powitalnej przy pierwszym uruchomieniu przeglądarki po uaktualnieniu systemu operacyjnego.
 
       Jeśli ta zasada jest włączona lub nieskonfigurowana, przeglądarka ponownie wyświetli stronę powitalną przy pierwszym uruchomieniu po uaktualnieniu systemu operacyjnego.
@@ -2016,9 +2046,15 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
 <translation id="8382184662529825177">Włącz używanie zaświadczania zdalnego do ochrony treści na urządzeniu</translation>
 <translation id="838870586332499308">Włącz dane w roamingu</translation>
 <translation id="8412312801707973447">Czy wykonywane jest sprawdzanie OCSP/CRL online</translation>
+<translation id="8413348101535146315">Umożliwia kończenie procesów w Menedżerze zadań <ph name="PRODUCT_NAME" />.
+
+      Jeśli ta zasada jest wyłączona, przycisk „Zakończ proces” w Menedżerze zadań jest nieaktywny.
+
+      Jeśli ta zasada jest włączona lub nie jest skonfigurowana, użytkownik może kończyć procesy w Menedżerze zadań.</translation>
 <translation id="8424255554404582727">Ustaw domyślny obrót ekranu stosowany po każdym ponownym uruchomieniu</translation>
 <translation id="8426231401662877819">Obróć ekran w prawo o 90 stopni</translation>
 <translation id="8451988835943702790">Używaj strony Nowa karta jako strony początkowej</translation>
+<translation id="8458790683633857482">Określa zestaw zasad przesyłany do środowiska wykonawczego ARC. Wartość musi być wyrażona prawidłowym ciągiem znaków JSON.</translation>
 <translation id="8465065632133292531">Parametry dla URL-i dynamicznych używających POST</translation>
 <translation id="847472800012384958">Nie zezwalaj na pokazywanie wyskakujących okienek w żadnej witrynie</translation>
 <translation id="8477885780684655676">TLS 1.0</translation>
@@ -2183,6 +2219,13 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
 
           Wartość zasady powinna być określona w milisekundach. Wartości muszą być mniejsze niż opóźnienie bezczynności.</translation>
 <translation id="891435090623616439">zakodowane jako ciąg JSON – więcej szczegółów znajdziesz na <ph name="COMPLEX_POLICIES_URL" /></translation>
+<translation id="8929359433203547810">Jeśli ta zasada ma wartość Fałsz, <ph name="PRODUCT_OS_NAME" /> wyłącza Bluetooth i użytkownik nie może włączyć go ponownie.
+
+      Jeśli zasada ma wartość Prawda lub nie ma wartości, użytkownik może swobodnie włączać i wyłączać Bluetooth.
+
+      Jeśli ustawisz wartość tej zasady, użytkownik nie może jej zmienić ani zastąpić.
+
+      Aby zmiany zostały zastosowane, po włączeniu Bluetootha musisz ponownie uruchomić urządzenie (po wyłączeniu Bluetootha nie jest to konieczne).</translation>
 <translation id="8947415621777543415">Zgłoś lokalizację urządzenia</translation>
 <translation id="8951350807133946005">Ustaw katalog podręcznej pamięci dyskowej</translation>
 <translation id="8955719471735800169">Powrót do góry</translation>
@@ -2212,6 +2255,24 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
 <translation id="9112897538922695510">Umożliwia zarejestrowanie listy modułów obsługi protokołów. Ta zasada może być tylko zalecana. We właściwości |protocol| należy wskazać schemat taki jak „mailto”, a we właściwości |url| należy wskazać wzorzec adresu URL aplikacji obsługującej ten schemat. Wzorzec może obejmować „%s”, który – jeśli występuje – zostanie zastąpiony przez obsługiwany adres URL.
 
           Moduły obsługi protokołów zarejestrowane przez zasadę są łączone z modułami zarejestrowanymi przez użytkownika i oba te typy są dostępne do użycia. Użytkownik może zastąpić moduły obsługi protokołów zainstalowane przez zasadę, instalując nowy moduł domyślny, ale nie może usunąć modułów zarejestrowanych przez zasadę.</translation>
+<translation id="913138516158420759">Pozwala określić serwer proxy używany przez <ph name="PRODUCT_NAME" /> i uniemożliwia użytkownikom zmianę jego ustawień. Tego serwera proxy będą mogły używać też aplikacje ARC.
+
+          Jeśli wybierzesz, że serwer proxy ma nie być używany, a połączenie ma być zawsze bezpośrednie, wszystkie pozostałe opcje zostaną zignorowane.
+
+          Jeśli wybierzesz korzystanie z systemowych ustawień serwera proxy, wszystkie pozostałe opcje zostaną zignorowane.
+
+          Jeśli wybierzesz automatyczne wykrywanie serwera proxy, wszystkie pozostałe opcje zostaną zignorowane.
+
+          Jeśli wybierzesz tryb stałego serwera proxy, możesz podać kolejne opcje w polach „Adres IP lub URL serwera proxy” i „Lista rozdzielanych przecinkami reguł omijania serwera proxy”. Dla aplikacji ARC jest dostępny tylko serwer proxy HTTP o najwyższym priorytecie.
+
+          Jeśli wybierzesz korzystanie ze skryptu PAC serwera proxy, w polu „Adres URL pliku PAC serwera proxy” musisz podać adres URL skryptu.
+
+          Szczegółowe informacje znajdziesz na:
+          <ph name="PROXY_HELP_URL" />
+
+          Jeśli włączysz to ustawienie, <ph name="PRODUCT_NAME" /> i aplikacje ARC zignorują wszystkie opcje związane z serwerem proxy podane w wierszu poleceń.
+
+          Jeśli ta zasada pozostanie nieustawiona, użytkownicy będą mogli samodzielnie wybrać ustawienia serwera proxy.</translation>
 <translation id="913195841488580904">Blokuj dostęp do listy adresów URL</translation>
 <translation id="9135033364005346124">Włącz serwer proxy usługi <ph name="CLOUD_PRINT_NAME" /></translation>
 <translation id="9147029539363974059">Wysyła dzienniki systemowe na serwer zarządzania, by umożliwić monitorowanie ich przez administratorów.

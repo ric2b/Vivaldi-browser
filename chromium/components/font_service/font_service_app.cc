@@ -9,20 +9,19 @@
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "mojo/platform_handle/platform_handle_functions.h"
-#include "mojo/shell/public/cpp/connection.h"
+#include "services/shell/public/cpp/connection.h"
 
-static_assert(static_cast<uint32_t>(SkTypeface::kNormal) ==
-                  static_cast<uint32_t>(font_service::TypefaceStyle::NORMAL),
-              "Skia and font service flags must match");
-static_assert(static_cast<uint32_t>(SkTypeface::kBold) ==
-                  static_cast<uint32_t>(font_service::TypefaceStyle::BOLD),
-              "Skia and font service flags must match");
-static_assert(static_cast<uint32_t>(SkTypeface::kItalic) ==
-                  static_cast<uint32_t>(font_service::TypefaceStyle::ITALIC),
-              "Skia and font service flags must match");
 static_assert(
-    static_cast<uint32_t>(SkTypeface::kBoldItalic) ==
-        static_cast<uint32_t>(font_service::TypefaceStyle::BOLD_ITALIC),
+    static_cast<uint32_t>(SkFontStyle::kUpright_Slant) ==
+        static_cast<uint32_t>(font_service::mojom::TypefaceSlant::ROMAN),
+    "Skia and font service flags must match");
+static_assert(
+    static_cast<uint32_t>(SkFontStyle::kItalic_Slant) ==
+        static_cast<uint32_t>(font_service::mojom::TypefaceSlant::ITALIC),
+    "Skia and font service flags must match");
+static_assert(
+    static_cast<uint32_t>(SkFontStyle::kOblique_Slant) ==
+        static_cast<uint32_t>(font_service::mojom::TypefaceSlant::OBLIQUE),
     "Skia and font service flags must match");
 
 namespace {
@@ -58,36 +57,44 @@ FontServiceApp::FontServiceApp() {}
 
 FontServiceApp::~FontServiceApp() {}
 
-void FontServiceApp::Initialize(mojo::Connector* connector,
-                                const mojo::Identity& identity,
+void FontServiceApp::Initialize(shell::Connector* connector,
+                                const shell::Identity& identity,
                                 uint32_t id) {
   tracing_.Initialize(connector, identity.name());
 }
 
-bool FontServiceApp::AcceptConnection(mojo::Connection* connection) {
+bool FontServiceApp::AcceptConnection(shell::Connection* connection) {
   connection->AddInterface(this);
   return true;
 }
 
-void FontServiceApp::Create(mojo::Connection* connection,
-                            mojo::InterfaceRequest<FontService> request) {
+void FontServiceApp::Create(
+    shell::Connection* connection,
+    mojo::InterfaceRequest<mojom::FontService> request) {
   bindings_.AddBinding(this, std::move(request));
 }
 
 void FontServiceApp::MatchFamilyName(const mojo::String& family_name,
-                                     TypefaceStyle requested_style,
+                                     mojom::TypefaceStylePtr requested_style,
                                      const MatchFamilyNameCallback& callback) {
   SkFontConfigInterface::FontIdentity result_identity;
   SkString result_family;
-  SkTypeface::Style result_style;
+  SkFontStyle result_style;
   SkFontConfigInterface* fc =
       SkFontConfigInterface::GetSingletonDirectInterface();
   const bool r = fc->matchFamilyName(
-      family_name.data(), static_cast<SkTypeface::Style>(requested_style),
+      family_name.data(),
+      SkFontStyle(requested_style->weight,
+                  requested_style->width,
+                  static_cast<SkFontStyle::Slant>(requested_style->slant)),
       &result_identity, &result_family, &result_style);
 
   if (!r) {
-    callback.Run(nullptr, "", TypefaceStyle::NORMAL);
+    mojom::TypefaceStylePtr style(mojom::TypefaceStyle::New());
+    style->weight = SkFontStyle().weight();
+    style->width = SkFontStyle().width();
+    style->slant = static_cast<mojom::TypefaceSlant>(SkFontStyle().slant());
+    callback.Run(nullptr, "", std::move(style));
     return;
   }
 
@@ -95,13 +102,17 @@ void FontServiceApp::MatchFamilyName(const mojo::String& family_name,
   // which will later be given to us in a request to open the file.
   int index = FindOrAddPath(result_identity.fString);
 
-  FontIdentityPtr identity(FontIdentity::New());
+  mojom::FontIdentityPtr identity(mojom::FontIdentity::New());
   identity->id = static_cast<uint32_t>(index);
   identity->ttc_index = result_identity.fTTCIndex;
   identity->str_representation = result_identity.fString.c_str();
 
-  callback.Run(std::move(identity), result_family.c_str(),
-               static_cast<TypefaceStyle>(result_style));
+  mojom::TypefaceStylePtr style(mojom::TypefaceStyle::New());
+  style->weight = result_style.weight();
+  style->width = result_style.width();
+  style->slant = static_cast<mojom::TypefaceSlant>(result_style.slant());
+
+  callback.Run(std::move(identity), result_family.c_str(), std::move(style));
 }
 
 void FontServiceApp::OpenStream(uint32_t id_number,

@@ -98,7 +98,7 @@ WTF::String webTimeRangesToString(const WebTimeRanges& ranges)
 
 SourceBuffer* SourceBuffer::create(PassOwnPtr<WebSourceBuffer> webSourceBuffer, MediaSource* source, GenericEventQueue* asyncEventQueue)
 {
-    SourceBuffer* sourceBuffer = new SourceBuffer(webSourceBuffer, source, asyncEventQueue);
+    SourceBuffer* sourceBuffer = new SourceBuffer(std::move(webSourceBuffer), source, asyncEventQueue);
     sourceBuffer->suspendIfNeeded();
     return sourceBuffer;
 }
@@ -106,7 +106,7 @@ SourceBuffer* SourceBuffer::create(PassOwnPtr<WebSourceBuffer> webSourceBuffer, 
 SourceBuffer::SourceBuffer(PassOwnPtr<WebSourceBuffer> webSourceBuffer, MediaSource* source, GenericEventQueue* asyncEventQueue)
     : ActiveScriptWrappable(this)
     , ActiveDOMObject(source->getExecutionContext())
-    , m_webSourceBuffer(webSourceBuffer)
+    , m_webSourceBuffer(std::move(webSourceBuffer))
     , m_source(source)
     , m_trackDefaults(TrackDefaultList::create())
     , m_asyncEventQueue(asyncEventQueue)
@@ -128,6 +128,7 @@ SourceBuffer::SourceBuffer(PassOwnPtr<WebSourceBuffer> webSourceBuffer, MediaSou
     ASSERT(m_webSourceBuffer);
     ASSERT(m_source);
     ASSERT(m_source->mediaElement());
+    ThreadState::current()->registerPreFinalizer(this);
     m_audioTracks = AudioTrackList::create(*m_source->mediaElement());
     m_videoTracks = VideoTrackList::create(*m_source->mediaElement());
     m_webSourceBuffer->setClient(this);
@@ -135,18 +136,14 @@ SourceBuffer::SourceBuffer(PassOwnPtr<WebSourceBuffer> webSourceBuffer, MediaSou
 
 SourceBuffer::~SourceBuffer()
 {
-    // Oilpan: a SourceBuffer might be finalized without having been
-    // explicitly removed first, hence the asserts below will not
-    // hold.
-#if !ENABLE(OILPAN)
-    m_audioTracks->shutdown();
-    m_videoTracks->shutdown();
-    ASSERT(isRemoved());
-    ASSERT(!m_loader);
-    ASSERT(!m_stream);
-    ASSERT(!m_webSourceBuffer);
-#endif
     WTF_LOG(Media, "SourceBuffer(%p)::~SourceBuffer", this);
+}
+
+void SourceBuffer::dispose()
+{
+    // Promptly clears a raw reference from content/ to an on-heap object
+    // so that content/ doesn't access it in a lazy sweeping phase.
+    m_webSourceBuffer.clear();
 }
 
 const AtomicString& SourceBuffer::segmentsKeyword()
@@ -313,7 +310,7 @@ void SourceBuffer::setAppendWindowEnd(double end, ExceptionState& exceptionState
     m_appendWindowEnd = end;
 }
 
-void SourceBuffer::appendBuffer(PassRefPtr<DOMArrayBuffer> data, ExceptionState& exceptionState)
+void SourceBuffer::appendBuffer(DOMArrayBuffer* data, ExceptionState& exceptionState)
 {
     WTF_LOG(Media, "SourceBuffer(%p)::appendBuffer size=%u", this, data->byteLength());
     // Section 3.2 appendBuffer()
@@ -321,7 +318,7 @@ void SourceBuffer::appendBuffer(PassRefPtr<DOMArrayBuffer> data, ExceptionState&
     appendBufferInternal(static_cast<const unsigned char*>(data->data()), data->byteLength(), exceptionState);
 }
 
-void SourceBuffer::appendBuffer(PassRefPtr<DOMArrayBufferView> data, ExceptionState& exceptionState)
+void SourceBuffer::appendBuffer(DOMArrayBufferView* data, ExceptionState& exceptionState)
 {
     WTF_LOG(Media, "SourceBuffer(%p)::appendBuffer size=%u", this, data->byteLength());
     // Section 3.2 appendBuffer()
@@ -487,10 +484,83 @@ void SourceBuffer::removedFromMediaSource()
     WTF_LOG(Media, "SourceBuffer(%p)::removedFromMediaSource", this);
     abortIfUpdating();
 
+    if (RuntimeEnabledFeatures::audioVideoTracksEnabled()) {
+        ASSERT(m_source);
+        if (m_source->mediaElement()->audioTracks().length() > 0
+            || m_source->mediaElement()->videoTracks().length() > 0) {
+            removeMediaTracks();
+        }
+    }
+
     m_webSourceBuffer->removedFromMediaSource();
     m_webSourceBuffer.clear();
     m_source = nullptr;
     m_asyncEventQueue = nullptr;
+}
+
+void SourceBuffer::removeMediaTracks()
+{
+    ASSERT(RuntimeEnabledFeatures::audioVideoTracksEnabled());
+    // Spec: http://w3c.github.io/media-source/#widl-MediaSource-removeSourceBuffer-void-SourceBuffer-sourceBuffer
+    ASSERT(m_source);
+
+    HTMLMediaElement* mediaElement = m_source->mediaElement();
+    ASSERT(mediaElement);
+    // 3. Let SourceBuffer audioTracks list equal the AudioTrackList object returned by sourceBuffer.audioTracks.
+    // 4. If the SourceBuffer audioTracks list is not empty, then run the following steps:
+    // 4.1 Let HTMLMediaElement audioTracks list equal the AudioTrackList object returned by the audioTracks attribute on the HTMLMediaElement.
+    // 4.2 Let the removed enabled audio track flag equal false.
+    bool removedEnabledAudioTrack = false;
+    // 4.3 For each AudioTrack object in the SourceBuffer audioTracks list, run the following steps:
+    while (audioTracks().length() > 0) {
+        AudioTrack* audioTrack = audioTracks().anonymousIndexedGetter(0);
+        // 4.3.1 Set the sourceBuffer attribute on the AudioTrack object to null.
+        SourceBufferTrackBaseSupplement::setSourceBuffer(*audioTrack, nullptr);
+        // 4.3.2 If the enabled attribute on the AudioTrack object is true, then set the removed enabled audio track flag to true.
+        if (audioTrack->enabled())
+            removedEnabledAudioTrack = true;
+        // 4.3.3 Remove the AudioTrack object from the HTMLMediaElement audioTracks list.
+        // 4.3.4 Queue a task to fire a trusted event named removetrack, that does not bubble and is not cancelable, and that uses the TrackEvent interface, at the HTMLMediaElement audioTracks list.
+        mediaElement->audioTracks().remove(audioTrack->trackId());
+        // 4.3.5 Remove the AudioTrack object from the SourceBuffer audioTracks list.
+        // 4.3.6 Queue a task to fire a trusted event named removetrack, that does not bubble and is not cancelable, and that uses the TrackEvent interface, at the SourceBuffer audioTracks list.
+        audioTracks().remove(audioTrack->trackId());
+    }
+    // 4.4 If the removed enabled audio track flag equals true, then queue a task to fire a simple event named change at the HTMLMediaElement audioTracks list.
+    if (removedEnabledAudioTrack) {
+        Event* event = Event::create(EventTypeNames::change);
+        event->setTarget(&mediaElement->audioTracks());
+        mediaElement->scheduleEvent(event);
+    }
+
+    // 5. Let SourceBuffer videoTracks list equal the VideoTrackList object returned by sourceBuffer.videoTracks.
+    // 6. If the SourceBuffer videoTracks list is not empty, then run the following steps:
+    // 6.1 Let HTMLMediaElement videoTracks list equal the VideoTrackList object returned by the videoTracks attribute on the HTMLMediaElement.
+    // 6.2 Let the removed selected video track flag equal false.
+    bool removedSelectedVideoTrack = false;
+    // 6.3 For each VideoTrack object in the SourceBuffer videoTracks list, run the following steps:
+    while (videoTracks().length() > 0) {
+        VideoTrack* videoTrack = videoTracks().anonymousIndexedGetter(0);
+        // 6.3.1 Set the sourceBuffer attribute on the VideoTrack object to null.
+        SourceBufferTrackBaseSupplement::setSourceBuffer(*videoTrack, nullptr);
+        // 6.3.2 If the selected attribute on the VideoTrack object is true, then set the removed selected video track flag to true.
+        if (videoTrack->selected())
+            removedSelectedVideoTrack = true;
+        // 6.3.3 Remove the VideoTrack object from the HTMLMediaElement videoTracks list.
+        // 6.3.4 Queue a task to fire a trusted event named removetrack, that does not bubble and is not cancelable, and that uses the TrackEvent interface, at the HTMLMediaElement videoTracks list.
+        mediaElement->videoTracks().remove(videoTrack->trackId());
+        // 6.3.5 Remove the VideoTrack object from the SourceBuffer videoTracks list.
+        // 6.3.6 Queue a task to fire a trusted event named removetrack, that does not bubble and is not cancelable, and that uses the TrackEvent interface, at the SourceBuffer videoTracks list.
+        videoTracks().remove(videoTrack->trackId());
+    }
+    // 6.4 If the removed selected video track flag equals true, then queue a task to fire a simple event named change at the HTMLMediaElement videoTracks list.
+    if (removedSelectedVideoTrack) {
+        Event* event = Event::create(EventTypeNames::change);
+        event->setTarget(&mediaElement->videoTracks());
+        mediaElement->scheduleEvent(event);
+    }
+
+    // 7-8. TODO(servolk): Remove text tracks once SourceBuffer has text tracks.
 }
 
 template<class T>
@@ -505,7 +575,7 @@ T* findExistingTrackById(const TrackListBase<T>& trackList, const String& id)
     return trackList.getTrackById(id);
 }
 
-std::vector<WebMediaPlayer::TrackId> SourceBuffer::initializationSegmentReceived(const std::vector<MediaTrackInfo>& newTracks)
+WebVector<WebMediaPlayer::TrackId> SourceBuffer::initializationSegmentReceived(const WebVector<MediaTrackInfo>& newTracks)
 {
     WTF_LOG(Media, "SourceBuffer::initializationSegmentReceived %p tracks=%zu", this, newTracks.size());
     ASSERT(m_source);
@@ -514,54 +584,49 @@ std::vector<WebMediaPlayer::TrackId> SourceBuffer::initializationSegmentReceived
 
     // TODO(servolk): Implement proper 'initialization segment received' algorithm according to MSE spec:
     // https://w3c.github.io/media-source/#sourcebuffer-init-segment-received
-    std::vector<WebMediaPlayer::TrackId> result;
+    WebVector<WebMediaPlayer::TrackId> result(newTracks.size());
+    unsigned resultIdx = 0;
     for (const auto& trackInfo : newTracks) {
-        const auto& trackType = std::get<0>(trackInfo);
-        const auto& id = std::get<1>(trackInfo);
-        const auto& kind = std::get<2>(trackInfo);
-        const auto& label = std::get<3>(trackInfo);
-        const auto& language = std::get<4>(trackInfo);
-
         if (!RuntimeEnabledFeatures::audioVideoTracksEnabled()) {
             static WebMediaPlayer::TrackId nextTrackId = 0;
-            result.push_back(++nextTrackId);
+            result[resultIdx++] = ++nextTrackId;
             continue;
         }
 
         const TrackBase* trackBase = nullptr;
-        if (trackType == WebMediaPlayer::AudioTrack) {
+        if (trackInfo.trackType == WebMediaPlayer::AudioTrack) {
             AudioTrack* audioTrack = nullptr;
             if (!m_firstInitializationSegmentReceived) {
-                audioTrack = AudioTrack::create(id, kind, label, language, false);
+                audioTrack = AudioTrack::create(trackInfo.byteStreamTrackId, trackInfo.kind, trackInfo.label, trackInfo.language, false);
                 SourceBufferTrackBaseSupplement::setSourceBuffer(*audioTrack, this);
                 audioTracks().add(audioTrack);
                 m_source->mediaElement()->audioTracks().add(audioTrack);
             } else {
-                audioTrack = findExistingTrackById(audioTracks(), id);
+                audioTrack = findExistingTrackById(audioTracks(), trackInfo.byteStreamTrackId);
                 ASSERT(audioTrack);
             }
             trackBase = audioTrack;
-            result.push_back(audioTrack->trackId());
-        } else if (trackType == WebMediaPlayer::VideoTrack) {
+            result[resultIdx++] = audioTrack->trackId();
+        } else if (trackInfo.trackType == WebMediaPlayer::VideoTrack) {
             VideoTrack* videoTrack = nullptr;
             if (!m_firstInitializationSegmentReceived) {
-                videoTrack = VideoTrack::create(id, kind, label, language, false);
+                videoTrack = VideoTrack::create(trackInfo.byteStreamTrackId, trackInfo.kind, trackInfo.label, trackInfo.language, false);
                 SourceBufferTrackBaseSupplement::setSourceBuffer(*videoTrack, this);
                 videoTracks().add(videoTrack);
                 m_source->mediaElement()->videoTracks().add(videoTrack);
             } else {
-                videoTrack = findExistingTrackById(videoTracks(), id);
+                videoTrack = findExistingTrackById(videoTracks(), trackInfo.byteStreamTrackId);
                 ASSERT(videoTrack);
             }
             trackBase = videoTrack;
-            result.push_back(videoTrack->trackId());
+            result[resultIdx++] = videoTrack->trackId();
         } else {
             NOTREACHED();
         }
         (void)trackBase;
 #if !LOG_DISABLED
         const char* logActionStr = m_firstInitializationSegmentReceived ? "using existing" : "added";
-        const char* logTrackTypeStr = (trackType == WebMediaPlayer::AudioTrack) ? "audio" : "video";
+        const char* logTrackTypeStr = (trackInfo.trackType == WebMediaPlayer::AudioTrack) ? "audio" : "video";
         WTF_LOG(Media, "Tracks (sb=%p): %s %sTrack %p trackId=%d id=%s label=%s lang=%s", this, logActionStr, logTrackTypeStr, trackBase, trackBase->trackId(), trackBase->id().utf8().data(), trackBase->label().utf8().data(), trackBase->language().utf8().data());
 #endif
     }
@@ -960,7 +1025,7 @@ DEFINE_TRACE(SourceBuffer)
     visitor->trace(m_stream);
     visitor->trace(m_audioTracks);
     visitor->trace(m_videoTracks);
-    RefCountedGarbageCollectedEventTargetWithInlineData<SourceBuffer>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
     ActiveDOMObject::trace(visitor);
 }
 

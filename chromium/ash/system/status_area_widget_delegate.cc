@@ -11,6 +11,7 @@
 #include "ash/shell.h"
 #include "ash/shell_window_ids.h"
 #include "ash/system/tray/tray_constants.h"
+#include "ash/wm/common/shelf/wm_shelf_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/compositor/layer.h"
@@ -49,8 +50,8 @@ class StatusAreaWidgetDelegateAnimationSettings
 namespace ash {
 
 StatusAreaWidgetDelegate::StatusAreaWidgetDelegate()
-    : focus_cycler_for_testing_(NULL),
-      alignment_(SHELF_ALIGNMENT_BOTTOM) {
+    : focus_cycler_for_testing_(nullptr),
+      alignment_(wm::SHELF_ALIGNMENT_BOTTOM) {
   // Allow the launcher to surrender the focus to another window upon
   // navigation completion by the user.
   set_allow_deactivate_on_esc(true);
@@ -113,7 +114,7 @@ void StatusAreaWidgetDelegate::UpdateLayout() {
   SetLayoutManager(layout);
 
   views::ColumnSet* columns = layout->AddColumnSet(0);
-  if (IsHorizontalAlignment(alignment_)) {
+  if (wm::IsHorizontalAlignment(alignment_)) {
     bool is_first_visible_child = true;
     for (int c = 0; c < child_count(); ++c) {
       views::View* child = child_at(c);

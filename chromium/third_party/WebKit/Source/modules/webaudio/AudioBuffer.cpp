@@ -27,6 +27,7 @@
  */
 
 #include "modules/webaudio/AudioBuffer.h"
+
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
@@ -34,7 +35,7 @@
 #include "platform/audio/AudioBus.h"
 #include "platform/audio/AudioFileReader.h"
 #include "platform/audio/AudioUtilities.h"
-#include "wtf/Float32Array.h"
+#include "wtf/typed_arrays/Float32Array.h"
 
 namespace blink {
 
@@ -130,7 +131,7 @@ bool AudioBuffer::createdSuccessfully(unsigned desiredNumberOfChannels) const
     return numberOfChannels() == desiredNumberOfChannels;
 }
 
-PassRefPtr<DOMFloat32Array> AudioBuffer::createFloat32ArrayOrNull(size_t length)
+DOMFloat32Array* AudioBuffer::createFloat32ArrayOrNull(size_t length)
 {
     RefPtr<WTF::Float32Array> bufferView = WTF::Float32Array::createOrNull(length);
     if (!bufferView)
@@ -145,12 +146,11 @@ AudioBuffer::AudioBuffer(unsigned numberOfChannels, size_t numberOfFrames, float
     m_channels.reserveCapacity(numberOfChannels);
 
     for (unsigned i = 0; i < numberOfChannels; ++i) {
-        RefPtr<DOMFloat32Array> channelDataArray = createFloat32ArrayOrNull(m_length);
+        DOMFloat32Array* channelDataArray = createFloat32ArrayOrNull(m_length);
         // If the channel data array could not be created, just return. The caller will need to
         // check that the desired number of channels were created.
-        if (!channelDataArray) {
+        if (!channelDataArray)
             return;
-        }
 
         channelDataArray->setNeuterable(false);
         m_channels.append(channelDataArray);
@@ -165,7 +165,7 @@ AudioBuffer::AudioBuffer(AudioBus* bus)
     unsigned numberOfChannels = bus->numberOfChannels();
     m_channels.reserveCapacity(numberOfChannels);
     for (unsigned i = 0; i < numberOfChannels; ++i) {
-        RefPtr<DOMFloat32Array> channelDataArray = createFloat32ArrayOrNull(m_length);
+        DOMFloat32Array* channelDataArray = createFloat32ArrayOrNull(m_length);
         // If the channel data array could not be created, just return. The caller will need to
         // check that the desired number of channels were created.
         if (!channelDataArray)
@@ -179,7 +179,7 @@ AudioBuffer::AudioBuffer(AudioBus* bus)
     }
 }
 
-PassRefPtr<DOMFloat32Array> AudioBuffer::getChannelData(unsigned channelIndex, ExceptionState& exceptionState)
+DOMFloat32Array* AudioBuffer::getChannelData(unsigned channelIndex, ExceptionState& exceptionState)
 {
     if (channelIndex >= m_channels.size()) {
         exceptionState.throwDOMException(IndexSizeError, "channel index (" + String::number(channelIndex) + ") exceeds number of channels (" + String::number(m_channels.size()) + ")");

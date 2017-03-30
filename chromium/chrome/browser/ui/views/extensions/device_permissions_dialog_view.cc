@@ -8,7 +8,7 @@
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/extensions/api/chrome_device_permissions_prompt.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/constrained_window/constrained_window_views.h"
@@ -159,7 +159,7 @@ gfx::Size DevicePermissionsDialogView::GetPreferredSize() const {
   return gfx::Size(500, 250);
 }
 
-void ChromeDevicePermissionsPrompt::ShowDialog() {
+void ChromeDevicePermissionsPrompt::ShowDialogViews() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   web_modal::WebContentsModalDialogManager* manager =

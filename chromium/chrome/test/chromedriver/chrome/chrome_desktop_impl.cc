@@ -21,6 +21,7 @@
 #include "chrome/test/chromedriver/chrome/status.h"
 #include "chrome/test/chromedriver/chrome/web_view_impl.h"
 #include "chrome/test/chromedriver/net/port_server.h"
+#include "chrome/test/chromedriver/net/timeout.h"
 
 #if defined(OS_POSIX)
 #include <errno.h>
@@ -66,10 +67,10 @@ bool KillProcess(const base::Process& process, bool kill_gracefully) {
 }  // namespace
 
 ChromeDesktopImpl::ChromeDesktopImpl(
-    scoped_ptr<DevToolsHttpClient> http_client,
-    scoped_ptr<DevToolsClient> websocket_client,
+    std::unique_ptr<DevToolsHttpClient> http_client,
+    std::unique_ptr<DevToolsClient> websocket_client,
     ScopedVector<DevToolsEventListener>& devtools_event_listeners,
-    scoped_ptr<PortReservation> port_reservation,
+    std::unique_ptr<PortReservation> port_reservation,
     base::Process process,
     const base::CommandLine& command,
     base::ScopedTempDir* user_data_dir,
@@ -100,13 +101,14 @@ ChromeDesktopImpl::~ChromeDesktopImpl() {
   }
 }
 
-Status ChromeDesktopImpl::WaitForPageToLoad(const std::string& url,
-                                            const base::TimeDelta& timeout,
-                                            scoped_ptr<WebView>* web_view) {
-  base::TimeTicks deadline = base::TimeTicks::Now() + timeout;
+Status ChromeDesktopImpl::WaitForPageToLoad(
+    const std::string& url,
+    const base::TimeDelta& timeout_raw,
+    std::unique_ptr<WebView>* web_view) {
+  Timeout timeout(timeout_raw);
   std::string id;
   WebViewInfo::Type type = WebViewInfo::Type::kPage;
-  while (base::TimeTicks::Now() < deadline) {
+  while (timeout.GetRemainingTime() > base::TimeDelta()) {
     WebViewsInfo views_info;
     Status status = devtools_http_client_->GetWebViewsInfo(&views_info);
     if (status.IsError())
@@ -136,17 +138,15 @@ Status ChromeDesktopImpl::WaitForPageToLoad(const std::string& url,
     // https://code.google.com/p/chromedriver/issues/detail?id=1205
     device_metrics = nullptr;
   }
-  scoped_ptr<WebView> web_view_tmp(
-      new WebViewImpl(id,
-                      devtools_http_client_->browser_info(),
-                      devtools_http_client_->CreateClient(id),
-                      device_metrics));
+  std::unique_ptr<WebView> web_view_tmp(
+      new WebViewImpl(id, devtools_http_client_->browser_info(),
+                      devtools_http_client_->CreateClient(id), device_metrics));
   Status status = web_view_tmp->ConnectIfNecessary();
   if (status.IsError())
     return status;
 
   status = web_view_tmp->WaitForPendingNavigations(
-      std::string(), deadline - base::TimeTicks::Now(), false);
+      std::string(), timeout, false);
   if (status.IsOk())
     *web_view = std::move(web_view_tmp);
   return status;
@@ -155,7 +155,7 @@ Status ChromeDesktopImpl::WaitForPageToLoad(const std::string& url,
 Status ChromeDesktopImpl::GetAutomationExtension(
     AutomationExtension** extension) {
   if (!automation_extension_) {
-    scoped_ptr<WebView> web_view;
+    std::unique_ptr<WebView> web_view;
     Status status = WaitForPageToLoad(
         "chrome-extension://aapnijgdinlhnhlmodcfapnahmbfebeb/"
         "_generated_background_page.html",

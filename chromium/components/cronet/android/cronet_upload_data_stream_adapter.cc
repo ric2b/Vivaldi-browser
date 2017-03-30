@@ -12,7 +12,7 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/cronet/android/cronet_url_request_adapter.h"
 #include "jni/CronetUploadDataStream_jni.h"
 
@@ -120,7 +120,7 @@ static jlong AttachUploadDataToRequest(
   CronetUploadDataStreamAdapter* adapter =
       new CronetUploadDataStreamAdapter(env, jupload_data_stream);
 
-  scoped_ptr<CronetUploadDataStream> upload_data_stream(
+  std::unique_ptr<CronetUploadDataStream> upload_data_stream(
       new CronetUploadDataStream(adapter, jlength));
 
   request_adapter->SetUpload(std::move(upload_data_stream));

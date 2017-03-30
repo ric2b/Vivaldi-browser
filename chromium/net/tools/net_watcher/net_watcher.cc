@@ -4,7 +4,9 @@
 
 // This is a small utility that watches for and logs network changes.
 
+#include <memory>
 #include <string>
+#include <unordered_set>
 
 #include "base/at_exit.h"
 #include "base/command_line.h"
@@ -12,7 +14,6 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_split.h"
 #include "base/values.h"
@@ -69,7 +70,7 @@ const char* ConnectionTypeToString(
 }
 
 std::string ProxyConfigToString(const net::ProxyConfig& config) {
-  scoped_ptr<base::Value> config_value(config.ToValue());
+  std::unique_ptr<base::Value> config_value(config.ToValue());
   std::string str;
   base::JSONWriter::Write(*config_value, &str);
   return str;
@@ -168,7 +169,7 @@ int main(int argc, char* argv[]) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   std::string ignored_netifs_str =
       command_line->GetSwitchValueASCII(kIgnoreNetifFlag);
-  base::hash_set<std::string> ignored_interfaces;
+  std::unordered_set<std::string> ignored_interfaces;
   if (!ignored_netifs_str.empty()) {
     for (const std::string& ignored_netif :
          base::SplitString(ignored_netifs_str, ",", base::TRIM_WHITESPACE,
@@ -177,15 +178,15 @@ int main(int argc, char* argv[]) {
       ignored_interfaces.insert(ignored_netif);
     }
   }
-  scoped_ptr<net::NetworkChangeNotifier> network_change_notifier(
+  std::unique_ptr<net::NetworkChangeNotifier> network_change_notifier(
       new net::NetworkChangeNotifierLinux(ignored_interfaces));
 #else
-  scoped_ptr<net::NetworkChangeNotifier> network_change_notifier(
+  std::unique_ptr<net::NetworkChangeNotifier> network_change_notifier(
       net::NetworkChangeNotifier::Create());
 #endif
 
   // Use the network loop as the file loop also.
-  scoped_ptr<net::ProxyConfigService> proxy_config_service(
+  std::unique_ptr<net::ProxyConfigService> proxy_config_service(
       net::ProxyService::CreateSystemProxyConfigService(
           network_loop.task_runner(), network_loop.task_runner()));
 

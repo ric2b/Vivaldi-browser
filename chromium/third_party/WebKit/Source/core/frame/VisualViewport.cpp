@@ -33,6 +33,8 @@
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/PageScaleConstraints.h"
+#include "core/frame/PageScaleConstraintsSet.h"
 #include "core/frame/Settings.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/layout/LayoutView.h"
@@ -85,13 +87,13 @@ DEFINE_TRACE(VisualViewport)
     ScrollableArea::trace(visitor);
 }
 
-void VisualViewport::updateLayoutIgnorePendingStylesheets()
+void VisualViewport::updateStyleAndLayoutIgnorePendingStylesheets()
 {
     if (!mainFrame())
         return;
 
     if (Document* document = mainFrame()->document())
-        document->updateLayoutIgnorePendingStylesheets();
+        document->updateStyleAndLayoutIgnorePendingStylesheets();
 }
 
 void VisualViewport::enqueueChangedEvent()
@@ -211,49 +213,69 @@ void VisualViewport::setScale(float scale)
 
 double VisualViewport::scrollLeft()
 {
-    updateLayoutIgnorePendingStylesheets();
+    if (!mainFrame())
+        return 0;
 
-    return visibleRect().x();
+    updateStyleAndLayoutIgnorePendingStylesheets();
+
+    return adjustScrollForAbsoluteZoom(visibleRect().x(), mainFrame()->pageZoomFactor());
 }
 
 double VisualViewport::scrollTop()
 {
-    updateLayoutIgnorePendingStylesheets();
+    if (!mainFrame())
+        return 0;
 
-    return visibleRect().y();
+    updateStyleAndLayoutIgnorePendingStylesheets();
+
+    return adjustScrollForAbsoluteZoom(visibleRect().y(), mainFrame()->pageZoomFactor());
 }
 
 void VisualViewport::setScrollLeft(double x)
 {
-    updateLayoutIgnorePendingStylesheets();
+    if (!mainFrame())
+        return;
 
-    setLocation(FloatPoint(x, visibleRect().y()));
+    updateStyleAndLayoutIgnorePendingStylesheets();
+
+    setLocation(FloatPoint(x * mainFrame()->pageZoomFactor(), location().y()));
 }
 
 void VisualViewport::setScrollTop(double y)
 {
-    updateLayoutIgnorePendingStylesheets();
+    if (!mainFrame())
+        return;
 
-    setLocation(FloatPoint(visibleRect().x(), y));
+    updateStyleAndLayoutIgnorePendingStylesheets();
+
+    setLocation(FloatPoint(location().x(), y * mainFrame()->pageZoomFactor()));
 }
 
 double VisualViewport::clientWidth()
 {
-    updateLayoutIgnorePendingStylesheets();
+    if (!mainFrame())
+        return 0;
 
-    return visibleRect().width();
+    updateStyleAndLayoutIgnorePendingStylesheets();
+
+    double width = adjustScrollForAbsoluteZoom(visibleSize().width(), mainFrame()->pageZoomFactor());
+    return width - mainFrame()->view()->verticalScrollbarWidth();
 }
 
 double VisualViewport::clientHeight()
 {
-    updateLayoutIgnorePendingStylesheets();
+    if (!mainFrame())
+        return 0;
 
-    return visibleRect().height();
+    updateStyleAndLayoutIgnorePendingStylesheets();
+
+    double height = adjustScrollForAbsoluteZoom(visibleSize().height(), mainFrame()->pageZoomFactor());
+    return height - mainFrame()->view()->horizontalScrollbarHeight();
 }
 
 double VisualViewport::pageScale()
 {
-    updateLayoutIgnorePendingStylesheets();
+    updateStyleAndLayoutIgnorePendingStylesheets();
 
     return m_scale;
 }
@@ -485,7 +507,7 @@ void VisualViewport::registerLayersWithTreeView(WebLayerTreeView* layerTreeView)
 
 bool VisualViewport::visualViewportSuppliesScrollbars() const
 {
-    return frameHost().settings().viewportMetaEnabled();
+    return frameHost().settings().viewportEnabled();
 }
 
 bool VisualViewport::scrollAnimatorEnabled() const
@@ -545,7 +567,7 @@ DoublePoint VisualViewport::maximumScrollPositionDouble() const
     if (!mainFrame())
         return IntPoint();
 
-    // FIXME: We probably shouldn't be storing the bounds in a float. crbug.com/422331.
+    // TODO(bokan): We probably shouldn't be storing the bounds in a float. crbug.com/470718.
     FloatSize frameViewSize(contentsSize());
 
     if (m_topControlsAdjustment) {
@@ -557,7 +579,7 @@ DoublePoint VisualViewport::maximumScrollPositionDouble() const
     frameViewSize = FloatSize(flooredIntSize(frameViewSize));
 
     FloatSize viewportSize(m_size);
-    viewportSize.expand(0, m_topControlsAdjustment);
+    viewportSize.expand(0, ceilf(m_topControlsAdjustment));
 
     FloatSize maxPosition = frameViewSize - viewportSize;
     maxPosition.scale(1 / m_scale);

@@ -404,7 +404,7 @@ class SharedIsolateFactory {
 
  private:
   base::Lock lock_;
-  scoped_ptr<gin::IsolateHolder> holder_;
+  std::unique_ptr<gin::IsolateHolder> holder_;
   bool has_initialized_v8_;
 
   DISALLOW_COPY_AND_ASSIGN(SharedIsolateFactory);
@@ -507,21 +507,25 @@ class ProxyResolverV8::Context {
     // Attach the javascript bindings.
     v8::Local<v8::FunctionTemplate> alert_template =
         v8::FunctionTemplate::New(isolate_, &AlertCallback, v8_this);
+    alert_template->RemovePrototype();
     global_template->Set(ASCIILiteralToV8String(isolate_, "alert"),
                          alert_template);
 
     v8::Local<v8::FunctionTemplate> my_ip_address_template =
         v8::FunctionTemplate::New(isolate_, &MyIpAddressCallback, v8_this);
+    my_ip_address_template->RemovePrototype();
     global_template->Set(ASCIILiteralToV8String(isolate_, "myIpAddress"),
                          my_ip_address_template);
 
     v8::Local<v8::FunctionTemplate> dns_resolve_template =
         v8::FunctionTemplate::New(isolate_, &DnsResolveCallback, v8_this);
+    dns_resolve_template->RemovePrototype();
     global_template->Set(ASCIILiteralToV8String(isolate_, "dnsResolve"),
                          dns_resolve_template);
 
     v8::Local<v8::FunctionTemplate> is_plain_host_name_template =
         v8::FunctionTemplate::New(isolate_, &IsPlainHostNameCallback, v8_this);
+    is_plain_host_name_template->RemovePrototype();
     global_template->Set(ASCIILiteralToV8String(isolate_, "isPlainHostName"),
                          is_plain_host_name_template);
 
@@ -529,11 +533,13 @@ class ProxyResolverV8::Context {
 
     v8::Local<v8::FunctionTemplate> dns_resolve_ex_template =
         v8::FunctionTemplate::New(isolate_, &DnsResolveExCallback, v8_this);
+    dns_resolve_ex_template->RemovePrototype();
     global_template->Set(ASCIILiteralToV8String(isolate_, "dnsResolveEx"),
                          dns_resolve_ex_template);
 
     v8::Local<v8::FunctionTemplate> my_ip_address_ex_template =
         v8::FunctionTemplate::New(isolate_, &MyIpAddressExCallback, v8_this);
+    my_ip_address_ex_template->RemovePrototype();
     global_template->Set(ASCIILiteralToV8String(isolate_, "myIpAddressEx"),
                          my_ip_address_ex_template);
 
@@ -541,11 +547,13 @@ class ProxyResolverV8::Context {
         v8::FunctionTemplate::New(isolate_,
                                   &SortIpAddressListCallback,
                                   v8_this);
+    sort_ip_address_list_template->RemovePrototype();
     global_template->Set(ASCIILiteralToV8String(isolate_, "sortIpAddressList"),
                          sort_ip_address_list_template);
 
     v8::Local<v8::FunctionTemplate> is_in_net_ex_template =
         v8::FunctionTemplate::New(isolate_, &IsInNetExCallback, v8_this);
+    is_in_net_ex_template->RemovePrototype();
     global_template->Set(ASCIILiteralToV8String(isolate_, "isInNetEx"),
                          is_in_net_ex_template);
 
@@ -836,7 +844,7 @@ class ProxyResolverV8::Context {
 
 // ProxyResolverV8 ------------------------------------------------------------
 
-ProxyResolverV8::ProxyResolverV8(scoped_ptr<Context> context)
+ProxyResolverV8::ProxyResolverV8(std::unique_ptr<Context> context)
     : context_(std::move(context)) {
   DCHECK(context_);
 }
@@ -853,7 +861,7 @@ int ProxyResolverV8::GetProxyForURL(const GURL& query_url,
 int ProxyResolverV8::Create(
     const scoped_refptr<ProxyResolverScriptData>& script_data,
     ProxyResolverV8::JSBindings* js_bindings,
-    scoped_ptr<ProxyResolverV8>* resolver) {
+    std::unique_ptr<ProxyResolverV8>* resolver) {
   DCHECK(script_data.get());
   DCHECK(js_bindings);
 
@@ -861,7 +869,7 @@ int ProxyResolverV8::Create(
     return ERR_PAC_SCRIPT_FAILED;
 
   // Try parsing the PAC script.
-  scoped_ptr<Context> context(
+  std::unique_ptr<Context> context(
       new Context(g_isolate_factory.Get().GetSharedIsolate()));
   int rv = context->InitV8(script_data, js_bindings);
   if (rv == OK)

@@ -88,9 +88,9 @@ import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.KeyNavigationUtil;
 import org.chromium.chrome.browser.util.ViewUtils;
 import org.chromium.chrome.browser.widget.TintedImageButton;
+import org.chromium.chrome.browser.widget.animation.AnimatorProperties;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.content.browser.ContentViewCore;
-import org.chromium.content.browser.accessibility.BrowserAccessibilityManager;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.UiUtils;
@@ -215,10 +215,6 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
     private AnimatorSet mNavigationIconShowAnimator;
 
     private OmniboxPrerender mOmniboxPrerender;
-
-    private View mFocusedTabView;
-    private int mFocusedTabImportantForAccessibilityState;
-    private BrowserAccessibilityManager mFocusedTabAccessibilityManager;
 
     private boolean mSuggestionModalShown;
     private boolean mUseDarkColors;
@@ -587,6 +583,16 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
                 getSelectedView().setSelected(true);
             }
         }
+
+        private void updateSuggestionsLayoutDirection(int layoutDirection) {
+            if (!isShown()) return;
+
+            for (int i = 0; i < getChildCount(); i++) {
+                View childView = getChildAt(i);
+                if (!(childView instanceof SuggestionView)) continue;
+                ApiCompatibilityUtils.setLayoutDirection(childView, layoutDirection);
+            }
+        }
     }
 
     public LocationBarLayout(Context context, AttributeSet attrs) {
@@ -678,6 +684,10 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
             @Override
             public void onUrlDirectionChanged(int layoutDirection) {
                 ApiCompatibilityUtils.setLayoutDirection(LocationBarLayout.this, layoutDirection);
+
+                if (mSuggestionList != null) {
+                    mSuggestionList.updateSuggestionsLayoutDirection(layoutDirection);
+                }
             }
         });
 
@@ -818,11 +828,6 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
             mLocationBarIconActiveAnimator.setDuration(0);
         }
         mLocationBarIconActiveAnimator.start();
-    }
-
-    @Override
-    public void onUrlPreFocusChanged(boolean gainFocus) {
-      // TODO(mariakhomenko): remove from the interface entirely as it's unused
     }
 
     @Override
@@ -1757,7 +1762,8 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
             if (currentTab != null && currentTab.getWebContents() != null) {
                 Activity activity = currentTab.getWindowAndroid().getActivity().get();
                 if (activity != null) {
-                    WebsiteSettingsPopup.show(activity, currentTab, null);
+                    WebsiteSettingsPopup.show(
+                            activity, currentTab, null, WebsiteSettingsPopup.OPENED_FROM_TOOLBAR);
                 }
             }
         } else if (v == mMicButton) {
@@ -2115,46 +2121,16 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
 
     private void updateOmniboxResultsContainerVisibility(boolean visible) {
         boolean currentlyVisible = mOmniboxResultsContainer.getVisibility() == VISIBLE;
-        if (currentlyVisible == visible) {
-            // This early return is necessary. Otherwise, calling
-            // updateOmniboxResultsContainerVisibility(true) twice in a row will update
-            // mFocusedTabImportantForAccessibilityState incorrectly and cause
-            // mFocusedTabView to be stuck in IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS mode.
-            // http://crbug.com/445560
-            return;
-        }
+        if (currentlyVisible == visible) return;
+
+        ChromeActivity activity = (ChromeActivity) mWindowAndroid.getActivity().get();
 
         if (visible) {
             mOmniboxResultsContainer.setVisibility(VISIBLE);
-
-            if (getContentViewCore() != null) {
-                mFocusedTabAccessibilityManager =
-                        getContentViewCore().getBrowserAccessibilityManager();
-                if (mFocusedTabAccessibilityManager != null) {
-                    mFocusedTabAccessibilityManager.setVisible(false);
-                }
-            }
-
-            if (getCurrentTab() != null && getCurrentTab().getView() != null) {
-                mFocusedTabView = getCurrentTab().getView();
-                mFocusedTabImportantForAccessibilityState =
-                        mFocusedTabView.getImportantForAccessibility();
-                mFocusedTabView.setImportantForAccessibility(
-                        IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
-            }
+            if (activity != null) activity.addViewObscuringAllTabs(mOmniboxResultsContainer);
         } else {
             mOmniboxResultsContainer.setVisibility(INVISIBLE);
-
-            if (mFocusedTabAccessibilityManager != null) {
-                mFocusedTabAccessibilityManager.setVisible(true);
-                mFocusedTabAccessibilityManager = null;
-            }
-
-            if (mFocusedTabView != null) {
-                mFocusedTabView.setImportantForAccessibility(
-                        mFocusedTabImportantForAccessibilityState);
-                mFocusedTabView = null;
-            }
+            if (activity != null) activity.removeViewObscuringAllTabs(mOmniboxResultsContainer);
         }
     }
 
@@ -2189,7 +2165,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
         if (mFadeInOmniboxBackgroundAnimator == null) {
             mFadeInOmniboxBackgroundAnimator = ObjectAnimator.ofInt(
                     getRootView().findViewById(R.id.omnibox_results_container).getBackground(),
-                    "alpha", 0, 255);
+                    AnimatorProperties.DRAWABLE_ALPHA_PROPERTY, 0, 255);
             mFadeInOmniboxBackgroundAnimator.setDuration(OMNIBOX_CONTAINER_BACKGROUND_FADE_MS);
             mFadeInOmniboxBackgroundAnimator.setInterpolator(
                     BakedBezierInterpolator.FADE_IN_CURVE);
@@ -2201,7 +2177,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
         if (mFadeOutOmniboxBackgroundAnimator == null) {
             mFadeOutOmniboxBackgroundAnimator = ObjectAnimator.ofInt(
                     getRootView().findViewById(R.id.omnibox_results_container).getBackground(),
-                    "alpha", 255, 0);
+                    AnimatorProperties.DRAWABLE_ALPHA_PROPERTY, 255, 0);
             mFadeOutOmniboxBackgroundAnimator.setDuration(OMNIBOX_CONTAINER_BACKGROUND_FADE_MS);
             mFadeOutOmniboxBackgroundAnimator.setInterpolator(
                     BakedBezierInterpolator.FADE_OUT_CURVE);

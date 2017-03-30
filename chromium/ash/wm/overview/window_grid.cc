@@ -14,10 +14,11 @@
 #include "ash/screen_util.h"
 #include "ash/shell.h"
 #include "ash/shell_window_ids.h"
+#include "ash/wm/common/window_state.h"
 #include "ash/wm/overview/scoped_transform_overview_window.h"
 #include "ash/wm/overview/window_selector.h"
 #include "ash/wm/overview/window_selector_item.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "base/command_line.h"
 #include "base/i18n/string_search.h"
 #include "base/memory/scoped_vector.h"
@@ -25,6 +26,7 @@
 #include "ui/aura/window.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
+#include "ui/display/display.h"
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/views/background.h"
@@ -446,8 +448,8 @@ void WindowGrid::InitSelectionWidget(WindowSelector::Direction direction) {
   const gfx::Rect target_bounds = SelectedWindow()->target_bounds();
   gfx::Vector2d fade_out_direction =
           GetSlideVectorForFadeIn(direction, target_bounds);
-  gfx::Display dst_display =
-      gfx::Screen::GetScreen()->GetDisplayMatching(target_bounds);
+  display::Display dst_display =
+      display::Screen::GetScreen()->GetDisplayMatching(target_bounds);
   selection_widget_->GetNativeWindow()->SetBoundsInScreen(
       target_bounds - fade_out_direction, dst_display);
 }

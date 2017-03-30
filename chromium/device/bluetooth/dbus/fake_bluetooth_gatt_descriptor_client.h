@@ -8,10 +8,10 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "dbus/object_path.h"
@@ -85,7 +85,7 @@ class DEVICE_BLUETOOTH_EXPORT FakeBluetoothGattDescriptorClient
     DescriptorData();
     ~DescriptorData();
 
-    scoped_ptr<Properties> properties;
+    std::unique_ptr<Properties> properties;
   };
   typedef std::map<dbus::ObjectPath, DescriptorData*> PropertiesMap;
   PropertiesMap properties_;

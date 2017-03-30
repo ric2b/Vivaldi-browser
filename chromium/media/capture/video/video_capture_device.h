@@ -16,12 +16,12 @@
 #include <stdint.h>
 
 #include <list>
+#include <memory>
 #include <string>
 
 #include "base/files/file.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -93,6 +93,7 @@ class MEDIA_EXPORT VideoCaptureDevice {
          const CaptureApiType api_type,
          const TransportType transport_type);
 #endif
+    Name(const Name& other);
     ~Name();
 
     // Friendly name of a device
@@ -216,7 +217,7 @@ class MEDIA_EXPORT VideoCaptureDevice {
     //
     // The output buffer stays reserved and mapped for use until the Buffer
     // object is destroyed or returned.
-    virtual scoped_ptr<Buffer> ReserveOutputBuffer(
+    virtual std::unique_ptr<Buffer> ReserveOutputBuffer(
         const gfx::Size& dimensions,
         VideoPixelFormat format,
         VideoPixelStorage storage) = 0;
@@ -228,11 +229,11 @@ class MEDIA_EXPORT VideoCaptureDevice {
     // ReserveOutputBuffer(), delivery is guaranteed and will require no
     // additional copies in the browser process.
     virtual void OnIncomingCapturedBuffer(
-        scoped_ptr<Buffer> buffer,
+        std::unique_ptr<Buffer> buffer,
         const VideoCaptureFormat& frame_format,
         const base::TimeTicks& timestamp) = 0;
     virtual void OnIncomingCapturedVideoFrame(
-        scoped_ptr<Buffer> buffer,
+        std::unique_ptr<Buffer> buffer,
         const scoped_refptr<VideoFrame>& frame,
         const base::TimeTicks& timestamp) = 0;
 
@@ -241,7 +242,7 @@ class MEDIA_EXPORT VideoCaptureDevice {
     // Buffer has not been preserved, or if the |dimensions|, |format|, or
     // |storage| disagree with how it was reserved via ReserveOutputBuffer().
     // When this operation fails, nullptr will be returned.
-    virtual scoped_ptr<Buffer> ResurrectLastOutputBuffer(
+    virtual std::unique_ptr<Buffer> ResurrectLastOutputBuffer(
         const gfx::Size& dimensions,
         VideoPixelFormat format,
         VideoPixelStorage storage) = 0;
@@ -264,7 +265,7 @@ class MEDIA_EXPORT VideoCaptureDevice {
   // Prepares the video capturer for use. StopAndDeAllocate() must be called
   // before the object is deleted.
   virtual void AllocateAndStart(const VideoCaptureParams& params,
-                                scoped_ptr<Client> client) = 0;
+                                std::unique_ptr<Client> client) = 0;
 
   // In cases where the video capturer self-pauses (e.g., a screen capturer
   // where the screen's content has not changed in a while), consumers may call
@@ -297,6 +298,16 @@ class MEDIA_EXPORT VideoCaptureDevice {
   // would be sequenced through the same task runner, so that deallocation
   // happens first.
   virtual void StopAndDeAllocate() = 0;
+
+  // Asynchronously takes a photo, possibly reconfiguring the capture objects
+  // and/or interrupting the capture flow. Returns false if taking the picture
+  // could not be scheduled at all, or else runs |photo_callback| (on the thread
+  // where TakePhoto() is run).
+  using TakePhotoCallback =
+      base::Callback<void(const std::string&,
+                          std::unique_ptr<std::vector<uint8_t>>)>;
+  virtual bool TakePhoto(const TakePhotoCallback& photo_callback)
+      WARN_UNUSED_RESULT;
 
   // Gets the power line frequency, either from the params if specified by the
   // user or from the current system time zone.

@@ -9,7 +9,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/policy/cloud/user_cloud_policy_manager_factory.h"
@@ -54,7 +54,7 @@ void UserPolicySigninServiceBase::FetchPolicyForSignedInUser(
     const std::string& client_id,
     scoped_refptr<net::URLRequestContextGetter> profile_request_context,
     const PolicyFetchCallback& callback) {
-  scoped_ptr<CloudPolicyClient> client =
+  std::unique_ptr<CloudPolicyClient> client =
       UserCloudPolicyManager::CreateCloudPolicyClient(
           device_management_service_, profile_request_context);
   client->SetupRegistration(dm_token, client_id);
@@ -148,7 +148,7 @@ void UserPolicySigninServiceBase::PrepareForUserCloudPolicyManagerShutdown() {
     manager->core()->service()->RemoveObserver(this);
 }
 
-scoped_ptr<CloudPolicyClient>
+std::unique_ptr<CloudPolicyClient>
 UserPolicySigninServiceBase::CreateClientForRegistrationOnly(
     const std::string& username) {
   DCHECK(!username.empty());
@@ -158,7 +158,7 @@ UserPolicySigninServiceBase::CreateClientForRegistrationOnly(
   // If the user should not get policy, just bail out.
   if (!policy_manager() || !ShouldLoadPolicyForUser(username)) {
     DVLOG(1) << "Signed in user is not in the whitelist";
-    return scoped_ptr<CloudPolicyClient>();
+    return std::unique_ptr<CloudPolicyClient>();
   }
 
   // If the DeviceManagementService is not yet initialized, start it up now.
@@ -231,7 +231,7 @@ void UserPolicySigninServiceBase::InitializeForSignedInUser(
 
 void UserPolicySigninServiceBase::InitializeUserCloudPolicyManager(
     const std::string& username,
-    scoped_ptr<CloudPolicyClient> client) {
+    std::unique_ptr<CloudPolicyClient> client) {
   DCHECK(client);
   UserCloudPolicyManager* manager = policy_manager();
   manager->SetSigninUsername(username);

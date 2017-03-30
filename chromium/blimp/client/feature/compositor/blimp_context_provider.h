@@ -17,6 +17,10 @@
 #include "skia/ext/refptr.h"
 #include "ui/gl/gl_surface.h"
 
+namespace skia_bindings {
+class GrContextForGLES2Interface;
+}  // namespace skia_bindings
+
 namespace blimp {
 namespace client {
 
@@ -30,12 +34,11 @@ class BlimpContextProvider : public cc::ContextProvider {
   // cc::ContextProvider implementation.
   bool BindToCurrentThread() override;
   void DetachFromThread() override;
-  Capabilities ContextCapabilities() override;
+  gpu::Capabilities ContextCapabilities() override;
   gpu::gles2::GLES2Interface* ContextGL() override;
   gpu::ContextSupport* ContextSupport() override;
   class GrContext* GrContext() override;
   void InvalidateGrContext(uint32_t state) override;
-  void SetupLock() override;
   base::Lock* GetLock() override;
   void DeleteCachedResources() override;
   void SetLostContextCallback(
@@ -53,11 +56,8 @@ class BlimpContextProvider : public cc::ContextProvider {
   base::ThreadChecker main_thread_checker_;
   base::ThreadChecker context_thread_checker_;
 
-  base::Lock context_lock_;
   std::unique_ptr<gpu::GLInProcessContext> context_;
-  skia::RefPtr<class GrContext> gr_context_;
-
-  cc::ContextProvider::Capabilities capabilities_;
+  std::unique_ptr<skia_bindings::GrContextForGLES2Interface> gr_context_;
 
   LostContextCallback lost_context_callback_;
 

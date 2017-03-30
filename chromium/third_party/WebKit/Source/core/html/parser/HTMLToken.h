@@ -28,9 +28,8 @@
 
 #include "core/dom/Attribute.h"
 #include "core/html/parser/HTMLParserIdioms.h"
+#include "wtf/Forward.h"
 #include "wtf/PassOwnPtr.h"
-#include "wtf/RefCounted.h"
-#include "wtf/RefPtr.h"
 
 namespace blink {
 
@@ -257,7 +256,7 @@ public:
 
     PassOwnPtr<DoctypeData> releaseDoctypeData()
     {
-        return m_doctypeData.release();
+        return std::move(m_doctypeData);
     }
 
     /* Start/End Tag Tokens */

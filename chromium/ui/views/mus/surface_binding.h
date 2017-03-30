@@ -5,9 +5,10 @@
 #ifndef UI_VIEWS_MUS_SURFACE_BINDING_H_
 #define UI_VIEWS_MUS_SURFACE_BINDING_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "ui/views/mus/mus_export.h"
 
@@ -15,12 +16,12 @@ namespace cc {
 class OutputSurface;
 }
 
-namespace mojo {
-class Connector;
-}
-
 namespace mus {
 class Window;
+}
+
+namespace shell {
+class Connector;
 }
 
 namespace views {
@@ -32,14 +33,14 @@ namespace views {
 // connection.
 class VIEWS_MUS_EXPORT SurfaceBinding {
  public:
-  SurfaceBinding(mojo::Connector* connector,
+  SurfaceBinding(shell::Connector* connector,
                  mus::Window* window,
                  mus::mojom::SurfaceType surface_type);
   ~SurfaceBinding();
 
   // Creates an OutputSurface that renders to the Window supplied to the
   // constructor.
-  scoped_ptr<cc::OutputSurface> CreateOutputSurface();
+  std::unique_ptr<cc::OutputSurface> CreateOutputSurface();
 
  private:
   class PerConnectionState;

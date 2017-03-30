@@ -5,7 +5,9 @@
 #ifndef MEDIA_AUDIO_ALSA_AUDIO_MANAGER_ALSA_H_
 #define MEDIA_AUDIO_ALSA_AUDIO_MANAGER_ALSA_H_
 
+#include <memory>
 #include <string>
+
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -18,7 +20,10 @@ class AlsaWrapper;
 
 class MEDIA_EXPORT AudioManagerAlsa : public AudioManagerBase {
  public:
-  AudioManagerAlsa(AudioLogFactory* audio_log_factory);
+  AudioManagerAlsa(
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+      scoped_refptr<base::SingleThreadTaskRunner> worker_task_runner,
+      AudioLogFactory* audio_log_factory);
 
   static void ShowLinuxAudioInputSettings();
 
@@ -84,7 +89,7 @@ class MEDIA_EXPORT AudioManagerAlsa : public AudioManagerBase {
   AudioInputStream* MakeInputStream(const AudioParameters& params,
                                     const std::string& device_id);
 
-  scoped_ptr<AlsaWrapper> wrapper_;
+  std::unique_ptr<AlsaWrapper> wrapper_;
 
   DISALLOW_COPY_AND_ASSIGN(AudioManagerAlsa);
 };

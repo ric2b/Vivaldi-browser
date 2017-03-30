@@ -39,6 +39,7 @@ CSPSourceList::CSPSourceList(ContentSecurityPolicy* policy, const String& direct
     , m_allowInline(false)
     , m_allowEval(false)
     , m_allowDynamic(false)
+    , m_allowHashedAttributes(false)
     , m_hashAlgorithmsUsed(0)
 {
 }
@@ -87,6 +88,11 @@ bool CSPSourceList::allowNonce(const String& nonce) const
 bool CSPSourceList::allowHash(const CSPHashValue& hashValue) const
 {
     return m_hashes.contains(hashValue);
+}
+
+bool CSPSourceList::allowHashedAttributes() const
+{
+    return m_allowHashedAttributes;
 }
 
 uint8_t CSPSourceList::hashAlgorithmsUsed() const
@@ -170,8 +176,13 @@ bool CSPSourceList::parseSource(const UChar* begin, const UChar* end, String& sc
         return true;
     }
 
-    if (equalIgnoringCase("'unsafe-dynamic'", begin, end - begin)) {
-        addSourceUnsafeDynamic();
+    if (equalIgnoringCase("'strict-dynamic'", begin, end - begin)) {
+        addSourceStrictDynamic();
+        return true;
+    }
+
+    if (equalIgnoringCase("'unsafe-hashed-attributes'", begin, end - begin)) {
+        addSourceUnsafeHashedAttributes();
         return true;
     }
 
@@ -492,9 +503,14 @@ void CSPSourceList::addSourceUnsafeEval()
     m_allowEval = true;
 }
 
-void CSPSourceList::addSourceUnsafeDynamic()
+void CSPSourceList::addSourceStrictDynamic()
 {
     m_allowDynamic = true;
+}
+
+void CSPSourceList::addSourceUnsafeHashedAttributes()
+{
+    m_allowHashedAttributes = true;
 }
 
 void CSPSourceList::addSourceNonce(const String& nonce)

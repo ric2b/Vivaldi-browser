@@ -39,7 +39,7 @@ class MessageCenterButtonBar : public views::View,
 
   // Enables or disables all of the buttons in the center.  This is used to
   // prevent user clicks during the close-all animation.
-  virtual void SetAllButtonsEnabled(bool enabled);
+  void SetSettingsAndQuietModeButtonsEnabled(bool enabled);
 
   // Sometimes we shouldn't see the close-all button.
   void SetCloseAllButtonEnabled(bool enabled);
@@ -48,6 +48,9 @@ class MessageCenterButtonBar : public views::View,
 
   // Sometimes we shouldn't see the back arrow (not in settings).
   void SetBackArrowVisible(bool visible);
+
+  // Update the label of the title.
+  void SetTitle(const base::string16& title);
 
  private:
   // Updates the layout manager which can have differing configuration

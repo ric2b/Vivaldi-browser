@@ -19,7 +19,7 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
 {
   "name": "gpu driver bug list",
   // Please update the version number whenever you change this file.
-  "version": "8.66",
+  "version": "8.78",
   "entries": [
     {
       "id": 1,
@@ -1071,17 +1071,6 @@ LONG_STRING_CONST(
       ]
     },
     {
-      "id": 96,
-      "description": "glBindFramebuffer sometimes requires a glBegin/End to take effect",
-      "cr_bugs": [435786],
-      "os": {
-        "type": "macosx"
-      },
-      "features": [
-        "gl_begin_gl_end_on_fbo_change_to_backbuffer"
-      ]
-    },
-    {
       "id": 97,
       "description": "Multisampling has poor performance in Intel BayTrail",
       "cr_bugs": [443517],
@@ -1914,6 +1903,107 @@ LONG_STRING_CONST(
       ]
     },
     {
+      "id": 159,
+      "cr_bugs": [570897],
+      "description": "Framebuffer discarding can hurt performance on non-tilers",
+      "os": {
+        "type": "linux"
+      },
+      "vendor_id": "0x10de",
+      "gl_vendor": "NVIDIA.*",
+      "gl_type": "gl",
+      "features": [
+        "disable_discard_framebuffer"
+      ]
+    },
+    {
+      "id": 160,
+      "cr_bugs": [601753],
+      "description": "Framebuffer discarding not useful on NVIDIA Kepler architecture and later",
+      "os": {
+        "type": "linux"
+      },
+      "vendor_id": "0x10de",
+      "gl_vendor": "NVIDIA.*",
+      "gl_type": "gles",
+      "gl_version": {
+        "op": ">=",
+        "value": "3.0"
+      },
+      "features": [
+        "disable_discard_framebuffer"
+      ]
+    },
+    {
+      "id": 161,
+      "cr_bugs": [601753],
+      "description": "Framebuffer discarding not useful on NVIDIA Kepler architecture and later",
+      "os": {
+        "type": "chromeos"
+      },
+      "vendor_id": "0x10de",
+      "gl_vendor": "NVIDIA.*",
+      "gl_type": "gles",
+      "gl_version": {
+        "op": ">=",
+        "value": "3.0"
+      },
+      "features": [
+        "disable_discard_framebuffer"
+      ]
+    },
+    {
+      "id": 162,
+      "cr_bugs": [601753],
+      "description": "Framebuffer discarding not useful on NVIDIA Kepler architecture and later",
+      "os": {
+        "type": "android"
+      },
+      "gl_vendor": "NVIDIA.*",
+      "gl_type": "gles",
+      "gl_version": {
+        "op": ">=",
+        "value": "3.0"
+      },
+      "features": [
+        "disable_discard_framebuffer"
+      ]
+    },
+    {
+      "id": 163,
+      "cr_bugs": [607130],
+      "description": "Multisample renderbuffers with format GL_RGB8 have performance issues on Intel GPUs.",
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x8086",
+      "features": [
+        "disable_webgl_rgb_multisampling_usage"
+      ]
+    },
+    {
+      "id": 164,
+      "cr_bugs": [595948],
+      "description": "glColorMask does not work for multisample renderbuffers on old AMD GPUs.",
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x1002",
+      "device_id": ["0x68b8"],
+      "features": [
+        "disable_webgl_multisampling_color_mask_usage"
+      ]
+    },
+    {
+      "id": 165,
+      "cr_bugs": [596774],
+      "description": "Unpacking overlapping rows from unpack buffers is unstable on NVIDIA GL driver",
+      "gl_vendor": "NVIDIA.*",
+      "features": [
+        "unpack_overlapping_rows_separately_unpack_buffer"
+      ]
+    },
+    {
       "id": 166,
       "cr_bugs": [612474],
       "description": "Crash reports for glDiscardFramebuffer on Adreno 530",
@@ -1923,6 +2013,65 @@ LONG_STRING_CONST(
       },
       "features": [
         "disable_discard_framebuffer"
+      ]
+    },
+    {
+      "id": 167,
+      "cr_bugs": [610516],
+      "description": "glEGLImageTargetTexture2DOES crashes on Mali-400",
+      "os": {
+        "type": "android"
+      },
+      "gl_vendor": "ARM.*",
+      "gl_renderer": ".*Mali-4.*",
+      "features": [
+        "avda_dont_copy_pictures"
+      ]
+    },
+    {
+      "id": 168,
+      "description": "VirtualBox driver doesn't correctly support partial swaps.",
+      "cr_bugs": [613722],
+      "os": {
+        "type": "linux"
+      },
+      "vendor_id": "0x80ee",
+      "features": [
+        "disable_post_sub_buffers_for_onscreen_surfaces"
+      ]
+    },
+    {
+      "id": 174,
+      "description": "Adreno 4xx support for EXT_multisampled_render_to_texture is buggy on Android 7.0",
+      "cr_bugs": [612474],
+      "os": {
+        "type": "android",
+        "version": {
+          "op": "between",
+          "value": "7.0.0",
+          "value2": "7.0.99"
+          // Only initial version of N.
+        }
+      },
+      "gl_renderer": "Adreno \\(TM\\) 4.*",
+      "disabled_extensions": [
+        "GL_EXT_multisampled_render_to_texture"
+      ]
+    },
+    {
+      "id": 175,
+      "description": "Adreno 5xx support for EXT_multisampled_render_to_texture is buggy on Android < 7.0",
+      "cr_bugs": [612474],
+      "os": {
+        "type": "android",
+        "version": {
+          "op": "<",
+          "value": "7.0"
+        }
+      },
+      "gl_renderer": "Adreno \\(TM\\) 5.*",
+      "disabled_extensions": [
+        "GL_EXT_multisampled_render_to_texture"
       ]
     }
   ]

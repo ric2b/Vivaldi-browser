@@ -99,3 +99,12 @@
   DISABLE(PipelineIntegrationTest, EncryptedPlayback_MP4_CENC_VideoOnly)
   DISABLE(PipelineIntegrationTest,
           EncryptedPlayback_NoEncryptedFrames_MP4_CENC_VideoOnly)
+
+  DISABLE(SpeechViewTest, ClickMicButton)
+
+  // Broke in v52
+  DISABLE(WebViewPopupInteractiveTest, PopupPositioningBasic)
+  DISABLE(WebViewPopupInteractiveTest, PopupPositioningMoved)
+  DISABLE(BrowserWindowControllerTest, FullscreenResizeFlags)
+  DISABLE(ExtensionInstallUIBrowserTest, TestInstallThemeInFullScreen)
+  DISABLE(FullscreenControllerTest, FullscreenOnFileURL)

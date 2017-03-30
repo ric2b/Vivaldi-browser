@@ -12,10 +12,15 @@
 #include <vector>
 
 #include "components/mus/common/types.h"
+#include "components/mus/public/interfaces/input_event_constants.mojom.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 
-namespace mojo {
+namespace gfx {
+class Point;
+}
+
+namespace shell {
 class Connector;
 }
 
@@ -43,7 +48,7 @@ class WindowTreeConnection {
   // Creates a WindowTreeConnection with no roots. Use this to establish a
   // connection directly to mus and create top level windows.
   static WindowTreeConnection* Create(WindowTreeDelegate* delegate,
-                                      mojo::Connector* connector);
+                                      shell::Connector* connector);
 
   // Creates a WindowTreeConnection to service the specified request for
   // a WindowTreeClient. Use this to be embedded in another app.
@@ -66,9 +71,6 @@ class WindowTreeConnection {
   // Returns the root of this connection.
   virtual const std::set<Window*>& GetRoots() = 0;
 
-  // Returns a Window known to this connection.
-  virtual Window* GetWindowById(Id id) = 0;
-
   // Returns the Window with input capture; null if no window has requested
   // input capture, or if another app has capture.
   virtual Window* GetCaptureWindow() = 0;
@@ -80,6 +82,15 @@ class WindowTreeConnection {
   // Sets focus to null. This does nothing if focus is currently null.
   virtual void ClearFocus() = 0;
 
+  // Returns the current location of the mouse on screen. Note: this method may
+  // race the asynchronous initialization; but in that case we return (0, 0).
+  virtual gfx::Point GetCursorScreenPoint() = 0;
+
+  // See description in window_tree.mojom. When an existing event observer is
+  // updated or cleared then any future events from the server for that observer
+  // will be ignored.
+  virtual void SetEventObserver(mojom::EventMatcherPtr matcher) = 0;
+
   // Creates and returns a new Window (which is owned by the window server).
   // Windows are initially hidden, use SetVisible(true) to show.
   Window* NewWindow() { return NewWindow(nullptr); }
@@ -87,10 +98,6 @@ class WindowTreeConnection {
       const std::map<std::string, std::vector<uint8_t>>* properties) = 0;
   virtual Window* NewTopLevelWindow(
       const std::map<std::string, std::vector<uint8_t>>* properties) = 0;
-
-  // Returns the id for this connection.
-  // TODO(sky): remove this. It is not necessarily correct anymore.
-  virtual ConnectionSpecificId GetConnectionId() = 0;
 
   virtual void AddObserver(WindowTreeConnectionObserver* observer) = 0;
   virtual void RemoveObserver(WindowTreeConnectionObserver* observer) = 0;

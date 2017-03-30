@@ -23,6 +23,7 @@
 #define ProcessingInstruction_h
 
 #include "core/dom/CharacterData.h"
+#include "core/dom/StyleEngineContext.h"
 #include "core/fetch/ResourceOwner.h"
 #include "core/fetch/StyleSheetResource.h"
 #include "core/fetch/StyleSheetResourceClient.h"
@@ -37,7 +38,7 @@ class ProcessingInstruction final : public CharacterData, private ResourceOwner<
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(ProcessingInstruction);
 public:
-    static RawPtr<ProcessingInstruction> create(Document&, const String& target, const String& data);
+    static ProcessingInstruction* create(Document&, const String& target, const String& data);
     ~ProcessingInstruction() override;
     DECLARE_VIRTUAL_TRACE();
 
@@ -62,7 +63,7 @@ public:
         DEFINE_INLINE_VIRTUAL_TRACE() { }
     };
 
-    void setEventListenerForXSLT(RawPtr<DetachableEventListener> listener) { m_listenerForXSLT = listener; }
+    void setEventListenerForXSLT(DetachableEventListener* listener) { m_listenerForXSLT = listener; }
     EventListener* eventListenerForXSLT();
     void clearEventListenerForXSLT();
 
@@ -71,7 +72,7 @@ private:
 
     String nodeName() const override;
     NodeType getNodeType() const override;
-    RawPtr<Node> cloneNode(bool deep) override;
+    Node* cloneNode(bool deep) override;
 
     InsertionNotificationRequest insertedInto(ContainerNode*) override;
     void removedFrom(ContainerNode*) override;
@@ -94,6 +95,7 @@ private:
     String m_title;
     String m_media;
     Member<StyleSheet> m_sheet;
+    StyleEngineContext m_styleEngineContext;
     bool m_loading;
     bool m_alternate;
     bool m_isCSS;

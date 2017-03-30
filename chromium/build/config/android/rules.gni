@@ -66,12 +66,6 @@ template("generate_jni") {
       rebase_path(jni_generator_include, jni_output_dir),
       "--native_exports_optional",
     ]
-    if (defined(invoker.jni_generator_jarjar_file)) {
-      args += [
-        "--jarjar",
-        rebase_path(jni_generator_jarjar_file, root_build_dir),
-      ]
-    }
   }
 
   config("jni_includes_${target_name}") {
@@ -85,13 +79,15 @@ template("generate_jni") {
   }
 
   group(target_name) {
-    public_deps = []
     forward_variables_from(invoker,
                            [
                              "deps",
                              "public_deps",
                              "visibility",
                            ])
+    if (!defined(public_deps)) {
+      public_deps = []
+    }
     public_deps += [ ":$foreach_target_name" ]
     public_configs = [ ":jni_includes_${target_name}" ]
   }
@@ -388,7 +384,11 @@ template("jinja_template") {
   assert(defined(invoker.output))
 
   action(target_name) {
-    forward_variables_from(invoker, [ "visibility" ])
+    forward_variables_from(invoker,
+                           [
+                             "visibility",
+                             "deps",
+                           ])
 
     sources = [
       invoker.input,
@@ -633,7 +633,6 @@ template("android_resources") {
 
   process_resources(process_resources_target_name) {
     visibility = [ ":$final_target_name" ]
-    deps = []
     forward_variables_from(invoker,
                            [
                              "app_as_shared_lib",
@@ -646,6 +645,9 @@ template("android_resources") {
                              "shared_resources",
                              "v14_skip",
                            ])
+    if (!defined(deps)) {
+      deps = []
+    }
     deps += [ ":$build_config_target_name" ]
 
     # Always generate R.onResourcesLoaded() method, it is required for
@@ -904,7 +906,8 @@ template("java_strings_grd_prebuilt") {
 #     android_library target, for example.
 #   chromium_code: If true, extra analysis warning/errors will be enabled.
 #   enable_errorprone: If true, enables the errorprone compiler.
-#   enable_incremental_javac: Overrides the global enable_incremental_javac.
+#   enable_incremental_javac_override: Overrides the
+#     global enable_incremental_javac.
 #   main_class: When specified, a wrapper script is created within
 #     $root_build_dir/bin to launch the binary with the given class as the
 #     entrypoint.
@@ -1003,7 +1006,8 @@ template("junit_binary") {
 #
 #   chromium_code: If true, extra analysis warning/errors will be enabled.
 #   enable_errorprone: If true, enables the errorprone compiler.
-#   enable_incremental_javac: Overrides the global enable_incremental_javac.
+#   enable_incremental_javac_override: Overrides the global
+#     enable_incremental_javac.
 #
 #   jar_excluded_patterns: List of patterns of .class files to exclude from the
 #     final jar.
@@ -1092,7 +1096,8 @@ template("java_prebuilt") {
 #
 #   chromium_code: If true, extra analysis warning/errors will be enabled.
 #   enable_errorprone: If true, enables the errorprone compiler.
-#   enable_incremental_javac: Overrides the global enable_incremental_javac.
+#   enable_incremental_javac_override: Overrides the global
+#     enable_incremental_javac.
 #
 #   jar_excluded_patterns: List of patterns of .class files to exclude from the
 #     final jar.
@@ -1204,6 +1209,7 @@ template("android_java_prebuilt") {
     forward_variables_from(invoker, "*")
     supports_android = true
     requires_android = true
+    strip_resource_classes = true
   }
 }
 
@@ -1265,6 +1271,8 @@ template("android_java_prebuilt") {
 #     installation only on Android M or later. In these releases the system
 #     linker does relocation unpacking, so we can enable it unconditionally.
 #   secondary_native_libs: the path of native libraries for secondary app abi.
+#   run_findbugs_override: Forces run_findbugs on or off. If undefined, the
+#     default will use the build arg run_findbugs.
 #
 # Example
 #   android_apk("foo_apk") {
@@ -1548,23 +1556,18 @@ template("android_apk") {
 
   java_target = "${_template_name}__java"
   java_library_impl(java_target) {
-    forward_variables_from(invoker, [ "run_findbugs" ])
+    forward_variables_from(invoker,
+                           [
+                             "chromium_code",
+                             "java_files",
+                             "run_findbugs_override",
+                           ])
     supports_android = true
     requires_android = true
     override_build_config = _build_config
     deps = _android_manifest_deps + [ ":$build_config_target" ]
 
     android_manifest = _android_manifest
-    chromium_code = true
-    if (defined(invoker.chromium_code)) {
-      chromium_code = invoker.chromium_code
-    }
-
-    if (defined(invoker.java_files)) {
-      java_files = invoker.java_files
-    } else {
-      java_files = []
-    }
     srcjar_deps = _srcjar_deps
     jar_path = _jar_path
     dex_path = _lib_dex_path
@@ -1593,6 +1596,9 @@ template("android_apk") {
       outputs = [
         depfile,
         "${_dist_ijar_path}",
+      ]
+      data = [
+        _dist_ijar_path,
       ]
       args = [
         "--depfile",
@@ -1657,7 +1663,6 @@ template("android_apk") {
   }
 
   dex("$final_dex_target_name") {
-    forward_variables_from(invoker, [ "enable_multidex" ])
     deps = _dex_deps + [ ":$build_config_target" ]
     inputs = [
       _build_config,
@@ -1748,7 +1753,6 @@ template("android_apk") {
 
   _final_deps += [ ":${_template_name}__create" ]
   create_apk("${_template_name}__create") {
-    deps = []
     forward_variables_from(invoker,
                            [
                              "alternative_android_sdk_jar",
@@ -1764,6 +1768,9 @@ template("android_apk") {
                              "uncompress_shared_libraries",
                              "write_asset_list",
                            ])
+    if (!defined(deps)) {
+      deps = []
+    }
     apk_path = _final_apk_path
     android_manifest = _android_manifest
     assets_build_config = _build_config
@@ -1927,12 +1934,14 @@ template("android_apk") {
     public_deps = _final_deps
   }
   group("${target_name}_incremental") {
-    data_deps = []
     forward_variables_from(invoker,
                            [
                              "data",
                              "data_deps",
                            ])
+    if (!defined(data_deps)) {
+      data_deps = []
+    }
 
     # device/commands is used by the installer script to push files via .zip.
     data_deps += [ "//build/android/pylib/device/commands" ] +
@@ -2035,8 +2044,11 @@ template("instrumentation_test_apk") {
     }
 
     create_dist_ijar = true
-    run_findbugs = defined(invoker.run_findbugs) && invoker.run_findbugs &&
-                   defined(invoker.java_files)
+    if (defined(invoker.run_findbugs_override)) {
+      # Only allow findbugs when there are java files.
+      run_findbugs_override =
+          invoker.run_findbugs_override && defined(invoker.java_files)
+    }
   }
 
   group(target_name) {
@@ -2050,6 +2062,24 @@ template("instrumentation_test_apk") {
     if (defined(invoker.apk_under_test)) {
       public_deps += [ invoker.apk_under_test ]
     }
+    if (defined(invoker.isolate_file)) {
+      isolate_values = exec_script("//build/gypi_to_gn.py",
+                                   [
+                                     rebase_path(invoker.isolate_file),
+                                     "--replace",
+                                     "<(DEPTH)=/",
+                                   ],
+                                   "scope",
+                                   [ invoker.isolate_file ])
+      data = isolate_values.files
+    }
+  }
+
+  # TODO: Delete once recipes no longer use this target.
+  group("${target_name}_run") {
+    public_deps = [
+      ":${invoker.target_name}",
+    ]
   }
   group("${target_name}_incremental") {
     public_deps = [
@@ -2120,12 +2150,7 @@ template("unittest_apk") {
     final_apk_path = "$root_build_dir/${apk_name}_apk/${apk_name}-debug.apk"
 
     if (!defined(use_default_launcher) || use_default_launcher) {
-      java_files = [
-        "//testing/android/native_test/java/src/org/chromium/native_test/NativeBrowserTestActivity.java",
-        "//testing/android/native_test/java/src/org/chromium/native_test/NativeTestActivity.java",
-        "//testing/android/native_test/java/src/org/chromium/native_test/NativeUnitTestActivity.java",
-        "//testing/android/native_test/java/src/org/chromium/native_test/NativeTestInstrumentationTestRunner.java",
-      ]
+      deps += [ "//testing/android/native_test:native_test_java" ]
     }
     native_libs = [ unittests_binary ]
     deps += [
@@ -2282,6 +2307,9 @@ template("create_native_executable_dist") {
     ]
 
     dest = invoker.dist_dir
+    data = [
+      "${invoker.dist_dir}/",
+    ]
 
     _rebased_libraries_list = rebase_path(_libraries_list, root_build_dir)
     _rebased_binaries_list = rebase_path([ invoker.binary ], root_build_dir)

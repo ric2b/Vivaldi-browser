@@ -15,8 +15,8 @@
 #include "base/strings/pattern.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/platform_thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
@@ -116,7 +116,7 @@ void MockHostResolverBase::CancelRequest(RequestHandle handle) {
   size_t id = reinterpret_cast<size_t>(handle);
   RequestMap::iterator it = requests_.find(id);
   if (it != requests_.end()) {
-    scoped_ptr<Request> req(it->second);
+    std::unique_ptr<Request> req(it->second);
     requests_.erase(it);
   } else {
     NOTREACHED() << "CancelRequest must NOT be called after request is "
@@ -175,9 +175,9 @@ int MockHostResolverBase::ResolveFromIPLiteralOrCache(const RequestInfo& info,
                        info.host_resolver_flags());
     const HostCache::Entry* entry = cache_->Lookup(key, base::TimeTicks::Now());
     if (entry) {
-      rv = entry->error;
+      rv = entry->error();
       if (rv == OK)
-        *addresses = AddressList::CopyWithPort(entry->addrlist, info.port());
+        *addresses = AddressList::CopyWithPort(entry->addresses(), info.port());
     }
   }
   return rv;
@@ -212,7 +212,7 @@ void MockHostResolverBase::ResolveNow(size_t id) {
   if (it == requests_.end())
     return;  // was canceled
 
-  scoped_ptr<Request> req(it->second);
+  std::unique_ptr<Request> req(it->second);
   requests_.erase(it);
   int rv = ResolveProc(id, req->info, req->addresses);
   if (!req->callback.is_null())

@@ -4,7 +4,6 @@
 #include <vector>
 
 #include "base/files/file_util.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/md5.h"
 #include "base/sha1.h"
 #include "base/strings/string16.h"
@@ -101,7 +100,7 @@ bool DecryptMasterPasswordKeys(const std::string &password,
   memcpy(iv, res1.a+8, 8);
   memset(res1.a,0,sizeof(res1.a));
 
-  scoped_ptr<crypto::SymmetricKey> dec_key(
+  std::unique_ptr<crypto::SymmetricKey> dec_key(
     crypto::SymmetricKey::Import(crypto::SymmetricKey::DES_EDE3,
                                  key, sizeof(key)));
   memset(key,0,sizeof(key));
@@ -288,7 +287,7 @@ bool WandReadEncryptedField(std::string::iterator &buffer,
     key.append((char *) res1.a, sizeof(res1.a));
     key.append((char *) res2.a, 3*8-sizeof(res2.a));
 
-    scoped_ptr<crypto::SymmetricKey> dec_key(
+    std::unique_ptr<crypto::SymmetricKey> dec_key(
           crypto::SymmetricKey::Import(crypto::SymmetricKey::DES_EDE3, key));
 
     crypto::Encryptor decryptor;

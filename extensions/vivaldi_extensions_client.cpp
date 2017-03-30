@@ -42,10 +42,10 @@ VivaldiExtensionsClient::GetAPISchema(const std::string& name) const {
 }
 
 
-scoped_ptr<JSONFeatureProviderSource>
+std::unique_ptr<JSONFeatureProviderSource>
 VivaldiExtensionsClient::CreateFeatureProviderSource(
     const std::string& name) const {
-  scoped_ptr<JSONFeatureProviderSource> source(
+  std::unique_ptr<JSONFeatureProviderSource> source(
       ChromeExtensionsClient::CreateFeatureProviderSource(name));
   DCHECK(source);
 

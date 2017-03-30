@@ -11,6 +11,7 @@
 #include "public/platform/WebViewScheduler.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "wtf/RefCounted.h"
 #include <queue>
 
 using testing::ElementsAre;
@@ -188,8 +189,8 @@ public:
     std::unique_ptr<WebViewScheduler> createWebViewScheduler(blink::WebView*) override { return nullptr; }
     void suspendTimerQueue() override { }
     void resumeTimerQueue() override { }
-    void addPendingNavigation() override { }
-    void removePendingNavigation() override { }
+    void addPendingNavigation(WebScheduler::NavigatingFrameType) override { }
+    void removePendingNavigation(WebScheduler::NavigatingFrameType) override { }
     void onNavigationStarted() override { }
 
 private:

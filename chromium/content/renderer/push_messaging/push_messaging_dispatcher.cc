@@ -67,7 +67,8 @@ void PushMessagingDispatcher::DidGetManifest(
     blink::WebServiceWorkerRegistration* service_worker_registration,
     const blink::WebPushSubscriptionOptions& options,
     blink::WebPushSubscriptionCallbacks* callbacks,
-    const Manifest& manifest) {
+    const Manifest& manifest,
+    const ManifestDebugInfo&) {
   // Get the sender_info from the manifest since it wasn't provided by
   // the caller.
   if (manifest.IsEmpty()) {
@@ -102,8 +103,8 @@ void PushMessagingDispatcher::DoSubscribe(
                                  PUSH_REGISTRATION_STATUS_NO_SENDER_ID);
     return;
   }
-  Send(new PushMessagingHostMsg_SubscribeFromDocument(
-      routing_id(), request_id, options, service_worker_registration_id));
+  Send(new PushMessagingHostMsg_Subscribe(
+      routing_id(), request_id, service_worker_registration_id, options));
 }
 
 void PushMessagingDispatcher::OnSubscribeFromDocumentSuccess(

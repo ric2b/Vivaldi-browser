@@ -12,7 +12,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_response_headers.h"
@@ -72,16 +72,16 @@ void URLRequestSlowDownloadJob::AddUrlHandler() {
   URLRequestFilter* filter = URLRequestFilter::GetInstance();
   filter->AddUrlInterceptor(
       GURL(kUnknownSizeUrl),
-      scoped_ptr<URLRequestInterceptor>(new Interceptor()));
+      std::unique_ptr<URLRequestInterceptor>(new Interceptor()));
   filter->AddUrlInterceptor(
       GURL(kKnownSizeUrl),
-      scoped_ptr<URLRequestInterceptor>(new Interceptor()));
+      std::unique_ptr<URLRequestInterceptor>(new Interceptor()));
   filter->AddUrlInterceptor(
       GURL(kFinishDownloadUrl),
-      scoped_ptr<URLRequestInterceptor>(new Interceptor()));
+      std::unique_ptr<URLRequestInterceptor>(new Interceptor()));
   filter->AddUrlInterceptor(
       GURL(kErrorDownloadUrl),
-      scoped_ptr<URLRequestInterceptor>(new Interceptor()));
+      std::unique_ptr<URLRequestInterceptor>(new Interceptor()));
 }
 
 // static

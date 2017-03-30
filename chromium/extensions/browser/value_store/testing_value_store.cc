@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 
 namespace {
 
@@ -56,23 +57,23 @@ ValueStore::ReadResult TestingValueStore::Get(
       it != keys.end(); ++it) {
     base::Value* value = NULL;
     if (storage_.GetWithoutPathExpansion(*it, &value)) {
-      settings->SetWithoutPathExpansion(*it, value->DeepCopy());
+      settings->SetWithoutPathExpansion(*it, value->CreateDeepCopy());
     }
   }
-  return MakeReadResult(make_scoped_ptr(settings), status_);
+  return MakeReadResult(base::WrapUnique(settings), status_);
 }
 
 ValueStore::ReadResult TestingValueStore::Get() {
   read_count_++;
   if (!status_.ok())
     return MakeReadResult(status_);
-  return MakeReadResult(make_scoped_ptr(storage_.DeepCopy()), status_);
+  return MakeReadResult(storage_.CreateDeepCopy(), status_);
 }
 
 ValueStore::WriteResult TestingValueStore::Set(
     WriteOptions options, const std::string& key, const base::Value& value) {
   base::DictionaryValue settings;
-  settings.SetWithoutPathExpansion(key, value.DeepCopy());
+  settings.SetWithoutPathExpansion(key, value.CreateDeepCopy());
   return Set(options, settings);
 }
 
@@ -82,18 +83,16 @@ ValueStore::WriteResult TestingValueStore::Set(
   if (!status_.ok())
     return MakeWriteResult(status_);
 
-  scoped_ptr<ValueStoreChangeList> changes(new ValueStoreChangeList());
+  std::unique_ptr<ValueStoreChangeList> changes(new ValueStoreChangeList());
   for (base::DictionaryValue::Iterator it(settings);
        !it.IsAtEnd(); it.Advance()) {
     base::Value* old_value = NULL;
     if (!storage_.GetWithoutPathExpansion(it.key(), &old_value) ||
         !old_value->Equals(&it.value())) {
-      changes->push_back(
-          ValueStoreChange(
-              it.key(),
-              old_value ? old_value->DeepCopy() : old_value,
-              it.value().DeepCopy()));
-      storage_.SetWithoutPathExpansion(it.key(), it.value().DeepCopy());
+      changes->push_back(ValueStoreChange(
+          it.key(), old_value ? old_value->CreateDeepCopy() : nullptr,
+          it.value().CreateDeepCopy()));
+      storage_.SetWithoutPathExpansion(it.key(), it.value().CreateDeepCopy());
     }
   }
   return MakeWriteResult(std::move(changes), status_);
@@ -109,12 +108,12 @@ ValueStore::WriteResult TestingValueStore::Remove(
   if (!status_.ok())
     return MakeWriteResult(status_);
 
-  scoped_ptr<ValueStoreChangeList> changes(new ValueStoreChangeList());
+  std::unique_ptr<ValueStoreChangeList> changes(new ValueStoreChangeList());
   for (std::vector<std::string>::const_iterator it = keys.begin();
       it != keys.end(); ++it) {
-    scoped_ptr<base::Value> old_value;
+    std::unique_ptr<base::Value> old_value;
     if (storage_.RemoveWithoutPathExpansion(*it, &old_value)) {
-      changes->push_back(ValueStoreChange(*it, old_value.release(), NULL));
+      changes->push_back(ValueStoreChange(*it, std::move(old_value), nullptr));
     }
   }
   return MakeWriteResult(std::move(changes), status_);

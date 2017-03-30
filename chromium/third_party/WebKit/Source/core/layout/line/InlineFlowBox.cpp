@@ -460,13 +460,15 @@ FontBaseline InlineFlowBox::dominantBaseline() const
 
 void InlineFlowBox::adjustMaxAscentAndDescent(int& maxAscent, int& maxDescent, int maxPositionTop, int maxPositionBottom)
 {
+    int originalMaxAscent = maxAscent;
+    int originalMaxDescent = maxDescent;
     for (InlineBox* curr = firstChild(); curr; curr = curr->nextOnLine()) {
         // The computed lineheight needs to be extended for the
         // positioned elements
         if (curr->getLineLayoutItem().isOutOfFlowPositioned())
             continue; // Positioned placeholders don't affect calculations.
         if (curr->verticalAlign() == VerticalAlignTop || curr->verticalAlign() == VerticalAlignBottom) {
-            int lineHeight = curr->lineHeight();
+            int lineHeight = curr->lineHeight().round();
             if (curr->verticalAlign() == VerticalAlignTop) {
                 if (maxAscent + maxDescent < lineHeight)
                     maxDescent = lineHeight - maxAscent;
@@ -477,6 +479,8 @@ void InlineFlowBox::adjustMaxAscentAndDescent(int& maxAscent, int& maxDescent, i
 
             if (maxAscent + maxDescent >= std::max(maxPositionTop, maxPositionBottom))
                 break;
+            maxAscent = originalMaxAscent;
+            maxDescent = originalMaxDescent;
         }
 
         if (curr->isInlineFlowBox())
@@ -948,7 +952,7 @@ void InlineFlowBox::setLayoutOverflow(const LayoutRect& rect, const LayoutRect& 
         return;
 
     if (!m_overflow)
-        m_overflow = adoptPtr(new OverflowModel(frameBox, frameBox));
+        m_overflow = adoptPtr(new SimpleOverflowModel(frameBox, frameBox));
 
     m_overflow->setLayoutOverflow(rect);
 }
@@ -960,7 +964,7 @@ void InlineFlowBox::setVisualOverflow(const LayoutRect& rect, const LayoutRect& 
         return;
 
     if (!m_overflow)
-        m_overflow = adoptPtr(new OverflowModel(frameBox, frameBox));
+        m_overflow = adoptPtr(new SimpleOverflowModel(frameBox, frameBox));
 
     m_overflow->setVisualOverflow(rect);
 }
@@ -1232,7 +1236,7 @@ LayoutUnit InlineFlowBox::computeUnderAnnotationAdjustment(LayoutUnit allowedPos
     return result;
 }
 
-void InlineFlowBox::collectLeafBoxesInLogicalOrder(Vector<InlineBox*>& leafBoxesInLogicalOrder, CustomInlineBoxRangeReverse customReverseImplementation, void* userData) const
+void InlineFlowBox::collectLeafBoxesInLogicalOrder(Vector<InlineBox*>& leafBoxesInLogicalOrder, CustomInlineBoxRangeReverse customReverseImplementation) const
 {
     InlineBox* leaf = firstLeafChild();
 
@@ -1275,12 +1279,10 @@ void InlineFlowBox::collectLeafBoxesInLogicalOrder(Vector<InlineBox*>& leafBoxes
                 ++it;
             }
             Vector<InlineBox*>::iterator last = it;
-            if (customReverseImplementation) {
-                ASSERT(userData);
-                (*customReverseImplementation)(userData, first, last);
-            } else {
+            if (customReverseImplementation)
+                (*customReverseImplementation)(first, last);
+            else
                 std::reverse(first, last);
-            }
         }
         ++minLevel;
     }

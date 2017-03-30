@@ -24,6 +24,8 @@ component("ash") {
   public_deps = [
     "//ash/resources",
     "//ash/strings",
+    "//ash/wm/common:ash_wm_common",
+    "//ash/wm/common/resources",
   ]
   deps = [
     "//base",
@@ -40,12 +42,13 @@ component("ash") {
     "//skia",
     "//third_party/icu",
     "//ui/accessibility",
-    "//ui/app_list/shower",
+    "//ui/app_list/presenter",
     "//ui/aura",
     "//ui/base",
     "//ui/base:ui_data_pack",
     "//ui/base/ime",
     "//ui/compositor",
+    "//ui/display",
     "//ui/display/types",
     "//ui/events",
     "//ui/events:events_base",
@@ -81,6 +84,7 @@ component("ash") {
       "//build/config/linux:xfixes",
     ]
     deps += [
+      "//ui/events/devices/x11",
       "//ui/events/platform",
       "//ui/gfx/x",
     ]
@@ -114,7 +118,6 @@ component("ash") {
       "//ui/chromeos:ui_chromeos",
       "//ui/chromeos/resources",
       "//ui/chromeos/strings",
-      "//ui/display",
       "//ui/display/util",
     ]
   } else {
@@ -190,6 +193,7 @@ source_set("test_support") {
   deps = [
     ":test_support_with_content",  # TODO(beng): reverse this direction.
     "//ash/resources",
+    "//ash/wm/common/resources",
     "//base:i18n",
     "//base/test:test_support",
     "//components/signin/core/account_id",
@@ -201,7 +205,7 @@ source_set("test_support") {
     "//testing/gtest",
     "//ui/accessibility",
     "//ui/app_list:test_support",
-    "//ui/app_list/shower",
+    "//ui/app_list/presenter",
     "//ui/aura",
     "//ui/aura:test_support",
     "//ui/base:test_support",
@@ -280,13 +284,14 @@ static_library("ash_shell_lib") {
     ":test_support",
     "//ash/resources",
     "//ash/strings",
+    "//ash/wm/common/resources",
     "//base",
     "//base:i18n",
     "//components/user_manager",
     "//net",
     "//skia",
     "//third_party/icu",
-    "//ui/app_list/shower",
+    "//ui/app_list/presenter",
     "//ui/aura",
     "//ui/base",
     "//ui/base/ime",
@@ -324,6 +329,7 @@ static_library("ash_shell_lib_with_content") {
     "//ui/aura",
     "//ui/base",
     "//ui/compositor",
+    "//ui/display",
     "//ui/events/devices",
     "//ui/message_center",
     "//ui/views:test_support",
@@ -346,6 +352,7 @@ test("ash_unittests") {
     ":test_support_with_content",
     "//ash/resources",
     "//ash/strings",
+    "//ash/wm/common/resources",
     "//base",
     "//base/test:test_support",
     "//components/signin/core/account_id",
@@ -356,7 +363,7 @@ test("ash_unittests") {
     "//testing/gtest",
     "//third_party/icu",
     "//ui/accessibility",
-    "//ui/app_list/shower",
+    "//ui/app_list/presenter",
     "//ui/aura",
     "//ui/aura:test_support",
     "//ui/base",
@@ -410,9 +417,6 @@ test("ash_unittests") {
       "virtual_keyboard_controller_unittest.cc",
       "wm/workspace/workspace_window_resizer_unittest.cc",
     ]
-    sources += [
-      #'<(SHARED_INTERMEDIATE_DIR)/ui/resources/ui_unscaled_resources.rc',  TODO(GYP)
-    ]
   }
 
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
@@ -462,6 +466,7 @@ executable("ash_shell_with_content") {
     ":ash_shell_lib_with_content",
     "//base",
     "//build/config/sanitizers:deps",
+    "//build/win:default_exe_manifest",
     "//components/user_manager",
     "//content",
     "//content/public/app:both",

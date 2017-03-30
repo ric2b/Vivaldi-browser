@@ -15,6 +15,7 @@ component("x11") {
     "//skia",
     "//ui/events",
     "//ui/events/devices",
+    "//ui/events/devices/x11",
     "//ui/events/platform",
     "//ui/events/platform/x11",
     "//ui/gfx/x",
@@ -40,7 +41,10 @@ component("x11") {
       "x11_window_ozone.cc",
       "x11_window_ozone.h",
     ]
-    deps += [ "//ui/base" ]
+    deps += [
+      "//ui/base",
+      "//ui/base/x",
+    ]
   } else if (use_x11) {
     sources += [
       "x11_window.cc",

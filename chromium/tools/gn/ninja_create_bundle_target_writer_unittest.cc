@@ -14,10 +14,11 @@
 namespace {
 
 void SetupBundleDataDir(BundleData* bundle_data, const std::string& root_dir) {
-  bundle_data->root_dir().assign(root_dir + "/bar.bundle");
-  bundle_data->resources_dir().assign(bundle_data->root_dir() + "/Resources");
-  bundle_data->executable_dir().assign(bundle_data->root_dir() + "/Executable");
-  bundle_data->plugins_dir().assign(bundle_data->root_dir() + "/PlugIns");
+  std::string bundle_root_dir = root_dir + "/bar.bundle";
+  bundle_data->root_dir() = SourceDir(bundle_root_dir);
+  bundle_data->resources_dir() = SourceDir(bundle_root_dir + "/Resources");
+  bundle_data->executable_dir() = SourceDir(bundle_root_dir + "/Executable");
+  bundle_data->plugins_dir() = SourceDir(bundle_root_dir + "/PlugIns");
 }
 
 }  // namespace
@@ -55,7 +56,8 @@ TEST(NinjaCreateBundleTargetWriter, Run) {
       "\n"
       "build obj/baz/bar.stamp: stamp "
           "bar.bundle/Resources/input1.txt "
-          "bar.bundle/Resources/input2.txt\n";
+          "bar.bundle/Resources/input2.txt\n"
+      "build bar.bundle: phony obj/baz/bar.stamp\n";
   std::string out_str = out.str();
   EXPECT_EQ(expected, out_str);
 }
@@ -97,7 +99,53 @@ TEST(NinjaCreateBundleTargetWriter, AssetCatalog) {
           "../../foo/Foo.xcassets/foo.imageset/FooIcon-29@2x.png "
           "../../foo/Foo.xcassets/foo.imageset/FooIcon-29@3x.png\n"
       "\n"
-      "build obj/baz/bar.stamp: stamp bar.bundle/Resources/Assets.car\n";
+      "build obj/baz/bar.stamp: stamp bar.bundle/Resources/Assets.car\n"
+      "build bar.bundle: phony obj/baz/bar.stamp\n";
+  std::string out_str = out.str();
+  EXPECT_EQ(expected, out_str);
+}
+
+// Tests that the phony target for the top-level bundle directory is generated
+// correctly.
+TEST(NinjaCreateBundleTargetWriter, BundleRootDirOutput) {
+  TestWithScope setup;
+  Err err;
+
+  setup.build_settings()->SetBuildDir(SourceDir("//out/Debug/"));
+  Target target(setup.settings(), Label(SourceDir("//baz/"), "bar"));
+  target.set_output_type(Target::CREATE_BUNDLE);
+
+  const std::string bundle_root_dir("//out/Debug/bar.bundle/Contents");
+  target.bundle_data().root_dir() = SourceDir(bundle_root_dir);
+  target.bundle_data().resources_dir() =
+      SourceDir(bundle_root_dir + "/Resources");
+  target.bundle_data().executable_dir() = SourceDir(bundle_root_dir + "/MacOS");
+  target.bundle_data().plugins_dir() = SourceDir(bundle_root_dir + "/Plug Ins");
+
+  std::vector<SourceFile> sources;
+  sources.push_back(SourceFile("//foo/input1.txt"));
+  sources.push_back(SourceFile("//foo/input2.txt"));
+  target.bundle_data().file_rules().push_back(BundleFileRule(
+      sources, SubstitutionPattern::MakeForTest(
+                   "{{bundle_resources_dir}}/{{source_file_part}}")));
+
+  target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  std::ostringstream out;
+  NinjaCreateBundleTargetWriter writer(&target, out);
+  writer.Run();
+
+  const char expected[] =
+      "build bar.bundle/Contents/Resources/input1.txt: copy_bundle_data "
+          "../../foo/input1.txt\n"
+      "build bar.bundle/Contents/Resources/input2.txt: copy_bundle_data "
+          "../../foo/input2.txt\n"
+      "\n"
+      "build obj/baz/bar.stamp: stamp "
+          "bar.bundle/Contents/Resources/input1.txt "
+          "bar.bundle/Contents/Resources/input2.txt\n"
+      "build bar.bundle: phony obj/baz/bar.stamp\n";
   std::string out_str = out.str();
   EXPECT_EQ(expected, out_str);
 }
@@ -167,7 +215,8 @@ TEST(NinjaCreateBundleTargetWriter, OrderOnlyDeps) {
           "bar.bundle/Resources/input1.txt "
           "bar.bundle/Resources/input2.txt "
           "bar.bundle/Info.plist "
-          "bar.bundle/Resources/Assets.car\n";
+          "bar.bundle/Resources/Assets.car\n"
+      "build bar.bundle: phony obj/baz/bar.stamp\n";
   std::string out_str = out.str();
   EXPECT_EQ(expected, out_str);
 }

@@ -54,6 +54,7 @@ Certaines fonctionnalités ne seront peut-être pas disponibles, et les modifica
 <translation id="2673087257647337101">Mise à jour presque terminée. Relancez Chromium pour terminer la mise à jour.</translation>
 <translation id="2685838254101182273">Chromium n'est plus mis à jour et n'est plus compatible avec la version actuelle de votre système d'exploitation.</translation>
 <translation id="2705212601509139398">Ce site utilise le plug-in Chromium Frame, dont le développement va bientôt être abandonné. Veuillez désinstaller ce plug-in, puis télécharger un navigateur compatible.</translation>
+<translation id="2711502716910134313">Onglet Chromium</translation>
 <translation id="2770231113462710648">Remplacer le navigateur par défaut par :</translation>
 <translation id="2801146392936645542">Le fichier "<ph name="FILE_NAME" />" a été bloqué dans Chromium, car son contenu est malveillant.</translation>
 <translation id="2847479871509788944">Supprimer de Chromium</translation>
@@ -67,7 +68,6 @@ Certaines fonctionnalités ne seront peut-être pas disponibles, et les modifica
 <translation id="3130323860337406239">Votre micro est en cours d'utilisation dans Chromium.</translation>
 <translation id="313551035350905294">Vous vous connectez à un compte géré et donnez le contrôle de votre profil Chromium à son administrateur. Vos données Chromium (applications, favoris, historique, mots de passe et d'autres paramètres) seront définitivement liées à <ph name="USER_NAME" />. Vous pourrez supprimer ces données via le tableau de bord Comptes Google, mais vous ne pourrez pas les associer à un autre compte.</translation>
 <translation id="3190315855212034486">Chromium est bloqué. Voulez-vous le relancer maintenant ?</translation>
-<translation id="3197823471738295152">Votre appareil est à jour.</translation>
 <translation id="3244477511402911926">Centre de notifications Chromium</translation>
 <translation id="3256316712990552818">Copié dans Chromium</translation>
 <translation id="3258596308407688501">Chromium ne peut ni lire, ni écrire dans son répertoire de données :
@@ -121,6 +121,7 @@ Certaines fonctionnalités ne seront peut-être pas disponibles, et les modifica
 <translation id="549669000822060376">Veuillez patienter pendant que Chromium installe les dernières mises à jour du système.</translation>
 <translation id="5563479599352954471">Rechercher en un clic</translation>
 <translation id="5620765574781326016">Pour en savoir plus sur des sujets évoqués sur des sites Web sans quitter la page.</translation>
+<translation id="5634636535844844681">Vous devez disposer de Windows 7 ou version ultérieure pour utiliser Chromium.</translation>
 <translation id="5680901439334282664">connectez-vous à Chromium</translation>
 <translation id="5772805321386874569">(nécessite le <ph name="BEGIN_BUTTON" />redémarrage<ph name="END_BUTTON" /> de Chromium)</translation>
 <translation id="5796460469508169315">Chromium est presque prêt</translation>
@@ -180,6 +181,12 @@ Chromium ne peut pas récupérer vos paramètres.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7339898014177206373">Nouvelle fenêtre</translation>
 <translation id="734373864078049451">Votre contenu Web, vos favoris et toutes vos données Chromium sont conservés ici.</translation>
+<translation id="7344413941077984497">Pour définir les sites Web que l'utilisateur <ph name="NEW_PROFILE_NAME" /> peut consulter, vous pouvez configurer des restrictions et des paramètres sur le site <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. Si vous conservez les paramètres par défaut, <ph name="NEW_PROFILE_NAME" /> peut parcourir l'ensemble des sites du Web.
+
+Pour empêcher <ph name="NEW_PROFILE_NAME" /> d'accéder à votre compte, assurez-vous de verrouiller votre profil lorsque vous n'utilisez pas Chromium. Pour ce faire, cliquez sur le nom de votre profil dans l'angle supérieur droit du navigateur, puis sélectionnez "Fermer et activer le verrouillage enfant".
+<ph name="BEGIN_LINK_2" />En savoir plus<ph name="END_LINK_2" />
+
+Pour obtenir plus d'informations, veuillez consulter votre compte de messagerie (<ph name="ACCOUNT_EMAIL" />).</translation>
 <translation id="7419987137528340081">Si vous préférez conserver vos données Chromium à part, vous pouvez créer un utilisateur Chromium pour <ph name="USER_NAME" />.</translation>
 <translation id="7421823331379285070">Chromium requiert Windows XP ou une version ultérieure. Certaines fonctionnalités risquent de ne pas fonctionner.</translation>
 <translation id="7463979740390522693">Notifications – Chromium (<ph name="QUANTITY" /> non lues)</translation>
@@ -208,6 +215,7 @@ Chromium ne peut pas récupérer vos paramètres.</translation>
 <translation id="8586442755830160949">Copyright Auteurs de Chromium <ph name="YEAR" />. Tous droits réservés.</translation>
 <translation id="8621669128220841554">Échec de l'installation en raison d'une erreur non spécifiée. Veuillez télécharger Chromium à nouveau.</translation>
 <translation id="8628626585870903697">Chromium ne comprend pas le lecteur de PDF qui est nécessaire au fonctionnement de l'aperçu avant impression.</translation>
+<translation id="8667808506758191620">Votre <ph name="DEVICE_TYPE" /> est à jour.</translation>
 <translation id="8697124171261953979">Elle contrôle également la page qui s'affiche au démarrage de Chromium ou lorsque vous effectuez une recherche dans l'omnibox.</translation>
 <translation id="8704119203788522458">Voici votre Chromium</translation>
 <translation id="872034308864968620">Laisser Chromium s'exécuter en arrière-plan</translation>
@@ -216,7 +224,7 @@ Chromium ne peut pas récupérer vos paramètres.</translation>
 <translation id="8823523095753232532">Lier mes données Chromium à ce compte</translation>
 <translation id="8851136666856101339">principal</translation>
 <translation id="8862326446509486874">Vous ne disposez pas des droits requis pour installer la version système. Relancez l'installation en vous connectant comme administrateur.</translation>
-<translation id="8897323336392112261">Elle contrôle également la page qui s'affiche au démarrage de Chromium ou lorsque vous cliquez sur le bouton "Accueil".</translation>
+<translation id="8897323336392112261">Elle contrôle également la page qui s'affiche au démarrage de Chromium ou lorsque vous cliquez sur le bouton Accueil.</translation>
 <translation id="8907580949721785412">Chromium tente d'afficher les mots de passe. Pour autoriser cette action, saisissez votre mot de passe Windows.</translation>
 <translation id="894903460958736500">Le logiciel exécuté sur votre ordinateur n'est pas compatible avec Chromium.</translation>
 <translation id="8974095189086268230">Chromium OS fonctionne grâce à d'autres <ph name="BEGIN_LINK_CROS_OSS" />logiciels libres<ph name="END_LINK_CROS_OSS" />.</translation>
@@ -224,7 +232,6 @@ Chromium ne peut pas récupérer vos paramètres.</translation>
 
 Si vous vous connectez quand même, toutes les informations Chromium, comme les favoris, l'historique et les autres paramètres, seront fusionnées avec <ph name="ACCOUNT_EMAIL_NEW" />.</translation>
 <translation id="9013087743919948559">Ajouter à Chromium</translation>
-<translation id="9013262824292842194">Chromium requiert Windows Vista ou Windows XP avec SP2 ou une version ultérieure.</translation>
 <translation id="9019929317751753759">Afin de rendre Chromium plus sûr, nous avons désactivé l'extension suivante qui n'est pas répertoriée sur le <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> et qui a pu être ajoutée à votre insu.</translation>
 <translation id="9022552996538154597">Se connecter à Chromium</translation>
 <translation id="9036189287518468038">Lanceur d'applications Chromium</translation>

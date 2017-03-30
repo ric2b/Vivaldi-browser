@@ -5,9 +5,12 @@
 #ifndef COMPONENTS_MUS_WS_PLATFORM_DISPLAY_INIT_PARAMS_H_
 #define COMPONENTS_MUS_WS_PLATFORM_DISPLAY_INIT_PARAMS_H_
 
-#include "base/memory/ref_counted.h"
+#include <stdint.h>
 
-namespace mojo {
+#include "base/memory/ref_counted.h"
+#include "ui/gfx/geometry/rect.h"
+
+namespace shell {
 class Connector;
 }
 
@@ -23,9 +26,11 @@ struct PlatformDisplayInitParams {
   PlatformDisplayInitParams(const PlatformDisplayInitParams& other);
   ~PlatformDisplayInitParams();
 
-  mojo::Connector* connector = nullptr;
   scoped_refptr<GpuState> gpu_state;
   scoped_refptr<SurfacesState> surfaces_state;
+
+  gfx::Rect display_bounds;
+  int64_t display_id;
 };
 
 }  // namespace ws

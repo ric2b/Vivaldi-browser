@@ -16,6 +16,7 @@
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_event_filter.h"
+#include "ash/wm/common/shelf/wm_shelf_util.h"
 #include "ash/wm/window_animations.h"
 #include "base/command_line.h"
 #include "grit/ash_resources.h"
@@ -34,11 +35,11 @@
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/nine_image_painter.h"
-#include "ui/gfx/screen.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/gfx/transform.h"
 #include "ui/views/background.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/wm/core/window_animations.h"
 
 namespace {
 
@@ -156,12 +157,13 @@ class TrayBackground : public views::Background {
   DISALLOW_COPY_AND_ASSIGN(TrayBackground);
 };
 
-TrayBackgroundView::TrayContainer::TrayContainer(ShelfAlignment alignment)
+TrayBackgroundView::TrayContainer::TrayContainer(wm::ShelfAlignment alignment)
     : alignment_(alignment) {
   UpdateLayout();
 }
 
-void TrayBackgroundView::TrayContainer::SetAlignment(ShelfAlignment alignment) {
+void TrayBackgroundView::TrayContainer::SetAlignment(
+    wm::ShelfAlignment alignment) {
   if (alignment_ == alignment)
     return;
   alignment_ = alignment;
@@ -192,7 +194,7 @@ void TrayBackgroundView::TrayContainer::ViewHierarchyChanged(
 void TrayBackgroundView::TrayContainer::UpdateLayout() {
   // Adjust the size of status tray dark background by adding additional
   // empty border.
-  if (IsHorizontalAlignment(alignment_)) {
+  if (wm::IsHorizontalAlignment(alignment_)) {
     SetBorder(views::Border::CreateEmptyBorder(
         kPaddingFromEdgeOfShelf,
         kPaddingFromEdgeOfShelf,
@@ -224,7 +226,7 @@ void TrayBackgroundView::TrayContainer::UpdateLayout() {
 TrayBackgroundView::TrayBackgroundView(StatusAreaWidget* status_area_widget)
     : status_area_widget_(status_area_widget),
       tray_container_(NULL),
-      shelf_alignment_(SHELF_ALIGNMENT_BOTTOM),
+      shelf_alignment_(wm::SHELF_ALIGNMENT_BOTTOM),
       background_(NULL),
       hide_background_animator_(this, 0, kTrayBackgroundAlpha),
       hover_background_animator_(
@@ -261,6 +263,17 @@ TrayBackgroundView::~TrayBackgroundView() {
 void TrayBackgroundView::Initialize() {
   GetWidget()->AddObserver(widget_observer_.get());
   SetTrayBorder();
+}
+
+// static
+void TrayBackgroundView::InitializeBubbleAnimations(
+    views::Widget* bubble_widget) {
+  aura::Window* window = bubble_widget->GetNativeWindow();
+  ::wm::SetWindowVisibilityAnimationType(
+      window, ::wm::WINDOW_VISIBILITY_ANIMATION_TYPE_FADE);
+  ::wm::SetWindowVisibilityAnimationTransition(window, ::wm::ANIMATE_HIDE);
+  ::wm::SetWindowVisibilityAnimationDuration(
+      window, base::TimeDelta::FromMilliseconds(kAnimationDurationForPopupMs));
 }
 
 void TrayBackgroundView::SetVisible(bool visible) {
@@ -392,7 +405,7 @@ ShelfLayoutManager* TrayBackgroundView::GetShelfLayoutManager() {
   return status_area_widget()->shelf_widget()->shelf_layout_manager();
 }
 
-void TrayBackgroundView::SetShelfAlignment(ShelfAlignment alignment) {
+void TrayBackgroundView::SetShelfAlignment(wm::ShelfAlignment alignment) {
   shelf_alignment_ = alignment;
   SetTrayBorder();
   tray_container_->SetAlignment(alignment);
@@ -403,13 +416,13 @@ void TrayBackgroundView::SetTrayBorder() {
   // Tray views are laid out right-to-left or bottom-to-top
   bool on_edge = (this == parent->child_at(0));
   int left_edge, top_edge, right_edge, bottom_edge;
-  if (IsHorizontalAlignment(shelf_alignment())) {
+  if (wm::IsHorizontalAlignment(shelf_alignment())) {
     top_edge = ShelfLayoutManager::kShelfItemInset;
     left_edge = 0;
     bottom_edge = kShelfSize -
         ShelfLayoutManager::kShelfItemInset - kShelfItemHeight;
     right_edge = on_edge ? kPaddingFromEdgeOfShelf : 0;
-  } else if (shelf_alignment() == SHELF_ALIGNMENT_LEFT) {
+  } else if (shelf_alignment() == wm::SHELF_ALIGNMENT_LEFT) {
     top_edge = 0;
     left_edge = kShelfSize -
         ShelfLayoutManager::kShelfItemInset - kShelfItemHeight;
@@ -450,24 +463,11 @@ bool TrayBackgroundView::RequiresNotificationWhenAnimatorDestroyed() const {
 
 void TrayBackgroundView::HideTransformation() {
   gfx::Transform transform;
-  if (IsHorizontalAlignment(shelf_alignment_))
+  if (wm::IsHorizontalAlignment(shelf_alignment_))
     transform.Translate(width(), 0.0f);
   else
     transform.Translate(0.0f, height());
   layer()->SetTransform(transform);
-}
-
-void TrayBackgroundView::InitializeBubbleAnimations(
-    views::Widget* bubble_widget) {
-  wm::SetWindowVisibilityAnimationType(
-      bubble_widget->GetNativeWindow(),
-      wm::WINDOW_VISIBILITY_ANIMATION_TYPE_FADE);
-  wm::SetWindowVisibilityAnimationTransition(
-      bubble_widget->GetNativeWindow(),
-      wm::ANIMATE_HIDE);
-  wm::SetWindowVisibilityAnimationDuration(
-      bubble_widget->GetNativeWindow(),
-      base::TimeDelta::FromMilliseconds(kAnimationDurationForPopupMs));
 }
 
 aura::Window* TrayBackgroundView::GetBubbleWindowContainer() const {
@@ -559,9 +559,9 @@ gfx::Rect TrayBackgroundView::GetBubbleAnchorRect(
 }
 
 TrayBubbleView::AnchorAlignment TrayBackgroundView::GetAnchorAlignment() const {
-  if (shelf_alignment_ == SHELF_ALIGNMENT_LEFT)
+  if (shelf_alignment_ == wm::SHELF_ALIGNMENT_LEFT)
     return TrayBubbleView::ANCHOR_ALIGNMENT_LEFT;
-  if (shelf_alignment_ == SHELF_ALIGNMENT_RIGHT)
+  if (shelf_alignment_ == wm::SHELF_ALIGNMENT_RIGHT)
     return TrayBubbleView::ANCHOR_ALIGNMENT_RIGHT;
   return TrayBubbleView::ANCHOR_ALIGNMENT_BOTTOM;
 }

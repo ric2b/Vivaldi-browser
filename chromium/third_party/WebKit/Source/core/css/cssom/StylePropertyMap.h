@@ -7,7 +7,8 @@
 
 #include "bindings/core/v8/Iterable.h"
 #include "bindings/core/v8/ScriptWrappable.h"
-#include "bindings/core/v8/UnionTypesCore.h"
+#include "bindings/core/v8/StyleValueOrStyleValueSequence.h"
+#include "bindings/core/v8/StyleValueOrStyleValueSequenceOrString.h"
 #include "core/CSSPropertyNames.h"
 #include "core/CoreExport.h"
 #include "core/css/cssom/StyleValue.h"
@@ -20,15 +21,16 @@ class CORE_EXPORT StylePropertyMap : public GarbageCollectedFinalized<StylePrope
     WTF_MAKE_NONCOPYABLE(StylePropertyMap);
     DEFINE_WRAPPERTYPEINFO();
 public:
+    typedef HeapVector<Member<StyleValue>> StyleValueVector;
+
     virtual ~StylePropertyMap() { }
 
     // Accessors.
-    StyleValue* get(const String& propertyName);
-    HeapVector<Member<StyleValue>> getAll(const String& propertyName);
-    bool has(const String& propertyName);
+    StyleValue* get(const String& propertyName, ExceptionState&);
+    StyleValueVector getAll(const String& propertyName, ExceptionState&);
+    bool has(const String& propertyName, ExceptionState&);
 
-    virtual StyleValue* get(CSSPropertyID) = 0;
-    virtual HeapVector<Member<StyleValue>> getAll(CSSPropertyID) = 0;
+    virtual StyleValueVector getAll(CSSPropertyID) = 0;
     virtual bool has(CSSPropertyID) = 0;
 
     virtual Vector<String> getProperties() = 0;
@@ -46,6 +48,9 @@ public:
 
 protected:
     StylePropertyMap() { }
+
+    IterationSource* startIteration(ScriptState*, ExceptionState&) override { return nullptr; }
+    StyleValueVector cssValueToStyleValueVector(CSSPropertyID, const CSSValue&);
 };
 
 } // namespace blink

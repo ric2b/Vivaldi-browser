@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "ui/gfx/native_pixmap_handle_ozone.h"
 #include "ui/ozone/platform/drm/common/client_native_pixmap_dmabuf.h"
 #include "ui/ozone/public/client_native_pixmap_factory.h"
@@ -40,15 +41,23 @@ class ClientNativePixmapFactoryGbm : public ClientNativePixmapFactory {
                                 gfx::BufferUsage usage) const override {
     switch (usage) {
       case gfx::BufferUsage::GPU_READ:
-      case gfx::BufferUsage::SCANOUT:
-        return format == gfx::BufferFormat::RGBA_8888 ||
+        return format == gfx::BufferFormat::BGR_565 ||
+               format == gfx::BufferFormat::RGBA_8888 ||
                format == gfx::BufferFormat::RGBX_8888 ||
                format == gfx::BufferFormat::BGRA_8888 ||
                format == gfx::BufferFormat::BGRX_8888;
+      case gfx::BufferUsage::SCANOUT:
+        return format == gfx::BufferFormat::BGRX_8888;
       case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE:
       case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE_PERSISTENT: {
 #if defined(OS_CHROMEOS)
-        return format == gfx::BufferFormat::BGRA_8888;
+        return
+#if defined(ARCH_CPU_X86_FAMILY)
+            // Currently only Intel driver (i.e. minigbm and Mesa) supports R_8.
+            // crbug.com/356871
+            format == gfx::BufferFormat::R_8 ||
+#endif
+            format == gfx::BufferFormat::BGRA_8888;
 #else
         return false;
 #endif
@@ -57,7 +66,7 @@ class ClientNativePixmapFactoryGbm : public ClientNativePixmapFactory {
     NOTREACHED();
     return false;
   }
-  scoped_ptr<ClientNativePixmap> ImportFromHandle(
+  std::unique_ptr<ClientNativePixmap> ImportFromHandle(
       const gfx::NativePixmapHandle& handle,
       const gfx::Size& size,
       gfx::BufferUsage usage) override {
@@ -75,7 +84,7 @@ class ClientNativePixmapFactoryGbm : public ClientNativePixmapFactory {
 #endif
       case gfx::BufferUsage::GPU_READ:
       case gfx::BufferUsage::SCANOUT:
-        return make_scoped_ptr<ClientNativePixmapGbm>(
+        return base::WrapUnique<ClientNativePixmapGbm>(
             new ClientNativePixmapGbm);
     }
     NOTREACHED();

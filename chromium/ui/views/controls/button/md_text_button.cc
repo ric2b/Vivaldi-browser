@@ -10,6 +10,7 @@
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
+#include "ui/views/controls/button/blue_button.h"
 #include "ui/views/painter.h"
 
 namespace views {
@@ -23,19 +24,47 @@ const int kVerticalPadding = 6;
 // Minimum size to reserve for the button contents.
 const int kMinWidth = 48;
 
+LabelButton* CreateButton(ButtonListener* listener,
+                          const base::string16& text,
+                          bool md) {
+  if (md)
+    return MdTextButton::CreateMdButton(listener, text);
+
+  LabelButton* button = new LabelButton(listener, text);
+  button->SetStyle(CustomButton::STYLE_BUTTON);
+  return button;
+}
+
 }  // namespace
 
 // static
 LabelButton* MdTextButton::CreateStandardButton(ButtonListener* listener,
                                                 const base::string16& text) {
-  if (ui::MaterialDesignController::IsModeMaterial())
-    return CreateMdButton(listener, text);
-
-  LabelButton* button = new LabelButton(listener, text);
-  button->SetStyle(STYLE_BUTTON);
-  return button;
+  return CreateButton(listener, text,
+                      ui::MaterialDesignController::IsModeMaterial());
 }
 
+// static
+LabelButton* MdTextButton::CreateSecondaryUiButton(ButtonListener* listener,
+                                                   const base::string16& text) {
+  return CreateButton(listener, text,
+                      ui::MaterialDesignController::IsSecondaryUiMaterial());
+}
+
+// static
+LabelButton* MdTextButton::CreateSecondaryUiBlueButton(
+    ButtonListener* listener,
+    const base::string16& text) {
+  if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
+    MdTextButton* md_button = MdTextButton::CreateMdButton(listener, text);
+    md_button->SetCallToAction(MdTextButton::STRONG_CALL_TO_ACTION);
+    return md_button;
+  }
+
+  return new BlueButton(listener, text);
+}
+
+// static
 MdTextButton* MdTextButton::CreateMdButton(ButtonListener* listener,
                                            const base::string16& text) {
   MdTextButton* button = new MdTextButton(listener);
@@ -45,6 +74,7 @@ MdTextButton* MdTextButton::CreateMdButton(ButtonListener* listener,
   button->SetBorder(
       Border::CreateEmptyBorder(kVerticalPadding, kHorizontalPadding,
                                 kVerticalPadding, kHorizontalPadding));
+  button->SetFocusForPlatform();
   return button;
 }
 
@@ -69,6 +99,15 @@ void MdTextButton::SetText(const base::string16& text) {
   LabelButton::SetText(base::i18n::ToUpper(text));
 }
 
+void MdTextButton::UpdateStyleToIndicateDefaultStatus() {
+  // Update the call to action state to reflect defaultness. Don't change strong
+  // call to action to weak.
+  if (!is_default())
+    SetCallToAction(NO_CALL_TO_ACTION);
+  else if (cta_ == NO_CALL_TO_ACTION)
+    SetCallToAction(WEAK_CALL_TO_ACTION);
+}
+
 MdTextButton::MdTextButton(ButtonListener* listener)
     : LabelButton(listener, base::string16()),
       ink_drop_delegate_(this, this),
@@ -76,7 +115,7 @@ MdTextButton::MdTextButton(ButtonListener* listener)
   set_ink_drop_delegate(&ink_drop_delegate_);
   set_has_ink_drop_action_on_click(true);
   SetHorizontalAlignment(gfx::ALIGN_CENTER);
-  SetFocusable(true);
+  SetFocusForPlatform();
   SetMinSize(gfx::Size(kMinWidth, 0));
   SetFocusPainter(nullptr);
   UseMdFocusRing();
@@ -89,7 +128,11 @@ void MdTextButton::UpdateColorsFromNativeTheme() {
   ui::NativeTheme::ColorId fg_color_id = ui::NativeTheme::kColorId_NumColors;
   switch (cta_) {
     case NO_CALL_TO_ACTION:
-      fg_color_id = ui::NativeTheme::kColorId_ButtonEnabledColor;
+      // When there's no call to action, respect a color override if one has
+      // been set. For other call to action states, don't let individual buttons
+      // specify a color.
+      if (!explicitly_set_normal_color())
+        fg_color_id = ui::NativeTheme::kColorId_ButtonEnabledColor;
       break;
     case WEAK_CALL_TO_ACTION:
       fg_color_id = ui::NativeTheme::kColorId_CallToActionColor;
@@ -99,7 +142,8 @@ void MdTextButton::UpdateColorsFromNativeTheme() {
       break;
   }
   ui::NativeTheme* theme = GetNativeTheme();
-  SetEnabledTextColors(theme->GetSystemColor(fg_color_id));
+  if (fg_color_id != ui::NativeTheme::kColorId_NumColors)
+    SetEnabledTextColors(theme->GetSystemColor(fg_color_id));
 
   set_background(
       cta_ == STRONG_CALL_TO_ACTION

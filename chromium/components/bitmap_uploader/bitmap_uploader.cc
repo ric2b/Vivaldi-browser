@@ -16,7 +16,7 @@
 #include "mojo/converters/surfaces/surfaces_utils.h"
 #include "mojo/public/c/gles2/chromium_extension.h"
 #include "mojo/public/c/gles2/gles2.h"
-#include "mojo/shell/public/cpp/connector.h"
+#include "services/shell/public/cpp/connector.h"
 
 namespace bitmap_uploader {
 namespace {
@@ -45,7 +45,7 @@ BitmapUploader::~BitmapUploader() {
   MojoGLES2DestroyContext(gles2_context_);
 }
 
-void BitmapUploader::Init(mojo::Connector* connector) {
+void BitmapUploader::Init(shell::Connector* connector) {
   surface_ = window_->RequestSurface(mus::mojom::SurfaceType::DEFAULT);
   surface_->BindToThread();
   surface_->set_client(this);
@@ -71,7 +71,7 @@ void BitmapUploader::SetColor(uint32_t color) {
 // Sets a bitmap.
 void BitmapUploader::SetBitmap(int width,
                                int height,
-                               scoped_ptr<std::vector<unsigned char>> data,
+                               std::unique_ptr<std::vector<unsigned char>> data,
                                Format format) {
   width_ = width;
   height_ = height;
@@ -82,6 +82,11 @@ void BitmapUploader::SetBitmap(int width,
 }
 
 void BitmapUploader::Upload() {
+  // If the |gpu_service_| has errored than we won't get far. Do nothing,
+  // assuming we are in shutdown.
+  if (gpu_service_.encountered_error())
+    return;
+
   const gfx::Rect bounds(window_->bounds());
   mus::mojom::PassPtr pass = mojo::CreateDefaultPass(1, bounds);
   mus::mojom::CompositorFramePtr frame = mus::mojom::CompositorFrame::New();

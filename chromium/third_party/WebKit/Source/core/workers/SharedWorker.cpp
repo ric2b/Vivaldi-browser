@@ -32,7 +32,6 @@
 #include "core/workers/SharedWorker.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/MessageChannel.h"
 #include "core/dom/MessagePort.h"
@@ -56,8 +55,8 @@ inline SharedWorker::SharedWorker(ExecutionContext* context)
 
 SharedWorker* SharedWorker::create(ExecutionContext* context, const String& url, const String& name, ExceptionState& exceptionState)
 {
-    ASSERT(isMainThread());
-    ASSERT_WITH_SECURITY_IMPLICATION(context->isDocument());
+    DCHECK(isMainThread());
+    SECURITY_DCHECK(context->isDocument());
 
     UseCounter::count(context, UseCounter::SharedWorkerStart);
 
@@ -66,7 +65,7 @@ SharedWorker* SharedWorker::create(ExecutionContext* context, const String& url,
     MessageChannel* channel = MessageChannel::create(context);
     worker->m_port = channel->port1();
     OwnPtr<WebMessagePortChannel> remotePort = channel->port2()->disentangle();
-    ASSERT(remotePort);
+    DCHECK(remotePort);
 
     worker->suspendIfNeeded();
 
@@ -82,7 +81,7 @@ SharedWorker* SharedWorker::create(ExecutionContext* context, const String& url,
         return nullptr;
 
     if (document->frame()->loader().client()->sharedWorkerRepositoryClient())
-        document->frame()->loader().client()->sharedWorkerRepositoryClient()->connect(worker, remotePort.release(), scriptURL, name, exceptionState);
+        document->frame()->loader().client()->sharedWorkerRepositoryClient()->connect(worker, std::move(remotePort), scriptURL, name, exceptionState);
 
     return worker;
 }

@@ -49,6 +49,9 @@
 #if defined(OS_ANDROID)
 #include "ui/gfx/android/device_display_info.h"
 #endif  // OS_ANDROID
+#if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
+#include "content/common/mojo/mojo_shell_connection_impl.h"
+#endif
 
 namespace content {
 
@@ -251,6 +254,16 @@ enum BlockStatusHistogram {
   BLOCK_STATUS_ALL_DOMAINS_BLOCKED,
   BLOCK_STATUS_MAX
 };
+
+bool ShouldDisableHardwareAcceleration() {
+#if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
+  // TODO(rjkroege): Remove this when https://crbug.com/602519 is fixed.
+  if (IsRunningInMojoShell())
+    return true;
+#endif
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kDisableGpu);
+}
 
 }  // namespace anonymous
 
@@ -531,6 +544,13 @@ void GpuDataManagerImplPrivate::Initialize() {
       gpu_info.gpu.active = true;
       gpu_info.secondary_gpus.clear();
     }
+
+    gpu::ParseSecondaryGpuDevicesFromCommandLine(*command_line, &gpu_info);
+
+    if (command_line->HasSwitch(switches::kGpuTestingDriverDate)) {
+      gpu_info.driver_date =
+          command_line->GetSwitchValueASCII(switches::kGpuTestingDriverDate);
+    }
   }
 #if defined(ARCH_CPU_X86_FAMILY)
   if (!gpu_info.gpu.vendor_id || !gpu_info.gpu.device_id) {
@@ -729,6 +749,42 @@ void GpuDataManagerImplPrivate::AppendGpuCommandLine(
       gpu_info_.driver_vendor);
   command_line->AppendSwitchASCII(switches::kGpuDriverVersion,
       gpu_info_.driver_version);
+  command_line->AppendSwitchASCII(switches::kGpuDriverDate,
+      gpu_info_.driver_date);
+
+  gpu::GPUInfo::GPUDevice maybe_active_gpu_device;
+  if (gpu_info_.gpu.active)
+    maybe_active_gpu_device = gpu_info_.gpu;
+
+  std::string vendor_ids_str;
+  std::string device_ids_str;
+  for (const auto& device : gpu_info_.secondary_gpus) {
+    if (!vendor_ids_str.empty())
+      vendor_ids_str += ";";
+    if (!device_ids_str.empty())
+      device_ids_str += ";";
+    vendor_ids_str += base::StringPrintf("0x%04x", device.vendor_id);
+    device_ids_str += base::StringPrintf("0x%04x", device.device_id);
+
+    if (device.active)
+      maybe_active_gpu_device = device;
+  }
+
+  if (!vendor_ids_str.empty() && !device_ids_str.empty()) {
+    command_line->AppendSwitchASCII(switches::kGpuSecondaryVendorIDs,
+                                    vendor_ids_str);
+    command_line->AppendSwitchASCII(switches::kGpuSecondaryDeviceIDs,
+                                    device_ids_str);
+  }
+
+  if (maybe_active_gpu_device.active) {
+    command_line->AppendSwitchASCII(
+        switches::kGpuActiveVendorID,
+        base::StringPrintf("0x%04x", maybe_active_gpu_device.vendor_id));
+    command_line->AppendSwitchASCII(
+        switches::kGpuActiveDeviceID,
+        base::StringPrintf("0x%04x", maybe_active_gpu_device.device_id));
+  }
 }
 
 void GpuDataManagerImplPrivate::UpdateRendererWebPrefs(
@@ -923,7 +979,7 @@ bool GpuDataManagerImplPrivate::ShouldDisableAcceleratedVideoDecode(
     return true;
 
   // Accelerated decode is never available with --disable-gpu.
-  return command_line->HasSwitch(switches::kDisableGpu);
+  return ShouldDisableHardwareAcceleration();
 }
 
 void GpuDataManagerImplPrivate::GetDisabledExtensions(
@@ -972,7 +1028,6 @@ GpuDataManagerImplPrivate::GpuDataManagerImplPrivate(GpuDataManagerImpl* owner)
       use_swiftshader_(false),
       card_blacklisted_(false),
       update_histograms_(true),
-      window_count_(0),
       domain_blocking_enabled_(true),
       owner_(owner),
       gpu_process_accessible_(true),
@@ -984,7 +1039,7 @@ GpuDataManagerImplPrivate::GpuDataManagerImplPrivate(GpuDataManagerImpl* owner)
   swiftshader_path_ =
       base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
           switches::kSwiftShaderPath);
-  if (command_line->HasSwitch(switches::kDisableGpu))
+  if (ShouldDisableHardwareAcceleration())
     DisableHardwareAcceleration();
 
 #if defined(OS_MACOSX)

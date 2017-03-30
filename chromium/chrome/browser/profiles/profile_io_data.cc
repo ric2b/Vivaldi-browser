@@ -23,8 +23,8 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -80,7 +80,6 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/resource_context.h"
 #include "net/base/keygen_handler.h"
-#include "net/base/network_quality_estimator.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/multi_log_ct_verifier.h"
 #include "net/cookies/canonical_cookie.h"
@@ -88,6 +87,7 @@
 #include "net/http/http_transaction_factory.h"
 #include "net/http/http_util.h"
 #include "net/http/transport_security_persister.h"
+#include "net/nqe/network_quality_estimator.h"
 #include "net/proxy/proxy_config_service_fixed.h"
 #include "net/proxy/proxy_script_fetcher_impl.h"
 #include "net/proxy/proxy_service.h"
@@ -385,7 +385,6 @@ void NotifyContextGettersOfShutdownOnIO(
 void ProfileIOData::InitializeOnUIThread(Profile* profile) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   PrefService* pref_service = profile->GetPrefs();
-  PrefService* local_state_pref_service = g_browser_process->local_state();
 
   std::unique_ptr<ProfileParams> params(new ProfileParams);
   params->path = profile->GetPath();
@@ -497,10 +496,6 @@ void ProfileIOData::InitializeOnUIThread(Profile* profile) {
     signin_allowed_.MoveToThread(io_task_runner);
   }
 
-  quick_check_enabled_.Init(prefs::kQuickCheckEnabled,
-                            local_state_pref_service);
-  quick_check_enabled_.MoveToThread(io_task_runner);
-
   media_device_id_salt_ = new MediaDeviceIDSalt(pref_service, IsOffTheRecord());
 
   network_prediction_options_.Init(prefs::kNetworkPredictionOptions,
@@ -543,8 +538,6 @@ void ProfileIOData::InitializeOnUIThread(Profile* profile) {
       prefs::kIncognitoModeAvailability, pref_service);
   incognito_availibility_pref_.MoveToThread(io_task_runner);
 
-  initialized_on_UI_thread_ = true;
-
   // We need to make sure that content initializes its own data structures that
   // are associated with each ResourceContext because we might post this
   // object to the IO thread after this function.
@@ -571,6 +564,17 @@ void ProfileIOData::AppRequestContext::SetCookieStore(
     std::unique_ptr<net::CookieStore> cookie_store) {
   cookie_store_ = std::move(cookie_store);
   set_cookie_store(cookie_store_.get());
+}
+
+void ProfileIOData::AppRequestContext::SetChannelIDService(
+    std::unique_ptr<net::ChannelIDService> channel_id_service) {
+  channel_id_service_ = std::move(channel_id_service);
+  set_channel_id_service(channel_id_service_.get());
+}
+
+void ProfileIOData::AppRequestContext::SetHttpNetworkSession(
+    std::unique_ptr<net::HttpNetworkSession> http_network_session) {
+  http_network_session_ = std::move(http_network_session);
 }
 
 void ProfileIOData::AppRequestContext::SetHttpTransactionFactory(
@@ -606,7 +610,6 @@ ProfileIOData::ProfileIOData(Profile::ProfileType profile_type)
       use_system_key_slot_(false),
 #endif
       resource_context_(new ResourceContext(this)),
-      initialized_on_UI_thread_(false),
       profile_type_(profile_type) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
@@ -1007,12 +1010,7 @@ void ProfileIOData::Init(
   // functions have been provided to assist in common operations.
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(!initialized_);
-
-  // TODO(jhawkins): Remove once crbug.com/102004 is fixed.
-  CHECK(initialized_on_UI_thread_);
-
-  // TODO(jhawkins): Return to DCHECK once crbug.com/102004 is fixed.
-  CHECK(profile_params_.get());
+  DCHECK(profile_params_.get());
 
   IOThread* const io_thread = profile_params_->io_thread;
   IOThread::Globals* const io_thread_globals = io_thread->globals();
@@ -1022,6 +1020,8 @@ void ProfileIOData::Init(
   // Create the common request contexts.
   main_request_context_.reset(new net::URLRequestContext());
   extensions_request_context_.reset(new net::URLRequestContext());
+
+  main_request_context_->set_enable_brotli(io_thread_globals->enable_brotli);
 
   std::unique_ptr<ChromeNetworkDelegate> network_delegate(
       new ChromeNetworkDelegate(
@@ -1057,7 +1057,8 @@ void ProfileIOData::Init(
       io_thread_globals->proxy_script_fetcher_context.get(),
       io_thread_globals->system_network_delegate.get(),
       std::move(profile_params_->proxy_config_service), command_line,
-      quick_check_enabled_.GetValue());
+      io_thread->WpadQuickCheckEnabled(),
+      io_thread->PacHttpsUrlStrippingEnabled());
   transport_security_state_.reset(new net::TransportSecurityState());
   base::SequencedWorkerPool* pool = BrowserThread::GetBlockingPool();
   transport_security_persister_.reset(
@@ -1257,7 +1258,6 @@ void ProfileIOData::ShutdownOnUIThread(
   sync_disabled_.Destroy();
   signin_allowed_.Destroy();
   network_prediction_options_.Destroy();
-  quick_check_enabled_.Destroy();
   if (media_device_id_salt_.get())
     media_device_id_salt_->ShutdownOnUIThread();
   session_startup_pref_.Destroy();

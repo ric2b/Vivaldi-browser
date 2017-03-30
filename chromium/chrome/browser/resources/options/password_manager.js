@@ -66,6 +66,14 @@ cr.define('options', function() {
         PageManager.closeOverlay();
       };
 
+      $('password-manager-import').onclick = function() {
+        chrome.send('importPassword');
+      };
+
+      $('password-manager-export').onclick = function() {
+        chrome.send('exportPassword');
+      };
+
       $('password-search-box').addEventListener('search',
           this.handleSearchQueryChange_.bind(this));
 
@@ -270,6 +278,20 @@ cr.define('options', function() {
       var item = this.savedPasswordsList_.getListItemByIndex(index);
       item.showPassword(password);
     },
+
+    /**
+     * @param {boolean} visible Whether the link should be visible.
+     * @private
+     */
+    setManageAccountLinkVisibility_: function(visible) {
+      $('manage-passwords-span').hidden = !visible;
+    },
+
+    /** @private */
+    showImportExportButton_: function() {
+      $('password-manager-import').hidden = false;
+      $('password-manager-export').hidden = false;
+    },
   };
 
   /**
@@ -277,9 +299,9 @@ cr.define('options', function() {
    * @param {number} rowIndex indicating the row to remove.
    */
   PasswordManager.removeSavedPassword = function(rowIndex) {
-      chrome.send('removeSavedPassword', [String(rowIndex)]);
-      chrome.send('coreOptionsUserMetricsAction',
-                  ['Options_PasswordManagerDeletePassword']);
+    chrome.send('removeSavedPassword', [String(rowIndex)]);
+    chrome.send('coreOptionsUserMetricsAction',
+                ['Options_PasswordManagerDeletePassword']);
   };
 
   /**
@@ -287,7 +309,7 @@ cr.define('options', function() {
    * @param {number} rowIndex indicating the row to remove.
    */
   PasswordManager.removePasswordException = function(rowIndex) {
-      chrome.send('removePasswordException', [String(rowIndex)]);
+    chrome.send('removePasswordException', [String(rowIndex)]);
   };
 
   PasswordManager.requestShowPassword = function(index) {
@@ -298,7 +320,8 @@ cr.define('options', function() {
   cr.makePublic(PasswordManager, [
     'setSavedPasswordsList',
     'setPasswordExceptionsList',
-    'showPassword'
+    'showImportExportButton',
+    'showPassword',
   ]);
 
   // Export

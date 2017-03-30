@@ -108,7 +108,6 @@ source_set("ui") {
     "//components/upload_list",
     "//components/user_prefs",
     "//components/version_ui",
-    "//components/web_modal",
     "//components/web_resource",
     "//content/public/common",
     "//crypto",
@@ -120,6 +119,7 @@ source_set("ui") {
     "//ui/accessibility",
     "//ui/base",
     "//ui/content_accelerators",
+    "//ui/display",
     "//ui/events",
     "//ui/events:gesture_detection",
     "//ui/gfx",
@@ -194,6 +194,7 @@ source_set("ui") {
                     ".",
                     "//chrome")
     deps += [
+      "//chrome/browser/profile_resetter:profile_reset_report_proto",
       "//chrome/common:features",
       "//components/copresence",
       "//components/feedback/proto",
@@ -252,14 +253,22 @@ source_set("ui") {
     sources +=
         rebase_path(gypi_values.chrome_browser_ui_ash_sources, ".", "//chrome")
     sources += [
+      "ash/app_list/app_list_presenter_service.cc",
+      "ash/app_list/app_list_presenter_service.h",
       "ash/keyboard_ui_service.cc",
       "ash/keyboard_ui_service.h",
+      "ash/launcher/chrome_mash_shelf_controller.cc",
+      "ash/launcher/chrome_mash_shelf_controller.h",
     ]
     deps += [
       "//ash",
       "//ash:ash_with_content",
       "//ash/strings",
       "//components/user_manager",
+      "//mash/shelf/public/interfaces",
+      "//skia/public",
+      "//ui/app_list/presenter",
+      "//ui/app_list/presenter:mojom",
       "//ui/keyboard:mojom",
     ]
     if (!is_chromeos) {
@@ -293,6 +302,12 @@ source_set("ui") {
           rebase_path(gypi_values.chrome_browser_ui_views_non_mac_sources,
                       ".",
                       "//chrome")
+      if (use_aura) {
+        deps += [
+          "//components/mus/public/cpp",
+          "//components/mus/public/interfaces",
+        ]
+      }
       if (enable_extensions) {
         sources += rebase_path(
                 gypi_values.chrome_browser_ui_views_extensions_non_mac_sources,
@@ -313,7 +328,7 @@ source_set("ui") {
   }
   if (use_aura && !use_ozone && is_desktop_linux) {
     deps += [
-      "//build/linux:gio",
+      "//build/linux/libgio",
 
       # gtk2 is the only component that can interact with gtk2 in our new
       # world.
@@ -342,6 +357,7 @@ source_set("ui") {
     deps += [
       # aura uses some of ash resources.
       "//ash/resources",
+      "//ash/wm/common/resources",
       "//ui/aura",
       "//ui/keyboard",
       "//ui/keyboard:keyboard_with_content",
@@ -379,8 +395,6 @@ source_set("ui") {
   if (is_android) {
     deps += [ "//crypto:platform" ]
 
-    defines += [ "CHROME_BUILD_ID=\"$android_chrome_build_id\"" ]
-
     if (android_java_ui) {
       sources +=
           rebase_path(gypi_values.chrome_browser_ui_android_java_ui_sources,
@@ -403,6 +417,7 @@ source_set("ui") {
       "//third_party/google_toolbox_for_mac",
       "//third_party/molokocacao",
       "//third_party/mozilla",
+      "//ui/accelerated_widget_mac:accelerated_widget_mac",
     ]
     if (mac_views_browser) {
       sources += rebase_path(
@@ -417,6 +432,12 @@ source_set("ui") {
               gypi_values.chrome_browser_ui_views_extensions_non_mac_sources,
               ".",
               "//chrome")
+
+      sources -= [
+        "views/extensions/extension_popup_aura.cc",
+        "views/extensions/extension_popup_aura.h",
+      ]
+
       deps += [ "//extensions/components/native_app_window" ]
     } else {
       sources += rebase_path(gypi_values.chrome_browser_ui_cocoa_sources,
@@ -424,7 +445,10 @@ source_set("ui") {
                              "//chrome")
     }
     include_dirs = [ "$target_gen_dir" ]
-    libs += [ "Quartz.framework" ]
+    libs += [
+      "Carbon.framework",
+      "Quartz.framework",
+    ]
     configs +=
         [ "//third_party/google_toolbox_for_mac:google_toolbox_for_mac_config" ]
   } else {  # non-Mac.
@@ -448,7 +472,6 @@ source_set("ui") {
       "//third_party/iaccessible2",
       "//third_party/isimpledom",
       "//third_party/wtl",
-      "//ui/app_list",
       "//ui/base/ime",
       "//ui/events:dom_keycode_converter",
     ]
@@ -459,6 +482,9 @@ source_set("ui") {
         "webui/help/version_updater_basic.cc",
         "webui/help/version_updater_basic.h",
       ]
+    }
+    if (enable_app_list) {
+      deps += [ "//ui/app_list" ]
     }
   } else {  # 'OS!="win"
     if (toolkit_views) {
@@ -512,27 +538,29 @@ source_set("ui") {
                              ".",
                              "//chrome")
     }
+    if (is_desktop_linux) {
+      sources +=
+          rebase_path(gypi_values.chrome_browser_ui_app_list_linux_sources,
+                      ".",
+                      "//chrome")
+    }
+    if (!is_mac && !use_ash) {
+      sources +=
+          rebase_path(gypi_values.chrome_browser_ui_app_list_views_sources,
+                      ".",
+                      "//chrome")
+    }
     deps += [ "//ui/app_list" ]
   } else {
     sources += rebase_path(gypi_values.chrome_browser_ui_non_app_list_sources,
                            ".",
                            "//chrome")
   }
-  if (enable_autofill_dialog) {
-    sources +=
-        rebase_path(gypi_values.chrome_browser_ui_autofill_dialog_sources,
-                    ".",
-                    "//chrome")
-    if (!android_java_ui && !is_ios) {
-      sources += rebase_path(
-              gypi_values.chrome_browser_ui_autofill_dialog_non_mobile_sources,
-              ".",
-              "//chrome")
-      deps += [
-        "//third_party/libaddressinput",
-        "//third_party/libaddressinput:strings",
-      ]
-    }
+  if (!android_java_ui && !is_ios) {
+    deps += [
+      "//third_party/libaddressinput",
+      "//third_party/libaddressinput:strings",
+    ]
   }
   if (enable_extensions) {
     deps += [
@@ -617,8 +645,6 @@ source_set("test_support") {
     "find_bar/find_bar_host_unittest_util.h",
     "login/login_handler_test_utils.cc",
     "login/login_handler_test_utils.h",
-    "passwords/manage_passwords_ui_controller_mock.cc",
-    "passwords/manage_passwords_ui_controller_mock.h",
     "test/test_confirm_bubble_model.cc",
     "test/test_confirm_bubble_model.h",
     "toolbar/test_toolbar_action_view_controller.cc",
@@ -627,6 +653,10 @@ source_set("test_support") {
 
   if (!is_ios && !is_android) {
     sources += [
+      "passwords/manage_passwords_ui_controller_mock.cc",
+      "passwords/manage_passwords_ui_controller_mock.h",
+      "passwords/password_dialog_controller_mock.cc",
+      "passwords/password_dialog_controller_mock.h",
       "website_settings/mock_permission_bubble_request.cc",
       "website_settings/mock_permission_bubble_request.h",
     ]

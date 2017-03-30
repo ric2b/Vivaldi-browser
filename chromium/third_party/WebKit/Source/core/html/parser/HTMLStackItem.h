@@ -32,8 +32,6 @@
 #include "core/dom/Element.h"
 #include "core/html/parser/AtomicHTMLToken.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "wtf/RefCounted.h"
-#include "wtf/RefPtr.h"
 #include "wtf/text/AtomicString.h"
 
 namespace blink {
@@ -48,13 +46,13 @@ public:
     };
 
     // Used by document fragment node and context element.
-    static RawPtr<HTMLStackItem> create(RawPtr<ContainerNode> node, ItemType type)
+    static HTMLStackItem* create(ContainerNode* node, ItemType type)
     {
         return new HTMLStackItem(node, type);
     }
 
     // Used by HTMLElementStack and HTMLFormattingElementList.
-    static RawPtr<HTMLStackItem> create(RawPtr<ContainerNode> node, AtomicHTMLToken* token, const AtomicString& namespaceURI = HTMLNames::xhtmlNamespaceURI)
+    static HTMLStackItem* create(ContainerNode* node, AtomicHTMLToken* token, const AtomicString& namespaceURI = HTMLNames::xhtmlNamespaceURI)
     {
         return new HTMLStackItem(node, token, namespaceURI);
     }
@@ -212,7 +210,7 @@ public:
     DEFINE_INLINE_TRACE() { visitor->trace(m_node); }
 
 private:
-    HTMLStackItem(RawPtr<ContainerNode> node, ItemType type)
+    HTMLStackItem(ContainerNode* node, ItemType type)
         : m_node(node)
     {
         switch (type) {
@@ -227,7 +225,7 @@ private:
         }
     }
 
-    HTMLStackItem(RawPtr<ContainerNode> node, AtomicHTMLToken* token, const AtomicString& namespaceURI = HTMLNames::xhtmlNamespaceURI)
+    HTMLStackItem(ContainerNode* node, AtomicHTMLToken* token, const AtomicString& namespaceURI = HTMLNames::xhtmlNamespaceURI)
         : m_node(node)
         , m_tokenLocalName(token->name())
         , m_tokenAttributes(token->attributes())

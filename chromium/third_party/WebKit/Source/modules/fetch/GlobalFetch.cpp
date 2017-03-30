@@ -33,6 +33,11 @@ public:
 
     ScriptPromise fetch(ScriptState* scriptState, const RequestInfo& input, const Dictionary& init, ExceptionState& exceptionState) override
     {
+        if (!scriptState->contextIsValid()) {
+            // TODO(yhirano): Should this be moved to bindings?
+            exceptionState.throwTypeError("The global scope is shutting down.");
+            return ScriptPromise();
+        }
         if (m_fetchManager->isStopped()) {
             exceptionState.throwTypeError("The global scope is shutting down.");
             return ScriptPromise();
@@ -44,7 +49,7 @@ public:
         Request* r = Request::create(scriptState, input, init, exceptionState);
         if (exceptionState.hadException())
             return ScriptPromise();
-        return m_fetchManager->fetch(scriptState, r->passRequestData());
+        return m_fetchManager->fetch(scriptState, r->passRequestData(scriptState));
     }
 
     DEFINE_INLINE_VIRTUAL_TRACE()

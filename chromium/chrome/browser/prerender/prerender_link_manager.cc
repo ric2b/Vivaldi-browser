@@ -6,11 +6,11 @@
 
 #include <functional>
 #include <limits>
+#include <memory>
 #include <set>
 #include <string>
 #include <utility>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "chrome/browser/prerender/prerender_contents.h"
@@ -87,7 +87,7 @@ void RecordLinkManagerStarting(const uint32_t rel_types) {
 
 void Send(int child_id, IPC::Message* raw_message) {
   using content::RenderProcessHost;
-  scoped_ptr<IPC::Message> own_message(raw_message);
+  std::unique_ptr<IPC::Message> own_message(raw_message);
 
   RenderProcessHost* render_process_host = RenderProcessHost::FromID(child_id);
   if (!render_process_host)
@@ -272,7 +272,6 @@ PrerenderLinkManager::LinkPrerender::LinkPrerender(
       creation_time(creation_time),
       deferred_launcher(deferred_launcher),
       handle(NULL),
-      is_match_complete_replacement(false),
       has_been_abandoned(false) {}
 
 PrerenderLinkManager::LinkPrerender::LinkPrerender(const LinkPrerender& other) =
@@ -433,7 +432,7 @@ void PrerenderLinkManager::RemovePrerender(LinkPrerender* prerender) {
   for (std::list<LinkPrerender>::iterator i = prerenders_.begin();
        i != prerenders_.end(); ++i) {
     if (&(*i) == prerender) {
-      scoped_ptr<PrerenderHandle> own_handle(i->handle);
+      std::unique_ptr<PrerenderHandle> own_handle(i->handle);
       i->handle = NULL;
       prerenders_.erase(i);
       return;
@@ -446,7 +445,7 @@ void PrerenderLinkManager::CancelPrerender(LinkPrerender* prerender) {
   for (std::list<LinkPrerender>::iterator i = prerenders_.begin();
        i != prerenders_.end(); ++i) {
     if (&(*i) == prerender) {
-      scoped_ptr<PrerenderHandle> own_handle(i->handle);
+      std::unique_ptr<PrerenderHandle> own_handle(i->handle);
       i->handle = NULL;
       prerenders_.erase(i);
       if (own_handle)
@@ -521,29 +520,10 @@ void PrerenderLinkManager::OnPrerenderStop(
   if (!prerender)
     return;
 
-  // If the prerender became a match complete replacement, the stop
-  // message has already been sent.
-  if (!prerender->is_match_complete_replacement) {
-    Send(prerender->launcher_child_id,
-         new PrerenderMsg_OnPrerenderStop(prerender->prerender_id));
-  }
-  RemovePrerender(prerender);
-  StartPrerenders();
-}
-
-void PrerenderLinkManager::OnPrerenderCreatedMatchCompleteReplacement(
-    PrerenderHandle* prerender_handle) {
-  LinkPrerender* prerender = FindByPrerenderHandle(prerender_handle);
-  if (!prerender)
-    return;
-
-  DCHECK(!prerender->is_match_complete_replacement);
-  prerender->is_match_complete_replacement = true;
   Send(prerender->launcher_child_id,
        new PrerenderMsg_OnPrerenderStop(prerender->prerender_id));
-  // Do not call RemovePrerender here. The replacement needs to stay connected
-  // to the HTMLLinkElement in the renderer so it notices renderer-triggered
-  // cancelations.
+  RemovePrerender(prerender);
+  StartPrerenders();
 }
 
 }  // namespace prerender

@@ -7,9 +7,9 @@
 
 #include <list>
 #include <map>
+#include <memory>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/accelerators/accelerator_manager.h"
@@ -201,7 +201,8 @@ class VIEWS_EXPORT FocusManager {
 
   // Restore the view saved with a previous call to StoreFocusedView(). Used
   // when the widget becomes active. Returns true when the previous view was
-  // successfully refocused - otherwise false.
+  // successfully refocused. In case the stored view is no longer focusable,
+  // it advances focus and returns false.
   bool RestoreFocusedView();
 
   // Sets the |view| to be restored when calling RestoreFocusView. This is used
@@ -277,12 +278,6 @@ class VIEWS_EXPORT FocusManager {
   void AddFocusChangeListener(FocusChangeListener* listener);
   void RemoveFocusChangeListener(FocusChangeListener* listener);
 
-  // Returns the AcceleratorTarget that should be activated for the specified
-  // keyboard accelerator, or NULL if no view is registered for that keyboard
-  // accelerator.
-  ui::AcceleratorTarget* GetCurrentTargetForAccelerator(
-      const ui::Accelerator& accelerator) const;
-
   // Whether the given |accelerator| has a priority handler associated with it.
   bool HasPriorityHandler(const ui::Accelerator& accelerator) const;
 
@@ -325,6 +320,12 @@ class VIEWS_EXPORT FocusManager {
                              bool reverse,
                              bool dont_loop);
 
+  bool keyboard_accessible() const { return keyboard_accessible_; }
+
+  // Updates |keyboard_accessible_| to the given value and advances focus if
+  // necessary.
+  void SetKeyboardAccessible(bool keyboard_accessible);
+
  private:
   // Returns the focusable view found in the FocusTraversable specified starting
   // at the specified view. This traverses down along the FocusTraversable
@@ -338,6 +339,10 @@ class VIEWS_EXPORT FocusManager {
   // and should not be processed further.
   bool ProcessArrowKeyTraversal(const ui::KeyEvent& event);
 
+  // Whether |view| is currently focusable as per the platform's interpretation
+  // of |keyboard_accesible_|.
+  bool IsFocusable(View* view) const;
+
   // Whether arrow key traversal is enabled.
   static bool arrow_key_traversal_enabled_;
 
@@ -346,13 +351,13 @@ class VIEWS_EXPORT FocusManager {
 
   // The object which handles an accelerator when |accelerator_manager_| doesn't
   // handle it.
-  scoped_ptr<FocusManagerDelegate> delegate_;
+  std::unique_ptr<FocusManagerDelegate> delegate_;
 
   // The view that currently is focused.
   View* focused_view_;
 
   // The AcceleratorManager this FocusManager is associated with.
-  scoped_ptr<ui::AcceleratorManager> accelerator_manager_;
+  std::unique_ptr<ui::AcceleratorManager> accelerator_manager_;
 
   // Keeps track of whether shortcut handling is currently suspended.
   bool shortcut_handling_suspended_;
@@ -369,6 +374,15 @@ class VIEWS_EXPORT FocusManager {
 
   // See description above getter.
   bool is_changing_focus_;
+
+  // This is true if full keyboard accessibility is needed. This causes
+  // IsAccessibilityFocusable() to be checked rather than IsFocusable(). This
+  // can be set depending on platform constraints. FocusSearch uses this in
+  // addition to its own accessibility mode, which handles accessibility at the
+  // FocusTraversable level. Currently only used on Mac, when Full Keyboard
+  // access is enabled.
+  // Default value is false.
+  bool keyboard_accessible_;
 
   DISALLOW_COPY_AND_ASSIGN(FocusManager);
 };

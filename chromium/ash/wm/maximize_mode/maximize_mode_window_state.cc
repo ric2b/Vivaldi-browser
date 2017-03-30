@@ -9,20 +9,22 @@
 #include "ash/screen_util.h"
 #include "ash/shell.h"
 #include "ash/shell_window_ids.h"
-#include "ash/wm/coordinate_conversion.h"
+#include "ash/wm/aura/wm_window_aura.h"
+#include "ash/wm/common/window_animation_types.h"
+#include "ash/wm/common/window_state_delegate.h"
+#include "ash/wm/common/window_state_util.h"
+#include "ash/wm/common/wm_event.h"
+#include "ash/wm/common/wm_screen_util.h"
+#include "ash/wm/common/workspace/workspace_window_resizer.h"
 #include "ash/wm/maximize_mode/maximize_mode_window_manager.h"
 #include "ash/wm/window_animations.h"
 #include "ash/wm/window_properties.h"
-#include "ash/wm/window_state_delegate.h"
-#include "ash/wm/window_state_util.h"
+#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm/wm_event.h"
-#include "ash/wm/workspace/workspace_window_resizer.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
 #include "ui/compositor/layer.h"
-#include "ui/gfx/display.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/view_constants_aura.h"
 #include "ui/views/widget/widget.h"
@@ -35,14 +37,10 @@ namespace {
 gfx::Size GetMaximumSizeOfWindow(wm::WindowState* window_state) {
   DCHECK(window_state->CanMaximize() || window_state->CanResize());
 
-  gfx::Size workspace_size = ScreenUtil::GetMaximizedWindowBoundsInParent(
-      window_state->window()).size();
+  gfx::Size workspace_size =
+      wm::GetMaximizedWindowBoundsInParent(window_state->window()).size();
 
-  aura::WindowDelegate* delegate = window_state->window()->delegate();
-  if (!delegate)
-    return workspace_size;
-
-  gfx::Size size = delegate->GetMaximumSize();
+  gfx::Size size = window_state->window()->GetMaximumSize();
   if (size.IsEmpty())
     return workspace_size;
 
@@ -54,7 +52,7 @@ gfx::Size GetMaximumSizeOfWindow(wm::WindowState* window_state) {
 gfx::Rect GetCenteredBounds(const gfx::Rect& bounds_in_parent,
                             wm::WindowState* state_object) {
   gfx::Rect work_area_in_parent =
-      ScreenUtil::GetDisplayWorkAreaBoundsInParent(state_object->window());
+      wm::GetDisplayWorkAreaBoundsInParent(state_object->window());
   work_area_in_parent.ClampToCenteredSize(bounds_in_parent.size());
   return work_area_in_parent;
 }
@@ -62,7 +60,7 @@ gfx::Rect GetCenteredBounds(const gfx::Rect& bounds_in_parent,
 // Returns the maximized/full screen and/or centered bounds of a window.
 gfx::Rect GetBoundsInMaximizedMode(wm::WindowState* state_object) {
   if (state_object->IsFullscreen())
-    return ScreenUtil::GetDisplayBoundsInParent(state_object->window());
+    return wm::GetDisplayBoundsInParent(state_object->window());
 
   gfx::Rect bounds_in_parent;
   // Make the window as big as possible.
@@ -75,7 +73,7 @@ gfx::Rect GetBoundsInMaximizedMode(wm::WindowState* state_object) {
     if (state_object->HasRestoreBounds())
       bounds_in_parent = state_object->GetRestoreBoundsInParent();
     else
-      bounds_in_parent = state_object->window()->bounds();
+      bounds_in_parent = state_object->window()->GetBounds();
   }
   return GetCenteredBounds(bounds_in_parent, state_object);
 }
@@ -86,7 +84,7 @@ gfx::Rect GetBoundsInMaximizedMode(wm::WindowState* state_object) {
 void MaximizeModeWindowState::UpdateWindowPosition(
     wm::WindowState* window_state) {
   gfx::Rect bounds_in_parent = GetBoundsInMaximizedMode(window_state);
-  if (bounds_in_parent == window_state->window()->bounds())
+  if (bounds_in_parent == window_state->window()->GetBounds())
     return;
   window_state->SetBoundsDirect(bounds_in_parent);
 }
@@ -168,7 +166,7 @@ void MaximizeModeWindowState::OnWMEvent(wm::WindowState* window_state,
         gfx::Rect bounds_in_parent =
             (static_cast<const wm::SetBoundsEvent*>(event))->requested_bounds();
         bounds_in_parent = GetCenteredBounds(bounds_in_parent, window_state);
-        if (bounds_in_parent != window_state->window()->bounds()) {
+        if (bounds_in_parent != window_state->window()->GetBounds()) {
           if (window_state->window()->IsVisible())
             window_state->SetBoundsDirectAnimated(bounds_in_parent);
           else
@@ -206,17 +204,18 @@ void MaximizeModeWindowState::AttachState(
     wm::WindowState::State* previous_state) {
   current_state_type_ = previous_state->GetType();
 
-  views::Widget* widget =
-      views::Widget::GetWidgetForNativeWindow(window_state->window());
+  aura::Window* window =
+      ash::wm::WmWindowAura::GetAuraWindow(window_state->window());
+  views::Widget* widget = views::Widget::GetWidgetForNativeWindow(window);
   if (widget) {
     gfx::Rect bounds = widget->GetRestoredBounds();
     if (!bounds.IsEmpty()) {
       // We do not want to do a session restore to our window states. Therefore
       // we tell the window to use the current default states instead.
-      window_state->window()->SetProperty(ash::kRestoreShowStateOverrideKey,
-                                          window_state->GetShowState());
-      window_state->window()->SetProperty(ash::kRestoreBoundsOverrideKey,
-          new gfx::Rect(widget->GetRestoredBounds()));
+      window->SetProperty(ash::kRestoreShowStateOverrideKey,
+                          window_state->GetShowState());
+      window->SetProperty(ash::kRestoreBoundsOverrideKey,
+                          new gfx::Rect(widget->GetRestoredBounds()));
     }
   }
 
@@ -234,7 +233,8 @@ void MaximizeModeWindowState::AttachState(
 
 void MaximizeModeWindowState::DetachState(wm::WindowState* window_state) {
   // From now on, we can use the default session restore mechanism again.
-  window_state->window()->ClearProperty(ash::kRestoreBoundsOverrideKey);
+  ash::wm::WmWindowAura::GetAuraWindow(window_state->window())
+      ->ClearProperty(ash::kRestoreBoundsOverrideKey);
   window_state->set_can_be_dragged(true);
 }
 
@@ -252,8 +252,8 @@ void MaximizeModeWindowState::UpdateWindow(wm::WindowState* window_state,
       return;
 
     current_state_type_ = target_state;
-    ::wm::SetWindowVisibilityAnimationType(
-        window_state->window(), WINDOW_VISIBILITY_ANIMATION_TYPE_MINIMIZE);
+    window_state->window()->SetVisibilityAnimationType(
+        wm::WINDOW_VISIBILITY_ANIMATION_TYPE_MINIMIZE);
     window_state->window()->Hide();
     if (window_state->IsActive())
       window_state->Deactivate();
@@ -273,9 +273,9 @@ void MaximizeModeWindowState::UpdateWindow(wm::WindowState* window_state,
   UpdateBounds(window_state, animated);
   window_state->NotifyPostStateTypeChange(old_state_type);
 
-  if ((window_state->window()->TargetVisibility() ||
-      old_state_type == wm::WINDOW_STATE_TYPE_MINIMIZED) &&
-      !window_state->window()->layer()->visible()) {
+  if ((window_state->window()->GetTargetVisibility() ||
+       old_state_type == wm::WINDOW_STATE_TYPE_MINIMIZED) &&
+      !window_state->window()->GetLayer()->visible()) {
     // The layer may be hidden if the window was previously minimized. Make
     // sure it's visible.
     window_state->window()->Show();
@@ -296,7 +296,7 @@ void MaximizeModeWindowState::UpdateBounds(wm::WindowState* window_state,
   // If we have a target bounds rectangle, we center it and set it
   // accordingly.
   if (!bounds_in_parent.IsEmpty() &&
-      bounds_in_parent != window_state->window()->bounds()) {
+      bounds_in_parent != window_state->window()->GetBounds()) {
     if (current_state_type_ == wm::WINDOW_STATE_TYPE_MINIMIZED ||
         !window_state->window()->IsVisible() ||
         !animated) {

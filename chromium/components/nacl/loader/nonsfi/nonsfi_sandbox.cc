@@ -14,6 +14,8 @@
 #include <sys/syscall.h>
 #include <sys/time.h>
 
+#include <memory>
+
 #include "base/logging.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -335,7 +337,7 @@ ResultExpr NaClNonSfiBPFSandboxPolicy::InvalidSyscall() const {
 
 bool InitializeBPFSandbox(base::ScopedFD proc_fd) {
   bool sandbox_is_initialized = content::InitializeSandbox(
-      scoped_ptr<sandbox::bpf_dsl::Policy>(
+      std::unique_ptr<sandbox::bpf_dsl::Policy>(
           new nacl::nonsfi::NaClNonSfiBPFSandboxPolicy()),
       std::move(proc_fd));
   if (!sandbox_is_initialized)

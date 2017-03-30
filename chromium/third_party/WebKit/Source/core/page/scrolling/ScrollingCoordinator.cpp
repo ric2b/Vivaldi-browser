@@ -35,7 +35,6 @@
 #include "core/html/HTMLElement.h"
 #include "core/layout/LayoutGeometryMap.h"
 #include "core/layout/LayoutPart.h"
-#include "core/layout/LayoutView.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
@@ -286,7 +285,7 @@ static PassOwnPtr<WebScrollbarLayer> createScrollbarLayer(Scrollbar& scrollbar, 
 
     OwnPtr<WebScrollbarLayer> scrollbarLayer = adoptPtr(Platform::current()->compositorSupport()->createScrollbarLayer(WebScrollbarImpl::create(&scrollbar), painter, geometry.leakPtr()));
     GraphicsLayer::registerContentsLayer(scrollbarLayer->layer());
-    return scrollbarLayer.release();
+    return scrollbarLayer;
 }
 
 PassOwnPtr<WebScrollbarLayer> ScrollingCoordinator::createSolidColorScrollbarLayer(ScrollbarOrientation orientation, int thumbThickness, int trackStart, bool isLeftSideVerticalScrollbar)
@@ -294,7 +293,7 @@ PassOwnPtr<WebScrollbarLayer> ScrollingCoordinator::createSolidColorScrollbarLay
     WebScrollbar::Orientation webOrientation = (orientation == HorizontalScrollbar) ? WebScrollbar::Horizontal : WebScrollbar::Vertical;
     OwnPtr<WebScrollbarLayer> scrollbarLayer = adoptPtr(Platform::current()->compositorSupport()->createSolidColorScrollbarLayer(webOrientation, thumbThickness, trackStart, isLeftSideVerticalScrollbar));
     GraphicsLayer::registerContentsLayer(scrollbarLayer->layer());
-    return scrollbarLayer.release();
+    return scrollbarLayer;
 }
 
 static void detachScrollbarLayer(GraphicsLayer* scrollbarGraphicsLayer)
@@ -322,7 +321,7 @@ static void setupScrollbarLayer(GraphicsLayer* scrollbarGraphicsLayer, WebScroll
 WebScrollbarLayer* ScrollingCoordinator::addWebScrollbarLayer(ScrollableArea* scrollableArea, ScrollbarOrientation orientation, PassOwnPtr<WebScrollbarLayer> scrollbarLayer)
 {
     ScrollbarMap& scrollbars = orientation == HorizontalScrollbar ? m_horizontalScrollbars : m_verticalScrollbars;
-    return scrollbars.add(scrollableArea, scrollbarLayer).storedValue->value.get();
+    return scrollbars.add(scrollableArea, std::move(scrollbarLayer)).storedValue->value.get();
 }
 
 WebScrollbarLayer* ScrollingCoordinator::getWebScrollbarLayer(ScrollableArea* scrollableArea, ScrollbarOrientation orientation)
@@ -333,6 +332,9 @@ WebScrollbarLayer* ScrollingCoordinator::getWebScrollbarLayer(ScrollableArea* sc
 
 void ScrollingCoordinator::scrollableAreaScrollbarLayerDidChange(ScrollableArea* scrollableArea, ScrollbarOrientation orientation)
 {
+    if (!m_page || !m_page->mainFrame())
+        return;
+
     bool isMainFrame = isForMainFrame(scrollableArea);
     GraphicsLayer* scrollbarGraphicsLayer = orientation == HorizontalScrollbar
         ? scrollableArea->layerForHorizontalScrollbar()
@@ -356,7 +358,7 @@ void ScrollingCoordinator::scrollableAreaScrollbarLayerDidChange(ScrollableArea*
             } else {
                 webScrollbarLayer = createScrollbarLayer(scrollbar, m_page->deviceScaleFactor());
             }
-            scrollbarLayer = addWebScrollbarLayer(scrollableArea, orientation, webScrollbarLayer.release());
+            scrollbarLayer = addWebScrollbarLayer(scrollableArea, orientation, std::move(webScrollbarLayer));
         }
 
         WebLayer* scrollLayer = toWebLayer(scrollableArea->layerForScrolling());
@@ -373,12 +375,13 @@ void ScrollingCoordinator::scrollableAreaScrollbarLayerDidChange(ScrollableArea*
 
 bool ScrollingCoordinator::scrollableAreaScrollLayerDidChange(ScrollableArea* scrollableArea)
 {
+    if (!m_page || !m_page->mainFrame())
+        return false;
+
     GraphicsLayer* scrollLayer = scrollableArea->layerForScrolling();
 
-    if (scrollLayer) {
-        ASSERT(m_page);
+    if (scrollLayer)
         scrollLayer->setScrollableArea(scrollableArea, isForViewport(scrollableArea));
-    }
 
     WebLayer* webLayer = toWebLayer(scrollableArea->layerForScrolling());
     WebLayer* containerLayer = toWebLayer(scrollableArea->layerForContainer());
@@ -447,6 +450,9 @@ static void projectRectsToGraphicsLayerSpaceRecursive(
     HashSet<const PaintLayer*>& layersWithRects,
     LayerFrameMap& layerChildFrameMap)
 {
+    // If this layer is throttled, ignore it.
+    if (curLayer->layoutObject()->frameView() && curLayer->layoutObject()->frameView()->shouldThrottleRendering())
+        return;
     // Project any rects for the current layer
     LayerHitTestRects::const_iterator layerIter = layerRects.find(curLayer);
     if (layerIter != layerRects.end()) {
@@ -495,7 +501,7 @@ static void projectRectsToGraphicsLayerSpaceRecursive(
     if (mapIter != layerChildFrameMap.end()) {
         for (size_t i = 0; i < mapIter->value.size(); i++) {
             const LocalFrame* childFrame = mapIter->value[i];
-            const PaintLayer* childLayer = childFrame->view()->layoutView()->layer();
+            const PaintLayer* childLayer = childFrame->view()->layoutViewItem().layer();
             if (layersWithRects.contains(childLayer)) {
                 LayerFrameMap newLayerChildFrameMap;
                 makeLayerChildFrameMap(childFrame, &newLayerChildFrameMap);
@@ -787,19 +793,20 @@ static void accumulateDocumentTouchEventTargetRects(LayerHitTestRects& rects, co
     // Fullscreen HTML5 video when OverlayFullscreenVideo is enabled is implemented by replacing the
     // root cc::layer with the video layer so doing this optimization causes the compositor to think
     // that there are no handlers, therefore skip it.
-    if (!document->layoutView()->compositor()->inOverlayFullscreenVideo()) {
+    if (!document->layoutViewItem().compositor()->inOverlayFullscreenVideo()) {
         for (const auto& eventTarget : *targets) {
             EventTarget* target = eventTarget.key;
             Node* node = target->toNode();
-            LocalDOMWindow* window = target->toDOMWindow();
+            LocalDOMWindow* window = target->toLocalDOMWindow();
             // If the target is inside a throttled frame, skip it.
             if (window && window->frame()->view() && window->frame()->view()->shouldThrottleRendering())
                 continue;
             if (node && node->document().view() && node->document().view()->shouldThrottleRendering())
                 continue;
             if (window || node == document || node == document->documentElement() || node == document->body()) {
-                if (LayoutView* layoutView = document->layoutView())
-                    layoutView->computeLayerHitTestRects(rects);
+                if (LayoutViewItem layoutView = document->layoutViewItem()) {
+                    layoutView.computeLayerHitTestRects(rects);
+                }
                 return;
             }
         }
@@ -826,8 +833,10 @@ static void accumulateDocumentTouchEventTargetRects(LayerHitTestRects& rects, co
             // If the set also contains one of our ancestor nodes then processing
             // this node would be redundant.
             bool hasTouchEventTargetAncestor = false;
-            for (Node* ancestor = node->parentNode(); ancestor && !hasTouchEventTargetAncestor; ancestor = ancestor->parentNode()) {
-                if (targets->contains(ancestor))
+            for (Node& ancestor : NodeTraversal::ancestorsOf(*node)) {
+                if (hasTouchEventTargetAncestor)
+                    break;
+                if (targets->contains(&ancestor))
                     hasTouchEventTargetAncestor = true;
             }
             if (!hasTouchEventTargetAncestor) {
@@ -892,8 +901,8 @@ bool ScrollingCoordinator::isForRootLayer(ScrollableArea* scrollableArea) const
         return false;
 
     // FIXME(305811): Refactor for OOPI.
-    LayoutView* layoutView = m_page->deprecatedLocalMainFrame()->view()->layoutView();
-    return layoutView ? scrollableArea == layoutView->layer()->getScrollableArea() : false;
+    LayoutViewItem layoutViewItem = m_page->deprecatedLocalMainFrame()->view()->layoutViewItem();
+    return layoutViewItem.isNull() ? false : scrollableArea == layoutViewItem.layer()->getScrollableArea();
 }
 
 bool ScrollingCoordinator::isForMainFrame(ScrollableArea* scrollableArea) const
@@ -949,7 +958,8 @@ bool ScrollingCoordinator::hasVisibleSlowRepaintViewportConstrainedObjects(Frame
 
     for (const LayoutObject* layoutObject : *viewportConstrainedObjects) {
         ASSERT(layoutObject->isBoxModelObject() && layoutObject->hasLayer());
-        ASSERT(layoutObject->style()->position() == FixedPosition);
+        ASSERT(layoutObject->style()->position() == FixedPosition
+            || layoutObject->style()->position() == StickyPosition);
         PaintLayer* layer = toLayoutBoxModelObject(layoutObject)->layer();
 
         // Whether the Layer scrolls with the viewport is a tree-depenent
@@ -992,12 +1002,21 @@ MainThreadScrollingReasons ScrollingCoordinator::mainThreadScrollingReasons() co
         if (!frame->isLocalFrame())
             continue;
 
+        // TODO(alexmos,kenrb): For OOPIF, local roots that are different from
+        // the main frame can't be used in the calculation, since they use
+        // different compositors with unrelated state, which breaks some of the
+        // calculations below.
+        if (toLocalFrame(frame)->localFrameRoot() != m_page->mainFrame())
+            continue;
+
         FrameView* frameView = toLocalFrame(frame)->view();
         if (!frameView || frameView->shouldThrottleRendering())
             continue;
 
         if (frameView->hasBackgroundAttachmentFixedObjects())
             reasons |= MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects;
+        if (frameView->hasStickyPositionObjects())
+            reasons |= MainThreadScrollingReason::kHasStickyPositionObjects;
         FrameView::ScrollingReasons scrollingReasons = frameView->getScrollingReasons();
         const bool mayBeScrolledByInput = (scrollingReasons == FrameView::Scrollable);
         const bool mayBeScrolledByScript = mayBeScrolledByInput || (scrollingReasons ==
@@ -1023,6 +1042,8 @@ String ScrollingCoordinator::mainThreadScrollingReasonsAsText(MainThreadScrollin
         stringBuilder.appendLiteral("Has background-attachment:fixed, ");
     if (reasons & MainThreadScrollingReason::kHasNonLayerViewportConstrainedObjects)
         stringBuilder.appendLiteral("Has non-layer viewport-constrained objects, ");
+    if (reasons & MainThreadScrollingReason::kHasStickyPositionObjects)
+        stringBuilder.appendLiteral("Has sticky position objects, ");
     if (reasons & MainThreadScrollingReason::kThreadedScrollingDisabled)
         stringBuilder.appendLiteral("Threaded scrolling is disabled, ");
     if (reasons & MainThreadScrollingReason::kAnimatingScrollOnMainThread)

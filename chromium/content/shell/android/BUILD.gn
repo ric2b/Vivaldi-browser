@@ -118,6 +118,7 @@ android_apk("content_shell_apk") {
     ":libcontent_shell_content_view",
     "//base:base_java",
     "//content/public/android:content_java",
+    "//content/public/test/android:layouttest_java_support",
     "//media/capture/video/android:capture_java",
     "//net/android:net_java",
     "//third_party/mesa:osmesa",
@@ -160,7 +161,7 @@ instrumentation_test_apk("content_shell_test_apk") {
   apk_under_test = ":content_shell_apk"
   apk_name = "ContentShellTest"
   android_manifest = "javatests/AndroidManifest.xml"
-  isolate_file = "../../content_shell_test_apk.isolate"
+  isolate_file = "../../content_shell_test_data.isolate"
 }
 
 if (current_cpu != "x64") {

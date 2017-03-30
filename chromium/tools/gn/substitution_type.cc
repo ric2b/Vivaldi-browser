@@ -43,8 +43,11 @@ const char* kSubstitutionNames[SUBSTITUTION_NUM_TYPES] = {
   "{{inputs_newline}}",  // SUBSTITUTION_LINKER_INPUTS_NEWLINE
   "{{ldflags}}",  // SUBSTITUTION_LDFLAGS
   "{{libs}}",  // SUBSTITUTION_LIBS
+  "{{output_dir}}",  // SUBSTITUTION_OUTPUT_DIR
   "{{output_extension}}",  // SUBSTITUTION_OUTPUT_EXTENSION
   "{{solibs}}",  // SUBSTITUTION_SOLIBS
+
+  "{{arflags}}",  // SUBSTITUTION_ARFLAGS
 
   "{{bundle_root_dir}}",  // SUBSTITUTION_BUNDLE_ROOT_DIR
   "{{bundle_resources_dir}}",  // SUBSTITUTION_BUNDLE_RESOURCES_DIR
@@ -91,8 +94,11 @@ const char* kSubstitutionNinjaNames[SUBSTITUTION_NUM_TYPES] = {
     "in_newline",        // SUBSTITUTION_LINKER_INPUTS_NEWLINE
     "ldflags",           // SUBSTITUTION_LDFLAGS
     "libs",              // SUBSTITUTION_LIBS
+    "output_dir",        // SUBSTITUTION_OUTPUT_DIR
     "output_extension",  // SUBSTITUTION_OUTPUT_EXTENSION
     "solibs",            // SUBSTITUTION_SOLIBS
+
+    "arflags",           // SUBSTITUTION_ARFLAGS
 
     "bundle_root_dir",        // SUBSTITUTION_BUNDLE_ROOT_DIR
     "bundle_resources_dir",   // SUBSTITUTION_BUNDLE_RESOURCES_DIR
@@ -193,6 +199,7 @@ bool IsValidLinkerSubstitution(SubstitutionType type) {
          type == SUBSTITUTION_LINKER_INPUTS_NEWLINE ||
          type == SUBSTITUTION_LDFLAGS ||
          type == SUBSTITUTION_LIBS ||
+         type == SUBSTITUTION_OUTPUT_DIR ||
          type == SUBSTITUTION_OUTPUT_EXTENSION ||
          type == SUBSTITUTION_SOLIBS;
 }
@@ -200,6 +207,16 @@ bool IsValidLinkerSubstitution(SubstitutionType type) {
 bool IsValidLinkerOutputsSubstitution(SubstitutionType type) {
   // All valid compiler outputs plus the output extension.
   return IsValidCompilerOutputsSubstitution(type) ||
+         type == SUBSTITUTION_OUTPUT_DIR ||
+         type == SUBSTITUTION_OUTPUT_EXTENSION;
+}
+
+bool IsValidALinkSubstitution(SubstitutionType type) {
+  return IsValidToolSubstitution(type) ||
+         type == SUBSTITUTION_LINKER_INPUTS ||
+         type == SUBSTITUTION_LINKER_INPUTS_NEWLINE ||
+         type == SUBSTITUTION_ARFLAGS ||
+         type == SUBSTITUTION_OUTPUT_DIR ||
          type == SUBSTITUTION_OUTPUT_EXTENSION;
 }
 

@@ -20,7 +20,7 @@
 #include "content/renderer/render_view_impl.h"
 #include "mojo/converters/geometry/geometry_type_converters.h"
 #include "mojo/converters/surfaces/surfaces_utils.h"
-#include "mojo/shell/public/cpp/connector.h"
+#include "services/shell/public/cpp/connector.h"
 
 namespace content {
 
@@ -45,7 +45,8 @@ void RenderWidgetMusConnection::Bind(
   }
 }
 
-scoped_ptr<cc::OutputSurface> RenderWidgetMusConnection::CreateOutputSurface() {
+std::unique_ptr<cc::OutputSurface>
+RenderWidgetMusConnection::CreateOutputSurface() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!window_surface_binding_);
   mus::mojom::GpuPtr gpu_service;
@@ -55,7 +56,7 @@ scoped_ptr<cc::OutputSurface> RenderWidgetMusConnection::CreateOutputSurface() {
   gpu_service->CreateOffscreenGLES2Context(GetProxy(&cb));
   scoped_refptr<cc::ContextProvider> context_provider(
       new mus::ContextProvider(cb.PassInterface().PassHandle()));
-  scoped_ptr<cc::OutputSurface> surface(new mus::OutputSurface(
+  std::unique_ptr<cc::OutputSurface> surface(new mus::OutputSurface(
       context_provider, mus::WindowSurface::Create(&window_surface_binding_)));
   if (compositor_mus_connection_) {
     compositor_mus_connection_->AttachSurfaceOnMainThread(
@@ -123,15 +124,18 @@ void RenderWidgetMusConnection::OnDidOverscroll(
 }
 
 void RenderWidgetMusConnection::OnInputEventAck(
-    scoped_ptr<InputEventAck> input_event_ack) {
+    std::unique_ptr<InputEventAck> input_event_ack) {
   DCHECK(!pending_ack_.is_null());
   pending_ack_.Run(input_event_ack->state ==
-                   InputEventAckState::INPUT_EVENT_ACK_STATE_CONSUMED);
+                           InputEventAckState::INPUT_EVENT_ACK_STATE_CONSUMED
+                       ? mus::mojom::EventResult::HANDLED
+                       : mus::mojom::EventResult::UNHANDLED);
   pending_ack_.Reset();
 }
 
 void RenderWidgetMusConnection::NotifyInputEventHandled(
-    blink::WebInputEvent::Type handled_type) {
+    blink::WebInputEvent::Type handled_type,
+    InputEventAckState ack_result) {
   NOTIMPLEMENTED();
 }
 
@@ -167,13 +171,13 @@ void RenderWidgetMusConnection::OnConnectionLost() {
 }
 
 void RenderWidgetMusConnection::OnWindowInputEvent(
-    scoped_ptr<blink::WebInputEvent> input_event,
-    const base::Callback<void(bool)>& ack) {
+    std::unique_ptr<blink::WebInputEvent> input_event,
+    const base::Callback<void(mus::mojom::EventResult)>& ack) {
   DCHECK(thread_checker_.CalledOnValidThread());
   // If we don't yet have a RenderWidgetInputHandler then we don't yet have
   // an initialized RenderWidget.
   if (!input_handler_) {
-    ack.Run(false);
+    ack.Run(mus::mojom::EventResult::UNHANDLED);
     return;
   }
   // TODO(fsamuel): It would be nice to add this DCHECK but the reality is an

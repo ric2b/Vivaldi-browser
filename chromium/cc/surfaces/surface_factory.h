@@ -5,12 +5,12 @@
 #ifndef CC_SURFACES_SURFACE_FACTORY_H_
 #define CC_SURFACES_SURFACE_FACTORY_H_
 
+#include <memory>
 #include <set>
 #include <unordered_map>
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "cc/output/compositor_frame.h"
@@ -49,15 +49,19 @@ class CC_SURFACES_EXPORT SurfaceFactory
   void Destroy(SurfaceId surface_id);
   void DestroyAll();
 
+  // Set that the current frame on new_id is to be treated as the successor to
+  // the current frame on old_id for the purposes of calculating damage.
+  void SetPreviousFrameSurface(SurfaceId new_id, SurfaceId old_id);
+
   // A frame can only be submitted to a surface created by this factory,
   // although the frame may reference surfaces created by other factories.
   // The callback is called the first time this frame is used to draw, or if
   // the frame is discarded.
   void SubmitCompositorFrame(SurfaceId surface_id,
-                             scoped_ptr<CompositorFrame> frame,
+                             std::unique_ptr<CompositorFrame> frame,
                              const DrawCallback& callback);
   void RequestCopyOfSurface(SurfaceId surface_id,
-                            scoped_ptr<CopyOutputRequest> copy_request);
+                            std::unique_ptr<CopyOutputRequest> copy_request);
 
   void WillDrawSurface(SurfaceId id, const gfx::Rect& damage_rect);
 
@@ -83,7 +87,7 @@ class CC_SURFACES_EXPORT SurfaceFactory
   bool needs_sync_points_;
 
   using OwningSurfaceMap =
-      std::unordered_map<SurfaceId, scoped_ptr<Surface>, SurfaceIdHash>;
+      std::unordered_map<SurfaceId, std::unique_ptr<Surface>, SurfaceIdHash>;
   OwningSurfaceMap surface_map_;
 
   DISALLOW_COPY_AND_ASSIGN(SurfaceFactory);

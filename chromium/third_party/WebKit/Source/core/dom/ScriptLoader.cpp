@@ -223,7 +223,7 @@ bool ScriptLoader::prepareScript(const TextPosition& scriptStartPosition, Legacy
 
     // FIXME: If script is parser inserted, verify it's still in the original document.
     Document& elementDocument = m_element->document();
-    Document* contextDocument = elementDocument.contextDocument().get();
+    Document* contextDocument = elementDocument.contextDocument();
 
     if (!contextDocument || !contextDocument->allowExecutingScripts(m_element))
         return false;
@@ -249,7 +249,7 @@ bool ScriptLoader::prepareScript(const TextPosition& scriptStartPosition, Legacy
         m_willBeParserExecuted = true;
     } else if (client->hasSourceAttribute() && m_parserInserted && !client->asyncAttributeValue()) {
         m_willBeParserExecuted = true;
-    } else if (!client->hasSourceAttribute() && m_parserInserted && !elementDocument.isRenderingReady()) {
+    } else if (!client->hasSourceAttribute() && m_parserInserted && !elementDocument.isScriptExecutionReady()) {
         m_willBeParserExecuted = true;
         m_readyToBeParserExecuted = true;
     } else if (client->hasSourceAttribute() && !client->asyncAttributeValue() && !m_forceAsync) {
@@ -286,7 +286,7 @@ bool ScriptLoader::fetchScript(const String& sourceUrl, FetchRequest::DeferOptio
 {
     DCHECK(m_element);
 
-    RawPtr<Document> elementDocument(m_element->document());
+    Document* elementDocument = &(m_element->document());
     if (!m_element->inShadowIncludingDocument() || m_element->document() != elementDocument)
         return false;
 
@@ -317,7 +317,7 @@ bool ScriptLoader::fetchScript(const String& sourceUrl, FetchRequest::DeferOptio
         String integrityAttr = m_element->fastGetAttribute(HTMLNames::integrityAttr);
         if (!integrityAttr.isEmpty()) {
             IntegrityMetadataSet metadataSet;
-            SubresourceIntegrity::parseIntegrityAttribute(integrityAttr, metadataSet, elementDocument.get());
+            SubresourceIntegrity::parseIntegrityAttribute(integrityAttr, metadataSet, elementDocument);
             request.setIntegrityMetadata(metadataSet);
         }
 
@@ -365,8 +365,8 @@ bool ScriptLoader::executeScript(const ScriptSourceCode& sourceCode, double* com
     if (sourceCode.isEmpty())
         return true;
 
-    RawPtr<Document> elementDocument(m_element->document());
-    RawPtr<Document> contextDocument = elementDocument->contextDocument().get();
+    Document* elementDocument = &(m_element->document());
+    Document* contextDocument = elementDocument->contextDocument();
     if (!contextDocument)
         return true;
 
@@ -375,7 +375,7 @@ bool ScriptLoader::executeScript(const ScriptSourceCode& sourceCode, double* com
     const ContentSecurityPolicy* csp = elementDocument->contentSecurityPolicy();
     bool shouldBypassMainWorldCSP = (frame && frame->script().shouldBypassMainWorldCSP())
         || csp->allowScriptWithNonce(m_element->fastGetAttribute(HTMLNames::nonceAttr))
-        || csp->allowScriptWithHash(sourceCode.source().toString())
+        || csp->allowScriptWithHash(sourceCode.source().toString(), ContentSecurityPolicy::InlineType::Block)
         || (!isParserInserted() && csp->allowDynamic());
 
     if (!m_isExternalScript && (!shouldBypassMainWorldCSP && !csp->allowInlineScript(elementDocument->url(), m_startLineNumber, sourceCode.source().toString()))) {
@@ -423,17 +423,17 @@ bool ScriptLoader::executeScript(const ScriptSourceCode& sourceCode, double* com
     const bool isImportedScript = contextDocument != elementDocument;
     // http://www.whatwg.org/specs/web-apps/current-work/#execute-the-script-block step 2.3
     // with additional support for HTML imports.
-    IgnoreDestructiveWriteCountIncrementer ignoreDestructiveWriteCountIncrementer(m_isExternalScript || isImportedScript ? contextDocument.get() : 0);
+    IgnoreDestructiveWriteCountIncrementer ignoreDestructiveWriteCountIncrementer(m_isExternalScript || isImportedScript ? contextDocument : 0);
 
-    if (isHTMLScriptLoader(m_element))
-        contextDocument->pushCurrentScript(toHTMLScriptElement(m_element));
+    if (isHTMLScriptLoader(m_element) || isSVGScriptLoader(m_element))
+        contextDocument->pushCurrentScript(m_element);
 
     // Create a script from the script element node, using the script
     // block's source and the script block's type.
     // Note: This is where the script is compiled and actually executed.
     frame->script().executeScriptInMainWorld(sourceCode, accessControlStatus, compilationFinishTime);
 
-    if (isHTMLScriptLoader(m_element)) {
+    if (isHTMLScriptLoader(m_element) || isSVGScriptLoader(m_element)) {
         DCHECK(contextDocument->currentScript() == m_element);
         contextDocument->popCurrentScript();
     }
@@ -447,7 +447,7 @@ void ScriptLoader::execute()
     DCHECK(m_pendingScript->resource());
     bool errorOccurred = false;
     ScriptSourceCode source = m_pendingScript->getSource(KURL(), errorOccurred);
-    RawPtr<Element> element = m_pendingScript->releaseElementAndClear();
+    Element* element = m_pendingScript->releaseElementAndClear();
     ALLOW_UNUSED_LOCAL(element);
     if (errorOccurred) {
         dispatchErrorEvent();
@@ -464,8 +464,7 @@ void ScriptLoader::notifyFinished(Resource* resource)
 {
     DCHECK(!m_willBeParserExecuted);
 
-    RawPtr<Document> elementDocument(m_element->document());
-    RawPtr<Document> contextDocument = elementDocument->contextDocument().get();
+    Document* contextDocument = m_element->document().contextDocument();
     if (!contextDocument)
         return;
 
@@ -474,8 +473,8 @@ void ScriptLoader::notifyFinished(Resource* resource)
     ScriptRunner::ExecutionType runOrder = m_willExecuteInOrder ? ScriptRunner::IN_ORDER_EXECUTION : ScriptRunner::ASYNC_EXECUTION;
     if (m_resource->errorOccurred()) {
         contextDocument->scriptRunner()->notifyScriptLoadError(this, runOrder);
-        dispatchErrorEvent();
         detach();
+        dispatchErrorEvent();
         return;
     }
     contextDocument->scriptRunner()->notifyScriptReady(this, runOrder);

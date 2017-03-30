@@ -124,6 +124,10 @@ base::StringPiece ContentClient::GetOriginTrialPublicKey() {
 }
 
 #if defined(OS_ANDROID)
+bool ContentClient::UsingSynchronousCompositing() {
+  return false;
+}
+
 media::MediaClientAndroid* ContentClient::GetMediaClientAndroid() {
   return nullptr;
 }

@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 
 #include "base/memory/scoped_vector.h"
@@ -18,7 +19,7 @@
 
 namespace device {
 
-class BluetoothGattService;
+class BluetoothRemoteGattService;
 class MockBluetoothAdapter;
 
 class MockBluetoothDevice : public BluetoothDevice {
@@ -87,8 +88,13 @@ class MockBluetoothDevice : public BluetoothDevice {
                void(const GattConnectionCallback& callback,
                     const ConnectErrorCallback& error_callback));
 
-  MOCK_CONST_METHOD0(GetGattServices, std::vector<BluetoothGattService*>());
-  MOCK_CONST_METHOD1(GetGattService, BluetoothGattService*(const std::string&));
+  MOCK_METHOD1(SetGattServicesDiscoveryComplete, void(bool));
+  MOCK_CONST_METHOD0(IsGattServicesDiscoveryComplete, bool());
+
+  MOCK_CONST_METHOD0(GetGattServices,
+                     std::vector<BluetoothRemoteGattService*>());
+  MOCK_CONST_METHOD1(GetGattService,
+                     BluetoothRemoteGattService*(const std::string&));
   MOCK_METHOD0(CreateGattConnectionImpl, void());
   MOCK_METHOD0(DisconnectGatt, void());
 
@@ -100,15 +106,19 @@ class MockBluetoothDevice : public BluetoothDevice {
   // ON_CALL(*mock_device, GetGattServices))
   //   .WillByDefault(Invoke(*mock_device,
   //                         &MockBluetoothDevice::GetMockServices));
-  void AddMockService(scoped_ptr<MockBluetoothGattService> mock_device);
-  std::vector<BluetoothGattService*> GetMockServices() const;
-  BluetoothGattService* GetMockService(const std::string& identifier) const;
+  void AddMockService(std::unique_ptr<MockBluetoothGattService> mock_device);
+  std::vector<BluetoothRemoteGattService*> GetMockServices() const;
+  BluetoothRemoteGattService* GetMockService(
+      const std::string& identifier) const;
+
+  void SetConnected(bool connected) { connected_ = connected; }
 
  private:
   uint32_t bluetooth_class_;
   std::string name_;
   std::string address_;
   BluetoothDevice::UUIDList uuids_;
+  bool connected_;
 
   ScopedVector<MockBluetoothGattService> mock_services_;
 };

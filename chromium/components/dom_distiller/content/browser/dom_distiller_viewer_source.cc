@@ -4,14 +4,14 @@
 
 #include "components/dom_distiller/content/browser/dom_distiller_viewer_source.h"
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/memory/ref_counted_memory.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
-#include "base/metrics/user_metrics.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -157,6 +157,15 @@ void DomDistillerViewerSource::RequestViewerHandle::DidFinishLoad(
     return;
   }
 
+  int64_t start_time_ms = url_utils::GetTimeFromDistillerUrl(validated_url);
+  if (start_time_ms > 0) {
+    base::TimeTicks start_time =
+        base::TimeDelta::FromMilliseconds(start_time_ms) + base::TimeTicks();
+    base::TimeDelta latency = base::TimeTicks::Now() - start_time;
+
+    UMA_HISTOGRAM_TIMES("DomDistiller.Time.ViewerLoading", latency);
+  }
+
   // No SendJavaScript() calls allowed before |buffer_| is run and cleared.
   waiting_for_page_ready_ = false;
   if (!buffer_.empty()) {
@@ -169,7 +178,7 @@ void DomDistillerViewerSource::RequestViewerHandle::DidFinishLoad(
 DomDistillerViewerSource::DomDistillerViewerSource(
     DomDistillerServiceInterface* dom_distiller_service,
     const std::string& scheme,
-    scoped_ptr<DistillerUIHandle> ui_handle)
+    std::unique_ptr<DistillerUIHandle> ui_handle)
     : scheme_(scheme),
       dom_distiller_service_(dom_distiller_service),
       distiller_ui_handle_(std::move(ui_handle)) {}
@@ -221,7 +230,7 @@ void DomDistillerViewerSource::StartDataRequest(
   RequestViewerHandle* request_viewer_handle =
       new RequestViewerHandle(web_contents, scheme_, path_after_query_separator,
                               dom_distiller_service_->GetDistilledPagePrefs());
-  scoped_ptr<ViewerHandle> viewer_handle = viewer::CreateViewRequest(
+  std::unique_ptr<ViewerHandle> viewer_handle = viewer::CreateViewRequest(
       dom_distiller_service_, path, request_viewer_handle,
       web_contents->GetContainerBounds().size());
 
@@ -239,7 +248,7 @@ void DomDistillerViewerSource::StartDataRequest(
           distiller_ui_handle_.get()));
 
   // Tell the renderer that this is currently a distilled page.
-  DistillerPageNotifierServicePtr page_notifier_service;
+  mojom::DistillerPageNotifierServicePtr page_notifier_service;
   render_frame_host->GetServiceRegistry()->ConnectToRemoteService(
       mojo::GetProxy(&page_notifier_service));
   DCHECK(page_notifier_service);

@@ -50,6 +50,8 @@ const gpu::GpuPreferences GetGpuPreferencesFromCommandLine() {
 #if defined(OS_WIN)
   gpu_preferences.enable_accelerated_vpx_decode =
       command_line->HasSwitch(switches::kEnableAcceleratedVpxDecode);
+  gpu_preferences.enable_zero_copy_dxgi_video =
+      command_line->HasSwitch(switches::kEnableZeroCopyDxgiVideo);
 #endif
   gpu_preferences.compile_shader_always_succeeds =
       command_line->HasSwitch(switches::kCompileShaderAlwaysSucceeds);
@@ -83,8 +85,6 @@ const gpu::GpuPreferences GetGpuPreferencesFromCommandLine() {
       command_line->HasSwitch(switches::kDisableGpuShaderDiskCache);
   gpu_preferences.enable_share_group_async_texture_upload =
       command_line->HasSwitch(switches::kEnableShareGroupAsyncTextureUpload);
-  gpu_preferences.enable_subscribe_uniform_extension =
-      command_line->HasSwitch(switches::kEnableSubscribeUniformExtension);
   gpu_preferences.enable_threaded_texture_mailboxes =
       command_line->HasSwitch(switches::kEnableThreadedTextureMailboxes);
   gpu_preferences.gl_shader_interm_output =

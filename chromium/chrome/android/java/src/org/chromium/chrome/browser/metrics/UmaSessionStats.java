@@ -7,9 +7,9 @@ package org.chromium.chrome.browser.metrics;
 import android.content.ComponentCallbacks;
 import android.content.Context;
 import android.content.res.Configuration;
-import android.preference.PreferenceManager;
 import android.text.TextUtils;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.privacy.CrashReportingPermissionManager;
 import org.chromium.chrome.browser.preferences.privacy.PrivacyPreferencesManager;
@@ -144,7 +144,7 @@ public class UmaSessionStats implements NetworkChangeNotifier.ConnectionTypeObse
 
         nativeUmaEndSession(sNativeUmaSessionStats);
         NetworkChangeNotifier.removeConnectionTypeObserver(this);
-        PreferenceManager.getDefaultSharedPreferences(mContext)
+        ContextUtils.getAppSharedPreferences()
                 .edit()
                 .putLong(LAST_USED_TIME_PREF, System.currentTimeMillis())
                 .apply();
@@ -171,14 +171,15 @@ public class UmaSessionStats implements NetworkChangeNotifier.ConnectionTypeObse
      * can be retrieved while native preferences are not accessible.
      */
     private void updatePreferences() {
-        // Update cellular experiment preference.
         PrivacyPreferencesManager prefManager = PrivacyPreferencesManager.getInstance(mContext);
+
+        // Update cellular experiment preference.
         boolean cellularExperiment = TextUtils.equals("true",
                 VariationsAssociatedData.getVariationParamValue(
                         "UMA_EnableCellularLogUpload", "Enabled"));
         prefManager.setCellularExperiment(cellularExperiment);
 
-        // Update metrics reporting preference.
+        // Migrate to new preferences for cellular experiment.
         if (cellularExperiment) {
             PrefServiceBridge prefBridge = PrefServiceBridge.getInstance();
             // If the native preference metrics reporting has not been set, then initialize it
@@ -190,6 +191,9 @@ public class UmaSessionStats implements NetworkChangeNotifier.ConnectionTypeObse
             // Set new Android preference for usage and crash reporting.
             prefManager.setUsageAndCrashReporting(prefBridge.isMetricsReportingEnabled());
         }
+
+        // Make sure preferences are in sync.
+        prefManager.syncUsageAndCrashReportingPrefs();
     }
 
     @Override

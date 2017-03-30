@@ -55,7 +55,6 @@ SchedulerStateMachine::SchedulerStateMachine(const SchedulerSettings& settings)
       critical_begin_main_frame_to_activate_is_fast_(true),
       main_thread_missed_last_deadline_(false),
       skip_next_begin_main_frame_to_reduce_latency_(false),
-      children_need_begin_frames_(false),
       defer_commits_(false),
       video_needs_begin_frames_(false),
       last_commit_had_no_updates_(false),
@@ -86,8 +85,6 @@ const char* SchedulerStateMachine::BeginImplFrameStateToString(
   switch (state) {
     case BEGIN_IMPL_FRAME_STATE_IDLE:
       return "BEGIN_IMPL_FRAME_STATE_IDLE";
-    case BEGIN_IMPL_FRAME_STATE_BEGIN_FRAME_STARTING:
-      return "BEGIN_IMPL_FRAME_STATE_BEGIN_FRAME_STARTING";
     case BEGIN_IMPL_FRAME_STATE_INSIDE_BEGIN_FRAME:
       return "BEGIN_IMPL_FRAME_STATE_INSIDE_BEGIN_FRAME";
     case BEGIN_IMPL_FRAME_STATE_INSIDE_DEADLINE:
@@ -189,9 +186,9 @@ const char* SchedulerStateMachine::ActionToString(Action action) {
   return "???";
 }
 
-scoped_ptr<base::trace_event::ConvertableToTraceFormat>
+std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
 SchedulerStateMachine::AsValue() const {
-  scoped_ptr<base::trace_event::TracedValue> state(
+  std::unique_ptr<base::trace_event::TracedValue> state(
       new base::trace_event::TracedValue());
   AsValueInto(state.get());
   return std::move(state);
@@ -256,7 +253,6 @@ void SchedulerStateMachine::AsValueInto(
                     main_thread_missed_last_deadline_);
   state->SetBoolean("skip_next_begin_main_frame_to_reduce_latency",
                     skip_next_begin_main_frame_to_reduce_latency_);
-  state->SetBoolean("children_need_begin_frames", children_need_begin_frames_);
   state->SetBoolean("video_needs_begin_frames", video_needs_begin_frames_);
   state->SetBoolean("defer_commits", defer_commits_);
   state->SetBoolean("last_commit_had_no_updates", last_commit_had_no_updates_);
@@ -415,18 +411,6 @@ bool SchedulerStateMachine::CouldSendBeginMainFrame() const {
   return true;
 }
 
-bool SchedulerStateMachine::SendingBeginMainFrameMightCauseDeadlock() const {
-  // NPAPI is the only case where the UI thread makes synchronous calls to the
-  // Renderer main thread. During that synchronous call, we may not get a
-  // SwapAck for the UI thread, which may prevent BeginMainFrame's from
-  // completing if there's enough back pressure. If the BeginMainFrame can't
-  // make progress, the Renderer can't service the UI thread's synchronous call
-  // and we have deadlock.
-  // This returns true if there's too much backpressure to finish a commit
-  // if we were to initiate a BeginMainFrame.
-  return has_pending_tree_ && active_tree_needs_first_draw_ && SwapThrottled();
-}
-
 bool SchedulerStateMachine::ShouldSendBeginMainFrame() const {
   if (!CouldSendBeginMainFrame())
     return false;
@@ -463,18 +447,11 @@ bool SchedulerStateMachine::ShouldSendBeginMainFrame() const {
 
   // We need a new commit for the forced redraw. This honors the
   // single commit per interval because the result will be swapped to screen.
-  // TODO(brianderson): Remove this or move it below the
-  // SendingBeginMainFrameMightCauseDeadlock check since  we want to avoid
-  // ever returning true from this method if we might cause deadlock.
   if (forced_redraw_state_ == FORCED_REDRAW_STATE_WAITING_FOR_COMMIT)
     return true;
 
   // We shouldn't normally accept commits if there isn't an OutputSurface.
   if (!HasInitializedOutputSurface())
-    return false;
-
-  // Make sure the BeginMainFrame can finish eventually if we start it.
-  if (SendingBeginMainFrameMightCauseDeadlock())
     return false;
 
   if (!settings_.main_frame_while_swap_throttled_enabled) {
@@ -537,7 +514,7 @@ bool SchedulerStateMachine::ShouldInvalidateOutputSurface() const {
     return false;
 
   // Invalidations are only performed inside a BeginFrame.
-  if (begin_impl_frame_state_ != BEGIN_IMPL_FRAME_STATE_BEGIN_FRAME_STARTING)
+  if (begin_impl_frame_state_ != BEGIN_IMPL_FRAME_STATE_INSIDE_BEGIN_FRAME)
     return false;
 
   // TODO(sunnyps): needs_prepare_tiles_ is needed here because PrepareTiles is
@@ -582,7 +559,11 @@ void SchedulerStateMachine::WillSendBeginMainFrame() {
 }
 
 void SchedulerStateMachine::WillCommit(bool commit_has_no_updates) {
+  DCHECK(!has_pending_tree_ ||
+         (settings_.main_frame_before_activation_enabled &&
+          commit_has_no_updates));
   commit_count_++;
+  last_commit_had_no_updates_ = commit_has_no_updates;
 
   if (commit_has_no_updates || settings_.main_frame_before_activation_enabled) {
     begin_main_frame_state_ = BEGIN_MAIN_FRAME_STATE_IDLE;
@@ -590,11 +571,12 @@ void SchedulerStateMachine::WillCommit(bool commit_has_no_updates) {
     begin_main_frame_state_ = BEGIN_MAIN_FRAME_STATE_WAITING_FOR_ACTIVATION;
   }
 
-  // If the commit was aborted, then there is no pending tree.
-  has_pending_tree_ = !commit_has_no_updates;
-
-  wait_for_ready_to_draw_ =
-      !commit_has_no_updates && settings_.commit_to_active_tree;
+  if (!commit_has_no_updates) {
+    // Pending tree only exists if commit had updates.
+    has_pending_tree_ = true;
+    pending_tree_is_ready_for_activation_ = false;
+    wait_for_ready_to_draw_ = settings_.commit_to_active_tree;
+  }
 
   // Update state related to forced draws.
   if (forced_redraw_state_ == FORCED_REDRAW_STATE_WAITING_FOR_COMMIT) {
@@ -604,27 +586,11 @@ void SchedulerStateMachine::WillCommit(bool commit_has_no_updates) {
   }
 
   // Update the output surface state.
-  DCHECK_NE(output_surface_state_, OUTPUT_SURFACE_WAITING_FOR_FIRST_ACTIVATION);
   if (output_surface_state_ == OUTPUT_SURFACE_WAITING_FOR_FIRST_COMMIT) {
-    if (has_pending_tree_) {
-      output_surface_state_ = OUTPUT_SURFACE_WAITING_FOR_FIRST_ACTIVATION;
-    } else {
-      output_surface_state_ = OUTPUT_SURFACE_ACTIVE;
-    }
+    output_surface_state_ = has_pending_tree_
+                                ? OUTPUT_SURFACE_WAITING_FOR_FIRST_ACTIVATION
+                                : OUTPUT_SURFACE_ACTIVE;
   }
-
-  // Update state if there's no updates heading for the active tree, but we need
-  // to do a forced draw.
-  if (commit_has_no_updates &&
-      forced_redraw_state_ == FORCED_REDRAW_STATE_WAITING_FOR_DRAW) {
-    DCHECK(!has_pending_tree_);
-    needs_redraw_ = true;
-  }
-
-  // This post-commit work is common to both completed and aborted commits.
-  pending_tree_is_ready_for_activation_ = false;
-
-  last_commit_had_no_updates_ = commit_has_no_updates;
 }
 
 void SchedulerStateMachine::WillActivate() {
@@ -765,10 +731,6 @@ void SchedulerStateMachine::SetSkipNextBeginMainFrameToReduceLatency() {
   skip_next_begin_main_frame_to_reduce_latency_ = true;
 }
 
-bool SchedulerStateMachine::BeginFrameRequiredForChildren() const {
-  return children_need_begin_frames_;
-}
-
 bool SchedulerStateMachine::BeginFrameNeededForVideo() const {
   return video_needs_begin_frames_;
 }
@@ -783,13 +745,8 @@ bool SchedulerStateMachine::BeginFrameNeeded() const {
   if (!visible_)
     return false;
 
-  return (BeginFrameRequiredForAction() || BeginFrameRequiredForChildren() ||
-          BeginFrameNeededForVideo() || ProactiveBeginFrameWanted());
-}
-
-void SchedulerStateMachine::SetChildrenNeedBeginFrames(
-    bool children_need_begin_frames) {
-  children_need_begin_frames_ = children_need_begin_frames;
+  return BeginFrameRequiredForAction() || BeginFrameNeededForVideo() ||
+         ProactiveBeginFrameWanted();
 }
 
 void SchedulerStateMachine::SetVideoNeedsBeginFrames(
@@ -860,7 +817,7 @@ bool SchedulerStateMachine::ProactiveBeginFrameWanted() const {
 }
 
 void SchedulerStateMachine::OnBeginImplFrame() {
-  begin_impl_frame_state_ = BEGIN_IMPL_FRAME_STATE_BEGIN_FRAME_STARTING;
+  begin_impl_frame_state_ = BEGIN_IMPL_FRAME_STATE_INSIDE_BEGIN_FRAME;
   current_frame_number_++;
 
   last_commit_had_no_updates_ = false;
@@ -875,10 +832,6 @@ void SchedulerStateMachine::OnBeginImplFrame() {
   // "Drain" the PrepareTiles funnel.
   if (prepare_tiles_funnel_ > 0)
     prepare_tiles_funnel_--;
-}
-
-void SchedulerStateMachine::OnBeginImplFrameDeadlinePending() {
-  begin_impl_frame_state_ = BEGIN_IMPL_FRAME_STATE_INSIDE_BEGIN_FRAME;
 }
 
 void SchedulerStateMachine::OnBeginImplFrameDeadline() {

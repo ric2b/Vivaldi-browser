@@ -11,6 +11,7 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
@@ -108,7 +109,7 @@ class TestDownloadRequestHandler::PartialResponseJob
   int ReadRawData(net::IOBuffer* buf, int buf_size) override;
 
  private:
-  PartialResponseJob(scoped_ptr<Parameters> parameters,
+  PartialResponseJob(std::unique_ptr<Parameters> parameters,
                      base::WeakPtr<Interceptor> interceptor,
                      net::URLRequest* url_request,
                      net::NetworkDelegate* network_delegate);
@@ -143,7 +144,7 @@ class TestDownloadRequestHandler::PartialResponseJob
   // re-entrancy.
   void NotifyHeadersCompleteAndPrepareToRead();
 
-  scoped_ptr<Parameters> parameters_;
+  std::unique_ptr<Parameters> parameters_;
 
   base::WeakPtr<Interceptor> interceptor_;
   net::HttpResponseInfo response_info_;
@@ -204,20 +205,8 @@ TestDownloadRequestHandler::CompletedRequest::CompletedRequest() {}
 
 TestDownloadRequestHandler::CompletedRequest::~CompletedRequest() {}
 
-#if !defined(_MSC_VER) || _MSC_VER >= 1900
 TestDownloadRequestHandler::CompletedRequest::CompletedRequest(
     CompletedRequest&&) = default;
-#else
-TestDownloadRequestHandler::CompletedRequest::CompletedRequest(
-    CompletedRequest&& other)
- : transferred_byte_count(other.transferred_byte_count),
-   request_headers(other.request_headers),
-   referrer(other.referrer),
-   referrer_policy(other.referrer_policy),
-   first_party_for_cookies(other.first_party_for_cookies),
-   first_party_url_policy(other.first_party_url_policy),
-   initiator(other.initiator){}
-#endif
 
 // static
 net::URLRequestJob* TestDownloadRequestHandler::PartialResponseJob::Factory(
@@ -225,12 +214,12 @@ net::URLRequestJob* TestDownloadRequestHandler::PartialResponseJob::Factory(
     net::URLRequest* request,
     net::NetworkDelegate* delegate,
     base::WeakPtr<Interceptor> interceptor) {
-  return new PartialResponseJob(make_scoped_ptr(new Parameters(parameters)),
+  return new PartialResponseJob(base::WrapUnique(new Parameters(parameters)),
                                 interceptor, request, delegate);
 }
 
 TestDownloadRequestHandler::PartialResponseJob::PartialResponseJob(
-    scoped_ptr<Parameters> parameters,
+    std::unique_ptr<Parameters> parameters,
     base::WeakPtr<Interceptor> interceptor,
     net::URLRequest* request,
     net::NetworkDelegate* network_delegate)
@@ -512,7 +501,8 @@ TestDownloadRequestHandler::Interceptor::Register(
     const GURL& url,
     scoped_refptr<base::SequencedTaskRunner> client_task_runner) {
   DCHECK(url.is_valid());
-  scoped_ptr<Interceptor> interceptor(new Interceptor(url, client_task_runner));
+  std::unique_ptr<Interceptor> interceptor(
+      new Interceptor(url, client_task_runner));
   base::WeakPtr<Interceptor> weak_reference =
       interceptor->weak_ptr_factory_.GetWeakPtr();
   net::URLRequestFilter* filter = net::URLRequestFilter::GetInstance();
@@ -522,7 +512,8 @@ TestDownloadRequestHandler::Interceptor::Register(
 
 void TestDownloadRequestHandler::Interceptor::Unregister() {
   net::URLRequestFilter* filter = net::URLRequestFilter::GetInstance();
-  filter->RemoveUrlHandler(url_);
+  GURL url = url_;  // Make a copy as |this| will be deleted.
+  filter->RemoveUrlHandler(url);
   // We are deleted now since the filter owned |this|.
 }
 

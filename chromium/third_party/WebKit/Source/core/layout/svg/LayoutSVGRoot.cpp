@@ -44,6 +44,7 @@ LayoutSVGRoot::LayoutSVGRoot(SVGElement* node)
     : LayoutReplaced(node)
     , m_objectBoundingBoxValid(false)
     , m_isLayoutSizeChanged(false)
+    , m_didScreenScaleFactorChange(false)
     , m_needsBoundariesOrTransformUpdate(true)
     , m_hasBoxDecorationBackground(false)
     , m_hasNonIsolatedBlendingDescendants(false)
@@ -122,7 +123,7 @@ LayoutUnit LayoutSVGRoot::computeReplacedLogicalWidth(ShouldComputePreferred sho
     return LayoutReplaced::computeReplacedLogicalWidth(shouldComputePreferred);
 }
 
-LayoutUnit LayoutSVGRoot::computeReplacedLogicalHeight() const
+LayoutUnit LayoutSVGRoot::computeReplacedLogicalHeight(LayoutUnit estimatedUsedWidth) const
 {
     // When we're embedded through SVGImage (border-image/background-image/<html:img>/...) we're forced to resize to a specific size.
     if (!m_containerSize.isEmpty())
@@ -131,7 +132,7 @@ LayoutUnit LayoutSVGRoot::computeReplacedLogicalHeight() const
     if (isEmbeddedThroughFrameContainingSVGDocument())
         return containingBlock()->availableLogicalHeight(IncludeMarginBorderPadding);
 
-    return LayoutReplaced::computeReplacedLogicalHeight();
+    return LayoutReplaced::computeReplacedLogicalHeight(estimatedUsedWidth);
 }
 
 void LayoutSVGRoot::layout()
@@ -139,19 +140,26 @@ void LayoutSVGRoot::layout()
     ASSERT(needsLayout());
     LayoutAnalyzer::Scope analyzer(*this);
 
-    bool needsLayout = selfNeedsLayout();
-
     LayoutSize oldSize = size();
     updateLogicalWidth();
     updateLogicalHeight();
+
     buildLocalToBorderBoxTransform();
+    // TODO(fs): Temporarily, needing a layout implies that the local transform
+    // has changed. This should be updated to be more precise and factor in the
+    // actual (relevant) changes to the computed user-space transform.
+    m_didScreenScaleFactorChange = selfNeedsLayout();
 
     SVGLayoutSupport::layoutResourcesIfNeeded(this);
 
     SVGSVGElement* svg = toSVGSVGElement(node());
     ASSERT(svg);
-    m_isLayoutSizeChanged = needsLayout || (svg->hasRelativeLengths() && oldSize != size());
-    SVGLayoutSupport::layoutChildren(this, needsLayout || SVGLayoutSupport::filtersForceContainerLayout(this));
+    m_isLayoutSizeChanged = selfNeedsLayout() || (svg->hasRelativeLengths() && oldSize != size());
+    // When hasRelativeLengths() is false, no descendants have relative lengths
+    // (hence no one is interested in viewport size changes).
+    bool layoutSizeChanged = m_isLayoutSizeChanged && svg->hasRelativeLengths();
+
+    SVGLayoutSupport::layoutChildren(firstChild(), false, m_didScreenScaleFactorChange, layoutSizeChanged);
 
     if (m_needsBoundariesOrTransformUpdate) {
         updateCachedBoundaries();
@@ -164,7 +172,7 @@ void LayoutSVGRoot::layout()
     if (!shouldApplyViewportClip()) {
         FloatRect contentPaintInvalidationRect = paintInvalidationRectInLocalSVGCoordinates();
         contentPaintInvalidationRect = m_localToBorderBoxTransform.mapRect(contentPaintInvalidationRect);
-        addVisualOverflow(enclosingLayoutRect(contentPaintInvalidationRect));
+        addContentsVisualOverflow(enclosingLayoutRect(contentPaintInvalidationRect));
     }
 
     updateLayerTransformAfterLayout();
@@ -183,6 +191,14 @@ bool LayoutSVGRoot::shouldApplyViewportClip() const
         || style()->overflowX() == OverflowAuto
         || style()->overflowX() == OverflowScroll
         || this->isDocumentElement();
+}
+
+LayoutRect LayoutSVGRoot::visualOverflowRect() const
+{
+    LayoutRect rect = LayoutReplaced::selfVisualOverflowRect();
+    if (!shouldApplyViewportClip())
+        rect.unite(contentsVisualOverflowRect());
+    return rect;
 }
 
 void LayoutSVGRoot::paintReplaced(const PaintInfo& paintInfo, const LayoutPoint& paintOffset) const

@@ -88,10 +88,8 @@ hooks = [
       'python',
       'vivaldi/chromium/build/util/lastchange.py',
       '--git-hash-only',
-      '-s',
-      'vivaldi/chromium/third_party/WebKit',
-      '-o',
-      'vivaldi/chromium/build/util/LASTCHANGE.blink'
+      '-s', 'vivaldi/chromium/third_party/WebKit',
+      '-o', 'vivaldi/chromium/build/util/LASTCHANGE.blink'
       ],
   },
   {
@@ -101,12 +99,9 @@ hooks = [
       'python',
       'vivaldi/chromium/build/util/lastchange.py',
       '--git-hash-only',
-      '-s',
-      'vivaldi/.',
-      '--name-suffix',
-      '_VIVALDI',
-      '-o',
-      'vivaldi/chromium/build/util/LASTCHANGE.vivaldi'
+      '-s', 'vivaldi/.',
+      '--name-suffix', '_VIVALDI',
+      '-o','vivaldi/chromium/build/util/LASTCHANGE.vivaldi'
       ],
   },
   # Pull GN binaries. This needs to be before running GYP below.
@@ -253,7 +248,7 @@ hooks = [
     'action': ['python',
       'vivaldi/chromium/build/get_syzygy_binaries.py',
       '--output-dir', 'vivaldi/chromium/third_party/syzygy/binaries',
-      '--revision=e6784a6b60fa2449a3cabb8ede9c6b98ef902c06',
+      '--revision=253383e5987fe5dc81b93057c7d173c0620d3ee0',
       '--overwrite'
     ],
   },

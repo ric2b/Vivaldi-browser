@@ -268,8 +268,8 @@ void ChromeNativeAppWindowViews::UpdateEventTargeterWithInset() {
   // Add the EasyResizeWindowTargeter on the window, not its root window. The
   // root window does not have a delegate, which is needed to handle the event
   // in Linux.
-  scoped_ptr<ui::EventTargeter> old_eventtarget =
-    window->SetEventTargeter(scoped_ptr<ui::EventTargeter>(
+  std::unique_ptr<ui::EventTargeter> old_eventtarget =
+    window->SetEventTargeter(std::unique_ptr<ui::EventTargeter>(
     new wm::EasyResizeWindowTargeter(window, inset, inset)));
   delete old_eventtarget.release();
 #endif

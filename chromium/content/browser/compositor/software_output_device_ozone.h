@@ -5,6 +5,8 @@
 #ifndef CONTENT_BROWSER_COMPOSITOR_SOFTWARE_OUTPUT_DEVICE_OZONE_H_
 #define CONTENT_BROWSER_COMPOSITOR_SOFTWARE_OUTPUT_DEVICE_OZONE_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "cc/output/software_output_device.h"
 #include "content/common/content_export.h"
@@ -23,7 +25,7 @@ namespace content {
 class CONTENT_EXPORT SoftwareOutputDeviceOzone
     : public cc::SoftwareOutputDevice {
  public:
-  static scoped_ptr<SoftwareOutputDeviceOzone> Create(
+  static std::unique_ptr<SoftwareOutputDeviceOzone> Create(
       ui::Compositor* compositor);
   ~SoftwareOutputDeviceOzone() override;
 
@@ -36,7 +38,7 @@ class CONTENT_EXPORT SoftwareOutputDeviceOzone
   explicit SoftwareOutputDeviceOzone(ui::Compositor* compositor);
   ui::Compositor* compositor_;
 
-  scoped_ptr<ui::SurfaceOzoneCanvas> surface_ozone_;
+  std::unique_ptr<ui::SurfaceOzoneCanvas> surface_ozone_;
 
   DISALLOW_COPY_AND_ASSIGN(SoftwareOutputDeviceOzone);
 };

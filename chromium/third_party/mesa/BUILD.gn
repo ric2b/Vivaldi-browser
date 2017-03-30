@@ -3,6 +3,8 @@
 # found in the LICENSE file.
 
 import("//build/config/ui.gni")
+import("//build/config/compiler/compiler.gni")
+import("//build/config/sanitizers/sanitizers.gni")
 
 config("mesa_headers_config") {
   include_dirs = [ "src/include" ]
@@ -143,6 +145,11 @@ config("mesa_internal_warnings") {
       "/wd4345",  # POD-type default initializers.
       "/wd4311",  # Pointer truncation TODO(brucedawson): http://crbug.com/554200
     ]
+    if (is_official_build && full_wpo_on_official) {
+      # TODO(sebmarchand): http://crbug.com/604838 This should be removed if
+      # Mesa is ever rolled and the warning is fixed.
+      cflags += [ "/wd4723" ]  # potential divide by 0.
+    }
   }
 }
 
@@ -272,6 +279,12 @@ static_library("mesa_libglslcommon") {
     # Mesa triggers some of these Clang warnings.
     configs -= [ "//build/config/clang:extra_warnings" ]
   }
+
+  # UBsan's vptr is not compatible with -fno-rtti,
+  # which is used by gallium/auxiliary/Makefile.
+  configs -= [ "//build/config/sanitizers:default_sanitizer_flags" ]
+  configs +=
+      [ "//build/config/sanitizers:default_sanitizer_flags_but_ubsan_vptr" ]
 
   deps = [
     ":mesa_headers",
@@ -656,6 +669,12 @@ static_library("mesa") {
     configs -= [ "//build/config/clang:extra_warnings" ]
   }
 
+  # UBsan's vptr is not compatible with -fno-rtti,
+  # which is used by gallium/auxiliary/Makefile.
+  configs -= [ "//build/config/sanitizers:default_sanitizer_flags" ]
+  configs +=
+      [ "//build/config/sanitizers:default_sanitizer_flags_but_ubsan_vptr" ]
+
   cflags = []
 
   if (is_android && !is_clang) {
@@ -710,9 +729,17 @@ loadable_module("osmesa") {
     configs -= [ "//build/config/clang:extra_warnings" ]
   }
 
+  # UBsan's vptr is not compatible with -fno-rtti,
+  # which is used by gallium/auxiliary/Makefile.
+  configs -= [ "//build/config/sanitizers:default_sanitizer_flags" ]
+  configs +=
+      [ "//build/config/sanitizers:default_sanitizer_flags_but_ubsan_vptr" ]
+
   if (is_win) {
-    ldflags = [ "/DEF:" + rebase_path("src/src/mesa/drivers/osmesa/osmesa.def",
-                                      root_build_dir) ]
+    sources += [ "src/src/mesa/drivers/osmesa/osmesa.def" ]
+
+    # http://crbug.com/512956
+    ldflags = [ "/ignore:4197" ]
 
     # TODO(brucedawson) : remove when crbug.com/482671 is resolved by
     # Microsoft.
@@ -724,9 +751,13 @@ loadable_module("osmesa") {
     ":mesa",
     ":mesa_headers",
     ":mesa_libglslcommon",
-    "//base",  # Required for the allocator implementation.
     "//build/config/sanitizers:deps",
   ]
+
+  # Required for the allocator implementation, which is not used on Mac.
+  if (!is_mac) {
+    deps += [ "//base" ]
+  }
 
   if (is_win) {
     defines = [

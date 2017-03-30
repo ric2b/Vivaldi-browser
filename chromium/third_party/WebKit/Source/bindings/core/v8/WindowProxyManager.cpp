@@ -10,13 +10,9 @@
 
 namespace blink {
 
-RawPtr<WindowProxyManager> WindowProxyManager::create(Frame& frame)
+WindowProxyManager* WindowProxyManager::create(Frame& frame)
 {
     return new WindowProxyManager(frame);
-}
-
-WindowProxyManager::~WindowProxyManager()
-{
 }
 
 DEFINE_TRACE(WindowProxyManager)
@@ -36,9 +32,8 @@ WindowProxy* WindowProxyManager::windowProxy(DOMWrapperWorld& world)
         if (iter != m_isolatedWorlds.end()) {
             windowProxy = iter->value.get();
         } else {
-            RawPtr<WindowProxy> isolatedWorldWindowProxy = WindowProxy::create(m_isolate, m_frame, world);
-            windowProxy = isolatedWorldWindowProxy.get();
-            m_isolatedWorlds.set(world.worldId(), isolatedWorldWindowProxy.release());
+            windowProxy = WindowProxy::create(m_isolate, m_frame, world);
+            m_isolatedWorlds.set(world.worldId(), windowProxy);
         }
     }
     return windowProxy;

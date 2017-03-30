@@ -71,7 +71,7 @@ class IPCMediaPipelineHostImpl::PictureBufferManager {
   ~PictureBufferManager();
 
   const IPCPictureBuffer* ProvidePictureBuffer(const gfx::Size& size);
-  scoped_ptr<media::AutoReleasedPassThroughDecoderTexture> CreateWrappedTexture(
+  std::unique_ptr<media::AutoReleasedPassThroughDecoderTexture> CreateWrappedTexture(
       uint32_t texture_id);
   void DismissPictureBufferInUse();
 
@@ -86,7 +86,7 @@ class IPCMediaPipelineHostImpl::PictureBufferManager {
 
   media::GpuVideoAcceleratorFactories* factories_;
 
-  scoped_ptr<IPCPictureBuffer> picture_buffer_in_use_;
+  std::unique_ptr<IPCPictureBuffer> picture_buffer_in_use_;
   std::queue<IPCPictureBuffer> available_picture_buffers_;
   std::map<int32_t, IPCPictureBuffer> picture_buffers_at_display_;
 
@@ -144,7 +144,7 @@ IPCMediaPipelineHostImpl::PictureBufferManager::ProvidePictureBuffer(
   return picture_buffer_in_use_.get();
 }
 
-scoped_ptr<media::AutoReleasedPassThroughDecoderTexture>
+std::unique_ptr<media::AutoReleasedPassThroughDecoderTexture>
 IPCMediaPipelineHostImpl::PictureBufferManager::CreateWrappedTexture(
     uint32_t texture_id) {
   DCHECK(picture_buffer_in_use_);
@@ -154,10 +154,10 @@ IPCMediaPipelineHostImpl::PictureBufferManager::CreateWrappedTexture(
     return NULL;
   }
 
-  scoped_ptr<media::PassThroughDecoderTexture> texture_info(
+  std::unique_ptr<media::PassThroughDecoderTexture> texture_info(
       new media::PassThroughDecoderTexture);
   texture_info->texture_id = texture_id;
-  texture_info->mailbox_holder = make_scoped_ptr(new gpu::MailboxHolder(
+  texture_info->mailbox_holder = base::WrapUnique(new gpu::MailboxHolder(
       picture_buffer_in_use_->texture_mailbox, gpu::SyncToken(),
       media::kPlatformMediaPipelineTextureTarget));
   // This callback has to be run when texture is no longer needed.
@@ -171,7 +171,7 @@ IPCMediaPipelineHostImpl::PictureBufferManager::CreateWrappedTexture(
       std::make_pair(texture_id, *picture_buffer_in_use_));
   picture_buffer_in_use_.reset();
 
-  return make_scoped_ptr(
+  return base::WrapUnique(
      new media::AutoReleasedPassThroughDecoderTexture(std::move(texture_info)));
 }
 
@@ -225,7 +225,7 @@ class IPCMediaPipelineHostImpl::SharedData {
 
  private:
   gpu::GpuChannelHost* channel_;
-  scoped_ptr<base::SharedMemory> memory_;
+  std::unique_ptr<base::SharedMemory> memory_;
 };
 
 IPCMediaPipelineHostImpl::SharedData::SharedData(gpu::GpuChannelHost* channel)
@@ -569,7 +569,7 @@ void IPCMediaPipelineHostImpl::OnDecodedDataReady(
     case media::MediaDataStatus::kOk: {
       scoped_refptr<media::DecoderBuffer> buffer;
       if (is_handling_accelerated_video_decode(params.type)) {
-        scoped_ptr<media::AutoReleasedPassThroughDecoderTexture>
+        std::unique_ptr<media::AutoReleasedPassThroughDecoderTexture>
             wrapped_texture = picture_buffer_manager_->CreateWrappedTexture(
                 params.client_texture_id);
         if (!wrapped_texture) {

@@ -55,6 +55,7 @@ Es posible que algunas funciones no estén disponibles y que no se guarden los c
 <translation id="2673087257647337101">Chromium casi ha terminado de actualizarse. Reinícialo para completar la actualización.</translation>
 <translation id="2685838254101182273">Chromium ha dejado de actualizarse y ya no admite la versión de tu sistema operativo.</translation>
 <translation id="2705212601509139398">Este sitio utiliza el complemento Chromium Frame, que pronto dejará de estar disponible. Desinstálalo y descarga un navegador compatible.</translation>
+<translation id="2711502716910134313">Pestaña de Chromium</translation>
 <translation id="2770231113462710648">Cambiar navegador predeterminado por:</translation>
 <translation id="2801146392936645542"><ph name="FILE_NAME" /> es un archivo malicioso y Chromium lo ha bloqueado.</translation>
 <translation id="2847479871509788944">Desinstalar de Chromium...</translation>
@@ -68,7 +69,6 @@ Es posible que algunas funciones no estén disponibles y que no se guarden los c
 <translation id="3130323860337406239">Chromium está utilizando el micrófono.</translation>
 <translation id="313551035350905294">Estás iniciando sesión con una cuenta administrada, por lo que concedes a su administrador el control sobre tu perfil de Chromium. Tus datos de Chromium, como aplicaciones, marcadores, historial, contraseñas y otras opciones quedarán vinculados de forma permanente a <ph name="USER_NAME" />. Podrás eliminar estos datos mediante el panel de control de cuentas de Google, pero no podrás asociarlos a otra cuenta.</translation>
 <translation id="3190315855212034486">¡Vaya! Se ha producido un fallo en Chromium. ¿Quieres reiniciar el navegador ahora?</translation>
-<translation id="3197823471738295152">El dispositivo está actualizado.</translation>
 <translation id="3244477511402911926">Centro de notificaciones de Chromium</translation>
 <translation id="3256316712990552818">Copiada a Chromium</translation>
 <translation id="3258596308407688501">Chromium no puede leer el directorio de datos ni escribir en él:
@@ -122,6 +122,7 @@ Es posible que algunas funciones no estén disponibles y que no se guarden los c
 <translation id="549669000822060376">Espera mientras Chromium instala las últimas actualizaciones del sistema.</translation>
 <translation id="5563479599352954471">Buscar con un toque</translation>
 <translation id="5620765574781326016">Obtén información sobre los temas en sitios web sin salir de la página.</translation>
+<translation id="5634636535844844681">Chromium requiere Windows 7 o una versión posterior.</translation>
 <translation id="5680901439334282664">iniciar sesión en Chromium</translation>
 <translation id="5772805321386874569">(se debe <ph name="BEGIN_BUTTON" />reiniciar<ph name="END_BUTTON" /> Chromium)</translation>
 <translation id="5796460469508169315">Chromium está casi listo.</translation>
@@ -182,6 +183,12 @@ Chromium no puede recuperar tu configuración.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7339898014177206373">Nueva ventana</translation>
 <translation id="734373864078049451">Aquí puedes encontrar tus páginas web, marcadores y otros contenidos de Chromium.</translation>
+<translation id="7344413941077984497">Para establecer los sitios web que <ph name="NEW_PROFILE_NAME" /> puede ver, configura restricciones y opciones a través de la página <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. Si no cambias la configuración predeterminada, <ph name="NEW_PROFILE_NAME" /> podrá navegar por toda la Web.
+
+Para evitar que <ph name="NEW_PROFILE_NAME" /> acceda a tu cuenta, bloquea tu perfil cuando no uses Chromium. Para ello, haz clic en el nombre de tu perfil situado en la esquina superior derecha del navegador y selecciona Salir y bloquear.
+<ph name="BEGIN_LINK_2" />Más información<ph name="END_LINK_2" />
+
+Consulta tu correo electrónico (<ph name="ACCOUNT_EMAIL" />) para obtener más información.</translation>
 <translation id="7419987137528340081">Si prefieres mantener tu información de Chromium por separado, puedes crear un nuevo usuario de Chromium para <ph name="USER_NAME" />.</translation>
 <translation id="7421823331379285070">Chromium requiere Windows XP o una versión posterior. Es posible que algunas características no funcionen.</translation>
 <translation id="7463979740390522693">Chromium - Notificaciones (<ph name="QUANTITY" /> sin leer)</translation>
@@ -210,6 +217,7 @@ Chromium no puede recuperar tu configuración.</translation>
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> Los creadores de Chromium. Todos los derechos reservados.</translation>
 <translation id="8621669128220841554">La instalación ha fallado debido a un error no especificado. Vuelve a descargar Chromium.</translation>
 <translation id="8628626585870903697">Chromium no incluye el visor de PDF que se necesita para que la vista previa de impresión funcione.</translation>
+<translation id="8667808506758191620">El dispositivo <ph name="DEVICE_TYPE" /> está actualizado.</translation>
 <translation id="8697124171261953979">También controla qué página se muestra al iniciar Chromium o al hacer búsquedas desde el omnibox.</translation>
 <translation id="8704119203788522458">Aquí tienes tu navegador Chromium</translation>
 <translation id="872034308864968620">Permitir que Chromium se ejecute en segundo plano</translation>
@@ -226,7 +234,6 @@ Chromium no puede recuperar tu configuración.</translation>
 
 Si decides iniciar sesión de todas formas, se fusionará la información de Chromium, como marcadores, historial y otras opciones con la de <ph name="ACCOUNT_EMAIL_NEW" />.</translation>
 <translation id="9013087743919948559">Añadir a Chromium</translation>
-<translation id="9013262824292842194">Chromium está disponible para Windows Vista o Windows XP con SP2 o superior.</translation>
 <translation id="9019929317751753759">Para aumentar la seguridad de Chromium, hemos inhabilitado la siguiente extensión que no figura en <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> y que puede haberse añadido sin tu conocimiento.</translation>
 <translation id="9022552996538154597">Iniciar sesión en Chromium</translation>
 <translation id="9036189287518468038">Menú de aplicaciones de Chromium</translation>

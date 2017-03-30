@@ -68,10 +68,16 @@
 <translation id="2997147809295888909">Chrome потвърди, че сертификатът на този уебсайт е издаден от <ph name="ISSUER" />. Сървърът не предостави информация за прозрачност на сертификата.</translation>
 <translation id="3037838751736561277">Google Chrome работи на заден план.</translation>
 <translation id="3047079729301751317">Прекратяването на връзката с/ъс <ph name="USERNAME" /> ще изчисти историята, отметките, настройките и другите данни в Chrome, съхранени на това устройство. Данните в профила ви в Google няма да бъдат изчистени и могат да се управляват в <ph name="GOOGLE_DASHBOARD_LINK" />Google Табло за управление<ph name="END_GOOGLE_DASHBOARD_LINK" />.</translation>
+<translation id="3065168410429928842">Раздел в Chrome</translation>
 <translation id="3080151273017101988">Изпълняване на приложения на заден план при затворен браузър Google Chrome</translation>
 <translation id="3089968997497233615">Налице е нова, по-сигурна версия на Google Chrome.</translation>
 <translation id="3149510190863420837">Приложения в Chrome</translation>
-<translation id="3197823471738295152">Устройството ви е актуално.</translation>
+<translation id="3251381707915721925">За да зададете кои уебсайтове може да преглежда <ph name="NEW_PROFILE_NAME" />, посетете <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" /> и конфигурирайте ограничения и настройки. Ако не промените стандартните опции, <ph name="NEW_PROFILE_NAME" /> ще е в състояние да сърфира навсякъде в мрежата.
+
+За да предотвратите достъпа на <ph name="NEW_PROFILE_NAME" /> до профила си, непременно заключвайте потребителския си профил, когато не използвате Chrome. За целта кликнете върху името на потребителския си профил в горния десен ъгъл на браузъра и изберете „Изход и заключване за деца“.
+<ph name="BEGIN_LINK_2" />Научете повече<ph name="END_LINK_2" />
+
+За допълнителни инструкции, моля, проверете електронната си поща на адрес <ph name="ACCOUNT_EMAIL" />.</translation>
 <translation id="3282568296779691940">Вход в Chrome</translation>
 <translation id="3311976847535831054">Този компютър вече няма да получава актуализации за 32-битовата версия на Google Chrome. Моля, надстройте до 64-битовата версия на браузъра.</translation>
 <translation id="3360895254066713204">Chrome Helper</translation>
@@ -207,7 +213,6 @@
 <translation id="7808348361785373670">Премахване от Chrome...</translation>
 <translation id="7825851276765848807">Инсталацията не бе успешна поради неизвестна грешка. Моля, изтеглете отново Google Chrome.</translation>
 <translation id="7890208801193284374">Ако споделяте компютър, близките и приятелите ви могат да сърфират отделно и да настроят Chrome точно така, както искат.</translation>
-<translation id="8000275528373650868">За Google Chrome се изисква Windows Vista или Windows XP с SP2 или по-нова версия.</translation>
 <translation id="8005540215158006229">Chrome е почти готов.</translation>
 <translation id="8008534537613507642">Повторно инсталиране на Chrome</translation>
 <translation id="8030318113982266900">Устройството ви се актуализира до канал: <ph name="CHANNEL_NAME" />...</translation>
@@ -229,6 +234,7 @@
 <translation id="8556340503434111824">Налице е нова версия на Google Chrome, която е по-бърза от всякога.</translation>
 <translation id="8568392309447938879">Трябва да сте влезли в Chrome, за да използвате приложения. Това разрешава на браузъра да синхронизира на устройствата вашите приложения, отметки, история, пароли и други настройки.</translation>
 <translation id="8614913330719544658">Google Chrome блокира. Да се стартира ли отново сега?</translation>
+<translation id="8667808506758191620">Устройството ви <ph name="DEVICE_TYPE" /> е актуално.</translation>
 <translation id="8669527147644353129">Google Chrome Helper</translation>
 <translation id="8679801911857917785">То също контролира коя страница се показва при стартиране на Chrome.</translation>
 <translation id="870251953148363156">Актуализиране на &amp;Google Chrome</translation>
@@ -237,6 +243,7 @@
 <translation id="8851136666856101339">основен елемент</translation>
 <translation id="8862326446509486874">Нямате подходящи права за инсталация на ниво система. Опитайте да стартирате отново инсталационната програма като администратор.</translation>
 <translation id="9026991721384951619">Chrome OS не можа да синхронизира данните ви, защото потребителското име и паролата за вход в профила ви не са актуални.</translation>
+<translation id="9067395829937117663">За Google Chrome се изисква Windows 7 или по-нова версия.</translation>
 <translation id="9102715433345326100">Този файл е злонамерен и е блокиран от Chrome.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Предупреждение<ph name="END_BOLD" />: Google Chrome не може да попречи на разширенията да записват историята ви на сърфиране. За да деактивирате това разширение в режим „инкогнито“, премахнете отметката от тази опция.</translation>
 <translation id="911206726377975832">Да се изтрият ли и данните от сърфирането?</translation>

@@ -7,7 +7,6 @@
 #include "android_webview/browser/aw_browser_context.h"
 #include "android_webview/browser/aw_content_browser_client.h"
 #include "android_webview/browser/aw_form_database_service.h"
-#include "android_webview/browser/aw_pref_store.h"
 #include "android_webview/native/aw_contents.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
@@ -25,6 +24,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/ssl_status.h"
 #include "jni/AwAutofillClient_jni.h"
+#include "ui/gfx/geometry/rect_f.h"
 
 using base::android::AttachCurrentThread;
 using base::android::ConvertUTF16ToJavaString;
@@ -207,16 +207,13 @@ void AwAutofillClient::SuggestionSelected(JNIEnv* env,
   }
 }
 
-void AwAutofillClient::HideRequestAutocompleteDialog() {
-  NOTIMPLEMENTED();
-}
-
 void AwAutofillClient::ShowAutofillSettings() {
   NOTIMPLEMENTED();
 }
 
 void AwAutofillClient::ShowUnmaskPrompt(
     const autofill::CreditCard& card,
+    UnmaskCardReason reason,
     base::WeakPtr<autofill::CardUnmaskDelegate> delegate) {
   NOTIMPLEMENTED();
 }
@@ -248,13 +245,6 @@ bool AwAutofillClient::HasCreditCardScanFeature() {
 }
 
 void AwAutofillClient::ScanCreditCard(const CreditCardScanCallback& callback) {
-  NOTIMPLEMENTED();
-}
-
-void AwAutofillClient::ShowRequestAutocompleteDialog(
-    const autofill::FormData& form,
-    content::RenderFrameHost* rfh,
-    const ResultCallback& callback) {
   NOTIMPLEMENTED();
 }
 

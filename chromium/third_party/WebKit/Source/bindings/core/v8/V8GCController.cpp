@@ -32,28 +32,23 @@
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/RetainedDOMInfo.h"
+#include "bindings/core/v8/ScriptWrappableVisitor.h"
 #include "bindings/core/v8/V8AbstractEventListener.h"
 #include "bindings/core/v8/V8Binding.h"
-#include "bindings/core/v8/V8MutationObserver.h"
 #include "bindings/core/v8/V8Node.h"
 #include "bindings/core/v8/V8ScriptRunner.h"
 #include "bindings/core/v8/WrapperTypeInfo.h"
 #include "core/dom/Attr.h"
-#include "core/dom/Document.h"
-#include "core/dom/NodeTraversal.h"
-#include "core/dom/TemplateContentDocumentFragment.h"
-#include "core/dom/shadow/ElementShadow.h"
-#include "core/dom/shadow/ShadowRoot.h"
-#include "core/html/HTMLTemplateElement.h"
+#include "core/dom/Element.h"
+#include "core/dom/Node.h"
 #include "core/html/imports/HTMLImportsController.h"
 #include "core/inspector/InspectorTraceEvents.h"
-#include "core/svg/SVGElement.h"
 #include "platform/Histogram.h"
 #include "platform/TraceEvent.h"
 #include "public/platform/BlameContext.h"
 #include "public/platform/Platform.h"
-#include "wtf/Partitions.h"
 #include "wtf/Vector.h"
+#include "wtf/allocator/Partitions.h"
 #include <algorithm>
 
 namespace blink {
@@ -165,10 +160,11 @@ public:
         ASSERT(V8DOMWrapper::hasInternalFieldsSet(wrapper));
 
         const WrapperTypeInfo* type = toWrapperTypeInfo(wrapper);
-        if (type->hasPendingActivity(wrapper)) {
+        if (!RuntimeEnabledFeatures::traceWrappablesEnabled()
+            && type->hasPendingActivity(wrapper)) {
             // If you hit this assert, you'll need to add a [DependentiLifetime]
             // extended attribute to the DOM interface. A DOM interface that
-            // overrides hasPendingActivity must be marked as [DependentiLifetime].
+            // overrides hasPendingActivity must be marked as [DependentLifetime].
             RELEASE_ASSERT(!value->IsIndependent());
             m_isolate->SetObjectGroupId(*value, liveRootId());
             ++m_domObjectsWithPendingActivity;
@@ -178,14 +174,16 @@ public:
             return;
 
         if (classId == WrapperTypeInfo::NodeClassId) {
-            ASSERT(V8Node::hasInstance(wrapper, m_isolate));
-            Node* node = V8Node::toImpl(wrapper);
-            if (node->hasEventListeners())
-                addReferencesForNodeWithEventListeners(m_isolate, node, v8::Persistent<v8::Object>::Cast(*value));
-            Node* root = V8GCController::opaqueRootForGC(m_isolate, node);
-            m_isolate->SetObjectGroupId(*value, v8::UniqueId(reinterpret_cast<intptr_t>(root)));
-            if (m_constructRetainedObjectInfos)
-                m_groupsWhichNeedRetainerInfo.append(root);
+            if (!RuntimeEnabledFeatures::traceWrappablesEnabled()) {
+                ASSERT(V8Node::hasInstance(wrapper, m_isolate));
+                Node* node = V8Node::toImpl(wrapper);
+                if (node->hasEventListeners())
+                    addReferencesForNodeWithEventListeners(m_isolate, node, v8::Persistent<v8::Object>::Cast(*value));
+                Node* root = V8GCController::opaqueRootForGC(m_isolate, node);
+                m_isolate->SetObjectGroupId(*value, v8::UniqueId(reinterpret_cast<intptr_t>(root)));
+                if (m_constructRetainedObjectInfos)
+                    m_groupsWhichNeedRetainerInfo.append(root);
+            }
         } else if (classId == WrapperTypeInfo::ObjectClassId) {
             type->visitDOMWrapper(m_isolate, toScriptWrappable(wrapper), v8::Persistent<v8::Object>::Cast(*value));
         } else {
@@ -311,8 +309,21 @@ void V8GCController::gcPrologue(v8::Isolate* isolate, v8::GCType type, v8::GCCal
     }
 }
 
+namespace {
+
+void UpdateCollectedPhantomHandles(v8::Isolate* isolate)
+{
+    ThreadHeapStats& heapStats = ThreadState::current()->heap().heapStats();
+    size_t count = isolate->NumberOfPhantomHandleResetsSinceLastCall();
+    heapStats.decreaseWrapperCount(count);
+    heapStats.increaseCollectedWrapperCount(count);
+}
+
+} // namespace
+
 void V8GCController::gcEpilogue(v8::Isolate* isolate, v8::GCType type, v8::GCCallbackFlags flags)
 {
+    UpdateCollectedPhantomHandles(isolate);
     switch (type) {
     case v8::kGCTypeScavenge:
         TRACE_EVENT_END1("devtools.timeline,v8", "MinorGC", "usedHeapSizeAfter", usedHeapSize(isolate));
@@ -356,7 +367,7 @@ void V8GCController::gcEpilogue(v8::Isolate* isolate, v8::GCType type, v8::GCCal
         // to collect all garbage, you need to wait until the next event loop.
         // Regarding (2), it would be OK in practice to trigger only one GC per gcEpilogue, because
         // GCController.collectAll() forces multiple V8's GC.
-        Heap::collectGarbage(BlinkGC::HeapPointersOnStack, BlinkGC::GCWithSweep, BlinkGC::ForcedGC);
+        ThreadHeap::collectGarbage(BlinkGC::HeapPointersOnStack, BlinkGC::GCWithSweep, BlinkGC::ForcedGC);
 
         // Forces a precise GC at the end of the current event loop.
         if (ThreadState::current()) {
@@ -369,7 +380,7 @@ void V8GCController::gcEpilogue(v8::Isolate* isolate, v8::GCType type, v8::GCCal
     // low memory notifications.
     if (flags & v8::kGCCallbackFlagCollectAllAvailableGarbage) {
         // This single GC is not enough. See the above comment.
-        Heap::collectGarbage(BlinkGC::HeapPointersOnStack, BlinkGC::GCWithSweep, BlinkGC::ForcedGC);
+        ThreadHeap::collectGarbage(BlinkGC::HeapPointersOnStack, BlinkGC::GCWithSweep, BlinkGC::ForcedGC);
 
         // Do not force a precise GC at the end of the current event loop.
         // According to UMA stats, the collection rate of the precise GC

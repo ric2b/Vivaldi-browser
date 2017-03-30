@@ -10,7 +10,7 @@
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/public/renderer/renderer_ppapi_host.h"
 #include "content/renderer/pepper/pepper_file_ref_renderer_host.h"
 #include "content/renderer/pepper/renderer_ppapi_host_impl.h"
@@ -98,7 +98,7 @@ void DataFromWebURLResponse(RendererPpapiHostImpl* host_impl,
         new PepperFileRefRendererHost(host_impl, pp_instance, 0, external_path);
     int renderer_pending_host_id =
         host_impl->GetPpapiHost()->AddPendingResourceHost(
-            scoped_ptr<ppapi::host::ResourceHost>(renderer_host));
+            std::unique_ptr<ppapi::host::ResourceHost>(renderer_host));
 
     std::vector<IPC::Message> create_msgs;
     create_msgs.push_back(PpapiHostMsg_FileRef_CreateForRawFS(external_path));

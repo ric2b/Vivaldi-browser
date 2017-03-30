@@ -39,7 +39,7 @@ namespace blink {
 using namespace HTMLNames;
 
 LayoutTableRow::LayoutTableRow(Element* element)
-    : LayoutBox(element)
+    : LayoutTableBoxComponent(element)
     , m_rowIndex(unsetRowIndex)
 {
     // init LayoutObject attributes
@@ -48,7 +48,7 @@ LayoutTableRow::LayoutTableRow(Element* element)
 
 void LayoutTableRow::willBeRemovedFromTree()
 {
-    LayoutBox::willBeRemovedFromTree();
+    LayoutTableBoxComponent::willBeRemovedFromTree();
 
     section()->setNeedsCellRecalc();
 }
@@ -65,7 +65,7 @@ void LayoutTableRow::styleDidChange(StyleDifference diff, const ComputedStyle* o
 {
     ASSERT(style()->display() == TABLE_ROW);
 
-    LayoutBox::styleDidChange(diff, oldStyle);
+    LayoutTableBoxComponent::styleDidChange(diff, oldStyle);
     propagateStyleToAnonymousChildren();
 
     if (section() && oldStyle && style()->logicalHeight() != oldStyle->logicalHeight())
@@ -81,10 +81,12 @@ void LayoutTableRow::styleDidChange(StyleDifference diff, const ComputedStyle* o
             // If the border width changes on a row, we need to make sure the cells in the row know to lay out again.
             // This only happens when borders are collapsed, since they end up affecting the border sides of the cell
             // itself.
+            table->setPreferredLogicalWidthsDirty(MarkOnlyThis);
             for (LayoutBox* childBox = firstChildBox(); childBox; childBox = childBox->nextSiblingBox()) {
                 if (!childBox->isTableCell())
                     continue;
                 childBox->setChildNeedsLayout();
+                childBox->setPreferredLogicalWidthsDirty(MarkOnlyThis);
             }
         }
     }
@@ -144,7 +146,7 @@ void LayoutTableRow::addChild(LayoutObject* child, LayoutObject* beforeChild)
     LayoutTableCell* cell = toLayoutTableCell(child);
 
     ASSERT(!beforeChild || beforeChild->isTableCell());
-    LayoutBox::addChild(cell, beforeChild);
+    LayoutTableBoxComponent::addChild(cell, beforeChild);
 
     // Generated content can result in us having a null section so make sure to null check our parent.
     if (parent())
@@ -216,12 +218,6 @@ void LayoutTableRow::paint(const PaintInfo& paintInfo, const LayoutPoint& paintO
     TableRowPainter(*this).paint(paintInfo, paintOffset);
 }
 
-void LayoutTableRow::imageChanged(WrappedImagePtr, const IntRect*)
-{
-    // FIXME: Examine cells and issue paint invalidations of only the rect the image paints in.
-    setShouldDoFullPaintInvalidation();
-}
-
 LayoutTableRow* LayoutTableRow::createAnonymous(Document* document)
 {
     LayoutTableRow* layoutObject = new LayoutTableRow(nullptr);
@@ -237,9 +233,18 @@ LayoutTableRow* LayoutTableRow::createAnonymousWithParent(const LayoutObject* pa
     return newRow;
 }
 
+void LayoutTableRow::computeOverflow()
+{
+    clearAllOverflows();
+    addVisualEffectOverflow();
+    for (LayoutTableCell* cell = firstCell(); cell; cell = cell->nextCell())
+        addOverflowFromCell(cell);
+}
+
 void LayoutTableRow::addOverflowFromCell(const LayoutTableCell* cell)
 {
     // Non-row-spanning-cells don't create overflow (they are fully contained within this row).
+    // TODO(crbug.com/603993): This seems incorrect because cell may have visual effect overflow that should be included in this row.
     if (cell->rowSpan() == 1)
         return;
 
@@ -252,7 +257,7 @@ void LayoutTableRow::addOverflowFromCell(const LayoutTableCell* cell)
     LayoutUnit cellOffsetLogicalTopDifference = cell->location().y() - location().y();
     cellVisualOverflowRect.move(LayoutUnit(), cellOffsetLogicalTopDifference);
 
-    addVisualOverflow(cellVisualOverflowRect);
+    addContentsVisualOverflow(cellVisualOverflowRect);
 }
 
 } // namespace blink

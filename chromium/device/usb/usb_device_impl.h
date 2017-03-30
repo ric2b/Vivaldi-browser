@@ -8,10 +8,12 @@
 #include <stdint.h>
 
 #include <list>
+#include <memory>
 #include <string>
 #include <utility>
 
 #include "base/callback.h"
+#include "base/files/scoped_file.h"
 #include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "build/build_config.h"
@@ -63,7 +65,7 @@ class UsbDeviceImpl : public UsbDevice {
   }
   void set_device_path(const std::string& value) { device_path_ = value; }
   void set_webusb_allowed_origins(
-      scoped_ptr<WebUsbAllowedOrigins> allowed_origins) {
+      std::unique_ptr<WebUsbAllowedOrigins> allowed_origins) {
     webusb_allowed_origins_ = std::move(allowed_origins);
   }
   void set_webusb_landing_page(const GURL& url) { webusb_landing_page_ = url; }
@@ -73,6 +75,7 @@ class UsbDeviceImpl : public UsbDevice {
  protected:
   friend class UsbServiceImpl;
   friend class UsbDeviceHandleImpl;
+  friend class UsbDeviceHandleUsbfs;
 
   // Called by UsbServiceImpl only;
   UsbDeviceImpl(scoped_refptr<UsbContext> context,
@@ -89,7 +92,8 @@ class UsbDeviceImpl : public UsbDevice {
   void ReadAllConfigurations();
 
   // Called by UsbDeviceHandleImpl.
-  void HandleClosed(scoped_refptr<UsbDeviceHandle> handle);
+  void HandleClosed(UsbDeviceHandle* handle);
+  void ActiveConfigurationChanged(int configuration_value);
   void RefreshActiveConfiguration();
 
  private:
@@ -102,10 +106,15 @@ class UsbDeviceImpl : public UsbDevice {
                           const std::string& error_message);
   void OpenOnBlockingThreadWithFd(dbus::FileDescriptor fd,
                                   const OpenCallback& callback);
-#endif
+#else
   void OpenOnBlockingThread(const OpenCallback& callback);
+#endif  // defined(OS_CHROMEOS)
+#if defined(OS_LINUX)
+  void Opened(base::ScopedFD fd, const OpenCallback& callback);
+#else
   void Opened(PlatformUsbDeviceHandle platform_handle,
               const OpenCallback& callback);
+#endif  // defined(OS_LINUX)
 
   base::ThreadChecker thread_checker_;
   PlatformUsbDevice platform_device_;

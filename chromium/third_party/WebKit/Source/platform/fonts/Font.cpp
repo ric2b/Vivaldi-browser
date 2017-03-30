@@ -57,6 +57,8 @@ using namespace Unicode;
 namespace blink {
 
 Font::Font()
+    : m_canShapeWordByWord(0)
+    , m_shapeWordByWordComputed(0)
 {
 }
 
@@ -70,6 +72,9 @@ Font::Font(const FontDescription& fd)
 Font::Font(const Font& other)
     : m_fontDescription(other.m_fontDescription)
     , m_fontFallbackList(other.m_fontFallbackList)
+    // TODO(yosin): We should have a comment the reason why don't we copy
+    // |m_canShapeWordByWord| and |m_shapeWordByWordComputed| from |other|,
+    // since |operator=()| copies them from |other|.
     , m_canShapeWordByWord(0)
     , m_shapeWordByWordComputed(0)
 {
@@ -420,7 +425,7 @@ CodePath Font::codePath(const TextRunPaintInfo& runInfo) const
 
     const TextRun& run = runInfo.run;
 
-    if (getFontDescription().getTypesettingFeatures() && (runInfo.from || runInfo.to != run.length()))
+    if (getFontDescription().getTypesettingFeatures())
         return ComplexPath;
 
     if (m_fontDescription.featureSettings() && m_fontDescription.featureSettings()->size() > 0)
@@ -430,9 +435,6 @@ CodePath Font::codePath(const TextRunPaintInfo& runInfo) const
         return ComplexPath;
 
     if (m_fontDescription.widthVariant() != RegularWidth)
-        return ComplexPath;
-
-    if (run.length() > 1 && getFontDescription().getTypesettingFeatures())
         return ComplexPath;
 
     // FIXME: This really shouldn't be needed but for some reason the
@@ -461,6 +463,9 @@ bool Font::computeCanShapeWordByWord() const
 {
     if (!getFontDescription().getTypesettingFeatures())
         return true;
+
+    if (!primaryFont())
+        return false;
 
     const FontPlatformData& platformData = primaryFont()->platformData();
     TypesettingFeatures features = getFontDescription().getTypesettingFeatures();
@@ -521,7 +526,7 @@ GlyphData Font::glyphDataForCharacter(UChar32& c, bool mirror, bool normalizeSpa
     ASSERT(isMainThread());
 
     if (variant == AutoVariant) {
-        if (m_fontDescription.variant() == FontVariantSmallCaps) {
+        if (m_fontDescription.variantCaps() == FontDescription::SmallCaps) {
             bool includeDefault = false;
             UChar32 upperC = toUpper(c, m_fontDescription.locale(includeDefault));
             if (upperC != c) {
@@ -739,7 +744,7 @@ int Font::offsetForPositionForComplexText(const TextRun& run, float xFloat,
     bool includePartialGlyphs) const
 {
     CachingWordShaper shaper(m_fontFallbackList->shapeCache(m_fontDescription));
-    return shaper.offsetForPosition(this, run, xFloat);
+    return shaper.offsetForPosition(this, run, xFloat, includePartialGlyphs);
 }
 
 // Return the rectangle for selecting the given range of code-points in the TextRun.
@@ -751,6 +756,13 @@ FloatRect Font::selectionRectForComplexText(const TextRun& run,
     return FloatRect(point.x() + range.start, point.y(), range.width(), height);
 }
 
+CharacterRange Font::getCharacterRange(const TextRun& run, unsigned from, unsigned to) const
+{
+    FontCachePurgePreventer purgePreventer;
+    CachingWordShaper shaper(m_fontFallbackList->shapeCache(m_fontDescription));
+    return shaper.getCharacterRange(this, run, from, to);
+}
+
 Vector<CharacterRange> Font::individualCharacterRanges(const TextRun& run) const
 {
     // TODO(pdr): Android is temporarily (crbug.com/577306) using the old simple
@@ -760,7 +772,13 @@ Vector<CharacterRange> Font::individualCharacterRanges(const TextRun& run) const
     // will be improved shaping in SVG when compared to HTML.
     FontCachePurgePreventer purgePreventer;
     CachingWordShaper shaper(m_fontFallbackList->shapeCache(m_fontDescription));
-    return shaper.individualCharacterRanges(this, run);
+    auto ranges = shaper.individualCharacterRanges(this, run);
+    // The shaper should return ranges.size == run.length but on some platforms
+    // (OSX10.9.5) we are seeing cases in the upper end of the unicode range
+    // where this is not true (see: crbug.com/620952). To catch these cases on
+    // more popular platforms, and to protect users, we are using a CHECK here.
+    CHECK_EQ(ranges.size(), static_cast<unsigned>(run.length()));
+    return ranges;
 }
 
 float Font::floatWidthForSimpleText(const TextRun& run, HashSet<const SimpleFontData*>* fallbackFonts, FloatRect* glyphBounds) const

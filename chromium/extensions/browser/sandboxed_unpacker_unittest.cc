@@ -10,7 +10,7 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "components/crx_file/id_util.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -131,8 +131,8 @@ class SandboxedUnpackerTest : public ExtensionsTest {
   base::ScopedTempDir extensions_dir_;
   MockSandboxedUnpackerClient* client_;
   scoped_refptr<SandboxedUnpacker> sandboxed_unpacker_;
-  scoped_ptr<content::TestBrowserThreadBundle> browser_threads_;
-  scoped_ptr<content::InProcessUtilityThreadHelper>
+  std::unique_ptr<content::TestBrowserThreadBundle> browser_threads_;
+  std::unique_ptr<content::InProcessUtilityThreadHelper>
       in_process_utility_thread_helper_;
 };
 

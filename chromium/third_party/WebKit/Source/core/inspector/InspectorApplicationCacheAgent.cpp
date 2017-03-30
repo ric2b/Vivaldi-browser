@@ -28,7 +28,6 @@
 #include "core/frame/LocalFrame.h"
 #include "core/inspector/IdentifiersFactory.h"
 #include "core/inspector/InspectedFrames.h"
-#include "core/inspector/InstrumentingAgents.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
 #include "core/page/NetworkStateNotifier.h"
@@ -57,14 +56,14 @@ void InspectorApplicationCacheAgent::restore()
 void InspectorApplicationCacheAgent::enable(ErrorString*)
 {
     m_state->setBoolean(ApplicationCacheAgentState::applicationCacheAgentEnabled, true);
-    m_instrumentingAgents->setInspectorApplicationCacheAgent(this);
+    m_instrumentingAgents->addInspectorApplicationCacheAgent(this);
     frontend()->networkStateUpdated(networkStateNotifier().onLine());
 }
 
 void InspectorApplicationCacheAgent::disable(ErrorString*)
 {
     m_state->setBoolean(ApplicationCacheAgentState::applicationCacheAgentEnabled, false);
-    m_instrumentingAgents->setInspectorApplicationCacheAgent(nullptr);
+    m_instrumentingAgents->removeInspectorApplicationCacheAgent(this);
 }
 
 void InspectorApplicationCacheAgent::updateApplicationCacheStatus(LocalFrame* frame)
@@ -105,7 +104,7 @@ void InspectorApplicationCacheAgent::getFramesWithManifests(ErrorString*, OwnPtr
                 .setFrameId(IdentifiersFactory::frameId(frame))
                 .setManifestURL(manifestURL)
                 .setStatus(static_cast<int>(host->getStatus())).build();
-            (*result)->addItem(value.release());
+            (*result)->addItem(std::move(value));
         }
     }
 }
@@ -169,7 +168,7 @@ PassOwnPtr<protocol::Array<protocol::ApplicationCache::ApplicationCacheResource>
     for (int i = 0; it != end; ++it, i++)
         resources->addItem(buildObjectForApplicationCacheResource(*it));
 
-    return resources.release();
+    return resources;
 }
 
 PassOwnPtr<protocol::ApplicationCache::ApplicationCacheResource> InspectorApplicationCacheAgent::buildObjectForApplicationCacheResource(const ApplicationCacheHost::ResourceInfo& resourceInfo)
@@ -194,7 +193,7 @@ PassOwnPtr<protocol::ApplicationCache::ApplicationCacheResource> InspectorApplic
         .setUrl(resourceInfo.m_resource.getString())
         .setSize(static_cast<int>(resourceInfo.m_size))
         .setType(builder.toString()).build();
-    return value.release();
+    return value;
 }
 
 DEFINE_TRACE(InspectorApplicationCacheAgent)

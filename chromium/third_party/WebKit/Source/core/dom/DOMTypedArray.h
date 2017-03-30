@@ -9,15 +9,15 @@
 #include "core/CoreExport.h"
 #include "core/dom/DOMArrayBufferView.h"
 #include "core/dom/DOMSharedArrayBuffer.h"
-#include "wtf/Float32Array.h"
-#include "wtf/Float64Array.h"
-#include "wtf/Int16Array.h"
-#include "wtf/Int32Array.h"
-#include "wtf/Int8Array.h"
-#include "wtf/Uint16Array.h"
-#include "wtf/Uint32Array.h"
-#include "wtf/Uint8Array.h"
-#include "wtf/Uint8ClampedArray.h"
+#include "wtf/typed_arrays/Float32Array.h"
+#include "wtf/typed_arrays/Float64Array.h"
+#include "wtf/typed_arrays/Int16Array.h"
+#include "wtf/typed_arrays/Int32Array.h"
+#include "wtf/typed_arrays/Int8Array.h"
+#include "wtf/typed_arrays/Uint16Array.h"
+#include "wtf/typed_arrays/Uint32Array.h"
+#include "wtf/typed_arrays/Uint8Array.h"
+#include "wtf/typed_arrays/Uint8ClampedArray.h"
 #include <v8.h>
 
 namespace blink {
@@ -29,30 +29,29 @@ class CORE_TEMPLATE_CLASS_EXPORT DOMTypedArray final : public DOMArrayBufferView
 public:
     typedef typename WTFTypedArray::ValueType ValueType;
 
-    static PassRefPtr<ThisType> create(PassRefPtr<WTFTypedArray> bufferView)
+    static ThisType* create(PassRefPtr<WTFTypedArray> bufferView)
     {
-        return adoptRef(new ThisType(bufferView));
+        return new ThisType(bufferView);
     }
-    static PassRefPtr<ThisType> create(unsigned length)
+    static ThisType* create(unsigned length)
     {
         return create(WTFTypedArray::create(length));
     }
-    static PassRefPtr<ThisType> create(const ValueType* array, unsigned length)
+    static ThisType* create(const ValueType* array, unsigned length)
     {
         return create(WTFTypedArray::create(array, length));
     }
-    static PassRefPtr<ThisType> create(PassRefPtr<WTF::ArrayBuffer> buffer, unsigned byteOffset, unsigned length)
+    static ThisType* create(PassRefPtr<WTF::ArrayBuffer> buffer, unsigned byteOffset, unsigned length)
     {
         return create(WTFTypedArray::create(buffer, byteOffset, length));
     }
-    static PassRefPtr<ThisType> create(PassRefPtr<DOMArrayBufferBase> prpBuffer, unsigned byteOffset, unsigned length)
+    static ThisType* create(DOMArrayBufferBase *buffer, unsigned byteOffset, unsigned length)
     {
-        RefPtr<DOMArrayBufferBase> buffer = prpBuffer;
         RefPtr<WTFTypedArray> bufferView = WTFTypedArray::create(buffer->buffer(), byteOffset, length);
-        return adoptRef(new ThisType(bufferView.release(), buffer.release()));
+        return new ThisType(bufferView.release(), buffer);
     }
 
-    static PassRefPtr<ThisType> createOrNull(unsigned length)
+    static ThisType* createOrNull(unsigned length)
     {
         RefPtr<WTF::ArrayBuffer> buffer = WTF::ArrayBuffer::createOrNull(length, 1);
         return buffer ? create(buffer.release(), 0, length) : nullptr;
@@ -72,7 +71,7 @@ public:
 private:
     explicit DOMTypedArray(PassRefPtr<WTFTypedArray> bufferView)
         : DOMArrayBufferView(bufferView) { }
-    DOMTypedArray(PassRefPtr<WTFTypedArray> bufferView, PassRefPtr<DOMArrayBufferBase> domArrayBuffer)
+    DOMTypedArray(PassRefPtr<WTFTypedArray> bufferView, DOMArrayBufferBase* domArrayBuffer)
         : DOMArrayBufferView(bufferView, domArrayBuffer) { }
 };
 

@@ -31,7 +31,6 @@
 // To use, derive your test base class from RenderViewHostImplTestHarness.
 
 struct FrameHostMsg_DidCommitProvisionalLoad_Params;
-struct ViewHostMsg_TextInputState_Params;
 
 namespace gfx {
 class Rect;
@@ -43,6 +42,7 @@ class SiteInstance;
 class TestRenderFrameHost;
 class TestWebContents;
 struct FrameReplicationState;
+struct TextInputState;
 
 // Utility function to initialize FrameHostMsg_DidCommitProvisionalLoad_Params
 // with given parameters.
@@ -69,7 +69,6 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   void SetBounds(const gfx::Rect& rect) override {}
   gfx::Vector2dF GetLastScrollOffset() const override;
   gfx::NativeView GetNativeView() const override;
-  gfx::NativeViewId GetNativeViewId() const override;
   gfx::NativeViewAccessible GetNativeViewAccessible() override;
   ui::TextInputClient* GetTextInputClient() override;
   bool HasFocus() const override;
@@ -81,6 +80,7 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   void WasOccluded() override;
   gfx::Rect GetViewBounds() const override;
 #if defined(OS_MACOSX)
+  ui::AcceleratedWidgetMac* GetAcceleratedWidgetMac() const override;
   void SetActive(bool active) override;
   void ShowDefinitionForSelection() override {}
   bool SupportsSpeech() const override;
@@ -88,8 +88,9 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   bool IsSpeaking() const override;
   void StopSpeaking() override;
 #endif  // defined(OS_MACOSX)
-  void OnSwapCompositorFrame(uint32_t output_surface_id,
-                             scoped_ptr<cc::CompositorFrame> frame) override;
+  void OnSwapCompositorFrame(
+      uint32_t output_surface_id,
+      std::unique_ptr<cc::CompositorFrame> frame) override;
   void ClearCompositorFrame() override {}
 
   // RenderWidgetHostViewBase implementation.
@@ -99,8 +100,7 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   void Focus() override {}
   void SetIsLoading(bool is_loading) override {}
   void UpdateCursor(const WebCursor& cursor) override {}
-  void TextInputStateChanged(
-      const ViewHostMsg_TextInputState_Params& params) override {}
+  void TextInputStateChanged(const TextInputState& params) override {}
   void ImeCancelComposition() override {}
   void ImeCompositionRangeChanged(
       const gfx::Range& range,
@@ -129,6 +129,7 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   gfx::Rect GetBoundsInRootWindow() override;
   bool LockMouse() override;
   void UnlockMouse() override;
+  uint32_t GetSurfaceIdNamespace() override;
 
   bool is_showing() const { return is_showing_; }
   bool is_occluded() const { return is_occluded_; }
@@ -138,6 +139,7 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   RenderWidgetHostImpl* rwh_;
 
  private:
+  uint32_t surface_id_namespace_;
   bool is_showing_;
   bool is_occluded_;
   bool did_swap_compositor_frame_;
@@ -190,7 +192,7 @@ class TestRenderViewHost
       public RenderViewHostTester {
  public:
   TestRenderViewHost(SiteInstance* instance,
-                     scoped_ptr<RenderWidgetHostImpl> widget,
+                     std::unique_ptr<RenderWidgetHostImpl> widget,
                      RenderViewHostDelegate* delegate,
                      int32_t main_frame_routing_id,
                      bool swapped_out);
@@ -305,7 +307,7 @@ class RenderViewHostImplTestHarness : public RenderViewHostTestHarness {
   TestRenderFrameHost* main_test_rfh();
 
  private:
-  typedef scoped_ptr<ui::test::ScopedSetSupportedScaleFactors>
+  typedef std::unique_ptr<ui::test::ScopedSetSupportedScaleFactors>
       ScopedSetSupportedScaleFactors;
   ScopedSetSupportedScaleFactors scoped_set_supported_scale_factors_;
   DISALLOW_COPY_AND_ASSIGN(RenderViewHostImplTestHarness);

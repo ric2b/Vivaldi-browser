@@ -220,7 +220,7 @@ PassOwnPtr<GraphicsLayer> CompositedLayerMapping::createGraphicsLayer(Compositin
     if (Node* owningNode = m_owningLayer.layoutObject()->generatingNode())
         graphicsLayer->setOwnerNodeId(DOMNodeIds::idForNode(owningNode));
 
-    return graphicsLayer.release();
+    return graphicsLayer;
 }
 
 void CompositedLayerMapping::createPrimaryGraphicsLayer()
@@ -555,6 +555,8 @@ bool CompositedLayerMapping::updateGraphicsLayerConfiguration()
 
     updateElementIdAndCompositorMutableProperties();
 
+    m_graphicsLayer->setHasWillChangeTransformHint(style.hasWillChangeTransformHint());
+
     m_owningLayer.update3DTransformedDescendantStatus();
     if (style.preserves3D() && style.hasOpacity() && m_owningLayer.has3DTransformedDescendant())
         UseCounter::count(layoutObject->document(), UseCounter::OpacityWithPreserve3DQuirk);
@@ -769,11 +771,6 @@ void CompositedLayerMapping::updateMainGraphicsLayerGeometry(const IntRect& rela
     // descendants. So, the visibility flag for m_graphicsLayer should be true if there are any
     // non-compositing visible layers.
     bool contentsVisible = m_owningLayer.hasVisibleContent() || hasVisibleNonCompositingDescendant(&m_owningLayer);
-    if (layoutObject()->isVideo()) {
-        HTMLVideoElement* videoElement = toHTMLVideoElement(layoutObject()->node());
-        if (videoElement->isFullscreen() && videoElement->usesOverlayFullscreenVideo())
-            contentsVisible = false;
-    }
     m_graphicsLayer->setContentsVisible(contentsVisible);
 
     m_graphicsLayer->setBackfaceVisibility(layoutObject()->style()->backfaceVisibility() == BackfaceVisibilityVisible);
@@ -1198,7 +1195,13 @@ void CompositedLayerMapping::updateContentsOffsetInCompositingLayer(const IntPoi
 
 void CompositedLayerMapping::updateDrawsContent()
 {
-    bool hasPaintedContent = containsPaintedContent();
+    bool inOverlayFullscreenVideo = false;
+    if (layoutObject()->isVideo()) {
+        HTMLVideoElement* videoElement = toHTMLVideoElement(layoutObject()->node());
+        if (videoElement->isFullscreen() && videoElement->usesOverlayFullscreenVideo())
+            inOverlayFullscreenVideo = true;
+    }
+    bool hasPaintedContent = inOverlayFullscreenVideo ? false : containsPaintedContent();
     m_graphicsLayer->setDrawsContent(hasPaintedContent);
 
     if (m_scrollingLayer) {
@@ -2061,23 +2064,25 @@ struct SetContentsNeedsDisplayInRectFunctor {
         if (layer->drawsContent()) {
             IntRect layerDirtyRect = r;
             layerDirtyRect.move(-layer->offsetFromLayoutObject());
-            layer->setNeedsDisplayInRect(layerDirtyRect, invalidationReason);
+            layer->setNeedsDisplayInRect(layerDirtyRect, invalidationReason, client);
         }
     }
 
     IntRect r;
     PaintInvalidationReason invalidationReason;
+    const DisplayItemClient& client;
 };
 
 // r is in the coordinate space of the layer's layout object
-void CompositedLayerMapping::setContentsNeedDisplayInRect(const LayoutRect& r, PaintInvalidationReason invalidationReason)
+void CompositedLayerMapping::setContentsNeedDisplayInRect(const LayoutRect& r, PaintInvalidationReason invalidationReason, const DisplayItemClient& client)
 {
     // TODO(wangxianzhu): Enable the following assert after paint invalidation for spv2 is ready.
     // ASSERT(!RuntimeEnabledFeatures::slimmingPaintV2Enabled());
 
     SetContentsNeedsDisplayInRectFunctor functor = {
         enclosingIntRect(LayoutRect(r.location() + m_owningLayer.subpixelAccumulation(), r.size())),
-        invalidationReason
+        invalidationReason,
+        client
     };
     ApplyToGraphicsLayers(this, functor, ApplyToContentLayers);
 }
@@ -2149,7 +2154,8 @@ void CompositedLayerMapping::doPaintTask(const GraphicsLayerPaintInfo& paintInfo
     }
 
 #if ENABLE(ASSERT)
-    paintInfo.paintLayer->layoutObject()->assertSubtreeIsLaidOut();
+    if (!layoutObject()->view()->frame() || !layoutObject()->view()->frame()->shouldThrottleRendering())
+        paintInfo.paintLayer->layoutObject()->assertSubtreeIsLaidOut();
 #endif
 
     float deviceScaleFactor = blink::deviceScaleFactor(paintInfo.paintLayer->layoutObject()->frame());
@@ -2190,8 +2196,6 @@ static void paintScrollbar(const Scrollbar* scrollbar, GraphicsContext& context,
     scrollbar->paint(context, CullRect(transformedClip));
 }
 
-// The following should be kept in sync with the code computing potential_new_recorded_viewport in
-// cc::RecordingSource::UpdateAndExpandInvalidation() before we keep only one copy of the algorithm.
 static const int kPixelDistanceToRecord = 4000;
 
 IntRect CompositedLayerMapping::recomputeInterestRect(const GraphicsLayer* graphicsLayer) const
@@ -2251,8 +2255,6 @@ IntRect CompositedLayerMapping::recomputeInterestRect(const GraphicsLayer* graph
     return localInterestRect;
 }
 
-// The following should be kept in sync with cc::RecordingSource::ExposesEnoughNewArea()
-// before we keep only one copy of the algorithm.
 static const int kMinimumDistanceBeforeRepaint = 512;
 
 bool CompositedLayerMapping::interestRectChangedEnoughToRepaint(const IntRect& previousInterestRect, const IntRect& newInterestRect, const IntSize& layerSize)
@@ -2321,6 +2323,9 @@ void CompositedLayerMapping::paintContents(const GraphicsLayer* graphicsLayer, G
 {
     // https://code.google.com/p/chromium/issues/detail?id=343772
     DisableCompositingQueryAsserts disabler;
+    // Allow throttling to make sure no painting paths (e.g.,
+    // ContentLayerDelegate::paintContents) try to paint throttled content.
+    DocumentLifecycle::AllowThrottlingScope allowThrottling(m_owningLayer.layoutObject()->document().lifecycle());
 #if ENABLE(ASSERT)
     // FIXME: once the state machine is ready, this can be removed and we can refer to that instead.
     if (Page* page = layoutObject()->frame()->page())
@@ -2368,7 +2373,7 @@ void CompositedLayerMapping::paintContents(const GraphicsLayer* graphicsLayer, G
     } else if (isScrollableAreaLayer(graphicsLayer)) {
         paintScrollableArea(graphicsLayer, context, interestRect);
     }
-    InspectorInstrumentation::didPaint(m_owningLayer.layoutObject(), graphicsLayer, context, LayoutRect(interestRect));
+    InspectorInstrumentation::didPaint(m_owningLayer.layoutObject()->frame(), graphicsLayer, context, LayoutRect(interestRect));
 #if ENABLE(ASSERT)
     if (Page* page = layoutObject()->frame()->page())
         page->setIsPainting(false);

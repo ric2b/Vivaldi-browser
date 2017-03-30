@@ -47,17 +47,11 @@ class ExceptionState;
 class ExecutionContext;
 
 class FileWriter final
-#if ENABLE(OILPAN)
     : public EventTargetWithInlineData
     , public FileWriterBase
-#else
-    : public FileWriterBase
-    , public EventTargetWithInlineData
-#endif
     , public ActiveScriptWrappable
     , public ActiveDOMObject
     , public WebFileWriterClient {
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(FileWriterBase);
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(FileWriter);
 public:

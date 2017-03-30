@@ -2,7 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-component("blimp_net") {
+component("net") {
+  output_name = "blimp_net"
   sources = [
     "blimp_connection.cc",
     "blimp_connection.h",
@@ -22,6 +23,10 @@ component("blimp_net") {
     "blimp_message_thread_pipe.h",
     "blimp_net_export.h",
     "blimp_transport.h",
+    "blob_channel/blob_channel_receiver.cc",
+    "blob_channel/blob_channel_receiver.h",
+    "blob_channel/blob_channel_sender.cc",
+    "blob_channel/blob_channel_sender.h",
     "browser_connection_handler.cc",
     "browser_connection_handler.h",
     "client_connection_manager.cc",
@@ -66,9 +71,10 @@ component("blimp_net") {
 
   deps = [
     "//base",
-    "//blimp/common:blimp_common",
+    "//blimp/common",
     "//blimp/common/proto",
     "//net",
+    "//third_party/WebKit/public:blink_headers",
     "//third_party/zlib",
     "//ui/base/ime:text_input_types",
   ]
@@ -83,7 +89,7 @@ source_set("test_support") {
   ]
 
   deps = [
-    ":blimp_net",
+    ":net",
     "//blimp/common/proto",
     "//net:test_support",
     "//testing/gmock",
@@ -101,6 +107,9 @@ source_set("unit_tests") {
     "blimp_message_output_buffer_unittest.cc",
     "blimp_message_pump_unittest.cc",
     "blimp_message_thread_pipe_unittest.cc",
+    "blob_channel/blob_channel_integration_test.cc",
+    "blob_channel/blob_channel_receiver_unittest.cc",
+    "blob_channel/blob_channel_sender_unittest.cc",
     "browser_connection_handler_unittest.cc",
     "client_connection_manager_unittest.cc",
     "compressed_packet_unittest.cc",
@@ -115,15 +124,17 @@ source_set("unit_tests") {
   ]
 
   deps = [
-    ":blimp_net",
+    ":net",
     ":test_support",
     "//base",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
-    "//blimp/common:blimp_common",
+    "//blimp/common",
+    "//blimp/common:test_support",
     "//blimp/common/proto",
     "//net:test_support",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/WebKit/public:blink_headers",
   ]
 }

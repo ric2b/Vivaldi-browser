@@ -4,15 +4,18 @@
 
 #include "components/audio_modem/audio_player.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/single_thread_task_runner.h"
+#include "base/run_loop.h"
+#include "base/test/test_message_loop.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/audio_modem/audio_player_impl.h"
 #include "components/audio_modem/public/audio_modem_types.h"
 #include "components/audio_modem/test/random_samples.h"
-#include "media/audio/audio_manager.h"
 #include "media/audio/audio_manager_base.h"
 #include "media/base/audio_bus.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -22,7 +25,7 @@ namespace {
 class TestAudioOutputStream : public media::AudioOutputStream {
  public:
   using GatherSamplesCallback =
-      base::Callback<void(scoped_ptr<media::AudioBus>, int frames)>;
+      base::Callback<void(std::unique_ptr<media::AudioBus>, int frames)>;
   TestAudioOutputStream(int default_frame_count,
                         int max_frame_count,
                         GatherSamplesCallback gather_callback)
@@ -50,7 +53,7 @@ class TestAudioOutputStream : public media::AudioOutputStream {
     int frames = 0, total_frames = 0;
     do {
       // Call back into the player to get samples that it wants us to play.
-      scoped_ptr<media::AudioBus> dest =
+      std::unique_ptr<media::AudioBus> dest =
           media::AudioBus::Create(1, default_frame_count_);
       frames = callback_->OnMoreData(dest.get(), 0, 0);
       total_frames += frames;
@@ -77,8 +80,9 @@ class AudioPlayerTest : public testing::Test,
                         public base::SupportsWeakPtr<AudioPlayerTest> {
  public:
   AudioPlayerTest() : buffer_index_(0), player_(nullptr) {
-    if (!media::AudioManager::Get())
-      media::AudioManager::CreateForTesting();
+    audio_manager_ = media::AudioManager::CreateForTesting(
+        base::ThreadTaskRunnerHandle::Get());
+    base::RunLoop().RunUntilIdle();
   }
 
   ~AudioPlayerTest() override { DeletePlayer(); }
@@ -91,6 +95,7 @@ class AudioPlayerTest : public testing::Test,
         kMaxFrameCount,
         base::Bind(&AudioPlayerTest::GatherSamples, AsWeakPtr())));
     player_->Initialize();
+    base::RunLoop().RunUntilIdle();
   }
 
   void DeletePlayer() {
@@ -98,6 +103,7 @@ class AudioPlayerTest : public testing::Test,
       return;
     player_->Finalize();
     player_ = nullptr;
+    base::RunLoop().RunUntilIdle();
   }
 
   void PlayAndVerifySamples(
@@ -107,8 +113,8 @@ class AudioPlayerTest : public testing::Test,
     buffer_ = media::AudioBus::Create(1, kMaxFrameCount);
     buffer_index_ = 0;
     player_->Play(samples);
-    player_->FlushAudioLoopForTesting();
     player_->Stop();
+    base::RunLoop().RunUntilIdle();
 
     int differences = 0;
     for (int i = 0; i < kMaxFrameCount; ++i) {
@@ -120,7 +126,7 @@ class AudioPlayerTest : public testing::Test,
     buffer_.reset();
   }
 
-  void GatherSamples(scoped_ptr<media::AudioBus> bus, int frames) {
+  void GatherSamples(std::unique_ptr<media::AudioBus> bus, int frames) {
     if (!buffer_.get())
       return;
     bus->CopyPartialFramesTo(0, frames, buffer_index_, buffer_.get());
@@ -129,19 +135,20 @@ class AudioPlayerTest : public testing::Test,
 
  protected:
   bool IsPlaying() {
-    player_->FlushAudioLoopForTesting();
+    base::RunLoop().RunUntilIdle();
     return player_->is_playing_;
   }
 
   static const int kDefaultFrameCount = 1024;
   static const int kMaxFrameCount = 1024 * 100;
 
-  scoped_ptr<media::AudioBus> buffer_;
+  base::TestMessageLoop message_loop_;
+  media::ScopedAudioManagerPtr audio_manager_;
+  std::unique_ptr<media::AudioBus> buffer_;
   int buffer_index_;
 
   // Deleted by calling Finalize() on the object.
   AudioPlayerImpl* player_;
-  base::MessageLoop message_loop_;
 };
 
 TEST_F(AudioPlayerTest, BasicPlayAndStop) {
@@ -151,16 +158,19 @@ TEST_F(AudioPlayerTest, BasicPlayAndStop) {
 
   player_->Play(samples);
   EXPECT_TRUE(IsPlaying());
+
   player_->Stop();
   EXPECT_FALSE(IsPlaying());
-  player_->Play(samples);
 
+  player_->Play(samples);
   EXPECT_TRUE(IsPlaying());
+
   player_->Stop();
   EXPECT_FALSE(IsPlaying());
-  player_->Play(samples);
 
+  player_->Play(samples);
   EXPECT_TRUE(IsPlaying());
+
   player_->Stop();
   EXPECT_FALSE(IsPlaying());
 

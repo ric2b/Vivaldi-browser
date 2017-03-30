@@ -9,6 +9,8 @@
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
+#include "chromecast/chromecast_features.h"
 #include "chromecast/public/cast_egl_platform.h"
 #include "chromecast/public/cast_egl_platform_shlib.h"
 #include "ui/ozone/common/native_display_delegate_ozone.h"
@@ -27,7 +29,7 @@ using chromecast::CastEglPlatform;
 namespace ui {
 namespace {
 
-base::LazyInstance<scoped_ptr<GpuPlatformSupport>> g_gpu_platform_support =
+base::LazyInstance<std::unique_ptr<GpuPlatformSupport>> g_gpu_platform_support =
     LAZY_INSTANCE_INITIALIZER;
 
 // Ozone platform implementation for Cast.  Implements functionality
@@ -39,7 +41,7 @@ base::LazyInstance<scoped_ptr<GpuPlatformSupport>> g_gpu_platform_support =
 // to the CastEglPlatform interface.
 class OzonePlatformCast : public OzonePlatform {
  public:
-  explicit OzonePlatformCast(scoped_ptr<CastEglPlatform> egl_platform)
+  explicit OzonePlatformCast(std::unique_ptr<CastEglPlatform> egl_platform)
       : egl_platform_(std::move(egl_platform)) {}
   ~OzonePlatformCast() override {}
 
@@ -62,17 +64,18 @@ class OzonePlatformCast : public OzonePlatform {
   GpuPlatformSupportHost* GetGpuPlatformSupportHost() override {
     return gpu_platform_support_host_.get();
   }
-  scoped_ptr<SystemInputInjector> CreateSystemInputInjector() override {
+  std::unique_ptr<SystemInputInjector> CreateSystemInputInjector() override {
     return nullptr;  // no input injection support
   }
-  scoped_ptr<PlatformWindow> CreatePlatformWindow(
+  std::unique_ptr<PlatformWindow> CreatePlatformWindow(
       PlatformWindowDelegate* delegate,
       const gfx::Rect& bounds) override {
-    return make_scoped_ptr<PlatformWindow>(
+    return base::WrapUnique<PlatformWindow>(
         new PlatformWindowCast(delegate, bounds));
   }
-  scoped_ptr<NativeDisplayDelegate> CreateNativeDisplayDelegate() override {
-    return make_scoped_ptr(new NativeDisplayDelegateOzone());
+  std::unique_ptr<NativeDisplayDelegate> CreateNativeDisplayDelegate()
+      override {
+    return base::WrapUnique(new NativeDisplayDelegateOzone());
   }
 
   void InitializeUI() override {
@@ -85,10 +88,10 @@ class OzonePlatformCast : public OzonePlatform {
     // or if we're an audio-only build.
     // Note: switch is kDisableGpu from content/public/common/content_switches.h
     bool enable_dummy_software_rendering = true;
-#if !defined(DISABLE_DISPLAY)
+#if !BUILDFLAG(DISABLE_DISPLAY)
     enable_dummy_software_rendering =
         base::CommandLine::ForCurrentProcess()->HasSwitch("disable-gpu");
-#endif
+#endif  // BUILDFLAG(DISABLE_DISPLAY)
 
     if (enable_dummy_software_rendering)
       surface_factory_.reset(new SurfaceFactoryCast());
@@ -96,16 +99,16 @@ class OzonePlatformCast : public OzonePlatform {
   void InitializeGPU() override {
     surface_factory_.reset(new SurfaceFactoryCast(std::move(egl_platform_)));
     g_gpu_platform_support.Get() =
-        make_scoped_ptr(new GpuPlatformSupportCast(surface_factory_.get()));
+        base::WrapUnique(new GpuPlatformSupportCast(surface_factory_.get()));
   }
 
  private:
-  scoped_ptr<CastEglPlatform> egl_platform_;
-  scoped_ptr<SurfaceFactoryCast> surface_factory_;
-  scoped_ptr<CursorFactoryOzone> cursor_factory_;
-  scoped_ptr<InputController> input_controller_;
-  scoped_ptr<GpuPlatformSupportHost> gpu_platform_support_host_;
-  scoped_ptr<OverlayManagerOzone> overlay_manager_;
+  std::unique_ptr<CastEglPlatform> egl_platform_;
+  std::unique_ptr<SurfaceFactoryCast> surface_factory_;
+  std::unique_ptr<CursorFactoryOzone> cursor_factory_;
+  std::unique_ptr<InputController> input_controller_;
+  std::unique_ptr<GpuPlatformSupportHost> gpu_platform_support_host_;
+  std::unique_ptr<OverlayManagerOzone> overlay_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(OzonePlatformCast);
 };
@@ -115,7 +118,7 @@ class OzonePlatformCast : public OzonePlatform {
 OzonePlatform* CreateOzonePlatformCast() {
   const std::vector<std::string>& argv =
       base::CommandLine::ForCurrentProcess()->argv();
-  scoped_ptr<chromecast::CastEglPlatform> platform(
+  std::unique_ptr<chromecast::CastEglPlatform> platform(
       chromecast::CastEglPlatformShlib::Create(argv));
   return new OzonePlatformCast(std::move(platform));
 }

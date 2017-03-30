@@ -18,7 +18,8 @@ class UtilityProcessControlImpl : public ProcessControlImpl {
   ~UtilityProcessControlImpl() override;
 
   // ProcessControlImpl:
-  void RegisterLoaders(NameToLoaderMap* name_to_loader_map) override;
+  void RegisterApplications(ApplicationMap* apps) override;
+  void OnApplicationQuit() override;
 
  private:
   void OnLoadFailed() override;

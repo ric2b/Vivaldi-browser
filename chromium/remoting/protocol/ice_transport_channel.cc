@@ -10,7 +10,7 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "jingle/glue/utils.h"
 #include "net/base/net_errors.h"
 #include "remoting/protocol/channel_socket_adapter.h"
@@ -26,6 +26,8 @@ namespace remoting {
 namespace protocol {
 
 namespace {
+
+const int kIceUfragLength = 16;
 
 // Utility function to map a cricket::Candidate string type to a
 // TransportRoute::RouteType enum value.
@@ -49,7 +51,7 @@ IceTransportChannel::IceTransportChannel(
     scoped_refptr<TransportContext> transport_context)
     : transport_context_(transport_context),
       ice_username_fragment_(
-          rtc::CreateRandomString(cricket::ICE_UFRAG_LENGTH)),
+          rtc::CreateRandomString(kIceUfragLength)),
       connect_attempts_left_(
           transport_context->network_settings().ice_reconnect_attempts),
       weak_factory_(this) {

@@ -101,8 +101,16 @@ by a child template that "extends" this file.
         android:icon="@mipmap/app_icon"
         android:label="@string/app_name"
         android:largeHeap="false"
-        android:allowBackup="false"
+        android:allowBackup="true"
+        android:fullBackupContent="@xml/chromebackupscheme"
+        android:restoreAnyVersion="true"
+        {% block android_backup_agent %}
+        android:backupAgent="org.chromium.chrome.browser.ChromeBackupAgent"
+        {% endblock %}
         android:supportsRtl="true"
+        {% if target_sdk_version|int >= 24 %}
+        android:networkSecurityConfig="@xml/network_security_config"
+        {% endif %}
         {% block extra_application_attributes %}{% endblock %}>
 
         <!-- Samsung MultiWindow Support -->
@@ -128,7 +136,8 @@ by a child template that "extends" this file.
              (shown in Android's Settings/Apps list) share the same label, we
              do not specify one here to allow it to inherit from the app. -->
         <activity android:name="org.chromium.chrome.browser.document.ChromeLauncherActivity"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:relinquishTaskIdentity="true">
         </activity>
         <activity-alias android:name="com.google.android.apps.chrome.Main"
             android:targetActivity="org.chromium.chrome.browser.document.ChromeLauncherActivity"
@@ -345,6 +354,7 @@ by a child template that "extends" this file.
         <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkEditActivity"
             android:theme="@style/BookmarkDialogWhite"
             android:windowSoftInputMode="stateHidden"
+            android:label="@string/edit_bookmark"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
         <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkAddEditFolderActivity"
@@ -418,12 +428,6 @@ by a child template that "extends" this file.
             android:excludeFromRecents="true">
         </activity>
 
-        <activity android:name="org.chromium.chrome.browser.childaccounts.ResetDataActivity"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar"
-            android:exported="true"
-            android:excludeFromRecents="true">
-        </activity>
-
         <!-- This activity is started along with IncognitoDocumentActivity, so it also must
              disable hardware acceleration. Besides, it doesn't have any UI. -->
         <activity android:name="org.chromium.chrome.browser.document.CipherKeyActivity"
@@ -455,7 +459,6 @@ by a child template that "extends" this file.
         <activity android:name="org.chromium.chrome.browser.physicalweb.PhysicalWebOptInActivity"
             android:label="@string/physical_web_list_urls_activity_title"
             android:theme="@style/PhysicalWebOptInStyle"
-            android:autoRemoveFromRecents="true"
             android:exported="false">
         </activity>
 
@@ -509,19 +512,6 @@ by a child template that "extends" this file.
         <service android:name="org.chromium.chrome.browser.download.DownloadNotificationService"
             android:exported="false">
         </service>
-
-        <!-- Precache service.
-        Not enabled on Stable or Work channels. This is currently an experiment
-        on beta channel (crbug/309216) but the mere existence of these can lead
-        to some process churn, so omit them while not relevant. b/24776372
-        -->
-        {% if channel in ['default', 'canary', 'dev', 'beta'] %}
-        <receiver android:name="org.chromium.chrome.browser.precache.PrecacheBootReceiver">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED"/>
-            </intent-filter>
-        </receiver>
-        {% endif %}
 
         <service android:name="org.chromium.components.variations.firstrun.VariationsSeedService"
             android:exported="false" />

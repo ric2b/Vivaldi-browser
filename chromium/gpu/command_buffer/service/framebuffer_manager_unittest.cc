@@ -27,6 +27,7 @@ const GLint kMaxTextureSize = 64;
 const GLint kMaxCubemapSize = 64;
 const GLint kMaxRectangleTextureSize = 64;
 const GLint kMax3DTextureSize = 256;
+const GLint kMaxArrayTextureLayers = 256;
 const GLint kMaxRenderbufferSize = 64;
 const GLint kMaxSamples = 4;
 const uint32_t kMaxDrawBuffers = 16;
@@ -46,6 +47,7 @@ class FramebufferManagerTest : public GpuServiceTest {
                                               kMaxCubemapSize,
                                               kMaxRectangleTextureSize,
                                               kMax3DTextureSize,
+                                              kMaxArrayTextureLayers,
                                               kUseDefaultTextures));
     renderbuffer_manager_.reset(new RenderbufferManager(NULL,
                                                         kMaxRenderbufferSize,
@@ -61,8 +63,8 @@ class FramebufferManagerTest : public GpuServiceTest {
  protected:
   FramebufferManager manager_;
   scoped_refptr<FeatureInfo> feature_info_;
-  scoped_ptr<TextureManager> texture_manager_;
-  scoped_ptr<RenderbufferManager> renderbuffer_manager_;
+  std::unique_ptr<TextureManager> texture_manager_;
+  std::unique_ptr<RenderbufferManager> renderbuffer_manager_;
 };
 
 TEST_F(FramebufferManagerTest, Basic) {
@@ -126,6 +128,7 @@ class FramebufferInfoTestBase : public GpuServiceTest {
                                               kMaxCubemapSize,
                                               kMaxRectangleTextureSize,
                                               kMax3DTextureSize,
+                                              kMaxArrayTextureLayers,
                                               kUseDefaultTextures));
     renderbuffer_manager_.reset(new RenderbufferManager(NULL,
                                                         kMaxRenderbufferSize,
@@ -158,10 +161,10 @@ class FramebufferInfoTestBase : public GpuServiceTest {
   FramebufferManager manager_;
   Framebuffer* framebuffer_;
   scoped_refptr<FeatureInfo> feature_info_;
-  scoped_ptr<TextureManager> texture_manager_;
-  scoped_ptr<RenderbufferManager> renderbuffer_manager_;
-  scoped_ptr<MockErrorState> error_state_;
-  scoped_ptr<MockGLES2Decoder> decoder_;
+  std::unique_ptr<TextureManager> texture_manager_;
+  std::unique_ptr<RenderbufferManager> renderbuffer_manager_;
+  std::unique_ptr<MockErrorState> error_state_;
+  std::unique_ptr<MockGLES2Decoder> decoder_;
 };
 
 class FramebufferInfoTest : public FramebufferInfoTestBase {

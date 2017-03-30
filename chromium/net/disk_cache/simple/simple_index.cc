@@ -144,7 +144,7 @@ SimpleIndex::SimpleIndex(
     const scoped_refptr<base::SingleThreadTaskRunner>& io_thread,
     SimpleIndexDelegate* delegate,
     net::CacheType cache_type,
-    scoped_ptr<SimpleIndexFile> index_file)
+    std::unique_ptr<SimpleIndexFile> index_file)
     : delegate_(delegate),
       cache_type_(cache_type),
       cache_size_(0),
@@ -158,7 +158,9 @@ SimpleIndex::SimpleIndex(
       io_thread_(io_thread),
       // Creating the callback once so it is reused every time
       // write_to_disk_timer_.Start() is called.
-      write_to_disk_cb_(base::Bind(&SimpleIndex::WriteToDisk, AsWeakPtr())),
+      write_to_disk_cb_(base::Bind(&SimpleIndex::WriteToDisk,
+                                   AsWeakPtr(),
+                                   INDEX_WRITE_REASON_IDLE)),
       app_on_background_(false) {}
 
 SimpleIndex::~SimpleIndex() {
@@ -182,7 +184,7 @@ void SimpleIndex::Initialize(base::Time cache_mtime) {
 #endif
 
   SimpleIndexLoadResult* load_result = new SimpleIndexLoadResult();
-  scoped_ptr<SimpleIndexLoadResult> load_result_scoped(load_result);
+  std::unique_ptr<SimpleIndexLoadResult> load_result_scoped(load_result);
   base::Closure reply = base::Bind(
       &SimpleIndex::MergeInitializingSet,
       AsWeakPtr(),
@@ -208,8 +210,9 @@ int SimpleIndex::ExecuteWhenReady(const net::CompletionCallback& task) {
   return net::ERR_IO_PENDING;
 }
 
-scoped_ptr<SimpleIndex::HashList> SimpleIndex::GetEntriesBetween(
-    base::Time initial_time, base::Time end_time) {
+std::unique_ptr<SimpleIndex::HashList> SimpleIndex::GetEntriesBetween(
+    base::Time initial_time,
+    base::Time end_time) {
   DCHECK_EQ(true, initialized_);
 
   if (!initial_time.is_null())
@@ -221,7 +224,7 @@ scoped_ptr<SimpleIndex::HashList> SimpleIndex::GetEntriesBetween(
   const base::Time extended_end_time =
       end_time.is_null() ? base::Time::Max() : end_time;
   DCHECK(extended_end_time >= initial_time);
-  scoped_ptr<HashList> ret_hashes(new HashList());
+  std::unique_ptr<HashList> ret_hashes(new HashList());
   for (EntrySet::iterator it = entries_set_.begin(), end = entries_set_.end();
        it != end; ++it) {
     EntryMetadata& metadata = it->second;
@@ -232,7 +235,7 @@ scoped_ptr<SimpleIndex::HashList> SimpleIndex::GetEntriesBetween(
   return ret_hashes;
 }
 
-scoped_ptr<SimpleIndex::HashList> SimpleIndex::GetAllHashes() {
+std::unique_ptr<SimpleIndex::HashList> SimpleIndex::GetAllHashes() {
   return GetEntriesBetween(base::Time(), base::Time());
 }
 
@@ -395,13 +398,14 @@ void SimpleIndex::UpdateEntryIteratorSize(EntrySet::iterator* it,
 }
 
 void SimpleIndex::MergeInitializingSet(
-    scoped_ptr<SimpleIndexLoadResult> load_result) {
+    std::unique_ptr<SimpleIndexLoadResult> load_result) {
   DCHECK(io_thread_checker_.CalledOnValidThread());
   DCHECK(load_result->did_load);
 
   EntrySet* index_file_entries = &load_result->entries;
 
-  for (base::hash_set<uint64_t>::const_iterator it = removed_entries_.begin();
+  for (std::unordered_set<uint64_t>::const_iterator it =
+           removed_entries_.begin();
        it != removed_entries_.end(); ++it) {
     index_file_entries->erase(*it);
   }
@@ -431,7 +435,7 @@ void SimpleIndex::MergeInitializingSet(
   // The actual IO is asynchronous, so calling WriteToDisk() shouldn't slow the
   // merge down much.
   if (load_result->flush_required)
-    WriteToDisk();
+    WriteToDisk(INDEX_WRITE_REASON_STARTUP_MERGE);
 
   SIMPLE_CACHE_UMA(CUSTOM_COUNTS,
                    "IndexInitializationWaiters", cache_type_,
@@ -455,12 +459,12 @@ void SimpleIndex::OnApplicationStateChange(
   } else if (state ==
       base::android::APPLICATION_STATE_HAS_STOPPED_ACTIVITIES) {
     app_on_background_ = true;
-    WriteToDisk();
+    WriteToDisk(INDEX_WRITE_REASON_ANDROID_STOPPED);
   }
 }
 #endif
 
-void SimpleIndex::WriteToDisk() {
+void SimpleIndex::WriteToDisk(IndexWriteToDiskReason reason) {
   DCHECK(io_thread_checker_.CalledOnValidThread());
   if (!initialized_)
     return;
@@ -481,8 +485,8 @@ void SimpleIndex::WriteToDisk() {
   }
   last_write_to_disk_ = start;
 
-  index_file_->WriteToDisk(entries_set_, cache_size_,
-                           start, app_on_background_, base::Closure());
+  index_file_->WriteToDisk(reason, entries_set_, cache_size_, start,
+                           app_on_background_, base::Closure());
 }
 
 }  // namespace disk_cache

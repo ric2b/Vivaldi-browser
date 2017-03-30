@@ -11,10 +11,12 @@
 
 import collections
 import json
+import logging
 import operator
 import optparse
 import os
 import re
+import struct
 import sys
 import tempfile
 import zipfile
@@ -33,6 +35,45 @@ with host_paths.SysPath(_GRIT_PATH):
 with host_paths.SysPath(host_paths.BUILD_COMMON_PATH):
   import perf_tests_results_helper # pylint: disable=import-error
 
+# Python had a bug in zipinfo parsing that triggers on ChromeModern.apk
+# https://bugs.python.org/issue14315
+def _PatchedDecodeExtra(self):
+  # Try to decode the extra field.
+  extra = self.extra
+  unpack = struct.unpack
+  while len(extra) >= 4:
+    tp, ln = unpack('<HH', extra[:4])
+    if tp == 1:
+      if ln >= 24:
+        counts = unpack('<QQQ', extra[4:28])
+      elif ln == 16:
+        counts = unpack('<QQ', extra[4:20])
+      elif ln == 8:
+        counts = unpack('<Q', extra[4:12])
+      elif ln == 0:
+        counts = ()
+      else:
+        raise RuntimeError, "Corrupt extra field %s"%(ln,)
+
+      idx = 0
+
+      # ZIP64 extension (large files and/or large archives)
+      if self.file_size in (0xffffffffffffffffL, 0xffffffffL):
+        self.file_size = counts[idx]
+        idx += 1
+
+      if self.compress_size == 0xFFFFFFFFL:
+        self.compress_size = counts[idx]
+        idx += 1
+
+      if self.header_offset == 0xffffffffL:
+        self.header_offset = counts[idx]
+        idx += 1
+
+    extra = extra[ln + 4:]
+
+zipfile.ZipInfo._decodeExtra = (  # pylint: disable=protected-access
+    _PatchedDecodeExtra)
 
 # Static initializers expected in official builds. Note that this list is built
 # using 'nm' on libchrome.so which results from a GCC official build (i.e.
@@ -47,7 +88,9 @@ _BASE_CHART = {
 }
 _DUMP_STATIC_INITIALIZERS_PATH = os.path.join(
     host_paths.DIR_SOURCE_ROOT, 'tools', 'linux', 'dump-static-initializers.py')
-_RC_HEADER_RE = re.compile(r'^#define (?P<name>\w+) (?P<id>\d+)$')
+# Pragma exists when enable_resource_whitelist_generation=true.
+_RC_HEADER_RE = re.compile(
+    r'^#define (?P<name>\w+) (?:_Pragma\(.*?\) )?(?P<id>\d+)$')
 
 
 def CountStaticInitializers(so_path):
@@ -408,6 +451,7 @@ Pass any number of files to graph their sizes. Any files with the extension
 
   if chartjson:
     results_path = os.path.join(options.output_dir, 'results-chart.json')
+    logging.critical('Dumping json to %s', results_path)
     with open(results_path, 'w') as json_file:
       json.dump(chartjson, json_file)
 

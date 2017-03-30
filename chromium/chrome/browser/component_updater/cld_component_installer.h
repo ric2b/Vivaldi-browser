@@ -32,7 +32,7 @@ class CldComponentInstallerTraits : public ComponentInstallerTraits {
   friend class CldComponentInstallerTest;  // For access within SetUp()
   friend class test::ComponentCldDataHarness;  // For browser tests only
   FRIEND_TEST_ALL_PREFIXES(CldComponentInstallerTest, ComponentReady);
-  FRIEND_TEST_ALL_PREFIXES(CldComponentInstallerTest, GetBaseDirectory);
+  FRIEND_TEST_ALL_PREFIXES(CldComponentInstallerTest, GetRelativeInstallDir);
   FRIEND_TEST_ALL_PREFIXES(CldComponentInstallerTest, GetHash);
   FRIEND_TEST_ALL_PREFIXES(CldComponentInstallerTest, GetInstalledPath);
   FRIEND_TEST_ALL_PREFIXES(CldComponentInstallerTest, GetName);
@@ -49,8 +49,8 @@ class CldComponentInstallerTraits : public ComponentInstallerTraits {
                           const base::FilePath& install_dir) const override;
   void ComponentReady(const base::Version& version,
                       const base::FilePath& path,
-                      scoped_ptr<base::DictionaryValue> manifest) override;
-  base::FilePath GetBaseDirectory() const override;
+                      std::unique_ptr<base::DictionaryValue> manifest) override;
+  base::FilePath GetRelativeInstallDir() const override;
   void GetHash(std::vector<uint8_t>* hash) const override;
   std::string GetName() const override;
   std::string GetAp() const override;

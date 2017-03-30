@@ -35,18 +35,6 @@ class _PageCycler(perf_benchmark.PerfBenchmark):
         report_speed_index=options.report_speed_index)
 
 
-# This is an old page set, we intend to remove it after more modern benchmarks
-# work on CrOS.
-@benchmark.Enabled('chromeos')
-class PageCyclerDhtml(_PageCycler):
-  """Benchmarks for various DHTML operations like simple animations."""
-  page_set = page_sets.DhtmlPageSet
-
-  @classmethod
-  def Name(cls):
-    return 'page_cycler.dhtml'
-
-
 class PageCyclerIntlArFaHe(_PageCycler):
   """Page load time for a variety of pages in Arabic, Farsi and Hebrew.
 
@@ -119,30 +107,12 @@ class PageCyclerIntlKoThVi(_PageCycler):
     return 'page_cycler.intl_ko_th_vi'
 
   @classmethod
-  def ShouldDisable(cls, possible_browser):  # http://crbug.com/597656
-      return (possible_browser.browser_type == 'reference' and
-              possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X')
-
-
-class PageCyclerMorejs(_PageCycler):
-  """Page load for a variety of pages that were JavaScript heavy in 2009."""
-  page_set = page_sets.MorejsPageSet
-
-  @classmethod
-  def Name(cls):
-    return 'page_cycler.morejs'
-
-
-# This is an old page set, we intend to remove it after more modern benchmarks
-# work on CrOS.
-@benchmark.Enabled('chromeos')
-class PageCyclerMoz(_PageCycler):
-  """Page load for mozilla's original page set. Recorded in December 2000."""
-  page_set = page_sets.MozPageSet
-
-  @classmethod
-  def Name(cls):
-    return 'page_cycler.moz'
+  def ShouldDisable(cls, possible_browser):
+    # http://crbug.com/597656 (Android Nexus 5X).
+    # http://crbug.com/605543 (Mac Snow Leopard).
+    return (possible_browser.browser_type == 'reference' and (
+              possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X' or
+              possible_browser.platform.GetOSVersionName() == 'snowleopard'))
 
 
 @benchmark.Enabled('android')
@@ -163,16 +133,6 @@ class PageCyclerTop10Mobile(_PageCycler):
     if found:
       stories.RemoveStory(found)
     return stories
-
-
-@benchmark.Disabled('all')
-class PageCyclerKeyMobileSites(_PageCycler):
-  """Page load time benchmark for key mobile sites."""
-  page_set = page_sets.KeyMobileSitesPageSet
-
-  @classmethod
-  def Name(cls):
-    return 'page_cycler.key_mobile_sites_smooth'
 
 
 @benchmark.Disabled('android')  # crbug.com/357326
@@ -222,7 +182,6 @@ class PageCyclerBasicOopifIsolated(_PageCycler):
     options.AppendExtraBrowserArgs(['--site-per-process'])
 
 
-@benchmark.Disabled('reference')  # crbug.com/523346
 class PageCyclerBasicOopif(_PageCycler):
   """ A benchmark measuring performance of the out-of-process iframes page
   set, without running in out-of-process iframes mode.. """
@@ -232,11 +191,6 @@ class PageCyclerBasicOopif(_PageCycler):
   def Name(cls):
     return 'page_cycler.basic_oopif'
 
-
-@benchmark.Disabled('all')  # crbug.com/443730
-class PageCyclerBigJs(_PageCycler):
-  page_set = page_sets.BigJsPageSet
-
   @classmethod
-  def Name(cls):
-    return 'page_cycler.big_js'
+  def ShouldDisable(cls, possible_browser):
+    return cls.IsSvelte(possible_browser)  # http://crbug.com/607657

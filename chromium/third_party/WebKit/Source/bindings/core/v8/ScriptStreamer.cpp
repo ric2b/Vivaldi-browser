@@ -279,6 +279,12 @@ private:
         // BOM can only occur at the beginning of the data.
         ASSERT(lengthOfBOM == 0 || m_queueTailPosition == 0);
 
+        if (!streamer->resource()->response().cacheStorageCacheName().isNull()) {
+            streamer->suppressStreaming();
+            cancel();
+            return;
+        }
+
         CachedMetadataHandler* cacheHandler = streamer->resource()->cacheHandler();
         if (cacheHandler && cacheHandler->cachedMetadata(V8ScriptRunner::tagForCodeCache(cacheHandler))) {
             // The resource has a code cache, so it's unnecessary to stream and
@@ -433,7 +439,7 @@ void ScriptStreamer::streamingCompleteOnBackgroundThread()
 
     // notifyFinished might already be called, or it might be called in the
     // future (if the parsing finishes earlier because of a parse error).
-    m_loadingTaskRunner->postTask(BLINK_FROM_HERE, threadSafeBind(&ScriptStreamer::streamingComplete, AllowCrossThreadAccess(this)));
+    m_loadingTaskRunner->postTask(BLINK_FROM_HERE, threadSafeBind(&ScriptStreamer::streamingComplete, wrapCrossThreadPersistent(this)));
 
     // The task might delete ScriptStreamer, so it's not safe to do anything
     // after posting it. Note that there's no way to guarantee that this
@@ -541,7 +547,7 @@ void ScriptStreamer::notifyAppendData(ScriptResource* resource)
             return;
         }
 
-        ScriptStreamerThread::shared()->postTask(threadSafeBind(&ScriptStreamerThread::runScriptStreamingTask, scriptStreamingTask.release(), AllowCrossThreadAccess(this)));
+        ScriptStreamerThread::shared()->postTask(threadSafeBind(&ScriptStreamerThread::runScriptStreamingTask, passed(std::move(scriptStreamingTask)), wrapCrossThreadPersistent(this)));
         recordStartedStreamingHistogram(m_scriptType, 1);
     }
     if (m_stream)
@@ -564,10 +570,6 @@ void ScriptStreamer::notifyFinished(Resource* resource)
     if (m_stream)
         m_stream->didFinishLoading();
     m_loadingFinished = true;
-
-    // Calling notifyFinishedToClient can result into the upper layers dropping
-    // references to ScriptStreamer. Keep it alive until this function ends.
-    RawPtr<ScriptStreamer> protect(this);
 
     notifyFinishedToClient();
 }

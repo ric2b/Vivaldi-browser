@@ -8,7 +8,9 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/synchronization/lock.h"
 #include "chrome/common/url_constants.h"
 #include "content/public/browser/notification_source.h"
@@ -37,7 +39,7 @@ class ArgumentListResponseValue
   ArgumentListResponseValue(const std::string& function_name,
                             const char* title,
                             ExtensionFunction* function,
-                            scoped_ptr<base::ListValue> result)
+                            std::unique_ptr<base::ListValue> result)
       : function_name_(function_name), title_(title) {
     if (function->GetResultList()) {
       DCHECK_EQ(function->GetResultList(), result.get())
@@ -68,7 +70,7 @@ class ErrorWithArgumentsResponseValue : public ArgumentListResponseValue {
   ErrorWithArgumentsResponseValue(const std::string& function_name,
                                   const char* title,
                                   ExtensionFunction* function,
-                                  scoped_ptr<base::ListValue> result,
+                                  std::unique_ptr<base::ListValue> result,
                                   const std::string& error)
       : ArgumentListResponseValue(function_name,
                                   title,
@@ -269,12 +271,13 @@ void ExtensionFunction::SetResult(base::Value* result) {
   results_->Append(result);
 }
 
-void ExtensionFunction::SetResult(scoped_ptr<base::Value> result) {
+void ExtensionFunction::SetResult(std::unique_ptr<base::Value> result) {
   results_.reset(new base::ListValue());
   results_->Append(std::move(result));
 }
 
-void ExtensionFunction::SetResultList(scoped_ptr<base::ListValue> results) {
+void ExtensionFunction::SetResultList(
+    std::unique_ptr<base::ListValue> results) {
   results_ = std::move(results);
 }
 
@@ -296,26 +299,26 @@ bool ExtensionFunction::user_gesture() const {
 
 ExtensionFunction::ResponseValue ExtensionFunction::NoArguments() {
   return ResponseValue(new ArgumentListResponseValue(
-      name(), "NoArguments", this, make_scoped_ptr(new base::ListValue())));
+      name(), "NoArguments", this, base::WrapUnique(new base::ListValue())));
 }
 
 ExtensionFunction::ResponseValue ExtensionFunction::OneArgument(
     base::Value* arg) {
-  scoped_ptr<base::ListValue> args(new base::ListValue());
+  std::unique_ptr<base::ListValue> args(new base::ListValue());
   args->Append(arg);
   return ResponseValue(new ArgumentListResponseValue(name(), "OneArgument",
                                                      this, std::move(args)));
 }
 
 ExtensionFunction::ResponseValue ExtensionFunction::OneArgument(
-    scoped_ptr<base::Value> arg) {
+    std::unique_ptr<base::Value> arg) {
   return OneArgument(arg.release());
 }
 
 ExtensionFunction::ResponseValue ExtensionFunction::TwoArguments(
     base::Value* arg1,
     base::Value* arg2) {
-  scoped_ptr<base::ListValue> args(new base::ListValue());
+  std::unique_ptr<base::ListValue> args(new base::ListValue());
   args->Append(arg1);
   args->Append(arg2);
   return ResponseValue(new ArgumentListResponseValue(name(), "TwoArguments",
@@ -323,7 +326,7 @@ ExtensionFunction::ResponseValue ExtensionFunction::TwoArguments(
 }
 
 ExtensionFunction::ResponseValue ExtensionFunction::ArgumentList(
-    scoped_ptr<base::ListValue> args) {
+    std::unique_ptr<base::ListValue> args) {
   return ResponseValue(new ArgumentListResponseValue(name(), "ArgumentList",
                                                      this, std::move(args)));
 }
@@ -358,7 +361,7 @@ ExtensionFunction::ResponseValue ExtensionFunction::Error(
 }
 
 ExtensionFunction::ResponseValue ExtensionFunction::ErrorWithArguments(
-    scoped_ptr<base::ListValue> args,
+    std::unique_ptr<base::ListValue> args,
     const std::string& error) {
   return ResponseValue(new ErrorWithArgumentsResponseValue(
       name(), "ErrorWithArguments", this, std::move(args), error));
@@ -411,6 +414,20 @@ void ExtensionFunction::SendResponseImpl(bool success) {
     results_.reset(new base::ListValue());
 
   response_callback_.Run(type, *results_, GetError(), histogram_value());
+
+  // TODO(devlin): Once we have a baseline metric for how long functions take,
+  // we can create a handful of buckets and record the function name so that we
+  // can find what the fastest/slowest are. See crbug.com/608561.
+  // Note: Certain functions perform actions that are inherently slow - such as
+  // anything waiting on user action. As such, we can't always assume that a
+  // long execution time equates to a poorly-performing function.
+  if (success) {
+    UMA_HISTOGRAM_TIMES("Extensions.Functions.SucceededTotalExecutionTime",
+                        timer_.Elapsed());
+  } else {
+    UMA_HISTOGRAM_TIMES("Extensions.Functions.FailedTotalExecutionTime",
+                        timer_.Elapsed());
+  }
 }
 
 void ExtensionFunction::OnRespondingLater(ResponseValue value) {

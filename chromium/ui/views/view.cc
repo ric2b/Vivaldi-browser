@@ -8,11 +8,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <utility>
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
@@ -32,6 +33,7 @@
 #include "ui/compositor/paint_context.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/compositor/transform_recorder.h"
+#include "ui/display/screen.h"
 #include "ui/events/event_target_iterator.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/point3_f.h"
@@ -39,7 +41,6 @@
 #include "ui/gfx/interpolated_transform.h"
 #include "ui/gfx/path.h"
 #include "ui/gfx/scoped_canvas.h"
-#include "ui/gfx/screen.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/gfx/transform.h"
 #include "ui/native_theme/native_theme.h"
@@ -114,8 +115,7 @@ View::View()
       registered_accelerator_count_(0),
       next_focusable_view_(NULL),
       previous_focusable_view_(NULL),
-      focusable_(false),
-      accessibility_focusable_(false),
+      focus_behavior_(FocusBehavior::NEVER),
       context_menu_controller_(NULL),
       drag_controller_(NULL),
       native_view_accessibility_(NULL) {
@@ -479,8 +479,8 @@ void View::SetPaintToLayer(bool paint_to_layer) {
   }
 }
 
-scoped_ptr<ui::Layer> View::RecreateLayer() {
-  scoped_ptr<ui::Layer> old_layer = LayerOwner::RecreateLayer();
+std::unique_ptr<ui::Layer> View::RecreateLayer() {
+  std::unique_ptr<ui::Layer> old_layer = LayerOwner::RecreateLayer();
   Widget* widget = GetWidget();
   if (widget)
     widget->UpdateRootLayers();
@@ -858,7 +858,7 @@ void View::set_background(Background* b) {
   background_.reset(b);
 }
 
-void View::SetBorder(scoped_ptr<Border> b) {
+void View::SetBorder(std::unique_ptr<Border> b) {
   border_ = std::move(b);
 }
 
@@ -953,7 +953,7 @@ bool View::IsMouseHovered() const {
   if (!GetWidget()->IsMouseEventsEnabled())
     return false;
 
-  gfx::Point cursor_pos(gfx::Screen::GetScreen()->GetCursorScreenPoint());
+  gfx::Point cursor_pos(display::Screen::GetScreen()->GetCursorScreenPoint());
   ConvertPointFromScreen(this, &cursor_pos);
   return HitTestPoint(cursor_pos);
 }
@@ -1066,9 +1066,9 @@ const ui::InputMethod* View::GetInputMethod() const {
                 : nullptr;
 }
 
-scoped_ptr<ViewTargeter>
-View::SetEventTargeter(scoped_ptr<ViewTargeter> targeter) {
-  scoped_ptr<ViewTargeter> old_targeter = std::move(targeter_);
+std::unique_ptr<ViewTargeter> View::SetEventTargeter(
+    std::unique_ptr<ViewTargeter> targeter) {
+  std::unique_ptr<ViewTargeter> old_targeter = std::move(targeter_);
   targeter_ = std::move(targeter);
   return old_targeter;
 }
@@ -1090,8 +1090,8 @@ ui::EventTarget* View::GetParentTarget() {
   return parent_;
 }
 
-scoped_ptr<ui::EventTargetIterator> View::GetChildIterator() const {
-  return make_scoped_ptr(new ui::EventTargetIteratorImpl<View>(children_));
+std::unique_ptr<ui::EventTargetIterator> View::GetChildIterator() const {
+  return base::WrapUnique(new ui::EventTargetIteratorImpl<View>(children_));
 }
 
 ui::EventTargeter* View::GetEventTargeter() {
@@ -1198,28 +1198,20 @@ void View::SetNextFocusableView(View* view) {
   next_focusable_view_ = view;
 }
 
-void View::SetFocusable(bool focusable) {
-  if (focusable_ == focusable)
+void View::SetFocusBehavior(FocusBehavior focus_behavior) {
+  if (focus_behavior_ == focus_behavior)
     return;
 
-  focusable_ = focusable;
+  focus_behavior_ = focus_behavior;
   AdvanceFocusIfNecessary();
 }
 
 bool View::IsFocusable() const {
-  return focusable_ && enabled_ && IsDrawn();
+  return focus_behavior_ == FocusBehavior::ALWAYS && enabled_ && IsDrawn();
 }
 
 bool View::IsAccessibilityFocusable() const {
-  return (focusable_ || accessibility_focusable_) && enabled_ && IsDrawn();
-}
-
-void View::SetAccessibilityFocusable(bool accessibility_focusable) {
-  if (accessibility_focusable_ == accessibility_focusable)
-    return;
-
-  accessibility_focusable_ = accessibility_focusable;
-  AdvanceFocusIfNecessary();
+  return focus_behavior_ != FocusBehavior::NEVER && enabled_ && IsDrawn();
 }
 
 FocusManager* View::GetFocusManager() {
@@ -1234,8 +1226,13 @@ const FocusManager* View::GetFocusManager() const {
 
 void View::RequestFocus() {
   FocusManager* focus_manager = GetFocusManager();
-  if (focus_manager && IsFocusable())
-    focus_manager->SetFocusedView(this);
+  if (focus_manager) {
+    bool focusable = focus_manager->keyboard_accessible()
+                         ? IsAccessibilityFocusable()
+                         : IsFocusable();
+    if (focusable)
+      focus_manager->SetFocusedView(this);
+  }
 }
 
 bool View::SkipDefaultKeyEventProcessing(const ui::KeyEvent& event) {
@@ -1808,7 +1805,7 @@ void View::DoRemoveChildView(View* view,
   if (i == children_.end())
     return;
 
-  scoped_ptr<View> view_to_be_deleted;
+  std::unique_ptr<View> view_to_be_deleted;
   if (update_focus_cycle) {
     View* next_focusable = view->next_focusable_view_;
     View* prev_focusable = view->previous_focusable_view_;
@@ -2086,9 +2083,7 @@ void View::CreateLayer() {
 
   SetLayer(new ui::Layer());
   layer()->set_delegate(this);
-#if !defined(NDEBUG)
   layer()->set_name(GetClassName());
-#endif
 
   UpdateParentLayers();
   UpdateLayerVisibility();

@@ -8,6 +8,7 @@
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 
+#include "base/memory/ptr_util.h"
 #include "content/common/gpu/media/propmedia_gpu_channel.h"
 
 namespace gpu {
@@ -33,13 +34,13 @@ ProprietaryMediaGpuChannelManager::ProprietaryMediaGpuChannelManager(
 
 ProprietaryMediaGpuChannelManager::~ProprietaryMediaGpuChannelManager() {}
 
-scoped_ptr<GpuChannel> ProprietaryMediaGpuChannelManager::CreateGpuChannel(
+std::unique_ptr<GpuChannel> ProprietaryMediaGpuChannelManager::CreateGpuChannel(
     int client_id,
     uint64_t client_tracing_id,
     bool preempts,
     bool allow_view_command_buffers,
     bool allow_real_time_streams) {
-  return make_scoped_ptr(
+  return base::WrapUnique(
       new ProprietaryMediaGpuChannel(
                      this, sync_point_manager(), watchdog(), share_group(),
                      mailbox_manager(), preempts ? preemption_flag() : nullptr,

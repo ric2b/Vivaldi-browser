@@ -5,13 +5,15 @@
 #ifndef COMPONENTS_SYNC_DRIVER_GENERIC_CHANGE_PROCESSOR_FACTORY_H_
 #define COMPONENTS_SYNC_DRIVER_GENERIC_CHANGE_PROCESSOR_FACTORY_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "sync/internal_api/public/base/model_type.h"
 
 namespace syncer {
 class AttachmentService;
+class DataTypeErrorHandler;
 class SyncableService;
 class SyncMergeResult;
 struct UserShare;
@@ -19,7 +21,6 @@ struct UserShare;
 
 namespace sync_driver {
 
-class DataTypeErrorHandler;
 class GenericChangeProcessor;
 class SyncClient;
 
@@ -36,10 +37,10 @@ class GenericChangeProcessorFactory {
  public:
   GenericChangeProcessorFactory();
   virtual ~GenericChangeProcessorFactory();
-  virtual scoped_ptr<GenericChangeProcessor> CreateGenericChangeProcessor(
+  virtual std::unique_ptr<GenericChangeProcessor> CreateGenericChangeProcessor(
       syncer::ModelType type,
       syncer::UserShare* user_share,
-      DataTypeErrorHandler* error_handler,
+      syncer::DataTypeErrorHandler* error_handler,
       const base::WeakPtr<syncer::SyncableService>& local_service,
       const base::WeakPtr<syncer::SyncMergeResult>& merge_result,
       SyncClient* sync_client);

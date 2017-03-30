@@ -27,6 +27,7 @@
 #include "build/build_config.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
 #include "ui/base/material_design/material_design_controller.h"
@@ -34,13 +35,14 @@
 #include "ui/base/ui_base_paths.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/base/ui_features.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/safe_integer_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_source.h"
-#include "ui/gfx/screen.h"
 #include "ui/strings/grit/app_locale_settings.h"
 
 #if defined(OS_ANDROID)
@@ -53,11 +55,7 @@
 #endif
 
 #if defined(OS_WIN)
-#include "ui/gfx/win/dpi.h"
-#endif
-
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-#include "base/mac/mac_util.h"
+#include "ui/display/win/dpi.h"
 #endif
 
 namespace ui {
@@ -108,6 +106,13 @@ base::FilePath GetResourcesPakFilePath(const std::string& pak_name) {
 #endif  // OS_WIN
 }
 
+SkBitmap CreateEmptyBitmap() {
+  SkBitmap bitmap;
+  bitmap.allocN32Pixels(32, 32);
+  bitmap.eraseARGB(255, 255, 255, 0);
+  return bitmap;
+}
+
 }  // namespace
 
 // An ImageSkiaSource that loads bitmaps for the requested scale factor from
@@ -130,8 +135,16 @@ class ResourceBundle::ResourceBundleImageSource : public gfx::ImageSkiaSource {
     ScaleFactor scale_factor = GetSupportedScaleFactor(scale);
     bool found = rb_->LoadBitmap(resource_id_, &scale_factor,
                                  &image, &fell_back_to_1x);
-    if (!found)
+    if (!found) {
+#if defined(OS_ANDROID)
+      // TODO(oshima): Android unit_tests runs at DSF=3 with 100P assets.
       return gfx::ImageSkiaRep();
+#else
+      NOTREACHED() << "Unable to load image with id " << resource_id_
+                   << ", scale=" << scale;
+      return gfx::ImageSkiaRep(CreateEmptyBitmap(), scale);
+#endif
+    }
 
     // If the resource is in the package with SCALE_FACTOR_NONE, it
     // can be used in any scale factor. The image is maked as "unscaled"
@@ -177,7 +190,7 @@ void ResourceBundle::InitSharedInstanceWithPakFileRegion(
     base::File pak_file,
     const base::MemoryMappedFile::Region& region) {
   InitSharedInstance(NULL);
-  scoped_ptr<DataPack> data_pack(new DataPack(SCALE_FACTOR_100P));
+  std::unique_ptr<DataPack> data_pack(new DataPack(SCALE_FACTOR_100P));
   if (!data_pack->LoadFromFileRegion(std::move(pak_file), region)) {
     NOTREACHED() << "failed to load pak file";
     return;
@@ -257,8 +270,7 @@ void ResourceBundle::AddDataPackFromFileRegion(
     base::File file,
     const base::MemoryMappedFile::Region& region,
     ScaleFactor scale_factor) {
-  scoped_ptr<DataPack> data_pack(
-      new DataPack(scale_factor));
+  std::unique_ptr<DataPack> data_pack(new DataPack(scale_factor));
   if (data_pack->LoadFromFileRegion(std::move(file), region)) {
     AddDataPack(data_pack.release());
   } else {
@@ -320,8 +332,7 @@ std::string ResourceBundle::LoadLocaleResources(
     }
   }
 
-  scoped_ptr<DataPack> data_pack(
-      new DataPack(SCALE_FACTOR_100P));
+  std::unique_ptr<DataPack> data_pack(new DataPack(SCALE_FACTOR_100P));
   if (!data_pack->LoadFromPath(locale_file_path)) {
     UMA_HISTOGRAM_ENUMERATION("ResourceBundle.LoadLocaleResourcesError",
                               logging::GetLastSystemErrorCode(), 16000);
@@ -337,10 +348,11 @@ std::string ResourceBundle::LoadLocaleResources(
 
 void ResourceBundle::LoadTestResources(const base::FilePath& path,
                                        const base::FilePath& locale_path) {
+  is_test_resources_ = true;
   DCHECK(!ui::GetSupportedScaleFactors().empty());
   const ScaleFactor scale_factor(ui::GetSupportedScaleFactors()[0]);
   // Use the given resource pak for both common and localized resources.
-  scoped_ptr<DataPack> data_pack(new DataPack(scale_factor));
+  std::unique_ptr<DataPack> data_pack(new DataPack(scale_factor));
   if (!path.empty() && data_pack->LoadFromPath(path))
     AddDataPack(data_pack.release());
 
@@ -406,7 +418,9 @@ gfx::Image& ResourceBundle::GetImageNamed(int resource_id) {
     ui::ScaleFactor scale_factor_to_load = GetMaxScaleFactor();
 #elif defined(OS_WIN)
     ui::ScaleFactor scale_factor_to_load =
-        gfx::GetDPIScale() > 1.25 ? GetMaxScaleFactor() : ui::SCALE_FACTOR_100P;
+        display::win::GetDPIScale() > 1.25
+            ? GetMaxScaleFactor()
+            : ui::SCALE_FACTOR_100P;
 #else
     ui::ScaleFactor scale_factor_to_load = ui::SCALE_FACTOR_100P;
 #endif
@@ -663,8 +677,8 @@ void ResourceBundle::InitSharedInstance(Delegate* delegate) {
 #endif
 #if defined(OS_ANDROID)
   float display_density;
-  if (gfx::Display::HasForceDeviceScaleFactor()) {
-    display_density = gfx::Display::GetForcedDeviceScaleFactor();
+  if (display::Display::HasForceDeviceScaleFactor()) {
+    display_density = display::Display::GetForcedDeviceScaleFactor();
   } else {
     gfx::DeviceDisplayInfo device_info;
     display_density = device_info.GetDIPScale();
@@ -673,7 +687,7 @@ void ResourceBundle::InitSharedInstance(Delegate* delegate) {
   if (closest != SCALE_FACTOR_100P)
     supported_scale_factors.push_back(closest);
 #elif defined(OS_IOS)
-  gfx::Display display = gfx::Screen::GetScreen()->GetPrimaryDisplay();
+  display::Display display = display::Screen::GetScreen()->GetPrimaryDisplay();
   if (display.device_scale_factor() > 2.0) {
     DCHECK_EQ(3.0, display.device_scale_factor());
     supported_scale_factors.push_back(SCALE_FACTOR_300P);
@@ -683,10 +697,8 @@ void ResourceBundle::InitSharedInstance(Delegate* delegate) {
   } else {
     supported_scale_factors.push_back(SCALE_FACTOR_100P);
   }
-#elif defined(OS_MACOSX)
-  if (base::mac::IsOSLionOrLater())
-    supported_scale_factors.push_back(SCALE_FACTOR_200P);
-#elif defined(OS_CHROMEOS) || defined(OS_LINUX) || defined(OS_WIN)
+#elif defined(OS_MACOSX) || defined(OS_CHROMEOS) || defined(OS_LINUX) || \
+    defined(OS_WIN)
   supported_scale_factors.push_back(SCALE_FACTOR_200P);
 #endif
   ui::SetSupportedScaleFactors(supported_scale_factors);
@@ -746,7 +758,7 @@ void ResourceBundle::AddDataPackFromPathInternal(
   if (pack_path.empty() || !pack_path.IsAbsolute())
     return;
 
-  scoped_ptr<DataPack> data_pack(new DataPack(scale_factor));
+  std::unique_ptr<DataPack> data_pack(new DataPack(scale_factor));
   data_pack->set_has_only_material_design_assets(has_only_material_assets);
   if (data_pack->LoadFromPath(pack_path)) {
     AddDataPack(data_pack.release());
@@ -799,7 +811,7 @@ bool ResourceBundle::LoadBitmap(const ResourceHandle& data_handle,
 #if !defined(OS_IOS)
   // iOS does not compile or use the JPEG codec.  On other platforms,
   // 99% of our assets are PNGs, however fallback to JPEG.
-  scoped_ptr<SkBitmap> jpeg_bitmap(
+  std::unique_ptr<SkBitmap> jpeg_bitmap(
       gfx::JPEGCodec::Decode(memory->front(), memory->size()));
   if (jpeg_bitmap.get()) {
     bitmap->swap(*jpeg_bitmap.get());
@@ -817,6 +829,7 @@ bool ResourceBundle::LoadBitmap(int resource_id,
                                 SkBitmap* bitmap,
                                 bool* fell_back_to_1x) const {
   DCHECK(fell_back_to_1x);
+  ResourceHandle* data_handle_100_percent = nullptr;
   for (size_t i = 0; i < data_packs_.size(); ++i) {
     if (data_packs_[i]->GetScaleFactor() == ui::SCALE_FACTOR_NONE &&
         LoadBitmap(*data_packs_[i], resource_id, bitmap, fell_back_to_1x)) {
@@ -824,11 +837,25 @@ bool ResourceBundle::LoadBitmap(int resource_id,
       *scale_factor = ui::SCALE_FACTOR_NONE;
       return true;
     }
+    if (data_packs_[i]->GetScaleFactor() == ui::SCALE_FACTOR_100P)
+      data_handle_100_percent = data_packs_[i];
+
     if (data_packs_[i]->GetScaleFactor() == *scale_factor &&
         LoadBitmap(*data_packs_[i], resource_id, bitmap, fell_back_to_1x)) {
       return true;
     }
   }
+
+  // Unit tests may only have 1x data pack. Allow them to fallback to 1x
+  // resources.
+  if (*scale_factor != ui::SCALE_FACTOR_100P && is_test_resources_ &&
+      data_handle_100_percent &&
+      LoadBitmap(*data_handle_100_percent, resource_id, bitmap,
+                 fell_back_to_1x)) {
+    *fell_back_to_1x = true;
+    return true;
+  }
+
   return false;
 }
 
@@ -837,9 +864,7 @@ gfx::Image& ResourceBundle::GetEmptyImage() {
 
   if (empty_image_.IsEmpty()) {
     // The placeholder bitmap is bright red so people notice the problem.
-    SkBitmap bitmap;
-    bitmap.allocN32Pixels(32, 32);
-    bitmap.eraseARGB(255, 255, 0, 0);
+    SkBitmap bitmap = CreateEmptyBitmap();
     empty_image_ = gfx::Image::CreateFrom1xBitmap(bitmap);
   }
   return empty_image_;

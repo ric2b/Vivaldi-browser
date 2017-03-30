@@ -12,7 +12,7 @@
 #include "components/prefs/pref_value_store.h"
 #include "components/prefs/value_map_pref_store.h"
 #include "components/prefs/writeable_pref_store.h"
-#include "mojo/shell/public/cpp/connector.h"
+#include "services/shell/public/cpp/connector.h"
 
 namespace filesystem {
 
@@ -23,9 +23,9 @@ void DoNothingHandleReadError(PersistentPrefStore::PrefReadError error) {}
 
 }  // namespace
 
-scoped_ptr<PrefService> CreatePrefService(mojo::Connector* connector,
-                                          PrefRegistry* pref_registry) {
-  filesystem::FileSystemPtr filesystem;
+std::unique_ptr<PrefService> CreatePrefService(shell::Connector* connector,
+                                               PrefRegistry* pref_registry) {
+  filesystem::mojom::FileSystemPtr filesystem;
   connector->ConnectToInterface("mojo:filesystem", &filesystem);
 
   scoped_refptr<FilesystemJsonPrefStore> user_prefs =
@@ -33,7 +33,7 @@ scoped_ptr<PrefService> CreatePrefService(mojo::Connector* connector,
                                   nullptr /* TODO(erg): pref filter */);
 
   PrefNotifierImpl* pref_notifier = new PrefNotifierImpl();
-  scoped_ptr<PrefService> pref_service(new PrefService(
+  std::unique_ptr<PrefService> pref_service(new PrefService(
       pref_notifier,
       new PrefValueStore(nullptr, nullptr, nullptr, nullptr, user_prefs.get(),
                          nullptr, pref_registry->defaults().get(),

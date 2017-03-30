@@ -70,7 +70,29 @@
 
 
 ```
-## **\--markdown**: write the output in the Markdown format.
+## **\--fail-on-unused-args**: Treat unused build args as fatal errors.
+
+```
+  If you set a value in a build's "gn args" and never use it in the
+  build (in a declare_args() block), GN will normally print an error
+  but not fail the build.
+
+  In many cases engineers would use build args to enable or disable
+  features that would sometimes get removed. It would by annoying to
+  block work for typically benign problems. In Chrome in particular,
+  flags might be configured for build bots in a separate infrastructure
+  repository, or a declare_args block might be changed in a third party
+  repository. Treating these errors as blocking forced complex multi-
+  way patches to land what would otherwise be simple changes.
+
+  In some cases, such concerns are not as important, and a mismatch
+  in build flags between the invoker of the build and the build files
+  represents a critical mismatch that should be immediately fixed. Such
+  users can set this flag to force GN to fail in that case.
+
+
+```
+## **\--markdown**: Write help output in the Markdown format.
 
 ## **\--[no]color**: Forces colored output on or off.
 
@@ -151,6 +173,16 @@
   escaping. The files will be relative to the root_build_dir. The first
   line of the file will be the main output file of the target itself
   (in the above example, "bar.so").
+
+
+```
+## **\--script-executable**: Set the executable used to execute scripts.
+
+```
+  By default GN searches the PATH for Python to execute scripts in
+  action targets and exec_script calls. This flag allows the
+  specification of a specific Python executable or potentially
+  a different language interpreter.
 
 
 ```
@@ -414,74 +446,47 @@
 
 
 ```
-## **gn desc <out_dir> <target label> [<what to show>] [\--blame]**
+## **gn desc <out_dir> <label or pattern> [<what to show>] [\--blame]**
 
 ```
-  Displays information about a given labeled target for the given build.
-  The build parameters will be taken for the build in the given
-  <out_dir>.
+  Displays information about a given target or config. The build
+  build parameters will be taken for the build in the given <out_dir>.
+
+  The <label or pattern> can be a target label, a config label, or a
+  label pattern (see "gn help label_pattern"). A label pattern will
+  only match targets.
 
 ```
 
 ### **Possibilities for <what to show>**
+
 ```
   (If unspecified an overall summary will be displayed.)
 
-  sources
-      Source files.
-
-  inputs
-      Additional input dependencies.
-
-  public
-      Public header files.
-
-  check_includes
-      Whether "gn check" checks this target for include usage.
-
-  allow_circular_includes_from
-      Permit includes from these targets.
-
-  visibility
-      Prints which targets can depend on this one.
-
-  testonly
-      Whether this target may only be used in tests.
-
-  configs
-      Shows configs applied to the given target, sorted in the order
-      they're specified. This includes both configs specified in the
-      "configs" variable, as well as configs pushed onto this target
-      via dependencies specifying "all" or "direct" dependent
-      configs.
-
-  deps
-      Show immediate or recursive dependencies. See below for flags that
-      control deps printing.
-
-  public_configs
   all_dependent_configs
-      Shows the labels of configs applied to targets that depend on this
-      one (either directly or all of them).
-
-  script
+  allow_circular_includes_from
+  arflags [--blame]
   args
+  cflags [--blame]
+  cflags_cc [--blame]
+  cflags_cxx [--blame]
+  check_includes
+  configs [--tree] (see below)
+  defines [--blame]
   depfile
-      Actions only. The script and related values.
-
-  outputs
-      Outputs for script and copy target types.
-
-  defines       [--blame]
-  include_dirs  [--blame]
-  cflags        [--blame]
-  cflags_cc     [--blame]
-  cflags_cxx    [--blame]
-  ldflags       [--blame]
+  deps [--all] [--tree] (see below)
+  include_dirs [--blame]
+  inputs
+  ldflags [--blame]
   lib_dirs
   libs
-      Shows the given values taken from the target and all configs
-      applying. See "--blame" below.
+  outputs
+  public_configs
+  public
+  script
+  sources
+  testonly
+  visibility
 
   runtime_deps
       Compute all runtime deps for the given target. This is a
@@ -498,17 +503,49 @@
 ### **Shared flags**
 
 ```
+  --all-toolchains
+      Normally only inputs in the default toolchain will be included.
+      This switch will turn on matching all toolchains.
+
+      For example, a file is in a target might be compiled twice:
+      once in the default toolchain and once in a secondary one. Without
+      this flag, only the default toolchain one will be matched by
+      wildcards. With this flag, both will be matched.
+
+```
+
+### **Target flags**
+
+```
   --blame
-      Used with any value specified by a config, this will name
-      the config that specified the value. This doesn't currently work
-      for libs and lib_dirs because those are inherited and are more
-      complicated to figure out the blame (patches welcome).
+      Used with any value specified on a config, this will name
+      the config that cause that target to get the flag. This doesn't
+      currently work for libs and lib_dirs because those are inherited
+      and are more complicated to figure out the blame (patches
+      welcome).
 
 ```
 
-### **Flags that control how deps are printed**
+### **Configs**
 
 ```
+  The "configs" section will list all configs that apply. For targets
+  this will include configs specified in the "configs" variable of
+  the target, and also configs pushed onto this target via public
+  or "all dependent" configs.
+
+  Configs can have child configs. Specifying --tree will show the
+  hierarchy.
+
+```
+
+### **Printing deps**
+
+```
+  Deps will include all public, private, and data deps (TODO this could
+  be clarified and enhanced) sorted in order applying. The following
+  may be used:
+
   --all
       Collects all recursive dependencies and prints a sorted flat list.
       Also usable with --tree (see below).
@@ -654,16 +691,53 @@
              (default Visual Studio version: 2015)
       "vs2013" - Visual Studio 2013 project/solution files.
       "vs2015" - Visual Studio 2015 project/solution files.
-
-  --sln=<file_name>
-      Override default sln file name ("all"). Solution file is written
-      to the root build directory. Only for Visual Studio.
+      "xcode" - Xcode workspace/solution files.
+      "qtcreator" - QtCreator project files.
 
   --filters=<path_prefixes>
       Semicolon-separated list of label patterns used to limit the set
       of generated projects (see "gn help label_pattern"). Only
-      matching targets will be included to the solution. Only for Visual
-      Studio.
+      matching targets will be included to the solution. Only used for
+      Visual Studio and Xcode.
+
+```
+
+### **Visual Studio Flags**
+
+```
+  --sln=<file_name>
+      Override default sln file name ("all"). Solution file is written
+      to the root build directory.
+
+```
+
+### **Xcode Flags**
+
+```
+  --workspace=<file_name>
+      Override defaut workspace file name ("all"). The workspace file
+      is written to the root build directory.
+
+  --ninja-extra-args=<string>
+      This string is passed without any quoting to the ninja invocation
+      command-line. Can be used to configure ninja flags, like "-j" if
+      using goma for example.
+
+  --root-target=<target_name>
+      Name of the target corresponding to "All" target in Xcode.
+      If unset, "All" invokes ninja without any target
+      and builds everything.
+
+```
+
+### **QtCreator Flags**
+
+```
+  --root-target=<target_name>
+      Name of the root target for which the QtCreator project will be
+      generated to contain files of it and its dependencies. If unset, 
+      the whole build graph will be omitted.
+
 
 ```
 
@@ -738,10 +812,13 @@
           root build directory.
 
   --all-toolchains
-      Matches all toolchains. When set, if the label pattern does not
-      specify an explicit toolchain, labels from all toolchains will be
-      matched. When unset, only targets in the default toolchain will
-      be matched unless an explicit toolchain in the label is set.
+      Normally only inputs in the default toolchain will be included.
+      This switch will turn on matching all toolchains.
+
+      For example, a file is in a target might be compiled twice:
+      once in the default toolchain and once in a secondary one. Without
+      this flag, only the default toolchain one will be matched by
+      wildcards. With this flag, both will be matched.
 
   --testonly=(true|false)
       Restrict outputs to targets with the testonly flag set
@@ -870,10 +947,8 @@
 
       For example, a file is in a target might be compiled twice:
       once in the default toolchain and once in a secondary one. Without
-      this flag, only the default toolchain one will be matched and
-      printed (potentially with its recursive dependencies, depending on
-      the other options). With this flag, both will be printed
-      (potentially with both of their recursive dependencies).
+      this flag, only the default toolchain one will be matched by
+      wildcards. With this flag, both will be matched.
 
   --as=(buildfile|label|output)
       How to print targets.
@@ -1349,7 +1424,8 @@
 
 ```
   bundle_root_dir*, bundle_resources_dir*, bundle_executable_dir*,
-  bundle_plugins_dir*, deps, data_deps, public_deps, visibility
+  bundle_plugins_dir*, deps, data_deps, public_deps, visibility,
+  product_type
   * = required
 
 ```
@@ -1399,6 +1475,7 @@
       }
 
       create_bundle("${app_name}.app") {
+        product_type = "com.apple.product-type.application"
         deps = [
           ":${app_name}_bundle_executable",
           ":${app_name}_bundle_info_plist",
@@ -2730,6 +2807,20 @@
 
         The command to run.
 
+    default_output_dir  [string with substitutions]
+        Valid for: linker tools
+
+        Default directory name for the output file relative to the
+        root_build_dir. It can contain other substitution patterns.
+        This will be the default value for the {{output_dir}} expansion
+        (discussed below) but will be overridden by the "output_dir"
+        variable in a target, if one is specified.
+
+        GN doesn't do anything with this string other than pass it
+        along, potentially with target-specific overrides. It is the
+        tool's job to use the expansion so that the files will be in
+        the right place.
+
     default_output_extension  [string]
         Valid for: linker tools
 
@@ -2746,7 +2837,7 @@
 
         Example: default_output_extension = ".exe"
 
-    depfile  [string]
+    depfile  [string with substitutions]
         Valid for: compiler tools (optional)
 
         If the tool can write ".d" files, this specifies the name of
@@ -2808,13 +2899,11 @@
           ]
 
         Example for a linker tool that produces a .dll and a .lib. The
-        use of {{output_extension}} rather than hardcoding ".dll"
-        allows the extension of the library to be overridden on a
-        target-by-target basis, but in this example, it always
-        produces a ".lib" import library:
+        use of {{target_output_name}}, {{output_extension}} and
+        {{output_dir}} allows the target to override these values.
           outputs = [
-            "{{root_out_dir}}/{{target_output_name}}{{output_extension}}",
-            "{{root_out_dir}}/{{target_output_name}}.lib",
+            "{{output_dir}}/{{target_output_name}}{{output_extension}}",
+            "{{output_dir}}/{{target_output_name}}.lib",
           ]
 
     link_output  [string with substitutions]
@@ -2827,7 +2916,7 @@
         should match entries in the "outputs". If unspecified, the
         first item in the "outputs" array will be used for all. See
         "Separate linking and dependencies for shared libraries"
-        below for more.  If link_output is set but runtime_link_output
+        below for more. If link_output is set but runtime_link_output
         is not set, runtime_link_output defaults to link_output.
 
         On Windows, where the tools produce a .dll shared library and
@@ -2937,7 +3026,7 @@
     {{target_out_dir}}
         The directory of the generated file and output directories,
         respectively, for the current target. There is no trailing
-        slash.
+        slash. See also {{output_dir}} for linker tools.
         Example: "out/base/test"
 
     {{target_output_name}}
@@ -2991,6 +3080,7 @@
         Example: "gen/base/test"
 
   Linker tools have multiple inputs and (potentially) multiple outputs
+  The static library tool ("alink") is not considered a linker tool.
   The following expansions are available:
 
     {{inputs}}
@@ -3020,6 +3110,21 @@
 
         Example: "-lfoo -lbar"
 
+    {{output_dir}}
+        The value of the "output_dir" variable in the target, or the
+        the value of the "default_output_dir" value in the tool if the
+        target does not override the output directory. This will be
+        relative to the root_build_dir and will not end in a slash.
+        Will be "." for output to the root_build_dir.
+
+        This is subtly different than {{target_out_dir}} which is
+        defined by GN based on the target's path and not overridable.
+        {{output_dir}} is for the final output, {{target_out_dir}} is
+        generally for object files and other outputs.
+
+        Usually {{output_dir}} would be defined in terms of either
+        {{target_out_dir}} or {{root_out_dir}}
+
     {{output_extension}}
         The value of the "output_extension" variable in the target,
         or the value of the "default_output_extension" value in the
@@ -3034,6 +3139,9 @@
 
         These should generally be treated the same as libs by your tool.
         Example: "libfoo.so libbar.so"
+
+  The static library ("alink") tool allows {{arflags}} plus the common
+  tool substitutions.
 
   The copy tool allows the common compiler/linker substitutions, plus
   {{source}} which is the source of the copy. The stamp tool allows
@@ -3075,13 +3183,13 @@
     tool("solink") {
       command = "..."
       outputs = [
-        "{{root_out_dir}}/{{target_output_name}}{{output_extension}}",
-        "{{root_out_dir}}/{{target_output_name}}{{output_extension}}.TOC",
+        "{{output_dir}}/{{target_output_name}}{{output_extension}}",
+        "{{output_dir}}/{{target_output_name}}{{output_extension}}.TOC",
       ]
       link_output =
-        "{{root_out_dir}}/{{target_output_name}}{{output_extension}}"
+        "{{output_dir}}/{{target_output_name}}{{output_extension}}"
       depend_output =
-        "{{root_out_dir}}/{{target_output_name}}{{output_extension}}.TOC"
+        "{{output_dir}}/{{target_output_name}}{{output_extension}}.TOC"
       restat = true
     }
 
@@ -3698,6 +3806,42 @@
 
 
 ```
+## **arflags**: Arguments passed to static_library archiver.
+
+```
+  A list of flags passed to the archive/lib command that creates static
+  libraries.
+
+  arflags are NOT pushed to dependents, so applying arflags to source
+  sets or any other target type will be a no-op. As with ldflags,
+  you could put the arflags in a config and set that as a public or
+  "all dependent" config, but that will likely not be what you want.
+  If you have a chain of static libraries dependent on each other,
+  this can cause the flags to propagate up to other static libraries.
+  Due to the nature of how arflags are typically used, you will normally
+  want to apply them directly on static_library targets themselves.
+
+```
+
+### **Ordering of flags and values**
+
+```
+  1. Those set on the current target (not in a config).
+  2. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  3. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  4. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  5. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  6. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+
+
+```
 ## **args**: Arguments passed to an action.
 
 ```
@@ -4075,9 +4219,16 @@
   In some cases the static library might be the final desired output.
   For example, you may be producing a static library for distribution to
   third parties. In this case, the static library should include code
-  for all dependencies in one complete package. Since GN does not unpack
-  static libraries to forward their contents up the dependency chain,
-  it is an error for complete static libraries to depend on other static
+  for all dependencies in one complete package. However, complete static
+  libraries themselves are never linked into other complete static
+  libraries. All complete static libraries are for distribution and
+  linking them in would cause code duplication in this case. If the
+  static library is not for distribution, it should not be complete.
+
+  GN treats non-complete static libraries as source sets when they are
+  linked into complete static libraries. This is done because some tools
+  like AR do not handle dependent static libraries properly. This makes
+  it easier to write "alink" rules.
 
   In rare cases it makes sense to list a header in more than one
   target if it could be considered conceptually a member of both.
@@ -4241,7 +4392,7 @@
   generated files both in the "outputs" list as well as the "data"
   list.
 
-  By convention, directories are be listed with a trailing slash:
+  By convention, directories are listed with a trailing slash:
     data = [ "test/data/" ]
   However, no verification is done on these so GN doesn't enforce this.
   The paths are just rebased and passed along when requested.
@@ -4660,6 +4811,36 @@
 
 
 ```
+## **output_dir**: [directory] Directory to put output file in.
+
+```
+  For library and executable targets, overrides the directory for the
+  final output. This must be in the root_build_dir or a child thereof.
+
+  This should generally be in the root_out_dir or a subdirectory thereof
+  (the root_out_dir will be the same as the root_build_dir for the
+  default toolchain, and will be a subdirectory for other toolchains).
+  Not putting the output in a subdirectory of root_out_dir can result
+  in collisions between different toolchains, so you will need to take
+  steps to ensure that your target is only present in one toolchain.
+
+  Normally the toolchain specifies the output directory for libraries
+  and executables (see "gn help tool"). You will have to consult that
+  for the default location. The default location will be used if
+  output_dir is undefined or empty.
+
+```
+
+### **Example**
+
+```
+  shared_library("doom_melon") {
+    output_dir = "$root_out_dir/plugin_libs"
+    ...
+  }
+
+
+```
 ## **output_extension**: Value to use for the output's file extension.
 
 ```
@@ -4854,6 +5035,18 @@
   The source file that goes along with the precompiled_header when
   using "msvc"-style precompiled headers. It will be implicitly added
   to the sources of the target. See "gn help precompiled_header".
+
+
+```
+## **product_type**: Product type for Xcode projects.
+
+```
+  Correspond to the type of the product of a create_bundle target. Only
+  meaningful to Xcode (used as part of the Xcode project generation).
+
+  When generating Xcode project files, only create_bundle target with
+  a non-empty product_type will have a corresponding target in Xcode
+  project.
 
 
 ```
@@ -5724,6 +5917,10 @@
 ### **Placeholders**
 
 ```
+  This section discusses only placeholders for actions. There are other
+  placeholders used in the definition of tools. See "gn help tool" for
+  those.
+
   {{source}}
       The name of the source file including directory (*). This will
       generally be used for specifying inputs to a script in the
@@ -5824,11 +6021,13 @@
 **  \--args**: Specifies build arguments overrides.
 **  \--color**: Force colored output.
 **  \--dotfile**: Override the name of the ".gn" file.
-**  \--markdown**: write the output in the Markdown format.
+**  \--fail-on-unused-args**: Treat unused build args as fatal errors.
+**  \--markdown**: Write help output in the Markdown format.
 **  \--nocolor**: Force non-colored output.
 **  -q**: Quiet mode. Don't print output on success.
 **  \--root**: Explicitly specify source root.
 **  \--runtime-deps-list-file**: Save runtime dependencies for targets in file.
+**  \--script-executable**: Set the executable used to execute scripts.
 **  \--threads**: Specify number of worker threads.
 **  \--time**: Outputs a summary of how long everything took.
 **  \--tracelog**: Writes a Chrome-compatible trace log to the given file.

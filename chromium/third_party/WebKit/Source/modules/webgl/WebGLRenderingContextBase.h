@@ -27,6 +27,7 @@
 #define WebGLRenderingContextBase_h
 
 #include "bindings/core/v8/Nullable.h"
+#include "bindings/core/v8/ScopedPersistent.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/ScriptWrappable.h"
@@ -40,12 +41,13 @@
 #include "modules/webgl/WebGLTexture.h"
 #include "modules/webgl/WebGLVertexArrayObjectBase.h"
 #include "platform/Timer.h"
-#include "platform/graphics/GraphicsTypes3D.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/gpu/DrawingBuffer.h"
 #include "platform/graphics/gpu/Extensions3DUtil.h"
 #include "platform/graphics/gpu/WebGLImageConversion.h"
-#include "public/platform/WebGraphicsContext3D.h"
+#include "public/platform/Platform.h"
+#include "public/platform/WebGraphicsContext3DProvider.h"
+#include "third_party/khronos/GLES2/gl2.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/text/WTFString.h"
 
@@ -64,8 +66,6 @@ class GLES2Interface;
 namespace blink {
 
 class ANGLEInstancedArrays;
-class CHROMIUMSubscribeUniform;
-class CHROMIUMValuebuffer;
 class EXTBlendMinMax;
 class EXTDisjointTimerQuery;
 class EXTFragDepth;
@@ -86,6 +86,7 @@ class OESTextureFloatLinear;
 class OESTextureHalfFloat;
 class OESTextureHalfFloatLinear;
 class OESVertexArrayObject;
+class WaitableEvent;
 class WebGLActiveInfo;
 class WebGLBuffer;
 class WebGLCompressedTextureASTC;
@@ -114,31 +115,17 @@ class WebGLVertexArrayObjectBase;
 class WebGLRenderingContextLostCallback;
 class WebGLRenderingContextErrorMessageCallback;
 
-// ScopedDrawingBufferBinder is used for ReadPixels/CopyTexImage2D/CopySubImage2D to read from
-// a multisampled DrawingBuffer. In this situation, we need to blit to a single sampled buffer
-// for reading, during which the bindings could be changed and need to be recovered.
-class ScopedDrawingBufferBinder {
-    STACK_ALLOCATED();
+// This class uses the color mask to prevent drawing to the alpha channel, if
+// the DrawingBuffer requires RGB emulation.
+class ScopedRGBEmulationColorMask {
 public:
-    ScopedDrawingBufferBinder(DrawingBuffer* drawingBuffer, WebGLFramebuffer* framebufferBinding)
-        : m_drawingBuffer(drawingBuffer)
-        , m_readFramebufferBinding(framebufferBinding)
-    {
-        // Commit DrawingBuffer if needed (e.g., for multisampling)
-        if (!m_readFramebufferBinding && m_drawingBuffer)
-            m_drawingBuffer->commit();
-    }
-
-    ~ScopedDrawingBufferBinder()
-    {
-        // Restore DrawingBuffer if needed
-        if (!m_readFramebufferBinding && m_drawingBuffer)
-            m_drawingBuffer->restoreFramebufferBindings();
-    }
+    ScopedRGBEmulationColorMask(gpu::gles2::GLES2Interface*, GLboolean* colorMask, DrawingBuffer*);
+    ~ScopedRGBEmulationColorMask();
 
 private:
-    DrawingBuffer* m_drawingBuffer;
-    Member<WebGLFramebuffer> m_readFramebufferBinding;
+    gpu::gles2::GLES2Interface* m_contextGL;
+    GLboolean m_colorMask[4];
+    const bool m_requiresEmulation;
 };
 
 class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext {
@@ -154,6 +141,7 @@ public:
     static unsigned getWebGLVersion(const CanvasRenderingContext*);
 
     static PassOwnPtr<WebGraphicsContext3DProvider> createWebGraphicsContext3DProvider(HTMLCanvasElement*, WebGLContextAttributes, unsigned webGLVersion);
+    static PassOwnPtr<WebGraphicsContext3DProvider> createWebGraphicsContext3DProvider(ScriptState*, WebGLContextAttributes, unsigned webGLVersion);
     static void forceNextWebGLContextCreationToFail();
 
     int drawingBufferWidth() const;
@@ -381,8 +369,13 @@ public:
     void forceRestoreContext();
     void loseContextImpl(LostContextMode, AutoRecoveryMethod);
 
-    WebGraphicsContext3D* webContext() const { return drawingBuffer()->context(); }
-    gpu::gles2::GLES2Interface* contextGL() const { return drawingBuffer()->contextGL(); }
+    gpu::gles2::GLES2Interface* contextGL() const
+    {
+        DrawingBuffer* d = drawingBuffer();
+        if (!d)
+            return nullptr;
+        return d->contextGL();
+    }
     WebGLContextGroup* contextGroup() const { return m_contextGroup.get(); }
     Extensions3DUtil* extensionsUtil();
 
@@ -395,15 +388,6 @@ public:
     void removeContextObject(WebGLContextObject*);
 
     unsigned maxVertexAttribs() const { return m_maxVertexAttribs; }
-
-    // GL_CHROMIUM_subscribe_uniform
-    CHROMIUMValuebuffer* createValuebufferCHROMIUM();
-    void deleteValuebufferCHROMIUM(CHROMIUMValuebuffer*);
-    GLboolean isValuebufferCHROMIUM(CHROMIUMValuebuffer*);
-    void bindValuebufferCHROMIUM(GLenum target, CHROMIUMValuebuffer*);
-    void subscribeValueCHROMIUM(GLenum target, GLenum subscription);
-    void populateSubscribedValuesCHROMIUM(GLenum target);
-    void uniformValuebufferCHROMIUM(const WebGLUniformLocation*, GLenum target, GLenum subscription);
 
     // Eagerly finalize WebGLRenderingContextBase in order for it
     // to (first) be able to detach its WebGLContextObjects, before
@@ -448,6 +432,7 @@ protected:
     friend class ScopedFramebufferRestorer;
 
     WebGLRenderingContextBase(HTMLCanvasElement*, PassOwnPtr<WebGraphicsContext3DProvider>, const WebGLContextAttributes&);
+    WebGLRenderingContextBase(OffscreenCanvas*, PassOwnPtr<WebGraphicsContext3DProvider>, const WebGLContextAttributes&);
     PassRefPtr<DrawingBuffer> createDrawingBuffer(PassOwnPtr<WebGraphicsContext3DProvider>);
     void setupFlags();
 
@@ -465,6 +450,8 @@ protected:
 
     void destroyContext();
     void markContextChanged(ContentChangeType);
+
+    void onErrorMessage(const char*, int32_t id);
 
     void notifyCanvasContextChanged();
 
@@ -513,18 +500,7 @@ protected:
     Timer<WebGLRenderingContextBase> m_restoreTimer;
 
     bool m_markedCanvasDirty;
-#if ENABLE(OILPAN)
     HeapHashSet<WeakMember<WebGLContextObject>> m_contextObjects;
-#else
-    // The hash set isn't traced, hence the references are effectively
-    // weakly kept. Each WebGLContextObject is responsible for detaching
-    // itself upon finalization if the WebGLRenderingContextBase hasn't been
-    // finalized already and detached them via detachAndRemoveAllObjects().
-    // See http://crbug.com/534524 for the details.
-    HashSet<UntracedMember<WebGLContextObject>> m_contextObjects;
-#endif
-
-    Member<WebGLRenderingContextErrorMessageCallback> m_errorMessageCallbackAdapter;
 
     // List of bound VBO's. Used to maintain info about sizes for ARRAY_BUFFER and stored values for ELEMENT_ARRAY_BUFFER
     Member<WebGLBuffer> m_boundArrayBuffer;
@@ -547,7 +523,6 @@ protected:
     Member<WebGLProgram> m_currentProgram;
     Member<WebGLFramebuffer> m_framebufferBinding;
     Member<WebGLRenderbuffer> m_renderbufferBinding;
-    Member<CHROMIUMValuebuffer> m_valuebufferBinding;
 
     HeapVector<TextureUnitState> m_textureUnits;
     unsigned long m_activeTextureUnit;
@@ -1029,8 +1004,8 @@ protected:
         DontDisplayInConsole
     };
 
-    // Wrapper for WebGraphicsContext3D::synthesizeGLError that sends a message
-    // to the JavaScript console.
+    // Reports an error to glGetError, sends a message to the JavaScript
+    // console.
     void synthesizeGLError(GLenum, const char* functionName, const char* description, ConsoleDisplayPreference = DisplayInConsole);
     void emitGLWarning(const char* function, const char* reason);
 
@@ -1065,7 +1040,28 @@ protected:
     // latched into the context's state, or which are implicitly
     // linked together (like programs and their attached shaders), are
     // not garbage collected before they should be.
-    static void preserveObjectWrapper(ScriptState*, ScriptWrappable* sourceObject, const char* baseName, unsigned long index, ScriptWrappable* targetObject);
+    ScopedPersistent<v8::Array> m_2DTextureWrappers;
+    ScopedPersistent<v8::Array> m_2DArrayTextureWrappers;
+    ScopedPersistent<v8::Array> m_3DTextureWrappers;
+    ScopedPersistent<v8::Array> m_cubeMapTextureWrappers;
+    ScopedPersistent<v8::Array> m_extensionWrappers;
+
+    // The "catch-all" array for the rest of the preserved object
+    // wrappers. The enum below defines how the indices in this array
+    // are used.
+    enum PreservedWrapperIndex {
+        PreservedArrayBuffer,
+        PreservedElementArrayBuffer,
+        PreservedFramebuffer,
+        PreservedProgram,
+        PreservedRenderbuffer,
+        PreservedDefaultVAO,
+        PreservedVAO,
+    };
+    ScopedPersistent<v8::Array> m_miscWrappers;
+
+    static void preserveObjectWrapper(ScriptState*, ScriptWrappable* sourceObject, v8::Local<v8::String> hiddenValueName, ScopedPersistent<v8::Array>* persistentCache, uint32_t index, ScriptWrappable* targetObject);
+
     // Called to lazily instantiate the wrapper for the default VAO
     // during calls to bindBuffer and vertexAttribPointer (from
     // JavaScript).
@@ -1088,13 +1084,11 @@ protected:
     static WebGLRenderingContextBase* oldestContext();
     static WebGLRenderingContextBase* oldestEvictedContext();
 
-#if ENABLE(OILPAN)
     CrossThreadWeakPersistentThisPointer<WebGLRenderingContextBase> createWeakThisPointer() { return CrossThreadWeakPersistentThisPointer<WebGLRenderingContextBase>(this); }
-#else
-    WeakPtr<WebGLRenderingContextBase> createWeakThisPointer() { return m_weakPtrFactory.createWeakPtr(); }
 
-    WeakPtrFactory<WebGLRenderingContextBase> m_weakPtrFactory;
-#endif
+private:
+    WebGLRenderingContextBase(HTMLCanvasElement*, OffscreenCanvas*, PassOwnPtr<WebGraphicsContext3DProvider>, const WebGLContextAttributes&);
+    static PassOwnPtr<WebGraphicsContext3DProvider> createContextProviderInternal(HTMLCanvasElement*, ScriptState*, WebGLContextAttributes, unsigned);
 };
 
 DEFINE_TYPE_CASTS(WebGLRenderingContextBase, CanvasRenderingContext, context, context->is3d(), context.is3d());

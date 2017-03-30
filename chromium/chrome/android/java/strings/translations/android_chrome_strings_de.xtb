@@ -3,7 +3,7 @@
 <translationbundle lang="de">
 <translation id="1040144152982955218">Es wird nach Geräten gesucht… <ph name="BEGIN_LINK" />Hilfe aufrufen<ph name="END_LINK" /></translation>
 <translation id="1056898198331236512">Warnung</translation>
-<translation id="10614374240317010">Nie speichern für...</translation>
+<translation id="10614374240317010">Nie speichern für…</translation>
 <translation id="1061441684050139317">Chrome benötigt Zugriff auf das Mikrofon, um es für diese Website freizugeben.</translation>
 <translation id="1080790410959514870">Sie melden sich von einem Konto ab, das von <ph name="DOMAIN_NAME" /> verwaltet wird. Dadurch werden die auf diesem Gerät gespeicherten Chrome-Daten gelöscht. Die Daten verbleiben jedoch weiterhin in Ihrem Google-Konto.</translation>
 <translation id="1098052486217676340">Fertig</translation>
@@ -28,7 +28,6 @@ Zur Verwendung von Physical Web müssen Bluetooth und der Standortdienst aktivie
 <translation id="129553762522093515">Kürzlich geschlossen</translation>
 <translation id="1326317727527857210">Melden Sie sich in Chrome an, um Tabs von Ihren anderen Geräten abzurufen.</translation>
 <translation id="13410144310025252">In Chrome ansehen</translation>
-<translation id="1346090444609141578">Keine gespeicherten Seiten vorhanden</translation>
 <translation id="1369915414381695676">Website "<ph name="SITE_NAME" />" hinzugefügt</translation>
 <translation id="1373696734384179344">Der Speicher reicht nicht aus, um den ausgewählten Inhalt herunterzuladen.</translation>
 <translation id="138361230106469022">Hallo <ph name="FULL_NAME" /></translation>
@@ -49,15 +48,14 @@ Zur Verwendung von Physical Web müssen Bluetooth und der Standortdienst aktivie
 <translation id="1549000191223877751">Zu anderem Fenster wechseln</translation>
 <translation id="1553358976309200471">Chrome aktualisieren</translation>
 <translation id="1557201757634521564">Codierung automatisch erkennen</translation>
-<translation id="1592483623187843893">Lesezeichen offline gespeichert</translation>
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1623104350909869708">Keine weiteren Dialogfelder auf dieser Seite zulassen</translation>
+<translation id="1639239467298939599">Wird geladen...</translation>
 <translation id="1641113438599504367">Safe Browsing</translation>
 <translation id="164269334534774161">Sie sehen sich momentan eine Offlinekopie dieser Seite vom <ph name="CREATION_TIME" /> an</translation>
 <translation id="1643702317193804718">Seite wird in folgende Sprache übersetzt: <ph name="SOURCE_LANGUAGE" />...</translation>
 <translation id="1644574205037202324">Verlauf</translation>
 <translation id="1647391597548383849">Kamerazugriff</translation>
-<translation id="1648687357130613845">Speicherplatz</translation>
 <translation id="1657479659644194568">Chrome einrichten</translation>
 <translation id="169033420419426091"><ph name="FILE_NAME" /> konnte nicht heruntergeladen werden, weil keine SD-Karte gefunden wurde.</translation>
 <translation id="1692118695553449118">Synchronisierung ist aktiviert</translation>
@@ -70,13 +68,13 @@ Zur Verwendung von Physical Web müssen Bluetooth und der Standortdienst aktivie
 <translation id="1825719650605518411">First Run Experience</translation>
 <translation id="1829244130665387512">Seite durchsuchen</translation>
 <translation id="1832521218263067499">Sicherheitsrelevante Zwischenfälle</translation>
+<translation id="1842969606798536927">Bezahlen</translation>
 <translation id="1853692000353488670">Neuer Inkognito-Tab</translation>
 <translation id="189172778771606813">Navigationsleiste schließen</translation>
+<translation id="1924956916668006832">Lieferadresse auswählen</translation>
 <translation id="194341124344773587">Berechtigung für Chrome in den <ph name="BEGIN_LINK" />Android-Einstellungen<ph name="END_LINK" /> aktivieren</translation>
 <translation id="1943432128510653496">Passwörter speichern</translation>
 <translation id="1944384637046898011">Ab <ph name="TIME" /> alle Daten mit Google-Passwort verschlüsseln</translation>
-<translation id="1946005195648379376">Legen Sie fest, wie Google anhand des Browserverlaufs die Suche und andere Google-Dienste für Sie personalisieren soll.</translation>
-<translation id="1959930595721737608">JavaScript auf der folgenden Website zulassen.</translation>
 <translation id="1966710179511230534">Bitte aktualisieren Sie Ihre Anmeldeinformationen.</translation>
 <translation id="1974060860693918893">Erweitert</translation>
 <translation id="1984321224716884559">Chrome Dev-Lesezeichen</translation>
@@ -102,10 +100,14 @@ Zur Verwendung von Physical Web müssen Bluetooth und der Standortdienst aktivie
 <translation id="2268044343513325586">Verfeinern</translation>
 <translation id="2315043854645842844">Die clientseitige Zertifikatauswahl wird vom Betriebssystem nicht unterstützt.</translation>
 <translation id="2321958826496381788">Ziehen Sie den Schieberegler, bis Sie diesen Text problemlos lesen können. Nach dem Doppeltippen auf einen Abschnitt sollte der Text mindestens so groß sein.</translation>
+<translation id="2331464965008647960">Geräte in Ihrer Nähe übertragen Webseiten über Bluetooth. Chrome sucht nach Seiten und zeigt Sie Ihnen an, wenn Ihr Gerät entsperrt ist. Diese Seiten werden durch einen Google-Dienst überprüft, um die Qualität der Suchergebnisse zu verbessern.
+
+Über die Chrome-Einstellungen können Sie das Physical Web verwalten.
+
+<ph name="BEGIN_LINK" />Weitere Informationen<ph name="END_LINK" /></translation>
 <translation id="2343328333327081434">Wird installiert…</translation>
 <translation id="2351097562818989364">Übersetzungseinstellungen zurückgesetzt</translation>
 <translation id="2359808026110333948">Weiter</translation>
-<translation id="2381756643783702095">Vor dem Senden nachfragen (empfohlen)</translation>
 <translation id="2385560268894525395">für die letzte Woche</translation>
 <translation id="2387895666653383613">Text-Skalierung</translation>
 <translation id="238909021488141516">Beim Herunterladen des Inhalts ist ein Fehler aufgetreten.</translation>
@@ -113,14 +115,12 @@ Zur Verwendung von Physical Web müssen Bluetooth und der Standortdienst aktivie
 <translation id="2433507940547922241">Darstellung</translation>
 <translation id="2439248520967274840">Sie melden sich gerade in <ph name="TO_ACCOUNT" /> an. Einige Ihrer bestehenden Lesezeichen, Ihrer Passwörter, Ihrer anderen Einstellungen sowie ein Teil Ihres Verlaufs wurden zuvor mit <ph name="FROM_ACCOUNT" /> synchronisiert. Was möchten Sie mit den vorhandenen Daten tun?</translation>
 <translation id="2440823041667407902">Standortzugriff</translation>
-<translation id="2470327855284432041">Seite mit <ph name="PAGE_SIZE_STRING" /> offline gespeichert</translation>
 <translation id="2476578072172137802">Website-Einstellungen</translation>
 <translation id="2482878487686419369">Benachrichtigungen</translation>
 <translation id="2496180316473517155">Browserverlauf</translation>
 <translation id="2498359688066513246">Hilfe und Feedback</translation>
 <translation id="2501278716633472235">Zurück</translation>
 <translation id="2512222046227390255">AutoFill-Formulare</translation>
-<translation id="2521102375070725336">Lesezeichen offline im Ordner "<ph name="FOLDER_NAME" />" gespeichert</translation>
 <translation id="2526148617758225454">Der Datensparmodus ist aktiviert. Über die Einstellungen können Sie ihn wieder deaktivieren.</translation>
 <translation id="2532336938189706096">Web-Ansicht</translation>
 <translation id="2536728043171574184">Eine Offline-Kopie dieser Seite wird angezeigt.</translation>
@@ -128,6 +128,7 @@ Zur Verwendung von Physical Web müssen Bluetooth und der Standortdienst aktivie
 <translation id="257931822824936280">Maximiert – zum Minimieren klicken</translation>
 <translation id="2587052924345400782">Neuere Version verfügbar</translation>
 <translation id="2593272815202181319">Monospace</translation>
+<translation id="2621115761605608342">JavaScript für eine bestimmte Website zulassen.</translation>
 <translation id="2646820313617290661">Deine Eltern verwalten diese Einstellungen.</translation>
 <translation id="2653659639078652383">Senden</translation>
 <translation id="2677748264148917807">Verlassen</translation>
@@ -139,6 +140,7 @@ Zur Verwendung von Physical Web müssen Bluetooth und der Standortdienst aktivie
 <translation id="2762000892062317888">gerade eben</translation>
 <translation id="2770465223704140727">Aus Liste entfernen</translation>
 <translation id="278029852808208386">Keine Bluetooth-Geräte gefunden. <ph name="BEGIN_LINK" />Wiederholen Sie die Suche.<ph name="END_LINK" /></translation>
+<translation id="2781389167600714117">Versand auswählen</translation>
 <translation id="2811892995384186721">Ihr Gerät ist nicht zu sehen? <ph name="BEGIN_LINK" />Hilfe aufrufen<ph name="END_LINK" /></translation>
 <translation id="2836148919159985482">Tippen Sie zum Beenden des Vollbildmodus auf die Zurück-Taste.</translation>
 <translation id="2842985007712546952">Übergeordneter Ordner</translation>
@@ -150,6 +152,7 @@ Zur Verwendung von Physical Web müssen Bluetooth und der Standortdienst aktivie
 <translation id="2903493209154104877">Adressen</translation>
 <translation id="2913331724188855103">Websites dürfen Cookiedaten speichern und lesen (empfohlen).</translation>
 <translation id="2956410042958133412">Dieses Konto wird von <ph name="PARENT_NAME_1" /> und <ph name="PARENT_NAME_2" /> verwaltet.</translation>
+<translation id="2959609938957585241">Aktivieren Sie "Daten automatisch synchronisieren" in den Android-Kontoeinstellungen, um Tabs von Ihren anderen Geräten abzurufen.</translation>
 <translation id="2960796085439532066">Copyright <ph name="YEAR" /> Google Inc. Alle Rechte vorbehalten.</translation>
 <translation id="2968755619301702150">Zertifikats-Viewer</translation>
 <translation id="2996291259634659425">Passphrase erstellen</translation>
@@ -158,12 +161,13 @@ Zur Verwendung von Physical Web müssen Bluetooth und der Standortdienst aktivie
 <translation id="3029704984691124060">Passphrasen stimmen nicht überein.</translation>
 <translation id="3036750288708366620"><ph name="BEGIN_LINK" />Hilfe aufrufen<ph name="END_LINK" /></translation>
 <translation id="3063601790762993062">Video speichern</translation>
-<translation id="306566828762083630">Ihr Gerätespeicher ist voll. Bitte entfernen Sie Elemente, um Speicherplatz freizugeben.</translation>
 <translation id="307329814453917357">Übersetzung der Seiten mithilfe von Google Übersetzer anbieten</translation>
 <translation id="3089395242580810162">In Inkognito-Tab öffnen</translation>
 <translation id="3090193911106258841">Zugriff auf Audio- und Video-Eingang</translation>
 <translation id="3117051980354074377">Melden Sie sich in Chrome an, um Lesezeichen von Ihren anderen Geräten abzurufen.</translation>
 <translation id="3137521801621304719">Inkognitomodus deaktivieren</translation>
+<translation id="3149891296864842641">Versandoption</translation>
+<translation id="3162882791484435636">Versandoption auswählen</translation>
 <translation id="3177909033752230686">Sprache der Seite:</translation>
 <translation id="3190152372525844641">Berechtigungen für Chrome in den <ph name="BEGIN_LINK" />Android-Einstellungen<ph name="END_LINK" /> aktivieren</translation>
 <translation id="3198916472715691905"><ph name="STORAGE_AMOUNT" /> gespeicherte Daten</translation>
@@ -185,13 +189,13 @@ Zur Verwendung von Physical Web müssen Bluetooth und der Standortdienst aktivie
 
 Sie melden sich gerade mit einem verwalteten Konto an und geben dem Administrator des Kontos Kontrolle über Ihr Chrome-Profil. Ihre Chrome-Daten werden dauerhaft mit diesem Konto verknüpft. Wenn Sie sich aus diesem Konto abmelden, werden alle lokalen Chrome-Daten gelöscht.</translation>
 <translation id="3384347053049321195">Bild teilen</translation>
+<translation id="3386292677130313581">Nachfragen, bevor Websites Ihr Standort angezeigt wird (empfohlen)</translation>
 <translation id="3387650086002190359"><ph name="FILE_NAME" /> konnte aufgrund von Dateisystemfehlern nicht heruntergeladen werden.</translation>
 <translation id="3414952576877147120">Größe:</translation>
 <translation id="3435896845095436175">Aktivieren</translation>
 <translation id="3452612588551937789">Melden Sie sich mit Ihrem Google-Konto an, um Ihre Lesezeichen, Ihren Verlauf, Ihre Passwörter und Ihre anderen Einstellungen auf allen Geräten abrufen zu können.</translation>
 <translation id="3485544713029068372">Smart Lock für Passwörter</translation>
 <translation id="3492207499832628349">Neuer Inkognito-Tab</translation>
-<translation id="3501331331116143684">Seite offline im Ordner "<ph name="FOLDER_NAME" />" gespeichert</translation>
 <translation id="3518985090088779359">Akzeptieren &amp; weiter</translation>
 <translation id="3522247891732774234">Update verfügbar. Weitere Optionen</translation>
 <translation id="3527085408025491307">Ordner</translation>
@@ -221,32 +225,31 @@ Zur Anpassung des Suchbegriffs drücken Sie einige Sekunden lang auf den entspre
 <translation id="3988213473815854515">Standort freigegeben</translation>
 <translation id="3992315671621218278">Link speichern</translation>
 <translation id="4002066346123236978">Titel</translation>
-<translation id="4035611068038188272">Lesezeichen belegen momentan <ph name="TOTAL_OFFLINE_STORAGE_SIZE" /> Speicherplatz.</translation>
 <translation id="4042870126885713738">Vorschläge einblenden, wenn eine Webadresse nicht gefunden oder keine Verbindung hergestellt werden kann</translation>
 <translation id="4056223980640387499">Sepia</translation>
 <translation id="4062305924942672200">Rechtliche Hinweise</translation>
 <translation id="4089831646916293264">Diese Funktion beeinträchtigt möglicherweise den Zugang zu Premium-Datendiensten, die von Ihrem Mobilfunkanbieter bereitgestellt werden.</translation>
 <translation id="4099578267706723511">Nutzungsstatistiken und Absturzberichte zur Verbesserung von Chrome an Google senden</translation>
+<translation id="410351446219883937">Autoplay</translation>
 <translation id="411254640334432676">Fehler beim Download</translation>
 <translation id="4113030288477039509">Von Ihrem Administrator verwaltet</translation>
 <translation id="4165986682804962316">Website-Einstellungen</translation>
 <translation id="4170011742729630528">Der Dienst ist momentan nicht verfügbar. Bitte versuchen Sie es später erneut.</translation>
-<translation id="4193864812412988973">Sie sehen sich momentan eine Offlinekopie des Lesezeichens an</translation>
 <translation id="4195643157523330669">In neuem Tab öffnen</translation>
-<translation id="4198229475320555619">Lesezeichen mit einer Größe von <ph name="PAGE_SIZE_STRING" /> offline gespeichert</translation>
 <translation id="423410644998903704">Chrome benötigt Zugriff auf die Berechtigungen, um sie für diese Website freizugeben.</translation>
 <translation id="4242533952199664413">Einstellungen öffnen</translation>
 <translation id="424864128008805179">Von Chrome abmelden?</translation>
 <translation id="4254813446494774748">Zielsprache:</translation>
 <translation id="4256782883801055595">Open Source-Lizenzen</translation>
 <translation id="4259722352634471385">Die Navigation zu <ph name="URL" /> ist blockiert.</translation>
+<translation id="4262028915562328938">Es ist ein Synchronisierungsfehler aufgetreten. Tippen Sie, um Details zu erhalten.</translation>
 <translation id="4269820728363426813">URL kopieren</translation>
 <translation id="4271185234001491831"><ph name="LANGUAGE" /> nie übersetzen</translation>
+<translation id="4275663329226226506">Medien</translation>
 <translation id="4278390842282768270">Zugelassen</translation>
 <translation id="4297410240212242334">Tabs und Apps separat anzeigen</translation>
 <translation id="4307992518367153382">Grundeinstellungen</translation>
 <translation id="4334294535648607276">Download abgeschlossen.</translation>
-<translation id="4350413759959745971">Gespeicherte Seiten verschieben</translation>
 <translation id="4351244548802238354">Dialogfeld schließen</translation>
 <translation id="4376501731284077108">Nicht kontrolliert</translation>
 <translation id="4378154925671717803">Telefon</translation>
@@ -254,8 +257,8 @@ Zur Anpassung des Suchbegriffs drücken Sie einige Sekunden lang auf den entspre
 <translation id="4440256989292146959">Mehr surfen, weniger verbrauchen</translation>
 <translation id="4452548195519783679">Als Lesezeichen in "<ph name="FOLDER_NAME" />" gespeichert</translation>
 <translation id="4457399174246232812">Zukünftige Physical Web-Seiten zu Objekten in der Nähe werden in Ihrer Benachrichtigungsliste angezeigt.</translation>
+<translation id="4479647676395637221">Nachfragen, bevor Websites Zugriff auf Ihre Kamera erhalten (empfohlen)</translation>
 <translation id="4498934959426056365">Schlüsselgenerierung</translation>
-<translation id="4505554159887937799">Offline gespeichert</translation>
 <translation id="4508440807153586353">Nur Personen mit Ihrer Passphrase können Ihre verschlüsselten Daten lesen. Die Passphrase wird nicht an Google gesendet oder von Google gespeichert. Falls Sie sie vergessen oder diese Einstellung ändern möchten, müssen Sie die Synchronisierung zurücksetzen. <ph name="BEGIN_LINK" />Weitere Informationen<ph name="END_LINK" /></translation>
 <translation id="4513387527876475750">{DAYS,plural, =1{Vor # Tag}other{Vor # Tagen}}</translation>
 <translation id="4522570452068850558">Details</translation>
@@ -273,8 +276,8 @@ Zur Anpassung des Suchbegriffs drücken Sie einige Sekunden lang auf den entspre
 <translation id="4690286298542128877">Tabs werden in einen Tab-Wechsler in Chrome verschoben.</translation>
 <translation id="4698413471314543145">Es fehlen wichtige Funktionen zur Ausführung von Chrome. Ihre Chrome-Installation ist entweder unvollständig oder nicht mit dieser Android-Version kompatibel.</translation>
 <translation id="4699172675775169585">Bilder und Dateien im Cache</translation>
+<translation id="4710672574193412565">Fügen Sie ein Google-Konto über die Seite "Konten" der App "Einstellungen" Ihres Geräts hinzu.</translation>
 <translation id="4720023427747327413">In <ph name="PRODUCT_NAME" /> öffnen</translation>
-<translation id="4726963856048758366">Speicherplatz freigegeben</translation>
 <translation id="473775607612524610">Aktualisieren</translation>
 <translation id="4738836084190194332">Letzte Synchronisierung: <ph name="WHEN" /></translation>
 <translation id="4773299976671772492">Angehalten</translation>
@@ -283,11 +286,10 @@ Zur Anpassung des Suchbegriffs drücken Sie einige Sekunden lang auf den entspre
 <translation id="4816465935029283692">Datentypen</translation>
 <translation id="4827948050554950725">Kreditkarte hinzufügen</translation>
 <translation id="4836364883164334657">Ihre Verbindung zu dieser Website ist nicht sicher. Unbefugte Dritte könnten versuchen, Ihre Informationen von <ph name="DOMAIN_NAME" /> zu stehlen, etwa Fotos, Passwörter, Nachrichten oder Kreditkartendaten.</translation>
-<translation id="4850886885716139402">Anzeigen</translation>
 <translation id="4875622588773761625">Soll <ph name="PASSWORD_MANAGER_BRAND" /> Ihr Passwort für diese Website aktualisieren?</translation>
 <translation id="4881695831933465202">Öffnen</translation>
 <translation id="4885273946141277891">Nicht unterstützte Anzahl von Chrome-Instanzen</translation>
-<translation id="4927198283430892231">Die gespeicherten Seiten belegen momentan <ph name="TOTAL_OFFLINE_STORAGE_SIZE" />.</translation>
+<translation id="4923459931733593730">Zahlung</translation>
 <translation id="4943872375798546930">Keine Ergebnisse</translation>
 <translation id="497421865427891073">Weiter</translation>
 <translation id="4996978546172906250">Teilen über</translation>
@@ -322,11 +324,11 @@ Zur Anpassung des Suchbegriffs drücken Sie einige Sekunden lang auf den entspre
 <translation id="5302048478445481009">Sprache</translation>
 <translation id="5304593522240415983">Dieses Feld darf nicht leer sein.</translation>
 <translation id="5308380583665731573">Verbinden</translation>
-<translation id="5308933389783727448">Gespeicherte Seiten durchsuchen</translation>
 <translation id="5313967007315987356">Website hinzufügen</translation>
 <translation id="5317780077021120954">Speichern</translation>
 <translation id="5324858694974489420">Jugendschutzeinstellungen</translation>
 <translation id="5327248766486351172">Name</translation>
+<translation id="5335288049665977812">Ausführung von JavaScript durch Websites zulassen (empfohlen)</translation>
 <translation id="5345040418939504969"><ph name="BOOKMARK_TITLE" /> gelöscht</translation>
 <translation id="5345083863238459644">Der Standortzugriff ist auch <ph name="BEGIN_LINK" />für dieses Gerät deaktiviert<ph name="END_LINK" />.</translation>
 <translation id="5380554235172449987">Nie senden</translation>
@@ -334,7 +336,6 @@ Zur Anpassung des Suchbegriffs drücken Sie einige Sekunden lang auf den entspre
 <translation id="5414836363063783498">Überprüfung...</translation>
 <translation id="5423934151118863508">Hier werden Ihre am meisten aufgerufenen Seiten angezeigt.</translation>
 <translation id="5424715742813396254">Gespeicherten Eintrag oder Ausnahme bearbeiten</translation>
-<translation id="5442257541162692417">Gespeicherte Seite bearbeiten</translation>
 <translation id="544291274896356069">Der Inkognitomodus wird beendet, wenn dieser Link in einer externen App geöffnet wird. Vorgang fortsetzen?</translation>
 <translation id="5487521232677179737">Daten löschen</translation>
 <translation id="5487729733663684359">Chrome-Updates werden für diese Version von Android nicht mehr unterstützt.</translation>
@@ -350,7 +351,6 @@ Zur Anpassung des Suchbegriffs drücken Sie einige Sekunden lang auf den entspre
 <translation id="5596627076506792578">Weitere Optionen</translation>
 <translation id="5626134646977739690">Name:</translation>
 <translation id="5626370437647899551">Google-Konto hinzufügen</translation>
-<translation id="563535393368633106">Vor dem Zugriff nachfragen (empfohlen)</translation>
 <translation id="5646376287012673985">Standort</translation>
 <translation id="5659593005791499971">E-Mail-Adresse</translation>
 <translation id="5668404140385795438">Website-Anfrage zum Verhindern des Vergrößerns übergehen</translation>
@@ -366,6 +366,7 @@ Sie sind jedoch nicht unsichtbar. Der Inkognitomodus verhindert nicht, dass Info
 <translation id="5763382633136178763">Inkognito-Tabs</translation>
 <translation id="5765780083710877561">Beschreibung:</translation>
 <translation id="5771382037724542929">Möchten Sie die vorhandene Datei "<ph name="FILE_NAME" />" in "<ph name="DIRECTORY_NAME" />" wirklich ersetzen?</translation>
+<translation id="5777170031995031090">Sie können festlegen, wie Google Ihren Browserverlauf nutzt, um die Suche, Werbung und andere Google-Dienste zu personalisieren.</translation>
 <translation id="5804241973901381774">Berechtigungen</translation>
 <translation id="5809361687334836369">{HOURS,plural, =1{Vor # Stunde}other{Vor # Stunden}}</translation>
 <translation id="5817918615728894473">Pairing durchführen</translation>
@@ -374,6 +375,7 @@ Sie sind jedoch nicht unsichtbar. Der Inkognitomodus verhindert nicht, dass Info
 <translation id="585027516397408832">Datensparmodus aktiviert</translation>
 <translation id="5860033963881614850">Aus</translation>
 <translation id="5869522115854928033">Gespeicherte Passwörter</translation>
+<translation id="588563574323093535">Nachfragen, bevor Websites in den Vollbildmodus wechseln dürfen (empfohlen)</translation>
 <translation id="5899349522111170522">Neue Datei erstellen</translation>
 <translation id="5902828464777634901">Alle von dieser Website gespeicherten lokalen Daten, einschließlich Cookies, werden gelöscht.</translation>
 <translation id="5911030830365207728">Google Übersetzer</translation>
@@ -388,6 +390,7 @@ Sie sind jedoch nicht unsichtbar. Der Inkognitomodus verhindert nicht, dass Info
 <translation id="6042308850641462728">Mehr</translation>
 <translation id="604996488070107836"><ph name="FILE_NAME" /> konnte aufgrund eines unbekannten Fehlers nicht heruntergeladen werden.</translation>
 <translation id="605721222689873409">JJ</translation>
+<translation id="605904398899306450">Websites dürfen die Wiedergabe wichtiger Medien automatisch starten (empfohlen)</translation>
 <translation id="6075798973483050474">Startseite bearbeiten</translation>
 <translation id="6108923351542677676">Einrichtung läuft...</translation>
 <translation id="6112702117600201073">Aktualisierung der Seite</translation>
@@ -397,6 +400,7 @@ Sie sind jedoch nicht unsichtbar. Der Inkognitomodus verhindert nicht, dass Info
 <translation id="6140912465461743537">Land/Region</translation>
 <translation id="6159335304067198720"><ph name="PERCENT" /> Einsparungen bei der Datennutzung</translation>
 <translation id="6165508094623778733">Weitere Informationen</translation>
+<translation id="6181444274883918285">Ausnahme für Website hinzufügen</translation>
 <translation id="6192792657125177640">Ausnahmen</translation>
 <translation id="6232535412751077445">Wenn Sie das Kästchen "Do Not Track" anklicken, wird mit Ihren Browserzugriffen eine Anforderung gesendet. Wie sich diese Anforderung auswirkt, hängt davon ab, ob eine Website darauf reagiert und wie die Anforderung interpretiert wird.
 
@@ -413,7 +417,6 @@ Einige Websites schalten möglicherweise Werbeanzeigen, deren Auswahl nicht dara
 <translation id="6406506848690869874">Synchronisierung</translation>
 <translation id="6409731863280057959">Pop-ups</translation>
 <translation id="641643625718530986">Drucken...</translation>
-<translation id="6447570251829705777">Lesezeichen nicht offline verfügbar</translation>
 <translation id="6447842834002726250">Cookies</translation>
 <translation id="6448273550210938826">Such- und URL-Vorschläge</translation>
 <translation id="6458785801851713928">Die Synchronisierung ist für Ihre Domain nicht verfügbar.</translation>
@@ -435,20 +438,14 @@ Einige Websites schalten möglicherweise Werbeanzeigen, deren Auswahl nicht dara
 <translation id="6656545060687952787">Chrome benötigt Zugriff auf den Standort, um nach Geräten suchen zu können. <ph name="BEGIN_LINK" />Berechtigungen aktualisieren<ph name="END_LINK" /></translation>
 <translation id="666268767214822976">Während der Eingabe in die Adressleiste mithilfe einer Vervollständigungsfunktion verwandte Suchanfragen und beliebte Websites einblenden</translation>
 <translation id="666981079809192359">Chrome-Datenschutzhinweise</translation>
-<translation id="6683720003467092441">Hintergrundsynchronisierung auf der folgenden Website zulassen.</translation>
-<translation id="6697251040310467641">Seite offline gespeichert</translation>
 <translation id="6698801883190606802">Synchronisierte Daten verwalten</translation>
-<translation id="6699351163704950317">Alle gespeicherten Seiten</translation>
 <translation id="6710213216561001401">Zurück</translation>
-<translation id="6720988912937197322">Gespeicherte Seite nicht offline verfügbar</translation>
 <translation id="6738867403308150051">Wird heruntergeladen...</translation>
 <translation id="6762156594045689028">Wenn Sie diese Einstellung ändern möchten, <ph name="BEGIN_LINK" />setzen Sie die Synchronisierung zurück<ph name="END_LINK" /></translation>
 <translation id="6770414673596662518">Das Safe Browsing-System von Chrome erkennt außerdem schädliche Seiten und schützt Sie vor Phishing, Malware und schädlichen Downloads.</translation>
 <translation id="6784675033504223784">Nach "<ph name="SEARCH_TERM" />" suchen</translation>
 <translation id="6790428901817661496">Wiedergabe</translation>
-<translation id="6792460226655139786">Gespeicherte Seiten</translation>
 <translation id="679325081238418596">Rufen Sie Ihre Lesezeichen, Ihren Verlauf, Ihre Passwörter und andere Einstellungen auf allen Ihren Geräten ab</translation>
-<translation id="6805056253035393346">Besuchen</translation>
 <translation id="6820607729870073286">Sie haben keine Website-Einstellungen gespeichert.</translation>
 <translation id="6820686453637990663">CVC</translation>
 <translation id="6831043979455480757">Übersetzen</translation>
@@ -457,7 +454,6 @@ Einige Websites schalten möglicherweise Werbeanzeigen, deren Auswahl nicht dara
 <translation id="6857778194843072568">Nur bei WLAN senden</translation>
 <translation id="6865313869410766144">AutoFill-Formulardaten</translation>
 <translation id="6868088497967843822">Melden Sie sich an, um Ihre Lesezeichen, Ihren Verlauf, Ihre Passwörter und andere Einstellungen auf allen Ihren Geräten aufzurufen.</translation>
-<translation id="6879008316532205713">Aktivieren Sie "Daten automatisch synchronisieren" in den Android-Kontoeinstellungen, um Tabs von Ihren anderen Geräten abzurufen.</translation>
 <translation id="6945221475159498467">Auswählen</translation>
 <translation id="6963766334940102469">Lesezeichen löschen</translation>
 <translation id="6965382102122355670">OK</translation>
@@ -466,6 +462,7 @@ Einige Websites schalten möglicherweise Werbeanzeigen, deren Auswahl nicht dara
 <translation id="6981982820502123353">Bedienungshilfen</translation>
 <translation id="6990079615885386641">App aus dem Play Store abrufen: <ph name="APP_ACTION" /></translation>
 <translation id="699220179437400583">Details zu möglichen sicherheitsrelevanten Zwischenfällen automatisch an Google senden</translation>
+<translation id="6992289844737586249">Nachfragen, bevor Websites auf Ihr Mikrofon zugreifen dürfen (empfohlen)</translation>
 <translation id="6999892069268112724">Google-Konto bestätigen</translation>
 <translation id="7021515813996758557"><ph name="FILE_NAME" /> heruntergeladen</translation>
 <translation id="7022756207310403729">Im Browser öffnen</translation>
@@ -484,11 +481,12 @@ Einige Websites schalten möglicherweise Werbeanzeigen, deren Auswahl nicht dara
 <translation id="7180611975245234373">Aktualisieren</translation>
 <translation id="7191430249889272776">Tab im Hintergrund geöffnet</translation>
 <translation id="7208788139759694678">Datensparmodus deaktiviert</translation>
+<translation id="7220786058474068424">Verarbeitung läuft</translation>
 <translation id="7243308994586599757">Optionen unten auf dem Bildschirm verfügbar</translation>
 <translation id="7244362611678346589"><ph name="SEARCH_ENGINE_URL" /> zeigt Ihnen lokale Suchergebnisse basierend auf Ihrem Standort.</translation>
 <translation id="7299441085833132046"><ph name="BEGIN_LINK" />Hilfe<ph name="END_LINK" /></translation>
 <translation id="7299721129597238157">Lesezeichen löschen</translation>
-<translation id="7347770551817603360">Offlineinhalt</translation>
+<translation id="7347770551817603360">Offline-Inhalt</translation>
 <translation id="7363354739009474003">"<ph name="VIDEO_TITLE" />" wird geladen.</translation>
 <translation id="7366340029385295517">Übertragung an <ph name="SCREEN_NAME" /></translation>
 <translation id="7375125077091615385">Typ:</translation>
@@ -524,23 +522,23 @@ Eventuell finden Sie unter <ph name="BEGIN_LINK" />history.google.com<ph name="E
 <translation id="7648422057306047504">Passwörter mit Google-Anmeldedaten verschlüsseln</translation>
 <translation id="7658239707568436148">Abbrechen</translation>
 <translation id="7665369617277396874">Konto hinzufügen</translation>
+<translation id="7682287625158474539">Versand</translation>
 <translation id="7690588279513156836">Original laden</translation>
 <translation id="771135159654932189">URLs in der Nähe</translation>
-<translation id="7735023902678907596">Seiten, die Sie sich auf Inkognito-Tabs ansehen, werden nach dem Schließen aller Inkognito-Tabs nicht in Ihrem Browserverlauf, Cookie-Speicher oder Suchverlauf gespeichert. Heruntergeladene Dateien oder gespeicherte Seiten bleiben erhalten.
-
-Sie sind jedoch nicht unsichtbar. Der Inkognitomodus verhindert nicht, dass Informationen zu Ihren Webaktivitäten von Ihrem Arbeitgeber oder Ihrem Internetanbieter erfasst werden. Zudem verzeichnen auch die Websites, die Sie im Inkognitomodus aufrufen, weiterhin Ihren Besuch.</translation>
-<translation id="7761240775244195612">Sollen <ph name="PAGES_NUMBER" /> Offline-Kopien gelöscht werden, die im vergangenen Monat nicht genutzt wurden? Dadurch wird <ph name="TOTAL_PAGE_SIZE" /> Speicherplatz freigegeben.</translation>
+<translation id="7713873128508426081">Immer erlaubt</translation>
 <translation id="7764225426217299476">Adresse hinzufügen</translation>
 <translation id="7765158879357617694">Verschieben</translation>
 <translation id="7772032839648071052">Passphrase bestätigen</translation>
-<translation id="7784213092572143271">Seite gespeichert</translation>
 <translation id="7788788617745289808">Chrome benötigt Zugriff auf die Kamera, um sie für diese Website freizugeben.</translation>
 <translation id="7791543448312431591">Hinzufügen</translation>
 <translation id="780301667611848630">Kein Interesse</translation>
 <translation id="7829298379596169484">Zugriff auf Audio-Eingang</translation>
+<translation id="7837582000577464779">Bei der Verarbeitung Ihrer Bestellung ist ein Fehler aufgetreten. Bitte überprüfen Sie Ihr Konto und versuchen Sie es erneut.</translation>
+<translation id="7840369537802583269">Erkennung und Wiedergabe wichtiger Medien für eine bestimmte Website</translation>
 <translation id="7846076177841592234">Auswahl aufheben</translation>
 <translation id="7851858861565204677">Andere Geräte</translation>
 <translation id="7876243839304621966">Alle entfernen</translation>
+<translation id="7902333740914687335">Zahlung verarbeitet</translation>
 <translation id="7947953824732555851">Akzeptieren und anmelden</translation>
 <translation id="7949961459945740081">Neue Funktionen herunterladen</translation>
 <translation id="7963646190083259054">Anbieter:</translation>
@@ -550,22 +548,19 @@ Sie sind jedoch nicht unsichtbar. Der Inkognitomodus verhindert nicht, dass Info
 <translation id="8007176423574883786">Für dieses Gerät deaktiviert</translation>
 <translation id="8026334261755873520">Browserdaten löschen</translation>
 <translation id="8035133914807600019">Neuer Ordner…</translation>
-<translation id="8050319187894766337">Seite offline gespeichert. Speicher fast voll</translation>
+<translation id="8063895661287329888">Fehler beim Hinzufügen des Lesezeichens.</translation>
 <translation id="8068648041423924542">Zertifikat kann nicht ausgewählt werden.</translation>
 <translation id="8069239273282989646">Nach Komprimierung</translation>
 <translation id="8073388330009372546">Bild in neuem Tab öffnen</translation>
 <translation id="8076014560081431679">Gespeicherte Website-Einstellungen werden nicht gelöscht und können möglicherweise Ihre Surfgewohnheiten wiedergeben. <ph name="BEGIN_LINK" />Weitere Informationen<ph name="END_LINK" /></translation>
 <translation id="8087000398470557479">Dieser Inhalt ist von <ph name="DOMAIN_NAME" /> und wurde von Google bereitgestellt.</translation>
-<translation id="8098570222830891427">Geräte in Ihrer Nähe übertragen Webseiten über Bluetooth. Chrome sucht nach Seiten und zeigt Sie Ihnen an, wenn Ihr Gerät entsperrt ist. Diese Seiten werden durch einen Google-Dienst überprüft, um die Qualität der Suchergebnisse zu verbessern.
-
-Über die Chrome-Einstellungen können Sie das Physical Web verwalten.</translation>
 <translation id="8106211421800660735">Kreditkartennummer</translation>
 <translation id="813082847718468539">Website-Informationen anzeigen</translation>
 <translation id="8137558756159375272">Mit "Zum Suchen tippen" werden das ausgewählte Wort und die aktuelle Seite als Kontext an die Google-Suche gesendet. Sie können die Funktion in den <ph name="BEGIN_LINK" />Einstellungen<ph name="END_LINK" /> deaktivieren.</translation>
-<translation id="8146397137182589628">Nicht offline gespeichert</translation>
 <translation id="8168435359814927499">Inhalte</translation>
 <translation id="8173098127580644436">für den gesamten Zeitraum</translation>
 <translation id="8200772114523450471">Fortsetzen</translation>
+<translation id="8202097416529803614">Zusammenfassung der Bestellung</translation>
 <translation id="8209050860603202033">Bild öffnen</translation>
 <translation id="8215250379351058554"><ph name="SITE" /> möchte eine Verbindung herstellen mit:</translation>
 <translation id="8218346974737627104">Anmeldung bestätigen</translation>
@@ -575,15 +570,13 @@ Sie sind jedoch nicht unsichtbar. Der Inkognitomodus verhindert nicht, dass Info
 <translation id="8275818695183729150">Zulassen (für Suchanfragen in der Adressleiste)</translation>
 <translation id="8283853025636624853">Synchronisierung mit <ph name="SYNC_ACCOUNT_USER_NAME" /></translation>
 <translation id="8310344678080805313">Standard-Tabs</translation>
+<translation id="8372893542064058268">Lässt die Hintergrundsynchronisierung für eine bestimmte Website zu.</translation>
 <translation id="8374821112118309944">TalkBack muss auf eine neuere Version aktualisiert werden.</translation>
 <translation id="8396312449826231789">Nur genehmigte Websites</translation>
 <translation id="8413126021676339697">Gesamtverlauf anzeigen</translation>
-<translation id="8413385045638830869">Zuerst fragen (empfohlen)</translation>
 <translation id="8428213095426709021">Einstellungen</translation>
-<translation id="8429160401486700187">Gespeicherte Seiten löschen</translation>
 <translation id="8433057134996913067">Dadurch werden Sie von den meisten Websites abgemeldet.</translation>
 <translation id="8481940801237642152">Ihre Verbindung zu dieser Website ist privat, möglicherweise ist jedoch jemand im Netzwerk in der Lage, das Aussehen der Seite zu ändern.</translation>
-<translation id="8493948351860045254">Speicherplatz freigeben</translation>
 <translation id="8497726226069778601">Noch keine Seiten</translation>
 <translation id="8514577642972634246">Inkognitomodus aktivieren</translation>
 <translation id="8518901949365209398">Diese Website verwendet eine schwache Sicherheitskonfiguration (SHA-1-Signaturen). Daher ist Ihre Verbindung möglicherweise nicht geschützt.</translation>
@@ -604,16 +597,16 @@ Um neue Lizenzen zu erwerben, stellen Sie eine Internetverbindung her und spiele
 <translation id="8676374126336081632">Eingabe löschen</translation>
 <translation id="869891660844655955">Ablaufdatum</translation>
 <translation id="8699799819461268362">Google SafeSites-Filter</translation>
-<translation id="8701537995684343047">Lesezeichen öffnen, um es offline zu speichern</translation>
 <translation id="8719023831149562936">Aktueller Tab kann nicht gebeamt werden.</translation>
 <translation id="8725066075913043281">Erneut versuchen</translation>
 <translation id="8730621377337864115">Fertig</translation>
-<translation id="8737542153238017984">Gespeicherte Seite nicht offline verfügbar. Speicher fast voll</translation>
 <translation id="8793430725658173476">URL kopieren</translation>
 <translation id="8798099450830957504">Standardeinstellung</translation>
 <translation id="8812942424849541387">Funktionsweise unter <ph name="BEGIN_LINK1" />Einstellungen<ph name="END_LINK1" /> verwalten</translation>
 <translation id="8820817407110198400">Lesezeichen</translation>
 <translation id="8829678271838353305"><ph name="ACCOUNT_EMAIL_LAST" /> war zuletzt angemeldet. Wenn Sie sich mit <ph name="ACCOUNT_EMAIL_NEW" /> anmelden, werden synchronisierte Daten wie Lesezeichen in den Konten zusammengeführt. Wenn die Daten nicht zusammengeführt werden sollen, löschen Sie in den <ph name="BEGIN_LINK" />Einstellungen<ph name="END_LINK" /> die Browserdaten.</translation>
+<translation id="883635517171802338">Anzeige von Pop-ups für Websites blockieren (empfohlen)</translation>
+<translation id="884264119367021077">Versandadresse</translation>
 <translation id="8853345339104747198"><ph name="TAB_TITLE" /></translation>
 <translation id="885701979325669005">Speicher</translation>
 <translation id="8901170036886848654">Keine Lesezeichen gefunden</translation>
@@ -631,7 +624,7 @@ Um neue Lizenzen zu erwerben, stellen Sie eine Internetverbindung her und spiele
 <translation id="8987061207681586800">Chrome personalisieren</translation>
 <translation id="9019902583201351841">Von deinen Eltern verwaltet</translation>
 <translation id="9020607083536754075">Aktuellen Tab schließen und zur zuvor genutzten App wechseln</translation>
-<translation id="9038649477754266430">Vervollständigungsdienst zum schnelleren Laden von Seiten verwenden</translation>
+<translation id="9038649477754266430">Vorhersagedienst zum schnelleren Laden von Seiten verwenden</translation>
 <translation id="9050666287014529139">Passphrase</translation>
 <translation id="9060538597317784206">App <ph name="APP_NAME" /> im Play Store anzeigen. Bewertung: <ph name="APP_RATING" /></translation>
 <translation id="9063523880881406963">"Desktop-Version anfordern" deaktivieren</translation>
@@ -642,8 +635,8 @@ Um neue Lizenzen zu erwerben, stellen Sie eine Internetverbindung her und spiele
 <translation id="9100610230175265781">Passphrase erforderlich</translation>
 <translation id="9133515669113036225">Anmeldedaten des Geräts zurücksetzen</translation>
 <translation id="9137013805542155359">Original anzeigen</translation>
+<translation id="9139068048179869749">Nachfragen, bevor Websites Benachrichtigungen senden dürfen (empfohlen)</translation>
 <translation id="9141510419986760385">Sie stellen die Kontosynchronisierung von <ph name="FROM_ACCOUNT" /> auf <ph name="TO_ACCOUNT" /> um. Was möchten Sie mit Ihren bestehenden Lesezeichen, Ihrem Verlauf, Ihren Passwörtern und anderen Einstellungen tun?</translation>
-<translation id="9151532766011674069">Lesezeichen offline gespeichert. Der Speicher ist fast voll.</translation>
 <translation id="917685106653909562">Physical Web-Seiten zu Objekten in der Nähe</translation>
 <translation id="9187199695613236444">Für Mobilgeräte optimierte Ansicht</translation>
 <translation id="9192643434065497760">Aktivieren Sie Bluetooth in den <ph name="BEGIN_LINK" />Geräteeinstellungen<ph name="END_LINK" />, um ein Pairing zuzulassen.</translation>
@@ -652,7 +645,6 @@ Um neue Lizenzen zu erwerben, stellen Sie eine Internetverbindung her und spiele
 <translation id="932327136139879170">Privat</translation>
 <translation id="938850635132480979">Fehler: <ph name="ERROR_CODE" /></translation>
 <translation id="945632385593298557">Mikrofonzugriff</translation>
-<translation id="954352821720225055">Lesezeichen offline nicht verfügbar. Der Speicher ist fast voll.</translation>
 <translation id="969096075394517431">Sprachen ändern</translation>
 <translation id="981121421437150478">Offline</translation>
 <translation id="983192555821071799">Alle Tabs schließen</translation>

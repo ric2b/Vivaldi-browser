@@ -5,49 +5,16 @@
 #include "ui/views/mus/screen_mus.h"
 
 #include "mojo/converters/geometry/geometry_type_converters.h"
-#include "mojo/shell/public/cpp/connection.h"
-#include "mojo/shell/public/cpp/connector.h"
-#include "ui/gfx/display_finder.h"
-#include "ui/gfx/display_observer.h"
+#include "services/shell/public/cpp/connection.h"
+#include "services/shell/public/cpp/connector.h"
+#include "ui/aura/window.h"
+#include "ui/display/display_finder.h"
+#include "ui/display/display_observer.h"
+#include "ui/mojo/display/display_type_converters.h"
 #include "ui/views/mus/screen_mus_delegate.h"
 #include "ui/views/mus/window_manager_frame_values.h"
 
 namespace mojo {
-
-template <>
-struct TypeConverter<gfx::Display, mus::mojom::DisplayPtr> {
-  static gfx::Display Convert(const mus::mojom::DisplayPtr& input) {
-    gfx::Display result(input->id, input->bounds.To<gfx::Rect>());
-    result.set_work_area(input->work_area.To<gfx::Rect>());
-    result.set_device_scale_factor(input->device_pixel_ratio);
-    switch (input->rotation) {
-      case mus::mojom::Rotation::VALUE_0:
-        result.set_rotation(gfx::Display::ROTATE_0);
-        break;
-      case mus::mojom::Rotation::VALUE_90:
-        result.set_rotation(gfx::Display::ROTATE_90);
-        break;
-      case mus::mojom::Rotation::VALUE_180:
-        result.set_rotation(gfx::Display::ROTATE_180);
-        break;
-      case mus::mojom::Rotation::VALUE_270:
-        result.set_rotation(gfx::Display::ROTATE_270);
-        break;
-    }
-    switch (input->touch_support) {
-      case mus::mojom::TouchSupport::UNKNOWN:
-        result.set_touch_support(gfx::Display::TOUCH_SUPPORT_UNKNOWN);
-        break;
-      case mus::mojom::TouchSupport::AVAILABLE:
-        result.set_touch_support(gfx::Display::TOUCH_SUPPORT_AVAILABLE);
-        break;
-      case mus::mojom::TouchSupport::UNAVAILABLE:
-        result.set_touch_support(gfx::Display::TOUCH_SUPPORT_UNAVAILABLE);
-        break;
-    }
-    return result;
-  }
-};
 
 template <>
 struct TypeConverter<views::WindowManagerFrameValues,
@@ -69,13 +36,13 @@ namespace views {
 
 ScreenMus::ScreenMus(ScreenMusDelegate* delegate)
     : delegate_(delegate),
-      primary_display_index_(0),
-      display_manager_observer_binding_(this) {}
+      display_manager_observer_binding_(this) {
+}
 
 ScreenMus::~ScreenMus() {}
 
-void ScreenMus::Init(mojo::Connector* connector) {
-  gfx::Screen::SetScreenInstance(this);
+void ScreenMus::Init(shell::Connector* connector) {
+  display::Screen::SetScreenInstance(this);
 
   connector->ConnectToInterface("mojo:mus", &display_manager_);
 
@@ -86,70 +53,52 @@ void ScreenMus::Init(mojo::Connector* connector) {
   //
   // TODO(rockot): Do something better here. This should not have to block tasks
   // from running on the calling thread. http://crbug.com/594852.
-  display_manager_observer_binding_.WaitForIncomingMethodCall();
+  bool success = display_manager_observer_binding_.WaitForIncomingMethodCall();
 
-  // The WaitForIncomingMethodCall() should have supplied the set of Displays.
-  DCHECK(displays_.size());
-}
-
-int ScreenMus::FindDisplayIndexById(int64_t id) const {
-  for (size_t i = 0; i < displays_.size(); ++i) {
-    if (displays_[i].id() == id)
-      return static_cast<int>(i);
+  // The WaitForIncomingMethodCall() should have supplied the set of Displays,
+  // unless mus is going down, in which case encountered_error() is true, or the
+  // call to WaitForIncomingMethodCall() failed.
+  if (display_list_.displays().empty()) {
+    DCHECK(display_manager_.encountered_error() || !success);
+    // In this case we install a default display and assume the process is
+    // going to exit shortly so that the real value doesn't matter.
+    display_list_.AddDisplay(
+        display::Display(0xFFFFFFFF, gfx::Rect(0, 0, 801, 802)),
+        DisplayList::Type::PRIMARY);
   }
-  return -1;
 }
 
-void ScreenMus::ProcessDisplayChanged(const gfx::Display& changed_display,
+void ScreenMus::ProcessDisplayChanged(const display::Display& changed_display,
                                       bool is_primary) {
-  const int display_index = FindDisplayIndexById(changed_display.id());
-  if (display_index == -1) {
-    displays_.push_back(changed_display);
-    if (is_primary)
-      primary_display_index_ = static_cast<int>(displays_.size()) - 1;
-    FOR_EACH_OBSERVER(gfx::DisplayObserver, observers_,
-                      OnDisplayAdded(changed_display));
+  if (display_list_.FindDisplayById(changed_display.id()) ==
+      display_list_.displays().end()) {
+    display_list_.AddDisplay(changed_display,
+                             is_primary ? DisplayList::Type::PRIMARY
+                                        : DisplayList::Type::NOT_PRIMARY);
     return;
   }
-
-  gfx::Display* local_display = &displays_[display_index];
-  uint32_t changed_values = 0;
-  if (is_primary && display_index != primary_display_index_) {
-    primary_display_index_ = display_index;
-    // ash::DisplayManager only notifies for the Display gaining primary, not
-    // the one losing it.
-    changed_values |= gfx::DisplayObserver::DISPLAY_METRIC_PRIMARY;
-  }
-  if (local_display->bounds() != changed_display.bounds()) {
-    local_display->set_bounds(changed_display.bounds());
-    changed_values |= gfx::DisplayObserver::DISPLAY_METRIC_BOUNDS;
-  }
-  if (local_display->work_area() != changed_display.work_area()) {
-    local_display->set_work_area(changed_display.work_area());
-    changed_values |= gfx::DisplayObserver::DISPLAY_METRIC_WORK_AREA;
-  }
-  if (local_display->rotation() != changed_display.rotation()) {
-    local_display->set_rotation(changed_display.rotation());
-    changed_values |= gfx::DisplayObserver::DISPLAY_METRIC_ROTATION;
-  }
-  if (local_display->device_scale_factor() !=
-      changed_display.device_scale_factor()) {
-    local_display->set_device_scale_factor(
-        changed_display.device_scale_factor());
-    changed_values |= gfx::DisplayObserver::DISPLAY_METRIC_DEVICE_SCALE_FACTOR;
-  }
-  FOR_EACH_OBSERVER(gfx::DisplayObserver, observers_,
-                    OnDisplayMetricsChanged(*local_display, changed_values));
+  display_list_.UpdateDisplay(
+      changed_display,
+      is_primary ? DisplayList::Type::PRIMARY : DisplayList::Type::NOT_PRIMARY);
 }
 
 gfx::Point ScreenMus::GetCursorScreenPoint() {
-  NOTIMPLEMENTED();
-  return gfx::Point();
+  if (!delegate_) {
+    // TODO(erg): If we need the cursor point in the window manager, we'll need
+    // to make |delegate_| required. It only recently changed to be optional.
+    NOTIMPLEMENTED();
+    return gfx::Point();
+  }
+
+  return delegate_->GetCursorScreenPoint();
 }
 
-gfx::NativeWindow ScreenMus::GetWindowUnderCursor() {
-  NOTIMPLEMENTED();
-  return nullptr;
+bool ScreenMus::IsWindowUnderCursor(gfx::NativeWindow window) {
+  if (!window)
+    return false;
+
+  return window->IsVisible() &&
+      window->GetBoundsInScreen().Contains(GetCursorScreenPoint());
 }
 
 gfx::NativeWindow ScreenMus::GetWindowAtScreenPoint(const gfx::Point& point) {
@@ -157,81 +106,86 @@ gfx::NativeWindow ScreenMus::GetWindowAtScreenPoint(const gfx::Point& point) {
   return nullptr;
 }
 
-gfx::Display ScreenMus::GetPrimaryDisplay() const {
-  return displays_[primary_display_index_];
+display::Display ScreenMus::GetPrimaryDisplay() const {
+  return *display_list_.GetPrimaryDisplayIterator();
 }
 
-gfx::Display ScreenMus::GetDisplayNearestWindow(gfx::NativeView view) const {
+display::Display ScreenMus::GetDisplayNearestWindow(
+    gfx::NativeView view) const {
   //NOTIMPLEMENTED();
-  return GetPrimaryDisplay();
+  return *display_list_.GetPrimaryDisplayIterator();
 }
 
-gfx::Display ScreenMus::GetDisplayNearestPoint(const gfx::Point& point) const {
-  return *gfx::FindDisplayNearestPoint(displays_, point);
+display::Display ScreenMus::GetDisplayNearestPoint(
+    const gfx::Point& point) const {
+  return *display::FindDisplayNearestPoint(display_list_.displays(), point);
 }
 
 int ScreenMus::GetNumDisplays() const {
-  return static_cast<int>(displays_.size());
+  return static_cast<int>(display_list_.displays().size());
 }
 
-std::vector<gfx::Display> ScreenMus::GetAllDisplays() const {
-  return displays_;
+std::vector<display::Display> ScreenMus::GetAllDisplays() const {
+  return display_list_.displays();
 }
 
-gfx::Display ScreenMus::GetDisplayMatching(const gfx::Rect& match_rect) const {
-  const gfx::Display* match =
-      gfx::FindDisplayWithBiggestIntersection(displays_, match_rect);
+display::Display ScreenMus::GetDisplayMatching(
+    const gfx::Rect& match_rect) const {
+  const display::Display* match = display::FindDisplayWithBiggestIntersection(
+      display_list_.displays(), match_rect);
   return match ? *match : GetPrimaryDisplay();
 }
 
-void ScreenMus::AddObserver(gfx::DisplayObserver* observer) {
-  observers_.AddObserver(observer);
+void ScreenMus::AddObserver(display::DisplayObserver* observer) {
+  display_list_.AddObserver(observer);
 }
 
-void ScreenMus::RemoveObserver(gfx::DisplayObserver* observer) {
-  observers_.RemoveObserver(observer);
+void ScreenMus::RemoveObserver(display::DisplayObserver* observer) {
+  display_list_.RemoveObserver(observer);
 }
 
-void ScreenMus::OnDisplays(mojo::Array<mus::mojom::DisplayPtr> displays) {
+void ScreenMus::OnDisplays(
+    mojo::Array<mus::mojom::DisplayPtr> transport_displays) {
   // This should only be called once from Init() before any observers have been
   // added.
-  DCHECK(displays_.empty());
-  displays_ = displays.To<std::vector<gfx::Display>>();
+  DCHECK(display_list_.displays().empty());
+  std::vector<display::Display> displays =
+      transport_displays.To<std::vector<display::Display>>();
   for (size_t i = 0; i < displays.size(); ++i) {
-    if (displays[i]->is_primary) {
-      primary_display_index_ = static_cast<int>(i);
+    const bool is_primary = transport_displays[i]->is_primary;
+    display_list_.AddDisplay(displays[i], is_primary
+                                              ? DisplayList::Type::PRIMARY
+                                              : DisplayList::Type::NOT_PRIMARY);
+    if (is_primary) {
       // TODO(sky): Make WindowManagerFrameValues per display.
       WindowManagerFrameValues frame_values =
-          displays[i]->frame_decoration_values.To<WindowManagerFrameValues>();
+          transport_displays[i]
+              ->frame_decoration_values.To<WindowManagerFrameValues>();
       WindowManagerFrameValues::SetInstance(frame_values);
     }
   }
+  DCHECK(!display_list_.displays().empty());
 }
 
 void ScreenMus::OnDisplaysChanged(
     mojo::Array<mus::mojom::DisplayPtr> transport_displays) {
   for (size_t i = 0; i < transport_displays.size(); ++i) {
     const bool is_primary = transport_displays[i]->is_primary;
-    ProcessDisplayChanged(transport_displays[i].To<gfx::Display>(), is_primary);
+    ProcessDisplayChanged(transport_displays[i].To<display::Display>(),
+                          is_primary);
     if (is_primary) {
       WindowManagerFrameValues frame_values =
           transport_displays[i]
               ->frame_decoration_values.To<WindowManagerFrameValues>();
       WindowManagerFrameValues::SetInstance(frame_values);
-      delegate_->OnWindowManagerFrameValuesChanged();
+      if (delegate_)
+        delegate_->OnWindowManagerFrameValuesChanged();
     }
   }
 }
 
 void ScreenMus::OnDisplayRemoved(int64_t id) {
-  const int index = FindDisplayIndexById(id);
-  DCHECK_NE(-1, index);
-  // Another display must become primary before the existing primary is
-  // removed.
-  DCHECK_NE(index, primary_display_index_);
-  const gfx::Display display = displays_[index];
-  FOR_EACH_OBSERVER(gfx::DisplayObserver, observers_,
-                    OnDisplayRemoved(display));
+  display_list_.RemoveDisplay(id);
 }
 
 }  // namespace views

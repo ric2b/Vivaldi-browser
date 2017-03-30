@@ -27,19 +27,19 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import logging
-import os
-import optparse
-from webkitpy.tool.multicommandtool import AbstractDeclarativeCommand
-from webkitpy.layout_tests.layout_package.bot_test_expectations import BotTestExpectationsFactory
-from webkitpy.layout_tests.models.test_expectations import TestExpectationParser, TestExpectationsModel, TestExpectations
-from webkitpy.layout_tests.port import builders
+
 from webkitpy.common.net import sheriff_calendar
+from webkitpy.layout_tests.layout_package.bot_test_expectations import BotTestExpectationsFactory
+from webkitpy.layout_tests.models.test_expectations import TestExpectationParser
+from webkitpy.layout_tests.models.test_expectations import TestExpectations
+from webkitpy.layout_tests.models.test_expectations import TestExpectationsModel
+from webkitpy.tool.commands.command import Command
 
 
 _log = logging.getLogger(__name__)
 
 
-class FlakyTests(AbstractDeclarativeCommand):
+class FlakyTests(Command):
     name = "print-flaky-tests"
     help_text = "Print out flaky lines from the flakiness dashboard"
     show_in_main_help = True
@@ -63,7 +63,7 @@ Flakiness dashboard: %s
 '''
 
     def __init__(self):
-        AbstractDeclarativeCommand.__init__(self)
+        super(FlakyTests, self).__init__()
         # This is sorta silly, but allows for unit testing:
         self.expectations_factory = BotTestExpectationsFactory
 
@@ -107,8 +107,8 @@ Flakiness dashboard: %s
         return final_model._test_to_expectation_line.values()
 
     def execute(self, options, args, tool):
-        factory = self.expectations_factory()
-        lines = self._collect_expectation_lines(builders.all_builder_names(), factory)
+        factory = self.expectations_factory(tool.builders)
+        lines = self._collect_expectation_lines(tool.builders.all_builder_names(), factory)
         lines.sort(key=lambda line: line.path)
 
         port = tool.port_factory.get()
@@ -117,8 +117,8 @@ Flakiness dashboard: %s
         lines = filter(lambda line: fs.exists(fs.join(port.layout_tests_dir(), line.path)), lines)
 
         test_names = [line.name for line in lines]
-        flakiness_dashbord_url = self.FLAKINESS_DASHBOARD_URL % ','.join(test_names)
+        flakiness_dashboard_url = self.FLAKINESS_DASHBOARD_URL % ','.join(test_names)
         expectations_string = TestExpectations.list_to_string(lines)
 
         # pylint: disable=E1601
-        print self.OUTPUT % (self.HEADER, expectations_string, flakiness_dashbord_url)
+        print self.OUTPUT % (self.HEADER, expectations_string, flakiness_dashboard_url)

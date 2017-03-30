@@ -37,9 +37,6 @@
 # for more information.
 
 {
-  'includes': [
-    '../build/util/version.gypi',
-  ],
   'rules': [
     {
       'rule_name': 'isolate',
@@ -67,10 +64,6 @@
         '--path-variable', 'DEPTH', '<(DEPTH)',
         '--path-variable', 'PRODUCT_DIR', '<(PRODUCT_DIR) ',
 
-        # Extra variables are replaced on the 'command' entry and on paths in
-        # the .isolate file but are not considered relative paths.
-        '--extra-variable', 'version_full=<(version_full)',
-
         # Note: This list must match DefaultConfigVariables()
         # in build/android/pylib/utils/isolator.py
         '--config-variable', 'CONFIGURATION_NAME=<(CONFIGURATION_NAME)',
@@ -97,13 +90,14 @@
         '--config-variable', 'use_instrumented_libraries=<(use_instrumented_libraries)',
         '--config-variable',
         'use_prebuilt_instrumented_libraries=<(use_prebuilt_instrumented_libraries)',
-        '--config-variable', 'use_openssl=<(use_openssl)',
         '--config-variable', 'use_ozone=<(use_ozone)',
         '--config-variable', 'use_x11=<(use_x11)',
         '--config-variable', 'v8_use_external_startup_data=<(v8_use_external_startup_data)',
       ],
       'conditions': [
         # Note: When gyp merges lists, it appends them to the old value.
+        # Extra variables are replaced on the 'command' entry and on paths in
+        # the .isolate file but are not considered relative paths.
         ['OS=="mac"', {
           'action': [
             '--extra-variable', 'mac_product_name=<(mac_product_name)',
@@ -119,7 +113,9 @@
           ],
         }],
         ['OS=="win"', {
+          'includes': ['../build/util/version.gypi'],
           'action': [
+            '--extra-variable', 'version_full=<(version_full)',
             '--config-variable', 'msvs_version=<(MSVS_VERSION)',
           ],
         }, {

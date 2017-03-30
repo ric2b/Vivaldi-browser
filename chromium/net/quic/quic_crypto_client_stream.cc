@@ -4,6 +4,7 @@
 
 #include "net/quic/quic_crypto_client_stream.h"
 
+#include <memory>
 #include <vector>
 
 #include "base/metrics/histogram_macros.h"
@@ -53,7 +54,7 @@ QuicCryptoClientStream::ChannelIDSourceCallbackImpl::
     ~ChannelIDSourceCallbackImpl() {}
 
 void QuicCryptoClientStream::ChannelIDSourceCallbackImpl::Run(
-    scoped_ptr<ChannelIDKey>* channel_id_key) {
+    std::unique_ptr<ChannelIDKey>* channel_id_key) {
   if (stream_ == nullptr) {
     return;
   }
@@ -81,7 +82,7 @@ QuicCryptoClientStream::ProofVerifierCallbackImpl::
 void QuicCryptoClientStream::ProofVerifierCallbackImpl::Run(
     bool ok,
     const string& error_details,
-    scoped_ptr<ProofVerifyDetails>* details) {
+    std::unique_ptr<ProofVerifyDetails>* details) {
   if (stream_ == nullptr) {
     return;
   }
@@ -357,6 +358,7 @@ void QuicCryptoClientStream::DoSendCHLO(
   string error_details;
   QuicErrorCode error = crypto_config_->FillClientHello(
       server_id_, session()->connection()->connection_id(),
+      session()->connection()->version(),
       session()->connection()->supported_versions().front(), cached,
       session()->connection()->clock()->WallNow(),
       session()->connection()->random_generator(), channel_id_key_.get(),

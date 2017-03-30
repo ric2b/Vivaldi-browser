@@ -78,6 +78,10 @@ class TEST_RUNNER_EXPORT LayoutTestRuntimeFlags {
   // If true, don't dump output until notifyDone is called.
   DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(wait_until_done)
 
+  // If true, ends the test when a URL is loaded externally via
+  // WebFrameClient::loadURLExternally().
+  DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(wait_until_external_url_load)
+
   // Causes navigation actions just printout the intended navigation instead
   // of taking you to the page. This is used for cases like mailto, where you
   // don't actually want to open the mail program.
@@ -99,6 +103,68 @@ class TEST_RUNNER_EXPORT LayoutTestRuntimeFlags {
 
   // Contents of Accept-Language HTTP header requested by the test.
   DEFINE_STRING_LAYOUT_TEST_RUNTIME_FLAG(accept_languages)
+
+  // Flags influencing behavior of MockContentSettingsClient.
+  DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(images_allowed)
+  DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(media_allowed)
+  DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(scripts_allowed)
+  DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(storage_allowed)
+  DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(plugins_allowed)
+  DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(displaying_insecure_content_allowed)
+  DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(running_insecure_content_allowed)
+  DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(
+      dump_web_content_settings_client_callbacks)
+  DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(autoplay_allowed)
+
+  // If true, the test_shell will write a descriptive line for each editing
+  // command.
+  DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(dump_editting_callbacks)
+
+  // If true, the test_shell will output a descriptive line for each frame
+  // load callback.
+  DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(dump_frame_load_callbacks)
+
+  // If true, the test_shell will output a descriptive line for each
+  // PingLoader dispatched.
+  DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(dump_ping_loader_callbacks)
+
+  // If true, the test_shell will output a line of the user gesture status
+  // text for some frame load callbacks.
+  DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(
+      dump_user_gesture_in_frame_load_callbacks)
+
+  // If true, the test_shell will output a descriptive line for each resource
+  // load callback.
+  DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(dump_resource_load_callbacks)
+  DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(dump_resource_priorities)
+
+  // If true, the test_shell will output the MIME type for each resource that
+  // was loaded.
+  DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(dump_resource_response_mime_types)
+
+  // If true, content_shell will dump the default navigation policy passed to
+  // WebFrameClient::decidePolicyForNavigation.
+  DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(dump_navigation_policy)
+
+  // If true, output a message when the page title is changed.
+  DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(dump_title_changes)
+
+  // If true, the test_shell will print out the icon change notifications.
+  DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(dump_icon_changes)
+
+  // If true, the console messages produced by the page will
+  // be part of test output.
+  DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(dump_console_messages)
+
+  // Desired return value of WebFrameClient::runModalBeforeUnloadDialog.
+  DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(
+      stay_on_page_after_handling_before_unload)
+
+  // Indicates if the test already tracks a top loading frame (in any of the
+  // renderer processes).  This flag is trying to prevent different renderer
+  // processes from tracking different top loading frames (i.e. main frame in
+  // one renderer and an OOPIF in another renderer).
+  DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG(have_top_loading_frame)
 
 #undef DEFINE_BOOL_LAYOUT_TEST_RUNTIME_FLAG
 #undef DEFINE_STRING_LAYOUT_TEST_RUNTIME_FLAG

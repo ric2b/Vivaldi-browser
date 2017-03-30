@@ -8,8 +8,8 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "cc/layers/video_frame_provider_client_impl.h"
-#include "cc/quads/io_surface_draw_quad.h"
 #include "cc/quads/stream_video_draw_quad.h"
 #include "cc/quads/texture_draw_quad.h"
 #include "cc/quads/yuv_video_draw_quad.h"
@@ -27,7 +27,7 @@
 namespace cc {
 
 // static
-scoped_ptr<VideoLayerImpl> VideoLayerImpl::Create(
+std::unique_ptr<VideoLayerImpl> VideoLayerImpl::Create(
     LayerTreeImpl* tree_impl,
     int id,
     VideoFrameProvider* provider,
@@ -39,7 +39,7 @@ scoped_ptr<VideoLayerImpl> VideoLayerImpl::Create(
       VideoFrameProviderClientImpl::Create(
           provider, tree_impl->GetVideoFrameControllerClient());
 
-  return make_scoped_ptr(new VideoLayerImpl(
+  return base::WrapUnique(new VideoLayerImpl(
       tree_impl, id, std::move(provider_client_impl), video_rotation));
 }
 
@@ -66,9 +66,9 @@ VideoLayerImpl::~VideoLayerImpl() {
   }
 }
 
-scoped_ptr<LayerImpl> VideoLayerImpl::CreateLayerImpl(
+std::unique_ptr<LayerImpl> VideoLayerImpl::CreateLayerImpl(
     LayerTreeImpl* tree_impl) {
-  return make_scoped_ptr(new VideoLayerImpl(
+  return base::WrapUnique(new VideoLayerImpl(
       tree_impl, id(), provider_client_impl_, video_rotation_));
 }
 
@@ -216,24 +216,15 @@ void VideoLayerImpl::AppendQuads(RenderPass* render_pass,
       bool nearest_neighbor = false;
       TextureDrawQuad* texture_quad =
           render_pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
-      texture_quad->SetNew(shared_quad_state,
-                           quad_rect,
-                           opaque_rect,
-                           visible_quad_rect,
-                           software_resources_[0],
-                           premultiplied_alpha,
-                           uv_top_left,
-                           uv_bottom_right,
-                           SK_ColorTRANSPARENT,
-                           opacity,
-                           flipped,
-                           nearest_neighbor);
+      texture_quad->SetNew(shared_quad_state, quad_rect, opaque_rect,
+                           visible_quad_rect, software_resources_[0],
+                           premultiplied_alpha, uv_top_left, uv_bottom_right,
+                           SK_ColorTRANSPARENT, opacity, flipped,
+                           nearest_neighbor, false);
       ValidateQuadResources(texture_quad);
       break;
     }
     case VideoFrameExternalResources::YUV_RESOURCE: {
-      DCHECK_GE(frame_resources_.size(), 3u);
-
       YUVVideoDrawQuad::ColorSpace color_space = YUVVideoDrawQuad::REC_601;
       int videoframe_color_space;
       if (frame_->metadata()->GetInteger(media::VideoFrameMetadata::COLOR_SPACE,
@@ -250,12 +241,18 @@ void VideoLayerImpl::AppendQuads(RenderPass* render_pass,
           frame_->format(), media::VideoFrame::kUPlane, coded_size);
 
       if (frame_->HasTextures()) {
-        DCHECK_EQ(media::PIXEL_FORMAT_I420, frame_->format());
-        DCHECK_EQ(3u, frame_resources_.size());  // Alpha is not supported yet.
+        if (frame_->format() == media::PIXEL_FORMAT_NV12) {
+          DCHECK_EQ(2u, frame_resources_.size());
+        } else {
+          DCHECK_EQ(media::PIXEL_FORMAT_I420, frame_->format());
+          DCHECK_EQ(3u,
+                    frame_resources_.size());  // Alpha is not supported yet.
+        }
       } else {
         DCHECK(uv_tex_size ==
                media::VideoFrame::PlaneSize(
                    frame_->format(), media::VideoFrame::kVPlane, coded_size));
+        DCHECK_GE(frame_resources_.size(), 3u);
         DCHECK(frame_resources_.size() <= 3 ||
                ya_tex_size == media::VideoFrame::PlaneSize(
                                   frame_->format(), media::VideoFrame::kAPlane,
@@ -281,7 +278,8 @@ void VideoLayerImpl::AppendQuads(RenderPass* render_pass,
           shared_quad_state, quad_rect, opaque_rect, visible_quad_rect,
           ya_tex_coord_rect, uv_tex_coord_rect, ya_tex_size, uv_tex_size,
           frame_resources_[0].id, frame_resources_[1].id,
-          frame_resources_[2].id,
+          frame_resources_.size() > 2 ? frame_resources_[2].id
+                                      : frame_resources_[1].id,
           frame_resources_.size() > 3 ? frame_resources_[3].id : 0, color_space,
           frame_resource_offset_, frame_resource_multiplier_);
       ValidateQuadResources(yuv_video_quad);
@@ -307,7 +305,7 @@ void VideoLayerImpl::AppendQuads(RenderPass* render_pass,
                            visible_quad_rect, frame_resources_[0].id,
                            premultiplied_alpha, uv_top_left, uv_bottom_right,
                            SK_ColorTRANSPARENT, opacity, flipped,
-                           nearest_neighbor);
+                           nearest_neighbor, false);
       ValidateQuadResources(texture_quad);
       break;
     }
@@ -324,19 +322,6 @@ void VideoLayerImpl::AppendQuads(RenderPass* render_pass,
           frame_resources_[0].id, frame_resources_[0].size_in_pixels,
           scale * provider_client_impl_->StreamTextureMatrix());
       ValidateQuadResources(stream_video_quad);
-      break;
-    }
-    case VideoFrameExternalResources::IO_SURFACE: {
-      DCHECK_EQ(frame_resources_.size(), 1u);
-      if (frame_resources_.size() < 1u)
-        break;
-      IOSurfaceDrawQuad* io_surface_quad =
-          render_pass->CreateAndAppendDrawQuad<IOSurfaceDrawQuad>();
-      io_surface_quad->SetNew(shared_quad_state, quad_rect, opaque_rect,
-                              visible_quad_rect, visible_rect.size(),
-                              frame_resources_[0].id,
-                              IOSurfaceDrawQuad::UNFLIPPED);
-      ValidateQuadResources(io_surface_quad);
       break;
     }
 #if defined(VIDEO_HOLE)

@@ -19,7 +19,7 @@
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
@@ -132,8 +132,14 @@ int MultiprocessTestHelper::WaitForChildShutdown() {
   CHECK(test_child_.IsValid());
 
   int rv = -1;
+#if defined(OS_ANDROID)
+  // On Android, we need to use a special function to wait for the child.
+  CHECK(AndroidWaitForChildExitWithTimeout(
+      test_child_, TestTimeouts::action_timeout(), &rv));
+#else
   CHECK(
       test_child_.WaitForExitWithTimeout(TestTimeouts::action_timeout(), &rv));
+#endif
   test_child_.Close();
   return rv;
 }

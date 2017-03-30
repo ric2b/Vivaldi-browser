@@ -53,13 +53,11 @@ void getScriptableObjectProperty(PropertyType property, const v8::PropertyCallba
     if (instance.IsEmpty())
         return;
 
-    v8::Local<v8::Value> value;
-    if (!instance->Get(info.GetIsolate()->GetCurrentContext(), property).ToLocal(&value))
+    if (!v8CallBoolean(instance->HasOwnProperty(info.GetIsolate()->GetCurrentContext(), property)))
         return;
 
-    // We quit here to allow the binding code to look up general HTMLObjectElement properties
-    // if they are not overriden by plugin.
-    if (value->IsUndefined() && !v8CallBoolean(instance->Has(info.GetIsolate()->GetCurrentContext(), property)))
+    v8::Local<v8::Value> value;
+    if (!instance->Get(info.GetIsolate()->GetCurrentContext(), property).ToLocal(&value))
         return;
 
     v8SetReturnValue(info, value);
@@ -87,36 +85,27 @@ void setScriptableObjectProperty(PropertyType property, v8::Local<v8::Value> val
     // DOM element will also be set. For plugin's that don't intercept the call
     // (all except gTalk) this makes no difference at all. For gTalk the fact
     // that the property on the DOM element also gets set is inconsequential.
-    v8::Maybe<bool> unused = instance->Set(info.GetIsolate()->GetCurrentContext(), property, value);
-    ALLOW_UNUSED_LOCAL(unused);
+    v8CallBoolean(instance->CreateDataProperty(info.GetIsolate()->GetCurrentContext(), property, value));
 }
 } // namespace
 
 void V8HTMLEmbedElement::namedPropertyGetterCustom(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-    if (!name->IsString())
-        return;
     getScriptableObjectProperty<V8HTMLEmbedElement>(name.As<v8::String>(), info);
 }
 
 void V8HTMLObjectElement::namedPropertyGetterCustom(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-    if (!name->IsString())
-        return;
     getScriptableObjectProperty<V8HTMLObjectElement>(name.As<v8::String>(), info);
 }
 
 void V8HTMLEmbedElement::namedPropertySetterCustom(v8::Local<v8::Name> name, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-    if (!name->IsString())
-        return;
     setScriptableObjectProperty<V8HTMLEmbedElement>(name.As<v8::String>(), value, info);
 }
 
 void V8HTMLObjectElement::namedPropertySetterCustom(v8::Local<v8::Name> name, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-    if (!name->IsString())
-        return;
     setScriptableObjectProperty<V8HTMLObjectElement>(name.As<v8::String>(), value, info);
 }
 

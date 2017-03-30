@@ -4,11 +4,13 @@
 
 #include "chrome/browser/push_messaging/push_messaging_service_factory.h"
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/permissions/permission_manager_factory.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/push_messaging/background_budget_service_factory.h"
 #include "chrome/browser/push_messaging/push_messaging_service_impl.h"
 #include "chrome/browser/services/gcm/fake_gcm_profile_service.h"
 #include "chrome/browser/services/gcm/gcm_profile_service_factory.h"
@@ -35,6 +37,7 @@ PushMessagingServiceFactory::PushMessagingServiceFactory()
     : BrowserContextKeyedServiceFactory(
           "PushMessagingProfileService",
           BrowserContextDependencyManager::GetInstance()) {
+  DependsOn(BackgroundBudgetServiceFactory::GetInstance());
   DependsOn(gcm::GCMProfileServiceFactory::GetInstance());
   DependsOn(HostContentSettingsMapFactory::GetInstance());
   DependsOn(PermissionManagerFactory::GetInstance());
@@ -45,7 +48,7 @@ PushMessagingServiceFactory::~PushMessagingServiceFactory() {}
 void PushMessagingServiceFactory::RestoreFactoryForTests(
     content::BrowserContext* context) {
   SetTestingFactory(context, [](content::BrowserContext* context) {
-    return scoped_ptr<KeyedService>(
+    return std::unique_ptr<KeyedService>(
         GetInstance()->BuildServiceInstanceFor(context));
   });
 }

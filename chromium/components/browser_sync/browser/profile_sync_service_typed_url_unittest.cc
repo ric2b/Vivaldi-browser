@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -14,12 +15,12 @@
 #include "base/callback.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "components/browser_sync/browser/abstract_profile_sync_service_test.h"
 #include "components/browser_sync/browser/test_profile_sync_service.h"
@@ -30,10 +31,10 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/typed_url_data_type_controller.h"
 #include "components/signin/core/browser/signin_manager.h"
-#include "components/sync_driver/data_type_error_handler_mock.h"
 #include "components/sync_driver/data_type_manager_impl.h"
 #include "sync/internal_api/public/read_node.h"
 #include "sync/internal_api/public/read_transaction.h"
+#include "sync/internal_api/public/test/data_type_error_handler_mock.h"
 #include "sync/internal_api/public/write_node.h"
 #include "sync/internal_api/public/write_transaction.h"
 #include "sync/protocol/typed_url_specifics.pb.h"
@@ -92,7 +93,7 @@ class HistoryServiceMock : public history::HistoryService {
   HistoryServiceMock() : history::HistoryService(), backend_(nullptr) {}
 
   base::CancelableTaskTracker::TaskId ScheduleDBTask(
-      scoped_ptr<history::HistoryDBTask> task,
+      std::unique_ptr<history::HistoryDBTask> task,
       base::CancelableTaskTracker* tracker) override {
     // Explicitly copy out the raw pointer -- compilers might decide to
     // evaluate task.release() before the arguments for the first Bind().
@@ -178,7 +179,7 @@ class ProfileSyncServiceTypedUrlTest : public AbstractProfileSyncServiceTest {
                    base::Unretained(this)),
         run_loop.QuitClosure());
     run_loop.Run();
-    history_service_ = make_scoped_ptr(new HistoryServiceMock);
+    history_service_ = base::WrapUnique(new HistoryServiceMock);
     history_service_->set_task_runner(data_type_thread()->task_runner());
     history_service_->set_backend(history_backend_);
 
@@ -195,7 +196,7 @@ class ProfileSyncServiceTypedUrlTest : public AbstractProfileSyncServiceTest {
 
   void CreateHistoryService() {
     history_backend_ = new HistoryBackendMock();
-    syncable_service_ = make_scoped_ptr(
+    syncable_service_ = base::WrapUnique(
         new TestTypedUrlSyncableService(history_backend_.get()));
   }
 
@@ -379,11 +380,11 @@ class ProfileSyncServiceTypedUrlTest : public AbstractProfileSyncServiceTest {
 
  private:
   scoped_refptr<HistoryBackendMock> history_backend_;
-  scoped_ptr<HistoryServiceMock> history_service_;
-  sync_driver::DataTypeErrorHandlerMock error_handler_;
+  std::unique_ptr<HistoryServiceMock> history_service_;
+  syncer::DataTypeErrorHandlerMock error_handler_;
   TypedUrlDataTypeController* data_type_controller;
-  scoped_ptr<TestTypedUrlSyncableService> syncable_service_;
-  scoped_ptr<sync_driver::FakeSyncClient> sync_client_;
+  std::unique_ptr<TestTypedUrlSyncableService> syncable_service_;
+  std::unique_ptr<sync_driver::FakeSyncClient> sync_client_;
 
   DISALLOW_COPY_AND_ASSIGN(ProfileSyncServiceTypedUrlTest);
 };

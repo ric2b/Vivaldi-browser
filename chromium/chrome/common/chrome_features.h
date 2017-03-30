@@ -15,9 +15,17 @@ namespace features {
 // All features in alphabetical order. The features should be documented
 // alongside the definition of their values in the .cc file.
 
+#if defined(OS_CHROMEOS)
+extern const base::Feature kArcMemoryManagement;
+#endif  // defined(OS_CHROMEOS)
+
 #if defined(OS_WIN) || defined(OS_MACOSX)
 extern const base::Feature kAutomaticTabDiscarding;
 #endif  // defined(OS_WIN) || defined(OS_MACOSX)
+
+extern const base::Feature kBlockSmallContent;
+
+extern const base::Feature kBrowserHangFixesExperiment;
 
 extern const base::Feature kExpectCTReporting;
 

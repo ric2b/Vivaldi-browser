@@ -12,7 +12,7 @@
 #include "base/process/launch.h"
 #include "base/process/process.h"
 #include "base/process/process_handle.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/nacl/common/nacl_cmd_line.h"
 #include "components/nacl/common/nacl_debug_exception_handler_win.h"
 #include "components/nacl/common/nacl_messages.h"
@@ -109,9 +109,11 @@ void NaClBrokerListener::OnLaunchLoaderThroughBroker(
     cmd_line->AppendSwitchASCII(switches::kProcessChannelID,
                                 loader_channel_id);
 
-    base::Process loader_process = content::StartSandboxedProcess(
-        this, cmd_line, base::HandlesToInheritVector());
-    if (loader_process.IsValid()) {
+    base::Process loader_process;
+    sandbox::ResultCode result = content::StartSandboxedProcess(
+        this, cmd_line, base::HandlesToInheritVector(), &loader_process);
+
+    if (result == sandbox::SBOX_ALL_OK) {
       // Note: PROCESS_DUP_HANDLE is necessary here, because:
       // 1) The current process is the broker, which is the loader's parent.
       // 2) The browser is not the loader's parent, and so only gets the

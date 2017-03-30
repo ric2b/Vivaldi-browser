@@ -6,7 +6,6 @@
 
 #include <stdint.h>
 
-#include "base/memory/scoped_ptr.h"
 #include "gpu/command_buffer/service/buffer_manager.h"
 #include "gpu/command_buffer/service/error_state_mock.h"
 #include "gpu/command_buffer/service/feature_info.h"
@@ -120,7 +119,8 @@ TEST_F(VertexAttribManagerTest, SetAttribInfo) {
   // The VertexAttribManager must be destroyed before the BufferManager
   // so it releases its buffers.
   manager_ = NULL;
-  buffer_manager.Destroy(false);
+  buffer_manager.MarkContextLost();
+  buffer_manager.Destroy();
 }
 
 TEST_F(VertexAttribManagerTest, HaveFixedAttribs) {
@@ -181,7 +181,8 @@ TEST_F(VertexAttribManagerTest, CanAccess) {
   // The VertexAttribManager must be destroyed before the BufferManager
   // so it releases its buffers.
   manager_ = NULL;
-  buffer_manager.Destroy(false);
+  buffer_manager.MarkContextLost();
+  buffer_manager.Destroy();
 }
 
 TEST_F(VertexAttribManagerTest, Unbind) {
@@ -218,7 +219,8 @@ TEST_F(VertexAttribManagerTest, Unbind) {
   // The VertexAttribManager must be destroyed before the BufferManager
   // so it releases its buffers.
   manager_ = NULL;
-  buffer_manager.Destroy(false);
+  buffer_manager.MarkContextLost();
+  buffer_manager.Destroy();
 }
 
 // TODO(gman): Test ValidateBindings

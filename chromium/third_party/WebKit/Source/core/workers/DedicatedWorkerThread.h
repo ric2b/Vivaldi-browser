@@ -30,31 +30,31 @@
 #ifndef DedicatedWorkerThread_h
 #define DedicatedWorkerThread_h
 
-#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/workers/WorkerThread.h"
 
 namespace blink {
 
-class WorkerObjectProxy;
+class InProcessWorkerObjectProxy;
 class WorkerThreadStartupData;
 
 class DedicatedWorkerThread final : public WorkerThread {
 public:
-    static PassOwnPtr<DedicatedWorkerThread> create(PassRefPtr<WorkerLoaderProxy>, WorkerObjectProxy&, double timeOrigin);
-    WorkerObjectProxy& workerObjectProxy() const { return m_workerObjectProxy; }
+    static PassOwnPtr<DedicatedWorkerThread> create(PassRefPtr<WorkerLoaderProxy>, InProcessWorkerObjectProxy&, double timeOrigin);
     ~DedicatedWorkerThread() override;
+
+    WorkerBackingThread& workerBackingThread() override { return *m_workerBackingThread; }
+    InProcessWorkerObjectProxy& workerObjectProxy() const { return m_workerObjectProxy; }
 
 protected:
     WorkerGlobalScope* createWorkerGlobalScope(PassOwnPtr<WorkerThreadStartupData>) override;
     void postInitialize() override;
-    WebThreadSupportingGC& backingThread() override;
 
 private:
-    DedicatedWorkerThread(PassRefPtr<WorkerLoaderProxy>, WorkerObjectProxy&, double timeOrigin);
+    DedicatedWorkerThread(PassRefPtr<WorkerLoaderProxy>, InProcessWorkerObjectProxy&, double timeOrigin);
 
-    WorkerObjectProxy& m_workerObjectProxy;
+    OwnPtr<WorkerBackingThread> m_workerBackingThread;
+    InProcessWorkerObjectProxy& m_workerObjectProxy;
     double m_timeOrigin;
-    OwnPtr<WebThreadSupportingGC> m_thread;
 };
 
 } // namespace blink

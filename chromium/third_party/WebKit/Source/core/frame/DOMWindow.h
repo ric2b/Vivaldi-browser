@@ -5,10 +5,10 @@
 #ifndef DOMWindow_h
 #define DOMWindow_h
 
+#include "bindings/core/v8/Transferables.h"
 #include "core/CoreExport.h"
 #include "core/events/EventTarget.h"
 #include "core/frame/DOMWindowBase64.h"
-#include "core/frame/Location.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollableArea.h"
 
@@ -20,7 +20,6 @@ class ApplicationCache;
 class BarProp;
 class CSSRuleList;
 class CSSStyleDeclaration;
-class Console;
 class CustomElementsRegistry;
 class DOMSelection;
 class DOMWindowCSS;
@@ -31,20 +30,20 @@ class FrameRequestCallback;
 class History;
 class IdleRequestCallback;
 class IdleRequestOptions;
+class Location;
 class LocalDOMWindow;
+class MessageEvent;
 class MediaQueryList;
 class Navigator;
 class Screen;
+class ScriptState;
 class ScrollToOptions;
 class SerializedScriptValue;
 class Storage;
 class StyleMedia;
 
-typedef HeapVector<Member<MessagePort>, 1> MessagePortArray;
-
 class CORE_EXPORT DOMWindow : public EventTargetWithInlineData, public DOMWindowBase64 {
     DEFINE_WRAPPERTYPEINFO();
-    REFCOUNTED_EVENT_TARGET(DOMWindow);
 public:
     ~DOMWindow() override;
 
@@ -62,6 +61,7 @@ public:
 
     // EventTarget overrides:
     const AtomicString& interfaceName() const override;
+    const DOMWindow* toDOMWindow() const override;
 
     // DOM Level 0
     virtual Screen* screen() const = 0;
@@ -130,19 +130,17 @@ public:
     //  90 is when rotated counter clockwise.
     virtual int orientation() const = 0;
 
-    virtual Console* console() const  = 0;
-
     virtual DOMSelection* getSelection() = 0;
 
     void focus(ExecutionContext*);
     virtual void blur() = 0;
     void close(ExecutionContext*);
-    virtual void print() = 0;
+    virtual void print(ScriptState*) = 0;
     virtual void stop() = 0;
 
-    virtual void alert(const String& message = String()) = 0;
-    virtual bool confirm(const String& message) = 0;
-    virtual String prompt(const String& message, const String& defaultValue) = 0;
+    virtual void alert(ScriptState*, const String& message = String()) = 0;
+    virtual bool confirm(ScriptState*, const String& message) = 0;
+    virtual String prompt(ScriptState*, const String& message, const String& defaultValue) = 0;
 
     virtual bool find(const String&, bool caseSensitive, bool backwards, bool wrap, bool wholeWord, bool searchInFrames, bool showDialog) const = 0;
 
@@ -176,7 +174,7 @@ public:
     virtual void cancelIdleCallback(int id) = 0;
 
     // Custom elements
-    virtual CustomElementsRegistry* customElements() const = 0;
+    virtual CustomElementsRegistry* customElements(ScriptState*) const = 0;
 
     void captureEvents() { }
     void releaseEvents() { }
@@ -186,7 +184,7 @@ public:
     // window[index]...
     DOMWindow* anonymousIndexedGetter(uint32_t) const;
 
-    void postMessage(PassRefPtr<SerializedScriptValue> message, const MessagePortArray*, const String& targetOrigin, LocalDOMWindow* source, ExceptionState&);
+    void postMessage(PassRefPtr<SerializedScriptValue> message, const MessagePortArray&, const String& targetOrigin, LocalDOMWindow* source, ExceptionState&);
 
     String sanitizedCrossDomainAccessErrorMessage(const LocalDOMWindow* callingWindow) const;
     String crossDomainAccessErrorMessage(const LocalDOMWindow* callingWindow) const;
@@ -219,6 +217,8 @@ public:
 
 protected:
     DOMWindow();
+
+    virtual void schedulePostMessage(MessageEvent*, PassRefPtr<SecurityOrigin> target, Document* source) = 0;
 
     // Set to true when close() has been called. Needed for
     // |window.closed| determinism; having it return 'true'

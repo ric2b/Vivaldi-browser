@@ -2,17 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ui/events/ozone/layout/xkb/xkb_keyboard_layout_engine.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
-#include "ui/events/ozone/layout/xkb/xkb_keyboard_layout_engine.h"
 
 namespace ui {
 
@@ -149,8 +151,8 @@ class XkbLayoutEngineVkTest : public testing::Test {
   ~XkbLayoutEngineVkTest() override {}
 
   void SetUp() override {
-    KeyboardLayoutEngineManager::SetKeyboardLayoutEngine(
-        make_scoped_ptr(new VkTestXkbKeyboardLayoutEngine(keycode_converter_)));
+    KeyboardLayoutEngineManager::SetKeyboardLayoutEngine(base::WrapUnique(
+        new VkTestXkbKeyboardLayoutEngine(keycode_converter_)));
     layout_engine_ = static_cast<VkTestXkbKeyboardLayoutEngine*>(
         KeyboardLayoutEngineManager::GetKeyboardLayoutEngine());
   }
@@ -805,8 +807,8 @@ TEST_F(XkbLayoutEngineVkTest, KeyboardCodeForNonPrintable) {
     {{DomCode::CONTROL_RIGHT, XKB_KEY_Control_R}, VKEY_CONTROL},
     {{DomCode::SHIFT_LEFT, XKB_KEY_Shift_L}, VKEY_SHIFT},
     {{DomCode::SHIFT_RIGHT, XKB_KEY_Shift_R}, VKEY_SHIFT},
-    {{DomCode::OS_LEFT, XKB_KEY_Super_L}, VKEY_LWIN},
-    {{DomCode::OS_RIGHT, XKB_KEY_Super_R}, VKEY_LWIN},
+    {{DomCode::META_LEFT, XKB_KEY_Super_L}, VKEY_LWIN},
+    {{DomCode::META_RIGHT, XKB_KEY_Super_R}, VKEY_LWIN},
     {{DomCode::ALT_LEFT, XKB_KEY_Alt_L}, VKEY_MENU},
     {{DomCode::ALT_RIGHT, XKB_KEY_Alt_R}, VKEY_MENU},
     {{DomCode::ALT_RIGHT, XKB_KEY_ISO_Level3_Shift}, VKEY_ALTGR},

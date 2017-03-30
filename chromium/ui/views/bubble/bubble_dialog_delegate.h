@@ -44,7 +44,6 @@ class VIEWS_EXPORT BubbleDialogDelegateView : public DialogDelegateView,
   bool ShouldShowCloseButton() const override;
   ClientView* CreateClientView(Widget* widget) override;
   NonClientFrameView* CreateNonClientFrameView(Widget* widget) override;
-  void GetAccessibleState(ui::AXViewState* state) override;
   const char* GetClassName() const override;
 
   // WidgetObserver overrides:
@@ -66,6 +65,8 @@ class VIEWS_EXPORT BubbleDialogDelegateView : public DialogDelegateView,
 
   BubbleBorder::Arrow arrow() const { return arrow_; }
   void set_arrow(BubbleBorder::Arrow arrow) { arrow_ = arrow; }
+
+  void set_mirror_arrow_in_rtl(bool mirror) { mirror_arrow_in_rtl_ = mirror; }
 
   BubbleBorder::Shadow shadow() const { return shadow_; }
   void set_shadow(BubbleBorder::Shadow shadow) { shadow_ = shadow; }
@@ -172,6 +173,9 @@ class VIEWS_EXPORT BubbleDialogDelegateView : public DialogDelegateView,
 
   // The arrow's location on the bubble.
   BubbleBorder::Arrow arrow_;
+
+  // Automatically mirror the arrow in RTL layout.
+  bool mirror_arrow_in_rtl_;
 
   // Bubble border shadow to use.
   BubbleBorder::Shadow shadow_;

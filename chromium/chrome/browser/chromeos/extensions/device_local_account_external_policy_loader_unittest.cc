@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/extensions/device_local_account_external_policy_loader.h"
 
 #include <string>
+#include <utility>
 
 #include "base/callback.h"
 #include "base/files/file_util.h"
@@ -14,7 +15,7 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "base/version.h"
 #include "build/build_config.h"
@@ -183,10 +184,8 @@ void DeviceLocalAccountExternalPolicyLoaderTest::SetForceInstallListPolicy() {
       extension_urls::GetWebstoreUpdateUrl().spec().c_str()));
   store_.policy_map_.Set(policy::key::kExtensionInstallForcelist,
                          policy::POLICY_LEVEL_MANDATORY,
-                         policy::POLICY_SCOPE_USER,
-                         policy::POLICY_SOURCE_CLOUD,
-                         forcelist.release(),
-                         NULL);
+                         policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
+                         std::move(forcelist), nullptr);
   store_.NotifyStoreLoaded();
 }
 

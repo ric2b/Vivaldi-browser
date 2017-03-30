@@ -8,5 +8,8 @@
     Constructor(DOMString type, optional InputEventInit eventInitDict),
     RuntimeEnabled=InputEvent,
 ] interface InputEvent : UIEvent {
-    // TODO(chongz): Add 'inputType', 'data', 'isComposing' and 'targetRanges'
+    readonly attribute DOMString inputType;
+    readonly attribute DOMString data;
+    readonly attribute boolean isComposing;
+    // TODO(chongz): Add 'targetRanges'
 };

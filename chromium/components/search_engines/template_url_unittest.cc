@@ -277,6 +277,60 @@ TEST_F(TemplateURLTest, SetPrepopulatedAndParse) {
   EXPECT_TRUE(valid);
 }
 
+// Test that setting the prepopulate ID from TemplateURL causes the stored
+// TemplateURLRef to handle parsing the URL parameters differently.
+TEST_F(TemplateURLTest, SetPrepopulatedAndReplace) {
+  TemplateURLData data;
+  data.SetURL("http://foo{fhqwhgads}search/?q={searchTerms}");
+  data.suggestions_url = "http://foo{fhqwhgads}suggest/?q={searchTerms}";
+  data.instant_url = "http://foo{fhqwhgads}instant/";
+  data.image_url = "http://foo{fhqwhgads}image/";
+  data.new_tab_url = "http://foo{fhqwhgads}newtab/";
+  data.contextual_search_url = "http://foo{fhqwhgads}context/";
+  data.alternate_urls.push_back(
+      "http://foo{fhqwhgads}alternate/?q={searchTerms}");
+
+  TemplateURLRef::SearchTermsArgs args(base::ASCIIToUTF16("X"));
+  const SearchTermsData& stdata = search_terms_data_;
+
+  TemplateURL url(data);
+  EXPECT_EQ("http://foo%7Bfhqwhgads%7Dsearch/?q=X",
+            url.url_ref().ReplaceSearchTerms(args, stdata));
+  EXPECT_EQ("http://foo%7Bfhqwhgads%7Dalternate/?q=X",
+            url.url_refs()[0].ReplaceSearchTerms(args, stdata));
+  EXPECT_EQ("http://foo%7Bfhqwhgads%7Dsearch/?q=X",
+            url.url_refs()[1].ReplaceSearchTerms(args, stdata));
+  EXPECT_EQ("http://foo%7Bfhqwhgads%7Dsuggest/?q=X",
+            url.suggestions_url_ref().ReplaceSearchTerms(args, stdata));
+  EXPECT_EQ("http://foo{fhqwhgads}instant/",
+            url.instant_url_ref().ReplaceSearchTerms(args, stdata));
+  EXPECT_EQ("http://foo{fhqwhgads}image/",
+            url.image_url_ref().ReplaceSearchTerms(args, stdata));
+  EXPECT_EQ("http://foo{fhqwhgads}newtab/",
+            url.new_tab_url_ref().ReplaceSearchTerms(args, stdata));
+  EXPECT_EQ("http://foo{fhqwhgads}context/",
+            url.contextual_search_url_ref().ReplaceSearchTerms(args, stdata));
+
+  data.prepopulate_id = 123;
+  TemplateURL url2(data);
+  EXPECT_EQ("http://foosearch/?q=X",
+            url2.url_ref().ReplaceSearchTerms(args, stdata));
+  EXPECT_EQ("http://fooalternate/?q=X",
+            url2.url_refs()[0].ReplaceSearchTerms(args, stdata));
+  EXPECT_EQ("http://foosearch/?q=X",
+            url2.url_refs()[1].ReplaceSearchTerms(args, stdata));
+  EXPECT_EQ("http://foosuggest/?q=X",
+            url2.suggestions_url_ref().ReplaceSearchTerms(args, stdata));
+  EXPECT_EQ("http://fooinstant/",
+            url2.instant_url_ref().ReplaceSearchTerms(args, stdata));
+  EXPECT_EQ("http://fooimage/",
+            url2.image_url_ref().ReplaceSearchTerms(args, stdata));
+  EXPECT_EQ("http://foonewtab/",
+            url2.new_tab_url_ref().ReplaceSearchTerms(args, stdata));
+  EXPECT_EQ("http://foocontext/",
+            url2.contextual_search_url_ref().ReplaceSearchTerms(args, stdata));
+}
+
 TEST_F(TemplateURLTest, InputEncodingBeforeSearchTerm) {
   TemplateURLData data;
   data.SetURL("http://foox{inputEncoding?}a{searchTerms}y{outputEncoding?}b");
@@ -1190,6 +1244,32 @@ TEST_F(TemplateURLTest, ExtractSearchTermsFromNonUTF8URL) {
   EXPECT_EQ(
       base::WideToUTF16(L"\x0431\x0443\x043A\x0432\x044B \x0410 \x0438 A"),
       result);
+}
+
+// Checks that the ExtractSearchTermsFromURL function strips constant
+// prefix/suffix strings from the search terms param.
+TEST_F(TemplateURLTest, ExtractSearchTermsWithPrefixAndSuffix) {
+  TemplateURLData data;
+  data.alternate_urls.push_back(
+      "http://www.example.com/?q=chromium-{searchTerms}@chromium.org");
+  data.alternate_urls.push_back(
+      "http://www.example.com/chromium-{searchTerms}@chromium.org/info");
+  TemplateURL url(data);
+  base::string16 result;
+
+  EXPECT_TRUE(url.ExtractSearchTermsFromURL(
+      GURL("http://www.example.com/?q=chromium-dev@chromium.org"),
+      search_terms_data_, &result));
+  EXPECT_EQ(ASCIIToUTF16("dev"), result);
+
+  EXPECT_TRUE(url.ExtractSearchTermsFromURL(
+      GURL("http://www.example.com/chromium-dev@chromium.org/info"),
+      search_terms_data_, &result));
+  EXPECT_EQ(ASCIIToUTF16("dev"), result);
+
+  // Don't match if the prefix and suffix aren't there.
+  EXPECT_FALSE(url.ExtractSearchTermsFromURL(
+      GURL("http://www.example.com/?q=invalid"), search_terms_data_, &result));
 }
 
 TEST_F(TemplateURLTest, HasSearchTermsReplacementKey) {

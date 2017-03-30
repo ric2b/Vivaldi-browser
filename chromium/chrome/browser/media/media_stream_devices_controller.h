@@ -39,7 +39,7 @@ class MediaStreamDevicesController : public PermissionBubbleRequest {
   bool IsAllowedForVideo() const;
   bool IsAskingForAudio() const;
   bool IsAskingForVideo() const;
-  const std::string& GetSecurityOriginSpec() const;
+  base::string16 GetMessageText() const;
 
   // Forces the permissions to be denied (without being persisted) regardless
   // of what the previous state was.  If the user had previously allowed the
@@ -52,13 +52,13 @@ class MediaStreamDevicesController : public PermissionBubbleRequest {
 
   // PermissionBubbleRequest:
   int GetIconId() const override;
-  base::string16 GetMessageText() const override;
   base::string16 GetMessageTextFragment() const override;
   GURL GetOrigin() const override;
   void PermissionGranted() override;
   void PermissionDenied() override;
   void Cancelled() override;
   void RequestFinished() override;
+  PermissionBubbleType GetPermissionBubbleType() const override;
 
  private:
   // Returns a list of devices available for the request for the given

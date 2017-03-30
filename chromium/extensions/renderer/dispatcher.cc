@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -15,7 +16,7 @@
 #include "base/debug/alias.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/string_piece.h"
@@ -59,7 +60,6 @@
 #include "extensions/renderer/blob_native_handler.h"
 #include "extensions/renderer/content_watcher.h"
 #include "extensions/renderer/context_menus_custom_bindings.h"
-#include "extensions/renderer/css_native_handler.h"
 #include "extensions/renderer/dispatcher_delegate.h"
 #include "extensions/renderer/display_source_custom_bindings.h"
 #include "extensions/renderer/document_custom_bindings.h"
@@ -70,13 +70,10 @@
 #include "extensions/renderer/extensions_renderer_client.h"
 #include "extensions/renderer/file_system_natives.h"
 #include "extensions/renderer/guest_view/guest_view_internal_custom_bindings.h"
-#include "extensions/renderer/i18n_custom_bindings.h"
 #include "extensions/renderer/id_generator_custom_bindings.h"
-#include "extensions/renderer/lazy_background_page_native_handler.h"
 #include "extensions/renderer/logging_native_handler.h"
 #include "extensions/renderer/messaging_bindings.h"
 #include "extensions/renderer/module_system.h"
-#include "extensions/renderer/print_native_handler.h"
 #include "extensions/renderer/process_info_native_handler.h"
 #include "extensions/renderer/render_frame_observer_natives.h"
 #include "extensions/renderer/renderer_extension_registry.h"
@@ -189,7 +186,7 @@ void CallModuleMethod(const std::string& module_name,
   v8::HandleScope handle_scope(context->isolate());
   v8::Context::Scope context_scope(context->v8_context());
 
-  scoped_ptr<content::V8ValueConverter> converter(
+  std::unique_ptr<content::V8ValueConverter> converter(
       content::V8ValueConverter::create());
 
   std::vector<v8::Local<v8::Value>> arguments;
@@ -263,7 +260,7 @@ Dispatcher::Dispatcher(DispatcherDelegate* delegate)
   script_injection_manager_.reset(
       new ScriptInjectionManager(user_script_set_manager_.get()));
   user_script_set_manager_observer_.Add(user_script_set_manager_.get());
-  request_sender_.reset(new RequestSender(this));
+  request_sender_.reset(new RequestSender());
   PopulateSourceMap();
   WakeEventPage::Get()->Init(RenderThread::Get());
 
@@ -355,7 +352,7 @@ void Dispatcher::DidCreateScriptContext(
     InitOriginPermissions(context->extension());
 
   {
-    scoped_ptr<ModuleSystem> module_system(
+    std::unique_ptr<ModuleSystem> module_system(
         new ModuleSystem(context, &source_map_));
     context->set_module_system(std::move(module_system));
   }
@@ -469,7 +466,7 @@ void Dispatcher::DidInitializeServiceWorkerContextOnWorkerThread(
       extension, Feature::SERVICE_WORKER_CONTEXT);
   context->set_url(url);
 
-  g_worker_script_context_set.Get().Insert(make_scoped_ptr(context));
+  g_worker_script_context_set.Get().Insert(base::WrapUnique(context));
 
   v8::Isolate* isolate = context->isolate();
 
@@ -633,7 +630,7 @@ void Dispatcher::InvokeModuleSystemMethod(content::RenderFrame* render_frame,
                                           const std::string& function_name,
                                           const base::ListValue& args,
                                           bool user_gesture) {
-  scoped_ptr<WebScopedUserGesture> web_user_gesture;
+  std::unique_ptr<WebScopedUserGesture> web_user_gesture;
   if (user_gesture)
     web_user_gesture.reset(new WebScopedUserGesture);
 
@@ -858,89 +855,81 @@ void Dispatcher::RegisterNativeHandlers(ModuleSystem* module_system,
                                         RequestSender* request_sender,
                                         V8SchemaRegistry* v8_schema_registry) {
   module_system->RegisterNativeHandler(
-      "vivaldi", scoped_ptr<NativeHandler>(new VivaldiNativeHandler(context)));
+      "vivaldi",
+      std::unique_ptr<NativeHandler>(new VivaldiNativeHandler(context)));
   module_system->RegisterNativeHandler(
-      "chrome", scoped_ptr<NativeHandler>(new ChromeNativeHandler(context)));
+      "chrome",
+      std::unique_ptr<NativeHandler>(new ChromeNativeHandler(context)));
   module_system->RegisterNativeHandler(
-      "lazy_background_page",
-      scoped_ptr<NativeHandler>(new LazyBackgroundPageNativeHandler(context)));
-  module_system->RegisterNativeHandler(
-      "logging", scoped_ptr<NativeHandler>(new LoggingNativeHandler(context)));
+      "logging",
+      std::unique_ptr<NativeHandler>(new LoggingNativeHandler(context)));
   module_system->RegisterNativeHandler("schema_registry",
                                        v8_schema_registry->AsNativeHandler());
   module_system->RegisterNativeHandler(
-      "print", scoped_ptr<NativeHandler>(new PrintNativeHandler(context)));
-  module_system->RegisterNativeHandler(
       "test_features",
-      scoped_ptr<NativeHandler>(new TestFeaturesNativeHandler(context)));
+      std::unique_ptr<NativeHandler>(new TestFeaturesNativeHandler(context)));
   module_system->RegisterNativeHandler(
       "test_native_handler",
-      scoped_ptr<NativeHandler>(new TestNativeHandler(context)));
+      std::unique_ptr<NativeHandler>(new TestNativeHandler(context)));
   module_system->RegisterNativeHandler(
       "user_gestures",
-      scoped_ptr<NativeHandler>(new UserGesturesNativeHandler(context)));
+      std::unique_ptr<NativeHandler>(new UserGesturesNativeHandler(context)));
   module_system->RegisterNativeHandler(
-      "utils", scoped_ptr<NativeHandler>(new UtilsNativeHandler(context)));
+      "utils", std::unique_ptr<NativeHandler>(new UtilsNativeHandler(context)));
   module_system->RegisterNativeHandler(
       "v8_context",
-      scoped_ptr<NativeHandler>(new V8ContextNativeHandler(context)));
+      std::unique_ptr<NativeHandler>(new V8ContextNativeHandler(context)));
   module_system->RegisterNativeHandler(
-      "event_natives", scoped_ptr<NativeHandler>(new EventBindings(context)));
+      "event_natives",
+      std::unique_ptr<NativeHandler>(new EventBindings(context)));
   module_system->RegisterNativeHandler(
-      "messaging_natives",
-      scoped_ptr<NativeHandler>(MessagingBindings::Get(dispatcher, context)));
+      "messaging_natives", std::unique_ptr<NativeHandler>(
+                               MessagingBindings::Get(dispatcher, context)));
   module_system->RegisterNativeHandler(
-      "apiDefinitions",
-      scoped_ptr<NativeHandler>(
-          new ApiDefinitionsNatives(dispatcher, context)));
+      "apiDefinitions", std::unique_ptr<NativeHandler>(
+                            new ApiDefinitionsNatives(dispatcher, context)));
   module_system->RegisterNativeHandler(
-      "sendRequest",
-      scoped_ptr<NativeHandler>(
-          new SendRequestNatives(request_sender, context)));
+      "sendRequest", std::unique_ptr<NativeHandler>(
+                         new SendRequestNatives(request_sender, context)));
   module_system->RegisterNativeHandler(
-      "setIcon",
-      scoped_ptr<NativeHandler>(new SetIconNatives(context)));
+      "setIcon", std::unique_ptr<NativeHandler>(new SetIconNatives(context)));
   module_system->RegisterNativeHandler(
       "activityLogger",
-      scoped_ptr<NativeHandler>(new APIActivityLogger(context)));
+      std::unique_ptr<NativeHandler>(new APIActivityLogger(context)));
   module_system->RegisterNativeHandler(
       "renderFrameObserverNatives",
-      scoped_ptr<NativeHandler>(new RenderFrameObserverNatives(context)));
+      std::unique_ptr<NativeHandler>(new RenderFrameObserverNatives(context)));
 
   // Natives used by multiple APIs.
   module_system->RegisterNativeHandler(
       "file_system_natives",
-      scoped_ptr<NativeHandler>(new FileSystemNatives(context)));
+      std::unique_ptr<NativeHandler>(new FileSystemNatives(context)));
 
   // Custom bindings.
   module_system->RegisterNativeHandler(
       "app_window_natives",
-      scoped_ptr<NativeHandler>(new AppWindowCustomBindings(context)));
+      std::unique_ptr<NativeHandler>(new AppWindowCustomBindings(context)));
   module_system->RegisterNativeHandler(
       "blob_natives",
-      scoped_ptr<NativeHandler>(new BlobNativeHandler(context)));
+      std::unique_ptr<NativeHandler>(new BlobNativeHandler(context)));
   module_system->RegisterNativeHandler(
       "context_menus",
-      scoped_ptr<NativeHandler>(new ContextMenusCustomBindings(context)));
-  module_system->RegisterNativeHandler(
-      "css_natives", scoped_ptr<NativeHandler>(new CssNativeHandler(context)));
+      std::unique_ptr<NativeHandler>(new ContextMenusCustomBindings(context)));
   module_system->RegisterNativeHandler(
       "document_natives",
-      scoped_ptr<NativeHandler>(new DocumentCustomBindings(context)));
+      std::unique_ptr<NativeHandler>(new DocumentCustomBindings(context)));
   module_system->RegisterNativeHandler(
-      "guest_view_internal",
-      scoped_ptr<NativeHandler>(
-          new GuestViewInternalCustomBindings(context)));
-  module_system->RegisterNativeHandler(
-      "i18n", scoped_ptr<NativeHandler>(new I18NCustomBindings(context)));
+      "guest_view_internal", std::unique_ptr<NativeHandler>(
+                                 new GuestViewInternalCustomBindings(context)));
   module_system->RegisterNativeHandler(
       "id_generator",
-      scoped_ptr<NativeHandler>(new IdGeneratorCustomBindings(context)));
+      std::unique_ptr<NativeHandler>(new IdGeneratorCustomBindings(context)));
   module_system->RegisterNativeHandler(
-      "runtime", scoped_ptr<NativeHandler>(new RuntimeCustomBindings(context)));
+      "runtime",
+      std::unique_ptr<NativeHandler>(new RuntimeCustomBindings(context)));
   module_system->RegisterNativeHandler(
       "display_source",
-      scoped_ptr<NativeHandler>(new DisplaySourceCustomBindings(context)));
+      std::unique_ptr<NativeHandler>(new DisplaySourceCustomBindings(context)));
 }
 
 bool Dispatcher::OnControlMessageReceived(const IPC::Message& message) {
@@ -1043,7 +1032,7 @@ void Dispatcher::OnCancelSuspend(const std::string& extension_id) {
 }
 
 void Dispatcher::OnDeliverMessage(int target_port_id, const Message& message) {
-  scoped_ptr<RequestSender::ScopedTabID> scoped_tab_id;
+  std::unique_ptr<RequestSender::ScopedTabID> scoped_tab_id;
   std::map<int, int>::const_iterator it =
       port_to_tab_id_map_.find(target_port_id);
   if (it != port_to_tab_id_map_.end()) {
@@ -1209,9 +1198,9 @@ void Dispatcher::OnUpdatePermissions(
   if (!extension)
     return;
 
-  scoped_ptr<const PermissionSet> active =
+  std::unique_ptr<const PermissionSet> active =
       params.active_permissions.ToPermissionSet();
-  scoped_ptr<const PermissionSet> withheld =
+  std::unique_ptr<const PermissionSet> withheld =
       params.withheld_permissions.ToPermissionSet();
 
   UpdateOriginPermissions(
@@ -1449,8 +1438,8 @@ void Dispatcher::RegisterBinding(const std::string& api_name,
   if (!source_map_.Contains(api_name)) {
     module_system->RegisterNativeHandler(
         api_name,
-        scoped_ptr<NativeHandler>(new BindingGeneratingNativeHandler(
-            context, api_name, "binding")));
+        std::unique_ptr<NativeHandler>(
+            new BindingGeneratingNativeHandler(context, api_name, "binding")));
     module_system->SetNativeLazyField(
         bind_object, bind_name, api_name, "binding");
   } else {
@@ -1475,14 +1464,11 @@ void Dispatcher::RegisterNativeHandlers(ModuleSystem* module_system,
        BackgroundInfo::HasLazyBackgroundPage(extension));
   module_system->RegisterNativeHandler(
       "process",
-      scoped_ptr<NativeHandler>(new ProcessInfoNativeHandler(
-          context,
-          context->GetExtensionID(),
+      std::unique_ptr<NativeHandler>(new ProcessInfoNativeHandler(
+          context, context->GetExtensionID(),
           context->GetContextTypeDescription(),
           ExtensionsRendererClient::Get()->IsIncognitoProcess(),
-          is_component_extension,
-          manifest_version,
-          send_request_disabled)));
+          is_component_extension, manifest_version, send_request_disabled)));
 
   delegate_->RegisterNativeHandlers(this, module_system, context);
 }
@@ -1502,9 +1488,15 @@ void Dispatcher::UpdateContentCapabilities(ScriptContext* context) {
   APIPermissionSet permissions;
   for (const auto& extension :
        *RendererExtensionRegistry::Get()->GetMainThreadExtensionSet()) {
+    blink::WebLocalFrame* web_frame = context->web_frame();
+    GURL url = context->url();
+    // We allow about:blank pages to take on the privileges of their parents if
+    // they aren't sandboxed.
+    if (web_frame && !web_frame->getSecurityOrigin().isUnique())
+      url = ScriptContext::GetEffectiveDocumentURL(web_frame, url, true);
     const ContentCapabilitiesInfo& info =
         ContentCapabilitiesInfo::Get(extension.get());
-    if (info.url_patterns.MatchesURL(context->url())) {
+    if (info.url_patterns.MatchesURL(url)) {
       APIPermissionSet new_permissions;
       APIPermissionSet::Union(permissions, info.permissions, &new_permissions);
       permissions = new_permissions;
@@ -1618,26 +1610,24 @@ v8::Local<v8::Object> Dispatcher::GetOrCreateBindObjectIfAvailable(
 void Dispatcher::RequireGuestViewModules(ScriptContext* context) {
   Feature::Context context_type = context->context_type();
   ModuleSystem* module_system = context->module_system();
-
-  // Only set if |context| is capable of running guests in OOPIF. Used to
-  // require additional module overrides.
-  bool guest_view_required = false;
+  bool requires_guest_view_module = false;
 
   // Require AppView.
   if (context->GetAvailability("appViewEmbedderInternal").is_available()) {
+    requires_guest_view_module = true;
     module_system->Require("appView");
   }
 
   // Require ExtensionOptions.
   if (context->GetAvailability("extensionOptionsInternal").is_available()) {
+    requires_guest_view_module = true;
     module_system->Require("extensionOptions");
     module_system->Require("extensionOptionsAttributes");
-
-    guest_view_required = true;
   }
 
   // Require ExtensionView.
   if (context->GetAvailability("extensionViewInternal").is_available()) {
+    requires_guest_view_module = true;
     module_system->Require("extensionView");
     module_system->Require("extensionViewApiMethods");
     module_system->Require("extensionViewAttributes");
@@ -1645,6 +1635,7 @@ void Dispatcher::RequireGuestViewModules(ScriptContext* context) {
 
   // Require WebView.
   if (context->GetAvailability("webViewInternal").is_available()) {
+    requires_guest_view_module = true;
     module_system->Require("webView");
     module_system->Require("webViewApiMethods");
     module_system->Require("webViewAttributes");
@@ -1652,11 +1643,9 @@ void Dispatcher::RequireGuestViewModules(ScriptContext* context) {
             .is_available()) {
       module_system->Require("webViewExperimental");
     }
-
-    guest_view_required = true;
   }
 
-  if (guest_view_required &&
+  if (requires_guest_view_module &&
       content::BrowserPluginGuestMode::UseCrossProcessFramesForGuests()) {
     module_system->Require("guestViewIframe");
     module_system->Require("guestViewIframeContainer");

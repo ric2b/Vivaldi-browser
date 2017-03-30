@@ -264,7 +264,6 @@ var MainPageBehaviorImpl = {
    */
   playCollapseSection_: function(section) {
     var card = section.$.card;
-    var cardStyle = getComputedStyle(card);
 
     this.style.margin = '';
     section.$.header.hidden = false;
@@ -293,6 +292,12 @@ var MainPageBehaviorImpl = {
     // but account for scroll.
     var targetTop = card.getBoundingClientRect().top - this.scroller.scrollTop;
 
+    // Account for the section header.
+    var headerStyle = getComputedStyle(section.$.header);
+    targetTop += section.$.header.offsetHeight +
+        parseInt(headerStyle.marginBottom, 10) +
+        parseInt(headerStyle.marginTop, 10);
+
     var keyframes = [{
       top: startingTop + 'px',
       minHeight: cardHeightStart + 'px',
@@ -304,16 +309,17 @@ var MainPageBehaviorImpl = {
     var options = /** @type {!KeyframeEffectOptions} */({
       duration: EXPAND_DURATION
     });
-    var promise = this.animateElement('section', card, keyframes, options);
-    return promise;
+    return this.animateElement('section', card, keyframes, options);
   },
 };
+
 
 /** @polymerBehavior */
 var MainPageBehavior = [
   TransitionBehavior,
   MainPageBehaviorImpl
 ];
+
 
 /**
  * TODO(michaelpg): integrate slide animations.
@@ -330,12 +336,29 @@ var RoutableBehaviorImpl = {
   },
 
   /** @private */
+  scrollToSection_: function() {
+    // TODO(dschuyler): Determine whether this setTimeout can be removed.
+    // See also: https://github.com/Polymer/polymer/issues/3629
+    setTimeout(function pollForScrollHeight() {
+      // If the current section changes while we are waiting for the page to be
+      // ready, scroll to the newest requested section.
+      var element = this.getSection_(this.currentRoute.section);
+      if (!element)
+        return;
+
+      if (element.parentNode.host.scrollHeight == 0) {
+        setTimeout(pollForScrollHeight.bind(this), 100);
+        return;
+      }
+
+      element.scrollIntoView();
+    }.bind(this));
+  },
+
+  /** @private */
   currentRouteChanged_: function(newRoute, oldRoute) {
-    // route.section is only non-empty when the user is within a subpage.
-    // When the user is not in a subpage, but on the Basic page, route.section
-    // is an empty string.
-    var newRouteIsSubpage = newRoute && newRoute.section;
-    var oldRouteIsSubpage = oldRoute && oldRoute.section;
+    var newRouteIsSubpage = newRoute && newRoute.subpage.length;
+    var oldRouteIsSubpage = oldRoute && oldRoute.subpage.length;
 
     if (!oldRoute && newRouteIsSubpage) {
       // Allow the page to load before expanding the section. TODO(michaelpg):
@@ -357,6 +380,8 @@ var RoutableBehaviorImpl = {
       var section = this.getSection_(newRoute.section);
       if (section)
         this.expandSection(section);
+    } else if (newRoute && newRoute.section) {
+      this.scrollToSection_();
     }
   },
 
@@ -371,6 +396,7 @@ var RoutableBehaviorImpl = {
         this.$$('[section=' + section + ']'));
   },
 };
+
 
 /** @polymerBehavior */
 var RoutableBehavior = [

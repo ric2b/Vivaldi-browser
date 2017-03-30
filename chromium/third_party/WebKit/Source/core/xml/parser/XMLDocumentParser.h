@@ -34,6 +34,7 @@
 #include "platform/text/SegmentedString.h"
 #include "wtf/HashMap.h"
 #include "wtf/OwnPtr.h"
+#include "wtf/RefCounted.h"
 #include "wtf/text/CString.h"
 #include "wtf/text/StringHash.h"
 #include <libxml/tree.h>
@@ -66,11 +67,11 @@ private:
 
 class XMLDocumentParser final : public ScriptableDocumentParser, public ScriptResourceClient {
 public:
-    static RawPtr<XMLDocumentParser> create(Document& document, FrameView* view)
+    static XMLDocumentParser* create(Document& document, FrameView* view)
     {
         return new XMLDocumentParser(document, view);
     }
-    static RawPtr<XMLDocumentParser> create(DocumentFragment* fragment, Element* element, ParserContentPolicy parserContentPolicy)
+    static XMLDocumentParser* create(DocumentFragment* fragment, Element* element, ParserContentPolicy parserContentPolicy)
     {
         return new XMLDocumentParser(fragment, element, parserContentPolicy);
     }

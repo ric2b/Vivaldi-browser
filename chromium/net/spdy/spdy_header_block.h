@@ -11,7 +11,6 @@
 #include <memory>
 #include <string>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 #include "net/base/linked_hash_map.h"
 #include "net/base/net_export.h"
@@ -83,6 +82,11 @@ class NET_EXPORT SpdyHeaderBlock {
   // Allows either lookup or mutation of the value associated with a key.
   StringPieceProxy operator[](const base::StringPiece key);
 
+  // Non-mutating lookup of header value. Returns empty StringPiece if key not
+  // present. To distinguish between absence of header and empty header value,
+  // use find().
+  base::StringPiece GetHeader(const base::StringPiece key) const;
+
   // This object provides automatic conversions that allow SpdyHeaderBlock to be
   // nearly a drop-in replacement for linked_hash_map<string, string>. It reads
   // data from or writes data to a SpdyHeaderBlock::Storage.
@@ -126,11 +130,11 @@ class NET_EXPORT SpdyHeaderBlock {
   void AppendHeader(const base::StringPiece key, const base::StringPiece value);
 
   MapType block_;
-  scoped_ptr<Storage> storage_;
+  std::unique_ptr<Storage> storage_;
 };
 
 // Converts a SpdyHeaderBlock into NetLog event parameters.
-NET_EXPORT scoped_ptr<base::Value> SpdyHeaderBlockNetLogCallback(
+NET_EXPORT std::unique_ptr<base::Value> SpdyHeaderBlockNetLogCallback(
     const SpdyHeaderBlock* headers,
     NetLogCaptureMode capture_mode);
 

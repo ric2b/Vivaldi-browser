@@ -47,7 +47,6 @@ public:
     void beginFrame(double lastFrameTimeMonotonic) override;
     void updateAllLifecyclePhases() override;
     void paint(WebCanvas*, const WebRect& viewPort) override;
-    void paintCompositedDeprecated(WebCanvas*, const WebRect&) override;
     void layoutAndPaintAsync(WebLayoutAndPaintAsyncCallback*) override;
     void compositeAndReadbackAsync(WebCompositeAndReadbackAsyncCallback*) override;
     void themeChanged() override;
@@ -60,7 +59,6 @@ public:
         const WebFloatSize& elasticOverscrollDelta,
         float scaleFactor,
         float topControlsShownRatioDelta) override;
-    void recordFrameTimingEvent(FrameTimingEventType, int64_t rectId, const WebVector<WebFrameTimingEvent>& events) override;
     void mouseCaptureLost() override;
     void setFocus(bool) override;
     bool setComposition(
@@ -89,7 +87,6 @@ public:
     void didChangeWindowResizerRect() override;
     WebColor backgroundColor() const override;
     WebPagePopup* pagePopup() const override;
-    void setTopControlsHeight(float height, bool topControlsShrinkLayoutSize) override;
     void updateTopControlsState(WebTopControlsState constraints, WebTopControlsState current, bool animate) override;
     void setVisibilityState(WebPageVisibilityState, bool isInitialState) override;
     bool isTransparent() const override;
@@ -97,6 +94,7 @@ public:
     void setBaseBackgroundColor(WebColor) override;
     bool forSubframe() const { return false; }
     void scheduleAnimation() override;
+    WebWidgetClient* client() const override { return m_client; }
 
 private:
     WebWidgetClient* m_client;

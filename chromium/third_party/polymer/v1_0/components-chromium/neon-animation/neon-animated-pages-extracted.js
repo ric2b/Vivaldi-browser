@@ -25,19 +25,21 @@
 
     },
 
-    observers: [
-      '_selectedChanged(selected)'
-    ],
-
     listeners: {
+      'iron-select': '_onIronSelect',
       'neon-animation-finish': '_onNeonAnimationFinish'
     },
 
-    _selectedChanged: function(selected) {
+    _onIronSelect: function(event) {
+      var selectedPage = event.detail.item;
 
-      var selectedPage = this.selectedItem;
+      // Only consider child elements.
+      if (this.items.indexOf(selectedPage) < 0) {
+        return;
+      }
+
       var oldPage = this._valueToItem(this._prevSelected) || false;
-      this._prevSelected = selected;
+      this._prevSelected = this.selected;
 
       // on initial load and if animateInitialSelection is negated, simply display selectedPage.
       if (!oldPage && !this.animateInitialSelection) {
@@ -45,11 +47,7 @@
         return;
       }
 
-      // insert safari fix.
-      this.animationConfig = [{
-        name: 'opaque-animation',
-        node: selectedPage
-      }];
+      this.animationConfig = [];
 
       // configure selectedPage animations.
       if (this.entryAnimation) {
@@ -100,7 +98,7 @@
       selectedPage.classList.add('neon-animating');
 
       // actually run the animations.
-      if (this.animationConfig.length > 1) {
+      if (this.animationConfig.length >= 1) {
 
         // on first load, ensure we run animations only after element is attached.
         if (!this.isAttached) {

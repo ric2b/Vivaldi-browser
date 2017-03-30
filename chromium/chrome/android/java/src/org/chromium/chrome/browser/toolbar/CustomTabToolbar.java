@@ -138,8 +138,10 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
                 if (currentTab == null || currentTab.getWebContents() == null) return;
                 Activity activity = currentTab.getWindowAndroid().getActivity().get();
                 if (activity == null) return;
-                WebsiteSettingsPopup.show(activity, currentTab, mState == STATE_TITLE_ONLY
-                        ? parsePublisherNameFromUrl(currentTab.getUrl()) : null);
+                String publisherName = mState == STATE_TITLE_ONLY
+                        ? parsePublisherNameFromUrl(currentTab.getUrl()) : null;
+                WebsiteSettingsPopup.show(activity, currentTab, publisherName,
+                        WebsiteSettingsPopup.OPENED_FROM_TOOLBAR);
             }
         });
     }
@@ -366,15 +368,14 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
         mTitleBar.setTextColor(titleTextColor);
 
         if (getProgressBar() != null) {
-            if (!mUseDarkColors) {
-                getProgressBar().setBackgroundColor(ColorUtils
-                        .getLightProgressbarBackground(getToolbarDataProvider().getPrimaryColor()));
-                getProgressBar().setForegroundColor(ApiCompatibilityUtils.getColor(resources,
-                        R.color.progress_bar_foreground_white));
+            if (!ColorUtils.isUsingDefaultToolbarColor(getResources(),
+                    getBackground().getColor())) {
+                getProgressBar().setThemeColor(getBackground().getColor(), false);
             } else {
-                int progressBarBackgroundColorResource = R.color.progress_bar_background;
                 getProgressBar().setBackgroundColor(ApiCompatibilityUtils.getColor(resources,
-                        progressBarBackgroundColorResource));
+                        R.color.progress_bar_background));
+                getProgressBar().setForegroundColor(ApiCompatibilityUtils.getColor(resources,
+                        R.color.progress_bar_foreground));
             }
         }
     }
@@ -615,9 +616,6 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
 
     @Override
     public void setToolbarDataProvider(ToolbarDataProvider model) {}
-
-    @Override
-    public void onUrlPreFocusChanged(boolean gainFocus) {}
 
     @Override
     public void onTextChangedForAutocomplete(boolean canInlineAutocomplete) {}

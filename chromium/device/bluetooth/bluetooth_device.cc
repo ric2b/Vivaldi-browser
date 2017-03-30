@@ -4,15 +4,17 @@
 
 #include "device/bluetooth/bluetooth_device.h"
 
+#include <memory>
 #include <string>
 
+#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_gatt_connection.h"
-#include "device/bluetooth/bluetooth_gatt_service.h"
+#include "device/bluetooth/bluetooth_remote_gatt_service.h"
 #include "grit/bluetooth_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -24,7 +26,9 @@ BluetoothDevice::BluetoothDevice(BluetoothAdapter* adapter)
       services_data_(new base::DictionaryValue()) {}
 
 BluetoothDevice::~BluetoothDevice() {
-  DidDisconnectGatt();
+  for (BluetoothGattConnection* connection : gatt_connections_) {
+    connection->InvalidateConnectionReference();
+  }
 }
 
 BluetoothDevice::ConnectionInfo::ConnectionInfo()
@@ -257,15 +261,15 @@ bool BluetoothDevice::IsGattServicesDiscoveryComplete() const {
   return gatt_services_discovery_complete_;
 }
 
-std::vector<BluetoothGattService*>
-    BluetoothDevice::GetGattServices() const {
-  std::vector<BluetoothGattService*> services;
+std::vector<BluetoothRemoteGattService*> BluetoothDevice::GetGattServices()
+    const {
+  std::vector<BluetoothRemoteGattService*> services;
   for (const auto& iter : gatt_services_)
     services.push_back(iter.second);
   return services;
 }
 
-BluetoothGattService* BluetoothDevice::GetGattService(
+BluetoothRemoteGattService* BluetoothDevice::GetGattService(
     const std::string& identifier) const {
   return gatt_services_.get(identifier);
 }
@@ -329,10 +333,11 @@ BluetoothDevice::UUIDList BluetoothDevice::GetServiceDataUUIDs() const {
 void BluetoothDevice::DidConnectGatt() {
   for (const auto& callback : create_gatt_connection_success_callbacks_) {
     callback.Run(
-        make_scoped_ptr(new BluetoothGattConnection(adapter_, GetAddress())));
+        base::WrapUnique(new BluetoothGattConnection(adapter_, GetAddress())));
   }
   create_gatt_connection_success_callbacks_.clear();
   create_gatt_connection_error_callbacks_.clear();
+  GetAdapter()->NotifyDeviceChanged(this);
 }
 
 void BluetoothDevice::DidFailToConnectGatt(ConnectErrorCode error) {
@@ -356,6 +361,7 @@ void BluetoothDevice::DidDisconnectGatt() {
     connection->InvalidateConnectionReference();
   }
   gatt_connections_.clear();
+  GetAdapter()->NotifyDeviceChanged(this);
 }
 
 void BluetoothDevice::AddGattConnection(BluetoothGattConnection* connection) {

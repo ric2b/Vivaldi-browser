@@ -80,7 +80,6 @@ public:
         // to the style/layout/compositing states.
         Stopping,
         Stopped,
-        Disposed,
     };
 
     class Scope {
@@ -130,12 +129,28 @@ public:
         DocumentLifecycle& m_documentLifecycle;
     };
 
+    // Throttling is disabled by default. Instantiating this class allows
+    // throttling (e.g., during BeginMainFrame). If a script needs to run inside
+    // this scope, DisallowThrottlingScope should be used to let the script
+    // perform a synchronous layout if necessary.
     class CORE_EXPORT AllowThrottlingScope {
         STACK_ALLOCATED();
         WTF_MAKE_NONCOPYABLE(AllowThrottlingScope);
     public:
         AllowThrottlingScope(DocumentLifecycle&);
         ~AllowThrottlingScope();
+    };
+
+    class CORE_EXPORT DisallowThrottlingScope {
+        STACK_ALLOCATED();
+        WTF_MAKE_NONCOPYABLE(DisallowThrottlingScope);
+
+    public:
+        DisallowThrottlingScope(DocumentLifecycle&);
+        ~DisallowThrottlingScope();
+
+    private:
+        int m_savedCount;
     };
 
     DocumentLifecycle();

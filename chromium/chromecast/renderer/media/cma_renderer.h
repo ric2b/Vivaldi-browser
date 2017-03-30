@@ -25,6 +25,7 @@ class DemuxerStreamProvider;
 class GpuVideoAcceleratorFactories;
 class TimeDeltaInterpolator;
 class VideoFrame;
+class VideoOverlayFactory;
 class VideoRendererSink;
 }
 
@@ -32,7 +33,6 @@ namespace chromecast {
 namespace media {
 class AudioPipelineProxy;
 class BalancedMediaTaskRunnerFactory;
-class HoleFrameFactory;
 class MediaPipelineProxy;
 class VideoPipelineProxy;
 
@@ -45,12 +45,8 @@ class CmaRenderer : public ::media::Renderer {
 
   // ::media::Renderer implementation:
   void Initialize(::media::DemuxerStreamProvider* demuxer_stream_provider,
-                  const ::media::PipelineStatusCB& init_cb,
-                  const ::media::StatisticsCB& statistics_cb,
-                  const ::media::BufferingStateCB& buffering_state_cb,
-                  const base::Closure& ended_cb,
-                  const ::media::PipelineStatusCB& error_cb,
-                  const base::Closure& waiting_for_decryption_key_cb) override;
+                  ::media::RendererClient* client,
+                  const ::media::PipelineStatusCB& init_cb) override;
   void Flush(const base::Closure& flush_cb) override;
   void StartPlayingFrom(base::TimeDelta time) override;
   void SetPlaybackRate(double playback_rate) override;
@@ -110,13 +106,9 @@ class CmaRenderer : public ::media::Renderer {
   ::media::DemuxerStreamProvider* demuxer_stream_provider_;
 
   // Set of callbacks.
+  ::media::RendererClient* client_;
   ::media::PipelineStatusCB init_cb_;
-  ::media::StatisticsCB statistics_cb_;
-  base::Closure ended_cb_;
-  ::media::PipelineStatusCB error_cb_;
-  ::media::BufferingStateCB buffering_state_cb_;
   base::Closure flush_cb_;
-  base::Closure waiting_for_decryption_key_cb_;
 
   // Renderer state.
   // Used mostly for checking that transitions are correct.
@@ -130,10 +122,8 @@ class CmaRenderer : public ::media::Renderer {
   bool received_video_eos_;
 
   // Data members for helping the creation of the video hole frame.
-  gfx::Size initial_natural_size_;
-  bool initial_video_hole_created_;
   ::media::GpuVideoAcceleratorFactories* gpu_factories_;
-  std::unique_ptr<HoleFrameFactory> hole_frame_factory_;
+  std::unique_ptr<::media::VideoOverlayFactory> video_overlay_factory_;
 
   // Lock protecting access to |time_interpolator_|.
   base::Lock time_interpolator_lock_;

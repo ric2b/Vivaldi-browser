@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
@@ -16,10 +17,10 @@
 #include "base/threading/thread.h"
 #include "components/sync_driver/backend_data_type_configurer.h"
 #include "components/sync_driver/fake_sync_client.h"
+#include "sync/api/fake_model_type_service.h"
 #include "sync/engine/commit_queue.h"
 #include "sync/internal_api/public/activation_context.h"
 #include "sync/internal_api/public/shared_model_type_processor.h"
-#include "sync/internal_api/public/test/fake_model_type_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace sync_driver_v2 {
@@ -57,11 +58,12 @@ class NullCommitQueue : public syncer_v2::CommitQueue {
 // A class that pretends to be the sync backend.
 class MockSyncBackend {
  public:
-  void Connect(syncer::ModelType type,
-               scoped_ptr<syncer_v2::ActivationContext> activation_context) {
+  void Connect(
+      syncer::ModelType type,
+      std::unique_ptr<syncer_v2::ActivationContext> activation_context) {
     enabled_types_.Put(type);
     activation_context->type_processor->ConnectSync(
-        make_scoped_ptr(new NullCommitQueue()));
+        base::WrapUnique(new NullCommitQueue()));
   }
 
   void Disconnect(syncer::ModelType type) {
@@ -105,9 +107,9 @@ class MockBackendDataTypeConfigurer
     NOTREACHED() << "Not implemented.";
   }
 
-  void ActivateNonBlockingDataType(
-      syncer::ModelType type,
-      scoped_ptr<syncer_v2::ActivationContext> activation_context) override {
+  void ActivateNonBlockingDataType(syncer::ModelType type,
+                                   std::unique_ptr<syncer_v2::ActivationContext>
+                                       activation_context) override {
     // Post on Sync thread just like the real implementation does.
     sync_task_runner_->PostTask(
         FROM_HERE,
@@ -143,11 +145,8 @@ class UIModelTypeControllerTest : public testing::Test,
   void SetUp() override {
     controller_ = new TestUIModelTypeController(
         ui_loop_.task_runner(), base::Closure(), syncer::DEVICE_INFO, this);
-
-    // TODO(crbug.com/543407): Move the processor stuff out.
-    type_processor_ =
-        service_.SetUpProcessor(new syncer_v2::SharedModelTypeProcessor(
-            syncer::DEVICE_INFO, &service_));
+    service_.reset(new syncer_v2::FakeModelTypeService(base::Bind(
+        &UIModelTypeControllerTest::CreateProcessor, base::Unretained(this))));
   }
 
   void TearDown() override {
@@ -157,26 +156,33 @@ class UIModelTypeControllerTest : public testing::Test,
 
   syncer_v2::ModelTypeService* GetModelTypeServiceForType(
       syncer::ModelType type) override {
-    return &service_;
+    return service_.get();
   }
 
  protected:
-  void TestTypeProcessor(bool isAllowingChanges, bool isConnected) {
-    EXPECT_EQ(isAllowingChanges, type_processor_->IsAllowingChanges());
+  std::unique_ptr<syncer_v2::ModelTypeChangeProcessor> CreateProcessor(
+      syncer::ModelType type,
+      syncer_v2::ModelTypeService* service) {
+    std::unique_ptr<syncer_v2::SharedModelTypeProcessor> processor =
+        base::WrapUnique(
+            new syncer_v2::SharedModelTypeProcessor(type, service));
+    type_processor_ = processor.get();
+    return std::move(processor);
+  }
+
+  void ExpectProcessorConnected(bool isConnected) {
+    DCHECK(type_processor_);
     EXPECT_EQ(isConnected, type_processor_->IsConnected());
   }
 
-  void OnMetadataLoaded() {
-    type_processor_->OnMetadataLoaded(
-        make_scoped_ptr(new syncer_v2::MetadataBatch()));
-  }
-
   void LoadModels() {
-    if (!type_processor_->IsAllowingChanges()) {
-      OnMetadataLoaded();
-    }
     controller_->LoadModels(base::Bind(
         &UIModelTypeControllerTest::LoadModelsDone, base::Unretained(this)));
+    if (!type_processor_->IsAllowingChanges()) {
+      type_processor_->OnMetadataLoaded(
+          syncer::SyncError(),
+          base::WrapUnique(new syncer_v2::MetadataBatch()));
+    }
 
     if (auto_run_tasks_) {
       RunAllTasks();
@@ -246,7 +252,7 @@ class UIModelTypeControllerTest : public testing::Test,
   scoped_refptr<base::TestSimpleTaskRunner> sync_thread_runner_;
   MockSyncBackend backend_;
   MockBackendDataTypeConfigurer configurer_;
-  syncer_v2::FakeModelTypeService service_;
+  std::unique_ptr<syncer_v2::FakeModelTypeService> service_;
 };
 
 TEST_F(UIModelTypeControllerTest, InitialState) {
@@ -255,13 +261,12 @@ TEST_F(UIModelTypeControllerTest, InitialState) {
 }
 
 TEST_F(UIModelTypeControllerTest, LoadModelsOnUIThread) {
-  TestTypeProcessor(false, false);  // not enabled, not connected.
   LoadModels();
   EXPECT_EQ(sync_driver::DataTypeController::MODEL_LOADED,
             controller_->state());
   EXPECT_TRUE(load_models_callback_called_);
   EXPECT_FALSE(load_models_error_.IsSet());
-  TestTypeProcessor(true, false);  // enabled, not connected.
+  ExpectProcessorConnected(false);
 }
 
 TEST_F(UIModelTypeControllerTest, LoadModelsTwice) {
@@ -279,7 +284,7 @@ TEST_F(UIModelTypeControllerTest, ActivateDataTypeOnUIThread) {
   EXPECT_EQ(sync_driver::DataTypeController::MODEL_LOADED,
             controller_->state());
   RegisterWithBackend();
-  TestTypeProcessor(true, true);  // enabled, connected.
+  ExpectProcessorConnected(true);
 
   StartAssociating();
   EXPECT_EQ(sync_driver::DataTypeController::RUNNING, controller_->state());
@@ -288,7 +293,7 @@ TEST_F(UIModelTypeControllerTest, ActivateDataTypeOnUIThread) {
 TEST_F(UIModelTypeControllerTest, Stop) {
   LoadModels();
   RegisterWithBackend();
-  TestTypeProcessor(true, true);  // enabled, connected.
+  ExpectProcessorConnected(true);
   StartAssociating();
 
   DeactivateDataTypeAndStop();

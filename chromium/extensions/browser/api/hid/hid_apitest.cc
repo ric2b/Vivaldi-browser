@@ -6,8 +6,9 @@
 #include <stdint.h>
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "device/core/mock_device_client.h"
 #include "device/hid/hid_collection_info.h"
@@ -147,9 +148,9 @@ class TestExtensionsAPIClient : public ShellExtensionsAPIClient {
  public:
   TestExtensionsAPIClient() : ShellExtensionsAPIClient() {}
 
-  scoped_ptr<DevicePermissionsPrompt> CreateDevicePermissionsPrompt(
+  std::unique_ptr<DevicePermissionsPrompt> CreateDevicePermissionsPrompt(
       content::WebContents* web_contents) const override {
-    return make_scoped_ptr(new TestDevicePermissionsPrompt(web_contents));
+    return base::WrapUnique(new TestDevicePermissionsPrompt(web_contents));
   }
 };
 
@@ -207,7 +208,7 @@ class HidApiTest : public ShellApiTest {
   }
 
  protected:
-  scoped_ptr<MockDeviceClient> device_client_;
+  std::unique_ptr<MockDeviceClient> device_client_;
 };
 
 IN_PROC_BROWSER_TEST_F(HidApiTest, HidApp) {

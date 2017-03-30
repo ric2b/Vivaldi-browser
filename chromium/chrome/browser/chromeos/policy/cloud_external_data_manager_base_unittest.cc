@@ -17,7 +17,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/test_simple_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/policy/cloud_external_data_store.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_store.h"
@@ -157,12 +157,10 @@ void CloudExternalDataManagerBaseTest::SetUp() {
   SetUpExternalDataManager();
 
   // Set |kStringPolicy| to a string value.
-  cloud_policy_store_.policy_map_.Set(kStringPolicy,
-                                      POLICY_LEVEL_MANDATORY,
-                                      POLICY_SCOPE_USER,
-                                      POLICY_SOURCE_CLOUD,
-                                      new base::StringValue(std::string()),
-                                      NULL);
+  cloud_policy_store_.policy_map_.Set(
+      kStringPolicy, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+      POLICY_SOURCE_CLOUD,
+      base::WrapUnique(new base::StringValue(std::string())), nullptr);
   // Make |k10BytePolicy| reference 10 bytes of external data.
   SetExternalDataReference(
       k10BytePolicy,
@@ -213,13 +211,10 @@ void CloudExternalDataManagerBaseTest::SetExternalDataReference(
     const std::string& policy,
     std::unique_ptr<base::DictionaryValue> metadata) {
   cloud_policy_store_.policy_map_.Set(
-      policy,
-      POLICY_LEVEL_MANDATORY,
-      POLICY_SCOPE_USER,
-      POLICY_SOURCE_CLOUD,
-      metadata.release(),
-      new ExternalDataFetcher(
-          external_data_manager_->weak_factory_.GetWeakPtr(), policy));
+      policy, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+      std::move(metadata),
+      base::WrapUnique(new ExternalDataFetcher(
+          external_data_manager_->weak_factory_.GetWeakPtr(), policy)));
 }
 
 ExternalDataFetcher::FetchCallback

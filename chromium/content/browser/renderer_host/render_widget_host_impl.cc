@@ -5,6 +5,7 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 
 #include <math.h>
+
 #include <set>
 #include <utility>
 
@@ -16,12 +17,13 @@
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
@@ -55,6 +57,7 @@
 #include "content/common/host_shared_bitmap_manager.h"
 #include "content/common/input_messages.h"
 #include "content/common/resize_params.h"
+#include "content/common/text_input_state.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/notification_service.h"
@@ -143,6 +146,7 @@ inline blink::WebGestureEvent CreateScrollBeginForWrapping(
 
   blink::WebGestureEvent wrap_gesture_scroll_begin;
   wrap_gesture_scroll_begin.type = blink::WebInputEvent::GestureScrollBegin;
+  wrap_gesture_scroll_begin.timeStampSeconds = gesture_event.timeStampSeconds;
   wrap_gesture_scroll_begin.sourceDevice = gesture_event.sourceDevice;
   wrap_gesture_scroll_begin.data.scrollBegin.deltaXHint = 0;
   wrap_gesture_scroll_begin.data.scrollBegin.deltaYHint = 0;
@@ -157,6 +161,7 @@ inline blink::WebGestureEvent CreateScrollEndForWrapping(
 
   blink::WebGestureEvent wrap_gesture_scroll_end;
   wrap_gesture_scroll_end.type = blink::WebInputEvent::GestureScrollEnd;
+  wrap_gesture_scroll_end.timeStampSeconds = gesture_event.timeStampSeconds;
   wrap_gesture_scroll_end.sourceDevice = gesture_event.sourceDevice;
   wrap_gesture_scroll_end.resendingPluginId = gesture_event.resendingPluginId;
 
@@ -203,7 +208,6 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
       next_browser_snapshot_id_(1),
       owned_by_render_frame_host_(false),
       is_focused_(false),
-      scale_input_to_viewport_(IsUseZoomForDSFEnabled()),
       hung_renderer_delay_(
           base::TimeDelta::FromMilliseconds(kHungRendererDelayMs)),
       new_content_rendering_delay_(
@@ -268,8 +272,9 @@ RenderWidgetHostImpl* RenderWidgetHostImpl::FromID(
 }
 
 // static
-scoped_ptr<RenderWidgetHostIterator> RenderWidgetHost::GetRenderWidgetHosts() {
-  scoped_ptr<RenderWidgetHostIteratorImpl> hosts(
+std::unique_ptr<RenderWidgetHostIterator>
+RenderWidgetHost::GetRenderWidgetHosts() {
+  std::unique_ptr<RenderWidgetHostIteratorImpl> hosts(
       new RenderWidgetHostIteratorImpl());
   for (auto& it : g_routing_id_widget_map.Get()) {
     RenderWidgetHost* widget = it.second;
@@ -289,9 +294,9 @@ scoped_ptr<RenderWidgetHostIterator> RenderWidgetHost::GetRenderWidgetHosts() {
 }
 
 // static
-scoped_ptr<RenderWidgetHostIterator>
+std::unique_ptr<RenderWidgetHostIterator>
 RenderWidgetHostImpl::GetAllRenderWidgetHosts() {
-  scoped_ptr<RenderWidgetHostIteratorImpl> hosts(
+  std::unique_ptr<RenderWidgetHostIteratorImpl> hosts(
       new RenderWidgetHostIteratorImpl());
   for (auto& it : g_routing_id_widget_map.Get())
     hosts->Add(it.second);
@@ -330,12 +335,6 @@ int RenderWidgetHostImpl::GetRoutingID() const {
 
 RenderWidgetHostViewBase* RenderWidgetHostImpl::GetView() const {
   return view_.get();
-}
-
-gfx::NativeViewId RenderWidgetHostImpl::GetNativeViewId() const {
-  if (view_)
-    return view_->GetNativeViewId();
-  return 0;
 }
 
 void RenderWidgetHostImpl::ResetSizeAndRepaintPendingFlags() {
@@ -478,7 +477,7 @@ bool RenderWidgetHostImpl::OnMessageReceived(const IPC::Message &msg) {
 
 bool RenderWidgetHostImpl::Send(IPC::Message* msg) {
   if (IPC_MESSAGE_ID_CLASS(msg->type()) == InputMsgStart)
-    return input_router_->SendInput(make_scoped_ptr(msg));
+    return input_router_->SendInput(base::WrapUnique(msg));
 
   return process_->Send(msg);
 }
@@ -616,7 +615,7 @@ void RenderWidgetHostImpl::SetInitialRenderSizeParams(
     const ResizeParams& resize_params) {
   resize_ack_pending_ = resize_params.needs_resize_ack;
 
-  old_resize_params_ = make_scoped_ptr(new ResizeParams(resize_params));
+  old_resize_params_ = base::WrapUnique(new ResizeParams(resize_params));
 }
 
 void RenderWidgetHostImpl::WasResized() {
@@ -629,7 +628,7 @@ void RenderWidgetHostImpl::WasResized() {
     return;
   }
 
-  scoped_ptr<ResizeParams> params(new ResizeParams);
+  std::unique_ptr<ResizeParams> params(new ResizeParams);
   if (color_profile_out_of_date_)
     DispatchColorProfile();
   if (!GetResizeParams(params.get()))
@@ -966,19 +965,8 @@ void RenderWidgetHostImpl::ForwardMouseEventWithLatencyInfo(
     return;
 
   MouseEventWithLatencyInfo mouse_with_latency(mouse_event, ui_latency);
-  latency_tracker_.OnInputEvent(mouse_event, &mouse_with_latency.latency);
+  DispatchInputEventWithLatencyInfo(mouse_event, &mouse_with_latency.latency);
   input_router_->SendMouseEvent(mouse_with_latency);
-
-  // Pass mouse state to gpu service if the subscribe uniform
-  // extension is enabled.
-  if (process_->SubscribeUniformEnabled()) {
-    gpu::ValueState state;
-    state.int_value[0] = mouse_event.x;
-    state.int_value[1] = mouse_event.y;
-    // TODO(orglofch) Separate the mapping of pending value states to the
-    // Gpu Service to be per RWH not per process
-    process_->SendUpdateValueState(GL_MOUSE_POSITION_CHROMIUM, state);
-  }
 }
 
 void RenderWidgetHostImpl::ForwardWheelEvent(
@@ -999,7 +987,7 @@ void RenderWidgetHostImpl::ForwardWheelEventWithLatencyInfo(
     return;
 
   MouseWheelEventWithLatencyInfo wheel_with_latency(wheel_event, ui_latency);
-  latency_tracker_.OnInputEvent(wheel_event, &wheel_with_latency.latency);
+  DispatchInputEventWithLatencyInfo(wheel_event, &wheel_with_latency.latency);
   input_router_->SendWheelEvent(wheel_with_latency);
 }
 
@@ -1055,7 +1043,8 @@ void RenderWidgetHostImpl::ForwardGestureEventWithLatencyInfo(
     return;
 
   GestureEventWithLatencyInfo gesture_with_latency(gesture_event, ui_latency);
-  latency_tracker_.OnInputEvent(gesture_event, &gesture_with_latency.latency);
+  DispatchInputEventWithLatencyInfo(gesture_event,
+                                    &gesture_with_latency.latency);
   input_router_->SendGestureEvent(gesture_with_latency);
 
   if (scroll_update_needs_wrapping) {
@@ -1069,7 +1058,7 @@ void RenderWidgetHostImpl::ForwardEmulatedTouchEvent(
   TRACE_EVENT0("input", "RenderWidgetHostImpl::ForwardEmulatedTouchEvent");
 
   TouchEventWithLatencyInfo touch_with_latency(touch_event);
-  latency_tracker_.OnInputEvent(touch_event, &touch_with_latency.latency);
+  DispatchInputEventWithLatencyInfo(touch_event, &touch_with_latency.latency);
   input_router_->SendTouchEvent(touch_with_latency);
 }
 
@@ -1091,7 +1080,7 @@ void RenderWidgetHostImpl::ForwardTouchEventWithLatencyInfo(
     return;
   }
 
-  latency_tracker_.OnInputEvent(touch_event, &touch_with_latency.latency);
+  DispatchInputEventWithLatencyInfo(touch_event, &touch_with_latency.latency);
   input_router_->SendTouchEvent(touch_with_latency);
 }
 
@@ -1160,12 +1149,12 @@ void RenderWidgetHostImpl::ForwardKeyboardEvent(
 
   NativeWebKeyboardEventWithLatencyInfo key_event_with_latency(key_event);
   key_event_with_latency.event.isBrowserShortcut = is_shortcut;
-  latency_tracker_.OnInputEvent(key_event, &key_event_with_latency.latency);
+  DispatchInputEventWithLatencyInfo(key_event, &key_event_with_latency.latency);
   input_router_->SendKeyboardEvent(key_event_with_latency);
 }
 
 void RenderWidgetHostImpl::QueueSyntheticGesture(
-    scoped_ptr<SyntheticGesture> synthetic_gesture,
+    std::unique_ptr<SyntheticGesture> synthetic_gesture,
     const base::Callback<void(SyntheticGesture::Result)>& on_complete) {
   if (!synthetic_gesture_controller_ && view_) {
     synthetic_gesture_controller_.reset(
@@ -1232,6 +1221,17 @@ void RenderWidgetHostImpl::RemoveMouseEventCallback(
   }
 }
 
+void RenderWidgetHostImpl::AddInputEventObserver(
+    RenderWidgetHost::InputEventObserver* observer) {
+  if (!input_event_observers_.HasObserver(observer))
+    input_event_observers_.AddObserver(observer);
+}
+
+void RenderWidgetHostImpl::RemoveInputEventObserver(
+    RenderWidgetHost::InputEventObserver* observer) {
+  input_event_observers_.RemoveObserver(observer);
+}
+
 void RenderWidgetHostImpl::GetWebScreenInfo(blink::WebScreenInfo* result) {
   TRACE_EVENT0("renderer_host", "RenderWidgetHostImpl::GetWebScreenInfo");
   if (view_)
@@ -1241,7 +1241,7 @@ void RenderWidgetHostImpl::GetWebScreenInfo(blink::WebScreenInfo* result) {
   // TODO(sievers): find a way to make this done another way so the method
   // can be const.
   latency_tracker_.set_device_scale_factor(result->deviceScaleFactor);
-  if (scale_input_to_viewport_)
+  if (IsUseZoomForDSFEnabled())
     input_router_->SetDeviceScaleFactor(result->deviceScaleFactor);
 }
 
@@ -1562,7 +1562,7 @@ bool RenderWidgetHostImpl::OnSwapCompositorFrame(
   ViewHostMsg_SwapCompositorFrame::Param param;
   if (!ViewHostMsg_SwapCompositorFrame::Read(&message, &param))
     return false;
-  scoped_ptr<cc::CompositorFrame> frame(new cc::CompositorFrame);
+  std::unique_ptr<cc::CompositorFrame> frame(new cc::CompositorFrame);
   uint32_t output_surface_id = base::get<0>(param);
   base::get<1>(param).AssignTo(frame.get());
   std::vector<IPC::Message> messages_to_deliver_with_frame;
@@ -1726,7 +1726,7 @@ void RenderWidgetHostImpl::SetTouchEventEmulationEnabled(
 }
 
 void RenderWidgetHostImpl::OnTextInputStateChanged(
-    const ViewHostMsg_TextInputState_Params& params) {
+    const TextInputState& params) {
   if (view_)
     view_->TextInputStateChanged(params);
 }
@@ -1781,7 +1781,7 @@ void RenderWidgetHostImpl::OnShowDisambiguationPopup(
   DCHECK(!rect_pixels.IsEmpty());
   DCHECK(!size.IsEmpty());
 
-  scoped_ptr<cc::SharedBitmap> bitmap =
+  std::unique_ptr<cc::SharedBitmap> bitmap =
       HostSharedBitmapManager::current()->GetSharedBitmapFromId(size, id);
   if (!bitmap) {
     bad_message::ReceivedBadMessage(GetProcess(),
@@ -1888,6 +1888,14 @@ void RenderWidgetHostImpl::DidOverscroll(const DidOverscrollParams& params) {
 void RenderWidgetHostImpl::DidStopFlinging() {
   if (view_)
     view_->DidStopFlinging();
+}
+
+void RenderWidgetHostImpl::DispatchInputEventWithLatencyInfo(
+    const blink::WebInputEvent& event,
+    ui::LatencyInfo* latency) {
+  latency_tracker_.OnInputEvent(event, latency);
+  FOR_EACH_OBSERVER(InputEventObserver, input_event_observers_,
+                    OnInputEvent(event));
 }
 
 void RenderWidgetHostImpl::OnKeyboardEventAck(

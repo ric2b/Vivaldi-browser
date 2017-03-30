@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "core/layout/LayoutBlock.h"
+#include "core/layout/LayoutInline.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/paint/PaintControllerPaintTest.h"
 #include "platform/graphics/GraphicsContext.h"
@@ -53,7 +55,7 @@ TEST_P(PaintLayerPainterTest, CachedSubsequence)
         TestDisplayItem(htmlLayer, DisplayItem::EndSubsequence));
 
     toHTMLElement(content1.node())->setAttribute(HTMLNames::styleAttr, "position: absolute; width: 100px; height: 100px; background-color: green");
-    updateLifecyclePhasesBeforePaint();
+    document().view()->updateAllLifecyclePhasesExceptPaint();
     bool needsCommit = paintWithoutCommit();
 
     EXPECT_DISPLAY_LIST(rootPaintController().newDisplayItemList(), 8,
@@ -110,7 +112,7 @@ TEST_P(PaintLayerPainterTest, CachedSubsequenceOnInterestRectChange)
     PaintLayer& container3Layer = *toLayoutBoxModelObject(container3).layer();
     LayoutObject& content3 = *document().getElementById("content3")->layoutObject();
 
-    updateLifecyclePhasesBeforePaint();
+    document().view()->updateAllLifecyclePhasesExceptPaint();
     IntRect interestRect(0, 0, 400, 300);
     paint(&interestRect);
 
@@ -135,7 +137,7 @@ TEST_P(PaintLayerPainterTest, CachedSubsequenceOnInterestRectChange)
         TestDisplayItem(container3Layer, DisplayItem::EndSubsequence),
         TestDisplayItem(htmlLayer, DisplayItem::EndSubsequence));
 
-    updateLifecyclePhasesBeforePaint();
+    document().view()->updateAllLifecyclePhasesExceptPaint();
     IntRect newInterestRect(0, 100, 300, 1000);
     bool needsCommit = paintWithoutCommit(&newInterestRect);
 
@@ -186,7 +188,7 @@ TEST_P(PaintLayerPainterTest, CachedSubsequenceOnStyleChangeWithInterestRectClip
         "<div id='container2' style='position: relative; z-index: 1; width: 200px; height: 200px; background-color: blue'>"
         "  <div id='content2' style='position: absolute; width: 100px; height: 100px; background-color: green'></div>"
         "</div>");
-    updateLifecyclePhasesBeforePaint();
+    document().view()->updateAllLifecyclePhasesExceptPaint();
     IntRect interestRect(0, 0, 50, 300); // PaintResult of all subsequences will be MayBeClippedByPaintDirtyRect.
     paint(&interestRect);
 
@@ -212,7 +214,7 @@ TEST_P(PaintLayerPainterTest, CachedSubsequenceOnStyleChangeWithInterestRectClip
         TestDisplayItem(htmlLayer, DisplayItem::EndSubsequence));
 
     toHTMLElement(content1.node())->setAttribute(HTMLNames::styleAttr, "position: absolute; width: 100px; height: 100px; background-color: green");
-    updateLifecyclePhasesBeforePaint();
+    document().view()->updateAllLifecyclePhasesExceptPaint();
     bool needsCommit = paintWithoutCommit(&interestRect);
 
     EXPECT_DISPLAY_LIST(rootPaintController().newDisplayItemList(), 8,
@@ -277,7 +279,7 @@ TEST_P(PaintLayerPainterTest, PaintPhaseOutline)
 
     // needsPaintPhaseDescendantOutlines should be set when any descendant on the same layer has outline.
     toHTMLElement(outlineDiv.node())->setAttribute(HTMLNames::styleAttr, styleWithOutline);
-    updateLifecyclePhasesBeforePaint();
+    document().view()->updateAllLifecyclePhasesExceptPaint();
     EXPECT_TRUE(selfPaintingLayer.needsPaintPhaseDescendantOutlines());
     EXPECT_FALSE(nonSelfPaintingLayer.needsPaintPhaseDescendantOutlines());
     paint();
@@ -312,10 +314,39 @@ TEST_P(PaintLayerPainterTest, PaintPhaseFloat)
 
     // needsPaintPhaseFloat should be set when any descendant on the same layer has float.
     toHTMLElement(floatDiv.node())->setAttribute(HTMLNames::styleAttr, styleWithFloat);
-    updateLifecyclePhasesBeforePaint();
+    document().view()->updateAllLifecyclePhasesExceptPaint();
     EXPECT_TRUE(selfPaintingLayer.needsPaintPhaseFloat());
     EXPECT_FALSE(nonSelfPaintingLayer.needsPaintPhaseFloat());
     paint();
+    EXPECT_TRUE(displayItemListContains(rootPaintController().getDisplayItemList(), floatDiv, DisplayItem::BoxDecorationBackground));
+}
+
+TEST_P(PaintLayerPainterTest, PaintPhaseFloatUnderInlineLayer)
+{
+    setBodyInnerHTML(
+        "<div id='self-painting-layer' style='position: absolute'>"
+        "  <div id='non-self-painting-layer' style='overflow: hidden'>"
+        "    <span id='span' style='position: relative'>"
+        "      <div id='float' style='width: 10px; height: 10px; background-color: blue; float: left'></div>"
+        "    </span>"
+        "  </div>"
+        "</div>");
+    document().view()->updateAllLifecyclePhases();
+
+    LayoutObject& floatDiv = *document().getElementById("float")->layoutObject();
+    LayoutInline& span = *toLayoutInline(document().getElementById("span")->layoutObject());
+    PaintLayer& spanLayer = *span.layer();
+    ASSERT_TRUE(&spanLayer == floatDiv.enclosingLayer());
+    ASSERT_FALSE(spanLayer.needsPaintPhaseFloat());
+    LayoutBlock& selfPaintingLayerObject = *toLayoutBlock(document().getElementById("self-painting-layer")->layoutObject());
+    PaintLayer& selfPaintingLayer = *selfPaintingLayerObject.layer();
+    ASSERT_TRUE(selfPaintingLayer.isSelfPaintingLayer());
+    PaintLayer& nonSelfPaintingLayer = *toLayoutBoxModelObject(document().getElementById("non-self-painting-layer")->layoutObject())->layer();
+    ASSERT_FALSE(nonSelfPaintingLayer.isSelfPaintingLayer());
+
+    EXPECT_TRUE(selfPaintingLayer.needsPaintPhaseFloat());
+    EXPECT_FALSE(nonSelfPaintingLayer.needsPaintPhaseFloat());
+    EXPECT_FALSE(spanLayer.needsPaintPhaseFloat());
     EXPECT_TRUE(displayItemListContains(rootPaintController().getDisplayItemList(), floatDiv, DisplayItem::BoxDecorationBackground));
 }
 
@@ -354,7 +385,7 @@ TEST_P(PaintLayerPainterTest, PaintPhaseBlockBackground)
 
     // needsPaintPhaseDescendantBlockBackgrounds should be set when any descendant on the same layer has Background.
     toHTMLElement(backgroundDiv.node())->setAttribute(HTMLNames::styleAttr, styleWithBackground);
-    updateLifecyclePhasesBeforePaint();
+    document().view()->updateAllLifecyclePhasesExceptPaint();
     EXPECT_TRUE(selfPaintingLayer.needsPaintPhaseDescendantBlockBackgrounds());
     EXPECT_FALSE(nonSelfPaintingLayer.needsPaintPhaseDescendantBlockBackgrounds());
     paint();

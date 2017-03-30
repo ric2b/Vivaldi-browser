@@ -20,17 +20,17 @@ class DownloadPermissionRequest : public PermissionBubbleRequest {
       base::WeakPtr<DownloadRequestLimiter::TabDownloadState> host);
   ~DownloadPermissionRequest() override;
 
+ private:
   // PermisisonBubbleDelegate:
   int GetIconId() const override;
-  base::string16 GetMessageText() const override;
   base::string16 GetMessageTextFragment() const override;
   GURL GetOrigin() const override;
   void PermissionGranted() override;
   void PermissionDenied() override;
   void Cancelled() override;
   void RequestFinished() override;
+  PermissionBubbleType GetPermissionBubbleType() const override;
 
- private:
   base::WeakPtr<DownloadRequestLimiter::TabDownloadState> host_;
   GURL request_origin_;
 

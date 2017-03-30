@@ -8,12 +8,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "gpu/command_buffer/service/context_group.h"
 #include "gpu/command_buffer/service/gl_utils.h"
 #include "gpu/gpu_export.h"
@@ -62,6 +62,7 @@ class GPU_EXPORT Framebuffer : public base::RefCounted<Framebuffer> {
     virtual void AddToSignature(
         TextureManager* texture_manager, std::string* signature) const = 0;
     virtual bool FormsFeedbackLoop(TextureRef* texture, GLint level) const = 0;
+    virtual bool EmulatingRGB() const = 0;
 
    protected:
     friend class base::RefCounted<Attachment>;
@@ -224,7 +225,7 @@ class GPU_EXPORT Framebuffer : public base::RefCounted<Framebuffer> {
   typedef base::hash_map<GLenum, scoped_refptr<Attachment> > AttachmentMap;
   AttachmentMap attachments_;
 
-  scoped_ptr<GLenum[]> draw_buffers_;
+  std::unique_ptr<GLenum[]> draw_buffers_;
 
   GLenum read_buffer_;
 

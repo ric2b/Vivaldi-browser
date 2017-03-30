@@ -16,10 +16,12 @@
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/chrome_content_browser_client.h"
@@ -65,7 +67,6 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "chrome/test/base/test_switches.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/app_modal/app_modal_dialog.h"
 #include "components/app_modal/app_modal_dialog_queue.h"
@@ -105,8 +106,12 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_set.h"
 #include "net/base/net_errors.h"
+#include "net/base/test_data_directory.h"
+#include "net/cert/x509_certificate.h"
 #include "net/dns/mock_host_resolver.h"
+#include "net/ssl/ssl_cipher_suite_names.h"
 #include "net/ssl/ssl_connection_status_flags.h"
+#include "net/test/cert_test_util.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
@@ -117,7 +122,6 @@
 #include "ui/base/page_transition_types.h"
 
 #if defined(OS_MACOSX)
-#include "base/mac/mac_util.h"
 #include "base/mac/scoped_nsautorelease_pool.h"
 #include "chrome/browser/ui/cocoa/run_loop_testing.h"
 #endif
@@ -498,13 +502,6 @@ class BrowserTest : public ExtensionBrowserTest {
 // Launch the app on a page with no title, check that the app title was set
 // correctly.
 IN_PROC_BROWSER_TEST_F(BrowserTest, NoTitle) {
-#if defined(OS_WIN) && defined(USE_ASH)
-  // Disable this test in Metro+Ash for now (http://crbug.com/262796).
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshBrowserTests))
-    return;
-#endif
-
   ui_test_utils::NavigateToURL(
       browser(), ui_test_utils::GetTestUrl(
                      base::FilePath(base::FilePath::kCurrentDirectory),
@@ -522,13 +519,6 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, NoTitle) {
 // character in them. This is a regression test for
 // https://crbug.com/503003.
 IN_PROC_BROWSER_TEST_F(BrowserTest, NoTitleFileUrl) {
-#if defined(OS_WIN) && defined(USE_ASH)
-  // Disable this test in Metro+Ash for now (http://crbug.com/262796).
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshBrowserTests))
-    return;
-#endif
-
   // Note that the host names used and the order of these cases are by design.
   // There must be unique query parameters and references per case (i.e. the
   // indexed foo*.com hosts) because if the same query parameter is repeated in
@@ -570,13 +560,6 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, NoTitleFileUrl) {
 // Launch the app, navigate to a page with a title, check that the app title
 // was set correctly.
 IN_PROC_BROWSER_TEST_F(BrowserTest, Title) {
-#if defined(OS_WIN) && defined(USE_ASH)
-  // Disable this test in Metro+Ash for now (http://crbug.com/262796).
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshBrowserTests))
-    return;
-#endif
-
   ui_test_utils::NavigateToURL(
       browser(), ui_test_utils::GetTestUrl(
                      base::FilePath(base::FilePath::kCurrentDirectory),
@@ -2242,13 +2225,6 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, WindowOpenClose) {
 #if !defined(OS_MACOSX) && \
     !(defined(OS_LINUX) && !defined(OS_CHROMEOS) && defined(USE_AURA))
 IN_PROC_BROWSER_TEST_F(BrowserTest, FullscreenBookmarkBar) {
-#if defined(OS_WIN) && defined(USE_ASH)
-  // Disable this test in Metro+Ash for now (http://crbug.com/262796).
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshBrowserTests))
-    return;
-#endif
-
   chrome::ToggleBookmarkBar(browser());
   EXPECT_EQ(BookmarkBar::SHOW, browser()->bookmark_bar_state());
   chrome::ToggleFullscreenMode(browser());
@@ -2412,13 +2388,6 @@ class NoStartupWindowTest : public BrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(NoStartupWindowTest, NoStartupWindowBasicTest) {
-#if defined(OS_WIN) && defined(USE_ASH)
-  // kNoStartupWindow doesn't make sense in Metro+Ash.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshBrowserTests))
-    return;
-#endif
-
   // No browser window should be started by default.
   EXPECT_EQ(0u, chrome::GetTotalBrowserCount());
 
@@ -2434,13 +2403,6 @@ IN_PROC_BROWSER_TEST_F(NoStartupWindowTest, NoStartupWindowBasicTest) {
 // session state.
 #if !defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(NoStartupWindowTest, DontInitSessionServiceForApps) {
-#if defined(OS_WIN) && defined(USE_ASH)
-  // kNoStartupWindow doesn't make sense in Metro+Ash.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshBrowserTests))
-    return;
-#endif
-
   Profile* profile = ProfileManager::GetActiveUserProfile();
 
   SessionService* session_service =
@@ -2471,13 +2433,6 @@ class AppModeTest : public BrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(AppModeTest, EnableAppModeTest) {
-#if defined(OS_WIN) && defined(USE_ASH)
-  // Disable this test in Metro+Ash for now (http://crbug.com/262796).
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshBrowserTests))
-    return;
-#endif
-
   // Test that an application browser window loads correctly.
 
   // Verify the browser is in application mode.
@@ -2722,12 +2677,6 @@ IN_PROC_BROWSER_TEST_F(ClickModifierTest, DISABLED_HrefShiftMiddleClickTest) {
 }
 
 IN_PROC_BROWSER_TEST_F(BrowserTest, GetSizeForNewRenderView) {
-#if defined(OS_MACOSX)
-  // TODO(erikchen): This behavior has regressed on OSX 10.7 and 10.8 and should
-  // be fixed. http://crbug.com/503185
-  if (base::mac::IsOSMountainLion() || base::mac::IsOSLion())
-    return;
-#endif  // defined(OS_MACOSX)
   // The instant extended NTP has javascript that does not work with
   // ui_test_utils::NavigateToURL.  The NTP rvh reloads when the browser tries
   // to navigate away from the page, which causes the WebContents to end up in
@@ -3094,48 +3043,121 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, SecurityStyleChangedObserverGoBack) {
 
 namespace {
 
-// A URLRequestMockHTTPJob that mocks an SSL connection with an
-// obsolete protocol version.
-class URLRequestNonsecureConnection : public net::URLRequestMockHTTPJob {
+// After AddNonsecureUrlHandler() is called, requests to this hostname
+// will use obsolete TLS settings.
+const char kMockNonsecureHostname[] = "example-nonsecure.test";
+
+// A URLRequestMockHTTPJob that mocks a TLS connection with an obsolete
+// protocol version.
+class URLRequestObsoleteTLSJob : public net::URLRequestMockHTTPJob {
  public:
+  URLRequestObsoleteTLSJob(net::URLRequest* request,
+                           net::NetworkDelegate* network_delegate,
+                           const base::FilePath& file_path,
+                           scoped_refptr<net::X509Certificate> cert,
+                           scoped_refptr<base::TaskRunner> task_runner)
+      : net::URLRequestMockHTTPJob(request,
+                                   network_delegate,
+                                   file_path,
+                                   task_runner),
+        cert_(std::move(cert)) {}
+
   void GetResponseInfo(net::HttpResponseInfo* info) override {
-    info->ssl_info.connection_status = (net::SSL_CONNECTION_VERSION_TLS1_1
-                                        << net::SSL_CONNECTION_VERSION_SHIFT);
-    // TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 from
-    // http://www.iana.org/assignments/tls-parameters/tls-parameters.xml#tls-parameters-4
-    const uint16_t ciphersuite = 0xc02f;
-    net::SSLConnectionStatusSetCipherSuite(ciphersuite,
+    net::URLRequestMockHTTPJob::GetResponseInfo(info);
+    net::SSLConnectionStatusSetVersion(net::SSL_CONNECTION_VERSION_TLS1_1,
+                                       &info->ssl_info.connection_status);
+    const uint16_t kTlsEcdheRsaWithAes128CbcSha = 0xc013;
+    net::SSLConnectionStatusSetCipherSuite(kTlsEcdheRsaWithAes128CbcSha,
                                            &info->ssl_info.connection_status);
+    info->ssl_info.cert = cert_;
   }
 
  protected:
-  ~URLRequestNonsecureConnection() override {}
+  ~URLRequestObsoleteTLSJob() override {}
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(URLRequestNonsecureConnection);
+  const scoped_refptr<net::X509Certificate> cert_;
+
+  DISALLOW_COPY_AND_ASSIGN(URLRequestObsoleteTLSJob);
 };
+
+// A URLRequestInterceptor that handles requests with
+// URLRequestObsoleteTLSJob jobs.
+class URLRequestNonsecureInterceptor : public net::URLRequestInterceptor {
+ public:
+  URLRequestNonsecureInterceptor(
+      const base::FilePath& base_path,
+      scoped_refptr<base::SequencedWorkerPool> worker_pool,
+      scoped_refptr<net::X509Certificate> cert)
+      : base_path_(base_path),
+        worker_pool_(std::move(worker_pool)),
+        cert_(std::move(cert)) {}
+
+  ~URLRequestNonsecureInterceptor() override {}
+
+  // net::URLRequestInterceptor:
+  net::URLRequestJob* MaybeInterceptRequest(
+      net::URLRequest* request,
+      net::NetworkDelegate* network_delegate) const override {
+    return new URLRequestObsoleteTLSJob(
+        request, network_delegate, base_path_, cert_,
+        worker_pool_->GetTaskRunnerWithShutdownBehavior(
+            base::SequencedWorkerPool::SKIP_ON_SHUTDOWN));
+  }
+
+ private:
+  const base::FilePath base_path_;
+  const scoped_refptr<base::SequencedWorkerPool> worker_pool_;
+  const scoped_refptr<net::X509Certificate> cert_;
+
+  DISALLOW_COPY_AND_ASSIGN(URLRequestNonsecureInterceptor);
+};
+
+// Installs a handler to serve HTTPS requests to
+// |kMockNonsecureHostname| with connections that have obsolete TLS
+// settings.
+void AddNonsecureUrlHandler(
+    const base::FilePath& base_path,
+    scoped_refptr<net::X509Certificate> cert,
+    scoped_refptr<base::SequencedWorkerPool> worker_pool) {
+  net::URLRequestFilter* filter = net::URLRequestFilter::GetInstance();
+  filter->AddHostnameInterceptor(
+      "https", kMockNonsecureHostname,
+      std::unique_ptr<net::URLRequestInterceptor>(
+          new URLRequestNonsecureInterceptor(base_path, worker_pool, cert)));
+}
 
 class BrowserTestNonsecureURLRequest : public BrowserTest {
  public:
-  BrowserTestNonsecureURLRequest() : BrowserTest() {}
+  BrowserTestNonsecureURLRequest() : BrowserTest(), cert_(nullptr) {}
+
+  void SetUpInProcessBrowserTestFixture() override {
+    cert_ =
+        net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem");
+    ASSERT_TRUE(cert_);
+  }
+
   void SetUpOnMainThread() override {
-    base::FilePath root_http;
-    PathService::Get(chrome::DIR_TEST_DATA, &root_http);
+    base::FilePath serve_file;
+    PathService::Get(chrome::DIR_TEST_DATA, &serve_file);
+    serve_file = serve_file.Append(FILE_PATH_LITERAL("title1.html"));
     content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
         base::Bind(
-            &URLRequestNonsecureConnection::AddUrlHandlers, root_http,
+            &AddNonsecureUrlHandler, serve_file, cert_,
             make_scoped_refptr(content::BrowserThread::GetBlockingPool())));
   }
 
  private:
+  scoped_refptr<net::X509Certificate> cert_;
+
   DISALLOW_COPY_AND_ASSIGN(BrowserTestNonsecureURLRequest);
 };
 
 }  // namespace
 
-// Tests that a nonsecure connection does not get a secure connection
-// explanation.
+// Tests that a connection with obsolete TLS settings does not get a
+// secure connection explanation.
 IN_PROC_BROWSER_TEST_F(BrowserTestNonsecureURLRequest,
                        SecurityStyleChangedObserverNonsecureConnection) {
   content::WebContents* web_contents =
@@ -3143,7 +3165,16 @@ IN_PROC_BROWSER_TEST_F(BrowserTestNonsecureURLRequest,
   SecurityStyleTestObserver observer(web_contents);
 
   ui_test_utils::NavigateToURL(
-      browser(), URLRequestNonsecureConnection::GetMockHttpsUrl(std::string()));
+      browser(), GURL(std::string("https://") + kMockNonsecureHostname));
+
+  // The security style of the page doesn't get downgraded for obsolete
+  // TLS settings, so it should remain at SECURITY_STYLE_AUTHENTICATED.
+  EXPECT_EQ(content::SECURITY_STYLE_AUTHENTICATED,
+            observer.latest_security_style());
+
+  // The messages explaining the security style do, however, get
+  // downgraded: SECURE_PROTOCOL_AND_CIPHERSUITE should not show up when
+  // the TLS settings are obsolete.
   for (const auto& explanation :
        observer.latest_explanations().secure_explanations) {
     EXPECT_NE(l10n_util::GetStringUTF8(IDS_SECURE_PROTOCOL_AND_CIPHERSUITE),

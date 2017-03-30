@@ -20,9 +20,9 @@
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/test_simple_task_runner.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -450,8 +450,6 @@ class TestIOHandler : public MessageLoopForIO::IOHandler {
 TestIOHandler::TestIOHandler(const wchar_t* name, HANDLE signal, bool wait)
     : signal_(signal), wait_(wait) {
   memset(buffer_, 0, sizeof(buffer_));
-  memset(&context_, 0, sizeof(context_));
-  context_.handler = this;
 
   file_.Set(CreateFile(name, GENERIC_READ, 0, NULL, OPEN_EXISTING,
                        FILE_FLAG_OVERLAPPED, NULL));

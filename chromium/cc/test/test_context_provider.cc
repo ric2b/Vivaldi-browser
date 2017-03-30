@@ -29,25 +29,22 @@ scoped_refptr<TestContextProvider> TestContextProvider::Create() {
 scoped_refptr<TestContextProvider> TestContextProvider::CreateWorker() {
   scoped_refptr<TestContextProvider> worker_context_provider =
       Create(TestWebGraphicsContext3D::Create());
-  if (!worker_context_provider)
-    return nullptr;
   // Worker contexts are bound to the thread they are created on.
   if (!worker_context_provider->BindToCurrentThread())
     return nullptr;
-  worker_context_provider->SetupLock();
   return worker_context_provider;
 }
 
 // static
 scoped_refptr<TestContextProvider> TestContextProvider::Create(
-    scoped_ptr<TestWebGraphicsContext3D> context) {
+    std::unique_ptr<TestWebGraphicsContext3D> context) {
   if (!context)
     return NULL;
   return new TestContextProvider(std::move(context));
 }
 
 TestContextProvider::TestContextProvider(
-    scoped_ptr<TestWebGraphicsContext3D> context)
+    std::unique_ptr<TestWebGraphicsContext3D> context)
     : context3d_(std::move(context)),
       context_gl_(new TestGLES2Interface(context3d_.get())),
       bound_(false),
@@ -86,10 +83,9 @@ void TestContextProvider::DetachFromThread() {
   context_thread_checker_.DetachFromThread();
 }
 
-ContextProvider::Capabilities TestContextProvider::ContextCapabilities() {
+gpu::Capabilities TestContextProvider::ContextCapabilities() {
   DCHECK(bound_);
   DCHECK(context_thread_checker_.CalledOnValidThread());
-
   return context3d_->test_capabilities();
 }
 
@@ -112,9 +108,8 @@ class GrContext* TestContextProvider::GrContext() {
   if (gr_context_)
     return gr_context_.get();
 
-  skia::RefPtr<const GrGLInterface> gl_interface =
-      skia::AdoptRef(GrGLCreateNullInterface());
-  gr_context_ = skia::AdoptRef(GrContext::Create(
+  sk_sp<const GrGLInterface> gl_interface(GrGLCreateNullInterface());
+  gr_context_ = sk_sp<::GrContext>(GrContext::Create(
       kOpenGL_GrBackend,
       reinterpret_cast<GrBackendContext>(gl_interface.get())));
 
@@ -133,9 +128,6 @@ void TestContextProvider::InvalidateGrContext(uint32_t state) {
     gr_context_.get()->resetContext(state);
 }
 
-void TestContextProvider::SetupLock() {
-}
-
 base::Lock* TestContextProvider::GetLock() {
   return &context_lock_;
 }
@@ -146,7 +138,7 @@ void TestContextProvider::DeleteCachedResources() {
 void TestContextProvider::OnLostContext() {
   DCHECK(context_thread_checker_.CalledOnValidThread());
   if (!lost_context_callback_.is_null())
-    base::ResetAndReturn(&lost_context_callback_).Run();
+    lost_context_callback_.Run();
   if (gr_context_)
     gr_context_->abandonContext();
 }
@@ -167,11 +159,6 @@ void TestContextProvider::SetLostContextCallback(
   DCHECK(context_thread_checker_.CalledOnValidThread());
   DCHECK(lost_context_callback_.is_null() || cb.is_null());
   lost_context_callback_ = cb;
-}
-
-void TestContextProvider::SetMaxTransferBufferUsageBytes(
-    size_t max_transfer_buffer_usage_bytes) {
-  context3d_->SetMaxTransferBufferUsageBytes(max_transfer_buffer_usage_bytes);
 }
 
 }  // namespace cc

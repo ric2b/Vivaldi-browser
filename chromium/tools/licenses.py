@@ -30,6 +30,9 @@ PRUNE_PATHS = set([
     # Placeholder directory only, not third-party code.
     os.path.join('third_party','adobe'),
 
+    # Already covered by //third_party/android_tools.
+    os.path.join('third_party','android_tools_internal'),
+
     # Apache 2.0 license. See crbug.com/140478
     os.path.join('third_party','bidichecker'),
 
@@ -43,10 +46,12 @@ PRUNE_PATHS = set([
     os.path.join('build','secondary'),
     os.path.join('third_party','bison'),
     os.path.join('third_party','blanketjs'),
+    os.path.join('third_party','chromite'),
     os.path.join('third_party','gles2_conform'),
     os.path.join('third_party','gnu_binutils'),
     os.path.join('third_party','gold'),
     os.path.join('third_party','gperf'),
+    os.path.join('third_party','jarjar'),
     os.path.join('third_party','kasko'),
     os.path.join('third_party','lighttpd'),
     os.path.join('third_party','llvm'),
@@ -55,6 +60,7 @@ PRUNE_PATHS = set([
     os.path.join('third_party','nacl_sdk_binaries'),
     os.path.join('third_party','pefile'),
     os.path.join('third_party','psyco_win32'),
+    os.path.join('third_party','pyelftools'),
     os.path.join('third_party','pylib'),
     os.path.join('third_party','pywebsocket'),
     os.path.join('third_party','qunit'),
@@ -166,12 +172,6 @@ SPECIAL_CASES = {
         "Name": "PDFium",
         "URL": "http://code.google.com/p/pdfium/",
         "License": "BSD",
-    },
-    os.path.join('third_party', 'pdfsqueeze'): {
-        "Name": "pdfsqueeze",
-        "URL": "http://code.google.com/p/pdfsqueeze/",
-        "License": "Apache 2.0",
-        "License File": "COPYING",
     },
     os.path.join('third_party', 'ppapi'): {
         "Name": "ppapi",
@@ -317,7 +317,6 @@ KNOWN_NON_IOS_LIBRARIES = set([
     os.path.join('third_party', 'mozilla'),
     os.path.join('third_party', 'npapi'),
     os.path.join('third_party', 'ots'),
-    os.path.join('third_party', 'pdfsqueeze'),
     os.path.join('third_party', 'ppapi'),
     os.path.join('third_party', 'qcms'),
     os.path.join('third_party', 're2'),

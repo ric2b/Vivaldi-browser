@@ -28,6 +28,10 @@ class WebContents;
 // tabs are enabled. Replaces the current controller.
 - (void)createTabStripController;
 
+// Sets the window's collection behavior to the appropriate
+// fullscreen behavior.
+- (void)updateFullscreenCollectionBehavior;
+
 // Saves the window's position in the local state preferences.
 - (void)saveWindowPositionIfNeeded;
 
@@ -51,7 +55,6 @@ class WebContents;
 // Returns YES if the bookmark bar should be placed below the infobar, NO
 // otherwise.
 - (BOOL)placeBookmarkBarBelowInfoBar;
-
 
 // Lays out the tab content area in the given frame. If the height changes,
 // sends a message to the renderer to resize.
@@ -194,8 +197,8 @@ class WebContents;
 // it when we are entering fullscreen.
 - (void)adjustUIForEnteringFullscreen;
 
-// Returns YES if the fullscreen is for tab content.
-- (BOOL)isFullscreenForTabContent;
+// Returns YES if the fullscreen is for tab content or an extension.
+- (BOOL)isFullscreenForTabContentOrExtension;
 
 #endif
 

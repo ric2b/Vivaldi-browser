@@ -6,17 +6,19 @@
 
 #include "bindings/modules/v8/ModuleBindingsInitializer.h"
 #include "core/EventTypeNames.h"
+#include "core/css/CSSPaintImageGenerator.h"
 #include "core/dom/Document.h"
 #include "core/html/HTMLCanvasElement.h"
+#include "core/offscreencanvas/OffscreenCanvas.h"
 #include "modules/EventModulesFactory.h"
 #include "modules/EventModulesNames.h"
 #include "modules/EventTargetModulesNames.h"
 #include "modules/IndexedDBNames.h"
 #include "modules/accessibility/AXObjectCacheImpl.h"
 #include "modules/canvas2d/CanvasRenderingContext2D.h"
+#include "modules/csspaint/CSSPaintImageGeneratorImpl.h"
 #include "modules/filesystem/DraggedIsolatedFileSystemImpl.h"
 #include "modules/imagebitmap/ImageBitmapRenderingContext.h"
-#include "modules/offscreencanvas/OffscreenCanvas.h"
 #include "modules/offscreencanvas2d/OffscreenCanvasRenderingContext2D.h"
 #include "modules/webdatabase/DatabaseManager.h"
 #include "modules/webgl/WebGL2RenderingContext.h"
@@ -41,6 +43,7 @@ void ModulesInitializer::initialize()
     IndexedDBNames::init();
     AXObjectCache::init(AXObjectCacheImpl::create);
     DraggedIsolatedFileSystem::init(DraggedIsolatedFileSystemImpl::prepareForDataObject);
+    CSSPaintImageGenerator::init(CSSPaintImageGeneratorImpl::create);
 
     CoreInitializer::initialize();
 
@@ -52,6 +55,7 @@ void ModulesInitializer::initialize()
 
     // OffscreenCanvas context types must be registered with the OffscreenCanvas.
     OffscreenCanvas::registerRenderingContextFactory(adoptPtr(new OffscreenCanvasRenderingContext2D::Factory()));
+    OffscreenCanvas::registerRenderingContextFactory(adoptPtr(new WebGLRenderingContext::Factory()));
 
     ASSERT(isInitialized());
 }

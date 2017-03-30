@@ -28,8 +28,15 @@ Status StubDevToolsClient::ConnectIfNecessary() {
 Status StubDevToolsClient::SendCommand(
     const std::string& method,
     const base::DictionaryValue& params) {
-  scoped_ptr<base::DictionaryValue> result;
+  std::unique_ptr<base::DictionaryValue> result;
   return SendCommandAndGetResult(method, params, &result);
+}
+
+Status StubDevToolsClient::SendCommandWithTimeout(
+    const std::string& method,
+    const base::DictionaryValue& params,
+    const Timeout* timeout) {
+  return SendCommand(method, params);
 }
 
 Status StubDevToolsClient::SendAsyncCommand(
@@ -39,11 +46,19 @@ Status StubDevToolsClient::SendAsyncCommand(
 }
 
 Status StubDevToolsClient::SendCommandAndGetResult(
-      const std::string& method,
-      const base::DictionaryValue& params,
-      scoped_ptr<base::DictionaryValue>* result) {
+    const std::string& method,
+    const base::DictionaryValue& params,
+    std::unique_ptr<base::DictionaryValue>* result) {
   result->reset(new base::DictionaryValue());
   return Status(kOk);
+}
+
+Status StubDevToolsClient::SendCommandAndGetResultWithTimeout(
+    const std::string& method,
+    const base::DictionaryValue& params,
+    const Timeout* timeout,
+    std::unique_ptr<base::DictionaryValue>* result) {
+  return SendCommandAndGetResult(method, params, result);
 }
 
 void StubDevToolsClient::AddListener(DevToolsEventListener* listener) {
@@ -52,7 +67,7 @@ void StubDevToolsClient::AddListener(DevToolsEventListener* listener) {
 
 Status StubDevToolsClient::HandleEventsUntil(
     const ConditionalFunc& conditional_func,
-    const base::TimeDelta& timeout) {
+    const Timeout& timeout) {
   return Status(kOk);
 }
 

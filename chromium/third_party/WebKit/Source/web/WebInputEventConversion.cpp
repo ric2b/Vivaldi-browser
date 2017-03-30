@@ -129,9 +129,26 @@ ScrollGranularity toPlatformScrollGranularity(WebGestureEvent::ScrollUnits units
     case WebGestureEvent::ScrollUnits::Page:
         return ScrollGranularity::ScrollByPage;
     default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return ScrollGranularity::ScrollByPrecisePixel;
     }
+}
+
+ScrollInertialPhase toPlatformScrollInertialPhase(WebGestureEvent::InertialPhaseState state)
+{
+    static_assert(ScrollInertialPhaseUnknown == static_cast<ScrollInertialPhase>(WebGestureEvent::UnknownMomentumPhase),
+        "Inertial phases not equal");
+    static_assert(ScrollInertialPhaseNonMomentum == static_cast<ScrollInertialPhase>(WebGestureEvent::NonMomentumPhase),
+        "Inertial phases not equal");
+    static_assert(ScrollInertialPhaseMomentum == static_cast<ScrollInertialPhase>(WebGestureEvent::MomentumPhase),
+        "Inertial phases not equal");
+
+    return static_cast<ScrollInertialPhase>(state);
+}
+
+WebGestureEvent::InertialPhaseState toWebGestureInertialPhaseState(ScrollInertialPhase state)
+{
+    return static_cast<WebGestureEvent::InertialPhaseState>(state);
 }
 
 WebGestureEvent::ScrollUnits toWebGestureScrollUnits(ScrollGranularity granularity)
@@ -144,7 +161,7 @@ WebGestureEvent::ScrollUnits toWebGestureScrollUnits(ScrollGranularity granulari
     case ScrollGranularity::ScrollByPage:
         return WebGestureEvent::ScrollUnits::Page;
     default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return WebGestureEvent::ScrollUnits::PrecisePixels;
     }
 }
@@ -190,7 +207,7 @@ PlatformMouseEventBuilder::PlatformMouseEventBuilder(Widget* widget, const WebMo
         break;
 
     default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     }
 }
 
@@ -236,14 +253,14 @@ PlatformGestureEventBuilder::PlatformGestureEventBuilder(Widget* widget, const W
         m_data.m_scroll.m_deltaX = e.data.scrollBegin.deltaXHint;
         m_data.m_scroll.m_deltaY = e.data.scrollBegin.deltaYHint;
         m_data.m_scroll.m_deltaUnits = toPlatformScrollGranularity(e.data.scrollBegin.deltaHintUnits);
-        m_data.m_scroll.m_inertial = e.data.scrollBegin.inertial;
+        m_data.m_scroll.m_inertialPhase = toPlatformScrollInertialPhase(e.data.scrollBegin.inertialPhase);
         m_data.m_scroll.m_synthetic = e.data.scrollBegin.synthetic;
         break;
     case WebInputEvent::GestureScrollEnd:
         m_type = PlatformEvent::GestureScrollEnd;
         m_data.m_scroll.m_resendingPluginId = e.resendingPluginId;
         m_data.m_scroll.m_deltaUnits = toPlatformScrollGranularity(e.data.scrollEnd.deltaUnits);
-        m_data.m_scroll.m_inertial = e.data.scrollEnd.inertial;
+        m_data.m_scroll.m_inertialPhase = toPlatformScrollInertialPhase(e.data.scrollEnd.inertialPhase);
         m_data.m_scroll.m_synthetic = e.data.scrollEnd.synthetic;
         break;
     case WebInputEvent::GestureFlingStart:
@@ -259,7 +276,7 @@ PlatformGestureEventBuilder::PlatformGestureEventBuilder(Widget* widget, const W
         m_data.m_scroll.m_velocityX = e.data.scrollUpdate.velocityX;
         m_data.m_scroll.m_velocityY = e.data.scrollUpdate.velocityY;
         m_data.m_scroll.m_preventPropagation = e.data.scrollUpdate.preventPropagation;
-        m_data.m_scroll.m_inertial = e.data.scrollUpdate.inertial;
+        m_data.m_scroll.m_inertialPhase = toPlatformScrollInertialPhase(e.data.scrollUpdate.inertialPhase);
         m_data.m_scroll.m_deltaUnits = toPlatformScrollGranularity(e.data.scrollUpdate.deltaUnits);
         break;
     case WebInputEvent::GestureTap:
@@ -286,7 +303,7 @@ PlatformGestureEventBuilder::PlatformGestureEventBuilder(Widget* widget, const W
         // DoubleTap gesture is now handled as PlatformEvent::GestureTap with tap_count = 2. So no
         // need to convert to a Platfrom DoubleTap gesture. But in WebViewImpl::handleGestureEvent
         // all WebGestureEvent are converted to PlatformGestureEvent, for completeness and not reach
-        // the ASSERT_NOT_REACHED() at the end, convert the DoubleTap to a NoType.
+        // the NOTREACHED() at the end, convert the DoubleTap to a NoType.
         m_type = PlatformEvent::NoType;
         break;
     case WebInputEvent::GestureTwoFingerTap:
@@ -312,7 +329,7 @@ PlatformGestureEventBuilder::PlatformGestureEventBuilder(Widget* widget, const W
         m_data.m_pinchUpdate.m_scale = e.data.pinchUpdate.scale;
         break;
     default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     }
     m_position = widget->convertFromRootFrame(flooredIntPoint(convertHitPointToRootFrame(widget, FloatPoint(e.x, e.y))));
     m_globalPosition = IntPoint(e.globalX, e.globalY);
@@ -326,7 +343,7 @@ PlatformGestureEventBuilder::PlatformGestureEventBuilder(Widget* widget, const W
         m_source = PlatformGestureSourceTouchscreen;
         break;
     case WebGestureDeviceUninitialized:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     }
 }
 
@@ -344,7 +361,7 @@ inline PlatformEvent::EventType toPlatformKeyboardEventType(WebInputEvent::Type 
     case WebInputEvent::Char:
         return PlatformEvent::Char;
     default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     }
     return PlatformEvent::KeyDown;
 }
@@ -408,8 +425,10 @@ inline PlatformEvent::EventType toPlatformTouchEventType(const WebInputEvent::Ty
         return PlatformEvent::TouchEnd;
     case WebInputEvent::TouchCancel:
         return PlatformEvent::TouchCancel;
+    case WebInputEvent::TouchScrollStarted:
+        return PlatformEvent::TouchScrollStarted;
     default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     }
     return PlatformEvent::TouchStart;
 }
@@ -428,7 +447,7 @@ inline PlatformTouchPoint::TouchState toPlatformTouchPointState(const WebTouchPo
     case WebTouchPoint::StateCancelled:
         return PlatformTouchPoint::TouchCancelled;
     case WebTouchPoint::StateUndefined:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     }
     return PlatformTouchPoint::TouchReleased;
 }
@@ -452,7 +471,6 @@ PlatformTouchPointBuilder::PlatformTouchPointBuilder(Widget* widget, const WebTo
     m_pointerProperties = point;
     m_state = toPlatformTouchPointState(point.state);
 
-    // This assumes convertFromRootFrame does only translations, not scales.
     FloatPoint floatPos = convertHitPointToRootFrame(widget, point.position);
     IntPoint flooredPoint = flooredIntPoint(floatPos);
     m_pos = widget->convertFromRootFrame(flooredPoint) + (floatPos - flooredPoint);
@@ -468,6 +486,7 @@ PlatformTouchEventBuilder::PlatformTouchEventBuilder(Widget* widget, const WebTo
     m_modifiers = event.modifiers;
     m_timestamp = event.timeStampSeconds;
     m_causesScrollingIfUncanceled = event.movedBeyondSlopRegion;
+    m_dispatchedDuringFling = event.dispatchedDuringFling;
 
     for (unsigned i = 0; i < event.touchesLength; ++i)
         m_touchPoints.append(PlatformTouchPointBuilder(widget, event.touches[i]));
@@ -475,19 +494,19 @@ PlatformTouchEventBuilder::PlatformTouchEventBuilder(Widget* widget, const WebTo
     m_dispatchType = toPlatformDispatchType(event.dispatchType);
 }
 
-static FloatPoint convertAbsoluteLocationForLayoutObjectFloat(const LayoutPoint& location, const LayoutObject& layoutObject)
+static FloatPoint convertAbsoluteLocationForLayoutObjectFloat(const LayoutPoint& location, const LayoutItem layoutItem)
 {
-    return layoutObject.absoluteToLocal(FloatPoint(location), UseTransforms);
+    return layoutItem.absoluteToLocal(FloatPoint(location), UseTransforms);
 }
 
-static IntPoint convertAbsoluteLocationForLayoutObject(const LayoutPoint& location, const LayoutObject& layoutObject)
+static IntPoint convertAbsoluteLocationForLayoutObject(const LayoutPoint& location, const LayoutItem layoutItem)
 {
-    return roundedIntPoint(convertAbsoluteLocationForLayoutObjectFloat(location, layoutObject));
+    return roundedIntPoint(convertAbsoluteLocationForLayoutObjectFloat(location, layoutItem));
 }
 
 // FIXME: Change |widget| to const Widget& after RemoteFrames get
 // RemoteFrameViews.
-static void updateWebMouseEventFromCoreMouseEvent(const MouseRelatedEvent& event, const Widget* widget, const LayoutObject& layoutObject, WebMouseEvent& webEvent)
+static void updateWebMouseEventFromCoreMouseEvent(const MouseRelatedEvent& event, const Widget* widget, const LayoutItem layoutItem, WebMouseEvent& webEvent)
 {
     webEvent.timeStampSeconds = event.platformTimeStamp();
     webEvent.modifiers = event.modifiers();
@@ -501,12 +520,12 @@ static void updateWebMouseEventFromCoreMouseEvent(const MouseRelatedEvent& event
     webEvent.globalY = event.screenY();
     webEvent.windowX = pointInRootFrame.x();
     webEvent.windowY = pointInRootFrame.y();
-    IntPoint localPoint = convertAbsoluteLocationForLayoutObject(event.absoluteLocation(), layoutObject);
+    IntPoint localPoint = convertAbsoluteLocationForLayoutObject(event.absoluteLocation(), layoutItem);
     webEvent.x = localPoint.x();
     webEvent.y = localPoint.y();
 }
 
-WebMouseEventBuilder::WebMouseEventBuilder(const Widget* widget, const LayoutObject* layoutObject, const MouseEvent& event)
+WebMouseEventBuilder::WebMouseEventBuilder(const Widget* widget, const LayoutItem layoutItem, const MouseEvent& event)
 {
     if (event.type() == EventTypeNames::mousemove)
         type = WebInputEvent::MouseMove;
@@ -523,7 +542,7 @@ WebMouseEventBuilder::WebMouseEventBuilder(const Widget* widget, const LayoutObj
     else
         return; // Skip all other mouse events.
 
-    updateWebMouseEventFromCoreMouseEvent(event, widget, *layoutObject, *this);
+    updateWebMouseEventFromCoreMouseEvent(event, widget, layoutItem, *this);
 
     switch (event.button()) {
     case LeftButton:
@@ -559,7 +578,7 @@ WebMouseEventBuilder::WebMouseEventBuilder(const Widget* widget, const LayoutObj
 
 // Generate a synthetic WebMouseEvent given a TouchEvent (eg. for emulating a mouse
 // with touch input for plugins that don't support touch input).
-WebMouseEventBuilder::WebMouseEventBuilder(const Widget* widget, const LayoutObject* layoutObject, const TouchEvent& event)
+WebMouseEventBuilder::WebMouseEventBuilder(const Widget* widget, const LayoutItem layoutItem, const TouchEvent& event)
 {
     if (!event.touches())
         return;
@@ -600,19 +619,19 @@ WebMouseEventBuilder::WebMouseEventBuilder(const Widget* widget, const LayoutObj
     modifiers |= WebInputEvent::LeftButtonDown;
     clickCount = (type == MouseDown || type == MouseUp);
 
-    IntPoint localPoint = convertAbsoluteLocationForLayoutObject(touch->absoluteLocation(), *layoutObject);
+    IntPoint localPoint = convertAbsoluteLocationForLayoutObject(touch->absoluteLocation(), layoutItem);
     x = localPoint.x();
     y = localPoint.y();
 
     pointerType = WebPointerProperties::PointerType::Touch;
 }
 
-WebMouseWheelEventBuilder::WebMouseWheelEventBuilder(const Widget* widget, const LayoutObject* layoutObject, const WheelEvent& event)
+WebMouseWheelEventBuilder::WebMouseWheelEventBuilder(const Widget* widget, const LayoutItem layoutItem, const WheelEvent& event)
 {
     if (event.type() != EventTypeNames::wheel && event.type() != EventTypeNames::mousewheel)
         return;
     type = WebInputEvent::MouseWheel;
-    updateWebMouseEventFromCoreMouseEvent(event, widget, *layoutObject, *this);
+    updateWebMouseEventFromCoreMouseEvent(event, widget, layoutItem, *this);
     deltaX = -event.deltaX();
     deltaY = -event.deltaY();
     wheelTicksX = event.ticksX();
@@ -672,13 +691,13 @@ WebInputEvent::Type toWebKeyboardEventType(PlatformEvent::EventType type)
     }
 }
 
-static WebTouchPoint toWebTouchPoint(const Touch* touch, const LayoutObject* layoutObject, WebTouchPoint::State state)
+static WebTouchPoint toWebTouchPoint(const Touch* touch, const LayoutItem layoutItem, WebTouchPoint::State state)
 {
     WebTouchPoint point;
     point.pointerType = WebPointerProperties::PointerType::Touch;
     point.id = touch->identifier();
     point.screenPosition = touch->screenLocation();
-    point.position = convertAbsoluteLocationForLayoutObjectFloat(touch->absoluteLocation(), *layoutObject);
+    point.position = convertAbsoluteLocationForLayoutObjectFloat(touch->absoluteLocation(), layoutItem);
     point.radiusX = touch->radiusX();
     point.radiusY = touch->radiusY();
     point.rotationAngle = touch->rotationAngle();
@@ -696,7 +715,7 @@ static unsigned indexOfTouchPointWithId(const WebTouchPoint* touchPoints, unsign
     return std::numeric_limits<unsigned>::max();
 }
 
-static void addTouchPointsUpdateStateIfNecessary(WebTouchPoint::State state, TouchList* touches, WebTouchPoint* touchPoints, unsigned* touchPointsLength, const LayoutObject* layoutObject)
+static void addTouchPointsUpdateStateIfNecessary(WebTouchPoint::State state, TouchList* touches, WebTouchPoint* touchPoints, unsigned* touchPointsLength, const LayoutItem layoutItem)
 {
     unsigned initialTouchPointsLength = *touchPointsLength;
     for (unsigned i = 0; i < touches->length(); ++i) {
@@ -709,13 +728,13 @@ static void addTouchPointsUpdateStateIfNecessary(WebTouchPoint::State state, Tou
         if (existingPointIndex != std::numeric_limits<unsigned>::max()) {
             touchPoints[existingPointIndex].state = state;
         } else {
-            touchPoints[pointIndex] = toWebTouchPoint(touch, layoutObject, state);
+            touchPoints[pointIndex] = toWebTouchPoint(touch, layoutItem, state);
             ++(*touchPointsLength);
         }
     }
 }
 
-WebTouchEventBuilder::WebTouchEventBuilder(const LayoutObject* layoutObject, const TouchEvent& event)
+WebTouchEventBuilder::WebTouchEventBuilder(const LayoutItem layoutItem, const TouchEvent& event)
 {
     if (event.type() == EventTypeNames::touchstart)
         type = TouchStart;
@@ -726,7 +745,7 @@ WebTouchEventBuilder::WebTouchEventBuilder(const LayoutObject* layoutObject, con
     else if (event.type() == EventTypeNames::touchcancel)
         type = TouchCancel;
     else {
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         type = Undefined;
         return;
     }
@@ -738,15 +757,15 @@ WebTouchEventBuilder::WebTouchEventBuilder(const LayoutObject* layoutObject, con
 
     // Currently touches[] is empty, add stationary points as-is.
     for (unsigned i = 0; i < event.touches()->length() && i < static_cast<unsigned>(WebTouchEvent::touchesLengthCap); ++i) {
-        touches[i] = toWebTouchPoint(event.touches()->item(i), layoutObject, WebTouchPoint::StateStationary);
+        touches[i] = toWebTouchPoint(event.touches()->item(i), layoutItem, WebTouchPoint::StateStationary);
         ++touchesLength;
     }
     // If any existing points are also in the change list, we should update
     // their state, otherwise just add the new points.
-    addTouchPointsUpdateStateIfNecessary(toWebTouchPointState(event.type()), event.changedTouches(), touches, &touchesLength, layoutObject);
+    addTouchPointsUpdateStateIfNecessary(toWebTouchPointState(event.type()), event.changedTouches(), touches, &touchesLength, layoutItem);
 }
 
-WebGestureEventBuilder::WebGestureEventBuilder(const LayoutObject* layoutObject, const GestureEvent& event)
+WebGestureEventBuilder::WebGestureEventBuilder(const LayoutItem layoutItem, const GestureEvent& event)
 {
     if (event.type() == EventTypeNames::gestureshowpress) {
         type = GestureShowPress;
@@ -760,20 +779,20 @@ WebGestureEventBuilder::WebGestureEventBuilder(const LayoutObject* layoutObject,
         data.scrollBegin.deltaXHint = event.deltaX();
         data.scrollBegin.deltaYHint = event.deltaY();
         data.scrollBegin.deltaHintUnits = toWebGestureScrollUnits(event.deltaUnits());
-        data.scrollBegin.inertial = event.inertial();
+        data.scrollBegin.inertialPhase = toWebGestureInertialPhaseState(event.inertialPhase());
         data.scrollBegin.synthetic = event.synthetic();
     } else if (event.type() == EventTypeNames::gesturescrollend) {
         type = GestureScrollEnd;
         resendingPluginId = event.resendingPluginId();
         data.scrollEnd.deltaUnits = toWebGestureScrollUnits(event.deltaUnits());
-        data.scrollEnd.inertial = event.inertial();
+        data.scrollEnd.inertialPhase = toWebGestureInertialPhaseState(event.inertialPhase());
         data.scrollEnd.synthetic = event.synthetic();
     } else if (event.type() == EventTypeNames::gesturescrollupdate) {
         type = GestureScrollUpdate;
         data.scrollUpdate.deltaUnits = toWebGestureScrollUnits(event.deltaUnits());
         data.scrollUpdate.deltaX = event.deltaX();
         data.scrollUpdate.deltaY = event.deltaY();
-        data.scrollUpdate.inertial = event.inertial();
+        data.scrollUpdate.inertialPhase = toWebGestureInertialPhaseState(event.inertialPhase());
         resendingPluginId = event.resendingPluginId();
     } else if (event.type() == EventTypeNames::gestureflingstart) {
         type = GestureFlingStart;
@@ -789,7 +808,7 @@ WebGestureEventBuilder::WebGestureEventBuilder(const LayoutObject* layoutObject,
 
     globalX = event.screenX();
     globalY = event.screenY();
-    IntPoint localPoint = convertAbsoluteLocationForLayoutObject(event.absoluteLocation(), *layoutObject);
+    IntPoint localPoint = convertAbsoluteLocationForLayoutObject(event.absoluteLocation(), layoutItem);
     x = localPoint.x();
     y = localPoint.y();
 
@@ -801,7 +820,7 @@ WebGestureEventBuilder::WebGestureEventBuilder(const LayoutObject* layoutObject,
         sourceDevice = WebGestureDeviceTouchscreen;
         break;
     case GestureSourceUninitialized:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     }
 }
 

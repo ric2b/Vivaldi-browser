@@ -48,7 +48,7 @@ void SavedpasswordsGetListFunction::SetPasswordList(
   languages_ = GetProfile()->GetPrefs()->GetString(prefs::kAcceptLanguages);
 
   for (size_t i = 0; i < password_list.size(); ++i) {
-    scoped_ptr<SavedPasswordItem> new_node(
+    std::unique_ptr<SavedPasswordItem> new_node(
           GetSavedPasswordItem(password_list[i], i));
     svd_pwd_entries.push_back(std::move(*new_node));
   }
@@ -58,7 +58,7 @@ void SavedpasswordsGetListFunction::SetPasswordList(
 }
 
 SavedPasswordItem* SavedpasswordsGetListFunction::GetSavedPasswordItem(
-        const scoped_ptr<autofill::PasswordForm> &form, int id
+        const std::unique_ptr<autofill::PasswordForm> &form, int id
       ){
   SavedPasswordItem* notes_tree_node = new SavedPasswordItem();
   notes_tree_node->username =  base::UTF16ToUTF8(form->username_value);
@@ -82,7 +82,7 @@ void SavedpasswordsGetListFunction::SendResponseToCallback() {
 
 
 void SavedpasswordsGetListFunction::SetPasswordExceptionList(
-  const std::vector<scoped_ptr<autofill::PasswordForm>>&
+  const std::vector<std::unique_ptr<autofill::PasswordForm>>&
           password_exception_list) {
 }
 
@@ -108,7 +108,7 @@ bool SavedpasswordsRemoveFunction::RunAsync(){
   password_manager_presenter_.Initialize();
   password_manager_presenter_.UpdatePasswordLists();
 
-  scoped_ptr<passwords::Remove::Params> params(
+  std::unique_ptr<passwords::Remove::Params> params(
     passwords::Remove::Params::Create(*args_));
     EXTENSION_FUNCTION_VALIDATE(params.get());
     base::StringToInt64(params->id, &idToRemove);

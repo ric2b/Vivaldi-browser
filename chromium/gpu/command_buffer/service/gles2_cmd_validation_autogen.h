@@ -253,12 +253,7 @@ class QueryTargetValidator {
 };
 QueryTargetValidator query_target;
 
-class ReadBufferValidator {
- public:
-  bool IsValid(const GLenum value) const;
-};
-ReadBufferValidator read_buffer;
-
+ValueValidator<GLenum> read_buffer;
 ValueValidator<GLenum> read_pixel_format;
 ValueValidator<GLenum> read_pixel_type;
 ValueValidator<GLenum> render_buffer_format;
@@ -308,7 +303,6 @@ class StringTypeValidator {
 };
 StringTypeValidator string_type;
 
-ValueValidator<GLenum> subscription_target;
 ValueValidator<GLbitfield> sync_flush_flags;
 class SyncParameterValidator {
  public:
@@ -389,7 +383,6 @@ class UniformParameterValidator {
 };
 UniformParameterValidator uniform_parameter;
 
-ValueValidator<GLenum> value_buffer_target;
 class VertexAttribITypeValidator {
  public:
   bool IsValid(const GLenum value) const;

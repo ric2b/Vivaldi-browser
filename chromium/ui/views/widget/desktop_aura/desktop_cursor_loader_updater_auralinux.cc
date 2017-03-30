@@ -7,10 +7,11 @@
 #include <stddef.h>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/cursor/cursor_loader.h"
 #include "ui/base/cursor/cursors_aura.h"
-#include "ui/gfx/display.h"
+#include "ui/display/display.h"
 
 namespace views {
 namespace {
@@ -62,14 +63,15 @@ void DesktopCursorLoaderUpdaterAuraLinux::OnCreate(
 }
 
 void DesktopCursorLoaderUpdaterAuraLinux::OnDisplayUpdated(
-    const gfx::Display& display,
+    const display::Display& display,
     ui::CursorLoader* loader) {
   LoadImageCursors(display.device_scale_factor(), loader);
 }
 
 // static
-scoped_ptr<DesktopCursorLoaderUpdater> DesktopCursorLoaderUpdater::Create() {
-  return make_scoped_ptr(new DesktopCursorLoaderUpdaterAuraLinux);
+std::unique_ptr<DesktopCursorLoaderUpdater>
+DesktopCursorLoaderUpdater::Create() {
+  return base::WrapUnique(new DesktopCursorLoaderUpdaterAuraLinux);
 }
 
 }  // namespace views

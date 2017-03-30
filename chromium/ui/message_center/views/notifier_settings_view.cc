@@ -119,7 +119,7 @@ const int kComputedTitleElementSpacing =
     settings::kDescriptionToSwitcherSpace - 6;
 
 // A function to create a focus border.
-scoped_ptr<views::Painter> CreateFocusPainter() {
+std::unique_ptr<views::Painter> CreateFocusPainter() {
   return views::Painter::CreateSolidFocusPainter(kFocusBorderColor,
                                                  gfx::Insets(1, 2, 3, 2));
 }
@@ -144,7 +144,7 @@ class EntryView : public views::View {
   void OnBlur() override;
 
  private:
-  scoped_ptr<views::Painter> focus_painter_;
+  std::unique_ptr<views::Painter> focus_painter_;
 
   DISALLOW_COPY_AND_ASSIGN(EntryView);
 };
@@ -299,15 +299,14 @@ NotifierSettingsView::NotifierButton::NotifierButton(
 
   checkbox_->SetChecked(notifier_->enabled);
   checkbox_->set_listener(this);
-  checkbox_->SetFocusable(false);
+  checkbox_->SetFocusBehavior(FocusBehavior::NEVER);
   checkbox_->SetAccessibleName(notifier_->name);
 
   if (ShouldHaveLearnMoreButton()) {
     // Create a more-info button that will be right-aligned.
     learn_more_ = new views::ImageButton(this);
     learn_more_->SetFocusPainter(CreateFocusPainter());
-    learn_more_->set_request_focus_on_press(false);
-    learn_more_->SetFocusable(true);
+    learn_more_->SetFocusForPlatform();
 
     ui::ResourceBundle& rb = ResourceBundle::GetSharedInstance();
     learn_more_->SetImage(
@@ -477,7 +476,7 @@ NotifierSettingsView::NotifierSettingsView(NotifierSettingsProvider* provider)
   if (provider_)
     provider_->AddObserver(this);
 
-  SetFocusable(true);
+  SetFocusBehavior(FocusBehavior::ALWAYS);
   set_background(
       views::Background::CreateSolidBackground(kMessageCenterBackgroundColor));
   SetPaintToLayer(true);
@@ -579,11 +578,12 @@ void NotifierSettingsView::UpdateContentsView(
         active_group.name : active_group.login_info;
     notifier_group_selector_ =
         new views::MenuButton(notifier_group_text, this, true);
-    notifier_group_selector_->SetBorder(scoped_ptr<views::Border>(
+    notifier_group_selector_->SetBorder(std::unique_ptr<views::Border>(
         new views::LabelButtonAssetBorder(views::Button::STYLE_BUTTON)));
     notifier_group_selector_->SetFocusPainter(nullptr);
     notifier_group_selector_->set_animate_on_state_change(false);
-    notifier_group_selector_->SetFocusable(true);
+    notifier_group_selector_->SetFocusForPlatform();
+    notifier_group_selector_->set_request_focus_on_press(true);
     contents_title_view->AddChildView(notifier_group_selector_);
   }
 
@@ -596,7 +596,7 @@ void NotifierSettingsView::UpdateContentsView(
 
     // This code emulates separators using borders.  We will create an invisible
     // border on the last notifier, as the spec leaves a space for it.
-    scoped_ptr<views::Border> entry_border;
+    std::unique_ptr<views::Border> entry_border;
     if (i == notifier_count - 1) {
       entry_border = views::Border::CreateEmptyBorder(
           0, 0, settings::kEntrySeparatorHeight, 0);
@@ -609,7 +609,7 @@ void NotifierSettingsView::UpdateContentsView(
                                                 settings::kEntrySeparatorColor);
     }
     entry->SetBorder(std::move(entry_border));
-    entry->SetFocusable(true);
+    entry->SetFocusBehavior(FocusBehavior::ALWAYS);
     contents_view->AddChildView(entry);
     buttons_.insert(button);
   }

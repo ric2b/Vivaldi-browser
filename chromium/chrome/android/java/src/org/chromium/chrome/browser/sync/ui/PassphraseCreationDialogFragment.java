@@ -88,26 +88,31 @@ public class PassphraseCreationDialogFragment extends DialogFragment {
     public void onStart() {
         super.onStart();
         AlertDialog d = (AlertDialog) getDialog();
-        // Override the button's onClick listener. The default gets set in the dialog's onCreate,
-        // when it is shown (in super.onStart()), so we have to do this here. Otherwise the dialog
-        // will close when the button is clicked regardless of what else we do.
-        d.getButton(Dialog.BUTTON_POSITIVE).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                tryToSubmitPassphrase();
-            }
-        });
+        if (d != null) {
+            // Override the button's onClick listener. The default gets set in the dialog's
+            // onCreate, when it is shown (in super.onStart()), so we have to do this here.
+            // Otherwise the dialog will close when the button is clicked regardless of what else we
+            // do.
+            d.getButton(Dialog.BUTTON_POSITIVE).setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    tryToSubmitPassphrase();
+                }
+            });
+        }
     }
 
     private void tryToSubmitPassphrase() {
         String passphrase = mEnterPassphrase.getText().toString();
         String confirmPassphrase = mConfirmPassphrase.getText().toString();
 
-        if (passphrase.isEmpty()) {
-            mConfirmPassphrase.setError(getString(R.string.sync_passphrase_cannot_be_blank));
-            return;
-        } else if (!passphrase.equals(confirmPassphrase)) {
+        if (!passphrase.equals(confirmPassphrase)) {
             mConfirmPassphrase.setError(getString(R.string.sync_passphrases_do_not_match));
+            mConfirmPassphrase.requestFocus();
+            return;
+        } else if (passphrase.isEmpty()) {
+            mEnterPassphrase.setError(getString(R.string.sync_passphrase_cannot_be_blank));
+            mEnterPassphrase.requestFocus();
             return;
         }
 

@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_SETTINGS_SETTINGS_MANAGE_PROFILE_HANDLER_H_
 #define CHROME_BROWSER_UI_WEBUI_SETTINGS_SETTINGS_MANAGE_PROFILE_HANDLER_H_
 
+#include <memory>
 #include <string>
 
 #include "base/memory/weak_ptr.h"
@@ -29,6 +30,8 @@ class ManageProfileHandler : public settings::SettingsPageUIHandler,
 
   // settings::SettingsPageUIHandler:
   void RegisterMessages() override;
+  void OnJavascriptAllowed() override;
+  void OnJavascriptDisallowed() override;
 
   // ProfileAttributesStorage::Observer:
   void OnProfileAvatarChanged(const base::FilePath& profile_path) override;
@@ -43,7 +46,7 @@ class ManageProfileHandler : public settings::SettingsPageUIHandler,
   void HandleGetAvailableIcons(const base::ListValue* args);
 
   // Get all the available profile icons to choose from.
-  scoped_ptr<base::ListValue> GetAvailableIcons();
+  std::unique_ptr<base::ListValue> GetAvailableIcons();
 
   // Callback for the "setProfileIconAndName" message. Sets the name and icon
   // of a given profile.

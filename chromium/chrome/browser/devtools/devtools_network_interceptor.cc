@@ -66,7 +66,7 @@ void DevToolsNetworkInterceptor::FinishRecords(
 }
 
 void DevToolsNetworkInterceptor::UpdateConditions(
-    scoped_ptr<DevToolsNetworkConditions> conditions) {
+    std::unique_ptr<DevToolsNetworkConditions> conditions) {
   DCHECK(conditions);
   base::TimeTicks now = base::TimeTicks::Now();
   if (conditions_->IsThrottling())
@@ -253,7 +253,7 @@ int DevToolsNetworkInterceptor::StartThrottle(
 
   base::TimeTicks now = base::TimeTicks::Now();
   UpdateThrottled(now);
-  if (start && latency_length_ != base::TimeDelta()) {
+  if (start && !latency_length_.is_zero()) {
     record.send_end = (send_end - base::TimeTicks()).InMicroseconds();
     suspended_.push_back(record);
     UpdateSuspended(now);

@@ -26,9 +26,9 @@ class MockPointerDelegate : public PointerDelegate {
   // Overridden from PointerDelegate:
   MOCK_METHOD1(OnPointerDestroying, void(Pointer*));
   MOCK_CONST_METHOD1(CanAcceptPointerEventsForSurface, bool(Surface*));
-  MOCK_METHOD3(OnPointerEnter, void(Surface*, const gfx::Point&, int));
+  MOCK_METHOD3(OnPointerEnter, void(Surface*, const gfx::PointF&, int));
   MOCK_METHOD1(OnPointerLeave, void(Surface*));
-  MOCK_METHOD2(OnPointerMotion, void(base::TimeDelta, const gfx::Point&));
+  MOCK_METHOD2(OnPointerMotion, void(base::TimeDelta, const gfx::PointF&));
   MOCK_METHOD3(OnPointerButton, void(base::TimeDelta, int, bool));
   MOCK_METHOD3(OnPointerScroll,
                void(base::TimeDelta, const gfx::Vector2dF&, bool));
@@ -38,26 +38,26 @@ class MockPointerDelegate : public PointerDelegate {
 };
 
 TEST_F(PointerTest, SetCursor) {
-  scoped_ptr<Surface> surface(new Surface);
-  scoped_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
+  std::unique_ptr<Surface> surface(new Surface);
+  std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
   gfx::Size buffer_size(10, 10);
-  scoped_ptr<Buffer> buffer(
+  std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
   surface->Attach(buffer.get());
   surface->Commit();
 
   MockPointerDelegate delegate;
-  scoped_ptr<Pointer> pointer(new Pointer(&delegate));
+  std::unique_ptr<Pointer> pointer(new Pointer(&delegate));
   ui::test::EventGenerator generator(ash::Shell::GetPrimaryRootWindow());
 
   EXPECT_CALL(delegate, CanAcceptPointerEventsForSurface(surface.get()))
       .WillRepeatedly(testing::Return(true));
   EXPECT_CALL(delegate, OnPointerFrame()).Times(1);
-  EXPECT_CALL(delegate, OnPointerEnter(surface.get(), gfx::Point(), 0));
+  EXPECT_CALL(delegate, OnPointerEnter(surface.get(), gfx::PointF(), 0));
   generator.MoveMouseTo(surface->GetBoundsInScreen().origin());
 
-  scoped_ptr<Surface> pointer_surface(new Surface);
-  scoped_ptr<Buffer> pointer_buffer(
+  std::unique_ptr<Surface> pointer_surface(new Surface);
+  std::unique_ptr<Buffer> pointer_buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
   pointer_surface->Attach(pointer_buffer.get());
   pointer_surface->Commit();
@@ -76,22 +76,22 @@ TEST_F(PointerTest, SetCursor) {
 }
 
 TEST_F(PointerTest, OnPointerEnter) {
-  scoped_ptr<Surface> surface(new Surface);
-  scoped_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
+  std::unique_ptr<Surface> surface(new Surface);
+  std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
   gfx::Size buffer_size(10, 10);
-  scoped_ptr<Buffer> buffer(
+  std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
   surface->Attach(buffer.get());
   surface->Commit();
 
   MockPointerDelegate delegate;
-  scoped_ptr<Pointer> pointer(new Pointer(&delegate));
+  std::unique_ptr<Pointer> pointer(new Pointer(&delegate));
   ui::test::EventGenerator generator(ash::Shell::GetPrimaryRootWindow());
 
   EXPECT_CALL(delegate, CanAcceptPointerEventsForSurface(surface.get()))
       .WillRepeatedly(testing::Return(true));
   EXPECT_CALL(delegate, OnPointerFrame()).Times(1);
-  EXPECT_CALL(delegate, OnPointerEnter(surface.get(), gfx::Point(), 0));
+  EXPECT_CALL(delegate, OnPointerEnter(surface.get(), gfx::PointF(), 0));
   generator.MoveMouseTo(surface->GetBoundsInScreen().origin());
 
   EXPECT_CALL(delegate, OnPointerDestroying(pointer.get()));
@@ -99,22 +99,22 @@ TEST_F(PointerTest, OnPointerEnter) {
 }
 
 TEST_F(PointerTest, OnPointerLeave) {
-  scoped_ptr<Surface> surface(new Surface);
-  scoped_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
+  std::unique_ptr<Surface> surface(new Surface);
+  std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
   gfx::Size buffer_size(10, 10);
-  scoped_ptr<Buffer> buffer(
+  std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
   surface->Attach(buffer.get());
   surface->Commit();
 
   MockPointerDelegate delegate;
-  scoped_ptr<Pointer> pointer(new Pointer(&delegate));
+  std::unique_ptr<Pointer> pointer(new Pointer(&delegate));
   ui::test::EventGenerator generator(ash::Shell::GetPrimaryRootWindow());
 
   EXPECT_CALL(delegate, CanAcceptPointerEventsForSurface(surface.get()))
       .WillRepeatedly(testing::Return(true));
   EXPECT_CALL(delegate, OnPointerFrame()).Times(2);
-  EXPECT_CALL(delegate, OnPointerEnter(surface.get(), gfx::Point(), 0));
+  EXPECT_CALL(delegate, OnPointerEnter(surface.get(), gfx::PointF(), 0));
   generator.MoveMouseTo(surface->GetBoundsInScreen().origin());
 
   EXPECT_CALL(delegate, OnPointerLeave(surface.get()));
@@ -125,34 +125,34 @@ TEST_F(PointerTest, OnPointerLeave) {
 }
 
 TEST_F(PointerTest, OnPointerMotion) {
-  scoped_ptr<Surface> surface(new Surface);
-  scoped_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
+  std::unique_ptr<Surface> surface(new Surface);
+  std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
   gfx::Size buffer_size(10, 10);
-  scoped_ptr<Buffer> buffer(
+  std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
   surface->Attach(buffer.get());
   surface->Commit();
 
   MockPointerDelegate delegate;
-  scoped_ptr<Pointer> pointer(new Pointer(&delegate));
+  std::unique_ptr<Pointer> pointer(new Pointer(&delegate));
   ui::test::EventGenerator generator(ash::Shell::GetPrimaryRootWindow());
 
   EXPECT_CALL(delegate, CanAcceptPointerEventsForSurface(surface.get()))
       .WillRepeatedly(testing::Return(true));
   EXPECT_CALL(delegate, OnPointerFrame()).Times(6);
 
-  EXPECT_CALL(delegate, OnPointerEnter(surface.get(), gfx::Point(), 0));
+  EXPECT_CALL(delegate, OnPointerEnter(surface.get(), gfx::PointF(), 0));
   generator.MoveMouseTo(surface->GetBoundsInScreen().origin());
 
-  EXPECT_CALL(delegate, OnPointerMotion(testing::_, gfx::Point(1, 1)));
+  EXPECT_CALL(delegate, OnPointerMotion(testing::_, gfx::PointF(1, 1)));
   generator.MoveMouseTo(surface->GetBoundsInScreen().origin() +
                         gfx::Vector2d(1, 1));
 
-  scoped_ptr<Surface> sub_surface(new Surface);
+  std::unique_ptr<Surface> sub_surface(new Surface);
   surface->AddSubSurface(sub_surface.get());
   surface->SetSubSurfacePosition(sub_surface.get(), gfx::Point(5, 5));
   gfx::Size sub_buffer_size(5, 5);
-  scoped_ptr<Buffer> sub_buffer(
+  std::unique_ptr<Buffer> sub_buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(sub_buffer_size)));
   sub_surface->Attach(sub_buffer.get());
   sub_surface->Commit();
@@ -162,18 +162,18 @@ TEST_F(PointerTest, OnPointerMotion) {
       .WillRepeatedly(testing::Return(true));
 
   EXPECT_CALL(delegate, OnPointerLeave(surface.get()));
-  EXPECT_CALL(delegate, OnPointerEnter(sub_surface.get(), gfx::Point(), 0));
+  EXPECT_CALL(delegate, OnPointerEnter(sub_surface.get(), gfx::PointF(), 0));
   generator.MoveMouseTo(sub_surface->GetBoundsInScreen().origin());
 
-  EXPECT_CALL(delegate, OnPointerMotion(testing::_, gfx::Point(1, 1)));
+  EXPECT_CALL(delegate, OnPointerMotion(testing::_, gfx::PointF(1, 1)));
   generator.MoveMouseTo(sub_surface->GetBoundsInScreen().origin() +
                         gfx::Vector2d(1, 1));
 
-  scoped_ptr<Surface> child_surface(new Surface);
-  scoped_ptr<ShellSurface> child_shell_surface(new ShellSurface(
+  std::unique_ptr<Surface> child_surface(new Surface);
+  std::unique_ptr<ShellSurface> child_shell_surface(new ShellSurface(
       child_surface.get(), shell_surface.get(), gfx::Rect(9, 9, 1, 1), true));
   gfx::Size child_buffer_size(15, 15);
-  scoped_ptr<Buffer> child_buffer(
+  std::unique_ptr<Buffer> child_buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(child_buffer_size)));
   child_surface->Attach(child_buffer.get());
   child_surface->Commit();
@@ -182,10 +182,10 @@ TEST_F(PointerTest, OnPointerMotion) {
       .WillRepeatedly(testing::Return(true));
 
   EXPECT_CALL(delegate, OnPointerLeave(sub_surface.get()));
-  EXPECT_CALL(delegate, OnPointerEnter(child_surface.get(), gfx::Point(), 0));
+  EXPECT_CALL(delegate, OnPointerEnter(child_surface.get(), gfx::PointF(), 0));
   generator.MoveMouseTo(child_surface->GetBoundsInScreen().origin());
 
-  EXPECT_CALL(delegate, OnPointerMotion(testing::_, gfx::Point(10, 10)));
+  EXPECT_CALL(delegate, OnPointerMotion(testing::_, gfx::PointF(10, 10)));
   generator.MoveMouseTo(child_surface->GetBoundsInScreen().origin() +
                         gfx::Vector2d(10, 10));
 
@@ -194,23 +194,23 @@ TEST_F(PointerTest, OnPointerMotion) {
 }
 
 TEST_F(PointerTest, OnPointerButton) {
-  scoped_ptr<Surface> surface(new Surface);
-  scoped_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
+  std::unique_ptr<Surface> surface(new Surface);
+  std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
   gfx::Size buffer_size(10, 10);
-  scoped_ptr<Buffer> buffer(
+  std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
   surface->Attach(buffer.get());
   surface->Commit();
 
   MockPointerDelegate delegate;
-  scoped_ptr<Pointer> pointer(new Pointer(&delegate));
+  std::unique_ptr<Pointer> pointer(new Pointer(&delegate));
   ui::test::EventGenerator generator(ash::Shell::GetPrimaryRootWindow());
 
   EXPECT_CALL(delegate, CanAcceptPointerEventsForSurface(surface.get()))
       .WillRepeatedly(testing::Return(true));
   EXPECT_CALL(delegate, OnPointerFrame()).Times(3);
 
-  EXPECT_CALL(delegate, OnPointerEnter(surface.get(), gfx::Point(), 0));
+  EXPECT_CALL(delegate, OnPointerEnter(surface.get(), gfx::PointF(), 0));
   generator.MoveMouseTo(surface->GetBoundsInScreen().origin());
 
   EXPECT_CALL(delegate,
@@ -224,16 +224,16 @@ TEST_F(PointerTest, OnPointerButton) {
 }
 
 TEST_F(PointerTest, OnPointerScroll) {
-  scoped_ptr<Surface> surface(new Surface);
-  scoped_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
+  std::unique_ptr<Surface> surface(new Surface);
+  std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
   gfx::Size buffer_size(10, 10);
-  scoped_ptr<Buffer> buffer(
+  std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
   surface->Attach(buffer.get());
   surface->Commit();
 
   MockPointerDelegate delegate;
-  scoped_ptr<Pointer> pointer(new Pointer(&delegate));
+  std::unique_ptr<Pointer> pointer(new Pointer(&delegate));
   ui::test::EventGenerator generator(ash::Shell::GetPrimaryRootWindow());
   gfx::Point location = surface->GetBoundsInScreen().origin();
 
@@ -241,7 +241,7 @@ TEST_F(PointerTest, OnPointerScroll) {
       .WillRepeatedly(testing::Return(true));
   EXPECT_CALL(delegate, OnPointerFrame()).Times(4);
 
-  EXPECT_CALL(delegate, OnPointerEnter(surface.get(), gfx::Point(), 0));
+  EXPECT_CALL(delegate, OnPointerEnter(surface.get(), gfx::PointF(), 0));
   generator.MoveMouseTo(location);
 
   {
@@ -260,23 +260,23 @@ TEST_F(PointerTest, OnPointerScroll) {
 }
 
 TEST_F(PointerTest, OnPointerScrollDiscrete) {
-  scoped_ptr<Surface> surface(new Surface);
-  scoped_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
+  std::unique_ptr<Surface> surface(new Surface);
+  std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
   gfx::Size buffer_size(10, 10);
-  scoped_ptr<Buffer> buffer(
+  std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
   surface->Attach(buffer.get());
   surface->Commit();
 
   MockPointerDelegate delegate;
-  scoped_ptr<Pointer> pointer(new Pointer(&delegate));
+  std::unique_ptr<Pointer> pointer(new Pointer(&delegate));
   ui::test::EventGenerator generator(ash::Shell::GetPrimaryRootWindow());
 
   EXPECT_CALL(delegate, CanAcceptPointerEventsForSurface(surface.get()))
       .WillRepeatedly(testing::Return(true));
   EXPECT_CALL(delegate, OnPointerFrame()).Times(2);
 
-  EXPECT_CALL(delegate, OnPointerEnter(surface.get(), gfx::Point(), 0));
+  EXPECT_CALL(delegate, OnPointerEnter(surface.get(), gfx::PointF(), 0));
   generator.MoveMouseTo(surface->GetBoundsInScreen().origin());
 
   EXPECT_CALL(delegate,

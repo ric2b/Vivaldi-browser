@@ -6,10 +6,10 @@
 #define CHROME_TEST_CHROMEDRIVER_CHROME_STUB_WEB_VIEW_H_
 
 #include <list>
+#include <memory>
 #include <string>
 
 #include "base/compiler_specific.h"
-#include "base/memory/scoped_ptr.h"
 #include "chrome/test/chromedriver/chrome/web_view.h"
 
 class StubWebView : public WebView {
@@ -23,26 +23,26 @@ class StubWebView : public WebView {
   Status ConnectIfNecessary() override;
   Status HandleReceivedEvents() override;
   Status GetUrl(std::string* url) override;
-  Status Load(const std::string& url) override;
+  Status Load(const std::string& url, const Timeout* timeout) override;
   Status Reload() override;
   Status TraverseHistory(int delta) override;
   Status EvaluateScript(const std::string& frame,
                         const std::string& function,
-                        scoped_ptr<base::Value>* result) override;
+                        std::unique_ptr<base::Value>* result) override;
   Status CallFunction(const std::string& frame,
                       const std::string& function,
                       const base::ListValue& args,
-                      scoped_ptr<base::Value>* result) override;
+                      std::unique_ptr<base::Value>* result) override;
   Status CallAsyncFunction(const std::string& frame,
                            const std::string& function,
                            const base::ListValue& args,
                            const base::TimeDelta& timeout,
-                           scoped_ptr<base::Value>* result) override;
+                           std::unique_ptr<base::Value>* result) override;
   Status CallUserAsyncFunction(const std::string& frame,
                                const std::string& function,
                                const base::ListValue& args,
                                const base::TimeDelta& timeout,
-                               scoped_ptr<base::Value>* result) override;
+                               std::unique_ptr<base::Value>* result) override;
   Status GetFrameByFunction(const std::string& frame,
                             const std::string& function,
                             const base::ListValue& args,
@@ -52,12 +52,13 @@ class StubWebView : public WebView {
   Status DispatchTouchEvent(const TouchEvent& event) override;
   Status DispatchTouchEvents(const std::list<TouchEvent>& events) override;
   Status DispatchKeyEvents(const std::list<KeyEvent>& events) override;
-  Status GetCookies(scoped_ptr<base::ListValue>* cookies) override;
+  Status GetCookies(std::unique_ptr<base::ListValue>* cookies) override;
   Status DeleteCookie(const std::string& name, const std::string& url) override;
   Status WaitForPendingNavigations(const std::string& frame_id,
-                                   const base::TimeDelta& timeout,
+                                   const Timeout& timeout,
                                    bool stop_load_on_timeout) override;
   Status IsPendingNavigation(const std::string& frame_id,
+                             const Timeout* timeout,
                              bool* is_pending) override;
   JavaScriptDialogManager* GetJavaScriptDialogManager() override;
   Status OverrideGeolocation(const Geoposition& geoposition) override;
@@ -67,9 +68,9 @@ class StubWebView : public WebView {
   Status SetFileInputFiles(const std::string& frame,
                            const base::DictionaryValue& element,
                            const std::vector<base::FilePath>& files) override;
-  Status TakeHeapSnapshot(scoped_ptr<base::Value>* snapshot) override;
+  Status TakeHeapSnapshot(std::unique_ptr<base::Value>* snapshot) override;
   Status StartProfile() override;
-  Status EndProfile(scoped_ptr<base::Value>* profile_data) override;
+  Status EndProfile(std::unique_ptr<base::Value>* profile_data) override;
   Status SynthesizeTapGesture(int x,
                               int y,
                               int tap_count,

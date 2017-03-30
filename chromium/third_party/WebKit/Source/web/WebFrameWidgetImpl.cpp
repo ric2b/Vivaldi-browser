@@ -75,11 +75,7 @@ WebFrameWidget* WebFrameWidget::create(WebWidgetClient* client, WebView* webView
 WebFrameWidgetImpl* WebFrameWidgetImpl::create(WebWidgetClient* client, WebLocalFrame* localRoot)
 {
     // Pass the WebFrameWidgetImpl's self-reference to the caller.
-#if ENABLE(OILPAN)
     return new WebFrameWidgetImpl(client, localRoot); // SelfKeepAlive is set in constructor.
-#else
-    return adoptRef(new WebFrameWidgetImpl(client, localRoot)).leakRef();
-#endif
 }
 
 // static
@@ -100,9 +96,7 @@ WebFrameWidgetImpl::WebFrameWidgetImpl(WebWidgetClient* client, WebLocalFrame* l
     , m_suppressNextKeypressEvent(false)
     , m_ignoreInputEvents(false)
     , m_isTransparent(false)
-#if ENABLE(OILPAN)
     , m_selfKeepAlive(this)
-#endif
 {
     DCHECK(m_localRoot->frame()->isLocalRoot());
     initializeLayerTreeView();
@@ -141,11 +135,7 @@ void WebFrameWidgetImpl::close()
     m_rootLayer = nullptr;
     m_rootGraphicsLayer = nullptr;
 
-#if ENABLE(OILPAN)
     m_selfKeepAlive.clear();
-#else
-    deref(); // Balances ref() acquired in WebFrameWidget::create
-#endif
 }
 
 WebSize WebFrameWidgetImpl::size()
@@ -256,7 +246,7 @@ void WebFrameWidgetImpl::updateAllLifecyclePhases()
 void WebFrameWidgetImpl::paint(WebCanvas* canvas, const WebRect& rect)
 {
     // Out-of-process iframes require compositing.
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
 }
 
 
@@ -321,8 +311,11 @@ const WebInputEvent* WebFrameWidgetImpl::m_currentInputEvent = nullptr;
 
 WebInputEventResult WebFrameWidgetImpl::handleInputEvent(const WebInputEvent& inputEvent)
 {
-
     TRACE_EVENT1("input", "WebFrameWidgetImpl::handleInputEvent", "type", inputTypeToName(inputEvent.type));
+
+    // Don't handle events once we've started shutting down.
+    if (!page())
+        return WebInputEventResult::NotHandled;
 
     // Report the event to be NOT processed by WebKit, so that the browser can handle it appropriately.
     if (m_ignoreInputEvents)
@@ -361,7 +354,7 @@ WebInputEventResult WebFrameWidgetImpl::handleInputEvent(const WebInputEvent& in
             gestureIndicator = adoptPtr(new UserGestureIndicator(m_mouseCaptureGestureToken.release()));
             break;
         default:
-            ASSERT_NOT_REACHED();
+            NOTREACHED();
         }
 
         node->dispatchMouseEvent(
@@ -750,7 +743,7 @@ WebInputEventResult WebFrameWidgetImpl::handleGestureEvent(const WebGestureEvent
         m_client->didHandleGestureEvent(event, eventCancelled);
         return WebInputEventResult::NotHandled;
     default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     }
     LocalFrame* frame = m_localRoot->frame();
     eventResult = frame->eventHandler().handleGestureEvent(PlatformGestureEventBuilder(frame->view(), event));

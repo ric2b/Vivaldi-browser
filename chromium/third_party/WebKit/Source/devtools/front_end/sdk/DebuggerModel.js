@@ -787,6 +787,27 @@ WebInspector.DebuggerModel.prototype = {
         this._breakpointResolvedEventTarget.removeEventListener(breakpointId, listener, thisObject);
     },
 
+    /**
+     * @param {!Array<string>} patterns
+     * @return {!Promise<boolean>}
+     */
+    setBlackboxPatterns: function(patterns)
+    {
+        var callback;
+        var promise = new Promise(fulfill => callback = fulfill);
+        this._agent.setBlackboxPatterns(patterns, patternsUpdated);
+        return promise;
+
+        /**
+         * @param {?Protocol.Error} error
+         */
+        function patternsUpdated(error)
+        {
+            if (error)
+                console.error(error);
+            callback(!error);
+        }
+    },
 
     /**
      * @param {!WebInspector.Event} event
@@ -1038,7 +1059,6 @@ WebInspector.DebuggerModel.CallFrame.fromPayloadArray = function(debuggerModel, 
 }
 
 WebInspector.DebuggerModel.CallFrame.prototype = {
-
     /**
      * @return {!WebInspector.Script}
      */
@@ -1205,6 +1225,14 @@ WebInspector.DebuggerModel.Scope = function(callFrame, ordinal)
 }
 
 WebInspector.DebuggerModel.Scope.prototype = {
+    /**
+     * @return {!WebInspector.DebuggerModel.CallFrame}
+     */
+    callFrame: function()
+    {
+        return this._callFrame;
+    },
+
     /**
      * @return {string}
      */

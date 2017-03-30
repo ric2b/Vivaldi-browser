@@ -65,12 +65,12 @@ class AudioEncoder::ImplBase
             base::Time::kMicrosecondsPerSecond * samples_per_frame_ /
             sampling_rate)),
         buffer_fill_end_(0),
-        frame_id_(kFirstFrameId),
+        frame_id_(FrameId::first()),
         samples_dropped_from_buffer_(0) {
     // Support for max sampling rate of 48KHz, 2 channels, 100 ms duration.
     const int kMaxSamplesTimesChannelsPerFrame = 48 * 2 * 100;
     if (num_channels_ <= 0 || samples_per_frame_ <= 0 ||
-        frame_duration_ == base::TimeDelta() ||
+        frame_duration_.is_zero() ||
         samples_per_frame_ * num_channels_ > kMaxSamplesTimesChannelsPerFrame) {
       operational_status_ = STATUS_INVALID_CONFIGURATION;
     }
@@ -86,7 +86,7 @@ class AudioEncoder::ImplBase
 
   base::TimeDelta frame_duration() const { return frame_duration_; }
 
-  void EncodeAudio(scoped_ptr<AudioBus> audio_bus,
+  void EncodeAudio(std::unique_ptr<AudioBus> audio_bus,
                    const base::TimeTicks& recorded_time) {
     DCHECK_EQ(operational_status_, STATUS_INITIALIZED);
     DCHECK(!recorded_time.is_null());
@@ -139,19 +139,17 @@ class AudioEncoder::ImplBase
       if (buffer_fill_end_ < samples_per_frame_)
         break;
 
-      scoped_ptr<SenderEncodedFrame> audio_frame(
-          new SenderEncodedFrame());
+      std::unique_ptr<SenderEncodedFrame> audio_frame(new SenderEncodedFrame());
       audio_frame->dependency = EncodedFrame::KEY;
       audio_frame->frame_id = frame_id_;
       audio_frame->referenced_frame_id = frame_id_;
       audio_frame->rtp_timestamp = frame_rtp_timestamp_;
       audio_frame->reference_time = frame_capture_time_;
 
-      TRACE_EVENT_ASYNC_BEGIN2(
-          "cast.stream",
-          "Audio Encode", audio_frame.get(),
-          "frame_id", frame_id_,
-          "rtp_timestamp", frame_rtp_timestamp_.lower_32_bits());
+      TRACE_EVENT_ASYNC_BEGIN2("cast.stream", "Audio Encode", audio_frame.get(),
+                               "frame_id", frame_id_.lower_32_bits(),
+                               "rtp_timestamp",
+                               frame_rtp_timestamp_.lower_32_bits());
       if (EncodeFromFilledBuffer(&audio_frame->data)) {
         // Compute deadline utilization as the real-world time elapsed divided
         // by the signal duration.
@@ -212,7 +210,7 @@ class AudioEncoder::ImplBase
   int buffer_fill_end_;
 
   // A counter used to label EncodedFrames.
-  uint32_t frame_id_;
+  FrameId frame_id_;
 
   // The RTP timestamp for the next frame of encoded audio.  This is defined as
   // the number of audio samples encoded so far, plus the estimated number of
@@ -321,9 +319,9 @@ class AudioEncoder::OpusImpl : public AudioEncoder::ImplBase {
            duration == base::TimeDelta::FromMilliseconds(60);
   }
 
-  const scoped_ptr<uint8_t[]> encoder_memory_;
+  const std::unique_ptr<uint8_t[]> encoder_memory_;
   OpusEncoder* const opus_encoder_;
-  const scoped_ptr<float[]> buffer_;
+  const std::unique_ptr<float[]> buffer_;
 
   // This is the recommended value, according to documentation in
   // third_party/opus/src/include/opus.h, so that the Opus encoder does not
@@ -365,8 +363,7 @@ class AudioEncoder::AppleAacImpl : public AudioEncoder::ImplBase {
         output_buffer_(nullptr),
         converter_(nullptr),
         file_(nullptr),
-        num_access_units_(0),
-        can_resume_(true) {
+        num_access_units_(0) {
     if (ImplBase::operational_status_ != STATUS_UNINITIALIZED) {
       return;
     }
@@ -457,23 +454,6 @@ class AudioEncoder::AppleAacImpl : public AudioEncoder::ImplBase {
       }
     }
 
-#if defined(OS_IOS)
-    // See the comment next to |can_resume_| for details on resumption. Some
-    // converters can return kAudioConverterErr_PropertyNotSupported, in which
-    // case resumption is implicitly supported. This is the only location where
-    // the implementation modifies |can_resume_|.
-    uint32_t can_resume;
-    prop_size = sizeof(can_resume);
-    OSStatus oserr = AudioConverterGetProperty(
-        converter_,
-        kAudioConverterPropertyCanResumeFromInterruption,
-        &prop_size,
-        &can_resume);
-    if (oserr == noErr) {
-      const_cast<bool&>(can_resume_) = can_resume != 0;
-    }
-#endif
-
     // Figure out the maximum size of an access unit that the encoder can
     // produce. |mBytesPerPacket| will be 0 for variable size configurations,
     // in which case we must query the value.
@@ -495,7 +475,7 @@ class AudioEncoder::AppleAacImpl : public AudioEncoder::ImplBase {
 
     // Allocate a buffer to store one access unit. This is the only location
     // where the implementation modifies |access_unit_buffer_|.
-    const_cast<scoped_ptr<uint8_t[]>&>(access_unit_buffer_)
+    const_cast<std::unique_ptr<uint8_t[]>&>(access_unit_buffer_)
         .reset(new uint8_t[max_access_unit_size]);
 
     // Initialize the converter ABL. Note that the buffer size has to be set
@@ -515,7 +495,7 @@ class AudioEncoder::AppleAacImpl : public AudioEncoder::ImplBase {
                                       nullptr) != noErr) {
       return false;
     }
-    scoped_ptr<uint8_t[]> cookie_data(new uint8_t[cookie_size]);
+    std::unique_ptr<uint8_t[]> cookie_data(new uint8_t[cookie_size]);
     if (AudioConverterGetProperty(converter_,
                                   kAudioConverterCompressionMagicCookie,
                                   &cookie_size,
@@ -692,7 +672,7 @@ class AudioEncoder::AppleAacImpl : public AudioEncoder::ImplBase {
 
   // Buffer that holds one AAC access unit worth of samples. The input callback
   // function provides samples from this buffer via |input_bus_| to the encoder.
-  const scoped_ptr<AudioBus> input_buffer_;
+  const std::unique_ptr<AudioBus> input_buffer_;
 
   // Wrapper AudioBus used by the input callback function. Normally it wraps
   // |input_buffer_|. However, as an optimization when the client submits a
@@ -700,11 +680,11 @@ class AudioEncoder::AppleAacImpl : public AudioEncoder::ImplBase {
   // redirected to the client buffer temporarily. We know that the base
   // implementation will call us right after to encode the buffer and thus we
   // can eliminate the copy into |input_buffer_|.
-  const scoped_ptr<AudioBus> input_bus_;
+  const std::unique_ptr<AudioBus> input_bus_;
 
   // A buffer that holds one AAC access unit. Initialized in |Initialize| once
   // the maximum access unit size is known.
-  const scoped_ptr<uint8_t[]> access_unit_buffer_;
+  const std::unique_ptr<uint8_t[]> access_unit_buffer_;
 
   // The maximum size of an access unit that the encoder can emit.
   const uint32_t max_access_unit_size_;
@@ -725,16 +705,6 @@ class AudioEncoder::AppleAacImpl : public AudioEncoder::ImplBase {
 
   // The number of access units emitted so far by the encoder.
   uint64_t num_access_units_;
-
-  // On iOS, audio codecs can be interrupted by other services (such as an
-  // audio alert or phone call). Depending on the underlying hardware and
-  // configuration, the codec may have to be thrown away and re-initialized
-  // after such an interruption. This flag tracks if we can resume or not from
-  // such an interruption. It is initialized to true, which is the only possible
-  // value on OS X and on most modern iOS hardware.
-  // TODO(jfroy): Implement encoder re-initialization after interruption.
-  //              https://crbug.com/424787
-  const bool can_resume_;
 
   DISALLOW_COPY_AND_ASSIGN(AppleAacImpl);
 };
@@ -782,7 +752,7 @@ class AudioEncoder::Pcm16Impl : public AudioEncoder::ImplBase {
   }
 
  private:
-  const scoped_ptr<int16_t[]> buffer_;
+  const std::unique_ptr<int16_t[]> buffer_;
 
   DISALLOW_COPY_AND_ASSIGN(Pcm16Impl);
 };
@@ -857,7 +827,7 @@ base::TimeDelta AudioEncoder::GetFrameDuration() const {
   return impl_->frame_duration();
 }
 
-void AudioEncoder::InsertAudio(scoped_ptr<AudioBus> audio_bus,
+void AudioEncoder::InsertAudio(std::unique_ptr<AudioBus> audio_bus,
                                const base::TimeTicks& recorded_time) {
   DCHECK(insert_thread_checker_.CalledOnValidThread());
   DCHECK(audio_bus.get());

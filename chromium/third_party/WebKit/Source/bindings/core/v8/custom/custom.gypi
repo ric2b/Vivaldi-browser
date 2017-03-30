@@ -6,6 +6,7 @@
     'variables': {
         'bindings_core_v8_custom_files': [
             'V8CSSStyleDeclarationCustom.cpp',
+            'V8CSSStyleRuleCustom.cpp',
             'V8CustomEventCustom.cpp',
             'V8CustomXPathNSResolver.cpp',
             'V8CustomXPathNSResolver.h',
@@ -14,6 +15,7 @@
             'V8ErrorEventCustom.cpp',
             'V8EventTargetCustom.cpp',
             'V8HTMLAllCollectionCustom.cpp',
+            'V8HTMLElementCustom.cpp',
             'V8HTMLPlugInElementCustom.cpp',
             'V8IntersectionObserverCustom.cpp',
             'V8MediaQueryListCustom.cpp',

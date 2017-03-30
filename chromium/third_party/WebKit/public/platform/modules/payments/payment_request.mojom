@@ -22,7 +22,7 @@ struct ShippingAddress {
   // letters.
   string language_code;
 
-  // Optional ISO 1524 script code. Four ASCII letters. The first letter is
+  // Optional ISO 15924 script code. Four ASCII letters. The first letter is
   // upper case; the rest are lower case.
   string script_code;
 
@@ -42,6 +42,9 @@ struct PaymentResponse {
   //
   // {"nameOnCard": "Jon Doe", "pan": "4111 1111 1111 1111"}
   string stringified_details;
+
+  ShippingAddress? shipping_address;
+  string? shipping_option_id;
 };
 
 interface PaymentRequestClient {
@@ -100,6 +103,7 @@ interface PaymentRequest {
        //
        // {"https://android.com/pay": {"gateway": "stripe"}}
        string stringified_data);
+  UpdateWith(PaymentDetails details);
   Abort();
   Complete(bool success);
 };

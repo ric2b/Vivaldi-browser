@@ -5,10 +5,9 @@
 #ifndef CC_TREES_LAYER_TREE_HOST_CLIENT_H_
 #define CC_TREES_LAYER_TREE_HOST_CLIENT_H_
 
+#include <memory>
+
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
-#include "base/time/time.h"
-#include "cc/debug/frame_timing_tracker.h"
 
 namespace gfx {
 class Vector2d;
@@ -58,16 +57,10 @@ class LayerTreeHostClient {
   virtual void DidCommit() = 0;
   virtual void DidCommitAndDrawFrame() = 0;
   virtual void DidCompleteSwapBuffers() = 0;
-  virtual void RecordFrameTimingEvents(
-      scoped_ptr<FrameTimingTracker::CompositeTimingSet> composite_events,
-      scoped_ptr<FrameTimingTracker::MainFrameTimingSet> main_frame_events) = 0;
-
-  // Called when page scale animation has completed.
   virtual void DidCompletePageScaleAnimation() = 0;
-
-  // TODO(simonhong): Makes this to pure virtual function when client
-  // implementation is ready.
-  virtual void SendBeginFramesToChildren(const BeginFrameArgs& args) {}
+  virtual void ReportFixedRasterScaleUseCounters(
+      bool has_blurry_content,
+      bool has_potential_performance_regression) = 0;
 
  protected:
   virtual ~LayerTreeHostClient() {}

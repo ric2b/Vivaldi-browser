@@ -3,7 +3,7 @@
 #include "extensions/api/history/history_search_api.h"
 
 #include "base/bind.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -34,8 +34,8 @@ double MilliSecondsFromTime(const base::Time& time) {
   return 1000 * time.ToDoubleT();
 }
 
-scoped_ptr<HistoryItem> GetHistoryItem(const history::URLRow& row) {
-  scoped_ptr<HistoryItem> history_item(new HistoryItem());
+std::unique_ptr<HistoryItem> GetHistoryItem(const history::URLRow& row) {
+  std::unique_ptr<HistoryItem> history_item(new HistoryItem());
 
   history_item->id = base::Int64ToString(row.id());
   history_item->url.reset(new std::string(row.url().spec()));
@@ -54,7 +54,7 @@ scoped_ptr<HistoryItem> GetHistoryItem(const history::URLRow& row) {
 
 
 bool HistorySearchDbSearchFunction::RunAsyncImpl() {
-  scoped_ptr<DBSearch::Params> params(DBSearch::Params::Create(*args_));
+  std::unique_ptr<DBSearch::Params> params(DBSearch::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   history::HistoryService* hs = HistoryServiceFactory::GetForProfile(
@@ -87,7 +87,7 @@ void HistorySearchDbSearchFunction::SearchComplete(
             results->begin();
          iterator != results->end();
         ++iterator) {
-      history_item_vec.push_back(std::move(*make_scoped_ptr(
+      history_item_vec.push_back(std::move(*base::WrapUnique(
           GetHistoryItem(**iterator).release())));
     }
   }

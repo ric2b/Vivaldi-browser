@@ -31,31 +31,25 @@
 #include "core/inspector/InspectorInstrumentation.h"
 
 #include "bindings/core/v8/ScriptCallStack.h"
+#include "core/InstrumentingAgents.h"
 #include "core/events/EventTarget.h"
 #include "core/fetch/FetchInitiatorInfo.h"
 #include "core/frame/FrameHost.h"
 #include "core/inspector/InspectorCSSAgent.h"
 #include "core/inspector/InspectorConsoleAgent.h"
+#include "core/inspector/InspectorDOMDebuggerAgent.h"
 #include "core/inspector/InspectorDebuggerAgent.h"
+#include "core/inspector/InspectorPageAgent.h"
 #include "core/inspector/InspectorProfilerAgent.h"
 #include "core/inspector/InspectorResourceAgent.h"
-#include "core/inspector/InstrumentingAgents.h"
+#include "core/inspector/InspectorSession.h"
+#include "core/inspector/MainThreadDebugger.h"
 #include "core/inspector/WorkerInspectorController.h"
 #include "core/page/Page.h"
 #include "core/workers/MainThreadWorkletGlobalScope.h"
 #include "core/workers/WorkerGlobalScope.h"
 
 namespace blink {
-
-namespace {
-
-PersistentHeapHashSet<WeakMember<InstrumentingAgents>>& instrumentingAgentsSet()
-{
-    DEFINE_STATIC_LOCAL(PersistentHeapHashSet<WeakMember<InstrumentingAgents>>, instrumentingAgentsSet, ());
-    return instrumentingAgentsSet;
-}
-
-}
 
 namespace InspectorInstrumentation {
 
@@ -67,171 +61,148 @@ AsyncTask::AsyncTask(ExecutionContext* context, void* task, bool enabled)
     : m_instrumentingAgents(enabled ? instrumentingAgentsFor(context) : nullptr)
     , m_task(task)
 {
-    if (m_instrumentingAgents && m_instrumentingAgents->inspectorDebuggerAgent())
-        m_instrumentingAgents->inspectorDebuggerAgent()->asyncTaskStarted(m_task);
+    if (!m_instrumentingAgents || !m_instrumentingAgents->hasInspectorSessions())
+        return;
+    for (InspectorSession* session : m_instrumentingAgents->inspectorSessions())
+        session->asyncTaskStarted(m_task);
 }
 
 AsyncTask::~AsyncTask()
 {
-    if (m_instrumentingAgents && m_instrumentingAgents->inspectorDebuggerAgent())
-        m_instrumentingAgents->inspectorDebuggerAgent()->asyncTaskFinished(m_task);
+    if (!m_instrumentingAgents || !m_instrumentingAgents->hasInspectorSessions())
+        return;
+    for (InspectorSession* session : m_instrumentingAgents->inspectorSessions())
+        session->asyncTaskFinished(m_task);
+}
+
+NativeBreakpoint::NativeBreakpoint(ExecutionContext* context, const String& name, bool sync)
+    : m_instrumentingAgents(instrumentingAgentsFor(context))
+    , m_sync(sync)
+{
+    if (!m_instrumentingAgents || !m_instrumentingAgents->hasInspectorDOMDebuggerAgents())
+        return;
+    for (InspectorDOMDebuggerAgent* domDebuggerAgent : m_instrumentingAgents->inspectorDOMDebuggerAgents())
+        domDebuggerAgent->allowNativeBreakpoint(name, nullptr, m_sync);
+}
+
+NativeBreakpoint::NativeBreakpoint(ExecutionContext* context, EventTarget* eventTarget, Event* event)
+    : m_instrumentingAgents(instrumentingAgentsFor(context))
+    , m_sync(false)
+{
+    if (!m_instrumentingAgents || !m_instrumentingAgents->hasInspectorDOMDebuggerAgents())
+        return;
+    Node* node = eventTarget->toNode();
+    String targetName = node ? node->nodeName() : eventTarget->interfaceName();
+    for (InspectorDOMDebuggerAgent* domDebuggerAgent : m_instrumentingAgents->inspectorDOMDebuggerAgents())
+        domDebuggerAgent->allowNativeBreakpoint(event->type(), &targetName, m_sync);
+}
+
+NativeBreakpoint::~NativeBreakpoint()
+{
+    if (m_sync || !m_instrumentingAgents || !m_instrumentingAgents->hasInspectorDOMDebuggerAgents())
+        return;
+    for (InspectorDOMDebuggerAgent* domDebuggerAgent : m_instrumentingAgents->inspectorDOMDebuggerAgents())
+        domDebuggerAgent->cancelNativeBreakpoint();
+}
+
+StyleRecalc::StyleRecalc(Document* document)
+    : m_instrumentingAgents(instrumentingAgentsFor(document))
+{
+    if (!m_instrumentingAgents || m_instrumentingAgents->hasInspectorResourceAgents())
+        return;
+    for (InspectorResourceAgent* resourceAgent : m_instrumentingAgents->inspectorResourceAgents())
+        resourceAgent->willRecalculateStyle(document);
+}
+
+StyleRecalc::~StyleRecalc()
+{
+    if (!m_instrumentingAgents)
+        return;
+    if (m_instrumentingAgents->hasInspectorResourceAgents()) {
+        for (InspectorResourceAgent* resourceAgent : m_instrumentingAgents->inspectorResourceAgents())
+            resourceAgent->didRecalculateStyle();
+    }
+    if (m_instrumentingAgents->hasInspectorPageAgents()) {
+        for (InspectorPageAgent* pageAgent : m_instrumentingAgents->inspectorPageAgents())
+            pageAgent->didRecalculateStyle();
+    }
+}
+
+JavaScriptDialog::JavaScriptDialog(LocalFrame* frame, const String& message, ChromeClient::DialogType dialogType)
+    : m_instrumentingAgents(instrumentingAgentsFor(frame))
+    , m_result(false)
+{
+    if (!m_instrumentingAgents || !m_instrumentingAgents->hasInspectorPageAgents())
+        return;
+    for (InspectorPageAgent* pageAgent : m_instrumentingAgents->inspectorPageAgents())
+        pageAgent->willRunJavaScriptDialog(message, dialogType);
+}
+
+void JavaScriptDialog::setResult(bool result)
+{
+    m_result = result;
+}
+
+JavaScriptDialog::~JavaScriptDialog()
+{
+    if (!m_instrumentingAgents || !m_instrumentingAgents->hasInspectorPageAgents())
+        return;
+    for (InspectorPageAgent* pageAgent : m_instrumentingAgents->inspectorPageAgents())
+        pageAgent->didRunJavaScriptDialog(m_result);
 }
 
 int FrontendCounter::s_frontendCounter = 0;
 
-// Keep in sync with kDevToolsRequestInitiator defined in devtools_network_controller.cc
-const char kInspectorEmulateNetworkConditionsClientId[] = "X-DevTools-Emulate-Network-Conditions-Client-Id";
+bool isDebuggerPaused(LocalFrame*)
+{
+    return MainThreadDebugger::instance()->debugger()->isPaused();
 }
 
-InspectorInstrumentationCookie::InspectorInstrumentationCookie()
-    : m_instrumentingAgents(nullptr)
+void didReceiveResourceResponseButCanceled(LocalFrame* frame, DocumentLoader* loader, unsigned long identifier, const ResourceResponse& r, Resource* resource)
 {
+    didReceiveResourceResponse(frame, identifier, loader, r, resource);
 }
 
-InspectorInstrumentationCookie::InspectorInstrumentationCookie(InstrumentingAgents* agents)
-    : m_instrumentingAgents(agents)
+void continueAfterXFrameOptionsDenied(LocalFrame* frame, DocumentLoader* loader, unsigned long identifier, const ResourceResponse& r, Resource* resource)
 {
+    didReceiveResourceResponseButCanceled(frame, loader, identifier, r, resource);
 }
 
-InspectorInstrumentationCookie::InspectorInstrumentationCookie(const InspectorInstrumentationCookie& other)
-    : m_instrumentingAgents(other.m_instrumentingAgents)
+void continueWithPolicyIgnore(LocalFrame* frame, DocumentLoader* loader, unsigned long identifier, const ResourceResponse& r, Resource* resource)
 {
-}
-
-InspectorInstrumentationCookie& InspectorInstrumentationCookie::operator=(const InspectorInstrumentationCookie& other)
-{
-    if (this != &other)
-        m_instrumentingAgents = other.m_instrumentingAgents;
-    return *this;
-}
-
-InspectorInstrumentationCookie::~InspectorInstrumentationCookie()
-{
-}
-
-namespace InspectorInstrumentation {
-
-bool isDebuggerPausedImpl(InstrumentingAgents* instrumentingAgents)
-{
-    if (InspectorDebuggerAgent* debuggerAgent = instrumentingAgents->inspectorDebuggerAgent())
-        return debuggerAgent->isPaused();
-    return false;
-}
-
-void didReceiveResourceResponseButCanceledImpl(LocalFrame* frame, DocumentLoader* loader, unsigned long identifier, const ResourceResponse& r)
-{
-    didReceiveResourceResponse(frame, identifier, loader, r, 0);
-}
-
-void continueAfterXFrameOptionsDeniedImpl(LocalFrame* frame, DocumentLoader* loader, unsigned long identifier, const ResourceResponse& r)
-{
-    didReceiveResourceResponseButCanceledImpl(frame, loader, identifier, r);
-}
-
-void continueWithPolicyIgnoreImpl(LocalFrame* frame, DocumentLoader* loader, unsigned long identifier, const ResourceResponse& r)
-{
-    didReceiveResourceResponseButCanceledImpl(frame, loader, identifier, r);
-}
-
-void removedResourceFromMemoryCacheImpl(Resource* cachedResource)
-{
-    ASSERT(isMainThread());
-    for (InstrumentingAgents* instrumentingAgents: instrumentingAgentsSet()) {
-        if (InspectorResourceAgent* inspectorResourceAgent = instrumentingAgents->inspectorResourceAgent())
-            inspectorResourceAgent->removedResourceFromMemoryCache(cachedResource);
-    }
-}
-
-bool collectingHTMLParseErrorsImpl(InstrumentingAgents* instrumentingAgents)
-{
-    ASSERT(isMainThread());
-    return instrumentingAgentsSet().contains(instrumentingAgents);
+    didReceiveResourceResponseButCanceled(frame, loader, identifier, r, resource);
 }
 
 bool consoleAgentEnabled(ExecutionContext* executionContext)
 {
     InstrumentingAgents* instrumentingAgents = instrumentingAgentsFor(executionContext);
-    InspectorConsoleAgent* consoleAgent = instrumentingAgents ? instrumentingAgents->inspectorConsoleAgent() : 0;
-    return consoleAgent && consoleAgent->enabled();
-}
-
-void registerInstrumentingAgents(InstrumentingAgents* instrumentingAgents)
-{
-    ASSERT(isMainThread());
-    instrumentingAgentsSet().add(instrumentingAgents);
-}
-
-void unregisterInstrumentingAgents(InstrumentingAgents* instrumentingAgents)
-{
-    ASSERT(isMainThread());
-    ASSERT(instrumentingAgentsSet().contains(instrumentingAgents));
-    instrumentingAgentsSet().remove(instrumentingAgents);
-}
-
-InstrumentingAgents* instrumentingAgentsFor(LocalFrame* frame)
-{
-    return frame ? frame->instrumentingAgents() : nullptr;
-}
-
-InstrumentingAgents* instrumentingAgentsFor(EventTarget* eventTarget)
-{
-    if (!eventTarget)
-        return 0;
-    return instrumentingAgentsFor(eventTarget->getExecutionContext());
-}
-
-InstrumentingAgents* instrumentingAgentsFor(LayoutObject* layoutObject)
-{
-    return instrumentingAgentsFor(layoutObject->frame());
+    if (!instrumentingAgents || !instrumentingAgents->hasInspectorConsoleAgents())
+        return false;
+    for (InspectorConsoleAgent* consoleAgent: instrumentingAgents->inspectorConsoleAgents()) {
+        if (consoleAgent->enabled())
+            return true;
+    }
+    return false;
 }
 
 InstrumentingAgents* instrumentingAgentsFor(WorkerGlobalScope* workerGlobalScope)
 {
     if (!workerGlobalScope)
-        return 0;
-    return instrumentationForWorkerGlobalScope(workerGlobalScope);
+        return nullptr;
+    if (WorkerInspectorController* controller = workerGlobalScope->workerInspectorController())
+        return controller->instrumentingAgents();
+    return nullptr;
 }
 
 InstrumentingAgents* instrumentingAgentsForNonDocumentContext(ExecutionContext* context)
 {
     if (context->isWorkerGlobalScope())
-        return instrumentationForWorkerGlobalScope(toWorkerGlobalScope(context));
-
-    if (context->isWorkletGlobalScope()) {
-        LocalFrame* frame = toMainThreadWorkletGlobalScope(context)->frame();
-        if (frame)
-            return instrumentingAgentsFor(frame);
-    }
-
-    return 0;
+        return instrumentingAgentsFor(toWorkerGlobalScope(context));
+    if (context->isWorkletGlobalScope())
+        return instrumentingAgentsFor(toMainThreadWorkletGlobalScope(context)->frame());
+    return nullptr;
 }
 
 } // namespace InspectorInstrumentation
-
-namespace InstrumentationEvents {
-const char PaintSetup[] = "PaintSetup";
-const char Paint[] = "Paint";
-const char Layer[] = "Layer";
-const char RequestMainThreadFrame[] = "RequestMainThreadFrame";
-const char BeginFrame[] = "BeginFrame";
-const char ActivateLayerTree[] = "ActivateLayerTree";
-const char DrawFrame[] = "DrawFrame";
-const char EmbedderCallback[] = "EmbedderCallback";
-};
-
-namespace InstrumentationEventArguments {
-const char FrameId[] = "frameId";
-const char LayerId[] = "layerId";
-const char LayerTreeId[] = "layerTreeId";
-const char PageId[] = "pageId";
-const char CallbackName[] = "callbackName";
-};
-
-InstrumentingAgents* instrumentationForWorkerGlobalScope(WorkerGlobalScope* workerGlobalScope)
-{
-    if (WorkerInspectorController* controller = workerGlobalScope->workerInspectorController())
-        return controller->m_instrumentingAgents.get();
-    return 0;
-}
 
 } // namespace blink

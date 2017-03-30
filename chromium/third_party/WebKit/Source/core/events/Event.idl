@@ -23,7 +23,6 @@
 [
     Constructor(DOMString type, optional EventInit eventInitDict),
     Exposed=(Window,Worker),
-    GarbageCollected,
 ] interface Event {
     readonly attribute DOMString type;
     readonly attribute EventTarget? target;
@@ -46,7 +45,7 @@
     [RuntimeEnabled=ShadowDOMV1, MeasureAs=EventScoped] readonly attribute boolean scoped;
     [RuntimeEnabled=ShadowDOMV1, MeasureAs=EventRelatedTargetScoped] readonly attribute boolean relatedTargetScoped;
 
-    [RuntimeEnabled=TrustedEvents, Unforgeable] readonly attribute boolean isTrusted;
+    [Unforgeable] readonly attribute boolean isTrusted;
 
     // TODO(majidvp): At the moment the actual return value type can either
     // be: 
@@ -88,5 +87,5 @@
     const unsigned short CHANGE    = 32768;
     [MeasureAs=EventSrcElement] readonly attribute EventTarget srcElement;
     [MeasureAs=EventReturnValue, CallWith=ExecutionContext, ImplementedAs=legacyReturnValue] attribute boolean returnValue;
-    [MeasureAs=EventCancelBubble] attribute boolean cancelBubble;
+    [MeasureAs=EventCancelBubble, CallWith=ExecutionContext] attribute boolean cancelBubble;
 };

@@ -432,7 +432,8 @@ bool AutofillProfile::operator!=(const AutofillProfile& profile) const {
 }
 
 const base::string16 AutofillProfile::PrimaryValue() const {
-  return GetRawInfo(ADDRESS_HOME_LINE1) + GetRawInfo(ADDRESS_HOME_CITY);
+  return GetRawInfo(NAME_FIRST) + GetRawInfo(NAME_LAST) +
+         GetRawInfo(ADDRESS_HOME_LINE1) + GetRawInfo(ADDRESS_HOME_CITY);
 }
 
 bool AutofillProfile::IsSubsetOf(const AutofillProfile& profile,
@@ -483,7 +484,10 @@ bool AutofillProfile::IsSubsetOfForFieldSet(
 
 bool AutofillProfile::OverwriteName(const NameInfo& imported_name,
                                     const std::string& app_locale) {
+  // Check if the names parts are equal.
   if (name_.ParsedNamesAreEqual(imported_name)) {
+    // If the current |name_| has an empty NAME_FULL but the the |imported_name|
+    // has not, overwrite only NAME_FULL.
     if (name_.GetRawInfo(NAME_FULL).empty() &&
         !imported_name.GetRawInfo(NAME_FULL).empty()) {
       name_.SetRawInfo(NAME_FULL, imported_name.GetRawInfo(NAME_FULL));
@@ -495,7 +499,9 @@ bool AutofillProfile::OverwriteName(const NameInfo& imported_name,
   l10n::CaseInsensitiveCompare compare;
   AutofillType type = AutofillType(NAME_FULL);
   base::string16 full_name = name_.GetInfo(type, app_locale);
-  if (compare.StringsEqual(full_name,
+  // Always overwrite if the name parts are empty.
+  if (!name_.NamePartsAreEmpty() &&
+      compare.StringsEqual(full_name,
                            imported_name.GetInfo(type, app_locale))) {
     // The imported name has the same full name string as the name for this
     // profile.  Because full names are _heuristically_ parsed into
@@ -510,7 +516,7 @@ bool AutofillProfile::OverwriteName(const NameInfo& imported_name,
       return false;
   }
 
-  name_ = imported_name;
+  name_.OverwriteName(imported_name);
   return true;
 }
 
@@ -524,16 +530,20 @@ bool AutofillProfile::OverwriteWith(const AutofillProfile& profile,
   if (profile.use_date() > use_date())
     set_use_date(profile.use_date());
 
-  ServerFieldTypeSet field_types;
-  profile.GetNonEmptyTypes(app_locale, &field_types);
+  // |types_to_overwrite| is initially populated with all types that have
+  //  non-empty data in the incoming |profile|. After adjustment, all data from
+  // |profile| corresponding to types in |types_to_overwrite| is overwritten in
+  // |this| profile.
+  ServerFieldTypeSet types_to_overwrite;
+  profile.GetNonEmptyTypes(app_locale, &types_to_overwrite);
 
   // Only transfer "full" types (e.g. full name) and not fragments (e.g.
   // first name, last name).
-  CollapseCompoundFieldTypes(&field_types);
+  CollapseCompoundFieldTypes(&types_to_overwrite);
 
   // Remove ADDRESS_HOME_STREET_ADDRESS to ensure a merge of the address line by
   // line. See comment below.
-  field_types.erase(ADDRESS_HOME_STREET_ADDRESS);
+  types_to_overwrite.erase(ADDRESS_HOME_STREET_ADDRESS);
 
   l10n::CaseInsensitiveCompare compare;
 
@@ -547,25 +557,24 @@ bool AutofillProfile::OverwriteWith(const AutofillProfile& profile,
           CanonicalizeProfileString(GetRawInfo(ADDRESS_HOME_STREET_ADDRESS))) &&
       !GetRawInfo(ADDRESS_HOME_LINE2).empty() &&
       profile.GetRawInfo(ADDRESS_HOME_LINE2).empty()) {
-    field_types.erase(ADDRESS_HOME_LINE1);
-    field_types.erase(ADDRESS_HOME_LINE2);
+    types_to_overwrite.erase(ADDRESS_HOME_LINE1);
+    types_to_overwrite.erase(ADDRESS_HOME_LINE2);
   }
 
   bool did_overwrite = false;
 
-  for (ServerFieldTypeSet::const_iterator iter = field_types.begin();
-       iter != field_types.end(); ++iter) {
-    FieldTypeGroup group = AutofillType(*iter).group();
-
-    // Special case names.
-    if (group == NAME) {
-      did_overwrite = OverwriteName(profile.name_, app_locale) || did_overwrite;
+  for (const ServerFieldType field_type : types_to_overwrite) {
+    // Special case for names.
+    if (AutofillType(field_type).group() == NAME) {
+      did_overwrite |= OverwriteName(profile.name_, app_locale);
       continue;
     }
 
-    base::string16 new_value = profile.GetRawInfo(*iter);
-    if (!compare.StringsEqual(GetRawInfo(*iter), new_value)) {
-      SetRawInfo(*iter, new_value);
+    base::string16 new_value = profile.GetRawInfo(field_type);
+    // Overwrite the data in |this| profile for the field type and set
+    // |did_overwrite| if the previous data was different than the |new_value|.
+    if (GetRawInfo(field_type) != new_value) {
+      SetRawInfo(field_type, new_value);
       did_overwrite = true;
     }
   }
@@ -578,6 +587,7 @@ bool AutofillProfile::SaveAdditionalInfo(const AutofillProfile& profile,
   ServerFieldTypeSet field_types, other_field_types;
   GetNonEmptyTypes(app_locale, &field_types);
   profile.GetNonEmptyTypes(app_locale, &other_field_types);
+
   // The address needs to be compared line by line to take into account the
   // logic for empty fields implemented in the loop.
   field_types.erase(ADDRESS_HOME_STREET_ADDRESS);
@@ -634,6 +644,7 @@ bool AutofillProfile::SaveAdditionalInfo(const AutofillProfile& profile,
         }
         continue;
       }
+
       // Special case for the state to support abbreviations. Currently only the
       // US states are supported.
       if (field_type == ADDRESS_HOME_STATE) {
@@ -647,6 +658,30 @@ bool AutofillProfile::SaveAdditionalInfo(const AutofillProfile& profile,
                                  abbreviation))
           continue;
       }
+
+      // Special case for company names to support cannonicalized variations.
+      if (field_type == COMPANY_NAME) {
+        if (compare.StringsEqual(
+                CanonicalizeProfileString(profile.GetRawInfo(field_type)),
+                CanonicalizeProfileString(GetRawInfo(field_type)))) {
+          continue;
+        }
+      }
+
+      // Special case for middle name to support initials.
+      if (field_type == NAME_MIDDLE) {
+        base::string16 middle_name = GetRawInfo(NAME_MIDDLE);
+        base::string16 profile_middle_name = profile.GetRawInfo(NAME_MIDDLE);
+        DCHECK(!middle_name.empty());
+        DCHECK(!profile_middle_name.empty());
+        // If one of the two middle names is an initial that matches the first
+        // letter of the other middle name, they are considered equivalent.
+        if ((middle_name.size() == 1 || profile_middle_name.size() == 1) &&
+            middle_name[0] == profile_middle_name[0]) {
+          continue;
+        }
+      }
+
       if (!compare.StringsEqual(profile.GetRawInfo(field_type),
                                 GetRawInfo(field_type))) {
         return false;

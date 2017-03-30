@@ -10,7 +10,8 @@
 #include "gpu/command_buffer/client/gl_in_process_context.h"
 #include "gpu/command_buffer/client/gles2_implementation.h"
 #include "gpu/command_buffer/client/gles2_lib.h"
-#include "gpu/skia_bindings/gl_bindings_skia_cmd_buffer.h"
+#include "gpu/command_buffer/client/shared_memory_limits.h"
+#include "gpu/skia_bindings/grcontext_for_gles2_interface.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLInterface.h"
 
@@ -43,23 +44,19 @@ BlimpContextProvider::BlimpContextProvider(
   context_.reset(gpu::GLInProcessContext::Create(
       nullptr /* service */, nullptr /* surface */, false /* is_offscreen */,
       widget, gfx::Size(1, 1), nullptr /* share_context */, attribs_for_gles2,
-      gfx::PreferDiscreteGpu, gpu::GLInProcessContextSharedMemoryLimits(),
+      gfx::PreferDiscreteGpu, gpu::SharedMemoryLimits(),
       gpu_memory_buffer_manager, nullptr /* memory_limits */));
-  context_->SetContextLostCallback(
+  context_->GetImplementation()->SetLostContextCallback(
       base::Bind(&BlimpContextProvider::OnLostContext, base::Unretained(this)));
 }
 
 BlimpContextProvider::~BlimpContextProvider() {
   DCHECK(main_thread_checker_.CalledOnValidThread() ||
          context_thread_checker_.CalledOnValidThread());
-  if (gr_context_)
-    gr_context_->releaseResourcesAndAbandonContext();
 }
 
 bool BlimpContextProvider::BindToCurrentThread() {
   DCHECK(context_thread_checker_.CalledOnValidThread());
-  capabilities_.gpu = context_->GetImplementation()->capabilities();
-  capabilities_.gpu.image = true;
   return true;
 }
 
@@ -67,9 +64,9 @@ void BlimpContextProvider::DetachFromThread() {
   context_thread_checker_.DetachFromThread();
 }
 
-cc::ContextProvider::Capabilities BlimpContextProvider::ContextCapabilities() {
+gpu::Capabilities BlimpContextProvider::ContextCapabilities() {
   DCHECK(context_thread_checker_.CalledOnValidThread());
-  return capabilities_;
+  return context_->GetImplementation()->capabilities();
 }
 
 gpu::gles2::GLES2Interface* BlimpContextProvider::ContextGL() {
@@ -86,37 +83,31 @@ class GrContext* BlimpContextProvider::GrContext() {
   DCHECK(context_thread_checker_.CalledOnValidThread());
 
   if (gr_context_)
-    return gr_context_.get();
+    return gr_context_->get();
 
-  sk_sp<GrGLInterface> interface(
-      skia_bindings::CreateGLES2InterfaceBindings(ContextGL()));
+  gr_context_.reset(new skia_bindings::GrContextForGLES2Interface(ContextGL()));
 
-  gr_context_ = skia::AdoptRef(GrContext::Create(
-      // GrContext takes ownership of |interface|.
-      kOpenGL_GrBackend, reinterpret_cast<GrBackendContext>(interface.get())));
-  return gr_context_.get();
+  return gr_context_->get();
 }
 
 void BlimpContextProvider::InvalidateGrContext(uint32_t state) {
   DCHECK(context_thread_checker_.CalledOnValidThread());
 
   if (gr_context_)
-    gr_context_->resetContext(state);
-}
-
-void BlimpContextProvider::SetupLock() {
-  context_->SetLock(&context_lock_);
+    gr_context_->ResetContext(state);
 }
 
 base::Lock* BlimpContextProvider::GetLock() {
-  return &context_lock_;
+  // This context provider is not used on multiple threads.
+  NOTREACHED();
+  return nullptr;
 }
 
 void BlimpContextProvider::DeleteCachedResources() {
   DCHECK(context_thread_checker_.CalledOnValidThread());
 
   if (gr_context_)
-    gr_context_->freeGpuResources();
+    gr_context_->FreeGpuResources();
 }
 
 void BlimpContextProvider::SetLostContextCallback(
@@ -128,9 +119,9 @@ void BlimpContextProvider::SetLostContextCallback(
 void BlimpContextProvider::OnLostContext() {
   DCHECK(context_thread_checker_.CalledOnValidThread());
   if (!lost_context_callback_.is_null())
-    base::ResetAndReturn(&lost_context_callback_).Run();
+    lost_context_callback_.Run();
   if (gr_context_)
-    gr_context_->abandonContext();
+    gr_context_->OnLostContext();
 }
 
 }  // namespace client

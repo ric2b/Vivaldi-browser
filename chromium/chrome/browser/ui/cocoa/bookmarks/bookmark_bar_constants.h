@@ -17,6 +17,7 @@ namespace bookmarks {
 
 // Correction used for computing other values based on the height.
 const int kVisualHeightOffset = 2;
+const int kMaterialVisualHeightOffset = 2;
 
 // The amount of space between the inner bookmark bar and the outer toolbar on
 // new tab pages.

@@ -11,7 +11,7 @@
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_tree_connection.h"
 #include "components/mus/public/cpp/window_tree_host_factory.h"
-#include "mojo/shell/public/cpp/connector.h"
+#include "services/shell/public/cpp/connector.h"
 
 namespace mus {
 namespace {
@@ -71,7 +71,7 @@ void WindowServerTestBase::SetUp() {
   std::swap(window_manager_, most_recent_connection_);
 }
 
-bool WindowServerTestBase::AcceptConnection(mojo::Connection* connection) {
+bool WindowServerTestBase::AcceptConnection(shell::Connection* connection) {
   connection->AddInterface<mojom::WindowTreeClient>(this);
   return true;
 }
@@ -87,6 +87,9 @@ void WindowServerTestBase::OnConnectionLost(WindowTreeConnection* connection) {
   window_tree_connection_destroyed_ = true;
 }
 
+void WindowServerTestBase::OnEventObserved(const ui::Event& event,
+                                           Window* target) {}
+
 void WindowServerTestBase::SetWindowManagerClient(WindowManagerClient* client) {
   window_manager_client_ = client;
 }
@@ -100,7 +103,7 @@ bool WindowServerTestBase::OnWmSetBounds(Window* window, gfx::Rect* bounds) {
 bool WindowServerTestBase::OnWmSetProperty(
     Window* window,
     const std::string& name,
-    scoped_ptr<std::vector<uint8_t>>* new_data) {
+    std::unique_ptr<std::vector<uint8_t>>* new_data) {
   return window_manager_delegate_
              ? window_manager_delegate_->OnWmSetProperty(window, name, new_data)
              : true;
@@ -119,7 +122,7 @@ void WindowServerTestBase::OnAccelerator(uint32_t id, const ui::Event& event) {
 }
 
 void WindowServerTestBase::Create(
-    mojo::Connection* connection,
+    shell::Connection* connection,
     mojo::InterfaceRequest<mojom::WindowTreeClient> request) {
   WindowTreeConnection::Create(
       this, std::move(request),

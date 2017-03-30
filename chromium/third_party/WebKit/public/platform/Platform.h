@@ -44,7 +44,6 @@
 #include "WebGamepadListener.h"
 #include "WebGamepads.h"
 #include "WebGestureDevice.h"
-#include "WebGraphicsContext3D.h"
 #include "WebLocalizedString.h"
 #include "WebPlatformEventType.h"
 #include "WebSize.h"
@@ -57,6 +56,11 @@
 #include "base/metrics/user_metrics_action.h"
 
 class GrContext;
+
+namespace v8 {
+class Context;
+template<class T> class Local;
+}
 
 namespace blink {
 
@@ -74,10 +78,10 @@ class WebFallbackThemeEngine;
 class WebFileSystem;
 class WebFileUtilities;
 class WebFlingAnimator;
-class WebGeofencingProvider;
 class WebGestureCurve;
 class WebGraphicsContext3DProvider;
 class WebIDBFactory;
+class WebImageCaptureFrameGrabber;
 class WebInstalledApp;
 class WebMIDIAccessor;
 class WebMIDIAccessorClient;
@@ -308,16 +312,15 @@ public:
     virtual WebString userAgent() { return WebString(); }
 
     // A suggestion to cache this metadata in association with this URL.
-    virtual void cacheMetadata(const WebURL&, int64_t responseTime, const char* data, size_t dataSize) { }
+    virtual void cacheMetadata(const WebURL&, int64_t responseTime, const char* data, size_t dataSize) {}
+
+    // A suggestion to cache this metadata in association with this URL which resource is in CacheStorage.
+    virtual void cacheMetadataInCacheStorage(const WebURL&, int64_t responseTime, const char* data, size_t dataSize, const blink::WebSecurityOrigin& cacheStorageOrigin, const WebString& cacheStorageCacheName) {}
 
     // Returns the decoded data url if url had a supported mimetype and parsing was successful.
     virtual WebData parseDataURL(const WebURL&, WebString& mimetype, WebString& charset) { return WebData(); }
 
     virtual WebURLError cancelledError(const WebURL&) const { return WebURLError(); }
-
-    virtual bool isReservedIPAddress(const WebString& host) const { return false; }
-
-    virtual bool portAllowed(const WebURL&) const { return false; }
 
     // Returns true and stores the position of the end of the headers to |*end|
     // if the headers part ends in |bytes[0..size]|. Returns false otherwise.
@@ -399,16 +402,6 @@ public:
     // renderer was created with threaded rendering desabled.
     virtual WebThread* compositorThread() const { return 0; }
 
-    // Vibration -----------------------------------------------------------
-
-    // Starts a vibration for the given duration in milliseconds. If there is currently an active
-    // vibration it will be cancelled before the new one is started.
-    virtual void vibrate(unsigned time) { }
-
-    // Cancels the current vibration, if there is one.
-    virtual void cancelVibration() { }
-
-
     // Testing -------------------------------------------------------------
 
     // Gets a pointer to URLLoaderMockFactory for testing. Will not be available in production builds.
@@ -447,10 +440,6 @@ public:
     virtual void removeTraceLogEnabledStateObserver(TraceLogEnabledStateObserver*) {}
 
     typedef uint64_t WebMemoryAllocatorDumpGuid;
-
-    // Returns guid corresponding to the given string (the hash value) for
-    // creating a WebMemoryAllocatorDump.
-    virtual WebMemoryAllocatorDumpGuid createWebMemoryAllocatorDumpGuid(const WebString& guidStr) { return 0; }
 
     // GPU ----------------------------------------------------------------
     //
@@ -507,11 +496,11 @@ public:
 
     // WebRTC ----------------------------------------------------------
 
-    // Creates an WebRTCPeerConnectionHandler for RTCPeerConnection.
+    // Creates a WebRTCPeerConnectionHandler for RTCPeerConnection.
     // May return null if WebRTC functionality is not avaliable or if it's out of resources.
     virtual WebRTCPeerConnectionHandler* createRTCPeerConnectionHandler(WebRTCPeerConnectionHandlerClient*) { return nullptr; }
 
-    // Creates an WebMediaRecorderHandler to record MediaStreams.
+    // Creates a WebMediaRecorderHandler to record MediaStreams.
     // May return null if the functionality is not available or out of resources.
     virtual WebMediaRecorderHandler* createMediaRecorderHandler() { return nullptr; }
 
@@ -521,17 +510,22 @@ public:
     // May return null if WebRTC functionality is not available or out of resources.
     virtual WebMediaStreamCenter* createMediaStreamCenter(WebMediaStreamCenterClient*) { return nullptr; }
 
-    // Creates an WebCanvasCaptureHandler to capture Canvas output.
+    // Creates a WebCanvasCaptureHandler to capture Canvas output.
     virtual WebCanvasCaptureHandler* createCanvasCaptureHandler(const WebSize&, double, WebMediaStreamTrack*) { return nullptr; }
 
     // Fills in the WebMediaStream to capture from the WebMediaPlayer identified
     // by the second parameter.
     virtual void createHTMLVideoElementCapturer(WebMediaStream*, WebMediaPlayer*) {}
 
+    // Creates a WebImageCaptureFrameGrabber to take a snapshot of a Video Tracks.
+    // May return null if the functionality is not available.
+    virtual WebImageCaptureFrameGrabber* createImageCaptureFrameGrabber() { return nullptr; }
+
     // WebWorker ----------------------------------------------------------
 
     virtual void didStartWorkerThread() { }
     virtual void willStopWorkerThread() { }
+    virtual void workerContextCreated(const v8::Local<v8::Context>& worker) { }
 
     // WebCrypto ----------------------------------------------------------
 
@@ -597,11 +591,6 @@ public:
     // Web Notifications --------------------------------------------------
 
     virtual WebNotificationManager* notificationManager() { return nullptr; }
-
-
-    // Geofencing ---------------------------------------------------------
-
-    virtual WebGeofencingProvider* geofencingProvider() { return nullptr; }
 
 
     // Push API------------------------------------------------------------

@@ -23,8 +23,9 @@
 
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/UnionTypesCore.h"
-#include "core/dom/ExceptionCode.h"
+#include "bindings/core/v8/HTMLElementOrLong.h"
+#include "bindings/core/v8/HTMLOptionElementOrHTMLOptGroupElement.h"
+#include "bindings/core/v8/NodeListOrElement.h"
 #include "core/dom/StaticNodeList.h"
 #include "core/html/HTMLOptionElement.h"
 #include "core/html/HTMLSelectElement.h"
@@ -63,7 +64,7 @@ void HTMLOptionsCollection::supportedPropertyNames(Vector<String>& names)
     }
 }
 
-RawPtr<HTMLOptionsCollection> HTMLOptionsCollection::create(ContainerNode& select, CollectionType)
+HTMLOptionsCollection* HTMLOptionsCollection::create(ContainerNode& select, CollectionType)
 {
     return new HTMLOptionsCollection(select);
 }
@@ -110,14 +111,14 @@ void HTMLOptionsCollection::namedGetter(const AtomicString& name, NodeListOrElem
     returnValue.setNodeList(StaticElementList::adopt(namedItems));
 }
 
-bool HTMLOptionsCollection::anonymousIndexedSetter(unsigned index, RawPtr<HTMLOptionElement> value, ExceptionState& exceptionState)
+bool HTMLOptionsCollection::anonymousIndexedSetter(unsigned index, HTMLOptionElement* value, ExceptionState& exceptionState)
 {
     HTMLSelectElement& base = toHTMLSelectElement(ownerNode());
     if (!value) { // undefined or null
         base.remove(index);
         return true;
     }
-    base.setOption(index, value.get(), exceptionState);
+    base.setOption(index, value, exceptionState);
     return true;
 }
 

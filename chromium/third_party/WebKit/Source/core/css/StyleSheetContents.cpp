@@ -62,7 +62,6 @@ StyleSheetContents::StyleSheetContents(StyleRuleImport* ownerRule, const String&
     , m_hasSyntacticallyValidCSSHeader(true)
     , m_didLoadErrorOccur(false)
     , m_isMutable(false)
-    , m_isInMemoryCache(false)
     , m_hasFontFaceRule(false)
     , m_hasMediaQueries(false)
     , m_hasSingleOwnerDocument(true)
@@ -81,14 +80,11 @@ StyleSheetContents::StyleSheetContents(const StyleSheetContents& o)
     , m_hasSyntacticallyValidCSSHeader(o.m_hasSyntacticallyValidCSSHeader)
     , m_didLoadErrorOccur(false)
     , m_isMutable(false)
-    , m_isInMemoryCache(false)
     , m_hasFontFaceRule(o.m_hasFontFaceRule)
     , m_hasMediaQueries(o.m_hasMediaQueries)
     , m_hasSingleOwnerDocument(true)
     , m_parserContext(o.m_parserContext)
 {
-    ASSERT(o.isCacheable());
-
     // FIXME: Copy import rules.
     ASSERT(o.m_importRules.isEmpty());
 
@@ -98,9 +94,6 @@ StyleSheetContents::StyleSheetContents(const StyleSheetContents& o)
 
 StyleSheetContents::~StyleSheetContents()
 {
-#if !ENABLE(OILPAN)
-    clearRules();
-#endif
 }
 
 void StyleSheetContents::setHasSyntacticallyValidCSSHeader(bool isValidCss)
@@ -112,7 +105,7 @@ void StyleSheetContents::setHasSyntacticallyValidCSSHeader(bool isValidCss)
     m_hasSyntacticallyValidCSSHeader = isValidCss;
 }
 
-bool StyleSheetContents::isCacheable() const
+bool StyleSheetContents::isCacheableForResource() const
 {
     // This would require dealing with multiple clients for load callbacks.
     if (!loadCompleted())
@@ -141,6 +134,22 @@ bool StyleSheetContents::isCacheable() const
         return false;
     return true;
 }
+
+bool StyleSheetContents::isCacheableForStyleElement() const
+{
+    // FIXME: Support copying import rules.
+    if (!importRules().isEmpty())
+        return false;
+    // Until import rules are supported in cached sheets it's not possible for loading to fail.
+    DCHECK(!didLoadErrorOccur());
+    // It is not the original sheet anymore.
+    if (isMutable())
+        return false;
+    if (!hasSyntacticallyValidCSSHeader())
+        return false;
+    return true;
+}
+
 
 void StyleSheetContents::parserAppendRule(StyleRuleBase* rule)
 {
@@ -503,7 +512,7 @@ static bool childRulesHaveFailedOrCanceledSubresources(const HeapVector<Member<S
 
 bool StyleSheetContents::hasFailedOrCanceledSubresources() const
 {
-    ASSERT(isCacheable());
+    ASSERT(isCacheableForResource());
     return childRulesHaveFailedOrCanceledSubresources(m_childRules);
 }
 
@@ -575,17 +584,19 @@ void StyleSheetContents::removeSheetFromCache(Document* document)
     document->styleEngine().removeSheet(this);
 }
 
-void StyleSheetContents::addedToMemoryCache()
+void StyleSheetContents::setReferencedFromResource(CSSStyleSheetResource* resource)
 {
-    ASSERT(!m_isInMemoryCache);
-    ASSERT(isCacheable());
-    m_isInMemoryCache = true;
+    DCHECK(resource);
+    DCHECK(!isReferencedFromResource());
+    DCHECK(isCacheableForResource());
+    m_referencedFromResource = resource;
 }
 
-void StyleSheetContents::removedFromMemoryCache()
+void StyleSheetContents::clearReferencedFromResource()
 {
-    ASSERT(isCacheable());
-    m_isInMemoryCache = false;
+    DCHECK(isReferencedFromResource());
+    DCHECK(isCacheableForResource());
+    m_referencedFromResource = nullptr;
 }
 
 RuleSet& StyleSheetContents::ensureRuleSet(const MediaQueryEvaluator& medium, AddRuleFlags addRuleFlags)
@@ -674,6 +685,7 @@ DEFINE_TRACE(StyleSheetContents)
     visitor->trace(m_loadingClients);
     visitor->trace(m_completedClients);
     visitor->trace(m_ruleSet);
+    visitor->trace(m_referencedFromResource);
 }
 
 } // namespace blink

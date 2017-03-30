@@ -95,6 +95,9 @@ void FramePainter::paintContents(GraphicsContext& context, const GlobalPaintFlag
 {
     Document* document = frameView().frame().document();
 
+    if (frameView().shouldThrottleRendering())
+        return;
+
 #ifndef NDEBUG
     bool fillWithRed;
     if (document->printing())
@@ -120,10 +123,8 @@ void FramePainter::paintContents(GraphicsContext& context, const GlobalPaintFlag
         return;
     }
 
-    if (!frameView().shouldThrottleRendering()) {
-        RELEASE_ASSERT(!frameView().needsLayout());
-        ASSERT(document->lifecycle().state() >= DocumentLifecycle::CompositingClean);
-    }
+    RELEASE_ASSERT(!frameView().needsLayout());
+    ASSERT(document->lifecycle().state() >= DocumentLifecycle::CompositingClean);
 
     TRACE_EVENT1("devtools.timeline", "Paint", "data", InspectorPaintEvent::data(layoutView, LayoutRect(rect), 0));
 
@@ -141,8 +142,7 @@ void FramePainter::paintContents(GraphicsContext& context, const GlobalPaintFlag
     PaintLayer* rootLayer = layoutView->layer();
 
 #if ENABLE(ASSERT)
-    if (!frameView().shouldThrottleRendering())
-        layoutView->assertSubtreeIsLaidOut();
+    layoutView->assertSubtreeIsLaidOut();
     LayoutObject::SetLayoutNeededForbiddenScope forbidSetNeedsLayout(*rootLayer->layoutObject());
 #endif
 
@@ -167,7 +167,7 @@ void FramePainter::paintContents(GraphicsContext& context, const GlobalPaintFlag
         s_inPaintContents = false;
     }
 
-    InspectorInstrumentation::didPaint(layoutView, 0, context, LayoutRect(rect));
+    InspectorInstrumentation::didPaint(layoutView->frame(), 0, context, LayoutRect(rect));
 }
 
 void FramePainter::paintScrollbars(GraphicsContext& context, const IntRect& rect)

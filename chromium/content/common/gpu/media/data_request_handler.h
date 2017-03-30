@@ -12,7 +12,6 @@
 #include "base/callback.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/synchronization/waitable_event.h"
 #include "content/common/content_export.h"
 #include "media/base/mac/avfoundation_glue.h"
@@ -97,7 +96,7 @@ class CONTENT_EXPORT DataRequestHandler
   IPCDataSource* const data_source_;
   const dispatch_queue_t queue_;
 
-  scoped_ptr<OrderedRequests> requests_;
+  std::unique_ptr<OrderedRequests> requests_;
 
   uint8_t buffer_[kBufferSize];
   int last_size_read_;

@@ -11,7 +11,7 @@
 #include "base/metrics/histogram.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/appcache/appcache_interceptor.h"
@@ -21,6 +21,7 @@
 #include "content/browser/loader/resource_loader_delegate.h"
 #include "content/browser/loader/resource_request_info_impl.h"
 #include "content/browser/service_worker/service_worker_request_handler.h"
+#include "content/browser/service_worker/service_worker_response_info.h"
 #include "content/browser/ssl/ssl_client_auth_handler.h"
 #include "content/browser/ssl/ssl_manager.h"
 #include "content/browser/ssl/ssl_policy.h"
@@ -28,7 +29,6 @@
 #include "content/public/browser/cert_store.h"
 #include "content/public/browser/resource_context.h"
 #include "content/public/browser/resource_dispatcher_host_login_delegate.h"
-#include "content/public/browser/signed_certificate_timestamp_store.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/process_type.h"
@@ -37,10 +37,12 @@
 #include "net/base/io_buffer.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_response_headers.h"
+#include "net/nqe/network_quality_estimator.h"
 #include "net/ssl/client_cert_store.h"
 #include "net/ssl/ssl_platform_key.h"
 #include "net/ssl/ssl_private_key.h"
 #include "net/url_request/redirect_info.h"
+#include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_status.h"
 
 using base::TimeDelta;
@@ -48,20 +50,6 @@ using base::TimeTicks;
 
 namespace content {
 namespace {
-
-void StoreSignedCertificateTimestamps(
-    const net::SignedCertificateTimestampAndStatusList& sct_list,
-    int process_id,
-    SignedCertificateTimestampIDStatusList* sct_ids) {
-  SignedCertificateTimestampStore* sct_store(
-      SignedCertificateTimestampStore::GetInstance());
-
-  for (auto iter = sct_list.begin(); iter != sct_list.end(); ++iter) {
-    const int sct_id(sct_store->Store(iter->sct.get(), process_id));
-    sct_ids->push_back(
-        SignedCertificateTimestampIDAndStatus(sct_id, iter->status));
-  }
-}
 
 void GetSSLStatusForRequest(const GURL& url,
                             const net::SSLInfo& ssl_info,
@@ -71,13 +59,9 @@ void GetSSLStatusForRequest(const GURL& url,
   DCHECK(ssl_info.cert);
   int cert_id = cert_store->StoreCert(ssl_info.cert.get(), child_id);
 
-  SignedCertificateTimestampIDStatusList signed_certificate_timestamp_ids;
-  StoreSignedCertificateTimestamps(ssl_info.signed_certificate_timestamps,
-                                   child_id, &signed_certificate_timestamp_ids);
-
   *ssl_status = SSLStatus(SSLPolicy::GetSecurityStyleForResource(
                               url, cert_id, ssl_info.cert_status),
-                          cert_id, signed_certificate_timestamp_ids, ssl_info);
+                          cert_id, ssl_info);
 }
 
 void PopulateResourceResponse(ResourceRequestInfoImpl* info,
@@ -98,15 +82,27 @@ void PopulateResourceResponse(ResourceRequestInfoImpl* info,
   response->head.connection_info = response_info.connection_info;
   response->head.was_fetched_via_proxy = request->was_fetched_via_proxy();
   response->head.proxy_server = response_info.proxy_server;
-  response->head.socket_address = request->GetSocketAddress();
+  response->head.socket_address = response_info.socket_address;
   const content::ResourceRequestInfo* request_info =
       content::ResourceRequestInfo::ForRequest(request);
   if (request_info)
     response->head.is_using_lofi = request_info->IsUsingLoFi();
-  if (ServiceWorkerRequestHandler* handler =
-          ServiceWorkerRequestHandler::GetHandler(request)) {
-    handler->GetExtraResponseInfo(&response->head);
+
+  response->head.effective_connection_type =
+      net::NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_UNKNOWN;
+  if (info->IsMainFrame()) {
+    net::NetworkQualityEstimator* estimator =
+        request->context()->network_quality_estimator();
+    if (estimator) {
+      response->head.effective_connection_type =
+          estimator->GetEffectiveConnectionType();
+    }
   }
+
+  const ServiceWorkerResponseInfo* service_worker_info =
+      ServiceWorkerResponseInfo::ForRequest(request);
+  if (service_worker_info)
+    service_worker_info->GetExtraResponseInfo(&response->head);
   AppCacheInterceptor::GetExtraResponseInfo(
       request, &response->head.appcache_id,
       &response->head.appcache_manifest_url);
@@ -121,6 +117,13 @@ void PopulateResourceResponse(ResourceRequestInfoImpl* info,
     response->head.has_major_certificate_errors =
         net::IsCertStatusError(ssl_status.cert_status) &&
         !net::IsCertStatusMinorError(ssl_status.cert_status);
+    if (info->ShouldReportRawHeaders()) {
+      // Only pass the Signed Certificate Timestamps (SCTs) when the network
+      // panel of the DevTools is open, i.e. ShouldReportRawHeaders() is set.
+      // These data are used to populate the requests in the security panel too.
+      response->head.signed_certificate_timestamps =
+          request->ssl_info().signed_certificate_timestamps;
+    }
   } else {
     // We should not have any SSL state.
     DCHECK(!request->ssl_info().cert_status);
@@ -743,6 +746,9 @@ void ResourceLoader::RecordHistograms() {
     }
 
     UMA_HISTOGRAM_ENUMERATION("Net.Prefetch.Pattern", status, STATUS_MAX);
+  } else if (request_->response_info().unused_since_prefetch) {
+    TimeDelta total_time = base::TimeTicks::Now() - request_->creation_time();
+    UMA_HISTOGRAM_TIMES("Net.Prefetch.TimeSpentOnPrefetchHit", total_time);
   }
 }
 

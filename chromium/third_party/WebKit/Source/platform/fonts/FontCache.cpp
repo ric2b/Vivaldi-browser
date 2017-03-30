@@ -29,8 +29,8 @@
 
 #include "platform/fonts/FontCache.h"
 
+#include "base/trace_event/process_memory_dump.h"
 #include "platform/FontFamilyNames.h"
-
 #include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/fonts/AcceptLanguagesResolver.h"
@@ -76,11 +76,10 @@ static FallbackListShaperCache* gFallbackListShaperCache = nullptr;
 SkFontMgr* FontCache::s_fontManager = nullptr;
 
 #if OS(WIN)
-bool FontCache::s_useDirectWrite = false;
 bool FontCache::s_antialiasedTextEnabled = false;
 bool FontCache::s_lcdTextEnabled = false;
-bool FontCache::s_useSubpixelPositioning = false;
 float FontCache::s_deviceScaleFactor = 1.0;
+bool FontCache::s_useSkiaFontFallback = false;
 #endif // OS(WIN)
 
 FontCache* FontCache::fontCache()
@@ -343,26 +342,24 @@ void FontCache::invalidate()
     purge(ForcePurge);
 }
 
-void FontCache::dumpFontPlatformDataCache(WebProcessMemoryDump* memoryDump)
+void FontCache::dumpFontPlatformDataCache(base::trace_event::ProcessMemoryDump* memoryDump)
 {
     ASSERT(isMainThread());
     if (!gFontPlatformDataCache)
         return;
-    String dumpName = String("font_caches/font_platform_data_cache");
-    WebMemoryAllocatorDump* dump = memoryDump->createMemoryAllocatorDump(dumpName);
+    base::trace_event::MemoryAllocatorDump* dump = memoryDump->CreateAllocatorDump("font_caches/font_platform_data_cache");
     size_t fontPlatformDataObjectsSize = gFontPlatformDataCache->size() * sizeof(FontPlatformData);
-    dump->addScalar("size", "bytes", fontPlatformDataObjectsSize);
-    memoryDump->addSuballocation(dump->guid(), String(WTF::Partitions::kAllocatedObjectPoolName));
+    dump->AddScalar("size", "bytes", fontPlatformDataObjectsSize);
+    memoryDump->AddSuballocation(dump->guid(), WTF::Partitions::kAllocatedObjectPoolName);
 }
 
-void FontCache::dumpShapeResultCache(WebProcessMemoryDump* memoryDump)
+void FontCache::dumpShapeResultCache(base::trace_event::ProcessMemoryDump* memoryDump)
 {
     ASSERT(isMainThread());
     if (!gFallbackListShaperCache) {
         return;
     }
-    String dumpName = String("font_caches/shape_caches");
-    WebMemoryAllocatorDump* dump = memoryDump->createMemoryAllocatorDump(dumpName);
+    base::trace_event::MemoryAllocatorDump* dump = memoryDump->CreateAllocatorDump("font_caches/shape_caches");
     size_t shapeResultCacheSize = 0;
     FallbackListShaperCache::iterator iter;
     for (iter = gFallbackListShaperCache->begin();
@@ -370,9 +367,25 @@ void FontCache::dumpShapeResultCache(WebProcessMemoryDump* memoryDump)
         ++iter) {
         shapeResultCacheSize += iter->value->byteSize();
     }
-    dump->addScalar("size", "bytes", shapeResultCacheSize);
-    memoryDump->addSuballocation(dump->guid(), String(WTF::Partitions::kAllocatedObjectPoolName));
+    dump->AddScalar("size", "bytes", shapeResultCacheSize);
+    memoryDump->AddSuballocation(dump->guid(), WTF::Partitions::kAllocatedObjectPoolName);
 }
 
+// SkFontMgr requires script-based locale names, like "zh-Hant" and "zh-Hans",
+// instead of "zh-CN" and "zh-TW".
+CString toSkFontMgrLocale(const String& locale)
+{
+    if (!locale.startsWith("zh", TextCaseInsensitive))
+        return locale.ascii();
+
+    switch (localeToScriptCodeForFontSelection(locale)) {
+    case USCRIPT_SIMPLIFIED_HAN:
+        return "zh-Hans";
+    case USCRIPT_TRADITIONAL_HAN:
+        return "zh-Hant";
+    default:
+        return locale.ascii();
+    }
+}
 
 } // namespace blink

@@ -48,11 +48,11 @@ void BackupCallback(const base::FilePath& path) {
 
 void LoadCallback(const base::FilePath& path,
     const base::WeakPtr<vivaldi::NotesStorage> storage,
-    scoped_ptr<NotesLoadDetails> details) {
+    std::unique_ptr<NotesLoadDetails> details) {
   bool notes_file_exists = base::PathExists(path);
   if (notes_file_exists) {
     JSONFileValueDeserializer serializer(path);
-    scoped_ptr<base::Value> root(serializer.Deserialize(NULL, NULL));
+    std::unique_ptr<base::Value> root(serializer.Deserialize(NULL, NULL));
 
     if (root.get()) {
       // Building the index can take a while, so we do it on the background
@@ -101,7 +101,7 @@ NotesStorage::~NotesStorage() {
     writer_.DoScheduledWrite();
 }
 
-void NotesStorage::LoadNotes(scoped_ptr<NotesLoadDetails> details) {
+void NotesStorage::LoadNotes(std::unique_ptr<NotesLoadDetails> details) {
   DCHECK(details);
   sequenced_task_runner_->PostTask(
     FROM_HERE,
@@ -123,13 +123,13 @@ void NotesStorage::NotesModelDeleted() {
 }
 
 bool NotesStorage::SerializeData(std::string* output) {
-  scoped_ptr<base::Value> value(model_->root()->WriteJSON());
+  std::unique_ptr<base::Value> value(model_->root()->WriteJSON());
   JSONStringValueSerializer serializer(output);
   serializer.set_pretty_print(true);
   return serializer.Serialize(*(value.get()));
 }
 
-void NotesStorage::OnLoadFinished(scoped_ptr<NotesLoadDetails> details) {
+void NotesStorage::OnLoadFinished(std::unique_ptr<NotesLoadDetails> details) {
   if (!model_)
     return;
 
@@ -144,7 +144,7 @@ bool NotesStorage::SaveNow() {
     return false;
   }
 
-  scoped_ptr<std::string> data(new std::string);
+  std::unique_ptr<std::string> data(new std::string);
   if (!SerializeData(data.get()))
     return false;
   writer_.WriteNow(std::move(data));

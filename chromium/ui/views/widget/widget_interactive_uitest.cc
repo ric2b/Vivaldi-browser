@@ -278,11 +278,15 @@ class WidgetTestInteractive : public WidgetTest {
   ~WidgetTestInteractive() override {}
 
   void SetUp() override {
-    gfx::GLSurfaceTestSupport::InitializeOneOff();
-    ui::RegisterPathProvider();
-    base::FilePath ui_test_pak_path;
-    ASSERT_TRUE(PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
-    ui::ResourceBundle::InitSharedInstanceWithPakPath(ui_test_pak_path);
+    // On mus these tests run as part of views::ViewsTestSuite which already
+    // does this initialization.
+    if (!IsMus()) {
+      gfx::GLSurfaceTestSupport::InitializeOneOff();
+      ui::RegisterPathProvider();
+      base::FilePath ui_test_pak_path;
+      ASSERT_TRUE(PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
+      ui::ResourceBundle::InitSharedInstanceWithPakPath(ui_test_pak_path);
+    }
     WidgetTest::SetUp();
   }
 
@@ -318,7 +322,7 @@ class WidgetTestInteractive : public WidgetTest {
 TEST_F(WidgetTestInteractive, DesktopNativeWidgetAuraActivationAndFocusTest) {
   // Create widget 1 and expect the active window to be its window.
   View* focusable_view1 = new View;
-  focusable_view1->SetFocusable(true);
+  focusable_view1->SetFocusBehavior(View::FocusBehavior::ALWAYS);
   Widget* widget1 = CreateWidget();
   widget1->GetContentsView()->AddChildView(focusable_view1);
   widget1->Show();
@@ -602,14 +606,14 @@ TEST_F(WidgetTestInteractive, CheckResizeControllerEvents) {
 TEST_F(WidgetTestInteractive, ViewFocusOnWidgetActivationChanges) {
   Widget* widget1 = CreateTopLevelPlatformWidget();
   View* view1 = new View;
-  view1->SetFocusable(true);
+  view1->SetFocusBehavior(View::FocusBehavior::ALWAYS);
   widget1->GetContentsView()->AddChildView(view1);
 
   Widget* widget2 = CreateTopLevelPlatformWidget();
   View* view2a = new View;
   View* view2b = new View;
-  view2a->SetFocusable(true);
-  view2b->SetFocusable(true);
+  view2a->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  view2b->SetFocusBehavior(View::FocusBehavior::ALWAYS);
   widget2->GetContentsView()->AddChildView(view2a);
   widget2->GetContentsView()->AddChildView(view2b);
 
@@ -649,9 +653,10 @@ TEST_F(WidgetTestInteractive, ViewFocusOnWidgetActivationChanges) {
 TEST_F(WidgetTestInteractive, ViewFocusOnHWNDEnabledChanges) {
   Widget* widget = CreateTopLevelFramelessPlatformWidget();
   widget->SetContentsView(new View);
-  for (size_t i = 0; i < 2; ++i) {
+  for (int i = 0; i < 2; ++i) {
     widget->GetContentsView()->AddChildView(new View);
-    widget->GetContentsView()->child_at(i)->SetFocusable(true);
+    widget->GetContentsView()->child_at(i)->SetFocusBehavior(
+        View::FocusBehavior::ALWAYS);
   }
 
   widget->Show();
@@ -805,6 +810,56 @@ TEST_F(WidgetTestInteractive, FullscreenBoundsReducedOnActivationLoss) {
   widget1.CloseNow();
   widget2.CloseNow();
 }
+
+// Ensure the window rect and client rects are correct with a window that was
+// maximized.
+TEST_F(WidgetTestInteractive, FullscreenMaximizedWindowBounds) {
+  Widget widget;
+  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
+  params.native_widget = new DesktopNativeWidgetAura(&widget);
+  params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  widget.set_frame_type(Widget::FRAME_TYPE_FORCE_CUSTOM);
+  widget.Init(params);
+  widget.SetBounds(gfx::Rect(0, 0, 200, 200));
+  widget.Show();
+
+  widget.Maximize();
+  EXPECT_TRUE(widget.IsMaximized());
+
+  widget.SetFullscreen(true);
+  EXPECT_TRUE(widget.IsFullscreen());
+  EXPECT_FALSE(widget.IsMaximized());
+  // Ensure that the StopIgnoringPosChanges task in HWNDMessageHandler runs.
+  // This task is queued when a widget becomes fullscreen.
+  RunPendingMessages();
+
+  aura::WindowTreeHost* host = widget.GetNativeWindow()->GetHost();
+  HWND hwnd = host->GetAcceleratedWidget();
+
+  HMONITOR monitor = ::MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+  ASSERT_TRUE(!!monitor);
+  MONITORINFO monitor_info;
+  monitor_info.cbSize = sizeof(monitor_info);
+  ASSERT_TRUE(::GetMonitorInfo(monitor, &monitor_info));
+
+  gfx::Rect monitor_bounds(monitor_info.rcMonitor);
+  gfx::Rect window_bounds = widget.GetWindowBoundsInScreen();
+  gfx::Rect client_area_bounds = host->GetBounds();
+
+  EXPECT_EQ(window_bounds, monitor_bounds);
+  EXPECT_EQ(monitor_bounds, client_area_bounds);
+
+  // Setting not fullscreen should return it to maximized.
+  widget.SetFullscreen(false);
+  EXPECT_FALSE(widget.IsFullscreen());
+  EXPECT_TRUE(widget.IsMaximized());
+
+  client_area_bounds = host->GetBounds();
+  EXPECT_TRUE(monitor_bounds.Contains(client_area_bounds));
+  EXPECT_NE(monitor_bounds, client_area_bounds);
+
+  widget.CloseNow();
+}
 #endif  // defined(OS_WIN)
 
 #if !defined(OS_CHROMEOS)
@@ -826,6 +881,10 @@ class ModalDialogDelegate : public DialogDelegateView {
 // Tests whether the focused window is set correctly when a modal window is
 // created and destroyed. When it is destroyed it should focus the owner window.
 TEST_F(WidgetTestInteractive, WindowModalWindowDestroyedActivationTest) {
+  // Fails on mus due to focus issues. http://crbug.com/611601
+  if (IsMus())
+    return;
+
   TestWidgetFocusChangeListener focus_listener;
   WidgetFocusManager::GetInstance()->AddFocusChangeListener(&focus_listener);
   const std::vector<gfx::NativeView>& focus_changes =
@@ -863,7 +922,7 @@ TEST_F(WidgetTestInteractive, WindowModalWindowDestroyedActivationTest) {
   modal_dialog_widget->Show();
 
   gfx::NativeView modal_native_view = modal_dialog_widget->GetNativeView();
-  EXPECT_EQ(3u, focus_changes.size());
+  ASSERT_EQ(3u, focus_changes.size());
   EXPECT_EQ(nullptr, focus_changes[1]);
   EXPECT_EQ(modal_native_view, focus_changes[2]);
 
@@ -877,7 +936,7 @@ TEST_F(WidgetTestInteractive, WindowModalWindowDestroyedActivationTest) {
   modal_dialog_widget->CloseNow();
 #endif
 
-  EXPECT_EQ(5u, focus_changes.size());
+  ASSERT_EQ(5u, focus_changes.size());
   EXPECT_EQ(nullptr, focus_changes[3]);
   EXPECT_EQ(top_level_native_view, focus_changes[4]);
 
@@ -897,6 +956,10 @@ TEST_F(WidgetTestInteractive, WindowModalWindowDestroyedActivationTest) {
 
 // Test that when opening a system-modal window, capture is released.
 TEST_F(WidgetTestInteractive, MAYBE_SystemModalWindowReleasesCapture) {
+  // Crashes on mus due to capture issue. http://crbug.com/611764
+  if (IsMus())
+    return;
+
   TestWidgetFocusChangeListener focus_listener;
   WidgetFocusManager::GetInstance()->AddFocusChangeListener(&focus_listener);
 
@@ -988,6 +1051,10 @@ TEST_F(WidgetTestInteractive, TouchSelectionQuickMenuIsNotActivated) {
 #endif  // defined(USE_AURA)
 
 TEST_F(WidgetTestInteractive, DisableViewDoesNotActivateWidget) {
+  // Times out on mus. See http://crbug.com/612193
+  if (IsMus())
+    return;
+
 #if defined(OS_WIN)
   views_delegate()->set_use_desktop_native_widgets(true);
 #endif  // !defined(OS_WIN)
@@ -1000,7 +1067,7 @@ TEST_F(WidgetTestInteractive, DisableViewDoesNotActivateWidget) {
   widget1.Init(params1);
 
   View* view1 = new View();
-  view1->SetFocusable(true);
+  view1->SetFocusBehavior(View::FocusBehavior::ALWAYS);
   widget1.GetRootView()->AddChildView(view1);
 
   ActivateSync(&widget1);
@@ -1018,7 +1085,7 @@ TEST_F(WidgetTestInteractive, DisableViewDoesNotActivateWidget) {
   widget2.Init(params2);
 
   View* view2 = new View();
-  view2->SetFocusable(true);
+  view2->SetFocusBehavior(View::FocusBehavior::ALWAYS);
   widget2.GetRootView()->AddChildView(view2);
 
   ActivateSync(&widget2);
@@ -1179,7 +1246,7 @@ TEST_F(WidgetTestInteractive, InitialFocus) {
   // focusable subview).
   Widget* toplevel(CreateTopLevelPlatformWidget());
   View* view = new View;
-  view->SetFocusable(true);
+  view->SetFocusBehavior(View::FocusBehavior::ALWAYS);
   toplevel->GetContentsView()->AddChildView(view);
 
   ShowSync(toplevel);
@@ -1234,11 +1301,15 @@ class WidgetCaptureTest : public ViewsTestBase {
   ~WidgetCaptureTest() override {}
 
   void SetUp() override {
-    gfx::GLSurfaceTestSupport::InitializeOneOff();
-    ui::RegisterPathProvider();
-    base::FilePath ui_test_pak_path;
-    ASSERT_TRUE(PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
-    ui::ResourceBundle::InitSharedInstanceWithPakPath(ui_test_pak_path);
+    // On mus these tests run as part of views::ViewsTestSuite which already
+    // does this initialization.
+    if (!IsMus()) {
+      gfx::GLSurfaceTestSupport::InitializeOneOff();
+      ui::RegisterPathProvider();
+      base::FilePath ui_test_pak_path;
+      ASSERT_TRUE(PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
+      ui::ResourceBundle::InitSharedInstanceWithPakPath(ui_test_pak_path);
+    }
     ViewsTestBase::SetUp();
   }
 
@@ -1305,12 +1376,20 @@ TEST_F(WidgetCaptureTest, Capture) {
 #if !defined(OS_CHROMEOS)
 // See description in TestCapture(). Creates DesktopNativeWidget.
 TEST_F(WidgetCaptureTest, CaptureDesktopNativeWidget) {
+  // Fails on mus. http://crbug.com/611764
+  if (IsMus())
+    return;
+
   TestCapture(true);
 }
 #endif
 
 // Test that no state is set if capture fails.
 TEST_F(WidgetCaptureTest, FailedCaptureRequestIsNoop) {
+  // Fails on mus. http://crbug.com/611764
+  if (IsMus())
+    return;
+
   Widget widget;
   Widget::InitParams params =
       CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS);
@@ -1353,6 +1432,10 @@ TEST_F(WidgetCaptureTest, FailedCaptureRequestIsNoop) {
 // Test that a synthetic mouse exit is sent to the widget which was handling
 // mouse events when a different widget grabs capture.
 TEST_F(WidgetCaptureTest, MAYBE_MouseExitOnCaptureGrab) {
+  // Fails on mus. http://crbug.com/611764
+  if (IsMus())
+    return;
+
   Widget widget1;
   Widget::InitParams params1 =
       CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS);
@@ -1608,6 +1691,10 @@ TEST_F(WidgetInputMethodInteractiveTest, OneWindow) {
 // Test input method focus changes affected by focus changes cross 2 windows
 // which shares the same top window.
 TEST_F(WidgetInputMethodInteractiveTest, TwoWindows) {
+  // Fails on mus. http://crbug.com/611766
+  if (IsMus())
+    return;
+
   Widget* parent = CreateWidget();
   parent->SetBounds(gfx::Rect(100, 100, 100, 100));
 

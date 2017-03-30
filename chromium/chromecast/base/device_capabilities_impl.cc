@@ -11,7 +11,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chromecast/base/serializers.h"
 
@@ -149,11 +149,9 @@ void DeviceCapabilitiesImpl::Register(const std::string& key,
   DCHECK(validator);
 
   base::AutoLock auto_lock(validation_lock_);
-  bool added =
-      validator_map_.add(key, base::WrapUnique(new ValidatorInfo(validator)))
-          .second;
   // Check that a validator has not already been registered for this key
-  DCHECK(added);
+  DCHECK_EQ(0u, validator_map_.count(key));
+  validator_map_[key] = base::WrapUnique(new ValidatorInfo(validator));
 }
 
 void DeviceCapabilitiesImpl::Unregister(const std::string& key,

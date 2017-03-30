@@ -2,9 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/wm/dock/docked_window_layout_manager.h"
+#include "ash/wm/common/dock/docked_window_layout_manager.h"
 
 #include "ash/ash_switches.h"
+#include "ash/display/display_manager.h"
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_layout_manager.h"
@@ -19,10 +20,11 @@
 #include "ash/test/shelf_view_test_api.h"
 #include "ash/test/shell_test_api.h"
 #include "ash/test/test_shelf_delegate.h"
-#include "ash/wm/coordinate_conversion.h"
-#include "ash/wm/panels/panel_layout_manager.h"
-#include "ash/wm/window_resizer.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/aura/wm_window_aura.h"
+#include "ash/wm/common/panels/panel_layout_manager.h"
+#include "ash/wm/common/window_resizer.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
@@ -32,7 +34,7 @@
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/hit_test.h"
 #include "ui/display/manager/display_layout.h"
-#include "ui/gfx/screen.h"
+#include "ui/display/screen.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/coordinate_conversion.h"
 
@@ -76,8 +78,7 @@ class DockedWindowLayoutManagerTest
           test::TestShelfDelegate::instance();
       shelf_delegate->AddShelfItem(window);
       PanelLayoutManager* manager =
-          static_cast<PanelLayoutManager*>(GetPanelContainer(window)->
-              layout_manager());
+          PanelLayoutManager::Get(wm::WmWindowAura::Get(window));
       manager->Relayout();
     }
     return window;
@@ -93,27 +94,20 @@ class DockedWindowLayoutManagerTest
           test::TestShelfDelegate::instance();
       shelf_delegate->AddShelfItem(window);
       PanelLayoutManager* manager =
-          static_cast<PanelLayoutManager*>(GetPanelContainer(window)->
-              layout_manager());
+          PanelLayoutManager::Get(wm::WmWindowAura::Get(window));
       manager->Relayout();
     }
     return window;
-  }
-
-  aura::Window* GetPanelContainer(aura::Window* panel) {
-    return Shell::GetContainer(panel->GetRootWindow(),
-                               kShellWindowId_PanelContainer);
   }
 
   static WindowResizer* CreateSomeWindowResizer(
       aura::Window* window,
       const gfx::Point& point_in_parent,
       int window_component) {
-    return CreateWindowResizer(
-        window,
-        point_in_parent,
-        window_component,
-        aura::client::WINDOW_MOVE_SOURCE_MOUSE).release();
+    return CreateWindowResizer(wm::WmWindowAura::Get(window), point_in_parent,
+                               window_component,
+                               aura::client::WINDOW_MOVE_SOURCE_MOUSE)
+        .release();
   }
 
   void DragStart(aura::Window* window) {
@@ -187,8 +181,9 @@ class DockedWindowLayoutManagerTest
     // avoid snap by clicking away from the border
     ASSERT_NO_FATAL_FAILURE(DragStartAtOffsetFromwindowOrigin(window, 25, 5));
 
-    gfx::Rect work_area =
-        gfx::Screen::GetScreen()->GetDisplayNearestWindow(window).work_area();
+    gfx::Rect work_area = display::Screen::GetScreen()
+                              ->GetDisplayNearestWindow(window)
+                              .work_area();
     gfx::Point initial_location_in_screen = initial_location_in_parent_;
     ::wm::ConvertPointToScreen(window->parent(), &initial_location_in_screen);
     // Drag the window left or right to the edge (or almost to it).
@@ -270,8 +265,8 @@ TEST_P(DockedWindowLayoutManagerTest, AutoPlacingLeft) {
             window->GetBoundsInScreen().x());
   EXPECT_EQ(kShellWindowId_DockedContainer, window->parent()->id());
 
-  DockedWindowLayoutManager* manager = static_cast<DockedWindowLayoutManager*>(
-      window->parent()->layout_manager());
+  DockedWindowLayoutManager* manager =
+      DockedWindowLayoutManager::Get(wm::WmWindowAura::Get(window.get()));
 
   // Create two additional windows and test their auto-placement
   std::unique_ptr<aura::Window> window1(CreateTestWindowInShellWithId(1));
@@ -320,8 +315,8 @@ TEST_P(DockedWindowLayoutManagerTest, AutoPlacingRight) {
             window->GetBoundsInScreen().right());
   EXPECT_EQ(kShellWindowId_DockedContainer, window->parent()->id());
 
-  DockedWindowLayoutManager* manager = static_cast<DockedWindowLayoutManager*>(
-      window->parent()->layout_manager());
+  DockedWindowLayoutManager* manager =
+      DockedWindowLayoutManager::Get(wm::WmWindowAura::Get(window.get()));
 
   // Create two additional windows and test their auto-placement
   std::unique_ptr<aura::Window> window1(CreateTestWindowInShellWithId(1));
@@ -374,8 +369,8 @@ TEST_P(DockedWindowLayoutManagerTest, AutoPlacingRightSecondScreen) {
             window->GetBoundsInScreen().right());
   EXPECT_EQ(kShellWindowId_DockedContainer, window->parent()->id());
 
-  DockedWindowLayoutManager* manager = static_cast<DockedWindowLayoutManager*>(
-      window->parent()->layout_manager());
+  DockedWindowLayoutManager* manager =
+      DockedWindowLayoutManager::Get(wm::WmWindowAura::Get(window.get()));
 
   // Create two additional windows and test their auto-placement
   bounds = gfx::Rect(616, 32, 231, 320);
@@ -429,8 +424,9 @@ TEST_P(DockedWindowLayoutManagerTest, AddTwoWindows) {
   EXPECT_EQ(kShellWindowId_DockedContainer, w2->parent()->id());
 
   // Test that the gaps differ at most by a single pixel.
-  gfx::Rect work_area =
-      gfx::Screen::GetScreen()->GetDisplayNearestWindow(w1.get()).work_area();
+  gfx::Rect work_area = display::Screen::GetScreen()
+                            ->GetDisplayNearestWindow(w1.get())
+                            .work_area();
   int gap1 = w1->GetBoundsInScreen().y();
   int gap2 = w2->GetBoundsInScreen().y() - w1->GetBoundsInScreen().bottom();
   int gap3 = work_area.bottom() - w2->GetBoundsInScreen().bottom();
@@ -463,8 +459,9 @@ TEST_P(DockedWindowLayoutManagerTest, TwoWindowsDragging) {
   DragEnd();
 
   // Test the new windows order and that the gaps differ at most by a pixel.
-  gfx::Rect work_area =
-      gfx::Screen::GetScreen()->GetDisplayNearestWindow(w1.get()).work_area();
+  gfx::Rect work_area = display::Screen::GetScreen()
+                            ->GetDisplayNearestWindow(w1.get())
+                            .work_area();
   int gap1 = w2->GetBoundsInScreen().y() - work_area.y();
   int gap2 = w1->GetBoundsInScreen().y() - w2->GetBoundsInScreen().bottom();
   int gap3 = work_area.bottom() - w1->GetBoundsInScreen().bottom();
@@ -499,8 +496,9 @@ TEST_P(DockedWindowLayoutManagerTest, ThreeWindowsDragging) {
 
   // Test that the top and bottom windows are clamped in work area and
   // that the gaps between the windows differ at most by a pixel.
-  gfx::Rect work_area =
-      gfx::Screen::GetScreen()->GetDisplayNearestWindow(w1.get()).work_area();
+  gfx::Rect work_area = display::Screen::GetScreen()
+                            ->GetDisplayNearestWindow(w1.get())
+                            .work_area();
   int gap1 = w1->GetBoundsInScreen().y() - work_area.y();
   int gap2 = w2->GetBoundsInScreen().y() - w1->GetBoundsInScreen().bottom();
   int gap3 = w3->GetBoundsInScreen().y() - w2->GetBoundsInScreen().bottom();
@@ -543,7 +541,7 @@ TEST_P(DockedWindowLayoutManagerTest, ThreeWindowsDraggingSecondScreen) {
   // Create two screen vertical layout.
   UpdateDisplay("600x1000,600x1000");
   // Layout the secondary display to the bottom of the primary.
-  ASSERT_GT(gfx::Screen::GetScreen()->GetNumDisplays(), 1);
+  ASSERT_GT(display::Screen::GetScreen()->GetNumDisplays(), 1);
   Shell::GetInstance()->display_manager()->SetLayoutForCurrentDisplays(
       test::CreateDisplayLayout(display::DisplayPlacement::BOTTOM, 0));
 
@@ -568,8 +566,9 @@ TEST_P(DockedWindowLayoutManagerTest, ThreeWindowsDraggingSecondScreen) {
             w3->GetBoundsInScreen().right());
   EXPECT_EQ(kShellWindowId_DockedContainer, w3->parent()->id());
 
-  gfx::Rect work_area =
-      gfx::Screen::GetScreen()->GetDisplayNearestWindow(w1.get()).work_area();
+  gfx::Rect work_area = display::Screen::GetScreen()
+                            ->GetDisplayNearestWindow(w1.get())
+                            .work_area();
   // Test that the top and bottom windows are clamped in work area and
   // that the overlaps between the windows differ at most by a pixel.
   int gap1 = w1->GetBoundsInScreen().y() - work_area.y();
@@ -764,8 +763,9 @@ TEST_P(DockedWindowLayoutManagerTest, ThreeWindowsSplitHeightEvenly) {
   EXPECT_EQ(kShellWindowId_DockedContainer, w2->parent()->id());
 
   // The two windows should be same size vertically and almost 1/2 of work area.
-  gfx::Rect work_area =
-      gfx::Screen::GetScreen()->GetDisplayNearestWindow(w1.get()).work_area();
+  gfx::Rect work_area = display::Screen::GetScreen()
+                            ->GetDisplayNearestWindow(w1.get())
+                            .work_area();
   EXPECT_NEAR(w1->GetBoundsInScreen().height(),
               w2->GetBoundsInScreen().height(),
               1);
@@ -826,8 +826,9 @@ TEST_P(DockedWindowLayoutManagerTest, TwoWindowsHeightRestrictions) {
 
   // w1 should be more than half of the work area height (even with a margin).
   // w2 should be less than half of the work area height (even with a margin).
-  gfx::Rect work_area =
-      gfx::Screen::GetScreen()->GetDisplayNearestWindow(w1.get()).work_area();
+  gfx::Rect work_area = display::Screen::GetScreen()
+                            ->GetDisplayNearestWindow(w1.get())
+                            .work_area();
   EXPECT_GT(w1->GetBoundsInScreen().height(), work_area.height() / 2 + 10);
   EXPECT_LT(w2->GetBoundsInScreen().height(), work_area.height() / 2 - 10);
 }
@@ -855,7 +856,7 @@ TEST_P(DockedWindowLayoutManagerTest, DisplayDisconnectionMovesDocked) {
             window->GetBoundsInScreen().right());
   EXPECT_EQ(kShellWindowId_DockedContainer, window->parent()->id());
   EXPECT_EQ(ideal_width(), window->bounds().width());
-  gfx::Rect work_area = gfx::Screen::GetScreen()
+  gfx::Rect work_area = display::Screen::GetScreen()
                             ->GetDisplayNearestWindow(window.get())
                             .work_area();
   EXPECT_EQ(work_area.height(), window->GetBoundsInScreen().height());

@@ -7,15 +7,15 @@
 
 #include <stdint.h>
 
-#include <map>
+#include <memory>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
@@ -172,24 +172,25 @@ class CONTENT_EXPORT ServiceWorkerDatabase {
                             RegistrationData* deleted_version,
                             std::vector<int64_t>* newly_purgeable_resources);
 
-  // Reads user data for |registration_id| and |user_data_name| from the
-  // database.
+  // Reads user data for |registration_id| and |user_data_names| from the
+  // database. Returns OK only if all keys are found; otherwise NOT_FOUND, and
+  // |user_data_values| will be empty.
   Status ReadUserData(int64_t registration_id,
-                      const std::string& user_data_name,
-                      std::string* user_data);
+                      const std::vector<std::string>& user_data_names,
+                      std::vector<std::string>* user_data_values);
 
-  // Writes |user_data| into the database. Returns NOT_FOUND if the registration
-  // specified by |registration_id| does not exist in the database.
-  Status WriteUserData(int64_t registration_id,
-                       const GURL& origin,
-                       const std::string& user_data_name,
-                       const std::string& user_data);
+  // Writes |name_value_pairs| into the database. Returns NOT_FOUND if the
+  // registration specified by |registration_id| does not exist in the database.
+  Status WriteUserData(
+      int64_t registration_id,
+      const GURL& origin,
+      const std::vector<std::pair<std::string, std::string>>& name_value_pairs);
 
-  // Deletes user data for |registration_id| and |user_data_name| from the
-  // database. Returns OK if it's successfully deleted or not found in the
+  // Deletes user data for |registration_id| and |user_data_names| from the
+  // database. Returns OK if all are successfully deleted or not found in the
   // database.
   Status DeleteUserData(int64_t registration_id,
-                        const std::string& user_data_name);
+                        const std::vector<std::string>& user_data_names);
 
   // Reads user data for all registrations that have data with |user_data_name|
   // from the database. Returns OK if they are successfully read or not found.
@@ -347,8 +348,8 @@ class CONTENT_EXPORT ServiceWorkerDatabase {
       Status status);
 
   const base::FilePath path_;
-  scoped_ptr<leveldb::Env> env_;
-  scoped_ptr<leveldb::DB> db_;
+  std::unique_ptr<leveldb::Env> env_;
+  std::unique_ptr<leveldb::DB> db_;
 
   int64_t next_avail_registration_id_;
   int64_t next_avail_resource_id_;

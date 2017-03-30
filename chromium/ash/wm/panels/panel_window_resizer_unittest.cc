@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/wm/panels/panel_window_resizer.h"
+#include "ash/wm/common/panels/panel_window_resizer.h"
 
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
@@ -17,9 +17,11 @@
 #include "ash/test/cursor_manager_test_api.h"
 #include "ash/test/shell_test_api.h"
 #include "ash/test/test_shelf_delegate.h"
+#include "ash/wm/aura/wm_window_aura.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/common/wm_event.h"
 #include "ash/wm/drag_window_resizer.h"
-#include "ash/wm/window_state.h"
-#include "ash/wm/wm_event.h"
+#include "ash/wm/window_state_aura.h"
 #include "base/i18n/rtl.h"
 #include "base/win/windows_version.h"
 #include "ui/aura/client/aura_constants.h"
@@ -65,11 +67,10 @@ class PanelWindowResizerTest : public test::AshTestBase {
   }
 
   void DragStart(aura::Window* window) {
-    resizer_.reset(CreateWindowResizer(
-        window,
-        window->bounds().origin(),
-        HTCAPTION,
-        aura::client::WINDOW_MOVE_SOURCE_MOUSE).release());
+    resizer_.reset(CreateWindowResizer(wm::WmWindowAura::Get(window),
+                                       window->bounds().origin(), HTCAPTION,
+                                       aura::client::WINDOW_MOVE_SOURCE_MOUSE)
+                       .release());
     ASSERT_TRUE(resizer_.get());
   }
 
@@ -239,7 +240,8 @@ TEST_F(PanelWindowResizerTest, PanelDetachReattachLeft) {
     return;
 
   ash::Shell* shell = ash::Shell::GetInstance();
-  shell->SetShelfAlignment(SHELF_ALIGNMENT_LEFT, shell->GetPrimaryRootWindow());
+  shell->SetShelfAlignment(wm::SHELF_ALIGNMENT_LEFT,
+                           shell->GetPrimaryRootWindow());
   std::unique_ptr<aura::Window> window(CreatePanelWindow(gfx::Point(0, 0)));
   DetachReattachTest(window.get(), 1, 0);
 }
@@ -249,7 +251,7 @@ TEST_F(PanelWindowResizerTest, PanelDetachReattachRight) {
     return;
 
   ash::Shell* shell = ash::Shell::GetInstance();
-  shell->SetShelfAlignment(SHELF_ALIGNMENT_RIGHT,
+  shell->SetShelfAlignment(wm::SHELF_ALIGNMENT_RIGHT,
                            shell->GetPrimaryRootWindow());
   std::unique_ptr<aura::Window> window(CreatePanelWindow(gfx::Point(0, 0)));
   DetachReattachTest(window.get(), -1, 0);
@@ -492,7 +494,8 @@ TEST_F(PanelWindowResizerTest, DragReordersPanelsVertical) {
     return;
 
   ash::Shell* shell = ash::Shell::GetInstance();
-  shell->SetShelfAlignment(SHELF_ALIGNMENT_LEFT, shell->GetPrimaryRootWindow());
+  shell->SetShelfAlignment(wm::SHELF_ALIGNMENT_LEFT,
+                           shell->GetPrimaryRootWindow());
   DragAlongShelfReorder(0, -1);
 }
 

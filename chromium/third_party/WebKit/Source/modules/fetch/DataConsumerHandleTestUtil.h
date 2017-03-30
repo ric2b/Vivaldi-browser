@@ -115,17 +115,17 @@ public:
                 ASSERT(m_holder);
                 m_holder = nullptr;
             }
-            void postTaskToReadingThread(const WebTraceLocation& location, PassOwnPtr<CrossThreadClosure> task)
+            void postTaskToReadingThread(const WebTraceLocation& location, std::unique_ptr<CrossThreadClosure> task)
             {
                 MutexLocker locker(m_holderMutex);
                 ASSERT(m_holder);
-                m_holder->readingThread()->postTask(location, task);
+                m_holder->readingThread()->postTask(location, std::move(task));
             }
-            void postTaskToUpdatingThread(const WebTraceLocation& location, PassOwnPtr<CrossThreadClosure> task)
+            void postTaskToUpdatingThread(const WebTraceLocation& location, std::unique_ptr<CrossThreadClosure> task)
             {
                 MutexLocker locker(m_holderMutex);
                 ASSERT(m_holder);
-                m_holder->updatingThread()->postTask(location, task);
+                m_holder->updatingThread()->postTask(location, std::move(task));
             }
 
         private:
@@ -218,22 +218,22 @@ public:
         void resetReader() { m_reader = nullptr; }
         void signalDone() { m_waitableEvent->signal(); }
         const String& result() { return m_context->result(); }
-        void postTaskToReadingThread(const WebTraceLocation& location, PassOwnPtr<CrossThreadClosure> task)
+        void postTaskToReadingThread(const WebTraceLocation& location, std::unique_ptr<CrossThreadClosure> task)
         {
-            m_context->postTaskToReadingThread(location,  task);
+            m_context->postTaskToReadingThread(location,  std::move(task));
         }
-        void postTaskToUpdatingThread(const WebTraceLocation& location, PassOwnPtr<CrossThreadClosure> task)
+        void postTaskToUpdatingThread(const WebTraceLocation& location, std::unique_ptr<CrossThreadClosure> task)
         {
-            m_context->postTaskToUpdatingThread(location,  task);
+            m_context->postTaskToUpdatingThread(location,  std::move(task));
         }
-        void postTaskToReadingThreadAndWait(const WebTraceLocation& location, PassOwnPtr<CrossThreadClosure> task)
+        void postTaskToReadingThreadAndWait(const WebTraceLocation& location, std::unique_ptr<CrossThreadClosure> task)
         {
-            postTaskToReadingThread(location,  task);
+            postTaskToReadingThread(location,  std::move(task));
             m_waitableEvent->wait();
         }
-        void postTaskToUpdatingThreadAndWait(const WebTraceLocation& location, PassOwnPtr<CrossThreadClosure> task)
+        void postTaskToUpdatingThreadAndWait(const WebTraceLocation& location, std::unique_ptr<CrossThreadClosure> task)
         {
-            postTaskToUpdatingThread(location,  task);
+            postTaskToUpdatingThread(location,  std::move(task));
             m_waitableEvent->wait();
         }
     protected:
@@ -255,7 +255,7 @@ public:
         {
             ThreadHolder holder(this);
             m_waitableEvent = adoptPtr(new WaitableEvent());
-            m_handle = handle;
+            m_handle = std::move(handle);
 
             postTaskToReadingThreadAndWait(BLINK_FROM_HERE, threadSafeBind(&Self::obtainReader, this));
         }
@@ -284,7 +284,7 @@ public:
         {
             ThreadHolder holder(this);
             m_waitableEvent = adoptPtr(new WaitableEvent());
-            m_handle = handle;
+            m_handle = std::move(handle);
 
             postTaskToReadingThreadAndWait(BLINK_FROM_HERE, threadSafeBind(&Self::obtainReader, this));
         }
@@ -343,16 +343,16 @@ public:
         }
 
         MOCK_METHOD1(didFetchDataLoadedBlobHandleMock, void(RefPtr<BlobDataHandle>));
-        MOCK_METHOD1(didFetchDataLoadedArrayBufferMock, void(RefPtr<DOMArrayBuffer>));
+        MOCK_METHOD1(didFetchDataLoadedArrayBufferMock, void(DOMArrayBuffer*));
         MOCK_METHOD1(didFetchDataLoadedString, void(const String&));
         MOCK_METHOD0(didFetchDataLoadStream, void());
         MOCK_METHOD0(didFetchDataLoadFailed, void());
 
-        // In mock methods we use RefPtr<> rather than PassRefPtr<>.
-        void didFetchDataLoadedArrayBuffer(PassRefPtr<DOMArrayBuffer> arrayBuffer) override
+        void didFetchDataLoadedArrayBuffer(DOMArrayBuffer* arrayBuffer) override
         {
             didFetchDataLoadedArrayBufferMock(arrayBuffer);
         }
+        // In mock methods we use RefPtr<> rather than PassRefPtr<>.
         void didFetchDataLoadedBlobHandle(PassRefPtr<BlobDataHandle> blobDataHandle) override
         {
             didFetchDataLoadedBlobHandleMock(blobDataHandle);
@@ -460,14 +460,14 @@ public:
     public:
         using OnFinishedReading = WTF::Function<void(PassOwnPtr<HandleReadResult>)>;
 
-        HandleReader(PassOwnPtr<WebDataConsumerHandle>, PassOwnPtr<OnFinishedReading>);
+        HandleReader(PassOwnPtr<WebDataConsumerHandle>, std::unique_ptr<OnFinishedReading>);
         void didGetReadable() override;
 
     private:
         void runOnFinishedReading(PassOwnPtr<HandleReadResult>);
 
         OwnPtr<WebDataConsumerHandle::Reader> m_reader;
-        OwnPtr<OnFinishedReading> m_onFinishedReading;
+        std::unique_ptr<OnFinishedReading> m_onFinishedReading;
         Vector<char> m_data;
     };
 
@@ -478,14 +478,14 @@ public:
     public:
         using OnFinishedReading = WTF::Function<void(PassOwnPtr<HandleReadResult>)>;
 
-        HandleTwoPhaseReader(PassOwnPtr<WebDataConsumerHandle>, PassOwnPtr<OnFinishedReading>);
+        HandleTwoPhaseReader(PassOwnPtr<WebDataConsumerHandle>, std::unique_ptr<OnFinishedReading>);
         void didGetReadable() override;
 
     private:
         void runOnFinishedReading(PassOwnPtr<HandleReadResult>);
 
         OwnPtr<WebDataConsumerHandle::Reader> m_reader;
-        OwnPtr<OnFinishedReading> m_onFinishedReading;
+        std::unique_ptr<OnFinishedReading> m_onFinishedReading;
         Vector<char> m_data;
     };
 
@@ -500,7 +500,7 @@ public:
             , m_event(adoptPtr(new WaitableEvent()))
             , m_isDone(false)
         {
-            m_thread->thread()->postTask(BLINK_FROM_HERE, threadSafeBind(&HandleReaderRunner::start, AllowCrossThreadAccess(this), handle));
+            m_thread->thread()->postTask(BLINK_FROM_HERE, threadSafeBind(&HandleReaderRunner::start, AllowCrossThreadAccess(this), passed(std::move(handle))));
         }
         ~HandleReaderRunner()
         {
@@ -513,19 +513,19 @@ public:
                 return nullptr;
             m_event->wait();
             m_isDone = true;
-            return m_result.release();
+            return std::move(m_result);
         }
 
     private:
         void start(PassOwnPtr<WebDataConsumerHandle> handle)
         {
-            m_handleReader = adoptPtr(new T(handle, bind<PassOwnPtr<HandleReadResult>>(&HandleReaderRunner::onFinished, this)));
+            m_handleReader = adoptPtr(new T(std::move(handle), bind<PassOwnPtr<HandleReadResult>>(&HandleReaderRunner::onFinished, this)));
         }
 
         void onFinished(PassOwnPtr<HandleReadResult> result)
         {
             m_handleReader = nullptr;
-            m_result = result;
+            m_result = std::move(result);
             m_event->signal();
         }
 

@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include <time.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/bind.h"
@@ -21,7 +22,6 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -32,6 +32,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/installer/setup/app_launcher_installer.h"
 #include "chrome/installer/setup/install.h"
+#include "chrome/installer/setup/installer_metrics.h"
 #include "chrome/installer/setup/setup_constants.h"
 #include "chrome/installer/setup/setup_util.h"
 #include "chrome/installer/setup/update_active_setup_version_work_item.h"
@@ -190,7 +191,7 @@ bool AddFirewallRulesCallback(bool system_level,
   if (work_item.IsRollback() && !remove_on_rollback)
     return true;
 
-  scoped_ptr<FirewallManager> manager =
+  std::unique_ptr<FirewallManager> manager =
       FirewallManager::Create(dist, chrome_path);
   if (!manager) {
     LOG(ERROR) << "Failed creating a FirewallManager. Continuing with install.";
@@ -272,7 +273,7 @@ void AddDeleteUninstallEntryForMSIWorkItems(
 
   WorkItem* delete_reg_key = work_item_list->AddDeleteRegKeyWorkItem(
       reg_root, uninstall_reg, KEY_WOW64_32KEY);
-  delete_reg_key->set_ignore_failure(true);
+  delete_reg_key->set_best_effort(true);
 }
 
 // Adds Chrome specific install work items to |install_list|.
@@ -289,17 +290,20 @@ void AddChromeWorkItems(const InstallationState& original_state,
   const base::FilePath& target_path = installer_state.target_path();
 
   if (current_version) {
-    // Delete the archive from an existing install to save some disk space.  We
-    // make this an unconditional work item since there's no need to roll this
-    // back; if installation fails we'll be moved to the "-full" channel anyway.
+    // Delete the archive from an existing install to save some disk space.
     base::FilePath old_installer_dir(
         installer_state.GetInstallerDirectory(*current_version));
     base::FilePath old_archive(
         old_installer_dir.Append(installer::kChromeArchive));
     // Don't delete the archive that we are actually installing from.
     if (archive_path != old_archive) {
-      install_list->AddDeleteTreeWorkItem(old_archive, temp_path)->
-          set_ignore_failure(true);
+      auto* delete_old_archive_work_item =
+          install_list->AddDeleteTreeWorkItem(old_archive, temp_path);
+      // Don't cause failure of |install_list| if this WorkItem fails.
+      delete_old_archive_work_item->set_best_effort(true);
+      // No need to roll this back; if installation fails we'll be moved to the
+      // "-full" channel anyway.
+      delete_old_archive_work_item->set_rollback_enabled(false);
     }
   }
 
@@ -340,17 +344,6 @@ void AddChromeWorkItems(const InstallationState& original_state,
         WorkItem::ALWAYS_MOVE);
   }
 
-  // Extra executable for crash logging (Google Breakpad).
-  // Install if the kVivaldiCrashLogging commandline option is present.
-  const base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
-  if (cmd_line.HasSwitch(installer::switches::kVivaldiCrashLogging)) {
-    install_list->AddMoveTreeWorkItem(
-        src_path.Append(installer::kCrashServiceExe).value(),
-        target_path.Append(installer::kCrashServiceExe).value(),
-        temp_path.value(),
-        WorkItem::ALWAYS_MOVE);
-  }
-
   // Install kVisualElementsManifest if it is present in |src_path|. No need to
   // make this a conditional work item as if the file is not there now, it will
   // never be.
@@ -385,9 +378,10 @@ void AddChromeWorkItems(const InstallationState& original_state,
                              WorkItem::ALWAYS_MOVE);
 
   // Delete any old_chrome.exe if present (ignore failure if it's in use).
-  install_list->AddDeleteTreeWorkItem(
-      target_path.Append(installer::kChromeOldExe), temp_path)->
-          set_ignore_failure(true);
+  install_list
+      ->AddDeleteTreeWorkItem(target_path.Append(installer::kChromeOldExe),
+                              temp_path)
+      ->set_best_effort(true);
 }
 
 // Adds work items to remove COM registration for |product|'s deprecated
@@ -490,8 +484,7 @@ void AddUninstallShortcutWorkItems(const InstallerState& installer_state,
 
     BrowserDistribution* dist = product.distribution();
     base::string16 chrome_icon = ShellUtil::FormatIconLocation(
-        install_path.Append(dist->GetIconFilename()),
-        dist->GetIconIndex(BrowserDistribution::SHORTCUT_CHROME));
+        install_path.Append(dist->GetIconFilename()), dist->GetIconIndex());
     install_list->AddSetRegValueWorkItem(reg_root,
                                          uninstall_reg,
                                          KEY_WOW64_32KEY,
@@ -916,7 +909,7 @@ bool AppendPostInstallTasks(const InstallerState& installer_state,
   // the 'cpv' value with the critical update version (if present), and the
   // 'cmd' value with the rename command to run.
   {
-    scoped_ptr<WorkItemList> in_use_update_work_items(
+    std::unique_ptr<WorkItemList> in_use_update_work_items(
         WorkItem::CreateConditionalWorkItemList(
             new ConditionRunIfFileExists(new_chrome_exe)));
     in_use_update_work_items->set_log_message("InUseUpdateWorkItemList");
@@ -990,7 +983,7 @@ bool AppendPostInstallTasks(const InstallerState& installer_state,
 
   // Append work items that will be executed if this was NOT an in-use update.
   {
-    scoped_ptr<WorkItemList> regular_update_work_items(
+    std::unique_ptr<WorkItemList> regular_update_work_items(
         WorkItem::CreateConditionalWorkItemList(
             new Not(new ConditionRunIfFileExists(new_chrome_exe))));
     regular_update_work_items->set_log_message("RegularUpdateWorkItemList");
@@ -1039,19 +1032,7 @@ bool AppendPostInstallTasks(const InstallerState& installer_state,
       }
     }
   }
-  // NOTE (jarle, 2015-06-12):
-  // Remove the vivaldi.7z archive after installation (VB-2104).
-  // This is a temporary measure to save disk space since we will
-  // need this file when we get delta binary updates in the installer.
-  // This feature is not planned for version 1.0.
-  if (installer_state.is_vivaldi()) {
-    base::FilePath installer_dir(
-      installer_state.GetInstallerDirectory(new_version));
-    base::FilePath archive(
-      installer_dir.Append(installer::kChromeArchive));
-    post_install_task_list->AddDeleteTreeWorkItem(archive, setup_path)->
-      set_ignore_failure(true);
-  }
+
   return true;
 }
 
@@ -1071,6 +1052,10 @@ void AddInstallWorkItems(const InstallationState& original_state,
   // A temp directory that work items need and the actual install directory.
   install_list->AddCreateDirWorkItem(temp_path);
   install_list->AddCreateDirWorkItem(target_path);
+
+  // Create the directory in which persistent metrics will be stored.
+  install_list->AddCreateDirWorkItem(
+      GetPersistentHistogramStorageDir(target_path));
 
   if (installer_state.FindProduct(BrowserDistribution::CHROME_BROWSER) ||
       installer_state.FindProduct(BrowserDistribution::CHROME_BINARIES)) {
@@ -1170,7 +1155,7 @@ void AddRegisterComDllWorkItems(const base::FilePath& dll_folder,
                                 const std::vector<base::FilePath>& dll_list,
                                 bool system_level,
                                 bool do_register,
-                                bool ignore_failures,
+                                bool best_effort,
                                 WorkItemList* work_item_list) {
   DCHECK(work_item_list);
   if (dll_list.empty()) {
@@ -1182,7 +1167,7 @@ void AddRegisterComDllWorkItems(const base::FilePath& dll_folder,
       WorkItem* work_item = work_item_list->AddSelfRegWorkItem(
           dll_path.value(), do_register, !system_level);
       DCHECK(work_item);
-      work_item->set_ignore_failure(ignore_failures);
+      work_item->set_best_effort(best_effort);
     }
   }
 }
@@ -1201,7 +1186,7 @@ void AddSetMsiMarkerWorkItem(const InstallerState& installer_state,
                                              msi_value,
                                              true);
   DCHECK(set_msi_work_item);
-  set_msi_work_item->set_ignore_failure(true);
+  set_msi_work_item->set_best_effort(true);
   set_msi_work_item->set_log_message("Could not write MSI marker!");
 }
 

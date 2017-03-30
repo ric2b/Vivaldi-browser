@@ -39,17 +39,13 @@ class Document;
 class ScriptLoader;
 class WebTaskRunner;
 
-class CORE_EXPORT ScriptRunner final : public GarbageCollectedFinalized<ScriptRunner> {
+class CORE_EXPORT ScriptRunner final : public GarbageCollected<ScriptRunner> {
     WTF_MAKE_NONCOPYABLE(ScriptRunner);
 public:
-    static RawPtr<ScriptRunner> create(Document* document)
+    static ScriptRunner* create(Document* document)
     {
         return new ScriptRunner(document);
     }
-    ~ScriptRunner();
-#if !ENABLE(OILPAN)
-    void dispose();
-#endif
 
     enum ExecutionType { ASYNC_EXECUTION, IN_ORDER_EXECUTION };
     void queueScriptForExecution(ScriptLoader*, ExecutionType);
@@ -94,11 +90,6 @@ private:
     bool m_isSuspended;
 #ifndef NDEBUG
     bool m_hasEverBeenSuspended;
-#endif
-
-#if !ENABLE(OILPAN)
-    bool m_isDisposed;
-    WeakPtrFactory<ScriptRunner> m_weakPointerFactoryForTasks;
 #endif
 };
 

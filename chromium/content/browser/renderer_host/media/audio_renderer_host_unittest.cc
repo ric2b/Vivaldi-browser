@@ -76,10 +76,11 @@ class MockAudioRendererHost : public AudioRendererHost {
         shared_memory_length_(0) {}
 
   // A list of mock methods.
-  MOCK_METHOD3(OnDeviceAuthorized,
+  MOCK_METHOD4(OnDeviceAuthorized,
                void(int stream_id,
                     media::OutputDeviceStatus device_status,
-                    const media::AudioParameters& output_params));
+                    const media::AudioParameters& output_params,
+                    const std::string& matched_device_id));
   MOCK_METHOD2(OnStreamCreated, void(int stream_id, int length));
   MOCK_METHOD1(OnStreamPlaying, void(int stream_id));
   MOCK_METHOD1(OnStreamPaused, void(int stream_id));
@@ -117,8 +118,10 @@ class MockAudioRendererHost : public AudioRendererHost {
 
   void OnNotifyDeviceAuthorized(int stream_id,
                                 media::OutputDeviceStatus device_status,
-                                const media::AudioParameters& output_params) {
-    OnDeviceAuthorized(stream_id, device_status, output_params);
+                                const media::AudioParameters& output_params,
+                                const std::string& matched_device_id) {
+    OnDeviceAuthorized(stream_id, device_status, output_params,
+                       matched_device_id);
   }
 
   void OnNotifyStreamCreated(
@@ -184,7 +187,8 @@ void WaitForEnumeration(base::RunLoop* loop,
 class AudioRendererHostTest : public testing::Test {
  public:
   AudioRendererHostTest() {
-    audio_manager_.reset(media::AudioManager::CreateForTesting());
+    audio_manager_ = media::AudioManager::CreateForTesting(
+        base::ThreadTaskRunnerHandle::Get());
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kUseFakeDeviceForMediaStream);
     media_stream_manager_.reset(new MediaStreamManager(audio_manager_.get()));
@@ -234,7 +238,7 @@ class AudioRendererHostTest : public testing::Test {
                   : media::OUTPUT_DEVICE_STATUS_ERROR_NOT_FOUND;
 
     EXPECT_CALL(*host_.get(),
-                OnDeviceAuthorized(kStreamId, expected_device_status, _));
+                OnDeviceAuthorized(kStreamId, expected_device_status, _, _));
 
     if (expected_device_status == media::OUTPUT_DEVICE_STATUS_OK) {
       EXPECT_CALL(*host_.get(), OnStreamCreated(kStreamId, _));
@@ -325,7 +329,7 @@ class AudioRendererHostTest : public testing::Test {
   // TestBrowserThreadBundle.
   std::unique_ptr<MediaStreamManager> media_stream_manager_;
   TestBrowserThreadBundle thread_bundle_;
-  std::unique_ptr<media::AudioManager> audio_manager_;
+  media::ScopedAudioManagerPtr audio_manager_;
   MockAudioMirroringManager mirroring_manager_;
   scoped_refptr<MockAudioRendererHost> host_;
 

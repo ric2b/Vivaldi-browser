@@ -8,16 +8,17 @@
 #include <stddef.h>
 
 #include <list>
+#include <memory>
 #include <string>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/process.h"
 #include "base/sequenced_task_runner_helpers.h"
+#include "base/timer/elapsed_timer.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/console_message_level.h"
 #include "extensions/browser/extension_function_histogram_value.h"
@@ -134,7 +135,7 @@ class ExtensionFunction
     // Returns true for success, false for failure.
     virtual bool Apply() = 0;
   };
-  typedef scoped_ptr<ResponseValueObject> ResponseValue;
+  typedef std::unique_ptr<ResponseValueObject> ResponseValue;
 
   // The action to use when returning from RunAsync.
   //
@@ -145,7 +146,7 @@ class ExtensionFunction
 
     virtual void Execute() = 0;
   };
-  typedef scoped_ptr<ResponseActionObject> ResponseAction;
+  typedef std::unique_ptr<ResponseActionObject> ResponseAction;
 
   // Helper class for tests to force all ExtensionFunction::user_gesture()
   // calls to return true as long as at least one instance of this class
@@ -203,12 +204,12 @@ class ExtensionFunction
   virtual void SetArgs(const base::ListValue* args);
 
   // Sets a single Value as the results of the function.
-  void SetResult(scoped_ptr<base::Value> result);
+  void SetResult(std::unique_ptr<base::Value> result);
   // As above, but deprecated. TODO(estade): remove.
   void SetResult(base::Value* result);
 
   // Sets multiple Values as the results of the function.
-  void SetResultList(scoped_ptr<base::ListValue> results);
+  void SetResultList(std::unique_ptr<base::ListValue> results);
 
   // Retrieves the results of the function as a ListValue.
   const base::ListValue* GetResultList() const;
@@ -300,17 +301,18 @@ class ExtensionFunction
   // to this by hand.
   ResponseValue OneArgument(base::Value* arg);
   // Success, a single argument |arg| to pass to caller.
-  ResponseValue OneArgument(scoped_ptr<base::Value> arg);
+  ResponseValue OneArgument(std::unique_ptr<base::Value> arg);
   // Success, two arguments |arg1| and |arg2| to pass to caller. TAKES
   // OWNERSHIP - raw pointers for convenience, since callers usually construct
   // the argument to this by hand. Note that use of this function may imply you
   // should be using the generated Result struct and ArgumentList.
   ResponseValue TwoArguments(base::Value* arg1, base::Value* arg2);
   // Success, a list of arguments |results| to pass to caller. TAKES OWNERSHIP
-  // - a scoped_ptr<> for convenience, since callers usually get this from the
+  // - a std::unique_ptr<> for convenience, since callers usually get this from
+  // the
   // result of a Create(...) call on the generated Results struct, for example,
   // alarms::Get::Results::Create(alarm).
-  ResponseValue ArgumentList(scoped_ptr<base::ListValue> results);
+  ResponseValue ArgumentList(std::unique_ptr<base::ListValue> results);
   // Error. chrome.runtime.lastError.message will be set to |error|.
   ResponseValue Error(const std::string& error);
   // Error with formatting. Args are processed using
@@ -329,7 +331,7 @@ class ExtensionFunction
   // Using this ResponseValue indicates something is wrong with the API.
   // It shouldn't be possible to have both an error *and* some arguments.
   // Some legacy APIs do rely on it though, like webstorePrivate.
-  ResponseValue ErrorWithArguments(scoped_ptr<base::ListValue> args,
+  ResponseValue ErrorWithArguments(std::unique_ptr<base::ListValue> args,
                                    const std::string& error);
   // Bad message. A ResponseValue equivalent to EXTENSION_FUNCTION_VALIDATE(),
   // so this will actually kill the renderer and not respond at all.
@@ -407,11 +409,11 @@ class ExtensionFunction
   bool user_gesture_;
 
   // The arguments to the API. Only non-null if argument were specified.
-  scoped_ptr<base::ListValue> args_;
+  std::unique_ptr<base::ListValue> args_;
 
   // The results of the API. This should be populated by the derived class
   // before SendResponse() is called.
-  scoped_ptr<base::ListValue> results_;
+  std::unique_ptr<base::ListValue> results_;
 
   // Any detailed error from the API. This should be populated by the derived
   // class before Run() returns.
@@ -439,6 +441,8 @@ class ExtensionFunction
   int source_process_id_;
 
  private:
+  base::ElapsedTimer timer_;
+
   void OnRespondingLater(ResponseValue response);
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionFunction);
@@ -536,7 +540,7 @@ class UIThreadExtensionFunction : public ExtensionFunction {
   // The RenderFrameHost we will send responses to.
   content::RenderFrameHost* render_frame_host_;
 
-  scoped_ptr<RenderFrameHostTracker> tracker_;
+  std::unique_ptr<RenderFrameHostTracker> tracker_;
 
   DelegateForTests* delegate_;
 

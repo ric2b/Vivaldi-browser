@@ -64,9 +64,6 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // Informs the delegate whenever a RenderFrameHost is deleted.
   virtual void RenderFrameDeleted(RenderFrameHost* render_frame_host) {}
 
-  // The RenderFrameHost has been swapped out.
-  virtual void SwappedOut(RenderFrameHost* render_frame_host) {}
-
   // A context menu should be shown, to be built using the context information
   // provided in the supplied params.
   virtual void ShowContextMenu(RenderFrameHost* render_frame_host,
@@ -184,7 +181,8 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
 
   // Creates a WebUI object for a frame navigating to |url|. If no WebUI
   // applies, returns null.
-  virtual scoped_ptr<WebUIImpl> CreateWebUIForRenderFrameHost(const GURL& url);
+  virtual std::unique_ptr<WebUIImpl> CreateWebUIForRenderFrameHost(
+      const GURL& url);
 
  protected:
   virtual ~RenderFrameHostDelegate() {}

@@ -10,7 +10,7 @@
 
 namespace blink {
 
-MultiColumnFragmentainerGroup::MultiColumnFragmentainerGroup(LayoutMultiColumnSet& columnSet)
+MultiColumnFragmentainerGroup::MultiColumnFragmentainerGroup(const LayoutMultiColumnSet& columnSet)
     : m_columnSet(columnSet)
 {
 }
@@ -57,7 +57,7 @@ void MultiColumnFragmentainerGroup::resetColumnHeight()
     }
 }
 
-bool MultiColumnFragmentainerGroup::recalculateColumnHeight()
+bool MultiColumnFragmentainerGroup::recalculateColumnHeight(LayoutMultiColumnSet& columnSet)
 {
     LayoutUnit oldColumnHeight = m_columnHeight;
 
@@ -66,18 +66,18 @@ bool MultiColumnFragmentainerGroup::recalculateColumnHeight()
     // Only the last row may have auto height, and thus be balanced. There are no good reasons to
     // balance the preceding rows, and that could potentially lead to an insane number of layout
     // passes as well.
-    if (isLastGroup() && m_columnSet.heightIsAuto()) {
+    if (isLastGroup() && columnSet.heightIsAuto()) {
         LayoutUnit newColumnHeight;
-        if (!m_columnSet.isInitialHeightCalculated()) {
+        if (!columnSet.isInitialHeightCalculated()) {
             // Initial balancing: Start with the lowest imaginable column height. Also calculate the
             // height of the tallest piece of unbreakable content. Columns should never get any
             // shorter than that (unless constrained by max-height). Propagate this to our
             // containing column set, in case there is an outer multicol container that also needs
             // to balance. After having calculated the initial column height, the multicol container
             // needs another layout pass with the column height that we just calculated.
-            InitialColumnHeightFinder initialHeightFinder(*this);
+            InitialColumnHeightFinder initialHeightFinder(columnSet, logicalTopInFlowThread(), logicalBottomInFlowThread());
             LayoutUnit tallestUnbreakableLogicalHeight = initialHeightFinder.tallestUnbreakableLogicalHeight();
-            m_columnSet.propagateTallestUnbreakableLogicalHeight(tallestUnbreakableLogicalHeight);
+            columnSet.propagateTallestUnbreakableLogicalHeight(tallestUnbreakableLogicalHeight);
             newColumnHeight = std::max(initialHeightFinder.initialMinimalBalancedHeight(), tallestUnbreakableLogicalHeight);
         } else {
             // Rebalancing: After having laid out again, we'll need to rebalance if the height
@@ -98,7 +98,7 @@ bool MultiColumnFragmentainerGroup::recalculateColumnHeight()
     return true; // Need another pass.
 }
 
-LayoutSize MultiColumnFragmentainerGroup::flowThreadTranslationAtOffset(LayoutUnit offsetInFlowThread) const
+LayoutSize MultiColumnFragmentainerGroup::flowThreadTranslationAtOffset(LayoutUnit offsetInFlowThread, CoordinateSpaceConversion mode) const
 {
     LayoutMultiColumnFlowThread* flowThread = m_columnSet.multiColumnFlowThread();
     unsigned columnIndex = columnIndexAtOffset(offsetInFlowThread);
@@ -107,6 +107,9 @@ LayoutSize MultiColumnFragmentainerGroup::flowThreadTranslationAtOffset(LayoutUn
     LayoutRect columnRect(columnRectAt(columnIndex));
     m_columnSet.flipForWritingMode(columnRect);
     LayoutSize translationRelativeToGroup = columnRect.location() - portionRect.location();
+    LayoutSize translationRelativeToFlowThread = translationRelativeToGroup + offsetFromColumnSet() + m_columnSet.topLeftLocationOffset() - flowThread->topLeftLocationOffset();
+    if (mode == CoordinateSpaceConversion::Containing)
+        return translationRelativeToFlowThread;
 
     LayoutSize enclosingTranslation;
     if (LayoutMultiColumnFlowThread* enclosingFlowThread = flowThread->enclosingFlowThread()) {
@@ -114,11 +117,11 @@ LayoutSize MultiColumnFragmentainerGroup::flowThreadTranslationAtOffset(LayoutUn
         // Translation that would map points in the coordinate space of the outermost flow thread to
         // visual points in the first column in the first fragmentainer group (row) in our multicol
         // container.
-        LayoutSize enclosingTranslationOrigin = enclosingFlowThread->flowThreadTranslationAtOffset(firstRow.blockOffsetInEnclosingFragmentationContext());
+        LayoutSize enclosingTranslationOrigin = enclosingFlowThread->flowThreadTranslationAtOffset(firstRow.blockOffsetInEnclosingFragmentationContext(), mode);
 
         // Translation that would map points in the coordinate space of the outermost flow thread to
         // visual points in the first column in this fragmentainer group.
-        enclosingTranslation = enclosingFlowThread->flowThreadTranslationAtOffset(blockOffsetInEnclosingFragmentationContext());
+        enclosingTranslation = enclosingFlowThread->flowThreadTranslationAtOffset(blockOffsetInEnclosingFragmentationContext(), mode);
 
         // What we ultimately return from this method is a translation that maps points in the
         // coordinate space of our flow thread to a visual point in a certain column in this
@@ -129,7 +132,7 @@ LayoutSize MultiColumnFragmentainerGroup::flowThreadTranslationAtOffset(LayoutUn
         enclosingTranslation -= enclosingTranslationOrigin;
     }
 
-    return enclosingTranslation + translationRelativeToGroup + offsetFromColumnSet() + m_columnSet.topLeftLocationOffset() - flowThread->topLeftLocationOffset();
+    return enclosingTranslation + translationRelativeToFlowThread;
 }
 
 LayoutUnit MultiColumnFragmentainerGroup::columnLogicalTopForOffset(LayoutUnit offsetInFlowThread) const
@@ -184,7 +187,7 @@ LayoutRect MultiColumnFragmentainerGroup::fragmentsBoundingBox(const LayoutRect&
     flowThread->flipForWritingMode(startColumnFlowThreadOverflowPortion);
     LayoutRect startColumnRect(boundingBoxInFlowThread);
     startColumnRect.intersect(startColumnFlowThreadOverflowPortion);
-    startColumnRect.move(flowThreadTranslationAtOffset(logicalTopInFlowThreadAt(startColumn)));
+    startColumnRect.move(flowThreadTranslationAtOffset(logicalTopInFlowThreadAt(startColumn), CoordinateSpaceConversion::Containing));
     if (startColumn == endColumn)
         return startColumnRect; // It all takes place in one column. We're done.
 
@@ -192,7 +195,7 @@ LayoutRect MultiColumnFragmentainerGroup::fragmentsBoundingBox(const LayoutRect&
     flowThread->flipForWritingMode(endColumnFlowThreadOverflowPortion);
     LayoutRect endColumnRect(boundingBoxInFlowThread);
     endColumnRect.intersect(endColumnFlowThreadOverflowPortion);
-    endColumnRect.move(flowThreadTranslationAtOffset(logicalTopInFlowThreadAt(endColumn)));
+    endColumnRect.move(flowThreadTranslationAtOffset(logicalTopInFlowThreadAt(endColumn), CoordinateSpaceConversion::Containing));
     return unionRect(startColumnRect, endColumnRect);
 }
 
@@ -251,7 +254,7 @@ void MultiColumnFragmentainerGroup::collectLayerFragments(PaintLayerFragments& f
         PaintLayerFragment fragment;
 
         // Set the physical translation offset.
-        fragment.paginationOffset = toLayoutPoint(flowThreadTranslationAtOffset(logicalTopInFlowThreadAt(i)));
+        fragment.paginationOffset = toLayoutPoint(flowThreadTranslationAtOffset(logicalTopInFlowThreadAt(i), CoordinateSpaceConversion::Visual));
 
         // Set the overflow clip rect that corresponds to the column.
         fragment.paginationClip = flowThreadPortionOverflowRectAt(i);
@@ -264,10 +267,15 @@ void MultiColumnFragmentainerGroup::collectLayerFragments(PaintLayerFragments& f
 
 LayoutRect MultiColumnFragmentainerGroup::calculateOverflow() const
 {
-    unsigned columnCount = actualColumnCount();
-    if (!columnCount)
-        return LayoutRect();
-    return columnRectAt(columnCount - 1);
+    // Note that we just return the bounding rectangle of the column boxes here. We currently don't
+    // examine overflow caused by the actual content that ends up in each column.
+    LayoutRect overflowRect;
+    if (unsigned columnCount = actualColumnCount()) {
+        overflowRect = columnRectAt(0);
+        if (columnCount > 1)
+            overflowRect.uniteEvenIfEmpty(columnRectAt(columnCount - 1));
+    }
+    return overflowRect;
 }
 
 unsigned MultiColumnFragmentainerGroup::actualColumnCount() const
@@ -336,7 +344,7 @@ LayoutUnit MultiColumnFragmentainerGroup::rebalanceColumnHeightIfNeeded() const
         return m_columnHeight;
     }
 
-    MinimumSpaceShortageFinder shortageFinder(*this);
+    MinimumSpaceShortageFinder shortageFinder(columnSet(), logicalTopInFlowThread(), logicalBottomInFlowThread());
 
     if (shortageFinder.forcedBreaksCount() + 1 >= m_columnSet.usedColumnCount()) {
         // Too many forced breaks to allow any implicit breaks. Initial balancing should already

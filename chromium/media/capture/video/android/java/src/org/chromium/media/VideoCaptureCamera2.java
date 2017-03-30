@@ -46,7 +46,7 @@ public class VideoCaptureCamera2 extends VideoCapture {
         public void onOpened(CameraDevice cameraDevice) {
             mCameraDevice = cameraDevice;
             changeCameraStateAndNotify(CameraState.CONFIGURING);
-            if (!createCaptureObjects()) {
+            if (!createPreviewObjects()) {
                 changeCameraStateAndNotify(CameraState.STOPPED);
                 nativeOnError(mNativeVideoCaptureDeviceAndroid, "Error configuring camera");
             }
@@ -70,12 +70,27 @@ public class VideoCaptureCamera2 extends VideoCapture {
     };
 
     // Inner class to extend a Capture Session state change listener.
-    private class CrCaptureSessionListener extends CameraCaptureSession.StateCallback {
+    private class CrPreviewSessionListener extends CameraCaptureSession.StateCallback {
+        private final CaptureRequest mPreviewRequest;
+        CrPreviewSessionListener(CaptureRequest previewRequest) {
+            mPreviewRequest = previewRequest;
+        }
+
         @Override
         public void onConfigured(CameraCaptureSession cameraCaptureSession) {
             Log.d(TAG, "onConfigured");
-            mCaptureSession = cameraCaptureSession;
-            createCaptureRequest();
+            mPreviewSession = cameraCaptureSession;
+            try {
+                // This line triggers the preview. No |listener| is registered, so we will not get
+                // notified of capture events, instead, CrImageReaderListener will trigger every
+                // time a downloaded image is ready. Since |handler| is null, we'll work on the
+                // current Thread Looper.
+                mPreviewSession.setRepeatingRequest(mPreviewRequest, null, null);
+            } catch (CameraAccessException | IllegalArgumentException | SecurityException ex) {
+                Log.e(TAG, "setRepeatingRequest: ", ex);
+                return;
+            }
+            // Now wait for trigger on CrImageReaderListener.onImageAvailable();
             changeCameraStateAndNotify(CameraState.STARTED);
         }
 
@@ -88,54 +103,133 @@ public class VideoCaptureCamera2 extends VideoCapture {
         }
     };
 
-    // Internal class implementing the ImageReader listener. Gets pinged when a
-    // new frame is been captured and downloaded to memory-backed buffers.
+    // Internal class implementing an ImageReader listener for Preview frames. Gets pinged when a
+    // new frame is been captured and downloads it to memory-backed buffers.
     private class CrImageReaderListener implements ImageReader.OnImageAvailableListener {
         @Override
         public void onImageAvailable(ImageReader reader) {
-            Image image = null;
-            try {
-                image = reader.acquireLatestImage();
+            try (Image image = reader.acquireLatestImage()) {
                 if (image == null) return;
+
                 if (image.getFormat() != ImageFormat.YUV_420_888 || image.getPlanes().length != 3) {
-                    Log.e(TAG, "Unexpected image format: %d or #planes: %d", image.getFormat(),
-                            image.getPlanes().length);
-                    return;
+                    nativeOnError(mNativeVideoCaptureDeviceAndroid, "Unexpected image format: "
+                            + image.getFormat() + " or #planes: " + image.getPlanes().length);
+                    throw new IllegalStateException();
                 }
 
                 if (reader.getWidth() != image.getWidth()
                         || reader.getHeight() != image.getHeight()) {
-                    throw new IllegalStateException("ImageReader size " + reader.getWidth() + "x"
-                            + reader.getHeight() + " did not match Image size " + image.getWidth()
-                            + "x" + image.getHeight());
+                    nativeOnError(mNativeVideoCaptureDeviceAndroid, "ImageReader size ("
+                            + reader.getWidth() + "x" + reader.getHeight()
+                            + ") did not match Image size (" + image.getWidth() + "x"
+                            + image.getHeight() + ")");
+                    throw new IllegalStateException();
                 }
+
                 readImageIntoBuffer(image, mCapturedData);
                 nativeOnFrameAvailable(mNativeVideoCaptureDeviceAndroid, mCapturedData,
                         mCapturedData.length, getCameraRotation());
             } catch (IllegalStateException ex) {
-                Log.e(TAG, "acquireLatestImage():" + ex);
-                return;
-            } finally {
-                if (image != null) {
-                    image.close();
-                }
+                Log.e(TAG, "acquireLatestImage():", ex);
             }
         }
     };
 
-    private byte[] mCapturedData;
+    // Inner class to extend a Photo Session state change listener.
+    // Error paths must signal notifyTakePhotoError().
+    private class CrPhotoSessionListener extends CameraCaptureSession.StateCallback {
+        private final CaptureRequest mPhotoRequest;
+        private final long mCallbackId;
+        CrPhotoSessionListener(CaptureRequest photoRequest, long callbackId) {
+            mPhotoRequest = photoRequest;
+            mCallbackId = callbackId;
+        }
 
-    private CameraDevice mCameraDevice = null;
-    private CaptureRequest.Builder mPreviewBuilder = null;
-    private CameraCaptureSession mCaptureSession = null;
-    private ImageReader mImageReader = null;
+        @Override
+        public void onConfigured(CameraCaptureSession session) {
+            Log.d(TAG, "onConfigured");
+            try {
+                // This line triggers a single photo capture. No |listener| is registered, so we
+                // will get notified via a CrPhotoSessionListener. Since |handler| is null, we'll
+                // work on the current Thread Looper.
+                session.capture(mPhotoRequest, null, null);
+            } catch (CameraAccessException e) {
+                Log.e(TAG, "capture() error");
+                notifyTakePhotoError(mCallbackId);
+                return;
+            }
+        }
+
+        @Override
+        public void onConfigureFailed(CameraCaptureSession session) {
+            Log.e(TAG, "failed configuring capture session");
+            notifyTakePhotoError(mCallbackId);
+            return;
+        }
+    };
+
+    // Internal class implementing an ImageReader listener for encoded Photos.
+    // Gets pinged when a new Image is been captured.
+    private class CrPhotoReaderListener implements ImageReader.OnImageAvailableListener {
+        private final long mCallbackId;
+        CrPhotoReaderListener(long callbackId) {
+            mCallbackId = callbackId;
+        }
+
+        private byte[] readCapturedData(Image image) {
+            byte[] capturedData = null;
+            try {
+                capturedData = image.getPlanes()[0].getBuffer().array();
+            } catch (UnsupportedOperationException ex) {
+                // Try reading the pixels in a different way.
+                final ByteBuffer buffer = image.getPlanes()[0].getBuffer();
+                capturedData = new byte[buffer.remaining()];
+                buffer.get(capturedData);
+            } finally {
+                return capturedData;
+            }
+        }
+
+        @Override
+        public void onImageAvailable(ImageReader reader) {
+            Log.d(TAG, "CrPhotoReaderListener.mCallbackId " + mCallbackId);
+            try (Image image = reader.acquireLatestImage()) {
+                if (image == null) {
+                    throw new IllegalStateException();
+                }
+
+                if (image.getFormat() != ImageFormat.JPEG) {
+                    Log.e(TAG, "Unexpected image format: %d", image.getFormat());
+                    throw new IllegalStateException();
+                }
+
+                final byte[] capturedData = readCapturedData(image);
+                nativeOnPhotoTaken(mNativeVideoCaptureDeviceAndroid, mCallbackId, capturedData);
+
+            } catch (IllegalStateException ex) {
+                notifyTakePhotoError(mCallbackId);
+                return;
+            }
+
+            if (createPreviewObjects()) return;
+
+            nativeOnError(mNativeVideoCaptureDeviceAndroid, "Error restarting preview");
+        }
+    };
 
     private static final double kNanoSecondsToFps = 1.0E-9;
-    private static final String TAG = "cr.media";
+    private static final String TAG = "VideoCapture";
 
     private static enum CameraState { OPENING, CONFIGURING, STARTED, STOPPED }
-    private CameraState mCameraState = CameraState.STOPPED;
+
     private final Object mCameraStateLock = new Object();
+
+    private byte[] mCapturedData;
+
+    private CameraDevice mCameraDevice;
+    private CameraCaptureSession mPreviewSession;
+
+    private CameraState mCameraState = CameraState.STOPPED;
 
     // Service function to grab CameraCharacteristics and handle exceptions.
     private static CameraCharacteristics getCameraCharacteristics(Context appContext, int id) {
@@ -144,76 +238,70 @@ public class VideoCaptureCamera2 extends VideoCapture {
         try {
             return manager.getCameraCharacteristics(Integer.toString(id));
         } catch (CameraAccessException ex) {
-            Log.e(TAG, "getCameraCharacteristics: " + ex);
+            Log.e(TAG, "getCameraCharacteristics: ", ex);
         }
         return null;
     }
 
-    private boolean createCaptureObjects() {
-        Log.d(TAG, "createCaptureObjects");
+    // {@link nativeOnPhotoTaken()} needs to be called back if there's any
+    // problem after {@link takePhoto()} has returned true.
+    private void notifyTakePhotoError(long callbackId) {
+        nativeOnPhotoTaken(mNativeVideoCaptureDeviceAndroid, callbackId, new byte[0]);
+    }
+
+    private boolean createPreviewObjects() {
+        Log.d(TAG, "createPreviewObjects");
         if (mCameraDevice == null) return false;
 
         // Create an ImageReader and plug a thread looper into it to have
         // readback take place on its own thread.
-        final int maxImages = 2;
-        mImageReader = ImageReader.newInstance(mCaptureFormat.getWidth(),
-                mCaptureFormat.getHeight(), mCaptureFormat.getPixelFormat(), maxImages);
+        final ImageReader imageReader = ImageReader.newInstance(mCaptureFormat.getWidth(),
+                mCaptureFormat.getHeight(), mCaptureFormat.getPixelFormat(), 2 /* maxImages */);
         HandlerThread thread = new HandlerThread("CameraPreview");
         thread.start();
         final Handler backgroundHandler = new Handler(thread.getLooper());
         final CrImageReaderListener imageReaderListener = new CrImageReaderListener();
-        mImageReader.setOnImageAvailableListener(imageReaderListener, backgroundHandler);
+        imageReader.setOnImageAvailableListener(imageReaderListener, backgroundHandler);
 
         // The Preview template specifically means "high frame rate is given
         // priority over the highest-quality post-processing".
+        CaptureRequest.Builder previewRequestBuilder = null;
         try {
-            mPreviewBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+            previewRequestBuilder =
+                    mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
         } catch (CameraAccessException | IllegalArgumentException | SecurityException ex) {
-            Log.e(TAG, "createCaptureRequest: " + ex);
+            Log.e(TAG, "createCaptureRequest: ", ex);
             return false;
         }
-        if (mPreviewBuilder == null) {
-            Log.e(TAG, "mPreviewBuilder error");
+        if (previewRequestBuilder == null) {
+            Log.e(TAG, "previewRequestBuilder error");
             return false;
         }
         // Construct an ImageReader Surface and plug it into our CaptureRequest.Builder.
-        mPreviewBuilder.addTarget(mImageReader.getSurface());
+        previewRequestBuilder.addTarget(imageReader.getSurface());
 
         // A series of configuration options in the PreviewBuilder
-        mPreviewBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
-        mPreviewBuilder.set(
+        previewRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
+        previewRequestBuilder.set(
                 CaptureRequest.NOISE_REDUCTION_MODE, CameraMetadata.NOISE_REDUCTION_MODE_FAST);
-        mPreviewBuilder.set(CaptureRequest.EDGE_MODE, CameraMetadata.EDGE_MODE_FAST);
-        mPreviewBuilder.set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
+        previewRequestBuilder.set(CaptureRequest.EDGE_MODE, CameraMetadata.EDGE_MODE_FAST);
+        previewRequestBuilder.set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
                 CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON);
         // SENSOR_EXPOSURE_TIME ?
 
         List<Surface> surfaceList = new ArrayList<Surface>(1);
-        surfaceList.add(mImageReader.getSurface());
-        final CrCaptureSessionListener captureSessionListener = new CrCaptureSessionListener();
+        surfaceList.add(imageReader.getSurface());
+
+        final CaptureRequest previewRequest = previewRequestBuilder.build();
+        final CrPreviewSessionListener captureSessionListener =
+                new CrPreviewSessionListener(previewRequest);
         try {
             mCameraDevice.createCaptureSession(surfaceList, captureSessionListener, null);
         } catch (CameraAccessException | IllegalArgumentException | SecurityException ex) {
-            Log.e(TAG, "createCaptureSession: " + ex);
+            Log.e(TAG, "createCaptureSession: ", ex);
             return false;
         }
-        // Wait for trigger on CrCaptureSessionListener.onConfigured();
-        return true;
-    }
-
-    private boolean createCaptureRequest() {
-        Log.d(TAG, "createCaptureRequest");
-        try {
-            // This line triggers the capture. No |listener| is registered, so
-            // we will not get notified of capture events, instead, ImageReader
-            // will trigger every time a downloaded image is ready. Since
-            //|handler| is null, we'll work on the current Thread Looper.
-            mCaptureSession.setRepeatingRequest(mPreviewBuilder.build(), null, null);
-        } catch (CameraAccessException | IllegalArgumentException | SecurityException ex) {
-            Log.e(TAG, "setRepeatingRequest: " + ex);
-            return false;
-        }
-        // Now wait for trigger on CrImageReaderListener.onImageAvailable();
+        // Wait for trigger on CrPreviewSessionListener.onConfigured();
         return true;
     }
 
@@ -248,7 +336,8 @@ public class VideoCaptureCamera2 extends VideoCapture {
                 }
 
                 // Last row is special in some devices and may not contain the full
-                // |rowStride| bytes of data. See http://crbug.com/458701.
+                // |rowStride| bytes of data. See http://crbug.com/458701 and
+                // http://developer.android.com/reference/android/media/Image.Plane.html#getBuffer()
                 buffer.get(rowData, 0, Math.min(rowStride, buffer.remaining()));
                 for (int col = 0; col < planeWidth; ++col) {
                     data[offset++] = rowData[col * pixelStride];
@@ -280,7 +369,7 @@ public class VideoCaptureCamera2 extends VideoCapture {
         } catch (CameraAccessException | SecurityException ex) {
             // SecurityException is an undocumented exception, but has been seen in
             // http://crbug/605424.
-            Log.e(TAG, "getNumberOfCameras: getCameraIdList(): " + ex);
+            Log.e(TAG, "getNumberOfCameras: getCameraIdList(): ", ex);
             return 0;
         }
     }
@@ -422,7 +511,7 @@ public class VideoCaptureCamera2 extends VideoCapture {
         try {
             manager.openCamera(Integer.toString(mId), stateListener, mainHandler);
         } catch (CameraAccessException | IllegalArgumentException | SecurityException ex) {
-            Log.e(TAG, "allocate: manager.openCamera: " + ex);
+            Log.e(TAG, "allocate: manager.openCamera: ", ex);
             return false;
         }
 
@@ -441,21 +530,66 @@ public class VideoCaptureCamera2 extends VideoCapture {
                 try {
                     mCameraStateLock.wait();
                 } catch (InterruptedException ex) {
-                    Log.e(TAG, "CaptureStartedEvent: " + ex);
+                    Log.e(TAG, "CaptureStartedEvent: ", ex);
                 }
             }
             if (mCameraState == CameraState.STOPPED) return true;
         }
 
         try {
-            mCaptureSession.abortCaptures();
+            mPreviewSession.abortCaptures();
         } catch (CameraAccessException | IllegalStateException ex) {
-            Log.e(TAG, "abortCaptures: " + ex);
+            Log.e(TAG, "abortCaptures: ", ex);
             return false;
         }
         if (mCameraDevice == null) return false;
         mCameraDevice.close();
         changeCameraStateAndNotify(CameraState.STOPPED);
+        return true;
+    }
+
+    @Override
+    public boolean takePhoto(final long callbackId) {
+        Log.d(TAG, "takePhoto " + callbackId);
+        if (mCameraDevice == null || mCameraState != CameraState.STARTED) return false;
+
+        final ImageReader imageReader = ImageReader.newInstance(mCaptureFormat.getWidth(),
+                mCaptureFormat.getHeight(), ImageFormat.JPEG, 1 /* maxImages */);
+
+        HandlerThread thread = new HandlerThread("CameraPicture");
+        thread.start();
+        final Handler backgroundHandler = new Handler(thread.getLooper());
+
+        final CrPhotoReaderListener photoReaderListener = new CrPhotoReaderListener(callbackId);
+        imageReader.setOnImageAvailableListener(photoReaderListener, backgroundHandler);
+
+        final List<Surface> surfaceList = new ArrayList<Surface>(1);
+        surfaceList.add(imageReader.getSurface());
+
+        CaptureRequest.Builder photoRequestBuilder = null;
+        try {
+            photoRequestBuilder =
+                    mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+        } catch (CameraAccessException e) {
+            Log.e(TAG, "mCameraDevice.createCaptureRequest() error");
+            return false;
+        }
+        if (photoRequestBuilder == null) {
+            Log.e(TAG, "photoRequestBuilder error");
+            return false;
+        }
+        photoRequestBuilder.addTarget(imageReader.getSurface());
+        photoRequestBuilder.set(CaptureRequest.JPEG_ORIENTATION, getCameraRotation());
+
+        final CaptureRequest photoRequest = photoRequestBuilder.build();
+        final CrPhotoSessionListener sessionListener =
+                new CrPhotoSessionListener(photoRequest, callbackId);
+        try {
+            mCameraDevice.createCaptureSession(surfaceList, sessionListener, backgroundHandler);
+        } catch (CameraAccessException | IllegalArgumentException | SecurityException ex) {
+            Log.e(TAG, "createCaptureSession: " + ex);
+            return false;
+        }
         return true;
     }
 

@@ -32,9 +32,9 @@
 
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/Document.h"
-#include "core/frame/ConsoleTypes.h"
 #include "modules/websockets/DocumentWebSocketChannel.h"
 #include "modules/websockets/WebSocketChannel.h"
+#include "platform/v8_inspector/public/ConsoleTypes.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
 #include "public/web/WebArrayBuffer.h"
@@ -122,7 +122,7 @@ bool WebPepperSocketImpl::sendArrayBuffer(const WebArrayBuffer& webArrayBuffer)
     if (m_isClosingOrClosed)
         return true;
 
-    RefPtr<DOMArrayBuffer> arrayBuffer = PassRefPtr<DOMArrayBuffer>(webArrayBuffer);
+    DOMArrayBuffer* arrayBuffer = webArrayBuffer;
     m_private->send(*arrayBuffer, 0, arrayBuffer->byteLength());
     return true;
 }

@@ -8,11 +8,26 @@ namespace features {
 
 // All features in alphabetical order.
 
+#if defined(OS_CHROMEOS)
+// Whether to handle low memory kill of ARC apps by Chrome.
+const base::Feature kArcMemoryManagement{
+    "ArcMemoryManagement", base::FEATURE_ENABLED_BY_DEFAULT};
+#endif  // defined(OS_CHROMEOS)
+
 #if defined(OS_WIN) || defined(OS_MACOSX)
 // Enables automatic tab discarding, when the system is in low memory state.
 const base::Feature kAutomaticTabDiscarding{"AutomaticTabDiscarding",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_WIN) || defined(OS_MACOSX)
+
+// Experiment to disable small cross-origin content. (http://crbug.com/608886)
+const base::Feature kBlockSmallContent{"BlockSmallPluginContent",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Fixes for browser hang bugs are deployed in a field trial in order to measure
+// their impact. See crbug.com/478209.
+const base::Feature kBrowserHangFixesExperiment{
+    "BrowserHangFixesExperiment", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables Expect CT reporting, which sends reports for opted-in sites
 // that don't serve sufficient Certificate Transparency information.
@@ -50,16 +65,8 @@ const base::Feature kSafeSearchUrlReporting{"SafeSearchUrlReporting",
 // A new user experience for transitioning into fullscreen and mouse pointer
 // lock states. The name is a misnomer (for historical reasons); affects both
 // Views and Android builds.
-const base::Feature kSimplifiedFullscreenUI{
-    "ViewsSimplifiedFullscreenUI",
-#if defined(USE_AURA)
-    // Windows, Linux, Chrome OS.
-    base::FEATURE_ENABLED_BY_DEFAULT,
-#else
-    // Mac, Android.
-    base::FEATURE_DISABLED_BY_DEFAULT,
-#endif
-};
+const base::Feature kSimplifiedFullscreenUI{"ViewsSimplifiedFullscreenUI",
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
 #if defined(SYZYASAN)
 // Enable the deferred free mechanism in the syzyasan module, which helps the

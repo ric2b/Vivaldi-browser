@@ -10,13 +10,14 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/about_flags.h"
 #include "chrome/browser/dom_distiller/dom_distiller_service_factory.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/search/suggestions/suggestions_ui.h"
 #include "chrome/browser/ui/webui/about_ui.h"
 #include "chrome/browser/ui/webui/bookmarks_ui.h"
 #include "chrome/browser/ui/webui/components_ui.h"
@@ -97,6 +98,7 @@
 #if defined(OS_ANDROID)
 #include "chrome/browser/ui/webui/net_export_ui.h"
 #include "chrome/browser/ui/webui/popular_sites_internals_ui.h"
+#include "chrome/browser/ui/webui/snippets_internals_ui.h"
 #else
 #include "chrome/browser/signin/easy_unlock_service.h"
 #include "chrome/browser/signin/easy_unlock_service_factory.h"
@@ -345,6 +347,8 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<ProfilerUI>;
   if (url.host() == chrome::kChromeUISignInInternalsHost)
     return &NewWebUI<SignInInternalsUI>;
+  if (url.host() == chrome::kChromeUISuggestionsHost)
+    return &NewWebUI<suggestions::SuggestionsUI>;
   if (url.host() == chrome::kChromeUISupervisedUserInternalsHost)
     return &NewWebUI<SupervisedUserInternalsUI>;
   if (url.host() == chrome::kChromeUISupervisedUserPassphrasePageHost)
@@ -478,6 +482,9 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<NetExportUI>;
   if (url.host() == chrome::kChromeUIPopularSitesInternalsHost)
     return &NewWebUI<PopularSitesInternalsUI>;
+  if (url.host() == chrome::kChromeUISnippetsInternalsHost &&
+      !profile->IsOffTheRecord())
+    return &NewWebUI<SnippetsInternalsUI>;
 #else
   if (url.host() == chrome::kChromeUICopresenceHost)
     return &NewWebUI<CopresenceUI>;

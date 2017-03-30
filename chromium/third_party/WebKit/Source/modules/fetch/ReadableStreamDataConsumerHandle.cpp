@@ -12,8 +12,10 @@
 #include "bindings/core/v8/V8BindingMacros.h"
 #include "bindings/core/v8/V8IteratorResultValue.h"
 #include "bindings/core/v8/V8Uint8Array.h"
+#include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/dom/DOMTypedArray.h"
 #include "core/streams/ReadableStreamOperations.h"
+#include "core/workers/WorkerGlobalScope.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebTaskRunner.h"
 #include "public/platform/WebThread.h"
@@ -26,6 +28,20 @@
 #include <v8.h>
 
 namespace blink {
+
+namespace {
+
+bool isTerminating(ScriptState* scriptState)
+{
+    ExecutionContext* executionContext = scriptState->getExecutionContext();
+    if (!executionContext)
+        return true;
+    if (!executionContext->isWorkerGlobalScope())
+        return false;
+    return toWorkerGlobalScope(executionContext)->scriptController()->isExecutionTerminating();
+}
+
+} // namespace
 
 using Result = WebDataConsumerHandle::Result;
 using Flags = WebDataConsumerHandle::Flags;
@@ -49,7 +65,12 @@ public:
             bool done;
             v8::Local<v8::Value> item = v.v8Value();
             ASSERT(item->IsObject());
-            v8::Local<v8::Value> value = v8CallOrCrash(v8UnpackIteratorResult(v.getScriptState(), item.As<v8::Object>(), &done));
+            if (isTerminating(v.getScriptState()))
+                return ScriptValue();
+            v8::MaybeLocal<v8::Value> maybeValue = v8UnpackIteratorResult(v.getScriptState(), item.As<v8::Object>(), &done);
+            if (isTerminating(v.getScriptState()))
+                return ScriptValue();
+            v8::Local<v8::Value> value = v8CallOrCrash(maybeValue);
             if (done) {
                 readingContext->onReadDone();
                 return v;
@@ -159,9 +180,10 @@ public:
                 m_isReading = false;
                 return WebDataConsumerHandle::UnexpectedError;
             }
-            ReadableStreamOperations::read(m_scriptState.get(), reader).then(
-                OnFulfilled::createFunction(m_scriptState.get(), this),
-                OnRejected::createFunction(m_scriptState.get(), this));
+            ReadableStreamOperations::defaultReaderRead(
+                m_scriptState.get(), reader).then(
+                    OnFulfilled::createFunction(m_scriptState.get(), this),
+                    OnRejected::createFunction(m_scriptState.get(), this));
         }
         return WebDataConsumerHandle::ShouldWait;
     }
@@ -258,7 +280,7 @@ private:
     ScopedPersistent<v8::Value> m_reader;
     RefPtr<ScriptState> m_scriptState;
     WebDataConsumerHandle::Client* m_client;
-    RefPtr<DOMUint8Array> m_pendingBuffer;
+    Persistent<DOMUint8Array> m_pendingBuffer;
     size_t m_pendingOffset;
     bool m_isReading;
     bool m_isDone;
@@ -277,4 +299,3 @@ FetchDataConsumerHandle::Reader* ReadableStreamDataConsumerHandle::obtainReaderI
 }
 
 } // namespace blink
-

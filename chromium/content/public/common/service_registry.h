@@ -15,6 +15,7 @@
 #include "mojo/public/cpp/bindings/interface_ptr.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/system/core.h"
+#include "services/shell/public/interfaces/interface_provider.mojom.h"
 
 namespace content {
 
@@ -24,7 +25,18 @@ namespace content {
 // ConnectToRemoteService.
 class CONTENT_EXPORT ServiceRegistry {
  public:
+  static ServiceRegistry* Create();
   virtual ~ServiceRegistry() {}
+
+  // Binds this ServiceProvider implementation to a message pipe endpoint.
+  virtual void Bind(shell::mojom::InterfaceProviderRequest request) = 0;
+
+  // Binds to a remote ServiceProvider. This will expose added services to the
+  // remote ServiceProvider with the corresponding handle and enable
+  // ConnectToRemoteService to provide access to services exposed by the remote
+  // ServiceProvider.
+  virtual void BindRemoteServiceProvider(
+      shell::mojom::InterfaceProviderPtr service_provider) = 0;
 
   // Make the service created by |service_factory| available to the remote
   // ServiceProvider. In response to each request for a service,
@@ -33,7 +45,7 @@ class CONTENT_EXPORT ServiceRegistry {
   // service will override the factory. Existing connections to the service are
   // unaffected.
   template <typename Interface>
-  void AddService(const base::Callback<void(mojo::InterfaceRequest<Interface>)>
+  void AddService(const base::Callback<void(mojo::InterfaceRequest<Interface>)>&
                       service_factory) {
     AddService(Interface::Name_,
                base::Bind(&ServiceRegistry::ForwardToServiceFactory<Interface>,
@@ -41,7 +53,7 @@ class CONTENT_EXPORT ServiceRegistry {
   }
   virtual void AddService(
       const std::string& service_name,
-      const base::Callback<void(mojo::ScopedMessagePipeHandle)>
+      const base::Callback<void(mojo::ScopedMessagePipeHandle)>&
           service_factory) = 0;
 
   // Remove future access to the service implementing Interface. Existing
@@ -57,7 +69,7 @@ class CONTENT_EXPORT ServiceRegistry {
   void ConnectToRemoteService(mojo::InterfaceRequest<Interface> ptr) {
     ConnectToRemoteService(Interface::Name_, ptr.PassMessagePipe());
   }
-  virtual void ConnectToRemoteService(const base::StringPiece& name,
+  virtual void ConnectToRemoteService(base::StringPiece name,
                                       mojo::ScopedMessagePipeHandle handle) = 0;
 
   // Registers a local service factory to intercept ConnectToRemoteService
@@ -75,7 +87,7 @@ class CONTENT_EXPORT ServiceRegistry {
  private:
   template <typename Interface>
   static void ForwardToServiceFactory(
-      const base::Callback<void(mojo::InterfaceRequest<Interface>)>
+      const base::Callback<void(mojo::InterfaceRequest<Interface>)>&
           service_factory,
       mojo::ScopedMessagePipeHandle handle) {
     service_factory.Run(mojo::MakeRequest<Interface>(std::move(handle)));

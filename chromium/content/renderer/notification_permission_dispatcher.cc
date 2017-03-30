@@ -11,6 +11,8 @@
 #include "content/public/renderer/render_frame.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebString.h"
+#include "third_party/WebKit/public/platform/modules/permissions/permission_status.mojom-blink.h"
+#include "third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h"
 #include "third_party/WebKit/public/web/modules/notifications/WebNotificationPermissionCallback.h"
 
 using blink::WebNotificationPermissionCallback;
@@ -31,7 +33,7 @@ void NotificationPermissionDispatcher::RequestPermission(
         mojo::GetProxy(&permission_service_));
   }
 
-  scoped_ptr<WebNotificationPermissionCallback> owned_callback(callback);
+  std::unique_ptr<WebNotificationPermissionCallback> owned_callback(callback);
 
   // base::Unretained is safe here because the Mojo channel, with associated
   // callbacks, will be deleted before the "this" instance is deleted.
@@ -43,25 +45,14 @@ void NotificationPermissionDispatcher::RequestPermission(
 }
 
 void NotificationPermissionDispatcher::OnPermissionRequestComplete(
-    scoped_ptr<WebNotificationPermissionCallback> callback,
+    std::unique_ptr<WebNotificationPermissionCallback> callback,
     blink::mojom::PermissionStatus status) {
   DCHECK(callback);
 
-  blink::WebNotificationPermission permission =
-      blink::WebNotificationPermissionDefault;
-  switch (status) {
-    case blink::mojom::PermissionStatus::GRANTED:
-      permission = blink::WebNotificationPermissionAllowed;
-      break;
-    case blink::mojom::PermissionStatus::DENIED:
-      permission = blink::WebNotificationPermissionDenied;
-      break;
-    case blink::mojom::PermissionStatus::ASK:
-      permission = blink::WebNotificationPermissionDefault;
-      break;
-  }
+  blink::mojom::blink::PermissionStatus blink_status =
+      static_cast<blink::mojom::blink::PermissionStatus>(status);
 
-  callback->permissionRequestComplete(permission);
+  callback->permissionRequestComplete(blink_status);
 }
 
 }  // namespace content

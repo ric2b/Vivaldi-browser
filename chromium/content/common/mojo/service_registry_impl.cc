@@ -10,6 +10,10 @@
 
 namespace content {
 
+ServiceRegistry* ServiceRegistry::Create() {
+  return new ServiceRegistryImpl;
+}
+
 ServiceRegistryImpl::ServiceRegistryImpl()
     : binding_(this), weak_factory_(this) {}
 
@@ -20,15 +24,14 @@ ServiceRegistryImpl::~ServiceRegistryImpl() {
   }
 }
 
-void ServiceRegistryImpl::Bind(
-    mojo::shell::mojom::InterfaceProviderRequest request) {
+void ServiceRegistryImpl::Bind(shell::mojom::InterfaceProviderRequest request) {
   binding_.Bind(std::move(request));
   binding_.set_connection_error_handler(base::Bind(
       &ServiceRegistryImpl::OnConnectionError, base::Unretained(this)));
 }
 
 void ServiceRegistryImpl::BindRemoteServiceProvider(
-    mojo::shell::mojom::InterfaceProviderPtr service_provider) {
+    shell::mojom::InterfaceProviderPtr service_provider) {
   CHECK(!remote_provider_);
   remote_provider_ = std::move(service_provider);
   while (!pending_connects_.empty()) {
@@ -40,7 +43,7 @@ void ServiceRegistryImpl::BindRemoteServiceProvider(
 }
 
 void ServiceRegistryImpl::AddService(const std::string& service_name,
-                                     const ServiceFactory service_factory) {
+                                     const ServiceFactory& service_factory) {
   service_factories_[service_name] = service_factory;
 }
 
@@ -49,7 +52,7 @@ void ServiceRegistryImpl::RemoveService(const std::string& service_name) {
 }
 
 void ServiceRegistryImpl::ConnectToRemoteService(
-    const base::StringPiece& service_name,
+    base::StringPiece service_name,
     mojo::ScopedMessagePipeHandle handle) {
   auto override_it = service_overrides_.find(service_name.as_string());
   if (override_it != service_overrides_.end()) {
@@ -88,8 +91,10 @@ void ServiceRegistryImpl::GetInterface(
     const mojo::String& name,
     mojo::ScopedMessagePipeHandle client_handle) {
   auto it = service_factories_.find(name);
-  if (it == service_factories_.end())
+  if (it == service_factories_.end()) {
+    DLOG(ERROR) << name << " not found";
     return;
+  }
 
   // It's possible and effectively unavoidable that under certain conditions
   // an invalid handle may be received. Don't invoke the factory in that case.

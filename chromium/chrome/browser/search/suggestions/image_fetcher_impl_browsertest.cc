@@ -4,20 +4,25 @@
 
 #include "chrome/browser/search/suggestions/image_fetcher_impl.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "components/suggestions/image_fetcher_delegate.h"
+#include "components/image_fetcher/image_fetcher_delegate.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/image/image.h"
 #include "url/gurl.h"
 
 class SkBitmap;
+
+using image_fetcher::ImageFetcher;
+using image_fetcher::ImageFetcherDelegate;
 
 namespace suggestions {
 
@@ -38,8 +43,8 @@ class TestImageFetcherDelegate : public ImageFetcherDelegate {
   ~TestImageFetcherDelegate() override{};
 
   // Perform additional tasks when an image has been fetched.
-  void OnImageFetched(const GURL& url, const SkBitmap* bitmap) override {
-    if (bitmap) {
+  void OnImageFetched(const GURL& url, const gfx::Image& image) override {
+    if (!image.IsEmpty()) {
       num_delegate_valid_called_++;
     } else {
       num_delegate_null_called_++;
@@ -54,7 +59,7 @@ class TestImageFetcherDelegate : public ImageFetcherDelegate {
   int num_delegate_null_called_;
 };
 
-}  // end namespace
+}  // namespace
 
 class ImageFetcherImplBrowserTest : public InProcessBrowserTest {
  protected:
@@ -77,8 +82,8 @@ class ImageFetcherImplBrowserTest : public InProcessBrowserTest {
 
   void OnImageAvailable(base::RunLoop* loop,
                         const GURL& url,
-                        const SkBitmap* bitmap) {
-    if (bitmap) {
+                        const gfx::Image& image) {
+    if (!image.IsEmpty()) {
       num_callback_valid_called_++;
     } else {
       num_callback_null_called_++;
@@ -87,7 +92,7 @@ class ImageFetcherImplBrowserTest : public InProcessBrowserTest {
   }
 
   void StartOrQueueNetworkRequestHelper(const GURL& image_url) {
-    scoped_ptr<ImageFetcherImpl> image_fetcher_(CreateImageFetcher());
+    std::unique_ptr<ImageFetcherImpl> image_fetcher_(CreateImageFetcher());
 
     base::RunLoop run_loop;
     image_fetcher_->StartOrQueueNetworkRequest(

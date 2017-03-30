@@ -4,20 +4,26 @@
 
 import("//testing/test.gni")
 
-component("blimp_common") {
+component("common") {
+  output_name = "blimp_common"
   sources = [
     "blimp_common_export.h",
-    "compositor/blimp_image_serialization_processor.cc",
-    "compositor/blimp_image_serialization_processor.h",
+    "blob_cache/blob_cache.h",
+    "blob_cache/id_util.cc",
+    "blob_cache/id_util.h",
+    "blob_cache/in_memory_blob_cache.cc",
+    "blob_cache/in_memory_blob_cache.h",
     "compositor/blimp_task_graph_runner.cc",
     "compositor/blimp_task_graph_runner.h",
-    "compositor/webp_decoder.cc",
-    "compositor/webp_decoder.h",
     "create_blimp_message.cc",
     "create_blimp_message.h",
+    "get_client_token.cc",
+    "get_client_token.h",
     "logging.cc",
     "logging.h",
     "protocol_version.h",
+    "switches.cc",
+    "switches.h",
   ]
 
   defines = [ "BLIMP_COMMON_IMPLEMENTATION=1" ]
@@ -26,10 +32,25 @@ component("blimp_common") {
     "//base",
     "//blimp/common/proto",
     "//cc",
-    "//skia",
-    "//third_party/libwebp",
-    "//ui/gfx/geometry",
-    "//ui/gl",
+    "//crypto",
+  ]
+}
+
+source_set("test_support") {
+  testonly = true
+
+  sources = [
+    "blob_cache/mock_blob_cache.cc",
+    "blob_cache/mock_blob_cache.h",
+    "blob_cache/test_util.cc",
+    "blob_cache/test_util.h",
+  ]
+
+  deps = [
+    ":common",
+    "//blimp/common/proto",
+    "//testing/gmock",
+    "//testing/gtest",
   ]
 }
 
@@ -37,13 +58,18 @@ source_set("unit_tests") {
   testonly = true
 
   sources = [
+    "blob_cache/id_util_unittest.cc",
+    "blob_cache/in_memory_blob_cache_unittest.cc",
     "create_blimp_message_unittest.cc",
     "logging_unittest.cc",
   ]
 
   deps = [
-    ":blimp_common",
+    ":common",
+    "//base",
     "//blimp/common/proto",
+    "//blimp/net:test_support",
+    "//crypto",
     "//testing/gmock",
     "//testing/gtest",
   ]

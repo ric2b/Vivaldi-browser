@@ -9,7 +9,7 @@
 
 #include "base/bind.h"
 #include "base/memory/shared_memory.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/mus/gles2/gl_surface_adapter.h"
 #include "components/mus/gles2/gpu_memory_tracker.h"
@@ -25,7 +25,6 @@
 #include "gpu/command_buffer/service/query_manager.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/command_buffer/service/transfer_buffer_manager.h"
-#include "gpu/command_buffer/service/valuebuffer_manager.h"
 #include "mojo/converters/geometry/geometry_type_converters.h"
 #include "mojo/platform_handle/platform_handle_functions.h"
 #include "ui/gfx/buffer_format_util.h"
@@ -34,6 +33,7 @@
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_image_shared_memory.h"
 #include "ui/gl/gl_surface.h"
+#include "ui/gl/init/gl_factory.h"
 
 #if defined(USE_OZONE)
 #include "ui/gl/gl_image_ozone_native_pixmap.h"
@@ -86,18 +86,17 @@ bool CommandBufferDriver::Initialize(
     return false;
 
   const bool offscreen = widget_ == gfx::kNullAcceleratedWidget;
-  static scoped_refptr<gfx::GLSurface> underlying_surface;
   if (offscreen) {
-    surface_ = gfx::GLSurface::CreateOffscreenGLSurface(gfx::Size(0, 0));
+    surface_ = gl::init::CreateOffscreenGLSurface(gfx::Size(0, 0));
   } else {
 #if defined(USE_OZONE)
     scoped_refptr<gfx::GLSurface> underlying_surface =
-        gfx::GLSurface::CreateSurfacelessViewGLSurface(widget_);
+        gl::init::CreateSurfacelessViewGLSurface(widget_);
     if (!underlying_surface)
-      underlying_surface = gfx::GLSurface::CreateViewGLSurface(widget_);
+      underlying_surface = gl::init::CreateViewGLSurface(widget_);
 #else
     scoped_refptr<gfx::GLSurface> underlying_surface =
-        gfx::GLSurface::CreateViewGLSurface(widget_);
+        gl::init::CreateViewGLSurface(widget_);
 #endif
     scoped_refptr<GLSurfaceAdapterMus> surface_adapter =
         new GLSurfaceAdapterMus(underlying_surface);
@@ -119,7 +118,7 @@ bool CommandBufferDriver::Initialize(
     return false;
 
   // TODO(piman): virtual contexts, gpu preference.
-  context_ = gfx::GLContext::CreateGLContext(
+  context_ = gl::init::CreateGLContext(
       gpu_state_->share_group(), surface_.get(), gfx::PreferIntegratedGpu);
   if (!context_.get())
     return false;
@@ -130,18 +129,18 @@ bool CommandBufferDriver::Initialize(
   // TODO(piman): ShaderTranslatorCache is currently per-ContextGroup but
   // only needs to be per-thread.
   const bool bind_generates_resource = attrib_helper.bind_generates_resource;
+  scoped_refptr<gpu::gles2::FeatureInfo> feature_info =
+      new gpu::gles2::FeatureInfo(gpu_state_->gpu_driver_bug_workarounds());
   scoped_refptr<gpu::gles2::ContextGroup> context_group =
       new gpu::gles2::ContextGroup(
           gpu_state_->gpu_preferences(), gpu_state_->mailbox_manager(),
           new GpuMemoryTracker,
           new gpu::gles2::ShaderTranslatorCache(gpu_state_->gpu_preferences()),
-          new gpu::gles2::FramebufferCompletenessCache, nullptr, nullptr,
-          nullptr, bind_generates_resource);
+          new gpu::gles2::FramebufferCompletenessCache, feature_info,
+          bind_generates_resource);
 
   command_buffer_.reset(
       new gpu::CommandBufferService(context_group->transfer_buffer_manager()));
-  bool result = command_buffer_->Initialize();
-  DCHECK(result);
 
   decoder_.reset(::gpu::gles2::GLES2Decoder::Create(context_group.get()));
   executor_.reset(new gpu::CommandExecutor(command_buffer_.get(),
@@ -157,10 +156,8 @@ bool CommandBufferDriver::Initialize(
 
   gpu::gles2::DisallowedFeatures disallowed_features;
 
-  std::vector<int32_t> attrib_vector;
-  attrib_helper.Serialize(&attrib_vector);
   if (!decoder_->Initialize(surface_, context_, offscreen, gfx::Size(1, 1),
-                            disallowed_features, attrib_vector))
+                            disallowed_features, attrib_helper))
     return false;
 
   command_buffer_->SetPutOffsetChangeCallback(base::Bind(
@@ -173,7 +170,7 @@ bool CommandBufferDriver::Initialize(
   // TODO(piman): other callbacks
 
   const size_t kSize = sizeof(gpu::CommandBufferSharedState);
-  scoped_ptr<gpu::BufferBacking> backing(
+  std::unique_ptr<gpu::BufferBacking> backing(
       MojoBufferBacking::Create(std::move(shared_state), kSize));
   if (!backing)
     return false;
@@ -204,7 +201,7 @@ void CommandBufferDriver::RegisterTransferBuffer(
   DCHECK(CalledOnValidThread());
   // Take ownership of the memory and map it into this process.
   // This validates the size.
-  scoped_ptr<gpu::BufferBacking> backing(
+  std::unique_ptr<gpu::BufferBacking> backing(
       MojoBufferBacking::Create(std::move(transfer_buffer), size));
   if (!backing) {
     DVLOG(0) << "Failed to map shared memory.";
@@ -391,7 +388,7 @@ void CommandBufferDriver::ScheduleDelayedWork(base::TimeDelta delay) {
     return;
   }
 
-  const base::TimeTicks current_time = base::TimeTicks();
+  const base::TimeTicks current_time = base::TimeTicks::Now();
   // |process_delayed_work_time_| is set if processing of delayed work is
   // already scheduled. Just update the time if already scheduled.
   if (!process_delayed_work_time_.is_null()) {

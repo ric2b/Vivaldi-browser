@@ -17,6 +17,7 @@
 
 namespace syncer_v2 {
 struct CommitRequestData;
+struct CommitResponseData;
 struct UpdateResponseData;
 
 // This class is used by the SharedModelTypeProcessor to track the state of each
@@ -80,11 +81,6 @@ class SYNC_EXPORT ProcessorEntityTracker {
   // Applies a local change to this item.
   void MakeLocalChange(std::unique_ptr<EntityData> data);
 
-  // Schedule a commit if the |name| does not match this item's last known
-  // encryption key.  The worker that performs the commit is expected to
-  // encrypt the item using the latest available key.
-  void UpdateDesiredEncryptionKey(const std::string& name);
-
   // Applies a local deletion to this item.
   void Delete();
 
@@ -100,10 +96,7 @@ class SYNC_EXPORT ProcessorEntityTracker {
   // unset IsUnsynced().  If many local changes occur in quick succession, it's
   // possible that the committed item was already out of date by the time it
   // reached the server.
-  void ReceiveCommitResponse(const std::string& id,
-                             int64_t sequence_number,
-                             int64_t response_version,
-                             const std::string& encryption_key_name);
+  void ReceiveCommitResponse(const CommitResponseData& data);
 
   // Clears any in-memory sync state associated with outstanding commits.
   void ClearTransientSyncState();
@@ -112,14 +105,22 @@ class SYNC_EXPORT ProcessorEntityTracker {
   // The data is swapped from the input struct without copying.
   void CacheCommitData(EntityData* data);
 
+  // Caches the a copy of |data_ptr|, which doesn't copy the data itself.
+  void CacheCommitData(const EntityDataPtr& data_ptr);
+
   // Check if the instance has cached commit data.
   bool HasCommitData() const;
 
-  // Check whether |specifics| matches the stored specifics_hash.
-  bool MatchesSpecificsHash(const sync_pb::EntitySpecifics& specifics) const;
-
-  // Check whether |data| matches the stored metadata.
+  // Check whether |data| matches the stored specifics hash.
   bool MatchesData(const EntityData& data) const;
+
+  // Check whether |data| matches the stored base (shared between client and
+  // server) specifics hash.
+  bool MatchesBaseData(const EntityData& data) const;
+
+  // Increment sequence number in the metadata. This will also update the
+  // base_specifics_hash if the entity was not already unsynced.
+  void IncrementSequenceNumber();
 
  private:
   friend class ProcessorEntityTrackerTest;
@@ -128,14 +129,8 @@ class SYNC_EXPORT ProcessorEntityTracker {
   ProcessorEntityTracker(const std::string& client_tag,
                          sync_pb::EntityMetadata* metadata);
 
-  // Whether knowledge of this entity has never gone past the processor. This
-  // means that no commits have been queued and it did not originate at the
-  // server. This is used to determine whether it is safe to delete the tracker
-  // and metadata for this entity.
-  bool IsLocalOnly() const;
-
-  // Increment sequence number in the metadata.
-  void IncrementSequenceNumber();
+  // Check whether |specifics| matches the stored specifics_hash.
+  bool MatchesSpecificsHash(const sync_pb::EntitySpecifics& specifics) const;
 
   // Update hash string for EntitySpecifics in the metadata.
   void UpdateSpecificsHash(const sync_pb::EntitySpecifics& specifics);
@@ -152,11 +147,6 @@ class SYNC_EXPORT ProcessorEntityTracker {
 
   // The sequence number of the last item sent to the sync thread.
   int64_t commit_requested_sequence_number_;
-
-  // TODO(stanisc): this should be removed.
-  // The name of the encryption key used to encrypt this item on the server.
-  // Empty when no encryption is in use.
-  std::string encryption_key_name_;
 };
 
 }  // namespace syncer_v2

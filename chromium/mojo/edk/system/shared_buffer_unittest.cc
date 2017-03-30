@@ -63,13 +63,7 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(CopyToBufferClient, SharedBufferTest, h) {
   EXPECT_EQ("quit", ReadMessage(h));
 }
 
-#if defined(OS_ANDROID)
-// Android multi-process tests are not executing the new process. This is flaky.
-#define MAYBE_PassSharedBufferCrossProcess DISABLED_PassSharedBufferCrossProcess
-#else
-#define MAYBE_PassSharedBufferCrossProcess PassSharedBufferCrossProcess
-#endif
-TEST_F(SharedBufferTest, MAYBE_PassSharedBufferCrossProcess) {
+TEST_F(SharedBufferTest, PassSharedBufferCrossProcess) {
   const std::string message = "hello";
   MojoHandle b = CreateBuffer(message.size());
 
@@ -93,13 +87,7 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(CreateBufferClient, SharedBufferTest, h) {
   EXPECT_EQ("quit", ReadMessage(h));
 }
 
-#if defined(OS_ANDROID)
-// Android multi-process tests are not executing the new process. This is flaky.
-#define MAYBE_PassSharedBufferFromChild DISABLED_PassSharedBufferFromChild
-#else
-#define MAYBE_PassSharedBufferFromChild PassSharedBufferFromChild
-#endif
-TEST_F(SharedBufferTest, MAYBE_PassSharedBufferFromChild) {
+TEST_F(SharedBufferTest, PassSharedBufferFromChild) {
   const std::string message = "hello";
   MojoHandle b;
   RUN_CHILD_ON_PIPE(CreateBufferClient, h)
@@ -126,7 +114,6 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(CreateAndPassBuffer, SharedBufferTest, h) {
   WriteMessageWithHandles(other_child, "", &dupe, 1);
 
   EXPECT_EQ("quit", ReadMessage(h));
-  WriteMessage(h, "ok");
 }
 
 DEFINE_TEST_CLIENT_TEST_WITH_PIPE(ReceiveAndEditBuffer, SharedBufferTest, h) {
@@ -143,17 +130,9 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(ReceiveAndEditBuffer, SharedBufferTest, h) {
   WriteToBuffer(b, 0, message);
   EXPECT_EQ(MOJO_RESULT_OK, MojoClose(b));
   EXPECT_EQ("quit", ReadMessage(h));
-  WriteMessage(h, "ok");
 }
 
-#if defined(OS_ANDROID)
-// Android multi-process tests are not executing the new process. This is flaky.
-#define MAYBE_PassSharedBufferFromChildToChild \
-    DISABLED_PassSharedBufferFromChildToChild
-#else
-#define MAYBE_PassSharedBufferFromChildToChild PassSharedBufferFromChildToChild
-#endif
-TEST_F(SharedBufferTest, MAYBE_PassSharedBufferFromChildToChild) {
+TEST_F(SharedBufferTest, PassSharedBufferFromChildToChild) {
   const std::string message = "hello";
   MojoHandle p0, p1;
   CreateMessagePipe(&p0, &p1);
@@ -171,10 +150,8 @@ TEST_F(SharedBufferTest, MAYBE_PassSharedBufferFromChildToChild) {
       ReadMessageWithHandles(h0, &b, 1);
 
       WriteMessage(h1, "quit");
-      EXPECT_EQ("ok", ReadMessage(h1));
     END_CHILD()
     WriteMessage(h0, "quit");
-    EXPECT_EQ("ok", ReadMessage(h0));
   END_CHILD()
 
   // The second child should have written this message.
@@ -197,8 +174,6 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(CreateAndPassBufferParent, SharedBufferTest,
 
     EXPECT_EQ("quit", ReadMessage(parent));
     WriteMessage(child, "quit");
-    EXPECT_EQ("ok", ReadMessage(child));
-    WriteMessage(parent, "ok");
   END_CHILD()
 }
 
@@ -212,8 +187,6 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(ReceiveAndEditBufferParent, SharedBufferTest,
 
     EXPECT_EQ("quit", ReadMessage(parent));
     WriteMessage(child, "quit");
-    EXPECT_EQ("ok", ReadMessage(child));
-    WriteMessage(parent, "ok");
   END_CHILD()
 }
 
@@ -245,10 +218,8 @@ TEST_F(SharedBufferTest, MAYBE_PassHandleBetweenCousins) {
       ReadMessageWithHandles(child1, &b, 1);
 
       WriteMessage(child2, "quit");
-      EXPECT_EQ("ok", ReadMessage(child2));
     END_CHILD()
     WriteMessage(child1, "quit");
-    EXPECT_EQ("ok", ReadMessage(child1));
   END_CHILD()
 
   // The second grandchild should have written this message.
@@ -312,10 +283,8 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(CreateAndPassReadOnlyBuffer,
   WriteMessage(h, "ok");
 }
 
-#if defined(OS_ANDROID) || (defined(OS_POSIX) && !defined(OS_MACOSX))
+#if defined(OS_ANDROID)
 // Android multi-process tests are not executing the new process. This is flaky.
-// Non-OSX posix uses a sync broker to create shared memory. Creating read-only
-// duplicates in child processes is not currently supported via the sync broker.
 #define MAYBE_CreateAndPassFromChildReadOnlyBuffer \
     DISABLED_CreateAndPassFromChildReadOnlyBuffer
 #else

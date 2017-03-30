@@ -76,7 +76,7 @@ class CronetUrlRequestContext extends CronetEngine {
             new ObserverList<RequestFinishedListener>();
 
     @UsedByReflection("CronetEngine.java")
-    public CronetUrlRequestContext(CronetEngine.Builder builder) {
+    public CronetUrlRequestContext(final CronetEngine.Builder builder) {
         CronetLibraryLoader.ensureInitialized(builder.getContext(), builder);
         nativeSetMinLogLevel(getLoggingLevel());
         synchronized (mLock) {
@@ -91,6 +91,7 @@ class CronetUrlRequestContext extends CronetEngine {
         Runnable task = new Runnable() {
             @Override
             public void run() {
+                CronetLibraryLoader.ensureInitializedOnMainThread(builder.getContext());
                 synchronized (mLock) {
                     // mUrlRequestContextAdapter is guaranteed to exist until
                     // initialization on main and network threads completes and
@@ -130,7 +131,8 @@ class CronetUrlRequestContext extends CronetEngine {
 
     @Override
     public UrlRequest createRequest(String url, UrlRequest.Callback callback, Executor executor,
-            int priority, Collection<Object> requestAnnotations) {
+            int priority, Collection<Object> requestAnnotations, boolean disableCache,
+            boolean disableConnectionMigration) {
         synchronized (mLock) {
             checkHaveAdapter();
             boolean metricsCollectionEnabled = mNetworkQualityEstimatorEnabled;
@@ -140,18 +142,20 @@ class CronetUrlRequestContext extends CronetEngine {
                 }
             }
             return new CronetUrlRequest(this, url, priority, callback, executor, requestAnnotations,
-                    metricsCollectionEnabled);
+                    metricsCollectionEnabled, disableCache, disableConnectionMigration);
         }
     }
 
     @Override
     BidirectionalStream createBidirectionalStream(String url, BidirectionalStream.Callback callback,
             Executor executor, String httpMethod, List<Map.Entry<String, String>> requestHeaders,
-            @BidirectionalStream.Builder.StreamPriority int priority) {
+            @BidirectionalStream.Builder.StreamPriority int priority, boolean disableAutoFlush,
+            boolean delayRequestHeadersUntilFirstFlush) {
         synchronized (mLock) {
             checkHaveAdapter();
-            return new CronetBidirectionalStream(
-                    this, url, priority, callback, executor, httpMethod, requestHeaders);
+            return new CronetBidirectionalStream(this, url, priority, callback, executor,
+                    httpMethod, requestHeaders, disableAutoFlush,
+                    delayRequestHeadersUntilFirstFlush);
         }
     }
 

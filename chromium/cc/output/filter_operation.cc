@@ -11,6 +11,9 @@
 #include "cc/base/math_util.h"
 #include "cc/output/filter_operation.h"
 #include "ui/gfx/animation/tween.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/skia_util.h"
 
 namespace cc {
 
@@ -83,15 +86,14 @@ FilterOperation::FilterOperation(FilterType type, float amount, int inset)
   memset(matrix_, 0, sizeof(matrix_));
 }
 
-FilterOperation::FilterOperation(
-    FilterType type,
-    const skia::RefPtr<SkImageFilter>& image_filter)
+FilterOperation::FilterOperation(FilterType type,
+                                 sk_sp<SkImageFilter> image_filter)
     : type_(type),
       amount_(0),
       outer_threshold_(0),
       drop_shadow_offset_(0, 0),
       drop_shadow_color_(0),
-      image_filter_(image_filter),
+      image_filter_(std::move(image_filter)),
       zoom_inset_(0) {
   DCHECK_EQ(type_, REFERENCE);
   memset(matrix_, 0, sizeof(matrix_));
@@ -161,8 +163,7 @@ static FilterOperation CreateNoOpFilter(FilterOperation::FilterType type) {
     case FilterOperation::SATURATING_BRIGHTNESS:
       return FilterOperation::CreateSaturatingBrightnessFilter(0.f);
     case FilterOperation::REFERENCE:
-      return FilterOperation::CreateReferenceFilter(
-          skia::RefPtr<SkImageFilter>());
+      return FilterOperation::CreateReferenceFilter(nullptr);
     case FilterOperation::ALPHA_THRESHOLD:
       return FilterOperation::CreateAlphaThresholdFilter(SkRegion(), 1.f, 0.f);
   }
@@ -290,20 +291,17 @@ void FilterOperation::AsValueInto(base::trace_event::TracedValue* value) const {
       break;
     case FilterOperation::REFERENCE: {
       int count_inputs = 0;
-      bool can_filter_image_gpu = false;
       if (image_filter_) {
         count_inputs = image_filter_->countInputs();
-        can_filter_image_gpu = image_filter_->canFilterImageGPU();
       }
       value->SetBoolean("is_null", !image_filter_);
       value->SetInteger("count_inputs", count_inputs);
-      value->SetBoolean("can_filter_image_gpu", can_filter_image_gpu);
       break;
     }
     case FilterOperation::ALPHA_THRESHOLD: {
         value->SetDouble("inner_threshold", amount_);
         value->SetDouble("outer_threshold", outer_threshold_);
-        scoped_ptr<base::ListValue> region_value(new base::ListValue());
+        std::unique_ptr<base::ListValue> region_value(new base::ListValue());
         value->BeginArray("region");
         for (SkRegion::Iterator it(region_); !it.done(); it.next()) {
           value->AppendInteger(it.rect().x());
@@ -314,6 +312,42 @@ void FilterOperation::AsValueInto(base::trace_event::TracedValue* value) const {
         value->EndArray();
       }
       break;
+  }
+}
+
+static SkVector MapStdDeviation(float std_deviation, const SkMatrix& matrix) {
+  SkVector sigma = SkVector::Make(std_deviation, std_deviation);
+  matrix.mapVectors(&sigma, 1);
+  return sigma * SkIntToScalar(3);
+}
+
+gfx::Rect FilterOperation::MapRect(const gfx::Rect& rect,
+                                   const SkMatrix& matrix) const {
+  switch (type_) {
+    case FilterOperation::BLUR: {
+      SkVector spread = MapStdDeviation(amount(), matrix);
+      gfx::Rect result = rect;
+      result.Inset(-spread.x(), -spread.y(), -spread.x(), -spread.y());
+      return result;
+    }
+    case FilterOperation::DROP_SHADOW: {
+      SkVector spread = MapStdDeviation(amount(), matrix);
+      gfx::Rect result = rect;
+      result.Inset(-spread.x(), -spread.y(), -spread.x(), -spread.y());
+      result += drop_shadow_offset().OffsetFromOrigin();
+      result.Union(rect);
+      return result;
+    }
+    case FilterOperation::REFERENCE: {
+      if (!image_filter())
+        return rect;
+      SkIRect in_rect = gfx::RectToSkIRect(rect);
+      SkIRect out_rect = image_filter()->filterBounds(
+          in_rect, matrix, SkImageFilter::kForward_MapDirection);
+      return gfx::SkIRectToRect(out_rect);
+    }
+    default:
+      return rect;
   }
 }
 

@@ -43,6 +43,7 @@ class CORE_EXPORT InspectorDebuggerAgent
     : public InspectorBaseAgent<InspectorDebuggerAgent, protocol::Frontend::Debugger>
     , public protocol::Backend::Debugger {
 public:
+    explicit InspectorDebuggerAgent(V8DebuggerAgent*);
     ~InspectorDebuggerAgent() override;
     DECLARE_VIRTUAL_TRACE();
 
@@ -73,33 +74,15 @@ public:
     void setVariableValue(ErrorString*, int scopeNumber, const String16& variableName, PassOwnPtr<protocol::Runtime::CallArgument> newValue, const String16& callFrameId) override;
     void getBacktrace(ErrorString*, OwnPtr<protocol::Array<protocol::Debugger::CallFrame>>* callFrames, Maybe<protocol::Runtime::StackTrace>* asyncStackTrace) override;
     void setAsyncCallStackDepth(ErrorString*, int maxDepth) override;
+    void setBlackboxPatterns(ErrorString*, PassOwnPtr<protocol::Array<String16>> patterns) override;
     void setBlackboxedRanges(ErrorString*, const String16& scriptId, PassOwnPtr<protocol::Array<protocol::Debugger::ScriptPosition>> positions) override;
 
-    // Called by InspectorInstrumentation.
-    bool isPaused();
-    void scriptExecutionBlockedByCSP(const String& directiveText);
-    void willExecuteScript(int scriptId);
-    void didExecuteScript();
-
-    // Async stack implementation.
-    void asyncTaskScheduled(const String& taskName, void* task);
-    void asyncTaskScheduled(const String& taskName, void* task, bool recurring);
-    void asyncTaskCanceled(void* task);
-    void allAsyncTasksCanceled();
-    void asyncTaskStarted(void* task);
-    void asyncTaskFinished(void* task);
-
     // InspectorBaseAgent overrides.
-    void setState(protocol::DictionaryValue*) override;
-    void setFrontend(protocol::Frontend*) override;
-    void clearFrontend() override;
+    void init(InstrumentingAgents*, protocol::Frontend*, protocol::Dispatcher*, protocol::DictionaryValue*) override;
+    void dispose() override;
     void restore() override;
 
-    V8DebuggerAgent* v8Agent() const { return m_v8DebuggerAgent; }
-
 protected:
-    explicit InspectorDebuggerAgent(V8DebuggerAgent*);
-
     V8DebuggerAgent* m_v8DebuggerAgent;
 };
 

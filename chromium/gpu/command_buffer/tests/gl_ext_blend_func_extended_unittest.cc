@@ -13,6 +13,7 @@
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/command_buffer/tests/gl_manager.h"
 #include "gpu/command_buffer/tests/gl_test_utils.h"
+#include "gpu/config/gpu_test_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gl/gl_switches.h"
@@ -98,8 +99,7 @@ class EXTBlendFuncExtendedDrawTest : public testing::TestWithParam<bool> {
     GLManager::Options options;
     options.size = gfx::Size(kWidth, kHeight);
     options.force_shader_name_hashing = GetParam();
-    base::CommandLine command_line(*base::CommandLine::ForCurrentProcess());
-    gl_.InitializeWithCommandLine(options, &command_line);
+    gl_.Initialize(options);
   }
 
   bool IsApplicable() const {
@@ -246,7 +246,7 @@ class EXTBlendFuncExtendedES3DrawTest : public EXTBlendFuncExtendedDrawTest {
     options.force_shader_name_hashing = GetParam();
     base::CommandLine command_line(*base::CommandLine::ForCurrentProcess());
     command_line.AppendSwitch(switches::kEnableUnsafeES3APIs);
-    gl_.InitializeWithCommandLine(options, &command_line);
+    gl_.InitializeWithCommandLine(options, command_line);
   }
   bool IsApplicable() const {
     return gl_.IsInitialized() && EXTBlendFuncExtendedDrawTest::IsApplicable();
@@ -468,6 +468,14 @@ TEST_P(EXTBlendFuncExtendedES3DrawTest, ES3Getters) {
 TEST_P(EXTBlendFuncExtendedES3DrawTest, ES3GettersArray) {
   if (!IsApplicable())
     return;
+
+  // TODO(zmo): Figure out why this fails on AMD. crbug.com/585132.
+  gpu::GPUTestBotConfig bot_config;
+  if (bot_config.LoadCurrentConfig(nullptr) &&
+      bot_config.Matches("linux amd")) {
+    return;
+  }
+
   const GLint kTestArraySize = 2;
   const GLint kFragData0Location = 2;
   const GLint kFragData1Location = 1;

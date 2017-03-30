@@ -32,6 +32,7 @@
     children_changed,
     clicked,
     document_selection_changed,
+    expanded_changed,          // Web
     focus,
     hide,                      // Remove: http://crbug.com/392502
     hover,
@@ -304,6 +305,8 @@
 
     // Relationships between this element and other elements.
     activedescendant_id,
+    next_on_line_id,
+    previous_on_line_id,
 
     // Identifies a child tree which this node hosts.
     child_tree_id,
@@ -314,6 +317,10 @@
 
     // In the case of AX_ROLE_COLOR_WELL, specifies the selected color.
     color_value,
+
+    // Indicates the element that represents the current item within a container
+    // or set of related elements.
+    aria_current_state,
 
     // Text attributes.
 
@@ -423,6 +430,16 @@
     text_style_line_through = 8
   };
 
+  [cpp_enum_prefix_override="ax"] enum AXAriaCurrentState {
+    aria_current_state_false,
+    aria_current_state_true,
+    aria_current_state_page,
+    aria_current_state_step,
+    aria_current_state_location,
+    aria_current_state_date,
+    aria_current_state_time
+  };
+
   [cpp_enum_prefix_override="ax"] enum AXInvalidState {
     invalid_state_false,
     invalid_state_true,
@@ -453,5 +470,26 @@
     description_from_contents,
     description_from_placeholder,
     description_from_related_element
+  };
+
+  // Touch gestures on Chrome OS.
+  enum AXGesture {
+    double_tap,
+    swipe_left_1,
+    swipe_up_1,
+    swipe_right_1,
+    swipe_down_1,
+    swipe_left_2,
+    swipe_up_2,
+    swipe_right_2,
+    swipe_down_2,
+    swipe_left_3,
+    swipe_up_3,
+    swipe_right_3,
+    swipe_down_3,
+    swipe_left_4,
+    swipe_up_4,
+    swipe_right_4,
+    swipe_down_4
   };
 };

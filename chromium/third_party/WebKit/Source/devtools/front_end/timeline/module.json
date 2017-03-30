@@ -21,16 +21,15 @@
             "className": "WebInspector.LoadTimelineHandler"
         },
         {
-            "type": "@WebInspector.UISourceCodeFrame.LineDecorator",
-            "className": "WebInspector.TimelineUIUtils.PerformanceLineDecorator",
-            "decoratorType": "performance"
-        },
-        {
             "type": "@WebInspector.ActionDelegate",
             "actionId": "timeline.toggle-recording",
             "iconClass": "record-toolbar-item",
             "contextTypes": ["WebInspector.TimelinePanel"],
             "className": "WebInspector.TimelinePanel.ActionDelegate",
+            "options": [
+                { "value": true, "title": "Record" },
+                { "value": false, "title": "Stop" }
+            ],
             "bindings": [
                 {
                     "platform": "windows,linux",
@@ -101,8 +100,6 @@
     "dependencies": [
         "components",
         "components_lazy",
-        "source_frame",
-        "sources",
         "ui_lazy"
     ],
     "scripts": [

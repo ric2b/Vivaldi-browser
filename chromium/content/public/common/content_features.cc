@@ -19,6 +19,11 @@ const base::Feature kBrotliEncoding{"brotli-encoding",
 const base::Feature kCredentialManagementAPI{"CredentialManagementAPI",
                                              base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Enable GPU Rasterization by default. This can still be overridden by
+// --force-gpu-rasterization or --disable-gpu-rasterization.
+const base::Feature kDefaultEnableGpuRasterization{
+    "DefaultEnableGpuRasterization", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Downloads resumption will be controllable via a flag until it's enabled
 // permanently. See https://crbug.com/7648
 const base::Feature kDownloadResumption{"DownloadResumption",
@@ -30,14 +35,11 @@ const base::Feature kDownloadResumption{"DownloadResumption",
 const base::Feature kDocumentWriteEvaluator{"DocumentWriteEvaluator",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
-// The Experimental Framework for controlling access to API experiments.
-const base::Feature kExperimentalFramework{"ExperimentalFramework",
-                                           base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Enable the material design playback UI for media elements.  This is always
-// on for OS_ANDROID, but may be enabled by experiment for other platforms.
-const base::Feature kNewMediaPlaybackUi{"NewMediaPlaybackUi",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
+// Can main thread be pipelined with activation. Always disabled for devices
+// with fewer than 4 cores irrespective of this flag. Can also be overridden by
+// --enable(disable)-main-frame-before-activation command line flag.
+const base::Feature kMainFrameBeforeActivation{
+    "MainFrameBeforeActivation", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // FeatureList definition for trials to enable the download button on
 // MediaDocument.
@@ -46,21 +48,44 @@ const base::Feature kMediaDocumentDownloadButton{
     base::FEATURE_DISABLED_BY_DEFAULT
 };
 
+// Enable the material design playback UI for media elements.  This is always
+// on for OS_ANDROID, but may be enabled by experiment for other platforms.
+const base::Feature kNewMediaPlaybackUi{"NewMediaPlaybackUi",
+                                        base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Non-validating reload for desktop.
+// See https://crbug.com/591245
+const base::Feature kNonValidatingReloadOnNormalReload{
+    "NonValidatingReloadOnNormalReload",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Non-validating reload on reload-to-refresh-content (e.g. pull-to-refresh).
-// See https://crbug.com/558829
+// See https://crbug.com/591245
 const base::Feature kNonValidatingReloadOnRefreshContent{
-    "NonValidatingReloadOnRefreshContent",
+    "NonValidatingReloadOnRefreshContentV2",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
 // An experiment to optimize resource loading IPC for small resources.
 // http://crbug.com/580928
-const base::Feature kOptimizeIPCForSmallResource{
-    "OptimizeForSmallResource",
+const base::Feature kOptimizeLoadingIPCForSmallResources{
+    "OptimizeLoadingIPCForSmallResources",
     base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Origin Trials for controlling access to feature/API experiments.
+const base::Feature kOriginTrials{"OriginTrials",
+                                  base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Paint optimizations including subsequence caching and empty phase skipping.
+const base::Feature kPaintOptimizations{"PaintOptimizations",
+                                        base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Partial support for pointer event feature.
+const base::Feature kPointerEvents{"PointerEvent",
+                                   base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Throttle Blink's rendering pipeline based on frame visibility.
 const base::Feature kRenderingPipelineThrottling{
-    "RenderingPipelineThrottling", base::FEATURE_DISABLED_BY_DEFAULT};
+    "RenderingPipelineThrottling", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Scrolls to compensate for layout movements (bit.ly/scroll-anchoring).
 const base::Feature kScrollAnchoring{"ScrollAnchoring",
@@ -78,13 +103,13 @@ const base::Feature kTokenBinding{"token-binding",
                                   base::FEATURE_DISABLED_BY_DEFAULT};
 
 // An experimental User Agent Intervention on WebFonts loading.
-const base::Feature kWebFontsIntervention{"WebFontsIntervention",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kWebFontsInterventionV2{"WebFontsInterventionV2",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Makes WebRTC use ECDSA certs by default (i.e., when no cert type was
 // specified in JS).
 const base::Feature kWebRtcEcdsaDefault {"WebRTC-EnableWebRtcEcdsa",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
+                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls whether the WebUSB API is enabled:
 // https://wicg.github.io/webusb

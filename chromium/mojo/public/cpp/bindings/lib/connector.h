@@ -5,9 +5,11 @@
 #ifndef MOJO_PUBLIC_CPP_BINDINGS_LIB_CONNECTOR_H_
 #define MOJO_PUBLIC_CPP_BINDINGS_LIB_CONNECTOR_H_
 
+#include <memory>
+
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "mojo/public/cpp/bindings/callback.h"
 #include "mojo/public/cpp/bindings/lib/sync_handle_watcher.h"
@@ -42,7 +44,9 @@ class Connector : public MessageReceiver {
   };
 
   // The Connector takes ownership of |message_pipe|.
-  Connector(ScopedMessagePipeHandle message_pipe, ConnectorConfig config);
+  Connector(ScopedMessagePipeHandle message_pipe,
+            ConnectorConfig config,
+            scoped_refptr<base::SingleThreadTaskRunner> runner);
   ~Connector() override;
 
   // Sets the receiver to handle messages read from the message pipe.  The
@@ -139,6 +143,10 @@ class Connector : public MessageReceiver {
     return sync_handle_watcher_callback_count_ > 0;
   }
 
+  base::SingleThreadTaskRunner* task_runner() const {
+    return task_runner_.get();
+  }
+
  private:
   // Callback of mojo::Watcher.
   void OnWatcherHandleReady(MojoResult result);
@@ -170,6 +178,7 @@ class Connector : public MessageReceiver {
   ScopedMessagePipeHandle message_pipe_;
   MessageReceiver* incoming_receiver_;
 
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   Watcher handle_watcher_;
 
   bool error_;
@@ -180,9 +189,9 @@ class Connector : public MessageReceiver {
 
   // If sending messages is allowed from multiple threads, |lock_| is used to
   // protect modifications to |message_pipe_| and |drop_writes_|.
-  scoped_ptr<base::Lock> lock_;
+  std::unique_ptr<base::Lock> lock_;
 
-  scoped_ptr<SyncHandleWatcher> sync_watcher_;
+  std::unique_ptr<SyncHandleWatcher> sync_watcher_;
   bool allow_woken_up_by_others_;
   // If non-zero, currently the control flow is inside the sync handle watcher
   // callback.

@@ -18,11 +18,10 @@
 #include "base/metrics/sparse_histogram.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
-#include "content/renderer/media/media_stream_audio_track.h"
 #include "content/renderer/media/media_stream_constraints_util.h"
 #include "content/renderer/media/media_stream_track.h"
 #include "content/renderer/media/peer_connection_tracker.h"
@@ -32,7 +31,6 @@
 #include "content/renderer/media/rtc_dtmf_sender_handler.h"
 #include "content/renderer/media/webrtc/peer_connection_dependency_factory.h"
 #include "content/renderer/media/webrtc/webrtc_media_stream_adapter.h"
-#include "content/renderer/media/webrtc_audio_capturer.h"
 #include "content/renderer/media/webrtc_audio_device_impl.h"
 #include "content/renderer/media/webrtc_uma_histograms.h"
 #include "content/renderer/render_thread_impl.h"
@@ -258,50 +256,6 @@ void GetNativeRtcConfiguration(
             blink_config.certificate(i))->rtcCertificate());
   }
 }
-// Scan the basic and advanced constraints until a value is found.
-// If nothing is found, the default is returned.
-// Argument 2 is a pointer to class data member.
-// Note: This code is a near duplicate of code in media_stream_audio_processor.
-// Consider extracting to a generic helper file.
-// It is NOT behaving according to spec, so should not go into blink.
-bool ScanConstraintsForBoolean(
-    const blink::WebMediaConstraints& constraints,
-    blink::BooleanConstraint blink::WebMediaTrackConstraintSet::*picker,
-    bool the_default,
-    bool* found) {
-  const auto& the_field = constraints.basic().*picker;
-  if (the_field.hasExact()) {
-    if (found) {
-      *found = true;
-    }
-    return the_field.exact();
-  }
-  for (const auto& advanced_constraint : constraints.advanced()) {
-    const auto& the_field = advanced_constraint.*picker;
-    if (the_field.hasExact()) {
-      if (found) {
-        *found = true;
-      }
-      return the_field.exact();
-    }
-  }
-  if (found) {
-    *found = false;
-  }
-  return the_default;
-}
-
-rtc::Optional<bool> ConstraintToOptional(
-    const blink::WebMediaConstraints& constraints,
-    blink::BooleanConstraint blink::WebMediaTrackConstraintSet::*picker) {
-  bool found;
-  bool the_value;
-  the_value = ScanConstraintsForBoolean(constraints, picker, false, &found);
-  if (found) {
-    return rtc::Optional<bool>(the_value);
-  }
-  return rtc::Optional<bool>();
-}
 
 void CopyConstraintsIntoRtcConfiguration(
     const blink::WebMediaConstraints constraints,
@@ -311,22 +265,40 @@ void CopyConstraintsIntoRtcConfiguration(
     return;
   }
 
-  // Note: IPv6 WebRTC value is "disable" while Blink is "enable".
-  configuration->disable_ipv6 = !ScanConstraintsForBoolean(
-      constraints, &blink::WebMediaTrackConstraintSet::enableIPv6, true,
-      nullptr);
-  // Note: If an optional is not present, webrtc decides on its own
-  // what the value should be.
-  configuration->enable_dscp = ConstraintToOptional(
-      constraints, &blink::WebMediaTrackConstraintSet::enableDscp);
-  configuration->cpu_overuse_detection = ConstraintToOptional(
-      constraints, &blink::WebMediaTrackConstraintSet::googCpuOveruseDetection);
-  configuration->enable_rtp_data_channel = ScanConstraintsForBoolean(
+  bool the_value;
+  if (GetConstraintValueAsBoolean(
+          constraints, &blink::WebMediaTrackConstraintSet::enableIPv6,
+          &the_value)) {
+    configuration->disable_ipv6 = !the_value;
+  } else {
+    // Note: IPv6 WebRTC value is "disable" while Blink is "enable".
+    configuration->disable_ipv6 = false;
+  }
+
+  if (GetConstraintValueAsBoolean(
+      constraints, &blink::WebMediaTrackConstraintSet::enableDscp,
+      &the_value)) {
+    configuration->set_dscp(the_value);
+  }
+
+  if (GetConstraintValueAsBoolean(
+      constraints, &blink::WebMediaTrackConstraintSet::googCpuOveruseDetection,
+      &the_value)) {
+    configuration->set_cpu_adaptation(the_value);
+  }
+
+  if (GetConstraintValueAsBoolean(
+      constraints,
+      &blink::WebMediaTrackConstraintSet::googEnableVideoSuspendBelowMinBitrate,
+      &the_value)) {
+    configuration->set_suspend_below_min_bitrate(the_value);
+  }
+
+  if (!GetConstraintValueAsBoolean(
       constraints, &blink::WebMediaTrackConstraintSet::enableRtpDataChannels,
-      false, nullptr);
-  configuration->suspend_below_min_bitrate = ConstraintToOptional(
-      constraints, &blink::WebMediaTrackConstraintSet::
-                       googEnableVideoSuspendBelowMinBitrate);
+      &configuration->enable_rtp_data_channel)) {
+    configuration->enable_rtp_data_channel = false;
+  }
   int rate;
   if (GetConstraintValueAsInteger(
           constraints,
@@ -750,6 +722,21 @@ void ConvertConstraintsToWebrtcOfferOptions(
 base::LazyInstance<std::set<RTCPeerConnectionHandler*> >::Leaky
     g_peer_connection_handlers = LAZY_INSTANCE_INITIALIZER;
 
+void OverrideDefaultCertificateBasedOnExperiment(
+    webrtc::PeerConnectionInterface::RTCConfiguration* config) {
+  if (base::FeatureList::IsEnabled(features::kWebRtcEcdsaDefault)) {
+    if (config->certificates.empty()) {
+      rtc::scoped_refptr<rtc::RTCCertificate> certificate =
+          PeerConnectionDependencyFactory::GenerateDefaultCertificate();
+      config->certificates.push_back(certificate);
+    }
+  }
+  // If the ECDSA experiment is not running we rely on the default being RSA for
+  // the control group. See bug related to this: crbug.com/611698.
+  static_assert(rtc::KT_DEFAULT == rtc::KT_RSA, "This code relies on "
+      "KT_DEFAULT == KT_RSA for RSA certificate generation.");
+}
+
 }  // namespace
 
 // Implementation of LocalRTCStatsRequest.
@@ -980,18 +967,13 @@ bool RTCPeerConnectionHandler::initialize(
 
   webrtc::PeerConnectionInterface::RTCConfiguration config;
   GetNativeRtcConfiguration(server_configuration, &config);
+  OverrideDefaultCertificateBasedOnExperiment(&config);
 
-  if (base::FeatureList::IsEnabled(features::kWebRtcEcdsaDefault)) {
-    if (config.certificates.empty()) {
-      rtc::scoped_refptr<rtc::RTCCertificate> certificate =
-          PeerConnectionDependencyFactory::GenerateDefaultCertificate();
-      config.certificates.push_back(certificate);
-    }
-  }
-
-  config.disable_prerenderer_smoothing =
-      !base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableRTCSmoothnessAlgorithm);
+  // Choose between RTC smoothness algorithm and prerenderer smoothing.
+  // Prerenderer smoothing is turned on if RTC smoothness is turned off.
+  config.set_prerenderer_smoothing(
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableRTCSmoothnessAlgorithm));
 
   // Copy all the relevant constraints into |config|.
   CopyConstraintsIntoRtcConfiguration(options, &config);
@@ -1022,14 +1004,7 @@ bool RTCPeerConnectionHandler::InitializeForTest(
   DCHECK(thread_checker_.CalledOnValidThread());
   webrtc::PeerConnectionInterface::RTCConfiguration config;
   GetNativeRtcConfiguration(server_configuration, &config);
-
-  if (base::FeatureList::IsEnabled(features::kWebRtcEcdsaDefault)) {
-    if (config.certificates.empty()) {
-      rtc::scoped_refptr<rtc::RTCCertificate> certificate =
-          PeerConnectionDependencyFactory::GenerateDefaultCertificate();
-      config.certificates.push_back(certificate);
-    }
-  }
+  OverrideDefaultCertificateBasedOnExperiment(&config);
 
   peer_connection_observer_ = new Observer(weak_factory_.GetWeakPtr());
   CopyConstraintsIntoRtcConfiguration(options, &config);
@@ -1509,20 +1484,25 @@ blink::WebRTCDataChannelHandler* RTCPeerConnectionHandler::createDataChannel(
 blink::WebRTCDTMFSenderHandler* RTCPeerConnectionHandler::createDTMFSender(
     const blink::WebMediaStreamTrack& track) {
   DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(!track.isNull());
   TRACE_EVENT0("webrtc", "RTCPeerConnectionHandler::createDTMFSender");
   DVLOG(1) << "createDTMFSender.";
 
-  MediaStreamAudioTrack* native_track = MediaStreamAudioTrack::From(track);
-  if (!native_track || !native_track->is_local_track() ||
-      track.source().getType() != blink::WebMediaStreamSource::TypeAudio) {
-    DLOG(ERROR) << "The DTMF sender requires a local audio track.";
+  // Find the WebRtc track referenced by the blink track's ID.
+  webrtc::AudioTrackInterface* webrtc_track = nullptr;
+  for (const WebRtcMediaStreamAdapter* s : local_streams_) {
+    webrtc_track = s->webrtc_media_stream()->FindAudioTrack(track.id().utf8());
+    if (webrtc_track)
+      break;
+  }
+  if (!webrtc_track) {
+    DLOG(ERROR) << "Audio track with ID '" << track.id().utf8()
+                << "' has no known WebRtc sink.";
     return nullptr;
   }
 
-  scoped_refptr<webrtc::AudioTrackInterface> audio_track =
-      native_track->GetAudioAdapter();
   rtc::scoped_refptr<webrtc::DtmfSenderInterface> sender(
-      native_peer_connection_->CreateDtmfSender(audio_track.get()));
+      native_peer_connection_->CreateDtmfSender(webrtc_track));
   if (!sender) {
     DLOG(ERROR) << "Could not create native DTMF sender.";
     return nullptr;

@@ -2,17 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "media/audio/sounds/audio_stream_handler.h"
+
+#include <memory>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/test/test_message_loop.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "media/audio/audio_io.h"
 #include "media/audio/audio_manager.h"
 #include "media/audio/simple_sources.h"
-#include "media/audio/sounds/audio_stream_handler.h"
 #include "media/audio/sounds/test_data.h"
 #include "media/base/channel_layout.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -25,7 +28,9 @@ class AudioStreamHandlerTest : public testing::Test {
   ~AudioStreamHandlerTest() override {}
 
   void SetUp() override {
-    audio_manager_.reset(AudioManager::CreateForTesting());
+    audio_manager_ =
+        AudioManager::CreateForTesting(base::ThreadTaskRunnerHandle::Get());
+    base::RunLoop().RunUntilIdle();
 
     base::StringPiece data(kTestAudioData, arraysize(kTestAudioData));
     audio_stream_handler_.reset(new AudioStreamHandler(data));
@@ -33,7 +38,7 @@ class AudioStreamHandlerTest : public testing::Test {
 
   void TearDown() override {
     audio_stream_handler_.reset();
-    audio_manager_.reset();
+    base::RunLoop().RunUntilIdle();
   }
 
   AudioStreamHandler* audio_stream_handler() {
@@ -50,10 +55,9 @@ class AudioStreamHandlerTest : public testing::Test {
   }
 
  private:
-  scoped_ptr<AudioManager> audio_manager_;
-  scoped_ptr<AudioStreamHandler> audio_stream_handler_;
-
-  base::MessageLoop message_loop_;
+  base::TestMessageLoop message_loop_;
+  ScopedAudioManagerPtr audio_manager_;
+  std::unique_ptr<AudioStreamHandler> audio_stream_handler_;
 };
 
 TEST_F(AudioStreamHandlerTest, Play) {

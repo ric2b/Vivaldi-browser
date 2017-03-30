@@ -70,6 +70,8 @@ class PolicyBase final : public TargetPolicy {
                                     const base::char16* handle_name) override;
   void AddHandleToShare(HANDLE handle) override;
   void SetLockdownDefaultDacl() override;
+  void SetEnableOPMRedirection() override;
+  bool GetEnableOPMRedirection() override;
 
   // Creates a Job object with the level specified in a previous call to
   // SetJobLevel().
@@ -86,7 +88,7 @@ class PolicyBase final : public TargetPolicy {
 
   // Adds a target process to the internal list of targets. Internally a
   // call to TargetProcess::Init() is issued.
-  bool AddTarget(TargetProcess* target);
+  ResultCode AddTarget(TargetProcess* target);
 
   // Called when there are no more active processes in a Job.
   // Removes a Job object associated with this policy and the target associated
@@ -105,7 +107,7 @@ class PolicyBase final : public TargetPolicy {
   ~PolicyBase();
 
   // Sets up interceptions for a new target.
-  bool SetupAllInterceptions(TargetProcess* target);
+  ResultCode SetupAllInterceptions(TargetProcess* target);
 
   // Sets up the handle closer for a new target.
   bool SetupHandleCloser(TargetProcess* target);
@@ -164,6 +166,7 @@ class PolicyBase final : public TargetPolicy {
   // This list contains handles other than the stderr/stdout handles which are
   // shared with the target at times.
   base::HandlesToInheritVector handles_to_share_;
+  bool enable_opm_redirection_;
 
   DISALLOW_COPY_AND_ASSIGN(PolicyBase);
 };

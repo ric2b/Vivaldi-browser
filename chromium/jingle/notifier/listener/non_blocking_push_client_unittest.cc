@@ -5,11 +5,11 @@
 #include "jingle/notifier/listener/non_blocking_push_client.h"
 
 #include <cstddef>
+#include <memory>
 
 #include "base/compiler_specific.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "jingle/notifier/base/fake_base_task.h"
 #include "jingle/notifier/listener/fake_push_client.h"
 #include "jingle/notifier/listener/fake_push_client_observer.h"
@@ -48,18 +48,18 @@ class NonBlockingPushClientTest : public testing::Test {
     message_loop_.RunUntilIdle();
   }
 
-  scoped_ptr<PushClient> CreateFakePushClient() {
+  std::unique_ptr<PushClient> CreateFakePushClient() {
     if (fake_push_client_) {
       ADD_FAILURE();
-      return scoped_ptr<PushClient>();
+      return std::unique_ptr<PushClient>();
     }
     fake_push_client_ = new FakePushClient();
-    return scoped_ptr<PushClient>(fake_push_client_);
+    return std::unique_ptr<PushClient>(fake_push_client_);
   }
 
   base::MessageLoop message_loop_;
   FakePushClientObserver fake_observer_;
-  scoped_ptr<NonBlockingPushClient> push_client_;
+  std::unique_ptr<NonBlockingPushClient> push_client_;
   // Owned by |push_client_|.
   FakePushClient* fake_push_client_;
 };

@@ -44,6 +44,10 @@ void MessagePumpWin::Run(Delegate* delegate) {
   s.should_quit = false;
   s.run_depth = state_ ? state_->run_depth + 1 : 1;
 
+  // TODO(stanisc): crbug.com/596190: Remove this code once the bug is fixed.
+  s.schedule_work_error_count = 0;
+  s.last_schedule_work_error_time = Time();
+
   RunState* previous_state = state_;
   state_ = &s;
 
@@ -113,6 +117,8 @@ void MessagePumpForUI::ScheduleWork() {
   InterlockedExchange(&have_work_, 0);  // Clarify that we didn't really insert.
   UMA_HISTOGRAM_ENUMERATION("Chrome.MessageLoopProblem", MESSAGE_POST_ERROR,
                             MESSAGE_LOOP_PROBLEM_MAX);
+  state_->schedule_work_error_count++;
+  state_->last_schedule_work_error_time = Time::Now();
 }
 
 void MessagePumpForUI::ScheduleDelayedWork(const TimeTicks& delayed_work_time) {
@@ -423,13 +429,16 @@ bool MessagePumpForUI::ProcessPumpReplacementMessage() {
 //-----------------------------------------------------------------------------
 // MessagePumpForIO public:
 
+MessagePumpForIO::IOContext::IOContext() {
+  memset(&overlapped, 0, sizeof(overlapped));
+}
+
 MessagePumpForIO::MessagePumpForIO() {
   port_.Set(CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, NULL, 1));
   DCHECK(port_.IsValid());
 }
 
-MessagePumpForIO::~MessagePumpForIO() {
-}
+MessagePumpForIO::~MessagePumpForIO() = default;
 
 void MessagePumpForIO::ScheduleWork() {
   if (InterlockedExchange(&have_work_, 1))
@@ -446,6 +455,8 @@ void MessagePumpForIO::ScheduleWork() {
   InterlockedExchange(&have_work_, 0);  // Clarify that we didn't succeed.
   UMA_HISTOGRAM_ENUMERATION("Chrome.MessageLoopProblem", COMPLETION_POST_ERROR,
                             MESSAGE_LOOP_PROBLEM_MAX);
+  state_->schedule_work_error_count++;
+  state_->last_schedule_work_error_time = Time::Now();
 }
 
 void MessagePumpForIO::ScheduleDelayedWork(const TimeTicks& delayed_work_time) {
@@ -457,19 +468,15 @@ void MessagePumpForIO::ScheduleDelayedWork(const TimeTicks& delayed_work_time) {
 
 void MessagePumpForIO::RegisterIOHandler(HANDLE file_handle,
                                          IOHandler* handler) {
-  ULONG_PTR key = HandlerToKey(handler, true);
-  HANDLE port = CreateIoCompletionPort(file_handle, port_.Get(), key, 1);
+  HANDLE port = CreateIoCompletionPort(file_handle, port_.Get(),
+                                       reinterpret_cast<ULONG_PTR>(handler), 1);
   DPCHECK(port);
 }
 
 bool MessagePumpForIO::RegisterJobObject(HANDLE job_handle,
                                          IOHandler* handler) {
-  // Job object notifications use the OVERLAPPED pointer to carry the message
-  // data. Mark the completion key correspondingly, so we will not try to
-  // convert OVERLAPPED* to IOContext*.
-  ULONG_PTR key = HandlerToKey(handler, false);
   JOBOBJECT_ASSOCIATE_COMPLETION_PORT info;
-  info.CompletionKey = reinterpret_cast<void*>(key);
+  info.CompletionKey = handler;
   info.CompletionPort = port_.Get();
   return SetInformationJobObject(job_handle,
                                  JobObjectAssociateCompletionPortInformation,
@@ -543,24 +550,12 @@ bool MessagePumpForIO::WaitForIOCompletion(DWORD timeout, IOHandler* filter) {
       return true;
   }
 
-  // If |item.has_valid_io_context| is false then |item.context| does not point
-  // to a context structure, and so should not be dereferenced, although it may
-  // still hold valid non-pointer data.
-  if (!item.has_valid_io_context || item.context->handler) {
-    if (filter && item.handler != filter) {
-      // Save this item for later
-      completed_io_.push_back(item);
-    } else {
-      DCHECK(!item.has_valid_io_context ||
-             (item.context->handler == item.handler));
-      WillProcessIOEvent();
-      item.handler->OnIOCompleted(item.context, item.bytes_transfered,
-                                  item.error);
-      DidProcessIOEvent();
-    }
+  if (filter && item.handler != filter) {
+    // Save this item for later
+    completed_io_.push_back(item);
   } else {
-    // The handler must be gone by now, just cleanup the mess.
-    delete item.context;
+    item.handler->OnIOCompleted(item.context, item.bytes_transfered,
+                                item.error);
   }
   return true;
 }
@@ -578,7 +573,7 @@ bool MessagePumpForIO::GetIOItem(DWORD timeout, IOItem* item) {
     item->bytes_transfered = 0;
   }
 
-  item->handler = KeyToHandler(key, &item->has_valid_io_context);
+  item->handler = reinterpret_cast<IOHandler*>(key);
   item->context = reinterpret_cast<IOContext*>(overlapped);
   return true;
 }
@@ -606,46 +601,6 @@ bool MessagePumpForIO::MatchCompletedIOItem(IOHandler* filter, IOItem* item) {
     }
   }
   return false;
-}
-
-void MessagePumpForIO::AddIOObserver(IOObserver *obs) {
-  io_observers_.AddObserver(obs);
-}
-
-void MessagePumpForIO::RemoveIOObserver(IOObserver *obs) {
-  io_observers_.RemoveObserver(obs);
-}
-
-void MessagePumpForIO::WillProcessIOEvent() {
-  FOR_EACH_OBSERVER(IOObserver, io_observers_, WillProcessIOEvent());
-}
-
-void MessagePumpForIO::DidProcessIOEvent() {
-  FOR_EACH_OBSERVER(IOObserver, io_observers_, DidProcessIOEvent());
-}
-
-// static
-ULONG_PTR MessagePumpForIO::HandlerToKey(IOHandler* handler,
-                                         bool has_valid_io_context) {
-  ULONG_PTR key = reinterpret_cast<ULONG_PTR>(handler);
-
-  // |IOHandler| is at least pointer-size aligned, so the lowest two bits are
-  // always cleared. We use the lowest bit to distinguish completion keys with
-  // and without the associated |IOContext|.
-  DCHECK_EQ(key & 1, 0u);
-
-  // Mark the completion key as context-less.
-  if (!has_valid_io_context)
-    key = key | 1;
-  return key;
-}
-
-// static
-MessagePumpForIO::IOHandler* MessagePumpForIO::KeyToHandler(
-    ULONG_PTR key,
-    bool* has_valid_io_context) {
-  *has_valid_io_context = ((key & 1) == 0);
-  return reinterpret_cast<IOHandler*>(key & ~static_cast<ULONG_PTR>(1));
 }
 
 }  // namespace base

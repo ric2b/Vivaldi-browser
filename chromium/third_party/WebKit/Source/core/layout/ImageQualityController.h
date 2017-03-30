@@ -32,13 +32,8 @@
 #define ImageQualityController_h
 
 #include "base/gtest_prod_util.h"
-#include "core/CoreExport.h"
 #include "core/layout/LayoutObject.h"
-#include "platform/geometry/IntSize.h"
 #include "platform/geometry/LayoutSize.h"
-#include "platform/graphics/Image.h"
-#include "platform/graphics/ImageOrientation.h"
-#include "platform/graphics/ImageSource.h"
 #include "wtf/HashMap.h"
 
 namespace blink {
@@ -64,33 +59,37 @@ public:
     InterpolationQuality chooseInterpolationQuality(const LayoutObject&, Image*, const void* layer, const LayoutSize&);
 
 private:
+    static const double cLowQualityTimeThreshold;
+    static const double cTimerRestartThreshold;
+
     ImageQualityController();
 
     static bool has(const LayoutObject&);
     void set(const LayoutObject&, LayerSizeMap* innerMap, const void* layer, const LayoutSize&, bool isResizing);
 
-    bool shouldPaintAtLowQuality(const LayoutObject&, Image*, const void* layer, const LayoutSize&);
+    bool shouldPaintAtLowQuality(const LayoutObject&, Image*, const void* layer, const LayoutSize&, double lastFrameTimeMonotonic);
     void removeLayer(const LayoutObject&, LayerSizeMap* innerMap, const void* layer);
     void objectDestroyed(const LayoutObject&);
     bool isEmpty() { return m_objectLayerSizeMap.isEmpty(); }
 
     void highQualityRepaintTimerFired(Timer<ImageQualityController>*);
-    void restartTimer();
+    void restartTimer(double lastFrameTimeMonotonic);
 
     // Only for use in testing.
     void setTimer(Timer<ImageQualityController>*);
 
     ObjectLayerSizeMap m_objectLayerSizeMap;
     OwnPtr<Timer<ImageQualityController>> m_timer;
+    double m_frameTimeWhenTimerStarted;
 
     // For calling set().
     FRIEND_TEST_ALL_PREFIXES(LayoutPartTest, DestroyUpdatesImageQualityController);
 
     // For calling setTimer(),
-    FRIEND_TEST_ALL_PREFIXES(ImageQualityControllerTest, LowQualityFilterForLiveResize);
     FRIEND_TEST_ALL_PREFIXES(ImageQualityControllerTest, LowQualityFilterForResizingImage);
     FRIEND_TEST_ALL_PREFIXES(ImageQualityControllerTest, MediumQualityFilterForNotAnimatedWhileAnotherAnimates);
     FRIEND_TEST_ALL_PREFIXES(ImageQualityControllerTest, DontKickTheAnimationTimerWhenPaintingAtTheSameSize);
+    FRIEND_TEST_ALL_PREFIXES(ImageQualityControllerTest, DontRestartTimerUnlessAdvanced);
 };
 
 } // namespace blink

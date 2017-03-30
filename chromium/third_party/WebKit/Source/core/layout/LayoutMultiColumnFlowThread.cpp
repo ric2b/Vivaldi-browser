@@ -81,12 +81,25 @@ static inline bool isMultiColumnContainer(const LayoutObject& object)
     return toLayoutBlockFlow(object).multiColumnFlowThread();
 }
 
+// Return true if there's nothing that prevents the specified object from being in the ancestor
+// chain between some column spanner and its containing multicol container. A column spanner needs
+// the multicol container to be its containing block, so that the spanner is able to escape the flow
+// thread. (Everything contained by the flow thread is split into columns, but this is precisely
+// what shouldn't be done to a spanner, since it's supposed to span all columns.)
+//
+// We require that the parent of the spanner participate in the block formatting context established
+// by the multicol container (i.e. that there are no BFCs or other formatting contexts
+// in-between). We also require that there be no transforms, since transforms insist on being in the
+// containing block chain for everything inside it, which conflicts with a spanners's need to have
+// the multicol container as its direct containing block. We may also not put spanners inside
+// objects that don't support fragmentation.
 static inline bool canContainSpannerInParentFragmentationContext(const LayoutObject& object)
 {
     if (!object.isLayoutBlockFlow())
         return false;
     const LayoutBlockFlow& blockFlow = toLayoutBlockFlow(object);
     return !blockFlow.createsNewFormattingContext()
+        && !blockFlow.hasTransformRelatedProperty()
         && blockFlow.getPaginationBreakability() != LayoutBox::ForbidBreaks
         && !isMultiColumnContainer(blockFlow);
 }
@@ -302,12 +315,7 @@ LayoutUnit LayoutMultiColumnFlowThread::tallestUnbreakableLogicalHeight(LayoutUn
 
 LayoutSize LayoutMultiColumnFlowThread::columnOffset(const LayoutPoint& point) const
 {
-    if (!hasValidColumnSetInfo())
-        return LayoutSize(0, 0);
-
-    LayoutPoint flowThreadPoint = flipForWritingMode(point);
-    LayoutUnit blockOffset = isHorizontalWritingMode() ? flowThreadPoint.y() : flowThreadPoint.x();
-    return flowThreadTranslationAtOffset(blockOffset);
+    return flowThreadTranslationAtPoint(point, CoordinateSpaceConversion::Containing);
 }
 
 bool LayoutMultiColumnFlowThread::needsNewWidth() const
@@ -325,12 +333,26 @@ bool LayoutMultiColumnFlowThread::isPageLogicalHeightKnown() const
     return false;
 }
 
-LayoutSize LayoutMultiColumnFlowThread::flowThreadTranslationAtOffset(LayoutUnit offsetInFlowThread) const
+LayoutSize LayoutMultiColumnFlowThread::flowThreadTranslationAtOffset(LayoutUnit offsetInFlowThread, CoordinateSpaceConversion mode) const
 {
+    if (!hasValidColumnSetInfo())
+        return LayoutSize(0, 0);
     LayoutMultiColumnSet* columnSet = columnSetAtBlockOffset(offsetInFlowThread);
     if (!columnSet)
         return LayoutSize(0, 0);
-    return columnSet->flowThreadTranslationAtOffset(offsetInFlowThread);
+    return columnSet->flowThreadTranslationAtOffset(offsetInFlowThread, mode);
+}
+
+LayoutSize LayoutMultiColumnFlowThread::flowThreadTranslationAtPoint(const LayoutPoint& flowThreadPoint, CoordinateSpaceConversion mode) const
+{
+    LayoutPoint flippedPoint = flipForWritingMode(flowThreadPoint);
+    LayoutUnit blockOffset = isHorizontalWritingMode() ? flippedPoint.y() : flippedPoint.x();
+    return flowThreadTranslationAtOffset(blockOffset, mode);
+}
+
+LayoutPoint LayoutMultiColumnFlowThread::flowThreadPointToVisualPoint(const LayoutPoint& flowThreadPoint) const
+{
+    return flowThreadPoint + flowThreadTranslationAtPoint(flowThreadPoint, CoordinateSpaceConversion::Visual);
 }
 
 LayoutPoint LayoutMultiColumnFlowThread::visualPointToFlowThreadPoint(const LayoutPoint& visualPoint) const
@@ -343,6 +365,15 @@ LayoutPoint LayoutMultiColumnFlowThread::visualPointToFlowThreadPoint(const Layo
             break;
     }
     return columnSet ? columnSet->visualPointToFlowThreadPoint(toLayoutPoint(visualPoint + location() - columnSet->location())) : visualPoint;
+}
+
+int LayoutMultiColumnFlowThread::inlineBlockBaseline(LineDirectionMode lineDirection) const
+{
+    LayoutUnit baselineInFlowThread = LayoutUnit(LayoutFlowThread::inlineBlockBaseline(lineDirection));
+    LayoutMultiColumnSet* columnSet = columnSetAtBlockOffset(baselineInFlowThread);
+    if (!columnSet)
+        return baselineInFlowThread.toInt();
+    return (baselineInFlowThread - columnSet->pageLogicalTopForOffset(baselineInFlowThread)).ceil();
 }
 
 LayoutMultiColumnSet* LayoutMultiColumnFlowThread::columnSetAtBlockOffset(LayoutUnit offset) const
@@ -501,7 +532,21 @@ void LayoutMultiColumnFlowThread::appendNewFragmentainerGroupIfNeeded(LayoutUnit
 
         // We have run out of columns here, so we need to add at least one more row to hold more
         // columns.
+        LayoutMultiColumnFlowThread* enclosingFlowThread = enclosingFragmentationContext->associatedFlowThread();
         do {
+            if (enclosingFlowThread) {
+                // When we add a new row here, it implicitly means that we're inserting another
+                // column in our enclosing multicol container. That in turn may mean that we've run
+                // out of columns there too. Need to insert additional rows in ancestral multicol
+                // containers before doing it in the descendants, in order to get the height
+                // constraints right down there.
+                const MultiColumnFragmentainerGroup& lastRow = columnSet->lastFragmentainerGroup();
+                // The top offset where where the new fragmentainer group will start in this column
+                // set, converted to the coordinate space of the enclosing multicol container.
+                LayoutUnit logicalOffsetInOuter = lastRow.blockOffsetInEnclosingFragmentationContext() + lastRow.logicalHeight();
+                enclosingFlowThread->appendNewFragmentainerGroupIfNeeded(logicalOffsetInOuter, AssociateWithLatterPage);
+            }
+
             const MultiColumnFragmentainerGroup& newRow = columnSet->appendNewFragmentainerGroup();
             // Zero-height rows should really not occur here, but if it does anyway, break, so that
             // we don't get stuck in an infinite loop.
@@ -509,14 +554,6 @@ void LayoutMultiColumnFlowThread::appendNewFragmentainerGroupIfNeeded(LayoutUnit
             if (newRow.logicalHeight() <= 0)
                 break;
         } while (!columnSet->hasFragmentainerGroupForColumnAt(offsetInFlowThread, pageBoundaryRule));
-
-        if (LayoutMultiColumnFlowThread* enclosingFlowThread = enclosingFragmentationContext->associatedFlowThread()) {
-            // When we add a new row here, it implicitly means that we're inserting another column
-            // in our enclosing multicol container. That in turn may mean that we've run out of
-            // columns there too.
-            const MultiColumnFragmentainerGroup& lastRow = columnSet->lastFragmentainerGroup();
-            enclosingFlowThread->appendNewFragmentainerGroupIfNeeded(lastRow.blockOffsetInEnclosingFragmentationContext(), AssociateWithLatterPage);
-        }
     }
 }
 

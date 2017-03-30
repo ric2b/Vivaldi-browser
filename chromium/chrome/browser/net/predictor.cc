@@ -12,23 +12,22 @@
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/containers/mru_cache.h"
+#include "base/feature_list.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/io_thread.h"
-#include "chrome/browser/net/preconnect.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile_io_data.h"
 #include "chrome/common/chrome_switches.h"
@@ -37,6 +36,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/resource_hints.h"
 #include "net/base/address_list.h"
 #include "net/base/completion_callback.h"
 #include "net/base/host_port_pair.h"
@@ -56,6 +56,11 @@ using base::TimeDelta;
 using content::BrowserThread;
 
 namespace chrome_browser_net {
+
+namespace {
+const base::Feature kUsePredictorDNSQueue{"UsePredictorDNSQueue",
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
+}
 
 // static
 const int Predictor::kPredictorReferrerVersion = 2;
@@ -236,7 +241,7 @@ void Predictor::AnticipateOmniboxUrl(const GURL& url, bool preconnectable) {
   UrlInfo::ResolutionMotivation motivation(UrlInfo::OMNIBOX_MOTIVATED);
   base::TimeTicks now = base::TimeTicks::Now();
 
-  if (preconnect_enabled_) {
+  if (PreconnectEnabled()) {
     if (preconnectable && !is_new_host_request) {
       ++consecutive_omnibox_preconnect_count_;
       // The omnibox suggests a search URL (for which we can preconnect) after
@@ -300,8 +305,8 @@ void Predictor::PreconnectUrlAndSubresources(const GURL& url,
     const GURL& first_party_for_cookies) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI) ||
          BrowserThread::CurrentlyOn(BrowserThread::IO));
-  if (!predictor_enabled_ || !preconnect_enabled_ ||
-      !url.is_valid() || !url.has_host())
+  if (!predictor_enabled_ || !PreconnectEnabled() || !url.is_valid() ||
+      !url.has_host())
     return;
   if (!CanPreresolveAndPreconnect())
     return;
@@ -427,7 +432,8 @@ void Predictor::DiscardAllResults() {
       assignees[url] = *info;
     }
   }
-  DCHECK_LE(assignees.size(), max_concurrent_dns_lookups_);
+  DCHECK(!base::FeatureList::IsEnabled(kUsePredictorDNSQueue) ||
+         assignees.size() <= max_concurrent_dns_lookups_);
   results_.clear();
   // Put back in the names being worked on.
   for (Results::iterator it = assignees.begin(); assignees.end() != it; ++it) {
@@ -466,6 +472,8 @@ void Predictor::LearnFromNavigation(const GURL& referring_url,
   DCHECK_EQ(target_url, Predictor::CanonicalizeUrl(target_url));
   DCHECK_NE(target_url, GURL::EmptyGURL());
 
+  if (observer_)
+    observer_->OnLearnFromNavigation(referring_url, target_url);
   referrers_[referring_url].SuggestHost(target_url);
   // Possibly do some referrer trimming.
   TrimReferrers();
@@ -867,13 +875,44 @@ void Predictor::PreconnectUrlOnIOThread(
   // Skip the HSTS redirect.
   GURL url = GetHSTSRedirectOnIOThread(original_url);
 
+  // TODO(csharrison): The observer should only be notified after the null check
+  // for the URLRequestContextGetter. The predictor tests should be fixed to
+  // allow for this, as they currently expect a callback with no getter.
+  // URLRequestContextGetter is null. Tests rely on this behavior.
   if (observer_) {
     observer_->OnPreconnectUrl(
         url, first_party_for_cookies, motivation, count);
   }
 
-  PreconnectOnIOThread(url, first_party_for_cookies, motivation, count,
-                       url_request_context_getter_.get(), allow_credentials);
+  net::URLRequestContextGetter* getter = url_request_context_getter_.get();
+  if (!getter)
+    return;
+
+  // Translate the motivation from UrlRequest motivations to HttpRequest
+  // motivations.
+  net::HttpRequestInfo::RequestMotivation request_motivation =
+      net::HttpRequestInfo::NORMAL_MOTIVATION;
+  switch (motivation) {
+    case UrlInfo::OMNIBOX_MOTIVATED:
+      request_motivation = net::HttpRequestInfo::OMNIBOX_MOTIVATED;
+      break;
+    case UrlInfo::LEARNED_REFERAL_MOTIVATED:
+      request_motivation = net::HttpRequestInfo::PRECONNECT_MOTIVATED;
+      break;
+    case UrlInfo::MOUSE_OVER_MOTIVATED:
+    case UrlInfo::SELF_REFERAL_MOTIVATED:
+    case UrlInfo::EARLY_LOAD_MOTIVATED:
+      request_motivation = net::HttpRequestInfo::EARLY_LOAD_MOTIVATED;
+      break;
+    default:
+      // Other motivations should never happen here.
+      NOTREACHED();
+      break;
+  }
+  UMA_HISTOGRAM_ENUMERATION("Net.PreconnectMotivation", motivation,
+                            UrlInfo::MAX_MOTIVATED);
+  content::PreconnectUrl(getter, url, first_party_for_cookies, count,
+                         allow_credentials, request_motivation);
 }
 
 void Predictor::PredictFrameSubresources(const GURL& url,
@@ -941,7 +980,7 @@ void Predictor::PrepareFrameSubresources(const GURL& original_url,
     // size of the list with all the "Leaf" nodes in the tree (nodes that don't
     // load any subresources).  If we learn about this resource, we will instead
     // provide a more carefully estimated preconnection count.
-    if (preconnect_enabled_) {
+    if (PreconnectEnabled()) {
       PreconnectUrlOnIOThread(url, first_party_for_cookies,
                               UrlInfo::SELF_REFERAL_MOTIVATED,
                               kAllowCredentialsOnPreconnectByDefault, 2);
@@ -961,7 +1000,7 @@ void Predictor::PrepareFrameSubresources(const GURL& original_url,
                                 static_cast<int>(connection_expectation * 100),
                                 10, 5000, 50);
     future_url->second.ReferrerWasObserved();
-    if (preconnect_enabled_ &&
+    if (PreconnectEnabled() &&
         connection_expectation > kPreconnectWorthyExpectedValue) {
       evalution = PRECONNECTION;
       future_url->second.IncrementPreconnectionCount();
@@ -1056,6 +1095,7 @@ UrlInfo* Predictor::AppendToResolutionQueue(
 
 bool Predictor::CongestionControlPerformed(UrlInfo* info) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK(base::FeatureList::IsEnabled(kUsePredictorDNSQueue));
   // Note: queue_duration is ONLY valid after we go to assigned state.
   if (info->queue_duration() < max_dns_queue_delay_)
     return false;
@@ -1075,14 +1115,18 @@ bool Predictor::CongestionControlPerformed(UrlInfo* info) {
 void Predictor::StartSomeQueuedResolutions() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
+  // If the queue is disabled, just make LookupRequests for all entries.
+  bool enable_queue = base::FeatureList::IsEnabled(kUsePredictorDNSQueue);
   while (!work_queue_.IsEmpty() &&
-         pending_lookups_.size() < max_concurrent_dns_lookups_) {
+         (!enable_queue ||
+          pending_lookups_.size() < max_concurrent_dns_lookups_)) {
     const GURL url(work_queue_.Pop());
     UrlInfo* info = &results_[url];
     DCHECK(info->HasUrl(url));
     info->SetAssignedState();
 
-    if (CongestionControlPerformed(info)) {
+    // Only perform congestion control if the queue is enabled.
+    if (enable_queue && CongestionControlPerformed(info)) {
       DCHECK(work_queue_.IsEmpty());
       return;
     }
@@ -1173,6 +1217,16 @@ GURL Predictor::GetHSTSRedirectOnIOThread(const GURL& url) {
 // ---------------------- End IO methods. -------------------------------------
 
 //-----------------------------------------------------------------------------
+
+bool Predictor::PreconnectEnabled() const {
+  base::AutoLock lock(preconnect_enabled_lock_);
+  return preconnect_enabled_;
+}
+
+void Predictor::SetPreconnectEnabledForTest(bool preconnect_enabled) {
+  base::AutoLock lock(preconnect_enabled_lock_);
+  preconnect_enabled_ = preconnect_enabled;
+}
 
 Predictor::HostNameQueue::HostNameQueue() {
 }

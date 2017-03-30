@@ -7,21 +7,22 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 
 namespace media {
 
 class Cluster {
  public:
-  Cluster(scoped_ptr<uint8_t[]> data, int size);
+  Cluster(std::unique_ptr<uint8_t[]> data, int size);
   ~Cluster();
 
   const uint8_t* data() const { return data_.get(); }
   int size() const { return size_; }
 
  private:
-  scoped_ptr<uint8_t[]> data_;
+  std::unique_ptr<uint8_t[]> data_;
   int size_;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(Cluster);
@@ -42,16 +43,18 @@ class ClusterBuilder {
                      int64_t timecode,
                      int duration,
                      int flags,
+                     bool is_key_frame,
                      const uint8_t* data,
                      int size);
   void AddBlockGroupWithoutBlockDuration(int track_num,
                                          int64_t timecode,
                                          int flags,
+                                         bool is_key_frame,
                                          const uint8_t* data,
                                          int size);
 
-  scoped_ptr<Cluster> Finish();
-  scoped_ptr<Cluster> FinishWithUnknownSize();
+  std::unique_ptr<Cluster> Finish();
+  std::unique_ptr<Cluster> FinishWithUnknownSize();
 
  private:
   void AddBlockGroupInternal(int track_num,
@@ -59,6 +62,7 @@ class ClusterBuilder {
                              bool include_block_duration,
                              int duration,
                              int flags,
+                             bool is_key_frame,
                              const uint8_t* data,
                              int size);
   void Reset();
@@ -71,7 +75,7 @@ class ClusterBuilder {
                   const uint8_t* data,
                   int size);
 
-  scoped_ptr<uint8_t[]> buffer_;
+  std::unique_ptr<uint8_t[]> buffer_;
   int buffer_size_;
   int bytes_used_;
   int64_t cluster_timecode_;

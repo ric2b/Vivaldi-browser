@@ -40,7 +40,7 @@ void MessageFramer::MessageHeader::PrependToString(std::string* str) {
   MessageHeader output = *this;
   output.message_size = base::HostToNet32(message_size);
   size_t header_size = MessageHeader::header_size();
-  scoped_ptr<char, base::FreeDeleter> char_array(
+  std::unique_ptr<char, base::FreeDeleter> char_array(
       static_cast<char*>(malloc(header_size)));
   memcpy(char_array.get(), &output, header_size);
   str->insert(0, char_array.get(), header_size);
@@ -113,14 +113,14 @@ size_t MessageFramer::BytesRequested() {
   }
 }
 
-scoped_ptr<CastMessage> MessageFramer::Ingest(size_t num_bytes,
-                                              size_t* message_length,
-                                              ChannelError* error) {
+std::unique_ptr<CastMessage> MessageFramer::Ingest(size_t num_bytes,
+                                                   size_t* message_length,
+                                                   ChannelError* error) {
   DCHECK(error);
   DCHECK(message_length);
   if (error_) {
     *error = CHANNEL_ERROR_INVALID_MESSAGE;
-    return scoped_ptr<CastMessage>();
+    return nullptr;
   }
 
   DCHECK_EQ(base::checked_cast<int32_t>(message_bytes_received_),
@@ -139,7 +139,7 @@ scoped_ptr<CastMessage> MessageFramer::Ingest(size_t num_bytes,
           VLOG(1) << "Error parsing header (message size too large).";
           *error = CHANNEL_ERROR_INVALID_MESSAGE;
           error_ = true;
-          return scoped_ptr<CastMessage>();
+          return nullptr;
         }
         current_element_ = BODY;
         body_size_ = header.message_size;
@@ -147,14 +147,14 @@ scoped_ptr<CastMessage> MessageFramer::Ingest(size_t num_bytes,
       break;
     case BODY:
       if (BytesRequested() == 0) {
-        scoped_ptr<CastMessage> parsed_message(new CastMessage);
+        std::unique_ptr<CastMessage> parsed_message(new CastMessage);
         if (!parsed_message->ParseFromArray(
                 input_buffer_->StartOfBuffer() + MessageHeader::header_size(),
                 body_size_)) {
           VLOG(1) << "Error parsing packet body.";
           *error = CHANNEL_ERROR_INVALID_MESSAGE;
           error_ = true;
-          return scoped_ptr<CastMessage>();
+          return nullptr;
         }
         *message_length = body_size_;
         Reset();
@@ -163,11 +163,11 @@ scoped_ptr<CastMessage> MessageFramer::Ingest(size_t num_bytes,
       break;
     default:
       NOTREACHED() << "Unhandled packet element type.";
-      return scoped_ptr<CastMessage>();
+      return nullptr;
   }
 
   input_buffer_->set_offset(message_bytes_received_);
-  return scoped_ptr<CastMessage>();
+  return nullptr;
 }
 
 void MessageFramer::Reset() {

@@ -4,7 +4,8 @@
 
 #include "ash/shell.h"
 #include "ash/shell_factory.h"
-#include "ash/wm/coordinate_conversion.h"
+#include "ash/wm/aura/wm_window_aura.h"
+#include "ash/wm/common/root_window_finder.h"
 #include "ash/wm/window_properties.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/screen_position_client.h"
@@ -14,7 +15,7 @@
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/test/ui_controls.h"
 #include "ui/base/test/ui_controls_aura.h"
-#include "ui/gfx/screen.h"
+#include "ui/display/screen.h"
 
 DECLARE_WINDOW_PROPERTY_TYPE(ui_controls::UIControlsAura*)
 
@@ -45,7 +46,8 @@ UIControlsAura* GetUIControlsForRootWindow(aura::Window* root_window) {
 // Returns the UIControls object for the RootWindow at |point_in_screen|.
 UIControlsAura* GetUIControlsAt(const gfx::Point& point_in_screen) {
   // TODO(mazda): Support the case passive grab is taken.
-  return GetUIControlsForRootWindow(ash::wm::GetRootWindowAt(point_in_screen));
+  return GetUIControlsForRootWindow(wm::WmWindowAura::GetAuraWindow(
+      ash::wm::GetRootWindowAt(point_in_screen)));
 }
 
 }  // namespace
@@ -97,7 +99,7 @@ class UIControlsAsh : public UIControlsAura {
   }
 
   bool SendMouseEvents(MouseButton type, int state) override {
-    gfx::Point p(gfx::Screen::GetScreen()->GetCursorScreenPoint());
+    gfx::Point p(display::Screen::GetScreen()->GetCursorScreenPoint());
     UIControlsAura* ui_controls = GetUIControlsAt(p);
     return ui_controls && ui_controls->SendMouseEvents(type, state);
   }
@@ -112,7 +114,7 @@ class UIControlsAsh : public UIControlsAura {
   }
 
   bool SendMouseClick(MouseButton type) override {
-    gfx::Point p(gfx::Screen::GetScreen()->GetCursorScreenPoint());
+    gfx::Point p(display::Screen::GetScreen()->GetCursorScreenPoint());
     UIControlsAura* ui_controls = GetUIControlsAt(p);
     return ui_controls && ui_controls->SendMouseClick(type);
   }

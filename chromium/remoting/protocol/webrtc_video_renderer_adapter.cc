@@ -11,7 +11,7 @@
 #include "base/callback.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "remoting/protocol/frame_consumer.h"
 #include "third_party/libyuv/include/libyuv/video_common.h"
 #include "third_party/webrtc/media/base/videoframe.h"
@@ -46,6 +46,10 @@ WebrtcVideoRendererAdapter::WebrtcVideoRendererAdapter(
 
 WebrtcVideoRendererAdapter::~WebrtcVideoRendererAdapter() {
   DCHECK(task_runner_->BelongsToCurrentThread());
+
+  webrtc::VideoTrackVector video_tracks = media_stream_->GetVideoTracks();
+  DCHECK(!video_tracks.empty());
+  video_tracks[0]->RemoveSink(this);
 }
 
 void WebrtcVideoRendererAdapter::OnFrame(const cricket::VideoFrame& frame) {
@@ -55,7 +59,7 @@ void WebrtcVideoRendererAdapter::OnFrame(const cricket::VideoFrame& frame) {
   // BasicDesktopFrame is created directly. This will not work correctly with
   // all FrameConsumer implementations. Fix this somehow.
   std::unique_ptr<webrtc::DesktopFrame> rgb_frame(new webrtc::BasicDesktopFrame(
-      webrtc::DesktopSize(frame.GetWidth(), frame.GetHeight())));
+      webrtc::DesktopSize(frame.width(), frame.height())));
 
   frame.ConvertToRgbBuffer(
       output_format_fourcc_, rgb_frame->data(),
@@ -75,5 +79,5 @@ void WebrtcVideoRendererAdapter::DrawFrame(
   frame_consumer_->DrawFrame(std::move(frame), base::Closure());
 }
 
-}  // namespace remoting
 }  // namespace protocol
+}  // namespace remoting

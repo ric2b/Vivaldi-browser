@@ -5,19 +5,11 @@
 /**
  * @fileoverview
  * 'settings-people-page' is the settings page containing sign-in settings.
- *
- * Example:
- *
- *    <iron-animated-pages>
- *      <settings-people-page prefs="{{prefs}}"></settings-people-page>
- *      ... other pages ...
- *    </iron-animated-pages>
  */
 Polymer({
   is: 'settings-people-page',
 
   behaviors: [
-    I18nBehavior,
     WebUIListenerBehavior,
   ],
 
@@ -39,7 +31,7 @@ Polymer({
     },
 
     /**
-     * The current sync status, supplied by settings.SyncPrivateApi.
+     * The current sync status, supplied by SyncBrowserProxy.
      * @type {?settings.SyncStatus}
      */
     syncStatus: Object,
@@ -54,9 +46,29 @@ Polymer({
      */
     profileName_: String,
 
+    /** @private {!settings.SyncBrowserProxyImpl} */
+    syncBrowserProxy_: {
+      type: Object,
+      value: function() {
+        return settings.SyncBrowserProxyImpl.getInstance();
+      },
+    },
+
 <if expr="chromeos">
+    /**
+     * True if Pin Unlock is allowed on this machine.
+     */
+    pinUnlockAllowed_: {
+      type: Boolean,
+      value: function() {
+        /* TODO(jdufault): Return a real value via quickUnlockPrivate API. */
+        return false;
+      },
+      readOnly: true,
+    },
+
     /** @private {!settings.EasyUnlockBrowserProxyImpl} */
-    browserProxy_: {
+    easyUnlockBrowserProxy_: {
       type: Object,
       value: function() {
         return settings.EasyUnlockBrowserProxyImpl.getInstance();
@@ -100,16 +112,22 @@ Polymer({
 
   /** @override */
   attached: function() {
-    settings.SyncPrivateApi.getProfileInfo(this.handleProfileInfo_.bind(this));
-    settings.SyncPrivateApi.getSyncStatus(
-        this.handleSyncStatusFetched_.bind(this));
+    settings.ProfileInfoBrowserProxyImpl.getInstance().getProfileInfo().then(
+        this.handleProfileInfo_.bind(this));
+    this.addWebUIListener('profile-info-changed',
+                          this.handleProfileInfo_.bind(this));
+
+    this.syncBrowserProxy_.getSyncStatus().then(
+        this.handleSyncStatus_.bind(this));
+    this.addWebUIListener('sync-status-changed',
+                          this.handleSyncStatus_.bind(this));
 
 <if expr="chromeos">
     if (this.easyUnlockAllowed_) {
       this.addWebUIListener(
           'easy-unlock-enabled-status',
           this.handleEasyUnlockEnabledStatusChanged_.bind(this));
-      this.browserProxy_.getEnabledStatus().then(
+      this.easyUnlockBrowserProxy_.getEnabledStatus().then(
           this.handleEasyUnlockEnabledStatusChanged_.bind(this));
     }
 </if>
@@ -118,24 +136,20 @@ Polymer({
   /**
    * Handler for when the profile's icon and name is updated.
    * @private
-   * @param {!string} name
-   * @param {!string} iconUrl
+   * @param {!settings.ProfileInfo} info
    */
-  handleProfileInfo_: function(name, iconUrl) {
-    this.profileName_ = name;
-    this.profileIconUrl_ = iconUrl;
+  handleProfileInfo_: function(info) {
+    this.profileName_ = info.name;
+    this.profileIconUrl_ = info.iconUrl;
   },
 
   /**
-   * Handler for when the sync state is pushed from settings.SyncPrivateApi.
+   * Handler for when the sync state is pushed from the browser.
+   * @param {?settings.SyncStatus} syncStatus
    * @private
    */
-  handleSyncStatusFetched_: function(syncStatus) {
+  handleSyncStatus_: function(syncStatus) {
     this.syncStatus = syncStatus;
-
-    // TODO(tommycli): Remove once we figure out how to refactor the sync
-    // code to not include HTML in the status messages.
-    this.$.syncStatusText.innerHTML = syncStatus.statusText;
   },
 
 <if expr="chromeos">
@@ -147,11 +161,6 @@ Polymer({
     this.easyUnlockEnabled_ = easyUnlockEnabled;
   },
 </if>
-
-  /** @private */
-  onActionLinkTap_: function() {
-    settings.SyncPrivateApi.showSetupUI();
-  },
 
   /** @private */
   onPictureTap_: function() {
@@ -171,8 +180,13 @@ Polymer({
 </if>
 
   /** @private */
+  onActivityControlsTap_: function() {
+    this.syncBrowserProxy_.openActivityControlsUrl();
+  },
+
+  /** @private */
   onSigninTap_: function() {
-    settings.SyncPrivateApi.startSignIn();
+    this.syncBrowserProxy_.startSignIn();
   },
 
   /** @private */
@@ -183,20 +197,26 @@ Polymer({
   /** @private */
   onDisconnectConfirm_: function() {
     var deleteProfile = this.$.deleteProfile && this.$.deleteProfile.checked;
-    settings.SyncPrivateApi.disconnect(deleteProfile);
+    this.syncBrowserProxy_.signOut(deleteProfile);
 
     // Dialog automatically closed because button has dialog-confirm attribute.
   },
 
   /** @private */
   onSyncTap_: function() {
+    assert(this.syncStatus.signedIn);
+    assert(this.syncStatus.syncSystemEnabled);
+
+    if (this.syncStatus.managed)
+      return;
+
     this.$.pages.setSubpageChain(['sync']);
   },
 
 <if expr="chromeos">
   /** @private */
   onEasyUnlockSetupTap_: function() {
-    this.browserProxy_.startTurnOnFlow();
+    this.easyUnlockBrowserProxy_.startTurnOnFlow();
   },
 
   /** @private */
@@ -208,7 +228,7 @@ Polymer({
   /** @private */
   onManageOtherPeople_: function() {
 <if expr="not chromeos">
-    settings.SyncPrivateApi.manageOtherPeople();
+    this.syncBrowserProxy_.manageOtherPeople();
 </if>
 <if expr="chromeos">
     this.$.pages.setSubpageChain(['users']);
@@ -217,18 +237,27 @@ Polymer({
 
   /**
    * @private
+   * @param {?settings.SyncStatus} syncStatus
    * @return {boolean}
    */
-  isStatusTextSet_: function(syncStatus) {
-    return syncStatus && syncStatus.statusText.length > 0;
+  isAdvancedSyncSettingsVisible_: function(syncStatus) {
+    return !!syncStatus && !!syncStatus.signedIn &&
+        !!syncStatus.syncSystemEnabled;
   },
 
   /**
    * @private
-   * @return {boolean}
+   * @param {?settings.SyncStatus} syncStatus
+   * @return {string}
    */
-  isAdvancedSyncSettingsVisible_: function(syncStatus) {
-    return syncStatus && syncStatus.signedIn && !syncStatus.managed &&
-           syncStatus.syncSystemEnabled;
+  getSyncIcon_: function(syncStatus) {
+    if (!syncStatus)
+      return '';
+    if (syncStatus.hasError)
+      return 'settings:sync-problem';
+    if (syncStatus.managed)
+      return 'settings:sync-disabled';
+
+    return 'settings:done';
   },
 });

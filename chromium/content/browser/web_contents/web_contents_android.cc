@@ -158,7 +158,7 @@ void AXTreeSnapshotCallback(const ScopedJavaGlobalRef<jobject>& callback,
     Java_WebContentsImpl_onAccessibilitySnapshot(env, nullptr, callback.obj());
     return;
   }
-  scoped_ptr<BrowserAccessibilityManagerAndroid> manager(
+  std::unique_ptr<BrowserAccessibilityManagerAndroid> manager(
       static_cast<BrowserAccessibilityManagerAndroid*>(
           BrowserAccessibilityManager::Create(result, nullptr)));
   manager->set_prune_tree_for_screen_reader(false);
@@ -237,7 +237,7 @@ bool WebContentsAndroid::Register(JNIEnv* env) {
   return RegisterNativesImpl(env);
 }
 
-WebContentsAndroid::WebContentsAndroid(WebContents* web_contents)
+WebContentsAndroid::WebContentsAndroid(WebContentsImpl* web_contents)
     : web_contents_(web_contents),
       navigation_controller_(&(web_contents->GetController())),
       synchronous_compositor_client_(nullptr),
@@ -576,7 +576,7 @@ void WebContentsAndroid::SendMessageToFrame(
   base::string16 source_origin;
   base::string16 j_target_origin(ConvertJavaStringToUTF16(env, target_origin));
   base::string16 j_message(ConvertJavaStringToUTF16(env, message));
-  std::vector<content::TransferredMessagePort> ports;
+  std::vector<int> ports;
   content::MessagePortProvider::PostMessageToFrame(
       web_contents_, source_origin, j_target_origin, j_message, ports);
 }

@@ -6,7 +6,7 @@
 // chromium\src\media\filters\audio_file_reader_unittest.cc.
 
 #include "base/bind.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/threading/thread.h"
 #include "content/common/gpu/media/test_pipeline_host.h"
 #include "media/base/audio_bus.h"
@@ -20,10 +20,10 @@
 namespace content {
 
 namespace {
-scoped_ptr<media::IPCMediaPipelineHost> CreateIPCMediaPipelineHost(
+std::unique_ptr<media::IPCMediaPipelineHost> CreateIPCMediaPipelineHost(
     const scoped_refptr<base::SequencedTaskRunner>& decode_task_runner,
     media::DataSource* data_source) {
-  return make_scoped_ptr(new TestPipelineHost(data_source));
+  return base::WrapUnique(new TestPipelineHost(data_source));
 }
 }  // namespace
 
@@ -57,7 +57,7 @@ class IPCAudioDecoderTest : public testing::Test {
   // Reads the entire file provided to Initialize().
   void ReadAndVerify(const std::string& expected_audio_hash,
                      int expected_frames) {
-    scoped_ptr<media::AudioBus> decoded_audio_data = media::AudioBus::Create(
+    std::unique_ptr<media::AudioBus> decoded_audio_data = media::AudioBus::Create(
         decoder_->channels(), decoder_->number_of_frames());
     const int actual_frames = decoder_->Read(decoded_audio_data.get());
 
@@ -99,8 +99,8 @@ class IPCAudioDecoderTest : public testing::Test {
  private:
   base::Thread decode_thread_;
   scoped_refptr<media::DecoderBuffer> data_;
-  scoped_ptr<media::InMemoryUrlProtocol> protocol_;
-  scoped_ptr<media::IPCAudioDecoder> decoder_;
+  std::unique_ptr<media::InMemoryUrlProtocol> protocol_;
+  std::unique_ptr<media::IPCAudioDecoder> decoder_;
 
   DISALLOW_COPY_AND_ASSIGN(IPCAudioDecoderTest);
 };

@@ -53,9 +53,8 @@ void ImageDecoderImpl::DecodeImage(
   if (codec == mojom::ImageCodec::ROBUST_JPEG) {
     // Our robust jpeg decoding is using IJG libjpeg.
     if (encoded_data.size()) {
-      scoped_ptr<SkBitmap> decoded_jpeg(
-          gfx::JPEGCodecRobustSlow::Decode(encoded_data.storage().data(),
-                                           encoded_data.size()));
+      std::unique_ptr<SkBitmap> decoded_jpeg(gfx::JPEGCodecRobustSlow::Decode(
+          encoded_data.storage().data(), encoded_data.size()));
       if (decoded_jpeg.get() && !decoded_jpeg->empty())
         decoded_image = *decoded_jpeg;
     }
@@ -76,9 +75,11 @@ void ImageDecoderImpl::DecodeImage(
   }
 
   if (!decoded_image.isNull()) {
-    skia::mojom::BitmapPtr dummy_image = skia::mojom::Bitmap::New();
-    int64_t struct_size =
-        skia::mojom::GetSerializedSize_(dummy_image, nullptr) + kPadding;
+    // When serialized, the space taken up by a skia::mojom::Bitmap excluding
+    // the pixel data payload should be:
+    //   sizeof(skia::mojom::Bitmap::Data_) + pixel data array header (8 bytes)
+    // Use a bigger number in case we need padding at the end.
+    int64_t struct_size = sizeof(skia::mojom::Bitmap::Data_) + kPadding;
     int64_t image_size = decoded_image.computeSize64();
     int halves = 0;
     while (struct_size + (image_size >> 2 * halves) > max_message_size_)

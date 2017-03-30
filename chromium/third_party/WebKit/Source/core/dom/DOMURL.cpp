@@ -33,8 +33,6 @@
 #include "core/dom/URLSearchParams.h"
 #include "core/fetch/MemoryCache.h"
 #include "core/fileapi/Blob.h"
-#include "core/frame/Deprecation.h"
-#include "core/frame/UseCounter.h"
 #include "core/html/PublicURLManager.h"
 #include "platform/blob/BlobURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -85,22 +83,6 @@ void DOMURL::setSearch(const String& value)
         updateSearchParams(value);
 }
 
-String DOMURL::createObjectURL(ExecutionContext* executionContext, Blob* blob, ExceptionState& exceptionState)
-{
-    DCHECK(blob);
-    if (!executionContext)
-        return String();
-
-    if (executionContext->isServiceWorkerGlobalScope())
-        Deprecation::countDeprecation(executionContext, UseCounter::URLMethodCreateObjectURLServiceWorker);
-
-    if (blob->hasBeenClosed()) {
-        exceptionState.throwDOMException(InvalidStateError, String(blob->isFile() ? "File" : "Blob") + " has been closed.");
-        return String();
-    }
-    return createPublicURL(executionContext, blob, blob->uuid());
-}
-
 String DOMURL::createPublicURL(ExecutionContext* executionContext, URLRegistrable* registrable, const String& uuid)
 {
     KURL publicURL = BlobURL::createPublicURL(executionContext->getSecurityOrigin());
@@ -110,19 +92,6 @@ String DOMURL::createPublicURL(ExecutionContext* executionContext, URLRegistrabl
     executionContext->publicURLManager().registerURL(executionContext->getSecurityOrigin(), publicURL, registrable, uuid);
 
     return publicURL.getString();
-}
-
-void DOMURL::revokeObjectURL(ExecutionContext* executionContext, const String& urlString)
-{
-    if (!executionContext)
-        return;
-
-    if (executionContext->isServiceWorkerGlobalScope())
-        Deprecation::countDeprecation(executionContext, UseCounter::URLMethodRevokeObjectURLServiceWorker);
-
-    KURL url(KURL(), urlString);
-    executionContext->removeURLFromMemoryCache(url);
-    executionContext->publicURLManager().revoke(url);
 }
 
 void DOMURL::revokeObjectUUID(ExecutionContext* executionContext, const String& uuid)

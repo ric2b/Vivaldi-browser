@@ -18,7 +18,6 @@
 #include "cc/base/list_container.h"
 #include "cc/quads/render_pass_id.h"
 #include "cc/surfaces/surface_id.h"
-#include "skia/ext/refptr.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/transform.h"
@@ -57,18 +56,18 @@ class CC_EXPORT RenderPass {
  public:
   ~RenderPass();
 
-  static scoped_ptr<RenderPass> Create();
-  static scoped_ptr<RenderPass> Create(size_t num_layers);
-  static scoped_ptr<RenderPass> Create(size_t shared_quad_state_list_size,
-                                       size_t quad_list_size);
+  static std::unique_ptr<RenderPass> Create();
+  static std::unique_ptr<RenderPass> Create(size_t num_layers);
+  static std::unique_ptr<RenderPass> Create(size_t shared_quad_state_list_size,
+                                            size_t quad_list_size);
 
   // A shallow copy of the render pass, which does not include its quads or copy
   // requests.
-  scoped_ptr<RenderPass> Copy(RenderPassId new_id) const;
+  std::unique_ptr<RenderPass> Copy(RenderPassId new_id) const;
 
   // A deep copy of the render passes in the list including the quads.
-  static void CopyAll(const std::vector<scoped_ptr<RenderPass>>& in,
-                      std::vector<scoped_ptr<RenderPass>>* out);
+  static void CopyAll(const std::vector<std::unique_ptr<RenderPass>>& in,
+                      std::vector<std::unique_ptr<RenderPass>>* out);
 
   void SetNew(RenderPassId id,
               const gfx::Rect& output_rect,
@@ -115,7 +114,7 @@ class CC_EXPORT RenderPass {
   // contents as a bitmap, and give a copy of the bitmap to each callback in
   // this list. This property should not be serialized between compositors, as
   // it only makes sense in the root compositor.
-  std::vector<scoped_ptr<CopyOutputRequest>> copy_requests;
+  std::vector<std::unique_ptr<CopyOutputRequest>> copy_requests;
 
   QuadList quad_list;
   SharedQuadStateList shared_quad_state_list;
@@ -134,7 +133,7 @@ class CC_EXPORT RenderPass {
   DISALLOW_COPY_AND_ASSIGN(RenderPass);
 };
 
-using RenderPassList = std::vector<scoped_ptr<RenderPass>>;
+using RenderPassList = std::vector<std::unique_ptr<RenderPass>>;
 using RenderPassIdHashMap =
     std::unordered_map<RenderPassId, RenderPass*, RenderPassIdHash>;
 

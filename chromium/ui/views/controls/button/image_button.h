@@ -5,9 +5,10 @@
 #ifndef UI_VIEWS_CONTROLS_BUTTON_IMAGE_BUTTON_H_
 #define UI_VIEWS_CONTROLS_BUTTON_IMAGE_BUTTON_H_
 
+#include <memory>
+
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "ui/base/layout.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/views/controls/button/custom_button.h"
@@ -17,11 +18,9 @@ namespace views {
 class Painter;
 
 // An image button.
-
 // Note that this type of button is not focusable by default and will not be
-// part of the focus chain.  Call SetFocusable(true) to make it part of the
-// focus chain.
-
+// part of the focus chain, unless in accessibility mode. Call
+// SetFocusForPlatform() to make it part of the focus chain.
 class VIEWS_EXPORT ImageButton : public CustomButton {
  public:
   static const char kViewClassName[];
@@ -56,7 +55,7 @@ class VIEWS_EXPORT ImageButton : public CustomButton {
   void SetImageAlignment(HorizontalAlignment h_align,
                          VerticalAlignment v_align);
 
-  void SetFocusPainter(scoped_ptr<Painter> focus_painter);
+  void SetFocusPainter(std::unique_ptr<Painter> focus_painter);
 
   // The minimum size of the contents (not including the border). The contents
   // will be at least this size, but may be larger if the image itself is
@@ -113,7 +112,7 @@ class VIEWS_EXPORT ImageButton : public CustomButton {
   // resources.
   bool draw_image_mirrored_;
 
-  scoped_ptr<Painter> focus_painter_;
+  std::unique_ptr<Painter> focus_painter_;
 
   DISALLOW_COPY_AND_ASSIGN(ImageButton);
 };

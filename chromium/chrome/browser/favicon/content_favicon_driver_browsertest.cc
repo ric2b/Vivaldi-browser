@@ -10,7 +10,7 @@
 #include "base/run_loop.h"
 #include "base/scoped_observer.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/ui/browser.h"
@@ -210,7 +210,7 @@ IN_PROC_BROWSER_TEST_F(ContentFaviconDriverTest, ReloadBypassingCache) {
   GURL url = embedded_test_server()->GetURL("/favicon/page_with_favicon.html");
   GURL icon_url = embedded_test_server()->GetURL("/favicon/icon.png");
 
-  scoped_ptr<TestResourceDispatcherHostDelegate> delegate(
+  std::unique_ptr<TestResourceDispatcherHostDelegate> delegate(
       new TestResourceDispatcherHostDelegate(icon_url));
   content::ResourceDispatcherHost::Get()->SetDelegate(delegate.get());
 

@@ -9,6 +9,7 @@
 
 #include "mojo/public/cpp/bindings/lib/bindings_internal.h"
 #include "mojo/public/cpp/bindings/lib/bounds_checker.h"
+#include "mojo/public/cpp/bindings/lib/serialization_util.h"
 #include "mojo/public/cpp/bindings/lib/validate_params.h"
 #include "mojo/public/cpp/bindings/lib/validation_errors.h"
 #include "mojo/public/cpp/bindings/message.h"
@@ -29,6 +30,14 @@ bool ValidateEncodedPointer(const uint64_t* offset);
 // claimed version.
 bool ValidateStructHeaderAndClaimMemory(const void* data,
                                         BoundsChecker* bounds_checker);
+
+// Validates that |data| contains a valid union header, in terms of alignment
+// and size. If not inlined, it checks that the memory range
+// [data, data + num_bytes) is not marked as occupied by other objects in
+// |bounds_checker|. On success, the memory range is marked as occupied.
+bool ValidateUnionHeaderAndClaimMemory(const void* data,
+                                       bool inlined,
+                                       BoundsChecker* bounds_checker);
 
 // Validates that the message is a request which doesn't expect a response.
 bool ValidateMessageIsRequestWithoutResponse(const Message* message);
@@ -73,13 +82,14 @@ bool ValidateInlinedUnionNonNullable(const T& input,
   return false;
 }
 
-bool ValidateHandleNonNullable(const Handle& input, const char* error_message);
+bool ValidateHandleNonNullable(const Handle_Data& input,
+                               const char* error_message);
 
 bool ValidateInterfaceIdNonNullable(InterfaceId input,
                                     const char* error_message);
 
 template <typename T>
-bool ValidateArray(const ArrayPointer<T>& input,
+bool ValidateArray(const Pointer<Array_Data<T>>& input,
                    BoundsChecker* bounds_checker,
                    const ArrayValidateParams* validate_params) {
   if (!ValidateEncodedPointer(&input.offset)) {
@@ -92,7 +102,7 @@ bool ValidateArray(const ArrayPointer<T>& input,
 }
 
 template <typename T>
-bool ValidateMap(const StructPointer<T>& input,
+bool ValidateMap(const Pointer<T>& input,
                  BoundsChecker* bounds_checker,
                  const ArrayValidateParams* value_validate_params) {
   if (!ValidateEncodedPointer(&input.offset)) {
@@ -105,8 +115,7 @@ bool ValidateMap(const StructPointer<T>& input,
 }
 
 template <typename T>
-bool ValidateStruct(const StructPointer<T>& input,
-                    BoundsChecker* bounds_checker) {
+bool ValidateStruct(const Pointer<T>& input, BoundsChecker* bounds_checker) {
   if (!ValidateEncodedPointer(&input.offset)) {
     ReportValidationError(VALIDATION_ERROR_ILLEGAL_POINTER);
     return false;
@@ -120,24 +129,20 @@ bool ValidateInlinedUnion(const T& input, BoundsChecker* bounds_checker) {
   return T::Validate(&input, bounds_checker, true);
 }
 
-bool ValidateHandle(const Handle& input, BoundsChecker* bounds_checker);
+template <typename T>
+bool ValidateNonInlinedUnion(const Pointer<T>& input,
+                             BoundsChecker* bounds_checker) {
+  if (!ValidateEncodedPointer(&input.offset)) {
+    ReportValidationError(VALIDATION_ERROR_ILLEGAL_POINTER);
+    return false;
+  }
+
+  return T::Validate(DecodePointerRaw(&input.offset), bounds_checker, false);
+}
+
+bool ValidateHandle(const Handle_Data& input, BoundsChecker* bounds_checker);
 
 bool ValidateAssociatedInterfaceId(InterfaceId input);
-
-// Checks whether the given enum value is valid. Please note that any value is
-// valid for an extensible enum, although it may be from a newer version and
-// thus unknown.
-template <typename T>
-bool ValidateEnum(const T& input) {
-  if (T::kIsExtensible)
-    return true;
-
-  if (T::IsKnownValue(input.value))
-    return true;
-
-  ReportValidationError(VALIDATION_ERROR_UNKNOWN_ENUM_VALUE);
-  return false;
-}
 
 }  // namespace internal
 }  // namespace mojo

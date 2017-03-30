@@ -11,7 +11,7 @@
 
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/local_discovery/service_discovery_shared_client.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/ip_address.h"
@@ -31,9 +31,9 @@ using ServiceTxtRecordMap = std::map<std::string, std::string>;
 // Parses TXT record strings into a map. TXT key-value strings are assumed to
 // follow the form "$key(=$value)?", where $key must contain at least one
 // character, and $value may be empty.
-scoped_ptr<ServiceTxtRecordMap> ParseServiceTxtRecord(
+std::unique_ptr<ServiceTxtRecordMap> ParseServiceTxtRecord(
     const std::vector<std::string>& record) {
-  scoped_ptr<ServiceTxtRecordMap> record_map(new ServiceTxtRecordMap());
+  std::unique_ptr<ServiceTxtRecordMap> record_map(new ServiceTxtRecordMap());
   for (const auto& key_value_str : record) {
     if (key_value_str.empty())
       continue;
@@ -54,7 +54,7 @@ scoped_ptr<ServiceTxtRecordMap> ParseServiceTxtRecord(
 
 AndroidDeviceManager::DeviceInfo ServiceDescriptionToDeviceInfo(
     const ServiceDescription& service_description) {
-  scoped_ptr<ServiceTxtRecordMap> record_map =
+  std::unique_ptr<ServiceTxtRecordMap> record_map =
       ParseServiceTxtRecord(service_description.metadata);
 
   AndroidDeviceManager::DeviceInfo device_info;
@@ -133,7 +133,7 @@ class CastDeviceProvider::DeviceListerDelegate
   // messages will be posted).
   scoped_refptr<base::SingleThreadTaskRunner> runner_;
   scoped_refptr<ServiceDiscoverySharedClient> service_discovery_client_;
-  scoped_ptr<ServiceDiscoveryDeviceLister> device_lister_;
+  std::unique_ptr<ServiceDiscoveryDeviceLister> device_lister_;
 };
 
 CastDeviceProvider::CastDeviceProvider() : weak_factory_(this) {}

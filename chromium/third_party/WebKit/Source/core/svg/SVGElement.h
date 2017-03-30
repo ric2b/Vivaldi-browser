@@ -126,11 +126,6 @@ public:
     void setCursorElement(SVGCursorElement*);
     void setCursorImageValue(CSSCursorImageValue*);
 
-#if !ENABLE(OILPAN)
-    void cursorElementRemoved();
-    void cursorImageValueRemoved();
-#endif
-
     SVGElement* correspondingElement() const;
     void setCorrespondingElement(SVGElement*);
     SVGUseElement* correspondingUseElement() const;
@@ -139,7 +134,7 @@ public:
 
     PassRefPtr<ComputedStyle> customStyleForLayoutObject() final;
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     virtual bool isAnimatableAttribute(const QualifiedName&) const;
 #endif
 
@@ -227,8 +222,8 @@ protected:
     void reportAttributeParsingError(SVGParsingError, const QualifiedName&, const AtomicString&);
     bool hasFocusEventListeners() const;
 
-    bool addEventListenerInternal(const AtomicString& eventType, EventListener*, const EventListenerOptions&) final;
-    bool removeEventListenerInternal(const AtomicString& eventType, EventListener*, const EventListenerOptions&) final;
+    void addedEventListener(const AtomicString& eventType, RegisteredEventListener&) final;
+    void removedEventListener(const AtomicString& eventType, const RegisteredEventListener&) final;
 
 private:
     bool isSVGElement() const = delete; // This will catch anyone doing an unnecessary check.

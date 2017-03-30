@@ -67,13 +67,17 @@ TEST_F(LayerTreeJsonParserSanityCheck, Basic) {
                                   &task_graph_runner);
   LayerTreeImpl* tree = host_impl.active_tree();
 
-  scoped_ptr<LayerImpl> root_impl(LayerImpl::Create(tree, 1));
-  scoped_ptr<LayerImpl> parent(LayerImpl::Create(tree, 2));
-  scoped_ptr<LayerImpl> child(LayerImpl::Create(tree, 3));
+  std::unique_ptr<LayerImpl> root_impl(LayerImpl::Create(tree, 1));
+  std::unique_ptr<LayerImpl> parent(LayerImpl::Create(tree, 2));
+  std::unique_ptr<LayerImpl> child(LayerImpl::Create(tree, 3));
 
   root_impl->SetBounds(gfx::Size(100, 100));
   parent->SetBounds(gfx::Size(50, 50));
   child->SetBounds(gfx::Size(40, 40));
+
+  gfx::Transform translate;
+  translate.Translate(10, 15);
+  child->SetTransform(translate);
 
   parent->SetPosition(gfx::PointF(25.f, 25.f));
 
@@ -95,8 +99,8 @@ TEST_F(LayerTreeJsonParserSanityCheck, EventHandlerRegions) {
                                   &task_graph_runner);
   LayerTreeImpl* tree = host_impl.active_tree();
 
-  scoped_ptr<LayerImpl> root_impl(LayerImpl::Create(tree, 1));
-  scoped_ptr<LayerImpl> touch_layer(LayerImpl::Create(tree, 2));
+  std::unique_ptr<LayerImpl> root_impl(LayerImpl::Create(tree, 1));
+  std::unique_ptr<LayerImpl> touch_layer(LayerImpl::Create(tree, 2));
 
   root_impl->SetBounds(gfx::Size(100, 100));
   touch_layer->SetBounds(gfx::Size(50, 50));

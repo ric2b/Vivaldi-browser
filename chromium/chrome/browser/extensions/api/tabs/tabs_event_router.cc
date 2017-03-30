@@ -71,6 +71,7 @@ TabsEventRouter::TabEntry::TabEntry(TabsEventRouter* router,
       complete_waiting_on_load_(false),
       was_audible_(contents->WasRecentlyAudible()),
       was_muted_(contents->IsAudioMuted()),
+      was_discarded_(false),
       router_(router) {}
 
 std::set<std::string> TabsEventRouter::TabEntry::UpdateLoadState() {
@@ -105,6 +106,13 @@ bool TabsEventRouter::TabEntry::SetMuted(bool new_val) {
   if (was_muted_ == new_val)
     return false;
   was_muted_ = new_val;
+  return true;
+}
+
+bool TabsEventRouter::TabEntry::SetDiscarded(bool new_val) {
+  if (was_discarded_ == new_val)
+    return false;
+  was_discarded_ = new_val;
   return true;
 }
 
@@ -409,6 +417,11 @@ void TabsEventRouter::TabUpdated(TabEntry* entry,
     changed_property_names.insert(tabs_constants::kMutedInfoKey);
   }
 
+  bool discarded = ExtensionTabUtil::IsDiscarded(entry->web_contents());
+  if (entry->SetDiscarded(discarded)) {
+    changed_property_names.insert(tabs_constants::kDiscardedKey);
+  }
+
   if (!changed_property_names.empty()) {
     DispatchTabUpdatedEvent(entry->web_contents(),
                             std::move(changed_property_names));
@@ -489,8 +502,10 @@ void TabsEventRouter::TabChangedAt(WebContents* contents,
                                    int index,
                                    TabChangeType change_type) {
   TabEntry* entry = GetTabEntry(contents);
-  CHECK(entry);
-  TabUpdated(entry, entry->UpdateLoadState());
+  // TabClosingAt() may have already removed the entry for |contents| even
+  // though the tab has not yet been detached.
+  if (entry)
+    TabUpdated(entry, entry->UpdateLoadState());
 }
 
 void TabsEventRouter::TabReplacedAt(TabStripModel* tab_strip_model,

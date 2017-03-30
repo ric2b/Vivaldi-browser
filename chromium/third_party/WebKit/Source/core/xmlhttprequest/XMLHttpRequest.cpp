@@ -22,10 +22,11 @@
 
 #include "core/xmlhttprequest/XMLHttpRequest.h"
 
+#include "bindings/core/v8/ArrayBufferOrArrayBufferViewOrBlobOrDocumentOrStringOrFormData.h"
+#include "bindings/core/v8/ArrayBufferOrArrayBufferViewOrBlobOrUSVString.h"
 #include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/UnionTypesCore.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMArrayBufferView.h"
 #include "core/dom/DOMException.h"
@@ -125,7 +126,9 @@ void logConsoleError(ExecutionContext* context, const String& message)
         return;
     // FIXME: It's not good to report the bad usage without indicating what source line it came from.
     // We should pass additional parameters so we can tell the console where the mistake occurred.
-    context->addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, message));
+    ConsoleMessage* consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, message);
+    consoleMessage->collectCallStack();
+    context->addConsoleMessage(consoleMessage);
 }
 
 enum HeaderValueCategoryByRFC7230 {
@@ -223,11 +226,6 @@ XMLHttpRequest::XMLHttpRequest(ExecutionContext* context, PassRefPtr<SecurityOri
     , m_downloadingToFile(false)
     , m_responseTextOverflow(false)
 {
-#if ENABLE(ASSERT) && !ENABLE(OILPAN)
-    // Verify that this object was allocated on the 'eager' heap.
-    // (this check comes 'for free' with Oilpan enabled.)
-    ASSERT(IS_EAGERLY_FINALIZED());
-#endif
 }
 
 XMLHttpRequest::~XMLHttpRequest()
@@ -345,7 +343,7 @@ Blob* XMLHttpRequest::responseBlob()
                 blobData->setContentType(finalResponseMIMETypeWithFallback().lower());
                 m_binaryResponseBuilder.clear();
             }
-            m_responseBlob = Blob::create(BlobDataHandle::create(blobData.release(), size));
+            m_responseBlob = Blob::create(BlobDataHandle::create(std::move(blobData), size));
         }
     }
 
@@ -361,14 +359,14 @@ DOMArrayBuffer* XMLHttpRequest::responseArrayBuffer()
 
     if (!m_responseArrayBuffer) {
         if (m_binaryResponseBuilder && m_binaryResponseBuilder->size()) {
-            RefPtr<DOMArrayBuffer> buffer = DOMArrayBuffer::createUninitialized(m_binaryResponseBuilder->size(), 1);
+            DOMArrayBuffer* buffer = DOMArrayBuffer::createUninitialized(m_binaryResponseBuilder->size(), 1);
             if (!m_binaryResponseBuilder->getAsBytes(buffer->data(), static_cast<size_t>(buffer->byteLength()))) {
                 // m_binaryResponseBuilder failed to allocate an ArrayBuffer.
                 // We need to crash the renderer since there's no way defined in
                 // the spec to tell this to the user.
                 CRASH();
             }
-            m_responseArrayBuffer = buffer.release();
+            m_responseArrayBuffer = buffer;
             m_binaryResponseBuilder.clear();
         } else {
             m_responseArrayBuffer = DOMArrayBuffer::create(nullptr, 0);
@@ -638,6 +636,15 @@ bool XMLHttpRequest::initSend(ExceptionState& exceptionState)
         return false;
     }
 
+    if (!m_async && exceptionState.isolate() && v8::MicrotasksScope::IsRunningMicrotasks(exceptionState.isolate())) {
+        Deprecation::countDeprecation(getExecutionContext(), UseCounter::During_Microtask_SyncXHR);
+        if (RuntimeEnabledFeatures::disableBlockingMethodsDuringMicrotasksEnabled()) {
+            exceptionState.throwDOMException(InvalidAccessError, "Cannot send() synchronous requests during microtask execution.");
+            return false;
+        }
+    }
+
+
     m_error = false;
     return true;
 }
@@ -652,12 +659,12 @@ void XMLHttpRequest::send(const ArrayBufferOrArrayBufferViewOrBlobOrDocumentOrSt
     }
 
     if (body.isArrayBuffer()) {
-        send(body.getAsArrayBuffer().get(), exceptionState);
+        send(body.getAsArrayBuffer(), exceptionState);
         return;
     }
 
     if (body.isArrayBufferView()) {
-        send(body.getAsArrayBufferView().get(), exceptionState);
+        send(body.getAsArrayBufferView(), exceptionState);
         return;
     }
 
@@ -874,6 +881,9 @@ void XMLHttpRequest::createRequest(PassRefPtr<EncodedFormData> httpBody, Excepti
 
     m_sameOriginRequest = getSecurityOrigin()->canRequestNoSuborigin(m_url);
 
+    if (!m_sameOriginRequest && m_includeCredentials)
+        UseCounter::count(&executionContext, UseCounter::XMLHttpRequestCrossOriginWithCredentials);
+
     // We also remember whether upload events should be allowed for this request in case the upload listeners are
     // added after the request is started.
     m_uploadEventsAllowed = m_sameOriginRequest || uploadEvents || !FetchUtils::isSimpleRequest(m_method, m_requestHeaders);
@@ -948,7 +958,7 @@ void XMLHttpRequest::abort()
     //
     // |sendFlag| is only set when we have an active, asynchronous loader.
     // Don't use it as "the send() flag" when the XHR is in sync mode.
-    bool sendFlag = m_loader;
+    bool sendFlag = m_loader.get();
 
     // internalAbort() clears the response. Save the data needed for
     // dispatching ProgressEvents.
@@ -1019,13 +1029,13 @@ bool XMLHttpRequest::internalAbort()
     // If, window.onload contains open() and send(), m_loader will be set to
     // non 0 value. So, we cannot continue the outer open(). In such case,
     // just abort the outer open() by returning false.
-    OwnPtr<ThreadableLoader> loader = m_loader.release();
+    OwnPtr<ThreadableLoader> loader = std::move(m_loader);
     loader->cancel();
 
     // If abort() called internalAbort() and a nested open() ended up
     // clearing the error flag, but didn't send(), make sure the error
     // flag is still set.
-    bool newLoadStarted = m_loader;
+    bool newLoadStarted = m_loader.get();
     if (!newLoadStarted)
         m_error = true;
 
@@ -1441,7 +1451,7 @@ PassRefPtr<BlobDataHandle> XMLHttpRequest::createBlobDataHandleFromResponse()
         // finalResponseMIMEType() after compatibility investigation.
         blobData->setContentType(finalResponseMIMETypeWithFallback().lower());
     }
-    return BlobDataHandle::create(blobData.release(), m_lengthDownloadedToFile);
+    return BlobDataHandle::create(std::move(blobData), m_lengthDownloadedToFile);
 }
 
 void XMLHttpRequest::notifyParserStopped()
@@ -1555,7 +1565,7 @@ PassOwnPtr<TextResourceDecoder> XMLHttpRequest::createDecoder() const
         // versions, Firefox and Opera.
         decoder->useLenientXMLDecoding();
 
-        return decoder.release();
+        return decoder;
     }
 
     if (responseIsHTML())
@@ -1701,6 +1711,7 @@ DEFINE_TRACE(XMLHttpRequest)
     visitor->trace(m_responseLegacyStream);
     visitor->trace(m_responseDocument);
     visitor->trace(m_responseDocumentParser);
+    visitor->trace(m_responseArrayBuffer);
     visitor->trace(m_progressEventThrottle);
     visitor->trace(m_upload);
     visitor->trace(m_blobLoader);

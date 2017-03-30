@@ -9,6 +9,7 @@ import android.text.TextUtils;
 
 import org.chromium.base.ApplicationState;
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.PackageUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
@@ -66,7 +67,7 @@ public class ExternalDataUseObserver {
             }
             boolean isControlAppInstalled =
                     PackageUtils.getPackageVersion(
-                            ApplicationStatus.getApplicationContext(), mControlAppPackageName)
+                            ContextUtils.getApplicationContext(), mControlAppPackageName)
                     != -1;
             if (isControlAppInstalled != mInstalled) {
                 mInstalled = isControlAppInstalled;
@@ -161,8 +162,7 @@ public class ExternalDataUseObserver {
     /**
      * Asynchronously reports data use to the external observer.
      * @param label the label provided by {@link #ExternalDataUseObserver} for the matching rule.
-     * “ChromeTab” in case traffic was performed in a Chromium tab, and “ChromePlate” in case it was
-     * performed within a ChromePlate.
+     * @param tag “ChromeCustomTab” for Chrome custom tab, or "ChromeTab" for a default tab.
      * @param networkType type of the network on which the traffic was exchanged. This integer value
      * must map to NetworkChangeNotifier.ConnectionType.
      * @param mccMnc MCCMNC of the network on which the traffic was exchanged.
@@ -179,6 +179,14 @@ public class ExternalDataUseObserver {
      * report to be lost.
      */
     @CalledByNative
+    protected void reportDataUse(String label, String tag, int networkType, String mccMnc,
+            long startTimeInMillis, long endTimeInMillis, long bytesDownloaded,
+            long bytesUploaded) {}
+
+    /**
+     * TODO(rajendrant): Remove this function once the downstream CL lands.
+     * This overloaded function is kept to avoid breakage.
+     */
     protected void reportDataUse(String label, int networkType, String mccMnc,
             long startTimeInMillis, long endTimeInMillis, long bytesDownloaded,
             long bytesUploaded) {}

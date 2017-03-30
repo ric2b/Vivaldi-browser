@@ -7,6 +7,7 @@
 #include "ash/shelf/shelf_util.h"
 #include "ash/system/tray/fixed_sized_image_view.h"
 #include "ash/system/tray/tray_constants.h"
+#include "ash/wm/common/shelf/wm_shelf_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/message_center/message_center.h"
 #include "ui/views/controls/label.h"
@@ -183,12 +184,13 @@ void ScreenTrayItem::DestroyDefaultView() {
   default_view_ = NULL;
 }
 
-void ScreenTrayItem::UpdateAfterShelfAlignmentChange(ShelfAlignment alignment) {
+void ScreenTrayItem::UpdateAfterShelfAlignmentChange(
+    wm::ShelfAlignment alignment) {
   if (!tray_view_)
     return;
 
   // Center the item dependent on the orientation of the shelf.
-  views::BoxLayout::Orientation layout = IsHorizontalAlignment(alignment)
+  views::BoxLayout::Orientation layout = wm::IsHorizontalAlignment(alignment)
                                              ? views::BoxLayout::kHorizontal
                                              : views::BoxLayout::kVertical;
   tray_view_->SetLayoutManager(new views::BoxLayout(layout, 0, 0, 0));

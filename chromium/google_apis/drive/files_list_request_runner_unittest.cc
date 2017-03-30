@@ -11,7 +11,7 @@
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "google_apis/drive/base_requests.h"
 #include "google_apis/drive/dummy_auth_service.h"
 #include "google_apis/drive/request_sender.h"
@@ -80,7 +80,6 @@ class FilesListRequestRunnerTest : public testing::Test {
     runner_.reset(new FilesListRequestRunner(
         request_sender_.get(),
         google_apis::DriveApiUrlGenerator(test_server_.base_url(),
-                                          test_server_.GetURL("/download/"),
                                           test_server_.GetURL("/thumbnail/"))));
   }
 

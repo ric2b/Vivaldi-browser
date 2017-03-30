@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include "base/single_thread_task_runner.h"
+#include "media/audio/audio_device_description.h"
 #include "media/audio/audio_manager_base.h"
 #include "media/audio/pulse/pulse_util.h"
 

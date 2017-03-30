@@ -230,6 +230,31 @@ chrome.automation.StateType = {
 };
 
 /**
+ * @enum {number}
+ */
+chrome.automation.NameFromType = {
+  0: '',
+  1: 'nameFromUninitialized',
+  2: 'nameFromAttribute',
+  3: 'nameFromContents',
+  4: 'nameFromPlaceholder',
+  5: 'nameFromRelatedElement',
+  6: 'nameFromValue'
+};
+
+/**
+ * @enum {number}
+ */
+chrome.automation.DescriptionFromType = {
+  0: '',
+  1: 'descriptionFromUninitialized',
+  2: 'descriptionFromAttribute',
+  3: 'descriptionFromContents',
+  4: 'descriptionFromPlaceholder',
+  5: 'descriptionFromRelatedElement'
+};
+
+/**
  * @enum {string}
  */
 chrome.automation.TreeChangeType = {
@@ -260,8 +285,10 @@ chrome.automation.FindParams;
 
 /**
  * @constructor
+ * @param {chrome.automation.EventType} type
+ * @param {chrome.automation.AutomationNode} node
  */
-chrome.automation.AutomationEvent = function() {};
+chrome.automation.AutomationEvent = function(type, node) {};
 
 /**
  * @type {!chrome.automation.AutomationNode}
@@ -329,6 +356,18 @@ chrome.automation.AutomationNode.prototype.role;
  * @type {!Object<chrome.automation.StateType, boolean>}
  */
 chrome.automation.AutomationNode.prototype.state;
+
+
+/**
+ * @type {chrome.automation.NameFromType}
+ */
+chrome.automation.AutomationNode.prototype.nameFrom;
+
+
+/**
+ * @type {chrome.automation.DescriptionFromType}
+ */
+chrome.automation.AutomationNode.prototype.descriptionFrom;
 
 
 /**
@@ -497,7 +536,6 @@ chrome.automation.AutomationNode.prototype.showContextMenu = function() {};
 chrome.automation.AutomationNode.prototype.setSelection =
     function(start, end) {};
 
-
 /** @type {string} */
 chrome.automation.AutomationNode.prototype.containerLiveStatus;
 
@@ -509,6 +547,9 @@ chrome.automation.AutomationNode.prototype.containerLiveAtomic;
 
 /** @type {boolean} */
 chrome.automation.AutomationNode.prototype.containerLiveBusy;
+
+/** @type {string} */
+chrome.automation.AutomationNode.prototype.language;
 
 /** @type {string} */
 chrome.automation.AutomationNode.prototype.liveStatus;
@@ -527,6 +568,12 @@ chrome.automation.AutomationNode.prototype.liveBusy;
  * @param {Object} findParams
  */
 chrome.automation.AutomationNode.prototype.find = function(findParams) {};
+
+/**
+ * @param {Object} findParams
+ * @return {Array<chrome.automation.AutomationNode>}
+ */
+chrome.automation.AutomationNode.prototype.findAll = function(findParams) {};
 
 /**
  * @type {string}
@@ -565,6 +612,11 @@ chrome.automation.AutomationNode.prototype.lineBreaks;
  * @type {(number|undefined)}
  */
 chrome.automation.focusOffset;
+
+/**
+ * @type {(chrome.automation.AutomationNode|undefined)}
+ */
+chrome.automation.AutomationNode.prototype.activeDescendant;
 
 /** @type {function() : !Object} */
 chrome.app.getDetails;

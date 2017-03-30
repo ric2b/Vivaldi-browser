@@ -27,39 +27,35 @@
 #define SkiaImageFilterBuilder_h
 
 #include "platform/PlatformExport.h"
-#include "platform/geometry/FloatSize.h"
 #include "platform/graphics/ColorSpace.h"
-#include "platform/graphics/CompositorFilterOperations.h"
-#include "platform/graphics/GraphicsTypes.h"
-#include "platform/heap/Handle.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
 
 class SkImageFilter;
-class SkMatrix;
+class SkPicture;
 
 namespace blink {
 
 class AffineTransform;
+class BoxReflection;
+class CompositorFilterOperations;
 class FilterEffect;
 class FilterOperations;
 class Image;
 
-class PLATFORM_EXPORT SkiaImageFilterBuilder {
-    STACK_ALLOCATED();
-public:
-    ~SkiaImageFilterBuilder();
+namespace SkiaImageFilterBuilder {
 
-    PassRefPtr<SkImageFilter> build(FilterEffect*, ColorSpace, bool requiresPMColorValidation = true);
-    void buildFilterOperations(const FilterOperations&, CompositorFilterOperations*);
-    PassRefPtr<SkImageFilter> buildTransform(const AffineTransform&, SkImageFilter* input);
+PLATFORM_EXPORT sk_sp<SkImageFilter> build(FilterEffect*, ColorSpace, bool requiresPMColorValidation = true);
+PLATFORM_EXPORT void buildFilterOperations(const FilterOperations&, CompositorFilterOperations*);
+PLATFORM_EXPORT sk_sp<SkImageFilter> buildTransform(const AffineTransform&, sk_sp<SkImageFilter> input);
 
-    PassRefPtr<SkImageFilter> transformColorSpace(
-        SkImageFilter* input, ColorSpace srcColorSpace, ColorSpace dstColorSpace);
+PLATFORM_EXPORT sk_sp<SkImageFilter> transformColorSpace(
+    sk_sp<SkImageFilter> input, ColorSpace srcColorSpace, ColorSpace dstColorSpace);
 
-    SkMatrix matrixForBoxReflectFilter(ReflectionDirection, float offset);
-    PassRefPtr<SkImageFilter> buildBoxReflectFilter(
-        ReflectionDirection, float offset, Image* maskImage, SkImageFilter* input);
-};
+PLATFORM_EXPORT void buildSourceGraphic(FilterEffect*, sk_sp<SkPicture>);
 
+PLATFORM_EXPORT sk_sp<SkImageFilter> buildBoxReflectFilter(const BoxReflection&, sk_sp<SkImageFilter> input);
+
+} // namespace SkiaImageFilterBuilder
 } // namespace blink
 
 #endif

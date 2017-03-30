@@ -16,7 +16,7 @@
 namespace extensions {
 
 bool ThumbnailsIsThumbnailAvailableFunction::RunAsync() {
-  scoped_ptr<vivaldi::thumbnails::IsThumbnailAvailable::Params> params(
+  std::unique_ptr<vivaldi::thumbnails::IsThumbnailAvailable::Params> params(
       vivaldi::thumbnails::IsThumbnailAvailable::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 

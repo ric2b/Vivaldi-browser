@@ -26,8 +26,8 @@
 #include "base/strings/string_util.h"
 #include "base/synchronization/condition_variable.h"
 #include "base/synchronization/lock.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread_local.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/tracked_objects.h"
 #include "build/build_config.h"
@@ -40,7 +40,6 @@
 #include "content/child/child_shared_bitmap_manager.h"
 #include "content/child/fileapi/file_system_dispatcher.h"
 #include "content/child/fileapi/webfilesystem_impl.h"
-#include "content/child/geofencing/geofencing_message_filter.h"
 #include "content/child/memory/child_memory_message_filter.h"
 #include "content/child/mojo/mojo_application.h"
 #include "content/child/notifications/notification_dispatcher.h"
@@ -268,7 +267,8 @@ ChildThreadImpl::Options::Builder::InBrowserProcess(
     const InProcessChildThreadParams& params) {
   options_.browser_process_io_runner = params.io_runner();
   options_.channel_name = params.channel_name();
-  options_.in_process_message_pipe_handle = params.handle();
+  options_.in_process_ipc_token = params.ipc_token();
+  options_.in_process_application_token = params.application_token();
   return *this;
 }
 
@@ -337,15 +337,18 @@ scoped_refptr<base::SequencedTaskRunner> ChildThreadImpl::GetIOTaskRunner() {
 }
 
 void ChildThreadImpl::ConnectChannel(bool use_mojo_channel,
-                                     mojo::ScopedMessagePipeHandle handle) {
+                                     const std::string& ipc_token) {
   bool create_pipe_now = true;
   if (use_mojo_channel) {
     VLOG(1) << "Mojo is enabled on child";
+    mojo::ScopedMessagePipeHandle handle;
     if (!IsInBrowserProcess()) {
       DCHECK(!handle.is_valid());
       handle = mojo::edk::CreateChildMessagePipe(
           base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
               switches::kMojoChannelToken));
+    } else {
+      handle = mojo::edk::CreateChildMessagePipe(ipc_token);
     }
     DCHECK(handle.is_valid());
     channel_->Init(IPC::ChannelMojo::CreateClientFactory(std::move(handle)),
@@ -392,7 +395,17 @@ void ChildThreadImpl::Init(const Options& options) {
     UMA_HISTOGRAM_TIMES("Mojo.Shell.ChildConnectionTime", timer.Elapsed());
   }
 
-  mojo_application_.reset(new MojoApplication(GetIOTaskRunner()));
+  mojo_application_.reset(new MojoApplication());
+  std::string mojo_application_token;
+  if (!IsInBrowserProcess()) {
+    mojo_application_token =
+        base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+            switches::kMojoApplicationChannelToken);
+  } else {
+    mojo_application_token = options.in_process_application_token;
+  }
+  if (!mojo_application_token.empty())
+    mojo_application_->InitWithToken(mojo_application_token);
 
   sync_message_filter_ = channel_->CreateSyncMessageFilter();
   thread_safe_sender_ = new ThreadSafeSender(
@@ -414,8 +427,6 @@ void ChildThreadImpl::Init(const Options& options) {
       new QuotaMessageFilter(thread_safe_sender_.get());
   quota_dispatcher_.reset(new QuotaDispatcher(thread_safe_sender_.get(),
                                               quota_message_filter_.get()));
-  geofencing_message_filter_ =
-      new GeofencingMessageFilter(thread_safe_sender_.get());
   notification_dispatcher_ =
       new NotificationDispatcher(thread_safe_sender_.get());
   push_dispatcher_ = new PushDispatcher(thread_safe_sender_.get());
@@ -426,7 +437,6 @@ void ChildThreadImpl::Init(const Options& options) {
   channel_->AddFilter(notification_dispatcher_->GetFilter());
   channel_->AddFilter(push_dispatcher_->GetFilter());
   channel_->AddFilter(service_worker_message_filter_->GetFilter());
-  channel_->AddFilter(geofencing_message_filter_->GetFilter());
 
   if (!IsInBrowserProcess()) {
     // In single process mode, browser-side tracing and memory will cover the
@@ -461,9 +471,7 @@ void ChildThreadImpl::Init(const Options& options) {
   IPC::AttachmentBroker* broker = IPC::AttachmentBroker::GetGlobal();
   if (broker && !broker->IsPrivilegedBroker())
     broker->RegisterBrokerCommunicationChannel(channel_.get());
-  ConnectChannel(
-      options.use_mojo_channel,
-      mojo::MakeScopedHandle(options.in_process_message_pipe_handle));
+  ConnectChannel(options.use_mojo_channel, options.in_process_ipc_token);
 
   int connection_timeout = kConnectionTimeoutS;
   std::string connection_override =
@@ -607,9 +615,6 @@ std::unique_ptr<base::SharedMemory> ChildThreadImpl::AllocateSharedMemory(
 }
 
 bool ChildThreadImpl::OnMessageReceived(const IPC::Message& msg) {
-  if (mojo_application_->OnMessageReceived(msg))
-    return true;
-
   // Resource responses are sent to the resource dispatcher.
   if (resource_dispatcher_->OnMessageReceived(msg))
     return true;
@@ -633,6 +638,8 @@ bool ChildThreadImpl::OnMessageReceived(const IPC::Message& msg) {
                         OnProfilingPhaseCompleted)
     IPC_MESSAGE_HANDLER(ChildProcessMsg_SetProcessBackgrounded,
                         OnProcessBackgrounded)
+    IPC_MESSAGE_HANDLER(ChildProcessMsg_PurgeAndSuspend,
+                        OnProcessPurgeAndSuspend)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
@@ -655,6 +662,9 @@ void ChildThreadImpl::OnProcessBackgrounded(bool backgrounded) {
   if (backgrounded)
     timer_slack = base::TIMER_SLACK_MAXIMUM;
   base::MessageLoop::current()->SetTimerSlack(timer_slack);
+}
+
+void ChildThreadImpl::OnProcessPurgeAndSuspend() {
 }
 
 void ChildThreadImpl::OnShutdown() {
@@ -720,7 +730,7 @@ void ChildThreadImpl::EnsureConnected() {
 }
 
 bool ChildThreadImpl::IsInBrowserProcess() const {
-  return browser_process_io_runner_;
+  return static_cast<bool>(browser_process_io_runner_);
 }
 
 }  // namespace content

@@ -6,6 +6,8 @@
 
 #include <string.h>
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
@@ -28,6 +30,8 @@ bool CanAcceptMoreMessages(const Port* port) {
   // Have we already doled out the last message (i.e., do we expect to NOT
   // receive further messages)?
   uint64_t next_sequence_num = port->message_queue.next_sequence_num();
+  if (port->state == Port::kClosed)
+    return false;
   if (port->peer_closed || port->remove_proxy_on_last_message) {
     if (port->last_sequence_num_to_receive == next_sequence_num - 1)
       return false;
@@ -211,12 +215,12 @@ int Node::ClosePort(const PortRef& port_ref) {
     // If the port being closed still has unread messages, then we need to take
     // care to close those ports so as to avoid leaking memory.
     port->message_queue.GetReferencedPorts(&referenced_port_names);
+
+    ErasePort_Locked(port_ref.name());
   }
 
   DVLOG(2) << "Sending ObserveClosure from " << port_ref.name() << "@" << name_
            << " to " << peer_port_name << "@" << peer_node_name;
-
-  ErasePort(port_ref.name());
 
   delegate_->ForwardMessage(
       peer_node_name,
@@ -269,7 +273,7 @@ int Node::GetMessageIf(const PortRef& port_ref,
     if (!CanAcceptMoreMessages(port))
       return ERROR_PORT_PEER_CLOSED;
 
-    port->message_queue.GetNextMessageIf(selector, message);
+    port->message_queue.GetNextMessageIf(std::move(selector), message);
   }
 
   // Allow referenced ports to trigger PortStatusChanged calls.
@@ -291,48 +295,22 @@ int Node::GetMessageIf(const PortRef& port_ref,
   return OK;
 }
 
-int Node::SendMessage(const PortRef& port_ref, ScopedMessage* message) {
-  ScopedMessage& m = *message;
-  for (size_t i = 0; i < m->num_ports(); ++i) {
-    if (m->ports()[i] == port_ref.name())
-      return ERROR_PORT_CANNOT_SEND_SELF;
-  }
+int Node::SendMessage(const PortRef& port_ref, ScopedMessage message) {
+  int rv = SendMessageInternal(port_ref, &message);
+  if (rv != OK) {
+    // If send failed, close all carried ports. Note that we're careful not to
+    // close the sending port itself if it happened to be one of the encoded
+    // ports (an invalid but possible condition.)
+    for (size_t i = 0; i < message->num_ports(); ++i) {
+      if (message->ports()[i] == port_ref.name())
+        continue;
 
-  Port* port = port_ref.port();
-  {
-    // We must acquire |ports_lock_| before grabbing any port locks, because
-    // WillSendMessage_Locked may need to lock multiple ports out of order.
-    base::AutoLock ports_lock(ports_lock_);
-    base::AutoLock lock(port->lock);
-
-    if (port->state != Port::kReceiving)
-      return ERROR_PORT_STATE_UNEXPECTED;
-
-    if (port->peer_closed)
-      return ERROR_PORT_PEER_CLOSED;
-
-    int rv = WillSendMessage_Locked(port, port_ref.name(), m.get());
-    if (rv != OK)
-      return rv;
-
-    // Beyond this point there's no sense in returning anything but OK. Even if
-    // message forwarding or acceptance fails, there's nothing the embedder can
-    // do to recover. Assume that failure beyond this point must be treated as a
-    // transport failure.
-
-    if (port->peer_node_name != name_) {
-      delegate_->ForwardMessage(port->peer_node_name, std::move(m));
-      return OK;
+      PortRef port;
+      if (GetPort(message->ports()[i], &port) == OK)
+        ClosePort(port);
     }
   }
-
-  int rv = AcceptMessage(std::move(m));
-  if (rv != OK) {
-    // See comment above for why we don't return an error in this case.
-    DVLOG(2) << "AcceptMessage failed: " << rv;
-  }
-
-  return OK;
+  return rv;
 }
 
 int Node::AcceptMessage(ScopedMessage message) {
@@ -365,6 +343,7 @@ int Node::MergePorts(const PortRef& port_ref,
                      const NodeName& destination_node_name,
                      const PortName& destination_port_name) {
   Port* port = port_ref.port();
+  MergePortEventData data;
   {
     // |ports_lock_| must be held for WillSendPort_Locked below.
     base::AutoLock ports_lock(ports_lock_);
@@ -375,15 +354,14 @@ int Node::MergePorts(const PortRef& port_ref,
 
     // Send the port-to-merge over to the destination node so it can be merged
     // into the port cycle atomically there.
-    MergePortEventData data;
     data.new_port_name = port_ref.name();
     WillSendPort_Locked(port, destination_node_name, &data.new_port_name,
                         &data.new_port_descriptor);
-    delegate_->ForwardMessage(
-        destination_node_name,
-        NewInternalMessage(destination_port_name,
-                           EventType::kMergePort, data));
   }
+  delegate_->ForwardMessage(
+      destination_node_name,
+      NewInternalMessage(destination_port_name,
+                         EventType::kMergePort, data));
   return OK;
 }
 
@@ -577,6 +555,17 @@ int Node::OnObserveProxy(const PortName& port_name,
   scoped_refptr<Port> port = GetPort(port_name);
   if (!port) {
     DVLOG(1) << "ObserveProxy: " << port_name << "@" << name_ << " not found";
+
+    if (port_name != event.proxy_port_name &&
+        port_name != event.proxy_to_port_name) {
+      // The receiving port may have been removed while this message was in
+      // transit.  In this case, we restart the ObserveProxy circulation from
+      // the referenced proxy port to avoid leaking the proxy.
+      delegate_->ForwardMessage(
+          event.proxy_node_name,
+          NewInternalMessage(
+              event.proxy_port_name, EventType::kObserveProxy, event));
+    }
     return OK;
   }
 
@@ -689,6 +678,9 @@ int Node::OnObserveClosure(const PortName& port_name,
   // ObserveProxyAck.
 
   bool notify_delegate = false;
+  ObserveClosureEventData forwarded_data;
+  NodeName peer_node_name;
+  PortName peer_port_name;
   {
     // We must acquire |ports_lock_| before the port lock because it must be
     // held for MaybeRemoveProxy_Locked.
@@ -707,8 +699,6 @@ int Node::OnObserveClosure(const PortName& port_name,
     // We always forward ObserveClosure, even beyond the receiving port which
     // cares about it. This ensures that any dead-end proxies beyond that port
     // are notified to remove themselves.
-
-    ObserveClosureEventData forwarded_data;
 
     if (port->state == Port::kReceiving) {
       notify_delegate = true;
@@ -739,11 +729,14 @@ int Node::OnObserveClosure(const PortName& port_name,
              << " (last_sequence_num=" << forwarded_data.last_sequence_num
              << ")";
 
-    delegate_->ForwardMessage(
-        port->peer_node_name,
-        NewInternalMessage(port->peer_port_name,
-                           EventType::kObserveClosure, forwarded_data));
+    peer_node_name = port->peer_node_name;
+    peer_port_name = port->peer_port_name;
   }
+  delegate_->ForwardMessage(
+      peer_node_name,
+      NewInternalMessage(peer_port_name, EventType::kObserveClosure,
+                         forwarded_data));
+
   if (notify_delegate) {
     PortRef port_ref(port_name, port);
     delegate_->PortStatusChanged(port_ref);
@@ -754,8 +747,6 @@ int Node::OnObserveClosure(const PortName& port_name,
 int Node::OnMergePort(const PortName& port_name,
                       const MergePortEventData& event) {
   scoped_refptr<Port> port = GetPort(port_name);
-  if (!port)
-    return ERROR_PORT_UNKNOWN;
 
   DVLOG(1) << "MergePort at " << port_name << "@" << name_ << " (state="
            << port->state << ") merging with proxy " << event.new_port_name
@@ -773,7 +764,7 @@ int Node::OnMergePort(const PortName& port_name,
   int rv = AcceptPort(event.new_port_name, event.new_port_descriptor);
   if (rv != OK) {
     close_target_port = true;
-  } else {
+  } else if (port) {
     // BeginProxying_Locked may call MaybeRemoveProxy_Locked, which in turn
     // needs to hold |ports_lock_|. We also acquire multiple port locks within.
     base::AutoLock ports_lock(ports_lock_);
@@ -798,6 +789,8 @@ int Node::OnMergePort(const PortName& port_name,
       close_new_port = true;
       close_target_port = true;
     }
+  } else {
+    close_new_port = true;
   }
 
   if (close_target_port) {
@@ -830,11 +823,6 @@ int Node::AddPortWithName(const PortName& port_name,
   return OK;
 }
 
-void Node::ErasePort(const PortName& port_name) {
-  base::AutoLock lock(ports_lock_);
-  return ErasePort_Locked(port_name);
-}
-
 void Node::ErasePort_Locked(const PortName& port_name) {
   ports_lock_.AssertAcquired();
   ports_.erase(port_name);
@@ -853,6 +841,53 @@ scoped_refptr<Port> Node::GetPort_Locked(const PortName& port_name) {
     return nullptr;
 
   return iter->second;
+}
+
+int Node::SendMessageInternal(const PortRef& port_ref, ScopedMessage* message) {
+  ScopedMessage& m = *message;
+  for (size_t i = 0; i < m->num_ports(); ++i) {
+    if (m->ports()[i] == port_ref.name())
+      return ERROR_PORT_CANNOT_SEND_SELF;
+  }
+
+  Port* port = port_ref.port();
+  NodeName peer_node_name;
+  {
+    // We must acquire |ports_lock_| before grabbing any port locks, because
+    // WillSendMessage_Locked may need to lock multiple ports out of order.
+    base::AutoLock ports_lock(ports_lock_);
+    base::AutoLock lock(port->lock);
+
+    if (port->state != Port::kReceiving)
+      return ERROR_PORT_STATE_UNEXPECTED;
+
+    if (port->peer_closed)
+      return ERROR_PORT_PEER_CLOSED;
+
+    int rv = WillSendMessage_Locked(port, port_ref.name(), m.get());
+    if (rv != OK)
+      return rv;
+
+    // Beyond this point there's no sense in returning anything but OK. Even if
+    // message forwarding or acceptance fails, there's nothing the embedder can
+    // do to recover. Assume that failure beyond this point must be treated as a
+    // transport failure.
+
+    peer_node_name = port->peer_node_name;
+  }
+
+  if (peer_node_name != name_) {
+    delegate_->ForwardMessage(peer_node_name, std::move(m));
+    return OK;
+  }
+
+  int rv = AcceptMessage(std::move(m));
+  if (rv != OK) {
+    // See comment above for why we don't return an error in this case.
+    DVLOG(2) << "AcceptMessage failed: " << rv;
+  }
+
+  return OK;
 }
 
 int Node::MergePorts_Locked(const PortRef& port0_ref,
@@ -884,7 +919,6 @@ int Node::MergePorts_Locked(const PortRef& port0_ref,
 
     std::swap(port0->peer_node_name, port1->peer_node_name);
     std::swap(port0->peer_port_name, port1->peer_port_name);
-    std::swap(port0->peer_closed, port1->peer_closed);
 
     port0->state = Port::kBuffering;
     if (port0->peer_closed)
@@ -926,7 +960,6 @@ int Node::MergePorts_Locked(const PortRef& port0_ref,
     // state by undoing the peer swap.
     std::swap(port0->peer_node_name, port1->peer_node_name);
     std::swap(port0->peer_port_name, port1->peer_port_name);
-    std::swap(port0->peer_closed, port1->peer_closed);
     port0->remove_proxy_on_last_message = false;
     port1->remove_proxy_on_last_message = false;
     port0->state = Port::kReceiving;

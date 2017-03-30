@@ -8,13 +8,14 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.DialogInterface.OnClickListener;
-import android.preference.PreferenceManager;
 import android.support.v7.app.AlertDialog;
 import android.text.TextUtils;
 import android.view.View;
 import android.widget.CheckBox;
 import android.widget.TextView;
 
+import org.chromium.base.ContextUtils;
+import org.chromium.base.FieldTrialList;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.EmbedContentViewActivity;
@@ -23,6 +24,7 @@ import org.chromium.chrome.browser.sessions.SessionTabHelper;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.variations.VariationsAssociatedData;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.Referrer;
 
 /**
@@ -31,7 +33,7 @@ import org.chromium.content_public.common.Referrer;
 public class DataUseTabUIManager {
 
     private static final String SHARED_PREF_DATA_USE_DIALOG_OPT_OUT = "data_use_dialog_opt_out";
-    private static final String FIELD_TRIAL_NAME = "ExternalDataUseObserver";
+    private static final String DATA_USE_FIELD_TRIAL = "ExternalDataUseObserver";
 
     /**
      * Data use started UI snackbar will not be shown if {@link DISABLE_DATA_USE_STARTED_UI_PARAM}
@@ -105,8 +107,9 @@ public class DataUseTabUIManager {
      * continue.
      */
     public static boolean wouldDataUseTrackingEnd(Tab tab, String url, int pageTransitionType) {
-        return nativeWouldDataUseTrackingEnd(SessionTabHelper.sessionIdForTab(tab.getWebContents()),
-                url, pageTransitionType, tab.getProfile());
+        return nativeWouldDataUseTrackingEnd(tab.getWebContents(),
+                SessionTabHelper.sessionIdForTab(tab.getWebContents()), url, pageTransitionType,
+                tab.getProfile());
     }
 
     /**
@@ -223,18 +226,26 @@ public class DataUseTabUIManager {
      * @return true if the data use tracking started UI (snackbar) should be shown.
      */
     public static boolean shouldShowDataUseStartedUI() {
-        return !DISABLE_DATA_USE_UI_PARAM_VALUE.equals(
-                VariationsAssociatedData.getVariationParamValue(
-                        FIELD_TRIAL_NAME, DISABLE_DATA_USE_STARTED_UI_PARAM));
+        // UI should be shown only when field trial is active, not disabled in Finch and in
+        // non-roaming-cellular connection.
+        return FieldTrialList.trialExists(DATA_USE_FIELD_TRIAL)
+                && !DISABLE_DATA_USE_UI_PARAM_VALUE.equals(
+                           VariationsAssociatedData.getVariationParamValue(
+                                   DATA_USE_FIELD_TRIAL, DISABLE_DATA_USE_STARTED_UI_PARAM))
+                && nativeIsNonRoamingCellularConnection();
     }
 
     /**
      * @return true if the data use tracking ended UI (snackbar or interstitial) should be shown.
      */
     public static boolean shouldShowDataUseEndedUI() {
-        return !DISABLE_DATA_USE_UI_PARAM_VALUE.equals(
-                VariationsAssociatedData.getVariationParamValue(
-                        FIELD_TRIAL_NAME, DISABLE_DATA_USE_ENDED_UI_PARAM));
+        // UI should be shown only when field trial is active, not disabled in Finch and in
+        // non-roaming-cellular connection.
+        return FieldTrialList.trialExists(DATA_USE_FIELD_TRIAL)
+                && !DISABLE_DATA_USE_UI_PARAM_VALUE.equals(
+                           VariationsAssociatedData.getVariationParamValue(
+                                   DATA_USE_FIELD_TRIAL, DISABLE_DATA_USE_ENDED_UI_PARAM))
+                && nativeIsNonRoamingCellularConnection();
     }
 
     /**
@@ -247,11 +258,11 @@ public class DataUseTabUIManager {
      */
     public static boolean shouldShowDataUseEndedSnackbar(Context context) {
         assert shouldShowDataUseEndedUI();
-        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(
+        return ContextUtils.getAppSharedPreferences().getBoolean(
                        SHARED_PREF_DATA_USE_DIALOG_OPT_OUT, false)
                 || DISABLE_DATA_USE_UI_PARAM_VALUE.equals(
                            VariationsAssociatedData.getVariationParamValue(
-                                   FIELD_TRIAL_NAME, DISABLE_DATA_USE_ENDED_DIALOG_PARAM));
+                                   DATA_USE_FIELD_TRIAL, DISABLE_DATA_USE_ENDED_DIALOG_PARAM));
     }
 
     /**
@@ -261,7 +272,7 @@ public class DataUseTabUIManager {
      * @param optedOut Whether the user has opted out of seeing the data use dialog.
      */
     private static void setOptedOutOfDataUseDialog(Context context, boolean optedOut) {
-        PreferenceManager.getDefaultSharedPreferences(context).edit()
+        ContextUtils.getAppSharedPreferences().edit()
                 .putBoolean(SHARED_PREF_DATA_USE_DIALOG_OPT_OUT, optedOut)
                 .apply();
         if (optedOut) {
@@ -293,9 +304,10 @@ public class DataUseTabUIManager {
     private static native boolean nativeCheckAndResetDataUseTrackingEnded(
             int tabId, Profile profile);
     private static native void nativeUserClickedContinueOnDialogBox(int tabId, Profile profile);
-    private static native boolean nativeWouldDataUseTrackingEnd(
-            int tabId, String url, int pageTransitionType, Profile jprofile);
+    private static native boolean nativeWouldDataUseTrackingEnd(WebContents webContents, int tabId,
+            String url, int pageTransitionType, Profile jprofile);
     private static native void nativeOnCustomTabInitialNavigation(int tabID, String packageName,
             String url, Profile profile);
     private static native String nativeGetDataUseUIString(int messageID);
+    private static native boolean nativeIsNonRoamingCellularConnection();
 }

@@ -47,10 +47,7 @@ class WorkerGlobalScopeProxy;
 class CORE_EXPORT PageConsoleAgent final : public InspectorConsoleAgent {
     WTF_MAKE_NONCOPYABLE(PageConsoleAgent);
 public:
-    static RawPtr<PageConsoleAgent> create(V8RuntimeAgent* runtimeAgent, V8DebuggerAgent* debuggerAgent, InspectorDOMAgent* domAgent, InspectedFrames* inspectedFrames)
-    {
-        return new PageConsoleAgent(runtimeAgent, debuggerAgent, domAgent, inspectedFrames);
-    }
+    PageConsoleAgent(V8InspectorSession*, InspectorDOMAgent*, InspectedFrames*);
     ~PageConsoleAgent() override;
     DECLARE_VIRTUAL_TRACE();
 
@@ -60,6 +57,8 @@ public:
     void workerTerminated(WorkerInspectorProxy*);
     void workerConsoleAgentEnabled(WorkerInspectorProxy*);
 
+    void consoleMessagesCleared() override;
+
 protected:
     ConsoleMessageStorage* messageStorage() override;
 
@@ -67,7 +66,6 @@ protected:
     void disableStackCapturingIfNeeded() override;
 
 private:
-    PageConsoleAgent(V8RuntimeAgent*, V8DebuggerAgent*, InspectorDOMAgent*, InspectedFrames*);
     void clearMessages(ErrorString*) override;
 
     Member<InspectorDOMAgent> m_inspectorDOMAgent;

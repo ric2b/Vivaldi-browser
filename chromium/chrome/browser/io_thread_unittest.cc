@@ -14,7 +14,6 @@
 #include "chrome/browser/io_thread.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
-#include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/policy/core/common/mock_policy_service.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -75,7 +74,7 @@ class NetworkSessionConfiguratorTest : public testing::Test {
 
   bool is_spdy_allowed_by_policy_;
   bool is_quic_allowed_by_policy_;
-  scoped_ptr<base::FieldTrialList> field_trial_list_;
+  std::unique_ptr<base::FieldTrialList> field_trial_list_;
   net::HttpNetworkSession::Params params_;
 
  private:
@@ -91,13 +90,11 @@ TEST_F(NetworkSessionConfiguratorTest, Defaults) {
   EXPECT_FALSE(params_.enable_spdy31);
   EXPECT_TRUE(params_.enable_http2);
   EXPECT_FALSE(params_.enable_tcp_fast_open_for_ssl);
-  EXPECT_FALSE(params_.parse_alternative_services);
-  EXPECT_FALSE(params_.enable_alternative_service_with_different_host);
+  EXPECT_TRUE(params_.parse_alternative_services);
+  EXPECT_TRUE(params_.enable_alternative_service_with_different_host);
   EXPECT_FALSE(params_.enable_npn);
   EXPECT_TRUE(params_.enable_priority_dependencies);
   EXPECT_FALSE(params_.enable_quic);
-  EXPECT_FALSE(params_.enable_quic_for_proxies);
-  EXPECT_FALSE(IOThread::ShouldEnableQuicForDataReductionProxy());
 }
 
 TEST_F(NetworkSessionConfiguratorTest, IgnoreCertificateErrors) {
@@ -127,7 +124,7 @@ TEST_F(NetworkSessionConfiguratorTest, AltSvcFieldTrialEnabled) {
   ParseFieldTrials();
 
   EXPECT_TRUE(params_.parse_alternative_services);
-  EXPECT_FALSE(params_.enable_alternative_service_with_different_host);
+  EXPECT_TRUE(params_.enable_alternative_service_with_different_host);
 }
 
 TEST_F(NetworkSessionConfiguratorTest, AltSvcFieldTrialDisabled) {
@@ -136,7 +133,7 @@ TEST_F(NetworkSessionConfiguratorTest, AltSvcFieldTrialDisabled) {
   ParseFieldTrials();
 
   EXPECT_FALSE(params_.parse_alternative_services);
-  EXPECT_FALSE(params_.enable_alternative_service_with_different_host);
+  EXPECT_TRUE(params_.enable_alternative_service_with_different_host);
 }
 
 TEST_F(NetworkSessionConfiguratorTest, SpdyFieldTrialHoldbackEnabled) {
@@ -241,7 +238,6 @@ TEST_F(NetworkSessionConfiguratorTest, EnableQuicFromFieldTrialGroup) {
 
   EXPECT_TRUE(params_.enable_quic);
   EXPECT_FALSE(params_.disable_quic_on_timeout_with_open_streams);
-  EXPECT_TRUE(params_.enable_quic_for_proxies);
   EXPECT_EQ(1350u, params_.quic_max_packet_length);
   EXPECT_EQ(net::QuicTagVector(), params_.quic_connection_options);
   EXPECT_FALSE(params_.quic_always_require_handshake_confirmation);
@@ -251,18 +247,17 @@ TEST_F(NetworkSessionConfiguratorTest, EnableQuicFromFieldTrialGroup) {
   EXPECT_FALSE(params_.quic_enable_non_blocking_io);
   EXPECT_FALSE(params_.quic_disable_disk_cache);
   EXPECT_FALSE(params_.quic_prefer_aes);
-  EXPECT_FALSE(params_.parse_alternative_services);
-  EXPECT_FALSE(params_.enable_alternative_service_with_different_host);
+  EXPECT_TRUE(params_.parse_alternative_services);
+  EXPECT_TRUE(params_.enable_alternative_service_with_different_host);
   EXPECT_EQ(0, params_.quic_max_number_of_lossy_connections);
   EXPECT_EQ(1.0f, params_.quic_packet_loss_threshold);
-  EXPECT_FALSE(params_.quic_delay_tcp_race);
+  EXPECT_TRUE(params_.quic_delay_tcp_race);
   EXPECT_FALSE(params_.quic_close_sessions_on_ip_change);
   EXPECT_EQ(net::kIdleConnectionTimeoutSeconds,
             params_.quic_idle_connection_timeout_seconds);
   EXPECT_FALSE(params_.quic_disable_preconnect_if_0rtt);
   EXPECT_FALSE(params_.quic_migrate_sessions_on_network_change);
   EXPECT_FALSE(params_.quic_migrate_sessions_early);
-  EXPECT_FALSE(IOThread::ShouldEnableQuicForDataReductionProxy());
   EXPECT_TRUE(params_.quic_host_whitelist.empty());
 
   net::HttpNetworkSession::Params default_params;
@@ -282,57 +277,12 @@ TEST_F(NetworkSessionConfiguratorTest,
   EXPECT_TRUE(params_.disable_quic_on_timeout_with_open_streams);
 }
 
-TEST_F(NetworkSessionConfiguratorTest, EnableQuicFromQuicProxyFieldTrialGroup) {
-  const struct {
-    std::string field_trial_group_name;
-    bool expect_enable_quic;
-  } tests[] = {
-      {
-          std::string(), false,
-      },
-      {
-          "NotEnabled", false,
-      },
-      {
-          "Control", false,
-      },
-      {
-          "Disabled", false,
-      },
-      {
-          "EnabledControl", true,
-      },
-      {
-          "Enabled", true,
-      },
-  };
-
-  field_trial_list_.reset();
-  for (size_t i = 0; i < arraysize(tests); ++i) {
-    base::FieldTrialList field_trial_list(new base::MockEntropyProvider());
-    base::FieldTrialList::CreateFieldTrial(
-        data_reduction_proxy::params::GetQuicFieldTrialName(),
-        tests[i].field_trial_group_name);
-
-    ParseFieldTrials();
-
-    EXPECT_FALSE(params_.enable_quic) << i;
-    EXPECT_EQ(tests[i].expect_enable_quic, params_.enable_quic_for_proxies)
-        << i;
-    EXPECT_EQ(tests[i].expect_enable_quic,
-              IOThread::ShouldEnableQuicForDataReductionProxy())
-        << i;
-  }
-}
-
 TEST_F(NetworkSessionConfiguratorTest, EnableQuicFromCommandLine) {
   base::CommandLine::ForCurrentProcess()->AppendSwitch("enable-quic");
 
   ParseFieldTrialsAndCommandLine();
 
   EXPECT_TRUE(params_.enable_quic);
-  EXPECT_TRUE(params_.enable_quic_for_proxies);
-  EXPECT_FALSE(IOThread::ShouldEnableQuicForDataReductionProxy());
 }
 
 TEST_F(NetworkSessionConfiguratorTest,
@@ -627,15 +577,15 @@ TEST_F(NetworkSessionConfiguratorTest, QuicReceiveBufferSize) {
   EXPECT_EQ(2097152, params_.quic_socket_receive_buffer_size);
 }
 
-TEST_F(NetworkSessionConfiguratorTest, QuicDelayTcpConnection) {
+TEST_F(NetworkSessionConfiguratorTest, QuicDisableDelayTcpRace) {
   std::map<std::string, std::string> field_trial_params;
-  field_trial_params["delay_tcp_race"] = "true";
+  field_trial_params["disable_delay_tcp_race"] = "true";
   variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
   base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
 
   ParseFieldTrials();
 
-  EXPECT_TRUE(params_.quic_delay_tcp_race);
+  EXPECT_FALSE(params_.quic_delay_tcp_race);
 }
 
 TEST_F(NetworkSessionConfiguratorTest, QuicOriginsToForceQuicOn) {
@@ -810,7 +760,7 @@ class IOThreadTestWithIOThreadObject : public testing::Test {
   // TestBrowserThreadBundle's destructor is responsible for calling
   // CleanUp(), the IOThread must be declared before the bundle, so that
   // the bundle is deleted first.
-  scoped_ptr<IOThread> io_thread_;
+  std::unique_ptr<IOThread> io_thread_;
   content::TestBrowserThreadBundle thread_bundle_;
 };
 

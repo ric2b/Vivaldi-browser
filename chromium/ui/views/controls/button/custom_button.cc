@@ -12,7 +12,6 @@
 #include "ui/gfx/animation/throb_animation.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
-#include "ui/gfx/screen.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/animation/ink_drop_delegate.h"
 #include "ui/views/animation/ink_drop_hover.h"
@@ -48,11 +47,12 @@ class MdFocusRing : public views::View {
   MdFocusRing() {
     SetPaintToLayer(true);
     layer()->SetFillsBoundsOpaquely(false);
-
-    // Don't accept input events.
-    SetEnabled(false);
   }
   ~MdFocusRing() override {}
+
+  bool CanProcessEventsWithinSubtree() const override {
+    return false;
+  }
 
   void OnPaint(gfx::Canvas* canvas) override {
     CustomButton::PaintMdFocusRing(canvas, this);
@@ -268,6 +268,10 @@ bool CustomButton::OnKeyPressed(const ui::KeyEvent& event) {
   // KeyRelease and Enter clicks the button on KeyPressed.
   if (event.key_code() == ui::VKEY_SPACE) {
     SetState(STATE_PRESSED);
+    if (ink_drop_delegate_ &&
+        ink_drop_delegate_->GetTargetInkDropState() !=
+            views::InkDropState::ACTION_PENDING)
+      ink_drop_delegate_->OnAction(views::InkDropState::ACTION_PENDING);
   } else if (event.key_code() == ui::VKEY_RETURN) {
     SetState(STATE_NORMAL);
     NotifyClick(event);
@@ -382,7 +386,7 @@ void CustomButton::VisibilityChanged(View* starting_from, bool visible) {
   SetState(visible && ShouldEnterHoveredState() ? STATE_HOVERED : STATE_NORMAL);
 }
 
-scoped_ptr<InkDropHover> CustomButton::CreateInkDropHover() const {
+std::unique_ptr<InkDropHover> CustomButton::CreateInkDropHover() const {
   return ShouldShowInkDropHover() ? Button::CreateInkDropHover() : nullptr;
 }
 
@@ -438,7 +442,7 @@ CustomButton::CustomButton(ButtonListener* listener)
       animate_on_state_change_(true),
       is_throbbing_(false),
       triggerable_event_flags_(ui::EF_LEFT_MOUSE_BUTTON),
-      request_focus_on_press_(true),
+      request_focus_on_press_(false),
       ink_drop_delegate_(nullptr),
       notify_action_(NOTIFY_ON_RELEASE),
       has_ink_drop_action_on_click_(false),

@@ -108,12 +108,14 @@ public:
         // HTMLMediaElement
         virtual double currentTime() const = 0;
         virtual double duration() const = 0;
+        virtual bool paused() const = 0;
         virtual bool ended() const = 0;
         virtual bool muted() const = 0;
         virtual void setMuted(bool) = 0;
         virtual void playInternal() = 0;
-        virtual bool isUserGestureRequiredForPlay() const = 0;
-        virtual void removeUserGestureRequirement() = 0;
+        virtual void pauseInternal() = 0;
+        virtual bool isLockedPendingUserGesture() const = 0;
+        virtual void unlockUserGesture() = 0;
         virtual void recordAutoplayMetric(AutoplayMetrics) = 0;
         virtual bool shouldAutoplay() = 0;
         virtual bool isHTMLVideoElement() const = 0;
@@ -124,6 +126,10 @@ public:
         virtual PageVisibilityState pageVisibilityState() const = 0;
         virtual String autoplayExperimentMode() const = 0;
 
+        // Frame
+        virtual bool isCrossOrigin() const = 0;
+        virtual bool isAutoplayAllowedPerSettings() const = 0;
+
         // LayoutObject
         virtual void setRequestPositionUpdates(bool) = 0;
         virtual IntRect absoluteBoundingBoxRect() const = 0;
@@ -131,7 +137,7 @@ public:
         DEFINE_INLINE_VIRTUAL_TRACE() { }
     };
 
-    static RawPtr<AutoplayExperimentHelper> create(Client* client)
+    static AutoplayExperimentHelper* create(Client* client)
     {
         return new AutoplayExperimentHelper(client);
     }
@@ -151,37 +157,63 @@ public:
     void playbackStopped();
     void initialPlayWithUserGesture();
 
+    // Returns true if and only if any experiment is enabled (i.e., |m_mode|
+    // is not ExperimentOff).
+    bool isExperimentEnabled();
+
     // Clean up.  For Oilpan, this means "early in HTMLMediaElement's dispose".
     // For non-Oilpan, just delete the object.
     void dispose();
 
     // Remove the user gesture requirement, and record why.  If there is no
     // gesture requirement, then this does nothing.
-    void removeUserGestureRequirement(AutoplayMetrics);
+    void unlockUserGesture(AutoplayMetrics);
+
+    // Set the reason that we're overridding the user gesture.  If there is no
+    // gesture requirement, then this does nothing.
+    void setDeferredOverrideReason(AutoplayMetrics);
+
+    // Return true if and only if the user gesture requirement is currently
+    // overridden by the experiment, permitting playback.
+    bool isGestureRequirementOverridden() const;
+
+    // Return true if and only if playback is queued but hasn't started yet,
+    // such as if the element doesn't meet visibility requirements.
+    bool isPlaybackDeferred() const;
 
     // Set the position to the current view's position, and
     void triggerAutoplayViewportCheckForTesting();
 
     enum Mode {
         // Do not enable the autoplay experiment.
-        ExperimentOff = 0,
+        ExperimentOff     = 0,
         // Enable gestureless autoplay for video elements.
-        ForVideo      = 1 << 0,
+        ForVideo          = 1 << 0,
         // Enable gestureless autoplay for audio elements.
-        ForAudio      = 1 << 1,
+        ForAudio          = 1 << 1,
         // Restrict gestureless autoplay to media that is in a visible page.
-        IfPageVisible = 1 << 2,
-        // Restrict gestureless autoplay to media that is visible in
+        IfPageVisible     = 1 << 2,
+        // Restrict gestureless autoplay to media that is entirely visible in
         // the viewport.
-        IfViewport    = 1 << 3,
+        IfViewport        = 1 << 3,
+        // Restrict gestureless autoplay to media that is partially visible in
+        // the viewport.
+        IfPartialViewport = 1 << 4,
         // Restrict gestureless autoplay to audio-less or muted media.
-        IfMuted       = 1 << 4,
+        IfMuted           = 1 << 5,
         // Restrict gestureless autoplay to sites which contain the
         // viewport tag.
-        IfMobile      = 1 << 5,
+        IfMobile          = 1 << 6,
+        // Restrict gestureless autoplay to sites which are from the same origin
+        // as the top-level frame.
+        IfSameOrigin      = 1 << 7,
+        // Extend IfSameOrigin to allow autoplay of cross-origin elements if
+        // they're muted.  This has no effect on same-origin or if IfSameOrigin
+        // isn't enabled.
+        OrMuted           = 1 << 8,
         // If gestureless autoplay is allowed, then mute the media before
         // starting to play.
-        PlayMuted     = 1 << 6,
+        PlayMuted         = 1 << 9,
     };
 
     DEFINE_INLINE_TRACE() { visitor->trace(m_client); }
@@ -196,10 +228,22 @@ private:
     // Un-register for position updates, if we are currently registered.
     void unregisterForPositionUpdatesIfNeeded();
 
+    // Modifiers for checking isEligible().
+    enum EligibilityMode {
+        // Perform all normal eligibility checks.
+        Normal = 0,
+
+        // Perform normal eligibility checks, but skip checking if autoplay has
+        // actually been requested.  In other words, don't fail just becase
+        // nobody has called play() and/or set the autoplay attribute.
+        IgnorePendingPlayback = 1
+    };
+
     // Return true if any only if this player meets (most) of the eligibility
     // requirements for the experiment to override the need for a user
     // gesture.  This includes everything except the visibility test.
-    bool isEligible() const;
+    // |mode| modifies the eligibility check, as described above.
+    bool isEligible(EligibilityMode = Normal) const;
 
     // Return false if and only if m_element is not visible, and we care
     // that it must be visible.
@@ -235,7 +279,7 @@ private:
 
     Client& client() const;
 
-    bool isUserGestureRequiredForPlay() const;
+    bool isLockedPendingUserGesture() const;
 
     inline bool enabled(Mode mode) const
     {
@@ -249,6 +293,10 @@ private:
     // Could stopping at this point be considered a bailout of playback?
     // (as in, "The user really didn't want to play this").
     bool isBailout() const;
+
+    // Returns true if and only if the experiment requires some sort of viewport
+    // visibility check for autoplay.
+    bool requiresViewportVisibility() const;
 
     Member<Client> m_client;
 
@@ -275,7 +323,7 @@ private:
 
     // Is the current playback the result of autoplay?  If so, then this flag
     // records that the pause / stop should be counted in the autoplay metrics.
-    bool m_waitingForAutoplayPlaybackEnd : 1;
+    bool m_waitingForAutoplayPlaybackStop : 1;
 
     // Did we record that this media element exists in the metrics yet?  This is
     // independent of whether it autoplays; we just want to know how many

@@ -6,15 +6,15 @@
 #define DEVICE_BLUETOOTH_DBUS_BLUETOOTH_GATT_CHARACTERISTIC_SERVICE_PROVIDER_H_
 
 #include <stdint.h>
-
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/macros.h"
 #include "dbus/bus.h"
+#include "dbus/message.h"
 #include "dbus/object_path.h"
 #include "device/bluetooth/bluetooth_export.h"
+#include "device/bluetooth/dbus/bluetooth_gatt_attribute_value_delegate.h"
 
 namespace bluez {
 
@@ -34,59 +34,26 @@ namespace bluez {
 // "Value" property.
 class DEVICE_BLUETOOTH_EXPORT BluetoothGattCharacteristicServiceProvider {
  public:
-  // Interface for reacting to GATT characteristic value requests.
-  class Delegate {
-   public:
-    virtual ~Delegate() {}
-
-    // ValueCallback is used for methods that require a characteristic value
-    // to be returned.
-    typedef base::Callback<void(const std::vector<uint8_t>&)> ValueCallback;
-
-    // ErrorCallback is used by methods to report failure.
-    typedef base::Closure ErrorCallback;
-
-    // This method will be called when a remote device requests to read the
-    // value of the exported GATT characteristic. Invoke |callback| with a value
-    // to return that value to the requester. Invoke |error_callback| to report
-    // a failure to read the value. This can happen, for example, if the
-    // characteristic has no read permission set. Either callback should be
-    // invoked after a reasonable amount of time, since the request will time
-    // out if left pending for too long.
-    virtual void GetCharacteristicValue(
-        const ValueCallback& callback,
-        const ErrorCallback& error_callback) = 0;
-
-    // This method will be called, when a remote device requests to write the
-    // value of the exported GATT characteristic. Invoke |callback| to report
-    // that the value was successfully written. Invoke |error_callback| to
-    // report a failure to write the value. This can happen, for example, if the
-    // characteristic has no write permission set. Either callback should be
-    // invoked after a reasonable amount of time, since the request will time
-    // out if left pending for too long.
-    //
-    // The delegate should use this method to perform any side-effects that may
-    // occur based on the set value and potentially send a property changed
-    // signal to notify the Bluetooth daemon that the value has changed.
-    virtual void SetCharacteristicValue(
-        const std::vector<uint8_t>& value,
-        const base::Closure& callback,
-        const ErrorCallback& error_callback) = 0;
-  };
-
   virtual ~BluetoothGattCharacteristicServiceProvider();
 
   // Send a PropertyChanged signal to notify the Bluetooth daemon that the value
   // of the "Value" property has changed to |value|.
   virtual void SendValueChanged(const std::vector<uint8_t>& value) = 0;
 
+  // Writes the characteristics's properties into the provided writer. If
+  // value is not null, it is written also, otherwise no value property is
+  // written.
+  virtual void WriteProperties(dbus::MessageWriter* writer) {}
+
+  virtual const dbus::ObjectPath& object_path() const = 0;
+
   // Creates the instance, where |bus| is the D-Bus bus connection to export
   // the object onto, |uuid| is the 128-bit GATT characteristic UUID,
-  // |flags| is the list of GATT characteristic properties, |permissions| is the
-  // list of attribute permissions, |service_path| is the object path of the
-  // exported GATT service the characteristic belongs to, |object_path| is the
-  // object path that the characteristic should have, and |delegate| is the
-  // object that "Value" Get/Set requests will be passed to and responses
+  // |flags| is the list of GATT characteristic properties, |flags| is the
+  // list of flags for this characteristic, |service_path| is the object path
+  // of the exported GATT service the characteristic belongs to, |object_path|
+  // is the object path that the characteristic should have, and |delegate| is
+  // the object that "Value" Get/Set requests will be passed to and responses
   // generated from.
   //
   // Object paths of GATT characteristics must be hierarchical to the path of
@@ -97,10 +64,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothGattCharacteristicServiceProvider {
   static BluetoothGattCharacteristicServiceProvider* Create(
       dbus::Bus* bus,
       const dbus::ObjectPath& object_path,
-      Delegate* delegate,
+      std::unique_ptr<BluetoothGattAttributeValueDelegate> delegate,
       const std::string& uuid,
       const std::vector<std::string>& flags,
-      const std::vector<std::string>& permissions,
       const dbus::ObjectPath& service_path);
 
  protected:

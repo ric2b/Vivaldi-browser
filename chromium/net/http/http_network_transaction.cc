@@ -4,6 +4,7 @@
 
 #include "net/http/http_network_transaction.h"
 
+#include <memory>
 #include <set>
 #include <utility>
 #include <vector>
@@ -13,7 +14,6 @@
 #include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/format_macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
@@ -71,14 +71,14 @@ namespace net {
 
 namespace {
 
-scoped_ptr<base::Value> NetLogSSLVersionFallbackCallback(
+std::unique_ptr<base::Value> NetLogSSLVersionFallbackCallback(
     const GURL* url,
     int net_error,
     SSLFailureState ssl_failure_state,
     uint16_t version_before,
     uint16_t version_after,
     NetLogCaptureMode /* capture_mode */) {
-  scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetString("host_and_port", GetHostAndPort(*url));
   dict->SetInteger("net_error", net_error);
   dict->SetInteger("ssl_failure_state", ssl_failure_state);
@@ -87,11 +87,11 @@ scoped_ptr<base::Value> NetLogSSLVersionFallbackCallback(
   return std::move(dict);
 }
 
-scoped_ptr<base::Value> NetLogSSLCipherFallbackCallback(
+std::unique_ptr<base::Value> NetLogSSLCipherFallbackCallback(
     const GURL* url,
     int net_error,
     NetLogCaptureMode /* capture_mode */) {
-  scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetString("host_and_port", GetHostAndPort(*url));
   dict->SetInteger("net_error", net_error);
   return std::move(dict);
@@ -121,10 +121,6 @@ HttpNetworkTransaction::HttpNetworkTransaction(RequestPriority priority,
       establishing_tunnel_(false),
       websocket_handshake_stream_base_create_helper_(NULL),
       net_error_details_() {
-  session->ssl_config_service()->GetSSLConfig(&server_ssl_config_);
-  session->GetAlpnProtos(&server_ssl_config_.alpn_protos);
-  session->GetNpnProtos(&server_ssl_config_.npn_protos);
-  proxy_ssl_config_ = server_ssl_config_;
 }
 
 HttpNetworkTransaction::~HttpNetworkTransaction() {
@@ -154,6 +150,9 @@ int HttpNetworkTransaction::Start(const HttpRequestInfo* request_info,
   net_log_ = net_log;
   request_ = request_info;
 
+  // Now that we have an HttpRequestInfo object, update server_ssl_config_.
+  session_->GetSSLConfig(*request_, &server_ssl_config_, &proxy_ssl_config_);
+
   if (request_->load_flags & LOAD_DISABLE_CERT_REVOCATION_CHECKING) {
     server_ssl_config_.rev_checking_enabled = false;
     proxy_ssl_config_.rev_checking_enabled = false;
@@ -161,14 +160,6 @@ int HttpNetworkTransaction::Start(const HttpRequestInfo* request_info,
 
   if (request_->load_flags & LOAD_PREFETCH)
     response_.unused_since_prefetch = true;
-
-  // Channel ID is disabled if privacy mode is enabled for this request.
-  if (request_->privacy_mode == PRIVACY_MODE_ENABLED) {
-    server_ssl_config_.channel_id_enabled = false;
-  } else if (session_->params().enable_token_binding &&
-             session_->params().channel_id_service) {
-    server_ssl_config_.token_binding_params.push_back(TB_PARAM_ECDSAP256);
-  }
 
   next_state_ = STATE_NOTIFY_BEFORE_CREATE_STREAM;
   int rv = DoLoop(OK);
@@ -359,7 +350,7 @@ void HttpNetworkTransaction::StopCaching() {}
 
 bool HttpNetworkTransaction::GetFullRequestHeaders(
     HttpRequestHeaders* headers) const {
-  // TODO(ttuttle): Make sure we've populated request_headers_.
+  // TODO(juliatuttle): Make sure we've populated request_headers_.
   *headers = request_headers_;
   return true;
 }
@@ -1247,8 +1238,11 @@ int HttpNetworkTransaction::DoReadHeadersComplete(int result) {
     return OK;
   }
 
-  session_->http_stream_factory()->ProcessAlternativeServices(
-      session_, response_.headers.get(), HostPortPair::FromURL(request_->url));
+  if (session_->params().enable_alternative_service_for_insecure_origins ||
+      IsSecureRequest()) {
+    session_->http_stream_factory()->ProcessAlternativeServices(
+        session_, response_.headers.get(), url::SchemeHostPort(request_->url));
+  }
 
   if (IsSecureRequest())
     stream_->GetSSLInfo(&response_.ssl_info);

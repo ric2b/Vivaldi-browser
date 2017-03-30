@@ -8,6 +8,8 @@
 #include <utility>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/stl_util.h"
 #include "content/browser/frame_host/frame_tree.h"
@@ -39,6 +41,10 @@ base::LazyInstance<FrameTreeNodeIdMap> g_frame_tree_node_id_map =
 const double kLoadingProgressNotStarted = 0.0;
 const double kLoadingProgressMinimum = 0.1;
 const double kLoadingProgressDone = 1.0;
+
+void RecordUniqueNameLength(size_t length) {
+  UMA_HISTOGRAM_COUNTS("SessionRestore.FrameUniqueNameLength", length);
+}
 
 }  // namespace
 
@@ -74,9 +80,9 @@ FrameTreeNode::FrameTreeNode(
     FrameTree* frame_tree,
     Navigator* navigator,
     RenderFrameHostDelegate* render_frame_delegate,
-    RenderViewHostDelegate* render_view_delegate,
     RenderWidgetHostDelegate* render_widget_delegate,
     RenderFrameHostManager::Delegate* manager_delegate,
+    FrameTreeNode* parent,
     blink::WebTreeScopeType scope,
     const std::string& name,
     const std::string& unique_name,
@@ -85,11 +91,10 @@ FrameTreeNode::FrameTreeNode(
       navigator_(navigator),
       render_manager_(this,
                       render_frame_delegate,
-                      render_view_delegate,
                       render_widget_delegate,
                       manager_delegate),
       frame_tree_node_id_(next_frame_tree_node_id_++),
-      parent_(NULL),
+      parent_(parent),
       opener_(nullptr),
       opener_observer_(nullptr),
       has_committed_real_load_(false),
@@ -111,6 +116,7 @@ FrameTreeNode::FrameTreeNode(
           std::make_pair(frame_tree_node_id_, this));
   CHECK(result.second);
 
+  RecordUniqueNameLength(unique_name.size());
   TRACE_EVENT_OBJECT_CREATED_WITH_ID(
       "navigation", "FrameTreeNode",
       TRACE_ID_WITH_SCOPE("FrameTreeNode", frame_tree_node_id_));
@@ -119,7 +125,7 @@ FrameTreeNode::FrameTreeNode(
 }
 
 FrameTreeNode::~FrameTreeNode() {
-  children_.clear();
+  std::vector<std::unique_ptr<FrameTreeNode>>().swap(children_);
   frame_tree_->FrameRemoved(this);
   FOR_EACH_OBSERVER(Observer, observers_, OnFrameTreeNodeDestroyed(this));
 
@@ -145,12 +151,11 @@ bool FrameTreeNode::IsMainFrame() const {
   return frame_tree_->root() == this;
 }
 
-FrameTreeNode* FrameTreeNode::AddChild(scoped_ptr<FrameTreeNode> child,
+FrameTreeNode* FrameTreeNode::AddChild(std::unique_ptr<FrameTreeNode> child,
                                        int process_id,
                                        int frame_routing_id) {
   // Child frame must always be created in the same process as the parent.
   CHECK_EQ(process_id, render_manager_.current_host()->GetProcess()->GetID());
-  child->set_parent(this);
 
   // Initialize the RenderFrameHost for the new node.  We always create child
   // frames in the same SiteInstance as the current frame, and they can swap to
@@ -177,7 +182,7 @@ void FrameTreeNode::RemoveChild(FrameTreeNode* child) {
     if (iter->get() == child) {
       // Subtle: we need to make sure the node is gone from the tree before
       // observers are notified of its deletion.
-      scoped_ptr<FrameTreeNode> node_to_delete(std::move(*iter));
+      std::unique_ptr<FrameTreeNode> node_to_delete(std::move(*iter));
       children_.erase(iter);
       node_to_delete.reset();
       return;
@@ -191,7 +196,7 @@ void FrameTreeNode::ResetForNewProcess() {
 
   // Remove child nodes from the tree, then delete them. This destruction
   // operation will notify observers.
-  std::vector<scoped_ptr<FrameTreeNode>>().swap(children_);
+  std::vector<std::unique_ptr<FrameTreeNode>>().swap(children_);
 }
 
 void FrameTreeNode::SetOpener(FrameTreeNode* opener) {
@@ -204,7 +209,7 @@ void FrameTreeNode::SetOpener(FrameTreeNode* opener) {
 
   if (opener_) {
     if (!opener_observer_)
-      opener_observer_ = make_scoped_ptr(new OpenerDestroyedObserver(this));
+      opener_observer_ = base::WrapUnique(new OpenerDestroyedObserver(this));
     opener_->AddObserver(opener_observer_.get());
   }
 }
@@ -237,9 +242,21 @@ void FrameTreeNode::SetFrameName(const std::string& name,
     DCHECK_EQ(unique_name, replication_state_.unique_name);
     return;
   }
+  RecordUniqueNameLength(unique_name.size());
   render_manager_.OnDidUpdateName(name, unique_name);
   replication_state_.name = name;
   replication_state_.unique_name = unique_name;
+}
+
+void FrameTreeNode::AddContentSecurityPolicy(
+    const ContentSecurityPolicyHeader& header) {
+  replication_state_.accumulated_csp_headers.push_back(header);
+  render_manager_.OnDidAddContentSecurityPolicy(header);
+}
+
+void FrameTreeNode::ResetContentSecurityPolicy() {
+  replication_state_.accumulated_csp_headers.clear();
+  render_manager_.OnDidResetContentSecurityPolicy();
 }
 
 void FrameTreeNode::SetEnforceStrictMixedContentChecking(bool should_enforce) {
@@ -274,16 +291,11 @@ bool FrameTreeNode::IsDescendantOf(FrameTreeNode* other) const {
 }
 
 FrameTreeNode* FrameTreeNode::PreviousSibling() const {
-  if (!parent_)
-    return nullptr;
+  return GetSibling(-1);
+}
 
-  for (size_t i = 0; i < parent_->child_count(); ++i) {
-    if (parent_->child_at(i) == this)
-      return (i == 0) ? nullptr : parent_->child_at(i - 1);
-  }
-
-  NOTREACHED() << "FrameTreeNode not found in its parent's children.";
-  return nullptr;
+FrameTreeNode* FrameTreeNode::NextSibling() const {
+  return GetSibling(1);
 }
 
 bool FrameTreeNode::IsLoading() const {
@@ -317,7 +329,7 @@ bool FrameTreeNode::CommitPendingSandboxFlags() {
 }
 
 void FrameTreeNode::CreatedNavigationRequest(
-    scoped_ptr<NavigationRequest> navigation_request) {
+    std::unique_ptr<NavigationRequest> navigation_request) {
   CHECK(IsBrowserSideNavigationEnabled());
 
   bool was_previously_loading = frame_tree()->IsLoading();
@@ -490,8 +502,26 @@ void FrameTreeNode::TraceSnapshot() const {
   TRACE_EVENT_OBJECT_SNAPSHOT_WITH_ID(
       "navigation", "FrameTreeNode",
       TRACE_ID_WITH_SCOPE("FrameTreeNode", frame_tree_node_id_),
-      scoped_ptr<base::trace_event::ConvertableToTraceFormat>(
+      std::unique_ptr<base::trace_event::ConvertableToTraceFormat>(
           new TracedFrameTreeNode(*this)));
+}
+
+FrameTreeNode* FrameTreeNode::GetSibling(int relative_offset) const {
+  if (!parent_ || !parent_->child_count())
+    return nullptr;
+
+  for (size_t i = 0; i < parent_->child_count(); ++i) {
+    if (parent_->child_at(i) == this) {
+      if ((relative_offset < 0 && static_cast<size_t>(-relative_offset) > i) ||
+          i + relative_offset >= parent_->child_count()) {
+        return nullptr;
+      }
+      return parent_->child_at(i + relative_offset);
+    }
+  }
+
+  NOTREACHED() << "FrameTreeNode not found in its parent's children.";
+  return nullptr;
 }
 
 void FrameTreeNode::DidChangeLoadProgressExtended(double load_progress,

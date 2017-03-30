@@ -44,8 +44,7 @@ class MESSAGE_CENTER_EXPORT MessageCenterView : public views::View,
                     MessageCenterTray* tray,
                     int max_height,
                     bool initially_settings_visible,
-                    bool top_down,
-                    const base::string16& title);
+                    bool top_down);
   ~MessageCenterView() override;
 
   void SetNotifications(const NotificationList::Notifications& notifications);
@@ -79,7 +78,7 @@ class MESSAGE_CENTER_EXPORT MessageCenterView : public views::View,
   void ClickOnNotification(const std::string& notification_id) override;
   void RemoveNotification(const std::string& notification_id,
                           bool by_user) override;
-  scoped_ptr<ui::MenuModel> CreateMenuModel(
+  std::unique_ptr<ui::MenuModel> CreateMenuModel(
       const NotifierId& notifier_id,
       const base::string16& display_source) override;
   bool HasClickedListener(const std::string& notification_id) override;
@@ -95,22 +94,26 @@ class MESSAGE_CENTER_EXPORT MessageCenterView : public views::View,
  private:
   friend class MessageCenterViewTest;
 
+  enum class Mode { NOTIFICATIONS, SETTINGS, BUTTONS_ONLY };
+
   void AddNotificationAt(const Notification& notification, int index);
-  void NotificationsChanged();
+  base::string16 GetButtonBarTitle() const;
+  void Update(bool animate);
+  void SetVisibilityMode(Mode mode, bool animate);
+  void UpdateButtonBarStatus();
   void SetNotificationViewForTest(MessageView* view);
 
   MessageCenter* message_center_;  // Weak reference.
   MessageCenterTray* tray_;  // Weak reference.
 
-  // Map notification_id->NotificationView*. It contains all NotificationViews
-  // currently displayed in MessageCenter.
-  typedef std::map<std::string, NotificationView*> NotificationViewsMap;
+  // Map notification_id->MessageView*. It contains all MessageViews currently
+  // displayed in MessageCenter.
+  typedef std::map<std::string, MessageView*> NotificationViewsMap;
   NotificationViewsMap notification_views_;  // Weak.
 
   // Child views.
   views::ScrollView* scroller_;
-  scoped_ptr<MessageListView> message_list_view_;
-  scoped_ptr<views::View> empty_list_view_;
+  std::unique_ptr<MessageListView> message_list_view_;
   NotifierSettingsView* settings_view_;
   MessageCenterButtonBar* button_bar_;
   bool top_down_;
@@ -120,7 +123,7 @@ class MESSAGE_CENTER_EXPORT MessageCenterView : public views::View,
 
   // Animation managing transition between message center and settings (and vice
   // versa).
-  scoped_ptr<gfx::MultiAnimation> settings_transition_animation_;
+  std::unique_ptr<gfx::MultiAnimation> settings_transition_animation_;
 
   // Helper data to keep track of the transition between settings and
   // message center views.
@@ -133,7 +136,12 @@ class MESSAGE_CENTER_EXPORT MessageCenterView : public views::View,
   // ignored.
   bool is_closing_;
 
-  scoped_ptr<MessageViewContextMenuController> context_menu_controller_;
+  bool is_clearing_ = false;
+
+  // Current view mode. During animation, it is the target mode.
+  Mode mode_ = Mode::BUTTONS_ONLY;
+
+  std::unique_ptr<MessageViewContextMenuController> context_menu_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(MessageCenterView);
 };

@@ -20,7 +20,7 @@
 #include "chrome/browser/metrics/jumplist_metrics_win.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
-#include "chrome/browser/shell_integration.h"
+#include "chrome/browser/shell_integration_win.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -50,6 +50,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
+#include "chrome/browser/shell_integration_win.h"
 
 using content::BrowserThread;
 using JumpListData = JumpList::JumpListData;
@@ -306,14 +307,15 @@ JumpList::JumpList(Profile* profile)
 
   if (IsVivaldi()) {
     std::string app_name = web_app::GenerateApplicationNameFromExtensionId(
-    							vivaldi::kVivaldiAppId);
+                  vivaldi::kVivaldiAppId);
     app_id_ =
-      shell_integration::GetAppModelIdForProfile(base::UTF8ToWide(app_name),
+      shell_integration::win::GetAppModelIdForProfile(
+                                                 base::UTF8ToWide(app_name),
                                                  profile_->GetPath());
   }
   else {
   app_id_ =
-      shell_integration::GetChromiumModelIdForProfile(profile_->GetPath());
+      shell_integration::win::GetChromiumModelIdForProfile(profile_->GetPath());
   }
   icon_dir_ = profile_->GetPath().Append(chrome::kJumpListIconDirname);
 

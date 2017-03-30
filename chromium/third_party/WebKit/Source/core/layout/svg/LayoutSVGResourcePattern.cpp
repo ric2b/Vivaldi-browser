@@ -44,9 +44,7 @@ public:
 LayoutSVGResourcePattern::LayoutSVGResourcePattern(SVGPatternElement* node)
     : LayoutSVGResourcePaintServer(node)
     , m_shouldCollectPatternAttributes(true)
-#if ENABLE(OILPAN)
     , m_attributesWrapper(PatternAttributesWrapper::create())
-#endif
 {
 }
 
@@ -116,7 +114,7 @@ PassOwnPtr<PatternData> LayoutSVGResourcePattern::buildPatternData(const LayoutO
     patternData->transform.translate(tileBounds.x(), tileBounds.y());
     patternData->transform.preMultiply(attributes.patternTransform());
 
-    return patternData.release();
+    return patternData;
 }
 
 SVGPaintServer LayoutSVGResourcePattern::preparePaintServer(const LayoutObject& object)
@@ -130,11 +128,7 @@ SVGPaintServer LayoutSVGResourcePattern::preparePaintServer(const LayoutObject& 
     if (m_shouldCollectPatternAttributes) {
         patternElement->synchronizeAnimatedSVGAttribute(anyQName());
 
-#if ENABLE(OILPAN)
         m_attributesWrapper->set(PatternAttributes());
-#else
-        m_attributes = PatternAttributes();
-#endif
         patternElement->collectPatternAttributes(mutableAttributes());
         m_shouldCollectPatternAttributes = false;
     }

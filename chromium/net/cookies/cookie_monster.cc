@@ -46,6 +46,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <memory>
 #include <set>
 
 #include "base/bind.h"
@@ -53,14 +54,14 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_util.h"
@@ -306,6 +307,55 @@ void RunAsync(scoped_refptr<base::TaskRunner> proxy,
               const CanonicalCookie& cookie,
               bool removed) {
   proxy->PostTask(FROM_HERE, base::Bind(callback, cookie, removed));
+}
+
+size_t CountProtectedSecureCookiesAtPriority(
+    CookiePriority priority,
+    CookieMonster::CookieItVector* cookies) {
+  size_t num_protected_secure_cookies = 0;
+  for (const auto& cookie : *cookies) {
+    if (!cookie->second->IsSecure())
+      continue;
+    // 1) At low-priority, only low-priority secure cookies are protected as
+    //    part of the quota.
+    // 2) At medium-priority, only medium-priority secure cookies are protected
+    //    as part of the quota (low-priority secure cookies may be deleted).
+    // 3) At high-priority, medium-priority and high-priority secure cookies are
+    //    protected as part of the quota (low-priority secure cookies may be
+    //    deleted).
+    CookiePriority cookie_priority = cookie->second->Priority();
+    switch (cookie_priority) {
+      case COOKIE_PRIORITY_LOW:
+        if (priority == COOKIE_PRIORITY_LOW)
+          num_protected_secure_cookies++;
+        break;
+      case COOKIE_PRIORITY_MEDIUM:
+      case COOKIE_PRIORITY_HIGH:
+        if (cookie_priority <= priority)
+          num_protected_secure_cookies++;
+        break;
+    }
+  }
+
+  return num_protected_secure_cookies;
+}
+
+bool IsCookieEligibleForEviction(CookiePriority current_priority_level,
+                                 bool protect_secure_cookies,
+                                 const CanonicalCookie* cookie) {
+  if (!cookie->IsSecure() || !protect_secure_cookies)
+    return cookie->Priority() <= current_priority_level;
+
+  // Special consideration has to be given for low-priority secure cookies since
+  // they are given lower prority than non-secure medium-priority and non-secure
+  // high-priority cookies. Thus, low-priority secure cookies may be evicted at
+  // a medium and high value of |current_priority_level|. Put another way,
+  // low-priority secure cookies are only protected when the current priority
+  // level is low.
+  if (current_priority_level == COOKIE_PRIORITY_LOW)
+    return false;
+
+  return cookie->Priority() == COOKIE_PRIORITY_LOW;
 }
 
 }  // namespace
@@ -592,37 +642,38 @@ int CookieMonster::DeleteAllCreatedBetweenTask::RunDeleteTask() {
                                                          delete_end_);
 }
 
-// Task class for DeleteAllCreatedBetweenForHost call.
-class CookieMonster::DeleteAllCreatedBetweenForHostTask
+// Task class for DeleteAllCreatedBetweenWithPredicate call.
+class CookieMonster::DeleteAllCreatedBetweenWithPredicateTask
     : public DeleteTask<int> {
  public:
-  DeleteAllCreatedBetweenForHostTask(CookieMonster* cookie_monster,
-                                     Time delete_begin,
-                                     Time delete_end,
-                                     const GURL& url,
-                                     const DeleteCallback& callback)
+  DeleteAllCreatedBetweenWithPredicateTask(
+      CookieMonster* cookie_monster,
+      Time delete_begin,
+      Time delete_end,
+      base::Callback<bool(const CanonicalCookie&)> predicate,
+      const DeleteCallback& callback)
       : DeleteTask<int>(cookie_monster, callback),
         delete_begin_(delete_begin),
         delete_end_(delete_end),
-        url_(url) {}
+        predicate_(predicate) {}
 
   // DeleteTask:
   int RunDeleteTask() override;
 
  protected:
-  ~DeleteAllCreatedBetweenForHostTask() override {}
+  ~DeleteAllCreatedBetweenWithPredicateTask() override {}
 
  private:
   Time delete_begin_;
   Time delete_end_;
-  GURL url_;
+  base::Callback<bool(const CanonicalCookie&)> predicate_;
 
-  DISALLOW_COPY_AND_ASSIGN(DeleteAllCreatedBetweenForHostTask);
+  DISALLOW_COPY_AND_ASSIGN(DeleteAllCreatedBetweenWithPredicateTask);
 };
 
-int CookieMonster::DeleteAllCreatedBetweenForHostTask::RunDeleteTask() {
-  return this->cookie_monster()->DeleteAllCreatedBetweenForHost(
-      delete_begin_, delete_end_, url_);
+int CookieMonster::DeleteAllCreatedBetweenWithPredicateTask::RunDeleteTask() {
+  return this->cookie_monster()->DeleteAllCreatedBetweenWithPredicate(
+      delete_begin_, delete_end_, predicate_);
 }
 
 // Task class for DeleteCanonicalCookie call.
@@ -923,16 +974,19 @@ void CookieMonster::DeleteAllCreatedBetweenAsync(
   DoCookieTask(task);
 }
 
-void CookieMonster::DeleteAllCreatedBetweenForHostAsync(
-    const Time delete_begin,
-    const Time delete_end,
-    const GURL& url,
+void CookieMonster::DeleteAllCreatedBetweenWithPredicateAsync(
+    const Time& delete_begin,
+    const Time& delete_end,
+    const base::Callback<bool(const CanonicalCookie&)>& predicate,
     const DeleteCallback& callback) {
-  scoped_refptr<DeleteAllCreatedBetweenForHostTask> task =
-      new DeleteAllCreatedBetweenForHostTask(this, delete_begin, delete_end,
-                                             url, callback);
-
-  DoCookieTaskForURL(task, url);
+  if (predicate.is_null()) {
+    callback.Run(0);
+    return;
+  }
+  scoped_refptr<DeleteAllCreatedBetweenWithPredicateTask> task =
+      new DeleteAllCreatedBetweenWithPredicateTask(
+          this, delete_begin, delete_end, predicate, callback);
+  DoCookieTask(task);
 }
 
 void CookieMonster::DeleteSessionCookiesAsync(
@@ -974,7 +1028,7 @@ const char* const CookieMonster::kDefaultCookieableSchemes[] = {"http", "https",
 const int CookieMonster::kDefaultCookieableSchemesCount =
     arraysize(kDefaultCookieableSchemes);
 
-scoped_ptr<CookieStore::CookieChangedSubscription>
+std::unique_ptr<CookieStore::CookieChangedSubscription>
 CookieMonster::AddCallbackForCookie(const GURL& gurl,
                                     const std::string& name,
                                     const CookieChangedCallback& callback) {
@@ -1033,7 +1087,7 @@ bool CookieMonster::SetCookieWithDetails(const GURL& url,
     last_time_seen_ = actual_creation_time;
   }
 
-  scoped_ptr<CanonicalCookie> cc(CanonicalCookie::Create(
+  std::unique_ptr<CanonicalCookie> cc(CanonicalCookie::Create(
       url, name, value, domain, path, actual_creation_time, expiration_time,
       secure, http_only, same_site, enforce_strict_secure, priority));
 
@@ -1125,41 +1179,29 @@ int CookieMonster::DeleteAllCreatedBetween(const Time& delete_begin,
   return num_deleted;
 }
 
-int CookieMonster::DeleteAllCreatedBetweenForHost(const Time delete_begin,
-                                                  const Time delete_end,
-                                                  const GURL& url) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  if (!HasCookieableScheme(url))
-    return 0;
-
-  const std::string host(url.host());
-
-  // We store host cookies in the store by their canonical host name;
-  // domain cookies are stored with a leading ".".  So this is a pretty
-  // simple lookup and per-cookie delete.
+int CookieMonster::DeleteAllCreatedBetweenWithPredicate(
+    const base::Time& delete_begin,
+    const base::Time& delete_end,
+    const base::Callback<bool(const CanonicalCookie&)>& predicate) {
   int num_deleted = 0;
-  for (CookieMapItPair its = cookies_.equal_range(GetKey(host));
-       its.first != its.second;) {
-    CookieMap::iterator curit = its.first;
-    ++its.first;
+  for (CookieMap::iterator it = cookies_.begin(); it != cookies_.end();) {
+    CookieMap::iterator curit = it;
+    CanonicalCookie* cc = curit->second;
+    ++it;
 
-    const CanonicalCookie* const cc = curit->second;
-
-    // Delete only on a match as a host cookie.
-    if (cc->IsHostCookie() && cc->IsDomainMatch(host) &&
-        cc->CreationDate() >= delete_begin &&
+    if (cc->CreationDate() >= delete_begin &&
         // The assumption that null |delete_end| is equivalent to
         // Time::Max() is confusing.
-        (delete_end.is_null() || cc->CreationDate() < delete_end)) {
-      num_deleted++;
-
-      InternalDeleteCookie(curit, true, DELETE_COOKIE_EXPLICIT);
+        (delete_end.is_null() || cc->CreationDate() < delete_end) &&
+        predicate.Run(*cc)) {
+      InternalDeleteCookie(curit, true, /*sync_to_store*/
+                           DELETE_COOKIE_EXPLICIT);
+      ++num_deleted;
     }
   }
+
   return num_deleted;
 }
-
 
 bool CookieMonster::SetCookieWithOptions(const GURL& url,
                                          const std::string& cookie_line,
@@ -1727,7 +1769,7 @@ bool CookieMonster::SetCookieWithCreationTimeAndOptions(
     last_time_seen_ = creation_time;
   }
 
-  scoped_ptr<CanonicalCookie> cc(
+  std::unique_ptr<CanonicalCookie> cc(
       CanonicalCookie::Create(url, cookie_line, creation_time, options));
 
   if (!cc.get()) {
@@ -1737,7 +1779,7 @@ bool CookieMonster::SetCookieWithCreationTimeAndOptions(
   return SetCanonicalCookie(std::move(cc), options);
 }
 
-bool CookieMonster::SetCanonicalCookie(scoped_ptr<CanonicalCookie> cc,
+bool CookieMonster::SetCanonicalCookie(std::unique_ptr<CanonicalCookie> cc,
                                        const CookieOptions& options) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
@@ -1795,7 +1837,7 @@ bool CookieMonster::SetCanonicalCookies(const CookieList& list) {
   options.set_include_httponly();
 
   for (const auto& cookie : list) {
-    if (!SetCanonicalCookie(make_scoped_ptr(new CanonicalCookie(cookie)),
+    if (!SetCanonicalCookie(base::WrapUnique(new CanonicalCookie(cookie)),
                             options)) {
       return false;
     }
@@ -1877,15 +1919,6 @@ size_t CookieMonster::GarbageCollect(const Time& current,
     num_deleted +=
         GarbageCollectExpired(current, cookies_.equal_range(key), cookie_its);
 
-    // TODO(mkwst): Soften this.
-    CookieItVector secure_cookie_its;
-    if (enforce_strict_secure && cookie_its->size() > kDomainMaxCookies) {
-      VLOG(kVlogGarbageCollection) << "Garbage collecting non-Secure cookies.";
-      num_deleted +=
-          GarbageCollectNonSecure(non_expired_cookie_its, &secure_cookie_its);
-      cookie_its = &secure_cookie_its;
-    }
-
     if (cookie_its->size() > kDomainMaxCookies) {
       VLOG(kVlogGarbageCollection) << "Deep Garbage Collect domain.";
       size_t purge_goal =
@@ -1895,25 +1928,83 @@ size_t CookieMonster::GarbageCollect(const Time& current,
       // Sort the cookies by access date, from least-recent to most-recent.
       std::sort(cookie_its->begin(), cookie_its->end(), LRACookieSorter);
 
+      size_t additional_quota_low = kDomainCookiesQuotaLow;
+      size_t additional_quota_medium = kDomainCookiesQuotaMedium;
+      size_t additional_quota_high = kDomainCookiesQuotaHigh;
+
       // Remove all but the kDomainCookiesQuotaLow most-recently accessed
       // cookies with low-priority. Then, if cookies still need to be removed,
       // bump the quota and remove low- and medium-priority. Then, if cookies
       // _still_ need to be removed, bump the quota and remove cookies with
       // any priority.
-      const size_t kQuotas[3] = {kDomainCookiesQuotaLow,
-                                 kDomainCookiesQuotaMedium,
-                                 kDomainCookiesQuotaHigh};
+      //
+      // 1.  Low-priority non-secure cookies.
+      // 2.  Low-priority secure cookies.
+      // 3.  Medium-priority non-secure cookies.
+      // 4.  High-priority non-secure cookies.
+      // 5.  Medium-priority secure cookies.
+      // 6.  High-priority secure cookies.
+      const static struct {
+        CookiePriority priority;
+        bool protect_secure_cookies;
+      } purge_rounds[] = {
+          // 1.  Low-priority non-secure cookies.
+          {COOKIE_PRIORITY_LOW, true},
+          // 2.  Low-priority secure cookies.
+          {COOKIE_PRIORITY_LOW, false},
+          // 3.  Medium-priority non-secure cookies.
+          {COOKIE_PRIORITY_MEDIUM, true},
+          // 4.  High-priority non-secure cookies.
+          {COOKIE_PRIORITY_HIGH, true},
+          // 5.  Medium-priority secure cookies.
+          {COOKIE_PRIORITY_MEDIUM, false},
+          // 6.  High-priority secure cookies.
+          {COOKIE_PRIORITY_HIGH, false},
+      };
+
       size_t quota = 0;
-      for (size_t i = 0; i < arraysize(kQuotas) && purge_goal > 0; i++) {
-        quota += kQuotas[i];
-        size_t just_deleted = PurgeLeastRecentMatches(
-            cookie_its, static_cast<CookiePriority>(i), quota, purge_goal);
-        DCHECK_LE(just_deleted, purge_goal);
-        purge_goal -= just_deleted;
-        num_deleted += just_deleted;
+      for (const auto& purge_round : purge_rounds) {
+        // Only observe the non-secure purge rounds if strict secure cookies is
+        // enabled.
+        if (!enforce_strict_secure && purge_round.protect_secure_cookies)
+          continue;
+
+        // Only adjust the quota if the round is executing, otherwise it is
+        // necesary to delay quota adjustments until a later round. This is
+        // because if the high priority, non-secure round is skipped, its quota
+        // should not count until the later high priority, full round later.
+        size_t* additional_quota = nullptr;
+        switch (purge_round.priority) {
+          case COOKIE_PRIORITY_LOW:
+            additional_quota = &additional_quota_low;
+            break;
+          case COOKIE_PRIORITY_MEDIUM:
+            additional_quota = &additional_quota_medium;
+            break;
+          case COOKIE_PRIORITY_HIGH:
+            additional_quota = &additional_quota_high;
+            break;
+        }
+        quota += *additional_quota;
+        *additional_quota = 0u;
+        size_t just_deleted = 0u;
+
+        // Purge up to |purge_goal| for all cookies at the given priority. This
+        // path will always execute if strict secure cookies is disabled since
+        // |purge_goal| must be positive because of the for-loop guard. If
+        // strict secure cookies is enabled, this path will be taken only if the
+        // initial non-secure purge did not evict enough cookies.
+        if (purge_goal > 0) {
+          just_deleted = PurgeLeastRecentMatches(
+              cookie_its, purge_round.priority, quota, purge_goal,
+              purge_round.protect_secure_cookies);
+          DCHECK_LE(just_deleted, purge_goal);
+          purge_goal -= just_deleted;
+          num_deleted += just_deleted;
+        }
       }
 
-      DCHECK_EQ(0U, purge_goal);
+      DCHECK_EQ(0u, purge_goal);
     }
   }
 
@@ -1963,12 +2054,21 @@ size_t CookieMonster::GarbageCollect(const Time& current,
 size_t CookieMonster::PurgeLeastRecentMatches(CookieItVector* cookies,
                                               CookiePriority priority,
                                               size_t to_protect,
-                                              size_t purge_goal) {
+                                              size_t purge_goal,
+                                              bool protect_secure_cookies) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   // Find the first protected cookie by walking down from the end of the list
   // cookie list (most-recently accessed) until |to_protect| cookies that match
   // |priority| are found.
+  //
+  // If |protect_secure_cookies| is true, do a first pass that counts eligible
+  // secure cookies at the specified priority as protected.
+  if (protect_secure_cookies) {
+    to_protect -= std::min(
+        to_protect, CountProtectedSecureCookiesAtPriority(priority, cookies));
+  }
+
   size_t protection_boundary = cookies->size();
   while (to_protect > 0 && protection_boundary > 0) {
     protection_boundary--;
@@ -1982,7 +2082,12 @@ size_t CookieMonster::PurgeLeastRecentMatches(CookieItVector* cookies,
   size_t removed = 0;
   size_t current = 0;
   while (removed < purge_goal && current < protection_boundary) {
-    if (cookies->at(current)->second->Priority() <= priority) {
+    const CanonicalCookie* current_cookie = cookies->at(current)->second;
+    // Only delete the current cookie if the priority is less than or equal to
+    // the current level. If it is equal to the current level, and secure
+    // cookies are protected, only delete it if it is not secure.
+    if (IsCookieEligibleForEviction(priority, protect_secure_cookies,
+                                    current_cookie)) {
       InternalDeleteCookie(cookies->at(current), true,
                            DELETE_COOKIE_EVICTED_DOMAIN);
       cookies->erase(cookies->begin() + current);
@@ -2014,24 +2119,6 @@ size_t CookieMonster::GarbageCollectExpired(const Time& current,
       ++num_deleted;
     } else if (cookie_its) {
       cookie_its->push_back(curit);
-    }
-  }
-
-  return num_deleted;
-}
-
-size_t CookieMonster::GarbageCollectNonSecure(
-    const CookieItVector& valid_cookies,
-    CookieItVector* cookie_its) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  size_t num_deleted = 0;
-  for (const auto& curr_cookie_it : valid_cookies) {
-    if (!curr_cookie_it->second->IsSecure()) {
-      InternalDeleteCookie(curr_cookie_it, true, DELETE_COOKIE_NON_SECURE);
-      ++num_deleted;
-    } else if (cookie_its) {
-      cookie_its->push_back(curr_cookie_it);
     }
   }
 

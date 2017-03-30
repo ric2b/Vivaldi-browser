@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "cc/base/cc_export.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/tiles/picture_layer_tiling.h"
@@ -28,10 +29,10 @@ class CC_EXPORT PictureLayerImpl
     : public LayerImpl,
       NON_EXPORTED_BASE(public PictureLayerTilingClient) {
  public:
-  static scoped_ptr<PictureLayerImpl> Create(LayerTreeImpl* tree_impl,
-                                             int id,
-                                             bool is_mask) {
-    return make_scoped_ptr(new PictureLayerImpl(tree_impl, id, is_mask));
+  static std::unique_ptr<PictureLayerImpl> Create(LayerTreeImpl* tree_impl,
+                                                  int id,
+                                                  bool is_mask) {
+    return base::WrapUnique(new PictureLayerImpl(tree_impl, id, is_mask));
   }
   ~PictureLayerImpl() override;
 
@@ -39,7 +40,7 @@ class CC_EXPORT PictureLayerImpl
 
   // LayerImpl overrides.
   const char* LayerTypeAsString() const override;
-  scoped_ptr<LayerImpl> CreateLayerImpl(LayerTreeImpl* tree_impl) override;
+  std::unique_ptr<LayerImpl> CreateLayerImpl(LayerTreeImpl* tree_impl) override;
   void PushPropertiesTo(LayerImpl* layer) override;
   void AppendQuads(RenderPass* render_pass,
                    AppendQuadsData* append_quads_data) override;
@@ -92,9 +93,6 @@ class CC_EXPORT PictureLayerImpl
   RasterSource* GetRasterSource() const { return raster_source_.get(); }
 
  protected:
-  friend class LayerRasterTileIterator;
-  using TileRequirementCheck = bool (PictureLayerTiling::*)(const Tile*) const;
-
   PictureLayerImpl(LayerTreeImpl* tree_impl, int id, bool is_mask);
   PictureLayerTiling* AddTiling(float contents_scale);
   void RemoveAllTilings();
@@ -120,11 +118,11 @@ class CC_EXPORT PictureLayerImpl
 
   virtual void UpdateIdealScales();
   float MaximumTilingContentsScale() const;
-  scoped_ptr<PictureLayerTilingSet> CreatePictureLayerTilingSet();
+  std::unique_ptr<PictureLayerTilingSet> CreatePictureLayerTilingSet();
 
   PictureLayerImpl* twin_layer_;
 
-  scoped_ptr<PictureLayerTilingSet> tilings_;
+  std::unique_ptr<PictureLayerTilingSet> tilings_;
   scoped_refptr<RasterSource> raster_source_;
   Region invalidation_;
 
@@ -132,6 +130,9 @@ class CC_EXPORT PictureLayerImpl
   float ideal_device_scale_;
   float ideal_source_scale_;
   float ideal_contents_scale_;
+  // This refers to the ideal scale from the previous frame (or a previous time
+  // the ideal scale was updated).
+  float last_ideal_source_scale_;
 
   float raster_page_scale_;
   float raster_device_scale_;

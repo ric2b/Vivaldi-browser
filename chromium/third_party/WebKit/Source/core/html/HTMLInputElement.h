@@ -48,7 +48,7 @@ struct DateTimeChooserParameters;
 class CORE_EXPORT HTMLInputElement : public HTMLTextFormControlElement {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static RawPtr<HTMLInputElement> create(Document&, HTMLFormElement*, bool createdByParser);
+    static HTMLInputElement* create(Document&, HTMLFormElement*, bool createdByParser);
     ~HTMLInputElement() override;
     DECLARE_VIRTUAL_TRACE();
 
@@ -279,7 +279,6 @@ private:
     enum AutoCompleteSetting { Uninitialized, On, Off };
 
     void didAddUserAgentShadowRoot(ShadowRoot&) final;
-    void willAddFirstAuthorShadowRoot() final;
 
     void willChangeForm() final;
     void didChangeForm() final;
@@ -328,8 +327,8 @@ private:
     void resetImpl() final;
     bool supportsAutofocus() const final;
 
-    void* preDispatchEventHandler(Event*) final;
-    void postDispatchEventHandler(Event*, void* dataFromPreDispatch) final;
+    EventDispatchHandlingState* preDispatchEventHandler(Event*) final;
+    void postDispatchEventHandler(Event*, EventDispatchHandlingState*) final;
 
     bool isURLAttribute(const Attribute&) const final;
     bool hasLegalLinkAttribute(const QualifiedName&) const final;
@@ -361,7 +360,7 @@ private:
 
     void subtreeHasChanged() final;
 
-    void setListAttributeTargetObserver(RawPtr<ListAttributeTargetObserver>);
+    void setListAttributeTargetObserver(ListAttributeTargetObserver*);
     void resetListAttributeTargetObserver();
     void parseMaxLengthAttribute(const AtomicString&);
     void parseMinLengthAttribute(const AtomicString&);
@@ -382,8 +381,10 @@ private:
     int m_maxLength;
     int m_minLength;
     short m_maxResults;
+    // https://html.spec.whatwg.org/multipage/forms.html#concept-fe-checked
     unsigned m_isChecked : 1;
-    unsigned m_reflectsCheckedAttribute : 1;
+    // https://html.spec.whatwg.org/multipage/forms.html#concept-input-checked-dirty-flag
+    unsigned m_dirtyCheckedness : 1;
     unsigned m_isIndeterminate : 1;
     unsigned m_isActivatedSubmit : 1;
     unsigned m_autocomplete : 2; // AutoCompleteSetting

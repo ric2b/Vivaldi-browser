@@ -70,9 +70,9 @@ void RecordContentDispositionCountFlag(
 }
 
 // Do not insert, delete, or reorder; this is being histogrammed. Append only.
-// All of the download_extensions.cc file types should be in this list.
-// TODO(asanka): This enum and the UMA metrics for dangerous/malicious downloads
-// should be moved to //chrome/browser/download.
+// All of the download_file_types.asciipb entries should be in this list.
+// TODO(asanka): Replace this enum with calls to FileTypePolicies and move the
+// UMA metrics for dangerous/malicious downloads to //chrome/browser/download.
 const base::FilePath::CharType* kDangerousFileTypes[] = {
   FILE_PATH_LITERAL(".ad"),
   FILE_PATH_LITERAL(".ade"),
@@ -320,6 +320,21 @@ const base::FilePath::CharType* kDangerousFileTypes[] = {
   FILE_PATH_LITERAL(".zip"),
   FILE_PATH_LITERAL(".zipx"),
   FILE_PATH_LITERAL(".zpaq"),
+  FILE_PATH_LITERAL(".cdr"),
+  FILE_PATH_LITERAL(".dart"),
+  FILE_PATH_LITERAL(".dc42"),
+  FILE_PATH_LITERAL(".diskcopy42"),
+  FILE_PATH_LITERAL(".dmg"),
+  FILE_PATH_LITERAL(".dmgpart"),
+  FILE_PATH_LITERAL(".dvdr"),
+  FILE_PATH_LITERAL(".img"),
+  FILE_PATH_LITERAL(".imgpart"),
+  FILE_PATH_LITERAL(".ndif"),
+  FILE_PATH_LITERAL(".smi"),
+  FILE_PATH_LITERAL(".sparsebundle"),
+  FILE_PATH_LITERAL(".sparseimage"),
+  FILE_PATH_LITERAL(".toast"),
+  FILE_PATH_LITERAL(".udif"),
 };
 
 // Maps extensions to their matching UMA histogram int value.
@@ -703,7 +718,7 @@ void RecordNetworkBlockage(base::TimeDelta resource_handler_lifetime,
                            base::TimeDelta resource_handler_blocked_time) {
   int percentage = 0;
   // Avoid division by zero errors.
-  if (resource_handler_blocked_time != base::TimeDelta()) {
+  if (!resource_handler_blocked_time.is_zero()) {
     percentage =
         resource_handler_blocked_time * 100 / resource_handler_lifetime;
   }

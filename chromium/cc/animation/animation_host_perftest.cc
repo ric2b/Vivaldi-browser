@@ -4,7 +4,7 @@
 
 #include "cc/animation/animation_host.h"
 
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "cc/animation/animation_id_provider.h"
 #include "cc/animation/animation_player.h"
 #include "cc/animation/animation_timeline.h"
@@ -68,7 +68,7 @@ class AnimationHostPerfTest : public testing::Test {
       last_player_id = AnimationIdProvider::NextPlayerId();
 
       timeline->AttachPlayer(player);
-      player->AttachLayer(layer->id());
+      player->AttachElement(layer->id());
       EXPECT_TRUE(player->element_animations());
     }
 
@@ -114,7 +114,7 @@ class AnimationHostPerfTest : public testing::Test {
   }
 
  protected:
-  scoped_ptr<FakeLayerTreeHost> layer_tree_host_;
+  std::unique_ptr<FakeLayerTreeHost> layer_tree_host_;
   scoped_refptr<Layer> root_layer_;
   LayerImpl* root_layer_impl_;
 

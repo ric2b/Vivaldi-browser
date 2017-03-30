@@ -9,12 +9,6 @@
 namespace blink {
 
 // static
-void WebFontRendering::setUseDirectWrite(bool useDirectWrite)
-{
-    FontCache::setUseDirectWrite(useDirectWrite);
-}
-
-// static
 void WebFontRendering::setSkiaFontManager(SkFontMgr* fontMgr)
 {
     WTF::adopted(fontMgr);
@@ -52,18 +46,6 @@ void WebFontRendering::setStatusFontMetrics(const wchar_t* familyName, int32_t f
 }
 
 // static
-void WebFontRendering::setLCDOrder(SkFontHost::LCDOrder order)
-{
-    SkFontHost::SetSubpixelOrder(order);
-}
-
-// static
-void WebFontRendering::setLCDOrientation(SkFontHost::LCDOrientation orientation)
-{
-    SkFontHost::SetSubpixelOrientation(orientation);
-}
-
-// static
 void WebFontRendering::setAntialiasedTextEnabled(bool enabled)
 {
     FontCache::setAntialiasedTextEnabled(enabled);
@@ -73,6 +55,12 @@ void WebFontRendering::setAntialiasedTextEnabled(bool enabled)
 void WebFontRendering::setLCDTextEnabled(bool enabled)
 {
     FontCache::setLCDTextEnabled(enabled);
+}
+
+// static
+void WebFontRendering::setUseSkiaFontFallback(bool useSkiaFontFallback)
+{
+    FontCache::setUseSkiaFontFallback(useSkiaFontFallback);
 }
 
 } // namespace blink

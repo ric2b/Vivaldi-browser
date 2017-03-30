@@ -6,8 +6,9 @@
 
 #include <stddef.h>
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "components/domain_reliability/config.h"
 
 namespace domain_reliability {
@@ -291,6 +292,9 @@ const GoogleConfigParams kGoogleConfigs[] = {
   { "admob.vn", true, false, false },
   { "adwhirl.com", true, false, false },
   { "android.com", true, false, false },
+  { "anycast-edge.metric.gstatic.com", true, false, false },
+  { "anycast1.metric.gstatic.com", true, false, false },
+  { "anycast1-stb.metric.gstatic.com", true, false, false },
   { "chromecast.com", true, false, false },
   { "chromeexperiments.com", true, false, false },
   { "chromestatus.com", true, false, false },
@@ -314,6 +318,7 @@ const GoogleConfigParams kGoogleConfigs[] = {
   { "google.jobs", true, false, false },
   { "google.net", true, false, false },
   { "google.org", true, false, false },
+  { "google.stackdriver.com", true, false, false },
   { "googleadapis.com", true, false, false },
   { "googleadservices.com", true, false, false },
   { "googleadsserving.cn", true, false, false },
@@ -340,6 +345,20 @@ const GoogleConfigParams kGoogleConfigs[] = {
   { "gstatic.com", true, false, false },
   { "picasa.com", true, false, false },
   { "recaptcha.net", true, false, false },
+  { "stackdriver.com", true, false, false },
+  { "stbcast.metric.gstatic.com", true, false, false },
+  { "stbcast2.metric.gstatic.com", true, false, false },
+  { "stbcast3.metric.gstatic.com", true, false, false },
+  { "stbcast4.metric.gstatic.com", true, false, false },
+  { "stbcast-stb.metric.gstatic.com", true, false, false },
+  { "stbcast2-stb.metric.gstatic.com", true, false, false },
+  { "stbcast3-stb.metric.gstatic.com", true, false, false },
+  { "stbcast4-stb.metric.gstatic.com", true, false, false },
+  { "unicast.metric.gstatic.com", true, false, false },
+  { "unicast-edge.metric.gstatic.com", true, false, false },
+  { "unicast-stb.metric.gstatic.com", true, false, false },
+  { "unicast2.metric.gstatic.com", true, false, false },
+  { "unicast2-stb.metric.gstatic.com", true, false, false },
   { "waze.com", true, false, false },
   { "withgoogle.com", true, false, false },
   { "youtu.be", true, false, false },
@@ -507,15 +526,17 @@ const char* kGoogleStandardCollectors[] = {
 const char* kGoogleOriginSpecificCollectorPathString =
   "/domainreliability/upload";
 
-static scoped_ptr<DomainReliabilityConfig>
-CreateGoogleConfig(const GoogleConfigParams& params, bool is_www) {
+static std::unique_ptr<DomainReliabilityConfig> CreateGoogleConfig(
+    const GoogleConfigParams& params,
+    bool is_www) {
   if (is_www)
     DCHECK(params.duplicate_for_www);
 
   std::string hostname = (is_www ? "www." : "") + std::string(params.hostname);
   bool include_subdomains = params.include_subdomains && !is_www;
 
-  scoped_ptr<DomainReliabilityConfig> config(new DomainReliabilityConfig());
+  std::unique_ptr<DomainReliabilityConfig> config(
+      new DomainReliabilityConfig());
   config->origin = GURL("https://" + hostname + "/");
   config->include_subdomains = include_subdomains;
   config->collectors.clear();

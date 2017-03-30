@@ -121,8 +121,6 @@ class VivaldiBrowserWindow : public BrowserWindow {
   bool IsTabStripEditable() const override;
   bool IsToolbarVisible() const override;
   gfx::Rect GetRootWindowResizerRect() const override;
-  void ConfirmAddSearchProvider(TemplateURL* template_url,
-    Profile* profile) override{}
   void ShowUpdateChromeDialog() override{}
   void ShowBookmarkBubble(const GURL& url,
     bool already_bookmarked) override{}
@@ -134,13 +132,6 @@ class VivaldiBrowserWindow : public BrowserWindow {
     translate::TranslateStep step,
     translate::TranslateErrors::Type error_type,
     bool is_user_gesture) override{}
-#if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
-  void ShowOneClickSigninBubble(
-    OneClickSigninBubbleType type,
-    const base::string16& email,
-    const base::string16& error_message,
-    const StartSyncCallback& start_sync_callback) override{}
-#endif
   bool IsDownloadShelfVisible() const override;
   DownloadShelf* GetDownloadShelf() override;
   void ConfirmBrowserCloseWithPendingDownloads(
@@ -174,6 +165,9 @@ class VivaldiBrowserWindow : public BrowserWindow {
       content::WebContents* contents,
       autofill::SaveCardBubbleController* controller,
       bool is_user_gesture) override;
+  void ShowOneClickSigninConfirmation(
+    const base::string16& email,
+    const StartSyncCallback& start_sync_callback) override {};
 
   //extensions::AppWindow* GetAppWindow(content::WebContents* web_contents);
   ExclusiveAccessContext* GetExclusiveAccessContext() override;
@@ -190,12 +184,16 @@ class VivaldiBrowserWindow : public BrowserWindow {
       const base::Callback<void(ImeWarningBubblePermissionStatus status)>&
         callback) override {}
 
+  std::string GetWorkspace() const override;
+  void MaybeShowNewBackShortcutBubble(bool forward) override {}
+  void HideNewBackShortcutBubble() override {}
+
  protected:
   void DestroyBrowser() override;
 
  private:
   // The Browser object we are associated with.
-  scoped_ptr<Browser> browser_;
+   std::unique_ptr<Browser> browser_;
 
   // The window bounds.
   gfx::Rect bounds_;

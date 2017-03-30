@@ -29,6 +29,7 @@ component("wifi") {
   if (is_mac) {
     libs = [
       "CoreWLAN.framework",
+      "Foundation.framework",
       "SystemConfiguration.framework",
     ]
   }
@@ -56,6 +57,7 @@ executable("wifi_test") {
     ":wifi",
     "//base",
     "//build/config/sanitizers:deps",
+    "//build/win:default_exe_manifest",
     "//components/onc",
   ]
 }

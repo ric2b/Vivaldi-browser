@@ -18,7 +18,8 @@ class NopDragDropClient : public DragDropClient {
                        aura::Window* source_window,
                        const gfx::Point& screen_location,
                        int operation,
-                       ui::DragDropTypes::DragEventSource source) override {
+                       ui::DragDropTypes::DragEventSource source,
+                       bool& cancelled) override {
     return 0;
   }
   void DragUpdate(aura::Window* target,

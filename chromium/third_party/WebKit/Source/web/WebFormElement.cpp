@@ -62,14 +62,6 @@ WebString WebFormElement::method() const
     return constUnwrap<HTMLFormElement>()->method();
 }
 
-void WebFormElement::getNamedElements(const WebString& name,
-                                      WebVector<WebNode>& result)
-{
-    HeapVector<Member<Element>> tempVector;
-    unwrap<HTMLFormElement>()->getNamedElements(name, tempVector);
-    result.assign(tempVector);
-}
-
 void WebFormElement::getFormControlElements(WebVector<WebFormControlElement>& result) const
 {
     const HTMLFormElement* form = constUnwrap<HTMLFormElement>();
@@ -81,16 +73,6 @@ void WebFormElement::getFormControlElements(WebVector<WebFormControlElement>& re
             formControlElements.append(toHTMLFormControlElement(*it));
     }
     result.assign(formControlElements);
-}
-
-bool WebFormElement::checkValidity()
-{
-    return unwrap<HTMLFormElement>()->checkValidity();
-}
-
-void WebFormElement::finishRequestAutocomplete(WebFormElement::AutocompleteResult result)
-{
-    unwrap<HTMLFormElement>()->finishRequestAutocomplete(static_cast<HTMLFormElement::AutocompleteResult>(result));
 }
 
 WebFormElement::WebFormElement(HTMLFormElement* e)

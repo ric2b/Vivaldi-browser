@@ -11,7 +11,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "cc/resources/shared_bitmap.h"
@@ -130,7 +130,7 @@ void ConvertImageData(PPB_ImageData_Impl* src_image,
 }  // namespace
 
 struct PepperGraphics2DHost::QueuedOperation {
-  enum Type { PAINT, SCROLL, REPLACE, };
+  enum Type { PAINT, SCROLL, REPLACE, TRANSFORM };
 
   QueuedOperation(Type t)
       : type(t), paint_x(0), paint_y(0), scroll_dx(0), scroll_dy(0) {}
@@ -148,6 +148,10 @@ struct PepperGraphics2DHost::QueuedOperation {
 
   // Valid when type == REPLACE.
   scoped_refptr<PPB_ImageData_Impl> replace_image;
+
+  // Valid when type == TRANSFORM
+  float scale;
+  gfx::PointF translation;
 };
 
 // static
@@ -223,6 +227,8 @@ int32_t PepperGraphics2DHost::OnResourceMessageReceived(
                                         OnHostMsgFlush)
     PPAPI_DISPATCH_HOST_RESOURCE_CALL(PpapiHostMsg_Graphics2D_SetScale,
                                       OnHostMsgSetScale)
+    PPAPI_DISPATCH_HOST_RESOURCE_CALL(PpapiHostMsg_Graphics2D_SetLayerTransform,
+                                      OnHostMsgSetLayerTransform)
     PPAPI_DISPATCH_HOST_RESOURCE_CALL(PpapiHostMsg_Graphics2D_ReadImageData,
                                       OnHostMsgReadImageData)
   PPAPI_END_MESSAGE_MAP()
@@ -524,6 +530,21 @@ int32_t PepperGraphics2DHost::OnHostMsgSetScale(
   return PP_ERROR_BADARGUMENT;
 }
 
+int32_t PepperGraphics2DHost::OnHostMsgSetLayerTransform(
+            ppapi::host::HostMessageContext* context,
+            float scale,
+            const PP_FloatPoint& translation) {
+  if (scale < 0.0f)
+    return PP_ERROR_BADARGUMENT;
+
+  QueuedOperation operation(QueuedOperation::TRANSFORM);
+  operation.scale = scale;
+  operation.translation = gfx::PointF(translation.x, translation.y);
+  queued_operations_.push_back(operation);
+  return PP_OK;
+}
+
+
 int32_t PepperGraphics2DHost::OnHostMsgReadImageData(
     ppapi::host::HostMessageContext* context,
     PP_Resource image,
@@ -532,10 +553,11 @@ int32_t PepperGraphics2DHost::OnHostMsgReadImageData(
   return ReadImageData(image, &top_left) ? PP_OK : PP_ERROR_FAILED;
 }
 
-void PepperGraphics2DHost::ReleaseCallback(scoped_ptr<cc::SharedBitmap> bitmap,
-                                           const gfx::Size& bitmap_size,
-                                           const gpu::SyncToken& sync_token,
-                                           bool lost_resource) {
+void PepperGraphics2DHost::ReleaseCallback(
+    std::unique_ptr<cc::SharedBitmap> bitmap,
+    const gfx::Size& bitmap_size,
+    const gpu::SyncToken& sync_token,
+    bool lost_resource) {
   cached_bitmap_.reset();
   // Only keep around a cached bitmap if the plugin is currently drawing (has
   // need_flush_ack_ set).
@@ -546,12 +568,12 @@ void PepperGraphics2DHost::ReleaseCallback(scoped_ptr<cc::SharedBitmap> bitmap,
 
 bool PepperGraphics2DHost::PrepareTextureMailbox(
     cc::TextureMailbox* mailbox,
-    scoped_ptr<cc::SingleReleaseCallback>* release_callback) {
+    std::unique_ptr<cc::SingleReleaseCallback>* release_callback) {
   if (!texture_mailbox_modified_)
     return false;
   // TODO(jbauman): Send image_data_ through mailbox to avoid copy.
   gfx::Size pixel_image_size(image_data_->width(), image_data_->height());
-  scoped_ptr<cc::SharedBitmap> shared_bitmap;
+  std::unique_ptr<cc::SharedBitmap> shared_bitmap;
   if (cached_bitmap_) {
     if (cached_bitmap_size_ == pixel_image_size)
       shared_bitmap = std::move(cached_bitmap_);
@@ -589,10 +611,15 @@ int32_t PepperGraphics2DHost::Flush(PP_Resource* old_image_data) {
   bool done_replace_contents = false;
   bool no_update_visible = true;
   bool is_plugin_visible = true;
+
   for (size_t i = 0; i < queued_operations_.size(); i++) {
     QueuedOperation& operation = queued_operations_[i];
     gfx::Rect op_rect;
     switch (operation.type) {
+      case QueuedOperation::TRANSFORM:
+        ExecuteTransform(operation.scale, operation.translation);
+        no_update_visible = false;
+        break;
       case QueuedOperation::PAINT:
         ExecutePaintImageData(operation.paint_image.get(),
                               operation.paint_x,
@@ -626,11 +653,15 @@ int32_t PepperGraphics2DHost::Flush(PP_Resource* old_image_data) {
     // is visible to determine how to deal with the callback.
     if (bound_instance_ && !op_rect.IsEmpty()) {
       gfx::Point scroll_delta(operation.scroll_dx, operation.scroll_dy);
-      if (!ConvertToLogicalPixels(scale_,
-                                  &op_rect,
+      // In use-zoom-for-dsf mode, the viewport (thus cc) uses native
+      // pixels, so the damage and rects have to be scaled.
+      gfx::Rect op_rect_in_viewport = op_rect;
+      ConvertToLogicalPixels(scale_, &op_rect, nullptr);
+      if (!ConvertToLogicalPixels(scale_ / viewport_to_dip_scale_,
+                                  &op_rect_in_viewport,
                                   operation.type == QueuedOperation::SCROLL
                                       ? &scroll_delta
-                                      : NULL)) {
+                                      : nullptr)) {
         // Conversion requires falling back to InvalidateRect.
         operation.type = QueuedOperation::PAINT;
       }
@@ -648,10 +679,10 @@ int32_t PepperGraphics2DHost::Flush(PP_Resource* old_image_data) {
       // partially or completely off-screen.
       if (operation.type == QueuedOperation::SCROLL) {
         bound_instance_->ScrollRect(
-            scroll_delta.x(), scroll_delta.y(), op_rect);
+            scroll_delta.x(), scroll_delta.y(), op_rect_in_viewport);
       } else {
-        if (!op_rect.IsEmpty())
-          bound_instance_->InvalidateRect(op_rect);
+        if (!op_rect_in_viewport.IsEmpty())
+          bound_instance_->InvalidateRect(op_rect_in_viewport);
       }
       texture_mailbox_modified_ = true;
     }
@@ -676,6 +707,11 @@ int32_t PepperGraphics2DHost::Flush(PP_Resource* old_image_data) {
   }
 
   return PP_OK_COMPLETIONPENDING;
+}
+
+void PepperGraphics2DHost::ExecuteTransform(const float& scale,
+                                            const gfx::PointF& translate) {
+  bound_instance_->SetGraphics2DTransform(scale, translate);
 }
 
 void PepperGraphics2DHost::ExecutePaintImageData(PPB_ImageData_Impl* image,

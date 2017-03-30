@@ -5,6 +5,11 @@
 {
   'variables': {
     'chromium_code': 1,
+    'mojom_files': [
+      'public/interfaces/chooser_service.mojom',
+      'public/interfaces/device.mojom',
+      'public/interfaces/device_manager.mojom',
+    ],
   },
   'targets': [
     {
@@ -103,6 +108,10 @@
           'dependencies!': [
             '../../third_party/libusb/libusb.gyp:libusb',
           ],
+          'sources': [
+            'usb_device_handle_usbfs.cc',
+            'usb_device_handle_usbfs.h',
+          ],
           # These sources are libusb-specific.
           'sources!': [
             'usb_context.cc',
@@ -122,16 +131,33 @@
             '../../chromeos/chromeos.gyp:chromeos',
           ],
         }],
+        ['OS=="linux"', {
+          'sources': [
+            'usb_device_handle_usbfs.cc',
+            'usb_device_handle_usbfs.h',
+          ],
+          'sources!': [
+            'usb_device_handle_impl.cc',
+            'usb_device_handle_impl.h',
+          ]
+        }]
       ]
     },
     {
       'target_name': 'device_usb_mojo_bindings',
       'type': 'static_library',
-      'sources': [
-        'public/interfaces/chooser_service.mojom',
-        'public/interfaces/device.mojom',
-        'public/interfaces/device_manager.mojom',
+      'sources': [ '<@(mojom_files)' ],
+      'includes': [
+        '../../mojo/mojom_bindings_generator.gypi',
       ],
+    },
+    {
+      'target_name': 'device_usb_mojo_bindings_for_blink',
+      'type': 'static_library',
+      'sources': [ '<@(mojom_files)' ],
+      'variables': {
+        'for_blink': 'true',
+      },
       'includes': [
         '../../mojo/mojom_bindings_generator.gypi',
       ],

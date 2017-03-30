@@ -69,6 +69,8 @@ class WorkerGlobalScope;
 class WorkerOrWorkletGlobalScope;
 class XPathNSResolver;
 
+using InstallOriginTrialsFunction = void (*)(ScriptState*);
+
 template <typename T>
 struct V8TypeOf {
     STATIC_ONLY(V8TypeOf);
@@ -241,12 +243,6 @@ inline void v8SetReturnValue(const CallbackInfo& callbackInfo, PassRefPtr<T> imp
     v8SetReturnValue(callbackInfo, impl.get());
 }
 
-template<typename CallbackInfo, typename T>
-inline void v8SetReturnValue(const CallbackInfo& callbackInfo, RawPtr<T> impl)
-{
-    v8SetReturnValue(callbackInfo, impl.get());
-}
-
 template<typename CallbackInfo>
 inline void v8SetReturnValueForMainWorld(const CallbackInfo& callbackInfo, ScriptWrappable* impl)
 {
@@ -311,12 +307,6 @@ inline void v8SetReturnValueForMainWorld(const CallbackInfo& callbackInfo, PassR
     v8SetReturnValueForMainWorld(callbackInfo, impl.get());
 }
 
-template<typename CallbackInfo, typename T>
-inline void v8SetReturnValueForMainWorld(const CallbackInfo& callbackInfo, RawPtr<T> impl)
-{
-    v8SetReturnValueForMainWorld(callbackInfo, impl.get());
-}
-
 template<typename CallbackInfo>
 inline void v8SetReturnValueFast(const CallbackInfo& callbackInfo, ScriptWrappable* impl, const ScriptWrappable* wrappable)
 {
@@ -365,12 +355,6 @@ inline void v8SetReturnValueFast(const CallbackInfo& callbackInfo, WorkerGlobalS
 
 template<typename CallbackInfo, typename T, typename Wrappable>
 inline void v8SetReturnValueFast(const CallbackInfo& callbackInfo, PassRefPtr<T> impl, const Wrappable* wrappable)
-{
-    v8SetReturnValueFast(callbackInfo, impl.get(), wrappable);
-}
-
-template<typename CallbackInfo, typename T, typename Wrappable>
-inline void v8SetReturnValueFast(const CallbackInfo& callbackInfo, RawPtr<T> impl, const Wrappable* wrappable)
 {
     v8SetReturnValueFast(callbackInfo, impl.get(), wrappable);
 }
@@ -592,68 +576,12 @@ inline v8::MaybeLocal<v8::Value> v8DateOrNaN(v8::Isolate* isolate, double value)
 }
 
 // FIXME: Remove the special casing for NodeFilter and XPathNSResolver.
-RawPtr<NodeFilter> toNodeFilter(v8::Local<v8::Value>, v8::Local<v8::Object>, ScriptState*);
+NodeFilter* toNodeFilter(v8::Local<v8::Value>, v8::Local<v8::Object>, ScriptState*);
 XPathNSResolver* toXPathNSResolver(ScriptState*, v8::Local<v8::Value>);
 
 bool toV8Sequence(v8::Local<v8::Value>, uint32_t& length, v8::Isolate*, ExceptionState&);
 
-// Converts a JavaScript value to an array as per the Web IDL specification:
-// http://www.w3.org/TR/2012/CR-WebIDL-20120419/#es-array
-template <typename T, typename V8T>
-Vector<RefPtr<T>> toRefPtrNativeArrayUnchecked(v8::Local<v8::Value> v8Value, uint32_t length, v8::Isolate* isolate, ExceptionState& exceptionState)
-{
-    Vector<RefPtr<T>> result;
-    result.reserveInitialCapacity(length);
-    v8::Local<v8::Object> object = v8::Local<v8::Object>::Cast(v8Value);
-    v8::TryCatch block(isolate);
-    for (uint32_t i = 0; i < length; ++i) {
-        v8::Local<v8::Value> element;
-        if (!v8Call(object->Get(isolate->GetCurrentContext(), i), element, block)) {
-            exceptionState.rethrowV8Exception(block.Exception());
-            return Vector<RefPtr<T>>();
-        }
-        if (V8T::hasInstance(element, isolate)) {
-            v8::Local<v8::Object> elementObject = v8::Local<v8::Object>::Cast(element);
-            result.uncheckedAppend(V8T::toImpl(elementObject));
-        } else {
-            exceptionState.throwTypeError("Invalid Array element type");
-            return Vector<RefPtr<T>>();
-        }
-    }
-    return result;
-}
-
-template <typename T, typename V8T>
-Vector<RefPtr<T>> toRefPtrNativeArray(v8::Local<v8::Value> value, int argumentIndex, v8::Isolate* isolate, ExceptionState& exceptionState)
-{
-    v8::Local<v8::Value> v8Value(v8::Local<v8::Value>::New(isolate, value));
-    uint32_t length = 0;
-    if (value->IsArray()) {
-        length = v8::Local<v8::Array>::Cast(v8Value)->Length();
-    } else if (!toV8Sequence(value, length, isolate, exceptionState)) {
-        if (!exceptionState.hadException())
-            exceptionState.throwTypeError(ExceptionMessages::notAnArrayTypeArgumentOrValue(argumentIndex));
-        return Vector<RefPtr<T>>();
-    }
-    return toRefPtrNativeArrayUnchecked<T, V8T>(v8Value, length, isolate, exceptionState);
-}
-
-template <typename T, typename V8T>
-Vector<RefPtr<T>> toRefPtrNativeArray(v8::Local<v8::Value> value, const String& propertyName, v8::Isolate* isolate, ExceptionState& exceptionState)
-{
-    v8::Local<v8::Value> v8Value(v8::Local<v8::Value>::New(isolate, value));
-    uint32_t length = 0;
-    if (value->IsArray()) {
-        length = v8::Local<v8::Array>::Cast(v8Value)->Length();
-    } else if (!toV8Sequence(value, length, isolate, exceptionState)) {
-        if (!exceptionState.hadException())
-            exceptionState.throwTypeError(ExceptionMessages::notASequenceTypeProperty(propertyName));
-        return Vector<RefPtr<T>>();
-    }
-    return toRefPtrNativeArrayUnchecked<T, V8T>(v8Value, length, isolate, exceptionState);
-}
-
-template <typename T, typename V8T>
+template <typename T>
 HeapVector<Member<T>> toMemberNativeArray(v8::Local<v8::Value> value, int argumentIndex, v8::Isolate* isolate, ExceptionState& exceptionState)
 {
     v8::Local<v8::Value> v8Value(v8::Local<v8::Value>::New(isolate, value));
@@ -676,9 +604,9 @@ HeapVector<Member<T>> toMemberNativeArray(v8::Local<v8::Value> value, int argume
             exceptionState.rethrowV8Exception(block.Exception());
             return HeapVector<Member<T>>();
         }
-        if (V8T::hasInstance(element, isolate)) {
+        if (V8TypeOf<T>::Type::hasInstance(element, isolate)) {
             v8::Local<v8::Object> elementObject = v8::Local<v8::Object>::Cast(element);
-            result.uncheckedAppend(V8T::toImpl(elementObject));
+            result.uncheckedAppend(V8TypeOf<T>::Type::toImpl(elementObject));
         } else {
             exceptionState.throwTypeError("Invalid Array element type");
             return HeapVector<Member<T>>();
@@ -687,7 +615,7 @@ HeapVector<Member<T>> toMemberNativeArray(v8::Local<v8::Value> value, int argume
     return result;
 }
 
-template <typename T, typename V8T>
+template <typename T>
 HeapVector<Member<T>> toMemberNativeArray(v8::Local<v8::Value> value, const String& propertyName, v8::Isolate* isolate, ExceptionState& exceptionState)
 {
     v8::Local<v8::Value> v8Value(v8::Local<v8::Value>::New(isolate, value));
@@ -710,9 +638,9 @@ HeapVector<Member<T>> toMemberNativeArray(v8::Local<v8::Value> value, const Stri
             exceptionState.rethrowV8Exception(block.Exception());
             return HeapVector<Member<T>>();
         }
-        if (V8T::hasInstance(element, isolate)) {
+        if (V8TypeOf<T>::Type::hasInstance(element, isolate)) {
             v8::Local<v8::Object> elementObject = v8::Local<v8::Object>::Cast(element);
-            result.uncheckedAppend(V8T::toImpl(elementObject));
+            result.uncheckedAppend(V8TypeOf<T>::Type::toImpl(elementObject));
         } else {
             exceptionState.throwTypeError("Invalid Array element type");
             return HeapVector<Member<T>>();
@@ -935,6 +863,20 @@ CORE_EXPORT EventTarget* toEventTarget(v8::Isolate*, v8::Local<v8::Value>);
 // to allocate it using alloca() in the callers stack frame.
 CORE_EXPORT void toFlexibleArrayBufferView(v8::Isolate*, v8::Local<v8::Value>, FlexibleArrayBufferView&, void* storage = nullptr);
 
+// Installs all of the origin-trial-enabled V8 bindings for the given context
+// and world, based on the trial tokens which have been added to the
+// ExecutionContext. This should be called after the V8 context has been
+// installed, but may be called multiple times, as trial tokens are
+// encountered. It indirectly calls the function set by
+// |setInstallOriginTrialsFunction|.
+CORE_EXPORT void installOriginTrials(ScriptState*);
+
+// Sets the function to be called by |installOriginTrials|. The function is
+// initially set to the private |installOriginTrialsForCore| function, but
+// can be overridden by this function. A pointer to the previously set function
+// is returned, so that functions can be chained.
+CORE_EXPORT InstallOriginTrialsFunction setInstallOriginTrialsFunction(InstallOriginTrialsFunction);
+
 // If the current context causes out of memory, JavaScript setting
 // is disabled and it returns true.
 bool handleOutOfMemory();
@@ -949,7 +891,7 @@ v8::Local<v8::Function> getBoundFunction(v8::Local<v8::Function>);
 // Attaches |environment| to |function| and returns it.
 inline v8::Local<v8::Function> createClosure(v8::FunctionCallback function, v8::Local<v8::Value> environment, v8::Isolate* isolate)
 {
-    return v8::Function::New(isolate, function, environment);
+    return v8::Function::New(isolate->GetCurrentContext(), function, environment, 0, v8::ConstructorBehavior::kThrow).ToLocalChecked();
 }
 
 // FIXME: This will be soon embedded in the generated code.
@@ -958,9 +900,10 @@ template<typename Collection> static void indexedPropertyEnumerator(const v8::Pr
     Collection* collection = toScriptWrappable(info.Holder())->toImpl<Collection>();
     int length = collection->length();
     v8::Local<v8::Array> properties = v8::Array::New(info.GetIsolate(), length);
+    v8::Local<v8::Context> context = info.GetIsolate()->GetCurrentContext();
     for (int i = 0; i < length; ++i) {
         v8::Local<v8::Integer> integer = v8::Integer::New(info.GetIsolate(), i);
-        if (!v8CallBoolean(properties->Set(info.GetIsolate()->GetCurrentContext(), integer, integer)))
+        if (!v8CallBoolean(properties->CreateDataProperty(context, i, integer)))
             return;
     }
     v8SetReturnValue(info, properties);
@@ -1007,7 +950,12 @@ private:
 // Callback functions used by generated code.
 CORE_EXPORT void v8ConstructorAttributeGetter(v8::Local<v8::Name> propertyName, const v8::PropertyCallbackInfo<v8::Value>&);
 
-typedef void (*InstallTemplateFunction)(v8::Local<v8::FunctionTemplate>, v8::Isolate*);
+typedef void (*InstallTemplateFunction)(v8::Isolate*, const DOMWrapperWorld&, v8::Local<v8::FunctionTemplate> interfaceTemplate);
+
+// Freeze a V8 object. The type of the first parameter and the return value is
+// intentionally v8::Value so that this function can wrap toV8().
+// If the argument isn't an object, this will crash.
+v8::Local<v8::Value> freezeV8Object(v8::Local<v8::Value>, v8::Isolate*);
 
 } // namespace blink
 

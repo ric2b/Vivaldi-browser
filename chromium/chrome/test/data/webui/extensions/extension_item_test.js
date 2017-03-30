@@ -5,36 +5,6 @@
 /** @fileoverview Suite of tests for extension-item. */
 cr.define('extension_item_tests', function() {
   /**
-   * A mock delegate for the item, capable of testing functionality.
-   * @constructor
-   * @extends {extension_test_util.ClickMock}
-   * @implements {extensions.ItemDelegate}
-   */
-  function MockDelegate() {}
-
-  MockDelegate.prototype = {
-    __proto__: extension_test_util.ClickMock.prototype,
-
-    /** @override */
-    deleteItem: function(id) {},
-
-    /** @override */
-    setItemEnabled: function(id, enabled) {},
-
-    /** @override */
-    showItemDetails: function(id) {},
-
-    /** @override */
-    setItemAllowedIncognito: function(id, enabled) {},
-
-    /** @override */
-    isInDevMode: function() { return false; },
-
-    /** @override: */
-    inspectItemView: function(id, view) {},
-  };
-
-  /**
    * The data used to populate the extension item.
    * @type {chrome.developerPrivate.ExtensionInfo}
    */
@@ -43,21 +13,16 @@ cr.define('extension_item_tests', function() {
   // The normal elements, which should always be shown.
   var normalElements = [
     {selector: '#name', text: extensionData.name},
+    {selector: '#icon'},
     {selector: '#description', text: extensionData.description},
-    {selector: '#version', text: extensionData.version},
-    {selector: '#enabled'},
-    {selector: '#show-details'},
-    {selector: '#delete-button'},
-  ];
-  // The elements in the details panel, which should only be shown if
-  // the isShowingDetails bit is set.
-  var detailElements = [
-    {selector: '#allow-incognito'},
+    {selector: '#enable-toggle'},
     {selector: '#details-button'},
+    {selector: '#remove-button'},
   ];
   // The developer elements, which should only be shown if in developer
   // mode *and* showing details.
   var devElements = [
+    {selector: '#version', text: extensionData.version},
     {selector: '#extension-id', text: 'ID:' + extensionData.id},
     {selector: '#inspect-views'},
     {selector: '#inspect-views paper-button', text: 'foo.html'},
@@ -88,16 +53,6 @@ cr.define('extension_item_tests', function() {
     testElementsVisibility(item, normalElements, false);
   }
 
-  /** Tests that detail elements are visible. */
-  function testDetailElementsAreVisible(item) {
-    testElementsVisibility(item, detailElements, true);
-  }
-
-  /** Tests that detail elements are hidden. */
-  function testDetailElementsAreHidden(item) {
-    testElementsVisibility(item, detailElements, false);
-  }
-
   /** Tests that dev elements are visible. */
   function testDeveloperElementsAreVisible(item) {
     testElementsVisibility(item, devElements, true);
@@ -111,12 +66,11 @@ cr.define('extension_item_tests', function() {
   /** @enum {string} */
   var TestNames = {
     ElementVisibilityNormalState: 'element visibility: normal state',
-    ElementVisibilityDetailState:
-        'element visibility: after tapping show details',
     ElementVisibilityDeveloperState:
         'element visibility: after enabling developer mode',
     ClickableItems: 'clickable items',
     Warnings: 'warnings',
+    SourceIndicator: 'source indicator',
   };
 
   function registerTests() {
@@ -127,7 +81,7 @@ cr.define('extension_item_tests', function() {
        */
       var item;
 
-      /** @type {MockDelegate} */
+      /** @type {extension_test_util.MockItemDelegate} */
       var mockDelegate;
 
       suiteSetup(function() {
@@ -137,7 +91,7 @@ cr.define('extension_item_tests', function() {
       // Initialize an extension item before each test.
       setup(function() {
         PolymerTest.clearBody();
-        mockDelegate = new MockDelegate();
+        mockDelegate = new extension_test_util.MockItemDelegate();
         item = new extensions.Item();
         item.set('data', extensionData);
         item.set('delegate', mockDelegate);
@@ -146,58 +100,49 @@ cr.define('extension_item_tests', function() {
 
       test(assert(TestNames.ElementVisibilityNormalState), function() {
         testNormalElementsAreVisible(item);
-        testDetailElementsAreHidden(item);
         testDeveloperElementsAreHidden(item);
 
-        expectTrue(item.$.enabled.checked);
-        expectEquals('Enabled', item.$.enabled.textContent.trim());
+        expectTrue(item.$['enable-toggle'].checked);
         item.set('data.state', 'DISABLED');
-        expectFalse(item.$.enabled.checked);
-        expectEquals('Disabled', item.$.enabled.textContent.trim());
-      });
-
-      test(assert(TestNames.ElementVisibilityDetailState), function() {
-        MockInteractions.tap(item.$['show-details']);
-        testNormalElementsAreVisible(item);
-        testDetailElementsAreVisible(item);
-        testDeveloperElementsAreHidden(item);
+        expectFalse(item.$['enable-toggle'].checked);
       });
 
       test(assert(TestNames.ElementVisibilityDeveloperState), function() {
-        MockInteractions.tap(item.$['show-details']);
         item.set('inDevMode', true);
 
         testNormalElementsAreVisible(item);
-        testDetailElementsAreVisible(item);
         testDeveloperElementsAreVisible(item);
-
-        // Toggling "show details" should also hide the developer elements.
-        MockInteractions.tap(item.$['show-details']);
-        testNormalElementsAreVisible(item);
-        testDetailElementsAreHidden(item);
-        testDeveloperElementsAreHidden(item);
       });
 
       /** Tests that the delegate methods are correctly called. */
       test(assert(TestNames.ClickableItems), function() {
-        MockInteractions.tap(item.$['show-details']);
         item.set('inDevMode', true);
 
         mockDelegate.testClickingCalls(
-            item.$['delete-button'], 'deleteItem', [item.data.id]);
+            item.$['remove-button'], 'deleteItem', [item.data.id]);
         mockDelegate.testClickingCalls(
-            item.$.enabled, 'setItemEnabled', [item.data.id, false]);
-        mockDelegate.testClickingCalls(
-            item.$$('#allow-incognito'), 'setItemAllowedIncognito',
-            [item.data.id, true]);
-        mockDelegate.testClickingCalls(
-            item.$$('#details-button'), 'showItemDetails', [item.data.id]);
+            item.$['enable-toggle'], 'setItemEnabled', [item.data.id, false]);
         mockDelegate.testClickingCalls(
             item.$$('#inspect-views paper-button'),
             'inspectItemView', [item.data.id, item.data.views[0]]);
         mockDelegate.testClickingCalls(
             item.$$('#inspect-views paper-button:nth-of-type(0n + 2)'),
             'inspectItemView', [item.data.id, item.data.views[1]]);
+
+        var satisfied = false;
+        var listener = function(e) {
+          expectTrue(e.detail.element == item);
+          satisfied = true;
+        };
+        item.addEventListener('extension-item-show-details', listener);
+        MockInteractions.tap(item.$$('#details-button'));
+        expectTrue(satisfied);
+        item.removeEventListener('extension-item-show-details', listener);
+
+        item.set('data.disableReasons.corruptInstall', true);
+        Polymer.dom.flush();
+        mockDelegate.testClickingCalls(
+            item.$$('#repair-button'), 'repairItem', [item.data.id]);
       });
 
       test(assert(TestNames.Warnings), function() {
@@ -211,34 +156,30 @@ cr.define('extension_item_tests', function() {
           return extension_test_util.isVisible(item, '#blacklisted-warning');
         };
 
-        extension_test_util.testVisible(item, '#warnings-container', false);
+        expectFalse(hasCorruptedWarning());
+        expectFalse(hasSuspiciousWarning());
+        expectFalse(hasBlacklistedWarning());
+
         item.set('data.disableReasons.corruptInstall', true);
         Polymer.dom.flush();
-        extension_test_util.testVisible(item, '#warnings-container', true);
-
-        var warnings = assert(item.$$('#warnings-container'));
-        expectEquals('mild', warnings.className);
         expectTrue(hasCorruptedWarning());
         expectFalse(hasSuspiciousWarning());
         expectFalse(hasBlacklistedWarning());
 
         item.set('data.disableReasons.suspiciousInstall', true);
         Polymer.dom.flush();
-        expectEquals('mild', warnings.className);
         expectTrue(hasCorruptedWarning());
         expectTrue(hasSuspiciousWarning());
         expectFalse(hasBlacklistedWarning());
 
         item.set('data.blacklistText', 'This item is blacklisted');
         Polymer.dom.flush();
-        expectEquals('severe', warnings.className);
         expectTrue(hasCorruptedWarning());
         expectTrue(hasSuspiciousWarning());
         expectTrue(hasBlacklistedWarning());
 
         item.set('data.blacklistText', undefined);
         Polymer.dom.flush();
-        expectEquals('mild', warnings.className);
         expectTrue(hasCorruptedWarning());
         expectTrue(hasSuspiciousWarning());
         expectFalse(hasBlacklistedWarning());
@@ -246,7 +187,37 @@ cr.define('extension_item_tests', function() {
         item.set('data.disableReasons.corruptInstall', false);
         item.set('data.disableReasons.suspiciousInstall', false);
         Polymer.dom.flush();
-        extension_test_util.testVisible(item, '#warnings-container', false);
+        expectFalse(hasCorruptedWarning());
+        expectFalse(hasSuspiciousWarning());
+        expectFalse(hasBlacklistedWarning());
+      });
+
+      test(assert(TestNames.SourceIndicator), function() {
+        expectFalse(extension_test_util.isVisible(item, '#source-indicator'));
+        item.set('data.location', 'UNPACKED');
+        Polymer.dom.flush()
+        expectTrue(extension_test_util.isVisible(item, '#source-indicator'));
+        var icon = item.$$('#source-indicator iron-icon');
+        assertTrue(!!icon);
+        expectEquals('extensions-icons:unpacked', icon.icon);
+        extension_test_util.testIronIcons(item);
+
+        item.set('data.location', 'THIRD_PARTY');
+        Polymer.dom.flush();
+        expectTrue(extension_test_util.isVisible(item, '#source-indicator'));
+        expectEquals('input', icon.icon);
+        extension_test_util.testIronIcons(item);
+
+        item.set('data.location', 'FROM_STORE');
+        item.set('data.controlledInfo', {type: 'POLICY', text: 'policy'});
+        Polymer.dom.flush();
+        expectTrue(extension_test_util.isVisible(item, '#source-indicator'));
+        expectEquals('communication:business', icon.icon);
+        extension_test_util.testIronIcons(item);
+
+        item.set('data.controlledInfo', null);
+        Polymer.dom.flush();
+        expectFalse(extension_test_util.isVisible(item, '#source-indicator'));
       });
     });
   }

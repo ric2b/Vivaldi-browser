@@ -26,7 +26,7 @@
 #include "core/inspector/InspectorStyleSheet.h"
 #include "platform/Decimal.h"
 #include "platform/animation/TimingFunction.h"
-#include "platform/v8_inspector/public/V8RuntimeAgent.h"
+#include "platform/v8_inspector/public/V8InspectorSession.h"
 #include "wtf/text/Base64.h"
 
 namespace AnimationAgentState {
@@ -36,12 +36,12 @@ static const char animationAgentPlaybackRate[] = "animationAgentPlaybackRate";
 
 namespace blink {
 
-InspectorAnimationAgent::InspectorAnimationAgent(InspectedFrames* inspectedFrames, InspectorDOMAgent* domAgent, InspectorCSSAgent* cssAgent, V8RuntimeAgent* runtimeAgent)
+InspectorAnimationAgent::InspectorAnimationAgent(InspectedFrames* inspectedFrames, InspectorDOMAgent* domAgent, InspectorCSSAgent* cssAgent, V8InspectorSession* v8Session)
     : InspectorBaseAgent<InspectorAnimationAgent, protocol::Frontend::Animation>("Animation")
     , m_inspectedFrames(inspectedFrames)
     , m_domAgent(domAgent)
     , m_cssAgent(cssAgent)
-    , m_runtimeAgent(runtimeAgent)
+    , m_v8Session(v8Session)
     , m_isCloning(false)
 {
 }
@@ -60,7 +60,7 @@ void InspectorAnimationAgent::restore()
 void InspectorAnimationAgent::enable(ErrorString*)
 {
     m_state->setBoolean(AnimationAgentState::animationAgentEnabled, true);
-    m_instrumentingAgents->setInspectorAnimationAgent(this);
+    m_instrumentingAgents->addInspectorAnimationAgent(this);
 }
 
 void InspectorAnimationAgent::disable(ErrorString*)
@@ -69,7 +69,7 @@ void InspectorAnimationAgent::disable(ErrorString*)
     for (const auto& clone : m_idToAnimationClone.values())
         clone->cancel();
     m_state->setBoolean(AnimationAgentState::animationAgentEnabled, false);
-    m_instrumentingAgents->setInspectorAnimationAgent(nullptr);
+    m_instrumentingAgents->removeInspectorAnimationAgent(this);
     m_idToAnimation.clear();
     m_idToAnimationType.clear();
     m_idToAnimationClone.clear();
@@ -91,8 +91,7 @@ void InspectorAnimationAgent::didCommitLoadForLocalFrame(LocalFrame* frame)
 
 static PassOwnPtr<protocol::Animation::AnimationEffect> buildObjectForAnimationEffect(KeyframeEffect* effect, bool isTransition)
 {
-    ComputedTimingProperties computedTiming;
-    effect->computedTiming(computedTiming);
+    ComputedTimingProperties computedTiming = effect->getComputedTiming();
     double delay = computedTiming.delay();
     double duration = computedTiming.duration().getAsUnrestrictedDouble();
     String easing = effect->specifiedTiming().timingFunction->toString();
@@ -122,7 +121,7 @@ static PassOwnPtr<protocol::Animation::AnimationEffect> buildObjectForAnimationE
         .setFill(computedTiming.fill())
         .setBackendNodeId(DOMNodeIds::idForNode(effect->target()))
         .setEasing(easing).build();
-    return animationObject.release();
+    return animationObject;
 }
 
 static PassOwnPtr<protocol::Animation::KeyframeStyle> buildObjectForStringKeyframe(const StringKeyframe* keyframe)
@@ -134,7 +133,7 @@ static PassOwnPtr<protocol::Animation::KeyframeStyle> buildObjectForStringKeyfra
     OwnPtr<protocol::Animation::KeyframeStyle> keyframeObject = protocol::Animation::KeyframeStyle::create()
         .setOffset(offset)
         .setEasing(keyframe->easing().toString()).build();
-    return keyframeObject.release();
+    return keyframeObject;
 }
 
 static PassOwnPtr<protocol::Animation::KeyframesRule> buildObjectForAnimationKeyframes(const KeyframeEffect* effect)
@@ -152,7 +151,7 @@ static PassOwnPtr<protocol::Animation::KeyframesRule> buildObjectForAnimationKey
         const StringKeyframe* stringKeyframe = toStringKeyframe(keyframe.get());
         keyframes->addItem(buildObjectForStringKeyframe(stringKeyframe));
     }
-    return protocol::Animation::KeyframesRule::create().setKeyframes(keyframes.release()).build();
+    return protocol::Animation::KeyframesRule::create().setKeyframes(std::move(keyframes)).build();
 }
 
 PassOwnPtr<protocol::Animation::Animation> InspectorAnimationAgent::buildObjectForAnimation(blink::Animation& animation)
@@ -176,7 +175,7 @@ PassOwnPtr<protocol::Animation::Animation> InspectorAnimationAgent::buildObjectF
     m_idToAnimationType.set(id, animationType);
 
     OwnPtr<protocol::Animation::AnimationEffect> animationEffectObject = buildObjectForAnimationEffect(toKeyframeEffect(animation.effect()), animationType == AnimationType::CSSTransition);
-    animationEffectObject->setKeyframesRule(keyframeRule.release());
+    animationEffectObject->setKeyframesRule(std::move(keyframeRule));
 
     OwnPtr<protocol::Animation::Animation> animationObject = protocol::Animation::Animation::create()
         .setId(id)
@@ -186,11 +185,11 @@ PassOwnPtr<protocol::Animation::Animation> InspectorAnimationAgent::buildObjectF
         .setPlaybackRate(animation.playbackRate())
         .setStartTime(normalizedStartTime(animation))
         .setCurrentTime(animation.currentTime())
-        .setSource(animationEffectObject.release())
+        .setSource(std::move(animationEffectObject))
         .setType(animationType).build();
     if (animationType != AnimationType::WebAnimation)
         animationObject->setCssId(createCSSId(animation));
-    return animationObject.release();
+    return animationObject;
 }
 
 void InspectorAnimationAgent::getPlaybackRate(ErrorString*, double* playbackRate)
@@ -333,6 +332,7 @@ void InspectorAnimationAgent::setTiming(ErrorString* errorString, const String& 
         return;
 
     animation = animationClone(animation);
+    NonThrowableExceptionState exceptionState;
 
     String type = m_idToAnimationType.get(animationId);
     if (type == AnimationType::CSSTransition) {
@@ -352,12 +352,12 @@ void InspectorAnimationAgent::setTiming(ErrorString* errorString, const String& 
         AnimationEffectTiming* timing = animation->effect()->timing();
         UnrestrictedDoubleOrString unrestrictedDuration;
         unrestrictedDuration.setUnrestrictedDouble(duration + delay);
-        timing->setDuration(unrestrictedDuration);
+        timing->setDuration(unrestrictedDuration, exceptionState);
     } else {
         AnimationEffectTiming* timing = animation->effect()->timing();
         UnrestrictedDoubleOrString unrestrictedDuration;
         unrestrictedDuration.setUnrestrictedDouble(duration);
-        timing->setDuration(unrestrictedDuration);
+        timing->setDuration(unrestrictedDuration, exceptionState);
         timing->setDelay(delay);
     }
 }
@@ -379,8 +379,8 @@ void InspectorAnimationAgent::resolveAnimation(ErrorString* errorString, const S
     }
 
     ScriptState::Scope scope(scriptState);
-    m_runtimeAgent->disposeObjectGroup("animation");
-    *result = m_runtimeAgent->wrapObject(scriptState->context(), toV8(animation, scriptState->context()->Global(), scriptState->isolate()), "animation");
+    m_v8Session->releaseObjectGroup("animation");
+    *result = m_v8Session->wrapObject(scriptState->context(), toV8(animation, scriptState->context()->Global(), scriptState->isolate()), "animation");
     if (!*result)
         *errorString = "Element not associated with a document.";
 }
@@ -429,7 +429,7 @@ String InspectorAnimationAgent::createCSSId(blink::Animation& animation)
     addStringToDigestor(digestor.get(), type);
     addStringToDigestor(digestor.get(), animation.id());
     for (CSSPropertyID property : cssProperties) {
-        RawPtr<CSSStyleDeclaration> style = m_cssAgent->findEffectiveDeclaration(property, styles);
+        CSSStyleDeclaration* style = m_cssAgent->findEffectiveDeclaration(property, styles);
         // Ignore inline styles.
         if (!style || !style->parentStyleSheet() || !style->parentRule() || style->parentRule()->type() != CSSRule::STYLE_RULE)
             continue;
@@ -496,7 +496,6 @@ DEFINE_TRACE(InspectorAnimationAgent)
     visitor->trace(m_domAgent);
     visitor->trace(m_cssAgent);
     visitor->trace(m_idToAnimation);
-    visitor->trace(m_idToAnimationType);
     visitor->trace(m_idToAnimationClone);
     InspectorBaseAgent::trace(visitor);
 }

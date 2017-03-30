@@ -62,19 +62,17 @@ template("_repack_one_locale") {
       sources += [
         "${root_gen_dir}/content/app/strings/content_strings_${locale}.pak",
         "${root_gen_dir}/device/bluetooth/strings/bluetooth_strings_${locale}.pak",
+        "${root_gen_dir}/third_party/libaddressinput/address_input_strings_${locale}.pak",
         "${root_gen_dir}/ui/strings/app_locale_settings_${locale}.pak",
         "${root_gen_dir}/ui/strings/ui_strings_${locale}.pak",
       ]
       deps += [
         "//content/app/strings",
         "//device/bluetooth/strings",
+        "//third_party/libaddressinput:strings",
         "//ui/strings:app_locale_settings",
         "//ui/strings:ui_strings",
       ]
-    }
-    if (enable_autofill_dialog) {
-      sources += [ "${root_gen_dir}/third_party/libaddressinput/address_input_strings_${locale}.pak" ]
-      deps += [ "//third_party/libaddressinput:strings" ]
     }
     if (enable_extensions) {
       sources += [
@@ -163,7 +161,7 @@ template("chrome_repack_locales") {
 
       # Compute the output name. Mac uses a different location.
       if (is_mac || is_ios) {
-        output = "${root_gen_dir}/repack/${output_locale}.lproj/locale.pak"
+        output = "${root_gen_dir}/repack/locales/${output_locale}.pak"
       } else {
         output = "${root_out_dir}/locales/${output_locale}.pak"
       }

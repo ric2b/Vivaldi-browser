@@ -17,7 +17,7 @@ namespace {
 // Reads parameters for the field trial variation. Any parameters not present in
 // the variation info or that cannot be parsed will be filled in with default
 // values. Returns a MemoryLeakReportProto with the parameter fields filled in.
-MemoryLeakReportProto GetVariationParameters() {
+MemoryLeakReportProto::Params GetVariationParameters() {
   // Variation parameter names.
   const char kFieldTrialName[] = "RuntimeMemoryLeakDetector";
   const char kSamplingRateParam[] = "sampling_rate";
@@ -76,28 +76,24 @@ MemoryLeakReportProto GetVariationParameters() {
     call_stack_suspicion_threshold = kDefaultCallStackSuspicionThreshold;
   }
 
-  MemoryLeakReportProto proto;
-  proto.set_sampling_rate(sampling_rate);
-  proto.set_max_stack_depth(max_stack_depth);
-  proto.set_analysis_interval_bytes(analysis_interval_kb * 1024);
-  proto.set_size_suspicion_threshold(size_suspicion_threshold);
-  proto.set_call_stack_suspicion_threshold(call_stack_suspicion_threshold);
-  return proto;
+  MemoryLeakReportProto_Params result;
+  result.set_sampling_rate(sampling_rate);
+  result.set_max_stack_depth(max_stack_depth);
+  result.set_analysis_interval_bytes(analysis_interval_kb * 1024);
+  result.set_size_suspicion_threshold(size_suspicion_threshold);
+  result.set_call_stack_suspicion_threshold(call_stack_suspicion_threshold);
+  return result;
 }
 
 }  // namespace
 
 LeakDetectorController::LeakDetectorController()
-    : leak_report_proto_template_(GetVariationParameters()) {
+    : params_(GetVariationParameters()) {
   LeakDetector* detector = LeakDetector::GetInstance();
   detector->AddObserver(this);
 
-  // Leak detector parameters are stored in |leak_report_proto_template_|.
-  const MemoryLeakReportProto& proto = leak_report_proto_template_;
-  detector->Init(proto.sampling_rate(), proto.max_stack_depth(),
-                 proto.analysis_interval_bytes(),
-                 proto.size_suspicion_threshold(),
-                 proto.call_stack_suspicion_threshold());
+  // Leak detector parameters are stored in |params_|.
+  detector->Init(params_);
 }
 
 LeakDetectorController::~LeakDetectorController() {
@@ -105,20 +101,15 @@ LeakDetectorController::~LeakDetectorController() {
   LeakDetector::GetInstance()->RemoveObserver(this);
 }
 
-void LeakDetectorController::OnLeakFound(
-    const LeakDetector::LeakReport& report) {
+void LeakDetectorController::OnLeaksFound(
+    const std::vector<MemoryLeakReportProto>& reports) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  // Initialize the new report with the protobuf template, which contains some
-  // pre-filled data (parameter values).
-  stored_reports_.push_back(leak_report_proto_template_);
-  MemoryLeakReportProto* proto = &stored_reports_.back();
-
-  // Fill in the remaining fields of the protobuf with data from |report|.
-  proto->set_size_bytes(report.alloc_size_bytes);
-  proto->mutable_call_stack()->Reserve(report.call_stack.size());
-  for (uintptr_t call_stack_entry : report.call_stack)
-    proto->mutable_call_stack()->Add(call_stack_entry);
+  for (const auto& report : reports) {
+    // Store the report and insert stored parameters.
+    stored_reports_.push_back(report);
+    stored_reports_.back().mutable_params()->CopyFrom(params_);
+  }
 }
 
 void LeakDetectorController::GetLeakReports(

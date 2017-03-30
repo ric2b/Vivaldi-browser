@@ -5,7 +5,6 @@
 #ifndef CONTENT_BROWSER_CHILD_PROCESS_SECURITY_POLICY_IMPL_H_
 #define CONTENT_BROWSER_CHILD_PROCESS_SECURITY_POLICY_IMPL_H_
 
-
 #include <map>
 #include <set>
 #include <string>

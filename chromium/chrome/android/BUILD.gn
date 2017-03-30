@@ -111,7 +111,7 @@ java_strings_grd("chrome_strings_grd") {
     "values-uk/android_chrome_strings.xml",
     "values-vi/android_chrome_strings.xml",
     "values-zh-rCN/android_chrome_strings.xml",
-    "values-zh-rTW/android_chrome_strings.xml",
+    "values-zh/android_chrome_strings.xml",
   ]
 }
 
@@ -119,6 +119,7 @@ java_strings_grd("chrome_strings_grd") {
 android_library("chrome_java") {
   deps = [
     "//base:base_java",
+    "//chrome/android/webapk/libs/client",
     "//components/safe_json/android:safe_json_java",
     "//components/variations/android:variations_java",
     "//components/web_contents_delegate_android:web_contents_delegate_android_java",
@@ -179,7 +180,6 @@ android_library("chrome_java") {
       "//chrome:page_info_connection_type_javagen",
       "//chrome:website_settings_action_javagen",
       "//components/infobars/core:infobar_enums_java",
-      "//components/offline_pages:offline_page_feature_enums_java",
       "//components/offline_pages:offline_page_model_enums_java",
       "//components/omnibox/browser:autocomplete_match_javagen",
       "//components/omnibox/browser:autocomplete_match_type_javagen",
@@ -194,6 +194,7 @@ android_library("chrome_java") {
       "//components/dom_distiller/android:dom_distiller_content_java",
       "//components/dom_distiller/android:dom_distiller_core_java",
       "//components/gcm_driver/android:gcm_driver_java",
+      "//components/gcm_driver/instance_id/android:instance_id_driver_java",
       "//components/invalidation/impl:java",
       "//components/navigation_interception/android:navigation_interception_java",
       "//components/policy/android:policy_java",
@@ -230,6 +231,7 @@ java_cpp_enum("chrome_android_java_enums_srcjar") {
     "//chrome/browser/android/activity_type_ids.h",
     "//chrome/browser/android/feedback/connectivity_checker.cc",
     "//chrome/browser/android/ntp/most_visited_sites.cc",
+    "//chrome/browser/android/policy/policy_auditor.cc",
     "//chrome/browser/android/shortcut_info.h",
     "//chrome/browser/android/tab_android.h",
     "//chrome/browser/browsing_data/browsing_data_counter_utils.h",
@@ -260,43 +262,11 @@ java_cpp_template("resource_id_javagen") {
 
 # GYP: //chrome/chrome_tests.gypi:chrome_junit_tests
 junit_binary("chrome_junit_tests") {
-  java_files = [
-    "junit/src/org/chromium/chrome/browser/ShortcutHelperTest.java",
-    "junit/src/org/chromium/chrome/browser/SSLClientCertificateRequestTest.java",
-    "junit/src/org/chromium/chrome/browser/crash/LogcatExtractionCallableTest.java",
-    "junit/src/org/chromium/chrome/browser/bookmarks/BookmarkModelUnitTest.java",
-    "junit/src/org/chromium/chrome/browser/bookmarks/BookmarkUtilsTest.java",
-    "junit/src/org/chromium/chrome/browser/contextualsearch/ContextualSearchSelectionControllerTest.java",
-    "junit/src/org/chromium/chrome/browser/externalauth/ExternalAuthUtilsTest.java",
-    "junit/src/org/chromium/chrome/browser/firstrun/FirstRunFlowSequencerTest.java",
-    "junit/src/org/chromium/chrome/browser/gcore/GoogleApiClientHelperTest.java",
-    "junit/src/org/chromium/chrome/browser/invalidation/InvalidationControllerTest.java",
-    "junit/src/org/chromium/chrome/browser/media/remote/AbstractMediaRouteControllerTest.java",
-    "junit/src/org/chromium/chrome/browser/media/remote/MediaUrlResolverTest.java",
-    "junit/src/org/chromium/chrome/browser/media/remote/RemoteVideoInfoTest.java",
-    "junit/src/org/chromium/chrome/browser/media/router/ChromeMediaRouterRouteTest.java",
-    "junit/src/org/chromium/chrome/browser/media/router/ChromeMediaRouterSinkObservationTest.java",
-    "junit/src/org/chromium/chrome/browser/media/router/ChromeMediaRouterTestBase.java",
-    "junit/src/org/chromium/chrome/browser/media/router/cast/CastMessageHandlerTest.java",
-    "junit/src/org/chromium/chrome/browser/media/router/cast/DiscoveryCallbackTest.java",
-    "junit/src/org/chromium/chrome/browser/media/router/cast/JSONTestUtils.java",
-    "junit/src/org/chromium/chrome/browser/media/router/cast/TestUtils.java",
-    "junit/src/org/chromium/chrome/browser/notifications/NotificationUIManagerUnitTest.java",
-    "junit/src/org/chromium/chrome/browser/ntp/NativePageFactoryTest.java",
-    "junit/src/org/chromium/chrome/browser/offlinepages/ClientIdTest.java",
-    "junit/src/org/chromium/chrome/browser/offlinepages/OfflinePageBridgeTest.java",
-    "junit/src/org/chromium/chrome/browser/offlinepages/OfflinePageTabObserverTest.java",
-    "junit/src/org/chromium/chrome/browser/offlinepages/OfflinePageUtilsTest.java",
-    "junit/src/org/chromium/chrome/browser/omaha/ResponseParserTest.java",
-    "junit/src/org/chromium/chrome/browser/omaha/VersionNumberTest.java",
-    "junit/src/org/chromium/chrome/browser/snackbar/SnackbarCollectionUnitTest.java",
-    "junit/src/org/chromium/chrome/browser/superviseduser/SupervisedUserContentProviderUnitTest.java",
-    "junit/src/org/chromium/chrome/browser/util/NonThreadSafeTest.java",
-    "junit/src/org/chromium/chrome/browser/webapps/WebappDataStorageTest.java",
-    "junit/src/org/chromium/chrome/browser/webapps/WebappRegistryTest.java",
-  ]
+  # From java_sources.gni.
+  java_files = chrome_junit_test_java_sources
   deps = [
     ":chrome_java",
+    ":chrome_java_resources",
     "//base:base_java",
     "//base:base_java_test_support",
     "//base:base_junit_test_support",
@@ -308,6 +278,7 @@ junit_binary("chrome_junit_tests") {
     "//sync:sync_java_test_support",
     "//sync/android:sync_java",
     "//third_party/android_tools:android_support_v7_mediarouter_java",
+    "//third_party/android_tools:android_support_v7_recyclerview_java",
     "//third_party/cacheinvalidation:cacheinvalidation_javalib",
     "//third_party/junit:hamcrest",
     "//ui/android:ui_java",
@@ -440,6 +411,7 @@ jinja_template("chrome_sync_shell_apk_manifest") {
 # GYP: //chrome/android/chrome_apk.gyp:chrome_public_apk_template_resources
 jinja_template_resources("chrome_public_apk_template_resources") {
   resources = [
+    "java/res_template/xml/chromebackupscheme.xml",
     "java/res_template/xml/searchable.xml",
     "java/res_template/xml/syncadapter.xml",
   ]
@@ -450,6 +422,7 @@ jinja_template_resources("chrome_public_apk_template_resources") {
 # GYP: //chrome/android/chrome_apk.gyp:chrome_sync_shell_apk_template_resources
 jinja_template_resources("chrome_sync_shell_apk_template_resources") {
   resources = [
+    "java/res_template/xml/chromebackupscheme.xml",
     "java/res_template/xml/searchable.xml",
     "java/res_template/xml/syncadapter.xml",
   ]
@@ -457,13 +430,37 @@ jinja_template_resources("chrome_sync_shell_apk_template_resources") {
   variables = chrome_sync_shell_jinja_variables
 }
 
-# GYP: //chrome/android/chrome_apk.gyp:libchrome_public
-shared_library("chrome_public") {
+# GYP: none
+shared_library("chrome") {
+  sources = chrome_apk_gypi.chrome_app_native_sources
   deps = [
     "//build/config/sanitizers:deps",
     "//chrome:chrome_android_core",
   ]
-  sources = chrome_apk_gypi.chrome_public_app_native_sources
+
+  if (is_android && use_order_profiling) {
+    deps += [ "//tools/cygprofile" ]
+  }
+
+  public_configs = extra_chrome_shared_library_configs
+}
+
+# GYP: none
+if (!defined(webview_only_libmonochrome) || !webview_only_libmonochrome) {
+  shared_library("monochrome") {
+    sources = chrome_apk_gypi.monochrome_app_native_sources
+    deps = [
+      "//android_webview:common",
+      "//chrome:chrome_android_core",
+    ]
+
+    configs -= [ "//build/config/android:hide_native_jni_exports" ]
+    if (is_android && use_order_profiling) {
+      deps += [ "//tools/cygprofile" ]
+    }
+
+    public_configs = extra_chrome_shared_library_configs
+  }
 }
 
 # GYP: //chrome/android/chrome_apk.gyp:libchrome_sync_shell
@@ -499,10 +496,10 @@ chrome_public_apk_tmpl_shared("chrome_public_apk") {
   android_manifest = get_target_outputs(":chrome_public_apk_manifest")
   android_manifest = android_manifest[1]
   apk_name = "ChromePublic"
-  native_libs = [ "libchrome_public.so" ]
+  native_libs = [ "libchrome.so" ]
 
   deps = [
-    ":chrome_public",
+    ":chrome",
     ":chrome_public_apk_manifest",
     ":chrome_public_apk_template_resources",
   ]
@@ -555,8 +552,10 @@ instrumentation_test_apk("chrome_public_test_apk") {
   deps = [
     ":chrome_public_test_apk_manifest",
     ":chrome_test_java",
+    "//chrome/android/webapk/shell_apk:shell_apk_javatests",
   ]
   additional_apks = [
+    "//chrome/android/webapk/shell_apk/javatests/dex_optimizer:dex_optimizer_apk",
     "//chrome/test/android/chrome_public_test_support:chrome_public_test_support_apk",
     "//net/android:net_test_support_apk",
   ]
@@ -566,19 +565,9 @@ instrumentation_test_apk("chrome_public_test_apk") {
 
 android_library("chrome_sync_shell_test_apk_java") {
   testonly = true
-  java_files = [
-    "sync_shell/javatests/src/org/chromium/chrome/browser/sync/AutofillTest.java",
-    "sync_shell/javatests/src/org/chromium/chrome/browser/sync/BookmarksTest.java",
-    "sync_shell/javatests/src/org/chromium/chrome/browser/sync/FakeServerHelper.java",
-    "sync_shell/javatests/src/org/chromium/chrome/browser/sync/FirstRunTest.java",
-    "sync_shell/javatests/src/org/chromium/chrome/browser/sync/GmsCoreSyncListenerTest.java",
-    "sync_shell/javatests/src/org/chromium/chrome/browser/sync/OpenTabsTest.java",
-    "sync_shell/javatests/src/org/chromium/chrome/browser/sync/SyncCustomizationFragmentTest.java",
-    "sync_shell/javatests/src/org/chromium/chrome/browser/sync/SyncTest.java",
-    "sync_shell/javatests/src/org/chromium/chrome/browser/sync/SyncTestBase.java",
-    "sync_shell/javatests/src/org/chromium/chrome/browser/sync/TypedUrlsTest.java",
-    "sync_shell/javatests/src/org/chromium/chrome/browser/sync/ui/PassphraseTypeDialogFragmentTest.java",
-  ]
+
+  # From java_sources.jni.
+  java_files = sync_shell_test_java_sources
 
   deps = [
     "//base:base_java",

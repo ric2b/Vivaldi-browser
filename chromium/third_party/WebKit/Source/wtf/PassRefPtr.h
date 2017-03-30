@@ -23,7 +23,6 @@
 
 #include "wtf/Allocator.h"
 #include "wtf/Assertions.h"
-#include "wtf/RawPtr.h"
 #include "wtf/TypeTraits.h"
 
 namespace WTF {
@@ -62,7 +61,6 @@ public:
     PassRefPtr() : m_ptr(nullptr) {}
     PassRefPtr(std::nullptr_t) : m_ptr(nullptr) {}
     PassRefPtr(T* ptr) : m_ptr(ptr) { refIfNotNull(ptr); }
-    template <typename U> PassRefPtr(const RawPtr<U>& ptr, EnsurePtrConvertibleArgDecl(U, T)) : m_ptr(ptr.get()) { refIfNotNull(m_ptr); }
     explicit PassRefPtr(T& ptr) : m_ptr(&ptr) { m_ptr->ref(); }
     // It somewhat breaks the type system to allow transfer of ownership out of
     // a const PassRefPtr. However, it makes it much easier to work with
@@ -74,6 +72,7 @@ public:
     ALWAYS_INLINE ~PassRefPtr() { derefIfNotNull(m_ptr); }
 
     template <typename U> PassRefPtr(const RefPtr<U>&, EnsurePtrConvertibleArgDecl(U, T));
+    template <typename U> PassRefPtr(RefPtr<U>&&, EnsurePtrConvertibleArgDecl(U, T));
 
     T* get() const { return m_ptr; }
 
@@ -112,6 +111,12 @@ template <typename U> inline PassRefPtr<T>::PassRefPtr(const RefPtr<U>& o, Ensur
     refIfNotNull(ptr);
 }
 
+template <typename T>
+template <typename U> inline PassRefPtr<T>::PassRefPtr(RefPtr<U>&& o, EnsurePtrConvertibleArgDefn(U, T))
+    : m_ptr(o.release().leakRef())
+{
+}
+
 template <typename T> inline T* PassRefPtr<T>::leakRef() const
 {
     T* ptr = m_ptr;
@@ -144,16 +149,6 @@ template <typename T, typename U> inline bool operator==(T* a, const PassRefPtr<
     return a == b.get();
 }
 
-template <typename T, typename U> inline bool operator==(const PassRefPtr<T>& a, const RawPtr<U>& b)
-{
-    return a.get() == b.get();
-}
-
-template <typename T, typename U> inline bool operator==(const RawPtr<T>& a, const PassRefPtr<U>& b)
-{
-    return a.get() == b.get();
-}
-
 template <typename T, typename U> inline bool operator!=(const PassRefPtr<T>& a, const PassRefPtr<U>& b)
 {
     return a.get() != b.get();
@@ -177,16 +172,6 @@ template <typename T, typename U> inline bool operator!=(const PassRefPtr<T>& a,
 template <typename T, typename U> inline bool operator!=(T* a, const PassRefPtr<U>& b)
 {
     return a != b.get();
-}
-
-template <typename T, typename U> inline bool operator!=(const PassRefPtr<T>& a, const RawPtr<U>& b)
-{
-    return a.get() != b.get();
-}
-
-template <typename T, typename U> inline bool operator!=(const RawPtr<T>& a, const PassRefPtr<U>& b)
-{
-    return a.get() != b.get();
 }
 
 template <typename T> PassRefPtr<T> adoptRef(T* p)

@@ -18,7 +18,7 @@
 #include "base/metrics/sparse_histogram.h"
 #include "base/path_service.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -295,7 +295,7 @@ bool HotwordService::IsHotwordHardwareAvailable() {
     chromeos::AudioDeviceList devices;
     chromeos::CrasAudioHandler::Get()->GetAudioDevices(&devices);
     for (size_t i = 0; i < devices.size(); ++i) {
-      if (devices[i].type == chromeos::AUDIO_TYPE_AOKR) {
+      if (devices[i].type == chromeos::AUDIO_TYPE_HOTWORD) {
         DCHECK(devices[i].is_input);
         return true;
       }

@@ -8,10 +8,10 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/synchronization/lock.h"
-#include "base/thread_task_runner_handle.h"
 #include "mojo/public/cpp/bindings/lib/sync_handle_watcher.h"
 
 namespace mojo {
@@ -45,9 +45,12 @@ class MayAutoLock {
 // ----------------------------------------------------------------------------
 
 Connector::Connector(ScopedMessagePipeHandle message_pipe,
-                     ConnectorConfig config)
+                     ConnectorConfig config,
+                     scoped_refptr<base::SingleThreadTaskRunner> runner)
     : message_pipe_(std::move(message_pipe)),
       incoming_receiver_(nullptr),
+      task_runner_(std::move(runner)),
+      handle_watcher_(task_runner_),
       error_(false),
       drop_writes_(false),
       enforce_errors_from_incoming_receiver_(true),
@@ -147,21 +150,11 @@ bool Connector::Accept(Message* message) {
     return true;
 
   MojoResult rv =
-      WriteMessageRaw(message_pipe_.get(),
-                      message->data(),
-                      message->data_num_bytes(),
-                      message->mutable_handles()->empty()
-                          ? nullptr
-                          : reinterpret_cast<const MojoHandle*>(
-                                &message->mutable_handles()->front()),
-                      static_cast<uint32_t>(message->mutable_handles()->size()),
+      WriteMessageNew(message_pipe_.get(), message->TakeMojoMessage(),
                       MOJO_WRITE_MESSAGE_FLAG_NONE);
 
   switch (rv) {
     case MOJO_RESULT_OK:
-      // The handles were successfully transferred, so we don't need the message
-      // to track their lifetime any longer.
-      message->mutable_handles()->clear();
       break;
     case MOJO_RESULT_FAILED_PRECONDITION:
       // There's no point in continuing to write to this pipe since the other
@@ -249,7 +242,7 @@ void Connector::WaitToReadMore() {
   if (rv != MOJO_RESULT_OK) {
     // If the watch failed because the handle is invalid or its conditions can
     // no longer be met, we signal the error asynchronously to avoid reentry.
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    task_runner_->PostTask(
         FROM_HERE,
         base::Bind(&Connector::OnWatcherHandleReady, weak_self_, rv));
   }

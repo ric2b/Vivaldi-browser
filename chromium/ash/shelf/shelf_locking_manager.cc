@@ -41,19 +41,17 @@ void ShelfLockingManager::SessionStateChanged(
 }
 
 void ShelfLockingManager::OnLockStateEvent(EventType event) {
-  // This is only called when locking the screen; there is no unlock event here.
-  // It's also called when the screen lock animation begins and should help the
-  // shelf appear locked much earlier than ShellObserver::OnLockStateChanged.
-  screen_locked_ = true;
+  // Lock when the animation starts, ignoring pre-lock. There's no unlock event.
+  screen_locked_ |= event == EVENT_LOCK_ANIMATION_STARTED;
   UpdateLockedState();
 }
 
 void ShelfLockingManager::UpdateLockedState() {
-  const ShelfAlignment alignment = shelf_->alignment();
-  if (is_locked() && alignment != SHELF_ALIGNMENT_BOTTOM_LOCKED) {
+  const wm::ShelfAlignment alignment = shelf_->alignment();
+  if (is_locked() && alignment != wm::SHELF_ALIGNMENT_BOTTOM_LOCKED) {
     stored_alignment_ = alignment;
-    shelf_->SetAlignment(SHELF_ALIGNMENT_BOTTOM_LOCKED);
-  } else if (!is_locked() && alignment == SHELF_ALIGNMENT_BOTTOM_LOCKED) {
+    shelf_->SetAlignment(wm::SHELF_ALIGNMENT_BOTTOM_LOCKED);
+  } else if (!is_locked() && alignment == wm::SHELF_ALIGNMENT_BOTTOM_LOCKED) {
     shelf_->SetAlignment(stored_alignment_);
   }
 }

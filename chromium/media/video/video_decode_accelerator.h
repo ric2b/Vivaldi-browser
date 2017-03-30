@@ -13,10 +13,12 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "media/base/bitstream_buffer.h"
+#include "media/base/cdm_context.h"
 #include "media/base/surface_manager.h"
 #include "media/base/video_decoder_config.h"
 #include "media/video/picture.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/gpu_memory_buffer.h"
 
 typedef unsigned int GLenum;
 
@@ -102,20 +104,36 @@ class MEDIA_EXPORT VideoDecodeAccelerator {
   struct MEDIA_EXPORT Config {
     enum { kNoSurfaceID = SurfaceManager::kNoSurfaceID };
 
+    // Specifies the allocation and handling mode for output PictureBuffers.
+    // When set to ALLOCATE, the VDA is expected to allocate backing memory
+    // for PictureBuffers at the time of AssignPictureBuffers() call.
+    // When set to IMPORT, the VDA will not allocate, but after receiving
+    // AssignPictureBuffers() call, it will expect a call to
+    // ImportBufferForPicture() for each PictureBuffer before use.
+    enum class OutputMode {
+      ALLOCATE,
+      IMPORT,
+    };
+
     Config() = default;
+
+    // Intentional converting constructor.
+    // TODO(watk): Make this explicit.
     Config(VideoCodecProfile profile);
-    Config(const VideoDecoderConfig& video_decoder_config);
 
     std::string AsHumanReadableString() const;
 
-    // |profile| combines the information about the codec and its profile.
+    // The video codec and profile.
     VideoCodecProfile profile = VIDEO_CODEC_PROFILE_UNKNOWN;
 
-    // The flag indicating whether the stream is encrypted.
+    // Whether the stream is encrypted.
     bool is_encrypted = false;
 
-    // The flag indicating whether the client supports deferred initialization
-    // or not.
+    // The CDM that the VDA should use to decode encrypted streams. Must be
+    // set to a valid ID if |is_encrypted|.
+    int cdm_id = CdmContext::kInvalidCdmId;
+
+    // Whether the client supports deferred initialization.
     bool is_deferred_initialization_allowed = false;
 
     // An optional graphics surface that the VDA should render to. For setting
@@ -124,7 +142,9 @@ class MEDIA_EXPORT VideoDecodeAccelerator {
     int surface_id = kNoSurfaceID;
 
     // Coded size of the video frame hint, subject to change.
-    gfx::Size initial_expected_coded_size;
+    gfx::Size initial_expected_coded_size = gfx::Size(320, 240);
+
+    OutputMode output_mode = OutputMode::ALLOCATE;
   };
 
   // Interface for collaborating with picture interface to provide memory for
@@ -190,25 +210,15 @@ class MEDIA_EXPORT VideoDecodeAccelerator {
   // NotifyInitializationComplete with the actual success / failure of
   // initialization.  Note that a return value of false from VDA::Initialize
   // indicates that initialization definitely failed, and no callback is needed.
-  // TODO(liberato): should we say that encrypted video requires deferred?
   //
-  // For encrpyted video, the decoder needs a CDM to be able to decode encrypted
-  // buffers. SetCdm() should be called after Initialize() to set such a CDM.
-  // Client::NotifyCdmAttached() will then be called to indicate whether the CDM
-  // is successfully attached to the decoder. Only when a CDM is successfully
-  // attached can we start to decode.
+  // For encrypted video, only deferred initialization is supported and |config|
+  // must contain a valid |cdm_id|.
   //
   // Parameters:
   //  |config| contains the initialization parameters.
   //  |client| is the client of this video decoder. Does not take ownership of
   //  |client| which must be valid until Destroy() is called.
   virtual bool Initialize(const Config& config, Client* client) = 0;
-
-  // Sets a CDM to be used by the decoder to decode encrypted buffers.
-  // Client::NotifyCdmAttached() will then be called to indicate whether the CDM
-  // is successfully attached to the decoder. The default implementation is a
-  // no-op since most VDAs don't support encrypted video.
-  virtual void SetCdm(int cdm_id);
 
   // Decodes given bitstream buffer that contains at most one frame.  Once
   // decoder is done with processing |bitstream_buffer| it will call
@@ -229,6 +239,19 @@ class MEDIA_EXPORT VideoDecodeAccelerator {
   //  the call to Client::ProvidePictureBuffers().
   virtual void AssignPictureBuffers(
       const std::vector<PictureBuffer>& buffers) = 0;
+
+  // Imports |gpu_memory_buffer_handles| as backing memory for picture buffer
+  // associated with |picture_buffer_id|. The n-th element in
+  // |gpu_memory_buffer_handles| should be a handle to a GpuMemoryBuffer backing
+  // the n-th plane of the PictureBuffer. This can only be be used if the VDA
+  // has been Initialize()d with config.output_mode = IMPORT, and should be
+  // preceded by a call to AssignPictureBuffers() to set up the number of
+  // PictureBuffers and their details.
+  // After this call, the VDA becomes the owner of the GpuMemoryBufferHandles,
+  // and is responsible for closing them after use, also on import failure.
+  virtual void ImportBufferForPicture(
+      int32_t picture_buffer_id,
+      const std::vector<gfx::GpuMemoryBufferHandle>& gpu_memory_buffer_handles);
 
   // Sends picture buffers to be reused by the decoder. This needs to be called
   // for each buffer that has been processed so that decoder may know onto which
@@ -294,6 +317,10 @@ class MEDIA_EXPORT VideoDecodeAccelerator {
   // TODO(dshwang): after moving to D3D11, remove this. crbug.com/438691
   virtual GLenum GetSurfaceInternalFormat() const;
 
+  // In IMPORT OutputMode, if supported by the VDA, return the format that it
+  // requires for imported picture buffers.
+  virtual VideoPixelFormat GetOutputFormat() const;
+
  protected:
   // Do not delete directly; use Destroy() or own it with a scoped_ptr, which
   // will Destroy() it properly by default.
@@ -304,8 +331,9 @@ class MEDIA_EXPORT VideoDecodeAccelerator {
 
 namespace std {
 
-// Specialize std::default_delete so that scoped_ptr<VideoDecodeAccelerator>
-// uses "Destroy()" instead of trying to use the destructor.
+// Specialize std::default_delete so that
+// std::unique_ptr<VideoDecodeAccelerator> uses "Destroy()" instead of trying to
+// use the destructor.
 template <>
 struct MEDIA_EXPORT default_delete<media::VideoDecodeAccelerator> {
   void operator()(media::VideoDecodeAccelerator* vda) const;

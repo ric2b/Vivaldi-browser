@@ -4,6 +4,7 @@
 
 #include "ui/views/mus/window_tree_host_mus.h"
 
+#include "base/memory/ptr_util.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/events/event.h"
@@ -16,13 +17,12 @@ namespace views {
 ////////////////////////////////////////////////////////////////////////////////
 // WindowTreeHostMus, public:
 
-WindowTreeHostMus::WindowTreeHostMus(mojo::Connector* connector,
+WindowTreeHostMus::WindowTreeHostMus(shell::Connector* connector,
                                      NativeWidgetMus* native_widget,
                                      mus::Window* window)
-    : native_widget_(native_widget),
-      show_state_(ui::PLATFORM_WINDOW_STATE_UNKNOWN) {
+    : native_widget_(native_widget) {
   SetPlatformWindow(
-      make_scoped_ptr(new PlatformWindowMus(this, connector, window)));
+      base::WrapUnique(new PlatformWindowMus(this, connector, window)));
   // The location of events is already transformed, and there is no way to
   // correctly determine the reverse transform. So, don't attempt to transform
   // event locations, else the root location is wrong.
@@ -56,10 +56,6 @@ void WindowTreeHostMus::DispatchEvent(ui::Event* event) {
 void WindowTreeHostMus::OnClosed() {
   if (native_widget_)
     native_widget_->OnPlatformWindowClosed();
-}
-
-void WindowTreeHostMus::OnWindowStateChanged(ui::PlatformWindowState state) {
-  show_state_ = state;
 }
 
 void WindowTreeHostMus::OnActivationChanged(bool active) {

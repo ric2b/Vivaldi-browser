@@ -627,6 +627,11 @@ void WebSettingsImpl::setStrictlyBlockBlockableMixedContent(bool enabled)
     m_settings->setStrictlyBlockBlockableMixedContent(enabled);
 }
 
+void WebSettingsImpl::setPassiveEventListenerDefault(PassiveEventListenerDefault defaultValue)
+{
+    m_settings->setPassiveListenerDefault(static_cast<PassiveListenerDefault>(defaultValue));
+}
+
 void WebSettingsImpl::setPasswordEchoEnabled(bool flag)
 {
     m_settings->setPasswordEchoEnabled(flag);
@@ -798,9 +803,14 @@ void WebSettingsImpl::setV8CacheOptions(V8CacheOptions options)
     m_settings->setV8CacheOptions(static_cast<blink::V8CacheOptions>(options));
 }
 
-void WebSettingsImpl::setUseMobileViewportStyle(bool enabled)
+void WebSettingsImpl::setV8CacheStrategiesForCacheStorage(V8CacheStrategiesForCacheStorage strategies)
 {
-    m_devToolsEmulator->setUseMobileViewportStyle(enabled);
+    m_settings->setV8CacheStrategiesForCacheStorage(static_cast<blink::V8CacheStrategiesForCacheStorage>(strategies));
+}
+
+void WebSettingsImpl::setViewportStyle(WebViewportStyle style)
+{
+    m_devToolsEmulator->setViewportStyle(style);
 }
 
 void WebSettingsImpl::setServeResourceFromCacheOnly(bool onlyLoadFromCache)

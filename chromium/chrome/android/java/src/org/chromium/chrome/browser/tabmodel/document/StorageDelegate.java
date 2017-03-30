@@ -10,7 +10,7 @@ import android.util.SparseArray;
 
 import com.google.protobuf.nano.MessageNano;
 
-import org.chromium.base.ApplicationStatus;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.StreamUtil;
 import org.chromium.chrome.browser.TabState;
@@ -69,7 +69,7 @@ public class StorageDelegate extends TabPersister {
         FileInputStream streamIn = null;
         try {
             String filename = getFilename(encrypted);
-            streamIn = ApplicationStatus.getApplicationContext().openFileInput(filename);
+            streamIn = ContextUtils.getApplicationContext().openFileInput(filename);
 
             // Read the file from the file into the out stream.
             ByteArrayOutputStream streamOut = new ByteArrayOutputStream();
@@ -102,7 +102,7 @@ public class StorageDelegate extends TabPersister {
 
         FileOutputStream outputStream = null;
         try {
-            outputStream = ApplicationStatus.getApplicationContext().openFileOutput(
+            outputStream = ContextUtils.getApplicationContext().openFileOutput(
                     getFilename(encrypted), Context.MODE_PRIVATE);
             outputStream.write(bytes);
         } catch (FileNotFoundException e) {
@@ -115,14 +115,12 @@ public class StorageDelegate extends TabPersister {
     }
 
     private void preloadStateDirectory() {
-        if (sBaseStateDirectoryFetchTask != null) {
-            return;
-        }
+        if (sBaseStateDirectoryFetchTask != null) return;
 
         sBaseStateDirectoryFetchTask = new AsyncTask<Void, Void, File>() {
             @Override
             protected File doInBackground(Void... params) {
-                return ApplicationStatus.getApplicationContext().getDir(
+                return ContextUtils.getApplicationContext().getDir(
                         STATE_DIRECTORY, Context.MODE_PRIVATE);
             }
         }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
@@ -139,8 +137,7 @@ public class StorageDelegate extends TabPersister {
 
         // If the AsyncTask failed for some reason, we have no choice but to fall back to
         // main-thread disk access.
-        return ApplicationStatus.getApplicationContext().getDir(
-                STATE_DIRECTORY, Context.MODE_PRIVATE);
+        return ContextUtils.getApplicationContext().getDir(STATE_DIRECTORY, Context.MODE_PRIVATE);
     }
 
     /**

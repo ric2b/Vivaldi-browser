@@ -5,8 +5,9 @@
 #ifndef BaseRenderingContext2D_h
 #define BaseRenderingContext2D_h
 
-#include "bindings/core/v8/UnionTypesCore.h"
-#include "bindings/modules/v8/UnionTypesModules.h"
+#include "bindings/modules/v8/HTMLImageElementOrHTMLVideoElementOrHTMLCanvasElementOrImageBitmap.h"
+#include "bindings/modules/v8/StringOrCanvasGradientOrCanvasPattern.h"
+#include "core/html/ImageData.h"
 #include "modules/ModulesExport.h"
 #include "modules/canvas2d/CanvasGradient.h"
 #include "modules/canvas2d/CanvasPathMethods.h"
@@ -106,14 +107,14 @@ public:
     void fillRect(double x, double y, double width, double height);
     void strokeRect(double x, double y, double width, double height);
 
-    void drawImage(const CanvasImageSourceUnion&, double x, double y, ExceptionState&);
-    void drawImage(const CanvasImageSourceUnion&, double x, double y, double width, double height, ExceptionState&);
-    void drawImage(const CanvasImageSourceUnion&, double sx, double sy, double sw, double sh, double dx, double dy, double dw, double dh, ExceptionState&);
-    void drawImage(CanvasImageSource*, double sx, double sy, double sw, double sh, double dx, double dy, double dw, double dh, ExceptionState&);
+    void drawImage(ExecutionContext*, const CanvasImageSourceUnion&, double x, double y, ExceptionState&);
+    void drawImage(ExecutionContext*, const CanvasImageSourceUnion&, double x, double y, double width, double height, ExceptionState&);
+    void drawImage(ExecutionContext*, const CanvasImageSourceUnion&, double sx, double sy, double sw, double sh, double dx, double dy, double dw, double dh, ExceptionState&);
+    void drawImage(ExecutionContext*, CanvasImageSource*, double sx, double sy, double sw, double sh, double dx, double dy, double dw, double dh, ExceptionState&);
 
     CanvasGradient* createLinearGradient(double x0, double y0, double x1, double y1);
     CanvasGradient* createRadialGradient(double x0, double y0, double r0, double x1, double y1, double r1, ExceptionState&);
-    CanvasPattern* createPattern(const CanvasImageSourceUnion&, const String& repetitionType, ExceptionState&);
+    CanvasPattern* createPattern(ExecutionContext*, const CanvasImageSourceUnion&, const String& repetitionType, ExceptionState&);
 
     ImageData* createImageData(ImageData*, ExceptionState&) const;
     ImageData* createImageData(double width, double height, ExceptionState&) const;
@@ -128,7 +129,7 @@ public:
 
     virtual bool originClean() const = 0;
     virtual void setOriginTainted() = 0;
-    virtual bool wouldTaintOrigin(CanvasImageSource*) = 0;
+    virtual bool wouldTaintOrigin(CanvasImageSource*, ExecutionContext*) = 0;
 
     virtual int width() const = 0;
     virtual int height() const = 0;
@@ -148,6 +149,7 @@ public:
 
     virtual bool stateHasFilter() = 0;
     virtual SkImageFilter* stateGetFilter() = 0;
+    virtual void snapshotStateForFilter() = 0;
 
     virtual void validateStateStack() = 0;
 

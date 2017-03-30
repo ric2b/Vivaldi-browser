@@ -68,6 +68,8 @@
        '<(VIVALDI)/app/vivaldi_constants.cc',
        '<(VIVALDI)/base/vivaldi_switches.cpp',
        '<(VIVALDI)/base/vivaldi_switches.h',
+       '<(VIVALDI)/browser/vivaldi_clipboard_utils.cc',
+       '<(VIVALDI)/browser/vivaldi_clipboard_utils.h',
     ],
     # browser
     'vivaldi_browser_sources' : [
@@ -101,6 +103,10 @@
       '<(VIVALDI)/ui/views/vivaldi_context_menu_views.cc',
       '<(VIVALDI)/ui/views/vivaldi_context_menu_views.h',
       '<(VIVALDI)/ui/views/vivaldi_main_menu_views.cc',
+    ],
+    'vivaldi_ui_base_win': [
+      '<(VIVALDI)/ui/dragging/custom_drag_source_win.cc',
+      '<(VIVALDI)/ui/dragging/custom_drag_source_win.h',
     ],
     # setup
     'vivaldi_setup': [
@@ -148,9 +154,18 @@
       '<(VIVALDI)/extensions/vivaldi_script_dispatcher.cpp',
     ],
 
-    'vivaldi_keycode_translation': [
-      '<(VIVALDI)/browser/keycode_translation.cpp',
+    'vivaldi_keycode_translation_win': [
+      '<(VIVALDI)/browser/keycode_translation_win.cc',
       '<(VIVALDI)/browser/keycode_translation.h',
+    ],
+    'vivaldi_keycode_translation_linux': [
+      '<(VIVALDI)/browser/keycode_translation_linux.cc',
+      '<(VIVALDI)/browser/keycode_translation.h',
+    ],
+    # renderer
+    'vivaldi_renderer': [
+      '<(VIVALDI)/renderer/vivaldi_render_view_observer.cc',
+      '<(VIVALDI)/renderer/vivaldi_render_view_observer.h',
     ],
     # chrome_initial
     'vivaldi_remove_mac_resources_chrome_exe' : [

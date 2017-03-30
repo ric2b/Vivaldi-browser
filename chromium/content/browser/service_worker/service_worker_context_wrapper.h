@@ -7,13 +7,13 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/service_worker_context.h"
@@ -154,15 +154,15 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   // All these methods must be called from the IO thread.
   void GetAllRegistrations(const GetRegistrationsInfosCallback& callback);
   void GetRegistrationUserData(int64_t registration_id,
-                               const std::string& key,
+                               const std::vector<std::string>& keys,
                                const GetUserDataCallback& callback);
-  void StoreRegistrationUserData(int64_t registration_id,
-                                 const GURL& origin,
-                                 const std::string& key,
-                                 const std::string& data,
-                                 const StatusCallback& callback);
+  void StoreRegistrationUserData(
+      int64_t registration_id,
+      const GURL& origin,
+      const std::vector<std::pair<std::string, std::string>>& key_value_pairs,
+      const StatusCallback& callback);
   void ClearRegistrationUserData(int64_t registration_id,
-                                 const std::string& key,
+                                 const std::vector<std::string>& keys,
                                  const StatusCallback& callback);
   void GetUserDataForAllRegistrations(
       const std::string& key,
@@ -171,6 +171,9 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   // This function can be called from any thread, but the callback will always
   // be called on the UI thread.
   void StartServiceWorker(const GURL& pattern, const StatusCallback& callback);
+
+  // This function can be called from any thread.
+  void SkipWaitingWorker(const GURL& pattern);
 
   // These methods can be called from any thread.
   void UpdateRegistration(const GURL& pattern);
@@ -200,7 +203,7 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
 
   void InitInternal(
       const base::FilePath& user_data_directory,
-      scoped_ptr<ServiceWorkerDatabaseTaskManager> database_task_manager,
+      std::unique_ptr<ServiceWorkerDatabaseTaskManager> database_task_manager,
       const scoped_refptr<base::SingleThreadTaskRunner>& disk_cache_thread,
       storage::QuotaManagerProxy* quota_manager_proxy,
       storage::SpecialStoragePolicy* special_storage_policy);
@@ -235,9 +238,9 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
 
   const scoped_refptr<base::ObserverListThreadSafe<
       ServiceWorkerContextObserver>> observer_list_;
-  const scoped_ptr<ServiceWorkerProcessManager> process_manager_;
+  const std::unique_ptr<ServiceWorkerProcessManager> process_manager_;
   // Cleared in ShutdownOnIO():
-  scoped_ptr<ServiceWorkerContextCore> context_core_;
+  std::unique_ptr<ServiceWorkerContextCore> context_core_;
 
   // Initialized in Init(); true if the user data directory is empty.
   bool is_incognito_;

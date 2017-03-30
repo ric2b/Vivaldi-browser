@@ -6,10 +6,10 @@
 
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "media/base/video_frame.h"
-#include "media/gpu/ipc/common/gpu_video_accelerator_util.h"
+#include "media/gpu/gpu_video_accelerator_util.h"
 #include "media/gpu/ipc/common/media_messages.h"
 #include "media/video/video_encode_accelerator.h"
 #include "ui/gfx/gpu_memory_buffer.h"
@@ -17,9 +17,8 @@
 namespace media {
 
 GpuVideoEncodeAcceleratorHost::GpuVideoEncodeAcceleratorHost(
-    gpu::GpuChannelHost* channel,
     gpu::CommandBufferProxyImpl* impl)
-    : channel_(channel),
+    : channel_(impl->channel()),
       encoder_route_id_(MSG_ROUTING_NONE),
       client_(NULL),
       impl_(impl),

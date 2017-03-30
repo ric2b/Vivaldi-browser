@@ -25,6 +25,8 @@
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/client_socket_pool_base.h"
 #include "net/socket/socket_net_log_params.h"
+#include "net/socket/socket_performance_watcher.h"
+#include "net/socket/socket_performance_watcher_factory.h"
 #include "net/socket/tcp_client_socket.h"
 
 using base::TimeDelta;
@@ -200,6 +202,7 @@ TransportConnectJob::TransportConnectJob(
     const scoped_refptr<TransportSocketParams>& params,
     base::TimeDelta timeout_duration,
     ClientSocketFactory* client_socket_factory,
+    SocketPerformanceWatcherFactory* socket_performance_watcher_factory,
     HostResolver* host_resolver,
     Delegate* delegate,
     NetLog* net_log)
@@ -210,6 +213,7 @@ TransportConnectJob::TransportConnectJob(
                  delegate,
                  BoundNetLog::Make(net_log, NetLog::SOURCE_CONNECT_JOB)),
       helper_(params, client_socket_factory, host_resolver, &connect_timing_),
+      socket_performance_watcher_factory_(socket_performance_watcher_factory),
       interval_between_connects_(CONNECT_INTERVAL_GT_20MS),
       resolve_result_(OK) {
   helper_.SetOnIOComplete(this);
@@ -296,9 +300,17 @@ int TransportConnectJob::DoTransportConnect() {
 
   helper_.set_next_state(
       TransportConnectJobHelper::STATE_TRANSPORT_CONNECT_COMPLETE);
+  // Create a |SocketPerformanceWatcher|, and pass the ownership.
+  std::unique_ptr<SocketPerformanceWatcher> socket_performance_watcher;
+  if (socket_performance_watcher_factory_) {
+    socket_performance_watcher =
+        socket_performance_watcher_factory_->CreateSocketPerformanceWatcher(
+            SocketPerformanceWatcherFactory::PROTOCOL_TCP);
+  }
   transport_socket_ =
       helper_.client_socket_factory()->CreateTransportClientSocket(
-          helper_.addresses(), net_log().net_log(), net_log().source());
+          helper_.addresses(), std::move(socket_performance_watcher),
+          net_log().net_log(), net_log().source());
 
   // If the list contains IPv6 and IPv4 addresses, the first address will
   // be IPv6, and the IPv4 addresses will be tried as fallback addresses,
@@ -413,11 +425,20 @@ void TransportConnectJob::DoIPv6FallbackTransportConnect() {
   DCHECK(!fallback_transport_socket_.get());
   DCHECK(!fallback_addresses_.get());
 
+  // Create a |SocketPerformanceWatcher|, and pass the ownership.
+  std::unique_ptr<SocketPerformanceWatcher> socket_performance_watcher;
+  if (socket_performance_watcher_factory_) {
+    socket_performance_watcher =
+        socket_performance_watcher_factory_->CreateSocketPerformanceWatcher(
+            SocketPerformanceWatcherFactory::PROTOCOL_TCP);
+  }
+
   fallback_addresses_.reset(new AddressList(helper_.addresses()));
   MakeAddressListStartWithIPv4(fallback_addresses_.get());
   fallback_transport_socket_ =
       helper_.client_socket_factory()->CreateTransportClientSocket(
-          *fallback_addresses_, net_log().net_log(), net_log().source());
+          *fallback_addresses_, std::move(socket_performance_watcher),
+          net_log().net_log(), net_log().source());
   fallback_connect_start_time_ = base::TimeTicks::Now();
   int rv = fallback_transport_socket_->Connect(
       base::Bind(
@@ -484,15 +505,15 @@ void TransportConnectJob::CopyConnectionAttemptsFromSockets() {
   }
 }
 
-scoped_ptr<ConnectJob>
+std::unique_ptr<ConnectJob>
 TransportClientSocketPool::TransportConnectJobFactory::NewConnectJob(
     const std::string& group_name,
     const PoolBase::Request& request,
     ConnectJob::Delegate* delegate) const {
-  return scoped_ptr<ConnectJob>(new TransportConnectJob(
+  return std::unique_ptr<ConnectJob>(new TransportConnectJob(
       group_name, request.priority(), request.respect_limits(),
       request.params(), ConnectionTimeout(), client_socket_factory_,
-      host_resolver_, delegate, net_log_));
+      socket_performance_watcher_factory_, host_resolver_, delegate, net_log_));
 }
 
 base::TimeDelta
@@ -506,6 +527,7 @@ TransportClientSocketPool::TransportClientSocketPool(
     int max_sockets_per_group,
     HostResolver* host_resolver,
     ClientSocketFactory* client_socket_factory,
+    SocketPerformanceWatcherFactory* socket_performance_watcher_factory,
     NetLog* net_log)
     : base_(NULL,
             max_sockets,
@@ -514,6 +536,7 @@ TransportClientSocketPool::TransportClientSocketPool(
             ClientSocketPool::used_idle_socket_timeout(),
             new TransportConnectJobFactory(client_socket_factory,
                                            host_resolver,
+                                           socket_performance_watcher_factory,
                                            net_log)) {
   base_.EnableConnectBackupJobs();
 }
@@ -575,7 +598,7 @@ void TransportClientSocketPool::CancelRequest(
 
 void TransportClientSocketPool::ReleaseSocket(
     const std::string& group_name,
-    scoped_ptr<StreamSocket> socket,
+    std::unique_ptr<StreamSocket> socket,
     int id) {
   base_.ReleaseSocket(group_name, std::move(socket), id);
 }
@@ -602,10 +625,10 @@ LoadState TransportClientSocketPool::GetLoadState(
   return base_.GetLoadState(group_name, handle);
 }
 
-scoped_ptr<base::DictionaryValue> TransportClientSocketPool::GetInfoAsValue(
-    const std::string& name,
-    const std::string& type,
-    bool include_nested_pools) const {
+std::unique_ptr<base::DictionaryValue>
+TransportClientSocketPool::GetInfoAsValue(const std::string& name,
+                                          const std::string& type,
+                                          bool include_nested_pools) const {
   return base_.GetInfoAsValue(name, type);
 }
 

@@ -33,7 +33,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/DocumentParser.h"
 #include "core/dom/StyleEngine.h"
-#include "core/dom/custom/CustomElementSyncMicrotaskQueue.h"
+#include "core/dom/custom/V0CustomElementSyncMicrotaskQueue.h"
 #include "core/html/HTMLDocument.h"
 #include "core/html/imports/HTMLImportChild.h"
 #include "core/html/imports/HTMLImportsController.h"
@@ -46,15 +46,12 @@ namespace blink {
 HTMLImportLoader::HTMLImportLoader(HTMLImportsController* controller)
     : m_controller(controller)
     , m_state(StateLoading)
-    , m_microtaskQueue(CustomElementSyncMicrotaskQueue::create())
+    , m_microtaskQueue(V0CustomElementSyncMicrotaskQueue::create())
 {
 }
 
 HTMLImportLoader::~HTMLImportLoader()
 {
-#if !ENABLE(OILPAN)
-    dispose();
-#endif
 }
 
 void HTMLImportLoader::dispose()
@@ -69,7 +66,7 @@ void HTMLImportLoader::dispose()
     clearResource();
 }
 
-void HTMLImportLoader::startLoading(const RawPtr<RawResource>& resource)
+void HTMLImportLoader::startLoading(RawResource* resource)
 {
     setResource(resource);
 }
@@ -88,7 +85,6 @@ void HTMLImportLoader::responseReceived(Resource* resource, const ResourceRespon
 
 void HTMLImportLoader::dataReceived(Resource*, const char* data, size_t length)
 {
-    RawPtr<DocumentWriter> protectingWriter(m_writer.get());
     m_writer->addData(data, length);
 }
 
@@ -143,7 +139,7 @@ void HTMLImportLoader::setState(State state)
     m_state = state;
 
     if (m_state == StateParsed || m_state == StateError || m_state == StateWritten) {
-        if (RawPtr<DocumentWriter> writer = m_writer.release())
+        if (DocumentWriter* writer = m_writer.release())
             writer->end();
     }
 
@@ -173,7 +169,7 @@ void HTMLImportLoader::didRemoveAllPendingStylesheet()
 
 bool HTMLImportLoader::hasPendingResources() const
 {
-    return m_document && m_document->styleEngine().hasPendingSheets();
+    return m_document && m_document->styleEngine().hasPendingScriptBlockingSheets();
 }
 
 void HTMLImportLoader::didFinishLoading()
@@ -215,7 +211,7 @@ bool HTMLImportLoader::shouldBlockScriptExecution() const
     return firstImport()->state().shouldBlockScriptExecution();
 }
 
-RawPtr<CustomElementSyncMicrotaskQueue> HTMLImportLoader::microtaskQueue() const
+V0CustomElementSyncMicrotaskQueue* HTMLImportLoader::microtaskQueue() const
 {
     return m_microtaskQueue;
 }

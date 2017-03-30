@@ -5,10 +5,10 @@
 #ifndef CC_SCHEDULER_SCHEDULER_STATE_MACHINE_H_
 #define CC_SCHEDULER_SCHEDULER_STATE_MACHINE_H_
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "cc/base/cc_export.h"
 #include "cc/output/begin_frame_args.h"
 #include "cc/scheduler/commit_earlyout_reason.h"
@@ -59,11 +59,8 @@ class CC_EXPORT SchedulerStateMachine {
 
   // Note: BeginImplFrameState does not cycle through these states in a fixed
   // order on all platforms. It's up to the scheduler to set these correctly.
-  // TODO(sunnyps): Rename the states to IDLE, ANIMATE, WAITING_FOR_DEADLINE and
-  // DRAW.
   enum BeginImplFrameState {
     BEGIN_IMPL_FRAME_STATE_IDLE,
-    BEGIN_IMPL_FRAME_STATE_BEGIN_FRAME_STARTING,
     BEGIN_IMPL_FRAME_STATE_INSIDE_BEGIN_FRAME,
     BEGIN_IMPL_FRAME_STATE_INSIDE_DEADLINE,
   };
@@ -129,7 +126,7 @@ class CC_EXPORT SchedulerStateMachine {
   };
   static const char* ActionToString(Action action);
 
-  scoped_ptr<base::trace_event::ConvertableToTraceFormat> AsValue() const;
+  std::unique_ptr<base::trace_event::ConvertableToTraceFormat> AsValue() const;
   void AsValueInto(base::trace_event::TracedValue* dict) const;
 
   Action NextAction() const;
@@ -153,7 +150,6 @@ class CC_EXPORT SchedulerStateMachine {
   // The scheduler will not draw more than once in a given BeginImplFrame
   // callback nor send more than one BeginMainFrame message.
   void OnBeginImplFrame();
-  void OnBeginImplFrameDeadlinePending();
   // Indicates that the scheduler has entered the draw phase. The scheduler
   // will not draw more than once in a single draw phase.
   // TODO(sunnyps): Rename OnBeginImplFrameDeadline to OnDraw or similar.
@@ -272,17 +268,11 @@ class CC_EXPORT SchedulerStateMachine {
 
   void SetDeferCommits(bool defer_commits);
 
-  void SetChildrenNeedBeginFrames(bool children_need_begin_frames);
-  bool children_need_begin_frames() const {
-    return children_need_begin_frames_;
-  }
-
   void SetVideoNeedsBeginFrames(bool video_needs_begin_frames);
   bool video_needs_begin_frames() const { return video_needs_begin_frames_; }
 
  protected:
   bool BeginFrameRequiredForAction() const;
-  bool BeginFrameRequiredForChildren() const;
   bool BeginFrameNeededForVideo() const;
   bool ProactiveBeginFrameWanted() const;
 
@@ -291,9 +281,6 @@ class CC_EXPORT SchedulerStateMachine {
   // True if we need to force activations to make forward progress.
   // TODO(sunnyps): Rename this to ShouldAbortCurrentFrame or similar.
   bool PendingActivationsShouldBeForced() const;
-
-  // TODO(brianderson): Remove this once NPAPI support is removed.
-  bool SendingBeginMainFrameMightCauseDeadlock() const;
 
   bool ShouldBeginOutputSurfaceCreation() const;
   bool ShouldDraw() const;
@@ -353,7 +340,6 @@ class CC_EXPORT SchedulerStateMachine {
   bool critical_begin_main_frame_to_activate_is_fast_;
   bool main_thread_missed_last_deadline_;
   bool skip_next_begin_main_frame_to_reduce_latency_;
-  bool children_need_begin_frames_;
   bool defer_commits_;
   bool video_needs_begin_frames_;
   bool last_commit_had_no_updates_;

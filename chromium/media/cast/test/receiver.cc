@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <deque>
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -19,7 +20,6 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
@@ -28,9 +28,9 @@
 #include "base/timer/timer.h"
 #include "media/audio/audio_io.h"
 #include "media/audio/audio_manager.h"
-#include "media/audio/audio_parameters.h"
 #include "media/audio/fake_audio_log_factory.h"
 #include "media/base/audio_bus.h"
+#include "media/base/audio_parameters.h"
 #include "media/base/channel_layout.h"
 #include "media/base/video_frame.h"
 #include "media/cast/cast_config.h"
@@ -234,7 +234,7 @@ class NaivePlayer : public InProcessReceiver,
 
     // Finally, clear out any frames remaining in the queues.
     while (!audio_playout_queue_.empty()) {
-      const scoped_ptr<AudioBus> to_be_deleted(
+      const std::unique_ptr<AudioBus> to_be_deleted(
           audio_playout_queue_.front().second);
       audio_playout_queue_.pop_front();
     }
@@ -286,7 +286,7 @@ class NaivePlayer : public InProcessReceiver,
     }
   }
 
-  void OnAudioFrame(scoped_ptr<AudioBus> audio_frame,
+  void OnAudioFrame(std::unique_ptr<AudioBus> audio_frame,
                     const base::TimeTicks& playout_time,
                     bool is_continuous) final {
     DCHECK(cast_env()->CurrentlyOn(CastEnvironment::MAIN));
@@ -450,7 +450,7 @@ class NaivePlayer : public InProcessReceiver,
     return ret;
   }
 
-  scoped_ptr<AudioBus> PopOneAudioFrame(bool was_skipped) {
+  std::unique_ptr<AudioBus> PopOneAudioFrame(bool was_skipped) {
     audio_lock_.AssertAcquired();
 
     if (was_skipped) {
@@ -469,7 +469,7 @@ class NaivePlayer : public InProcessReceiver,
     }
 
     last_popped_audio_playout_time_ = audio_playout_queue_.front().first;
-    scoped_ptr<AudioBus> ret(audio_playout_queue_.front().second);
+    std::unique_ptr<AudioBus> ret(audio_playout_queue_.front().second);
     audio_playout_queue_.pop_front();
     ++num_audio_frames_processed_;
     return ret;
@@ -514,7 +514,7 @@ class NaivePlayer : public InProcessReceiver,
 #if defined(USE_X11)
   test::LinuxOutputWindow render_;
 #endif  // defined(USE_X11)
-  scoped_ptr<AudioOutputStream> audio_output_stream_;
+  std::unique_ptr<AudioOutputStream> audio_output_stream_;
 
   // Video playout queue.
   typedef std::pair<base::TimeTicks, scoped_refptr<VideoFrame> >
@@ -533,7 +533,7 @@ class NaivePlayer : public InProcessReceiver,
   int64_t num_audio_frames_processed_;
 
   // These must only be used on the audio thread calling OnMoreData().
-  scoped_ptr<AudioBus> currently_playing_audio_frame_;
+  std::unique_ptr<AudioBus> currently_playing_audio_frame_;
   int currently_playing_audio_frame_start_;
 
   std::map<uint16_t, base::TimeTicks> audio_play_times_;
@@ -548,14 +548,15 @@ int main(int argc, char** argv) {
   base::AtExitManager at_exit;
   base::CommandLine::Init(argc, argv);
   InitLogging(logging::LoggingSettings());
+  base::MessageLoop message_loop;
 
   scoped_refptr<media::cast::CastEnvironment> cast_environment(
       new media::cast::StandaloneCastEnvironment);
 
   // Start up Chromium audio system.
-  media::FakeAudioLogFactory fake_audio_log_factory_;
-  const scoped_ptr<media::AudioManager> audio_manager(
-      media::AudioManager::Create(&fake_audio_log_factory_));
+  const media::ScopedAudioManagerPtr audio_manager(
+      media::AudioManager::CreateForTesting(
+          base::ThreadTaskRunnerHandle::Get()));
   CHECK(media::AudioManager::Get());
 
   media::cast::FrameReceiverConfig audio_config =
@@ -600,7 +601,7 @@ int main(int argc, char** argv) {
                                   window_height);
   player.Start();
 
-  base::MessageLoop().Run();  // Run forever (i.e., until SIGTERM).
+  message_loop.Run();  // Run forever (i.e., until SIGTERM).
   NOTREACHED();
   return 0;
 }

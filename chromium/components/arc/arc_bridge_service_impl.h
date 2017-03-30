@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_ARC_ARC_BRIDGE_SERVICE_IMPL_H_
 #define COMPONENTS_ARC_ARC_BRIDGE_SERVICE_IMPL_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -26,7 +27,7 @@ namespace arc {
 class ArcBridgeServiceImpl : public ArcBridgeService,
                              public ArcBridgeBootstrap::Delegate {
  public:
-  explicit ArcBridgeServiceImpl(scoped_ptr<ArcBridgeBootstrap> bootstrap);
+  explicit ArcBridgeServiceImpl(std::unique_ptr<ArcBridgeBootstrap> bootstrap);
   ~ArcBridgeServiceImpl() override;
 
   void SetDetectedAvailability(bool available) override;
@@ -34,6 +35,11 @@ class ArcBridgeServiceImpl : public ArcBridgeService,
   void HandleStartup() override;
 
   void Shutdown() override;
+
+  // Normally, reconnecting after connection shutdown happens after a short
+  // delay. When testing, however, we'd like it to happen immediately to avoid
+  // adding unnecessary delays.
+  void DisableReconnectDelayForTesting();
 
  private:
   friend class ArcBridgeTest;
@@ -48,18 +54,18 @@ class ArcBridgeServiceImpl : public ArcBridgeService,
   void StopInstance();
 
   // ArcBridgeBootstrap::Delegate:
-  void OnConnectionEstablished(ArcBridgeInstancePtr instance) override;
+  void OnConnectionEstablished(mojom::ArcBridgeInstancePtr instance) override;
   void OnStopped() override;
 
   // Called when the bridge channel is closed. This typically only happens when
   // the ARC instance crashes. This is not called during shutdown.
   void OnChannelClosed();
 
-  scoped_ptr<ArcBridgeBootstrap> bootstrap_;
+  std::unique_ptr<ArcBridgeBootstrap> bootstrap_;
 
   // Mojo endpoints.
-  mojo::Binding<ArcBridgeHost> binding_;
-  ArcBridgeInstancePtr instance_ptr_;
+  mojo::Binding<mojom::ArcBridgeHost> binding_;
+  mojom::ArcBridgeInstancePtr instance_ptr_;
 
   // If the user's session has started.
   bool session_started_;
@@ -67,6 +73,9 @@ class ArcBridgeServiceImpl : public ArcBridgeService,
   // If the instance had already been started but the connection to it was
   // lost. This should make the instance restart.
   bool reconnect_ = false;
+
+  // Delay the reconnection.
+  bool use_delay_before_reconnecting_ = true;
 
   // WeakPtrFactory to use callbacks.
   base::WeakPtrFactory<ArcBridgeServiceImpl> weak_factory_;

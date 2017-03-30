@@ -6,6 +6,7 @@
 
 #include <numeric>
 
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_utils.h"
@@ -45,8 +46,13 @@ ACTION_TEMPLATE(InvokeCallback,
 ACTION_TEMPLATE(InvokeUsbTransferCallback,
                 HAS_1_TEMPLATE_PARAMS(int, k),
                 AND_1_VALUE_PARAMS(p1)) {
-  net::IOBuffer* io_buffer = new net::IOBuffer(1);
-  memset(io_buffer->data(), 0, 1);  // Avoid uninitialized reads.
+  net::IOBuffer* io_buffer = nullptr;
+  size_t length = 0;
+  if (p1 != device::USB_TRANSFER_ERROR) {
+    length = 1;
+    io_buffer = new net::IOBuffer(length);
+    memset(io_buffer->data(), 0, length);  // Avoid uninitialized reads.
+  }
   ::std::tr1::get<k>(args).Run(p1, io_buffer, 1);
 }
 
@@ -112,9 +118,9 @@ class TestExtensionsAPIClient : public ShellExtensionsAPIClient {
  public:
   TestExtensionsAPIClient() : ShellExtensionsAPIClient() {}
 
-  scoped_ptr<DevicePermissionsPrompt> CreateDevicePermissionsPrompt(
+  std::unique_ptr<DevicePermissionsPrompt> CreateDevicePermissionsPrompt(
       content::WebContents* web_contents) const override {
-    return make_scoped_ptr(new TestDevicePermissionsPrompt(web_contents));
+    return base::WrapUnique(new TestDevicePermissionsPrompt(web_contents));
   }
 };
 
@@ -141,7 +147,7 @@ class UsbApiTest : public ShellApiTest {
  protected:
   scoped_refptr<MockUsbDeviceHandle> mock_device_handle_;
   scoped_refptr<MockUsbDevice> mock_device_;
-  scoped_ptr<MockDeviceClient> device_client_;
+  std::unique_ptr<MockDeviceClient> device_client_;
 };
 
 }  // namespace

@@ -1,23 +1,26 @@
+<link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/hardware-icons.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-spinner/paper-spinner.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-tabs/paper-tab.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-tabs/paper-tabs.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_search_field/cr_search_field.html">
 <link rel="import" href="chrome://history/shared_style.html">
 
 <dom-module id="history-toolbar">
   <template>
-    <style include="shared-style"></style>
-    <style>
+    <style include="shared-style">
       :host {
-        background: rgb(63, 85, 102);
         color: #fff;
-        height: 56px;
         transition: background-color 150ms;
+        width: 100%;
       }
 
-      :host,
-      #items,
+      #overlay-buttons,
+      #overlay-wrapper,
       #main-content,
       #button-container,
       #toolbar-container {
@@ -32,87 +35,178 @@
 
       h1 {
         @apply(--layout-flex);
-        font-size: 16px;
+        -webkit-padding-start: 24px;
+        font-size: 123%;
         font-weight: 400;
-        padding-left: 24px;
+      }
+
+      #toolbar-container {
+        height: 56px;
+      }
+
+      #right-content {
+        flex: 1 0 0;
+      }
+
+      #left-content {
+        flex: 1 0 var(--side-bar-width);
+      }
+
+      #centered-content {
+        /** Padding-start gives space on one side, flex-basis gives space on the
+          other. */
+        -webkit-padding-start: var(--card-padding-side);
+        display: flex;
+        flex: 1 1 calc(var(--card-max-width) + var(--card-padding-side));
+      }
+
+      #right-content {
+        @apply(--layout-center);
+        @apply(--layout-horizontal);
+        justify-content: flex-end;
       }
 
       #search-input {
         -webkit-padding-end: 20px;
       }
 
-      #items {
+      #searching-spinner {
+        height: 20px;
+        width: 20px;
+        -webkit-padding-end: 10px;
+      }
+
+      #overlay-buttons {
         margin: 0 auto;
         max-width: var(--card-max-width);
+        padding: 0 var(--card-padding-side);
+      }
+
+      #overlay-wrapper {
+        -webkit-margin-start: var(--side-bar-width);
       }
 
       #number-selected {
         @apply(--layout-flex);
       }
 
-      paper-icon-button {
+      #cancel-icon-button {
+        -webkit-margin-end: 24px;
+        -webkit-margin-start: 2px;
         height: 36px;
-        margin: 0 24px 0 2px;
         min-width: 36px;
         width: 36px;
       }
 
-      #centered-buttons {
-        flex: 0 1 var(--card-max-width);
+      #grouped-nav-container paper-icon-button {
+        --paper-icon-button-ink-color: rgba(255, 255, 255, 0.4);
+        -webkit-margin-start: 24px;
+        flex: 0 0 auto;
       }
 
-      paper-button {
-        pointer-events: auto;
+      paper-tab {
+        --paper-tab-ink: rgba(255, 255, 255, 0.4);
+        font-size: 13px;
+        text-transform: uppercase;
       }
 
-      .toolbar-overlay  {
-        height: inherit;
-        left: 0;
+      paper-tabs {
+        --paper-tabs-selection-bar-color: var(--google-blue-500);
+        height: 45px;
+        min-width: 300px;
+      }
+
+      #grouped-buttons-container {
+        @apply(--layout-center);
+        @apply(--layout-horizontal);
+        -webkit-margin-start: var(--side-bar-width);
+      }
+
+      #grouped-range-buttons {
+        -webkit-margin-start: 32px;
+      }
+
+      #grouped-nav-container {
+        @apply(--layout-center);
+        @apply(--layout-end-justified);
+        @apply(--layout-flex);
+        @apply(--layout-horizontal);
+        -webkit-margin-end: 24px;
+        overflow: hidden;
+        transition: opacity 150ms;
+      }
+
+      :host([grouped-range=0]) #grouped-nav-container {
+        opacity: 0;
         pointer-events: none;
-        position: absolute;
-        top: 0;
       }
 
-      #front-padding {
-        flex: 1 1 0;
-        min-width: 100px;
+      #grouped-date {
+        flex: 0 1 auto;
+        opacity: 0.7;
+        overflow: hidden;
+        text-align: right;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
-      #back-padding {
-        flex: 1 1 0;
+      :host-context([dir=rtl]) .rtl-reversible {
+        transform: rotate(180deg);
       }
     </style>
     <div id="toolbar-container">
       <div id="main-content" hidden$="[[itemsSelected_]]">
-        <h1 id="title">$i18n{title}</h1>
-        <cr-search-field id="search-input" label="$i18n{search}"
-            clear-label="$i18n{clearSearch}">
-        </cr-search-field>
+        <div id="left-content">
+          <h1 id="title">$i18n{title}</h1>
+        </div>
+        <div id="centered-content">
+          <div id="right-content">
+            <paper-spinner id="searching-spinner" active="[[searching]]">
+            </paper-spinner>
+            <cr-search-field id="search-input" label="$i18n{search}"
+                clear-label="$i18n{clearSearch}">
+            </cr-search-field>
+          </div>
+        </div>
       </div>
 
-      <div id="items" hidden$="[[!itemsSelected_]]">
-        <paper-icon-button icon="clear" id="cancel-icon-button"
-            on-tap="onClearSelectionTap_"></paper-icon-button>
-        <div id="number-selected">[[numberOfItemsSelected_(count)]]</div>
-        <paper-button id="cancel-button" on-tap="onClearSelectionTap_">
-          $i18n{cancel}
-        </paper-button>
-        <paper-button id="delete-button" on-tap="onDeleteTap_">
-          $i18n{delete}
-        </paper-button>
+      <div id="overlay-wrapper" hidden$="[[!itemsSelected_]]">
+        <div id="overlay-buttons">
+          <paper-icon-button icon="cr:clear" id="cancel-icon-button"
+              on-tap="onClearSelectionTap_"></paper-icon-button>
+          <div id="number-selected">[[numberOfItemsSelected_(count)]]</div>
+          <paper-button id="cancel-button" on-tap="onClearSelectionTap_">
+            $i18n{cancel}
+          </paper-button>
+          <paper-button id="delete-button" on-tap="onDeleteTap_">
+            $i18n{delete}
+          </paper-button>
+        </div>
       </div>
     </div>
-
-    <div id="button-container" class="toolbar-overlay">
-      <div id="front-padding"></div>
-      <div id="centered-buttons" hidden$="[[itemsSelected_]]">
-        <paper-button on-tap="onClearBrowsingDataTap_"
-            id="clear-browsing-data-button">
-          $i18n{clearBrowsingData}
-        </paper-button>
+    <template is="dom-if" if="[[isGroupedMode]]">
+      <div id="grouped-buttons-container">
+        <paper-tabs attr-for-selected="value" selected="{{groupedRange}}"
+            id="grouped-range-buttons">
+          <paper-tab value="0">$i18n{rangeAllTime}</paper-tab>
+          <paper-tab value="1">$i18n{rangeWeek}</paper-tab>
+          <paper-tab value="2">$i18n{rangeMonth}</paper-tab>
+        </paper-tabs>
+        <div id="grouped-nav-container">
+          <span id="grouped-date">
+            {{getHistoryInterval_(queryStartTime, queryEndTime)}}
+          </span>
+          <paper-icon-button icon="today" alt="$i18n{rangeToday}"
+              title="$i18n{rangeToday}"></paper-icon-button>
+          <paper-icon-button icon="hardware:keyboard-arrow-left"
+              alt="$i18n{rangePrevious}" title="$i18n{rangePrevious}"
+              class="rtl-reversible"></paper-icon-button>
+          <paper-icon-button icon="hardware:keyboard-arrow-right"
+              alt="$i18n{rangeNext}" title="$i18n{rangeNext}"
+              class="rtl-reversible"></paper-icon-button>
+        </div>
       </div>
-      <div id="back-padding"></div>
-    </div>
+    </template>
   </template>
   <script src="chrome://history/history_toolbar.js"></script>
 </dom-module>

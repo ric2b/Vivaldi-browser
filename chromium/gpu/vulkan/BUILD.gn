@@ -20,6 +20,12 @@ if (enable_vulkan) {
         "vulkan_command_buffer.h",
         "vulkan_command_pool.cc",
         "vulkan_command_pool.h",
+        "vulkan_descriptor_layout.cc",
+        "vulkan_descriptor_layout.h",
+        "vulkan_descriptor_pool.cc",
+        "vulkan_descriptor_pool.h",
+        "vulkan_descriptor_set.cc",
+        "vulkan_descriptor_set.h",
         "vulkan_device_queue.cc",
         "vulkan_device_queue.h",
         "vulkan_export.h",
@@ -30,6 +36,10 @@ if (enable_vulkan) {
         "vulkan_platform.h",
         "vulkan_render_pass.cc",
         "vulkan_render_pass.h",
+        "vulkan_sampler.cc",
+        "vulkan_sampler.h",
+        "vulkan_shader_module.cc",
+        "vulkan_shader_module.h",
         "vulkan_surface.cc",
         "vulkan_surface.h",
         "vulkan_swap_chain.cc",
@@ -53,6 +63,7 @@ if (enable_vulkan) {
 
       deps = [
         "//base",
+        "//third_party/shaderc:libshaderc",
         "//ui/base",
         "//ui/gfx",
       ]
@@ -66,7 +77,10 @@ if (enable_vulkan) {
 
   test("vulkan_tests") {
     sources = [
+      "tests/basic_vulkan_test.cc",
+      "tests/basic_vulkan_test.h",
       "tests/native_window.h",
+      "tests/shader_module_unittest.cc",
       "tests/vulkan_test.cc",
       "tests/vulkan_tests_main.cc",
     ]

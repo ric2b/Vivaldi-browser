@@ -10,7 +10,6 @@
 #include <string>
 
 #include "base/callback.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "media/base/media_export.h"
@@ -36,7 +35,7 @@ class MEDIA_EXPORT ProtocolSniffer {
   void SniffProtocol(DataSource* data_source, const Callback& callback);
 
  private:
-  void ReadDone(scoped_ptr<uint8_t[]> data,
+  void ReadDone(std::unique_ptr<uint8_t[]> data,
                 const Callback& callback,
                 int size_read);
 

@@ -38,6 +38,7 @@
 #include "public/platform/WebRect.h"
 #include "public/platform/WebScreenInfo.h"
 #include "public/web/WebMeaningfulLayout.h"
+#include "public/web/WebTextDirection.h"
 #include "public/web/WebTouchAction.h"
 
 namespace blink {
@@ -133,8 +134,13 @@ public:
     // Called when a gesture event is handled.
     virtual void didHandleGestureEvent(const WebGestureEvent& event, bool eventCancelled) { }
 
-    // Called when overscrolled on main thread.
-    virtual void didOverscroll(const WebFloatSize& unusedDelta, const WebFloatSize& accumulatedRootOverScroll, const WebFloatPoint& position, const WebFloatSize& velocity) { }
+    // Called when overscrolled on main thread. All parameters are in
+    // viewport-space.
+    virtual void didOverscroll(
+        const WebFloatSize& overscrollDelta,
+        const WebFloatSize& accumulatedOverscroll,
+        const WebFloatPoint& positionInViewport,
+        const WebFloatSize& velocityInViewport) { }
 
     // Called to update if touch events should be sent.
     virtual void hasTouchEventHandlers(bool) { }

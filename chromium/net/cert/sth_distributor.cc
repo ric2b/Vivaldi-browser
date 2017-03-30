@@ -9,9 +9,10 @@
 #include "net/cert/signed_tree_head.h"
 
 namespace {
-const char kPilotLogID[33] =
-    "\xa4\xb9\x09\x90\xb4\x18\x58\x14\x87\xbb\x13\xa2\xcc\x67\x70\x0a\x3c\x35"
-    "\x98\x04\xf9\x1b\xdf\xb8\xe3\x77\xcd\x0e\xc8\x0d\xdc\x10";
+const uint8_t kPilotLogID[] = {0xa4, 0xb9, 0x09, 0x90, 0xb4, 0x18, 0x58, 0x14,
+                               0x87, 0xbb, 0x13, 0xa2, 0xcc, 0x67, 0x70, 0x0a,
+                               0x3c, 0x35, 0x98, 0x04, 0xf9, 0x1b, 0xdf, 0xb8,
+                               0xe3, 0x77, 0xcd, 0x0e, 0xc8, 0x0d, 0xdc, 0x10};
 }
 
 namespace net {
@@ -24,10 +25,21 @@ STHDistributor::STHDistributor()
 STHDistributor::~STHDistributor() {}
 
 void STHDistributor::NewSTHObserved(const SignedTreeHead& sth) {
+  auto it = std::find_if(observed_sths_.begin(), observed_sths_.end(),
+                         [&sth](const SignedTreeHead& other) {
+                           return sth.log_id == other.log_id;
+                         });
+
+  if (it == observed_sths_.end())
+    observed_sths_.push_back(sth);
+  else
+    *it = sth;
+
   FOR_EACH_OBSERVER(STHObserver, observer_list_, NewSTHObserved(sth));
 
-  if (sth.log_id.compare(0, sth.log_id.size(), kPilotLogID,
-                         arraysize(kPilotLogID) - 1) != 0)
+  if (sth.log_id.compare(0, sth.log_id.size(),
+                         reinterpret_cast<const char*>(kPilotLogID),
+                         sizeof(kPilotLogID)) != 0)
     return;
 
   const base::TimeDelta sth_age = base::Time::Now() - sth.timestamp;
@@ -38,6 +50,13 @@ void STHDistributor::NewSTHObserved(const SignedTreeHead& sth) {
 
 void STHDistributor::RegisterObserver(STHObserver* observer) {
   observer_list_.AddObserver(observer);
+  // Make a local copy, because notifying the |observer| of a
+  // new STH may result in this class being notified of a
+  // (different) new STH, thus invalidating the iterator.
+  std::vector<SignedTreeHead> local_sths(observed_sths_);
+
+  for (const auto& sth : local_sths)
+    observer->NewSTHObserved(sth);
 }
 
 void STHDistributor::UnregisterObserver(STHObserver* observer) {

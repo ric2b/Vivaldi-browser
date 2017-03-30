@@ -36,7 +36,7 @@ using guest_view::GuestViewBase;
 
 namespace extensions {
 
-StreamContainer::StreamContainer(scoped_ptr<content::StreamInfo> stream,
+StreamContainer::StreamContainer(std::unique_ptr<content::StreamInfo> stream,
                                  int tab_id,
                                  bool embedded,
                                  const GURL& handler_url,
@@ -181,7 +181,8 @@ void MimeHandlerViewGuest::NavigationStateChanged(
 
   content::NavigationEntry* last_committed_entry =
       embedder_web_contents()->GetController().GetLastCommittedEntry();
-  if (last_committed_entry) {
+  if (last_committed_entry &&
+      (embedder_web_contents() && embedder_web_contents()->GetDelegate())) {
     last_committed_entry->SetTitle(source->GetTitle());
     embedder_web_contents()->GetDelegate()->NavigationStateChanged(
         embedder_web_contents(), changed_flags);

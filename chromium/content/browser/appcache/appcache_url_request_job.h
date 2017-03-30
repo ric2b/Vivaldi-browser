@@ -52,7 +52,6 @@ class CONTENT_EXPORT AppCacheURLRequestJob
   // methods should be called, and only once per job. A job will sit idle and
   // wait indefinitely until one of the deliver methods is called.
   void DeliverAppCachedResponse(const GURL& manifest_url,
-                                int64_t group_id,
                                 int64_t cache_id,
                                 const AppCacheEntry& entry,
                                 bool is_fallback);
@@ -79,7 +78,6 @@ class CONTENT_EXPORT AppCacheURLRequestJob
   // that this job has been instructed to deliver. These are only
   // valid to call if is_delivering_appcache_response.
   const GURL& manifest_url() const { return manifest_url_; }
-  int64_t group_id() const { return group_id_; }
   int64_t cache_id() const { return cache_id_; }
   const AppCacheEntry& entry() const { return entry_; }
 
@@ -173,7 +171,6 @@ class CONTENT_EXPORT AppCacheURLRequestJob
   bool has_been_killed_;
   DeliveryType delivery_type_;
   GURL manifest_url_;
-  int64_t group_id_;
   int64_t cache_id_;
   AppCacheEntry entry_;
   bool is_fallback_;
@@ -181,10 +178,10 @@ class CONTENT_EXPORT AppCacheURLRequestJob
   bool cache_entry_not_found_;
   scoped_refptr<AppCacheResponseInfo> info_;
   scoped_refptr<net::GrowableIOBuffer> handler_source_buffer_;
-  scoped_ptr<AppCacheResponseReader> handler_source_reader_;
+  std::unique_ptr<AppCacheResponseReader> handler_source_reader_;
   net::HttpByteRange range_requested_;
-  scoped_ptr<net::HttpResponseInfo> range_response_info_;
-  scoped_ptr<AppCacheResponseReader> reader_;
+  std::unique_ptr<net::HttpResponseInfo> range_response_info_;
+  std::unique_ptr<AppCacheResponseReader> reader_;
   scoped_refptr<AppCache> cache_;
   scoped_refptr<AppCacheGroup> group_;
   const OnPrepareToRestartCallback on_prepare_to_restart_callback_;

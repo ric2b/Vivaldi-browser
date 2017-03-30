@@ -6,7 +6,8 @@
 
 #include <stddef.h>
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
 #include "build/build_config.h"
 #include "content/common/text_input_client_messages.h"
 #include "content/renderer/pepper/pepper_plugin_instance_impl.h"
@@ -22,8 +23,11 @@
 namespace content {
 
 TextInputClientObserver::TextInputClientObserver(RenderViewImpl* render_view)
-    : RenderViewObserver(render_view),
-      render_view_impl_(render_view) {
+#if defined(ENABLE_PLUGINS)
+    : RenderViewObserver(render_view), render_view_impl_(render_view) {
+#else
+    : RenderViewObserver(render_view) {
+#endif
 }
 
 TextInputClientObserver::~TextInputClientObserver() {
@@ -54,7 +58,7 @@ void TextInputClientObserver::OnStringAtPoint(gfx::Point point) {
   NSAttributedString* string = blink::WebSubstringUtil::attributedWordAtPoint(
       webview(), point, baselinePoint);
 
-  scoped_ptr<const mac::AttributedStringCoder::EncodedString> encoded(
+  std::unique_ptr<const mac::AttributedStringCoder::EncodedString> encoded(
       mac::AttributedStringCoder::Encode(string));
   Send(new TextInputClientReplyMsg_GotStringAtPoint(
       routing_id(), *encoded.get(), baselinePoint));
@@ -74,8 +78,8 @@ void TextInputClientObserver::OnCharacterIndexForPoint(gfx::Point point) {
 void TextInputClientObserver::OnFirstRectForCharacterRange(gfx::Range range) {
   gfx::Rect rect;
 #if defined(ENABLE_PLUGINS)
-  if (render_view_impl_->focused_pepper_plugin()) {
-    rect = render_view_impl_->focused_pepper_plugin()->GetCaretBounds();
+  if (render_view_impl_->GetFocusedPepperPlugin()) {
+    rect = render_view_impl_->GetFocusedPepperPlugin()->GetCaretBounds();
   } else
 #endif
   {
@@ -99,7 +103,7 @@ void TextInputClientObserver::OnStringForRange(gfx::Range range) {
     string = blink::WebSubstringUtil::attributedSubstringInRange(
         frame, range.start(), range.length(), &baselinePoint);
   }
-  scoped_ptr<const mac::AttributedStringCoder::EncodedString> encoded(
+  std::unique_ptr<const mac::AttributedStringCoder::EncodedString> encoded(
       mac::AttributedStringCoder::Encode(string));
   Send(new TextInputClientReplyMsg_GotStringForRange(routing_id(),
       *encoded.get(), baselinePoint));

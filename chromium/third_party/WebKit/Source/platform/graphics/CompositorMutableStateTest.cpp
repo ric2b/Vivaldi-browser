@@ -44,12 +44,9 @@ public:
     void SetLayerPropertiesForTesting(LayerImpl* layer)
     {
         layer->SetTransform(gfx::Transform());
-        layer->SetTransformOrigin(gfx::Point3F());
         layer->SetPosition(gfx::PointF());
         layer->SetBounds(gfx::Size(100, 100));
-        layer->SetShouldFlattenTransform(true);
         layer->Set3dSortingContextId(0);
-        layer->SetForceRenderSurface(true);
         layer->SetDrawsContent(true);
     }
 

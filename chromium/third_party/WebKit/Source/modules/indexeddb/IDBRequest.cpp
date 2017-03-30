@@ -83,7 +83,7 @@ DEFINE_TRACE(IDBRequest)
     visitor->trace(m_pendingCursor);
     visitor->trace(m_cursorKey);
     visitor->trace(m_cursorPrimaryKey);
-    RefCountedGarbageCollectedEventTargetWithInlineData<IDBRequest>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
     ActiveDOMObject::trace(visitor);
 }
 
@@ -256,10 +256,10 @@ void IDBRequest::onSuccess(PassOwnPtr<WebIDBCursor> backend, IDBKey* key, IDBKey
     IDBCursor* cursor = nullptr;
     switch (m_cursorType) {
     case IndexedDB::CursorKeyOnly:
-        cursor = IDBCursor::create(backend, m_cursorDirection, this, m_source.get(), m_transaction.get());
+        cursor = IDBCursor::create(std::move(backend), m_cursorDirection, this, m_source.get(), m_transaction.get());
         break;
     case IndexedDB::CursorKeyAndValue:
-        cursor = IDBCursorWithValue::create(backend, m_cursorDirection, this, m_source.get(), m_transaction.get());
+        cursor = IDBCursorWithValue::create(std::move(backend), m_cursorDirection, this, m_source.get(), m_transaction.get());
         break;
     default:
         ASSERT_NOT_REACHED();

@@ -70,10 +70,16 @@ Si decides iniciar sesión de todas formas, se fusionará la información de Chr
 <translation id="2997147809295888909">Chrome ha verificado que <ph name="ISSUER" /> emitió el certificado de este sitio web. El servidor no ha proporcionado ninguna información de Transparencia de certificados.</translation>
 <translation id="3037838751736561277">Google Chrome está en modo de segundo plano.</translation>
 <translation id="3047079729301751317">Si desvinculas a <ph name="USERNAME" />, se borrarán tu historial, tus marcadores, tu configuración y otros datos de Chrome almacenados en este dispositivo. No obstante, no se borrarán los datos almacenados en tu cuenta de Google y se podrán administrar en el <ph name="GOOGLE_DASHBOARD_LINK" />Panel de control de Google<ph name="END_GOOGLE_DASHBOARD_LINK" />.</translation>
+<translation id="3065168410429928842">Pestaña de Chrome</translation>
 <translation id="3080151273017101988">Seguir ejecutando aplicaciones en segundo plano al cerrar Google Chrome</translation>
 <translation id="3089968997497233615">Hay una nueva versión más segura de Google Chrome disponible.</translation>
 <translation id="3149510190863420837">Aplicaciones de Chrome</translation>
-<translation id="3197823471738295152">El dispositivo está actualizado.</translation>
+<translation id="3251381707915721925">Para establecer los sitios web que <ph name="NEW_PROFILE_NAME" /> puede ver, configura restricciones y opciones a través de la página <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />.Si no cambias la configuración predeterminada, <ph name="NEW_PROFILE_NAME" /> podrá navegar por toda la Web.
+
+Para evitar que <ph name="NEW_PROFILE_NAME" /> acceda a tu cuenta, bloquea tu perfil cuando no uses Chrome. Para ello, haz clic en el nombre de tu perfil situado en la esquina superior derecha del navegador y selecciona Salir y bloquear.
+<ph name="BEGIN_LINK_2" />Más información<ph name="END_LINK_2" />
+
+Consulta tu correo electrónico (<ph name="ACCOUNT_EMAIL" />) para obtener más información.</translation>
 <translation id="3282568296779691940">Iniciar sesión en Chrome</translation>
 <translation id="3311976847535831054">Este ordenador dejará de recibir actualizaciones de Google Chrome (32 bits). Actualiza Google Chrome a la versión de 64 bits.</translation>
 <translation id="3360895254066713204">Ayudante de Chrome</translation>
@@ -213,7 +219,6 @@ Google Chrome no puede recuperar tu configuración.</translation>
 <translation id="7808348361785373670">Desinstalar de Chrome...</translation>
 <translation id="7825851276765848807">La instalación no se ha podido realizar a causa de un error no especificado. Vuelve a descargar Google Chrome.</translation>
 <translation id="7890208801193284374">Si compartes un ordenador, tus amigos y familiares pueden navegar de forma independiente y configurar Chrome a su gusto.</translation>
-<translation id="8000275528373650868">Google Chrome está disponible para Windows Vista o Windows XP con SP2 o superior.</translation>
 <translation id="8005540215158006229">Chrome está casi listo</translation>
 <translation id="8008534537613507642">Reinstalar Chrome</translation>
 <translation id="8030318113982266900">Actualizando el canal del dispositivo a <ph name="CHANNEL_NAME" />...</translation>
@@ -235,6 +240,7 @@ Google Chrome no puede recuperar tu configuración.</translation>
 <translation id="8556340503434111824">Hay una nueva versión de Google Chrome disponible que funciona a una velocidad sin precedentes.</translation>
 <translation id="8568392309447938879">Para usar las aplicaciones, debes iniciar sesión en Chrome. De ese modo, Chrome podrá sincronizar tus aplicaciones, tus marcadores, tu historial, tus contraseñas y otras opciones en distintos dispositivos.</translation>
 <translation id="8614913330719544658">Google Chrome no responde. ¿Quieres reiniciarlo ahora?</translation>
+<translation id="8667808506758191620">El dispositivo <ph name="DEVICE_TYPE" /> está actualizado.</translation>
 <translation id="8669527147644353129">Ayudante de Google Chrome</translation>
 <translation id="8679801911857917785">También controla qué página se muestra al iniciar Chrome.</translation>
 <translation id="870251953148363156">Actualizar &amp;Google Chrome</translation>
@@ -243,6 +249,7 @@ Google Chrome no puede recuperar tu configuración.</translation>
 <translation id="8851136666856101339">principal</translation>
 <translation id="8862326446509486874">No dispones de los derechos necesarios para la instalación en el sistema. Intenta ejecutar de nuevo el programa de instalación como administrador.</translation>
 <translation id="9026991721384951619">Chrome OS no ha podido sincronizar los datos porque la información de inicio de sesión de tu cuenta está obsoleta.</translation>
+<translation id="9067395829937117663">Google Chrome requiere Windows 7 o una versión posterior.</translation>
 <translation id="9102715433345326100">Este archivo es malicioso y Chrome lo ha bloqueado.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Advertencia:<ph name="END_BOLD" /> Google Chrome no puede evitar que las extensiones registren el historial de búsqueda. Para inhabilitar la ejecución de la extensión en modo incógnito, desactiva la casilla correspondiente a esta opción.</translation>
 <translation id="911206726377975832">¿Quieres borrar también los datos de navegación?</translation>

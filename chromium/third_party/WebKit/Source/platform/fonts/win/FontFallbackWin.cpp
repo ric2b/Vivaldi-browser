@@ -49,10 +49,7 @@ static inline bool isFontPresent(const UChar* fontName, SkFontMgr* fontManager)
 {
     String family = fontName;
     SkTypeface* typeface;
-    if (FontCache::useDirectWrite())
-        typeface = fontManager->matchFamilyStyle(family.utf8().data(), SkFontStyle());
-    else
-        typeface = fontManager->legacyCreateTypeface(family.utf8().data(), SkTypeface::kNormal);
+    typeface = fontManager->matchFamilyStyle(family.utf8().data(), SkFontStyle());
 
     if (!typeface)
         return false;
@@ -416,7 +413,6 @@ const UChar* getFontBasedOnUnicodeBlock(UBlockCode blockCode, SkFontMgr* fontMan
     case UBLOCK_MISCELLANEOUS_SYMBOLS_AND_PICTOGRAPHS:
     case UBLOCK_TRANSPORT_AND_MAP_SYMBOLS:
     case UBLOCK_ALCHEMICAL_SYMBOLS:
-    case UBLOCK_RUNIC:
     case UBLOCK_DINGBATS:
     case UBLOCK_GOTHIC:
         return symbolFont;

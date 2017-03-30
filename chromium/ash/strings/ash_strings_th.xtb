@@ -26,6 +26,7 @@
 <translation id="1602076796624386989">เปิดใช้งานข้อมูลมือถือ</translation>
 <translation id="1621499497873603021">เวลาที่เหลือกว่าแบตเตอรี่จะหมด, <ph name="TIME_LEFT" /></translation>
 <translation id="164969095109328410">อุปกรณ์ Chrome</translation>
+<translation id="1677472565718498478">ใช้ได้อีก <ph name="TIME" /></translation>
 <translation id="1723752762323179280">กำลังออกจากเซสชัน</translation>
 <translation id="1747827819627189109">เปิดใช้แป้นพิมพ์บนหน้าจออยู่</translation>
 <translation id="1812696562331527143">วิธีการป้อนข้อมูลของคุณเปลี่ยนแปลงเป็น <ph name="INPUT_METHOD_ID" />* (<ph name="BEGIN_LINK" />บุคคลที่สาม<ph name="END_LINK" />)
@@ -92,7 +93,6 @@
 <translation id="3621712662352432595">การตั้งค่าเสียง</translation>
 <translation id="3625258641415618104">ปิดใช้การจับภาพหน้าจอ</translation>
 <translation id="3626281679859535460">ความสว่าง</translation>
-<translation id="3626637461649818317">เหลืออีก <ph name="PERCENTAGE" />%</translation>
 <translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079">ความละเอียดของ <ph name="DISPLAY_NAME" /> เปลี่ยนเป็น <ph name="RESOLUTION" /></translation>
 <translation id="370649949373421643">เปิดใช้งาน Wi-Fi</translation>
@@ -111,13 +111,13 @@
 <translation id="397105322502079400">กำลังคำนวณ...</translation>
 <translation id="3995138139523574647">อุปกรณ์ USB-C (พอร์ตด้านหลังขวา)</translation>
 <translation id="4053612967614057854">ปิดใช้แป้นพิมพ์บนหน้าจอ</translation>
-<translation id="412065659894267608">อีก <ph name="HOUR" />ชม. <ph name="MINUTE" />นาทีจึงจะเต็ม</translation>
 <translation id="4250680216510889253">ไม่มี</translation>
 <translation id="4279490309300973883">กำลังแสดงผล</translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4421231901400348175">กำลังแชร์การควบคุมหน้าจอกับ <ph name="HELPER_NAME" /> ผ่านความช่วยเหลือระยะไกล</translation>
 <translation id="4430019312045809116">ระดับเสียง</translation>
 <translation id="4527045527269911712">อุปกรณ์บลูทูธ "<ph name="DEVICE_NAME" />" ต้องการสิทธิ์ในการจับคู่</translation>
+<translation id="453661520163887813">อีก <ph name="TIME" /> จะเต็ม</translation>
 <translation id="4544944664594876241">มีการเปลี่ยนแปลงทางลัดที่ใช้ล็อกหน้าจอ โปรดใช้ <ph name="NEW_SHORTCUT" /> แทน <ph name="OLD_SHORTCUT" /></translation>
 <translation id="479989351350248267">ค้นหา</translation>
 <translation id="4804818685124855865">ตัดการเชื่อมต่อ</translation>
@@ -129,7 +129,6 @@
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl+Shift+Space</translation>
 <translation id="5045002648206642691">การตั้งค่า Google ไดรฟ์...</translation>
-<translation id="5102001756192215136">เหลืออีก <ph name="HOUR" />:<ph name="MINUTE" /></translation>
 <translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">เครื่องส่งพร้อมใช้งาน</translation>
 <translation id="5222676887888702881">ออกจากระบบ</translation>
@@ -166,7 +165,6 @@
 <translation id="615957422585914272">แสดงแป้นพิมพ์บนหน้าจอ</translation>
 <translation id="6165508094623778733">เรียนรู้เพิ่มเติม</translation>
 <translation id="6203030746557259519">หน้าจอเสมือน</translation>
-<translation id="6247708409970142803"><ph name="PERCENTAGE" />%</translation>
 <translation id="6248847161401822652">กด Control Shift Q สองครั้งเพื่อออก</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" /> หมุนเวียนเป็น <ph name="ROTATION" /></translation>
 <translation id="6359806961507272919">SMS จาก <ph name="PHONE_NUMBER" /></translation>
@@ -207,6 +205,7 @@
 <translation id="7510334386202674593">Ctrl+Shift+L</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> ไม่สนับสนุน <ph name="SPECIFIED_RESOLUTION" /> ความละเอียดเปลี่ยนเป็น <ph name="FALLBACK_RESOLUTION" /></translation>
 <translation id="7573962313813535744">โหมดเชื่อมต่อแท่นชาร์จ</translation>
+<translation id="7580671184200851182">เล่นเสียงเหมือนกันผ่านลำโพงทุกตัว (เสียงโมโน)</translation>
 <translation id="7593891976182323525">ค้นหาหรือ Shift</translation>
 <translation id="7649070708921625228">ช่วยเหลือ</translation>
 <translation id="7692480393933218409">กำลังชาร์จอุปกรณ์ USB-C ที่เชื่อมต่ออยู่</translation>
@@ -225,13 +224,14 @@
 <translation id="8308637677604853869">เมนูก่อนหน้า</translation>
 <translation id="8356164830168736643">ปิด <ph name="WINDOW_TITLE" /></translation>
 <translation id="8428213095426709021">การตั้งค่า</translation>
-<translation id="8456362689280298700">อีก <ph name="HOUR" />:<ph name="MINUTE" /> จึงจะเต็ม</translation>
 <translation id="8517041960877371778"><ph name="DEVICE_TYPE" /> ของคุณอาจไม่ชาร์จเมื่อเครื่องเปิดอยู่</translation>
 <translation id="8528322925433439945">มือถือ ...</translation>
+<translation id="8639760480004882931">เหลือ <ph name="PERCENTAGE" />%</translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">เชื่อมต่อกับที่ชาร์จพลังงานต่ำ</translation>
 <translation id="8814190375133053267">Wi-Fi</translation>
 <translation id="882279321799040148">คลิกเพื่อดู</translation>
+<translation id="8825534185036233643">ไม่สนับสนุนการมิเรอร์บนจอแสดงผลเกิน 2 หน้าจอ</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8850991929411075241">Search+Esc</translation>
 <translation id="8878886163241303700">กำลังขยายหน้าจอ</translation>

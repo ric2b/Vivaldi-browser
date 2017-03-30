@@ -26,6 +26,8 @@
 #define RTCDataChannel_h
 
 #include "base/gtest_prod_util.h"
+#include "bindings/core/v8/ActiveScriptWrappable.h"
+#include "core/dom/ActiveDOMObject.h"
 #include "modules/EventTargetModules.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
@@ -45,10 +47,13 @@ class WebRTCPeerConnectionHandler;
 struct WebRTCDataChannelInit;
 
 class MODULES_EXPORT RTCDataChannel final
-    : public RefCountedGarbageCollectedEventTargetWithInlineData<RTCDataChannel>
-    , WTF_NON_EXPORTED_BASE(public WebRTCDataChannelHandlerClient) {
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(RTCDataChannel);
+    : public EventTargetWithInlineData
+    , WTF_NON_EXPORTED_BASE(public WebRTCDataChannelHandlerClient)
+    , public ActiveScriptWrappable
+    , public ActiveDOMObject {
+    USING_GARBAGE_COLLECTED_MIXIN(RTCDataChannel);
     DEFINE_WRAPPERTYPEINFO();
+    USING_PRE_FINALIZER(RTCDataChannel, dispose);
 public:
     static RTCDataChannel* create(ExecutionContext*, PassOwnPtr<WebRTCDataChannelHandler>);
     static RTCDataChannel* create(ExecutionContext*, WebRTCPeerConnectionHandler*, const String& label, const WebRTCDataChannelInit&, ExceptionState&);
@@ -77,8 +82,8 @@ public:
     void setBinaryType(const String&, ExceptionState&);
 
     void send(const String&, ExceptionState&);
-    void send(PassRefPtr<DOMArrayBuffer>, ExceptionState&);
-    void send(PassRefPtr<DOMArrayBufferView>, ExceptionState&);
+    void send(DOMArrayBuffer*, ExceptionState&);
+    void send(DOMArrayBufferView*, ExceptionState&);
     void send(Blob*, ExceptionState&);
 
     void close();
@@ -93,8 +98,14 @@ public:
     const AtomicString& interfaceName() const override;
     ExecutionContext* getExecutionContext() const override;
 
-    // Oilpan: need to eagerly finalize m_handler
-    EAGERLY_FINALIZE();
+    // ActiveDOMObject
+    void suspend() override;
+    void resume() override;
+    void stop() override;
+
+    // ActiveScriptWrappable
+    bool hasPendingActivity() const override;
+
     DECLARE_VIRTUAL_TRACE();
 
     // WebRTCDataChannelHandlerClient
@@ -106,11 +117,10 @@ public:
 
 private:
     RTCDataChannel(ExecutionContext*, PassOwnPtr<WebRTCDataChannelHandler>);
+    void dispose();
 
     void scheduleDispatchEvent(Event*);
     void scheduledEventTimerFired(Timer<RTCDataChannel>*);
-
-    Member<ExecutionContext> m_executionContext;
 
     OwnPtr<WebRTCDataChannelHandler> m_handler;
 
@@ -126,6 +136,8 @@ private:
     HeapVector<Member<Event>> m_scheduledEvents;
 
     unsigned m_bufferedAmountLowThreshold;
+
+    bool m_stopped;
 
     FRIEND_TEST_ALL_PREFIXES(RTCDataChannelTest, BufferedAmountLow);
 };

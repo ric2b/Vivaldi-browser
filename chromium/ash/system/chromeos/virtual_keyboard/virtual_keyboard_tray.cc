@@ -13,6 +13,7 @@
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_utils.h"
+#include "ash/wm/common/shelf/wm_shelf_util.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -46,7 +47,7 @@ VirtualKeyboardTray::~VirtualKeyboardTray() {
     Shell::GetInstance()->keyboard_ui()->RemoveObserver(this);
 }
 
-void VirtualKeyboardTray::SetShelfAlignment(ShelfAlignment alignment) {
+void VirtualKeyboardTray::SetShelfAlignment(wm::ShelfAlignment alignment) {
   TrayBackgroundView::SetShelfAlignment(alignment);
   tray_container()->SetBorder(views::Border::NullBorder());
 
@@ -61,7 +62,7 @@ void VirtualKeyboardTray::SetShelfAlignment(ShelfAlignment alignment) {
   // Square up the padding if horizontally aligned. Avoid extra padding when
   // vertically aligned as the button would violate the width constraint on the
   // shelf.
-  if (IsHorizontalAlignment(alignment)) {
+  if (wm::IsHorizontalAlignment(alignment)) {
     gfx::Insets insets = button_->GetInsets();
     int additional_padding = std::max(0, top_padding - left_padding);
     left_padding += additional_padding;
@@ -84,9 +85,7 @@ void VirtualKeyboardTray::HideBubbleWithView(
     const views::TrayBubbleView* bubble_view) {
 }
 
-bool VirtualKeyboardTray::ClickedOutsideBubble() {
-  return false;
-}
+void VirtualKeyboardTray::ClickedOutsideBubble() {}
 
 bool VirtualKeyboardTray::PerformAction(const ui::Event& event) {
   Shell::GetInstance()->keyboard_ui()->Show();

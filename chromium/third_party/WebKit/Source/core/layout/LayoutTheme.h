@@ -68,7 +68,7 @@ public:
     virtual String extraDefaultStyleSheet();
     virtual String extraQuirksStyleSheet() { return String(); }
     virtual String extraMediaControlsStyleSheet() { return String(); }
-    virtual String extraFullScreenStyleSheet() { return String(); }
+    virtual String extraFullscreenStyleSheet() { return String(); }
 
     // A method to obtain the baseline position for a "leaf" control.  This will only be used if a baseline
     // position cannot be determined by examining child content. Checkboxes and radio buttons are examples of
@@ -96,10 +96,9 @@ public:
     // A method asking if the theme's controls actually care about redrawing when hovered.
     virtual bool supportsHover(const ComputedStyle&) const { return false; }
 
-#if ENABLE(INPUT_MULTIPLE_FIELDS_UI)
-    // A method asking if the platform is able to show a calendar picker for a given input type.
+    // A method asking if the platform is able to show a calendar picker for a
+    // given input type.
     virtual bool supportsCalendarPicker(const AtomicString&) const;
-#endif
 
     // Text selection colors.
     Color activeSelectionBackgroundColor() const;

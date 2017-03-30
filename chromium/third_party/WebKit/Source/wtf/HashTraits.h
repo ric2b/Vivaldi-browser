@@ -21,6 +21,7 @@
 #ifndef WTF_HashTraits_h
 #define WTF_HashTraits_h
 
+#include "wtf/Forward.h"
 #include "wtf/HashFunctions.h"
 #include "wtf/HashTableDeletedValueType.h"
 #include "wtf/StdLibExtras.h"
@@ -33,10 +34,7 @@
 
 namespace WTF {
 
-class String;
 template <bool isInteger, typename T> struct GenericHashTraitsBase;
-template <typename T> class OwnPtr;
-template <typename T> class PassOwnPtr;
 template <typename T> struct HashTraits;
 
 enum ShouldWeakPointersBeMarkedStrongly {
@@ -104,17 +102,9 @@ template <typename T> struct GenericHashTraits : GenericHashTraitsBase<std::is_i
     typedef const T& IteratorConstReferenceType;
     static IteratorReferenceType getToReferenceConversion(IteratorGetType x) { return *x; }
     static IteratorConstReferenceType getToReferenceConstConversion(IteratorConstGetType x) { return *x; }
-    // Type for functions that take ownership, such as add.
-    // The store function either not be called or called once to store something
-    // passed in.  The value passed to the store function will be PassInType.
-    typedef const T& PassInType;
+
     template <typename IncomingValueType>
     static void store(IncomingValueType&& value, T& storage) { storage = std::forward<IncomingValueType>(value); }
-
-    // Type for return value of functions that transfer ownership, such as take.
-    typedef T PassOutType;
-    static T&& passOut(T& value) { return std::move(value); }
-    static T&& passOut(T&& value) { return std::move(value); }
 
     // Type for return value of functions that do not transfer ownership, such
     // as get.
@@ -171,12 +161,7 @@ template <typename P> struct HashTraits<OwnPtr<P>> : SimpleClassHashTraits<OwnPt
 
     typedef typename OwnPtr<P>::PtrType PeekInType;
 
-    typedef PassOwnPtr<P> PassInType;
-    static void store(PassOwnPtr<P> value, OwnPtr<P>& storage) { storage = value; }
-
-    typedef PassOwnPtr<P> PassOutType;
-    static PassOwnPtr<P> passOut(OwnPtr<P>& value) { return value.release(); }
-    static PassOwnPtr<P> passOut(std::nullptr_t) { return nullptr; }
+    static void store(PassOwnPtr<P> value, OwnPtr<P>& storage) { storage = std::move(value); }
 
     typedef typename OwnPtr<P>::PtrType PeekOutType;
     static PeekOutType peek(const OwnPtr<P>& value) { return value.get(); }
@@ -198,19 +183,12 @@ template <typename P> struct HashTraits<RefPtr<P>> : SimpleClassHashTraits<RefPt
     static IteratorReferenceType getToReferenceConversion(IteratorGetType x) { return *x; }
     static IteratorConstReferenceType getToReferenceConstConversion(IteratorConstGetType x) { return *x; }
 
-    typedef PassRefPtr<P> PassInType;
     static void store(PassRefPtr<P> value, RefPtr<P>& storage) { storage = value; }
-
-    typedef PassRefPtr<P> PassOutType;
-    static PassOutType passOut(RefPtr<P>& value) { return value.release(); }
-    static PassOutType passOut(std::nullptr_t) { return nullptr; }
 
     typedef P* PeekOutType;
     static PeekOutType peek(const RefPtr<P>& value) { return value.get(); }
     static PeekOutType peek(std::nullptr_t) { return 0; }
 };
-
-template <typename T> struct HashTraits<RawPtr<T>> : HashTraits<T*> { };
 
 template <typename T>
 struct HashTraits<std::unique_ptr<T>> : SimpleClassHashTraits<std::unique_ptr<T>> {
@@ -222,12 +200,7 @@ struct HashTraits<std::unique_ptr<T>> : SimpleClassHashTraits<std::unique_ptr<T>
 
     using PeekInType = T*;
 
-    using PassInType = std::unique_ptr<T>;
     static void store(std::unique_ptr<T>&& value, std::unique_ptr<T>& storage) { storage = std::move(value); }
-
-    using PassOutType = std::unique_ptr<T>;
-    static std::unique_ptr<T>&& passOut(std::unique_ptr<T>& value) { return std::move(value); }
-    static std::unique_ptr<T> passOut(std::nullptr_t) { return nullptr; }
 
     using PeekOutType = T*;
     static PeekOutType peek(const std::unique_ptr<T>& value) { return value.get(); }

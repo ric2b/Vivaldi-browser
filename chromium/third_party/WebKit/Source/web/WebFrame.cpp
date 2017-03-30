@@ -307,16 +307,15 @@ WebFrame::~WebFrame()
     m_openedFrameTracker.reset(0);
 }
 
-#if ENABLE(OILPAN)
 ALWAYS_INLINE bool WebFrame::isFrameAlive(const WebFrame* frame)
 {
     if (!frame)
         return true;
 
     if (frame->isWebLocalFrame())
-        return Heap::isHeapObjectAlive(toWebLocalFrameImpl(frame));
+        return ThreadHeap::isHeapObjectAlive(toWebLocalFrameImpl(frame));
 
-    return Heap::isHeapObjectAlive(toWebRemoteFrameImpl(frame));
+    return ThreadHeap::isHeapObjectAlive(toWebRemoteFrameImpl(frame));
 }
 
 template <typename VisitorDispatcher>
@@ -358,6 +357,5 @@ DEFINE_VISITOR_METHOD(Visitor*)
 DEFINE_VISITOR_METHOD(InlinedGlobalMarkingVisitor)
 
 #undef DEFINE_VISITOR_METHOD
-#endif
 
 } // namespace blink

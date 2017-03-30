@@ -44,11 +44,16 @@ class ASH_EXPORT PowerStatusView : public views::View,
   // if true; otherwise, layout the UI items on the left side.
   bool default_view_right_align_;
 
-  views::Label* time_status_label_;
   views::Label* percentage_label_;
+  views::Label* separator_label_;
+  views::Label* time_status_label_;
 
   // Battery status indicator icon.
   views::ImageView* icon_;
+
+  // Information about the image last used to update |icon_|. Cached to avoid
+  // unnecessary updates (http://crbug.com/589348).
+  PowerStatus::BatteryImageInfo previous_battery_image_info_;
 
   DISALLOW_COPY_AND_ASSIGN(PowerStatusView);
 };

@@ -17,8 +17,6 @@
 #include "extensions/browser/extension_function.h"
 #include "extensions/browser/extension_registry_observer.h"
 
-class ExtensionRegistry;
-class ExtensionUninstallDialog;
 struct WebApplicationInfo;
 
 namespace extensions {
@@ -87,7 +85,7 @@ class ManagementGetPermissionWarningsByManifestFunction
                              MANAGEMENT_GETPERMISSIONWARNINGSBYMANIFEST);
 
   // Called when utility process finishes.
-  void OnParseSuccess(scoped_ptr<base::Value> value);
+  void OnParseSuccess(std::unique_ptr<base::Value> value);
   void OnParseFailure(const std::string& error);
 
  protected:
@@ -127,9 +125,9 @@ class ManagementSetEnabledFunction : public UIThreadExtensionFunction {
 
   std::string extension_id_;
 
-  scoped_ptr<InstallPromptDelegate> install_prompt_;
+  std::unique_ptr<InstallPromptDelegate> install_prompt_;
 
-  scoped_ptr<RequirementsChecker> requirements_checker_;
+  std::unique_ptr<RequirementsChecker> requirements_checker_;
 };
 
 class ManagementUninstallFunctionBase : public UIThreadExtensionFunction {
@@ -153,7 +151,7 @@ class ManagementUninstallFunctionBase : public UIThreadExtensionFunction {
 
   std::string target_extension_id_;
 
-  scoped_ptr<UninstallDialogDelegate> uninstall_dialog_;
+  std::unique_ptr<UninstallDialogDelegate> uninstall_dialog_;
 };
 
 class ManagementUninstallFunction : public ManagementUninstallFunctionBase {
@@ -221,7 +219,7 @@ class ManagementGenerateAppForLinkFunction : public AsyncManagementFunction {
   bool RunAsync() override;
 
  private:
-  scoped_ptr<AppForLinkDelegate> app_for_link_delegate_;
+  std::unique_ptr<AppForLinkDelegate> app_for_link_delegate_;
 };
 
 class ManagementEventRouter : public ExtensionRegistryObserver {
@@ -285,9 +283,9 @@ class ManagementAPI : public BrowserContextKeyedAPI,
   static const bool kServiceRedirectedInIncognito = true;
 
   // Created lazily upon OnListenerAdded.
-  scoped_ptr<ManagementEventRouter> management_event_router_;
+  std::unique_ptr<ManagementEventRouter> management_event_router_;
 
-  scoped_ptr<ManagementAPIDelegate> delegate_;
+  std::unique_ptr<ManagementAPIDelegate> delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(ManagementAPI);
 };

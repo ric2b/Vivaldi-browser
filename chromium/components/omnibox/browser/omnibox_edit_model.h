@@ -7,9 +7,10 @@
 
 #include <stddef.h>
 
+#include <memory>
+
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "components/metrics/proto/omnibox_event.pb.h"
@@ -79,7 +80,7 @@ class OmniboxEditModel {
 
   OmniboxEditModel(OmniboxView* view,
                    OmniboxEditController* controller,
-                   scoped_ptr<OmniboxClient> client);
+                   std::unique_ptr<OmniboxClient> client);
   virtual ~OmniboxEditModel();
 
   // TODO(beaudoin): Remove this accessor when the AutocompleteController has
@@ -387,8 +388,8 @@ class OmniboxEditModel {
   // Conversion between user text and display text. User text is the text the
   // user has input. Display text is the text being shown in the edit. The
   // two are different if a keyword is selected.
-  base::string16 DisplayTextFromUserText(const base::string16& text) const;
-  base::string16 UserTextFromDisplayText(const base::string16& text) const;
+  base::string16 MaybeStripKeyword(const base::string16& text) const;
+  base::string16 MaybePrependKeyword(const base::string16& text) const;
 
   // If there's a selected match, copies it into |match|. Else, returns the
   // default match for the current text, as well as the alternate nav URL, if
@@ -439,9 +440,9 @@ class OmniboxEditModel {
 
   // NOTE: |client_| must outlive |omnibox_controller_|, as the latter has a
   // reference to the former.
-  scoped_ptr<OmniboxClient> client_;
+  std::unique_ptr<OmniboxClient> client_;
 
-  scoped_ptr<OmniboxController> omnibox_controller_;
+  std::unique_ptr<OmniboxController> omnibox_controller_;
 
   OmniboxView* view_;
 

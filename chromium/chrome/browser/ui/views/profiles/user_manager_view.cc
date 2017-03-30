@@ -30,7 +30,8 @@
 #include "content/public/browser/web_contents.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/gfx/screen.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/view.h"
@@ -38,7 +39,7 @@
 #include "ui/views/window/dialog_client_view.h"
 
 #if defined(OS_WIN)
-#include "chrome/browser/shell_integration.h"
+#include "chrome/browser/shell_integration_win.h"
 #include "ui/base/win/shell.h"
 #include "ui/views/win/hwnd_util.h"
 #endif
@@ -71,7 +72,7 @@ class ReauthDelegate : public views::DialogDelegateView,
   bool CanResize() const override;
   bool CanMaximize() const override;
   bool CanMinimize() const override;
-  bool UseNewStyleForThisDialog() const override;
+  bool ShouldUseCustomFrame() const override;
   ui::ModalType GetModalType() const override;
   void DeleteDelegate() override;
   base::string16 GetWindowTitle() const override;
@@ -122,7 +123,7 @@ bool ReauthDelegate::CanMinimize() const  {
   return true;
 }
 
-bool ReauthDelegate::UseNewStyleForThisDialog() const {
+bool ReauthDelegate::ShouldUseCustomFrame() const {
   return false;
 }
 
@@ -305,7 +306,7 @@ void UserManagerView::Init(Profile* system_profile, const GURL& url) {
       gfx::NativeView native_view =
           views::Widget::GetWidgetForNativeWindow(
               browser->window()->GetNativeWindow())->GetNativeView();
-      bounds = gfx::Screen::GetScreen()
+      bounds = display::Screen::GetScreen()
                    ->GetDisplayNearestWindow(native_view)
                    .work_area();
       bounds.ClampToCenteredSize(gfx::Size(UserManager::kWindowWidth,
@@ -323,9 +324,10 @@ void UserManagerView::Init(Profile* system_profile, const GURL& url) {
 
 #if defined(OS_WIN)
   // Set the app id for the task manager to the app id of its parent
-  ui::win::SetAppIdForWindow(shell_integration::GetChromiumModelIdForProfile(
-                                 system_profile->GetPath()),
-                             views::HWNDForWidget(GetWidget()));
+  ui::win::SetAppIdForWindow(
+      shell_integration::win::GetChromiumModelIdForProfile(
+          system_profile->GetPath()),
+      views::HWNDForWidget(GetWidget()));
 #endif
 
 #if defined(USE_ASH)
@@ -394,6 +396,6 @@ void UserManagerView::WindowClosing() {
     instance_ = NULL;
 }
 
-bool UserManagerView::UseNewStyleForThisDialog() const {
+bool UserManagerView::ShouldUseCustomFrame() const {
   return false;
 }

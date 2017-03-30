@@ -56,7 +56,7 @@ class DataFetcherSharedMemoryBase::PollingThread : public base::Thread {
 
   unsigned consumers_bitmask_;
   DataFetcherSharedMemoryBase* fetcher_;
-  scoped_ptr<base::RepeatingTimer> timer_;
+  std::unique_ptr<base::RepeatingTimer> timer_;
 
   DISALLOW_COPY_AND_ASSIGN(PollingThread);
 };
@@ -132,6 +132,12 @@ bool DataFetcherSharedMemoryBase::StartFetchingDeviceData(
   void* buffer = GetSharedMemoryBuffer(consumer_type);
   if (!buffer)
     return false;
+
+  size_t buffer_size = GetConsumerSharedMemoryBufferSize(consumer_type);
+  // buffer size should be strictly positive because buffer is non-zero.
+  DCHECK(buffer_size > 0);
+  // make sure to clear any potentially stale values in the memory buffer.
+  memset(buffer, 0, buffer_size);
 
   if (GetType() != FETCHER_TYPE_DEFAULT) {
     if (!InitAndStartPollingThreadIfNecessary())
@@ -226,7 +232,7 @@ base::SharedMemory* DataFetcherSharedMemoryBase::GetSharedMemory(
   if (buffer_size == 0)
     return nullptr;
 
-  scoped_ptr<base::SharedMemory> new_shared_mem(new base::SharedMemory);
+  std::unique_ptr<base::SharedMemory> new_shared_mem(new base::SharedMemory);
   if (new_shared_mem->CreateAndMapAnonymous(buffer_size)) {
     if (void* mem = new_shared_mem->memory()) {
       memset(mem, 0, buffer_size);

@@ -28,7 +28,6 @@
 
 #include "core/CoreExport.h"
 #include "core/css/FontFaceCache.h"
-#include "core/css/FontLoader.h"
 #include "platform/fonts/FontSelector.h"
 #include "platform/fonts/GenericFontFamilySettings.h"
 #include "platform/heap/Handle.h"
@@ -57,23 +56,16 @@ public:
     void willUseRange(const FontDescription&, const AtomicString& familyName, const FontDataForRangeSet&) override;
     bool isPlatformFontAvailable(const FontDescription&, const AtomicString& family);
 
-#if !ENABLE(OILPAN)
-    void clearDocument();
-#endif
-
     void fontFaceInvalidated();
 
     // FontCacheClient implementation
     void fontCacheInvalidated() override;
 
     void registerForInvalidationCallbacks(CSSFontSelectorClient*);
-#if !ENABLE(OILPAN)
     void unregisterForInvalidationCallbacks(CSSFontSelectorClient*);
-#endif
 
     Document* document() const { return m_document; }
     FontFaceCache* fontFaceCache() { return &m_fontFaceCache; }
-    FontLoader* fontLoader() { return m_fontLoader.get(); }
 
     const GenericFontFamilySettings& genericFontFamilySettings() const { return m_genericFontFamilySettings; }
     void updateGenericFontFamilySettings(Document&);
@@ -86,15 +78,13 @@ protected:
     void dispatchInvalidationCallbacks();
 
 private:
-    // FIXME: Oilpan: Ideally this should just be a traced Member but that will
+    // TODO(Oilpan): Ideally this should just be a traced Member but that will
     // currently leak because ComputedStyle and its data are not on the heap.
     // See crbug.com/383860 for details.
     WeakMember<Document> m_document;
     // FIXME: Move to Document or StyleEngine.
     FontFaceCache m_fontFaceCache;
     HeapHashSet<WeakMember<CSSFontSelectorClient>> m_clients;
-
-    Member<FontLoader> m_fontLoader;
     GenericFontFamilySettings m_genericFontFamilySettings;
 };
 

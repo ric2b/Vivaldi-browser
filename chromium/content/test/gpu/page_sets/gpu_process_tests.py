@@ -13,6 +13,9 @@ class GpuProcessSharedPageState(gpu_test_base.GpuSharedPageState):
                   '--gpu-testing-os-version',
                   '--gpu-testing-vendor-id',
                   '--gpu-testing-device-id',
+                  '--gpu-testing-secondary-vendor-ids',
+                  '--gpu-testing-secondary-device-ids',
+                  '--gpu-testing-driver-date',
                   '--gpu-testing-gl-vendor',
                   '--gpu-testing-gl-renderer',
                   '--gpu-testing-gl-version']
@@ -29,6 +32,93 @@ class GpuProcessSharedPageState(gpu_test_base.GpuSharedPageState):
         if opt.startswith(gpu_switch):
           old_gpu_switches.append(opt)
     options.difference_update(old_gpu_switches)
+
+
+class IdentifyActiveGpuPageBase(gpu_test_base.PageBase):
+
+  def __init__(self, name=None, page_set=None, shared_page_state_class=None,
+               expectations=None, active_gpu=None, inactive_gpus=None):
+    super(IdentifyActiveGpuPageBase, self).__init__(
+      url='chrome:gpu',
+      name=name,
+      page_set=page_set,
+      shared_page_state_class=shared_page_state_class,
+      expectations=expectations)
+    self.active_gpu = active_gpu
+    self.inactive_gpus = inactive_gpus
+
+  def Validate(self, tab, results):
+    basic_infos = tab.EvaluateJavaScript('browserBridge.gpuInfo.basic_info')
+    active_gpu = []
+    inactive_gpus = []
+    index = 0
+    for info in basic_infos:
+      description = info['description']
+      value = info['value']
+      if description.startswith('GPU%d' % index) and value.startswith('VENDOR'):
+        if value.endswith('*ACTIVE*'):
+          active_gpu.append(value)
+        else:
+          inactive_gpus.append(value)
+        index += 1
+
+    if active_gpu != self.active_gpu:
+      raise page_test.Failure('Active GPU field is wrong %s' % active_gpu)
+
+    if inactive_gpus != self.inactive_gpus:
+      raise page_test.Failure('Inactive GPU field is wrong %s' % inactive_gpus)
+
+
+class DriverBugWorkaroundsTestsPage(gpu_test_base.PageBase):
+  def __init__(self, page_set=None, name='',
+               shared_page_state_class=None,
+               expectations=None,
+               expected_workaround=None,
+               unexpected_workaround=None):
+    super(DriverBugWorkaroundsTestsPage, self).__init__(
+        url='chrome:gpu',
+        page_set=page_set,
+        name=name,
+        shared_page_state_class=shared_page_state_class,
+        expectations=expectations)
+    self.expected_workaround = expected_workaround
+    self.unexpected_workaround = unexpected_workaround
+
+  def _Validate(self, tab, process_kind, is_expected, workaround_name):
+    if process_kind == "browser_process":
+      gpu_driver_bug_workarounds = tab.EvaluateJavaScript( \
+        'GetDriverBugWorkarounds()')
+    elif process_kind == "gpu_process":
+      gpu_driver_bug_workarounds = tab.EvaluateJavaScript( \
+        'chrome.gpuBenchmarking.getGpuDriverBugWorkarounds()')
+
+    is_present = workaround_name in gpu_driver_bug_workarounds
+
+    failure = False
+    if is_expected and not is_present:
+      failure = True
+      error_message = "is missing"
+    elif not is_expected and is_present:
+      failure = True
+      error_message = "is not expected"
+
+    if failure:
+      print 'Test failed. Printing page contents:'
+      print tab.EvaluateJavaScript('document.body.innerHTML')
+      raise page_test.Failure('%s %s in Browser process workarounds: %s' \
+        % (workaround_name, error_message, gpu_driver_bug_workarounds))
+
+  def Validate(self, tab, results):
+    if not self.expected_workaround and not self.unexpected_workaround:
+      return
+
+    if self.expected_workaround:
+      self._Validate(tab, "browser_process", True, self.expected_workaround)
+      self._Validate(tab, "gpu_process", True, self.expected_workaround)
+
+    if self.unexpected_workaround:
+      self._Validate(tab, "browser_process", False, self.unexpected_workaround)
+      self._Validate(tab, "gpu_process", False, self.unexpected_workaround)
 
 class GpuProcessTestsPage(gpu_test_base.PageBase):
   def __init__(self, url, name, story_set, expectations):
@@ -170,46 +260,249 @@ class SkipGpuProcessPage(gpu_test_base.PageBase):
       raise page_test.Failure('GPU process detected')
 
 
-class DriverBugWorkaroundsSharedPageState(GpuProcessSharedPageState):
+class DriverBugWorkaroundsShared(GpuProcessSharedPageState):
   def __init__(self, test, finder_options, story_set):
-    super(DriverBugWorkaroundsSharedPageState, self).__init__(
+    super(DriverBugWorkaroundsShared, self).__init__(
       test, finder_options, story_set)
     options = finder_options.browser_options
     options.AppendExtraBrowserArgs('--use_gpu_driver_workaround_for_testing')
 
 
-class DriverBugWorkaroundsInGpuProcessPage(gpu_test_base.PageBase):
+class DriverBugWorkaroundsInGpuProcessPage(DriverBugWorkaroundsTestsPage):
   def __init__(self, story_set, expectations):
     super(DriverBugWorkaroundsInGpuProcessPage, self).__init__(
-      url='chrome:gpu',
       name='GpuProcess.driver_bug_workarounds_in_gpu_process',
       page_set=story_set,
-      shared_page_state_class=DriverBugWorkaroundsSharedPageState,
+      shared_page_state_class=DriverBugWorkaroundsShared,
+      expectations=expectations,
+      expected_workaround='use_gpu_driver_workaround_for_testing')
+
+  def Validate(self, tab, results):
+    super(DriverBugWorkaroundsInGpuProcessPage, self).Validate(tab, results)
+
+
+class DriverBugWorkaroundsUponGLRendererShared(GpuProcessSharedPageState):
+  def __init__(self, test, finder_options, story_set):
+    super(DriverBugWorkaroundsUponGLRendererShared, self).__init__(
+      test, finder_options, story_set)
+    options = finder_options.browser_options
+    if sys.platform in ('cygwin', 'win32'):
+      # Hit id 51 and 87 from kGpuDriverBugListJson.
+      options.AppendExtraBrowserArgs('--gpu-testing-vendor-id=0x1002')
+      options.AppendExtraBrowserArgs('--gpu-testing-device-id=0x6779')
+      options.AppendExtraBrowserArgs('--gpu-testing-driver-date=11-20-2014')
+      options.AppendExtraBrowserArgs('--gpu-testing-gl-vendor=Google Inc.')
+      options.AppendExtraBrowserArgs('--gpu-testing-gl-renderer=ANGLE ' \
+        '(AMD Radeon HD 6450 Direct3D11 vs_5_0 ps_5_0)')
+      options.AppendExtraBrowserArgs('--gpu-testing-gl-version=OpenGL ES 2.0 ' \
+        '(ANGLE 2.1.0.0c0d8006a9dd)')
+    elif sys.platform.startswith('linux'):
+      # Hit id 153 from kGpuDriverBugListJson.
+      options.AppendExtraBrowserArgs('--gpu-testing-vendor-id=0x0101')
+      options.AppendExtraBrowserArgs('--gpu-testing-device-id=0x0102')
+      options.AppendExtraBrowserArgs('--gpu-testing-gl-vendor=Vivante ' \
+        'Corporation')
+      options.AppendExtraBrowserArgs('--gpu-testing-gl-renderer=Vivante GC1000')
+    elif sys.platform == 'darwin':
+      # Currently on osx no workaround relies on gl-renderer.
+      pass
+
+
+class DriverBugWorkaroundsUponGLRendererPage(DriverBugWorkaroundsTestsPage):
+  def __init__(self, story_set, expectations):
+    self.expected_workaround = None
+    self.unexpected_workaround = None
+
+    if sys.platform in ('cygwin', 'win32'):
+      self.expected_workaround = "texsubimage_faster_than_teximage"
+      self.unexpected_workaround = "disable_d3d11"
+    elif sys.platform.startswith('linux'):
+      self.expected_workaround = "disable_multisampled_render_to_texture"
+    elif sys.platform == 'darwin':
+      pass
+    super(DriverBugWorkaroundsUponGLRendererPage, self).__init__(
+      name='GpuProcess.driver_bug_workarounds_upon_gl_renderer',
+      page_set=story_set,
+      shared_page_state_class=DriverBugWorkaroundsUponGLRendererShared,
+      expectations=expectations,
+      expected_workaround=self.expected_workaround,
+      unexpected_workaround=self.unexpected_workaround)
+
+  def Validate(self, tab, results):
+    super(DriverBugWorkaroundsUponGLRendererPage, self).Validate(tab, results)
+
+
+class IdentifyActiveGpuSharedPageState1(GpuProcessSharedPageState):
+  def __init__(self, test, finder_options, story_set):
+    super(IdentifyActiveGpuSharedPageState1, self).__init__(
+      test, finder_options, story_set)
+    opts = finder_options.browser_options
+
+    opts.AppendExtraBrowserArgs('--gpu-testing-vendor-id=0x8086')
+    opts.AppendExtraBrowserArgs('--gpu-testing-device-id=0x040a')
+    opts.AppendExtraBrowserArgs('--gpu-testing-secondary-vendor-ids=0x10de')
+    opts.AppendExtraBrowserArgs('--gpu-testing-secondary-device-ids=0x0de1')
+    opts.AppendExtraBrowserArgs('--gpu-testing-gl-vendor=nouveau')
+
+
+class IdentifyActiveGpuPage1(IdentifyActiveGpuPageBase):
+  def __init__(self, story_set, expectations):
+    active_gpu = ['VENDOR = 0x10de, DEVICE= 0x0de1 *ACTIVE*']
+    inactive_gpus = ['VENDOR = 0x8086, DEVICE= 0x040a']
+
+    super(IdentifyActiveGpuPage1, self).__init__(
+      name='GpuProcess.identify_active_gpu1',
+      page_set=story_set,
+      shared_page_state_class=IdentifyActiveGpuSharedPageState1,
+      expectations=expectations,
+      active_gpu=active_gpu,
+      inactive_gpus=inactive_gpus)
+
+  def Validate(self, tab, results):
+    super(IdentifyActiveGpuPage1, self).Validate(tab, results)
+
+
+class IdentifyActiveGpuSharedPageState2(GpuProcessSharedPageState):
+  def __init__(self, test, finder_options, story_set):
+    super(IdentifyActiveGpuSharedPageState2, self).__init__(
+      test, finder_options, story_set)
+    opts = finder_options.browser_options
+
+    opts.AppendExtraBrowserArgs('--gpu-testing-vendor-id=0x8086')
+    opts.AppendExtraBrowserArgs('--gpu-testing-device-id=0x040a')
+    opts.AppendExtraBrowserArgs('--gpu-testing-secondary-vendor-ids=0x10de')
+    opts.AppendExtraBrowserArgs('--gpu-testing-secondary-device-ids=0x0de1')
+    opts.AppendExtraBrowserArgs('--gpu-testing-gl-vendor=Intel')
+
+
+class IdentifyActiveGpuPage2(IdentifyActiveGpuPageBase):
+  def __init__(self, story_set, expectations):
+    active_gpu = ['VENDOR = 0x8086, DEVICE= 0x040a *ACTIVE*']
+    inactive_gpus = ['VENDOR = 0x10de, DEVICE= 0x0de1']
+
+    super(IdentifyActiveGpuPage2, self).__init__(
+      name='GpuProcess.identify_active_gpu2',
+      page_set=story_set,
+      shared_page_state_class=IdentifyActiveGpuSharedPageState2,
+      expectations=expectations,
+      active_gpu=active_gpu,
+      inactive_gpus=inactive_gpus)
+
+  def Validate(self, tab, results):
+    super(IdentifyActiveGpuPage2, self).Validate(tab, results)
+
+
+class IdentifyActiveGpuSharedPageState3(GpuProcessSharedPageState):
+  def __init__(self, test, finder_options, story_set):
+    super(IdentifyActiveGpuSharedPageState3, self).__init__(
+      test, finder_options, story_set)
+    opts = finder_options.browser_options
+
+    opts.AppendExtraBrowserArgs('--gpu-testing-vendor-id=0x8086')
+    opts.AppendExtraBrowserArgs('--gpu-testing-device-id=0x040a')
+    opts.AppendExtraBrowserArgs('--gpu-testing-secondary-vendor-ids= \
+                                0x10de;0x1002')
+    opts.AppendExtraBrowserArgs('--gpu-testing-secondary-device-ids= \
+                                0x0de1;0x6779')
+    opts.AppendExtraBrowserArgs('--gpu-testing-gl-vendor=X.Org')
+    opts.AppendExtraBrowserArgs('--gpu-testing-gl-renderer=AMD R600')
+
+
+class IdentifyActiveGpuPage3(IdentifyActiveGpuPageBase):
+  def __init__(self, story_set, expectations):
+    active_gpu = ['VENDOR = 0x1002, DEVICE= 0x6779 *ACTIVE*']
+    inactive_gpus = ['VENDOR = 0x8086, DEVICE= 0x040a', \
+                     'VENDOR = 0x10de, DEVICE= 0x0de1']
+
+    super(IdentifyActiveGpuPage3, self).__init__(
+      name='GpuProcess.identify_active_gpu3',
+      page_set=story_set,
+      shared_page_state_class=IdentifyActiveGpuSharedPageState3,
+      expectations=expectations,
+      active_gpu=active_gpu,
+      inactive_gpus=inactive_gpus)
+
+  def Validate(self, tab, results):
+    super(IdentifyActiveGpuPage3, self).Validate(tab, results)
+
+
+class IdentifyActiveGpuSharedPageState4(GpuProcessSharedPageState):
+  def __init__(self, test, finder_options, story_set):
+    super(IdentifyActiveGpuSharedPageState4, self).__init__(
+      test, finder_options, story_set)
+    opts = finder_options.browser_options
+
+    opts.AppendExtraBrowserArgs('--gpu-testing-vendor-id=0x10de')
+    opts.AppendExtraBrowserArgs('--gpu-testing-device-id=0x0de1')
+    opts.AppendExtraBrowserArgs('--gpu-testing-secondary-vendor-ids=')
+    opts.AppendExtraBrowserArgs('--gpu-testing-secondary-device-ids=')
+    opts.AppendExtraBrowserArgs('--gpu-testing-gl-vendor=nouveau')
+
+
+class IdentifyActiveGpuPage4(IdentifyActiveGpuPageBase):
+  def __init__(self, story_set, expectations):
+    active_gpu = ['VENDOR = 0x10de, DEVICE= 0x0de1 *ACTIVE*']
+    inactive_gpus = []
+
+    super(IdentifyActiveGpuPage4, self).__init__(
+      name='GpuProcess.identify_active_gpu4',
+      page_set=story_set,
+      shared_page_state_class=IdentifyActiveGpuSharedPageState4,
+      expectations=expectations,
+      active_gpu=active_gpu,
+      inactive_gpus=inactive_gpus)
+
+  def Validate(self, tab, results):
+    super(IdentifyActiveGpuPage4, self).Validate(tab, results)
+
+
+class ReadbackWebGLGpuProcessSharedPageState(GpuProcessSharedPageState):
+  def __init__(self, test, finder_options, story_set):
+    super(ReadbackWebGLGpuProcessSharedPageState, self).__init__(
+      test, finder_options, story_set)
+    options = finder_options.browser_options
+
+    if sys.platform.startswith('linux'):
+      # Hit id 110 from kSoftwareRenderingListJson.
+      options.AppendExtraBrowserArgs('--gpu-testing-vendor-id=0x10de')
+      options.AppendExtraBrowserArgs('--gpu-testing-device-id=0x0de1')
+      options.AppendExtraBrowserArgs('--gpu-testing-gl-vendor=VMware')
+      options.AppendExtraBrowserArgs('--gpu-testing-gl-renderer=Gallium 0.4 ' \
+        'on llvmpipe (LLVM 3.4, 256 bits)')
+      options.AppendExtraBrowserArgs('--gpu-testing-gl-version="3.0 Mesa 11.2"')
+
+class ReadbackWebGLGpuProcessPage(gpu_test_base.PageBase):
+  def __init__(self, story_set, expectations):
+    super(ReadbackWebGLGpuProcessPage, self).__init__(
+      url='chrome:gpu',
+      name='GpuProcess.readback_webgl_gpu_process',
+      page_set=story_set,
+      shared_page_state_class=ReadbackWebGLGpuProcessSharedPageState,
       expectations=expectations)
 
   def Validate(self, tab, results):
-    workaround = 'use_gpu_driver_workaround_for_testing'
-
-    browser_list = tab.EvaluateJavaScript('GetDriverBugWorkarounds()')
-    if not workaround in browser_list:
-      print 'Test failed. Printing page contents:'
-      print tab.EvaluateJavaScript('document.body.innerHTML')
-      raise page_test.Failure('%s missing in Browser process workarounds: %s' \
-        % (workaround, browser_list))
-
-    gpu_list = tab.EvaluateJavaScript( \
-      'chrome.gpuBenchmarking.getGpuDriverBugWorkarounds()')
-    if not workaround in gpu_list:
-      print 'Test failed. Printing page contents:'
-      print tab.EvaluateJavaScript('document.body.innerHTML')
-      raise page_test.Failure('%s missing in GPU process workarounds: %s' \
-        % (workaround, gpu_list))
+    if sys.platform.startswith('linux'):
+      feature_status_js = 'browserBridge.gpuInfo.featureStatus.featureStatus'
+      feature_status_list = tab.EvaluateJavaScript(feature_status_js)
+      result = True
+      for name, status in feature_status_list.items():
+        if name == 'multiple_raster_threads':
+          result = result and status == 'enabled_on'
+        elif name == 'native_gpu_memory_buffers':
+          result = result and status == 'disabled_software'
+        elif name == 'webgl':
+          result = result and status == 'enabled_readback'
+        else:
+          result = result and status == 'unavailable_software'
+      if not result:
+        raise page_test.Failure('WebGL readback setup failed: %s' \
+          % feature_status_list)
 
 class GpuProcessTestsStorySet(story_set_module.StorySet):
 
   """ Tests that accelerated content triggers the creation of a GPU process """
 
-  def __init__(self, expectations):
+  def __init__(self, expectations, is_platform_android):
     super(GpuProcessTestsStorySet, self).__init__(
       serving_dirs=set(['../../../../content/test/data']))
 
@@ -229,8 +522,15 @@ class GpuProcessTestsStorySet(story_set_module.StorySet):
     self.AddStory(GpuInfoCompletePage(self, expectations))
     self.AddStory(NoGpuProcessPage(self, expectations))
     self.AddStory(SoftwareGpuProcessPage(self, expectations))
-    self.AddStory(SkipGpuProcessPage(self, expectations))
+    if not is_platform_android:
+      self.AddStory(SkipGpuProcessPage(self, expectations))
     self.AddStory(DriverBugWorkaroundsInGpuProcessPage(self, expectations))
+    self.AddStory(IdentifyActiveGpuPage1(self, expectations))
+    self.AddStory(IdentifyActiveGpuPage2(self, expectations))
+    self.AddStory(IdentifyActiveGpuPage3(self, expectations))
+    self.AddStory(IdentifyActiveGpuPage4(self, expectations))
+    self.AddStory(ReadbackWebGLGpuProcessPage(self, expectations))
+    self.AddStory(DriverBugWorkaroundsUponGLRendererPage(self, expectations))
 
   @property
   def allow_mixed_story_states(self):

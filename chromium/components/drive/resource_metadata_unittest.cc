@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "components/drive/resource_metadata.h"
+#include "components/drive/chromeos/resource_metadata.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -14,11 +14,11 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "components/drive/chromeos/drive_test_util.h"
+#include "components/drive/chromeos/fake_free_disk_space_getter.h"
+#include "components/drive/chromeos/file_cache.h"
 #include "components/drive/drive.pb.h"
-#include "components/drive/drive_test_util.h"
-#include "components/drive/fake_free_disk_space_getter.h"
-#include "components/drive/file_cache.h"
 #include "components/drive/file_system_core_util.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -164,11 +164,11 @@ class ResourceMetadataTest : public testing::Test {
 
   base::ScopedTempDir temp_dir_;
   content::TestBrowserThreadBundle thread_bundle_;
-  scoped_ptr<ResourceMetadataStorage, test_util::DestroyHelperForTests>
+  std::unique_ptr<ResourceMetadataStorage, test_util::DestroyHelperForTests>
       metadata_storage_;
-  scoped_ptr<FakeFreeDiskSpaceGetter> fake_free_disk_space_getter_;
-  scoped_ptr<FileCache, test_util::DestroyHelperForTests> cache_;
-  scoped_ptr<ResourceMetadata, test_util::DestroyHelperForTests>
+  std::unique_ptr<FakeFreeDiskSpaceGetter> fake_free_disk_space_getter_;
+  std::unique_ptr<FileCache, test_util::DestroyHelperForTests> cache_;
+  std::unique_ptr<ResourceMetadata, test_util::DestroyHelperForTests>
       resource_metadata_;
 };
 
@@ -549,7 +549,8 @@ TEST_F(ResourceMetadataTest, GetResourceEntryById) {
 }
 
 TEST_F(ResourceMetadataTest, Iterate) {
-  scoped_ptr<ResourceMetadata::Iterator> it = resource_metadata_->GetIterator();
+  std::unique_ptr<ResourceMetadata::Iterator> it =
+      resource_metadata_->GetIterator();
   ASSERT_TRUE(it);
 
   int file_count = 0, directory_count = 0;

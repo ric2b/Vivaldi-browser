@@ -78,13 +78,6 @@ class GetUpdatesProcessorTest : public ::testing::Test {
     response->set_changes_remaining(0);
   }
 
-  const UpdateHandler* GetHandler(ModelType type) {
-    UpdateHandlerMap::iterator it = update_handler_map_.find(type);
-    if (it == update_handler_map_.end())
-      return NULL;
-    return it->second;
-  }
-
   const base::TimeTicks kTestStartTime;
 
  protected:
@@ -248,7 +241,7 @@ TEST_F(GetUpdatesProcessorTest, ConfigureTest) {
         gu_msg.from_progress_marker(i).data_type_id());
     progress_types.Put(type);
   }
-  EXPECT_TRUE(enabled_types().Equals(progress_types));
+  EXPECT_EQ(enabled_types(), progress_types);
 }
 
 TEST_F(GetUpdatesProcessorTest, PollTest) {
@@ -269,7 +262,7 @@ TEST_F(GetUpdatesProcessorTest, PollTest) {
         gu_msg.from_progress_marker(i).data_type_id());
     progress_types.Put(type);
   }
-  EXPECT_TRUE(enabled_types().Equals(progress_types));
+  EXPECT_EQ(enabled_types(), progress_types);
 }
 
 TEST_F(GetUpdatesProcessorTest, RetryTest) {
@@ -300,7 +293,7 @@ TEST_F(GetUpdatesProcessorTest, RetryTest) {
         gu_msg.from_progress_marker(i).data_type_id());
     progress_types.Put(type);
   }
-  EXPECT_TRUE(enabled_types().Equals(progress_types));
+  EXPECT_EQ(enabled_types(), progress_types);
 }
 
 TEST_F(GetUpdatesProcessorTest, NudgeWithRetryTest) {
@@ -435,7 +428,7 @@ TEST_F(GetUpdatesProcessorApplyUpdatesTest, Normal) {
   EXPECT_EQ(0, GetNonAppliedHandler()->GetPassiveApplyUpdatesCount());
   EXPECT_EQ(0, GetAppliedHandler()->GetPassiveApplyUpdatesCount());
 
-  EXPECT_TRUE(status.get_updates_request_types().Equals(GetGuTypes()));
+  EXPECT_EQ(GetGuTypes(), status.get_updates_request_types());
 }
 
 // Verify that a configure cycle applies updates passively to the specified
@@ -458,7 +451,7 @@ TEST_F(GetUpdatesProcessorApplyUpdatesTest, Configure) {
   EXPECT_EQ(0, GetNonAppliedHandler()->GetApplyUpdatesCount());
   EXPECT_EQ(0, GetAppliedHandler()->GetApplyUpdatesCount());
 
-  EXPECT_TRUE(status.get_updates_request_types().Equals(GetGuTypes()));
+  EXPECT_EQ(GetGuTypes(), status.get_updates_request_types());
 }
 
 // Verify that a poll cycle applies updates non-passively to the specified
@@ -480,7 +473,7 @@ TEST_F(GetUpdatesProcessorApplyUpdatesTest, Poll) {
   EXPECT_EQ(0, GetNonAppliedHandler()->GetPassiveApplyUpdatesCount());
   EXPECT_EQ(0, GetAppliedHandler()->GetPassiveApplyUpdatesCount());
 
-  EXPECT_TRUE(status.get_updates_request_types().Equals(GetGuTypes()));
+  EXPECT_EQ(GetGuTypes(), status.get_updates_request_types());
 }
 
 class DownloadUpdatesDebugInfoTest : public ::testing::Test {

@@ -35,22 +35,22 @@ cc::AnimationPlayer* CompositorAnimationPlayer::animationPlayer() const
 void CompositorAnimationPlayer::setAnimationDelegate(CompositorAnimationDelegate* delegate)
 {
     m_delegate = delegate;
-    m_animationPlayer->set_layer_animation_delegate(delegate ? this : nullptr);
+    m_animationPlayer->set_animation_delegate(delegate ? this : nullptr);
 }
 
 void CompositorAnimationPlayer::attachLayer(WebLayer* webLayer)
 {
-    m_animationPlayer->AttachLayer(webLayer->id());
+    m_animationPlayer->AttachElement(webLayer->id());
 }
 
 void CompositorAnimationPlayer::detachLayer()
 {
-    m_animationPlayer->DetachLayer();
+    m_animationPlayer->DetachElement();
 }
 
 bool CompositorAnimationPlayer::isLayerAttached() const
 {
-    return m_animationPlayer->layer_id() != 0;
+    return m_animationPlayer->element_id() != 0;
 }
 
 void CompositorAnimationPlayer::addAnimation(CompositorAnimation* animation)

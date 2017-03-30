@@ -46,6 +46,8 @@ source_set("gpu_sources") {
     "//base/third_party/dynamic_annotations",
     "//components/tracing",
     "//content:export",
+    "//content:export",
+    "//content/child",
     "//content/common",
     "//content/public/child:child_sources",
     "//content/public/common:common_sources",
@@ -53,19 +55,22 @@ source_set("gpu_sources") {
     "//gpu/ipc/common:command_buffer_traits",
     "//gpu/ipc/service",
     "//ipc",
-    "//media/mojo/services:application_factory",
-    "//mojo/shell/public/interfaces",
+    "//media/gpu",
+    "//media/gpu/ipc/service",
+    "//services/shell/public/interfaces",
     "//skia",
     "//ui/events/ipc",
     "//ui/gfx/ipc",
     "//ui/gl",
+    "//ui/gl/init",
   ]
 
+  if (is_android) {
+    deps += [ "//media/base/android" ]
+  }
+
   if (mojo_media_host == "gpu") {
-    deps += [ "//media/mojo/services:application_factory" ]
-    if (is_android) {
-      deps += [ "//media/base/android" ]
-    }
+    deps += [ "//media/mojo/services" ]
   }
 
   if (is_win) {

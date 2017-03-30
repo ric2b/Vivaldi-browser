@@ -46,25 +46,14 @@ class V8ProfilerAgent;
 class CORE_EXPORT InspectorProfilerAgent final : public InspectorBaseAgent<InspectorProfilerAgent, protocol::Frontend::Profiler>, public protocol::Backend::Profiler {
     WTF_MAKE_NONCOPYABLE(InspectorProfilerAgent);
 public:
-    class Client {
-    public:
-        virtual ~Client() { }
-        virtual void profilingStarted() { }
-        virtual void profilingStopped() { }
-    };
-
-    static RawPtr<InspectorProfilerAgent> create(V8ProfilerAgent*, Client*);
+    explicit InspectorProfilerAgent(V8ProfilerAgent*);
     ~InspectorProfilerAgent() override;
     DECLARE_VIRTUAL_TRACE();
 
     // InspectorBaseAgent overrides.
-    void setState(protocol::DictionaryValue*) override;
-    void setFrontend(protocol::Frontend*) override;
-    void clearFrontend() override;
+    void init(InstrumentingAgents*, protocol::Frontend*, protocol::Dispatcher*, protocol::DictionaryValue*) override;
+    void dispose() override;
     void restore() override;
-
-    void consoleProfile(ExecutionContext*, const String16& title);
-    void consoleProfileEnd(const String16& title);
 
     void enable(ErrorString*) override;
     void disable(ErrorString*) override;
@@ -72,15 +61,7 @@ public:
     void start(ErrorString*) override;
     void stop(ErrorString*, OwnPtr<protocol::Profiler::CPUProfile>*) override;
 
-    void willProcessTask();
-    void didProcessTask();
-    void willEnterNestedRunLoop();
-    void didLeaveNestedRunLoop();
-
 private:
-    InspectorProfilerAgent(V8ProfilerAgent*, Client*);
-
-    Client* m_client;
     V8ProfilerAgent* m_v8ProfilerAgent;
 };
 

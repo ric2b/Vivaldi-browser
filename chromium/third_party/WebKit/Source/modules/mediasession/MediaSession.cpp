@@ -18,7 +18,7 @@
 namespace blink {
 
 MediaSession::MediaSession(PassOwnPtr<WebMediaSession> webMediaSession)
-    : m_webMediaSession(webMediaSession)
+    : m_webMediaSession(std::move(webMediaSession))
 {
     ASSERT(m_webMediaSession);
 }
@@ -33,7 +33,7 @@ MediaSession* MediaSession::create(ExecutionContext* context, ExceptionState& ex
         exceptionState.throwDOMException(NotSupportedError, "Missing platform implementation.");
         return nullptr;
     }
-    return new MediaSession(webMediaSession.release());
+    return new MediaSession(std::move(webMediaSession));
 }
 
 ScriptPromise MediaSession::activate(ScriptState* scriptState)

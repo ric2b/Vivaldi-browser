@@ -28,12 +28,27 @@ uint64_t GetSafeRandomId(const std::map<uint64_t, T>& m) {
   return new_id;
 }
 
+template <typename FunctionType>
+leveldb::Status ForEachWithPrefix(leveldb::DB* db,
+                                  const leveldb::Slice& key_prefix,
+                                  FunctionType function) {
+  std::unique_ptr<leveldb::Iterator> it(
+      db->NewIterator(leveldb::ReadOptions()));
+  it->Seek(key_prefix);
+  for (; it->Valid(); it->Next()) {
+    if (!it->key().starts_with(key_prefix))
+      break;
+    function(it->key(), it->value());
+  }
+  return it->status();
+}
+
 }  // namespace
 
 LevelDBDatabaseImpl::LevelDBDatabaseImpl(
-    leveldb::LevelDBDatabaseRequest request,
-    scoped_ptr<leveldb::Env> environment,
-    scoped_ptr<leveldb::DB> db)
+    leveldb::mojom::LevelDBDatabaseRequest request,
+    std::unique_ptr<leveldb::Env> environment,
+    std::unique_ptr<leveldb::DB> db)
     : binding_(this, std::move(request)),
       environment_(std::move(environment)),
       db_(std::move(db)) {}
@@ -60,19 +75,35 @@ void LevelDBDatabaseImpl::Delete(mojo::Array<uint8_t> key,
   callback.Run(LeveldbStatusToError(status));
 }
 
-void LevelDBDatabaseImpl::Write(mojo::Array<BatchedOperationPtr> operations,
-                                const WriteCallback& callback) {
+void LevelDBDatabaseImpl::DeletePrefixed(
+    mojo::Array<uint8_t> key_prefix,
+    const DeletePrefixedCallback& callback) {
+  leveldb::WriteBatch batch;
+  leveldb::Status status = DeletePrefixedHelper(
+      GetSliceFor(key_prefix), &batch);
+  if (status.ok())
+    status = db_->Write(leveldb::WriteOptions(), &batch);
+  callback.Run(LeveldbStatusToError(status));
+}
+
+void LevelDBDatabaseImpl::Write(
+    mojo::Array<mojom::BatchedOperationPtr> operations,
+    const WriteCallback& callback) {
   leveldb::WriteBatch batch;
 
   for (size_t i = 0; i < operations.size(); ++i) {
     switch (operations[i]->type) {
-      case BatchOperationType::PUT_KEY: {
+      case mojom::BatchOperationType::PUT_KEY: {
         batch.Put(GetSliceFor(operations[i]->key),
                   GetSliceFor(operations[i]->value));
         break;
       }
-      case BatchOperationType::DELETE_KEY: {
+      case mojom::BatchOperationType::DELETE_KEY: {
         batch.Delete(GetSliceFor(operations[i]->key));
+        break;
+      }
+      case mojom::BatchOperationType::DELETE_PREFIXED_KEY: {
+        DeletePrefixedHelper(GetSliceFor(operations[i]->key), &batch);
         break;
       }
     }
@@ -88,6 +119,20 @@ void LevelDBDatabaseImpl::Get(mojo::Array<uint8_t> key,
   leveldb::Status status =
       db_->Get(leveldb::ReadOptions(), GetSliceFor(key), &value);
   callback.Run(LeveldbStatusToError(status), mojo::Array<uint8_t>::From(value));
+}
+
+void LevelDBDatabaseImpl::GetPrefixed(mojo::Array<uint8_t> key_prefix,
+                                      const GetPrefixedCallback& callback) {
+  mojo::Array<mojom::KeyValuePtr> data;
+  leveldb::Status status = ForEachWithPrefix(
+      db_.get(), GetSliceFor(key_prefix),
+      [&data](const leveldb::Slice& key, const leveldb::Slice& value) {
+        mojom::KeyValuePtr kv = mojom::KeyValue::New();
+        kv->key = GetArrayFor(key);
+        kv->value = GetArrayFor(value);
+        data.push_back(std::move(kv));
+      });
+  callback.Run(LeveldbStatusToError(status), std::move(data));
 }
 
 void LevelDBDatabaseImpl::GetSnapshot(const GetSnapshotCallback& callback) {
@@ -111,7 +156,8 @@ void LevelDBDatabaseImpl::GetFromSnapshot(uint64_t snapshot_id,
   // If the snapshot id is invalid, send back invalid argument
   auto it = snapshot_map_.find(snapshot_id);
   if (it == snapshot_map_.end()) {
-    callback.Run(DatabaseError::INVALID_ARGUMENT, mojo::Array<uint8_t>());
+    callback.Run(mojom::DatabaseError::INVALID_ARGUMENT,
+                 mojo::Array<uint8_t>());
     return;
   }
 
@@ -161,7 +207,8 @@ void LevelDBDatabaseImpl::IteratorSeekToFirst(
     const IteratorSeekToFirstCallback& callback) {
   auto it = iterator_map_.find(iterator_id);
   if (it == iterator_map_.end()) {
-    callback.Run(false, DatabaseError::INVALID_ARGUMENT, nullptr, nullptr);
+    callback.Run(false, mojom::DatabaseError::INVALID_ARGUMENT, nullptr,
+                 nullptr);
     return;
   }
 
@@ -175,7 +222,8 @@ void LevelDBDatabaseImpl::IteratorSeekToLast(
     const IteratorSeekToLastCallback& callback) {
   auto it = iterator_map_.find(iterator_id);
   if (it == iterator_map_.end()) {
-    callback.Run(false, DatabaseError::INVALID_ARGUMENT, nullptr, nullptr);
+    callback.Run(false, mojom::DatabaseError::INVALID_ARGUMENT, nullptr,
+                 nullptr);
     return;
   }
 
@@ -190,7 +238,8 @@ void LevelDBDatabaseImpl::IteratorSeek(
     const IteratorSeekToLastCallback& callback) {
   auto it = iterator_map_.find(iterator_id);
   if (it == iterator_map_.end()) {
-    callback.Run(false, DatabaseError::INVALID_ARGUMENT, nullptr, nullptr);
+    callback.Run(false, mojom::DatabaseError::INVALID_ARGUMENT, nullptr,
+                 nullptr);
     return;
   }
 
@@ -203,7 +252,8 @@ void LevelDBDatabaseImpl::IteratorNext(uint64_t iterator_id,
                                        const IteratorNextCallback& callback) {
   auto it = iterator_map_.find(iterator_id);
   if (it == iterator_map_.end()) {
-    callback.Run(false, DatabaseError::INVALID_ARGUMENT, nullptr, nullptr);
+    callback.Run(false, mojom::DatabaseError::INVALID_ARGUMENT, nullptr,
+                 nullptr);
     return;
   }
 
@@ -216,7 +266,8 @@ void LevelDBDatabaseImpl::IteratorPrev(uint64_t iterator_id,
                                        const IteratorPrevCallback& callback) {
   auto it = iterator_map_.find(iterator_id);
   if (it == iterator_map_.end()) {
-    callback.Run(false, DatabaseError::INVALID_ARGUMENT, nullptr, nullptr);
+    callback.Run(false, mojom::DatabaseError::INVALID_ARGUMENT, nullptr,
+                 nullptr);
     return;
   }
 
@@ -235,6 +286,16 @@ void LevelDBDatabaseImpl::ReplyToIteratorMessage(
 
   callback.Run(true, LeveldbStatusToError(it->status()), GetArrayFor(it->key()),
                GetArrayFor(it->value()));
+}
+
+leveldb::Status LevelDBDatabaseImpl::DeletePrefixedHelper(
+    const leveldb::Slice& key_prefix,
+    leveldb::WriteBatch* batch) {
+  leveldb::Status status = ForEachWithPrefix(db_.get(), key_prefix,
+      [batch](const leveldb::Slice& key, const leveldb::Slice& value) {
+        batch->Delete(key);
+      });
+  return status;
 }
 
 }  // namespace leveldb

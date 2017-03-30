@@ -3,6 +3,8 @@
 # found in the LICENSE file.
 
 import("//chrome/version.gni")
+import("//testing/test.gni")
+import("//third_party/kasko/kasko.gni")
 
 source_set("client") {
   sources = [
@@ -12,6 +14,44 @@ source_set("client") {
   deps = [
     "//base",
   ]
+}
+
+if (enable_kasko) {
+  source_set("kasko_util") {
+    sources = [
+      "kasko_util.cc",
+      "kasko_util.h",
+      "system_load_estimator.cc",
+      "system_load_estimator.h",
+    ]
+    deps = [
+      "//base",
+      "//components/crash/content/app",
+      "//components/memory_pressure",
+      "//third_party/kasko",
+    ]
+    libs = [ "pdh.lib" ]  # Used by system_load_estimator.h.
+    ldflags = [ "/DELAYLOAD:pdh.dll" ]  # Only used on report capture.
+  }
+
+  test("system_load_estimator_unittests") {
+    sources = [
+      "system_load_estimator_unittest.cc",
+    ]
+    deps = [
+      ":client",
+      ":kasko_util",
+      "//base/test:run_all_unittests",
+      "//base/test:test_support",
+      "//testing/gtest",
+    ]
+  }
+} else {
+  group("kasko_util") {
+    public_deps = [
+      "//third_party/kasko:kasko_features",
+    ]
+  }
 }
 
 process_version("chrome_watcher_resources") {
@@ -32,13 +72,13 @@ shared_library("chrome_watcher") {
   deps = [
     ":chrome_watcher_resources",
     ":client",
+    ":kasko_util",
     "//base",
     "//base:base_static",
     "//build/config/sanitizers:deps",
+    "//chrome/common:metrics_constants_util_win",
     "//chrome/installer/util:with_no_strings",
     "//components/browser_watcher",
-    "//components/crash/content/app",
-    "//third_party/kasko",
   ]
   ldflags = [ "/DEF:" + rebase_path("chrome_watcher.def", root_build_dir) ]
   configs -= [ "//build/config/win:console" ]

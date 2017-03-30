@@ -4,13 +4,15 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
@@ -27,6 +29,7 @@
 #include "media/cdm/aes_decryptor.h"
 #include "media/cdm/json_web_key.h"
 #include "media/filters/chunk_demuxer.h"
+#include "media/media_features.h"
 #include "media/renderers/renderer_impl.h"
 #include "media/test/pipeline_integration_test_base.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -36,8 +39,8 @@
 #include "media/mojo/interfaces/renderer.mojom.h"
 #include "media/mojo/interfaces/service_factory.mojom.h"
 #include "media/mojo/services/mojo_renderer_impl.h"
-#include "mojo/shell/public/cpp/application_test_base.h"
-#include "mojo/shell/public/cpp/connect.h"
+#include "services/shell/public/cpp/connect.h"
+#include "services/shell/public/cpp/shell_test.h"
 
 // TODO(dalecurtis): The mojo renderer is in another process, so we have no way
 // currently to get hashes for video and audio samples.  This also means that
@@ -110,10 +113,16 @@ const char kADTS[] = "audio/aac";
 const char kMP4[] = "video/mp4; codecs=\"avc1.4D4041,mp4a.40.2\"";
 #endif
 const char kMP4VideoAVC3[] = "video/mp4; codecs=\"avc3.64001f\"";
+#if BUILDFLAG(ENABLE_MP4_VP9_DEMUXING)
+const char kMP4VideoVP9[] = "video/mp4; codecs=\"vp09.00.00.08.01.01.00.00\"";
+#endif
 const char kMP4Video[] = "video/mp4; codecs=\"avc1.4D4041\"";
 const char kMP4Audio[] = "audio/mp4; codecs=\"mp4a.40.2\"";
 #if !defined(USE_SYSTEM_PROPRIETARY_CODECS)
 const char kMP3[] = "audio/mpeg";
+#endif
+#if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
+const char kMP2AudioSBR[] = "video/mp2t; codecs=\"avc1.4D4041,mp4a.40.5\"";
 #endif
 #endif  // defined(USE_PROPRIETARY_CODECS)
 
@@ -293,7 +302,7 @@ class FakeEncryptedMedia {
 
   scoped_refptr<AesDecryptor> decryptor_;
   TestCdmContext cdm_context_;
-  scoped_ptr<AppBase> app_;
+  std::unique_ptr<AppBase> app_;
 };
 
 enum PromiseResult { RESOLVED, REJECTED };
@@ -319,18 +328,19 @@ class KeyProvidingApp : public FakeEncryptedMedia::AppBase {
     EXPECT_EQ(expected, REJECTED) << error_message;
   }
 
-  scoped_ptr<SimpleCdmPromise> CreatePromise(PromiseResult expected) {
-    scoped_ptr<media::SimpleCdmPromise> promise(new media::CdmCallbackPromise<>(
-        base::Bind(&KeyProvidingApp::OnResolve, base::Unretained(this),
-                   expected),
-        base::Bind(&KeyProvidingApp::OnReject, base::Unretained(this),
-                   expected)));
+  std::unique_ptr<SimpleCdmPromise> CreatePromise(PromiseResult expected) {
+    std::unique_ptr<media::SimpleCdmPromise> promise(
+        new media::CdmCallbackPromise<>(
+            base::Bind(&KeyProvidingApp::OnResolve, base::Unretained(this),
+                       expected),
+            base::Bind(&KeyProvidingApp::OnReject, base::Unretained(this),
+                       expected)));
     return promise;
   }
 
-  scoped_ptr<NewSessionCdmPromise> CreateSessionPromise(
+  std::unique_ptr<NewSessionCdmPromise> CreateSessionPromise(
       PromiseResult expected) {
-    scoped_ptr<media::NewSessionCdmPromise> promise(
+    std::unique_ptr<media::NewSessionCdmPromise> promise(
         new media::CdmCallbackPromise<std::string>(
             base::Bind(&KeyProvidingApp::OnResolveWithSession,
                        base::Unretained(this), expected),
@@ -517,9 +527,11 @@ class MockMediaSource {
 
   virtual ~MockMediaSource() {}
 
-  const base::FilePath file_path() { return file_path_; }
+  std::unique_ptr<Demuxer> GetDemuxer() {
+    return std::move(owned_chunk_demuxer_);
+  }
 
-  scoped_ptr<Demuxer> GetDemuxer() { return std::move(owned_chunk_demuxer_); }
+  const base::FilePath file_path() { return file_path_; }
 
   void set_encrypted_media_init_data_cb(
       const Demuxer::EncryptedMediaInitDataCB& encrypted_media_init_data_cb) {
@@ -652,11 +664,11 @@ class MockMediaSource {
   }
 
   // A workaround for gtest mocks not allowing moving scoped_ptrs.
-  void InitSegmentReceivedWrapper(scoped_ptr<MediaTracks> tracks) {
+  void InitSegmentReceivedWrapper(std::unique_ptr<MediaTracks> tracks) {
     InitSegmentReceived(tracks);
   }
 
-  MOCK_METHOD1(InitSegmentReceived, void(scoped_ptr<MediaTracks>&));
+  MOCK_METHOD1(InitSegmentReceived, void(std::unique_ptr<MediaTracks>&));
 
  private:
   scoped_refptr<DecoderBuffer> file_data_;
@@ -665,35 +677,41 @@ class MockMediaSource {
   size_t initial_append_size_;
   std::string mimetype_;
   ChunkDemuxer* chunk_demuxer_;
-  scoped_ptr<Demuxer> owned_chunk_demuxer_;
+  std::unique_ptr<Demuxer> owned_chunk_demuxer_;
   Demuxer::EncryptedMediaInitDataCB encrypted_media_init_data_cb_;
   base::TimeDelta last_timestamp_offset_;
 };
 
-#if defined(MOJO_RENDERER)
-class PipelineIntegrationTestHost : public mojo::test::ApplicationTestBase,
+// TODO(xhwang): These tests have been disabled for some time as apptests and no
+//               longer pass. They need to be reconstituted as shell tests.
+//               Currently there are compile issues which must be resolved,
+//               preferably by eliminating multiple inheritance here which is
+//               banned by Google C++ style.
+#if defined(MOJO_RENDERER) && defined(ENABLE_MOJO_PIPELINE_INTEGRATION_TEST)
+class PipelineIntegrationTestHost : public shell::test::ShellTest,
                                     public PipelineIntegrationTestBase {
  public:
-  bool ShouldCreateDefaultRunLoop() override { return false; }
+  PipelineIntegrationTestHost()
+      : shell::test::ShellTest("exe:media_pipeline_integration_shelltests") {}
 
   void SetUp() override {
-    ApplicationTestBase::SetUp();
+    ShellTest::SetUp();
     InitializeMediaLibrary();
   }
 
  protected:
-  scoped_ptr<Renderer> CreateRenderer() override {
+  std::unique_ptr<Renderer> CreateRenderer() override {
     connector()->ConnectToInterface("mojo:media", &media_service_factory_);
 
-    interfaces::RendererPtr mojo_renderer;
+    mojom::RendererPtr mojo_renderer;
     media_service_factory_->CreateRenderer(mojo::GetProxy(&mojo_renderer));
 
-    return make_scoped_ptr(new MojoRendererImpl(message_loop_.task_runner(),
-                                                std::move(mojo_renderer)));
+    return base::WrapUnique(new MojoRendererImpl(message_loop_.task_runner(),
+                                                 std::move(mojo_renderer)));
   }
 
  private:
-  interfaces::ServiceFactoryPtr media_service_factory_;
+  mojom::ServiceFactoryPtr media_service_factory_;
 };
 #else
 class PipelineIntegrationTestHost : public testing::Test,
@@ -719,29 +737,18 @@ class PipelineIntegrationTest : public PipelineIntegrationTestHost {
     EXPECT_CALL(*this, OnMetadata(_))
         .Times(AtMost(1))
         .WillRepeatedly(SaveArg<0>(&metadata_));
-    EXPECT_CALL(*this, OnBufferingStateChanged(BUFFERING_HAVE_ENOUGH))
+    EXPECT_CALL(*this, OnBufferingStateChange(BUFFERING_HAVE_ENOUGH))
         .Times(AnyNumber());
-    EXPECT_CALL(*this, OnBufferingStateChanged(BUFFERING_HAVE_NOTHING))
+    EXPECT_CALL(*this, OnBufferingStateChange(BUFFERING_HAVE_NOTHING))
         .Times(AnyNumber());
 
     // Encrypted content not used, so this is never called.
     EXPECT_CALL(*this, OnWaitingForDecryptionKey()).Times(0);
 
     demuxer_ = source->GetDemuxer();
-    pipeline_->Start(
-        demuxer_.get(), CreateRenderer(source->file_path()),
-        base::Bind(&PipelineIntegrationTest::OnEnded, base::Unretained(this)),
-        base::Bind(&PipelineIntegrationTest::OnError, base::Unretained(this)),
-        base::Bind(&PipelineIntegrationTest::OnStatusCallback,
-                   base::Unretained(this)),
-        base::Bind(&PipelineIntegrationTest::OnMetadata,
-                   base::Unretained(this)),
-        base::Bind(&PipelineIntegrationTest::OnBufferingStateChanged,
-                   base::Unretained(this)),
-        base::Closure(), base::Bind(&PipelineIntegrationTest::OnAddTextTrack,
-                                    base::Unretained(this)),
-        base::Bind(&PipelineIntegrationTest::OnWaitingForDecryptionKey,
-                   base::Unretained(this)));
+    pipeline_->Start(demuxer_.get(), CreateRenderer(source->file_path()), this,
+                     base::Bind(&PipelineIntegrationTest::OnStatusCallback,
+                                base::Unretained(this)));
     message_loop_.Run();
     EXPECT_EQ(PIPELINE_OK, pipeline_status_);
     return pipeline_status_;
@@ -757,9 +764,9 @@ class PipelineIntegrationTest : public PipelineIntegrationTestHost {
     EXPECT_CALL(*this, OnMetadata(_))
         .Times(AtMost(1))
         .WillRepeatedly(SaveArg<0>(&metadata_));
-    EXPECT_CALL(*this, OnBufferingStateChanged(BUFFERING_HAVE_ENOUGH))
+    EXPECT_CALL(*this, OnBufferingStateChange(BUFFERING_HAVE_ENOUGH))
         .Times(AnyNumber());
-    EXPECT_CALL(*this, OnBufferingStateChanged(BUFFERING_HAVE_NOTHING))
+    EXPECT_CALL(*this, OnBufferingStateChange(BUFFERING_HAVE_NOTHING))
         .Times(AnyNumber());
     EXPECT_CALL(*this, DecryptorAttached(true));
 
@@ -773,20 +780,9 @@ class PipelineIntegrationTest : public PipelineIntegrationTestHost {
                       base::Bind(&PipelineIntegrationTest::DecryptorAttached,
                                  base::Unretained(this)));
 
-    pipeline_->Start(
-        demuxer_.get(), CreateRenderer(source->file_path()),
-        base::Bind(&PipelineIntegrationTest::OnEnded, base::Unretained(this)),
-        base::Bind(&PipelineIntegrationTest::OnError, base::Unretained(this)),
-        base::Bind(&PipelineIntegrationTest::OnStatusCallback,
-                   base::Unretained(this)),
-        base::Bind(&PipelineIntegrationTest::OnMetadata,
-                   base::Unretained(this)),
-        base::Bind(&PipelineIntegrationTest::OnBufferingStateChanged,
-                   base::Unretained(this)),
-        base::Closure(), base::Bind(&PipelineIntegrationTest::OnAddTextTrack,
-                                    base::Unretained(this)),
-        base::Bind(&PipelineIntegrationTest::OnWaitingForDecryptionKey,
-                   base::Unretained(this)));
+    pipeline_->Start(demuxer_.get(), CreateRenderer(source->file_path()), this,
+                     base::Bind(&PipelineIntegrationTest::OnStatusCallback,
+                                base::Unretained(this)));
 
     source->set_encrypted_media_init_data_cb(
         base::Bind(&FakeEncryptedMedia::OnEncryptedMediaInitData,
@@ -1118,6 +1114,23 @@ TEST_F(PipelineIntegrationTest, BasicPlayback_MediaSource_Live) {
 
 TEST_F(PipelineIntegrationTest, BasicPlayback_MediaSource_VP9_WebM) {
   MockMediaSource source("bear-vp9.webm", kWebMVP9, 67504);
+  StartPipelineWithMediaSource(&source);
+  source.EndOfStream();
+
+  EXPECT_EQ(1u, pipeline_->GetBufferedTimeRanges().size());
+  EXPECT_EQ(0, pipeline_->GetBufferedTimeRanges().start(0).InMilliseconds());
+  EXPECT_EQ(kVP9WebMFileDurationMs,
+            pipeline_->GetBufferedTimeRanges().end(0).InMilliseconds());
+
+  Play();
+
+  ASSERT_TRUE(WaitUntilOnEnded());
+  source.Shutdown();
+  Stop();
+}
+
+TEST_F(PipelineIntegrationTest, BasicPlayback_MediaSource_VP9_BlockGroup_WebM) {
+  MockMediaSource source("bear-vp9-blockgroup.webm", kWebMVP9, 67871);
   StartPipelineWithMediaSource(&source);
   source.EndOfStream();
 
@@ -1929,6 +1942,24 @@ TEST_F(PipelineIntegrationTest,
   Stop();
 }
 
+#if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
+TEST_F(PipelineIntegrationTest, Mp2ts_AAC_HE_SBR_Audio) {
+  EXPECT_CALL(*this, OnDurationChange()).Times(AnyNumber());
+
+  MockMediaSource source("bear-1280x720-aac_he.ts", kMP2AudioSBR,
+                         kAppendWholeFile);
+  StartPipelineWithMediaSource(&source);
+
+  source.EndOfStream();
+  ASSERT_EQ(PIPELINE_OK, pipeline_status_);
+
+  // When SBR is not taken into account correctly by mpeg2ts parser, it will
+  // estimate audio frame durations incorrectly and that will lead to gaps in
+  // buffered ranges (so this check will fail) and stalled playback.
+  EXPECT_EQ(1u, pipeline_->GetBufferedTimeRanges().size());
+}
+#endif
+
 TEST_F(PipelineIntegrationTest,
        MAYBE_EME(EncryptedPlayback_NoEncryptedFrames_MP4_CENC_AudioOnly)) {
   MockMediaSource source("bear-1280x720-a_frag-cenc_clear-all.mp4", kMP4Audio,
@@ -1997,6 +2028,24 @@ TEST_F(PipelineIntegrationTest,
   Stop();
 }
 
+#if BUILDFLAG(ENABLE_MP4_VP9_DEMUXING)
+TEST_F(PipelineIntegrationTest, EncryptedPlayback_MP4_VP9_CENC_VideoOnly) {
+  MockMediaSource source("bear-320x240-v_frag-vp9-cenc.mp4", kMP4VideoVP9,
+                         kAppendWholeFile);
+  FakeEncryptedMedia encrypted_media(new KeyProvidingApp());
+  StartPipelineWithEncryptedMedia(&source, &encrypted_media);
+
+  source.EndOfStream();
+  ASSERT_EQ(PIPELINE_OK, pipeline_status_);
+
+  Play();
+
+  ASSERT_TRUE(WaitUntilOnEnded());
+  source.Shutdown();
+  Stop();
+}
+#endif  // #if BUILDFLAG(ENABLE_MP4_VP9_DEMUXING)
+
 TEST_F(PipelineIntegrationTest, BasicPlayback_MediaSource_VideoOnly_MP4_AVC3) {
   MockMediaSource source("bear-1280x720-v_frag-avc3.mp4", kMP4VideoAVC3,
                          kAppendWholeFile);
@@ -2014,6 +2063,22 @@ TEST_F(PipelineIntegrationTest, BasicPlayback_MediaSource_VideoOnly_MP4_AVC3) {
   source.Shutdown();
   Stop();
 }
+
+#if BUILDFLAG(ENABLE_MP4_VP9_DEMUXING)
+TEST_F(PipelineIntegrationTest, BasicPlayback_MediaSource_VideoOnly_MP4_VP9) {
+  MockMediaSource source("bear-320x240-v_frag-vp9.mp4", kMP4VideoVP9,
+                         kAppendWholeFile);
+  StartPipelineWithMediaSource(&source);
+  source.EndOfStream();
+  ASSERT_EQ(PIPELINE_OK, pipeline_status_);
+
+  Play();
+
+  ASSERT_TRUE(WaitUntilOnEnded());
+  source.Shutdown();
+  Stop();
+}
+#endif  // #if BUILDFLAG(ENABLE_MP4_VP9_DEMUXING)
 
 #endif  // defined(USE_PROPRIETARY_CODECS)
 #endif  // !defined(OS_LINUX) && defined(USE_PROPRIETARY_CODECS)

@@ -4,13 +4,16 @@
 
 #include "courgette/disassembler_elf_32_x86.h"
 
+#include <ctype.h>
 #include <stddef.h>
 #include <stdint.h>
 
 #include <algorithm>
+#include <memory>
+#include <set>
 #include <string>
+#include <vector>
 
-#include "base/memory/scoped_ptr.h"
 #include "courgette/assembly_program.h"
 #include "courgette/base_test_unittest.h"
 #include "courgette/image_utils.h"
@@ -18,6 +21,41 @@
 namespace courgette {
 
 namespace {
+
+class TestDisassemblerElf32X86 : public DisassemblerElf32X86 {
+ public:
+  TestDisassemblerElf32X86(const void* start, size_t length)
+    : DisassemblerElf32X86(start, length) { }
+  ~TestDisassemblerElf32X86() override { }
+
+  void TestSectionHeaderFileOffsetOrder() {
+    std::vector<FileOffset> file_offsets;
+    for (Elf32_Half section_id : section_header_file_offset_order_) {
+      const Elf32_Shdr* section_header = SectionHeader(section_id);
+      file_offsets.push_back(section_header->sh_offset);
+    }
+    EXPECT_EQ(static_cast<size_t>(SectionHeaderCount()), file_offsets.size());
+    EXPECT_TRUE(std::is_sorted(file_offsets.begin(), file_offsets.end()));
+  }
+
+  void TestSectionName() {
+    std::set<std::string> name_set;
+    for (const Elf32_Shdr& section_header : section_header_table_) {
+      std::string name;
+      EXPECT_TRUE(SectionName(section_header, &name));
+      // Ensure |name| is unique and is printable (may be empty though).
+      EXPECT_EQ(0U, name_set.count(name));
+      EXPECT_TRUE(std::all_of(name.begin(), name.end(), ::isprint));
+      name_set.insert(name);
+    }
+    // Check for existence of a few common sections.
+    EXPECT_EQ(1U, name_set.count(".text"));
+    EXPECT_EQ(1U, name_set.count(".data"));
+    EXPECT_EQ(1U, name_set.count(".rodata"));
+    EXPECT_EQ(1U, name_set.count(".bss"));
+    EXPECT_EQ(1U, name_set.count(".shstrtab"));
+  }
+};
 
 class DisassemblerElf32X86Test : public BaseTest {
  public:
@@ -29,11 +67,10 @@ class DisassemblerElf32X86Test : public BaseTest {
 void DisassemblerElf32X86Test::TestExe(const char* file_name,
                                        size_t expected_abs_count,
                                        size_t expected_rel_count) const {
-  using TypedRVA = DisassemblerElf32::TypedRVA;
   std::string file1 = FileContents(file_name);
 
-  scoped_ptr<DisassemblerElf32X86> disassembler(
-      new DisassemblerElf32X86(file1.c_str(), file1.length()));
+  std::unique_ptr<TestDisassemblerElf32X86> disassembler(
+      new TestDisassemblerElf32X86(file1.c_str(), file1.length()));
 
   bool can_parse_header = disassembler->ParseHeader();
   EXPECT_TRUE(can_parse_header);
@@ -51,7 +88,7 @@ void DisassemblerElf32X86Test::TestExe(const char* file_name,
   EXPECT_EQ('L', offset_p[2]);
   EXPECT_EQ('F', offset_p[3]);
 
-  scoped_ptr<AssemblyProgram> program(new AssemblyProgram(EXE_ELF_32_X86));
+  std::unique_ptr<AssemblyProgram> program(new AssemblyProgram(EXE_ELF_32_X86));
 
   EXPECT_TRUE(disassembler->Disassemble(program.get()));
 
@@ -60,7 +97,7 @@ void DisassemblerElf32X86Test::TestExe(const char* file_name,
   // Flatten the list typed rel32 to a list of rel32 RVAs.
   std::vector<RVA> rel32_list;
   rel32_list.reserve(disassembler->Rel32Locations().size());
-  for (TypedRVA* typed_rel32 : disassembler->Rel32Locations())
+  for (auto& typed_rel32 : disassembler->Rel32Locations())
     rel32_list.push_back(typed_rel32->rva());
 
   EXPECT_EQ(expected_abs_count, abs32_list.size());
@@ -84,12 +121,17 @@ void DisassemblerElf32X86Test::TestExe(const char* file_name,
     }
   }
   EXPECT_FALSE(found_match);
+
+  disassembler->TestSectionHeaderFileOffsetOrder();
+
+  disassembler->TestSectionName();
 }
 
 }  // namespace
 
 TEST_F(DisassemblerElf32X86Test, All) {
-  TestExe("elf-32-1", 200, 3441);
+  TestExe("elf-32-1", 200, 3337);
+  TestExe("elf-32-high-bss", 0, 4);
 }
 
 }  // namespace courgette

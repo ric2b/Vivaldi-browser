@@ -17,7 +17,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/histogram_tester.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/android/data_usage/data_use_tab_model.h"
 #include "components/data_usage/core/data_use.h"
 #include "components/data_usage/core/data_use_aggregator.h"
@@ -116,7 +116,7 @@ class ExternalDataUseObserverTest : public testing::Test {
   void TriggerTabTrackingOnDefaultTab() {
     external_data_use_observer_->GetDataUseTabModel()->OnNavigationEvent(
         kDefaultTabId, DataUseTabModel::TRANSITION_OMNIBOX_SEARCH,
-        GURL(kDefaultURL), std::string());
+        GURL(kDefaultURL), std::string(), nullptr);
   }
 
   // Returns a default data_usage::DataUse object.
@@ -246,7 +246,8 @@ TEST_F(ExternalDataUseObserverTest, ReportsMergedCorrectly) {
 
   for (const auto& expected_report : expected_data_use_reports) {
     const ExternalDataUseObserver::DataUseReportKey key(
-        kDefaultLabel, net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
+        kDefaultLabel, DataUseTabModel::kDefaultTag,
+        net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
         expected_report.mcc_mnc);
 
     EXPECT_NE(buffered_data_reports().end(), buffered_data_reports().find(key));
@@ -269,7 +270,8 @@ TEST_F(ExternalDataUseObserverTest, TimestampsMergedCorrectly) {
   base::Time end_timestamp = start_timestamp + base::TimeDelta::FromSeconds(1);
   for (size_t i = 0; i < num_iterations; ++i) {
     external_data_use_observer()->BufferDataUseReport(
-        default_data_use(), kDefaultLabel, start_timestamp, end_timestamp);
+        default_data_use(), kDefaultLabel, DataUseTabModel::kDefaultTag,
+        start_timestamp, end_timestamp);
 
     start_timestamp += base::TimeDelta::FromSeconds(1);
     end_timestamp += base::TimeDelta::FromSeconds(1);
@@ -305,11 +307,11 @@ TEST_F(ExternalDataUseObserverTest, MultipleMatchingRules) {
 
   external_data_use_observer()->GetDataUseTabModel()->OnNavigationEvent(
       kDefaultTabId, DataUseTabModel::TRANSITION_OMNIBOX_SEARCH,
-      GURL("http://www.foo.com/#q=abc"), std::string());
+      GURL("http://www.foo.com/#q=abc"), std::string(), nullptr);
 
   external_data_use_observer()->GetDataUseTabModel()->OnNavigationEvent(
       kDefaultTabId + 1, DataUseTabModel::TRANSITION_OMNIBOX_SEARCH,
-      GURL("http://www.bar.com/#q=abc"), std::string());
+      GURL("http://www.bar.com/#q=abc"), std::string(), nullptr);
 
   EXPECT_EQ(0U, external_data_use_observer()->buffered_data_reports_.size());
   EXPECT_TRUE(external_data_use_observer()
@@ -332,7 +334,8 @@ TEST_F(ExternalDataUseObserverTest, MultipleMatchingRules) {
   EXPECT_EQ(1U, buffered_data_reports().size());
 
   const ExternalDataUseObserver::DataUseReportKey key_bar(
-      kBarLabel, net::NetworkChangeNotifier::CONNECTION_UNKNOWN, kBarMccMnc);
+      kBarLabel, DataUseTabModel::kDefaultTag,
+      net::NetworkChangeNotifier::CONNECTION_UNKNOWN, kBarMccMnc);
   EXPECT_NE(buffered_data_reports().end(),
             buffered_data_reports().find(key_bar));
 }
@@ -343,16 +346,23 @@ TEST_F(ExternalDataUseObserverTest, HashFunction) {
   ExternalDataUseObserver::DataUseReportKeyHash hash;
 
   ExternalDataUseObserver::DataUseReportKey foo(
-      kFooLabel, net::NetworkChangeNotifier::CONNECTION_UNKNOWN, kFooMccMnc);
+      kFooLabel, DataUseTabModel::kDefaultTag,
+      net::NetworkChangeNotifier::CONNECTION_UNKNOWN, kFooMccMnc);
   ExternalDataUseObserver::DataUseReportKey bar_label(
-      kBarLabel, net::NetworkChangeNotifier::CONNECTION_UNKNOWN, kFooMccMnc);
+      kBarLabel, DataUseTabModel::kDefaultTag,
+      net::NetworkChangeNotifier::CONNECTION_UNKNOWN, kFooMccMnc);
+  ExternalDataUseObserver::DataUseReportKey bar_custom_tab_tag(
+      kBarLabel, DataUseTabModel::kCustomTabTag,
+      net::NetworkChangeNotifier::CONNECTION_UNKNOWN, kFooMccMnc);
   ExternalDataUseObserver::DataUseReportKey bar_network_type(
-      kFooLabel, net::NetworkChangeNotifier::CONNECTION_WIFI, kFooMccMnc);
+      kFooLabel, DataUseTabModel::kDefaultTag,
+      net::NetworkChangeNotifier::CONNECTION_WIFI, kFooMccMnc);
   ExternalDataUseObserver::DataUseReportKey bar_mcc_mnc(
-      kFooLabel, net::NetworkChangeNotifier::CONNECTION_UNKNOWN, kBarMccMnc);
+      kFooLabel, DataUseTabModel::kDefaultTag,
+      net::NetworkChangeNotifier::CONNECTION_UNKNOWN, kBarMccMnc);
 
   EXPECT_NE(hash(foo), hash(bar_label));
-  EXPECT_NE(hash(foo), hash(bar_label));
+  EXPECT_NE(hash(foo), hash(bar_custom_tab_tag));
   EXPECT_NE(hash(foo), hash(bar_network_type));
   EXPECT_NE(hash(foo), hash(bar_mcc_mnc));
 }
@@ -399,7 +409,7 @@ TEST_F(ExternalDataUseObserverTest, MatchingRuleFetchOnControlAppInstall) {
     base::HistogramTester histogram_tester;
     external_data_use_observer()->data_use_tab_model_->OnNavigationEvent(
         kDefaultTabId, DataUseTabModel::TRANSITION_LINK, GURL(kDefaultURL),
-        std::string());
+        std::string(), nullptr);
     base::RunLoop().RunUntilIdle();
     histogram_tester.ExpectTotalCount("DataUsage.MatchingRulesCount.Valid", 0);
   }
@@ -421,7 +431,7 @@ TEST_F(ExternalDataUseObserverTest, MatchingRuleFetchOnControlAppInstall) {
     base::HistogramTester histogram_tester;
     external_data_use_observer()->data_use_tab_model_->OnNavigationEvent(
         kDefaultTabId, DataUseTabModel::TRANSITION_LINK, GURL(kDefaultURL),
-        std::string());
+        std::string(), nullptr);
     base::RunLoop().RunUntilIdle();
     histogram_tester.ExpectTotalCount("DataUsage.MatchingRulesCount.Valid", 1);
   }
@@ -437,7 +447,7 @@ TEST_F(ExternalDataUseObserverTest, MatchingRuleFetchOnControlAppInstall) {
     base::HistogramTester histogram_tester;
     external_data_use_observer()->data_use_tab_model_->OnNavigationEvent(
         kDefaultTabId, DataUseTabModel::TRANSITION_LINK, GURL(kDefaultURL),
-        std::string());
+        std::string(), nullptr);
     base::RunLoop().RunUntilIdle();
     histogram_tester.ExpectTotalCount("DataUsage.MatchingRulesCount.Valid", 0);
   }
@@ -620,7 +630,7 @@ TEST_F(ExternalDataUseObserverTest, DataUseReportTimedOut) {
   // control app is installed, since there are no valid rules yet.
   external_data_use_observer()->GetDataUseTabModel()->OnNavigationEvent(
       kDefaultTabId, DataUseTabModel::TRANSITION_OMNIBOX_SEARCH,
-      GURL(kDefaultURL), std::string());
+      GURL(kDefaultURL), std::string(), nullptr);
   base::RunLoop().RunUntilIdle();
   histogram_tester.ExpectTotalCount(kUMAMatchingRuleFirstFetchDurationHistogram,
                                     1);

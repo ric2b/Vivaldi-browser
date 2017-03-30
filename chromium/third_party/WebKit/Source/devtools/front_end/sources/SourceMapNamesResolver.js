@@ -5,56 +5,51 @@
 WebInspector.SourceMapNamesResolver = {};
 
 WebInspector.SourceMapNamesResolver._cachedMapSymbol = Symbol("cache");
-WebInspector.SourceMapNamesResolver._cachedPromiseSymbol = Symbol("cachePromise");
+WebInspector.SourceMapNamesResolver._cachedIdentifiersSymbol = Symbol("cachedIdentifiers");
+
+/**
+ * @constructor
+ * @param {string} name
+ * @param {number} lineNumber
+ * @param {number} columnNumber
+ */
+WebInspector.SourceMapNamesResolver.Identifier = function(name, lineNumber, columnNumber)
+{
+    this.name = name;
+    this.lineNumber = lineNumber;
+    this.columnNumber = columnNumber;
+}
 
 /**
  * @param {!WebInspector.DebuggerModel.Scope} scope
- * @return {!Promise.<!Map<string, string>>}
+ * @return {!Promise<!Array<!WebInspector.SourceMapNamesResolver.Identifier>>}
  */
-WebInspector.SourceMapNamesResolver._resolveScope = function(scope)
+WebInspector.SourceMapNamesResolver._scopeIdentifiers = function(scope)
 {
-    var cachedMap = scope[WebInspector.SourceMapNamesResolver._cachedMapSymbol];
-    if (cachedMap)
-        return Promise.resolve(cachedMap);
-
-    var cachedPromise = scope[WebInspector.SourceMapNamesResolver._cachedPromiseSymbol];
-    if (cachedPromise)
-        return cachedPromise;
-
     var startLocation = scope.startLocation();
     var endLocation = scope.endLocation();
 
     if (scope.type() === DebuggerAgent.ScopeType.Global || !startLocation || !endLocation || !startLocation.script().sourceMapURL || (startLocation.script() !== endLocation.script()))
-        return Promise.resolve(new Map());
+        return Promise.resolve(/** @type {!Array<!WebInspector.SourceMapNamesResolver.Identifier>}*/([]));
 
     var script = startLocation.script();
-    var sourceMap = WebInspector.debuggerWorkspaceBinding.sourceMapForScript(script);
-    if (!sourceMap)
-        return Promise.resolve(new Map());
-
-    var promise = script.requestContent().then(onContent);
-    scope[WebInspector.SourceMapNamesResolver._cachedPromiseSymbol] = promise;
-    return promise;
+    return script.requestContent().then(onContent);
 
     /**
      * @param {?string} content
-     * @return {!Promise<!Map<string, string>>}
+     * @return {!Promise<!Array<!WebInspector.SourceMapNamesResolver.Identifier>>}
      */
     function onContent(content)
     {
         if (!content)
-            return Promise.resolve(new Map());
-
-        var startLocation = scope.startLocation();
-        var endLocation = scope.endLocation();
-        var textRange = new WebInspector.TextRange(startLocation.lineNumber, startLocation.columnNumber, endLocation.lineNumber, endLocation.columnNumber);
+            return Promise.resolve(/** @type {!Array<!WebInspector.SourceMapNamesResolver.Identifier>}*/([]));
 
         var text = new WebInspector.Text(content);
-        var scopeText = text.extract(textRange);
-        var scopeStart = text.toSourceRange(textRange).offset;
+        var scopeRange = new WebInspector.TextRange(startLocation.lineNumber, startLocation.columnNumber, endLocation.lineNumber, endLocation.columnNumber)
+        var scopeText = text.extract(scopeRange);
+        var scopeStart = text.toSourceRange(scopeRange).offset;
         var prefix = "function fui";
-
-        return WebInspector.SourceMapNamesResolverWorker._instance().javaScriptIdentifiers(prefix + scopeText)
+        return WebInspector.formatterWorkerPool.runTask("javaScriptIdentifiers", {content: prefix + scopeText})
             .then(onIdentifiers.bind(null, text, scopeStart, prefix));
     }
 
@@ -62,29 +57,126 @@ WebInspector.SourceMapNamesResolver._resolveScope = function(scope)
      * @param {!WebInspector.Text} text
      * @param {number} scopeStart
      * @param {string} prefix
-     * @param {!Array<!{name: string, offset: number}>} identifiers
-     * @return {!Map<string, string>}
+     * @param {?MessageEvent} event
+     * @return {!Array<!WebInspector.SourceMapNamesResolver.Identifier>}
      */
-    function onIdentifiers(text, scopeStart, prefix, identifiers)
+    function onIdentifiers(text, scopeStart, prefix, event)
     {
-        var namesMapping = new Map();
-        var lineEndings = text.lineEndings();
-
+        var identifiers = event ? /** @type {!Array<!{name: string, offset: number}>} */(event.data) : [];
+        var result = [];
+        var cursor = new WebInspector.TextCursor(text.lineEndings());
+        var promises = [];
         for (var i = 0; i < identifiers.length; ++i) {
             var id = identifiers[i];
+            if (id.offset < prefix.length)
+                continue;
             var start = scopeStart + id.offset - prefix.length;
+            cursor.resetTo(start);
+            result.push(new WebInspector.SourceMapNamesResolver.Identifier(id.name, cursor.lineNumber(), cursor.columnNumber()));
+        }
+        return result;
+    }
+}
 
-            var lineNumber = lineEndings.lowerBound(start);
-            var columnNumber = start - (lineNumber === 0 ? 0 : (lineEndings[lineNumber - 1] + 1));
-            var entry = sourceMap.findEntry(lineNumber, columnNumber);
-            if (entry)
+/**
+ * @param {!WebInspector.DebuggerModel.Scope} scope
+ * @return {!Promise.<!Map<string, string>>}
+ */
+WebInspector.SourceMapNamesResolver._resolveScope = function(scope)
+{
+    var identifiersPromise = scope[WebInspector.SourceMapNamesResolver._cachedIdentifiersSymbol];
+    if (identifiersPromise)
+        return identifiersPromise;
+
+    var script = scope.callFrame().script;
+    var sourceMap = WebInspector.debuggerWorkspaceBinding.sourceMapForScript(script);
+    if (!sourceMap)
+        return Promise.resolve(new Map());
+
+    /** @type {!Map<string, !WebInspector.Text>} */
+    var textCache = new Map();
+    identifiersPromise = WebInspector.SourceMapNamesResolver._scopeIdentifiers(scope).then(onIdentifiers);
+    scope[WebInspector.SourceMapNamesResolver._cachedIdentifiersSymbol] = identifiersPromise;
+    return identifiersPromise;
+
+    /**
+     * @param {!Array<!WebInspector.SourceMapNamesResolver.Identifier>} identifiers
+     * @return {!Promise<!Map<string, string>>}
+     */
+    function onIdentifiers(identifiers)
+    {
+        var namesMapping = new Map();
+        // Extract as much as possible from SourceMap.
+        for (var i = 0; i < identifiers.length; ++i) {
+            var id = identifiers[i];
+            var entry = sourceMap.findEntry(id.lineNumber, id.columnNumber);
+            if (entry && entry.name)
                 namesMapping.set(id.name, entry.name);
         }
 
-        scope[WebInspector.SourceMapNamesResolver._cachedMapSymbol] = namesMapping;
-        delete scope[WebInspector.SourceMapNamesResolver._cachedPromiseSymbol];
-        WebInspector.SourceMapNamesResolver._scopeResolvedForTest();
-        return namesMapping;
+        // Resolve missing identifier names from sourcemap ranges.
+        var promises = [];
+        for (var i = 0; i < identifiers.length; ++i) {
+            var id = identifiers[i];
+            if (namesMapping.has(id.name))
+                continue;
+            var promise = resolveSourceName(id).then(onSourceNameResolved.bind(null, namesMapping, id));
+            promises.push(promise);
+        }
+        return Promise.all(promises)
+            .then(() => WebInspector.SourceMapNamesResolver._scopeResolvedForTest())
+            .then(() => namesMapping)
+    }
+
+    /**
+     * @param {!Map<string, string>} namesMapping
+     * @param {!WebInspector.SourceMapNamesResolver.Identifier} id
+     * @param {?string} sourceName
+     */
+    function onSourceNameResolved(namesMapping, id, sourceName)
+    {
+        if (!sourceName)
+            return;
+        namesMapping.set(id.name, sourceName);
+    }
+
+    /**
+     * @param {!WebInspector.SourceMapNamesResolver.Identifier} id
+     * @return {!Promise<?string>}
+     */
+    function resolveSourceName(id)
+    {
+        var startEntry = sourceMap.findEntry(id.lineNumber, id.columnNumber);
+        var endEntry = sourceMap.findEntry(id.lineNumber, id.columnNumber + id.name.length);
+        if (!startEntry || !endEntry || !startEntry.sourceURL || startEntry.sourceURL !== endEntry.sourceURL
+            || !startEntry.sourceLineNumber || !startEntry.sourceColumnNumber
+            || !endEntry.sourceLineNumber || !endEntry.sourceColumnNumber)
+            return Promise.resolve(/** @type {?string} */(null));
+        var sourceTextRange = new WebInspector.TextRange(startEntry.sourceLineNumber, startEntry.sourceColumnNumber, endEntry.sourceLineNumber, endEntry.sourceColumnNumber);
+        var uiSourceCode = WebInspector.networkMapping.uiSourceCodeForScriptURL(startEntry.sourceURL, script);
+        if (!uiSourceCode)
+            return Promise.resolve(/** @type {?string} */(null));
+
+        return uiSourceCode.requestContent()
+            .then(onSourceContent.bind(null, sourceTextRange));
+    }
+
+    /**
+     * @param {!WebInspector.TextRange} sourceTextRange
+     * @param {?string} content
+     * @return {?string}
+     */
+    function onSourceContent(sourceTextRange, content)
+    {
+        if (!content)
+            return null;
+        var text = textCache.get(content);
+        if (!text) {
+            text = new WebInspector.Text(content);
+            textCache.set(content, text);
+        }
+        var originalIdentifier = text.extract(sourceTextRange).trim();
+        return /[a-zA-Z0-9_$]+/.test(originalIdentifier) ? originalIdentifier : null;
     }
 }
 
@@ -151,7 +243,7 @@ WebInspector.SourceMapNamesResolver.resolveExpression = function(callFrame, orig
         if (reverseMapping.has(originalText))
             return Promise.resolve(reverseMapping.get(originalText) || "");
 
-        return WebInspector.SourceMapNamesResolver._resolveExpression(callFrame, uiSourceCode, lineNumber, startColumnNumber, endColumnNumber)
+        return WebInspector.SourceMapNamesResolver._resolveExpression(callFrame, uiSourceCode, lineNumber, startColumnNumber, endColumnNumber);
     }
 }
 
@@ -191,7 +283,59 @@ WebInspector.SourceMapNamesResolver._resolveExpression = function(callFrame, uiS
         var originalText = text.extract(textRange);
         if (!originalText)
             return Promise.resolve("");
-        return WebInspector.SourceMapNamesResolverWorker._instance().evaluatableJavaScriptSubstring(originalText);
+        return WebInspector.formatterWorkerPool.runTask("evaluatableJavaScriptSubstring", {content: originalText})
+            .then(onResult);
+    }
+
+    /**
+     * @param {?MessageEvent} event
+     * @return {string}
+     */
+    function onResult(event)
+    {
+        return event ? /** @type {string} */(event.data) : "";
+    }
+}
+
+/**
+ * @param {?WebInspector.DebuggerModel.CallFrame} callFrame
+ * @return {!Promise<?WebInspector.RemoteObject>}
+ */
+WebInspector.SourceMapNamesResolver.resolveThisObject = function(callFrame)
+{
+    if (!callFrame)
+        return Promise.resolve(/** @type {?WebInspector.RemoteObject} */(null));
+    if (!Runtime.experiments.isEnabled("resolveVariableNames") || !callFrame.scopeChain().length)
+        return Promise.resolve(callFrame.thisObject());
+
+    return WebInspector.SourceMapNamesResolver._resolveScope(callFrame.scopeChain()[0])
+        .then(onScopeResolved);
+
+    /**
+     * @param {!Map<string, string>} namesMapping
+     * @return {!Promise<?WebInspector.RemoteObject>}
+     */
+    function onScopeResolved(namesMapping)
+    {
+        var thisMappings = namesMapping.inverse().get("this");
+        if (!thisMappings || thisMappings.size !== 1)
+            return Promise.resolve(callFrame.thisObject());
+
+        var thisMapping = thisMappings.valuesArray()[0];
+        var callback;
+        var promise = new Promise(fulfill => callback = fulfill);
+        callFrame.evaluate(thisMapping, "backtrace", false, true, false, true, onEvaluated.bind(null, callback));
+        return promise;
+    }
+
+    /**
+     * @param {function(!WebInspector.RemoteObject)} callback
+     * @param {?RuntimeAgent.RemoteObject} evaluateResult
+     */
+    function onEvaluated(callback, evaluateResult)
+    {
+        var remoteObject = evaluateResult ? callFrame.target().runtimeModel.createRemoteObject(evaluateResult) : callFrame.thisObject();
+        callback(remoteObject);
     }
 }
 
@@ -459,98 +603,3 @@ WebInspector.SourceMapNamesResolver.RemoteObject.prototype = {
     __proto__: WebInspector.RemoteObject.prototype
 }
 
-/**
- * @constructor
- */
-WebInspector.SourceMapNamesResolverWorker = function()
-{
-    this._worker = new WorkerRuntime.Worker("formatter_worker");
-    this._worker.onmessage = this._onMessage.bind(this);
-    this._methodNames = [];
-    this._contents = [];
-    this._callbacks = [];
-}
-
-WebInspector.SourceMapNamesResolverWorker.prototype = {
-    /**
-     * @param {string} text
-     * @return {!Promise<string>}
-     */
-    evaluatableJavaScriptSubstring: function(text)
-    {
-        var callback;
-        var promise = new Promise(fulfill => callback = fulfill);
-        this._methodNames.push("evaluatableJavaScriptSubstring");
-        this._contents.push(text);
-        this._callbacks.push(this._evaluatableJavaScriptSubstringCallback.bind(this, callback));
-        this._maybeRunTask();
-        return promise;
-    },
-
-    /**
-     * @param {function(string)} callback
-     * @param {!MessageEvent} event
-     */
-    _evaluatableJavaScriptSubstringCallback: function(callback, event)
-    {
-        callback.call(null, /** @type {string} */(event.data));
-    },
-
-    /**
-     * @param {string} text
-     * @return {!Promise<!Array<!{name: string, offset: number}>>}
-     */
-    javaScriptIdentifiers: function(text)
-    {
-        var callback;
-        var promise = new Promise(fulfill => callback = fulfill);
-        this._methodNames.push("javaScriptIdentifiers");
-        this._contents.push(text);
-        this._callbacks.push(this._javaScriptIdentifiersCallback.bind(this, callback));
-        this._maybeRunTask();
-        return promise;
-    },
-
-    /**
-     * @param {function(!Array<!{name: string, offset: number}>)} callback
-     * @param {!MessageEvent} event
-     */
-    _javaScriptIdentifiersCallback: function(callback, event)
-    {
-        callback.call(null, /** @type {!Array<!{name: string, offset: number}>} */(event.data));
-    },
-
-    /**
-     * @param {!MessageEvent} event
-     */
-    _onMessage: function(event)
-    {
-        var callback = this._callbacks[0];
-        this._methodNames.shift();
-        this._contents.shift();
-        this._callbacks.shift();
-        callback.call(null, event);
-        this._runningTask = false;
-        this._maybeRunTask();
-    },
-
-    _maybeRunTask: function()
-    {
-        if (this._runningTask || !this._methodNames.length)
-            return;
-        this._runningTask = true;
-        var methodName = this._methodNames[0];
-        var content = this._contents[0];
-        this._worker.postMessage({ method: methodName, params: { content: content } });
-    }
-}
-
-/**
- * @return {!WebInspector.SourceMapNamesResolverWorker}
- */
-WebInspector.SourceMapNamesResolverWorker._instance = function()
-{
-    if (!WebInspector.SourceMapNamesResolverWorker._instanceObject)
-        WebInspector.SourceMapNamesResolverWorker._instanceObject = new WebInspector.SourceMapNamesResolverWorker();
-    return WebInspector.SourceMapNamesResolverWorker._instanceObject;
-}

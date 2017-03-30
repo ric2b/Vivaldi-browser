@@ -5,9 +5,7 @@
 package org.chromium.mojo.bindings;
 
 import android.test.suitebuilder.annotation.SmallTest;
-import android.util.Log;
 
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.mojo.HandleMock;
 import org.chromium.mojo.MojoTestCase;
@@ -36,7 +34,8 @@ public class ValidationTest extends MojoTestCase {
      * The path where validation test data is.
      */
     private static final File VALIDATION_TEST_DATA_PATH =
-            new File(UrlUtils.getTestFilePath("bindings/validation"));
+            new File(UrlUtils.getIsolatedTestFilePath(
+                "mojo/public/interfaces/bindings/tests/data/validation"));
 
     /**
      * The data needed for a validation test.
@@ -60,11 +59,6 @@ public class ValidationTest extends MojoTestCase {
             if (pathname.getName().startsWith("conformance_mthd13_good_2")) {
                 return false;
             }
-            // TODO(yzshen): skip enum validation tests because the feature is
-            // not supported in Java yet. crbug.com/581392
-            if (pathname.getName().indexOf("enum") != -1) {
-                return false;
-            }
             return pathname.isFile() && pathname.getName().startsWith(mPrefix)
                     && pathname.getName().endsWith(".data");
         }
@@ -85,20 +79,23 @@ public class ValidationTest extends MojoTestCase {
             throws FileNotFoundException {
         List<TestData> results = new ArrayList<TestData>();
 
-        // Do not fail if the test data is not present.
+        // Fail if the test data is not present.
         if (!VALIDATION_TEST_DATA_PATH.isDirectory()) {
-            Log.w("ValidationTest", "No test found.");
-            return results;
+            fail("No test data directory found. "
+                    + "Expected directory at: " + VALIDATION_TEST_DATA_PATH);
         }
 
-        for (File dataFile : VALIDATION_TEST_DATA_PATH.listFiles(new DataFileFilter(prefix))) {
-            File resultFile = new File(dataFile.getParent(),
-                    dataFile.getName().replaceFirst("\\.data$", ".expected"));
-            TestData testData = new TestData();
-            testData.dataFile = dataFile;
-            testData.inputData = ValidationTestUtil.parseData(getStringContent(dataFile));
-            testData.expectedResult = getStringContent(resultFile);
-            results.add(testData);
+        File[] files = VALIDATION_TEST_DATA_PATH.listFiles(new DataFileFilter(prefix));
+        if (files != null) {
+            for (File dataFile : files) {
+                File resultFile = new File(dataFile.getParent(),
+                        dataFile.getName().replaceFirst("\\.data$", ".expected"));
+                TestData testData = new TestData();
+                testData.dataFile = dataFile;
+                testData.inputData = ValidationTestUtil.parseData(getStringContent(dataFile));
+                testData.expectedResult = getStringContent(resultFile);
+                results.add(testData);
+            }
         }
         return results;
     }
@@ -189,11 +186,8 @@ public class ValidationTest extends MojoTestCase {
 
     /**
      * Testing the conformance suite.
-     *
-     * https://crbug.com/536671
-     * @SmallTest
      */
-    @DisabledTest
+    @SmallTest
     public void testConformance() throws FileNotFoundException {
         runTest("conformance_", ConformanceTestInterface.MANAGER.buildStub(null,
                 ConformanceTestInterface.MANAGER.buildProxy(null, new SinkMessageReceiver())));
@@ -214,11 +208,8 @@ public class ValidationTest extends MojoTestCase {
 
     /**
      * Testing the integration suite for request messages.
-     *
-     * https://crbug.com/536671
-     * @SmallTest
      */
-    @DisabledTest
+    @SmallTest
     public void testIntegrationRequestMessage() throws FileNotFoundException {
         runTest("integration_intf_rqst_",
                 new RoutingMessageReceiver(IntegrationTestInterface.MANAGER.buildStub(null,
@@ -230,11 +221,8 @@ public class ValidationTest extends MojoTestCase {
 
     /**
      * Testing the integration suite for response messages.
-     *
-     * https://crbug.com/536671
-     * @SmallTest
      */
-    @DisabledTest
+    @SmallTest
     public void testIntegrationResponseMessage() throws FileNotFoundException {
         runTest("integration_intf_resp_",
                 new RoutingMessageReceiver(IntegrationTestInterface.MANAGER.buildStub(null,

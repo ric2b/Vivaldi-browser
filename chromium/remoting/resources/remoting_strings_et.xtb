@@ -34,6 +34,7 @@ Lisateavet privaatsuse kohta vaadake Google'i privaatsuseeskirjadest (http://goo
 <translation id="1779766957982586368">Sulgeb akna</translation>
 <translation id="1841799852846221389">Arvuti kaugühenduste keelamine …</translation>
 <translation id="189172778771606813">Sule navigeerimissahtel</translation>
+<translation id="1897488610212723051">Kustuta</translation>
 <translation id="195619862187186579">Klaviatuuri paigutused</translation>
 <translation id="1996161829609978754">Chrome laadib alla rakenduse Chromoting Host installerit. Kui allalaadimine on lõppenud, käitage enne jätkamist installerit.</translation>
 <translation id="2009755455353575666">Ühendamine ebaõnnestus</translation>
@@ -122,9 +123,6 @@ Host</translation>
 <translation id="3950820424414687140">Sisselogimine</translation>
 <translation id="3989511127559254552">Jätkamiseks peate esmalt oma arvutile andma laiendatud juurdepääsuload. Peate seda tegema vaid ühe korra.</translation>
 <translation id="4006787130661126000">Kui soovite Chrome Remote Desktopiga arvuti juurde pääseda, peate lubama kaugühendused.</translation>
-<translation id="4028465833180158312">• Materiaalsel disainil põhineva kasutajaliidese värskendused.
-• Kolmanda osapoole litsentside omistused.
-• Võrguühenduseta kaugarvutite teabe kuvamine.</translation>
 <translation id="405887016757208221">Kaugarvutil ei õnnestunud seanssi lähtestada. Kui probleem püsib, proovige hosti uuesti seadistada.</translation>
 <translation id="4068946408131579958">Kõik ühendused</translation>
 <translation id="409800995205263688">MÄRKUS: reegli seaded lubavad luua ühenduse ainult teie võrku kuuluvate arvutite vahel.</translation>
@@ -168,6 +166,7 @@ Desktopi host</translation>
 <translation id="4985296110227979402">Esmalt tuleb arvutis seadistada kaugjuurdepääs</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (võrguühenduseta)</translation>
 <translation id="5070121137485264635">Kaughost vajab autentimist kolmanda osapoole veebisaidil. Jätkamiseks peate andma Chrome Remote Desktopile täiendavad load juurdepääsuks sellele aadressile:</translation>
+<translation id="507204348399810022">Kas soovite kindlasti keelata kaugühendused hostiga <ph name="HOSTNAME" />?</translation>
 <translation id="5156271271724754543">Sisestage mõlemale väljale sama PIN-kood.</translation>
 <translation id="5168917394043976756">Ava navigeerimissahtel</translation>
 <translation id="5170982930780719864">Sobimatu hosti ID.</translation>
@@ -178,7 +177,6 @@ Desktopi host</translation>
 <translation id="533625276787323658">Ühegi seadmega ei saa ühendust luua</translation>
 <translation id="5363265567587775042">Paluge kasutajal, kelle arvutile soovite juurde pääseda, klõpsata nupul „<ph name="SHARE" />” ja anda teile juurdepääsukood.</translation>
 <translation id="5379087427956679853">Chrome Remote Desktop võimaldab arvutit turvaliselt veebi kaudu jagada. Mõlema kasutaja arvutis peab töötama rakendus Chrome Remote Desktop, mille leiate aadressilt <ph name="URL" />.</translation>
-<translation id="5394895745784982830">Macile (OS X 10.6 ja uuemad versioonid)</translation>
 <translation id="5397086374758643919">Chrome Remote Desktopi hosti desinstaller</translation>
 <translation id="5419185025274123272">Rakendust ei saanud lähtestada. Saate siiski saata veaaruande.</translation>
 <translation id="544077782045763683">Host on välja lülitatud.</translation>
@@ -214,6 +212,10 @@ Desktopi host</translation>
 <translation id="6324708100353784493">Lubasite Google Cardboardi integreerimise režiimi. Selle režiimi kasutamiseks sisestage oma seade Google Cardboardiga ühilduvasse vaaturisse.</translation>
 <translation id="6381670701864002291">Midagi muud.</translation>
 <translation id="6398765197997659313">Välju täisekraanilt</translation>
+<translation id="6408143143164565232">• Kuulake heli Windowsi või Linuxi arvutitest.
+• Eemaldage soovimatud ühendused, vajutades pikalt arvuti nimel.
+• Sõrmede kokku-lahku liigutamisega suumimine ja kahe sõrmega kerimine on sujuvam.
+• Uus abi ja tagasiside kuva.</translation>
 <translation id="6441316101718669559">Sellel platvormil ei toetata töölaua integreerimist. Saate rakendust kasutada, kuid kasutuskogemus on kehvem.</translation>
 <translation id="652218476070540101">Selle arvuti PIN-koodi värskendatakse ...</translation>
 <translation id="6527303717912515753">Jaga</translation>
@@ -221,6 +223,7 @@ Desktopi host</translation>
 <translation id="6542902059648396432">Probleemist teavitamine ...</translation>
 <translation id="6550675742724504774">Valikud</translation>
 <translation id="6570205395680337606">Rakenduse lähtestamine. Kaotate kogu salvestamata töö.</translation>
+<translation id="6572345186230665992">Macile (OS X Mavericks 10.9 ja uuemad versioonid)</translation>
 <translation id="6612717000975622067">Saada klahvikombinatsioon Ctrl + Alt + Del</translation>
 <translation id="6640610550128933069">viimati oli veebis <ph name="DATE" /></translation>
 <translation id="6668065415969892472">Teie PIN-kood on värskendatud.</translation>
@@ -232,7 +235,6 @@ Desktopi host</translation>
 <translation id="6930242544192836755">Kestus</translation>
 <translation id="6939719207673461467">Kuva/peida klaviatuur.</translation>
 <translation id="6944854424004126054">Akna taastamine</translation>
-<translation id="6962773374262604195">Windowsile (XP ja uuemad versioonid)</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942">Kas olete kindel, et soovite keelata kaugühenduse hostiga <ph name="HOSTNAME" />? Kui mõtlete ümber, peate selles arvutis ühendused uuesti lubama.</translation>
 <translation id="6998989275928107238">Host</translation>
@@ -288,6 +290,7 @@ Desktopi host</translation>
 <translation id="8759753423332885148">Lisateave.</translation>
 <translation id="8791202241915690908">Chromootimise hosti installiprogrammi allalaadimine</translation>
 <translation id="894763922177556086">Hea</translation>
+<translation id="895780780740011433">Windows 7-le ja uuematele versioonidele</translation>
 <translation id="897805526397249209">Muu arvutiga kaugühenduste lubamiseks installige sellesse rakendus Chromoting ja klõpsake nupul „<ph name="BUTTON_NAME" />”.</translation>
 <translation id="8998327464021325874">Chrome Remote Desktopi hosti kontroller</translation>
 <translation id="9016232822027372900">Ühenda siiski</translation>

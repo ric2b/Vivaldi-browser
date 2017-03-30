@@ -16,9 +16,7 @@
 namespace cc {
 LayerTreeHostCommonTestBase::LayerTreeHostCommonTestBase(
     const LayerTreeSettings& settings)
-    : LayerTestCommon::LayerImplTest(settings),
-      render_surface_layer_list_count_(0) {
-}
+    : LayerTestCommon::LayerImplTest(settings) {}
 
 LayerTreeHostCommonTestBase::~LayerTreeHostCommonTestBase() {
 }
@@ -31,9 +29,10 @@ void LayerTreeHostCommonTestBase::SetLayerPropertiesForTesting(
     const gfx::Size& bounds,
     bool flatten_transform,
     bool is_3d_sorted) {
-  SetLayerPropertiesForTestingInternal(layer, transform, transform_origin,
-                                       position, bounds, flatten_transform,
+  SetLayerPropertiesForTestingInternal(layer, transform, position, bounds,
                                        is_3d_sorted);
+  layer->SetTransformOrigin(transform_origin);
+  layer->SetShouldFlattenTransform(flatten_transform);
 }
 
 void LayerTreeHostCommonTestBase::SetLayerPropertiesForTesting(
@@ -44,9 +43,10 @@ void LayerTreeHostCommonTestBase::SetLayerPropertiesForTesting(
     const gfx::Size& bounds,
     bool flatten_transform,
     bool is_3d_sorted) {
-  SetLayerPropertiesForTestingInternal(layer, transform, transform_origin,
-                                       position, bounds, flatten_transform,
+  SetLayerPropertiesForTestingInternal(layer, transform, position, bounds,
                                        is_3d_sorted);
+  layer->test_properties()->transform_origin = transform_origin;
+  layer->test_properties()->should_flatten_transform = flatten_transform;
 }
 
 void LayerTreeHostCommonTestBase::SetLayerPropertiesForTesting(
@@ -58,11 +58,12 @@ void LayerTreeHostCommonTestBase::SetLayerPropertiesForTesting(
     bool flatten_transform,
     bool is_3d_sorted,
     bool create_render_surface) {
-  SetLayerPropertiesForTestingInternal(layer, transform, transform_origin,
-                                       position, bounds, flatten_transform,
+  SetLayerPropertiesForTestingInternal(layer, transform, position, bounds,
                                        is_3d_sorted);
+  layer->test_properties()->transform_origin = transform_origin;
+  layer->test_properties()->should_flatten_transform = flatten_transform;
   if (create_render_surface) {
-    layer->SetForceRenderSurface(true);
+    layer->test_properties()->force_render_surface = true;
   }
 }
 
@@ -73,7 +74,7 @@ void LayerTreeHostCommonTestBase::ExecuteCalculateDrawProperties(
     Layer* page_scale_layer,
     bool can_use_lcd_text,
     bool layers_always_allowed_lcd_text) {
-  LayerTreeHostCommon::PreCalculateMetaInformation(root_layer);
+  PropertyTreeBuilder::PreCalculateMetaInformation(root_layer);
 
   EXPECT_TRUE(page_scale_layer || (page_scale_factor == 1.f));
   gfx::Transform identity_matrix;
@@ -95,7 +96,7 @@ void LayerTreeHostCommonTestBase::ExecuteCalculateDrawProperties(
 void LayerTreeHostCommonTestBase::
     ExecuteCalculateDrawPropertiesWithPropertyTrees(Layer* root_layer) {
   DCHECK(root_layer->layer_tree_host());
-  LayerTreeHostCommon::PreCalculateMetaInformation(root_layer);
+  PropertyTreeBuilder::PreCalculateMetaInformation(root_layer);
 
   gfx::Transform identity_transform;
 
@@ -124,7 +125,6 @@ void LayerTreeHostCommonTestBase::
       outer_viewport_scroll_layer, overscroll_elasticity_layer,
       elastic_overscroll, page_scale_factor, device_scale_factor,
       gfx::Rect(device_viewport_size), identity_transform, property_trees);
-  draw_property_utils::UpdateRenderSurfaces(root_layer, property_trees);
   draw_property_utils::UpdatePropertyTrees(property_trees,
                                            can_render_to_separate_surface);
   draw_property_utils::FindLayersThatNeedUpdates(
@@ -137,7 +137,7 @@ void LayerTreeHostCommonTestBase::
 void LayerTreeHostCommonTestBase::
     ExecuteCalculateDrawPropertiesWithPropertyTrees(LayerImpl* root_layer) {
   DCHECK(root_layer->layer_tree_impl());
-  LayerTreeHostCommon::PreCalculateMetaInformationForTesting(root_layer);
+  PropertyTreeBuilder::PreCalculateMetaInformationForTesting(root_layer);
 
   gfx::Transform identity_transform;
 
@@ -188,10 +188,8 @@ void LayerTreeHostCommonTestBase::ExecuteCalculateDrawProperties(
   // We are probably not testing what is intended if the root_layer bounds are
   // empty.
   DCHECK(!root_layer->bounds().IsEmpty());
-  root_layer->layer_tree_impl()->IncrementRenderSurfaceListIdForTesting();
   LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting inputs(
-      root_layer, device_viewport_size, render_surface_layer_list_impl_.get(),
-      root_layer->layer_tree_impl()->current_render_surface_list_id());
+      root_layer, device_viewport_size, render_surface_layer_list_impl_.get());
   inputs.device_scale_factor = device_scale_factor;
   inputs.page_scale_factor = page_scale_factor;
   inputs.page_scale_layer = page_scale_layer;
@@ -199,10 +197,7 @@ void LayerTreeHostCommonTestBase::ExecuteCalculateDrawProperties(
   inputs.layers_always_allowed_lcd_text = layers_always_allowed_lcd_text;
   inputs.can_adjust_raster_scales = true;
 
-  render_surface_layer_list_count_ =
-      inputs.current_render_surface_layer_list_id;
-
-  LayerTreeHostCommon::CalculateDrawProperties(&inputs);
+  LayerTreeHostCommon::CalculateDrawPropertiesForTesting(&inputs);
 }
 
 void LayerTreeHostCommonTestBase::
@@ -214,17 +209,12 @@ void LayerTreeHostCommonTestBase::
   render_surface_layer_list_impl_.reset(new LayerImplList);
 
   DCHECK(!root_layer->bounds().IsEmpty());
-  root_layer->layer_tree_impl()->IncrementRenderSurfaceListIdForTesting();
   LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting inputs(
-      root_layer, device_viewport_size, render_surface_layer_list_impl_.get(),
-      root_layer->layer_tree_impl()->current_render_surface_list_id());
+      root_layer, device_viewport_size, render_surface_layer_list_impl_.get());
   inputs.can_adjust_raster_scales = true;
   inputs.can_render_to_separate_surface = false;
 
-  render_surface_layer_list_count_ =
-      inputs.current_render_surface_layer_list_id;
-
-  LayerTreeHostCommon::CalculateDrawProperties(&inputs);
+  LayerTreeHostCommon::CalculateDrawPropertiesForTesting(&inputs);
 }
 
 bool LayerTreeHostCommonTestBase::UpdateLayerListContains(int id) const {

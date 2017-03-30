@@ -5,6 +5,8 @@
 #include "chrome/browser/ui/webui/settings/settings_default_browser_handler.h"
 
 #include "base/bind.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/startup/default_browser_prompt.h"
 #include "chrome/common/pref_names.h"
@@ -26,10 +28,6 @@ DefaultBrowserHandler::DefaultBrowserHandler(content::WebUI* webui)
   default_browser_worker_ = new shell_integration::DefaultBrowserWorker(
       base::Bind(&DefaultBrowserHandler::OnDefaultBrowserWorkerFinished,
                  weak_ptr_factory_.GetWeakPtr()));
-  default_browser_policy_.Init(
-      prefs::kDefaultBrowserSettingEnabled, g_browser_process->local_state(),
-      base::Bind(&DefaultBrowserHandler::RequestDefaultBrowserState,
-                 base::Unretained(this), nullptr));
 }
 
 DefaultBrowserHandler::~DefaultBrowserHandler() {}
@@ -45,13 +43,29 @@ void DefaultBrowserHandler::RegisterMessages() {
                  base::Unretained(this)));
 }
 
+void DefaultBrowserHandler::OnJavascriptAllowed() {
+  default_browser_policy_.Init(
+      prefs::kDefaultBrowserSettingEnabled, g_browser_process->local_state(),
+      base::Bind(&DefaultBrowserHandler::RequestDefaultBrowserState,
+                 base::Unretained(this), nullptr));
+}
+
+void DefaultBrowserHandler::OnJavascriptDisallowed() {
+  default_browser_policy_.Destroy();
+}
+
 void DefaultBrowserHandler::RequestDefaultBrowserState(
     const base::ListValue* /*args*/) {
+  AllowJavascript();
+
   default_browser_worker_->StartCheckIsDefault();
 }
 
 void DefaultBrowserHandler::SetAsDefaultBrowser(const base::ListValue* args) {
   CHECK(!IsDisabledByPolicy(default_browser_policy_));
+
+  base::RecordAction(base::UserMetricsAction("Options_SetAsDefaultBrowser"));
+  UMA_HISTOGRAM_COUNTS("Settings.StartSetAsDefault", true);
 
   default_browser_worker_->StartSetAsDefault();
 
@@ -72,11 +86,10 @@ void DefaultBrowserHandler::OnDefaultBrowserWorkerFinished(
   base::FundamentalValue can_be_default(
       state != shell_integration::UNKNOWN_DEFAULT &&
       !IsDisabledByPolicy(default_browser_policy_) &&
-      shell_integration::CanSetAsDefaultBrowser() !=
-          shell_integration::SET_DEFAULT_NOT_ALLOWED);
+      shell_integration::CanSetAsDefaultBrowser());
 
-  web_ui()->CallJavascriptFunction("Settings.updateDefaultBrowserState",
-                                   is_default, can_be_default);
+  CallJavascriptFunction("Settings.updateDefaultBrowserState", is_default,
+                         can_be_default);
 }
 
 }  // namespace settings

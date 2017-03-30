@@ -22,7 +22,8 @@
 #include "ui/base/ime/input_method_initializer.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/ui_base_switches.h"
-#include "ui/gfx/screen.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/native_theme/native_theme_aura.h"
 #include "ui/native_theme/native_theme_dark_aura.h"
 #include "ui/views/linux_ui/linux_ui.h"
@@ -83,8 +84,11 @@ void ChromeBrowserMainExtraPartsViewsLinux::ToolkitInitialized() {
 
 void ChromeBrowserMainExtraPartsViewsLinux::PreCreateThreads() {
   ChromeBrowserMainExtraPartsViews::PreCreateThreads();
+  // TODO(varkha): The next call should not be necessary once Material Design is
+  // on unconditionally.
+  views::LinuxUI::instance()->MaterialDesignControllerReady();
   views::LinuxUI::instance()->UpdateDeviceScaleFactor(
-      gfx::Screen::GetScreen()->GetPrimaryDisplay().device_scale_factor());
+      display::Screen::GetScreen()->GetPrimaryDisplay().device_scale_factor());
 }
 
 void ChromeBrowserMainExtraPartsViewsLinux::PreProfileInit() {

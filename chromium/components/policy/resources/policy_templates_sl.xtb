@@ -2,13 +2,11 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="sl">
 <translation id="101438888985615157">Sukanje zaslona za 180 stopinj</translation>
-<translation id="1015272884520659144">Določa seznam naprav USB, za katere je dovoljena prekinitev povezave z gonilnikom jedra zaradi uporabe prek API-ja chrome.usb neposredno v spletni aplikaciji. Vnosi so pari, sestavljeni iz identifikatorja proizvajalca za USB in identifikatorja izdelka, ki omogočajo prepoznavo določene strojne opreme.
-
-      Če ta pravilnik ni nastavljen, se obravnava, da je seznam naprav USB, katerih povezavo je mogoče prekiniti, prazen.</translation>
 <translation id="1017967144265860778">Upravljanje porabe na zaslonu za prijavo</translation>
 <translation id="1019101089073227242">Nastavitev imenika za uporabniške podatke</translation>
 <translation id="1022361784792428773">ID-ji razširitev, katerih namestitev je treba uporabniku preprečiti (ali * za vse)</translation>
 <translation id="102492767056134033">Nastavitev privzetega stanja zaslonske tipkovnice na zaslonu za prijavo</translation>
+<translation id="1040446814317236570">Omogočanje odstranjevanja elementov iz URL-jev za skripte PAC (za https://)</translation>
 <translation id="1044878202534415707">Poročanje statističnih podatkov o strojni opremi, kot je poraba CPE-ja/RAM-a.
 
       Če je pravilnik onemogočen, se statistični podatki ne poročajo.
@@ -73,14 +71,6 @@
       Če pravilnik ni nastavljen ali je onemogočen, šifrirane zbirke v protokolu TLS ne bodo omogočene, sicer pa je lahko omogočen zaradi ohranjanja združljivosti z zastarelim strežnikom. To je začasen ukrep in strežnik je treba na novo konfigurirati.</translation>
 <translation id="1297182715641689552">Uporabi skript .pac za proxy</translation>
 <translation id="1304973015437969093">ID-ji razširitev/aplikacij in URL-ji posodobitev se namestijo brez obveščanja</translation>
-<translation id="1310699457130669094">Tu lahko določite URL za datoteko .pac strežnika proxy.
-
-          Ta pravilnik velja le, če ste v »Izberite, kako določiti nastavitve strežnika proxy« izbrali ročne nastavitve.
-
-         Če ste za nastavitve pravilnika za strežnik proxy izbrali drug način, tega pravilnika ne nastavljajte.
-
-          Če želite podrobnejše primere, obiščite:
-          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="1313457536529613143">Določa odstotek spremembe zakasnitve zatemnitve zaslona, kadar se zazna dejavnost uporabnika, medtem ko je zaslon v zatemnjenem načinu ali kmalu potem ko je bil izklopljen.
 
 Če je nastavljen ta pravilnik, določa odstotek spremembe zakasnitve zatemnitve zaslona, kadar se zazna dejavnost uporabnika, medtem ko je zaslon v zatemnjenem načinu ali kmalu potem ko je bil izklopljen. S prilagoditvijo zatemnitve zaslona se prilagodijo tudi zakasnitve za izklop zaslona, zaklepanje zaslona in čas nedejavnosti, tako da se ohranijo enake razdalje od prvotno nastavljene zakasnitve za zatemnitev zaslona.
@@ -165,6 +155,11 @@ Vrednost prilagoditve mora biti 100 % ali več.</translation>
 <translation id="1608755754295374538">URL-ji, ki jim bo brez poziva dovoljen dostop do naprav za zajem zvoka</translation>
 <translation id="1617235075406854669">Omogočanje brisanja zgodovine brskalnika in prenosov</translation>
 <translation id="1617384279878333801">Omogočanje dodajanja oseb v upravitelju profilov</translation>
+<translation id="163200210584085447">Vzorci na tem seznamu se bodo primerjali z varnostnim
+      izvorom zahtevajočega URL-ja. Če bo najdeno ujemanje, bo dostop
+      do naprav za zajemanje videa odobren na straneh za prijavo SAML. Če ne bo najdeno nobeno
+      ujemanje, bo dostop samodejno zavrnjen. Vzorci z nadomestnimi znaki
+      niso dovoljeni.</translation>
 <translation id="1655229863189977773">Nastavi velikost predpomnilnika diska v bajtih</translation>
 <translation id="166427968280387991">Strežnik proxy</translation>
 <translation id="1675002386741412210">Na voljo podpora za:</translation>
@@ -253,14 +248,6 @@ Vrednost prilagoditve mora biti 100 % ali več.</translation>
       Če je ta pravilnik omogočen, je v sistemski vrstici prikazan velik rdeč gumb za odjavo, ko je seja aktivna in zaslon ni zaklenjen.
 
       Če je ta pravilnik onemogočen ali ni določen, v sistemski vrstici ni velikega rdečega gumba za odjavo.</translation>
-<translation id="1942957375738056236">Tu lahko določite URL strežnika proxy.
-
-          Ta pravilnik velja samo, če ste pod »Izberite, kako določiti nastavitve strežnika proxy« izbrali ročne nastavitve.
-
-          Če ste izbrali drug način nastavljanja pravilnikov za strežnik proxy, tega pravilnika ne nastavljajte.
-
-          Več o drugih možnostih in podrobnejše primere najdete na:
-          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="1956493342242507974">Nastavitev upravljanja porabe na prijavnem zaslonu v sistemu <ph name="PRODUCT_OS_NAME" />.
 
       S tem pravilnikom lahko nastavite, kako deluje <ph name="PRODUCT_OS_NAME" />, ko uporabnik nekaj časa ni dejaven in je prikazan prijavni zaslon. Pravilnik nadzira več nastavitev. Za podrobnosti posameznih nastavitev in njihove obsege vrednosti si oglejte ustrezne pravilnike, ki v seji nadzirajo upravljanje porabe. Edini odstopanji od teh pravilnikov sta:
@@ -294,6 +281,7 @@ Vrednost prilagoditve mora biti 100 % ali več.</translation>
 <translation id="2113068765175018713">Omejitev časa dejavnosti naprave samodejnim vnovičnim zagonom</translation>
 <translation id="2127599828444728326">Dovoli obvestila na teh mestih</translation>
 <translation id="2131902621292742709">Časovni zamik zatemnitve zaslona ob napajanju iz akumulatorja</translation>
+<translation id="2134437727173969994">Dovoli zaklepanje zaslona</translation>
 <translation id="2137064848866899664">Če je ta pravilnik nastavljen, je vsak zaslon zasukan na
       določeno postavitev pri vsakem vnovičnem zagonu in pri prvi povezavi
       po spremembi vrednosti pravilnika. Uporabnik lahko po prijavi
@@ -361,6 +349,7 @@ Vrednost prilagoditve mora biti 100 % ali več.</translation>
 <translation id="2337466621458842053">Omogoča nastavitev seznama vzorcev URL-jev, s katerim se določijo, ki lahko prikazujejo slike.
 
           Če ta pravilnik ni nastavljen, bo za vsa spletna mesta uporabljena splošna privzeta vrednost iz pravilnika »DefaultImagesSetting«, kadar je ta nastavljen, ali iz uporabnikove osebne konfiguracije, kadar pravilnik »DefaultImagesSetting« ni nastavljen.</translation>
+<translation id="2366415278352956652">Omogoča predvajanje</translation>
 <translation id="2371309782685318247">Določa obdobje (v milisekundah), v katerem se izvaja poizvedba v storitvi upravljanja naprave za podatke pravilnika za napravo.
 
       Nastavitev tega pravilnika preglasi privzeto vrednost 3 ur. Veljavne vrednosti za ta pravilnik so v obsegu od 1.800.000 (30 minut) do 86.400.000 (1 dan). Vrednosti, ki niso v tem obsegu, bodo prilagojene omejitvi.
@@ -515,7 +504,6 @@ napravi konfiguriran tako, da pri samodejni prijavi ni zakasnitve, naprava pa ni
       Če ta pravilnik ni nastavljen, bo lahko uporabnik sam izbiral, ali želi uporabiti funkcijo strežnika proxy za stiskanje podatkov.</translation>
 <translation id="2587719089023392205">Nastavi <ph name="PRODUCT_NAME" /> za privzeti brskalnik</translation>
 <translation id="2592091433672667839">Trajanje nedejavnosti, preden se v maloprodajnem načinu na zaslonu za prijavo pokaže ohranjevalnik zaslona</translation>
-<translation id="260705825237536216">Konfiguriranje aplikacij ARC</translation>
 <translation id="2623014935069176671">Čakanje na začetno dejavnost uporabnika</translation>
 <translation id="262740370354162807">Omogoča pošiljanje dokumentov v storitev <ph name="CLOUD_PRINT_NAME" /></translation>
 <translation id="2633084400146331575">Vklop izgovorjave</translation>
@@ -531,6 +519,7 @@ napravi konfiguriran tako, da pri samodejni prijavi ni zakasnitve, naprava pa ni
           Ta pravilnik velja le, če je omogočen pravilnik »DefaultSearchProviderEnabled«.</translation>
 <translation id="2682225790874070339">Onemogoči Google Drive v aplikaciji Datoteke za <ph name="PRODUCT_OS_NAME" /></translation>
 <translation id="268577405881275241">Omogoči funkcijo stiskanja podatkov v strežniku proxy</translation>
+<translation id="2731627323327011390">Onemogočanje uporabe potrdil sistema <ph name="PRODUCT_OS_NAME" /> aplikacijam ARC</translation>
 <translation id="2742843273354638707">Skrivanje aplikacije Spletna trgovina Chrome in povezave v nogi na strani »Nov zavihek« in v zaganjalniku aplikacij v sistemu <ph name="PRODUCT_OS_NAME" />.
 
       Če je ta pravilnik nastavljen na »True«, so ikone skrite.
@@ -581,6 +570,22 @@ napravi konfiguriran tako, da pri samodejni prijavi ni zakasnitve, naprava pa ni
           Vsak element na tem seznamu je vzorec ujemanja v slogu razširitve (glejte http://code.google.com/chrome/extensions/match_patterns.html). Uporabniki lahko preprosto namestijo elemente s poljubnega URL-ja, ki se ujema z elementom na tem seznamu. Mesto datoteke *.crx in strani, kjer se prenos začne (tj. napotitelj), morajo dovoljevati vzorci s tega seznama.
 
           Seznam ExtensionInstallBlacklist ima prednost pred tem pravilnikom. To pomeni, da razširitve s tega seznama ni mogoče namestiti, čeprav je za namestitev uporabljeno spletno mesto na tem seznamu.</translation>
+<translation id="2813740161943223811">Ta pravilnik je zastarel, namesto njega uporabite ProxyMode.
+
+          Omogoča nastavitev strežnika proxy, ki ga uporablja <ph name="PRODUCT_NAME" />, in uporabnikom prepreči spreminjanje nastavitev strežnika proxy. Tudi aplikacije ARC bodo lahko uporabljale ta strežnik proxy.
+
+          Če izberete, da se strežnik proxy nikoli ne uporablja in se vedno vzpostavi neposredna povezava, so vse druge možnosti prezrte.
+
+          Če izberete uporabo sistemskih nastavitev strežnika proxy ali samodejno zaznavanje strežnika proxy, so vse druge možnosti prezrte.
+
+          Če izberete ročno nastavitev strežnika proxy, lahko v možnostih »Naslov ali URL strežnika proxy«, »URL datoteke .pac za proxy« in »Seznam pravil za obvod strežnika proxy, ločenih z vejicami« izberete dodatne nastavitve. Aplikacijam ARC je na voljo samo strežnik proxy HTTP z največjo prednostjo.
+
+          Podrobne primere si lahko ogledate tukaj:
+          <ph name="PROXY_HELP_URL" />.
+
+          Če omogočite to nastavitev, <ph name="PRODUCT_NAME" /> prezre vse možnosti, povezane s strežnikom proxy, navedene v ukazni vrstici.
+
+          Če ta pravilnik ni nastavljen, lahko uporabniki sami izberejo nastavitve strežnika proxy.</translation>
 <translation id="2824715612115726353">Omogoči način brez beleženja zgodovine</translation>
 <translation id="2844404652289407061">Omogoči razpoložljivost funkcije »Dotaknite se za iskanje« v pogledu vsebine brskalnika <ph name="PRODUCT_NAME" />.
 
@@ -693,6 +698,18 @@ napravi konfiguriran tako, da pri samodejni prijavi ni zakasnitve, naprava pa ni
           </translation>
 <translation id="3205825995289802549">Povečaj prvo okno brskalnika pri prvem izvajanju</translation>
 <translation id="3206731874112238027">Onemogočanje predogleda tiskanja (zastarelo)</translation>
+<translation id="3208854390109736596">Omogoča izbiro strežnika proxy, ki ga uporablja <ph name="PRODUCT_NAME" />, in uporabnikom prepreči spreminjanje nastavitev strežnika proxy. Tudi aplikacije ARC bodo lahko uporabljale ta strežnik proxy.
+
+      Če izberete, da se strežnik proxy ne uporablja in se vedno vzpostavi neposredna povezava, so vse druge možnosti prezrte.
+
+      Če izberete samodejno zaznavanje strežnika proxy, so vse druge možnosti prezrte.
+
+      Podrobne primere si lahko ogledate tukaj:
+      <ph name="PROXY_HELP_URL" />.
+
+      Če omogočite to nastavitev, <ph name="PRODUCT_NAME" /> in aplikacije ARC prezrejo vse možnosti, povezane s strežnikom proxy, navedene v ukazni vrstici.
+
+      Če teh pravilnikov ne nastavite, lahko uporabniki sami izberejo nastavitve strežnika proxy.</translation>
 <translation id="3213821784736959823">Določa, ali je v brskalniku <ph name="PRODUCT_NAME" /> uporabljen vgrajeni odjemalec DNS.
 
        Če je ta pravilnik nastavljen na »true«, bo uporabljen vgrajeni odjemalec DNS, če je na voljo.
@@ -724,6 +741,7 @@ napravi konfiguriran tako, da pri samodejni prijavi ni zakasnitve, naprava pa ni
       Če je ta nastavitev omogočena ali ni nastavljena, lahko uporabniki s preverjanjem pristnosti prek računa za Google omogočijo proxy za tiskanje v oblaku.
 
       Če je ta nastavitev onemogočena, uporabniki ne morejo omogočiti proxyja, računalnik pa tiskalnikov ne bo smel dati v skupno rabo s storitvijo <ph name="CLOUD_PRINT_NAME" />.</translation>
+<translation id="3297010562646015826">Omogoča procese prekinitve v upravitelju opravil</translation>
 <translation id="3322771899429619102">Omogoča nastavitev seznama vzorcev URL-jev, s katerim so določena mesta, ki smejo uporabljati ustvarjanje ključev. Če je vzorec URL-ja v »KeygenBlockedForUrls«, to preglasi te izjeme.
 
          Če ta pravilnik ni nastavljen, bo za vsa spletna mesta uporabljena splošna privzeta vrednost iz pravilnika »DefaultKeygenSetting«, kadar je ta nastavljen, ali iz uporabnikove osebne konfiguracije, kadar pravilnik »DefaultKeygenSetting« ni nastavljen.</translation>
@@ -746,6 +764,9 @@ napravi konfiguriran tako, da pri samodejni prijavi ni zakasnitve, naprava pa ni
 
       Če je pravilnik onemogočen, <ph name="PRODUCT_OS_NAME" /> ne omogoča sej gosta.</translation>
 <translation id="3428247105888806363">Omogoči omrežno predvidevanje</translation>
+<translation id="3449886121729668969">Določi nastavitve strežnika proxy za izdelek <ph name="PRODUCT_NAME" />. Te nastavitve strežnika proxy so na voljo tudi za aplikacije ARC.
+
+      Ta pravilnik še ni primeren za uporabo, zato ga ne uporabljajte.</translation>
 <translation id="3460784402832014830">Določa URL, ki ga iskalnik uporablja za nov zavihek s povezavami.
 
           Ta pravilnik je izbiren. Če ni nastavljen, ne bo novega zavihka s povezavami.
@@ -756,28 +777,19 @@ napravi konfiguriran tako, da pri samodejni prijavi ni zakasnitve, naprava pa ni
           Če je pravilnik nastavljen na »True«, se zakasnitve upravljanja porabe in omejitev dolžine seje ne začnejo izvajati, dokler v seji ni zaznana prva dejavnost uporabnika.
 
           Če je pravilnik nastavljen na »False« oziroma ni nastavljen, se zakasnitve upravljanja porabe in omejitev dolžine seje začnejo izvajati takoj ob začetku seje.</translation>
+<translation id="3469657928310999477"><ph name="PRODUCT_NAME" /> bo obšel vse strežnike proxy za seznam gostiteljev, naveden tukaj. Aplikacije ARC lahko ta seznam uporabljajo kot seznam za obvod pravil.
+
+           Ta pravilnik velja le, če ste v razdelku »Izberite, kako določiti nastavitve strežnika proxy« izbrali ročne nastavitve strežnika proxy.
+
+          Če ste za nastavitve pravilnika za strežnik proxy izbrali drug način, tega pravilnika ne nastavljajte.
+
+          Če želite podrobnejše primere, obiščite:
+          <ph name="PROXY_HELP_URL" />.</translation>
 <translation id="3478024346823118645">Ob odjavi izbriši uporabniške podatke</translation>
 <translation id="348495353354674884">Omogoči navidezno tipkovnico</translation>
 <translation id="3496296378755072552">Upravitelj gesel</translation>
 <translation id="349667858031092827">Časovnega pasu nikoli ne zaznaj samodejno.</translation>
-<translation id="3502472987829488885">Omogoča izbiro strežnika proxy, ki naj ga uporabljajo <ph name="PRODUCT_NAME" /> in aplikacije ARC ter uporabnikom prepreči spreminjanje nastavitev strežnika proxy.
-
-          Če izberete, da se proxy nikoli ne uporablja in se vedno vzpostavi neposredna povezava, so vse druge možnosti prezrte. Aplikacije ARC uporabljajo privzeti strežnik proxy trenutnega omrežja.
-
-          Če izberete sistemske nastavitve strežnika proxy, so vse druge možnosti prezrte. Aplikacije ARC uporabljajo privzeti strežnik proxy trenutnega omrežja.
-
-          Če izberete samodejno zaznavanje strežnika proxy, so vse druge možnosti prezrte.
-
-          Če izberete fiksni način strežnika proxy, lahko v možnostih »Naslov ali URL strežnika proxy« in »Seznam pravil za obvod strežnika proxy, ločenih z vejicami« izberete dodatne nastavitve. Aplikacije ARC bodo uporabljale samo strežnik proxy HTTP z največjo prednostjo.
-
-          Če za strežnik proxy izberete uporabo skripta .pac, morate v možnosti »URL datoteke .pac za strežnik proxy« navesti URL skripta.
-
-          Podrobne primere si lahko ogledate tukaj:
-          <ph name="PROXY_HELP_URL" />
-
-          Če omogočite to nastavitev, <ph name="PRODUCT_NAME" /> in aplikacije ARC prezrejo vse možnosti, povezane s strežnikom proxy, navedene v ukazni vrstici.
-
-          Če ta pravilnik ni nastavljen, lahko uporabniki sami izberejo nastavitve strežnika proxy.</translation>
+<translation id="350443680860256679">Konfiguriranje ARC-a</translation>
 <translation id="3504791027627803580">Določa URL iskalnika, ki se uporabi za slikovno iskanje. Iskalne poizvedbe se pošljejo z metodo GET. Če je nastavljen pravilnik DefaultSearchProviderImageURLPostParams, se zahteve za slikovno iskanje pošljejo z metodo POST.
 
           Ta pravilnik je izbiren. Če ni nastavljen, se ne uporabi nobeno slikovno iskanje.
@@ -902,6 +914,7 @@ napravi konfiguriran tako, da pri samodejni prijavi ni zakasnitve, naprava pa ni
 <translation id="3967075520570946456">Omogočanje prikaza pozdravne strani ob prvem zagonu brskalnika po nadgradnji operacijskega sistema</translation>
 <translation id="3973371701361892765">Nikoli samodejno ne skrij police</translation>
 <translation id="3984028218719007910">Določa, ali <ph name="PRODUCT_OS_NAME" /> po odjavi ohrani lokalne podatke o računu. Če je pravilnik omogočen, <ph name="PRODUCT_OS_NAME" /> ne shrani trajnih računov in vsi podatki seje uporabnika se po odjavi izbrišejo. Če je pravilnik onemogočen ali ni nastavljen, lahko naprava hrani (šifrirane) lokalne podatke uporabnikov.</translation>
+<translation id="3997519162482760140">URL-ji, ki jim bo odobren dostop do naprav za zajem videa na straneh za prijavo SAML</translation>
 <translation id="4001275826058808087">Skrbniki za IT, ki upravljajo naprave v podjetju, lahko s to zastavico določijo, ali je uporabnikom dovoljeno unovčiti ponudbe prek registracije sistema Chrome OS.
 
       Če je vrednost pravilnika nastavljena na »true« ali pravilnik ni nastavljen, lahko uporabniki unovčijo ponudbe prek registracije sistema Chrome OS.
@@ -927,22 +940,6 @@ napravi konfiguriran tako, da pri samodejni prijavi ni zakasnitve, naprava pa ni
           Če je ta pravilnik nastavljen na »Ohrani piškotke za obdobje trajanja seje«, se ob zaprtju seje piškotki izbrišejo. Če se <ph name="PRODUCT_NAME" /> izvaja v ozadju, se seja ob zaprtju zadnjega okna morda ne bo zaprla. Več informacij o konfiguriranju tega delovanja je na voljo v pravilniku »BackgroundModeEnabled«.
 
           Če ta pravilnik ni nastavljen, se uporabi »AllowCookies« in uporabnik bo lahko to spremenil.</translation>
-<translation id="4098957623809244159">Ta pravilnik je zastarel, namesto njega uporabite ProxyMode.
-
-          Omogoča nastavitev strežnika proxy, ki ga uporabljajo <ph name="PRODUCT_NAME" /> in aplikacije ARC, ter uporabnikom prepreči spreminjanje nastavitev strežnika proxy.
-
-          Če izberete, da se proxy nikoli ne uporablja in se vedno vzpostavi neposredna povezava, so vse druge možnosti prezrte.
-
-          Če izberete uporabo sistemskih nastavitev strežnika proxy ali samodejno zaznavanje strežnika proxy, so vse druge možnosti prezrte.
-
-          Če izberete ročno nastavitev strežnika proxy, lahko v možnostih »Naslov ali URL strežnika proxy«, »URL datoteke .pac za proxy« in »Seznam pravil za obvod strežnika proxy, ločenih z vejicami« izberete dodatne nastavitve.
-
-          Podrobne primere si lahko ogledate tukaj:
-          <ph name="PROXY_HELP_URL" />
-
-          Če omogočite to nastavitev, <ph name="PRODUCT_NAME" /> prezre vse možnosti, povezane s strežnikom proxy, navedene v ukazni vrstici.
-
-          Če ta pravilnik ni nastavljen, lahko uporabniki sami izberejo nastavitve strežnika proxy.</translation>
 <translation id="4103289232974211388">Preusmeritev na SAML IdP po potrditvi uporabnika</translation>
 <translation id="410478022164847452">Določa trajanje uporabnikove nedejavnosti, po preteku katere se izvede dejanje ob nedejavnosti, če se naprava napaja iz električnega omrežja.
 
@@ -951,6 +948,9 @@ napravi konfiguriran tako, da pri samodejni prijavi ni zakasnitve, naprava pa ni
           Če pravilnik ni nastavljen, velja privzeto trajanje.
 
           Vrednost pravilnika naj bo navedena v milisekundah.</translation>
+<translation id="4115096483386877940">Dovoli zaklepanje zaslona.
+
+      Če je ta pravilnik onemogočen, uporabniki ne bodo mogli zakleniti zaslona (mogoča bo samo odjava iz uporabniške seje). Če je ta nastavitev omogočena ali nastavljena, bodo lahko zaslon zaklenili uporabniki, ki so preverili pristnost z geslom.</translation>
 <translation id="4121350739760194865">Onemogoči prikaz oglasov za programe na strani »Nov zavihek«.</translation>
 <translation id="4147054660081653009">Potrdilo odjemalca za vzpostavljanje povezave s tem: RemoteAccessHostTokenValidationUrl.
 
@@ -1026,6 +1026,7 @@ Vrednost pravilnika mora vedno biti navedena v sekundah. Vrednosti so navzdol om
 <translation id="4449545651113180484">Sukanje zaslona v smeri urnega kazalca za 270 stopinj</translation>
 <translation id="4467952432486360968">Blokiraj piškotke drugih spletnih mest</translation>
 <translation id="4474167089968829729">Omogočanje shranjevanja gesel v upravitelju gesel</translation>
+<translation id="447686899376429408">Če je pravilnik omogočen ali ni nastavljen, bo uporabnikom omogočeno predvajanje vsebine zavihkov, spletnih mest ali namizja iz brskalnika. Če je onemogočen, bo ta možnost onemogočena.</translation>
 <translation id="4480694116501920047">Uveljavitev Google Varnega iskanja</translation>
 <translation id="4482640907922304445">Pokaže gumb za domačo stran v orodni vrstici brskalnika <ph name="PRODUCT_NAME" />.
 
@@ -1263,11 +1264,6 @@ Vrednost pravilnika mora vedno biti navedena v sekundah. Vrednosti so navzdol om
 <translation id="5307432759655324440">Razpoložljivost načina brez beleženja zgodovine</translation>
 <translation id="5318185076587284965">Gostitelju oddaljenega dostopa omogoči uporabo posredovalnih strežnikov</translation>
 <translation id="5330684698007383292">Dovoli, da <ph name="PRODUCT_FRAME_NAME" /> obravnava te vrste vsebine.</translation>
-<translation id="5345267406698765263">Določa pravilnik za aplikacije ARC kot niz JSON, ki ga je mogoče nespremenjenega
-      posredovati izvajalniku ARC. Ta nastavitev se trenutno uporablja samo za
-      določanje vsiljene namestitve aplikacij.
-
-      Če ta pravilnik ni nastavljen, se nobena aplikacija ne namesti samodejno.</translation>
 <translation id="5365946944967967336">V orodni vrstici pokaži gumb »Domov«</translation>
 <translation id="5366977351895725771">Če pravilnik ni vklopljen, ta uporabnik ne more ustvarjati zaščitenih uporabnikov. Obstoječi zaščiteni uporabniki so še vedno na voljo.
 
@@ -1399,7 +1395,6 @@ Vrednost pravilnika mora vedno biti navedena v sekundah. Vrednosti so navzdol om
 
       Če je izbrano »Vsiljeno«, je mogoče strani odpirati SAMO v načinu brez beleženja zgodovine.</translation>
 <translation id="5836064773277134605">Omeji obseg vrat UDP, ki jih uporablja gostitelj oddaljenega dostopa</translation>
-<translation id="5845159892130426052">Omogoči API ShowModalDialog prek 2015.04.30</translation>
 <translation id="5862253018042179045">Nastavitev privzetega stanja funkcije izgovorjave za ljudi s posebnimi potrebami na prijavnem zaslonu.
 
           Če ta pravilnik vklopite, bo na prijavnem zaslonu omogočena izgovorjava.
@@ -1430,14 +1425,6 @@ Vrednost pravilnika mora vedno biti navedena v sekundah. Vrednosti so navzdol om
 <translation id="5893553533827140852">Če je ta nastavitev omogočena, bodo zahteve za preverjanje pristnosti »gnubby« posredovane prek povezave z oddaljenim gostiteljem.
 
           Če je ta nastavitev onemogočena ali ni konfigurirana, zahteve za preverjanje pristnosti »gnubby« ne bodo posredovane.</translation>
-<translation id="5900959132054596599"><ph name="PRODUCT_NAME" /> in aplikacije ARC bodo obšle vse strežnike proxy za seznam gostiteljev, naveden tukaj.
-
-          Ta pravilnik velja le, če ste v »Izberite, kako določiti nastavitve strežnika proxy« izbrali ročne nastavitve.
-
-          Če ste za nastavitve pravilnika za strežnik proxy izbrali drug način, tega pravilnika ne nastavljajte.
-
-          Če želite podrobnejše primere, obiščite:
-          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="5921713479449475707">Dovoli samoposodobitvene prenose prek HTTP</translation>
 <translation id="5921888683953999946">Nastavitev privzetega stanja funkcije velikega kazalca za ljudi s posebnimi potrebami na prijavnem zaslonu.
 
@@ -1485,6 +1472,9 @@ Vrednost pravilnika mora vedno biti navedena v sekundah. Vrednosti so navzdol om
       Ta pravilnik se velja za vse vrste nosilcev podatkov, kot so bliskovni pogoni USB, kartice SD in druge pomnilniške kartice, optični nosilci podatkov itn. Na notranji pomnilnik to ne vpliva, zato je do datotek, shranjenih v mapi »Prenosi«, še vedno mogoče dostopati.  Ta pravilnik ne vpliva tudi na Google Drive.
 
       Če je ta nastavitev onemogočena ali ni nastavljena, lahko uporabniki v svoji napravi uporabljajo vse podprte oblike zunanjega pomnilnika.</translation>
+<translation id="6076099373507468537">Določa seznam naprav USB, za katere je dovoljena prekinitev povezave z gonilnikom jedra zaradi uporabe prek API-ja chrome.usb neposredno v spletni aplikaciji. Vnosi so pari, ki so sestavljeni iz identifikatorja proizvajalca za USB in identifikatorja izdelka ter ki omogočajo prepoznavo posamezne strojne opreme.
+
+      Če ta pravilnik ni nastavljen, je seznam naprav USB, katerih povezavo je mogoče prekiniti, prazen.</translation>
 <translation id="6095999036251797924">Določi trajanje uporabnikove nedejavnosti, po preteku katere se zaslon zaklene, če se napaja iz električnega omrežja ali akumulatorja.
 
           Če je trajanje nedejavnosti nastavljeno na vrednost, večjo od nič, izraža ta vrednost čas nedejavnosti uporabnika, preden <ph name="PRODUCT_OS_NAME" /> zaklene zaslon.
@@ -1853,11 +1843,6 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
 
           Če je pravilnik »RestoreOnStartup« nastavljen, da se obnovijo URL-ji prejšnjih sej, ta pravilnik ne bo upoštevan in piškotki za ta spletna mesta bodo trajno shranjeni.</translation>
 <translation id="7207095846245296855">Uveljavi Google Varno iskanje</translation>
-<translation id="7213425178181578730">Če je ta pravilnik onemogočen, bo <ph name="PRODUCT_OS_NAME" /> onemogočil Bluetooth in ga uporabnik ne bo mogel znova omogočiti.
-
-      Če je ta pravilnik omogočen ali ni nastavljen, bo uporabnik Bluetooth lahko po želji omogočil ali onemogočil.
-
-      Če je ta pravilnik nastavljen, ga uporabnik ne more spremeniti ali preglasiti.</translation>
 <translation id="7216442368414164495">Uporabnikom dovoli prijavo za razširjeno poročanje za Varno brskanje</translation>
 <translation id="7227967227357489766">Določa seznam uporabnikov, ki se lahko prijavijo v napravo. Vnosi so v obliki <ph name="USER_WHITELIST_ENTRY_FORMAT" />, na primer <ph name="USER_WHITELIST_ENTRY_EXAMPLE" />. Če želite omogočiti poljubne uporabnike v domeni, naj bodo vnosi v obliki <ph name="USER_WHITELIST_ENTRY_WILDCARD" />.
 
@@ -1870,6 +1855,7 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
           Če pravilnik omogočite, ga lahko uporabniki začasno preglasijo tako, da omogočijo ali onemogočijo lupo, vendar ta nastavitev ni trajna in privzeta nastavitev se obnovi vsakič, ko je ponovno prikazan prijavni zaslon ali kadar je uporabnik eno minuto nedejaven na prijavnem zaslonu.
 
           Če pravilnik ni vklopljen, je lupa onemogočena, ko je prvič prikazan prijavni zaslon. Uporabniki lahko kadar koli omogočijo ali onemogočijo lupo, pri čemer se njegovo stanje na prijavnem zaslonu ohrani med uporabniki.</translation>
+<translation id="7249828445670652637">Omogočanje uporabe potrdil sistema <ph name="PRODUCT_OS_NAME" /> aplikacijam ARC</translation>
 <translation id="7258823566580374486">Omogočanje zakrivanja gostiteljev za oddaljeni dostop</translation>
 <translation id="7260277299188117560">Samodejno posodabljanje prek p2p omogočeno</translation>
 <translation id="7267809745244694722">Predstavnostne tipke privzeto delujejo kot funkcije tipke</translation>
@@ -1972,9 +1958,6 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
 
      Če to nastavitev onemogočite ali je ne nastavite, <ph name="PRODUCT_NAME" /> uporabi prednostne območne nastavitve, ki jih izbere uporabnik (če so nastavljene), sistemske območne nastavitve ali rezervne območne nastavitve (»en-US«).</translation>
 <translation id="7651739109954974365">Določa, ali je podatkovno gostovanje za napravo omogočeno. Če je pravilnik omogočen, je podatkovno gostovanje omogočeno. Če ni nastavljen ali je onemogočen, podatkovno gostovanje ni na voljo.</translation>
-<translation id="7667184304362487902">Določi nastavitve proxyja za izdelek <ph name="PRODUCT_NAME" /> in aplikacije ARC.
-
-      Ta pravilnik še ni primeren za uporabo, zato ga ne uporabljajte.</translation>
 <translation id="76810863974142048">URL, na katerem morajo odjemalci za oddaljeni dostop pridobiti žeton za preverjanje pristnosti.
 
           Če je ta pravilnik nastavljen, bo gostitelj za oddaljeni dostop zahteval, da odjemalci pridobijo žeton za preverjanje na tem URL-ju, če želijo vzpostaviti povezavo. Uporabljati ga je treba v povezavi s pravilnikom RemoteAccessHostTokenValidationUrl.
@@ -2033,6 +2016,14 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
       poročajo. Če je omogočen ali ni nastavljen, se podatki o seji
       poročajo.</translation>
 <translation id="7774768074957326919">Uporaba sistemskih nastavitev proxyja</translation>
+<translation id="7775831859772431793">Tu lahko določite URL strežnika proxy.
+
+          Ta pravilnik velja samo, če ste v razdelku »Izberite, kako določiti nastavitve strežnika proxy« izbrali ročne nastavitve.
+
+          Če ste izbrali drug način nastavljanja pravilnikov za strežnik proxy, tega pravilnika ne nastavljajte.
+
+          Več o drugih možnostih in podrobnejše primere najdete na:
+          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="7788511847830146438">Za profil</translation>
 <translation id="7796141075993499320">Omogoča nastavitev seznama vzorcev URL-jev, s katerim so določena spletna mesta, ki lahko izvajajo vtičnike.
 
@@ -2059,25 +2050,25 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
       Če ta pravilnik ni nastavljen, deluje, kot da je nastavljena možnost TimezoneAutomaticDetectionUsersDecide.
 
       Če je nastavljen pravilnik SystemTimezone, preglasi ta pravilnik. V tem primeru je samodejno zaznavanje časovnega pasu v celoti onemogočeno.</translation>
+<translation id="787125417158068494">Če je pravilnik nastavljen na »SyncDisabled« ali ni konfiguriran, potrdila sistema <ph name="PRODUCT_OS_NAME" /> niso na voljo za aplikacije ARC.
+
+      Če je pravilnik nastavljen na »CopyCaCerts«, so vsa potrdila overitelja potrdil, nameščena s pravilnikom ONC in za katera velja <ph name="WEB_TRUSTED_BIT" />, na voljo za aplikacije ARC.</translation>
 <translation id="7882585827992171421">Ta pravilnik je aktiven samo v maloprodajnem načinu.
 
       Določa ID razširitve, ki se uporabi kot ohranjevalnik zaslona na zaslonu za prijavo. Razširitev mora biti del paketa AppPack, ki je za to domeno nastavljen s pravilnikom »DeviceAppPack«.</translation>
 <translation id="7882890448959833986">Onemogočanje opozorila glede nepodprtega operacijskega sistema</translation>
 <translation id="7912255076272890813">Konfiguracija dovoljenih vrst aplikacij/razširitev</translation>
-<translation id="7928112526630078979">Omogoča izbiro strežnika proxy, ki naj ga uporabljajo <ph name="PRODUCT_NAME" /> in aplikacije ARC ter uporabnikom prepreči spreminjanje nastavitev strežnika proxy.
+<translation id="7915236031252389808">Tu lahko določite URL za datoteko .pac strežnika proxy.
 
-      Če izberete, da se strežnik proxy nikoli ne uporablja in se vedno vzpostavi neposredna povezava, so vse druge možnosti prezrte. Aplikacije ARC uporabljajo privzeti strežnik proxy trenutnega omrežja.
+          Ta pravilnik velja le, če ste v razdelku »Izberite, kako določiti nastavitve strežnika proxy« izbrali ročne nastavitve.
 
-      Če izberete samodejno zaznavanje strežnika proxy, so vse druge možnosti prezrte.
+         Če ste za nastavitve pravilnika za strežnik proxy izbrali drug način, tega pravilnika ne nastavljajte.
 
-      Podrobne primere si lahko ogledate tukaj:
-      <ph name="PROXY_HELP_URL" />
-
-      Če omogočite to nastavitev, <ph name="PRODUCT_NAME" /> in aplikacije ARC prezrejo vse možnosti, povezane s strežnikom proxy, navedene v ukazni vrstici.
-
-      Če teh pravilnikov ne nastavite, lahko uporabniki sami izberejo nastavitve strežnika proxy.</translation>
+          Če želite podrobnejše primere, obiščite:
+          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="793134539373873765">Določa, ali se za prenos posodobitvenih paketov operacijskega sistema uporablja p2p. Če je nastavljeno na »True«, naprave dajo posodobitvene pakete v skupno rabo v krajevnem omrežju in jih poskušajo uporabiti ter s tem morebiti zmanjšati uporabo internetne pasovne širine in zamašitve. Če posodobitveni paket ni na voljo v krajevnem omrežju, ga naprava poskuša prenesti iz posodobitvenegea strežnika. Če je nastavljeno na »False« ali ni nastavljeno, se uporabi p2p.</translation>
 <translation id="7933141401888114454">Omogoči ustvarjanje zaščitenih uporabnikov</translation>
+<translation id="793473937901685727">Nastavitev razpoložljivosti potrdil aplikacijam ARC</translation>
 <translation id="7936098023732125869">Omogoča uporabo privzetega ponudnika iskanja.
 
           Če omogočite to nastavitev, se izvede privzeto iskanje, ko uporabnik v naslovno vrstico vtipka besedilo, ki ni URL.
@@ -2196,6 +2187,26 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
       Če ta pravilnik ni nastavljen, bo <ph name="PRODUCT_OS_NAME" /> za prikazno ime na zaslonu za prijavo uporabil ID e-poštnega računa lokalnega računa za prijavo.
 
       Ta pravilnik ne velja za običajne uporabniške račune.</translation>
+<translation id="8279832363395120715">Iz URL-jev s protokolom https:// odstrani občutljive dele glede zasebnosti in varnosti, preden jih posreduje skriptom PAC (samodejno konfiguriranje strežnika proxy), ki jih med razreševanjem strežnika proxy uporablja <ph name="PRODUCT_NAME" />.
+
+      Če je pravilnik omogočen, je varnostna funkcija omogočena, iz URL-jev s protokolom https://
+      pa se odstranijo deli, preden se pošljejo v skript PAC. Na ta način skriptu PAC
+      niso vidni podatki, ki so običajno zaščiteni
+      s šifriranim kanalom (kot je pot in poizvedba URL-ja).
+
+      Če je pravilnik onemogočen, je varnostna funkcija onemogočena, skriptom PAC
+      pa je izrecno omogočen ogled vseh komponent URL-ja s protokolom https://.
+      To se uporabi za vse skripte PAC ne glede na izvor (vključno s tistimi,
+      ki so pridobljeni s prenosom, ki ni varen, ali odkriti z mehanizmom WPAD
+      na način, ki ni varen).
+
+      Pravilnik je privzeto omogočen (varnostna funkcija je omogočena). Izjema so uporabniki sistema OS Chrome
+      v podjetjih, za katere je pravilnik trenutno privzeto onemogočen.
+
+      Priporočamo, da pravilnik omogočite. Edini razlog za onemogočanje je,
+      če pravilnik povzroča težavo z združljivostjo z obstoječimi skripti PAC.
+
+      V prihodnje težimo k odstranitvi preglasitve.</translation>
 <translation id="8285435910062771358">Vklop lupe celozaslonskega načina</translation>
 <translation id="8294750666104911727">Običajno bodo strani, ki imajo možnost »X-UA-Compatible« nastavljeno na »chrome=1«, upodobljene v izdelku <ph name="PRODUCT_FRAME_NAME" />, ne glede na pravilnik »ChromeFrameRendererSettings«.
 
@@ -2216,6 +2227,7 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
 
       Vrednost pravilnika mora biti v milisekundah.</translation>
 <translation id="8344454543174932833">Uvoz zaznamkov privzetega brskalnika ob prvem zagonu</translation>
+<translation id="8359734107661430198">Omogočanje API-ja ExampleDeprecatedFeature API do vključno 2. 9. 2008</translation>
 <translation id="8360452361555133173">Omogoča prikaz pozdravne strani od prvem zagonu brskalnika po nadgradnji operacijskega sistema.
 
       Če je ta pravilnik omogočen ali ni nastavljen, bo brskalnik ob prvem zagonu po nadgradnji operacijskega sistema znova prikazal pozdravno stran.
@@ -2225,9 +2237,15 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
 <translation id="8382184662529825177">Omogoči uporabo oddaljenega potrjevanja za zaščito vsebine za napravo</translation>
 <translation id="838870586332499308">Omogoči podatkovno gostovanje</translation>
 <translation id="8412312801707973447">Ali se izvaja spletni pregled OCSP/CRL</translation>
+<translation id="8413348101535146315">Omogoča procese prekinitve v upravitelju opravil izdelka <ph name="PRODUCT_NAME" />.
+
+      Če je pravilnik onemogočen, je gumb za končanje procesa v upravitelju opravil onemogočen.
+
+      Če je pravilnik omogočen ali ni konfiguriran, lahko uporabnik konča procese v upravitelju opravil.</translation>
 <translation id="8424255554404582727">Nastavitev privzetega sukanja zaslona, ki se znova uveljavi pri vsakem vnovičnem zagonu</translation>
 <translation id="8426231401662877819">Sukanje zaslona v smeri urnega kazalca za 90 stopinj</translation>
 <translation id="8451988835943702790">Uporabi stran za nov zavihek kot domačo stran</translation>
+<translation id="8458790683633857482">Določa nabor pravilnikov, ki bodo posredovani izvajalniku ARC. Vrednost mora biti veljavna datoteka JSON.</translation>
 <translation id="8465065632133292531">Parametri za takojšnji URL, ki uporablja POST</translation>
 <translation id="847472800012384958">Nobenemu mestu ne dovoli prikaza pojavnih oken</translation>
 <translation id="8477885780684655676">TLS 1.0</translation>
@@ -2418,6 +2436,13 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
 
           Vrednost pravilnika naj bo navedena v milisekundah. Vrednosti morajo biti manjše od časovnega zamika nedejavnosti.</translation>
 <translation id="891435090623616439">kodirano kot niz JSON; več informacij je na voljo na <ph name="COMPLEX_POLICIES_URL" /></translation>
+<translation id="8929359433203547810">Če je ta pravilnik onemogočen, bo <ph name="PRODUCT_OS_NAME" /> onemogočil Bluetooth in ga uporabnik ne bo mogel znova omogočiti.
+
+      Če je ta pravilnik omogočen ali ni nastavljen, bo uporabnik Bluetooth lahko po želji omogočil ali onemogočil.
+
+      Če je ta pravilnik nastavljen, ga uporabnik ne more spremeniti ali preglasiti.
+
+      Ko omogočite Bluetooth, je treba napravo znova zagnati, da bodo spremembe izvedene (če Bluetooth onemogočite, naprave ni treba znova zagnati).</translation>
 <translation id="8947415621777543415">Prijava lokacije naprave</translation>
 <translation id="8951350807133946005">Nastavi imenik predpomnilnika diska</translation>
 <translation id="8955719471735800169">Nazaj na vrh</translation>
@@ -2447,6 +2472,24 @@ URL-ji, ki uporabljajo sheme s tega seznama, se ne bodo naložili in dostop do n
 <translation id="9112897538922695510">Omogoča registracijo seznama rutin za obravnavo protokolov. Ta pravilnik je lahko samo priporočen. Lastnost |protocol| mora biti nastavljena na shemo, kot je »mailto«, in lastnost |url| mora biti nastavljena na vzorec URL aplikacije, ki obravnava shemo. Vzorec lahko vsebuje »%s«. Če ga, ta nadomesti obravnavani URL.
 
           Rutine za obravnavo protokola, registrirane s pravilnikom, so združene z rutinami, ki jih registrira uporabnik, oboje pa je na voljo za uporabo. Uporabnik lahko preglasi rutine za obravnavo protokola, nameščene s pravilnikom, tako da namesti novo privzeto rutino za obravnavo protokola, vendar ne more odstraniti rutine za obravnavo protokola, registrirane s pravilnikom.</translation>
+<translation id="913138516158420759">Omogoča izbiro strežnika proxy, ki ga uporablja <ph name="PRODUCT_NAME" />, in uporabnikom prepreči spreminjanje nastavitev strežnika proxy. Tudi aplikacije ARC bodo lahko uporabljale ta strežnik proxy.
+
+          Če izberete, da se strežnik proxy ne uporablja in se vedno vzpostavi neposredna povezava, so vse druge možnosti prezrte.
+
+          Če izberete sistemske nastavitve strežnika proxy, so vse druge možnosti prezrte.
+
+          Če izberete samodejno zaznavanje strežnika proxy, so vse druge možnosti prezrte.
+
+          Če izberete fiksni način strežnika proxy, lahko v možnostih »Naslov ali URL strežnika proxy« in »Seznam pravil za obvod proxyja, ločenih z vejicami« izberete dodatne nastavitve. Za aplikacije ARC je na voljo samo strežnik proxy HTTP z največjo prednostjo.
+
+          Če za strežnik proxy izberete uporabo skripta .pac, morate v možnosti »URL datoteke .pac za strežnik proxy« navesti URL skripta.
+
+          Podrobne primere si lahko ogledate tukaj:
+          <ph name="PROXY_HELP_URL" />.
+
+          Če omogočite to nastavitev, <ph name="PRODUCT_NAME" /> in aplikacije ARC prezrejo vse možnosti, povezane s strežnikom proxy, navedene v ukazni vrstici.
+
+          Če ta pravilnik ni nastavljen, lahko uporabniki sami izberejo nastavitve strežnika proxy.</translation>
 <translation id="913195841488580904">Blokiranje dostopa do seznama spletnih naslovov</translation>
 <translation id="9135033364005346124">Omogoči proxy <ph name="CLOUD_PRINT_NAME" /></translation>
 <translation id="9147029539363974059">Pošiljanje sistemskih dnevnikov v strežnik za upravljanje, kar skrbnikom omogoča

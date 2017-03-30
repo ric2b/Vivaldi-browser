@@ -4,6 +4,7 @@
 
 #include "core/animation/TimingInput.h"
 
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/animation/AnimationInputHelpers.h"
 #include "core/animation/KeyframeEffectOptions.h"
 
@@ -40,28 +41,48 @@ void TimingInput::setFillMode(Timing& timing, const String& fillMode)
     }
 }
 
-void TimingInput::setIterationStart(Timing& timing, double iterationStart)
+bool TimingInput::setIterationStart(Timing& timing, double iterationStart, ExceptionState& exceptionState)
 {
-    if (std::isfinite(iterationStart))
-        timing.iterationStart = std::max<double>(iterationStart, 0);
-    else
-        timing.iterationStart = Timing::defaults().iterationStart;
+    ASSERT(std::isfinite(iterationStart));
+    if (std::isnan(iterationStart) || iterationStart < 0) {
+        exceptionState.throwTypeError("iterationStart must be non-negative.");
+        return false;
+    }
+    timing.iterationStart = iterationStart;
+    return true;
 }
 
-void TimingInput::setIterationCount(Timing& timing, double iterationCount)
+bool TimingInput::setIterationCount(Timing& timing, double iterationCount, ExceptionState& exceptionState)
 {
-    if (!std::isnan(iterationCount))
-        timing.iterationCount = std::max<double>(iterationCount, 0);
-    else
-        timing.iterationCount = Timing::defaults().iterationCount;
+    if (std::isnan(iterationCount) || iterationCount < 0) {
+        exceptionState.throwTypeError("iterationCount must be non-negative.");
+        return false;
+    }
+    timing.iterationCount = iterationCount;
+    return true;
 }
 
-void TimingInput::setIterationDuration(Timing& timing, double iterationDuration)
+bool TimingInput::setIterationDuration(Timing& timing, const UnrestrictedDoubleOrString& iterationDuration, ExceptionState& exceptionState)
 {
-    if (!std::isnan(iterationDuration) && iterationDuration >= 0)
-        timing.iterationDuration = iterationDuration / 1000;
-    else
-        timing.iterationDuration = Timing::defaults().iterationDuration;
+    static const char* errorMessage = "duration must be non-negative or auto.";
+
+    if (iterationDuration.isUnrestrictedDouble()) {
+        double durationNumber = iterationDuration.getAsUnrestrictedDouble();
+        if (std::isnan(durationNumber) || durationNumber < 0) {
+            exceptionState.throwTypeError(errorMessage);
+            return false;
+        }
+        timing.iterationDuration = durationNumber / 1000;
+        return true;
+    }
+
+    if (iterationDuration.getAsString() != "auto") {
+        exceptionState.throwTypeError(errorMessage);
+        return false;
+    }
+
+    timing.iterationDuration = Timing::defaults().iterationDuration;
+    return true;
 }
 
 void TimingInput::setPlaybackRate(Timing& timing, double playbackRate)
@@ -85,41 +106,45 @@ void TimingInput::setPlaybackDirection(Timing& timing, const String& direction)
     }
 }
 
-void TimingInput::setTimingFunction(Timing& timing, const String& timingFunctionString, Document* document)
+bool TimingInput::setTimingFunction(Timing& timing, const String& timingFunctionString, Document* document, ExceptionState& exceptionState)
 {
-    if (RefPtr<TimingFunction> timingFunction = AnimationInputHelpers::parseTimingFunction(timingFunctionString, document))
+    if (RefPtr<TimingFunction> timingFunction = AnimationInputHelpers::parseTimingFunction(timingFunctionString, document, exceptionState)) {
         timing.timingFunction = timingFunction;
-    else
-        timing.timingFunction = Timing::defaults().timingFunction;
+        return true;
+    }
+    return false;
 }
 
-Timing TimingInput::convert(const KeyframeEffectOptions& timingInput, Document* document)
+bool TimingInput::convert(const KeyframeEffectOptions& timingInput, Timing& timingOutput, Document* document, ExceptionState& exceptionState)
 {
-    Timing result;
+    setStartDelay(timingOutput, timingInput.delay());
+    setEndDelay(timingOutput, timingInput.endDelay());
+    setFillMode(timingOutput, timingInput.fill());
 
-    setStartDelay(result, timingInput.delay());
-    setEndDelay(result, timingInput.endDelay());
-    setFillMode(result, timingInput.fill());
-    setIterationStart(result, timingInput.iterationStart());
-    setIterationCount(result, timingInput.iterations());
-    if (timingInput.duration().isUnrestrictedDouble())
-        setIterationDuration(result, timingInput.duration().getAsUnrestrictedDouble());
-    else
-        setIterationDuration(result, -1);
-    setPlaybackRate(result, timingInput.playbackRate());
-    setPlaybackDirection(result, timingInput.direction());
-    setTimingFunction(result, timingInput.easing(), document);
+    if (!setIterationStart(timingOutput, timingInput.iterationStart(), exceptionState))
+        return false;
 
-    result.assertValid();
+    if (!setIterationCount(timingOutput, timingInput.iterations(), exceptionState))
+        return false;
 
-    return result;
+    if (!setIterationDuration(timingOutput, timingInput.duration(), exceptionState))
+        return false;
+
+    setPlaybackRate(timingOutput, timingInput.playbackRate());
+    setPlaybackDirection(timingOutput, timingInput.direction());
+
+    if (!setTimingFunction(timingOutput, timingInput.easing(), document, exceptionState))
+        return false;
+
+    timingOutput.assertValid();
+
+    return true;
 }
 
-Timing TimingInput::convert(double duration)
+bool TimingInput::convert(double duration, Timing& timingOutput, ExceptionState& exceptionState)
 {
-    Timing result;
-    setIterationDuration(result, duration);
-    return result;
+    ASSERT(timingOutput == Timing::defaults());
+    return setIterationDuration(timingOutput, UnrestrictedDoubleOrString::fromUnrestrictedDouble(duration), exceptionState);
 }
 
 } // namespace blink

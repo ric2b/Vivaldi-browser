@@ -53,13 +53,13 @@ ScriptStreamerThread* ScriptStreamerThread::shared()
     return s_sharedThread;
 }
 
-void ScriptStreamerThread::postTask(PassOwnPtr<CrossThreadClosure> task)
+void ScriptStreamerThread::postTask(std::unique_ptr<CrossThreadClosure> task)
 {
     ASSERT(isMainThread());
     MutexLocker locker(m_mutex);
     ASSERT(!m_runningTask);
     m_runningTask = true;
-    platformThread().getWebTaskRunner()->postTask(BLINK_FROM_HERE, task);
+    platformThread().getWebTaskRunner()->postTask(BLINK_FROM_HERE, std::move(task));
 }
 
 void ScriptStreamerThread::taskDone()

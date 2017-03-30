@@ -206,16 +206,6 @@ void LayoutTable::addChild(LayoutObject* child, LayoutObject* beforeChild)
     section->addChild(child);
 }
 
-void LayoutTable::addChildIgnoringContinuation(LayoutObject* newChild, LayoutObject* beforeChild)
-{
-    // We need to bypass the LayoutBlock implementation and instead do a normal addChild() (or we
-    // won't get there at all), so that any missing anonymous table part layoutObjects are
-    // inserted. Otherwise we might end up with an insane layout tree with inlines or blocks as
-    // direct children of a table, which will break assumptions made all over the code, which may
-    // lead to crashers and security issues.
-    addChild(newChild, beforeChild);
-}
-
 void LayoutTable::addCaption(const LayoutTableCaption* caption)
 {
     ASSERT(m_captions.find(caption) == kNotFound);
@@ -273,7 +263,7 @@ void LayoutTable::updateLogicalWidth()
 
     LayoutBlock* cb = containingBlock();
 
-    LayoutUnit availableLogicalWidth = containingBlockLogicalWidthForContent() + (isOutOfFlowPositioned() ? cb->paddingLogicalWidth() : LayoutUnit());
+    LayoutUnit availableLogicalWidth = containingBlockLogicalWidthForContent();
     bool hasPerpendicularContainingBlock = cb->style()->isHorizontalWritingMode() != style()->isHorizontalWritingMode();
     LayoutUnit containerWidthInInlineDirection = hasPerpendicularContainingBlock ? perpendicularContainingBlockLogicalHeight() : availableLogicalWidth;
 
@@ -292,7 +282,13 @@ void LayoutTable::updateLogicalWidth()
             availableContentLogicalWidth = shrinkLogicalWidthToAvoidFloats(marginStart, marginEnd, toLayoutBlockFlow(cb));
 
         // Ensure we aren't bigger than our available width.
-        setLogicalWidth(LayoutUnit(std::min(availableContentLogicalWidth, maxPreferredLogicalWidth()).floor()));
+        LayoutUnit maxWidth = maxPreferredLogicalWidth();
+        // scaledWidthFromPercentColumns depends on m_layoutStruct in TableLayoutAlgorithmAuto, which
+        // maxPreferredLogicalWidth fills in. So scaledWidthFromPercentColumns has to be called after
+        // maxPreferredLogicalWidth.
+        LayoutUnit scaledWidth = m_tableLayout->scaledWidthFromPercentColumns() + bordersPaddingAndSpacingInRowDirection();
+        maxWidth = std::max(scaledWidth, maxWidth);
+        setLogicalWidth(LayoutUnit(std::min(availableContentLogicalWidth, maxWidth).floor()));
     }
 
     // Ensure we aren't bigger than our max-width style.
@@ -412,6 +408,25 @@ void LayoutTable::simplifiedNormalFlowLayout()
         section->updateLayerTransformAfterLayout();
         section->addVisualEffectOverflow();
     }
+}
+
+bool LayoutTable::recalcChildOverflowAfterStyleChange()
+{
+    ASSERT(childNeedsOverflowRecalcAfterStyleChange());
+    clearChildNeedsOverflowRecalcAfterStyleChange();
+
+    // If the table sections we keep pointers to have gone away then the table will be rebuilt and
+    // overflow will get recalculated anyway so return early.
+    if (needsSectionRecalc())
+        return false;
+
+    bool childrenOverflowChanged = false;
+    for (LayoutTableSection* section = topSection(); section; section = sectionBelow(section)) {
+        if (!section->childNeedsOverflowRecalcAfterStyleChange())
+            continue;
+        childrenOverflowChanged |= section->recalcChildOverflowAfterStyleChange();
+    }
+    return childrenOverflowChanged;
 }
 
 void LayoutTable::layout()
@@ -573,7 +588,7 @@ void LayoutTable::layout()
         invalidateCollapsedBorders();
 
         computeOverflow(clientLogicalBottom());
-        updateScrollInfoAfterLayout();
+        updateAfterLayout();
     }
 
     // FIXME: This value isn't the intrinsic content logical height, but we need
@@ -634,7 +649,7 @@ void LayoutTable::addOverflowFromChildren()
         if (borderOverflowRect != pixelSnappedBorderBoxRect()) {
             LayoutRect borderLayoutRect(borderOverflowRect);
             addLayoutOverflow(borderLayoutRect);
-            addVisualOverflow(borderLayoutRect);
+            addContentsVisualOverflow(borderLayoutRect);
         }
     }
 
@@ -1318,9 +1333,9 @@ int LayoutTable::firstLineBoxBaseline() const
     return -1;
 }
 
-LayoutRect LayoutTable::overflowClipRect(const LayoutPoint& location, OverlayScrollbarSizeRelevancy relevancy) const
+LayoutRect LayoutTable::overflowClipRect(const LayoutPoint& location, OverlayScrollbarClipBehavior overlayScrollbarClipBehavior) const
 {
-    LayoutRect rect = LayoutBlock::overflowClipRect(location, relevancy);
+    LayoutRect rect = LayoutBlock::overflowClipRect(location, overlayScrollbarClipBehavior);
 
     // If we have a caption, expand the clip to include the caption.
     // FIXME: Technically this is wrong, but it's virtually impossible to fix this
@@ -1402,7 +1417,7 @@ PaintInvalidationReason LayoutTable::invalidatePaintIfNeeded(const PaintInvalida
     // Do it now instead of during painting to invalidate table cells if needed.
     recalcCollapsedBordersIfNeeded();
     if (collapseBorders() && !m_collapsedBorders.isEmpty())
-        paintInvalidationState.enclosingSelfPaintingLayer(*this).setNeedsPaintPhaseDescendantBlockBackgrounds();
+        paintInvalidationState.paintingLayer().setNeedsPaintPhaseDescendantBlockBackgrounds();
 
     return LayoutBlock::invalidatePaintIfNeeded(paintInvalidationState);
 }
@@ -1412,29 +1427,46 @@ void LayoutTable::invalidatePaintOfSubtreesIfNeeded(const PaintInvalidationState
     // Table cells paint background from the containing column group, column, section and row.
     // If background of any of them changed, we need to invalidate all affected cells.
     // Here use shouldDoFullPaintInvalidation() as a broader condition of background change.
-    for (LayoutObject* section = firstChild(); section; section = section->nextSibling()) {
-        if (!section->isTableSection())
+
+    // If any col changed background, we'll check all cells for background changes.
+    bool hasColChangedBackground = false;
+    for (LayoutTableCol* col = firstColumn(); col; col = col->nextColumn()) {
+        if (col->backgroundChangedSinceLastPaintInvalidation()) {
+            hasColChangedBackground = true;
+            break;
+        }
+    }
+    for (LayoutObject* child = firstChild(); child; child = child->nextSibling()) {
+        if (!child->isTableSection())
             continue;
-        for (LayoutTableRow* row = toLayoutTableSection(section)->firstRow(); row; row = row->nextRow()) {
+        LayoutTableSection* section = toLayoutTableSection(child);
+        if (!hasColChangedBackground && !section->shouldCheckForPaintInvalidationRegardlessOfPaintInvalidationState())
+            continue;
+        for (LayoutTableRow* row = section->firstRow(); row; row = row->nextRow()) {
+            if (!hasColChangedBackground && !section->backgroundChangedSinceLastPaintInvalidation() && !row->backgroundChangedSinceLastPaintInvalidation())
+                continue;
             for (LayoutTableCell* cell = row->firstCell(); cell; cell = cell->nextCell()) {
-                ColAndColGroup colAndColGroup = colElementAtAbsoluteColumn(cell->absoluteColumnIndex());
-                LayoutTableCol* column = colAndColGroup.col;
-                LayoutTableCol* columnGroup = colAndColGroup.colgroup;
+                bool invalidated = false;
                 // Table cells paint container's background on the container's backing instead of its own (if any),
                 // so we must invalidate it by the containers.
-                bool invalidated = false;
-                if ((columnGroup && columnGroup->shouldDoFullPaintInvalidation())
-                    || (column && column->shouldDoFullPaintInvalidation())
-                    || section->shouldDoFullPaintInvalidation()) {
+                if (section->backgroundChangedSinceLastPaintInvalidation()) {
                     section->invalidateDisplayItemClient(*cell);
                     invalidated = true;
+                } else if (hasColChangedBackground) {
+                    ColAndColGroup colAndColGroup = colElementAtAbsoluteColumn(cell->absoluteColumnIndex());
+                    LayoutTableCol* column = colAndColGroup.col;
+                    LayoutTableCol* columnGroup = colAndColGroup.colgroup;
+                    if ((columnGroup && columnGroup->backgroundChangedSinceLastPaintInvalidation())
+                        || (column && column->backgroundChangedSinceLastPaintInvalidation())) {
+                        section->invalidateDisplayItemClient(*cell);
+                        invalidated = true;
+                    }
                 }
-                if ((!invalidated || row->isPaintInvalidationContainer()) && row->shouldDoFullPaintInvalidation())
+                if ((!invalidated || row->hasSelfPaintingLayer()) && row->backgroundChangedSinceLastPaintInvalidation())
                     row->invalidateDisplayItemClient(*cell);
             }
         }
     }
-
     LayoutBlock::invalidatePaintOfSubtreesIfNeeded(childPaintInvalidationState);
 }
 

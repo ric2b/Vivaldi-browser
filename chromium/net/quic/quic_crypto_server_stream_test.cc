@@ -5,9 +5,9 @@
 #include "net/quic/quic_crypto_server_stream.h"
 
 #include <map>
+#include <memory>
 #include <vector>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/stl_util.h"
 #include "net/quic/crypto/aes_128_gcm_12_encrypter.h"
 #include "net/quic/crypto/crypto_framer.h"
@@ -24,6 +24,7 @@
 #include "net/quic/quic_session.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/delayed_verify_strike_register_client.h"
+#include "net/quic/test_tools/quic_crypto_server_config_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -39,16 +40,6 @@ using testing::_;
 
 namespace net {
 namespace test {
-
-class QuicCryptoServerConfigPeer {
- public:
-  static string GetPrimaryOrbit(const QuicCryptoServerConfig& config) {
-    base::AutoLock lock(config.configs_lock_);
-    CHECK(config.primary_config_.get() != nullptr);
-    return string(reinterpret_cast<const char*>(config.primary_config_->orbit),
-                  kOrbitSize);
-  }
-};
 
 class QuicCryptoServerStreamPeer {
  public:
@@ -82,14 +73,13 @@ class QuicCryptoServerStreamTest : public ::testing::TestWithParam<bool> {
     InitializeServer();
 
     if (AsyncStrikeRegisterVerification()) {
-      string orbit =
-          QuicCryptoServerConfigPeer::GetPrimaryOrbit(server_crypto_config_);
+      QuicCryptoServerConfigPeer peer(&server_crypto_config_);
       strike_register_client_ = new DelayedVerifyStrikeRegisterClient(
           10000,  // strike_register_max_entries
           static_cast<uint32_t>(
               server_connection_->clock()->WallNow().ToUNIXSeconds()),
           60,  // strike_register_window_secs
-          reinterpret_cast<const uint8_t*>(orbit.data()),
+          peer.GetPrimaryConfig()->orbit,
           StrikeRegister::NO_STARTUP_PERIOD_NEEDED);
       strike_register_client_->StartDelayingVerification();
       server_crypto_config_.SetStrikeRegisterClient(strike_register_client_);
@@ -102,16 +92,18 @@ class QuicCryptoServerStreamTest : public ::testing::TestWithParam<bool> {
     server_session_.reset();
     client_session_.reset();
     STLDeleteElements(&helpers_);
+    STLDeleteElements(&alarm_factories_);
   }
 
   // Initializes the crypto server stream state for testing.  May be
   // called multiple times.
   void InitializeServer() {
     TestQuicSpdyServerSession* server_session = nullptr;
-    helpers_.push_back(new MockConnectionHelper);
+    helpers_.push_back(new MockQuicConnectionHelper);
+    alarm_factories_.push_back(new MockAlarmFactory);
     CreateServerSessionForTest(
         server_id_, QuicTime::Delta::FromSeconds(100000), supported_versions_,
-        helpers_.back(), &server_crypto_config_,
+        helpers_.back(), alarm_factories_.back(), &server_crypto_config_,
         &server_compressed_certs_cache_, &server_connection_, &server_session);
     CHECK(server_session);
     server_session_.reset(server_session);
@@ -134,13 +126,14 @@ class QuicCryptoServerStreamTest : public ::testing::TestWithParam<bool> {
   // testing.  May be called multiple times.
   void InitializeFakeClient(bool supports_stateless_rejects) {
     TestQuicSpdyClientSession* client_session = nullptr;
-    helpers_.push_back(new MockConnectionHelper);
-    CreateClientSessionForTest(server_id_, supports_stateless_rejects,
-                               QuicTime::Delta::FromSeconds(100000),
-                               supported_versions_,
+    helpers_.push_back(new MockQuicConnectionHelper);
+    alarm_factories_.push_back(new MockAlarmFactory);
+    CreateClientSessionForTest(
+        server_id_, supports_stateless_rejects,
+        QuicTime::Delta::FromSeconds(100000), supported_versions_,
 
-                               helpers_.back(), &client_crypto_config_,
-                               &client_connection_, &client_session);
+        helpers_.back(), alarm_factories_.back(), &client_crypto_config_,
+        &client_connection_, &client_session);
     CHECK(client_session);
     client_session_.reset(client_session);
   }
@@ -161,8 +154,8 @@ class QuicCryptoServerStreamTest : public ::testing::TestWithParam<bool> {
     CHECK(server_connection_);
     CHECK(server_session_ != nullptr);
     return CryptoTestUtils::HandshakeWithFakeClient(
-        helpers_.back(), server_connection_, server_stream(), server_id_,
-        client_options_);
+        helpers_.back(), alarm_factories_.back(), server_connection_,
+        server_stream(), server_id_, client_options_);
   }
 
   // Performs a single round of handshake message-exchange between the
@@ -178,14 +171,17 @@ class QuicCryptoServerStreamTest : public ::testing::TestWithParam<bool> {
   }
 
  protected:
-  // Every connection gets its own MockConnectionHelper, tracked separately
-  // from the server and client state so their lifetimes persist through the
-  // whole test.
-  std::vector<MockConnectionHelper*> helpers_;
+  // Every connection gets its own MockQuicConnectionHelper and
+  // MockAlarmFactory,
+  // tracked separately from
+  // the server and client state so their lifetimes persist through the whole
+  // test.
+  std::vector<MockQuicConnectionHelper*> helpers_;
+  std::vector<MockAlarmFactory*> alarm_factories_;
 
   // Server state
   PacketSavingConnection* server_connection_;
-  scoped_ptr<TestQuicSpdyServerSession> server_session_;
+  std::unique_ptr<TestQuicSpdyServerSession> server_session_;
   QuicCryptoServerConfig server_crypto_config_;
   QuicCompressedCertsCache server_compressed_certs_cache_;
   QuicServerId server_id_;
@@ -193,10 +189,10 @@ class QuicCryptoServerStreamTest : public ::testing::TestWithParam<bool> {
   // Client state
   PacketSavingConnection* client_connection_;
   QuicCryptoClientConfig client_crypto_config_;
-  scoped_ptr<TestQuicSpdyClientSession> client_session_;
+  std::unique_ptr<TestQuicSpdyClientSession> client_session_;
 
   CryptoHandshakeMessage message_;
-  scoped_ptr<QuicData> message_data_;
+  std::unique_ptr<QuicData> message_data_;
   CryptoTestUtils::FakeClientOptions client_options_;
   DelayedVerifyStrikeRegisterClient* strike_register_client_;
 
@@ -227,6 +223,28 @@ TEST_P(QuicCryptoServerStreamTest, ConnectedAfterCHLO) {
   EXPECT_EQ(2, CompleteCryptoHandshake());
   EXPECT_TRUE(server_stream()->encryption_established());
   EXPECT_TRUE(server_stream()->handshake_confirmed());
+}
+
+TEST_P(QuicCryptoServerStreamTest, EncryptionLevelAfterCHLO) {
+  Initialize();
+  InitializeFakeClient(/* supports_stateless_rejects= */ false);
+
+  // Do a first handshake in order to prime the client config with the server's
+  // information.
+  AdvanceHandshakeWithFakeClient();
+  EXPECT_FALSE(server_stream()->encryption_established());
+  EXPECT_FALSE(server_stream()->handshake_confirmed());
+
+  // Now do another handshake, with the blocking SHLO connection option.
+  InitializeServer();
+  InitializeFakeClient(/* supports_stateless_rejects= */ false);
+  client_session_->config()->SetConnectionOptionsToSend({kIPFS});
+
+  AdvanceHandshakeWithFakeClient();
+  EXPECT_TRUE(server_stream()->encryption_established());
+  EXPECT_TRUE(server_stream()->handshake_confirmed());
+  EXPECT_EQ(ENCRYPTION_FORWARD_SECURE,
+            server_session_->connection()->encryption_level());
 }
 
 TEST_P(QuicCryptoServerStreamTest, StatelessRejectAfterCHLO) {
@@ -379,11 +397,7 @@ TEST_P(QuicCryptoServerStreamTest, ZeroRTT) {
         server_stream());
   }
 
-  if (AsyncStrikeRegisterVerification()) {
-    EXPECT_EQ(1, client_stream()->num_sent_client_hellos());
-  } else {
-    EXPECT_EQ(2, client_stream()->num_sent_client_hellos());
-  }
+  EXPECT_EQ(1, client_stream()->num_sent_client_hellos());
 }
 
 TEST_P(QuicCryptoServerStreamTest, MessageAfterHandshake) {
@@ -443,6 +457,31 @@ TEST_P(QuicCryptoServerStreamTest, OnlySendSCUPAfterHandshakeComplete) {
 
   server_stream()->SendServerConfigUpdate(nullptr);
   EXPECT_EQ(0, server_stream()->NumServerConfigUpdateMessagesSent());
+}
+
+TEST_P(QuicCryptoServerStreamTest, SendSCUPAfterHandshakeComplete) {
+  FLAGS_quic_use_hash_in_scup = true;
+  Initialize();
+
+  InitializeFakeClient(/* supports_stateless_rejects= */ false);
+
+  // Do a first handshake in order to prime the client config with the server's
+  // information.
+  AdvanceHandshakeWithFakeClient();
+
+  // Now do another handshake, with the blocking SHLO connection option.
+  InitializeServer();
+  InitializeFakeClient(/* supports_stateless_rejects= */ false);
+  AdvanceHandshakeWithFakeClient();
+
+  // Send a SCUP message and ensure that the client was able to verify it.
+  EXPECT_CALL(*client_connection_, CloseConnection(_, _, _)).Times(0);
+  server_stream()->SendServerConfigUpdate(nullptr);
+  CryptoTestUtils::AdvanceHandshake(client_connection_, client_stream(), 1,
+                                    server_connection_, server_stream(), 1);
+
+  EXPECT_EQ(1, server_stream()->NumServerConfigUpdateMessagesSent());
+  EXPECT_EQ(1, client_stream()->num_scup_messages_received());
 }
 
 TEST_P(QuicCryptoServerStreamTest, DoesPeerSupportStatelessRejects) {

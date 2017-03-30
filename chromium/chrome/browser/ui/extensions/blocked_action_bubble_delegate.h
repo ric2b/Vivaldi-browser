@@ -19,8 +19,10 @@ class BlockedActionBubbleDelegate : public ToolbarActionsBarBubbleDelegate {
 
  private:
   // ToolbarActionsBarBubbleDelegate:
+  bool ShouldShow() override;
+  bool ShouldCloseOnDeactivate() override;
   base::string16 GetHeadingText() override;
-  base::string16 GetBodyText() override;
+  base::string16 GetBodyText(bool anchored_to_action) override;
   base::string16 GetItemListText() override;
   base::string16 GetActionButtonText() override;
   base::string16 GetDismissButtonText() override;

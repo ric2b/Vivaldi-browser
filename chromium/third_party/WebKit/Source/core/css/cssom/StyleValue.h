@@ -12,6 +12,7 @@
 
 namespace blink {
 
+class ExceptionState;
 class ScriptState;
 class ScriptValue;
 
@@ -20,14 +21,20 @@ class CORE_EXPORT StyleValue : public GarbageCollectedFinalized<StyleValue>, pub
     DEFINE_WRAPPERTYPEINFO();
 public:
     enum StyleValueType {
-        KeywordType, SimpleLengthType, CalcLengthType, NumberType, TransformValueType, PositionType
+        AngleType,
+        CalcLengthType,
+        KeywordType,
+        NumberType,
+        PositionType,
+        SimpleLengthType,
+        TransformValueType,
     };
 
     virtual ~StyleValue() { }
 
     virtual StyleValueType type() const = 0;
 
-    static ScriptValue parse(ScriptState*, const String& property, const String& cssText);
+    static ScriptValue parse(ScriptState*, const String& propertyName, const String& value, ExceptionState&);
 
     virtual CSSValue* toCSSValue() const = 0;
     virtual String cssString() const

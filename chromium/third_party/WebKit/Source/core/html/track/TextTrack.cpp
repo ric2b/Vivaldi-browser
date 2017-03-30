@@ -78,24 +78,24 @@ const AtomicString& TextTrack::metadataKeyword()
 
 const AtomicString& TextTrack::disabledKeyword()
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, open, ("disabled"));
-    return open;
+    DEFINE_STATIC_LOCAL(const AtomicString, disabled, ("disabled"));
+    return disabled;
 }
 
 const AtomicString& TextTrack::hiddenKeyword()
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, closed, ("hidden"));
-    return closed;
+    DEFINE_STATIC_LOCAL(const AtomicString, hidden, ("hidden"));
+    return hidden;
 }
 
 const AtomicString& TextTrack::showingKeyword()
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, ended, ("showing"));
-    return ended;
+    DEFINE_STATIC_LOCAL(const AtomicString, showing, ("showing"));
+    return showing;
 }
 
 TextTrack::TextTrack(const AtomicString& kind, const AtomicString& label, const AtomicString& language, const AtomicString& id, TextTrackType type)
-    : TrackBase(WebMediaPlayer::TextTrack, label, language, id)
+    : TrackBase(WebMediaPlayer::TextTrack, kind, label, language, id)
     , m_cues(nullptr)
     , m_regions(nullptr)
     , m_trackList(nullptr)
@@ -106,7 +106,6 @@ TextTrack::TextTrack(const AtomicString& kind, const AtomicString& label, const 
     , m_renderedTrackIndex(invalidTrackIndex)
     , m_hasBeenConfigured(false)
 {
-    setKind(kind);
 }
 
 TextTrack::~TextTrack()
@@ -138,17 +137,9 @@ void TextTrack::setTrackList(TextTrackList* trackList)
     invalidateTrackIndex();
 }
 
-void TextTrack::setKind(const AtomicString& newKind)
+bool TextTrack::isVisualKind() const
 {
-    AtomicString oldKind = kind();
-    TrackBase::setKind(newKind);
-
-    // If kind changes from visual to non-visual and mode is 'showing', then force mode to 'hidden'.
-    // FIXME: This is not per spec. crbug.com/460923
-    if (oldKind != kind() && mode() == showingKeyword()) {
-        if (kind() != captionsKeyword() && kind() != subtitlesKeyword())
-            setMode(hiddenKeyword());
-    }
+    return kind() == subtitlesKeyword() || kind() == captionsKeyword();
 }
 
 void TextTrack::setMode(const AtomicString& mode)
@@ -414,15 +405,15 @@ void TextTrack::invalidateTrackIndex()
     m_renderedTrackIndex = invalidTrackIndex;
 }
 
-bool TextTrack::isRendered()
+bool TextTrack::isRendered() const
 {
-    if (kind() != captionsKeyword() && kind() != subtitlesKeyword())
-        return false;
+    return m_mode == showingKeyword() && isVisualKind();
+}
 
-    if (m_mode != showingKeyword())
-        return false;
-
-    return true;
+bool TextTrack::canBeRendered() const
+{
+    // A track can be displayed when it's of kind captions or subtitles and hasn't failed to load.
+    return getReadinessState() != FailedToLoad && isVisualKind();
 }
 
 TextTrackCueList* TextTrack::ensureTextTrackCueList()
@@ -476,7 +467,11 @@ DEFINE_TRACE(TextTrack)
     visitor->trace(m_regions);
     visitor->trace(m_trackList);
     TrackBase::trace(visitor);
-    RefCountedGarbageCollectedEventTargetWithInlineData<TextTrack>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
 }
 
+DEFINE_TRACE_WRAPPERS(TextTrack)
+{
+    visitor->traceWrappers(m_cues);
+}
 } // namespace blink

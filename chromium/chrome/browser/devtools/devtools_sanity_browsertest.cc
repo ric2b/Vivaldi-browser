@@ -4,12 +4,16 @@
 
 #include <stddef.h>
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/cancelable_callback.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
 #include "base/single_thread_task_runner.h"
@@ -18,7 +22,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_timeouts.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/device/tcp_device_provider.h"
@@ -38,7 +42,6 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "chrome/test/base/test_switches.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/app_modal/javascript_app_modal_dialog.h"
 #include "components/app_modal/native_app_modal_dialog.h"
@@ -64,9 +67,14 @@
 #include "extensions/common/value_builder.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
+#include "net/test/url_request/url_request_mock_http_job.h"
+#include "net/url_request/url_request_context.h"
+#include "net/url_request/url_request_filter.h"
+#include "net/url_request/url_request_http_job.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "ui/compositor/compositor_switches.h"
 #include "ui/gl/gl_switches.h"
+#include "url/gurl.h"
 
 using app_modal::AppModalDialog;
 using app_modal::JavaScriptAppModalDialog;
@@ -94,6 +102,10 @@ const char kNavigateBackTestPage[] =
 const char kWindowOpenTestPage[] = "files/devtools/window_open.html";
 const char kLatencyInfoTestPage[] = "files/devtools/latency_info.html";
 const char kChunkedTestPage[] = "chunked";
+const char kPushTestPage[] = "files/devtools/push_test_page.html";
+// The resource is not really pushed, but mock url request job pretends it is.
+const char kPushTestResource[] = "devtools/image.png";
+const char kPushUseNullEndTime[] = "pushUseNullEndTime";
 const char kSlowTestPage[] =
     "chunked?waitBeforeHeaders=100&waitBetweenChunks=100&chunksNumber=2";
 const char kSharedWorkerTestPage[] =
@@ -164,6 +176,83 @@ void SwitchToExtensionPanel(DevToolsWindow* window,
                            .as_string();
   SwitchToPanel(window, (prefix + panel_name).c_str());
 }
+
+class PushTimesMockURLRequestJob : public net::URLRequestMockHTTPJob {
+ public:
+  PushTimesMockURLRequestJob(net::URLRequest* request,
+                             net::NetworkDelegate* network_delegate,
+                             base::FilePath file_path)
+      : net::URLRequestMockHTTPJob(
+            request,
+            network_delegate,
+            file_path,
+            BrowserThread::GetBlockingPool()->GetTaskRunnerWithShutdownBehavior(
+                base::SequencedWorkerPool::SKIP_ON_SHUTDOWN)) {}
+
+  void Start() override {
+    load_timing_info_.socket_reused = true;
+    load_timing_info_.request_start_time = base::Time::Now();
+    load_timing_info_.request_start = base::TimeTicks::Now();
+    load_timing_info_.send_start = base::TimeTicks::Now();
+    load_timing_info_.send_end = base::TimeTicks::Now();
+    load_timing_info_.receive_headers_end = base::TimeTicks::Now();
+
+    net::URLRequestMockHTTPJob::Start();
+  }
+
+  void GetLoadTimingInfo(net::LoadTimingInfo* load_timing_info) const override {
+    load_timing_info_.push_start = load_timing_info_.request_start -
+                                   base::TimeDelta::FromMilliseconds(100);
+    if (load_timing_info_.push_end.is_null() &&
+        request()->url().query() != kPushUseNullEndTime) {
+      load_timing_info_.push_end = base::TimeTicks::Now();
+    }
+    *load_timing_info = load_timing_info_;
+  }
+
+ private:
+  mutable net::LoadTimingInfo load_timing_info_;
+  DISALLOW_COPY_AND_ASSIGN(PushTimesMockURLRequestJob);
+};
+
+class TestInterceptor : public net::URLRequestInterceptor {
+ public:
+  // Creates TestInterceptor and registers it with the URLRequestFilter,
+  // which takes ownership of it.
+  static void Register(const GURL& url, const base::FilePath& file_path) {
+    EXPECT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
+    net::URLRequestFilter::GetInstance()->AddHostnameInterceptor(
+        url.scheme(), url.host(),
+        base::WrapUnique(new TestInterceptor(url, file_path)));
+  }
+
+  // Unregisters previously created TestInterceptor, which should delete it.
+  static void Unregister(const GURL& url) {
+    EXPECT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
+    net::URLRequestFilter::GetInstance()->RemoveHostnameHandler(url.scheme(),
+                                                                url.host());
+  }
+
+  // net::URLRequestJobFactory::ProtocolHandler implementation:
+  net::URLRequestJob* MaybeInterceptRequest(
+      net::URLRequest* request,
+      net::NetworkDelegate* network_delegate) const override {
+    EXPECT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
+    if (request->url().path() != url_.path())
+      return nullptr;
+    return new PushTimesMockURLRequestJob(request, network_delegate,
+                                          file_path_);
+  }
+
+ private:
+  TestInterceptor(const GURL& url, const base::FilePath& file_path)
+      : url_(url), file_path_(file_path) {}
+
+  const GURL url_;
+  const base::FilePath file_path_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestInterceptor);
+};
 
 }  // namespace
 
@@ -811,7 +900,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest, DevToolsExtensionWithHttpIframe) {
   // Our extension must load an URL from the test server, whose port is only
   // known at runtime. So, to embed the URL, we must dynamically generate the
   // extension, rather than loading it from static content.
-  scoped_ptr<extensions::TestExtensionDir> dir(
+  std::unique_ptr<extensions::TestExtensionDir> dir(
       new extensions::TestExtensionDir());
 
   extensions::DictionaryBuilder manifest;
@@ -942,6 +1031,24 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestNetworkRawHeadersText) {
   RunTest("testNetworkRawHeadersText", kChunkedTestPage);
 }
 
+IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestNetworkPushTime) {
+  OpenDevToolsWindow(kPushTestPage, false);
+  GURL push_url = spawned_test_server()->GetURL(kPushTestResource);
+  base::FilePath file_path =
+      spawned_test_server()->document_root().AppendASCII(kPushTestResource);
+
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::Bind(&TestInterceptor::Register, push_url, file_path));
+
+  DispatchOnTestSuite(window_, "testPushTimes", push_url.spec().c_str());
+
+  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                          base::Bind(&TestInterceptor::Unregister, push_url));
+
+  CloseDevToolsWindow();
+}
+
 // Tests that console messages are not duplicated on navigation back.
 #if defined(OS_WIN)
 // Flaking on windows swarm try runs: crbug.com/409285.
@@ -1031,7 +1138,7 @@ class DevToolsAutoOpenerTest : public DevToolsSanityTest {
     observer_.reset(new DevToolsWindowCreationObserver());
   }
  protected:
-  scoped_ptr<DevToolsWindowCreationObserver> observer_;
+  std::unique_ptr<DevToolsWindowCreationObserver> observer_;
 };
 
 IN_PROC_BROWSER_TEST_F(DevToolsAutoOpenerTest, TestAutoOpenForTabs) {
@@ -1097,13 +1204,6 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, AutoAttachToWindowOpen) {
 }
 
 IN_PROC_BROWSER_TEST_F(WorkerDevToolsSanityTest, InspectSharedWorker) {
-#if defined(OS_WIN) && defined(USE_ASH)
-  // Disable this test in Metro+Ash for now (http://crbug.com/262796).
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshBrowserTests))
-    return;
-#endif
-
   RunTest("testSharedWorker", kSharedWorkerTestPage, kSharedWorkerTestWorker);
 }
 
@@ -1166,13 +1266,6 @@ class RemoteDebuggingTest : public ExtensionApiTest {
 #define MAYBE_RemoteDebugger RemoteDebugger
 #endif
 IN_PROC_BROWSER_TEST_F(RemoteDebuggingTest, MAYBE_RemoteDebugger) {
-#if defined(OS_WIN) && defined(USE_ASH)
-  // Disable this test in Metro+Ash for now (http://crbug.com/262796).
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshBrowserTests))
-    return;
-#endif
-
   ASSERT_TRUE(RunExtensionTest("target_list")) << message_;
 }
 
@@ -1222,7 +1315,6 @@ IN_PROC_BROWSER_TEST_F(DevToolsPixelOutputTests,
                        MAYBE_TestLatencyInfoInstrumentation) {
   WebContents* web_contents = GetInspectedTab();
   OpenDevToolsWindow(kLatencyInfoTestPage, false);
-  RunTestMethod("enableExperiment", "timelineLatencyInfo");
   DispatchAndWait("startTimeline");
 
   for (int i = 0; i < 3; ++i) {

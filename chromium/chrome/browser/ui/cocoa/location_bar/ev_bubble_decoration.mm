@@ -7,14 +7,19 @@
 #import "base/logging.h"
 #include "base/strings/sys_string_conversions.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_icon_decoration.h"
+#import "chrome/browser/ui/cocoa/themed_window.h"
 #include "grit/theme_resources.h"
 #include "skia/ext/skia_utils_mac.h"
+#import "ui/base/cocoa/nsview_additions.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/text_elider.h"
 
 namespace {
+
+// This is used to increase the right margin of this decoration.
+const CGFloat kRightSideMargin = 1.0;
 
 // TODO(shess): In general, decorations that don't fit in the
 // available space are omitted.  This one never goes to omitted, it
@@ -53,7 +58,10 @@ NSColor* ColorWithRGBBytes(int rr, int gg, int bb) {
 EVBubbleDecoration::EVBubbleDecoration(LocationIconDecoration* location_icon)
     : location_icon_(location_icon) {
   if (ui::MaterialDesignController::IsModeMaterial()) {
-    SetTextColor(GetBackgroundBorderColor());
+    // On Retina the text label is 1px above the Omnibox textfield's text
+    // baseline. If the Omnibox textfield also drew the label the baselines
+    // would align.
+    SetRetinaBaselineOffset(0.5);
   } else {
     // Color tuples stolen from location_bar_view_gtk.cc.
     SetTextColor(ColorWithRGBBytes(0x07, 0x95, 0x00));
@@ -63,12 +71,35 @@ EVBubbleDecoration::EVBubbleDecoration(LocationIconDecoration* location_icon)
 EVBubbleDecoration::~EVBubbleDecoration() {}
 
 NSColor* EVBubbleDecoration::GetBackgroundBorderColor() {
-  return skia::SkColorToCalibratedNSColor(gfx::kGoogleGreen700);
+  return skia::SkColorToSRGBNSColor(gfx::kGoogleGreen700);
 }
 
 void EVBubbleDecoration::SetFullLabel(NSString* label) {
   full_label_.reset([label retain]);
   SetLabel(full_label_);
+}
+
+void EVBubbleDecoration::DrawWithBackgroundInFrame(NSRect background_frame,
+                                                   NSRect frame,
+                                                   NSView* control_view) {
+  if (!ui::MaterialDesignController::IsModeMaterial()) {
+    BubbleDecoration::DrawWithBackgroundInFrame(background_frame, frame,
+                                                control_view);
+    return;
+  }
+
+  NSRect rect = NSInsetRect(background_frame, 0, 3);
+  rect.size.width -= kRightSideMargin;
+
+  CGFloat line_width = [control_view cr_lineWidth];
+  bool in_dark_mode = [[control_view window] inIncognitoModeWithSystemTheme];
+  // Only adjust the path rect by 1/2 the line width if it's going to be
+  // stroked (so that the stroke lines fall along pixel lines).
+  if (!in_dark_mode) {
+    rect = NSInsetRect(rect, line_width / 2., line_width / 2.);
+  }
+
+  DrawInFrame(frame, control_view);
 }
 
 NSPoint EVBubbleDecoration::GetBubblePointInFrame(NSRect frame) {

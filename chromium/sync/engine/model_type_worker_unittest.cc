@@ -91,6 +91,8 @@ class ModelTypeWorkerTest : public ::testing::Test {
   void InitializeWithState(const sync_pb::DataTypeState& state,
                            const UpdateResponseDataList& pending_updates);
 
+  ModelTypeWorker* worker() const { return worker_.get(); }
+
   // Introduce a new key that the local cryptographer can't decrypt.
   void NewForeignEncryptionKey();
 
@@ -289,7 +291,7 @@ void ModelTypeWorkerTest::InitializeWithState(
     const UpdateResponseDataList& initial_pending_updates) {
   DCHECK(!worker_);
 
-  // We don't get to own this object.  The |worker_| keeps a scoped_ptr to it.
+  // We don't get to own this object.  The |worker_| keeps a unique_ptr to it.
   mock_type_processor_ = new MockModelTypeProcessor();
   mock_type_processor_->SetDisconnectCallback(base::Bind(
       &ModelTypeWorkerTest::DisconnectProcessor, base::Unretained(this)));
@@ -696,7 +698,7 @@ TEST_F(ModelTypeWorkerTest, SimpleCommit) {
   ASSERT_TRUE(HasCommitEntityOnServer("tag1"));
   const sync_pb::SyncEntity& entity = GetLatestCommitEntityOnServer("tag1");
   EXPECT_FALSE(entity.id_string().empty());
-  EXPECT_EQ(kUncommittedVersion, entity.version());
+  EXPECT_EQ(0, entity.version());
   EXPECT_NE(0, entity.mtime());
   EXPECT_NE(0, entity.ctime());
   EXPECT_FALSE(entity.name().empty());
@@ -718,6 +720,8 @@ TEST_F(ModelTypeWorkerTest, SimpleCommit) {
 
   EXPECT_EQ(client_tag_hash, commit_response.client_tag_hash);
   EXPECT_LT(0, commit_response.response_version);
+  EXPECT_LT(0, commit_response.sequence_number);
+  EXPECT_FALSE(commit_response.specifics_hash.empty());
 }
 
 TEST_F(ModelTypeWorkerTest, SimpleDelete) {
@@ -789,6 +793,8 @@ TEST_F(ModelTypeWorkerTest, SendInitialSyncDone) {
   EXPECT_EQ(0U, GetNumModelThreadUpdateResponses());
   EXPECT_EQ(1, GetNumInitialDownloadNudges());
 
+  EXPECT_FALSE(worker()->IsInitialSyncEnded());
+
   // Receive an update response that contains only the type root node.
   TriggerTypeRootUpdateFromServer();
 
@@ -802,6 +808,7 @@ TEST_F(ModelTypeWorkerTest, SendInitialSyncDone) {
   const sync_pb::DataTypeState& state = GetNthModelThreadUpdateState(0);
   EXPECT_FALSE(state.progress_marker().token().empty());
   EXPECT_TRUE(state.initial_sync_done());
+  EXPECT_TRUE(worker()->IsInitialSyncEnded());
 }
 
 // Commit two new entities in two separate commit messages.
@@ -1096,7 +1103,7 @@ TEST_F(ModelTypeWorkerTest, RestorePendingEntries) {
   // Verify the item gets decrypted and sent back to the model thread.
   // TODO(maxbogue): crbug.com/529498: Uncomment when pending updates are
   // handled by the worker again.
-  //ASSERT_TRUE(HasUpdateResponseOnModelThread("tag1"));
+  // ASSERT_TRUE(HasUpdateResponseOnModelThread("tag1"));
 }
 
 // Test decryption of pending updates saved across a restart.  This test
@@ -1132,7 +1139,7 @@ TEST_F(ModelTypeWorkerTest, RestoreApplicableEntries) {
   // Verify the item gets decrypted and sent back to the model thread.
   // TODO(maxbogue): crbug.com/529498: Uncomment when pending updates are
   // handled by the worker again.
-  //ASSERT_TRUE(HasUpdateResponseOnModelThread("tag1"));
+  // ASSERT_TRUE(HasUpdateResponseOnModelThread("tag1"));
 }
 
 // Test that undecryptable updates provide sufficient reason to not commit.

@@ -11,6 +11,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/task_management/task_manager_observer.h"
+#include "chrome/browser/task_manager/task_manager.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/task_manager/task_manager_columns.h"
 #include "chrome/browser/ui/user_manager.h"
@@ -21,11 +22,14 @@
 #include "components/prefs/pref_service.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/table_model_observer.h"
+#include "ui/views/border.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/table/table_view.h"
+#include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/layout_constants.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/window/dialog_client_view.h"
 
 #if defined(USE_ASH)
 #include "ash/shelf/shelf_util.h"
@@ -35,7 +39,7 @@
 #endif  // defined(USE_ASH)
 
 #if defined(OS_WIN)
-#include "chrome/browser/shell_integration.h"
+#include "chrome/browser/shell_integration_win.h"
 #include "ui/base/win/shell.h"
 #include "ui/views/win/hwnd_util.h"
 #endif  // defined(OS_WIN)
@@ -54,11 +58,12 @@ NewTaskManagerView::~NewTaskManagerView() {
 }
 
 // static
-void NewTaskManagerView::Show(Browser* browser) {
+task_management::TaskManagerTableModel* NewTaskManagerView::Show(
+    Browser* browser) {
   if (g_task_manager_view) {
     // If there's a Task manager window open already, just activate it.
     g_task_manager_view->GetWidget()->Activate();
-    return;
+    return g_task_manager_view->table_model_.get();
   }
 
   g_task_manager_view = new NewTaskManagerView();
@@ -84,7 +89,7 @@ void NewTaskManagerView::Show(Browser* browser) {
   // process.
   if (browser) {
     ui::win::SetAppIdForWindow(
-        shell_integration::GetChromiumModelIdForProfile(
+        shell_integration::win::GetChromiumModelIdForProfile(
             browser->profile()->GetPath()),
         views::HWNDForWidget(g_task_manager_view->GetWidget()));
   }
@@ -105,6 +110,7 @@ void NewTaskManagerView::Show(Browser* browser) {
                                           IDR_ASH_SHELF_ICON_TASK_MANAGER,
                                           native_window->title());
 #endif
+  return g_task_manager_view->table_model_.get();
 }
 
 // static
@@ -139,22 +145,6 @@ void NewTaskManagerView::ToggleSortOrder(int visible_column_index) {
   tab_table_->ToggleSortOrder(visible_column_index);
 }
 
-void NewTaskManagerView::Layout() {
-  gfx::Size size = kill_button_->GetPreferredSize();
-  gfx::Rect parent_bounds = parent()->GetContentsBounds();
-  const int horizontal_margin = views::kPanelHorizMargin;
-  const int vertical_margin = views::kButtonVEdgeMargin;
-  int x = width() - size.width() - horizontal_margin;
-  int y_buttons = parent_bounds.bottom() - size.height() - vertical_margin;
-  kill_button_->SetBounds(x, y_buttons, size.width(), size.height());
-
-  gfx::Rect rect = GetLocalBounds();
-  rect.Inset(horizontal_margin, views::kPanelVertMargin);
-  rect.Inset(0, 0, 0,
-             kill_button_->height() + views::kUnrelatedControlVerticalSpacing);
-  tab_table_parent_->SetBoundsRect(rect);
-}
-
 gfx::Size NewTaskManagerView::GetPreferredSize() const {
   return gfx::Size(460, 270);
 }
@@ -165,37 +155,6 @@ bool NewTaskManagerView::AcceleratorPressed(
   DCHECK_EQ(ui::EF_CONTROL_DOWN, accelerator.modifiers());
   GetWidget()->Close();
   return true;
-}
-
-void NewTaskManagerView::ViewHierarchyChanged(
-    const ViewHierarchyChangedDetails& details) {
-  views::DialogDelegateView::ViewHierarchyChanged(details);
-  // Since we want the Kill button to show up in the same visual row as the
-  // close button, which is provided by the framework, we must add it to the
-  // non-client view, which is the parent of this view. Similarly, when we're
-  // removed from the view hierarchy, we must take care to clean up that item.
-  if (details.child == this) {
-    if (details.is_add) {
-      details.parent->AddChildView(kill_button_);
-      tab_table_parent_ = tab_table_->CreateParentIfNecessary();
-      AddChildView(tab_table_parent_);
-    } else {
-      details.parent->RemoveChildView(kill_button_);
-    }
-  }
-}
-
-void NewTaskManagerView::ButtonPressed(views::Button* sender,
-                                       const ui::Event& event) {
-  DCHECK_EQ(kill_button_, sender);
-
-  using SelectedIndices =  ui::ListSelectionModel::SelectedIndices;
-  SelectedIndices selection(tab_table_->selection_model().selected_indices());
-  for (SelectedIndices::const_reverse_iterator i = selection.rbegin();
-       i != selection.rend();
-       ++i) {
-    table_model_->KillTask(*i);
-  }
 }
 
 bool NewTaskManagerView::CanResize() const {
@@ -222,8 +181,40 @@ std::string NewTaskManagerView::GetWindowName() const {
   return prefs::kTaskManagerWindowPlacement;
 }
 
+bool NewTaskManagerView::Accept() {
+  using SelectedIndices = ui::ListSelectionModel::SelectedIndices;
+  SelectedIndices selection(tab_table_->selection_model().selected_indices());
+  for (SelectedIndices::const_reverse_iterator i = selection.rbegin();
+       i != selection.rend(); ++i) {
+    table_model_->KillTask(*i);
+  }
+
+  // Just kill the process, don't close the task manager dialog.
+  return false;
+}
+
+bool NewTaskManagerView::Close() {
+  return true;
+}
+
 int NewTaskManagerView::GetDialogButtons() const {
-  return ui::DIALOG_BUTTON_NONE;
+  return ui::DIALOG_BUTTON_OK;
+}
+
+base::string16 NewTaskManagerView::GetDialogButtonLabel(
+    ui::DialogButton button) const {
+  return l10n_util::GetStringUTF16(IDS_TASK_MANAGER_KILL);
+}
+
+bool NewTaskManagerView::IsDialogButtonEnabled(ui::DialogButton button) const {
+  const ui::ListSelectionModel::SelectedIndices& selections(
+      tab_table_->selection_model().selected_indices());
+  for (const auto& selection : selections) {
+    if (table_model_->IsBrowserProcess(selection))
+      return false;
+  }
+
+  return !selections.empty() && TaskManager::IsEndProcessEnabled();
 }
 
 void NewTaskManagerView::WindowClosing() {
@@ -238,7 +229,7 @@ void NewTaskManagerView::WindowClosing() {
   table_model_->StoreColumnsSettings();
 }
 
-bool NewTaskManagerView::UseNewStyleForThisDialog() const {
+bool NewTaskManagerView::ShouldUseCustomFrame() const {
   return false;
 }
 
@@ -248,18 +239,7 @@ void NewTaskManagerView::GetGroupRange(int model_index,
 }
 
 void NewTaskManagerView::OnSelectionChanged() {
-  const ui::ListSelectionModel::SelectedIndices& selections(
-      tab_table_->selection_model().selected_indices());
-  bool selection_contains_browser_process = false;
-  for (const auto& selection : selections) {
-    if (table_model_->IsBrowserProcess(selection)) {
-      selection_contains_browser_process = true;
-      break;
-    }
-  }
-
-  kill_button_->SetEnabled(!selection_contains_browser_process &&
-                           !selections.empty());
+  GetDialogClientView()->UpdateDialogButtons();
 }
 
 void NewTaskManagerView::OnDoubleClick() {
@@ -313,8 +293,7 @@ void NewTaskManagerView::ExecuteCommand(int id, int event_flags) {
 }
 
 NewTaskManagerView::NewTaskManagerView()
-    : kill_button_(nullptr),
-      tab_table_(nullptr),
+    : tab_table_(nullptr),
       tab_table_parent_(nullptr),
       is_always_on_top_(false) {
   Init();
@@ -349,20 +328,21 @@ void NewTaskManagerView::Init() {
   tab_table_->set_context_menu_controller(this);
   set_context_menu_controller(this);
 
+  tab_table_parent_ = tab_table_->CreateParentIfNecessary();
+  AddChildView(tab_table_parent_);
+
+  SetLayoutManager(new views::FillLayout());
+  SetBorder(views::Border::CreateEmptyBorder(views::kPanelVertMargin,
+                                             views::kButtonHEdgeMarginNew, 0,
+                                             views::kButtonHEdgeMarginNew));
+
   table_model_->RetrieveSavedColumnsSettingsAndUpdateTable();
-
-  kill_button_ = new views::LabelButton(this,
-      l10n_util::GetStringUTF16(IDS_TASK_MANAGER_KILL));
-  kill_button_->SetStyle(views::Button::STYLE_BUTTON);
-
-  // Makes sure our state is consistent.
-  OnSelectionChanged();
 
   AddAccelerator(ui::Accelerator(ui::VKEY_W, ui::EF_CONTROL_DOWN));
 }
 
 void NewTaskManagerView::InitAlwaysOnTopState() {
-  RetriveSavedAlwaysOnTopState();
+  RetrieveSavedAlwaysOnTopState();
   GetWidget()->SetAlwaysOnTop(is_always_on_top_);
 }
 
@@ -372,7 +352,7 @@ void NewTaskManagerView::ActivateFocusedTab() {
     table_model_->ActivateTask(active_row);
 }
 
-void NewTaskManagerView::RetriveSavedAlwaysOnTopState() {
+void NewTaskManagerView::RetrieveSavedAlwaysOnTopState() {
   is_always_on_top_ = false;
 
   if (!g_browser_process->local_state())

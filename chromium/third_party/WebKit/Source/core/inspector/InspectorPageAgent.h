@@ -45,12 +45,12 @@ class Document;
 class DocumentLoader;
 class InspectedFrames;
 class InspectorCSSAgent;
-class InspectorDebuggerAgent;
 class InspectorResourceContentLoader;
 class KURL;
 class LocalFrame;
 class SharedBuffer;
 class TextResourceDecoder;
+class V8InspectorSession;
 
 using blink::protocol::Maybe;
 
@@ -81,7 +81,7 @@ public:
         OtherResource
     };
 
-    static RawPtr<InspectorPageAgent> create(InspectedFrames*, Client*, InspectorResourceContentLoader*, InspectorDebuggerAgent*);
+    static InspectorPageAgent* create(InspectedFrames*, Client*, InspectorResourceContentLoader*, V8InspectorSession*);
 
     static HeapVector<Member<Document>> importsForFrame(LocalFrame*);
     static bool cachedResourceContent(Resource*, String* result, bool* base64Encoded);
@@ -109,6 +109,7 @@ public:
     void startScreencast(ErrorString*, const Maybe<String>& format, const Maybe<int>& quality, const Maybe<int>& maxWidth, const Maybe<int>& maxHeight, const Maybe<int>& everyNthFrame) override;
     void stopScreencast(ErrorString*) override;
     void setOverlayMessage(ErrorString*, const Maybe<String>& message) override;
+    void setBlockedEventsWarningThreshold(ErrorString*, double threshold) override;
 
     // InspectorInstrumentation API
     void didClearDocumentOfWindowObject(LocalFrame*);
@@ -125,7 +126,7 @@ public:
     void didRunJavaScriptDialog(bool result);
     void didUpdateLayout();
     void didResizeMainFrame();
-    void didRecalculateStyle(int);
+    void didRecalculateStyle();
     void windowCreated(LocalFrame*);
 
     // Inspector Controller API
@@ -135,7 +136,7 @@ public:
     DECLARE_VIRTUAL_TRACE();
 
 private:
-    InspectorPageAgent(InspectedFrames*, Client*, InspectorResourceContentLoader*, InspectorDebuggerAgent*);
+    InspectorPageAgent(InspectedFrames*, Client*, InspectorResourceContentLoader*, V8InspectorSession*);
 
     void finishReload();
     void getResourceContentAfterResourcesContentLoaded(const String& frameId, const String& url, PassOwnPtr<GetResourceContentCallback>);
@@ -146,15 +147,15 @@ private:
     PassOwnPtr<protocol::Page::Frame> buildObjectForFrame(LocalFrame*);
     PassOwnPtr<protocol::Page::FrameResourceTree> buildObjectForFrameTree(LocalFrame*);
     Member<InspectedFrames> m_inspectedFrames;
-    Member<InspectorDebuggerAgent> m_debuggerAgent;
+    V8InspectorSession* m_v8Session;
     Client* m_client;
     long m_lastScriptIdentifier;
     String m_pendingScriptToEvaluateOnLoadOnce;
     String m_scriptToEvaluateOnLoadOnce;
     bool m_enabled;
     bool m_reloading;
-
     Member<InspectorResourceContentLoader> m_inspectorResourceContentLoader;
+    int m_resourceContentLoaderClientId;
 };
 
 

@@ -11,15 +11,16 @@
 #include "base/location.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/policy/core/common/async_policy_loader.h"
 #include "components/policy/core/common/policy_bundle.h"
 #include "components/policy/core/common/schema_registry.h"
 
 namespace policy {
 
-AsyncPolicyProvider::AsyncPolicyProvider(SchemaRegistry* registry,
-                                         scoped_ptr<AsyncPolicyLoader> loader)
+AsyncPolicyProvider::AsyncPolicyProvider(
+    SchemaRegistry* registry,
+    std::unique_ptr<AsyncPolicyLoader> loader)
     : loader_(std::move(loader)), weak_factory_(this) {
   // Make an immediate synchronous load on startup.
   OnLoaderReloaded(loader_->InitialLoad(registry->schema_map()));
@@ -110,7 +111,8 @@ void AsyncPolicyProvider::ReloadAfterRefreshSync() {
                  schema_map()));
 }
 
-void AsyncPolicyProvider::OnLoaderReloaded(scoped_ptr<PolicyBundle> bundle) {
+void AsyncPolicyProvider::OnLoaderReloaded(
+    std::unique_ptr<PolicyBundle> bundle) {
   DCHECK(CalledOnValidThread());
   // Only propagate policy updates if there are no pending refreshes, and if
   // Shutdown() hasn't been called yet.
@@ -122,7 +124,7 @@ void AsyncPolicyProvider::OnLoaderReloaded(scoped_ptr<PolicyBundle> bundle) {
 void AsyncPolicyProvider::LoaderUpdateCallback(
     scoped_refptr<base::SingleThreadTaskRunner> runner,
     base::WeakPtr<AsyncPolicyProvider> weak_this,
-    scoped_ptr<PolicyBundle> bundle) {
+    std::unique_ptr<PolicyBundle> bundle) {
   runner->PostTask(FROM_HERE,
                  base::Bind(&AsyncPolicyProvider::OnLoaderReloaded,
                             weak_this,

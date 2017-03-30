@@ -51,14 +51,9 @@ inline HTMLStyleElement::HTMLStyleElement(Document& document, bool createdByPars
 
 HTMLStyleElement::~HTMLStyleElement()
 {
-#if !ENABLE(OILPAN)
-    StyleElement::clearDocumentData(document(), this);
-
-    styleLoadEventSender().cancelEvent(this);
-#endif
 }
 
-RawPtr<HTMLStyleElement> HTMLStyleElement::create(Document& document, bool createdByParser)
+HTMLStyleElement* HTMLStyleElement::create(Document& document, bool createdByParser)
 {
     return new HTMLStyleElement(document, createdByParser);
 }

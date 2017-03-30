@@ -1,11 +1,21 @@
 {
   "manifest_version":  1,
   "name": "mojo:mus",
-  "display_name": "Mandoline UI Services",
+  "display_name": "UI Service",
   "capabilities": {
+    "provided": {
+      // A collection of interfaces needed by a generic client of mus.
+      // Additional interfaces may be requested a-la-carte.
+      "app": [
+        "mus::mojom::Clipboard",
+        "mus::mojom::DisplayManager",
+        "mus::mojom::Gpu",
+        "mus::mojom::WindowTreeFactory"
+      ]
+    },
     "required": {
-      "*": { "interfaces": [ "*" ] },
-      "mojo:shell": { "classes": [ "all_users" ] }
+      "*": { "classes": [ "app" ] },
+      "mojo:shell": { "classes": [ "shell:all_users", "shell:explicit_class" ] }
     }
   }
 }

@@ -13,7 +13,6 @@
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/sequence_checker.h"
 #include "base/sequenced_task_runner.h"
 #include "base/synchronization/lock.h"
@@ -130,7 +129,7 @@ class ImageDecoder : public content::UtilityProcessHostClient {
 
   // Overidden from UtilityProcessHostClient.
   void OnProcessCrashed(int exit_code) override;
-  void OnProcessLaunchFailed() override;
+  void OnProcessLaunchFailed(int error_code) override;
   bool OnMessageReceived(const IPC::Message& message) override;
 
   // IPC message handlers.

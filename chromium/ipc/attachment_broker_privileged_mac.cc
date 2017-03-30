@@ -200,6 +200,9 @@ bool AttachmentBrokerPrivilegedMac::RouteWireFormatToAnother(
 base::mac::ScopedMachSendRight AttachmentBrokerPrivilegedMac::ExtractNamedRight(
     mach_port_t task_port,
     mach_port_name_t named_right) {
+  if (named_right == MACH_PORT_NULL)
+    return base::mac::ScopedMachSendRight(MACH_PORT_NULL);
+
   mach_port_t extracted_right = MACH_PORT_NULL;
   mach_msg_type_name_t extracted_right_type;
   kern_return_t kr =
@@ -240,15 +243,14 @@ void AttachmentBrokerPrivilegedMac::SendPrecursorsForProcess(
     AttachmentBrokerPrivileged::EndpointRunnerPair pair =
         GetSenderWithProcessId(pid);
     if (!pair.first) {
-      if (store_on_failure) {
-        // Try again later.
-        LogError(DELAYED);
-      } else {
-        // If there is no sender, then permanently fail.
-        LogError(DESTINATION_NOT_FOUND);
-        delete it->second;
-        precursors_.erase(it);
-      }
+      // Try again later.
+      if (store_on_failure)
+        return;
+
+      // If there is no sender, then permanently fail.
+      LogError(DESTINATION_NOT_FOUND);
+      delete it->second;
+      precursors_.erase(it);
       return;
     }
   }
@@ -337,16 +339,15 @@ void AttachmentBrokerPrivilegedMac::ProcessExtractorsForProcess(
     AttachmentBrokerPrivileged::EndpointRunnerPair pair =
         GetSenderWithProcessId(pid);
     if (!pair.first) {
-      if (store_on_failure) {
-        // If there is no sender, then the communication channel with the source
-        // process has not yet been established. Try again later.
-        LogError(DELAYED);
-      } else {
-        // There is no sender. Permanently fail.
-        LogError(ERROR_SOURCE_NOT_FOUND);
-        delete it->second;
-        extractors_.erase(it);
-      }
+      // If there is no sender, then the communication channel with the source
+      // process has not yet been established. Try again later.
+      if (store_on_failure)
+        return;
+
+      // There is no sender. Permanently fail.
+      LogError(ERROR_SOURCE_NOT_FOUND);
+      delete it->second;
+      extractors_.erase(it);
       return;
     }
   }

@@ -126,7 +126,7 @@ void V8LazyEventListener::prepareListenerObject(ExecutionContext* executionConte
     if (!executionContext->isDocument())
         return;
 
-    if (!toDocument(executionContext)->allowInlineEventHandlers(m_node, this, m_sourceURL, m_position.m_line)) {
+    if (!toDocument(executionContext)->allowInlineEventHandler(m_node, this, m_sourceURL, m_position.m_line)) {
         clearListenerObject();
         return;
     }
@@ -183,12 +183,12 @@ void V8LazyEventListener::prepareListenerObject(ExecutionContext* executionConte
     // source returned (sometimes a RegExp is applied as well) for some
     // other use. That fails miserably if the actual wrapper source is
     // returned.
-    v8::Local<v8::Function> toStringFunction = v8::Function::New(isolate(), V8LazyEventListenerToString);
-    if (toStringFunction.IsEmpty())
+    v8::Local<v8::Function> toStringFunction;
+    if (!v8::Function::New(scriptState->context(), V8LazyEventListenerToString, v8::Local<v8::Value>(), 0, v8::ConstructorBehavior::kThrow).ToLocal(&toStringFunction))
         return;
     String toStringString = "function " + m_functionName + "(" + m_eventParameterName + ") {\n  " + m_code + "\n}";
     V8HiddenValue::setHiddenValue(scriptState, wrappedFunction, V8HiddenValue::toStringString(isolate()), v8String(isolate(), toStringString));
-    if (!v8CallBoolean(wrappedFunction->Set(scriptState->context(), v8AtomicString(isolate(), "toString"), toStringFunction)))
+    if (!v8CallBoolean(wrappedFunction->CreateDataProperty(scriptState->context(), v8AtomicString(isolate(), "toString"), toStringFunction)))
         return;
     wrappedFunction->SetName(v8String(isolate(), m_functionName));
 
@@ -213,7 +213,7 @@ void V8LazyEventListener::fireErrorEvent(v8::Local<v8::Context> v8Context, Execu
     if (v8Call(message->GetLineNumber(v8Context), lineNumber)
         && v8Call(message->GetStartColumn(v8Context), columnNumber))
         ++columnNumber;
-    RawPtr<ErrorEvent> event = ErrorEvent::create(messageText, m_sourceURL, lineNumber, columnNumber, &world());
+    ErrorEvent* event = ErrorEvent::create(messageText, m_sourceURL, lineNumber, columnNumber, &world());
 
     AccessControlStatus accessControlStatus = NotSharableCrossOrigin;
     if (message->IsOpaque())
@@ -221,7 +221,7 @@ void V8LazyEventListener::fireErrorEvent(v8::Local<v8::Context> v8Context, Execu
     else if (message->IsSharedCrossOrigin())
         accessControlStatus = SharableCrossOrigin;
 
-    executionContext->reportException(event.release(), 0, nullptr, accessControlStatus);
+    executionContext->reportException(event, 0, nullptr, accessControlStatus);
 }
 
 } // namespace blink

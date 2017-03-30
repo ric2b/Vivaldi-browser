@@ -28,19 +28,14 @@ cr.define('md_history.history_synced_tabs_test', function() {
 
   function registerTests() {
     suite('synced-tabs', function() {
+      var app;
       var element;
       var sidebarElement;
 
       suiteSetup(function() {
-        element = $('history-synced-device-manager');
-        sidebarElement = $('history-side-bar');
-      });
-
-      test('sidebar displayed', function() {
-        setForeignSessions([], false);
-        assertTrue(sidebarElement.hidden);
-        setForeignSessions([], true);
-        assertFalse(sidebarElement.hidden);
+        app = $('history-app');
+        element = app.$['history-synced-device-manager'];
+        sidebarElement = app.$['history-side-bar'];
       });
 
       test('single card, single window', function(done) {

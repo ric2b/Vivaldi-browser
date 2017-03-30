@@ -11,7 +11,6 @@
 
 #include <vector>
 
-#include "base/memory/scoped_ptr.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/mac/scoped_audio_queue_ref.h"
@@ -80,7 +79,7 @@ class CoreAudioDemuxerStream : public DemuxerStream {
   ScopedAudioQueueRef audio_queue_;
   AudioQueueBufferRef audio_queue_buffer_;
 
-  scoped_ptr<std::vector<AudioStreamPacketDescription>> packet_descs_;
+  std::unique_ptr<std::vector<AudioStreamPacketDescription>> packet_descs_;
 
   size_t bytes_filled_;    // how many bytes have been filled
   size_t packets_filled_;  // how many packets have been filled

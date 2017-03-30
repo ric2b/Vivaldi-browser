@@ -18,7 +18,8 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/base_window.h"
-#include "ui/gfx/screen.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/views/background.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
@@ -110,7 +111,7 @@ void ExtensionDialog::InitWindow(gfx::NativeWindow parent,
   // Ensure the top left and top right of the window are on screen, with
   // priority given to the top left.
   gfx::Rect screen_rect =
-      gfx::Screen::GetScreen()->GetDisplayNearestPoint(center).bounds();
+      display::Screen::GetScreen()->GetDisplayNearestPoint(center).bounds();
   gfx::Rect bounds_rect = gfx::Rect(x, y, width, height);
   bounds_rect.AdjustToFit(screen_rect);
   window->SetBounds(bounds_rect);
@@ -192,7 +193,7 @@ views::View* ExtensionDialog::GetContentsView() {
   return GetExtensionView(host_.get());
 }
 
-bool ExtensionDialog::UseNewStyleForThisDialog() const {
+bool ExtensionDialog::ShouldUseCustomFrame() const {
   return false;
 }
 
@@ -225,7 +226,7 @@ void ExtensionDialog::Observe(int type,
         observer_->ExtensionTerminated(this);
       break;
     default:
-      NOTREACHED() << L"Received unexpected notification";
+      NOTREACHED() << "Received unexpected notification";
       break;
   }
 }

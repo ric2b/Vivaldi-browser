@@ -2,24 +2,34 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "chrome/browser/chromeos/arc/arc_auth_service.h"
+#include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
+#include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
+#include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chromeos/chromeos_switches.h"
+#include "chromeos/login/user_names.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/test/fake_arc_bridge_service.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "components/syncable_prefs/testing_pref_service_syncable.h"
+#include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "google_apis/gaia/gaia_constants.h"
@@ -41,10 +51,13 @@ const char kTestAuthCode[] = "4/Qa3CPIhh-WcMfWSf9HZaYcGUhEeax-F9sQK9CNRhZWs";
 class ArcAuthServiceTest : public testing::Test {
  public:
   ArcAuthServiceTest()
-      : thread_bundle_(new content::TestBrowserThreadBundle(kThreadOptions)) {}
+      : thread_bundle_(new content::TestBrowserThreadBundle(kThreadOptions)),
+        user_manager_enabler_(new chromeos::FakeChromeUserManager) {}
   ~ArcAuthServiceTest() override = default;
 
   void SetUp() override {
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        chromeos::switches::kEnableArc);
     ArcAuthService::DisableUIForTesting();
 
     EXPECT_TRUE(temp_dir_.CreateUniqueTempDir());
@@ -62,9 +75,21 @@ class ArcAuthServiceTest : public testing::Test {
     EXPECT_EQ(true, !ArcBridgeService::Get()->available());
     EXPECT_EQ(ArcBridgeService::State::STOPPED,
               ArcBridgeService::Get()->state());
+
+    const AccountId account_id(
+        AccountId::FromUserEmailGaiaId("user@gmail.com", "1234567890"));
+    GetFakeUserManager()->AddUser(account_id);
+    GetFakeUserManager()->LoginUser(account_id);
+
+    chromeos::WallpaperManager::Initialize();
   }
 
-  void TearDown() override {}
+  void TearDown() override { chromeos::WallpaperManager::Shutdown(); }
+
+  chromeos::FakeChromeUserManager* GetFakeUserManager() const {
+    return static_cast<chromeos::FakeChromeUserManager*>(
+        user_manager::UserManager::Get());
+  }
 
  protected:
   Profile* profile() { return profile_.get(); }
@@ -86,15 +111,16 @@ class ArcAuthServiceTest : public testing::Test {
   std::unique_ptr<arc::FakeArcBridgeService> bridge_service_;
   std::unique_ptr<arc::ArcAuthService> auth_service_;
   std::unique_ptr<TestingProfile> profile_;
+  chromeos::ScopedUserManagerEnabler user_manager_enabler_;
   base::ScopedTempDir temp_dir_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcAuthServiceTest);
 };
 
 TEST_F(ArcAuthServiceTest, PrefChangeTriggersService) {
-  ASSERT_EQ(ArcAuthService::State::STOPPED, auth_service()->state());
+  ASSERT_EQ(ArcAuthService::State::NOT_INITIALIZED, auth_service()->state());
 
-  PrefService* pref = profile()->GetPrefs();
+  PrefService* const pref = profile()->GetPrefs();
   DCHECK_EQ(false, pref->GetBoolean(prefs::kArcEnabled));
 
   auth_service()->OnPrimaryUserProfilePrepared(profile());
@@ -110,9 +136,49 @@ TEST_F(ArcAuthServiceTest, PrefChangeTriggersService) {
   auth_service()->Shutdown();
 }
 
+TEST_F(ArcAuthServiceTest, DisabledForEphemeralDataUsers) {
+  PrefService* const prefs = profile()->GetPrefs();
+  EXPECT_FALSE(prefs->GetBoolean(prefs::kArcSignedIn));
+  prefs->SetBoolean(prefs::kArcEnabled, true);
+
+  chromeos::FakeChromeUserManager* const fake_user_manager =
+      GetFakeUserManager();
+
+  fake_user_manager->AddUser(fake_user_manager->GetGuestAccountId());
+  fake_user_manager->SwitchActiveUser(fake_user_manager->GetGuestAccountId());
+  auth_service()->OnPrimaryUserProfilePrepared(profile());
+  ASSERT_EQ(ArcAuthService::State::STOPPED, auth_service()->state());
+
+  fake_user_manager->AddUser(chromeos::login::DemoAccountId());
+  fake_user_manager->SwitchActiveUser(chromeos::login::DemoAccountId());
+  auth_service()->Shutdown();
+  auth_service()->OnPrimaryUserProfilePrepared(profile());
+  ASSERT_EQ(ArcAuthService::State::STOPPED, auth_service()->state());
+
+  const AccountId public_account_id(
+      AccountId::FromUserEmail("public_user@gmail.com"));
+  fake_user_manager->AddPublicAccountUser(public_account_id);
+  fake_user_manager->SwitchActiveUser(public_account_id);
+  auth_service()->Shutdown();
+  auth_service()->OnPrimaryUserProfilePrepared(profile());
+  ASSERT_EQ(ArcAuthService::State::STOPPED, auth_service()->state());
+
+  const AccountId not_in_list_account_id(
+      AccountId::FromUserEmail("not_in_list_user@gmail.com"));
+  fake_user_manager->AddUser(not_in_list_account_id);
+  fake_user_manager->SwitchActiveUser(not_in_list_account_id);
+  fake_user_manager->RemoveUserFromList(not_in_list_account_id);
+  auth_service()->Shutdown();
+  auth_service()->OnPrimaryUserProfilePrepared(profile());
+  ASSERT_EQ(ArcAuthService::State::STOPPED, auth_service()->state());
+
+  // Correctly stop service.
+  auth_service()->Shutdown();
+}
+
 TEST_F(ArcAuthServiceTest, BaseWorkflow) {
   ASSERT_EQ(ArcBridgeService::State::STOPPED, bridge_service()->state());
-  ASSERT_EQ(ArcAuthService::State::STOPPED, auth_service()->state());
+  ASSERT_EQ(ArcAuthService::State::NOT_INITIALIZED, auth_service()->state());
   ASSERT_EQ(std::string(), auth_service()->GetAndResetAuthCode());
 
   auth_service()->OnPrimaryUserProfilePrepared(profile());
@@ -134,7 +200,7 @@ TEST_F(ArcAuthServiceTest, BaseWorkflow) {
   ASSERT_EQ(std::string(), auth_service()->GetAndResetAuthCode());
 
   auth_service()->Shutdown();
-  ASSERT_EQ(ArcAuthService::State::STOPPED, auth_service()->state());
+  ASSERT_EQ(ArcAuthService::State::NOT_INITIALIZED, auth_service()->state());
   ASSERT_EQ(ArcBridgeService::State::STOPPED, bridge_service()->state());
   ASSERT_EQ(std::string(), auth_service()->GetAndResetAuthCode());
 
@@ -155,7 +221,7 @@ TEST_F(ArcAuthServiceTest, BaseWorkflow) {
 }
 
 TEST_F(ArcAuthServiceTest, CancelFetchingDisablesArc) {
-  PrefService* pref = profile()->GetPrefs();
+  PrefService* const pref = profile()->GetPrefs();
 
   auth_service()->OnPrimaryUserProfilePrepared(profile());
   pref->SetBoolean(prefs::kArcEnabled, true);
@@ -170,7 +236,7 @@ TEST_F(ArcAuthServiceTest, CancelFetchingDisablesArc) {
 }
 
 TEST_F(ArcAuthServiceTest, CloseUIKeepsArcEnabled) {
-  PrefService* pref = profile()->GetPrefs();
+  PrefService* const pref = profile()->GetPrefs();
 
   auth_service()->OnPrimaryUserProfilePrepared(profile());
   pref->SetBoolean(prefs::kArcEnabled, true);
@@ -188,7 +254,7 @@ TEST_F(ArcAuthServiceTest, CloseUIKeepsArcEnabled) {
 }
 
 TEST_F(ArcAuthServiceTest, EnableDisablesArc) {
-  PrefService* pref = profile()->GetPrefs();
+  const PrefService* pref = profile()->GetPrefs();
   auth_service()->OnPrimaryUserProfilePrepared(profile());
 
   EXPECT_FALSE(pref->GetBoolean(prefs::kArcEnabled));
@@ -202,7 +268,7 @@ TEST_F(ArcAuthServiceTest, EnableDisablesArc) {
 }
 
 TEST_F(ArcAuthServiceTest, SignInStatus) {
-  PrefService* prefs = profile()->GetPrefs();
+  PrefService* const prefs = profile()->GetPrefs();
 
   EXPECT_FALSE(prefs->GetBoolean(prefs::kArcSignedIn));
   prefs->SetBoolean(prefs::kArcEnabled, true);
@@ -220,7 +286,7 @@ TEST_F(ArcAuthServiceTest, SignInStatus) {
 
   // Second start, no fetching code is expected.
   auth_service()->Shutdown();
-  EXPECT_EQ(ArcAuthService::State::STOPPED, auth_service()->state());
+  EXPECT_EQ(ArcAuthService::State::NOT_INITIALIZED, auth_service()->state());
   EXPECT_EQ(ArcBridgeService::State::STOPPED, bridge_service()->state());
   auth_service()->OnPrimaryUserProfilePrepared(profile());
   EXPECT_TRUE(prefs->GetBoolean(prefs::kArcSignedIn));
@@ -228,10 +294,33 @@ TEST_F(ArcAuthServiceTest, SignInStatus) {
   EXPECT_EQ(ArcBridgeService::State::READY, bridge_service()->state());
 
   // Report failure.
-  auth_service()->OnSignInFailed(arc::ArcSignInFailureReason::UNKNOWN_ERROR);
+  auth_service()->OnSignInFailed(
+      arc::mojom::ArcSignInFailureReason::UNKNOWN_ERROR);
   EXPECT_FALSE(prefs->GetBoolean(prefs::kArcSignedIn));
   EXPECT_EQ(ArcAuthService::State::STOPPED, auth_service()->state());
   EXPECT_EQ(ArcBridgeService::State::STOPPED, bridge_service()->state());
+
+  // Correctly stop service.
+  auth_service()->Shutdown();
+}
+
+TEST_F(ArcAuthServiceTest, DisabledForDeviceLocalAccount) {
+  PrefService* const prefs = profile()->GetPrefs();
+  EXPECT_FALSE(prefs->GetBoolean(prefs::kArcSignedIn));
+  prefs->SetBoolean(prefs::kArcEnabled, true);
+
+  // Create device local account and set it as active.
+  const std::string email = "device-local-account@fake-email.com";
+  TestingProfile::Builder profile_builder;
+  profile_builder.SetProfileName(email);
+  std::unique_ptr<TestingProfile> device_local_profile(profile_builder.Build());
+  const AccountId account_id(AccountId::FromUserEmail(email));
+  GetFakeUserManager()->AddPublicAccountUser(account_id);
+  GetFakeUserManager()->SwitchActiveUser(account_id);
+
+  // Check that user without GAIA account can't use ARC.
+  auth_service()->OnPrimaryUserProfilePrepared(device_local_profile.get());
+  EXPECT_EQ(ArcAuthService::State::STOPPED, auth_service()->state());
 
   // Correctly stop service.
   auth_service()->Shutdown();

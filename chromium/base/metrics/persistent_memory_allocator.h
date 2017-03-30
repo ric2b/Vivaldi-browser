@@ -12,6 +12,7 @@
 
 #include "base/atomicops.h"
 #include "base/base_export.h"
+#include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/strings/string_piece.h"
@@ -118,9 +119,17 @@ class BASE_EXPORT PersistentMemoryAllocator {
     size_t free;
   };
 
+  enum : Reference {
+    kReferenceNull = 0  // A common "null" reference value.
+  };
+
   enum : uint32_t {
     kTypeIdAny = 0  // Match any type-id inside GetAsObject().
   };
+
+  // This is the standard file extension (suitable for being passed to the
+  // AddExtension() method of base::FilePath) for dumps of persistent memory.
+  static const base::FilePath::CharType kFileExtension[];
 
   // The allocator operates on any arbitrary block of memory. Creation and
   // persisting or sharing of that block with another process is the
@@ -187,6 +196,7 @@ class BASE_EXPORT PersistentMemoryAllocator {
   // not guarantee consistency. Use with care. Do not write.
   const void* data() const { return const_cast<const char*>(mem_base_); }
   size_t length() const { return mem_size_; }
+  size_t size() const { return mem_size_; }
   size_t used() const;
 
   // Get an object referenced by a |ref|. For safety reasons, the |type_id|
@@ -284,7 +294,6 @@ class BASE_EXPORT PersistentMemoryAllocator {
   struct BlockHeader;
   static const uint32_t kAllocAlignment;
   static const Reference kReferenceQueue;
-  static const Reference kReferenceNull;
 
   // The shared metadata is always located at the top of the memory segment.
   // These convenience functions eliminate constant casting of the base

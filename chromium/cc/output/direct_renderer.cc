@@ -181,7 +181,7 @@ void DirectRenderer::DecideRenderPassAllocationsForFrame(
 
   for (size_t i = 0; i < render_passes_in_draw_order.size(); ++i) {
     if (render_pass_textures_.count(render_passes_in_draw_order[i]->id) == 0) {
-      scoped_ptr<ScopedResource> texture =
+      std::unique_ptr<ScopedResource> texture =
           ScopedResource::Create(resource_provider_);
       render_pass_textures_[render_passes_in_draw_order[i]->id] =
           std::move(texture);
@@ -278,23 +278,18 @@ void DirectRenderer::DrawFrame(RenderPassList* render_passes_in_draw_order,
 
 gfx::Rect DirectRenderer::ComputeScissorRectForRenderPass(
     const DrawingFrame* frame) {
-  gfx::Rect render_pass_scissor = frame->current_render_pass->output_rect;
+  if (frame->current_render_pass == frame->root_render_pass)
+    return frame->root_damage_rect;
 
-  if (frame->root_damage_rect == frame->root_render_pass->output_rect ||
-      !frame->current_render_pass->copy_requests.empty())
-    return render_pass_scissor;
+  // If the root damage rect has been expanded due to overlays, all the other
+  // damage rect calculations are incorrect.
+  if (!frame->root_render_pass->damage_rect.Contains(frame->root_damage_rect))
+    return frame->current_render_pass->output_rect;
 
-  gfx::Transform inverse_transform(gfx::Transform::kSkipInitialization);
-  if (frame->current_render_pass->transform_to_root_target.GetInverse(
-          &inverse_transform)) {
-    // Only intersect inverse-projected damage if the transform is invertible.
-    gfx::Rect damage_rect_in_render_pass_space =
-        MathUtil::ProjectEnclosingClippedRect(inverse_transform,
-                                              frame->root_damage_rect);
-    render_pass_scissor.Intersect(damage_rect_in_render_pass_space);
-  }
-
-  return render_pass_scissor;
+  DCHECK(frame->current_render_pass->copy_requests.empty() ||
+         (frame->current_render_pass->damage_rect ==
+          frame->current_render_pass->output_rect));
+  return frame->current_render_pass->damage_rect;
 }
 
 bool DirectRenderer::NeedDeviceClip(const DrawingFrame* frame) const {
@@ -397,7 +392,7 @@ void DirectRenderer::DoDrawPolygon(const DrawPolygon& poly,
 }
 
 void DirectRenderer::FlushPolygons(
-    std::deque<scoped_ptr<DrawPolygon>>* poly_list,
+    std::deque<std::unique_ptr<DrawPolygon>>* poly_list,
     DrawingFrame* frame,
     const gfx::Rect& render_pass_scissor,
     bool use_render_pass_scissor) {
@@ -482,7 +477,7 @@ void DirectRenderer::DrawRenderPass(DrawingFrame* frame,
       MoveFromDrawToWindowSpace(frame, render_pass_scissor_in_draw_space));
 
   const QuadList& quad_list = render_pass->quad_list;
-  std::deque<scoped_ptr<DrawPolygon>> poly_list;
+  std::deque<std::unique_ptr<DrawPolygon>> poly_list;
 
   int next_polygon_id = 0;
   int last_sorting_context_id = 0;
@@ -504,7 +499,7 @@ void DirectRenderer::DrawRenderPass(DrawingFrame* frame,
     // This layer is in a 3D sorting context so we add it to the list of
     // polygons to go into the BSP tree.
     if (quad.shared_quad_state->sorting_context_id != 0) {
-      scoped_ptr<DrawPolygon> new_polygon(new DrawPolygon(
+      std::unique_ptr<DrawPolygon> new_polygon(new DrawPolygon(
           *it, gfx::RectF(quad.visible_rect),
           quad.shared_quad_state->quad_to_target_transform, next_polygon_id++));
       if (new_polygon->points().size() > 2u) {

@@ -12,6 +12,7 @@ group("all") {
   deps = [
     ":mash_unittests",
     "//components/leveldb",
+    "//mash/catalog_viewer",
     "//mash/example",
     "//mash/init",
     "//mash/login",
@@ -21,18 +22,37 @@ group("all") {
   ]
 }
 
+group("browser") {
+  testonly = true
+
+  deps = [
+    ":all",
+    "//mash/browser",
+    "//mash/webtest",
+  ]
+}
+
 test("mash_unittests") {
+  sources = [
+    "test/mash_test_suite.cc",
+    "test/mash_test_suite.h",
+    "test/mash_unittests.cc",
+  ]
   deps = [
     "//base",
-    "//base/test:test_config",
     "//base/test:test_support",
+    "//mash/wm:resources",
     "//mash/wm:unittests",
     "//mojo/platform_handle:platform_handle_impl",
-    "//mojo/shell/background:main",
-    "//mojo/shell/public/cpp/test:run_all_shelltests",
+    "//services/shell/background:main",
+    "//ui/aura",
+    "//ui/base",
+    "//ui/compositor:test_support",
+    "//ui/gl:test_support",
   ]
   data_deps = [
     ":unittests_manifest",
+    "//mash/wm:resources",
   ]
 }
 

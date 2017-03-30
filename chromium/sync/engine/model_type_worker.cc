@@ -85,6 +85,10 @@ void ModelTypeWorker::UpdateCryptographer(
 }
 
 // UpdateHandler implementation.
+bool ModelTypeWorker::IsInitialSyncEnded() const {
+  return data_type_state_.initial_sync_done();
+}
+
 void ModelTypeWorker::GetDownloadProgress(
     sync_pb::DataTypeProgressMarker* progress_marker) const {
   DCHECK(CalledOnValidThread());
@@ -219,7 +223,6 @@ std::unique_ptr<CommitContribution> ModelTypeWorker::GetContribution(
   DCHECK(pending_updates_.empty());
 
   size_t space_remaining = max_entries;
-  std::vector<int64_t> sequence_numbers;
   google::protobuf::RepeatedPtrField<sync_pb::SyncEntity> commit_entities;
 
   if (!CanCommitItems())
@@ -231,12 +234,8 @@ std::unique_ptr<CommitContribution> ModelTypeWorker::GetContribution(
     WorkerEntityTracker* entity = it->second.get();
     if (entity->HasPendingCommit()) {
       sync_pb::SyncEntity* commit_entity = commit_entities.Add();
-      int64_t sequence_number = -1;
-
-      entity->PrepareCommitProto(commit_entity, &sequence_number);
-      HelpInitializeCommitEntity(commit_entity);
-      sequence_numbers.push_back(sequence_number);
-
+      entity->PopulateCommitProto(commit_entity);
+      AdjustCommitProto(commit_entity);
       space_remaining--;
     }
   }
@@ -246,13 +245,11 @@ std::unique_ptr<CommitContribution> ModelTypeWorker::GetContribution(
 
   return std::unique_ptr<CommitContribution>(
       new NonBlockingTypeCommitContribution(data_type_state_.type_context(),
-                                            commit_entities, sequence_numbers,
-                                            this));
+                                            commit_entities, this));
 }
 
-void ModelTypeWorker::OnCommitResponse(
-    const CommitResponseDataList& response_list) {
-  for (const CommitResponseData& response : response_list) {
+void ModelTypeWorker::OnCommitResponse(CommitResponseDataList* response_list) {
+  for (CommitResponseData& response : *response_list) {
     WorkerEntityTracker* entity = GetEntityTracker(response.client_tag_hash);
 
     // There's no way we could have committed an entry we know nothing about.
@@ -263,14 +260,13 @@ void ModelTypeWorker::OnCommitResponse(
       continue;
     }
 
-    entity->ReceiveCommitResponse(response.id, response.response_version,
-                                  response.sequence_number);
+    entity->ReceiveCommitResponse(&response);
   }
 
   // Send the responses back to the model thread.  It needs to know which
   // items have been successfully committed so it can save that information in
   // permanent storage.
-  model_type_processor_->OnCommitCompleted(data_type_state_, response_list);
+  model_type_processor_->OnCommitCompleted(data_type_state_, *response_list);
 }
 
 base::WeakPtr<ModelTypeWorker> ModelTypeWorker::AsWeakPtr() {
@@ -297,13 +293,12 @@ bool ModelTypeWorker::CanCommitItems() const {
   return true;
 }
 
-void ModelTypeWorker::HelpInitializeCommitEntity(
-    sync_pb::SyncEntity* sync_entity) {
+void ModelTypeWorker::AdjustCommitProto(sync_pb::SyncEntity* sync_entity) {
   DCHECK(CanCommitItems());
 
   // Initial commits need our help to generate a client ID.
-  if (!sync_entity->has_id_string()) {
-    DCHECK_EQ(kUncommittedVersion, sync_entity->version());
+  if (sync_entity->version() == kUncommittedVersion) {
+    DCHECK(!sync_entity->has_id_string());
     // TODO(stanisc): This is incorrect for bookmarks for two reasons:
     // 1) Won't be able to match previously committed bookmarks to the ones
     //    with server ID.
@@ -312,6 +307,9 @@ void ModelTypeWorker::HelpInitializeCommitEntity(
     //    would result in a duplication.
     // We should generate client ID on the frontend side instead.
     sync_entity->set_id_string(base::GenerateGUID());
+    sync_entity->set_version(0);
+  } else {
+    DCHECK(sync_entity->has_id_string());
   }
 
   // Encrypt the specifics and hide the title if necessary.

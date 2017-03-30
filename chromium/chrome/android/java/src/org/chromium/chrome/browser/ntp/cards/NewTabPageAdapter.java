@@ -4,11 +4,15 @@
 
 package org.chromium.chrome.browser.ntp.cards;
 
+import android.graphics.Canvas;
+import android.support.v4.view.animation.FastOutLinearInInterpolator;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.RecyclerView.Adapter;
 import android.support.v7.widget.RecyclerView.ViewHolder;
 import android.support.v7.widget.helper.ItemTouchHelper;
+import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.Interpolator;
 
 import org.chromium.base.Log;
 import org.chromium.chrome.browser.ntp.NewTabPageLayout;
@@ -29,17 +33,38 @@ import java.util.List;
  */
 public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements SnippetsObserver {
     private static final String TAG = "Ntp";
+    private static final Interpolator FADE_INTERPOLATOR = new FastOutLinearInInterpolator();
 
     private final NewTabPageManager mNewTabPageManager;
     private final NewTabPageLayout mNewTabPageLayout;
     private final AboveTheFoldListItem mAboveTheFoldListItem;
     private final List<NewTabPageListItem> mNewTabPageListItems;
     private final ItemTouchCallbacks mItemTouchCallbacks;
+    private NewTabPageRecyclerView mRecyclerView;
+    private boolean mWantsSnippets;
 
     private class ItemTouchCallbacks extends ItemTouchHelper.Callback {
         @Override
         public void onSwiped(ViewHolder viewHolder, int direction) {
-            NewTabPageAdapter.this.dismissItem(viewHolder.getAdapterPosition());
+            mRecyclerView.onItemDismissStarted(viewHolder.itemView);
+
+            // This is going to have a effect at the next layout pass, which is going to happen
+            // after the item has been removed from the adapter and the layout.
+            mRecyclerView.refreshBottomSpacing();
+
+            NewTabPageAdapter.this.dismissItem(viewHolder);
+        }
+
+        @Override
+        public void clearView(RecyclerView recyclerView, ViewHolder viewHolder) {
+            // clearView() is called when an interaction with the item is finished, which does
+            // not mean that the user went all the way and dismissed the item before releasing it.
+            // We need to check that the item has been removed.
+            if (viewHolder.getAdapterPosition() == RecyclerView.NO_POSITION) {
+                mRecyclerView.onItemDismissFinished(viewHolder.itemView);
+            }
+
+            super.clearView(recyclerView, viewHolder);
         }
 
         @Override
@@ -60,6 +85,16 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
 
             return makeMovementFlags(0 /* dragFlags */, swipeFlags);
         }
+
+        @Override
+        public void onChildDraw(Canvas c, RecyclerView recyclerView, ViewHolder viewHolder,
+                float dX, float dY, int actionState, boolean isCurrentlyActive) {
+            View itemView = viewHolder.itemView;
+            float input = Math.abs(dX) / itemView.getMeasuredWidth();
+            float alpha = 1 - FADE_INTERPOLATOR.getInterpolation(input);
+            itemView.setAlpha(alpha);
+            super.onChildDraw(c, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive);
+        }
     }
 
     /**
@@ -77,7 +112,7 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
         mItemTouchCallbacks = new ItemTouchCallbacks();
         mNewTabPageListItems = new ArrayList<NewTabPageListItem>();
         mNewTabPageListItems.add(mAboveTheFoldListItem);
-
+        mWantsSnippets = true;
         mNewTabPageManager.setSnippetsObserver(this);
     }
 
@@ -88,17 +123,25 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
 
     @Override
     public void onSnippetsReceived(List<SnippetArticle> listSnippets) {
+        if (!mWantsSnippets) return;
+
         int newSnippetCount = listSnippets.size();
         Log.d(TAG, "Received %d new snippets.", newSnippetCount);
-        mNewTabPageListItems.clear();
-        mNewTabPageListItems.add(mAboveTheFoldListItem);
 
-        if (newSnippetCount > 0) {
-            mNewTabPageListItems.add(new SnippetHeaderListItem());
-            mNewTabPageListItems.addAll(listSnippets);
-        }
+        // At first, there might be no snippets available, we wait until they have been fetched.
+        if (newSnippetCount == 0) return;
 
-        notifyDataSetChanged();
+        loadSnippets(listSnippets);
+
+        // We don't want to get notified of other changes.
+        mWantsSnippets = false;
+    }
+
+    @Override
+    public void onSnippetsDisabled() {
+        // Clear the snippets, wait for new updates in case the service is reenabled later.
+        loadSnippets(new ArrayList<SnippetArticle>());
+        mWantsSnippets = true;
     }
 
     @Override
@@ -122,6 +165,10 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
                     SnippetArticleViewHolder.createView(parent), mNewTabPageManager);
         }
 
+        if (viewType == NewTabPageListItem.VIEW_TYPE_SPACING) {
+            return new NewTabPageViewHolder(SpacingListItem.createView(parent));
+        }
+
         return null;
     }
 
@@ -135,19 +182,51 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
         return mNewTabPageListItems.size();
     }
 
-    private void dismissItem(int position) {
-        assert getItemViewType(position) == NewTabPageListItem.VIEW_TYPE_SNIPPET;
-        mNewTabPageManager.onSnippetDismissed((SnippetArticle) mNewTabPageListItems.get(position));
-        mNewTabPageListItems.remove(position);
+    private void loadSnippets(List<SnippetArticle> listSnippets) {
+        // Copy thumbnails over
+        for (SnippetArticle newSnippet : listSnippets) {
+            int existingSnippetIdx = mNewTabPageListItems.indexOf(newSnippet);
+            if (existingSnippetIdx == -1) continue;
 
-        int numRemovedItems = 1;
-        if (mNewTabPageListItems.size() == 2) {
-            // There's only the above-the-fold item and the header left, so we remove the header.
-            position = 1; // When present, the header is always at that position.
-            mNewTabPageListItems.remove(position);
-            ++numRemovedItems;
+            newSnippet.setThumbnailBitmap(
+                    ((SnippetArticle) mNewTabPageListItems.get(existingSnippetIdx))
+                            .getThumbnailBitmap());
         }
 
-        notifyItemRangeRemoved(position, numRemovedItems);
+        mNewTabPageListItems.clear();
+        mNewTabPageListItems.add(mAboveTheFoldListItem);
+        mNewTabPageListItems.add(new SnippetHeaderListItem());
+        mNewTabPageListItems.addAll(listSnippets);
+        mNewTabPageListItems.add(new SpacingListItem());
+
+        notifyDataSetChanged();
+    }
+
+    @Override
+    public void onAttachedToRecyclerView(RecyclerView recyclerView) {
+        super.onAttachedToRecyclerView(recyclerView);
+
+        // We are assuming for now that the adapter is used with a single RecyclerView.
+        // Getting the reference as we are doing here is going to be broken if that changes.
+        assert mRecyclerView == null;
+
+        // FindBugs chokes on the cast below when not checked, raising BC_UNCONFIRMED_CAST
+        assert recyclerView instanceof NewTabPageRecyclerView;
+
+        mRecyclerView = (NewTabPageRecyclerView) recyclerView;
+    }
+
+    private void dismissItem(ViewHolder itemViewHolder) {
+        assert itemViewHolder.getItemViewType() == NewTabPageListItem.VIEW_TYPE_SNIPPET;
+
+        int position = itemViewHolder.getAdapterPosition();
+        mNewTabPageManager.onSnippetDismissed((SnippetArticle) mNewTabPageListItems.get(position));
+
+        mNewTabPageListItems.remove(position);
+        notifyItemRemoved(position);
+    }
+
+    List<NewTabPageListItem> getItemsForTesting() {
+        return mNewTabPageListItems;
     }
 }

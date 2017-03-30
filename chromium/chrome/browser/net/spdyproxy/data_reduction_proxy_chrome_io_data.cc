@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/common/chrome_content_client.h"
@@ -48,13 +49,12 @@ void OnLoFiResponseReceivedOnUI(content::WebContents* web_contents,
 
 } // namespace
 
-scoped_ptr<data_reduction_proxy::DataReductionProxyIOData>
+std::unique_ptr<data_reduction_proxy::DataReductionProxyIOData>
 CreateDataReductionProxyChromeIOData(
     net::NetLog* net_log,
     PrefService* prefs,
     const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner,
-    const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner,
-    bool enable_quic) {
+    const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner) {
   DCHECK(net_log);
   DCHECK(prefs);
 
@@ -74,19 +74,17 @@ CreateDataReductionProxyChromeIOData(
   bool enabled =
       prefs->GetBoolean(prefs::kDataSaverEnabled) ||
       data_reduction_proxy::params::ShouldForceEnableDataReductionProxy();
-  scoped_ptr<data_reduction_proxy::DataReductionProxyIOData>
+  std::unique_ptr<data_reduction_proxy::DataReductionProxyIOData>
       data_reduction_proxy_io_data(
           new data_reduction_proxy::DataReductionProxyIOData(
               DataReductionProxyChromeSettings::GetClient(), flags, net_log,
-              io_task_runner, ui_task_runner, enabled, enable_quic,
-              GetUserAgent()));
+              io_task_runner, ui_task_runner, enabled, GetUserAgent()));
 
   data_reduction_proxy_io_data->set_lofi_decider(
-      make_scoped_ptr(new data_reduction_proxy::ContentLoFiDecider()));
+      base::WrapUnique(new data_reduction_proxy::ContentLoFiDecider()));
   data_reduction_proxy_io_data->set_lofi_ui_service(
-      make_scoped_ptr(new data_reduction_proxy::ContentLoFiUIService(
-          ui_task_runner,
-          base::Bind(&OnLoFiResponseReceivedOnUI))));
+      base::WrapUnique(new data_reduction_proxy::ContentLoFiUIService(
+          ui_task_runner, base::Bind(&OnLoFiResponseReceivedOnUI))));
 
   return data_reduction_proxy_io_data;
 }

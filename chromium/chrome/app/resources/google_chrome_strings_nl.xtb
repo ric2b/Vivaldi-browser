@@ -70,10 +70,16 @@ Als je inlogt, worden Chrome-gegevens zoals bladwijzers, geschiedenis en andere 
 <translation id="2997147809295888909">Chrome heeft geverifieerd dat <ph name="ISSUER" /> het certificaat van deze website heeft uitgegeven. De server heeft geen certificaattransparantiegegevens geleverd.</translation>
 <translation id="3037838751736561277">Google Chrome bevindt zich in de achtergrondmodus.</translation>
 <translation id="3047079729301751317">Als je de verbinding met <ph name="USERNAME" /> verbreekt, worden je geschiedenis, bladwijzers, instellingen en andere Chrome-gegevens op dit apparaat opgeslagen. De gegevens die in je Google-account zijn opgeslagen, worden niet gewist en kunnen worden beheerd via <ph name="GOOGLE_DASHBOARD_LINK" />Google Dashboard<ph name="END_GOOGLE_DASHBOARD_LINK" />.</translation>
+<translation id="3065168410429928842">Chrome-tabblad</translation>
 <translation id="3080151273017101988">Achtergrondapps blijven uitvoeren wanneer Google Chrome is gesloten</translation>
 <translation id="3089968997497233615">Er is een nieuwere, veiligere versie van Google Chrome beschikbaar.</translation>
 <translation id="3149510190863420837">Chrome-apps</translation>
-<translation id="3197823471738295152">Het apparaat is bijgewerkt.</translation>
+<translation id="3251381707915721925">Als je wilt instellen welke websites <ph name="NEW_PROFILE_NAME" /> kan bekijken, kun je beperkingen en instellingen configureren door naar <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" /> te gaan. Als je de standaardinstellingen niet wijzigt, kan <ph name="NEW_PROFILE_NAME" /> overal op internet browsen.
+
+Als je wilt voorkomen dat <ph name="NEW_PROFILE_NAME" /> toegang krijgt tot je account, moet je ervoor zorgen dat je je profiel vergrendelt wanneer je Chrome niet gebruikt. Klik hiervoor op je profielnaam in de rechterbovenhoek van de browser en selecteer 'Afsluiten en kinderslot'.
+<ph name="BEGIN_LINK_2" />Meer informatie<ph name="END_LINK_2" />
+
+Controleer je e-mail op <ph name="ACCOUNT_EMAIL" /> voor verdere instructies.</translation>
 <translation id="3282568296779691940">Inloggen bij Chrome</translation>
 <translation id="3311976847535831054">Deze computer ontvangt geen updates meer voor de 32-bits versie van Google Chrome. Upgrade naar de 64-bits versie van Google Chrome.</translation>
 <translation id="3360895254066713204">Chrome Helper</translation>
@@ -211,7 +217,6 @@ Sommige functies zijn wellicht niet beschikbaar. Geef een andere profieldirector
 <translation id="7808348361785373670">Verwijderen uit Chrome…</translation>
 <translation id="7825851276765848807">De installatie is mislukt vanwege een onbekende fout. Download Google Chrome opnieuw.</translation>
 <translation id="7890208801193284374">Als je een computer deelt, kunnen vrienden en familie afzonderlijk surfen en Chrome configureren zoals zij dat willen.</translation>
-<translation id="8000275528373650868">Voor Google Chrome is Windows Vista of Windows XP met SP2 of hoger vereist.</translation>
 <translation id="8005540215158006229">Chrome is bijna klaar.</translation>
 <translation id="8008534537613507642">Chrome opnieuw installeren</translation>
 <translation id="8030318113982266900">Je apparaat bijwerken naar <ph name="CHANNEL_NAME" /> kanaal...</translation>
@@ -233,6 +238,7 @@ Sommige functies zijn wellicht niet beschikbaar. Geef een andere profieldirector
 <translation id="8556340503434111824">Er is een nieuwe versie van Google Chrome en deze is sneller dan ooit.</translation>
 <translation id="8568392309447938879">Je moet zijn ingelogd bij Chrome om apps te gebruiken. Zo kan Chrome je apps, bladwijzers, geschiedenis, wachtwoorden en andere instellingen synchroniseren met al je apparaten.</translation>
 <translation id="8614913330719544658">Google Chrome reageert niet meer. Nu opnieuw starten?</translation>
+<translation id="8667808506758191620">Je <ph name="DEVICE_TYPE" /> is up-to-date.</translation>
 <translation id="8669527147644353129">Google Chrome Helper</translation>
 <translation id="8679801911857917785">Hiermee wordt ook gecontroleerd welke pagina wordt weergegeven wanneer je Chrome start.</translation>
 <translation id="870251953148363156">&amp;Google Chrome updaten</translation>
@@ -241,6 +247,7 @@ Sommige functies zijn wellicht niet beschikbaar. Geef een andere profieldirector
 <translation id="8851136666856101339">hoofd</translation>
 <translation id="8862326446509486874">Je hebt geen rechten om op systeemniveau te installeren. Meld je aan als beheerder en voer het installatieprogramma opnieuw uit.</translation>
 <translation id="9026991721384951619">Chrome OS kan je gegevens niet synchroniseren omdat de inloggegevens voor je account zijn verouderd.</translation>
+<translation id="9067395829937117663">Voor Google Chrome is Windows 7 of hoger vereist.</translation>
 <translation id="9102715433345326100">Dit bestand is schadelijk en is daarom door Chrome geblokkeerd.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Waarschuwing:<ph name="END_BOLD" /> Google Chrome kan niet voorkomen dat extensies je browsegeschiedenis registreren. Als je deze extensie in de incognitomodus wilt uitschakelen, verwijder je het vinkje bij deze optie.</translation>
 <translation id="911206726377975832">Ook browsegegevens wissen?</translation>

@@ -12,11 +12,13 @@ source_set("child") {
   # (i.e. not content/browser or content/common) and only if they're inside the
   # content component (i.e. not content/test or content/shell).
   visibility = [
+    ":*",
     "//content/gpu/*",
     "//content/ppapi_plugin/*",
     "//content/public/child:child_sources",
     "//content/renderer/*",
     "//content/utility/*",
+    "//tools/ipc_fuzzer/*",
   ]
 
   sources = rebase_path(content_child_gypi_values.private_child_sources,
@@ -43,12 +45,15 @@ source_set("child") {
     "//content/app/resources",
     "//content/app/strings",
     "//content/common",
+    "//content/public/common:common_sources",
     "//crypto:platform",
+    "//gpu/command_buffer/client",
+    "//ipc/mojo",
+    "//media",
     "//mojo/common",
-    "//mojo/message_pump",
-    "//mojo/shell/public/interfaces",
-    "//mojo/shell/runner/common",
     "//net",
+    "//services/shell/public/interfaces",
+    "//services/shell/runner/common",
     "//skia",
     "//storage/common",
     "//third_party/WebKit/public:blink_headers",
@@ -59,6 +64,7 @@ source_set("child") {
     "//ui/events/gestures/blink",
     "//ui/gfx",
     "//ui/gfx/geometry",
+    "//ui/gl",
     "//ui/native_theme",
     "//url",
   ]
@@ -75,13 +81,29 @@ source_set("child") {
   }
 
   if (enable_plugins) {
-    deps += [ "//ppapi/proxy" ]
+    deps += [
+      "//ppapi/proxy",
+      "//ppapi/shared_impl",
+    ]
   } else {
-    sources -= [ "browser_font_resource_trusted.cc" ]
+    sources -= [
+      "browser_font_resource_trusted.cc",
+      "browser_font_resource_trusted.h",
+    ]
   }
 
   configs += [
     "//content:content_implementation",
     "//build/config/compiler:no_size_t_to_int_warning",
   ]
+}
+
+# See comment at the top of //content/BUILD.gn for how this works.
+group("for_content_tests") {
+  visibility = [ "//content/test/*" ]
+  if (!is_component_build) {
+    public_deps = [
+      ":child",
+    ]
+  }
 }

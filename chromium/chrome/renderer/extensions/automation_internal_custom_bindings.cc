@@ -7,10 +7,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/common/extensions/chrome_extension_messages.h"
 #include "chrome/common/extensions/manifest_handlers/automation.h"
@@ -720,6 +721,29 @@ void AutomationInternalCustomBindings::GetSchemaAdditions(
       v8::String::NewFromUtf8(GetIsolate(), "TreeChangeType"),
       ToEnumObject(GetIsolate(), ui::AX_MUTATION_NONE, ui::AX_MUTATION_LAST));
 
+  v8::Local<v8::Object> name_from_type(v8::Object::New(GetIsolate()));
+  for (int i = ui::AX_NAME_FROM_NONE; i <= ui::AX_NAME_FROM_LAST; ++i) {
+    name_from_type->Set(
+        v8::Integer::New(GetIsolate(), i),
+        CreateV8String(GetIsolate(),
+                       ui::ToString(static_cast<ui::AXNameFrom>(i))));
+  }
+
+  additions->Set(v8::String::NewFromUtf8(GetIsolate(), "NameFromType"),
+                 name_from_type);
+
+  v8::Local<v8::Object> description_from_type(v8::Object::New(GetIsolate()));
+  for (int i = ui::AX_DESCRIPTION_FROM_NONE; i <= ui::AX_DESCRIPTION_FROM_LAST;
+       ++i) {
+    description_from_type->Set(
+        v8::Integer::New(GetIsolate(), i),
+        CreateV8String(GetIsolate(),
+                       ui::ToString(static_cast<ui::AXDescriptionFrom>(i))));
+  }
+
+  additions->Set(v8::String::NewFromUtf8(GetIsolate(), "DescriptionFromType"),
+                 description_from_type);
+
   args.GetReturnValue().Set(additions);
 }
 
@@ -1057,6 +1081,7 @@ void AutomationInternalCustomBindings::OnAccessibilityEvent(
   args->Set(0U, event_params);
   context()->DispatchEvent("automationInternal.onAccessibilityEvent", args);
 }
+
 void AutomationInternalCustomBindings::OnNodeDataWillChange(
     ui::AXTree* tree,
     const ui::AXNodeData& old_node_data,
@@ -1123,6 +1148,10 @@ void AutomationInternalCustomBindings::OnAtomicUpdateFinished(
         SendTreeChangeEvent(
             api::automation::TREE_CHANGE_TYPE_NODECHANGED,
             tree, node);
+        break;
+      // Unhandled.
+      case NODE_REPARENTED:
+      case SUBTREE_REPARENTED:
         break;
     }
   }

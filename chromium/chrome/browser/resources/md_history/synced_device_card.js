@@ -51,7 +51,7 @@ Polymer({
   toggleTabCard: function() {
     this.$.collapse.toggle();
     this.$['dropdown-indicator'].icon =
-        this.$.collapse.opened ? 'expand-less' : 'expand-more';
+        this.$.collapse.opened ? 'cr:expand-less' : 'cr:expand-more';
   },
 
   /**
@@ -65,7 +65,7 @@ Polymer({
 
       for (var i = 0; i < this.tabs.length; i++) {
         icons[i].style.backgroundImage =
-            getFaviconImageSet(this.tabs[i].url);
+            cr.icon.getFaviconImageSet(this.tabs[i].url);
       }
     });
   }

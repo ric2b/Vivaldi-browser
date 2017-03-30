@@ -59,6 +59,10 @@ error::Error GLES2DecoderImpl::HandleBindBufferBase(
   GLenum target = static_cast<GLenum>(c.target);
   GLuint index = static_cast<GLuint>(c.index);
   GLuint buffer = c.buffer;
+  if (!validators_->indexed_buffer_target.IsValid(target)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glBindBufferBase", target, "target");
+    return error::kNoError;
+  }
   DoBindBufferBase(target, index, buffer);
   return error::kNoError;
 }
@@ -76,6 +80,14 @@ error::Error GLES2DecoderImpl::HandleBindBufferRange(
   GLuint buffer = c.buffer;
   GLintptr offset = static_cast<GLintptr>(c.offset);
   GLsizeiptr size = static_cast<GLsizeiptr>(c.size);
+  if (!validators_->indexed_buffer_target.IsValid(target)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glBindBufferRange", target, "target");
+    return error::kNoError;
+  }
+  if (size < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glBindBufferRange", "size < 0");
+    return error::kNoError;
+  }
   DoBindBufferRange(target, index, buffer, offset, size);
   return error::kNoError;
 }
@@ -150,13 +162,12 @@ error::Error GLES2DecoderImpl::HandleBindTransformFeedback(
   (void)c;
   GLenum target = static_cast<GLenum>(c.target);
   GLuint transformfeedback = c.transformfeedback;
-  if (!group_->GetTransformFeedbackServiceId(transformfeedback,
-                                             &transformfeedback)) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glBindTransformFeedback",
-                       "invalid transformfeedback id");
+  if (!validators_->transform_feedback_bind_target.IsValid(target)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glBindTransformFeedback", target,
+                                    "target");
     return error::kNoError;
   }
-  glBindTransformFeedback(target, transformfeedback);
+  DoBindTransformFeedback(target, transformfeedback);
   return error::kNoError;
 }
 
@@ -366,6 +377,10 @@ error::Error GLES2DecoderImpl::HandleClearBufferfi(uint32_t immediate_data_size,
   GLint drawbuffers = static_cast<GLint>(c.drawbuffers);
   GLfloat depth = static_cast<GLfloat>(c.depth);
   GLint stencil = static_cast<GLint>(c.stencil);
+  if (!validators_->bufferfi.IsValid(buffer)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glClearBufferfi", buffer, "buffer");
+    return error::kNoError;
+  }
   DoClearBufferfi(buffer, drawbuffers, depth, stencil);
   return error::kNoError;
 }
@@ -381,7 +396,7 @@ error::Error GLES2DecoderImpl::HandleClearBufferfvImmediate(
   GLenum buffer = static_cast<GLenum>(c.buffer);
   GLint drawbuffers = static_cast<GLint>(c.drawbuffers);
   uint32_t data_size;
-  if (!ComputeDataSize(1, sizeof(GLfloat), 4, &data_size)) {
+  if (!GLES2Util::ComputeDataSize(1, sizeof(GLfloat), 4, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -389,6 +404,10 @@ error::Error GLES2DecoderImpl::HandleClearBufferfvImmediate(
   }
   const GLfloat* value =
       GetImmediateDataAs<const GLfloat*>(c, data_size, immediate_data_size);
+  if (!validators_->bufferfv.IsValid(buffer)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glClearBufferfv", buffer, "buffer");
+    return error::kNoError;
+  }
   if (value == NULL) {
     return error::kOutOfBounds;
   }
@@ -407,7 +426,7 @@ error::Error GLES2DecoderImpl::HandleClearBufferivImmediate(
   GLenum buffer = static_cast<GLenum>(c.buffer);
   GLint drawbuffers = static_cast<GLint>(c.drawbuffers);
   uint32_t data_size;
-  if (!ComputeDataSize(1, sizeof(GLint), 4, &data_size)) {
+  if (!GLES2Util::ComputeDataSize(1, sizeof(GLint), 4, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -415,6 +434,10 @@ error::Error GLES2DecoderImpl::HandleClearBufferivImmediate(
   }
   const GLint* value =
       GetImmediateDataAs<const GLint*>(c, data_size, immediate_data_size);
+  if (!validators_->bufferiv.IsValid(buffer)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glClearBufferiv", buffer, "buffer");
+    return error::kNoError;
+  }
   if (value == NULL) {
     return error::kOutOfBounds;
   }
@@ -433,7 +456,7 @@ error::Error GLES2DecoderImpl::HandleClearBufferuivImmediate(
   GLenum buffer = static_cast<GLenum>(c.buffer);
   GLint drawbuffers = static_cast<GLint>(c.drawbuffers);
   uint32_t data_size;
-  if (!ComputeDataSize(1, sizeof(GLuint), 4, &data_size)) {
+  if (!GLES2Util::ComputeDataSize(1, sizeof(GLuint), 4, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -441,6 +464,10 @@ error::Error GLES2DecoderImpl::HandleClearBufferuivImmediate(
   }
   const GLuint* value =
       GetImmediateDataAs<const GLuint*>(c, data_size, immediate_data_size);
+  if (!validators_->bufferuiv.IsValid(buffer)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glClearBufferuiv", buffer, "buffer");
+    return error::kNoError;
+  }
   if (value == NULL) {
     return error::kOutOfBounds;
   }
@@ -595,6 +622,36 @@ error::Error GLES2DecoderImpl::HandleCompressedTexSubImage3D(
   uint32_t data_size = imageSize;
   const void* data = GetSharedMemoryAs<const void*>(
       c.data_shm_id, c.data_shm_offset, data_size);
+  if (!validators_->texture_3_d_target.IsValid(target)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexSubImage3D", target,
+                                    "target");
+    return error::kNoError;
+  }
+  if (width < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage3D",
+                       "width < 0");
+    return error::kNoError;
+  }
+  if (height < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage3D",
+                       "height < 0");
+    return error::kNoError;
+  }
+  if (depth < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage3D",
+                       "depth < 0");
+    return error::kNoError;
+  }
+  if (!validators_->compressed_texture_format.IsValid(format)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexSubImage3D", format,
+                                    "format");
+    return error::kNoError;
+  }
+  if (imageSize < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage3D",
+                       "imageSize < 0");
+    return error::kNoError;
+  }
   if (data == NULL) {
     return error::kOutOfBounds;
   }
@@ -616,6 +673,20 @@ error::Error GLES2DecoderImpl::HandleCopyBufferSubData(
   GLintptr readoffset = static_cast<GLintptr>(c.readoffset);
   GLintptr writeoffset = static_cast<GLintptr>(c.writeoffset);
   GLsizeiptr size = static_cast<GLsizeiptr>(c.size);
+  if (!validators_->buffer_target.IsValid(readtarget)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCopyBufferSubData", readtarget,
+                                    "readtarget");
+    return error::kNoError;
+  }
+  if (!validators_->buffer_target.IsValid(writetarget)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCopyBufferSubData", writetarget,
+                                    "writetarget");
+    return error::kNoError;
+  }
+  if (size < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCopyBufferSubData", "size < 0");
+    return error::kNoError;
+  }
   glCopyBufferSubData(readtarget, writetarget, readoffset, writeoffset, size);
   return error::kNoError;
 }
@@ -714,6 +785,18 @@ error::Error GLES2DecoderImpl::HandleCopyTexSubImage3D(
   GLint y = static_cast<GLint>(c.y);
   GLsizei width = static_cast<GLsizei>(c.width);
   GLsizei height = static_cast<GLsizei>(c.height);
+  if (!validators_->texture_3_d_target.IsValid(target)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCopyTexSubImage3D", target, "target");
+    return error::kNoError;
+  }
+  if (width < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCopyTexSubImage3D", "width < 0");
+    return error::kNoError;
+  }
+  if (height < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCopyTexSubImage3D", "height < 0");
+    return error::kNoError;
+  }
   glCopyTexSubImage3D(target, level, xoffset, yoffset, zoffset, x, y, width,
                       height);
   return error::kNoError;
@@ -912,13 +995,7 @@ error::Error GLES2DecoderImpl::HandleDeleteTransformFeedbacksImmediate(
   if (ids == NULL) {
     return error::kOutOfBounds;
   }
-  for (GLsizei ii = 0; ii < n; ++ii) {
-    GLuint service_id = 0;
-    if (group_->GetTransformFeedbackServiceId(ids[ii], &service_id)) {
-      glDeleteTransformFeedbacks(1, &service_id);
-      group_->RemoveTransformFeedbackId(ids[ii]);
-    }
-  }
+  DeleteTransformFeedbacksHelper(n, ids);
   return error::kNoError;
 }
 
@@ -1139,6 +1216,16 @@ error::Error GLES2DecoderImpl::HandleFramebufferTextureLayer(
   GLuint texture = c.texture;
   GLint level = static_cast<GLint>(c.level);
   GLint layer = static_cast<GLint>(c.layer);
+  if (!validators_->frame_buffer_target.IsValid(target)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glFramebufferTextureLayer", target,
+                                    "target");
+    return error::kNoError;
+  }
+  if (!validators_->attachment.IsValid(attachment)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glFramebufferTextureLayer", attachment,
+                                    "attachment");
+    return error::kNoError;
+  }
   DoFramebufferTextureLayer(target, attachment, texture, level, layer);
   return error::kNoError;
 }
@@ -1305,15 +1392,8 @@ error::Error GLES2DecoderImpl::HandleGenTransformFeedbacksImmediate(
   if (ids == NULL) {
     return error::kOutOfBounds;
   }
-  for (GLsizei ii = 0; ii < n; ++ii) {
-    if (group_->GetTransformFeedbackServiceId(ids[ii], NULL)) {
-      return error::kInvalidArguments;
-    }
-  }
-  scoped_ptr<GLuint[]> service_ids(new GLuint[n]);
-  glGenTransformFeedbacks(n, service_ids.get());
-  for (GLsizei ii = 0; ii < n; ++ii) {
-    group_->AddTransformFeedbackId(ids[ii], service_ids[ii]);
+  if (!GenTransformFeedbacksHelper(n, ids)) {
+    return error::kInvalidArguments;
   }
   return error::kNoError;
 }
@@ -1366,6 +1446,15 @@ error::Error GLES2DecoderImpl::HandleGetBufferParameteri64v(
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLint64* params = result ? result->GetData() : NULL;
+  if (!validators_->buffer_target.IsValid(target)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glGetBufferParameteri64v", target,
+                                    "target");
+    return error::kNoError;
+  }
+  if (!validators_->buffer_parameter_64.IsValid(pname)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glGetBufferParameteri64v", pname, "pname");
+    return error::kNoError;
+  }
   if (params == NULL) {
     return error::kOutOfBounds;
   }
@@ -1518,6 +1607,10 @@ error::Error GLES2DecoderImpl::HandleGetInteger64v(uint32_t immediate_data_size,
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLint64* params = result ? result->GetData() : NULL;
+  if (!validators_->g_l_state.IsValid(pname)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glGetInteger64v", pname, "pname");
+    return error::kNoError;
+  }
   if (params == NULL) {
     return error::kOutOfBounds;
   }
@@ -1549,22 +1642,21 @@ error::Error GLES2DecoderImpl::HandleGetIntegeri_v(uint32_t immediate_data_size,
   Result* result = GetSharedMemoryAs<Result*>(c.data_shm_id, c.data_shm_offset,
                                               Result::ComputeSize(num_values));
   GLint* data = result ? result->GetData() : NULL;
+  if (!validators_->indexed_g_l_state.IsValid(pname)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glGetIntegeri_v", pname, "pname");
+    return error::kNoError;
+  }
   if (data == NULL) {
     return error::kOutOfBounds;
   }
-  LOCAL_COPY_REAL_GL_ERRORS_TO_WRAPPER("GetIntegeri_v");
   // Check that the client initialized the result.
   if (result->size != 0) {
     return error::kInvalidArguments;
   }
-  glGetIntegeri_v(pname, index, data);
-  GLenum error = LOCAL_PEEK_GL_ERROR("GetIntegeri_v");
-  if (error == GL_NO_ERROR) {
-    result->SetNumResults(num_values);
-  }
+  DoGetIntegeri_v(pname, index, data);
+  result->SetNumResults(num_values);
   return error::kNoError;
 }
-
 error::Error GLES2DecoderImpl::HandleGetInteger64i_v(
     uint32_t immediate_data_size,
     const void* cmd_data) {
@@ -1581,22 +1673,21 @@ error::Error GLES2DecoderImpl::HandleGetInteger64i_v(
   Result* result = GetSharedMemoryAs<Result*>(c.data_shm_id, c.data_shm_offset,
                                               Result::ComputeSize(num_values));
   GLint64* data = result ? result->GetData() : NULL;
+  if (!validators_->indexed_g_l_state.IsValid(pname)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glGetInteger64i_v", pname, "pname");
+    return error::kNoError;
+  }
   if (data == NULL) {
     return error::kOutOfBounds;
   }
-  LOCAL_COPY_REAL_GL_ERRORS_TO_WRAPPER("GetInteger64i_v");
   // Check that the client initialized the result.
   if (result->size != 0) {
     return error::kInvalidArguments;
   }
-  glGetInteger64i_v(pname, index, data);
-  GLenum error = LOCAL_PEEK_GL_ERROR("GetInteger64i_v");
-  if (error == GL_NO_ERROR) {
-    result->SetNumResults(num_values);
-  }
+  DoGetInteger64i_v(pname, index, data);
+  result->SetNumResults(num_values);
   return error::kNoError;
 }
-
 error::Error GLES2DecoderImpl::HandleGetIntegerv(uint32_t immediate_data_size,
                                                  const void* cmd_data) {
   const gles2::cmds::GetIntegerv& c =
@@ -1718,6 +1809,10 @@ error::Error GLES2DecoderImpl::HandleGetSamplerParameterfv(
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLfloat* params = result ? result->GetData() : NULL;
+  if (!validators_->sampler_parameter.IsValid(pname)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glGetSamplerParameterfv", pname, "pname");
+    return error::kNoError;
+  }
   if (params == NULL) {
     return error::kOutOfBounds;
   }
@@ -1750,6 +1845,10 @@ error::Error GLES2DecoderImpl::HandleGetSamplerParameteriv(
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLint* params = result ? result->GetData() : NULL;
+  if (!validators_->sampler_parameter.IsValid(pname)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glGetSamplerParameteriv", pname, "pname");
+    return error::kNoError;
+  }
   if (params == NULL) {
     return error::kOutOfBounds;
   }
@@ -1814,6 +1913,10 @@ error::Error GLES2DecoderImpl::HandleGetSynciv(uint32_t immediate_data_size,
   Result* result = GetSharedMemoryAs<Result*>(
       c.values_shm_id, c.values_shm_offset, Result::ComputeSize(num_values));
   GLint* values = result ? result->GetData() : NULL;
+  if (!validators_->sync_parameter.IsValid(pname)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glGetSynciv", pname, "pname");
+    return error::kNoError;
+  }
   if (values == NULL) {
     return error::kOutOfBounds;
   }
@@ -1995,6 +2098,10 @@ error::Error GLES2DecoderImpl::HandleGetVertexAttribIiv(
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLint* params = result ? result->GetData() : NULL;
+  if (!validators_->vertex_attribute.IsValid(pname)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glGetVertexAttribIiv", pname, "pname");
+    return error::kNoError;
+  }
   if (params == NULL) {
     return error::kOutOfBounds;
   }
@@ -2027,6 +2134,10 @@ error::Error GLES2DecoderImpl::HandleGetVertexAttribIuiv(
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLuint* params = result ? result->GetData() : NULL;
+  if (!validators_->vertex_attribute.IsValid(pname)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glGetVertexAttribIuiv", pname, "pname");
+    return error::kNoError;
+  }
   if (params == NULL) {
     return error::kOutOfBounds;
   }
@@ -2087,8 +2198,9 @@ error::Error GLES2DecoderImpl::HandleInvalidateFramebufferImmediate(
   (void)c;
   GLenum target = static_cast<GLenum>(c.target);
   GLsizei count = static_cast<GLsizei>(c.count);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLenum), 1, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLenum), 1, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -2096,10 +2208,20 @@ error::Error GLES2DecoderImpl::HandleInvalidateFramebufferImmediate(
   }
   const GLenum* attachments =
       GetImmediateDataAs<const GLenum*>(c, data_size, immediate_data_size);
+  if (!validators_->frame_buffer_target.IsValid(target)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glInvalidateFramebuffer", target,
+                                    "target");
+    return error::kNoError;
+  }
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glInvalidateFramebuffer",
+                       "count < 0");
+    return error::kNoError;
+  }
   if (attachments == NULL) {
     return error::kOutOfBounds;
   }
-  glInvalidateFramebuffer(target, count, attachments);
+  DoInvalidateFramebuffer(target, count, attachments);
   return error::kNoError;
 }
 
@@ -2114,8 +2236,9 @@ error::Error GLES2DecoderImpl::HandleInvalidateSubFramebufferImmediate(
   (void)c;
   GLenum target = static_cast<GLenum>(c.target);
   GLsizei count = static_cast<GLsizei>(c.count);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLenum), 1, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLenum), 1, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -2127,10 +2250,30 @@ error::Error GLES2DecoderImpl::HandleInvalidateSubFramebufferImmediate(
   GLint y = static_cast<GLint>(c.y);
   GLsizei width = static_cast<GLsizei>(c.width);
   GLsizei height = static_cast<GLsizei>(c.height);
+  if (!validators_->frame_buffer_target.IsValid(target)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glInvalidateSubFramebuffer", target,
+                                    "target");
+    return error::kNoError;
+  }
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glInvalidateSubFramebuffer",
+                       "count < 0");
+    return error::kNoError;
+  }
   if (attachments == NULL) {
     return error::kOutOfBounds;
   }
-  glInvalidateSubFramebuffer(target, count, attachments, x, y, width, height);
+  if (width < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glInvalidateSubFramebuffer",
+                       "width < 0");
+    return error::kNoError;
+  }
+  if (height < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glInvalidateSubFramebuffer",
+                       "height < 0");
+    return error::kNoError;
+  }
+  DoInvalidateSubFramebuffer(target, count, attachments, x, y, width, height);
   return error::kNoError;
 }
 
@@ -2303,9 +2446,7 @@ error::Error GLES2DecoderImpl::HandleIsTransformFeedback(
   if (!result_dst) {
     return error::kOutOfBounds;
   }
-  GLuint service_transformfeedback = 0;
-  *result_dst = group_->GetTransformFeedbackServiceId(
-      transformfeedback, &service_transformfeedback);
+  *result_dst = DoIsTransformFeedback(transformfeedback);
   return error::kNoError;
 }
 
@@ -2344,7 +2485,7 @@ error::Error GLES2DecoderImpl::HandlePauseTransformFeedback(
   const gles2::cmds::PauseTransformFeedback& c =
       *static_cast<const gles2::cmds::PauseTransformFeedback*>(cmd_data);
   (void)c;
-  glPauseTransformFeedback();
+  DoPauseTransformFeedback();
   return error::kNoError;
 }
 
@@ -2372,6 +2513,10 @@ error::Error GLES2DecoderImpl::HandleReadBuffer(uint32_t immediate_data_size,
       *static_cast<const gles2::cmds::ReadBuffer*>(cmd_data);
   (void)c;
   GLenum src = static_cast<GLenum>(c.src);
+  if (!validators_->read_buffer.IsValid(src)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glReadBuffer", src, "src");
+    return error::kNoError;
+  }
   DoReadBuffer(src);
   return error::kNoError;
 }
@@ -2425,7 +2570,7 @@ error::Error GLES2DecoderImpl::HandleResumeTransformFeedback(
   const gles2::cmds::ResumeTransformFeedback& c =
       *static_cast<const gles2::cmds::ResumeTransformFeedback*>(cmd_data);
   (void)c;
-  glResumeTransformFeedback();
+  DoResumeTransformFeedback();
   return error::kNoError;
 }
 
@@ -2452,6 +2597,10 @@ error::Error GLES2DecoderImpl::HandleSamplerParameterf(
   GLuint sampler = c.sampler;
   GLenum pname = static_cast<GLenum>(c.pname);
   GLfloat param = static_cast<GLfloat>(c.param);
+  if (!validators_->sampler_parameter.IsValid(pname)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glSamplerParameterf", pname, "pname");
+    return error::kNoError;
+  }
   DoSamplerParameterf(sampler, pname, param);
   return error::kNoError;
 }
@@ -2467,7 +2616,7 @@ error::Error GLES2DecoderImpl::HandleSamplerParameterfvImmediate(
   GLuint sampler = c.sampler;
   GLenum pname = static_cast<GLenum>(c.pname);
   uint32_t data_size;
-  if (!ComputeDataSize(1, sizeof(GLfloat), 1, &data_size)) {
+  if (!GLES2Util::ComputeDataSize(1, sizeof(GLfloat), 1, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -2475,6 +2624,10 @@ error::Error GLES2DecoderImpl::HandleSamplerParameterfvImmediate(
   }
   const GLfloat* params =
       GetImmediateDataAs<const GLfloat*>(c, data_size, immediate_data_size);
+  if (!validators_->sampler_parameter.IsValid(pname)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glSamplerParameterfv", pname, "pname");
+    return error::kNoError;
+  }
   if (params == NULL) {
     return error::kOutOfBounds;
   }
@@ -2493,6 +2646,10 @@ error::Error GLES2DecoderImpl::HandleSamplerParameteri(
   GLuint sampler = c.sampler;
   GLenum pname = static_cast<GLenum>(c.pname);
   GLint param = static_cast<GLint>(c.param);
+  if (!validators_->sampler_parameter.IsValid(pname)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glSamplerParameteri", pname, "pname");
+    return error::kNoError;
+  }
   DoSamplerParameteri(sampler, pname, param);
   return error::kNoError;
 }
@@ -2508,7 +2665,7 @@ error::Error GLES2DecoderImpl::HandleSamplerParameterivImmediate(
   GLuint sampler = c.sampler;
   GLenum pname = static_cast<GLenum>(c.pname);
   uint32_t data_size;
-  if (!ComputeDataSize(1, sizeof(GLint), 1, &data_size)) {
+  if (!GLES2Util::ComputeDataSize(1, sizeof(GLint), 1, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -2516,6 +2673,10 @@ error::Error GLES2DecoderImpl::HandleSamplerParameterivImmediate(
   }
   const GLint* params =
       GetImmediateDataAs<const GLint*>(c, data_size, immediate_data_size);
+  if (!validators_->sampler_parameter.IsValid(pname)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glSamplerParameteriv", pname, "pname");
+    return error::kNoError;
+  }
   if (params == NULL) {
     return error::kOutOfBounds;
   }
@@ -2814,7 +2975,7 @@ error::Error GLES2DecoderImpl::HandleTexParameterfvImmediate(
   GLenum target = static_cast<GLenum>(c.target);
   GLenum pname = static_cast<GLenum>(c.pname);
   uint32_t data_size;
-  if (!ComputeDataSize(1, sizeof(GLfloat), 1, &data_size)) {
+  if (!GLES2Util::ComputeDataSize(1, sizeof(GLfloat), 1, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -2866,7 +3027,7 @@ error::Error GLES2DecoderImpl::HandleTexParameterivImmediate(
   GLenum target = static_cast<GLenum>(c.target);
   GLenum pname = static_cast<GLenum>(c.pname);
   uint32_t data_size;
-  if (!ComputeDataSize(1, sizeof(GLint), 1, &data_size)) {
+  if (!GLES2Util::ComputeDataSize(1, sizeof(GLint), 1, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -2902,6 +3063,31 @@ error::Error GLES2DecoderImpl::HandleTexStorage3D(uint32_t immediate_data_size,
   GLsizei width = static_cast<GLsizei>(c.width);
   GLsizei height = static_cast<GLsizei>(c.height);
   GLsizei depth = static_cast<GLsizei>(c.depth);
+  if (!validators_->texture_3_d_target.IsValid(target)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glTexStorage3D", target, "target");
+    return error::kNoError;
+  }
+  if (levels < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glTexStorage3D", "levels < 0");
+    return error::kNoError;
+  }
+  if (!validators_->texture_internal_format_storage.IsValid(internalFormat)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glTexStorage3D", internalFormat,
+                                    "internalFormat");
+    return error::kNoError;
+  }
+  if (width < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glTexStorage3D", "width < 0");
+    return error::kNoError;
+  }
+  if (height < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glTexStorage3D", "height < 0");
+    return error::kNoError;
+  }
+  if (depth < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glTexStorage3D", "depth < 0");
+    return error::kNoError;
+  }
   DoTexStorage3D(target, levels, internalFormat, width, height, depth);
   return error::kNoError;
 }
@@ -2933,6 +3119,11 @@ error::Error GLES2DecoderImpl::HandleTransformFeedbackVaryingsBucket(
       len.size() > 0 ? const_cast<const GLint*>(&len[0]) : NULL;
   (void)length;
   GLenum buffermode = static_cast<GLenum>(c.buffermode);
+  if (!validators_->buffer_mode.IsValid(buffermode)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glTransformFeedbackVaryings", buffermode,
+                                    "buffermode");
+    return error::kNoError;
+  }
   DoTransformFeedbackVaryings(program, count, varyings, buffermode);
   return error::kNoError;
 }
@@ -2959,8 +3150,9 @@ error::Error GLES2DecoderImpl::HandleUniform1fvImmediate(
   (void)c;
   GLint location = static_cast<GLint>(c.location);
   GLsizei count = static_cast<GLsizei>(c.count);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLfloat), 1, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLfloat), 1, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -2968,6 +3160,10 @@ error::Error GLES2DecoderImpl::HandleUniform1fvImmediate(
   }
   const GLfloat* v =
       GetImmediateDataAs<const GLfloat*>(c, data_size, immediate_data_size);
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glUniform1fv", "count < 0");
+    return error::kNoError;
+  }
   if (v == NULL) {
     return error::kOutOfBounds;
   }
@@ -2994,8 +3190,9 @@ error::Error GLES2DecoderImpl::HandleUniform1ivImmediate(
   (void)c;
   GLint location = static_cast<GLint>(c.location);
   GLsizei count = static_cast<GLsizei>(c.count);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLint), 1, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLint), 1, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3003,6 +3200,10 @@ error::Error GLES2DecoderImpl::HandleUniform1ivImmediate(
   }
   const GLint* v =
       GetImmediateDataAs<const GLint*>(c, data_size, immediate_data_size);
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glUniform1iv", "count < 0");
+    return error::kNoError;
+  }
   if (v == NULL) {
     return error::kOutOfBounds;
   }
@@ -3036,8 +3237,9 @@ error::Error GLES2DecoderImpl::HandleUniform1uivImmediate(
   (void)c;
   GLint location = static_cast<GLint>(c.location);
   GLsizei count = static_cast<GLsizei>(c.count);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLuint), 1, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLuint), 1, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3045,6 +3247,10 @@ error::Error GLES2DecoderImpl::HandleUniform1uivImmediate(
   }
   const GLuint* v =
       GetImmediateDataAs<const GLuint*>(c, data_size, immediate_data_size);
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glUniform1uiv", "count < 0");
+    return error::kNoError;
+  }
   if (v == NULL) {
     return error::kOutOfBounds;
   }
@@ -3075,8 +3281,9 @@ error::Error GLES2DecoderImpl::HandleUniform2fvImmediate(
   (void)c;
   GLint location = static_cast<GLint>(c.location);
   GLsizei count = static_cast<GLsizei>(c.count);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLfloat), 2, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLfloat), 2, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3084,6 +3291,10 @@ error::Error GLES2DecoderImpl::HandleUniform2fvImmediate(
   }
   const GLfloat* v =
       GetImmediateDataAs<const GLfloat*>(c, data_size, immediate_data_size);
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glUniform2fv", "count < 0");
+    return error::kNoError;
+  }
   if (v == NULL) {
     return error::kOutOfBounds;
   }
@@ -3114,8 +3325,9 @@ error::Error GLES2DecoderImpl::HandleUniform2ivImmediate(
   (void)c;
   GLint location = static_cast<GLint>(c.location);
   GLsizei count = static_cast<GLsizei>(c.count);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLint), 2, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLint), 2, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3123,6 +3335,10 @@ error::Error GLES2DecoderImpl::HandleUniform2ivImmediate(
   }
   const GLint* v =
       GetImmediateDataAs<const GLint*>(c, data_size, immediate_data_size);
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glUniform2iv", "count < 0");
+    return error::kNoError;
+  }
   if (v == NULL) {
     return error::kOutOfBounds;
   }
@@ -3157,8 +3373,9 @@ error::Error GLES2DecoderImpl::HandleUniform2uivImmediate(
   (void)c;
   GLint location = static_cast<GLint>(c.location);
   GLsizei count = static_cast<GLsizei>(c.count);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLuint), 2, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLuint), 2, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3166,6 +3383,10 @@ error::Error GLES2DecoderImpl::HandleUniform2uivImmediate(
   }
   const GLuint* v =
       GetImmediateDataAs<const GLuint*>(c, data_size, immediate_data_size);
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glUniform2uiv", "count < 0");
+    return error::kNoError;
+  }
   if (v == NULL) {
     return error::kOutOfBounds;
   }
@@ -3197,8 +3418,9 @@ error::Error GLES2DecoderImpl::HandleUniform3fvImmediate(
   (void)c;
   GLint location = static_cast<GLint>(c.location);
   GLsizei count = static_cast<GLsizei>(c.count);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLfloat), 3, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLfloat), 3, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3206,6 +3428,10 @@ error::Error GLES2DecoderImpl::HandleUniform3fvImmediate(
   }
   const GLfloat* v =
       GetImmediateDataAs<const GLfloat*>(c, data_size, immediate_data_size);
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glUniform3fv", "count < 0");
+    return error::kNoError;
+  }
   if (v == NULL) {
     return error::kOutOfBounds;
   }
@@ -3237,8 +3463,9 @@ error::Error GLES2DecoderImpl::HandleUniform3ivImmediate(
   (void)c;
   GLint location = static_cast<GLint>(c.location);
   GLsizei count = static_cast<GLsizei>(c.count);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLint), 3, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLint), 3, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3246,6 +3473,10 @@ error::Error GLES2DecoderImpl::HandleUniform3ivImmediate(
   }
   const GLint* v =
       GetImmediateDataAs<const GLint*>(c, data_size, immediate_data_size);
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glUniform3iv", "count < 0");
+    return error::kNoError;
+  }
   if (v == NULL) {
     return error::kOutOfBounds;
   }
@@ -3281,8 +3512,9 @@ error::Error GLES2DecoderImpl::HandleUniform3uivImmediate(
   (void)c;
   GLint location = static_cast<GLint>(c.location);
   GLsizei count = static_cast<GLsizei>(c.count);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLuint), 3, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLuint), 3, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3290,6 +3522,10 @@ error::Error GLES2DecoderImpl::HandleUniform3uivImmediate(
   }
   const GLuint* v =
       GetImmediateDataAs<const GLuint*>(c, data_size, immediate_data_size);
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glUniform3uiv", "count < 0");
+    return error::kNoError;
+  }
   if (v == NULL) {
     return error::kOutOfBounds;
   }
@@ -3322,8 +3558,9 @@ error::Error GLES2DecoderImpl::HandleUniform4fvImmediate(
   (void)c;
   GLint location = static_cast<GLint>(c.location);
   GLsizei count = static_cast<GLsizei>(c.count);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLfloat), 4, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLfloat), 4, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3331,6 +3568,10 @@ error::Error GLES2DecoderImpl::HandleUniform4fvImmediate(
   }
   const GLfloat* v =
       GetImmediateDataAs<const GLfloat*>(c, data_size, immediate_data_size);
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glUniform4fv", "count < 0");
+    return error::kNoError;
+  }
   if (v == NULL) {
     return error::kOutOfBounds;
   }
@@ -3363,8 +3604,9 @@ error::Error GLES2DecoderImpl::HandleUniform4ivImmediate(
   (void)c;
   GLint location = static_cast<GLint>(c.location);
   GLsizei count = static_cast<GLsizei>(c.count);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLint), 4, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLint), 4, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3372,6 +3614,10 @@ error::Error GLES2DecoderImpl::HandleUniform4ivImmediate(
   }
   const GLint* v =
       GetImmediateDataAs<const GLint*>(c, data_size, immediate_data_size);
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glUniform4iv", "count < 0");
+    return error::kNoError;
+  }
   if (v == NULL) {
     return error::kOutOfBounds;
   }
@@ -3408,8 +3654,9 @@ error::Error GLES2DecoderImpl::HandleUniform4uivImmediate(
   (void)c;
   GLint location = static_cast<GLint>(c.location);
   GLsizei count = static_cast<GLsizei>(c.count);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLuint), 4, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLuint), 4, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3417,6 +3664,10 @@ error::Error GLES2DecoderImpl::HandleUniform4uivImmediate(
   }
   const GLuint* v =
       GetImmediateDataAs<const GLuint*>(c, data_size, immediate_data_size);
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glUniform4uiv", "count < 0");
+    return error::kNoError;
+  }
   if (v == NULL) {
     return error::kOutOfBounds;
   }
@@ -3433,8 +3684,9 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix2fvImmediate(
   GLint location = static_cast<GLint>(c.location);
   GLsizei count = static_cast<GLsizei>(c.count);
   GLboolean transpose = static_cast<GLboolean>(c.transpose);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLfloat), 4, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLfloat), 4, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3442,6 +3694,10 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix2fvImmediate(
   }
   const GLfloat* value =
       GetImmediateDataAs<const GLfloat*>(c, data_size, immediate_data_size);
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glUniformMatrix2fv", "count < 0");
+    return error::kNoError;
+  }
   if (value == NULL) {
     return error::kOutOfBounds;
   }
@@ -3460,8 +3716,9 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix2x3fvImmediate(
   GLint location = static_cast<GLint>(c.location);
   GLsizei count = static_cast<GLsizei>(c.count);
   GLboolean transpose = static_cast<GLboolean>(c.transpose);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLfloat), 6, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLfloat), 6, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3469,6 +3726,10 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix2x3fvImmediate(
   }
   const GLfloat* value =
       GetImmediateDataAs<const GLfloat*>(c, data_size, immediate_data_size);
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glUniformMatrix2x3fv", "count < 0");
+    return error::kNoError;
+  }
   if (value == NULL) {
     return error::kOutOfBounds;
   }
@@ -3487,8 +3748,9 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix2x4fvImmediate(
   GLint location = static_cast<GLint>(c.location);
   GLsizei count = static_cast<GLsizei>(c.count);
   GLboolean transpose = static_cast<GLboolean>(c.transpose);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLfloat), 8, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLfloat), 8, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3496,6 +3758,10 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix2x4fvImmediate(
   }
   const GLfloat* value =
       GetImmediateDataAs<const GLfloat*>(c, data_size, immediate_data_size);
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glUniformMatrix2x4fv", "count < 0");
+    return error::kNoError;
+  }
   if (value == NULL) {
     return error::kOutOfBounds;
   }
@@ -3512,8 +3778,9 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix3fvImmediate(
   GLint location = static_cast<GLint>(c.location);
   GLsizei count = static_cast<GLsizei>(c.count);
   GLboolean transpose = static_cast<GLboolean>(c.transpose);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLfloat), 9, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLfloat), 9, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3521,6 +3788,10 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix3fvImmediate(
   }
   const GLfloat* value =
       GetImmediateDataAs<const GLfloat*>(c, data_size, immediate_data_size);
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glUniformMatrix3fv", "count < 0");
+    return error::kNoError;
+  }
   if (value == NULL) {
     return error::kOutOfBounds;
   }
@@ -3539,8 +3810,9 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix3x2fvImmediate(
   GLint location = static_cast<GLint>(c.location);
   GLsizei count = static_cast<GLsizei>(c.count);
   GLboolean transpose = static_cast<GLboolean>(c.transpose);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLfloat), 6, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLfloat), 6, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3548,6 +3820,10 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix3x2fvImmediate(
   }
   const GLfloat* value =
       GetImmediateDataAs<const GLfloat*>(c, data_size, immediate_data_size);
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glUniformMatrix3x2fv", "count < 0");
+    return error::kNoError;
+  }
   if (value == NULL) {
     return error::kOutOfBounds;
   }
@@ -3566,8 +3842,9 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix3x4fvImmediate(
   GLint location = static_cast<GLint>(c.location);
   GLsizei count = static_cast<GLsizei>(c.count);
   GLboolean transpose = static_cast<GLboolean>(c.transpose);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLfloat), 12, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLfloat), 12, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3575,6 +3852,10 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix3x4fvImmediate(
   }
   const GLfloat* value =
       GetImmediateDataAs<const GLfloat*>(c, data_size, immediate_data_size);
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glUniformMatrix3x4fv", "count < 0");
+    return error::kNoError;
+  }
   if (value == NULL) {
     return error::kOutOfBounds;
   }
@@ -3591,8 +3872,9 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix4fvImmediate(
   GLint location = static_cast<GLint>(c.location);
   GLsizei count = static_cast<GLsizei>(c.count);
   GLboolean transpose = static_cast<GLboolean>(c.transpose);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLfloat), 16, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLfloat), 16, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3600,6 +3882,10 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix4fvImmediate(
   }
   const GLfloat* value =
       GetImmediateDataAs<const GLfloat*>(c, data_size, immediate_data_size);
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glUniformMatrix4fv", "count < 0");
+    return error::kNoError;
+  }
   if (value == NULL) {
     return error::kOutOfBounds;
   }
@@ -3618,8 +3904,9 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix4x2fvImmediate(
   GLint location = static_cast<GLint>(c.location);
   GLsizei count = static_cast<GLsizei>(c.count);
   GLboolean transpose = static_cast<GLboolean>(c.transpose);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLfloat), 8, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLfloat), 8, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3627,6 +3914,10 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix4x2fvImmediate(
   }
   const GLfloat* value =
       GetImmediateDataAs<const GLfloat*>(c, data_size, immediate_data_size);
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glUniformMatrix4x2fv", "count < 0");
+    return error::kNoError;
+  }
   if (value == NULL) {
     return error::kOutOfBounds;
   }
@@ -3645,8 +3936,9 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix4x3fvImmediate(
   GLint location = static_cast<GLint>(c.location);
   GLsizei count = static_cast<GLsizei>(c.count);
   GLboolean transpose = static_cast<GLboolean>(c.transpose);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLfloat), 12, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLfloat), 12, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3654,6 +3946,10 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix4x3fvImmediate(
   }
   const GLfloat* value =
       GetImmediateDataAs<const GLfloat*>(c, data_size, immediate_data_size);
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glUniformMatrix4x3fv", "count < 0");
+    return error::kNoError;
+  }
   if (value == NULL) {
     return error::kOutOfBounds;
   }
@@ -3702,7 +3998,7 @@ error::Error GLES2DecoderImpl::HandleVertexAttrib1fvImmediate(
   (void)c;
   GLuint indx = static_cast<GLuint>(c.indx);
   uint32_t data_size;
-  if (!ComputeDataSize(1, sizeof(GLfloat), 1, &data_size)) {
+  if (!GLES2Util::ComputeDataSize(1, sizeof(GLfloat), 1, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3738,7 +4034,7 @@ error::Error GLES2DecoderImpl::HandleVertexAttrib2fvImmediate(
   (void)c;
   GLuint indx = static_cast<GLuint>(c.indx);
   uint32_t data_size;
-  if (!ComputeDataSize(1, sizeof(GLfloat), 2, &data_size)) {
+  if (!GLES2Util::ComputeDataSize(1, sizeof(GLfloat), 2, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3775,7 +4071,7 @@ error::Error GLES2DecoderImpl::HandleVertexAttrib3fvImmediate(
   (void)c;
   GLuint indx = static_cast<GLuint>(c.indx);
   uint32_t data_size;
-  if (!ComputeDataSize(1, sizeof(GLfloat), 3, &data_size)) {
+  if (!GLES2Util::ComputeDataSize(1, sizeof(GLfloat), 3, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3813,7 +4109,7 @@ error::Error GLES2DecoderImpl::HandleVertexAttrib4fvImmediate(
   (void)c;
   GLuint indx = static_cast<GLuint>(c.indx);
   uint32_t data_size;
-  if (!ComputeDataSize(1, sizeof(GLfloat), 4, &data_size)) {
+  if (!GLES2Util::ComputeDataSize(1, sizeof(GLfloat), 4, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3855,7 +4151,7 @@ error::Error GLES2DecoderImpl::HandleVertexAttribI4ivImmediate(
   (void)c;
   GLuint indx = static_cast<GLuint>(c.indx);
   uint32_t data_size;
-  if (!ComputeDataSize(1, sizeof(GLint), 4, &data_size)) {
+  if (!GLES2Util::ComputeDataSize(1, sizeof(GLint), 4, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -3897,7 +4193,7 @@ error::Error GLES2DecoderImpl::HandleVertexAttribI4uivImmediate(
   (void)c;
   GLuint indx = static_cast<GLuint>(c.indx);
   uint32_t data_size;
-  if (!ComputeDataSize(1, sizeof(GLuint), 4, &data_size)) {
+  if (!GLES2Util::ComputeDataSize(1, sizeof(GLuint), 4, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -4193,7 +4489,12 @@ error::Error GLES2DecoderImpl::HandleBeginTransformFeedback(
       *static_cast<const gles2::cmds::BeginTransformFeedback*>(cmd_data);
   (void)c;
   GLenum primitivemode = static_cast<GLenum>(c.primitivemode);
-  glBeginTransformFeedback(primitivemode);
+  if (!validators_->transform_feedback_primitive_mode.IsValid(primitivemode)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glBeginTransformFeedback", primitivemode,
+                                    "primitivemode");
+    return error::kNoError;
+  }
+  DoBeginTransformFeedback(primitivemode);
   return error::kNoError;
 }
 
@@ -4205,7 +4506,7 @@ error::Error GLES2DecoderImpl::HandleEndTransformFeedback(
   const gles2::cmds::EndTransformFeedback& c =
       *static_cast<const gles2::cmds::EndTransformFeedback*>(cmd_data);
   (void)c;
-  glEndTransformFeedback();
+  DoEndTransformFeedback();
   return error::kNoError;
 }
 
@@ -4486,7 +4787,7 @@ error::Error GLES2DecoderImpl::HandleProduceTextureCHROMIUMImmediate(
   (void)c;
   GLenum target = static_cast<GLenum>(c.target);
   uint32_t data_size;
-  if (!ComputeDataSize(1, sizeof(GLbyte), 64, &data_size)) {
+  if (!GLES2Util::ComputeDataSize(1, sizeof(GLbyte), 64, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -4516,7 +4817,7 @@ error::Error GLES2DecoderImpl::HandleProduceTextureDirectCHROMIUMImmediate(
   GLuint texture = c.texture;
   GLenum target = static_cast<GLenum>(c.target);
   uint32_t data_size;
-  if (!ComputeDataSize(1, sizeof(GLbyte), 64, &data_size)) {
+  if (!GLES2Util::ComputeDataSize(1, sizeof(GLbyte), 64, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -4545,7 +4846,7 @@ error::Error GLES2DecoderImpl::HandleConsumeTextureCHROMIUMImmediate(
   (void)c;
   GLenum target = static_cast<GLenum>(c.target);
   uint32_t data_size;
-  if (!ComputeDataSize(1, sizeof(GLbyte), 64, &data_size)) {
+  if (!GLES2Util::ComputeDataSize(1, sizeof(GLbyte), 64, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -4562,146 +4863,6 @@ error::Error GLES2DecoderImpl::HandleConsumeTextureCHROMIUMImmediate(
     return error::kOutOfBounds;
   }
   DoConsumeTextureCHROMIUM(target, mailbox);
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderImpl::HandleGenValuebuffersCHROMIUMImmediate(
-    uint32_t immediate_data_size,
-    const void* cmd_data) {
-  const gles2::cmds::GenValuebuffersCHROMIUMImmediate& c =
-      *static_cast<const gles2::cmds::GenValuebuffersCHROMIUMImmediate*>(
-          cmd_data);
-  (void)c;
-  GLsizei n = static_cast<GLsizei>(c.n);
-  uint32_t data_size;
-  if (!SafeMultiplyUint32(n, sizeof(GLuint), &data_size)) {
-    return error::kOutOfBounds;
-  }
-  GLuint* buffers =
-      GetImmediateDataAs<GLuint*>(c, data_size, immediate_data_size);
-  if (buffers == NULL) {
-    return error::kOutOfBounds;
-  }
-  if (!GenValuebuffersCHROMIUMHelper(n, buffers)) {
-    return error::kInvalidArguments;
-  }
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderImpl::HandleDeleteValuebuffersCHROMIUMImmediate(
-    uint32_t immediate_data_size,
-    const void* cmd_data) {
-  const gles2::cmds::DeleteValuebuffersCHROMIUMImmediate& c =
-      *static_cast<const gles2::cmds::DeleteValuebuffersCHROMIUMImmediate*>(
-          cmd_data);
-  (void)c;
-  GLsizei n = static_cast<GLsizei>(c.n);
-  uint32_t data_size;
-  if (!SafeMultiplyUint32(n, sizeof(GLuint), &data_size)) {
-    return error::kOutOfBounds;
-  }
-  const GLuint* valuebuffers =
-      GetImmediateDataAs<const GLuint*>(c, data_size, immediate_data_size);
-  if (valuebuffers == NULL) {
-    return error::kOutOfBounds;
-  }
-  DeleteValuebuffersCHROMIUMHelper(n, valuebuffers);
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderImpl::HandleIsValuebufferCHROMIUM(
-    uint32_t immediate_data_size,
-    const void* cmd_data) {
-  const gles2::cmds::IsValuebufferCHROMIUM& c =
-      *static_cast<const gles2::cmds::IsValuebufferCHROMIUM*>(cmd_data);
-  (void)c;
-  GLuint valuebuffer = c.valuebuffer;
-  typedef cmds::IsValuebufferCHROMIUM::Result Result;
-  Result* result_dst = GetSharedMemoryAs<Result*>(
-      c.result_shm_id, c.result_shm_offset, sizeof(*result_dst));
-  if (!result_dst) {
-    return error::kOutOfBounds;
-  }
-  *result_dst = DoIsValuebufferCHROMIUM(valuebuffer);
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderImpl::HandleBindValuebufferCHROMIUM(
-    uint32_t immediate_data_size,
-    const void* cmd_data) {
-  const gles2::cmds::BindValuebufferCHROMIUM& c =
-      *static_cast<const gles2::cmds::BindValuebufferCHROMIUM*>(cmd_data);
-  (void)c;
-  GLenum target = static_cast<GLenum>(c.target);
-  GLuint valuebuffer = c.valuebuffer;
-  if (!validators_->value_buffer_target.IsValid(target)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glBindValuebufferCHROMIUM", target,
-                                    "target");
-    return error::kNoError;
-  }
-  DoBindValueBufferCHROMIUM(target, valuebuffer);
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderImpl::HandleSubscribeValueCHROMIUM(
-    uint32_t immediate_data_size,
-    const void* cmd_data) {
-  const gles2::cmds::SubscribeValueCHROMIUM& c =
-      *static_cast<const gles2::cmds::SubscribeValueCHROMIUM*>(cmd_data);
-  (void)c;
-  GLenum target = static_cast<GLenum>(c.target);
-  GLenum subscription = static_cast<GLenum>(c.subscription);
-  if (!validators_->value_buffer_target.IsValid(target)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glSubscribeValueCHROMIUM", target,
-                                    "target");
-    return error::kNoError;
-  }
-  if (!validators_->subscription_target.IsValid(subscription)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glSubscribeValueCHROMIUM", subscription,
-                                    "subscription");
-    return error::kNoError;
-  }
-  DoSubscribeValueCHROMIUM(target, subscription);
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderImpl::HandlePopulateSubscribedValuesCHROMIUM(
-    uint32_t immediate_data_size,
-    const void* cmd_data) {
-  const gles2::cmds::PopulateSubscribedValuesCHROMIUM& c =
-      *static_cast<const gles2::cmds::PopulateSubscribedValuesCHROMIUM*>(
-          cmd_data);
-  (void)c;
-  GLenum target = static_cast<GLenum>(c.target);
-  if (!validators_->value_buffer_target.IsValid(target)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glPopulateSubscribedValuesCHROMIUM",
-                                    target, "target");
-    return error::kNoError;
-  }
-  DoPopulateSubscribedValuesCHROMIUM(target);
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderImpl::HandleUniformValuebufferCHROMIUM(
-    uint32_t immediate_data_size,
-    const void* cmd_data) {
-  const gles2::cmds::UniformValuebufferCHROMIUM& c =
-      *static_cast<const gles2::cmds::UniformValuebufferCHROMIUM*>(cmd_data);
-  (void)c;
-  GLint location = static_cast<GLint>(c.location);
-  GLenum target = static_cast<GLenum>(c.target);
-  GLenum subscription = static_cast<GLenum>(c.subscription);
-  if (!validators_->value_buffer_target.IsValid(target)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glUniformValuebufferCHROMIUM", target,
-                                    "target");
-    return error::kNoError;
-  }
-  if (!validators_->subscription_target.IsValid(subscription)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glUniformValuebufferCHROMIUM",
-                                    subscription, "subscription");
-    return error::kNoError;
-  }
-  DoUniformValueBufferCHROMIUM(location, target, subscription);
   return error::kNoError;
 }
 
@@ -4762,8 +4923,9 @@ error::Error GLES2DecoderImpl::HandleDiscardFramebufferEXTImmediate(
 
   GLenum target = static_cast<GLenum>(c.target);
   GLsizei count = static_cast<GLsizei>(c.count);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLenum), 1, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLenum), 1, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -4811,8 +4973,9 @@ error::Error GLES2DecoderImpl::HandleDrawBuffersEXTImmediate(
       *static_cast<const gles2::cmds::DrawBuffersEXTImmediate*>(cmd_data);
   (void)c;
   GLsizei count = static_cast<GLsizei>(c.count);
-  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(GLenum), 1, &data_size)) {
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLenum), 1, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -4873,7 +5036,7 @@ error::Error GLES2DecoderImpl::HandleMatrixLoadfCHROMIUMImmediate(
 
   GLenum matrixMode = static_cast<GLenum>(c.matrixMode);
   uint32_t data_size;
-  if (!ComputeDataSize(1, sizeof(GLfloat), 16, &data_size)) {
+  if (!GLES2Util::ComputeDataSize(1, sizeof(GLfloat), 16, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -5025,7 +5188,7 @@ GLES2DecoderImpl::HandleUniformMatrix4fvStreamTextureMatrixCHROMIUMImmediate(
   GLint location = static_cast<GLint>(c.location);
   GLboolean transpose = static_cast<GLboolean>(c.transpose);
   uint32_t data_size;
-  if (!ComputeDataSize(1, sizeof(GLfloat), 16, &data_size)) {
+  if (!GLES2Util::ComputeDataSize(1, sizeof(GLfloat), 16, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {

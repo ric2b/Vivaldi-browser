@@ -31,6 +31,7 @@
 #include "platform/graphics/gpu/DrawingBuffer.h"
 
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/command_buffer/common/capabilities.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/TraceEvent.h"
 #include "platform/graphics/GraphicsLayer.h"
@@ -40,10 +41,9 @@
 #include "public/platform/WebCompositorSupport.h"
 #include "public/platform/WebExternalBitmap.h"
 #include "public/platform/WebExternalTextureLayer.h"
-#include "public/platform/WebGraphicsContext3D.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
-#include "wtf/ArrayBufferContents.h"
 #include "wtf/CheckedNumeric.h"
+#include "wtf/typed_arrays/ArrayBufferContents.h"
 #include <algorithm>
 
 namespace blink {
@@ -110,8 +110,8 @@ PassRefPtr<DrawingBuffer> DrawingBuffer::create(PassOwnPtr<WebGraphicsContext3DP
     if (discardFramebufferSupported)
         extensionsUtil->ensureExtensionEnabled("GL_EXT_discard_framebuffer");
 
-    RefPtr<DrawingBuffer> drawingBuffer = adoptRef(new DrawingBuffer(std::move(contextProvider), extensionsUtil.release(), discardFramebufferSupported, wantAlphaChannel, premultipliedAlpha, preserve));
-    if (!drawingBuffer->initialize(size, wantDepthBuffer, wantStencilBuffer, multisampleSupported)) {
+    RefPtr<DrawingBuffer> drawingBuffer = adoptRef(new DrawingBuffer(std::move(contextProvider), std::move(extensionsUtil), discardFramebufferSupported, wantAlphaChannel, premultipliedAlpha, preserve, wantDepthBuffer, wantStencilBuffer));
+    if (!drawingBuffer->initialize(size, multisampleSupported)) {
         drawingBuffer->beginDestruction();
         return PassRefPtr<DrawingBuffer>();
     }
@@ -129,37 +129,21 @@ DrawingBuffer::DrawingBuffer(
     bool discardFramebufferSupported,
     bool wantAlphaChannel,
     bool premultipliedAlpha,
-    PreserveDrawingBuffer preserve)
+    PreserveDrawingBuffer preserve,
+    bool wantDepth,
+    bool wantStencil)
     : m_preserveDrawingBuffer(preserve)
-    , m_scissorEnabled(false)
-    , m_texture2DBinding(0)
-    , m_drawFramebufferBinding(0)
-    , m_readFramebufferBinding(0)
-    , m_activeTextureUnit(GL_TEXTURE0)
     , m_contextProvider(std::move(contextProvider))
-    , m_context(m_contextProvider->context3d())
     , m_gl(m_contextProvider->contextGL())
     , m_extensionsUtil(std::move(extensionsUtil))
-    , m_size(-1, -1)
     , m_discardFramebufferSupported(discardFramebufferSupported)
     , m_wantAlphaChannel(wantAlphaChannel)
     , m_premultipliedAlpha(premultipliedAlpha)
-    , m_hasImplicitStencilBuffer(false)
-    , m_fbo(0)
-    , m_depthStencilBuffer(0)
-    , m_multisampleFBO(0)
-    , m_multisampleColorBuffer(0)
-    , m_contentsChanged(true)
-    , m_contentsChangeCommitted(false)
-    , m_bufferClearNeeded(false)
-    , m_antiAliasingMode(None)
-    , m_maxTextureSize(0)
-    , m_sampleCount(0)
-    , m_packAlignment(4)
-    , m_destructionInProgress(false)
-    , m_isHidden(false)
-    , m_filterQuality(kLow_SkFilterQuality)
+    , m_wantDepth(wantDepth)
+    , m_wantStencil(wantStencil)
 {
+    memset(m_colorMask, 0, 4 * sizeof(GLboolean));
+    memset(m_clearColor, 0, 4 * sizeof(GLfloat));
     // Used by browser tests to detect the use of a DrawingBuffer.
     TRACE_EVENT_INSTANT0("test_gpu", "DrawingBufferCreation", TRACE_EVENT_SCOPE_GLOBAL);
 }
@@ -192,11 +176,6 @@ void DrawingBuffer::setBufferClearNeeded(bool flag)
     }
 }
 
-WebGraphicsContext3D* DrawingBuffer::context()
-{
-    return m_context;
-}
-
 gpu::gles2::GLES2Interface* DrawingBuffer::contextGL()
 {
     return m_gl;
@@ -223,6 +202,20 @@ void DrawingBuffer::setFilterQuality(SkFilterQuality filterQuality)
         if (m_layer)
             m_layer->setNearestNeighbor(filterQuality == kNone_SkFilterQuality);
     }
+}
+
+bool DrawingBuffer::requiresAlphaChannelToBePreserved()
+{
+    return !m_drawFramebufferBinding && defaultBufferRequiresAlphaChannelToBePreserved();
+}
+
+bool DrawingBuffer::defaultBufferRequiresAlphaChannelToBePreserved()
+{
+    if (wantExplicitResolve()) {
+        return !m_wantAlphaChannel && getMultisampledRenderbufferFormat() == GL_RGBA8_OES;
+    }
+
+    return !m_wantAlphaChannel && m_colorBuffer.imageId && contextProvider()->getCapabilities().chromium_image_rgb_emulation;
 }
 
 void DrawingBuffer::freeRecycledMailboxes()
@@ -277,16 +270,11 @@ bool DrawingBuffer::prepareMailbox(WebExternalTextureMailbox* outMailbox, WebExt
 
     if (m_preserveDrawingBuffer == Discard) {
         std::swap(frontColorBufferMailbox->textureInfo, m_colorBuffer);
-        // It appears safe to overwrite the context's framebuffer binding in the Discard case since there will always be a
-        // WebGLRenderingContext::clearIfComposited() call made before the next draw call which restores the framebuffer binding.
-        // If this stops being true at some point, we should track the current framebuffer binding in the DrawingBuffer and restore
-        // it after attaching the new back buffer here.
-        m_gl->BindFramebuffer(GL_FRAMEBUFFER, m_fbo);
-        attachColorBufferToCurrentFBO();
+        attachColorBufferToReadFramebuffer();
 
         if (m_discardFramebufferSupported) {
             // Explicitly discard framebuffer to save GPU memory bandwidth for tile-based GPU arch.
-            const GLenum attachments[3] = { GL_COLOR_ATTACHMENT0, GL_DEPTH_ATTACHMENT, GL_STENCIL_ATTACHMENT};
+            const GLenum attachments[3] = { GL_COLOR_ATTACHMENT0, GL_DEPTH_ATTACHMENT, GL_STENCIL_ATTACHMENT };
             m_gl->DiscardFramebufferEXT(GL_FRAMEBUFFER, 3, attachments);
         }
     } else {
@@ -343,9 +331,20 @@ DrawingBuffer::TextureParameters DrawingBuffer::chromiumImageTextureParameters()
     // on OSX.
     TextureParameters parameters;
     parameters.target = GC3D_TEXTURE_RECTANGLE_ARB;
-    parameters.internalColorFormat = GL_RGBA;
-    parameters.internalRenderbufferFormat = GL_RGBA8_OES;
-    parameters.colorFormat = GL_RGBA;
+
+    if (m_wantAlphaChannel) {
+        parameters.creationInternalColorFormat = GL_RGBA;
+        parameters.internalColorFormat = GL_RGBA;
+    } else if (contextProvider()->getCapabilities().chromium_image_rgb_emulation) {
+        parameters.creationInternalColorFormat = GL_RGB;
+        parameters.internalColorFormat = GL_RGBA;
+    } else {
+        parameters.creationInternalColorFormat = GL_RGB;
+        parameters.internalColorFormat = GL_RGB;
+    }
+
+    // Unused when CHROMIUM_image is being used.
+    parameters.colorFormat = 0;
     return parameters;
 #else
     return defaultTextureParameters();
@@ -358,12 +357,12 @@ DrawingBuffer::TextureParameters DrawingBuffer::defaultTextureParameters()
     parameters.target = GL_TEXTURE_2D;
     if (m_wantAlphaChannel) {
         parameters.internalColorFormat = GL_RGBA;
+        parameters.creationInternalColorFormat = GL_RGBA;
         parameters.colorFormat = GL_RGBA;
-        parameters.internalRenderbufferFormat = GL_RGBA8_OES;
     } else {
         parameters.internalColorFormat = GL_RGB;
+        parameters.creationInternalColorFormat = GL_RGB;
         parameters.colorFormat = GL_RGB;
-        parameters.internalRenderbufferFormat = GL_RGB8_OES;
     }
     return parameters;
 }
@@ -438,7 +437,7 @@ void DrawingBuffer::deleteMailbox(const WebExternalTextureMailbox& mailbox)
     ASSERT_NOT_REACHED();
 }
 
-bool DrawingBuffer::initialize(const IntSize& size, bool wantDepthBuffer, bool wantStencilBuffer, bool useMultisampling)
+bool DrawingBuffer::initialize(const IntSize& size, bool useMultisampling)
 {
     if (m_gl->GetGraphicsResetStatusKHR() != GL_NO_ERROR) {
         // Need to try to restore the context again later.
@@ -461,15 +460,18 @@ bool DrawingBuffer::initialize(const IntSize& size, bool wantDepthBuffer, bool w
     m_sampleCount = std::min(4, maxSampleCount);
 
     m_gl->GenFramebuffers(1, &m_fbo);
-
     m_gl->BindFramebuffer(GL_FRAMEBUFFER, m_fbo);
-    createSecondaryBuffers();
-    if (!reset(size, wantDepthBuffer || wantStencilBuffer))
+    if (wantExplicitResolve()) {
+        m_gl->GenFramebuffers(1, &m_multisampleFBO);
+        m_gl->BindFramebuffer(GL_FRAMEBUFFER, m_multisampleFBO);
+        m_gl->GenRenderbuffers(1, &m_multisampleRenderbuffer);
+    }
+    if (!reset(size))
         return false;
 
     if (m_depthStencilBuffer) {
-        DCHECK(wantDepthBuffer || wantStencilBuffer);
-        m_hasImplicitStencilBuffer = !wantStencilBuffer;
+        DCHECK(wantDepthOrStencil());
+        m_hasImplicitStencilBuffer = !m_wantStencil;
     }
 
     if (m_gl->GetGraphicsResetStatusKHR() != GL_NO_ERROR) {
@@ -480,7 +482,7 @@ bool DrawingBuffer::initialize(const IntSize& size, bool wantDepthBuffer, bool w
     return true;
 }
 
-bool DrawingBuffer::copyToPlatformTexture(WebGraphicsContext3D* context, gpu::gles2::GLES2Interface* gl, GLuint texture, GLenum internalFormat,
+bool DrawingBuffer::copyToPlatformTexture(gpu::gles2::GLES2Interface* gl, GLuint texture, GLenum internalFormat,
     GLenum destType, GLint level, bool premultiplyAlpha, bool flipY, SourceDrawingBuffer sourceBuffer)
 {
     if (m_contentsChanged) {
@@ -583,8 +585,8 @@ void DrawingBuffer::beginDestruction()
     if (m_fbo)
         m_gl->DeleteFramebuffers(1, &m_fbo);
 
-    if (m_multisampleColorBuffer)
-        m_gl->DeleteRenderbuffers(1, &m_multisampleColorBuffer);
+    if (m_multisampleRenderbuffer)
+        m_gl->DeleteRenderbuffers(1, &m_multisampleRenderbuffer);
 
     if (m_depthStencilBuffer)
         m_gl->DeleteRenderbuffers(1, &m_depthStencilBuffer);
@@ -598,7 +600,7 @@ void DrawingBuffer::beginDestruction()
 
     m_colorBuffer = TextureInfo();
     m_frontColorBuffer = FrontBufferInfo();
-    m_multisampleColorBuffer = 0;
+    m_multisampleRenderbuffer = 0;
     m_depthStencilBuffer = 0;
     m_multisampleFBO = 0;
     m_fbo = 0;
@@ -619,50 +621,24 @@ GLuint DrawingBuffer::createColorTexture(const TextureParameters& parameters)
     return offscreenColorTexture;
 }
 
-void DrawingBuffer::createSecondaryBuffers()
+bool DrawingBuffer::resizeMultisampleFramebuffer(const IntSize& size)
 {
-    // create a multisample FBO
-    if (m_antiAliasingMode == MSAAExplicitResolve) {
-        m_gl->GenFramebuffers(1, &m_multisampleFBO);
-        m_gl->BindFramebuffer(GL_FRAMEBUFFER, m_multisampleFBO);
-        m_gl->GenRenderbuffers(1, &m_multisampleColorBuffer);
-    }
-}
+    DCHECK(wantExplicitResolve());
+    m_gl->BindFramebuffer(GL_FRAMEBUFFER, m_multisampleFBO);
+    m_gl->BindRenderbuffer(GL_RENDERBUFFER, m_multisampleRenderbuffer);
+    m_gl->RenderbufferStorageMultisampleCHROMIUM(GL_RENDERBUFFER, m_sampleCount, getMultisampledRenderbufferFormat(), size.width(), size.height());
 
-bool DrawingBuffer::resizeFramebuffer(const IntSize& size, bool wantDepthOrStencilBuffer)
-{
-    m_gl->BindFramebuffer(GL_FRAMEBUFFER, m_fbo);
-    if (m_antiAliasingMode != MSAAExplicitResolve && wantDepthOrStencilBuffer)
-        resizeDepthStencil(size);
-    if (m_gl->CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    if (m_gl->GetError() == GL_OUT_OF_MEMORY)
         return false;
 
-    return true;
-}
-
-bool DrawingBuffer::resizeMultisampleFramebuffer(const IntSize& size, bool wantDepthOrStencilBuffer)
-{
-    if (m_antiAliasingMode == MSAAExplicitResolve) {
-        m_gl->BindFramebuffer(GL_FRAMEBUFFER, m_multisampleFBO);
-
-        m_gl->BindRenderbuffer(GL_RENDERBUFFER, m_multisampleColorBuffer);
-        m_gl->RenderbufferStorageMultisampleCHROMIUM(GL_RENDERBUFFER, m_sampleCount, m_colorBuffer.parameters.internalRenderbufferFormat, size.width(), size.height());
-
-        if (m_gl->GetError() == GL_OUT_OF_MEMORY)
-            return false;
-
-        m_gl->FramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, m_multisampleColorBuffer);
-        if (wantDepthOrStencilBuffer)
-            resizeDepthStencil(size);
-        if (m_gl->CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-            return false;
-    }
+    m_gl->FramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, m_multisampleRenderbuffer);
 
     return true;
 }
 
 void DrawingBuffer::resizeDepthStencil(const IntSize& size)
 {
+    m_gl->BindFramebuffer(GL_FRAMEBUFFER, m_multisampleFBO ? m_multisampleFBO : m_fbo);
     if (!m_depthStencilBuffer)
         m_gl->GenRenderbuffers(1, &m_depthStencilBuffer);
     m_gl->BindRenderbuffer(GL_RENDERBUFFER, m_depthStencilBuffer);
@@ -678,7 +654,34 @@ void DrawingBuffer::resizeDepthStencil(const IntSize& size)
     m_gl->BindRenderbuffer(GL_RENDERBUFFER, 0);
 }
 
+bool DrawingBuffer::resizeDefaultFramebuffer(const IntSize& size)
+{
+    // Resize or create m_colorBuffer.
+    if (m_colorBuffer.textureId) {
+        resizeTextureMemory(&m_colorBuffer, size);
+    } else {
+        m_colorBuffer = createTextureAndAllocateMemory(size);
+    }
 
+    attachColorBufferToReadFramebuffer();
+
+    if (wantExplicitResolve()) {
+        if (!resizeMultisampleFramebuffer(size))
+            return false;
+    }
+
+    if (wantDepthOrStencil())
+        resizeDepthStencil(size);
+
+    if (wantExplicitResolve()) {
+        m_gl->BindFramebuffer(GL_FRAMEBUFFER, m_multisampleFBO);
+        if (m_gl->CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+            return false;
+    }
+
+    m_gl->BindFramebuffer(GL_FRAMEBUFFER, m_fbo);
+    return m_gl->CheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+}
 
 void DrawingBuffer::clearFramebuffers(GLbitfield clearMask)
 {
@@ -714,7 +717,7 @@ IntSize DrawingBuffer::adjustSize(const IntSize& desiredSize, const IntSize& cur
     return adjustedSize;
 }
 
-bool DrawingBuffer::reset(const IntSize& newSize, bool wantDepthOrStencilBuffer)
+bool DrawingBuffer::reset(const IntSize& newSize)
 {
     ASSERT(!newSize.isEmpty());
     IntSize adjustedSize = adjustSize(newSize, m_size, m_maxTextureSize);
@@ -723,18 +726,7 @@ bool DrawingBuffer::reset(const IntSize& newSize, bool wantDepthOrStencilBuffer)
 
     if (adjustedSize != m_size) {
         do {
-            if (m_colorBuffer.textureId) {
-                resizeTextureMemory(&m_colorBuffer, adjustedSize);
-            } else {
-                m_colorBuffer = createTextureAndAllocateMemory(adjustedSize);
-            }
-
-            m_gl->BindFramebuffer(GL_FRAMEBUFFER, m_fbo);
-            attachColorBufferToCurrentFBO();
-
-            // resize multisample FBO
-            if (!resizeMultisampleFramebuffer(adjustedSize, wantDepthOrStencilBuffer)
-                || !resizeFramebuffer(adjustedSize, wantDepthOrStencilBuffer)) {
+            if (!resizeDefaultFramebuffer(adjustedSize)) {
                 adjustedSize.scale(s_resourceAdjustedRatio);
                 continue;
             }
@@ -748,7 +740,7 @@ bool DrawingBuffer::reset(const IntSize& newSize, bool wantDepthOrStencilBuffer)
     }
 
     m_gl->Disable(GL_SCISSOR_TEST);
-    m_gl->ClearColor(0, 0, 0, 0);
+    m_gl->ClearColor(0, 0, 0, defaultBufferRequiresAlphaChannelToBePreserved() ? 1 : 0);
     m_gl->ColorMask(true, true, true, true);
 
     GLbitfield clearMask = GL_COLOR_BUFFER_BIT;
@@ -769,7 +761,7 @@ bool DrawingBuffer::reset(const IntSize& newSize, bool wantDepthOrStencilBuffer)
 
 void DrawingBuffer::commit()
 {
-    if (m_multisampleFBO && !m_contentsChangeCommitted) {
+    if (wantExplicitResolve() && !m_contentsChangeCommitted) {
         m_gl->BindFramebuffer(GL_READ_FRAMEBUFFER_ANGLE, m_multisampleFBO);
         m_gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER_ANGLE, m_fbo);
 
@@ -779,7 +771,22 @@ void DrawingBuffer::commit()
         int width = m_size.width();
         int height = m_size.height();
         // Use NEAREST, because there is no scale performed during the blit.
-        m_gl->BlitFramebufferCHROMIUM(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        GLuint filter = GL_NEAREST;
+
+        m_gl->BlitFramebufferCHROMIUM(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, filter);
+
+        // On old AMD GPUs on OS X, glColorMask doesn't work correctly for
+        // multisampled renderbuffers and the alpha channel can be overwritten.
+        // Clear the alpha channel of |m_fbo|.
+        if (defaultBufferRequiresAlphaChannelToBePreserved()
+            && contextProvider()->getCapabilities().disable_webgl_multisampling_color_mask_usage) {
+            m_gl->ClearColor(0, 0, 0, 1);
+            m_gl->ColorMask(false, false, false, true);
+            m_gl->Clear(GL_COLOR_BUFFER_BIT);
+
+            m_gl->ClearColor(m_clearColor[0], m_clearColor[1], m_clearColor[2], m_clearColor[3]);
+            m_gl->ColorMask(m_colorMask[0], m_colorMask[1], m_colorMask[2], m_colorMask[3]);
+        }
 
         if (m_scissorEnabled)
             m_gl->Enable(GL_SCISSOR_TEST);
@@ -823,10 +830,7 @@ bool DrawingBuffer::multisample() const
 
 void DrawingBuffer::bind(GLenum target)
 {
-    if (target != GL_READ_FRAMEBUFFER)
-        m_gl->BindFramebuffer(target, m_multisampleFBO ? m_multisampleFBO : m_fbo);
-    else
-        m_gl->BindFramebuffer(target, m_fbo);
+    m_gl->BindFramebuffer(target, wantExplicitResolve() ? m_multisampleFBO : m_fbo);
 }
 
 void DrawingBuffer::setPackAlignment(GLint param)
@@ -933,21 +937,36 @@ void DrawingBuffer::deleteChromiumImageForTexture(TextureInfo* info)
     }
 }
 
+void DrawingBuffer::clearChromiumImageAlpha(const TextureInfo& info)
+{
+    if (m_wantAlphaChannel)
+        return;
+    if (!contextProvider()->getCapabilities().chromium_image_rgb_emulation)
+        return;
+
+    GLuint fbo = 0;
+    m_gl->GenFramebuffers(1, &fbo);
+    m_gl->BindFramebuffer(GL_FRAMEBUFFER, fbo);
+    m_gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, info.parameters.target, info.textureId, 0);
+    m_gl->ClearColor(0, 0, 0, 1);
+    m_gl->ColorMask(false, false, false, true);
+    m_gl->Clear(GL_COLOR_BUFFER_BIT);
+    m_gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, info.parameters.target, 0, 0);
+    m_gl->DeleteFramebuffers(1, &fbo);
+    restoreFramebufferBindings();
+    m_gl->ClearColor(m_clearColor[0], m_clearColor[1], m_clearColor[2], m_clearColor[3]);
+    m_gl->ColorMask(m_colorMask[0], m_colorMask[1], m_colorMask[2], m_colorMask[3]);
+}
+
 DrawingBuffer::TextureInfo DrawingBuffer::createTextureAndAllocateMemory(const IntSize& size)
 {
-    // TODO(erikchen): Add support for a CHROMIUM_image back buffer whose
-    // behavior mimics a texture with internal format GL_RGB.
-    // https://crbug.com/581777.
-    if (!m_wantAlphaChannel)
-        return createDefaultTextureAndAllocateMemory(size);
-
     if (!RuntimeEnabledFeatures::webGLImageChromiumEnabled())
         return createDefaultTextureAndAllocateMemory(size);
 
     // First, try to allocate a CHROMIUM_image. This always has the potential to
     // fail.
     TextureParameters parameters = chromiumImageTextureParameters();
-    GLuint imageId = m_gl->CreateGpuMemoryBufferImageCHROMIUM(size.width(), size.height(), parameters.internalColorFormat, GC3D_SCANOUT_CHROMIUM);
+    GLuint imageId = m_gl->CreateGpuMemoryBufferImageCHROMIUM(size.width(), size.height(), parameters.creationInternalColorFormat, GC3D_SCANOUT_CHROMIUM);
     if (!imageId)
         return createDefaultTextureAndAllocateMemory(size);
 
@@ -958,6 +977,7 @@ DrawingBuffer::TextureInfo DrawingBuffer::createTextureAndAllocateMemory(const I
     info.textureId = textureId;
     info.imageId = imageId;
     info.parameters = parameters;
+    clearChromiumImageAlpha(info);
     return info;
 }
 
@@ -965,7 +985,7 @@ DrawingBuffer::TextureInfo DrawingBuffer::createDefaultTextureAndAllocateMemory(
 {
     TextureParameters parameters = defaultTextureParameters();
     GLuint textureId = createColorTexture(parameters);
-    texImage2DResourceSafe(parameters.target, 0, parameters.internalColorFormat, size.width(), size.height(), 0, parameters.colorFormat, GL_UNSIGNED_BYTE);
+    texImage2DResourceSafe(parameters.target, 0, parameters.creationInternalColorFormat, size.width(), size.height(), 0, parameters.colorFormat, GL_UNSIGNED_BYTE);
 
     DrawingBuffer::TextureInfo info;
     info.textureId = textureId;
@@ -978,10 +998,11 @@ void DrawingBuffer::resizeTextureMemory(TextureInfo* info, const IntSize& size)
     ASSERT(info->textureId);
     if (info->imageId) {
         deleteChromiumImageForTexture(info);
-        info->imageId = m_gl->CreateGpuMemoryBufferImageCHROMIUM(size.width(), size.height(), info->parameters.internalColorFormat, GC3D_SCANOUT_CHROMIUM);
+        info->imageId = m_gl->CreateGpuMemoryBufferImageCHROMIUM(size.width(), size.height(), info->parameters.creationInternalColorFormat, GC3D_SCANOUT_CHROMIUM);
         if (info->imageId) {
             m_gl->BindTexture(info->parameters.target, info->textureId);
             m_gl->BindTexImage2DCHROMIUM(info->parameters.target, info->imageId);
+            clearChromiumImageAlpha(*info);
             return;
         }
 
@@ -992,20 +1013,52 @@ void DrawingBuffer::resizeTextureMemory(TextureInfo* info, const IntSize& size)
     }
 
     m_gl->BindTexture(info->parameters.target, info->textureId);
-    texImage2DResourceSafe(info->parameters.target, 0, info->parameters.internalColorFormat, size.width(), size.height(), 0, info->parameters.colorFormat, GL_UNSIGNED_BYTE);
+    texImage2DResourceSafe(info->parameters.target, 0, info->parameters.creationInternalColorFormat, size.width(), size.height(), 0, info->parameters.colorFormat, GL_UNSIGNED_BYTE);
 }
 
-void DrawingBuffer::attachColorBufferToCurrentFBO()
+void DrawingBuffer::attachColorBufferToReadFramebuffer()
 {
-    GLenum target = m_colorBuffer.parameters.target;
+    m_gl->BindFramebuffer(GL_FRAMEBUFFER, m_fbo);
 
-    m_gl->BindTexture(target, m_colorBuffer.textureId);
+    GLenum target = m_colorBuffer.parameters.target;
+    GLenum id = m_colorBuffer.textureId;
+
+    m_gl->BindTexture(target, id);
 
     if (m_antiAliasingMode == MSAAImplicitResolve)
-        m_gl->FramebufferTexture2DMultisampleEXT(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, target, m_colorBuffer.textureId, 0, m_sampleCount);
+        m_gl->FramebufferTexture2DMultisampleEXT(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, target, id, 0, m_sampleCount);
     else
-        m_gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, target, m_colorBuffer.textureId, 0);
+        m_gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, target, id, 0);
 
+    restoreTextureBindings();
+    restoreFramebufferBindings();
+}
+
+bool DrawingBuffer::wantExplicitResolve()
+{
+    return m_antiAliasingMode == MSAAExplicitResolve;
+}
+
+bool DrawingBuffer::wantDepthOrStencil()
+{
+    return m_wantDepth || m_wantStencil;
+}
+
+GLenum DrawingBuffer::getMultisampledRenderbufferFormat()
+{
+    DCHECK(wantExplicitResolve());
+    if (m_wantAlphaChannel)
+        return GL_RGBA8_OES;
+    if (m_colorBuffer.imageId && contextProvider()->getCapabilities().chromium_image_rgb_emulation)
+        return GL_RGBA8_OES;
+    return GL_RGB8_OES;
+}
+
+void DrawingBuffer::restoreTextureBindings()
+{
+    // This class potentially modifies the bindings for GL_TEXTURE_2D and
+    // GL_TEXTURE_RECTANGLE. Only GL_TEXTURE_2D needs to be restored since
+    // the public interface for WebGL does not support GL_TEXTURE_RECTANGLE.
     m_gl->BindTexture(GL_TEXTURE_2D, m_texture2DBinding);
 }
 

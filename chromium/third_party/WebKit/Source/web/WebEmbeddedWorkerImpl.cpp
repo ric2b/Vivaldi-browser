@@ -35,9 +35,8 @@
 #include "core/dom/SecurityContext.h"
 #include "core/fetch/SubstituteData.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorInstrumentation.h"
-#include "core/inspector/WorkerDebuggerAgent.h"
-#include "core/inspector/WorkerInspectorController.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/workers/WorkerClients.h"
 #include "core/workers/WorkerGlobalScope.h"
@@ -52,15 +51,19 @@
 #include "platform/heap/Handle.h"
 #include "platform/network/ContentSecurityPolicyParsers.h"
 #include "platform/network/ContentSecurityPolicyResponseHeaders.h"
+#include "platform/network/NetworkUtils.h"
+#include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerProvider.h"
+#include "public/web/WebConsoleMessage.h"
 #include "public/web/WebDevToolsAgent.h"
 #include "public/web/WebSettings.h"
 #include "public/web/WebView.h"
 #include "public/web/WebWorkerContentSettingsClientProxy.h"
 #include "public/web/modules/serviceworker/WebServiceWorkerContextClient.h"
 #include "public/web/modules/serviceworker/WebServiceWorkerNetworkProvider.h"
+#include "web/IndexedDBClientImpl.h"
 #include "web/ServiceWorkerGlobalScopeClientImpl.h"
 #include "web/ServiceWorkerGlobalScopeProxy.h"
 #include "web/WebDataSourceImpl.h"
@@ -81,9 +84,9 @@ static HashSet<WebEmbeddedWorkerImpl*>& runningWorkerInstances()
     return set;
 }
 
-WebEmbeddedWorkerImpl::WebEmbeddedWorkerImpl(PassOwnPtr<WebServiceWorkerContextClient> client, PassOwnPtr<WebWorkerContentSettingsClientProxy> ContentSettingsClient)
-    : m_workerContextClient(client)
-    , m_contentSettingsClient(ContentSettingsClient)
+WebEmbeddedWorkerImpl::WebEmbeddedWorkerImpl(PassOwnPtr<WebServiceWorkerContextClient> client, PassOwnPtr<WebWorkerContentSettingsClientProxy> contentSettingsClient)
+    : m_workerContextClient(std::move(client))
+    , m_contentSettingsClient(std::move(contentSettingsClient))
     , m_workerInspectorProxy(WorkerInspectorProxy::create())
     , m_webView(nullptr)
     , m_mainFrame(nullptr)
@@ -128,6 +131,22 @@ void WebEmbeddedWorkerImpl::startWorkerContext(
     DCHECK(!m_mainScriptLoader);
     DCHECK_EQ(m_pauseAfterDownloadState, DontPauseAfterDownload);
     m_workerStartData = data;
+
+    // TODO(mkwst): This really needs to be piped through from the requesting
+    // document, like we're doing for SharedWorkers. That turns out to be
+    // incredibly convoluted, and since ServiceWorkers are locked to the same
+    // origin as the page which requested them, the only time it would come
+    // into play is a DNS poisoning attack after the page load. It's something
+    // we should fix, but we're taking this shortcut for the prototype.
+    //
+    // https://crbug.com/590714
+    KURL scriptURL = m_workerStartData.scriptURL;
+    m_workerStartData.addressSpace = WebAddressSpacePublic;
+    if (NetworkUtils::isReservedIPAddress(scriptURL.host()))
+        m_workerStartData.addressSpace = WebAddressSpacePrivate;
+    if (SecurityOrigin::create(scriptURL)->isLocalhost())
+        m_workerStartData.addressSpace = WebAddressSpaceLocal;
+
     if (data.pauseAfterDownloadMode == WebEmbeddedWorkerStartData::PauseAfterDownload)
         m_pauseAfterDownloadState = DoPauseAfterDownload;
     prepareShadowPageForLoader();
@@ -193,13 +212,37 @@ void WebEmbeddedWorkerImpl::detachDevTools()
         devtoolsAgent->detach();
 }
 
-void WebEmbeddedWorkerImpl::dispatchDevToolsMessage(int sessionId, const WebString& message)
+void WebEmbeddedWorkerImpl::dispatchDevToolsMessage(int sessionId, int callId, const WebString& method, const WebString& message)
 {
     if (m_askedToTerminate)
         return;
     WebDevToolsAgent* devtoolsAgent = m_mainFrame->devToolsAgent();
     if (devtoolsAgent)
-        devtoolsAgent->dispatchOnInspectorBackend(sessionId, message);
+        devtoolsAgent->dispatchOnInspectorBackend(sessionId, callId, method, message);
+}
+
+void WebEmbeddedWorkerImpl::addMessageToConsole(const WebConsoleMessage& message)
+{
+    MessageLevel webCoreMessageLevel;
+    switch (message.level) {
+    case WebConsoleMessage::LevelDebug:
+        webCoreMessageLevel = DebugMessageLevel;
+        break;
+    case WebConsoleMessage::LevelLog:
+        webCoreMessageLevel = LogMessageLevel;
+        break;
+    case WebConsoleMessage::LevelWarning:
+        webCoreMessageLevel = WarningMessageLevel;
+        break;
+    case WebConsoleMessage::LevelError:
+        webCoreMessageLevel = ErrorMessageLevel;
+        break;
+    default:
+        NOTREACHED();
+        return;
+    }
+
+    m_mainFrame->frame()->document()->addConsoleMessage(ConsoleMessage::create(OtherMessageSource, webCoreMessageLevel, message.text, message.url, message.lineNumber, message.columnNumber));
 }
 
 void WebEmbeddedWorkerImpl::postMessageToPageInspector(const String& message)
@@ -207,17 +250,17 @@ void WebEmbeddedWorkerImpl::postMessageToPageInspector(const String& message)
     m_workerInspectorProxy->dispatchMessageFromWorker(message);
 }
 
-void WebEmbeddedWorkerImpl::postTaskToLoader(PassOwnPtr<ExecutionContextTask> task)
+void WebEmbeddedWorkerImpl::postTaskToLoader(std::unique_ptr<ExecutionContextTask> task)
 {
-    m_mainFrame->frame()->document()->postTask(BLINK_FROM_HERE, task);
+    m_mainFrame->frame()->document()->postTask(BLINK_FROM_HERE, std::move(task));
 }
 
-bool WebEmbeddedWorkerImpl::postTaskToWorkerGlobalScope(PassOwnPtr<ExecutionContextTask> task)
+bool WebEmbeddedWorkerImpl::postTaskToWorkerGlobalScope(std::unique_ptr<ExecutionContextTask> task)
 {
     if (m_askedToTerminate || !m_workerThread)
         return false;
 
-    m_workerThread->postTask(BLINK_FROM_HERE, task);
+    m_workerThread->postTask(BLINK_FROM_HERE, std::move(task));
     return !m_workerThread->terminated();
 }
 
@@ -290,7 +333,7 @@ void WebEmbeddedWorkerImpl::didFinishDocumentLoad(WebLocalFrame* frame)
         *m_mainFrame->frame()->document(),
         m_workerStartData.scriptURL,
         DenyCrossOriginRequests,
-        m_mainFrame->frame()->document()->addressSpace(),
+        m_workerStartData.addressSpace,
         nullptr,
         bind(&WebEmbeddedWorkerImpl::onScriptLoaderFinished, this));
     // Do nothing here since onScriptLoaderFinished() might have been already
@@ -310,13 +353,23 @@ void WebEmbeddedWorkerImpl::resumeStartup()
         loadShadowPage();
 }
 
+WebDevToolsAgentClient::WebKitClientMessageLoop* WebEmbeddedWorkerImpl::createClientMessageLoop()
+{
+    return m_workerContextClient->createDevToolsMessageLoop();
+}
+
 void WebEmbeddedWorkerImpl::onScriptLoaderFinished()
 {
     DCHECK(m_mainScriptLoader);
     if (m_askedToTerminate)
         return;
 
-    if (m_mainScriptLoader->failed()) {
+    // The browser is expected to associate a registration and then load the
+    // script. If there's no associated registration, the browser could not
+    // successfully handle the SetHostedVersionID IPC, and the script load came
+    // through the normal network stack rather than through service worker
+    // loading code.
+    if (!m_workerContextClient->hasAssociatedRegistration() || m_mainScriptLoader->failed()) {
         m_mainScriptLoader.clear();
         // This deletes 'this'.
         m_workerContextClient->workerContextFailedToStart();
@@ -349,7 +402,8 @@ void WebEmbeddedWorkerImpl::startWorkerThread()
     SecurityOrigin* starterOrigin = document->getSecurityOrigin();
 
     WorkerClients* workerClients = WorkerClients::create();
-    provideContentSettingsClientToWorker(workerClients, m_contentSettingsClient.release());
+    provideContentSettingsClientToWorker(workerClients, std::move(m_contentSettingsClient));
+    provideIndexedDBClientToWorker(workerClients, IndexedDBClientImpl::create());
     provideServiceWorkerGlobalScopeClientToWorker(workerClients, ServiceWorkerGlobalScopeClientImpl::create(*m_workerContextClient));
     provideServiceWorkerContainerClientToWorker(workerClients, adoptPtr(m_workerContextClient->createServiceWorkerProvider()));
 
@@ -358,16 +412,18 @@ void WebEmbeddedWorkerImpl::startWorkerThread()
 
     KURL scriptURL = m_mainScriptLoader->url();
     WorkerThreadStartMode startMode = m_workerInspectorProxy->workerStartMode(document);
+
     OwnPtr<WorkerThreadStartupData> startupData = WorkerThreadStartupData::create(
         scriptURL,
         m_workerStartData.userAgent,
         m_mainScriptLoader->script(),
         m_mainScriptLoader->releaseCachedMetadata(),
         startMode,
-        document->contentSecurityPolicy()->headers(),
+        document->contentSecurityPolicy()->headers().get(),
         starterOrigin,
         workerClients,
         m_mainScriptLoader->responseAddressSpace(),
+        m_mainScriptLoader->originTrialTokens(),
         static_cast<V8CacheOptions>(m_workerStartData.v8CacheOptions));
 
     m_mainScriptLoader.clear();
@@ -375,7 +431,7 @@ void WebEmbeddedWorkerImpl::startWorkerThread()
     m_workerGlobalScopeProxy = ServiceWorkerGlobalScopeProxy::create(*this, *document, *m_workerContextClient);
     m_loaderProxy = WorkerLoaderProxy::create(this);
     m_workerThread = ServiceWorkerThread::create(m_loaderProxy, *m_workerGlobalScopeProxy);
-    m_workerThread->start(startupData.release());
+    m_workerThread->start(std::move(startupData));
     m_workerInspectorProxy->workerThreadCreated(document, m_workerThread.get(), scriptURL);
 }
 

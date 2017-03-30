@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -17,7 +18,6 @@
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/process/kill.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
@@ -79,7 +79,7 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   static RenderViewHostImpl* From(RenderWidgetHost* rwh);
 
   RenderViewHostImpl(SiteInstance* instance,
-                     scoped_ptr<RenderWidgetHostImpl> widget,
+                     std::unique_ptr<RenderWidgetHostImpl> widget,
                      RenderViewHostDelegate* delegate,
                      int32_t main_frame_routing_id,
                      bool swapped_out,
@@ -185,8 +185,8 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   }
 
   // Tracks whether this RenderViewHost is in an active state (rather than
-  // pending swap out, pending deletion, or swapped out), according to its main
-  // frame RenderFrameHost.
+  // pending swap out or swapped out), according to its main frame
+  // RenderFrameHost.
   bool is_active() const { return is_active_; }
   void set_is_active(bool is_active) { is_active_ = is_active; }
 
@@ -348,7 +348,7 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   void GrantFileAccessFromPageState(const PageState& validated_state);
 
   // The RenderWidgetHost.
-  scoped_ptr<RenderWidgetHostImpl> render_widget_host_;
+  std::unique_ptr<RenderWidgetHostImpl> render_widget_host_;
 
   // The number of RenderFrameHosts which have a reference to this RVH.
   int frames_ref_count_;
@@ -360,10 +360,6 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   // in this RenderViewHost are part of this SiteInstance.  Cannot change
   // over time.
   scoped_refptr<SiteInstanceImpl> instance_;
-
-  // true if we are currently waiting for a response for drag context
-  // information.
-  bool waiting_for_drag_context_response_;
 
   // A bitwise OR of bindings types that have been enabled for this RenderView.
   // See BindingsPolicy for details.
@@ -408,7 +404,7 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   // This is updated every time UpdateWebkitPreferences is called. That method
   // is in turn called when any of the settings change that the WebPreferences
   // values depend on.
-  scoped_ptr<WebPreferences> web_preferences_;
+  std::unique_ptr<WebPreferences> web_preferences_;
 
   bool updating_web_preferences_;
 

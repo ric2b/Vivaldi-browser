@@ -206,6 +206,7 @@ void WebSocketBridge::DidStartClosingHandshake() {
 void WebSocketBridge::connect(const WebURL& url,
                               const WebVector<WebString>& protocols,
                               const WebSecurityOrigin& origin,
+                              const WebURL& first_party_for_cookies,
                               WebSocketHandleClient* client) {
   DCHECK_EQ(kInvalidChannelId, channel_id_);
   WebSocketDispatcher* dispatcher =
@@ -221,8 +222,15 @@ void WebSocketBridge::connect(const WebURL& url,
            << base::JoinString(protocols_to_pass, ", ") << "), "
            << origin.toString().utf8() << ")";
 
+  WebSocketHostMsg_AddChannelRequest_Params params;
+  params.socket_url = url;
+  params.requested_protocols = protocols_to_pass;
+  params.origin = origin;
+  params.first_party_for_cookies = first_party_for_cookies;
+  params.render_frame_id = render_frame_id_;
+
   ChildThreadImpl::current()->Send(new WebSocketHostMsg_AddChannelRequest(
-      channel_id_, url, protocols_to_pass, origin, render_frame_id_));
+      channel_id_, params));
 }
 
 void WebSocketBridge::send(bool fin,

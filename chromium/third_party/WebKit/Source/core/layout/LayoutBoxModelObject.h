@@ -26,6 +26,7 @@
 
 #include "core/CoreExport.h"
 #include "core/layout/LayoutObject.h"
+#include "core/page/scrolling/StickyPositionScrollingConstraints.h"
 #include "core/style/ShadowData.h"
 #include "platform/geometry/LayoutRect.h"
 
@@ -63,6 +64,15 @@ enum ContentChangeType {
 };
 
 class InlineFlowBox;
+
+struct LayoutBoxModelObjectRareData {
+    WTF_MAKE_NONCOPYABLE(LayoutBoxModelObjectRareData);
+    USING_FAST_MALLOC(LayoutBoxModelObjectRareData);
+public:
+    LayoutBoxModelObjectRareData() {}
+
+    StickyPositionScrollingConstraints m_stickyPositionScrollingConstraints;
+};
 
 // This class is the base class for all CSS objects.
 //
@@ -140,6 +150,12 @@ public:
 
     LayoutSize relativePositionOffset() const;
     LayoutSize relativePositionLogicalOffset() const { return style()->isHorizontalWritingMode() ? relativePositionOffset() : relativePositionOffset().transposedSize(); }
+
+    // Populates StickyPositionConstraints, setting the sticky box rect, containing block rect and updating
+    // the constraint offsets according to the available space.
+    FloatRect computeStickyConstrainingRect() const;
+    void updateStickyPositionConstraints() const;
+    LayoutSize stickyPositionOffset() const;
 
     LayoutSize offsetForInFlowPosition() const;
 
@@ -235,6 +251,7 @@ public:
     LayoutUnit borderAndPaddingLogicalLeft() const { return style()->isHorizontalWritingMode() ? borderLeft() + paddingLeft() : borderTop() + paddingTop(); }
 
     LayoutUnit borderLogicalLeft() const { return LayoutUnit(style()->isHorizontalWritingMode() ? borderLeft() : borderTop()); }
+    LayoutUnit borderLogicalRight() const { return LayoutUnit(style()->isHorizontalWritingMode() ? borderRight() : borderBottom()); }
 
     LayoutUnit paddingLogicalWidth() const { return paddingStart() + paddingEnd(); }
     LayoutUnit paddingLogicalHeight() const { return paddingBefore() + paddingAfter(); }
@@ -283,8 +300,10 @@ public:
 
     void invalidateTreeIfNeeded(const PaintInvalidationState&) override;
 
-    // Indicate that the contents of this layoutObject need to be repainted. Only has an effect if compositing is being used,
-    void setBackingNeedsPaintInvalidationInRect(const LayoutRect&, PaintInvalidationReason) const; // r is in the coordinate space of this layout object
+    // Indicate that the contents of this layoutObject need to be repainted.
+    // This only has an effect if compositing is being used.
+    // The rect is in the physical coordinate space of this layout object.
+    void setBackingNeedsPaintInvalidationInRect(const LayoutRect&, PaintInvalidationReason, const LayoutObject&) const;
 
     void invalidateDisplayItemClientOnBacking(const DisplayItemClient&, PaintInvalidationReason) const;
 
@@ -315,6 +334,8 @@ protected:
     // See continuation above for more details.
     void setContinuation(LayoutBoxModelObject*);
 
+    virtual LayoutSize accumulateInFlowPositionOffsets() const { return LayoutSize(); }
+
     LayoutRect localCaretRectForEmptyElement(LayoutUnit width, LayoutUnit textIndentOffset);
 
     bool hasAutoHeightOrContainingBlockWithAutoHeight() const;
@@ -327,6 +348,8 @@ protected:
 
     void styleWillChange(StyleDifference, const ComputedStyle& newStyle) override;
     void styleDidChange(StyleDifference, const ComputedStyle* oldStyle) override;
+
+    void invalidateStickyConstraints();
 
 public:
     // These functions are only used internally to manipulate the layout tree structure via remove/insert/appendChildNode.
@@ -354,14 +377,23 @@ public:
     virtual void moveChildrenTo(LayoutBoxModelObject* toBoxModelObject, LayoutObject* startChild, LayoutObject* endChild, LayoutObject* beforeChild, bool fullRemoveInsert = false);
 
 private:
-    void createLayer(PaintLayerType);
+    void createLayer();
 
     LayoutUnit computedCSSPadding(const Length&) const;
     bool isBoxModelObject() const final { return true; }
 
+    LayoutBoxModelObjectRareData& ensureRareData()
+    {
+        if (!m_rareData)
+            m_rareData = adoptPtr(new LayoutBoxModelObjectRareData());
+        return *m_rareData.get();
+    }
+
     // The PaintLayer associated with this object.
     // |m_layer| can be nullptr depending on the return value of layerTypeRequired().
     OwnPtr<PaintLayer> m_layer;
+
+    OwnPtr<LayoutBoxModelObjectRareData> m_rareData;
 };
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutBoxModelObject, isBoxModelObject());

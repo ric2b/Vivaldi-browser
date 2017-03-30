@@ -36,9 +36,8 @@ FilterPainter::FilterPainter(PaintLayer& layer, GraphicsContext& context, const 
 
     ASSERT(layer.filterInfo());
 
-    SkiaImageFilterBuilder builder;
     lastEffect->determineFilterPrimitiveSubregion(MapRectForward);
-    RefPtr<SkImageFilter> imageFilter = builder.build(lastEffect, ColorSpaceDeviceRGB);
+    sk_sp<SkImageFilter> imageFilter = SkiaImageFilterBuilder::build(lastEffect, ColorSpaceDeviceRGB);
     if (!imageFilter)
         return;
 
@@ -63,7 +62,7 @@ FilterPainter::FilterPainter(PaintLayer& layer, GraphicsContext& context, const 
     if (!context.getPaintController().displayItemConstructionIsDisabled()) {
         FilterOperations filterOperations(layer.computeFilterOperations(m_layoutObject->styleRef()));
         OwnPtr<CompositorFilterOperations> compositorFilterOperations = adoptPtr(CompositorFactory::current().createFilterOperations());
-        builder.buildFilterOperations(filterOperations, compositorFilterOperations.get());
+        SkiaImageFilterBuilder::buildFilterOperations(filterOperations, compositorFilterOperations.get());
         // FIXME: It's possible to have empty CompositorFilterOperations here even
         // though the SkImageFilter produced above is non-null, since the
         // layer's FilterEffectBuilder can have a stale representation of
@@ -76,7 +75,7 @@ FilterPainter::FilterPainter(PaintLayer& layer, GraphicsContext& context, const 
             visualBounds.moveBy(-offsetFromRoot);
             layer.convertFromFlowThreadToVisualBoundingBoxInAncestor(paintingInfo.rootLayer, visualBounds);
         }
-        context.getPaintController().createAndAppend<BeginFilterDisplayItem>(*m_layoutObject, imageFilter, FloatRect(visualBounds), compositorFilterOperations.release());
+        context.getPaintController().createAndAppend<BeginFilterDisplayItem>(*m_layoutObject, std::move(imageFilter), FloatRect(visualBounds), std::move(compositorFilterOperations));
     }
 
     m_filterInProgress = true;

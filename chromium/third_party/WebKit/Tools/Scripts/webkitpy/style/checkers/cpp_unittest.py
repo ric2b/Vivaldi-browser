@@ -1587,6 +1587,24 @@ class CppStyleTest(CppStyleTestBase):
 
         self.assert_lint('CHECK_EQ("foo", "foo")', '')
 
+    def test_check_deprecated_macros(self):
+        self.assert_lint('ASSERT(foo)', 'ASSERT is deprecated. Use DCHECK or '
+                         'its variants instead.  [build/deprecated] [5]')
+        self.assert_lint('    ASSERT_UNUSED(foo, foo)', 'ASSERT_UNUSED is '
+                         'deprecated. Use DCHECK or its variants instead.  '
+                         '[build/deprecated] [5]')
+        self.assert_lint('ASSERT_NOT_REACHED()', 'ASSERT_NOT_REACHED is '
+                         'deprecated. Use NOTREACHED instead.  '
+                         '[build/deprecated] [5]')
+        self.assert_lint('ASSERT_WITH_SECURITY_IMPLICATION(foo)',
+                         'ASSERT_WITH_SECURITY_IMPLICATION is deprecated. Use '
+                         'SECURITY_DCHECK instead.  [build/deprecated] [5]')
+        self.assert_lint('WTF_LOG(foo)', 'WTF_LOG is deprecated. Use DVLOG '
+                         'instead.  [build/deprecated] [5]')
+
+        self.assert_lint('FOO_BAR_ASSERT()', '')
+        self.assert_lint('ASSERT_NO_EXCEPTIONS', '')
+
     def test_brace_at_begin_of_line(self):
         self.assert_lint('{',
                          'This { should be at the end of the previous line'
@@ -1648,6 +1666,16 @@ class CppStyleTest(CppStyleTestBase):
             '{\n'
             '    {\n'
             '    }\n'
+            '}\n',
+            '')
+        self.assert_multi_line_lint(
+            'auto foo() -> int\n'
+            '{\n'
+            '}\n',
+            '')
+        self.assert_multi_line_lint(
+            'auto foo() -> T<U, V>\n'
+            '{\n'
             '}\n',
             '')
 
@@ -2406,7 +2434,7 @@ class CppStyleTest(CppStyleTestBase):
             '  [runtime/printf_format] [3]')
 
         self.assert_lint(
-            r'snprintf(file, "Never mix %d and %1$d parmaeters!", value);',
+            r'snprintf(file, "Never mix %d and %1$d parameters!", value);',
             '%N$ formats are unconventional.  Try rewriting to avoid them.'
             '  [runtime/printf_format] [2]')
 
@@ -3387,14 +3415,14 @@ class NoNonVirtualDestructorsTest(CppStyleTestBase):
             'More than one command on the same line  [whitespace/newline] [4]')
         self.assert_multi_line_lint(
             'class MyClass {\n'
-            '    int getIntValue() { ASSERT(m_ptr); return *m_ptr; }\n'
+            '    int getIntValue() { DCHECK(m_ptr); return *m_ptr; }\n'
             '};\n',
             '')
         self.assert_multi_line_lint(
             'class MyClass {\n'
             '    int getIntValue()\n'
             '    {\n'
-            '        ASSERT(m_ptr); return *m_ptr;\n'
+            '        DCHECK(m_ptr); return *m_ptr;\n'
             '    }\n'
             '};\n',
             'More than one command on the same line  [whitespace/newline] [4]')
@@ -4891,7 +4919,7 @@ class WebKitStyleTest(CppStyleTestBase):
     def test_ctype_fucntion(self):
         self.assert_lint(
             'int i = isascii(8);',
-            'Use equivelent function in <wtf/ASCIICType.h> instead of the '
+            'Use equivalent function in <wtf/ASCIICType.h> instead of the '
             'isascii() function.  [runtime/ctype_function] [4]',
             'foo.cpp')
 

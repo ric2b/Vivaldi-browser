@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <utility>
 
 #include "base/callback.h"
@@ -17,6 +18,7 @@
 #include "base/trace_event/memory_dump_provider.h"
 #include "content/common/content_export.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
+#include "gpu/ipc/common/surface_handle.h"
 
 namespace content {
 
@@ -62,12 +64,12 @@ class CONTENT_EXPORT BrowserGpuMemoryBufferManager
                                         gfx::BufferUsage usage);
 
   // Overridden from gpu::GpuMemoryBufferManager:
-  scoped_ptr<gfx::GpuMemoryBuffer> AllocateGpuMemoryBuffer(
+  std::unique_ptr<gfx::GpuMemoryBuffer> AllocateGpuMemoryBuffer(
       const gfx::Size& size,
       gfx::BufferFormat format,
       gfx::BufferUsage usage,
-      int32_t surface_id) override;
-  scoped_ptr<gfx::GpuMemoryBuffer> CreateGpuMemoryBufferFromHandle(
+      gpu::SurfaceHandle surface_handle) override;
+  std::unique_ptr<gfx::GpuMemoryBuffer> CreateGpuMemoryBufferFromHandle(
       const gfx::GpuMemoryBufferHandle& handle,
       const gfx::Size& size,
       gfx::BufferFormat format) override;
@@ -134,11 +136,11 @@ class CONTENT_EXPORT BrowserGpuMemoryBufferManager
                                              int client_id,
                                              const CreateCallback& callback)>;
 
-  scoped_ptr<gfx::GpuMemoryBuffer> AllocateGpuMemoryBufferForSurface(
+  std::unique_ptr<gfx::GpuMemoryBuffer> AllocateGpuMemoryBufferForSurface(
       const gfx::Size& size,
       gfx::BufferFormat format,
       gfx::BufferUsage usage,
-      int32_t surface_id);
+      gpu::SurfaceHandle surface_handle);
 
   // Functions that handle synchronous buffer creation requests.
   void HandleCreateGpuMemoryBufferOnIO(CreateGpuMemoryBufferRequest* request);

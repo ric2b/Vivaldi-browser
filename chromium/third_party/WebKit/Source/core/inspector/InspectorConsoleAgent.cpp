@@ -30,11 +30,8 @@
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/ConsoleMessageStorage.h"
 #include "core/inspector/IdentifiersFactory.h"
-#include "core/inspector/InstrumentingAgents.h"
 #include "core/inspector/ScriptArguments.h"
-#include "platform/v8_inspector/public/V8Debugger.h"
-#include "platform/v8_inspector/public/V8DebuggerAgent.h"
-#include "platform/v8_inspector/public/V8RuntimeAgent.h"
+#include "platform/v8_inspector/public/V8InspectorSession.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
@@ -43,26 +40,22 @@ namespace ConsoleAgentState {
 static const char consoleMessagesEnabled[] = "consoleMessagesEnabled";
 }
 
-InspectorConsoleAgent::InspectorConsoleAgent(V8RuntimeAgent* runtimeAgent, V8DebuggerAgent* debuggerAgent)
+InspectorConsoleAgent::InspectorConsoleAgent(V8InspectorSession* v8Session)
     : InspectorBaseAgent<InspectorConsoleAgent, protocol::Frontend::Console>("Console")
-    , m_runtimeAgent(runtimeAgent)
-    , m_debuggerAgent(debuggerAgent)
+    , m_v8Session(v8Session)
     , m_enabled(false)
 {
 }
 
 InspectorConsoleAgent::~InspectorConsoleAgent()
 {
-#if !ENABLE(OILPAN)
-    m_instrumentingAgents->setInspectorConsoleAgent(0);
-#endif
 }
 
 void InspectorConsoleAgent::enable(ErrorString*)
 {
     if (m_enabled)
         return;
-    m_instrumentingAgents->setInspectorConsoleAgent(this);
+    m_instrumentingAgents->addInspectorConsoleAgent(this);
     m_enabled = true;
     enableStackCapturingIfNeeded();
 
@@ -70,9 +63,9 @@ void InspectorConsoleAgent::enable(ErrorString*)
 
     ConsoleMessageStorage* storage = messageStorage();
     if (storage->expiredCount()) {
-        RawPtr<ConsoleMessage> expiredMessage = ConsoleMessage::create(OtherMessageSource, WarningMessageLevel, String::format("%d console messages are not shown.", storage->expiredCount()));
+        ConsoleMessage* expiredMessage = ConsoleMessage::create(OtherMessageSource, WarningMessageLevel, String::format("%d console messages are not shown.", storage->expiredCount()));
         expiredMessage->setTimestamp(0);
-        sendConsoleMessageToFrontend(expiredMessage.get(), false);
+        sendConsoleMessageToFrontend(expiredMessage, false);
     }
 
     size_t messageCount = storage->size();
@@ -84,7 +77,7 @@ void InspectorConsoleAgent::disable(ErrorString*)
 {
     if (!m_enabled)
         return;
-    m_instrumentingAgents->setInspectorConsoleAgent(nullptr);
+    m_instrumentingAgents->removeInspectorConsoleAgent(this);
     m_enabled = false;
     disableStackCapturingIfNeeded();
 
@@ -103,22 +96,11 @@ void InspectorConsoleAgent::restore()
 void InspectorConsoleAgent::addMessageToConsole(ConsoleMessage* consoleMessage)
 {
     sendConsoleMessageToFrontend(consoleMessage, true);
-    if (consoleMessage->type() != AssertMessageType)
-        return;
-    if (!m_debuggerAgent || !m_debuggerAgent->enabled())
-        return;
-    m_debuggerAgent->breakProgramOnException(protocol::Debugger::Paused::ReasonEnum::Assert, nullptr);
-}
-
-void InspectorConsoleAgent::clearAllMessages()
-{
-    ErrorString error;
-    clearMessages(&error);
 }
 
 void InspectorConsoleAgent::consoleMessagesCleared()
 {
-    m_runtimeAgent->disposeObjectGroup("console");
+    m_v8Session->releaseObjectGroup("console");
     frontend()->messagesCleared();
 }
 
@@ -194,7 +176,7 @@ void InspectorConsoleAgent::sendConsoleMessageToFrontend(ConsoleMessage* console
         jsonObj->setExecutionContextId(scriptState->contextIdInDebugger());
     if (consoleMessage->source() == NetworkMessageSource && consoleMessage->requestIdentifier())
         jsonObj->setNetworkRequestId(IdentifiersFactory::requestId(consoleMessage->requestIdentifier()));
-    RawPtr<ScriptArguments> arguments = consoleMessage->scriptArguments();
+    ScriptArguments* arguments = consoleMessage->scriptArguments();
     if (arguments && arguments->argumentCount()) {
         ScriptState::Scope scope(arguments->getScriptState());
         v8::Local<v8::Context> context = arguments->getScriptState()->context();
@@ -202,23 +184,23 @@ void InspectorConsoleAgent::sendConsoleMessageToFrontend(ConsoleMessage* console
         if (consoleMessage->type() == TableMessageType && generatePreview) {
             v8::Local<v8::Value> table = arguments->argumentAt(0).v8Value();
             v8::Local<v8::Value> columns = arguments->argumentCount() > 1 ? arguments->argumentAt(1).v8Value() : v8::Local<v8::Value>();
-            OwnPtr<protocol::Runtime::RemoteObject> inspectorValue = m_runtimeAgent->wrapTable(context, table, columns);
+            OwnPtr<protocol::Runtime::RemoteObject> inspectorValue = m_v8Session->wrapTable(context, table, columns);
             if (inspectorValue)
-                jsonArgs->addItem(inspectorValue.release());
+                jsonArgs->addItem(std::move(inspectorValue));
             else
                 jsonArgs = nullptr;
         } else {
             for (unsigned i = 0; i < arguments->argumentCount(); ++i) {
-                OwnPtr<protocol::Runtime::RemoteObject> inspectorValue = m_runtimeAgent->wrapObject(context, arguments->argumentAt(i).v8Value(), "console", generatePreview);
+                OwnPtr<protocol::Runtime::RemoteObject> inspectorValue = m_v8Session->wrapObject(context, arguments->argumentAt(i).v8Value(), "console", generatePreview);
                 if (!inspectorValue) {
                     jsonArgs = nullptr;
                     break;
                 }
-                jsonArgs->addItem(inspectorValue.release());
+                jsonArgs->addItem(std::move(inspectorValue));
             }
         }
         if (jsonArgs)
-            jsonObj->setParameters(jsonArgs.release());
+            jsonObj->setParameters(std::move(jsonArgs));
     }
     if (consoleMessage->callStack())
         jsonObj->setStack(consoleMessage->callStack()->buildInspectorObject());
@@ -226,7 +208,7 @@ void InspectorConsoleAgent::sendConsoleMessageToFrontend(ConsoleMessage* console
         jsonObj->setMessageId(consoleMessage->messageId());
     if (consoleMessage->relatedMessageId())
         jsonObj->setRelatedMessageId(consoleMessage->relatedMessageId());
-    frontend()->messageAdded(jsonObj.release());
+    frontend()->messageAdded(std::move(jsonObj));
     frontend()->flush();
 }
 

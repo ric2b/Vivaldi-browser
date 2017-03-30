@@ -13,6 +13,7 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "gpu/command_buffer/common/gles2_cmd_utils.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -49,9 +50,10 @@ class MockGLES2Decoder : public GLES2Decoder {
                     bool offscreen,
                     const gfx::Size& size,
                     const DisallowedFeatures& disallowed_features,
-                    const std::vector<int32_t>& attribs));
+                    const ContextCreationAttribHelper& attrib_helper));
   MOCK_METHOD1(Destroy, void(bool have_context));
   MOCK_METHOD1(SetSurface, void(const scoped_refptr<gfx::GLSurface>& surface));
+  MOCK_METHOD0(ReleaseSurface, void());
   MOCK_METHOD1(ProduceFrontBuffer, void(const Mailbox& mailbox));
   MOCK_METHOD1(ResizeOffscreenFrameBuffer, bool(const gfx::Size& size));
   MOCK_METHOD0(MakeCurrent, bool());
@@ -83,9 +85,10 @@ class MockGLES2Decoder : public GLES2Decoder {
   MOCK_CONST_METHOD0(ClearAllAttributes, void());
   MOCK_CONST_METHOD0(RestoreAllAttributes, void());
   MOCK_METHOD0(GetQueryManager, gpu::gles2::QueryManager*());
+  MOCK_METHOD0(
+      GetTransformFeedbackManager, gpu::gles2::TransformFeedbackManager*());
   MOCK_METHOD0(GetVertexArrayManager, gpu::gles2::VertexArrayManager*());
   MOCK_METHOD0(GetImageManager, gpu::gles2::ImageManager*());
-  MOCK_METHOD0(GetValuebufferManager, gpu::gles2::ValuebufferManager*());
   MOCK_METHOD1(
       SetResizeCallback, void(const base::Callback<void(gfx::Size, float)>&));
   MOCK_METHOD1(SetIgnoreCachedStateForTest, void(bool ignore));
@@ -113,6 +116,15 @@ class MockGLES2Decoder : public GLES2Decoder {
                     int y_offset,
                     int width,
                     int height));
+  MOCK_METHOD6(ClearCompressedTextureLevel,
+               bool(Texture* texture,
+                    unsigned target,
+                    int level,
+                    unsigned format,
+                    int width,
+                    int height));
+  MOCK_METHOD1(IsCompressedTextureFormat,
+               bool(unsigned format));
   MOCK_METHOD8(ClearLevel3D,
                bool(Texture* texture,
                     unsigned target,

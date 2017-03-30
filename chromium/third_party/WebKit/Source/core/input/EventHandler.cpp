@@ -56,9 +56,9 @@
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
+#include "core/frame/TopControls.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/VisualViewport.h"
-#include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLDialogElement.h"
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLFrameSetElement.h"
@@ -70,6 +70,7 @@
 #include "core/layout/LayoutPart.h"
 #include "core/layout/LayoutTextControlSingleLine.h"
 #include "core/layout/LayoutView.h"
+#include "core/layout/api/LayoutViewItem.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
@@ -82,11 +83,12 @@
 #include "core/page/Page.h"
 #include "core/page/SpatialNavigation.h"
 #include "core/page/TouchAdjustment.h"
+#include "core/page/scrolling/OverscrollController.h"
+#include "core/page/scrolling/RootScroller.h"
 #include "core/page/scrolling/ScrollState.h"
 #include "core/paint/PaintLayer.h"
 #include "core/style/ComputedStyle.h"
 #include "core/svg/SVGDocumentExtensions.h"
-#include "platform/Histogram.h"
 #include "platform/PlatformGestureEvent.h"
 #include "platform/PlatformKeyboardEvent.h"
 #include "platform/PlatformTouchEvent.h"
@@ -107,33 +109,6 @@
 namespace blink {
 
 namespace {
-
-bool hasTouchHandlers(const EventHandlerRegistry& registry)
-{
-    return registry.hasEventHandlers(EventHandlerRegistry::TouchStartOrMoveEventBlocking)
-        || registry.hasEventHandlers(EventHandlerRegistry::TouchStartOrMoveEventPassive)
-        || registry.hasEventHandlers(EventHandlerRegistry::TouchEndOrCancelEventBlocking)
-        || registry.hasEventHandlers(EventHandlerRegistry::TouchEndOrCancelEventPassive);
-}
-
-const AtomicString& touchEventNameForTouchPointState(PlatformTouchPoint::TouchState state)
-{
-    switch (state) {
-    case PlatformTouchPoint::TouchReleased:
-        return EventTypeNames::touchend;
-    case PlatformTouchPoint::TouchCancelled:
-        return EventTypeNames::touchcancel;
-    case PlatformTouchPoint::TouchPressed:
-        return EventTypeNames::touchstart;
-    case PlatformTouchPoint::TouchMoved:
-        return EventTypeNames::touchmove;
-    case PlatformTouchPoint::TouchStationary:
-        // Fall through to default
-    default:
-        ASSERT_NOT_REACHED();
-        return emptyAtom;
-    }
-}
 
 // Convert |event->deltaMode()| to scroll granularity and output as |granularity|.
 bool wheelGranularityToScrollGranularity(const WheelEvent* event, ScrollGranularity* granularity)
@@ -167,58 +142,46 @@ bool shouldRefetchEventTarget(const MouseEventWithHitTestResults& mev)
     return targetNode->isShadowRoot() && isHTMLInputElement(*toShadowRoot(targetNode)->host());
 }
 
-// These offsets change indicies into the ListenerHistogram
-// enumeration. The addition of a series of offsets then
-// produces the resulting ListenerHistogram value.
-const size_t kTouchTargetHistogramRootScrollerOffset = 4;
-const size_t kTouchTargetHistogramScrollableDocumentOffset = 2;
-const size_t kTouchTargetHistogramHandledOffset = 1;
-
-enum TouchTargetAndDispatchResultType {
-    NonRootScrollerNonScrollableNotHandled, // Non-root-scroller, non-scrollable document, not handled.
-    NonRootScrollerNonScrollableHandled, // Non-root-scroller, non-scrollable document, handled application.
-    NonRootScrollerScrollableDocumentNotHandled, // Non-root-scroller, scrollable document, not handled.
-    NonRootScrollerScrollableDocumentHandled, // Non-root-scroller, scrollable document, handled application.
-    RootScrollerNonScrollableNotHandled, // Root-scroller, non-scrollable document, not handled.
-    RootScrollerNonScrollableHandled, // Root-scroller, non-scrollable document, handled.
-    RootScrollerScrollableDocumentNotHandled, // Root-scroller, scrollable document, not handled.
-    RootScrollerScrollableDocumentHandled, // Root-scroller, scrollable document, handled.
-    TouchTargetAndDispatchResultTypeMax,
-};
-
-TouchTargetAndDispatchResultType toTouchTargetHistogramValue(EventTarget* eventTarget, DispatchEventResult dispatchResult)
+// TODO(bokan): This method can go away once all scrolls happen through the
+// scroll customization path.
+void computeScrollChainForSingleNode(Node& node, std::deque<int>& scrollChain)
 {
-    int result = 0;
-    Document* document = nullptr;
+    scrollChain.clear();
 
-    if (const LocalDOMWindow* domWindow = eventTarget->toDOMWindow()) {
-        // Treat the window as a root scroller as well.
-        document = domWindow->document();
-        result += kTouchTargetHistogramRootScrollerOffset;
-    } else if (Node* node = eventTarget->toNode()) {
-        // Report if the target node is the document or body.
-        if (node->isDocumentNode() || static_cast<Node*>(node->document().documentElement()) == node || static_cast<Node*>(node->document().body()) == node) {
-            result += kTouchTargetHistogramRootScrollerOffset;
-        }
-        document = &node->document();
-    }
+    ASSERT(node.layoutObject());
+    Element* element = toElement(&node);
 
-    if (document) {
-        FrameView* view = document->view();
-        if (view && view->isScrollable())
-            result += kTouchTargetHistogramScrollableDocumentOffset;
-    }
-
-    if (dispatchResult != DispatchEventResult::NotCanceled)
-        result += kTouchTargetHistogramHandledOffset;
-    return static_cast<TouchTargetAndDispatchResultType>(result);
+    scrollChain.push_front(DOMNodeIds::idForNode(element));
 }
 
-enum TouchEventDispatchResultType {
-    UnhandledTouches, // Unhandled touch events.
-    HandledTouches, // Handled touch events.
-    TouchEventDispatchResultTypeMax,
-};
+void recomputeScrollChain(const LocalFrame& frame, const Node& startNode,
+    std::deque<int>& scrollChain)
+{
+    scrollChain.clear();
+
+    ASSERT(startNode.layoutObject());
+    LayoutBox* curBox = startNode.layoutObject()->enclosingBox();
+
+    // Scrolling propagates along the containing block chain.
+    while (curBox && !curBox->isLayoutView()) {
+        Node* curNode = curBox->node();
+        // FIXME: this should reject more elements, as part of crbug.com/410974.
+        if (curNode && curNode->isElementNode()) {
+            Element* curElement = toElement(curNode);
+            if (curElement == frame.document()->scrollingElement())
+                break;
+            scrollChain.push_front(DOMNodeIds::idForNode(curElement));
+        }
+        curBox = curBox->containingBlock();
+    }
+    // TODO(tdresser): this should sometimes be excluded, as part of crbug.com/410974.
+    // We need to ensure that the scrollingElement is always part of
+    // the scroll chain. In quirks mode, when the scrollingElement is
+    // the body, some elements may use the documentElement as their
+    // containingBlock, so we ensure the scrollingElement is added
+    // here.
+    scrollChain.push_front(DOMNodeIds::idForNode(frame.document()->scrollingElement()));
+}
 
 } // namespace
 
@@ -257,10 +220,6 @@ static const double TextDragDelay = 0.15;
 static const double TextDragDelay = 0.0;
 #endif
 
-// Report Overscroll if OverscrollDelta is greater than minimumOverscrollDelta
-// to maintain consistency as did in compositor.
-static const float minimumOverscrollDelta = 0.1;
-
 enum NoCursorChangeType { NoCursorChange };
 
 enum class DragInitiator { Mouse, Touch };
@@ -278,35 +237,6 @@ private:
     Cursor m_cursor;
 };
 
-void recomputeScrollChain(const LocalFrame& frame, const Node& startNode,
-    std::deque<int>& scrollChain)
-{
-    scrollChain.clear();
-
-    ASSERT(startNode.layoutObject());
-    LayoutBox* curBox = startNode.layoutObject()->enclosingBox();
-
-    // Scrolling propagates along the containing block chain.
-    while (curBox && !curBox->isLayoutView()) {
-        Node* curNode = curBox->node();
-        // FIXME: this should reject more elements, as part of crbug.com/410974.
-        if (curNode && curNode->isElementNode()) {
-            Element* curElement = toElement(curNode);
-            if (curElement == frame.document()->scrollingElement())
-                break;
-            scrollChain.push_front(DOMNodeIds::idForNode(curElement));
-        }
-        curBox = curBox->containingBlock();
-    }
-    // TODO(tdresser): this should sometimes be excluded, as part of crbug.com/410974.
-    // We need to ensure that the scrollingElement is always part of
-    // the scroll chain. In quirks mode, when the scrollingElement is
-    // the body, some elements may use the documentElement as their
-    // containingBlock, so we ensure the scrollingElement is added
-    // here.
-    scrollChain.push_front(DOMNodeIds::idForNode(frame.document()->scrollingElement()));
-}
-
 EventHandler::EventHandler(LocalFrame* frame)
     : m_frame(frame)
     , m_mousePressed(false)
@@ -322,18 +252,15 @@ EventHandler::EventHandler(LocalFrame* frame)
     , m_eventHandlerWillResetCapturingMouseEventsNode(0)
     , m_clickCount(0)
     , m_shouldOnlyFireDragOverEvent(false)
-    , m_accumulatedRootOverscroll(FloatSize())
     , m_mousePositionIsUnknown(true)
     , m_mouseDownTimestamp(0)
-    , m_touchPressed(false)
-    , m_inPointerCanceledState(false)
+    , m_pointerEventManager(frame)
     , m_scrollGestureHandlingNode(nullptr)
     , m_lastGestureScrollOverWidget(false)
     , m_longTapShouldInvokeContextMenu(false)
     , m_activeIntervalTimer(this, &EventHandler::activeIntervalTimerFired)
     , m_lastShowPressTimestamp(0)
     , m_deltaConsumedForScrollSequence(false)
-    , m_waitingForFirstTouchMove(false)
 {
 }
 
@@ -355,9 +282,6 @@ DEFINE_TRACE(EventHandler)
     visitor->trace(m_dragTarget);
     visitor->trace(m_frameSetBeingResized);
     visitor->trace(m_scrollbarHandlingScrollGesture);
-    visitor->trace(m_targetForTouchID);
-    visitor->trace(m_regionForTouchID);
-    visitor->trace(m_touchSequenceDocument);
     visitor->trace(m_scrollGestureHandlingNode);
     visitor->trace(m_previousGestureScrolledNode);
     visitor->trace(m_lastDeferredTapElement);
@@ -394,15 +318,10 @@ void EventHandler::clear()
     m_mousePressed = false;
     m_capturesDragging = false;
     m_capturingMouseEventsNode = nullptr;
-    m_targetForTouchID.clear();
-    m_touchSequenceDocument.clear();
-    m_touchSequenceUserGestureToken.clear();
     clearGestureScrollState();
     m_lastGestureScrollOverWidget = false;
     m_scrollbarHandlingScrollGesture = nullptr;
-    m_touchPressed = false;
     m_pointerEventManager.clear();
-    m_inPointerCanceledState = false;
     m_mouseDownMayStartDrag = false;
     m_lastShowPressTimestamp = 0;
     m_lastDeferredTapElement = nullptr;
@@ -469,7 +388,7 @@ WebInputEventResult EventHandler::handleMousePressEvent(const MouseEventWithHitT
 
     cancelFakeMouseMoveEvent();
 
-    m_frame->document()->updateLayoutIgnorePendingStylesheets();
+    m_frame->document()->updateStyleAndLayoutIgnorePendingStylesheets();
 
     if (FrameView* frameView = m_frame->view()) {
         if (frameView->isPointInScrollbarCorner(event.event().position()))
@@ -668,7 +587,66 @@ void EventHandler::stopAutoscroll()
         controller->stopAutoscroll();
 }
 
-ScrollResult EventHandler::physicalScroll(ScrollGranularity granularity, const FloatSize& delta, Node* startNode, Node** stopNode, bool* consumed)
+ScrollResult EventHandler::scrollBox(LayoutBox* box,
+    ScrollGranularity granularity, const FloatSize& delta,
+    const FloatPoint& position, const FloatSize& velocity,
+    bool* wasRootScroller)
+{
+    ASSERT(box);
+    Node* node = box->node();
+
+    // If there's no ApplyScroll callback on the element, scroll as usuall in
+    // the non-scroll-customization case.
+    if (!node || !node->isElementNode() || !toElement(node)->getApplyScroll()) {
+        *wasRootScroller = false;
+        return box->scroll(granularity, delta);
+    }
+
+    // Viewport actions should only happen when scrolling an element in the
+    // main frame.
+    ASSERT(m_frame->isMainFrame());
+
+    // If there is an ApplyScroll callback, its because we placed one on the
+    // root scroller to control top controls and overscroll. Invoke a scroll
+    // using parts of the scroll customization framework on just this element.
+    computeScrollChainForSingleNode(*node, m_currentScrollChain);
+
+    OwnPtr<ScrollStateData> scrollStateData = adoptPtr(new ScrollStateData());
+    scrollStateData->delta_x = delta.width();
+    scrollStateData->delta_y = delta.height();
+    scrollStateData->position_x = position.x();
+    scrollStateData->position_y = position.y();
+    // TODO(bokan): delta_granularity is meant to be the number of pixels per
+    // unit of delta but we can't determine that until we get to the area we'll
+    // scroll. This is a hack, we stuff the enum into the double value for
+    // now.
+    scrollStateData->delta_granularity = static_cast<double>(granularity);
+    scrollStateData->velocity_x = velocity.width();
+    scrollStateData->velocity_y = velocity.height();
+    scrollStateData->should_propagate = false;
+    scrollStateData->is_in_inertial_phase = false;
+    scrollStateData->from_user_input = true;
+    scrollStateData->delta_consumed_for_scroll_sequence = false;
+    ScrollState* scrollState =
+        ScrollState::create(std::move(scrollStateData));
+
+    customizedScroll(*node, *scrollState);
+
+    ScrollResult result(
+        scrollState->deltaX() != delta.width(),
+        scrollState->deltaY() != delta.height(),
+        scrollState->deltaX(),
+        scrollState->deltaY());
+
+    *wasRootScroller = true;
+    m_currentScrollChain.clear();
+
+    return result;
+}
+
+ScrollResult EventHandler::physicalScroll(ScrollGranularity granularity,
+    const FloatSize& delta, const FloatPoint& position,
+    const FloatSize& velocity, Node* startNode, Node** stopNode, bool* consumed)
 {
     if (consumed)
         *consumed = false;
@@ -678,7 +656,7 @@ ScrollResult EventHandler::physicalScroll(ScrollGranularity granularity, const F
     Node* node = startNode;
     ASSERT(node && node->layoutObject());
 
-    m_frame->document()->updateLayoutIgnorePendingStylesheets();
+    m_frame->document()->updateStyleAndLayoutIgnorePendingStylesheets();
 
     ScrollResult result;
 
@@ -688,7 +666,15 @@ ScrollResult EventHandler::physicalScroll(ScrollGranularity granularity, const F
         // chain past it.
         bool shouldStopChaining =
             stopNode && *stopNode && curBox->node() == *stopNode;
-        result = curBox->scroll(granularity, delta);
+        bool wasRootScroller = false;
+
+        result = scrollBox(
+            curBox,
+            granularity,
+            delta,
+            position,
+            velocity,
+            &wasRootScroller);
 
         if (result.didScroll() && stopNode)
             *stopNode = curBox->node();
@@ -698,6 +684,10 @@ ScrollResult EventHandler::physicalScroll(ScrollGranularity granularity, const F
             if (consumed)
                 *consumed = true;
             return result;
+        } else if (wasRootScroller) {
+            // Don't try to chain past the root scroller, even if there's
+            // eligible ancestors.
+            break;
         }
 
         curBox = curBox->containingBlock();
@@ -716,10 +706,13 @@ bool EventHandler::logicalScroll(ScrollDirection direction, ScrollGranularity gr
     if (!node)
         node = m_mousePressNode.get();
 
-    if (!node || !node->layoutObject())
-        node = m_frame->view()->layoutView()->node();
+    if ((!node || !node->layoutObject()) && m_frame->view() && !m_frame->view()->layoutViewItem().isNull())
+        node = m_frame->view()->layoutViewItem().node();
 
-    m_frame->document()->updateLayoutIgnorePendingStylesheets();
+    if (!node)
+        return false;
+
+    m_frame->document()->updateStyleAndLayoutIgnorePendingStylesheets();
 
     LayoutBox* curBox = node->layoutObject()->enclosingBox();
     while (curBox) {
@@ -745,7 +738,7 @@ void EventHandler::customizedScroll(const Node& startNode, ScrollState& scrollSt
         return;
 
     if (scrollState.deltaX() || scrollState.deltaY())
-        m_frame->document()->updateLayoutIgnorePendingStylesheets();
+        m_frame->document()->updateStyleAndLayoutIgnorePendingStylesheets();
 
     if (m_currentScrollChain.empty())
         recomputeScrollChain(*m_frame, startNode, m_currentScrollChain);
@@ -760,7 +753,7 @@ bool EventHandler::bubblingScroll(ScrollDirection direction, ScrollGranularity g
 {
     // The layout needs to be up to date to determine if we can scroll. We may be
     // here because of an onLoad event, in which case the final layout hasn't been performed yet.
-    m_frame->document()->updateLayoutIgnorePendingStylesheets();
+    m_frame->document()->updateStyleAndLayoutIgnorePendingStylesheets();
     // FIXME: enable scroll customization in this case. See crbug.com/410974.
     if (logicalScroll(direction, granularity, startingNode))
         return true;
@@ -844,15 +837,15 @@ void EventHandler::updateCursor()
     if (!view || !view->shouldSetCursor())
         return;
 
-    LayoutView* layoutView = view->layoutView();
-    if (!layoutView)
+    LayoutViewItem layoutViewItem = view->layoutViewItem();
+    if (layoutViewItem.isNull())
         return;
 
-    m_frame->document()->updateLayout();
+    m_frame->document()->updateStyleAndLayout();
 
     HitTestRequest request(HitTestRequest::ReadOnly | HitTestRequest::AllowChildFrameContent);
     HitTestResult result(request, view->rootFrameToContents(m_lastKnownMousePosition));
-    layoutView->hitTest(result);
+    layoutViewItem.hitTest(result);
 
     if (LocalFrame* frame = result.innerNodeFrame()) {
         OptionalCursor optionalCursor = frame->eventHandler().selectCursor(result);
@@ -1281,7 +1274,7 @@ WebInputEventResult EventHandler::handleMouseMoveOrLeaveEvent(const PlatformMous
     }
 
     // Treat any mouse move events as readonly if the user is currently touching the screen.
-    if (m_touchPressed)
+    if (m_pointerEventManager.isAnyTouchActive())
         hitType |= HitTestRequest::Active | HitTestRequest::ReadOnly;
     HitTestRequest request(hitType);
     MouseEventWithHitTestResults mev = MouseEventWithHitTestResults(mouseEvent, HitTestResult(request, LayoutPoint()));
@@ -1433,15 +1426,20 @@ WebInputEventResult EventHandler::handleMouseReleaseEvent(const PlatformMouseEve
         && mev.innerNode()->canParticipateInFlatTree() && m_clickNode->canParticipateInFlatTree()
         && !(selectionController().hasExtendedSelection() && isLinkSelection(mev));
     if (shouldDispatchClickEvent) {
+        Node* clickTargetNode = nullptr;
         // Updates distribution because a 'mouseup' event listener can make the
         // tree dirty at dispatchMouseEvent() invocation above.
         // Unless distribution is updated, commonAncestor would hit ASSERT.
-        // Both m_clickNode and mev.innerNode() don't need to be updated
-        // because commonAncestor() will exit early if their documents are different.
-        m_clickNode->updateDistribution();
-        if (Node* clickTargetNode = mev.innerNode()->commonAncestor(
-            *m_clickNode, parentForClickEvent)) {
-
+        if (m_clickNode == mev.innerNode()) {
+            clickTargetNode = m_clickNode;
+            clickTargetNode->updateDistribution();
+        } else if (m_clickNode->document() == mev.innerNode()->document()) {
+            m_clickNode->updateDistribution();
+            mev.innerNode()->updateDistribution();
+            clickTargetNode = mev.innerNode()->commonAncestor(
+                *m_clickNode, parentForClickEvent);
+        }
+        if (clickTargetNode) {
             // Dispatch mouseup directly w/o calling updateMouseEventTargetNodeAndSendEvents
             // because the mouseup dispatch above has already updated it
             // correctly. Moreover, clickTargetNode is different from
@@ -1713,9 +1711,9 @@ void EventHandler::updateMouseEventTargetNodeAndSendEvents(Node* targetNode,
     const PlatformMouseEvent& mouseEvent, bool isFrameBoundaryTransition)
 {
     Node* lastNodeUnderMouse = updateMouseEventTargetNode(targetNode, mouseEvent);
-    m_pointerEventManager.sendMouseAndPossiblyPointerNodeTransitionEvents(
+    m_pointerEventManager.sendMouseAndPossiblyPointerBoundaryEvents(
         lastNodeUnderMouse, m_nodeUnderMouse, mouseEvent,
-        m_frame->document()->domWindow(), isFrameBoundaryTransition);
+        isFrameBoundaryTransition);
 }
 
 WebInputEventResult EventHandler::dispatchMouseEvent(const AtomicString& eventType, Node* targetNode, int clickCount, const PlatformMouseEvent& mouseEvent)
@@ -1765,7 +1763,7 @@ WebInputEventResult EventHandler::updatePointerTargetAndDispatchEvents(const Ato
 
     return m_pointerEventManager.sendMousePointerEvent(
         m_nodeUnderMouse, mouseEventType, clickCount, mouseEvent, nullptr,
-        m_frame->document()->domWindow(), lastNodeUnderMouse);
+        lastNodeUnderMouse);
 }
 
 WebInputEventResult EventHandler::handleMouseFocus(const MouseEventWithHitTestResults& targetedEvent, InputDeviceCapabilities* sourceCapabilities)
@@ -1777,7 +1775,7 @@ WebInputEventResult EventHandler::handleMouseFocus(const MouseEventWithHitTestRe
     }
 
     // The layout needs to be up to date to determine if an element is focusable.
-    m_frame->document()->updateLayoutIgnorePendingStylesheets();
+    m_frame->document()->updateStyleAndLayoutIgnorePendingStylesheets();
 
     Element* element = nullptr;
     if (m_nodeUnderMouse)
@@ -1857,7 +1855,7 @@ WebInputEventResult EventHandler::handleWheelEvent(const PlatformWheelEvent& eve
 {
     Document* doc = m_frame->document();
 
-    if (!doc->layoutView())
+    if (doc->layoutViewItem().isNull())
         return WebInputEventResult::NotHandled;
 
     FrameView* view = m_frame->view();
@@ -1868,7 +1866,7 @@ WebInputEventResult EventHandler::handleWheelEvent(const PlatformWheelEvent& eve
 
     HitTestRequest request(HitTestRequest::ReadOnly);
     HitTestResult result(request, vPoint);
-    doc->layoutView()->hitTest(result);
+    doc->layoutViewItem().hitTest(result);
 
     Node* node = result.innerNode();
     // Wheel events should not dispatch to text nodes.
@@ -1951,13 +1949,18 @@ void EventHandler::defaultWheelEventHandler(Node* startNode, WheelEvent* wheelEv
 
     // FIXME: enable scroll customization in this case. See crbug.com/410974.
     bool consumed = false;
-    ScrollResult result = physicalScroll(granularity, delta, startNode, &node, &consumed);
+
+    physicalScroll(
+        granularity,
+        delta,
+        FloatPoint(),
+        FloatSize(),
+        startNode,
+        &node,
+        &consumed);
 
     if (consumed)
         wheelEvent->setDefaultHandled();
-
-    if (m_frame->isMainFrame())
-        handleOverscroll(result);
 }
 
 WebInputEventResult EventHandler::handleGestureShowPress()
@@ -2086,14 +2089,14 @@ WebInputEventResult EventHandler::handleGestureScrollEvent(const PlatformGesture
 
     if (!eventTarget) {
         Document* document = m_frame->document();
-        if (!document->layoutView())
+        if (document->layoutViewItem().isNull())
             return WebInputEventResult::NotHandled;
 
         FrameView* view = m_frame->view();
         LayoutPoint viewPoint = view->rootFrameToContents(gestureEvent.position());
         HitTestRequest request(HitTestRequest::ReadOnly);
         HitTestResult result(request, viewPoint);
-        document->layoutView()->hitTest(result);
+        document->layoutViewItem().hitTest(result);
 
         eventTarget = result.innerNode();
 
@@ -2180,7 +2183,7 @@ WebInputEventResult EventHandler::handleGestureTap(const GestureEventWithHitTest
     if (currentHitTest.innerNode()) {
         LocalFrame* mainFrame = m_frame->localFrameRoot();
         if (mainFrame && mainFrame->view())
-            mainFrame->view()->updateAllLifecyclePhases();
+            mainFrame->view()->updateLifecycleToCompositingCleanPlusScrolling();
         adjustedPoint = frameView->rootFrameToContents(gestureEvent.position());
         currentHitTest = hitTestResultInFrame(m_frame, adjustedPoint, hitType);
     }
@@ -2248,7 +2251,7 @@ WebInputEventResult EventHandler::handleGestureTap(const GestureEventWithHitTest
         bool domTreeChanged = preDispatchDomTreeVersion != m_frame->document()->domTreeVersion();
         bool styleChanged = preDispatchStyleVersion != m_frame->document()->styleVersion();
 
-        IntPoint tappedPositionInViewport = m_frame->page()->frameHost().visualViewport().rootFrameToViewport(tappedPosition);
+        IntPoint tappedPositionInViewport = frameHost()->visualViewport().rootFrameToViewport(tappedPosition);
         m_frame->chromeClient().showUnhandledTapUIIfNeeded(tappedPositionInViewport, tappedNode, domTreeChanged || styleChanged);
     }
     return eventResult;
@@ -2358,11 +2361,11 @@ WebInputEventResult EventHandler::handleGestureScrollEnd(const PlatformGestureEv
         if (RuntimeEnabledFeatures::scrollCustomizationEnabled()) {
             OwnPtr<ScrollStateData> scrollStateData = adoptPtr(new ScrollStateData());
             scrollStateData->is_ending = true;
-            scrollStateData->is_in_inertial_phase = gestureEvent.inertial();
+            scrollStateData->is_in_inertial_phase = gestureEvent.inertialPhase() == ScrollInertialPhaseMomentum;
             scrollStateData->from_user_input = true;
             scrollStateData->is_direct_manipulation = true;
             scrollStateData->delta_consumed_for_scroll_sequence = m_deltaConsumedForScrollSequence;
-            ScrollState* scrollState = ScrollState::create(scrollStateData.release());
+            ScrollState* scrollState = ScrollState::create(std::move(scrollStateData));
             customizedScroll(*node, *scrollState);
         }
     }
@@ -2374,7 +2377,7 @@ WebInputEventResult EventHandler::handleGestureScrollEnd(const PlatformGestureEv
 WebInputEventResult EventHandler::handleGestureScrollBegin(const PlatformGestureEvent& gestureEvent)
 {
     Document* document = m_frame->document();
-    if (!document->layoutView())
+    if (document->layoutViewItem().isNull())
         return WebInputEventResult::NotHandled;
 
     FrameView* view = m_frame->view();
@@ -2398,12 +2401,12 @@ WebInputEventResult EventHandler::handleGestureScrollBegin(const PlatformGesture
     if (RuntimeEnabledFeatures::scrollCustomizationEnabled()) {
         m_currentScrollChain.clear();
         OwnPtr<ScrollStateData> scrollStateData = adoptPtr(new ScrollStateData());
-        scrollStateData->start_position_x = gestureEvent.position().x();
-        scrollStateData->start_position_y = gestureEvent.position().y();
+        scrollStateData->position_x = gestureEvent.position().x();
+        scrollStateData->position_y = gestureEvent.position().y();
         scrollStateData->is_beginning = true;
         scrollStateData->from_user_input = true;
         scrollStateData->delta_consumed_for_scroll_sequence = m_deltaConsumedForScrollSequence;
-        ScrollState* scrollState = ScrollState::create(scrollStateData.release());
+        ScrollState* scrollState = ScrollState::create(std::move(scrollStateData));
         customizedScroll(*m_scrollGestureHandlingNode.get(), *scrollState);
     } else {
         if (m_frame->isMainFrame())
@@ -2412,35 +2415,14 @@ WebInputEventResult EventHandler::handleGestureScrollBegin(const PlatformGesture
     return WebInputEventResult::HandledSystem;
 }
 
-void EventHandler::resetOverscroll(bool didScrollX, bool didScrollY)
+bool EventHandler::isRootScroller(const Node& node) const
 {
-    if (didScrollX)
-        m_accumulatedRootOverscroll.setWidth(0);
-    if (didScrollY)
-        m_accumulatedRootOverscroll.setHeight(0);
-}
+    // The root scroller is the one Element on the page designated to perform
+    // "viewport actions" like top controls movement and overscroll glow.
+    if (!frameHost() || !frameHost()->rootScroller())
+        return false;
 
-static inline FloatSize adjustOverscroll(FloatSize unusedDelta)
-{
-    if (std::abs(unusedDelta.width()) < minimumOverscrollDelta)
-        unusedDelta.setWidth(0);
-    if (std::abs(unusedDelta.height()) < minimumOverscrollDelta)
-        unusedDelta.setHeight(0);
-
-    return unusedDelta;
-}
-
-void EventHandler::handleOverscroll(const ScrollResult& scrollResult, const FloatPoint& position, const FloatSize& velocity)
-{
-    ASSERT(m_frame->isMainFrame());
-
-    FloatSize unusedDelta(scrollResult.unusedScrollDeltaX, scrollResult.unusedScrollDeltaY);
-    unusedDelta = adjustOverscroll(unusedDelta);
-    resetOverscroll(scrollResult.didScrollX, scrollResult.didScrollY);
-    if (unusedDelta != FloatSize()) {
-        m_accumulatedRootOverscroll += unusedDelta;
-        m_frame->chromeClient().didOverscroll(unusedDelta, m_accumulatedRootOverscroll, position, velocity);
-    }
+    return frameHost()->rootScroller()->get() == &node;
 }
 
 WebInputEventResult EventHandler::handleGestureScrollUpdate(const PlatformGestureEvent& gestureEvent)
@@ -2485,13 +2467,14 @@ WebInputEventResult EventHandler::handleGestureScrollUpdate(const PlatformGestur
             OwnPtr<ScrollStateData> scrollStateData = adoptPtr(new ScrollStateData());
             scrollStateData->delta_x = delta.width();
             scrollStateData->delta_y = delta.height();
+            scrollStateData->delta_granularity = ScrollByPrecisePixel;
             scrollStateData->velocity_x = velocity.width();
             scrollStateData->velocity_y = velocity.height();
             scrollStateData->should_propagate = !gestureEvent.preventPropagation();
-            scrollStateData->is_in_inertial_phase = gestureEvent.inertial();
+            scrollStateData->is_in_inertial_phase = gestureEvent.inertialPhase() == ScrollInertialPhaseMomentum;
             scrollStateData->from_user_input = true;
             scrollStateData->delta_consumed_for_scroll_sequence = m_deltaConsumedForScrollSequence;
-            ScrollState* scrollState = ScrollState::create(scrollStateData.release());
+            ScrollState* scrollState = ScrollState::create(std::move(scrollStateData));
             if (m_previousGestureScrolledNode) {
                 // The ScrollState needs to know what the current
                 // native scrolling element is, so that for an
@@ -2514,16 +2497,21 @@ WebInputEventResult EventHandler::handleGestureScrollUpdate(const PlatformGestur
                 stopNode = m_previousGestureScrolledNode.get();
 
             bool consumed = false;
-            ScrollResult result = physicalScroll(granularity, delta, node, &stopNode, &consumed);
+            ScrollResult result = physicalScroll(
+                granularity,
+                delta,
+                FloatPoint(gestureEvent.position()),
+                velocity,
+                node,
+                &stopNode,
+                &consumed);
 
             if (gestureEvent.preventPropagation())
                 m_previousGestureScrolledNode = stopNode;
 
-            if (m_frame->isMainFrame() && (!stopNode || stopNode->layoutObject() == m_frame->view()->layoutView())) {
-                FloatPoint position = FloatPoint(gestureEvent.position().x(), gestureEvent.position().y());
-                handleOverscroll(result, position, velocity);
-            } else {
-                resetOverscroll(result.didScrollX, result.didScrollY);
+            if ((!stopNode || !isRootScroller(*stopNode)) && frameHost()) {
+                frameHost()->overscrollController().resetAccumulated(
+                    result.didScrollX, result.didScrollY);
             }
 
             if (consumed)
@@ -2540,7 +2528,12 @@ void EventHandler::clearGestureScrollState()
     m_previousGestureScrolledNode = nullptr;
     m_deltaConsumedForScrollSequence = false;
     m_currentScrollChain.clear();
-    m_accumulatedRootOverscroll = FloatSize();
+
+    if (FrameHost* host = frameHost()) {
+        bool resetX = true;
+        bool resetY = true;
+        host->overscrollController().resetAccumulated(resetX, resetY);
+    }
 }
 
 bool EventHandler::isScrollbarHandlingGestures() const
@@ -2909,7 +2902,7 @@ WebInputEventResult EventHandler::sendContextMenuEventForKey(Element* overrideTa
     Element* focusedElement = overrideTargetElement ? overrideTargetElement : doc->focusedElement();
     FrameSelection& selection = m_frame->selection();
     Position start = selection.selection().start();
-    VisualViewport& visualViewport = m_frame->page()->frameHost().visualViewport();
+    VisualViewport& visualViewport = frameHost()->visualViewport();
 
     if (!overrideTargetElement && start.anchorNode() && (selection.rootEditableElement() || selection.isRange())) {
         IntRect firstRect = m_frame->editor().firstRectForRange(selection.selection().toNormalizedEphemeralRange());
@@ -3495,6 +3488,9 @@ void EventHandler::defaultBackspaceEventHandler(KeyboardEvent* event)
 {
     ASSERT(event->type() == EventTypeNames::keydown);
 
+    if (!RuntimeEnabledFeatures::backspaceDefaultHandlerEnabled())
+        return;
+
     if (event->ctrlKey() || event->metaKey() || event->altKey())
         return;
 
@@ -3628,421 +3624,11 @@ HitTestResult EventHandler::hitTestResultInFrame(LocalFrame* frame, const Layout
     return result;
 }
 
-void EventHandler::dispatchPointerEvents(const PlatformTouchEvent& event,
-    HeapVector<TouchInfo>& touchInfos)
-{
-    if (!RuntimeEnabledFeatures::pointerEventEnabled())
-        return;
-
-    // Iterate through the touch points, sending PointerEvents to the targets as required.
-    for (unsigned i = 0; i < touchInfos.size(); ++i) {
-        TouchInfo& touchInfo = touchInfos[i];
-        const PlatformTouchPoint& touchPoint = touchInfo.point;
-
-
-        if (touchPoint.state() == PlatformTouchPoint::TouchStationary
-            || !touchInfo.knownTarget)
-            continue;
-
-        WebInputEventResult result =
-            m_pointerEventManager.sendTouchPointerEvent(
-            touchInfo.touchTarget, touchPoint, event.getModifiers(),
-            touchInfo.adjustedRadius.width(), touchInfo.adjustedRadius.height(),
-            touchInfo.adjustedPagePoint.x(), touchInfo.adjustedPagePoint.y());
-        touchInfo.consumed = result != WebInputEventResult::NotHandled;
-    }
-}
-
-void EventHandler::sendPointerCancels(HeapVector<TouchInfo>& touchInfos)
-{
-    if (!RuntimeEnabledFeatures::pointerEventEnabled())
-        return;
-
-    for (unsigned i = 0; i < touchInfos.size(); ++i) {
-        TouchInfo& touchInfo = touchInfos[i];
-        const PlatformTouchPoint& point = touchInfo.point;
-        const PlatformTouchPoint::TouchState pointState = point.state();
-
-        if (pointState == PlatformTouchPoint::TouchReleased
-            || pointState == PlatformTouchPoint::TouchCancelled)
-            continue;
-
-        m_pointerEventManager.sendTouchCancelPointerEvent(
-            touchInfo.touchTarget,
-            point);
-    }
-}
-
-namespace {
-
-// Defining this class type local to dispatchTouchEvents() and annotating
-// it with STACK_ALLOCATED(), runs into MSVC(VS 2013)'s C4822 warning
-// that the local class doesn't provide a local definition for 'operator new'.
-// Which it intentionally doesn't and shouldn't.
-//
-// Work around such toolchain bugginess by lifting out the type, thereby
-// taking it out of C4822's reach.
-class ChangedTouches final {
-    STACK_ALLOCATED();
-public:
-    // The touches corresponding to the particular change state this struct
-    // instance represents.
-    Member<TouchList> m_touches;
-
-    using EventTargetSet = HeapHashSet<Member<EventTarget>>;
-    // Set of targets involved in m_touches.
-    EventTargetSet m_targets;
-};
-
-} // namespace
-
-WebInputEventResult EventHandler::dispatchTouchEvents(const PlatformTouchEvent& event,
-    HeapVector<TouchInfo>& touchInfos, bool freshTouchEvents, bool allTouchReleased)
-{
-    bool touchStartOrFirstTouchMove = false;
-    if (event.type() == PlatformEvent::TouchStart) {
-        m_waitingForFirstTouchMove = true;
-        touchStartOrFirstTouchMove = true;
-    } else if (event.type() == PlatformEvent::TouchMove) {
-        touchStartOrFirstTouchMove = m_waitingForFirstTouchMove;
-        m_waitingForFirstTouchMove = false;
-    }
-
-    // Build up the lists to use for the 'touches', 'targetTouches' and
-    // 'changedTouches' attributes in the JS event. See
-    // http://www.w3.org/TR/touch-events/#touchevent-interface for how these
-    // lists fit together.
-
-    // Holds the complete set of touches on the screen.
-    TouchList* touches = TouchList::create();
-
-    // A different view on the 'touches' list above, filtered and grouped by
-    // event target. Used for the 'targetTouches' list in the JS event.
-    using TargetTouchesHeapMap = HeapHashMap<EventTarget*, Member<TouchList>>;
-    TargetTouchesHeapMap touchesByTarget;
-
-    // Array of touches per state, used to assemble the 'changedTouches' list.
-    ChangedTouches changedTouches[PlatformTouchPoint::TouchStateEnd];
-
-    for (unsigned i = 0; i < touchInfos.size(); ++i) {
-        const TouchInfo& touchInfo = touchInfos[i];
-        const PlatformTouchPoint& point = touchInfo.point;
-        PlatformTouchPoint::TouchState pointState = point.state();
-
-        if (touchInfo.consumed)
-            continue;
-
-        Touch* touch = Touch::create(
-            touchInfo.targetFrame.get(),
-            touchInfo.touchTarget.get(),
-            point.id(),
-            point.screenPos(),
-            touchInfo.adjustedPagePoint,
-            touchInfo.adjustedRadius,
-            point.rotationAngle(),
-            point.force(),
-            touchInfo.region);
-
-        // Ensure this target's touch list exists, even if it ends up empty, so
-        // it can always be passed to TouchEvent::Create below.
-        TargetTouchesHeapMap::iterator targetTouchesIterator = touchesByTarget.find(touchInfo.touchTarget.get());
-        if (targetTouchesIterator == touchesByTarget.end()) {
-            touchesByTarget.set(touchInfo.touchTarget.get(), TouchList::create());
-            targetTouchesIterator = touchesByTarget.find(touchInfo.touchTarget.get());
-        }
-
-        // touches and targetTouches should only contain information about
-        // touches still on the screen, so if this point is released or
-        // cancelled it will only appear in the changedTouches list.
-        if (pointState != PlatformTouchPoint::TouchReleased && pointState != PlatformTouchPoint::TouchCancelled) {
-            touches->append(touch);
-            targetTouchesIterator->value->append(touch);
-        }
-
-        // Now build up the correct list for changedTouches.
-        // Note that  any touches that are in the TouchStationary state (e.g. if
-        // the user had several points touched but did not move them all) should
-        // never be in the changedTouches list so we do not handle them
-        // explicitly here. See https://bugs.webkit.org/show_bug.cgi?id=37609
-        // for further discussion about the TouchStationary state.
-        if (pointState != PlatformTouchPoint::TouchStationary && touchInfo.knownTarget) {
-            ASSERT(pointState < PlatformTouchPoint::TouchStateEnd);
-            if (!changedTouches[pointState].m_touches)
-                changedTouches[pointState].m_touches = TouchList::create();
-            changedTouches[pointState].m_touches->append(touch);
-            changedTouches[pointState].m_targets.add(touchInfo.touchTarget);
-        }
-    }
-    if (allTouchReleased) {
-        m_touchSequenceDocument.clear();
-        m_touchSequenceUserGestureToken.clear();
-    }
-
-    WebInputEventResult eventResult = WebInputEventResult::NotHandled;
-
-    // Now iterate through the changedTouches list and m_targets within it, sending
-    // TouchEvents to the targets as required.
-    for (unsigned state = 0; state != PlatformTouchPoint::TouchStateEnd; ++state) {
-        if (!changedTouches[state].m_touches)
-            continue;
-
-        const AtomicString& eventName(touchEventNameForTouchPointState(static_cast<PlatformTouchPoint::TouchState>(state)));
-        for (const auto& eventTarget : changedTouches[state].m_targets) {
-            EventTarget* touchEventTarget = eventTarget;
-            TouchEvent* touchEvent = TouchEvent::create(
-                touches, touchesByTarget.get(touchEventTarget), changedTouches[state].m_touches.get(),
-                eventName, touchEventTarget->toNode()->document().domWindow(),
-                event.getModifiers(), event.cancelable(), event.causesScrollingIfUncanceled(), event.timestamp());
-
-            DispatchEventResult domDispatchResult = touchEventTarget->dispatchEvent(touchEvent);
-
-            // Only report for top level documents with a single touch on
-            // touch-start or the first touch-move.
-            if (touchStartOrFirstTouchMove && touchInfos.size() == 1 && event.cancelable() && !m_frame->document()->ownerElement()) {
-                DEFINE_STATIC_LOCAL(EnumerationHistogram, rootDocumentListenerHistogram, ("Event.Touch.TargetAndDispatchResult", TouchTargetAndDispatchResultTypeMax));
-                rootDocumentListenerHistogram.count(toTouchTargetHistogramValue(eventTarget, domDispatchResult));
-
-                // Count the handled touch starts and first touch moves before and after the page is fully loaded respectively.
-                if (m_frame->document()->isLoadCompleted()) {
-                    DEFINE_STATIC_LOCAL(EnumerationHistogram, touchDispositionsAfterPageLoadHistogram, ("Event.Touch.TouchDispositionsAfterPageLoad", TouchEventDispatchResultTypeMax));
-                    touchDispositionsAfterPageLoadHistogram.count((domDispatchResult != DispatchEventResult::NotCanceled) ? HandledTouches : UnhandledTouches);
-                } else {
-                    DEFINE_STATIC_LOCAL(EnumerationHistogram, touchDispositionsBeforePageLoadHistogram, ("Event.Touch.TouchDispositionsBeforePageLoad", TouchEventDispatchResultTypeMax));
-                    touchDispositionsBeforePageLoadHistogram.count((domDispatchResult != DispatchEventResult::NotCanceled) ? HandledTouches : UnhandledTouches);
-                }
-            }
-            eventResult = mergeEventResult(eventResult, toWebInputEventResult(domDispatchResult));
-        }
-    }
-    return eventResult;
-}
-
 WebInputEventResult EventHandler::handleTouchEvent(const PlatformTouchEvent& event)
 {
     TRACE_EVENT0("blink", "EventHandler::handleTouchEvent");
 
-    const Vector<PlatformTouchPoint>& points = event.touchPoints();
-
-    bool freshTouchEvents = true;
-    bool allTouchReleased = true;
-    for (unsigned i = 0; i < points.size(); ++i) {
-        const PlatformTouchPoint& point = points[i];
-
-        if (point.state() != PlatformTouchPoint::TouchPressed)
-            freshTouchEvents = false;
-        if (point.state() != PlatformTouchPoint::TouchReleased && point.state() != PlatformTouchPoint::TouchCancelled)
-            allTouchReleased = false;
-    }
-    if (freshTouchEvents) {
-        // Ideally we'd ASSERT !m_touchSequenceDocument here since we should
-        // have cleared the active document when we saw the last release. But we
-        // have some tests that violate this, ClusterFuzz could trigger it, and
-        // there may be cases where the browser doesn't reliably release all
-        // touches. http://crbug.com/345372 tracks this.
-        m_touchSequenceDocument.clear();
-        m_touchSequenceUserGestureToken.clear();
-    }
-
-    ASSERT(m_frame->view());
-    if (m_touchSequenceDocument && (!m_touchSequenceDocument->frame() || !m_touchSequenceDocument->frame()->view())) {
-        // If the active touch document has no frame or view, it's probably being destroyed
-        // so we can't dispatch events.
-        return WebInputEventResult::NotHandled;
-    }
-
-    // First do hit tests for any new touch points.
-    for (unsigned i = 0; i < points.size(); ++i) {
-        const PlatformTouchPoint& point = points[i];
-
-        // Touch events implicitly capture to the touched node, and don't change
-        // active/hover states themselves (Gesture events do). So we only need
-        // to hit-test on touchstart, and it can be read-only.
-        if (point.state() == PlatformTouchPoint::TouchPressed) {
-            HitTestRequest::HitTestRequestType hitType = HitTestRequest::TouchEvent | HitTestRequest::ReadOnly | HitTestRequest::Active;
-            LayoutPoint pagePoint = roundedLayoutPoint(m_frame->view()->rootFrameToContents(point.pos()));
-            HitTestResult result;
-            if (!m_touchSequenceDocument) {
-                result = hitTestResultAtPoint(pagePoint, hitType);
-            } else if (m_touchSequenceDocument->frame()) {
-                LayoutPoint framePoint = roundedLayoutPoint(m_touchSequenceDocument->frame()->view()->rootFrameToContents(point.pos()));
-                result = hitTestResultInFrame(m_touchSequenceDocument->frame(), framePoint, hitType);
-            } else {
-                continue;
-            }
-
-            Node* node = result.innerNode();
-            if (!node)
-                continue;
-
-            if (isHTMLCanvasElement(node)) {
-                std::pair<Element*, String> regionInfo = toHTMLCanvasElement(node)->getControlAndIdIfHitRegionExists(result.pointInInnerNodeFrame());
-                if (regionInfo.first)
-                    node = regionInfo.first;
-                m_regionForTouchID.set(point.id(), regionInfo.second);
-            }
-
-            // Touch events should not go to text nodes
-            if (node->isTextNode())
-                node = FlatTreeTraversal::parent(*node);
-
-            if (!m_touchSequenceDocument) {
-                // Keep track of which document should receive all touch events
-                // in the active sequence. This must be a single document to
-                // ensure we don't leak Nodes between documents.
-                m_touchSequenceDocument = &(result.innerNode()->document());
-                ASSERT(m_touchSequenceDocument->frame()->view());
-            }
-
-            // Ideally we'd ASSERT(!m_targetForTouchID.contains(point.id())
-            // since we shouldn't get a touchstart for a touch that's already
-            // down. However EventSender allows this to be violated and there's
-            // some tests that take advantage of it. There may also be edge
-            // cases in the browser where this happens.
-            // See http://crbug.com/345372.
-            m_targetForTouchID.set(point.id(), node);
-
-            TouchAction effectiveTouchAction = TouchActionUtil::computeEffectiveTouchAction(*node);
-            if (effectiveTouchAction != TouchActionAuto)
-                m_frame->page()->chromeClient().setTouchAction(effectiveTouchAction);
-        }
-    }
-
-    m_touchPressed = !allTouchReleased;
-
-    // If there's no document receiving touch events, or no handlers on the
-    // document set to receive the events, then we can skip all the rest of
-    // this work.
-    if (!m_touchSequenceDocument || !m_touchSequenceDocument->frameHost() || !hasTouchHandlers(m_touchSequenceDocument->frameHost()->eventHandlerRegistry()) || !m_touchSequenceDocument->frame()) {
-        if (allTouchReleased) {
-            m_touchSequenceDocument.clear();
-            m_touchSequenceUserGestureToken.clear();
-        }
-        return WebInputEventResult::NotHandled;
-    }
-
-    // Whether a touch should be considered a "user gesture" or not is a tricky question.
-    // https://docs.google.com/document/d/1oF1T3O7_E4t1PYHV6gyCwHxOi3ystm0eSL5xZu7nvOg/edit#
-    // TODO(rbyers): Disable user gesture in some cases but retain logging for now (crbug.com/582140).
-    OwnPtr<UserGestureIndicator> gestureIndicator;
-    if (event.touchPoints().size() == 1
-        && event.touchPoints()[0].state() == PlatformTouchPoint::TouchReleased
-        && !event.causesScrollingIfUncanceled()) {
-        // This is a touchend corresponding to a tap, definitely a user gesture.  So don't supply
-        // a UserGestureUtilizedCallback.
-        gestureIndicator = adoptPtr(new UserGestureIndicator(DefinitelyProcessingUserGesture));
-    } else {
-        // This is some other touch event that perhaps shouldn't be considered a user gesture.  So
-        // use a UserGestureUtilizedCallback to get metrics / deprecation warnings.
-        if (m_touchSequenceUserGestureToken)
-            gestureIndicator = adoptPtr(new UserGestureIndicator(m_touchSequenceUserGestureToken.release(), &m_touchSequenceDocument->frame()->eventHandler()));
-        else
-            gestureIndicator = adoptPtr(new UserGestureIndicator(DefinitelyProcessingUserGesture, &m_touchSequenceDocument->frame()->eventHandler()));
-        m_touchSequenceUserGestureToken = UserGestureIndicator::currentToken();
-    }
-
-    // Compute and store the common info used by both PointerEvent and TouchEvent.
-    HeapVector<TouchInfo> touchInfos(points.size());
-
-    for (unsigned i = 0; i < points.size(); ++i) {
-        const PlatformTouchPoint& point = points[i];
-        PlatformTouchPoint::TouchState pointState = point.state();
-        EventTarget* touchTarget = nullptr;
-        String regionID;
-
-        if (pointState == PlatformTouchPoint::TouchReleased || pointState == PlatformTouchPoint::TouchCancelled) {
-            // The target should be the original target for this touch, so get
-            // it from the hashmap. As it's a release or cancel we also remove
-            // it from the map.
-            touchTarget = m_targetForTouchID.take(point.id());
-            regionID = m_regionForTouchID.take(point.id());
-        } else {
-            // No hittest is performed on move or stationary, since the target
-            // is not allowed to change anyway.
-            touchTarget = m_targetForTouchID.get(point.id());
-            regionID = m_regionForTouchID.get(point.id());
-        }
-
-        LocalFrame* targetFrame = nullptr;
-        bool knownTarget = false;
-        if (touchTarget) {
-            Document& doc = touchTarget->toNode()->document();
-            // If the target node has moved to a new document while it was being touched,
-            // we can't send events to the new document because that could leak nodes
-            // from one document to another. See http://crbug.com/394339.
-            if (&doc == m_touchSequenceDocument.get()) {
-                targetFrame = doc.frame();
-                knownTarget = true;
-            }
-        }
-        if (!knownTarget) {
-            // If we don't have a target registered for the point it means we've
-            // missed our opportunity to do a hit test for it (due to some
-            // optimization that prevented blink from ever seeing the
-            // touchstart), or that the touch started outside the active touch
-            // sequence document. We should still include the touch in the
-            // Touches list reported to the application (eg. so it can
-            // differentiate between a one and two finger gesture), but we won't
-            // actually dispatch any events for it. Set the target to the
-            // Document so that there's some valid node here. Perhaps this
-            // should really be LocalDOMWindow, but in all other cases the target of
-            // a Touch is a Node so using the window could be a breaking change.
-            // Since we know there was no handler invoked, the specific target
-            // should be completely irrelevant to the application.
-            touchTarget = m_touchSequenceDocument;
-            targetFrame = m_touchSequenceDocument->frame();
-        }
-        ASSERT(targetFrame);
-
-        // pagePoint should always be in the target element's document coordinates.
-        FloatPoint pagePoint = targetFrame->view()->rootFrameToContents(point.pos());
-        float scaleFactor = 1.0f / targetFrame->pageZoomFactor();
-
-        TouchInfo& touchInfo = touchInfos[i];
-        touchInfo.point = point;
-        touchInfo.touchTarget = touchTarget;
-        touchInfo.targetFrame = targetFrame;
-        touchInfo.adjustedPagePoint = pagePoint.scaledBy(scaleFactor);
-        touchInfo.adjustedRadius = point.radius().scaledBy(scaleFactor);
-        touchInfo.knownTarget = knownTarget;
-        touchInfo.consumed = false;
-        touchInfo.region = regionID;
-    }
-
-    if (!m_inPointerCanceledState) {
-        dispatchPointerEvents(event, touchInfos);
-        // Note that the disposition of any pointer events affects only the generation of touch
-        // events. If all pointer events were handled (and hence no touch events were fired), that
-        // is still equivalent to the touch events going unhandled because pointer event handler
-        // don't block scroll gesture generation.
-    }
-
-    // TODO(crbug.com/507408): If PE handlers always call preventDefault, we won't see TEs until after
-    // scrolling starts because the scrolling would suppress upcoming PEs. This sudden "break" in TE
-    // suppression can make the visible TEs inconsistent (e.g. touchmove without a touchstart).
-
-    WebInputEventResult eventResult = dispatchTouchEvents(event, touchInfos, freshTouchEvents,
-        allTouchReleased);
-
-    if (!m_inPointerCanceledState) {
-        // Check if we need to stop firing pointer events because of a touch action.
-        // See: www.w3.org/TR/pointerevents/#declaring-candidate-regions-for-default-touch-behaviors
-        if (event.causesScrollingIfUncanceled() && eventResult == WebInputEventResult::NotHandled) {
-            m_inPointerCanceledState = true;
-            sendPointerCancels(touchInfos);
-        }
-    } else if (allTouchReleased) {
-        m_inPointerCanceledState = false;
-    }
-
-    return eventResult;
-}
-
-void EventHandler::userGestureUtilized()
-{
-    // This is invoked for UserGestureIndicators created in handleTouchEvent which perhaps represent
-    // touch actions which shouldn't be considered a user-gesture.
-    UseCounter::count(m_frame, UseCounter::TouchDragUserGestureUsed);
-    Deprecation::countDeprecationCrossOriginIframe(m_frame, UseCounter::TouchDragUserGestureUsedCrossOrigin);
+    return m_pointerEventManager.handleTouchEvents(event);
 }
 
 void EventHandler::setLastKnownMousePosition(const PlatformMouseEvent& event)
@@ -4099,6 +3685,14 @@ PlatformEvent::Modifiers EventHandler::accessKeyModifiers()
 #else
     return PlatformEvent::AltKey;
 #endif
+}
+
+FrameHost* EventHandler::frameHost() const
+{
+    if (!m_frame->page())
+        return nullptr;
+
+    return &m_frame->page()->frameHost();
 }
 
 } // namespace blink

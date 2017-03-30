@@ -9,10 +9,10 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "components/mus/public/interfaces/command_buffer.mojom.h"
 #include "gpu/command_buffer/client/gpu_control.h"
 #include "gpu/command_buffer/common/command_buffer.h"
@@ -27,25 +27,18 @@ class RunLoop;
 namespace gles2 {
 class CommandBufferClientImpl;
 
-class CommandBufferDelegate {
- public:
-  virtual ~CommandBufferDelegate();
-  virtual void ContextLost();
-};
-
 class CommandBufferClientImpl
     : public mus::mojom::CommandBufferClient,
       public gpu::CommandBuffer,
       public gpu::GpuControl {
  public:
   explicit CommandBufferClientImpl(
-      CommandBufferDelegate* delegate,
       const std::vector<int32_t>& attribs,
       mojo::ScopedMessagePipeHandle command_buffer_handle);
   ~CommandBufferClientImpl() override;
+  bool Initialize();
 
   // CommandBuffer implementation:
-  bool Initialize() override;
   State GetLastState() override;
   int32_t GetLastToken() override;
   void Flush(int32_t put_offset) override;
@@ -58,6 +51,7 @@ class CommandBufferClientImpl
   void DestroyTransferBuffer(int32_t id) override;
 
   // gpu::GpuControl implementation:
+  void SetGpuControlClient(gpu::GpuControlClient*) override;
   gpu::Capabilities GetCapabilities() override;
   int32_t CreateImage(ClientBuffer buffer,
                       size_t width,
@@ -70,7 +64,6 @@ class CommandBufferClientImpl
                                      unsigned usage) override;
   void SignalQuery(uint32_t query, const base::Closure& callback) override;
   void SetLock(base::Lock*) override;
-  bool IsGpuChannelLost() override;
   void EnsureWorkVisible() override;
   gpu::CommandBufferNamespace GetNamespaceID() const override;
   gpu::CommandBufferId GetCommandBufferID() const override;
@@ -96,7 +89,8 @@ class CommandBufferClientImpl
 
   gpu::CommandBufferSharedState* shared_state() const { return shared_state_; }
 
-  CommandBufferDelegate* delegate_;
+  gpu::GpuControlClient* gpu_control_client_;
+  bool destroyed_;
   std::vector<int32_t> attribs_;
   mojo::Binding<mus::mojom::CommandBufferClient> client_binding_;
   mus::mojom::CommandBufferPtr command_buffer_;

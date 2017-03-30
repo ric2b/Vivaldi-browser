@@ -47,6 +47,7 @@
 #include "WebTextDirection.h"
 #include "public/platform/BlameContext.h"
 #include "public/platform/WebCommon.h"
+#include "public/platform/WebEffectiveConnectionType.h"
 #include "public/platform/WebFileSystem.h"
 #include "public/platform/WebFileSystemType.h"
 #include "public/platform/WebLoadingBehaviorFlag.h"
@@ -56,6 +57,7 @@
 #include "public/platform/WebStorageQuotaType.h"
 #include "public/platform/WebURLError.h"
 #include "public/platform/WebURLRequest.h"
+#include "public/web/WebContentSecurityPolicy.h"
 #include <v8.h>
 
 namespace blink {
@@ -76,12 +78,13 @@ class WebEncryptedMediaClient;
 class WebExternalPopupMenu;
 class WebExternalPopupMenuClient;
 class WebFormElement;
-class WebGeolocationClient;
 class WebInstalledAppClient;
 class WebMediaPlayer;
 class WebMediaPlayerClient;
 class WebMediaPlayerEncryptedMediaClient;
+class WebMediaPlayerSource;
 class WebMediaSession;
+class WebMediaStream;
 class WebMIDIClient;
 class WebNotificationPermissionCallback;
 class WebPermissionClient;
@@ -95,10 +98,7 @@ class WebScreenOrientationClient;
 class WebString;
 class WebURL;
 class WebURLResponse;
-class WebUSBClient;
 class WebUserMediaClient;
-class WebVRClient;
-class WebWakeLockClient;
 class WebWorkerContentSettingsClientProxy;
 struct WebColorSuggestion;
 struct WebConsoleMessage;
@@ -117,7 +117,7 @@ public:
 
     // May return null.
     // WebContentDecryptionModule* may be null if one has not yet been set.
-    virtual WebMediaPlayer* createMediaPlayer(const WebURL&, WebMediaPlayerClient*, WebMediaPlayerEncryptedMediaClient*, WebContentDecryptionModule*, const WebString& sinkId, WebMediaSession*) { return 0; }
+    virtual WebMediaPlayer* createMediaPlayer(const WebMediaPlayerSource&, WebMediaPlayerClient*, WebMediaPlayerEncryptedMediaClient*, WebContentDecryptionModule*, const WebString& sinkId, WebMediaSession*) { return 0; }
 
     // May return null.
     virtual WebMediaSession* createMediaSession() { return 0; }
@@ -197,6 +197,12 @@ public:
 
     // The sandbox flags have changed for a child frame of this frame.
     virtual void didChangeSandboxFlags(WebFrame* childFrame, WebSandboxFlags flags) { }
+
+    // Called when a new Content Security Policy is added to the frame's
+    // document.  This can be triggered by handling of HTTP headers, handling
+    // of <meta> element, or by inheriting CSP from the parent (in case of
+    // about:blank).
+    virtual void didAddContentSecurityPolicy(const WebString& headerValue, WebContentSecurityPolicyType, WebContentSecurityPolicySource) { }
 
     // Some frame owner properties have changed for a child frame of this frame.
     // Frame owner properties currently include: scrolling, marginwidth and
@@ -349,7 +355,7 @@ public:
     // The navigation resulted in no change to the documents within the page.
     // For example, the navigation may have just resulted in scrolling to a
     // named anchor or a PopState event may have been dispatched.
-    virtual void didNavigateWithinPage(WebLocalFrame*, const WebHistoryItem&, WebHistoryCommitType) { }
+    virtual void didNavigateWithinPage(WebLocalFrame*, const WebHistoryItem&, WebHistoryCommitType, bool contentInitiated) { }
 
     // Called upon update to scroll position, document state, and other
     // non-navigational events related to the data held by WebHistoryItem.
@@ -365,6 +371,9 @@ public:
     // Called to dispatch a load event for this frame in the FrameOwner of an
     // out-of-process parent frame.
     virtual void dispatchLoad() { }
+
+    // Returns the effective connection type when the frame was fetched.
+    virtual WebEffectiveConnectionType getEffectiveConnectionType() { return WebEffectiveConnectionType::TypeUnknown; }
 
     // Web Notifications ---------------------------------------------------
 
@@ -438,11 +447,6 @@ public:
     // the given frame. Additional context data is supplied.
     virtual void showContextMenu(const WebContextMenuData&) { }
 
-    // Called when the data attached to the currently displayed context menu is
-    // invalidated. The context menu may be closed if possible.
-    virtual void clearContextMenu() { }
-
-
     // Low-level resource notifications ------------------------------------
 
     // A request is about to be sent out, and the client may modify it.  Request
@@ -485,10 +489,10 @@ public:
 
     // This frame has displayed inactive content (such as an image) from
     // a connection with certificate errors.
-    virtual void didDisplayContentWithCertificateErrors(const WebURL& url, const WebCString& securityInfo, const WebURL& mainResourceUrl, const WebCString& mainResourceSecurityInfo) {}
+    virtual void didDisplayContentWithCertificateErrors(const WebURL& url, const WebCString& securityInfo) {}
     // This frame has run active content (such as a script) from a
     // connection with certificate errors.
-    virtual void didRunContentWithCertificateErrors(const WebURL& url, const WebCString& securityInfo, const WebURL& mainResourceUrl, const WebCString& mainResourceSecurityInfo) {}
+    virtual void didRunContentWithCertificateErrors(const WebURL& url, const WebCString& securityInfo) {}
 
     // A performance timing event (e.g. first paint) occurred
     virtual void didChangePerformanceTiming() { }
@@ -570,16 +574,6 @@ public:
     // A WebSocket object is going to open a new WebSocket connection.
     virtual void willOpenWebSocket(WebSocketHandle*) { }
 
-    // Wake Lock -----------------------------------------------------
-
-    virtual WebWakeLockClient* wakeLockClient() { return 0; }
-
-    // Geolocation ---------------------------------------------------------
-
-    // Access the embedder API for (client-based) geolocation client .
-    virtual WebGeolocationClient* geolocationClient() { return 0; }
-
-
     // MediaStream -----------------------------------------------------
 
     // A new WebRTCPeerConnectionHandler is created.
@@ -597,22 +591,14 @@ public:
 
     virtual WebMIDIClient* webMIDIClient() { return 0; }
 
-
-    // Messages ------------------------------------------------------
-
-    // Notifies the embedder that a postMessage was issued on this frame, and
-    // gives the embedder a chance to handle it instead of WebKit. Returns true
-    // if the embedder handled it.
-    virtual bool willCheckAndDispatchMessageEvent(
-        WebLocalFrame* sourceFrame,
-        WebFrame* targetFrame,
-        WebSecurityOrigin target,
-        WebDOMMessageEvent event) { return false; }
+    // User agent ------------------------------------------------------
 
     // Asks the embedder if a specific user agent should be used. Non-empty
     // strings indicate an override should be used. Otherwise,
     // Platform::current()->userAgent() will be called to provide one.
     virtual WebString userAgentOverride() { return WebString(); }
+
+    // Do not track ----------------------------------------------------
 
     // Asks the embedder what value the network stack will send for the DNT
     // header. An empty string indicates that no DNT header will be send.
@@ -689,11 +675,6 @@ public:
     // Access the embedder API for permission client.
     virtual WebPermissionClient* permissionClient() { return 0; }
 
-    // Virtual Reality -----------------------------------------------------
-
-    // Access the embedder API for virtual reality client.
-    virtual WebVRClient* webVRClient() { return 0; }
-
     // App Banners ---------------------------------------------------------
     virtual WebAppBannerClient* appBannerClient() { return 0; }
 
@@ -715,9 +696,6 @@ public:
 
     // Bluetooth -----------------------------------------------------------
     virtual WebBluetooth* bluetooth() { return 0; }
-
-    // WebUSB --------------------------------------------------------------
-    virtual WebUSBClient* usbClient() { return nullptr; }
 
 
     // Audio Output Devices API --------------------------------------------

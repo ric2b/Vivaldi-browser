@@ -44,7 +44,6 @@ namespace blink {
 
 CSSFontSelector::CSSFontSelector(Document* document)
     : m_document(document)
-    , m_fontLoader(FontLoader::create(this, document))
     , m_genericFontFamilySettings(document->frame()->settings()->genericFontFamilySettings())
 {
     // FIXME: An old comment used to say there was no need to hold a reference to m_document
@@ -59,10 +58,6 @@ CSSFontSelector::CSSFontSelector(Document* document)
 
 CSSFontSelector::~CSSFontSelector()
 {
-#if !ENABLE(OILPAN)
-    clearDocument();
-    FontCache::fontCache()->removeClient(this);
-#endif
 }
 
 void CSSFontSelector::registerForInvalidationCallbacks(CSSFontSelectorClient* client)
@@ -70,12 +65,10 @@ void CSSFontSelector::registerForInvalidationCallbacks(CSSFontSelectorClient* cl
     m_clients.add(client);
 }
 
-#if !ENABLE(OILPAN)
 void CSSFontSelector::unregisterForInvalidationCallbacks(CSSFontSelectorClient* client)
 {
     m_clients.remove(client);
 }
-#endif
 
 void CSSFontSelector::dispatchInvalidationCallbacks()
 {
@@ -162,15 +155,6 @@ bool CSSFontSelector::isPlatformFontAvailable(const FontDescription& fontDescrip
     return FontCache::fontCache()->isPlatformFontAvailable(fontDescription, family);
 }
 
-#if !ENABLE(OILPAN)
-void CSSFontSelector::clearDocument()
-{
-    m_fontLoader->clearDocumentAndFontSelector();
-    m_document = nullptr;
-    m_fontFaceCache.clearAll();
-}
-#endif
-
 void CSSFontSelector::updateGenericFontFamilySettings(Document& document)
 {
     if (!document.settings())
@@ -184,7 +168,6 @@ DEFINE_TRACE(CSSFontSelector)
     visitor->trace(m_document);
     visitor->trace(m_fontFaceCache);
     visitor->trace(m_clients);
-    visitor->trace(m_fontLoader);
     FontSelector::trace(visitor);
 }
 

@@ -6,7 +6,9 @@
 
 #include "ash/ash_switches.h"
 #include "ash/shell.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/aura/wm_window_aura.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "build/build_config.h"
@@ -17,7 +19,6 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "chrome/test/base/test_switches.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/native_app_window.h"
 #include "ui/aura/client/aura_constants.h"
@@ -59,13 +60,6 @@ typedef InProcessBrowserTest AcceleratorCommandsBrowserTest;
 
 // Confirm that toggling window miximized works properly
 IN_PROC_BROWSER_TEST_F(AcceleratorCommandsBrowserTest, ToggleMaximized) {
-#if defined(OS_WIN)
-  // Run the test on Win Ash only.
-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshBrowserTests))
-    return;
-#endif
-
   ASSERT_TRUE(ash::Shell::HasInstance()) << "No Instance";
   ash::wm::WindowState* window_state = ash::wm::GetActiveWindowState();
   ASSERT_TRUE(window_state);
@@ -79,7 +73,8 @@ IN_PROC_BROWSER_TEST_F(AcceleratorCommandsBrowserTest, ToggleMaximized) {
 
   // When in fullscreen accelerators::ToggleMaximized gets out of fullscreen.
   EXPECT_FALSE(window_state->IsFullscreen());
-  Browser* browser = chrome::FindBrowserWithWindow(window_state->window());
+  Browser* browser = chrome::FindBrowserWithWindow(
+      ash::wm::WmWindowAura::GetAuraWindow(window_state->window()));
   ASSERT_TRUE(browser);
   chrome::ToggleFullscreenMode(browser);
   EXPECT_TRUE(window_state->IsFullscreen());
@@ -126,13 +121,6 @@ class AcceleratorCommandsFullscreenBrowserTest
 // Test that toggling window fullscreen works properly.
 IN_PROC_BROWSER_TEST_P(AcceleratorCommandsFullscreenBrowserTest,
                        ToggleFullscreen) {
-#if defined(OS_WIN)
-  // Run the test on Win Ash only.
-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshBrowserTests))
-    return;
-#endif
-
   ASSERT_TRUE(ash::Shell::HasInstance()) << "No Instance";
 
   // 1) Browser windows.
@@ -152,7 +140,8 @@ IN_PROC_BROWSER_TEST_P(AcceleratorCommandsFullscreenBrowserTest,
 
   // 2) ToggleFullscreen() should have no effect on windows which cannot be
   // maximized.
-  window_state->window()->SetProperty(aura::client::kCanMaximizeKey, false);
+  ash::wm::WmWindowAura::GetAuraWindow(window_state->window())
+      ->SetProperty(aura::client::kCanMaximizeKey, false);
   ash::accelerators::ToggleFullscreen();
   EXPECT_TRUE(IsInitialShowState(window_state));
 
@@ -262,13 +251,6 @@ class AcceleratorCommandsPlatformAppFullscreenBrowserTest
 // Test the behavior of platform apps when ToggleFullscreen() is called.
 IN_PROC_BROWSER_TEST_P(AcceleratorCommandsPlatformAppFullscreenBrowserTest,
                        ToggleFullscreen) {
-#if defined(OS_WIN)
-  // Run the test on Win Ash only.
-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshBrowserTests))
-    return;
-#endif
-
   ASSERT_TRUE(ash::Shell::HasInstance()) << "No Instance";
   const extensions::Extension* extension = LoadAndLaunchPlatformApp("minimal",
                                                                     "Launched");

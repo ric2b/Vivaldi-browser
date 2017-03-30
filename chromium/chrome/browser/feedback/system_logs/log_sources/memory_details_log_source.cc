@@ -21,7 +21,7 @@ class SystemLogsMemoryHandler : public MemoryDetails {
   void OnDetailsAvailable() override {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-    scoped_ptr<SystemLogsResponse> response(new SystemLogsResponse);
+    std::unique_ptr<SystemLogsResponse> response(new SystemLogsResponse);
     (*response)["mem_usage"] = ToLogString();
     callback_.Run(response.get());
   }
@@ -46,7 +46,7 @@ void MemoryDetailsLogSource::Fetch(const SysLogsSourceCallback& callback) {
 
   scoped_refptr<SystemLogsMemoryHandler>
       handler(new SystemLogsMemoryHandler(callback));
-  handler->StartFetch(MemoryDetails::FROM_CHROME_ONLY);
+  handler->StartFetch();
 }
 
 }  // namespace system_logs

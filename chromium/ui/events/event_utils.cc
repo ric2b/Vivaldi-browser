@@ -6,8 +6,8 @@
 
 #include <vector>
 
-#include "ui/gfx/display.h"
-#include "ui/gfx/screen.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 
 namespace ui {
 
@@ -15,8 +15,8 @@ namespace {
 int g_custom_event_types = ET_LAST;
 }  // namespace
 
-scoped_ptr<Event> EventFromNative(const base::NativeEvent& native_event) {
-  scoped_ptr<Event> event;
+std::unique_ptr<Event> EventFromNative(const base::NativeEvent& native_event) {
+  std::unique_ptr<Event> event;
   EventType type = EventTypeFromNative(native_event);
   switch(type) {
     case ET_KEY_PRESSED:
@@ -67,21 +67,21 @@ base::TimeDelta EventTimeForNow() {
 
 bool ShouldDefaultToNaturalScroll() {
   return GetInternalDisplayTouchSupport() ==
-      gfx::Display::TOUCH_SUPPORT_AVAILABLE;
+         display::Display::TOUCH_SUPPORT_AVAILABLE;
 }
 
-gfx::Display::TouchSupport GetInternalDisplayTouchSupport() {
-  gfx::Screen* screen = gfx::Screen::GetScreen();
+display::Display::TouchSupport GetInternalDisplayTouchSupport() {
+  display::Screen* screen = display::Screen::GetScreen();
   // No screen in some unit tests.
   if (!screen)
-    return gfx::Display::TOUCH_SUPPORT_UNKNOWN;
-  const std::vector<gfx::Display>& displays = screen->GetAllDisplays();
-  for (std::vector<gfx::Display>::const_iterator it = displays.begin();
+    return display::Display::TOUCH_SUPPORT_UNKNOWN;
+  const std::vector<display::Display>& displays = screen->GetAllDisplays();
+  for (std::vector<display::Display>::const_iterator it = displays.begin();
        it != displays.end(); ++it) {
     if (it->IsInternal())
       return it->touch_support();
   }
-  return gfx::Display::TOUCH_SUPPORT_UNAVAILABLE;
+  return display::Display::TOUCH_SUPPORT_UNAVAILABLE;
 }
 
 }  // namespace ui

@@ -5,8 +5,9 @@
 #ifndef UI_DISPLAY_MANAGER_DISPLAY_LAYOUT_BUILDER_H_
 #define UI_DISPLAY_MANAGER_DISPLAY_LAYOUT_BUILDER_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "ui/display/display_export.h"
 #include "ui/display/manager/display_layout.h"
 
@@ -37,6 +38,10 @@ class DISPLAY_EXPORT DisplayLayoutBuilder final {
                                             DisplayPlacement::Position position,
                                             int offset);
 
+  // Adds a display placement.
+  DisplayLayoutBuilder& AddDisplayPlacement(
+      const DisplayPlacement& placement);
+
   // Sets the display placement for the secondary display.
   DisplayLayoutBuilder& SetSecondaryPlacement(
       int64_t secondary_id,
@@ -44,10 +49,10 @@ class DISPLAY_EXPORT DisplayLayoutBuilder final {
       int offset);
 
   // Returns the DisplayLayout. After this call, the builder becomes invalid.
-  scoped_ptr<DisplayLayout> Build();
+  std::unique_ptr<DisplayLayout> Build();
 
  private:
-  scoped_ptr<DisplayLayout> layout_;
+  std::unique_ptr<DisplayLayout> layout_;
 
   DISALLOW_COPY_AND_ASSIGN(DisplayLayoutBuilder);
 };

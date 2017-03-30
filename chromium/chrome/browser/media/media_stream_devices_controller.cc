@@ -30,6 +30,7 @@
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "components/url_formatter/elide_url.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/permission_type.h"
 #include "content/public/browser/render_frame_host.h"
@@ -232,8 +233,16 @@ bool MediaStreamDevicesController::IsAskingForVideo() const {
   return old_video_setting_ == CONTENT_SETTING_ASK;
 }
 
-const std::string& MediaStreamDevicesController::GetSecurityOriginSpec() const {
-  return request_.security_origin.spec();
+base::string16 MediaStreamDevicesController::GetMessageText() const {
+  int message_id = IDS_MEDIA_CAPTURE_AUDIO_AND_VIDEO;
+  if (!IsAskingForAudio())
+    message_id = IDS_MEDIA_CAPTURE_VIDEO_ONLY;
+  else if (!IsAskingForVideo())
+    message_id = IDS_MEDIA_CAPTURE_AUDIO_ONLY;
+  return l10n_util::GetStringFUTF16(
+      message_id,
+      url_formatter::FormatUrlForSecurityDisplay(
+          GetOrigin(), url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC));
 }
 
 void MediaStreamDevicesController::ForcePermissionDeniedTemporarily() {
@@ -251,16 +260,6 @@ int MediaStreamDevicesController::GetIconId() const {
     return IDR_INFOBAR_MEDIA_STREAM_CAMERA;
 
   return IDR_INFOBAR_MEDIA_STREAM_MIC;
-}
-
-base::string16 MediaStreamDevicesController::GetMessageText() const {
-  int message_id = IDS_MEDIA_CAPTURE_AUDIO_AND_VIDEO;
-  if (!IsAskingForAudio())
-    message_id = IDS_MEDIA_CAPTURE_VIDEO_ONLY;
-  else if (!IsAskingForVideo())
-    message_id = IDS_MEDIA_CAPTURE_AUDIO_ONLY;
-  return l10n_util::GetStringFUTF16(
-      message_id, base::UTF8ToUTF16(GetSecurityOriginSpec()));
 }
 
 base::string16 MediaStreamDevicesController::GetMessageTextFragment() const {
@@ -305,6 +304,11 @@ void MediaStreamDevicesController::Cancelled() {
 
 void MediaStreamDevicesController::RequestFinished() {
   delete this;
+}
+
+PermissionBubbleType MediaStreamDevicesController::GetPermissionBubbleType()
+    const {
+  return PermissionBubbleType::MEDIA_STREAM;
 }
 
 content::MediaStreamDevices MediaStreamDevicesController::GetDevices(

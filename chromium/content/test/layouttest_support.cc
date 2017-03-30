@@ -11,13 +11,13 @@
 #include "base/lazy_instance.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
+#include "components/scheduler/test/renderer_scheduler_test_support.h"
 #include "components/test_runner/test_common.h"
 #include "components/test_runner/web_frame_test_proxy.h"
 #include "components/test_runner/web_test_proxy.h"
 #include "content/browser/bluetooth/bluetooth_dispatcher_host.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
-#include "content/child/geofencing/web_geofencing_provider_impl.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/public/common/page_state.h"
 #include "content/public/renderer/renderer_gamepad_provider.h"
@@ -67,6 +67,9 @@ base::LazyInstance<FrameProxyCreationCallback>::Leaky
 using WebTestProxyType = test_runner::WebTestProxy<RenderViewImpl,
                                                    CompositorDependencies*,
                                                    const ViewMsg_New_Params&>;
+using WebFrameTestProxyType =
+    test_runner::WebFrameTestProxy<RenderFrameImpl,
+                                   const RenderFrameImpl::CreateParams&>;
 
 RenderViewImpl* CreateWebTestProxy(CompositorDependencies* compositor_deps,
                                    const ViewMsg_New_Params& params) {
@@ -80,10 +83,7 @@ RenderViewImpl* CreateWebTestProxy(CompositorDependencies* compositor_deps,
 
 RenderFrameImpl* CreateWebFrameTestProxy(
     const RenderFrameImpl::CreateParams& params) {
-  typedef test_runner::WebFrameTestProxy<
-      RenderFrameImpl, const RenderFrameImpl::CreateParams&> FrameProxy;
-
-  FrameProxy* render_frame_proxy = new FrameProxy(params);
+  WebFrameTestProxyType* render_frame_proxy = new WebFrameTestProxyType(params);
   if (g_frame_test_proxy_callback == 0)
     return render_frame_proxy;
   g_frame_test_proxy_callback.Get().Run(render_frame_proxy, render_frame_proxy);
@@ -112,6 +112,13 @@ test_runner::WebTestProxyBase* GetWebTestProxyBase(RenderView* render_view) {
   return static_cast<test_runner::WebTestProxyBase*>(render_view_proxy);
 }
 
+test_runner::WebFrameTestProxyBase* GetWebFrameTestProxyBase(
+    RenderFrame* render_frame) {
+  WebFrameTestProxyType* render_frame_proxy =
+      static_cast<WebFrameTestProxyType*>(render_frame);
+  return static_cast<test_runner::WebFrameTestProxyBase*>(render_frame_proxy);
+}
+
 void EnableWebTestProxyCreation(
     const ViewProxyCreationCallback& view_proxy_creation_callback,
     const FrameProxyCreationCallback& frame_proxy_creation_callback) {
@@ -121,11 +128,10 @@ void EnableWebTestProxyCreation(
   RenderFrameImpl::InstallCreateHook(CreateWebFrameTestProxy);
 }
 
-void FetchManifestDoneCallback(
-    scoped_ptr<ManifestFetcher> fetcher,
-    const FetchManifestCallback& callback,
-    const blink::WebURLResponse& response,
-    const std::string& data) {
+void FetchManifestDoneCallback(std::unique_ptr<ManifestFetcher> fetcher,
+                               const FetchManifestCallback& callback,
+                               const blink::WebURLResponse& response,
+                               const std::string& data) {
   // |fetcher| will be autodeleted here as it is going out of scope.
   callback.Run(response, data);
 }
@@ -133,7 +139,7 @@ void FetchManifestDoneCallback(
 void FetchManifest(blink::WebView* view, const GURL& url,
                    const FetchManifestCallback& callback) {
   ManifestFetcher* fetcher = new ManifestFetcher(url);
-  scoped_ptr<ManifestFetcher> autodeleter(fetcher);
+  std::unique_ptr<ManifestFetcher> autodeleter(fetcher);
 
   // Start is called on fetcher which is also bound to the callback.
   // A raw pointer is used instead of a scoped_ptr as base::Passes passes
@@ -146,7 +152,7 @@ void FetchManifest(blink::WebView* view, const GURL& url,
                             callback));
 }
 
-void SetMockGamepadProvider(scoped_ptr<RendererGamepadProvider> provider) {
+void SetMockGamepadProvider(std::unique_ptr<RendererGamepadProvider> provider) {
   RenderThreadImpl::current()
       ->blink_platform_impl()
       ->SetPlatformEventObserverForTesting(blink::WebPlatformEventTypeGamepad,
@@ -169,9 +175,7 @@ void EnableRendererLayoutTestMode() {
   RenderThreadImpl::current()->set_layout_test_mode(true);
 
 #if defined(OS_WIN)
-  if (gfx::win::ShouldUseDirectWrite()) {
-    RegisterSideloadedTypefaces(SkFontMgr_New_DirectWrite());
-  }
+  RegisterSideloadedTypefaces(SkFontMgr_New_DirectWrite());
 #endif
 }
 
@@ -362,24 +366,6 @@ void SetBluetoothAdapter(int render_process_id,
     dispatcher_host->SetBluetoothAdapterForTesting(std::move(adapter));
 }
 
-void SetGeofencingMockProvider(bool service_available) {
-  static_cast<WebGeofencingProviderImpl*>(
-      RenderThreadImpl::current()->blink_platform_impl()->geofencingProvider())
-          ->SetMockProvider(service_available);
-}
-
-void ClearGeofencingMockProvider() {
-  static_cast<WebGeofencingProviderImpl*>(
-      RenderThreadImpl::current()->blink_platform_impl()->geofencingProvider())
-          ->ClearMockProvider();
-}
-
-void SetGeofencingMockPosition(double latitude, double longitude) {
-  static_cast<WebGeofencingProviderImpl*>(
-      RenderThreadImpl::current()->blink_platform_impl()->geofencingProvider())
-          ->SetMockPosition(latitude, longitude);
-}
-
 void UseSynchronousResizeMode(RenderView* render_view, bool enable) {
   static_cast<RenderViewImpl*>(render_view)->
       UseSynchronousResizeModeForTesting(enable);
@@ -443,7 +429,7 @@ std::string DumpBackForwardList(std::vector<PageState>& page_state,
   std::string result;
   result.append("\n============== Back Forward List ==============\n");
   for (size_t index = 0; index < page_state.size(); ++index) {
-    scoped_ptr<HistoryEntry> entry(
+    std::unique_ptr<HistoryEntry> entry(
         PageStateToHistoryEntry(page_state[index]));
     result.append(
         DumpHistoryItem(entry->root_history_node(),
@@ -452,6 +438,12 @@ std::string DumpBackForwardList(std::vector<PageState>& page_state,
   }
   result.append("===============================================\n");
   return result;
+}
+
+void SchedulerRunIdleTasks(const base::Closure& callback) {
+    scheduler::RendererScheduler* scheduler =
+        content::RenderThreadImpl::current()->GetRendererScheduler();
+    scheduler::RunIdleTasksForTesting(scheduler, callback);
 }
 
 }  // namespace content

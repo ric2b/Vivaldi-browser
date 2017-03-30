@@ -263,6 +263,30 @@ FontWeight StyleBuilderConverter::convertFontWeight(StyleResolverState& state, c
     }
 }
 
+FontDescription::FontVariantCaps StyleBuilderConverter::convertFontVariantCaps(StyleResolverState&, const CSSValue& value)
+{
+    ASSERT_WITH_SECURITY_IMPLICATION(value.isPrimitiveValue());
+    CSSValueID valueID = toCSSPrimitiveValue(value).getValueID();
+    switch (valueID) {
+    case CSSValueNormal:
+        return FontDescription::CapsNormal;
+    case CSSValueSmallCaps:
+        return FontDescription::SmallCaps;
+    case CSSValueAllSmallCaps:
+        return FontDescription::AllSmallCaps;
+    case CSSValuePetiteCaps:
+        return FontDescription::PetiteCaps;
+    case CSSValueAllPetiteCaps:
+        return FontDescription::AllPetiteCaps;
+    case CSSValueUnicase:
+        return FontDescription::Unicase;
+    case CSSValueTitlingCaps:
+        return FontDescription::TitlingCaps;
+    default:
+        return FontDescription::CapsNormal;
+    }
+}
+
 FontDescription::VariantLigatures StyleBuilderConverter::convertFontVariantLigatures(StyleResolverState&, const CSSValue& value)
 {
     if (value.isValueList()) {
@@ -305,8 +329,55 @@ FontDescription::VariantLigatures StyleBuilderConverter::convertFontVariantLigat
     }
 
     ASSERT_WITH_SECURITY_IMPLICATION(value.isPrimitiveValue());
+
+    if (toCSSPrimitiveValue(value).getValueID() == CSSValueNone) {
+        return FontDescription::VariantLigatures(FontDescription::DisabledLigaturesState);
+    }
+
     ASSERT(toCSSPrimitiveValue(value).getValueID() == CSSValueNormal);
     return FontDescription::VariantLigatures();
+}
+
+FontVariantNumeric StyleBuilderConverter::convertFontVariantNumeric(StyleResolverState&, const CSSValue& value)
+{
+    if (value.isPrimitiveValue()) {
+        ASSERT(toCSSPrimitiveValue(value).getValueID() == CSSValueNormal);
+        return FontVariantNumeric();
+    }
+
+    FontVariantNumeric variantNumeric;
+    for (const CSSValue* feature : toCSSValueList(value)) {
+        switch (toCSSPrimitiveValue(feature)->getValueID()) {
+        case CSSValueLiningNums:
+            variantNumeric.setNumericFigure(FontVariantNumeric::LiningNums);
+            break;
+        case CSSValueOldstyleNums:
+            variantNumeric.setNumericFigure(FontVariantNumeric::OldstyleNums);
+            break;
+        case CSSValueProportionalNums:
+            variantNumeric.setNumericSpacing(FontVariantNumeric::ProportionalNums);
+            break;
+        case CSSValueTabularNums:
+            variantNumeric.setNumericSpacing(FontVariantNumeric::TabularNums);
+            break;
+        case CSSValueDiagonalFractions:
+            variantNumeric.setNumericFraction(FontVariantNumeric::DiagonalFractions);
+            break;
+        case CSSValueStackedFractions:
+            variantNumeric.setNumericFraction(FontVariantNumeric::StackedFractions);
+            break;
+        case CSSValueOrdinal:
+            variantNumeric.setOrdinal(FontVariantNumeric::OrdinalOn);
+            break;
+        case CSSValueSlashedZero:
+            variantNumeric.setSlashedZero(FontVariantNumeric::SlashedZeroOn);
+            break;
+        default:
+            ASSERT_NOT_REACHED();
+            break;
+        }
+    }
+    return variantNumeric;
 }
 
 StyleSelfAlignmentData StyleBuilderConverter::convertSelfOrDefaultAlignmentData(StyleResolverState&, const CSSValue& value)

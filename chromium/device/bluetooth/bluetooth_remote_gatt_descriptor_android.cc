@@ -4,6 +4,8 @@
 
 #include "device/bluetooth/bluetooth_remote_gatt_descriptor_android.h"
 
+#include <memory>
+
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
@@ -19,14 +21,14 @@ using base::android::AttachCurrentThread;
 namespace device {
 
 // static
-scoped_ptr<BluetoothRemoteGattDescriptorAndroid>
+std::unique_ptr<BluetoothRemoteGattDescriptorAndroid>
 BluetoothRemoteGattDescriptorAndroid::Create(
     const std::string& instance_id,
     jobject /* BluetoothGattDescriptorWrapper */
     bluetooth_gatt_descriptor_wrapper,
     jobject /* chromeBluetoothDevice */
     chrome_bluetooth_device) {
-  scoped_ptr<BluetoothRemoteGattDescriptorAndroid> descriptor(
+  std::unique_ptr<BluetoothRemoteGattDescriptorAndroid> descriptor(
       new BluetoothRemoteGattDescriptorAndroid(instance_id));
 
   descriptor->j_descriptor_.Reset(
@@ -63,22 +65,18 @@ BluetoothUUID BluetoothRemoteGattDescriptorAndroid::GetUUID() const {
           AttachCurrentThread(), j_descriptor_.obj())));
 }
 
-bool BluetoothRemoteGattDescriptorAndroid::IsLocal() const {
-  return false;
-}
-
 const std::vector<uint8_t>& BluetoothRemoteGattDescriptorAndroid::GetValue()
     const {
   return value_;
 }
 
-BluetoothGattCharacteristic*
+BluetoothRemoteGattCharacteristic*
 BluetoothRemoteGattDescriptorAndroid::GetCharacteristic() const {
   NOTIMPLEMENTED();
   return nullptr;
 }
 
-BluetoothGattCharacteristic::Permissions
+BluetoothRemoteGattCharacteristic::Permissions
 BluetoothRemoteGattDescriptorAndroid::GetPermissions() const {
   NOTIMPLEMENTED();
   return 0;
@@ -89,8 +87,9 @@ void BluetoothRemoteGattDescriptorAndroid::ReadRemoteDescriptor(
     const ErrorCallback& error_callback) {
   if (read_pending_ || write_pending_) {
     base::MessageLoop::current()->PostTask(
-        FROM_HERE, base::Bind(error_callback,
-                              BluetoothGattService::GATT_ERROR_IN_PROGRESS));
+        FROM_HERE,
+        base::Bind(error_callback,
+                   BluetoothRemoteGattService::GATT_ERROR_IN_PROGRESS));
     return;
   }
 
@@ -114,8 +113,9 @@ void BluetoothRemoteGattDescriptorAndroid::WriteRemoteDescriptor(
     const ErrorCallback& error_callback) {
   if (read_pending_ || write_pending_) {
     base::MessageLoop::current()->PostTask(
-        FROM_HERE, base::Bind(error_callback,
-                              BluetoothGattService::GATT_ERROR_IN_PROGRESS));
+        FROM_HERE,
+        base::Bind(error_callback,
+                   BluetoothRemoteGattService::GATT_ERROR_IN_PROGRESS));
     return;
   }
 

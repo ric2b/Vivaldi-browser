@@ -12,17 +12,17 @@
 #import "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
 #import "base/mac/sdk_forward_declarations.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "ui/accelerated_widget_mac/window_resize_helper_mac.h"
 #import "ui/base/cocoa/constrained_window/constrained_window_animation.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/input_method_factory.h"
-#include "ui/gfx/display.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/geometry/dip_util.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
 #import "ui/gfx/mac/nswindow_frame_controls.h"
-#include "ui/gfx/screen.h"
 #import "ui/views/cocoa/bridged_content_view.h"
 #import "ui/views/cocoa/cocoa_mouse_capture.h"
 #include "ui/views/cocoa/tooltip_manager_mac.h"
@@ -107,8 +107,8 @@ const int kResizeAreaCornerSize = 12;
 int kWindowPropertiesKey;
 
 float GetDeviceScaleFactorFromView(NSView* view) {
-  gfx::Display display =
-      gfx::Screen::GetScreen()->GetDisplayNearestWindow(view);
+  display::Display display =
+      display::Screen::GetScreen()->GetDisplayNearestWindow(view);
   DCHECK(display.is_valid());
   return display.device_scale_factor();
 }
@@ -799,6 +799,9 @@ void BridgedNativeWidget::OnWindowKeyStatusChangedTo(bool is_key) {
   if ([window_ contentView] == [window_ firstResponder]) {
     if (is_key) {
       widget->OnNativeFocus();
+      // Explicitly set the keyboard accessibility state on regaining key
+      // window status.
+      [bridged_view_ updateFullKeyboardAccess];
       widget->GetFocusManager()->RestoreFocusedView();
     } else {
       widget->OnNativeBlur();

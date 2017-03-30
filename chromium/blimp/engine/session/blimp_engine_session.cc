@@ -6,13 +6,17 @@
 
 #include <string>
 
+#include "base/command_line.h"
 #include "base/memory/ptr_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "base/trace_event/trace_event.h"
 #include "blimp/common/create_blimp_message.h"
 #include "blimp/common/proto/tab_control.pb.h"
 #include "blimp/engine/app/blimp_engine_config.h"
 #include "blimp/engine/app/settings_manager.h"
+#include "blimp/engine/app/switches.h"
 #include "blimp/engine/app/ui/blimp_layout_manager.h"
 #include "blimp/engine/app/ui/blimp_screen.h"
 #include "blimp/engine/app/ui/blimp_window_tree_client.h"
@@ -90,6 +94,21 @@ base::Closure QuitCurrentMessageLoopClosure() {
                     base::MessageLoop::QuitWhenIdleClosure());
 }
 
+uint16_t GetListeningPort() {
+  unsigned port_parsed = 0;
+  if (!base::StringToUint(
+          base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+              kEnginePort),
+          &port_parsed)) {
+    return kDefaultPort;
+  }
+  if (port_parsed > 65535) {
+    LOG(FATAL) << "--engine-port must be a value between 0 and 65535.";
+    return kDefaultPort;
+  }
+  return port_parsed;
+}
+
 }  // namespace
 
 // EngineNetworkComponents is created by the BlimpEngineSession on the UI
@@ -109,6 +128,8 @@ class EngineNetworkComponents : public ConnectionHandler,
   // received messages can be properly handled.
   void Initialize(const std::string& client_token);
 
+  uint16_t GetPortForTesting() { return port_; }
+
   BrowserConnectionHandler* GetBrowserConnectionHandler();
 
  private:
@@ -122,6 +143,7 @@ class EngineNetworkComponents : public ConnectionHandler,
 
   net::NetLog* net_log_;
   base::Closure quit_closure_;
+  uint16_t port_ = 0;
 
   std::unique_ptr<BrowserConnectionHandler> connection_handler_;
   std::unique_ptr<EngineAuthenticationHandler> authentication_handler_;
@@ -155,9 +177,12 @@ void EngineNetworkComponents::Initialize(const std::string& client_token) {
       new EngineConnectionManager(authentication_handler_.get()));
 
   // Adds BlimpTransports to connection_manager_.
-  net::IPEndPoint address(GetIPv4AnyAddress(), kDefaultPort);
-  connection_manager_->AddTransport(
-      base::WrapUnique(new TCPEngineTransport(address, net_log_)));
+  net::IPEndPoint address(GetIPv4AnyAddress(), GetListeningPort());
+  TCPEngineTransport* transport = new TCPEngineTransport(address, net_log_);
+  connection_manager_->AddTransport(base::WrapUnique(transport));
+
+  transport->GetLocalAddress(&address);
+  port_ = address.port();
 }
 
 void EngineNetworkComponents::HandleConnection(
@@ -214,8 +239,8 @@ BlimpEngineSession::~BlimpEngineSession() {
 }
 
 void BlimpEngineSession::Initialize() {
-  DCHECK(!gfx::Screen::GetScreen());
-  gfx::Screen::SetScreenInstance(screen_.get());
+  DCHECK(!display::Screen::GetScreen());
+  display::Screen::SetScreenInstance(screen_.get());
 
   window_tree_host_.reset(new BlimpWindowTreeHost());
 
@@ -247,6 +272,15 @@ void BlimpEngineSession::Initialize() {
       base::Bind(&EngineNetworkComponents::Initialize,
                  base::Unretained(net_components_.get()),
                  engine_config_->client_token()));
+}
+
+void BlimpEngineSession::GetEnginePortForTesting(
+    const GetPortCallback& callback) {
+  content::BrowserThread::PostTaskAndReplyWithResult(
+      content::BrowserThread::IO, FROM_HERE,
+      base::Bind(&EngineNetworkComponents::GetPortForTesting,
+                 base::Unretained(net_components_.get())),
+      callback);
 }
 
 void BlimpEngineSession::RegisterFeatures() {
@@ -320,8 +354,10 @@ void BlimpEngineSession::HandleResize(float device_pixel_ratio,
 }
 
 void BlimpEngineSession::LoadUrl(const int target_tab_id, const GURL& url) {
+  TRACE_EVENT1("blimp", "BlimpEngineSession::LoadUrl", "URL", url.spec());
   DVLOG(1) << "Load URL " << url << " in tab " << target_tab_id;
-  if (url.is_empty()) {
+  if (!url.is_valid()) {
+    VLOG(1) << "Dropping invalid URL " << url;
     return;
   }
 
@@ -352,12 +388,15 @@ void BlimpEngineSession::Reload(const int target_tab_id) {
 void BlimpEngineSession::OnWebGestureEvent(
     content::RenderWidgetHost* render_widget_host,
     std::unique_ptr<blink::WebGestureEvent> event) {
+  TRACE_EVENT1("blimp", "BlimpEngineSession::OnWebGestureEvent", "type",
+               event->type);
   render_widget_host->ForwardGestureEvent(*event);
 }
 
 void BlimpEngineSession::OnCompositorMessageReceived(
     content::RenderWidgetHost* render_widget_host,
     const std::vector<uint8_t>& message) {
+  TRACE_EVENT0("blimp", "BlimpEngineSession::OnCompositorMessageReceived");
 
   render_widget_host->HandleCompositorProto(message);
 }
@@ -398,6 +437,7 @@ void BlimpEngineSession::OnInputMethodDestroyed(
 
 // Called when a user input should trigger showing the IME.
 void BlimpEngineSession::OnShowImeIfNeeded() {
+  TRACE_EVENT0("blimp", "BlimpEngineSession::OnShowImeIfNeeded");
   if (!web_contents_->GetRenderWidgetHostView() ||
       !window_tree_host_->GetInputMethod()->GetTextInputClient())
     return;
@@ -411,6 +451,8 @@ void BlimpEngineSession::OnShowImeIfNeeded() {
 void BlimpEngineSession::ProcessMessage(
     std::unique_ptr<BlimpMessage> message,
     const net::CompletionCallback& callback) {
+  TRACE_EVENT1("blimp", "BlimpEngineSession::ProcessMessage", "TabId",
+               message->target_tab_id());
   DCHECK(!callback.is_null());
   DCHECK(message->type() == BlimpMessage::TAB_CONTROL ||
          message->type() == BlimpMessage::NAVIGATION);
@@ -513,6 +555,7 @@ void BlimpEngineSession::ActivateContents(content::WebContents* contents) {
 void BlimpEngineSession::ForwardCompositorProto(
     content::RenderWidgetHost* render_widget_host,
     const std::vector<uint8_t>& proto) {
+  TRACE_EVENT0("blimp", "BlimpEngineSession::ForwardCompositorProto");
   render_widget_feature_.SendCompositorMessage(kDummyTabId, render_widget_host,
                                                proto);
 }
@@ -520,6 +563,7 @@ void BlimpEngineSession::ForwardCompositorProto(
 void BlimpEngineSession::NavigationStateChanged(
     content::WebContents* source,
     content::InvalidateTypes changed_flags) {
+  TRACE_EVENT0("blimp", "BlimpEngineSession::NavigationStateChanged");
   if (source != web_contents_.get() || !changed_flags)
     return;
 

@@ -39,8 +39,7 @@ namespace blink {
 class SourceBuffer;
 class GenericEventQueue;
 
-class SourceBufferList final : public RefCountedGarbageCollectedEventTargetWithInlineData<SourceBufferList> {
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(SourceBufferList);
+class SourceBufferList final : public EventTargetWithInlineData {
     DEFINE_WRAPPERTYPEINFO();
 public:
     static SourceBufferList* create(ExecutionContext* context, GenericEventQueue* asyncEventQueue)

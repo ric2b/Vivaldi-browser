@@ -24,7 +24,6 @@
 
 #include "modules/webaudio/MediaElementAudioSourceNode.h"
 #include "core/dom/CrossThreadTask.h"
-#include "core/frame/ConsoleTypes.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "modules/webaudio/AbstractAudioContext.h"
@@ -178,9 +177,7 @@ void MediaElementAudioSourceHandler::process(size_t numberOfFrames)
                 m_maybePrintCORSMessage = false;
                 if (context()->getExecutionContext()) {
                     context()->getExecutionContext()->postTask(BLINK_FROM_HERE,
-                        createCrossThreadTask(&MediaElementAudioSourceHandler::printCORSMessage,
-                            this,
-                            m_currentSrcString));
+                        createCrossThreadTask(&MediaElementAudioSourceHandler::printCORSMessage, PassRefPtr<MediaElementAudioSourceHandler>(this), m_currentSrcString));
                 }
             }
             outputBus->zero();

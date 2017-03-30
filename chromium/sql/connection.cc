@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+
 #include <utility>
 
 #include "base/bind.h"
@@ -42,8 +43,6 @@ namespace {
 // up the database.
 // TODO(shess): Better story on this.  http://crbug.com/56559
 const int kBusyTimeoutSeconds = 1;
-
-bool g_mmap_disabled_default = false;
 
 class ScopedBusyTimeout {
  public:
@@ -115,9 +114,8 @@ int BackupDatabase(sqlite3* src, sqlite3* dst, const char* db_name) {
 // just use clean names to start with.
 bool ValidAttachmentPoint(const char* attachment_point) {
   for (size_t i = 0; attachment_point[i]; ++i) {
-    if (!((attachment_point[i] >= '0' && attachment_point[i] <= '9') ||
-          (attachment_point[i] >= 'a' && attachment_point[i] <= 'z') ||
-          (attachment_point[i] >= 'A' && attachment_point[i] <= 'Z') ||
+    if (!(base::IsAsciiDigit(attachment_point[i]) ||
+          base::IsAsciiAlpha(attachment_point[i]) ||
           attachment_point[i] == '_')) {
       return false;
     }
@@ -256,12 +254,6 @@ bool Connection::ShouldIgnoreSqliteCompileError(int error) {
       basic_error == SQLITE_CORRUPT;
 }
 
-// static
-void Connection::set_mmap_disabled_by_default() {
-    g_mmap_disabled_default = true;
-}
-
-
 void Connection::ReportDiagnosticInfo(int extended_error, Statement* stmt) {
   AssertIOAllowed();
 
@@ -355,7 +347,7 @@ Connection::Connection()
       needs_rollback_(false),
       in_memory_(false),
       poisoned_(false),
-      mmap_disabled_(g_mmap_disabled_default),
+      mmap_disabled_(false),
       mmap_enabled_(false),
       total_changes_at_last_release_(0),
       stats_histogram_(NULL),
@@ -542,7 +534,7 @@ void Connection::Preload() {
   if (preload_size > file_size)
     preload_size = file_size;
 
-  scoped_ptr<char[]> buf(new char[page_size]);
+  std::unique_ptr<char[]> buf(new char[page_size]);
   for (sqlite3_int64 pos = 0; pos < preload_size; pos += page_size) {
     rc = file->pMethods->xRead(file, buf.get(), page_size, pos);
 
@@ -679,12 +671,13 @@ bool Connection::RegisterIntentToUpload() const {
   // already bad.
   base::AutoLock lock(g_sqlite_init_lock.Get());
 
-  scoped_ptr<base::Value> root;
+  std::unique_ptr<base::Value> root;
   if (!base::PathExists(breadcrumb_path)) {
-    scoped_ptr<base::DictionaryValue> root_dict(new base::DictionaryValue());
+    std::unique_ptr<base::DictionaryValue> root_dict(
+        new base::DictionaryValue());
     root_dict->SetInteger(kVersionKey, kVersion);
 
-    scoped_ptr<base::ListValue> dumps(new base::ListValue);
+    std::unique_ptr<base::ListValue> dumps(new base::ListValue);
     dumps->AppendString(histogram_tag_);
     root_dict->Set(kDiagnosticDumpsKey, std::move(dumps));
 
@@ -693,11 +686,11 @@ bool Connection::RegisterIntentToUpload() const {
     // Failure to read a valid dictionary implies that something is going wrong
     // on the system.
     JSONFileValueDeserializer deserializer(breadcrumb_path);
-    scoped_ptr<base::Value> read_root(
+    std::unique_ptr<base::Value> read_root(
         deserializer.Deserialize(nullptr, nullptr));
     if (!read_root.get())
       return false;
-    scoped_ptr<base::DictionaryValue> root_dict =
+    std::unique_ptr<base::DictionaryValue> root_dict =
         base::DictionaryValue::From(std::move(read_root));
     if (!root_dict)
       return false;

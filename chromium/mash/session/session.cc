@@ -8,8 +8,8 @@
 #include "base/command_line.h"
 #include "base/message_loop/message_loop.h"
 #include "mash/login/public/interfaces/login.mojom.h"
-#include "mojo/shell/public/cpp/connection.h"
-#include "mojo/shell/public/cpp/connector.h"
+#include "services/shell/public/cpp/connection.h"
+#include "services/shell/public/cpp/connector.h"
 
 namespace {
 
@@ -27,17 +27,17 @@ namespace session {
 Session::Session() : connector_(nullptr), screen_locked_(false) {}
 Session::~Session() {}
 
-void Session::Initialize(mojo::Connector* connector,
-                         const mojo::Identity& identity,
+void Session::Initialize(shell::Connector* connector,
+                         const shell::Identity& identity,
                          uint32_t id) {
   connector_ = connector;
-  StartBrowserDriver();
+  StartAppDriver();
   StartWindowManager();
   StartSystemUI();
   StartQuickLaunch();
 }
 
-bool Session::AcceptConnection(mojo::Connection* connection) {
+bool Session::AcceptConnection(shell::Connection* connection) {
   connection->AddInterface<mojom::Session>(this);
   return true;
 }
@@ -85,7 +85,7 @@ void Session::UnlockScreen() {
   StopScreenlock();
 }
 
-void Session::Create(mojo::Connection* connection,
+void Session::Create(shell::Connection* connection,
                      mojom::SessionRequest request) {
   bindings_.AddBinding(this, std::move(request));
 }
@@ -103,11 +103,10 @@ void Session::StartSystemUI() {
                                      base::Unretained(this)));
 }
 
-void Session::StartBrowserDriver() {
+void Session::StartAppDriver() {
   StartRestartableService(
-      "mojo:browser_driver",
-      base::Bind(&Session::StartBrowserDriver,
-                 base::Unretained(this)));
+      "mojo:app_driver",
+      base::Bind(&Session::StartAppDriver, base::Unretained(this)));
 }
 
 void Session::StartQuickLaunch() {
@@ -135,7 +134,7 @@ void Session::StartRestartableService(
     const base::Closure& restart_callback) {
   // TODO(beng): This would be the place to insert logic that counted restarts
   //             to avoid infinite crash-restart loops.
-  std::unique_ptr<mojo::Connection> connection = connector_->Connect(url);
+  std::unique_ptr<shell::Connection> connection = connector_->Connect(url);
   // Note: |connection| may be null if we've lost our connection to the shell.
   if (connection) {
     connection->SetConnectionLostClosure(

@@ -77,8 +77,6 @@
 #include "chrome/browser/ui/app_list/google_now_extension.h"
 #endif
 
-#include "extensions/browser/extension_prefs.h"
-
 using content::BrowserThread;
 
 namespace extensions {
@@ -389,11 +387,8 @@ void ComponentLoader::AddNetworkSpeechSynthesisExtension() {
 }
 
 void ComponentLoader::AddVivaldiApp() {
-  // Make sure that Vivaldi can access the extension preferences. See
-  // <URL://https://developer.chrome.com/extensions/types#ChromeSetting>
-  ExtensionPrefs::Get(this->profile_)
-      ->RegisterExtensionForPrefs(Add(
-          VIVALDI_MAINFEST_JS, base::FilePath(FILE_PATH_LITERAL("vivaldi"))));
+  Add(VIVALDI_MAINFEST_JS,
+      base::FilePath(FILE_PATH_LITERAL("vivaldi")));
 }
 
 void ComponentLoader::AddGoogleNowExtension() {
@@ -543,6 +538,12 @@ void ComponentLoader::AddDefaultComponentExtensions(
   bool is_vivaldi =
       vivaldi::IsVivaldiRunning() && !vivaldi::IsDebuggingVivaldi();
 
+  if (is_vivaldi &&
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
+          apps::kLoadAndLaunchApp)) {
+      AddVivaldiApp();
+  }
+
   // Do not add component extensions that have background pages here -- add them
   // to AddDefaultComponentExtensionsWithBackgroundPages.
 #if defined(OS_CHROMEOS)
@@ -587,12 +588,6 @@ void ComponentLoader::AddDefaultComponentExtensions(
 
   AddKeyboardApp();
 
-  if (vivaldi::IsVivaldiRunning() && !vivaldi::IsDebuggingVivaldi() &&
-      !base::CommandLine::ForCurrentProcess()->HasSwitch(
-          apps::kLoadAndLaunchApp)) {
-    AddVivaldiApp();
-  }
-
   AddDefaultComponentExtensionsWithBackgroundPages(skip_session_components);
 
 #if defined(ENABLE_PLUGINS)
@@ -628,8 +623,10 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
     bool skip_session_components) {
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
+#if defined(ENABLE_SETTINGS_APP)
   bool is_vivaldi = vivaldi::IsVivaldiRunning() &&
                    !vivaldi::IsDebuggingVivaldi();
+#endif
 
   // Component extensions with background pages are not enabled during tests
   // because they generate a lot of background behavior that can interfere.

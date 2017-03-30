@@ -17,15 +17,26 @@ class PolicyMap;
 
 namespace arc {
 
+// Constants for the ARC certs sync mode are defined in the policy, please keep
+// its in sync.
+enum ArcCertsSyncMode : int32_t {
+  // Certificates sync is disabled.
+  SYNC_DISABLED = 0,
+  // Copy of CA certificates is enabled.
+  COPY_CA_CERTS = 1
+};
+
 class ArcPolicyBridge : public ArcService,
                         public ArcBridgeService::Observer,
-                        public PolicyHost,
+                        public mojom::PolicyHost,
                         public policy::PolicyService::Observer {
  public:
   explicit ArcPolicyBridge(ArcBridgeService* bridge_service);
   ArcPolicyBridge(ArcBridgeService* bridge_service,
                   policy::PolicyService* policy_service);
   ~ArcPolicyBridge() override;
+
+  void OverrideIsManagedForTesting(bool is_managed);
 
   // ArcBridgeService::Observer overrides.
   void OnPolicyInstanceReady() override;
@@ -44,6 +55,7 @@ class ArcPolicyBridge : public ArcService,
 
   mojo::Binding<PolicyHost> binding_;
   policy::PolicyService* policy_service_ = nullptr;
+  bool is_managed_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(ArcPolicyBridge);
 };

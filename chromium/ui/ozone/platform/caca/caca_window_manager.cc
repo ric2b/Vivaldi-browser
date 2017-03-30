@@ -9,6 +9,7 @@
 #include "base/macros.h"
 #include "base/trace_event/trace_event.h"
 #include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/gfx/vsync_provider.h"
@@ -28,17 +29,17 @@ class CacaSurface : public ui::SurfaceOzoneCanvas {
   bool Initialize();
 
   // ui::SurfaceOzoneCanvas overrides:
-  skia::RefPtr<SkSurface> GetSurface() override;
+  sk_sp<SkSurface> GetSurface() override;
   void ResizeCanvas(const gfx::Size& viewport_size) override;
   void PresentCanvas(const gfx::Rect& damage) override;
-  scoped_ptr<gfx::VSyncProvider> CreateVSyncProvider() override;
+  std::unique_ptr<gfx::VSyncProvider> CreateVSyncProvider() override;
 
  private:
   CacaWindow* window_;  // Not owned.
 
   ScopedCacaDither dither_;
 
-  skia::RefPtr<SkSurface> surface_;
+  sk_sp<SkSurface> surface_;
 
   DISALLOW_COPY_AND_ASSIGN(CacaSurface);
 };
@@ -54,7 +55,7 @@ bool CacaSurface::Initialize() {
   return true;
 }
 
-skia::RefPtr<SkSurface> CacaSurface::GetSurface() {
+sk_sp<SkSurface> CacaSurface::GetSurface() {
   return surface_;
 }
 
@@ -68,7 +69,7 @@ void CacaSurface::ResizeCanvas(const gfx::Size& viewport_size) {
                                        kN32_SkColorType,
                                        kPremul_SkAlphaType);
 
-  surface_ = skia::AdoptRef(SkSurface::NewRaster(info));
+  surface_ = SkSurface::MakeRaster(info);
   if (!surface_)
     LOG(ERROR) << "Failed to create SkSurface";
 
@@ -87,22 +88,17 @@ void CacaSurface::ResizeCanvas(const gfx::Size& viewport_size) {
 void CacaSurface::PresentCanvas(const gfx::Rect& damage) {
   TRACE_EVENT0("ozone", "CacaSurface::PresentCanvas");
 
-  SkImageInfo info;
-  size_t row_bytes;
-  const void* pixels = surface_->peekPixels(&info, &row_bytes);
+  SkPixmap pixmap;
+  surface_->peekPixels(&pixmap);
 
   caca_canvas_t* canvas = caca_get_canvas(window_->display());
-  caca_dither_bitmap(canvas,
-                     0,
-                     0,
-                     caca_get_canvas_width(canvas),
-                     caca_get_canvas_height(canvas),
-                     dither_.get(),
-                     static_cast<const uint8_t*>(pixels));
+  caca_dither_bitmap(canvas, 0, 0, caca_get_canvas_width(canvas),
+                     caca_get_canvas_height(canvas), dither_.get(),
+                     static_cast<const uint8_t*>(pixmap.addr()));
   caca_refresh_display(window_->display());
 }
 
-scoped_ptr<gfx::VSyncProvider> CacaSurface::CreateVSyncProvider() {
+std::unique_ptr<gfx::VSyncProvider> CacaSurface::CreateVSyncProvider() {
   return nullptr;
 }
 
@@ -131,13 +127,13 @@ bool CacaWindowManager::LoadEGLGLES2Bindings(
   return false;
 }
 
-scoped_ptr<ui::SurfaceOzoneCanvas> CacaWindowManager::CreateCanvasForWidget(
-    gfx::AcceleratedWidget widget) {
+std::unique_ptr<ui::SurfaceOzoneCanvas>
+CacaWindowManager::CreateCanvasForWidget(gfx::AcceleratedWidget widget) {
   DCHECK(thread_checker_.CalledOnValidThread());
   CacaWindow* window = windows_.Lookup(widget);
   DCHECK(window);
 
-  scoped_ptr<CacaSurface> canvas(new CacaSurface(window));
+  std::unique_ptr<CacaSurface> canvas(new CacaSurface(window));
   bool initialized = canvas->Initialize();
   DCHECK(initialized);
   return std::move(canvas);

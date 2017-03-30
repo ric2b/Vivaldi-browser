@@ -41,10 +41,14 @@ WebInspector.DeviceModeView.prototype = {
         this._mediaInspectorContainer = this._contentClip.createChild("div", "device-mode-media-container");
         this._contentArea = this._contentClip.createChild("div", "device-mode-content-area");
 
+        this._outlineImage = this._contentArea.createChild("img", "device-mode-outline-image hidden fill");
+        this._outlineImage.addEventListener("load", this._onImageLoaded.bind(this, this._outlineImage, true), false);
+        this._outlineImage.addEventListener("error", this._onImageLoaded.bind(this, this._outlineImage, false), false);
+
         this._screenArea = this._contentArea.createChild("div", "device-mode-screen-area");
         this._screenImage = this._screenArea.createChild("img", "device-mode-screen-image hidden");
-        this._screenImage.addEventListener("load", this._onScreenImageLoaded.bind(this, true), false);
-        this._screenImage.addEventListener("error", this._onScreenImageLoaded.bind(this, false), false);
+        this._screenImage.addEventListener("load", this._onImageLoaded.bind(this, this._screenImage, true), false);
+        this._screenImage.addEventListener("error", this._onImageLoaded.bind(this, this._screenImage, false), false);
 
         this._bottomRightResizerElement = this._screenArea.createChild("div", "device-mode-resizer device-mode-bottom-right-resizer");
         this._bottomRightResizerElement.createChild("div", "");
@@ -81,9 +85,9 @@ WebInspector.DeviceModeView.prototype = {
                       WebInspector.UIString("Tablet"),
                       WebInspector.UIString("Laptop"),
                       WebInspector.UIString("Laptop L"),
-                      WebInspector.UIString("4K")]
+                      WebInspector.UIString("4K")];
         this._presetBlocks = [];
-        var inner = this._responsivePresetsContainer.createChild("div", "device-mode-presets-container-inner")
+        var inner = this._responsivePresetsContainer.createChild("div", "device-mode-presets-container-inner");
         for (var i = sizes.length - 1; i >= 0; --i) {
             var outer = inner.createChild("div", "fill device-mode-preset-bar-outer");
             var block = outer.createChild("div", "device-mode-preset-bar");
@@ -104,11 +108,6 @@ WebInspector.DeviceModeView.prototype = {
             this._model.setSizeAndScaleToFit(width, 0);
             e.consume();
         }
-    },
-
-    toggleDeviceMode: function()
-    {
-        this._toolbar.toggleDeviceMode();
     },
 
     /**
@@ -188,6 +187,18 @@ WebInspector.DeviceModeView.prototype = {
 
     _updateUI: function()
     {
+        /**
+         * @param {!Element} element
+         * @param {!WebInspector.Rect} rect
+         */
+        function applyRect(element, rect)
+        {
+            element.style.left = rect.left + "px";
+            element.style.top = rect.top + "px";
+            element.style.width = rect.width + "px";
+            element.style.height = rect.height + "px";
+        }
+
         if (!this.isShowing())
             return;
 
@@ -199,11 +210,7 @@ WebInspector.DeviceModeView.prototype = {
 
         var cssScreenRect = this._model.screenRect().scale(1 / zoomFactor);
         if (!cssScreenRect.isEqual(this._cachedCssScreenRect)) {
-            this._screenArea.style.left = cssScreenRect.left + "px";
-            this._screenArea.style.top = cssScreenRect.top + "px";
-            this._screenArea.style.width = cssScreenRect.width + "px";
-            this._screenArea.style.height = cssScreenRect.height + "px";
-            this._leftRuler.element.style.left = cssScreenRect.left + "px";
+            applyRect(this._screenArea, cssScreenRect);
             updateRulers = true;
             callDoResize = true;
             this._cachedCssScreenRect = cssScreenRect;
@@ -211,13 +218,18 @@ WebInspector.DeviceModeView.prototype = {
 
         var cssVisiblePageRect = this._model.visiblePageRect().scale(1 / zoomFactor);
         if (!cssVisiblePageRect.isEqual(this._cachedCssVisiblePageRect)) {
-            this._pageArea.style.left = cssVisiblePageRect.left + "px";
-            this._pageArea.style.top = cssVisiblePageRect.top + "px";
-            this._pageArea.style.width = cssVisiblePageRect.width + "px";
-            this._pageArea.style.height = cssVisiblePageRect.height + "px";
+            applyRect(this._pageArea, cssVisiblePageRect);
             callDoResize = true;
             this._cachedCssVisiblePageRect = cssVisiblePageRect;
         }
+
+        var outlineRect = this._model.outlineRect().scale(1 / zoomFactor);
+        if (!outlineRect.isEqual(this._cachedOutlineRect)) {
+            applyRect(this._outlineImage, outlineRect);
+            callDoResize = true;
+            this._cachedOutlineRect = outlineRect;
+        }
+        this._contentClip.classList.toggle("device-mode-outline-visible", !!this._model.outlineImage());
 
         var resizable = this._model.type() === WebInspector.DeviceModeModel.Type.Responsive;
         if (resizable !== this._cachedResizable) {
@@ -243,7 +255,7 @@ WebInspector.DeviceModeView.prototype = {
         if (showRulers !== this._cachedShowRulers) {
             this._contentClip.classList.toggle("device-mode-rulers-visible", showRulers);
             if (showRulers) {
-                this._topRuler.show(this._contentClip, this._contentArea);
+                this._topRuler.show(this._contentArea);
                 this._leftRuler.show(this._contentArea);
             } else {
                 this._topRuler.detach();
@@ -263,36 +275,41 @@ WebInspector.DeviceModeView.prototype = {
         }
 
         this._toolbar.update();
-        this._loadScreenImage(this._model.screenImage());
+        this._loadImage(this._screenImage, this._model.screenImage());
+        this._loadImage(this._outlineImage, this._model.outlineImage());
         this._mediaInspector.setAxisTransform(this._model.scale());
         if (callDoResize)
             this.doResize();
         if (updateRulers) {
-            this._topRuler.render(this._cachedCssScreenRect ? this._cachedCssScreenRect.left : 0, this._model.scale());
-            this._leftRuler.render(0, this._model.scale());
+            this._topRuler.render(this._model.scale());
+            this._leftRuler.render(this._model.scale());
+            this._topRuler.element.positionAt(this._cachedCssScreenRect ? this._cachedCssScreenRect.left : 0, this._cachedCssScreenRect ? this._cachedCssScreenRect.top : 0);
+            this._leftRuler.element.positionAt(this._cachedCssScreenRect ? this._cachedCssScreenRect.left : 0, this._cachedCssScreenRect ? this._cachedCssScreenRect.top : 0);
         }
         if (contentAreaResized)
             this._contentAreaResized();
     },
 
     /**
+     * @param {!Element} element
      * @param {string} srcset
      */
-    _loadScreenImage: function(srcset)
+    _loadImage: function(element, srcset)
     {
-        if (this._screenImage.getAttribute("srcset") === srcset)
+        if (element.getAttribute("srcset") === srcset)
             return;
-        this._screenImage.setAttribute("srcset", srcset);
+        element.setAttribute("srcset", srcset);
         if (!srcset)
-            this._screenImage.classList.toggle("hidden", true);
+            element.classList.toggle("hidden", true);
     },
 
     /**
+     * @param {!Element} element
      * @param {boolean} success
      */
-    _onScreenImageLoaded: function(success)
+    _onImageLoaded: function(element, success)
     {
-        this._screenImage.classList.toggle("hidden", !success);
+        element.classList.toggle("hidden", !success);
     },
 
     _contentAreaResized: function()
@@ -356,6 +373,19 @@ WebInspector.DeviceModeView.prototype = {
         var mainTarget = WebInspector.targetManager.mainTarget();
         if (!mainTarget)
             return;
+        WebInspector.DOMModel.muteHighlight();
+
+        var zoomFactor = WebInspector.zoomManager.zoomFactor();
+        var rect = this._contentArea.getBoundingClientRect();
+        var availableSize = new Size(Math.max(rect.width * zoomFactor, 1), Math.max(rect.height * zoomFactor, 1));
+        var outlineVisible = this._model.deviceOutlineSetting().get();
+
+        if (availableSize.width < this._model.screenRect().width ||
+            availableSize.height < this._model.screenRect().height) {
+            WebInspector.inspectorView.minimize();
+            this._model.deviceOutlineSetting().set(false);
+        }
+
         mainTarget.pageAgent().captureScreenshot(screenshotCaptured.bind(this));
 
         /**
@@ -365,34 +395,69 @@ WebInspector.DeviceModeView.prototype = {
          */
         function screenshotCaptured(error, content)
         {
-            if (error)
+            this._model.deviceOutlineSetting().set(outlineVisible);
+            var dpr = window.devicePixelRatio;
+            var outlineRect = this._model.outlineRect().scale(dpr);
+            var screenRect = this._model.screenRect().scale(dpr);
+            screenRect.left -= outlineRect.left;
+            screenRect.top -= outlineRect.top;
+            var visiblePageRect = this._model.visiblePageRect().scale(dpr);
+            visiblePageRect.left += screenRect.left;
+            visiblePageRect.top += screenRect.top;
+            outlineRect.left = 0;
+            outlineRect.top = 0;
+
+            WebInspector.DOMModel.unmuteHighlight();
+            WebInspector.inspectorView.restore();
+
+            if (error) {
+                console.error(error);
                 return;
+            }
 
             // Create a canvas to splice the images together.
             var canvas = createElement("canvas");
             var ctx = canvas.getContext("2d");
-            var screenRect = this._model.screenRect();
-            var dpr = window.devicePixelRatio;
-            canvas.width = screenRect.width * dpr;
-            canvas.height = screenRect.height * dpr;
-            // Add any available screen images.
-            if (this._model.screenImage()) {
-                var screenImage = new Image();
-                screenImage.crossOrigin = "Anonymous";
-                screenImage.srcset = this._model.screenImage();
-                screenImage.onload = onImageLoad.bind(this);
-                screenImage.onerror = paintScreenshot.bind(this);
-            } else {
-                paintScreenshot.call(this);
-            }
+            canvas.width = outlineRect.width;
+            canvas.height = outlineRect.height;
+
+            var promise = Promise.resolve();
+            if (this._model.outlineImage())
+                promise = promise.then(paintImage.bind(null, this._model.outlineImage(), outlineRect));
+            promise = promise.then(drawBorder);
+            if (this._model.screenImage())
+                promise = promise.then(paintImage.bind(null, this._model.screenImage(), screenRect));
+            promise.then(paintScreenshot.bind(this));
 
             /**
-             * @this {WebInspector.DeviceModeView}
+             * @param {string} src
+             * @param {!WebInspector.Rect} rect
+             * @return {!Promise<undefined>}
              */
-            function onImageLoad()
+            function paintImage(src, rect)
             {
-                ctx.drawImage(screenImage, 0, 0, screenRect.width * dpr, screenRect.height * dpr);
-                paintScreenshot.call(this);
+                var callback;
+                var promise = new Promise(fulfill => callback = fulfill);
+                var image = new Image();
+                image.crossOrigin = "Anonymous";
+                image.srcset = src;
+                image.onload = onImageLoad;
+                image.onerror = callback;
+                return promise;
+
+                function onImageLoad()
+                {
+                    ctx.drawImage(image, rect.left, rect.top, rect.width, rect.height);
+                    callback();
+                }
+            }
+
+            function drawBorder()
+            {
+                ctx.strokeStyle = "hsla(0, 0%, 98%, 0.5)";
+                ctx.lineWidth = 1;
+                ctx.setLineDash([10, 10]);
+                ctx.strokeRect(screenRect.left + 1, screenRect.top + 1, screenRect.width - 2, screenRect.height - 2);
             }
 
             /**
@@ -402,12 +467,11 @@ WebInspector.DeviceModeView.prototype = {
             {
                 var pageImage = new Image();
                 pageImage.src = "data:image/png;base64," + content;
-                var visiblePageRect = this._model.visiblePageRect().scale(dpr);
                 ctx.drawImage(pageImage,
                               visiblePageRect.left,
                               visiblePageRect.top,
-                              visiblePageRect.width,
-                              visiblePageRect.height);
+                              Math.min(pageImage.naturalWidth, screenRect.width),
+                              Math.min(pageImage.naturalHeight, screenRect.height));
                 var mainFrame = mainTarget.resourceTreeModel.mainFrame;
                 var fileName = mainFrame ? mainFrame.url.trimURL().removeURLFragment() : "";
                 if (this._model.type() === WebInspector.DeviceModeModel.Type.Device)
@@ -433,10 +497,10 @@ WebInspector.DeviceModeView.prototype = {
 WebInspector.DeviceModeView.Ruler = function(horizontal, applyCallback)
 {
     WebInspector.VBox.call(this);
-    this._contentElement = this.element.createChild("div", "device-mode-ruler flex-auto");
+    this.element.classList.add("device-mode-ruler");
+    this._contentElement = this.element.createChild("div", "device-mode-ruler-content").createChild("div", "device-mode-ruler-inner");
     this._horizontal = horizontal;
     this._scale = 1;
-    this._offset = 0;
     this._count = 0;
     this._throttler = new WebInspector.Throttler(0);
     this._applyCallback = applyCallback;
@@ -444,17 +508,11 @@ WebInspector.DeviceModeView.Ruler = function(horizontal, applyCallback)
 
 WebInspector.DeviceModeView.Ruler.prototype = {
     /**
-     * @param {number} offset
      * @param {number} scale
      */
-    render: function(offset, scale)
+    render: function(scale)
     {
         this._scale = scale;
-        this._offset = offset;
-        if (this._horizontal)
-            this.element.style.paddingLeft = this._offset + "px";
-        else
-            this.element.style.paddingTop = this._offset + "px";
         this._throttler.schedule(this._update.bind(this));
     },
 

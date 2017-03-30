@@ -5,10 +5,10 @@
 #ifndef CHROME_INSTALLER_UTIL_CONDITIONAL_WORK_ITEM_LIST_H_
 #define CHROME_INSTALLER_UTIL_CONDITIONAL_WORK_ITEM_LIST_H_
 
-#include "chrome/installer/util/work_item_list.h"
+#include <memory>
 
 #include "base/files/file_path.h"
-#include "base/memory/scoped_ptr.h"
+#include "chrome/installer/util/work_item_list.h"
 
 // A WorkItemList subclass that permits conditionally executing a set of
 // WorkItems.
@@ -17,18 +17,20 @@ class ConditionalWorkItemList : public WorkItemList {
   explicit ConditionalWorkItemList(Condition* condition);
   ~ConditionalWorkItemList() override;
 
+ private:
+  // WorkItemList:
+
   // If condition_->ShouldRun() returns true, then execute the items in this
   // list and return true iff they all succeed. If condition_->ShouldRun()
   // returns false, does nothing and returns true.
-  bool Do() override;
+  bool DoImpl() override;
 
   // Does a rollback of the items (if any) that were run in Do.
-  void Rollback() override;
+  void RollbackImpl() override;
 
- protected:
   // Pointer to a Condition that is used to determine whether to run this
   // WorkItemList.
-  scoped_ptr<Condition> condition_;
+  std::unique_ptr<Condition> condition_;
 };
 
 
@@ -54,7 +56,7 @@ class Not : public WorkItem::Condition {
   bool ShouldRun() const override;
 
  private:
-  scoped_ptr<WorkItem::Condition> original_condition_;
+  std::unique_ptr<WorkItem::Condition> original_condition_;
 };
 
 #endif  // CHROME_INSTALLER_UTIL_CONDITIONAL_WORK_ITEM_LIST_H_

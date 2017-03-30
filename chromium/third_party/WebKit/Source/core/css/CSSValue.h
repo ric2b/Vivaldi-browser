@@ -26,13 +26,11 @@
 #include "platform/weborigin/KURL.h"
 #include "wtf/HashMap.h"
 #include "wtf/ListHashSet.h"
-#include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
 
 namespace blink {
 
 class CORE_EXPORT CSSValue : public GarbageCollectedFinalized<CSSValue> {
-#if ENABLE(OILPAN)
 public:
     // Override operator new to allocate CSSValue subtype objects onto
     // a dedicated heap.
@@ -45,19 +43,8 @@ public:
     {
         ThreadState* state = ThreadStateFor<ThreadingTrait<CSSValue>::Affinity>::state();
         const char typeName[] = "blink::CSSValue";
-        return Heap::allocateOnArenaIndex(state, size, isEager ? BlinkGC::EagerSweepArenaIndex : BlinkGC::CSSValueArenaIndex, GCInfoTrait<CSSValue>::index(), typeName);
+        return ThreadHeap::allocateOnArenaIndex(state, size, isEager ? BlinkGC::EagerSweepArenaIndex : BlinkGC::CSSValueArenaIndex, GCInfoTrait<CSSValue>::index(), typeName);
     }
-#else
-    USING_FAST_MALLOC_WITH_TYPE_NAME(blink::CSSValue);
-public:
-    // Override RefCounted's deref() to ensure operator delete is called on
-    // the appropriate subclass type.
-    void deref()
-    {
-        if (derefBase())
-            destroy();
-    }
-#endif // !ENABLE(OILPAN)
 
     String cssText() const;
 

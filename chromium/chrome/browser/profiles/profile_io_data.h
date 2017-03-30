@@ -267,6 +267,10 @@ class ProfileIOData {
     AppRequestContext();
 
     void SetCookieStore(std::unique_ptr<net::CookieStore> cookie_store);
+    void SetChannelIDService(
+        std::unique_ptr<net::ChannelIDService> channel_id_service);
+    void SetHttpNetworkSession(
+        std::unique_ptr<net::HttpNetworkSession> http_network_session);
     void SetHttpTransactionFactory(
         std::unique_ptr<net::HttpTransactionFactory> http_factory);
     void SetJobFactory(std::unique_ptr<net::URLRequestJobFactory> job_factory);
@@ -275,6 +279,8 @@ class ProfileIOData {
     ~AppRequestContext() override;
 
     std::unique_ptr<net::CookieStore> cookie_store_;
+    std::unique_ptr<net::ChannelIDService> channel_id_service_;
+    std::unique_ptr<net::HttpNetworkSession> http_network_session_;
     std::unique_ptr<net::HttpTransactionFactory> http_factory_;
     std::unique_ptr<net::URLRequestJobFactory> job_factory_;
   };
@@ -592,9 +598,6 @@ class ProfileIOData {
 #endif
 
   mutable DevToolsNetworkControllerHandle network_controller_handle_;
-
-  // TODO(jhawkins): Remove once crbug.com/102004 is fixed.
-  bool initialized_on_UI_thread_;
 
   const Profile::ProfileType profile_type_;
 

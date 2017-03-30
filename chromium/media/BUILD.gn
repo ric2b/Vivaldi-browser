@@ -19,6 +19,7 @@ buildflag_header("media_features") {
     "ENABLE_AC3_EAC3_AUDIO_DEMUXING=$enable_ac3_eac3_audio_demuxing",
     "ENABLE_HEVC_DEMUXING=$enable_hevc_demuxing",
     "ENABLE_MSE_MPEG2TS_STREAM_PARSER=$enable_mse_mpeg2ts_stream_parser",
+    "ENABLE_MP4_VP9_DEMUXING=0",
   ]
 }
 
@@ -70,6 +71,12 @@ config("media_dependent_config") {
   }
 }
 
+source_set("cdm_api") {
+  sources = [
+    "cdm/api/content_decryption_module.h",
+  ]
+}
+
 component("media") {
   sources = [
     "cdm/aes_decryptor.cc",
@@ -78,19 +85,19 @@ component("media") {
     "cdm/cdm_adapter.h",
     "cdm/cdm_allocator.cc",
     "cdm/cdm_allocator.h",
+    "cdm/cdm_file_io.cc",
+    "cdm/cdm_file_io.h",
     "cdm/cdm_helpers.cc",
     "cdm/cdm_helpers.h",
+    "cdm/cdm_wrapper.h",
     "cdm/default_cdm_factory.cc",
     "cdm/default_cdm_factory.h",
     "cdm/json_web_key.cc",
     "cdm/json_web_key.h",
-    "cdm/key_system_names.cc",
-    "cdm/key_system_names.h",
     "cdm/player_tracker_impl.cc",
     "cdm/player_tracker_impl.h",
     "cdm/supported_cdm_versions.cc",
     "cdm/supported_cdm_versions.h",
-    "ffmpeg/ffmpeg_deleters.h",
     "filters/audio_clock.cc",
     "filters/audio_clock.h",
     "filters/audio_renderer_algorithm.cc",
@@ -194,6 +201,8 @@ component("media") {
     "renderers/renderer_impl.h",
     "renderers/skcanvas_video_renderer.cc",
     "renderers/skcanvas_video_renderer.h",
+    "renderers/video_overlay_factory.cc",
+    "renderers/video_overlay_factory.h",
     "renderers/video_renderer_impl.cc",
     "renderers/video_renderer_impl.h",
     "video/fake_video_encode_accelerator.cc",
@@ -227,14 +236,18 @@ component("media") {
   cflags = []
   libs = []
   defines = []
-  deps = []
+  deps = [
+    ":cdm_api",
+  ]
+
+  public_configs = [ "//third_party/libwebm:libwebm_config" ]
+  public_deps = []
 
   include_dirs = [ "." ]
   if (media_use_ffmpeg) {
+    public_deps += [ "//media/ffmpeg" ]
     deps += [ "//third_party/ffmpeg" ]
     sources += [
-      "ffmpeg/ffmpeg_common.cc",
-      "ffmpeg/ffmpeg_common.h",
       "filters/audio_file_reader.cc",
       "filters/audio_file_reader.h",
       "filters/blocking_url_protocol.cc",
@@ -334,7 +347,7 @@ component("media") {
   }
 
   if (is_mac) {
-    deps += [ "//media/base/mac" ]
+    public_deps += [ "//media/base/mac" ]
     libs += [
       "CoreVideo.framework",
       "OpenGL.framework",
@@ -434,7 +447,7 @@ component("media") {
     ]
   }
 
-  public_deps = [
+  public_deps += [
     ":media_features",
     ":shared_memory_support",
     "//media/audio",
@@ -512,6 +525,7 @@ test("media_unittests") {
     "filters/h264_parser_unittest.cc",
     "filters/ivf_parser_unittest.cc",
     "filters/jpeg_parser_unittest.cc",
+    "filters/memory_data_source_unittest.cc",
     "filters/pipeline_controller_unittest.cc",
     "filters/source_buffer_stream_unittest.cc",
     "filters/video_cadence_estimator_unittest.cc",
@@ -553,6 +567,7 @@ test("media_unittests") {
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 
   deps = [
+    ":cdm_api",
     ":media",
     ":test_support",
     "//base/test:test_support",
@@ -577,7 +592,6 @@ test("media_unittests") {
   data_deps = []
 
   if (is_android) {
-    isolate_file = "media_unittests.isolate"
     sources -= [
       "filters/decrypting_audio_decoder_unittest.cc",
       "filters/decrypting_video_decoder_unittest.cc",
@@ -597,8 +611,8 @@ test("media_unittests") {
   }
 
   if (media_use_ffmpeg) {
+    deps += [ "//media/ffmpeg:ffmpeg_unittests" ]
     sources += [
-      "ffmpeg/ffmpeg_common_unittest.cc",
       "filters/audio_decoder_unittest.cc",
       "filters/audio_file_reader_unittest.cc",
       "filters/blocking_url_protocol_unittest.cc",
@@ -659,7 +673,10 @@ test("media_unittests") {
   }
 
   if (is_mac || is_ios) {
-    deps += [ "//media/base/mac" ]
+    libs = [
+      "AppKit.framework",
+      "Foundation.framework",
+    ]
   }
 
   #      include_dirs += [
@@ -693,11 +710,13 @@ test("media_perftests") {
   ]
   if (is_android) {
     deps += [ "//ui/gl" ]
-    isolate_file = "media_perftests.isolate"
   }
   if (media_use_ffmpeg) {
     deps += [ "//third_party/ffmpeg" ]  # Direct dependency required to inherit config.
   }
+
+  # This target should not require the Chrome executable to run.
+  assert_no_deps = [ "//chrome" ]
 }
 
 # For running the subset of media_unittests that might require audio hardware
@@ -710,6 +729,7 @@ test("audio_unittests") {
     ":test_support",
     "//base/test:test_support",
     "//media/audio:unittests",
+    "//media/base:test_support",
     "//ui/gfx:test_support",
   ]
 }
@@ -733,24 +753,26 @@ source_set("test_support") {
     "//skia",
     "//testing/gmock",
     "//testing/gtest",
+    "//ui/gfx",
   ]
 }
 
-# TODO(dalecurtis): How to split this across audio/base directories??
+# TODO(jrummell): This should be renamed and moved to media/base/BUILD.gn.
 component("shared_memory_support") {
   sources = [
-    "audio/audio_parameters.cc",
-    "audio/audio_parameters.h",
-    "audio/point.cc",
-    "audio/point.h",
     "base/audio_bus.cc",
     "base/audio_bus.h",
+    "base/audio_parameters.cc",
+    "base/audio_parameters.h",
+    "base/audio_point.cc",
+    "base/audio_point.h",
     "base/channel_layout.cc",
     "base/channel_layout.h",
     "base/limits.h",
     "base/media_export.h",
     "base/vector_math.cc",
     "base/vector_math.h",
+    "base/vector_math_testing.h",
   ]
   configs += [
     ":media_config",
@@ -768,7 +790,6 @@ if (media_use_ffmpeg && !is_android) {
   test("ffmpeg_regression_tests") {
     sources = [
       "base/run_all_unittests.cc",
-      "ffmpeg/ffmpeg_regression_tests.cc",
     ]
 
     configs += [ "//media:media_config" ]
@@ -779,10 +800,10 @@ if (media_use_ffmpeg && !is_android) {
       "//media:test_support",
       "//media/audio:test_support",
       "//media/base:test_support",
+      "//media/ffmpeg:ffmpeg_regression_tests",
       "//media/test:pipeline_integration_tests",
       "//testing/gmock",
       "//testing/gtest",
-      "//third_party/ffmpeg",
       "//ui/gfx:test_support",
       "//ui/gfx/geometry",
     ]
@@ -818,7 +839,7 @@ fuzzer_test("media_vp8_parser_fuzzer") {
     ":media",
     "//base",
   ]
-  libfuzzer_options = "filters/vp8_parser_fuzzertest.options"
+  libfuzzer_options = [ "max_len = 400000" ]
   dict = "test/vp8.dict"
 }
 
@@ -830,5 +851,17 @@ fuzzer_test("media_vp9_parser_fuzzer") {
     ":media",
     "//base",
   ]
-  libfuzzer_options = "filters/vp9_parser_fuzzertest.options"
+  libfuzzer_options = [ "max_len = 400000" ]
+}
+
+fuzzer_test("media_vpx_video_decoder_fuzzer") {
+  sources = [
+    "filters/vpx_video_decoder_fuzzertest.cc",
+  ]
+  deps = [
+    ":media",
+    "//base",
+  ]
+  libfuzzer_options = [ "max_len = 400000" ]
+  seed_corpus = "//media/test/data"
 }

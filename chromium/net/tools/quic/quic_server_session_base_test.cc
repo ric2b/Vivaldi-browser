@@ -4,6 +4,9 @@
 
 #include "net/tools/quic/quic_server_session_base.h"
 
+#include <cstdint>
+#include <memory>
+
 #include "base/macros.h"
 #include "net/quic/crypto/quic_crypto_server_config.h"
 #include "net/quic/crypto/quic_random.h"
@@ -27,8 +30,8 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 using net::test::CryptoTestUtils;
-using net::test::MockConnection;
-using net::test::MockConnectionHelper;
+using net::test::MockQuicConnection;
+using net::test::MockQuicConnectionHelper;
 using net::test::QuicConfigPeer;
 using net::test::QuicConnectionPeer;
 using net::test::QuicSpdyStreamPeer;
@@ -131,8 +134,9 @@ class QuicServerSessionBaseTest : public ::testing::TestWithParam<QuicVersion> {
     config_.SetInitialSessionFlowControlWindowToSend(
         kInitialSessionFlowControlWindowForTest);
 
-    connection_ = new StrictMock<MockConnection>(
-        &helper_, Perspective::IS_SERVER, SupportedVersions(GetParam()));
+    connection_ = new StrictMock<MockQuicConnection>(
+        &helper_, &alarm_factory_, Perspective::IS_SERVER,
+        SupportedVersions(GetParam()));
     session_.reset(new TestServerSession(config_, connection_, &owner_,
                                          &crypto_config_,
                                          &compressed_certs_cache_));
@@ -145,13 +149,14 @@ class QuicServerSessionBaseTest : public ::testing::TestWithParam<QuicVersion> {
   }
 
   StrictMock<MockQuicServerSessionVisitor> owner_;
-  MockConnectionHelper helper_;
-  StrictMock<MockConnection>* connection_;
+  MockQuicConnectionHelper helper_;
+  MockAlarmFactory alarm_factory_;
+  StrictMock<MockQuicConnection>* connection_;
   QuicConfig config_;
   QuicCryptoServerConfig crypto_config_;
   QuicCompressedCertsCache compressed_certs_cache_;
-  scoped_ptr<TestServerSession> session_;
-  scoped_ptr<CryptoHandshakeMessage> handshake_message_;
+  std::unique_ptr<TestServerSession> session_;
+  std::unique_ptr<CryptoHandshakeMessage> handshake_message_;
   QuicConnectionVisitorInterface* visitor_;
 };
 
@@ -174,6 +179,16 @@ MATCHER_P(EqualsProto, network_params, "") {
 INSTANTIATE_TEST_CASE_P(Tests,
                         QuicServerSessionBaseTest,
                         ::testing::ValuesIn(QuicSupportedVersions()));
+
+TEST_P(QuicServerSessionBaseTest, ServerPushDisabledByDefault) {
+  // Without the client explicitly sending kSPSH, server push will be disabled
+  // at the server.
+  EXPECT_FALSE(
+      session_->config()->HasReceivedConnectionOptions() &&
+      ContainsQuicTag(session_->config()->ReceivedConnectionOptions(), kSPSH));
+  session_->OnConfigNegotiated();
+  EXPECT_FALSE(session_->server_push_enabled());
+}
 
 TEST_P(QuicServerSessionBaseTest, CloseStreamDueToReset) {
   // Open a stream, then reset it.
@@ -324,6 +339,15 @@ TEST_P(QuicServerSessionBaseTest, MaxAvailableStreams) {
       session_.get(), kLimitingStreamId + 4));
 }
 
+TEST_P(QuicServerSessionBaseTest, EnableServerPushThroughConnectionOption) {
+  // Assume server received server push connection option.
+  QuicTagVector copt;
+  copt.push_back(kSPSH);
+  QuicConfigPeer::SetReceivedConnectionOptions(session_->config(), copt);
+  session_->OnConfigNegotiated();
+  EXPECT_TRUE(session_->server_push_enabled());
+}
+
 TEST_P(QuicServerSessionBaseTest, GetEvenIncomingError) {
   // Incoming streams on the server session must be odd.
   EXPECT_CALL(*connection_, CloseConnection(QUIC_INVALID_STREAM_ID, _, _));
@@ -393,7 +417,7 @@ TEST_P(QuicServerSessionBaseTest, BandwidthEstimates) {
       QuicSentPacketManagerPeer::GetBandwidthRecorder(sent_packet_manager);
   // Seed an rtt measurement equal to the initial default rtt.
   RttStats* rtt_stats =
-      QuicSentPacketManagerPeer::GetRttStats(sent_packet_manager);
+      const_cast<RttStats*>(sent_packet_manager->GetRttStats());
   rtt_stats->UpdateRtt(
       QuicTime::Delta::FromMicroseconds(rtt_stats->initial_rtt_us()),
       QuicTime::Delta::Zero(), QuicTime::Zero());

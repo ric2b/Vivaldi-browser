@@ -4,7 +4,8 @@
 
 module mus.mojom;
 
-import "components/mus/public/interfaces/input_event_matcher.mojom";
+import "components/mus/public/interfaces/cursor.mojom";
+import "components/mus/public/interfaces/event_matcher.mojom";
 import "components/mus/public/interfaces/input_events.mojom";
 import "components/mus/public/interfaces/window_manager_constants.mojom";
 import "ui/mojo/geometry/geometry.mojom";
@@ -20,6 +21,13 @@ import "ui/mojo/geometry/geometry.mojom";
 // with WindowTreeClient, further WindowTree requests this interface from
 // WindowTreeClient supplied at the time the WindowTreeHost is created.
 interface WindowManager {
+  // Whether the window is always on top. Type: bool.
+  const string kAlwaysOnTop_Property = "prop:always_on_top";
+  // Initial bounds to create the window at. If empty the WindowManager decides
+  // the initial bounds.
+  const string kInitialBounds_Property = "prop:initial_bounds";
+  // Internal window name. Useful for debugging. Type: mojom::String
+  const string kName_Property = "prop:name";
   // The window's preferred size as defined by its content. Type: gfx::Size.
   const string kPreferredSize_Property = "prop:preferred-size";
   // The window's resize behavior. Type: ResizeBehavior.
@@ -38,6 +46,10 @@ interface WindowManager {
   const string kWindowType_Property = "prop:window-type";
   // The window's title. Type: mojom::String
   const string kWindowTitle_Property = "prop:window-title";
+  // A flag controlling the window's presence on the mash shelf. Type: bool
+  const string kWindowIgnoredByShelf_Property = "prop:window-ignored-by-shelf";
+  // The application ID (eg. 'mojo:foo'). Type: mojom::String
+  const string kAppID_Property = "prop:app-id";
 
   // When the WindowManager completes a request it must call back to
   // WindowManagerClient::WmResponse().
@@ -77,6 +89,7 @@ interface WindowManagerClient {
   // target window. The id is defined by the client and can be used to more
   // easily identify the accelerator's action. If an accelerator with the same
   // id or the same matcher already exists, then the accelerator is not added.
+  // Accelerator ids 1 << 31 and above are reserved for internal use.
   AddAccelerator(uint32 id, EventMatcher matcher) => (bool success);
   RemoveAccelerator(uint32 id);
 
@@ -90,6 +103,9 @@ interface WindowManagerClient {
   // Sets the frame decoration constants of the display the window manager is
   // associated with.
   WmSetFrameDecorationValues(FrameDecorationValues values);
+
+  // Sets the cursor that the non-client areas of the window should use.
+  WmSetNonClientCursor(uint32 window_id, Cursor cursor_id);
 
   // Response from WmCreateTopLevelWindow() informing the client of the id for
   // the new window.

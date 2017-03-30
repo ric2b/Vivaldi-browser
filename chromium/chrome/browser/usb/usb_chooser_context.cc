@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -61,10 +62,10 @@ UsbChooserContext::UsbChooserContext(Profile* profile)
 
 UsbChooserContext::~UsbChooserContext() {}
 
-std::vector<scoped_ptr<base::DictionaryValue>>
+std::vector<std::unique_ptr<base::DictionaryValue>>
 UsbChooserContext::GetGrantedObjects(const GURL& requesting_origin,
                                      const GURL& embedding_origin) {
-  std::vector<scoped_ptr<base::DictionaryValue>> objects =
+  std::vector<std::unique_ptr<base::DictionaryValue>> objects =
       ChooserContextBase::GetGrantedObjects(requesting_origin,
                                             embedding_origin);
 
@@ -74,7 +75,8 @@ UsbChooserContext::GetGrantedObjects(const GURL& requesting_origin,
     for (const std::string& guid : it->second) {
       scoped_refptr<UsbDevice> device = usb_service_->GetDevice(guid);
       DCHECK(device);
-      scoped_ptr<base::DictionaryValue> object(new base::DictionaryValue());
+      std::unique_ptr<base::DictionaryValue> object(
+          new base::DictionaryValue());
       object->SetString(kDeviceNameKey, device->product_string());
       object->SetString(kGuidKey, device->guid());
       objects.push_back(std::move(object));
@@ -84,9 +86,9 @@ UsbChooserContext::GetGrantedObjects(const GURL& requesting_origin,
   return objects;
 }
 
-std::vector<scoped_ptr<ChooserContextBase::Object>>
+std::vector<std::unique_ptr<ChooserContextBase::Object>>
 UsbChooserContext::GetAllGrantedObjects() {
-  std::vector<scoped_ptr<ChooserContextBase::Object>> objects =
+  std::vector<std::unique_ptr<ChooserContextBase::Object>> objects =
       ChooserContextBase::GetAllGrantedObjects();
 
   for (const auto& map_entry : ephemeral_devices_) {
@@ -98,7 +100,7 @@ UsbChooserContext::GetAllGrantedObjects() {
       base::DictionaryValue object;
       object.SetString(kDeviceNameKey, device->product_string());
       object.SetString(kGuidKey, device->guid());
-      objects.push_back(make_scoped_ptr(new ChooserContextBase::Object(
+      objects.push_back(base::WrapUnique(new ChooserContextBase::Object(
           requesting_origin, embedding_origin, &object, "preference",
           is_off_the_record_)));
     }
@@ -136,7 +138,8 @@ void UsbChooserContext::GrantDevicePermission(const GURL& requesting_origin,
     return;
 
   if (CanStorePersistentEntry(device)) {
-    scoped_ptr<base::DictionaryValue> device_dict(new base::DictionaryValue());
+    std::unique_ptr<base::DictionaryValue> device_dict(
+        new base::DictionaryValue());
     device_dict->SetString(kDeviceNameKey, device->product_string());
     device_dict->SetInteger(kVendorIdKey, device->vendor_id());
     device_dict->SetInteger(kProductIdKey, device->product_id());
@@ -152,26 +155,27 @@ void UsbChooserContext::GrantDevicePermission(const GURL& requesting_origin,
 bool UsbChooserContext::HasDevicePermission(
     const GURL& requesting_origin,
     const GURL& embedding_origin,
-    const device::usb::DeviceInfo& device_info) {
+    scoped_refptr<const device::UsbDevice> device) {
   auto it = ephemeral_devices_.find(
       std::make_pair(requesting_origin, embedding_origin));
   if (it != ephemeral_devices_.end() &&
-      ContainsValue(it->second, device_info.guid)) {
+      ContainsValue(it->second, device->guid())) {
     return true;
   }
 
-  std::vector<scoped_ptr<base::DictionaryValue>> device_list =
+  std::vector<std::unique_ptr<base::DictionaryValue>> device_list =
       GetGrantedObjects(requesting_origin, embedding_origin);
-  for (const scoped_ptr<base::DictionaryValue>& device_dict : device_list) {
+  for (const std::unique_ptr<base::DictionaryValue>& device_dict :
+       device_list) {
     int vendor_id;
     int product_id;
-    std::string serial_number;
+    base::string16 serial_number;
     if (device_dict->GetInteger(kVendorIdKey, &vendor_id) &&
-        device_info.vendor_id == vendor_id &&
+        device->vendor_id() == vendor_id &&
         device_dict->GetInteger(kProductIdKey, &product_id) &&
-        device_info.product_id == product_id &&
+        device->product_id() == product_id &&
         device_dict->GetString(kSerialNumberKey, &serial_number) &&
-        device_info.serial_number == serial_number) {
+        device->serial_number() == serial_number) {
       return true;
     }
   }

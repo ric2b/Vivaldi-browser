@@ -97,6 +97,7 @@ class ShellUtil {
     };
 
     explicit ShortcutProperties(ShellChange level_in);
+    ShortcutProperties(const ShortcutProperties& other);
     ~ShortcutProperties();
 
     // Sets the target executable to launch from this shortcut.
@@ -142,7 +143,7 @@ class ShellUtil {
     }
 
     // Forces the shortcut's name to |shortcut_name_in|.
-    // Default: the current distribution's GetShortcutName(SHORTCUT_CHROME).
+    // Default: the current distribution's GetShortcutName().
     // The ".lnk" extension will automatically be added to this name.
     void set_shortcut_name(const base::string16& shortcut_name_in) {
       shortcut_name = shortcut_name_in;
@@ -407,6 +408,19 @@ class ShellUtil {
   // on the Windows shell to prompt the user. This is the case for versions of
   // Windows prior to Windows 8.
   static bool CanMakeChromeDefaultUnattended();
+
+  enum InteractiveSetDefaultMode {
+    // The intent picker is opened with the different choices available to the
+    // user.
+    INTENT_PICKER,
+    // The Windows default apps settings page is opened with the current default
+    // app focused.
+    SYSTEM_SETTINGS,
+  };
+
+  // Returns the interactive mode that should be used to set the default browser
+  // or default protocol client on Windows 8+.
+  static InteractiveSetDefaultMode GetInteractiveSetDefaultMode();
 
   // Returns the DefaultState of Chrome for HTTP and HTTPS and updates the
   // default browser beacons as appropriate.

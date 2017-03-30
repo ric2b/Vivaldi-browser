@@ -23,6 +23,7 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/origin_util.h"
 #include "content/public/common/page_type.h"
 #include "content/public/test/background_sync_test_util.h"
 #include "content/public/test/browser_test_utils.h"
@@ -31,6 +32,7 @@
 #include "extensions/browser/process_manager.h"
 #include "extensions/test/background_page_watcher.h"
 #include "extensions/test/extension_test_message_listener.h"
+#include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 
 namespace extensions {
@@ -84,7 +86,7 @@ class WebContentsLoadStopObserver : content::WebContentsObserver {
 
 class ServiceWorkerTest : public ExtensionApiTest {
  public:
-  ServiceWorkerTest() : current_channel_(version_info::Channel::DEV) {}
+  ServiceWorkerTest() : current_channel_(version_info::Channel::STABLE) {}
 
   ~ServiceWorkerTest() override {}
 
@@ -158,7 +160,11 @@ class ServiceWorkerTest : public ExtensionApiTest {
   }
 
  private:
-  // Sets the channel to "dev" since service workers are restricted to dev.
+  // Sets the channel to "stable".
+  // Not useful after we've opened extension Service Workers to stable
+  // channel.
+  // TODO(lazyboy): Remove this when ExtensionServiceWorkersEnabled() is
+  // removed.
   ScopedCurrentChannel current_channel_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerTest);
@@ -236,23 +242,8 @@ class ServiceWorkerPushMessagingTest : public ServiceWorkerTest {
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerPushMessagingTest);
 };
 
-IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, RegisterSucceedsOnDev) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, RegisterSucceeds) {
   StartTestFromBackgroundPage("register.js", kExpectSuccess);
-}
-
-// This feature is restricted to dev, so on beta it should have existing
-// behavior - which is for it to fail.
-IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, RegisterFailsOnBeta) {
-  ScopedCurrentChannel current_channel_override(
-      version_info::Channel::BETA);
-  std::string error;
-  const Extension* extension =
-      StartTestFromBackgroundPage("register.js", &error);
-  EXPECT_EQ(
-      "Failed to register a ServiceWorker: The URL protocol of the current "
-      "origin ('chrome-extension://" +
-          extension->id() + "') is not supported.",
-      error);
 }
 
 IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, UpdateRefreshesServiceWorker) {
@@ -620,9 +611,24 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, WebAccessibleResourcesIframeSrc) {
       kFlagNone);
   ASSERT_TRUE(extension);
   ASSERT_TRUE(StartEmbeddedTestServer());
-  GURL page_url = embedded_test_server()->GetURL(
-      "/extensions/api_test/service_worker/web_accessible_resources/"
-      "webpage.html");
+
+  // Service workers can only control secure contexts
+  // (https://w3c.github.io/webappsec-secure-contexts/). For documents, this
+  // typically means the document must have a secure origin AND all its ancestor
+  // frames must have documents with secure origins.  However, extension pages
+  // are considered secure, even if they have an ancestor document that is an
+  // insecure context (see GetSchemesBypassingSecureContextCheckWhitelist). So
+  // extension service workers must be able to control an extension page
+  // embedded in an insecure context. To test this, set up an insecure
+  // (non-localhost, non-https) URL for the web page. This page will create
+  // iframes that load extension pages that must be controllable by service
+  // worker.
+  host_resolver()->AddRule("a.com", "127.0.0.1");
+  GURL page_url =
+      embedded_test_server()->GetURL("a.com",
+                                     "/extensions/api_test/service_worker/"
+                                     "web_accessible_resources/webpage.html");
+  EXPECT_FALSE(content::IsOriginSecure(page_url));
 
   content::WebContents* web_contents = AddTab(browser(), page_url);
   std::string result;
@@ -708,7 +714,14 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest,
       << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(ServiceWorkerPushMessagingTest, OnPush) {
+// Flaky on ChromiumOS bots. http://crbug.com/612673
+// Flaky on Windows bots. http://crbug.com/612840
+#if defined(OS_CHROMEOS) || defined(OS_WIN)
+#define MAYBE_OnPush DISABLED_OnPush
+#else
+#define MAYBE_OnPush OnPush
+#endif
+IN_PROC_BROWSER_TEST_F(ServiceWorkerPushMessagingTest, MAYBE_OnPush) {
   const Extension* extension = LoadExtensionWithFlags(
       test_data_dir_.AppendASCII("service_worker/push_messaging"), kFlagNone);
   ASSERT_TRUE(extension);

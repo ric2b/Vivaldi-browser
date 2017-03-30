@@ -10,8 +10,8 @@
 #include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "blimp/client/app/blimp_client_switches.h"
 #include "blimp/client/feature/ime_feature.h"
 #include "blimp/client/feature/navigation_feature.h"
@@ -114,22 +114,28 @@ void ClientNetworkComponents::Initialize() {
 void ClientNetworkComponents::ConnectWithAssignment(
     const Assignment& assignment) {
   DCHECK(connection_manager_);
-  connection_manager_->set_client_token(assignment.client_token);
 
+  connection_manager_->set_client_token(assignment.client_token);
+  const char* transport_type = "UNKNOWN";
   switch (assignment.transport_protocol) {
     case Assignment::SSL:
       DCHECK(assignment.cert);
       connection_manager_->AddTransport(base::WrapUnique(new SSLClientTransport(
           assignment.engine_endpoint, std::move(assignment.cert), nullptr)));
+      transport_type = "SSL";
       break;
     case Assignment::TCP:
       connection_manager_->AddTransport(base::WrapUnique(
           new TCPClientTransport(assignment.engine_endpoint, nullptr)));
+      transport_type = "TCP";
       break;
     case Assignment::UNKNOWN:
-      DLOG(FATAL) << "Uknown transport type.";
+      LOG(FATAL) << "Unknown transport type.";
       break;
   }
+
+  VLOG(1) << "Connecting to " << assignment.engine_endpoint.ToString() << " ("
+          << transport_type << ")";
 
   connection_manager_->Connect();
 }
@@ -141,12 +147,14 @@ ClientNetworkComponents::GetBrowserConnectionHandler() {
 
 void ClientNetworkComponents::HandleConnection(
     std::unique_ptr<BlimpConnection> connection) {
+  VLOG(1) << "Connection established.";
   connection->AddConnectionErrorObserver(this);
   network_observer_->OnConnected();
   connection_handler_->HandleConnection(std::move(connection));
 }
 
 void ClientNetworkComponents::OnConnectionError(int result) {
+  VLOG(1) << "Connection error: " << net::ErrorToString(result);
   network_observer_->OnDisconnected(result);
 }
 
@@ -183,6 +191,7 @@ BlimpClientSession::~BlimpClientSession() {
 }
 
 void BlimpClientSession::Connect(const std::string& client_auth_token) {
+  VLOG(1) << "Trying to get assignment.";
   assignment_source_->GetAssignment(
       client_auth_token, base::Bind(&BlimpClientSession::ConnectWithAssignment,
                                     weak_factory_.GetWeakPtr()));
@@ -190,12 +199,14 @@ void BlimpClientSession::Connect(const std::string& client_auth_token) {
 
 void BlimpClientSession::ConnectWithAssignment(AssignmentSource::Result result,
                                                const Assignment& assignment) {
-  OnAssignmentConnectionAttempted(result);
+  OnAssignmentConnectionAttempted(result, assignment);
 
   if (result != AssignmentSource::Result::RESULT_OK) {
-    VLOG(1) << "Assignment request failed: " << result;
+    LOG(FATAL) << "Assignment failed, reason: " << result;
     return;
   }
+
+  VLOG(1) << "Assignment succeeded";
 
   io_thread_.task_runner()->PostTask(
       FROM_HERE,
@@ -204,7 +215,8 @@ void BlimpClientSession::ConnectWithAssignment(AssignmentSource::Result result,
 }
 
 void BlimpClientSession::OnAssignmentConnectionAttempted(
-    AssignmentSource::Result result) {}
+    AssignmentSource::Result result,
+    const Assignment& assignment) {}
 
 void BlimpClientSession::RegisterFeatures() {
   thread_pipe_manager_ = base::WrapUnique(new ThreadPipeManager(
@@ -260,6 +272,10 @@ ImeFeature* BlimpClientSession::GetImeFeature() const {
 
 RenderWidgetFeature* BlimpClientSession::GetRenderWidgetFeature() const {
   return render_widget_feature_.get();
+}
+
+SettingsFeature* BlimpClientSession::GetSettingsFeature() const {
+  return settings_feature_.get();
 }
 
 }  // namespace client

@@ -6,6 +6,7 @@ import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//content/renderer/renderer.gni")
 import("//media/media_options.gni")
+import("//third_party/webrtc/build/webrtc.gni")
 
 source_set("renderer") {
   # Only the public target should depend on this. All other targets (even
@@ -31,19 +32,20 @@ source_set("renderer") {
     "//base:i18n",
     "//cc",
     "//cc/blink",
+    "//cc/ipc",
     "//cc/proto",
     "//cc/surfaces",
     "//cc/surfaces:surface_id",
     "//components/scheduler:scheduler",
     "//components/url_formatter",
     "//content:resources",
+    "//content/child",
     "//content/common",
     "//content/gpu:gpu_sources",
     "//content/public/child:child_sources",
     "//content/public/common:common_sources",
     "//content/public/common:feature_h264_with_openh264_ffmpeg",
     "//content/public/common:features",
-    "//content/public/common:mojo_bindings",
     "//crypto:platform",
     "//device/battery:mojo_bindings",
     "//device/bluetooth",
@@ -51,12 +53,12 @@ source_set("renderer") {
     "//device/vibration:mojo_bindings",
     "//gin",
     "//gpu",
-    "//gpu/blink",
     "//gpu/command_buffer/client:gles2_interface",
     "//ipc/mojo",
     "//jingle:jingle_glue",
     "//media",
     "//media/blink",
+    "//media/gpu",
     "//media/gpu/ipc/client",
     "//media/gpu/ipc/common",
     "//media/midi",
@@ -65,14 +67,16 @@ source_set("renderer") {
     "//mojo/edk/js",
     "//mojo/public/cpp/bindings",
     "//mojo/public/js",
-    "//mojo/shell/public/cpp",
-    "//mojo/shell/public/interfaces",
     "//net",
     "//sandbox",
+    "//services/shell/public/cpp",
+    "//services/shell/public/interfaces",
     "//skia",
     "//skia/public",
     "//storage/common",
     "//third_party/WebKit/public:blink",
+    "//third_party/WebKit/public:mojo_bindings",
+    "//third_party/WebKit/public:mojo_bindings_blink",
     "//third_party/boringssl",
     "//third_party/icu",
     "//third_party/libjingle",
@@ -81,6 +85,7 @@ source_set("renderer") {
     "//ui/accessibility",
     "//ui/base",
     "//ui/base/ime",
+    "//ui/display",
     "//ui/events:dom_keycode_converter",
     "//ui/events:events_base",
     "//ui/events/blink",
@@ -171,6 +176,9 @@ source_set("renderer") {
       "//third_party/webrtc/modules/video_coding:webrtc_h264",
       "//third_party/webrtc/system_wrappers",
     ]
+    if (rtc_use_h264) {
+      deps += [ "//third_party/openh264:encoder" ]
+    }
   } else {
     sources += [
       "media/webrtc_logging.h",
@@ -233,15 +241,6 @@ source_set("renderer") {
 
       # Defines in mojo_media_config are also pulled in here.
       "//media/mojo/services:proxy",
-    ]
-  }
-
-  if (enable_webvr) {
-    sources += [
-      "vr/vr_dispatcher.cc",
-      "vr/vr_dispatcher.h",
-      "vr/vr_type_converters.cc",
-      "vr/vr_type_converters.h",
     ]
   }
 

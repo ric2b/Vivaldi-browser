@@ -13,7 +13,7 @@
 #include "cc/debug/lap_timer.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/layers/picture_layer_impl.h"
-#include "cc/raster/tile_task_worker_pool.h"
+#include "cc/raster/raster_buffer_provider.h"
 #include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_host_impl.h"
 #include "cc/trees/layer_tree_impl.h"
@@ -126,14 +126,12 @@ RasterizeAndRecordBenchmarkImpl::~RasterizeAndRecordBenchmarkImpl() {}
 void RasterizeAndRecordBenchmarkImpl::DidCompleteCommit(
     LayerTreeHostImpl* host) {
   LayerTreeHostCommon::CallFunctionForEveryLayer(
-      host->active_tree(),
-      [this](LayerImpl* layer) {
+      host->active_tree(), [this](LayerImpl* layer) {
         rasterize_results_.total_layers++;
         layer->RunMicroBenchmark(this);
-      },
-      CallFunctionLayerType::ALL_LAYERS);
+      });
 
-  scoped_ptr<base::DictionaryValue> result(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
   result->SetDouble("rasterize_time_ms",
                     rasterize_results_.total_best_time.InMillisecondsF());
   result->SetDouble("total_pictures_in_pile_size",
@@ -172,10 +170,11 @@ void RasterizeAndRecordBenchmarkImpl::RunOnLayer(PictureLayerImpl* layer) {
   // it takes to rasterize content. As such, the actual settings used here don't
   // really matter.
   const LayerTreeSettings& settings = layer->layer_tree_impl()->settings();
-  scoped_ptr<PictureLayerTilingSet> tiling_set = PictureLayerTilingSet::Create(
-      layer->GetTree(), &client, settings.tiling_interest_area_padding,
-      settings.skewport_target_time_in_seconds,
-      settings.skewport_extrapolation_limit_in_content_pixels);
+  std::unique_ptr<PictureLayerTilingSet> tiling_set =
+      PictureLayerTilingSet::Create(
+          layer->GetTree(), &client, settings.tiling_interest_area_padding,
+          settings.skewport_target_time_in_seconds,
+          settings.skewport_extrapolation_limit_in_screen_pixels);
 
   PictureLayerTiling* tiling =
       tiling_set->AddTiling(1.f, layer->GetRasterSource());

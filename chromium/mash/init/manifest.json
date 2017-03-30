@@ -4,8 +4,9 @@
   "display_name": "Root Controller",
   "capabilities": {
     "required": {
-      "*": { "interfaces": [ "*" ] },
-      "mojo:shell": { "classes": ["user_id", "all_users"] }
+      "*": { },
+      "mojo:login": { "interfaces": [ "mash::login::mojom::Login" ] },
+      "mojo:shell": { "classes": ["shell:user_id", "shell:all_users"] }
     }
   }
 }

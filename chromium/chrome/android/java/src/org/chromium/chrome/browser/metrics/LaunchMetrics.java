@@ -102,6 +102,52 @@ public class LaunchMetrics {
         }
     }
 
+    /** Caches a set of enumerated histogram samples. */
+    public static class EnumeratedHistogramSample extends CachedHistogram {
+        private final List<Integer> mSamples = new ArrayList<Integer>();
+        private final int mMaxValue;
+
+        public EnumeratedHistogramSample(String histogramName, int maxValue) {
+            super(histogramName);
+            mMaxValue = maxValue;
+        }
+
+        public void record(int sample) {
+            mSamples.add(sample);
+        }
+
+        @Override
+        protected void commitAndClear() {
+            for (Integer sample : mSamples) {
+                RecordHistogram.recordEnumeratedHistogram(mHistogramName, sample, mMaxValue);
+            }
+            mSamples.clear();
+        }
+    }
+
+    /** Caches a set of times histogram samples. */
+    public static class TimesHistogramSample extends CachedHistogram {
+        private final List<Long> mSamples = new ArrayList<Long>();
+        private final TimeUnit mTimeUnit;
+
+        public TimesHistogramSample(String histogramName, TimeUnit timeUnit) {
+            super(histogramName);
+            mTimeUnit = timeUnit;
+        }
+
+        public void record(long sample) {
+            mSamples.add(sample);
+        }
+
+        @Override
+        protected void commitAndClear() {
+            for (Long sample : mSamples) {
+                RecordHistogram.recordTimesHistogram(mHistogramName, sample, mTimeUnit);
+            }
+            mSamples.clear();
+        }
+    }
+
     // Each list item is a pair of the url and where it was added from e.g. from the add to
     // homescreen menu item, an app banner, or unknown. The mapping of int source values to
     // their string names is found in the C++ ShortcutInfo struct.
@@ -156,16 +202,27 @@ public class LaunchMetrics {
         }
         sTabUrls.clear();
 
-        for (Long time : sWebappHistogramTimes) {
-            RecordHistogram.recordTimesHistogram("Android.StrictMode.WebappAuthenticatorMac", time,
-                    TimeUnit.MILLISECONDS);
-        }
-        sWebappHistogramTimes.clear();
-
         // Record generic cached events.
         for (CachedHistogram event : CachedHistogram.sEvents) event.commitAndClear();
     }
 
+    /**
+     * Records metrics about the state of the homepage on launch.
+     * @param showHomeButton Whether the home button is shown.
+     * @param homepageIsNtp Whether the homepage is set to the NTP.
+     * @param homepageUrl The value of the homepage URL.
+     */
+    public static void recordHomePageLaunchMetrics(
+            boolean showHomeButton, boolean homepageIsNtp, String homepageUrl) {
+        if (homepageUrl == null) {
+            homepageUrl = "";
+            assert !showHomeButton : "Homepage should be disabled for a null URL";
+        }
+        nativeRecordHomePageLaunchMetrics(showHomeButton, homepageIsNtp, homepageUrl);
+    }
+
     private static native void nativeRecordLaunch(
             boolean standalone, String url, int source, WebContents webContents);
+    private static native void nativeRecordHomePageLaunchMetrics(
+            boolean showHomeButton, boolean homepageIsNtp, String homepageUrl);
 }

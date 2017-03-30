@@ -10,6 +10,7 @@
 
 #include "build/build_config.h"
 #include "content/public/common/console_message_level.h"
+#include "content/public/common/mhtml_generation_params.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/security_style.h"
 #include "content/public/common/ssl_status.h"
@@ -22,11 +23,13 @@
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/WebReferrerPolicy.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
+#include "third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h"
 #include "third_party/WebKit/public/web/WebWindowFeatures.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_tree_update.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/gfx/ipc/geometry/gfx_param_traits.h"
 #include "ui/gfx/ipc/gfx_param_traits.h"
 #include "ui/gfx/ipc/skia/gfx_skia_param_traits.h"
 
@@ -41,10 +44,14 @@ IPC_ENUM_TRAITS_MAX_VALUE(net::NetworkChangeNotifier::ConnectionType,
                           net::NetworkChangeNotifier::CONNECTION_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(content::ConsoleMessageLevel,
                           content::CONSOLE_MESSAGE_LEVEL_LAST)
+IPC_ENUM_TRAITS_MAX_VALUE(content::MHTMLCacheControlPolicy,
+                          content::MHTMLCacheControlPolicy::LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(content::SecurityStyle,
                           content::SECURITY_STYLE_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebReferrerPolicy,
                           blink::WebReferrerPolicyLast)
+IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::PermissionStatus,
+                          blink::mojom::PermissionStatus::LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(content::EditingBehavior,
                           content::EDITING_BEHAVIOR_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(WindowOpenDisposition,
@@ -61,6 +68,9 @@ IPC_ENUM_TRAITS_MIN_MAX_VALUE(ui::HoverType,
 IPC_ENUM_TRAITS_MIN_MAX_VALUE(content::ImageAnimationPolicy,
                               content::IMAGE_ANIMATION_POLICY_ALLOWED,
                               content::IMAGE_ANIMATION_POLICY_NO_ANIMATION)
+IPC_ENUM_TRAITS_MIN_MAX_VALUE(content::ViewportStyle,
+                              content::ViewportStyle::DEFAULT,
+                              content::ViewportStyle::LAST)
 
 IPC_STRUCT_TRAITS_BEGIN(blink::WebPoint)
   IPC_STRUCT_TRAITS_MEMBER(x)
@@ -197,6 +207,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(supports_multiple_windows)
   IPC_STRUCT_TRAITS_MEMBER(viewport_enabled)
   IPC_STRUCT_TRAITS_MEMBER(viewport_meta_enabled)
+  IPC_STRUCT_TRAITS_MEMBER(viewport_style)
   IPC_STRUCT_TRAITS_MEMBER(main_frame_resizes_are_orientation_changes)
   IPC_STRUCT_TRAITS_MEMBER(initialize_at_minimum_page_scale)
   IPC_STRUCT_TRAITS_MEMBER(smart_insert_delete_enabled)
@@ -231,8 +242,8 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(ignore_main_frame_overflow_hidden_quirk)
   IPC_STRUCT_TRAITS_MEMBER(report_screen_size_in_physical_pixels_quirk)
   IPC_STRUCT_TRAITS_MEMBER(resue_global_for_unowned_main_frame)
-  IPC_STRUCT_TRAITS_MEMBER(autoplay_experiment_mode)
 #endif
+  IPC_STRUCT_TRAITS_MEMBER(autoplay_experiment_mode)
   IPC_STRUCT_TRAITS_MEMBER(default_minimum_page_scale_factor)
   IPC_STRUCT_TRAITS_MEMBER(default_maximum_page_scale_factor)
 IPC_STRUCT_TRAITS_END()

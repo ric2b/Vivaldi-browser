@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "gpu/command_buffer/service/buffer_manager.h"
 #include "gpu/command_buffer/service/error_state_mock.h"
 #include "gpu/command_buffer/service/feature_info.h"
@@ -37,7 +39,8 @@ class BufferManagerTestBase : public GpuServiceTest {
   }
 
   void TearDown() override {
-    manager_->Destroy(false);
+    manager_->MarkContextLost();
+    manager_->Destroy();
     manager_.reset();
     error_state_.reset();
     GpuServiceTest::TearDown();
@@ -226,8 +229,8 @@ class BufferManagerTestBase : public GpuServiceTest {
         40, 1, GL_UNSIGNED_INT, enable_primitive_restart, &max_value));
   }
 
-  scoped_ptr<BufferManager> manager_;
-  scoped_ptr<MockErrorState> error_state_;
+  std::unique_ptr<BufferManager> manager_;
+  std::unique_ptr<MockErrorState> error_state_;
 };
 
 class BufferManagerTest : public BufferManagerTestBase {
@@ -248,9 +251,9 @@ class BufferManagerMemoryTrackerTest : public BufferManagerTestBase {
 class BufferManagerClientSideArraysTest : public BufferManagerTestBase {
  protected:
   void SetUp() override {
-    feature_info_ = new FeatureInfo();
-    feature_info_->workarounds_.use_client_side_arrays_for_stream_buffers =
-      true;
+    GpuDriverBugWorkarounds gpu_driver_bug_workarounds;
+    gpu_driver_bug_workarounds.use_client_side_arrays_for_stream_buffers = true;
+    feature_info_ = new FeatureInfo(gpu_driver_bug_workarounds);
     SetUpBase(NULL, feature_info_.get(), "");
   }
 
@@ -338,7 +341,7 @@ TEST_F(BufferManagerTest, Destroy) {
   EXPECT_CALL(*gl_, DeleteBuffersARB(1, ::testing::Pointee(kService1Id)))
       .Times(1)
       .RetiresOnSaturation();
-  manager_->Destroy(true);
+  manager_->Destroy();
   // Check the resources were released.
   buffer1 = manager_->GetBuffer(kClient1Id);
   ASSERT_TRUE(buffer1 == NULL);
@@ -363,7 +366,7 @@ TEST_F(BufferManagerTest, DoBufferSubData) {
   EXPECT_FALSE(DoBufferSubData(buffer, kTarget, 0, -1, data));
   DoBufferData(buffer, kTarget, 1, GL_STATIC_DRAW, NULL, GL_NO_ERROR);
   const int size = 0x20000;
-  scoped_ptr<uint8_t[]> temp(new uint8_t[size]);
+  std::unique_ptr<uint8_t[]> temp(new uint8_t[size]);
   EXPECT_FALSE(DoBufferSubData(buffer, kTarget, 0 - size, size, temp.get()));
   EXPECT_FALSE(DoBufferSubData(buffer, kTarget, 1, size / 2, temp.get()));
 }
@@ -567,6 +570,21 @@ TEST_F(BufferManagerTest, BindBufferConflicts) {
       }
     }
   }
+}
+
+TEST_F(BufferManagerTest, DeleteBufferAfterContextLost) {
+  const GLuint kClient1Id = 1;
+  const GLuint kService1Id = 11;
+  manager_->CreateBuffer(kClient1Id, kService1Id);
+  Buffer* buffer1 = manager_->GetBuffer(kClient1Id);
+  ASSERT_TRUE(buffer1 != nullptr);
+  manager_->MarkContextLost();
+  // Removing buffers after MarkContextLost cause no GL calls.
+  manager_->RemoveBuffer(kClient1Id);
+  manager_->Destroy();
+  // Check the resources were released.
+  buffer1 = manager_->GetBuffer(kClient1Id);
+  ASSERT_TRUE(buffer1 == nullptr);
 }
 
 }  // namespace gles2

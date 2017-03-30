@@ -12,6 +12,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "content/public/browser/devtools_agent_host.h"
+#include "content/public/browser/javascript_dialog_manager.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
@@ -34,6 +35,64 @@ const char kIdParam[] = "id";
 const char kMethodParam[] = "method";
 const char kParamsParam[] = "params";
 
+class TestJavaScriptDialogManager : public JavaScriptDialogManager,
+                                    public WebContentsDelegate {
+ public:
+  TestJavaScriptDialogManager() : handle_(false) {}
+  ~TestJavaScriptDialogManager() override {}
+
+  void Handle()
+  {
+    if (!callback_.is_null()) {
+      callback_.Run(true, base::string16());
+      callback_.Reset();
+    } else {
+      handle_ = true;
+    }
+  }
+
+  // WebContentsDelegate
+  JavaScriptDialogManager* GetJavaScriptDialogManager(
+      WebContents* source) override {
+    return this;
+  }
+
+  // JavaScriptDialogManager
+  void RunJavaScriptDialog(WebContents* web_contents,
+                           const GURL& origin_url,
+                           JavaScriptMessageType javascript_message_type,
+                           const base::string16& message_text,
+                           const base::string16& default_prompt_text,
+                           const DialogClosedCallback& callback,
+                           bool* did_suppress_message) override {
+    if (handle_) {
+      handle_ = false;
+      callback.Run(true, base::string16());
+    } else {
+      callback_ = callback;
+    }
+  };
+
+  void RunBeforeUnloadDialog(WebContents* web_contents,
+                             bool is_reload,
+                             const DialogClosedCallback& callback) override {}
+
+  bool HandleJavaScriptDialog(WebContents* web_contents,
+                              bool accept,
+                              const base::string16* prompt_override) override {
+    return true;
+  }
+
+  void CancelActiveAndPendingDialogs(WebContents* web_contents) override {}
+
+  void ResetDialogState(WebContents* web_contents) override {}
+
+ private:
+  DialogClosedCallback callback_;
+  bool handle_;
+  DISALLOW_COPY_AND_ASSIGN(TestJavaScriptDialogManager);
+};
+
 }
 
 class DevToolsProtocolTest : public ContentBrowserTest,
@@ -47,12 +106,12 @@ class DevToolsProtocolTest : public ContentBrowserTest,
 
  protected:
   void SendCommand(const std::string& method,
-                   scoped_ptr<base::DictionaryValue> params) {
+                   std::unique_ptr<base::DictionaryValue> params) {
     SendCommand(method, std::move(params), true);
   }
 
   void SendCommand(const std::string& method,
-                   scoped_ptr<base::DictionaryValue> params,
+                   std::unique_ptr<base::DictionaryValue> params,
                    bool wait) {
     in_dispatch_ = true;
     base::DictionaryValue command;
@@ -115,7 +174,7 @@ class DevToolsProtocolTest : public ContentBrowserTest,
     RunMessageLoop();
   }
 
-  scoped_ptr<base::DictionaryValue> result_;
+  std::unique_ptr<base::DictionaryValue> result_;
   scoped_refptr<DevToolsAgentHost> agent_host_;
   int last_sent_id_;
   std::vector<int> result_ids_;
@@ -124,8 +183,9 @@ class DevToolsProtocolTest : public ContentBrowserTest,
  private:
   void DispatchProtocolMessage(DevToolsAgentHost* agent_host,
                                const std::string& message) override {
-    scoped_ptr<base::DictionaryValue> root(static_cast<base::DictionaryValue*>(
-        base::JSONReader::Read(message).release()));
+    std::unique_ptr<base::DictionaryValue> root(
+        static_cast<base::DictionaryValue*>(
+            base::JSONReader::Read(message).release()));
     int id;
     if (root->GetInteger("id", &id)) {
       result_ids_.push_back(id);
@@ -163,7 +223,7 @@ class SyntheticKeyEventTest : public DevToolsProtocolTest {
                     int modifier,
                     int windowsKeyCode,
                     int nativeKeyCode) {
-    scoped_ptr<base::DictionaryValue> params(new base::DictionaryValue());
+    std::unique_ptr<base::DictionaryValue> params(new base::DictionaryValue());
     params->SetString("type", type);
     params->SetInteger("modifiers", modifier);
     params->SetInteger("windowsVirtualKeyCode", windowsKeyCode);
@@ -263,7 +323,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, DISABLED_SynthesizePinchGesture) {
       shell()->web_contents(),
       "domAutomationController.send(window.innerHeight)", &old_height));
 
-  scoped_ptr<base::DictionaryValue> params(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> params(new base::DictionaryValue());
   params->SetInteger("x", old_width / 2);
   params->SetInteger("y", old_height / 2);
   params->SetDouble("scaleFactor", 2.0);
@@ -293,7 +353,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, DISABLED_SynthesizeScrollGesture) {
       "domAutomationController.send(document.body.scrollTop)", &scroll_top));
   ASSERT_EQ(0, scroll_top);
 
-  scoped_ptr<base::DictionaryValue> params(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> params(new base::DictionaryValue());
   params->SetInteger("x", 0);
   params->SetInteger("y", 0);
   params->SetInteger("xDistance", 0);
@@ -317,7 +377,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, DISABLED_SynthesizeTapGesture) {
       "domAutomationController.send(document.body.scrollTop)", &scroll_top));
   ASSERT_EQ(0, scroll_top);
 
-  scoped_ptr<base::DictionaryValue> params(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> params(new base::DictionaryValue());
   params->SetInteger("x", 16);
   params->SetInteger("y", 16);
   params->SetString("gestureSourceType", "touch");
@@ -341,7 +401,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, NavigationPreservesMessages) {
   Attach();
   SendCommand("Page.enable", nullptr, false);
 
-  scoped_ptr<base::DictionaryValue> params(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> params(new base::DictionaryValue());
   test_url = GetTestUrl("devtools", "navigation.html");
   params->SetString("url", test_url.spec());
   TestNavigationObserver navigation_observer(shell()->web_contents());
@@ -491,7 +551,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, ReloadBlankPage) {
 IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, EvaluateInBlankPage) {
   NavigateToURLBlockUntilNavigationsComplete(shell(), GURL("about:blank"), 1);
   Attach();
-  scoped_ptr<base::DictionaryValue> params(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> params(new base::DictionaryValue());
   params->SetString("expression", "window");
   SendCommand("Runtime.evaluate", std::move(params), true);
   bool wasThrown = true;
@@ -506,12 +566,25 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest,
   NavigateToURLBlockUntilNavigationsComplete(shell(), test_url, 1);
   Attach();
   NavigateToURLBlockUntilNavigationsComplete(shell(), GURL("about:blank"), 1);
-  scoped_ptr<base::DictionaryValue> params(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> params(new base::DictionaryValue());
   params->SetString("expression", "window");
   SendCommand("Runtime.evaluate", std::move(params), true);
   bool wasThrown = true;
   EXPECT_TRUE(result_->GetBoolean("wasThrown", &wasThrown));
   EXPECT_FALSE(wasThrown);
+}
+
+IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, JavaScriptDialogNotifications) {
+  NavigateToURLBlockUntilNavigationsComplete(shell(), GURL("about:blank"), 1);
+  Attach();
+  TestJavaScriptDialogManager dialog_manager;
+  shell()->web_contents()->SetDelegate(&dialog_manager);
+  SendCommand("Page.enable", nullptr, true);
+  std::unique_ptr<base::DictionaryValue> params(new base::DictionaryValue());
+  params->SetString("expression", "alert('alert')");
+  SendCommand("Runtime.evaluate", std::move(params), false);
+  WaitForNotification("Page.javascriptDialogOpening");
+  dialog_manager.Handle();
 }
 
 }  // namespace content

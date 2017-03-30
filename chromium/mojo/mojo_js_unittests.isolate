@@ -3,6 +3,8 @@
 # found in the LICENSE file.
 {
   'includes': [
+    '../base/base.isolate',
+    '../gin/v8.isolate',
     '../third_party/icu/icu.isolate',
   ],
   'conditions': [
@@ -17,30 +19,26 @@
         'files': [
           '../gin/test/expect.js',
           '../testing/test_env.py',
-          '<(PRODUCT_DIR)/gen/mojo/public/interfaces/bindings/tests/',
-          'bindings/js/',
-          'public/js/bindings/',
-        ],
-      },
-    }],
-    ['OS=="win"', {
-      'variables': {
-        'files': [
-          '<(PRODUCT_DIR)/mojo_public_test_support.dll',
-        ],
-      },
-    }],
-    ['OS=="linux"', {
-      'variables': {
-        'files': [
-          '<(PRODUCT_DIR)/lib/libmojo_public_test_support.so',
-        ],
-      },
-    }],
-    ['OS=="mac"', {
-      'variables': {
-        'files': [
-          '<(PRODUCT_DIR)/libmojo_public_test_support.dylib',
+          'public/interfaces/bindings/tests/data/validation/',
+          'public/js/',
+          '<(PRODUCT_DIR)/gen/mojo/public/interfaces/bindings/tests/math_calculator.mojom.js',
+          '<(PRODUCT_DIR)/gen/mojo/public/interfaces/bindings/tests/no_module.mojom.js',
+          '<(PRODUCT_DIR)/gen/mojo/public/interfaces/bindings/tests/ping_service.mojom.js',
+          '<(PRODUCT_DIR)/gen/mojo/public/interfaces/bindings/tests/rect.mojom.js',
+          '<(PRODUCT_DIR)/gen/mojo/public/interfaces/bindings/tests/regression_tests.mojom.js',
+          '<(PRODUCT_DIR)/gen/mojo/public/interfaces/bindings/tests/sample_factory.mojom.js',
+          '<(PRODUCT_DIR)/gen/mojo/public/interfaces/bindings/tests/sample_import.mojom.js',
+          '<(PRODUCT_DIR)/gen/mojo/public/interfaces/bindings/tests/sample_import2.mojom.js',
+          '<(PRODUCT_DIR)/gen/mojo/public/interfaces/bindings/tests/sample_interfaces.mojom.js',
+          '<(PRODUCT_DIR)/gen/mojo/public/interfaces/bindings/tests/sample_service.mojom.js',
+          '<(PRODUCT_DIR)/gen/mojo/public/interfaces/bindings/tests/scoping.mojom.js',
+          '<(PRODUCT_DIR)/gen/mojo/public/interfaces/bindings/tests/serialization_test_structs.mojom.js',
+          '<(PRODUCT_DIR)/gen/mojo/public/interfaces/bindings/tests/test_constants.mojom.js',
+          '<(PRODUCT_DIR)/gen/mojo/public/interfaces/bindings/tests/test_native_types.mojom.js',
+          '<(PRODUCT_DIR)/gen/mojo/public/interfaces/bindings/tests/test_structs.mojom.js',
+          '<(PRODUCT_DIR)/gen/mojo/public/interfaces/bindings/tests/test_sync_methods.mojom.js',
+          '<(PRODUCT_DIR)/gen/mojo/public/interfaces/bindings/tests/test_unions.mojom.js',
+          '<(PRODUCT_DIR)/gen/mojo/public/interfaces/bindings/tests/validation_test_interfaces.mojom.js',
         ],
       },
     }],

@@ -76,7 +76,7 @@ TestPaintArtifact& TestPaintArtifact::rectDrawing(const FloatRect& bounds, Color
     OwnPtr<DummyRectClient> client = adoptPtr(new DummyRectClient(bounds, color));
     m_displayItemList.allocateAndConstruct<DrawingDisplayItem>(
         *client, DisplayItem::DrawingFirst, client->makePicture());
-    m_dummyClients.append(client.release());
+    m_dummyClients.append(std::move(client));
     return *this;
 }
 
@@ -86,7 +86,7 @@ TestPaintArtifact& TestPaintArtifact::foreignLayer(const FloatPoint& location, c
     OwnPtr<DummyRectClient> client = adoptPtr(new DummyRectClient(floatBounds, Color::transparent));
     m_displayItemList.allocateAndConstruct<ForeignLayerDisplayItem>(
         *client, DisplayItem::ForeignLayerFirst, std::move(layer), location, size);
-    m_dummyClients.append(client.release());
+    m_dummyClients.append(std::move(client));
     return *this;
 }
 
@@ -97,7 +97,7 @@ const PaintArtifact& TestPaintArtifact::build()
 
     if (!m_paintChunks.isEmpty())
         m_paintChunks.last().endIndex = m_displayItemList.size();
-    m_paintArtifact = PaintArtifact(std::move(m_displayItemList), std::move(m_paintChunks));
+    m_paintArtifact = PaintArtifact(std::move(m_displayItemList), std::move(m_paintChunks), true);
     m_built = true;
     return m_paintArtifact;
 }

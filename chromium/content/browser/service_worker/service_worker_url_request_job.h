@@ -64,21 +64,7 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
     // can use this opportunity to grab state from the
     // ServiceWorkerURLRequestJob to determine how it should behave when the
     // request is restarted.
-    virtual void OnPrepareToRestart(
-        base::TimeTicks service_worker_start_time,
-        base::TimeTicks service_worker_ready_time) = 0;
-
-    // Called when the request has finished starting.
-    // Unlike URLRequestJob::NotifyComplete, called both on success and failure.
-    virtual void OnStartCompleted(
-        bool was_fetched_via_service_worker,
-        bool was_fallback_required,
-        const GURL& original_url_via_service_worker,
-        blink::WebServiceWorkerResponseType response_type_via_service_worker,
-        base::TimeTicks worker_start_time,
-        base::TimeTicks service_worker_ready_time,
-        bool response_is_in_cache_storage,
-        const std::string& response_cache_storage_cache_name) = 0;
+    virtual void OnPrepareToRestart() = 0;
 
     // Returns the ServiceWorkerVersion fetch events for this request job should
     // be dispatched to. If no appropriate worker can be determined, returns
@@ -184,7 +170,7 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
   void StartRequest();
 
   // Creates ServiceWorkerFetchRequest from |request_| and |body_|.
-  scoped_ptr<ServiceWorkerFetchRequest> CreateFetchRequest();
+  std::unique_ptr<ServiceWorkerFetchRequest> CreateFetchRequest();
 
   // Creates BlobDataHandle of the request body from |body_|. This handle
   // |request_body_blob_data_handle_| will be deleted when
@@ -252,19 +238,19 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
   bool is_started_;
 
   net::HttpByteRange byte_range_;
-  scoped_ptr<net::HttpResponseInfo> range_response_info_;
-  scoped_ptr<net::HttpResponseInfo> http_response_info_;
+  std::unique_ptr<net::HttpResponseInfo> range_response_info_;
+  std::unique_ptr<net::HttpResponseInfo> http_response_info_;
   // Headers that have not yet been committed to |http_response_info_|.
   scoped_refptr<net::HttpResponseHeaders> http_response_headers_;
   GURL response_url_;
   blink::WebServiceWorkerResponseType service_worker_response_type_;
 
   // Used when response type is FORWARD_TO_SERVICE_WORKER.
-  scoped_ptr<ServiceWorkerFetchDispatcher> fetch_dispatcher_;
+  std::unique_ptr<ServiceWorkerFetchDispatcher> fetch_dispatcher_;
   std::string client_id_;
   base::WeakPtr<storage::BlobStorageContext> blob_storage_context_;
   const ResourceContext* resource_context_;
-  scoped_ptr<net::URLRequest> blob_request_;
+  std::unique_ptr<net::URLRequest> blob_request_;
   scoped_refptr<Stream> stream_;
   GURL waiting_stream_url_;
   scoped_refptr<net::IOBuffer> stream_pending_buffer_;
@@ -280,7 +266,7 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
   // ResourceRequestBody has a collection of BlobDataHandles attached to it
   // using the userdata mechanism. So we have to keep it not to free the blobs.
   scoped_refptr<ResourceRequestBody> body_;
-  scoped_ptr<storage::BlobDataHandle> request_body_blob_data_handle_;
+  std::unique_ptr<storage::BlobDataHandle> request_body_blob_data_handle_;
   scoped_refptr<ServiceWorkerVersion> streaming_version_;
   ServiceWorkerFetchType fetch_type_;
 

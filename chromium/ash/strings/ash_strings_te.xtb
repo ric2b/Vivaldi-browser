@@ -26,6 +26,7 @@
 <translation id="1602076796624386989">మొబైల్ డేటాను ప్రారంభించు</translation>
 <translation id="1621499497873603021">బ్యాటరీ ఖాళీ కావడానికి మిగిలి ఉన్న సమయం, <ph name="TIME_LEFT" /></translation>
 <translation id="164969095109328410">Chrome పరికరం</translation>
+<translation id="1677472565718498478"><ph name="TIME" /> మిగిలి ఉంది</translation>
 <translation id="1723752762323179280">సెషన్ నుండి నిష్క్రమిస్తోంది</translation>
 <translation id="1747827819627189109">స్క్రీన్‌పై కనిపించే కీబోర్డ్ ప్రారంభించబడింది</translation>
 <translation id="1812696562331527143">మీ ఇన్‌పుట్ పద్ధతి <ph name="INPUT_METHOD_ID" />*(<ph name="BEGIN_LINK" />3వ పక్షం<ph name="END_LINK" />)కు మార్చబడింది.
@@ -92,7 +93,6 @@
 <translation id="3621712662352432595">ఆడియో సెట్టింగ్‌‍లు</translation>
 <translation id="3625258641415618104">స్క్రీన్‌షాట్‌లు నిలిపివేయబడ్డాయి</translation>
 <translation id="3626281679859535460">ప్రకాశం</translation>
-<translation id="3626637461649818317"><ph name="PERCENTAGE" />% మిగిలి ఉంది</translation>
 <translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079"><ph name="DISPLAY_NAME" /> రిజల్యూషన్ <ph name="RESOLUTION" />కి మార్చబడింది</translation>
 <translation id="370649949373421643">Wi-fiని ప్రారంభించు</translation>
@@ -111,13 +111,13 @@
 <translation id="397105322502079400">గణిస్తోంది...</translation>
 <translation id="3995138139523574647">USB-C పరికరం (కుడివైపు వెనుక పోర్ట్)</translation>
 <translation id="4053612967614057854">స్క్రీన్‌పై కీబోర్డ్‌ను నిలిపివేయి</translation>
-<translation id="412065659894267608">నిండే వరకు <ph name="HOUR" />h <ph name="MINUTE" />m అవుతుంది</translation>
 <translation id="4250680216510889253">కాదు</translation>
 <translation id="4279490309300973883">ప్రతిబింబిస్తుంది</translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4421231901400348175">రిమోట్ సహాయం విధానంలో మీ స్క్రీన్ నియంత్రణ <ph name="HELPER_NAME" />కి భాగస్వామ్యం చేయబడుతోంది.</translation>
 <translation id="4430019312045809116">వాల్యూమ్</translation>
 <translation id="4527045527269911712">బ్లూటూత్ పరికరం "<ph name="DEVICE_NAME" />" జత కావడానికి అనుమతి కోరుతోంది.</translation>
+<translation id="453661520163887813">పూర్తి కావడానికి <ph name="TIME" /> పడుతుంది</translation>
 <translation id="4544944664594876241">స్క్రీన్‌ని లాక్ చేసే సత్వరమార్గం మార్చబడింది. దయచేసి <ph name="OLD_SHORTCUT" />కి బదులుగా <ph name="NEW_SHORTCUT" />ని ఉపయోగించండి.</translation>
 <translation id="479989351350248267">search</translation>
 <translation id="4804818685124855865">డిస్‌కనెక్ట్ చెయ్యి</translation>
@@ -129,7 +129,6 @@
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl+Shift+Space</translation>
 <translation id="5045002648206642691">Google డిస్క్ సెట్టింగ్‌లు...</translation>
-<translation id="5102001756192215136"><ph name="HOUR" />:<ph name="MINUTE" /> మిగిలి ఉంది</translation>
 <translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">Cast పరికరాలు అందుబాటులో ఉన్నాయి</translation>
 <translation id="5222676887888702881">సైన్ ఔట్</translation>
@@ -166,7 +165,6 @@
 <translation id="615957422585914272">స్క్రీన్‌పై కీబోర్డ్‌ను చూపు</translation>
 <translation id="6165508094623778733">మరింత తెలుసుకోండి</translation>
 <translation id="6203030746557259519">వర్చువల్ డిస్‌ప్లే</translation>
-<translation id="6247708409970142803"><ph name="PERCENTAGE" />%</translation>
 <translation id="6248847161401822652">నిష్క్రమించడానికి రెండుసార్లు Control Shift Q నొక్కండి.</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" /> <ph name="ROTATION" />కి తిప్పబడింది</translation>
 <translation id="6359806961507272919"><ph name="PHONE_NUMBER" /> నుండి SMS</translation>
@@ -207,6 +205,7 @@
 <translation id="7510334386202674593">Ctrl+Shift+L</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> <ph name="SPECIFIED_RESOLUTION" />కి మద్దతివ్వదు. రిజల్యూషన్ <ph name="FALLBACK_RESOLUTION" />కి మార్చబడింది</translation>
 <translation id="7573962313813535744">డాక్ చేయబడిన మోడ్</translation>
+<translation id="7580671184200851182">అన్ని స్పీకర్‌ల్లో ఒకే ఆడియోను ప్లే చేయి (మోనో ఆడియో)</translation>
 <translation id="7593891976182323525">Search లేదా Shift</translation>
 <translation id="7649070708921625228">సహాయం</translation>
 <translation id="7692480393933218409">కనెక్ట్ చేసిన USB-C పరికరాలను ఛార్జ్ చేస్తోంది</translation>
@@ -225,13 +224,14 @@
 <translation id="8308637677604853869">మునుపటి మెను</translation>
 <translation id="8356164830168736643"><ph name="WINDOW_TITLE" />ని మూసివేయి</translation>
 <translation id="8428213095426709021">సెట్టింగ్‌లు</translation>
-<translation id="8456362689280298700"><ph name="HOUR" />:<ph name="MINUTE" />లో పూర్తవుతుంది</translation>
 <translation id="8517041960877371778">మీ <ph name="DEVICE_TYPE" /> ఆన్‌లో ఉన్నప్పుడు ఛార్జ్ కాకపోవచ్చు.</translation>
 <translation id="8528322925433439945">మొబైల్ ...</translation>
+<translation id="8639760480004882931"><ph name="PERCENTAGE" /> మిగిలి ఉంది</translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">తక్కువ-పవర్ గల ఛార్జర్ కనెక్ట్ చేయబడింది</translation>
 <translation id="8814190375133053267">Wi-Fi</translation>
 <translation id="882279321799040148">వీక్షించడానికి క్లిక్ చేసినప్పుడు</translation>
+<translation id="8825534185036233643">రెండింటి కంటే ఎక్కువ డిస్‌ప్లేలతో మిర్రరింగ్ చేయడానికి మద్దతు లేదు.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8850991929411075241">Search+Esc</translation>
 <translation id="8878886163241303700">స్క్రీన్ విస్తరించబడుతోంది</translation>

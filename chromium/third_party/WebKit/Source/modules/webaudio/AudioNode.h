@@ -32,6 +32,7 @@
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/RefPtr.h"
+#include "wtf/ThreadSafeRefCounted.h"
 #include "wtf/Vector.h"
 #include "wtf/build_config.h"
 
@@ -274,8 +275,7 @@ protected:
     ChannelCountMode m_newChannelCountMode;
 };
 
-class MODULES_EXPORT AudioNode : public RefCountedGarbageCollectedEventTargetWithInlineData<AudioNode> {
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(AudioNode);
+class MODULES_EXPORT AudioNode : public EventTargetWithInlineData {
     DEFINE_WRAPPERTYPEINFO();
     USING_PRE_FINALIZER(AudioNode, dispose);
 public:

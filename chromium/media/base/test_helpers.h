@@ -6,10 +6,11 @@
 #define MEDIA_BASE_TEST_HELPERS_H_
 
 #include <stddef.h>
+#include <memory>
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "media/audio/audio_parameters.h"
+#include "media/base/audio_parameters.h"
 #include "media/base/channel_layout.h"
 #include "media/base/media_log.h"
 #include "media/base/pipeline_status.h"
@@ -67,7 +68,7 @@ class WaitableMessageLoopEvent {
   base::MessageLoop* message_loop_;
   bool signaled_;
   PipelineStatus status_;
-  scoped_ptr<base::RunLoop> run_loop_;
+  std::unique_ptr<base::RunLoop> run_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(WaitableMessageLoopEvent);
 };

@@ -42,6 +42,7 @@
         'browser/ui/native_content_controller_test.xib'
       ],
       'sources': [
+        'app/application_delegate/memory_warning_helper_unittest.mm',
         'app/safe_mode_util_unittest.cc',
         'browser/chrome_url_util_unittest.mm',
         'browser/crash_loop_detection_util_unittest.mm',
@@ -59,6 +60,7 @@
         'browser/net/image_fetcher_unittest.mm',
         'browser/net/metrics_network_client_unittest.mm',
         'browser/net/retryable_url_fetcher_unittest.mm',
+        'browser/notification_promo_unittest.cc',
         'browser/passwords/password_controller_unittest.mm',
         'browser/reading_list/reading_list_entry_unittest.cc',
         'browser/reading_list/reading_list_model_unittest.cc',
@@ -69,6 +71,7 @@
         'browser/snapshots/snapshots_util_unittest.mm',
         'browser/translate/translate_service_ios_unittest.cc',
         'browser/ui/commands/set_up_for_testing_command_unittest.mm',
+        'browser/ui/context_menu/context_menu_controller_unittest.mm',
         'browser/ui/keyboard/UIKeyCommand+ChromeTest.mm',
         'browser/ui/keyboard/hardware_keyboard_watcher_unittest.mm',
         'browser/ui/native_content_controller_unittest.mm',

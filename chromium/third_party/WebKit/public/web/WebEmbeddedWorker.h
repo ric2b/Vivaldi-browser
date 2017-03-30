@@ -38,6 +38,7 @@ namespace blink {
 class WebServiceWorkerContextClient;
 class WebString;
 class WebWorkerContentSettingsClientProxy;
+struct WebConsoleMessage;
 struct WebEmbeddedWorkerStartData;
 
 // An interface to start and terminate an embedded worker.
@@ -66,7 +67,8 @@ public:
     virtual void attachDevTools(const WebString& hostId, int sessionId) = 0;
     virtual void reattachDevTools(const WebString& hostId, int sessionId, const WebString& savedState) = 0;
     virtual void detachDevTools() = 0;
-    virtual void dispatchDevToolsMessage(int sessionId, const WebString&) = 0;
+    virtual void dispatchDevToolsMessage(int sessionId, int callId, const WebString& method, const WebString& message) = 0;
+    virtual void addMessageToConsole(const WebConsoleMessage&) = 0;
 };
 
 } // namespace blink

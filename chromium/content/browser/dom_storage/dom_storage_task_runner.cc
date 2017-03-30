@@ -40,7 +40,7 @@ bool DOMStorageWorkerPoolTaskRunner::PostDelayedTask(
   // Note base::TaskRunner implements PostTask in terms of PostDelayedTask
   // with a delay of zero, we detect that usage and avoid the unecessary
   // trip thru the message loop.
-  if (delay == base::TimeDelta()) {
+  if (delay.is_zero()) {
     return sequenced_worker_pool_->PostSequencedWorkerTaskWithShutdownBehavior(
         primary_sequence_token_, from_here, task,
         base::SequencedWorkerPool::BLOCK_SHUTDOWN);
@@ -66,6 +66,11 @@ bool DOMStorageWorkerPoolTaskRunner::IsRunningOnSequence(
     SequenceID sequence_id) const {
   return sequenced_worker_pool_->IsRunningSequenceOnCurrentThread(
       IDtoToken(sequence_id));
+}
+
+scoped_refptr<base::SequencedTaskRunner>
+DOMStorageWorkerPoolTaskRunner::GetSequencedTaskRunner(SequenceID sequence_id) {
+  return sequenced_worker_pool_->GetSequencedTaskRunner(IDtoToken(sequence_id));
 }
 
 base::SequencedWorkerPool::SequenceToken
@@ -102,6 +107,11 @@ bool MockDOMStorageTaskRunner::PostShutdownBlockingTask(
 
 bool MockDOMStorageTaskRunner::IsRunningOnSequence(SequenceID) const {
   return task_runner_->RunsTasksOnCurrentThread();
+}
+
+scoped_refptr<base::SequencedTaskRunner>
+MockDOMStorageTaskRunner::GetSequencedTaskRunner(SequenceID sequence_id) {
+  return task_runner_;
 }
 
 }  // namespace content

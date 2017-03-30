@@ -15,7 +15,8 @@
 
 namespace content {
 
-// Represents a session history item for a particular frame.
+// Represents a session history item for a particular frame.  It is matched with
+// corresponding FrameTreeNodes using unique name (or by the root position).
 //
 // This class is refcounted and can be shared across multiple NavigationEntries.
 // For now, it is owned by a single NavigationEntry and only tracks the main
@@ -28,14 +29,16 @@ namespace content {
 class CONTENT_EXPORT FrameNavigationEntry
     : public base::RefCounted<FrameNavigationEntry> {
  public:
-  explicit FrameNavigationEntry(int frame_tree_node_id);
-  FrameNavigationEntry(int frame_tree_node_id,
-                       const std::string& frame_unique_name,
+  FrameNavigationEntry();
+  FrameNavigationEntry(const std::string& frame_unique_name,
                        int64_t item_sequence_number,
                        int64_t document_sequence_number,
                        scoped_refptr<SiteInstanceImpl> site_instance,
+                       scoped_refptr<SiteInstanceImpl> source_site_instance,
                        const GURL& url,
-                       const Referrer& referrer);
+                       const Referrer& referrer,
+                       const std::string& method,
+                       int64_t post_id);
 
   // Creates a copy of this FrameNavigationEntry that can be modified
   // independently from the original.
@@ -46,20 +49,12 @@ class CONTENT_EXPORT FrameNavigationEntry
                    int64_t item_sequence_number,
                    int64_t document_sequence_number,
                    SiteInstanceImpl* site_instance,
+                   scoped_refptr<SiteInstanceImpl> source_site_instance,
                    const GURL& url,
                    const Referrer& referrer,
-                   const PageState& page_state);
-
-  // The ID of the FrameTreeNode this entry is for.  -1 for the main frame,
-  // since we don't always know the FrameTreeNode ID when creating the overall
-  // NavigationEntry.
-  // TODO(creis): Consider removing |frame_tree_node_id| in favor of
-  // |frame_unique_name|, if we can move unique name computation to the browser
-  // process.
-  int frame_tree_node_id() const { return frame_tree_node_id_; }
-  void set_frame_tree_node_id(int frame_tree_node_id) {
-    frame_tree_node_id_ = frame_tree_node_id;
-  }
+                   const PageState& page_state,
+                   const std::string& method,
+                   int64_t post_id);
 
   // The unique name of the frame this entry is for.  This is a stable name for
   // the frame based on its position in the tree and relation to other named
@@ -93,6 +88,18 @@ class CONTENT_EXPORT FrameNavigationEntry
   }
   SiteInstanceImpl* site_instance() const { return site_instance_.get(); }
 
+  // The |source_site_instance| is used to identify the SiteInstance of the
+  // frame that initiated the navigation. It is present only for
+  // renderer-initiated navigations and is cleared once the navigation has
+  // committed.
+  void set_source_site_instance(
+      scoped_refptr<SiteInstanceImpl> source_site_instance) {
+    source_site_instance_ = std::move(source_site_instance);
+  }
+  SiteInstanceImpl* source_site_instance() const {
+    return source_site_instance_.get();
+  }
+
   // The actual URL loaded in the frame.  This is in contrast to the virtual
   // URL, which is shown to the user.
   void set_url(const GURL& url) { url_ = url; }
@@ -105,6 +112,15 @@ class CONTENT_EXPORT FrameNavigationEntry
   void set_page_state(const PageState& page_state) { page_state_ = page_state; }
   const PageState& page_state() const { return page_state_; }
 
+  // The HTTP method used to navigate.
+  const std::string& method() const { return method_; }
+  void set_method(const std::string& method) { method_ = method; }
+
+  // The id of the post corresponding to this navigation or -1 if the
+  // navigation was not a POST.
+  int64_t post_id() const { return post_id_; }
+  void set_post_id(int64_t post_id) { post_id_ = post_id; }
+
  private:
   friend class base::RefCounted<FrameNavigationEntry>;
   virtual ~FrameNavigationEntry();
@@ -116,15 +132,18 @@ class CONTENT_EXPORT FrameNavigationEntry
   // WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING
 
   // See the accessors above for descriptions.
-  int frame_tree_node_id_;
   std::string frame_unique_name_;
   int64_t item_sequence_number_;
   int64_t document_sequence_number_;
   scoped_refptr<SiteInstanceImpl> site_instance_;
+  // This member is cleared at commit time and is not persisted.
+  scoped_refptr<SiteInstanceImpl> source_site_instance_;
   GURL url_;
   Referrer referrer_;
   // TODO(creis): Change this to FrameState.
   PageState page_state_;
+  std::string method_;
+  int64_t post_id_;
 
   DISALLOW_COPY_AND_ASSIGN(FrameNavigationEntry);
 };

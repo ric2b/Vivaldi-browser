@@ -67,7 +67,7 @@ InterpolationValue CSSBasicShapeInterpolationType::maybeConvertNeutral(const Int
     return InterpolationValue(BasicShapeInterpolationFunctions::createNeutralValue(*underlying.nonInterpolableValue), nonInterpolableValue);
 }
 
-InterpolationValue CSSBasicShapeInterpolationType::maybeConvertInitial(const StyleResolverState&) const
+InterpolationValue CSSBasicShapeInterpolationType::maybeConvertInitial(const StyleResolverState&, ConversionCheckers&) const
 {
     return BasicShapeInterpolationFunctions::maybeConvertBasicShape(
         BasicShapePropertyFunctions::getInitialBasicShape(cssProperty()), 1);
@@ -92,11 +92,11 @@ InterpolationValue CSSBasicShapeInterpolationType::maybeConvertValue(const CSSVa
     return BasicShapeInterpolationFunctions::maybeConvertCSSValue(*list.item(0));
 }
 
-PairwiseInterpolationValue CSSBasicShapeInterpolationType::mergeSingleConversions(InterpolationValue&& start, InterpolationValue&& end) const
+PairwiseInterpolationValue CSSBasicShapeInterpolationType::maybeMergeSingles(InterpolationValue&& start, InterpolationValue&& end) const
 {
     if (!BasicShapeInterpolationFunctions::shapesAreCompatible(*start.nonInterpolableValue, *end.nonInterpolableValue))
         return nullptr;
-    return PairwiseInterpolationValue(start.interpolableValue.release(), end.interpolableValue.release(), start.nonInterpolableValue.release());
+    return PairwiseInterpolationValue(std::move(start.interpolableValue), std::move(end.interpolableValue), start.nonInterpolableValue.release());
 }
 
 InterpolationValue CSSBasicShapeInterpolationType::maybeConvertUnderlyingValue(const InterpolationEnvironment& environment) const

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/shell_integration.h"
+#include "chrome/browser/shell_integration_win.h"
 
 #include <windows.h>
 #include <shlwapi.h>
@@ -11,24 +11,35 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <vector>
+
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/md5.h"
+#include "base/memory/ptr_util.h"
+#include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
+#include "base/metrics/user_metrics_action.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "base/win/registry.h"
 #include "base/win/scoped_comptr.h"
 #include "base/win/scoped_propvariant.h"
 #include "base/win/shortcut.h"
 #include "base/win/windows_version.h"
 #include "chrome/browser/policy/policy_path_parser.h"
+#include "chrome/browser/shell_integration.h"
 #include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/win/settings_app_monitor.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
@@ -36,6 +47,7 @@
 #include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/create_reg_key_work_item.h"
 #include "chrome/installer/util/install_util.h"
+#include "chrome/installer/util/scoped_user_protocol_entry.h"
 #include "chrome/installer/util/set_reg_value_work_item.h"
 #include "chrome/installer/util/shell_util.h"
 #include "chrome/installer/util/util_constants.h"
@@ -46,6 +58,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
+#include "base/md5.h"
 #include "browser/win/vivaldi_standalone.h"
 
 using content::BrowserThread;
@@ -53,8 +66,6 @@ using content::BrowserThread;
 namespace shell_integration {
 
 namespace {
-
-const wchar_t kAppListAppNameSuffix[] = L"AppList";
 
 // Helper function for GetAppId to generates profile id
 // from profile path. "profile_id" is composed of sanitized basenames of
@@ -104,6 +115,7 @@ base::string16 GetProfileIdFromPath(const base::FilePath& profile_path) {
 }
 
 base::string16 GetAppListAppName() {
+  static const base::char16 kAppListAppNameSuffix[] = L"AppList";
   BrowserDistribution* dist = BrowserDistribution::GetDistribution();
   base::string16 app_name(dist->GetBaseAppId());
   app_name.append(kAppListAppNameSuffix);
@@ -155,7 +167,7 @@ base::string16 GetExpectedAppId(const base::CommandLine& command_line,
   }
   DCHECK(!app_name.empty());
 
-  return GetAppModelIdForProfile(app_name, profile_path);
+  return win::GetAppModelIdForProfile(app_name, profile_path);
 }
 
 void MigrateTaskbarPinsCallback() {
@@ -173,7 +185,7 @@ void MigrateTaskbarPinsCallback() {
     return;
   }
 
-  MigrateShortcutsInPathInternal(chrome_exe, pins_path);
+  win::MigrateShortcutsInPathInternal(chrome_exe, pins_path);
 }
 
 // Windows 8 introduced a new protocol->executable binding system which cannot
@@ -236,6 +248,191 @@ DefaultWebClientState GetDefaultWebClientStateFromShellUtilDefaultState(
   }
 }
 
+// A recorder of user actions in the Windows Settings app.
+class DefaultBrowserActionRecorder : public win::SettingsAppMonitor::Delegate {
+ public:
+  // Creates the recorder and the monitor that drives it. |continuation| will be
+  // run once the monitor's initialization completes (regardless of success or
+  // failure).
+  explicit DefaultBrowserActionRecorder(base::Closure continuation)
+      : continuation_(std::move(continuation)), settings_app_monitor_(this) {}
+
+ private:
+  // win::SettingsAppMonitor::Delegate:
+  void OnInitialized(HRESULT result) override {
+    UMA_HISTOGRAM_BOOLEAN("SettingsAppMonitor.InitializationResult",
+                          SUCCEEDED(result));
+    if (SUCCEEDED(result)) {
+      base::RecordAction(
+          base::UserMetricsAction("SettingsAppMonitor.Initialized"));
+    }
+    continuation_.Run();
+    continuation_ = base::Closure();
+  }
+
+  void OnAppFocused() override {
+    base::RecordAction(
+        base::UserMetricsAction("SettingsAppMonitor.AppFocused"));
+  }
+
+  void OnChooserInvoked() override {
+    base::RecordAction(
+        base::UserMetricsAction("SettingsAppMonitor.ChooserInvoked"));
+  }
+
+  void OnBrowserChosen(const base::string16& browser_name) override {
+    if (browser_name ==
+        BrowserDistribution::GetDistribution()->GetDisplayName()) {
+      base::RecordAction(
+          base::UserMetricsAction("SettingsAppMonitor.ChromeBrowserChosen"));
+    } else {
+      base::RecordAction(
+          base::UserMetricsAction("SettingsAppMonitor.OtherBrowserChosen"));
+    }
+  }
+
+  // A closure to be run once initialization completes.
+  base::Closure continuation_;
+
+  // Monitors user interaction with the Windows Settings app for the sake of
+  // reporting user actions.
+  win::SettingsAppMonitor settings_app_monitor_;
+
+  DISALLOW_COPY_AND_ASSIGN(DefaultBrowserActionRecorder);
+};
+
+// A function bound up in a callback with a DefaultBrowserActionRecorder and
+// a closure to keep the former alive until the time comes to run the latter.
+void OnSettingsAppFinished(
+    std::unique_ptr<DefaultBrowserActionRecorder> recorder,
+    const base::Closure& on_finished_callback) {
+  recorder.reset();
+  on_finished_callback.Run();
+}
+
+// There is no way to make sure the user is done with the system settings, but a
+// signal that the interaction is finished is needed for UMA. A timer of 2
+// minutes is used as a substitute. The registry keys for the protocol
+// association with an app are also monitored to signal the end of the
+// interaction early when it is clear that the user made a choice (e.g. http
+// and https for default browser).
+//
+// This helper class manages both the timer and the registry watchers and makes
+// sure the callback for the end of the settings interaction is only run once.
+// This class also manages its own lifetime.
+class OpenSystemSettingsHelper {
+ public:
+  // Begin the monitoring and will call |on_finished_callback| when done.
+  // Takes in a null-terminated array of |protocols| whose registry keys must be
+  // watched. The array must contain at least one element.
+  static void Begin(const wchar_t* const protocols[],
+                    const base::Closure& on_finished_callback) {
+    new OpenSystemSettingsHelper(protocols, on_finished_callback);
+  }
+
+ private:
+  // The reason the settings interaction concluded. Do not modify the ordering
+  // because it is used for UMA.
+  enum ConcludeReason { REGISTRY_WATCHER, TIMEOUT, NUM_CONCLUDE_REASON_TYPES };
+
+  OpenSystemSettingsHelper(const wchar_t* const protocols[],
+                           const base::Closure& on_finished_callback)
+      : scoped_user_protocol_entry_(protocols[0]),
+        on_finished_callback_(on_finished_callback),
+        weak_ptr_factory_(this) {
+    static const wchar_t kUrlAssociationFormat[] =
+        L"SOFTWARE\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\"
+        L"%ls\\UserChoice";
+
+    // Remember the start time.
+    start_time_ = base::TimeTicks::Now();
+
+    for (const wchar_t* const* scan = &protocols[0]; *scan != nullptr; ++scan) {
+      AddRegistryKeyWatcher(
+          base::StringPrintf(kUrlAssociationFormat, *scan).c_str());
+    }
+    // Only the watchers that were succesfully initialized are counted.
+    registry_watcher_count_ = registry_key_watchers_.size();
+
+    timer_.Start(
+        FROM_HERE, base::TimeDelta::FromMinutes(2),
+        base::Bind(&OpenSystemSettingsHelper::ConcludeInteraction,
+                   weak_ptr_factory_.GetWeakPtr(), ConcludeReason::TIMEOUT));
+  }
+
+  // Called when a change is detected on one of the registry keys being watched.
+  // Note: All types of modification to the registry key will trigger this
+  //       function even if the value change is the only one that matters. This
+  //       is good enough for now.
+  void OnRegistryKeyChanged() {
+    DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+
+    // Make sure all the registry watchers have fired.
+    if (--registry_watcher_count_ == 0) {
+      UMA_HISTOGRAM_MEDIUM_TIMES(
+          "DefaultBrowser.SettingsInteraction.RegistryWatcherDuration",
+          base::TimeTicks::Now() - start_time_);
+
+      ConcludeInteraction(ConcludeReason::REGISTRY_WATCHER);
+    }
+  }
+
+  // Ends the monitoring with the system settings. Will call
+  // |on_finished_callback_| and then dispose of this class instance to make
+  // sure the callback won't get called subsequently.
+  void ConcludeInteraction(ConcludeReason conclude_reason) {
+    DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+
+    UMA_HISTOGRAM_ENUMERATION(
+        "DefaultBrowser.SettingsInteraction.ConcludeReason", conclude_reason,
+        NUM_CONCLUDE_REASON_TYPES);
+    on_finished_callback_.Run();
+    delete this;
+  }
+
+  // Helper function to create a registry watcher for a given |key_path|. Do
+  // nothing on initialization failure.
+  void AddRegistryKeyWatcher(const wchar_t* key_path) {
+    auto reg_key = base::WrapUnique(
+        new base::win::RegKey(HKEY_CURRENT_USER, key_path, KEY_NOTIFY));
+
+    if (reg_key->Valid() &&
+        reg_key->StartWatching(
+            base::Bind(&OpenSystemSettingsHelper::OnRegistryKeyChanged,
+                       weak_ptr_factory_.GetWeakPtr()))) {
+      registry_key_watchers_.push_back(std::move(reg_key));
+    }
+  }
+
+  // This is needed to make sure that Windows displays an entry for the protocol
+  // inside the "Choose default apps by protocol" settings page.
+  ScopedUserProtocolEntry scoped_user_protocol_entry_;
+
+  // The function to call when the interaction with the system settings is
+  // finished.
+  base::Closure on_finished_callback_;
+
+  // The number of time the registry key watchers must fire.
+  int registry_watcher_count_ = 0;
+
+  // There can be multiple registry key watchers as some settings modify
+  // multiple protocol associations. e.g. Changing the default browser modifies
+  // the http and https associations.
+  std::vector<std::unique_ptr<base::win::RegKey>> registry_key_watchers_;
+
+  base::OneShotTimer timer_;
+
+  // Records the time it takes for the final registry watcher to get signaled.
+  base::TimeTicks start_time_;
+
+  // Weak ptrs are used to bind this class to the callbacks of the timer and the
+  // registry watcher. This makes it possible to self-delete after one of the
+  // callbacks is executed to cancel the remaining ones.
+  base::WeakPtrFactory<OpenSystemSettingsHelper> weak_ptr_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(OpenSystemSettingsHelper);
+};
+
 }  // namespace
 
 bool SetAsDefaultBrowser() {
@@ -254,23 +451,6 @@ bool SetAsDefaultBrowser() {
   }
 
   VLOG(1) << "Chrome registered as default browser.";
-  return true;
-}
-
-bool SetAsDefaultBrowserInteractive() {
-  base::FilePath chrome_exe;
-  if (!PathService::Get(base::FILE_EXE, &chrome_exe)) {
-    NOTREACHED() << "Error getting app exe path";
-    return false;
-  }
-
-  BrowserDistribution* dist = BrowserDistribution::GetDistribution();
-  if (!ShellUtil::ShowMakeChromeDefaultSystemUI(dist, chrome_exe)) {
-    LOG(ERROR) << "Failed to launch the set-default-browser Windows UI.";
-    return false;
-  }
-
-  VLOG(1) << "Set-default-browser Windows UI completed.";
   return true;
 }
 
@@ -297,32 +477,15 @@ bool SetAsDefaultProtocolClient(const std::string& protocol) {
   return true;
 }
 
-bool SetAsDefaultProtocolClientInteractive(const std::string& protocol) {
-  base::FilePath chrome_exe;
-  if (!PathService::Get(base::FILE_EXE, &chrome_exe)) {
-    NOTREACHED() << "Error getting app exe path";
-    return false;
-  }
-
-  BrowserDistribution* dist = BrowserDistribution::GetDistribution();
-  base::string16 wprotocol(base::UTF8ToUTF16(protocol));
-  if (!ShellUtil::ShowMakeChromeDefaultProtocolClientSystemUI(dist, chrome_exe,
-                                                              wprotocol)) {
-    LOG(ERROR) << "Failed to launch the set-default-client Windows UI.";
-    return false;
-  }
-
-  VLOG(1) << "Set-default-client Windows UI completed.";
-  return true;
-}
-
-DefaultWebClientSetPermission CanSetAsDefaultBrowser() {
+DefaultWebClientSetPermission GetDefaultWebClientSetPermission() {
   BrowserDistribution* distribution = BrowserDistribution::GetDistribution();
   if (distribution->GetDefaultBrowserControlPolicy() !=
           BrowserDistribution::DEFAULT_BROWSER_FULL_CONTROL)
     return SET_DEFAULT_NOT_ALLOWED;
   if (ShellUtil::CanMakeChromeDefaultUnattended())
     return SET_DEFAULT_UNATTENDED;
+  // Windows 8 and 10 both introduced a new way to set the default web client
+  // which require user interaction.
   return SET_DEFAULT_INTERACTIVE;
 }
 
@@ -448,6 +611,94 @@ DefaultWebClientState IsDefaultProtocolClient(const std::string& protocol) {
           base::UTF8ToUTF16(protocol)));
 }
 
+namespace win {
+
+bool SetAsDefaultBrowserUsingIntentPicker() {
+  base::FilePath chrome_exe;
+  if (!PathService::Get(base::FILE_EXE, &chrome_exe)) {
+    NOTREACHED() << "Error getting app exe path";
+    return false;
+  }
+
+  BrowserDistribution* dist = BrowserDistribution::GetDistribution();
+  if (!ShellUtil::ShowMakeChromeDefaultSystemUI(dist, chrome_exe)) {
+    LOG(ERROR) << "Failed to launch the set-default-browser Windows UI.";
+    return false;
+  }
+
+  VLOG(1) << "Set-default-browser Windows UI completed.";
+  return true;
+}
+
+void SetAsDefaultBrowserUsingSystemSettings(
+    const base::Closure& on_finished_callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+
+  base::FilePath chrome_exe;
+  if (!PathService::Get(base::FILE_EXE, &chrome_exe)) {
+    NOTREACHED() << "Error getting app exe path";
+    on_finished_callback.Run();
+    return;
+  }
+
+  // Create an action recorder that will open the settings app once it has
+  // initialized.
+  std::unique_ptr<DefaultBrowserActionRecorder> recorder(
+      new DefaultBrowserActionRecorder(base::Bind(
+          base::IgnoreResult(&ShellUtil::ShowMakeChromeDefaultSystemUI),
+          base::Unretained(BrowserDistribution::GetDistribution()),
+          chrome_exe)));
+
+  // The helper manages its own lifetime. Bind the action recorder
+  // into the finished callback to keep it alive throughout the
+  // interaction.
+  static const wchar_t* const kProtocols[] = {L"http", L"https", nullptr};
+  OpenSystemSettingsHelper::Begin(
+      kProtocols, base::Bind(&OnSettingsAppFinished, base::Passed(&recorder),
+                             on_finished_callback));
+}
+
+bool SetAsDefaultProtocolClientUsingIntentPicker(const std::string& protocol) {
+  base::FilePath chrome_exe;
+  if (!PathService::Get(base::FILE_EXE, &chrome_exe)) {
+    NOTREACHED() << "Error getting app exe path";
+    return false;
+  }
+
+  BrowserDistribution* dist = BrowserDistribution::GetDistribution();
+  base::string16 wprotocol(base::UTF8ToUTF16(protocol));
+  if (!ShellUtil::ShowMakeChromeDefaultProtocolClientSystemUI(dist, chrome_exe,
+                                                              wprotocol)) {
+    LOG(ERROR) << "Failed to launch the set-default-client Windows UI.";
+    return false;
+  }
+
+  VLOG(1) << "Set-default-client Windows UI completed.";
+  return true;
+}
+
+void SetAsDefaultProtocolClientUsingSystemSettings(
+    const std::string& protocol,
+    const base::Closure& on_finished_callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+
+  base::FilePath chrome_exe;
+  if (!PathService::Get(base::FILE_EXE, &chrome_exe)) {
+    NOTREACHED() << "Error getting app exe path";
+    on_finished_callback.Run();
+    return;
+  }
+
+  // The helper manages its own lifetime.
+  base::string16 wprotocol(base::UTF8ToUTF16(protocol));
+  const wchar_t* const kProtocols[] = {wprotocol.c_str(), nullptr};
+  OpenSystemSettingsHelper::Begin(kProtocols, on_finished_callback);
+
+  BrowserDistribution* dist = BrowserDistribution::GetDistribution();
+  ShellUtil::ShowMakeChromeDefaultProtocolClientSystemUI(dist, chrome_exe,
+                                                         wprotocol);
+}
+
 base::string16 GetAppModelIdForProfile(const base::string16& app_name,
                                        const base::FilePath& profile_path) {
   std::vector<base::string16> components;
@@ -470,11 +721,6 @@ base::string16 GetChromiumModelIdForProfile(
       ShellUtil::GetBrowserModelId(dist,
                                    InstallUtil::IsPerUserInstall(chrome_exe)),
       profile_path);
-}
-
-base::string16 GetAppListAppModelIdForProfile(
-    const base::FilePath& profile_path) {
-  return GetAppModelIdForProfile(GetAppListAppName(), profile_path);
 }
 
 void MigrateTaskbarPins() {
@@ -605,9 +851,8 @@ base::FilePath GetStartMenuShortcut(const base::FilePath& chrome_exe) {
     base::DIR_START_MENU,
   };
   BrowserDistribution* dist = BrowserDistribution::GetDistribution();
-  const base::string16 shortcut_name(
-      dist->GetShortcutName(BrowserDistribution::SHORTCUT_CHROME) +
-      installer::kLnkExt);
+  const base::string16 shortcut_name(dist->GetShortcutName() +
+                                     installer::kLnkExt);
   base::FilePath programs_folder;
   base::FilePath shortcut;
 
@@ -627,5 +872,7 @@ base::FilePath GetStartMenuShortcut(const base::FilePath& chrome_exe) {
 
   return base::FilePath();
 }
+
+}  // namespace win
 
 }  // namespace shell_integration

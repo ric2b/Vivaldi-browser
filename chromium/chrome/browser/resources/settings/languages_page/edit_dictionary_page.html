@@ -1,6 +1,7 @@
+<link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-a11y-keys/iron-a11y-keys.html"> <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/iron-icons.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-a11y-keys/iron-a11y-keys.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-list/iron-list.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
@@ -37,19 +38,20 @@
         <iron-a11y-keys id="keys" keys="enter esc"
             on-keys-pressed="onKeysPress_"></iron-a11y-keys>
         <paper-input id="newWord" no-label-float
-            i18n-values="label:addDictionaryWordLabel"></paper-input>
-        <paper-button on-tap="onAddWordTap_"
-            i18n-content="addDictionaryWordButton"></paper-button>
+            label="$i18n{addDictionaryWordLabel}"></paper-input>
+        <paper-button on-tap="onAddWordTap_">
+          $i18n{addDictionaryWordButton}
+        </paper-button>
       </div>
     </div>
     <div class="settings-box block">
-      <h2 i18n-content="customDictionaryWords"></h2>
+      <h2>$i18n{customDictionaryWords}</h2>
       <div class="list-frame">
         <iron-list id="list" items="{{words_}}">
           <template>
             <div class="list-item">
               <div class="word">[[item]]</div>
-              <paper-icon-button icon="clear" on-tap="onRemoveWordTap_">
+              <paper-icon-button icon="cr:clear" on-tap="onRemoveWordTap_">
               </paper-icon-button>
             </div>
           </template>

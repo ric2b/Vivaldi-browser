@@ -17,7 +17,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/sys_info.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -44,6 +44,7 @@
 #include "content/common/content_switches_internal.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "content/common/input/input_event_utils.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/renderer/gpu/render_widget_compositor_delegate.h"
 #include "content/renderer/input/input_handler_manager.h"
@@ -60,7 +61,6 @@
 
 #if defined(OS_ANDROID)
 #include "base/android/build_info.h"
-#include "content/renderer/android/synchronous_compositor_factory.h"
 #include "ui/gfx/android/device_display_info.h"
 #endif
 
@@ -204,11 +204,11 @@ static cc::TopControlsState ConvertTopControlsState(
 }  // namespace
 
 // static
-scoped_ptr<RenderWidgetCompositor> RenderWidgetCompositor::Create(
+std::unique_ptr<RenderWidgetCompositor> RenderWidgetCompositor::Create(
     RenderWidgetCompositorDelegate* delegate,
     float device_scale_factor,
     CompositorDependencies* compositor_deps) {
-  scoped_ptr<RenderWidgetCompositor> compositor(
+  std::unique_ptr<RenderWidgetCompositor> compositor(
       new RenderWidgetCompositor(delegate, compositor_deps));
   compositor->Initialize(device_scale_factor);
   return compositor;
@@ -247,8 +247,7 @@ void RenderWidgetCompositor::Initialize(float device_scale_factor) {
     }
   }
   settings.main_frame_before_activation_enabled =
-      cmd->HasSwitch(cc::switches::kEnableMainFrameBeforeActivation) &&
-      !cmd->HasSwitch(cc::switches::kDisableMainFrameBeforeActivation);
+      cmd->HasSwitch(cc::switches::kEnableMainFrameBeforeActivation);
   settings.use_mouse_wheel_gestures = UseGestureBasedWheelScrolling();
 
   settings.default_tile_size = CalculateDefaultTileSize(device_scale_factor);
@@ -293,6 +292,8 @@ void RenderWidgetCompositor::Initialize(float device_scale_factor) {
       compositor_deps_->IsGpuRasterizationForced();
   settings.gpu_rasterization_enabled =
       compositor_deps_->IsGpuRasterizationEnabled();
+  settings.async_worker_context_enabled =
+      compositor_deps_->IsAsyncWorkerContextEnabled();
 
   settings.can_use_lcd_text = compositor_deps_->IsLcdTextEnabled();
   settings.use_distance_field_text =
@@ -325,6 +326,8 @@ void RenderWidgetCompositor::Initialize(float device_scale_factor) {
           hide_threshold >= 0.f && hide_threshold <= 1.f)
         settings.top_controls_hide_threshold = hide_threshold;
   }
+
+  settings.use_layer_lists = cmd->HasSwitch(cc::switches::kEnableLayerLists);
 
   settings.renderer_settings.allow_antialiasing &=
       !cmd->HasSwitch(cc::switches::kDisableCompositedAntialiasing);
@@ -366,11 +369,8 @@ void RenderWidgetCompositor::Initialize(float device_scale_factor) {
   }
 
 #if defined(OS_ANDROID)
-  DCHECK(!SynchronousCompositorFactory::GetInstance() ||
-         !cmd->HasSwitch(switches::kIPCSyncCompositing));
   bool using_synchronous_compositor =
-      SynchronousCompositorFactory::GetInstance() ||
-      cmd->HasSwitch(switches::kIPCSyncCompositing);
+      GetContentClient()->UsingSynchronousCompositing();
 
   // We can't use GPU rasterization on low-end devices, because the Ganesh
   // cache would consume too much memory.
@@ -449,12 +449,6 @@ void RenderWidgetCompositor::Initialize(float device_scale_factor) {
     settings.renderer_settings.preferred_tile_format = cc::ETC1;
   }
 
-  if (delegate_->ForOOPIF()) {
-    // TODO(simonhong): Apply BeginFrame scheduling for OOPIF.
-    // See crbug.com/471411.
-    settings.use_external_begin_frame_source = false;
-  }
-
   settings.max_staging_buffer_usage_in_bytes = 32 * 1024 * 1024;  // 32MB
   // Use 1/4th of staging buffers on low-end devices.
   if (base::SysInfo::IsLowEndDevice())
@@ -483,7 +477,7 @@ void RenderWidgetCompositor::Initialize(float device_scale_factor) {
   if (use_remote_compositing)
     settings.use_external_begin_frame_source = false;
 
-  scoped_ptr<cc::BeginFrameSource> external_begin_frame_source;
+  std::unique_ptr<cc::BeginFrameSource> external_begin_frame_source;
   if (settings.use_external_begin_frame_source) {
     external_begin_frame_source = delegate_->CreateExternalBeginFrameSource();
   }
@@ -545,16 +539,16 @@ void RenderWidgetCompositor::SetNeedsForcedRedraw() {
   setNeedsAnimate();
 }
 
-scoped_ptr<cc::SwapPromiseMonitor>
+std::unique_ptr<cc::SwapPromiseMonitor>
 RenderWidgetCompositor::CreateLatencyInfoSwapPromiseMonitor(
     ui::LatencyInfo* latency) {
-  return scoped_ptr<cc::SwapPromiseMonitor>(
-      new cc::LatencyInfoSwapPromiseMonitor(
-          latency, layer_tree_host_.get(), NULL));
+  return std::unique_ptr<cc::SwapPromiseMonitor>(
+      new cc::LatencyInfoSwapPromiseMonitor(latency, layer_tree_host_.get(),
+                                            NULL));
 }
 
 void RenderWidgetCompositor::QueueSwapPromise(
-    scoped_ptr<cc::SwapPromise> swap_promise) {
+    std::unique_ptr<cc::SwapPromise> swap_promise) {
   layer_tree_host_->QueueSwapPromise(std::move(swap_promise));
 }
 
@@ -580,15 +574,15 @@ const cc::Layer* RenderWidgetCompositor::GetRootLayer() const {
 
 int RenderWidgetCompositor::ScheduleMicroBenchmark(
     const std::string& name,
-    scoped_ptr<base::Value> value,
-    const base::Callback<void(scoped_ptr<base::Value>)>& callback) {
+    std::unique_ptr<base::Value> value,
+    const base::Callback<void(std::unique_ptr<base::Value>)>& callback) {
   return layer_tree_host_->ScheduleMicroBenchmark(name, std::move(value),
                                                   callback);
 }
 
 bool RenderWidgetCompositor::SendMessageToMicroBenchmark(
     int id,
-    scoped_ptr<base::Value> value) {
+    std::unique_ptr<base::Value> value) {
   return layer_tree_host_->SendMessageToMicroBenchmark(id, std::move(value));
 }
 
@@ -782,9 +776,9 @@ bool RenderWidgetCompositor::haveScrollEventHandlers() const {
 
 void CompositeAndReadbackAsyncCallback(
     blink::WebCompositeAndReadbackAsyncCallback* callback,
-    scoped_ptr<cc::CopyOutputResult> result) {
+    std::unique_ptr<cc::CopyOutputResult> result) {
   if (result->HasBitmap()) {
-    scoped_ptr<SkBitmap> result_bitmap = result->TakeBitmap();
+    std::unique_ptr<SkBitmap> result_bitmap = result->TakeBitmap();
     callback->didCompositeAndReadback(*result_bitmap);
   } else {
     callback->didCompositeAndReadback(SkBitmap());
@@ -950,7 +944,7 @@ void RenderWidgetCompositor::RequestNewOutputSurface() {
 
   bool fallback =
       num_failed_recreate_attempts_ >= OUTPUT_SURFACE_RETRIES_BEFORE_FALLBACK;
-  scoped_ptr<cc::OutputSurface> surface(
+  std::unique_ptr<cc::OutputSurface> surface(
       delegate_->CreateOutputSurface(fallback));
 
   if (!surface) {
@@ -1004,6 +998,13 @@ void RenderWidgetCompositor::DidCompletePageScaleAnimation() {
   delegate_->DidCompletePageScaleAnimation();
 }
 
+void RenderWidgetCompositor::ReportFixedRasterScaleUseCounters(
+    bool has_blurry_content,
+    bool has_potential_performance_regression) {
+  delegate_->ReportFixedRasterScaleUseCounters(
+      has_blurry_content, has_potential_performance_regression);
+}
+
 void RenderWidgetCompositor::RequestScheduleAnimation() {
   delegate_->RequestScheduleAnimation();
 }
@@ -1029,13 +1030,6 @@ void RenderWidgetCompositor::SendCompositorProto(
   delegate_->ForwardCompositorProto(serialized);
 }
 
-void RenderWidgetCompositor::RecordFrameTimingEvents(
-    scoped_ptr<cc::FrameTimingTracker::CompositeTimingSet> composite_events,
-    scoped_ptr<cc::FrameTimingTracker::MainFrameTimingSet> main_frame_events) {
-  delegate_->RecordFrameTimingEvents(std::move(composite_events),
-                                     std::move(main_frame_events));
-}
-
 void RenderWidgetCompositor::SetSurfaceIdNamespace(
     uint32_t surface_id_namespace) {
   layer_tree_host_->set_surface_id_namespace(surface_id_namespace);
@@ -1045,7 +1039,7 @@ void RenderWidgetCompositor::OnHandleCompositorProto(
     const std::vector<uint8_t>& proto) {
   DCHECK(remote_proto_channel_receiver_);
 
-  scoped_ptr<cc::proto::CompositorMessage> deserialized(
+  std::unique_ptr<cc::proto::CompositorMessage> deserialized(
       new cc::proto::CompositorMessage);
   int signed_size = base::checked_cast<int>(proto.size());
   if (!deserialized->ParseFromArray(proto.data(), signed_size)) {

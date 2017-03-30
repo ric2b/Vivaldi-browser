@@ -9,15 +9,18 @@
 #include <stdint.h>
 #include <wrl.h>
 
+#include <memory>
 #include <utility>
 #include <vector>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_sender.h"
+
+struct DWriteFontStyle;
+struct MapCharactersResult;
 
 namespace content {
 
@@ -32,6 +35,8 @@ class FakeFont {
  public:
   explicit FakeFont(const base::string16& name);
 
+  FakeFont(const FakeFont& other);
+
   ~FakeFont();
 
   FakeFont& AddFilePath(const base::string16& file_path) {
@@ -44,6 +49,8 @@ class FakeFont {
     family_names_.emplace_back(locale, family_name);
     return *this;
   }
+
+  const base::string16& font_name() { return font_name_; }
 
  private:
   friend FakeFontCollection;
@@ -97,7 +104,7 @@ class FakeFontCollection : public base::RefCounted<FakeFontCollection> {
 
     ~ReplySender() override;
 
-    scoped_ptr<IPC::Message>& OnMessageReceived(const IPC::Message& msg);
+    std::unique_ptr<IPC::Message>& OnMessageReceived(const IPC::Message& msg);
 
     bool Send(IPC::Message* msg) override;
 
@@ -112,9 +119,16 @@ class FakeFontCollection : public base::RefCounted<FakeFontCollection> {
     void OnGetFontFiles(uint32_t family_index,
                         std::vector<base::string16>* file_paths_);
 
+    void OnMapCharacters(const base::string16& text,
+                         const DWriteFontStyle& font_style,
+                         const base::string16& locale_name,
+                         uint32_t reading_direction,
+                         const base::string16& base_family_name,
+                         MapCharactersResult* result);
+
    private:
     scoped_refptr<FakeFontCollection> collection_;
-    scoped_ptr<IPC::Message> reply_;
+    std::unique_ptr<IPC::Message> reply_;
 
     DISALLOW_COPY_AND_ASSIGN(ReplySender);
   };
@@ -145,6 +159,13 @@ class FakeFontCollection : public base::RefCounted<FakeFontCollection> {
 
   void OnGetFontFiles(uint32_t family_index,
                       std::vector<base::string16>* file_paths);
+
+  void OnMapCharacters(const base::string16& text,
+                       const DWriteFontStyle& font_style,
+                       const base::string16& locale_name,
+                       uint32_t reading_direction,
+                       const base::string16& base_family_name,
+                       MapCharactersResult* result);
 
   std::unique_ptr<ReplySender> GetReplySender();
 

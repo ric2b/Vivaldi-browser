@@ -7,7 +7,8 @@
 
 #include <stddef.h>
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
 #include "cc/base/cc_export.h"
 #include "cc/playback/display_item.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
@@ -40,7 +41,6 @@ class CC_EXPORT DrawingDisplayItem : public DisplayItem {
   size_t ExternalMemoryUsage() const override;
 
   int ApproximateOpCount() const;
-  bool IsSuitableForGpuRasterization() const;
 
   void CloneTo(DrawingDisplayItem* item) const;
 

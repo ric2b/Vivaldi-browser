@@ -8,13 +8,15 @@
 
 #include "base/lazy_instance.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "cc/resources/platform_color.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gl_in_process_context.h"
 #include "gpu/command_buffer/client/gles2_implementation.h"
 #include "gpu/command_buffer/client/gles2_lib.h"
+#include "gpu/command_buffer/client/shared_memory_limits.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
-#include "gpu/skia_bindings/gl_bindings_skia_cmd_buffer.h"
+#include "gpu/skia_bindings/grcontext_for_gles2_interface.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
 #include "third_party/skia/include/gpu/GrContext.h"
@@ -24,7 +26,7 @@
 namespace cc {
 
 // static
-scoped_ptr<gpu::GLInProcessContext> CreateTestInProcessContext(
+std::unique_ptr<gpu::GLInProcessContext> CreateTestInProcessContext(
     TestGpuMemoryBufferManager* gpu_memory_buffer_manager,
     TestImageFactory* image_factory,
     gpu::GLInProcessContext* shared_context) {
@@ -42,18 +44,17 @@ scoped_ptr<gpu::GLInProcessContext> CreateTestInProcessContext(
   attribs.bind_generates_resource = false;
   gfx::GpuPreference gpu_preference = gfx::PreferDiscreteGpu;
 
-  scoped_ptr<gpu::GLInProcessContext> context =
-      make_scoped_ptr(gpu::GLInProcessContext::Create(
+  std::unique_ptr<gpu::GLInProcessContext> context =
+      base::WrapUnique(gpu::GLInProcessContext::Create(
           nullptr, nullptr, is_offscreen, gfx::kNullAcceleratedWidget,
           gfx::Size(1, 1), shared_context, attribs, gpu_preference,
-          gpu::GLInProcessContextSharedMemoryLimits(),
-          gpu_memory_buffer_manager, image_factory));
+          gpu::SharedMemoryLimits(), gpu_memory_buffer_manager, image_factory));
 
   DCHECK(context);
   return context;
 }
 
-scoped_ptr<gpu::GLInProcessContext> CreateTestInProcessContext() {
+std::unique_ptr<gpu::GLInProcessContext> CreateTestInProcessContext() {
   return CreateTestInProcessContext(nullptr, nullptr, nullptr);
 }
 
@@ -65,11 +66,11 @@ TestInProcessContextProvider::TestInProcessContextProvider(
           (shared_context ? shared_context->context_.get() : nullptr))) {}
 
 TestInProcessContextProvider::~TestInProcessContextProvider() {
-  if (gr_context_)
-    gr_context_->releaseResourcesAndAbandonContext();
 }
 
-bool TestInProcessContextProvider::BindToCurrentThread() { return true; }
+bool TestInProcessContextProvider::BindToCurrentThread() {
+  return true;
+}
 
 gpu::gles2::GLES2Interface* TestInProcessContextProvider::ContextGL() {
   return context_->GetImplementation();
@@ -81,51 +82,40 @@ gpu::ContextSupport* TestInProcessContextProvider::ContextSupport() {
 
 class GrContext* TestInProcessContextProvider::GrContext() {
   if (gr_context_)
-    return gr_context_.get();
+    return gr_context_->get();
 
-  sk_sp<GrGLInterface> interface(
-      skia_bindings::CreateGLES2InterfaceBindings(ContextGL()));
-
-  gr_context_ = skia::AdoptRef(GrContext::Create(
-      // GrContext takes ownership of |interface|.
-      kOpenGL_GrBackend, reinterpret_cast<GrBackendContext>(interface.get())));
-  return gr_context_.get();
+  gr_context_.reset(new skia_bindings::GrContextForGLES2Interface(ContextGL()));
+  return gr_context_->get();
 }
 
 void TestInProcessContextProvider::InvalidateGrContext(uint32_t state) {
   if (gr_context_)
-    gr_context_->resetContext(state);
-}
-
-void TestInProcessContextProvider::SetupLock() {
+    gr_context_->ResetContext(state);
 }
 
 base::Lock* TestInProcessContextProvider::GetLock() {
   return &context_lock_;
 }
 
-ContextProvider::Capabilities
-TestInProcessContextProvider::ContextCapabilities() {
-  ContextProvider::Capabilities capabilities;
-  capabilities.gpu.image = true;
-  capabilities.gpu.texture_rectangle = true;
-  capabilities.gpu.sync_query = true;
-
+gpu::Capabilities TestInProcessContextProvider::ContextCapabilities() {
+  gpu::Capabilities capabilities;
+  capabilities.image = true;
+  capabilities.texture_rectangle = true;
+  capabilities.sync_query = true;
   switch (PlatformColor::Format()) {
     case PlatformColor::SOURCE_FORMAT_RGBA8:
-      capabilities.gpu.texture_format_bgra8888 = false;
+      capabilities.texture_format_bgra8888 = false;
       break;
     case PlatformColor::SOURCE_FORMAT_BGRA8:
-      capabilities.gpu.texture_format_bgra8888 = true;
+      capabilities.texture_format_bgra8888 = true;
       break;
   }
-
   return capabilities;
 }
 
 void TestInProcessContextProvider::DeleteCachedResources() {
   if (gr_context_)
-    gr_context_->freeGpuResources();
+    gr_context_->FreeGpuResources();
 }
 
 void TestInProcessContextProvider::SetLostContextCallback(

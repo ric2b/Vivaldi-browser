@@ -32,6 +32,7 @@
 #include "chromecast/browser/service/cast_service_simple.h"
 #include "chromecast/browser/url_request_context_factory.h"
 #include "chromecast/common/global_descriptors.h"
+#include "chromecast/media/audio/cast_audio_manager.h"
 #include "chromecast/media/cma/backend/media_pipeline_backend_manager.h"
 #include "chromecast/public/media/media_pipeline_backend.h"
 #include "components/crash/content/app/breakpad_linux.h"
@@ -52,8 +53,8 @@
 #include "ui/gl/gl_switches.h"
 
 #if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-#include "chromecast/browser/media/cast_mojo_media_application.h"
 #include "chromecast/browser/media/cast_mojo_media_client.h"
+#include "media/mojo/services/mojo_media_application.h"  // nogncheck
 #endif  // ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS
 
 #if defined(OS_ANDROID)
@@ -68,14 +69,16 @@ namespace shell {
 
 namespace {
 #if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-static std::unique_ptr<mojo::ShellClient> CreateCastMojoMediaApplication(
-    CastContentBrowserClient* browser_client) {
+static std::unique_ptr<::shell::ShellClient> CreateMojoMediaApplication(
+    CastContentBrowserClient* browser_client,
+    const base::Closure& quit_closure) {
   std::unique_ptr<media::CastMojoMediaClient> mojo_media_client(
       new media::CastMojoMediaClient(
           base::Bind(&CastContentBrowserClient::CreateMediaPipelineBackend,
                      base::Unretained(browser_client))));
-  return std::unique_ptr<mojo::ShellClient>(new media::CastMojoMediaApplication(
-      std::move(mojo_media_client), browser_client->GetMediaTaskRunner()));
+  return std::unique_ptr<::shell::ShellClient>(
+      new ::media::MojoMediaApplication(std::move(mojo_media_client),
+                                        quit_closure));
 }
 #endif  // ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS
 }  // namespace
@@ -272,6 +275,14 @@ void CastContentBrowserClient::OverrideWebkitPrefs(
 
   // Enable 5% margins for WebVTT cues to keep within title-safe area
   prefs->text_track_margin_percentage = 5;
+
+#if defined(OS_ANDROID)
+  // Enable the television style for viewport so that all cast apps have a
+  // 1280px wide layout viewport by default.
+  DCHECK(prefs->viewport_enabled);
+  DCHECK(prefs->viewport_meta_enabled);
+  prefs->viewport_style = content::ViewportStyle::TELEVISION;
+#endif  // defined(OS_ANDROID)
 }
 
 void CastContentBrowserClient::ResourceDispatcherHostCreated() {
@@ -382,9 +393,11 @@ bool CastContentBrowserClient::CanCreateWindow(
 void CastContentBrowserClient::RegisterInProcessMojoApplications(
     StaticMojoApplicationMap* apps) {
 #if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-  apps->insert(std::make_pair(
-      "mojo:media",
-      base::Bind(&CreateCastMojoMediaApplication, base::Unretained(this))));
+  content::MojoApplicationInfo app_info;
+  app_info.application_factory =
+      base::Bind(&CreateMojoMediaApplication, base::Unretained(this));
+  app_info.application_task_runner = GetMediaTaskRunner();
+  apps->insert(std::make_pair("mojo:media", app_info));
 #endif
 }
 
@@ -417,6 +430,12 @@ void CastContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
 }
 
 #else
+::media::ScopedAudioManagerPtr CastContentBrowserClient::CreateAudioManager(
+    ::media::AudioLogFactory* audio_log_factory) {
+  return ::media::ScopedAudioManagerPtr(new media::CastAudioManager(
+      GetMediaTaskRunner(), GetMediaTaskRunner(), audio_log_factory,
+      media_pipeline_backend_manager()));
+}
 
 std::unique_ptr<::media::CdmFactory>
 CastContentBrowserClient::CreateCdmFactory() {

@@ -7,7 +7,6 @@
 #ifndef MEDIA_FILTERS_PASS_THROUGH_DECODER_TEXTURE_H_
 #define MEDIA_FILTERS_PASS_THROUGH_DECODER_TEXTURE_H_
 
-#include "base/memory/scoped_ptr.h"
 #include "gpu/command_buffer/common/mailbox_holder.h"
 #include "media/base/video_frame.h"
 
@@ -18,7 +17,7 @@ struct MEDIA_EXPORT PassThroughDecoderTexture {
   ~PassThroughDecoderTexture();
 
   uint32_t texture_id;
-  scoped_ptr<gpu::MailboxHolder> mailbox_holder;
+  std::unique_ptr<gpu::MailboxHolder> mailbox_holder;
   VideoFrame::ReleaseMailboxCB mailbox_holder_release_cb;
 
  private:
@@ -30,16 +29,16 @@ struct MEDIA_EXPORT PassThroughDecoderTexture {
 class MEDIA_EXPORT AutoReleasedPassThroughDecoderTexture {
  public:
   explicit AutoReleasedPassThroughDecoderTexture(
-      scoped_ptr<PassThroughDecoderTexture> texture);
+      std::unique_ptr<PassThroughDecoderTexture> texture);
   ~AutoReleasedPassThroughDecoderTexture();
 
-  scoped_ptr<PassThroughDecoderTexture> Pass() {
+  std::unique_ptr<PassThroughDecoderTexture> Pass() {
     DCHECK(texture_);
     return std::move(texture_);
   }
 
  private:
-  scoped_ptr<PassThroughDecoderTexture> texture_;
+  std::unique_ptr<PassThroughDecoderTexture> texture_;
 
   DISALLOW_COPY_AND_ASSIGN(AutoReleasedPassThroughDecoderTexture);
 };

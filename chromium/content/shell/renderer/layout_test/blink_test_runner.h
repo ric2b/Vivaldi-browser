@@ -6,12 +6,12 @@
 #define CONTENT_SHELL_RENDERER_LAYOUT_TEST_BLINK_TEST_RUNNER_H_
 
 #include <deque>
+#include <memory>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "components/test_runner/test_preferences.h"
 #include "components/test_runner/web_test_delegate.h"
 #include "content/public/common/page_state.h"
@@ -112,9 +112,6 @@ class BlinkTestRunner : public RenderViewObserver,
       override;
   void SendBluetoothManualChooserEvent(const std::string& event,
                                        const std::string& argument) override;
-  void SetGeofencingMockProvider(bool service_available) override;
-  void ClearGeofencingMockProvider() override;
-  void SetGeofencingMockPosition(double latitude, double longitude) override;
   void SetFocus(blink::WebView* web_view, bool focus) override;
   void SetAcceptAllCookies(bool accept) override;
   std::string PathToLocalResource(const std::string& resource) override;
@@ -130,8 +127,6 @@ class BlinkTestRunner : public RenderViewObserver,
   void LoadURLForFrame(const blink::WebURL& url,
                        const std::string& frame_name) override;
   bool AllowExternalPages() override;
-  std::string DumpHistoryForWindow(
-      test_runner::WebTestProxyBase* proxy) override;
   void FetchManifest(
       blink::WebView* view,
       const GURL& url,
@@ -155,6 +150,7 @@ class BlinkTestRunner : public RenderViewObserver,
     blink::WebLocalFrame* frame,
     const blink::WebPluginParams& params) override;
   float GetDeviceScaleFactorForTest() const override;
+  void RunIdleTasks(const base::Closure& callback) override;
 
   // Resets a RenderView to a known state for layout tests. It is used both when
   // a RenderView is created and when reusing an existing RenderView for the
@@ -163,14 +159,12 @@ class BlinkTestRunner : public RenderViewObserver,
   // also resets additional state, like the main frame's name and opener.
   void Reset(bool for_new_test);
 
-  void set_proxy(test_runner::WebTestProxyBase* proxy) { proxy_ = proxy; }
-  test_runner::WebTestProxyBase* proxy() const { return proxy_; }
-
   void ReportLeakDetectionResult(const LeakDetectionResult& result);
 
   // Message handlers forwarded by LayoutTestRenderFrameObserver.
   void OnSetTestConfiguration(const ShellTestConfiguration& params);
   void OnReplicateTestConfiguration(const ShellTestConfiguration& params);
+  void OnSetupSecondaryRenderer();
 
  private:
   // Message handlers.
@@ -179,7 +173,7 @@ class BlinkTestRunner : public RenderViewObserver,
       const std::vector<std::vector<PageState> >& session_histories,
       const std::vector<unsigned>& current_entry_indexes);
   void OnReset();
-  void OnNotifyDone();
+  void OnTestFinishedInSecondaryRenderer();
   void OnTryLeakDetection();
   void OnReplyBluetoothManualChooserEvents(
       const std::vector<std::string>& events);
@@ -191,14 +185,11 @@ class BlinkTestRunner : public RenderViewObserver,
   void CaptureDumpContinued();
   void OnPixelsDumpCompleted(const SkBitmap& snapshot);
   void CaptureDumpComplete();
+  std::string DumpHistoryForWindow(blink::WebView* web_view);
 
   mojom::LayoutTestBluetoothFakeAdapterSetter&
   GetBluetoothFakeAdapterSetter();
   mojom::LayoutTestBluetoothFakeAdapterSetterPtr bluetooth_fake_adapter_setter_;
-
-  test_runner::WebTestProxyBase* proxy_;
-
-  RenderView* focused_view_;
 
   test_runner::TestPreferences prefs_;
 
@@ -215,7 +206,7 @@ class BlinkTestRunner : public RenderViewObserver,
 
   bool focus_on_next_commit_;
 
-  scoped_ptr<LeakDetector> leak_detector_;
+  std::unique_ptr<LeakDetector> leak_detector_;
 
   DISALLOW_COPY_AND_ASSIGN(BlinkTestRunner);
 };

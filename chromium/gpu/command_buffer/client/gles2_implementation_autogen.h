@@ -981,22 +981,6 @@ void BindUniformLocationCHROMIUM(GLuint program,
                                  GLint location,
                                  const char* name) override;
 
-void GenValuebuffersCHROMIUM(GLsizei n, GLuint* buffers) override;
-
-void DeleteValuebuffersCHROMIUM(GLsizei n, const GLuint* valuebuffers) override;
-
-GLboolean IsValuebufferCHROMIUM(GLuint valuebuffer) override;
-
-void BindValuebufferCHROMIUM(GLenum target, GLuint valuebuffer) override;
-
-void SubscribeValueCHROMIUM(GLenum target, GLenum subscription) override;
-
-void PopulateSubscribedValuesCHROMIUM(GLenum target) override;
-
-void UniformValuebufferCHROMIUM(GLint location,
-                                GLenum target,
-                                GLenum subscription) override;
-
 void BindTexImage2DCHROMIUM(GLenum target, GLint imageId) override;
 
 void ReleaseTexImage2DCHROMIUM(GLenum target, GLint imageId) override;
@@ -1048,7 +1032,8 @@ void ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
                              GLboolean is_clipped,
                              const GLfloat* clip_rect,
                              GLint sorting_context_id,
-                             const GLfloat* transform) override;
+                             const GLfloat* transform,
+                             GLuint filter) override;
 
 void CommitOverlayPlanesCHROMIUM() override;
 

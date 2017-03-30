@@ -8,12 +8,17 @@
 #include <stddef.h>
 
 #include <string>
+
 #include "base/macros.h"
+#include "base/scoped_observer.h"
+#include "chrome/browser/ui/browser_list_observer.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/common/extension.h"
 
 class Browser;
+class BrowserList;
 class ExtensionService;
+class ToolbarActionsModel;
 class Profile;
 
 namespace extensions {
@@ -21,7 +26,7 @@ namespace extensions {
 class ExtensionPrefs;
 class ExtensionRegistry;
 
-class ExtensionMessageBubbleController {
+class ExtensionMessageBubbleController : public chrome::BrowserListObserver {
  public:
   // UMA histogram constants.
   enum BubbleAction {
@@ -121,7 +126,7 @@ class ExtensionMessageBubbleController {
   };
 
   ExtensionMessageBubbleController(Delegate* delegate, Browser* browser);
-  virtual ~ExtensionMessageBubbleController();
+  ~ExtensionMessageBubbleController() override;
 
   Delegate* delegate() const { return delegate_.get(); }
   Profile* profile();
@@ -156,12 +161,18 @@ class ExtensionMessageBubbleController {
   virtual void OnBubbleDismiss(bool dismissed_by_deactivation);
   virtual void OnLinkClicked();
 
+  // Sets this bubble as the active bubble being shown.
+  void SetIsActiveBubble();
+
   void ClearProfileListForTesting();
 
   static void set_should_ignore_learn_more_for_testing(
       bool should_ignore_learn_more);
 
  private:
+  // BrowserListObserver:
+  void OnBrowserRemoved(Browser* browser) override;
+
   // Iterate over the known extensions and acknowledge each one.
   void AcknowledgeExtensions();
 
@@ -176,6 +187,9 @@ class ExtensionMessageBubbleController {
   // A weak pointer to the Browser we are associated with. Not owned by us.
   Browser* browser_;
 
+  // The associated ToolbarActionsModel. Not owned.
+  ToolbarActionsModel* model_;
+
   // The list of extensions found.
   ExtensionIdList extension_list_;
 
@@ -189,7 +203,12 @@ class ExtensionMessageBubbleController {
   bool initialized_;
 
   // Whether or not the bubble is highlighting extensions.
-  bool did_highlight_;
+  bool is_highlighting_;
+
+  // Whether or not this bubble is the active bubble being shown.
+  bool is_active_bubble_;
+
+  ScopedObserver<BrowserList, BrowserListObserver> browser_list_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionMessageBubbleController);
 };

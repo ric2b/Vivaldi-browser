@@ -77,7 +77,6 @@ public:
 
     enum Status {
         NotStarted,
-        LoadStartScheduled, // scheduled but not yet started, only used by fonts.
         Pending, // load in progress
         Cached, // load completed successfully
         LoadError,
@@ -91,15 +90,14 @@ public:
     }
     virtual ~Resource();
 
-    virtual void removedFromMemoryCache();
     DECLARE_VIRTUAL_TRACE();
 
-    virtual void load(ResourceFetcher*);
+    void load(ResourceFetcher*);
 
     virtual void setEncoding(const String&) { }
     virtual String encoding() const { return String(); }
     virtual void appendData(const char*, size_t);
-    virtual void error(Resource::Status);
+    virtual void error(const ResourceError&);
     virtual void setCORSFailed() { }
 
     void setNeedsSynchronousCacheHit(bool needsSynchronousCacheHit) { m_needsSynchronousCacheHit = needsSynchronousCacheHit; }
@@ -107,7 +105,6 @@ public:
     void setLinkPreload(bool isLinkPreload) { m_linkPreload = isLinkPreload; }
     bool isLinkPreload() const { return m_linkPreload; }
 
-    void setResourceError(const ResourceError& error) { m_error = error; }
     const ResourceError& resourceError() const { return m_error; }
 
     void setIdentifier(unsigned long identifier) { m_identifier = identifier; }
@@ -118,7 +115,7 @@ public:
     const ResourceRequest& resourceRequest() const { return m_resourceRequest; }
     const ResourceRequest& lastResourceRequest() const;
 
-    void setRevalidatingRequest(const ResourceRequest& request) { m_revalidatingRequest = request; }
+    virtual void setRevalidatingRequest(const ResourceRequest&);
 
     // This url can have a fragment, but it can match resources that differ by the fragment only.
     const KURL& url() const { return m_resourceRequest.url();}
@@ -164,16 +161,14 @@ public:
 
     // Computes the status of an object after loading.
     // Updates the expire date on the cache entry file
-    void setLoadFinishTime(double finishTime) { m_loadFinishTime = finishTime; }
-    virtual void finish();
+    virtual void finish(double finishTime);
+    void finish() { finish(0.0); }
 
     // FIXME: Remove the stringless variant once all the callsites' error messages are updated.
     bool passesAccessControlCheck(SecurityOrigin*) const;
     bool passesAccessControlCheck(SecurityOrigin*, String& errorDescription) const;
 
     bool isEligibleForIntegrityCheck(SecurityOrigin*) const;
-
-    void clearLoader();
 
     SharedBuffer* resourceBuffer() const { return m_data.get(); }
     void setResourceBuffer(PassRefPtr<SharedBuffer>);
@@ -185,7 +180,7 @@ public:
     virtual void willNotFollowRedirect() {}
 
     virtual void responseReceived(const ResourceResponse&, PassOwnPtr<WebDataConsumerHandle>);
-    void setResponse(const ResourceResponse& response) { m_response = response; }
+    void setResponse(const ResourceResponse&);
     const ResourceResponse& response() const { return m_response; }
 
     virtual void reportResourceTimingToClients(const ResourceTimingInfo&) { }
@@ -244,9 +239,6 @@ public:
 
     static const char* resourceTypeToString(Type, const FetchInitiatorInfo&);
     static const char* resourceTypeName(Type);
-
-    // TODO(japhet): Remove once oilpan ships, it doesn't need the WeakPtr.
-    Resource* asWeakPtr();
 
 protected:
     Resource(const ResourceRequest&, Type, const ResourceLoaderOptions&);
@@ -308,8 +300,9 @@ protected:
     Timer<Resource> m_cancelTimer;
 
 private:
-    class CacheHandler;
     class ResourceCallback;
+    class CachedMetadataHandlerImpl;
+    class ServiceWorkerResponseCachedMetadataHandler;
 
     void cancelTimerFired(Timer<Resource>*);
 
@@ -320,16 +313,8 @@ private:
 
     bool unlock();
 
-    void setCachedMetadata(unsigned dataTypeID, const char*, size_t, CachedMetadataHandler::CacheType);
-    void clearCachedMetadata(CachedMetadataHandler::CacheType);
-    CachedMetadata* cachedMetadata(unsigned dataTypeID) const;
-
-#if !ENABLE(OILPAN)
-    WeakPtrFactory<Resource> m_weakPtrFactory;
-#endif
-
-    RefPtr<CachedMetadata> m_cachedMetadata;
-    Member<CacheHandler> m_cacheHandler;
+    Member<CachedMetadataHandlerImpl> m_cacheHandler;
+    RefPtr<SecurityOrigin> m_fetcherSecurityOrigin;
 
     ResourceError m_error;
 

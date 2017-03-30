@@ -70,6 +70,7 @@ class BrowserWindowCocoa
                           int reason) override;
   void ZoomChangedForActiveTab(bool can_show_bubble) override;
   gfx::Rect GetRestoredBounds() const override;
+  std::string GetWorkspace() const override;
   ui::WindowShowState GetRestoredState() const override;
   gfx::Rect GetBounds() const override;
   gfx::Size GetContentsSize() const override;
@@ -81,6 +82,8 @@ class BrowserWindowCocoa
   bool ShouldHideUIForFullscreen() const override;
   bool IsFullscreen() const override;
   bool IsFullscreenBubbleVisible() const override;
+  void MaybeShowNewBackShortcutBubble(bool forward) override;
+  void HideNewBackShortcutBubble() override;
   LocationBar* GetLocationBar() const override;
   void SetFocusToLocationBar(bool select_all) override;
   void UpdateReloadStopState(bool is_loading, bool force) override;
@@ -98,8 +101,6 @@ class BrowserWindowCocoa
   bool IsTabStripEditable() const override;
   bool IsToolbarVisible() const override;
   gfx::Rect GetRootWindowResizerRect() const override;
-  void ConfirmAddSearchProvider(TemplateURL* template_url,
-                                Profile* profile) override;
   void ShowUpdateChromeDialog() override;
   void ShowBookmarkBubble(const GURL& url, bool already_bookmarked) override;
   void ShowBookmarkAppBubble(
@@ -114,10 +115,8 @@ class BrowserWindowCocoa
                            translate::TranslateErrors::Type error_type,
                            bool is_user_gesture) override;
 #if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
-  void ShowOneClickSigninBubble(
-      OneClickSigninBubbleType type,
+  void ShowOneClickSigninConfirmation(
       const base::string16& email,
-      const base::string16& error_message,
       const StartSyncCallback& start_sync_callback) override;
 #endif
   bool IsDownloadShelfVisible() const override;

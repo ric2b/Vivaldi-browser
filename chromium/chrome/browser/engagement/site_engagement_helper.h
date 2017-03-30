@@ -8,22 +8,22 @@
 #include "base/macros.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/engagement/site_engagement_metrics.h"
+#include "chrome/browser/engagement/site_engagement_service.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
 namespace content {
+class NavigationHandle;
 class WebContents;
 }
 
-class GURL;
-
 // Per-WebContents class to handle updating the site engagement scores for
 // origins.
-class SiteEngagementHelper
+class SiteEngagementService::Helper
     : public content::WebContentsObserver,
-      public content::WebContentsUserData<SiteEngagementHelper> {
+      public content::WebContentsUserData<SiteEngagementService::Helper> {
  public:
-  ~SiteEngagementHelper() override;
+  ~Helper() override;
 
   static void SetSecondsBetweenUserInputCheck(int seconds);
   static void SetSecondsTrackingDelayAfterNavigation(int seconds);
@@ -41,7 +41,7 @@ class SiteEngagementHelper
   // 2. continual engagement over a non-trivial duration of time
   class PeriodicTracker {
    public:
-    explicit PeriodicTracker(SiteEngagementHelper* helper);
+    explicit PeriodicTracker(SiteEngagementService::Helper* helper);
     virtual ~PeriodicTracker();
 
     // Begin tracking after |initial_delay|.
@@ -57,9 +57,9 @@ class SiteEngagementHelper
     bool IsTimerRunning();
 
     // Set the timer object for testing.
-    void SetPauseTimerForTesting(scoped_ptr<base::Timer> timer);
+    void SetPauseTimerForTesting(std::unique_ptr<base::Timer> timer);
 
-    SiteEngagementHelper* helper() { return helper_; }
+    SiteEngagementService::Helper* helper() { return helper_; }
 
    protected:
     friend class SiteEngagementHelperTest;
@@ -75,8 +75,10 @@ class SiteEngagementHelper
     virtual void TrackingStopped() {}
 
    private:
-    SiteEngagementHelper* helper_;
-    scoped_ptr<base::Timer> pause_timer_;
+    SiteEngagementService::Helper* helper_;
+    std::unique_ptr<base::Timer> pause_timer_;
+
+    DISALLOW_COPY_AND_ASSIGN(PeriodicTracker);
   };
 
   // Class to encapsulate time-on-site engagement detection. Time-on-site is
@@ -89,7 +91,7 @@ class SiteEngagementHelper
   class InputTracker : public PeriodicTracker,
                        public content::WebContentsObserver {
    public:
-    InputTracker(SiteEngagementHelper* helper,
+    InputTracker(SiteEngagementService::Helper* helper,
                  content::WebContents* web_contents);
 
     bool is_tracking() const { return is_tracking_; }
@@ -106,6 +108,8 @@ class SiteEngagementHelper
 
     // content::WebContentsObserver overrides.
     void DidGetUserInteraction(const blink::WebInputEvent::Type type) override;
+
+    DISALLOW_COPY_AND_ASSIGN(InputTracker);
   };
 
   // Class to encapsulate media detection. Any media playing in a WebContents
@@ -121,7 +125,7 @@ class SiteEngagementHelper
   class MediaTracker : public PeriodicTracker,
                        public content::WebContentsObserver {
    public:
-    MediaTracker(SiteEngagementHelper* helper,
+    MediaTracker(SiteEngagementService::Helper* helper,
                  content::WebContents* web_contents);
     ~MediaTracker() override;
 
@@ -138,10 +142,12 @@ class SiteEngagementHelper
 
     bool is_hidden_;
     std::vector<MediaPlayerId> active_media_players_;
+
+    DISALLOW_COPY_AND_ASSIGN(MediaTracker);
   };
 
-  explicit SiteEngagementHelper(content::WebContents* web_contents);
-  friend class content::WebContentsUserData<SiteEngagementHelper>;
+  explicit Helper(content::WebContents* web_contents);
+  friend class content::WebContentsUserData<SiteEngagementService::Helper>;
   friend class SiteEngagementHelperTest;
 
   // Ask the SiteEngagementService to record engagement via user input at the
@@ -153,9 +159,7 @@ class SiteEngagementHelper
   void RecordMediaPlaying(bool is_hidden);
 
   // content::WebContentsObserver overrides.
-  void DidNavigateMainFrame(
-      const content::LoadCommittedDetails& details,
-      const content::FrameNavigateParams& params) override;
+  void DidFinishNavigation(content::NavigationHandle* handle) override;
   void WasShown() override;
   void WasHidden() override;
 
@@ -163,7 +167,7 @@ class SiteEngagementHelper
   MediaTracker media_tracker_;
   bool record_engagement_;
 
-  DISALLOW_COPY_AND_ASSIGN(SiteEngagementHelper);
+  DISALLOW_COPY_AND_ASSIGN(Helper);
 };
 
 #endif  // CHROME_BROWSER_ENGAGEMENT_SITE_ENGAGEMENT_HELPER_H_

@@ -54,13 +54,12 @@ class Element;
 class ExceptionState;
 
 class CORE_EXPORT Animation final
-    : public RefCountedGarbageCollectedEventTargetWithInlineData<Animation>
+    : public EventTargetWithInlineData
     , public ActiveScriptWrappable
     , public ActiveDOMObject
     , public CompositorAnimationDelegate
     , public CompositorAnimationPlayerClient {
     DEFINE_WRAPPERTYPEINFO();
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(Animation);
     USING_GARBAGE_COLLECTED_MIXIN(Animation);
 public:
     enum AnimationPlayState {
@@ -185,7 +184,7 @@ public:
 
 protected:
     DispatchEventResult dispatchEventInternal(Event*) override;
-    bool addEventListenerInternal(const AtomicString& eventType, EventListener*, const EventListenerOptions&) override;
+    void addedEventListener(const AtomicString& eventType, RegisteredEventListener&) override;
 
 private:
     Animation(ExecutionContext*, AnimationTimeline&, AnimationEffect*);

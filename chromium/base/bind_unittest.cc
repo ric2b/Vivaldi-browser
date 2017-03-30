@@ -763,15 +763,10 @@ TEST_F(BindTest, ConstRef) {
 }
 
 TEST_F(BindTest, ScopedRefptr) {
-  // BUG: The scoped_refptr should cause the only AddRef()/Release() pair. But
-  // due to a bug in base::Bind(), there's an extra call when invoking the
-  // callback.
-  // https://code.google.com/p/chromium/issues/detail?id=251937
-  EXPECT_CALL(has_ref_, AddRef()).Times(2);
-  EXPECT_CALL(has_ref_, Release()).Times(2);
+  EXPECT_CALL(has_ref_, AddRef()).Times(1);
+  EXPECT_CALL(has_ref_, Release()).Times(1);
 
-  const scoped_refptr<StrictMock<HasRef> > refptr(&has_ref_);
-
+  const scoped_refptr<HasRef> refptr(&has_ref_);
   Callback<int()> scoped_refptr_const_ref_cb =
       Bind(&FunctionWithScopedRefptrFirstParam, base::ConstRef(refptr), 1);
   EXPECT_EQ(1, scoped_refptr_const_ref_cb.Run());
@@ -800,6 +795,12 @@ TEST_F(BindTest, Owned) {
   EXPECT_EQ(0, deletes);
   own_object_cb.Reset();
   EXPECT_EQ(1, deletes);
+}
+
+TEST_F(BindTest, UniquePtrReceiver) {
+  std::unique_ptr<StrictMock<NoRef>> no_ref(new StrictMock<NoRef>);
+  EXPECT_CALL(*no_ref, VoidMethod0()).Times(1);
+  Bind(&NoRef::VoidMethod0, std::move(no_ref)).Run();
 }
 
 // Tests for Passed() wrapper support:

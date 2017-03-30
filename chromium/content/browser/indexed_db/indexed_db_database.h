@@ -24,7 +24,10 @@
 #include "content/browser/indexed_db/indexed_db_transaction_coordinator.h"
 #include "content/browser/indexed_db/list_set.h"
 #include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBTypes.h"
-#include "url/gurl.h"
+
+namespace url {
+class Origin;
+}
 
 namespace content {
 
@@ -42,10 +45,10 @@ class CONTENT_EXPORT IndexedDBDatabase
     : NON_EXPORTED_BASE(public base::RefCounted<IndexedDBDatabase>) {
  public:
   // An index and corresponding set of keys
-  typedef std::pair<int64_t, std::vector<IndexedDBKey>> IndexKeys;
+  using IndexKeys = std::pair<int64_t, std::vector<IndexedDBKey>>;
 
-  // Identifier is pair of (origin url, database name).
-  typedef std::pair<GURL, base::string16> Identifier;
+  // Identifier is pair of (origin, database name).
+  using Identifier = std::pair<url::Origin, base::string16>;
 
   static const int64_t kInvalidId = 0;
   static const int64_t kMinimumIndexId = 30;
@@ -124,13 +127,13 @@ class CONTENT_EXPORT IndexedDBDatabase
   void Get(int64_t transaction_id,
            int64_t object_store_id,
            int64_t index_id,
-           scoped_ptr<IndexedDBKeyRange> key_range,
+           std::unique_ptr<IndexedDBKeyRange> key_range,
            bool key_only,
            scoped_refptr<IndexedDBCallbacks> callbacks);
   void GetAll(int64_t transaction_id,
               int64_t object_store_id,
               int64_t index_id,
-              scoped_ptr<IndexedDBKeyRange> key_range,
+              std::unique_ptr<IndexedDBKeyRange> key_range,
               bool key_only,
               int64_t max_count,
               scoped_refptr<IndexedDBCallbacks> callbacks);
@@ -138,13 +141,13 @@ class CONTENT_EXPORT IndexedDBDatabase
            int64_t object_store_id,
            IndexedDBValue* value,
            ScopedVector<storage::BlobDataHandle>* handles,
-           scoped_ptr<IndexedDBKey> key,
+           std::unique_ptr<IndexedDBKey> key,
            blink::WebIDBPutMode mode,
            scoped_refptr<IndexedDBCallbacks> callbacks,
            const std::vector<IndexKeys>& index_keys);
   void SetIndexKeys(int64_t transaction_id,
                     int64_t object_store_id,
-                    scoped_ptr<IndexedDBKey> primary_key,
+                    std::unique_ptr<IndexedDBKey> primary_key,
                     const std::vector<IndexKeys>& index_keys);
   void SetIndexesReady(int64_t transaction_id,
                        int64_t object_store_id,
@@ -152,7 +155,7 @@ class CONTENT_EXPORT IndexedDBDatabase
   void OpenCursor(int64_t transaction_id,
                   int64_t object_store_id,
                   int64_t index_id,
-                  scoped_ptr<IndexedDBKeyRange> key_range,
+                  std::unique_ptr<IndexedDBKeyRange> key_range,
                   blink::WebIDBCursorDirection,
                   bool key_only,
                   blink::WebIDBTaskType task_type,
@@ -160,11 +163,11 @@ class CONTENT_EXPORT IndexedDBDatabase
   void Count(int64_t transaction_id,
              int64_t object_store_id,
              int64_t index_id,
-             scoped_ptr<IndexedDBKeyRange> key_range,
+             std::unique_ptr<IndexedDBKeyRange> key_range,
              scoped_refptr<IndexedDBCallbacks> callbacks);
   void DeleteRange(int64_t transaction_id,
                    int64_t object_store_id,
-                   scoped_ptr<IndexedDBKeyRange> key_range,
+                   std::unique_ptr<IndexedDBKeyRange> key_range,
                    scoped_refptr<IndexedDBCallbacks> callbacks);
   void Clear(int64_t transaction_id,
              int64_t object_store_id,
@@ -191,7 +194,7 @@ class CONTENT_EXPORT IndexedDBDatabase
       IndexedDBTransaction* transaction);
   void VersionChangeOperation(int64_t version,
                               scoped_refptr<IndexedDBCallbacks> callbacks,
-                              scoped_ptr<IndexedDBConnection> connection,
+                              std::unique_ptr<IndexedDBConnection> connection,
                               IndexedDBTransaction* transaction);
   void VersionChangeAbortOperation(int64_t previous_version,
                                    IndexedDBTransaction* transaction);
@@ -206,32 +209,32 @@ class CONTENT_EXPORT IndexedDBDatabase
                                  IndexedDBTransaction* transaction);
   void GetOperation(int64_t object_store_id,
                     int64_t index_id,
-                    scoped_ptr<IndexedDBKeyRange> key_range,
+                    std::unique_ptr<IndexedDBKeyRange> key_range,
                     indexed_db::CursorType cursor_type,
                     scoped_refptr<IndexedDBCallbacks> callbacks,
                     IndexedDBTransaction* transaction);
   void GetAllOperation(int64_t object_store_id,
                        int64_t index_id,
-                       scoped_ptr<IndexedDBKeyRange> key_range,
+                       std::unique_ptr<IndexedDBKeyRange> key_range,
                        indexed_db::CursorType cursor_type,
                        int64_t max_count,
                        scoped_refptr<IndexedDBCallbacks> callbacks,
                        IndexedDBTransaction* transaction);
   struct PutOperationParams;
-  void PutOperation(scoped_ptr<PutOperationParams> params,
+  void PutOperation(std::unique_ptr<PutOperationParams> params,
                     IndexedDBTransaction* transaction);
   void SetIndexesReadyOperation(size_t index_count,
                                 IndexedDBTransaction* transaction);
   struct OpenCursorOperationParams;
-  void OpenCursorOperation(scoped_ptr<OpenCursorOperationParams> params,
+  void OpenCursorOperation(std::unique_ptr<OpenCursorOperationParams> params,
                            IndexedDBTransaction* transaction);
   void CountOperation(int64_t object_store_id,
                       int64_t index_id,
-                      scoped_ptr<IndexedDBKeyRange> key_range,
+                      std::unique_ptr<IndexedDBKeyRange> key_range,
                       scoped_refptr<IndexedDBCallbacks> callbacks,
                       IndexedDBTransaction* transaction);
   void DeleteRangeOperation(int64_t object_store_id,
-                            scoped_ptr<IndexedDBKeyRange> key_range,
+                            std::unique_ptr<IndexedDBKeyRange> key_range,
                             scoped_refptr<IndexedDBCallbacks> callbacks,
                             IndexedDBTransaction* transaction);
   void ClearOperation(int64_t object_store_id,
@@ -263,13 +266,14 @@ class CONTENT_EXPORT IndexedDBDatabase
 
   bool IsOpenConnectionBlocked() const;
   leveldb::Status OpenInternal();
-  void RunVersionChangeTransaction(scoped_refptr<IndexedDBCallbacks> callbacks,
-                                   scoped_ptr<IndexedDBConnection> connection,
-                                   int64_t transaction_id,
-                                   int64_t requested_version);
+  void RunVersionChangeTransaction(
+      scoped_refptr<IndexedDBCallbacks> callbacks,
+      std::unique_ptr<IndexedDBConnection> connection,
+      int64_t transaction_id,
+      int64_t requested_version);
   void RunVersionChangeTransactionFinal(
       scoped_refptr<IndexedDBCallbacks> callbacks,
-      scoped_ptr<IndexedDBConnection> connection,
+      std::unique_ptr<IndexedDBConnection> connection,
       int64_t transaction_id,
       int64_t requested_version);
   void ProcessPendingCalls();
@@ -277,7 +281,7 @@ class CONTENT_EXPORT IndexedDBDatabase
   bool IsDeleteDatabaseBlocked() const;
   void DeleteDatabaseFinal(scoped_refptr<IndexedDBCallbacks> callbacks);
 
-  scoped_ptr<IndexedDBConnection> CreateConnection(
+  std::unique_ptr<IndexedDBConnection> CreateConnection(
       scoped_refptr<IndexedDBDatabaseCallbacks> database_callbacks,
       int child_process_id);
 
@@ -301,8 +305,9 @@ class CONTENT_EXPORT IndexedDBDatabase
 
   TransactionMap transactions_;
   PendingOpenCallList pending_open_calls_;
-  scoped_ptr<PendingUpgradeCall> pending_run_version_change_transaction_call_;
-  scoped_ptr<PendingSuccessCall> pending_second_half_open_;
+  std::unique_ptr<PendingUpgradeCall>
+      pending_run_version_change_transaction_call_;
+  std::unique_ptr<PendingSuccessCall> pending_second_half_open_;
   PendingDeleteCallList pending_delete_calls_;
 
   ConnectionSet connections_;

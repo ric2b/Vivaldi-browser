@@ -26,6 +26,7 @@
 <translation id="1602076796624386989">Включить мобильную передачу данных</translation>
 <translation id="1621499497873603021">Оставшееся время работы от батареи: <ph name="TIME_LEFT" />.</translation>
 <translation id="164969095109328410">Устройство Chrome</translation>
+<translation id="1677472565718498478">Ещё <ph name="TIME" /></translation>
 <translation id="1723752762323179280">Завершение сеанса</translation>
 <translation id="1747827819627189109">Экранная клавиатура включена</translation>
 <translation id="1812696562331527143">Способ ввода изменен на <ph name="INPUT_METHOD_ID" />*(<ph name="BEGIN_LINK" />независимый разработчик<ph name="END_LINK" />).
@@ -92,7 +93,6 @@
 <translation id="3621712662352432595">Настройки звука</translation>
 <translation id="3625258641415618104">Скриншоты отключены</translation>
 <translation id="3626281679859535460">Яркость</translation>
-<translation id="3626637461649818317">Осталось <ph name="PERCENTAGE" />%</translation>
 <translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079"><ph name="DISPLAY_NAME" />: установлено разрешение <ph name="RESOLUTION" /></translation>
 <translation id="370649949373421643">Включить Wi-Fi</translation>
@@ -111,13 +111,13 @@
 <translation id="397105322502079400">Вычисление…</translation>
 <translation id="3995138139523574647">Устройство USB-C (дальний порт справа)</translation>
 <translation id="4053612967614057854">Отключить экранную клавиатуру</translation>
-<translation id="412065659894267608">До полной зарядки: <ph name="HOUR" /> ч <ph name="MINUTE" /> мин</translation>
 <translation id="4250680216510889253">Нет</translation>
 <translation id="4279490309300973883">Отражение</translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4421231901400348175">Доступ к экрану для <ph name="HELPER_NAME" /> с помощью удаленного помощника</translation>
 <translation id="4430019312045809116">Объем</translation>
 <translation id="4527045527269911712">Устройству <ph name="DEVICE_NAME" /> требуется разрешение на подключение через Bluetooth.</translation>
+<translation id="453661520163887813">До полной зарядки <ph name="TIME" /></translation>
 <translation id="4544944664594876241">Изменились быстрые клавиши для блокировки экрана. Используйте <ph name="NEW_SHORTCUT" /> вместо <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="479989351350248267">поиск</translation>
 <translation id="4804818685124855865">Отключиться</translation>
@@ -129,7 +129,6 @@
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl + Shift + пробел</translation>
 <translation id="5045002648206642691">Настройки Диска Google…</translation>
-<translation id="5102001756192215136">Осталось <ph name="HOUR" />:<ph name="MINUTE" /></translation>
 <translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">Доступны устройства для трансляции</translation>
 <translation id="5222676887888702881">Выйти</translation>
@@ -166,7 +165,6 @@
 <translation id="615957422585914272">Показывать экранную клавиатуру</translation>
 <translation id="6165508094623778733">Подробнее...</translation>
 <translation id="6203030746557259519">Виртуальный дисплей</translation>
-<translation id="6247708409970142803"><ph name="PERCENTAGE" />%</translation>
 <translation id="6248847161401822652">Чтобы выйти, дважды нажмите Control + Shift + Q.</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" />: положение изменено на <ph name="ROTATION" /></translation>
 <translation id="6359806961507272919">SMS от <ph name="PHONE_NUMBER" /></translation>
@@ -206,6 +204,7 @@
 <translation id="7510334386202674593">Ctrl + Shift + L</translation>
 <translation id="7561014039265304140">Дисплей <ph name="DISPLAY_NAME" /> не поддерживает разрешение <ph name="SPECIFIED_RESOLUTION" />. Будет использовано разрешение <ph name="FALLBACK_RESOLUTION" />.</translation>
 <translation id="7573962313813535744">Закрепленный режим</translation>
+<translation id="7580671184200851182">Воспроизводить одно и то же аудио через все динамики (моноаудио)</translation>
 <translation id="7593891976182323525">Search или Shift</translation>
 <translation id="7649070708921625228">Справка</translation>
 <translation id="7692480393933218409">Подключенные устройства USB-C заряжаются</translation>
@@ -224,13 +223,14 @@
 <translation id="8308637677604853869">Предыдущее меню</translation>
 <translation id="8356164830168736643">Закрыть окно "<ph name="WINDOW_TITLE" />"</translation>
 <translation id="8428213095426709021">Настройки</translation>
-<translation id="8456362689280298700">до полной зарядки: <ph name="HOUR" />:<ph name="MINUTE" /></translation>
 <translation id="8517041960877371778">Не удается зарядить устройство <ph name="DEVICE_TYPE" />, пока оно включено.</translation>
 <translation id="8528322925433439945">Мобильные сети…</translation>
+<translation id="8639760480004882931">Батарея заряжена на <ph name="PERCENTAGE" /></translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">Подключено маломощное зарядное устройство</translation>
 <translation id="8814190375133053267">Wi-Fi</translation>
 <translation id="882279321799040148">Посмотреть</translation>
+<translation id="8825534185036233643">Зеркалирование более двух дисплеев не поддерживается.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8850991929411075241">Клавиша поиска + Esc</translation>
 <translation id="8878886163241303700">Раскрытый экран</translation>

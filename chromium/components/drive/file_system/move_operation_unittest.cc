@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "components/drive/file_system/move_operation.h"
+#include "components/drive/chromeos/file_system/move_operation.h"
 
 #include "components/drive/file_change.h"
 #include "components/drive/file_system/operation_test_base.h"
@@ -22,7 +22,7 @@ class MoveOperationTest : public OperationTestBase {
                                       metadata()));
   }
 
-  scoped_ptr<MoveOperation> operation_;
+  std::unique_ptr<MoveOperation> operation_;
 };
 
 TEST_F(MoveOperationTest, MoveFileInSameDirectory) {

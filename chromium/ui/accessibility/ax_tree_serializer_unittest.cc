@@ -2,17 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ui/accessibility/ax_tree_serializer.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_serializable_tree.h"
 #include "ui/accessibility/ax_tree.h"
-#include "ui/accessibility/ax_tree_serializer.h"
 
 namespace ui {
 
@@ -35,13 +37,13 @@ class AXTreeSerializerTest : public testing::Test {
 
   AXTreeUpdate treedata0_;
   AXTreeUpdate treedata1_;
-  scoped_ptr<AXSerializableTree> tree0_;
-  scoped_ptr<AXSerializableTree> tree1_;
-  scoped_ptr<AXTreeSource<const AXNode*, AXNodeData, AXTreeData> >
+  std::unique_ptr<AXSerializableTree> tree0_;
+  std::unique_ptr<AXSerializableTree> tree1_;
+  std::unique_ptr<AXTreeSource<const AXNode*, AXNodeData, AXTreeData>>
       tree0_source_;
-  scoped_ptr<AXTreeSource<const AXNode*, AXNodeData, AXTreeData> >
+  std::unique_ptr<AXTreeSource<const AXNode*, AXNodeData, AXTreeData>>
       tree1_source_;
-  scoped_ptr<BasicAXTreeSerializer> serializer_;
+  std::unique_ptr<BasicAXTreeSerializer> serializer_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(AXTreeSerializerTest);
@@ -72,18 +74,18 @@ void AXTreeSerializerTest::CreateTreeSerializer() {
 // new child should be added.
 TEST_F(AXTreeSerializerTest, UpdateContainsOnlyChangedNodes) {
   // (1 (2 3))
+  treedata0_.root_id = 1;
   treedata0_.nodes.resize(3);
   treedata0_.nodes[0].id = 1;
-  treedata0_.nodes[0].role = AX_ROLE_ROOT_WEB_AREA;
   treedata0_.nodes[0].child_ids.push_back(2);
   treedata0_.nodes[0].child_ids.push_back(3);
   treedata0_.nodes[1].id = 2;
   treedata0_.nodes[2].id = 3;
 
   // (1 (4 2 3))
+  treedata1_.root_id = 1;
   treedata1_.nodes.resize(4);
   treedata1_.nodes[0].id = 1;
-  treedata1_.nodes[0].role = AX_ROLE_ROOT_WEB_AREA;
   treedata1_.nodes[0].child_ids.push_back(4);
   treedata1_.nodes[0].child_ids.push_back(2);
   treedata1_.nodes[0].child_ids.push_back(3);
@@ -107,9 +109,9 @@ TEST_F(AXTreeSerializerTest, UpdateContainsOnlyChangedNodes) {
 // is unaffected.
 TEST_F(AXTreeSerializerTest, NewRootUpdatesEntireTree) {
   // (1 (2 (3 (4))))
+  treedata0_.root_id = 1;
   treedata0_.nodes.resize(4);
   treedata0_.nodes[0].id = 1;
-  treedata0_.nodes[0].role = AX_ROLE_ROOT_WEB_AREA;
   treedata0_.nodes[0].child_ids.push_back(2);
   treedata0_.nodes[1].id = 2;
   treedata0_.nodes[1].child_ids.push_back(3);
@@ -118,9 +120,9 @@ TEST_F(AXTreeSerializerTest, NewRootUpdatesEntireTree) {
   treedata0_.nodes[3].id = 4;
 
   // (5 (2 (3 (4))))
+  treedata1_.root_id = 5;
   treedata1_.nodes.resize(4);
   treedata1_.nodes[0].id = 5;
-  treedata1_.nodes[0].role = AX_ROLE_ROOT_WEB_AREA;
   treedata1_.nodes[0].child_ids.push_back(2);
   treedata1_.nodes[1].id = 2;
   treedata1_.nodes[1].child_ids.push_back(3);
@@ -147,9 +149,9 @@ TEST_F(AXTreeSerializerTest, NewRootUpdatesEntireTree) {
 // and new parent of the reparented node must be deleted and recreated.
 TEST_F(AXTreeSerializerTest, ReparentingUpdatesSubtree) {
   // (1 (2 (3 (4) 5)))
+  treedata0_.root_id = 1;
   treedata0_.nodes.resize(5);
   treedata0_.nodes[0].id = 1;
-  treedata0_.nodes[0].role = AX_ROLE_ROOT_WEB_AREA;
   treedata0_.nodes[0].child_ids.push_back(2);
   treedata0_.nodes[1].id = 2;
   treedata0_.nodes[1].child_ids.push_back(3);
@@ -162,9 +164,9 @@ TEST_F(AXTreeSerializerTest, ReparentingUpdatesSubtree) {
   // Node 5 has been reparented from being a child of node 2,
   // to a child of node 4.
   // (1 (2 (3 (4 (5)))))
+  treedata1_.root_id = 1;
   treedata1_.nodes.resize(5);
   treedata1_.nodes[0].id = 1;
-  treedata1_.nodes[0].role = AX_ROLE_ROOT_WEB_AREA;
   treedata1_.nodes[0].child_ids.push_back(2);
   treedata1_.nodes[1].id = 2;
   treedata1_.nodes[1].child_ids.push_back(3);
@@ -235,9 +237,9 @@ class AXTreeSourceWithInvalidId
 TEST(AXTreeSerializerInvalidTest, InvalidChild) {
   // (1 (2 3))
   AXTreeUpdate treedata;
+  treedata.root_id = 1;
   treedata.nodes.resize(3);
   treedata.nodes[0].id = 1;
-  treedata.nodes[0].role = AX_ROLE_ROOT_WEB_AREA;
   treedata.nodes[0].child_ids.push_back(2);
   treedata.nodes[0].child_ids.push_back(3);
   treedata.nodes[1].id = 2;
@@ -258,9 +260,9 @@ TEST(AXTreeSerializerInvalidTest, InvalidChild) {
 // Test that we can set a maximum number of nodes to serialize.
 TEST_F(AXTreeSerializerTest, MaximumSerializedNodeCount) {
   // (1 (2 (3 4) 5 (6 7)))
+  treedata0_.root_id = 1;
   treedata0_.nodes.resize(7);
   treedata0_.nodes[0].id = 1;
-  treedata0_.nodes[0].role = AX_ROLE_ROOT_WEB_AREA;
   treedata0_.nodes[0].child_ids.push_back(2);
   treedata0_.nodes[0].child_ids.push_back(5);
   treedata0_.nodes[1].id = 2;
@@ -289,9 +291,9 @@ TEST_F(AXTreeSerializerTest, MaximumSerializedNodeCount) {
 // update will re-send the entire tree.
 TEST_F(AXTreeSerializerTest, DuplicateIdsReturnsErrorAndFlushes) {
   // (1 (2 (3 (4) 5)))
+  treedata0_.root_id = 1;
   treedata0_.nodes.resize(5);
   treedata0_.nodes[0].id = 1;
-  treedata0_.nodes[0].role = AX_ROLE_ROOT_WEB_AREA;
   treedata0_.nodes[0].child_ids.push_back(2);
   treedata0_.nodes[1].id = 2;
   treedata0_.nodes[1].child_ids.push_back(3);
@@ -302,9 +304,9 @@ TEST_F(AXTreeSerializerTest, DuplicateIdsReturnsErrorAndFlushes) {
   treedata0_.nodes[4].id = 5;
 
   // (1 (2 (6 (7) 5)))
+  treedata1_.root_id = 1;
   treedata1_.nodes.resize(5);
   treedata1_.nodes[0].id = 1;
-  treedata1_.nodes[0].role = AX_ROLE_ROOT_WEB_AREA;
   treedata1_.nodes[0].child_ids.push_back(2);
   treedata1_.nodes[1].id = 2;
   treedata1_.nodes[1].child_ids.push_back(6);

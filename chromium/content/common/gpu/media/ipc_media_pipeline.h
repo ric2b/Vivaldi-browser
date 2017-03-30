@@ -120,8 +120,8 @@ class IPCMediaPipeline : public IPC::Listener {
   IPC::Sender* const channel_;
   const int32_t routing_id_;
 
-  scoped_ptr<IPCDataSourceImpl> data_source_;
-  scoped_ptr<PlatformMediaPipeline> media_pipeline_;
+  std::unique_ptr<IPCDataSourceImpl> data_source_;
+  std::unique_ptr<PlatformMediaPipeline> media_pipeline_;
 
   base::ThreadChecker thread_checker_;
 
@@ -132,7 +132,7 @@ class IPCMediaPipeline : public IPC::Listener {
 
   // A buffer for decoded media data, shared with the render process.  Filled in
   // the GPU process, consumed in the renderer process.
-  scoped_ptr<base::SharedMemory>
+  std::unique_ptr<base::SharedMemory>
       shared_decoded_data_[media::PLATFORM_MEDIA_DATA_TYPE_COUNT];
 
   // Holding place for decoded media data when it didn't fit into shared buffer

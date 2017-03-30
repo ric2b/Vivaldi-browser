@@ -14,7 +14,7 @@
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/appcache/appcache.h"
 #include "content/browser/appcache/appcache_backend_impl.h"
 #include "content/browser/appcache/appcache_entry.h"
@@ -294,7 +294,7 @@ class AppCacheServiceImpl::CheckResponseHelper : AsyncHelper {
   // Internals used to perform the checks.
   const int kIOBufferSize;
   scoped_refptr<AppCache> cache_;
-  scoped_ptr<AppCacheResponseReader> response_reader_;
+  std::unique_ptr<AppCacheResponseReader> response_reader_;
   scoped_refptr<HttpResponseInfoIOBuffer> info_buffer_;
   scoped_refptr<net::IOBuffer> data_buffer_;
   int64_t expected_total_size_;
@@ -331,8 +331,8 @@ void AppCacheServiceImpl::CheckResponseHelper::OnGroupLoaded(
 
   // Verify that we can read the response info and data.
   expected_total_size_ = entry->response_size();
-  response_reader_.reset(service_->storage()->CreateResponseReader(
-      manifest_url_, group->group_id(), response_id_));
+  response_reader_.reset(
+      service_->storage()->CreateResponseReader(manifest_url_, response_id_));
   info_buffer_ = new HttpResponseInfoIOBuffer();
   response_reader_->ReadInfo(
       info_buffer_.get(),
@@ -389,7 +389,7 @@ void AppCacheServiceImpl::CheckResponseHelper::OnReadDataComplete(int result) {
 // AppCacheStorageReference ------
 
 AppCacheStorageReference::AppCacheStorageReference(
-    scoped_ptr<AppCacheStorage> storage)
+    std::unique_ptr<AppCacheStorage> storage)
     : storage_(std::move(storage)) {}
 AppCacheStorageReference::~AppCacheStorageReference() {}
 

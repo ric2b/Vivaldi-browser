@@ -10,7 +10,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "gpu/config/gpu_info_collector.h"
 #include "ui/gl/gl_implementation.h"
-#include "ui/gl/gl_surface.h"
+#include "ui/gl/init/gl_factory.h"
 
 #if defined(USE_OZONE)
 #include "ui/ozone/public/ozone_platform.h"
@@ -21,6 +21,7 @@ namespace mus {
 GpuState::GpuState()
     : gpu_thread_("gpu_thread"),
       control_thread_("gpu_command_buffer_control"),
+      gpu_driver_bug_workarounds_(base::CommandLine::ForCurrentProcess()),
       hardware_rendering_available_(false) {
   base::ThreadRestrictions::ScopedAllowWait allow_wait;
   gpu_thread_.Start();
@@ -44,7 +45,10 @@ void GpuState::StopThreads() {
 }
 
 void GpuState::InitializeOnGpuThread(base::WaitableEvent* event) {
-  hardware_rendering_available_ = gfx::GLSurface::InitializeOneOff();
+#if defined(USE_OZONE)
+  ui::OzonePlatform::InitializeForGPU();
+#endif
+  hardware_rendering_available_ = gl::init::InitializeGLOneOff();
   command_buffer_task_runner_ = new CommandBufferTaskRunner;
   driver_manager_.reset(new CommandBufferDriverManager);
   sync_point_manager_.reset(new gpu::SyncPointManager(true));
@@ -68,9 +72,6 @@ void GpuState::InitializeOnGpuThread(base::WaitableEvent* event) {
   }
   event->Signal();
 
-#if defined(USE_OZONE)
-  ui::OzonePlatform::InitializeForGPU();
-#endif
 }
 
 void GpuState::DestroyGpuSpecificStateOnGpuThread() {

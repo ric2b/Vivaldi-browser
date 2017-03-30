@@ -12,19 +12,12 @@ namespace media {
 // Defines values that specify registered Initialization Data Types used
 // in Encrypted Media Extensions (EME).
 // http://w3c.github.io/encrypted-media/initdata-format-registry.html#registry
-// The mask values are stored in a InitDataTypeMask.
 enum class EmeInitDataType {
   UNKNOWN,
   WEBM,
   CENC,
   KEYIDS
 };
-
-typedef uint32_t InitDataTypeMask;
-const InitDataTypeMask kInitDataTypeMaskNone = 0;
-const InitDataTypeMask kInitDataTypeMaskWebM = 1 << 0;
-const InitDataTypeMask kInitDataTypeMaskCenc = 1 << 1;
-const InitDataTypeMask kInitDataTypeMaskKeyIds = 1 << 2;
 
 // Defines bitmask values that specify codecs used in Encrypted Media Extension
 // (EME). Each value represents a codec within a specific container.
@@ -44,7 +37,8 @@ enum EmeCodec {
   EME_CODEC_MP4_AAC = 1 << 4,
   EME_CODEC_MP4_AUDIO_ALL = EME_CODEC_MP4_AAC,
   EME_CODEC_MP4_AVC1 = 1 << 5,
-  EME_CODEC_MP4_VIDEO_ALL = EME_CODEC_MP4_AVC1,
+  EME_CODEC_MP4_VP9 = 1 << 6,
+  EME_CODEC_MP4_VIDEO_ALL = (EME_CODEC_MP4_AVC1 | EME_CODEC_MP4_VP9),
   EME_CODEC_MP4_ALL = (EME_CODEC_MP4_AUDIO_ALL | EME_CODEC_MP4_VIDEO_ALL),
   EME_CODEC_AUDIO_ALL = (EME_CODEC_WEBM_AUDIO_ALL | EME_CODEC_MP4_AUDIO_ALL),
   EME_CODEC_VIDEO_ALL = (EME_CODEC_WEBM_VIDEO_ALL | EME_CODEC_MP4_VIDEO_ALL),

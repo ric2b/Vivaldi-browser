@@ -37,8 +37,6 @@
 #include "core/frame/DOMWindowProperty.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
 
 namespace blink {
 
@@ -51,7 +49,7 @@ class DOMSelection final : public GarbageCollected<DOMSelection>, public ScriptW
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(DOMSelection);
 public:
-    static RawPtr<DOMSelection> create(const TreeScope* treeScope)
+    static DOMSelection* create(const TreeScope* treeScope)
     {
         return new DOMSelection(treeScope);
     }
@@ -84,7 +82,7 @@ public:
     void collapseToEnd(ExceptionState&);
     void collapseToStart(ExceptionState&);
     void extend(Node*, int offset, ExceptionState&);
-    RawPtr<Range> getRangeAt(int, ExceptionState&);
+    Range* getRangeAt(int, ExceptionState&);
     void removeAllRanges();
     void addRange(Range*);
     void deleteFromDocument();

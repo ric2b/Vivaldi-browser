@@ -1,21 +1,65 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/iron-icons.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/notification-icons.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-checkbox/paper-checkbox.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-dialog/paper-dialog.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-input/paper-input.html">
 <link rel="import" href="chrome://resources/cr_elements/network/cr_onc_types.html">
+<link rel="import" href="chrome://md-settings/icons.html">
 <link rel="import" href="network_property_list.html">
 
 <dom-module id="network-siminfo">
-  <link rel="import" type="css" href="network_siminfo.css">
   <template>
+    <style>
+      iron-icon {
+       -webkit-margin-end: 5px;
+       -webkit-margin-start: -3px;
+      }
+
+      paper-button {
+        margin: 0;
+      }
+
+      span {
+        -webkit-margin-end: 10px;
+      }
+
+      #lockedDiv span {
+        color: red;
+        font-weight: 500;
+      }
+
+      #lockedDiv paper-input {
+        -webkit-margin-start: 10px;
+        width: 80px;
+      }
+
+      #unlockSimDialog paper-input {
+        -webkit-margin-start: 5px;
+      }
+
+      #unlockSimDialog span {
+        -webkit-margin-start: 5px;
+      }
+
+      .pin {
+        min-width: 100px;
+      }
+
+      .puk {
+        min-width: 200px;
+      }
+
+      .error {
+        color: red;
+        max-width: 400px;
+      }
+    </style>
     <div id="outerDiv" class="layout vertical">
       <div class="layout horizontal center"
           hidden$="[[networkProperties.Cellular.SIMPresent]]">
         <!-- SIM missing UI -->
-        <iron-icon icon="notification:sim-card-alert"></iron-icon>
+        <iron-icon icon="settings:sim-card-alert"></iron-icon>
         <span>Missing SIM card</span>
       </div>
       <div class="layout vertical"
@@ -23,7 +67,7 @@
         <div id="lockedDiv" class="layout horizontal center"
             hidden$="[[!isSimLocked_(networkProperties)]]">
           <!-- SIM locked -->
-          <iron-icon icon="lock"></iron-icon>
+          <iron-icon icon="settings:lock"></iron-icon>
           <span>SIM card is locked.</span>
           <paper-button on-tap="onUnlockPinTap_">Unlock</paper-button>
         </div>

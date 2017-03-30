@@ -51,7 +51,7 @@ RTCDTMFSender* RTCDTMFSender::create(ExecutionContext* context, WebRTCPeerConnec
         return nullptr;
     }
 
-    RTCDTMFSender* dtmfSender = new RTCDTMFSender(context, track, handler.release());
+    RTCDTMFSender* dtmfSender = new RTCDTMFSender(context, track, std::move(handler));
     dtmfSender->suspendIfNeeded();
     return dtmfSender;
 }
@@ -61,15 +61,24 @@ RTCDTMFSender::RTCDTMFSender(ExecutionContext* context, MediaStreamTrack* track,
     , m_track(track)
     , m_duration(defaultToneDurationMs)
     , m_interToneGap(defaultInterToneGapMs)
-    , m_handler(handler)
+    , m_handler(std::move(handler))
     , m_stopped(false)
     , m_scheduledEventTimer(this, &RTCDTMFSender::scheduledEventTimerFired)
 {
+    ThreadState::current()->registerPreFinalizer(this);
     m_handler->setClient(this);
 }
 
 RTCDTMFSender::~RTCDTMFSender()
 {
+}
+
+void RTCDTMFSender::dispose()
+{
+    // Promptly clears a raw reference from content/ to an on-heap object
+    // so that content/ doesn't access it in a lazy sweeping phase.
+    m_handler->setClient(nullptr);
+    m_handler.clear();
 }
 
 bool RTCDTMFSender::canInsertDTMF() const
@@ -139,7 +148,7 @@ ExecutionContext* RTCDTMFSender::getExecutionContext() const
 void RTCDTMFSender::stop()
 {
     m_stopped = true;
-    m_handler->setClient(0);
+    m_handler->setClient(nullptr);
 }
 
 void RTCDTMFSender::scheduleDispatchEvent(Event* event)
@@ -167,7 +176,7 @@ DEFINE_TRACE(RTCDTMFSender)
 {
     visitor->trace(m_track);
     visitor->trace(m_scheduledEvents);
-    RefCountedGarbageCollectedEventTargetWithInlineData<RTCDTMFSender>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
     ActiveDOMObject::trace(visitor);
 }
 

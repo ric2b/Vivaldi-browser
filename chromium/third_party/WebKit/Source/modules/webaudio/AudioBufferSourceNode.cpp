@@ -441,6 +441,8 @@ void AudioBufferSourceHandler::startSource(double when, double grainOffset, doub
 {
     ASSERT(isMainThread());
 
+    context()->recordUserGestureState();
+
     if (playbackState() != UNSCHEDULED_STATE) {
         exceptionState.throwDOMException(
             InvalidStateError,
@@ -583,8 +585,8 @@ void AudioBufferSourceHandler::handleStoppableSourceNode()
 // ----------------------------------------------------------------
 AudioBufferSourceNode::AudioBufferSourceNode(AbstractAudioContext& context, float sampleRate)
     : AudioScheduledSourceNode(context)
-    , m_playbackRate(AudioParam::create(context, 1.0))
-    , m_detune(AudioParam::create(context, 0.0))
+    , m_playbackRate(AudioParam::create(context, ParamTypeAudioBufferSourcePlaybackRate, 1.0))
+    , m_detune(AudioParam::create(context, ParamTypeAudioBufferSourceDetune, 0.0))
 {
     setHandler(AudioBufferSourceHandler::create(*this, sampleRate, m_playbackRate->handler(), m_detune->handler()));
 }

@@ -17,11 +17,17 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 
+#include "app/vivaldi_apptools.h"
+#include "ui/dragging/drag_tab_handler.h"
+
 ChromeWebContentsViewDelegateMac::ChromeWebContentsViewDelegateMac(
     content::WebContents* web_contents)
     : ContextMenuDelegate(web_contents),
       bookmark_handler_(new WebDragBookmarkHandlerMac),
       web_contents_(web_contents) {
+  if (vivaldi::IsVivaldiRunning()) {
+    bookmark_handler_.reset(new vivaldi::DragTabHandler);
+  }
 }
 
 ChromeWebContentsViewDelegateMac::~ChromeWebContentsViewDelegateMac() {
@@ -122,7 +128,7 @@ content::RenderWidgetHostView*
 ChromeWebContentsViewDelegateMac::GetActiveRenderWidgetHostView() {
   return web_contents_->GetFullscreenRenderWidgetHostView() ?
       web_contents_->GetFullscreenRenderWidgetHostView() :
-      web_contents_->GetRenderWidgetHostView();
+      web_contents_->GetTopLevelRenderWidgetHostView();
 }
 
 namespace chrome {

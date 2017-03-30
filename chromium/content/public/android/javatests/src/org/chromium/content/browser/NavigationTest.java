@@ -7,6 +7,7 @@ package org.chromium.content.browser;
 import android.test.suitebuilder.annotation.MediumTest;
 
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.content.browser.test.util.TestCallbackHelperContainer;
 import org.chromium.content.browser.test.util.TestCallbackHelperContainer.OnEvaluateJavaScriptResultHelper;
@@ -55,6 +56,7 @@ public class NavigationTest extends ContentShellTestBase {
 
     @MediumTest
     @Feature({"Navigation"})
+    @FlakyTest
     public void testDirectedNavigationHistory() throws Throwable {
         ContentShellActivity activity = launchContentShellWithUrl(URL_1);
         waitForActiveShellToBeDoneLoading();

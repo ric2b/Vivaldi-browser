@@ -9,7 +9,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/input/input_handler.h"
 #include "components/scheduler/renderer/renderer_scheduler.h"
@@ -104,10 +104,10 @@ void InputHandlerManager::AddInputHandlerOnCompositorThread(
   TRACE_EVENT1("input",
       "InputHandlerManager::AddInputHandlerOnCompositorThread",
       "result", "AddingRoute");
-  scoped_ptr<InputHandlerWrapper> wrapper(new InputHandlerWrapper(
+  std::unique_ptr<InputHandlerWrapper> wrapper(new InputHandlerWrapper(
       this, routing_id, main_task_runner, input_handler, render_view_impl,
       enable_smooth_scrolling, enable_wheel_gestures));
-  client_->DidAddInputHandler(routing_id);
+  client_->RegisterRoutingID(routing_id);
   if (synchronous_handler_proxy_client_) {
     synchronous_handler_proxy_client_->DidAddSynchronousHandlerProxy(
         routing_id, wrapper->input_handler_proxy());
@@ -121,12 +121,45 @@ void InputHandlerManager::RemoveInputHandler(int routing_id) {
 
   TRACE_EVENT0("input", "InputHandlerManager::RemoveInputHandler");
 
-  client_->DidRemoveInputHandler(routing_id);
+  client_->UnregisterRoutingID(routing_id);
   if (synchronous_handler_proxy_client_) {
     synchronous_handler_proxy_client_->DidRemoveSynchronousHandlerProxy(
         routing_id);
   }
   input_handlers_.erase(routing_id);
+}
+
+void InputHandlerManager::RegisterRoutingID(int routing_id) {
+  if (task_runner_->BelongsToCurrentThread()) {
+    RegisterRoutingIDOnCompositorThread(routing_id);
+  } else {
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::Bind(&InputHandlerManager::RegisterRoutingIDOnCompositorThread,
+                   base::Unretained(this), routing_id));
+  }
+}
+
+void InputHandlerManager::RegisterRoutingIDOnCompositorThread(int routing_id) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  client_->RegisterRoutingID(routing_id);
+}
+
+void InputHandlerManager::UnregisterRoutingID(int routing_id) {
+  if (task_runner_->BelongsToCurrentThread()) {
+    UnregisterRoutingIDOnCompositorThread(routing_id);
+  } else {
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::Bind(&InputHandlerManager::UnregisterRoutingIDOnCompositorThread,
+                   base::Unretained(this), routing_id));
+  }
+}
+
+void InputHandlerManager::UnregisterRoutingIDOnCompositorThread(
+    int routing_id) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  client_->UnregisterRoutingID(routing_id);
 }
 
 void InputHandlerManager::ObserveWheelEventAndResultOnMainThread(
@@ -183,23 +216,25 @@ void InputHandlerManager::ObserveGestureEventAndResultOnCompositorThread(
 
 void InputHandlerManager::NotifyInputEventHandledOnMainThread(
     int routing_id,
-    blink::WebInputEvent::Type type) {
+    blink::WebInputEvent::Type type,
+    InputEventAckState ack_result) {
   task_runner_->PostTask(
       FROM_HERE,
       base::Bind(
           &InputHandlerManager::NotifyInputEventHandledOnCompositorThread,
-          base::Unretained(this), routing_id, type));
+          base::Unretained(this), routing_id, type, ack_result));
 }
 
 void InputHandlerManager::NotifyInputEventHandledOnCompositorThread(
     int routing_id,
-    blink::WebInputEvent::Type handled_type) {
+    blink::WebInputEvent::Type handled_type,
+    InputEventAckState ack_result) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   auto it = input_handlers_.find(routing_id);
   if (it == input_handlers_.end())
     return;
 
-  client_->NotifyInputEventHandled(routing_id, handled_type);
+  client_->NotifyInputEventHandled(routing_id, handled_type, ack_result);
 }
 
 InputEventAckState InputHandlerManager::HandleInputEvent(
@@ -243,6 +278,10 @@ InputEventAckState InputHandlerManager::HandleInputEvent(
 void InputHandlerManager::DidOverscroll(int routing_id,
                                         const DidOverscrollParams& params) {
   client_->DidOverscroll(routing_id, params);
+}
+
+void InputHandlerManager::DidStartFlinging(int routing_id) {
+  client_->DidStartFlinging(routing_id);
 }
 
 void InputHandlerManager::DidStopFlinging(int routing_id) {

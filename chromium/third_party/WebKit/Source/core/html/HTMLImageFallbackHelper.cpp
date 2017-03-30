@@ -34,7 +34,7 @@ void HTMLImageFallbackHelper::createAltTextShadowTree(Element& element)
 {
     ShadowRoot& root = element.ensureUserAgentShadowRoot();
 
-    RawPtr<HTMLDivElement> container = HTMLDivElement::create(element.document());
+    HTMLDivElement* container = HTMLDivElement::create(element.document());
     root.appendChild(container);
     container->setAttribute(idAttr, AtomicString("alttext-container"));
     container->setInlineStyleProperty(CSSPropertyOverflow, CSSValueHidden);
@@ -44,9 +44,8 @@ void HTMLImageFallbackHelper::createAltTextShadowTree(Element& element)
     container->setInlineStyleProperty(CSSPropertyDisplay, CSSValueInlineBlock);
     container->setInlineStyleProperty(CSSPropertyBoxSizing, CSSValueBorderBox);
     container->setInlineStyleProperty(CSSPropertyPadding, 1, CSSPrimitiveValue::UnitType::Pixels);
-    container->setInlineStyleProperty(CSSPropertyBorderRadius, ("inherit"));
 
-    RawPtr<HTMLImageElement> brokenImage = HTMLImageElement::create(element.document());
+    HTMLImageElement* brokenImage = HTMLImageElement::create(element.document());
     container->appendChild(brokenImage);
     brokenImage->setIsFallbackImage();
     brokenImage->setAttribute(idAttr, AtomicString("alttext-image"));
@@ -55,13 +54,13 @@ void HTMLImageFallbackHelper::createAltTextShadowTree(Element& element)
     brokenImage->setAttribute(alignAttr, AtomicString("left"));
     brokenImage->setInlineStyleProperty(CSSPropertyMargin, 0, CSSPrimitiveValue::UnitType::Pixels);
 
-    RawPtr<HTMLDivElement> altText = HTMLDivElement::create(element.document());
+    HTMLDivElement* altText = HTMLDivElement::create(element.document());
     container->appendChild(altText);
     altText->setAttribute(idAttr, AtomicString("alttext"));
     altText->setInlineStyleProperty(CSSPropertyOverflow, CSSValueHidden);
     altText->setInlineStyleProperty(CSSPropertyDisplay, CSSValueBlock);
 
-    RawPtr<Text> text = Text::create(element.document(), toHTMLElement(element).altText());
+    Text* text = Text::create(element.document(), toHTMLElement(element).altText());
     altText->appendChild(text);
 }
 

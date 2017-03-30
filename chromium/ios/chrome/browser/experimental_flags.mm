@@ -36,10 +36,6 @@ bool IsAlertOnBackgroundUploadEnabled() {
       boolForKey:kEnableAlertOnBackgroundUpload];
 }
 
-bool IsBookmarkCollectionEnabled() {
-  return true;
-}
-
 bool IsLRUSnapshotCacheEnabled() {
   // Check if the experimental flag is forced on or off.
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -104,6 +100,25 @@ bool IsTabSwitcherEnabled() {
 
 bool IsReadingListEnabled() {
   return [[NSUserDefaults standardUserDefaults] boolForKey:kEnableReadingList];
+}
+
+bool IsAllBookmarksEnabled() {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kEnableAllBookmarksView)) {
+    return true;
+  } else if (command_line->HasSwitch(switches::kDisableAllBookmarksView)) {
+    return false;
+  }
+
+  // Check if the finch experiment exists.
+  std::string group_name =
+      base::FieldTrialList::FindFullName("RemoveAllBookmarks");
+
+  if (group_name.empty()) {
+    return true;  // If no finch experiment, keep all bookmarks enabled.
+  }
+  return base::StartsWith(group_name, "Enabled",
+                          base::CompareCase::INSENSITIVE_ASCII);
 }
 
 }  // namespace experimental_flags

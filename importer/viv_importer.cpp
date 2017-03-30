@@ -176,7 +176,7 @@ void OperaImporter::ImportSpeedDial() {
 
       if (key.find("Speed Dial ") != std::string::npos) {
         const base::DictionaryValue* dict = nullptr;
-        scoped_ptr<ImportedSpeedDialEntry> entry(new ImportedSpeedDialEntry);
+        std::unique_ptr<ImportedSpeedDialEntry> entry(new ImportedSpeedDialEntry);
         if (itr.value().GetAsDictionary(&dict)) {
           for (base::DictionaryValue::Iterator section(*dict);
                !section.IsAtEnd(); section.Advance()) {

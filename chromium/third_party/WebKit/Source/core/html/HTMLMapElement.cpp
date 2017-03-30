@@ -47,13 +47,13 @@ HTMLMapElement::~HTMLMapElement()
 {
 }
 
-HTMLAreaElement* HTMLMapElement::areaForPoint(LayoutPoint location, const LayoutSize& containerSize)
+HTMLAreaElement* HTMLMapElement::areaForPoint(const LayoutPoint& location, const LayoutObject* containerObject)
 {
     HTMLAreaElement* defaultArea = nullptr;
     for (HTMLAreaElement& area : Traversal<HTMLAreaElement>::descendantsOf(*this)) {
         if (area.isDefault() && !defaultArea)
             defaultArea = &area;
-        else if (area.pointInArea(location, containerSize))
+        else if (area.pointInArea(location, containerObject))
             return &area;
     }
 
@@ -62,7 +62,7 @@ HTMLAreaElement* HTMLMapElement::areaForPoint(LayoutPoint location, const Layout
 
 HTMLImageElement* HTMLMapElement::imageElement()
 {
-    RawPtr<HTMLCollection> images = document().images();
+    HTMLCollection* images = document().images();
     for (unsigned i = 0; Element* curr = images->item(i); ++i) {
         ASSERT(isHTMLImageElement(curr));
 
@@ -104,7 +104,7 @@ void HTMLMapElement::parseAttribute(const QualifiedName& name, const AtomicStrin
     HTMLElement::parseAttribute(name, oldValue, value);
 }
 
-RawPtr<HTMLCollection> HTMLMapElement::areas()
+HTMLCollection* HTMLMapElement::areas()
 {
     return ensureCachedCollection<HTMLCollection>(MapAreas);
 }

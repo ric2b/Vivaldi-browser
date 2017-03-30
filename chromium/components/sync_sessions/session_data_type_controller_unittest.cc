@@ -10,7 +10,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/sync_driver/fake_sync_client.h"
@@ -184,10 +184,10 @@ class SessionDataTypeControllerTest : public testing::Test,
   }
 
   scoped_refptr<SessionDataTypeController> controller_;
-  scoped_ptr<MockSyncedWindowDelegatesGetter> synced_window_getter_;
-  scoped_ptr<LocalDeviceInfoProviderMock> local_device_;
-  scoped_ptr<MockSyncedWindowDelegate> synced_window_delegate_;
-  scoped_ptr<TestSyncSessionsClient> sync_sessions_client_;
+  std::unique_ptr<MockSyncedWindowDelegatesGetter> synced_window_getter_;
+  std::unique_ptr<LocalDeviceInfoProviderMock> local_device_;
+  std::unique_ptr<MockSyncedWindowDelegate> synced_window_delegate_;
+  std::unique_ptr<TestSyncSessionsClient> sync_sessions_client_;
   bool load_finished_;
 
  private:

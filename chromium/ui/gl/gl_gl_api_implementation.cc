@@ -106,6 +106,20 @@ static inline GLenum GetTexInternalFormat(GLenum internal_format,
     }
   }
 
+  if (gfx::g_version_info->IsAtLeastGL(2, 1) ||
+      gfx::g_version_info->IsAtLeastGLES(3, 0)) {
+    switch (internal_format) {
+      case GL_SRGB_EXT:
+        gl_internal_format = GL_SRGB8;
+        break;
+      case GL_SRGB_ALPHA_EXT:
+        gl_internal_format = GL_SRGB8_ALPHA8;
+        break;
+      default:
+        break;
+    }
+  }
+
   if (gfx::g_version_info->is_es)
     return gl_internal_format;
 
@@ -154,7 +168,29 @@ static inline GLenum GetTexInternalFormat(GLenum internal_format,
         break;
     }
   }
+
   return gl_internal_format;
+}
+
+static inline GLenum GetTexFormat(GLenum format) {
+  GLenum gl_format = format;
+
+  DCHECK(gfx::g_version_info);
+  if (gfx::g_version_info->IsAtLeastGL(2, 1) ||
+      gfx::g_version_info->IsAtLeastGLES(3, 0)) {
+    switch (format) {
+      case GL_SRGB_EXT:
+        gl_format = GL_RGB;
+        break;
+      case GL_SRGB_ALPHA_EXT:
+        gl_format = GL_RGBA;
+        break;
+      default:
+        break;
+    }
+  }
+
+  return gl_format;
 }
 
 static inline GLenum GetTexType(GLenum type) {
@@ -171,18 +207,21 @@ static void GL_BINDING_CALL CustomTexImage2D(
     const void* pixels) {
   GLenum gl_internal_format = GetTexInternalFormat(
       internalformat, format, type);
+  GLenum gl_format = GetTexFormat(format);
   GLenum gl_type = GetTexType(type);
   g_driver_gl.orig_fn.glTexImage2DFn(
-      target, level, gl_internal_format, width, height, border, format, gl_type,
-      pixels);
+      target, level, gl_internal_format, width, height, border, gl_format,
+      gl_type, pixels);
 }
 
 static void GL_BINDING_CALL CustomTexSubImage2D(
       GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width,
       GLsizei height, GLenum format, GLenum type, const void* pixels) {
+  GLenum gl_format = GetTexFormat(format);
   GLenum gl_type = GetTexType(type);
   g_driver_gl.orig_fn.glTexSubImage2DFn(
-      target, level, xoffset, yoffset, width, height, format, gl_type, pixels);
+      target, level, xoffset, yoffset, width, height, gl_format, gl_type,
+      pixels);
 }
 
 static void GL_BINDING_CALL CustomTexStorage2DEXT(

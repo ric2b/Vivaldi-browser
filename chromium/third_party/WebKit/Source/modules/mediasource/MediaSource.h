@@ -49,11 +49,10 @@ class GenericEventQueue;
 class WebSourceBuffer;
 
 class MediaSource final
-    : public RefCountedGarbageCollectedEventTargetWithInlineData<MediaSource>
+    : public EventTargetWithInlineData
     , public HTMLMediaSource
     , public ActiveScriptWrappable
     , public ActiveDOMObject {
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(MediaSource);
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(MediaSource);
 public:
@@ -85,10 +84,6 @@ public:
     double duration() const override;
     TimeRanges* buffered() const override;
     TimeRanges* seekable() const override;
-#if !ENABLE(OILPAN)
-    void refHTMLMediaSource() override { ref(); }
-    void derefHTMLMediaSource() override { deref(); }
-#endif
 
     // EventTarget interface
     const AtomicString& interfaceName() const override;

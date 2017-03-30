@@ -23,6 +23,7 @@ source_set("gpu_sources") {
   configs += [ "//content:content_implementation" ]
 
   sources = [
+    "content_gpu_client.cc",
     "content_gpu_client.h",
     "gpu_video_decode_accelerator_factory.cc",
     "gpu_video_decode_accelerator_factory.h",
@@ -35,7 +36,8 @@ source_set("gpu_sources") {
     "//content/public/common:common_sources",
     "//gpu/command_buffer/service",
     "//gpu/config",
-    "//media:media",
+    "//media",
+    "//media/gpu",
   ]
 
   allow_circular_includes_from = [ "//content/gpu:gpu_sources" ]

@@ -11,8 +11,8 @@
 #include "base/bind_helpers.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "media/base/android/audio_media_codec_decoder.h"
 #include "media/base/android/media_drm_bridge.h"
 #include "media/base/android/media_player_manager.h"
@@ -40,7 +40,7 @@ MediaCodecPlayer::MediaCodecPlayer(
     int player_id,
     base::WeakPtr<MediaPlayerManager> manager,
     const OnDecoderResourcesReleasedCB& on_decoder_resources_released_cb,
-    scoped_ptr<DemuxerAndroid> demuxer,
+    std::unique_ptr<DemuxerAndroid> demuxer,
     const GURL& frame_url,
     int media_session_id)
     : MediaPlayerAndroid(player_id,

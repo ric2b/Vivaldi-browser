@@ -42,6 +42,7 @@
 #include "core/html/HTMLMediaElement.h"
 #include "core/input/EventHandler.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/layout/LayoutBlockFlow.h"
 #include "core/layout/LayoutFullScreen.h"
 #include "core/layout/api/LayoutFullScreenItem.h"
 #include "core/page/ChromeClient.h"
@@ -107,7 +108,7 @@ static bool fullscreenElementReady(const Element& element)
     // |element|'s node document's browsing context either has a browsing context container and the
     // fullscreen element ready check returns true for |element|'s node document's browsing
     // context's browsing context container, or it has no browsing context container.
-    if (const Element* owner = element.document().ownerElement()) {
+    if (const Element* owner = element.document().localOwner()) {
         if (!fullscreenElementReady(*owner))
             return false;
     }
@@ -120,11 +121,11 @@ static bool isPrefixed(const AtomicString& type)
     return type == EventTypeNames::webkitfullscreenchange || type == EventTypeNames::webkitfullscreenerror;
 }
 
-static RawPtr<Event> createEvent(const AtomicString& type, EventTarget& target)
+static Event* createEvent(const AtomicString& type, EventTarget& target)
 {
     EventInit initializer;
     initializer.setBubbles(isPrefixed(type));
-    RawPtr<Event> event = Event::create(type, initializer);
+    Event* event = Event::create(type, initializer);
     event->setTarget(&target);
     return event;
 }
@@ -170,7 +171,7 @@ bool Fullscreen::isFullScreen(Document& document)
 }
 
 Fullscreen::Fullscreen(Document& document)
-    : DocumentLifecycleObserver(&document)
+    : ContextLifecycleObserver(&document)
     , m_fullScreenLayoutObject(nullptr)
     , m_eventQueueTimer(this, &Fullscreen::eventQueueTimerFired)
 {
@@ -183,10 +184,10 @@ Fullscreen::~Fullscreen()
 
 inline Document* Fullscreen::document()
 {
-    return lifecycleContext();
+    return toDocument(lifecycleContext());
 }
 
-void Fullscreen::documentWasDetached()
+void Fullscreen::contextDestroyed()
 {
     m_eventQueue.clear();
 
@@ -231,7 +232,7 @@ void Fullscreen::requestFullscreen(Element& element, RequestType requestType)
         if (!UserGestureIndicator::utilizeUserGesture()) {
             String message = ExceptionMessages::failedToExecute("requestFullScreen",
                 "Element", "API can only be initiated by a user gesture.");
-            document()->getExecutionContext()->addConsoleMessage(
+            document()->addConsoleMessage(
                 ConsoleMessage::create(JSMessageSource, WarningMessageLevel, message));
             break;
         }
@@ -248,7 +249,7 @@ void Fullscreen::requestFullscreen(Element& element, RequestType requestType)
 
         do {
             docs.prepend(currentDoc);
-            currentDoc = currentDoc->ownerElement() ? &currentDoc->ownerElement()->document() : nullptr;
+            currentDoc = currentDoc->localOwner() ? &currentDoc->localOwner()->document() : nullptr;
         } while (currentDoc);
 
         // 4. For each document in docs, run these substeps:
@@ -274,11 +275,11 @@ void Fullscreen::requestFullscreen(Element& element, RequestType requestType)
             // 3. Otherwise, if document's fullscreen element stack is either empty or its top element
             // is not following document's browsing context container,
             Element* topElement = fullscreenElementFrom(*currentDoc);
-            if (!topElement || topElement != followingDoc->ownerElement()) {
+            if (!topElement || topElement != followingDoc->localOwner()) {
                 // ...push following document's browsing context container on document's fullscreen element
                 // stack, and queue a task to fire an event named fullscreenchange with its bubbles attribute
                 // set to true on document.
-                from(*currentDoc).pushFullscreenElementStack(*followingDoc->ownerElement(), requestType);
+                from(*currentDoc).pushFullscreenElementStack(*followingDoc->localOwner(), requestType);
                 enqueueChangeEvent(*currentDoc, requestType);
                 continue;
             }
@@ -371,8 +372,8 @@ void Fullscreen::exitFullscreen()
 
         // 3. If doc's fullscreen element stack is empty and doc's browsing context has a browsing context
         // container, set doc to that browsing context container's node document.
-        if (!newTop && currentDoc->ownerElement()) {
-            currentDoc = &currentDoc->ownerElement()->document();
+        if (!newTop && currentDoc->localOwner()) {
+            currentDoc = &currentDoc->localOwner()->document();
             continue;
         }
 
@@ -447,8 +448,8 @@ void Fullscreen::didEnterFullScreenForElement(Element* element)
     document()->styleEngine().ensureFullscreenUAStyle();
     m_fullScreenElement->pseudoStateChanged(CSSSelector::PseudoFullScreen);
 
-    // FIXME: This should not call updateLayoutTree.
-    document()->updateLayoutTree();
+    // FIXME: This should not call updateStyleAndLayoutTree.
+    document()->updateStyleAndLayoutTree();
 
     m_fullScreenElement->didBecomeFullscreenElement();
 
@@ -498,7 +499,7 @@ void Fullscreen::setFullScreenLayoutObject(LayoutFullScreen* layoutObject)
     if (layoutObject && m_savedPlaceholderComputedStyle) {
         layoutObject->createPlaceholder(m_savedPlaceholderComputedStyle.release(), m_savedPlaceholderFrameRect);
     } else if (layoutObject && m_fullScreenLayoutObject && m_fullScreenLayoutObject->placeholder()) {
-        LayoutBlock* placeholder = m_fullScreenLayoutObject->placeholder();
+        LayoutBlockFlow* placeholder = m_fullScreenLayoutObject->placeholder();
         layoutObject->createPlaceholder(ComputedStyle::clone(placeholder->styleRef()), placeholder->frameRect());
     }
 
@@ -516,7 +517,7 @@ void Fullscreen::fullScreenLayoutObjectDestroyed()
 
 void Fullscreen::enqueueChangeEvent(Document& document, RequestType requestType)
 {
-    RawPtr<Event> event;
+    Event* event;
     if (requestType == UnprefixedRequest) {
         event = createEvent(EventTypeNames::fullscreenchange, document);
     } else {
@@ -535,7 +536,7 @@ void Fullscreen::enqueueChangeEvent(Document& document, RequestType requestType)
 
 void Fullscreen::enqueueErrorEvent(Element& element, RequestType requestType)
 {
-    RawPtr<Event> event;
+    Event* event;
     if (requestType == UnprefixedRequest)
         event = createEvent(EventTypeNames::fullscreenerror, element.document());
     else
@@ -546,15 +547,11 @@ void Fullscreen::enqueueErrorEvent(Element& element, RequestType requestType)
 
 void Fullscreen::eventQueueTimerFired(Timer<Fullscreen>*)
 {
-    // Since we dispatch events in this function, it's possible that the
-    // document will be detached and GC'd. We protect it here to make sure we
-    // can finish the function successfully.
-    RawPtr<Document> protectDocument(document());
     HeapDeque<Member<Event>> eventQueue;
     m_eventQueue.swap(eventQueue);
 
     while (!eventQueue.isEmpty()) {
-        RawPtr<Event> event = eventQueue.takeFirst();
+        Event* event = eventQueue.takeFirst();
         Node* target = event->target()->toNode();
 
         // If the element was removed from our tree, also message the documentElement.
@@ -614,7 +611,7 @@ DEFINE_TRACE(Fullscreen)
     visitor->trace(m_fullScreenElementStack);
     visitor->trace(m_eventQueue);
     Supplement<Document>::trace(visitor);
-    DocumentLifecycleObserver::trace(visitor);
+    ContextLifecycleObserver::trace(visitor);
 }
 
 } // namespace blink

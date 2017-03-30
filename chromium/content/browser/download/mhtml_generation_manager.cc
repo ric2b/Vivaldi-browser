@@ -24,6 +24,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/mhtml_generation_params.h"
 #include "net/base/mime_util.h"
 
 namespace content {
@@ -32,13 +33,16 @@ namespace content {
 // are executed on other threads.
 class MHTMLGenerationManager::Job : public RenderProcessHostObserver {
  public:
-  Job(int job_id, WebContents* web_contents, GenerateMHTMLCallback callback);
+  Job(int job_id,
+      WebContents* web_contents,
+      const MHTMLGenerationParams& params,
+      const GenerateMHTMLCallback& callback);
   ~Job() override;
 
   int id() const { return job_id_; }
   void set_browser_file(base::File file) { browser_file_ = std::move(file); }
 
-  GenerateMHTMLCallback callback() const { return callback_; }
+  const GenerateMHTMLCallback& callback() const { return callback_; }
 
   // Handler for FrameHostMsg_SerializeAsMHTMLResponse (a notification from the
   // renderer that the MHTML generation for previous frame has finished).
@@ -85,6 +89,11 @@ class MHTMLGenerationManager::Job : public RenderProcessHostObserver {
   // See also MHTMLGenerationManager::id_to_job_ map.
   int job_id_;
 
+  // User-configurable parameters. Includes the file location, binary encoding
+  // choices, and whether to skip storing resources marked
+  // Cache-Control: no-store.
+  MHTMLGenerationParams params_;
+
   // The IDs of frames that still need to be processed.
   std::queue<int> pending_frame_tree_node_ids_;
 
@@ -108,7 +117,7 @@ class MHTMLGenerationManager::Job : public RenderProcessHostObserver {
   std::string salt_;
 
   // The callback to call once generation is complete.
-  GenerateMHTMLCallback callback_;
+  const GenerateMHTMLCallback callback_;
 
   // RAII helper for registering this Job as a RenderProcessHost observer.
   ScopedObserver<RenderProcessHost, MHTMLGenerationManager::Job>
@@ -119,8 +128,10 @@ class MHTMLGenerationManager::Job : public RenderProcessHostObserver {
 
 MHTMLGenerationManager::Job::Job(int job_id,
                                  WebContents* web_contents,
-                                 GenerateMHTMLCallback callback)
+                                 const MHTMLGenerationParams& params,
+                                 const GenerateMHTMLCallback& callback)
     : job_id_(job_id),
+      params_(params),
       frame_tree_node_id_of_busy_frame_(FrameTreeNode::kFrameTreeNodeInvalidId),
       mhtml_boundary_marker_(net::GenerateMimeMultipartBoundary()),
       salt_(base::GenerateGUID()),
@@ -165,11 +176,13 @@ MHTMLGenerationManager::Job::CreateFrameRoutingIdToContentId(
 
 bool MHTMLGenerationManager::Job::SendToNextRenderFrame() {
   DCHECK(browser_file_.IsValid());
-  DCHECK_LT(0u, pending_frame_tree_node_ids_.size());
+  DCHECK(!pending_frame_tree_node_ids_.empty());
 
   FrameMsg_SerializeAsMHTML_Params ipc_params;
   ipc_params.job_id = job_id_;
   ipc_params.mhtml_boundary_marker = mhtml_boundary_marker_;
+  ipc_params.mhtml_binary_encoding = params_.use_binary_encoding;
+  ipc_params.mhtml_cache_control_policy = params_.cache_control_policy;
 
   int frame_tree_node_id = pending_frame_tree_node_ids_.front();
   pending_frame_tree_node_ids_.pop();
@@ -288,15 +301,15 @@ MHTMLGenerationManager::~MHTMLGenerationManager() {
 }
 
 void MHTMLGenerationManager::SaveMHTML(WebContents* web_contents,
-                                       const base::FilePath& file_path,
+                                       const MHTMLGenerationParams& params,
                                        const GenerateMHTMLCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  int job_id = NewJob(web_contents, callback);
+  int job_id = NewJob(web_contents, params, callback);
 
   BrowserThread::PostTaskAndReplyWithResult(
       BrowserThread::FILE, FROM_HERE,
-      base::Bind(&MHTMLGenerationManager::CreateFile, file_path),
+      base::Bind(&MHTMLGenerationManager::CreateFile, params.file_path),
       base::Bind(&MHTMLGenerationManager::OnFileAvailable,
                  base::Unretained(this),  // Safe b/c |this| is a singleton.
                  job_id));
@@ -387,20 +400,18 @@ void MHTMLGenerationManager::OnFileClosed(int job_id,
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   Job* job = FindJob(job_id);
-  DCHECK(job);
-
   job->callback().Run(job_status == JobStatus::SUCCESS ? file_size : -1);
   id_to_job_.erase(job_id);
   delete job;
 }
 
 int MHTMLGenerationManager::NewJob(WebContents* web_contents,
+                                   const MHTMLGenerationParams& params,
                                    const GenerateMHTMLCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   int job_id = next_job_id_++;
-  Job* job = new Job(job_id, web_contents, callback);
-  id_to_job_[job_id] = job;
+  id_to_job_[job_id] = new Job(job_id, web_contents, params, callback);
   return job_id;
 }
 

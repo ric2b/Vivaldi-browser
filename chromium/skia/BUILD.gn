@@ -19,8 +19,7 @@ skia_support_pdf = !is_ios && (enable_basic_printing || enable_print_preview)
 gypi_chromium_skia_defines =
     exec_script("//build/gypi_to_gn.py",
                 [
-                  rebase_path(
-                      "//skia/chromium_skia_defines.gypi"),
+                  rebase_path("//skia/chromium_skia_defines.gypi"),
                   "--replace=<(skia_include_path)=//third_party/skia/include",
                   "--replace=<(skia_src_path)=//third_party/skia/src",
                 ],
@@ -342,7 +341,6 @@ component("skia") {
     "//third_party/skia/src/utils/SkFrontBufferedStream.cpp",
     "//third_party/skia/src/utils/SkInterpolator.cpp",
     "//third_party/skia/src/utils/SkLayer.cpp",
-    "//third_party/skia/src/utils/SkMD5.cpp",
     "//third_party/skia/src/utils/SkMeshUtils.cpp",
     "//third_party/skia/src/utils/SkNinePatch.cpp",
     "//third_party/skia/src/utils/SkOSFile.cpp",
@@ -467,7 +465,7 @@ component("skia") {
 
   if (is_linux) {
     if (use_pango) {
-      configs += [ "//build/config/linux:pangocairo" ]
+      configs += [ "//build/config/linux/pangocairo" ]
     }
     deps += [
       "//build/linux:fontconfig",
@@ -498,6 +496,16 @@ component("skia") {
   if (is_android && !is_debug) {
     configs -= [ "//build/config/compiler:default_optimization" ]
     configs += [ "//build/config/compiler:optimize_max" ]
+  }
+
+  if (is_mac) {
+    libs = [
+      "AppKit.framework",
+      "CoreFoundation.framework",
+      "CoreGraphics.framework",
+      "CoreText.framework",
+      "Foundation.framework",
+    ]
   }
 
   if (is_ios) {
@@ -699,31 +707,28 @@ test("skia_unittests") {
   }
 }
 
-if (is_linux && !is_chromeos) {
-  # TODO(GYP): Figure out which of these work and are needed on other platforms.
-  executable("image_operations_bench") {
-    sources = [
-      "ext/image_operations_bench.cc",
-    ]
+executable("image_operations_bench") {
+  sources = [
+    "ext/image_operations_bench.cc",
+  ]
 
-    deps = [
-      ":skia",
-      "//base",
-      "//build/config/sanitizers:deps",
-    ]
-  }
+  deps = [
+    ":skia",
+    "//base",
+    "//build/config/sanitizers:deps",
+  ]
+}
 
-  executable("filter_fuzz_stub") {
-    testonly = true
-    sources = [
-      "tools/filter_fuzz_stub/filter_fuzz_stub.cc",
-    ]
+executable("filter_fuzz_stub") {
+  testonly = true
+  sources = [
+    "tools/filter_fuzz_stub/filter_fuzz_stub.cc",
+  ]
 
-    deps = [
-      ":skia",
-      "//base",
-      "//base/test:test_support",
-      "//build/config/sanitizers:deps",
-    ]
-  }
+  deps = [
+    ":skia",
+    "//base",
+    "//base/test:test_support",
+    "//build/config/sanitizers:deps",
+  ]
 }

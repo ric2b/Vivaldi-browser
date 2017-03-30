@@ -9,7 +9,6 @@
 
 #include <string>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "content/common/gpu/media/platform_media_pipeline.h"
@@ -49,11 +48,11 @@ class AVFMediaPipeline : public PlatformMediaPipeline {
 
   void SeekDone(const SeekCB& seek_cb, bool success);
 
-  scoped_ptr<MediaDecoderClient> media_decoder_client_;
-  scoped_ptr<AVFMediaDecoder> media_decoder_;
+  std::unique_ptr<MediaDecoderClient> media_decoder_client_;
+  std::unique_ptr<AVFMediaDecoder> media_decoder_;
 
-  scoped_ptr<AVFDataBufferQueue> audio_queue_;
-  scoped_ptr<AVFDataBufferQueue> video_queue_;
+  std::unique_ptr<AVFDataBufferQueue> audio_queue_;
+  std::unique_ptr<AVFDataBufferQueue> video_queue_;
 
   IPCDataSource* data_source_;
 

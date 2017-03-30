@@ -2,13 +2,11 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-TW">
 <translation id="101438888985615157">將畫面旋轉 180 度</translation>
-<translation id="1015272884520659144">定義可從核心驅動程式卸離的 USB 裝置 (以便直接在網路應用程式中透過 chrome.usb API 使用) 清單。清單中的項目必須是一組 USB 供應商識別碼和產品識別碼，用於識別特定硬體。
-
-      如果未設定這項政策，系統會認定卸離式 USB 裝置清單中沒有任何項目。</translation>
 <translation id="1017967144265860778">位於登入畫面中的電源管理設定</translation>
 <translation id="1019101089073227242">設定使用者資料目錄</translation>
 <translation id="1022361784792428773">使用者應避免安裝的擴充功能 ID (使用星號 (*) 排除所有擴充功能)</translation>
 <translation id="102492767056134033">設定螢幕小鍵盤在登入畫面中的預設狀態</translation>
+<translation id="1040446814317236570">啟用 PAC 網址分解功能 (適用於 https://)</translation>
 <translation id="1044878202534415707">回報硬體統計資料，例如 CPU/RAM 使用量。
 
       如果將這項政策設為 False，系統將不會回報統計資料。
@@ -65,7 +63,6 @@
       如果未設定這項政策或將其設為 False，系統就不會在 TLS 中啟用 RC4 加密套件。您也可以將這項政策設為 True，以保持與過舊伺服器的相容性。這種方法是權宜之計，伺服器應重新設定，才是正確的做法。</translation>
 <translation id="1297182715641689552">使用 .pac Proxy 指令碼</translation>
 <translation id="1304973015437969093">自動在背景中安裝的擴充功能/應用程式 ID 和更新網址</translation>
-<translation id="1310699457130669094">您可以在這裡為 Proxy .pac 檔案指定網址。只有當您在「選擇如何指定 Proxy 伺服器設定」中選取手動 Proxy 設定，這項政策才會生效。如果您已選取任何其他模式來設定 Proxy 政策，則不需設定這項政策。如需詳細範例，請造訪：<ph name="PROXY_HELP_URL" /></translation>
 <translation id="1313457536529613143">指定裝置在螢幕變暗時或螢幕關閉後不久偵測到使用者活動時的調暗延遲時間延長百分比。
 
           如果您設定這項政策，表示裝置會在螢幕變暗時或螢幕關閉後不久偵測到使用者活動時，根據指定的百分比延長調暗延遲時間。如果延遲時間延長，關閉螢幕、鎖定螢幕和閒置狀態的延遲時間也會隨之調整，以維持原本所設定的相同時間比例。
@@ -148,6 +145,11 @@
 <translation id="1608755754295374538">系統會直接授權存取音訊擷取裝置而不需提示的網址</translation>
 <translation id="1617235075406854669">啟用刪除瀏覽器和下載紀錄</translation>
 <translation id="1617384279878333801">允許在設定檔管理員中新增使用者</translation>
+<translation id="163200210584085447">系統會比對這份清單中的模式與要求網址的
+      安全性來源。如果找到相符的結果，系統就會
+      在 SAML 登入網頁授權存取錄影裝置。如果找不到
+      相符的結果，系統會自動拒絕存取權。禁止使用
+      萬用模式。</translation>
 <translation id="1655229863189977773">設定磁碟快取大小 (以位元組為單位)</translation>
 <translation id="166427968280387991">Proxy 伺服器：</translation>
 <translation id="1675002386741412210">支援環境：</translation>
@@ -230,7 +232,6 @@
       如果您啟用這項設定，當工作階段啟動且螢幕未鎖定時，系統列就會顯示紅色的大型登出按鈕。
 
       如果您停用或未指定這項設定，系統列就不會顯示紅色的大型登出按鈕。</translation>
-<translation id="1942957375738056236">您可以在這裡指定 Proxy 伺服器的網址。只有當您在「選擇如何指定 Proxy 伺服器設定」中選取手動 Proxy 設定時，這項政策才會生效。如果您已選取任何其他模式來設定 Proxy 政策，則不需設定這項政策。如需更多選項或詳例，請造訪：<ph name="PROXY_HELP_URL" /></translation>
 <translation id="1956493342242507974">設置 <ph name="PRODUCT_OS_NAME" /> 登入畫面的電源管理設定。
 
       這項政策可讓您設定當 <ph name="PRODUCT_OS_NAME" /> 停留在登入畫面，並且一段時間沒有使用者活動時，系統應該採取哪些動作。這項政策可控管多項設定，如要瞭解個別設定的語義和數值範圍，請參閱控管工作階段電源管理的相應政策。這些政策不能指定的只有以下兩點：
@@ -264,6 +265,7 @@
 <translation id="2113068765175018713">透過自動重新啟動的方式限制裝置的正常運作時間</translation>
 <translation id="2127599828444728326">允許這些網站的通知</translation>
 <translation id="2131902621292742709">在電池供電環境下執行時的螢幕調暗延遲時間</translation>
+<translation id="2134437727173969994">允許鎖定畫面</translation>
 <translation id="2137064848866899664">如果設定這項政策，每次重新啟動時，
       以及在這個政策值發生變更後首次連線時，
       每個畫面都會依指定的角度旋轉。
@@ -317,6 +319,7 @@
 <translation id="2309390639296060546">預設地理位置設定</translation>
 <translation id="2312134445771258233">允許您設定起始時載入的網頁。系統會略過 [起始時開啟的網址] 網頁清單內容，除非您在 [起始動作] 中選取 [開啟網址清單]。</translation>
 <translation id="2337466621458842053">允許您設定網址模式清單，指定可以顯示圖片的網站。如果未設定這項政策，系統會從「DefaultImagesSetting」政策 (如果有設定的話) 或使用者的個人設定，將通用預設值套用至所有網站。</translation>
+<translation id="2366415278352956652">啟用投放功能</translation>
 <translation id="2371309782685318247">以毫秒數指定對裝置管理服務詢問使用者政策資訊的時間。
 
       設定這項政策會覆寫 3 小時的預設值。本政策的有效值範圍由 1800000 (30 分鐘) 到 86400000 (1 天)。超出範圍的值會自動歸類為上限值或下限值。
@@ -462,7 +465,6 @@
       如果您未設定這項政策，使用者將可以自行決定是否要使用資料壓縮 Proxy 功能。</translation>
 <translation id="2587719089023392205">將 <ph name="PRODUCT_NAME" /> 設為預設瀏覽器</translation>
 <translation id="2592091433672667839">螢幕保護程式顯示前的閒置時間會顯示在零售模式下的登入畫面上</translation>
-<translation id="260705825237536216">設定 ARC 應用程式</translation>
 <translation id="2623014935069176671">等待初始使用者活動</translation>
 <translation id="262740370354162807">啟用「<ph name="CLOUD_PRINT_NAME" />」文件提交功能</translation>
 <translation id="2633084400146331575">啟用互動朗讀</translation>
@@ -472,6 +474,7 @@
 <translation id="267596348720209223">指定搜尋引擎支援的字元編碼。編碼就是 UTF-8、GB2312 和 ISO-8859-1 等字碼頁名稱。系統會以提供的順序來測試。這項政策是選擇性的，如果未設定，預設會使用的是 UTF-8。只有在啟用「DefaultSearchProviderEnabled」政策時，系統才會遵循這項政策。</translation>
 <translation id="2682225790874070339">停用 <ph name="PRODUCT_OS_NAME" />「檔案」應用程式中的雲端硬碟</translation>
 <translation id="268577405881275241">啟用資料壓縮 Proxy 功能</translation>
+<translation id="2731627323327011390">禁止 ARC 應用程式使用「<ph name="PRODUCT_OS_NAME" />」憑證</translation>
 <translation id="2742843273354638707">在新分頁和 <ph name="PRODUCT_OS_NAME" />應用程式啟動畫面中隱藏 Chrome 線上應用程式商店和底端連結。
 
       如果將這項政策設為 True，系統會隱藏圖示。
@@ -522,6 +525,22 @@
       本清單中的每個項目皆應使用擴充功能式的比對模式 (請參閱 https://developer.chrome.com/extensions/match_patterns)。任何網址只要符合本清單的任何項目，使用者即可輕鬆安裝該網址中的項目。*.crx 檔案和下載網頁的位址 (即參照網址) 必須獲得這些模式許可。
 
       ExtensionInstallBlacklist 的設定優先於本政策。也就是說，即使本清單允許安裝某網站的擴充功能，但如果該擴充功能亦列於黑名單上，則您仍然無法使用較簡便的方式安裝該擴充功能。</translation>
+<translation id="2813740161943223811">這項政策已淘汰，請改用 ProxyMode。
+
+          允許您指定「<ph name="PRODUCT_NAME" />」使用的 Proxy 伺服器，並禁止使用者變更 Proxy 設定。ARC 應用程式也能使用這個 Proxy 伺服器。
+
+          如果您選擇永不使用 Proxy 伺服器，一律採用直接連線，系統會忽略其他所有選項。
+
+          如果您選擇使用系統 Proxy 設定或自動偵測 Proxy 伺服器，系統也會忽略其他所有選項。
+
+          如果您選擇手動 Proxy 設定，可進一步指定「Proxy 伺服器位址或網址」、「Proxy .pac 檔案網址」和「以逗號分隔的 Proxy 略過規則清單」中的選項。ARC 應用程式僅會使用優先程度最高的 HTTP Proxy 伺服器。
+
+          如需詳細範例，請造訪：
+          <ph name="PROXY_HELP_URL" />。
+
+          如果您啟用這項設定，「<ph name="PRODUCT_NAME" />」會忽略所有透過命令列指定的 Proxy 相關選項。
+
+          如果不設定這項政策，使用者即可自行選擇 Proxy 設定。</translation>
 <translation id="2824715612115726353">啟用無痕模式</translation>
 <translation id="2844404652289407061">在 <ph name="PRODUCT_NAME" /> 的內容畫面中啟用「輕觸搜尋」功能。
 
@@ -628,6 +647,18 @@
           </translation>
 <translation id="3205825995289802549">首次執行時將第一個瀏覽器視窗最大化</translation>
 <translation id="3206731874112238027">停用列印預覽 (已淘汰)</translation>
+<translation id="3208854390109736596">允許您指定「<ph name="PRODUCT_NAME" />」使用的 Proxy 伺服器，並禁止使用者變更 Proxy 設定。ARC 應用程式也能使用這個 Proxy 伺服器。
+
+      如果您選擇永不使用 Proxy 伺服器，一律採用直接連線，系統會忽略其他所有選項。
+
+      如果您選擇自動偵測 Proxy 伺服器，系統會忽略其他所有選項。
+
+      如需詳細範例，請造訪：
+      <ph name="PROXY_HELP_URL" />.
+
+      如果您啟用這項設定，「<ph name="PRODUCT_NAME" />」和 ARC 應用程式會忽略所有透過命令列指定的 Proxy 相關選項。
+
+      如果不設定這些政策，使用者即可自行選擇 Proxy 設定。</translation>
 <translation id="3213821784736959823">控制是否要在 <ph name="PRODUCT_NAME" /> 中使用內建 DNS 用戶端。
 
       如果您將這項政策設為 True，系統就會使用內建 DNS 用戶端 (如果可用)。
@@ -655,6 +686,7 @@
       不論這項政策處於啟用或未設定的狀態，使用者都可以透過 Google 帳戶驗證來啟用雲端列印 Proxy。
 
       如果您停用這項設定，使用者就無法啟用 Proxy，而且本機不得與 <ph name="CLOUD_PRINT_NAME" /> 共用自己的印表機。</translation>
+<translation id="3297010562646015826">允許在工作管理員中結束處理程序</translation>
 <translation id="3322771899429619102">允許您設定網址模式清單，指定可以使用金鑰產生功能的網站。如果網址模式為「KeygenBlockedForUrls」，則會覆寫這類例外狀況。
 
           如果未設定這項政策，系統會根據「DefaultKeygenSetting」政策 (如果有設定的話) 或使用者的個人設定，將通用預設值套用到所有網站。</translation>
@@ -677,6 +709,9 @@
 
       如果這項政策設為 False，<ph name="PRODUCT_OS_NAME" /> 不會允許開啟訪客工作階段。</translation>
 <translation id="3428247105888806363">啟用網路預測功能</translation>
+<translation id="3449886121729668969">指定「<ph name="PRODUCT_NAME" />」的 Proxy 設定。ARC 應用程式也能使用這些 Proxy 設定。
+
+      這項政策尚未開放使用，請勿使用。</translation>
 <translation id="3460784402832014830">指定搜尋引擎用於提供新分頁的網址。
 
           這項政策是選擇性的，如果未設定，系統將不會提供新分頁。
@@ -687,28 +722,19 @@
           如果這項政策設為 True，系統會延遲管理電源，並且在發現工作階段中產生第一個使用者活動後，才會開始執行工作階段長度限制。
 
           如果這項政策設為 False 或未設定，系統會延遲管理電源，並且在工作階段開始後立即執行工作階段長度限制。</translation>
+<translation id="3469657928310999477">「<ph name="PRODUCT_NAME" />」會略過這裡提供的主機清單中的任何 Proxy。ARC 應用程式可使用這份清單做為略過規則清單。
+
+          只有當您在「選擇如何指定 Proxy 伺服器設定」選取手動 Proxy 設定時，這項政策才會生效。
+
+          如果您已選取任何其他模式來設定 Proxy 政策，則不需設定這項政策。
+
+          如需詳細範例，請造訪：
+          <ph name="PROXY_HELP_URL" />。</translation>
 <translation id="3478024346823118645">登出後清除使用者資料</translation>
 <translation id="348495353354674884">啟用虛擬鍵盤</translation>
 <translation id="3496296378755072552">密碼管理員</translation>
 <translation id="349667858031092827">不自動偵測時區。</translation>
-<translation id="3502472987829488885">允許您指定 <ph name="PRODUCT_NAME" /> 和 ARC 應用程式使用的 Proxy 伺服器，並禁止使用者變更 Proxy 設定。
-
-          如果您選擇永不使用 Proxy 伺服器，並且一律直接連線，系統會忽略其他所有選項。ARC 應用程式則會使用目前網路的預設 Proxy 伺服器 (如果有的話)。
-
-          如果您選擇使用系統 Proxy 設定，系統會忽略其他所有選項。ARC 應用程式則會使用目前網路的預設 Proxy 伺服器 (如果有的話)。
-
-          如果您選擇自動偵測 Proxy 伺服器，系統會忽略其他所有選項。
-
-          如果您選擇固定的伺服器 Proxy 模式，可進一步指定「Proxy 伺服器位址或網址」和「以逗號分隔的 Proxy 略過規則清單」中的選項。ARC 僅會使用優先程度最高的 HTTP Proxy 伺服器。
-
-          如果您選擇使用 .pac Proxy 指令碼，則必須在「Proxy .pac 檔案網址」中指定指令碼網址。
-
-          如需詳細範例，請造訪以下網址：
-          <ph name="PROXY_HELP_URL" />
-
-          如果您啟用這項設定，<ph name="PRODUCT_NAME" /> 和 ARC 應用程式會忽略所有從命令列指定的 Proxy 相關選項。
-
-          如果不設定這項政策，則使用者可自行選擇 Proxy 設定。</translation>
+<translation id="350443680860256679">設定 ARC</translation>
 <translation id="3504791027627803580">指定用來提供圖片搜尋的搜尋引擎網址。系統將使用 GET 方法傳送搜尋要求。如果設定 DefaultSearchProviderImageURLPostParams 政策，系統就會使用 POST 方法傳送圖片搜尋要求。
 
           這項政策是選擇性的，如果未設定，就不能使用圖片搜尋。
@@ -825,6 +851,7 @@
 <translation id="3967075520570946456">允許在作業系統升級後首次啟動瀏覽器時顯示歡迎網頁。</translation>
 <translation id="3973371701361892765">永不自動隱藏檔案櫃</translation>
 <translation id="3984028218719007910">決定登出後 <ph name="PRODUCT_OS_NAME" /> 是否要保留本機帳戶資料。如果設為 True，<ph name="PRODUCT_OS_NAME" /> 不會保留任何永久帳戶，並且在登出後會刪除使用者工作階段的所有資料。如果這項政策設為 False 或未設定，裝置會保留 (加密) 本機使用者資料。</translation>
+<translation id="3997519162482760140">可在 SAML 登入網頁取得錄影裝置存取權的網址</translation>
 <translation id="4001275826058808087">企業裝置的 IT 管理員可使用這個標記來控制是否允許使用者透過註冊 Chrome 作業系統來兌換優惠。
 
       如果將這項政策設為 True 或未設定這項政策，使用者將可透過註冊 Chrome 作業系統來兌換優惠。
@@ -842,22 +869,6 @@
           如果將這項政策設為 [在工作階段期間保留 Cookie]，系統會在工作階段結束時清除 Cookie。請注意，如果 <ph name="PRODUCT_NAME" /> 是在「背景模式」中執行，工作階段可能不會在最後一個視窗關閉時結束。如需深入瞭解如何設定這項行為，請參閱「BackgroundModeEnabled」政策。
 
           如未設定這項政策，系統會使用「AllowCookies」，使用者之後可以自行變更這項設定。</translation>
-<translation id="4098957623809244159">這項政策已淘汰，請改用 ProxyMode。
-
-          允許您指定 <ph name="PRODUCT_NAME" /> 和 ARC 應用程式使用的 Proxy 伺服器，並禁止使用者變更 Proxy 設定。
-
-          如果您決定完全不使用 Proxy 伺服器，一律採用直接連線，系統會忽略其他所有選項。
-
-          如果您選擇使用系統 Proxy 設定或自動偵測 Proxy 伺服器，系統也會忽略其他所有選項。
-
-          如果您選擇手動 Proxy 設定，可進一步指定「Proxy 伺服器位址或網址」、「Proxy .pac 檔案網址」和「以逗號分隔的 Proxy 略過規則清單」中的選項。
-
-          如需參考具體的設定範例，請造訪以下網址：
-          <ph name="PROXY_HELP_URL" />
-
-          如果您啟用這項設定，<ph name="PRODUCT_NAME" /> 會忽略所有從命令列指定的 Proxy 相關選項。
-
-          如果不設定這項政策，使用者即可自行選擇 Proxy 設定。</translation>
 <translation id="4103289232974211388">經使用者確認後重新導向 SAML IdP</translation>
 <translation id="410478022164847452">指定時間長度，如果系統在 AC 供電環境下執行且未偵測到使用者輸入行為，就會在這段時間過後採取動作。
 
@@ -866,6 +877,9 @@
           如果您未設定這項政策，系統會使用預設時間長度。
 
           指定政策值時需以毫秒為單位。</translation>
+<translation id="4115096483386877940">允許鎖定畫面。
+
+      如果將這項政策設為 false，使用者將無法鎖定畫面 (只能登出使用者工作階段)。如果將這項政策設為 true 或不設定這項政策，則使用密碼通過驗證的使用者可以鎖定畫面。</translation>
 <translation id="4121350739760194865">阻止應用程式宣傳資訊在新分頁上顯示</translation>
 <translation id="4147054660081653009">用於連接 RemoteAccessHostTokenValidationUrl 的用戶端憑證。
 
@@ -937,6 +951,7 @@
 <translation id="4449545651113180484">將畫面以順時針方向旋轉 270 度</translation>
 <translation id="4467952432486360968">封鎖第三方 Cookie</translation>
 <translation id="4474167089968829729">允許將密碼儲存到密碼管理員</translation>
+<translation id="447686899376429408">如果將這項政策設為 True (或是保留未設定狀態)，使用者將可透過瀏覽器投放分頁、網站或桌面內容。如果設為 False，這個選項會遭到停用。</translation>
 <translation id="4480694116501920047">強制啟用安全搜尋服務</translation>
 <translation id="4482640907922304445">顯示「<ph name="PRODUCT_NAME" />」工具列上的 [首頁] 按鈕。如果您啟用這項設定，系統會顯示 [首頁] 按鈕。如果您停用這項設定，系統就不會顯示 [首頁] 按鈕。不論您啟用或停用這項設定，使用者都無法變更或覆寫「<ph name="PRODUCT_NAME" />」中的這項設定。如果您不設定這項政策，使用者就能選擇是否要顯示 [首頁] 按鈕。</translation>
 <translation id="4492287494009043413">停用螢幕畫面擷取功能</translation>
@@ -1138,11 +1153,6 @@
 <translation id="5307432759655324440">無痕模式適用性</translation>
 <translation id="5318185076587284965">啟用遠端存取主機所使用的轉送伺服器</translation>
 <translation id="5330684698007383292">允許 <ph name="PRODUCT_FRAME_NAME" /> 處理列出的內容類型</translation>
-<translation id="5345267406698765263">以 JSON 字串形式指定 ARC 應用程式政策，
-      以便直接遞交給 ARC 執行階段。目前這項設定僅適用於
-      指定強制安裝應用程式。
-
-      如果未設定這項政策，則不會自動安裝任何應用程式。</translation>
 <translation id="5365946944967967336">在工具列上顯示 [首頁] 按鈕</translation>
 <translation id="5366977351895725771">如果設為 False，這位使用者將無法建立受監督的使用者。目前如有任何受監督的使用者帳戶，則仍然可供存取。
 
@@ -1259,7 +1269,6 @@
       如未設定這項政策，系統會使用預設的設定檔目錄。</translation>
 <translation id="5826047473100157858">指定使用者是否可以在「<ph name="PRODUCT_NAME" />」中以無痕模式開啟網頁。如果選取的是 [啟用] 或未設定政策，網頁能以無痕模式開啟。如果選取的是 [停用]，則網頁可能無法以無痕模式開啟。如果選取的是 [強制]，系統只會以無痕模式開啟網頁。</translation>
 <translation id="5836064773277134605">限制遠端存取主機所使用的 UDP 通訊埠範圍</translation>
-<translation id="5845159892130426052">啟用 ShowModalDialog API (至 2015 年 4 月 30 日停用)</translation>
 <translation id="5862253018042179045">設定互動朗讀協助功能在登入畫面的預設狀態。
 
           如果您將這項政策設為 True，系統將在顯示登入畫面時啟用互動朗讀。
@@ -1289,14 +1298,6 @@
 <translation id="5893553533827140852">啟用這項設定時，系統將透過遠端主機連線以 Proxy 處理 gnubby 驗證要求。
 
           如果停用或不設定這項設定，系統將不會以 Proxy 處理 gnubby 驗證要求。</translation>
-<translation id="5900959132054596599">如果在這裡提供的主機清單有任何 Proxy，<ph name="PRODUCT_NAME" /> 和 ARC 應用程式一律會略過。
-
-          您必須在「選擇如何指定 Proxy 伺服器設定」選取手動 Proxy 設定，這項政策才會生效。
-
-          如果您選取了任何其他 Proxy 政策設定模式，則請勿設定這項政策。
-
-          如需參考更具體的設定範例，請造訪以下網址：
-          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="5921713479449475707">允許透過 HTTP 自動更新下載</translation>
 <translation id="5921888683953999946">設定大型游標協助功能在登入畫面的預設狀態。
 
@@ -1342,6 +1343,9 @@
       這項政策會影響所有類型的儲存裝置媒體 (例如 USB 隨身碟、外接硬碟、SD 卡和其他記憶卡、光學儲存裝置等等)，內部儲存裝置則不受影響，因此您仍可存取儲存在「下載」資料夾中的檔案，Google 雲端硬碟也不受這項政策影響。
 
       如果您停用這項設定或並未進行設置，則使用者可以在裝置上使用所有支援的外部儲存裝置類型。</translation>
+<translation id="6076099373507468537">定義可從核心驅動程式卸離的 USB 裝置 (以便直接在網路應用程式中透過 chrome.usb API 使用) 清單。清單中的項目必須是一組 USB 供應商識別碼和產品識別碼，用於識別特定硬體。
+
+      如果未設定這項政策，卸離式 USB 裝置清單就不會顯示任何項目。</translation>
 <translation id="6095999036251797924">指定時間長度，如果系統在 AC 電源或電池供電環境下執行，且未偵測到使用者輸入行為，就會在這段時間過後鎖定螢幕。
 
           如果您將時間長度設為大於 0 的值，表示使用者處於閒置狀態達到該時間長度後，<ph name="PRODUCT_OS_NAME" /> 才會鎖定螢幕。
@@ -1677,11 +1681,6 @@
 
           如果將「RestoreOnStartup」政策設為還原先前工作階段的網址，系統就不會遵循這項政策，並且會為這些網站永久儲存 Cookie。</translation>
 <translation id="7207095846245296855">強制啟用 Google 安全搜尋模式</translation>
-<translation id="7213425178181578730">如果將這項政策設為 false，<ph name="PRODUCT_OS_NAME" /> 會停用藍牙功能，且使用者無法重新啟用。
-
-      如果將這項政策設為 true 或不予設定，使用者可以視需求啟用或停用藍牙功能。
-
-      設定這項政策後，使用者無法變更或覆寫政策。</translation>
 <translation id="7216442368414164495">允許使用者採用安全瀏覽模式的進階回報功能</translation>
 <translation id="7227967227357489766">定義可登入裝置的使用者允許清單，項目格式為「<ph name="USER_WHITELIST_ENTRY_FORMAT" />」(例如「<ph name="USER_WHITELIST_ENTRY_EXAMPLE" />」)。如要允許網域的任意使用者，請使用格式為「<ph name="USER_WHITELIST_ENTRY_WILDCARD" />」的項目。
 
@@ -1694,6 +1693,7 @@
           如果您設定了這項政策，使用者可以暫時覆寫這項政策，只要啟用或停用螢幕放大鏡即可。但使用者的選擇並非永久性，只要系統再次顯示登入畫面或使用者在登入畫面閒置了一段時間，系統就會還原預設值。
 
           如果您未設定這項政策，則系統會在初次顯示登入畫面時停用螢幕放大鏡。使用者隨時都可以啟用或停用螢幕放大鏡，而螢幕放大鏡在登入畫面的狀態則視使用者的選擇而定 (均為永久性)。</translation>
+<translation id="7249828445670652637">允許 ARC 應用程式使用「<ph name="PRODUCT_OS_NAME" />」CA 憑證</translation>
 <translation id="7258823566580374486">啟用遠端存取主機遮幕</translation>
 <translation id="7260277299188117560">已啟用自動更新 P2P</translation>
 <translation id="7267809745244694722">媒體鍵預設為功能鍵</translation>
@@ -1783,9 +1783,6 @@
 <translation id="7632724434767231364">GSSAPI 資料庫名稱</translation>
 <translation id="7635471475589566552">設定「<ph name="PRODUCT_NAME" />」的應用程式語言代碼，並且禁止使用者變更語言代碼。如果您啟用這項設定，「<ph name="PRODUCT_NAME" />」就會使用指定的語言代碼。如果設定的語言代碼不受支援，就會改用「en-US」。如果停用或尚未調整這項設定，「<ph name="PRODUCT_NAME" />」就會使用使用者指定的偏好語言代碼 (如果已設定)、系統語言代碼或備用語言代碼「en-US」。</translation>
 <translation id="7651739109954974365">決定是否要為裝置啟用數據漫遊。如果設為 True，就會允許數據漫遊。如未設定或設為 False，就不支援數據漫遊。</translation>
-<translation id="7667184304362487902">指定 <ph name="PRODUCT_NAME" /> 和 ARC 應用程式的 Proxy 設定。
-
-      這項政策尚未開放使用，請勿使用。</translation>
 <translation id="76810863974142048">遠端存取用戶端取得驗證憑證的來源網址。
 
           如果設定這項政策，遠端存取主機會要求驗證用戶端透過這個網址取得驗證憑證，才能建立連線 (必須和 RemoteAccessHostTokenValidationUrl 配合使用)。
@@ -1841,6 +1838,14 @@
       如果將這項政策設為 False，系統不會回報工作階段資訊。
       如果設為 True 或未設定，則會回報工作階段資訊。</translation>
 <translation id="7774768074957326919">使用系統 Proxy 設定</translation>
+<translation id="7775831859772431793">您可以在這裡指定 Proxy 伺服器的網址。
+
+          只有當您在「選擇如何指定 Proxy 伺服器設定」中選取手動 Proxy 設定時，這項政策才會生效。
+
+          如果您已選取任何其他模式來設定 Proxy 政策，則不需設定這項政策。
+
+          如需更多選項或詳細範例，請造訪：
+          <ph name="PROXY_HELP_URL" />。</translation>
 <translation id="7788511847830146438">根據設定檔</translation>
 <translation id="7796141075993499320">允許您設定網址模式清單，指定可以執行外掛程式的網站。如果未設定這項政策，系統會從「DefaultPluginsSetting」政策 (如果有設定的話) 或使用者的個人設定，將通用預設值套用至所有網站。</translation>
 <translation id="7818131573217430250">設定高反差模式在登入畫面的預設狀態</translation>
@@ -1866,25 +1871,25 @@
       如果未設定這項政策，系統行為與設定 TimezoneAutomaticDetectionUsersDecide 時相同。
 
       如果設定了 SystemTimezone 政策，則會覆寫這項政策。在這種情況下，系統會全面停止自動偵測時區。</translation>
+<translation id="787125417158068494">如果設為 SyncDisabled 或未設定，ARC 應用程式將無法使用「<ph name="PRODUCT_OS_NAME" />」憑證。
+
+      如果設為 CopyCaCerts，ARC 應用程式將可使用所有 ONC 安裝的 CA 憑證 (需有「<ph name="WEB_TRUSTED_BIT" />」)。</translation>
 <translation id="7882585827992171421">這項政策僅在零售模式下有效。
 
       決定使用擴充程式 ID 當做登入畫面的螢幕保護程式。該擴充功能必須屬於您透過 DeviceAppPack 政策為這個網域設定的 AppPack。</translation>
 <translation id="7882890448959833986">偵測到不支援的作業系統時不顯示警告</translation>
 <translation id="7912255076272890813">設定允許的應用程式/擴充功能類型</translation>
-<translation id="7928112526630078979">允許您指定 <ph name="PRODUCT_NAME" /> 和 ARC 應用程式使用的 Proxy 伺服器，並禁止使用者變更 Proxy 設定。
+<translation id="7915236031252389808">您可以在這裡為 Proxy .pac 檔案指定網址。
 
-      如果您選擇永不使用 Proxy 伺服器，並且一律直接連線，系統會忽略其他所有選項。ARC 應用程式則會使用目前網路的預設 Proxy 伺服器 (如果有的話)。
+          只有當您在「選擇如何指定 Proxy 伺服器設定」中選取手動 Proxy 設定，這項政策才會生效。
 
-      如果您選擇自動偵測 Proxy 伺服器，系統會忽略其他所有選項。
+          如果您已選取任何其他模式來設定 Proxy 政策，則不需設定這項政策。
 
-      如需詳細範例，請造訪以下網址：
-      <ph name="PROXY_HELP_URL" />
-
-      如果您啟用這項設定，<ph name="PRODUCT_NAME" /> 和 ARC 應用程式會忽略所有從命令列指定的 Proxy 相關選項。
-
-      如果不設定這項政策，使用者即可自行選擇 Proxy 設定。</translation>
+          如需詳細範例，請造訪：
+          <ph name="PROXY_HELP_URL" />。</translation>
 <translation id="793134539373873765">指定是否使用 P2P 更新裝載作業系統。如果設為 True，裝置將會在 LAN 上共用並嘗試使用更新裝載，藉此降低網際網路頻寬用量及減輕壅塞。如果 LAN 上未提供更新裝載，裝置將回歸至更新伺服器進行下載。如果設為 False 或未設定，則不會使用 P2P。</translation>
 <translation id="7933141401888114454">啟用建立受監管使用者的功能</translation>
+<translation id="793473937901685727">設定 ARC 應用程式的憑證可用性</translation>
 <translation id="7936098023732125869">啟用預設搜尋引擎。
 
           如果您啟用這項設定，每當使用者在網址列中輸入文字而非網址時，系統就會執行預設搜尋。
@@ -1989,6 +1994,17 @@
       如未設定這項政策，<ph name="PRODUCT_OS_NAME" /> 就會使用裝置本機帳戶的電子郵件帳戶 ID 當做登入畫面的顯示名稱。
 
       這項政策對於一般使用者帳戶無效。</translation>
+<translation id="8279832363395120715">先將 https:// 網址中攸關隱私和安全性的敏感部分去除，再轉送給 PAC (Proxy Auto Config) 指令碼，供 <ph name="PRODUCT_NAME" /> 在 Proxy 解析期間使用。
+
+      設為 True 時會啟用安全性功能，先將 https:// 網址分解再提交給 PAC 指令碼。如此一來，PAC 指令碼便無法檢視原本受加密通道保護的資料 (例如網址的路徑和查詢)。
+
+      設為 False 時會停用安全性功能，PAC 指令碼將因此獲得檢視所有 https:// 網址元素的權限。所有 PAC 指令碼都會套用這項設定，無論來源為何 (包括從不安全的傳輸過程中擷取而來的 PAC 指令碼，或是以不安全的方式透過 WPAD 找到的 PAC 指令碼)。
+
+      這項政策預設為 True (啟用安全性功能)，但 Chrome 作業系統企業使用者除外 (目前預設為 False)。
+
+      建議您將這項政策設為 True。如果設為 True 會與現有的 PAC 指令碼衝突，造成相容性問題，才需要將這項政策設為 False。
+
+      按照我們的期望，日後將移除這項覆寫機制。</translation>
 <translation id="8285435910062771358">已啟用全螢幕放大鏡</translation>
 <translation id="8294750666104911727">無論「ChromeFrameRendererSettings」政策為何，一般而言，X-UA-Compatible 設為 chrome=1 的網頁將會在 <ph name="PRODUCT_FRAME_NAME" /> 中開啟。
 
@@ -2009,6 +2025,7 @@
 
       應以毫秒數指定政策值。</translation>
 <translation id="8344454543174932833">第一次執行時從預設瀏覽器匯入書籤</translation>
+<translation id="8359734107661430198">從 2008 年 9 月 2 日開始啟用 ExampleDeprecatedFeature API</translation>
 <translation id="8360452361555133173">允許在作業系統升級後，瀏覽器首次啟動時顯示歡迎網頁。
 
       如果這項政策設為 True 或未設定，瀏覽器會在作業系統升級後首次啟動時重新顯示歡迎網頁。
@@ -2018,9 +2035,15 @@
 <translation id="8382184662529825177">啟用可用於保護裝置內容的遠端認證機制</translation>
 <translation id="838870586332499308">啟用數據漫遊</translation>
 <translation id="8412312801707973447">不論線上 OCSP/CRL 檢查是否執行</translation>
+<translation id="8413348101535146315">允許在「<ph name="PRODUCT_NAME" />」的工作管理員中結束處理程序。
+
+      如果您將這項政策設為 False，工作管理員的「結束程序」按鈕會隨即停用。
+
+      如果您將這項政策設為 True 或未設定，使用者就能在工作管理員中結束處理程序。</translation>
 <translation id="8424255554404582727">設定畫面旋轉預設值 (每次重新啟動皆重新套用)</translation>
 <translation id="8426231401662877819">將畫面以順時針方向旋轉 90 度</translation>
 <translation id="8451988835943702790">將新分頁設為首頁</translation>
+<translation id="8458790683633857482">指定要遞交至 ARC 執行階段的一系列政策。政策值必須是有效的 JSON。</translation>
 <translation id="8465065632133292531">使用 POST 的互動智慧搜尋網址參數</translation>
 <translation id="847472800012384958">不允許任何網站顯示彈出式視窗</translation>
 <translation id="8477885780684655676">TLS 1.0</translation>
@@ -2177,6 +2200,13 @@
 
           指定政策值時需以毫秒為單位。該值需小於閒置延遲時間。</translation>
 <translation id="891435090623616439">以 JSON 字串格式編碼，詳情請參閱 <ph name="COMPLEX_POLICIES_URL" /></translation>
+<translation id="8929359433203547810">如果將這項政策設為 false，<ph name="PRODUCT_OS_NAME" /> 會停用藍牙功能，且使用者無法重新啟用。
+
+      如果將這項政策設為 true 或不予設定，使用者可以視需求啟用或停用藍牙功能。
+
+      設定這項政策後，使用者無法變更或覆寫政策。
+
+      啟用藍牙功能後，必須重新啟動裝置，變更才會生效 (停用藍牙功能時不需重新啟動裝置)。</translation>
 <translation id="8947415621777543415">回報裝置位置</translation>
 <translation id="8951350807133946005">設定磁碟快取目錄</translation>
 <translation id="8955719471735800169">返回頁首</translation>
@@ -2206,6 +2236,24 @@
 <translation id="9112897538922695510">允許您註冊通訊協定處理常式清單 (這是一律建議使用的政策)。屬性 |protocol| 應設定為配置 (例如「mailto」)，而屬性 |url| 則應設定為處理該配置的應用程式的網址模式。模式可包含「%s」(如果有的話，會由受處理的網址取代)。
 
           由政策註冊的通訊協定處理常式會與由使用者註冊的通訊協定處理常式合併，兩者皆可供使用。使用者可以安裝新的預設處理常式來覆寫由政策安裝的通訊協定處理常式，但無法移除由政策註冊的通訊協定處理常式。</translation>
+<translation id="913138516158420759">允許您指定「<ph name="PRODUCT_NAME" />」使用的 Proxy 伺服器，並禁止使用者變更 Proxy 設定。ARC 應用程式也能使用這個 Proxy 伺服器。
+
+          如果您選擇永不使用 Proxy 伺服器，一律採用直接連線，系統會忽略其他所有選項。
+
+          如果您選擇使用系統 Proxy 設定，系統會忽略其他所有選項。
+
+          如果您選擇自動偵測 Proxy 伺服器，系統會忽略其他所有選項。
+
+          如果您選擇固定的伺服器 Proxy 模式，可進一步指定「Proxy 伺服器位址或網址」和「以逗號分隔的 Proxy 略過規則清單」中的選項。ARC 應用程式僅會使用優先程度最高的 HTTP Proxy 伺服器。
+
+          如果您選擇使用 .pac Proxy 指令碼，則必須在 [Proxy .pac 檔案網址] 中指定指令碼網址。
+
+          如需詳細範例，請造訪：
+          <ph name="PROXY_HELP_URL" />。
+
+          如果您啟用這項設定，「<ph name="PRODUCT_NAME" />」和 ARC 應用程式會略過所有透過命令列指定的 Proxy 相關選項。
+
+          如果不設定這些政策，使用者即可自行選擇 Proxy 設定。</translation>
 <translation id="913195841488580904">禁止存取清單中的網址</translation>
 <translation id="9135033364005346124">啟用 <ph name="CLOUD_PRINT_NAME" /> Proxy</translation>
 <translation id="9147029539363974059">將系統紀錄傳送到管理伺服器，

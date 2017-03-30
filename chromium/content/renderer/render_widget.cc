@@ -4,6 +4,7 @@
 
 #include "content/renderer/render_widget.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/auto_reset.h"
@@ -12,7 +13,7 @@
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
@@ -25,18 +26,19 @@
 #include "cc/base/switches.h"
 #include "cc/debug/benchmark_instrumentation.h"
 #include "cc/output/output_surface.h"
+#include "cc/output/vulkan_in_process_context_provider.h"
 #include "cc/scheduler/begin_frame_source.h"
 #include "cc/trees/layer_tree_host.h"
 #include "components/scheduler/renderer/render_widget_scheduling_state.h"
 #include "components/scheduler/renderer/renderer_scheduler.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
-#include "content/common/gpu/client/webgraphicscontext3d_command_buffer_impl.h"
 #include "content/common/gpu_process_launch_causes.h"
 #include "content/common/input/synthetic_gesture_packet.h"
 #include "content/common/input/web_input_event_traits.h"
 #include "content/common/input_messages.h"
 #include "content/common/swapped_out_messages.h"
+#include "content/common/text_input_state.h"
 #include "content/common/view_messages.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
@@ -61,10 +63,10 @@
 #include "content/renderer/render_widget_owner_delegate.h"
 #include "content/renderer/renderer_blink_platform_impl.h"
 #include "content/renderer/resizing_mode_selector.h"
+#include "gpu/command_buffer/client/shared_memory_limits.h"
 #include "ipc/ipc_sync_message.h"
 #include "skia/ext/platform_canvas.h"
 #include "third_party/WebKit/public/platform/WebCursorInfo.h"
-#include "third_party/WebKit/public/platform/WebGraphicsContext3D.h"
 #include "third_party/WebKit/public/platform/WebPoint.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/WebScreenInfo.h"
@@ -79,6 +81,7 @@
 #include "third_party/WebKit/public/web/WebRange.h"
 #include "third_party/WebKit/public/web/WebRuntimeFeatures.h"
 #include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/WebKit/public/web/WebWidget.h"
 #include "third_party/skia/include/core/SkShader.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gfx/geometry/point_conversions.h"
@@ -90,7 +93,6 @@
 
 #if defined(OS_ANDROID)
 #include <android/keycodes.h>
-#include "content/renderer/android/synchronous_compositor_factory.h"
 #include "content/renderer/android/synchronous_compositor_filter.h"
 #include "content/renderer/android/synchronous_compositor_output_surface.h"
 #endif
@@ -105,12 +107,6 @@
 #include "content/public/common/mojo_shell_connection.h"
 #include "content/renderer/mus/render_widget_mus_connection.h"
 #endif
-
-#if defined(ENABLE_VULKAN)
-#include "cc/output/vulkan_in_process_context_provider.h"
-#endif
-
-#include "third_party/WebKit/public/web/WebWidget.h"
 
 using blink::WebCompositionUnderline;
 using blink::WebCursorInfo;
@@ -222,8 +218,6 @@ RenderWidget::RenderWidget(CompositorDependencies* compositor_deps,
       webwidget_(nullptr),
       owner_delegate_(nullptr),
       opener_id_(MSG_ROUTING_NONE),
-      top_controls_shrink_blink_size_(false),
-      top_controls_height_(0.f),
       next_paint_flags_(0),
       auto_resize_mode_(false),
       need_update_rect_for_auto_resize_(false),
@@ -252,7 +246,8 @@ RenderWidget::RenderWidget(CompositorDependencies* compositor_deps,
       popup_origin_scale_for_emulation_(0.f),
       frame_swap_message_queue_(new FrameSwapMessageQueue()),
       resizing_mode_selector_(new ResizingModeSelector()),
-      has_host_context_menu_location_(false) {
+      has_host_context_menu_location_(false),
+      has_focus_(false) {
   if (!swapped_out)
     RenderProcess::current()->AddRefProcess();
   DCHECK(RenderThread::Get());
@@ -519,8 +514,6 @@ void RenderWidget::SetWindowRectSynchronously(
   params.new_size = new_window_rect.size();
   params.physical_backing_size =
       gfx::ScaleToCeiledSize(new_window_rect.size(), device_scale_factor_);
-  params.top_controls_shrink_blink_size = top_controls_shrink_blink_size_;
-  params.top_controls_height = top_controls_height_;
   params.visible_viewport_size = new_window_rect.size();
   params.resizer_rect = gfx::Rect();
   params.is_fullscreen_granted = is_fullscreen_granted_;
@@ -588,9 +581,6 @@ void RenderWidget::OnEnableDeviceEmulation(
     resize_params.new_size = size_;
     resize_params.physical_backing_size = physical_backing_size_;
     resize_params.visible_viewport_size = visible_viewport_size_;
-    resize_params.top_controls_shrink_blink_size =
-        top_controls_shrink_blink_size_;
-    resize_params.top_controls_height = top_controls_height_;
     resize_params.resizer_rect = resizer_rect_;
     resize_params.is_fullscreen_granted = is_fullscreen_granted_;
     resize_params.display_mode = display_mode_;
@@ -644,7 +634,7 @@ void RenderWidget::OnWasShown(bool needs_repainting,
   // Generate a full repaint.
   if (compositor_) {
     ui::LatencyInfo swap_latency_info(latency_info);
-    scoped_ptr<cc::SwapPromiseMonitor> latency_info_swap_promise_monitor(
+    std::unique_ptr<cc::SwapPromiseMonitor> latency_info_swap_promise_monitor(
         compositor_->CreateLatencyInfoSwapPromiseMonitor(&swap_latency_info));
     compositor_->SetNeedsForcedRedraw();
   }
@@ -654,6 +644,8 @@ void RenderWidget::OnWasShown(bool needs_repainting,
 void RenderWidget::OnRequestMoveAck() {
   DCHECK(pending_window_rect_count_);
   pending_window_rect_count_--;
+  if (!pending_window_rect_count_)
+    view_screen_rect_ = pending_window_rect_;
 }
 
 GURL RenderWidget::GetURLForGraphicsContext3D() {
@@ -679,8 +671,13 @@ void RenderWidget::OnMouseCaptureLost() {
 }
 
 void RenderWidget::OnSetFocus(bool enable) {
+  has_focus_ = enable;
+
   if (webwidget_)
     webwidget_->setFocus(enable);
+
+  FOR_EACH_OBSERVER(RenderFrameImpl, render_frames_,
+                    RenderWidgetSetFocus(enable));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -701,7 +698,8 @@ void RenderWidget::BeginMainFrame(double frame_time_sec) {
   webwidget_->beginFrame(frame_time_sec);
 }
 
-scoped_ptr<cc::OutputSurface> RenderWidget::CreateOutputSurface(bool fallback) {
+std::unique_ptr<cc::OutputSurface> RenderWidget::CreateOutputSurface(
+    bool fallback) {
   DCHECK(webwidget_);
   // For widgets that are never visible, we don't start the compositor, so we
   // never get a request for a cc::OutputSurface.
@@ -722,13 +720,25 @@ scoped_ptr<cc::OutputSurface> RenderWidget::CreateOutputSurface(bool fallback) {
   }
 #endif
 
+  uint32_t output_surface_id = next_output_surface_id_++;
+
+  if (command_line.HasSwitch(switches::kEnableVulkan)) {
+    scoped_refptr<cc::VulkanContextProvider> vulkan_context_provider =
+        cc::VulkanInProcessContextProvider::Create();
+    if (vulkan_context_provider) {
+      return base::WrapUnique(new DelegatedCompositorOutputSurface(
+          routing_id(), output_surface_id, nullptr, nullptr,
+          vulkan_context_provider, frame_swap_message_queue_));
+    }
+  }
+
+  // Create a gpu process channel and verify we want to use GPU compositing
+  // before creating any context providers.
   scoped_refptr<gpu::GpuChannelHost> gpu_channel_host;
   if (!use_software) {
-    CauseForGpuLaunch cause =
-        CAUSE_FOR_GPU_LAUNCH_WEBGRAPHICSCONTEXT3DCOMMANDBUFFERIMPL_INITIALIZE;
-    gpu_channel_host =
-        RenderThreadImpl::current()->EstablishGpuChannelSync(cause);
-    if (!gpu_channel_host.get()) {
+    gpu_channel_host = RenderThreadImpl::current()->EstablishGpuChannelSync(
+        CAUSE_FOR_GPU_LAUNCH_RENDERER_VERIFY_GPU_COMPOSITING);
+    if (!gpu_channel_host) {
       // Cause the compositor to wait and try again.
       return nullptr;
     }
@@ -738,86 +748,78 @@ scoped_ptr<cc::OutputSurface> RenderWidget::CreateOutputSurface(bool fallback) {
       use_software = true;
   }
 
-#if defined(ENABLE_VULKAN)
-  scoped_refptr<cc::VulkanContextProvider> vulkan_context_provider;
-#endif
-  scoped_refptr<ContextProviderCommandBuffer> context_provider;
-  scoped_refptr<ContextProviderCommandBuffer> worker_context_provider;
-  if (!use_software) {
-#if defined(ENABLE_VULKAN)
-    vulkan_context_provider = cc::VulkanInProcessContextProvider::Create();
-    if (vulkan_context_provider) {
-      uint32_t output_surface_id = next_output_surface_id_++;
-      return scoped_ptr<cc::OutputSurface>(new DelegatedCompositorOutputSurface(
-          routing_id(), output_surface_id, context_provider,
-          worker_context_provider, vulkan_context_provider,
-          frame_swap_message_queue_));
-    }
-#endif
-
-    context_provider = ContextProviderCommandBuffer::Create(
-        CreateGraphicsContext3D(gpu_channel_host.get()),
-        RENDER_COMPOSITOR_CONTEXT);
-    DCHECK(context_provider);
-    worker_context_provider =
-        RenderThreadImpl::current()->SharedWorkerContextProvider();
-    if (!worker_context_provider) {
-      // Cause the compositor to wait and try again.
-      return nullptr;
-    }
-
-#if defined(OS_ANDROID)
-    if (SynchronousCompositorFactory* factory =
-            SynchronousCompositorFactory::GetInstance()) {
-      uint32_t output_surface_id = next_output_surface_id_++;
-      return factory->CreateOutputSurface(
-          routing_id(), output_surface_id, frame_swap_message_queue_,
-          context_provider, worker_context_provider);
-    } else if (RenderThreadImpl::current()->sync_compositor_message_filter()) {
-      uint32_t output_surface_id = next_output_surface_id_++;
-      return make_scoped_ptr(new SynchronousCompositorOutputSurface(
-          context_provider, worker_context_provider, routing_id(),
-          output_surface_id, content::RenderThreadImpl::current()
-                                 ->sync_compositor_message_filter(),
-          frame_swap_message_queue_));
-    }
-#endif
-  }
-
-  uint32_t output_surface_id = next_output_surface_id_++;
-  // Composite-to-mailbox is currently used for layout tests in order to cause
-  // them to draw inside in the renderer to do the readback there. This should
-  // no longer be the case when crbug.com/311404 is fixed.
-  if (!RenderThreadImpl::current() ||
-      !RenderThreadImpl::current()->layout_test_mode()) {
-    DCHECK(compositor_deps_->GetCompositorImplThreadTaskRunner());
-    return make_scoped_ptr(new DelegatedCompositorOutputSurface(
-        routing_id(), output_surface_id, context_provider,
-        worker_context_provider,
-#if defined(ENABLE_VULKAN)
-        vulkan_context_provider,
-#endif
+  if (use_software) {
+    return base::WrapUnique(new DelegatedCompositorOutputSurface(
+        routing_id(), output_surface_id, nullptr, nullptr, nullptr,
         frame_swap_message_queue_));
   }
 
-  if (!context_provider.get()) {
-    scoped_ptr<cc::SoftwareOutputDevice> software_device(
-        new cc::SoftwareOutputDevice());
-
-    return make_scoped_ptr(new CompositorOutputSurface(
-        routing_id(), output_surface_id, nullptr, nullptr,
-#if defined(ENABLE_VULKAN)
-        nullptr,
-#endif
-        std::move(software_device), frame_swap_message_queue_, true));
+  scoped_refptr<ContextProviderCommandBuffer> worker_context_provider =
+      RenderThreadImpl::current()->SharedCompositorWorkerContextProvider();
+  if (!worker_context_provider) {
+    // Cause the compositor to wait and try again.
+    return nullptr;
   }
 
-  return make_scoped_ptr(new MailboxOutputSurface(
-      routing_id(), output_surface_id, context_provider,
-      worker_context_provider, frame_swap_message_queue_, cc::RGBA_8888));
+  // The renderer compositor context doesn't do a lot of stuff, so we don't
+  // expect it to need a lot of space for commands or transfer. Raster and
+  // uploads happen on the worker context instead.
+  gpu::SharedMemoryLimits limits = gpu::SharedMemoryLimits::ForMailboxContext();
+
+  // This is for an offscreen context for the compositor. So the default
+  // framebuffer doesn't need alpha, depth, stencil, antialiasing.
+  gpu::gles2::ContextCreationAttribHelper attributes;
+  attributes.alpha_size = -1;
+  attributes.depth_size = 0;
+  attributes.stencil_size = 0;
+  attributes.samples = 0;
+  attributes.sample_buffers = 0;
+  attributes.bind_generates_resource = false;
+  attributes.lose_context_when_out_of_memory = true;
+
+  constexpr bool automatic_flushes = false;
+  constexpr bool support_locking = false;
+
+  // The compositor context shares resources with the worker context unless
+  // the worker is async.
+  ContextProviderCommandBuffer* share_context = worker_context_provider.get();
+  if (compositor_deps_->IsAsyncWorkerContextEnabled())
+    share_context = nullptr;
+
+  scoped_refptr<ContextProviderCommandBuffer> context_provider(
+      new ContextProviderCommandBuffer(
+          std::move(gpu_channel_host), gpu::GPU_STREAM_DEFAULT,
+          gpu::GpuStreamPriority::NORMAL, gpu::kNullSurfaceHandle,
+          GetURLForGraphicsContext3D(), gfx::PreferIntegratedGpu,
+          automatic_flushes, support_locking, limits, attributes, share_context,
+          command_buffer_metrics::RENDER_COMPOSITOR_CONTEXT));
+
+#if defined(OS_ANDROID)
+  if (RenderThreadImpl::current()->sync_compositor_message_filter()) {
+    return base::WrapUnique(new SynchronousCompositorOutputSurface(
+        context_provider, worker_context_provider, routing_id(),
+        output_surface_id,
+        RenderThreadImpl::current()->sync_compositor_message_filter(),
+        frame_swap_message_queue_));
+  }
+#endif
+
+  // Composite-to-mailbox is currently used for layout tests in order to cause
+  // them to draw inside in the renderer to do the readback there. This should
+  // no longer be the case when crbug.com/311404 is fixed.
+  if (RenderThreadImpl::current()->layout_test_mode()) {
+    return base::WrapUnique(new MailboxOutputSurface(
+        routing_id(), output_surface_id, std::move(context_provider),
+        std::move(worker_context_provider), frame_swap_message_queue_,
+        cc::RGBA_8888));
+  }
+
+  return base::WrapUnique(new DelegatedCompositorOutputSurface(
+      routing_id(), output_surface_id, std::move(context_provider),
+      std::move(worker_context_provider), nullptr, frame_swap_message_queue_));
 }
 
-scoped_ptr<cc::BeginFrameSource>
+std::unique_ptr<cc::BeginFrameSource>
 RenderWidget::CreateExternalBeginFrameSource() {
   return compositor_deps_->CreateExternalBeginFrameSource(routing_id_);
 }
@@ -826,6 +828,10 @@ void RenderWidget::DidCommitAndDrawCompositorFrame() {
   // NOTE: Tests may break if this event is renamed or moved. See
   // tab_capture_performancetest.cc.
   TRACE_EVENT0("gpu", "RenderWidget::DidCommitAndDrawCompositorFrame");
+
+  FOR_EACH_OBSERVER(RenderFrameImpl, render_frames_,
+                    DidCommitAndDrawCompositorFrame());
+
   // Notify subclasses that we initiated the paint operation.
   DidInitiatePaint();
 }
@@ -863,12 +869,6 @@ void RenderWidget::DidCompleteSwapBuffers() {
   need_update_rect_for_auto_resize_ = false;
 }
 
-bool RenderWidget::ForOOPIF() const {
-  // TODO(simonhong): Remove this when we enable BeginFrame scheduling for
-  // OOPIF(crbug.com/471411).
-  return for_oopif_;
-}
-
 void RenderWidget::ForwardCompositorProto(const std::vector<uint8_t>& proto) {
   Send(new ViewHostMsg_ForwardCompositorProto(routing_id_, proto));
 }
@@ -894,38 +894,6 @@ void RenderWidget::OnSwapBuffersPosted() {
   TRACE_EVENT0("renderer", "RenderWidget::OnSwapBuffersPosted");
 }
 
-void RenderWidget::RecordFrameTimingEvents(
-    scoped_ptr<cc::FrameTimingTracker::CompositeTimingSet> composite_events,
-    scoped_ptr<cc::FrameTimingTracker::MainFrameTimingSet> main_frame_events) {
-  for (const auto& composite_event : *composite_events) {
-    int64_t frameId = composite_event.first;
-    const std::vector<cc::FrameTimingTracker::CompositeTimingEvent>& events =
-        composite_event.second;
-    std::vector<blink::WebFrameTimingEvent> webEvents;
-    for (size_t i = 0; i < events.size(); ++i) {
-      webEvents.push_back(blink::WebFrameTimingEvent(
-          events[i].frame_id,
-          (events[i].timestamp - base::TimeTicks()).InSecondsF()));
-    }
-    webwidget_->recordFrameTimingEvent(blink::WebWidget::CompositeEvent,
-                                       frameId, webEvents);
-  }
-  for (const auto& main_frame_event : *main_frame_events) {
-    int64_t frameId = main_frame_event.first;
-    const std::vector<cc::FrameTimingTracker::MainFrameTimingEvent>& events =
-        main_frame_event.second;
-    std::vector<blink::WebFrameTimingEvent> webEvents;
-    for (size_t i = 0; i < events.size(); ++i) {
-      webEvents.push_back(blink::WebFrameTimingEvent(
-          events[i].frame_id,
-          (events[i].timestamp - base::TimeTicks()).InSecondsF(),
-          (events[i].end_time - base::TimeTicks()).InSecondsF()));
-    }
-    webwidget_->recordFrameTimingEvent(blink::WebWidget::RenderEvent, frameId,
-                                       webEvents);
-  }
-}
-
 void RenderWidget::RequestScheduleAnimation() {
   scheduleAnimation();
 }
@@ -945,6 +913,13 @@ void RenderWidget::WillBeginCompositorFrame() {
 
   FOR_EACH_OBSERVER(RenderFrameProxy, render_frame_proxies_,
                     WillBeginCompositorFrame());
+}
+
+void RenderWidget::ReportFixedRasterScaleUseCounters(
+    bool has_blurry_content,
+    bool has_potential_performance_regression) {
+  webwidget_->reportFixedRasterScaleUseCounters(
+      has_blurry_content, has_potential_performance_regression);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1013,18 +988,20 @@ void RenderWidget::OnDidOverscroll(const DidOverscrollParams& params) {
   Send(new InputHostMsg_DidOverscroll(routing_id_, params));
 }
 
-void RenderWidget::OnInputEventAck(scoped_ptr<InputEventAck> input_event_ack) {
+void RenderWidget::OnInputEventAck(
+    std::unique_ptr<InputEventAck> input_event_ack) {
   Send(new InputHostMsg_HandleInputEvent_ACK(routing_id_, *input_event_ack));
 }
 
 void RenderWidget::NotifyInputEventHandled(
-    blink::WebInputEvent::Type handled_type) {
+    blink::WebInputEvent::Type handled_type,
+    InputEventAckState ack_result) {
   RenderThreadImpl* render_thread = RenderThreadImpl::current();
   InputHandlerManager* input_handler_manager =
       render_thread ? render_thread->input_handler_manager() : NULL;
   if (input_handler_manager) {
-    input_handler_manager->NotifyInputEventHandledOnMainThread(routing_id_,
-                                                               handled_type);
+    input_handler_manager->NotifyInputEventHandledOnMainThread(
+        routing_id_, handled_type, ack_result);
   }
 }
 
@@ -1069,7 +1046,7 @@ void RenderWidget::UpdateTextInputState(ShowIme show_ime,
       || text_field_is_dirty_
 #endif
       ) {
-    ViewHostMsg_TextInputState_Params params;
+    TextInputState params;
     params.type = new_type;
     params.mode = new_mode;
     params.flags = new_info.flags;
@@ -1108,6 +1085,9 @@ bool RenderWidget::WillHandleGestureEvent(const blink::WebGestureEvent& event) {
 }
 
 bool RenderWidget::WillHandleMouseEvent(const blink::WebMouseEvent& event) {
+  FOR_EACH_OBSERVER(RenderFrameImpl, render_frames_,
+                    RenderWidgetWillHandleMouseEvent());
+
   if (owner_delegate_)
     return owner_delegate_->RenderWidgetWillHandleMouseEvent(event);
 
@@ -1121,6 +1101,17 @@ void RenderWidget::Redraw() {
   set_next_paint_is_resize_ack();
   if (compositor_)
     compositor_->SetNeedsRedrawRect(gfx::Rect(size_));
+}
+
+void RenderWidget::ResizeWebWidget() {
+  webwidget_->resize(GetSizeForWebWidget());
+}
+
+gfx::Size RenderWidget::GetSizeForWebWidget() const {
+  if (IsUseZoomForDSFEnabled())
+    return gfx::ScaleToCeiledSize(size_, GetOriginalDeviceScaleFactor());
+
+  return size_;
 }
 
 void RenderWidget::Resize(const ResizeParams& params) {
@@ -1144,14 +1135,6 @@ void RenderWidget::Resize(const ResizeParams& params) {
   if (compositor_)
     compositor_->setViewportSize(params.physical_backing_size);
 
-  bool resized = size_ != params.new_size ||
-                 physical_backing_size_ != params.physical_backing_size;
-
-  size_ = params.new_size;
-  physical_backing_size_ = params.physical_backing_size;
-
-  top_controls_shrink_blink_size_ = params.top_controls_shrink_blink_size;
-  top_controls_height_ = params.top_controls_height;
   visible_viewport_size_ = params.visible_viewport_size;
   resizer_rect_ = params.resizer_rect;
 
@@ -1161,20 +1144,11 @@ void RenderWidget::Resize(const ResizeParams& params) {
   is_fullscreen_granted_ = params.is_fullscreen_granted;
   display_mode_ = params.display_mode;
 
-  webwidget_->setTopControlsHeight(params.top_controls_height,
-                                   top_controls_shrink_blink_size_);
+  size_ = params.new_size;
+  physical_backing_size_ = params.physical_backing_size;
 
-  if (resized) {
-    gfx::Size new_widget_size = size_;
-    if (IsUseZoomForDSFEnabled()) {
-      new_widget_size = gfx::ScaleToCeiledSize(new_widget_size,
-                                               GetOriginalDeviceScaleFactor());
-    }
-    // When resizing, we want to wait to paint before ACK'ing the resize.  This
-    // ensures that we only resize as fast as we can paint.  We only need to
-    // send an ACK if we are resized to a non-empty rect.
-    webwidget_->resize(new_widget_size);
-  }
+  ResizeWebWidget();
+
   WebSize visual_viewport_size;
 
   if (IsUseZoomForDSFEnabled()) {
@@ -1187,6 +1161,9 @@ void RenderWidget::Resize(const ResizeParams& params) {
 
   webwidget()->resizeVisualViewport(visual_viewport_size);
 
+  // When resizing, we want to wait to paint before ACK'ing the resize.  This
+  // ensures that we only resize as fast as we can paint.  We only need to
+  // send an ACK if we are resized to a non-empty rect.
   if (params.new_size.IsEmpty() || params.physical_backing_size.IsEmpty()) {
     // In this case there is no paint/composite and therefore no
     // ViewHostMsg_UpdateRect to send the resize ack with. We'd need to send the
@@ -1315,19 +1292,18 @@ void RenderWidget::ScheduleCompositeWithForcedRedraw() {
 }
 
 // static
-scoped_ptr<cc::SwapPromise> RenderWidget::QueueMessageImpl(
+std::unique_ptr<cc::SwapPromise> RenderWidget::QueueMessageImpl(
     IPC::Message* msg,
     MessageDeliveryPolicy policy,
     FrameSwapMessageQueue* frame_swap_message_queue,
     scoped_refptr<IPC::SyncMessageFilter> sync_message_filter,
     int source_frame_number) {
   bool first_message_for_frame = false;
-  frame_swap_message_queue->QueueMessageForFrame(policy,
-                                                 source_frame_number,
-                                                 make_scoped_ptr(msg),
+  frame_swap_message_queue->QueueMessageForFrame(policy, source_frame_number,
+                                                 base::WrapUnique(msg),
                                                  &first_message_for_frame);
   if (first_message_for_frame) {
-    scoped_ptr<cc::SwapPromise> promise(new QueueMessageSwapPromise(
+    std::unique_ptr<cc::SwapPromise> promise(new QueueMessageSwapPromise(
         sync_message_filter, frame_swap_message_queue, source_frame_number));
     return promise;
   }
@@ -1342,10 +1318,8 @@ void RenderWidget::QueueMessage(IPC::Message* msg,
     return;
   }
 
-  scoped_ptr<cc::SwapPromise> swap_promise =
-      QueueMessageImpl(msg,
-                       policy,
-                       frame_swap_message_queue_.get(),
+  std::unique_ptr<cc::SwapPromise> swap_promise =
+      QueueMessageImpl(msg, policy, frame_swap_message_queue_.get(),
                        RenderThreadImpl::current()->sync_message_filter(),
                        compositor_->GetSourceFrameNumber());
 
@@ -1430,7 +1404,7 @@ void RenderWidget::closeWidgetSoon() {
 }
 
 void RenderWidget::QueueSyntheticGesture(
-    scoped_ptr<SyntheticGestureParams> gesture_params,
+    std::unique_ptr<SyntheticGestureParams> gesture_params,
     const SyntheticGestureCompletionCallback& callback) {
   DCHECK(!callback.is_null());
 
@@ -1448,7 +1422,7 @@ void RenderWidget::Close() {
   compositor_.reset();
   if (webwidget_) {
     webwidget_->close();
-    webwidget_ = NULL;
+    webwidget_ = nullptr;
   }
 }
 
@@ -1743,11 +1717,6 @@ bool RenderWidget::SetDeviceColorProfile(
 void RenderWidget::OnOrientationChange() {
 }
 
-void RenderWidget::DidInitiatePaint() {
-  if (owner_delegate_)
-    owner_delegate_->RenderWidgetDidCommitAndDrawCompositorFrame();
-}
-
 void RenderWidget::DidFlushPaint() {
   if (owner_delegate_)
     owner_delegate_->RenderWidgetDidFlushPaint();
@@ -2014,8 +1983,8 @@ void RenderWidget::didHandleGestureEvent(
 }
 
 void RenderWidget::didOverscroll(
-    const blink::WebFloatSize& unusedDelta,
-    const blink::WebFloatSize& accumulatedRootOverScroll,
+    const blink::WebFloatSize& overscrollDelta,
+    const blink::WebFloatSize& accumulatedOverscroll,
     const blink::WebFloatPoint& position,
     const blink::WebFloatSize& velocity) {
 #if defined(OS_MACOSX)
@@ -2025,7 +1994,7 @@ void RenderWidget::didOverscroll(
   if (!compositor_deps()->IsElasticOverscrollEnabled())
     return;
 #endif
-  input_handler_->DidOverscrollFromBlink(unusedDelta, accumulatedRootOverScroll,
+  input_handler_->DidOverscrollFromBlink(overscrollDelta, accumulatedOverscroll,
                                          position, velocity);
 }
 
@@ -2090,62 +2059,6 @@ void RenderWidget::didUpdateTextOfFocusedElementByNonUserInput() {
   if (!IsUsingImeThread())
     text_field_is_dirty_ = true;
 #endif
-}
-
-scoped_ptr<WebGraphicsContext3DCommandBufferImpl>
-RenderWidget::CreateGraphicsContext3D(gpu::GpuChannelHost* gpu_channel_host) {
-  // This is for an offscreen context for raster in the compositor. So the
-  // default framebuffer doesn't need alpha, depth, stencil, antialiasing.
-  gpu::gles2::ContextCreationAttribHelper attributes;
-  attributes.alpha_size = -1;
-  attributes.depth_size = 0;
-  attributes.stencil_size = 0;
-  attributes.samples = 0;
-  attributes.sample_buffers = 0;
-  attributes.bind_generates_resource = false;
-  attributes.lose_context_when_out_of_memory = true;
-
-  WebGraphicsContext3DCommandBufferImpl::SharedMemoryLimits limits;
-#if defined(OS_ANDROID)
-  bool using_synchronous_compositing =
-      SynchronousCompositorFactory::GetInstance() ||
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kIPCSyncCompositing);
-  // If we raster too fast we become upload bound, and pending
-  // uploads consume memory. For maximum upload throughput, we would
-  // want to allow for upload_throughput * pipeline_time of pending
-  // uploads, after which we are just wasting memory. Since we don't
-  // know our upload throughput yet, this just caps our memory usage.
-  // Synchronous compositor uses half because synchronous compositor
-  // pipeline is only one frame deep. But twice of half for low end
-  // because 16bit texture is not supported.
-  size_t divider = using_synchronous_compositing ? 2 : 1;
-  if (base::SysInfo::IsLowEndDevice())
-    divider = 6;
-  // For reference Nexus10 can upload 1MB in about 2.5ms.
-  const double max_mb_uploaded_per_ms = 2.0 / (5 * divider);
-  // Deadline to draw a frame to achieve 60 frames per second.
-  const size_t kMillisecondsPerFrame = 16;
-  // Assuming a two frame deep pipeline between the CPU and the GPU.
-  size_t max_transfer_buffer_usage_mb =
-      static_cast<size_t>(2 * kMillisecondsPerFrame * max_mb_uploaded_per_ms);
-  static const size_t kBytesPerMegabyte = 1024 * 1024;
-  // We keep the MappedMemoryReclaimLimit the same as the upload limit
-  // to avoid unnecessarily stalling the compositor thread.
-  limits.mapped_memory_reclaim_limit =
-      max_transfer_buffer_usage_mb * kBytesPerMegabyte;
-#endif
-  limits.command_buffer_size = 64 * 1024;
-  limits.start_transfer_buffer_size = 64 * 1024;
-  limits.min_transfer_buffer_size = 64 * 1024;
-
-  bool share_resources = true;
-  bool automatic_flushes = false;
-
-  return make_scoped_ptr(new WebGraphicsContext3DCommandBufferImpl(
-      gpu::kNullSurfaceHandle, GetURLForGraphicsContext3D(), gpu_channel_host,
-      attributes, gfx::PreferIntegratedGpu, share_resources, automatic_flushes,
-      limits, nullptr));
 }
 
 void RenderWidget::RegisterRenderFrameProxy(RenderFrameProxy* proxy) {

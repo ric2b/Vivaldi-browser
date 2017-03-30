@@ -64,8 +64,8 @@ public:
     BLINK_EXPORT static void forceDisplayList2dCanvas(bool);
     BLINK_EXPORT static void forceDisable2dCanvasCopyOnWrite(bool);
 
-    BLINK_EXPORT static void enableExperimentalFramework(bool);
-    BLINK_EXPORT static bool isExperimentalFrameworkEnabled();
+    BLINK_EXPORT static void enableOriginTrials(bool);
+    BLINK_EXPORT static bool isOriginTrialsEnabled();
 
     BLINK_EXPORT static void enableApplicationCache(bool);
     BLINK_EXPORT static void enableAudioOutputDevices(bool);
@@ -78,12 +78,12 @@ public:
     BLINK_EXPORT static void enableFastMobileScrolling(bool);
     BLINK_EXPORT static void enableFileSystem(bool);
     BLINK_EXPORT static void enableImageColorProfiles(bool);
+    BLINK_EXPORT static void enableInputMultipleFieldsUI(bool);
     BLINK_EXPORT static void enableMediaCapture(bool);
     BLINK_EXPORT static void enableMediaDocumentDownloadButton(bool);
     BLINK_EXPORT static void enableNavigatorContentUtils(bool);
     BLINK_EXPORT static void enableNetworkInformation(bool);
     BLINK_EXPORT static void enableNewMediaPlaybackUi(bool);
-    BLINK_EXPORT static void enableNotificationActionIcons(bool);
     BLINK_EXPORT static void enableNotificationConstructor(bool);
     BLINK_EXPORT static void enableNotifications(bool);
     BLINK_EXPORT static void enableOrientationEvent(bool);
@@ -95,7 +95,6 @@ public:
     BLINK_EXPORT static void enablePushMessaging(bool);
     BLINK_EXPORT static void enableReducedReferrerGranularity(bool);
     BLINK_EXPORT static void enableRenderingPipelineThrottling(bool);
-    BLINK_EXPORT static void enableRequestAutocomplete(bool);
     BLINK_EXPORT static void enableScriptedSpeech(bool);
     BLINK_EXPORT static void enableScrollAnchoring(bool);
     BLINK_EXPORT static void enableSharedWorker(bool);
@@ -104,7 +103,7 @@ public:
     BLINK_EXPORT static void enableUnsafeES3APIs(bool);
     BLINK_EXPORT static void enableV8IdleTasks(bool);
     BLINK_EXPORT static void enableWebBluetooth(bool);
-    BLINK_EXPORT static void enableWebFontsIntervention(bool);
+    BLINK_EXPORT static void enableWebFontsInterventionV2(bool);
     BLINK_EXPORT static void enableWebFontsInterventionTrigger(bool);
     BLINK_EXPORT static void enableWebGLDraftExtensions(bool);
     BLINK_EXPORT static void enableWebGLImageChromium(bool);
@@ -112,10 +111,6 @@ public:
     BLINK_EXPORT static void enableWebVR(bool);
     BLINK_EXPORT static void enableXSLT(bool);
     BLINK_EXPORT static void forceOverlayFullscreenVideo(bool);
-
-    // TODO(nhiroki): Remove after ExtendableMessageEvent is shipped
-    // (crbug.com/543198).
-    BLINK_EXPORT static bool isServiceWorkerExtendableMessageEventEnabled();
 
 private:
     WebRuntimeFeatures();

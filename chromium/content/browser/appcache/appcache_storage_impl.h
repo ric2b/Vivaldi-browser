@@ -64,12 +64,10 @@ class AppCacheStorageImpl : public AppCacheStorage {
                          int response_code) override;
   void StoreEvictionTimes(AppCacheGroup* group) override;
   AppCacheResponseReader* CreateResponseReader(const GURL& manifest_url,
-                                               int64_t group_id,
                                                int64_t response_id) override;
-  AppCacheResponseWriter* CreateResponseWriter(const GURL& manifest_url,
-                                               int64_t group_id) override;
+  AppCacheResponseWriter* CreateResponseWriter(
+      const GURL& manifest_url) override;
   AppCacheResponseMetadataWriter* CreateResponseMetadataWriter(
-      int64_t group_id,
       int64_t response_id) override;
   void DoomResponses(const GURL& manifest_url,
                      const std::vector<int64_t>& response_ids) override;
@@ -147,6 +145,7 @@ class AppCacheStorageImpl : public AppCacheStorage {
                                int64_t group_id,
                                const GURL& manifest_url);
 
+  // Don't call this when |is_disabled_| is true.
   CONTENT_EXPORT AppCacheDiskCache* disk_cache();
 
   // The directory in which we place files in the file system.
@@ -180,7 +179,7 @@ class AppCacheStorageImpl : public AppCacheStorage {
   // disk cache and cannot continue.
   bool is_disabled_;
 
-  scoped_ptr<AppCacheDiskCache> disk_cache_;
+  std::unique_ptr<AppCacheDiskCache> disk_cache_;
   base::OneShotTimer lazy_commit_timer_;
 
   // Used to short-circuit certain operations without having to schedule

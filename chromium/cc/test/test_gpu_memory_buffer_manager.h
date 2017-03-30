@@ -5,6 +5,8 @@
 #ifndef CC_TEST_TEST_GPU_MEMORY_BUFFER_MANAGER_H_
 #define CC_TEST_TEST_GPU_MEMORY_BUFFER_MANAGER_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
 
@@ -20,12 +22,12 @@ class TestGpuMemoryBufferManager : public gpu::GpuMemoryBufferManager {
       bool in_use);
 
   // Overridden from gpu::GpuMemoryBufferManager:
-  scoped_ptr<gfx::GpuMemoryBuffer> AllocateGpuMemoryBuffer(
+  std::unique_ptr<gfx::GpuMemoryBuffer> AllocateGpuMemoryBuffer(
       const gfx::Size& size,
       gfx::BufferFormat format,
       gfx::BufferUsage usage,
-      int32_t surface_id) override;
-  scoped_ptr<gfx::GpuMemoryBuffer> CreateGpuMemoryBufferFromHandle(
+      gpu::SurfaceHandle surface_handle) override;
+  std::unique_ptr<gfx::GpuMemoryBuffer> CreateGpuMemoryBufferFromHandle(
       const gfx::GpuMemoryBufferHandle& handle,
       const gfx::Size& size,
       gfx::BufferFormat format) override;

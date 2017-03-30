@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import sys
+import time
 
 file_dir = os.path.dirname(__file__)
 sys.path.append(os.path.join(file_dir, '..', '..', 'perf'))
@@ -22,13 +23,18 @@ from telemetry.internal.backends.chrome_inspector import websocket
 import common_util
 
 
-DEFAULT_TIMEOUT_SECONDS = 10 # seconds
+DEFAULT_TIMEOUT_SECONDS = 10
+
+_WEBSOCKET_TIMEOUT_SECONDS = 10
 
 
 class DevToolsConnectionException(Exception):
   def __init__(self, message):
     super(DevToolsConnectionException, self).__init__(message)
     logging.warning("DevToolsConnectionException: " + message)
+
+class DevToolsConnectionTargetCrashed(DevToolsConnectionException):
+  pass
 
 
 # Taken from telemetry.internal.backends.chrome_inspector.tracing_backend.
@@ -86,6 +92,8 @@ class DevToolsConnection(object):
   TRACING_DONE_EVENT = 'Tracing.tracingComplete'
   TRACING_STREAM_EVENT = 'Tracing.tracingComplete'  # Same as TRACING_DONE.
   TRACING_TIMEOUT = 300
+  HTTP_ATTEMPTS = 10
+  HTTP_ATTEMPT_INTERVAL_SECONDS = 0.1
 
   def __init__(self, hostname, port):
     """Initializes the connection with a DevTools server.
@@ -106,6 +114,7 @@ class DevToolsConnection(object):
     self._target_descriptor = None
 
     self._Connect()
+    self.RegisterListener('Inspector.targetCrashed', self)
 
   def RegisterListener(self, name, listener):
     """Registers a listener for an event.
@@ -177,7 +186,7 @@ class DevToolsConnection(object):
     request = {'method': method}
     if params:
       request['params'] = params
-    return self._ws.SyncRequest(request)
+    return self._ws.SyncRequest(request, timeout=_WEBSOCKET_TIMEOUT_SECONDS)
 
   def SendAndIgnoreResponse(self, method, params=None):
     """Issues a request to the DevTools server, do not wait for the response.
@@ -234,6 +243,7 @@ class DevToolsConnection(object):
                                  self._scoped_states[scoped_state][0])
     self._tearing_down_tracing = False
 
+    logging.info('Navigate to %s' % url)
     self.SendAndIgnoreResponse('Page.navigate', {'url': url})
 
     self._Dispatch(timeout=timeout_seconds)
@@ -290,6 +300,11 @@ class DevToolsConnection(object):
         break
     if not self._please_stop:
       logging.warning('%s stopped on a timeout.' % kind)
+
+  def Handle(self, method, event):
+    del event # unused
+    if method == 'Inspector.targetCrashed':
+      raise DevToolsConnectionTargetCrashed('Renderer crashed.')
 
   def _TearDownMonitoring(self):
     if self.TRACING_DOMAIN in self._domains_to_enable:
@@ -349,17 +364,22 @@ class DevToolsConnection(object):
 
   def _HttpRequest(self, path):
     assert path[0] == '/'
-    r = httplib.HTTPConnection(self._http_hostname, self._http_port)
-    try:
-      r.request('GET', '/json' + path)
-      response = r.getresponse()
-      if response.status != 200:
-        raise DevToolsConnectionException(
-            'Cannot connect to DevTools, reponse code %d' % response.status)
-      raw_response = response.read()
-    finally:
-      r.close()
-    return raw_response
+    for _ in xrange(self.HTTP_ATTEMPTS):
+      r = httplib.HTTPConnection(self._http_hostname, self._http_port)
+      try:
+        r.request('GET', '/json' + path)
+        response = r.getresponse()
+        if response.status != 200:
+          raise DevToolsConnectionException(
+              'Cannot connect to DevTools, reponse code %d' % response.status)
+        return response.read()
+      except httplib.BadStatusLine as exception:
+        logging.warning('Devtools HTTP connection failed: %s' % repr(exception))
+        time.sleep(self.HTTP_ATTEMPT_INTERVAL_SECONDS)
+      finally:
+        r.close()
+    # Raise the exception that has failed the last attempt.
+    raise
 
   def _Connect(self):
     assert not self._ws
@@ -368,9 +388,12 @@ class DevToolsConnection(object):
       if target_descriptor['type'] == 'page':
         self._target_descriptor = target_descriptor
         break
-    assert self._target_descriptor['url'] == 'about:blank'
+    if self._target_descriptor['url'] != 'about:blank':
+      raise DevToolsConnectionException(
+          'Looks like devtools connection was made to a different instance.')
     self._ws = inspector_websocket.InspectorWebsocket()
-    self._ws.Connect(self._target_descriptor['webSocketDebuggerUrl'])
+    self._ws.Connect(self._target_descriptor['webSocketDebuggerUrl'],
+                     timeout=_WEBSOCKET_TIMEOUT_SECONDS)
 
 
 class Listener(object):
@@ -390,14 +413,14 @@ class Listener(object):
       event_name: (str) Event name, as registered.
       event: (dict) complete event.
     """
-    pass
+    raise NotImplementedError
 
 
 class Track(Listener):
   """Collects data from a DevTools server."""
   def GetEvents(self):
     """Returns a list of collected events, finalizing the state if necessary."""
-    pass
+    raise NotImplementedError
 
   def ToJsonDict(self):
     """Serializes to a dictionary, to be dumped as JSON.
@@ -406,10 +429,10 @@ class Track(Listener):
       A dict that can be dumped by the json module, and loaded by
       FromJsonDict().
     """
-    pass
+    raise NotImplementedError
 
   @classmethod
-  def FromJsonDict(cls, json_dict):
+  def FromJsonDict(cls, _json_dict):
     """Returns a Track instance constructed from data dumped by
        Track.ToJsonDict().
 
@@ -419,4 +442,8 @@ class Track(Listener):
     Returns:
       a Track instance.
     """
-    pass
+    # There is no sensible way to deserialize this abstract class, but
+    # subclasses are not required to define a deserialization method. For
+    # example, for testing we have a FakeRequestTrack which is never
+    # deserialized; instead fake instances are deserialized as RequestTracks.
+    assert False

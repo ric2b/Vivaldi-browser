@@ -11,6 +11,7 @@
 #include "base/command_line.h"
 #include "base/debug/debugging_flags.h"
 #include "base/debug/profiler.h"
+#include "base/feature_list.h"
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -118,6 +119,10 @@ bool HasInternalURL(const NavigationEntry* entry) {
 }  // namespace
 
 namespace chrome {
+
+const base::Feature kBackspaceGoesBackFeature {
+  "BackspaceGoesBack", base::FEATURE_DISABLED_BY_DEFAULT
+};
 
 ///////////////////////////////////////////////////////////////////////////////
 // BrowserCommandController, public:
@@ -317,10 +322,24 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
   // declaration order in browser.h!
   switch (id) {
     // Navigation commands
+    case IDC_BACKSPACE_BACK:
+      if (base::FeatureList::IsEnabled(kBackspaceGoesBackFeature))
+        GoBack(browser_, disposition);
+      else
+        browser_->window()->MaybeShowNewBackShortcutBubble(false);
+      break;
     case IDC_BACK:
+      browser_->window()->HideNewBackShortcutBubble();
       GoBack(browser_, disposition);
       break;
+    case IDC_BACKSPACE_FORWARD:
+      if (base::FeatureList::IsEnabled(kBackspaceGoesBackFeature))
+        GoForward(browser_, disposition);
+      else
+        browser_->window()->MaybeShowNewBackShortcutBubble(true);
+      break;
     case IDC_FORWARD:
+      browser_->window()->HideNewBackShortcutBubble();
       GoForward(browser_, disposition);
       break;
     case IDC_RELOAD:
@@ -422,9 +441,6 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
 #endif
 
 #if defined(OS_MACOSX)
-    case IDC_PRESENTATION_MODE:
-      chrome::ToggleFullscreenMode(browser_);
-      break;
     case IDC_TOGGLE_FULLSCREEN_TOOLBAR:
       chrome::ToggleFullscreenToolbar(browser_);
       break;
@@ -987,7 +1003,11 @@ void BrowserCommandController::UpdateCommandsForTabState() {
     return;
 
   // Navigation commands
+  command_updater_.UpdateCommandEnabled(IDC_BACKSPACE_BACK,
+                                        CanGoBack(browser_));
   command_updater_.UpdateCommandEnabled(IDC_BACK, CanGoBack(browser_));
+  command_updater_.UpdateCommandEnabled(IDC_BACKSPACE_FORWARD,
+                                        CanGoForward(browser_));
   command_updater_.UpdateCommandEnabled(IDC_FORWARD, CanGoForward(browser_));
   command_updater_.UpdateCommandEnabled(IDC_RELOAD, CanReload(browser_));
   command_updater_.UpdateCommandEnabled(IDC_RELOAD_BYPASSING_CACHE,
@@ -1174,8 +1194,6 @@ void BrowserCommandController::UpdateCommandsForFullscreenMode() {
 #endif
 
   command_updater_.UpdateCommandEnabled(IDC_FULLSCREEN, fullscreen_enabled);
-  command_updater_.UpdateCommandEnabled(IDC_PRESENTATION_MODE,
-                                        fullscreen_enabled);
   command_updater_.UpdateCommandEnabled(IDC_TOGGLE_FULLSCREEN_TOOLBAR,
                                         fullscreen_enabled);
 

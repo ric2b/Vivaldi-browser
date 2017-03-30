@@ -7,6 +7,7 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
 #include "net/quic/quic_chromium_client_session.h"
@@ -65,8 +66,9 @@ class MockQuicClientSessionBase : public QuicClientSessionBase {
   MOCK_METHOD1(CreateIncomingDynamicStream, QuicSpdyStream*(QuicStreamId id));
   MOCK_METHOD1(CreateOutgoingDynamicStream,
                QuicChromiumClientStream*(SpdyPriority priority));
-  MOCK_METHOD5(WritevData,
-               QuicConsumedData(QuicStreamId id,
+  MOCK_METHOD6(WritevData,
+               QuicConsumedData(ReliableQuicStream* stream,
+                                QuicStreamId id,
                                 QuicIOVector data,
                                 QuicStreamOffset offset,
                                 bool fin,
@@ -119,7 +121,7 @@ class MockQuicClientSessionBase : public QuicClientSessionBase {
   MOCK_METHOD0(ShouldCreateOutgoingDynamicStream, bool());
 
  private:
-  scoped_ptr<QuicCryptoStream> crypto_stream_;
+  std::unique_ptr<QuicCryptoStream> crypto_stream_;
 
   DISALLOW_COPY_AND_ASSIGN(MockQuicClientSessionBase);
 };
@@ -132,7 +134,7 @@ MockQuicClientSessionBase::MockQuicClientSessionBase(
                             DefaultQuicConfig()) {
   crypto_stream_.reset(new QuicCryptoStream(this));
   Initialize();
-  ON_CALL(*this, WritevData(_, _, _, _, _))
+  ON_CALL(*this, WritevData(_, _, _, _, _, _))
       .WillByDefault(testing::Return(QuicConsumedData(0, false)));
 }
 
@@ -143,9 +145,10 @@ class QuicChromiumClientStreamTest
  public:
   QuicChromiumClientStreamTest()
       : crypto_config_(CryptoTestUtils::ProofVerifierForTesting()),
-        session_(new MockConnection(&helper_,
-                                    Perspective::IS_CLIENT,
-                                    SupportedVersions(GetParam())),
+        session_(new MockQuicConnection(&helper_,
+                                        &alarm_factory_,
+                                        Perspective::IS_CLIENT,
+                                        SupportedVersions(GetParam())),
                  &push_promise_index_) {
     stream_ =
         new QuicChromiumClientStream(kTestStreamId, &session_, BoundNetLog());
@@ -193,7 +196,8 @@ class QuicChromiumClientStreamTest
 
   QuicCryptoClientConfig crypto_config_;
   testing::StrictMock<MockDelegate> delegate_;
-  MockConnectionHelper helper_;
+  MockQuicConnectionHelper helper_;
+  MockAlarmFactory alarm_factory_;
   MockQuicClientSessionBase session_;
   QuicChromiumClientStream* stream_;
   SpdyHeaderBlock headers_;
@@ -431,7 +435,7 @@ TEST_P(QuicChromiumClientStreamTest, WriteStreamData) {
   const size_t kDataLen = arraysize(kData1);
 
   // All data written.
-  EXPECT_CALL(session_, WritevData(stream_->id(), _, _, _, _))
+  EXPECT_CALL(session_, WritevData(stream_, stream_->id(), _, _, _, _))
       .WillOnce(Return(QuicConsumedData(kDataLen, true)));
   TestCompletionCallback callback;
   EXPECT_EQ(OK, stream_->WriteStreamData(base::StringPiece(kData1, kDataLen),
@@ -446,7 +450,7 @@ TEST_P(QuicChromiumClientStreamTest, WriteStreamDataAsync) {
   const size_t kDataLen = arraysize(kData1);
 
   // No data written.
-  EXPECT_CALL(session_, WritevData(stream_->id(), _, _, _, _))
+  EXPECT_CALL(session_, WritevData(stream_, stream_->id(), _, _, _, _))
       .WillOnce(Return(QuicConsumedData(0, false)));
   TestCompletionCallback callback;
   EXPECT_EQ(ERR_IO_PENDING,
@@ -455,8 +459,54 @@ TEST_P(QuicChromiumClientStreamTest, WriteStreamDataAsync) {
   ASSERT_FALSE(callback.have_result());
 
   // All data written.
-  EXPECT_CALL(session_, WritevData(stream_->id(), _, _, _, _))
+  EXPECT_CALL(session_, WritevData(stream_, stream_->id(), _, _, _, _))
       .WillOnce(Return(QuicConsumedData(kDataLen, true)));
+  stream_->OnCanWrite();
+  ASSERT_TRUE(callback.have_result());
+  EXPECT_EQ(OK, callback.WaitForResult());
+}
+
+TEST_P(QuicChromiumClientStreamTest, WritevStreamData) {
+  EXPECT_CALL(delegate_, OnClose(QUIC_NO_ERROR));
+
+  scoped_refptr<StringIOBuffer> buf1(new StringIOBuffer("hello world!"));
+  scoped_refptr<StringIOBuffer> buf2(
+      new StringIOBuffer("Just a small payload"));
+
+  // All data written.
+  EXPECT_CALL(session_, WritevData(stream_, stream_->id(), _, _, _, _))
+      .WillOnce(Return(QuicConsumedData(buf1->size(), false)))
+      .WillOnce(Return(QuicConsumedData(buf2->size(), true)));
+  TestCompletionCallback callback;
+  EXPECT_EQ(
+      OK, stream_->WritevStreamData({buf1, buf2}, {buf1->size(), buf2->size()},
+                                    true, callback.callback()));
+}
+
+TEST_P(QuicChromiumClientStreamTest, WritevStreamDataAsync) {
+  EXPECT_CALL(delegate_, HasSendHeadersComplete()).Times(AnyNumber());
+  EXPECT_CALL(delegate_, OnClose(QUIC_NO_ERROR));
+
+  scoped_refptr<StringIOBuffer> buf1(new StringIOBuffer("hello world!"));
+  scoped_refptr<StringIOBuffer> buf2(
+      new StringIOBuffer("Just a small payload"));
+
+  // Only a part of the data is written.
+  EXPECT_CALL(session_, WritevData(stream_, stream_->id(), _, _, _, _))
+      // First piece of data is written.
+      .WillOnce(Return(QuicConsumedData(buf1->size(), false)))
+      // Second piece of data is queued.
+      .WillOnce(Return(QuicConsumedData(0, false)));
+  TestCompletionCallback callback;
+  EXPECT_EQ(ERR_IO_PENDING,
+            stream_->WritevStreamData({buf1.get(), buf2.get()},
+                                      {buf1->size(), buf2->size()}, true,
+                                      callback.callback()));
+  ASSERT_FALSE(callback.have_result());
+
+  // The second piece of data is written.
+  EXPECT_CALL(session_, WritevData(stream_, stream_->id(), _, _, _, _))
+      .WillOnce(Return(QuicConsumedData(buf2->size(), true)));
   stream_->OnCanWrite();
   ASSERT_TRUE(callback.have_result());
   EXPECT_EQ(OK, callback.WaitForResult());

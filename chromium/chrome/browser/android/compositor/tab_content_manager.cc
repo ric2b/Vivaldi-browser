@@ -24,10 +24,12 @@
 #include "content/public/browser/readback_types.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "jni/TabContentManager_jni.h"
 #include "ui/android/resources/ui_resource_provider.h"
 #include "ui/gfx/android/java_bitmap.h"
+#include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/rect.h"
 #include "url/gurl.h"
 
@@ -77,17 +79,16 @@ class TabContentManager::TabReadbackRequest {
     }
 
     DCHECK(view->GetWebContents());
-    view->GetWebContents()
-        ->GetRenderViewHost()
-        ->GetWidget()
-        ->LockBackingStore();
+    content::RenderWidgetHost* rwh = view->GetWebContents()
+                                         ->GetRenderViewHost()
+                                         ->GetWidget();
+    rwh->LockBackingStore();
 
     SkColorType color_type = kN32_SkColorType;
-
-    // Calling this method with an empty rect will return a bitmap of the size
-    // of the content.
-    view->GetScaledContentBitmap(thumbnail_scale_, color_type, gfx::Rect(),
-                                 result_callback);
+    gfx::Rect src_rect = rwh->GetView()->GetViewBounds();
+    gfx::Size dst_size(
+        gfx::ScaleToCeiledSize(src_rect.size(), thumbnail_scale_));
+    rwh->CopyFromBackingStore(src_rect, dst_size, result_callback, color_type);
   }
 
   void OnFinishGetTabThumbnailBitmap(const SkBitmap& bitmap,
@@ -260,6 +261,8 @@ void TabContentManager::CacheTab(JNIEnv* env,
 
   if (thumbnail_cache_->CheckAndUpdateThumbnailMetaData(tab_id, url)) {
     if (!view ||
+        !view->GetWebContents()->GetRenderViewHost() ||
+        !view->GetWebContents()->GetRenderViewHost()->GetWidget() ||
         !view->GetWebContents()
              ->GetRenderViewHost()
              ->GetWidget()

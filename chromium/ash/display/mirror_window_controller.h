@@ -28,7 +28,7 @@ class ScreenPositionClient;
 }
 }
 
-namespace gfx {
+namespace display {
 class Display;
 }
 
@@ -71,8 +71,8 @@ class ASH_EXPORT MirrorWindowController : public aura::WindowTreeHostObserver {
   // display is not mirrored by the compositor path.
   aura::Window* GetWindow();
 
-  // Returns the gfx::Display for the mirroring root window.
-  gfx::Display GetDisplayForRootWindow(const aura::Window* root) const;
+  // Returns the display::Display for the mirroring root window.
+  display::Display GetDisplayForRootWindow(const aura::Window* root) const;
 
   // Returns the AshWindwoTreeHost created for |display_id|.
   AshWindowTreeHost* GetAshWindowTreeHostForDisplayId(int64_t display_id);

@@ -5,8 +5,8 @@
 #ifndef NET_QUIC_QUIC_CRYPTO_SERVER_STREAM_H_
 #define NET_QUIC_QUIC_CRYPTO_SERVER_STREAM_H_
 
-#include <stdint.h>
-
+#include <cstdint>
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
@@ -121,6 +121,7 @@ class NET_EXPORT_PRIVATE QuicCryptoServerStream
       const CryptoHandshakeMessage& message,
       const ValidateClientHelloResultCallback::Result& result,
       CryptoHandshakeMessage* reply,
+      DiversificationNonce* out_diversification_nonce,
       std::string* error_details);
 
   // Hook that allows the server to set QuicConfig defaults just
@@ -175,6 +176,10 @@ class NET_EXPORT_PRIVATE QuicCryptoServerStream
   // by ProofSource::GetProof.
   QuicCryptoProof crypto_proof_;
 
+  // Hash of the last received CHLO message which can be used for generating
+  // server config update messages.
+  std::string chlo_hash_;
+
   // Pointer to the active callback that will receive the result of
   // the client hello validation request and forward it to
   // FinishProcessingHandshakeMessage for processing.  nullptr if no
@@ -195,7 +200,7 @@ class NET_EXPORT_PRIVATE QuicCryptoServerStream
   // If the client provides CachedNetworkParameters in the STK in the CHLO, then
   // store here, and send back in future STKs if we have no better bandwidth
   // estimate to send.
-  scoped_ptr<CachedNetworkParameters> previous_cached_network_params_;
+  std::unique_ptr<CachedNetworkParameters> previous_cached_network_params_;
 
   // Contains any source address tokens which were present in the CHLO.
   SourceAddressTokens previous_source_address_tokens_;

@@ -5,13 +5,15 @@
 #ifndef COMPONENTS_SCHEDULER_RENDERER_RENDERER_SCHEDULER_H_
 #define COMPONENTS_SCHEDULER_RENDERER_RENDERER_SCHEDULER_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "components/scheduler/child/child_scheduler.h"
 #include "components/scheduler/child/single_thread_idle_task_runner.h"
 #include "components/scheduler/renderer/render_widget_scheduling_state.h"
 #include "components/scheduler/scheduler_export.h"
+#include "third_party/WebKit/public/platform/WebScheduler.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 
 namespace base {
@@ -36,19 +38,36 @@ class RenderWidgetSchedulingState;
 class SCHEDULER_EXPORT RendererScheduler : public ChildScheduler {
  public:
   ~RendererScheduler() override;
-  static scoped_ptr<RendererScheduler> Create();
+  static std::unique_ptr<RendererScheduler> Create();
 
   // Returns the compositor task runner.
   virtual scoped_refptr<TaskQueue> CompositorTaskRunner() = 0;
 
   // Keep RendererScheduler::UseCaseToString in sync with this enum.
   enum class UseCase {
+    // No active use case detected.
     NONE,
+    // A continuous gesture (e.g., scroll, pinch) which is being driven by the
+    // compositor thread.
     COMPOSITOR_GESTURE,
-    MAIN_THREAD_GESTURE,
-    SYNCHRONIZED_GESTURE,  // Both threads in the critical path.
+    // An unspecified touch gesture which is being handled by the main thread.
+    // Note that since we don't have a full view of the use case, we should be
+    // careful to prioritize all work equally.
+    MAIN_THREAD_CUSTOM_INPUT_HANDLING,
+    // A continuous gesture (e.g., scroll, pinch) which is being driven by the
+    // compositor thread but also observed by the main thread. An example is
+    // synchronized scrolling where a scroll listener on the main thread changes
+    // page layout based on the current scroll position.
+    SYNCHRONIZED_GESTURE,
+    // A gesture has recently started and we are about to run main thread touch
+    // listeners to find out the actual gesture type. To minimize touch latency,
+    // only input handling work should run in this state.
     TOUCHSTART,
+    // The page is loading.
     LOADING,
+    // A continuous gesture (e.g., scroll) which is being handled by the main
+    // thread.
+    MAIN_THREAD_GESTURE,
     // Must be the last entry.
     USE_CASE_COUNT,
     FIRST_USE_CASE = NONE,
@@ -56,7 +75,7 @@ class SCHEDULER_EXPORT RendererScheduler : public ChildScheduler {
   static const char* UseCaseToString(UseCase use_case);
 
   // Creates a WebThread implementation for the renderer main thread.
-  virtual scoped_ptr<blink::WebThread> CreateMainThread() = 0;
+  virtual std::unique_ptr<blink::WebThread> CreateMainThread() = 0;
 
   // Returns the loading task runner.  This queue is intended for tasks related
   // to resource dispatch, foreground HTML parsing, etc...
@@ -75,7 +94,7 @@ class SCHEDULER_EXPORT RendererScheduler : public ChildScheduler {
 
   // Returns a new RenderWidgetSchedulingState.  The signals from this will be
   // used to make scheduling decisions.
-  virtual scoped_ptr<RenderWidgetSchedulingState>
+  virtual std::unique_ptr<RenderWidgetSchedulingState>
   NewRenderWidgetSchedulingState() = 0;
 
   // Called to notify about the start of an extended period where no frames
@@ -127,14 +146,22 @@ class SCHEDULER_EXPORT RendererScheduler : public ChildScheduler {
   // Must be called on the main thread.
   virtual void OnRendererForegrounded() = 0;
 
-  // Tells the scheduler that a navigation task is pending. While any navigation
-  // tasks are pending, the scheduler will ensure that loading tasks are not
-  // blocked even if they are expensive. Must be called on the main thread.
-  virtual void AddPendingNavigation() = 0;
+  // Tells the scheduler that the render process should be suspended. This can
+  // only be done when the renderer is backgrounded. The renderer will be
+  // automatically resumed when foregrounded.
+  virtual void SuspendRenderer() = 0;
+
+  // Tells the scheduler that a navigation task is pending. While any main-frame
+  // navigation tasks are pending, the scheduler will ensure that loading tasks
+  // are not blocked even if they are expensive. Must be called on the main
+  // thread.
+  virtual void AddPendingNavigation(
+      blink::WebScheduler::NavigatingFrameType type) = 0;
 
   // Tells the scheduler that a navigation task is no longer pending.
   // Must be called on the main thread.
-  virtual void RemovePendingNavigation() = 0;
+  virtual void RemovePendingNavigation(
+      blink::WebScheduler::NavigatingFrameType type) = 0;
 
   // Tells the scheduler that a navigation has started.  The scheduler will
   // prioritize loading tasks for a short duration afterwards.

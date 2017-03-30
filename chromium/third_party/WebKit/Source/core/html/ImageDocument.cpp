@@ -57,7 +57,7 @@ using namespace HTMLNames;
 
 class ImageEventListener : public EventListener {
 public:
-    static RawPtr<ImageEventListener> create(ImageDocument* document)
+    static ImageEventListener* create(ImageDocument* document)
     {
         return new ImageEventListener(document);
     }
@@ -90,7 +90,7 @@ private:
 
 class ImageDocumentParser : public RawDataDocumentParser {
 public:
-    static RawPtr<ImageDocumentParser> create(ImageDocument* document)
+    static ImageDocumentParser* create(ImageDocument* document)
     {
         return new ImageDocumentParser(document);
     }
@@ -104,7 +104,6 @@ private:
     ImageDocumentParser(ImageDocument* document)
         : RawDataDocumentParser(document)
     {
-        UseCounter::count(document, UseCounter::ImageDocument);
     }
 
     void appendBytes(const char*, size_t) override;
@@ -158,8 +157,7 @@ void ImageDocumentParser::finish()
         ImageResource* cachedImage = document()->cachedImage();
         DocumentLoader* loader = document()->loader();
         cachedImage->setResponse(loader->response());
-        cachedImage->setLoadFinishTime(loader->timing().responseEnd());
-        cachedImage->finish();
+        cachedImage->finish(loader->timing().responseEnd());
 
         // Report the natural image size in the page title, regardless of zoom level.
         // At a zoom level of 1 the image is guaranteed to have an integer size.
@@ -194,16 +192,19 @@ ImageDocument::ImageDocument(const DocumentInit& initializer)
 {
     setCompatibilityMode(QuirksMode);
     lockCompatibilityMode();
+    UseCounter::count(*this, UseCounter::ImageDocument);
+    if (!isInMainFrame())
+        UseCounter::count(*this, UseCounter::ImageDocumentInFrame);
 }
 
-RawPtr<DocumentParser> ImageDocument::createParser()
+DocumentParser* ImageDocument::createParser()
 {
     return ImageDocumentParser::create(this);
 }
 
 void ImageDocument::createDocumentStructure()
 {
-    RawPtr<HTMLHtmlElement> rootElement = HTMLHtmlElement::create(*this);
+    HTMLHtmlElement* rootElement = HTMLHtmlElement::create(*this);
     appendChild(rootElement);
     rootElement->insertedByParser();
 
@@ -212,26 +213,19 @@ void ImageDocument::createDocumentStructure()
     if (isStopped())
         return; // runScriptsAtDocumentElementAvailable can detach the frame.
 
-    RawPtr<HTMLHeadElement> head = HTMLHeadElement::create(*this);
-    RawPtr<HTMLMetaElement> meta = HTMLMetaElement::create(*this);
+    HTMLHeadElement* head = HTMLHeadElement::create(*this);
+    HTMLMetaElement* meta = HTMLMetaElement::create(*this);
     meta->setAttribute(nameAttr, "viewport");
     meta->setAttribute(contentAttr, "width=device-width, minimum-scale=0.1");
     head->appendChild(meta);
 
-    RawPtr<HTMLBodyElement> body = HTMLBodyElement::create(*this);
+    HTMLBodyElement* body = HTMLBodyElement::create(*this);
     body->setAttribute(styleAttr, "margin: 0px;");
 
-    frame()->loader().client()->dispatchWillInsertBody();
+    willInsertBody();
 
     m_imageElement = HTMLImageElement::create(*this);
-    m_imageElement->setAttribute(styleAttr, "-webkit-user-select: none;\
-                                             text-align: center;\
-                                             position: absolute;\
-                                             margin: auto;\
-                                             top: 0px;\
-                                             right: 0px;\
-                                             bottom: 0px;\
-                                             left: 0px;");
+    m_imageElement->setAttribute(styleAttr, "-webkit-user-select: none");
     m_imageElement->setLoadingImageDocument();
     m_imageElement->setSrc(url().getString());
     body->appendChild(m_imageElement.get());
@@ -240,11 +234,11 @@ void ImageDocument::createDocumentStructure()
 
     if (shouldShrinkToFit()) {
         // Add event listeners
-        RawPtr<EventListener> listener = ImageEventListener::create(this);
+        EventListener* listener = ImageEventListener::create(this);
         if (LocalDOMWindow* domWindow = this->domWindow())
             domWindow->addEventListener("resize", listener, false);
         if (m_shrinkToFitMode == Desktop)
-            m_imageElement->addEventListener("click", listener.release(), false);
+            m_imageElement->addEventListener("click", listener, false);
     }
 
     rootElement->appendChild(head);
@@ -295,21 +289,11 @@ void ImageDocument::imageClicked(int x, int y)
     m_shouldShrinkImage = !m_shouldShrinkImage;
 
     if (m_shouldShrinkImage) {
-        m_imageElement->setAttribute(styleAttr, "-webkit-user-select: none;\
-                                                 text-align: center;\
-                                                 position: absolute;\
-                                                 margin: auto;\
-                                                 top: 0px;\
-                                                 right: 0px;\
-                                                 bottom: 0px;\
-                                                 left: 0px;");
-
         windowSizeChanged(ScaleZoomedDocument);
     } else {
-        m_imageElement->setAttribute(styleAttr, "-webkit-user-select: none;");
         restoreImageSize(ScaleZoomedDocument);
 
-        updateLayout();
+        updateStyleAndLayout();
 
         double scale = this->scale();
 
@@ -327,7 +311,7 @@ void ImageDocument::imageUpdated()
     if (m_imageSizeIsKnown)
         return;
 
-    updateLayoutTree();
+    updateStyleAndLayoutTree();
     if (!m_imageElement->cachedImage() || m_imageElement->cachedImage()->imageSize(LayoutObject::shouldRespectImageOrientation(m_imageElement->layoutObject()), pageZoomFactor(this)).isEmpty())
         return;
 
@@ -438,14 +422,6 @@ bool ImageDocument::shouldShrinkToFit() const
 {
     return frame()->isMainFrame();
 }
-
-#if !ENABLE(OILPAN)
-void ImageDocument::dispose()
-{
-    m_imageElement = nullptr;
-    HTMLDocument::dispose();
-}
-#endif
 
 DEFINE_TRACE(ImageDocument)
 {

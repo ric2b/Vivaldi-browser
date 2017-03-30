@@ -10,7 +10,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "base/version.h"
 #include "chrome/browser/devtools/device/devtools_android_bridge.h"
@@ -174,7 +174,7 @@ private:
   void SendTargets(const std::vector<DevToolsTargetImpl*>& targets);
 
   content::NotificationRegistrar notification_registrar_;
-  scoped_ptr<CancelableTimer> timer_;
+  std::unique_ptr<CancelableTimer> timer_;
   scoped_refptr<WorkerObserver> observer_;
   base::WeakPtrFactory<LocalTargetsUIHandler> weak_factory_;
 };
@@ -401,18 +401,19 @@ DevToolsTargetsUIHandler::~DevToolsTargetsUIHandler() {
 }
 
 // static
-scoped_ptr<DevToolsTargetsUIHandler>
+std::unique_ptr<DevToolsTargetsUIHandler>
 DevToolsTargetsUIHandler::CreateForLocal(
     const DevToolsTargetsUIHandler::Callback& callback) {
-  return scoped_ptr<DevToolsTargetsUIHandler>(
+  return std::unique_ptr<DevToolsTargetsUIHandler>(
       new LocalTargetsUIHandler(callback));
 }
 
 // static
-scoped_ptr<DevToolsTargetsUIHandler>
+std::unique_ptr<DevToolsTargetsUIHandler>
 DevToolsTargetsUIHandler::CreateForAdb(
-    const DevToolsTargetsUIHandler::Callback& callback, Profile* profile) {
-  return scoped_ptr<DevToolsTargetsUIHandler>(
+    const DevToolsTargetsUIHandler::Callback& callback,
+    Profile* profile) {
+  return std::unique_ptr<DevToolsTargetsUIHandler>(
       new AdbTargetsUIHandler(callback, profile));
 }
 

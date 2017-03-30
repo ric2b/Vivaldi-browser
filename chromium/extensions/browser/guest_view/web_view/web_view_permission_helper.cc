@@ -6,11 +6,7 @@
 
 #include <utility>
 
-#include "base/command_line.h"
-#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/ui/browser_finder.h"
-#include "components/content_settings/core/browser/host_content_settings_map.h"
-#include "components/content_settings/core/common/content_settings_pattern.h"
+#include "base/memory/ptr_util.h"
 #include "components/guest_view/browser/guest_view_event.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -20,7 +16,15 @@
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper_delegate.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
+
+#include "base/command_line.h"
+#include "browser/vivaldi_browser_finder.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings_pattern.h"
 #include "extensions/helper/vivaldi_app_helper.h"
+
+#include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 
 using content::BrowserPluginGuestDelegate;
 using content::RenderViewHost;
@@ -190,9 +194,19 @@ WebViewPermissionHelper* WebViewPermissionHelper::FromFrameID(
 // static
 WebViewPermissionHelper* WebViewPermissionHelper::FromWebContents(
       content::WebContents* web_contents) {
+  // This can be a MimeHandlerViewGuest, used to show PDFs. In that case use the
+  // owner webcontents which will give us a WebViewGuest.
+  MimeHandlerViewGuest* mime_view_guest =
+      MimeHandlerViewGuest::FromWebContents(web_contents);
+  if (mime_view_guest) {
+    WebViewGuest* web_view_guest =
+        WebViewGuest::FromWebContents(mime_view_guest->owner_web_contents());
+    return web_view_guest->web_view_permission_helper_.get();
+  }
   WebViewGuest* web_view_guest = WebViewGuest::FromWebContents(web_contents);
-  if (!web_view_guest)
-      return NULL;
+  if (!web_view_guest) {
+    return NULL;
+  }
   return web_view_guest->web_view_permission_helper_.get();
 }
 
@@ -218,8 +232,9 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
       extensions::VivaldiAppHelper::FromWebContents(web_view_guest()->
         embedder_web_contents());
   if (helper) do {
-    Profile* profile =
-        chrome::FindBrowserWithWebContents(web_contents())->profile();
+    Browser* browser = vivaldi::FindBrowserWithWebContents(web_contents());
+    DCHECK(browser);
+    Profile* profile = browser->profile();
 
     ContentSetting audio_setting = CONTENT_SETTING_DEFAULT;
     ContentSetting camera_setting = CONTENT_SETTING_DEFAULT;
@@ -247,8 +262,8 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
     if (audio_setting == CONTENT_SETTING_BLOCK ||
         camera_setting == CONTENT_SETTING_BLOCK) {
       callback.Run(content::MediaStreamDevices(),
-                 content::MEDIA_DEVICE_PERMISSION_DENIED,
-                 scoped_ptr<content::MediaStreamUI>());
+                   content::MEDIA_DEVICE_PERMISSION_DENIED,
+                   std::unique_ptr<content::MediaStreamUI>());
       return;
     }
     if (audio_setting == CONTENT_SETTING_ALLOW ||
@@ -303,8 +318,9 @@ void WebViewPermissionHelper::OnMediaPermissionResponse(
       extensions::VivaldiAppHelper::FromWebContents(
           web_view_guest()->embedder_web_contents());
   if (helper) {
-    Profile* profile =
-        chrome::FindBrowserWithWebContents(web_contents())->profile();
+    Browser* browser = vivaldi::FindBrowserWithWebContents(web_contents());
+    DCHECK(browser);
+    Profile* profile = browser->profile();
 
     if (request.audio_type != content::MEDIA_NO_SERVICE) {
       HostContentSettingsMapFactory::GetForProfile(profile)->SetContentSettingCustomScope(
@@ -323,14 +339,14 @@ void WebViewPermissionHelper::OnMediaPermissionResponse(
   if (!allow) {
     callback.Run(content::MediaStreamDevices(),
                  content::MEDIA_DEVICE_PERMISSION_DENIED,
-                 scoped_ptr<content::MediaStreamUI>());
+                 std::unique_ptr<content::MediaStreamUI>());
     return;
   }
   if (!web_view_guest()->attached() ||
       !web_view_guest()->embedder_web_contents()->GetDelegate()) {
     callback.Run(content::MediaStreamDevices(),
                  content::MEDIA_DEVICE_INVALID_STATE,
-                 scoped_ptr<content::MediaStreamUI>());
+                 std::unique_ptr<content::MediaStreamUI>());
     return;
   }
 
@@ -439,24 +455,24 @@ int WebViewPermissionHelper::RequestPermission(
   int request_id = next_permission_request_id_++;
   pending_permission_requests_[request_id] =
       PermissionResponseInfo(callback, permission_type, allowed_by_default);
-  scoped_ptr<base::DictionaryValue> args(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
   args->Set(webview::kRequestInfo, request_info.DeepCopy());
   args->SetInteger(webview::kRequestId, request_id);
   switch (permission_type) {
     case WEB_VIEW_PERMISSION_TYPE_NEW_WINDOW: {
-      web_view_guest_->DispatchEventToView(make_scoped_ptr(
+      web_view_guest_->DispatchEventToView(base::WrapUnique(
           new GuestViewEvent(webview::kEventNewWindow, std::move(args))));
       break;
     }
     case WEB_VIEW_PERMISSION_TYPE_JAVASCRIPT_DIALOG: {
-      web_view_guest_->DispatchEventToView(make_scoped_ptr(
+      web_view_guest_->DispatchEventToView(base::WrapUnique(
           new GuestViewEvent(webview::kEventDialog, std::move(args))));
       break;
     }
     default: {
       args->SetString(webview::kPermission,
                       PermissionTypeToString(permission_type));
-      web_view_guest_->DispatchEventToView(make_scoped_ptr(new GuestViewEvent(
+      web_view_guest_->DispatchEventToView(base::WrapUnique(new GuestViewEvent(
           webview::kEventPermissionRequest, std::move(args))));
       break;
     }

@@ -7,19 +7,19 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "content/browser/indexed_db/indexed_db_database_error.h"
 #include "content/browser/indexed_db/indexed_db_dispatcher_host.h"
 #include "content/common/indexed_db/indexed_db_key.h"
 #include "content/common/indexed_db/indexed_db_key_path.h"
-#include "url/gurl.h"
+#include "url/origin.h"
 
 namespace content {
 class IndexedDBBlobInfo;
@@ -51,7 +51,7 @@ class CONTENT_EXPORT IndexedDBCallbacks
                      int32_t ipc_callbacks_id,
                      int32_t ipc_database_callbacks_id,
                      int64_t host_transaction_id,
-                     const GURL& origin_url);
+                     const url::Origin& origin);
 
   virtual void OnError(const IndexedDBDatabaseError& error);
 
@@ -66,9 +66,9 @@ class CONTENT_EXPORT IndexedDBCallbacks
                           std::string data_loss_message);
   virtual void OnUpgradeNeeded(
       int64_t old_version,
-      scoped_ptr<IndexedDBConnection> connection,
+      std::unique_ptr<IndexedDBConnection> connection,
       const content::IndexedDBDatabaseMetadata& metadata);
-  virtual void OnSuccess(scoped_ptr<IndexedDBConnection> connection,
+  virtual void OnSuccess(std::unique_ptr<IndexedDBConnection> connection,
                          const content::IndexedDBDatabaseMetadata& metadata);
 
   // IndexedDBDatabase::OpenCursor
@@ -130,7 +130,7 @@ class CONTENT_EXPORT IndexedDBCallbacks
 
   // IndexedDBDatabase callbacks ------------------------
   int64_t host_transaction_id_;
-  GURL origin_url_;
+  url::Origin origin_;
   int32_t ipc_database_id_;
   int32_t ipc_database_callbacks_id_;
 

@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "base/memory/weak_ptr.h"
 #include "ipc/ipc_listener.h"
@@ -123,11 +122,11 @@ class IPCMediaPipelineHostImpl : public media::IPCMediaPipelineHost,
 
   // A buffer for raw media data, shared with the GPU process. Filled in the
   // renderer process, consumed in the GPU process.
-  scoped_ptr<SharedData> shared_raw_data_;
+  std::unique_ptr<SharedData> shared_raw_data_;
 
   // Buffers for decoded media data, shared with the GPU process. Filled in
   // the GPU process, consumed in the renderer process.
-  scoped_ptr<SharedData>
+  std::unique_ptr<SharedData>
       shared_decoded_data_[media::PLATFORM_MEDIA_DATA_TYPE_COUNT];
 
   media::PlatformAudioConfig audio_config_;
@@ -135,7 +134,7 @@ class IPCMediaPipelineHostImpl : public media::IPCMediaPipelineHost,
 
   media::GpuVideoAcceleratorFactories* factories_;
 
-  scoped_ptr<PictureBufferManager> picture_buffer_manager_;
+  std::unique_ptr<PictureBufferManager> picture_buffer_manager_;
 
   base::WeakPtrFactory<IPCMediaPipelineHostImpl> weak_ptr_factory_;
 };

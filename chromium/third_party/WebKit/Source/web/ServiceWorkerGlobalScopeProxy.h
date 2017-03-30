@@ -76,9 +76,7 @@ public:
     void dispatchExtendableMessageEvent(int eventID, const WebString& message, const WebSecurityOrigin& sourceOrigin, const WebMessagePortChannelArray&, std::unique_ptr<WebServiceWorker::Handle>) override;
     void dispatchFetchEvent(int, const WebServiceWorkerRequest&) override;
     void dispatchForeignFetchEvent(int, const WebServiceWorkerRequest&) override;
-    void dispatchGeofencingEvent(int, WebGeofencingEventType, const WebString& regionID, const WebCircularGeofencingRegion&) override;
     void dispatchInstallEvent(int) override;
-    void dispatchMessageEvent(const WebString& message, const WebMessagePortChannelArray&) override;
     void dispatchNotificationClickEvent(int, int64_t notificationID, const WebNotificationData&, int actionIndex) override;
     void dispatchNotificationCloseEvent(int, int64_t notificationID, const WebNotificationData&) override;
     void dispatchPushEvent(int, const WebString& data) override;

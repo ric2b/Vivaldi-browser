@@ -110,7 +110,7 @@ class WMFDecoderImpl {
   uint32_t output_sample_size_;  // in Bytes
 
   std::deque<scoped_refptr<DecoderBuffer>> queued_input_;
-  scoped_ptr<AudioDiscardHelper> discard_helper_;
+  std::unique_ptr<AudioDiscardHelper> discard_helper_;
 
   // We always call MFGetStrideForBitmapInfoHeader() through this pointer.
   // This guarantees the call succeeds both on Vista and newer systems.  On

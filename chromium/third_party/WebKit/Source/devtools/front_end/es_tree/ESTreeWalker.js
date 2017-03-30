@@ -4,16 +4,28 @@
 
 /**
  * @constructor
- * @param {function(!ESTree.Node)} beforeVisit
- * @param {function(!ESTree.Node)} afterVisit
+ * @param {function(!ESTree.Node):(!Object|undefined)} beforeVisit
+ * @param {function(!ESTree.Node)=} afterVisit
  */
 WebInspector.ESTreeWalker = function(beforeVisit, afterVisit)
 {
     this._beforeVisit = beforeVisit;
-    this._afterVisit = afterVisit;
+    this._afterVisit = afterVisit || new Function();
+    this._walkNulls = false;
 }
 
+/** @typedef {!Object} WebInspector.ESTreeWalker.SkipSubtree */
+WebInspector.ESTreeWalker.SkipSubtree = {};
+
 WebInspector.ESTreeWalker.prototype = {
+    /**
+     * @param {boolean} value
+     */
+    setWalkNulls: function(value)
+    {
+        this._walkNulls = value;
+    },
+
     /**
      * @param {!ESTree.Node} ast
      */
@@ -28,11 +40,22 @@ WebInspector.ESTreeWalker.prototype = {
      */
     _innerWalk: function(node, parent)
     {
+        if (!node && parent && this._walkNulls) {
+            node = /** @type {!ESTree.Node} */ ({
+                type: "Literal",
+                raw: "null",
+                value: null
+            });
+        }
+
         if (!node)
             return;
         node.parent = parent;
 
-        this._beforeVisit.call(null, node);
+        if (this._beforeVisit.call(null, node) === WebInspector.ESTreeWalker.SkipSubtree) {
+            this._afterVisit.call(null, node);
+            return;
+        }
 
         var walkOrder = WebInspector.ESTreeWalker._walkOrder[node.type];
         if (!walkOrder) {

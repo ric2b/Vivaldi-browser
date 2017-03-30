@@ -11,6 +11,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_impl.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/notifications/notification_platform_bridge.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/browser/printing/print_job_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -139,11 +140,6 @@ variations::VariationsService* TestingBrowserProcess::variations_service() {
   return nullptr;
 }
 
-web_resource::PromoResourceService*
-TestingBrowserProcess::promo_resource_service() {
-  return nullptr;
-}
-
 policy::BrowserPolicyConnector*
     TestingBrowserProcess::browser_policy_connector() {
   if (!browser_policy_connector_) {
@@ -182,7 +178,7 @@ BackgroundModeManager* TestingBrowserProcess::background_mode_manager() {
 }
 
 void TestingBrowserProcess::set_background_mode_manager_for_test(
-    scoped_ptr<BackgroundModeManager> manager) {
+    std::unique_ptr<BackgroundModeManager> manager) {
   NOTREACHED();
 }
 
@@ -214,7 +210,7 @@ TestingBrowserProcess::extension_event_router_forwarder() {
 }
 
 NotificationUIManager* TestingBrowserProcess::notification_ui_manager() {
-#if defined(ENABLE_NOTIFICATIONS)
+#if defined(ENABLE_NOTIFICATIONS) && !defined(OS_ANDROID)
   if (!notification_ui_manager_.get())
     notification_ui_manager_.reset(
         NotificationUIManager::Create(local_state()));
@@ -223,6 +219,11 @@ NotificationUIManager* TestingBrowserProcess::notification_ui_manager() {
   NOTIMPLEMENTED();
   return nullptr;
 #endif
+}
+
+NotificationPlatformBridge*
+TestingBrowserProcess::notification_platform_bridge() {
+  return notification_platform_bridge_.get();
 }
 
 message_center::MessageCenter* TestingBrowserProcess::message_center() {
@@ -349,9 +350,9 @@ TestingBrowserProcess::network_time_tracker() {
   if (!network_time_tracker_) {
     DCHECK(local_state_);
     network_time_tracker_.reset(new network_time::NetworkTimeTracker(
-        scoped_ptr<base::Clock>(new base::DefaultClock()),
-        scoped_ptr<base::TickClock>(new base::DefaultTickClock()),
-        local_state_));
+        std::unique_ptr<base::Clock>(new base::DefaultClock()),
+        std::unique_ptr<base::TickClock>(new base::DefaultTickClock()),
+        local_state_, system_request_context()));
   }
   return network_time_tracker_.get();
 }
@@ -374,8 +375,13 @@ void TestingBrowserProcess::SetSystemRequestContext(
 }
 
 void TestingBrowserProcess::SetNotificationUIManager(
-    scoped_ptr<NotificationUIManager> notification_ui_manager) {
+    std::unique_ptr<NotificationUIManager> notification_ui_manager) {
   notification_ui_manager_.swap(notification_ui_manager);
+}
+
+void TestingBrowserProcess::SetNotificationPlatformBridge(
+    std::unique_ptr<NotificationPlatformBridge> notification_platform_bridge) {
+  notification_platform_bridge_.swap(notification_platform_bridge);
 }
 
 void TestingBrowserProcess::SetLocalState(PrefService* local_state) {

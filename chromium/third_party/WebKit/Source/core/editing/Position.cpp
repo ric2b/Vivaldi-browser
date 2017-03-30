@@ -34,7 +34,7 @@
 
 namespace blink {
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 static bool canBeAnchorNode(Node* node)
 {
     return !node || !node->isPseudoElement();
@@ -51,12 +51,12 @@ const TreeScope* PositionTemplate<Strategy>::commonAncestorTreeScope(const Posit
 
 
 template <typename Strategy>
-PositionTemplate<Strategy> PositionTemplate<Strategy>::editingPositionOf(RawPtr<Node> anchorNode, int offset)
+PositionTemplate<Strategy> PositionTemplate<Strategy>::editingPositionOf(Node* anchorNode, int offset)
 {
     if (!anchorNode || anchorNode->isTextNode())
         return PositionTemplate<Strategy>(anchorNode, offset);
 
-    if (!Strategy::editingIgnoresContent(anchorNode.get()))
+    if (!Strategy::editingIgnoresContent(anchorNode))
         return PositionTemplate<Strategy>(anchorNode, offset);
 
     if (offset == 0)
@@ -64,12 +64,12 @@ PositionTemplate<Strategy> PositionTemplate<Strategy>::editingPositionOf(RawPtr<
 
     // Note: |offset| can be >= 1, if |anchorNode| have child nodes, e.g.
     // using Node.appendChild() to add a child node TEXTAREA.
-    ASSERT(offset >= 1);
+    DCHECK_GE(offset, 1);
     return PositionTemplate<Strategy>(anchorNode, PositionAnchorType::AfterAnchor);
 }
 
 template <typename Strategy>
-PositionTemplate<Strategy>::PositionTemplate(RawPtr<Node> anchorNode, PositionAnchorType anchorType)
+PositionTemplate<Strategy>::PositionTemplate(Node* anchorNode, PositionAnchorType anchorType)
     : m_anchorNode(anchorNode)
     , m_offset(0)
     , m_anchorType(anchorType)
@@ -79,7 +79,7 @@ PositionTemplate<Strategy>::PositionTemplate(RawPtr<Node> anchorNode, PositionAn
         return;
     }
     if (m_anchorNode->isTextNode()) {
-        ASSERT(m_anchorType == PositionAnchorType::BeforeAnchor || m_anchorType == PositionAnchorType::AfterAnchor);
+        DCHECK(m_anchorType == PositionAnchorType::BeforeAnchor || m_anchorType == PositionAnchorType::AfterAnchor);
         return;
     }
     if (m_anchorNode->isDocumentNode()) {
@@ -88,21 +88,25 @@ PositionTemplate<Strategy>::PositionTemplate(RawPtr<Node> anchorNode, PositionAn
         DCHECK(isBeforeChildren() || isAfterChildren()) << m_anchorType;
         return;
     }
-    ASSERT(canBeAnchorNode(m_anchorNode.get()));
-    ASSERT(m_anchorType != PositionAnchorType::OffsetInAnchor);
+#if DCHECK_IS_ON()
+    DCHECK(canBeAnchorNode(m_anchorNode.get()));
+#endif
+    DCHECK_NE(m_anchorType, PositionAnchorType::OffsetInAnchor);
 }
 
 template <typename Strategy>
-PositionTemplate<Strategy>::PositionTemplate(RawPtr<Node> anchorNode, int offset)
+PositionTemplate<Strategy>::PositionTemplate(Node* anchorNode, int offset)
     : m_anchorNode(anchorNode)
     , m_offset(offset)
     , m_anchorType(PositionAnchorType::OffsetInAnchor)
 {
     if (m_anchorNode)
-        ASSERT(offset >= 0);
+        DCHECK_GE(offset, 0);
     else
-        ASSERT(offset == 0);
-    ASSERT(canBeAnchorNode(m_anchorNode.get()));
+        DCHECK_EQ(offset, 0);
+#if DCHECK_IS_ON()
+    DCHECK(canBeAnchorNode(m_anchorNode.get()));
+#endif
 }
 
 template <typename Strategy>
@@ -290,8 +294,8 @@ Node* PositionTemplate<Strategy>::commonAncestorContainer(const PositionTemplate
 
 int comparePositions(const PositionInFlatTree& positionA, const PositionInFlatTree& positionB)
 {
-    ASSERT(positionA.isNotNull());
-    ASSERT(positionB.isNotNull());
+    DCHECK(positionA.isNotNull());
+    DCHECK(positionB.isNotNull());
 
     positionA.anchorNode()->updateDistribution();
     Node* containerA = positionA.computeContainerNode();
@@ -306,6 +310,30 @@ template <typename Strategy>
 int PositionTemplate<Strategy>::compareTo(const PositionTemplate<Strategy>& other) const
 {
     return comparePositions(*this, other);
+}
+
+template <typename Strategy>
+bool PositionTemplate<Strategy>::operator<(const PositionTemplate<Strategy>& other) const
+{
+    return comparePositions(*this, other) < 0;
+}
+
+template <typename Strategy>
+bool PositionTemplate<Strategy>::operator<=(const PositionTemplate<Strategy>& other) const
+{
+    return comparePositions(*this, other) <= 0;
+}
+
+template <typename Strategy>
+bool PositionTemplate<Strategy>::operator>(const PositionTemplate<Strategy>& other) const
+{
+    return comparePositions(*this, other) > 0;
+}
+
+template <typename Strategy>
+bool PositionTemplate<Strategy>::operator>=(const PositionTemplate<Strategy>& other) const
+{
+    return comparePositions(*this, other) >= 0;
 }
 
 template <typename Strategy>
@@ -397,7 +425,7 @@ PositionInFlatTree toPositionInFlatTree(const Position& pos)
         Node* anchor = pos.anchorNode();
         if (anchor->offsetInCharacters())
             return PositionInFlatTree(anchor, pos.computeOffsetInContainerNode());
-        ASSERT(!anchor->isSlotOrActiveInsertionPoint());
+        DCHECK(!anchor->isSlotOrActiveInsertionPoint());
         int offset = pos.computeOffsetInContainerNode();
         Node* child = NodeTraversal::childAt(*anchor, offset);
         if (!child) {
@@ -441,7 +469,7 @@ Position toPositionInDOMTree(const PositionInFlatTree& position)
         // FIXME: When anchorNode is <img>, assertion fails in the constructor.
         return Position(anchorNode, PositionAnchorType::AfterChildren);
     case PositionAnchorType::AfterAnchor:
-        return positionAfterNode(anchorNode);
+        return Position::afterNode(anchorNode);
     case PositionAnchorType::BeforeChildren:
         return Position(anchorNode, PositionAnchorType::BeforeChildren);
     case PositionAnchorType::BeforeAnchor:

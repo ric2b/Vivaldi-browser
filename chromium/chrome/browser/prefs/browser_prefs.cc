@@ -46,6 +46,7 @@
 #include "chrome/browser/profiles/profile_impl.h"
 #include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profiles_state.h"
+#include "chrome/browser/push_messaging/background_budget_service.h"
 #include "chrome/browser/push_messaging/push_messaging_app_identifier.h"
 #include "chrome/browser/renderer_host/pepper/device_id_fetcher.h"
 #include "chrome/browser/search/search.h"
@@ -98,17 +99,12 @@
 #include "content/public/browser/render_process_host.h"
 #include "net/http/http_server_properties_manager.h"
 
-#if defined(ENABLE_AUTOFILL_DIALOG)
-#include "chrome/browser/ui/autofill/autofill_dialog_controller.h"
-#endif
-
 #if BUILDFLAG(ENABLE_BACKGROUND)
 #include "chrome/browser/background/background_mode_manager.h"
 #endif
 
 #if defined(ENABLE_EXTENSIONS)
 #include "chrome/browser/accessibility/animation_policy_prefs.h"
-#include "chrome/browser/apps/drive/drive_app_mapping.h"
 #include "chrome/browser/apps/shortcut_manager.h"
 #include "chrome/browser/extensions/activity_log/activity_log.h"
 #include "chrome/browser/extensions/api/commands/command_service.h"
@@ -229,6 +225,10 @@
 #include "chrome/browser/ui/startup/default_browser_prompt.h"
 #endif
 
+#if defined(ENABLE_APP_LIST)
+#include "chrome/browser/apps/drive/drive_app_mapping.h"
+#endif
+
 namespace {
 
 #if defined(OS_WIN)
@@ -316,10 +316,6 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   startup_metric_utils::RegisterPrefs(registry);
   update_client::RegisterPrefs(registry);
   web_resource::PromoResourceService::RegisterPrefs(registry);
-
-#if defined(ENABLE_AUTOFILL_DIALOG)
-  autofill::AutofillDialogController::RegisterPrefs(registry);
-#endif
 
   policy::BrowserPolicyConnector::RegisterPrefs(registry);
   policy::PolicyStatisticsCollector::RegisterPrefs(registry);
@@ -416,6 +412,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   SCOPED_UMA_HISTOGRAM_TIMER("Settings.RegisterProfilePrefsTime");
   // User prefs. Please keep this list alphabetized.
   autofill::AutofillManager::RegisterProfilePrefs(registry);
+  BackgroundBudgetService::RegisterProfilePrefs(registry);
   sync_driver::SyncPrefs::RegisterProfilePrefs(registry);
   ChromeContentBrowserClient::RegisterProfilePrefs(registry);
   ChromeVersionService::RegisterProfilePrefs(registry);
@@ -447,15 +444,10 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   SessionStartupPref::RegisterProfilePrefs(registry);
   TemplateURLPrepopulateData::RegisterProfilePrefs(registry);
   translate::TranslatePrefs::RegisterProfilePrefs(registry);
-  web_resource::PromoResourceService::RegisterProfilePrefs(registry);
   ZeroSuggestProvider::RegisterProfilePrefs(registry);
 
 #if defined(ENABLE_APP_LIST)
   app_list::AppListPrefs::RegisterProfilePrefs(registry);
-#endif
-
-#if defined(ENABLE_AUTOFILL_DIALOG)
-  autofill::AutofillDialogController::RegisterProfilePrefs(registry);
 #endif
 
   policy::URLBlacklistManager::RegisterProfilePrefs(registry);
@@ -515,7 +507,9 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   AppShortcutManager::RegisterProfilePrefs(registry);
   DeviceIDFetcher::RegisterProfilePrefs(registry);
   DevToolsWindow::RegisterProfilePrefs(registry);
+#if defined(ENABLE_APP_LIST)
   DriveAppMapping::RegisterProfilePrefs(registry);
+#endif
   extensions::CommandService::RegisterProfilePrefs(registry);
   extensions::ExtensionSettingsHandler::RegisterProfilePrefs(registry);
   extensions::TabsCaptureVisibleTabFunction::RegisterProfilePrefs(registry);
@@ -624,6 +618,8 @@ void RegisterLoginProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
 
 // This method should be periodically pruned of year+ old migrations.
 void MigrateObsoleteBrowserPrefs(Profile* profile, PrefService* local_state) {
+  // Added 05/2016.
+  web_resource::PromoResourceService::ClearLocalState(local_state);
 }
 
 // This method should be periodically pruned of year+ old migrations.

@@ -5,15 +5,16 @@
 #ifndef UI_APP_LIST_VIEWS_APP_LIST_VIEW_H_
 #define UI_APP_LIST_VIEWS_APP_LIST_VIEW_H_
 
+#include <memory>
+
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "build/build_config.h"
 #include "ui/app_list/app_list_export.h"
 #include "ui/app_list/app_list_view_delegate_observer.h"
 #include "ui/app_list/speech_ui_model_observer.h"
-#include "ui/views/bubble/bubble_delegate.h"
+#include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "ui/views/widget/widget.h"
 
 namespace base {
@@ -41,7 +42,7 @@ class SpeechView;
 
 // AppListView is the top-level view and controller of app list UI. It creates
 // and hosts a AppsGridView and passes AppListModel to it for display.
-class APP_LIST_EXPORT AppListView : public views::BubbleDelegateView,
+class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
                                     public AppListViewDelegateObserver,
                                     public SpeechUIModelObserver {
  public:
@@ -86,7 +87,7 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDelegateView,
   // timer to show the UI when a maximum allowed wait time has expired.
   void ShowWhenReady();
 
-  void Close();
+  void CloseAppList();
 
   void UpdateBounds();
 
@@ -151,13 +152,13 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDelegateView,
                             bool border_accepts_events,
                             const gfx::Vector2d& anchor_offset);
 
-  // Overridden from views::BubbleDelegateView:
+  // Overridden from views::BubbleDialogDelegateView:
   void OnBeforeBubbleWidgetInit(views::Widget::InitParams* params,
                                 views::Widget* widget) const override;
+  int GetDialogButtons() const override;
 
   // Overridden from views::WidgetDelegateView:
   views::View* GetInitiallyFocusedView() override;
-  gfx::ImageSkia GetWindowIcon() override;
   bool WidgetHasHitTestMask() const override;
   void GetWidgetHitTestMask(gfx::Path* mask) const override;
 
@@ -184,7 +185,7 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDelegateView,
   views::View* overlay_view_;
 
   base::ObserverList<AppListViewObserver> observers_;
-  scoped_ptr<HideViewAnimationObserver> animation_observer_;
+  std::unique_ptr<HideViewAnimationObserver> animation_observer_;
 
   // For UMA and testing. If non-null, triggered when the app list is painted.
   base::Closure next_paint_callback_;

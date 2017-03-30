@@ -41,7 +41,6 @@ class PPAPI_PROXY_EXPORT PpapiCommandBufferProxy : public gpu::CommandBuffer,
   ~PpapiCommandBufferProxy() override;
 
   // gpu::CommandBuffer implementation:
-  bool Initialize() override;
   State GetLastState() override;
   int32_t GetLastToken() override;
   void Flush(int32_t put_offset) override;
@@ -54,6 +53,7 @@ class PPAPI_PROXY_EXPORT PpapiCommandBufferProxy : public gpu::CommandBuffer,
   void DestroyTransferBuffer(int32_t id) override;
 
   // gpu::GpuControl implementation:
+  void SetGpuControlClient(gpu::GpuControlClient*) override;
   gpu::Capabilities GetCapabilities() override;
   int32_t CreateImage(ClientBuffer buffer,
                       size_t width,
@@ -66,7 +66,6 @@ class PPAPI_PROXY_EXPORT PpapiCommandBufferProxy : public gpu::CommandBuffer,
                                      unsigned usage) override;
   void SignalQuery(uint32_t query, const base::Closure& callback) override;
   void SetLock(base::Lock*) override;
-  bool IsGpuChannelLost() override;
   void EnsureWorkVisible() override;
   gpu::CommandBufferNamespace GetNamespaceID() const override;
   gpu::CommandBufferId GetCommandBufferID() const override;

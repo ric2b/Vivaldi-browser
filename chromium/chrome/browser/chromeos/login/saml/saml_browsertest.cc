@@ -493,23 +493,31 @@ IN_PROC_BROWSER_TEST_F(SamlTest, ScrapedSingle) {
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
   StartSamlAndWaitForIdpPageLoad(kFirstSAMLUserEmail);
 
+  // Make sure that the password is scraped correctly.
+  ASSERT_TRUE(content::ExecuteScript(
+      GetLoginUI()->GetWebContents(),
+      "$('gaia-signin').gaiaAuthHost_.addEventListener('authCompleted',"
+      "    function(e) {"
+      "      var password = e.detail.password;"
+      "      window.domAutomationController.setAutomationId(0);"
+      "      window.domAutomationController.send(password);"
+      "    });"));
+
   // Fill-in the SAML IdP form and submit.
   SetSignFormField("Email", "fake_user");
   SetSignFormField("Password", "fake_password");
-  ExecuteJsInSigninFrame("document.getElementById('Submit').click();");
 
-  // Lands on confirm password screen.
-  OobeScreenWaiter(OobeScreen::SCREEN_CONFIRM_PASSWORD).Wait();
-
-  // Entering an unknown password should go back to the confirm password screen.
-  SendConfirmPassword("wrong_password");
-  OobeScreenWaiter(OobeScreen::SCREEN_CONFIRM_PASSWORD).Wait();
-
-  // Entering a known password should finish login and start session.
+  // Scraping a single password should finish the login and start the session.
   content::WindowedNotificationObserver session_start_waiter(
       chrome::NOTIFICATION_SESSION_STARTED,
       content::NotificationService::AllSources());
-  SendConfirmPassword("fake_password");
+  content::DOMMessageQueue message_queue;
+  ExecuteJsInSigninFrame("document.getElementById('Submit').click();");
+  std::string message;
+  do {
+    ASSERT_TRUE(message_queue.WaitForMessage(&message));
+  } while (message != "\"fake_password\"");
+
   session_start_waiter.Wait();
 }
 
@@ -530,20 +538,12 @@ IN_PROC_BROWSER_TEST_F(SamlTest, ScrapedDynamic) {
   // Fill-in the SAML IdP form and submit.
   SetSignFormField("Email", "fake_user");
   SetSignFormField("DynamicallyCreatedPassword", "fake_password");
-  ExecuteJsInSigninFrame("document.getElementById('Submit').click();");
 
-  // Lands on confirm password screen.
-  OobeScreenWaiter(OobeScreen::SCREEN_CONFIRM_PASSWORD).Wait();
-
-  // Entering an unknown password should go back to the confirm password screen.
-  SendConfirmPassword("wrong_password");
-  OobeScreenWaiter(OobeScreen::SCREEN_CONFIRM_PASSWORD).Wait();
-
-  // Entering a known password should finish login and start session.
+  // Scraping a single password should finish the login and start the session.
   content::WindowedNotificationObserver session_start_waiter(
       chrome::NOTIFICATION_SESSION_STARTED,
       content::NotificationService::AllSources());
-  SendConfirmPassword("fake_password");
+  ExecuteJsInSigninFrame("document.getElementById('Submit').click();");
   session_start_waiter.Wait();
 }
 
@@ -558,6 +558,11 @@ IN_PROC_BROWSER_TEST_F(SamlTest, ScrapedMultiple) {
   SetSignFormField("Password1", "password1");
   ExecuteJsInSigninFrame("document.getElementById('Submit').click();");
 
+  // Lands on confirm password screen.
+  OobeScreenWaiter(OobeScreen::SCREEN_CONFIRM_PASSWORD).Wait();
+
+  // Entering an unknown password should go back to the confirm password screen.
+  SendConfirmPassword("wrong_password");
   OobeScreenWaiter(OobeScreen::SCREEN_CONFIRM_PASSWORD).Wait();
 
   // Either scraped password should be able to sign-in.
@@ -594,15 +599,13 @@ IN_PROC_BROWSER_TEST_F(SamlTest, UseAutenticatedUserEmailAddress) {
   // reports was set via |SetFakeMergeSessionParams|.
   SetSignFormField("Email", "fake_user");
   SetSignFormField("Password", "fake_password");
-  ExecuteJsInSigninFrame("document.getElementById('Submit').click();");
-
-  OobeScreenWaiter(OobeScreen::SCREEN_CONFIRM_PASSWORD).Wait();
 
   content::WindowedNotificationObserver session_start_waiter(
       chrome::NOTIFICATION_SESSION_STARTED,
       content::NotificationService::AllSources());
-  SendConfirmPassword("fake_password");
+  ExecuteJsInSigninFrame("document.getElementById('Submit').click();");
   session_start_waiter.Wait();
+
   const user_manager::User* user =
       user_manager::UserManager::Get()->GetActiveUser();
   ASSERT_TRUE(user);
@@ -625,15 +628,16 @@ IN_PROC_BROWSER_TEST_F(SamlTest, FailToRetrieveAutenticatedUserEmailAddress) {
             WaitForAndGetFatalErrorMessage());
 }
 
-// Tests the password confirm flow: show error on the first failure and
-// fatal error on the second failure.
+// Tests the password confirm flow when more than one password is scraped: show
+// error on the first failure and fatal error on the second failure.
 IN_PROC_BROWSER_TEST_F(SamlTest, PasswordConfirmFlow) {
-  fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
+  fake_saml_idp()->SetLoginHTMLTemplate("saml_login_two_passwords.html");
   StartSamlAndWaitForIdpPageLoad(kFirstSAMLUserEmail);
 
   // Fill-in the SAML IdP form and submit.
   SetSignFormField("Email", "fake_user");
   SetSignFormField("Password", "fake_password");
+  SetSignFormField("Password1", "password1");
   ExecuteJsInSigninFrame("document.getElementById('Submit').click();");
 
   // Lands on confirm password screen with no error message.
@@ -846,6 +850,11 @@ void SAMLEnrollmentTest::WaitForEnrollmentSuccess() {
       GetLoginUI()->GetWebContents(),
       "var enrollmentScreen = document.getElementById('oauth-enrollment');"
       "function SendReplyIfEnrollmentDone() {"
+      "  if (enrollmentScreen.classList.contains("
+      "          'oauth-enroll-state-attribute-prompt')) {"
+      "    $('oauth-enroll-attribute-prompt-card').fire('submit');"
+      "    return false;"
+      "  }"
       "  if (!enrollmentScreen.classList.contains("
       "           'oauth-enroll-state-success')) {"
       "    return false;"
@@ -1010,11 +1019,9 @@ void SAMLPolicyTest::SetUpOnMainThread() {
 void SAMLPolicyTest::SetSAMLOfflineSigninTimeLimitPolicy(int limit) {
   policy::PolicyMap user_policy;
   user_policy.Set(policy::key::kSAMLOfflineSigninTimeLimit,
-                  policy::POLICY_LEVEL_MANDATORY,
-                  policy::POLICY_SCOPE_USER,
+                  policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
                   policy::POLICY_SOURCE_CLOUD,
-                  new base::FundamentalValue(limit),
-                  NULL);
+                  base::WrapUnique(new base::FundamentalValue(limit)), nullptr);
   provider_.UpdateChromePolicy(user_policy);
   base::RunLoop().RunUntilIdle();
 }
@@ -1127,14 +1134,12 @@ void SAMLPolicyTest::LogInWithSAML(const std::string& user_id,
                                         auth_lsid_cookie);
   SetSignFormField("Email", "fake_user");
   SetSignFormField("Password", "fake_password");
-  ExecuteJsInSigninFrame("document.getElementById('Submit').click();");
 
-  OobeScreenWaiter(OobeScreen::SCREEN_CONFIRM_PASSWORD).Wait();
-
+  // Scraping a single password should finish the login right away.
   content::WindowedNotificationObserver session_start_waiter(
       chrome::NOTIFICATION_SESSION_STARTED,
       content::NotificationService::AllSources());
-  SendConfirmPassword("fake_password");
+  ExecuteJsInSigninFrame("document.getElementById('Submit').click();");
   session_start_waiter.Wait();
 }
 
@@ -1352,15 +1357,12 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, SAMLInterstitialNext) {
 
   SetSignFormField("Email", "fake_user");
   SetSignFormField("Password", "fake_password");
-  ExecuteJsInSigninFrame("document.getElementById('Submit').click();");
 
+  // Scraping one password should finish login.
   content::WindowedNotificationObserver session_start_waiter(
       chrome::NOTIFICATION_SESSION_STARTED,
       content::NotificationService::AllSources());
-
-  OobeScreenWaiter(OobeScreen::SCREEN_CONFIRM_PASSWORD).Wait();
-  SendConfirmPassword("fake_password");
-  // Login should finish login and a session should start.
+  ExecuteJsInSigninFrame("document.getElementById('Submit').click();");
   session_start_waiter.Wait();
 }
 

@@ -67,7 +67,6 @@ BitmapImage::BitmapImage(ImageObserver* observer)
     , m_allDataReceived(false)
     , m_haveSize(false)
     , m_sizeAvailable(false)
-    , m_hasUniformFrameSize(true)
     , m_haveFrameCount(false)
 {
 }
@@ -116,8 +115,8 @@ void BitmapImage::destroyDecodedData(bool destroyAll)
         m_frames[i].clear(false);
     }
 
-    size_t frameBytesCleared = m_source.clearCacheExceptFrame(destroyAll ? kNotFound : m_currentFrame);
-    notifyMemoryChanged(-safeCast<int>(frameBytesCleared));
+    m_source.clearCacheExceptFrame(destroyAll ? kNotFound : m_currentFrame);
+    notifyMemoryChanged();
 }
 
 void BitmapImage::destroyDecodedDataIfNecessary()
@@ -134,19 +133,19 @@ void BitmapImage::destroyDecodedDataIfNecessary()
     }
 }
 
-void BitmapImage::notifyMemoryChanged(int delta)
+void BitmapImage::notifyMemoryChanged()
 {
-    if (delta && getImageObserver())
-        getImageObserver()->decodedSizeChanged(this, delta);
+    if (getImageObserver())
+        getImageObserver()->decodedSizeChangedTo(this, totalFrameBytes());
 }
 
-int BitmapImage::totalFrameBytes()
+size_t BitmapImage::totalFrameBytes()
 {
     const size_t numFrames = frameCount();
     size_t totalBytes = 0;
     for (size_t i = 0; i < numFrames; ++i)
         totalBytes += m_source.frameBytesAtIndex(i);
-    return safeCast<int>(totalBytes);
+    return totalBytes;
 }
 
 void BitmapImage::cacheFrame(size_t index)
@@ -154,8 +153,6 @@ void BitmapImage::cacheFrame(size_t index)
     size_t numFrames = frameCount();
     if (m_frames.size() < numFrames)
         m_frames.grow(numFrames);
-
-    int deltaBytes = totalFrameBytes();
 
     // We are caching frame snapshots.  This is OK even for partially decoded frames,
     // as they are cleared by dataChanged() when new data arrives.
@@ -169,15 +166,7 @@ void BitmapImage::cacheFrame(size_t index)
     m_frames[index].m_hasAlpha = m_source.frameHasAlphaAtIndex(index);
     m_frames[index].m_frameBytes = m_source.frameBytesAtIndex(index);
 
-    const IntSize frameSize(index ? m_source.frameSizeAtIndex(index) : m_size);
-    if (frameSize != m_size)
-        m_hasUniformFrameSize = false;
-
-    // We need to check the total bytes before and after the decode call, not
-    // just the current frame size, because some multi-frame images may require
-    // decoding multiple frames to decode the current frame.
-    deltaBytes = totalFrameBytes() - deltaBytes;
-    notifyMemoryChanged(deltaBytes);
+    notifyMemoryChanged();
 }
 
 void BitmapImage::updateSize() const
@@ -242,7 +231,6 @@ bool BitmapImage::dataChanged(bool allDataReceived)
     m_source.setData(*data(), allDataReceived);
 
     m_haveFrameCount = false;
-    m_hasUniformFrameSize = true;
     return isSizeAvailable();
 }
 
@@ -265,7 +253,7 @@ void BitmapImage::draw(SkCanvas* canvas, const SkPaint& paint, const FloatRect& 
         return; // It's too early and we don't have an image yet.
 
     FloatRect adjustedSrcRect = srcRect;
-    adjustedSrcRect.intersect(FloatRect(0, 0, image->width(), image->height()));
+    adjustedSrcRect.intersect(SkRect::Make(image->bounds()));
 
     if (adjustedSrcRect.isEmpty() || dstRect.isEmpty())
         return; // Nothing to draw.
@@ -274,7 +262,7 @@ void BitmapImage::draw(SkCanvas* canvas, const SkPaint& paint, const FloatRect& 
     if (shouldRespectImageOrientation == RespectImageOrientation)
         orientation = frameOrientationAtIndex(m_currentFrame);
 
-    int initialSaveCount = canvas->getSaveCount();
+    SkAutoCanvasRestore autoRestore(canvas, false);
     FloatRect adjustedDstRect = dstRect;
     if (orientation != DefaultImageOrientation) {
         canvas->save();
@@ -292,10 +280,8 @@ void BitmapImage::draw(SkCanvas* canvas, const SkPaint& paint, const FloatRect& 
         }
     }
 
-    SkRect skSrcRect = adjustedSrcRect;
-    canvas->drawImageRect(image.get(), skSrcRect, adjustedDstRect, &paint,
+    canvas->drawImageRect(image.get(), adjustedSrcRect, adjustedDstRect, &paint,
         WebCoreClampingModeToSkiaRectConstraint(clampMode));
-    canvas->restoreToCount(initialSaveCount);
 
     if (currentFrameIsLazyDecoded())
         PlatformInstrumentation::didDrawLazyPixelRef(image->uniqueID());

@@ -35,6 +35,7 @@ import loading_trace
 import options
 import request_dependencies_lens
 import request_track
+import xvfb_helper
 
 # TODO(mattcary): logging.info isn't that useful, as the whole (tools) world
 # uses logging info; we need to introduce logging modules to get finer-grained
@@ -57,16 +58,6 @@ def _LoadPage(device, url):
       data=url)
   logging.warning('Loading ' + url)
   device.StartActivity(load_intent, blocking=True)
-
-
-def _WriteJson(output, json_data):
-  """Write JSON data in a nice way.
-
-  Args:
-    output: a file object
-    json_data: JSON data as a dict.
-  """
-  json.dump(json_data, output, sort_keys=True, indent=2)
 
 
 def _GetPrefetchHtml(graph_view, name=None):
@@ -109,9 +100,12 @@ def _LogRequests(url, clear_cache_override=None):
   Returns:
     JSON dict of logged information (ie, a dict that describes JSON).
   """
+  xvfb_process = None
   if OPTIONS.local:
     chrome_ctl = controller.LocalChromeController()
-    chrome_ctl.SetHeadless(OPTIONS.headless)
+    if OPTIONS.headless:
+      xvfb_process =  xvfb_helper.LaunchXvfb()
+      chrome_ctl.SetChromeEnvOverride(xvfb_helper.GetChromeEnvironment())
   else:
     chrome_ctl = controller.RemoteChromeController(
         device_setup.GetFirstDevice())
@@ -127,6 +121,10 @@ def _LogRequests(url, clear_cache_override=None):
       connection.ClearCache()
     trace = loading_trace.LoadingTrace.RecordUrlNavigation(
         url, connection, chrome_ctl.ChromeMetadata())
+
+  if xvfb_process:
+    xvfb_process.terminate()
+
   return trace.ToJsonDict()
 
 
@@ -154,14 +152,14 @@ def _FullFetch(url, json_output, prefetch):
     logging.warning('Warm fetch')
     warm_data = _LogRequests(url, clear_cache_override=False)
     with open(json_output, 'w') as f:
-      _WriteJson(f, warm_data)
+      json.dump(warm_data, f)
     logging.warning('Wrote ' + json_output)
     with open(json_output + '.cold', 'w') as f:
-      _WriteJson(f, cold_data)
+      json.dump(cold_data, f)
     logging.warning('Wrote ' + json_output + '.cold')
   else:
     with open(json_output, 'w') as f:
-      _WriteJson(f, cold_data)
+      json.dump(cold_data, f)
     logging.warning('Wrote ' + json_output)
 
 
@@ -297,6 +295,14 @@ COMMAND_MAP = {
 
 def main():
   logging.basicConfig(level=logging.WARNING)
+  OPTIONS.AddGlobalArgument(
+      'clear_cache', True, 'clear browser cache before loading')
+  OPTIONS.AddGlobalArgument(
+      'emulate_device', '',
+      'Name of the device to emulate. Must be present '
+      'in --devices_file, or empty for no emulation.')
+  OPTIONS.AddGlobalArgument('emulate_network', '',
+      'Type of network emulation. Empty for no emulation.')
   OPTIONS.AddGlobalArgument(
       'local', False,
       'run against local desktop chrome rather than device '

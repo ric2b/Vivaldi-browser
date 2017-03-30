@@ -28,14 +28,14 @@
 
 #include "core/editing/CaretBase.h"
 
+#include <memory>
+
 namespace blink {
 
-class CullRect;
-
-class DragCaretController final : public GarbageCollectedFinalized<DragCaretController>, private CaretBase {
+class DragCaretController final : public GarbageCollectedFinalized<DragCaretController> {
     WTF_MAKE_NONCOPYABLE(DragCaretController);
 public:
-    static RawPtr<DragCaretController> create();
+    static DragCaretController* create();
 
     LayoutBlock* caretLayoutObject() const;
     void paintDragCaret(LocalFrame*, GraphicsContext&, const LayoutPoint&) const;
@@ -56,6 +56,7 @@ private:
     DragCaretController();
 
     VisiblePosition m_position;
+    const std::unique_ptr<CaretBase> m_caretBase;
 };
 
 } // namespace blink

@@ -39,19 +39,20 @@ public:
     void addInspectedHeapObject(ErrorString*, const String16& inspectedHeapObjectId) override;
     void getHeapObjectId(ErrorString*, const String16& objectId, String16* heapSnapshotObjectId) override;
 
-    void startSampling(ErrorString*) override;
+    void startSampling(ErrorString*, const Maybe<double>& samplingInterval) override;
     void stopSampling(ErrorString*, OwnPtr<protocol::HeapProfiler::SamplingHeapProfile>*) override;
-
-    void requestHeapStatsUpdate() override;
 
 private:
     void startTrackingHeapObjectsInternal(bool trackAllocations);
     void stopTrackingHeapObjectsInternal();
+    void requestHeapStatsUpdate();
+    static void onTimer(void*);
 
     V8InspectorSessionImpl* m_session;
     v8::Isolate* m_isolate;
     protocol::Frontend::HeapProfiler* m_frontend;
     protocol::DictionaryValue* m_state;
+    bool m_hasTimer;
 };
 
 } // namespace blink

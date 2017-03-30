@@ -64,10 +64,16 @@
       'variables': {
         'application_type': 'exe',
         'application_name': 'content_browser',
+        'packaged_manifests': [
+          '<(PRODUCT_DIR)/Mojo Applications/user/manifest.json',
+        ],
         'source_manifest': '<(DEPTH)/content/public/app/mojo/content_browser_manifest.json',
       },
       'includes': [
         '../mojo/public/mojo_application_manifest.gypi',
+      ],
+      'dependencies': [
+        '../services/user/user.gyp:user_app_manifest',
       ],
       'hard_dependency': 1,
     },
@@ -288,9 +294,9 @@
           'variables': { 'enable_wexit_time_destructors': 1, },
           'includes': [
             'content_renderer.gypi',
+            '../third_party/webrtc/build/common.gypi',
           ],
           'dependencies': [
-            '../third_party/webrtc/modules/modules.gyp:webrtc_h264',
             'common_features',
             'content_child',
             'content_common',
@@ -304,6 +310,12 @@
             ['chromium_enable_vtune_jit_for_v8==1', {
               'dependencies': [
                 '../v8/src/third_party/vtune/v8vtune.gyp:v8_vtune',
+              ],
+            }],
+            ['rtc_use_h264==1', {
+              'dependencies': [
+                  '../third_party/openh264/openh264.gyp:openh264_encoder',
+                  '../third_party/webrtc/modules/modules.gyp:webrtc_h264',
               ],
             }],
           ],
@@ -332,7 +344,6 @@
           'type': 'shared_library',
           'variables': { 'enable_wexit_time_destructors': 1, },
           'dependencies': [
-            '../third_party/webrtc/modules/modules.gyp:webrtc_h264',
             'common_features',
             'content_resources',
           ],
@@ -340,6 +351,12 @@
             ['chromium_enable_vtune_jit_for_v8==1', {
               'dependencies': [
                 '../v8/src/third_party/vtune/v8vtune.gyp:v8_vtune',
+              ],
+            }],
+            ['rtc_use_h264==1', {
+              'dependencies': [
+                  '../third_party/openh264/openh264.gyp:openh264_encoder',
+                  '../third_party/webrtc/modules/modules.gyp:webrtc_h264',
               ],
             }],
           ],
@@ -352,6 +369,7 @@
             'content_ppapi_plugin.gypi',
             'content_renderer.gypi',
             'content_utility.gypi',
+            '../third_party/webrtc/build/common.gypi',
           ],
           'msvs_settings': {
             'VCLinkerTool': {
@@ -462,7 +480,6 @@
             '../device/usb/usb.gyp:device_usb_java',
             '../device/vibration/vibration.gyp:device_vibration_java',
             '../media/media.gyp:media_java',
-            '../mojo/mojo_base.gyp:mojo_application_bindings',
             '../mojo/mojo_base.gyp:mojo_system_java',
             '../mojo/mojo_public.gyp:mojo_bindings_java',
             '../net/net.gyp:net',
@@ -658,7 +675,7 @@
             'src_files': ['<(PRODUCT_DIR)/content_shell.pak'],
             'conditions': [
               ['v8_use_external_startup_data==1', {
-                'dependencies': ['<(DEPTH)/v8/tools/gyp/v8.gyp:v8_external_snapshot'],
+                'dependencies': ['<(DEPTH)/v8/src/v8.gyp:v8_external_snapshot'],
                 'renaming_sources': [
                   '<(PRODUCT_DIR)/natives_blob.bin',
                   '<(PRODUCT_DIR)/snapshot_blob.bin',

@@ -17,7 +17,6 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -59,12 +58,11 @@
 #include "ui/gfx/text_elider.h"
 #include "ui/gfx/text_utils.h"
 #include "ui/gfx/vector_icons_public.h"
-#include "ui/views/animation/flood_fill_ink_drop_animation.h"
+#include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_delegate.h"
 #include "ui/views/animation/ink_drop_hover.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/image_button.h"
-#include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/mouse_constants.h"
@@ -190,7 +188,7 @@ DownloadItemViewMd::DownloadItemViewMd(DownloadItem* download_item,
   status_font_list_ =
       rb.GetFontList(ui::ResourceBundle::BaseFont).DeriveWithSizeDelta(-2);
 
-  SetAccessibilityFocusable(true);
+  SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
 
   OnDownloadUpdated(download());
 
@@ -340,9 +338,9 @@ void DownloadItemViewMd::Layout() {
       child_origin.Offset(button_size.width() + kButtonPadding, 0);
     }
     discard_button_->SetBoundsRect(gfx::Rect(child_origin, button_size));
-    DCHECK_EQ(GetPreferredSize().width(),
-              discard_button_->bounds().right() + kEndPadding);
-  } else {
+  }
+
+  if (mode_ != DANGEROUS_MODE) {
     dropdown_button_->SizeToPreferredSize();
     dropdown_button_->SetPosition(
         gfx::Point(width() - dropdown_button_->width() - kEndPadding,
@@ -370,9 +368,11 @@ gfx::Size DownloadItemViewMd::GetPreferredSize() const {
         std::max({child_height, button_size.height(), kWarningIconSize});
   } else {
     width = kStartPadding + DownloadShelf::kProgressIndicatorSize +
-            kProgressTextPadding + kTextWidth +
-            dropdown_button_->GetPreferredSize().width() + kEndPadding;
+            kProgressTextPadding + kTextWidth + kEndPadding;
   }
+
+  if (mode_ != DANGEROUS_MODE)
+    width += dropdown_button_->GetPreferredSize().width();
 
   return gfx::Size(width, std::max(kDefaultHeight,
                                    2 * kMinimumVerticalPadding + child_height));
@@ -474,19 +474,20 @@ void DownloadItemViewMd::AddInkDropLayer(ui::Layer* ink_drop_layer) {
   layer()->SetMasksToBounds(true);
 }
 
-scoped_ptr<views::InkDropAnimation> DownloadItemViewMd::CreateInkDropAnimation()
+std::unique_ptr<views::InkDropRipple> DownloadItemViewMd::CreateInkDropRipple()
     const {
-  return make_scoped_ptr(new views::FloodFillInkDropAnimation(
+  return base::WrapUnique(new views::FloodFillInkDropRipple(
       GetLocalBounds(), ink_drop_delegate_.last_ink_drop_location(),
       color_utils::DeriveDefaultIconColor(GetTextColor())));
 }
 
-scoped_ptr<views::InkDropHover> DownloadItemViewMd::CreateInkDropHover() const {
+std::unique_ptr<views::InkDropHover> DownloadItemViewMd::CreateInkDropHover()
+    const {
   if (IsShowingWarningDialog())
     return nullptr;
 
   gfx::Size size = GetPreferredSize();
-  return make_scoped_ptr(new views::InkDropHover(
+  return base::WrapUnique(new views::InkDropHover(
       size, kInkDropSmallCornerRadius, gfx::Rect(size).CenterPoint(),
       color_utils::DeriveDefaultIconColor(GetTextColor())));
 }
@@ -796,7 +797,7 @@ void DownloadItemViewMd::UpdateColorsFromTheme() {
   if (dangerous_download_label_)
     dangerous_download_label_->SetEnabledColor(GetTextColor());
   SetBorder(base::WrapUnique(new SeparatorBorder(GetThemeProvider()->GetColor(
-      ThemeProperties::COLOR_TOOLBAR_BOTTOM_SEPARATOR))));
+      ThemeProperties::COLOR_TOOLBAR_VERTICAL_SEPARATOR))));
 }
 
 void DownloadItemViewMd::ShowContextMenuImpl(const gfx::Rect& rect,
@@ -948,16 +949,14 @@ void DownloadItemViewMd::ShowWarningDialog() {
 
   dropdown_state_ = NORMAL;
   if (mode_ == DANGEROUS_MODE) {
-    save_button_ = views::MdTextButton::CreateStandardButton(
+    save_button_ = views::MdTextButton::CreateMdButton(
         this, model_.GetWarningConfirmButtonText());
-    save_button_->SetStyle(views::Button::STYLE_BUTTON);
     AddChildView(save_button_);
   }
   int discard_button_message =
       model_.IsMalicious() ? IDS_DISMISS_DOWNLOAD : IDS_DISCARD_DOWNLOAD;
-  discard_button_ = views::MdTextButton::CreateStandardButton(
+  discard_button_ = views::MdTextButton::CreateMdButton(
       this, l10n_util::GetStringUTF16(discard_button_message));
-  discard_button_->SetStyle(views::Button::STYLE_BUTTON);
   AddChildView(discard_button_);
 
   base::string16 dangerous_label =
@@ -969,7 +968,7 @@ void DownloadItemViewMd::ShowWarningDialog() {
   AddChildView(dangerous_download_label_);
   SizeLabelToMinWidth();
 
-  dropdown_button_->SetVisible(false);
+  dropdown_button_->SetVisible(mode_ == MALICIOUS_MODE);
 }
 
 gfx::ImageSkia DownloadItemViewMd::GetWarningIcon() {

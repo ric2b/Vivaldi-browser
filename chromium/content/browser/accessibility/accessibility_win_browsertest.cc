@@ -5,10 +5,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/win/scoped_bstr.h"
@@ -17,8 +17,11 @@
 #include "content/browser/accessibility/accessibility_mode_helper.h"
 #include "content/browser/accessibility/accessibility_tree_formatter.h"
 #include "content/browser/accessibility/accessibility_tree_formatter_utils_win.h"
+#include "content/browser/accessibility/browser_accessibility_manager_win.h"
 #include "content/browser/accessibility/browser_accessibility_win.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
+#include "content/browser/web_contents/web_contents_impl.h"
+#include "content/browser/web_contents/web_contents_view_aura.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_frame_host.h"
@@ -30,6 +33,8 @@
 #include "content/shell/browser/shell.h"
 #include "content/test/accessibility_browser_test_utils.h"
 #include "net/base/escape.h"
+#include "net/dns/mock_host_resolver.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "third_party/iaccessible2/ia2_api_all.h"
 #include "third_party/isimpledom/ISimpleDOMNode.h"
 #include "ui/aura/window.h"
@@ -226,12 +231,12 @@ void AccessibilityWinBrowserTest::SetUpTextareaField(
 void AccessibilityWinBrowserTest::SetUpSampleParagraph(
     base::win::ScopedComPtr<IAccessibleText>* paragraph_text) {
   ASSERT_NE(nullptr, paragraph_text);
-  LoadInitialAccessibilityTreeFromHtml(std::string(
+  LoadInitialAccessibilityTreeFromHtml(
       "<!DOCTYPE html><html><body>"
       "<p><b>Game theory</b> is \"the study of "
       "<a href=\"#\" title=\"Mathematical model\">mathematical models</a> "
       "of conflict and<br>cooperation between intelligent rational "
-      "decision-makers.\"</p></body></html>"));
+      "decision-makers.\"</p></body></html>");
 
   // Retrieve the IAccessible interface for the web page.
   base::win::ScopedComPtr<IAccessible> document(GetRendererAccessible());
@@ -367,7 +372,7 @@ AccessibilityWinBrowserTest::GetAllAccessibleChildren(
   if (child_count <= 0)
       return std::vector<base::win::ScopedVariant>();
 
-  scoped_ptr<VARIANT[]> children_array(new VARIANT[child_count]);
+  std::unique_ptr<VARIANT[]> children_array(new VARIANT[child_count]);
   LONG obtained_count = 0;
   hr = AccessibleChildren(
       element, 0, child_count, children_array.get(), &obtained_count);
@@ -667,10 +672,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   document_checker.CheckAccessible(GetRendererAccessible());
 
   // Set focus to the radio group.
-  scoped_ptr<AccessibilityNotificationWaiter> waiter(
-      new AccessibilityNotificationWaiter(
-          shell(), AccessibilityModeComplete,
-          ui::AX_EVENT_FOCUS));
+  std::unique_ptr<AccessibilityNotificationWaiter> waiter(
+      new AccessibilityNotificationWaiter(shell(), AccessibilityModeComplete,
+                                          ui::AX_EVENT_FOCUS));
   ExecuteScript(L"document.body.children[0].focus()");
   waiter->WaitForNotification();
 
@@ -712,10 +716,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   document_checker.CheckAccessible(GetRendererAccessible());
 
   // Check the checkbox.
-  scoped_ptr<AccessibilityNotificationWaiter> waiter(
-      new AccessibilityNotificationWaiter(
-          shell(), AccessibilityModeComplete,
-          ui::AX_EVENT_CHECKED_STATE_CHANGED));
+  std::unique_ptr<AccessibilityNotificationWaiter> waiter(
+      new AccessibilityNotificationWaiter(shell(), AccessibilityModeComplete,
+                                          ui::AX_EVENT_CHECKED_STATE_CHANGED));
   ExecuteScript(L"document.body.children[0].checked=true");
   waiter->WaitForNotification();
 
@@ -739,11 +742,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   document_checker.CheckAccessible(GetRendererAccessible());
 
   // Change the children of the document body.
-  scoped_ptr<AccessibilityNotificationWaiter> waiter(
-      new AccessibilityNotificationWaiter(
-          shell(),
-          AccessibilityModeComplete,
-          ui::AX_EVENT_CHILDREN_CHANGED));
+  std::unique_ptr<AccessibilityNotificationWaiter> waiter(
+      new AccessibilityNotificationWaiter(shell(), AccessibilityModeComplete,
+                                          ui::AX_EVENT_CHILDREN_CHANGED));
   ExecuteScript(L"document.body.innerHTML='<b>new text</b>'");
   waiter->WaitForNotification();
 
@@ -766,10 +767,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   document_checker.CheckAccessible(GetRendererAccessible());
 
   // Change the children of the document body.
-  scoped_ptr<AccessibilityNotificationWaiter> waiter(
-      new AccessibilityNotificationWaiter(
-          shell(), AccessibilityModeComplete,
-          ui::AX_EVENT_CHILDREN_CHANGED));
+  std::unique_ptr<AccessibilityNotificationWaiter> waiter(
+      new AccessibilityNotificationWaiter(shell(), AccessibilityModeComplete,
+                                          ui::AX_EVENT_CHILDREN_CHANGED));
   ExecuteScript(L"document.body.children[0].style.visibility='visible'");
   waiter->WaitForNotification();
 
@@ -799,10 +799,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   document_checker.CheckAccessible(GetRendererAccessible());
 
   // Focus the div in the document
-  scoped_ptr<AccessibilityNotificationWaiter> waiter(
-      new AccessibilityNotificationWaiter(
-          shell(), AccessibilityModeComplete,
-          ui::AX_EVENT_FOCUS));
+  std::unique_ptr<AccessibilityNotificationWaiter> waiter(
+      new AccessibilityNotificationWaiter(shell(), AccessibilityModeComplete,
+                                          ui::AX_EVENT_FOCUS));
   ExecuteScript(L"document.body.children[0].focus()");
   waiter->WaitForNotification();
 
@@ -849,10 +848,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   document_checker.CheckAccessible(GetRendererAccessible());
 
   // Set the value of the text control
-  scoped_ptr<AccessibilityNotificationWaiter> waiter(
-      new AccessibilityNotificationWaiter(
-          shell(), AccessibilityModeComplete,
-          ui::AX_EVENT_VALUE_CHANGED));
+  std::unique_ptr<AccessibilityNotificationWaiter> waiter(
+      new AccessibilityNotificationWaiter(shell(), AccessibilityModeComplete,
+                                          ui::AX_EVENT_VALUE_CHANGED));
   ExecuteScript(L"document.body.children[0].value='new value'");
   waiter->WaitForNotification();
 
@@ -1612,6 +1610,34 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
+                       TestParagraphTextAtOffsetWithBoundaryLine) {
+  base::win::ScopedComPtr<IAccessibleText> paragraph_text;
+  SetUpSampleParagraph(&paragraph_text);
+
+  // There should be two lines in this paragraph.
+  const LONG newline_offset = 46;
+  LONG n_characters;
+  ASSERT_HRESULT_SUCCEEDED(paragraph_text->get_nCharacters(&n_characters));
+  ASSERT_LT(0, n_characters);
+  ASSERT_LT(newline_offset, n_characters);
+
+  for (LONG i = 0; i <= newline_offset; ++i) {
+    CheckTextAtOffset(
+        paragraph_text, i, IA2_TEXT_BOUNDARY_LINE, 0, newline_offset + 1,
+        L"Game theory is \"the study of \xFFFC of conflict and\n");
+  }
+
+  // For line boundaries, IA2 Spec allows for the offset to be equal to the
+  // text's length.
+  for (LONG i = newline_offset + 1; i <= n_characters; ++i) {
+    CheckTextAtOffset(
+        paragraph_text, i, IA2_TEXT_BOUNDARY_LINE, newline_offset + 1,
+        n_characters,
+        L"cooperation between intelligent rational decision-makers.\"");
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
                        TestTextAtOffsetWithBoundaryAll) {
   base::win::ScopedComPtr<IAccessibleText> input_text;
   SetUpInputField(&input_text);
@@ -1627,6 +1653,106 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
 
   CheckTextAtOffset(textarea_text, CONTENTS_LENGTH - 1, IA2_TEXT_BOUNDARY_ALL,
       0, CONTENTS_LENGTH, base::SysUTF8ToWide(TEXTAREA_CONTENTS));
+}
+
+IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestIAccessibleAction) {
+  LoadInitialAccessibilityTreeFromHtml(
+      "<!DOCTYPE html><html><body>"
+      "<img src=\"\" alt=\"image\" "
+      "onclick=\"document.querySelector('img').alt = 'image2';\">"
+      "</body></html>");
+
+  // Retrieve the IAccessible interface for the web page.
+  base::win::ScopedComPtr<IAccessible> document(GetRendererAccessible());
+  std::vector<base::win::ScopedVariant> document_children =
+      GetAllAccessibleChildren(document.get());
+  ASSERT_EQ(1u, document_children.size());
+
+  base::win::ScopedComPtr<IAccessible2> div;
+  ASSERT_HRESULT_SUCCEEDED(QueryIAccessible2(
+      GetAccessibleFromVariant(document.get(), document_children[0].AsInput())
+          .get(),
+      div.Receive()));
+  std::vector<base::win::ScopedVariant> div_children =
+      GetAllAccessibleChildren(div.get());
+  ASSERT_EQ(1u, div_children.size());
+
+  base::win::ScopedComPtr<IAccessible2> image;
+  ASSERT_HRESULT_SUCCEEDED(QueryIAccessible2(
+      GetAccessibleFromVariant(div.get(), div_children[0].AsInput()).get(),
+      image.Receive()));
+  LONG image_role = 0;
+  ASSERT_HRESULT_SUCCEEDED(image->role(&image_role));
+  ASSERT_EQ(ROLE_SYSTEM_GRAPHIC, image_role);
+
+  base::win::ScopedComPtr<IAccessibleAction> image_action;
+  ASSERT_HRESULT_SUCCEEDED(image.QueryInterface(image_action.Receive()));
+
+  LONG n_actions = 0;
+  EXPECT_HRESULT_SUCCEEDED(image_action->nActions(&n_actions));
+  EXPECT_EQ(1, n_actions);
+
+  base::win::ScopedBstr action_name;
+  EXPECT_HRESULT_SUCCEEDED(image_action->get_name(0, action_name.Receive()));
+  EXPECT_EQ(L"click", std::wstring(action_name, action_name.Length()));
+  action_name.Release();
+  EXPECT_HRESULT_FAILED(image_action->get_name(1, action_name.Receive()));
+  EXPECT_EQ(nullptr, static_cast<BSTR>(action_name));
+
+  base::win::ScopedVariant childid_self(CHILDID_SELF);
+  base::win::ScopedBstr image_name;
+  EXPECT_HRESULT_SUCCEEDED(
+      image->get_accName(childid_self, image_name.Receive()));
+  EXPECT_EQ(L"image", std::wstring(image_name, image_name.Length()));
+  image_name.Release();
+  // Cllicking the image will change its name.
+  EXPECT_HRESULT_SUCCEEDED(image_action->doAction(0));
+  AccessibilityNotificationWaiter waiter(shell(), AccessibilityModeComplete,
+                                         ui::AX_EVENT_TEXT_CHANGED);
+  waiter.WaitForNotification();
+  EXPECT_HRESULT_SUCCEEDED(
+      image->get_accName(childid_self, image_name.Receive()));
+  EXPECT_EQ(L"image2", std::wstring(image_name, image_name.Length()));
+  EXPECT_HRESULT_FAILED(image_action->doAction(1));
+}
+
+IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, HasHWNDAfterNavigation) {
+  // This test simulates a scenario where RenderWidgetHostViewAura::SetSize
+  // is not called again after its window is added to the root window.
+  // Ensure that we still get a legacy HWND for accessibility.
+
+  host_resolver()->AddRule("*", "127.0.0.1");
+  ASSERT_TRUE(embedded_test_server()->Start());
+  WebContentsImpl* web_contents = static_cast<WebContentsImpl*>(
+      shell()->web_contents());
+  WebContentsView* web_contents_view = web_contents->GetView();
+  WebContentsViewAura* web_contents_view_aura =
+      static_cast<WebContentsViewAura*>(web_contents_view);
+
+  // Set a flag that will cause WebContentsViewAura to initialize a
+  // RenderWidgetHostViewAura with a null parent view.
+  web_contents_view_aura->set_init_rwhv_with_null_parent_for_testing(true);
+
+  // Navigate to a new page and wait for the accessibility tree to load.
+  AccessibilityNotificationWaiter waiter(
+      shell(), AccessibilityModeComplete,
+      ui::AX_EVENT_LOAD_COMPLETE);
+  NavigateToURL(shell(), embedded_test_server()->GetURL(
+      "/accessibility/html/article.html"));
+  waiter.WaitForNotification();
+
+  // At this point the root of the accessibility tree shouldn't have an HWND
+  // because we never gave a parent window to the RWHVA.
+  BrowserAccessibilityManagerWin* manager =
+      static_cast<BrowserAccessibilityManagerWin*>(
+          web_contents->GetRootBrowserAccessibilityManager());
+  ASSERT_EQ(nullptr, manager->GetParentHWND());
+
+  // Now add the RWHVA's window to the root window and ensure that we have
+  // an HWND for accessibility now.
+  web_contents_view->GetNativeView()->AddChild(
+      web_contents->GetRenderWidgetHostView()->GetNativeView());
+  ASSERT_NE(nullptr, manager->GetParentHWND());
 }
 
 }  // namespace content

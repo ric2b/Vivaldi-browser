@@ -12,7 +12,8 @@
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/display_manager_test_api.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/env.h"
@@ -24,7 +25,7 @@
 #include "ui/events/test/event_generator.h"
 #include "ui/events/test/test_event_handler.h"
 #include "ui/gfx/animation/slide_animation.h"
-#include "ui/views/bubble/bubble_delegate.h"
+#include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "ui/views/controls/native/native_view_host.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
@@ -32,6 +33,16 @@
 namespace ash {
 
 namespace {
+
+class TestBubbleDialogDelegate : public views::BubbleDialogDelegateView {
+ public:
+  explicit TestBubbleDialogDelegate(views::View* anchor)
+      : BubbleDialogDelegateView(anchor, views::BubbleBorder::NONE) {}
+  ~TestBubbleDialogDelegate() override {}
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(TestBubbleDialogDelegate);
+};
 
 class MockImmersiveFullscreenControllerDelegate
     : public ImmersiveFullscreenController::Delegate {
@@ -160,7 +171,7 @@ class ImmersiveFullscreenControllerTest : public ash::test::AshTestBase {
     top_container_ = new views::View();
     top_container_->SetBounds(
         0, 0, window_size.width(), 100);
-    top_container_->SetFocusable(true);
+    top_container_->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
     widget_->GetContentsView()->AddChildView(top_container_);
 
     delegate_.reset(
@@ -664,10 +675,10 @@ TEST_F(ImmersiveFullscreenControllerTest, DifferentModalityEnterExit) {
 }
 
 // Test when the SWIPE_CLOSE edge gesture closes the top-of-window views.
-#if defined(OS_WIN)
-// On Windows, touch events do not result in mouse events being disabled.  As
-// a result, the last part of this test which ends the reveal via a gesture will
-// not work correctly.  See crbug.com/332430, and the function
+#if !defined(OS_CHROMEOS)
+// On Windows/Linux, touch events do not result in mouse events being disabled.
+// As a result, the last part of this test which ends the reveal via a gesture
+// will not work correctly.  See crbug.com/332430, and the function
 // ShouldHideCursorOnTouch() in compound_event_filter.cc.
 #define MAYBE_EndRevealViaGesture DISABLED_EndRevealViaGesture
 #else
@@ -790,11 +801,11 @@ TEST_F(ImmersiveFullscreenControllerTest, Focus) {
   // test.
   views::View* child_view = new views::View();
   child_view->SetBounds(0, 0, 10, 10);
-  child_view->SetFocusable(true);
+  child_view->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
   top_container()->AddChildView(child_view);
   views::View* unrelated_view = new views::View();
   unrelated_view->SetBounds(0, 100, 10, 10);
-  unrelated_view->SetFocusable(true);
+  unrelated_view->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
   top_container()->parent()->AddChildView(unrelated_view);
   views::FocusManager* focus_manager =
       top_container()->GetWidget()->GetFocusManager();
@@ -913,8 +924,8 @@ TEST_F(ImmersiveFullscreenControllerTest, Bubbles) {
   // 1) Test that a bubble anchored to a child of the top container triggers
   // a reveal and keeps the top-of-window views revealed for the duration of
   // its visibility.
-  views::Widget* bubble_widget1(views::BubbleDelegateView::CreateBubble(
-      new views::BubbleDelegateView(child_view, views::BubbleBorder::NONE)));
+  views::Widget* bubble_widget1(views::BubbleDialogDelegateView::CreateBubble(
+      new TestBubbleDialogDelegate(child_view)));
   bubble_widget1->Show();
   EXPECT_TRUE(controller()->IsRevealed());
 
@@ -925,8 +936,8 @@ TEST_F(ImmersiveFullscreenControllerTest, Bubbles) {
       ImmersiveFullscreenController::ANIMATE_REVEAL_NO));
   EXPECT_TRUE(controller()->IsRevealed());
 
-  views::Widget* bubble_widget2 = views::BubbleDelegateView::CreateBubble(
-      new views::BubbleDelegateView(child_view, views::BubbleBorder::NONE));
+  views::Widget* bubble_widget2 = views::BubbleDialogDelegateView::CreateBubble(
+      new TestBubbleDialogDelegate(child_view));
   bubble_widget2->Show();
   EXPECT_TRUE(controller()->IsRevealed());
   revealed_lock.reset();
@@ -938,8 +949,8 @@ TEST_F(ImmersiveFullscreenControllerTest, Bubbles) {
   // 2) Test that transitioning from keeping the top-of-window views revealed
   // because of a bubble to keeping the top-of-window views revealed because of
   // mouse hover by activating |top_container_widget| works.
-  views::Widget* bubble_widget3 = views::BubbleDelegateView::CreateBubble(
-      new views::BubbleDelegateView(child_view, views::BubbleBorder::NONE));
+  views::Widget* bubble_widget3 = views::BubbleDialogDelegateView::CreateBubble(
+      new TestBubbleDialogDelegate(child_view));
   bubble_widget3->Show();
   SetHovered(true);
   EXPECT_TRUE(controller()->IsRevealed());
@@ -951,18 +962,18 @@ TEST_F(ImmersiveFullscreenControllerTest, Bubbles) {
   SetHovered(false);
   EXPECT_FALSE(controller()->IsRevealed());
 
-  views::BubbleDelegateView* bubble_delegate4(new views::BubbleDelegateView(
-      child_view, views::BubbleBorder::NONE));
+  views::BubbleDialogDelegateView* bubble_delegate4(
+      new TestBubbleDialogDelegate(child_view));
   bubble_delegate4->set_can_activate(false);
-  views::Widget* bubble_widget4(views::BubbleDelegateView::CreateBubble(
-      bubble_delegate4));
+  views::Widget* bubble_widget4(
+      views::BubbleDialogDelegateView::CreateBubble(bubble_delegate4));
   bubble_widget4->Show();
 
-  views::BubbleDelegateView* bubble_delegate5(new views::BubbleDelegateView(
-      child_view, views::BubbleBorder::NONE));
+  views::BubbleDialogDelegateView* bubble_delegate5(
+      new TestBubbleDialogDelegate(child_view));
   bubble_delegate5->set_can_activate(false);
-  views::Widget* bubble_widget5(views::BubbleDelegateView::CreateBubble(
-      bubble_delegate5));
+  views::Widget* bubble_widget5(
+      views::BubbleDialogDelegateView::CreateBubble(bubble_delegate5));
   bubble_widget5->Show();
 
   EXPECT_TRUE(controller()->IsRevealed());
@@ -988,8 +999,8 @@ TEST_F(ImmersiveFullscreenControllerTest, Bubbles) {
   // handled upon reenabling immersive fullscreen.
   SetEnabled(false);
 
-  views::Widget* bubble_widget6 = views::BubbleDelegateView::CreateBubble(
-      new views::BubbleDelegateView(child_view, views::BubbleBorder::NONE));
+  views::Widget* bubble_widget6 = views::BubbleDialogDelegateView::CreateBubble(
+      new TestBubbleDialogDelegate(child_view));
   bubble_widget6->Show();
 
   SetEnabled(true);
@@ -1000,8 +1011,8 @@ TEST_F(ImmersiveFullscreenControllerTest, Bubbles) {
   // 6) Test that a bubble which is not anchored to a child of the
   // TopContainerView does not trigger a reveal or keep the
   // top-of-window views revealed if they are already revealed.
-  views::Widget* bubble_widget7 = views::BubbleDelegateView::CreateBubble(
-      new views::BubbleDelegateView(unrelated_view, views::BubbleBorder::NONE));
+  views::Widget* bubble_widget7 = views::BubbleDialogDelegateView::CreateBubble(
+      new TestBubbleDialogDelegate(unrelated_view));
   bubble_widget7->Show();
   EXPECT_FALSE(controller()->IsRevealed());
 
@@ -1010,8 +1021,8 @@ TEST_F(ImmersiveFullscreenControllerTest, Bubbles) {
   AttemptReveal(MODALITY_MOUSE);
   EXPECT_TRUE(controller()->IsRevealed());
 
-  views::Widget* bubble_widget8 = views::BubbleDelegateView::CreateBubble(
-      new views::BubbleDelegateView(unrelated_view, views::BubbleBorder::NONE));
+  views::Widget* bubble_widget8 = views::BubbleDialogDelegateView::CreateBubble(
+      new TestBubbleDialogDelegate(unrelated_view));
   bubble_widget8->Show();
   SetHovered(false);
   EXPECT_FALSE(controller()->IsRevealed());

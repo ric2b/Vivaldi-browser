@@ -151,13 +151,13 @@ void WebViewGuest::ExtendedLoadProgressChanged(WebContents* source,
                                                double loaded_bytes,
                                                int loaded_elements,
                                                int total_elements) {
-  scoped_ptr<base::DictionaryValue> args(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
   args->SetString(guest_view::kUrl, web_contents()->GetURL().spec());
   args->SetDouble(webview::kProgress, progress);
   args->SetDouble(webview::kLoadedBytes, loaded_bytes);
   args->SetInteger(webview::kLoadedElements, loaded_elements);
   args->SetInteger(webview::kTotalElements, total_elements);
-  DispatchEventToView(make_scoped_ptr(
+  DispatchEventToView(base::WrapUnique(
       new GuestViewEvent(webview::kEventLoadProgress, std::move(args))));
 }
 
@@ -176,7 +176,7 @@ void WebViewGuest::InitListeners() {
 void WebViewGuest::ToggleFullscreenModeForTab(
     content::WebContents* web_contents,
     bool enter_fullscreen) {
-  scoped_ptr<base::DictionaryValue> args(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
   args->SetBoolean("enterFullscreen", enter_fullscreen);
 
   bool state_changed = enter_fullscreen != is_fullscreen_;
@@ -215,7 +215,7 @@ void WebViewGuest::ToggleFullscreenModeForTab(
     }
   }
   if (state_changed) {
-    DispatchEventToView(make_scoped_ptr(
+    DispatchEventToView(base::WrapUnique(
         new GuestViewEvent(webview::kEventOnFullscreen, std::move(args))));
   }
 }
@@ -230,7 +230,8 @@ void WebViewGuest::ShowValidationMessage(content::WebContents *web_contents,
 }
 
 void WebViewGuest::HideValidationMessage(content::WebContents* web_contents) {
-  validation_message_bubble_.reset();
+  if (validation_message_bubble_)
+    validation_message_bubble_->CloseValidationMessage();
 }
 
 void WebViewGuest::MoveValidationMessage(content::WebContents *web_contents,
@@ -319,11 +320,11 @@ void WebViewGuest::ShowPageInfo(gfx::Point pos) {
 #ifdef VIVALDI_BUILD
 void WebViewGuest::UpdateMediaState(TabAlertState state) {
   if (state != media_state_) {
-    scoped_ptr<base::DictionaryValue> args(new base::DictionaryValue());
+    std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
 
     args->SetString("activeMediaType", TabAlertStateToString(state));
 
-    DispatchEventToView(make_scoped_ptr(
+    DispatchEventToView(base::WrapUnique(
         new GuestViewEvent(webview::kEventMediaStateChanged, std::move(args))));
   }
   media_state_ = state;
@@ -358,7 +359,7 @@ void WebViewGuest::SetIsFullscreen(bool is_fullscreen) {
 }
 
 void WebViewGuest::VisibleSSLStateChanged(const WebContents* source) {
-  scoped_ptr<base::DictionaryValue> args(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
 #ifdef VIVALDI_BUILD
   const ChromeSecurityStateModelClient *security_model =
       ChromeSecurityStateModelClient::FromWebContents(source);
@@ -389,7 +390,7 @@ void WebViewGuest::VisibleSSLStateChanged(const WebContents* source) {
     }
 
   }
-  DispatchEventToView(make_scoped_ptr(
+  DispatchEventToView(base::WrapUnique(
       new GuestViewEvent(webview::kEventSSLStateChanged, std::move(args))));
 #endif // VIVALDI_BUILD
 }
@@ -570,9 +571,9 @@ bool WebViewGuest::OnMouseEvent(const blink::WebMouseEvent& mouse_event) {
 
 void WebViewGuest::UpdateTargetURL(content::WebContents *source,
                                    const GURL &url) {
-  scoped_ptr<base::DictionaryValue> args(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
   args->SetString(webview::kNewURL, url.spec());
-  DispatchEventToView(make_scoped_ptr(
+  DispatchEventToView(base::WrapUnique(
       new GuestViewEvent(webview::kEventTargetURLChanged, std::move(args))));
 }
 
@@ -588,10 +589,10 @@ void WebViewGuest::CreateSearch(const base::ListValue & search) {
     return;
   }
 
-  scoped_ptr<base::DictionaryValue> args(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
   args->SetString(webview::kNewSearchName, keyword);
   args->SetString(webview::kNewSearchUrl, url);
-  DispatchEventToView(make_scoped_ptr(
+  DispatchEventToView(base::WrapUnique(
       new GuestViewEvent(webview::kEventCreateSearch, std::move(args))));
 }
 
@@ -603,9 +604,9 @@ void WebViewGuest::PasteAndGo(const base::ListValue & search) {
     return;
   }
 
-  scoped_ptr<base::DictionaryValue> args(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
   args->SetString(webview::kClipBoardText, clipBoardText);
-  DispatchEventToView(make_scoped_ptr(
+  DispatchEventToView(base::WrapUnique(
       new GuestViewEvent(webview::kEventPasteAndGo, std::move(args))));
 }
 
@@ -694,9 +695,9 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
 }
 
 bool WebViewGuest::RequestPageInfo(const GURL& url) {
-  scoped_ptr<base::DictionaryValue> args(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
   args->Set(webview::kTargetURL, new base::StringValue(url.spec()));
-  DispatchEventToView(make_scoped_ptr(
+  DispatchEventToView(base::WrapUnique(
       new GuestViewEvent(webview::kEventRequestPageInfo, std::move(args))));
   return true;
 }

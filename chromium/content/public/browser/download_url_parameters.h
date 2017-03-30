@@ -6,13 +6,14 @@
 #define CONTENT_PUBLIC_BROWSER_DOWNLOAD_URL_PARAMETERS_H_
 
 #include <stdint.h>
+
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "content/public/browser/download_interrupt_reasons.h"
 #include "content/public/browser/download_save_info.h"
@@ -66,7 +67,7 @@ class CONTENT_EXPORT DownloadUrlParameters {
   // the wrong site instance where multiple iframes are involved. Use the
   // DownloadUrlParameters constructor below and specify the process and frame
   // IDs explicitly.
-  static scoped_ptr<DownloadUrlParameters> FromWebContents(
+  static std::unique_ptr<DownloadUrlParameters> FromWebContents(
       WebContents* web_contents,
       const GURL& url);
 
@@ -178,7 +179,7 @@ class CONTENT_EXPORT DownloadUrlParameters {
   // of the first |offset| bytes of the target file. In this case, the prefix
   // hash will be ignored since the |hash_state| is assumed to be correct if
   // provided.
-  void set_hash_state(scoped_ptr<crypto::SecureHash> hash_state) {
+  void set_hash_state(std::unique_ptr<crypto::SecureHash> hash_state) {
     save_info_.hash_state = std::move(hash_state);
   }
 
@@ -199,7 +200,7 @@ class CONTENT_EXPORT DownloadUrlParameters {
   // a blob by the time the download request starts, then the download will
   // fail.
   void set_blob_data_handle(
-      scoped_ptr<storage::BlobDataHandle> blob_data_handle) {
+      std::unique_ptr<storage::BlobDataHandle> blob_data_handle) {
     blob_data_handle_ = std::move(blob_data_handle);
   }
 
@@ -237,7 +238,7 @@ class CONTENT_EXPORT DownloadUrlParameters {
   bool do_not_prompt_for_login() const { return do_not_prompt_for_login_; }
 
   // STATE_CHANGING: Return the BlobDataHandle.
-  scoped_ptr<storage::BlobDataHandle> GetBlobDataHandle() {
+  std::unique_ptr<storage::BlobDataHandle> GetBlobDataHandle() {
     return std::move(blob_data_handle_);
   }
 
@@ -264,7 +265,7 @@ class CONTENT_EXPORT DownloadUrlParameters {
   DownloadSaveInfo save_info_;
   GURL url_;
   bool do_not_prompt_for_login_;
-  scoped_ptr<storage::BlobDataHandle> blob_data_handle_;
+  std::unique_ptr<storage::BlobDataHandle> blob_data_handle_;
 
   DISALLOW_COPY_AND_ASSIGN(DownloadUrlParameters);
 };

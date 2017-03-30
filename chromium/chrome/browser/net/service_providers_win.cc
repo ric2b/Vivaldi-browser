@@ -7,13 +7,17 @@
 #include <winsock2.h>
 #include <Ws2spi.h>
 
+#include <memory>
+
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/values.h"
 
 WinsockLayeredServiceProvider::WinsockLayeredServiceProvider() {
 }
+
+WinsockLayeredServiceProvider::WinsockLayeredServiceProvider(
+    const WinsockLayeredServiceProvider& other) = default;
 
 WinsockLayeredServiceProvider::~WinsockLayeredServiceProvider() {
 }
@@ -30,7 +34,7 @@ void GetWinsockNamespaceProviders(
     return;
   }
 
-  scoped_ptr<char[]> namespace_provider_bytes(new char[size]);
+  std::unique_ptr<char[]> namespace_provider_bytes(new char[size]);
   WSANAMESPACE_INFO* namespace_providers =
       reinterpret_cast<WSANAMESPACE_INFO*>(namespace_provider_bytes.get());
 
@@ -65,7 +69,7 @@ void GetWinsockLayeredServiceProviders(
     return;
   }
 
-  scoped_ptr<char[]> service_provider_bytes(new char[size]);
+  std::unique_ptr<char[]> service_provider_bytes(new char[size]);
   WSAPROTOCOL_INFOW* service_providers =
       reinterpret_cast<WSAPROTOCOL_INFOW*>(service_provider_bytes.get());
 

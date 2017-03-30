@@ -145,7 +145,8 @@ TableView::TableView(ui::TableModel* model,
     visible_column.column = columns[i];
     visible_columns_.push_back(visible_column);
   }
-  SetFocusable(true);
+  // Always focusable, even on Mac (consistent with NSTableView).
+  SetFocusBehavior(FocusBehavior::ALWAYS);
   SetModel(model);
 }
 
@@ -178,7 +179,7 @@ View* TableView::CreateParentIfNecessary() {
 }
 
 void TableView::SetRowBackgroundPainter(
-    scoped_ptr<TableViewRowBackgroundPainter> painter) {
+    std::unique_ptr<TableViewRowBackgroundPainter> painter) {
   row_background_painter_ = std::move(painter);
 }
 

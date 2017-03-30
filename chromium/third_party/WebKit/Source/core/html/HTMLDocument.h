@@ -34,7 +34,7 @@ class HTMLBodyElement;
 class CORE_EXPORT HTMLDocument : public Document {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static RawPtr<HTMLDocument> create(const DocumentInit& initializer = DocumentInit())
+    static HTMLDocument* create(const DocumentInit& initializer = DocumentInit())
     {
         return new HTMLDocument(initializer);
     }
@@ -66,7 +66,7 @@ public:
 
     static bool isCaseSensitiveAttribute(const QualifiedName&);
 
-    RawPtr<Document> cloneDocumentWithoutChildren() final;
+    Document* cloneDocumentWithoutChildren() final;
 
 protected:
     HTMLDocument(const DocumentInit&, DocumentClassFlags extendedDocumentClasses = DefaultDocumentClass);

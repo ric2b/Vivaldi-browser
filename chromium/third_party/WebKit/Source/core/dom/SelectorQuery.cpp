@@ -161,14 +161,14 @@ Element* SelectorDataList::closest(Element& targetElement) const
     return nullptr;
 }
 
-RawPtr<StaticElementList> SelectorDataList::queryAll(ContainerNode& rootNode) const
+StaticElementList* SelectorDataList::queryAll(ContainerNode& rootNode) const
 {
     HeapVector<Member<Element>> result;
     execute<AllElementsSelectorQueryTrait>(rootNode, result);
     return StaticElementList::adopt(result);
 }
 
-RawPtr<Element> SelectorDataList::queryFirst(ContainerNode& rootNode) const
+Element* SelectorDataList::queryFirst(ContainerNode& rootNode) const
 {
     Element* matchedElement = nullptr;
     execute<SingleElementSelectorQueryTrait>(rootNode, matchedElement);
@@ -205,10 +205,8 @@ inline bool matchesTagName(const QualifiedName& tagName, const Element& element)
 template <typename SelectorQueryTrait>
 void SelectorDataList::collectElementsByTagName(ContainerNode& rootNode, const QualifiedName& tagName,  typename SelectorQueryTrait::OutputType& output) const
 {
+    DCHECK_EQ(tagName.namespaceURI(), starAtom);
     for (Element& element : ElementTraversal::descendantsOf(rootNode)) {
-        // querySelector*() doesn't allow namespaces and throws before it gets
-        // here so we can ignore them.
-        DCHECK_EQ(tagName.namespaceURI(), starAtom);
         if (matchesTagName(tagName, element)) {
             SelectorQueryTrait::appendElement(output, element);
             if (SelectorQueryTrait::shouldOnlyMatchFirstElement)
@@ -261,7 +259,7 @@ void SelectorDataList::findTraverseRootsAndExecute(ContainerNode& rootNode, type
     bool startFromParent = false;
 
     for (const CSSSelector* selector = m_selectors[0]; selector; selector = selector->tagHistory()) {
-        if (selector->match() == CSSSelector::Id && !rootNode.document().containsMultipleElementsWithId(selector->value())) {
+        if (selector->match() == CSSSelector::Id && !rootNode.treeScope().containsMultipleElementsWithId(selector->value())) {
             Element* element = rootNode.treeScope().getElementById(selector->value());
             ContainerNode* adjustedNode = &rootNode;
             if (element && (isTreeScopeRoot(rootNode) || element->isDescendantOf(&rootNode)))
@@ -510,8 +508,15 @@ void SelectorDataList::execute(ContainerNode& rootNode, typename SelectorQueryTr
             collectElementsByClassName<SelectorQueryTrait>(rootNode, firstSelector.value(), output);
             return;
         case CSSSelector::Tag:
-            collectElementsByTagName<SelectorQueryTrait>(rootNode, firstSelector.tagQName(), output);
-            return;
+            if (firstSelector.tagQName().namespaceURI() == starAtom) {
+                collectElementsByTagName<SelectorQueryTrait>(rootNode, firstSelector.tagQName(), output);
+                return;
+            }
+            // querySelector*() doesn't allow namespace prefix resolution and
+            // throws before we get here, but we still may have selectors for
+            // elements without a namespace.
+            DCHECK_EQ(firstSelector.tagQName().namespaceURI(), nullAtom);
+            break;
         default:
             break; // If we need another fast path, add here.
         }
@@ -541,12 +546,12 @@ Element* SelectorQuery::closest(Element& element) const
     return m_selectors.closest(element);
 }
 
-RawPtr<StaticElementList> SelectorQuery::queryAll(ContainerNode& rootNode) const
+StaticElementList* SelectorQuery::queryAll(ContainerNode& rootNode) const
 {
     return m_selectors.queryAll(rootNode);
 }
 
-RawPtr<Element> SelectorQuery::queryFirst(ContainerNode& rootNode) const
+Element* SelectorQuery::queryFirst(ContainerNode& rootNode) const
 {
     return m_selectors.queryFirst(rootNode);
 }

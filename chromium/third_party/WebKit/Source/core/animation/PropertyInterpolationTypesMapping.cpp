@@ -9,6 +9,7 @@
 #include "core/animation/CSSBorderImageLengthBoxInterpolationType.h"
 #include "core/animation/CSSClipInterpolationType.h"
 #include "core/animation/CSSColorInterpolationType.h"
+#include "core/animation/CSSFilterListInterpolationType.h"
 #include "core/animation/CSSFontSizeInterpolationType.h"
 #include "core/animation/CSSFontWeightInterpolationType.h"
 #include "core/animation/CSSImageInterpolationType.h"
@@ -28,6 +29,7 @@
 #include "core/animation/CSSShadowListInterpolationType.h"
 #include "core/animation/CSSSizeListInterpolationType.h"
 #include "core/animation/CSSTextIndentInterpolationType.h"
+#include "core/animation/CSSTransformInterpolationType.h"
 #include "core/animation/CSSTransformOriginInterpolationType.h"
 #include "core/animation/CSSTranslateInterpolationType.h"
 #include "core/animation/CSSValueInterpolationType.h"
@@ -49,16 +51,14 @@
 
 namespace blink {
 
-const InterpolationTypes* PropertyInterpolationTypesMapping::get(const PropertyHandle& property)
+const InterpolationTypes& PropertyInterpolationTypesMapping::get(const PropertyHandle& property)
 {
     using ApplicableTypesMap = HashMap<PropertyHandle, OwnPtr<const InterpolationTypes>>;
     DEFINE_STATIC_LOCAL(ApplicableTypesMap, applicableTypesMap, ());
     auto entry = applicableTypesMap.find(property);
     if (entry != applicableTypesMap.end())
-        return entry->value.get();
+        return *entry->value.get();
 
-    // TODO(alancutter): Remove legacy interpolation code and stop returning nullptr.
-    bool fallbackToLegacy = false;
     OwnPtr<InterpolationTypes> applicableTypes = adoptPtr(new InterpolationTypes());
 
     if (property.isCSSProperty() || property.isPresentationAttribute()) {
@@ -239,15 +239,18 @@ const InterpolationTypes* PropertyInterpolationTypesMapping::get(const PropertyH
         case CSSPropertyRotate:
             applicableTypes->append(adoptPtr(new CSSRotateInterpolationType(cssProperty)));
             break;
-        default:
-            // TODO(alancutter): Support all interpolable CSS properties here so we can stop falling back to the old StyleInterpolation implementation.
-            if (CSSPropertyMetadata::isInterpolableProperty(cssProperty))
-                fallbackToLegacy = true;
+        case CSSPropertyBackdropFilter:
+        case CSSPropertyWebkitFilter:
+            applicableTypes->append(adoptPtr(new CSSFilterListInterpolationType(cssProperty)));
             break;
+        case CSSPropertyTransform:
+            applicableTypes->append(adoptPtr(new CSSTransformInterpolationType(cssProperty)));
+            break;
+        default:
+            ASSERT(!CSSPropertyMetadata::isInterpolableProperty(cssProperty));
         }
 
-        if (!fallbackToLegacy)
-            applicableTypes->append(adoptPtr(new CSSValueInterpolationType(cssProperty)));
+        applicableTypes->append(adoptPtr(new CSSValueInterpolationType(cssProperty)));
 
     } else {
         const QualifiedName& attribute = property.svgAttribute();
@@ -369,8 +372,8 @@ const InterpolationTypes* PropertyInterpolationTypesMapping::get(const PropertyH
         applicableTypes->append(adoptPtr(new SVGValueInterpolationType(attribute)));
     }
 
-    auto addResult = applicableTypesMap.add(property, fallbackToLegacy ? nullptr : applicableTypes.release());
-    return addResult.storedValue->value.get();
+    auto addResult = applicableTypesMap.add(property, std::move(applicableTypes));
+    return *addResult.storedValue->value.get();
 }
 
 } // namespace blink

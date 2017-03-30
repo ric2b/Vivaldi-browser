@@ -1,5 +1,0 @@
-include_rules = [
-  "+components/tracing",
-  "+mojo/services/catalog",
-  "+mojo/services/tracing",
-]

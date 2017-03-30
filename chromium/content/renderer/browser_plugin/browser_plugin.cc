@@ -12,7 +12,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "cc/surfaces/surface.h"
 #include "content/common/browser_plugin/browser_plugin_constants.h"
 #include "content/common/browser_plugin/browser_plugin_messages.h"
@@ -35,6 +35,8 @@
 #include "third_party/WebKit/public/web/WebPluginContainer.h"
 #include "third_party/WebKit/public/web/WebView.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+
+#include "app/vivaldi_apptools.h"
 
 using blink::WebPluginContainer;
 using blink::WebPoint;
@@ -68,7 +70,6 @@ BrowserPlugin::BrowserPlugin(
     : attached_(false),
       render_frame_routing_id_(render_frame->GetRoutingID()),
       container_(nullptr),
-      sad_guest_(nullptr),
       guest_crashed_(false),
       plugin_focused_(false),
       visible_(true),
@@ -154,7 +155,7 @@ void BrowserPlugin::Attach() {
   attach_params.view_rect = view_rect();
   attach_params.is_full_page_plugin = false;
   if (container()) {
-    blink::WebLocalFrame* frame = container()->element().document().frame();
+    blink::WebLocalFrame* frame = container()->document().frame();
     attach_params.is_full_page_plugin =
         frame->view()->mainFrame()->isWebLocalFrame() &&
         frame->view()->mainFrame()->document().isPluginDocument();
@@ -252,11 +253,11 @@ void BrowserPlugin::UpdateGuestFocusState(blink::WebFocusType focus_type) {
   if (!attached())
     return;
   bool should_be_focused = ShouldGuestBeFocused();
-  if (!BrowserPluginManager::Get()->IsUpdatingFocusForGuests())
-  BrowserPluginManager::Get()->Send(new BrowserPluginHostMsg_SetFocus(
-      browser_plugin_instance_id_,
-      should_be_focused,
-      focus_type));
+  // Let this always pass if we are not running Vivaldi.
+  if (!vivaldi::IsVivaldiRunning() ||
+      !BrowserPluginManager::Get()->IsUpdatingFocusForGuests())
+    BrowserPluginManager::Get()->Send(new BrowserPluginHostMsg_SetFocus(
+        browser_plugin_instance_id_, should_be_focused, focus_type));
 }
 
 bool BrowserPlugin::ShouldGuestBeFocused() const {
@@ -367,7 +368,7 @@ void BrowserPlugin::updateGeometry(const WebRect& plugin_rect_in_viewport,
   gfx::Rect old_view_rect = view_rect_;
   // Convert the plugin_rect_in_viewport to window coordinates, which is css.
   WebRect rect_in_css(plugin_rect_in_viewport);
-  blink::WebView* webview = container()->element().document().frame()->view();
+  blink::WebView* webview = container()->document().frame()->view();
   RenderView::FromWebView(webview)->GetWidget()->convertViewportToWindow(
       &rect_in_css);
   // gisli@vivalid.com:  keep track of old pos.
@@ -438,8 +439,14 @@ blink::WebInputEventResult BrowserPlugin::handleInputEvent(
 
   if (blink::WebInputEvent::isGestureEventType(event.type)) {
     auto gesture_event = static_cast<const blink::WebGestureEvent&>(event);
-    if (gesture_event.resendingPluginId == browser_plugin_instance_id_)
-      return blink::WebInputEventResult::NotHandled;
+    DCHECK(blink::WebInputEvent::GestureTapDown == event.type ||
+           gesture_event.resendingPluginId == browser_plugin_instance_id_);
+
+    // We shouldn't be forwarding GestureEvents to the Guest anymore. Indicate
+    // we handled this only if it's a non-resent event.
+    return gesture_event.resendingPluginId == browser_plugin_instance_id_
+               ? blink::WebInputEventResult::NotHandled
+               : blink::WebInputEventResult::HandledApplication;
   }
 
   if (event.type == blink::WebInputEvent::ContextMenu)

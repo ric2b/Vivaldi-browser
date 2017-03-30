@@ -63,10 +63,6 @@ void InspectorResourceContentLoader::ResourceClient::resourceFinished(Resource* 
         resource->removeClient(static_cast<RawResourceClient*>(this));
     else
         resource->removeClient(static_cast<StyleSheetResourceClient*>(this));
-
-#if !ENABLE(OILPAN)
-    delete this;
-#endif
 }
 
 void InspectorResourceContentLoader::ResourceClient::setCSSStyleSheet(const String&, const KURL& url, const String&, const CSSStyleSheetResource* resource)
@@ -85,6 +81,7 @@ InspectorResourceContentLoader::InspectorResourceContentLoader(LocalFrame* inspe
     : m_allRequestsStarted(false)
     , m_started(false)
     , m_inspectedFrame(inspectedFrame)
+    , m_lastClientId(0)
 {
 }
 
@@ -92,7 +89,7 @@ void InspectorResourceContentLoader::start()
 {
     m_started = true;
     HeapVector<Member<Document>> documents;
-    RawPtr<InspectedFrames> inspectedFrames = InspectedFrames::create(m_inspectedFrame);
+    InspectedFrames* inspectedFrames = InspectedFrames::create(m_inspectedFrame);
     for (LocalFrame* frame : *inspectedFrames) {
         documents.append(frame->document());
         documents.appendVector(InspectorPageAgent::importsForFrame(frame));
@@ -113,13 +110,13 @@ void InspectorResourceContentLoader::start()
         if (!resourceRequest.url().getString().isEmpty()) {
             urlsToFetch.add(resourceRequest.url().getString());
             FetchRequest request(resourceRequest, FetchInitiatorTypeNames::internal);
-            RawPtr<Resource> resource = RawResource::fetch(request, document->fetcher());
+            Resource* resource = RawResource::fetch(request, document->fetcher());
             if (resource) {
                 // Prevent garbage collection by holding a reference to this resource.
-                m_resources.append(resource.get());
+                m_resources.append(resource);
                 ResourceClient* resourceClient = new ResourceClient(this);
                 m_pendingResourceClients.add(resourceClient);
-                resourceClient->waitForResource(resource.get());
+                resourceClient->waitForResource(resource);
             }
         }
 
@@ -134,14 +131,14 @@ void InspectorResourceContentLoader::start()
             urlsToFetch.add(url);
             FetchRequest request(ResourceRequest(url), FetchInitiatorTypeNames::internal);
             request.mutableResourceRequest().setRequestContext(WebURLRequest::RequestContextInternal);
-            RawPtr<Resource> resource = CSSStyleSheetResource::fetch(request, document->fetcher());
+            Resource* resource = CSSStyleSheetResource::fetch(request, document->fetcher());
             if (!resource)
                 continue;
             // Prevent garbage collection by holding a reference to this resource.
-            m_resources.append(resource.get());
+            m_resources.append(resource);
             ResourceClient* resourceClient = new ResourceClient(this);
             m_pendingResourceClients.add(resourceClient);
-            resourceClient->waitForResource(resource.get());
+            resourceClient->waitForResource(resource);
         }
     }
 
@@ -149,12 +146,22 @@ void InspectorResourceContentLoader::start()
     checkDone();
 }
 
-void InspectorResourceContentLoader::ensureResourcesContentLoaded(PassOwnPtr<SameThreadClosure> callback)
+int InspectorResourceContentLoader::createClientId()
+{
+    return ++m_lastClientId;
+}
+
+void InspectorResourceContentLoader::ensureResourcesContentLoaded(int clientId, std::unique_ptr<SameThreadClosure> callback)
 {
     if (!m_started)
         start();
-    m_callbacks.append(callback);
+    m_callbacks.add(clientId, Callbacks()).storedValue->value.append(std::move(callback));
     checkDone();
+}
+
+void InspectorResourceContentLoader::cancel(int clientId)
+{
+    m_callbacks.remove(clientId);
 }
 
 InspectorResourceContentLoader::~InspectorResourceContentLoader()
@@ -202,10 +209,12 @@ void InspectorResourceContentLoader::checkDone()
 {
     if (!hasFinished())
         return;
-    Vector<OwnPtr<SameThreadClosure>> callbacks;
+    HashMap<int, Callbacks> callbacks;
     callbacks.swap(m_callbacks);
-    for (const auto& callback : callbacks)
-        (*callback)();
+    for (const auto& keyValue : callbacks) {
+        for (const auto& callback : keyValue.value)
+            (*callback)();
+    }
 }
 
 void InspectorResourceContentLoader::resourceFinished(ResourceClient* client)

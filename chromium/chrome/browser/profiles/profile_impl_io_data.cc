@@ -14,7 +14,6 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
-#include "base/profiler/scoped_tracker.h"
 #include "base/sequenced_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
@@ -74,9 +73,7 @@
 namespace {
 
 net::BackendType ChooseCacheBackendType() {
-#if defined(OS_ANDROID)
-  return net::CACHE_BACKEND_SIMPLE;
-#else
+#if !defined(OS_ANDROID)
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
   if (command_line.HasSwitch(switches::kUseSimpleCacheBackend)) {
@@ -89,10 +86,19 @@ net::BackendType ChooseCacheBackendType() {
   }
   const std::string experiment_name =
       base::FieldTrialList::FindFullName("SimpleCacheTrial");
-  if (experiment_name == "ExperimentYes" ||
-      experiment_name == "ExperimentYes2") {
+  if (base::StartsWith(experiment_name, "Disable",
+                       base::CompareCase::INSENSITIVE_ASCII)) {
+    return net::CACHE_BACKEND_BLOCKFILE;
+  }
+  if (base::StartsWith(experiment_name, "ExperimentYes",
+                       base::CompareCase::INSENSITIVE_ASCII)) {
     return net::CACHE_BACKEND_SIMPLE;
   }
+#endif  // #if !defined(OS_ANDROID)
+
+#if defined(OS_ANDROID) || defined(OS_LINUX) || defined(OS_CHROMEOS)
+  return net::CACHE_BACKEND_SIMPLE;
+#else
   return net::CACHE_BACKEND_BLOCKFILE;
 #endif
 }
@@ -179,17 +185,11 @@ void ProfileImplIOData::Handle::Init(
   if (io_data_->domain_reliability_monitor_)
     io_data_->domain_reliability_monitor_->MoveToNetworkThread();
 
-  // TODO(tbansal): Move this to IO thread once the data reduction proxy
-  // params are unified into a single object.
-  bool enable_quic_for_data_reduction_proxy =
-      IOThread::ShouldEnableQuicForDataReductionProxy();
-
   io_data_->set_data_reduction_proxy_io_data(
       CreateDataReductionProxyChromeIOData(
           g_browser_process->io_thread()->net_log(), profile_->GetPrefs(),
           BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO),
-          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI),
-          enable_quic_for_data_reduction_proxy));
+          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI)));
 
   base::SequencedWorkerPool* pool = BrowserThread::GetBlockingPool();
   scoped_refptr<base::SequencedTaskRunner> db_task_runner =
@@ -623,6 +623,8 @@ net::URLRequestContext* ProfileImplIOData::InitializeAppRequestContext(
 
   base::FilePath cookie_path = partition_descriptor.path.Append(
       chrome::kCookieFilename);
+  base::FilePath channel_id_path =
+      partition_descriptor.path.Append(chrome::kChannelIDFilename);
   base::FilePath cache_path =
       partition_descriptor.path.Append(chrome::kCacheDirname);
 
@@ -638,10 +640,9 @@ net::URLRequestContext* ProfileImplIOData::InitializeAppRequestContext(
         app_cache_max_size_,
         BrowserThread::GetMessageLoopProxyForThread(BrowserThread::CACHE)));
   }
-  std::unique_ptr<net::HttpCache> app_http_cache =
-      CreateHttpFactory(http_network_session_.get(), std::move(app_backend));
 
   std::unique_ptr<net::CookieStore> cookie_store;
+  scoped_refptr<net::SQLiteChannelIDStore> channel_id_db;
   if (partition_descriptor.in_memory) {
     cookie_store = content::CreateCookieStore(content::CookieStoreConfig());
   } else {
@@ -656,7 +657,30 @@ net::URLRequestContext* ProfileImplIOData::InitializeAppRequestContext(
         nullptr, nullptr);
     cookie_config.crypto_delegate = cookie_config::GetCookieCryptoDelegate();
     cookie_store = content::CreateCookieStore(cookie_config);
+    channel_id_db = new net::SQLiteChannelIDStore(
+        channel_id_path,
+        BrowserThread::GetBlockingPool()->GetSequencedTaskRunner(
+            base::SequencedWorkerPool::GetSequenceToken()));
   }
+  std::unique_ptr<net::ChannelIDService> channel_id_service(
+      new net::ChannelIDService(
+          new net::DefaultChannelIDStore(channel_id_db.get()),
+          base::WorkerPool::GetTaskRunner(true)));
+  cookie_store->SetChannelIDServiceID(channel_id_service->GetUniqueID());
+
+  // Build a new HttpNetworkSession that uses the new ChannelIDService.
+  net::HttpNetworkSession::Params network_params =
+      http_network_session_->params();
+  network_params.channel_id_service = channel_id_service.get();
+  std::unique_ptr<net::HttpNetworkSession> http_network_session(
+      new net::HttpNetworkSession(network_params));
+  std::unique_ptr<net::HttpCache> app_http_cache =
+      CreateHttpFactory(http_network_session.get(), std::move(app_backend));
+
+  // Transfer ownership of the ChannelIDStore and the HttpNetworkSession to the
+  // AppRequestContext.
+  context->SetChannelIDService(std::move(channel_id_service));
+  context->SetHttpNetworkSession(std::move(http_network_session));
 
   // Transfer ownership of the cookies and cache to AppRequestContext.
   context->SetCookieStore(std::move(cookie_store));

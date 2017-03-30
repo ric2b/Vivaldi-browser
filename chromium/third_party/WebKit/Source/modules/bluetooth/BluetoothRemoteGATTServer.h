@@ -6,7 +6,7 @@
 #define BluetoothRemoteGATTServer_h
 
 #include "bindings/core/v8/ScriptWrappable.h"
-#include "bindings/modules/v8/UnionTypesModules.h"
+#include "bindings/modules/v8/StringOrUnsignedLong.h"
 #include "modules/bluetooth/BluetoothDevice.h"
 #include "platform/heap/Heap.h"
 #include "wtf/OwnPtr.h"
@@ -22,7 +22,7 @@ class ScriptState;
 
 // BluetoothRemoteGATTServer provides a way to interact with a connected bluetooth peripheral.
 class BluetoothRemoteGATTServer final
-    : public GarbageCollectedFinalized<BluetoothRemoteGATTServer>
+    : public GarbageCollected<BluetoothRemoteGATTServer>
     , public ScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
 public:

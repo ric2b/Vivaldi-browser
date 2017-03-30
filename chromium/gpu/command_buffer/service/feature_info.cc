@@ -80,50 +80,6 @@ class StringSet {
   std::set<std::string> string_set_;
 };
 
-// Process a string of wordaround type IDs (seperated by ',') and set up
-// the corresponding Workaround flags.
-void StringToWorkarounds(
-    const std::string& types, FeatureInfo::Workarounds* workarounds) {
-  DCHECK(workarounds);
-  for (const base::StringPiece& piece :
-       base::SplitStringPiece(
-           types, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
-    int number = 0;
-    bool succeed = base::StringToInt(piece, &number);
-    DCHECK(succeed);
-    switch (number) {
-#define GPU_OP(type, name)    \
-  case gpu::type:             \
-    workarounds->name = true; \
-    break;
-      GPU_DRIVER_BUG_WORKAROUNDS(GPU_OP)
-#undef GPU_OP
-      default:
-        NOTIMPLEMENTED();
-    }
-  }
-  if (workarounds->max_texture_size_limit_4096)
-    workarounds->max_texture_size = 4096;
-  if (workarounds->max_cube_map_texture_size_limit_4096)
-    workarounds->max_cube_map_texture_size = 4096;
-  if (workarounds->max_cube_map_texture_size_limit_1024)
-    workarounds->max_cube_map_texture_size = 1024;
-  if (workarounds->max_cube_map_texture_size_limit_512)
-    workarounds->max_cube_map_texture_size = 512;
-
-  if (workarounds->max_fragment_uniform_vectors_32)
-    workarounds->max_fragment_uniform_vectors = 32;
-  if (workarounds->max_varying_vectors_16)
-    workarounds->max_varying_vectors = 16;
-  if (workarounds->max_vertex_uniform_vectors_256)
-    workarounds->max_vertex_uniform_vectors = 256;
-
-  if (workarounds->max_copy_texture_chromium_size_1048576)
-    workarounds->max_copy_texture_chromium_size = 1048576;
-  if (workarounds->max_copy_texture_chromium_size_262144)
-    workarounds->max_copy_texture_chromium_size = 262144;
-}
-
 }  // anonymous namespace.
 
 FeatureInfo::FeatureFlags::FeatureFlags()
@@ -135,6 +91,7 @@ FeatureInfo::FeatureFlags::FeatureFlags()
       chromium_screen_space_antialiasing(false),
       oes_standard_derivatives(false),
       oes_egl_image_external(false),
+      nv_egl_stream_consumer_external(false),
       oes_depth24(false),
       oes_compressed_etc1_rgb8_texture(false),
       packed_depth24_stencil8(false),
@@ -174,24 +131,11 @@ FeatureInfo::FeatureFlags::FeatureFlags()
       ext_texture_rg(false),
       chromium_image_ycbcr_420v(false),
       chromium_image_ycbcr_422(false),
-      enable_subscribe_uniform(false),
       emulate_primitive_restart_fixed_index(false),
       ext_render_buffer_format_bgra8888(false),
       ext_multisample_compatibility(false),
       ext_blend_func_extended(false),
       ext_read_format_bgra(false) {}
-
-FeatureInfo::Workarounds::Workarounds() :
-#define GPU_OP(type, name) name(false),
-    GPU_DRIVER_BUG_WORKAROUNDS(GPU_OP)
-#undef GPU_OP
-    max_texture_size(0),
-    max_cube_map_texture_size(0),
-    max_fragment_uniform_vectors(0),
-    max_varying_vectors(0),
-    max_vertex_uniform_vectors(0),
-    max_copy_texture_chromium_size(0) {
-}
 
 FeatureInfo::FeatureInfo() {
   InitializeBasicState(base::CommandLine::InitializedForCurrentProcess()
@@ -199,7 +143,18 @@ FeatureInfo::FeatureInfo() {
                            : nullptr);
 }
 
-FeatureInfo::FeatureInfo(const base::CommandLine& command_line) {
+FeatureInfo::FeatureInfo(
+    const GpuDriverBugWorkarounds& gpu_driver_bug_workarounds)
+    : workarounds_(gpu_driver_bug_workarounds) {
+  InitializeBasicState(base::CommandLine::InitializedForCurrentProcess()
+                           ? base::CommandLine::ForCurrentProcess()
+                           : nullptr);
+}
+
+FeatureInfo::FeatureInfo(
+    const base::CommandLine& command_line,
+    const GpuDriverBugWorkarounds& gpu_driver_bug_workarounds)
+    : workarounds_(gpu_driver_bug_workarounds) {
   InitializeBasicState(&command_line);
 }
 
@@ -207,19 +162,11 @@ void FeatureInfo::InitializeBasicState(const base::CommandLine* command_line) {
   if (!command_line)
     return;
 
-  if (command_line->HasSwitch(switches::kGpuDriverBugWorkarounds)) {
-    std::string types = command_line->GetSwitchValueASCII(
-        switches::kGpuDriverBugWorkarounds);
-    StringToWorkarounds(types, &workarounds_);
-  }
   feature_flags_.enable_shader_name_hashing =
       !command_line->HasSwitch(switches::kDisableShaderNameHashing);
 
   feature_flags_.is_swiftshader =
       (command_line->GetSwitchValueASCII(switches::kUseGL) == "swiftshader");
-
-  feature_flags_.enable_subscribe_uniform =
-      command_line->HasSwitch(switches::kEnableSubscribeUniformExtension);
 
   enable_unsafe_es3_apis_switch_ =
       command_line->HasSwitch(switches::kEnableUnsafeES3APIs);
@@ -392,10 +339,6 @@ void FeatureInfo::InitializeFeatures() {
   // UNPACK_ROW_LENGTH, UNPACK_SKIP_ROWS, and UNPACK_SKIP_PIXELS are enabled,
   // but there is no need to add them to pixel_store validtor.
   AddExtensionString("GL_EXT_unpack_subimage");
-
-  if (feature_flags_.enable_subscribe_uniform) {
-    AddExtensionString("GL_CHROMIUM_subscribe_uniform");
-  }
 
   // OES_vertex_array_object is emulated if not present natively,
   // so the extension string is always exposed.
@@ -600,9 +543,12 @@ void FeatureInfo::InitializeFeatures() {
   // sized formats GL_SRGB8 and GL_SRGB8_ALPHA8. Also, SRGB_EXT isn't a valid
   // <format> in this case. So, even with GLES3 explicitly check for
   // GL_EXT_sRGB.
-  if (((gl_version_info_->is_es3 || extensions.Contains("GL_OES_rgb8_rgba8")) &&
-       extensions.Contains("GL_EXT_sRGB")) ||
-      gfx::HasDesktopGLFeatures()) {
+  if ((((gl_version_info_->is_es3 ||
+         extensions.Contains("GL_OES_rgb8_rgba8")) &&
+        extensions.Contains("GL_EXT_sRGB")) ||
+       gfx::HasDesktopGLFeatures()) &&
+      (context_type_ == CONTEXT_TYPE_WEBGL1 ||
+       context_type_ == CONTEXT_TYPE_OPENGLES2)) {
     AddExtensionString("GL_EXT_sRGB");
     validators_.texture_internal_format.AddValue(GL_SRGB_EXT);
     validators_.texture_internal_format.AddValue(GL_SRGB_ALPHA_EXT);
@@ -611,6 +557,7 @@ void FeatureInfo::InitializeFeatures() {
     validators_.render_buffer_format.AddValue(GL_SRGB8_ALPHA8_EXT);
     validators_.frame_buffer_parameter.AddValue(
         GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING_EXT);
+    validators_.texture_unsized_internal_format.AddValue(GL_SRGB_EXT);
     validators_.texture_unsized_internal_format.AddValue(GL_SRGB_ALPHA_EXT);
   }
 
@@ -620,21 +567,26 @@ void FeatureInfo::InitializeFeatures() {
   bool enable_immutable_texture_format_bgra_on_es3 =
       extensions.Contains("GL_APPLE_texture_format_BGRA8888");
 
-  // Check if we should allow GL_EXT_texture_format_BGRA8888
+  // Check if we should allow GL_EXT_texture_format_BGRA8888.
   if (extensions.Contains("GL_EXT_texture_format_BGRA8888") ||
       enable_immutable_texture_format_bgra_on_es3 ||
       !gl_version_info_->is_es) {
     enable_texture_format_bgra8888 = true;
   }
 
-  // Only desktop GL extension GL_EXT_bgra or ANGLE guarantee that we can
-  // allocate a renderbuffer with this format.
-  if (extensions.Contains("GL_EXT_bgra") || gl_version_info_->is_angle) {
+  // On desktop, all devices support BGRA render buffers (note that on desktop
+  // BGRA internal formats are converted to RGBA in the API implementation).
+  // For ES, there is no extension that exposes BGRA renderbuffers, however
+  // Angle does support these.
+  if (gl_version_info_->is_angle || !gl_version_info_->is_es) {
     enable_render_buffer_bgra = true;
   }
 
+  // On desktop, all devices support BGRA readback since OpenGL 2.0, which we
+  // require. On ES, support is indicated by the GL_EXT_read_format_bgra
+  // extension.
   if (extensions.Contains("GL_EXT_read_format_bgra") ||
-      extensions.Contains("GL_EXT_bgra")) {
+      !gl_version_info_->is_es) {
     enable_read_format_bgra = true;
   }
 
@@ -924,6 +876,14 @@ void FeatureInfo::InitializeFeatures() {
   if (extensions.Contains("GL_OES_EGL_image_external")) {
     AddExtensionString("GL_OES_EGL_image_external");
     feature_flags_.oes_egl_image_external = true;
+  }
+  if (extensions.Contains("GL_NV_EGL_stream_consumer_external")) {
+    AddExtensionString("GL_NV_EGL_stream_consumer_external");
+    feature_flags_.nv_egl_stream_consumer_external = true;
+  }
+
+  if (feature_flags_.oes_egl_image_external ||
+      feature_flags_.nv_egl_stream_consumer_external) {
     validators_.texture_bind_target.AddValue(GL_TEXTURE_EXTERNAL_OES);
     validators_.get_tex_param_target.AddValue(GL_TEXTURE_EXTERNAL_OES);
     validators_.texture_parameter.AddValue(GL_REQUIRED_TEXTURE_IMAGE_UNITS_OES);
@@ -996,12 +956,8 @@ void FeatureInfo::InitializeFeatures() {
 #if defined(OS_MACOSX)
   if (gfx::GetGLImplementation() != gfx::kGLImplementationOSMesaGL) {
     AddExtensionString("GL_CHROMIUM_iosurface");
-    // TODO(dcastagna): Make this format work with GL Core Profile.
-    // crbug.com/587158
-    if (!gl_version_info_->is_desktop_core_profile) {
-      AddExtensionString("GL_CHROMIUM_ycbcr_420v_image");
-      feature_flags_.chromium_image_ycbcr_420v = true;
-    }
+    AddExtensionString("GL_CHROMIUM_ycbcr_420v_image");
+    feature_flags_.chromium_image_ycbcr_420v = true;
   }
 #endif
 
@@ -1034,7 +990,7 @@ void FeatureInfo::InitializeFeatures() {
       (extensions.Contains("GL_EXT_texture_storage") ||
        extensions.Contains("GL_ARB_texture_storage") ||
        support_texture_storage_on_es3 ||
-       gl_version_info_->is_desktop_core_profile)) {
+       gl_version_info_->IsAtLeastGL(4, 2))) {
     feature_flags_.ext_texture_storage = true;
     AddExtensionString("GL_EXT_texture_storage");
     validators_.texture_parameter.AddValue(GL_TEXTURE_IMMUTABLE_FORMAT_EXT);
@@ -1363,6 +1319,9 @@ void FeatureInfo::EnableES3Validators() {
   };
   if (max_color_attachments < kTotalColorAttachmentEnums) {
     validators_.attachment.RemoveValues(
+        kColorAttachments + max_color_attachments,
+        kTotalColorAttachmentEnums - max_color_attachments);
+    validators_.read_buffer.RemoveValues(
         kColorAttachments + max_color_attachments,
         kTotalColorAttachmentEnums - max_color_attachments);
   }

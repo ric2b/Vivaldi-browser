@@ -17,13 +17,14 @@ import android.content.pm.PermissionInfo;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Process;
-import android.preference.PreferenceManager;
 import android.text.TextUtils;
 import android.util.SparseArray;
 import android.view.View;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.Callback;
+import org.chromium.base.ContextUtils;
 import org.chromium.ui.UiUtils;
 
 import java.lang.ref.WeakReference;
@@ -130,6 +131,20 @@ public class ActivityWindowAndroid
     }
 
     @Override
+    public int showCancelableIntent(Callback<Integer> intentTrigger, IntentCallback callback,
+            Integer errorId) {
+        Activity activity = getActivity().get();
+        if (activity == null) return START_INTENT_FAILURE;
+
+        int requestCode = generateNextRequestCode();
+
+        intentTrigger.onResult(requestCode);
+
+        storeCallbackData(requestCode, callback, errorId);
+        return requestCode;
+    }
+
+    @Override
     public void cancelIntent(int requestCode) {
         Activity activity = getActivity().get();
         if (activity == null) return;
@@ -196,8 +211,7 @@ public class ActivityWindowAndroid
         Activity activity = getActivity().get();
         assert activity != null;
 
-        SharedPreferences.Editor editor =
-                PreferenceManager.getDefaultSharedPreferences(activity).edit();
+        SharedPreferences.Editor editor = ContextUtils.getAppSharedPreferences().edit();
         for (int i = 0; i < permissions.length; i++) {
             editor.putBoolean(getHasRequestedPermissionKey(permissions[i]), true);
         }
@@ -267,7 +281,7 @@ public class ActivityWindowAndroid
             // Check whether we have ever asked for this permission by checking whether we saved
             // a preference associated with it before.
             String permissionQueriedKey = getHasRequestedPermissionKey(permission);
-            SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(activity);
+            SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
             if (!prefs.getBoolean(permissionQueriedKey, false)) return true;
 
             return false;

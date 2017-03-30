@@ -34,9 +34,7 @@
 #include "ui/gfx/icon_util.h"
 #include "ui/gfx/path.h"
 #include "ui/gfx/path_win.h"
-#include "ui/gfx/screen.h"
 #include "ui/gfx/win/direct_manipulation.h"
-#include "ui/gfx/win/dpi.h"
 #include "ui/gfx/win/hwnd_util.h"
 #include "ui/gfx/win/rendering_window_manager.h"
 #include "ui/native_theme/native_theme_win.h"
@@ -301,6 +299,10 @@ class HWNDMessageHandler::ScopedRedrawLock {
 
   DISALLOW_COPY_AND_ASSIGN(ScopedRedrawLock);
 };
+
+// static HWNDMessageHandler member initialization.
+base::LazyInstance<HWNDMessageHandler::FullscreenWindowMonitorMap>
+    HWNDMessageHandler::fullscreen_monitor_map_ = LAZY_INSTANCE_INITIALIZER;
 
 ////////////////////////////////////////////////////////////////////////////////
 // HWNDMessageHandler, public:
@@ -686,7 +688,7 @@ bool HWNDMessageHandler::IsMinimized() const {
 }
 
 bool HWNDMessageHandler::IsMaximized() const {
-  return !!::IsZoomed(hwnd());
+  return !!::IsZoomed(hwnd()) && !IsFullscreen();
 }
 
 bool HWNDMessageHandler::IsFullscreen() const {
@@ -818,6 +820,18 @@ void HWNDMessageHandler::SetFullscreen(bool fullscreen) {
   // window, then go ahead and do it now.
   if (!fullscreen && dwm_transition_desired_)
     PerformDwmTransition();
+
+  // Add the fullscreen window to the fullscreen window map which is used to
+  // handle window activations.
+  HMONITOR monitor = MonitorFromWindow(hwnd(), MONITOR_DEFAULTTOPRIMARY);
+  if (fullscreen) {
+    (fullscreen_monitor_map_.Get())[monitor] = this;
+  } else {
+    FullscreenWindowMonitorMap::iterator iter =
+        fullscreen_monitor_map_.Get().find(monitor);
+    if (iter != fullscreen_monitor_map_.Get().end())
+      fullscreen_monitor_map_.Get().erase(iter);
+  }
 }
 
 void HWNDMessageHandler::SizeConstraintsChanged() {
@@ -1028,18 +1042,18 @@ void HWNDMessageHandler::PostProcessActivateMessage(
   // By reducing the size of the fullscreen window by 1px, we ensure that the
   // taskbar no longer treats the window and in turn the thread as a fullscreen
   // thread. This in turn ensures that maximized windows on the same thread
-  /// don't obscure the taskbar, etc.
+  // don't obscure the taskbar, etc.
+  // Please note that this taskbar behavior only occurs if the window becoming
+  // active is on the same monitor as the fullscreen window.
   if (!active) {
     if (IsFullscreen() && ::IsWindow(window_gaining_or_losing_activation)) {
-      // Reduce the bounds of the window by 1px to ensure that Windows does
-      // not treat this like a fullscreen window.
-      MONITORINFO monitor_info = {sizeof(monitor_info)};
-      GetMonitorInfo(MonitorFromWindow(hwnd(), MONITOR_DEFAULTTOPRIMARY),
-                      &monitor_info);
-      gfx::Rect shrunk_rect(monitor_info.rcMonitor);
-      shrunk_rect.set_height(shrunk_rect.height() - 1);
-      background_fullscreen_hack_ = true;
-      SetBoundsInternal(shrunk_rect, false);
+      HMONITOR active_window_monitor = MonitorFromWindow(
+          window_gaining_or_losing_activation, MONITOR_DEFAULTTOPRIMARY);
+      HMONITOR fullscreen_window_monitor =
+          MonitorFromWindow(hwnd(), MONITOR_DEFAULTTOPRIMARY);
+
+      if (active_window_monitor == fullscreen_window_monitor)
+        OnBackgroundFullscreen();
     }
   } else if (background_fullscreen_hack_) {
     // Restore the bounds of the window to fullscreen.
@@ -1049,6 +1063,13 @@ void HWNDMessageHandler::PostProcessActivateMessage(
                    &monitor_info);
     SetBoundsInternal(gfx::Rect(monitor_info.rcMonitor), false);
     background_fullscreen_hack_ = false;
+  } else {
+    // If the window becoming active has a fullscreen window on the same
+    // monitor then we need to reduce the size of the fullscreen window by
+    // 1 px. Please refer to the comments above for the reasoning behind
+    // this.
+    CheckAndHandleBackgroundFullscreenOnMonitor(
+        window_gaining_or_losing_activation);
   }
 }
 
@@ -1096,7 +1117,7 @@ void HWNDMessageHandler::TrackMouseEvents(DWORD mouse_tracking_flags) {
 
 void HWNDMessageHandler::ClientAreaSizeChanged() {
   // Ignore size changes due to fullscreen windows losing activation.
-  if (background_fullscreen_hack_)
+  if (background_fullscreen_hack_ && !sent_window_size_changing_)
     return;
   gfx::Size s = GetClientAreaBounds().size();
   delegate_->HandleClientSizeChanged(s);
@@ -1344,6 +1365,16 @@ LRESULT HWNDMessageHandler::OnCreate(CREATESTRUCT* create_struct) {
 void HWNDMessageHandler::OnDestroy() {
   windows_session_change_observer_.reset(nullptr);
   delegate_->HandleDestroying();
+  // If the window going away is a fullscreen window then remove its references
+  // from the full screen window map.
+  for (auto iter = fullscreen_monitor_map_.Get().begin();
+       iter != fullscreen_monitor_map_.Get().end();
+       iter++) {
+    if (iter->second == this) {
+      fullscreen_monitor_map_.Get().erase(iter);
+      break;
+    }
+  }
 }
 
 void HWNDMessageHandler::OnDisplayChange(UINT bits_per_pixel,
@@ -1404,14 +1435,17 @@ void HWNDMessageHandler::OnExitSizeMove() {
   // trackpoint drivers.
   if (in_size_loop_ && needs_scroll_styles_)
     AddScrollStylesToWindow(hwnd());
+  // If the window was moved to a monitor which has a fullscreen window active,
+  // we need to reduce the size of the fullscreen window by 1px.
+  CheckAndHandleBackgroundFullscreenOnMonitor(hwnd());
 }
 
 void HWNDMessageHandler::OnGetMinMaxInfo(MINMAXINFO* minmax_info) {
   gfx::Size min_window_size;
   gfx::Size max_window_size;
   delegate_->GetMinMaxSize(&min_window_size, &max_window_size);
-  min_window_size = gfx::win::DIPToScreenSize(min_window_size);
-  max_window_size = gfx::win::DIPToScreenSize(max_window_size);
+  min_window_size = delegate_->DIPToScreenSize(min_window_size);
+  max_window_size = delegate_->DIPToScreenSize(max_window_size);
 
 
   // Add the native frame border size to the minimum and maximum size if the
@@ -1563,6 +1597,29 @@ LRESULT HWNDMessageHandler::OnMouseRange(UINT message,
                                          WPARAM w_param,
                                          LPARAM l_param) {
   return HandleMouseEventInternal(message, w_param, l_param, true);
+}
+
+// On some systems with a high-resolution track pad and running Windows 10,
+// using the scrolling gesture (two-finger scroll) on the track pad
+// causes it to also generate a WM_POINTERDOWN message if the window
+// isn't focused. This leads to a WM_POINTERACTIVATE message and the window
+// gaining focus and coming to the front. This code detects a
+// WM_POINTERACTIVATE coming from the track pad and kills the activation
+// of the window. NOTE: most other trackpad messages come in as mouse
+// messages, including WM_MOUSEWHEEL instead of WM_POINTERWHEEL.
+LRESULT HWNDMessageHandler::OnPointerActivate(UINT message,
+                                              WPARAM w_param,
+                                              LPARAM l_param) {
+  using GetPointerTypeFn = BOOL(WINAPI*)(UINT32, POINTER_INPUT_TYPE*);
+  UINT32 pointer_id = GET_POINTERID_WPARAM(w_param);
+  POINTER_INPUT_TYPE pointer_type;
+  static GetPointerTypeFn get_pointer_type = reinterpret_cast<GetPointerTypeFn>(
+      GetProcAddress(GetModuleHandleA("user32.dll"), "GetPointerType"));
+  if (get_pointer_type && get_pointer_type(pointer_id, &pointer_type) &&
+      pointer_type == PT_TOUCHPAD)
+    return PA_NOACTIVATE;
+  SetMsgHandled(FALSE);
+  return -1;
 }
 
 void HWNDMessageHandler::OnMove(const gfx::Point& point) {
@@ -1728,6 +1785,21 @@ LRESULT HWNDMessageHandler::OnNCHitTest(const gfx::Point& point) {
     return 0;
   }
 
+  // Some views may overlap the non client area of the window.
+  // This means that we should look for these views before handing the
+  // hittest message off to DWM or DefWindowProc.
+  // If the hittest returned from the search for a view returns HTCLIENT
+  // then it means that we have a view overlapping the non client area.
+  // In all other cases we can fallback to the system default handling.
+
+  // Allow the NonClientView to handle the hittest to see if we have a view
+  // overlapping the non client area of the window.
+  POINT temp = { point.x(), point.y() };
+  MapWindowPoints(HWND_DESKTOP, hwnd(), &temp, 1);
+  int component = delegate_->GetNonClientComponent(gfx::Point(temp));
+  if (component == HTCLIENT)
+    return component;
+
   // If the DWM is rendering the window controls, we need to give the DWM's
   // default window procedure first chance to handle hit testing.
   if (HasSystemFrame()) {
@@ -1738,11 +1810,7 @@ LRESULT HWNDMessageHandler::OnNCHitTest(const gfx::Point& point) {
     }
   }
 
-  // First, give the NonClientView a chance to test the point to see if it
-  // provides any of the non-client area.
-  POINT temp = { point.x(), point.y() };
-  MapWindowPoints(HWND_DESKTOP, hwnd(), &temp, 1);
-  int component = delegate_->GetNonClientComponent(gfx::Point(temp));
+  // If the point is specified as custom or system nonclient item, return it.
   if (component != HTNOWHERE)
     return component;
 
@@ -2126,7 +2194,7 @@ LRESULT HWNDMessageHandler::OnTouchEvent(UINT message,
                                          LPARAM l_param) {
   // Handle touch events only on Aura for now.
   int num_points = LOWORD(w_param);
-  scoped_ptr<TOUCHINPUT[]> input(new TOUCHINPUT[num_points]);
+  std::unique_ptr<TOUCHINPUT[]> input(new TOUCHINPUT[num_points]);
   if (ui::GetTouchInputInfoWrapper(reinterpret_cast<HTOUCHINPUT>(l_param),
                                    num_points, input.get(),
                                    sizeof(TOUCHINPUT))) {
@@ -2656,5 +2724,29 @@ void HWNDMessageHandler::SetBoundsInternal(const gfx::Rect& bounds_in_pixels,
     direct_manipulation_helper_->SetBounds(bounds_in_pixels);
 }
 
+void HWNDMessageHandler::CheckAndHandleBackgroundFullscreenOnMonitor(
+    HWND window) {
+  HMONITOR monitor = MonitorFromWindow(window, MONITOR_DEFAULTTOPRIMARY);
+
+  FullscreenWindowMonitorMap::iterator iter =
+      fullscreen_monitor_map_.Get().find(monitor);
+  if (iter != fullscreen_monitor_map_.Get().end()) {
+    DCHECK(iter->second);
+    if (window != iter->second->hwnd())
+      iter->second->OnBackgroundFullscreen();
+  }
+}
+
+void HWNDMessageHandler::OnBackgroundFullscreen() {
+  // Reduce the bounds of the window by 1px to ensure that Windows does
+  // not treat this like a fullscreen window.
+  MONITORINFO monitor_info = {sizeof(monitor_info)};
+  GetMonitorInfo(MonitorFromWindow(hwnd(), MONITOR_DEFAULTTOPRIMARY),
+                 &monitor_info);
+  gfx::Rect shrunk_rect(monitor_info.rcMonitor);
+  shrunk_rect.set_height(shrunk_rect.height() - 1);
+  background_fullscreen_hack_ = true;
+  SetBoundsInternal(shrunk_rect, false);
+}
 
 }  // namespace views

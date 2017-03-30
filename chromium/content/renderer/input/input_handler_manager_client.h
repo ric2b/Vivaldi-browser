@@ -44,13 +44,15 @@ class CONTENT_EXPORT InputHandlerManagerClient {
   virtual void SetBoundHandler(const Handler& handler) = 0;
 
   // Called from the compositor thread.
-  virtual void DidAddInputHandler(int routing_id) = 0;
-  virtual void DidRemoveInputHandler(int routing_id) = 0;
+  virtual void RegisterRoutingID(int routing_id) = 0;
+  virtual void UnregisterRoutingID(int routing_id) = 0;
   virtual void DidOverscroll(int routing_id,
                              const DidOverscrollParams& params) = 0;
+  virtual void DidStartFlinging(int routing_id) = 0;
   virtual void DidStopFlinging(int routing_id) = 0;
   virtual void NotifyInputEventHandled(int routing_id,
-                                       blink::WebInputEvent::Type type) = 0;
+                                       blink::WebInputEvent::Type type,
+                                       InputEventAckState ack_result) = 0;
 
  protected:
   InputHandlerManagerClient() {}

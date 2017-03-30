@@ -70,7 +70,7 @@ void ProtocolSniffer::SniffProtocol(DataSource* data_source,
 
   // We read the first 8192 bytes, same as FFmpeg.
   static const size_t kDataSize = 8192;
-  scoped_ptr<uint8_t[]> data_holder(new uint8_t[kDataSize]);
+  std::unique_ptr<uint8_t[]> data_holder(new uint8_t[kDataSize]);
   uint8_t* data = data_holder.get();
 
   data_source->Read(
@@ -79,7 +79,7 @@ void ProtocolSniffer::SniffProtocol(DataSource* data_source,
                  base::Passed(&data_holder), callback));
 }
 
-void ProtocolSniffer::ReadDone(scoped_ptr<uint8_t[]> data,
+void ProtocolSniffer::ReadDone(std::unique_ptr<uint8_t[]> data,
                                const Callback& callback,
                                int size_read) {
   DCHECK(thread_checker_.CalledOnValidThread());

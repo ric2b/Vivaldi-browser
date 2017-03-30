@@ -53,9 +53,9 @@ void HTMLTablePartElement::collectStyleForPresentationAttribute(const QualifiedN
     } else if (name == backgroundAttr) {
         String url = stripLeadingAndTrailingHTMLSpaces(value);
         if (!url.isEmpty()) {
-            RawPtr<CSSImageValue> imageValue = CSSImageValue::create(url, document().completeURL(url));
+            CSSImageValue* imageValue = CSSImageValue::create(url, document().completeURL(url));
             imageValue->setReferrer(Referrer(document().outgoingReferrer(), document().getReferrerPolicy()));
-            style->setProperty(CSSProperty(CSSPropertyBackgroundImage, imageValue.release()));
+            style->setProperty(CSSProperty(CSSPropertyBackgroundImage, imageValue));
         }
     } else if (name == valignAttr) {
         if (equalIgnoringCase(value, "top"))

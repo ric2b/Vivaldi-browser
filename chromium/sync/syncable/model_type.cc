@@ -155,7 +155,6 @@ const char* kUserSelectableDataTypeNames[] = {
   "typedUrls",
   "extensions",
   "apps",
-  "wifiCredentials",
   "tabs",
 };
 
@@ -459,7 +458,6 @@ ModelTypeSet UserSelectableTypes() {
   set.Put(TYPED_URLS);
   set.Put(EXTENSIONS);
   set.Put(APPS);
-  set.Put(WIFI_CREDENTIALS);
   set.Put(PROXY_TABS);
   return set;
 }
@@ -635,6 +633,10 @@ std::string ModelTypeSetToString(ModelTypeSet model_types) {
     result += ModelTypeToString(it.Get());
   }
   return result;
+}
+
+std::ostream& operator<<(std::ostream& out, ModelTypeSet model_type_set) {
+  return out << ModelTypeSetToString(model_type_set);
 }
 
 ModelTypeSet ModelTypeSetFromString(const std::string& model_types_string) {

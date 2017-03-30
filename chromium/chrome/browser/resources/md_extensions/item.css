@@ -2,110 +2,161 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. */
 
-.content-section {
-  padding: 20px;
+[hidden] {
+  display: none !important;
 }
 
 #icon-wrapper {
-  align-self: center;
+  align-self: flex-start;
   display: flex;
-  justify-content: center;
-  margin: 0 24px;
+  padding: 6px;
 }
 
 #icon {
-  height: 32px;
-  width: 32px;
+  height: 36px;
+  width: 36px;
 }
 
-/* TODO(devlin): Combine this with downloads style. */
+#card,
+#card-wrapper {
+  min-height: 154px;
+  width: 400px;
+}
+
 #card-wrapper {
   background: white;
-  box-shadow: 0 2px 2px 0 rgba(0, 0, 0, .05), 0 1px 4px 0 rgba(0, 0, 0, .08),
+  box-shadow: 0 2px 2px 0 rgba(0, 0, 0, .05),
+              0 1px 4px 0 rgba(0, 0, 0, .08),
               0 3px 1px -2px rgba(0, 0, 0, .2);
-  color: #5A5A5A;
-  min-height: 103px;
-  width: 622px;
 }
 
 #card {
   display: flex;
+  flex-direction: column;
+  font-size: 13px;
 }
 
 #card.disabled {
   opacity: 0.6;
 }
 
-#content {
-  -webkit-border-start: 1px solid #C5C5C5;
+#main {
   display: flex;
-  flex: 1;
-  flex-direction: column;
+  flex-grow: 1;
+  padding: 16px;
+}
+
+#content {
+  -webkit-margin-start: 24px;
+  width: 100%;
+}
+
+#name-and-version {
+  margin-bottom: 4px;
 }
 
 #name {
-  color: #222;
-  font-weight: 500;
+  -webkit-margin-end: 8px;
+  color: var(--paper-grey-800);
+}
+
+#description {
   margin-bottom: 8px;
 }
 
-#controls {
-  padding-top: 20px;
+#version,
+#extension-id,
+#inspect-views,
+#button-strip {
+  color: var(--paper-grey-600);
 }
 
-#version {
-  -webkit-margin-start: 50px;
-  flex: 1;
-}
-
-.checkbox {
-  --paper-checkbox-checked-color: rgb(66, 133, 244);
-  --primary-text-color: #5A5A5A;
-}
-
-#details-container {
-  border-top: 1px solid #C5C5C5;
-  color: #5A5A5A;
-}
-
-#extension-id {
-  padding-bottom: 10px;
-}
-
+#description,
+#extension-id,
 #inspect-views {
-  padding-bottom: 20px;
+  line-height: 20px;
 }
 
 #inspect-views paper-button {
-  color: rgb(51, 103, 214);
+  color: var(--google-blue-700);
 }
 
-paper-button {
-  /* TODO(devlin): Decide whether all webui should do this. */
+#button-strip {
+  border-top: 1px solid var(--paper-grey-400);
+}
+
+#source-indicator {
+  align-items: center;
+  align-self: flex-end;
+  border-radius: 0 2px;
+  color: var(--paper-grey-800);
+  display: flex;
+  min-height: 32px;
+  padding: 0 8px;
+  position: absolute;
+  white-space: nowrap;
+}
+
+#source-indicator iron-icon {
+  height: 16px;
+  width: 16px;
+}
+
+#source-indicator span {
+  -webkit-margin-end: 8px;
+  display: none;
+}
+
+#source-indicator:hover {
+  background-color: var(--paper-grey-700);
+  color: white;
+}
+
+#source-indicator:hover span {
+  display: block;
+}
+
+paper-button,
+paper-toggle-button {
   cursor: pointer;
 }
 
-#warnings-container {
-  border-top: 1px solid #C5C5C5;
+#button-strip paper-button {
+  align-items: center;
   display: flex;
-  padding: 10px;
+  margin: 4px;
+  min-height: 32px;
+  padding: 0 12px;
+  text-transform: uppercase;
 }
 
-#warnings-container div {
-  color: #333;
+#enable-toggle {
+  -webkit-margin-end: 16px;
 }
 
-#warnings-container iron-icon {
-  -webkit-margin-end: 10px;
-  flex-shrink: 0;
+.warning {
+  align-items: center;
+  display: flex;
+  font-size: 13px;
+  justify-content: space-between;
+  padding: 12px 16px;
 }
 
-#warnings-container.severe iron-icon {
-  color: rgb(219, 68, 55);
+.warning paper-button {
+  -webkit-margin-start: 12px;
+  align-items: center;
+  display: flex;
+  text-transform: uppercase;
 }
 
-#warnings-container.mild iron-icon {
-  color: rgb(240, 147, 0);
+.severe.warning {
+  background-color: var(--paper-red-50);
+  color: var(--paper-red-700);
+}
+
+.mild.warning {
+  background-color: var(--paper-yellow-50);
+  color: var(--paper-grey-600);
 }
 
 #blacklisted-warning:empty {

@@ -4,7 +4,7 @@
 
 #include "modules/imagebitmap/ImageBitmapRenderingContext.h"
 
-#include "bindings/modules/v8/UnionTypesModules.h"
+#include "bindings/modules/v8/RenderingContext.h"
 #include "core/frame/ImageBitmap.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/StaticBitmapImage.h"
@@ -25,7 +25,7 @@ void ImageBitmapRenderingContext::setCanvasGetContextResult(RenderingContext& re
     result.setImageBitmapRenderingContext(this);
 }
 
-void ImageBitmapRenderingContext::transferImageBitmap(ImageBitmap* imageBitmap)
+void ImageBitmapRenderingContext::transferFromImageBitmap(ImageBitmap* imageBitmap)
 {
     m_image = imageBitmap->bitmapImage();
     if (!m_image)
@@ -53,7 +53,7 @@ bool ImageBitmapRenderingContext::paint(GraphicsContext& gc, const IntRect& r)
 
     // With impl-side painting, it is unsafe to use a gpu-backed SkImage
     ASSERT(!m_image->imageForCurrentFrame()->isTextureBacked());
-    gc.drawImage(m_image.get(), r, m_hasAlpha ? SkXfermode::kSrcOver_Mode : SkXfermode::kSrc_Mode);
+    gc.drawImage(m_image.get(), r, nullptr, m_hasAlpha ? SkXfermode::kSrcOver_Mode : SkXfermode::kSrc_Mode);
 
     return true;
 }

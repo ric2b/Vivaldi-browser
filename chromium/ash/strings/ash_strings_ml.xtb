@@ -26,6 +26,7 @@
 <translation id="1602076796624386989">മൊബൈൽ ഡാറ്റ പ്രാപ്‌തമാക്കുക</translation>
 <translation id="1621499497873603021">ബാറ്ററി ശൂന്യമാകുന്നതിന് ശേഷിക്കുന്ന സമയം, <ph name="TIME_LEFT" /></translation>
 <translation id="164969095109328410">Chrome ഉപകരണം</translation>
+<translation id="1677472565718498478"><ph name="TIME" /> ശേഷിക്കുന്നു</translation>
 <translation id="1723752762323179280">സെഷനിൽ നിന്ന് പുറത്തുകടക്കുന്നു</translation>
 <translation id="1747827819627189109">ഓൺ‌ സ്‌ക്രീൻ കീ‌ബോർഡ് പ്രവർത്തനക്ഷമമാക്കി</translation>
 <translation id="1812696562331527143">നിങ്ങളുടെ ഇൻപുട്ട് രീതി <ph name="INPUT_METHOD_ID" />*(<ph name="BEGIN_LINK" />മൂന്നാം കക്ഷി<ph name="END_LINK" />) എന്നതിലേയ്‌ക്ക് മാറ്റി.
@@ -92,7 +93,6 @@
 <translation id="3621712662352432595">ഓഡിയോ ക്രമീകരണങ്ങൾ</translation>
 <translation id="3625258641415618104">സ്‌ക്രീൻഷോട്ടുകൾ പ്രവർത്തനരഹിതമാക്കി</translation>
 <translation id="3626281679859535460">മിഴിവ്</translation>
-<translation id="3626637461649818317"><ph name="PERCENTAGE" />% ശേഷിക്കുന്നു</translation>
 <translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079"><ph name="DISPLAY_NAME" /> മിഴിവ് <ph name="RESOLUTION" /> എന്നതിലേയ്‌ക്ക് മാറ്റി</translation>
 <translation id="370649949373421643">Wi-fi പ്രാപ്‌തമാക്കുക</translation>
@@ -111,13 +111,13 @@
 <translation id="397105322502079400">കണക്കാക്കുന്നു...</translation>
 <translation id="3995138139523574647">USB-C ഉപകരണം (വലതുവശത്ത് പിന്നിലെ പോർട്ട്)</translation>
 <translation id="4053612967614057854">ഓൺ‌ സ്‌ക്രീൻ കീബോർഡ് പ്രവർത്തനരഹിതമാക്കുക</translation>
-<translation id="412065659894267608">പൂർണ്ണമായും ചാർജാകുന്നതിന് <ph name="HOUR" />മ <ph name="MINUTE" />മി</translation>
 <translation id="4250680216510889253">ഇല്ല</translation>
 <translation id="4279490309300973883">മിററിംഗ്</translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4421231901400348175"><ph name="HELPER_NAME" /> ഉപയോഗിച്ച് നിങ്ങളുടെ വിദൂര സഹായി മുഖേന സ്‌ക്രീനിന്റെ നിയന്ത്രണം പങ്കിടുക.</translation>
 <translation id="4430019312045809116">അളവ്</translation>
 <translation id="4527045527269911712">"<ph name="DEVICE_NAME" />" എന്ന Bluetooth ഉപകരണം ജോടിയാക്കുന്നതിനുള്ള അനുമതി ആവശ്യപ്പെടുന്നു.</translation>
+<translation id="453661520163887813">പൂർത്തിയാകാൻ ശേഷിക്കുന്ന സമയം <ph name="TIME" /></translation>
 <translation id="4544944664594876241">സ്‌ക്രീൻ ലോക്കുചെയ്യുന്നതിനുള്ള കുറുക്കുവഴി മാറ്റി. <ph name="OLD_SHORTCUT" /> എന്നതിന് പകരം <ph name="NEW_SHORTCUT" /> ഉപയോഗിക്കുക.</translation>
 <translation id="479989351350248267">search</translation>
 <translation id="4804818685124855865">വിച്ഛേദിക്കുക</translation>
@@ -129,7 +129,6 @@
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl+Shift+Space</translation>
 <translation id="5045002648206642691">Google ഡ്രൈവ് ക്രമീകരണങ്ങൾ...</translation>
-<translation id="5102001756192215136"><ph name="HOUR" />:<ph name="MINUTE" /> ശേഷിക്കുന്നു</translation>
 <translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">Cast ഉപകരണങ്ങൾ ലഭ്യമാണ്.</translation>
 <translation id="5222676887888702881">പുറത്തുകടക്കുക</translation>
@@ -165,7 +164,6 @@
 <translation id="615957422585914272">ഓൺ-സ്‌ക്രീൻ കീബോർഡ് ദൃശ്യമാക്കുക</translation>
 <translation id="6165508094623778733">കൂടുതൽ‍ മനസിലാക്കുക</translation>
 <translation id="6203030746557259519">വെർച്വൽ ഡിസ്‌പ്ലേ</translation>
-<translation id="6247708409970142803"><ph name="PERCENTAGE" />%</translation>
 <translation id="6248847161401822652">പുറത്തുപോകുന്നതിന് രണ്ടുതവണ Control Shift Q അമർത്തുക.</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" /> എന്നതിനെ <ph name="ROTATION" /> എന്നതിലേയ്‌ക്ക് തിരിച്ചു</translation>
 <translation id="6359806961507272919"><ph name="PHONE_NUMBER" /> എന്നതില്‍ നിന്നുള്ള SMS</translation>
@@ -205,6 +203,7 @@
 <translation id="7510334386202674593">Ctrl+Shift+L</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" />, <ph name="SPECIFIED_RESOLUTION" /> എന്നതിനെ പിന്തുണയ്‌ക്കുന്നില്ല. റസലൂഷൻ <ph name="FALLBACK_RESOLUTION" /> എന്നതിലേക്ക് മാറ്റി.</translation>
 <translation id="7573962313813535744">ഡോക്കുചെയ്‌ത മോഡ്</translation>
+<translation id="7580671184200851182">എല്ലാ സ്‌പീക്കറുകളിലൂടെയും സമാനമായ ഓഡിയോ പ്ലേ ചെയ്യുക (മോണോ ഓഡിയോ)</translation>
 <translation id="7593891976182323525">തിരയൽ അല്ലെങ്കിൽ Shift</translation>
 <translation id="7649070708921625228">സഹായം</translation>
 <translation id="7692480393933218409">കണക്‌റ്റുചെയ്‌ത USB-C ഉപകരണങ്ങൾ ചാർജ്ജുചെയ്യുന്നു</translation>
@@ -223,13 +222,14 @@
 <translation id="8308637677604853869">മുൻ മെനു</translation>
 <translation id="8356164830168736643"><ph name="WINDOW_TITLE" /> അടയ്‌ക്കുക</translation>
 <translation id="8428213095426709021">ക്രമീകരണങ്ങള്‍</translation>
-<translation id="8456362689280298700"><ph name="HOUR" />:<ph name="MINUTE" /> നിറയാൻ</translation>
 <translation id="8517041960877371778">നിങ്ങളുടെ <ph name="DEVICE_TYPE" /> ഓണായിരിക്കുമ്പോൾ അത് ചാർജ്ജാകാതിരിക്കാം.</translation>
 <translation id="8528322925433439945">മൊബൈൽ ...</translation>
+<translation id="8639760480004882931"><ph name="PERCENTAGE" /> ശേഷിക്കുന്നു</translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">കുറഞ്ഞ തോതിൽ വൈദ്യുതി പ്രവഹിക്കുന്ന ചാർജർ കണക്റ്റുചെയ്‌തു</translation>
 <translation id="8814190375133053267">Wi-Fi</translation>
 <translation id="882279321799040148">കാണുന്നതിന് ക്ലിക്കുചെയ്യുക</translation>
+<translation id="8825534185036233643">രണ്ടിലധികം ഡിസ്‌പ്ലേകളിൽ മിററിംഗ് ചെയ്യുന്നത് പിന്തുണയ്‌ക്കുന്നില്ല.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8850991929411075241">തിരയൽ+Esc</translation>
 <translation id="8878886163241303700">സ്‌ക്രീൻ വിപുലീകരിക്കുന്നു</translation>

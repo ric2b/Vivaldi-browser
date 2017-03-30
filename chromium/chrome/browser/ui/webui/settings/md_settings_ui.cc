@@ -10,12 +10,14 @@
 
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/webui/settings/about_handler.h"
 #include "chrome/browser/ui/webui/settings/appearance_handler.h"
 #include "chrome/browser/ui/webui/settings/downloads_handler.h"
 #include "chrome/browser/ui/webui/settings/font_handler.h"
 #include "chrome/browser/ui/webui/settings/languages_handler.h"
 #include "chrome/browser/ui/webui/settings/md_settings_localized_strings_provider.h"
 #include "chrome/browser/ui/webui/settings/people_handler.h"
+#include "chrome/browser/ui/webui/settings/profile_info_handler.h"
 #include "chrome/browser/ui/webui/settings/reset_settings_handler.h"
 #include "chrome/browser/ui/webui/settings/search_engines_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_clear_browsing_data_handler.h"
@@ -64,6 +66,7 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
   AddSettingsPageUIHandler(new FontHandler(web_ui));
   AddSettingsPageUIHandler(new LanguagesHandler(web_ui));
   AddSettingsPageUIHandler(new PeopleHandler(profile));
+  AddSettingsPageUIHandler(new ProfileInfoHandler(profile));
   AddSettingsPageUIHandler(new SearchEnginesHandler(profile));
   AddSettingsPageUIHandler(new SiteSettingsHandler(profile));
   AddSettingsPageUIHandler(new StartupPagesHandler(web_ui));
@@ -88,6 +91,7 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
     AddSettingsPageUIHandler(easy_unlock_handler);
 #endif
 
+  AddSettingsPageUIHandler(AboutHandler::Create(html_source, profile));
   AddSettingsPageUIHandler(ResetSettingsHandler::Create(html_source, profile));
 
   // Add all settings resources.
@@ -104,12 +108,6 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
 }
 
 MdSettingsUI::~MdSettingsUI() {
-}
-
-void MdSettingsUI::RenderViewReused(
-    content::RenderViewHost* /*render_view_host*/) {
-  for (SettingsPageUIHandler* handler : handlers_)
-    handler->RenderViewReused();
 }
 
 void MdSettingsUI::AddSettingsPageUIHandler(SettingsPageUIHandler* handler) {

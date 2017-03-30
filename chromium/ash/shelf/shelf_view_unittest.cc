@@ -46,6 +46,7 @@
 #include "ui/events/event_utils.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/view_model.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -390,6 +391,19 @@ class ShelfViewTest : public AshTestBase {
     ShelfID id = AddPlatformAppNoWait();
     test_api_->RunMessageLoopUntilAnimationsDone();
     return id;
+  }
+
+  void SetShelfItemTypeToAppShortcut(ShelfID id) {
+    int index = model_->ItemIndexByID(id);
+    DCHECK_GE(index, 0);
+
+    ShelfItem item = model_->items()[index];
+
+    if (item.type == TYPE_PLATFORM_APP || item.type == TYPE_WINDOWED_APP) {
+      item.type = TYPE_APP_SHORTCUT;
+      model_->Set(index, item);
+    }
+    test_api_->RunMessageLoopUntilAnimationsDone();
   }
 
   void RemoveByID(ShelfID id) {
@@ -960,12 +974,12 @@ TEST_F(ShelfViewTest, AssertNoButtonsOverlap) {
 
   // Test that any two successive visible icons never overlap in all shelf
   // alignment types.
-  const ShelfAlignment kAlignments[] = {
-      SHELF_ALIGNMENT_LEFT, SHELF_ALIGNMENT_RIGHT, SHELF_ALIGNMENT_BOTTOM,
-      SHELF_ALIGNMENT_BOTTOM_LOCKED,
+  const wm::ShelfAlignment kAlignments[] = {
+      wm::SHELF_ALIGNMENT_LEFT, wm::SHELF_ALIGNMENT_RIGHT,
+      wm::SHELF_ALIGNMENT_BOTTOM, wm::SHELF_ALIGNMENT_BOTTOM_LOCKED,
   };
 
-  for (ShelfAlignment alignment : kAlignments) {
+  for (wm::ShelfAlignment alignment : kAlignments) {
     shelf_view_->shelf()->SetAlignment(alignment);
     // For every 2 successive visible icons, expect that their bounds don't
     // intersect.
@@ -983,10 +997,10 @@ TEST_F(ShelfViewTest, AssertNoButtonsOverlap) {
 }
 
 // Making sure the overflow bubble arrow correctly tracks with shelf position.
-TEST_F(ShelfViewTest, OverflowArrowForShelfPosition) {
-  const ShelfAlignment kAlignments[] = {
-      SHELF_ALIGNMENT_BOTTOM, SHELF_ALIGNMENT_LEFT, SHELF_ALIGNMENT_RIGHT,
-      SHELF_ALIGNMENT_BOTTOM_LOCKED,
+TEST_P(ShelfViewTextDirectionTest, OverflowArrowForShelfPosition) {
+  const wm::ShelfAlignment kAlignments[] = {
+      wm::SHELF_ALIGNMENT_BOTTOM, wm::SHELF_ALIGNMENT_LEFT,
+      wm::SHELF_ALIGNMENT_RIGHT, wm::SHELF_ALIGNMENT_BOTTOM_LOCKED,
   };
 
   // These must match what is expected for each alignment above.
@@ -1005,7 +1019,11 @@ TEST_F(ShelfViewTest, OverflowArrowForShelfPosition) {
     ASSERT_TRUE(test_api_->overflow_bubble() &&
                 test_api_->overflow_bubble()->IsShowing());
 
-    EXPECT_EQ(test_api_->overflow_bubble()->bubble_view()->arrow(), kArrows[i]);
+    EXPECT_EQ(kArrows[i], test_api_->overflow_bubble()->bubble_view()->arrow());
+    OverflowBubbleViewTestAPI bubble_view_api(
+        test_api_->overflow_bubble()->bubble_view());
+    EXPECT_EQ(kArrows[i],
+              bubble_view_api.GetBubbleFrameView()->bubble_border()->arrow());
   }
 }
 
@@ -1411,7 +1429,7 @@ TEST_F(ShelfViewTest, RemovingItemClosesTooltip) {
   EXPECT_FALSE(tooltip_manager->IsVisible());
 
   // Change the shelf layout. This should not crash.
-  Shell::GetInstance()->SetShelfAlignment(SHELF_ALIGNMENT_LEFT,
+  Shell::GetInstance()->SetShelfAlignment(wm::SHELF_ALIGNMENT_LEFT,
                                           Shell::GetPrimaryRootWindow());
 }
 
@@ -1428,7 +1446,7 @@ TEST_F(ShelfViewTest, ShelfAlignmentClosesTooltip) {
   EXPECT_TRUE(tooltip_manager->IsVisible());
 
   // Changing shelf alignment hides the tooltip.
-  Shell::GetInstance()->SetShelfAlignment(SHELF_ALIGNMENT_LEFT,
+  Shell::GetInstance()->SetShelfAlignment(wm::SHELF_ALIGNMENT_LEFT,
                                           Shell::GetPrimaryRootWindow());
   EXPECT_FALSE(tooltip_manager->IsVisible());
 }
@@ -1769,8 +1787,9 @@ TEST_F(ShelfViewTest, CheckRipOffFromLeftShelfAlignmentWithMultiMonitor) {
 
   aura::Window* second_root = Shell::GetAllRootWindows()[1];
 
-  Shell::GetInstance()->SetShelfAlignment(SHELF_ALIGNMENT_LEFT, second_root);
-  ASSERT_EQ(SHELF_ALIGNMENT_LEFT,
+  Shell::GetInstance()->SetShelfAlignment(wm::SHELF_ALIGNMENT_LEFT,
+                                          second_root);
+  ASSERT_EQ(wm::SHELF_ALIGNMENT_LEFT,
             Shell::GetInstance()->GetShelfAlignment(second_root));
 
   // Initially, app list and browser shortcut are added.
@@ -1808,6 +1827,22 @@ TEST_F(ShelfViewTest, CheckDragAndDropFromOverflowBubbleToShelf) {
 
   TestDraggingAnItemFromOverflowToShelf(false);
   TestDraggingAnItemFromOverflowToShelf(true);
+}
+
+// Checks creating app shortcut for an opened platform app in overflow bubble
+// should be invisible to the shelf. See crbug.com/605793.
+TEST_F(ShelfViewTest, CheckOverflowStatusPinOpenedAppToShelf) {
+  AddButtonsUntilOverflow();
+
+  // Add a running Platform app.
+  ShelfID platform_app_id = AddPlatformApp();
+  EXPECT_FALSE(GetButtonByID(platform_app_id)->visible());
+
+  // Make the added running platform app to be an app shortcut.
+  // This app shortcut should be a swapped view in overflow bubble, which is
+  // invisible.
+  SetShelfItemTypeToAppShortcut(platform_app_id);
+  EXPECT_FALSE(GetButtonByID(platform_app_id)->visible());
 }
 
 // Tests that the AppListButton renders as active in response to touches.

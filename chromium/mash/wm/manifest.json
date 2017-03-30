@@ -1,5 +1,14 @@
 {
+  "manifest_version":  1,
   "name": "mojo:desktop_wm",
-  "display_name": "Desktop Window Manager",
-  "capabilities": { "*": ["*"] }
+  "display_name": "Window Manager",
+  "capabilities": {
+    "provided": {
+      "mus:window_manager" : [ "mus::mojom::AcceleratorRegistrar" ]
+    },
+    "required": {
+      "*": { "classes": [ "app" ] },
+      "mojo:mus": { "interfaces": [ "mus::mojom::WindowManagerFactoryService" ] }
+    }
+  }
 }

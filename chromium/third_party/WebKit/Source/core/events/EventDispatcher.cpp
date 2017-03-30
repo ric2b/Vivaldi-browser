@@ -32,8 +32,10 @@
 #include "core/events/MouseEvent.h"
 #include "core/events/ScopedEventQueue.h"
 #include "core/events/WindowEventContext.h"
+#include "core/frame/Deprecation.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalDOMWindow.h"
+#include "core/frame/UseCounter.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/TraceEvent.h"
@@ -119,7 +121,7 @@ DispatchEventResult EventDispatcher::dispatch()
     ASSERT(!EventDispatchForbiddenScope::isEventDispatchForbidden());
     ASSERT(m_event->target());
     TRACE_EVENT1("devtools.timeline", "EventDispatch", "data", InspectorEventDispatchEvent::data(*m_event));
-    void* preDispatchEventHandlerResult;
+    EventDispatchHandlingState* preDispatchEventHandlerResult = nullptr;
     if (dispatchEventPreProcess(preDispatchEventHandlerResult) == ContinueDispatching) {
         if (dispatchEventAtCapturing() == ContinueDispatching) {
             if (dispatchEventAtTarget() == ContinueDispatching)
@@ -137,7 +139,7 @@ DispatchEventResult EventDispatcher::dispatch()
     return EventTarget::dispatchEventResult(*m_event);
 }
 
-inline EventDispatchContinuation EventDispatcher::dispatchEventPreProcess(void*& preDispatchEventHandlerResult)
+inline EventDispatchContinuation EventDispatcher::dispatchEventPreProcess(EventDispatchHandlingState*& preDispatchEventHandlerResult)
 {
     // Give the target node a chance to do some work before DOM event handlers get a crack.
     preDispatchEventHandlerResult = m_node->preDispatchEventHandler(m_event.get());
@@ -177,12 +179,15 @@ inline void EventDispatcher::dispatchEventAtBubbling()
     size_t size = m_event->eventPath().size();
     for (size_t i = 1; i < size; ++i) {
         const NodeEventContext& eventContext = m_event->eventPath()[i];
-        if (eventContext.currentTargetSameAsTarget())
+        if (eventContext.currentTargetSameAsTarget()) {
             m_event->setEventPhase(Event::AT_TARGET);
-        else if (m_event->bubbles() && !m_event->cancelBubble())
+        } else if (m_event->bubbles() && !m_event->cancelBubble()) {
             m_event->setEventPhase(Event::BUBBLING_PHASE);
-        else
+        } else {
+            if (m_event->bubbles() && m_event->cancelBubble() && eventContext.node() && eventContext.node()->hasEventListeners(m_event->type()))
+                UseCounter::count(eventContext.node()->document(), UseCounter::EventCancelBubbleAffected);
             continue;
+        }
         eventContext.handleLocalEvents(*m_event);
         if (m_event->propagationStopped())
             return;
@@ -190,10 +195,12 @@ inline void EventDispatcher::dispatchEventAtBubbling()
     if (m_event->bubbles() && !m_event->cancelBubble()) {
         m_event->setEventPhase(Event::BUBBLING_PHASE);
         m_event->eventPath().windowEventContext().handleLocalEvents(*m_event);
+    } else if (m_event->bubbles() && m_event->eventPath().windowEventContext().window() && m_event->eventPath().windowEventContext().window()->hasEventListeners(m_event->type())) {
+        UseCounter::count(m_event->eventPath().windowEventContext().window()->getExecutionContext(), UseCounter::EventCancelBubbleAffected);
     }
 }
 
-inline void EventDispatcher::dispatchEventPostProcess(void* preDispatchEventHandlerResult)
+inline void EventDispatcher::dispatchEventPostProcess(EventDispatchHandlingState* preDispatchEventHandlerResult)
 {
     m_event->setTarget(EventPath::eventTargetRespectingTargetRules(*m_node));
     m_event->setCurrentTarget(nullptr);
@@ -221,20 +228,20 @@ inline void EventDispatcher::dispatchEventPostProcess(void* preDispatchEventHand
         m_node->willCallDefaultEventHandler(*m_event);
         m_node->defaultEventHandler(m_event.get());
         ASSERT(!m_event->defaultPrevented());
-        if (m_event->defaultHandled())
-            return;
         // For bubbling events, call default event handlers on the same targets in the
         // same order as the bubbling phase.
-        if (m_event->bubbles()) {
+        if (!m_event->defaultHandled() && m_event->bubbles()) {
             size_t size = m_event->eventPath().size();
             for (size_t i = 1; i < size; ++i) {
                 m_event->eventPath()[i].node()->willCallDefaultEventHandler(*m_event);
                 m_event->eventPath()[i].node()->defaultEventHandler(m_event.get());
                 ASSERT(!m_event->defaultPrevented());
                 if (m_event->defaultHandled())
-                    return;
+                    break;
             }
         }
+        if (m_event->defaultHandled() && !m_event->isTrusted() && !isClick)
+            Deprecation::countDeprecation(m_node->document(), UseCounter::UntrustedEventDefaultHandled);
     }
 }
 

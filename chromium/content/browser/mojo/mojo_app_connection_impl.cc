@@ -15,16 +15,17 @@ namespace content {
 const char kBrowserMojoAppUrl[] = "system:content_browser";
 
 namespace {
-void OnGotInstanceID(mojo::shell::mojom::ConnectResult result,
-                     const std::string& user_id, uint32_t remote_id) {}
+void OnGotInstanceID(shell::mojom::ConnectResult result,
+                     const std::string& user_id,
+                     uint32_t remote_id) {}
 }  // namespace
 
 // static
-scoped_ptr<MojoAppConnection> MojoAppConnection::Create(
+std::unique_ptr<MojoAppConnection> MojoAppConnection::Create(
     const std::string& user_id,
     const std::string& name,
     const std::string& requestor_name) {
-  return scoped_ptr<MojoAppConnection>(
+  return std::unique_ptr<MojoAppConnection>(
       new MojoAppConnectionImpl(user_id, name, requestor_name));
 }
 
@@ -34,7 +35,7 @@ MojoAppConnectionImpl::MojoAppConnectionImpl(
     const std::string& requestor_name) {
   MojoShellContext::ConnectToApplication(
       user_id, name, requestor_name, mojo::GetProxy(&interfaces_),
-      mojo::shell::mojom::InterfaceProviderPtr(), base::Bind(&OnGotInstanceID));
+      shell::mojom::InterfaceProviderPtr(), base::Bind(&OnGotInstanceID));
 }
 
 MojoAppConnectionImpl::~MojoAppConnectionImpl() {

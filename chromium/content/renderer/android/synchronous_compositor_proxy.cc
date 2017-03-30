@@ -7,8 +7,9 @@
 #include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/memory/shared_memory.h"
+#include "cc/ipc/cc_param_traits.h"
 #include "content/common/android/sync_compositor_messages.h"
-#include "content/common/cc_messages.h"
+#include "content/common/android/sync_compositor_statics.h"
 #include "content/public/common/content_switches.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_sender.h"
@@ -39,7 +40,6 @@ SynchronousCompositorProxy::SynchronousCompositorProxy(
       inside_receive_(false),
       hardware_draw_reply_(nullptr),
       software_draw_reply_(nullptr),
-      bytes_limit_(0u),
       version_(0u),
       page_scale_factor_(0.f),
       min_page_scale_factor_(0.f),
@@ -66,15 +66,10 @@ void SynchronousCompositorProxy::SetOutputSurface(
   DCHECK_NE(output_surface_, output_surface);
   if (output_surface_) {
     output_surface_->SetSyncClient(nullptr);
-    output_surface_->SetTreeActivationCallback(base::Closure());
   }
   output_surface_ = output_surface;
   if (output_surface_) {
     output_surface_->SetSyncClient(this);
-    output_surface_->SetTreeActivationCallback(
-        base::Bind(&SynchronousCompositorProxy::DidActivatePendingTree,
-                   base::Unretained(this)));
-    output_surface_->SetMemoryPolicy(bytes_limit_);
   }
 }
 
@@ -123,16 +118,6 @@ void SynchronousCompositorProxy::Invalidate() {
 void SynchronousCompositorProxy::DidActivatePendingTree() {
   ++did_activate_pending_tree_count_;
   SendAsyncRendererStateIfNeeded();
-  DeliverMessages();
-}
-
-void SynchronousCompositorProxy::DeliverMessages() {
-  DCHECK(output_surface_);
-  std::vector<scoped_ptr<IPC::Message>> messages;
-  output_surface_->GetMessagesToDeliver(&messages);
-  for (auto& msg : messages) {
-    Send(msg.release());
-  }
 }
 
 void SynchronousCompositorProxy::SendAsyncRendererStateIfNeeded() {
@@ -160,6 +145,9 @@ void SynchronousCompositorProxy::PopulateCommonParams(
 
 void SynchronousCompositorProxy::OnMessageReceived(
     const IPC::Message& message) {
+  if (output_surface_ && output_surface_->OnMessageReceived(message))
+    return;
+
   IPC_BEGIN_MESSAGE_MAP(SynchronousCompositorProxy, message)
     IPC_MESSAGE_HANDLER(SyncCompositorMsg_HandleInputEvent, HandleInputEvent)
     IPC_MESSAGE_HANDLER(SyncCompositorMsg_BeginFrame, BeginFrame)
@@ -172,6 +160,7 @@ void SynchronousCompositorProxy::OnMessageReceived(
                                     DemandDrawSw)
     IPC_MESSAGE_HANDLER(SyncCompositorMsg_UpdateState, ProcessCommonParams)
     IPC_MESSAGE_HANDLER(SyncCompositorMsg_ZoomBy, SynchronouslyZoomBy)
+    IPC_MESSAGE_HANDLER(SyncCompositorMsg_SetScroll, SetScroll)
   IPC_END_MESSAGE_MAP()
 }
 
@@ -232,8 +221,6 @@ void SynchronousCompositorProxy::DemandDrawHw(
     cc::CompositorFrame empty_frame;
     SendDemandDrawHwReply(&empty_frame, 0u, reply_message);
     inside_receive_ = false;
-  } else {
-    DeliverMessages();
   }
 }
 
@@ -288,19 +275,6 @@ void SynchronousCompositorProxy::SetSharedMemory(
   *success = true;
 }
 
-namespace {
-SkCanvas* g_sk_canvas_for_draw = nullptr;
-}
-
-// static
-void SynchronousCompositorProxy::SetSkCanvasForDraw(SkCanvas* canvas) {
-  DCHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kSingleProcess));
-  DCHECK(canvas || g_sk_canvas_for_draw) << !!canvas;
-  DCHECK(!canvas || !g_sk_canvas_for_draw) << !!canvas;
-  g_sk_canvas_for_draw = canvas;
-}
-
 void SynchronousCompositorProxy::ZeroSharedMemory() {
   DCHECK(!software_draw_shm_->zeroed);
   memset(software_draw_shm_->shm.memory(), 0, software_draw_shm_->buffer_size);
@@ -317,11 +291,12 @@ void SynchronousCompositorProxy::DemandDrawSw(
   if (output_surface_) {
     base::AutoReset<IPC::Message*> scoped_software_draw_reply(
         &software_draw_reply_, reply_message);
+    SkCanvas* sk_canvas_for_draw = SynchronousCompositorGetSkCanvas();
     if (use_in_process_zero_copy_software_draw_) {
-      DCHECK(g_sk_canvas_for_draw);
-      output_surface_->DemandDrawSw(g_sk_canvas_for_draw);
+      DCHECK(sk_canvas_for_draw);
+      output_surface_->DemandDrawSw(sk_canvas_for_draw);
     } else {
-      DCHECK(!g_sk_canvas_for_draw);
+      DCHECK(!sk_canvas_for_draw);
       DoDemandDrawSw(params);
     }
   }
@@ -330,8 +305,6 @@ void SynchronousCompositorProxy::DemandDrawSw(
     cc::CompositorFrame empty_frame;
     SendDemandDrawSwReply(false, &empty_frame, reply_message);
     inside_receive_ = false;
-  } else {
-    DeliverMessages();
   }
 }
 
@@ -409,6 +382,14 @@ void SynchronousCompositorProxy::SynchronouslyZoomBy(
   PopulateCommonParams(common_renderer_params);
 }
 
+void SynchronousCompositorProxy::SetScroll(
+    const gfx::ScrollOffset& new_total_scroll_offset) {
+  if (total_scroll_offset_ == new_total_scroll_offset)
+    return;
+  total_scroll_offset_ = new_total_scroll_offset;
+  input_handler_proxy_->SynchronouslySetRootScrollOffset(total_scroll_offset_);
+}
+
 void SynchronousCompositorProxy::DidOverscroll(
     const DidOverscrollParams& did_overscroll_params) {
   SyncCompositorCommonRendererParams params;
@@ -419,24 +400,8 @@ void SynchronousCompositorProxy::DidOverscroll(
 
 void SynchronousCompositorProxy::ProcessCommonParams(
     const SyncCompositorCommonBrowserParams& common_params) {
-  if (bytes_limit_ != common_params.bytes_limit) {
-    bytes_limit_ = common_params.bytes_limit;
-    if (output_surface_)
-      output_surface_->SetMemoryPolicy(bytes_limit_);
-  }
-  if (common_params.update_root_scroll_offset &&
-      total_scroll_offset_ != common_params.root_scroll_offset) {
-    total_scroll_offset_ = common_params.root_scroll_offset;
-    input_handler_proxy_->SynchronouslySetRootScrollOffset(
-        total_scroll_offset_);
-  }
   begin_frame_source_->SetBeginFrameSourcePaused(
       common_params.begin_frame_source_paused);
-  if (output_surface_ && !common_params.ack.resources.empty()) {
-    output_surface_->ReturnResources(
-        common_params.output_surface_id_for_returned_resources,
-        common_params.ack);
-  }
 }
 
 }  // namespace content

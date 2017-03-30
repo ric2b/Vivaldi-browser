@@ -104,7 +104,7 @@ public:
             m_resolver->resolve();
             return;
         }
-        m_resolver->resolve(ServiceWorkerRegistration::getOrCreate(m_resolver->getExecutionContext(), handle.release()));
+        m_resolver->resolve(ServiceWorkerRegistration::getOrCreate(m_resolver->getExecutionContext(), std::move(handle)));
     }
 
     void onError(const WebServiceWorkerError& error) override
@@ -191,7 +191,7 @@ DEFINE_TRACE(ServiceWorkerContainer)
 {
     visitor->trace(m_controller);
     visitor->trace(m_ready);
-    RefCountedGarbageCollectedEventTargetWithInlineData<ServiceWorkerContainer>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
     ContextLifecycleObserver::trace(visitor);
 }
 

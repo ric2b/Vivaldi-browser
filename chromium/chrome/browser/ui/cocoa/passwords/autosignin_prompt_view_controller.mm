@@ -17,24 +17,6 @@
 #include "ui/base/cocoa/controls/hyperlink_text_view.h"
 #include "ui/base/l10n/l10n_util.h"
 
-namespace {
-
-// Returns a NSRegularControlSize button. It's used for improving the contrast
-// due to Accessabilty standards.
-NSButton* BiggerDialogButton(NSString* title) {
-  base::scoped_nsobject<NSButton> button(
-      [[NSButton alloc] initWithFrame:NSZeroRect]);
-  CGFloat fontSize = [NSFont systemFontSizeForControlSize:NSRegularControlSize];
-  [button setFont:[NSFont systemFontOfSize:fontSize]];
-  [button setTitle:title];
-  [button setBezelStyle:NSRoundedBezelStyle];
-  [[button cell] setControlSize:NSRegularControlSize];
-  [button sizeToFit];
-  return button.autorelease();
-}
-
-}  // namespace
-
 @interface AutoSigninPromptView : NSView
 @property (nonatomic, copy) BOOL (^escHandler)(NSEvent* theEvent);
 @end
@@ -125,14 +107,6 @@ NSButton* BiggerDialogButton(NSString* title) {
   [_turnOffButton setTarget:self];
   [_turnOffButton setAction:@selector(onTurnOffClicked:)];
   [view addSubview:_turnOffButton];
-
-  // Invisible button to handle ESC.
-  base::scoped_nsobject<NSButton> cancel_button(
-      [[NSButton alloc] initWithFrame:NSZeroRect]);
-  [cancel_button setTarget:self];
-  [cancel_button setAction:@selector(onEscClicked:)];
-  [cancel_button setKeyEquivalent:kKeyEquivalentEscape];
-  [view addSubview:cancel_button];
 
   // Layout.
   // Compute the bubble width using the title and the buttons.

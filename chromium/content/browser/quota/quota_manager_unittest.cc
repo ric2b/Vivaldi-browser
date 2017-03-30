@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <memory>
 #include <set>
 #include <sstream>
 #include <vector>
@@ -14,13 +15,13 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/sys_info.h"
 #include "base/test/histogram_tester.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "content/public/test/mock_special_storage_policy.h"
 #include "content/public/test/mock_storage_client.h"
@@ -1302,7 +1303,7 @@ TEST_F(QuotaManagerTest, GetAvailableSpaceTest) {
 
 TEST_F(QuotaManagerTest, SetTemporaryStorageEvictionPolicy) {
   quota_manager()->SetTemporaryStorageEvictionPolicy(
-      make_scoped_ptr(new TestEvictionPolicy));
+      base::WrapUnique(new TestEvictionPolicy));
 
   GetEvictionOrigin(kTemp);
   base::RunLoop().RunUntilIdle();

@@ -4,8 +4,7 @@
 
 import os
 
-from telemetry.page import action_runner
-from telemetry.page import page_test
+from telemetry.page import legacy_page_test
 from telemetry.timeline.model import TimelineModel
 from telemetry.timeline import tracing_config
 from telemetry.value import list_of_scalar_values
@@ -72,7 +71,7 @@ def _AddTracingResults(thread, results):
     if event.name == 'ThreadHeap::coalesce':
       values['oilpan_coalesce'].append(duration)
       continue
-    if event.name == 'Heap::collectGarbage':
+    if event.name == 'BlinkGCMarking':
       if reason is not None:
         values['oilpan_%s_mark' % reason].append(mark_time)
         values['oilpan_%s_lazy_sweep' % reason].append(lazy_sweep_time)
@@ -130,7 +129,7 @@ def _AddTracingResults(thread, results):
   results.AddValue(scalar.ScalarValue(page, 'oilpan_gc', unit, gc_time))
 
 
-class _OilpanGCTimesBase(page_test.PageTest):
+class _OilpanGCTimesBase(legacy_page_test.LegacyPageTest):
 
   def __init__(self, action_name=''):
     super(_OilpanGCTimesBase, self).__init__(action_name)
@@ -164,8 +163,7 @@ class OilpanGCTimesForSmoothness(_OilpanGCTimesBase):
     self._interaction = None
 
   def DidNavigateToPage(self, page, tab):
-    runner = action_runner.ActionRunner(tab)
-    self._interaction = runner.CreateInteraction(_RUN_SMOOTH_ACTIONS)
+    self._interaction = tab.action_runner.CreateInteraction(_RUN_SMOOTH_ACTIONS)
     self._interaction.Begin()
 
   def ValidateAndMeasurePage(self, page, tab, results):

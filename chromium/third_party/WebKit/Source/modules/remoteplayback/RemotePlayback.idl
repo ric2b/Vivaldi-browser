@@ -10,7 +10,8 @@ enum RemotePlaybackState {
 };
 
 [
-    GarbageCollected,
+    ActiveScriptWrappable,
+    DependentLifetime,
     RuntimeEnabled=RemotePlayback
 ] interface RemotePlayback : EventTarget {
     readonly attribute RemotePlaybackState state;

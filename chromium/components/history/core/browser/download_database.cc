@@ -4,14 +4,17 @@
 
 #include "components/history/core/browser/download_database.h"
 
+#include <inttypes.h>
+
 #include <limits>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/debug/alias.h"
 #include "base/files/file_path.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram.h"
+#include "base/rand_util.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -192,28 +195,72 @@ bool DownloadDatabase::MigrateHashHttpMethodAndGenerateGuids() {
       !EnsureColumnExists("http_method", "VARCHAR NOT NULL DEFAULT ''"))
     return false;
 
-  // Generate GUIDs for each download. The GUID is generated thusly:
+  // Generate GUIDs for each download. GUIDs based on random data should conform
+  // with RFC 4122 section 4.4. Given the following field layout (based on RFC
+  // 4122):
   //
-  //    XXXXXXXX-RRRR-RRRR-RRRR-RRRRRRRRRRRR
+  //  0                   1                   2                   3
+  //  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+  //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  //  |                          time_low                             |
+  //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  //  |       time_mid                |         time_hi_and_version   |
+  //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  //  |clk_seq_hi_res |  clk_seq_low  |         node (0-1)            |
+  //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  //  |                         node (2-5)                            |
+  //  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  //
+  // * Bits 4-7 of time_hi_and_version should be set to 0b0100 == 4
+  // * Bits 6-7 of clk_seq_hi_res should be set to 0b10
+  // * All other bits should be random or pseudorandom.
+  //
+  // We are going to take the liberty of setting time_low to the 32-bit download
+  // ID. That will guarantee that no two randomly generated GUIDs will collide
+  // even if the 90 bits of entropy doesn't save us.
+  //
+  // Translated to the canonical string representation, the GUID is generated
+  // thusly:
+  //
+  //    XXXXXXXX-RRRR-4RRR-yRRR-RRRRRRRRRRRR
   //    \__  __/ \___________  ____________/
   //       \/                \/
-  //       |          Random hex digits
+  //       |          R = random hex digit.
+  //       |          y = one of {'8','9','A','B'} selected randomly.
+  //       |          4 = the character '4'.
   //       |
   //       Hex representation of 32-bit download ID.
-  //
-  // The 96 random bits provide entropy while the 32-bits from the download ID
-  // ensure that the generated identifiers will at least be unique amongst the
-  // download rows in the unlikely event there's a collision in the 96 entropy
-  // bits.
   //
   // This GUID generation scheme is only used for migrated download rows and
   // assumes that the likelihood of a collision with a GUID generated via
   // base::GenerateGUID() will be vanishingly small.
-  const char kMigrateGuidsQuery[] =
-      "UPDATE downloads SET guid = printf"
-      "(\"%08X-%s-%s-%s-%s\", id, hex(randomblob(2)), hex(randomblob(2)),"
-      " hex(randomblob(2)), hex(randomblob(6)))";
-  return GetDB().Execute(kMigrateGuidsQuery);
+  //
+  // A previous version of this code generated GUIDs that used random bits for
+  // all but the first 32-bits. I.e. the scheme didn't respect the 6 fixed bits
+  // as prescribed for type 4 GUIDs. The resulting GUIDs are not believed to
+  // have an elevated risk of collision with GUIDs generated via
+  // base::GenerateGUID() and are considered valid by all known consumers. Hence
+  // no additional migration logic is being introduced to fix those GUIDs.
+  sql::Statement select(GetDB().GetUniqueStatement("SELECT id FROM downloads"));
+  sql::Statement update(
+      GetDB().GetUniqueStatement("UPDATE downloads SET guid = ? WHERE id = ?"));
+  while (select.Step()) {
+    uint32_t id = select.ColumnInt(0);
+    uint64_t r1 = base::RandUint64();
+    uint64_t r2 = base::RandUint64();
+    std::string guid = base::StringPrintf(
+        "%08" PRIX32 "-%04" PRIX64 "-4%03" PRIX64 "-%04" PRIX64 "-%012" PRIX64,
+        id, r1 >> 48,
+        (r1 >> 36) & 0xfff,
+        ((8 | ((r1 >> 34) & 3)) << 12) | ((r1 >> 22) & 0xfff),
+        r2 & 0xffffffffffff);
+    update.BindString(0, guid);
+    update.BindInt(1, id);
+    if (!update.Run())
+      return false;
+    update.Reset(true);
+  }
+  return true;
 }
 
 bool DownloadDatabase::MigrateDownloadTabUrl() {
@@ -320,7 +367,7 @@ void DownloadDatabase::QueryDownloads(std::vector<DownloadRow>* results) {
       "by_ext_name, etag, last_modified FROM downloads ORDER BY start_time"));
 
   while (statement_main.Step()) {
-    scoped_ptr<DownloadRow> info(new DownloadRow());
+    std::unique_ptr<DownloadRow> info(new DownloadRow());
     int column = 0;
 
     // SQLITE does not have unsigned integers, so explicitly handle negative

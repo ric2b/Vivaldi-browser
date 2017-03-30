@@ -9,14 +9,23 @@
 #include "ash/display/display_info.h"
 #include "ash/display/display_manager.h"
 #include "ash/host/ash_window_tree_host.h"
+#include "ash/new_window_delegate.h"
 #include "ash/shell.h"
+#include "ash/system/system_notifier.h"
 #include "base/strings/string_number_conversions.h"
+#include "grit/ash_resources.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window_tree_host.h"
-#include "ui/gfx/display.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/base/resource/resource_bundle.h"
+#include "ui/display/display.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size_conversions.h"
+#include "ui/message_center/message_center.h"
+#include "ui/message_center/notification.h"
+#include "ui/message_center/notification_delegate.h"
+#include "ui/message_center/notification_list.h"
 #include "ui/wm/core/coordinate_conversion.h"
 
 #if defined(OS_CHROMEOS)
@@ -25,6 +34,29 @@
 
 namespace ash {
 namespace {
+
+const char kDisplayErrorNotificationId[] = "chrome://settings/display/error";
+
+// A notification delegate that will start the feedback app when the notication
+// is clicked.
+class DisplayErrorNotificationDelegate
+    : public message_center::NotificationDelegate {
+ public:
+  DisplayErrorNotificationDelegate() = default;
+
+  // message_center::NotificationDelegate:
+  bool HasClickedListener() override { return true; }
+
+  void Click() override {
+    ash::Shell::GetInstance()->new_window_delegate()->OpenFeedbackPage();
+  }
+
+ private:
+  // Private destructor since NotificationDelegate is ref-counted.
+  ~DisplayErrorNotificationDelegate() override = default;
+
+  DISALLOW_COPY_AND_ASSIGN(DisplayErrorNotificationDelegate);
+};
 
 // List of value UI Scale values. Scales for 2x are equivalent to 640,
 // 800, 1024, 1280, 1440, 1600 and 1920 pixel width respectively on
@@ -151,7 +183,7 @@ std::vector<DisplayMode> CreateUnifiedDisplayModeList(
 bool GetDisplayModeForResolution(const DisplayInfo& info,
                                  const gfx::Size& resolution,
                                  DisplayMode* out) {
-  if (gfx::Display::IsInternalDisplayId(info.id()))
+  if (display::Display::IsInternalDisplayId(info.id()))
     return false;
 
   const std::vector<DisplayMode>& modes = info.display_modes();
@@ -176,7 +208,7 @@ bool GetDisplayModeForNextUIScale(const DisplayInfo& info,
                                   DisplayMode* out) {
   DisplayManager* display_manager = Shell::GetInstance()->display_manager();
   if (!display_manager->IsActiveDisplayId(info.id()) ||
-      !gfx::Display::IsInternalDisplayId(info.id())) {
+      !display::Display::IsInternalDisplayId(info.id())) {
     return false;
   }
   const std::vector<DisplayMode>& modes = info.display_modes();
@@ -189,7 +221,7 @@ bool GetDisplayModeForNextUIScale(const DisplayInfo& info,
 bool GetDisplayModeForNextResolution(const DisplayInfo& info,
                                      bool up,
                                      DisplayMode* out) {
-  if (gfx::Display::IsInternalDisplayId(info.id()))
+  if (display::Display::IsInternalDisplayId(info.id()))
     return false;
   const std::vector<DisplayMode>& modes = info.display_modes();
   DisplayMode tmp(info.size_in_pixel(), 0.0f, false, false);
@@ -206,7 +238,7 @@ bool GetDisplayModeForNextResolution(const DisplayInfo& info,
 bool SetDisplayUIScale(int64_t id, float ui_scale) {
   DisplayManager* display_manager = Shell::GetInstance()->display_manager();
   if (!display_manager->IsActiveDisplayId(id) ||
-      !gfx::Display::IsInternalDisplayId(id)) {
+      !display::Display::IsInternalDisplayId(id)) {
     return false;
   }
   const DisplayInfo& info = display_manager->GetDisplayInfo(id);
@@ -222,8 +254,8 @@ bool HasDisplayModeForUIScale(const DisplayInfo& info, float ui_scale) {
   return std::find_if(modes.begin(), modes.end(), comparator) != modes.end();
 }
 
-bool ComputeBoundary(const gfx::Display& a_display,
-                     const gfx::Display& b_display,
+bool ComputeBoundary(const display::Display& a_display,
+                     const display::Display& b_display,
                      gfx::Rect* a_edge_in_screen,
                      gfx::Rect* b_edge_in_screen) {
   const gfx::Rect& a_bounds = a_display.bounds();
@@ -365,10 +397,11 @@ void MoveCursorTo(AshWindowTreeHost* ash_host,
   }
 }
 
-int FindDisplayIndexContainingPoint(const std::vector<gfx::Display>& displays,
-                                    const gfx::Point& point_in_screen) {
+int FindDisplayIndexContainingPoint(
+    const std::vector<display::Display>& displays,
+    const gfx::Point& point_in_screen) {
   auto iter = std::find_if(displays.begin(), displays.end(),
-                           [point_in_screen](const gfx::Display& display) {
+                           [point_in_screen](const display::Display& display) {
                              return display.bounds().Contains(point_in_screen);
                            });
   return iter == displays.end() ? -1 : (iter - displays.begin());
@@ -377,7 +410,7 @@ int FindDisplayIndexContainingPoint(const std::vector<gfx::Display>& displays,
 display::DisplayIdList CreateDisplayIdList(const display::DisplayList& list) {
   return GenerateDisplayIdList(
       list.begin(), list.end(),
-      [](const gfx::Display& display) { return display.id(); });
+      [](const display::Display& display) { return display.id(); });
 }
 
 void SortDisplayIdList(display::DisplayIdList* ids) {
@@ -402,8 +435,41 @@ bool CompareDisplayIds(int64_t id1, int64_t id2) {
   int index_1 = id1 & 0xFF;
   int index_2 = id2 & 0xFF;
   DCHECK_NE(index_1, index_2) << id1 << " and " << id2;
-  return gfx::Display::IsInternalDisplayId(id1) ||
-         (index_1 < index_2 && !gfx::Display::IsInternalDisplayId(id2));
+  return display::Display::IsInternalDisplayId(id1) ||
+         (index_1 < index_2 && !display::Display::IsInternalDisplayId(id2));
+}
+
+void ShowDisplayErrorNotification(int message_id) {
+  // Always remove the notification to make sure the notification appears
+  // as a popup in any situation.
+  message_center::MessageCenter::Get()->RemoveNotification(
+      kDisplayErrorNotificationId, false /* by_user */);
+
+  ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
+  std::unique_ptr<message_center::Notification> notification(
+      new message_center::Notification(
+          message_center::NOTIFICATION_TYPE_SIMPLE, kDisplayErrorNotificationId,
+          base::string16(),  // title
+          l10n_util::GetStringUTF16(message_id),
+          bundle.GetImageNamed(IDR_AURA_NOTIFICATION_DISPLAY),
+          base::string16(),  // display_source
+          GURL(), message_center::NotifierId(
+                      message_center::NotifierId::SYSTEM_COMPONENT,
+                      system_notifier::kNotifierDisplayError),
+          message_center::RichNotificationData(),
+          new DisplayErrorNotificationDelegate));
+  message_center::MessageCenter::Get()->AddNotification(
+      std::move(notification));
+}
+
+base::string16 GetDisplayErrorNotificationMessageForTest() {
+  message_center::NotificationList::Notifications notifications =
+      message_center::MessageCenter::Get()->GetVisibleNotifications();
+  for (auto const notification : notifications) {
+    if (notification->id() == kDisplayErrorNotificationId)
+      return notification->message();
+  }
+  return base::string16();
 }
 
 }  // namespace ash

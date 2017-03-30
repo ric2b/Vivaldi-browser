@@ -22,13 +22,13 @@ const char kDisableMediaSuspend[] = "disable-media-suspend";
 const char kDisableMediaThreadForMediaPlayback[] =
     "disable-media-thread-for-media-playback";
 
+// Use WebMediaPlayerAndroid instead of WebMediaPlayerImpl. This is a temporary
+// switch for holding back the new unified media pipeline.
+const char kDisableUnifiedMediaPipeline[] = "disable-unified-media-pipeline";
+
 // Sets the MediaSource player that uses the separate media thread
 const char kEnableMediaThreadForMediaPlayback[] =
     "enable-media-thread-for-media-playback";
-
-// Use WebMediaPlayerImpl instead of WebMediaPlayerAndroid. This is a temporary
-// switch for experimenting with unifying the Android playback pipeline.
-const char kEnableUnifiedMediaPipeline[] = "enable-unified-media-pipeline";
 #endif
 
 #if defined(OS_LINUX) || defined(OS_FREEBSD) || defined(OS_SOLARIS)
@@ -120,6 +120,6 @@ namespace media {
 
 // Use shared block-based buffering for media.
 const base::Feature kUseNewMediaCache{"use-new-media-cache",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
+                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 }  // namespace media

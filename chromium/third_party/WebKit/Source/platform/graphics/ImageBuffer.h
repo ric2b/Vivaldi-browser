@@ -37,13 +37,14 @@
 #include "platform/graphics/ImageBufferSurface.h"
 #include "platform/transforms/AffineTransform.h"
 #include "third_party/skia/include/core/SkPaint.h"
+#include "third_party/skia/include/core/SkPicture.h"
 #include "wtf/Forward.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
-#include "wtf/Uint8ClampedArray.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
+#include "wtf/typed_arrays/Uint8ClampedArray.h"
 
 namespace gpu {
 namespace gles2 {
@@ -65,7 +66,6 @@ class Image;
 class ImageBufferClient;
 class IntPoint;
 class IntRect;
-class WebGraphicsContext3D;
 
 enum Multiply {
     Premultiplied,
@@ -124,7 +124,7 @@ public:
     // with textures that are RGB or RGBA format, UNSIGNED_BYTE type and level 0, as specified in
     // Extensions3D::canUseCopyTextureCHROMIUM().
     // Destroys the TEXTURE_2D binding for the active texture unit of the passed context
-    bool copyToPlatformTexture(WebGraphicsContext3D*, gpu::gles2::GLES2Interface*, Platform3DObject, GLenum, GLenum, GLint, bool, bool);
+    bool copyToPlatformTexture(gpu::gles2::GLES2Interface*, GLuint texture, GLenum internalFormat, GLenum destType, GLint level, bool premultiplyAlpha, bool flipY);
 
     bool copyRenderingResultsFromDrawingBuffer(DrawingBuffer*, SourceDrawingBuffer);
 
@@ -135,6 +135,8 @@ public:
 
     PassRefPtr<SkImage> newSkImageSnapshot(AccelerationHint, SnapshotReason) const;
     PassRefPtr<Image> newImageSnapshot(AccelerationHint = PreferNoAcceleration, SnapshotReason = SnapshotReasonUnknown) const;
+
+    PassRefPtr<SkPicture> getPicture() { return m_surface->getPicture(); }
 
     void draw(GraphicsContext&, const FloatRect&, const FloatRect*, SkXfermode::Mode);
 
@@ -165,6 +167,7 @@ struct ImageDataBuffer {
     String PLATFORM_EXPORT toDataURL(const String& mimeType, const double& quality) const;
     bool PLATFORM_EXPORT encodeImage(const String& mimeType, const double& quality, Vector<unsigned char>* encodedImage) const;
     const unsigned char* pixels() const { return m_data; }
+    const IntSize& size() const { return m_size; }
     int height() const { return m_size.height(); }
     int width() const { return m_size.width(); }
 

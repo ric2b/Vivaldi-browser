@@ -27,7 +27,6 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import StringIO
 import csv
 import errno
 import logging
@@ -97,26 +96,6 @@ class Executive(object):
         # shows up on Mac and Linux.
         return sys.platform not in ('win32', 'cygwin')
 
-    def _run_command_with_teed_output(self, args, teed_output, **kwargs):
-        child_process = self.popen(args,
-                                   stdout=self.PIPE,
-                                   stderr=self.STDOUT,
-                                   close_fds=self._should_close_fds(),
-                                   **kwargs)
-
-        # Use our own custom wait loop because Popen ignores a tee'd
-        # stderr/stdout.
-        # FIXME: This could be improved not to flatten output to stdout.
-        while True:
-            output_line = child_process.stdout.readline()
-            if output_line == "" and child_process.poll() != None:
-                # poll() is not threadsafe and can throw OSError due to:
-                # http://bugs.python.org/issue1731717
-                return child_process.poll()
-            # We assume that the child process wrote to us in utf-8,
-            # so no re-encoding is necessary before writing here.
-            teed_output.write(output_line)
-
     def cpu_count(self):
         return multiprocessing.cpu_count()
 
@@ -147,7 +126,7 @@ class Executive(object):
 
     def kill_process(self, pid):
         """Attempts to kill the given pid.
-        Will fail silently if pid does not exist or insufficient permisssions."""
+        Will fail silently if pid does not exist or insufficient permissions."""
         if sys.platform == "win32":
             # We only use taskkill.exe on windows (not cygwin) because subprocess.pid
             # is a CYGWIN pid and taskkill.exe expects a windows pid.
@@ -345,7 +324,7 @@ class Executive(object):
         # Popen in Python 2.5 and before does not automatically encode unicode objects.
         # http://bugs.python.org/issue5290
         # See https://bugs.webkit.org/show_bug.cgi?id=37528
-        # for an example of a regresion caused by passing a unicode string directly.
+        # for an example of a regression caused by passing a unicode string directly.
         # FIXME: We may need to encode differently on different platforms.
         if isinstance(input, unicode):
             input = input.encode(self._child_process_encoding())
@@ -391,7 +370,7 @@ class Executive(object):
 
         # run_command automatically decodes to unicode() unless explicitly told not to.
         if decode_output:
-            output = output.decode(self._child_process_encoding())
+            output = output.decode(self._child_process_encoding(), errors="replace")
 
         # wait() is not threadsafe and can throw OSError due to:
         # http://bugs.python.org/issue1731717

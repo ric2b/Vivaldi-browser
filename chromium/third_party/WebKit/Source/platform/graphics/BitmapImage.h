@@ -129,10 +129,8 @@ private:
     bool ensureFrameIsCached(size_t index);
 
     // Returns the total number of bytes allocated for all framebuffers, i.e.
-    // the sum of m_source.frameBytesAtIndex(...) for all frames.  This is
-    // returned as an int for caller convenience, to allow safely subtracting
-    // the values from successive calls as signed expressions.
-    int totalFrameBytes();
+    // the sum of m_source.frameBytesAtIndex(...) for all frames.
+    size_t totalFrameBytes();
 
     // Called to invalidate cached data. When |destroyAll| is true, we wipe out
     // the entire frame buffer cache and tell the image source to destroy
@@ -147,7 +145,7 @@ private:
     void destroyDecodedDataIfNecessary();
 
     // Notifies observers that the memory footprint has changed.
-    void notifyMemoryChanged(int delta);
+    void notifyMemoryChanged();
 
     // Whether or not size is available yet.
     bool isSizeAvailable();
@@ -187,7 +185,6 @@ private:
     bool m_allDataReceived : 1; // Whether or not we've received all our data.
     mutable bool m_haveSize : 1; // Whether or not our |m_size| member variable has the final overall image size yet.
     bool m_sizeAvailable : 1; // Whether or not we can obtain the size of the first image frame yet from ImageIO.
-    mutable bool m_hasUniformFrameSize : 1;
     mutable bool m_haveFrameCount : 1;
 };
 

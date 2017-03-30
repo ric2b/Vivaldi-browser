@@ -8,8 +8,16 @@
 # Use gn args to add your own build preference args.
 
 use_ozone = true
+ozone_auto_platforms = false
+ozone_platform = "headless"
+ozone_platform_headless = true
+
+# In order to simplify deployment we build ICU data file
+# into binary.
+icu_use_data_file = false
 
 enable_basic_printing = false
+enable_nacl = false
 enable_print_preview = false
 enable_remoting = false
 use_alsa = false
@@ -19,5 +27,6 @@ use_dbus = false
 use_gconf = false
 use_gio = false
 use_kerberos = false
+use_libpci = false
 use_pulseaudio = false
 use_udev = false

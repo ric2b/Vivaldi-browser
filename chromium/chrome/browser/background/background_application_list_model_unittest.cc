@@ -4,16 +4,16 @@
 
 // TODO(rickcam): Bug 73183: Add unit tests for image loading
 
+#include "chrome/browser/background/background_application_list_model.h"
+
 #include <stddef.h>
 
 #include <cstdlib>
+#include <memory>
 #include <set>
-
-#include "chrome/browser/background/background_application_list_model.h"
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/stl_util.h"
 #include "build/build_config.h"
@@ -139,18 +139,15 @@ void RemoveBackgroundPermission(ExtensionService* service,
 
 // Crashes on Mac tryslaves.
 // http://crbug.com/165458
-#if defined(OS_MACOSX) || defined(OS_LINUX)
-#define MAYBE_ExplicitTest DISABLED_ExplicitTest
-#else
-#define MAYBE_ExplicitTest ExplicitTest
-#endif
+// Also crashes on Windows under Dr. Memory (https://crbug.com/606779),
+// presumably broken on all platforms.
 // With minimal test logic, verifies behavior over an explicit set of
 // extensions, of which some are Background Apps and others are not.
-TEST_F(BackgroundApplicationListModelTest, MAYBE_ExplicitTest) {
+TEST_F(BackgroundApplicationListModelTest, DISABLED_ExplicitTest) {
   InitializeAndLoadEmptyExtensionService();
   ASSERT_TRUE(service()->is_ready());
   ASSERT_TRUE(registry()->enabled_extensions().is_empty());
-  scoped_ptr<BackgroundApplicationListModel> model(
+  std::unique_ptr<BackgroundApplicationListModel> model(
       new BackgroundApplicationListModel(profile_.get()));
   ASSERT_EQ(0U, model->size());
 
@@ -222,7 +219,7 @@ TEST_F(BackgroundApplicationListModelTest, AddRemovePermissionsTest) {
   InitializeAndLoadEmptyExtensionService();
   ASSERT_TRUE(service()->is_ready());
   ASSERT_TRUE(registry()->enabled_extensions().is_empty());
-  scoped_ptr<BackgroundApplicationListModel> model(
+  std::unique_ptr<BackgroundApplicationListModel> model(
       new BackgroundApplicationListModel(profile_.get()));
   ASSERT_EQ(0U, model->size());
 
@@ -378,7 +375,7 @@ TEST_F(BackgroundApplicationListModelTest, RandomTest) {
   InitializeAndLoadEmptyExtensionService();
   ASSERT_TRUE(service()->is_ready());
   ASSERT_TRUE(registry()->enabled_extensions().is_empty());
-  scoped_ptr<BackgroundApplicationListModel> model(
+  std::unique_ptr<BackgroundApplicationListModel> model(
       new BackgroundApplicationListModel(profile_.get()));
   ASSERT_EQ(0U, model->size());
 

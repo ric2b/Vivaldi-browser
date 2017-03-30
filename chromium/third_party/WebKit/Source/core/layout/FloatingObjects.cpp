@@ -27,6 +27,8 @@
 #include "core/layout/LayoutBox.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/shapes/ShapeOutsideInfo.h"
+#include "core/paint/PaintLayer.h"
+#include "platform/RuntimeEnabledFeatures.h"
 
 #include <algorithm>
 
@@ -37,7 +39,6 @@ namespace blink {
 struct SameSizeAsFloatingObject {
     void* pointers[2];
     LayoutRect rect;
-    int paginationStrut;
     uint32_t bitfields : 8;
 };
 
@@ -46,7 +47,6 @@ static_assert(sizeof(FloatingObject) == sizeof(SameSizeAsFloatingObject), "Float
 FloatingObject::FloatingObject(LayoutBox* layoutObject)
     : m_layoutObject(layoutObject)
     , m_originatingLine(nullptr)
-    , m_paginationStrut(0)
     , m_shouldPaint(true)
     , m_isDescendant(false)
     , m_isPlaced(false)
@@ -67,9 +67,7 @@ FloatingObject::FloatingObject(LayoutBox* layoutObject, Type type, const LayoutR
     : m_layoutObject(layoutObject)
     , m_originatingLine(nullptr)
     , m_frameRect(frameRect)
-    , m_paginationStrut(0)
     , m_type(type)
-    , m_shouldPaint(shouldPaint)
     , m_isDescendant(isDescendant)
     , m_isPlaced(true)
     , m_isLowestNonOverhangingFloatInChild(isLowestNonOverhangingFloatInChild)
@@ -77,15 +75,34 @@ FloatingObject::FloatingObject(LayoutBox* layoutObject, Type type, const LayoutR
     , m_isInPlacedTree(false)
 #endif
 {
+    m_shouldPaint = shouldPaint || shouldPaintForCompositedLayoutPart();
+}
+
+bool FloatingObject::shouldPaintForCompositedLayoutPart()
+{
+    // HACK: only non-self-painting floats should paint. However, due to the fundamental compositing bug, some LayoutPart objects
+    // may become self-painting due to being composited. This leads to a chicken-egg issue because layout may not depend on compositing.
+    // If this is the case, set shouldPaint() to true even if the layer is technically self-painting. This lets the float which contains
+    // a LayoutPart start painting as soon as it stops being composited, without having to re-layout the float.
+    // This hack can be removed after SPv2.
+    return m_layoutObject->layer() && m_layoutObject->layer()->isSelfPaintingOnlyBecauseIsCompositedPart() && !RuntimeEnabledFeatures::slimmingPaintV2Enabled();
 }
 
 PassOwnPtr<FloatingObject> FloatingObject::create(LayoutBox* layoutObject)
 {
     OwnPtr<FloatingObject> newObj = adoptPtr(new FloatingObject(layoutObject));
-    newObj->setShouldPaint(!layoutObject->hasSelfPaintingLayer()); // If a layer exists, the float will paint itself. Otherwise someone else will.
+
+    // If a layer exists, the float will paint itself. Otherwise someone else will.
+    newObj->setShouldPaint(!layoutObject->hasSelfPaintingLayer() || newObj->shouldPaintForCompositedLayoutPart());
+
     newObj->setIsDescendant(true);
 
-    return newObj.release();
+    return newObj;
+}
+
+bool FloatingObject::shouldPaint() const
+{
+    return m_shouldPaint && !m_layoutObject->hasSelfPaintingLayer();
 }
 
 PassOwnPtr<FloatingObject> FloatingObject::copyToNewContainer(LayoutSize offset, bool shouldPaint, bool isDescendant) const
@@ -96,9 +113,8 @@ PassOwnPtr<FloatingObject> FloatingObject::copyToNewContainer(LayoutSize offset,
 PassOwnPtr<FloatingObject> FloatingObject::unsafeClone() const
 {
     OwnPtr<FloatingObject> cloneObject = adoptPtr(new FloatingObject(layoutObject(), getType(), m_frameRect, m_shouldPaint, m_isDescendant, false));
-    cloneObject->m_paginationStrut = m_paginationStrut;
     cloneObject->m_isPlaced = m_isPlaced;
-    return cloneObject.release();
+    return cloneObject;
 }
 
 template <FloatingObject::Type FloatTypeValue>
@@ -392,7 +408,7 @@ void FloatingObjects::moveAllToFloatInfoMap(LayoutBoxToFloatInfoMap& map)
     while (!m_set.isEmpty()) {
         OwnPtr<FloatingObject> floatingObject = m_set.takeFirst();
         LayoutBox* layoutObject = floatingObject->layoutObject();
-        map.add(layoutObject, floatingObject.release());
+        map.add(layoutObject, std::move(floatingObject));
     }
     clear();
 }

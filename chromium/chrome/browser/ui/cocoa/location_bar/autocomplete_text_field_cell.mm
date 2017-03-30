@@ -31,12 +31,24 @@ const CGFloat kCornerRadius = 3.0;
 
 // How far to inset the left- and right-hand decorations from the field's
 // bounds.
-const CGFloat kLeftDecorationXOffset = 5.0;
 const CGFloat kRightDecorationXOffset = 5.0;
+CGFloat LeftDecorationXOffset() {
+  const CGFloat kLeftDecorationXOffset = 5.0;
+  const CGFloat kLeftMaterialDecorationXOffset = 6.0;
+  return ui::MaterialDesignController::IsModeMaterial()
+             ? kLeftMaterialDecorationXOffset
+             : kLeftDecorationXOffset;
+}
 
 // The amount of padding on either side reserved for drawing
 // decorations.  [Views has |kItemPadding| == 3.]
-const CGFloat kDecorationHorizontalPad = 3.0;
+CGFloat DecorationsHorizontalPad() {
+  const CGFloat kDecorationHorizontalPad = 3.0;
+  const CGFloat kMaterialDecorationHorizontalPad = 4.0;
+  return ui::MaterialDesignController::IsModeMaterial()
+      ? kMaterialDecorationHorizontalPad
+      : kDecorationHorizontalPad;
+}
 
 const ui::NinePartImageIds kPopupBorderImageIds =
     IMAGE_GRID(IDR_OMNIBOX_POPUP_BORDER_AND_SHADOW);
@@ -71,6 +83,7 @@ void CalculatePositionsHelper(
   // The initial padding depends on whether the first visible decoration is
   // a button or not.
   bool is_first_visible_decoration = true;
+  const CGFloat kDecorationHorizontalPad = DecorationsHorizontalPad();
 
   for (size_t i = 0; i < all_decorations.size(); ++i) {
     if (all_decorations[i]->IsVisible()) {
@@ -134,7 +147,7 @@ size_t CalculatePositionsInFrame(
 
   // Layout |left_decorations| against the LHS.
   CalculatePositionsHelper(frame, left_decorations, NSMinXEdge,
-                           kLeftDecorationXOffset, decorations,
+                           LeftDecorationXOffset(), decorations,
                            decoration_frames, &frame);
   DCHECK_EQ(decorations->size(), decoration_frames->size());
 
@@ -248,8 +261,11 @@ size_t CalculatePositionsInFrame(
   // Material Design spec. It turns out this adjustment is equal to the single
   // pixel line width (so 1 on non-Retina, 0.5 on Retina). Make this adjustment
   // after computing decoration positions because the decorations are already
-  // correctly positioned.
+  // correctly positioned. The spec also calls for positioning the text 1pt to
+  // the right of its default position.
   if (ui::MaterialDesignController::IsModeMaterial()) {
+    textFrame.origin.x += 1;
+    textFrame.size.width -= 1;
     textFrame.origin.y -= singlePixelLineWidth_;
   }
 
@@ -269,6 +285,7 @@ size_t CalculatePositionsInFrame(
 
   // Determine the left-most extent for the i-beam cursor.
   CGFloat minX = NSMinX(textFrame);
+  const CGFloat kDecorationHorizontalPad = DecorationsHorizontalPad();
   for (size_t index = left_count; index--; ) {
     if (decorations[index]->AcceptsMousePress())
       break;
@@ -314,10 +331,6 @@ size_t CalculatePositionsInFrame(
 
   // Compute the border's bezier path.
   NSRect pathRect = NSInsetRect(frame, insetSize, insetSize);
-  // In dark mode, make room for a shadow beneath the bottom edge.
-  if (inDarkMode && isModeMaterial) {
-    pathRect.size.height -= singlePixelLineWidth_;
-  }
   NSBezierPath* path =
       [NSBezierPath bezierPathWithRoundedRect:pathRect
                                       xRadius:kCornerRadius
@@ -366,7 +379,7 @@ size_t CalculatePositionsInFrame(
       }
 
       // Draw a highlight beneath the top edge, and a shadow beneath the bottom
-      // edge.
+      // edge when on a Retina screen.
       {
         gfx::ScopedNSGraphicsContextSaveGState saveState;
         [NSBezierPath setDefaultLineWidth:singlePixelLineWidth_];
@@ -380,10 +393,12 @@ size_t CalculatePositionsInFrame(
         [NSBezierPath strokeLineFromPoint:origin
                                   toPoint:destination];
 
-        origin.y = destination.y = NSMaxY(pathRect) + singlePixelLineWidth_;
-        [[NSColor colorWithCalibratedWhite:69 / 255. alpha:1] set];
-        [NSBezierPath strokeLineFromPoint:origin
-                                  toPoint:destination];
+        if (singlePixelLineWidth_ < 1) {
+          origin.y = destination.y = NSMaxY(pathRect) + singlePixelLineWidth_;
+          [[AutocompleteTextField shadowColor] set];
+          [NSBezierPath strokeLineFromPoint:origin
+                                    toPoint:destination];
+        }
       }
     }
   } else {
@@ -429,6 +444,7 @@ size_t CalculatePositionsInFrame(
                             &decorations, &decorationFrames, &workingFrame);
 
   // Draw the decorations.
+  const CGFloat kDecorationHorizontalPad = DecorationsHorizontalPad();
   for (size_t i = 0; i < decorations.size(); ++i) {
     if (decorations[i]) {
       NSRect background_frame = NSInsetRect(

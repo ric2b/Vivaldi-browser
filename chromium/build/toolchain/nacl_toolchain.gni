@@ -38,20 +38,26 @@ template("nacl_toolchain") {
                              "cc",
                              "cxx",
                              "deps",
-                             "is_clang",
-                             "is_nacl_glibc",
                              "ld",
                              "link_outputs",
                              "nm",
                              "readelf",
                              "strip",
-                             "symbol_level",
                              "toolchain_cpu",
                            ])
 
-    # We do not support component builds or sanitizers with the NaCl toolchains.
+    if (defined(invoker.is_clang)) {
+      is_clang = invoker.is_clang
+    }
+    if (defined(invoker.is_nacl_glibc)) {
+      is_nacl_glibc = invoker.is_nacl_glibc
+    }
+    if (defined(invoker.symbol_level)) {
+      symbol_level = invoker.symbol_level
+    }
+
+    # We do not support component builds with the NaCl toolchains.
     is_component_build = false
-    clear_sanitizers = true
 
     # We do not support tcmalloc in the NaCl toolchains.
     use_allocator = "none"

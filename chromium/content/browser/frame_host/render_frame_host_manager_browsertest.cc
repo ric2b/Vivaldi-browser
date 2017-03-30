@@ -15,7 +15,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "content/browser/child_process_security_policy_impl.h"
@@ -939,10 +939,9 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostManagerTest,
   // http://crbug.com/153701 is fixed.
 }
 
-// Test for crbug.com/278336. MessagePorts should work cross-process. I.e.,
-// messages which contain Transferables and get intercepted by
-// RenderViewImpl::willCheckAndDispatchMessageEvent (because the RenderView is
-// swapped out) should work.
+// Test for crbug.com/278336. MessagePorts should work cross-process. Messages
+// which contain Transferables that need to be forwarded between processes via
+// RenderFrameProxy::willCheckAndDispatchMessageEvent should work.
 // Specifically:
 // 1) Create 2 windows (opener and "foo") and send "foo" cross-process.
 // 2) Post a message containing a message port from opener to "foo".
@@ -1844,16 +1843,8 @@ class FileChooserDelegate : public WebContentsDelegate {
 };
 
 // Test for http://crbug.com/262948.
-// Flaky on Mac. http://crbug.com/452018
-#if defined(OS_MACOSX)
-#define MAYBE_RestoreFileAccessForHistoryNavigation \
-  DISABLED_RestoreFileAccessForHistoryNavigation
-#else
-#define MAYBE_RestoreFileAccessForHistoryNavigation \
-  RestoreFileAccessForHistoryNavigation
-#endif
 IN_PROC_BROWSER_TEST_F(RenderFrameHostManagerTest,
-                       MAYBE_RestoreFileAccessForHistoryNavigation) {
+                       RestoreFileAccessForHistoryNavigation) {
   StartServer();
   base::FilePath file;
   EXPECT_TRUE(PathService::Get(base::DIR_TEMP, &file));
@@ -1863,13 +1854,18 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostManagerTest,
   GURL url1(embedded_test_server()->GetURL("/file_input.html"));
   NavigateToURL(shell(), url1);
   int process_id = shell()->web_contents()->GetRenderProcessHost()->GetID();
-  scoped_ptr<FileChooserDelegate> delegate(new FileChooserDelegate(file));
+  std::unique_ptr<FileChooserDelegate> delegate(new FileChooserDelegate(file));
   shell()->web_contents()->SetDelegate(delegate.get());
   EXPECT_TRUE(ExecuteScript(shell()->web_contents(),
                             "document.getElementById('fileinput').click();"));
   EXPECT_TRUE(delegate->file_chosen());
   EXPECT_TRUE(ChildProcessSecurityPolicyImpl::GetInstance()->CanReadFile(
       process_id, file));
+
+  // Disable the swap out timer so we wait for the UpdateState message.
+  static_cast<WebContentsImpl*>(shell()->web_contents())
+      ->GetMainFrame()
+      ->DisableSwapOutTimerForTesting();
 
   // Navigate to a different process without access to the file, and wait for
   // the old process to exit.
@@ -1921,13 +1917,16 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostManagerTest,
   WebContentsImpl* wc = static_cast<WebContentsImpl*>(shell()->web_contents());
   FrameTreeNode* root = wc->GetFrameTree()->root();
   int process_id = shell()->web_contents()->GetRenderProcessHost()->GetID();
-  scoped_ptr<FileChooserDelegate> delegate(new FileChooserDelegate(file));
+  std::unique_ptr<FileChooserDelegate> delegate(new FileChooserDelegate(file));
   shell()->web_contents()->SetDelegate(delegate.get());
   EXPECT_TRUE(ExecuteScript(root->child_at(0)->current_frame_host(),
                             "document.getElementById('fileinput').click();"));
   EXPECT_TRUE(delegate->file_chosen());
   EXPECT_TRUE(ChildProcessSecurityPolicyImpl::GetInstance()->CanReadFile(
       process_id, file));
+
+  // Disable the swap out timer so we wait for the UpdateState message.
+  root->current_frame_host()->DisableSwapOutTimerForTesting();
 
   // Navigate to a different process without access to the file, and wait for
   // the old process to exit.
@@ -2361,17 +2360,8 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostManagerTest,
 
 // Ensure that we don't crash the renderer in CreateRenderView if a proxy goes
 // away between swapout and the next navigation.  See https://crbug.com/581912.
-// Dr.Memory reports a use-after-free in this test, thus it may be flaky on
-// Windows. See https://crbug.com/600957.
-#if defined(OS_WIN)
-#define MAYBE_CreateRenderViewAfterProcessKillAndClosedProxy \
-    DISABLED_CreateRenderViewAfterProcessKillAndClosedProxy
-#else
-#define MAYBE_CreateRenderViewAfterProcessKillAndClosedProxy \
-    CreateRenderViewAfterProcessKillAndClosedProxy
-#endif
 IN_PROC_BROWSER_TEST_F(RenderFrameHostManagerTest,
-                       MAYBE_CreateRenderViewAfterProcessKillAndClosedProxy) {
+                       CreateRenderViewAfterProcessKillAndClosedProxy) {
   StartEmbeddedServer();
   FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
                             ->GetFrameTree()
@@ -2396,11 +2386,11 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostManagerTest,
   // Navigate the first tab to a different site, and only wait for commit, not
   // load stop.
   RenderFrameHostImpl* rfh_a = root->current_frame_host();
+  rfh_a->DisableSwapOutTimerForTesting();
   SiteInstanceImpl* site_instance_a = rfh_a->GetSiteInstance();
   TestFrameNavigationObserver commit_observer(root);
   shell()->LoadURL(embedded_test_server()->GetURL("b.com", "/title2.html"));
   commit_observer.WaitForCommit();
-  rfh_a->ResetSwapOutTimerForTesting();
   EXPECT_NE(shell()->web_contents()->GetSiteInstance(),
             new_shell->web_contents()->GetSiteInstance());
   EXPECT_TRUE(root->render_manager()->GetRenderFrameProxyHost(site_instance_a));
@@ -2410,9 +2400,10 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostManagerTest,
   ASSERT_TRUE(rfh_a->IsRenderFrameLive());
   ASSERT_FALSE(rfh_a->is_active());
 
-  // The corresponding RVH should not be pending deletion due to the proxy.
-  EXPECT_FALSE(root->render_manager()->IsViewPendingDeletion(
-                  rfh_a->render_view_host()));
+  // The corresponding RVH should still be referenced by the proxy and the old
+  // frame.
+  RenderViewHostImpl* rvh_a = rfh_a->render_view_host();
+  EXPECT_EQ(2, rvh_a->ref_count());
 
   // Kill the old process.
   RenderProcessHost* process = rfh_a->GetProcess();
@@ -2423,10 +2414,20 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostManagerTest,
   EXPECT_FALSE(popup_root->current_frame_host()->IsRenderFrameLive());
   // |rfh_a| is now deleted, thanks to the bug fix.
 
+  // With |rfh_a| gone, the RVH should only be referenced by the (dead) proxy.
+  EXPECT_EQ(1, rvh_a->ref_count());
+  EXPECT_TRUE(root->render_manager()->GetRenderFrameProxyHost(site_instance_a));
+  EXPECT_FALSE(root->render_manager()
+                   ->GetRenderFrameProxyHost(site_instance_a)
+                   ->is_render_frame_proxy_live());
+
   // Close the popup so there is no proxy for a.com in the original tab.
   new_shell->Close();
   EXPECT_FALSE(
       root->render_manager()->GetRenderFrameProxyHost(site_instance_a));
+
+  // This should delete the RVH as well.
+  EXPECT_FALSE(root->frame_tree()->GetRenderViewHost(site_instance_a));
 
   // Go back in the main frame from b.com to a.com. In https://crbug.com/581912,
   // the browser process would crash here because there was no main frame
@@ -2456,19 +2457,21 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostManagerTest,
   // Navigate the tab to a different site, and only wait for commit, not load
   // stop.
   RenderFrameHostImpl* rfh_a = root->current_frame_host();
+  rfh_a->DisableSwapOutTimerForTesting();
   SiteInstanceImpl* site_instance_a = rfh_a->GetSiteInstance();
   TestFrameNavigationObserver commit_observer(root);
   shell()->LoadURL(embedded_test_server()->GetURL("b.com", "/title2.html"));
   commit_observer.WaitForCommit();
-  rfh_a->ResetSwapOutTimerForTesting();
   EXPECT_NE(site_instance_a, shell()->web_contents()->GetSiteInstance());
 
-  // The previous RFH and RVH should still be pending deletion, as we wait for
-  // either the SwapOut ACK or a timeout.
+  // The previous RFH should still be pending deletion, as we wait for either
+  // the SwapOut ACK or a timeout.
   ASSERT_TRUE(rfh_a->IsRenderFrameLive());
   ASSERT_FALSE(rfh_a->is_active());
-  EXPECT_TRUE(root->render_manager()->IsViewPendingDeletion(
-                  rfh_a->render_view_host()));
+
+  // When the previous RFH was swapped out, it should have still gotten a
+  // replacement proxy even though it's the last active frame in the process.
+  EXPECT_TRUE(root->render_manager()->GetRenderFrameProxyHost(site_instance_a));
 
   // Open a popup in the new B process.
   Shell* new_shell =
@@ -2477,8 +2480,8 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostManagerTest,
             new_shell->web_contents()->GetSiteInstance());
 
   // Navigate the popup to the original site, but don't wait for commit (which
-  // won't happen).  This creates a proxy in the original tab, alongside the
-  // RFH and RVH pending deletion.
+  // won't happen).  This should reuse the proxy in the original tab, which at
+  // this point exists alongside the RFH pending deletion.
   new_shell->LoadURL(embedded_test_server()->GetURL("a.com", "/title2.html"));
   EXPECT_TRUE(root->render_manager()->GetRenderFrameProxyHost(site_instance_a));
 
@@ -2663,9 +2666,11 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostManagerTest,
   // a.com window.
   NavigateToURL(new_shell, embedded_test_server()->GetURL(
                                "b.com", "/cross-site/a.com/title1.html"));
-  if (AreAllSitesIsolatedForTesting()) {
+  if (AreAllSitesIsolatedForTesting() || IsBrowserSideNavigationEnabled()) {
     // In --site-per-process mode, both windows will actually be in the same
     // process.
+    // PlzNavigate: the SiteInstance for the navigation is determined after the
+    // redirect. So both windows will actually be in the same process.
     EXPECT_EQ(shell()->web_contents()->GetSiteInstance(),
               new_shell->web_contents()->GetSiteInstance());
   } else {
@@ -2684,7 +2689,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostManagerTest,
       "  }\n"
       "})())",
       &result));
-  if (AreAllSitesIsolatedForTesting()) {
+  if (AreAllSitesIsolatedForTesting() || IsBrowserSideNavigationEnabled()) {
     EXPECT_THAT(result,
                 ::testing::MatchesRegex("http://a.com:\\d+/title1.html"));
   } else {
@@ -2695,6 +2700,60 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostManagerTest,
                                         "origin \"http://a.com:\\d+\" from "
                                         "accessing a cross-origin frame."));
   }
+}
+
+// Test coverage for attempts to open subframe links in new windows, to prevent
+// incorrect invariant checks.  See https://crbug.com/605055.
+IN_PROC_BROWSER_TEST_F(RenderFrameHostManagerTest, CtrlClickSubframeLink) {
+  StartEmbeddedServer();
+
+  // Load a page with a subframe link.
+  NavigateToURL(shell(), embedded_test_server()->GetURL(
+                             "/ctrl-click-subframe-link.html"));
+
+  // Simulate a ctrl click on the link.  This won't actually create a new Shell
+  // because Shell::OpenURLFromTab only supports CURRENT_TAB, but it's enough to
+  // trigger the crash from https://crbug.com/605055.
+  EXPECT_TRUE(
+      ExecuteScript(shell()->web_contents(),
+                    "window.domAutomationController.send(ctrlClickLink());"));
+}
+
+// Ensure that we don't update the wrong NavigationEntry's title after an
+// ignored commit during a cross-process navigation.
+// See https://crbug.con/577449.
+IN_PROC_BROWSER_TEST_F(RenderFrameHostManagerTest,
+                       UnloadPushStateOnCrossProcessNavigation) {
+  StartEmbeddedServer();
+  WebContentsImpl* web_contents =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  FrameTreeNode* root = web_contents->GetFrameTree()->root();
+
+  // Give an initial page an unload handler that does a pushState, which will be
+  // ignored by the browser process.  It then does a title update which is
+  // meant for a NavigationEntry that will never be created.
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL("a.com", "/title2.html")));
+  EXPECT_TRUE(ExecuteScript(root->current_frame_host(),
+                            "window.onunload=function(e){"
+                            "history.pushState({}, 'foo', 'foo');"
+                            "document.title='foo'; };\n"));
+  base::string16 title = web_contents->GetTitle();
+  NavigationEntryImpl* entry = web_contents->GetController().GetEntryAtIndex(0);
+
+  // Navigate the first tab to a different site and wait for the old process to
+  // complete its unload handler and exit.
+  RenderFrameHostImpl* rfh_a = root->current_frame_host();
+  rfh_a->DisableSwapOutTimerForTesting();
+  RenderProcessHostWatcher exit_observer(
+      rfh_a->GetProcess(), RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
+  TestNavigationObserver commit_observer(web_contents);
+  shell()->LoadURL(embedded_test_server()->GetURL("b.com", "/title1.html"));
+  commit_observer.Wait();
+  exit_observer.Wait();
+
+  // Ensure the entry's title hasn't changed after the ignored commit.
+  EXPECT_EQ(title, entry->GetTitle());
 }
 
 }  // namespace content

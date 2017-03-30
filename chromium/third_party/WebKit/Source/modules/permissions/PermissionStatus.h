@@ -23,11 +23,10 @@ class ScriptPromiseResolver;
 // Expose the status of a given WebPermissionType for the current
 // ExecutionContext.
 class PermissionStatus final
-    : public RefCountedGarbageCollectedEventTargetWithInlineData<PermissionStatus>
+    : public EventTargetWithInlineData
     , public ActiveScriptWrappable
     , public ActiveDOMObject
     , public WebPermissionObserver {
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(PermissionStatus);
     USING_GARBAGE_COLLECTED_MIXIN(PermissionStatus);
     DEFINE_WRAPPERTYPEINFO();
 public:

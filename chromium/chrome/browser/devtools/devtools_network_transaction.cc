@@ -17,15 +17,15 @@
 #include "net/http/http_request_info.h"
 #include "net/socket/connection_attempts.h"
 
-// Keep in sync with kDevToolsEmulateNetworkConditionsClientId defined in
-// InspectorResourceAgent.cpp.
+// Keep in sync with X_DevTools_Emulate_Network_Conditions_Client_Id defined in
+// HTTPNames.in.
 const char
     DevToolsNetworkTransaction::kDevToolsEmulateNetworkConditionsClientId[] =
         "X-DevTools-Emulate-Network-Conditions-Client-Id";
 
 DevToolsNetworkTransaction::DevToolsNetworkTransaction(
     DevToolsNetworkController* controller,
-    scoped_ptr<net::HttpTransaction> network_transaction)
+    std::unique_ptr<net::HttpTransaction> network_transaction)
     : throttled_byte_count_(0),
       controller_(controller),
       network_transaction_(std::move(network_transaction)),

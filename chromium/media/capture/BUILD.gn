@@ -12,7 +12,6 @@ source_set("capture") {
     "content/animated_content_sampler.h",
     "content/capture_resolution_chooser.cc",
     "content/capture_resolution_chooser.h",
-    "content/feedback_signal_accumulator.cc",
     "content/feedback_signal_accumulator.h",
     "content/screen_capture_device_core.cc",
     "content/screen_capture_device_core.h",
@@ -83,6 +82,7 @@ source_set("capture") {
     "//base",
     "//media/base",
     "//skia",
+    "//ui/display",
   ]
 
   configs += [
@@ -98,9 +98,11 @@ source_set("capture") {
   }
 
   if (is_mac) {
-    deps += [
-      "//media/base/mac",
-      "//third_party/decklink",
+    deps += [ "//third_party/decklink" ]
+    libs = [
+      "CoreFoundation.framework",
+      "CoreGraphics.framework",
+      "Foundation.framework",
     ]
   }
 

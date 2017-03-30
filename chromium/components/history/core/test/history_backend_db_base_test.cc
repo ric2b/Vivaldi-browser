@@ -8,7 +8,7 @@
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/history/core/browser/download_constants.h"
 #include "components/history/core/browser/download_row.h"
 #include "components/history/core/browser/history_backend.h"
@@ -32,7 +32,8 @@ class BackendDelegate : public HistoryBackend::Delegate {
   void NotifyProfileError(sql::InitStatus init_status) override {
     history_test_->last_profile_error_ = init_status;
   }
-  void SetInMemoryBackend(scoped_ptr<InMemoryHistoryBackend> backend) override {
+  void SetInMemoryBackend(
+      std::unique_ptr<InMemoryHistoryBackend> backend) override {
     // Save the in-memory backend to the history test object, this happens
     // synchronously, so we don't have to do anything fancy.
     history_test_->in_mem_backend_.swap(backend);

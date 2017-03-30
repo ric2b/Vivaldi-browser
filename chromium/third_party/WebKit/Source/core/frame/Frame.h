@@ -34,7 +34,6 @@
 #include "core/page/FrameTree.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
-#include "wtf/RefCounted.h"
 
 namespace blink {
 
@@ -120,9 +119,11 @@ public:
 
     LayoutPart* ownerLayoutObject() const; // LayoutObject for the element that contains this frame.
 
-    int64_t frameID() const { return m_frameID; }
-
     Settings* settings() const; // can be null
+
+    // Return true if and only if this frame is a cross-origin frame with
+    // respect to the top-level frame.
+    bool isCrossOrigin() const;
 
     // isLoading() is true when the embedder should think a load is in progress.
     // In the case of LocalFrames, it means that the frame has sent a didStartLoading()
@@ -133,6 +134,8 @@ public:
 
     virtual WindowProxyManager* getWindowProxyManager() const = 0;
 
+    virtual void didChangeVisibilityState();
+
 protected:
     Frame(FrameClient*, FrameHost*, FrameOwner*);
 
@@ -142,9 +145,9 @@ protected:
     Member<FrameOwner> m_owner;
 
 private:
+    bool canNavigateWithoutFramebusting(const Frame&, String& errorReason);
+
     Member<FrameClient> m_client;
-    // Needed to identify Frame Timing requests.
-    int64_t m_frameID;
     bool m_isLoading;
 };
 

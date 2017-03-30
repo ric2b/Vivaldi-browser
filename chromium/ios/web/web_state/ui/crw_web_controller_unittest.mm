@@ -31,7 +31,6 @@
 #import "ios/web/test/wk_web_view_crash_utils.h"
 #include "ios/web/web_state/blocked_popup_info.h"
 #import "ios/web/web_state/js/crw_js_invoke_parameter_queue.h"
-#import "ios/web/web_state/ui/crw_web_controller+protected.h"
 #import "ios/web/web_state/ui/crw_web_controller_container_view.h"
 #import "ios/web/web_state/web_state_impl.h"
 #import "ios/web/web_state/wk_web_view_security_util.h"
@@ -447,7 +446,8 @@ TEST_F(CRWWebControllerTest, UrlForHistoryNavigation) {
 
 // Tests that presentSSLError:forSSLStatus:recoverable:callback: is called with
 // correct arguments if WKWebView fails to load a page with bad SSL cert.
-TEST_F(CRWWebControllerTest, SslCertError) {
+// TODO(crbug.com/602298): Remove this test.
+TEST_F(CRWWebControllerTest, SslCertErrorDeprecatedApi) {
   ASSERT_FALSE([mockDelegate_ SSLInfo].is_valid());
 
   scoped_refptr<net::X509Certificate> cert =
@@ -460,7 +460,11 @@ TEST_F(CRWWebControllerTest, SslCertError) {
                       userInfo:@{
                         web::kNSErrorPeerCertificateChainKey : chain,
                       }];
-  WKWebView* webView = static_cast<WKWebView*>([webController_ webView]);
+
+  CRWWebControllerContainerView* containerView =
+      static_cast<CRWWebControllerContainerView*>([webController_ view]);
+  WKWebView* webView =
+      static_cast<WKWebView*>(containerView.webViewContentView.webView);
   base::scoped_nsobject<NSObject> navigation([[NSObject alloc] init]);
   [static_cast<id<WKNavigationDelegate>>(webController_.get())
                             webView:webView
@@ -478,6 +482,53 @@ TEST_F(CRWWebControllerTest, SslCertError) {
             [mockDelegate_ SSLStatus].security_style);
   EXPECT_FALSE([mockDelegate_ recoverable]);
   EXPECT_TRUE([mockDelegate_ shouldContinueCallback]);
+}
+
+// Tests that AllowCertificateError is called with correct arguments if
+// WKWebView fails to load a page with bad SSL cert.
+TEST_F(CRWWebControllerTest, SslCertError) {
+  // TODO(crbug.com/602298): Remove this call.
+  [webController_ setDelegate:nil];
+
+  // Last arguments passed to AllowCertificateError must be in default state.
+  ASSERT_FALSE(GetWebClient()->last_cert_error_code());
+  ASSERT_FALSE(GetWebClient()->last_cert_error_ssl_info().is_valid());
+  ASSERT_FALSE(GetWebClient()->last_cert_error_ssl_info().cert_status);
+  ASSERT_FALSE(GetWebClient()->last_cert_error_request_url().is_valid());
+  ASSERT_TRUE(GetWebClient()->last_cert_error_overridable());
+
+  scoped_refptr<net::X509Certificate> cert =
+      net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem");
+
+  NSArray* chain = @[ static_cast<id>(cert->os_cert_handle()) ];
+  GURL url("https://chromium.test");
+  NSError* error =
+      [NSError errorWithDomain:NSURLErrorDomain
+                          code:NSURLErrorServerCertificateHasUnknownRoot
+                      userInfo:@{
+                        web::kNSErrorPeerCertificateChainKey : chain,
+                        web::kNSErrorFailingURLKey : net::NSURLWithGURL(url),
+                      }];
+  CRWWebControllerContainerView* containerView =
+      static_cast<CRWWebControllerContainerView*>([webController_ view]);
+  WKWebView* webView =
+      static_cast<WKWebView*>(containerView.webViewContentView.webView);
+  base::scoped_nsobject<NSObject> navigation([[NSObject alloc] init]);
+  [static_cast<id<WKNavigationDelegate>>(webController_.get())
+                            webView:webView
+      didStartProvisionalNavigation:static_cast<WKNavigation*>(navigation)];
+  [static_cast<id<WKNavigationDelegate>>(webController_.get())
+                           webView:webView
+      didFailProvisionalNavigation:static_cast<WKNavigation*>(navigation)
+                         withError:error];
+
+  // Verify correctness of AllowCertificateError method call.
+  EXPECT_EQ(net::ERR_CERT_INVALID, GetWebClient()->last_cert_error_code());
+  EXPECT_TRUE(GetWebClient()->last_cert_error_ssl_info().is_valid());
+  EXPECT_EQ(net::CERT_STATUS_INVALID,
+            GetWebClient()->last_cert_error_ssl_info().cert_status);
+  EXPECT_EQ(url, GetWebClient()->last_cert_error_request_url());
+  EXPECT_FALSE(GetWebClient()->last_cert_error_overridable());
 }
 
 // Test fixture to test |setPageDialogOpenPolicy:|.
@@ -756,18 +807,25 @@ TEST_F(CRWWebControllerPageScrollStateTest, FLAKY_AtTop) {
   ASSERT_FALSE(web_controller.atTop);
 };
 
-// Real WKWebView is required for JSEvaluationTest.
-typedef web::WebTestWithWebController CRWWebControllerJSEvaluationTest;
+// Real WKWebView is required for CRWWebControllerJSExecutionTest.
+typedef web::WebTestWithWebController CRWWebControllerJSExecutionTest;
 
 // Tests that a script correctly evaluates to string.
-TEST_F(CRWWebControllerJSEvaluationTest, Evaluation) {
+TEST_F(CRWWebControllerJSExecutionTest, LegacyAPIExecution) {
   LoadHtml(@"<p></p>");
   EXPECT_NSEQ(@"true", EvaluateJavaScriptAsString(@"true"));
   EXPECT_NSEQ(@"false", EvaluateJavaScriptAsString(@"false"));
 }
 
+// Tests that a script correctly evaluates to boolean.
+TEST_F(CRWWebControllerJSExecutionTest, Execution) {
+  LoadHtml(@"<p></p>");
+  EXPECT_NSEQ(@YES, ExecuteJavaScript(@"true"));
+  EXPECT_NSEQ(@NO, ExecuteJavaScript(@"false"));
+}
+
 // Tests that a script is not evaluated on windowID mismatch.
-TEST_F(CRWWebControllerJSEvaluationTest, WindowIdMissmatch) {
+TEST_F(CRWWebControllerJSExecutionTest, LegacyAPIWindowIdMissmatch) {
   LoadHtml(@"<p></p>");
   // Script is evaluated since windowID is matched.
   EvaluateJavaScriptAsString(@"window.test1 = '1';");
@@ -779,6 +837,21 @@ TEST_F(CRWWebControllerJSEvaluationTest, WindowIdMissmatch) {
   // Script is not evaluated because of windowID mismatch.
   EvaluateJavaScriptAsString(@"window.test2 = '2';");
   EXPECT_NSEQ(@"", EvaluateJavaScriptAsString(@"window.test2"));
+}
+
+// Tests that a script is not executed on windowID mismatch.
+TEST_F(CRWWebControllerJSExecutionTest, WindowIdMissmatch) {
+  LoadHtml(@"<p></p>");
+  // Script is evaluated since windowID is matched.
+  ExecuteJavaScript(@"window.test1 = '1';");
+  EXPECT_NSEQ(@"1", ExecuteJavaScript(@"window.test1"));
+
+  // Change windowID.
+  ExecuteJavaScript(@"__gCrWeb['windowId'] = '';");
+
+  // Script is not evaluated because of windowID mismatch.
+  ExecuteJavaScript(@"window.test2 = '2';");
+  EXPECT_FALSE(ExecuteJavaScript(@"window.test2"));
 }
 
 TEST_F(CRWWebControllerTest, WebUrlWithTrustLevel) {
@@ -850,17 +923,17 @@ class CRWWebControllerWindowOpenTest : public web::WebTestWithWebController {
     ASSERT_TRUE([delegate_ blockPopups]);
     [webController_ setDelegate:delegate_];
 
-    // Configure child web controller.
-    child_.reset(CreateWebController());
-    [child_ setWebUsageEnabled:YES];
-    [delegate_ setChildWebController:child_];
+    // Configure child web state.
+    child_web_state_.reset(new web::WebStateImpl(GetBrowserState()));
+    child_web_state_->SetWebUsageEnabled(true);
+    [delegate_ setChildWebController:child_web_state_->GetWebController()];
 
     // Configure child web controller's session controller mock.
     id sessionController =
         [OCMockObject niceMockForClass:[CRWSessionController class]];
     BOOL yes = YES;
     [[[sessionController stub] andReturnValue:OCMOCK_VALUE(yes)] isOpenedByDOM];
-    [child_ webStateImpl]->GetNavigationManagerImpl().SetSessionController(
+    child_web_state_->GetNavigationManagerImpl().SetSessionController(
         sessionController);
 
     LoadHtml(@"<html><body></body></html>");
@@ -868,7 +941,6 @@ class CRWWebControllerWindowOpenTest : public web::WebTestWithWebController {
   void TearDown() override {
     EXPECT_OCMOCK_VERIFY(delegate_);
     [webController_ setDelegate:nil];
-    [child_ close];
 
     web::WebTestWithWebController::TearDown();
   }
@@ -884,8 +956,8 @@ class CRWWebControllerWindowOpenTest : public web::WebTestWithWebController {
   }
   // A CRWWebDelegate mock used for testing.
   base::scoped_nsobject<id> delegate_;
-  // A child CRWWebController used for testing.
-  base::scoped_nsobject<CRWWebController> child_;
+  // A child WebState used for testing.
+  std::unique_ptr<web::WebStateImpl> child_web_state_;
 };
 
 // Tests that absence of web delegate is handled gracefully.

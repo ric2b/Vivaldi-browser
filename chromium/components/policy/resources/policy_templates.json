@@ -137,7 +137,7 @@
 #   persistent IDs for all fields (but not for groups!) are needed. These are
 #   specified by the 'id' keys of each policy. NEVER CHANGE EXISTING IDs,
 #   because doing so would break the deployed wire format!
-#   For your editing convenience: highest ID currently used: 325
+#   For your editing convenience: highest ID currently used: 333
 #
 # Placeholders:
 #   The following placeholder strings are automatically substituted:
@@ -1552,14 +1552,14 @@
       'name': 'Proxy',
       'type': 'group',
       'caption': '''Proxy server''',
-      'desc': '''Allows you to specify the proxy server used by <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and ARC-apps and prevents users from changing proxy settings.
+      'desc': '''Allows you to specify the proxy server used by <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and prevents users from changing proxy settings. ARC-apps will be able to use this proxy server too.
 
-      If you choose to never use a proxy server and always connect directly, all other options are ignored. ARC-apps will use the current network's default proxy server if any.
+      If you choose to never use a proxy server and always connect directly, all other options are ignored.
 
       If you choose to auto detect the proxy server, all other options are ignored.
 
       For detailed examples, visit:
-      <ph name="PROXY_HELP_URL">https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett<ex>https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett</ex></ph>
+      <ph name="PROXY_HELP_URL">https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett<ex>https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett</ex></ph>.
 
       If you enable this setting, <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and ARC-apps ignore all proxy-related options specified from the command line.
 
@@ -1619,20 +1619,20 @@
           'id': 21,
           'caption': '''Choose how to specify proxy server settings''',
           'tags': [],
-          'desc': '''Allows you to specify the proxy server used by <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and ARC-apps and prevents users from changing proxy settings.
+          'desc': '''Allows you to specify the proxy server used by <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and prevents users from changing proxy settings. ARC-apps will be able to use this proxy server too.
 
-          If you choose to never use a proxy server and always connect directly, all other options are ignored. ARC-apps will use the current network's default proxy server if any.
+          If you choose to never use a proxy server and always connect directly, all other options are ignored.
 
-          If you choose to use system proxy settings, all other options are ignored. ARC-apps will use the current network's default proxy server if any.
+          If you choose to use system proxy settings, all other options are ignored.
 
           If you choose to auto detect the proxy server, all other options are ignored.
 
-          If you choose fixed server proxy mode, you can specify further options in 'Address or URL of proxy server' and 'Comma-separated list of proxy bypass rules'. ARC-apps will only use the HTTP proxy server with the highest priority.
+          If you choose fixed server proxy mode, you can specify further options in 'Address or URL of proxy server' and 'Comma-separated list of proxy bypass rules'. Only the HTTP proxy server with the highest priority is available for ARC-apps.
 
           If you choose to use a .pac proxy script, you must specify the URL to the script in 'URL to a proxy .pac file'.
 
           For detailed examples, visit:
-          <ph name="PROXY_HELP_URL">https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett<ex>https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett</ex></ph>
+          <ph name="PROXY_HELP_URL">https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett<ex>https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett</ex></ph>.
 
           If you enable this setting, <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and ARC-apps ignore all proxy-related options specified from the command line.
 
@@ -1684,16 +1684,16 @@
           'tags': [],
           'desc': '''This policy is deprecated, use ProxyMode instead.
 
-          Allows you to specify the proxy server used by <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and ARC-apps and prevents users from changing proxy settings.
+          Allows you to specify the proxy server used by <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and prevents users from changing proxy settings. ARC-apps will be able to use this proxy server too.
 
           If you choose to never use a proxy server and always connect directly, all other options are ignored.
 
           If you choose to use system proxy settings or auto detect the proxy server, all other options are ignored.
 
-          If you choose manual proxy settings, you can specify further options in 'Address or URL of proxy server', 'URL to a proxy .pac file' and 'Comma-separated list of proxy bypass rules'.
+          If you choose manual proxy settings, you can specify further options in 'Address or URL of proxy server', 'URL to a proxy .pac file' and 'Comma-separated list of proxy bypass rules'. Only the HTTP proxy server with the highest priority is available for ARC-apps.
 
           For detailed examples, visit:
-          <ph name="PROXY_HELP_URL">https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett<ex>https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett</ex></ph>
+          <ph name="PROXY_HELP_URL">https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett<ex>https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett</ex></ph>.
 
           If you enable this setting, <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> ignores all proxy-related options specified from the command line.
 
@@ -1724,7 +1724,7 @@
           You should leave this policy not set if you have selected any other mode for setting proxy policies.
 
           For more options and detailed examples, visit:
-          <ph name="PROXY_HELP_URL">https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett<ex>https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett</ex></ph>''',
+          <ph name="PROXY_HELP_URL">https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett<ex>https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett</ex></ph>.''',
         },
         {
           'name': 'ProxyPacUrl',
@@ -1751,7 +1751,7 @@
           You should leave this policy not set if you have selected any other mode for setting proxy policies.
 
           For detailed examples, visit:
-          <ph name="PROXY_HELP_URL">https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett<ex>https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett</ex></ph>''',
+          <ph name="PROXY_HELP_URL">https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett<ex>https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett</ex></ph>.''',
         },
         {
           'name': 'ProxyBypassList',
@@ -1771,14 +1771,14 @@
           'id': 25,
           'caption': '''Proxy bypass rules''',
           'tags': [],
-          'desc': '''<ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and ARC-apps will bypass any proxy for the list of hosts given here.
+          'desc': '''<ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> will bypass any proxy for the list of hosts given here. ARC-apps will be able to use this list as a bypass rules list.
 
           This policy only takes effect if you have selected manual proxy settings at 'Choose how to specify proxy server settings'.
 
           You should leave this policy not set if you have selected any other mode for setting proxy policies.
 
           For more detailed examples, visit:
-          <ph name="PROXY_HELP_URL">https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett<ex>https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett</ex></ph>''',
+          <ph name="PROXY_HELP_URL">https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett<ex>https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett</ex></ph>.''',
           'label': '''Comma-separated list of proxy bypass rules''',
         },
       ],
@@ -1815,7 +1815,7 @@
       'id': 116,
       'caption': '''Proxy settings''',
       'tags': ['system-security'],
-      'desc': '''Configures the proxy settings for <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and ARC-apps.
+      'desc': '''Configures the proxy settings for <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>. These proxy settings will be available for ARC-apps too.
 
       This policy isn't ready for usage yet, please don't use it.''',
     },
@@ -7680,15 +7680,15 @@
         'items': {
           'type': 'string',
           'enum': [
-            'ShowModalDialog_EffectiveUntil20150430'
+            'ExampleDeprecatedFeature_EffectiveUntil20080902'
           ],
         },
       },
       'items': [
         {
-          'name': 'ShowModalDialog',
-          'value': 'ShowModalDialog_EffectiveUntil20150430',
-          'caption': '''Enable ShowModalDialog API through 2015.04.30''',
+          'name': 'ExampleDeprecatedFeature',
+          'value': 'ExampleDeprecatedFeature_EffectiveUntil20080902',
+          'caption': '''Enable ExampleDeprecatedFeature API through 2008/09/02''',
         }
       ],
       'supported_on': ['chrome.*:37-', 'chrome_os:37-', 'android:37-'],
@@ -7696,7 +7696,7 @@
         'dynamic_refresh': True,
         'per_profile': True,
       },
-      'example_value': ['ShowModalDialog_EffectiveUntil20150430'],
+      'example_value': ['ExampleDeprecatedFeature_EffectiveUntil20080902'],
       'id': 270,
       'caption': '''Enable deprecated web platform features for a limited time''',
       'tags': ['system-security'],
@@ -8242,7 +8242,7 @@
       unable to use ARC.''',
     },
     {
-      'name': 'ArcApplicationPolicy',
+      'name': 'ArcPolicy',
       'type': 'string',
       'schema': { 'type': 'string' },
       'supported_on': ['chrome_os:50-'],
@@ -8252,14 +8252,10 @@
       },
       'example_value': '',
       'id': 318,
-      'caption': '''Configure ARC apps''',
+      'caption': '''Configure ARC''',
       'tags': [],
       'desc':
-      '''Specifies the ARC application policy as JSON string which can be
-      handed-off as-is to the ARC runtime. At the moment, this setting is used
-      solely to specify force-installation of the apps.
-
-      If this policy is left not set, no apps are installed automatically.'''
+      '''Specifies a set of policies that will be handed over to the ARC runtime. The value must be valid JSON.'''
     },
     {
       'name': 'AllowKioskAppControlChromeVersion',
@@ -8333,7 +8329,7 @@
       'supported_on': ['chrome_os:51-'],
       'device_only': True,
       'features': {
-        'dynamic_refresh': True,
+        'dynamic_refresh': False,
       },
       'example_value': [
         {
@@ -8350,16 +8346,16 @@
       'tags': ['system-security'],
       'desc': '''Defines the list of USB devices that are allowed to be detached from their kernel driver in order to be used through the chrome.usb API directly inside a web application. Entries are pairs of USB Vendor Identifier and Product Identifier to identify a specific hardware.
 
-      If this policy is not configured, the list of a detachable USB devices is considered as empty.''',
+      If this policy is not configured, the list of a detachable USB devices is empty.''',
     },
     {
       'name': 'DeviceAllowBluetooth',
       'type': 'main',
       'schema': { 'type': 'boolean' },
-      'supported_on': ['chrome_os:51-'],
+      'supported_on': ['chrome_os:52-'],
       'device_only': True,
       'features': {
-        'dynamic_refresh': True,
+        'dynamic_refresh': False,
       },
       'example_value': True,
       'id': 323,
@@ -8369,7 +8365,9 @@
 
       If this policy is set to true or left unset, the user will be able to enable or disable Bluetooth as he wishes.
 
-      If this policy is set, the user cannot change or override it.''',
+      If this policy is set, the user cannot change or override it.
+
+      After enabling Bluetooth, the device must be rebooted for the changes to take effect (no need to reboot the device when disabling Bluetooth).''',
     },
     {
       'name': 'SuppressUnsupportedOSWarning',
@@ -8463,6 +8461,146 @@
       If this policy is not set, it will behave as if TimezoneAutomaticDetectionUsersDecide is set.
 
       If SystemTimezone policy is set, it overrides this policy. In this case automatic timezone detection is completely disabled.''',
+    },
+    {
+      'name': 'TaskManagerEndProcessEnabled',
+      'caption': '''Enables ending processes in Task Manager''',
+      'desc': '''Enables ending processes in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>'s Task Manager.
+
+      If set to false, the 'End process' button is disabled in the Task Manager.
+
+      If set to true or not configured, the user can end processes in the Task Manager.''',
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome.*:52-','chrome_os:52-'],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': False,
+      },
+      'example_value': True,
+      'tags': [],
+      'id': 327,
+    },
+    {
+      'name': 'LoginVideoCaptureAllowedUrls',
+      'type': 'list',
+      'schema': {
+        'type': 'array',
+        'items': { 'type': 'string' },
+      },
+      'supported_on': ['chrome_os:52-'],
+      'device_only': True,
+      'features': {
+        'dynamic_refresh': True,
+      },
+      'example_value': [ "https://example.com" ],
+      'id': 328,
+      'caption': '''URLs that will be granted access to video capture devices on SAML login pages''',
+      'tags': ['website-sharing'],
+      'desc': '''Patterns in this list will be matched against the security
+      origin of the requesting URL.  If a match is found, access to video
+      capture devices will be granted on SAML login pages.  If no match is
+      found, access will be automatically denied.  Wildcard patterns are not
+      allowed.'''
+    },
+    {
+      'name': 'AllowScreenLock',
+      'caption': '''Permit locking the screen''',
+      'desc': '''Permit locking the screen.
+
+      If this policy is set to false, users will not be able to lock the screen (only signing out from the user session will be possible). If this setting is set to true or not set, users who authenticated with a password can lock the screen.''',
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome_os:52-'],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': True,
+      },
+      'example_value': False,
+      'tags': [],
+      'id': 329,
+    },
+    {
+      'name': 'ArcCertificatesSyncMode',
+      'type': 'int-enum',
+      'schema': {
+        'type': 'integer',
+        'enum': [ 0, 1 ],
+      },
+      'items': [
+        {
+          'name': 'SyncDisabled',
+          'value': 0,
+          'caption': '''Disable usage of <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph> certificates to ARC-apps''',
+        },
+        {
+          'name': 'CopyCaCerts',
+          'value': 1,
+          'caption': '''Enable <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph> CA certificates to ARC-apps'''
+        },
+      ],
+      'supported_on': ['chrome_os:52-'],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': False,
+      },
+      'example_value': 0,
+      'id': 330,
+      'caption': '''Set certificate availability for ARC-apps''',
+      'tags': ['system-security'],
+      'desc': '''If set to SyncDisabled or not configured, <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph> certificates are not available for ARC-apps.
+
+      If set to CopyCaCerts, all ONC-installed CA certificates with <ph name="WEB_TRUSTED_BIT">Web TrustBit</ph> are available for ARC-apps.''',
+    },
+    {
+      'name': 'EnableMediaRouter',
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome.*:52-', 'chrome_os:52-', 'android:52-'],
+      'features': {
+        'dynamic_refresh': False,
+        'per_profile': True,
+      },
+      'example_value': True,
+      'id': 333,
+      'caption': '''Enables cast''',
+      'tags': [],
+      'desc': '''If this is set to true or is not set, users will be able to cast tabs, sites or the desktop from the browser. If set to false, this option will be disabled.'''
+    },
+    {
+      'name': 'PacHttpsUrlStrippingEnabled',
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': [ 'chrome.*:52-', 'chrome_os:52-' ],
+      'features': {
+        'dynamic_refresh': False,
+        'per_profile': False,
+      },
+      'example_value': False,
+      'id': 332,
+      'default_for_enterprise_users': False,
+      'caption': '''Enable PAC URL stripping (for https://)''',
+      'tags': ['system-security'],
+      'desc': '''Strips privacy and security sensitive parts of https:// URLs before passing them on to PAC scripts (Proxy Auto Config) used by <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> during proxy resolution.
+
+      When True, the security feature is enabled, and https:// URLs are
+      stripped before submitting them to a PAC script. In this manner the PAC
+      script is not able to view data that is ordinarily protected by an
+      encrypted channel (such as the URL's path and query).
+
+      When False, the security feature is disabled, and PAC scripts are
+      implicitly granted the ability to view all components of an https://
+      URL. This applies to all PAC scripts regardless of origin (including
+      those fetched over an insecure transport, or discovered insecurely
+      through WPAD).
+
+      This defaults to True (security feature enabled), except for Chrome OS
+      enterprise users for which this currently defaults to False.
+
+      It is recommended that this be set to True. The only reason to set it to
+      False is if it causes a compatibility problem with existing PAC scripts.
+
+      The desire is to remove this override in the future.''',
     },
   ],
   'messages': {

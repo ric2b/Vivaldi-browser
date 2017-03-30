@@ -5,10 +5,10 @@
 #ifndef COMPONENTS_TEST_RUNNER_TEST_PLUGIN_H_
 #define COMPONENTS_TEST_RUNNER_TEST_PLUGIN_H_
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "cc/layers/texture_layer.h"
 #include "cc/layers/texture_layer_client.h"
 #include "third_party/WebKit/public/platform/WebExternalTextureLayer.h"
@@ -23,7 +23,6 @@
 
 namespace blink {
 class WebFrame;
-class WebGraphicsContext3D;
 class WebGraphicsContext3DProvider;
 class WebLayer;
 struct WebPluginParams;
@@ -45,9 +44,9 @@ class WebTestDelegate;
 
 // A fake implemention of blink::WebPlugin for testing purposes.
 //
-// It uses WebGraphicsContext3D to paint a scene consisiting of a primitive
-// over a background. The primitive and background can be customized using
-// the following plugin parameters:
+// It uses GL to paint a scene consisiting of a primitive over a background. The
+// primitive and background can be customized using the following plugin
+// parameters.
 // primitive: none (default), triangle.
 // background-color: black (default), red, green, blue.
 // primitive-color: black (default), red, green, blue.
@@ -99,7 +98,7 @@ class TestPlugin : public blink::WebPlugin, public cc::TextureLayerClient {
   // cc::TextureLayerClient methods:
   bool PrepareTextureMailbox(
       cc::TextureMailbox* mailbox,
-      scoped_ptr<cc::SingleReleaseCallback>* release_callback,
+      std::unique_ptr<cc::SingleReleaseCallback>* release_callback,
       bool use_shared_memory) override;
 
  private:
@@ -158,17 +157,16 @@ class TestPlugin : public blink::WebPlugin, public cc::TextureLayerClient {
   blink::WebPluginContainer* container_;
 
   blink::WebRect rect_;
-  scoped_ptr<blink::WebGraphicsContext3DProvider> context_provider_;
-  blink::WebGraphicsContext3D* context_;
+  std::unique_ptr<blink::WebGraphicsContext3DProvider> context_provider_;
   gpu::gles2::GLES2Interface* gl_;
   GLuint color_texture_;
   cc::TextureMailbox texture_mailbox_;
-  scoped_ptr<cc::SharedBitmap> shared_bitmap_;
+  std::unique_ptr<cc::SharedBitmap> shared_bitmap_;
   bool mailbox_changed_;
   GLuint framebuffer_;
   Scene scene_;
   scoped_refptr<cc::TextureLayer> layer_;
-  scoped_ptr<blink::WebLayer> web_layer_;
+  std::unique_ptr<blink::WebLayer> web_layer_;
 
   blink::WebPluginContainer::TouchEventRequestType touch_event_request_;
   // Requests touch events from the WebPluginContainerImpl multiple times to

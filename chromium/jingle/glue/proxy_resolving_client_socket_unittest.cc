@@ -7,7 +7,7 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "net/base/test_completion_callback.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/proxy/proxy_service.h"
@@ -38,7 +38,7 @@ class ProxyResolvingClientSocketTest : public testing::Test {
   ProxyResolvingClientSocketTest()
       : url_request_context_getter_(new net::TestURLRequestContextGetter(
             base::ThreadTaskRunnerHandle::Get(),
-            scoped_ptr<net::TestURLRequestContext>(
+            std::unique_ptr<net::TestURLRequestContext>(
                 new MyTestURLRequestContext))) {}
 
   ~ProxyResolvingClientSocketTest() override {}

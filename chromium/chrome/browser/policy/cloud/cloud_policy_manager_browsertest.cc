@@ -2,8 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "base/command_line.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -13,6 +14,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
+#include "components/policy/core/common/cloud/device_management_service.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
 #include "components/policy/core/common/policy_switches.h"
 #include "components/policy/core/common/policy_test_utils.h"
@@ -54,6 +56,9 @@ class CloudPolicyManagerTest : public InProcessBrowserTest {
     base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
     command_line->AppendSwitchASCII(switches::kDeviceManagementUrl,
                                     "http://localhost");
+
+    // Set retry delay to prevent timeouts.
+    policy::DeviceManagementService::SetRetryDelayForTesting(0);
   }
 
   void SetUpOnMainThread() override {
@@ -136,7 +141,7 @@ class CloudPolicyManagerTest : public InProcessBrowserTest {
     policy_manager()->core()->client()->RemoveObserver(&observer);
   }
 
-  scoped_ptr<TestRequestInterceptor> interceptor_;
+  std::unique_ptr<TestRequestInterceptor> interceptor_;
 };
 
 IN_PROC_BROWSER_TEST_F(CloudPolicyManagerTest, Register) {

@@ -9,13 +9,14 @@
 #include <stdint.h>
 
 #include <deque>
+#include <memory>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "build/build_config.h"
 #include "cc/resources/returned_resource.h"
+#include "cc/scheduler/begin_frame_source.h"
 #include "cc/surfaces/surface_factory_client.h"
 #include "cc/surfaces/surface_id_allocator.h"
 #include "content/browser/compositor/image_transport_factory.h"
@@ -24,7 +25,6 @@
 #include "content/common/content_export.h"
 #include "content/common/input/input_event_ack_state.h"
 #include "content/public/browser/readback_types.h"
-#include "ui/compositor/compositor.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -33,7 +33,6 @@ class SurfaceFactory;
 enum class SurfaceDrawStatus;
 }
 
-struct ViewHostMsg_TextInputState_Params;
 
 namespace content {
 class CrossProcessFrameConnector;
@@ -41,6 +40,7 @@ class RenderWidgetHost;
 class RenderWidgetHostImpl;
 class RenderWidgetHostViewChildFrameTest;
 class RenderWidgetHostViewGuestSurfaceTest;
+struct TextInputState;
 
 // RenderWidgetHostViewChildFrame implements the view for a RenderWidgetHost
 // associated with content being rendered in a separate process from
@@ -52,15 +52,14 @@ class RenderWidgetHostViewGuestSurfaceTest;
 // See comments in render_widget_host_view.h about this class and its members.
 class CONTENT_EXPORT RenderWidgetHostViewChildFrame
     : public RenderWidgetHostViewBase,
-      public cc::SurfaceFactoryClient {
+      public cc::SurfaceFactoryClient,
+      public cc::BeginFrameObserver {
  public:
   explicit RenderWidgetHostViewChildFrame(RenderWidgetHost* widget);
   ~RenderWidgetHostViewChildFrame() override;
 
-  void set_cross_process_frame_connector(
-      CrossProcessFrameConnector* frame_connector) {
-    frame_connector_ = frame_connector;
-  }
+  void SetCrossProcessFrameConnector(
+      CrossProcessFrameConnector* frame_connector);
 
   // This functions registers single-use callbacks that want to be notified when
   // the next frame is swapped. The callback is triggered by
@@ -69,9 +68,10 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   // pointer is released.
   // TODO(wjmaclean): We should consider making this available in other view
   // types, such as RenderWidgetHostViewAura.
-  void RegisterFrameSwappedCallback(scoped_ptr<base::Closure> callback);
+  void RegisterFrameSwappedCallback(std::unique_ptr<base::Closure> callback);
 
   // RenderWidgetHostView implementation.
+  bool OnMessageReceived(const IPC::Message& msg) override;
   void InitAsChild(gfx::NativeView parent_view) override;
   RenderWidgetHost* GetRenderWidgetHost() const override;
   void SetSize(const gfx::Size& size) override;
@@ -86,7 +86,6 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   gfx::Size GetVisibleViewportSize() const override;
   gfx::Vector2dF GetLastScrollOffset() const override;
   gfx::NativeView GetNativeView() const override;
-  gfx::NativeViewId GetNativeViewId() const override;
   gfx::NativeViewAccessible GetNativeViewAccessible() override;
   void SetBackgroundColor(SkColor color) override;
   gfx::Size GetPhysicalBackingSize() const override;
@@ -97,8 +96,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   void InitAsFullscreen(RenderWidgetHostView* reference_host_view) override;
   void UpdateCursor(const WebCursor& cursor) override;
   void SetIsLoading(bool is_loading) override;
-  void TextInputStateChanged(
-      const ViewHostMsg_TextInputState_Params& params) override;
+  void TextInputStateChanged(const TextInputState& params) override;
   void ImeCancelComposition() override;
   void ImeCompositionRangeChanged(
       const gfx::Range& range,
@@ -123,8 +121,13 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
       const base::Callback<void(const gfx::Rect&, bool)>& callback) override;
   bool CanCopyToVideoFrame() const override;
   bool HasAcceleratedSurface(const gfx::Size& desired_size) override;
-  void OnSwapCompositorFrame(uint32_t output_surface_id,
-                             scoped_ptr<cc::CompositorFrame> frame) override;
+  void WheelEventAck(const blink::WebMouseWheelEvent& event,
+                     InputEventAckState ack_result) override;
+  void GestureEventAck(const blink::WebGestureEvent& event,
+                       InputEventAckState ack_result) override;
+  void OnSwapCompositorFrame(
+      uint32_t output_surface_id,
+      std::unique_ptr<cc::CompositorFrame> frame) override;
   // Since the URL of content rendered by this class is not displayed in
   // the URL bar, this method does not need an implementation.
   void ClearCompositorFrame() override {}
@@ -147,6 +150,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
 #if defined(OS_MACOSX)
   // RenderWidgetHostView implementation.
+  ui::AcceleratedWidgetMac* GetAcceleratedWidgetMac() const override;
   void SetActive(bool active) override;
   void ShowDefinitionForSelection() override;
   bool SupportsSpeech() const override;
@@ -164,7 +168,14 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   // cc::SurfaceFactoryClient implementation.
   void ReturnResources(const cc::ReturnedResourceArray& resources) override;
-  void SetBeginFrameSource(cc::BeginFrameSource* begin_frame_source) override;
+  void SetBeginFrameSource(cc::BeginFrameSource* source) override;
+
+  // cc::BeginFrameObserver implementation.
+  void OnBeginFrame(const cc::BeginFrameArgs& args) override;
+  const cc::BeginFrameArgs& LastUsedBeginFrameArgs() const override;
+  void OnBeginFrameSourcePausedChanged(bool paused) override;
+
+  void OnSetNeedsBeginFrames(bool needs_begin_frames);
 
   // Declared 'public' instead of 'protected' here to allow derived classes
   // to Bind() to it.
@@ -198,8 +209,8 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   RenderWidgetHostImpl* host_;
 
   // Surface-related state.
-  scoped_ptr<cc::SurfaceIdAllocator> id_allocator_;
-  scoped_ptr<cc::SurfaceFactory> surface_factory_;
+  std::unique_ptr<cc::SurfaceIdAllocator> id_allocator_;
+  std::unique_ptr<cc::SurfaceFactory> surface_factory_;
   cc::SurfaceId surface_id_;
   uint32_t next_surface_sequence_;
   uint32_t last_output_surface_id_;
@@ -223,10 +234,17 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
                                 const ReadbackRequestCallback& callback,
                                 const SkColorType preferred_color_type);
 
-  using FrameSwappedCallbackList = std::deque<scoped_ptr<base::Closure>>;
+  using FrameSwappedCallbackList = std::deque<std::unique_ptr<base::Closure>>;
   // Since frame-drawn callbacks are "fire once", we use std::deque to make
   // it convenient to swap() when processing the list.
   FrameSwappedCallbackList frame_swapped_callbacks_;
+
+  // The begin frame source being observed.  Null if none.
+  cc::BeginFrameSource* begin_frame_source_;
+  cc::BeginFrameArgs last_begin_frame_args_;
+  bool observing_begin_frame_source_;
+  // The surface id namespace of the parent RenderWidgetHostView.  0 if none.
+  uint32_t parent_surface_id_namespace_;
 
   base::WeakPtrFactory<RenderWidgetHostViewChildFrame> weak_factory_;
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewChildFrame);

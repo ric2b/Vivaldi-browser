@@ -184,7 +184,7 @@ void PepperTCPServerSocketMessageFilter::DoListen(
 
   state_ = STATE_LISTEN_IN_PROGRESS;
 
-  socket_.reset(new net::TCPSocket(NULL, net::NetLog::Source()));
+  socket_.reset(new net::TCPSocket(NULL, NULL, net::NetLog::Source()));
   int net_result = net::OK;
   do {
     net::IPEndPoint ip_end_point(net::IPAddress(address), port);
@@ -264,7 +264,7 @@ void PepperTCPServerSocketMessageFilter::OpenFirewallHole(
 void PepperTCPServerSocketMessageFilter::OnFirewallHoleOpened(
     const ppapi::host::ReplyMessageContext& context,
     int32_t net_result,
-    scoped_ptr<chromeos::FirewallHole> hole) {
+    std::unique_ptr<chromeos::FirewallHole> hole) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   LOG_IF(WARNING, !hole.get()) << "Firewall hole could not be opened.";
@@ -311,7 +311,7 @@ void PepperTCPServerSocketMessageFilter::OnAcceptCompleted(
     return;
   }
 
-  scoped_ptr<ppapi::host::ResourceHost> host =
+  std::unique_ptr<ppapi::host::ResourceHost> host =
       factory_->CreateAcceptedTCPSocket(instance_,
                                         ppapi::TCP_SOCKET_VERSION_PRIVATE,
                                         std::move(accepted_socket_));

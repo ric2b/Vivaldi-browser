@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.media.router.cast;
 
 import android.content.Context;
+import android.content.Intent;
 
 import com.google.android.gms.cast.ApplicationMetadata;
 import com.google.android.gms.cast.Cast;
@@ -15,15 +16,15 @@ import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.common.api.Status;
 
-import org.chromium.base.ApplicationStatus;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.media.ui.MediaNotificationInfo;
 import org.chromium.chrome.browser.media.ui.MediaNotificationListener;
 import org.chromium.chrome.browser.media.ui.MediaNotificationManager;
+import org.chromium.chrome.browser.metrics.MediaNotificationUma;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.content_public.common.MediaMetadata;
-
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -105,7 +106,7 @@ public class CastSessionImpl implements MediaNotificationListener, CastSession {
         mMessageChannel = new CastMessagingChannel(this);
         updateNamespaces();
 
-        final Context context = ApplicationStatus.getApplicationContext();
+        final Context context = ContextUtils.getApplicationContext();
 
         if (mNamespaces.contains(CastMessageHandler.MEDIA_NAMESPACE)) {
             mMediaPlayer = new RemoteMediaPlayer();
@@ -139,6 +140,11 @@ public class CastSessionImpl implements MediaNotificationListener, CastSession {
                     });
         }
 
+        Intent contentIntent = Tab.createBringTabToFrontIntent(tabId);
+        if (contentIntent != null) {
+            contentIntent.putExtra(MediaNotificationUma.INTENT_EXTRA_NAME,
+                    MediaNotificationUma.SOURCE_PRESENTATION);
+        }
         mNotificationBuilder = new MediaNotificationInfo.Builder()
                 .setPaused(false)
                 .setOrigin(origin)
@@ -147,7 +153,9 @@ public class CastSessionImpl implements MediaNotificationListener, CastSession {
                 .setTabId(tabId)
                 .setPrivate(isIncognito)
                 .setActions(MediaNotificationInfo.ACTION_STOP)
-                .setContentIntent(Tab.createBringTabToFrontIntent(tabId))
+                .setContentIntent(contentIntent)
+                .setIcon(R.drawable.ic_notification_media_route)
+                .setDefaultLargeIcon(R.drawable.cast_playing_square)
                 .setId(R.id.presentation_notification)
                 .setListener(this);
         setNotificationMetadata(mNotificationBuilder);
@@ -476,7 +484,6 @@ public class CastSessionImpl implements MediaNotificationListener, CastSession {
     private void setNotificationMetadata(MediaNotificationInfo.Builder builder) {
         MediaMetadata notificationMetadata = new MediaMetadata("", "", "");
         builder.setMetadata(notificationMetadata);
-        builder.setIcon(R.drawable.ic_notification_media_route);
 
         if (mCastDevice != null) notificationMetadata.setTitle(mCastDevice.getFriendlyName());
 

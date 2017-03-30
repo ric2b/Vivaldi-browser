@@ -50,6 +50,7 @@
       'dependencies' : [
         '../chrome/common_constants.gyp:version_header',
         '../chrome/chrome_features.gyp:chrome_common_features',
+        '../third_party/kasko/kasko.gyp:kasko_features',
       ],
       # Name the exe chrome.exe, not chrome_initial.exe.
       'product_name': 'vivaldi',
@@ -101,23 +102,6 @@
                 '-Wl,-section-ordering-file=<(order_text_section)' ],
             }],
           ]
-        }],
-        ['OS == "win"', {
-          'dependencies': [
-            'chrome_watcher',
-            'chrome_watcher_client',
-            '../components/components.gyp:browser_watcher_client',
-            '../components/components.gyp:crash_component',
-          ],
-          'sources': [
-            'app/chrome_crash_reporter_client.cc',
-            'app/chrome_crash_reporter_client.h',
-          ],
-          'conditions': [
-            ['win_console_app==1', {
-              'defines': ['WIN_CONSOLE_APP'],
-            }],
-          ],
         }],
         ['OS == "android"', {
           # Don't put the 'chrome' target in 'all' on android
@@ -366,6 +350,7 @@
               # include SCM information.
               'postbuild_name': 'Tweak Info.plist',
               'action': ['<(tweak_info_plist_path)',
+                         '--plist=${TARGET_BUILD_DIR}/${INFOPLIST_PATH}',
                          '--breakpad=0',
                          '--keystone=<(mac_keystone)',
                          '--sparkle=1',
@@ -435,25 +420,32 @@
             'chrome_nacl_win64',
             'chrome_process_finder',
             'chrome_version_resources',
-            'installer_util',
+            'chrome_watcher',
+            'chrome_watcher_client',
             'file_pre_reader',
+            'installer_util',
+            'install_static_util',
+            'metrics_constants_util_win',
             '../base/base.gyp:base',
-            '../crypto/crypto.gyp:crypto',
             '../breakpad/breakpad.gyp:breakpad_handler',
             '../breakpad/breakpad.gyp:breakpad_sender',
+            '../chrome/common_constants.gyp:common_constants',
             '../chrome_elf/chrome_elf.gyp:chrome_elf',
+            '../components/components.gyp:browser_watcher_client',
             '../components/components.gyp:crash_component',
             '../components/components.gyp:crash_core_common',
             '../components/components.gyp:flags_ui_switches',
             '../components/components.gyp:policy',
             '../components/components.gyp:startup_metric_utils_common',
+            '../crypto/crypto.gyp:crypto',
             '../sandbox/sandbox.gyp:sandbox',
-            '../third_party/kasko/kasko.gyp:kasko_features',
             '../ui/gfx/gfx.gyp:gfx',
             '../win8/win8.gyp:visual_elements_resources',
           ],
           'sources': [
             '<(SHARED_INTERMEDIATE_DIR)/chrome_version/chrome_exe_version.rc',
+            'app/chrome_crash_reporter_client_win.cc',
+            'app/chrome_crash_reporter_client_win.h',
             'app/chrome_exe.rc',
             'common/crash_keys.cc',
             'common/crash_keys.h',
@@ -461,6 +453,11 @@
           'sources!': [
             # We still want the _win entry point for sandbox, etc.
             'app/chrome_exe_main_aura.cc',
+          ],
+          'conditions': [
+            ['win_console_app==1', {
+              'defines': ['WIN_CONSOLE_APP'],
+            }],
           ],
           'msvs_settings': {
             'VCLinkerTool': {
@@ -551,12 +548,13 @@
                 '../content/public/common/content_switches.cc',
                 '../content/public/common/sandboxed_process_launcher_delegate.cc',
                 '<(SHARED_INTERMEDIATE_DIR)/chrome_version/nacl64_exe_version.rc',
-                'app/chrome_crash_reporter_client.cc',
+                'app/chrome_crash_reporter_client_win.cc',
                 'common/crash_keys.cc',
                 'nacl/nacl_exe_win_64.cc',
               ],
               'dependencies': [
                 'chrome_version_resources',
+                'install_static_util_nacl_win64',
                 'installer_util_nacl_win64',
                 '../base/base.gyp:base_i18n_nacl_win64',
                 '../base/base.gyp:base_win64',

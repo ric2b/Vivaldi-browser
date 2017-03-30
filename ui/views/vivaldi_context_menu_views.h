@@ -12,7 +12,6 @@
 #ifndef VIVALDI_UI_VIEWS_VIVALDI_CONTEXT_MENU_VIEWS_H_
 #define VIVALDI_UI_VIEWS_VIVALDI_CONTEXT_MENU_VIEWS_H_
 
-#include "base/memory/scoped_ptr.h"
 #include "content/public/common/context_menu_params.h"
 #include "ui/vivaldi_context_menu.h"
 
@@ -58,7 +57,7 @@ class VivaldiContextMenuViews : public vivaldi::VivaldiContextMenu {
  private:
   aura::Window* GetActiveNativeView();
   views::Widget* GetTopLevelWidget();
-  scoped_ptr<ToolkitDelegateViews> toolkit_delegate_;
+  std::unique_ptr<ToolkitDelegateViews> toolkit_delegate_;
   content::RenderFrameHost* render_frame_host_;
   ui::SimpleMenuModel* menu_model_;
   content::ContextMenuParams params_;

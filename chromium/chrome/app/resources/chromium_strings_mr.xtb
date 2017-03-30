@@ -54,6 +54,7 @@
 <translation id="2673087257647337101">जवळपास अद्ययावत! अद्यतन समाप्त करण्यासाठी Chromium रीलाँच करा.</translation>
 <translation id="2685838254101182273">Chromium ने अद्यतन करणे थांबविले आहे आणि हे आपल्या ऑपरेटिंग प्रणालीच्या या आवृत्तीचे यापुढे समर्थन करत नाही.</translation>
 <translation id="2705212601509139398">ही साइट Chromium फ्रेम प्लगिन वापरत आहे ते लवकरच असमर्थित केले जाईल. कृपया ते विस्थापित करा आणि एक सुसंगत ब्राउझर डाउनलोड करा.</translation>
+<translation id="2711502716910134313">Chromium टॅब</translation>
 <translation id="2770231113462710648">डीफॉल्ट ब्राउझर यावर बदला:</translation>
 <translation id="2801146392936645542"><ph name="FILE_NAME" /> दुर्भावनापूर्ण आहे, आणि Chromium ने ती अवरोधित केली आहे.</translation>
 <translation id="2847479871509788944">Chromium मधून काढा...</translation>
@@ -67,7 +68,6 @@
 <translation id="3130323860337406239">Chromium आपला मायक्रोफोन वापरत आहे.</translation>
 <translation id="313551035350905294">आपण एका व्यवस्थापित खात्यासह साइन इन करत आहात आणि त्याच्या प्रशासकास आपल्या Chromium प्रोफाईलवर नियंत्रण देत आहात. आपला Chromium डेटा, जसे की आपले अॅप्स, बुकमार्क, इतिहास, संकेतशब्द आणि अन्य सेटिंग्ज <ph name="USER_NAME" /> वर कायमचे बद्ध राहतील. आपण Google खाती डॅशबोर्ड द्वारे हा डेटा हटविण्यात सक्षम व्हाल, परंतु आपण दुसऱ्या खात्यासह हा डेटा संबद्ध करण्यात सक्षम होणार नाही.</translation>
 <translation id="3190315855212034486">ओहो! Chromium क्रॅश झाले आहे. आता पुन्हा लाँच करायचे?</translation>
-<translation id="3197823471738295152">आपले डिव्हाइस अद्ययावत आहे.</translation>
 <translation id="3244477511402911926">Chromium सूचना केंद्र</translation>
 <translation id="3256316712990552818">Chromium वर कॉपी केले</translation>
 <translation id="3258596308407688501">Chromium त्याची डेटा निर्देशिका वाचू किंवा लिहू शकत नाही:
@@ -121,6 +121,7 @@
 <translation id="549669000822060376">कृपया Chromium नवीनतम सिस्टीम अद्यतने स्थापित करेपर्यंत प्रतीक्षा करा.</translation>
 <translation id="5563479599352954471">एका स्पर्शाने शोधा</translation>
 <translation id="5620765574781326016">पृष्ठ न सोडता वेबसाइटवरील विषयांबद्दल जाणून घ्या.</translation>
+<translation id="5634636535844844681">Chromium साठी Windows 7 किंवा नंतरची आवृत्ती आवश्यक आहे.</translation>
 <translation id="5680901439334282664">Chromium वर साइन इन करा</translation>
 <translation id="5772805321386874569">(Chromium <ph name="BEGIN_BUTTON" />रीस्टार्ट<ph name="END_BUTTON" /> करणे आवश्यक)</translation>
 <translation id="5796460469508169315">Chromium जवळजवळ सज्ज आहे</translation>
@@ -180,6 +181,11 @@ Chromium आपली सेटिंग्ज पुनर्प्राप्
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7339898014177206373">नवीन विंडो</translation>
 <translation id="734373864078049451">आपले वेब, बुकमार्क आणि अन्य Chromium सामग्री येथे थेट आहे.</translation>
+<translation id="7344413941077984497"><ph name="NEW_PROFILE_NAME" /> कोणत्या वेबसाइट पाहू शकतो ते सेट करण्‍यासाठी, <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" /> वर भेट देऊन आपण प्रतिबंध आणि सेटिंग्ज कॉन्फिगर करू शकता. आपण डीफॉल्ट सेटिंग्ज बदलत नसल्यास, <ph name="NEW_PROFILE_NAME" /> वेबवरील प्रत्येक गोष्ट पाहू शकतो.
+
+<ph name="NEW_PROFILE_NAME" /> ला आपल्या खात्यात प्रवेश करण्‍यापासून प्रतिबंधित करण्यासाठी, आपण Chromium वापरत नसता तेव्हा आपण आपले प्रोफाइल लॉक करता याची खात्री करा. हे करण्‍यासाठी, ब्राउझरच्या वरील उजव्या कोपर्‍यातील आपले प्रोफाइल नाव क्लिक करा आणि "बाहेर पडा आणि मुलांचा लॉक" निवडा. <ph name="BEGIN_LINK_2" />अधिक जाणून घ्या<ph name="END_LINK_2" />
+
+कृपया पुढील सूचनांसाठी आपले ईमेल <ph name="ACCOUNT_EMAIL" /> वर तपासा.</translation>
 <translation id="7419987137528340081">आपण आपला विद्यमान Chromium डेटा स्वतंत्र ठेवण्यास प्राधान्य दिल्यास, आपण <ph name="USER_NAME" /> साठी एक नवीन Chromium तयार करू शकता.</translation>
 <translation id="7421823331379285070">Chromium साठी Windows XP किंवा नंतरचे आवश्‍यक आहे. काही वैशिष्‍ट्ये कदाचित कार्य करू शकत नाहीत.</translation>
 <translation id="7463979740390522693">Chromium - सूचना (<ph name="QUANTITY" /> न वाचलेल्या)</translation>
@@ -208,6 +214,7 @@ Chromium आपली सेटिंग्ज पुनर्प्राप्
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> The Chromium लेखक. सर्व हक्क राखीव.</translation>
 <translation id="8621669128220841554">अनिर्दिष्ट त्रुटीमुळे स्थापना अयशस्वी झाली. कृपया Chromium पुन्‍हा डाउनलोड करा.</translation>
 <translation id="8628626585870903697">Chromium कार्य करण्यासाठी मुद्रण पूर्वावलोकनास आवश्यक असलेले PDF viewer समाविष्ट करीत नाही.</translation>
+<translation id="8667808506758191620">आपले <ph name="DEVICE_TYPE" /> अद्ययावत आहे.</translation>
 <translation id="8697124171261953979">आपण Chromium प्रारंभ करता किंवा विविधोपयोगी क्षेत्रातून शोध घेता तेव्हा कोणते पृष्ठ दर्शविले जाते हे देखील हे नियंत्रित करते.</translation>
 <translation id="8704119203788522458">हे आपले Chromium आहे</translation>
 <translation id="872034308864968620">Chromium पार्श्वभूमीवर चालू द्या</translation>
@@ -224,7 +231,6 @@ Chromium आपली सेटिंग्ज पुनर्प्राप्
 
 तरीही साइन इन करण्यामुळे <ph name="ACCOUNT_EMAIL_NEW" /> मध्ये बुकमार्क, इतिहास यासारखी Chromium माहिती आणि अन्य सेटिंग्ज विलीन होईल.</translation>
 <translation id="9013087743919948559">Chromium वर जोडा</translation>
-<translation id="9013262824292842194">Chromium साठी SP2 किंवा त्यापेक्षा उच्च आवृत्तीसह Windows Vista किंवा Windows XP आवश्यक आहे.</translation>
 <translation id="9019929317751753759">Chromium अधिक सुरक्षित करण्यासाठी, आम्ही <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> मध्ये सूचीबद्ध नसलेला आणि आपल्या माहितीशिवाय कदाचित जोडला गेलेला खालील विस्तार अक्षम केला आहे.</translation>
 <translation id="9022552996538154597">Chromium वर साइन इन करा</translation>
 <translation id="9036189287518468038">Chromium App लाँचर</translation>

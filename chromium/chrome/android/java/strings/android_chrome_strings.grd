@@ -75,7 +75,8 @@ CHAR-LIMIT guidelines:
     <output filename="values-uk/android_chrome_strings.xml" lang="uk" type="android" />
     <output filename="values-vi/android_chrome_strings.xml" lang="vi" type="android" />
     <output filename="values-zh-rCN/android_chrome_strings.xml" lang="zh-CN" type="android" />
-    <output filename="values-zh-rTW/android_chrome_strings.xml" lang="zh-TW" type="android" />
+    <!-- Use zh instead of zh-rTW so that Android will let zh-HK fall back to zh-TW. -->
+    <output filename="values-zh/android_chrome_strings.xml" lang="zh-TW" type="android" />
   </outputs>
   <translations>
     <file lang="am" path="translations/android_chrome_strings_am.xtb" />
@@ -217,7 +218,10 @@ CHAR-LIMIT guidelines:
         Google Activity Controls
       </message>
       <message name="IDS_SIGN_IN_GOOGLE_ACTIVITY_CONTROLS_MESSAGE" desc="Message of Google activity controls preference in signed in accouts settings screen">
-        Control how Google uses your browsing history to personalize Search and other Google services.
+        Control how Google uses your browsing history to personalize Search, ads, and other Google services.
+      </message>
+      <message name="IDS_SIGN_IN_SYNC_ERROR_WIDGET" desc="Accessibility description of the sync error widget in settings screen">
+        Sync error occurred, tap to get details.
       </message>
 
       <!-- Search engine preferences -->
@@ -471,7 +475,7 @@ Your Google account may have other forms of browsing history like searches and a
       <message name="IDS_CLEAR_BROWSING_DATA_PROGRESS_TITLE" desc='Title for the progress dialog used when waiting for "clear browsing data" to complete.'>
         Clearing browsing data
       </message>
-      <message name="IDS_CLEAR_DATA_DELETE" desc="Button that allows the user to clear their browsing data. [CHAR-LIMIT=20]">
+      <message name="IDS_CLEAR_DATA_DELETE" desc="Button that allows the user to clear their browsing data. [CHAR-LIMIT=30]">
         Clear data
       </message>
       <message name="IDS_CLEAR_BROWSING_DATA_PROGRESS_MESSAGE" desc='Message on the progress dialog used when waiting for "clear browsing data" to complete.'>
@@ -530,6 +534,9 @@ Your Google account may have other forms of browsing history like searches and a
       <message name="IDS_ALL_SITES" desc='Title of the "All sites" settings screen that allows the user to see permissions for all websites. [CHAR-LIMIT=32]'>
         All sites
       </message>
+      <message name="IDS_AUTOPLAY_TITLE" desc='Title for the Autoplay settings screen [CHAR-LIMIT=32]'>
+        Autoplay
+      </message>
       <message name="IDS_COOKIES_TITLE" desc="Title for the Cookies settings screen [CHAR-LIMIT=32]">
         Cookies
       </message>
@@ -545,6 +552,9 @@ Your Google account may have other forms of browsing history like searches and a
       <message name="IDS_KEYGEN_PERMISSION_TITLE" desc="Title of the permission to allow a form to perform client-side key generation [CHAR-LIMIT=32]">
         Key generation
       </message>
+      <message name="IDS_MEDIA_PERMISSION_TITLE" desc="Title of the menu containing the media permissions [CHAR-LIMIT=32]">
+        Media
+      </message>
       <message name="IDS_POPUP_PERMISSION_TITLE" desc="Title of the permission to display pop-up windows [CHAR-LIMIT=32]">
         Pop-ups
       </message>
@@ -558,7 +568,7 @@ Your Google account may have other forms of browsing history like searches and a
         Background sync
       </message>
       <message name="IDS_WEBSITE_SETTINGS_ADD_SITE" desc="The label for the button to add a new website to the exception list.">
-        Add site
+        Add site exception
       </message>
       <message name="IDS_WEBSITE_SETTINGS_ADD_SITE_DIALOG_TITLE" desc="The title of the dialog to add a website to a list.">
         Add site
@@ -569,11 +579,14 @@ Your Google account may have other forms of browsing history like searches and a
       <message name="IDS_WEBSITE_SETTINGS_ADD_SITE_TOAST" desc="The toast shown when a new site has been added to the whitelist.">
         Site <ph name="SITE_NAME">%1$s<ex>google.com</ex></ph> added
       </message>
+      <message name="IDS_WEBSITE_SETTINGS_ADD_SITE_DESCRIPTION_AUTOPLAY" desc="The description for the allow autoplay for website dialog.">
+        Detect and playback important media for a specific site.
+      </message>
       <message name="IDS_WEBSITE_SETTINGS_ADD_SITE_DESCRIPTION_JAVASCRIPT" desc="The description for the allow Javascript for website dialog.">
-        Allow JavaScript on the following site.
+        Allow JavaScript for a specific site.
       </message>
       <message name="IDS_WEBSITE_SETTINGS_ADD_SITE_DESCRIPTION_BACKGROUND_SYNC" desc="The description for the allow Background Sync for website dialog.">
-        Allow Background Sync on the following site.
+        Allow Background Sync for a specific site.
       </message>
       <message name="IDS_WEBSITE_SETTINGS_ADD_SITE_SITE_URL" desc="The label for the input field where the user can type a website URL.">
         Site URL
@@ -599,6 +612,9 @@ Your Google account may have other forms of browsing history like searches and a
       <message name="IDS_WEBSITE_SETTINGS_CATEGORY_ALLOWED_EXCEPT_THIRD_PARTY" desc="Summary text for when only third-party cookies are blocked.">
         Allowed, except third-party
       </message>
+      <message name="IDS_WEBSITE_SETTINGS_CATEGORY_ALWAYS_ALLOWED" desc="Summary text explaining that a permission is allowed, and cannot be changed by the user, e.g. JavaScript: always allowed.">
+        Always allowed
+      </message>
       <message name="IDS_WEBSITE_SETTINGS_CATEGORY_ASK" desc="Summary text explaining that Chrome will ask the user before allowing a site to use a certain permission, e.g. JavaScript: ask first.">
         Ask first
       </message>
@@ -623,18 +639,32 @@ Your Google account may have other forms of browsing history like searches and a
       <message name="IDS_WEBSITE_SETTINGS_CATEGORY_ALLOWED_RECOMMENDED" desc="Summary text explaining that a permission is allowed, which is the recommended setting.">
         Allowed (recommended)
       </message>
-      <message name="IDS_WEBSITE_SETTINGS_CATEGORY_ASK_FIRST_RECOMMENDED" desc="Summary text explaining that the user will be asked before a site is granted a
-particular permission.">
-        Ask first (recommended)
-      </message>
-      <message name="IDS_WEBSITE_SETTINGS_CATEGORY_ASK_BEFORE_SENDING" desc="Summary text explaining that permission will be requested before sending things, e.g. notifications.">
-        Ask before sending (recommended)
-      </message>
-      <message name="IDS_WEBSITE_SETTINGS_CATEGORY_ASK_BEFORE_ACCESSING" desc="Summary text explaining that permission will be requested before accessing something, like location.">
-        Ask before accessing (recommended)
-      </message>
       <message name="IDS_WEBSITE_SETTINGS_CATEGORY_COOKIE_ALLOWED" desc="Summary text explaining that sites are allowed to use cookies and that it is the recommended setting.">
         Allow sites to save and read cookie data (recommended)
+      </message>
+      <message name="IDS_WEBSITE_SETTINGS_CATEGORY_AUTOPLAY_ALLOWED" desc="Summary text explaining that sites are allowed to  autoplay videos and that it is the recommended setting.">
+        Allow sites to autoplay important media (recommended)
+      </message>
+      <message name="IDS_WEBSITE_SETTINGS_CATEGORY_JAVASCRIPT_ALLOWED" desc="Summary text explaining that sites are allowed to run Javascript and that it is the recommended setting.">
+        Allow sites to run JavaScript (recommended)
+      </message>
+      <message name="IDS_WEBSITE_SETTINGS_CATEGORY_POPUPS_BLOCKED" desc="Summary text explaining that sites are blocked from showing popups and that it is the recommended setting.">
+        Block sites from showing pop-ups (recommended)
+      </message>
+      <message name="IDS_WEBSITE_SETTINGS_CATEGORY_LOCATION_ASK" desc="Summary text explaining that sites need to ask for permission before knowing location and that it is the recommended setting.">
+        Ask before allowing sites to know your location (recommended)
+      </message>
+      <message name="IDS_WEBSITE_SETTINGS_CATEGORY_NOTIFICATIONS_ASK" desc="Summary text explaining that sites need to ask for permission before sending notifications and that it is the recommended setting.">
+        Ask before allowing sites to send notifications (recommended)
+      </message>
+      <message name="IDS_WEBSITE_SETTINGS_CATEGORY_FULLSCREEN_ASK" desc="Summary text explaining that sites need to ask for permission before going fullscreen and that it is the recommended setting.">
+        Ask first before allowing sites to enter fullscreen (recommended)
+      </message>
+      <message name="IDS_WEBSITE_SETTINGS_CATEGORY_CAMERA_ASK" desc="Summary text explaining that sites need to ask for permission before accessing the camera and that it is the recommended setting.">
+        Ask first before allowing sites to use your camera (recommended)
+      </message>
+      <message name="IDS_WEBSITE_SETTINGS_CATEGORY_MIC_ASK" desc="Summary text explaining that sites need to ask for permission before accessing the microphone and that it is the recommended setting.">
+        Ask first before allowing sites to use your microphone (recommended)
       </message>
       <message name="IDS_WEBSITE_SETTINGS_PERMISSIONS_ALLOW" desc="Summary text explaining that Chrome will allow a website to access some permission, e.g. JavaScript: allow.">
         Allow
@@ -1013,12 +1043,12 @@ To obtain new licenses, connect to the internet and play your downloaded content
         To get your tabs from your other devices, turn on sync.
       </message>
       <message name="IDS_RECENT_TABS_SYNC_PROMO_ENABLE_ANDROID_SYNC" desc="Text that displayed in a textview encouraging the user to enable sync in the android settings.">
-        To get your tabs from your other devices, turn on "Auto-sync data" in Android account setting.
+        To get your tabs from your other devices, turn on "Auto-sync data" in Android account settings.
       </message>
       <message name="IDS_NTP_RECENT_TABS_SYNC_PROMO_INSTRUCTIONS" desc="Information about sync displayed on the NTP when the user has signed in on mobile but not on desktop">
         Tabs that you've opened in Chrome on your other devices will appear here.
       </message>
-      
+
       <message name="IDS_SIGN_IN_SYNC" desc="Sync preference title in signed-in prefs and prefix for notification related to sync [CHAR-LIMIT=32]">
         Sync
       </message>
@@ -1232,7 +1262,7 @@ You are signing in with a managed account and giving its administrator control o
       <message name="IDS_INFOBAR_CLOSE" desc="Accessibility label for the dismiss infobar Button">
         Close
       </message>
-      <message name="IDS_INFOBAR_SCREEN_POSITION" desc="Accessibility label to inform users about the InfoBar location">
+      <message name="IDS_BOTTOM_BAR_SCREEN_POSITION" desc="Accessibility label to inform users about the InfoBar location">
         Options available near bottom of the screen
       </message>
 
@@ -1722,6 +1752,12 @@ You are signing in with a managed account and giving its administrator control o
       <message name="IDS_SIGNIN_ADD_ACCOUNT" desc="Text for adding another Google Account">
         Add account
       </message>
+      <message name="IDS_SIGNIN_OPEN_ADD_GOOGLE_ACCOUNT_PAGE_FAILED" desc="Message for openning add Google Account page in device's Settings app failed">
+        Add a Google Account from the Accounts page in your device's Settings app.
+      </message>
+      <message name="IDS_SIGNIN_OPEN_SETTINGS_ACCOUNTS" desc="Text for button to open Accounts page in device's Settings app">
+        Open settings
+      </message>      
       <message name="IDS_MAKE_CHROME_YOURS" desc="Title for the signin promo that prompts the user to sign in to Chrome to have a personalized experirence. [CHAR-LIMIT=24]">
         Make Chrome yours
       </message>
@@ -1892,9 +1928,6 @@ You are signing in with a managed account and giving its administrator control o
       <message name="IDS_MENU_BOOKMARKS" desc="Menu item for opening the bookmarks page that contains all the user's bookmarks. [CHAR-LIMIT=27]">
         Bookmarks
       </message>
-      <message name="IDS_MENU_BOOKMARKS_OFFLINE_PAGES" desc="Menu item for opening the saved pages page that contains all the user's saved pages (bookmarks and offline). [CHAR-LIMIT=27]">
-        Saved pages
-      </message>
       <message name="IDS_MENU_RECENT_TABS" desc="Menu item for opening the 'Recent tabs' page that shows recently closed tabs and pages the user has opened on his/her other devices. [CHAR-LIMIT=27]">
         Recent tabs
       </message>
@@ -1939,20 +1972,17 @@ You are signing in with a managed account and giving its administrator control o
       <message name="IDS_BOOKMARK_PAGE_SAVED_FOLDER" desc="Message shown after user adds a new bookmark. Also specifies in which folder the bookmark was added. [CHAR-LIMIT=32]">
         Bookmarked to <ph name="FOLDER_NAME">%1$s<ex>Mobile bookmarks</ex></ph>
       </message>
+      <message name="IDS_BOOKMARK_PAGE_FAILED" desc="Message shown when the user tries to add a bookmark but the browser fails to save it.">
+        Failed to add bookmark.
+      </message>
       <message name="IDS_BOOKMARK_DRAWER_ALL_ITEMS" desc="Menu item for showing all bookmark items in the bookmarks UI [CHAR-LIMIT=24]">
         All bookmarks
       </message>
       <message name="IDS_BOOKMARK_DRAWER_FOLDERS" desc="Title for the list of folders in the drawer view. [CHAR-LIMIT=32]">
         Folders
       </message>
-      <message name="IDS_BOOKMARK_DRAWER_FILTER_OFFLINE_PAGES" desc="Menu item for showing all bookmarks with an offline pages [CHAR-LIMIT=24]">
-        Saved offline
-      </message>
       <message name="IDS_BOOKMARK_TITLE_BAR_ALL_ITEMS" desc="Title bar text for showing all bookmark items in the bookmarks UI [CHAR-LIMIT=32]">
         Bookmarks
-      </message>
-      <message name="IDS_BOOKMARK_TITLE_BAR_FILTER_OFFLINE_PAGES" desc="Title bar text for showing all save pages with offline copy in the bookmarks UI. [CHAR-LIMIT=24]">
-        Saved offline
       </message>
       <message name="IDS_BOOKMARK_PARENT_FOLDER" desc="Header text for title of parent folder of the bookmark [CHAR-LIMIT=32]">
         Parent folder
@@ -2011,15 +2041,6 @@ You are signing in with a managed account and giving its administrator control o
       <message name="IDS_BOOKMARK_FOLDER" desc="Label specifying what folder a bookmark is in. [CHAR-LIMIT=32]">
         Folder
       </message>
-      <message name="IDS_BOOKMARK_OFFLINE_PAGE_NONE" desc="Label specifying that given saved page does not have an offline copy, but user has the page open.">
-        Not saved offline
-      </message>
-      <message name="IDS_BOOKMARK_OFFLINE_PAGE_SIZE" desc="Label specifying that given saved page has an offline copy of a specific size.">
-        <ph name="PAGE_SIZE_STRING">%1$s<ex>1.32 MB</ex></ph> page saved offline
-      </message>
-      <message name="IDS_BOOKMARK_BTN_OFFLINE_PAGE_VISIT" desc="Label for a button to visit an offline page. [CHAR-LIMIT=20]">
-        Visit
-      </message>
       <message name="IDS_BOOKMARK_MISSING_TITLE" desc="Error message appearing when a user tries to create/edit a bookmark or a folder without a title. [CHAR-LIMIT=32]">
         Title required
       </message>
@@ -2052,106 +2073,8 @@ You are signing in with a managed account and giving its administrator control o
       </message>
 
       <!-- Offline pages -->
-      <message name="IDS_OFFLINE_PAGES_ACTION_BAR_DELETE" desc="Button text to delete the saved web pages that are being selected [CHAR-LIMIT=32]">
-        Delete saved pages
-      </message>
-      <message name="IDS_OFFLINE_PAGES_ACTION_BAR_MOVE" desc="Button text to move the saved web pages that are being selected [CHAR-LIMIT=32]">
-        Move saved pages
-      </message>
-      <message name="IDS_OFFLINE_PAGES_ACTION_BAR_SEARCH" desc="Button text to search among the saved web pages [CHAR-LIMIT=32]">
-        Search saved pages
-      </message>
-      <message name="IDS_OFFLINE_PAGES_ALL_ITEMS" desc="Title button and text for showing the list of web pages that have been saved/bookmarked. [CHAR-LIMIT=32]">
-        All saved pages
-      </message>
-      <message name="IDS_OFFLINE_PAGES_EDIT_ITEM" desc="The string prompting the user to edit the content of a saved page. [CHAR-LIMIT=32]">
-        Edit saved page
-      </message>
-      <message name="IDS_OFFLINE_PAGES_FREE_UP_SPACE_TITLE" desc="Text on a button and title of the dialog offering to remove offline pages to free up storage space. [CHAR-LIMIT=32]">
-        Free up space
-      </message>
-      <message name="IDS_OFFLINE_PAGES_FREE_UP_SPACE_MESSAGE" desc="Text explaining how many offline copies of saved pages are going to be removed and how much storage is going to be freed.">
-        Delete <ph name="PAGES_NUMBER">%1$d<ex>8</ex></ph> offline copies not used in the past month? This will clear <ph name="TOTAL_PAGE_SIZE">%2$s<ex>8.3 MB</ex></ph> of space.
-      </message>
-      <message name="IDS_OFFLINE_PAGES_FOLDER_EMPTY" desc="Text explaining that the currently selected saved pages folder is empty.">
-        No saved pages here
-      </message>
-      <message name="IDS_OFFLINE_PAGES_NTP_BUTTON_NAME" desc="Text for saved pages button on the new tab page [CHAR-LIMIT=20]">
-        Saved pages
-      </message>
-      <message name="IDS_OFFLINE_PAGES_NTP_BUTTON_ACCESSIBILITY" desc="Content description for saved pages button on the new tab page.">
-        Saved pages
-      </message>
-      <message name="IDS_OFFLINE_PAGES_OPEN_STORAGE_SETTINGS_DIALOG_TEXT" desc="Text of the dialog asking if the user wants to open storage settings to remove files to make space.">
-        Your device storage is full. Please remove other media to make space.
-      </message>
-      <message name="IDS_OFFLINE_PAGES_PAGE_SAVED" desc="Message shown after user adds a new offline page.">
-        Page saved offline
-      </message>
-      <message name="IDS_OFFLINE_PAGES_PAGE_SAVED_FOLDER" desc="Message shown after user saves a new offline page. Also specifies in which folder the bookmark was added.">
-        Page saved offline to <ph name="FOLDER_NAME">%1$s<ex>Mobile bookmarks</ex></ph>
-      </message>
-      <message name="IDS_OFFLINE_PAGES_PAGE_SKIPPED" desc="Message shown after a page was saved as a bookmark, but an offline copy was not created due to that the page is not HTTP or HTTPS page.">
-        Page saved
-      </message>
-      <message name="IDS_OFFLINE_PAGES_PAGE_SAVED_STORAGE_NEAR_FULL" desc="Message shown after user adds a new offline page and the storage is almost full.">
-        Page saved offline. Storage almost full.
-      </message>
-      <message name="IDS_OFFLINE_PAGES_PAGE_FAILED_TO_SAVE" desc="Message shown after a page was saved as a bookmark, but an offline copy was not created due to problems other than storage.">
-        Saved page not available offline
-      </message>
-      <message name="IDS_OFFLINE_PAGES_PAGE_FAILED_TO_SAVE_STORAGE_NEAR_FULL" desc="Message shown after a page was saved as a bookmark, but an offline copy was not created due to storage problem.">
-        Saved page not available offline. Storage almost full.
-      </message>
-      <message name="IDS_OFFLINE_PAGES_SAVED_PAGES" desc="Title in recent tasks list for showing the list of web pages that have been saved.">
-        Saved pages
-      </message>
-      <message name="IDS_OFFLINE_PAGES_STORAGE_SPACE_TITLE" desc="Title of the promo header for managing offline pages storage. [CHAR-LIMIT=32]">
-        Storage space
-      </message>
-      <message name="IDS_OFFLINE_PAGES_STORAGE_SPACE_MESSAGE" desc="Text explaining how much storage is currently used for offline copies of saved pages.">
-        Saved pages are currently taking up <ph name="TOTAL_OFFLINE_STORAGE_SIZE">%1$s<ex>780 MB</ex></ph>.
-      </message>
-      <message name="IDS_OFFLINE_PAGES_STORAGE_CLEARED" desc="Text for the snackbar confirming clearing of the offline page storage space.">
-        Storage cleared
-      </message>
       <message name="IDS_OFFLINE_PAGES_VIEWING_OFFLINE_PAGE" desc="Text explaining that the user is viewing an offline copy of a web page.">
         Viewing an offline copy of this page
-      </message>
-      <message name="IDS_OFFLINE_PAGES_VIEW_BUTTON" desc="Label for a button to open a system settings page. [CHAR-LIMIT=20]">
-        View
-      </message>
-
-      <!-- Offline pages (Use 'bookmarks' name in UI strings) -->
-      <message name="IDS_OFFLINE_PAGES_AS_BOOKMARKS_OFFLINE_PAGE_SIZE" desc="Label specifying that given saved page has an offline copy of a specific size (Use 'bookmarks' name in UI strings).">
-        <ph name="PAGE_SIZE_STRING">%1$s<ex>1.32 MB</ex></ph> bookmark saved offline
-      </message>
-      <message name="IDS_OFFLINE_PAGES_AS_BOOKMARKS_OFFLINE_PAGE_VISIT" desc="Label specifying that given saved page does not have an offline copy, and user does not have that page open (Use 'bookmarks' name in UI strings).">
-        Visit bookmark to save offline
-      </message>
-      <message name="IDS_OFFLINE_PAGES_AS_BOOKMARKS_PAGE_SAVED" desc="Message shown after user adds a new offline page (Use 'bookmarks' name in UI strings).">
-        Bookmark saved offline
-      </message>
-      <message name="IDS_OFFLINE_PAGES_AS_BOOKMARKS_PAGE_SAVED_FOLDER" desc="Message shown after user saves a new offline page. Also specifies in which folder the bookmark was added (Use 'bookmarks' name in UI strings).">
-        Bookmark saved offline to <ph name="FOLDER_NAME">%1$s<ex>Mobile bookmarks</ex></ph>
-      </message>
-      <message name="IDS_OFFLINE_PAGES_AS_BOOKMARKS_PAGE_SKIPPED" desc="Message shown after a page was saved as a bookmark, but an offline copy was not created due to that the page is not HTTP or HTTPS page (Use 'bookmarks' name in UI strings).">
-        Bookmarked
-      </message>
-      <message name="IDS_OFFLINE_PAGES_AS_BOOKMARKS_PAGE_SAVED_STORAGE_NEAR_FULL" desc="Message shown after user adds a new offline page and the storage is almost full (Use 'bookmarks' name in UI strings).">
-        Bookmark saved offline. Storage almost full.
-      </message>
-      <message name="IDS_OFFLINE_PAGES_AS_BOOKMARKS_PAGE_FAILED_TO_SAVE" desc="Message shown after a page was saved as a bookmark, but an offline copy was not created due to problems other than storage (Use 'bookmarks' name in UI strings).">
-        Bookmark not available offline
-      </message>
-      <message name="IDS_OFFLINE_PAGES_AS_BOOKMARKS_PAGE_FAILED_TO_SAVE_STORAGE_NEAR_FULL" desc="Message shown after a page was saved as a bookmark, but an offline copy was not created due to storage problem (Use 'bookmarks' name in UI strings).">
-        Bookmark not available offline. Storage almost full.
-      </message>
-      <message name="IDS_OFFLINE_PAGES_AS_BOOKMARKS_STORAGE_SPACE_MESSAGE" desc="Text explaining how much storage is currently used for offline copies of saved pages (Use 'bookmarks' name in UI strings).">
-        Bookmarks are currently taking up <ph name="TOTAL_OFFLINE_STORAGE_SIZE">%1$s<ex>780 MB</ex></ph>.
-      </message>
-      <message name="IDS_OFFLINE_PAGES_AS_BOOKMARKS_VIEWING_OFFLINE_PAGE" desc="Text explaining that the user is viewing an offline copy of a web page (Use 'bookmarks' name in UI strings).">
-        Viewing an offline copy of this bookmark
       </message>
 
       <!-- Find in page -->
@@ -2318,11 +2241,6 @@ You are signing in with a managed account and giving its administrator control o
 
 However, you aren’t invisible. Going incognito doesn’t hide your browsing from your employer, your internet service provider, or the websites you visit.
       </message>
-      <message name="IDS_OFFLINE_PAGES_NEW_TAB_INCOGNITO_MESSAGE" desc="Message shown when a user opens an incognito tab explaining incognito mode">
-        Pages you view in incognito tabs won’t stick around in your browser’s history, cookie store, or search history after you’ve closed all of your incognito tabs. Any downloaded files or saved pages will be kept.
-
-However, you aren’t invisible. Going incognito doesn’t hide your browsing from your employer, your internet service provider, or the websites you visit.
-      </message>
 
       <!-- Contextual Search -->
       <message name="IDS_CONTEXTUAL_SEARCH_NETWORK_UNAVAILABLE" desc="Tells the user the network is not accessible.">
@@ -2397,6 +2315,8 @@ You must have Bluetooth and Location turned on in order to use the Physical Web.
         Devices nearby you are broadcasting web pages over Bluetooth. Chrome will scan for pages and display them when you wake up your device. These pages will go through a Google service to improve the quality of page results.
 
 You can control the Physical Web in Chrome Settings.
+
+<ph name="BEGIN_LINK">&lt;learnmore&gt;</ph>Learn more<ph name="END_LINK">&lt;/learnmore&gt;</ph>
       </message>
       <message name="IDS_PHYSICAL_WEB_LIST_URLS_ACTIVITY_TITLE" desc="The title for a dialog that shows a list of URLs broadcasted from nearby devices.">
         The Physical Web
@@ -2446,6 +2366,53 @@ You can control the Physical Web in Chrome Settings.
       </message>
       <message name="IDS_USB_CHOOSER_DIALOG_FOOTNOTE_TEXT" desc="This text is shown at the bottom of the USB chooser dialog with a link to part of its text.">
         Not seeing your device? <ph name="BEGIN_LINK">&lt;link&gt;</ph>Get help<ph name="END_LINK">&lt;/link&gt;</ph>
+      </message>
+
+      <!-- Payments -->
+      <message name="IDS_PAYMENTS_METHOD_OF_PAYMENT_LABEL" desc="The title for the section that lets the user select the method of payment.">
+        Payment
+      </message>
+      <message name="IDS_PAYMENTS_SHIPPING_SUMMARY_LABEL" desc="The title for the section of shipping information.">
+        Shipping
+      </message>
+      <message name="IDS_PAYMENTS_SHIPPING_ADDRESS_LABEL" desc="The title for the section that lets the user select the address where the product should be shipped.">
+        Shipping address
+      </message>
+      <message name="IDS_PAYMENTS_SHIPPING_OPTION_LABEL" desc="The title for the section that lets the user select how the product should be shipped.">
+        Shipping option
+      </message>
+      <message name="IDS_PAYMENTS_SELECT_SHIPPING_PROMPT" desc="The label for the button that presents the user with the list of possible shipping addresses and options.">
+        Select shipping
+      </message>
+      <message name="IDS_PAYMENTS_SELECT_SHIPPING_OPTION_PROMPT" desc="The label for the button that presents the user with the list of possible shipping options.">
+        Select shipping option
+      </message>
+      <message name="IDS_PAYMENTS_SELECT_SHIPPING_ADDRESS_PROMPT" desc="The label for the button that presents the user with the list of possible shipping addresses.">
+        Select shipping address
+      </message>
+      <message name="IDS_PAYMENTS_ORDER_SUMMARY_LABEL" desc="The title of the section that shows the summary of the order, including names and prices of individual line items, i.e. the bill.">
+        Order summary
+      </message>
+      <message name="IDS_PAYMENTS_EDIT_BUTTON" desc="The label for the button that lets the user edit their payment options.">
+        Edit
+      </message>
+      <message name="IDS_PAYMENTS_CANCEL_BUTTON" desc="The label for the button that cancels the pending payment operation.">
+        Cancel
+      </message>
+      <message name="IDS_PAYMENTS_PAY_BUTTON" desc="The label for the button that finishes the payment process.">
+        Pay
+      </message>
+      <message name="IDS_PAYMENTS_LOADING_MESSAGE" desc="The text that informs the user that payment information is being loaded up.">
+        Loading
+      </message>
+      <message name="IDS_PAYMENTS_PROCESSING_MESSAGE" desc="The text that informs the user that the payment is being verified and charged.">
+        Processing
+      </message>
+      <message name="IDS_PAYMENTS_SUCCESS_MESSAGE" desc="The text that informs the user that the payment has been verified and charged.">
+        Payment processed
+      </message>
+      <message name="IDS_PAYMENTS_ERROR_MESSAGE" desc="The text that informs the user that there is error in verifying and charging the payment.">
+        There was an error processing your order.  Please check your account and try again.
       </message>
 
       <!-- Migration strings -->

@@ -62,7 +62,7 @@ TEST_F(CTObjectsExtractorTest, ExtractEmbeddedSCT) {
       new ct::SignedCertificateTimestamp());
   ExtractEmbeddedSCT(precert_chain_[0], &sct);
 
-  EXPECT_EQ(sct->version, SignedCertificateTimestamp::SCT_VERSION_1);
+  EXPECT_EQ(sct->version, SignedCertificateTimestamp::V1);
   EXPECT_EQ(ct::GetTestPublicKeyId(), sct->log_id);
 
   base::Time expected_timestamp =
@@ -83,7 +83,7 @@ TEST_F(CTObjectsExtractorTest, ExtractPrecert) {
   // Compare hash values of issuer spki.
   SHA256HashValue expected_issuer_key_hash;
   memcpy(expected_issuer_key_hash.data, GetDefaultIssuerKeyHash().data(), 32);
-  ASSERT_TRUE(expected_issuer_key_hash.Equals(entry.issuer_key_hash));
+  ASSERT_EQ(expected_issuer_key_hash, entry.issuer_key_hash);
 }
 
 TEST_F(CTObjectsExtractorTest, ExtractOrdinaryX509Cert) {

@@ -40,6 +40,8 @@
 #include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 
+struct hb_buffer_t;
+
 namespace blink {
 
 class Font;
@@ -67,12 +69,12 @@ public:
     bool hasVerticalOffsets() const { return m_hasVerticalOffsets; }
 
     // For memory reporting.
-    size_t byteSize();
+    size_t byteSize() const;
 
-    int offsetForPosition(float targetX) const;
+    int offsetForPosition(float targetX, bool includePartialGlyphs) const;
 
     PassRefPtr<ShapeResult> applySpacingToCopy(ShapeResultSpacing&,
-        const TextRun&);
+        const TextRun&) const;
 
 protected:
     struct RunInfo;
@@ -89,6 +91,8 @@ protected:
     }
 
     void applySpacing(ShapeResultSpacing&, const TextRun&);
+    void insertRun(PassOwnPtr<ShapeResult::RunInfo>, unsigned startGlyph,
+        unsigned numGlyphs, hb_buffer_t*);
 
     float m_width;
     FloatRect m_glyphBoundingBox;

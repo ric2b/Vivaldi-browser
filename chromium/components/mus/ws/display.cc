@@ -4,6 +4,9 @@
 
 #include "components/mus/ws/display.h"
 
+#include <set>
+#include <vector>
+
 #include "base/debug/debugger.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/mus/common/types.h"
@@ -20,7 +23,7 @@
 #include "components/mus/ws/window_tree_binding.h"
 #include "mojo/common/common_type_converters.h"
 #include "mojo/converters/geometry/geometry_type_converters.h"
-#include "mojo/shell/public/interfaces/connector.mojom.h"
+#include "services/shell/public/interfaces/connector.mojom.h"
 #include "ui/base/cursor/cursor.h"
 
 namespace mus {
@@ -61,7 +64,7 @@ Display::~Display() {
     window_server_->DestroyTree(state->tree());
 }
 
-void Display::Init(scoped_ptr<DisplayBinding> binding) {
+void Display::Init(std::unique_ptr<DisplayBinding> binding) {
   init_called_ = true;
   binding_ = std::move(binding);
   display_manager()->AddDisplay(this);
@@ -219,23 +222,6 @@ void Display::UpdateNativeCursor(int32_t cursor_id) {
   }
 }
 
-void Display::OnCursorUpdated(ServerWindow* window) {
-  WindowManagerState* wms = GetActiveWindowManagerState();
-  if (wms && window == wms->event_dispatcher()->mouse_cursor_source_window())
-    UpdateNativeCursor(window->cursor());
-}
-
-void Display::MaybeChangeCursorOnWindowTreeChange() {
-  WindowManagerState* wms = GetActiveWindowManagerState();
-  if (!wms)
-    return;
-  wms->event_dispatcher()->UpdateCursorProviderByLastKnownLocation();
-  ServerWindow* cursor_source_window =
-      wms->event_dispatcher()->mouse_cursor_source_window();
-  if (cursor_source_window)
-    UpdateNativeCursor(cursor_source_window->cursor());
-}
-
 void Display::SetSize(mojo::SizePtr size) {
   platform_display_->SetViewportSize(size.To<gfx::Size>());
 }
@@ -250,13 +236,12 @@ void Display::InitWindowManagersIfNecessary() {
 
   display_manager()->OnDisplayAcceleratedWidgetAvailable(this);
   if (binding_) {
-    scoped_ptr<WindowManagerState> wms_ptr(new WindowManagerState(
-        this, platform_display_.get(), top_level_surface_id_));
+    std::unique_ptr<WindowManagerState> wms_ptr(
+        new WindowManagerState(this, platform_display_.get()));
     WindowManagerState* wms = wms_ptr.get();
     // For this case we never create additional WindowManagerStates, so any
     // id works.
-    window_manager_state_map_[mojo::shell::mojom::kRootUserID] =
-        std::move(wms_ptr);
+    window_manager_state_map_[shell::mojom::kRootUserID] = std::move(wms_ptr);
     wms->tree_ = binding_->CreateWindowTree(wms->root());
   } else {
     CreateWindowManagerStatesFromRegistry();
@@ -274,9 +259,8 @@ void Display::CreateWindowManagerStatesFromRegistry() {
 
 void Display::CreateWindowManagerStateFromService(
     WindowManagerFactoryService* service) {
-  scoped_ptr<WindowManagerState> wms_ptr(
-      new WindowManagerState(this, platform_display_.get(),
-                             top_level_surface_id_, service->user_id()));
+  std::unique_ptr<WindowManagerState> wms_ptr(new WindowManagerState(
+      this, platform_display_.get(), service->user_id()));
   WindowManagerState* wms = wms_ptr.get();
   window_manager_state_map_[service->user_id()] = std::move(wms_ptr);
   wms->tree_ = window_server_->CreateTreeForWindowManager(
@@ -329,12 +313,6 @@ void Display::OnViewportMetricsChanged(
   // TODO(sky): if bounds changed, then need to update
   // Display/WindowManagerState appropriately (e.g. notify observers).
   window_server_->ProcessViewportMetricsChanged(this, old_metrics, new_metrics);
-}
-
-void Display::OnTopLevelSurfaceChanged(cc::SurfaceId surface_id) {
-  DCHECK(!root_);
-  // This should only be called once, and before we've created root_.
-  top_level_surface_id_ = surface_id;
 }
 
 void Display::OnCompositorFrameDrawn() {

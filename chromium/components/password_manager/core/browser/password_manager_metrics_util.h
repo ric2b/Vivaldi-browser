@@ -131,6 +131,7 @@ enum AutoSigninPromoUserAction {
 enum AccountChooserUserAction {
   ACCOUNT_CHOOSER_DISMISSED,
   ACCOUNT_CHOOSER_CREDENTIAL_CHOSEN,
+  ACCOUNT_CHOOSER_SIGN_IN,
   ACCOUNT_CHOOSER_ACTION_COUNT
 };
 
@@ -171,8 +172,9 @@ void LogMultiAccountUpdateBubbleUserAction(
 // Log a user action on showing the autosignin first run experience.
 void LogAutoSigninPromoUserAction(AutoSigninPromoUserAction action);
 
-// Log a user action on showing the account chooser.
-void LogAccountChooserUserAction(AccountChooserUserAction action);
+// Log a user action on showing the account chooser for one or many accounts.
+void LogAccountChooserUserActionOneAccount(AccountChooserUserAction action);
+void LogAccountChooserUserActionManyAccounts(AccountChooserUserAction action);
 
 }  // namespace metrics_util
 

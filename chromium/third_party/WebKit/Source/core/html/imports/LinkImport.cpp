@@ -39,7 +39,7 @@
 
 namespace blink {
 
-RawPtr<LinkImport> LinkImport::create(HTMLLinkElement* owner)
+LinkImport* LinkImport::create(HTMLLinkElement* owner)
 {
     return new LinkImport(owner);
 }
@@ -52,12 +52,6 @@ LinkImport::LinkImport(HTMLLinkElement* owner)
 
 LinkImport::~LinkImport()
 {
-#if !ENABLE(OILPAN)
-    if (m_child) {
-        m_child->clearClient();
-        m_child = nullptr;
-    }
-#endif
 }
 
 Document* LinkImport::importedDocument() const
@@ -79,8 +73,10 @@ void LinkImport::process()
         return;
 
     if (!m_owner->document().importsController()) {
-        ASSERT(m_owner->document().frame()); // The document should be the master.
-        HTMLImportsController::provideTo(m_owner->document());
+        // The document should be the master.
+        Document& master = m_owner->document();
+        ASSERT(master.frame());
+        master.setImportsController(HTMLImportsController::create(master));
     }
 
     LinkRequestBuilder builder(m_owner);

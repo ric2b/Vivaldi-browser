@@ -53,6 +53,7 @@
 <translation id="2673087257647337101">Está quase atualizado! Reinicie o Chromium para concluir a atualização.</translation>
 <translation id="2685838254101182273">O Chromium já não se atualiza nem suporta mais esta versão do seu sistema operativo.</translation>
 <translation id="2705212601509139398">Este site está a utilizar o plug-in Chromium Frame, que em breve deixará de ser suportado. Desinstale-o e transfira um navegador compatível.</translation>
+<translation id="2711502716910134313">Separador do Chromium</translation>
 <translation id="2770231113462710648">Alterar o navegador predefinido para:</translation>
 <translation id="2801146392936645542">O ficheiro <ph name="FILE_NAME" /> é malicioso e o Chromium bloqueou-o.</translation>
 <translation id="2847479871509788944">Remover do Chromium...</translation>
@@ -66,7 +67,6 @@
 <translation id="3130323860337406239">O Chromium está a utilizar o microfone.</translation>
 <translation id="313551035350905294">Está a iniciar sessão com uma conta gerida e a permitir que o administrador controle o seu perfil do Chromium. Os seus dados do Chromium, como aplicações, marcadores, histórico, palavras-passe e outras definições, ficarão associados permanentemente a <ph name="USER_NAME" />. Poderá eliminar estes dados através do Painel de Controlo das Contas Google mas não poderá associar estes dados a outra conta.</translation>
 <translation id="3190315855212034486">Ups! O Chromium falhou. Reiniciar agora?</translation>
-<translation id="3197823471738295152">O dispositivo está atualizado.</translation>
 <translation id="3244477511402911926">Centro de Notificações do Chromium</translation>
 <translation id="3256316712990552818">Copiado para o Chromium</translation>
 <translation id="3258596308407688501">O Chromium não consegue ler e escrever no respetivo diretório de dados:
@@ -120,6 +120,7 @@
 <translation id="549669000822060376">Aguarde até que o Chromium instale as atualizações do sistema mais recentes.</translation>
 <translation id="5563479599352954471">Pesquisar com um toque</translation>
 <translation id="5620765574781326016">Saiba mais acerca de tópicos em Websites sem sair da página.</translation>
+<translation id="5634636535844844681">O Chromium requer o Windows 7 ou superior.</translation>
 <translation id="5680901439334282664">inicie sessão no Chromium</translation>
 <translation id="5772805321386874569">(é necessário <ph name="BEGIN_BUTTON" />reiniciar<ph name="END_BUTTON" /> o Chromium)</translation>
 <translation id="5796460469508169315">O Chromium está quase pronto.</translation>
@@ -179,6 +180,12 @@ O Chromium não consegue recuperar as suas definições.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7339898014177206373">Nova janela</translation>
 <translation id="734373864078049451">A sua Web, os seus marcadores e os seus outros itens do Chromium estão aqui.</translation>
+<translation id="7344413941077984497">Para definir que Websites <ph name="NEW_PROFILE_NAME" /> pode ver, pode configurar restrições e definições ao aceder a <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. Se não alterar as predefinições, <ph name="NEW_PROFILE_NAME" /> pode procurar tudo na Web.
+
+Para evitar que <ph name="NEW_PROFILE_NAME" /> aceda à sua conta, certifique-se de que bloqueia o seu perfil quando não estiver a utilizar o Chromium. Para o fazer, clique no seu nome de perfil no canto superior direito do navegador e selecione "Sair e bloqueio para criança".
+<ph name="BEGIN_LINK_2" />Saber mais<ph name="END_LINK_2" />
+
+Para obter mais instruções, verifique o seu email em <ph name="ACCOUNT_EMAIL" />.</translation>
 <translation id="7419987137528340081">Se preferir manter os dados do Chromium existentes em separado, pode criar um novo utilizador do Chromium para <ph name="USER_NAME" />.</translation>
 <translation id="7421823331379285070">O Chromium necessita do Windows XP ou posterior. Algumas funcionalidades podem não funcionar.</translation>
 <translation id="7463979740390522693">Chromium – Notificações (<ph name="QUANTITY" /> não lidas)</translation>
@@ -207,6 +214,7 @@ O Chromium não consegue recuperar as suas definições.</translation>
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> Os autores do Chromium. Todos os direitos reservados.</translation>
 <translation id="8621669128220841554">A instalação falhou devido a um erro não especificado. Transfira novamente o Chromium .</translation>
 <translation id="8628626585870903697">O Chromium não inclui o visualizador de PDF que é necessário para que a Pré-visualização da Impressão funcione.</translation>
+<translation id="8667808506758191620">O seu <ph name="DEVICE_TYPE" /> está atualizado.</translation>
 <translation id="8697124171261953979">Também controla a página apresentada quando inicia o Chromium ou pesquisa a partir da Caixa geral.</translation>
 <translation id="8704119203788522458">Este é o seu Chromium</translation>
 <translation id="872034308864968620">Permitir que o Chromium Seja Executado em Segundo Plano</translation>
@@ -223,7 +231,6 @@ O Chromium não consegue recuperar as suas definições.</translation>
 
 Se continuar com este início de sessão, as informações do Chromium, como marcadores, histórico e outras definições, fundir-se-ão com <ph name="ACCOUNT_EMAIL_NEW" />.</translation>
 <translation id="9013087743919948559">Adicionar ao Chromium</translation>
-<translation id="9013262824292842194">O Chromium requer o Windows Vista ou Windows XP com SP2 ou superior.</translation>
 <translation id="9019929317751753759">Para tornar o Chromium mais seguro, desativámos a seguinte extensão, que não está listada na <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />, e é possível que tenha sido adicionada sem o seu conhecimento.</translation>
 <translation id="9022552996538154597">Iniciar sessão no Chromium</translation>
 <translation id="9036189287518468038">Iniciador de Aplicações do Chromium</translation>

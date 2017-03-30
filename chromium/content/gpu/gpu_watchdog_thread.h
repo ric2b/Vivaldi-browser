@@ -22,7 +22,7 @@ extern "C" {
 #include <X11/Xatom.h>
 }
 #include <sys/poll.h>
-#include "ui/base/x/x11_util.h"
+#include "ui/base/x/x11_util.h"  // nogncheck
 #include "ui/gfx/x/x11_types.h"  // nogncheck
 #endif
 
@@ -88,7 +88,7 @@ class GpuWatchdogThread : public base::Thread,
   void OnResume() override;
 
 #if defined(OS_WIN)
-  base::TimeDelta GetWatchedThreadTime();
+  base::ThreadTicks GetWatchedThreadTime();
 #endif
 
   base::MessageLoop* watched_message_loop_;
@@ -106,7 +106,7 @@ class GpuWatchdogThread : public base::Thread,
 
 #if defined(OS_WIN)
   void* watched_thread_handle_;
-  base::TimeDelta arm_cpu_time_;
+  base::ThreadTicks arm_cpu_time_;
 
   // This measures the time that the system has been running, in units of 100
   // ns.
@@ -118,6 +118,10 @@ class GpuWatchdogThread : public base::Thread,
   base::Time suspension_timeout_;
 
   bool suspended_;
+
+  // The time the last OnSuspend and OnResume was called.
+  base::Time suspend_time_;
+  base::Time resume_time_;
 
   // This is the time the last check was sent.
   base::Time check_time_;

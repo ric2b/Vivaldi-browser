@@ -25,7 +25,7 @@
 <translation id="1822429046913737220">f.m./e.m.</translation>
 <translation id="1832974991323546415">afspil på en enhed via fjernadgang</translation>
 <translation id="1842960171412779397">vælg</translation>
-<translation id="1880518467580572141">kontur</translation>
+<translation id="1880518467580572141">Oversigt</translation>
 <translation id="1921819250265091946">dd</translation>
 <translation id="1930711995431081526">status</translation>
 <translation id="1938124657309484470">Værdien må ikke være senere end <ph name="MAXIMUM_DATE_OR_TIME" />.</translation>
@@ -109,7 +109,9 @@
 <translation id="561939826962581046">tidspunkt</translation>
 <translation id="5641012560118721995">pause</translation>
 <translation id="5643186887447432888">knap</translation>
+<translation id="583281660410589416">Ukendt</translation>
 <translation id="5843503607508392247">Andet...</translation>
+<translation id="5860033963881614850">Fra</translation>
 <translation id="5939518447894949180">Nulstil</translation>
 <translation id="5944544982112848342">2048 (Høj klasse)</translation>
 <translation id="5966707198760109579">Uge</translation>

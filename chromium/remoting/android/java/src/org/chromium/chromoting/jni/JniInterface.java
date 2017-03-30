@@ -8,8 +8,11 @@ import android.content.Context;
 import android.graphics.Bitmap;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
+import org.chromium.chromoting.OAuthTokenConsumer;
+import org.chromium.chromoting.base.OAuthTokenFetcher;
 
 import java.nio.ByteBuffer;
 
@@ -19,24 +22,26 @@ import java.nio.ByteBuffer;
  */
 @JNINamespace("remoting")
 public class JniInterface {
-    /*
-     * Library-loading state machine.
-     */
-    /** Whether the library has been loaded. Accessed on the UI thread. */
-    private static boolean sLoaded = false;
+    private static final String TAG = "Chromoting";
+
+    private static final String TOKEN_SCOPE = "oauth2:https://www.googleapis.com/auth/chromoting";
+
+    // Used to fetch auth token for native client.
+    private static OAuthTokenConsumer sLoggerTokenConsumer;
+
+    private static String sAccount;
 
     /**
-     * To be called once from the main Activity. Loads and initializes the native code.
-     * Called on the UI thread.
+     * To be called once from the Application context singleton. Loads and initializes the native
+     * code. Called on the UI thread.
+     * @param context The Application context.
      */
     public static void loadLibrary(Context context) {
-        if (sLoaded) return;
-
-        System.loadLibrary("remoting_client_jni");
-
         ContextUtils.initApplicationContext(context.getApplicationContext());
+        sLoggerTokenConsumer = new OAuthTokenConsumer(context.getApplicationContext(), TOKEN_SCOPE);
+        System.loadLibrary("remoting_client_jni");
+        ContextUtils.initApplicationContextForNative();
         nativeLoadNative();
-        sLoaded = true;
     }
 
     /** Performs the native portion of the initialization. */
@@ -188,4 +193,28 @@ public class JniInterface {
 
     /** Passes extension message to the native code. */
     static native void nativeSendExtensionMessage(String type, String data);
+
+    public static void setAccountForLogging(String account) {
+        sAccount = account;
+    }
+
+    @CalledByNative
+    private static void fetchAuthToken() {
+        if (sAccount == null) {
+            throw new IllegalStateException("Account is not set before fetching the auth token.");
+        }
+        sLoggerTokenConsumer.consume(sAccount, new OAuthTokenFetcher.Callback() {
+            @Override
+            public void onTokenFetched(String token) {
+                nativeOnAuthTokenFetched(token);
+            }
+
+            @Override
+            public void onError(OAuthTokenFetcher.Error error) {
+                Log.e(TAG, "Failed to fetch auth token for native client.");
+            }
+        });
+    }
+
+    static native void nativeOnAuthTokenFetched(String token);
 }

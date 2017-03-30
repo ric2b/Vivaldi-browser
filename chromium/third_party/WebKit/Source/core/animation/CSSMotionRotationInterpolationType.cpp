@@ -91,7 +91,7 @@ InterpolationValue CSSMotionRotationInterpolationType::maybeConvertNeutral(const
     return convertMotionRotation(StyleMotionRotation(0, underlyingRotationType));
 }
 
-InterpolationValue CSSMotionRotationInterpolationType::maybeConvertInitial(const StyleResolverState&) const
+InterpolationValue CSSMotionRotationInterpolationType::maybeConvertInitial(const StyleResolverState&, ConversionCheckers& conversionCheckers) const
 {
     return convertMotionRotation(StyleMotionRotation(0, MotionRotationAuto));
 }
@@ -108,15 +108,15 @@ InterpolationValue CSSMotionRotationInterpolationType::maybeConvertValue(const C
     return convertMotionRotation(StyleBuilderConverter::convertMotionRotation(value));
 }
 
-PairwiseInterpolationValue CSSMotionRotationInterpolationType::mergeSingleConversions(InterpolationValue&& start, InterpolationValue&& end) const
+PairwiseInterpolationValue CSSMotionRotationInterpolationType::maybeMergeSingles(InterpolationValue&& start, InterpolationValue&& end) const
 {
     const MotionRotationType& startType = toCSSMotionRotationNonInterpolableValue(*start.nonInterpolableValue).rotationType();
     const MotionRotationType& endType = toCSSMotionRotationNonInterpolableValue(*end.nonInterpolableValue).rotationType();
     if (startType != endType)
         return nullptr;
     return PairwiseInterpolationValue(
-        start.interpolableValue.release(),
-        end.interpolableValue.release(),
+        std::move(start.interpolableValue),
+        std::move(end.interpolableValue),
         start.nonInterpolableValue.release());
 }
 

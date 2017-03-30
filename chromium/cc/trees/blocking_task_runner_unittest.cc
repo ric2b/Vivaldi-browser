@@ -8,7 +8,7 @@
 #include "base/location.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "cc/test/ordered_simple_task_runner.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -21,7 +21,7 @@ void TestTask(bool* result) {
 
 TEST(BlockingTaskRunnerTest, NoCapture) {
   bool did_run = false;
-  scoped_ptr<BlockingTaskRunner> runner(
+  std::unique_ptr<BlockingTaskRunner> runner(
       BlockingTaskRunner::Create(base::ThreadTaskRunnerHandle::Get()));
   runner->PostTask(FROM_HERE, base::Bind(&TestTask, &did_run));
   EXPECT_FALSE(did_run);
@@ -31,7 +31,7 @@ TEST(BlockingTaskRunnerTest, NoCapture) {
 
 TEST(BlockingTaskRunnerTest, Capture) {
   bool did_run = false;
-  scoped_ptr<BlockingTaskRunner> runner(
+  std::unique_ptr<BlockingTaskRunner> runner(
       BlockingTaskRunner::Create(base::ThreadTaskRunnerHandle::Get()));
   {
     BlockingTaskRunner::CapturePostTasks capture(runner.get());

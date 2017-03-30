@@ -5,10 +5,11 @@
 #ifndef CONTENT_RENDERER_RASTER_WORKER_POOL_H_
 #define CONTENT_RENDERER_RASTER_WORKER_POOL_H_
 
+#include <memory>
+
 #include "base/callback.h"
 #include "base/containers/hash_tables.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/sequenced_task_runner.h"
 #include "base/synchronization/condition_variable.h"
 #include "base/task_runner.h"
@@ -116,7 +117,7 @@ class CONTENT_EXPORT RasterWorkerPool : public base::TaskRunner,
   bool ShouldRunTaskForCategoryWithLockAcquired(cc::TaskCategory category);
 
   // The actual threads where work is done.
-  std::vector<scoped_ptr<base::SimpleThread>> threads_;
+  std::vector<std::unique_ptr<base::SimpleThread>> threads_;
 
   // Lock to exclusively access all the following members that are used to
   // implement the TaskRunner and TaskGraphRunner interfaces.

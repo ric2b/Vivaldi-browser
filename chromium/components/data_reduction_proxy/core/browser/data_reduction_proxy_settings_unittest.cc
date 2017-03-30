@@ -7,6 +7,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <vector>
+
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/md5.h"
@@ -17,7 +19,6 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_compression_stats.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config_test_utils.h"
-#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_configurator_test_utils.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings_test_utils.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_test_utils.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
@@ -25,6 +26,7 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_switches.h"
 #include "components/prefs/pref_registry_simple.h"
+#include "net/proxy/proxy_server.h"
 #include "net/socket/socket_test_util.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -156,6 +158,14 @@ TEST_F(DataReductionProxySettingsTest, TestContentLengths) {
 }
 
 TEST(DataReductionProxySettingsStandaloneTest, TestEndToEndSecureProxyCheck) {
+  const net::ProxyServer kHttpsProxy = net::ProxyServer::FromURI(
+      "https://secure_origin.net:443", net::ProxyServer::SCHEME_HTTP);
+  const net::ProxyServer kHttpProxy = net::ProxyServer::FromURI(
+      "insecure_origin.net:80", net::ProxyServer::SCHEME_HTTP);
+  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+      data_reduction_proxy::switches::kDataReductionProxyHttpProxies,
+      kHttpsProxy.ToURI() + ";" + kHttpProxy.ToURI());
+
   base::MessageLoopForIO message_loop;
   struct TestCase {
     const char* response_headers;
@@ -185,10 +195,9 @@ TEST(DataReductionProxySettingsStandaloneTest, TestEndToEndSecureProxyCheck) {
   for (const TestCase& test_case : kTestCases) {
     net::TestURLRequestContext context(true);
 
-    scoped_ptr<DataReductionProxyTestContext> drp_test_context =
+    std::unique_ptr<DataReductionProxyTestContext> drp_test_context =
         DataReductionProxyTestContext::Builder()
             .WithURLRequestContext(&context)
-            .WithTestConfigurator()
             .SkipSettingsInitialization()
             .Build();
 
@@ -214,17 +223,21 @@ TEST(DataReductionProxySettingsStandaloneTest, TestEndToEndSecureProxyCheck) {
     drp_test_context->SetDataReductionProxyEnabled(true);
     drp_test_context->RunUntilIdle();
 
-    EXPECT_EQ(test_case.expected_restricted,
-              drp_test_context->test_configurator()->restricted());
+    if (test_case.expected_restricted) {
+      EXPECT_EQ(std::vector<net::ProxyServer>(1, kHttpProxy),
+                drp_test_context->GetConfiguredProxiesForHttp());
+    } else {
+      EXPECT_EQ(std::vector<net::ProxyServer>({kHttpsProxy, kHttpProxy}),
+                drp_test_context->GetConfiguredProxiesForHttp());
+    }
   }
 }
 
 TEST(DataReductionProxySettingsStandaloneTest, TestOnProxyEnabledPrefChange) {
   base::MessageLoopForIO message_loop;
-  scoped_ptr<DataReductionProxyTestContext> drp_test_context =
+  std::unique_ptr<DataReductionProxyTestContext> drp_test_context =
       DataReductionProxyTestContext::Builder()
           .WithMockConfig()
-          .WithTestConfigurator()
           .WithMockDataReductionProxyService()
           .SkipSettingsInitialization()
           .Build();
@@ -309,31 +322,10 @@ TEST_F(DataReductionProxySettingsTest, TestSetDataReductionProxyEnabled) {
   settings_->SetDataReductionProxyEnabled(false);
   test_context_->RunUntilIdle();
   CheckDataReductionProxySyntheticTrial(false);
-  CheckDataReductionProxyLoFiSyntheticTrial(false);
 
   ExpectSetProxyPrefs(true, false);
   settings->SetDataReductionProxyEnabled(true);
   CheckDataReductionProxySyntheticTrial(true);
-  CheckDataReductionProxyLoFiSyntheticTrial(true);
-}
-
-TEST_F(DataReductionProxySettingsTest, TestEnableLoFiSyntheticTrial) {
-  MockSettings* settings = static_cast<MockSettings*>(settings_.get());
-  EXPECT_CALL(*settings, RecordStartupState(PROXY_ENABLED));
-  test_context_->SetDataReductionProxyEnabled(true);
-  InitDataReductionProxy(true);
-
-  // The Lo-Fi field trial will be set to "Disabled" until the first main frame
-  // request with Lo-Fi active.
-  CheckDataReductionProxyLoFiSyntheticTrial(false);
-
-  // Turn Lo-Fi on.
-  settings->SetLoFiModeActiveOnMainFrame(true);
-  CheckDataReductionProxyLoFiSyntheticTrial(true);
-
-  // Now turn it off.
-  settings->SetLoFiModeActiveOnMainFrame(false);
-  CheckDataReductionProxyLoFiSyntheticTrial(false);
 }
 
 TEST_F(DataReductionProxySettingsTest, TestLoFiImplicitOptOutClicksPerSession) {
@@ -539,7 +531,7 @@ TEST_F(DataReductionProxySettingsTest, TestLoFiSessionStateHistograms) {
   settings_->SetDataReductionProxyEnabled(false);
   settings_->data_reduction_proxy_service_->InitializeLoFiPrefs();
   test_context_->RunUntilIdle();
-  scoped_ptr<base::HistogramSamples> samples(
+  std::unique_ptr<base::HistogramSamples> samples(
       histogram_tester.GetHistogramSamplesSinceCreation(kUMALoFiSessionState));
   EXPECT_EQ(0, samples->TotalCount());
 
@@ -682,67 +674,6 @@ TEST_F(DataReductionProxySettingsTest, CheckInitMetricsWhenNotAllowed) {
                  base::Unretained(this)));
 
   test_context_->RunUntilIdle();
-}
-
-TEST_F(DataReductionProxySettingsTest, CheckQUICFieldTrials) {
-  const struct {
-    bool enable_quic;
-    std::string field_trial_group_name;
-  } tests[] = {
-      {
-          false, std::string(),
-      },
-      {
-          false, "NotEnabled",
-      },
-      {
-          false, "Control",
-      },
-      {
-          false, "Disabled",
-      },
-      {
-          true, "EnabledControl",
-      },
-      {
-          true, "Enabled",
-      },
-  };
-
-  for (size_t i = 0; i < arraysize(tests); ++i) {
-    // No call to |AddProxyToCommandLine()| was made, so the proxy feature
-    // should be unavailable.
-    // Clear the command line. Setting flags can force the proxy to be allowed.
-    base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
-
-    ResetSettings(false, false, false, false);
-    MockSettings* settings = static_cast<MockSettings*>(settings_.get());
-    EXPECT_FALSE(settings->Allowed());
-    EXPECT_CALL(*settings, RecordStartupState(PROXY_NOT_AVAILABLE));
-
-    settings_->InitDataReductionProxySettings(
-        test_context_->GetDataReductionProxyEnabledPrefName(),
-        test_context_->pref_service(), test_context_->io_data(),
-        test_context_->CreateDataReductionProxyService(settings_.get()));
-
-    base::FieldTrialList field_trial_list(new base::MockEntropyProvider());
-
-    base::FieldTrialList::CreateFieldTrial(params::GetQuicFieldTrialName(),
-                                           tests[i].field_trial_group_name);
-    EXPECT_EQ(
-        tests[i].field_trial_group_name,
-        base::FieldTrialList::FindFullName(params::GetQuicFieldTrialName()));
-    test_context_->config()->EnableQuic(tests[i].enable_quic);
-
-    settings_->SetCallbackToRegisterSyntheticFieldTrial(
-        base::Bind(&DataReductionProxySettingsTestBase::
-                       SyntheticFieldTrialRegistrationCallback,
-                   base::Unretained(this)));
-
-    net::ProxyServer origin =
-        test_context_->config()->test_params()->proxies_for_http().front();
-    EXPECT_EQ(tests[i].enable_quic, origin.is_quic()) << i;
-  }
 }
 
 }  // namespace data_reduction_proxy

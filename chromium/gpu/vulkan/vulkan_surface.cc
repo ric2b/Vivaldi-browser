@@ -20,12 +20,14 @@
 namespace gpu {
 
 namespace {
-const VkFormat kNativeVkFormat[] = {
-    VK_FORMAT_B8G8R8A8_UNORM,       // FORMAT_BGRA8888,
+const VkFormat kPreferredVkFormats32[] = {
+    VK_FORMAT_B8G8R8A8_UNORM,  // FORMAT_BGRA8888,
+    VK_FORMAT_R8G8B8A8_UNORM,  // FORMAT_RGBA8888,
+};
+
+const VkFormat kPreferredVkFormats16[] = {
     VK_FORMAT_R5G6B5_UNORM_PACK16,  // FORMAT_RGB565,
 };
-static_assert(arraysize(kNativeVkFormat) == VulkanSurface::NUM_SURFACE_FORMATS,
-              "Array size for kNativeVkFormat must match surface formats.");
 
 }  // namespace
 
@@ -52,6 +54,17 @@ class VulkanWSISurface : public VulkanSurface {
                                     nullptr, &surface_);
     if (VK_SUCCESS != result) {
       DLOG(ERROR) << "vkCreateXlibSurfaceKHR() failed: " << result;
+      return false;
+    }
+#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
+    VkAndroidSurfaceCreateInfoKHR surface_create_info = {};
+    surface_create_info.sType =
+        VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
+    surface_create_info.window = window_;
+    result = vkCreateAndroidSurfaceKHR(
+        GetVulkanInstance(), &surface_create_info, nullptr, &surface_);
+    if (VK_SUCCESS != result) {
+      DLOG(ERROR) << "vkCreateAndroidSurfaceKHR() failed: " << result;
       return false;
     }
 #else
@@ -83,19 +96,30 @@ class VulkanWSISurface : public VulkanSurface {
       return false;
     }
 
-    const VkFormat preferred_format = kNativeVkFormat[format];
+    const VkFormat* preferred_formats = (format == FORMAT_RGBA_32)
+                                            ? kPreferredVkFormats32
+                                            : kPreferredVkFormats16;
+    unsigned int size = (format == FORMAT_RGBA_32)
+                            ? arraysize(kPreferredVkFormats32)
+                            : arraysize(kPreferredVkFormats16);
+
     if (formats.size() == 1 && VK_FORMAT_UNDEFINED == formats[0].format) {
-      surface_format_.format = preferred_format;
+      surface_format_.format = preferred_formats[0];
       surface_format_.colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
     } else {
       bool format_set = false;
       for (VkSurfaceFormatKHR supported_format : formats) {
-        if (supported_format.format == preferred_format) {
-          surface_format_ = supported_format;
-          surface_format_.colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
-          format_set = true;
-          break;
+        unsigned int counter = 0;
+        while (counter < size && format_set == false) {
+          if (supported_format.format == preferred_formats[counter]) {
+            surface_format_ = supported_format;
+            surface_format_.colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+            format_set = true;
+          }
+          counter++;
         }
+        if (format_set)
+          break;
       }
       if (!format_set) {
         DLOG(ERROR) << "Format not supported.";
@@ -147,20 +171,12 @@ class VulkanWSISurface : public VulkanSurface {
   VulkanSwapChain swap_chain_;
 };
 
-// static
-bool VulkanSurface::InitializeOneOff() {
-  if (!InitializeVulkan())
-    return false;
-
-  return true;
-}
-
 VulkanSurface::~VulkanSurface() {}
 
 // static
-scoped_ptr<VulkanSurface> VulkanSurface::CreateViewSurface(
+std::unique_ptr<VulkanSurface> VulkanSurface::CreateViewSurface(
     gfx::AcceleratedWidget window) {
-  return scoped_ptr<VulkanSurface>(new VulkanWSISurface(window));
+  return std::unique_ptr<VulkanSurface>(new VulkanWSISurface(window));
 }
 
 VulkanSurface::VulkanSurface() {}

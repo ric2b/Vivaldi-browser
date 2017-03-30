@@ -217,31 +217,3 @@ bool UncheckedMalloc(size_t size, void** result) {
 }
 
 }  // namespace base
-
-// This is a workaround for crbug.com/598075. This code never existed in trunk.
-// The problem is that some x86 Android device vendors forgot to provide the
-// posix_memalign symbol in libc even though it is mandated by the NDK.
-// This causes Chrome to crash at load-time, due to the unresolved dependency.
-// Fortunately it is farily easy to reimplement ourselves posix_memalign on
-// top of memalign.
-// This is not a problem in trunk after http://crrev.com/1875043003.
-#if defined(OS_ANDROID) && defined(ARCH_CPU_X86)
-#include <errno.h>
-#include <malloc.h>
-
-extern "C" {
-__attribute__((visibility("default"))) int posix_memalign(void** res,
-                                                          size_t alignment,
-                                                          size_t size) {
-  // posix_memalign is supposed to check the arguments. See tc_posix_memalign()
-  // in tc_malloc.cc.
-  if (((alignment % sizeof(void*)) != 0) ||
-      ((alignment & (alignment - 1)) != 0) || (alignment == 0)) {
-    return EINVAL;
-  }
-  void* ptr = memalign(alignment, size);
-  *res = ptr;
-  return ptr ? 0 : ENOMEM;
-}
-}  // extern "C"
-#endif

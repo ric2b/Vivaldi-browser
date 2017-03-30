@@ -26,6 +26,7 @@
 <translation id="1602076796624386989">Activați datele mobile</translation>
 <translation id="1621499497873603021">Timp rămas până la descărcarea bateriei: <ph name="TIME_LEFT" /></translation>
 <translation id="164969095109328410">Dispozitiv Chrome</translation>
+<translation id="1677472565718498478">Timp rămas: <ph name="TIME" /></translation>
 <translation id="1723752762323179280">Se iese din sesiune</translation>
 <translation id="1747827819627189109">Tastatură pe ecran activată</translation>
 <translation id="1812696562331527143">Metoda de introducere s-a schimbat la <ph name="INPUT_METHOD_ID" />*(<ph name="BEGIN_LINK" />terță parte<ph name="END_LINK" />).
@@ -92,7 +93,6 @@ Apăsați Căutare sau Shift pentru a anula.</translation>
 <translation id="3621712662352432595">Setări audio</translation>
 <translation id="3625258641415618104">Capturile de ecran sunt dezactivate</translation>
 <translation id="3626281679859535460">Luminozitate</translation>
-<translation id="3626637461649818317">Nivel disponibil: <ph name="PERCENTAGE" />%</translation>
 <translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079">Rezoluția <ph name="DISPLAY_NAME" /> a fost modificată la <ph name="RESOLUTION" /></translation>
 <translation id="370649949373421643">Activați Wi-Fi</translation>
@@ -111,13 +111,13 @@ Apăsați Căutare sau Shift pentru a anula.</translation>
 <translation id="397105322502079400">Se calculează...</translation>
 <translation id="3995138139523574647">Dispozitiv USB-C (portul din dreapta spate)</translation>
 <translation id="4053612967614057854">Dezactivează tastatura de pe ecran</translation>
-<translation id="412065659894267608"><ph name="HOUR" /> h. <ph name="MINUTE" /> min. până la încărcare completă</translation>
 <translation id="4250680216510889253">Nu</translation>
 <translation id="4279490309300973883">Oglindire</translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4421231901400348175">În prezent, <ph name="HELPER_NAME" /> îți poate controla ecranul prin Asistență la distanță.</translation>
 <translation id="4430019312045809116">Volum</translation>
 <translation id="4527045527269911712">Dispozitivul Bluetooth „<ph name="DEVICE_NAME" />” solicită permisiunea de a se conecta.</translation>
+<translation id="453661520163887813"><ph name="TIME" /> până la încărcare completă</translation>
 <translation id="4544944664594876241">Comanda rapidă pentru a bloca ecranul a fost modificată. Folosește <ph name="NEW_SHORTCUT" /> în loc de <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="479989351350248267">căutați</translation>
 <translation id="4804818685124855865">Deconectează-te</translation>
@@ -129,7 +129,6 @@ Apăsați Căutare sau Shift pentru a anula.</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl + Shift + bara de spațiu</translation>
 <translation id="5045002648206642691">Setări Disc Google...</translation>
-<translation id="5102001756192215136">Timp rămas: <ph name="HOUR" />:<ph name="MINUTE" /></translation>
 <translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">Dispozitive de proiecție disponibile</translation>
 <translation id="5222676887888702881">Deconectează-te</translation>
@@ -166,7 +165,6 @@ Apăsați Căutare sau Shift pentru a anula.</translation>
 <translation id="615957422585914272">Afișați tastatura pe ecran</translation>
 <translation id="6165508094623778733">Află mai multe</translation>
 <translation id="6203030746557259519">Afișare virtuală</translation>
-<translation id="6247708409970142803"><ph name="PERCENTAGE" /> %</translation>
 <translation id="6248847161401822652">Apăsați de două ori Control Shift Q pentru a ieși.</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" /> a fost rotit la <ph name="ROTATION" /></translation>
 <translation id="6359806961507272919">SMS de la <ph name="PHONE_NUMBER" /></translation>
@@ -207,6 +205,7 @@ Apăsați Alt+Căutare sau Shift pentru a anula.</translation>
 <translation id="7510334386202674593">Ctrl + Shift + L</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> nu acceptă <ph name="SPECIFIED_RESOLUTION" />. Rezoluția a fost modificată la <ph name="FALLBACK_RESOLUTION" /></translation>
 <translation id="7573962313813535744">Modul andocat</translation>
+<translation id="7580671184200851182">Redă același conținut audio în toate difuzoarele (audio mono)</translation>
 <translation id="7593891976182323525">Căutare sau Shift</translation>
 <translation id="7649070708921625228">Ajutor</translation>
 <translation id="7692480393933218409">Se încarcă dispozitivele USB-C conectate</translation>
@@ -225,13 +224,14 @@ Apăsați Alt+Căutare sau Shift pentru a anula.</translation>
 <translation id="8308637677604853869">Meniul anterior</translation>
 <translation id="8356164830168736643">Închide <ph name="WINDOW_TITLE" /></translation>
 <translation id="8428213095426709021">Setări</translation>
-<translation id="8456362689280298700"><ph name="HOUR" />:<ph name="MINUTE" /> până ce bateria va fi plină</translation>
 <translation id="8517041960877371778">Este posibil ca <ph name="DEVICE_TYPE" /> să nu se încarce cât timp este pornit.</translation>
 <translation id="8528322925433439945">Rețele mobile...</translation>
+<translation id="8639760480004882931">Nivelul bateriei: <ph name="PERCENTAGE" /></translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">A fost conectat un încărcător de putere joasă</translation>
 <translation id="8814190375133053267">Wi-Fi</translation>
 <translation id="882279321799040148">Dați clic pentru afișare</translation>
+<translation id="8825534185036233643">Oglindirea cu mai mult de două afișaje nu este acceptată.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8850991929411075241">Tasta de căutare + Esc</translation>
 <translation id="8878886163241303700">Ecran extins</translation>

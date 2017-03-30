@@ -30,6 +30,15 @@ Button::ButtonState Button::GetButtonStateFrom(ui::NativeTheme::State state) {
 Button::~Button() {
 }
 
+void Button::SetFocusForPlatform() {
+#if defined(OS_MACOSX)
+  // On Mac, buttons are focusable only in full keyboard access mode.
+  SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
+#else
+  SetFocusBehavior(FocusBehavior::ALWAYS);
+#endif
+}
+
 void Button::SetTooltipText(const base::string16& tooltip_text) {
   tooltip_text_ = tooltip_text;
   if (accessible_name_.empty())
@@ -64,7 +73,7 @@ void Button::GetAccessibleState(ui::AXViewState* state) {
 Button::Button(ButtonListener* listener)
     : listener_(listener),
       tag_(-1) {
-  SetAccessibilityFocusable(true);
+  SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
 }
 
 void Button::NotifyClick(const ui::Event& event) {

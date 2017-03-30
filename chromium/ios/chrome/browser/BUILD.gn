@@ -163,6 +163,7 @@ source_set("browser") {
     "geolocation/CLLocation+OmniboxGeolocation.mm",
     "geolocation/CLLocation+XGeoHeader.h",
     "geolocation/CLLocation+XGeoHeader.mm",
+    "geolocation/location_manager+Testing.h",
     "geolocation/location_manager.h",
     "geolocation/location_manager.mm",
     "geolocation/omnibox_geolocation_authorization_alert.h",
@@ -235,6 +236,8 @@ source_set("browser") {
     "metrics/ios_chrome_metrics_service_client.h",
     "metrics/ios_chrome_metrics_services_manager_client.h",
     "metrics/ios_chrome_metrics_services_manager_client.mm",
+    "metrics/ios_chrome_origins_seen_service_factory.cc",
+    "metrics/ios_chrome_origins_seen_service_factory.h",
     "metrics/ios_chrome_stability_metrics_provider.cc",
     "metrics/ios_chrome_stability_metrics_provider.h",
     "metrics/mobile_session_shutdown_metrics_provider.h",
@@ -263,13 +266,19 @@ source_set("browser") {
     "net/metrics_network_client.mm",
     "net/metrics_network_client_manager.h",
     "net/metrics_network_client_manager.mm",
+    "net/net_types.h",
     "net/proxy_service_factory.cc",
     "net/proxy_service_factory.h",
     "net/retryable_url_fetcher.h",
     "net/retryable_url_fetcher.mm",
+    "notification_promo.cc",
+    "notification_promo.h",
     "ntp_snippets/ios_chrome_ntp_snippets_service_factory.cc",
+    "ntp_snippets/ios_chrome_ntp_snippets_service_factory.h",
     "open_from_clipboard/create_clipboard_recent_content.h",
     "open_from_clipboard/create_clipboard_recent_content.mm",
+    "passwords/credential_manager.h",
+    "passwords/credential_manager.mm",
     "passwords/ios_chrome_password_manager_client.h",
     "passwords/ios_chrome_password_manager_client.mm",
     "passwords/ios_chrome_password_manager_driver.h",
@@ -280,6 +289,8 @@ source_set("browser") {
     "passwords/ios_chrome_password_store_factory.h",
     "passwords/ios_chrome_save_password_infobar_delegate.h",
     "passwords/ios_chrome_save_password_infobar_delegate.mm",
+    "passwords/js_credential_manager.h",
+    "passwords/js_credential_manager.mm",
     "passwords/js_password_manager.h",
     "passwords/js_password_manager.mm",
     "passwords/password_controller.h",
@@ -311,8 +322,9 @@ source_set("browser") {
     "reading_list/reading_list_model.h",
     "reading_list/reading_list_model_factory.cc",
     "reading_list/reading_list_model_factory.h",
-    "reading_list/reading_list_model_memory.cc",
-    "reading_list/reading_list_model_memory.h",
+    "reading_list/reading_list_model_impl.cc",
+    "reading_list/reading_list_model_impl.h",
+    "reading_list/reading_list_model_observer.h",
     "reading_list/reading_list_model_observer.h",
     "reading_list/reading_list_model_storage.h",
     "reading_list/reading_list_model_storage_defaults.h",
@@ -335,6 +347,12 @@ source_set("browser") {
     "sessions/ios_chrome_tab_restore_service_client.mm",
     "sessions/ios_chrome_tab_restore_service_factory.cc",
     "sessions/ios_chrome_tab_restore_service_factory.h",
+    "share_extension/share_extension_item_receiver.h",
+    "share_extension/share_extension_item_receiver.mm",
+    "share_extension/share_extension_service.h",
+    "share_extension/share_extension_service.mm",
+    "share_extension/share_extension_service_factory.cc",
+    "share_extension/share_extension_service_factory.h",
     "signin/about_signin_internals_factory.cc",
     "signin/about_signin_internals_factory.h",
     "signin/account_consistency_service_factory.h",
@@ -450,6 +468,11 @@ source_set("browser") {
     "ui/commands/show_mail_composer_command.mm",
     "ui/commands/show_signin_command.h",
     "ui/commands/show_signin_command.mm",
+    "ui/context_menu/context_menu_controller.h",
+    "ui/context_menu/context_menu_controller.mm",
+    "ui/context_menu/context_menu_holder.h",
+    "ui/context_menu/context_menu_holder.mm",
+    "ui/context_menu/context_menu_provider.h",
     "ui/file_locations.h",
     "ui/file_locations.mm",
     "ui/image_util.h",
@@ -488,6 +511,8 @@ source_set("browser") {
     "ui/webui/crashes_ui.h",
     "ui/webui/flags_ui.cc",
     "ui/webui/flags_ui.h",
+    "ui/webui/gcm/gcm_internals_ui.cc",
+    "ui/webui/gcm/gcm_internals_ui.h",
     "ui/webui/history/browsing_history_handler.cc",
     "ui/webui/history/browsing_history_handler.h",
     "ui/webui/history/favicon_source.cc",
@@ -520,6 +545,8 @@ source_set("browser") {
     "variations/ios_chrome_variations_service_client.h",
     "web/dom_altering_lock.h",
     "web/dom_altering_lock.mm",
+    "web/resubmit_data_controller.h",
+    "web/resubmit_data_controller.mm",
     "web_data_service_factory.cc",
     "web_data_service_factory.h",
     "web_resource/web_resource_util.cc",
@@ -532,6 +559,7 @@ source_set("browser") {
     ":about_flags",
     ":injected_js",
     "//base",
+    "//base:i18n",
     "//breakpad:client",
     "//components/about_handler",
     "//components/autofill/core/browser",
@@ -544,17 +572,21 @@ source_set("browser") {
     "//components/certificate_reporting",
     "//components/component_updater",
     "//components/content_settings/core/browser",
+    "//components/content_settings/core/common",
     "//components/cookie_config",
     "//components/crash/core/browser",
     "//components/crash/core/common",
+    "//components/data_reduction_proxy/core/common",
     "//components/dom_distiller/core",
     "//components/dom_distiller/ios",
     "//components/favicon/core",
     "//components/favicon_base",
+    "//components/flags_ui",
     "//components/gcm_driver",
     "//components/google/core/browser",
     "//components/history/core/browser",
     "//components/history/ios/browser",
+    "//components/image_fetcher",
     "//components/infobars/core",
     "//components/invalidation/impl",
     "//components/invalidation/public",
@@ -568,12 +600,14 @@ source_set("browser") {
     "//components/metrics:profiler_ios",
     "//components/metrics:ui",
     "//components/metrics_services_manager",
+    "//components/navigation_metrics",
     "//components/net_log",
     "//components/network_time",
     "//components/ntp_snippets",
     "//components/omnibox/browser",
     "//components/open_from_clipboard",
     "//components/password_manager/core/browser",
+    "//components/password_manager/core/common",
     "//components/password_manager/sync/browser",
     "//components/policy:policy_component_common",
     "//components/pref_registry",
@@ -597,6 +631,7 @@ source_set("browser") {
     "//components/sync_sessions",
     "//components/syncable_prefs",
     "//components/translate/core/browser",
+    "//components/translate/core/common",
     "//components/translate/ios/browser",
     "//components/undo",
     "//components/update_client",
@@ -613,8 +648,13 @@ source_set("browser") {
     "//google_apis",
     "//ios/chrome/browser/variations:ios_chrome_ui_string_overrider_factory",
     "//ios/chrome/common",
+    "//ios/chrome/common/app_group",
+    "//ios/net",
     "//ios/public/provider/chrome/browser",
+    "//ios/public/provider/web",
     "//ios/web",
+    "//ios/web:user_agent",
+    "//ios/web/public/app",
     "//net",
     "//net:extras",
     "//skia",
@@ -622,6 +662,8 @@ source_set("browser") {
     "//third_party/google_toolbox_for_mac",
     "//ui/base",
     "//ui/gfx",
+    "//ui/resources",
+    "//ui/strings",
     "//url",
 
     # TODO(crbug.com/459705): add support for resource packing and change the
@@ -630,6 +672,8 @@ source_set("browser") {
     "//ios/chrome/app/strings",
     "//ios/chrome/app/theme",
   ]
+
+  allow_circular_includes_from = [ ":about_flags" ]
 
   libs = [
     "Accelerate.framework",
@@ -641,9 +685,14 @@ source_set("browser") {
   ]
 
   if (enable_rlz) {
+    sources += [
+      "rlz/rlz_tracker_delegate_impl.cc",
+      "rlz/rlz_tracker_delegate_impl.h",
+    ]
+
     deps += [
-      ":rlz",
       "//components/rlz",
+      "//rlz:rlz_lib",
     ]
   }
 }
@@ -664,10 +713,14 @@ source_set("about_flags") {
     "//components/autofill/core/common",
     "//components/dom_distiller/core",
     "//components/flags_ui",
+    "//components/flags_ui:switches",
     "//components/strings",
+    "//components/sync_driver",
+    "//components/variations",
     "//google_apis",
     "//ios/chrome/app/strings",
     "//ios/web",
+    "//ios/web:user_agent",
   ]
 
   defines = [
@@ -691,23 +744,6 @@ js_compile_unchecked("injected_js") {
   ]
 }
 
-if (enable_rlz_support) {
-  source_set("rlz") {
-    sources = [
-      "rlz/rlz_tracker_delegate_impl.cc",
-      "rlz/rlz_tracker_delegate_impl.h",
-    ]
-
-    deps = [
-      "//components/google/core/browser",
-      "//components/omnibox/browser",
-      "//components/rlz",
-      "//components/search_engines",
-      "//rlz:rlz_lib",
-    ]
-  }
-}
-
 source_set("test_support") {
   testonly = true
   sources = [
@@ -715,7 +751,6 @@ source_set("test_support") {
     "browser_state/test_chrome_browser_state.mm",
     "browser_state/test_chrome_browser_state_isolated_context.h",
     "browser_state/test_chrome_browser_state_isolated_context.mm",
-    "geolocation/location_manager+Testing.h",
     "geolocation/test_location_manager.h",
     "geolocation/test_location_manager.mm",
     "net/mock_image_fetcher.h",
@@ -735,20 +770,32 @@ source_set("test_support") {
   deps = [
     ":browser",
     "//base",
+    "//components/bookmarks/browser",
+    "//components/browser_sync/browser",
     "//components/browser_sync/browser:test_support",
+    "//components/history/core/browser",
+    "//components/history/ios/browser",
     "//components/keyed_service/core",
     "//components/keyed_service/ios",
     "//components/pref_registry:test_support",
     "//components/signin/core/browser",
+    "//components/signin/core/browser",
+    "//components/signin/core/browser:test_support",
     "//components/signin/ios/browser",
+    "//components/signin/ios/browser:test_support",
     "//components/sync_driver",
     "//components/sync_driver:test_support",
+    "//components/syncable_prefs",
+    "//components/syncable_prefs:test_support",
+    "//components/user_prefs",
+    "//components/webdata_services",
     "//ios/chrome/browser",
     "//ios/chrome/common",
     "//ios/chrome/test",
     "//ios/public/provider/chrome/browser",
     "//ios/public/provider/chrome/browser:test_support",
     "//ios/web",
+    "//net:test_support",
     "//sync",
     "//testing/gmock",
     "//testing/gtest",

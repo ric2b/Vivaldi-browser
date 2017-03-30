@@ -88,7 +88,6 @@ class OmniboxView {
   // revert to the permanent text.
   void SetUserText(const base::string16& text);
   virtual void SetUserText(const base::string16& text,
-                           const base::string16& display_text,
                            bool update_popup);
 
   // Sets the window text and the caret position. |notify_text_changed| is true
@@ -243,7 +242,7 @@ class OmniboxView {
 
  protected:
   OmniboxView(OmniboxEditController* controller,
-              scoped_ptr<OmniboxClient> client);
+              std::unique_ptr<OmniboxClient> client);
 
   // Internally invoked whenever the text changes in some way.
   virtual void TextChanged();
@@ -264,7 +263,7 @@ class OmniboxView {
   FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest, ShowURL);
 
   // |model_| can be NULL in tests.
-  scoped_ptr<OmniboxEditModel> model_;
+  std::unique_ptr<OmniboxEditModel> model_;
   OmniboxEditController* controller_;
 
   DISALLOW_COPY_AND_ASSIGN(OmniboxView);

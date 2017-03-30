@@ -11,6 +11,8 @@ import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ResourceId;
+import org.chromium.content_public.browser.WebContents;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,7 +36,27 @@ public class PersonalDataManager {
         /**
          * Called when the data is changed.
          */
-        public abstract void onPersonalDataChanged();
+        void onPersonalDataChanged();
+    }
+
+    /**
+     * Callback for full card request.
+     */
+    public interface FullCardRequestDelegate {
+        /**
+         * Called when user provided the full card details, including the CVC and the full PAN.
+         *
+         * @param card The full card.
+         * @param cvc The CVC for the card.
+         */
+        @CalledByNative("FullCardRequestDelegate")
+        void onFullCardDetails(CreditCard card, String cvc);
+
+        /**
+         * Called when user did not provide full card details.
+         */
+        @CalledByNative("FullCardRequestDelegate")
+        void onFullCardError();
     }
 
     /**
@@ -270,17 +292,21 @@ public class PersonalDataManager {
         private String mObfuscatedNumber;
         private String mMonth;
         private String mYear;
+        private String mBasicCardPaymentType;
+        private int mIssuerIconDrawableId;
 
         @CalledByNative("CreditCard")
         public static CreditCard create(String guid, String origin, boolean isLocal,
                 boolean isCached, String name, String number, String obfuscatedNumber, String month,
-                String year) {
-            return new CreditCard(
-                    guid, origin, isLocal, isCached, name, number, obfuscatedNumber, month, year);
+                String year, String basicCardPaymentType, int enumeratedIconId) {
+            return new CreditCard(guid, origin, isLocal, isCached, name, number, obfuscatedNumber,
+                    month, year, basicCardPaymentType,
+                    ResourceId.mapToDrawableId(enumeratedIconId));
         }
 
         public CreditCard(String guid, String origin, boolean isLocal, boolean isCached,
-                String name, String number, String obfuscatedNumber, String month, String year) {
+                String name, String number, String obfuscatedNumber, String month, String year,
+                String basicCardPaymentType, int issuerIconDrawableId) {
             mGUID = guid;
             mOrigin = origin;
             mIsLocal = isLocal;
@@ -290,6 +316,8 @@ public class PersonalDataManager {
             mObfuscatedNumber = obfuscatedNumber;
             mMonth = month;
             mYear = year;
+            mBasicCardPaymentType = basicCardPaymentType;
+            mIssuerIconDrawableId = issuerIconDrawableId;
         }
 
         /** TODO(estade): remove this constructor. */
@@ -353,6 +381,14 @@ public class PersonalDataManager {
 
         public boolean getIsCached() {
             return mIsCached;
+        }
+
+        public String getBasicCardPaymentType() {
+            return mBasicCardPaymentType;
+        }
+
+        public int getIssuerIconDrawableId() {
+            return mIssuerIconDrawableId;
         }
 
         @VisibleForTesting
@@ -438,9 +474,17 @@ public class PersonalDataManager {
     }
 
     public List<AutofillProfile> getProfiles() {
+        return getProfilesWithAddressOnlyLabels(false);
+    }
+
+    public List<AutofillProfile> getAddressOnlyProfiles() {
+        return getProfilesWithAddressOnlyLabels(true);
+    }
+
+    private List<AutofillProfile> getProfilesWithAddressOnlyLabels(boolean addressOnly) {
         ThreadUtils.assertOnUiThread();
 
-        String[] profileLabels = nativeGetProfileLabels(mPersonalDataManagerAndroid);
+        String[] profileLabels = nativeGetProfileLabels(mPersonalDataManagerAndroid, addressOnly);
 
         int profileCount = nativeGetProfileCount(mPersonalDataManagerAndroid);
         List<AutofillProfile> profiles = new ArrayList<AutofillProfile>(profileCount);
@@ -485,7 +529,15 @@ public class PersonalDataManager {
 
     public String setCreditCard(CreditCard card) {
         ThreadUtils.assertOnUiThread();
+        assert card.getIsLocal();
         return nativeSetCreditCard(mPersonalDataManagerAndroid, card);
+    }
+
+    @VisibleForTesting
+    public void addServerCreditCardForTest(CreditCard card) {
+        ThreadUtils.assertOnUiThread();
+        assert !card.getIsLocal();
+        nativeAddServerCreditCardForTest(mPersonalDataManagerAndroid, card);
     }
 
     public void deleteCreditCard(String guid) {
@@ -495,6 +547,12 @@ public class PersonalDataManager {
 
     public void clearUnmaskedCache(String guid) {
         nativeClearUnmaskedCache(mPersonalDataManagerAndroid, guid);
+    }
+
+    public void getFullCard(WebContents webContents, String guid,
+            FullCardRequestDelegate delegate) {
+        nativeGetFullCardForPaymentRequest(
+                mPersonalDataManagerAndroid, webContents, guid, delegate);
     }
 
     /**
@@ -536,7 +594,8 @@ public class PersonalDataManager {
 
     private native long nativeInit();
     private native int nativeGetProfileCount(long nativePersonalDataManagerAndroid);
-    private native String[] nativeGetProfileLabels(long nativePersonalDataManagerAndroid);
+    private native String[] nativeGetProfileLabels(long nativePersonalDataManagerAndroid,
+            boolean addressOnly);
     private native AutofillProfile nativeGetProfileByIndex(long nativePersonalDataManagerAndroid,
             int index);
     private native AutofillProfile nativeGetProfileByGUID(long nativePersonalDataManagerAndroid,
@@ -550,9 +609,13 @@ public class PersonalDataManager {
             String guid);
     private native String nativeSetCreditCard(long nativePersonalDataManagerAndroid,
             CreditCard card);
+    private native void nativeAddServerCreditCardForTest(long nativePersonalDataManagerAndroid,
+            CreditCard card);
     private native void nativeRemoveByGUID(long nativePersonalDataManagerAndroid, String guid);
     private native void nativeClearUnmaskedCache(
             long nativePersonalDataManagerAndroid, String guid);
+    private native void nativeGetFullCardForPaymentRequest(long nativePersonalDataManagerAndroid,
+            WebContents webContents, String guid, FullCardRequestDelegate delegate);
     private static native boolean nativeIsAutofillEnabled();
     private static native void nativeSetAutofillEnabled(boolean enable);
     private static native boolean nativeIsAutofillManaged();

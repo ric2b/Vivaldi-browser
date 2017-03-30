@@ -58,6 +58,7 @@
 #include "chrome/browser/lifetime/keep_alive_types.h"
 #include "chrome/browser/lifetime/scoped_keep_alive.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/common/chrome_constants.h"
@@ -90,11 +91,11 @@
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/events/event_utils.h"
-#include "ui/gfx/display.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/gfx/screen.h"
 #include "ui/gfx/transform.h"
 #include "ui/keyboard/keyboard_controller.h"
 #include "ui/keyboard/keyboard_util.h"
@@ -128,9 +129,6 @@ const int kCrashCountLimit = 5;
 
 // The default fade out animation time in ms.
 const int kDefaultFadeTimeMs = 200;
-
-// The fade out animation time used when adding another user into session.
-const int kUserAddFadeTimeMs = 300;
 
 // Whether to enable tnitializing WebUI in hidden state (see
 // |initialize_webui_hidden_|) by default.
@@ -280,6 +278,12 @@ LoginDisplayHostImpl::LoginDisplayHostImpl(const gfx::Rect& background_bounds)
       is_observing_keyboard_(false),
       pointer_factory_(this),
       animation_weak_ptr_factory_(this) {
+  if (chrome::IsRunningInMash()) {
+    // Animation, and initializing hidden, are not currently supported for Mash.
+    finalize_animation_type_ = ANIMATION_NONE;
+    initialize_webui_hidden_ = false;
+  }
+
   DBusThreadManager::Get()->GetSessionManagerClient()->AddObserver(this);
   CrasAudioHandler::Get()->AddAudioObserver(this);
   if (keyboard::KeyboardController::GetInstance()) {
@@ -287,8 +291,13 @@ LoginDisplayHostImpl::LoginDisplayHostImpl(const gfx::Rect& background_bounds)
     is_observing_keyboard_ = true;
   }
 
-  ash::Shell::GetInstance()->delegate()->AddVirtualKeyboardStateObserver(this);
-  gfx::Screen::GetScreen()->AddObserver(this);
+  if (!chrome::IsRunningInMash()) {
+    ash::Shell::GetInstance()->delegate()->AddVirtualKeyboardStateObserver(
+        this);
+  } else {
+    NOTIMPLEMENTED();
+  }
+  display::Screen::GetScreen()->AddObserver(this);
 
   // We need to listen to CLOSE_ALL_BROWSERS_REQUEST but not APP_TERMINATING
   // because/ APP_TERMINATING will never be fired as long as this keeps
@@ -319,6 +328,9 @@ LoginDisplayHostImpl::LoginDisplayHostImpl(const gfx::Rect& background_bounds)
 
   bool is_registered = StartupUtils::IsDeviceRegistered();
   bool zero_delay_enabled = WizardController::IsZeroDelayEnabled();
+  // Mash always runs login screen with zero delay
+  if (chrome::IsRunningInMash())
+    zero_delay_enabled = true;
   bool disable_boot_animation =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableBootAnimation);
@@ -331,11 +343,15 @@ LoginDisplayHostImpl::LoginDisplayHostImpl(const gfx::Rect& background_bounds)
   // show WebUI at once.
   waiting_for_user_pods_ = !zero_delay_enabled && !waiting_for_wallpaper_load_;
 
-  initialize_webui_hidden_ =
-      kHiddenWebUIInitializationDefault && !zero_delay_enabled;
+  // Initializing hidden is not supported in Mash
+  if (!chrome::IsRunningInMash()) {
+    initialize_webui_hidden_ =
+        kHiddenWebUIInitializationDefault && !zero_delay_enabled;
+  }
 
-  // Check if WebUI init type is overriden.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+  // Check if WebUI init type is overriden. Not supported in Mash.
+  if (!chrome::IsRunningInMash() &&
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kAshWebUIInit)) {
     const std::string override_type =
         base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
@@ -380,8 +396,12 @@ LoginDisplayHostImpl::LoginDisplayHostImpl(const gfx::Rect& background_bounds)
                       bundle.GetRawDataResource(IDR_SOUND_STARTUP_WAV));
 
   // Disable Drag'n'Drop for the login session.
-  scoped_drag_drop_disabler_.reset(new aura::client::ScopedDragDropDisabler(
-      ash::Shell::GetPrimaryRootWindow()));
+  if (!chrome::IsRunningInMash()) {
+    scoped_drag_drop_disabler_.reset(new aura::client::ScopedDragDropDisabler(
+        ash::Shell::GetPrimaryRootWindow()));
+  } else {
+    NOTIMPLEMENTED();
+  }
 }
 
 LoginDisplayHostImpl::~LoginDisplayHostImpl() {
@@ -392,12 +412,23 @@ LoginDisplayHostImpl::~LoginDisplayHostImpl() {
     is_observing_keyboard_ = false;
   }
 
-  ash::Shell::GetInstance()->delegate()->
-      RemoveVirtualKeyboardStateObserver(this);
-  gfx::Screen::GetScreen()->RemoveObserver(this);
+  if (!chrome::IsRunningInMash()) {
+    ash::Shell::GetInstance()->delegate()->RemoveVirtualKeyboardStateObserver(
+        this);
+  } else {
+    NOTIMPLEMENTED();
+  }
+  display::Screen::GetScreen()->RemoveObserver(this);
 
   if (login_view_ && login_window_)
     login_window_->RemoveRemovalsObserver(this);
+
+  chrome::MultiUserWindowManager* window_manager =
+      chrome::MultiUserWindowManager::GetInstance();
+  // MultiUserWindowManager instance might be null if no user is logged in - or
+  // in a unit test.
+  if (window_manager)
+    window_manager->RemoveObserver(this);
 
   ResetKeyboardOverscrollOverride();
 
@@ -467,7 +498,12 @@ void LoginDisplayHostImpl::Finalize() {
       ScheduleFadeOutAnimation(kDefaultFadeTimeMs);
       break;
     case ANIMATION_ADD_USER:
-      ScheduleFadeOutAnimation(kUserAddFadeTimeMs);
+      // Defer the deletion of LoginDisplayHost instance until the user adding
+      // animation (which is done by UserSwitchAnimatorChromeOS) is finished.
+      // This is to guarantee OnUserSwitchAnimationFinished() is called before
+      // LoginDisplayHost deletes itself.
+      break;
+    default:
       break;
   }
 }
@@ -542,21 +578,36 @@ void LoginDisplayHostImpl::StartUserAdding(
 
   restore_path_ = RESTORE_ADD_USER_INTO_SESSION;
   completion_callback_ = completion_callback;
-  finalize_animation_type_ = ANIMATION_ADD_USER;
+  // Animation is not supported in Mash
+  if (!chrome::IsRunningInMash())
+    finalize_animation_type_ = ANIMATION_ADD_USER;
+  // Observe the user switch animation and defer the deletion of itself only
+  // after the animation is finished.
+  chrome::MultiUserWindowManager* window_manager =
+      chrome::MultiUserWindowManager::GetInstance();
+  // MultiUserWindowManager instance might be null in a unit test.
+  if (window_manager)
+    window_manager->AddObserver(this);
+
   VLOG(1) << "Login WebUI >> user adding";
   if (!login_window_)
     LoadURL(GURL(kUserAddingURL));
   // We should emit this signal only at login screen (after reboot or sign out).
   login_view_->set_should_emit_login_prompt_visible(false);
 
-  // Lock container can be transparent after lock screen animation.
-  aura::Window* lock_container = ash::Shell::GetContainer(
-      ash::Shell::GetPrimaryRootWindow(),
-      ash::kShellWindowId_LockScreenContainersContainer);
-  lock_container->layer()->SetOpacity(1.0);
+  if (!chrome::IsRunningInMash()) {
+    // Lock container can be transparent after lock screen animation.
+    aura::Window* lock_container = ash::Shell::GetContainer(
+        ash::Shell::GetPrimaryRootWindow(),
+        ash::kShellWindowId_LockScreenContainersContainer);
+    lock_container->layer()->SetOpacity(1.0);
 
-  ash::Shell::GetInstance()->
-      desktop_background_controller()->MoveDesktopToLockedContainer();
+    ash::Shell::GetInstance()
+        ->desktop_background_controller()
+        ->MoveDesktopToLockedContainer();
+  } else {
+    NOTIMPLEMENTED();
+  }
 
   existing_user_controller_.reset();  // Only one controller in a time.
   existing_user_controller_.reset(new chromeos::ExistingUserController(this));
@@ -576,6 +627,15 @@ void LoginDisplayHostImpl::StartUserAdding(
                                 webui_login_display_);
 }
 
+void LoginDisplayHostImpl::CancelUserAdding() {
+  // ANIMATION_ADD_USER observes UserSwitchAnimatorChromeOS to shutdown the
+  // login display host. However, the animation does not run when user adding is
+  // canceled. Changing to ANIMATION_NONE so that Finalize() shuts down the host
+  // immediately.
+  finalize_animation_type_ = ANIMATION_NONE;
+  Finalize();
+}
+
 void LoginDisplayHostImpl::StartSignInScreen(
     const LoginScreenContext& context) {
   DisableKeyboardOverscroll();
@@ -585,7 +645,9 @@ void LoginDisplayHostImpl::StartSignInScreen(
 
   restore_path_ = RESTORE_SIGN_IN;
   is_showing_login_ = true;
-  finalize_animation_type_ = ANIMATION_WORKSPACE;
+  // Animation is not supported in Mash
+  if (!chrome::IsRunningInMash())
+    finalize_animation_type_ = ANIMATION_WORKSPACE;
 
   PrewarmAuthentication();
 
@@ -710,7 +772,9 @@ void LoginDisplayHostImpl::StartAppLaunch(const std::string& app_id,
     return;
   }
 
-  finalize_animation_type_ = ANIMATION_FADE_OUT;
+  // Animation is not supported in Mash.
+  if (!chrome::IsRunningInMash())
+    finalize_animation_type_ = ANIMATION_FADE_OUT;
   if (!login_window_)
     LoadURL(GURL(kAppLaunchSplashURL));
 
@@ -780,18 +844,28 @@ void LoginDisplayHostImpl::Observe(
                       content::NotificationService::AllSources());
   } else if (type == chrome::NOTIFICATION_LOGIN_USER_CHANGED &&
              user_manager::UserManager::Get()->IsCurrentUserNew()) {
-    // For new user, move desktop to locker container so that windows created
-    // during the user image picker step are below it.
-    ash::Shell::GetInstance()->
-        desktop_background_controller()->MoveDesktopToLockedContainer();
+    if (!chrome::IsRunningInMash()) {
+      // For new user, move desktop to locker container so that windows created
+      // during the user image picker step are below it.
+      ash::Shell::GetInstance()
+          ->desktop_background_controller()
+          ->MoveDesktopToLockedContainer();
+    } else {
+      NOTIMPLEMENTED();
+    }
     registrar_.Remove(this,
                       chrome::NOTIFICATION_LOGIN_USER_CHANGED,
                       content::NotificationService::AllSources());
   } else if (chrome::NOTIFICATION_WALLPAPER_ANIMATION_FINISHED == type) {
     VLOG(1) << "Login WebUI >> wp animation done";
     is_wallpaper_loaded_ = true;
-    ash::Shell::GetInstance()->user_wallpaper_delegate()
-        ->OnWallpaperBootAnimationFinished();
+    if (!chrome::IsRunningInMash()) {
+      ash::Shell::GetInstance()
+          ->user_wallpaper_delegate()
+          ->OnWallpaperBootAnimationFinished();
+    } else {
+      NOTIMPLEMENTED();
+    }
     if (waiting_for_wallpaper_load_) {
       // StartWizard / StartSignInScreen could be called multiple times through
       // the lifetime of host.
@@ -881,17 +955,19 @@ void LoginDisplayHostImpl::OnKeyboardBoundsChanging(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// LoginDisplayHostImpl, gfx::DisplayObserver implementation:
+// LoginDisplayHostImpl, display::DisplayObserver implementation:
 
-void LoginDisplayHostImpl::OnDisplayAdded(const gfx::Display& new_display) {
+void LoginDisplayHostImpl::OnDisplayAdded(const display::Display& new_display) {
 }
 
-void LoginDisplayHostImpl::OnDisplayRemoved(const gfx::Display& old_display) {
-}
+void LoginDisplayHostImpl::OnDisplayRemoved(
+    const display::Display& old_display) {}
 
-void LoginDisplayHostImpl::OnDisplayMetricsChanged(const gfx::Display& display,
-                                                   uint32_t changed_metrics) {
-  gfx::Display primary_display = gfx::Screen::GetScreen()->GetPrimaryDisplay();
+void LoginDisplayHostImpl::OnDisplayMetricsChanged(
+    const display::Display& display,
+    uint32_t changed_metrics) {
+  display::Display primary_display =
+      display::Screen::GetScreen()->GetPrimaryDisplay();
   if (display.id() != primary_display.id() ||
       !(changed_metrics & DISPLAY_METRIC_BOUNDS)) {
     return;
@@ -915,6 +991,13 @@ void LoginDisplayHostImpl::OnWillRemoveView(views::Widget* widget,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// LoginDisplayHostImpl, chrome::MultiUserWindowManager::Observer
+// implementation:
+void LoginDisplayHostImpl::OnUserSwitchAnimationFinished() {
+  ShutdownDisplayHost(false);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // LoginDisplayHostImpl, private
 
 void LoginDisplayHostImpl::ShutdownDisplayHost(bool post_quit_task) {
@@ -932,13 +1015,21 @@ void LoginDisplayHostImpl::ShutdownDisplayHost(bool post_quit_task) {
 
   if (ash::Shell::HasInstance() &&
       finalize_animation_type_ == ANIMATION_ADD_USER) {
-    ash::Shell::GetInstance()
-        ->desktop_background_controller()
-        ->MoveDesktopToUnlockedContainer();
+    if (!chrome::IsRunningInMash()) {
+      ash::Shell::GetInstance()
+          ->desktop_background_controller()
+          ->MoveDesktopToUnlockedContainer();
+    } else {
+      NOTIMPLEMENTED();
+    }
   }
 }
 
 void LoginDisplayHostImpl::ScheduleWorkspaceAnimation() {
+  if (chrome::IsRunningInMash()) {
+    NOTIMPLEMENTED();
+    return;
+  }
   if (ash::Shell::GetContainer(ash::Shell::GetPrimaryRootWindow(),
                                ash::kShellWindowId_DesktopBackgroundContainer)
           ->children()
@@ -1044,9 +1135,12 @@ void LoginDisplayHostImpl::InitLoginWindowAndView() {
   params.bounds = background_bounds();
   params.show_state = ui::SHOW_STATE_FULLSCREEN;
   params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
-  params.parent =
-      ash::Shell::GetContainer(ash::Shell::GetPrimaryRootWindow(),
-                               ash::kShellWindowId_LockScreenContainer);
+  // The ash::Shell containers are not available in Mash
+  if (!chrome::IsRunningInMash()) {
+    params.parent =
+        ash::Shell::GetContainer(ash::Shell::GetPrimaryRootWindow(),
+                                 ash::kShellWindowId_LockScreenContainer);
+  }
   login_window_ = new views::Widget;
   params.delegate = new LoginWidgetDelegate(login_window_);
   login_window_->Init(params);
@@ -1056,9 +1150,13 @@ void LoginDisplayHostImpl::InitLoginWindowAndView() {
   if (login_view_->webui_visible())
     OnLoginPromptVisible();
 
-  login_window_->SetVisibilityAnimationDuration(
-      base::TimeDelta::FromMilliseconds(kLoginFadeoutTransitionDurationMs));
-  login_window_->SetVisibilityAnimationTransition(views::Widget::ANIMATE_HIDE);
+  // Animations are not available in Mash
+  if (!chrome::IsRunningInMash()) {
+    login_window_->SetVisibilityAnimationDuration(
+        base::TimeDelta::FromMilliseconds(kLoginFadeoutTransitionDurationMs));
+    login_window_->SetVisibilityAnimationTransition(
+        views::Widget::ANIMATE_HIDE);
+  }
 
   login_window_->AddRemovalsObserver(this);
   login_window_->SetContentsView(login_view_);

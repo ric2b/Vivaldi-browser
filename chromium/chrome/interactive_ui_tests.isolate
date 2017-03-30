@@ -44,6 +44,7 @@
     ['OS=="linux" or OS=="mac" or OS=="win"', {
       'variables': {
         'files': [
+          '../content/test/data/',
           '../net/data/ssl/certificates/',
           '../net/tools/testserver/',
           '../ppapi/tests/test_case.html',
@@ -54,7 +55,6 @@
           '../third_party/pyftpdlib/',
           '../third_party/pywebsocket/',
           '../third_party/tlslite/',
-          '<(PRODUCT_DIR)/resources.pak',
           '<(PRODUCT_DIR)/ui_test.pak',
           'test/data/',
         ],
@@ -65,8 +65,11 @@
         'files': [
           '<(PRODUCT_DIR)/chrome_material_100_percent.pak',
           '<(PRODUCT_DIR)/chrome_100_percent.pak',
+          '<(PRODUCT_DIR)/chrome_material_200_percent.pak',
+          '<(PRODUCT_DIR)/chrome_200_percent.pak',
           '<(PRODUCT_DIR)/locales/en-US.pak',
           '<(PRODUCT_DIR)/locales/fr.pak',
+          '<(PRODUCT_DIR)/resources.pak',
         ],
       },
     }],

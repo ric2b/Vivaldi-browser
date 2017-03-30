@@ -4,7 +4,9 @@
 
 #include "chrome/browser/ui/webui/extensions/extensions_ui.h"
 
+#include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/extensions/extension_loader_handler.h"
 #include "chrome/browser/ui/webui/extensions/extension_settings_handler.h"
@@ -13,8 +15,10 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/google/core/browser/google_util.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "extensions/common/extension_urls.h"
 #include "grit/browser_resources.h"
 #include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -47,8 +51,6 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
   source->AddLocalizedString("sidebarPack", IDS_MD_EXTENSIONS_SIDEBAR_PACK);
   source->AddLocalizedString("sidebarUpdateNow",
                              IDS_MD_EXTENSIONS_SIDEBAR_UPDATE_NOW);
-  source->AddLocalizedString("sidebarWebsites",
-                             IDS_MD_EXTENSIONS_SIDEBAR_WEBSITES);
   source->AddLocalizedString("developerMode",
                              IDS_MD_EXTENSIONS_SIDEBAR_DEVELOPER_MODE);
   source->AddLocalizedString("getMoreExtensions",
@@ -60,11 +62,37 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
                              IDS_MD_EXTENSIONS_ITEM_INSPECT_VIEWS);
   source->AddLocalizedString("itemAllowIncognito",
                              IDS_MD_EXTENSIONS_ITEM_ALLOW_INCOGNITO);
+  source->AddLocalizedString("itemDescriptionLabel",
+                             IDS_MD_EXTENSIONS_ITEM_DESCRIPTION);
+  source->AddLocalizedString("itemDependencies",
+                             IDS_MD_EXTENSIONS_ITEM_DEPENDENCIES);
+  source->AddLocalizedString("itemDependentEntry",
+                             IDS_MD_EXTENSIONS_DEPENDENT_ENTRY);
   source->AddLocalizedString("itemDetails", IDS_MD_EXTENSIONS_ITEM_DETAILS);
-  source->AddLocalizedString("itemEnabled", IDS_MD_EXTENSIONS_ITEM_ENABLED);
-  source->AddLocalizedString("itemDisabled", IDS_MD_EXTENSIONS_ITEM_DISABLED);
+  source->AddLocalizedString("itemPermissions",
+                             IDS_MD_EXTENSIONS_ITEM_PERMISSIONS);
+  source->AddLocalizedString("itemPermissionsEmpty",
+                             IDS_MD_EXTENSIONS_ITEM_PERMISSIONS_EMPTY);
+  source->AddLocalizedString("itemRemove", IDS_MD_EXTENSIONS_ITEM_REMOVE);
+  source->AddLocalizedString("itemSource",
+                             IDS_MD_EXTENSIONS_ITEM_SOURCE);
+  source->AddLocalizedString("itemSourcePolicy",
+                             IDS_MD_EXTENSIONS_ITEM_SOURCE_POLICY);
+  source->AddLocalizedString("itemSourceSideloaded",
+                             IDS_MD_EXTENSIONS_ITEM_SOURCE_SIDELOADED);
+  source->AddLocalizedString("itemSourceUnpacked",
+                             IDS_MD_EXTENSIONS_ITEM_SOURCE_UNPACKED);
+  source->AddLocalizedString("itemVersion",
+                             IDS_MD_EXTENSIONS_ITEM_SOURCE);
+  source->AddLocalizedString("itemAllowOnFileUrls",
+                             IDS_EXTENSIONS_ALLOW_FILE_ACCESS);
+  source->AddLocalizedString("itemAllowOnAllSites",
+                             IDS_EXTENSIONS_ALLOW_ON_ALL_URLS);
+  source->AddLocalizedString("itemCollectErrors",
+                             IDS_EXTENSIONS_ENABLE_ERROR_COLLECTION);
   source->AddLocalizedString("itemCorruptInstall",
                              IDS_EXTENSIONS_CORRUPTED_EXTENSION);
+  source->AddLocalizedString("itemRepair", IDS_EXTENSIONS_REPAIR_CORRUPTED);
   source->AddString(
       "itemSuspiciousInstall",
       l10n_util::GetStringFUTF16(
@@ -78,7 +106,17 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
                              IDS_EXTENSIONS_VIEW_INACTIVE);
   source->AddLocalizedString("viewIframe",
                              IDS_EXTENSIONS_VIEW_IFRAME);
+  source->AddString(
+      "getMoreExtensionsUrl",
+      base::ASCIIToUTF16(
+          google_util::AppendGoogleLocaleParam(
+              GURL(extension_urls::GetWebstoreExtensionsCategoryURL()),
+              g_browser_process->GetApplicationLocale()).spec()));
 
+  source->AddResourcePath("extensions.js", IDR_MD_EXTENSIONS_EXTENSIONS_JS);
+  source->AddResourcePath("detail_view.html",
+                          IDR_MD_EXTENSIONS_DETAIL_VIEW_HTML);
+  source->AddResourcePath("detail_view.js", IDR_MD_EXTENSIONS_DETAIL_VIEW_JS);
   source->AddResourcePath("manager.css", IDR_MD_EXTENSIONS_MANAGER_CSS);
   source->AddResourcePath("manager.html", IDR_MD_EXTENSIONS_MANAGER_HTML);
   source->AddResourcePath("manager.js", IDR_MD_EXTENSIONS_MANAGER_JS);

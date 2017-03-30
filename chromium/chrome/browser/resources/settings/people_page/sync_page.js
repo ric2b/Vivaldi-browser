@@ -30,9 +30,26 @@ Polymer({
 
   behaviors: [
     I18nBehavior,
+    WebUIListenerBehavior,
   ],
 
   properties: {
+    /** @private */
+    pages: {
+      type: Object,
+      value: settings.PageStatus,
+      readOnly: true,
+    },
+
+    /**
+     * The curerntly displayed page.
+     * @private {!settings.PageStatus}
+     */
+    selectedPage_: {
+      type: String,
+      value: settings.PageStatus.SPINNER,
+    },
+
     /**
      * The current active route.
      */
@@ -42,7 +59,7 @@ Polymer({
     },
 
     /**
-     * The current sync preferences, supplied by settings.SyncPrivateApi.
+     * The current sync preferences, supplied by SyncBrowserProxy.
      * @type {?settings.SyncPrefs}
      */
     syncPrefs: {
@@ -53,64 +70,112 @@ Polymer({
      * Whether the "create passphrase" inputs should be shown. These inputs
      * give the user the opportunity to use a custom passphrase instead of
      * authenticating with his Google credentials.
+     * @private
      */
-    creatingNewPassphrase: {
+    creatingNewPassphrase_: {
       type: Boolean,
       value: false,
+    },
+
+    /** @private {!settings.SyncBrowserProxyImpl} */
+    browserProxy_: {
+      type: Object,
+      value: function() {
+        return settings.SyncBrowserProxyImpl.getInstance();
+      },
     },
 
     /**
-     * True if subpage needs the user's old Google password. This can happen
-     * when the user changes his password after encrypting his sync data.
-     *
-     * TODO(tommycli): FROM the C++ handler, the syncPrefs.usePassphrase field
-     * is true if and only if there is a custom non-Google Sync password.
-     *
-     * But going TO the C++ handler, the syncPrefs.usePassphrase field is true
-     * if there is either a custom or Google password. There is a separate
-     * syncPrefs.isGooglePassphrase field.
-     *
-     * We keep an extra state variable here because we mutate the
-     * syncPrefs.usePassphrase field in the OK button handler.
-     * Remove this once we fix refactor the legacy SyncSetupHandler.
+     * The unload callback is needed because the sign-in flow needs to know
+     * if the user has closed the tab with the sync settings. This property is
+     * non-null if the user is currently navigated on the sync settings route.
+     * @private {Function}
      */
-    askOldGooglePassphrase: {
-      type: Boolean,
-      value: false,
+    unloadCallback_: {
+      type: Object,
+      value: null,
     },
   },
 
-  created: function() {
-    settings.SyncPrivateApi.setSyncPrefsCallback(
-        this.handleSyncPrefsFetched_.bind(this));
+  /** @override */
+  attached: function() {
+    this.addWebUIListener('page-status-changed',
+                          this.handlePageStatusChanged_.bind(this));
+    this.addWebUIListener('sync-prefs-changed',
+                          this.handleSyncPrefsChanged_.bind(this));
+
+    if (this.isCurrentRouteOnSyncPage_())
+      this.onNavigateToPage_();
+  },
+
+  /** @override */
+  detached: function() {
+    if (this.isCurrentRouteOnSyncPage_())
+      this.onNavigateAwayFromPage_();
+  },
+
+  /**
+   * @private
+   * @return {boolean} Whether the current route shows the sync page.
+   */
+  isCurrentRouteOnSyncPage_: function() {
+    return this.currentRoute &&
+        this.currentRoute.section == 'people' &&
+        this.currentRoute.subpage.length == 1 &&
+        this.currentRoute.subpage[0] == 'sync';
   },
 
   /** @private */
   currentRouteChanged_: function() {
-    if (this.currentRoute.section == 'people' &&
-        this.currentRoute.subpage.length == 1 &&
-        this.currentRoute.subpage[0] == 'sync') {
-      // Display loading page until the settings have been retrieved.
-      this.$.pages.selected = 'loading';
-      settings.SyncPrivateApi.didNavigateToSyncPage();
-    } else {
-      settings.SyncPrivateApi.didNavigateAwayFromSyncPage();
-    }
+    if (!this.isAttached)
+      return;
+
+    if (this.isCurrentRouteOnSyncPage_())
+      this.onNavigateToPage_();
+    else
+      this.onNavigateAwayFromPage_();
+  },
+
+  /** @private */
+  onNavigateToPage_: function() {
+    // The element is not ready for C++ interaction until it is attached.
+    assert(this.isAttached);
+    assert(this.isCurrentRouteOnSyncPage_());
+
+    if (this.unloadCallback_)
+      return;
+
+    // Display loading page until the settings have been retrieved.
+    this.selectedPage_ = settings.PageStatus.SPINNER;
+
+    this.browserProxy_.didNavigateToSyncPage();
+
+    this.unloadCallback_ = this.onNavigateAwayFromPage_.bind(this);
+    window.addEventListener('unload', this.unloadCallback_);
+  },
+
+  /** @private */
+  onNavigateAwayFromPage_: function() {
+    if (!this.unloadCallback_)
+      return;
+
+    this.browserProxy_.didNavigateAwayFromSyncPage();
+
+    window.removeEventListener('unload', this.unloadCallback_);
+    this.unloadCallback_ = null;
   },
 
   /**
-   * Handler for when the sync state is pushed from settings.SyncPrivateApi.
+   * Handler for when the sync preferences are updated.
    * @private
    */
-  handleSyncPrefsFetched_: function(syncPrefs) {
+  handleSyncPrefsChanged_: function(syncPrefs) {
     this.syncPrefs = syncPrefs;
+    this.selectedPage_ = settings.PageStatus.CONFIGURE;
 
-    this.askOldGooglePassphrase =
-        this.syncPrefs.showPassphrase && !this.syncPrefs.usePassphrase;
-
-    this.creatingNewPassphrase = false;
-
-    this.$.pages.selected = 'main';
+    // Hide the new passphrase box if the sync data has been encrypted.
+    if (this.syncPrefs.encryptAllData)
+      this.creatingNewPassphrase_ = false;
   },
 
   /**
@@ -131,57 +196,83 @@ Polymer({
       this.set('syncPrefs.passwordsSynced', true);
       this.set('syncPrefs.tabsSynced', true);
     }
-  },
 
-  /** @private */
-  onCancelTap_: function() {
-    // Event is caught by settings-animated-pages.
-    this.fire('subpage-back');
+    this.onSingleSyncDataTypeChanged_();
   },
 
   /**
-   * Sets the sync data by sending it to the settings.SyncPrivateApi.
+   * Handler for when any sync data type checkbox is changed.
    * @private
    */
-  onOkTap_: function() {
-    if (this.creatingNewPassphrase) {
-      // If a new password has been entered but it is invalid, do not send the
-      // sync state to the API.
-      if (!this.validateCreatedPassphrases_())
+  onSingleSyncDataTypeChanged_: function() {
+    this.browserProxy_.setSyncDatatypes(this.syncPrefs).then(
+        this.handlePageStatusChanged_.bind(this));
+  },
+
+  /**
+   * Sends the newly created custom sync passphrase to the browser.
+   * @private
+   */
+  onSaveNewPassphraseTap_: function() {
+    assert(this.creatingNewPassphrase_);
+
+    // If a new password has been entered but it is invalid, do not send the
+    // sync state to the API.
+    if (!this.validateCreatedPassphrases_())
+      return;
+
+    this.syncPrefs.encryptAllData = true;
+    this.syncPrefs.setNewPassphrase = true;
+    this.syncPrefs.passphrase = this.$$('#passphraseInput').value;
+
+    this.browserProxy_.setSyncEncryption(this.syncPrefs).then(
+        this.handlePageStatusChanged_.bind(this));
+  },
+
+  /**
+   * Sends the user-entered existing password to re-enable sync.
+   * @private
+   */
+  onSubmitExistingPassphraseTap_: function() {
+    assert(!this.creatingNewPassphrase_);
+
+    this.syncPrefs.setNewPassphrase = false;
+
+    var existingPassphraseInput = this.$$('#existingPassphraseInput');
+    this.syncPrefs.passphrase = existingPassphraseInput.value;
+    existingPassphraseInput.value = '';
+
+    this.browserProxy_.setSyncEncryption(this.syncPrefs).then(
+        this.handlePageStatusChanged_.bind(this));
+  },
+
+  /**
+   * Called when the page status updates.
+   * @param {!settings.PageStatus} pageStatus
+   * @private
+   */
+  handlePageStatusChanged_: function(pageStatus) {
+    switch (pageStatus) {
+      case settings.PageStatus.SPINNER:
+      case settings.PageStatus.TIMEOUT:
+      case settings.PageStatus.CONFIGURE:
+        this.selectedPage_ = pageStatus;
         return;
-
-      this.syncPrefs.encryptAllData = true;
+      case settings.PageStatus.DONE:
+        if (this.isCurrentRouteOnSyncPage_()) {
+          // Event is caught by settings-animated-pages.
+          this.fire('subpage-back');
+        }
+        return;
+      case settings.PageStatus.PASSPHRASE_FAILED:
+        if (this.selectedPage_ == this.pages.CONFIGURE &&
+            this.syncPrefs && this.syncPrefs.passphraseRequired) {
+          this.$$('#existingPassphraseInput').invalid = true;
+        }
+        return;
     }
 
-    this.syncPrefs.isGooglePassphrase = this.askOldGooglePassphrase;
-    this.syncPrefs.usePassphrase =
-        this.creatingNewPassphrase || this.syncPrefs.showPassphrase;
-
-    if (this.syncPrefs.usePassphrase) {
-      var field = this.creatingNewPassphrase ?
-          this.$$('#passphraseInput') : this.$$('#existingPassphraseInput');
-      this.syncPrefs.passphrase = field.value;
-      field.value = '';
-    }
-
-    settings.SyncPrivateApi.setSyncPrefs(
-        this.syncPrefs, this.setPageStatusCallback_.bind(this));
-  },
-
-  /**
-   * Callback invoked from calling settings.SyncPrivateApi.setSyncPrefs().
-   * @param {!settings.PageStatus} callbackState
-   * @private
-   */
-  setPageStatusCallback_: function(callbackState) {
-    if (callbackState == settings.PageStatus.DONE) {
-      this.onCancelTap_();
-    } else if (callbackState == settings.PageStatus.TIMEOUT) {
-      this.$.pages.selected = 'timeout';
-    } else if (callbackState ==
-               settings.PageStatus.PASSPHRASE_ERROR) {
-      this.$$('#incorrectPassphraseError').hidden = false;
-    }
+    assertNotReached();
   },
 
   /**
@@ -189,7 +280,7 @@ Polymer({
    * @private
    */
   onEncryptionRadioSelectionChanged_: function(event) {
-    this.creatingNewPassphrase =
+    this.creatingNewPassphrase_ =
         event.target.selected == RadioButtonNames.ENCRYPT_WITH_PASSPHRASE;
   },
 
@@ -198,17 +289,9 @@ Polymer({
    * @private
    */
   selectedEncryptionRadio_: function() {
-    return this.encryptionRadiosDisabled_() ?
+    return this.syncPrefs.encryptAllData || this.creatingNewPassphrase_ ?
         RadioButtonNames.ENCRYPT_WITH_PASSPHRASE :
         RadioButtonNames.ENCRYPT_WITH_GOOGLE;
-  },
-
-  /**
-   * Computed binding returning the selected encryption radio button.
-   * @private
-   */
-  encryptionRadiosDisabled_: function() {
-    return this.syncPrefs.usePassphrase || this.syncPrefs.encryptAllData;
   },
 
   /**
@@ -240,22 +323,20 @@ Polymer({
    * @private
    */
   validateCreatedPassphrases_: function() {
-    this.$$('#emptyPassphraseError').hidden = true;
-    this.$$('#mismatchedPassphraseError').hidden = true;
+    var passphraseInput = this.$$('#passphraseInput');
+    var passphraseConfirmationInput = this.$$('#passphraseConfirmationInput');
 
-    var passphrase = this.$$('#passphraseInput').value;
-    if (!passphrase) {
-      this.$$('#emptyPassphraseError').hidden = false;
-      return false;
-    }
+    var passphrase = passphraseInput.value;
+    var confirmation = passphraseConfirmationInput.value;
 
-    var confirmation = this.$$('#passphraseConfirmationInput').value;
-    if (passphrase != confirmation) {
-      this.$$('#mismatchedPassphraseError').hidden = false;
-      return false;
-    }
+    var emptyPassphrase = !passphrase;
+    var mismatchedPassphrase = passphrase != confirmation;
 
-    return true;
+    passphraseInput.invalid = emptyPassphrase;
+    passphraseConfirmationInput.invalid =
+        !emptyPassphrase && mismatchedPassphrase;
+
+    return !emptyPassphrase && !mismatchedPassphrase;
   },
 });
 

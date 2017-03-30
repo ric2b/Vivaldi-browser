@@ -127,15 +127,15 @@
 
   bool webcontents_was_created_as_guest_;
 
-  scoped_ptr<ValidationMessageBubble> validation_message_bubble_;
+  base::WeakPtr<ValidationMessageBubble> validation_message_bubble_;
 
-  scoped_ptr<ExtensionHostForWebContents> extension_host_;
+  std::unique_ptr<ExtensionHostForWebContents> extension_host_;
 
   // Note(andre@vivaldi.com):
   // This is used for pages opened from extensions. The delegate is not set
   // and therefore navigation is not possible. We use this to navigate after
   // attaching is done.
-  scoped_ptr<std::string> delayed_open_url_;
+  std::unique_ptr<std::string> delayed_open_url_;
 
 private:
 

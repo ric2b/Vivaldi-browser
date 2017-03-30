@@ -15,10 +15,10 @@
 #include "mash/example/window_type_launcher/window_type_launcher.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "mojo/edk/embedder/process_delegate.h"
-#include "mojo/shell/public/cpp/shell_connection.h"
-#include "mojo/shell/public/interfaces/shell_client.mojom.h"
-#include "mojo/shell/runner/common/client_util.h"
-#include "mojo/shell/runner/init.h"
+#include "services/shell/public/cpp/shell_connection.h"
+#include "services/shell/public/interfaces/shell_client.mojom.h"
+#include "services/shell/runner/common/client_util.h"
+#include "services/shell/runner/init.h"
 
 namespace {
 
@@ -39,8 +39,8 @@ int main(int argc, char** argv) {
   base::AtExitManager at_exit;
   base::CommandLine::Init(argc, argv);
 
-  mojo::shell::InitializeLogging();
-  mojo::shell::WaitForDebuggerIfNecessary();
+  shell::InitializeLogging();
+  shell::WaitForDebuggerIfNecessary();
 
 #if !defined(OFFICIAL_BUILD)
   base::debug::EnableInProcessStackDumping();
@@ -62,8 +62,8 @@ int main(int argc, char** argv) {
 
     base::MessageLoop loop;
     WindowTypeLauncher delegate;
-    mojo::ShellConnection impl(
-        &delegate, mojo::shell::GetShellClientRequestFromCommandLine());
+    shell::ShellConnection impl(&delegate,
+                                shell::GetShellClientRequestFromCommandLine());
     loop.Run();
 
     mojo::edk::ShutdownIPCSupport();

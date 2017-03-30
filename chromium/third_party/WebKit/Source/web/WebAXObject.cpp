@@ -127,7 +127,7 @@ bool WebAXObject::updateLayoutAndCheckValidity()
         Document* document = m_private->getDocument();
         if (!document || !document->view())
             return false;
-        document->view()->updateAllLifecyclePhases();
+        document->view()->updateLifecycleToCompositingCleanPlusScrolling();
     }
 
     // Doing a layout can cause this object to be invalid, so check again.
@@ -239,6 +239,14 @@ WebString WebAXObject::ariaAutoComplete() const
         return WebString();
 
     return m_private->ariaAutoComplete();
+}
+
+WebAXAriaCurrentState WebAXObject::ariaCurrentState() const
+{
+    if (isDetached())
+        return WebAXAriaCurrentStateUndefined;
+
+    return static_cast<WebAXAriaCurrentState>(m_private->ariaCurrentState());
 }
 
 bool WebAXObject::isButtonStateMixed() const
@@ -1119,7 +1127,7 @@ bool WebAXObject::hasComputedStyle() const
 
     Document* document = m_private->getDocument();
     if (document)
-        document->updateLayoutTree();
+        document->updateStyleAndLayoutTree();
 
     Node* node = m_private->getNode();
     if (!node)
@@ -1135,7 +1143,7 @@ WebString WebAXObject::computedStyleDisplay() const
 
     Document* document = m_private->getDocument();
     if (document)
-        document->updateLayoutTree();
+        document->updateStyleAndLayoutTree();
 
     Node* node = m_private->getNode();
     if (!node)

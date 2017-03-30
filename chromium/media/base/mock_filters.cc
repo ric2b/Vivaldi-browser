@@ -5,7 +5,6 @@
 #include "media/base/mock_filters.h"
 
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 
 using ::testing::_;
 using ::testing::Invoke;
@@ -14,26 +13,20 @@ using ::testing::Return;
 
 namespace media {
 
-MockPipeline::MockPipeline() {}
+MockPipelineClient::MockPipelineClient() {}
+MockPipelineClient::~MockPipelineClient() {}
 
+MockPipeline::MockPipeline() {}
 MockPipeline::~MockPipeline() {}
 
 void MockPipeline::Start(Demuxer* demuxer,
-                         scoped_ptr<Renderer> renderer,
-                         const base::Closure& ended_cb,
-                         const PipelineStatusCB& error_cb,
-                         const PipelineStatusCB& seek_cb,
-                         const PipelineMetadataCB& metadata_cb,
-                         const BufferingStateCB& buffering_state_cb,
-                         const base::Closure& duration_change_cb,
-                         const AddTextTrackCB& add_text_track_cb,
-                         const base::Closure& waiting_for_decryption_key_cb) {
-  Start(demuxer, &renderer, ended_cb, error_cb, seek_cb, metadata_cb,
-        buffering_state_cb, duration_change_cb, add_text_track_cb,
-        waiting_for_decryption_key_cb);
+                         std::unique_ptr<Renderer> renderer,
+                         Client* client,
+                         const PipelineStatusCB& seek_cb) {
+  Start(demuxer, &renderer, client, seek_cb);
 }
 
-void MockPipeline::Resume(scoped_ptr<Renderer> renderer,
+void MockPipeline::Resume(std::unique_ptr<Renderer> renderer,
                           base::TimeDelta timestamp,
                           const PipelineStatusCB& seek_cb) {
   Resume(&renderer, timestamp, seek_cb);
@@ -108,6 +101,10 @@ MockVideoDecoder::~MockVideoDecoder() {}
 MockAudioDecoder::MockAudioDecoder() {}
 
 MockAudioDecoder::~MockAudioDecoder() {}
+
+MockRendererClient::MockRendererClient() {}
+
+MockRendererClient::~MockRendererClient() {}
 
 MockVideoRenderer::MockVideoRenderer() {}
 

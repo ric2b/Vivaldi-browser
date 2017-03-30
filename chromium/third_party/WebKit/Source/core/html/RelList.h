@@ -14,15 +14,10 @@ namespace blink {
 
 class RelList final : public DOMTokenList {
 public:
-    static RawPtr<RelList> create(Element* element)
+    static RelList* create(Element* element)
     {
         return new RelList(element);
     }
-
-#if !ENABLE(OILPAN)
-    void ref() override;
-    void deref() override;
-#endif
 
     unsigned length() const override;
     const AtomicString item(unsigned index) const override;

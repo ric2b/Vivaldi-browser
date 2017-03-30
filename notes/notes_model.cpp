@@ -3,6 +3,7 @@
 #include "notes/notes_model.h"
 
 #include "app/vivaldi_resources.h"
+#include "base/memory/ptr_util.h"
 #include "base/sequenced_task_runner.h"
 #include "chrome/browser/profiles/profile.h"
 #include "importer/imported_notes_entry.h"
@@ -63,12 +64,12 @@ void Notes_Model::Load(
 
   // Load the notes. NotesStorage notifies us when done.
   store_.reset(new NotesStorage(profile_, this, task_runner.get()));
-  store_->LoadNotes(make_scoped_ptr(CreateLoadDetails()));
+  store_->LoadNotes(base::WrapUnique(CreateLoadDetails()));
 }
 
 void Notes_Model::DoneLoading(NotesLoadDetails *details_delete_me) {
   DCHECK(details_delete_me);
-  scoped_ptr<NotesLoadDetails> details(details_delete_me);
+  std::unique_ptr<NotesLoadDetails> details(details_delete_me);
   details_delete_me->release_notes_node();
   if (loaded_) {
     // We should only ever be loaded once.

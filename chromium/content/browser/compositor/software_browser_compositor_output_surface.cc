@@ -9,7 +9,7 @@
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/output/compositor_frame.h"
@@ -22,9 +22,12 @@
 namespace content {
 
 SoftwareBrowserCompositorOutputSurface::SoftwareBrowserCompositorOutputSurface(
-    scoped_ptr<cc::SoftwareOutputDevice> software_device,
-    const scoped_refptr<ui::CompositorVSyncManager>& vsync_manager)
-    : BrowserCompositorOutputSurface(std::move(software_device), vsync_manager),
+    std::unique_ptr<cc::SoftwareOutputDevice> software_device,
+    const scoped_refptr<ui::CompositorVSyncManager>& vsync_manager,
+    base::SingleThreadTaskRunner* task_runner)
+    : BrowserCompositorOutputSurface(std::move(software_device),
+                                     vsync_manager,
+                                     task_runner),
       weak_factory_(this) {}
 
 SoftwareBrowserCompositorOutputSurface::
@@ -57,18 +60,14 @@ void SoftwareBrowserCompositorOutputSurface::SwapBuffers(
 
 void SoftwareBrowserCompositorOutputSurface::OnGpuSwapBuffersCompleted(
     const std::vector<ui::LatencyInfo>& latency_info,
-    gfx::SwapResult result) {
+    gfx::SwapResult result,
+    const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac) {
   NOTREACHED();
 }
 
 #if defined(OS_MACOSX)
 void SoftwareBrowserCompositorOutputSurface::SetSurfaceSuspendedForRecycle(
     bool suspended) {
-}
-
-bool SoftwareBrowserCompositorOutputSurface::
-    SurfaceShouldNotShowFramesAfterSuspendForRecycle() const {
-  return false;
 }
 #endif
 

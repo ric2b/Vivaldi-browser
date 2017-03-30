@@ -6,18 +6,17 @@
 #define CONTENT_BROWSER_PUSH_MESSAGING_PUSH_MESSAGING_MESSAGE_FILTER_H_
 
 #include <stdint.h>
+
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "content/common/service_worker/service_worker_status_code.h"
 #include "content/public/browser/browser_message_filter.h"
 #include "content/public/common/push_messaging_status.h"
 #include "url/gurl.h"
-
-class GURL;
 
 namespace content {
 
@@ -25,6 +24,7 @@ class PushMessagingService;
 class ServiceWorkerContextWrapper;
 struct PushSubscriptionOptions;
 
+// Documented at definition.
 extern const char kPushSenderIdServiceWorkerKey[];
 extern const char kPushRegistrationIdServiceWorkerKey[];
 
@@ -49,28 +49,14 @@ class PushMessagingMessageFilter : public BrowserMessageFilter {
 
   // Subscribe methods on IO thread --------------------------------------------
 
-  void OnSubscribeFromDocument(int render_frame_id,
-                               int request_id,
-                               const PushSubscriptionOptions& options,
-                               int64_t service_worker_registration_id);
+  void OnSubscribe(int render_frame_id,
+                   int request_id,
+                   int64_t service_worker_registration_id,
+                   const PushSubscriptionOptions& options);
 
-  void OnSubscribeFromWorker(int request_id,
-                             int64_t service_worker_registration_id,
-                             const PushSubscriptionOptions& options);
-
-  void DidPersistSenderInfo(const RegisterData& data,
-                            const PushSubscriptionOptions& options,
-                            ServiceWorkerStatusCode service_worker_status);
-
-  // sender_id is ignored if data.FromDocument() is false.
-  void CheckForExistingRegistration(const RegisterData& data,
-                                    const PushSubscriptionOptions& options);
-
-  // sender_id is ignored if data.FromDocument() is false.
   void DidCheckForExistingRegistration(
       const RegisterData& data,
-      const PushSubscriptionOptions& options,
-      const std::string& push_registration_id,
+      const std::vector<std::string>& push_registration_id,
       ServiceWorkerStatusCode service_worker_status);
 
   void DidGetEncryptionKeys(const RegisterData& data,
@@ -80,7 +66,7 @@ class PushMessagingMessageFilter : public BrowserMessageFilter {
                             const std::vector<uint8_t>& auth);
 
   void DidGetSenderIdFromStorage(const RegisterData& data,
-                                 const std::string& sender_id,
+                                 const std::vector<std::string>& sender_id,
                                  ServiceWorkerStatusCode service_worker_status);
 
   // Called via PostTask from UI thread.
@@ -110,18 +96,11 @@ class PushMessagingMessageFilter : public BrowserMessageFilter {
 
   void OnUnsubscribe(int request_id, int64_t service_worker_registration_id);
 
-  void UnsubscribeHavingGottenPushSubscriptionId(
+  void UnsubscribeHavingGottenIds(
       int request_id,
       int64_t service_worker_registration_id,
       const GURL& requesting_origin,
-      const std::string& push_subscription_id,
-      ServiceWorkerStatusCode service_worker_status);
-
-  void UnsubscribeHavingGottenSenderId(
-      int request_id,
-      int64_t service_worker_registration_id,
-      const GURL& requesting_origin,
-      const std::string& sender_id,
+      const std::vector<std::string>& push_subscription_and_sender_ids,
       ServiceWorkerStatusCode service_worker_status);
 
   // Called via PostTask from UI thread.
@@ -142,9 +121,15 @@ class PushMessagingMessageFilter : public BrowserMessageFilter {
   void OnGetSubscription(int request_id,
                          int64_t service_worker_registration_id);
 
+  void DidGetSenderInfo(int request_id,
+                        int64_t service_worker_registration_id,
+                        const std::vector<std::string>& sender_info,
+                        ServiceWorkerStatusCode status);
+
   void DidGetSubscription(int request_id,
                           int64_t service_worker_registration_id,
-                          const std::string& push_subscription_id,
+                          bool uses_standard_protocol,
+                          const std::vector<std::string>& push_subscription_id,
                           ServiceWorkerStatusCode status);
 
   void DidGetSubscriptionKeys(int request_id,
@@ -162,15 +147,25 @@ class PushMessagingMessageFilter : public BrowserMessageFilter {
   // Helper methods on IO thread -----------------------------------------------
 
   // Called via PostTask from UI thread.
-  void SendIPC(scoped_ptr<IPC::Message> message);
+  void SendIPC(std::unique_ptr<IPC::Message> message);
+
+  // Helper methods on either thread -------------------------------------------
+
+  // Creates an endpoint for |subscription_id| with either the default protocol,
+  // or the standardized Web Push Protocol, depending on |standard_protocol|.
+  GURL CreateEndpoint(bool standard_protocol,
+                      const std::string& subscription_id) const;
 
   // Inner core of this message filter which lives on the UI thread.
-  scoped_ptr<Core, BrowserThread::DeleteOnUIThread> ui_core_;
+  std::unique_ptr<Core, BrowserThread::DeleteOnUIThread> ui_core_;
 
   scoped_refptr<ServiceWorkerContextWrapper> service_worker_context_;
 
-  // Empty if no PushMessagingService was available when constructed.
-  GURL push_endpoint_base_;
+  // Whether the PushMessagingService was available when constructed.
+  bool service_available_;
+
+  GURL default_endpoint_;
+  GURL web_push_protocol_endpoint_;
 
   base::WeakPtrFactory<PushMessagingMessageFilter> weak_factory_io_to_io_;
 

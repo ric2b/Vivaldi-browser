@@ -7,8 +7,10 @@
 #include <algorithm>
 
 #include "base/build_time.h"
+#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/rand_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -115,6 +117,28 @@ void CheckTrialGroup(const std::string& trial_name,
   }
 }
 
+// A second copy of FieldTrialList::seen_states_ that is meant to outlive the
+// FieldTrialList object to determine if the inconsistency happens because there
+// might be multiple FieldTrialList objects.
+// TODO(asvitkine): Remove when crbug.com/359406 is resolved.
+base::LazyInstance<std::map<std::string, std::string>>::Leaky g_seen_states =
+    LAZY_INSTANCE_INITIALIZER;
+
+// A debug token generated during FieldTrialList construction. Used to diagnose
+// crbug.com/359406.
+// TODO(asvitkine): Remove when crbug.com/359406 is resolved.
+int32_t g_debug_token = -1;
+
+// Whether to append the debug token to the child process --force-fieldtrials
+// command line. Used to diagnose crbug.com/359406.
+// TODO(asvitkine): Remove when crbug.com/359406 is resolved.
+bool g_append_debug_token_to_trial_string = false;
+
+// Tracks whether |g_seen_states| is used. Defaults to false, because unit tests
+// will create multiple FieldTrialList instances. Also controls whether
+// |g_debug_token| is included in the field trial state string.
+bool g_use_global_check_states = false;
+
 }  // namespace
 
 // statics
@@ -218,7 +242,9 @@ void FieldTrial::SetForced() {
 
 // static
 void FieldTrial::EnableBenchmarking() {
-  DCHECK_EQ(0u, FieldTrialList::GetFieldTrialCount());
+  // TODO(asvitkine): Change this back to 0u after the trial in FieldTrialList
+  // constructor is removed.
+  DCHECK_EQ(1u, FieldTrialList::GetFieldTrialCount());
   enable_benchmarking_ = true;
 }
 
@@ -250,6 +276,9 @@ FieldTrial::FieldTrial(const std::string& trial_name,
   DCHECK_GT(total_probability, 0);
   DCHECK(!trial_name_.empty());
   DCHECK(!default_group_name_.empty());
+
+  if (g_debug_token == -1)
+    g_debug_token = RandInt(1, INT32_MAX);
 }
 
 FieldTrial::~FieldTrial() {}
@@ -324,6 +353,30 @@ FieldTrialList::FieldTrialList(
   Time::Exploded exploded;
   two_years_from_build_time.LocalExplode(&exploded);
   kNoExpirationYear = exploded.year;
+
+  // Run a 50/50 experiment that enables |g_use_global_check_states| only for
+  // half the users, to investigate if this instrumentation is causing the
+  // crashes to disappear for http://crbug.com/359406. Done here instead of a
+  // server-side trial because this needs to be done early during FieldTrialList
+  // initialization.
+  //
+  // Note: |g_use_global_check_states| is set via EnableGlobalStateChecks()
+  // prior to the FieldTrialList being created. We only want to do the trial
+  // check once the first time FieldTrialList is created, so use a static
+  // |first_time| variable to track this.
+  //
+  // TODO(asvitkine): Remove after http://crbug.com/359406 is fixed.
+  static bool first_time = true;
+  if (first_time && g_use_global_check_states) {
+    first_time = false;
+    base::FieldTrial* trial =
+        FactoryGetFieldTrial("UMA_CheckStates", 100, "NoChecks",
+                             kNoExpirationYear, 1, 1,
+                             FieldTrial::SESSION_RANDOMIZED, nullptr);
+    trial->AppendGroup("Checks", 50);
+    if (trial->group_name() == "NoChecks")
+      g_use_global_check_states = false;
+  }
 }
 
 FieldTrialList::~FieldTrialList() {
@@ -338,6 +391,18 @@ FieldTrialList::~FieldTrialList() {
 }
 
 // static
+void FieldTrialList::EnableGlobalStateChecks() {
+  CHECK(!g_use_global_check_states);
+  g_use_global_check_states = true;
+  g_append_debug_token_to_trial_string = true;
+}
+
+// static
+int32_t FieldTrialList::GetDebugToken() {
+  return g_debug_token;
+}
+
+// static
 FieldTrial* FieldTrialList::FactoryGetFieldTrial(
     const std::string& trial_name,
     FieldTrial::Probability total_probability,
@@ -348,8 +413,8 @@ FieldTrial* FieldTrialList::FactoryGetFieldTrial(
     FieldTrial::RandomizationType randomization_type,
     int* default_group_number) {
   return FactoryGetFieldTrialWithRandomizationSeed(
-      trial_name, total_probability, default_group_name,
-      year, month, day_of_month, randomization_type, 0, default_group_number);
+      trial_name, total_probability, default_group_name, year, month,
+      day_of_month, randomization_type, 0, default_group_number, NULL);
 }
 
 // static
@@ -362,7 +427,8 @@ FieldTrial* FieldTrialList::FactoryGetFieldTrialWithRandomizationSeed(
     const int day_of_month,
     FieldTrial::RandomizationType randomization_type,
     uint32_t randomization_seed,
-    int* default_group_number) {
+    int* default_group_number,
+    const FieldTrial::EntropyProvider* override_entropy_provider) {
   if (default_group_number)
     *default_group_number = FieldTrial::kDefaultGroupNumber;
   // Check if the field trial has already been created in some other way.
@@ -396,8 +462,10 @@ FieldTrial* FieldTrialList::FactoryGetFieldTrialWithRandomizationSeed(
 
   double entropy_value;
   if (randomization_type == FieldTrial::ONE_TIME_RANDOMIZED) {
+    // If an override entropy provider is given, use it.
     const FieldTrial::EntropyProvider* entropy_provider =
-        GetEntropyProviderForOneTimeRandomization();
+        override_entropy_provider ? override_entropy_provider
+                                  : GetEntropyProviderForOneTimeRandomization();
     CHECK(entropy_provider);
     entropy_value = entropy_provider->GetEntropyForTrial(trial_name,
                                                          randomization_seed);
@@ -466,6 +534,12 @@ void FieldTrialList::StatesToString(std::string* output) {
     output->append(it->group_name);
     output->append(1, kPersistentStringSeparator);
   }
+  if (g_append_debug_token_to_trial_string) {
+    output->append("DebugToken");
+    output->append(1, kPersistentStringSeparator);
+    output->append(IntToString(g_debug_token));
+    output->append(1, kPersistentStringSeparator);
+  }
 }
 
 // static
@@ -489,8 +563,13 @@ void FieldTrialList::AllStatesToString(std::string* output) {
     trial.group_name.AppendToString(output);
     output->append(1, kPersistentStringSeparator);
 
+    // TODO(asvitkine): Remove these when http://crbug.com/359406 is fixed.
     CheckTrialGroup(trial.trial_name.as_string(), trial.group_name.as_string(),
                     &global_->seen_states_);
+    if (g_use_global_check_states) {
+      CheckTrialGroup(trial.trial_name.as_string(),
+                      trial.group_name.as_string(), &g_seen_states.Get());
+    }
   }
 }
 
@@ -615,10 +694,15 @@ void FieldTrialList::NotifyFieldTrialGroupSelection(FieldTrial* field_trial) {
   if (!field_trial->enable_field_trial_)
     return;
 
+  // TODO(asvitkine): Remove this block when http://crbug.com/359406 is fixed.
   {
     AutoLock auto_lock(global_->lock_);
     CheckTrialGroup(field_trial->trial_name(),
                     field_trial->group_name_internal(), &global_->seen_states_);
+    if (g_use_global_check_states) {
+      CheckTrialGroup(field_trial->trial_name(),
+                      field_trial->group_name_internal(), &g_seen_states.Get());
+    }
   }
   global_->observer_list_->Notify(
       FROM_HERE, &FieldTrialList::Observer::OnFieldTrialGroupFinalized,

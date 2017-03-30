@@ -513,8 +513,9 @@ ChunkDemuxer::Status ChunkDemuxer::AddId(const std::string& id,
 
   bool has_audio = false;
   bool has_video = false;
-  scoped_ptr<media::StreamParser> stream_parser(StreamParserFactory::Create(
-      type, codecs, media_log_, &has_audio, &has_video));
+  std::unique_ptr<media::StreamParser> stream_parser(
+      StreamParserFactory::Create(type, codecs, media_log_, &has_audio,
+                                  &has_video));
 
   if (!stream_parser)
     return ChunkDemuxer::kNotSupported;
@@ -529,12 +530,12 @@ ChunkDemuxer::Status ChunkDemuxer::AddId(const std::string& id,
   if (has_video)
     source_id_video_ = id;
 
-  scoped_ptr<FrameProcessor> frame_processor(
+  std::unique_ptr<FrameProcessor> frame_processor(
       new FrameProcessor(base::Bind(&ChunkDemuxer::IncreaseDurationIfNecessary,
                                     base::Unretained(this)),
                          media_log_));
 
-  scoped_ptr<MediaSourceState> source_state(new MediaSourceState(
+  std::unique_ptr<MediaSourceState> source_state(new MediaSourceState(
       std::move(stream_parser), std::move(frame_processor),
       base::Bind(&ChunkDemuxer::CreateDemuxerStream, base::Unretained(this)),
       media_log_));
@@ -873,7 +874,7 @@ void ChunkDemuxer::Shutdown() {
 
   ChangeState_Locked(SHUTDOWN);
 
-  if(!seek_cb_.is_null())
+  if (!seek_cb_.is_null())
     base::ResetAndReturn(&seek_cb_).Run(PIPELINE_ERROR_ABORT);
 }
 
@@ -946,7 +947,7 @@ void ChunkDemuxer::OnSourceInitDone(
     return;
   }
 
-  if (params.duration != TimeDelta() && duration_ == kNoTimestamp())
+  if (!params.duration.is_zero() && duration_ == kNoTimestamp())
     UpdateDuration(params.duration);
 
   if (!params.timeline_offset.is_null()) {
@@ -1002,8 +1003,8 @@ void ChunkDemuxer::OnSourceInitDone(
   base::ResetAndReturn(&init_cb_).Run(PIPELINE_OK);
 }
 
-ChunkDemuxerStream*
-ChunkDemuxer::CreateDemuxerStream(DemuxerStream::Type type) {
+ChunkDemuxerStream* ChunkDemuxer::CreateDemuxerStream(
+    DemuxerStream::Type type) {
   switch (type) {
     case DemuxerStream::AUDIO:
       if (audio_)
@@ -1083,7 +1084,7 @@ void ChunkDemuxer::DecreaseDurationIfNecessary() {
                             itr->second->GetMaxBufferedDuration());
   }
 
-  if (max_duration == TimeDelta())
+  if (max_duration.is_zero())
     return;
 
   if (max_duration < duration_)

@@ -47,25 +47,12 @@ RemotePlayback* RemotePlayback::create(HTMLMediaElement& element)
 }
 
 RemotePlayback::RemotePlayback(HTMLMediaElement& element)
-    : DOMWindowProperty(element.document().frame())
+    : ActiveScriptWrappable(this)
     , m_state(element.isPlayingRemotely() ? WebRemotePlaybackState::Connected : WebRemotePlaybackState::Disconnected)
     , m_availability(element.hasRemoteRoutes())
-#if !ENABLE(OILPAN)
-    , m_mediaElement(element.createWeakPtr())
-#else
     , m_mediaElement(&element)
-#endif
 {
 }
-
-#if ENABLE(OILPAN)
-RemotePlayback::~RemotePlayback() = default;
-#else
-RemotePlayback::~RemotePlayback()
-{
-    m_mediaElement->setRemotePlaybackClient(nullptr);
-}
-#endif
 
 const AtomicString& RemotePlayback::interfaceName() const
 {
@@ -74,9 +61,7 @@ const AtomicString& RemotePlayback::interfaceName() const
 
 ExecutionContext* RemotePlayback::getExecutionContext() const
 {
-    if (!m_frame)
-        return 0;
-    return m_frame->document();
+    return &m_mediaElement->document();
 }
 
 ScriptPromise RemotePlayback::getAvailability(ScriptState* scriptState)
@@ -123,6 +108,13 @@ String RemotePlayback::state() const
     return remotePlaybackStateToString(m_state);
 }
 
+bool RemotePlayback::hasPendingActivity() const
+{
+    return hasEventListeners()
+        || !m_availabilityObjects.isEmpty()
+        || !m_connectPromiseResolvers.isEmpty();
+}
+
 void RemotePlayback::stateChanged(WebRemotePlaybackState state)
 {
     // We may get a "disconnected" state change while in the "disconnected"
@@ -166,10 +158,9 @@ void RemotePlayback::connectCancelled()
 DEFINE_TRACE(RemotePlayback)
 {
     visitor->trace(m_availabilityObjects);
-    visitor->trace(m_mediaElement);
     visitor->trace(m_connectPromiseResolvers);
-    RefCountedGarbageCollectedEventTargetWithInlineData<RemotePlayback>::trace(visitor);
-    DOMWindowProperty::trace(visitor);
+    visitor->trace(m_mediaElement);
+    EventTargetWithInlineData::trace(visitor);
 }
 
 } // namespace blink

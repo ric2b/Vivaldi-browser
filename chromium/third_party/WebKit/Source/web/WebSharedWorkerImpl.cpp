@@ -36,8 +36,6 @@
 #include "core/html/HTMLFormElement.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorInstrumentation.h"
-#include "core/inspector/WorkerDebuggerAgent.h"
-#include "core/inspector/WorkerInspectorController.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoader.h"
 #include "core/page/Page.h"
@@ -56,6 +54,7 @@
 #include "platform/network/ResourceResponse.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "public/platform/Platform.h"
 #include "public/platform/WebFileError.h"
 #include "public/platform/WebMessagePortChannel.h"
 #include "public/platform/WebString.h"
@@ -67,6 +66,7 @@
 #include "public/web/WebView.h"
 #include "public/web/WebWorkerContentSettingsClientProxy.h"
 #include "public/web/modules/serviceworker/WebServiceWorkerNetworkProvider.h"
+#include "web/IndexedDBClientImpl.h"
 #include "web/LocalFileSystemClient.h"
 #include "web/WebDataSourceImpl.h"
 #include "web/WebLocalFrameImpl.h"
@@ -210,6 +210,11 @@ void WebSharedWorkerImpl::resumeStartup()
         loadShadowPage();
 }
 
+WebDevToolsAgentClient::WebKitClientMessageLoop* WebSharedWorkerImpl::createClientMessageLoop()
+{
+    return m_client->createDevToolsMessageLoop();
+}
+
 // WorkerReportingProxy --------------------------------------------------------
 
 void WebSharedWorkerImpl::reportException(const String& errorMessage, int lineNumber, int columnNumber, const String& sourceURL, int exceptionId)
@@ -224,7 +229,7 @@ void WebSharedWorkerImpl::reportConsoleMessage(ConsoleMessage*)
 
 void WebSharedWorkerImpl::postMessageToPageInspector(const String& message)
 {
-    m_mainFrame->frame()->document()->postInspectorTask(BLINK_FROM_HERE, createCrossThreadTask(&WebSharedWorkerImpl::postMessageToPageInspectorOnMainThread, this, message));
+    m_mainFrame->frame()->document()->postInspectorTask(BLINK_FROM_HERE, createCrossThreadTask(&WebSharedWorkerImpl::postMessageToPageInspectorOnMainThread, AllowCrossThreadAccess(this), message));
 }
 
 void WebSharedWorkerImpl::postMessageToPageInspectorOnMainThread(const String& message)
@@ -262,28 +267,28 @@ void WebSharedWorkerImpl::workerThreadTerminatedOnMainThread()
 
 // WorkerLoaderProxyProvider -----------------------------------------------------------
 
-void WebSharedWorkerImpl::postTaskToLoader(PassOwnPtr<ExecutionContextTask> task)
+void WebSharedWorkerImpl::postTaskToLoader(std::unique_ptr<ExecutionContextTask> task)
 {
-    m_mainFrame->frame()->document()->postTask(BLINK_FROM_HERE, task);
+    m_mainFrame->frame()->document()->postTask(BLINK_FROM_HERE, std::move(task));
 }
 
-bool WebSharedWorkerImpl::postTaskToWorkerGlobalScope(PassOwnPtr<ExecutionContextTask> task)
+bool WebSharedWorkerImpl::postTaskToWorkerGlobalScope(std::unique_ptr<ExecutionContextTask> task)
 {
-    m_workerThread->postTask(BLINK_FROM_HERE, task);
+    m_workerThread->postTask(BLINK_FROM_HERE, std::move(task));
     return true;
 }
 
 void WebSharedWorkerImpl::connect(WebMessagePortChannel* webChannel)
 {
     workerThread()->postTask(
-        BLINK_FROM_HERE, createCrossThreadTask(&connectTask, adoptPtr(webChannel)));
+        BLINK_FROM_HERE, createCrossThreadTask(&connectTask, passed(adoptPtr(webChannel))));
 }
 
 void WebSharedWorkerImpl::connectTask(PassOwnPtr<WebMessagePortChannel> channel, ExecutionContext* context)
 {
     // Wrap the passed-in channel in a MessagePort, and send it off via a connect event.
     MessagePort* port = MessagePort::create(*context);
-    port->entangle(channel);
+    port->entangle(std::move(channel));
     WorkerGlobalScope* workerGlobalScope = toWorkerGlobalScope(context);
     ASSERT_WITH_SECURITY_IMPLICATION(workerGlobalScope->isSharedWorkerGlobalScope());
     workerGlobalScope->dispatchEvent(createConnectEvent(port));
@@ -327,6 +332,7 @@ void WebSharedWorkerImpl::onScriptLoaderFinished()
     provideLocalFileSystemToWorker(workerClients, LocalFileSystemClient::create());
     WebSecurityOrigin webSecurityOrigin(m_loadingDocument->getSecurityOrigin());
     provideContentSettingsClientToWorker(workerClients, adoptPtr(m_client->createWorkerContentSettingsClientProxy(webSecurityOrigin)));
+    provideIndexedDBClientToWorker(workerClients, IndexedDBClientImpl::create());
     ContentSecurityPolicy* contentSecurityPolicy = m_mainScriptLoader->releaseContentSecurityPolicy();
     WorkerThreadStartMode startMode = m_workerInspectorProxy->workerStartMode(document);
     OwnPtr<WorkerThreadStartupData> startupData = WorkerThreadStartupData::create(
@@ -335,16 +341,17 @@ void WebSharedWorkerImpl::onScriptLoaderFinished()
         m_mainScriptLoader->script(),
         nullptr,
         startMode,
-        contentSecurityPolicy ? contentSecurityPolicy->headers() : nullptr,
+        contentSecurityPolicy ? contentSecurityPolicy->headers().get() : nullptr,
         starterOrigin,
         workerClients,
-        m_mainScriptLoader->responseAddressSpace());
+        m_mainScriptLoader->responseAddressSpace(),
+        m_mainScriptLoader->originTrialTokens());
     m_loaderProxy = WorkerLoaderProxy::create(this);
     m_workerThread = SharedWorkerThread::create(m_name, m_loaderProxy, *this);
     InspectorInstrumentation::scriptImported(m_loadingDocument.get(), m_mainScriptLoader->identifier(), m_mainScriptLoader->script());
     m_mainScriptLoader.clear();
 
-    workerThread()->start(startupData.release());
+    workerThread()->start(std::move(startupData));
     m_workerInspectorProxy->workerThreadCreated(toDocument(m_loadingDocument.get()), workerThread(), m_url);
     m_client->workerScriptLoaded();
 }
@@ -381,13 +388,13 @@ void WebSharedWorkerImpl::detachDevTools()
         devtoolsAgent->detach();
 }
 
-void WebSharedWorkerImpl::dispatchDevToolsMessage(int sessionId, const WebString& message)
+void WebSharedWorkerImpl::dispatchDevToolsMessage(int sessionId, int callId, const WebString& method, const WebString& message)
 {
     if (m_askedToTerminate)
         return;
     WebDevToolsAgent* devtoolsAgent = m_mainFrame->devToolsAgent();
     if (devtoolsAgent)
-        devtoolsAgent->dispatchOnInspectorBackend(sessionId, message);
+        devtoolsAgent->dispatchOnInspectorBackend(sessionId, callId, method, message);
 }
 
 WebSharedWorker* WebSharedWorker::create(WebSharedWorkerClient* client)

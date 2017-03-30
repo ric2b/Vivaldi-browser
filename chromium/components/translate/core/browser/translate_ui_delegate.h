@@ -7,12 +7,12 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "components/translate/core/common/translate_errors.h"
@@ -119,6 +119,9 @@ class TranslateUIDelegate {
   // translated into the current target language automatically.
   void SetAlwaysTranslate(bool value);
 
+  // Returns true if the Always Translate checkbox should be checked by default.
+  bool ShouldAlwaysTranslateBeCheckedByDefault();
+
  private:
   // Gets the host of the page being translated, or an empty string if no URL is
   // associated with the current page.
@@ -148,7 +151,7 @@ class TranslateUIDelegate {
   size_t target_language_index_;
 
   // The translation related preferences.
-  scoped_ptr<TranslatePrefs> prefs_;
+  std::unique_ptr<TranslatePrefs> prefs_;
 
   DISALLOW_COPY_AND_ASSIGN(TranslateUIDelegate);
 };

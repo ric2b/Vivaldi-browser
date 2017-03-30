@@ -220,6 +220,11 @@ class CONTENT_EXPORT RenderViewHostDelegate {
   // to this view.
   virtual SessionStorageNamespaceMap GetSessionStorageNamespaceMap();
 
+  // Returns the zoom level for the pending navigation for the page. If there
+  // is no pending navigation, this returns the zoom level for the current
+  // page.
+  virtual double GetPendingPageZoomLevel();
+
   // Returns true if the RenderViewHost will never be visible.
   virtual bool IsNeverVisible();
 
@@ -236,6 +241,10 @@ class CONTENT_EXPORT RenderViewHostDelegate {
   // keyboard.
   virtual void SetIsVirtualKeyboardRequested(bool requested) {}
   virtual bool IsVirtualKeyboardRequested();
+
+  // Whether the user agent is overridden using the Chrome for Android "Request
+  // Desktop Site" feature.
+  virtual bool IsOverridingUserAgent();
 
  protected:
   virtual ~RenderViewHostDelegate() {}

@@ -40,6 +40,7 @@ import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tab.TopControlsVisibilityDelegate;
 import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.util.UrlUtilities;
+import org.chromium.chrome.browser.widget.ControlContainer;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.content.browser.ScreenOrientationProvider;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -61,8 +62,9 @@ public class WebappActivity extends FullScreenActivity {
     private static final String TAG = "WebappActivity";
     private static final long MS_BEFORE_NAVIGATING_BACK_FROM_INTERSTITIAL = 1000;
 
-    private final WebappInfo mWebappInfo;
     private final WebappDirectoryManager mDirectoryManager;
+
+    private WebappInfo mWebappInfo;
 
     private boolean mOldWebappCleanupStarted;
 
@@ -97,7 +99,7 @@ public class WebappActivity extends FullScreenActivity {
             Log.e(TAG, "Failed to parse new Intent: " + intent);
             finish();
         } else if (!TextUtils.equals(mWebappInfo.id(), newWebappInfo.id())) {
-            mWebappInfo.copy(newWebappInfo);
+            mWebappInfo = newWebappInfo;
             resetSavedInstanceState();
             if (mIsInitialized) initializeUI(null);
         }
@@ -122,7 +124,7 @@ public class WebappActivity extends FullScreenActivity {
     @Override
     public void preInflationStartup() {
         WebappInfo info = WebappInfo.create(getIntent());
-        if (info != null) mWebappInfo.copy(info);
+        if (info != null) mWebappInfo = info;
 
         ScreenOrientationProvider.lockOrientation((byte) mWebappInfo.orientation(), this);
         super.preInflationStartup();
@@ -229,6 +231,7 @@ public class WebappActivity extends FullScreenActivity {
 
     /**
      * @return Structure containing data about the webapp currently displayed.
+     *         The return value should not be cached.
      */
     WebappInfo getWebappInfo() {
         return mWebappInfo;
@@ -544,7 +547,8 @@ public class WebappActivity extends FullScreenActivity {
     }
 
     @Override
-    protected final ChromeFullscreenManager createFullscreenManager(View controlContainer) {
+    protected final ChromeFullscreenManager createFullscreenManager(
+            ControlContainer controlContainer) {
         return new ChromeFullscreenManager(this, controlContainer, getTabModelSelector(),
                 getControlContainerHeightResource(), false /* supportsBrowserOverride */);
     }

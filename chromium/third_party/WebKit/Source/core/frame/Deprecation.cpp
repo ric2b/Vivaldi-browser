@@ -98,7 +98,9 @@ void Deprecation::warnOnDeprecatedProperties(const LocalFrame* frame, CSSPropert
     String message = deprecationMessage(unresolvedProperty);
     if (!message.isEmpty()) {
         host->deprecation().suppress(unresolvedProperty);
-        frame->console().addMessage(ConsoleMessage::create(DeprecationMessageSource, WarningMessageLevel, message));
+        ConsoleMessage* consoleMessage = ConsoleMessage::create(DeprecationMessageSource, WarningMessageLevel, message);
+        consoleMessage->collectCallStack();
+        frame->console().addMessage(consoleMessage);
     }
 }
 
@@ -120,7 +122,9 @@ void Deprecation::countDeprecation(const LocalFrame* frame, UseCounter::Feature 
     if (!host->useCounter().hasRecordedMeasurement(feature)) {
         host->useCounter().recordMeasurement(feature);
         ASSERT(!deprecationMessage(feature).isEmpty());
-        frame->console().addMessage(ConsoleMessage::create(DeprecationMessageSource, WarningMessageLevel, deprecationMessage(feature)));
+        ConsoleMessage* consoleMessage = ConsoleMessage::create(DeprecationMessageSource, WarningMessageLevel, deprecationMessage(feature));
+        consoleMessage->collectCallStack();
+        frame->console().addMessage(consoleMessage);
     }
 }
 
@@ -292,10 +296,10 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
 
     case UseCounter::GeolocationInsecureOrigin:
     case UseCounter::GeolocationInsecureOriginIframe:
-        // TODO(jww): This message should be made less ambigous after WebView
-        // is fixed so geolocation can be removed there. After that, this
-        // should be updated to read similarly to GetUserMediaInsecureOrigin's
-        // message.
+        return "getCurrentPosition() and watchPosition() no longer work on insecure origins. To use this feature, you should consider switching your application to a secure origin, such as HTTPS. See https://goo.gl/rStTGz for more details.";
+
+    case UseCounter::GeolocationInsecureOriginDeprecatedNotRemoved:
+    case UseCounter::GeolocationInsecureOriginIframeDeprecatedNotRemoved:
         return "getCurrentPosition() and watchPosition() are deprecated on insecure origins. To use this feature, you should consider switching your application to a secure origin, such as HTTPS. See https://goo.gl/rStTGz for more details.";
 
     case UseCounter::GetUserMediaInsecureOrigin:
@@ -311,9 +315,6 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
 
     case UseCounter::ElementCreateShadowRootMultiple:
         return "Calling Element.createShadowRoot() for an element which already hosts a shadow root is deprecated. See https://www.chromestatus.com/features/4668884095336448 for more details.";
-
-    case UseCounter::ElementCreateShadowRootMultipleWithUserAgentShadowRoot:
-        return "Calling Element.createShadowRoot() for an element which already hosts a user-agent shadow root is deprecated. See https://www.chromestatus.com/features/4668884095336448 for more details.";
 
     case UseCounter::CSSDeepCombinator:
         return "/deep/ combinator is deprecated. See https://www.chromestatus.com/features/6750456638341120 for more details.";
@@ -352,9 +353,6 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
     case UseCounter::SVGZoomEvent:
         return willBeRemoved("'SVGZoomEvent'", 52, "5760883808534528");
 
-    case UseCounter::BorderImageWithBorderStyleNone:
-        return "Elements using the 'border-image' CSS property with no 'border-style' set should have no border, but currently do. Setting 'border-style' will be required in M51, around May 2016. See https://www.chromestatus.com/features/5542503914668032 for more details.";
-
     case UseCounter::WebAnimationHyphenatedProperty:
         return "Hyphenated property names in Web Animations keyframes are invalid and therefore ignored. Please use camelCase instead.";
 
@@ -364,17 +362,47 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
     case UseCounter::ResultsAttribute:
         return willBeRemoved("'results' attribute", 53, "5738199536107520");
 
-    case UseCounter::TouchDragUserGestureUsedCrossOrigin:
-        return willBeRemoved("Performing sensitive operations in iframes on touch events which don't represent a tap gesture", 52, "https://www.chromestatus.com/features/5649871251963904");
+    case UseCounter::WebAnimationsEasingAsFunctionLinear:
+        return String::format("Specifying animation easing as a function is deprecated and all support will be removed in %s, at which point this will throw a TypeError. This warning may have been triggered by the Web Animations or Polymer polyfills. See http://crbug.com/601672 for details.", milestoneString(54));
+
+    case UseCounter::WindowPostMessageWithLegacyTargetOriginArgument:
+        return replacedWillBeRemoved("'window.postMessage(message, transferables, targetOrigin)'", "'window.postMessage(message, targetOrigin, transferables)'", 54, "5719033043222528");
 
     case UseCounter::EncryptedMediaAllSelectedContentTypesMissingCodecs:
-        return "contentType strings without codecs will not be supported by requestMediaKeySystemAccess() in the future. Please specify the desired codec(s) as part of the contentType.";
+        return String::format("EME requires that contentType strings accepted by requestMediaKeySystemAccess() include codecs. Non-standard support for contentType strings without codecs will be removed in %s. Please specify the desired codec(s) as part of the contentType.", milestoneString(54));
 
-    case UseCounter::URLMethodCreateObjectURLServiceWorker:
-        return willBeRemoved("The 'URL.createObjectURL' method in Service Workers", 52, "5685092332601344");
+    case UseCounter::V8KeyboardEvent_KeyIdentifier_AttributeGetter:
+        return willBeRemoved("'KeyboardEvent.keyIdentifier'", 53, "5316065118650368");
 
-    case UseCounter::URLMethodRevokeObjectURLServiceWorker:
-        return willBeRemoved("The 'URL.revokeObjectURL' method in Service Workers", 52, "5685092332601344");
+    case UseCounter::During_Microtask_Alert:
+        return willBeRemoved("Invoking 'alert()' during microtask execution", 53, "5647113010544640");
+
+    case UseCounter::During_Microtask_Confirm:
+        return willBeRemoved("Invoking 'confirm()' during microtask execution", 53, "5647113010544640");
+
+    case UseCounter::During_Microtask_Print:
+        return willBeRemoved("Invoking 'print()' during microtask execution", 53, "5647113010544640");
+
+    case UseCounter::During_Microtask_Prompt:
+        return willBeRemoved("Invoking 'prompt()' during microtask execution", 53, "5647113010544640");
+
+    case UseCounter::During_Microtask_SyncXHR:
+        return willBeRemoved("Invoking 'send()' on a sync XHR during microtask execution", 53, "5647113010544640");
+
+    case UseCounter::MediaStreamOnEnded:
+        return willBeRemoved("The MediaStream 'ended' event", 54, "5730404371791872");
+
+    case UseCounter::UntrustedEventDefaultHandled:
+        return String::format("A DOM event generated from JavaScript has triggered a default action inside the browser. This behavior is non-standard and will be removed in %s. See https://www.chromestatus.com/features/5718803933560832 for more details.", milestoneString(53));
+
+    case UseCounter::TouchStartUserGestureUtilized:
+        return willBeRemoved("Performing operations that require explicit user interaction on touchstart events", 54, "5649871251963904");
+
+    case UseCounter::TouchMoveUserGestureUtilized:
+        return willBeRemoved("Performing operations that require explicit user interaction on touchmove events", 54, "5649871251963904");
+
+    case UseCounter::TouchEndDuringScrollUserGestureUtilized:
+        return willBeRemoved("Performing operations that require explicit user interaction on touchend events that occur as part of a scroll", 54, "5649871251963904");
 
     // Features that aren't deprecated don't have a deprecation message.
     default:

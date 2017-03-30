@@ -4,7 +4,7 @@
 
 #include "core/dom/Document.h"
 #include "core/html/HTMLIFrameElement.h"
-#include "core/layout/LayoutView.h"
+#include "core/layout/api/LayoutViewItem.h"
 #include "core/paint/PaintLayer.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "web/tests/sim/SimCompositor.h"
@@ -247,7 +247,7 @@ TEST_F(DocumentLoadingRenderingTest, ShouldNotPaintIframeContentWithPendingSheet
     // Main page is ready to begin painting as there's no pending sheets.
     // The frame is not yet loaded, so we only paint the top level page.
     auto frame1 = compositor().beginFrame();
-    EXPECT_TRUE(frame1.containsText());
+    EXPECT_TRUE(frame1.contains(SimCanvas::Text));
 
     frameResource.complete(
         "<!DOCTYPE html>"
@@ -264,16 +264,16 @@ TEST_F(DocumentLoadingRenderingTest, ShouldNotPaintIframeContentWithPendingSheet
     // this by doing offsetTop in a setTimeout, or by a parent frame executing
     // script that touched offsetTop in the child frame.
     auto* childFrame = toHTMLIFrameElement(document().getElementById("frame"));
-    childFrame->contentDocument()->updateLayoutIgnorePendingStylesheets();
+    childFrame->contentDocument()->updateStyleAndLayoutIgnorePendingStylesheets();
 
     auto frame2 = compositor().beginFrame();
 
     // The child frame still has pending sheets, and the parent frame has no
     // invalid paint so we shouldn't draw any text.
-    EXPECT_FALSE(frame2.containsText());
+    EXPECT_FALSE(frame2.contains(SimCanvas::Text));
 
-    LayoutView* iframeLayoutView = childFrame->contentDocument()->layoutView();
-    const DisplayItemList& displayItemList = iframeLayoutView->layer()->graphicsLayerBacking()->getPaintController().getDisplayItemList();
+    LayoutViewItem iframeLayoutViewItem = childFrame->contentDocument()->layoutViewItem();
+    const DisplayItemList& displayItemList = iframeLayoutViewItem.layer()->graphicsLayerBacking()->getPaintController().getDisplayItemList();
     // Check that the DisplayItemList has no subsequene caching markers. These are not allowed in pending-style-sheets mode
     // since otherwise caching would be incorrect.
     ASSERT_EQ(2u, displayItemList.size());
@@ -298,7 +298,48 @@ TEST_F(DocumentLoadingRenderingTest, ShouldNotPaintIframeContentWithPendingSheet
     // First frame where all frames are loaded, should paint the text in the
     // child frame.
     auto frame3 = compositor().beginFrame();
-    EXPECT_TRUE(frame3.containsText());
+    EXPECT_TRUE(frame3.contains(SimCanvas::Text));
 }
+
+TEST_F(DocumentLoadingRenderingTest, ShouldContinuePaintingWhenSheetsStartedAfterBody)
+{
+    SimRequest mainResource("https://example.com/test.html", "text/html");
+    SimRequest cssHeadResource("https://example.com/testHead.css", "text/css");
+    SimRequest cssBodyResource("https://example.com/testBody.css", "text/css");
+
+    loadURL("https://example.com/test.html");
+
+    mainResource.start();
+
+    // Still in the head, should not paint.
+    mainResource.write("<!DOCTYPE html><link rel=stylesheet href=testHead.css>");
+    EXPECT_FALSE(document().isRenderingReady());
+
+    // Sheet is streaming in, but not ready yet.
+    cssHeadResource.start();
+    cssHeadResource.write("a { color: red; }");
+    EXPECT_FALSE(document().isRenderingReady());
+
+    // Body inserted but sheet is still pending so don't paint.
+    mainResource.write("<body>");
+    EXPECT_FALSE(document().isRenderingReady());
+
+    // Sheet finished and body inserted, ok to paint.
+    cssHeadResource.finish();
+    EXPECT_TRUE(document().isRenderingReady());
+
+    // In the body, should not stop painting.
+    mainResource.write("<link rel=stylesheet href=testBody.css>");
+    EXPECT_TRUE(document().isRenderingReady());
+
+    // Finish loading the CSS resource (no change to painting).
+    cssBodyResource.complete("a { color: red; }");
+    EXPECT_TRUE(document().isRenderingReady());
+
+    // Finish the load, painting should stay enabled.
+    mainResource.finish();
+    EXPECT_TRUE(document().isRenderingReady());
+}
+
 
 } // namespace blink

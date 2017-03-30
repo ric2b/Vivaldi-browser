@@ -59,7 +59,7 @@ WebInspector.ConsoleView = function()
 
     this._executionContextComboBox = new WebInspector.ToolbarComboBox(null, "console-context");
     this._executionContextComboBox.setMaxWidth(200);
-    this._executionContextModel = new WebInspector.ExecutionContextModel(this._executionContextComboBox.selectElement());
+    this._executionContextModel = new WebInspector.ConsoleContextSelector(this._executionContextComboBox.selectElement());
 
     this._filter = new WebInspector.ConsoleViewFilter(this);
     this._filter.addEventListener(WebInspector.ConsoleViewFilter.Events.FilterChanged, this._updateMessageList.bind(this));
@@ -70,7 +70,7 @@ WebInspector.ConsoleView = function()
     this._progressToolbarItem = new WebInspector.ToolbarItem(createElement("div"));
 
     var toolbar = new WebInspector.Toolbar("", this._contentsElement);
-    toolbar.appendToolbarItem(WebInspector.Toolbar.createActionButton(WebInspector.actionRegistry.action("console.clear")));
+    toolbar.appendToolbarItem(WebInspector.Toolbar.createActionButton(/** @type {!WebInspector.Action }*/ (WebInspector.actionRegistry.action("console.clear"))));
     toolbar.appendToolbarItem(this._filterBar.filterButton());
     toolbar.appendToolbarItem(this._executionContextComboBox);
     toolbar.appendToolbarItem(this._preserveLogCheckbox);
@@ -831,7 +831,7 @@ WebInspector.ConsoleView.prototype = {
      */
     _commandEvaluated: function(event)
     {
-        var data = /**{{result: ?WebInspector.RemoteObject, wasThrown: boolean, text: string, commandMessage: !WebInspector.ConsoleMessage}} */ (event.data);
+        var data = /** @type {{result: ?WebInspector.RemoteObject, wasThrown: boolean, text: string, commandMessage: !WebInspector.ConsoleMessage}} */ (event.data);
         this._prompt.pushHistoryItem(data.text);
         this._consoleHistorySetting.set(this._prompt.historyData().slice(-WebInspector.ConsoleView.persistedHistorySize));
         this._printResult(data.result, data.wasThrown, data.commandMessage, data.exceptionDetails);
@@ -995,13 +995,11 @@ WebInspector.ConsoleView.prototype = {
         if (!this._regexMatchRanges.length)
             return;
 
-        var currentSearchResultClassName = "current-search-result";
-
         var matchRange;
         if (this._currentMatchRangeIndex >= 0) {
             matchRange = this._regexMatchRanges[this._currentMatchRangeIndex];
             var message = this._visibleViewMessages[matchRange.messageIndex];
-            message.searchHighlightNode(matchRange.matchIndex).classList.remove(currentSearchResultClassName);
+            message.searchHighlightNode(matchRange.matchIndex).classList.remove(WebInspector.highlightedCurrentSearchResultClassName);
         }
 
         index = mod(index, this._regexMatchRanges.length);
@@ -1010,7 +1008,7 @@ WebInspector.ConsoleView.prototype = {
         matchRange = this._regexMatchRanges[index];
         var message = this._visibleViewMessages[matchRange.messageIndex];
         var highlightNode = message.searchHighlightNode(matchRange.matchIndex);
-        highlightNode.classList.add(currentSearchResultClassName);
+        highlightNode.classList.add(WebInspector.highlightedCurrentSearchResultClassName);
         this._viewport.scrollItemIntoView(matchRange.messageIndex);
         highlightNode.scrollIntoViewIfNeeded();
     },

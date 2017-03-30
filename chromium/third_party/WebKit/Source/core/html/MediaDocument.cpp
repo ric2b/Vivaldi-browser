@@ -34,6 +34,7 @@
 #include "core/events/EventListener.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/HTMLAnchorElement.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/html/HTMLContentElement.h"
@@ -72,7 +73,7 @@ void recordDownloadMetric(MediaDocumentDownloadButtonValue value)
 // FIXME: Share more code with PluginDocumentParser.
 class MediaDocumentParser : public RawDataDocumentParser {
 public:
-    static RawPtr<MediaDocumentParser> create(MediaDocument* document)
+    static MediaDocumentParser* create(MediaDocument* document)
     {
         return new MediaDocumentParser(document);
     }
@@ -93,7 +94,7 @@ private:
 
 class MediaDownloadEventListener final : public EventListener {
 public:
-    static RawPtr<MediaDownloadEventListener> create()
+    static MediaDownloadEventListener* create()
     {
         return new MediaDownloadEventListener();
     }
@@ -124,7 +125,7 @@ private:
 void MediaDocumentParser::createDocumentStructure()
 {
     ASSERT(document());
-    RawPtr<HTMLHtmlElement> rootElement = HTMLHtmlElement::create(*document());
+    HTMLHtmlElement* rootElement = HTMLHtmlElement::create(*document());
     rootElement->insertedByParser();
     document()->appendChild(rootElement);
 
@@ -133,29 +134,29 @@ void MediaDocumentParser::createDocumentStructure()
     if (isDetached())
         return; // runScriptsAtDocumentElementAvailable can detach the frame.
 
-    RawPtr<HTMLHeadElement> head = HTMLHeadElement::create(*document());
-    RawPtr<HTMLMetaElement> meta = HTMLMetaElement::create(*document());
+    HTMLHeadElement* head = HTMLHeadElement::create(*document());
+    HTMLMetaElement* meta = HTMLMetaElement::create(*document());
     meta->setAttribute(nameAttr, "viewport");
     meta->setAttribute(contentAttr, "width=device-width");
-    head->appendChild(meta.release());
+    head->appendChild(meta);
 
-    RawPtr<HTMLVideoElement> media = HTMLVideoElement::create(*document());
+    HTMLVideoElement* media = HTMLVideoElement::create(*document());
     media->setAttribute(controlsAttr, "");
     media->setAttribute(autoplayAttr, "");
     media->setAttribute(nameAttr, "media");
 
-    RawPtr<HTMLSourceElement> source = HTMLSourceElement::create(*document());
+    HTMLSourceElement* source = HTMLSourceElement::create(*document());
     source->setSrc(document()->url());
 
     if (DocumentLoader* loader = document()->loader())
         source->setType(loader->responseMIMEType());
 
-    media->appendChild(source.release());
+    media->appendChild(source);
 
-    RawPtr<HTMLBodyElement> body = HTMLBodyElement::create(*document());
+    HTMLBodyElement* body = HTMLBodyElement::create(*document());
     body->setAttribute(styleAttr, "margin: 0px;");
 
-    RawPtr<HTMLDivElement> div = HTMLDivElement::create(*document());
+    HTMLDivElement* div = HTMLDivElement::create(*document());
     // Style sheets for media controls are lazily loaded until a media element is encountered.
     // As a result, elements encountered before the media element will not get the right
     // style at first if we put the styles in mediacontrols.css. To solve this issue, set the
@@ -168,11 +169,11 @@ void MediaDocumentParser::createDocumentStructure()
         "align-items: center;"
         "min-height: min-content;"
         "height: 100%;");
-    RawPtr<HTMLContentElement> content = HTMLContentElement::create(*document());
-    div->appendChild(content.release());
+    HTMLContentElement* content = HTMLContentElement::create(*document());
+    div->appendChild(content);
 
     if (RuntimeEnabledFeatures::mediaDocumentDownloadButtonEnabled()) {
-        RawPtr<HTMLAnchorElement> anchor = HTMLAnchorElement::create(*document());
+        HTMLAnchorElement* anchor = HTMLAnchorElement::create(*document());
         anchor->setAttribute(downloadAttr, "");
         anchor->setURL(document()->url());
         anchor->setTextContent(document()->getCachedLocale(document()->contentLanguage()).queryString(WebLocalizedString::DownloadButtonLabel).upper());
@@ -182,25 +183,24 @@ void MediaDocumentParser::createDocumentStructure()
             "margin-top: 32px;"
             "padding: 0 16px 0 16px;"
             "height: 36px;"
-            "background: #4285F4;"
+            "background: #000000;"
+            "-webkit-tap-highlight-color: rgba(255, 255, 255, 0.12);"
             "font-family: Roboto;"
             "font-size: 14px;"
             "border-radius: 5px;"
             "color: white;"
-            "font-weight: bold;"
+            "font-weight: 500;"
             "text-decoration: none;"
-            "min-width: 300px;"
             "line-height: 36px;");
-        RawPtr<EventListener> listener = MediaDownloadEventListener::create();
+        EventListener* listener = MediaDownloadEventListener::create();
         anchor->addEventListener(EventTypeNames::click, listener, false);
-        RawPtr<HTMLDivElement> buttonContainer = HTMLDivElement::create(*document());
+        HTMLDivElement* buttonContainer = HTMLDivElement::create(*document());
         buttonContainer->setAttribute(styleAttr,
-            "position: absolute;"
             "text-align: center;"
-            "left: 0;"
-            "right: 0;");
-        buttonContainer->appendChild(anchor.release());
-        div->appendChild(buttonContainer.release());
+            "height: 0;"
+            "flex: none");
+        buttonContainer->appendChild(anchor);
+        div->appendChild(buttonContainer);
         recordDownloadMetric(MediaDocumentDownloadButtonShown);
     }
 
@@ -208,10 +208,10 @@ void MediaDocumentParser::createDocumentStructure()
     // MediaDocument should have a single child which is the video element. Use
     // shadow root to hide all the elements we added here.
     ShadowRoot& shadowRoot = body->ensureUserAgentShadowRoot();
-    shadowRoot.appendChild(div.release());
-    body->appendChild(media.release());
-    rootElement->appendChild(head.release());
-    rootElement->appendChild(body.release());
+    shadowRoot.appendChild(div);
+    body->appendChild(media);
+    rootElement->appendChild(head);
+    rootElement->appendChild(body);
 
     m_didBuildDocumentStructure = true;
 }
@@ -234,9 +234,12 @@ MediaDocument::MediaDocument(const DocumentInit& initializer)
 {
     setCompatibilityMode(QuirksMode);
     lockCompatibilityMode();
+    UseCounter::count(*this, UseCounter::MediaDocument);
+    if (!isInMainFrame())
+        UseCounter::count(*this, UseCounter::MediaDocumentInFrame);
 }
 
-RawPtr<DocumentParser> MediaDocument::createParser()
+DocumentParser* MediaDocument::createParser()
 {
     return MediaDocumentParser::create(this);
 }

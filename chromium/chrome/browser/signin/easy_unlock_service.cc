@@ -15,7 +15,7 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sys_info.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "base/version.h"
@@ -364,7 +364,7 @@ std::string EasyUnlockService::GetDeviceId() {
 }
 
 void EasyUnlockService::Initialize(
-    scoped_ptr<EasyUnlockAppManager> app_manager) {
+    std::unique_ptr<EasyUnlockAppManager> app_manager) {
   app_manager_ = std::move(app_manager);
   app_manager_->EnsureReady(
       base::Bind(&EasyUnlockService::InitializeOnAppManagerReady,

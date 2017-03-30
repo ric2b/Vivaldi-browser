@@ -55,7 +55,7 @@ bool LocalFileSystemClient::requestFileSystemAccessSync(ExecutionContext* contex
 {
     DCHECK(context);
     if (context->isDocument()) {
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return false;
     }
 
@@ -67,7 +67,7 @@ void LocalFileSystemClient::requestFileSystemAccessAsync(ExecutionContext* conte
 {
     DCHECK(context);
     if (!context->isDocument()) {
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return;
     }
 
@@ -77,7 +77,7 @@ void LocalFileSystemClient::requestFileSystemAccessAsync(ExecutionContext* conte
         callbacks->onAllowed();
         return;
     }
-    webFrame->contentSettingsClient()->requestFileSystemAccessAsync(callbacks);
+    webFrame->contentSettingsClient()->requestFileSystemAccessAsync(std::move(callbacks));
 }
 
 LocalFileSystemClient::LocalFileSystemClient()

@@ -67,6 +67,8 @@ NSString* const NSAccessibilityInvalidStatusChangedNotification =
     @"AXInvalidStatusChanged";
 NSString* const NSAccessibilityLiveRegionChangedNotification =
     @"AXLiveRegionChanged";
+NSString* const NSAccessibilityExpandedChanged =
+    @"AXExpandedChanged";
 NSString* const NSAccessibilityMenuItemSelectedNotification =
     @"AXMenuItemSelected";
 
@@ -124,6 +126,7 @@ ui::AXTreeUpdate
   empty_document.state =
       1 << ui::AX_STATE_READ_ONLY;
   ui::AXTreeUpdate update;
+  update.root_id = empty_document.id;
   update.nodes.push_back(empty_document);
   return update;
 }
@@ -140,6 +143,7 @@ BrowserAccessibility* BrowserAccessibilityManagerMac::GetFocus() {
 }
 
 void BrowserAccessibilityManagerMac::NotifyAccessibilityEvent(
+    BrowserAccessibilityEvent::Source source,
     ui::AXEvent event_type,
     BrowserAccessibility* node) {
   if (!node->IsNative())
@@ -270,7 +274,10 @@ void BrowserAccessibilityManagerMac::NotifyAccessibilityEvent(
     case ui::AX_EVENT_ROW_COLLAPSED:
       mac_notification = NSAccessibilityRowCollapsedNotification;
       break;
-    // TODO(nektar): Add events for busy and expanded changed.
+    // TODO(nektar): Add events for busy.
+    case ui::AX_EVENT_EXPANDED_CHANGED:
+      mac_notification = NSAccessibilityExpandedChanged;
+      break;
     // TODO(nektar): Support menu open/close notifications.
     case ui::AX_EVENT_MENU_LIST_ITEM_SELECTED:
       mac_notification = NSAccessibilityMenuItemSelectedNotification;
@@ -392,7 +399,10 @@ void BrowserAccessibilityManagerMac::OnAtomicUpdateFinished(
       static_cast<BrowserAccessibilityMac*>(GetRoot());
   if (root) {
     root->RecreateNativeObject();
-    NotifyAccessibilityEvent(ui::AX_EVENT_CHILDREN_CHANGED, root);
+    NotifyAccessibilityEvent(
+        BrowserAccessibilityEvent::FromTreeChange,
+        ui::AX_EVENT_CHILDREN_CHANGED,
+        root);
   }
 }
 

@@ -7,7 +7,7 @@
 
 #include "cc/quads/render_pass.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "third_party/skia/include/utils/SkMatrix44.h"
+#include "third_party/skia/include/core/SkMatrix44.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace cc {
@@ -42,6 +42,8 @@ class CC_EXPORT CALayerOverlay {
   gfx::RectF bounds_rect;
   // The transform to apply to the CALayer.
   SkMatrix44 transform = SkMatrix44(SkMatrix44::kIdentity_Constructor);
+  // The minification and magnification filters for the CALayer.
+  unsigned filter;
 };
 
 typedef std::vector<CALayerOverlay> CALayerOverlayList;

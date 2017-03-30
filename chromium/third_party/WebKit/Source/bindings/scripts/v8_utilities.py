@@ -112,6 +112,17 @@ def uncapitalize(name):
     return name[0].lower() + name[1:]
 
 
+def unique_by(dict_list, key):
+    """Returns elements from a list of dictionaries with unique values for the named key."""
+    keys_seen = set()
+    filtered_list = []
+    for item in dict_list:
+        if item.get(key) not in keys_seen:
+            filtered_list.append(item)
+            keys_seen.add(item.get(key))
+    return filtered_list
+
+
 ################################################################################
 # C++
 ################################################################################
@@ -185,7 +196,7 @@ def activity_logging_world_check(member):
 CALL_WITH_ARGUMENTS = {
     'ScriptState': 'scriptState',
     'ExecutionContext': 'executionContext',
-    'ScriptArguments': 'scriptArguments.release()',
+    'ScriptArguments': 'scriptArguments',
     'CurrentWindow': 'currentDOMWindow(info.GetIsolate())',
     'EnteredWindow': 'enteredDOMWindow(info.GetIsolate())',
     'Document': 'document',
@@ -324,14 +335,6 @@ def exposed(member, interface):
     return exposure_set.code()
 
 
-# [GarbageCollected]
-def gc_type(definition):
-    extended_attributes = definition.extended_attributes
-    if 'GarbageCollected' in extended_attributes:
-        return 'GarbageCollectedObject'
-    return 'RefCountedObject'
-
-
 # [ImplementedAs]
 def cpp_name(definition_or_member):
     extended_attributes = definition_or_member.extended_attributes
@@ -390,13 +393,20 @@ def origin_trial_enabled_function_name(definition_or_member, interface):
                         '%s.%s' % (definition_or_member.idl_name, definition_or_member.name))
 
     if is_origin_trial_enabled:
-        includes.add('core/inspector/ConsoleMessage.h')
+        includes.add('bindings/core/v8/ScriptState.h')
         includes.add('core/origin_trials/OriginTrials.h')
 
         trial_name = extended_attributes['OriginTrialEnabled']
         return 'OriginTrials::%sEnabled' % uncapitalize(trial_name)
 
     return None
+
+
+def origin_trial_feature_name(definition_or_member):
+    extended_attributes = definition_or_member.extended_attributes
+    if 'OriginTrialEnabled' not in extended_attributes:
+        return None
+    return extended_attributes['OriginTrialEnabled']
 
 
 def runtime_feature_name(definition_or_member):

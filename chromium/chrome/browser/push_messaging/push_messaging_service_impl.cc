@@ -272,15 +272,17 @@ void PushMessagingServiceImpl::DeliverMessageCallback(
     case content::PUSH_DELIVERY_STATUS_EVENT_WAITUNTIL_REJECTED:
 #if defined(ENABLE_NOTIFICATIONS)
       // Only enforce the user visible requirements if this is currently running
-      // as the delivery callback for the last in-flight message.
-      if (in_flight_message_deliveries_.count(app_id) == 1) {
+      // as the delivery callback for the last in-flight message, and silent
+      // push has not been enabled through a command line flag.
+      if (in_flight_message_deliveries_.count(app_id) == 1 &&
+          !base::CommandLine::ForCurrentProcess()->HasSwitch(
+              switches::kAllowSilentPush)) {
         notification_manager_.EnforceUserVisibleOnlyRequirements(
             requesting_origin, service_worker_registration_id,
             completion_closure_runner.Release());
       }
 #endif
       break;
-    case content::PUSH_DELIVERY_STATUS_INVALID_MESSAGE:
     case content::PUSH_DELIVERY_STATUS_SERVICE_WORKER_ERROR:
       break;
     case content::PUSH_DELIVERY_STATUS_UNKNOWN_APP_ID:
@@ -335,10 +337,11 @@ void PushMessagingServiceImpl::OnSendAcknowledged(
   NOTREACHED() << "The Push API shouldn't have sent messages upstream";
 }
 
-// GetPushEndpoint method ------------------------------------------------------
+// GetEndpoint method ----------------------------------------------------------
 
-GURL PushMessagingServiceImpl::GetPushEndpoint() {
-  return GURL(std::string(kPushMessagingEndpoint));
+GURL PushMessagingServiceImpl::GetEndpoint(bool standard_protocol) const {
+  return GURL(standard_protocol ? kPushMessagingPushProtocolEndpoint
+                                : kPushMessagingGcmEndpoint);
 }
 
 // Subscribe and GetPermissionStatus methods -----------------------------------

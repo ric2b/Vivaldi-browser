@@ -64,12 +64,6 @@
           # Use the PCI lib to collect GPU information.
           'use_libpci%': 1,
 
-          # Use OpenSSL instead of NSS as the underlying SSL and crypto
-          # implementation. Certificate verification will in most cases be
-          # handled by the OS. If OpenSSL's struct X509 is used to represent
-          # certificates, use_openssl_certs must be set.
-          'use_openssl%': 1,
-
           # Use OpenSSL for representing certificates. When targeting Android,
           # the platform certificate library is used for certificate
           # verification. On other targets, this flag also enables OpenSSL for
@@ -113,7 +107,7 @@
 
           'conditions': [
             # Windows and Linux use Aura, but not Ash.
-            ['OS=="win" or OS=="linux"', {
+            ['OS=="win" or OS=="linux" or OS=="openbsd" or OS=="freebsd"', {
               'use_aura%': 1,
             }],
 
@@ -168,7 +162,6 @@
         'use_ozone%': '<(use_ozone)',
         'embedded%': '<(embedded)',
         'use_libpci%': '<(use_libpci)',
-        'use_openssl%': '<(use_openssl)',
         'use_openssl_certs%': '<(use_openssl_certs)',
         'enable_viewport%': '<(enable_viewport)',
         'enable_hidpi%': '<(enable_hidpi)',
@@ -255,23 +248,18 @@
           }],
 
           # Enable HiDPI on Mac OS, Windows and Linux (including Chrome OS).
-          ['OS=="mac" or OS=="win" or OS=="linux"', {
+          ['OS=="mac" or OS=="win" or OS=="linux" or OS=="openbsd" or OS=="freebsd"', {
             'enable_hidpi%': 1,
           }],
 
           # Enable Top Chrome Material Design on Chrome OS, Windows, and Linux,
-          # and Mac.
-          ['chromeos==1 or OS=="win" or OS=="linux" or OS=="mac"', {
+          # Mac, and *BSD.
+          ['chromeos==1 or OS=="win" or OS=="linux" or OS=="mac" or OS=="openbsd" or OS=="freebsd"', {
             'enable_topchrome_md%': 1,
           }],
 
-          # On iOS, use NSS rather than OpenSSL. See http://crbug.com/338886.
-          ['OS=="ios"', {
-            'use_openssl%': 0,
-          }],
-
-          # Enable App Launcher everywhere but mobile.
-          ['OS!="ios" and OS!="android"', {
+          # Enable App Launcher on ChromeOS only.
+          ['chromeos==1', {
             'enable_app_list%': 1,
           }, {
             'enable_app_list%': 0,
@@ -360,7 +348,6 @@
       'use_ozone_evdev%': '<(use_ozone_evdev)',
       'use_clipboard_aurax11%': '<(use_clipboard_aurax11)',
       'embedded%': '<(embedded)',
-      'use_openssl%': '<(use_openssl)',
       'use_openssl_certs%': '<(use_openssl_certs)',
       'enable_viewport%': '<(enable_viewport)',
       'enable_hidpi%': '<(enable_hidpi)',
@@ -432,6 +419,12 @@
       # that are machine-local. But, great for local builds.
       # Enable with GYP_DEFINES=win_fastlink=1
       'win_fastlink%': 0,
+
+      # Experimental setting to optimize Chrome's DLLs with PGO.
+      'chrome_pgo_phase%': '0',
+
+      # Experimental setting to build the official builds with full WPO.
+      'full_wpo_on_official%': '0',
 
       # Set to select the Title Case versions of strings in GRD files.
       'use_titlecase_in_grd%': 0,
@@ -560,13 +553,7 @@
       # enable_basic_printing. It's possible to build Chrome with preview only.
       'enable_print_preview%': 1,
 
-      # Set the version of CLD.
-      #   1: (DEPRECATED! See http://crbug.com/528305 for info) Use only CLD1.
-      #   2: Use only CLD2.
-      'cld_version%': 2,
-
       # For CLD2, the size of the tables that should be included in the build
-      # Only evaluated if cld_version == 2.
       # See third_party/cld_2/cld_2.gyp for more information.
       #   0: Small tables, high accuracy
       #   2: Large tables, higher accuracy
@@ -593,9 +580,6 @@
       # disabling depends on the platform.
       'enable_themes%': 1,
 
-      # Enables autofill dialog and associated features; disabled by default.
-      'enable_autofill_dialog%' : 0,
-
       # Defaults Wallet integration in Autofill dialog to use production
       # servers. Unofficial builds won't have the proper API keys.
       'enable_prod_wallet_service%': 0,
@@ -611,6 +595,12 @@
 
       # Enable FTP support by default.
       'disable_ftp_support%': 0,
+
+      # Do not use the platform ICU alternatives by default.
+      'use_platform_icu_alternatives%': 0,
+
+      # Do not disable brotli filter by default.
+      'disable_brotli_filter%': 0,
 
       # Use of precompiled headers on Windows.
       #
@@ -743,15 +733,6 @@
           'use_nss_certs%': 0,
         }],
 
-        # NSS verifier usage.
-        # On non-OpenSSL iOS configurations, certificates use the operating
-        # system library, but the verifier uses the bundled copy of NSS.
-        ['(OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris") or (OS=="ios" and use_openssl==0)', {
-          'use_nss_verifier%': 1,
-        }, {
-          'use_nss_verifier%': 0,
-        }],
-
         # libudev usage.  This currently only affects the content layer.
         ['OS=="linux" and embedded==0', {
           'use_udev%': 1,
@@ -790,7 +771,7 @@
         }],
 
         # DBus usage.
-        ['OS=="linux" and embedded==0', {
+        ['(OS=="linux" or OS=="openbsd" or OS=="freebsd") and embedded==0', {
           'use_dbus%': 1,
         }, {
           'use_dbus%': 0,
@@ -853,11 +834,6 @@
           'proprietary_codecs%': 0,
         }],
 
-        # Enable autofill dialog when not on iOS.
-        ['OS!="ios"', {
-          'enable_autofill_dialog%': 1,
-        }],
-
         ['buildtype=="Official"', {
           'enable_prod_wallet_service%': 1,
         }],
@@ -891,8 +867,8 @@
         }],
 
         # Use GPU accelerated cross process image transport by default
-        # on linux builds with the Aura window manager
-        ['use_aura==1 and OS=="linux"', {
+        # on linux and *BSD builds with the Aura window manager
+        ['use_aura==1 and (OS=="linux" or OS=="openbsd" or OS=="freebsd")', {
           'ui_compositor_image_transport%': 1,
         }, {
           'ui_compositor_image_transport%': 0,
@@ -911,10 +887,10 @@
           'enable_pdf%': 1,
           'pdf_enable_v8%': 1,
         }],
-        ['chromeos==1 or OS=="android" or OS=="ios" or (embedded==1 and chromecast==0)', {
+        ['OS=="android" or OS=="ios" or (embedded==1 and chromecast==0)', {
           'pdf_enable_xfa%': 0,
         }, {
-          'pdf_enable_xfa%': 0, # Reverted pending crbug.com/596373
+          'pdf_enable_xfa%': 0,
         }],
 
         ['chromeos==1 or OS=="android" or OS=="ios" or desktop_linux==1', {
@@ -1005,7 +981,7 @@
         # --help for more information. Meant to be overriden with GYP_DEFINES.
         # TODO(maruel): Remove the conditions as more configurations are
         # supported.
-        ['OS!="ios" and OS!="android" and chromeos==0', {
+        ['OS!="ios" and OS!="android" and chromeos==0 and OS!="openbsd" and OS!="freebsd"', {
           'test_isolation_mode%': 'check',
         }, {
           'test_isolation_mode%': 'noop',
@@ -1021,7 +997,7 @@
         }, {
           'use_openmax_dl_fft%': 0,
         }],
-        ['OS=="win" or OS=="linux"', {
+        ['OS=="win" or OS=="linux" or OS=="openbsd" or OS=="freebsd"', {
           'enable_mdns%' : 1,
         }],
 
@@ -1065,18 +1041,23 @@
           # http://crbug.com/574476
           'fastbuild%': 2,
         }],
-
-        # Enable crash reporting via Kasko.
+        # Enable hang report capture. Capture can only be enabled for 32bit
+        # Windows.
         ['OS=="win" and target_arch=="ia32" and branding=="Chrome"', {
-          # This needs to be enabled with kasko_hang_reports.
-          'kasko%': 0,
+          # Enable hang reports from the watcher process.
+          'kasko_hang_reports%': 0,
+          # Enable failed rendez-vous reports.
+          'kasko_failed_rdv_reports%': 0,
         }, {
-          'kasko%': 0,
+          # Enable hang reports from the watcher process.
+          'kasko_hang_reports%': 0,
+          # Enable failed rendez-vous reports.
+          'kasko_failed_rdv_reports%': 0,
         }],
       ],
 
-      # Enable hang reports in Kasko. Requires Kasko to be enabled.
-      'kasko_hang_reports%': 0,
+      # Kasko reporting is disabled by default, but may get enabled below.
+      'kasko%': 0,
 
       # Setting this to '0' will cause V8's startup snapshot to be
       # embedded in the binary instead of being a external files.
@@ -1161,10 +1142,8 @@
     'use_ash%': '<(use_ash)',
     'use_cras%': '<(use_cras)',
     'use_libpci%': '<(use_libpci)',
-    'use_openssl%': '<(use_openssl)',
     'use_openssl_certs%': '<(use_openssl_certs)',
     'use_nss_certs%': '<(use_nss_certs)',
-    'use_nss_verifier%': '<(use_nss_verifier)',
     'use_udev%': '<(use_udev)',
     'os_bsd%': '<(os_bsd)',
     'os_posix%': '<(os_posix)',
@@ -1206,6 +1185,8 @@
     'component%': '<(component)',
     'win_analyze%': '<(win_analyze)',
     'win_fastlink%': '<(win_fastlink)',
+    'chrome_pgo_phase%': '<(chrome_pgo_phase)',
+    'full_wpo_on_official%': '<(full_wpo_on_official)',
     'enable_resource_whitelist_generation%': '<(enable_resource_whitelist_generation)',
     'use_titlecase_in_grd%': '<(use_titlecase_in_grd)',
     'remoting%': '<(remoting)',
@@ -1228,6 +1209,7 @@
     'syzyasan%': '<(syzyasan)',
     'kasko%': '<(kasko)',
     'kasko_hang_reports%': '<(kasko_hang_reports)',
+    'kasko_failed_rdv_reports%': '<(kasko_failed_rdv_reports)',
     'syzygy_optimize%': '<(syzygy_optimize)',
     'lsan%': '<(lsan)',
     'msan%': '<(msan)',
@@ -1252,7 +1234,6 @@
     'enable_plugins%': '<(enable_plugins)',
     'enable_session_service%': '<(enable_session_service)',
     'enable_themes%': '<(enable_themes)',
-    'enable_autofill_dialog%': '<(enable_autofill_dialog)',
     'enable_prod_wallet_service%': '<(enable_prod_wallet_service)',
     'linux_use_bundled_gold%': '<(linux_use_bundled_gold)',
     'linux_use_bundled_binutils%': '<(linux_use_bundled_binutils)',
@@ -1264,11 +1245,12 @@
     'enable_print_preview%': '<(enable_print_preview)',
     'enable_spellcheck%': '<(enable_spellcheck)',
     'use_browser_spellchecker%': '<(use_browser_spellchecker)',
-    'cld_version%': '<(cld_version)',
     'cld2_table_size%': '<(cld2_table_size)',
     'enable_captive_portal_detection%': '<(enable_captive_portal_detection)',
     'disable_file_support%': '<(disable_file_support)',
     'disable_ftp_support%': '<(disable_ftp_support)',
+    'use_platform_icu_alternatives%': '<(use_platform_icu_alternatives)',
+    'disable_brotli_filter%': '<(disable_brotli_filter)',
     'enable_task_manager%': '<(enable_task_manager)',
     'sas_dll_path%': '<(sas_dll_path)',
     'wix_path%': '<(wix_path)',
@@ -1353,12 +1335,12 @@
     'android_lint%': 1,
 
     # Although base/allocator lets you select a heap library via an
-    # environment variable, the libcmt shim it uses sometimes gets in
-    # the way.  To disable it entirely, and switch to normal msvcrt, do e.g.
+    # environment variable, the shim it uses sometimes gets in the way.
+    # To disable it entirely, and switch to normal msvcrt, do e.g.
     #  'win_use_allocator_shim': 0,
     #  'win_release_RuntimeLibrary': 2
     # to ~/.gyp/include.gypi, gclient runhooks --force, and do a release build.
-    'win_use_allocator_shim%': 1, # 1 = shim allocator via libcmt; 0 = msvcrt
+    'win_use_allocator_shim%': 1, # 1 = shim allocator; 0 = msvcrt
 
     # Enables the unified allocator shim (experimental) which routes all the
     # alloc calls to base/. Right now is supported on Linux Desktop only.
@@ -1393,9 +1375,6 @@
     # Experimental setting to break chrome.dll into multiple pieces based on
     # process type.
     'chrome_multiple_dll%': '0',
-
-    # Experimental setting to optimize Chrome's DLLs with PGO.
-    'chrome_pgo_phase%': '0',
 
     # Whether the VS xtree header has been patched to disable warning 4702. If
     # it has, then we don't need to disable 4702 (unreachable code warning).
@@ -1565,20 +1544,19 @@
     # Turns on the i18n support in V8.
     'v8_enable_i18n_support': 1,
 
-    # Compile d8 for the host toolset.
-    'v8_toolset_for_d8': 'host',
+    # Compile the v8 shell for the host toolset.
+    'v8_toolset_for_shell': 'host',
 
     # V8 extras
     # Adding V8 extras files requires API owners review
     # Be sure to synchronize with build/module_args/v8.gni
 
     'v8_extra_library_files': [
-      '../third_party/WebKit/Source/core/streams/ReadableStreamTempStub.js',
-    ],
-    'v8_experimental_extra_library_files': [
       '../third_party/WebKit/Source/core/streams/ByteLengthQueuingStrategy.js',
       '../third_party/WebKit/Source/core/streams/CountQueuingStrategy.js',
       '../third_party/WebKit/Source/core/streams/ReadableStream.js',
+    ],
+    'v8_experimental_extra_library_files': [
     ],
 
     # Use brlapi from brltty for braille display support.
@@ -2006,11 +1984,7 @@
           },{
             'winsdk_arch%': '<(target_arch)',
           }],
-          ['component=="shared_library" or MSVS_VERSION == "2015"', {
-            # TODO(scottmg): The allocator shimming doesn't work on the 2015 CRT
-            # and we are hoping to be able to remove it if an additional feature
-            # lands in the 2015 CRT API. For now, don't shim and revisit once
-            # VS2015 is RTM: http://crbug.com/481611.
+          ['component=="shared_library"', {
             'win_use_allocator_shim%': 0,
           }],
           ['component=="static_library"', {
@@ -2027,10 +2001,15 @@
           }, {
             'win_console_app%': 0,
           }],
+          # Disable hang reporting for syzyasan builds.
           ['syzyasan==1', {
-            'kasko%': 1,
-            # Disable hang reports for SyzyASAN builds.
+            # Note: override.
             'kasko_hang_reports': 0,
+            'kasko_failed_rdv_reports': 0,
+          }],
+          # Enable the Kasko reporter for syzyasan builds and hang reporting.
+          ['syzyasan==1 or kasko_hang_reports==1 or kasko_failed_rdv_reports==1', {
+            'kasko': 1,
           }],
           ['component=="shared_library" and "<(GENERATOR)"=="ninja"', {
             # Only enabled by default for ninja because it's buggy in VS.
@@ -2046,6 +2025,9 @@
             'msvs_large_module_debug_link_mode%': '1',  # No
           },{
             'msvs_large_module_debug_link_mode%': '2',  # Yes
+          }],
+          ['chrome_pgo_phase!= 0', {
+            'full_wpo_on_official%': 1,
           }],
         ],
         'nacl_win64_defines': [
@@ -2129,9 +2111,6 @@
       }],
       ['use_nss_certs==1', {
         'grit_defines': ['-D', 'use_nss_certs'],
-      }],
-      ['use_nss_verifier==1', {
-        'grit_defines': ['-D', 'use_nss_verifier'],
       }],
       ['use_ozone==1', {
         'grit_defines': ['-D', 'use_ozone'],
@@ -2251,21 +2230,27 @@
               # no need to load it dynamically.
               'clang_dynlib_flags%': '',
             }],
+            ['(OS=="android" or OS=="linux") and chromecast==0', {
+              'clang_plugin_check_ipc_arg': '-Xclang -plugin-arg-find-bad-constructs -Xclang check-ipc',
+            }, {
+              'clang_plugin_check_ipc_arg': '',
+            }],
           ],
           'clang_plugin_args%': '-Xclang -plugin-arg-find-bad-constructs -Xclang check-templates '
-          '-Xclang -plugin-arg-find-bad-constructs -Xclang follow-macro-expansion ',
+          '-Xclang -plugin-arg-find-bad-constructs -Xclang follow-macro-expansion '
+          '-Xclang -plugin-arg-find-bad-constructs -Xclang check-implicit-copy-ctors ',
         },
         # If you change these, also change build/config/clang/BUILD.gn.
         'clang_chrome_plugins_flags%':
           '<(clang_dynlib_flags)'
-          '-Xclang -add-plugin -Xclang find-bad-constructs <(clang_plugin_args)',
+          '-Xclang -add-plugin -Xclang find-bad-constructs <(clang_plugin_args) <(clang_plugin_check_ipc_arg)',
       }],
       ['asan==1 or msan==1 or lsan==1 or tsan==1', {
         'clang%': 1,
         'use_allocator%': 'none',
         'use_sanitizer_options%': 1,
       }],
-      ['OS=="linux" and asan==0 and msan==0 and lsan==0 and tsan==0 and build_for_tool==""', {
+      ['(OS=="linux" or OS=="android") and asan==0 and msan==0 and lsan==0 and tsan==0 and build_for_tool==""', {
         'use_experimental_allocator_shim%': 1,
       }],
       ['OS=="linux" and asan==0 and msan==0 and lsan==0 and tsan==0', {
@@ -2663,13 +2648,15 @@
 
         # TODO(thakis): Enable this, crbug.com/507717
         '-Wno-shift-negative-value',
+
+        # TODO(thakis): https://crbug.com/604888
+        '-Wno-undefined-var-template',
       ],
     },
     'includes': [ 'set_clang_warning_flags.gypi', ],
     'defines': [
       # Don't use deprecated V8 APIs anywhere.
       'V8_DEPRECATION_WARNINGS',
-      'CLD_VERSION=<(cld_version)',
     ],
     'include_dirs': [
       '<(SHARED_INTERMEDIATE_DIR)',
@@ -2851,18 +2838,6 @@
       }],  # fieldtrial_testing_like_official_build==0 and branding!="Chrome"
       ['OS=="win"', {
         'defines': ['NO_TCMALLOC'],
-        'conditions': [
-          ['win_use_allocator_shim==1', {
-            'defines': ['ALLOCATOR_SHIM'],
-          }],
-        ],
-      }],
-      ['asan==1', {
-        'defines': [
-          'ADDRESS_SANITIZER',
-          'MEMORY_TOOL_REPLACES_ALLOCATOR',
-          'MEMORY_SANITIZER_INITIAL_SIZE',
-        ],
       }],
       ['syzyasan==1', {
         # SyzyAsan needs /PROFILE turned on to produce appropriate pdbs.
@@ -2979,9 +2954,6 @@
       ['enable_themes==1', {
         'defines': ['ENABLE_THEMES=1'],
       }],
-      ['enable_autofill_dialog==1', {
-        'defines': ['ENABLE_AUTOFILL_DIALOG=1'],
-      }],
       ['enable_prod_wallet_service==1', {
         # In GN, this is set on the autofill tagets only. See
         # //components/autofill/core/browser:wallet_service
@@ -3067,15 +3039,11 @@
       ['<(use_libpci)==1', {
         'defines': ['USE_LIBPCI=1'],
       }],
-      ['<(use_openssl)==1', {
-        'defines': ['USE_OPENSSL=1'],
-      }],
       ['<(use_openssl_certs)==1', {
         'defines': ['USE_OPENSSL_CERTS=1'],
       }],
       ['>(nacl_untrusted_build)==1', {
         'defines': [
-          'USE_OPENSSL=1',
           'USE_OPENSSL_CERTS=1',
         ],
       }],
@@ -3085,11 +3053,15 @@
       ['<(use_nss_certs)==1 and >(nacl_untrusted_build)==0', {
         'defines': ['USE_NSS_CERTS=1'],
       }],
-      ['<(use_nss_verifier)==1 and >(nacl_untrusted_build)==0', {
-        'defines': ['USE_NSS_VERIFIER=1'],
-      }],
       ['<(chromeos)==1 and >(nacl_untrusted_build)==0', {
         'defines': ['OS_CHROMEOS=1'],
+      }],
+      ['<(asan)==1 and >(nacl_untrusted_build)==0', {
+        'defines': [
+          'ADDRESS_SANITIZER',
+          'MEMORY_TOOL_REPLACES_ALLOCATOR',
+          'MEMORY_SANITIZER_INITIAL_SIZE',
+        ],
       }],
       ['enable_wexit_time_destructors==1 and OS!="win"', {
         # TODO: Enable on Windows too, http://crbug.com/404525
@@ -3226,6 +3198,9 @@
           'VCCLCompilerTool': {
             'AdditionalOptions': [
               '/bigobj',
+              # Tell the compiler to crash on failures. This is undocumented
+              # and unsupported but very handy.
+              '/d2FastFail',
             ],
           },
           'VCLinkerTool': {
@@ -3254,7 +3229,7 @@
               # Needs to be a bit lower for VS2015, or else errors out.
               '/maxilksize:0x7ff00000',
               # Tell the linker to crash on failures.
-              #'/fastfail',
+              '/fastfail',
             ],
           },
         },
@@ -3516,8 +3491,10 @@
               'WTF_USE_DYNAMIC_ANNOTATIONS=1',
             ],
           }],
-          ['OS=="win"', {
-            'defines': ['NO_TCMALLOC'],
+          ['OS=="win" and win_use_allocator_shim==1', {
+            'defines': [
+              'ALLOCATOR_SHIM'
+            ],
           }],
           # _FORTIFY_SOURCE isn't really supported by Clang now, see
           # http://llvm.org/bugs/show_bug.cgi?id=16821.
@@ -3556,11 +3533,6 @@
             'defines': [
               'NS_BLOCK_ASSERTIONS=1',
             ],
-          }],
-          # Force disable blink assertions on Cast device builds (overriding DCHECK_ALWAYS_ON)
-          # Only defined for Release builds (NDEBUG), otherwise blink won't compile.
-          ['chromecast==1 and OS=="linux" and is_cast_desktop_build==0', {
-            'defines': ['ENABLE_ASSERT=0'],
           }],
         ],
       },
@@ -3935,6 +3907,12 @@
               ['_toolset=="target"', {
                 'conditions': [
                   ['clang==0', {
+                    'cflags': [
+                      # Don't warn about "maybe" uninitialized. Clang doesn't
+                      # include this in -Wall but gcc does, and it gives false
+                      # positives.
+                      '-Wno-maybe-uninitialized',
+                    ],
                     'cflags_cc': [
                       # The codesourcery arm-2009q3 toolchain warns at that the ABI
                       # has changed whenever it encounters a varargs function. This
@@ -4728,9 +4706,9 @@
         ],
       },
     }],
-    # FreeBSD-specific options; note that most FreeBSD options are set above,
+    # *BSD-specific options; note that most *BSD options are set above,
     # with Linux.
-    ['OS=="freebsd"', {
+    ['OS=="openbsd" or OS=="freebsd"', {
       'target_defaults': {
         'ldflags': [
           '-Wl,--no-keep-memory',
@@ -4740,11 +4718,6 @@
     # Android-specific options; note that most are set above with Linux.
     ['OS=="android"', {
       'variables': {
-        # This is a unique identifier for a given build. It's used for
-        # identifying various build artifacts corresponding to a particular
-        # build of chrome (e.g. where to find archived symbols).
-        'chrome_build_id%': '',
-
         # Placing this variable here prevents from forking libvpx, used
         # by remoting.  Remoting is off, so it needn't built,
         # so forking it's deps seems like overkill.
@@ -4834,7 +4807,6 @@
             'defines': [
               'ANDROID',
               '__GNU_SOURCE=1',  # Necessary for clone()
-              'CHROME_BUILD_ID="<(chrome_build_id)"',
               # The NDK has these things, but doesn't define the constants
               # to say that it does. Define them here instead.
               'HAVE_SYS_UIO_H',
@@ -5201,7 +5173,6 @@
           # These should end with %, but there seems to be a bug with % in
           # variables that are intended to be set to different values in
           # different targets, like these.
-          'mac_pie': 1,        # Most executables can be position-independent.
           # Strip debugging symbols from the target.
           'mac_strip': '<(mac_strip_release)',
           'conditions': [
@@ -5294,55 +5265,14 @@
             ],
           }],
           ['_type=="executable"', {
-            'postbuilds': [
-              {
-                # Arranges for data (heap) pages to be protected against
-                # code execution when running on Mac OS X 10.7 ("Lion"), and
-                # ensures that the position-independent executable (PIE) bit
-                # is set for ASLR when running on Mac OS X 10.5 ("Leopard").
-                'variables': {
-                  # Define change_mach_o_flags in a variable ending in _path
-                  # so that GYP understands it's a path and performs proper
-                  # relativization during dict merging.
-                  'change_mach_o_flags_path':
-                      'mac/change_mach_o_flags_from_xcode.sh',
-                  'change_mach_o_flags_options%': [
-                  ],
-                  'target_conditions': [
-                    ['mac_pie==0 or release_valgrind_build==1', {
-                      # Don't enable PIE if it's unwanted. It's unwanted if
-                      # the target specifies mac_pie=0 or if building for
-                      # Valgrind, because Valgrind doesn't understand slide.
-                      # See the similar mac_pie/release_valgrind_build check
-                      # below.
-                      'change_mach_o_flags_options': [
-                        '--no-pie',
-                      ],
-                    }],
-                  ],
-                },
-                'postbuild_name': 'Change Mach-O Flags',
-                'action': [
-                  '<(change_mach_o_flags_path)',
-                  '>@(change_mach_o_flags_options)',
-                ],
-              },
-            ],
-            'target_conditions': [
-              ['mac_pie==1 and release_valgrind_build==0', {
-                # Turn on position-independence (ASLR) for executables. When
-                # PIE is on for the Chrome executables, the framework will
-                # also be subject to ASLR.
-                # Don't do this when building for Valgrind, because Valgrind
-                # doesn't understand slide. TODO: Make Valgrind on Mac OS X
-                # understand slide, and get rid of the Valgrind check.
-                'xcode_settings': {
-                  'OTHER_LDFLAGS': [
-                    '-Wl,-pie',  # Position-independent executable (MH_PIE)
-                  ],
-                },
-              }],
-            ],
+            # Turn on position-independence (ASLR) for executables. When
+            # PIE is on for the Chrome executables, the framework will
+            # also be subject to ASLR.
+            'xcode_settings': {
+              'OTHER_LDFLAGS': [
+                '-Wl,-pie',  # Position-independent executable (MH_PIE)
+              ],
+            },
           }],
           ['(_type=="executable" or _type=="shared_library" or \
              _type=="loadable_module") and mac_strip!=0', {
@@ -5569,6 +5499,12 @@
                     'Optimization': '1',
                     # 2, favorSize - Favor small code (/Os)
                     'FavorSizeOrSpeed': '2',
+                    'conditions': [
+                      ['full_wpo_on_official==1', {
+                        # This implies link time code generation.
+                        'WholeProgramOptimization': 'true',
+                      }],
+                    ],
                   },
                 },
               }],
@@ -5591,6 +5527,12 @@
                     'Optimization': '2',
                     # 1, favorSpeed - Favor fast code (/Ot)
                     'FavorSizeOrSpeed': '1',
+                    'conditions': [
+                      ['full_wpo_on_official==1', {
+                        # This implies link time code generation.
+                        'WholeProgramOptimization': 'true',
+                      }],
+                    ],
                   },
                 },
               }],
@@ -5720,10 +5662,11 @@
           # 2015 64-bit warning for integer to larger pointer
           4312,
 
-          # TODO(brucedawson): http://crbug.com/593448 4334 is a 'suspicious
-          # shift' warning and 4595 is an 'illegal inline operator new' warning
-          # Both are new in VS 2015 Update 2 and can safely be deferred for now.
-          4334, 4595,
+          # TODO(brucedawson): http://crbug.com/593448 - C4595 is an 'illegal
+          # inline operator new' warning that is new in VS 2015 Update 2.
+          # This is equivalent to clang's no-inline-new-delete warning.
+          # See http://bugs.icu-project.org/trac/ticket/11122
+          4595,
         ],
         'msvs_settings': {
           'VCCLCompilerTool': {
@@ -6315,9 +6258,6 @@
           ['_toolset=="target"', {
             'cflags': [
               '-fwhole-program-vtables',
-              # TODO(pcc): Remove this flag once the upstream interface change
-              # (http://reviews.llvm.org/D18635) lands.
-              '-fwhole-program-vtables-blacklist=<(cfi_blacklist)',
             ],
             'ldflags': [
               '-fwhole-program-vtables',

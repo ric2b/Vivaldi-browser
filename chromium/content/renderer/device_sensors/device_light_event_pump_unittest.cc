@@ -7,7 +7,7 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/common/device_sensors/device_light_hardware_buffer.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -90,8 +90,8 @@ class DeviceLightEventPumpTest : public testing::Test {
   DeviceLightHardwareBuffer* buffer() { return buffer_; }
 
  private:
-  scoped_ptr<MockDeviceLightListener> listener_;
-  scoped_ptr<DeviceLightEventPumpForTesting> light_pump_;
+  std::unique_ptr<MockDeviceLightListener> listener_;
+  std::unique_ptr<DeviceLightEventPumpForTesting> light_pump_;
   base::SharedMemoryHandle handle_;
   base::SharedMemory shared_memory_;
   DeviceLightHardwareBuffer* buffer_;

@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-
 /**
  * @constructor
  * @extends {WebInspector.Object}
@@ -533,7 +532,7 @@ WebInspector.UISourceCode.prototype = {
      */
     extension: function()
     {
-        return WebInspector.TextUtils.extension(this._name);
+        return WebInspector.ParsedURL.extractExtension(this._name);
     },
 
     /**
@@ -554,12 +553,21 @@ WebInspector.UISourceCode.prototype = {
     searchInContent: function(query, caseSensitive, isRegex, callback)
     {
         var content = this.content();
-        if (content) {
-            WebInspector.StaticContentProvider.searchInContent(content, query, caseSensitive, isRegex, callback);
+        if (!content) {
+            this._project.searchInFileContent(this, query, caseSensitive, isRegex, callback);
             return;
         }
 
-        this._project.searchInFileContent(this, query, caseSensitive, isRegex, callback);
+        // searchInContent should call back later.
+        setTimeout(doSearch.bind(null, content), 0);
+
+        /**
+         * @param {string} content
+         */
+        function doSearch(content)
+        {
+            callback(WebInspector.ContentProvider.performSearchInContent(content, query, caseSensitive, isRegex));
+        }
     },
 
     /**

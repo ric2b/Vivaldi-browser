@@ -26,6 +26,7 @@
 
 #include "core/fetch/CrossOriginAccessControl.h"
 
+#include "core/fetch/FetchUtils.h"
 #include "core/fetch/Resource.h"
 #include "core/fetch/ResourceLoaderOptions.h"
 #include "platform/network/HTTPParsers.h"
@@ -51,7 +52,7 @@ static PassOwnPtr<HTTPHeaderSet> createAllowedCrossOriginResponseHeadersSet()
     headerSet->add("last-modified");
     headerSet->add("pragma");
 
-    return headerSet.release();
+    return headerSet;
 }
 
 bool isOnAccessControlResponseHeaderWhitelist(const String& name)
@@ -80,29 +81,29 @@ ResourceRequest createAccessControlPreflightRequest(const ResourceRequest& reque
     preflightRequest.setRequestContext(request.requestContext());
     preflightRequest.setSkipServiceWorker(true);
 
+    if (request.isExternalRequest())
+        preflightRequest.setHTTPHeaderField(HTTPNames::Access_Control_Request_External, "true");
+
     const HTTPHeaderMap& requestHeaderFields = request.httpHeaderFields();
 
     if (requestHeaderFields.size() > 0) {
-        // Sort header names lexicographically: https://crbug.com/452391
         // Fetch API Spec:
         //   https://fetch.spec.whatwg.org/#cors-preflight-fetch-0
         Vector<String> headers;
         for (const auto& header : requestHeaderFields) {
+            if (FetchUtils::isSimpleHeader(header.key, header.value)) {
+                // Exclude simple headers.
+                continue;
+            }
             if (equalIgnoringCase(header.key, "referer")) {
                 // When the request is from a Worker, referrer header was added
                 // by WorkerThreadableLoader. But it should not be added to
                 // Access-Control-Request-Headers header.
                 continue;
             }
-            if (equalIgnoringCase(header.key, "save-data")) {
-                // As a short-term fix, exclude Save-Data from
-                // Access-Control-Request-Headers header.
-                // TODO(rajendrant): crbug.com/601092 Longer-term all simple
-                // headers should be excluded as well.
-                continue;
-            }
             headers.append(header.key.lower());
         }
+        // Sort header names lexicographically.
         std::sort(headers.begin(), headers.end(), WTF::codePointCompareLessThan);
         StringBuilder headerBuffer;
         for (const String& header : headers) {
@@ -226,6 +227,20 @@ bool passesPreflightStatusCheck(const ResourceResponse& response, String& errorD
         return false;
     }
 
+    return true;
+}
+
+bool passesExternalPreflightCheck(const ResourceResponse& response, String& errorDescription)
+{
+    AtomicString result = response.httpHeaderField(HTTPNames::Access_Control_Allow_External);
+    if (result.isNull()) {
+        errorDescription = "No 'Access-Control-Allow-External' header was present in the preflight response for this external request (This is an experimental header which is defined in 'https://mikewest.github.io/cors-rfc1918/').";
+        return false;
+    }
+    if (!equalIgnoringCase(result, "true")) {
+        errorDescription = "The 'Access-Control-Allow-External' header in the preflight response for this external request had a value of '" + result + "',  not 'true' (This is an experimental header which is defined in 'https://mikewest.github.io/cors-rfc1918/').";
+        return false;
+    }
     return true;
 }
 

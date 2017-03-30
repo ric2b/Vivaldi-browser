@@ -21,24 +21,15 @@ namespace blink {
 class EventQueue;
 class LocalFrame;
 class WorkerOrWorkletScriptController;
-class WorkletConsole;
 
 class MODULES_EXPORT WorkletGlobalScope : public GarbageCollectedFinalized<WorkletGlobalScope>, public SecurityContext, public MainThreadWorkletGlobalScope, public ScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(WorkletGlobalScope);
 public:
-#if !ENABLE(OILPAN)
-    using RefCounted<WorkletGlobalScope>::ref;
-    using RefCounted<WorkletGlobalScope>::deref;
-#endif
-
     ~WorkletGlobalScope() override;
     virtual void dispose();
 
     bool isWorkletGlobalScope() const final { return true; }
-
-    // WorkletGlobalScope
-    WorkletConsole* console();
 
     // WorkerOrWorkletGlobalScope
     ScriptWrappable* getScriptWrappable() const final { return const_cast<WorkletGlobalScope*>(this); }
@@ -59,14 +50,14 @@ public:
     using SecurityContext::contentSecurityPolicy;
 
     DOMTimerCoordinator* timers() final { ASSERT_NOT_REACHED(); return nullptr; } // WorkletGlobalScopes don't have timers.
-    void postTask(const WebTraceLocation&, PassOwnPtr<ExecutionContextTask>) override
+    void postTask(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>) override
     {
         // TODO(ikilpatrick): implement.
         ASSERT_NOT_REACHED();
     }
 
     void reportBlockedScriptExecutionToInspector(const String& directiveText) final;
-    void addConsoleMessage(RawPtr<ConsoleMessage>) final;
+    void addConsoleMessage(ConsoleMessage*) final;
     void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack>) final;
 
     DECLARE_VIRTUAL_TRACE();
@@ -77,18 +68,11 @@ protected:
     WorkletGlobalScope(LocalFrame*, const KURL&, const String& userAgent, PassRefPtr<SecurityOrigin>, v8::Isolate*);
 
 private:
-#if !ENABLE(OILPAN)
-    void refExecutionContext() final { ref(); }
-    void derefExecutionContext() final { deref(); }
-#endif
-
     const KURL& virtualURL() const final { return m_url; }
     KURL virtualCompleteURL(const String&) const final;
 
     EventTarget* errorEventTarget() final { return nullptr; }
     void didUpdateSecurityOrigin() final { }
-
-    mutable Member<WorkletConsole> m_console;
 
     KURL m_url;
     String m_userAgent;

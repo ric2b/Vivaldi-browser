@@ -12,11 +12,11 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread_checker.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "net/base/external_estimate_provider.h"
 #include "net/base/network_change_notifier.h"
+#include "net/nqe/external_estimate_provider.h"
 
 namespace chrome {
 namespace android {

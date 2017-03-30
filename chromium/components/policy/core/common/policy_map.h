@@ -8,11 +8,11 @@
 #include <stddef.h>
 
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/values.h"
 #include "components/policy/core/common/external_data_fetcher.h"
 #include "components/policy/core/common/policy_types.h"
@@ -28,19 +28,20 @@ class POLICY_EXPORT PolicyMap {
   struct POLICY_EXPORT Entry {
     PolicyLevel level;
     PolicyScope scope;
-    base::Value* value;
-    ExternalDataFetcher* external_data_fetcher;
+    std::unique_ptr<base::Value> value;
+    std::unique_ptr<ExternalDataFetcher> external_data_fetcher;
 
     // For debugging and displaying only. Set by provider delivering the policy.
     PolicySource source;
 
     Entry();
+    ~Entry();
 
-    // Deletes all members owned by |this|.
-    void DeleteOwnedMembers();
+    Entry(Entry&&);
+    Entry& operator=(Entry&&);
 
     // Returns a copy of |this|.
-    scoped_ptr<Entry> DeepCopy() const;
+    Entry DeepCopy() const;
 
     // Returns true if |this| has higher priority than |other|.
     bool has_higher_priority_than(const Entry& other) const;
@@ -64,14 +65,14 @@ class POLICY_EXPORT PolicyMap {
   // This is equivalent to Get(policy)->value, when it doesn't return NULL.
   const base::Value* GetValue(const std::string& policy) const;
 
-  // Takes ownership of |value| and |external_data_fetcher|. Overwrites any
-  // existing information stored in the map for the key |policy|.
+  // Overwrites any existing information stored in the map for the key |policy|.
   void Set(const std::string& policy,
            PolicyLevel level,
            PolicyScope scope,
            PolicySource source,
-           base::Value* value,
-           ExternalDataFetcher* external_data_fetcher);
+           std::unique_ptr<base::Value> value,
+           std::unique_ptr<ExternalDataFetcher> external_data_fetcher);
+  void Set(const std::string& policy, Entry entry);
 
   // Erase the given |policy|, if it exists in this map.
   void Erase(const std::string& policy);
@@ -83,7 +84,7 @@ class POLICY_EXPORT PolicyMap {
   void CopyFrom(const PolicyMap& other);
 
   // Returns a copy of |this|.
-  scoped_ptr<PolicyMap> DeepCopy() const;
+  std::unique_ptr<PolicyMap> DeepCopy() const;
 
   // Merges policies from |other| into |this|. Existing policies are only
   // overridden by those in |other| if they have a higher priority, as defined

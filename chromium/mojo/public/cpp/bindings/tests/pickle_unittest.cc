@@ -15,7 +15,7 @@
 #include "mojo/public/cpp/bindings/tests/pickled_struct_chromium.h"
 #include "mojo/public/cpp/bindings/tests/variant_test_util.h"
 #include "mojo/public/interfaces/bindings/tests/test_native_types.mojom-blink.h"
-#include "mojo/public/interfaces/bindings/tests/test_native_types.mojom-chromium.h"
+#include "mojo/public/interfaces/bindings/tests/test_native_types.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace mojo {
@@ -54,18 +54,18 @@ void ExpectError(InterfacePtr<T>* proxy, const base::Closure& callback) {
 }
 
 // This implements the generated Chromium variant of PicklePasser.
-class ChromiumPicklePasserImpl : public chromium::PicklePasser {
+class ChromiumPicklePasserImpl : public PicklePasser {
  public:
   ChromiumPicklePasserImpl() {}
 
-  // mojo::test::chromium::PicklePasser:
+  // mojo::test::PicklePasser:
   void PassPickle(const PickledStructChromium& pickle,
                   const PassPickleCallback& callback) override {
     callback.Run(pickle);
   }
 
   void PassPickleContainer(
-      chromium::PickleContainerPtr container,
+      PickleContainerPtr container,
       const PassPickleContainerCallback& callback) override {
     callback.Run(std::move(container));
   }
@@ -98,12 +98,12 @@ class BlinkPicklePasserImpl : public blink::PicklePasser {
     callback.Run(std::move(container));
   }
 
-  void PassPickles(Array<PickledStructBlink> pickles,
+  void PassPickles(WTFArray<PickledStructBlink> pickles,
                    const PassPicklesCallback& callback) override {
     callback.Run(std::move(pickles));
   }
 
-  void PassPickleArrays(Array<Array<PickledStructBlink>> pickle_arrays,
+  void PassPickleArrays(WTFArray<WTFArray<PickledStructBlink>> pickle_arrays,
                         const PassPickleArraysCallback& callback) override {
     callback.Run(std::move(pickle_arrays));
   }
@@ -115,13 +115,13 @@ class PickleTest : public testing::Test {
  public:
   PickleTest() {}
 
-  template <typename ProxyType = chromium::PicklePasser>
+  template <typename ProxyType = PicklePasser>
   InterfacePtr<ProxyType> ConnectToChromiumService() {
     InterfacePtr<ProxyType> proxy;
     InterfaceRequest<ProxyType> request = GetProxy(&proxy);
     chromium_bindings_.AddBinding(
         &chromium_service_,
-        ConvertInterfaceRequest<chromium::PicklePasser>(std::move(request)));
+        ConvertInterfaceRequest<PicklePasser>(std::move(request)));
     return proxy;
   }
 
@@ -138,7 +138,7 @@ class PickleTest : public testing::Test {
  private:
   base::MessageLoop loop_;
   ChromiumPicklePasserImpl chromium_service_;
-  BindingSet<chromium::PicklePasser> chromium_bindings_;
+  BindingSet<PicklePasser> chromium_bindings_;
   BlinkPicklePasserImpl blink_service_;
   BindingSet<blink::PicklePasser> blink_bindings_;
 };
@@ -164,7 +164,7 @@ TEST_F(PickleTest, ChromiumProxyToChromiumService) {
 }
 
 TEST_F(PickleTest, ChromiumProxyToBlinkService) {
-  auto chromium_proxy = ConnectToBlinkService<chromium::PicklePasser>();
+  auto chromium_proxy = ConnectToBlinkService<PicklePasser>();
   {
     base::RunLoop loop;
     chromium_proxy->PassPickle(
@@ -291,22 +291,22 @@ TEST_F(PickleTest, PickleArrayArray) {
 
 TEST_F(PickleTest, PickleContainer) {
   auto proxy = ConnectToChromiumService();
-  chromium::PickleContainerPtr pickle_container =
-      chromium::PickleContainer::New();
+  PickleContainerPtr pickle_container = PickleContainer::New();
   pickle_container->pickle.set_foo(42);
   pickle_container->pickle.set_bar(43);
   pickle_container->pickle.set_baz(44);
+  EXPECT_TRUE(pickle_container.Equals(pickle_container));
+  EXPECT_FALSE(pickle_container.Equals(PickleContainer::New()));
   {
     base::RunLoop run_loop;
-    proxy->PassPickleContainer(
-        std::move(pickle_container),
-        [&](chromium::PickleContainerPtr passed) {
-          ASSERT_FALSE(passed.is_null());
-          EXPECT_EQ(42, passed->pickle.foo());
-          EXPECT_EQ(43, passed->pickle.bar());
-          EXPECT_EQ(0, passed->pickle.baz());
-          run_loop.Quit();
-        });
+    proxy->PassPickleContainer(std::move(pickle_container),
+                               [&](PickleContainerPtr passed) {
+                                 ASSERT_FALSE(passed.is_null());
+                                 EXPECT_EQ(42, passed->pickle.foo());
+                                 EXPECT_EQ(43, passed->pickle.bar());
+                                 EXPECT_EQ(0, passed->pickle.baz());
+                                 run_loop.Quit();
+                               });
     run_loop.Run();
   }
 }

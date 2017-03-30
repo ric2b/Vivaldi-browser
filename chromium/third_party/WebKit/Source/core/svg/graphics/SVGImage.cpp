@@ -79,12 +79,6 @@ SVGImage::~SVGImage()
     ASSERT(!m_chromeClient || !m_chromeClient->image());
 }
 
-LayoutRect SVGImage::visualRect() const
-{
-    // TODO(chrishtr): fix this.
-    return LayoutRect();
-}
-
 bool SVGImage::isInSVGImage(const Node* node)
 {
     ASSERT(node);
@@ -166,6 +160,11 @@ static float resolveWidthForRatio(float height, const FloatSize& intrinsicRatio)
 static float resolveHeightForRatio(float width, const FloatSize& intrinsicRatio)
 {
     return width * intrinsicRatio.height() / intrinsicRatio.width();
+}
+
+bool SVGImage::hasIntrinsicDimensions() const
+{
+    return !concreteObjectSize(FloatSize()).isEmpty();
 }
 
 FloatSize SVGImage::concreteObjectSize(const FloatSize& defaultObjectSize) const
@@ -278,8 +277,8 @@ void SVGImage::drawPatternForContainer(GraphicsContext& context, const FloatSize
     spacedTile.expand(FloatSize(repeatSpacing));
 
     SkPictureBuilder patternPicture(spacedTile, nullptr, &context);
-    if (!DrawingRecorder::useCachedDrawingIfPossible(patternPicture.context(), *this, DisplayItem::Type::SVGImage)) {
-        DrawingRecorder patternPictureRecorder(patternPicture.context(), *this, DisplayItem::Type::SVGImage, spacedTile);
+    {
+        DrawingRecorder patternPictureRecorder(patternPicture.context(), patternPicture, DisplayItem::Type::SVGImage, spacedTile);
         // When generating an expanded tile, make sure we don't draw into the spacing area.
         if (tile != spacedTile)
             patternPicture.context().clip(tile);
@@ -347,7 +346,7 @@ void SVGImage::drawInternal(SkCanvas* canvas, const SkPaint& paint, const FloatR
 
     SkPictureBuilder imagePicture(dstRect);
     {
-        ClipRecorder clipRecorder(imagePicture.context(), *this, DisplayItem::ClipNodeImage, LayoutRect(enclosingIntRect(dstRect)));
+        ClipRecorder clipRecorder(imagePicture.context(), imagePicture, DisplayItem::ClipNodeImage, LayoutRect(enclosingIntRect(dstRect)));
 
         // We can only draw the entire frame, clipped to the rect we want. So compute where the top left
         // of the image would be if we were drawing without clipping, and translate accordingly.
@@ -356,9 +355,9 @@ void SVGImage::drawInternal(SkCanvas* canvas, const SkPaint& paint, const FloatR
         FloatPoint destOffset = dstRect.location() - topLeftOffset;
         AffineTransform transform = AffineTransform::translation(destOffset.x(), destOffset.y());
         transform.scale(scale.width(), scale.height());
-        TransformRecorder transformRecorder(imagePicture.context(), *this, transform);
+        TransformRecorder transformRecorder(imagePicture.context(), imagePicture, transform);
 
-        view->updateAllLifecyclePhases();
+        view->updateAllLifecyclePhasesExceptPaint();
         view->paint(imagePicture.context(), CullRect(enclosingIntRect(srcRect)));
         ASSERT(!view->needsLayout());
     }

@@ -6,11 +6,15 @@
 #define MOJO_PUBLIC_CPP_BINDINGS_LIB_ASSOCIATED_INTERFACE_PTR_STATE_H_
 
 #include <stdint.h>
+
 #include <algorithm>  // For |std::swap()|.
+#include <memory>
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
+#include "base/memory/ref_counted.h"
+#include "base/single_thread_task_runner.h"
 #include "mojo/public/cpp/bindings/associated_group.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr_info.h"
 #include "mojo/public/cpp/bindings/callback.h"
@@ -18,7 +22,7 @@
 #include "mojo/public/cpp/bindings/lib/interface_endpoint_client.h"
 #include "mojo/public/cpp/bindings/lib/interface_id.h"
 #include "mojo/public/cpp/bindings/lib/multiplex_router.h"
-#include "mojo/public/cpp/bindings/lib/scoped_interface_endpoint_handle.h"
+#include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 
 namespace mojo {
@@ -77,7 +81,8 @@ class AssociatedInterfacePtrState {
     swap(other->version_, version_);
   }
 
-  void Bind(AssociatedInterfacePtrInfo<Interface> info) {
+  void Bind(AssociatedInterfacePtrInfo<Interface> info,
+            scoped_refptr<base::SingleThreadTaskRunner> runner) {
     DCHECK(!endpoint_client_);
     DCHECK(!proxy_);
     DCHECK_EQ(0u, version_);
@@ -85,8 +90,9 @@ class AssociatedInterfacePtrState {
 
     version_ = info.version();
     endpoint_client_.reset(new InterfaceEndpointClient(
-        AssociatedInterfacePtrInfoHelper::PassHandle(&info), nullptr,
-        make_scoped_ptr(new typename Interface::ResponseValidator_()), false));
+        info.PassHandle(), nullptr,
+        base::WrapUnique(new typename Interface::ResponseValidator_()), false,
+        std::move(runner)));
     proxy_.reset(new Proxy(endpoint_client_.get()));
     proxy_->serialization_context()->router = endpoint_client_->router();
   }
@@ -97,11 +103,7 @@ class AssociatedInterfacePtrState {
     ScopedInterfaceEndpointHandle handle = endpoint_client_->PassHandle();
     endpoint_client_.reset();
     proxy_.reset();
-
-    AssociatedInterfacePtrInfo<Interface> result;
-    result.set_version(version_);
-    AssociatedInterfacePtrInfoHelper::SetHandle(&result, std::move(handle));
-    return result;
+    return AssociatedInterfacePtrInfo<Interface>(std::move(handle), version_);
   }
 
   bool is_bound() const { return !!endpoint_client_; }
@@ -127,8 +129,8 @@ class AssociatedInterfacePtrState {
  private:
   using Proxy = typename Interface::Proxy_;
 
-  scoped_ptr<InterfaceEndpointClient> endpoint_client_;
-  scoped_ptr<Proxy> proxy_;
+  std::unique_ptr<InterfaceEndpointClient> endpoint_client_;
+  std::unique_ptr<Proxy> proxy_;
 
   uint32_t version_;
 

@@ -425,7 +425,7 @@ SkRegion* NativeAppWindowViews::GetDraggableRegion() {
   return draggable_region_.get();
 }
 
-void NativeAppWindowViews::UpdateShape(scoped_ptr<SkRegion> region) {
+void NativeAppWindowViews::UpdateShape(std::unique_ptr<SkRegion> region) {
   // Stub implementation. See also ChromeNativeAppWindowViews.
 }
 

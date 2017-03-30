@@ -37,6 +37,7 @@
 #include "public/platform/modules/serviceworker/WebServiceWorkerClientsInfo.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerEventResult.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerSkipWaitingCallbacks.h"
+#include "public/web/WebDevToolsAgentClient.h"
 #include <v8.h>
 
 namespace blink {
@@ -68,6 +69,8 @@ public:
     // The worker script is successfully loaded and a new thread is about to
     // be started. Called on the main thread.
     virtual void workerScriptLoaded() { }
+
+    virtual bool hasAssociatedRegistration() { return false; }
 
     // A new WorkerGlobalScope is created and started to run on the
     // worker thread.
@@ -104,6 +107,9 @@ public:
 
     // Inspector related messages.
     virtual void sendDevToolsMessage(int sessionId, int callId, const WebString& message, const WebString& state) { }
+
+    // Message loop for debugging.
+    virtual WebDevToolsAgentClient::WebKitClientMessageLoop* createDevToolsMessageLoop() { return nullptr; }
 
     // ServiceWorker specific method.
     virtual void didHandleActivateEvent(int eventID, WebServiceWorkerEventResult result) { }

@@ -16,23 +16,18 @@ WebInspector.SecurityPanel = function()
     this._sidebarMainViewElement = new WebInspector.SecurityPanelSidebarTreeElement(WebInspector.UIString("Overview"), this._setVisibleView.bind(this, this._mainView), "security-main-view-sidebar-tree-item", "lock-icon");
     this._sidebarTree = new WebInspector.SecurityPanelSidebarTree(this._sidebarMainViewElement, this.showOrigin.bind(this));
     this.panelSidebarElement().appendChild(this._sidebarTree.element);
-    this.setDefaultFocusedElement(this._sidebarTree.element);
+    this.setDefaultFocusedElement(this._sidebarTree.contentElement);
 
     /** @type {!Map<!NetworkAgent.LoaderId, !WebInspector.NetworkRequest>} */
     this._lastResponseReceivedForLoaderId = new Map();
 
     /** @type {!Map<!WebInspector.SecurityPanel.Origin, !WebInspector.SecurityPanel.OriginState>} */
     this._origins = new Map();
-    WebInspector.targetManager.addModelListener(WebInspector.ResourceTreeModel, WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._onMainFrameNavigated, this);
 
     /** @type {!Map<!WebInspector.NetworkLogView.MixedContentFilterValues, number>} */
     this._filterRequestCounts = new Map();
 
     WebInspector.targetManager.observeTargets(this, WebInspector.Target.Type.Page);
-
-    WebInspector.targetManager.addModelListener(WebInspector.NetworkManager, WebInspector.NetworkManager.EventTypes.ResponseReceived, this._onResponseReceived, this);
-    WebInspector.targetManager.addModelListener(WebInspector.NetworkManager, WebInspector.NetworkManager.EventTypes.RequestFinished, this._onRequestFinished, this);
-    WebInspector.targetManager.addModelListener(WebInspector.SecurityModel, WebInspector.SecurityModel.EventTypes.SecurityStateChanged, this._onSecurityStateChanged, this);
 }
 
 /** @typedef {string} */
@@ -146,7 +141,7 @@ WebInspector.SecurityPanel.prototype = {
      */
     _processRequest: function(request)
     {
-        var origin = WebInspector.ParsedURL.splitURLIntoPathComponents(request.url)[0];
+        var origin = WebInspector.ParsedURL.extractOrigin(request.url);
 
         if (!origin) {
             // We don't handle resources like data: URIs. Most of them don't affect the lock icon.
@@ -248,7 +243,17 @@ WebInspector.SecurityPanel.prototype = {
      */
     targetAdded: function(target)
     {
-        WebInspector.SecurityModel.fromTarget(target);
+        if (this._target)
+            return;
+
+        this._target = target;
+
+        target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._onMainFrameNavigated, this);
+        target.networkManager.addEventListener(WebInspector.NetworkManager.EventTypes.ResponseReceived, this._onResponseReceived, this);
+        target.networkManager.addEventListener(WebInspector.NetworkManager.EventTypes.RequestFinished, this._onRequestFinished, this);
+
+        var securityModel = WebInspector.SecurityModel.fromTarget(target);
+        securityModel.addEventListener(WebInspector.SecurityModel.EventTypes.SecurityStateChanged, this._onSecurityStateChanged, this);
     },
 
     /**
@@ -277,11 +282,12 @@ WebInspector.SecurityPanel.prototype = {
         var request = this._lastResponseReceivedForLoaderId.get(frame.loaderId);
         this._clearOrigins();
 
-        var origin = WebInspector.ParsedURL.splitURLIntoPathComponents(request.url)[0];
-        this._sidebarTree.setMainOrigin(origin);
 
-        if (request)
+        if (request) {
+            var origin = WebInspector.ParsedURL.extractOrigin(request.url);
+            this._sidebarTree.setMainOrigin(origin);
             this._processRequest(request);
+        }
     },
 
     __proto__: WebInspector.PanelWithSidebar.prototype
@@ -619,7 +625,7 @@ WebInspector.SecurityMainView.prototype = {
         this.refreshExplanations();
     },
 
-    refreshExplanations: function ()
+    refreshExplanations: function()
     {
         this._securityExplanations.removeChildren();
         for (var explanation of this._explanations)
@@ -628,7 +634,7 @@ WebInspector.SecurityMainView.prototype = {
         this._addMixedContentExplanations();
     },
 
-    _addMixedContentExplanations: function ()
+    _addMixedContentExplanations: function()
     {
         if (!this._schemeIsCryptographic)
             return;
@@ -741,14 +747,13 @@ WebInspector.SecurityOriginView = function(panel, origin, originState)
     this.registerRequiredCSS("security/originView.css");
     this.registerRequiredCSS("security/lockIcon.css");
 
-    var titleSection = this.element.createChild("div", "origin-view-section title-section");
-    titleSection.createChild("div", "origin-view-title").textContent = WebInspector.UIString("Origin");
+    var titleSection = this.element.createChild("div", "title-section");
     var originDisplay = titleSection.createChild("div", "origin-display");
     this._originLockIcon = originDisplay.createChild("span", "security-property");
     this._originLockIcon.classList.add("security-property-" + originState.securityState);
     // TODO(lgarron): Highlight the origin scheme. https://crbug.com/523589
     originDisplay.createChild("span", "origin").textContent = origin;
-    var originNetworkLink = originDisplay.createChild("div", "link");
+    var originNetworkLink = titleSection.createChild("div", "link");
     originNetworkLink.textContent = WebInspector.UIString("View requests in Network Panel");
     function showOriginRequestsInNetworkPanel()
     {
@@ -802,7 +807,7 @@ WebInspector.SecurityOriginView = function(panel, origin, originState)
             table.addRow("", WebInspector.SecurityPanel.createCertificateViewerButton(WebInspector.UIString("Open full certificate details"), originState.securityDetails.certificateId));
         }
 
-        function displayCertificateDetailsUnavailable ()
+        function displayCertificateDetailsUnavailable()
         {
             certificateSection.createChild("div").textContent = WebInspector.UIString("Certificate details unavailable.");
         }

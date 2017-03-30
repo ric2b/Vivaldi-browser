@@ -4,7 +4,9 @@
 
 #include "media/audio/mac/audio_manager_mac.h"
 
-#include <stdint.h>
+#include <algorithm>
+#include <limits>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -16,10 +18,11 @@
 #include "base/power_monitor/power_observer.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/threading/thread_checker.h"
-#include "media/audio/audio_parameters.h"
+#include "media/audio/audio_device_description.h"
 #include "media/audio/mac/audio_auhal_mac.h"
 #include "media/audio/mac/audio_input_mac.h"
 #include "media/audio/mac/audio_low_latency_input_mac.h"
+#include "media/base/audio_parameters.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/channel_layout.h"
 #include "media/base/limits.h"
@@ -133,8 +136,8 @@ static void GetAudioDeviceInfo(bool is_input,
 
   // Get the array of device ids for all the devices, which includes both
   // input devices and output devices.
-  scoped_ptr<AudioDeviceID, base::FreeDeleter>
-      devices(static_cast<AudioDeviceID*>(malloc(size)));
+  std::unique_ptr<AudioDeviceID, base::FreeDeleter> devices(
+      static_cast<AudioDeviceID*>(malloc(size)));
   AudioDeviceID* device_ids = devices.get();
   result = AudioObjectGetPropertyData(kAudioObjectSystemObject,
                                       &property_address,
@@ -209,10 +212,7 @@ static void GetAudioDeviceInfo(bool is_input,
     // Prepend the default device to the list since we always want it to be
     // on the top of the list for all platforms. There is no duplicate
     // counting here since the default device has been abstracted out before.
-    media::AudioDeviceName name;
-    name.device_name = AudioManager::GetDefaultDeviceName();
-    name.unique_id = AudioManagerBase::kDefaultDeviceId;
-    device_names->push_front(name);
+    device_names->push_front(media::AudioDeviceName::CreateDefault());
   }
 }
 
@@ -228,7 +228,7 @@ static AudioDeviceID GetAudioDeviceIdByUId(bool is_input,
   UInt32 device_size = sizeof(audio_device_id);
   OSStatus result = -1;
 
-  if (device_id == AudioManagerBase::kDefaultDeviceId || device_id.empty()) {
+  if (AudioDeviceDescription::IsDefaultDevice(device_id)) {
     // Default Device.
     property_address.mSelector = is_input ?
         kAudioHardwarePropertyDefaultInputDevice :
@@ -291,18 +291,6 @@ static bool GetDefaultDevice(AudioDeviceID* device, bool input) {
 
 static bool GetDefaultOutputDevice(AudioDeviceID* device) {
   return GetDefaultDevice(device, false);
-}
-
-template <class T>
-void StopStreams(std::list<T*>* streams) {
-  for (typename std::list<T*>::iterator it = streams->begin();
-       it != streams->end();
-       ++it) {
-    // Stop() is safe to call multiple times, so it doesn't matter if a stream
-    // has already been stopped.
-    (*it)->Stop();
-  }
-  streams->clear();
 }
 
 class AudioManagerMac::AudioPowerObserver : public base::PowerObserver {
@@ -370,53 +358,50 @@ class AudioManagerMac::AudioPowerObserver : public base::PowerObserver {
   DISALLOW_COPY_AND_ASSIGN(AudioPowerObserver);
 };
 
-AudioManagerMac::AudioManagerMac(AudioLogFactory* audio_log_factory)
-    : AudioManagerBase(audio_log_factory),
+AudioManagerMac::AudioManagerMac(
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> worker_task_runner,
+    AudioLogFactory* audio_log_factory)
+    : AudioManagerBase(std::move(task_runner),
+                       std::move(worker_task_runner),
+                       audio_log_factory),
       current_sample_rate_(0),
-      current_output_device_(kAudioDeviceUnknown) {
+      current_output_device_(kAudioDeviceUnknown),
+      in_shutdown_(false) {
   SetMaxOutputStreamsAllowed(kMaxOutputStreams);
-
-  // CoreAudio calls must occur on the main thread of the process, which in our
-  // case is sadly the browser UI thread.  Failure to execute calls on the right
-  // thread leads to crashes and odd behavior.  See http://crbug.com/158170.
-  // TODO(dalecurtis): We should require the message loop to be passed in.
-  task_runner_ = base::MessageLoopForUI::IsCurrent()
-                     ? base::ThreadTaskRunnerHandle::Get()
-                     : AudioManagerBase::GetTaskRunner();
 
   // Task must be posted last to avoid races from handing out "this" to the
   // audio thread.  Always PostTask even if we're on the right thread since
   // AudioManager creation is on the startup path and this may be slow.
-  task_runner_->PostTask(FROM_HERE,
-                         base::Bind(&AudioManagerMac::InitializeOnAudioThread,
-                                    base::Unretained(this)));
+  GetTaskRunner()->PostTask(
+      FROM_HERE, base::Bind(&AudioManagerMac::InitializeOnAudioThread,
+                            base::Unretained(this)));
 }
 
 AudioManagerMac::~AudioManagerMac() {
-  if (task_runner_->BelongsToCurrentThread()) {
-    ShutdownOnAudioThread();
-  } else {
-    // It's safe to post a task here since Shutdown() will wait for all tasks to
-    // complete before returning.
-    task_runner_->PostTask(FROM_HERE,
-                           base::Bind(&AudioManagerMac::ShutdownOnAudioThread,
-                                      base::Unretained(this)));
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
+  // We are now in shutdown mode. This flag disables MaybeChangeBufferSize()
+  // and IncreaseIOBufferSizeIfPossible() which both touches native Core Audio
+  // APIs and they can fail and disrupt tests during shutdown.
+  in_shutdown_ = true;
+  // We have seen cases where active input audio is not closed down properly
+  // at browser shutdown. AudioInputController::Close() is called but tasks
+  // in AudioInputController::DoClose() are not executed. Hence, input streams
+  // might remain even at this late state. |low_latency_input_streams_| will be
+  // modified during the call to stream->Close(), so we can't iterate over it
+  // here.  Instead iterate over a copy.
+  // TODO(henrika): figure out the real cause why streams are not closed
+  // properly by the AIC for all cases and then remove this loop.
+  auto low_latency_input_streams_copy = low_latency_input_streams_;
+  for (auto* stream : low_latency_input_streams_copy) {
+    LOG(WARNING) << "Closing existing audio input stream at destruction";
+    // Prevents active Core Audio callbacks to use possibly invalid objects
+    // in its OnData() callback.
+    stream->Stop();
+    // Avoids hitting CHECK in dtor of AudioManagerBase.
+    stream->Close();
   }
-
   Shutdown();
-}
-
-scoped_refptr<base::SingleThreadTaskRunner> AudioManagerMac::GetTaskRunner() {
-  return task_runner_;
-}
-
-scoped_refptr<base::SingleThreadTaskRunner>
-AudioManagerMac::GetWorkerTaskRunner() {
-  if (!worker_thread_) {
-    worker_thread_.reset(new base::Thread("AudioWorkerThread"));
-    CHECK(worker_thread_->Start());
-  }
-  return worker_thread_->task_runner();
 }
 
 bool AudioManagerMac::HasAudioOutputDevices() {
@@ -450,7 +435,7 @@ bool AudioManagerMac::GetDeviceChannels(AudioDeviceID device,
   if (result != noErr || !size)
     return false;
 
-  scoped_ptr<uint8_t[]> list_storage(new uint8_t[size]);
+  std::unique_ptr<uint8_t[]> list_storage(new uint8_t[size]);
   AudioBufferList& buffer_list =
       *reinterpret_cast<AudioBufferList*>(list_storage.get());
 
@@ -521,6 +506,7 @@ void AudioManagerMac::GetAudioOutputDeviceNames(
 
 AudioParameters AudioManagerMac::GetInputStreamParameters(
     const std::string& device_id) {
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
   AudioDeviceID device = GetAudioDeviceIdByUId(true, device_id);
   if (device == kAudioObjectUnknown) {
     DLOG(ERROR) << "Invalid device " << device_id;
@@ -556,7 +542,7 @@ AudioParameters AudioManagerMac::GetInputStreamParameters(
 
 std::string AudioManagerMac::GetAssociatedOutputDeviceID(
     const std::string& input_device_id) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
   AudioDeviceID device = GetAudioDeviceIdByUId(true, input_device_id);
   if (device == kAudioObjectUnknown)
     return std::string();
@@ -572,8 +558,8 @@ std::string AudioManagerMac::GetAssociatedOutputDeviceID(
     return std::string();
 
   int device_count = size / sizeof(AudioDeviceID);
-  scoped_ptr<AudioDeviceID, base::FreeDeleter>
-      devices(static_cast<AudioDeviceID*>(malloc(size)));
+  std::unique_ptr<AudioDeviceID, base::FreeDeleter> devices(
+      static_cast<AudioDeviceID*>(malloc(size)));
   result = AudioObjectGetPropertyData(
       device, &pa, 0, NULL, &size, devices.get());
   if (result)
@@ -636,12 +622,14 @@ std::string AudioManagerMac::GetAssociatedOutputDeviceID(
 
 AudioOutputStream* AudioManagerMac::MakeLinearOutputStream(
     const AudioParameters& params) {
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
   return MakeLowLatencyOutputStream(params, std::string());
 }
 
 AudioOutputStream* AudioManagerMac::MakeLowLatencyOutputStream(
     const AudioParameters& params,
     const std::string& device_id) {
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
   bool device_listener_first_init = false;
   // Lazily create the audio device listener on the first stream creation,
   // even if getting an audio device fails. Otherwise, if we have 0 audio
@@ -668,7 +656,7 @@ AudioOutputStream* AudioManagerMac::MakeLowLatencyOutputStream(
   // listener.
   if (device_listener_first_init) {
     // Only set the current output device for the default device.
-    if (device_id == AudioManagerBase::kDefaultDeviceId || device_id.empty())
+    if (AudioDeviceDescription::IsDefaultDevice(device_id))
       current_output_device_ = device;
     // Just use the current sample rate since we don't allow non-native sample
     // rates on OSX.
@@ -681,7 +669,7 @@ AudioOutputStream* AudioManagerMac::MakeLowLatencyOutputStream(
 }
 
 std::string AudioManagerMac::GetDefaultOutputDeviceID() {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
   AudioDeviceID device_id = kAudioObjectUnknown;
   if (!GetDefaultOutputDevice(&device_id))
     return std::string();
@@ -710,6 +698,7 @@ std::string AudioManagerMac::GetDefaultOutputDeviceID() {
 
 AudioInputStream* AudioManagerMac::MakeLinearInputStream(
     const AudioParameters& params, const std::string& device_id) {
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
   DCHECK_EQ(AudioParameters::AUDIO_PCM_LINEAR, params.format());
   AudioInputStream* stream = new PCMQueueInAudioInputStream(this, params);
   basic_input_streams_.push_back(stream);
@@ -718,6 +707,7 @@ AudioInputStream* AudioManagerMac::MakeLinearInputStream(
 
 AudioInputStream* AudioManagerMac::MakeLowLatencyInputStream(
     const AudioParameters& params, const std::string& device_id) {
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
   DCHECK_EQ(AudioParameters::AUDIO_PCM_LOW_LATENCY, params.format());
   // Gets the AudioDeviceID that refers to the AudioInputDevice with the device
   // unique id. This AudioDeviceID is used to set the device for Audio Unit.
@@ -734,6 +724,7 @@ AudioInputStream* AudioManagerMac::MakeLowLatencyInputStream(
 AudioParameters AudioManagerMac::GetPreferredOutputStreamParameters(
     const std::string& output_device_id,
     const AudioParameters& input_params) {
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
   const AudioDeviceID device = GetAudioDeviceIdByUId(false, output_device_id);
   if (device == kAudioObjectUnknown) {
     DLOG(ERROR) << "Invalid output device " << output_device_id;
@@ -780,31 +771,12 @@ AudioParameters AudioManagerMac::GetPreferredOutputStreamParameters(
 }
 
 void AudioManagerMac::InitializeOnAudioThread() {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
   power_observer_.reset(new AudioPowerObserver());
 }
 
-void AudioManagerMac::ShutdownOnAudioThread() {
-  DCHECK(task_runner_->BelongsToCurrentThread());
-  output_device_listener_.reset();
-  power_observer_.reset();
-
-  // Since CoreAudio calls have to run on the UI thread and browser shutdown
-  // doesn't wait for outstanding tasks to complete, we may have input/output
-  // streams still running at shutdown.
-  //
-  // To avoid calls into destructed classes, we need to stop the OS callbacks
-  // by stopping the streams.  Note: The streams are leaked since process
-  // destruction is imminent.
-  //
-  // See http://crbug.com/354139 for crash details.
-  StopStreams(&basic_input_streams_);
-  StopStreams(&low_latency_input_streams_);
-  StopStreams(&output_streams_);
-}
-
 void AudioManagerMac::HandleDeviceChanges() {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
   const int new_sample_rate = HardwareSampleRate();
   AudioDeviceID new_output_device;
   GetDefaultOutputDevice(&new_output_device);
@@ -846,22 +818,22 @@ int AudioManagerMac::ChooseBufferSize(bool is_input, int sample_rate) {
 }
 
 bool AudioManagerMac::IsSuspending() const {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
   return power_observer_->IsSuspending();
 }
 
 bool AudioManagerMac::ShouldDeferStreamStart() const {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
   return power_observer_->ShouldDeferStreamStart();
 }
 
 bool AudioManagerMac::IsOnBatteryPower() const {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
   return power_observer_->IsOnBatteryPower();
 }
 
 size_t AudioManagerMac::GetNumberOfResumeNotifications() const {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
   return power_observer_->num_resume_notifications();
 }
 
@@ -871,7 +843,11 @@ bool AudioManagerMac::MaybeChangeBufferSize(AudioDeviceID device_id,
                                             size_t desired_buffer_size,
                                             bool* size_was_changed,
                                             size_t* io_buffer_frame_size) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
+  if (in_shutdown_) {
+    DVLOG(1) << "Disabled since we are shutting down";
+    return false;
+  }
   const bool is_input = (element == 1);
   DVLOG(1) << "MaybeChangeBufferSize(id=0x" << std::hex << device_id
            << ", is_input=" << is_input << ", desired_buffer_size=" << std::dec
@@ -971,15 +947,135 @@ bool AudioManagerMac::MaybeChangeBufferSize(AudioDeviceID device_id,
   // Store the currently used (after a change) I/O buffer frame size.
   *io_buffer_frame_size = buffer_size;
 
+  // If the size was changed, update the actual output buffer size used for the
+  // given device ID.
+  if (!is_input && (result == noErr)) {
+    output_io_buffer_size_map_[device_id] = buffer_size;
+  }
+
   return (result == noErr);
 }
 
+bool AudioManagerMac::IncreaseIOBufferSizeIfPossible(AudioDeviceID device_id) {
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
+  DVLOG(1) << "IncreaseIOBufferSizeIfPossible(id=0x" << std::hex << device_id
+           << ")";
+  if (in_shutdown_) {
+    DVLOG(1) << "Disabled since we are shutting down";
+    return false;
+  }
+  // Start by storing the actual I/O buffer size. Then scan all active output
+  // streams using the specified |device_id| and find the minimum requested
+  // buffer size. In addition, store a reference to the audio unit of the first
+  // output stream using |device_id|.
+  DCHECK(!output_io_buffer_size_map_.empty());
+  // All active output streams use the same actual I/O buffer size given
+  // a unique device ID.
+  // TODO(henrika): it would also be possible to use AudioUnitGetProperty(...,
+  // kAudioDevicePropertyBufferFrameSize,...) instead of caching the actual
+  // buffer size but I have chosen to use the map instead to avoid possibly
+  // expensive Core Audio API calls and the risk of failure when asking while
+  // closing a stream.
+  const size_t& actual_size = output_io_buffer_size_map_[device_id];
+  AudioUnit audio_unit;
+  size_t min_requested_size = std::numeric_limits<std::size_t>::max();
+  for (auto* stream : output_streams_) {
+    if (stream->device_id() == device_id) {
+      if (min_requested_size == std::numeric_limits<std::size_t>::max()) {
+        // Store reference to the first audio unit using the specified ID.
+        audio_unit = stream->audio_unit();
+      }
+      if (stream->requested_buffer_size() < min_requested_size)
+        min_requested_size = stream->requested_buffer_size();
+      DVLOG(1) << "requested:" << stream->requested_buffer_size()
+               << " actual: " << actual_size;
+    }
+  }
+
+  if (min_requested_size == std::numeric_limits<std::size_t>::max()) {
+    DVLOG(1) << "No action since there is no active stream for given device id";
+    return false;
+  }
+
+  // It is only possible to revert to a larger buffer size if the lowest
+  // requested is not in use. Example: if the actual I/O buffer size is 256 and
+  // at least one output stream has asked for 256 as its buffer size, we can't
+  // start using a larger I/O buffer size.
+  DCHECK_GE(min_requested_size, actual_size);
+  if (min_requested_size == actual_size) {
+    DVLOG(1) << "No action since lowest possible size is already in use: "
+             << actual_size;
+    return false;
+  }
+
+  // It should now be safe to increase the I/O buffer size to a new (higher)
+  // value using the |min_requested_size|. Doing so will save system resources.
+  // All active output streams with the same |device_id| are affected by this
+  // change but it is only required to apply the change to one of the streams.
+  DVLOG(1) << "min_requested_size: " << min_requested_size;
+  bool size_was_changed = false;
+  size_t io_buffer_frame_size = 0;
+  bool result =
+      MaybeChangeBufferSize(device_id, audio_unit, 0, min_requested_size,
+                            &size_was_changed, &io_buffer_frame_size);
+  DCHECK_EQ(io_buffer_frame_size, min_requested_size);
+  DCHECK(size_was_changed);
+  return result;
+}
+
+bool AudioManagerMac::AudioDeviceIsUsedForInput(AudioDeviceID device_id) {
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
+  if (!basic_input_streams_.empty()) {
+    // For Audio Queues and in the default case (Mac OS X), the audio comes
+    // from the system’s default audio input device as set by a user in System
+    // Preferences.
+    AudioDeviceID default_id;
+    GetDefaultDevice(&default_id, true);
+    if (default_id == device_id)
+      return true;
+  }
+
+  // Each low latency streams has its own device ID.
+  for (auto* stream : low_latency_input_streams_) {
+    if (stream->device_id() == device_id)
+      return true;
+  }
+  return false;
+}
+
 void AudioManagerMac::ReleaseOutputStream(AudioOutputStream* stream) {
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
   output_streams_.remove(static_cast<AUHALStream*>(stream));
   AudioManagerBase::ReleaseOutputStream(stream);
 }
 
+void AudioManagerMac::ReleaseOutputStreamUsingRealDevice(
+    AudioOutputStream* stream,
+    AudioDeviceID device_id) {
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
+  DVLOG(1) << "Closing output stream with id=0x" << std::hex << device_id;
+  DVLOG(1) << "requested_buffer_size: "
+           << static_cast<AUHALStream*>(stream)->requested_buffer_size();
+
+  // Start by closing down the specified output stream.
+  output_streams_.remove(static_cast<AUHALStream*>(stream));
+  AudioManagerBase::ReleaseOutputStream(stream);
+
+  // Prevent attempt to alter buffer size if the released stream was the last
+  // output stream.
+  if (output_streams_.empty())
+    return;
+
+  if (!AudioDeviceIsUsedForInput(device_id)) {
+    // The current audio device is not used for input. See if it is possible to
+    // increase the IO buffer size (saves power) given the remaining output
+    // audio streams and their buffer size requirements.
+    IncreaseIOBufferSizeIfPossible(device_id);
+  }
+}
+
 void AudioManagerMac::ReleaseInputStream(AudioInputStream* stream) {
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
   auto stream_it = std::find(basic_input_streams_.begin(),
                              basic_input_streams_.end(),
                              stream);
@@ -991,8 +1087,13 @@ void AudioManagerMac::ReleaseInputStream(AudioInputStream* stream) {
   AudioManagerBase::ReleaseInputStream(stream);
 }
 
-AudioManager* CreateAudioManager(AudioLogFactory* audio_log_factory) {
-  return new AudioManagerMac(audio_log_factory);
+ScopedAudioManagerPtr CreateAudioManager(
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> worker_task_runner,
+    AudioLogFactory* audio_log_factory) {
+  return ScopedAudioManagerPtr(
+      new AudioManagerMac(std::move(task_runner), std::move(worker_task_runner),
+                          audio_log_factory));
 }
 
 }  // namespace media

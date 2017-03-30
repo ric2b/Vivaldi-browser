@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <memory>
 
 #include "base/pickle.h"
 #include "base/threading/thread.h"
@@ -268,16 +269,11 @@ class IPCChannelProxyTest : public IPCTestBase {
   }
 
  private:
-  scoped_ptr<base::Thread> thread_;
-  scoped_ptr<QuitListener> listener_;
+  std::unique_ptr<base::Thread> thread_;
+  std::unique_ptr<QuitListener> listener_;
 };
 
-#if defined(OS_ANDROID)
-#define MAYBE_MessageClassFilters DISABLED_MessageClassFilters
-#else
-#define MAYBE_MessageClassFilters MessageClassFilters
-#endif
-TEST_F(IPCChannelProxyTest, MAYBE_MessageClassFilters) {
+TEST_F(IPCChannelProxyTest, MessageClassFilters) {
   // Construct a filter per message class.
   std::vector<scoped_refptr<MessageCountFilter> > class_filters;
   class_filters.push_back(make_scoped_refptr(
@@ -301,12 +297,7 @@ TEST_F(IPCChannelProxyTest, MAYBE_MessageClassFilters) {
     EXPECT_EQ(1U, class_filters[i]->messages_received());
 }
 
-#if defined(OS_ANDROID)
-#define MAYBE_GlobalAndMessageClassFilters DISABLED_GlobalAndMessageClassFilters
-#else
-#define MAYBE_GlobalAndMessageClassFilters GlobalAndMessageClassFilters
-#endif
-TEST_F(IPCChannelProxyTest, MAYBE_GlobalAndMessageClassFilters) {
+TEST_F(IPCChannelProxyTest, GlobalAndMessageClassFilters) {
   // Add a class and global filter.
   scoped_refptr<MessageCountFilter> class_filter(
       new MessageCountFilter(TestMsgStart));
@@ -335,12 +326,7 @@ TEST_F(IPCChannelProxyTest, MAYBE_GlobalAndMessageClassFilters) {
   EXPECT_EQ(3U, global_filter->messages_received());
 }
 
-#if defined(OS_ANDROID)
-#define MAYBE_FilterRemoval DISABLED_FilterRemoval
-#else
-#define MAYBE_FilterRemoval FilterRemoval
-#endif
-TEST_F(IPCChannelProxyTest, MAYBE_FilterRemoval) {
+TEST_F(IPCChannelProxyTest, FilterRemoval) {
   // Add a class and global filter.
   scoped_refptr<MessageCountFilter> class_filter(
       new MessageCountFilter(TestMsgStart));
@@ -423,7 +409,7 @@ class IPCChannelBadMessageTest : public IPCTestBase {
   }
 
  private:
-  scoped_ptr<QuitListener> listener_;
+  std::unique_ptr<QuitListener> listener_;
 };
 
 #if !defined(OS_WIN)
@@ -440,7 +426,7 @@ TEST_F(IPCChannelBadMessageTest, BadMessage) {
 MULTIPROCESS_IPC_TEST_CLIENT_MAIN(ChannelProxyClient) {
   base::MessageLoopForIO main_message_loop;
   ChannelReflectorListener listener;
-  scoped_ptr<IPC::Channel> channel(IPC::Channel::CreateClient(
+  std::unique_ptr<IPC::Channel> channel(IPC::Channel::CreateClient(
       IPCTestBase::GetChannelName("ChannelProxyClient"), &listener));
   CHECK(channel->Connect());
   listener.Init(channel.get());

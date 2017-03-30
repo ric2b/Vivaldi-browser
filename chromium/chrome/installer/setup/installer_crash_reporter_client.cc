@@ -43,7 +43,7 @@ void InstallerCrashReporterClient::GetProductNameAndVersion(
   // MUST match server-side configuration.
   *product_name = base::ASCIIToUTF16(PRODUCT_SHORTNAME_STRING);
 
-  scoped_ptr<FileVersionInfo> version_info(
+  std::unique_ptr<FileVersionInfo> version_info(
       FileVersionInfo::CreateFileVersionInfo(exe_path));
   if (version_info) {
     *version = version_info->product_version();
@@ -95,20 +95,6 @@ int InstallerCrashReporterClient::GetResultCodeRespawnFailed() {
   return 0;
 }
 
-void InstallerCrashReporterClient::InitBrowserCrashDumpsRegKey() {
-  // The installer does not track dump attempts and results in the registry.
-}
-
-void InstallerCrashReporterClient::RecordCrashDumpAttempt(bool is_real_crash) {
-  // The installer does not track dump attempts and results in the registry.
-}
-
-void InstallerCrashReporterClient::RecordCrashDumpAttemptResult(
-    bool is_real_crash,
-    bool succeeded) {
-  // The installer does not track dump attempts and results in the registry.
-}
-
 bool InstallerCrashReporterClient::GetCrashDumpLocation(
     base::FilePath* crash_dir) {
   return PathService::Get(chrome::DIR_CRASH_DUMPS, crash_dir);
@@ -119,7 +105,7 @@ size_t InstallerCrashReporterClient::RegisterCrashKeys() {
 }
 
 bool InstallerCrashReporterClient::IsRunningUnattended() {
-  scoped_ptr<base::Environment> env(base::Environment::Create());
+  std::unique_ptr<base::Environment> env(base::Environment::Create());
   return env->HasVar(env_vars::kHeadless);
 }
 

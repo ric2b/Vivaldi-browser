@@ -6,8 +6,9 @@
 
 #include <stddef.h>
 
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "cc/test/fake_external_begin_frame_source.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "ui/gfx/buffer_types.h"
@@ -25,6 +26,10 @@ bool FakeCompositorDependencies::IsGpuRasterizationForced() {
 }
 
 bool FakeCompositorDependencies::IsGpuRasterizationEnabled() {
+  return false;
+}
+
+bool FakeCompositorDependencies::IsAsyncWorkerContextEnabled() {
   return false;
 }
 
@@ -84,16 +89,10 @@ FakeCompositorDependencies::GetRendererScheduler() {
   return &renderer_scheduler_;
 }
 
-cc::ContextProvider*
-FakeCompositorDependencies::GetSharedMainThreadContextProvider() {
-  NOTREACHED();
-  return nullptr;
-}
-
-scoped_ptr<cc::BeginFrameSource>
+std::unique_ptr<cc::BeginFrameSource>
 FakeCompositorDependencies::CreateExternalBeginFrameSource(int routing_id) {
   double refresh_rate = 200.0;
-  return make_scoped_ptr(new cc::FakeExternalBeginFrameSource(refresh_rate));
+  return base::WrapUnique(new cc::FakeExternalBeginFrameSource(refresh_rate));
 }
 
 cc::ImageSerializationProcessor*

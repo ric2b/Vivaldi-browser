@@ -23,10 +23,13 @@ class CopyOutputResult;
 
 }  // namespace cc
 
+namespace display_compositor {
+class ReadbackYUVInterface;
+}
+
 namespace content {
 
 class PowerSaveBlocker;
-class ReadbackYUVInterface;
 
 class AuraWindowCaptureMachine
     : public media::VideoCaptureMachine,
@@ -113,7 +116,8 @@ class AuraWindowCaptureMachine
   media::VideoCaptureParams capture_params_;
 
   // YUV readback pipeline.
-  std::unique_ptr<content::ReadbackYUVInterface> yuv_readback_pipeline_;
+  std::unique_ptr<display_compositor::ReadbackYUVInterface>
+      yuv_readback_pipeline_;
 
   // Renders mouse cursor on frame.
   std::unique_ptr<content::CursorRendererAura> cursor_renderer_;

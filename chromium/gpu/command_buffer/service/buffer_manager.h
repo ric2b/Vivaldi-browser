@@ -9,13 +9,13 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <vector>
 
 #include "base/containers/hash_tables.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "gpu/command_buffer/common/buffer.h"
 #include "gpu/command_buffer/service/gl_utils.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
@@ -205,7 +205,7 @@ class GPU_EXPORT Buffer : public base::RefCounted<Buffer> {
   GLenum usage_;
 
   // Data cached from last glMapBufferRange call.
-  scoped_ptr<MappedRange> mapped_range_;
+  std::unique_ptr<MappedRange> mapped_range_;
 
   // A map of ranges to the highest value in that range of a certain type.
   typedef std::map<Range, GLuint, Range::Less> RangeToMaxValueMap;
@@ -222,8 +222,10 @@ class GPU_EXPORT BufferManager : public base::trace_event::MemoryDumpProvider {
   BufferManager(MemoryTracker* memory_tracker, FeatureInfo* feature_info);
   ~BufferManager() override;
 
+  void MarkContextLost();
+
   // Must call before destruction.
-  void Destroy(bool have_context);
+  void Destroy();
 
   // Creates a Buffer for the given buffer.
   void CreateBuffer(GLuint client_id, GLuint service_id);
@@ -293,6 +295,7 @@ class GPU_EXPORT BufferManager : public base::trace_event::MemoryDumpProvider {
   friend class Buffer;
   friend class TestHelper;  // Needs access to DoBufferData.
   friend class BufferManagerTestBase;  // Needs access to DoBufferSubData.
+  friend class IndexedBufferBindingHostTest;  // Needs access to SetInfo.
 
   void StartTracking(Buffer* buffer);
   void StopTracking(Buffer* buffer);
@@ -328,7 +331,7 @@ class GPU_EXPORT BufferManager : public base::trace_event::MemoryDumpProvider {
                GLenum usage,
                bool use_shadow);
 
-  scoped_ptr<MemoryTypeTracker> memory_type_tracker_;
+  std::unique_ptr<MemoryTypeTracker> memory_type_tracker_;
   MemoryTracker* memory_tracker_;
   scoped_refptr<FeatureInfo> feature_info_;
 
@@ -348,7 +351,7 @@ class GPU_EXPORT BufferManager : public base::trace_event::MemoryDumpProvider {
 
   GLuint primitive_restart_fixed_index_;
 
-  bool have_context_;
+  bool lost_context_;
   bool use_client_side_arrays_for_stream_buffers_;
 
   DISALLOW_COPY_AND_ASSIGN(BufferManager);

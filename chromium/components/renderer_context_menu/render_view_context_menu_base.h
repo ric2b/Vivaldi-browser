@@ -6,12 +6,13 @@
 #define COMPONENTS_RENDERER_CONTEXT_MENU_RENDER_VIEW_CONTEXT_MENU_BASE_H_
 
 #include <stddef.h>
+
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
@@ -55,6 +56,9 @@ class RenderViewContextMenuBase : public ui::SimpleMenuModel::Delegate,
                                 bool enabled,
                                 bool hidden,
                                 const base::string16& title) = 0;
+#if defined(OS_CHROMEOS)
+    virtual void UpdateMenuIcon(int command_id, const gfx::Image& image) = 0;
+#endif
   };
 
   static const size_t kMaxSelectionTextLength;
@@ -108,6 +112,7 @@ class RenderViewContextMenuBase : public ui::SimpleMenuModel::Delegate,
                       bool enabled,
                       bool hidden,
                       const base::string16& title) override;
+  void UpdateMenuIcon(int command_id, const gfx::Image& image) override;
   content::RenderViewHost* GetRenderViewHost() const override;
   content::WebContents* GetWebContents() const override;
   content::BrowserContext* GetBrowserContext() const override;
@@ -120,7 +125,7 @@ class RenderViewContextMenuBase : public ui::SimpleMenuModel::Delegate,
     content_type_.reset(content_type);
   }
 
-  void set_toolkit_delegate(scoped_ptr<ToolkitDelegate> delegate) {
+  void set_toolkit_delegate(std::unique_ptr<ToolkitDelegate> delegate) {
     toolkit_delegate_ = std::move(delegate);
   }
 
@@ -188,7 +193,7 @@ class RenderViewContextMenuBase : public ui::SimpleMenuModel::Delegate,
   // should be notified of menu closing without execution.
   bool command_executed_;
 
-  scoped_ptr<ContextMenuContentType> content_type_;
+  std::unique_ptr<ContextMenuContentType> content_type_;
 
  private:
   bool AppendCustomItems();
@@ -196,7 +201,7 @@ class RenderViewContextMenuBase : public ui::SimpleMenuModel::Delegate,
   // The RenderFrameHost's IDs.
   const int render_process_id_;
 
-  scoped_ptr<ToolkitDelegate> toolkit_delegate_;
+  std::unique_ptr<ToolkitDelegate> toolkit_delegate_;
 
   ScopedVector<ui::SimpleMenuModel> custom_submenus_;
 

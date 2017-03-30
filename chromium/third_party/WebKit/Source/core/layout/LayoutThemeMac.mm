@@ -32,7 +32,6 @@
 #import "platform/Theme.h"
 #import "platform/graphics/BitmapImage.h"
 #import "platform/mac/ColorMac.h"
-#import "platform/mac/LocalCurrentGraphicsContext.h"
 #import "platform/mac/ThemeMac.h"
 #import "platform/mac/VersionUtilMac.h"
 #import "platform/mac/WebCoreNSCellExtras.h"
@@ -1062,7 +1061,7 @@ void LayoutThemeMac::adjustMediaSliderThumbSize(ComputedStyle& style) const
     MediaControlsPainter::adjustMediaSliderThumbSize(style);
 }
 
-String LayoutThemeMac::extraFullScreenStyleSheet()
+String LayoutThemeMac::extraFullscreenStyleSheet()
 {
     // FIXME: Chromium may wish to style its default media controls differently in fullscreen.
     return String();

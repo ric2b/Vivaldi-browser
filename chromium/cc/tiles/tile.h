@@ -10,6 +10,7 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "cc/raster/tile_task.h"
 #include "cc/tiles/tile_draw_info.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
@@ -144,12 +145,12 @@ class CC_EXPORT Tile {
 
   unsigned scheduled_priority_;
 
-  scoped_refptr<RasterTask> raster_task_;
+  scoped_refptr<TileTask> raster_task_;
 
   DISALLOW_COPY_AND_ASSIGN(Tile);
 };
 
-using ScopedTilePtr = scoped_ptr<Tile, Tile::Deleter>;
+using ScopedTilePtr = std::unique_ptr<Tile, Tile::Deleter>;
 
 }  // namespace cc
 

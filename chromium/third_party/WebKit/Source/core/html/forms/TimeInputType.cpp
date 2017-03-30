@@ -53,7 +53,7 @@ static const int timeDefaultStepBase = 0;
 static const int timeStepScaleFactor = 1000;
 
 TimeInputType::TimeInputType(HTMLInputElement& element)
-    : BaseTimeInputType(element)
+    : BaseTemporalInputType(element)
 {
 }
 
@@ -120,8 +120,6 @@ String TimeInputType::localizeValue(const String& proposedValue) const
     return localized.isEmpty() ? proposedValue : localized;
 }
 
-#if ENABLE(INPUT_MULTIPLE_FIELDS_UI)
-
 String TimeInputType::formatDateTimeFieldsState(const DateTimeFieldsState& dateTimeFieldsState) const
 {
     if (!dateTimeFieldsState.hasHour() || !dateTimeFieldsState.hasMinute() || !dateTimeFieldsState.hasAMPM())
@@ -161,6 +159,5 @@ bool TimeInputType::isValidFormat(bool hasYear, bool hasMonth, bool hasWeek, boo
 {
     return hasHour && hasMinute && hasAMPM;
 }
-#endif
 
 } // namespace blink

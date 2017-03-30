@@ -23,18 +23,19 @@ executable("window_type_launcher") {
     "//base",
     "//base:base_static",
     "//build/config/sanitizers:deps",
+    "//build/win:default_exe_manifest",
     "//components/mus/public/interfaces",
+    "//mash/public/interfaces",
     "//mash/session/public/interfaces",
     "//mojo/common:common_base",
     "//mojo/converters/geometry",
     "//mojo/edk/system",
-    "//mojo/message_pump",
     "//mojo/platform_handle:platform_handle_impl",
     "//mojo/public/cpp/bindings",
-    "//mojo/shell/public/cpp",
-    "//mojo/shell/public/interfaces",
-    "//mojo/shell/runner:init",
-    "//mojo/shell/runner/common",
+    "//services/shell/public/cpp",
+    "//services/shell/public/interfaces",
+    "//services/shell/runner:init",
+    "//services/shell/runner/common",
     "//skia",
     "//ui/aura",
     "//ui/gfx",
@@ -54,7 +55,7 @@ copy("window_type_launcher_resources") {
     "$root_out_dir/views_mus_resources.pak",
   ]
   outputs = [
-    "$root_out_dir/window_type_launcher_exe_res/resources/views_mus_resources.pak",
+    "$root_out_dir/Mojo Applications/window_type_launcher_exe/resources/views_mus_resources.pak",
   ]
   deps = [
     "//ui/views/mus:resources",

@@ -7,14 +7,15 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/site_instance_impl.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
 #include "third_party/WebKit/public/platform/WebFocusType.h"
 
+struct FrameHostMsg_OpenURL_Params;
 struct FrameMsg_PostMessage_Params;
 
 namespace content {
@@ -38,11 +39,7 @@ class RenderWidgetHostView;
 // references valid over cross-process navigations and route cross-site
 // asynchronous JavaScript calls, such as postMessage.
 //
-// For now, RenderFrameProxyHost is created when a RenderFrameHost is swapped
-// out and acts just as a wrapper. It is destroyed when the RenderFrameHost is
-// swapped back in or is no longer referenced and is therefore deleted.
-//
-// Long term, RenderFrameProxyHost will be created whenever a cross-site
+// RenderFrameProxyHost is created whenever a cross-site
 // navigation occurs and a reference to the frame navigating needs to be kept
 // alive. A RenderFrameProxyHost and a RenderFrameHost for the same SiteInstance
 // can exist at the same time, but only one will be "active" at a time.
@@ -88,11 +85,6 @@ class RenderFrameProxyHost
 
   void SetChildRWHView(RenderWidgetHostView* view);
 
-  // TODO(nasko): The following methods should be removed once we don't have a
-  // swapped out state on RenderFrameHosts. See https://crbug.com/357747.
-  RenderFrameHostImpl* render_frame_host() {
-    return render_frame_host_.get();
-  }
   RenderViewHostImpl* GetRenderViewHost();
   RenderWidgetHostView* GetRenderWidgetHostView();
 
@@ -154,11 +146,7 @@ class RenderFrameProxyHost
   // frame tree, this class connects its associated RenderWidgetHostView
   // to this RenderFrameProxyHost, which corresponds to the same frame in the
   // parent's renderer process.
-  scoped_ptr<CrossProcessFrameConnector> cross_process_frame_connector_;
-
-  // TODO(nasko): This can be removed once we don't have a swapped out state on
-  // RenderFrameHosts. See https://crbug.com/357747.
-  scoped_ptr<RenderFrameHostImpl> render_frame_host_;
+  std::unique_ptr<CrossProcessFrameConnector> cross_process_frame_connector_;
 
   // The RenderViewHost that this RenderFrameProxyHost is associated with. It is
   // kept alive as long as any RenderFrameHosts or RenderFrameProxyHosts

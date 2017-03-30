@@ -4,10 +4,13 @@
 
 #include "device/bluetooth/test/test_bluetooth_adapter_observer.h"
 
+#include <string>
+#include <vector>
+
 #include "base/message_loop/message_loop.h"
-#include "device/bluetooth/bluetooth_gatt_characteristic.h"
-#include "device/bluetooth/bluetooth_gatt_descriptor.h"
-#include "device/bluetooth/bluetooth_gatt_service.h"
+#include "device/bluetooth/bluetooth_remote_gatt_characteristic.h"
+#include "device/bluetooth/bluetooth_remote_gatt_descriptor.h"
+#include "device/bluetooth/bluetooth_remote_gatt_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace device {
@@ -34,6 +37,10 @@ void TestBluetoothAdapterObserver::Reset() {
   device_added_count_ = 0;
   device_changed_count_ = 0;
   device_address_changed_count_ = 0;
+#if defined(OS_CHROMEOS) || defined(OS_LINUX)
+  device_paired_changed_count_ = 0;
+  device_new_paired_status_ = false;
+#endif
   device_removed_count_ = 0;
   last_device_ = NULL;
   last_device_address_.clear();
@@ -126,6 +133,19 @@ void TestBluetoothAdapterObserver::DeviceAddressChanged(
   QuitMessageLoop();
 }
 
+#if defined(OS_CHROMEOS) || defined(OS_LINUX)
+void TestBluetoothAdapterObserver::DevicePairedChanged(
+    device::BluetoothAdapter* adapter,
+    device::BluetoothDevice* device,
+    bool new_paired_status) {
+  ++device_paired_changed_count_;
+  last_device_ = device;
+  device_new_paired_status_ = new_paired_status;
+
+  QuitMessageLoop();
+}
+#endif
+
 void TestBluetoothAdapterObserver::DeviceRemoved(BluetoothAdapter* adapter,
                                                  BluetoothDevice* device) {
   EXPECT_EQ(adapter_.get(), adapter);
@@ -140,7 +160,7 @@ void TestBluetoothAdapterObserver::DeviceRemoved(BluetoothAdapter* adapter,
 void TestBluetoothAdapterObserver::GattServiceAdded(
     BluetoothAdapter* adapter,
     BluetoothDevice* device,
-    BluetoothGattService* service) {
+    BluetoothRemoteGattService* service) {
   ASSERT_EQ(adapter_.get(), adapter);
   ASSERT_EQ(service->GetDevice(), device);
 
@@ -148,7 +168,6 @@ void TestBluetoothAdapterObserver::GattServiceAdded(
   last_gatt_service_id_ = service->GetIdentifier();
   last_gatt_service_uuid_ = service->GetUUID();
 
-  EXPECT_FALSE(service->IsLocal());
   EXPECT_TRUE(service->IsPrimary());
 
   EXPECT_EQ(device->GetGattService(last_gatt_service_id_), service);
@@ -159,7 +178,7 @@ void TestBluetoothAdapterObserver::GattServiceAdded(
 void TestBluetoothAdapterObserver::GattServiceRemoved(
     BluetoothAdapter* adapter,
     BluetoothDevice* device,
-    BluetoothGattService* service) {
+    BluetoothRemoteGattService* service) {
   ASSERT_EQ(adapter_.get(), adapter);
   ASSERT_EQ(service->GetDevice(), device);
 
@@ -167,7 +186,6 @@ void TestBluetoothAdapterObserver::GattServiceRemoved(
   last_gatt_service_id_ = service->GetIdentifier();
   last_gatt_service_uuid_ = service->GetUUID();
 
-  EXPECT_FALSE(service->IsLocal());
   EXPECT_TRUE(service->IsPrimary());
 
   // The device should return NULL for this service.
@@ -190,7 +208,7 @@ void TestBluetoothAdapterObserver::GattServicesDiscovered(
 
 void TestBluetoothAdapterObserver::GattDiscoveryCompleteForService(
     BluetoothAdapter* adapter,
-    BluetoothGattService* service) {
+    BluetoothRemoteGattService* service) {
   ASSERT_EQ(adapter_.get(), adapter);
   ++gatt_discovery_complete_count_;
 
@@ -199,7 +217,7 @@ void TestBluetoothAdapterObserver::GattDiscoveryCompleteForService(
 
 void TestBluetoothAdapterObserver::GattServiceChanged(
     BluetoothAdapter* adapter,
-    BluetoothGattService* service) {
+    BluetoothRemoteGattService* service) {
   ASSERT_EQ(adapter_.get(), adapter);
   ++gatt_service_changed_count_;
 
@@ -208,7 +226,7 @@ void TestBluetoothAdapterObserver::GattServiceChanged(
 
 void TestBluetoothAdapterObserver::GattCharacteristicAdded(
     BluetoothAdapter* adapter,
-    BluetoothGattCharacteristic* characteristic) {
+    BluetoothRemoteGattCharacteristic* characteristic) {
   ASSERT_EQ(adapter_.get(), adapter);
 
   ++gatt_characteristic_added_count_;
@@ -225,7 +243,7 @@ void TestBluetoothAdapterObserver::GattCharacteristicAdded(
 
 void TestBluetoothAdapterObserver::GattCharacteristicRemoved(
     BluetoothAdapter* adapter,
-    BluetoothGattCharacteristic* characteristic) {
+    BluetoothRemoteGattCharacteristic* characteristic) {
   ASSERT_EQ(adapter_.get(), adapter);
 
   ++gatt_characteristic_removed_count_;
@@ -242,7 +260,7 @@ void TestBluetoothAdapterObserver::GattCharacteristicRemoved(
 
 void TestBluetoothAdapterObserver::GattDescriptorAdded(
     BluetoothAdapter* adapter,
-    BluetoothGattDescriptor* descriptor) {
+    BluetoothRemoteGattDescriptor* descriptor) {
   ASSERT_EQ(adapter_.get(), adapter);
 
   ++gatt_descriptor_added_count_;
@@ -259,7 +277,7 @@ void TestBluetoothAdapterObserver::GattDescriptorAdded(
 
 void TestBluetoothAdapterObserver::GattDescriptorRemoved(
     BluetoothAdapter* adapter,
-    BluetoothGattDescriptor* descriptor) {
+    BluetoothRemoteGattDescriptor* descriptor) {
   ASSERT_EQ(adapter_.get(), adapter);
 
   ++gatt_descriptor_removed_count_;
@@ -276,7 +294,7 @@ void TestBluetoothAdapterObserver::GattDescriptorRemoved(
 
 void TestBluetoothAdapterObserver::GattCharacteristicValueChanged(
     BluetoothAdapter* adapter,
-    BluetoothGattCharacteristic* characteristic,
+    BluetoothRemoteGattCharacteristic* characteristic,
     const std::vector<uint8_t>& value) {
   ASSERT_EQ(adapter_.get(), adapter);
 
@@ -295,7 +313,7 @@ void TestBluetoothAdapterObserver::GattCharacteristicValueChanged(
 
 void TestBluetoothAdapterObserver::GattDescriptorValueChanged(
     BluetoothAdapter* adapter,
-    BluetoothGattDescriptor* descriptor,
+    BluetoothRemoteGattDescriptor* descriptor,
     const std::vector<uint8_t>& value) {
   ASSERT_EQ(adapter_.get(), adapter);
 

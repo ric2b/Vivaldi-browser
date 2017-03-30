@@ -163,9 +163,6 @@ const char kEnableVp9SwitchName[] = "enable-vp9";
 
 const char kWindowIdSwitchName[] = "window-id";
 
-// Command line switch used to enable WebRTC-based protocol.
-const char kDisableAuthenticationSwitchName[] = "disable-authentication";
-
 // Maximum time to wait for clean shutdown to occur, before forcing termination
 // of the process.
 const int kShutdownTimeoutSeconds = 15;
@@ -183,57 +180,6 @@ const char kHostOfflineReasonPolicyChangeRequiresRestart[] =
 }  // namespace
 
 namespace remoting {
-
-#if !defined(NDEBUG)
-
-// Authenticator that accepts all connections. Use only for testing.
-class NoopAuthenticator : public protocol::Authenticator {
- public:
-  NoopAuthenticator() {}
-  ~NoopAuthenticator() override {}
-
-  // protocol::Authenticator interface.
-  State state() const override { return done_ ? ACCEPTED : WAITING_MESSAGE; }
-  bool started() const override { return done_; }
-  RejectionReason rejection_reason() const override {
-    NOTREACHED();
-    return INVALID_CREDENTIALS;
-  }
-  void ProcessMessage(const buzz::XmlElement* message,
-                      const base::Closure& resume_callback) override {
-    done_ = true;
-    resume_callback.Run();
-  }
-  std::unique_ptr<buzz::XmlElement> GetNextMessage() override {
-    NOTREACHED();
-    return nullptr;
-  }
-  const std::string& GetAuthKey() const override { return auth_key_; }
-  std::unique_ptr<protocol::ChannelAuthenticator> CreateChannelAuthenticator()
-      const override {
-    NOTREACHED();
-    return nullptr;
-  };
-
- private:
-  bool done_ = false;
-  std::string auth_key_ = "NOKEY";
-};
-
-// Factory for Authenticator instances.
-class NoopAuthenticatorFactory : public protocol::AuthenticatorFactory {
- public:
-  NoopAuthenticatorFactory() {}
-  ~NoopAuthenticatorFactory() override {}
-
-  std::unique_ptr<protocol::Authenticator> CreateAuthenticator(
-      const std::string& local_jid,
-      const std::string& remote_jid) override {
-    return base::WrapUnique(new NoopAuthenticator());
-  }
-};
-
-#endif  // !defined(NDEBUG)
 
 class HostProcess : public ConfigWatcher::Delegate,
                     public HostChangeNotificationListener::Listener,
@@ -387,7 +333,7 @@ class HostProcess : public ConfigWatcher::Delegate,
 
 #if defined(OS_LINUX)
   // Watch for certificate changes and kill the host when changes occur
-  scoped_ptr<CertificateWatcher> cert_watcher_;
+  std::unique_ptr<CertificateWatcher> cert_watcher_;
 #endif
 
   // XMPP server/remoting bot configuration (initialized from the command line).
@@ -533,7 +479,8 @@ bool HostProcess::InitWithCommandLine(const base::CommandLine* cmd_line) {
   IPC::AttachmentBroker* broker = IPC::AttachmentBroker::GetGlobal();
   if (broker && !broker->IsPrivilegedBroker())
     broker->RegisterBrokerCommunicationChannel(daemon_channel_.get());
-  daemon_channel_->Init(channel_handle, IPC::Channel::MODE_CLIENT, true);
+  daemon_channel_->Init(channel_handle, IPC::Channel::MODE_CLIENT,
+                        /*create_pipe_now=*/true);
 
 #else  // !defined(REMOTING_MULTI_PROCESS)
   if (cmd_line->HasSwitch(kHostConfigSwitchName)) {
@@ -739,18 +686,6 @@ void HostProcess::CreateAuthenticatorFactory() {
   if (state_ != HOST_STARTED)
     return;
 
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          kDisableAuthenticationSwitchName)) {
-#if defined(NDEBUG)
-    LOG(ERROR) << "Authentication can be disabled only in debug builds.";
-    ShutdownHost(kInitializationFailed);
-#else  // defined(NDEBUG)
-    host_->SetAuthenticatorFactory(
-        base::WrapUnique(new NoopAuthenticatorFactory()));
-#endif  // !defined(NDEBUG)
-    return;
-  }
-
   std::string local_certificate = key_pair_->GenerateCertificate();
   if (local_certificate.empty()) {
     LOG(ERROR) << "Failed to generate host certificate.";
@@ -885,7 +820,10 @@ void HostProcess::StartOnUiThread() {
     remoting::GnubbyAuthHandler::SetGnubbySocketName(gnubby_socket_name);
     gnubby_extension_supported_ = true;
   }
-#endif  // defined(OS_LINUX)
+#elif defined(OS_WIN)
+  // TODO(joedow): Remove the conditional once this is supported on OSX.
+  gnubby_extension_supported_ = true;
+#endif  // defined(OS_WIN)
 
   // Create a desktop environment factory appropriate to the build type &
   // platform.
@@ -926,8 +864,9 @@ void HostProcess::ShutdownOnUiThread() {
 
 #if defined(REMOTING_MULTI_PROCESS)
   IPC::AttachmentBroker* broker = IPC::AttachmentBroker::GetGlobal();
-  if (broker && !broker->IsPrivilegedBroker())
+  if (broker && !broker->IsPrivilegedBroker()) {
     broker->DeregisterBrokerCommunicationChannel(daemon_channel_.get());
+  }
   daemon_channel_.reset();
 #endif  // defined(REMOTING_MULTI_PROCESS)
 

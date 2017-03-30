@@ -74,21 +74,6 @@ SVGElement::SVGElement(const QualifiedName& tagName, Document& document, Constru
 SVGElement::~SVGElement()
 {
     ASSERT(inShadowIncludingDocument() || !hasRelativeLengths());
-
-    // The below teardown is all handled by weak pointer processing in oilpan.
-#if !ENABLE(OILPAN)
-    if (hasSVGRareData()) {
-        if (SVGCursorElement* cursorElement = svgRareData()->cursorElement())
-            cursorElement->removeReferencedElement(this);
-        if (CSSCursorImageValue* cursorImageValue = svgRareData()->cursorImageValue())
-            cursorImageValue->removeReferencedElement(this);
-
-        // With Oilpan, either removedFrom has been called or the document is dead
-        // as well and there is no reason to clear out the references.
-        rebuildAllIncomingReferences();
-        removeAllIncomingReferences();
-    }
-#endif
 }
 
 void SVGElement::detach(const AttachContext& context)
@@ -426,21 +411,23 @@ void SVGElement::updateRelativeLengthsInformation(bool clientHasRelativeLengths,
     // An element wants to notify us that its own relative lengths state changed.
     // Register it in the relative length map, and register us in the parent relative length map.
     // Register the parent in the grandparents map, etc. Repeat procedure until the root of the SVG tree.
-    for (ContainerNode* currentNode = this; currentNode && currentNode->isSVGElement(); currentNode = currentNode->parentNode()) {
-        SVGElement* currentElement = toSVGElement(currentNode);
-        ASSERT(!currentElement->m_inRelativeLengthClientsInvalidation);
+    for (Node& currentNode : NodeTraversal::inclusiveAncestorsOf(*this)) {
+        if (!currentNode.isSVGElement())
+            break;
+        SVGElement& currentElement = toSVGElement(currentNode);
+        ASSERT(!currentElement.m_inRelativeLengthClientsInvalidation);
 
-        bool hadRelativeLengths = currentElement->hasRelativeLengths();
+        bool hadRelativeLengths = currentElement.hasRelativeLengths();
         if (clientHasRelativeLengths)
-            currentElement->m_elementsWithRelativeLengths.add(clientElement);
+            currentElement.m_elementsWithRelativeLengths.add(clientElement);
         else
-            currentElement->m_elementsWithRelativeLengths.remove(clientElement);
+            currentElement.m_elementsWithRelativeLengths.remove(clientElement);
 
         // If the relative length state hasn't changed, we can stop propagating the notification.
-        if (hadRelativeLengths == currentElement->hasRelativeLengths())
+        if (hadRelativeLengths == currentElement.hasRelativeLengths())
             return;
 
-        clientElement = currentElement;
+        clientElement = &currentElement;
         clientHasRelativeLengths = clientElement->hasRelativeLengths();
     }
 
@@ -560,32 +547,10 @@ void SVGElement::setCursorElement(SVGCursorElement* cursorElement)
     rareData->setCursorElement(cursorElement);
 }
 
-#if !ENABLE(OILPAN)
-void SVGElement::cursorElementRemoved()
-{
-    svgRareData()->setCursorElement(0);
-}
-#endif
-
 void SVGElement::setCursorImageValue(CSSCursorImageValue* cursorImageValue)
 {
-    SVGElementRareData* rareData = ensureSVGRareData();
-#if !ENABLE(OILPAN)
-    if (CSSCursorImageValue* oldCursorImageValue = rareData->cursorImageValue()) {
-        if (cursorImageValue == oldCursorImageValue)
-            return;
-        oldCursorImageValue->removeReferencedElement(this);
-    }
-#endif
-    rareData->setCursorImageValue(cursorImageValue);
+    ensureSVGRareData()->setCursorImageValue(cursorImageValue);
 }
-
-#if !ENABLE(OILPAN)
-void SVGElement::cursorImageValueRemoved()
-{
-    svgRareData()->setCursorImageValue(0);
-}
-#endif
 
 SVGElement* SVGElement::correspondingElement() const
 {
@@ -717,8 +682,7 @@ AnimatedPropertyType SVGElement::animatedPropertyTypeForCSSAttribute(const Quali
 
 void SVGElement::addToPropertyMap(SVGAnimatedPropertyBase* property)
 {
-    QualifiedName attributeName = property->attributeName();
-    m_attributeToPropertyMap.set(attributeName, property);
+    m_attributeToPropertyMap.set(property->attributeName(), property);
 }
 
 SVGAnimatedPropertyBase* SVGElement::propertyFromAttribute(const QualifiedName& attributeName) const
@@ -767,39 +731,36 @@ static inline void collectInstancesForSVGElement(SVGElement* element, HeapHashSe
     instances = element->instancesForElement();
 }
 
-bool SVGElement::addEventListenerInternal(const AtomicString& eventType, EventListener* listener, const EventListenerOptions& options)
+void SVGElement::addedEventListener(const AtomicString& eventType, RegisteredEventListener& registeredListener)
 {
     // Add event listener to regular DOM element
-    if (!Node::addEventListenerInternal(eventType, listener, options))
-        return false;
+    Node::addedEventListener(eventType, registeredListener);
 
     // Add event listener to all shadow tree DOM element instances
     HeapHashSet<WeakMember<SVGElement>> instances;
     collectInstancesForSVGElement(this, instances);
+    AddEventListenerOptions options = registeredListener.options();
+    EventListener* listener = registeredListener.listener();
     for (SVGElement* element : instances) {
         bool result = element->Node::addEventListenerInternal(eventType, listener, options);
         ASSERT_UNUSED(result, result);
     }
-
-    return true;
 }
 
-bool SVGElement::removeEventListenerInternal(const AtomicString& eventType, EventListener* listener, const EventListenerOptions& options)
+void SVGElement::removedEventListener(const AtomicString& eventType, const RegisteredEventListener& registeredListener)
 {
-    // Remove event listener from regular DOM element
-    if (!Node::removeEventListenerInternal(eventType, listener, options))
-        return false;
+    Node::removedEventListener(eventType, registeredListener);
 
     // Remove event listener from all shadow tree DOM element instances
     HeapHashSet<WeakMember<SVGElement>> instances;
     collectInstancesForSVGElement(this, instances);
+    EventListenerOptions options = registeredListener.options();
+    const EventListener* listener = registeredListener.listener();
     for (SVGElement* shadowTreeElement : instances) {
         ASSERT(shadowTreeElement);
 
         shadowTreeElement->Node::removeEventListenerInternal(eventType, listener, options);
     }
-
-    return true;
 }
 
 static bool hasLoadListener(Element* element)
@@ -812,7 +773,7 @@ static bool hasLoadListener(Element* element)
         if (!entry)
             continue;
         for (size_t i = 0; i < entry->size(); ++i) {
-            if (entry->at(i).useCapture)
+            if (entry->at(i).capture())
                 return true;
         }
     }
@@ -1033,7 +994,7 @@ SVGElement::InstanceUpdateBlocker::~InstanceUpdateBlocker()
         m_targetElement->setInstanceUpdatesBlocked(false);
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 bool SVGElement::isAnimatableAttribute(const QualifiedName& name) const
 {
     // This static is atomically initialized to dodge a warning about
@@ -1143,7 +1104,7 @@ bool SVGElement::isAnimatableAttribute(const QualifiedName& name) const
 
     return animatableAttributes.contains(name);
 }
-#endif
+#endif // DCHECK_IS_ON()
 
 SVGElementSet* SVGElement::setOfIncomingReferences() const
 {

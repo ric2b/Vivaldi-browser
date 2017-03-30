@@ -1,21 +1,21 @@
+<link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/iron-icons.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-checkbox/paper-checkbox.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
+<link rel="import" href="chrome://resources/html/icon.html">
 <link rel="import" href="chrome://resources/html/util.html">
 <link rel="import" href="chrome://history/shared_style.html">
 
 <dom-module id="history-item">
   <template>
-    <style include="shared-style"></style>
-    <style>
+    <style include="shared-style">
       :host {
         @apply(--layout-center);
         @apply(--layout-vertical);
-        padding: 0 24px;
+        padding: 0 var(--card-padding-side);
       }
 
       #main-container {
@@ -131,12 +131,12 @@
           <a href="[[item.url]]" id="title" class="website-title"></a>
           <span id="domain">[[item.domain]]</span>
         </div>
-        <iron-icon icon="star" id="bookmark-star"></iron-icon>
-        <paper-icon-button icon="more-vert" id="menu-button"
+        <iron-icon icon="cr:star" id="bookmark-star"></iron-icon>
+        <paper-icon-button icon="cr:more-vert" id="menu-button"
             on-tap="onMenuButtonTap_">
         </paper-icon-button>
       </div>
-      <template is="dom-if" if="[[item.hasTimeGap]]">
+      <template is="dom-if" if="[[hasTimeGap]]">
         <div id="time-gap-separator"></div>
       </template>
     </div>

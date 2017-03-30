@@ -8,7 +8,7 @@
 #if defined(OS_MACOSX)
 extern "C" {
 #include <sandbox.h>
-}
+};
 #endif
 #include <fcntl.h>
 #include <stddef.h>
@@ -16,6 +16,7 @@ extern "C" {
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <memory>
 #include <queue>
 
 #include "base/callback.h"
@@ -31,6 +32,10 @@ extern "C" {
 
 #if defined(OS_POSIX)
 #include "base/macros.h"
+#endif
+
+#if defined(OS_MACOSX)
+#include "sandbox/mac/seatbelt.h"
 #endif
 
 namespace {
@@ -138,12 +143,7 @@ class IPCSendFdsTest : public IPCTestBase {
   }
 };
 
-#if defined(OS_ANDROID)
-#define MAYBE_DescriptorTest DISABLED_DescriptorTest
-#else
-#define MAYBE_DescriptorTest DescriptorTest
-#endif
-TEST_F(IPCSendFdsTest, MAYBE_DescriptorTest) {
+TEST_F(IPCSendFdsTest, DescriptorTest) {
   Init("SendFdsClient");
   RunServer();
 }
@@ -154,7 +154,7 @@ int SendFdsClientCommon(const std::string& test_client_name,
   MyChannelDescriptorListener listener(expected_inode_num);
 
   // Set up IPC channel.
-  scoped_ptr<IPC::Channel> channel(IPC::Channel::CreateClient(
+  std::unique_ptr<IPC::Channel> channel(IPC::Channel::CreateClient(
       IPCTestBase::GetChannelName(test_client_name), &listener));
   CHECK(channel->Connect());
 
@@ -193,16 +193,13 @@ MULTIPROCESS_IPC_TEST_CLIENT_MAIN(SendFdsSandboxedClient) {
 
   // Enable the sandbox.
   char* error_buff = NULL;
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-  int error = sandbox_init(kSBXProfilePureComputation, SANDBOX_NAMED,
-                           &error_buff);
+  int error = sandbox::Seatbelt::Init(kSBXProfilePureComputation, SANDBOX_NAMED,
+                                      &error_buff);
   bool success = (error == 0 && error_buff == NULL);
   if (!success)
     return -1;
 
-  sandbox_free_error(error_buff);
-#pragma clang diagnostic pop
+  sandbox::Seatbelt::FreeError(error_buff);
 
   // Make sure sandbox is really enabled.
   if (open(kDevZeroPath, O_RDONLY) != -1) {
@@ -265,8 +262,8 @@ class PipeChannelHelper {
         FROM_HERE, base::Bind(&PipeChannelHelper::Connect, out.get()));
   }
 
-  static void DestroyChannel(scoped_ptr<IPC::Channel> *c,
-                             base::WaitableEvent *event) {
+  static void DestroyChannel(std::unique_ptr<IPC::Channel>* c,
+                             base::WaitableEvent* event) {
     c->reset(0);
     event->Signal();
   }
@@ -299,7 +296,7 @@ class PipeChannelHelper {
   }
 
  private:
-  scoped_ptr<IPC::Channel> in, out;
+  std::unique_ptr<IPC::Channel> in, out;
   base::Thread* in_thread_;
   base::Thread* out_thread_;
   MyCBListener cb_listener_;
@@ -358,9 +355,9 @@ class IPCMultiSendingFdsTest : public testing::Test {
     // Unless the workaround is in place. With 10000 sends, we
     // should see at least a 3% failure rate.
     const int pipes_to_send = 20000;
-    scoped_ptr<base::Thread> producer(CreateThread("producer"));
-    scoped_ptr<base::Thread> middleman(CreateThread("middleman"));
-    scoped_ptr<base::Thread> consumer(CreateThread("consumer"));
+    std::unique_ptr<base::Thread> producer(CreateThread("producer"));
+    std::unique_ptr<base::Thread> middleman(CreateThread("middleman"));
+    std::unique_ptr<base::Thread> consumer(CreateThread("consumer"));
     PipeChannelHelper pipe1(
         middleman.get(),
         consumer.get(),

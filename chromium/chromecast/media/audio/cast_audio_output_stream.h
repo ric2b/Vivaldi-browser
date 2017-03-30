@@ -9,11 +9,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "media/audio/audio_io.h"
-#include "media/audio/audio_parameters.h"
-
-namespace base {
-class SingleThreadTaskRunner;
-}  // namespace base
+#include "media/base/audio_parameters.h"
 
 namespace chromecast {
 namespace media {
@@ -38,7 +34,6 @@ class CastAudioOutputStream : public ::media::AudioOutputStream {
  private:
   class Backend;
 
-  void OnClosed();
   void PushBuffer();
   void OnPushBufferComplete(bool success);
 
@@ -53,9 +48,6 @@ class CastAudioOutputStream : public ::media::AudioOutputStream {
   const base::TimeDelta buffer_duration_;
   bool push_in_progress_;
   base::TimeTicks next_push_time_;
-
-  scoped_refptr<base::SingleThreadTaskRunner> audio_task_runner_;
-  scoped_refptr<base::SingleThreadTaskRunner> backend_task_runner_;
 
   base::WeakPtrFactory<CastAudioOutputStream> weak_factory_;
 

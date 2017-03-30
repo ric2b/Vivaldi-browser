@@ -30,6 +30,13 @@ class WebDragBookmarkHandlerMac : public content::WebDragDestDelegate {
   void OnDrop() override;
   void OnDragLeave() override;
 
+  // Vivaldi addition
+  blink::WebDragOperationsMask OnDragEnd(
+      int screen_x,
+      int screen_y,
+      blink::WebDragOperationsMask ops,
+      bool cancelled) override;
+
  private:
   // The BookmarkTabHelper.
   // Weak reference; may be NULL if the contents don't have a

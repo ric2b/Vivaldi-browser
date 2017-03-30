@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <utility>
@@ -17,7 +18,6 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
@@ -36,6 +36,7 @@
 #include "storage/browser/blob/blob_data_handle.h"
 #include "third_party/leveldatabase/src/include/leveldb/status.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -110,7 +111,7 @@ class CONTENT_EXPORT IndexedDBBackingStore
       return blob_info_;
     }
     void SetHandles(ScopedVector<storage::BlobDataHandle>* handles);
-    scoped_ptr<BlobChangeRecord> Clone() const;
+    std::unique_ptr<BlobChangeRecord> Clone() const;
 
    private:
     std::string key_;
@@ -211,7 +212,7 @@ class CONTENT_EXPORT IndexedDBBackingStore
         : public base::RefCountedThreadSafe<ChainedBlobWriter> {
      public:
       virtual void set_delegate(
-          scoped_ptr<storage::FileWriterDelegate> delegate) = 0;
+          std::unique_ptr<storage::FileWriterDelegate> delegate) = 0;
 
       // TODO(ericu): Add a reason in the event of failure.
       virtual void ReportWriteCompletion(bool succeeded,
@@ -338,8 +339,8 @@ class CONTENT_EXPORT IndexedDBBackingStore
     Transaction* transaction_;
     int64_t database_id_;
     const CursorOptions cursor_options_;
-    scoped_ptr<LevelDBIterator> iterator_;
-    scoped_ptr<IndexedDBKey> current_key_;
+    std::unique_ptr<LevelDBIterator> iterator_;
+    std::unique_ptr<IndexedDBKey> current_key_;
     IndexedDBBackingStore::RecordIdentifier record_identifier_;
 
    private:
@@ -359,7 +360,7 @@ class CONTENT_EXPORT IndexedDBBackingStore
     DISALLOW_COPY_AND_ASSIGN(Cursor);
   };
 
-  const GURL& origin_url() const { return origin_url_; }
+  const url::Origin& origin() const { return origin_; }
   IndexedDBFactory* factory() const { return indexed_db_factory_; }
   base::SequencedTaskRunner* task_runner() const { return task_runner_.get(); }
   base::OneShotTimer* close_timer() { return &close_timer_; }
@@ -369,7 +370,7 @@ class CONTENT_EXPORT IndexedDBBackingStore
 
   static scoped_refptr<IndexedDBBackingStore> Open(
       IndexedDBFactory* indexed_db_factory,
-      const GURL& origin_url,
+      const url::Origin& origin,
       const base::FilePath& path_base,
       net::URLRequestContext* request_context,
       blink::WebIDBDataLoss* data_loss,
@@ -380,7 +381,7 @@ class CONTENT_EXPORT IndexedDBBackingStore
       leveldb::Status* status);
   static scoped_refptr<IndexedDBBackingStore> Open(
       IndexedDBFactory* indexed_db_factory,
-      const GURL& origin_url,
+      const url::Origin& origin,
       const base::FilePath& path_base,
       net::URLRequestContext* request_context,
       blink::WebIDBDataLoss* data_loss,
@@ -391,11 +392,11 @@ class CONTENT_EXPORT IndexedDBBackingStore
       bool clean_journal,
       leveldb::Status* status);
   static scoped_refptr<IndexedDBBackingStore> OpenInMemory(
-      const GURL& origin_url,
+      const url::Origin& origin,
       base::SequencedTaskRunner* task_runner,
       leveldb::Status* status);
   static scoped_refptr<IndexedDBBackingStore> OpenInMemory(
-      const GURL& origin_url,
+      const url::Origin& origin,
       LevelDBFactory* leveldb_factory,
       base::SequencedTaskRunner* task_runner,
       leveldb::Status* status);
@@ -420,9 +421,9 @@ class CONTENT_EXPORT IndexedDBBackingStore
 
   // Assumes caller has already closed the backing store.
   static leveldb::Status DestroyBackingStore(const base::FilePath& path_base,
-                                             const GURL& origin_url);
+                                             const url::Origin& origin);
   static bool RecordCorruptionInfo(const base::FilePath& path_base,
-                                   const GURL& origin_url,
+                                   const url::Origin& origin,
                                    const std::string& message);
   leveldb::Status GetObjectStores(
       int64_t database_id,
@@ -513,14 +514,14 @@ class CONTENT_EXPORT IndexedDBBackingStore
       int64_t object_store_id,
       int64_t index_id,
       const IndexedDBKey& key,
-      scoped_ptr<IndexedDBKey>* primary_key) WARN_UNUSED_RESULT;
+      std::unique_ptr<IndexedDBKey>* primary_key) WARN_UNUSED_RESULT;
   virtual leveldb::Status KeyExistsInIndex(
       IndexedDBBackingStore::Transaction* transaction,
       int64_t database_id,
       int64_t object_store_id,
       int64_t index_id,
       const IndexedDBKey& key,
-      scoped_ptr<IndexedDBKey>* found_primary_key,
+      std::unique_ptr<IndexedDBKey>* found_primary_key,
       bool* exists) WARN_UNUSED_RESULT;
 
   // Public for IndexedDBActiveBlobRegistry::ReleaseBlobRef.
@@ -528,21 +529,21 @@ class CONTENT_EXPORT IndexedDBBackingStore
 
   base::FilePath GetBlobFileName(int64_t database_id, int64_t key) const;
 
-  virtual scoped_ptr<Cursor> OpenObjectStoreKeyCursor(
+  virtual std::unique_ptr<Cursor> OpenObjectStoreKeyCursor(
       IndexedDBBackingStore::Transaction* transaction,
       int64_t database_id,
       int64_t object_store_id,
       const IndexedDBKeyRange& key_range,
       blink::WebIDBCursorDirection,
       leveldb::Status*);
-  virtual scoped_ptr<Cursor> OpenObjectStoreCursor(
+  virtual std::unique_ptr<Cursor> OpenObjectStoreCursor(
       IndexedDBBackingStore::Transaction* transaction,
       int64_t database_id,
       int64_t object_store_id,
       const IndexedDBKeyRange& key_range,
       blink::WebIDBCursorDirection,
       leveldb::Status*);
-  virtual scoped_ptr<Cursor> OpenIndexKeyCursor(
+  virtual std::unique_ptr<Cursor> OpenIndexKeyCursor(
       IndexedDBBackingStore::Transaction* transaction,
       int64_t database_id,
       int64_t object_store_id,
@@ -550,7 +551,7 @@ class CONTENT_EXPORT IndexedDBBackingStore
       const IndexedDBKeyRange& key_range,
       blink::WebIDBCursorDirection,
       leveldb::Status*);
-  virtual scoped_ptr<Cursor> OpenIndexCursor(
+  virtual std::unique_ptr<Cursor> OpenIndexCursor(
       IndexedDBBackingStore::Transaction* transaction,
       int64_t database_id,
       int64_t object_store_id,
@@ -563,11 +564,11 @@ class CONTENT_EXPORT IndexedDBBackingStore
   friend class base::RefCounted<IndexedDBBackingStore>;
 
   IndexedDBBackingStore(IndexedDBFactory* indexed_db_factory,
-                        const GURL& origin_url,
+                        const url::Origin& origin,
                         const base::FilePath& blob_path,
                         net::URLRequestContext* request_context,
-                        scoped_ptr<LevelDBDatabase> db,
-                        scoped_ptr<LevelDBComparator> comparator,
+                        std::unique_ptr<LevelDBDatabase> db,
+                        std::unique_ptr<LevelDBComparator> comparator,
                         base::SequencedTaskRunner* task_runner);
   virtual ~IndexedDBBackingStore();
 
@@ -597,16 +598,16 @@ class CONTENT_EXPORT IndexedDBBackingStore
  private:
   static scoped_refptr<IndexedDBBackingStore> Create(
       IndexedDBFactory* indexed_db_factory,
-      const GURL& origin_url,
+      const url::Origin& origin,
       const base::FilePath& blob_path,
       net::URLRequestContext* request_context,
-      scoped_ptr<LevelDBDatabase> db,
-      scoped_ptr<LevelDBComparator> comparator,
+      std::unique_ptr<LevelDBDatabase> db,
+      std::unique_ptr<LevelDBComparator> comparator,
       base::SequencedTaskRunner* task_runner,
       leveldb::Status* status);
 
   static bool ReadCorruptionInfo(const base::FilePath& path_base,
-                                 const GURL& origin_url,
+                                 const url::Origin& origin,
                                  std::string* message);
 
   leveldb::Status FindKeyInIndex(
@@ -638,7 +639,7 @@ class CONTENT_EXPORT IndexedDBBackingStore
       const BlobJournalType& journal) const;
 
   IndexedDBFactory* indexed_db_factory_;
-  const GURL origin_url_;
+  const url::Origin origin_;
   base::FilePath blob_path_;
 
   // The origin identifier is a key prefix unique to the origin used in the
@@ -655,8 +656,8 @@ class CONTENT_EXPORT IndexedDBBackingStore
   BlobChangeMap incognito_blob_map_;
   base::OneShotTimer journal_cleaning_timer_;
 
-  scoped_ptr<LevelDBDatabase> db_;
-  scoped_ptr<LevelDBComparator> comparator_;
+  std::unique_ptr<LevelDBDatabase> db_;
+  std::unique_ptr<LevelDBComparator> comparator_;
   // Whenever blobs are registered in active_blob_registry_, indexed_db_factory_
   // will hold a reference to this backing store.
   IndexedDBActiveBlobRegistry active_blob_registry_;

@@ -11,15 +11,12 @@
 #include "media/mojo/interfaces/service_factory.mojom.h"
 #include "media/mojo/services/mojo_cdm_service_context.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
-#include "mojo/shell/public/cpp/connector.h"
-#include "mojo/shell/public/cpp/message_loop_ref.h"
+#include "services/shell/public/cpp/connector.h"
+#include "services/shell/public/cpp/shell_connection_ref.h"
 
-namespace mojo {
-class MessageLoopRef;
 namespace shell {
 namespace mojom {
 class InterfaceProvider;
-}
 }
 }
 
@@ -30,22 +27,21 @@ class MediaLog;
 class MojoMediaClient;
 class RendererFactory;
 
-class ServiceFactoryImpl : public interfaces::ServiceFactory {
+class ServiceFactoryImpl : public mojom::ServiceFactory {
  public:
-  ServiceFactoryImpl(mojo::InterfaceRequest<interfaces::ServiceFactory> request,
-                     mojo::shell::mojom::InterfaceProvider* interfaces,
+  ServiceFactoryImpl(mojo::InterfaceRequest<mojom::ServiceFactory> request,
+                     shell::mojom::InterfaceProvider* interfaces,
                      scoped_refptr<MediaLog> media_log,
-                     std::unique_ptr<mojo::MessageLoopRef> parent_app_refcount,
+                     std::unique_ptr<shell::ShellConnectionRef> connection_ref,
                      MojoMediaClient* mojo_media_client);
   ~ServiceFactoryImpl() final;
 
-  // interfaces::ServiceFactory implementation.
+  // mojom::ServiceFactory implementation.
   void CreateAudioDecoder(
-      mojo::InterfaceRequest<interfaces::AudioDecoder> audio_decoder) final;
-  void CreateRenderer(
-      mojo::InterfaceRequest<interfaces::Renderer> renderer) final;
+      mojo::InterfaceRequest<mojom::AudioDecoder> audio_decoder) final;
+  void CreateRenderer(mojo::InterfaceRequest<mojom::Renderer> renderer) final;
   void CreateCdm(
-      mojo::InterfaceRequest<interfaces::ContentDecryptionModule> cdm) final;
+      mojo::InterfaceRequest<mojom::ContentDecryptionModule> cdm) final;
 
  private:
 #if defined(ENABLE_MOJO_RENDERER)
@@ -61,11 +57,16 @@ class ServiceFactoryImpl : public interfaces::ServiceFactory {
 #endif  // defined(ENABLE_MOJO_CDM)
 
   MojoCdmServiceContext cdm_service_context_;
-  mojo::StrongBinding<interfaces::ServiceFactory> binding_;
-  mojo::shell::mojom::InterfaceProvider* interfaces_;
-  scoped_refptr<MediaLog> media_log_;
-  std::unique_ptr<mojo::MessageLoopRef> parent_app_refcount_;
+  mojo::StrongBinding<mojom::ServiceFactory> binding_;
+#if defined(ENABLE_MOJO_CDM)
+  shell::mojom::InterfaceProvider* interfaces_;
+#endif
+#if defined(ENABLE_MOJO_AUDIO_DECODER) || defined(ENABLE_MOJO_CDM) || \
+    defined(ENABLE_MOJO_RENDERER)
   MojoMediaClient* mojo_media_client_;
+#endif
+  scoped_refptr<MediaLog> media_log_;
+  std::unique_ptr<shell::ShellConnectionRef> connection_ref_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceFactoryImpl);
 };

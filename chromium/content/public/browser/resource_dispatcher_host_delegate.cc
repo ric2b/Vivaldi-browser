@@ -4,6 +4,7 @@
 
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
 
+#include "content/public/browser/navigation_data.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/browser/stream_info.h"
 
@@ -70,8 +71,7 @@ bool ResourceDispatcherHostDelegate::ShouldInterceptResourceAsStream(
 
 void ResourceDispatcherHostDelegate::OnStreamCreated(
     net::URLRequest* request,
-    scoped_ptr<content::StreamInfo> stream) {
-}
+    std::unique_ptr<content::StreamInfo> stream) {}
 
 void ResourceDispatcherHostDelegate::OnResponseStarted(
     net::URLRequest* request,
@@ -95,6 +95,11 @@ bool ResourceDispatcherHostDelegate::ShouldEnableLoFiMode(
     const net::URLRequest& url_request,
     content::ResourceContext* resource_context) {
   return false;
+}
+
+NavigationData* ResourceDispatcherHostDelegate::GetNavigationData(
+    net::URLRequest* request) const {
+  return nullptr;
 }
 
 ResourceDispatcherHostDelegate::ResourceDispatcherHostDelegate() {

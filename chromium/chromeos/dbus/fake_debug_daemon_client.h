@@ -44,10 +44,12 @@ class CHROMEOS_EXPORT FakeDebugDaemonClient : public DebugDaemonClient {
   void GetWiMaxStatus(const GetWiMaxStatusCallback& callback) override;
   void GetNetworkInterfaces(
       const GetNetworkInterfacesCallback& callback) override;
-  void GetPerfOutput(uint32_t duration,
+  void GetPerfOutput(base::TimeDelta duration,
                      const std::vector<std::string>& perf_args,
-                     const GetPerfOutputCallback& callback) override;
+                     dbus::ScopedFileDescriptor file_descriptor,
+                     const DBusMethodErrorCallback& error_callback) override;
   void GetScrubbedLogs(const GetLogsCallback& callback) override;
+  void GetScrubbedBigLogs(const GetLogsCallback& callback) override;
   void GetAllLogs(const GetLogsCallback& callback) override;
   void GetUserLogFiles(const GetLogsCallback& callback) override;
   void TestICMP(const std::string& ip_address,

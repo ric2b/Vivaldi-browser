@@ -50,9 +50,8 @@ class EventSourceInit;
 class ExceptionState;
 class ResourceResponse;
 
-class CORE_EXPORT EventSource final : public RefCountedGarbageCollectedEventTargetWithInlineData<EventSource>, private ThreadableLoaderClient, public ActiveScriptWrappable, public ActiveDOMObject, public EventSourceParser::Client {
+class CORE_EXPORT EventSource final : public EventTargetWithInlineData, private ThreadableLoaderClient, public ActiveScriptWrappable, public ActiveDOMObject, public EventSourceParser::Client {
     DEFINE_WRAPPERTYPEINFO();
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(EventSource);
     USING_GARBAGE_COLLECTED_MIXIN(EventSource);
 public:
     static EventSource* create(ExecutionContext*, const String& url, const EventSourceInit&, ExceptionState&);

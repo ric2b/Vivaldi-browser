@@ -6,10 +6,10 @@
 #define CHROME_TEST_CHROMEDRIVER_CHROME_WEB_VIEW_H_
 
 #include <list>
+#include <memory>
 #include <string>
 #include <vector>
 
-#include "base/memory/scoped_ptr.h"
 
 namespace base {
 class DictionaryValue;
@@ -25,8 +25,9 @@ class JavaScriptDialogManager;
 struct KeyEvent;
 struct MouseEvent;
 struct NetworkConditions;
-struct TouchEvent;
 class Status;
+class Timeout;
+struct TouchEvent;
 
 class WebView {
  public:
@@ -48,7 +49,7 @@ class WebView {
   virtual Status GetUrl(std::string* url) = 0;
 
   // Load a given URL in the main frame.
-  virtual Status Load(const std::string& url) = 0;
+  virtual Status Load(const std::string& url, const Timeout* timeout) = 0;
 
   // Reload the current page.
   virtual Status Reload() = 0;
@@ -65,7 +66,7 @@ class WebView {
   // |result| will never be NULL on success.
   virtual Status EvaluateScript(const std::string& frame,
                                 const std::string& expression,
-                                scoped_ptr<base::Value>* result) = 0;
+                                std::unique_ptr<base::Value>* result) = 0;
 
   // Calls a JavaScript function in a specified frame with the given args and
   // returns the result. |frame| is a frame ID or an empty string for the main
@@ -76,7 +77,7 @@ class WebView {
   virtual Status CallFunction(const std::string& frame,
                               const std::string& function,
                               const base::ListValue& args,
-                              scoped_ptr<base::Value>* result) = 0;
+                              std::unique_ptr<base::Value>* result) = 0;
 
   // Calls a JavaScript function in a specified frame with the given args and
   // two callbacks. The first may be invoked with a value to return to the user.
@@ -87,17 +88,18 @@ class WebView {
                                    const std::string& function,
                                    const base::ListValue& args,
                                    const base::TimeDelta& timeout,
-                                   scoped_ptr<base::Value>* result) = 0;
+                                   std::unique_ptr<base::Value>* result) = 0;
 
   // Same as |CallAsyncFunction|, except no additional error callback is passed
   // to the function. Also, |kJavaScriptError| or |kScriptTimeout| is used
   // as the error code instead of |kUnknownError| in appropriate cases.
   // |result| will never be NULL on success.
-  virtual Status CallUserAsyncFunction(const std::string& frame,
-                                       const std::string& function,
-                                       const base::ListValue& args,
-                                       const base::TimeDelta& timeout,
-                                       scoped_ptr<base::Value>* result) = 0;
+  virtual Status CallUserAsyncFunction(
+      const std::string& frame,
+      const std::string& function,
+      const base::ListValue& args,
+      const base::TimeDelta& timeout,
+      std::unique_ptr<base::Value>* result) = 0;
 
   // Gets the frame ID for a frame element returned by invoking the given
   // JavaScript function. |frame| is a frame ID or an empty string for the main
@@ -121,7 +123,7 @@ class WebView {
   virtual Status DispatchKeyEvents(const std::list<KeyEvent>& events) = 0;
 
   // Return all the cookies visible to the current page.
-  virtual Status GetCookies(scoped_ptr<base::ListValue>* cookies) = 0;
+  virtual Status GetCookies(std::unique_ptr<base::ListValue>* cookies) = 0;
 
   // Delete the cookie with the given name.
   virtual Status DeleteCookie(const std::string& name,
@@ -135,12 +137,13 @@ class WebView {
   // If |stop_load_on_timeout| is true, will attempt to stop the page load on
   // timeout before returning the timeout status.
   virtual Status WaitForPendingNavigations(const std::string& frame_id,
-                                           const base::TimeDelta& timeout,
+                                           const Timeout& timeout,
                                            bool stop_load_on_timeout) = 0;
 
   // Returns whether the frame is pending navigation.
-  virtual Status IsPendingNavigation(
-      const std::string& frame_id, bool* is_pending) = 0;
+  virtual Status IsPendingNavigation(const std::string& frame_id,
+                                     const Timeout* timeout,
+                                     bool* is_pending) = 0;
 
   // Returns the JavaScriptDialogManager. Never null.
   virtual JavaScriptDialogManager* GetJavaScriptDialogManager() = 0;
@@ -166,7 +169,7 @@ class WebView {
   // A raw heap snapshot is in JSON format:
   //  1. A meta data element "snapshot" about how to parse data elements.
   //  2. Data elements: "nodes", "edges", "strings".
-  virtual Status TakeHeapSnapshot(scoped_ptr<base::Value>* snapshot) = 0;
+  virtual Status TakeHeapSnapshot(std::unique_ptr<base::Value>* snapshot) = 0;
 
   // Start recording Javascript CPU Profile.
   virtual Status StartProfile() = 0;
@@ -174,7 +177,7 @@ class WebView {
   // Stop recording Javascript CPU Profile and returns a graph of
   // CPUProfile objects. The format for the captured profile is defined
   // (by DevTools) in protocol.json.
-  virtual Status EndProfile(scoped_ptr<base::Value>* profile_data) = 0;
+  virtual Status EndProfile(std::unique_ptr<base::Value>* profile_data) = 0;
 
   virtual Status SynthesizeTapGesture(int x,
                                       int y,

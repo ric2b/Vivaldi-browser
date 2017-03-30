@@ -8,11 +8,10 @@
 
 #include "cc/output/compositor_frame.h"
 #include "cc/output/output_surface_client.h"
-#include "content/browser/compositor/browser_compositor_overlay_candidate_validator.h"
-#include "content/browser/compositor/buffer_queue.h"
-#include "content/browser/compositor/gl_helper.h"
+#include "components/display_compositor/buffer_queue.h"
+#include "components/display_compositor/compositor_overlay_candidate_validator.h"
+#include "components/display_compositor/gl_helper.h"
 #include "content/browser/compositor/reflector_impl.h"
-#include "content/browser/gpu/gpu_surface_tracker.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -21,18 +20,18 @@ namespace content {
 
 GpuSurfacelessBrowserCompositorOutputSurface::
     GpuSurfacelessBrowserCompositorOutputSurface(
-        const scoped_refptr<ContextProviderCommandBuffer>& context,
-        const scoped_refptr<ContextProviderCommandBuffer>& worker_context,
-        int surface_id,
-        const scoped_refptr<ui::CompositorVSyncManager>& vsync_manager,
-        scoped_ptr<BrowserCompositorOverlayCandidateValidator>
+        scoped_refptr<ContextProviderCommandBuffer> context,
+        gpu::SurfaceHandle surface_handle,
+        scoped_refptr<ui::CompositorVSyncManager> vsync_manager,
+        base::SingleThreadTaskRunner* task_runner,
+        std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
             overlay_candidate_validator,
         unsigned int target,
         unsigned int internalformat,
         gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager)
-    : GpuBrowserCompositorOutputSurface(context,
-                                        worker_context,
-                                        vsync_manager,
+    : GpuBrowserCompositorOutputSurface(std::move(context),
+                                        std::move(vsync_manager),
+                                        task_runner,
                                         std::move(overlay_candidate_validator)),
       internalformat_(internalformat),
       gpu_memory_buffer_manager_(gpu_memory_buffer_manager) {
@@ -47,11 +46,11 @@ GpuSurfacelessBrowserCompositorOutputSurface::
   // implementation.
   capabilities_.max_frames_pending = 2;
 
-  gl_helper_.reset(new GLHelper(context_provider_->ContextGL(),
-                                context_provider_->ContextSupport()));
-  output_surface_.reset(new BufferQueue(
+  gl_helper_.reset(new display_compositor::GLHelper(
+      context_provider_->ContextGL(), context_provider_->ContextSupport()));
+  output_surface_.reset(new display_compositor::BufferQueue(
       context_provider_, target, internalformat_, gl_helper_.get(),
-      gpu_memory_buffer_manager_, surface_id));
+      gpu_memory_buffer_manager_, surface_handle));
   output_surface_->Initialize();
 }
 
@@ -98,7 +97,8 @@ void GpuSurfacelessBrowserCompositorOutputSurface::Reshape(
 
 void GpuSurfacelessBrowserCompositorOutputSurface::OnGpuSwapBuffersCompleted(
     const std::vector<ui::LatencyInfo>& latency_info,
-    gfx::SwapResult result) {
+    gfx::SwapResult result,
+    const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac) {
   bool force_swap = false;
   if (result == gfx::SwapResult::SWAP_NAK_RECREATE_BUFFERS) {
     // Even through the swap failed, this is a fixable error so we can pretend
@@ -107,8 +107,8 @@ void GpuSurfacelessBrowserCompositorOutputSurface::OnGpuSwapBuffersCompleted(
     output_surface_->RecreateBuffers();
     force_swap = true;
   }
-  GpuBrowserCompositorOutputSurface::OnGpuSwapBuffersCompleted(latency_info,
-                                                               result);
+  GpuBrowserCompositorOutputSurface::OnGpuSwapBuffersCompleted(
+      latency_info, result, params_mac);
   if (force_swap)
     client_->SetNeedsRedrawRect(gfx::Rect(SurfaceSize()));
 }

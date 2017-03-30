@@ -4,38 +4,36 @@
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 
-#include "wtf/HashSet.h"
-#include "wtf/ThreadSpecific.h"
-#include "wtf/Threading.h"
+#include "bindings/core/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptWrappableVisitor.h"
+#include "bindings/core/v8/V8PerIsolateData.h"
 
 namespace blink {
-
-namespace {
-
-using ActiveScriptWrappableSetType = HashSet<const ActiveScriptWrappable*>;
-
-ActiveScriptWrappableSetType& activeScriptWrappables()
-{
-    DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadSpecific<ActiveScriptWrappableSetType>, activeScriptWrappableSet, new ThreadSpecific<ActiveScriptWrappableSetType>());
-    return *activeScriptWrappableSet;
-}
-
-} // namespace
 
 ActiveScriptWrappable::ActiveScriptWrappable(ScriptWrappable* self)
     : m_scriptWrappable(self)
 {
-    activeScriptWrappables().add(this);
+    ASSERT(ThreadState::current());
+    v8::Isolate* isolate = ThreadState::current()->isolate();
+    V8PerIsolateData* isolateData = V8PerIsolateData::from(isolate);
+    isolateData->addActiveScriptWrappable(this);
 }
 
-ActiveScriptWrappable::~ActiveScriptWrappable()
+void ActiveScriptWrappable::traceActiveScriptWrappables(v8::Isolate* isolate, ScriptWrappableVisitor* visitor)
 {
-    activeScriptWrappables().remove(this);
-}
+    V8PerIsolateData* isolateData = V8PerIsolateData::from(isolate);
+    auto activeScriptWrappables = isolateData->activeScriptWrappables();
+    if (!activeScriptWrappables) {
+        return;
+    }
 
-ScriptWrappable* ActiveScriptWrappable::toScriptWrappable() const
-{
-    return m_scriptWrappable;
+    for (auto activeWrappable : *activeScriptWrappables) {
+        if (!activeWrappable->hasPendingActivity())
+            continue;
+
+        ScriptWrappable* wrappable = activeWrappable->toScriptWrappable();
+        wrappable->wrapperTypeInfo()->traceWrappers(visitor, wrappable);
+    }
 }
 
 } // namespace blink

@@ -11,6 +11,7 @@
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "content/child/webmessageportchannel_impl.h"
+#include "content/common/content_security_policy_header.h"
 #include "content/common/frame_messages.h"
 #include "content/common/frame_replication_state.h"
 #include "content/common/input_messages.h"
@@ -52,7 +53,7 @@ RenderFrameProxy* RenderFrameProxy::CreateProxyToReplaceFrame(
     blink::WebTreeScopeType scope) {
   CHECK_NE(routing_id, MSG_ROUTING_NONE);
 
-  scoped_ptr<RenderFrameProxy> proxy(
+  std::unique_ptr<RenderFrameProxy> proxy(
       new RenderFrameProxy(routing_id, frame_to_replace->GetRoutingID()));
 
   // When a RenderFrame is replaced by a RenderProxy, the WebRemoteFrame should
@@ -94,7 +95,7 @@ RenderFrameProxy* RenderFrameProxy::CreateFrameProxy(
   blink::WebFrame* opener =
       RenderFrameImpl::ResolveOpener(opener_routing_id, nullptr);
 
-  scoped_ptr<RenderFrameProxy> proxy(
+  std::unique_ptr<RenderFrameProxy> proxy(
       new RenderFrameProxy(routing_id, MSG_ROUTING_NONE));
   RenderViewImpl* render_view = nullptr;
   RenderWidget* render_widget = nullptr;
@@ -166,15 +167,6 @@ RenderFrameProxy::RenderFrameProxy(int routing_id, int frame_routing_id)
 }
 
 RenderFrameProxy::~RenderFrameProxy() {
-  // TODO(nasko): Set the render_frame_proxy to null to avoid a double deletion
-  // when detaching the main frame. This can be removed once RenderFrameImpl and
-  // RenderFrameProxy have been completely decoupled. See
-  // https://crbug.com/357747.
-  RenderFrameImpl* render_frame =
-      RenderFrameImpl::FromRoutingID(frame_routing_id_);
-  if (render_frame)
-    render_frame->set_render_frame_proxy(nullptr);
-
   render_widget_->UnregisterRenderFrameProxy(this);
 
   CHECK(!web_frame_);
@@ -224,6 +216,10 @@ void RenderFrameProxy::SetReplicatedState(const FrameReplicationState& state) {
       state.should_enforce_strict_mixed_content_checking);
   web_frame_->setReplicatedPotentiallyTrustworthyUniqueOrigin(
       state.has_potentially_trustworthy_unique_origin);
+
+  web_frame_->resetReplicatedContentSecurityPolicy();
+  for (const auto& header : state.accumulated_csp_headers)
+    OnAddContentSecurityPolicy(header);
 }
 
 // Update the proxy's SecurityContext and FrameOwner with new sandbox flags
@@ -267,6 +263,10 @@ bool RenderFrameProxy::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(FrameMsg_DidUpdateSandboxFlags, OnDidUpdateSandboxFlags)
     IPC_MESSAGE_HANDLER(FrameMsg_DispatchLoad, OnDispatchLoad)
     IPC_MESSAGE_HANDLER(FrameMsg_DidUpdateName, OnDidUpdateName)
+    IPC_MESSAGE_HANDLER(FrameMsg_AddContentSecurityPolicy,
+                        OnAddContentSecurityPolicy)
+    IPC_MESSAGE_HANDLER(FrameMsg_ResetContentSecurityPolicy,
+                        OnResetContentSecurityPolicy)
     IPC_MESSAGE_HANDLER(FrameMsg_EnforceStrictMixedContentChecking,
                         OnEnforceStrictMixedContentChecking)
     IPC_MESSAGE_HANDLER(FrameMsg_DidUpdateOrigin, OnDidUpdateOrigin)
@@ -337,6 +337,17 @@ void RenderFrameProxy::OnDidUpdateName(const std::string& name,
                                 blink::WebString::fromUTF8(unique_name));
 }
 
+void RenderFrameProxy::OnAddContentSecurityPolicy(
+    const ContentSecurityPolicyHeader& header) {
+  web_frame_->addReplicatedContentSecurityPolicyHeader(
+      blink::WebString::fromUTF8(header.header_value), header.type,
+      header.source);
+}
+
+void RenderFrameProxy::OnResetContentSecurityPolicy() {
+  web_frame_->resetReplicatedContentSecurityPolicy();
+}
+
 void RenderFrameProxy::OnEnforceStrictMixedContentChecking(
     bool should_enforce) {
   web_frame_->setReplicatedShouldEnforceStrictMixedContentChecking(
@@ -384,7 +395,7 @@ void RenderFrameProxy::frameDetached(DetachType type) {
   delete this;
 }
 
-void RenderFrameProxy::postMessageEvent(
+void RenderFrameProxy::forwardPostMessage(
     blink::WebLocalFrame* source_frame,
     blink::WebRemoteFrame* target_frame,
     blink::WebSecurityOrigin target_origin,
@@ -416,10 +427,9 @@ void RenderFrameProxy::postMessageEvent(
 }
 
 void RenderFrameProxy::initializeChildFrame(
-    const blink::WebRect& frame_rect,
     float scale_factor) {
   Send(new FrameHostMsg_InitializeChildFrame(
-      routing_id_, frame_rect, scale_factor));
+      routing_id_, scale_factor));
 }
 
 void RenderFrameProxy::navigate(const blink::WebURLRequest& request,

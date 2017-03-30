@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -17,7 +18,6 @@
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_enums.h"
 #include "ui/base/accelerators/accelerator.h"
@@ -115,6 +115,18 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
                           public ui::EventHandler {
  public:
   typedef std::vector<View*> Views;
+
+  enum class FocusBehavior {
+    // Use when the View is never focusable. Default.
+    NEVER,
+
+    // Use when the View is to be focusable both in regular and accessibility
+    // mode.
+    ALWAYS,
+
+    // Use when the View is focusable only during accessibility mode.
+    ACCESSIBLE_ONLY,
+  };
 
   struct ViewHierarchyChangedDetails {
     ViewHierarchyChangedDetails()
@@ -314,7 +326,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   void SetPaintToLayer(bool paint_to_layer);
 
   // Overridden from ui::LayerOwner:
-  scoped_ptr<ui::Layer> RecreateLayer() override;
+  std::unique_ptr<ui::Layer> RecreateLayer() override;
 
   // RTL positioning -----------------------------------------------------------
 
@@ -504,7 +516,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   Background* background() { return background_.get(); }
 
   // The border object is owned by this object and may be NULL.
-  virtual void SetBorder(scoped_ptr<Border> b);
+  virtual void SetBorder(std::unique_ptr<Border> b);
   const Border* border() const { return border_.get(); }
   Border* border() { return border_.get(); }
 
@@ -700,7 +712,8 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
   // Sets a new ViewTargeter for the view, and returns the previous
   // ViewTargeter.
-  scoped_ptr<ViewTargeter> SetEventTargeter(scoped_ptr<ViewTargeter> targeter);
+  std::unique_ptr<ViewTargeter> SetEventTargeter(
+      std::unique_ptr<ViewTargeter> targeter);
 
   // Returns the ViewTargeter installed on |this| if one exists,
   // otherwise returns the ViewTargeter installed on our root view.
@@ -712,7 +725,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Overridden from ui::EventTarget:
   bool CanAcceptEvent(const ui::Event& event) override;
   ui::EventTarget* GetParentTarget() override;
-  scoped_ptr<ui::EventTargetIterator> GetChildIterator() const override;
+  std::unique_ptr<ui::EventTargetIterator> GetChildIterator() const override;
   ui::EventTargeter* GetEventTargeter() override;
   void ConvertEventToTarget(ui::EventTarget* target,
                             ui::LocatedEvent* event) override;
@@ -766,24 +779,15 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // IMPORTANT NOTE: loops in the focus hierarchy are not supported.
   void SetNextFocusableView(View* view);
 
-  // Sets whether this view is capable of taking focus. It will clear focus if
-  // the focused view is set to be non-focusable.
-  // Note that this is false by default so that a view used as a container does
-  // not get the focus.
-  void SetFocusable(bool focusable);
+  // Sets |focus_behavior| and advances focus if necessary.
+  void SetFocusBehavior(FocusBehavior focus_behavior);
 
-  // Returns true if this view is |focusable_|, |enabled_| and drawn.
+  // Returns true if this view is focusable, |enabled_| and drawn.
   bool IsFocusable() const;
 
   // Return whether this view is focusable when the user requires full keyboard
   // access, even though it may not be normally focusable.
   bool IsAccessibilityFocusable() const;
-
-  // Set whether this view can be made focusable if the user requires
-  // full keyboard access, even though it's not normally focusable. It will
-  // clear focus if the focused view is set to be non-focusable.
-  // Note that this is false by default.
-  void SetAccessibilityFocusable(bool accessibility_focusable);
 
   // Convenience method to retrieve the FocusManager associated with the
   // Widget that contains this view.  This can return NULL if this view is not
@@ -1140,9 +1144,8 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
   // Focus ---------------------------------------------------------------------
 
-  // Returns last value passed to SetFocusable(). Use IsFocusable() to determine
-  // if a view can take focus right now.
-  bool focusable() const { return focusable_; }
+  // Returns last set focus behavior.
+  FocusBehavior focus_behavior() const { return focus_behavior_; }
 
   // Override to be notified when focus has changed either to or from this View.
   virtual void OnFocus();
@@ -1191,7 +1194,9 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
   // NativeTheme ---------------------------------------------------------------
 
-  // Invoked when the NativeTheme associated with this View changes.
+  // Invoked when the NativeTheme associated with this View changes, including
+  // when one first becomes available (after the view is added to a widget
+  // hierarchy).
   virtual void OnNativeThemeChanged(const ui::NativeTheme* theme) {}
 
   // Debugging -----------------------------------------------------------------
@@ -1482,7 +1487,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   bool registered_for_visible_bounds_notification_;
 
   // List of descendants wanting notification when their visible bounds change.
-  scoped_ptr<Views> descendants_to_notify_;
+  std::unique_ptr<Views> descendants_to_notify_;
 
   // Transformations -----------------------------------------------------------
 
@@ -1497,7 +1502,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
   // The View's LayoutManager defines the sizing heuristics applied to child
   // Views. The default is absolute positioning according to bounds_.
-  scoped_ptr<LayoutManager> layout_manager_;
+  std::unique_ptr<LayoutManager> layout_manager_;
 
   // Whether this View's layer should be snapped to the pixel boundary.
   bool snap_layer_to_pixel_boundary_;
@@ -1505,10 +1510,10 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Painting ------------------------------------------------------------------
 
   // Background
-  scoped_ptr<Background> background_;
+  std::unique_ptr<Background> background_;
 
   // Border.
-  scoped_ptr<Border> border_;
+  std::unique_ptr<Border> border_;
 
   // Cached output of painting to be reused in future frames until invalidated.
   ui::PaintCache paint_cache_;
@@ -1532,7 +1537,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // The list of accelerators. List elements in the range
   // [0, registered_accelerator_count_) are already registered to FocusManager,
   // and the rest are not yet.
-  scoped_ptr<std::vector<ui::Accelerator> > accelerators_;
+  std::unique_ptr<std::vector<ui::Accelerator>> accelerators_;
   size_t registered_accelerator_count_;
 
   // Focus ---------------------------------------------------------------------
@@ -1543,12 +1548,8 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Next view to be focused when the Shift-Tab key combination is pressed.
   View* previous_focusable_view_;
 
-  // Whether this view can be focused.
-  bool focusable_;
-
-  // Whether this view is focusable if the user requires full keyboard access,
-  // even though it may not be normally focusable.
-  bool accessibility_focusable_;
+  // The focus behavior of the view in regular and accessibility mode.
+  FocusBehavior focus_behavior_;
 
   // Context menus -------------------------------------------------------------
 
@@ -1561,7 +1562,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
   // Input  --------------------------------------------------------------------
 
-  scoped_ptr<ViewTargeter> targeter_;
+  std::unique_ptr<ViewTargeter> targeter_;
 
   // Accessibility -------------------------------------------------------------
 

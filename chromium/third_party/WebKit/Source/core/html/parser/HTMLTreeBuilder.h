@@ -50,11 +50,11 @@ class HTMLDocumentParser;
 class HTMLTreeBuilder final : public GarbageCollectedFinalized<HTMLTreeBuilder> {
     WTF_MAKE_NONCOPYABLE(HTMLTreeBuilder);
 public:
-    static RawPtr<HTMLTreeBuilder> create(HTMLDocumentParser* parser, HTMLDocument* document, ParserContentPolicy parserContentPolicy, bool reportErrors, const HTMLParserOptions& options)
+    static HTMLTreeBuilder* create(HTMLDocumentParser* parser, HTMLDocument* document, ParserContentPolicy parserContentPolicy, const HTMLParserOptions& options)
     {
-        return new HTMLTreeBuilder(parser, document, parserContentPolicy, reportErrors, options);
+        return new HTMLTreeBuilder(parser, document, parserContentPolicy, options);
     }
-    static RawPtr<HTMLTreeBuilder> create(HTMLDocumentParser* parser, DocumentFragment* fragment, Element* contextElement, ParserContentPolicy parserContentPolicy, const HTMLParserOptions& options)
+    static HTMLTreeBuilder* create(HTMLDocumentParser* parser, DocumentFragment* fragment, Element* contextElement, ParserContentPolicy parserContentPolicy, const HTMLParserOptions& options)
     {
         return new HTMLTreeBuilder(parser, fragment, contextElement, parserContentPolicy, options);
     }
@@ -73,7 +73,7 @@ public:
 
     bool hasParserBlockingScript() const { return !!m_scriptToProcess; }
     // Must be called to take the parser-blocking script before calling the parser again.
-    RawPtr<Element> takeScriptToProcess(TextPosition& scriptStartPosition);
+    Element* takeScriptToProcess(TextPosition& scriptStartPosition);
 
     // Done, close any open tags, etc.
     void finished();
@@ -114,7 +114,7 @@ private:
         AfterAfterFramesetMode,
     };
 
-    HTMLTreeBuilder(HTMLDocumentParser*, HTMLDocument*, ParserContentPolicy, bool reportErrors, const HTMLParserOptions&);
+    HTMLTreeBuilder(HTMLDocumentParser*, HTMLDocument*, ParserContentPolicy, const HTMLParserOptions&);
     HTMLTreeBuilder(HTMLDocumentParser*, DocumentFragment*, Element* contextElement, ParserContentPolicy, const HTMLParserOptions&);
 
     void processToken(AtomicHTMLToken*);

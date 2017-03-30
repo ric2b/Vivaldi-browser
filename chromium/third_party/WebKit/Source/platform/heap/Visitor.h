@@ -119,6 +119,8 @@ public:
 template<typename Derived>
 class VisitorHelper {
 public:
+    VisitorHelper(ThreadState* state) : m_state(state) { }
+
     // One-argument templated mark method. This uses the static type of
     // the argument to get the TraceTrait. By default, the mark method
     // of the TraceTrait just calls the virtual two-argument mark method on this
@@ -208,7 +210,7 @@ public:
     template<typename T>
     void registerWeakCell(T** cell)
     {
-        Derived::fromHelper(this)->registerWeakCellWithCallback(reinterpret_cast<void**>(cell), &handleWeakCell<T>);
+        Derived::fromHelper(this)->registerWeakCellWithCallback(reinterpret_cast<void**>(const_cast<typename std::remove_const<T>::type**>(cell)), &handleWeakCell<T>);
     }
 
     template<typename T, void (T::*method)(Visitor*)>
@@ -221,9 +223,14 @@ public:
         Derived::fromHelper(this)->registerWeakMembers(object, object, callback);
     }
 
+    inline ThreadState* state() const { return m_state; }
+    inline ThreadHeap& heap() const { return state()->heap(); }
+
 private:
     template<typename T>
     static void handleWeakCell(Visitor* self, void* object);
+
+    ThreadState* m_state;
 };
 
 // Visitor is used to traverse the Blink object graph. Used for the

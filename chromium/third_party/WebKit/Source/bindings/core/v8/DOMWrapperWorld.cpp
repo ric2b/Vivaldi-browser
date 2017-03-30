@@ -85,7 +85,6 @@ private:
 };
 
 unsigned DOMWrapperWorld::isolatedWorldCount = 0;
-DOMWrapperWorld* DOMWrapperWorld::worldOfInitializingWindow = 0;
 
 PassRefPtr<DOMWrapperWorld> DOMWrapperWorld::create(v8::Isolate* isolate, int worldId, int extensionGroup)
 {
@@ -135,6 +134,44 @@ void DOMWrapperWorld::allWorldsInMainThread(Vector<RefPtr<DOMWrapperWorld>>& wor
     WorldMap& isolatedWorlds = isolatedWorldMap();
     for (WorldMap::iterator it = isolatedWorlds.begin(); it != isolatedWorlds.end(); ++it)
         worlds.append(it->value);
+}
+
+void DOMWrapperWorld::markWrappersInAllWorlds(ScriptWrappable* scriptWrappable, v8::Isolate* isolate)
+{
+    // TODO(hlopko): Currently wrapper in one world will keep wrappers in all
+    // worlds alive (possibly holding on entire documents). This is neither
+    // needed (there is no way to get from one wrapper to another), nor wanted
+    // (big performance and memory overhead).
+
+    // Marking for the main world
+    scriptWrappable->markWrapper(isolate);
+    if (!isMainThread())
+        return;
+    WorldMap& isolatedWorlds = isolatedWorldMap();
+    for (auto& world : isolatedWorlds.values()) {
+        DOMDataStore& dataStore = world->domDataStore();
+        if (dataStore.containsWrapper(scriptWrappable)) {
+            // Marking for the isolated worlds
+            dataStore.markWrapper(scriptWrappable);
+        }
+    }
+}
+
+void DOMWrapperWorld::setWrapperReferencesInAllWorlds(const v8::Persistent<v8::Object>& parent, ScriptWrappable* scriptWrappable, v8::Isolate* isolate)
+{
+    // Marking for the main world
+    if (scriptWrappable->containsWrapper())
+        scriptWrappable->setReference(parent, isolate);
+    if (!isMainThread())
+        return;
+    WorldMap& isolatedWorlds = isolatedWorldMap();
+    for (auto& world : isolatedWorlds.values()) {
+        DOMDataStore& dataStore = world->domDataStore();
+        if (dataStore.containsWrapper(scriptWrappable)) {
+            // Marking for the isolated worlds
+            dataStore.setReference(parent, scriptWrappable, isolate);
+        }
+    }
 }
 
 DOMWrapperWorld::~DOMWrapperWorld()

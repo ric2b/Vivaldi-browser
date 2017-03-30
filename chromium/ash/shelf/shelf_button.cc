@@ -8,11 +8,14 @@
 
 #include "ash/ash_constants.h"
 #include "ash/ash_switches.h"
+#include "ash/material_design/material_design_controller.h"
 #include "ash/shelf/shelf.h"
+#include "ash/shelf/shelf_constants.h"
 #include "ash/shelf/shelf_view.h"
 #include "base/time/time.h"
 #include "grit/ash_resources.h"
 #include "skia/ext/image_operations.h"
+#include "third_party/skia/include/core/SkPaint.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/layer.h"
@@ -37,6 +40,24 @@ const int kIconPad = 5;
 const int kIconPadVertical = 6;
 const int kAttentionThrobDurationMS = 800;
 const int kMaxAnimationSeconds = 10;
+const int kIndicatorOffsetFromBottom = 2;
+const int kIndicatorRadius = 2;
+const SkColor kIndicatorColor = SK_ColorWHITE;
+
+// Canvas scale to ensure that the activity indicator is not pixelated even at
+// the highest possible device scale factors.
+const int kIndicatorCanvasScale = 5;
+
+// Paints an activity indicator on |canvas| whose |size| is specified in DIP.
+void PaintIndicatorOnCanvas(gfx::Canvas* canvas, const gfx::Size& size) {
+  SkPaint paint;
+  paint.setColor(kIndicatorColor);
+  paint.setFlags(SkPaint::kAntiAlias_Flag);
+  canvas->DrawCircle(
+      gfx::Point(size.width() / 2,
+                 size.height() - kIndicatorOffsetFromBottom - kIndicatorRadius),
+      kIndicatorRadius, paint);
+}
 
 // Simple AnimationDelegate that owns a single ThrobAnimation instance to
 // keep all Draw Attention animations in sync.
@@ -228,7 +249,7 @@ ShelfButton::ShelfButton(ShelfView* shelf_view)
       bar_(new BarView(shelf_view->shelf())),
       state_(STATE_NORMAL),
       destroyed_flag_(nullptr) {
-  SetAccessibilityFocusable(true);
+  SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
 
   const gfx::ShadowValue kShadows[] = {
       gfx::ShadowValue(gfx::Vector2d(0, 2), 0, SkColorSetARGB(0x1A, 0, 0, 0)),
@@ -374,7 +395,7 @@ void ShelfButton::Layout() {
 
   // If on the left or top 'invert' the inset so the constant gap is on
   // the interior (towards the center of display) edge of the shelf.
-  if (SHELF_ALIGNMENT_LEFT == shelf->alignment())
+  if (wm::SHELF_ALIGNMENT_LEFT == shelf->alignment())
     x_offset = button_bounds.width() - (kIconSize + icon_pad);
 
   // Center icon with respect to the secondary axis, and ensure
@@ -486,11 +507,19 @@ void ShelfButton::UpdateBar() {
 
   if (bar_id != 0) {
     Shelf* shelf = shelf_view_->shelf();
-    ResourceBundle* rb = &ResourceBundle::GetSharedInstance();
-    gfx::ImageSkia image = *rb->GetImageNamed(bar_id).ToImageSkia();
+    gfx::ImageSkia image;
+    if (ash::MaterialDesignController::IsShelfMaterial()) {
+      gfx::Size size(kShelfButtonSize, kShelfSize);
+      gfx::Canvas canvas(size, kIndicatorCanvasScale, true /* is_opaque */);
+      PaintIndicatorOnCanvas(&canvas, size);
+      image = gfx::ImageSkia(canvas.ExtractImageRep());
+    } else {
+      ResourceBundle* rb = &ResourceBundle::GetSharedInstance();
+      image = *rb->GetImageNamed(bar_id).ToImageSkia();
+    }
     if (!shelf->IsHorizontalAlignment()) {
       image = gfx::ImageSkiaOperations::CreateRotatedImage(
-          image, shelf->alignment() == SHELF_ALIGNMENT_LEFT
+          image, shelf->alignment() == wm::SHELF_ALIGNMENT_LEFT
                      ? SkBitmapOperations::ROTATION_90_CW
                      : SkBitmapOperations::ROTATION_270_CW);
     }
@@ -503,7 +532,6 @@ void ShelfButton::UpdateBar() {
         views::ImageView::CENTER));
     bar_->SchedulePaint();
   }
-
   bar_->SetVisible(bar_id != 0 && state_ != STATE_NORMAL);
 }
 

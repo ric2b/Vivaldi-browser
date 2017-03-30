@@ -5,33 +5,27 @@
 /**
  * @constructor
  * @implements {WebInspector.ContentProvider}
+ * @param {string} contentURL
  * @param {!WebInspector.ResourceType} contentType
- * @param {string} content
- * @param {string=} contentURL
+ * @param {function():!Promise<string>} lazyContent
  */
-WebInspector.StaticContentProvider = function(contentType, content, contentURL)
+WebInspector.StaticContentProvider = function(contentURL, contentType, lazyContent)
 {
-    this._content = content;
+    this._contentURL = contentURL;
     this._contentType = contentType;
-    this._contentURL = contentURL || "";
+    this._lazyContent = lazyContent;
 }
 
 /**
+ * @param {string} contentURL
+ * @param {!WebInspector.ResourceType} contentType
  * @param {string} content
- * @param {string} query
- * @param {boolean} caseSensitive
- * @param {boolean} isRegex
- * @param {function(!Array.<!WebInspector.ContentProvider.SearchMatch>)} callback
+ * @return {!WebInspector.StaticContentProvider}
  */
-WebInspector.StaticContentProvider.searchInContent = function(content, query, caseSensitive, isRegex, callback)
+WebInspector.StaticContentProvider.fromString = function(contentURL, contentType, content)
 {
-    function performSearch()
-    {
-        callback(WebInspector.ContentProvider.performSearchInContent(content, query, caseSensitive, isRegex));
-    }
-
-    // searchInContent should call back later.
-    setTimeout(performSearch.bind(null), 0);
+    var lazyContent = () => Promise.resolve(content);
+    return new WebInspector.StaticContentProvider(contentURL, contentType, lazyContent);
 }
 
 WebInspector.StaticContentProvider.prototype = {
@@ -59,7 +53,7 @@ WebInspector.StaticContentProvider.prototype = {
      */
     requestContent: function()
     {
-        return Promise.resolve(/** @type {?string} */(this._content));
+        return /** @type {!Promise<?string>} */(this._lazyContent());
     },
 
     /**
@@ -71,6 +65,14 @@ WebInspector.StaticContentProvider.prototype = {
      */
     searchInContent: function(query, caseSensitive, isRegex, callback)
     {
-        WebInspector.StaticContentProvider.searchInContent(this._content, query, caseSensitive, isRegex, callback);
+        /**
+         * @param {string} content
+         */
+        function performSearch(content)
+        {
+            callback(WebInspector.ContentProvider.performSearchInContent(content, query, caseSensitive, isRegex));
+        }
+
+        this._lazyContent().then(performSearch);
     }
 }

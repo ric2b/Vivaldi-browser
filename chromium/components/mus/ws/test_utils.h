@@ -18,6 +18,7 @@
 #include "components/mus/ws/platform_display_factory.h"
 #include "components/mus/ws/test_change_tracker.h"
 #include "components/mus/ws/user_display_manager.h"
+#include "components/mus/ws/user_id.h"
 #include "components/mus/ws/window_manager_factory_registry.h"
 #include "components/mus/ws/window_manager_state.h"
 #include "components/mus/ws/window_server_delegate.h"
@@ -32,7 +33,8 @@ namespace test {
 
 class WindowManagerFactoryRegistryTestApi {
  public:
-  WindowManagerFactoryRegistryTestApi(WindowManagerFactoryRegistry* registry);
+  explicit WindowManagerFactoryRegistryTestApi(
+      WindowManagerFactoryRegistry* registry);
   ~WindowManagerFactoryRegistryTestApi();
 
   void AddService(const UserId& user_id, mojom::WindowManagerFactory* factory);
@@ -66,15 +68,19 @@ class UserDisplayManagerTestApi {
 
 class WindowTreeTestApi {
  public:
-  WindowTreeTestApi(WindowTree* tree);
+  explicit WindowTreeTestApi(WindowTree* tree);
   ~WindowTreeTestApi();
 
+  void set_user_id(const UserId& user_id) { tree_->user_id_ = user_id; }
   void set_window_manager_internal(mojom::WindowManager* wm_internal) {
     tree_->window_manager_internal_ = wm_internal;
   }
 
   void ClearAck() { tree_->event_ack_id_ = 0; }
   void EnableCapture() { tree_->event_ack_id_ = 1u; }
+
+  void SetEventObserver(mojom::EventMatcherPtr matcher,
+                        uint32_t event_observer_id);
 
  private:
   WindowTree* tree_;
@@ -106,15 +112,34 @@ class EventDispatcherTestApi {
 
   bool AreAnyPointersDown() const { return ed_->AreAnyPointersDown(); }
   bool is_mouse_button_down() const { return ed_->mouse_button_down_; }
-  bool IsObservingWindow(ServerWindow* window) {
-    return ed_->IsObservingWindow(window);
-  }
+  bool IsWindowPointerTarget(const ServerWindow* window) const;
   int NumberPointerTargetsForWindow(ServerWindow* window);
+  ModalWindowController* modal_window_controller() const {
+    return &ed_->modal_window_controller_;
+  }
 
  private:
   EventDispatcher* ed_;
 
   DISALLOW_COPY_AND_ASSIGN(EventDispatcherTestApi);
+};
+
+// -----------------------------------------------------------------------------
+
+class ModalWindowControllerTestApi {
+ public:
+  explicit ModalWindowControllerTestApi(ModalWindowController* mwc)
+      : mwc_(mwc) {}
+  ~ModalWindowControllerTestApi() {}
+
+  ServerWindow* GetActiveSystemModalWindow() const {
+    return mwc_->GetActiveSystemModalWindow();
+  }
+
+ private:
+  ModalWindowController* mwc_;
+
+  DISALLOW_COPY_AND_ASSIGN(ModalWindowControllerTestApi);
 };
 
 // -----------------------------------------------------------------------------
@@ -149,15 +174,14 @@ class WindowManagerStateTestApi {
 // Factory that always embeds the new WindowTree as the root user id.
 class TestDisplayBinding : public DisplayBinding {
  public:
-  TestDisplayBinding(Display* display, WindowServer* window_server)
-      : display_(display), window_server_(window_server) {}
+  explicit TestDisplayBinding(WindowServer* window_server)
+      : window_server_(window_server) {}
   ~TestDisplayBinding() override {}
 
  private:
   // DisplayBinding:
   WindowTree* CreateWindowTree(ServerWindow* root) override;
 
-  Display* display_;
   WindowServer* window_server_;
 
   DISALLOW_COPY_AND_ASSIGN(TestDisplayBinding);
@@ -272,8 +296,8 @@ class TestWindowTreeClient : public mus::mojom::WindowTreeClient {
       mojom::ViewportMetricsPtr new_metrics) override;
   void OnWindowHierarchyChanged(
       uint32_t window,
-      uint32_t new_parent,
       uint32_t old_parent,
+      uint32_t new_parent,
       mojo::Array<mojom::WindowDataPtr> windows) override;
   void OnWindowReordered(uint32_t window_id,
                          uint32_t relative_window_id,
@@ -289,7 +313,10 @@ class TestWindowTreeClient : public mus::mojom::WindowTreeClient {
                                      mojo::Array<uint8_t> new_data) override;
   void OnWindowInputEvent(uint32_t event_id,
                           uint32_t window,
-                          mojom::EventPtr event) override;
+                          mojom::EventPtr event,
+                          uint32_t event_observer_id) override;
+  void OnEventObserved(mojom::EventPtr event,
+                       uint32_t event_observer_id) override;
   void OnWindowFocused(uint32_t focused_window_id) override;
   void OnWindowPredefinedCursorChanged(uint32_t window_id,
                                        mojom::Cursor cursor_id) override;
@@ -326,7 +353,7 @@ class TestWindowTreeBinding : public WindowTreeBinding {
   WindowTree* tree_;
   TestWindowTreeClient client_;
   bool is_paused_ = false;
-  scoped_ptr<TestWindowManager> window_manager_;
+  std::unique_ptr<TestWindowManager> window_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(TestWindowTreeBinding);
 };
@@ -362,19 +389,19 @@ class TestWindowServerDelegate : public WindowServerDelegate {
 
   // WindowServerDelegate:
   void OnNoMoreDisplays() override;
-  scoped_ptr<WindowTreeBinding> CreateWindowTreeBinding(
+  std::unique_ptr<WindowTreeBinding> CreateWindowTreeBinding(
       BindingType type,
       ws::WindowServer* window_server,
       ws::WindowTree* tree,
       mojom::WindowTreeRequest* tree_request,
       mojom::WindowTreeClientPtr* client) override;
   void CreateDefaultDisplays() override;
+  bool IsTestConfig() const override;
 
  private:
   // If CreateDefaultDisplays() this is the number of Displays that are
   // created. The default is 0, which results in a DCHECK.
   int num_displays_to_create_ = 0;
-  Display* display_ = nullptr;
   WindowServer* window_server_ = nullptr;
   bool got_on_no_more_displays_ = false;
   // All TestWindowTreeBinding objects created via CreateWindowTreeBinding.
@@ -382,6 +409,76 @@ class TestWindowServerDelegate : public WindowServerDelegate {
   std::vector<TestWindowTreeBinding*> bindings_;
 
   DISALLOW_COPY_AND_ASSIGN(TestWindowServerDelegate);
+};
+
+// -----------------------------------------------------------------------------
+
+// Helper class which owns all of the necessary objects to test event targeting
+// of ServerWindow objects.
+class WindowEventTargetingHelper {
+ public:
+  WindowEventTargetingHelper();
+  ~WindowEventTargetingHelper();
+
+  // Creates |window| as an embeded window of the primary tree. This window is a
+  // root window of its own tree, with bounds |window_bounds|. The bounds of the
+  // root window of |display_| are defined by |root_window_bounds|.
+  ServerWindow* CreatePrimaryTree(const gfx::Rect& root_window_bounds,
+                                  const gfx::Rect& window_bounds);
+  // Creates a secondary tree, embedded as a child of |embed_window|. The
+  // resulting |window| is setup for event targeting, with bounds
+  // |window_bounds|.
+  void CreateSecondaryTree(ServerWindow* embed_window,
+                           const gfx::Rect& window_bounds,
+                           TestWindowTreeClient** out_client,
+                           WindowTree** window_tree,
+                           ServerWindow** window);
+  // Sets the task runner for |message_loop_|
+  void SetTaskRunner(scoped_refptr<base::SingleThreadTaskRunner> task_runner);
+
+  int32_t cursor_id() { return cursor_id_; }
+  Display* display() { return display_; }
+  TestWindowTreeBinding* last_binding() {
+    return window_server_delegate_.last_binding();
+  }
+  TestWindowTreeClient* last_window_tree_client() {
+    return window_server_delegate_.last_client();
+  }
+  TestWindowTreeClient* wm_client() { return wm_client_; }
+  WindowServer* window_server() { return window_server_.get(); }
+
+ private:
+  // TestWindowTreeClient that is used for the WM connection. Owned by
+  // |window_server_delegate_|
+  TestWindowTreeClient* wm_client_;
+  int32_t cursor_id_;
+  TestPlatformDisplayFactory platform_display_factory_;
+  TestWindowServerDelegate window_server_delegate_;
+  // Owned by WindowServer
+  TestDisplayBinding* display_binding_;
+  // Owned by WindowServer's DisplayManager.
+  Display* display_;
+  scoped_refptr<SurfacesState> surfaces_state_;
+  std::unique_ptr<WindowServer> window_server_;
+  // Needed to Bind to |wm_client_|
+  base::MessageLoop message_loop_;
+
+  DISALLOW_COPY_AND_ASSIGN(WindowEventTargetingHelper);
+};
+
+// -----------------------------------------------------------------------------
+
+class TestWindowManagerFactory : public mojom::WindowManagerFactory {
+ public:
+  TestWindowManagerFactory();
+  ~TestWindowManagerFactory() override;
+
+  // mojom::WindowManagerFactory:
+  void CreateWindowManager(mus::mojom::DisplayPtr display,
+                           mus::mojom::WindowTreeClientRequest client) override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(TestWindowManagerFactory);
 };
 
 // -----------------------------------------------------------------------------

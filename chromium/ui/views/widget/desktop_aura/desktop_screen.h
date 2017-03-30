@@ -7,7 +7,7 @@
 
 #include "ui/views/views_export.h"
 
-namespace gfx {
+namespace display {
 class Screen;
 }
 
@@ -15,7 +15,7 @@ namespace views {
 
 // Creates a Screen that represents the screen of the environment that hosts
 // a WindowTreeHost. Caller owns the result.
-VIEWS_EXPORT gfx::Screen* CreateDesktopScreen();
+VIEWS_EXPORT display::Screen* CreateDesktopScreen();
 
 }  // namespace views
 

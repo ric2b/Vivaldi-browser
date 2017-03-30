@@ -11,7 +11,7 @@
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/perf_time_logger.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "mojo/edk/test/mojo_test_base.h"
 #include "mojo/edk/test/scoped_ipc_support.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
@@ -161,6 +161,11 @@ class MojoE2EPerftest : public edk::test::MojoTestBase {
   }
 };
 
+void CreateAndRunService(InterfaceRequest<test::EchoService> request,
+                         const base::Closure& cb) {
+  new EchoServiceImpl(std::move(request), cb);
+}
+
 DEFINE_TEST_CLIENT_TEST_WITH_PIPE(PingService, MojoE2EPerftest, mp) {
   MojoHandle service_mp;
   EXPECT_EQ("hello", ReadMessageWithHandles(mp, &service_mp, 1));
@@ -168,7 +173,12 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(PingService, MojoE2EPerftest, mp) {
   InterfaceRequest<test::EchoService> request;
   request.Bind(ScopedMessagePipeHandle(MessagePipeHandle(service_mp)));
   base::RunLoop run_loop;
-  new EchoServiceImpl(std::move(request), run_loop.QuitClosure());
+  edk::test::GetIoTaskRunner()->PostTask(
+      FROM_HERE,
+      base::Bind(&CreateAndRunService, base::Passed(&request),
+                 base::Bind(base::IgnoreResult(&base::TaskRunner::PostTask),
+                            message_loop_.task_runner(), FROM_HERE,
+                            run_loop.QuitClosure())));
   run_loop.Run();
 }
 

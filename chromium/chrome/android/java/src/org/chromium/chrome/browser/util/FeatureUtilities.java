@@ -17,12 +17,14 @@ import android.os.UserManager;
 import android.speech.RecognizerIntent;
 import android.text.TextUtils;
 
-import org.chromium.base.ApplicationStatus;
 import org.chromium.base.CommandLine;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.FieldTrialList;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.chrome.browser.AppLinkHandler;
+import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
@@ -208,7 +210,7 @@ public class FeatureUtilities {
      *         and its related switches.
      */
     public static String getHerbFlavor() {
-        Context context = ApplicationStatus.getApplicationContext();
+        Context context = ContextUtils.getApplicationContext();
         if (isHerbDisallowed(context)) return ChromeSwitches.HERB_FLAVOR_DISABLED;
 
         if (!sIsHerbFlavorCached) {
@@ -233,15 +235,17 @@ public class FeatureUtilities {
     /**
      * Caches flags that must take effect on startup but are set via native code.
      */
-    public static void cacheNativeFlags() {
+    public static void cacheNativeFlags(ChromeApplication application) {
         cacheHerbFlavor();
+        AppLinkHandler.getInstance(application).cacheAppLinkEnabled(
+                application.getApplicationContext());
     }
 
     /**
      * Caches which flavor of Herb the user prefers from native.
      */
     private static void cacheHerbFlavor() {
-        Context context = ApplicationStatus.getApplicationContext();
+        Context context = ContextUtils.getApplicationContext();
         if (isHerbDisallowed(context)) return;
 
         String oldFlavor = getHerbFlavor();
@@ -292,5 +296,4 @@ public class FeatureUtilities {
     private static native void nativeSetDocumentModeEnabled(boolean enabled);
     private static native void nativeSetCustomTabVisible(boolean visible);
     private static native void nativeSetIsInMultiWindowMode(boolean isInMultiWindowMode);
-    public static native void nativeSetSqlMmapDisabledByDefault();
 }

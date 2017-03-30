@@ -53,7 +53,7 @@ class PaintLayerCompositor;
 class CORE_EXPORT InspectorLayerTreeAgent final : public InspectorBaseAgent<InspectorLayerTreeAgent, protocol::Frontend::LayerTree>, public protocol::Backend::LayerTree {
     WTF_MAKE_NONCOPYABLE(InspectorLayerTreeAgent);
 public:
-    static RawPtr<InspectorLayerTreeAgent> create(InspectedFrames* inspectedFrames)
+    static InspectorLayerTreeAgent* create(InspectedFrames* inspectedFrames)
     {
         return new InspectorLayerTreeAgent(inspectedFrames);
     }
@@ -68,7 +68,7 @@ public:
 
     // Called from InspectorInstrumentation
     void layerTreeDidChange();
-    void didPaint(LayoutObject*, const GraphicsLayer*, GraphicsContext&, const LayoutRect&);
+    void didPaint(const GraphicsLayer*, GraphicsContext&, const LayoutRect&);
 
     // Called from the front-end.
     void enable(ErrorString*) override;

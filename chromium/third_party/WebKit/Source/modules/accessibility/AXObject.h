@@ -277,6 +277,17 @@ enum AccessibilityOptionalBool {
     OptionalBoolFalse
 };
 
+enum AriaCurrentState {
+    AriaCurrentStateUndefined = 0,
+    AriaCurrentStateFalse,
+    AriaCurrentStateTrue,
+    AriaCurrentStatePage,
+    AriaCurrentStateStep,
+    AriaCurrentStateLocation,
+    AriaCurrentStateDate,
+    AriaCurrentStateTime
+};
+
 enum InvalidState {
     InvalidStateUndefined = 0,
     InvalidStateFalse,
@@ -648,6 +659,8 @@ public:
     void setLastKnownIsIgnoredValue(bool);
     bool hasInheritedPresentationalRole() const;
     bool isPresentationalChild() const;
+    bool ancestorExposesActiveDescendant() const;
+    bool computeAncestorExposesActiveDescendant() const;
 
     //
     // Accessible name calculation
@@ -732,6 +745,7 @@ public:
     // Properties of interactive elements.
     String actionVerb() const;
     virtual AccessibilityButtonState checkboxOrRadioValue() const;
+    virtual AriaCurrentState ariaCurrentState() const { return AriaCurrentStateUndefined; }
     virtual InvalidState getInvalidState() const { return InvalidStateUndefined; }
     // Only used when invalidState() returns InvalidStateOther.
     virtual String ariaInvalidValue() const { return String(); }
@@ -742,7 +756,7 @@ public:
     virtual String stringValue() const { return String(); }
 
     // ARIA attributes.
-    virtual AXObject* activeDescendant() const { return 0; }
+    virtual AXObject* activeDescendant() const { return nullptr; }
     virtual String ariaAutoComplete() const { return String(); }
     virtual String ariaDescribedByAttribute() const { return String(); }
     virtual void ariaFlowToElements(AXObjectVector&) const { }
@@ -759,7 +773,7 @@ public:
     virtual AccessibilityRole ariaRoleAttribute() const { return UnknownRole; }
     virtual bool ariaRoleHasPresentationalChildren() const { return false; }
     virtual AXObject* ancestorForWhichThisIsAPresentationalChild() const { return 0; }
-    virtual bool shouldFocusActiveDescendant() const { return false; }
+    bool supportsActiveDescendant() const;
     bool supportsARIAAttributes() const;
     virtual bool supportsARIADragging() const { return false; }
     virtual bool supportsARIADropping() const { return false; }
@@ -937,6 +951,7 @@ protected:
     mutable bool m_cachedIsDescendantOfDisabledNode : 1;
     mutable bool m_cachedHasInheritedPresentationalRole : 1;
     mutable bool m_cachedIsPresentationalChild : 1;
+    mutable bool m_cachedAncestorExposesActiveDescendant : 1;
     mutable Member<const AXObject> m_cachedLiveRegionRoot;
 
     Member<AXObjectCacheImpl> m_axObjectCache;

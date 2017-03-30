@@ -33,9 +33,9 @@
 
 #include "core/inspector/InspectorPageAgent.h"
 #include "core/inspector/InspectorRuntimeAgent.h"
+#include "core/inspector/InspectorSession.h"
 #include "core/inspector/InspectorTracingAgent.h"
 #include "platform/heap/Handle.h"
-#include "platform/inspector_protocol/FrontendChannel.h"
 #include "public/platform/WebSize.h"
 #include "public/platform/WebThread.h"
 #include "public/web/WebDevToolsAgent.h"
@@ -49,6 +49,7 @@ namespace blink {
 class GraphicsLayer;
 class InspectedFrames;
 class InspectorOverlay;
+class InspectorResourceContainer;
 class InspectorResourceContentLoader;
 class LocalFrame;
 class Page;
@@ -75,13 +76,11 @@ class WebDevToolsAgentImpl final
     , public InspectorEmulationAgent::Client
     , public InspectorTracingAgent::Client
     , public InspectorPageAgent::Client
-    , public InspectorRuntimeAgent::Client
-    , public protocol::FrontendChannel
+    , public InspectorSession::Client
     , private WebThread::TaskObserver {
 public:
     static WebDevToolsAgentImpl* create(WebLocalFrameImpl*, WebDevToolsAgentClient*);
     ~WebDevToolsAgentImpl() override;
-    void dispose();
     DECLARE_VIRTUAL_TRACE();
 
     void willBeDestroyed();
@@ -104,13 +103,13 @@ public:
     void reattach(const WebString& hostId, int sessionId, const WebString& savedState) override;
     void detach() override;
     void continueProgram() override;
-    void dispatchOnInspectorBackend(int sessionId, const WebString& message) override;
+    void dispatchOnInspectorBackend(int sessionId, int callId, const WebString& method, const WebString& message) override;
     void inspectElementAt(const WebPoint&) override;
     void failedToRequestDevTools() override;
     WebString evaluateInWebInspectorOverlay(const WebString& script) override;
 
 private:
-    WebDevToolsAgentImpl(WebLocalFrameImpl*, WebDevToolsAgentClient*, InspectorOverlay*);
+    WebDevToolsAgentImpl(WebLocalFrameImpl*, WebDevToolsAgentClient*, InspectorOverlay*, bool includeViewAgents);
 
     // InspectorTracingAgent::Client implementation.
     void enableTracing(const WTF::String& categoryFilter) override;
@@ -119,39 +118,37 @@ private:
     // InspectorEmulationAgent::Client implementation.
     void setCPUThrottlingRate(double) override;
 
-    // InspectorRuntimeAgent::Client implementation.
-    void resumeStartup() override;
-
     // InspectorPageAgent::Client implementation.
     void pageLayoutInvalidated(bool resized) override;
     void setPausedInDebuggerMessage(const String&) override;
     void waitForCreateWindow(LocalFrame*) override;
 
-    // protocol::FrontendChannel implementation.
-    void sendProtocolResponse(int sessionId, int callId, PassOwnPtr<protocol::DictionaryValue> message) override;
-    void sendProtocolNotification(PassOwnPtr<protocol::DictionaryValue> message) override;
-    void flush() override;
+    // InspectorSession::Client implementation.
+    void sendProtocolMessage(int sessionId, int callId, const String& response, const String& state) override;
+    void resumeStartup() override;
+    void profilingStarted() override;
+    void profilingStopped() override;
 
     // WebThread::TaskObserver implementation.
     void willProcessTask() override;
     void didProcessTask() override;
 
-    void initializeDeferredAgents();
+    void initializeSession(int sessionId, const String& hostId);
+    void destroySession();
 
     friend class WebDevToolsAgent;
     static void runDebuggerTask(int sessionId, PassOwnPtr<WebDevToolsAgent::MessageDescriptor>);
 
+    bool attached() const { return m_session.get(); }
+
     WebDevToolsAgentClient* m_client;
     Member<WebLocalFrameImpl> m_webLocalFrameImpl;
-    bool m_attached;
-#if DCHECK_IS_ON()
-    bool m_hasBeenDisposed;
-#endif
 
     Member<InstrumentingAgents> m_instrumentingAgents;
     Member<InspectorResourceContentLoader> m_resourceContentLoader;
     Member<InspectorOverlay> m_overlay;
     Member<InspectedFrames> m_inspectedFrames;
+    Member<InspectorResourceContainer> m_resourceContainer;
     OwnPtr<V8InspectorSession> m_v8Session;
 
     Member<InspectorDOMAgent> m_domAgent;
@@ -160,16 +157,8 @@ private:
     Member<InspectorLayerTreeAgent> m_layerTreeAgent;
     Member<InspectorTracingAgent> m_tracingAgent;
 
-    OwnPtr<protocol::Dispatcher> m_inspectorBackendDispatcher;
-    OwnPtr<protocol::Frontend> m_inspectorFrontend;
-    InspectorAgentRegistry m_agents;
-    bool m_deferredAgentsInitialized;
-
-    typedef Vector<std::pair<int, OwnPtr<protocol::Value>>> NotificationQueue;
-    NotificationQueue m_notificationQueue;
-    int m_sessionId;
-    String m_stateCookie;
-    bool m_stateMuted;
+    Member<InspectorSession> m_session;
+    bool m_includeViewAgents;
     int m_layerTreeId;
 };
 

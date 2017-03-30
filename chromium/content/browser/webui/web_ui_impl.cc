@@ -96,7 +96,8 @@ void WebUIImpl::RenderViewReused(RenderViewHost* render_view_host,
     GetContentClient()->browser()->LogWebUIUrl(site_url);
   }
 
-  controller_->RenderViewReused(render_view_host);
+  for (WebUIMessageHandler* handler : handlers_)
+    handler->RenderViewReused();
 }
 
 WebContents* WebUIImpl::GetWebContents() const {
@@ -141,6 +142,16 @@ WebUIController* WebUIImpl::GetController() const {
 
 void WebUIImpl::SetController(WebUIController* controller) {
   controller_.reset(controller);
+}
+
+bool WebUIImpl::CanCallJavascript() {
+  RenderFrameHost* target_frame = TargetFrame();
+  return target_frame &&
+         (ChildProcessSecurityPolicyImpl::GetInstance()->HasWebUIBindings(
+              target_frame->GetProcess()->GetID()) ||
+          // It's possible to load about:blank in a Web UI renderer.
+          // See http://crbug.com/42547
+          target_frame->GetLastCommittedURL().spec() == url::kAboutBlankURL);
 }
 
 void WebUIImpl::CallJavascriptFunction(const std::string& function_name) {
@@ -232,19 +243,12 @@ void WebUIImpl::AddMessageHandler(WebUIMessageHandler* handler) {
 }
 
 void WebUIImpl::ExecuteJavascript(const base::string16& javascript) {
-  RenderFrameHost* target_frame = TargetFrame();
-  if (target_frame) {
-    if (!(ChildProcessSecurityPolicyImpl::GetInstance()->HasWebUIBindings(
-              target_frame->GetProcess()->GetID()) ||
-          // It's possible to load about:blank in a Web UI renderer.
-          // See http://crbug.com/42547
-          target_frame->GetLastCommittedURL().spec() == url::kAboutBlankURL)) {
-      // Silently ignore the request. Would be nice to clean-up WebUI so we
-      // could turn this into a CHECK(). http://crbug.com/516690.
-      return;
-    }
-    target_frame->ExecuteJavaScript(javascript);
-  }
+  // Silently ignore the request. Would be nice to clean-up WebUI so we
+  // could turn this into a CHECK(). http://crbug.com/516690.
+  if (!CanCallJavascript())
+    return;
+
+  TargetFrame()->ExecuteJavaScript(javascript);
 }
 
 RenderFrameHost* WebUIImpl::TargetFrame() {

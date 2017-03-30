@@ -74,13 +74,13 @@ class V4UpdateProtocolManagerFactoryImpl
  public:
   V4UpdateProtocolManagerFactoryImpl() {}
   ~V4UpdateProtocolManagerFactoryImpl() override {}
-  scoped_ptr<V4UpdateProtocolManager> CreateProtocolManager(
+  std::unique_ptr<V4UpdateProtocolManager> CreateProtocolManager(
       net::URLRequestContextGetter* request_context_getter,
       const V4ProtocolConfig& config,
       const base::hash_map<UpdateListIdentifier, std::string>&
           current_list_states,
       V4UpdateCallback callback) override {
-    return scoped_ptr<V4UpdateProtocolManager>(new V4UpdateProtocolManager(
+    return std::unique_ptr<V4UpdateProtocolManager>(new V4UpdateProtocolManager(
         request_context_getter, config, current_list_states, callback));
   }
 
@@ -94,7 +94,7 @@ class V4UpdateProtocolManagerFactoryImpl
 V4UpdateProtocolManagerFactory* V4UpdateProtocolManager::factory_ = NULL;
 
 // static
-scoped_ptr<V4UpdateProtocolManager> V4UpdateProtocolManager::Create(
+std::unique_ptr<V4UpdateProtocolManager> V4UpdateProtocolManager::Create(
     net::URLRequestContextGetter* request_context_getter,
     const V4ProtocolConfig& config,
     const base::hash_map<UpdateListIdentifier, std::string>&
@@ -159,6 +159,8 @@ base::TimeDelta V4UpdateProtocolManager::GetNextUpdateInterval(bool back_off) {
     next = V4ProtocolManagerUtil::GetNextBackOffInterval(
         &update_error_count_, &update_back_off_mult_);
   }
+  DVLOG(1) << "V4UpdateProtocolManager::GetNextUpdateInterval: "
+           << "next_interval: " << next;
   return next;
 }
 
@@ -311,8 +313,11 @@ void V4UpdateProtocolManager::OnURLFetchComplete(
 
 GURL V4UpdateProtocolManager::GetUpdateUrl(
     const std::string& req_base64) const {
-  return V4ProtocolManagerUtil::GetRequestUrl(req_base64, "encodedUpdates",
-                                              config_);
+  GURL url = V4ProtocolManagerUtil::GetRequestUrl(req_base64, "encodedUpdates",
+                                                  config_);
+  DVLOG(1) << "V4UpdateProtocolManager::GetUpdateUrl: "
+           << "url: " << url;
+  return url;
 }
 
 }  // namespace safe_browsing

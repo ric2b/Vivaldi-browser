@@ -47,7 +47,7 @@ void ChromeBookmarkFileReader::LoadFile(base::FilePath& file) {
   ReadFileToString(file, &input);
 
   base::JSONReader reader;
-  scoped_ptr<base::Value> root(reader.ReadToValue(input));
+  std::unique_ptr<base::Value> root(reader.ReadToValue(input));
 
   base::DictionaryValue* dict = NULL;
 
@@ -126,10 +126,7 @@ bool ChromeBookmarkFileReader::DecodeNode(const base::DictionaryValue& value) {
     GURL url = GURL(url_string);
 
     HandleEntry("url", value);
-
-  }
-  else
-  {
+  } else {
     const base::Value* child_values;
     if (!value.Get(kChildrenKey, &child_values))
       return false;

@@ -25,10 +25,6 @@ namespace ui {
 class Event;
 }
 
-namespace views {
-class LabelButton;
-}
-
 // A small summary panel with buttons to control the app that is displayed at
 // the bottom of the app info dialog.
 class AppInfoFooterPanel
@@ -66,10 +62,12 @@ class AppInfoFooterPanel
   void CreateShortcuts();
   bool CanCreateShortcuts() const;
 
+#if defined(USE_ASH)
   // Pins and unpins the app from the shelf. Must only be called if
   // CanSetPinnedToShelf() returns true.
   void SetPinnedToShelf(bool value);
   bool CanSetPinnedToShelf() const;
+#endif
 
   // Uninstall the app. Must only be called if CanUninstallApp() returns true.
   void UninstallApp();
@@ -78,10 +76,10 @@ class AppInfoFooterPanel
   gfx::NativeWindow parent_window_;
 
   // UI elements on the dialog. Elements are NULL if they are not displayed.
-  views::LabelButton* create_shortcuts_button_;
-  views::LabelButton* pin_to_shelf_button_;
-  views::LabelButton* unpin_from_shelf_button_;
-  views::LabelButton* remove_button_;
+  views::View* create_shortcuts_button_;
+  views::View* pin_to_shelf_button_;
+  views::View* unpin_from_shelf_button_;
+  views::View* remove_button_;
 
   std::unique_ptr<extensions::ExtensionUninstallDialog>
       extension_uninstall_dialog_;

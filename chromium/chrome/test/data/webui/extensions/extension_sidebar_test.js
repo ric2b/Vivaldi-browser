@@ -29,13 +29,7 @@ cr.define('extension_sidebar_tests', function() {
     updateAllExtensions: function() {},
 
     /** @override */
-    scrollToExtensions: function() {},
-
-    /** @override */
-    scrollToApps: function() {},
-
-    /** @override */
-    scrollToWebsites: function() {},
+    showType: function() {},
   };
 
   /** @enum {string} */
@@ -61,10 +55,12 @@ cr.define('extension_sidebar_tests', function() {
         sidebar = document.querySelector('extensions-manager').sidebar;
         mockDelegate = new MockDelegate();
         sidebar.setDelegate(mockDelegate);
-        sidebar.setScrollDelegate(mockDelegate);
+        sidebar.setListDelegate(mockDelegate);
       });
 
       test(assert(TestNames.Layout), function() {
+        extension_test_util.testIronIcons(sidebar);
+
         var testVisible = extension_test_util.testVisible.bind(null, sidebar);
         testVisible('#load-unpacked', false);
         testVisible('#pack-extensions', false);
@@ -95,11 +91,11 @@ cr.define('extension_sidebar_tests', function() {
         mockDelegate.testClickingCalls(
             sidebar.$$('#update-now'), 'updateAllExtensions', []);
         mockDelegate.testClickingCalls(
-            sidebar.$$('#sections-extensions'), 'scrollToExtensions', []);
+            sidebar.$$('#sections-extensions'), 'showType',
+            [extensions.ShowingType.EXTENSIONS]);
         mockDelegate.testClickingCalls(
-            sidebar.$$('#sections-apps'), 'scrollToApps', []);
-        mockDelegate.testClickingCalls(
-            sidebar.$$('#sections-websites'), 'scrollToWebsites', []);
+            sidebar.$$('#sections-apps'), 'showType',
+            [extensions.ShowingType.APPS]);
       });
     });
   }

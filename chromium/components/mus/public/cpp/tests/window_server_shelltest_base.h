@@ -6,22 +6,22 @@
 #define COMPONENTS_MUS_PUBLIC_CPP_TESTS_WINDOW_SERVER_SHELLTEST_BASE_H_
 
 #include "base/macros.h"
-#include "mojo/shell/public/cpp/connection.h"
-#include "mojo/shell/public/cpp/shell_test.h"
+#include "services/shell/public/cpp/connection.h"
+#include "services/shell/public/cpp/shell_test.h"
 
 namespace mus {
 
 // Base class for all window manager shelltests to perform some common setup.
-class WindowServerShellTestBase : public mojo::test::ShellTest {
+class WindowServerShellTestBase : public shell::test::ShellTest {
  public:
   WindowServerShellTestBase();
   ~WindowServerShellTestBase() override;
 
-  virtual bool AcceptConnection(mojo::Connection* connection) = 0;
+  virtual bool AcceptConnection(shell::Connection* connection) = 0;
 
  private:
-  // mojo::test::ShellTest:
-  scoped_ptr<mojo::ShellClient> CreateShellClient() override;
+  // shell::test::ShellTest:
+  std::unique_ptr<shell::ShellClient> CreateShellClient() override;
 
   DISALLOW_COPY_AND_ASSIGN(WindowServerShellTestBase);
 };

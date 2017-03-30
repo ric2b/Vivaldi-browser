@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/app/main_dll_loader_win.h"
+
 #include <windows.h>  // NOLINT
 #include <shlwapi.h>  // NOLINT
 #include <stddef.h>
 #include <userenv.h>  // NOLINT
 
-#include "chrome/app/main_dll_loader_win.h"
+#include <memory>
 
 #include "base/base_paths.h"
 #include "base/base_switches.h"
@@ -17,7 +19,6 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
@@ -26,7 +27,7 @@
 #include "base/trace_event/trace_event.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/windows_version.h"
-#include "chrome/app/chrome_crash_reporter_client.h"
+#include "chrome/app/chrome_crash_reporter_client_win.h"
 #include "chrome/app/chrome_watcher_client_win.h"
 #include "chrome/app/chrome_watcher_command_line_win.h"
 #include "chrome/app/file_pre_reader_win.h"
@@ -36,6 +37,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_result_codes.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/metrics_constants_util_win.h"
 #include "chrome/installer/util/google_update_constants.h"
 #include "chrome/installer/util/google_update_settings.h"
 #include "chrome/installer/util/install_util.h"
@@ -164,8 +166,8 @@ int MainDllLoader::Launch(HINSTANCE instance) {
         reinterpret_cast<ChromeWatcherMainFunction>(
             ::GetProcAddress(watcher_dll, kChromeWatcherDLLEntrypoint));
     return watcher_main(
-        chrome::kBrowserExitCodesRegistryPath, parent_process.Take(),
-        main_thread_id, on_initialized_event.Take(),
+        chrome::GetBrowserExitCodesRegistryPath().c_str(),
+        parent_process.Take(), main_thread_id, on_initialized_event.Take(),
         watcher_data_directory.value().c_str(), channel_name.c_str());
   }
 
@@ -211,9 +213,9 @@ class ChromeDllLoader : public MainDllLoader {
   int OnBeforeExit(int return_code, const base::FilePath& dll_path) override;
 
  private:
-  scoped_ptr<ChromeWatcherClient> chrome_watcher_client_;
+  std::unique_ptr<ChromeWatcherClient> chrome_watcher_client_;
 #if BUILDFLAG(ENABLE_KASKO)
-  scoped_ptr<KaskoClient> kasko_client_;
+  std::unique_ptr<KaskoClient> kasko_client_;
 #endif
 };
 
@@ -223,13 +225,7 @@ void ChromeDllLoader::OnBeforeLaunch(const std::string& process_type,
     RecordDidRun(dll_path);
 
     // Launch the watcher process if stats collection consent has been granted.
-#if defined(GOOGLE_CHROME_BUILD)
-    const bool stats_collection_consent =
-        GoogleUpdateSettings::GetCollectStatsConsent();
-#else
-    const bool stats_collection_consent = false;
-#endif
-    if (stats_collection_consent) {
+    if (crash_reporter::GetUploadsEnabled()) {
       base::FilePath exe_path;
       if (PathService::Get(base::FILE_EXE, &exe_path)) {
         chrome_watcher_client_.reset(new ChromeWatcherClient(

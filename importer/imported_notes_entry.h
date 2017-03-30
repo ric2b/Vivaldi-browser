@@ -10,16 +10,19 @@
 #include "url/gurl.h"
 
 struct ImportedNotesEntry {
+ public:
   ImportedNotesEntry();
+  ImportedNotesEntry(const ImportedNotesEntry &);
   ~ImportedNotesEntry();
-	bool operator==(const ImportedNotesEntry& other) const;
+  bool operator==(const ImportedNotesEntry& other) const;
 
-	bool is_folder = false;
-	GURL url;
-	std::vector<base::string16> path;
-	base::string16 title;
-	base::string16 content;
-	base::Time creation_time;
+  bool is_folder = false;
+  GURL url;
+  std::vector<base::string16> path;
+  base::string16 title;
+  base::string16 content;
+  base::Time creation_time;
+
 };
 
 #endif  // VIVALDI_IMPORTER_IMPORTED_NOTES_ENTRY_H_

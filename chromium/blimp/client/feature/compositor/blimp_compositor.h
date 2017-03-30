@@ -10,7 +10,6 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "blimp/client/blimp_client_export.h"
 #include "blimp/client/feature/compositor/blimp_input_manager.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_host_client.h"
@@ -34,7 +33,6 @@ class LayerTreeHost;
 
 namespace blimp {
 
-class BlimpImageSerializationProcessor;
 class BlimpMessage;
 
 namespace client {
@@ -53,6 +51,7 @@ class BlimpCompositorClient {
   virtual cc::TaskGraphRunner* GetTaskGraphRunner() = 0;
   virtual gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() = 0;
   virtual cc::ImageSerializationProcessor* GetImageSerializationProcessor() = 0;
+  virtual void DidCompleteSwapBuffers() = 0;
 
   // Should send web gesture events which could not be handled locally by the
   // compositor to the engine.
@@ -85,7 +84,7 @@ class BlimpCompositorClient {
 // RenderWidget, identified by a custom |render_widget_id| generated on the
 // engine. The lifetime of this compositor is controlled by its corresponding
 // RenderWidget.
-class BLIMP_CLIENT_EXPORT BlimpCompositor
+class BlimpCompositor
     : public cc::LayerTreeHostClient,
       public cc::RemoteProtoChannel,
       public BlimpInputManagerClient {
@@ -150,11 +149,9 @@ class BLIMP_CLIENT_EXPORT BlimpCompositor
   void DidCommitAndDrawFrame() override;
   void DidCompleteSwapBuffers() override;
   void DidCompletePageScaleAnimation() override;
-  void RecordFrameTimingEvents(
-      std::unique_ptr<cc::FrameTimingTracker::CompositeTimingSet>
-          composite_events,
-      std::unique_ptr<cc::FrameTimingTracker::MainFrameTimingSet>
-          main_frame_events) override;
+  void ReportFixedRasterScaleUseCounters(
+      bool has_blurry_content,
+      bool has_potential_performance_regression) override {}
 
   // RemoteProtoChannel implementation.
   void SetProtoReceiver(ProtoReceiver* receiver) override;

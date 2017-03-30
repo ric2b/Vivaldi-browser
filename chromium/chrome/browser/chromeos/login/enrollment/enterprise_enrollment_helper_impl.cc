@@ -92,7 +92,7 @@ void EnterpriseEnrollmentHelperImpl::EnrollUsingAuthCode(
     bool fetch_additional_token) {
   DCHECK(!started_);
   started_ = true;
-  oauth_fetcher_.reset(new policy::PolicyOAuth2TokenFetcher());
+  oauth_fetcher_.reset(policy::PolicyOAuth2TokenFetcher::CreateInstance());
   oauth_fetcher_->StartWithAuthCode(
       auth_code, g_browser_process->system_request_context(),
       base::Bind(&EnterpriseEnrollmentHelperImpl::OnTokenFetched,
@@ -114,11 +114,11 @@ void EnterpriseEnrollmentHelperImpl::ClearAuth(const base::Closure& callback) {
     (new TokenRevoker())->Start(additional_token_);
 
   if (oauth_fetcher_) {
-    if (!oauth_fetcher_->oauth2_access_token().empty())
-      (new TokenRevoker())->Start(oauth_fetcher_->oauth2_access_token());
+    if (!oauth_fetcher_->OAuth2AccessToken().empty())
+      (new TokenRevoker())->Start(oauth_fetcher_->OAuth2AccessToken());
 
-    if (!oauth_fetcher_->oauth2_refresh_token().empty())
-      (new TokenRevoker())->Start(oauth_fetcher_->oauth2_refresh_token());
+    if (!oauth_fetcher_->OAuth2RefreshToken().empty())
+      (new TokenRevoker())->Start(oauth_fetcher_->OAuth2RefreshToken());
 
     oauth_fetcher_.reset();
   } else if (oauth_token_.length()) {
@@ -164,6 +164,8 @@ void EnterpriseEnrollmentHelperImpl::DoEnrollUsingToken(
 }
 
 void EnterpriseEnrollmentHelperImpl::GetDeviceAttributeUpdatePermission() {
+  // TODO(pbond): remove this LOG once http://crbug.com/586961 is fixed.
+  LOG(WARNING) << "Get device attribute update permission";
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
   policy::DeviceCloudPolicyManagerChromeOS* policy_manager =
@@ -210,8 +212,8 @@ void EnterpriseEnrollmentHelperImpl::OnTokenFetched(
   }
 
   additional_token_ = token;
-  std::string refresh_token = oauth_fetcher_->oauth2_refresh_token();
-  oauth_fetcher_.reset(new policy::PolicyOAuth2TokenFetcher());
+  std::string refresh_token = oauth_fetcher_->OAuth2RefreshToken();
+  oauth_fetcher_.reset(policy::PolicyOAuth2TokenFetcher::CreateInstance());
   oauth_fetcher_->StartWithRefreshToken(
       refresh_token, g_browser_process->system_request_context(),
       base::Bind(&EnterpriseEnrollmentHelperImpl::OnTokenFetched,
@@ -221,6 +223,8 @@ void EnterpriseEnrollmentHelperImpl::OnTokenFetched(
 
 void EnterpriseEnrollmentHelperImpl::OnEnrollmentFinished(
     policy::EnrollmentStatus status) {
+  // TODO(pbond): remove this LOG once http://crbug.com/586961 is fixed.
+  LOG(WARNING) << "Enrollment finished";
   ReportEnrollmentStatus(status);
   finished_ = true;
   if (status.status() == policy::EnrollmentStatus::STATUS_SUCCESS) {
@@ -234,6 +238,8 @@ void EnterpriseEnrollmentHelperImpl::OnEnrollmentFinished(
 
 void EnterpriseEnrollmentHelperImpl::OnDeviceAttributeUpdatePermission(
     bool granted) {
+  // TODO(pbond): remove this LOG once http://crbug.com/586961 is fixed.
+  LOG(WARNING) << "Device attribute update permission granted=" << granted;
   status_consumer()->OnDeviceAttributeUpdatePermission(granted);
 }
 

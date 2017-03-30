@@ -6,11 +6,9 @@
 
 #include <utility>
 
+#include "base/logging.h"
 #include "build/build_config.h"
-#include "content/common/mojo/mojo_messages.h"
-#include "content/public/browser/browser_thread.h"
-#include "ipc/ipc_sender.h"
-#include "mojo/edk/embedder/platform_channel_pair.h"
+#include "mojo/edk/embedder/embedder.h"
 
 namespace content {
 namespace {
@@ -28,8 +26,8 @@ class ApplicationSetupImpl : public mojom::ApplicationSetup {
  private:
   // mojom::ApplicationSetup implementation.
   void ExchangeInterfaceProviders(
-      mojo::shell::mojom::InterfaceProviderRequest services,
-      mojo::shell::mojom::InterfaceProviderPtr exposed_services) override {
+      shell::mojom::InterfaceProviderRequest services,
+      shell::mojom::InterfaceProviderPtr exposed_services) override {
     service_registry_->Bind(std::move(services));
     service_registry_->BindRemoteServiceProvider(std::move(exposed_services));
   }
@@ -40,54 +38,22 @@ class ApplicationSetupImpl : public mojom::ApplicationSetup {
 
 }  // namespace
 
-MojoApplicationHost::MojoApplicationHost() : did_activate_(false) {
+MojoApplicationHost::MojoApplicationHost()
+    : token_(mojo::edk::GenerateRandomToken()) {
 #if defined(OS_ANDROID)
   service_registry_android_ =
       ServiceRegistryAndroid::Create(&service_registry_);
 #endif
+
+  mojo::ScopedMessagePipeHandle pipe =
+      mojo::edk::CreateParentMessagePipe(token_);
+  DCHECK(pipe.is_valid());
+  application_setup_.reset(new ApplicationSetupImpl(
+      &service_registry_,
+      mojo::MakeRequest<mojom::ApplicationSetup>(std::move(pipe))));
 }
 
 MojoApplicationHost::~MojoApplicationHost() {
 }
-
-bool MojoApplicationHost::Init() {
-  DCHECK(!client_handle_.is_valid()) << "Already initialized!";
-
-  mojo::edk::PlatformChannelPair channel_pair;
-
-  scoped_refptr<base::TaskRunner> io_task_runner;
-  if (io_task_runner_override_) {
-    io_task_runner = io_task_runner_override_;
-  } else {
-    io_task_runner =
-        BrowserThread::UnsafeGetMessageLoopForThread(BrowserThread::IO)
-          ->task_runner();
-  }
-
-  // Forward this to the client once we know its process handle.
-  client_handle_ = channel_pair.PassClientHandle();
-  mojo::ScopedMessagePipeHandle pipe = channel_init_.Init(
-      channel_pair.PassServerHandle().release().handle, io_task_runner);
-  application_setup_.reset(new ApplicationSetupImpl(
-      &service_registry_,
-      mojo::MakeRequest<mojom::ApplicationSetup>(std::move(pipe))));
-  return true;
-}
-
-void MojoApplicationHost::Activate(IPC::Sender* sender,
-                                   base::ProcessHandle process_handle) {
-  DCHECK(!did_activate_);
-  DCHECK(client_handle_.is_valid());
-
-  base::PlatformFile client_file = client_handle_.release().handle;
-  did_activate_ = sender->Send(new MojoMsg_Activate(
-      IPC::GetPlatformFileForTransit(client_file, true)));
-}
-
-void MojoApplicationHost::OverrideIOTaskRunnerForTest(
-    scoped_refptr<base::TaskRunner> io_task_runner) {
-  io_task_runner_override_ = io_task_runner;
-}
-
 
 }  // namespace content

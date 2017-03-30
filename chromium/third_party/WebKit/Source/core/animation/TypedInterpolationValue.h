@@ -16,13 +16,13 @@ class TypedInterpolationValue {
 public:
     static PassOwnPtr<TypedInterpolationValue> create(const InterpolationType& type, PassOwnPtr<InterpolableValue> interpolableValue, PassRefPtr<NonInterpolableValue> nonInterpolableValue = nullptr)
     {
-        return adoptPtr(new TypedInterpolationValue(type, interpolableValue, nonInterpolableValue));
+        return adoptPtr(new TypedInterpolationValue(type, std::move(interpolableValue), nonInterpolableValue));
     }
 
     PassOwnPtr<TypedInterpolationValue> clone() const
     {
         InterpolationValue copy = m_value.clone();
-        return create(m_type, copy.interpolableValue.release(), copy.nonInterpolableValue.release());
+        return create(m_type, std::move(copy.interpolableValue), copy.nonInterpolableValue.release());
     }
 
     const InterpolationType& type() const { return m_type; }
@@ -35,7 +35,7 @@ public:
 private:
     TypedInterpolationValue(const InterpolationType& type, PassOwnPtr<InterpolableValue> interpolableValue, PassRefPtr<NonInterpolableValue> nonInterpolableValue)
         : m_type(type)
-        , m_value(interpolableValue, nonInterpolableValue)
+        , m_value(std::move(interpolableValue), nonInterpolableValue)
     {
         ASSERT(m_value.interpolableValue);
     }

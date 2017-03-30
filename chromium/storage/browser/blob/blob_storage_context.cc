@@ -19,7 +19,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "storage/browser/blob/blob_data_builder.h"
 #include "storage/browser/blob/blob_data_handle.h"
@@ -439,7 +439,8 @@ bool BlobStorageContext::AppendBlob(
             target_blob_uuid,
             new BlobDataItem(std::move(element), item.data_handle_,
                              item.disk_cache_entry(),
-                             item.disk_cache_stream_index())));
+                             item.disk_cache_stream_index(),
+                             item.disk_cache_side_stream_index())));
       } break;
       case DataElement::TYPE_BYTES_DESCRIPTION:
       case DataElement::TYPE_BLOB:

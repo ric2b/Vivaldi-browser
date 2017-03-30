@@ -10,6 +10,7 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <queue>
 #include <stack>
 #include <utility>
@@ -19,7 +20,7 @@
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -37,14 +38,14 @@
 #include "components/browser_sync/browser/profile_sync_test_util.h"
 #include "components/sync_bookmarks/bookmark_change_processor.h"
 #include "components/sync_bookmarks/bookmark_model_associator.h"
-#include "components/sync_driver/data_type_error_handler.h"
-#include "components/sync_driver/data_type_error_handler_mock.h"
 #include "components/sync_driver/fake_sync_client.h"
 #include "sync/api/sync_error.h"
 #include "sync/api/sync_merge_result.h"
 #include "sync/internal_api/public/change_record.h"
+#include "sync/internal_api/public/data_type_error_handler.h"
 #include "sync/internal_api/public/read_node.h"
 #include "sync/internal_api/public/read_transaction.h"
+#include "sync/internal_api/public/test/data_type_error_handler_mock.h"
 #include "sync/internal_api/public/test/test_user_share.h"
 #include "sync/internal_api/public/write_node.h"
 #include "sync/internal_api/public/write_transaction.h"
@@ -434,10 +435,10 @@ class ProfileSyncServiceBookmarkTest : public testing::Test {
 
   // Create a BookmarkModel. If |delete_bookmarks| is true, the bookmarks file
   // will be deleted before starting up the BookmarkModel.
-  scoped_ptr<BookmarkModel> CreateBookmarkModel(bool delete_bookmarks) {
+  std::unique_ptr<BookmarkModel> CreateBookmarkModel(bool delete_bookmarks) {
     const base::FilePath& data_path = data_dir_.path();
-    auto model = make_scoped_ptr<BookmarkModel>(new BookmarkModel(
-        make_scoped_ptr(new bookmarks::TestBookmarkClient())));
+    auto model = base::WrapUnique(new BookmarkModel(
+        base::WrapUnique(new bookmarks::TestBookmarkClient())));
     managed_bookmark_service_->BookmarkModelCreated(model.get());
     int64_t next_id = 0;
     static_cast<bookmarks::TestBookmarkClient*>(model->client())
@@ -786,11 +787,11 @@ class ProfileSyncServiceBookmarkTest : public testing::Test {
   void delete_change_processor() { change_processor_.reset(); }
 
   void ResetChangeProcessor() {
-    change_processor_ = make_scoped_ptr(new BookmarkChangeProcessor(
+    change_processor_ = base::WrapUnique(new BookmarkChangeProcessor(
         sync_client_.get(), model_associator_.get(), &mock_error_handler_));
   }
 
-  sync_driver::DataTypeErrorHandlerMock* mock_error_handler() {
+  syncer::DataTypeErrorHandlerMock* mock_error_handler() {
     return &mock_error_handler_;
   }
 
@@ -809,13 +810,13 @@ class ProfileSyncServiceBookmarkTest : public testing::Test {
   base::MessageLoop message_loop_;
   browser_sync::ProfileSyncServiceBundle profile_sync_service_bundle_;
 
-  scoped_ptr<sync_driver::FakeSyncClient> sync_client_;
-  scoped_ptr<BookmarkModel> model_;
+  std::unique_ptr<sync_driver::FakeSyncClient> sync_client_;
+  std::unique_ptr<BookmarkModel> model_;
   syncer::TestUserShare test_user_share_;
-  scoped_ptr<BookmarkChangeProcessor> change_processor_;
-  StrictMock<sync_driver::DataTypeErrorHandlerMock> mock_error_handler_;
-  scoped_ptr<BookmarkModelAssociator> model_associator_;
-  scoped_ptr<bookmarks::ManagedBookmarkService> managed_bookmark_service_;
+  std::unique_ptr<BookmarkChangeProcessor> change_processor_;
+  StrictMock<syncer::DataTypeErrorHandlerMock> mock_error_handler_;
+  std::unique_ptr<BookmarkModelAssociator> model_associator_;
+  std::unique_ptr<bookmarks::ManagedBookmarkService> managed_bookmark_service_;
 
   syncer::SyncMergeResult local_merge_result_;
   syncer::SyncMergeResult syncer_merge_result_;
@@ -1057,9 +1058,6 @@ TEST_F(ProfileSyncServiceBookmarkTest,
 
 // Verifies that the bookmark association skips sync nodes with invalid URLs.
 TEST_F(ProfileSyncServiceBookmarkTest, InitialModelAssociateWithInvalidUrl) {
-  EXPECT_CALL(*mock_error_handler(), CreateAndUploadError(_, _, _))
-      .WillOnce(Return(syncer::SyncError()));
-
   LoadBookmarkModel(DELETE_EXISTING_STORAGE, DONT_SAVE_TO_STORAGE);
   // On the local side create a folder and two nodes.
   const BookmarkNode* folder = model()->AddFolder(
@@ -1457,8 +1455,6 @@ TEST_F(ProfileSyncServiceBookmarkTest, RepeatedMiddleInsertion) {
 // Introduce a consistency violation into the model, and see that it
 // puts itself into a lame, error state.
 TEST_F(ProfileSyncServiceBookmarkTest, UnrecoverableErrorSuspendsService) {
-  EXPECT_CALL(*mock_error_handler(), OnSingleDataTypeUnrecoverableError(_));
-
   LoadBookmarkModel(DELETE_EXISTING_STORAGE, DONT_SAVE_TO_STORAGE);
   StartSync();
 
@@ -1479,6 +1475,8 @@ TEST_F(ProfileSyncServiceBookmarkTest, UnrecoverableErrorSuspendsService) {
   // The models don't match at this point, but the ProfileSyncService
   // doesn't know it yet.
   ExpectSyncerNodeKnown(node);
+
+  mock_error_handler()->ExpectError(syncer::SyncError::DATATYPE_ERROR);
 
   // Add a child to the inconsistent node.  This should cause detection of the
   // problem and the syncer should stop processing changes.

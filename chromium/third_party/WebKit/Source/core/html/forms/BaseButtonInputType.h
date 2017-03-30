@@ -31,18 +31,25 @@
 #ifndef BaseButtonInputType_h
 #define BaseButtonInputType_h
 
-#include "core/html/forms/BaseClickableWithKeyInputType.h"
+#include "core/html/forms/InputType.h"
+#include "core/html/forms/KeyboardClickableInputTypeView.h"
 
 namespace blink {
 
-// Base of button, file, image, reset, and submit types.
-class BaseButtonInputType : public BaseClickableWithKeyInputType {
+// Base of button, image, reset, and submit types.
+class BaseButtonInputType : public InputType, public KeyboardClickableInputTypeView {
+    USING_GARBAGE_COLLECTED_MIXIN(BaseButtonInputType);
+public:
+    DECLARE_VIRTUAL_TRACE();
+    using InputType::element;
+
 protected:
-    BaseButtonInputType(HTMLInputElement& element) : BaseClickableWithKeyInputType(element) { }
+    explicit BaseButtonInputType(HTMLInputElement&);
     void valueAttributeChanged() override;
     void createShadowSubtree() override;
 
 private:
+    InputTypeView* createView() override;
     bool shouldSaveAndRestoreFormControlState() const override;
     void appendToFormData(FormData&) const override;
     LayoutObject* createLayoutObject(const ComputedStyle&) const override;

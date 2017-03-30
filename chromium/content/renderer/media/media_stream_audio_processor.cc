@@ -17,9 +17,9 @@
 #include "content/public/common/content_switches.h"
 #include "content/renderer/media/media_stream_audio_processor_options.h"
 #include "content/renderer/media/webrtc_audio_device_impl.h"
-#include "media/audio/audio_parameters.h"
 #include "media/base/audio_converter.h"
 #include "media/base/audio_fifo.h"
+#include "media/base/audio_parameters.h"
 #include "media/base/channel_layout.h"
 #include "third_party/WebKit/public/platform/WebMediaConstraints.h"
 #include "third_party/webrtc/api/mediaconstraintsinterface.h"
@@ -302,6 +302,9 @@ MediaStreamAudioProcessor::MediaStreamAudioProcessor(
 }
 
 MediaStreamAudioProcessor::~MediaStreamAudioProcessor() {
+  // TODO(miu): This class is ref-counted, shared among threads, and then
+  // requires itself to be destroyed on the main thread only?!?!? Fix this, and
+  // then remove the hack in WebRtcAudioSink::Adapter.
   DCHECK(main_thread_checker_.CalledOnValidThread());
   Stop();
 }

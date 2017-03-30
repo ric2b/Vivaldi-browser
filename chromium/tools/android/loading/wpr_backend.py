@@ -9,6 +9,7 @@ import collections
 import os
 import re
 import sys
+from urlparse import urlparse
 
 
 _SRC_DIR = os.path.abspath(os.path.join(
@@ -22,6 +23,15 @@ import httparchive
 
 # Regex used to parse httparchive.py stdout's when listing all urls.
 _PARSE_WPR_REQUEST_REGEX = re.compile(r'^\S+\s+(?P<url>\S+)')
+
+# Regex used to extract WPR domain from WPR log.
+_PARSE_WPR_DOMAIN_REGEX = re.compile(r'^\(WARNING\)\s.*\sHTTP server started on'
+                                     r' (?P<netloc>\S+)\s*$')
+
+# Regex used to extract URLs requests from WPR log.
+_PARSE_WPR_URL_REGEX = re.compile(
+    r'^\((?P<level>\S+)\)\s.*\shttpproxy\..*\s(?P<method>[A-Z]+)\s+'
+    r'(?P<url>https?://[a-zA-Z0-9\-_:.]+/?\S*)\s.*$')
 
 
 class WprUrlEntry(object):
@@ -81,6 +91,28 @@ class WprUrlEntry(object):
     self._wpr_response.headers = \
         [x for x in self._wpr_response.headers if x[0].lower() != name]
 
+  def RemoveResponseHeaderDirectives(self, name, directives_blacklist):
+    """Removed a set of directives from response headers.
+
+    Also removes the cache header in case no more directives are left.
+    It is useful, for example, to remove 'no-cache' from 'pragma: no-cache'.
+
+    Args:
+      name: The name of the response header field to modify.
+      directives_blacklist: Set of lowered directives to remove from list.
+    """
+    response_headers = self.GetResponseHeadersDict()
+    if name not in response_headers:
+      return
+    new_value = []
+    for header_name in response_headers[name].split(','):
+      if header_name.strip().lower() not in directives_blacklist:
+        new_value.append(header_name)
+    if new_value:
+      self.SetResponseHeader(name, ','.join(new_value))
+    else:
+      self.DeleteResponseHeader(name)
+
   @classmethod
   def _ExtractUrl(cls, request_string):
     match = _PARSE_WPR_REQUEST_REGEX.match(request_string)
@@ -112,6 +144,51 @@ class WprArchiveBackend(object):
   def Persist(self):
     """Persists the archive to disk. """
     self._http_archive.Persist(self._wpr_archive_path)
+
+
+# WPR request seen by the WPR's HTTP proxy.
+#   is_served: Boolean whether WPR has found a matching resource in the archive.
+#   method: HTTP method of the request ['GET', 'POST' and so on...].
+#   url: The requested URL.
+#   is_wpr_host: Whether the requested url have WPR has an host such as:
+#     http://127.0.0.1:<WPR's HTTP listening port>/web-page-replay-command-exit
+WprRequest = collections.namedtuple('WprRequest',
+    ['is_served', 'method', 'url', 'is_wpr_host'])
+
+
+def ExtractRequestsFromLog(log_path):
+  """Extract list of requested handled by the WPR's HTTP proxy from a WPR log.
+
+  Args:
+    log_path: The path of the WPR log to parse.
+
+  Returns:
+    List of WprRequest.
+  """
+  requests = []
+  wpr_http_netloc = None
+  with open(log_path) as log_file:
+    for line in log_file.readlines():
+      # Extract WPR's HTTP proxy's listening network location.
+      match = _PARSE_WPR_DOMAIN_REGEX.match(line)
+      if match:
+        wpr_http_netloc = match.group('netloc')
+        assert wpr_http_netloc.startswith('127.0.0.1:')
+        continue
+      # Extract the WPR requested URLs.
+      match = _PARSE_WPR_URL_REGEX.match(line)
+      if match:
+        parsed_url = urlparse(match.group('url'))
+        # Ignore strange URL requests such as http://ousvtzkizg/
+        # TODO(gabadie): Find and terminate the location where they are queried.
+        if '.' not in parsed_url.netloc and ':' not in parsed_url.netloc:
+          continue
+        assert wpr_http_netloc
+        request = WprRequest(is_served=(match.group('level') == 'DEBUG'),
+            method=match.group('method'), url=match.group('url'),
+            is_wpr_host=parsed_url.netloc == wpr_http_netloc)
+        requests.append(request)
+  return requests
 
 
 if __name__ == '__main__':

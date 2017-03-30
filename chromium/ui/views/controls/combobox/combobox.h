@@ -53,15 +53,13 @@ class VIEWS_EXPORT Combobox : public PrefixDelegate, public ButtonListener {
   static const char kViewClassName[];
 
   // |model| is not owned by the combobox.
-  explicit Combobox(ui::ComboboxModel* model);
+  explicit Combobox(ui::ComboboxModel* model, Style style = STYLE_NORMAL);
   ~Combobox() override;
 
   static const gfx::FontList& GetFontList();
 
   // Sets the listener which will be called when a selection has been made.
   void set_listener(ComboboxListener* listener) { listener_ = listener; }
-
-  void SetStyle(Style style);
 
   // Informs the combobox that its model changed.
   void ModelChanged();
@@ -85,10 +83,6 @@ class VIEWS_EXPORT Combobox : public PrefixDelegate, public ButtonListener {
   void SetInvalid(bool invalid);
   bool invalid() const { return invalid_; }
 
-  // Returns the width of the arrow button component of the combobox: the arrow
-  // button itself, and the padding on either side of it.
-  int GetArrowButtonWidth() const;
-
   // Overridden from View:
   gfx::Size GetPreferredSize() const override;
   const char* GetClassName() const override;
@@ -100,6 +94,7 @@ class VIEWS_EXPORT Combobox : public PrefixDelegate, public ButtonListener {
   void OnBlur() override;
   void GetAccessibleState(ui::AXViewState* state) override;
   void Layout() override;
+  void OnEnabledChanged() override;
 
   // Overridden from PrefixDelegate:
   int GetRowCount() override;
@@ -148,11 +143,14 @@ class VIEWS_EXPORT Combobox : public PrefixDelegate, public ButtonListener {
 
   PrefixSelector* GetPrefixSelector();
 
+  // Returns the width of the combobox's arrow container.
+  int GetArrowContainerWidth() const;
+
   // Our model. Not owned.
   ui::ComboboxModel* model_;
 
   // The visual style of this combobox.
-  Style style_;
+  const Style style_;
 
   // Our listener. Not owned. Notified when the selected index change.
   ComboboxListener* listener_;
@@ -167,10 +165,10 @@ class VIEWS_EXPORT Combobox : public PrefixDelegate, public ButtonListener {
   base::string16 accessible_name_;
 
   // A helper used to select entries by keyboard input.
-  scoped_ptr<PrefixSelector> selector_;
+  std::unique_ptr<PrefixSelector> selector_;
 
   // Adapts a ComboboxModel for use by a views MenuRunner.
-  scoped_ptr<ui::MenuModel> menu_model_adapter_;
+  std::unique_ptr<ui::MenuModel> menu_model_adapter_;
 
   // Like MenuButton, we use a time object in order to keep track of when the
   // combobox was closed. The time is used for simulating menu behavior; that
@@ -186,7 +184,7 @@ class VIEWS_EXPORT Combobox : public PrefixDelegate, public ButtonListener {
   // The painters or images that are used when |style_| is STYLE_BUTTONS. The
   // first index means the state of unfocused or focused.
   // The images are owned by ResourceBundle.
-  scoped_ptr<Painter> body_button_painters_[2][Button::STATE_COUNT];
+  std::unique_ptr<Painter> body_button_painters_[2][Button::STATE_COUNT];
   std::vector<const gfx::ImageSkia*>
       menu_button_images_[2][Button::STATE_COUNT];
 
@@ -201,7 +199,10 @@ class VIEWS_EXPORT Combobox : public PrefixDelegate, public ButtonListener {
 
   // Set while the dropdown is showing. Ensures the menu is closed if |this| is
   // destroyed.
-  scoped_ptr<views::MenuRunner> menu_runner_;
+  std::unique_ptr<views::MenuRunner> menu_runner_;
+
+  // The image to be drawn for this combobox's arrow.
+  gfx::ImageSkia arrow_image_;
 
   // Used for making calbacks.
   base::WeakPtrFactory<Combobox> weak_ptr_factory_;

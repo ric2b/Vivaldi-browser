@@ -42,6 +42,7 @@
 #include "core/inspector/IdentifiersFactory.h"
 #include "core/inspector/InspectedFrames.h"
 #include "core/inspector/InspectorTaskRunner.h"
+#include "core/timing/MemoryInfo.h"
 #include "core/workers/MainThreadWorkletGlobalScope.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/v8_inspector/public/V8Debugger.h"
@@ -93,7 +94,14 @@ void MainThreadDebugger::setClientMessageLoop(PassOwnPtr<ClientMessageLoop> clie
 {
     ASSERT(!m_clientMessageLoop);
     ASSERT(clientMessageLoop);
-    m_clientMessageLoop = clientMessageLoop;
+    m_clientMessageLoop = std::move(clientMessageLoop);
+}
+
+void MainThreadDebugger::didClearContextsForFrame(LocalFrame* frame)
+{
+    DCHECK(isMainThread());
+    if (frame->localFrameRoot() == frame)
+        debugger()->resetContextGroup(contextGroupId(frame));
 }
 
 void MainThreadDebugger::contextCreated(ScriptState* scriptState, LocalFrame* frame, SecurityOrigin* origin)
@@ -101,9 +109,7 @@ void MainThreadDebugger::contextCreated(ScriptState* scriptState, LocalFrame* fr
     ASSERT(isMainThread());
     v8::HandleScope handles(scriptState->isolate());
     DOMWrapperWorld& world = scriptState->world();
-    if (frame->localFrameRoot() == frame && world.isMainWorld())
-        debugger()->resetContextGroup(contextGroupId(frame));
-    debugger()->contextCreated(V8ContextInfo(scriptState->context(), contextGroupId(frame), world.isMainWorld(), origin ? origin->toRawString() : "", world.isIsolatedWorld() ? world.isolatedWorldHumanReadableName() : "", IdentifiersFactory::frameId(frame)));
+    debugger()->contextCreated(V8ContextInfo(scriptState->context(), contextGroupId(frame), world.isMainWorld(), origin ? origin->toRawString() : "", world.isIsolatedWorld() ? world.isolatedWorldHumanReadableName() : "", IdentifiersFactory::frameId(frame), scriptState->getExecutionContext()->isDocument()));
 }
 
 void MainThreadDebugger::contextWillBeDestroyed(ScriptState* scriptState)
@@ -121,16 +127,16 @@ int MainThreadDebugger::contextGroupId(LocalFrame* frame)
 MainThreadDebugger* MainThreadDebugger::instance()
 {
     ASSERT(isMainThread());
-    v8::Isolate* isolate = V8PerIsolateData::mainThreadIsolate();
-    V8PerIsolateData* data = V8PerIsolateData::from(isolate);
+    V8PerIsolateData* data = V8PerIsolateData::from(V8PerIsolateData::mainThreadIsolate());
+    ASSERT(data->threadDebugger() && !data->threadDebugger()->isWorker());
     return static_cast<MainThreadDebugger*>(data->threadDebugger());
 }
 
-void MainThreadDebugger::interruptMainThreadAndRun(PassOwnPtr<InspectorTaskRunner::Task> task)
+void MainThreadDebugger::interruptMainThreadAndRun(std::unique_ptr<InspectorTaskRunner::Task> task)
 {
     MutexLocker locker(creationMutex());
     if (s_instance) {
-        s_instance->m_taskRunner->appendTask(task);
+        s_instance->m_taskRunner->appendTask(std::move(task));
         s_instance->m_taskRunner->interruptAndRunAllTasksDontWait(s_instance->m_isolate);
     }
 }
@@ -202,6 +208,35 @@ int MainThreadDebugger::ensureDefaultContextInGroup(int contextGroupId)
         return 0;
     v8::HandleScope scopes(scriptState->isolate());
     return V8Debugger::contextId(scriptState->context());
+}
+
+void MainThreadDebugger::reportMessageToConsole(v8::Local<v8::Context> context, ConsoleMessage* consoleMessage)
+{
+    ExecutionContext* executionContext = toExecutionContext(context);
+    ASSERT(executionContext);
+    if (executionContext->isWorkletGlobalScope()) {
+        executionContext->addConsoleMessage(consoleMessage);
+        return;
+    }
+
+    DOMWindow* window = toDOMWindow(context);
+    if (!window)
+        return;
+    LocalDOMWindow* localDomWindow = toLocalDOMWindow(window);
+    if (!localDomWindow)
+        return;
+    LocalFrame* frame = localDomWindow->frame();
+    if (!frame)
+        return;
+    frame->console().addMessage(consoleMessage);
+}
+
+v8::MaybeLocal<v8::Value> MainThreadDebugger::memoryInfo(v8::Isolate* isolate, v8::Local<v8::Context> context)
+{
+    ExecutionContext* executionContext = toExecutionContext(context);
+    ASSERT_UNUSED(executionContext, executionContext);
+    ASSERT(executionContext->isDocument());
+    return toV8(MemoryInfo::create(), context->Global(), isolate);
 }
 
 } // namespace blink

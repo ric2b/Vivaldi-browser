@@ -140,6 +140,11 @@ Background = function() {
 
   if (!chrome.accessibilityPrivate.setKeyboardListener)
     chrome.accessibilityPrivate.setKeyboardListener = function() {};
+
+  if (cvox.ChromeVox.isChromeOS) {
+    chrome.accessibilityPrivate.onAccessibilityGesture.addListener(
+        this.onAccessibilityGesture_);
+  }
 };
 
 /**
@@ -149,6 +154,36 @@ Background.ISSUE_URL = 'https://code.google.com/p/chromium/issues/entry?' +
     'labels=Type-Bug,Pri-2,cvox2,OS-Chrome&' +
     'components=UI>accessibility&' +
     'description=';
+
+/**
+ * Map from gesture names (AXGesture defined in ui/accessibility/ax_enums.idl)
+ *     to commands when in Classic mode.
+ * @type {Object<string, string>}
+ * @const
+ */
+Background.GESTURE_CLASSIC_COMMAND_MAP = {
+  'swipeUp1': 'backward',
+  'swipeDown1': 'forward',
+  'swipeLeft1': 'left',
+  'swipeRight1': 'right',
+  'swipeUp2': 'jumpToTop',
+  'swipeDown2': 'readFromhere',
+};
+
+/**
+ * Map from gesture names (AXGesture defined in ui/accessibility/ax_enums.idl)
+ *     to commands when in Classic mode.
+ * @type {Object<string, string>}
+ * @const
+ */
+Background.GESTURE_NEXT_COMMAND_MAP = {
+  'swipeUp1': 'previousLine',
+  'swipeDown1': 'nextLine',
+  'swipeLeft1': 'previousObject',
+  'swipeRight1': 'nextObject',
+  'swipeUp2': 'jumpToTop',
+  'swipeDown2': 'readFromHere',
+};
 
 Background.prototype = {
   __proto__: ChromeVoxState.prototype,
@@ -249,7 +284,20 @@ Background.prototype = {
    *    reliable.
    * @override
    */
-  refreshMode: function(url) {
+  refreshMode: function(node) {
+    // Mode changes are based upon the top level web root.
+    var root = node.root;
+    while (root &&
+        root.parent &&
+        root.parent.root &&
+        root.parent.root.role != RoleType.desktop) {
+      root = root.parent.root;
+    }
+
+    var url = '';
+    if (root && root.role == RoleType.rootWebArea)
+      url = root.docUrl;
+
     var mode = this.mode_;
     if (mode != ChromeVoxMode.FORCE_NEXT) {
       if (this.isWhitelistedForNext_(url)) {
@@ -635,11 +683,29 @@ Background.prototype = {
                        cvox.QueueMode.FLUSH);
         return false;
       case 'speakTimeAndDate':
-        var output = new Output();
-        var dateTime = new Date();
-        output.withString(
-            dateTime.toLocaleTimeString() +
-                ', ' + dateTime.toLocaleDateString()).go();
+        chrome.automation.getDesktop(function(d) {
+          // First, try speaking the on-screen time.
+          var allTime = d.findAll({role: RoleType.time});
+          allTime.filter(function(t) {
+            return t.root.role == RoleType.desktop;
+          });
+
+          var timeString = '';
+          allTime.forEach(function(t) {
+            if (t.name)
+              timeString = t.name;
+          });
+          if (timeString) {
+            cvox.ChromeVox.tts.speak(timeString, cvox.QueueMode.FLUSH);
+          } else {
+            // Fallback to the old way of speaking time.
+            var output = new Output();
+            var dateTime = new Date();
+            output.withString(
+                dateTime.toLocaleTimeString() +
+                    ', ' + dateTime.toLocaleDateString()).go();
+          }
+        });
         return false;
       case 'readCurrentTitle':
         var target = this.currentRange_.start.node;
@@ -679,7 +745,12 @@ Background.prototype = {
 
     if (pred) {
       var node = AutomationUtil.findNextNode(
-          current.getBound(dir).node, dir, pred);
+          current.getBound(dir).node, dir, pred, {skipInitialAncestry: true});
+
+      if (node) {
+        node = AutomationUtil.findNodePre(
+            node, dir, AutomationPredicate.element) || node;
+      }
 
       if (node) {
         current = cursors.Range.fromNode(node);
@@ -991,6 +1062,47 @@ Background.prototype = {
   saveExcursion: function() {
     this.savedRange_ =
         new cursors.Range(this.currentRange_.start, this.currentRange_.end);
+  },
+
+  /**
+   * Handles accessibility gestures from the touch screen.
+   * @param {string} gesture The gesture to handle, based on the AXGesture enum
+   *     defined in ui/accessibility/ax_enums.idl
+   * @private
+   */
+  onAccessibilityGesture_: function(gesture) {
+    // If we're in classic mode, some gestures need to be handled by the
+    // content script. Other gestures are universal and will be handled in
+    // this function.
+    if (this.mode_ == ChromeVoxMode.CLASSIC) {
+      if (this.handleClassicGesture_(gesture))
+        return;
+    }
+
+    var command = Background.GESTURE_NEXT_COMMAND_MAP[gesture];
+    if (command)
+      this.onGotCommand(command);
+  },
+
+  /**
+   * Handles accessibility gestures from the touch screen when in CLASSIC
+   * mode, by forwarding a command to the content script.
+   * @param {string} gesture The gesture to handle, based on the AXGesture enum
+   *     defined in ui/accessibility/ax_enums.idl
+   * @return {boolean} True if this gesture was handled.
+   * @private
+   */
+  handleClassicGesture_: function(gesture) {
+    var command = Background.GESTURE_CLASSIC_COMMAND_MAP[gesture];
+    if (!command)
+      return false;
+
+    var msg = {
+      'message': 'USER_COMMAND',
+      'command': command
+    };
+    cvox.ExtensionBridge.send(msg);
+    return true;
   },
 };
 

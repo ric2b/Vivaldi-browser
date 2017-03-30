@@ -81,7 +81,7 @@ void ShellBrowserContext::InitWhileIOAllowed() {
   CHECK(PathService::Get(base::DIR_LOCAL_APP_DATA, &path_));
   path_ = path_.Append(std::wstring(L"content_shell"));
 #elif defined(OS_LINUX)
-  scoped_ptr<base::Environment> env(base::Environment::Create());
+  std::unique_ptr<base::Environment> env(base::Environment::Create());
   base::FilePath config_dir(
       base::nix::GetXDGDirectory(env.get(),
                                  base::nix::kXdgConfigHomeEnvVar,
@@ -102,9 +102,9 @@ void ShellBrowserContext::InitWhileIOAllowed() {
   BrowserContext::Initialize(this, path_);
 }
 
-scoped_ptr<ZoomLevelDelegate> ShellBrowserContext::CreateZoomLevelDelegate(
+std::unique_ptr<ZoomLevelDelegate> ShellBrowserContext::CreateZoomLevelDelegate(
     const base::FilePath&) {
-  return scoped_ptr<ZoomLevelDelegate>();
+  return std::unique_ptr<ZoomLevelDelegate>();
 }
 
 base::FilePath ShellBrowserContext::GetPath() const {
@@ -123,10 +123,6 @@ DownloadManagerDelegate* ShellBrowserContext::GetDownloadManagerDelegate()  {
   }
 
   return download_manager_delegate_.get();
-}
-
-net::URLRequestContextGetter* ShellBrowserContext::GetRequestContext()  {
-  return GetDefaultStoragePartition(this)->GetURLRequestContext();
 }
 
 ShellURLRequestContextGetter*
@@ -151,30 +147,25 @@ net::URLRequestContextGetter* ShellBrowserContext::CreateRequestContext(
 }
 
 net::URLRequestContextGetter*
-    ShellBrowserContext::GetMediaRequestContext()  {
-  return GetRequestContext();
-}
-
-net::URLRequestContextGetter*
-    ShellBrowserContext::GetMediaRequestContextForRenderProcess(
-        int renderer_child_id)  {
-  return GetRequestContext();
-}
-
-net::URLRequestContextGetter*
-    ShellBrowserContext::GetMediaRequestContextForStoragePartition(
-        const base::FilePath& partition_path,
-        bool in_memory) {
-  return GetRequestContext();
-}
-
-net::URLRequestContextGetter*
 ShellBrowserContext::CreateRequestContextForStoragePartition(
     const base::FilePath& partition_path,
     bool in_memory,
     ProtocolHandlerMap* protocol_handlers,
     URLRequestInterceptorScopedVector request_interceptors) {
-  return NULL;
+  return nullptr;
+}
+
+net::URLRequestContextGetter*
+    ShellBrowserContext::CreateMediaRequestContext()  {
+  DCHECK(url_request_getter_.get());
+  return url_request_getter_.get();
+}
+
+net::URLRequestContextGetter*
+    ShellBrowserContext::CreateMediaRequestContextForStoragePartition(
+        const base::FilePath& partition_path,
+        bool in_memory) {
+  return nullptr;
 }
 
 ResourceContext* ShellBrowserContext::GetResourceContext()  {

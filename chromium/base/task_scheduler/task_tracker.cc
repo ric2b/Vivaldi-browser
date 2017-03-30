@@ -7,6 +7,10 @@
 #include "base/callback.h"
 #include "base/debug/task_annotator.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/threading/thread_restrictions.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "base/trace_event/trace_event.h"
 
 namespace base {
 namespace internal {
@@ -14,6 +18,10 @@ namespace internal {
 namespace {
 
 const char kQueueFunctionName[] = "base::PostTask";
+
+// This name conveys that a Task is run by the task scheduler without revealing
+// its implementation details.
+const char kRunFunctionName[] = "TaskSchedulerRunTask";
 
 // Upper bound for the
 // TaskScheduler.BlockShutdownTasksPostedDuringShutdown histogram.
@@ -78,8 +86,32 @@ void TaskTracker::RunTask(const Task* task) {
   if (!BeforeRunTask(shutdown_behavior))
     return;
 
-  debug::TaskAnnotator task_annotator;
-  task_annotator.RunTask(kQueueFunctionName, *task);
+  // All tasks run through here and the scheduler itself doesn't use singletons.
+  // Therefore, it isn't necessary to reset the singleton allowed bit after
+  // running the task.
+  ThreadRestrictions::SetSingletonAllowed(
+      task->traits.shutdown_behavior() !=
+      TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN);
+
+  {
+    // Set up TaskRunnerHandle as expected for the scope of the task.
+    std::unique_ptr<SequencedTaskRunnerHandle> sequenced_task_runner_handle;
+    std::unique_ptr<ThreadTaskRunnerHandle> single_thread_task_runner_handle;
+    DCHECK(!task->sequenced_task_runner_ref ||
+           !task->single_thread_task_runner_ref);
+    if (task->sequenced_task_runner_ref) {
+      sequenced_task_runner_handle.reset(
+          new SequencedTaskRunnerHandle(task->sequenced_task_runner_ref));
+    } else if (task->single_thread_task_runner_ref) {
+      single_thread_task_runner_handle.reset(
+          new ThreadTaskRunnerHandle(task->single_thread_task_runner_ref));
+    }
+
+    TRACE_TASK_EXECUTION(kRunFunctionName, *task);
+
+    debug::TaskAnnotator task_annotator;
+    task_annotator.RunTask(kQueueFunctionName, *task);
+  }
 
   AfterRunTask(shutdown_behavior);
 }

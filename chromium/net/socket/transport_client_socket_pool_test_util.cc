@@ -14,7 +14,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/load_timing_info.h"
@@ -190,34 +190,34 @@ class MockTriggerableClientSocket : public StreamSocket {
                       weak_factory_.GetWeakPtr());
   }
 
-  static scoped_ptr<StreamSocket> MakeMockPendingClientSocket(
+  static std::unique_ptr<StreamSocket> MakeMockPendingClientSocket(
       const AddressList& addrlist,
       bool should_connect,
       net::NetLog* net_log) {
-    scoped_ptr<MockTriggerableClientSocket> socket(
+    std::unique_ptr<MockTriggerableClientSocket> socket(
         new MockTriggerableClientSocket(addrlist, should_connect, net_log));
     base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
                                                   socket->GetConnectCallback());
     return std::move(socket);
   }
 
-  static scoped_ptr<StreamSocket> MakeMockDelayedClientSocket(
+  static std::unique_ptr<StreamSocket> MakeMockDelayedClientSocket(
       const AddressList& addrlist,
       bool should_connect,
       const base::TimeDelta& delay,
       net::NetLog* net_log) {
-    scoped_ptr<MockTriggerableClientSocket> socket(
+    std::unique_ptr<MockTriggerableClientSocket> socket(
         new MockTriggerableClientSocket(addrlist, should_connect, net_log));
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE, socket->GetConnectCallback(), delay);
     return std::move(socket);
   }
 
-  static scoped_ptr<StreamSocket> MakeMockStalledClientSocket(
+  static std::unique_ptr<StreamSocket> MakeMockStalledClientSocket(
       const AddressList& addrlist,
       net::NetLog* net_log,
       bool failing) {
-    scoped_ptr<MockTriggerableClientSocket> socket(
+    std::unique_ptr<MockTriggerableClientSocket> socket(
         new MockTriggerableClientSocket(addrlist, true, net_log));
     if (failing) {
       DCHECK_LE(1u, addrlist.size());
@@ -359,19 +359,20 @@ MockTransportClientSocketFactory::MockTransportClientSocketFactory(
 
 MockTransportClientSocketFactory::~MockTransportClientSocketFactory() {}
 
-scoped_ptr<DatagramClientSocket>
+std::unique_ptr<DatagramClientSocket>
 MockTransportClientSocketFactory::CreateDatagramClientSocket(
     DatagramSocket::BindType bind_type,
     const RandIntCallback& rand_int_cb,
     NetLog* net_log,
     const NetLog::Source& source) {
   NOTREACHED();
-  return scoped_ptr<DatagramClientSocket>();
+  return std::unique_ptr<DatagramClientSocket>();
 }
 
-scoped_ptr<StreamSocket>
+std::unique_ptr<StreamSocket>
 MockTransportClientSocketFactory::CreateTransportClientSocket(
     const AddressList& addresses,
+    std::unique_ptr<SocketPerformanceWatcher> /* socket_performance_watcher */,
     NetLog* /* net_log */,
     const NetLog::Source& /* source */) {
   allocation_count_++;
@@ -383,10 +384,10 @@ MockTransportClientSocketFactory::CreateTransportClientSocket(
 
   switch (type) {
     case MOCK_CLIENT_SOCKET:
-      return scoped_ptr<StreamSocket>(
+      return std::unique_ptr<StreamSocket>(
           new MockConnectClientSocket(addresses, net_log_));
     case MOCK_FAILING_CLIENT_SOCKET:
-      return scoped_ptr<StreamSocket>(
+      return std::unique_ptr<StreamSocket>(
           new MockFailingClientSocket(addresses, net_log_));
     case MOCK_PENDING_CLIENT_SOCKET:
       return MockTriggerableClientSocket::MakeMockPendingClientSocket(
@@ -407,7 +408,7 @@ MockTransportClientSocketFactory::CreateTransportClientSocket(
       return MockTriggerableClientSocket::MakeMockStalledClientSocket(
           addresses, net_log_, true);
     case MOCK_TRIGGERABLE_CLIENT_SOCKET: {
-      scoped_ptr<MockTriggerableClientSocket> rv(
+      std::unique_ptr<MockTriggerableClientSocket> rv(
           new MockTriggerableClientSocket(addresses, true, net_log_));
       triggerable_sockets_.push(rv->GetConnectCallback());
       // run_loop_quit_closure_ behaves like a condition variable. It will
@@ -420,19 +421,19 @@ MockTransportClientSocketFactory::CreateTransportClientSocket(
     }
     default:
       NOTREACHED();
-      return scoped_ptr<StreamSocket>(
+      return std::unique_ptr<StreamSocket>(
           new MockConnectClientSocket(addresses, net_log_));
   }
 }
 
-scoped_ptr<SSLClientSocket>
+std::unique_ptr<SSLClientSocket>
 MockTransportClientSocketFactory::CreateSSLClientSocket(
-    scoped_ptr<ClientSocketHandle> transport_socket,
+    std::unique_ptr<ClientSocketHandle> transport_socket,
     const HostPortPair& host_and_port,
     const SSLConfig& ssl_config,
     const SSLClientSocketContext& context) {
   NOTIMPLEMENTED();
-  return scoped_ptr<SSLClientSocket>();
+  return std::unique_ptr<SSLClientSocket>();
 }
 
 void MockTransportClientSocketFactory::ClearSSLSessionCache() {

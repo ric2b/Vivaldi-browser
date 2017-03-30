@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "base/strings/string_number_conversions.h"
 #include "net/quic/quic_bug_tracker.h"
 #include "net/quic/quic_clock.h"
 #include "net/quic/quic_flags.h"
@@ -18,6 +19,7 @@
 #include "net/quic/quic_utils.h"
 #include "net/quic/reliable_quic_stream.h"
 
+using base::StringPiece;
 using std::min;
 using std::numeric_limits;
 using std::string;
@@ -41,16 +43,7 @@ QuicStreamSequencer::~QuicStreamSequencer() {}
 void QuicStreamSequencer::OnStreamFrame(const QuicStreamFrame& frame) {
   ++num_frames_received_;
   const QuicStreamOffset byte_offset = frame.offset;
-  const size_t data_len = frame.frame_length;
-  bool consolidate_errors = FLAGS_quic_consolidate_onstreamframe_errors;
-  if (!consolidate_errors && data_len == 0 && !frame.fin) {
-    // Stream frames must have data or a fin flag.
-    LOG(WARNING) << "QUIC_INVALID_STREAM_FRAM: Empty stream frame "
-                    "without FIN set.";
-    stream_->CloseConnectionWithDetails(QUIC_EMPTY_STREAM_FRAME_NO_FIN,
-                                        "Empty stream frame without FIN set.");
-    return;
-  }
+  const size_t data_len = frame.data_length;
 
   if (frame.fin) {
     CloseStreamAtOffset(frame.offset + data_len);
@@ -61,26 +54,20 @@ void QuicStreamSequencer::OnStreamFrame(const QuicStreamFrame& frame) {
   size_t bytes_written;
   string error_details;
   QuicErrorCode result = buffered_frames_.OnStreamData(
-      byte_offset, StringPiece(frame.frame_buffer, frame.frame_length),
+      byte_offset, StringPiece(frame.data_buffer, frame.data_length),
       clock_->ApproximateNow(), &bytes_written, &error_details);
-  if (!consolidate_errors) {
-    if (result == QUIC_OVERLAPPING_STREAM_DATA) {
-      LOG(WARNING) << "QUIC_INVALID_STREAM_FRAME: Stream frame "
-                      "overlaps with buffered data.";
-      stream_->CloseConnectionWithDetails(
-          QUIC_EMPTY_STREAM_FRAME_NO_FIN,
-          "Stream frame overlaps with buffered data.");
-      return;
-    }
-  } else {
-    if (result != QUIC_NO_ERROR) {
-      LOG(WARNING) << QuicUtils::ErrorToString(result) << ": " << error_details;
-      stream_->CloseConnectionWithDetails(result, error_details);
-      return;
-    }
+  if (result != QUIC_NO_ERROR) {
+    string details = "Stream" + base::Uint64ToString(stream_->id()) + ": " +
+                     QuicUtils::ErrorToString(result) + ": " + error_details +
+                     "\nPeer Address: " +
+                     stream_->PeerAddressOfLatestPacket().ToString();
+    DLOG(WARNING) << QuicUtils::ErrorToString(result);
+    DLOG(WARNING) << details;
+    stream_->CloseConnectionWithDetails(result, details);
+    return;
   }
 
-  if ((consolidate_errors || result == QUIC_NO_ERROR) && bytes_written == 0) {
+  if (bytes_written == 0) {
     ++num_duplicate_frames_received_;
     // Silently ignore duplicates.
     return;

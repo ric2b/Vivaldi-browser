@@ -32,6 +32,8 @@
 #include "components/toolbar/toolbar_model.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/common/constants.h"
+#include "grit/components_scaled_resources.h"
+#include "grit/theme_resources.h"
 #import "skia/ext/skia_utils_mac.h"
 #import "third_party/mozilla/NSPasteboard+Utils.h"
 #include "ui/base/clipboard/clipboard.h"
@@ -86,29 +88,29 @@ NSColor* ColorWithRGBBytes(int rr, int gg, int bb) {
                                    alpha:1.0];
 }
 
-NSColor* HostTextColor(bool inDarkMode) {
+NSColor* HostTextColor(bool in_dark_mode) {
   if (!ui::MaterialDesignController::IsModeMaterial()) {
     return [NSColor blackColor];
   }
-  return inDarkMode ? [NSColor whiteColor] : [NSColor blackColor];
+  return in_dark_mode ? [NSColor whiteColor] : [NSColor blackColor];
 }
-NSColor* SecureSchemeColor(bool inDarkMode) {
+NSColor* SecureSchemeColor(bool in_dark_mode) {
   if (!ui::MaterialDesignController::IsModeMaterial()) {
     return ColorWithRGBBytes(0x07, 0x95, 0x00);
   }
-  return inDarkMode ? [NSColor colorWithCalibratedWhite:1 alpha:0.5] :
-                      skia::SkColorToCalibratedNSColor(gfx::kGoogleGreen700);
+  return in_dark_mode ? [NSColor colorWithCalibratedWhite:1 alpha:0.5]
+                      : skia::SkColorToCalibratedNSColor(gfx::kGoogleGreen700);
 }
-NSColor* SecurityWarningSchemeColor(bool inDarkMode) {
-  return inDarkMode ? [NSColor colorWithCalibratedWhite:1 alpha:0.5] :
-                      skia::SkColorToCalibratedNSColor(gfx::kGoogleYellow700);
+NSColor* SecurityWarningSchemeColor(bool in_dark_mode) {
+  return in_dark_mode ? [NSColor colorWithCalibratedWhite:1 alpha:0.5]
+                      : skia::SkColorToCalibratedNSColor(gfx::kGoogleYellow700);
 }
-NSColor* SecurityErrorSchemeColor(bool inDarkMode) {
+NSColor* SecurityErrorSchemeColor(bool in_dark_mode) {
   if (!ui::MaterialDesignController::IsModeMaterial()) {
     return ColorWithRGBBytes(0xa2, 0x00, 0x00);
   }
-  return inDarkMode ? [NSColor colorWithCalibratedWhite:1 alpha:0.5] :
-                      skia::SkColorToCalibratedNSColor(gfx::kGoogleRed700);
+  return in_dark_mode ? [NSColor colorWithCalibratedWhite:1 alpha:0.5]
+                      : skia::SkColorToCalibratedNSColor(gfx::kGoogleRed700);
 }
 
 const char kOmniboxViewMacStateKey[] = "OmniboxViewMacState";
@@ -159,13 +161,18 @@ NSColor* OmniboxViewMac::SuggestTextColor() {
   return [NSColor colorWithCalibratedWhite:0.0 alpha:0.5];
 }
 
+//static
+SkColor OmniboxViewMac::BaseTextColorSkia(bool in_dark_mode) {
+  return in_dark_mode ? SkColorSetA(SK_ColorWHITE, 0x7F)
+                      : SkColorSetA(SK_ColorBLACK, 0x7F);
+}
+
 // static
-NSColor* OmniboxViewMac::BaseTextColor(bool inDarkMode) {
+NSColor* OmniboxViewMac::BaseTextColor(bool in_dark_mode) {
   if (!ui::MaterialDesignController::IsModeMaterial()) {
     return [NSColor darkGrayColor];
   }
-  return inDarkMode ? [NSColor colorWithCalibratedWhite:1 alpha:0.5]
-                    : [NSColor colorWithCalibratedWhite:0 alpha:0.5];
+  return skia::SkColorToCalibratedNSColor(BaseTextColorSkia(in_dark_mode));
 }
 
 OmniboxViewMac::OmniboxViewMac(OmniboxEditController* controller,
@@ -539,8 +546,11 @@ void OmniboxViewMac::ApplyTextAttributes(
     const base::string16& display_text,
     NSMutableAttributedString* attributedString) {
   NSUInteger as_length = [attributedString length];
+  if (as_length == 0) {
+    return;
+  }
   NSRange as_entire_string = NSMakeRange(0, as_length);
-  bool inDarkMode = [[field_ window] inIncognitoModeWithSystemTheme];
+  bool in_dark_mode = [[field_ window] inIncognitoModeWithSystemTheme];
 
   ApplyTextStyle(attributedString);
 
@@ -549,6 +559,15 @@ void OmniboxViewMac::ApplyTextAttributes(
   [attributedString addAttribute:@"NSLanguage"
                            value:@"en_US_POSIX"
                            range:as_entire_string];
+
+  // Under Material Design, force the text to be a single color white editing.
+  if (ui::MaterialDesignController::IsModeMaterial() &&
+      [field_ currentEditor]) {
+    [attributedString addAttribute:NSForegroundColorAttributeName
+                             value:HostTextColor(in_dark_mode)
+                             range:as_entire_string];
+    return;
+  }
 
   url::Component scheme, host;
   AutocompleteInput::ParseForEmphasizeComponents(
@@ -559,12 +578,12 @@ void OmniboxViewMac::ApplyTextAttributes(
   if (model()->CurrentTextIsURL() &&
       (host.is_nonempty() || grey_out_url)) {
     [attributedString addAttribute:NSForegroundColorAttributeName
-                             value:BaseTextColor(inDarkMode)
+                             value:BaseTextColor(in_dark_mode)
                              range:as_entire_string];
 
     if (!grey_out_url) {
       [attributedString addAttribute:NSForegroundColorAttributeName
-                               value:HostTextColor(inDarkMode)
+                               value:HostTextColor(in_dark_mode)
                                range:ComponentToNSRange(host)];
     }
   }
@@ -582,20 +601,20 @@ void OmniboxViewMac::ApplyTextAttributes(
     NSColor* color;
     if (security_level == security_state::SecurityStateModel::EV_SECURE ||
         security_level == security_state::SecurityStateModel::SECURE) {
-      color = SecureSchemeColor(inDarkMode);
+      color = SecureSchemeColor(in_dark_mode);
     } else if (security_level ==
                security_state::SecurityStateModel::SECURITY_ERROR) {
-      color = SecurityErrorSchemeColor(inDarkMode);
+      color = SecurityErrorSchemeColor(in_dark_mode);
       // Add a strikethrough through the scheme.
       [attributedString addAttribute:NSStrikethroughStyleAttributeName
                  value:[NSNumber numberWithInt:NSUnderlineStyleSingle]
                  range:ComponentToNSRange(scheme)];
     } else if (security_level ==
                security_state::SecurityStateModel::SECURITY_WARNING) {
-      color = SecurityWarningSchemeColor(inDarkMode);
+      color = SecurityWarningSchemeColor(in_dark_mode);
     } else {
       NOTREACHED();
-      color = BaseTextColor(inDarkMode);
+      color = BaseTextColor(in_dark_mode);
     }
     [attributedString addAttribute:NSForegroundColorAttributeName
                              value:color
@@ -1096,7 +1115,13 @@ NSFont* OmniboxViewMac::GetLargeFont(int style) {
 
 NSFont* OmniboxViewMac::GetSmallFont(int style) {
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-  return rb.GetFontList(ui::ResourceBundle::SmallFont)
+  if (!ui::MaterialDesignController::IsModeMaterial()) {
+    return rb.GetFontList(ui::ResourceBundle::SmallFont)
+        .Derive(1, style)
+        .GetPrimaryFont()
+        .GetNativeFont();
+  }
+  return rb.GetFontListWithDelta(-2, gfx::Font::NORMAL)
       .Derive(1, style)
       .GetPrimaryFont()
       .GetNativeFont();

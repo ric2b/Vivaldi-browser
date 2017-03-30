@@ -37,9 +37,6 @@ class PasswordManagerClient;
 class PasswordManagerDriver;
 class PasswordFormManager;
 
-// TODO(melandory): Separate the PasswordFormManager API interface and the
-// implementation in two classes http://crbug.com/473184.
-
 // Per-tab password manager. Handles creation and management of UI elements,
 // receiving password form data from the renderer and managing the password
 // database through the PasswordStore. The PasswordManager is a LoginModel
@@ -84,7 +81,11 @@ class PasswordManager : public LoginModel {
 
   void GenerationAvailableForForm(const autofill::PasswordForm& form);
 
+  // Presaves the form with generated password.
+  void OnPresaveGeneratedPassword(const autofill::PasswordForm& password_form);
+
   // Update the state of generation for this form.
+  // If |password_is_generated| == false, removes the presaved form.
   void SetHasGeneratedPasswordForForm(
       password_manager::PasswordManagerDriver* driver,
       const autofill::PasswordForm& form,

@@ -5,8 +5,9 @@
 #ifndef UI_AURA_ENV_H_
 #define UI_AURA_ENV_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/supports_user_data.h"
 #include "ui/aura/aura_export.h"
@@ -32,14 +33,11 @@ class WindowTreeHost;
 // A singleton object that tracks general state within Aura.
 class AURA_EXPORT Env : public ui::EventTarget, public base::SupportsUserData {
  public:
-  // Creates the single Env instance (if it hasn't been created yet). If
-  // |create_event_source| is true a PlatformEventSource is created.
-  // TODO(sky): nuke |create_event_source|. Only necessary while mojo's
-  // nativeviewportservice lives in the same process as the viewmanager.
-  static void CreateInstance(bool create_event_source);
+  ~Env() override;
+
+  static std::unique_ptr<Env> CreateInstance();
   static Env* GetInstance();
   static Env* GetInstanceDontCreate();
-  static void DeleteInstance();
 
   void AddObserver(EnvObserver* observer);
   void RemoveObserver(EnvObserver* observer);
@@ -74,10 +72,8 @@ class AURA_EXPORT Env : public ui::EventTarget, public base::SupportsUserData {
   friend class WindowTreeHost;
 
   Env();
-  ~Env() override;
 
-  // See description of CreateInstance() for deatils of |create_event_source|.
-  void Init(bool create_event_source);
+  void Init();
 
   // Called by the Window when it is initialized. Notifies observers.
   void NotifyWindowInitialized(Window* window);
@@ -91,7 +87,7 @@ class AURA_EXPORT Env : public ui::EventTarget, public base::SupportsUserData {
   // Overridden from ui::EventTarget:
   bool CanAcceptEvent(const ui::Event& event) override;
   ui::EventTarget* GetParentTarget() override;
-  scoped_ptr<ui::EventTargetIterator> GetChildIterator() const override;
+  std::unique_ptr<ui::EventTargetIterator> GetChildIterator() const override;
   ui::EventTargeter* GetEventTargeter() override;
 
   base::ObserverList<EnvObserver> observers_;
@@ -101,8 +97,8 @@ class AURA_EXPORT Env : public ui::EventTarget, public base::SupportsUserData {
   gfx::Point last_mouse_location_;
   bool is_touch_down_;
 
-  scoped_ptr<InputStateLookup> input_state_lookup_;
-  scoped_ptr<ui::PlatformEventSource> event_source_;
+  std::unique_ptr<InputStateLookup> input_state_lookup_;
+  std::unique_ptr<ui::PlatformEventSource> event_source_;
 
   ui::ContextFactory* context_factory_;
 

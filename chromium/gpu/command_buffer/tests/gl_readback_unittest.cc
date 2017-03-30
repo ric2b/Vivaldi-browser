@@ -9,13 +9,14 @@
 #include <stdint.h>
 
 #include <cmath>
+#include <memory>
 
 #include "base/bind.h"
 #include "base/bit_cast.h"
 #include "base/location.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "gpu/command_buffer/tests/gl_manager.h"
 #include "gpu/command_buffer/tests/gl_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -140,7 +141,16 @@ static GLuint CompileShader(GLenum type, const char *data) {
   return shader;
 }
 
-TEST_F(GLReadbackTest, ReadPixelsFloat) {
+// TODO(zmo): ReadPixels with float type isn't implemented in ANGLE ES2
+// backend. crbug.com/607283.
+// TODO(zmo): This test also fails on some android devices when the readback
+// type is HALF_FLOAT_OES. Likely it's due to a driver bug. crbug.com/607936.
+#if defined(OS_WIN) || defined(OS_ANDROID)
+#define MAYBE_ReadPixelsFloat DISABLED_ReadPixelsFloat
+#else
+#define MAYBE_ReadPixelsFloat ReadPixelsFloat
+#endif
+TEST_F(GLReadbackTest, MAYBE_ReadPixelsFloat) {
   const GLsizei kTextureSize = 4;
   const GLfloat kDrawColor[4] = { -10.9f, 0.5f, 10.5f, 100.12f };
   const GLfloat kEpsilon = 0.01f;
@@ -274,7 +284,7 @@ TEST_F(GLReadbackTest, ReadPixelsFloat) {
 
         switch (read_type) {
           case GL_HALF_FLOAT_OES: {
-            scoped_ptr<GLushort[]> buf(
+            std::unique_ptr<GLushort[]> buf(
                 new GLushort[kTextureSize * kTextureSize * read_comp_count]);
             glReadPixels(
                 0, 0, kTextureSize, kTextureSize, read_format, read_type,
@@ -291,7 +301,7 @@ TEST_F(GLReadbackTest, ReadPixelsFloat) {
             break;
           }
           case GL_FLOAT: {
-            scoped_ptr<GLfloat[]> buf(
+            std::unique_ptr<GLfloat[]> buf(
                 new GLfloat[kTextureSize * kTextureSize * read_comp_count]);
             glReadPixels(
                 0, 0, kTextureSize, kTextureSize, read_format, read_type,

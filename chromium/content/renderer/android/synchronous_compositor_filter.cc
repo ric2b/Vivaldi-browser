@@ -8,7 +8,7 @@
 
 #include "base/callback.h"
 #include "base/stl_util.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/common/android/sync_compositor_messages.h"
 #include "content/common/input_messages.h"
 #include "content/renderer/android/synchronous_compositor_proxy.h"
@@ -186,9 +186,10 @@ void SynchronousCompositorFilter::CheckIsReady(int routing_id) {
   Entry& entry = entry_map_[routing_id];
   if (filter_ready_ && entry.IsReady()) {
     DCHECK(!sync_compositor_map_.contains(routing_id));
-    scoped_ptr<SynchronousCompositorProxy> proxy(new SynchronousCompositorProxy(
-        routing_id, this, entry.begin_frame_source,
-        entry.synchronous_input_handler_proxy, &input_handler_));
+    std::unique_ptr<SynchronousCompositorProxy> proxy(
+        new SynchronousCompositorProxy(
+            routing_id, this, entry.begin_frame_source,
+            entry.synchronous_input_handler_proxy, &input_handler_));
     if (entry.output_surface)
       proxy->SetOutputSurface(entry.output_surface);
     sync_compositor_map_.add(routing_id, std::move(proxy));
@@ -219,8 +220,8 @@ void SynchronousCompositorFilter::SetBoundHandler(const Handler& handler) {
           handler));
 }
 
-void SynchronousCompositorFilter::DidAddInputHandler(int routing_id) {}
-void SynchronousCompositorFilter::DidRemoveInputHandler(int routing_id) {}
+void SynchronousCompositorFilter::RegisterRoutingID(int routing_id) {}
+void SynchronousCompositorFilter::UnregisterRoutingID(int routing_id) {}
 
 void SynchronousCompositorFilter::SetBoundHandlerOnCompositorThread(
     const Handler& handler) {
@@ -240,6 +241,8 @@ void SynchronousCompositorFilter::DidOverscroll(
   proxy->DidOverscroll(params);
 }
 
+void SynchronousCompositorFilter::DidStartFlinging(int routing_id) {}
+
 void SynchronousCompositorFilter::DidStopFlinging(int routing_id) {
   DCHECK(compositor_task_runner_->BelongsToCurrentThread());
   Send(new InputHostMsg_DidStopFlinging(routing_id));
@@ -247,7 +250,8 @@ void SynchronousCompositorFilter::DidStopFlinging(int routing_id) {
 
 void SynchronousCompositorFilter::NotifyInputEventHandled(
     int routing_id,
-    blink::WebInputEvent::Type type) {}
+    blink::WebInputEvent::Type type,
+    InputEventAckState ack_result) {}
 
 void SynchronousCompositorFilter::DidAddSynchronousHandlerProxy(
     int routing_id,

@@ -36,7 +36,7 @@ class HTMLDivElement;
 class CORE_EXPORT HTMLOptGroupElement final : public HTMLElement {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static RawPtr<HTMLOptGroupElement> create(Document&);
+    static HTMLOptGroupElement* create(Document&);
 
     bool isDisabledFormControl() const override;
     String defaultToolTip() const override;
@@ -55,6 +55,7 @@ private:
     void didAddUserAgentShadowRoot(ShadowRoot&) override;
     void attach(const AttachContext& = AttachContext()) override;
     void detach(const AttachContext& = AttachContext()) override;
+    bool matchesEnabledPseudoClass() const override;
 
     // <optgroup> might not have a layoutObject so we manually manage a cached style.
     void updateNonComputedStyle();

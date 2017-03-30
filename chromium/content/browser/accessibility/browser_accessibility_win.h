@@ -66,6 +66,7 @@ BrowserAccessibilityWin
     COM_INTERFACE_ENTRY2(IDispatch, IAccessible2)
     COM_INTERFACE_ENTRY(IAccessible)
     COM_INTERFACE_ENTRY(IAccessible2)
+    COM_INTERFACE_ENTRY(IAccessibleAction)
     COM_INTERFACE_ENTRY(IAccessibleApplication)
     COM_INTERFACE_ENTRY(IAccessibleEx)
     COM_INTERFACE_ENTRY(IAccessibleHyperlink)
@@ -888,8 +889,8 @@ BrowserAccessibilityWin
   // Updates object attributes of IA2 with html attributes.
   void UpdateRequiredAttributes();
 
-  // Updates the IA2 text style attributes.
-  void UpdateTextAttributes();
+  // Fire a Windows-specific accessibility event notification on this node.
+  void FireNativeEvent(LONG win_event_type) const;
 
   struct WinAttributes {
     WinAttributes();
@@ -927,11 +928,11 @@ BrowserAccessibilityWin
     std::vector<int32_t> hyperlinks;
   };
 
-  scoped_ptr<WinAttributes> win_attributes_;
+  std::unique_ptr<WinAttributes> win_attributes_;
 
   // Only valid during the scope of a IA2_EVENT_TEXT_REMOVED or
   // IA2_EVENT_TEXT_INSERTED event.
-  scoped_ptr<WinAttributes> old_win_attributes_;
+  std::unique_ptr<WinAttributes> old_win_attributes_;
 
   // Relationships between this node and other nodes.
   std::vector<BrowserAccessibilityRelation*> relations_;

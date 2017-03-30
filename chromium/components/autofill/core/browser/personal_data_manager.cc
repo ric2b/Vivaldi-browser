@@ -612,6 +612,11 @@ void PersonalDataManager::ClearAllServerData() {
   server_profiles_.clear();
 }
 
+void PersonalDataManager::AddServerCreditCardForTest(
+    std::unique_ptr<CreditCard> credit_card) {
+  server_credit_cards_.push_back(credit_card.release());
+}
+
 void PersonalDataManager::RemoveByGUID(const std::string& guid) {
   if (is_off_the_record_)
     return;
@@ -807,12 +812,9 @@ std::vector<Suggestion> PersonalDataManager::GetCreditCardSuggestions(
   base::Time comparison_time = base::Time::Now();
   cards_to_suggest.sort(
       [comparison_time](const CreditCard* a, const CreditCard* b) {
-        bool a_has_valid_expiration = IsValidCreditCardExpirationDate(
-            a->expiration_year(), a->expiration_month(), comparison_time);
-        if (a_has_valid_expiration !=
-            IsValidCreditCardExpirationDate(
-                b->expiration_year(), b->expiration_month(), comparison_time))
-          return a_has_valid_expiration;
+        bool a_is_expired = a->IsExpired(comparison_time);
+        if (a_is_expired != b->IsExpired(comparison_time))
+          return !a_is_expired;
 
         return a->CompareFrecency(b, comparison_time);
       });
@@ -869,10 +871,19 @@ bool PersonalDataManager::IsValidLearnableProfile(
 // static
 std::string PersonalDataManager::MergeProfile(
     const AutofillProfile& new_profile,
-    const std::vector<AutofillProfile*>& existing_profiles,
+    std::vector<AutofillProfile*> existing_profiles,
     const std::string& app_locale,
     std::vector<AutofillProfile>* merged_profiles) {
   merged_profiles->clear();
+
+  // Sort the existing profiles in decreasing order of frecency, so the "best"
+  // profiles are checked first.
+  base::Time comparison_time = base::Time::Now();
+  std::sort(existing_profiles.begin(), existing_profiles.end(),
+            [comparison_time](const AutofillDataModel* a,
+                              const AutofillDataModel* b) {
+              return a->CompareFrecency(b, comparison_time);
+            });
 
   // Set to true if |existing_profiles| already contains an equivalent profile.
   bool matching_profile_found = false;
@@ -896,8 +907,6 @@ std::string PersonalDataManager::MergeProfile(
       // the profile will have a very slightly newer time reflecting what's
       // actually stored in the database.
       existing_profile->set_modification_date(base::Time::Now());
-
-      existing_profile->RecordAndLogUse();
     }
     merged_profiles->push_back(*existing_profile);
   }

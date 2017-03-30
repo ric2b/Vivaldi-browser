@@ -421,6 +421,7 @@ std::unique_ptr<api::tabs::Tab> ExtensionTabUtil::CreateTabObject(
       new int(contents->GetContainerBounds().size().width()));
   tab_object->height.reset(
       new int(contents->GetContainerBounds().size().height()));
+  tab_object->discarded = IsDiscarded(contents);
 
   tab_object->url.reset(new std::string(contents->GetURL().spec()));
   tab_object->title.reset(
@@ -438,6 +439,12 @@ std::unique_ptr<api::tabs::Tab> ExtensionTabUtil::CreateTabObject(
   tab_object->ext_data.reset(new std::string(contents->GetExtData()));
 
   return tab_object;
+}
+
+// static
+bool ExtensionTabUtil::IsDiscarded(content::WebContents *contents) {
+  memory::TabManager *tab_manager = g_browser_process->GetTabManager();
+  return (tab_manager && tab_manager->IsTabDiscarded(contents));
 }
 
 // static

@@ -2,17 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "media/cdm/cdm_adapter.h"
+
 #include <stdint.h>
+#include <memory>
 
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "media/base/cdm_callback_promise.h"
 #include "media/base/cdm_key_information.h"
 #include "media/base/media_keys.h"
-#include "media/cdm/cdm_adapter.h"
+#include "media/cdm/cdm_file_io.h"
 #include "media/cdm/external_clear_key_test_helper.h"
 #include "media/cdm/simple_cdm_allocator.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -81,10 +83,10 @@ class CdmAdapterTest : public testing::Test {
   void InitializeAndExpect(base::FilePath library_path,
                            ExpectedResult expected_result) {
     CdmConfig cdm_config;  // default settings of false are sufficient.
-    scoped_ptr<CdmAllocator> allocator(new SimpleCdmAllocator());
-
+    std::unique_ptr<CdmAllocator> allocator(new SimpleCdmAllocator());
     CdmAdapter::Create(
         helper_.KeySystemName(), library_path, cdm_config, std::move(allocator),
+        base::Bind(&CdmAdapterTest::CreateCdmFileIO, base::Unretained(this)),
         base::Bind(&CdmAdapterTest::OnSessionMessage, base::Unretained(this)),
         base::Bind(&CdmAdapterTest::OnSessionClosed, base::Unretained(this)),
         base::Bind(&CdmAdapterTest::OnLegacySessionError,
@@ -169,14 +171,15 @@ class CdmAdapterTest : public testing::Test {
 
   // Create a promise. |expected_result| is used to indicate how the promise
   // should be fulfilled.
-  scoped_ptr<SimpleCdmPromise> CreatePromise(ExpectedResult expected_result) {
+  std::unique_ptr<SimpleCdmPromise> CreatePromise(
+      ExpectedResult expected_result) {
     if (expected_result == SUCCESS) {
       EXPECT_CALL(*this, OnResolve());
     } else {
       EXPECT_CALL(*this, OnReject(_, _, IsNotEmpty()));
     }
 
-    scoped_ptr<SimpleCdmPromise> promise(new CdmCallbackPromise<>(
+    std::unique_ptr<SimpleCdmPromise> promise(new CdmCallbackPromise<>(
         base::Bind(&CdmAdapterTest::OnResolve, base::Unretained(this)),
         base::Bind(&CdmAdapterTest::OnReject, base::Unretained(this))));
     return promise;
@@ -184,7 +187,7 @@ class CdmAdapterTest : public testing::Test {
 
   // Create a promise to be used when a new session is created.
   // |expected_result| is used to indicate how the promise should be fulfilled.
-  scoped_ptr<NewSessionCdmPromise> CreateSessionPromise(
+  std::unique_ptr<NewSessionCdmPromise> CreateSessionPromise(
       ExpectedResult expected_result) {
     if (expected_result == SUCCESS) {
       EXPECT_CALL(*this, OnResolveWithSession(_))
@@ -193,7 +196,7 @@ class CdmAdapterTest : public testing::Test {
       EXPECT_CALL(*this, OnReject(_, _, IsNotEmpty()));
     }
 
-    scoped_ptr<NewSessionCdmPromise> promise(
+    std::unique_ptr<NewSessionCdmPromise> promise(
         new CdmCallbackPromise<std::string>(
             base::Bind(&CdmAdapterTest::OnResolveWithSession,
                        base::Unretained(this)),
@@ -202,6 +205,11 @@ class CdmAdapterTest : public testing::Test {
   }
 
   void RunUntilIdle() { message_loop_.RunUntilIdle(); }
+
+  std::unique_ptr<CdmFileIO> CreateCdmFileIO(cdm::FileIOClient* client) {
+    ADD_FAILURE() << "Should never be called";
+    return nullptr;
+  }
 
   // Methods used for promise resolved/rejected.
   MOCK_METHOD0(OnResolve, void());

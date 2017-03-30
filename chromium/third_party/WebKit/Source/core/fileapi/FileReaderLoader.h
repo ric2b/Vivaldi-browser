@@ -35,11 +35,11 @@
 #include "core/fileapi/FileError.h"
 #include "core/loader/ThreadableLoaderClient.h"
 #include "platform/weborigin/KURL.h"
-#include "wtf/ArrayBufferBuilder.h"
 #include "wtf/Forward.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/text/TextEncoding.h"
 #include "wtf/text/WTFString.h"
+#include "wtf/typed_arrays/ArrayBufferBuilder.h"
 
 namespace blink {
 
@@ -82,7 +82,7 @@ public:
     void didFail(const ResourceError&) override;
 
     String stringResult();
-    PassRefPtr<DOMArrayBuffer> arrayBufferResult() const;
+    DOMArrayBuffer* arrayBufferResult() const;
 
     // Returns the total bytes received. Bytes ignored by m_rawData won't be
     // counted.

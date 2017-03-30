@@ -35,7 +35,23 @@
 WebInspector.ResourceSourceFrame = function(resource)
 {
     this._resource = resource;
-    WebInspector.SourceFrame.call(this, resource);
+    WebInspector.SourceFrame.call(this, resource.contentURL(), resource.requestContent.bind(resource));
+}
+
+/**
+ * @param {!WebInspector.ContentProvider} resource
+ * @param {string} highlighterType
+ * @return {!WebInspector.SearchableView}
+ */
+WebInspector.ResourceSourceFrame.createSearchableView = function(resource, highlighterType)
+{
+    var sourceFrame = new WebInspector.ResourceSourceFrame(resource);
+    sourceFrame.setHighlighterType(highlighterType);
+    var searchableView = new WebInspector.SearchableView(sourceFrame);
+    searchableView.setPlaceholder(WebInspector.UIString("Find"));
+    sourceFrame.show(searchableView.element);
+    sourceFrame.setSearchableView(searchableView);
+    return searchableView;
 }
 
 WebInspector.ResourceSourceFrame.prototype = {

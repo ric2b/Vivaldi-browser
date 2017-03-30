@@ -5,12 +5,16 @@
 {%- set proxy_name = interface.name ~ "Proxy" %}
 {%- set namespace_as_string = "%s"|format(namespace|replace(".","::")) %}
 
-{%- macro alloc_params(struct, serialization_context) %}
+{%- macro alloc_params(struct, params, message, serialization_context) %}
+  ({{params}})->DecodePointers();
+  ({{serialization_context}})->handles.Swap(({{message}})->mutable_handles());
   bool success = true;
 {%-   for param in struct.packed.packed_fields_in_ordinal_order %}
   {{param.field.kind|cpp_wrapper_type}} p_{{param.field.name}}{};
 {%-   endfor %}
-  {{struct_macros.deserialize(struct, "params", "p_%s", serialization_context, "success")}}
+  {{struct.name}}DataView input_data_view({{params}},
+                                          {{serialization_context}});
+  {{struct_macros.deserialize(struct, "input_data_view", "p_%s", "success")}}
   if (!success)
     return false;
 {%- endmacro %}
@@ -31,19 +35,32 @@ p_{{param.name}}
   {{struct_macros.serialize(struct, struct_display_name, input_pattern,
                             "params", "builder.buffer()",
                             serialization_context)}}
-  params->EncodePointersAndHandles(builder.message()->mutable_handles());
+  ({{serialization_context}})->handles.Swap(
+      builder.message()->mutable_handles());
+  params->EncodePointers();
+
 {%- endmacro %}
 
 {#--- Begin #}
-MOJO_STATIC_CONST_MEMBER_DEFINITION const char {{class_name}}::Name_[] = "{{namespace_as_string}}::{{class_name}}";
-MOJO_STATIC_CONST_MEMBER_DEFINITION const uint32_t {{class_name}}::Version_;
+const char {{class_name}}::Name_[] = "{{namespace_as_string}}::{{class_name}}";
+const uint32_t {{class_name}}::Version_;
 
 {#--- Constants #}
 {%-  for constant in interface.constants %}
 {%-   if constant.kind|is_integral_kind %}
-MOJO_STATIC_CONST_MEMBER_DEFINITION const {{constant.kind|cpp_pod_type}} {{interface.name}}::{{constant.name}};
+const {{constant.kind|cpp_pod_type}} {{interface.name}}::{{constant.name}};
 {%-   else %}
-MOJO_STATIC_CONST_MEMBER_DEFINITION const {{constant.kind|cpp_pod_type}} {{interface.name}}::{{constant.name}} = {{constant|constant_value}};
+const {{constant.kind|cpp_pod_type}} {{interface.name}}::{{constant.name}} = {{constant|constant_value}};
+{%-   endif %}
+{%- endfor %}
+
+
+{%- for method in interface.methods %}
+{%-   if method.sync %}
+bool {{class_name}}::{{method.name}}({{interface_macros.declare_sync_method_params("", method)}}) {
+  NOTREACHED();
+  return false;
+}
 {%-   endif %}
 {%- endfor %}
 
@@ -80,8 +97,8 @@ bool {{class_name}}_{{method.name}}_HandleSyncResponse::Accept(
       reinterpret_cast<internal::{{class_name}}_{{method.name}}_ResponseParams_Data*>(
           message->mutable_payload());
 
-  params->DecodePointersAndHandles(message->mutable_handles());
-  {{alloc_params(method.response_param_struct, "&serialization_context_")}}
+  {{alloc_params(method.response_param_struct, "params", "message",
+                 "&serialization_context_")}}
 
 {%-       for param in method.response_parameters %}
 {%-         if param.kind|is_move_only_kind %}
@@ -115,8 +132,8 @@ bool {{class_name}}_{{method.name}}_ForwardToCallback::Accept(
       reinterpret_cast<internal::{{class_name}}_{{method.name}}_ResponseParams_Data*>(
           message->mutable_payload());
 
-  params->DecodePointersAndHandles(message->mutable_handles());
-  {{alloc_params(method.response_param_struct, "&serialization_context_")}}
+  {{alloc_params(method.response_param_struct, "params", "message",
+                 "&serialization_context_")}}
   callback_.Run({{pass_params(method.response_parameters)}});
   return true;
 }
@@ -276,8 +293,8 @@ bool {{class_name}}Stub::Accept(mojo::Message* message) {
           reinterpret_cast<internal::{{class_name}}_{{method.name}}_Params_Data*>(
               message->mutable_payload());
 
-      params->DecodePointersAndHandles(message->mutable_handles());
-      {{alloc_params(method.param_struct, "&serialization_context_")|indent(4)}}
+      {{alloc_params(method.param_struct, "params", "message",
+          "&serialization_context_")|indent(4)}}
       // A null |sink_| means no implementation was bound.
       assert(sink_);
       TRACE_EVENT0("mojom", "{{class_name}}::{{method.name}}");
@@ -306,8 +323,8 @@ bool {{class_name}}Stub::AcceptWithResponder(
           reinterpret_cast<internal::{{class_name}}_{{method.name}}_Params_Data*>(
               message->mutable_payload());
 
-      params->DecodePointersAndHandles(message->mutable_handles());
-      {{alloc_params(method.param_struct, "&serialization_context_")|indent(4)}}
+      {{alloc_params(method.param_struct, "params", "message",
+          "&serialization_context_")|indent(4)}}
       {{class_name}}::{{method.name}}Callback::Runnable* runnable =
           new {{class_name}}_{{method.name}}_ProxyToResponder(
               message->request_id(),

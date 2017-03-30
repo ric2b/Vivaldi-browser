@@ -9,8 +9,12 @@
 
 #include <map>
 #include <set>
+#include <string>
+#include <vector>
 
+#include "base/atomicops.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "components/mus/common/types.h"
 #include "components/mus/public/cpp/window.h"
@@ -45,7 +49,7 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   ~WindowTreeClientImpl() override;
 
   // Establishes the connection by way of the WindowTreeFactory.
-  void ConnectViaWindowTreeFactory(mojo::Connector* connector);
+  void ConnectViaWindowTreeFactory(shell::Connector* connector);
 
   // Wait for OnEmbed(), returning when done.
   void WaitForEmbed();
@@ -122,6 +126,8 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   // the last step of ~Window).
   void OnWindowDestroyed(Window* window);
 
+  Window* GetWindowByServerId(Id id);
+
   // WindowTreeConnection:
   Window* GetCaptureWindow() override;
 
@@ -136,13 +142,13 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   using IdToWindowMap = std::map<Id, Window*>;
 
   // TODO(sky): this assumes change_ids never wrap, which is a bad assumption.
-  using InFlightMap = std::map<uint32_t, scoped_ptr<InFlightChange>>;
+  using InFlightMap = std::map<uint32_t, std::unique_ptr<InFlightChange>>;
 
   // Returns the oldest InFlightChange that matches |change|.
   InFlightChange* GetOldestInFlightChangeMatching(const InFlightChange& change);
 
   // See InFlightChange for details on how InFlightChanges are used.
-  uint32_t ScheduleInFlightChange(scoped_ptr<InFlightChange> change);
+  uint32_t ScheduleInFlightChange(std::unique_ptr<InFlightChange> change);
 
   // Returns true if there is an InFlightChange that matches |change|. If there
   // is an existing change SetRevertValueFrom() is invoked on it. Returns false
@@ -160,16 +166,18 @@ class WindowTreeClientImpl : public WindowTreeConnection,
                    Id focused_window_id,
                    bool drawn);
 
+  void OnReceivedCursorLocationMemory(mojo::ScopedSharedBufferHandle handle);
+
   // Overridden from WindowTreeConnection:
   void SetDeleteOnNoRoots(bool value) override;
   const std::set<Window*>& GetRoots() override;
-  Window* GetWindowById(Id id) override;
   Window* GetFocusedWindow() override;
   void ClearFocus() override;
+  gfx::Point GetCursorScreenPoint() override;
+  void SetEventObserver(mojom::EventMatcherPtr matcher) override;
   Window* NewWindow(const Window::SharedProperties* properties) override;
   Window* NewTopLevelWindow(
       const Window::SharedProperties* properties) override;
-  ConnectionSpecificId GetConnectionId() override;
   void AddObserver(WindowTreeConnectionObserver* observer) override;
   void RemoveObserver(WindowTreeConnectionObserver* observer) override;
 
@@ -202,8 +210,8 @@ class WindowTreeClientImpl : public WindowTreeConnection,
       mojom::ViewportMetricsPtr new_metrics) override;
   void OnWindowHierarchyChanged(
       Id window_id,
-      Id new_parent_id,
       Id old_parent_id,
+      Id new_parent_id,
       mojo::Array<mojom::WindowDataPtr> windows) override;
   void OnWindowReordered(Id window_id,
                          Id relative_window_id,
@@ -219,7 +227,10 @@ class WindowTreeClientImpl : public WindowTreeConnection,
                                      mojo::Array<uint8_t> new_data) override;
   void OnWindowInputEvent(uint32_t event_id,
                           Id window_id,
-                          mojom::EventPtr event) override;
+                          mojom::EventPtr event,
+                          uint32_t event_observer_id) override;
+  void OnEventObserved(mojom::EventPtr event,
+                       uint32_t event_observer_id) override;
   void OnWindowFocused(Id focused_window_id) override;
   void OnWindowPredefinedCursorChanged(Id window_id,
                                        mojom::Cursor cursor) override;
@@ -244,6 +255,8 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   // Overriden from WindowManagerClient:
   void SetFrameDecorationValues(
       mojom::FrameDecorationValuesPtr values) override;
+  void SetNonClientCursor(Window* window,
+                          mus::mojom::Cursor cursor_id) override;
   void AddAccelerator(uint32_t id,
                       mojom::EventMatcherPtr event_matcher,
                       const base::Callback<void(bool)>& callback) override;
@@ -289,11 +302,26 @@ class WindowTreeClientImpl : public WindowTreeConnection,
 
   bool in_destructor_;
 
+  // A handle to shared memory that is one 32 bit integer long. The window
+  // server uses this to let us synchronously read the cursor location.
+  mojo::ScopedSharedBufferHandle cursor_location_handle_;
+
+  // The one int in |cursor_location_handle_|. When we read from this
+  // location, we must always read from it atomically.
+  base::subtle::Atomic32* cursor_location_memory_;
+
   base::ObserverList<WindowTreeConnectionObserver> observers_;
 
-  scoped_ptr<mojo::AssociatedBinding<mojom::WindowManager>>
+  std::unique_ptr<mojo::AssociatedBinding<mojom::WindowManager>>
       window_manager_internal_;
   mojom::WindowManagerClientAssociatedPtr window_manager_internal_client_;
+
+  bool has_event_observer_ = false;
+
+  // Monotonically increasing ID for event observers.
+  uint32_t event_observer_id_ = 0u;
+
+  base::WeakPtrFactory<WindowTreeClientImpl> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowTreeClientImpl);
 };

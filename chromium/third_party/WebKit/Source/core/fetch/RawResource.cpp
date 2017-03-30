@@ -30,6 +30,7 @@
 #include "core/fetch/ResourceClientOrObserverWalker.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/fetch/ResourceLoader.h"
+#include "platform/HTTPNames.h"
 
 namespace blink {
 
@@ -136,7 +137,6 @@ void RawResource::willFollowRedirect(ResourceRequest& newRequest, const Resource
 
 void RawResource::willNotFollowRedirect()
 {
-    RawPtr<RawResource> protect(this);
     ResourceClientWalker<RawResourceClient> w(m_clients);
     while (RawResourceClient* c = w.next())
         c->redirectBlocked();
@@ -152,7 +152,7 @@ void RawResource::responseReceived(const ResourceResponse& response, PassOwnPtr<
     while (RawResourceClient* c = w.next()) {
         // |handle| is cleared when passed, but it's not a problem because
         // |handle| is null when there are two or more clients, as asserted.
-        c->responseReceived(this, m_response, handle);
+        c->responseReceived(this, m_response, std::move(handle));
     }
 
     // If we successfully revalidated, we won't get appendData() calls.
@@ -214,6 +214,7 @@ static bool shouldIgnoreHeaderForCacheReuse(AtomicString headerName)
         m_headers.add("Purpose");
         m_headers.add("Referer");
         m_headers.add("User-Agent");
+        m_headers.add(HTTPNames::X_DevTools_Emulate_Network_Conditions_Client_Id);
     }
     return m_headers.contains(headerName);
 }

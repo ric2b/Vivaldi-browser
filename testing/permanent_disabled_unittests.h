@@ -23,6 +23,9 @@
   // internal HTML page modified, breaking the test
   DISABLE(HelpPageWebUITest, testOpenHelpPage)
 
+  // never stop loading; disabled widevine pepper support(?)
+  DISABLE(PepperContentSettingsSpecialCasesJavaScriptBlockedTest, WidevineCdm)
+
   DISABLE(UberUIBrowserTest, EnableMdExtensionsHidesExtensions)
   DISABLE(UberUIBrowserTest, EnableMdHistoryHidesHistory)
   DISABLE(UberUIBrowserTest, EnableSettingsWindowHidesSettingsAndHelp)

@@ -80,10 +80,8 @@ void HTMLFrameOwnerElement::UpdateSuspendScope::performDeferredWidgetTreeOperati
                 currentParent->removeChild(child);
             if (newParent)
                 newParent->addChild(child);
-#if ENABLE(OILPAN)
             if (currentParent && !newParent)
                 child->dispose();
-#endif
         }
     }
 
@@ -122,9 +120,7 @@ void moveWidgetToParentSoon(Widget* child, FrameView* parent)
             parent->addChild(child);
         } else if (toFrameView(child->parent())) {
             toFrameView(child->parent())->removeChild(child);
-#if ENABLE(OILPAN)
             child->dispose();
-#endif
         }
         return;
     }
@@ -178,7 +174,7 @@ void HTMLFrameOwnerElement::disconnectContentFrame()
     // unload event in the subframe which could execute script that could then
     // reach up into this document and then attempt to look back down. We should
     // see if this behavior is really needed as Gecko does not allow this.
-    if (RawPtr<Frame> frame = contentFrame()) {
+    if (Frame* frame = contentFrame()) {
         frame->detach(FrameDetachType::Remove);
     }
 }
@@ -227,7 +223,7 @@ Document* HTMLFrameOwnerElement::getSVGDocument(ExceptionState& exceptionState) 
     return nullptr;
 }
 
-void HTMLFrameOwnerElement::setWidget(RawPtr<Widget> widget)
+void HTMLFrameOwnerElement::setWidget(Widget* widget)
 {
     if (widget == m_widget)
         return;
@@ -257,7 +253,7 @@ void HTMLFrameOwnerElement::setWidget(RawPtr<Widget> widget)
         cache->childrenChanged(layoutPart);
 }
 
-RawPtr<Widget> HTMLFrameOwnerElement::releaseWidget()
+Widget* HTMLFrameOwnerElement::releaseWidget()
 {
     if (!m_widget)
         return nullptr;
@@ -278,14 +274,14 @@ Widget* HTMLFrameOwnerElement::ownedWidget() const
 
 bool HTMLFrameOwnerElement::loadOrRedirectSubframe(const KURL& url, const AtomicString& frameName, bool replaceCurrentItem)
 {
-    RawPtr<LocalFrame> parentFrame = document().frame();
+    LocalFrame* parentFrame = document().frame();
     if (contentFrame()) {
         contentFrame()->navigate(document(), url, replaceCurrentItem, UserGestureStatus::None);
         return true;
     }
 
     if (!document().getSecurityOrigin()->canDisplay(url)) {
-        FrameLoader::reportLocalLoadFailed(parentFrame.get(), url.getString());
+        FrameLoader::reportLocalLoadFailed(parentFrame, url.getString());
         return false;
     }
 

@@ -129,15 +129,12 @@ class GL_EXPORT GLSurface : public base::RefCounted<GLSurface> {
   virtual void CommitOverlayPlanesAsync(const SwapCompletionCallback& callback);
 
   // Initialize GL bindings.
+  // DEPRECATED(kylechar): Use gl::init::InitializeGLOneOff from gl_factory.h.
   static bool InitializeOneOff();
 
   // Called after a context is made current with this surface. Returns false
   // on error.
   virtual bool OnMakeCurrent(GLContext* context);
-
-  // Called when the surface is bound as the current framebuffer for the
-  // current context.
-  virtual void NotifyWasBound();
 
   // Used for explicit buffer management.
   virtual bool SetBackbufferAllocation(bool allocated);
@@ -189,7 +186,8 @@ class GL_EXPORT GLSurface : public base::RefCounted<GLSurface> {
                                bool is_clipped,
                                const RectF& clip_rect,
                                const Transform& transform,
-                               int sorting_content_id);
+                               int sorting_content_id,
+                               unsigned filter);
 
   virtual bool IsSurfaceless() const;
 
@@ -200,6 +198,7 @@ class GL_EXPORT GLSurface : public base::RefCounted<GLSurface> {
   virtual bool BuffersFlipped() const;
 
   // Create a GL surface that renders directly to a view.
+  // DEPRECATED(kylechar): Use gl::init::CreateViewGLSurface from gl_factory.h.
   static scoped_refptr<GLSurface> CreateViewGLSurface(
       gfx::AcceleratedWidget window);
 
@@ -208,11 +207,15 @@ class GL_EXPORT GLSurface : public base::RefCounted<GLSurface> {
   // semantics - there is no default framebuffer and the primary surface must
   // be presented as an overlay. If surfaceless mode is not supported or
   // enabled it will return a null pointer.
+  // DEPRECATED(kylechar): Use gl::init::CreateSurfacelessViewGLSurface from
+  // gl_factory.h.
   static scoped_refptr<GLSurface> CreateSurfacelessViewGLSurface(
       gfx::AcceleratedWidget window);
 #endif  // defined(USE_OZONE)
 
   // Create a GL surface used for offscreen rendering.
+  // DEPRECATED(kylechar): Use gl::init::CreateOffscreenGLSurface from
+  // gl_factory.h.
   static scoped_refptr<GLSurface> CreateOffscreenGLSurface(
       const gfx::Size& size);
 

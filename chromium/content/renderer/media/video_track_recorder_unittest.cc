@@ -40,9 +40,16 @@ ACTION_P(RunClosure, closure) {
   closure.Run();
 }
 
-const bool kTrackRecorderTestUseVp9OrNot[] = {false, true};
+const VideoTrackRecorder::CodecId kTrackRecorderTestCodec[] = {
+    VideoTrackRecorder::CodecId::VP8,
+    VideoTrackRecorder::CodecId::VP9
+#if BUILDFLAG(RTC_USE_H264)
+    , VideoTrackRecorder::CodecId::H264
+#endif
+};
 
-class VideoTrackRecorderTest : public TestWithParam<bool> {
+class VideoTrackRecorderTest
+    : public TestWithParam<VideoTrackRecorder::CodecId> {
  public:
   VideoTrackRecorderTest()
       : mock_source_(new MockMediaStreamVideoSource(false)) {
@@ -61,7 +68,7 @@ class VideoTrackRecorderTest : public TestWithParam<bool> {
     blink_track_.setExtraData(track_);
 
     video_track_recorder_.reset(new VideoTrackRecorder(
-        GetParam() /* use_vp9 */, blink_track_,
+        GetParam() /* codec */, blink_track_,
         base::Bind(&VideoTrackRecorderTest::OnEncodedVideo,
                    base::Unretained(this)),
         0 /* bits_per_second */));
@@ -163,7 +170,7 @@ TEST_P(VideoTrackRecorderTest, VideoEncoding) {
 
   run_loop.Run();
 
-  const size_t kEncodedSizeThreshold = 18;
+  const size_t kEncodedSizeThreshold = 14;
   EXPECT_GE(first_frame_encoded_data.size(), kEncodedSizeThreshold);
   EXPECT_GE(second_frame_encoded_data.size(), kEncodedSizeThreshold);
   EXPECT_GE(third_frame_encoded_data.size(), kEncodedSizeThreshold);
@@ -173,6 +180,6 @@ TEST_P(VideoTrackRecorderTest, VideoEncoding) {
 
 INSTANTIATE_TEST_CASE_P(,
                         VideoTrackRecorderTest,
-                        ValuesIn(kTrackRecorderTestUseVp9OrNot));
+                        ValuesIn(kTrackRecorderTestCodec));
 
 }  // namespace content

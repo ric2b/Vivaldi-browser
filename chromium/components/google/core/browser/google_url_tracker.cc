@@ -12,7 +12,7 @@
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/google/core/browser/google_pref_names.h"
 #include "components/google/core/browser/google_switches.h"
@@ -29,8 +29,9 @@ const char GoogleURLTracker::kDefaultGoogleHomepage[] =
 const char GoogleURLTracker::kSearchDomainCheckURL[] =
     "https://www.google.com/searchdomaincheck?format=domain&type=chrome";
 
-GoogleURLTracker::GoogleURLTracker(scoped_ptr<GoogleURLTrackerClient> client,
-                                   Mode mode)
+GoogleURLTracker::GoogleURLTracker(
+    std::unique_ptr<GoogleURLTrackerClient> client,
+    Mode mode)
     : client_(std::move(client)),
       google_url_(mode == UNIT_TEST_MODE ? kDefaultGoogleHomepage
                                          : client_->GetPrefs()->GetString(
@@ -82,14 +83,14 @@ void GoogleURLTracker::RequestServerCheck(bool force) {
   }
 }
 
-scoped_ptr<GoogleURLTracker::Subscription> GoogleURLTracker::RegisterCallback(
-    const OnGoogleURLUpdatedCallback& cb) {
+std::unique_ptr<GoogleURLTracker::Subscription>
+GoogleURLTracker::RegisterCallback(const OnGoogleURLUpdatedCallback& cb) {
   return callback_list_.Add(cb);
 }
 
 void GoogleURLTracker::OnURLFetchComplete(const net::URLFetcher* source) {
   // Delete the fetcher on this function's exit.
-  scoped_ptr<net::URLFetcher> clean_up_fetcher(fetcher_.release());
+  std::unique_ptr<net::URLFetcher> clean_up_fetcher(std::move(fetcher_));
 
   // Don't update the URL if the request didn't succeed.
   if (!source->GetStatus().is_success() || (source->GetResponseCode() != 200)) {

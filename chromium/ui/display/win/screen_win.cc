@@ -8,12 +8,15 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "ui/display/display.h"
 #include "ui/display/win/display_info.h"
+#include "ui/display/win/dpi.h"
 #include "ui/display/win/screen_win_display.h"
-#include "ui/gfx/display.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/win/dpi.h"
+#include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/geometry/size_conversions.h"
 
 namespace display {
 namespace win {
@@ -29,9 +32,9 @@ std::vector<ScreenWinDisplay> DisplayInfosToScreenWinDisplays(
   return screen_win_displays;
 }
 
-std::vector<gfx::Display> ScreenWinDisplaysToDisplays(
+std::vector<display::Display> ScreenWinDisplaysToDisplays(
     const std::vector<ScreenWinDisplay>& screen_win_displays) {
-  std::vector<gfx::Display> displays;
+  std::vector<display::Display> displays;
   for (const auto& screen_win_display : screen_win_displays)
     displays.push_back(screen_win_display.display());
 
@@ -54,7 +57,7 @@ BOOL CALLBACK EnumMonitorCallback(HMONITOR monitor,
       reinterpret_cast<std::vector<DisplayInfo>*>(data);
   DCHECK(display_infos);
   display_infos->push_back(DisplayInfo(MonitorInfoFromHMONITOR(monitor),
-                                       gfx::GetDPIScale()));
+                                       GetDPIScale()));
   return TRUE;
 }
 
@@ -75,6 +78,72 @@ ScreenWin::ScreenWin() {
 
 ScreenWin::~ScreenWin() = default;
 
+// static
+gfx::Point ScreenWin::ScreenToDIPPoint(const gfx::Point& pixel_point) {
+  return ScaleToFlooredPoint(pixel_point, 1.0f / GetDPIScale());
+}
+
+// static
+gfx::Point ScreenWin::DIPToScreenPoint(const gfx::Point& dip_point) {
+  return ScaleToFlooredPoint(dip_point, GetDPIScale());
+}
+
+// static
+gfx::Point ScreenWin::ClientToDIPPoint(HWND hwnd,
+                                       const gfx::Point& client_point) {
+  // TODO(robliao): Get the scale factor from |hwnd|.
+  return ScreenToDIPPoint(client_point);
+}
+
+// static
+gfx::Point ScreenWin::DIPToClientPoint(HWND hwnd, const gfx::Point& dip_point) {
+  // TODO(robliao): Get the scale factor from |hwnd|.
+  return DIPToScreenPoint(dip_point);
+}
+
+// static
+gfx::Rect ScreenWin::ScreenToDIPRect(HWND hwnd, const gfx::Rect& pixel_bounds) {
+  // It's important we scale the origin and size separately. If we instead
+  // calculated the size from the floored origin and ceiled right the size could
+  // vary depending upon where the two points land. That would cause problems
+  // for the places this code is used (in particular mapping from native window
+  // bounds to DIPs).
+  return gfx::Rect(ScreenToDIPPoint(pixel_bounds.origin()),
+                   ScreenToDIPSize(hwnd, pixel_bounds.size()));
+}
+
+// static
+gfx::Rect ScreenWin::DIPToScreenRect(HWND hwnd, const gfx::Rect& dip_bounds) {
+  // See comment in ScreenToDIPRect for why we calculate size like this.
+  return gfx::Rect(DIPToScreenPoint(dip_bounds.origin()),
+                   DIPToScreenSize(hwnd, dip_bounds.size()));
+}
+
+// static
+gfx::Rect ScreenWin::ClientToDIPRect(HWND hwnd, const gfx::Rect& pixel_bounds) {
+  return ScreenToDIPRect(hwnd, pixel_bounds);
+}
+
+// static
+gfx::Rect ScreenWin::DIPToClientRect(HWND hwnd, const gfx::Rect& dip_bounds) {
+  return DIPToScreenRect(hwnd, dip_bounds);
+}
+
+// static
+gfx::Size ScreenWin::ScreenToDIPSize(HWND hwnd,
+                                     const gfx::Size& size_in_pixels) {
+  // Always ceil sizes. Otherwise we may be leaving off part of the bounds.
+  // TODO(robliao): Get the scale factor from |hwnd|.
+  return ScaleToCeiledSize(size_in_pixels, 1.0f / GetDPIScale());
+}
+
+// static
+gfx::Size ScreenWin::DIPToScreenSize(HWND hwnd, const gfx::Size& dip_size) {
+  // Always ceil sizes. Otherwise we may be leaving off part of the bounds.
+  // TODO(robliao): Get the scale factor from |hwnd|.
+  return ScaleToCeiledSize(dip_size, GetDPIScale());
+}
+
 HWND ScreenWin::GetHWNDFromNativeView(gfx::NativeView window) const {
   NOTREACHED();
   return nullptr;
@@ -89,18 +158,18 @@ gfx::Point ScreenWin::GetCursorScreenPoint() {
   POINT pt;
   ::GetCursorPos(&pt);
   gfx::Point cursor_pos_pixels(pt);
-  return gfx::win::ScreenToDIPPoint(cursor_pos_pixels);
+  return ScreenToDIPPoint(cursor_pos_pixels);
 }
 
-gfx::NativeWindow ScreenWin::GetWindowUnderCursor() {
+bool ScreenWin::IsWindowUnderCursor(gfx::NativeWindow window) {
   POINT cursor_loc;
   HWND hwnd =
       ::GetCursorPos(&cursor_loc) ? ::WindowFromPoint(cursor_loc) : nullptr;
-  return GetNativeWindowFromHWND(hwnd);
+  return GetNativeWindowFromHWND(hwnd) == window;
 }
 
 gfx::NativeWindow ScreenWin::GetWindowAtScreenPoint(const gfx::Point& point) {
-  gfx::Point point_in_pixels = gfx::win::DIPToScreenPoint(point);
+  gfx::Point point_in_pixels = DIPToScreenPoint(point);
   return GetNativeWindowFromHWND(WindowFromPoint(point_in_pixels.ToPOINT()));
 }
 
@@ -108,11 +177,12 @@ int ScreenWin::GetNumDisplays() const {
   return static_cast<int>(screen_win_displays_.size());
 }
 
-std::vector<gfx::Display> ScreenWin::GetAllDisplays() const {
+std::vector<display::Display> ScreenWin::GetAllDisplays() const {
   return ScreenWinDisplaysToDisplays(screen_win_displays_);
 }
 
-gfx::Display ScreenWin::GetDisplayNearestWindow(gfx::NativeView window) const {
+display::Display ScreenWin::GetDisplayNearestWindow(
+    gfx::NativeView window) const {
   HWND window_hwnd = GetHWNDFromNativeView(window);
   if (!window_hwnd) {
     // When |window| isn't rooted to a display, we should just return the
@@ -125,28 +195,29 @@ gfx::Display ScreenWin::GetDisplayNearestWindow(gfx::NativeView window) const {
   return screen_win_display.display();
 }
 
-gfx::Display ScreenWin::GetDisplayNearestPoint(const gfx::Point& point) const {
-  gfx::Point screen_point(gfx::win::DIPToScreenPoint(point));
+Display ScreenWin::GetDisplayNearestPoint(const gfx::Point& point) const {
+  gfx::Point screen_point(DIPToScreenPoint(point));
   ScreenWinDisplay screen_win_display =
       GetScreenWinDisplayNearestScreenPoint(screen_point);
   return screen_win_display.display();
 }
 
-gfx::Display ScreenWin::GetDisplayMatching(const gfx::Rect& match_rect) const {
+display::Display ScreenWin::GetDisplayMatching(
+    const gfx::Rect& match_rect) const {
   ScreenWinDisplay screen_win_display =
       GetScreenWinDisplayNearestScreenRect(match_rect);
   return screen_win_display.display();
 }
 
-gfx::Display ScreenWin::GetPrimaryDisplay() const {
+display::Display ScreenWin::GetPrimaryDisplay() const {
   return GetPrimaryScreenWinDisplay().display();
 }
 
-void ScreenWin::AddObserver(gfx::DisplayObserver* observer) {
+void ScreenWin::AddObserver(display::DisplayObserver* observer) {
   change_notifier_.AddObserver(observer);
 }
 
-void ScreenWin::RemoveObserver(gfx::DisplayObserver* observer) {
+void ScreenWin::RemoveObserver(display::DisplayObserver* observer) {
   change_notifier_.RemoveObserver(observer);
 }
 
@@ -192,7 +263,7 @@ void ScreenWin::OnWndProc(HWND hwnd,
   if (message != WM_DISPLAYCHANGE)
     return;
 
-  std::vector<gfx::Display> old_displays = GetAllDisplays();
+  std::vector<display::Display> old_displays = GetAllDisplays();
   UpdateFromDisplayInfos(GetDisplayInfosFromSystem());
   change_notifier_.NotifyDisplaysChanged(old_displays, GetAllDisplays());
 }
@@ -217,7 +288,7 @@ ScreenWinDisplay ScreenWin::GetPrimaryScreenWinDisplay() const {
   MONITORINFOEX monitor_info = MonitorInfoFromWindow(nullptr,
                                                      MONITOR_DEFAULTTOPRIMARY);
   ScreenWinDisplay screen_win_display = GetScreenWinDisplay(monitor_info);
-  gfx::Display display = screen_win_display.display();
+  display::Display display = screen_win_display.display();
   // The Windows primary monitor is defined to have an origin of (0, 0).
   DCHECK_EQ(0, display.bounds().origin().x());
   DCHECK_EQ(0, display.bounds().origin().y());

@@ -26,6 +26,7 @@
 <translation id="1602076796624386989">Mobilfunk aktivieren</translation>
 <translation id="1621499497873603021">Verbleibende Akku-Laufzeit: <ph name="TIME_LEFT" /></translation>
 <translation id="164969095109328410">Chrome-Gerät</translation>
+<translation id="1677472565718498478">Verbleibende Zeit: <ph name="TIME" /> h</translation>
 <translation id="1723752762323179280">Sitzung wird beendet</translation>
 <translation id="1747827819627189109">Bildschirmtastatur aktiviert</translation>
 <translation id="1812696562331527143">Ihre Eingabemethode hat sich in <ph name="INPUT_METHOD_ID" />*(<ph name="BEGIN_LINK" />Drittanbieter<ph name="END_LINK" />) geändert.
@@ -92,7 +93,6 @@ Drücken Sie die Such-Taste oder Shift, um die Aktivierung aufzuheben.</translat
 <translation id="3621712662352432595">Audioeinstellungen</translation>
 <translation id="3625258641415618104">Screenshot-Funktion deaktiviert</translation>
 <translation id="3626281679859535460">Helligkeit</translation>
-<translation id="3626637461649818317"><ph name="PERCENTAGE" /> % verbleibend</translation>
 <translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079">Auflösung von <ph name="DISPLAY_NAME" /> wurde zu <ph name="RESOLUTION" /> geändert.</translation>
 <translation id="370649949373421643">WLAN aktivieren</translation>
@@ -111,13 +111,13 @@ Drücken Sie die Such-Taste oder Shift, um die Aktivierung aufzuheben.</translat
 <translation id="397105322502079400">Wird berechnet...</translation>
 <translation id="3995138139523574647">USB-C-Gerät (Port hinten rechts)</translation>
 <translation id="4053612967614057854">Bildschirmtastatur deaktivieren</translation>
-<translation id="412065659894267608">In <ph name="HOUR" /> Std. <ph name="MINUTE" /> Min. vollständig aufgeladen</translation>
 <translation id="4250680216510889253">Nein</translation>
 <translation id="4279490309300973883">Spiegelung</translation>
 <translation id="4321179778687042513">Strg</translation>
 <translation id="4421231901400348175">Sie teilen sich die Bildschirmsteuerung mit <ph name="HELPER_NAME" /> per Remote-Unterstützung.</translation>
 <translation id="4430019312045809116">Lautstärke</translation>
 <translation id="4527045527269911712">Das Bluetooth-Gerät "<ph name="DEVICE_NAME" />" bittet um Erlaubnis für das Pairing.</translation>
+<translation id="453661520163887813">Vollständig geladen in <ph name="TIME" /> h</translation>
 <translation id="4544944664594876241">Die Tastenkombination zum Sperren des Bildschirms hat sich geändert. Bitte drücken Sie <ph name="NEW_SHORTCUT" /> statt <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="479989351350248267">Suchen</translation>
 <translation id="4804818685124855865">Verbindung trennen</translation>
@@ -129,7 +129,6 @@ Drücken Sie die Such-Taste oder Shift, um die Aktivierung aufzuheben.</translat
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Strg + Shift + Leer</translation>
 <translation id="5045002648206642691">Google Drive-Einstellungen...</translation>
-<translation id="5102001756192215136"><ph name="HOUR" />:<ph name="MINUTE" /> verbleiben</translation>
 <translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">Übertragungsgeräte verfügbar</translation>
 <translation id="5222676887888702881">Abmelden</translation>
@@ -166,7 +165,6 @@ Drücken Sie zum Wechseln Shift+Alt.</translation>
 <translation id="615957422585914272">Bildschirmtastatur anzeigen</translation>
 <translation id="6165508094623778733">Weitere Informationen</translation>
 <translation id="6203030746557259519">Virtueller Bildschirm</translation>
-<translation id="6247708409970142803"><ph name="PERCENTAGE" /> %</translation>
 <translation id="6248847161401822652">Drücken Sie zum Beenden zweimal Steuerung-Shift-Q.</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" /> wurde zu <ph name="ROTATION" /> gedreht.</translation>
 <translation id="6359806961507272919">SMS von <ph name="PHONE_NUMBER" /></translation>
@@ -207,6 +205,7 @@ Drücken Sie Alt+Suchen oder Shift, um die Aktivierung aufzuheben.</translation>
 <translation id="7510334386202674593">Strg + Shift + L</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> unterstützt <ph name="SPECIFIED_RESOLUTION" /> nicht. Die Auflösung wurde auf <ph name="FALLBACK_RESOLUTION" /> zurückgesetzt.</translation>
 <translation id="7573962313813535744">Docking-Modus</translation>
+<translation id="7580671184200851182">Dieselben Audioinhalte über alle Boxen wiedergeben (Mono-Audio)</translation>
 <translation id="7593891976182323525">Suchen oder Shift</translation>
 <translation id="7649070708921625228">Hilfe</translation>
 <translation id="7692480393933218409">Verbundene USB-C-Geräte werden geladen</translation>
@@ -225,13 +224,14 @@ Drücken Sie Alt+Suchen oder Shift, um die Aktivierung aufzuheben.</translation>
 <translation id="8308637677604853869">Vorheriges Menü</translation>
 <translation id="8356164830168736643"><ph name="WINDOW_TITLE" /> schließen</translation>
 <translation id="8428213095426709021">Einstellungen</translation>
-<translation id="8456362689280298700"><ph name="HOUR" />:<ph name="MINUTE" /> bis voll aufgeladen</translation>
 <translation id="8517041960877371778">Ihr <ph name="DEVICE_TYPE" /> wird möglicherweise nicht aufgeladen, wenn es eingeschaltet ist.</translation>
 <translation id="8528322925433439945">Mobil...</translation>
+<translation id="8639760480004882931"><ph name="PERCENTAGE" /> % verbleibend</translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">Schwachstrom-Ladegerät angeschlossen</translation>
 <translation id="8814190375133053267">WLAN</translation>
 <translation id="882279321799040148">Zum Anzeigen klicken</translation>
+<translation id="8825534185036233643">Das Spiegeln mit mehr als zwei Displays wird nicht unterstützt.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8850991929411075241">Suche + Esc</translation>
 <translation id="8878886163241303700">Bildschirmerweiterung</translation>

@@ -20,7 +20,7 @@
 #include "base/metrics/histogram.h"
 #include "base/process/launch.h"
 #include "base/task_runner_util.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/chrome_utility_printing_messages.h"
@@ -244,12 +244,18 @@ bool ServiceUtilityProcessHost::Launch(base::CommandLine* cmd_line,
   if (no_sandbox) {
     cmd_line->AppendSwitch(switches::kNoSandbox);
     process_ = base::LaunchProcess(*cmd_line, base::LaunchOptions());
+    return process_.IsValid();
   } else {
     ServiceSandboxedProcessLauncherDelegate delegate;
-    process_ = content::StartSandboxedProcess(
-        &delegate, cmd_line, base::HandlesToInheritVector());
+    base::Process process;
+    sandbox::ResultCode result = content::StartSandboxedProcess(
+        &delegate, cmd_line, base::HandlesToInheritVector(), &process);
+    if (result == sandbox::SBOX_ALL_OK) {
+      process_ = std::move(process);
+      return true;
+    }
+    return false;
   }
-  return process_.IsValid();
 }
 
 bool ServiceUtilityProcessHost::Send(IPC::Message* msg) {

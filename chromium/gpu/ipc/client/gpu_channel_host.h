@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -15,24 +16,18 @@
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/process.h"
 #include "base/synchronization/lock.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/gpu_export.h"
 #include "gpu/ipc/common/gpu_stream_constants.h"
-#include "gpu/ipc/common/surface_handle.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_sync_channel.h"
 #include "ipc/message_filter.h"
 #include "ipc/message_router.h"
 #include "ui/events/latency_info.h"
-#include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_memory_buffer.h"
-#include "ui/gl/gpu_preference.h"
-
-class GURL;
 
 namespace base {
 class WaitableEvent;
@@ -47,8 +42,6 @@ class GpuMemoryBufferManager;
 }
 
 namespace gpu {
-class CommandBufferProxyImpl;
-class GpuChannelHost;
 
 class GPU_EXPORT GpuChannelHostFactory {
  public:
@@ -57,7 +50,8 @@ class GPU_EXPORT GpuChannelHostFactory {
   virtual bool IsMainThread() = 0;
   virtual scoped_refptr<base::SingleThreadTaskRunner>
   GetIOThreadTaskRunner() = 0;
-  virtual scoped_ptr<base::SharedMemory> AllocateSharedMemory(size_t size) = 0;
+  virtual std::unique_ptr<base::SharedMemory> AllocateSharedMemory(
+      size_t size) = 0;
 };
 
 // Encapsulates an IPC channel between the client and one GPU process.
@@ -76,10 +70,6 @@ class GPU_EXPORT GpuChannelHost
       const IPC::ChannelHandle& channel_handle,
       base::WaitableEvent* shutdown_event,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager);
-
-  static const int32_t kDefaultStreamId = gpu::GPU_STREAM_DEFAULT;
-  static const gpu::GpuStreamPriority kDefaultStreamPriority =
-      gpu::GpuStreamPriority::NORMAL;
 
   bool IsLost() const {
     DCHECK(channel_filter_.get());
@@ -106,20 +96,6 @@ class GPU_EXPORT GpuChannelHost
                            bool do_flush);
 
   void FlushPendingStream(int32_t stream_id);
-
-  // Create and connect to a command buffer in the GPU process.
-  scoped_ptr<CommandBufferProxyImpl> CreateCommandBuffer(
-      gpu::SurfaceHandle surface_handle,
-      const gfx::Size& size,
-      CommandBufferProxyImpl* share_group,
-      int32_t stream_id,
-      gpu::GpuStreamPriority stream_priority,
-      const std::vector<int32_t>& attribs,
-      const GURL& active_url,
-      gfx::GpuPreference gpu_preference);
-
-  // Destroy a command buffer created by this channel.
-  void DestroyCommandBuffer(CommandBufferProxyImpl* command_buffer);
 
   // Destroy this channel. Must be called on the main thread, before
   // destruction.
@@ -289,7 +265,7 @@ class GPU_EXPORT GpuChannelHost
 
   // Protects channel_ and stream_flush_info_.
   mutable base::Lock context_lock_;
-  scoped_ptr<IPC::SyncChannel> channel_;
+  std::unique_ptr<IPC::SyncChannel> channel_;
   base::hash_map<int32_t, StreamFlushInfo> stream_flush_info_;
 
   DISALLOW_COPY_AND_ASSIGN(GpuChannelHost);

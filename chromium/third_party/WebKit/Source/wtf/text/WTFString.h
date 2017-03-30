@@ -581,6 +581,8 @@ inline bool codePointCompareLessThan(const String& a, const String& b)
     return codePointCompare(a.impl(), b.impl()) < 0;
 }
 
+WTF_EXPORT int codePointCompareIgnoringASCIICase(const String&, const char*);
+
 template<size_t inlineCapacity>
 inline void append(Vector<UChar, inlineCapacity>& vector, const String& string)
 {
@@ -676,7 +678,8 @@ WTF_EXPORT const String& emptyString();
 WTF_EXPORT const String& emptyString16Bit();
 WTF_EXPORT extern const String& xmlnsWithColon;
 
-// Pretty printer for gtest and base/logging.*.
+// Pretty printer for gtest and base/logging.*.  It prepends and appends
+// double-quotes, and escapes chracters other than ASCII printables.
 WTF_EXPORT std::ostream& operator<<(std::ostream&, const String&);
 
 } // namespace WTF

@@ -2,10 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/policy/managed_bookmarks_policy_handler.h"
+
 #include <utility>
 
 #include "base/json/json_reader.h"
-#include "chrome/browser/policy/managed_bookmarks_policy_handler.h"
+#include "base/memory/ptr_util.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/policy/core/browser/configuration_policy_pref_store.h"
 #include "components/policy/core/browser/configuration_policy_pref_store_test.h"
@@ -24,7 +26,7 @@ class ManagedBookmarksPolicyHandlerTest
     : public ConfigurationPolicyPrefStoreTest {
   void SetUp() override {
     Schema chrome_schema = Schema::Wrap(GetChromeSchemaData());
-    handler_list_.AddHandler(make_scoped_ptr<ConfigurationPolicyHandler>(
+    handler_list_.AddHandler(base::WrapUnique<ConfigurationPolicyHandler>(
         new ManagedBookmarksPolicyHandler(chrome_schema)));
   }
 };
@@ -34,9 +36,7 @@ TEST_F(ManagedBookmarksPolicyHandlerTest, ApplyPolicySettings) {
   EXPECT_FALSE(store_->GetValue(bookmarks::prefs::kManagedBookmarks, NULL));
 
   PolicyMap policy;
-  policy.Set(key::kManagedBookmarks,
-             POLICY_LEVEL_MANDATORY,
-             POLICY_SCOPE_USER,
+  policy.Set(key::kManagedBookmarks, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
              POLICY_SOURCE_CLOUD,
              base::JSONReader::Read("["
                                     // The following gets filtered out from the
@@ -74,9 +74,8 @@ TEST_F(ManagedBookmarksPolicyHandlerTest, ApplyPolicySettings) {
                                     "      }"
                                     "    ]"
                                     "  }"
-                                    "]")
-                 .release(),
-             NULL);
+                                    "]"),
+             nullptr);
   UpdateProviderPolicy(policy);
   const base::Value* pref_value = NULL;
   EXPECT_TRUE(
@@ -92,7 +91,7 @@ TEST_F(ManagedBookmarksPolicyHandlerTest, ApplyPolicySettings) {
   ASSERT_TRUE(folder_value->GetAsString(&folder_name));
   EXPECT_EQ("abc 123", folder_name);
 
-  scoped_ptr<base::Value> expected(
+  std::unique_ptr<base::Value> expected(
       extensions::ListBuilder()
           .Append(extensions::DictionaryBuilder()
                       .Set("name", "Google")
@@ -143,18 +142,15 @@ TEST_F(ManagedBookmarksPolicyHandlerTest, ApplyPolicySettingsNoTitle) {
   EXPECT_FALSE(store_->GetValue(bookmarks::prefs::kManagedBookmarks, NULL));
 
   PolicyMap policy;
-  policy.Set(key::kManagedBookmarks,
-             POLICY_LEVEL_MANDATORY,
-             POLICY_SCOPE_USER,
+  policy.Set(key::kManagedBookmarks, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
              POLICY_SOURCE_CLOUD,
              base::JSONReader::Read("["
                                     "  {"
                                     "    \"name\": \"Google\","
                                     "    \"url\": \"google.com\""
                                     "  }"
-                                    "]")
-                 .release(),
-             NULL);
+                                    "]"),
+             nullptr);
   UpdateProviderPolicy(policy);
   const base::Value* pref_value = NULL;
   EXPECT_TRUE(
@@ -170,7 +166,7 @@ TEST_F(ManagedBookmarksPolicyHandlerTest, ApplyPolicySettingsNoTitle) {
   ASSERT_TRUE(folder_value->GetAsString(&folder_name));
   EXPECT_EQ("", folder_name);
 
-  scoped_ptr<base::Value> expected(
+  std::unique_ptr<base::Value> expected(
       extensions::ListBuilder()
           .Append(extensions::DictionaryBuilder()
                       .Set("name", "Google")
@@ -185,18 +181,16 @@ TEST_F(ManagedBookmarksPolicyHandlerTest, WrongPolicyType) {
   PolicyMap policy;
   // The expected type is base::ListValue, but this policy sets it as an
   // unparsed base::StringValue. Any type other than ListValue should fail.
-  policy.Set(key::kManagedBookmarks,
-             POLICY_LEVEL_MANDATORY,
-             POLICY_SCOPE_USER,
-             POLICY_SOURCE_CLOUD,
-             new base::StringValue(
-                 "["
-                 "  {"
-                 "    \"name\": \"Google\","
-                 "    \"url\": \"google.com\""
-                 "  },"
-                 "]"),
-             NULL);
+  policy.Set(
+      key::kManagedBookmarks, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+      POLICY_SOURCE_CLOUD,
+      base::WrapUnique(new base::StringValue("["
+                                             "  {"
+                                             "    \"name\": \"Google\","
+                                             "    \"url\": \"google.com\""
+                                             "  },"
+                                             "]")),
+      nullptr);
   UpdateProviderPolicy(policy);
   EXPECT_FALSE(store_->GetValue(bookmarks::prefs::kManagedBookmarks, NULL));
 }
@@ -204,9 +198,7 @@ TEST_F(ManagedBookmarksPolicyHandlerTest, WrongPolicyType) {
 #if defined(ENABLE_EXTENSIONS)
 TEST_F(ManagedBookmarksPolicyHandlerTest, UnknownKeys) {
   PolicyMap policy;
-  policy.Set(key::kManagedBookmarks,
-             POLICY_LEVEL_MANDATORY,
-             POLICY_SCOPE_USER,
+  policy.Set(key::kManagedBookmarks, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
              POLICY_SOURCE_CLOUD,
              base::JSONReader::Read("["
                                     "  {"
@@ -214,16 +206,15 @@ TEST_F(ManagedBookmarksPolicyHandlerTest, UnknownKeys) {
                                     "    \"unknown\": \"should be ignored\","
                                     "    \"url\": \"google.com\""
                                     "  }"
-                                    "]")
-                 .release(),
-             NULL);
+                                    "]"),
+             nullptr);
   UpdateProviderPolicy(policy);
   const base::Value* pref_value = NULL;
   EXPECT_TRUE(
       store_->GetValue(bookmarks::prefs::kManagedBookmarks, &pref_value));
   ASSERT_TRUE(pref_value);
 
-  scoped_ptr<base::Value> expected(
+  std::unique_ptr<base::Value> expected(
       extensions::ListBuilder()
           .Append(extensions::DictionaryBuilder()
                       .Set("name", "Google")
@@ -237,9 +228,7 @@ TEST_F(ManagedBookmarksPolicyHandlerTest, UnknownKeys) {
 #if defined(ENABLE_EXTENSIONS)
 TEST_F(ManagedBookmarksPolicyHandlerTest, BadBookmark) {
   PolicyMap policy;
-  policy.Set(key::kManagedBookmarks,
-             POLICY_LEVEL_MANDATORY,
-             POLICY_SCOPE_USER,
+  policy.Set(key::kManagedBookmarks, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
              POLICY_SOURCE_CLOUD,
              base::JSONReader::Read("["
                                     "  {"
@@ -258,16 +247,15 @@ TEST_F(ManagedBookmarksPolicyHandlerTest, BadBookmark) {
                                     "    \"name\": \"Google\","
                                     "    \"url\": \"google.com\""
                                     "  }"
-                                    "]")
-                 .release(),
-             NULL);
+                                    "]"),
+             nullptr);
   UpdateProviderPolicy(policy);
   const base::Value* pref_value = NULL;
   EXPECT_TRUE(
       store_->GetValue(bookmarks::prefs::kManagedBookmarks, &pref_value));
   ASSERT_TRUE(pref_value);
 
-  scoped_ptr<base::Value> expected(
+  std::unique_ptr<base::Value> expected(
       extensions::ListBuilder()
           .Append(extensions::DictionaryBuilder()
                       .Set("name", "Google")

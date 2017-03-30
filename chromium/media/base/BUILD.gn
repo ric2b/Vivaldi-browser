@@ -10,12 +10,21 @@ import("//build/config/linux/pkg_config.gni")
 import("//media/media_options.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 
+config("base_config") {
+  configs = [
+    # This target uses the ALLOCATOR_SHIM define.
+    "//base/allocator:allocator_shim_define",
+    "//build/config:precompiled_headers",
+    "//build/config/compiler:no_size_t_to_int_warning",
+    "//media:media_config",
+    "//media:media_dependent_config",
+    "//media:media_implementation",
+  ]
+}
+
 source_set("base") {
   # This is part of the media component.
-  visibility = [
-    "//media",
-    "//media/capture",
-  ]
+  visibility = [ "//media/*" ]
   sources = [
     "audio_block_fifo.cc",
     "audio_block_fifo.h",
@@ -117,10 +126,11 @@ source_set("base") {
     "eme_constants.h",
     "encryption_scheme.cc",
     "encryption_scheme.h",
-    "key_system_info.cc",
-    "key_system_info.h",
+    "key_system_names.cc",
+    "key_system_names.h",
+    "key_system_properties.cc",
+    "key_system_properties.h",
     "key_systems.cc",
-    "key_systems.h",
     "key_systems.h",
     "loopback_audio_converter.cc",
     "loopback_audio_converter.h",
@@ -160,6 +170,7 @@ source_set("base") {
     "pipeline.h",
     "pipeline_impl.cc",
     "pipeline_impl.h",
+    "pipeline_metadata.h",
     "pipeline_status.h",
     "player_tracker.cc",
     "player_tracker.h",
@@ -167,6 +178,7 @@ source_set("base") {
     "ranges.h",
     "renderer.cc",
     "renderer.h",
+    "renderer_client.h",
     "renderer_factory.cc",
     "renderer_factory.h",
     "sample_format.cc",
@@ -236,17 +248,17 @@ source_set("base") {
   defines = []
   public_deps = []
   deps = [
+    "//base/third_party/dynamic_annotations:dynamic_annotations",
+    "//gpu",
+    "//media:media_features",
+    "//media:shared_memory_support",
     "//skia",
+    "//third_party/libyuv",
     "//ui/events:events_base",
+    "//url:url",
   ]
   libs = []
-  configs += [
-    # This target uses the ALLOCATOR_SHIM define.
-    "//base/allocator:allocator_shim_define",
-    "//build/config:precompiled_headers",
-    "//media:media_config",
-    "//media:media_implementation",
-  ]
+  configs += [ ":base_config" ]
 
   if (media_use_ffmpeg) {
     if (!is_android) {
@@ -304,8 +316,6 @@ source_set("base") {
     ]
     deps += [ ":media_yasm" ]
   }
-
-  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 
   if (is_linux || is_win) {
     sources += [
@@ -377,11 +387,17 @@ source_set("test_support") {
     "test_helpers.cc",
     "test_helpers.h",
     "test_random.h",
+    "vector_math_testing.h",
   ]
   configs += [ "//media:media_config" ]
   deps = [
+    "//base",
+    "//base/test:test_support",
+    "//media",
+    "//media:media_features",
     "//media:shared_memory_support",
     "//testing/gmock",
+    "//ui/gfx:test_support",
   ]
 }
 
@@ -398,6 +414,8 @@ source_set("unittests") {
     "audio_fifo_unittest.cc",
     "audio_hardware_config_unittest.cc",
     "audio_hash_unittest.cc",
+    "audio_parameters_unittest.cc",
+    "audio_point_unittest.cc",
     "audio_pull_fifo_unittest.cc",
     "audio_push_fifo_unittest.cc",
     "audio_renderer_mixer_input_unittest.cc",
@@ -434,7 +452,6 @@ source_set("unittests") {
     "text_renderer_unittest.cc",
     "time_delta_interpolator_unittest.cc",
     "user_input_monitor_unittest.cc",
-    "vector_math_testing.h",
     "vector_math_unittest.cc",
     "video_decoder_config_unittest.cc",
     "video_frame_pool_unittest.cc",
@@ -449,6 +466,7 @@ source_set("unittests") {
   ]
   deps = [
     ":test_support",
+    "//base/test:test_support",
     "//gpu/command_buffer/common",
     "//media",
     "//skia",
@@ -487,9 +505,12 @@ source_set("perftests") {
   configs += [ "//media:media_config" ]
   deps = [
     ":test_support",
+    "//base",
+    "//base/test:test_support",
     "//media",
     "//testing/gmock",
     "//testing/gtest",
+    "//testing/perf",
     "//third_party/libyuv",
   ]
 
@@ -516,16 +537,18 @@ if (current_cpu == "x86" || current_cpu == "x64") {
       "simd/scale_yuv_to_rgb_sse.asm",
     ]
 
-    # TODO(ajwong): Only export if shared_library build...
     yasm_flags = [
       "-DCHROMIUM",
-      "-DEXPORT_SYMBOLS",
 
       # In addition to the same path as source asm, let yasm %include
       # search path be relative to src/ per Chromium policy.
       "-I",
       rebase_path("..", root_build_dir),
     ]
+
+    if (is_component_build) {
+      yasm_flags += [ "-DEXPORT_SYMBOLS" ]
+    }
 
     inputs = [
       "//third_party/x86inc/x86inc.asm",
@@ -569,6 +592,7 @@ fuzzer_test("media_bit_reader_fuzzer") {
     "bit_reader_fuzzertest.cc",
   ]
   deps = [
+    ":test_support",
     "//base",
     "//media",
   ]

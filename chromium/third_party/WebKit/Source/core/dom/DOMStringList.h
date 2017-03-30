@@ -29,8 +29,6 @@
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
 
@@ -49,7 +47,7 @@ public:
     // what path it should take. http://crbug.com/460726
     enum Source { IndexedDB, Location };
 
-    static RawPtr<DOMStringList> create(Source source)
+    static DOMStringList* create(Source source)
     {
         return new DOMStringList(source);
     }

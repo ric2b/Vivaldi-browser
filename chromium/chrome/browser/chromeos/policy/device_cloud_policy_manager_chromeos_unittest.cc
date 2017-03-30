@@ -16,7 +16,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
 #include "chrome/browser/chromeos/policy/device_cloud_policy_initializer.h"
@@ -187,12 +187,9 @@ class DeviceCloudPolicyManagerChromeOSTest
   void VerifyPolicyPopulated() {
     PolicyBundle bundle;
     bundle.Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()))
-        .Set(key::kDeviceMetricsReportingEnabled,
-             POLICY_LEVEL_MANDATORY,
-             POLICY_SCOPE_MACHINE,
-             POLICY_SOURCE_CLOUD,
-             new base::FundamentalValue(false),
-             NULL);
+        .Set(key::kDeviceMetricsReportingEnabled, POLICY_LEVEL_MANDATORY,
+             POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
+             base::WrapUnique(new base::FundamentalValue(false)), nullptr);
     EXPECT_TRUE(manager_->policies().Equals(bundle));
   }
 

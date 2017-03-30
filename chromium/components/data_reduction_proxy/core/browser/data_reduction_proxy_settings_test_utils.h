@@ -6,9 +6,9 @@
 #define COMPONENTS_DATA_REDUCTION_PROXY_CORE_BROWSER_DATA_REDUCTION_PROXY_SETTINGS_TEST_UTILS_H_
 
 #include <map>
+#include <memory>
 #include <string>
 
-#include "base/memory/scoped_ptr.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings.h"
 #include "components/prefs/testing_pref_service.h"
 #include "net/log/test_net_log.h"
@@ -71,7 +71,6 @@ class DataReductionProxySettingsTestBase : public testing::Test {
   void InitWithStatisticsPrefs();
   void InitDataReductionProxy(bool enabled_at_startup);
   void CheckDataReductionProxySyntheticTrial(bool enabled);
-  void CheckDataReductionProxyLoFiSyntheticTrial(bool enabled);
   bool SyntheticFieldTrialRegistrationCallback(const std::string& trial_name,
                                                const std::string& group_name) {
     synthetic_field_trials_[trial_name] = group_name;
@@ -79,8 +78,8 @@ class DataReductionProxySettingsTestBase : public testing::Test {
   }
 
   base::MessageLoopForIO message_loop_;
-  scoped_ptr<DataReductionProxyTestContext> test_context_;
-  scoped_ptr<DataReductionProxySettings> settings_;
+  std::unique_ptr<DataReductionProxyTestContext> test_context_;
+  std::unique_ptr<DataReductionProxySettings> settings_;
   base::Time last_update_time_;
   std::map<std::string, std::string> synthetic_field_trials_;
 };

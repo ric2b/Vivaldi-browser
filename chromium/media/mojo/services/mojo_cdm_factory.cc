@@ -7,17 +7,17 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "media/base/key_systems.h"
 #include "media/cdm/aes_decryptor.h"
 #include "media/mojo/services/mojo_cdm.h"
-#include "mojo/shell/public/cpp/connect.h"
-#include "mojo/shell/public/interfaces/interface_provider.mojom.h"
+#include "services/shell/public/cpp/connect.h"
+#include "services/shell/public/interfaces/interface_provider.mojom.h"
 
 namespace media {
 
 MojoCdmFactory::MojoCdmFactory(
-    mojo::shell::mojom::InterfaceProvider* interface_provider)
+    shell::mojom::InterfaceProvider* interface_provider)
     : interface_provider_(interface_provider) {
   DCHECK(interface_provider_);
 }
@@ -52,9 +52,9 @@ void MojoCdmFactory::Create(
     return;
   }
 
-  interfaces::ContentDecryptionModulePtr cdm_ptr;
-  mojo::GetInterface<interfaces::ContentDecryptionModule>(interface_provider_,
-                                                          &cdm_ptr);
+  mojom::ContentDecryptionModulePtr cdm_ptr;
+  shell::GetInterface<mojom::ContentDecryptionModule>(interface_provider_,
+                                                      &cdm_ptr);
 
   MojoCdm::Create(key_system, security_origin, cdm_config, std::move(cdm_ptr),
                   session_message_cb, session_closed_cb,

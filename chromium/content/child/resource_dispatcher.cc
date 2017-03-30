@@ -31,6 +31,8 @@
 #include "content/common/inter_process_time_ticks_converter.h"
 #include "content/common/navigation_params.h"
 #include "content/common/resource_messages.h"
+#include "content/common/resource_request.h"
+#include "content/common/resource_request_completion_status.h"
 #include "content/public/child/fixed_received_data.h"
 #include "content/public/child/request_peer.h"
 #include "content/public/child/resource_dispatcher_delegate.h"
@@ -227,7 +229,8 @@ void ResourceDispatcher::OnReceivedInlinedDataChunk(
     int encoded_data_length) {
   TRACE_EVENT0("loader", "ResourceDispatcher::OnReceivedInlinedDataChunk");
   DCHECK(!data.empty());
-  DCHECK(base::FeatureList::IsEnabled(features::kOptimizeIPCForSmallResource));
+  DCHECK(base::FeatureList::IsEnabled(
+      features::kOptimizeLoadingIPCForSmallResources));
 
   PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
   if (!request_info || data.empty())
@@ -260,8 +263,6 @@ void ResourceDispatcher::OnReceivedData(int request_id,
     CHECK(base::SharedMemory::IsHandleValid(request_info->buffer->handle()));
     CHECK_GE(request_info->buffer_size, data_offset + data_length);
 
-    base::TimeTicks time_start = base::TimeTicks::Now();
-
     const char* data_start = static_cast<char*>(request_info->buffer->memory());
     CHECK(data_start);
     CHECK(data_start + data_offset);
@@ -281,9 +282,6 @@ void ResourceDispatcher::OnReceivedData(int request_id,
     // |data| takes care of ACKing.
     send_ack = false;
     request_info->peer->OnReceivedData(std::move(data));
-
-    UMA_HISTOGRAM_TIMES("ResourceDispatcher.OnReceivedDataTime",
-                        base::TimeTicks::Now() - time_start);
   }
 
   // Acknowledge the reception of this data.
@@ -346,7 +344,7 @@ void ResourceDispatcher::FollowPendingRedirect(
 
 void ResourceDispatcher::OnRequestComplete(
     int request_id,
-    const ResourceMsg_RequestCompleteData& request_complete_data) {
+    const ResourceRequestCompletionStatus& request_complete_data) {
   TRACE_EVENT0("loader", "ResourceDispatcher::OnRequestComplete");
 
   PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
@@ -547,7 +545,7 @@ void ResourceDispatcher::FlushDeferredMessages(int request_id) {
 void ResourceDispatcher::StartSync(const RequestInfo& request_info,
                                    ResourceRequestBody* request_body,
                                    SyncLoadResponse* response) {
-  std::unique_ptr<ResourceHostMsg_Request> request =
+  std::unique_ptr<ResourceRequest> request =
       CreateRequest(request_info, request_body, NULL);
 
   SyncLoadResult result;
@@ -579,7 +577,7 @@ int ResourceDispatcher::StartAsync(const RequestInfo& request_info,
                                    ResourceRequestBody* request_body,
                                    std::unique_ptr<RequestPeer> peer) {
   GURL frame_origin;
-  std::unique_ptr<ResourceHostMsg_Request> request =
+  std::unique_ptr<ResourceRequest> request =
       CreateRequest(request_info, request_body, &frame_origin);
 
   // Compute a unique request_id for this renderer process.
@@ -632,6 +630,8 @@ void ResourceDispatcher::ToResourceResponseInfo(
   RemoteToLocalTimeTicks(converter, &load_timing->send_start);
   RemoteToLocalTimeTicks(converter, &load_timing->send_end);
   RemoteToLocalTimeTicks(converter, &load_timing->receive_headers_end);
+  RemoteToLocalTimeTicks(converter, &load_timing->push_start);
+  RemoteToLocalTimeTicks(converter, &load_timing->push_end);
   RemoteToLocalTimeTicks(converter, &renderer_info->service_worker_start_time);
   RemoteToLocalTimeTicks(converter, &renderer_info->service_worker_ready_time);
 
@@ -687,8 +687,6 @@ bool ResourceDispatcher::IsResourceDispatcherMessage(
     case ResourceMsg_ReceivedCachedMetadata::ID:
     case ResourceMsg_ReceivedRedirect::ID:
     case ResourceMsg_SetDataBuffer::ID:
-    case ResourceMsg_DataReceivedDebug::ID:
-    case ResourceMsg_DataReceivedDebug2::ID:
     case ResourceMsg_InlinedDataChunkReceived::ID:
     case ResourceMsg_DataReceived::ID:
     case ResourceMsg_DataDownloaded::ID:
@@ -735,11 +733,11 @@ void ResourceDispatcher::ReleaseResourcesInMessageQueue(MessageQueue* queue) {
   }
 }
 
-std::unique_ptr<ResourceHostMsg_Request> ResourceDispatcher::CreateRequest(
+std::unique_ptr<ResourceRequest> ResourceDispatcher::CreateRequest(
     const RequestInfo& request_info,
     ResourceRequestBody* request_body,
     GURL* frame_origin) {
-  std::unique_ptr<ResourceHostMsg_Request> request(new ResourceHostMsg_Request);
+  std::unique_ptr<ResourceRequest> request(new ResourceRequest);
   request->method = request_info.method;
   request->url = request_info.url;
   request->first_party_for_cookies = request_info.first_party_for_cookies;
@@ -766,6 +764,7 @@ std::unique_ptr<ResourceHostMsg_Request> ResourceDispatcher::CreateRequest(
   request->enable_upload_progress = request_info.enable_upload_progress;
   request->do_not_prompt_for_login = request_info.do_not_prompt_for_login;
   request->report_raw_headers = request_info.report_raw_headers;
+  request->lofi_state = request_info.lofi_state;
 
   if ((request_info.referrer.policy == blink::WebReferrerPolicyDefault ||
        request_info.referrer.policy ==
@@ -801,7 +800,6 @@ std::unique_ptr<ResourceHostMsg_Request> ResourceDispatcher::CreateRequest(
       extra_data->service_worker_provider_id();
   request->originated_from_service_worker =
       extra_data->originated_from_service_worker();
-  request->lofi_state = extra_data->lofi_state();
   request->request_body = request_body;
   request->resource_body_stream_url = request_info.resource_body_stream_url;
   if (frame_origin)

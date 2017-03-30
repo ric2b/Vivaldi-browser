@@ -15,6 +15,7 @@
 #include "core/dom/Document.h"
 #include "core/frame/Frame.h"
 #include "core/testing/DummyPageHolder.h"
+#include "modules/fetch/BodyStreamBuffer.h"
 #include "modules/fetch/FetchFormDataConsumerHandle.h"
 #include "modules/fetch/GlobalFetch.h"
 #include "modules/fetch/Request.h"
@@ -63,15 +64,6 @@ public:
         return ScriptPromise::reject(scriptState, V8ThrowException::createTypeError(scriptState->isolate(), "Unexpected call to fetch, no response available."));
     }
 
-    GlobalFetch::ScopedFetcher* weakPtr()
-    {
-#if ENABLE(OILPAN)
-        return this;
-#else
-        return m_weakFactory.createWeakPtr();
-#endif
-    }
-
     // This does not take ownership of its parameter. The provided sample object is used to check the parameter when called.
     void setExpectedFetchUrl(const String* expectedUrl) { m_expectedUrl = expectedUrl; }
     void setResponse(Response* response) { m_response = response; }
@@ -88,19 +80,12 @@ private:
     ScopedFetcherForTests()
         : m_fetchCount(0)
         , m_expectedUrl(nullptr)
-#if !ENABLE(OILPAN)
-        , m_weakFactory(this)
-#endif
     {
     }
 
     int m_fetchCount;
     const String* m_expectedUrl;
     Member<Response> m_response;
-
-#if !ENABLE(OILPAN)
-    WeakPtrFactory<GlobalFetch::ScopedFetcher> m_weakFactory;
-#endif
 };
 
 // A test implementation of the WebServiceWorkerCache interface which returns a (provided) error for every operation, and optionally checks arguments
@@ -228,7 +213,7 @@ public:
 
     Cache* createCache(ScopedFetcherForTests* fetcher, WebServiceWorkerCache* webCache)
     {
-        return Cache::create(fetcher->weakPtr(), adoptPtr(webCache));
+        return Cache::create(fetcher, adoptPtr(webCache));
     }
 
     ScriptState* getScriptState() { return ScriptState::forMainWorld(m_page->document().frame()); }
@@ -443,7 +428,7 @@ TEST_F(CacheStorageTest, BatchOperationArguments)
 
     WebServiceWorkerResponse webResponse;
     webResponse.setURL(KURL(ParsedURLString, url));
-    Response* response = Response::create(getExecutionContext(), webResponse);
+    Response* response = Response::create(getScriptState(), webResponse);
 
     WebVector<WebServiceWorkerCache::BatchOperation> expectedDeleteOperations(size_t(1));
     {
@@ -475,7 +460,7 @@ TEST_F(CacheStorageTest, BatchOperationArguments)
 
     request = newRequestFromUrl(url);
     ASSERT(request);
-    ScriptPromise putResult = cache->put(getScriptState(), requestToRequestInfo(request), response->clone(exceptionState()), exceptionState());
+    ScriptPromise putResult = cache->put(getScriptState(), requestToRequestInfo(request), response->clone(getScriptState(), exceptionState()), exceptionState());
     EXPECT_EQ("dispatchBatch", testCache->getAndClearLastErrorWebCacheMethodCalled());
     EXPECT_EQ(kNotImplementedString, getRejectString(putResult));
 
@@ -641,7 +626,7 @@ TEST_F(CacheStorageTest, Add)
     fetcher->setExpectedFetchUrl(&url);
 
     Request* request = newRequestFromUrl(url);
-    Response* response = Response::create(getExecutionContext(), FetchFormDataConsumerHandle::create(content), contentType, ResponseInit(), exceptionState());
+    Response* response = Response::create(getScriptState(), new BodyStreamBuffer(getScriptState(), FetchFormDataConsumerHandle::create(content)), contentType, ResponseInit(), exceptionState());
     fetcher->setResponse(response);
 
     WebVector<WebServiceWorkerCache::BatchOperation> expectedPutOperations(size_t(1));

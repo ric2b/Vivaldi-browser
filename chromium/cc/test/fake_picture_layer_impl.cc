@@ -7,6 +7,8 @@
 #include <stddef.h>
 
 #include <vector>
+
+#include "base/memory/ptr_util.h"
 #include "cc/tiles/tile.h"
 #include "cc/trees/layer_tree_impl.h"
 
@@ -53,9 +55,9 @@ FakePictureLayerImpl::FakePictureLayerImpl(LayerTreeImpl* tree_impl,
       use_set_valid_tile_priorities_flag_(false),
       release_resources_count_(0) {}
 
-scoped_ptr<LayerImpl> FakePictureLayerImpl::CreateLayerImpl(
+std::unique_ptr<LayerImpl> FakePictureLayerImpl::CreateLayerImpl(
     LayerTreeImpl* tree_impl) {
-  return make_scoped_ptr(new FakePictureLayerImpl(tree_impl, id(), is_mask_));
+  return base::WrapUnique(new FakePictureLayerImpl(tree_impl, id(), is_mask_));
 }
 
 void FakePictureLayerImpl::PushPropertiesTo(LayerImpl* layer_impl) {
@@ -115,12 +117,6 @@ void FakePictureLayerImpl::SetRasterSourceOnPending(
   const PictureLayerTilingSet* pending_set = nullptr;
   set_gpu_raster_max_texture_size(layer_tree_impl()->device_viewport_size());
   UpdateRasterSource(raster_source, &invalidation_temp, pending_set);
-}
-
-void FakePictureLayerImpl::SetIsDrawnRenderSurfaceLayerListMember(bool is) {
-  draw_properties().last_drawn_render_surface_layer_list_id =
-      is ? layer_tree_impl()->current_render_surface_list_id()
-         : layer_tree_impl()->current_render_surface_list_id() - 1;
 }
 
 void FakePictureLayerImpl::CreateAllTiles() {

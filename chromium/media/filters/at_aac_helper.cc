@@ -209,7 +209,7 @@ bool ATAACHelper::AudioFormatReader::ReadFormatList() {
   const size_t format_count = format_list_size / sizeof(AudioFormatListItem);
   DVLOG(1) << "Found " << format_count << " formats";
 
-  scoped_ptr<AudioFormatListItem[]> format_list(
+  std::unique_ptr<AudioFormatListItem[]> format_list(
       new AudioFormatListItem[format_count]);
   status =
       AudioFileStreamGetProperty(stream_, kAudioFileStreamProperty_FormatList,

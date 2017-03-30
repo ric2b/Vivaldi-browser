@@ -29,15 +29,16 @@
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/compositor/compositor.h"
-#include "ui/gfx/screen.h"
+#include "ui/display/screen.h"
 #include "ui/message_center/message_center.h"
 #include "ui/views/test/test_views_delegate.h"
 #include "ui/wm/core/wm_state.h"
 
 #if defined(USE_X11)
-#include "ui/events/devices/x11/touch_factory_x11.h"
+#include "ui/events/devices/x11/touch_factory_x11.h"  // nogncheck
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -100,7 +101,7 @@ void ShellBrowserMainParts::PostMainMessageLoopStart() {
 }
 
 void ShellBrowserMainParts::ToolkitInitialized() {
-  wm_state_.reset(new wm::WMState);
+  wm_state_.reset(new ::wm::WMState);
 }
 
 void ShellBrowserMainParts::PreMainMessageLoopRun() {
@@ -127,7 +128,7 @@ void ShellBrowserMainParts::PreMainMessageLoopRun() {
 
   ShellContentState::SetInstance(
       new ShellContentStateImpl(browser_context_.get()));
-
+  ui::MaterialDesignController::Initialize();
   ash::ShellInitParams init_params;
   init_params.delegate = delegate_;
   init_params.context_factory = content::GetContextFactory();
@@ -137,7 +138,7 @@ void ShellBrowserMainParts::PreMainMessageLoopRun() {
   ash::Shell::GetInstance()->UpdateAfterLoginStatusChange(user::LOGGED_IN_USER);
 
   window_watcher_.reset(new ash::shell::WindowWatcher);
-  gfx::Screen::GetScreen()->AddObserver(window_watcher_.get());
+  display::Screen::GetScreen()->AddObserver(window_watcher_.get());
 
   ash::shell::InitWindowTypeLauncher();
 
@@ -145,7 +146,7 @@ void ShellBrowserMainParts::PreMainMessageLoopRun() {
 }
 
 void ShellBrowserMainParts::PostMainMessageLoopRun() {
-  gfx::Screen::GetScreen()->RemoveObserver(window_watcher_.get());
+  display::Screen::GetScreen()->RemoveObserver(window_watcher_.get());
 
   window_watcher_.reset();
   delegate_ = nullptr;
@@ -158,8 +159,6 @@ void ShellBrowserMainParts::PostMainMessageLoopRun() {
 #if defined(OS_CHROMEOS)
   chromeos::CrasAudioHandler::Shutdown();
 #endif
-
-  aura::Env::DeleteInstance();
 
   views_delegate_.reset();
 

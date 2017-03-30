@@ -59,6 +59,23 @@
       ],
     },
     {
+      # GN version: //mojo/common:common_custom_types
+      'target_name': 'mojo_common_custom_types_mojom',
+      'type': 'none',
+      'variables': {
+        'mojom_files': [
+          'common/common_custom_types.mojom',
+        ],
+        'mojom_typemaps': [
+          'common/common_custom_types.typemap',
+        ],
+      },
+      'dependencies': [
+        '../ipc/ipc.gyp:ipc',
+      ],
+      'includes': [ 'mojom_bindings_generator_explicit.gypi' ],
+    },
+    {
       # GN version: //mojo/common:url_type_converters
       'target_name': 'mojo_url_type_converters',
       'type': 'static_library',
@@ -95,6 +112,23 @@
       ],
     },
     {
+      # GN version: //mojo/common:test_common_custom_types
+      'target_name': 'mojo_test_common_custom_types',
+      'type': 'static_library',
+      'variables': {
+        'mojom_typemaps': [
+          'common/common_custom_types.typemap',
+        ],
+      },
+      'sources': [
+        'common/test_common_custom_types.mojom',
+      ],
+      'dependencies': [
+        'mojo_common_custom_types_mojom',
+      ],
+      'includes': [ 'mojom_bindings_generator.gypi' ],
+    },
+    {
       # GN version: //mojo/common:mojo_common_unittests
       'target_name': 'mojo_common_unittests',
       'type': 'executable',
@@ -104,89 +138,19 @@
         '../base/base.gyp:base_message_loop_tests',
         '../testing/gtest.gyp:gtest',
         '../url/url.gyp:url_lib',
+        'mojo_common_custom_types_mojom',
         'mojo_common_lib',
+        'mojo_test_common_custom_types',
         'mojo_edk.gyp:mojo_system_impl',
         'mojo_edk.gyp:mojo_common_test_support',
         'mojo_edk.gyp:mojo_run_all_unittests',
         'mojo_public.gyp:mojo_cpp_bindings',
-        'mojo_public.gyp:mojo_message_pump_lib',
         'mojo_public.gyp:mojo_public_test_utils',
         'mojo_url_type_converters',
       ],
       'sources': [
+        'common/common_custom_types_unittest.cc',
         'common/common_type_converters_unittest.cc',
-        'message_pump/handle_watcher_unittest.cc',
-        'message_pump/message_pump_mojo_unittest.cc',
-      ],
-    },
-    {
-      'target_name': 'mojo_application_bindings_mojom',
-      'type': 'none',
-      'variables': {
-        'mojom_files': [
-          'services/catalog/public/interfaces/catalog.mojom',
-          'services/catalog/public/interfaces/resolver.mojom',
-          'shell/public/interfaces/capabilities.mojom',
-          'shell/public/interfaces/connector.mojom',
-          'shell/public/interfaces/interface_provider.mojom',
-          'shell/public/interfaces/shell.mojom',
-          'shell/public/interfaces/shell_client.mojom',
-          'shell/public/interfaces/shell_client_factory.mojom',
-          'shell/public/interfaces/shell_resolver.mojom',
-        ],
-      },
-      'includes': [ 'mojom_bindings_generator_explicit.gypi' ],
-    },
-    {
-      # GN version: //mojo/shell/public/cpp
-      'target_name': 'mojo_application_base',
-      'type': 'static_library',
-      'hard_dependency': 1,
-      'sources': [
-        'shell/public/cpp/application_runner.h',
-        'shell/public/cpp/capabilities.h',
-        'shell/public/cpp/connect.h',
-        'shell/public/cpp/connection.h',
-        'shell/public/cpp/connector.h',
-        'shell/public/cpp/identity.h',
-        'shell/public/cpp/initialize_base_and_icu.cc',
-        #'shell/public/cpp/initialize_base_and_icu.h',
-        'shell/public/cpp/interface_binder.h',
-        'shell/public/cpp/interface_factory.h',
-        'shell/public/cpp/interface_factory_impl.h',
-        'shell/public/cpp/interface_registry.h',
-        'shell/public/cpp/lib/application_runner.cc',
-        'shell/public/cpp/lib/capabilities.cc',
-        'shell/public/cpp/lib/connection_impl.cc',
-        'shell/public/cpp/lib/connection_impl.h',
-        'shell/public/cpp/lib/connector_impl.cc',
-        'shell/public/cpp/lib/connector_impl.h',
-        'shell/public/cpp/lib/identity.cc',
-        'shell/public/cpp/lib/interface_factory_binder.h',
-        'shell/public/cpp/lib/interface_registry.cc',
-        'shell/public/cpp/lib/message_loop_ref.cc',
-        'shell/public/cpp/lib/names.cc',
-        'shell/public/cpp/lib/shell_client.cc',
-        'shell/public/cpp/lib/shell_connection.cc',
-        'shell/public/cpp/message_loop_ref.h',
-        'shell/public/cpp/names.h',
-        'shell/public/cpp/shell.h',
-        'shell/public/cpp/shell_client.h',
-        'shell/public/cpp/shell_connection.h',
-      ],
-      'dependencies': [
-        '../base/base.gyp:base_i18n',
-        'mojo_application_bindings',
-        'mojo_public.gyp:mojo_message_pump_lib',
-      ],
-    },
-    {
-      # GN version: //mojo/public/interfaces/application:application
-      'target_name': 'mojo_application_bindings',
-      'type': 'static_library',
-      'dependencies': [
-        'mojo_application_bindings_mojom',
-        'mojo_public.gyp:mojo_cpp_bindings',
       ],
     },
     {
@@ -200,60 +164,6 @@
         'test/test_utils.h',
         'test/test_utils_posix.cc',
         'test/test_utils_win.cc',
-      ],
-    },
-    {
-      # GN version: //mojo/shell/public/cpp/tests
-      'target_name': 'mojo_public_application_unittests',
-      'type': 'executable',
-      'dependencies': [
-        '../base/base.gyp:base',
-        '../testing/gtest.gyp:gtest',
-        'mojo_application_base',
-        'mojo_edk.gyp:mojo_run_all_unittests',
-      ],
-      'sources': [
-        'shell/public/cpp/tests/interface_registry_unittest.cc',
-      ],
-    },
-    {
-      # Technically, these should be in the mojo_services.gyp, but this causes
-      # a cycle since the ios generator can't have gyp files refer to each
-      # other, even if the targets don't form a cycle.
-      #
-      # GN version: //mojo/services/tracing:lib
-      'target_name': 'tracing_service',
-      'type': 'static_library',
-      'dependencies': [
-        'mojo_services.gyp:tracing_service_bindings_lib',
-        'mojo_base.gyp:mojo_application_bindings',
-        'mojo_edk.gyp:mojo_system_impl',
-      ],
-      'sources': [
-        'services/tracing/trace_data_sink.cc',
-        'services/tracing/trace_data_sink.h',
-        'services/tracing/trace_recorder_impl.cc',
-        'services/tracing/trace_recorder_impl.h',
-        'services/tracing/tracing_app.cc',
-        'services/tracing/tracing_app.h',
-      ],
-    },
-    {
-      # GN version: //mojo/services/public/cpp
-      'target_name': 'tracing_service_lib',
-      'type': 'static_library',
-      'dependencies': [
-        'mojo_services.gyp:tracing_service_bindings_lib',
-        'mojo_base.gyp:mojo_application_bindings',
-        'mojo_edk.gyp:mojo_system_impl',
-      ],
-      'sources': [
-        'services/tracing/public/cpp/switches.cc',
-        'services/tracing/public/cpp/switches.h',
-        'services/tracing/public/cpp/tracing_impl.cc',
-        'services/tracing/public/cpp/tracing_impl.h',
-        'services/tracing/public/cpp/trace_provider_impl.cc',
-        'services/tracing/public/cpp/trace_provider_impl.h',
       ],
     },
   ],

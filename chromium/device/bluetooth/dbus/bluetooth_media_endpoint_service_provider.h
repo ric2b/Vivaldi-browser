@@ -7,12 +7,12 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "dbus/bus.h"
 #include "dbus/message.h"
 #include "dbus/object_path.h"
@@ -63,10 +63,10 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothMediaEndpointServiceProvider {
       std::string state;
 
       // The unit of transport is in 1/10 millisecond. Optional.
-      scoped_ptr<uint16_t> delay;
+      std::unique_ptr<uint16_t> delay;
 
       // The volume level of the transport. Optional.
-      scoped_ptr<uint16_t> volume;
+      std::unique_ptr<uint16_t> volume;
 
      private:
       DISALLOW_COPY_AND_ASSIGN(TransportProperties);

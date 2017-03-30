@@ -52,19 +52,7 @@ const char* fontWeightToString(FontWeight weight)
     case FontWeight900:
         return "900";
     }
-    ASSERT_NOT_REACHED();
-    return nullptr;
-}
-
-const char* fontVariantToString(FontVariant variant)
-{
-    switch (variant) {
-    case FontVariantNormal:
-        return "normal";
-    case FontVariantSmallCaps:
-        return "small-caps";
-    }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return nullptr;
 }
 
@@ -80,7 +68,7 @@ const char* fontStyleToString(FontStyle style)
     case FontStyleItalic:
         return "italic";
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return nullptr;
 }
 
@@ -96,7 +84,7 @@ const char* textTransformToString(ETextTransform transform)
     case TTNONE:
         return "none";
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return "";
 }
 
@@ -135,9 +123,6 @@ PopupMenuCSSFontSelector::PopupMenuCSSFontSelector(Document* document, CSSFontSe
 
 PopupMenuCSSFontSelector::~PopupMenuCSSFontSelector()
 {
-#if !ENABLE(OILPAN)
-    m_ownerFontSelector->unregisterForInvalidationCallbacks(this);
-#endif
 }
 
 PassRefPtr<FontData> PopupMenuCSSFontSelector::getFontData(const FontDescription& description, const AtomicString& name)
@@ -189,7 +174,7 @@ public:
         addProperty("textTransform", String(textTransformToString(baseStyle().textTransform())), m_buffer);
         addProperty("fontSize", baseFont().specifiedSize(), m_buffer);
         addProperty("fontStyle", String(fontStyleToString(baseFont().style())), m_buffer);
-        addProperty("fontVariant", String(fontVariantToString(baseFont().variant())), m_buffer);
+        addProperty("fontVariant", baseFont().variantCaps() == FontDescription::SmallCaps ? String("small-caps") : String(), m_buffer);
 
         PagePopupClient::addString("fontFamily: [", m_buffer);
         for (const FontFamily* f = &baseFont().family(); f; f = f->next()) {
@@ -345,8 +330,10 @@ void PopupMenuImpl::addElementStyle(ItemIterationContext& context, HTMLElement& 
     }
     if (baseFont.style() != fontDescription.style())
         addProperty("fontStyle", String(fontStyleToString(fontDescription.style())), data);
-    if (baseFont.variant() != fontDescription.variant())
-        addProperty("fontVariant", String(fontVariantToString(fontDescription.variant())), data);
+
+    if (baseFont.variantCaps() != fontDescription.variantCaps() && fontDescription.variantCaps() == FontDescription::SmallCaps)
+        addProperty("fontVariant", String("small-caps"), data);
+
     if (baseStyle.textTransform() != style->textTransform())
         addProperty("textTransform", String(textTransformToString(style->textTransform())), data);
 
@@ -493,7 +480,7 @@ void PopupMenuImpl::update()
 {
     if (!m_popup || !m_ownerElement)
         return;
-    ownerElement().document().updateLayoutTree();
+    ownerElement().document().updateStyleAndLayoutTree();
     // disconnectClient() might have been called.
     if (!m_ownerElement)
         return;

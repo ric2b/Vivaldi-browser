@@ -12,11 +12,15 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/security_interstitials/core/metrics_helper.h"
 #include "components/security_interstitials/core/ssl_error_ui.h"
+#include "grit/components_strings.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/interstitials/ios_chrome_controller_client.h"
 #include "ios/chrome/browser/interstitials/ios_chrome_metrics_helper.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/public/provider/chrome/browser/browser_constants.h"
+#include "ios/web/public/cert_store.h"
+#import "ios/web/public/navigation_item.h"
+#include "ios/web/public/ssl_status.h"
 #include "ios/web/public/web_state/web_state.h"
 #include "net/base/net_errors.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -36,7 +40,8 @@ enum SSLExpirationAndDecision {
 
 // Rappor prefix, which is used for both overridable and non-overridable
 // interstitials so we don't leak the "overridable" bit.
-const char kSSLRapporPrefix[] = "ssl2";
+const char kDeprecatedSSLRapporPrefix[] = "ssl2";
+const char kSSLRapporPrefix[] = "ssl3";
 
 void RecordSSLExpirationPageEventState(bool expired_but_previously_allowed,
                                        bool proceed,
@@ -91,7 +96,9 @@ IOSSSLBlockingPage::IOSSSLBlockingPage(
   reporting_info.metric_prefix =
       overridable_ ? "ssl_overridable" : "ssl_nonoverridable";
   reporting_info.rappor_prefix = kSSLRapporPrefix;
-  reporting_info.rappor_report_type = rappor::UMA_RAPPOR_TYPE;
+  reporting_info.deprecated_rappor_prefix = kDeprecatedSSLRapporPrefix;
+  reporting_info.rappor_report_type = rappor::LOW_FREQUENCY_UMA_RAPPOR_TYPE;
+  reporting_info.deprecated_rappor_report_type = rappor::UMA_RAPPOR_TYPE;
   IOSChromeMetricsHelper* ios_chrome_metrics_helper =
       new IOSChromeMetricsHelper(web_state, request_url, reporting_info);
   controller_->set_metrics_helper(base::WrapUnique(ios_chrome_metrics_helper));
@@ -178,6 +185,19 @@ void IOSSSLBlockingPage::OnDontProceed() {
                                     overridable_);
 
   NotifyDenyCertificate();
+}
+
+void IOSSSLBlockingPage::OverrideItem(web::NavigationItem* item) {
+  item->SetTitle(l10n_util::GetStringUTF16(IDS_SSL_V2_TITLE));
+
+  item->GetSSL().security_style = web::SECURITY_STYLE_AUTHENTICATION_BROKEN;
+  item->GetSSL().cert_status = ssl_info_.cert_status;
+  // On iOS cert may be null when it is not provided by API callback or can not
+  // be parsed.
+  if (ssl_info_.cert) {
+    item->GetSSL().cert_id = web::CertStore::GetInstance()->StoreCert(
+        ssl_info_.cert.get(), web_state()->GetCertGroupId());
+  }
 }
 
 void IOSSSLBlockingPage::NotifyDenyCertificate() {

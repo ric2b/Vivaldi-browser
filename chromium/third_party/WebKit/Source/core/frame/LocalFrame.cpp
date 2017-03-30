@@ -30,6 +30,7 @@
 #include "core/frame/LocalFrame.h"
 
 #include "bindings/core/v8/ScriptController.h"
+#include "core/InstrumentingAgents.h"
 #include "core/dom/DocumentType.h"
 #include "core/dom/StyleChangeReason.h"
 #include "core/editing/EditingUtilities.h"
@@ -51,7 +52,6 @@
 #include "core/input/EventHandler.h"
 #include "core/inspector/ConsoleMessageStorage.h"
 #include "core/inspector/InspectorInstrumentation.h"
-#include "core/inspector/InstrumentingAgents.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/api/LayoutViewItem.h"
@@ -78,6 +78,7 @@
 #include "platform/graphics/paint/PaintController.h"
 #include "platform/graphics/paint/SkPictureBuilder.h"
 #include "platform/graphics/paint/TransformDisplayItem.h"
+#include "platform/plugins/PluginData.h"
 #include "platform/text/TextStream.h"
 #include "public/platform/ServiceRegistry.h"
 #include "public/platform/WebFrameScheduler.h"
@@ -117,7 +118,7 @@ public:
         AffineTransform transform;
         transform.scale(deviceScaleFactor, deviceScaleFactor);
         transform.translate(-m_bounds.x(), -m_bounds.y());
-        context().getPaintController().createAndAppend<BeginTransformDisplayItem>(*m_localFrame, transform);
+        context().getPaintController().createAndAppend<BeginTransformDisplayItem>(*m_pictureBuilder, transform);
     }
 
     GraphicsContext& context() { return m_pictureBuilder->context(); }
@@ -126,7 +127,7 @@ public:
     {
         if (m_draggedNode && m_draggedNode->layoutObject())
             m_draggedNode->layoutObject()->updateDragState(false);
-        context().getPaintController().endItem<EndTransformDisplayItem>(*m_localFrame);
+        context().getPaintController().endItem<EndTransformDisplayItem>(*m_pictureBuilder);
         RefPtr<const SkPicture> recording = m_pictureBuilder->endRecording();
         RefPtr<SkImage> skImage = adoptRef(SkImage::NewFromPicture(recording.get(),
             SkISize::Make(m_bounds.width(), m_bounds.height()), nullptr, nullptr));
@@ -450,14 +451,7 @@ void LocalFrame::didChangeVisibilityState()
     if (document())
         document()->didChangeVisibilityState();
 
-    HeapVector<Member<LocalFrame>> childFrames;
-    for (Frame* child = tree().firstChild(); child; child = child->tree().nextSibling()) {
-        if (child->isLocalFrame())
-            childFrames.append(toLocalFrame(child));
-    }
-
-    for (size_t i = 0; i < childFrames.size(); ++i)
-        childFrames[i]->didChangeVisibilityState();
+    Frame::didChangeVisibilityState();
 }
 
 LocalFrame* LocalFrame::localFrameRoot()
@@ -595,7 +589,7 @@ void LocalFrame::setPageAndTextZoomFactors(float pageZoomFactor, float textZoomF
     }
 
     document->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::Zoom));
-    document->updateLayoutIgnorePendingStylesheets();
+    document->updateStyleAndLayoutIgnorePendingStylesheets();
 }
 
 void LocalFrame::deviceScaleFactorChanged()
@@ -619,7 +613,7 @@ double LocalFrame::devicePixelRatio() const
 
 PassOwnPtr<DragImage> LocalFrame::nodeImage(Node& node)
 {
-    m_view->updateAllLifecyclePhases();
+    m_view->updateAllLifecyclePhasesExceptPaint();
     LayoutObject* layoutObject = node.layoutObject();
     if (!layoutObject)
         return nullptr;
@@ -645,7 +639,7 @@ PassOwnPtr<DragImage> LocalFrame::dragImageForSelection(float opacity)
     if (!selection().isRange())
         return nullptr;
 
-    m_view->updateAllLifecyclePhases();
+    m_view->updateAllLifecyclePhasesExceptPaint();
     ASSERT(document()->isActive());
 
     FloatRect paintingRect = FloatRect(selection().bounds());
@@ -755,50 +749,6 @@ void LocalFrame::removeSpellingMarkersUnderWords(const Vector<String>& words)
     spellChecker().removeSpellingMarkersUnderWords(words);
 }
 
-ScrollResult LocalFrame::applyScrollDelta(ScrollGranularity granularity, const FloatSize& delta, bool isScrollBegin)
-{
-    if (isScrollBegin)
-        host()->topControls().scrollBegin();
-
-    if (!view() || delta.isZero())
-        return ScrollResult(false, false, delta.width(), delta.height());
-
-    FloatSize remainingDelta = delta;
-
-    // If this is main frame, allow top controls to scroll first.
-    if (shouldScrollTopControls(granularity, delta))
-        remainingDelta = host()->topControls().scrollBy(remainingDelta);
-
-    if (remainingDelta.isZero())
-        return ScrollResult(delta.width(), delta.height(), 0.0f, 0.0f);
-
-    ScrollResult result = view()->getScrollableArea()->userScroll(granularity, remainingDelta);
-    result.didScrollX = result.didScrollX || (remainingDelta.width() != delta.width());
-    result.didScrollY = result.didScrollY || (remainingDelta.height() != delta.height());
-
-    return result;
-}
-
-bool LocalFrame::shouldScrollTopControls(ScrollGranularity granularity, const FloatSize& delta) const
-{
-    if (!isMainFrame())
-        return false;
-
-    if (granularity != ScrollByPixel && granularity != ScrollByPrecisePixel)
-        return false;
-
-    // Always give the delta to the top controls if the scroll is in
-    // the direction to show the top controls. If it's in the
-    // direction to hide the top controls, only give the delta to the
-    // top controls when the frame can scroll.
-    DoublePoint maximumScrollPosition =
-        host()->visualViewport().maximumScrollPositionDouble() +
-        toDoubleSize(view()->maximumScrollPositionDouble());
-    DoublePoint scrollPosition = host()->visualViewport()
-        .visibleRectInDocument().location();
-    return delta.height() < 0 || scrollPosition.y() < maximumScrollPosition.y();
-}
-
 String LocalFrame::localLayerTreeAsText(unsigned flags) const
 {
     if (!contentLayoutObject())
@@ -830,7 +780,7 @@ inline LocalFrame::LocalFrame(FrameLoaderClient* client, FrameHost* host, FrameO
     , m_serviceRegistry(serviceRegistry)
 {
     if (isLocalRoot())
-        m_instrumentingAgents = InstrumentingAgents::create();
+        m_instrumentingAgents = new InstrumentingAgents();
     else
         m_instrumentingAgents = localFrameRoot()->m_instrumentingAgents;
 }
@@ -849,6 +799,18 @@ void LocalFrame::scheduleVisualUpdateUnlessThrottled()
     if (shouldThrottleRendering())
         return;
     page()->animator().scheduleVisualUpdate(this);
+}
+
+FrameLoaderClient* LocalFrame::client() const
+{
+    return static_cast<FrameLoaderClient*>(Frame::client());
+}
+
+PluginData* LocalFrame::pluginData() const
+{
+    if (!loader().allowPlugins(NotAboutToInstantiatePlugin))
+        return nullptr;
+    return page()->pluginData();
 }
 
 DEFINE_WEAK_IDENTIFIER_MAP(LocalFrame);

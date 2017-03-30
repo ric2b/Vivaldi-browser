@@ -10,6 +10,7 @@
 #include "core/frame/RemoteFrame.h"
 #include "core/frame/RemoteFrameView.h"
 #include "core/layout/LayoutPart.h"
+#include "core/layout/api/LayoutItem.h"
 #include "platform/exported/WrappedResourceRequest.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/weborigin/SecurityPolicy.h"
@@ -116,14 +117,6 @@ Frame* RemoteFrameClientImpl::lastChild() const
     return toCoreFrame(m_webFrame->lastChild());
 }
 
-bool RemoteFrameClientImpl::willCheckAndDispatchMessageEvent(
-    SecurityOrigin* target, MessageEvent* event, LocalFrame* sourceFrame) const
-{
-    if (m_webFrame->client())
-        m_webFrame->client()->postMessageEvent(WebLocalFrameImpl::fromFrame(sourceFrame), m_webFrame, WebSecurityOrigin(target), WebDOMMessageEvent(event));
-    return true;
-}
-
 void RemoteFrameClientImpl::frameFocused() const
 {
     if (m_webFrame->client())
@@ -152,6 +145,13 @@ unsigned RemoteFrameClientImpl::backForwardLength()
     return 2;
 }
 
+void RemoteFrameClientImpl::forwardPostMessage(
+    MessageEvent* event, PassRefPtr<SecurityOrigin> target, LocalFrame* sourceFrame) const
+{
+    if (m_webFrame->client())
+        m_webFrame->client()->forwardPostMessage(WebLocalFrameImpl::fromFrame(sourceFrame), m_webFrame, WebSecurityOrigin(target), WebDOMMessageEvent(event));
+}
+
 // FIXME: Remove this code once we have input routing in the browser
 // process. See http://crbug.com/339659.
 void RemoteFrameClientImpl::forwardInputEvent(Event* event)
@@ -176,9 +176,7 @@ void RemoteFrameClientImpl::forwardInputEvent(Event* event)
     if (event->isKeyboardEvent())
         webEvent = adoptPtr(new WebKeyboardEventBuilder(*static_cast<KeyboardEvent*>(event)));
     else if (event->isMouseEvent())
-        webEvent = adoptPtr(new WebMouseEventBuilder(m_webFrame->frame()->view(), m_webFrame->toImplBase()->frame()->ownerLayoutObject(), *static_cast<MouseEvent*>(event)));
-    else if (event->isWheelEvent())
-        webEvent = adoptPtr(new WebMouseWheelEventBuilder(m_webFrame->frame()->view(), m_webFrame->toImplBase()->frame()->ownerLayoutObject(), *static_cast<WheelEvent*>(event)));
+        webEvent = adoptPtr(new WebMouseEventBuilder(m_webFrame->frame()->view(), LayoutItem(m_webFrame->toImplBase()->frame()->ownerLayoutObject()), *static_cast<MouseEvent*>(event)));
 
     // Other or internal Blink events should not be forwarded.
     if (!webEvent || webEvent->type == WebInputEvent::Undefined)

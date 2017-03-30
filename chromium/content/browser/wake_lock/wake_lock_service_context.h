@@ -5,11 +5,11 @@
 #ifndef CONTENT_BROWSER_WAKE_LOCK_WAKE_LOCK_SERVICE_CONTEXT_H_
 #define CONTENT_BROWSER_WAKE_LOCK_WAKE_LOCK_SERVICE_CONTEXT_H_
 
+#include <memory>
 #include <set>
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/wake_lock/wake_lock_service_impl.h"
 #include "content/common/content_export.h"
@@ -28,9 +28,10 @@ class CONTENT_EXPORT WakeLockServiceContext : public WebContentsObserver {
   ~WakeLockServiceContext() override;
 
   // Creates a WakeLockServiceImpl that is strongly bound to |request|.
-  void CreateService(int render_process_id,
-                     int render_frame_id,
-                     mojo::InterfaceRequest<mojom::WakeLockService> request);
+  void CreateService(
+      int render_process_id,
+      int render_frame_id,
+      mojo::InterfaceRequest<blink::mojom::WakeLockService> request);
 
   // WebContentsObserver implementation.
   void RenderFrameDeleted(RenderFrameHost* render_frame_host) override;
@@ -56,7 +57,7 @@ class CONTENT_EXPORT WakeLockServiceContext : public WebContentsObserver {
   std::set<std::pair<int, int>> frames_requesting_lock_;
 
   // The actual power save blocker for screen.
-  scoped_ptr<PowerSaveBlocker> wake_lock_;
+  std::unique_ptr<PowerSaveBlocker> wake_lock_;
 
   base::WeakPtrFactory<WakeLockServiceContext> weak_factory_;
 

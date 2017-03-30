@@ -5,11 +5,11 @@
 #ifndef EXTENSIONS_BROWSER_VALUE_STORE_VALUE_STORE_CHANGE_H_
 #define EXTENSIONS_BROWSER_VALUE_STORE_VALUE_STORE_CHANGE_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/values.h"
 
 class ValueStoreChange;
@@ -22,9 +22,9 @@ class ValueStoreChange {
   // { "foo": { "key": "foo", "oldValue": "bar", "newValue": "baz" } }
   static std::string ToJson(const ValueStoreChangeList& changes);
 
-  // Ownership of |old_value| and |new_value| taken.
-  ValueStoreChange(
-      const std::string& key, base::Value* old_value, base::Value* new_value);
+  ValueStoreChange(const std::string& key,
+                   std::unique_ptr<base::Value> old_value,
+                   std::unique_ptr<base::Value> new_value);
 
   ValueStoreChange(const ValueStoreChange& other);
 
@@ -44,12 +44,13 @@ class ValueStoreChange {
  private:
   class Inner : public base::RefCountedThreadSafe<Inner> {
    public:
-    Inner(
-        const std::string& key, base::Value* old_value, base::Value* new_value);
+    Inner(const std::string& key,
+          std::unique_ptr<base::Value> old_value,
+          std::unique_ptr<base::Value> new_value);
 
     const std::string key_;
-    const scoped_ptr<base::Value> old_value_;
-    const scoped_ptr<base::Value> new_value_;
+    const std::unique_ptr<base::Value> old_value_;
+    const std::unique_ptr<base::Value> new_value_;
 
    private:
     friend class base::RefCountedThreadSafe<Inner>;

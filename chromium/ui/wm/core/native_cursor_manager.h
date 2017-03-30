@@ -10,7 +10,7 @@
 #include "ui/wm/core/native_cursor_manager_delegate.h"
 #include "ui/wm/wm_export.h"
 
-namespace gfx {
+namespace display {
 class Display;
 }
 
@@ -25,9 +25,8 @@ class WM_EXPORT NativeCursorManager {
   virtual ~NativeCursorManager() {}
 
   // A request to set the screen DPI. Can cause changes in the current cursor.
-  virtual void SetDisplay(
-      const gfx::Display& display,
-      NativeCursorManagerDelegate* delegate) = 0;
+  virtual void SetDisplay(const display::Display& display,
+                          NativeCursorManagerDelegate* delegate) = 0;
 
   // A request to set the cursor to |cursor|. At minimum, implementer should
   // call NativeCursorManagerDelegate::CommitCursor() with whatever cursor is

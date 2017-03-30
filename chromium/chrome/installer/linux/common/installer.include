@@ -56,9 +56,6 @@ process_template() (
     -e "s#@@CHANNEL@@#${CHANNEL}#g" \
     -e "s#@@COMPANY_FULLNAME@@#${COMPANY_FULLNAME}#g" \
     -e "s#@@VERSION@@#${VERSION}#g" \
-    -e "s#@@CHR_MAJOR@@#${CHR_MAJOR}#g" \
-    -e "s#@@CHR_MINOR@@#${CHR_MINOR}#g" \
-    -e "s#@@CHR_BUILD@@#${CHR_BUILD}#g" \
     -e "s#@@PACKAGE_RELEASE@@#${PACKAGE_RELEASE}#g" \
     -e "s#@@VERSIONFULL@@#${VERSIONFULL}#g" \
     -e "s#@@INSTALLDIR@@#${INSTALLDIR}#g" \
@@ -180,6 +177,12 @@ stage_install_common() {
     # Don't deploy the stub, link to Google Chrome's.
     ln -s "/opt/google/chrome/libwidevinecdm.so" \
       "${STAGEDIR}/${INSTALLDIR}/libwidevinecdm.so"
+  fi
+
+  # ANGLE
+  if [ "${CHANNEL}" != "stable" ]; then
+    install -m 644 "${BUILDDIR}/libGLESv2.so" "${STAGEDIR}/${INSTALLDIR}/"
+    install -m 644 "${BUILDDIR}/libEGL.so" "${STAGEDIR}/${INSTALLDIR}/"
   fi
 
   # Pepper Flash.

@@ -10,7 +10,6 @@
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
 #include "ash/shell_window_ids.h"
-#include "ash/system/bluetooth/bluetooth_observer.h"
 #include "ash/system/overview/overview_button_tray.h"
 #include "ash/system/status_area_widget_delegate.h"
 #include "ash/system/tray/system_tray.h"
@@ -19,7 +18,6 @@
 #include "ash/wm/window_properties.h"
 #include "base/i18n/time_formatting.h"
 #include "ui/aura/window.h"
-#include "ui/gfx/screen.h"
 
 #if defined(OS_CHROMEOS)
 #include "ash/system/chromeos/session/logout_button_tray.h"
@@ -27,8 +25,6 @@
 #endif
 
 namespace ash {
-
-const char StatusAreaWidget::kNativeViewName[] = "StatusAreaWidget";
 
 StatusAreaWidget::StatusAreaWidget(aura::Window* status_container,
                                    ShelfWidget* shelf_widget)
@@ -45,12 +41,12 @@ StatusAreaWidget::StatusAreaWidget(aura::Window* status_container,
   views::Widget::InitParams params(
       views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
   params.delegate = status_area_widget_delegate_;
+  params.name = "StatusAreaWidget";
   params.parent = status_container;
   params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
   Init(params);
   set_focus_on_creation(false);
   SetContentsView(status_area_widget_delegate_);
-  GetNativeView()->SetName(kNativeViewName);
 }
 
 StatusAreaWidget::~StatusAreaWidget() {
@@ -76,6 +72,7 @@ void StatusAreaWidget::CreateTrayViews() {
   virtual_keyboard_tray_->Initialize();
 #endif
   overview_button_tray_->Initialize();
+  SetShelfAlignment(system_tray_->shelf_alignment());
   UpdateAfterLoginStatusChange(delegate->GetUserLoginStatus());
 }
 
@@ -163,7 +160,7 @@ void StatusAreaWidget::AddOverviewButtonTray() {
   status_area_widget_delegate_->AddTray(overview_button_tray_);
 }
 
-void StatusAreaWidget::SetShelfAlignment(ShelfAlignment alignment) {
+void StatusAreaWidget::SetShelfAlignment(wm::ShelfAlignment alignment) {
   status_area_widget_delegate_->set_alignment(alignment);
   if (system_tray_)
     system_tray_->SetShelfAlignment(alignment);

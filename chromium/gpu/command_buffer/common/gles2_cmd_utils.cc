@@ -1067,30 +1067,16 @@ uint32_t GLES2Util::GetGLReadPixelsImplementationType(uint32_t internal_format,
     case GL_RG32F:
     case GL_RGB32F:
     case GL_RGBA32F:
-      return GL_FLOAT;
+    case GL_R11F_G11F_B10F:
+      return GL_UNSIGNED_BYTE;
     case GL_R16F:
     case GL_RG16F:
-    case GL_R11F_G11F_B10F:
     case GL_RGB16F:
     case GL_RGBA16F:
-      // TODO(zmo): Consider return GL_UNSIGNED_INT_10F_11F_11F_REV and
-      // GL_HALF_FLOAT.
-      return GL_FLOAT;
-    case GL_RGBA:
-    case GL_RGB:
-      // Unsized internal format, check the type
-      switch (texture_type) {
-        case GL_FLOAT:
-        case GL_HALF_FLOAT_OES:
-          return GL_FLOAT;
-        // TODO(zmo): Consider return GL_UNSIGNED_SHORT_5_6_5,
-        // GL_UNSIGNED_SHORT_4_4_4_4, GL_UNSIGNED_SHORT_5_5_5_1, and
-        // GL_UNSIGNED_INT_2_10_10_10_REV.
-        default:
-          return GL_UNSIGNED_BYTE;
-      }
+      return GL_HALF_FLOAT;
     default:
-      return GL_UNSIGNED_BYTE;
+      // Unsized internal format.
+      return texture_type;
   }
 }
 
@@ -1385,11 +1371,27 @@ bool GLES2Util::IsFloatFormat(uint32_t internal_format) {
   }
 }
 
+// static
+bool GLES2Util::ComputeDataSize(uint32_t count,
+                                size_t size,
+                                unsigned int elements_per_unit,
+                                uint32_t* dst) {
+  uint32_t value;
+  if (!SafeMultiplyUint32(count, static_cast<uint32_t>(size), &value)) {
+    return false;
+  }
+  if (!SafeMultiplyUint32(value, elements_per_unit, &value)) {
+    return false;
+  }
+  *dst = value;
+  return true;
+}
+
 namespace {
 
-// WebGraphicsContext3DCommandBufferImpl configuration attributes. Those in
-// the 16-bit range are the same as used by EGL. Those outside the 16-bit range
-// are unique to Chromium. Attributes are matched using a closest fit algorithm.
+// GL context configuration attributes. Those in the 16-bit range are the same
+// as used by EGL. Those outside the 16-bit range are unique to Chromium.
+// Attributes are matched using a closest fit algorithm.
 
 // From <EGL/egl.h>.
 #include <stddef.h>
@@ -1405,7 +1407,6 @@ const int32_t kSampleBuffers = 0x3032;    // EGL_SAMPLE_BUFFERS
 const int32_t kNone = 0x3038;             // EGL_NONE
 const int32_t kSwapBehavior = 0x3093;     // EGL_SWAP_BEHAVIOR
 const int32_t kBufferPreserved = 0x3094;  // EGL_BUFFER_PRESERVED
-const int32_t kBufferDestroyed = 0x3095;  // EGL_BUFFER_DESTROYED
 
 // Chromium only.
 const int32_t kBindGeneratesResource = 0x10000;
@@ -1432,53 +1433,6 @@ ContextCreationAttribHelper::ContextCreationAttribHelper()
 
 ContextCreationAttribHelper::ContextCreationAttribHelper(
     const ContextCreationAttribHelper& other) = default;
-
-void ContextCreationAttribHelper::Serialize(
-    std::vector<int32_t>* attribs) const {
-  if (alpha_size != -1) {
-    attribs->push_back(kAlphaSize);
-    attribs->push_back(alpha_size);
-  }
-  if (blue_size != -1) {
-    attribs->push_back(kBlueSize);
-    attribs->push_back(blue_size);
-  }
-  if (green_size != -1) {
-    attribs->push_back(kGreenSize);
-    attribs->push_back(green_size);
-  }
-  if (red_size != -1) {
-    attribs->push_back(kRedSize);
-    attribs->push_back(red_size);
-  }
-  if (depth_size != -1) {
-    attribs->push_back(kDepthSize);
-    attribs->push_back(depth_size);
-  }
-  if (stencil_size != -1) {
-    attribs->push_back(kStencilSize);
-    attribs->push_back(stencil_size);
-  }
-  if (samples != -1) {
-    attribs->push_back(kSamples);
-    attribs->push_back(samples);
-  }
-  if (sample_buffers != -1) {
-    attribs->push_back(kSampleBuffers);
-    attribs->push_back(sample_buffers);
-  }
-  attribs->push_back(kSwapBehavior);
-  attribs->push_back(buffer_preserved ? kBufferPreserved : kBufferDestroyed);
-  attribs->push_back(kBindGeneratesResource);
-  attribs->push_back(bind_generates_resource ? 1 : 0);
-  attribs->push_back(kFailIfMajorPerfCaveat);
-  attribs->push_back(fail_if_major_perf_caveat ? 1 : 0);
-  attribs->push_back(kLoseContextWhenOutOfMemory);
-  attribs->push_back(lose_context_when_out_of_memory ? 1 : 0);
-  attribs->push_back(kContextType);
-  attribs->push_back(context_type);
-  attribs->push_back(kNone);
-}
 
 bool ContextCreationAttribHelper::Parse(const std::vector<int32_t>& attribs) {
   for (size_t i = 0; i < attribs.size(); i += 2) {

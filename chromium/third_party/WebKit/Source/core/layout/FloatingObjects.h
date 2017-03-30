@@ -72,15 +72,12 @@ public:
 
     const LayoutRect& frameRect() const { ASSERT(isPlaced()); return m_frameRect; }
 
-    int paginationStrut() const { return m_paginationStrut; }
-    void setPaginationStrut(int strut) { m_paginationStrut = strut; }
-
 #if ENABLE(ASSERT)
     bool isInPlacedTree() const { return m_isInPlacedTree; }
     void setIsInPlacedTree(bool value) { m_isInPlacedTree = value; }
 #endif
 
-    bool shouldPaint() const { return m_shouldPaint; }
+    bool shouldPaint() const;
     void setShouldPaint(bool shouldPaint) { m_shouldPaint = shouldPaint; }
     bool isDescendant() const { return m_isDescendant; }
     void setIsDescendant(bool isDescendant) { m_isDescendant = isDescendant; }
@@ -95,10 +92,11 @@ private:
     explicit FloatingObject(LayoutBox*);
     FloatingObject(LayoutBox*, Type, const LayoutRect&, bool shouldPaint, bool isDescendant, bool isLowestNonOverhangingFloatInChild);
 
+    bool shouldPaintForCompositedLayoutPart();
+
     LayoutBox* m_layoutObject;
     RootInlineBox* m_originatingLine;
     LayoutRect m_frameRect;
-    int m_paginationStrut; // FIXME: Is this class size-sensitive? Does this need 32-bits?
 
     unsigned m_type : 2; // Type (left or right aligned)
     unsigned m_shouldPaint : 1;
@@ -114,10 +112,8 @@ struct FloatingObjectHashFunctions {
     STATIC_ONLY(FloatingObjectHashFunctions);
     static unsigned hash(FloatingObject* key) { return DefaultHash<LayoutBox*>::Hash::hash(key->layoutObject()); }
     static unsigned hash(const OwnPtr<FloatingObject>& key) { return hash(key.get()); }
-    static unsigned hash(const PassOwnPtr<FloatingObject>& key) { return hash(key.get()); }
     static bool equal(OwnPtr<FloatingObject>& a, FloatingObject* b) { return a->layoutObject() == b->layoutObject(); }
     static bool equal(OwnPtr<FloatingObject>& a, const OwnPtr<FloatingObject>& b) { return equal(a, b.get()); }
-    static bool equal(OwnPtr<FloatingObject>& a, const PassOwnPtr<FloatingObject>& b) { return equal(a, b.get()); }
 
     static const bool safeToCompareToEmptyOrDeleted = true;
 };

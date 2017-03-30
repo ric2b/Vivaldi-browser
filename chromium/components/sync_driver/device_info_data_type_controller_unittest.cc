@@ -8,7 +8,7 @@
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/sync_driver/fake_sync_client.h"
 #include "components/sync_driver/local_device_info_provider_mock.h"
 #include "components/sync_driver/sync_api_component_factory.h"
@@ -84,7 +84,7 @@ class DeviceInfoDataTypeControllerTest : public testing::Test {
 
  protected:
   scoped_refptr<DeviceInfoDataTypeController> controller_;
-  scoped_ptr<LocalDeviceInfoProviderMock> local_device_;
+  std::unique_ptr<LocalDeviceInfoProviderMock> local_device_;
   bool load_finished_;
 
  private:

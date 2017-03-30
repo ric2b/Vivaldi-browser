@@ -11,7 +11,6 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/threading/thread.h"
-#include "blimp/client/blimp_client_export.h"
 #include "blimp/client/session/assignment_source.h"
 #include "blimp/common/proto/blimp_message.pb.h"
 #include "blimp/net/blimp_message_processor.h"
@@ -54,7 +53,7 @@ class NetworkEventObserver {
 // This session glues together the feature proxy components and the network
 // layer.  The network components must be interacted with on the IO thread.  The
 // feature proxies must be interacted with on the UI thread.
-class BLIMP_CLIENT_EXPORT BlimpClientSession : public NetworkEventObserver {
+class BlimpClientSession : public NetworkEventObserver {
  public:
   explicit BlimpClientSession(const GURL& assigner_endpoint);
 
@@ -69,6 +68,7 @@ class BLIMP_CLIENT_EXPORT BlimpClientSession : public NetworkEventObserver {
   NavigationFeature* GetNavigationFeature() const;
   ImeFeature* GetImeFeature() const;
   RenderWidgetFeature* GetRenderWidgetFeature() const;
+  SettingsFeature* GetSettingsFeature() const;
 
   // The AssignmentCallback for when an assignment is ready. This will trigger
   // a connection to the engine.
@@ -80,7 +80,8 @@ class BLIMP_CLIENT_EXPORT BlimpClientSession : public NetworkEventObserver {
 
   // Notified every time the AssignmentSource returns the result of an attempted
   // assignment request.
-  virtual void OnAssignmentConnectionAttempted(AssignmentSource::Result result);
+  virtual void OnAssignmentConnectionAttempted(AssignmentSource::Result result,
+                                               const Assignment& assignment);
 
  private:
   void RegisterFeatures();

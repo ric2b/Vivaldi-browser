@@ -57,7 +57,6 @@ StringToUnitTable createStringToUnitTable()
     table.set(String("in"), CSSPrimitiveValue::UnitType::Inches);
     table.set(String("pt"), CSSPrimitiveValue::UnitType::Points);
     table.set(String("pc"), CSSPrimitiveValue::UnitType::Picas);
-    table.set(String(""), CSSPrimitiveValue::UnitType::UserUnits);
     table.set(String("deg"), CSSPrimitiveValue::UnitType::Degrees);
     table.set(String("rad"), CSSPrimitiveValue::UnitType::Radians);
     table.set(String("grad"), CSSPrimitiveValue::UnitType::Gradians);
@@ -298,56 +297,6 @@ void CSSPrimitiveValue::init(CSSCalcValue* c)
 
 CSSPrimitiveValue::~CSSPrimitiveValue()
 {
-#if !ENABLE(OILPAN)
-    switch (type()) {
-    case UnitType::Calc:
-        // We must not call deref() when oilpan is enabled because m_value.calc is traced.
-        m_value.calc->deref();
-        break;
-    case UnitType::CalcPercentageWithNumber:
-    case UnitType::CalcPercentageWithLength:
-        ASSERT_NOT_REACHED();
-        break;
-    case UnitType::Number:
-    case UnitType::Integer:
-    case UnitType::Percentage:
-    case UnitType::Ems:
-    case UnitType::QuirkyEms:
-    case UnitType::Exs:
-    case UnitType::Rems:
-    case UnitType::Chs:
-    case UnitType::Pixels:
-    case UnitType::Centimeters:
-    case UnitType::Millimeters:
-    case UnitType::Inches:
-    case UnitType::Points:
-    case UnitType::Picas:
-    case UnitType::UserUnits:
-    case UnitType::Degrees:
-    case UnitType::Radians:
-    case UnitType::Gradians:
-    case UnitType::Milliseconds:
-    case UnitType::Seconds:
-    case UnitType::Hertz:
-    case UnitType::Kilohertz:
-    case UnitType::Turns:
-    case UnitType::ViewportWidth:
-    case UnitType::ViewportHeight:
-    case UnitType::ViewportMin:
-    case UnitType::ViewportMax:
-    case UnitType::DotsPerPixel:
-    case UnitType::DotsPerInch:
-    case UnitType::DotsPerCentimeter:
-    case UnitType::Fraction:
-    case UnitType::Unknown:
-    case UnitType::ValueID:
-        break;
-    }
-    if (m_hasCachedCSSText) {
-        cssTextCache().remove(this);
-        m_hasCachedCSSText = false;
-    }
-#endif
 }
 
 double CSSPrimitiveValue::computeSeconds() const
@@ -423,29 +372,20 @@ double CSSPrimitiveValue::computeLengthDouble(const CSSToLengthConversionData& c
     return conversionData.zoomedComputedPixels(getDoubleValue(), type());
 }
 
-void CSSPrimitiveValue::accumulateLengthArray(CSSLengthArray& lengthArray, CSSLengthTypeArray& lengthTypeArray, double multiplier) const
+void CSSPrimitiveValue::accumulateLengthArray(CSSLengthArray& lengthArray, double multiplier) const
 {
-    ASSERT(lengthArray.size() == LengthUnitTypeCount);
+    ASSERT(lengthArray.values.size() == LengthUnitTypeCount);
 
     if (type() == UnitType::Calc) {
-        cssCalcValue()->accumulateLengthArray(lengthArray, lengthTypeArray, multiplier);
+        cssCalcValue()->accumulateLengthArray(lengthArray, multiplier);
         return;
     }
 
     LengthUnitType lengthType;
     bool conversionSuccess = unitTypeToLengthUnitType(type(), lengthType);
     ASSERT_UNUSED(conversionSuccess, conversionSuccess);
-    lengthArray.at(lengthType) += m_value.num * conversionToCanonicalUnitsScaleFactor(type()) * multiplier;
-    lengthTypeArray.set(lengthType);
-}
-
-void CSSPrimitiveValue::accumulateLengthArray(CSSLengthArray& lengthArray, double multiplier) const
-{
-    CSSLengthTypeArray lengthTypeArray;
-    lengthTypeArray.resize(CSSPrimitiveValue::LengthUnitTypeCount);
-    for (size_t i = 0; i < CSSPrimitiveValue::LengthUnitTypeCount; ++i)
-        lengthTypeArray.clear(i);
-    return CSSPrimitiveValue::accumulateLengthArray(lengthArray, lengthTypeArray, multiplier);
+    lengthArray.values[lengthType] += m_value.num * conversionToCanonicalUnitsScaleFactor(type()) * multiplier;
+    lengthArray.typeFlags.set(lengthType);
 }
 
 double CSSPrimitiveValue::conversionToCanonicalUnitsScaleFactor(UnitType unitType)

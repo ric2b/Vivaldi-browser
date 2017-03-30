@@ -55,10 +55,6 @@ StyleElement::StyleElement(Document* document, bool createdByParser)
 
 StyleElement::~StyleElement()
 {
-#if !ENABLE(OILPAN)
-    if (m_sheet)
-        clearSheet();
-#endif
 }
 
 StyleElement::ProcessingResult StyleElement::processStyleSheet(Document& document, Element* element)
@@ -101,12 +97,12 @@ void StyleElement::removedFrom(Element* element, ContainerNode* insertionPoint)
         m_registeredAsCandidate = false;
     }
 
-    RawPtr<StyleSheet> removedSheet = m_sheet.get();
+    StyleSheet* removedSheet = m_sheet.get();
 
     if (m_sheet)
         clearSheet(element);
     if (removedSheet)
-        document.styleEngine().setNeedsActiveStyleUpdate(removedSheet.get(), AnalyzedStyleUpdate);
+        document.styleEngine().setNeedsActiveStyleUpdate(removedSheet, AnalyzedStyleUpdate);
 }
 
 void StyleElement::clearDocumentData(Document& document, Element* element)
@@ -150,7 +146,7 @@ void StyleElement::clearSheet(Element* ownerElement)
     DCHECK(m_sheet);
 
     if (ownerElement && m_sheet->isLoading())
-        ownerElement->document().styleEngine().removePendingSheet(ownerElement);
+        ownerElement->document().styleEngine().removePendingSheet(ownerElement, m_styleEngineContext);
 
     m_sheet.release()->clearOwnerNode();
 }
@@ -178,25 +174,25 @@ StyleElement::ProcessingResult StyleElement::createSheet(Element* e, const Strin
 
     const ContentSecurityPolicy* csp = document.contentSecurityPolicy();
     bool passesContentSecurityPolicyChecks = shouldBypassMainWorldCSP(e)
-        || csp->allowStyleWithHash(text)
+        || csp->allowStyleWithHash(text, ContentSecurityPolicy::InlineType::Block)
         || csp->allowStyleWithNonce(e->fastGetAttribute(HTMLNames::nonceAttr))
         || csp->allowInlineStyle(e->document().url(), m_startPosition.m_line, text);
 
     // Clearing the current sheet may remove the cache entry so create the new sheet first
-    RawPtr<CSSStyleSheet> newSheet = nullptr;
+    CSSStyleSheet* newSheet = nullptr;
 
     // If type is empty or CSS, this is a CSS style sheet.
     const AtomicString& type = this->type();
     if (isCSS(e, type) && passesContentSecurityPolicyChecks) {
-        RawPtr<MediaQuerySet> mediaQueries = MediaQuerySet::create(media());
+        MediaQuerySet* mediaQueries = MediaQuerySet::create(media());
 
         MediaQueryEvaluator screenEval("screen", true);
         MediaQueryEvaluator printEval("print", true);
-        if (screenEval.eval(mediaQueries.get()) || printEval.eval(mediaQueries.get())) {
+        if (screenEval.eval(mediaQueries) || printEval.eval(mediaQueries)) {
             m_loading = true;
             TextPosition startPosition = m_startPosition == TextPosition::belowRangePosition() ? TextPosition::minimumPosition() : m_startPosition;
-            newSheet = document.styleEngine().createSheet(e, text, startPosition);
-            newSheet->setMediaQueries(mediaQueries.release());
+            newSheet = document.styleEngine().createSheet(e, text, startPosition, m_styleEngineContext);
+            newSheet->setMediaQueries(mediaQueries);
             m_loading = false;
         }
     }
@@ -204,7 +200,7 @@ StyleElement::ProcessingResult StyleElement::createSheet(Element* e, const Strin
     if (m_sheet)
         clearSheet(e);
 
-    m_sheet = newSheet.release();
+    m_sheet = newSheet;
     if (m_sheet)
         m_sheet->contents()->checkLoaded();
 
@@ -223,13 +219,13 @@ bool StyleElement::sheetLoaded(Document& document)
     if (isLoading())
         return false;
 
-    document.styleEngine().removePendingSheet(m_sheet->ownerNode());
+    document.styleEngine().removePendingSheet(m_sheet->ownerNode(), m_styleEngineContext);
     return true;
 }
 
 void StyleElement::startLoadingDynamicSheet(Document& document)
 {
-    document.styleEngine().addPendingSheet();
+    document.styleEngine().addPendingSheet(m_styleEngineContext);
 }
 
 DEFINE_TRACE(StyleElement)

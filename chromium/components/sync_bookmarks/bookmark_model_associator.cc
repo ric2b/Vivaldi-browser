@@ -4,6 +4,8 @@
 
 #include "components/sync_bookmarks/bookmark_model_associator.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/hash_tables.h"
@@ -15,7 +17,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/bookmarks/browser/bookmark_client.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/sync_bookmarks/bookmark_change_processor.h"
@@ -308,7 +310,7 @@ BookmarkModelAssociator::BookmarkModelAssociator(
     BookmarkModel* bookmark_model,
     sync_driver::SyncClient* sync_client,
     syncer::UserShare* user_share,
-    sync_driver::DataTypeErrorHandler* unrecoverable_error_handler,
+    syncer::DataTypeErrorHandler* unrecoverable_error_handler,
     bool expect_mobile_bookmarks_folder)
     : bookmark_model_(bookmark_model),
       sync_client_(sync_client),
@@ -454,7 +456,7 @@ syncer::SyncError BookmarkModelAssociator::AssociateModels(
   if (error.IsSet())
     return error;
 
-  scoped_ptr<ScopedAssociationUpdater> association_updater(
+  std::unique_ptr<ScopedAssociationUpdater> association_updater(
       new ScopedAssociationUpdater(bookmark_model_));
   DisassociateModels();
 

@@ -6,9 +6,10 @@
 
 #include <dwrite.h>
 
+#include <memory>
+
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "base/win/scoped_comptr.h"
 #include "base/win/win_util.h"
@@ -24,25 +25,14 @@
 #include "third_party/WebKit/public/web/win/WebFontRendering.h"
 #include "third_party/icu/source/i18n/unicode/timezone.h"
 #include "third_party/skia/include/ports/SkTypeface_win.h"
+#include "ui/display/win/dpi.h"
 #include "ui/gfx/win/direct_write.h"
-#include "ui/gfx/win/dpi.h"
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 #include "media/base/win/mf_util.h"
 #endif
 
 namespace content {
-namespace {
-
-// Windows-only skia sandbox support
-// These are used for GDI-path rendering.
-void SkiaPreCacheFont(const LOGFONT& logfont) {
-  RenderThread* render_thread = RenderThread::Get();
-  if (render_thread) {
-    render_thread->PreCacheFont(logfont);
-  }
-}
-
 void WarmUpMediaFoundation() {
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   media::LoadMFCommonLibraries();
@@ -51,13 +41,9 @@ void WarmUpMediaFoundation() {
 #endif
 }
 
-}  // namespace
-
 RendererMainPlatformDelegate::RendererMainPlatformDelegate(
     const MainFunctionParams& parameters)
-        : parameters_(parameters),
-          sandbox_test_module_(NULL) {
-}
+    : parameters_(parameters) {}
 
 RendererMainPlatformDelegate::~RendererMainPlatformDelegate() {
 }
@@ -69,7 +55,6 @@ void RendererMainPlatformDelegate::PlatformInitialize() {
   // malicious code if the renderer gets compromised.
   bool no_sandbox = command_line.HasSwitch(switches::kNoSandbox);
 
-  bool use_direct_write = gfx::win::ShouldUseDirectWrite();
   if (!no_sandbox) {
     // ICU DateFormat class (used in base/time_format.cc) needs to get the
     // Olson timezone ID by accessing the registry keys under
@@ -77,18 +62,14 @@ void RendererMainPlatformDelegate::PlatformInitialize() {
     // After TimeZone::createDefault is called once here, the timezone ID is
     // cached and there's no more need to access the registry. If the sandbox
     // is disabled, we don't have to make this dummy call.
-    scoped_ptr<icu::TimeZone> zone(icu::TimeZone::createDefault());
+    std::unique_ptr<icu::TimeZone> zone(icu::TimeZone::createDefault());
 
-    if (use_direct_write) {
-      InitializeDWriteFontProxy();
-    } else {
-      SkTypeface_SetEnsureLOGFONTAccessibleProc(SkiaPreCacheFont);
-    }
+    InitializeDWriteFontProxy();
 
     WarmUpMediaFoundation();
   }
-  blink::WebFontRendering::setUseDirectWrite(use_direct_write);
-  blink::WebFontRendering::setDeviceScaleFactor(gfx::GetDPIScale());
+  // TODO(robliao): This should use WebScreenInfo. See http://crbug.com/604555.
+  blink::WebFontRendering::setDeviceScaleFactor(display::win::GetDPIScale());
 }
 
 void RendererMainPlatformDelegate::PlatformUninitialize() {

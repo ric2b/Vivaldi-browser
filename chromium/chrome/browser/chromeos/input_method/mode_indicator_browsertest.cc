@@ -21,6 +21,7 @@
 #include "ui/base/ime/chromeos/input_method_whitelist.h"
 #include "ui/base/ime/ime_bridge.h"
 #include "ui/base/ime/input_method_factory.h"
+#include "ui/display/display.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
 
@@ -171,8 +172,9 @@ IN_PROC_BROWSER_TEST_F(ModeIndicatorBrowserTest, Bounds) {
   EXPECT_EQ(mi1_bounds.width(),  mi2_bounds.width());
   EXPECT_EQ(mi1_bounds.height(), mi2_bounds.height());
 
-  const gfx::Rect screen_bounds =
-      gfx::Screen::GetScreen()->GetDisplayMatching(cursor1_bounds).work_area();
+  const gfx::Rect screen_bounds = display::Screen::GetScreen()
+                                      ->GetDisplayMatching(cursor1_bounds)
+                                      .work_area();
 
   // Check if the location of the mode indicator is concidered with
   // the screen size.

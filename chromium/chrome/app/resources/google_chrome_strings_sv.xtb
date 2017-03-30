@@ -70,10 +70,16 @@ Om du loggar in ändå synkroniseras din information i Chrome, till exempel bokm
 <translation id="2997147809295888909">Chrome har verifierat att webbplatsens certifikat har utfärdats av <ph name="ISSUER" />. Inga certifikattransparensuppgifter skickades från servern.</translation>
 <translation id="3037838751736561277">Google Chrome körs i bakgrundsläge.</translation>
 <translation id="3047079729301751317">Om du kopplar från <ph name="USERNAME" /> rensas din historik, dina bokmärken, dina inställningar och annan Chrome-data som du har lagrat på enheten. Data som lagras i Google-kontot rensas inte utan kan hanteras via <ph name="GOOGLE_DASHBOARD_LINK" />Google Översikt<ph name="END_GOOGLE_DASHBOARD_LINK" />.</translation>
+<translation id="3065168410429928842">Chrome-flik</translation>
 <translation id="3080151273017101988">Fortsätt köra bakgrundsappar när Google Chrome avslutas</translation>
 <translation id="3089968997497233615">Det finns en ny, ännu säkrare version av Google Chrome.</translation>
 <translation id="3149510190863420837">Chrome-appar</translation>
-<translation id="3197823471738295152">Enheten är uppdaterad.</translation>
+<translation id="3251381707915721925">Om du vill ange vilka webbplatser som ska vara tillåtna för <ph name="NEW_PROFILE_NAME" /> besöker du <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" /> och konfigurerar begränsningar och andra inställningar där. Om du inte ändrar standardinställningarna får <ph name="NEW_PROFILE_NAME" /> surfa fritt på webben.
+
+Kom ihåg att låsa din profil när du inte använder Chrome om <ph name="NEW_PROFILE_NAME" /> inte ska få tillgång till ditt konto. Gör så här: Klicka på profilnamnet i webbläsarens övre högra hörn och välj Stäng och aktivera barnspärr.
+<ph name="BEGIN_LINK_2" />Läs mer<ph name="END_LINK_2" />
+
+Ytterligare anvisningar har skickats med e-post till dig på <ph name="ACCOUNT_EMAIL" />.</translation>
 <translation id="3282568296779691940">Logga in i Chrome</translation>
 <translation id="3311976847535831054">Den här datorn får inte längre uppdateringar för 32-bitarsversionen av Google Chrome. Uppgradera till Google Chrome med 64 bitar.</translation>
 <translation id="3360895254066713204">Chrome Helper</translation>
@@ -213,7 +219,6 @@ Google Chrome kan inte återställa dina inställningar.</translation>
 <translation id="7808348361785373670">Ta bort från Chrome …</translation>
 <translation id="7825851276765848807">Installationen misslyckades på grund av ett okänt fel. Ladda ned Google Chrome igen.</translation>
 <translation id="7890208801193284374">Om du delar en dator med vänner och familj kan de konfigurera Chrome precis som de vill och surfa separat.</translation>
-<translation id="8000275528373650868">För Google Chrome krävs Windows Vista eller Windows XP med SP2 eller senare.</translation>
 <translation id="8005540215158006229">Chrome är nästan klar.</translation>
 <translation id="8008534537613507642">Installera om Chrome</translation>
 <translation id="8030318113982266900">Uppdaterar din enhet till kanalen <ph name="CHANNEL_NAME" /> ...</translation>
@@ -235,6 +240,7 @@ Google Chrome kan inte återställa dina inställningar.</translation>
 <translation id="8556340503434111824">Det finns en ny version av Google Chrome och den är snabbare än någonsin.</translation>
 <translation id="8568392309447938879">Du måste logga in i Chrome om du vill använda appar. När du gör det synkroniseras appar, bokmärken, historik, lösenord och andra inställningar på de enheter där Chrome används.</translation>
 <translation id="8614913330719544658">Google Chrome svarar inte. Vill du starta om nu?</translation>
+<translation id="8667808506758191620"><ph name="DEVICE_TYPE" /> är uppdaterad.</translation>
 <translation id="8669527147644353129">Google Chrome Helper</translation>
 <translation id="8679801911857917785">Det styr också vilken sida som visas när du startar Chrome.</translation>
 <translation id="870251953148363156">Uppdatera &amp;Google Chrome</translation>
@@ -243,6 +249,7 @@ Google Chrome kan inte återställa dina inställningar.</translation>
 <translation id="8851136666856101339">huvud</translation>
 <translation id="8862326446509486874">Du har inte behörighet att göra en installation på systemnivå. Försök köra installationsprogrammet igen som administratör.</translation>
 <translation id="9026991721384951619">Det gick inte att synkronisera data med Chrome OS eftersom inloggningsuppgifterna för kontot är inaktuella.</translation>
+<translation id="9067395829937117663">För Google Chrome krävs Windows 7 eller senare.</translation>
 <translation id="9102715433345326100">Filen är skadlig och har blockerats av Chrome.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Varning!<ph name="END_BOLD" /> Google Chrome kan inte förhindra tillägg från att registrera din webbhistorik. Om du vill inaktivera det här tillägget i inkognitoläge avmarkerar du detta tillval.</translation>
 <translation id="911206726377975832">Vill du även ta bort din webbinformation?</translation>

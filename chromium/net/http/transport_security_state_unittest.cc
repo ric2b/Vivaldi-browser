@@ -16,6 +16,7 @@
 #include "base/strings/string_piece.h"
 #include "base/test/histogram_tester.h"
 #include "base/values.h"
+#include "crypto/openssl_util.h"
 #include "crypto/sha2.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
@@ -33,12 +34,6 @@
 #include "net/ssl/ssl_info.h"
 #include "net/test/cert_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
-#if defined(USE_OPENSSL)
-#include "crypto/openssl_util.h"
-#else
-#include "crypto/nss_util.h"
-#endif
 
 namespace net {
 
@@ -183,7 +178,7 @@ void CheckHPKPReport(
     const scoped_refptr<X509Certificate>& served_certificate_chain,
     const scoped_refptr<X509Certificate>& validated_certificate_chain,
     const HashValueVector& known_pins) {
-  scoped_ptr<base::Value> value(base::JSONReader::Read(report));
+  std::unique_ptr<base::Value> value(base::JSONReader::Read(report));
   ASSERT_TRUE(value);
   ASSERT_TRUE(value->IsType(base::Value::TYPE_DICTIONARY));
 
@@ -236,11 +231,7 @@ void CheckHPKPReport(
 class TransportSecurityStateTest : public testing::Test {
  public:
   void SetUp() override {
-#if defined(USE_OPENSSL)
     crypto::EnsureOpenSSLInit();
-#else
-    crypto::EnsureNSSInit();
-#endif
   }
 
   static void DisableStaticPins(TransportSecurityState* state) {
@@ -646,21 +637,21 @@ TEST_F(TransportSecurityStateTest, NewPinsOverride) {
 
   ASSERT_TRUE(state.GetDynamicPKPState("foo.example.com", &pkp_state));
   ASSERT_EQ(1u, pkp_state.spki_hashes.size());
-  EXPECT_TRUE(pkp_state.spki_hashes[0].Equals(hash1));
+  EXPECT_EQ(pkp_state.spki_hashes[0], hash1);
 
   state.AddHPKP("foo.example.com", expiry, false, HashValueVector(1, hash2),
                 report_uri);
 
   ASSERT_TRUE(state.GetDynamicPKPState("foo.example.com", &pkp_state));
   ASSERT_EQ(1u, pkp_state.spki_hashes.size());
-  EXPECT_TRUE(pkp_state.spki_hashes[0].Equals(hash2));
+  EXPECT_EQ(pkp_state.spki_hashes[0], hash2);
 
   state.AddHPKP("foo.example.com", expiry, false, HashValueVector(1, hash3),
                 report_uri);
 
   ASSERT_TRUE(state.GetDynamicPKPState("foo.example.com", &pkp_state));
   ASSERT_EQ(1u, pkp_state.spki_hashes.size());
-  EXPECT_TRUE(pkp_state.spki_hashes[0].Equals(hash3));
+  EXPECT_EQ(pkp_state.spki_hashes[0], hash3);
 }
 
 TEST_F(TransportSecurityStateTest, DeleteAllDynamicDataSince) {

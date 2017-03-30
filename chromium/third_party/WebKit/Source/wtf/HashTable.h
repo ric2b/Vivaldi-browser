@@ -25,7 +25,7 @@
 #include "wtf/Assertions.h"
 #include "wtf/ConditionalDestructor.h"
 #include "wtf/HashTraits.h"
-#include "wtf/PartitionAllocator.h"
+#include "wtf/allocator/PartitionAllocator.h"
 
 #define DUMP_HASHTABLE_STATS 0
 #define DUMP_HASHTABLE_STATS_PER_TABLE 0
@@ -353,11 +353,9 @@ public:
     typedef Traits ValueTraits;
     typedef Key KeyType;
     typedef typename KeyTraits::PeekInType KeyPeekInType;
-    typedef typename KeyTraits::PassInType KeyPassInType;
     typedef Value ValueType;
     typedef Extractor ExtractorType;
     typedef KeyTraits KeyTraitsType;
-    typedef typename Traits::PassInType ValuePassInType;
     typedef IdentityHashTranslator<HashFunctions> IdentityTranslatorType;
     typedef HashTableAddResult<HashTable, ValueType> AddResult;
 

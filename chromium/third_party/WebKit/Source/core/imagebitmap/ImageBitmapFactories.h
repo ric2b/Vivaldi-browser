@@ -31,16 +31,17 @@
 #ifndef ImageBitmapFactories_h
 #define ImageBitmapFactories_h
 
+#include "bindings/core/v8/HTMLImageElementOrHTMLVideoElementOrHTMLCanvasElementOrBlobOrImageDataOrImageBitmap.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/UnionTypesCore.h"
 #include "core/fileapi/FileReaderLoader.h"
 #include "core/fileapi/FileReaderLoaderClient.h"
 #include "core/imagebitmap/ImageBitmapOptions.h"
 #include "platform/Supplementable.h"
 #include "platform/geometry/IntRect.h"
-#include "third_party/skia/include/core/SkImage.h"
+
+class SkImage;
 
 namespace blink {
 
@@ -58,9 +59,7 @@ typedef HTMLImageElementOrHTMLVideoElementOrHTMLCanvasElementOrBlobOrImageDataOr
 class ImageBitmapFactories final : public GarbageCollectedFinalized<ImageBitmapFactories>, public Supplement<LocalDOMWindow>, public Supplement<WorkerGlobalScope> {
     USING_GARBAGE_COLLECTED_MIXIN(ImageBitmapFactories);
 public:
-    static ScriptPromise createImageBitmap(ScriptState*, EventTarget&, const ImageBitmapSourceUnion&, ExceptionState&);
     static ScriptPromise createImageBitmap(ScriptState*, EventTarget&, const ImageBitmapSourceUnion&, const ImageBitmapOptions&, ExceptionState&);
-    static ScriptPromise createImageBitmap(ScriptState*, EventTarget&, const ImageBitmapSourceUnion&, int sx, int sy, int sw, int sh, ExceptionState&);
     static ScriptPromise createImageBitmap(ScriptState*, EventTarget&, const ImageBitmapSourceUnion&, int sx, int sy, int sw, int sh, const ImageBitmapOptions&, ExceptionState&);
     static ScriptPromise createImageBitmap(ScriptState*, EventTarget&, ImageBitmapSource*, int sx, int sy, int sw, int sh, const ImageBitmapOptions&, ExceptionState&);
 
@@ -91,8 +90,8 @@ private:
 
         void rejectPromise();
 
-        void scheduleAsyncImageBitmapDecoding();
-        void decodeImageOnDecoderThread(WebTaskRunner*);
+        void scheduleAsyncImageBitmapDecoding(DOMArrayBuffer*);
+        void decodeImageOnDecoderThread(WebTaskRunner*, DOMArrayBuffer*);
         void resolvePromiseOnOriginalThread(PassRefPtr<SkImage>);
 
         // FileReaderLoaderClient

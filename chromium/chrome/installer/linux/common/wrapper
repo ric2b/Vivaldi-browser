@@ -9,25 +9,6 @@ export CHROME_WRAPPER="`readlink -f "$0"`"
 
 HERE="`dirname "$CHROME_WRAPPER"`"
 
-# Check if the CPU supports SSE2. If not, try to pop up a dialog to explain the
-# problem and exit. Otherwise the browser will just crash with a SIGILL.
-# http://crbug.com/348761
-grep ^flags /proc/cpuinfo|grep -qs sse2
-if [ $? != 0 ]; then
-  SSE2_DEPRECATION_MSG="This computer cannot run Vivaldi because \
-its hardware is no longer supported."
-  if which zenity &> /dev/null; then
-    zenity --warning --text="$SSE2_DEPRECATION_MSG"
-  elif which gmessage &> /dev/null; then
-    gmessage "$SSE2_DEPRECATION_MSG"
-  elif which xmessage &> /dev/null; then
-    xmessage "$SSE2_DEPRECATION_MSG"
-  else
-    echo "$SSE2_DEPRECATION_MSG" 1>&2
-  fi
-  exit 1
-fi
-
 # We include some xdg utilities next to the binary, and we want to prefer them
 # over the system versions when we know the system versions are very old. We
 # detect whether the system xdg utilities are sufficiently new to be likely to
@@ -45,14 +26,50 @@ else
 fi
 
 # Find libffmpeg.so with additional codecs.
-CHR_CODECS_CH="/usr/share/doc/chromium-codecs-ffmpeg-extra/changelog.Debian.gz"
-if [ -r $CHR_CODECS_CH ]; then
-  CHR_CODECS_VER=$(gzip -cd $CHR_CODECS_CH |
-    sed -n '1s/chromium-browser (\(\([0-9]\+\.\)\{3\}\).*/\1/p')
-  if [ "$CHR_CODECS_VER" = "@@CHR_MAJOR@@.@@CHR_MINOR@@.@@CHR_BUILD@@." ] || [ "$CHR_CODECS_VER" = "50.0.2661." ] || [ "$CHR_CODECS_VER" = "49.0.2623." ]; then
-    FFMPEG_LD_LIBRARY_PATH=":/usr/lib/chromium-browser/libs"
+CHR_CODECS_CL="/usr/share/doc/chromium-codecs-ffmpeg-extra/changelog.Debian.gz"
+if [ -r "$CHR_CODECS_CL" ]; then
+  LIBFFMPEG_PATH="/usr/lib/chromium-browser/libs"
+  CHR_CODECS_VER=`gzip -cd "$CHR_CODECS_CL" |
+    sed -n '1s/^chromium-browser (\([0-9]\+\.\)\{2\}\([0-9]\+\)\.[0-9]\+-.*/\2/p'`
+elif [ -r "/etc/os-release" ]; then
+  # Check distro, to allow distro specific tests to locate a suitable libffmpeg.so
+  . /etc/os-release
+  # os-release does not mandate ID_LIKE so set it to something (if empty), to
+  # avoid having an empty variable.
+  ID_LIKE="${ID_LIKE:-unknown}"
+  set_lib_dir_suf()
+  {
+    case "`uname -m`" in
+      x86_64) LIB_DIR_SUFFIX="64" ;;
+           *) LIB_DIR_SUFFIX="" ;;
+    esac
+  }
+  # OpenSUSE, SLES and derivatives will all have an ID_LIKE that includes "suse"
+  if [[ "$ID_LIKE" =~ "suse" ]]; then
+    set_lib_dir_suf
+    LIBFFMPEG_PATH="/usr/lib$LIB_DIR_SUFFIX/chromium/lib"
+    if [ -r "$LIBFFMPEG_PATH/libffmpeg.so" ]; then
+      # Query RPM database and set the version if chromium-ffmpeg is installed.
+      CHR_CODECS_VER=`rpm -qf "$LIBFFMPEG_PATH/libffmpeg.so" |
+        sed -n 's/^chromium-ffmpeg-\([0-9]\+\.\)\{2\}\([0-9]\+\)\.[0-9]\+-.*/\2/p'`
+    fi
+  # Slackware has the ID "slackware" but no ID_LIKE defined. Presumably derivatives
+  # might use ID_LIKE containing "slackware".
+  elif [ "$ID" = "slackware" ] || [[ "$ID_LIKE" =~ "slackware" ]]; then
+    set_lib_dir_suf
+    LIBFFMPEG_PATH="/usr/lib$LIB_DIR_SUFFIX/chromium/lib"
+    if [ -r "$LIBFFMPEG_PATH/libffmpeg.so" ]; then
+      # Query the package log and set the version if AlienBob's Chromium package
+      # is installed.
+      CHR_CODECS_VER=`echo /var/log/packages/chromium-*alien |
+        sed -n 's/.*chromium-\([0-9]\+\.\)\{2\}\([0-9]\+\)\.[0-9]\+-.*/\2/p'`
+    fi
   fi
 fi
+if [[ -n "$CHR_CODECS_VER" ]] && [ "$CHR_CODECS_VER" -ge "2564" ]; then
+  FFMPEG_LD_LIBRARY_PATH=":$LIBFFMPEG_PATH"
+fi
+
 # Set LD_LIBRARY_PATH to prefer our libs, excluding $HERE/lib/libffmpeg.so if
 # an alternative ffmpeg was found.
 if [[ -n "$LD_LIBRARY_PATH" ]]; then

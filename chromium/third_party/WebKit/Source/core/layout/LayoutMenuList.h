@@ -39,7 +39,7 @@ public:
     ~LayoutMenuList() override;
 
     HTMLSelectElement* selectElement() const;
-    void setOptionsChanged(bool changed) { m_optionsChanged = changed; }
+    void setOptionsChanged(bool);
     void didSetSelectedIndex(int optionIndex);
     String text() const;
 
@@ -80,9 +80,8 @@ private:
     void adjustInnerStyle();
     void setText(const String&);
     void setTextFromOption(int optionIndex);
-    void updateOptionsWidth();
+    void updateOptionsWidth() const;
     float computeTextWidth(const String&) const;
-    void updateText();
     void setIndexToSelectOnCancel(int listIndex);
 
     void didUpdateActiveOption(int optionIndex);
@@ -90,10 +89,12 @@ private:
     LayoutText* m_buttonText;
     LayoutBlock* m_innerBlock;
 
-    bool m_optionsChanged : 1;
+    mutable bool m_optionsChanged : 1;
     bool m_isEmpty : 1;
     bool m_hasUpdatedActiveOption : 1;
-    int m_optionsWidth;
+    // m_optionsWidth is calculated and cached on demand.
+    // updateOptionsWidth() should be called before reading them.
+    mutable int m_optionsWidth;
 
     int m_lastActiveIndex;
 

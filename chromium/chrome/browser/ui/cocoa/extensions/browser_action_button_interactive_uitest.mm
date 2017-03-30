@@ -177,6 +177,11 @@ void MoveMouseToCenter(NSView* view) {
   return self;
 }
 
+- (void)dealloc {
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
+  [super dealloc];
+}
+
 - (void)menuDidClose:(NSNotification*)notification {
   if (!closeClosure_.is_null()) {
     base::MessageLoop::current()->PostTask(
@@ -277,6 +282,9 @@ void CheckActionIsPoppedOut(BrowserActionsController* actionsController,
   EXPECT_EQ([actionsController containerView], [actionButton superview]);
   EXPECT_EQ([actionButton viewController],
             [actionsController toolbarActionsBar]->popped_out_action());
+  // Since the button is popped out for a popup or context menu, it should be
+  // highlighted.
+  EXPECT_TRUE([actionButton isHighlighted]);
 }
 
 // Test that opening a context menu works for both actions on the main bar and
@@ -321,6 +329,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionButtonUiTest,
     runLoop.Run();
     // The menu should have opened from the click.
     EXPECT_TRUE([menuHelper menuOpened]);
+    EXPECT_FALSE([actionButton isHighlighted]);
   }
 
   // Reset the menu helper so we can use it again.
@@ -356,6 +365,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionButtonUiTest,
     // action button, not the overflow's. Since Cocoa doesn't support running
     // a menu-within-a-menu, this is what has to happen.
     EXPECT_TRUE([menuHelper menuOpened]);
+    EXPECT_FALSE([actionButton isHighlighted]);
   }
 }
 
@@ -429,7 +439,9 @@ void CheckAppMenuLayout(ToolbarController* toolbarController,
 }
 
 // Tests the layout of the overflow container in the app menu.
-IN_PROC_BROWSER_TEST_F(BrowserActionButtonUiTest, TestOverflowContainerLayout) {
+// Disabled due to crashing flakily, see crbug.com/602203.
+IN_PROC_BROWSER_TEST_F(BrowserActionButtonUiTest,
+                       DISABLED_TestOverflowContainerLayout) {
   // Add a bunch of extensions - enough to trigger multiple rows in the overflow
   // menu.
   const int kNumExtensions = 12;
@@ -589,4 +601,51 @@ IN_PROC_BROWSER_TEST_F(BrowserActionButtonUiTest,
     runLoop.Run();
     EXPECT_TRUE([menuHelper menuOpened]);
   }
+}
+
+void CloseAppMenu(AppMenuController* appMenuController,
+                  const base::Closure& quitClosure) {
+  EXPECT_TRUE([appMenuController isMenuOpen]);
+  [appMenuController cancel];
+  quitClosure.Run();
+}
+
+// Tests opening the app menu with an overflow section needed, then closing it,
+// removing the need for the overflow section, and re-opening it.
+// Regression test for crbug.com/603241.
+IN_PROC_BROWSER_TEST_F(BrowserActionButtonUiTest,
+                       TestReopeningAppMenuWithOverflowNotNeeded) {
+  // Add an extension with a browser action and overflow it in the menu.
+  scoped_refptr<const extensions::Extension> extension =
+      extensions::extension_action_test_util::CreateActionExtension(
+          "browser_action",
+          extensions::extension_action_test_util::BROWSER_ACTION);
+  extension_service()->AddExtension(extension.get());
+  ASSERT_EQ(1u, model()->toolbar_items().size());
+  model()->SetVisibleIconCount(0);
+
+  // Move the mouse over the app menu button.
+  MoveMouseToCenter(appMenuButton());
+
+  auto openAndCloseAppMenu = [](AppMenuController* controller) {
+    base::RunLoop runLoop;
+    base::scoped_nsobject<MenuWatcher> menuWatcher(
+        [[MenuWatcher alloc] initWithController:controller]);
+    [menuWatcher setOpenClosure:
+        base::Bind(&CloseAppMenu,
+                   base::Unretained(controller),
+                   runLoop.QuitClosure())];
+    ui_controls::SendMouseEvents(ui_controls::LEFT,
+                                 ui_controls::DOWN | ui_controls::UP);
+    runLoop.Run();
+  };
+  openAndCloseAppMenu(appMenuController());
+
+  // Move the extension back to the main bar, so an overflow bar is no longer
+  // needed. Then open and close the app menu a couple times.
+  // This tests that the menu properly cleans up after itself when an overflow
+  // was present, and is no longer (fix for crbug.com/603241).
+  model()->SetVisibleIconCount(1);
+  openAndCloseAppMenu(appMenuController());
+  openAndCloseAppMenu(appMenuController());
 }

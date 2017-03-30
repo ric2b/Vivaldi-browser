@@ -14,7 +14,7 @@
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/upload_data_stream.h"
@@ -28,6 +28,8 @@
 #include "net/spdy/spdy_session.h"
 
 namespace net {
+
+const size_t SpdyHttpStream::kRequestBodyBufferSize = 1 << 14;  // 16KB
 
 SpdyHttpStream::SpdyHttpStream(const base::WeakPtr<SpdySession>& spdy_session,
                                bool direct)
@@ -232,9 +234,7 @@ int SpdyHttpStream::SendRequest(const HttpRequestHeaders& request_headers,
 
   CHECK(!request_body_buf_.get());
   if (HasUploadData()) {
-    // Use kMaxSpdyFrameChunkSize as the buffer size, since the request
-    // body data is written with this size at a time.
-    request_body_buf_ = new IOBufferWithSize(kMaxSpdyFrameChunkSize);
+    request_body_buf_ = new IOBufferWithSize(kRequestBodyBufferSize);
     // The request body buffer is empty at first.
     request_body_buf_size_ = 0;
   }
@@ -274,7 +274,7 @@ int SpdyHttpStream::SendRequest(const HttpRequestHeaders& request_headers,
     return ERR_IO_PENDING;
   }
 
-  scoped_ptr<SpdyHeaderBlock> headers(new SpdyHeaderBlock);
+  std::unique_ptr<SpdyHeaderBlock> headers(new SpdyHeaderBlock);
   CreateSpdyHeadersFromHttpRequest(*request_info_, request_headers,
                                    stream_->GetProtocolVersion(), direct_,
                                    headers.get());
@@ -351,7 +351,7 @@ SpdyResponseHeadersStatus SpdyHttpStream::OnResponseHeadersUpdated(
   return RESPONSE_HEADERS_ARE_COMPLETE;
 }
 
-void SpdyHttpStream::OnDataReceived(scoped_ptr<SpdyBuffer> buffer) {
+void SpdyHttpStream::OnDataReceived(std::unique_ptr<SpdyBuffer> buffer) {
   CHECK_EQ(response_headers_status_, RESPONSE_HEADERS_ARE_COMPLETE);
 
   // Note that data may be received for a SpdyStream prior to the user calling

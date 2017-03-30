@@ -14,23 +14,18 @@
 #include "platform/graphics/paint/DrawingDisplayItem.h"
 #include "platform/graphics/paint/PaintController.h"
 
-#define CHECK_CTM_FOR_TRANSFORMED_IMAGEFILTER
-
 namespace blink {
 
 GraphicsContext* SVGFilterRecordingContext::beginContent(FilterData* filterData)
 {
     ASSERT(filterData->m_state == FilterData::Initial);
 
-    GraphicsContext* context = &paintingContext();
-
     // Create a new context so the contents of the filter can be drawn and cached.
     m_paintController = PaintController::create();
     m_context = adoptPtr(new GraphicsContext(*m_paintController));
-    context = m_context.get();
 
     filterData->m_state = FilterData::RecordingContent;
-    return context;
+    return m_context.get();
 }
 
 void SVGFilterRecordingContext::endContent(FilterData* filterData)
@@ -40,17 +35,14 @@ void SVGFilterRecordingContext::endContent(FilterData* filterData)
     SourceGraphic* sourceGraphic = filterData->filter->getSourceGraphic();
     ASSERT(sourceGraphic);
 
-    GraphicsContext* context = &paintingContext();
-
     // Use the context that contains the filtered content.
     ASSERT(m_paintController);
     ASSERT(m_context);
-    context = m_context.get();
-    context->beginRecording(filterData->filter->filterRegion());
+    m_context->beginRecording(filterData->filter->filterRegion());
     m_paintController->commitNewDisplayItems();
-    m_paintController->paintArtifact().replay(*context);
+    m_paintController->paintArtifact().replay(*m_context);
 
-    sourceGraphic->setPicture(context->endRecording());
+    SkiaImageFilterBuilder::buildSourceGraphic(sourceGraphic, toSkSp(m_context->endRecording()));
 
     // Content is cached by the source graphic so temporaries can be freed.
     m_paintController = nullptr;
@@ -59,15 +51,14 @@ void SVGFilterRecordingContext::endContent(FilterData* filterData)
     filterData->m_state = FilterData::ReadyToPaint;
 }
 
-static void paintFilteredContent(const LayoutObject& object, GraphicsContext& context, FilterData* filterData)
+static void paintFilteredContent(GraphicsContext& context, FilterData* filterData)
 {
     ASSERT(filterData->m_state == FilterData::ReadyToPaint);
     ASSERT(filterData->filter->getSourceGraphic());
 
     filterData->m_state = FilterData::PaintingFilter;
 
-    SkiaImageFilterBuilder builder;
-    RefPtr<SkImageFilter> imageFilter = builder.build(filterData->filter->lastEffect(), ColorSpaceDeviceRGB);
+    sk_sp<SkImageFilter> imageFilter = SkiaImageFilterBuilder::build(filterData->filter->lastEffect(), ColorSpaceDeviceRGB);
     FloatRect boundaries = filterData->filter->filterRegion();
     context.save();
 
@@ -75,26 +66,7 @@ static void paintFilteredContent(const LayoutObject& object, GraphicsContext& co
     FilterEffect* lastEffect = filterData->filter->lastEffect();
     context.clipRect(lastEffect->determineAbsolutePaintRect(lastEffect->maxEffectRect()));
 
-#ifdef CHECK_CTM_FOR_TRANSFORMED_IMAGEFILTER
-    // TODO: Remove this workaround once skew/rotation support is added in Skia
-    // (https://code.google.com/p/skia/issues/detail?id=3288, crbug.com/446935).
-    // If the CTM contains rotation or shearing, apply the filter to
-    // the unsheared/unrotated matrix, and do the shearing/rotation
-    // as a final pass.
-    AffineTransform ctm = SVGLayoutSupport::deprecatedCalculateTransformToLayer(&object);
-    if (ctm.b() || ctm.c()) {
-        AffineTransform scaleAndTranslate;
-        scaleAndTranslate.translate(ctm.e(), ctm.f());
-        scaleAndTranslate.scale(ctm.xScale(), ctm.yScale());
-        ASSERT(scaleAndTranslate.isInvertible());
-        AffineTransform shearAndRotate = scaleAndTranslate.inverse();
-        shearAndRotate.multiply(ctm);
-        context.concatCTM(shearAndRotate.inverse());
-        imageFilter = builder.buildTransform(shearAndRotate, imageFilter.get());
-    }
-#endif
-
-    context.beginLayer(1, SkXfermode::kSrcOver_Mode, &boundaries, ColorFilterNone, imageFilter.get());
+    context.beginLayer(1, SkXfermode::kSrcOver_Mode, &boundaries, ColorFilterNone, std::move(imageFilter));
     context.endLayer();
     context.restore();
 
@@ -177,7 +149,7 @@ void SVGFilterPainter::finishEffect(const LayoutObject& object, SVGFilterRecordi
     // TODO(chrishtr): stop using an infinite rect, and instead bound the filter.
     LayoutObjectDrawingRecorder recorder(context, object, DisplayItem::SVGFilter, LayoutRect::infiniteIntRect());
     if (filterData && filterData->m_state == FilterData::ReadyToPaint)
-        paintFilteredContent(object, context, filterData);
+        paintFilteredContent(context, filterData);
 }
 
 } // namespace blink

@@ -79,12 +79,12 @@ JavaScriptDialogManager* JavaScriptDialogManager::GetInstance() {
 }
 
 void JavaScriptDialogManager::SetNativeDialogFactory(
-    scoped_ptr<JavaScriptNativeDialogFactory> factory) {
+    std::unique_ptr<JavaScriptNativeDialogFactory> factory) {
   native_dialog_factory_ = std::move(factory);
 }
 
 void JavaScriptDialogManager::SetExtensionsClient(
-    scoped_ptr<JavaScriptDialogExtensionsClient> extensions_client) {
+    std::unique_ptr<JavaScriptDialogExtensionsClient> extensions_client) {
   extensions_client_ = std::move(extensions_client);
 }
 
@@ -267,8 +267,8 @@ base::string16 JavaScriptDialogManager::GetTitle(
     base::string16 url_string =
         url_formatter::ElideHost(origin_url, gfx::FontList(), kUrlElideWidth);
 #else
-    base::string16 url_string =
-        url_formatter::FormatUrlForSecurityDisplayOmitScheme(origin_url);
+    base::string16 url_string = url_formatter::FormatUrlForSecurityDisplay(
+        origin_url, url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS);
 #endif
     return l10n_util::GetStringFUTF16(
         is_same_origin_as_main_frame ? IDS_JAVASCRIPT_MESSAGEBOX_TITLE

@@ -44,8 +44,6 @@ WebInspector.ElementsTreeOutline = function(domModel, omitRootDOMNode, selectEna
 
     this._shadowRoot = WebInspector.createShadowRootWithCoreStyles(element, "elements/elementsTreeOutline.css");
     var outlineDisclosureElement = this._shadowRoot.createChild("div", "elements-disclosure");
-    if (Runtime.experiments.isEnabled("reducedIndentation"))
-        outlineDisclosureElement.classList.add("elements-reduced-indentation");
 
     TreeOutline.call(this);
     this._element = this.element;
@@ -667,7 +665,7 @@ WebInspector.ElementsTreeOutline.prototype = {
     /**
      * @param {?TreeElement} treeElement
      */
-    setHoverEffect: function (treeElement)
+    setHoverEffect: function(treeElement)
     {
         if (this._previousHoveredElement === treeElement)
             return;
@@ -749,7 +747,7 @@ WebInspector.ElementsTreeOutline.prototype = {
         treeElement.listItemElement.classList.add("elements-drag-over");
         this._dragOverTreeElement = treeElement;
         event.preventDefault();
-        event.dataTransfer.dropEffect = 'move';
+        event.dataTransfer.dropEffect = "move";
         return false;
     },
 

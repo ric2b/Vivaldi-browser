@@ -19,30 +19,29 @@ namespace offline_pages {
 namespace {
 
 // Returns an offline page originated from the |online_url|.
-const offline_pages::OfflinePageItem* GetOfflinePageForOnlineURL(
+const OfflinePageItem* MaybeGetBestOfflinePageForOnlineURL(
     content::BrowserContext* browser_context,
     const GURL& online_url) {
   DCHECK(browser_context);
 
-  if (!offline_pages::IsOfflinePagesEnabled())
+  if (!IsOfflinePagesEnabled())
     return nullptr;
 
-  offline_pages::OfflinePageModel* offline_page_model =
-      offline_pages::OfflinePageModelFactory::GetForBrowserContext(
-          browser_context);
+  OfflinePageModel* offline_page_model =
+      OfflinePageModelFactory::GetForBrowserContext(browser_context);
   if (!offline_page_model)
     return nullptr;
 
-  return offline_page_model->GetPageByOnlineURL(online_url);
+  return offline_page_model->MaybeGetBestPageForOnlineURL(online_url);
 }
 
 // Returns an offline page that is stored as the |offline_url|.
-const offline_pages::OfflinePageItem* GetOfflinePageForOfflineURL(
+const OfflinePageItem* GetOfflinePageForOfflineURL(
     content::BrowserContext* browser_context,
     const GURL& offline_url) {
   DCHECK(browser_context);
 
-  if (!offline_pages::IsOfflinePagesEnabled())
+  if (!IsOfflinePagesEnabled())
     return nullptr;
 
   // Note that we first check if the url likely points to an offline page
@@ -51,13 +50,12 @@ const offline_pages::OfflinePageItem* GetOfflinePageForOfflineURL(
   if (!OfflinePageUtils::MightBeOfflineURL(offline_url))
     return nullptr;
 
-  offline_pages::OfflinePageModel* offline_page_model =
-      offline_pages::OfflinePageModelFactory::GetForBrowserContext(
-          browser_context);
+  OfflinePageModel* offline_page_model =
+      OfflinePageModelFactory::GetForBrowserContext(browser_context);
   if (!offline_page_model)
     return nullptr;
 
-  return offline_page_model->GetPageByOfflineURL(offline_url);
+  return offline_page_model->MaybeGetPageByOfflineURL(offline_url);
 }
 
 }  // namespace
@@ -75,8 +73,8 @@ bool OfflinePageUtils::MightBeOfflineURL(const GURL& url) {
 GURL OfflinePageUtils::GetOfflineURLForOnlineURL(
     content::BrowserContext* browser_context,
     const GURL& online_url) {
-  const offline_pages::OfflinePageItem* offline_page =
-      GetOfflinePageForOnlineURL(browser_context, online_url);
+  const OfflinePageItem* offline_page =
+      MaybeGetBestOfflinePageForOnlineURL(browser_context, online_url);
   if (!offline_page)
     return GURL();
 
@@ -87,32 +85,12 @@ GURL OfflinePageUtils::GetOfflineURLForOnlineURL(
 GURL OfflinePageUtils::GetOnlineURLForOfflineURL(
     content::BrowserContext* browser_context,
     const GURL& offline_url) {
-  const offline_pages::OfflinePageItem* offline_page =
+  const OfflinePageItem* offline_page =
       GetOfflinePageForOfflineURL(browser_context, offline_url);
   if (!offline_page)
     return GURL();
 
   return offline_page->url;
-}
-
-// static
-int64_t OfflinePageUtils::GetBookmarkIdForOfflineURL(
-    content::BrowserContext* browser_context,
-    const GURL& offline_url) {
-  const offline_pages::OfflinePageItem* offline_page =
-      GetOfflinePageForOfflineURL(browser_context, offline_url);
-  if (!offline_page)
-    return -1;
-
-  if (offline_page->client_id.name_space != offline_pages::BOOKMARK_NAMESPACE) {
-    return -1;
-  }
-
-  int64_t result;
-  if (base::StringToInt64(offline_page->client_id.id, &result)) {
-    return result;
-  }
-  return -1;
 }
 
 // static
@@ -125,23 +103,25 @@ bool OfflinePageUtils::IsOfflinePage(content::BrowserContext* browser_context,
 bool OfflinePageUtils::HasOfflinePageForOnlineURL(
     content::BrowserContext* browser_context,
     const GURL& online_url) {
-  const offline_pages::OfflinePageItem* offline_page =
-      GetOfflinePageForOnlineURL(browser_context, online_url);
+  const OfflinePageItem* offline_page =
+      MaybeGetBestOfflinePageForOnlineURL(browser_context, online_url);
   return offline_page && !offline_page->file_path.empty();
 }
 
 // static
-bool OfflinePageUtils::HasOfflinePages(
-    content::BrowserContext* browser_context) {
+void OfflinePageUtils::MarkPageAccessed(
+    content::BrowserContext* browser_context, const GURL& offline_url) {
   DCHECK(browser_context);
 
-  if (!offline_pages::IsOfflinePagesEnabled())
-    return false;
+  const OfflinePageItem* offline_page =
+      GetOfflinePageForOfflineURL(browser_context, offline_url);
+  if (!offline_page)
+    return;
 
-  offline_pages::OfflinePageModel* offline_page_model =
-      offline_pages::OfflinePageModelFactory::GetForBrowserContext(
-          browser_context);
-  return offline_page_model->HasOfflinePages();
+  OfflinePageModel* offline_page_model =
+      OfflinePageModelFactory::GetForBrowserContext(browser_context);
+  DCHECK(offline_page_model);
+  offline_page_model->MarkPageAccessed(offline_page->offline_id);
 }
 
 }  // namespace offline_pages

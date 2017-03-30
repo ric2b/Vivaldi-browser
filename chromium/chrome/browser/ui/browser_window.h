@@ -146,6 +146,14 @@ class BrowserWindow : public ui::BaseWindow {
   // Returns true if the fullscreen bubble is visible.
   virtual bool IsFullscreenBubbleVisible() const = 0;
 
+  // Shows a notice teaching the user the new shortcut for going back or forward
+  // if the user has pressed the old shortcut more than once in three seconds
+  // and the bubble has been shown less than five times.
+  virtual void MaybeShowNewBackShortcutBubble(bool forward) = 0;
+
+  // Hides the new back shortcut bubble, if showing, by fading it out.
+  virtual void HideNewBackShortcutBubble() = 0;
+
   // Returns the size of WebContents in the browser. This may be called before
   // the TabStripModel has an active tab.
   virtual gfx::Size GetContentsSize() const = 0;
@@ -208,11 +216,6 @@ class BrowserWindow : public ui::BaseWindow {
   // where we take care of it ourselves at the browser level).
   virtual gfx::Rect GetRootWindowResizerRect() const = 0;
 
-  // Shows a confirmation dialog box for adding a search engine described by
-  // |template_url|. Takes ownership of |template_url|.
-  virtual void ConfirmAddSearchProvider(TemplateURL* template_url,
-                                        Profile* profile) = 0;
-
   // Shows the Update Recommended dialog box.
   virtual void ShowUpdateChromeDialog() = 0;
 
@@ -252,24 +255,16 @@ class BrowserWindow : public ui::BaseWindow {
       bool is_user_gesture) = 0;
 
 #if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
-  enum OneClickSigninBubbleType {
-    ONE_CLICK_SIGNIN_BUBBLE_TYPE_BUBBLE,
-    ONE_CLICK_SIGNIN_BUBBLE_TYPE_MODAL_DIALOG,
-    ONE_CLICK_SIGNIN_BUBBLE_TYPE_SAML_MODAL_DIALOG
-  };
-
-  // Callback type used with the ShowOneClickSigninBubble() method.  If the
+  // Callback type used with the ShowOneClickSigninConfirmation() method. If the
   // user chooses to accept the sign in, the callback is called to start the
   // sync process.
   typedef base::Callback<void(OneClickSigninSyncStarter::StartSyncMode)>
       StartSyncCallback;
 
-  // Shows the one-click sign in bubble.  |email| holds the full email address
-  // of the account that has signed in.
-  virtual void ShowOneClickSigninBubble(
-      OneClickSigninBubbleType type,
+  // Shows the one-click sign in confirmation UI. |email| holds the full email
+  // address of the account that has signed in.
+  virtual void ShowOneClickSigninConfirmation(
       const base::string16& email,
-      const base::string16& error_message,
       const StartSyncCallback& start_sync_callback) = 0;
 #endif
 
@@ -399,6 +394,10 @@ class BrowserWindow : public ui::BaseWindow {
       const extensions::Extension* extension,
       const base::Callback<void(ImeWarningBubblePermissionStatus status)>&
           callback) = 0;
+
+  // Returns the platform-specific ID of the workspace the browser window
+  // currently resides in.
+  virtual std::string GetWorkspace() const = 0;
 
  protected:
   friend class BrowserCloseManager;

@@ -4,12 +4,15 @@
 
 #include "gpu/ipc/service/image_transport_surface.h"
 
+#include <memory>
+
 #include "gpu/ipc/service/child_window_surface_win.h"
 #include "gpu/ipc/service/pass_through_image_transport_surface.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_surface_egl.h"
+#include "ui/gl/init/gl_factory.h"
 #include "ui/gl/vsync_provider_win.h"
 
 namespace gpu {
@@ -30,12 +33,12 @@ scoped_refptr<gfx::GLSurface> ImageTransportSurface::CreateNativeSurface(
     surface = egl_surface;
 
     // TODO(jbauman): Get frame statistics from DirectComposition
-    scoped_ptr<gfx::VSyncProvider> vsync_provider(
+    std::unique_ptr<gfx::VSyncProvider> vsync_provider(
         new gfx::VSyncProviderWin(surface_handle));
     if (!egl_surface->Initialize(std::move(vsync_provider)))
       return nullptr;
   } else {
-    surface = gfx::GLSurface::CreateViewGLSurface(surface_handle);
+    surface = gl::init::CreateViewGLSurface(surface_handle);
     if (!surface)
       return nullptr;
   }

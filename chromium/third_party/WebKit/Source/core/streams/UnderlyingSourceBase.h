@@ -35,8 +35,11 @@ public:
     ScriptPromise cancelWrapper(ScriptState*, ScriptValue reason);
     virtual ScriptPromise cancel(ScriptState*, ScriptValue reason);
 
+    void notifyLockAcquired();
+    void notifyLockReleased();
+
     // ActiveScriptWrappable
-    bool hasPendingActivity() const final;
+    bool hasPendingActivity() const;
 
     // ActiveDOMObject
     void stop() override;
@@ -53,6 +56,7 @@ protected:
 
 private:
     Member<ReadableStreamController> m_controller;
+    bool m_isStreamLocked = false;
 };
 
 } // namespace blink

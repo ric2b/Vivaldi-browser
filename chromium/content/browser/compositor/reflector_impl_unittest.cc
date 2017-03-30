@@ -8,8 +8,8 @@
 #include "cc/test/fake_output_surface_client.h"
 #include "cc/test/test_context_provider.h"
 #include "cc/test/test_web_graphics_context_3d.h"
+#include "components/display_compositor/compositor_overlay_candidate_validator.h"
 #include "content/browser/compositor/browser_compositor_output_surface.h"
-#include "content/browser/compositor/browser_compositor_overlay_candidate_validator.h"
 #include "content/browser/compositor/reflector_impl.h"
 #include "content/browser/compositor/reflector_texture.h"
 #include "content/browser/compositor/test/no_transport_image_transport_factory.h"
@@ -19,7 +19,7 @@
 #include "ui/compositor/test/context_factories_for_test.h"
 
 #if defined(USE_OZONE)
-#include "content/browser/compositor/browser_compositor_overlay_candidate_validator_ozone.h"
+#include "components/display_compositor/compositor_overlay_candidate_validator_ozone.h"
 #include "ui/ozone/public/overlay_candidates_ozone.h"
 #endif  // defined(USE_OZONE)
 
@@ -57,13 +57,14 @@ class TestOverlayCandidatesOzone : public ui::OverlayCandidatesOzone {
 };
 #endif  // defined(USE_OZONE)
 
-scoped_ptr<BrowserCompositorOverlayCandidateValidator>
+std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
 CreateTestValidatorOzone() {
 #if defined(USE_OZONE)
-  return scoped_ptr<BrowserCompositorOverlayCandidateValidator>(
-      new BrowserCompositorOverlayCandidateValidatorOzone(
-          0, scoped_ptr<ui::OverlayCandidatesOzone>(
-                 new TestOverlayCandidatesOzone())));
+  return std::unique_ptr<
+      display_compositor::CompositorOverlayCandidateValidator>(
+      new display_compositor::CompositorOverlayCandidateValidatorOzone(
+          std::unique_ptr<ui::OverlayCandidatesOzone>(
+              new TestOverlayCandidatesOzone())));
 #else
   return nullptr;
 #endif  // defined(USE_OZONE)
@@ -71,12 +72,12 @@ CreateTestValidatorOzone() {
 
 class TestOutputSurface : public BrowserCompositorOutputSurface {
  public:
-  TestOutputSurface(
-      const scoped_refptr<cc::ContextProvider>& context_provider,
-      const scoped_refptr<ui::CompositorVSyncManager>& vsync_manager)
-      : BrowserCompositorOutputSurface(context_provider,
-                                       nullptr,
-                                       vsync_manager,
+  TestOutputSurface(scoped_refptr<cc::ContextProvider> context_provider,
+                    scoped_refptr<ui::CompositorVSyncManager> vsync_manager,
+                    base::SingleThreadTaskRunner* task_runner)
+      : BrowserCompositorOutputSurface(std::move(context_provider),
+                                       std::move(vsync_manager),
+                                       task_runner,
                                        CreateTestValidatorOzone()) {
     surface_size_ = gfx::Size(256, 256);
     device_scale_factor_ = 1.f;
@@ -97,19 +98,17 @@ class TestOutputSurface : public BrowserCompositorOutputSurface {
 
   void OnGpuSwapBuffersCompleted(
       const std::vector<ui::LatencyInfo>& latency_info,
-      gfx::SwapResult result) override {
+      gfx::SwapResult result,
+      const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac) override {
     NOTREACHED();
   }
 
 #if defined(OS_MACOSX)
   void SetSurfaceSuspendedForRecycle(bool suspended) override {}
-  bool SurfaceShouldNotShowFramesAfterSuspendForRecycle() const override {
-    return false;
-  }
 #endif
 
  private:
-  scoped_ptr<ReflectorTexture> reflector_texture_;
+  std::unique_ptr<ReflectorTexture> reflector_texture_;
 };
 
 const gfx::Rect kSubRect(0, 0, 64, 64);
@@ -123,7 +122,7 @@ class ReflectorImplTest : public testing::Test {
     ui::ContextFactory* context_factory =
         ui::InitializeContextFactoryForTests(enable_pixel_output);
     ImageTransportFactory::InitializeForUnitTests(
-        scoped_ptr<ImageTransportFactory>(
+        std::unique_ptr<ImageTransportFactory>(
             new NoTransportImageTransportFactory));
     message_loop_.reset(new base::MessageLoop());
     task_runner_ = message_loop_->task_runner();
@@ -131,10 +130,9 @@ class ReflectorImplTest : public testing::Test {
     compositor_.reset(
         new ui::Compositor(context_factory, compositor_task_runner_.get()));
     compositor_->SetAcceleratedWidget(gfx::kNullAcceleratedWidget);
-    context_provider_ =
-        cc::TestContextProvider::Create(cc::TestWebGraphicsContext3D::Create());
-    output_surface_ = scoped_ptr<TestOutputSurface>(
-        new TestOutputSurface(context_provider_, compositor_->vsync_manager()));
+    output_surface_ = std::unique_ptr<TestOutputSurface>(new TestOutputSurface(
+        cc::TestContextProvider::Create(cc::TestWebGraphicsContext3D::Create()),
+        compositor_->vsync_manager(), compositor_task_runner_.get()));
     CHECK(output_surface_->BindToClient(&output_surface_client_));
 
     root_layer_.reset(new ui::Layer(ui::LAYER_SOLID_COLOR));
@@ -146,7 +144,7 @@ class ReflectorImplTest : public testing::Test {
   }
 
   void SetUpReflector() {
-    reflector_ = make_scoped_ptr(
+    reflector_ = base::WrapUnique(
         new ReflectorImpl(compositor_.get(), mirroring_layer_.get()));
     reflector_->OnSourceSurfaceReady(output_surface_.get());
   }
@@ -155,7 +153,7 @@ class ReflectorImplTest : public testing::Test {
     if (reflector_)
       reflector_->RemoveMirroringLayer(mirroring_layer_.get());
     cc::TextureMailbox mailbox;
-    scoped_ptr<cc::SingleReleaseCallback> release;
+    std::unique_ptr<cc::SingleReleaseCallback> release;
     if (mirroring_layer_->PrepareTextureMailbox(&mailbox, &release, false)) {
       release->Run(gpu::SyncToken(), false);
     }
@@ -168,15 +166,14 @@ class ReflectorImplTest : public testing::Test {
 
  protected:
   scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner_;
-  scoped_refptr<cc::ContextProvider> context_provider_;
   cc::FakeOutputSurfaceClient output_surface_client_;
-  scoped_ptr<base::MessageLoop> message_loop_;
+  std::unique_ptr<base::MessageLoop> message_loop_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
-  scoped_ptr<ui::Compositor> compositor_;
-  scoped_ptr<ui::Layer> root_layer_;
-  scoped_ptr<ui::Layer> mirroring_layer_;
-  scoped_ptr<ReflectorImpl> reflector_;
-  scoped_ptr<TestOutputSurface> output_surface_;
+  std::unique_ptr<ui::Compositor> compositor_;
+  std::unique_ptr<ui::Layer> root_layer_;
+  std::unique_ptr<ui::Layer> mirroring_layer_;
+  std::unique_ptr<ReflectorImpl> reflector_;
+  std::unique_ptr<TestOutputSurface> output_surface_;
 };
 
 namespace {

@@ -27,6 +27,8 @@
 #   6) compile_gperf, compile_re2c, etc. -- Actions that invoke programs that
 #              turn intermediate files into .c files.
 
+import("//build/config/compiler/compiler.gni")
+
 if (current_toolchain == host_toolchain) {
   # Various files referenced by multiple targets.
   yasm_gen_include_dir = "$target_gen_dir/include"
@@ -57,6 +59,9 @@ if (current_toolchain == host_toolchain) {
     ]
     deps = [
       "//build/config/sanitizers:deps",
+
+      # Default manifest on Windows (a no-op elsewhere).
+      "//build/win:default_exe_manifest",
     ]
   }
 
@@ -71,6 +76,9 @@ if (current_toolchain == host_toolchain) {
     ]
     deps = [
       "//build/config/sanitizers:deps",
+
+      # Default manifest on Windows (a no-op elsewhere).
+      "//build/win:default_exe_manifest",
     ]
   }
 
@@ -89,6 +97,9 @@ if (current_toolchain == host_toolchain) {
     deps = [
       ":yasm_utils",
       "//build/config/sanitizers:deps",
+
+      # Default manifest on Windows (a no-op elsewhere).
+      "//build/win:default_exe_manifest",
     ]
   }
 
@@ -118,6 +129,9 @@ if (current_toolchain == host_toolchain) {
     ]
     deps = [
       "//build/config/sanitizers:deps",
+
+      # Default manifest on Windows (a no-op elsewhere).
+      "//build/win:default_exe_manifest",
     ]
   }
 
@@ -132,6 +146,9 @@ if (current_toolchain == host_toolchain) {
     ]
     deps = [
       "//build/config/sanitizers:deps",
+
+      # Default manifest on Windows (a no-op elsewhere).
+      "//build/win:default_exe_manifest",
     ]
   }
 
@@ -173,6 +190,9 @@ if (current_toolchain == host_toolchain) {
     ]
     deps = [
       "//build/config/sanitizers:deps",
+
+      # Default manifest on Windows (a no-op elsewhere).
+      "//build/win:default_exe_manifest",
     ]
   }
 
@@ -279,6 +299,12 @@ if (current_toolchain == host_toolchain) {
       ":yasm_warnings",
     ]
 
+    # Disable WPO for yasm: crbug.com/604808
+    if (is_official_build && full_wpo_on_official) {
+      configs -= [ "//build/config/compiler:default_optimization" ]
+      configs += [ "//build/config/compiler:optimize_no_wpo" ]
+    }
+
     # Yasm generates a bunch of .c files which its source file #include.
     # Add the |target_gen_dir| into the include path so it can find them.
     # Ideally, these generated .c files would be placed into a separate
@@ -308,6 +334,9 @@ if (current_toolchain == host_toolchain) {
       ":generate_version",
       ":yasm_utils",
       "//build/config/sanitizers:deps",
+
+      # Default manifest on Windows (a no-op elsewhere).
+      "//build/win:default_exe_manifest",
     ]
   }
 

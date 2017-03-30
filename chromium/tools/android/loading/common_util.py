@@ -3,10 +3,24 @@
 # found in the LICENSE file.
 
 import contextlib
+import json
 import logging
+import os
+import re
 import shutil
+import subprocess
+import sys
 import tempfile
 import time
+
+
+def VerboseCompileRegexOrAbort(regex):
+  """Compiles a user-provided regular expression, exits the program on error."""
+  try:
+    return re.compile(regex)
+  except re.error as e:
+    sys.stderr.write('invalid regex: {}\n{}\n'.format(regex, e))
+    sys.exit(2)
 
 
 def PollFor(condition, condition_name, interval=5):
@@ -67,12 +81,36 @@ def DeserializeAttributesFromJsonDict(json_dict, instance, attributes):
 
 
 @contextlib.contextmanager
-def TemporaryDirectory():
+def TemporaryDirectory(suffix='', prefix='tmp'):
   """Returns a freshly-created directory that gets automatically deleted after
   usage.
   """
-  name = tempfile.mkdtemp()
+  name = tempfile.mkdtemp(suffix=suffix, prefix=prefix)
   try:
     yield name
   finally:
     shutil.rmtree(name)
+
+
+def EnsureParentDirectoryExists(path):
+  """Verifies that the parent directory exists or creates it if missing."""
+  parent_directory_path = os.path.abspath(os.path.dirname(path))
+  if not os.path.isdir(parent_directory_path):
+    os.makedirs(parent_directory_path)
+
+
+def GetCommandLineForLogging(cmd, env_diff=None):
+  """Get command line string.
+
+  Args:
+    cmd: Command line argument
+    env_diff: Environment modification for the command line.
+
+  Returns:
+    Command line string.
+  """
+  cmd_str = ''
+  if env_diff:
+    for key, value in env_diff.iteritems():
+      cmd_str += '{}={} '.format(key, value)
+  return cmd_str + subprocess.list2cmdline(cmd)

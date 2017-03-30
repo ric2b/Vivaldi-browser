@@ -10,8 +10,8 @@
 
 int GetLayoutConstant(LayoutConstant constant) {
   const int kFindBarVerticalOffset[] = {1, 6, 6};
-  const int kIconLabelViewInternalSpacing[] = {3, 2, 2};
-  const int kIconLabelViewTrailingPadding[] = {2, 3, 3};
+  const int kIconLabelViewInternalSpacing[] = {3, 5, 5};
+  const int kIconLabelViewTrailingPadding[] = {2, 6, 6};
   const int kLocationBarBorderThickness[] = {2, 1, 1};
   const int kLocationBarBubbleFontVerticalPadding[] = {1, 2, 4};
   const int kLocationBarBubbleHorizontalPadding[] = {1, 4, 4};
@@ -30,13 +30,12 @@ int GetLayoutConstant(LayoutConstant constant) {
   const int kTabTopExclusionHeight[] = {0, 0, 0};
   const int kTabstripNewTabButtonOverlap[] = {8, 5, 6};
   const int kTabstripTabOverlap[] = {19, 16, 16};
-  const int kToolbarStandardSpacing[] = {3, 0, 8};
 #else
   const int kTabTopExclusionHeight[] = {2, 0, 0};
   const int kTabstripNewTabButtonOverlap[] = {11, 5, 6};
   const int kTabstripTabOverlap[] = {26, 16, 16};
-  const int kToolbarStandardSpacing[] = {3, 4, 8};
 #endif
+  const int kToolbarStandardSpacing[] = {3, 4, 8};
   const int kTabstripToolbarOverlap[] = {3, 0, 0};
   const int kToolbarContentShadowHeight[] = {0, 0, 0};
   const int kToolbarContentShadowHeightAsh[] = {2, 0, 0};

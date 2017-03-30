@@ -50,11 +50,11 @@ Polymer({
 
     /**
       * The type of category this widget is displaying data for. Normally
-      * either ALLOW or BLOCK, representing which sites are allowed or blocked
-      * respectively.
+      * either 'allow' or 'block', representing which sites are allowed or
+      * blocked respectively.
       */
     categorySubtype: {
-      type: Number,
+      type: String,
       value: settings.INVALID_CATEGORY_SUBTYPE,
     },
 
@@ -160,7 +160,7 @@ Polymer({
       this.browserProxy_.getExceptionList(this.category).then(
         function(exceptionList) {
           var allowExists = exceptionList.some(function(exception) {
-            return exception.setting == settings.PermissionStringValues.ALLOW;
+            return exception.setting == settings.PermissionValues.ALLOW;
           });
           if (allowExists)
             return;
@@ -187,9 +187,9 @@ Polymer({
    */
   onToggle_: function(e) {
     if (this.$.category.opened)
-      this.$.icon.icon = 'icons:expand-less';
+      this.$.icon.icon = 'cr:expand-less';
     else
-      this.$.icon.icon = 'icons:expand-more';
+      this.$.icon.icon = 'cr:expand-more';
   },
 
   /**
@@ -250,13 +250,16 @@ Polymer({
   appendSiteList_: function(sites, exceptionList) {
     for (var i = 0; i < exceptionList.length; ++i) {
       if (this.category != settings.ALL_SITES) {
+        if (exceptionList[i].setting == settings.PermissionValues.DEFAULT)
+          continue;
+
         // Filter out 'Block' values if this list is handling 'Allow' items.
-        if (exceptionList[i].setting == settings.PermissionStringValues.BLOCK &&
+        if (exceptionList[i].setting == settings.PermissionValues.BLOCK &&
             this.categorySubtype != settings.PermissionValues.BLOCK) {
           continue;
         }
         // Filter out 'Allow' values if this list is handling 'Block' items.
-        if (exceptionList[i].setting == settings.PermissionStringValues.ALLOW &&
+        if (exceptionList[i].setting == settings.PermissionValues.ALLOW &&
             this.categorySubtype != settings.PermissionValues.ALLOW) {
           continue;
         }
@@ -268,41 +271,45 @@ Polymer({
   },
 
   /**
-   * Ensures the URL has a scheme (assumes http if omitted).
+   * Converts a string origin/pattern to a URL.
+   * @param {string} originOrPattern The origin/pattern to convert to URL.
+   * @return {URL} The URL to return (or null if origin is not a valid URL).
+   * @private
    */
-  ensureUrlHasScheme_: function(url) {
-    if (url.length == 0) return url;
-    return url.indexOf('://') != -1 ? url : 'http://' + url;
+  toUrl_: function(originOrPattern) {
+    if (originOrPattern.length == 0)
+      return null;
+    // TODO(finnur): Hmm, it would probably be better to ensure scheme on the
+    //     JS/C++ boundary.
+    return new URL(
+        this.ensureUrlHasScheme(originOrPattern.replace('[*.]', '')));
   },
 
   /**
    * Converts an unordered site list to an ordered array, sorted by site name
    * then protocol and de-duped (by origin).
    * @param {!Array<SiteException>} sites A list of sites to sort and de-dup.
+   * @return {!Array<SiteException>} Sorted and de-duped list.
    * @private
    */
   toSiteArray_: function(sites) {
     var self = this;
     sites.sort(function(a, b) {
-      // TODO(finnur): Hmm, it would probably be better to ensure scheme on the
-      //     JS/C++ boundary.
-      var originA = self.ensureUrlHasScheme_(a.origin);
-      var originB = self.ensureUrlHasScheme_(b.origin);
-      var embeddingOriginA = self.ensureUrlHasScheme_(a.embeddingOrigin);
-      var embeddingOriginB = self.ensureUrlHasScheme_(b.embeddingOrigin);
-      var url1 = new URL(originA);
-      var url2 = new URL(originB);
-      var embeddingUrl1 = embeddingOriginA.length == 0 ? '' :
-          new URL(embeddingOriginA);
-      var embeddingUrl2 = embeddingOriginB.length == 0 ? '' :
-          new URL(embeddingOriginB);
+      var url1 = self.toUrl_(a.origin);
+      var url2 = self.toUrl_(b.origin);
       var comparison = url1.host.localeCompare(url2.host);
       if (comparison == 0) {
         comparison = url1.protocol.localeCompare(url2.protocol);
         if (comparison == 0) {
           comparison = url1.port.localeCompare(url2.port);
-          if (comparison == 0)
-            return embeddingUrl1.host.localeCompare(embeddingUrl2.host);
+          if (comparison == 0) {
+            // Compare hosts for the embedding origins.
+            var host1 = self.toUrl_(a.embeddingOrigin);
+            var host2 = self.toUrl_(b.embeddingOrigin);
+            host1 = (host1 == null) ? '' : host1.host;
+            host2 = (host2 == null) ? '' : host2.host;
+            return host1.localeCompare(host2);
+          }
         }
       }
       return comparison;
@@ -312,24 +319,34 @@ Polymer({
     var lastEmbeddingOrigin = '';
     for (var i = 0; i < sites.length; ++i) {
       var origin = sites[i].origin;
+      var originForDisplay = this.sanitizePort(origin.replace('[*.]', ''));
+
       var embeddingOrigin = sites[i].embeddingOrigin;
+      if (this.category == settings.ContentSettingsTypes.GEOLOCATION) {
+        if (embeddingOrigin == '')
+          embeddingOrigin = '*';
+      }
+      var embeddingOriginForDisplay = '';
+      if (embeddingOrigin != '' && origin != embeddingOrigin) {
+        embeddingOriginForDisplay = loadTimeData.getStringF(
+            'embeddedOnHost', this.sanitizePort(embeddingOrigin));
+      }
 
       // The All Sites category can contain duplicates (from other categories).
-      if (origin == lastOrigin && embeddingOrigin == lastEmbeddingOrigin)
+      if (originForDisplay == lastOrigin &&
+          embeddingOriginForDisplay == lastEmbeddingOrigin) {
         continue;
-
-      var embeddingOriginForDisplay = '';
-      if (embeddingOrigin != '*' && origin != embeddingOrigin)
-        embeddingOriginForDisplay = embeddingOrigin;
+      }
 
       results.push({
          origin: origin,
+         originForDisplay: originForDisplay,
          embeddingOrigin: embeddingOrigin,
          embeddingOriginForDisplay: embeddingOriginForDisplay,
       });
 
-      lastOrigin = origin;
-      lastEmbeddingOrigin = embeddingOrigin;
+      lastOrigin = originForDisplay;
+      lastEmbeddingOrigin = embeddingOriginForDisplay;
     }
     return results;
   },
@@ -342,8 +359,7 @@ Polymer({
     this.showAllowAction_ =
         this.categorySubtype == settings.PermissionValues.BLOCK;
     this.showBlockAction_ =
-        this.categorySubtype == settings.PermissionValues.ALLOW &&
-        this.category != settings.ContentSettingsTypes.FULLSCREEN;
+        this.categorySubtype == settings.PermissionValues.ALLOW;
   },
 
   /**
@@ -381,7 +397,7 @@ Polymer({
           settings.PermissionValues.ALLOW :
           settings.PermissionValues.BLOCK;
       this.setCategoryPermissionForOrigin(
-          origin, embeddingOrigin, value, this.category);
+          origin, embeddingOrigin, this.category, value);
     }
   },
 
@@ -434,16 +450,5 @@ Polymer({
       return true;
 
     return toggleState;
-  },
-
-  /**
-   * Returns the icon to use for a given site.
-   * @param {string} url The url of the site to fetch the icon for.
-   * @private
-   */
-  computeSiteIcon_: function(url) {
-    // TODO(finnur): For now, we're returning a placeholder image for each site
-    // but the actual favicon for each site will need to be returned.
-    return 'communication:message';
   },
 });

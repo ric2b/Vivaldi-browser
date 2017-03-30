@@ -55,6 +55,7 @@ Nekatere funkcije morda niso na voljo in spremembe nastavitev ne bodo shranjene.
 <translation id="2673087257647337101">Samo še malo. Znova zaženite Chromium, da dokončate posodobitev.</translation>
 <translation id="2685838254101182273">Chromium se ne posodablja več in ne podpira več te različice operacijskega sistema.</translation>
 <translation id="2705212601509139398">To spletno mesto uporablja vtičnik Chromium Frame, za katerega podpora kmalu ne bo več na voljo. Odstranite ga in prenesite sodoben brskalnik.</translation>
+<translation id="2711502716910134313">Zavihek v Chromiumu</translation>
 <translation id="2770231113462710648">Spremeni privzeti brskalnik na:</translation>
 <translation id="2801146392936645542">Datoteka <ph name="FILE_NAME" /> je zlonamerna, zato jo je Chromium blokiral.</translation>
 <translation id="2847479871509788944">Odstranitev iz Chromiuma ...</translation>
@@ -68,7 +69,6 @@ Nekatere funkcije morda niso na voljo in spremembe nastavitev ne bodo shranjene.
 <translation id="3130323860337406239">Chromium uporablja vaš mikrofon.</translation>
 <translation id="313551035350905294">Prijavljate se z upravljanim računom in s tem njegovemu skrbniku omogočate nadziranje vašega profila v Chromiumu. Vaši podatki v Chromiumu, na primer aplikacije, zaznamki, zgodovina, gesla in druge nastavitve, bodo postali trajno povezani z uporabnikom <ph name="USER_NAME" />. Te podatke boste lahko izbrisali na nadzorni plošči za Google Račune, vendar jih ne boste mogli povezati z drugim računom.</translation>
 <translation id="3190315855212034486">Opa! Chromium se je zrušil. Ga želite znova zagnati?</translation>
-<translation id="3197823471738295152">Naprava ima najnovejšo različico.</translation>
 <translation id="3244477511402911926">Chromiumovo središče za obvestila</translation>
 <translation id="3256316712990552818">Kopirano v Chromium</translation>
 <translation id="3258596308407688501">Chromium ne more brati svojega imenika s podatki ali pisati vanj:
@@ -122,6 +122,7 @@ Nekatere funkcije morda niso na voljo in spremembe nastavitev ne bodo shranjene.
 <translation id="549669000822060376">Počakajte, da Chromium namesti najnovejše sistemske posodobitve.</translation>
 <translation id="5563479599352954471">Iskanje z enim dotikom</translation>
 <translation id="5620765574781326016">Preberite več o temah na spletnih mestih, ne da bi vam bilo treba zapustiti stran.</translation>
+<translation id="5634636535844844681">Za Chromium potrebujete Windows 7 ali novejši.</translation>
 <translation id="5680901439334282664">se prijavite v Chromium</translation>
 <translation id="5772805321386874569">(zahteva <ph name="BEGIN_BUTTON" />vnovični zagon<ph name="END_BUTTON" /> Chromiuma)</translation>
 <translation id="5796460469508169315">Chromium je skoraj pripravljen.</translation>
@@ -181,6 +182,12 @@ Chromium ne more obnoviti vaših nastavitev.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7339898014177206373">Novo okno</translation>
 <translation id="734373864078049451">Tu so shranjeni vaš splet, zaznamki in druge stvari v Chromiumu.</translation>
+<translation id="7344413941077984497">Če želite nastaviti, katera spletna mesta si lahko ogleda <ph name="NEW_PROFILE_NAME" />, lahko na <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" /> konfigurirate omejitve in nastavitve. Če privzetih nastavitev ne spremenite, lahko <ph name="NEW_PROFILE_NAME" /> brska po spletu brez omejitev.
+
+Če želite preprečiti, da bi <ph name="NEW_PROFILE_NAME" /> dostopal(-a) do vašega računa, zaklenite profil, ko ne uporabljate Chromiuma. To storite tako, da v zgornjem desnem kotu brskalnika kliknete ime profila in izberete »Izhod in zaklepanje pred otroki«.
+<ph name="BEGIN_LINK_2" />Več o tem<ph name="END_LINK_2" />
+
+Nadaljnja navodila preberite v e-poštnem sporočilu, ki ste ga prejeli na <ph name="ACCOUNT_EMAIL" />.</translation>
 <translation id="7419987137528340081">Če želite, da bodo vaši obstoječi podatki v Chromiumu ločeni, lahko ustvarite nov profil v Chromiumu za uporabnika <ph name="USER_NAME" />.</translation>
 <translation id="7421823331379285070">Chromium zahteva Windows XP ali novejši. Nekatere funkcije morda ne bodo delovale.</translation>
 <translation id="7463979740390522693">Chromium – Obvestila (št. neprebranih: <ph name="QUANTITY" />)</translation>
@@ -209,6 +216,7 @@ Chromium ne more obnoviti vaših nastavitev.</translation>
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> Ustvarjalci Chromiuma. Vse pravice pridržane.</translation>
 <translation id="8621669128220841554">Namestitev ni uspela zaradi nenavedene napake. Znova prenesite Chromium.</translation>
 <translation id="8628626585870903697">Chromium nima pregledovalnika datotek PDF, ki je potreben za predogled tiskanja.</translation>
+<translation id="8667808506758191620">Naprava <ph name="DEVICE_TYPE" /> je posodobljena.</translation>
 <translation id="8697124171261953979">Določa tudi, katera stran je prikazana, ko zaženete Chromium ali iščete v naslovni vrstici.</translation>
 <translation id="8704119203788522458">To je vaš Chromium</translation>
 <translation id="872034308864968620">Naj se Chromium izvaja v ozadju</translation>
@@ -225,7 +233,6 @@ Chromium ne more obnoviti vaših nastavitev.</translation>
 
 Če se boste kljub temu prijavili, se bodo podatki iz Chromiuma, na primer zaznamki, zgodovina in druge nastavitve, združili v računu <ph name="ACCOUNT_EMAIL_NEW" />.</translation>
 <translation id="9013087743919948559">Dodaj v Chromium</translation>
-<translation id="9013262824292842194">Za Chromium potrebujete operacijski sistem Windows Vista ali Windows XP s servisnim paketom SP2 ali novejšim.</translation>
 <translation id="9019929317751753759">Zaradi večje varnosti smo v Chromiumu onemogočili to razširitev, ki ni navedena tukaj in je bila morda dodana brez vaše vednosti: <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />.</translation>
 <translation id="9022552996538154597">Prijava v Chromium</translation>
 <translation id="9036189287518468038">Zaganjalnik aplikacij v Chromiumu</translation>

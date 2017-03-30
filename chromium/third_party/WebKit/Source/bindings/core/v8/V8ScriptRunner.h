@@ -34,7 +34,6 @@
 #include "core/fetch/AccessControlStatus.h"
 #include "platform/text/CompressibleString.h"
 #include "wtf/Allocator.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/text/TextPosition.h"
 #include "wtf/text/WTFString.h"
 #include <v8.h>
@@ -71,6 +70,7 @@ public:
 
     static unsigned tagForParserCache(CachedMetadataHandler*);
     static unsigned tagForCodeCache(CachedMetadataHandler*);
+    static void setCacheTimeStamp(CachedMetadataHandler*);
 
 
     // Utiltiies for calling functions added to the V8 extras binding object.

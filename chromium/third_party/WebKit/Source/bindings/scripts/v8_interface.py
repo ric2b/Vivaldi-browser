@@ -46,7 +46,7 @@ import v8_methods
 import v8_types
 from v8_types import cpp_ptr_type, cpp_template_type
 import v8_utilities
-from v8_utilities import (cpp_name_or_partial, capitalize, cpp_name, gc_type,
+from v8_utilities import (cpp_name_or_partial, capitalize, cpp_name,
                           has_extended_attribute_value, runtime_enabled_function_name,
                           extended_attribute_value_as_list, is_legacy_interface_type_checking)
 
@@ -145,12 +145,10 @@ def interface_context(interface):
         }
         set_wrapper_reference_to['idl_type'].add_includes_for_type()
 
-    # [SetWrapperReferenceFrom]
+    # [Custom=VisitDOMWrapper]
     has_visit_dom_wrapper = (
         has_extended_attribute_value(interface, 'Custom', 'VisitDOMWrapper') or
         set_wrapper_reference_from or set_wrapper_reference_to)
-
-    this_gc_type = gc_type(interface)
 
     wrapper_class_id = ('NodeClassId' if inherits_interface(interface.name, 'Node') else 'ObjectClassId')
 
@@ -163,10 +161,9 @@ def interface_context(interface):
         'cpp_class': cpp_class_name,
         'cpp_class_or_partial': cpp_class_name_or_partial,
         'event_target_inheritance': 'InheritFromEventTarget' if is_event_target else 'NotInheritFromEventTarget',
-        'gc_type': this_gc_type,
+        'is_gc_type': True,
         # FIXME: Remove 'EventTarget' special handling, http://crbug.com/383699
         'has_access_check_callbacks': (is_check_security and
-                                       interface.name != 'Window' and
                                        interface.name != 'EventTarget'),
         'has_custom_legacy_call_as_function': has_extended_attribute_value(interface, 'Custom', 'LegacyCallAsFunction'),  # [Custom=LegacyCallAsFunction]
         'has_partial_interface': len(interface.partial_interfaces) > 0,
@@ -185,9 +182,7 @@ def interface_context(interface):
         'measure_as': v8_utilities.measure_as(interface, None),  # [MeasureAs]
         'origin_trial_enabled_function': v8_utilities.origin_trial_enabled_function_name(interface, None),
         'parent_interface': parent_interface,
-        'pass_cpp_type': cpp_template_type(
-            cpp_ptr_type('PassRefPtr', 'RawPtr', this_gc_type),
-            cpp_name(interface)),
+        'pass_cpp_type': cpp_name(interface) + '*',
         'active_scriptwrappable': active_scriptwrappable,
         'runtime_enabled_function': runtime_enabled_function_name(interface),  # [RuntimeEnabled]
         'set_wrapper_reference_from': set_wrapper_reference_from,
@@ -287,25 +282,6 @@ def interface_context(interface):
 
     context.update({
         'attributes': attributes,
-        'has_accessor_configuration': any(
-            not (attribute['exposed_test'] or
-                 attribute['runtime_enabled_function']) and
-            not attribute['is_data_type_property'] and
-            attribute['should_be_exposed_to_script']
-            for attribute in attributes),
-        'has_attribute_configuration': any(
-            not (attribute['exposed_test'] or
-                 attribute['runtime_enabled_function']) and
-            attribute['is_data_type_property'] and
-            attribute['should_be_exposed_to_script']
-            for attribute in attributes),
-        'has_constructor_attributes': any(
-            attribute['constructor_type']
-            for attribute in attributes),
-        'has_replaceable_attributes': any(
-            attribute['is_replaceable'] and
-            not attribute['is_data_type_property']
-            for attribute in attributes),
     })
 
     # Methods
@@ -1224,9 +1200,7 @@ def constructor_context(interface, constructor):
 
     return {
         'arguments': argument_contexts,
-        'cpp_type': cpp_template_type(
-            cpp_ptr_type('RefPtr', 'RawPtr', gc_type(interface)),
-            cpp_name(interface)),
+        'cpp_type': cpp_name(interface) + '*',
         'cpp_value': v8_methods.cpp_value(
             interface, constructor, len(constructor.arguments)),
         'has_exception_state':
@@ -1345,7 +1319,7 @@ def property_getter(getter, cpp_arguments):
         'is_raises_exception': is_raises_exception,
         'name': cpp_name(getter),
         'use_output_parameter_for_result': use_output_parameter_for_result,
-        'v8_set_return_value': idl_type.v8_set_return_value('result', extended_attributes=extended_attributes, script_wrappable='impl', release=idl_type.release),
+        'v8_set_return_value': idl_type.v8_set_return_value('result', extended_attributes=extended_attributes, script_wrappable='impl'),
     }
 
 

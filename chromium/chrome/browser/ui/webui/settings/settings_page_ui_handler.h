@@ -17,13 +17,6 @@ class SettingsPageUIHandler : public content::WebUIMessageHandler {
   SettingsPageUIHandler();
   ~SettingsPageUIHandler() override;
 
-  // WebUIMessageHandler implementation.
-  void RegisterMessages() override {}
-
-  // TODO(dbeam): move to WebUIMessageHandler?
-  // Called when a navigation re-uses a renderer process (i.e. reload).
-  virtual void RenderViewReused() {}
-
  protected:
   // Helper method for responding to JS requests initiated with
   // cr.sendWithPromise(), for the case where the returned promise should be
@@ -38,6 +31,10 @@ class SettingsPageUIHandler : public content::WebUIMessageHandler {
                                 const base::Value& response);
 
  private:
+  // SettingsPageUIHandler subclasses must be JavaScript-lifecycle safe.
+  void OnJavascriptAllowed() override = 0;
+  void OnJavascriptDisallowed() override = 0;
+
   DISALLOW_COPY_AND_ASSIGN(SettingsPageUIHandler);
 };
 

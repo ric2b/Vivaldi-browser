@@ -4,7 +4,10 @@
 
 #include "components/mus/ws/window_manager_state.h"
 
+#include <queue>
+
 #include "base/memory/weak_ptr.h"
+#include "components/mus/common/event_matcher_util.h"
 #include "components/mus/ws/accelerator.h"
 #include "components/mus/ws/display_manager.h"
 #include "components/mus/ws/platform_display.h"
@@ -13,12 +16,16 @@
 #include "components/mus/ws/user_id_tracker.h"
 #include "components/mus/ws/window_server.h"
 #include "components/mus/ws/window_tree.h"
-#include "mojo/shell/public/interfaces/connector.mojom.h"
+#include "services/shell/public/interfaces/connector.mojom.h"
 #include "ui/events/event.h"
 
 namespace mus {
 namespace ws {
 namespace {
+
+// Debug accelerator IDs start far above the highest valid Windows command ID
+// (0xDFFF) and Chrome's highest IDC command ID.
+const uint32_t kPrintWindowsDebugAcceleratorId = 1u << 31;
 
 base::TimeDelta GetDefaultAckTimerDelay() {
 #if defined(NDEBUG)
@@ -40,8 +47,8 @@ bool EventsCanBeCoalesced(const ui::Event& one, const ui::Event& two) {
          two.AsPointerEvent()->pointer_id();
 }
 
-scoped_ptr<ui::Event> CoalesceEvents(scoped_ptr<ui::Event> first,
-                                     scoped_ptr<ui::Event> second) {
+std::unique_ptr<ui::Event> CoalesceEvents(std::unique_ptr<ui::Event> first,
+                                          std::unique_ptr<ui::Event> second) {
   DCHECK(first->type() == ui::ET_POINTER_MOVED)
       << " Non-move events cannot be merged yet.";
   // For mouse moves, the new event just replaces the old event.
@@ -88,20 +95,16 @@ WindowManagerState::QueuedEvent::QueuedEvent() {}
 WindowManagerState::QueuedEvent::~QueuedEvent() {}
 
 WindowManagerState::WindowManagerState(Display* display,
-                                       PlatformDisplay* platform_display,
-                                       cc::SurfaceId surface_id)
+                                       PlatformDisplay* platform_display)
     : WindowManagerState(display,
                          platform_display,
-                         surface_id,
                          false,
-                         mojo::shell::mojom::kRootUserID) {}
+                         shell::mojom::kRootUserID) {}
 
 WindowManagerState::WindowManagerState(Display* display,
                                        PlatformDisplay* platform_display,
-                                       cc::SurfaceId surface_id,
                                        const UserId& user_id)
-    : WindowManagerState(display, platform_display, surface_id, true, user_id) {
-}
+    : WindowManagerState(display, platform_display, true, user_id) {}
 
 WindowManagerState::~WindowManagerState() {}
 
@@ -127,23 +130,16 @@ bool WindowManagerState::SetCapture(ServerWindow* window,
 
 void WindowManagerState::ReleaseCaptureBlockedByModalWindow(
     const ServerWindow* modal_window) {
-  if (!capture_window() || !modal_window->is_modal() ||
-      !modal_window->IsDrawn())
-    return;
-
-  if (modal_window->transient_parent() &&
-      !modal_window->transient_parent()->Contains(capture_window())) {
-    return;
-  }
-
-  SetCapture(nullptr, false);
+  event_dispatcher_.ReleaseCaptureBlockedByModalWindow(modal_window);
 }
 
 void WindowManagerState::ReleaseCaptureBlockedByAnyModalWindow() {
-  if (!capture_window() || !capture_window()->IsBlockedByModalWindow())
-    return;
+  event_dispatcher_.ReleaseCaptureBlockedByAnyModalWindow();
+}
 
-  SetCapture(nullptr, false);
+void WindowManagerState::AddSystemModalWindow(ServerWindow* window) {
+  DCHECK(!window->transient_parent());
+  event_dispatcher_.AddSystemModalWindow(window);
 }
 
 mojom::DisplayPtr WindowManagerState::ToMojomDisplay() const {
@@ -160,12 +156,13 @@ void WindowManagerState::OnWillDestroyTree(WindowTree* tree) {
   // The WindowTree is dying. So it's not going to ack the event.
   // If the dying tree matches the root |tree_| marked as handled so we don't
   // notify it of accelerators.
-  OnEventAck(tree_awaiting_input_ack_, tree == tree_);
+  OnEventAck(tree_awaiting_input_ack_, tree == tree_
+                                           ? mojom::EventResult::HANDLED
+                                           : mojom::EventResult::UNHANDLED);
 }
 
 WindowManagerState::WindowManagerState(Display* display,
                                        PlatformDisplay* platform_display,
-                                       cc::SurfaceId surface_id,
                                        bool is_user_id_valid,
                                        const UserId& user_id)
     : display_(display),
@@ -189,7 +186,8 @@ WindowManagerState::WindowManagerState(Display* display,
   display->root_window()->Add(root_.get());
 
   event_dispatcher_.set_root(root_.get());
-  event_dispatcher_.set_surface_id(surface_id);
+
+  AddDebugAccelerators();
 }
 
 bool WindowManagerState::IsActive() const {
@@ -207,7 +205,7 @@ void WindowManagerState::Deactivate() {
   event_dispatcher_.Reset();
   // The tree is no longer active, so no point in dispatching any further
   // events.
-  std::queue<scoped_ptr<QueuedEvent>> event_queue;
+  std::queue<std::unique_ptr<QueuedEvent>> event_queue;
   event_queue.swap(event_queue_);
 }
 
@@ -227,7 +225,8 @@ void WindowManagerState::ProcessEvent(const ui::Event& event) {
   event_dispatcher_.ProcessEvent(event);
 }
 
-void WindowManagerState::OnEventAck(mojom::WindowTree* tree, bool handled) {
+void WindowManagerState::OnEventAck(mojom::WindowTree* tree,
+                                    mojom::EventResult result) {
   if (tree_awaiting_input_ack_ != tree) {
     // TODO(sad): The ack must have arrived after the timeout. We should do
     // something here, and in OnEventAckTimeout().
@@ -236,7 +235,7 @@ void WindowManagerState::OnEventAck(mojom::WindowTree* tree, bool handled) {
   tree_awaiting_input_ack_ = nullptr;
   event_ack_timer_.Stop();
 
-  if (!handled && post_target_accelerator_)
+  if (result == mojom::EventResult::UNHANDLED && post_target_accelerator_)
     OnAccelerator(post_target_accelerator_->id(), *event_awaiting_input_ack_);
 
   ProcessNextEventFromQueue();
@@ -249,13 +248,13 @@ WindowServer* WindowManagerState::window_server() {
 void WindowManagerState::OnEventAckTimeout() {
   // TODO(sad): Figure out what we should do.
   NOTIMPLEMENTED() << "Event ACK timed out.";
-  OnEventAck(tree_awaiting_input_ack_, false);
+  OnEventAck(tree_awaiting_input_ack_, mojom::EventResult::UNHANDLED);
 }
 
 void WindowManagerState::QueueEvent(
     const ui::Event& event,
-    scoped_ptr<ProcessedEventTarget> processed_event_target) {
-  scoped_ptr<QueuedEvent> queued_event(new QueuedEvent);
+    std::unique_ptr<ProcessedEventTarget> processed_event_target) {
+  std::unique_ptr<QueuedEvent> queued_event(new QueuedEvent);
   queued_event->event = ui::Event::Clone(event);
   queued_event->processed_target = std::move(processed_event_target);
   event_queue_.push(std::move(queued_event));
@@ -265,7 +264,7 @@ void WindowManagerState::ProcessNextEventFromQueue() {
   // Loop through |event_queue_| stopping after dispatching the first valid
   // event.
   while (!event_queue_.empty()) {
-    scoped_ptr<QueuedEvent> queued_event = std::move(event_queue_.front());
+    std::unique_ptr<QueuedEvent> queued_event = std::move(event_queue_.front());
     event_queue_.pop();
     if (!queued_event->processed_target) {
       event_dispatcher_.ProcessEvent(*queued_event->event);
@@ -291,8 +290,10 @@ void WindowManagerState::DispatchInputEventToWindowImpl(
 
   if (event.IsMousePointerEvent()) {
     DCHECK(event_dispatcher_.mouse_cursor_source_window());
-    display_->UpdateNativeCursor(
-        event_dispatcher_.mouse_cursor_source_window()->cursor());
+
+    int32_t cursor_id = 0;
+    if (event_dispatcher_.GetCurrentMouseCursor(&cursor_id))
+      display_->UpdateNativeCursor(cursor_id);
   }
 
   // If the event is in the non-client area the event goes to the owner of
@@ -326,12 +327,44 @@ void WindowManagerState::DispatchInputEventToWindowImpl(
     event_awaiting_input_ack_ = ui::Event::Clone(event);
     post_target_accelerator_ = accelerator;
   }
+
+  // Ignore |tree| because it will receive the event via normal dispatch.
+  window_server()->SendToEventObservers(event, user_id_, tree);
+
   tree->DispatchInputEvent(target, event);
 }
+
+void WindowManagerState::AddDebugAccelerators() {
+  // Always register the accelerators, even if they only work in debug, so that
+  // keyboard behavior is the same in release and debug builds.
+  mojom::EventMatcherPtr matcher = CreateKeyMatcher(
+      mus::mojom::KeyboardCode::S,
+      mus::mojom::kEventFlagControlDown | mus::mojom::kEventFlagAltDown
+          | mus::mojom::kEventFlagShiftDown);
+  event_dispatcher_.AddAccelerator(kPrintWindowsDebugAcceleratorId,
+                                   std::move(matcher));
+}
+
+bool WindowManagerState::HandleDebugAccelerator(uint32_t accelerator_id) {
+#if !defined(NDEBUG)
+  if (accelerator_id == kPrintWindowsDebugAcceleratorId) {
+    // Error so it will be collected in system logs.
+    LOG(ERROR) << "ServerWindow hierarchy:\n"
+               << root()->GetDebugWindowHierarchy();
+    return true;
+  }
+#endif
+  return false;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// EventDispatcherDelegate:
 
 void WindowManagerState::OnAccelerator(uint32_t accelerator_id,
                                        const ui::Event& event) {
   DCHECK(IsActive());
+  if (HandleDebugAccelerator(accelerator_id))
+    return;
   tree_->OnAccelerator(accelerator_id, event);
 }
 
@@ -359,6 +392,11 @@ void WindowManagerState::OnServerWindowCaptureLost(ServerWindow* window) {
   window_server()->ProcessLostCapture(window);
 }
 
+void WindowManagerState::OnMouseCursorLocationChanged(const gfx::Point& point) {
+  window_server()->display_manager()->GetUserDisplayManager(user_id_)->
+      OnMouseCursorLocationChanged(point);
+}
+
 void WindowManagerState::DispatchInputEventToWindow(ServerWindow* target,
                                                     bool in_nonclient_area,
                                                     const ui::Event& event,
@@ -367,7 +405,7 @@ void WindowManagerState::DispatchInputEventToWindow(ServerWindow* target,
   // TODO(sky): this needs to see if another wms has capture and if so forward
   // to it.
   if (event_ack_timer_.IsRunning()) {
-    scoped_ptr<ProcessedEventTarget> processed_event_target(
+    std::unique_ptr<ProcessedEventTarget> processed_event_target(
         new ProcessedEventTarget(target, in_nonclient_area, accelerator));
     QueueEvent(event, std::move(processed_event_target));
     return;
@@ -378,6 +416,11 @@ void WindowManagerState::DispatchInputEventToWindow(ServerWindow* target,
     weak_accelerator = accelerator->GetWeakPtr();
   DispatchInputEventToWindowImpl(target, in_nonclient_area, event,
                                  weak_accelerator);
+}
+
+void WindowManagerState::OnEventTargetNotFound(const ui::Event& event) {
+  window_server()->SendToEventObservers(event, user_id_,
+                                        nullptr /* ignore_tree */);
 }
 
 }  // namespace ws

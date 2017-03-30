@@ -17,7 +17,10 @@
     ],
     "ChromotingQUIC": [
         {
-            "group_name": "Enabled"
+            "group_name": "Enabled",
+            "params": {
+                "delay_tcp_race": "true"
+            }
         }
     ],
     "DataCompressionProxyDevRollout": [
@@ -28,6 +31,14 @@
             "group_name": "Enabled"
         }
     ],
+    "NetworkTimeQueries": [
+        {
+            "enable_features": [
+                "NetworkTimeServiceQuerying"
+            ],
+            "group_name": "NetworkTimeQueriesEnabled"
+        }
+    ],
     "PageRevisitInstrumentation": [
         {
             "group_name": "Enabled"
@@ -36,6 +47,11 @@
     "PasswordBranding": [
         {
             "group_name": "SmartLockBrandingSavePromptOnly"
+        }
+    ],
+    "PasswordManagerSettingsMigration": [
+        {
+            "group_name": "Enable"
         }
     ],
     "QUIC": [

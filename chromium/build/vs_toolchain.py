@@ -153,12 +153,14 @@ def _VersionNumber():
 
 
 def _CopyRuntimeImpl(target, source, verbose=True):
-  """Copy |source| to |target| if it doesn't already exist or if it
-  needs to be updated.
+  """Copy |source| to |target| if it doesn't already exist or if it needs to be
+  updated (comparing last modified time as an approximate float match as for
+  some reason the values tend to differ by ~1e-07 despite being copies of the
+  same file... https://crbug.com/603603).
   """
   if (os.path.isdir(os.path.dirname(target)) and
       (not os.path.isfile(target) or
-      os.stat(target).st_mtime != os.stat(source).st_mtime)):
+       abs(os.stat(target).st_mtime - os.stat(source).st_mtime) >= 0.01)):
     if verbose:
       print 'Copying %s to %s...' % (source, target)
     if os.path.exists(target):
@@ -185,7 +187,6 @@ def _CopyRuntime2015(target_dir, source_dir, dll_pattern, suffix):
     source = os.path.join(source_dir, dll)
     _CopyRuntimeImpl(target, source)
   ucrt_src_dir = os.path.join(source_dir, 'api-ms-win-*.dll')
-  print 'Copying %s to %s...' % (ucrt_src_dir, target_dir)
   for ucrt_src_file in glob.glob(ucrt_src_dir):
     file_part = os.path.basename(ucrt_src_file)
     ucrt_dst_file = os.path.join(target_dir, file_part)
@@ -278,10 +279,14 @@ def _GetDesiredVsToolchainHashes():
   """Load a list of SHA1s corresponding to the toolchains that we want installed
   to build with."""
   if GetVisualStudioVersion() == '2015':
-    # Update 2.
-    return ['95ddda401ec5678f15eeed01d2bee08fcbc5ee97']
+    if bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN_PRERELEASE', '0'))):
+      # Update 3 pre-release, May 16th.
+      return ['283cc362f57dbe240e0d21f48ae45f9d834a425a']
+    else:
+      # Update 2.
+      return ['95ddda401ec5678f15eeed01d2bee08fcbc5ee97']
   else:
-    return ['4087e065abebdca6dbd0caca2910c6718d2ec67f']
+    return ['03a4e939cd325d6bc5216af41b92d02dda1366a6']
 
 
 def ShouldUpdateToolchain():

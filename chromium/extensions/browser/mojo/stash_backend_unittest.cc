@@ -12,7 +12,7 @@
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "mojo/shell/public/interfaces/interface_provider.mojom.h"
+#include "services/shell/public/interfaces/interface_provider.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace extensions {
@@ -95,7 +95,7 @@ class StashServiceTest : public testing::Test {
  protected:
   base::MessageLoop message_loop_;
   base::Closure stop_run_loop_;
-  scoped_ptr<StashBackend> stash_backend_;
+  std::unique_ptr<StashBackend> stash_backend_;
   Event expected_event_;
   bool expecting_error_;
   mojo::InterfacePtr<StashService> stash_service_;
@@ -191,7 +191,7 @@ TEST_F(StashServiceTest, NotifyOnReadableHandle) {
   stashed_object->id = "test type";
   stashed_object->data.push_back(0);
   stashed_object->monitor_handles = true;
-  mojo::shell::mojom::InterfaceProviderPtr service_provider;
+  shell::mojom::InterfaceProviderPtr service_provider;
 
   // Stash the ServiceProvider request. When we make a call on
   // |service_provider|, the stashed handle will become readable.

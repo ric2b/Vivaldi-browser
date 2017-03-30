@@ -4,7 +4,11 @@
 
 #include "components/mus/ws/window_server.h"
 
+#include <set>
+#include <string>
+
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "components/mus/ws/display.h"
 #include "components/mus/ws/display_binding.h"
@@ -21,7 +25,7 @@
 #include "mojo/converters/geometry/geometry_type_converters.h"
 #include "mojo/converters/input_events/input_events_type_converters.h"
 #include "mojo/converters/surfaces/surfaces_type_converters.h"
-#include "mojo/shell/public/cpp/connection.h"
+#include "services/shell/public/cpp/connection.h"
 #include "ui/gfx/geometry/size_conversions.h"
 
 namespace mus {
@@ -71,16 +75,17 @@ WindowTree* WindowServer::EmbedAtWindow(
     ServerWindow* root,
     const UserId& user_id,
     mojom::WindowTreeClientPtr client,
-    scoped_ptr<AccessPolicy> access_policy) {
-  scoped_ptr<WindowTree> tree_ptr(
+    std::unique_ptr<AccessPolicy> access_policy) {
+  std::unique_ptr<WindowTree> tree_ptr(
       new WindowTree(this, user_id, root, std::move(access_policy)));
   WindowTree* tree = tree_ptr.get();
 
   mojom::WindowTreePtr window_tree_ptr;
   mojom::WindowTreeRequest window_tree_request = GetProxy(&window_tree_ptr);
-  scoped_ptr<WindowTreeBinding> binding = delegate_->CreateWindowTreeBinding(
-      WindowServerDelegate::BindingType::EMBED, this, tree,
-      &window_tree_request, &client);
+  std::unique_ptr<WindowTreeBinding> binding =
+      delegate_->CreateWindowTreeBinding(
+          WindowServerDelegate::BindingType::EMBED, this, tree,
+          &window_tree_request, &client);
   if (!binding) {
     binding.reset(new ws::DefaultWindowTreeBinding(
         tree, this, std::move(window_tree_request), std::move(client)));
@@ -91,8 +96,8 @@ WindowTree* WindowServer::EmbedAtWindow(
   return tree;
 }
 
-WindowTree* WindowServer::AddTree(scoped_ptr<WindowTree> tree_impl_ptr,
-                                  scoped_ptr<WindowTreeBinding> binding,
+WindowTree* WindowServer::AddTree(std::unique_ptr<WindowTree> tree_impl_ptr,
+                                  std::unique_ptr<WindowTreeBinding> binding,
                                   mojom::WindowTreePtr tree_ptr) {
   CHECK_EQ(0u, tree_map_.count(tree_impl_ptr->id()));
   WindowTree* tree = tree_impl_ptr.get();
@@ -109,17 +114,18 @@ WindowTree* WindowServer::CreateTreeForWindowManager(
   mojom::DisplayPtr display_ptr = display->ToMojomDisplay();
   mojom::WindowTreeClientPtr tree_client;
   factory->CreateWindowManager(std::move(display_ptr), GetProxy(&tree_client));
-  scoped_ptr<WindowTree> tree_ptr(new WindowTree(
-      this, user_id, root, make_scoped_ptr(new WindowManagerAccessPolicy)));
+  std::unique_ptr<WindowTree> tree_ptr(new WindowTree(
+      this, user_id, root, base::WrapUnique(new WindowManagerAccessPolicy)));
   WindowTree* tree = tree_ptr.get();
   mojom::WindowTreePtr window_tree_ptr;
   mojom::WindowTreeRequest tree_request;
-  scoped_ptr<WindowTreeBinding> binding = delegate_->CreateWindowTreeBinding(
-      WindowServerDelegate::BindingType::WINDOW_MANAGER, this, tree,
-      &tree_request, &tree_client);
+  std::unique_ptr<WindowTreeBinding> binding =
+      delegate_->CreateWindowTreeBinding(
+          WindowServerDelegate::BindingType::WINDOW_MANAGER, this, tree,
+          &tree_request, &tree_client);
   if (!binding) {
-    DefaultWindowTreeBinding* default_binding = new DefaultWindowTreeBinding(
-        tree_ptr.get(), this, std::move(tree_client));
+    DefaultWindowTreeBinding* default_binding =
+        new DefaultWindowTreeBinding(tree_ptr.get(), std::move(tree_client));
     binding.reset(default_binding);
     window_tree_ptr = default_binding->CreateInterfacePtrAndBind();
   }
@@ -129,7 +135,7 @@ WindowTree* WindowServer::CreateTreeForWindowManager(
 }
 
 void WindowServer::DestroyTree(WindowTree* tree) {
-  scoped_ptr<WindowTree> tree_ptr;
+  std::unique_ptr<WindowTree> tree_ptr;
   {
     auto iter = tree_map_.find(tree->id());
     DCHECK(iter != tree_map_.end());
@@ -169,6 +175,15 @@ void WindowServer::DestroyTree(WindowTree* tree) {
 WindowTree* WindowServer::GetTreeWithId(ConnectionSpecificId connection_id) {
   auto iter = tree_map_.find(connection_id);
   return iter == tree_map_.end() ? nullptr : iter->second.get();
+}
+
+WindowTree* WindowServer::GetTreeWithConnectionName(
+    const std::string& connection_name) {
+  for (const auto& entry : tree_map_) {
+    if (entry.second->connection_name() == connection_name)
+      return entry.second.get();
+  }
+  return nullptr;
 }
 
 ServerWindow* WindowServer::GetWindow(const WindowId& id) {
@@ -392,11 +407,24 @@ void WindowServer::ProcessWillChangeWindowPredefinedCursor(ServerWindow* window,
     pair.second->ProcessCursorChanged(window, cursor_id,
                                       IsOperationSource(pair.first));
   }
+}
 
-  // Pass the cursor change to the native window.
-  Display* display = display_manager_->GetDisplayContaining(window);
-  if (display)
-    display->OnCursorUpdated(window);
+void WindowServer::SendToEventObservers(const ui::Event& event,
+                                        const UserId& user_id,
+                                        WindowTree* ignore_tree) {
+  for (auto& pair : tree_map_) {
+    WindowTree* tree = pair.second.get();
+    if (tree->user_id() == user_id && tree != ignore_tree)
+      tree->SendToEventObserver(event);
+  }
+}
+
+void WindowServer::SetPaintCallback(
+    const base::Callback<void(ServerWindow*)>& callback) {
+  DCHECK(delegate_->IsTestConfig()) << "Paint callbacks are expensive, and "
+                                    << "allowed only in tests.";
+  DCHECK(window_paint_callback_.is_null() || callback.is_null());
+  window_paint_callback_ = callback;
 }
 
 void WindowServer::ProcessViewportMetricsChanged(
@@ -436,11 +464,29 @@ void WindowServer::FinishOperation() {
   current_operation_ = nullptr;
 }
 
-void WindowServer::MaybeUpdateNativeCursor(ServerWindow* window) {
-  // This can be null in unit tests.
-  Display* display = display_manager_->GetDisplayContaining(window);
-  if (display)
-    display->MaybeChangeCursorOnWindowTreeChange();
+void WindowServer::UpdateNativeCursorFromMouseLocation(ServerWindow* window) {
+  WindowManagerAndDisplay wm_and_display =
+      display_manager_->GetWindowManagerAndDisplay(window);
+  WindowManagerState* wms = wm_and_display.window_manager_state;
+  if (wms && wm_and_display.display) {
+    wms->event_dispatcher()->UpdateCursorProviderByLastKnownLocation();
+    int32_t cursor_id = 0;
+    if (wms->event_dispatcher()->GetCurrentMouseCursor(&cursor_id))
+      wm_and_display.display->UpdateNativeCursor(cursor_id);
+  }
+}
+
+void WindowServer::UpdateNativeCursorIfOver(ServerWindow* window) {
+  WindowManagerAndDisplay wm_and_display =
+      display_manager_->GetWindowManagerAndDisplay(window);
+  WindowManagerState* wms = wm_and_display.window_manager_state;
+  if (wms && wm_and_display.display &&
+      window == wms->event_dispatcher()->mouse_cursor_source_window()) {
+    wms->event_dispatcher()->UpdateNonClientAreaForCurrentWindow();
+    int32_t cursor_id = 0;
+    if (wms->event_dispatcher()->GetCurrentMouseCursor(&cursor_id))
+      wm_and_display.display->UpdateNativeCursor(cursor_id);
+  }
 }
 
 mus::SurfacesState* WindowServer::GetSurfacesState() {
@@ -448,8 +494,12 @@ mus::SurfacesState* WindowServer::GetSurfacesState() {
 }
 
 void WindowServer::OnScheduleWindowPaint(ServerWindow* window) {
-  if (!in_destructor_)
-    SchedulePaint(window, gfx::Rect(window->bounds().size()));
+  if (in_destructor_)
+    return;
+
+  SchedulePaint(window, gfx::Rect(window->bounds().size()));
+  if (!window_paint_callback_.is_null())
+    window_paint_callback_.Run(window);
 }
 
 const ServerWindow* WindowServer::GetRootWindow(
@@ -521,7 +571,7 @@ void WindowServer::OnWindowHierarchyChanged(ServerWindow* window,
   if (new_parent)
     SchedulePaint(new_parent, gfx::Rect(new_parent->bounds().size()));
 
-  MaybeUpdateNativeCursor(window);
+  UpdateNativeCursorFromMouseLocation(window);
 }
 
 void WindowServer::OnWindowBoundsChanged(ServerWindow* window,
@@ -537,7 +587,7 @@ void WindowServer::OnWindowBoundsChanged(ServerWindow* window,
   SchedulePaint(window->parent(), old_bounds);
   SchedulePaint(window->parent(), new_bounds);
 
-  MaybeUpdateNativeCursor(window);
+  UpdateNativeCursorFromMouseLocation(window);
 }
 
 void WindowServer::OnWindowClientAreaChanged(
@@ -549,6 +599,8 @@ void WindowServer::OnWindowClientAreaChanged(
 
   ProcessClientAreaChanged(window, new_client_area,
                            new_additional_client_areas);
+
+  UpdateNativeCursorIfOver(window);
 }
 
 void WindowServer::OnWindowReordered(ServerWindow* window,
@@ -557,7 +609,7 @@ void WindowServer::OnWindowReordered(ServerWindow* window,
   ProcessWindowReorder(window, relative, direction);
   if (!in_destructor_)
     SchedulePaint(window, gfx::Rect(window->bounds().size()));
-  MaybeUpdateNativeCursor(window);
+  UpdateNativeCursorFromMouseLocation(window);
 }
 
 void WindowServer::OnWillChangeWindowVisibility(ServerWindow* window) {
@@ -605,6 +657,16 @@ void WindowServer::OnWindowPredefinedCursorChanged(ServerWindow* window,
     return;
 
   ProcessWillChangeWindowPredefinedCursor(window, cursor_id);
+
+  UpdateNativeCursorIfOver(window);
+}
+
+void WindowServer::OnWindowNonClientCursorChanged(ServerWindow* window,
+                                                  int32_t cursor_id) {
+  if (in_destructor_)
+    return;
+
+  UpdateNativeCursorIfOver(window);
 }
 
 void WindowServer::OnWindowSharedPropertyChanged(

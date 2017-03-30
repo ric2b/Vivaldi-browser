@@ -9,6 +9,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
+#include "base/metrics/user_metrics.h"
 #include "base/time/time.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/form_structure.h"
@@ -177,29 +178,6 @@ int GetFieldTypeGroupMetric(ServerFieldType field_type,
 
 namespace {
 
-std::string WalletApiMetricToString(
-    AutofillMetrics::WalletApiCallMetric metric) {
-  switch (metric) {
-    case AutofillMetrics::ACCEPT_LEGAL_DOCUMENTS:
-      return "AcceptLegalDocuments";
-    case AutofillMetrics::AUTHENTICATE_INSTRUMENT:
-      return "AuthenticateInstrument";
-    case AutofillMetrics::GET_FULL_WALLET:
-      return "GetFullWallet";
-    case AutofillMetrics::GET_WALLET_ITEMS:
-      return "GetWalletItems";
-    case AutofillMetrics::SAVE_TO_WALLET:
-      return "SaveToWallet";
-    case AutofillMetrics::UNKNOWN_API_CALL:
-    case AutofillMetrics::NUM_WALLET_API_CALLS:
-      NOTREACHED();
-      return "UnknownApiCall";
-  }
-
-  NOTREACHED();
-  return "UnknownApiCall";
-}
-
 // A version of the UMA_HISTOGRAM_ENUMERATION macro that allows the |name|
 // to vary over the program's runtime.
 void LogUMAHistogramEnumeration(const std::string& name,
@@ -216,21 +194,6 @@ void LogUMAHistogramEnumeration(const std::string& name,
           boundary_value + 1,
           base::HistogramBase::kUmaTargetedHistogramFlag);
   histogram->Add(sample);
-}
-
-// A version of the UMA_HISTOGRAM_TIMES macro that allows the |name|
-// to vary over the program's runtime.
-void LogUMAHistogramTimes(const std::string& name,
-                          const base::TimeDelta& duration) {
-  // Note: This leaks memory, which is expected behavior.
-  base::HistogramBase* histogram =
-      base::Histogram::FactoryTimeGet(
-          name,
-          base::TimeDelta::FromMilliseconds(1),
-          base::TimeDelta::FromSeconds(10),
-          50,
-          base::HistogramBase::kUmaTargetedHistogramFlag);
-  histogram->AddTime(duration);
 }
 
 // A version of the UMA_HISTOGRAM_LONG_TIMES macro that allows the |name|
@@ -316,62 +279,6 @@ void AutofillMetrics::LogScanCreditCardCompleted(
   LogUMAHistogramLongTimes("Autofill.ScanCreditCard.Duration_" + suffix,
                            duration);
   UMA_HISTOGRAM_BOOLEAN("Autofill.ScanCreditCard.Completed", completed);
-}
-
-// static
-void AutofillMetrics::LogDialogDismissalState(DialogDismissalState state) {
-  UMA_HISTOGRAM_ENUMERATION("RequestAutocomplete.DismissalState",
-                            state, NUM_DIALOG_DISMISSAL_STATES);
-}
-
-// static
-void AutofillMetrics::LogDialogInitialUserState(
-    DialogInitialUserStateMetric user_type) {
-  UMA_HISTOGRAM_ENUMERATION("RequestAutocomplete.InitialUserState",
-                            user_type, NUM_DIALOG_INITIAL_USER_STATE_METRICS);
-}
-
-// static
-void AutofillMetrics::LogDialogLatencyToShow(const base::TimeDelta& duration) {
-  LogUMAHistogramTimes("RequestAutocomplete.UiLatencyToShow", duration);
-}
-
-// static
-void AutofillMetrics::LogDialogPopupEvent(DialogPopupEvent event) {
-  UMA_HISTOGRAM_ENUMERATION("RequestAutocomplete.PopupInDialog",
-                            event, NUM_DIALOG_POPUP_EVENTS);
-}
-
-// static
-void AutofillMetrics::LogDialogSecurityMetric(DialogSecurityMetric metric) {
-  UMA_HISTOGRAM_ENUMERATION("RequestAutocomplete.Security",
-                            metric, NUM_DIALOG_SECURITY_METRICS);
-}
-
-// static
-void AutofillMetrics::LogDialogUiDuration(
-    const base::TimeDelta& duration,
-    DialogDismissalAction dismissal_action) {
-  std::string suffix;
-  switch (dismissal_action) {
-    case DIALOG_ACCEPTED:
-      suffix = "Submit";
-      break;
-
-    case DIALOG_CANCELED:
-      suffix = "Cancel";
-      break;
-  }
-
-  LogUMAHistogramLongTimes("RequestAutocomplete.UiDuration", duration);
-  LogUMAHistogramLongTimes("RequestAutocomplete.UiDuration." + suffix,
-                           duration);
-}
-
-// static
-void AutofillMetrics::LogDialogUiEvent(DialogUiEvent event) {
-  UMA_HISTOGRAM_ENUMERATION("RequestAutocomplete.UiEvents", event,
-                            NUM_DIALOG_UI_EVENTS);
 }
 
 // static
@@ -490,39 +397,6 @@ void AutofillMetrics::LogUnmaskingDuration(
   LogUMAHistogramLongTimes("Autofill.UnmaskPrompt.UnmaskingDuration", duration);
   LogUMAHistogramLongTimes("Autofill.UnmaskPrompt.UnmaskingDuration." + suffix,
                            duration);
-}
-
-// static
-void AutofillMetrics::LogWalletErrorMetric(WalletErrorMetric metric) {
-  UMA_HISTOGRAM_ENUMERATION("RequestAutocomplete.WalletErrors", metric,
-                            NUM_WALLET_ERROR_METRICS);
-}
-
-// static
-void AutofillMetrics::LogWalletApiCallDuration(
-    WalletApiCallMetric metric,
-    const base::TimeDelta& duration) {
-  LogUMAHistogramTimes("Wallet.ApiCallDuration." +
-                       WalletApiMetricToString(metric), duration);
-}
-
-// static
-void AutofillMetrics::LogWalletMalformedResponseMetric(
-    WalletApiCallMetric metric) {
-  UMA_HISTOGRAM_ENUMERATION("Wallet.MalformedResponse", metric,
-                            NUM_WALLET_API_CALLS);
-}
-
-// static
-void AutofillMetrics::LogWalletRequiredActionMetric(
-    WalletRequiredActionMetric required_action) {
-  UMA_HISTOGRAM_ENUMERATION("RequestAutocomplete.WalletRequiredActions",
-                            required_action, NUM_WALLET_REQUIRED_ACTIONS);
-}
-
-// static
-void AutofillMetrics::LogWalletResponseCode(int response_code) {
-  UMA_HISTOGRAM_SPARSE_SLOWLY("Wallet.ResponseCode", response_code);
 }
 
 // static
@@ -650,6 +524,8 @@ void AutofillMetrics::LogAutofillSuggestionAcceptedIndex(int index) {
   // A maximum of 50 is enforced to minimize the number of buckets generated.
   UMA_HISTOGRAM_SPARSE_SLOWLY("Autofill.SuggestionAcceptedIndex",
                               std::min(index, 50));
+
+  base::RecordAction(base::UserMetricsAction("Autofill_SelectedSuggestion"));
 }
 
 // static
@@ -725,11 +601,29 @@ void AutofillMetrics::FormEventLogger::OnDidInteractWithAutofillableForm() {
   }
 }
 
+void AutofillMetrics::FormEventLogger::OnDidPollSuggestions() {
+  if (is_for_credit_card_) {
+    base::RecordAction(
+        base::UserMetricsAction("Autofill_PolledCreditCardSuggestions"));
+  } else {
+    base::RecordAction(
+        base::UserMetricsAction("Autofill_PolledProfileSuggestions"));
+  }
+}
+
 void AutofillMetrics::FormEventLogger::OnDidShowSuggestions() {
   Log(AutofillMetrics::FORM_EVENT_SUGGESTIONS_SHOWN);
   if (!has_logged_suggestions_shown_) {
     has_logged_suggestions_shown_ = true;
     Log(AutofillMetrics::FORM_EVENT_SUGGESTIONS_SHOWN_ONCE);
+  }
+
+  if (is_for_credit_card_) {
+    base::RecordAction(
+        base::UserMetricsAction("Autofill_ShowedCreditCardSuggestions"));
+  } else {
+    base::RecordAction(
+        base::UserMetricsAction("Autofill_ShowedProfileSuggestions"));
   }
 }
 
@@ -769,6 +663,9 @@ void AutofillMetrics::FormEventLogger::OnDidFillSuggestion(
       Log(AutofillMetrics::FORM_EVENT_LOCAL_SUGGESTION_FILLED_ONCE);
     }
   }
+
+  base::RecordAction(
+      base::UserMetricsAction("Autofill_FilledCreditCardSuggestion"));
 }
 
 void AutofillMetrics::FormEventLogger::OnDidFillSuggestion(
@@ -787,6 +684,9 @@ void AutofillMetrics::FormEventLogger::OnDidFillSuggestion(
         ? AutofillMetrics::FORM_EVENT_SERVER_SUGGESTION_FILLED_ONCE
         : AutofillMetrics::FORM_EVENT_LOCAL_SUGGESTION_FILLED_ONCE);
   }
+
+  base::RecordAction(
+      base::UserMetricsAction("Autofill_FilledProfileSuggestion"));
 }
 
 void AutofillMetrics::FormEventLogger::OnWillSubmitForm() {
@@ -809,6 +709,8 @@ void AutofillMetrics::FormEventLogger::OnWillSubmitForm() {
   } else {
     Log(AutofillMetrics::FORM_EVENT_LOCAL_SUGGESTION_WILL_SUBMIT_ONCE);
   }
+
+  base::RecordAction(base::UserMetricsAction("Autofill_OnWillSubmitForm"));
 }
 
 void AutofillMetrics::FormEventLogger::OnFormSubmitted() {
@@ -831,6 +733,8 @@ void AutofillMetrics::FormEventLogger::OnFormSubmitted() {
   } else {
     Log(AutofillMetrics::FORM_EVENT_LOCAL_SUGGESTION_SUBMITTED_ONCE);
   }
+
+  base::RecordAction(base::UserMetricsAction("Autofill_FormSubmitted"));
 }
 
 void AutofillMetrics::FormEventLogger::Log(FormEvent event) const {

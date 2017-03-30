@@ -36,8 +36,8 @@ scoped_refptr<EmbeddedWorkerRegistry> EmbeddedWorkerRegistry::Create(
   return registry;
 }
 
-scoped_ptr<EmbeddedWorkerInstance> EmbeddedWorkerRegistry::CreateWorker() {
-  scoped_ptr<EmbeddedWorkerInstance> worker(
+std::unique_ptr<EmbeddedWorkerInstance> EmbeddedWorkerRegistry::CreateWorker() {
+  std::unique_ptr<EmbeddedWorkerInstance> worker(
       new EmbeddedWorkerInstance(context_, next_embedded_worker_id_));
   worker_map_[next_embedded_worker_id_++] = worker.get();
   return worker;
@@ -61,7 +61,14 @@ bool EmbeddedWorkerRegistry::OnMessageReceived(const IPC::Message& message,
     // purposely handling the message as no-op.
     return true;
   }
-  return worker->OnMessageReceived(message);
+  bool handled = worker->OnMessageReceived(message);
+
+  // Assume an unhandled message for a stopping worker is because the message
+  // was timed out and its handler removed prior to stopping.
+  // We might be more precise and record timed out request ids, but some
+  // cumbersome bookkeeping is needed and the IPC messaging will soon migrate
+  // to Mojo anyway.
+  return handled || worker->status() == EmbeddedWorkerInstance::STOPPING;
 }
 
 void EmbeddedWorkerRegistry::Shutdown() {
@@ -238,7 +245,7 @@ EmbeddedWorkerRegistry::~EmbeddedWorkerRegistry() {
 }
 
 ServiceWorkerStatusCode EmbeddedWorkerRegistry::SendStartWorker(
-    scoped_ptr<EmbeddedWorkerMsg_StartWorker_Params> params,
+    std::unique_ptr<EmbeddedWorkerMsg_StartWorker_Params> params,
     int process_id) {
   if (!context_)
     return SERVICE_WORKER_ERROR_ABORT;
@@ -265,7 +272,7 @@ ServiceWorkerStatusCode EmbeddedWorkerRegistry::SendStartWorker(
 
 ServiceWorkerStatusCode EmbeddedWorkerRegistry::Send(
     int process_id, IPC::Message* message_ptr) {
-  scoped_ptr<IPC::Message> message(message_ptr);
+  std::unique_ptr<IPC::Message> message(message_ptr);
   if (!context_)
     return SERVICE_WORKER_ERROR_ABORT;
   ProcessToSenderMap::iterator found = process_sender_map_.find(process_id);

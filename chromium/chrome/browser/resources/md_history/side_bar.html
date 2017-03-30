@@ -4,13 +4,24 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-listbox/paper-listbox.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-ripple/paper-ripple.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
+<link rel="import" href="chrome://history/shared_style.html">
 
 <dom-module id="history-side-bar">
   <template>
-    <style>
+    <style include="shared-style">
       :host {
         padding-top: 5px;
-        width: 200px;
+        width: var(--side-bar-width);
+      }
+
+      div.separator {
+        background-color: rgba(0, 0, 0, 0.08);
+        height: 1px;
+        margin: 8px 0;
+      }
+
+      #clear-browsing-data {
+        text-transform: uppercase;
       }
 
       paper-item {
@@ -31,13 +42,19 @@
         color: #5a5a5a;
       }
     </style>
-    <paper-listbox id="overflow-menu" selected="0" on-iron-select="onSelect_">
-      <paper-item id="history-button">
+    <paper-listbox id="overflow-menu" selected="0" on-iron-select="onSelect_"
+        selectable=".page-item">
+      <paper-item view-id="history-list" class="page-item">
         <div>$i18n{historyMenuItem}</div>
         <paper-ripple></paper-ripple>
       </paper-item>
-      <paper-item id="synced-tabs-button">
+      <paper-item view-id="history-synced-device-manager" class="page-item">
         <div>$i18n{openTabsMenuItem}</div>
+        <paper-ripple></paper-ripple>
+      </paper-item>
+      <div class="separator"></div>
+      <paper-item on-tap="onClearBrowsingDataTap_" id="clear-browsing-data">
+        <div>$i18n{clearBrowsingData}</div>
         <paper-ripple></paper-ripple>
       </paper-item>
     </paper-listbox>

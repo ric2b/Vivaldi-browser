@@ -2,11 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "chrome/test/base/view_event_test_platform_part.h"
 #include "ui/aura/env.h"
-#include "ui/gfx/screen.h"
+#include "ui/display/screen.h"
 #include "ui/views/widget/desktop_aura/desktop_screen.h"
 
 namespace {
@@ -18,16 +19,16 @@ class ViewEventTestPlatformPartDefault : public ViewEventTestPlatformPart {
       ui::ContextFactory* context_factory) {
 #if defined(USE_AURA)
     screen_.reset(views::CreateDesktopScreen());
-    gfx::Screen::SetScreenInstance(screen_.get());
-    aura::Env::CreateInstance(true);
-    aura::Env::GetInstance()->set_context_factory(context_factory);
+    display::Screen::SetScreenInstance(screen_.get());
+    env_ = aura::Env::CreateInstance();
+    env_->set_context_factory(context_factory);
 #endif
   }
 
   ~ViewEventTestPlatformPartDefault() override {
 #if defined(USE_AURA)
-    aura::Env::DeleteInstance();
-    gfx::Screen::SetScreenInstance(nullptr);
+    env_.reset();
+    display::Screen::SetScreenInstance(nullptr);
 #endif
   }
 
@@ -35,7 +36,8 @@ class ViewEventTestPlatformPartDefault : public ViewEventTestPlatformPart {
   gfx::NativeWindow GetContext() override { return NULL; }
 
  private:
-  scoped_ptr<gfx::Screen> screen_;
+  std::unique_ptr<display::Screen> screen_;
+  std::unique_ptr<aura::Env> env_;
 
   DISALLOW_COPY_AND_ASSIGN(ViewEventTestPlatformPartDefault);
 };

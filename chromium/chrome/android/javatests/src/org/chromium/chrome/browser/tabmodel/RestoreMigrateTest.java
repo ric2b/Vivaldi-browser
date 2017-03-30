@@ -36,8 +36,7 @@ public class RestoreMigrateTest extends InstrumentationTestCase {
                         return TabPersistentStore.serializeTabModelSelector(selector, null);
                     }
                 });
-        File f = TabPersistentStore.getStateDirectory(
-                getInstrumentation().getTargetContext(), index);
+        File f = TabPersistentStore.getOrCreateSelectorStateDirectory(index);
         FileOutputStream fos = null;
         try {
             fos = new FileOutputStream(new File(f, TabPersistentStore.SAVED_STATE_FILE));
@@ -87,11 +86,10 @@ public class RestoreMigrateTest extends InstrumentationTestCase {
         MockTabModelSelector selector = new MockTabModelSelector(0, 0, null);
         TabPersistentStore store = new TabPersistentStore(selector, 0,
                 getInstrumentation().getTargetContext(), null, null);
-        TabPersistentStore.waitForMigrationToFinish();
+        store.waitForMigrationToFinish();
 
         // Check that the files were moved.
-        File newDir =
-                TabPersistentStore.getStateDirectory(getInstrumentation().getTargetContext(), 0);
+        File newDir = TabPersistentStore.getOrCreateSelectorStateDirectory(0);
         File newStateFile = new File(newDir, TabPersistentStore.SAVED_STATE_FILE);
         File newTab0 = new File(newDir, TabState.SAVED_TAB_STATE_FILE_PREFIX + "0");
         File newTab1 = new File(newDir, TabState.SAVED_TAB_STATE_FILE_PREFIX + "1");
@@ -140,8 +138,7 @@ public class RestoreMigrateTest extends InstrumentationTestCase {
         assertTrue("Could not create tab 3 file", tab3.createNewFile());
 
         // Write new state files
-        File newDir =
-                TabPersistentStore.getStateDirectory(getInstrumentation().getTargetContext(), 0);
+        File newDir = TabPersistentStore.getOrCreateSelectorStateDirectory(0);
         File newStateFile = new File(newDir, TabPersistentStore.SAVED_STATE_FILE);
         File newTab4 = new File(newDir, TabState.SAVED_TAB_STATE_FILE_PREFIX + "4");
 
@@ -152,7 +149,7 @@ public class RestoreMigrateTest extends InstrumentationTestCase {
         MockTabModelSelector selector = new MockTabModelSelector(0, 0, null);
         TabPersistentStore store = new TabPersistentStore(selector, 0,
                 getInstrumentation().getTargetContext(), null, null);
-        TabPersistentStore.waitForMigrationToFinish();
+        store.waitForMigrationToFinish();
 
         assertTrue("Could not find new state file", newStateFile.exists());
         assertTrue("Could not find new tab 4 file", newTab4.exists());
@@ -198,15 +195,14 @@ public class RestoreMigrateTest extends InstrumentationTestCase {
         MockTabModelSelector selector = new MockTabModelSelector(0, 0, null);
         TabPersistentStore store = new TabPersistentStore(selector, 0,
                 getInstrumentation().getTargetContext(), null, null);
-        TabPersistentStore.waitForMigrationToFinish();
+        store.waitForMigrationToFinish();
 
         assertFalse("Could still find old state file", stateFile.exists());
         assertFalse("Could still find old tab 0 file", tab0.exists());
         assertTrue("Could not find other file", otherFile.exists());
 
         // Check that the files were moved.
-        File newDir =
-                TabPersistentStore.getStateDirectory(getInstrumentation().getTargetContext(), 0);
+        File newDir = TabPersistentStore.getOrCreateSelectorStateDirectory(0);
         File newStateFile = new File(newDir, TabPersistentStore.SAVED_STATE_FILE);
         File newTab0 = new File(newDir, TabState.SAVED_TAB_STATE_FILE_PREFIX + "0");
         File newOtherFile = new File(newDir, "other.file");
@@ -236,7 +232,7 @@ public class RestoreMigrateTest extends InstrumentationTestCase {
 
         int maxId = Math.max(getMaxId(selector0), getMaxId(selector1));
         RecordHistogram.disableForTests();
-        storeIn.loadState();
+        storeIn.loadState(false /* ignoreIncognitoFiles */);
         assertEquals("Invalid next id", maxId + 1,
                 TabIdManager.getInstance().generateValidId(Tab.INVALID_TAB_ID));
     }
@@ -265,8 +261,8 @@ public class RestoreMigrateTest extends InstrumentationTestCase {
                 getInstrumentation().getTargetContext(), null, null);
 
         RecordHistogram.disableForTests();
-        storeIn0.loadState();
-        storeIn1.loadState();
+        storeIn0.loadState(false /* ignoreIncognitoFiles */);
+        storeIn1.loadState(false /* ignoreIncognitoFiles */);
 
         assertEquals("Unexpected number of tabs to load", 6, storeIn0.getRestoredTabCount());
         assertEquals("Unexpected number of tabst o load", 3, storeIn1.getRestoredTabCount());

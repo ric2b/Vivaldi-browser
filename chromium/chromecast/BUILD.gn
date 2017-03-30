@@ -17,8 +17,8 @@ if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
-if (use_playready) {
-  config("playready_config") {
+config("playready_config") {
+  if (use_playready) {
     defines = [ "PLAYREADY_CDM_AVAILABLE" ]
   }
 }
@@ -121,8 +121,7 @@ cast_test_group("cast_tests") {
     ]
 
     if (use_alsa) {
-      tests +=
-          [ "//chromecast/media/cma/backend/alsa:alsa_cma_backend_unittests" ]
+      tests += [ "//chromecast/media/cma/backend/alsa:cast_alsa_cma_backend_unittests" ]
     }
   }
 
@@ -183,10 +182,6 @@ executable("cast_shell") {
 
   if (chromecast_branding != "public") {
     deps += [ "//chromecast/internal:cast_shell_internal" ]
-  }
-
-  if (ozone_platform_egltest) {
-    deps += [ "//ui/ozone/platform/egltest:eglplatform_shim_x11" ]
   }
 }
 
@@ -288,6 +283,7 @@ if (is_android) {
       "//third_party/icu:icu_assets",
       "//v8:v8_external_startup_data_assets",
     ]
+    disable_compression = true
   }
 
   # GYP target: chromecast.gyp:cast_shell_apk

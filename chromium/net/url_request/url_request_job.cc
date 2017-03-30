@@ -15,7 +15,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "net/base/auth.h"
 #include "net/base/host_port_pair.h"
@@ -24,9 +24,9 @@
 #include "net/base/load_states.h"
 #include "net/base/net_errors.h"
 #include "net/base/network_delegate.h"
-#include "net/base/network_quality_estimator.h"
 #include "net/filter/filter.h"
 #include "net/http/http_response_headers.h"
+#include "net/nqe/network_quality_estimator.h"
 #include "net/url_request/url_request_context.h"
 
 namespace net {
@@ -34,10 +34,11 @@ namespace net {
 namespace {
 
 // Callback for TYPE_URL_REQUEST_FILTERS_SET net-internals event.
-scoped_ptr<base::Value> FiltersSetCallback(
+std::unique_ptr<base::Value> FiltersSetCallback(
     Filter* filter,
     NetLogCaptureMode /* capture_mode */) {
-  scoped_ptr<base::DictionaryValue> event_params(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> event_params(
+      new base::DictionaryValue());
   event_params->SetString("filters", filter->OrderedFilterList());
   return std::move(event_params);
 }
@@ -198,8 +199,8 @@ void URLRequestJob::PopulateNetErrorDetails(NetErrorDetails* details) const {
   return;
 }
 
-Filter* URLRequestJob::SetupFilter() const {
-  return NULL;
+std::unique_ptr<Filter> URLRequestJob::SetupFilter() const {
+  return nullptr;
 }
 
 bool URLRequestJob::IsRedirectResponse(GURL* location,
@@ -445,7 +446,7 @@ void URLRequestJob::NotifyHeadersComplete() {
 
   has_handled_response_ = true;
   if (request_->status().is_success())
-    filter_.reset(SetupFilter());
+    filter_ = SetupFilter();
 
   if (!filter_.get()) {
     std::string content_length;

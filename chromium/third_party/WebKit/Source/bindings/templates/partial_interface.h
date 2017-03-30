@@ -7,6 +7,9 @@
 {% endfor %}
 
 namespace blink {
+{% if attributes|origin_trial_enabled_attributes %}
+class ScriptState;
+{% endif %}
 
 class {{v8_class_or_partial}} {
     STATIC_ONLY({{v8_class_or_partial}});
@@ -24,9 +27,12 @@ public:
     {% endif %}
     {% endfor %}
     {# Custom internal fields #}
-    static void preparePrototypeAndInterfaceObject(v8::Local<v8::Context>, v8::Local<v8::Object>, v8::Local<v8::Function>, v8::Local<v8::FunctionTemplate>);
+    static void preparePrototypeAndInterfaceObject(v8::Local<v8::Context>, const DOMWrapperWorld&, v8::Local<v8::Object>, v8::Local<v8::Function>, v8::Local<v8::FunctionTemplate>);
+    {% for group in attributes|origin_trial_enabled_attributes|groupby('origin_trial_feature_name') %}{{newline}}
+    static void install{{group.grouper}}(ScriptState*, v8::Local<v8::Object> instance);
+    {% endfor %}
 private:
-    static void install{{v8_class}}Template(v8::Local<v8::FunctionTemplate>, v8::Isolate*);
+    static void install{{v8_class}}Template(v8::Isolate*, const DOMWrapperWorld&, v8::Local<v8::FunctionTemplate> interfaceTemplate);
 };
 }
 #endif // {{v8_class_or_partial}}_h

@@ -17,6 +17,7 @@
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
 #include "components/prefs/pref_member.h"
+#include "ui/shell_dialogs/select_file_dialog.h"
 
 namespace autofill {
 struct PasswordForm;
@@ -54,6 +55,9 @@ class PasswordManagerPresenter
   // Gets the password entry at |index|.
   const autofill::PasswordForm* GetPassword(size_t index);
 
+  // Gets all password entries.
+  std::vector<std::unique_ptr<autofill::PasswordForm>> GetAllPasswords();
+
   // Gets the password exception entry at |index|.
   const autofill::PasswordForm* GetPasswordException(size_t index);
 
@@ -69,11 +73,11 @@ class PasswordManagerPresenter
   // |index| The index of the entry.
   void RequestShowPassword(size_t index);
 
+  // Returns true if the user is authenticated.
+  virtual bool IsUserAuthenticated();
+
  private:
   friend class PasswordManagerPresenterTest;
-
-  // Returns the password store associated with the currently active profile.
-  password_manager::PasswordStore* GetPasswordStore();
 
   // Sets the password and exception list of the UI view.
   void SetPasswordList();
@@ -89,6 +93,9 @@ class PasswordManagerPresenter
       std::vector<std::unique_ptr<autofill::PasswordForm>>* list,
       DuplicatesMap* duplicates,
       PasswordEntryType entry_type);
+
+  // Returns the password store associated with the currently active profile.
+  password_manager::PasswordStore* GetPasswordStore();
 
   // A short class to mediate requests to the password store.
   class ListPopulater : public password_manager::PasswordStoreConsumer {
@@ -137,6 +144,9 @@ class PasswordManagerPresenter
   std::vector<std::unique_ptr<autofill::PasswordForm>> password_exception_list_;
   DuplicatesMap password_duplicates_;
   DuplicatesMap password_exception_duplicates_;
+
+  // Whether to show stored passwords or not.
+  BooleanPrefMember show_passwords_;
 
   // The last time the user was successfully authenticated.
   // Used to determine whether or not to reveal plaintext passwords.

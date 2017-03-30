@@ -10,7 +10,7 @@
 #include <algorithm>
 
 #include "base/logging.h"
-#include "mojo/public/cpp/bindings/lib/bindings_serialization.h"
+#include "mojo/public/cpp/bindings/lib/serialization_util.h"
 
 namespace mojo {
 namespace internal {
@@ -38,8 +38,6 @@ void* FixedBuffer::Allocate(size_t delta) {
 
   return result;
 }
-
-PickleBuffer* FixedBuffer::AsPickleBuffer() { return nullptr; }
 
 FixedBufferForTesting::FixedBufferForTesting(size_t size) {
   size_ = internal::Align(size);

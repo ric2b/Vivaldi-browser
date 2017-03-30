@@ -6,6 +6,7 @@
 
 #include "base/strings/string_number_conversions.h"
 #include "content/public/common/media_stream_request.h"
+#include "media/base/audio_parameters.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 // Used for ID for output devices and for matching output device ID for input
@@ -31,7 +32,7 @@ void MockMediaStreamDispatcher::GenerateStream(
     int request_id,
     const base::WeakPtr<MediaStreamDispatcherEventHandler>& event_handler,
     const StreamControls& controls,
-    const GURL& url) {
+    const url::Origin& url) {
   // Audio and video share the same request so we use |audio_input_request_id_|
   // only.
   audio_input_request_id_ = request_id;
@@ -59,7 +60,7 @@ void MockMediaStreamDispatcher::EnumerateDevices(
     int request_id,
     const base::WeakPtr<MediaStreamDispatcherEventHandler>& event_handler,
     MediaStreamType type,
-    const GURL& security_origin) {
+    const url::Origin& security_origin) {
   if (type == MEDIA_DEVICE_AUDIO_CAPTURE) {
     audio_input_request_id_ = request_id;
     audio_input_array_.clear();
@@ -117,6 +118,9 @@ void MockMediaStreamDispatcher::AddAudioInputDeviceToArray(
         kAudioOutputDeviceIdPrefix + base::IntToString(session_id_);
   }
   audio.session_id = session_id_;
+  audio.device.input.sample_rate = media::AudioParameters::kAudioCDSampleRate;
+  audio.device.input.channel_layout = media::CHANNEL_LAYOUT_STEREO;
+  audio.device.input.frames_per_buffer = audio.device.input.sample_rate / 100;
   audio_input_array_.push_back(audio);
 }
 

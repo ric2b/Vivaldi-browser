@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -21,9 +22,9 @@
 #include "cc/base/cc_export.h"
 #include "cc/playback/decoded_draw_image.h"
 #include "cc/playback/draw_image.h"
-#include "cc/raster/tile_task_runner.h"
+#include "cc/resources/resource_format.h"
 #include "cc/tiles/image_decode_controller.h"
-#include "skia/ext/refptr.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
 
 namespace cc {
 
@@ -108,13 +109,16 @@ class CC_EXPORT SoftwareImageDecodeController
 
   // ImageDecodeController overrides.
   bool GetTaskForImageAndRef(const DrawImage& image,
-                             uint64_t prepare_tiles_id,
-                             scoped_refptr<ImageDecodeTask>* task) override;
+                             const TracingInfo& tracing_info,
+                             scoped_refptr<TileTask>* task) override;
   void UnrefImage(const DrawImage& image) override;
   DecodedDrawImage GetDecodedImageForDraw(const DrawImage& image) override;
   void DrawWithImageFinished(const DrawImage& image,
                              const DecodedDrawImage& decoded_image) override;
   void ReduceCacheUsage() override;
+  // Software doesn't keep outstanding images pinned, so this is a no-op.
+  void SetShouldAggressivelyFreeResources(
+      bool aggressively_free_resources) override {}
 
   // Decode the given image and store it in the cache. This is only called by an
   // image decode task from a worker thread.
@@ -132,14 +136,14 @@ class CC_EXPORT SoftwareImageDecodeController
   class DecodedImage {
    public:
     DecodedImage(const SkImageInfo& info,
-                 scoped_ptr<base::DiscardableMemory> memory,
+                 std::unique_ptr<base::DiscardableMemory> memory,
                  const SkSize& src_rect_offset,
                  uint64_t tracing_id);
     ~DecodedImage();
 
-    SkImage* image() const {
+    const sk_sp<SkImage>& image() const {
       DCHECK(locked_);
-      return image_.get();
+      return image_;
     }
 
     const SkSize& src_rect_offset() const { return src_rect_offset_; }
@@ -157,8 +161,8 @@ class CC_EXPORT SoftwareImageDecodeController
    private:
     bool locked_;
     SkImageInfo image_info_;
-    scoped_ptr<base::DiscardableMemory> memory_;
-    skia::RefPtr<SkImage> image_;
+    std::unique_ptr<base::DiscardableMemory> memory_;
+    sk_sp<SkImage> image_;
     SkSize src_rect_offset_;
     uint64_t tracing_id_;
   };
@@ -181,8 +185,9 @@ class CC_EXPORT SoftwareImageDecodeController
     base::CheckedNumeric<size_t> current_usage_bytes_;
   };
 
-  using ImageMRUCache =
-      base::HashingMRUCache<ImageKey, scoped_ptr<DecodedImage>, ImageKeyHash>;
+  using ImageMRUCache = base::HashingMRUCache<ImageKey,
+                                              std::unique_ptr<DecodedImage>,
+                                              ImageKeyHash>;
 
   // Looks for the key in the cache and returns true if it was found and was
   // successfully locked (or if it was already locked). Note that if this
@@ -192,8 +197,9 @@ class CC_EXPORT SoftwareImageDecodeController
   // Actually decode the image. Note that this function can (and should) be
   // called with no lock acquired, since it can do a lot of work. Note that it
   // can also return nullptr to indicate the decode failed.
-  scoped_ptr<DecodedImage> DecodeImageInternal(const ImageKey& key,
-                                               const DrawImage& draw_image);
+  std::unique_ptr<DecodedImage> DecodeImageInternal(
+      const ImageKey& key,
+      const DrawImage& draw_image);
 
   // Get the decoded draw image for the given key and draw_image. Note that this
   // function has to be called with no lock acquired, since it will acquire its
@@ -205,24 +211,32 @@ class CC_EXPORT SoftwareImageDecodeController
   DecodedDrawImage GetDecodedImageForDrawInternal(const ImageKey& key,
                                                   const DrawImage& draw_image);
 
+  // GetOriginalImageDecode is called by DecodeImageInternal when the quality
+  // does not scale the image. Like DecodeImageInternal, it should be called
+  // with no lock acquired and it returns nullptr if the decoding failed.
+  std::unique_ptr<DecodedImage> GetOriginalImageDecode(
+      const ImageKey& key,
+      sk_sp<const SkImage> image);
+
+  // GetScaledImageDecode is called by DecodeImageInternal when the quality
+  // requires the image be scaled. Like DecodeImageInternal, it should be
+  // called with no lock acquired and it returns nullptr if the decoding or
+  // scaling failed.
+  std::unique_ptr<DecodedImage> GetScaledImageDecode(
+      const ImageKey& key,
+      sk_sp<const SkImage> image);
+
   void SanityCheckState(int line, bool lock_acquired);
   void RefImage(const ImageKey& key);
   void RefAtRasterImage(const ImageKey& key);
   void UnrefAtRasterImage(const ImageKey& key);
-
-  // These functions indicate whether the images can be handled and cached by
-  // ImageDecodeController or whether they will fall through to Skia (with
-  // exception of possibly prerolling them). Over time these should return
-  // "false" in less cases, as the ImageDecodeController should start handling
-  // more of them.
-  bool CanHandleImage(const ImageKey& key);
 
   // Helper function which dumps all images in a specific ImageMRUCache.
   void DumpImageMemoryForCache(const ImageMRUCache& cache,
                                const char* cache_name,
                                base::trace_event::ProcessMemoryDump* pmd) const;
 
-  std::unordered_map<ImageKey, scoped_refptr<ImageDecodeTask>, ImageKeyHash>
+  std::unordered_map<ImageKey, scoped_refptr<TileTask>, ImageKeyHash>
       pending_image_tasks_;
 
   // The members below this comment can only be accessed if the lock is held to
@@ -239,11 +253,6 @@ class CC_EXPORT SoftwareImageDecodeController
       at_raster_decoded_images_ref_counts_;
 
   MemoryBudget locked_images_budget_;
-
-  // Note that this is used for cases where the only thing we do is preroll the
-  // image the first time we see it. This mimics the previous behavior and
-  // should over time change as the compositor starts to handle more cases.
-  std::unordered_set<uint32_t> prerolled_images_;
 
   ResourceFormat format_;
 

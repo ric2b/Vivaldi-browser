@@ -7,13 +7,13 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <queue>
 #include <vector>
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/process/process.h"
 #include "base/strings/string16.h"
 #include "content/browser/renderer_host/pepper/browser_ppapi_host_impl.h"
@@ -36,6 +36,8 @@ class PpapiPluginProcessHost : public BrowserChildProcessHostDelegate,
   class Client {
    public:
     // Gets the information about the renderer that's requesting the channel.
+    // If |renderer_handle| is base::kNullProcessHandle, this channel is used by
+    // the browser itself.
     virtual void GetPpapiChannelInfo(base::ProcessHandle* renderer_handle,
                                      int* renderer_id) = 0;
 
@@ -154,10 +156,10 @@ class PpapiPluginProcessHost : public BrowserChildProcessHostDelegate,
   scoped_refptr<PepperMessageFilter> filter_;
 
   ppapi::PpapiPermissions permissions_;
-  scoped_ptr<BrowserPpapiHostImpl> host_impl_;
+  std::unique_ptr<BrowserPpapiHostImpl> host_impl_;
 
   // Observes network changes. May be NULL.
-  scoped_ptr<PluginNetworkObserver> network_observer_;
+  std::unique_ptr<PluginNetworkObserver> network_observer_;
 
   // Channel requests that we are waiting to send to the plugin process once
   // the channel is opened.
@@ -175,7 +177,7 @@ class PpapiPluginProcessHost : public BrowserChildProcessHostDelegate,
 
   const bool is_broker_;
 
-  scoped_ptr<BrowserChildProcessHostImpl> process_;
+  std::unique_ptr<BrowserChildProcessHostImpl> process_;
 
   DISALLOW_COPY_AND_ASSIGN(PpapiPluginProcessHost);
 };

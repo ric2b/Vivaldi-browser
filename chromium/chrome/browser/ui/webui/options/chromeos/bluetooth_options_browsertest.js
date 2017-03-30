@@ -123,7 +123,8 @@ TEST_F('BluetoothWebUITestAsync', 'testEnableBluetooth', function() {
   }.bind(this));
 });
 
-TEST_F('BluetoothWebUITestAsync', 'testAddDevice', function() {
+// TODO(crbug.com/603499) Test is flaky.
+TEST_F('BluetoothWebUITestAsync', 'DISABLED_testAddDevice', function() {
   assertEquals(this.browsePreload, document.location.href);
 
   // Enable bluetooth.
@@ -231,7 +232,8 @@ TEST_F('BluetoothWebUITestAsync', 'testDevicePairing', function() {
   }.bind(this));
 });
 
-TEST_F('BluetoothWebUITestAsync', 'testConnect', function() {
+// TODO(crbug.com/608126) Test is flaky.
+TEST_F('BluetoothWebUITestAsync', 'DISABLED_testConnect', function() {
   assertEquals(this.browsePreload, document.location.href);
 
   // Enable bluetooth.
@@ -311,7 +313,8 @@ TEST_F('BluetoothWebUITestAsync', 'testDisconnect', function() {
   }.bind(this));
 });
 
-TEST_F('BluetoothWebUITestAsync', 'testForget', function() {
+// TODO(crbug.com/605090): Disabled because of flakiness.
+TEST_F('BluetoothWebUITestAsync', 'DISABLED_testForget', function() {
   assertEquals(this.browsePreload, document.location.href);
 
   // Enable bluetooth.

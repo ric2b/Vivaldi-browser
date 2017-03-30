@@ -18,7 +18,6 @@
 #include "gpu/command_buffer/common/gpu_memory_allocation.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/sync_token.h"
-#include "gpu/command_buffer/common/value_state.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/gpu_export.h"
 #include "gpu/ipc/common/gpu_command_buffer_traits.h"
@@ -30,6 +29,7 @@
 #include "ui/events/latency_info.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_memory_buffer.h"
+#include "ui/gfx/ipc/geometry/gfx_param_traits.h"
 #include "ui/gfx/ipc/gfx_param_traits.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/swap_result.h"
@@ -53,10 +53,12 @@ IPC_STRUCT_BEGIN(GPUCommandBufferConsoleMessage)
 IPC_STRUCT_END()
 
 IPC_STRUCT_BEGIN(GPUCreateCommandBufferConfig)
+  IPC_STRUCT_MEMBER(gpu::SurfaceHandle, surface_handle)
+  IPC_STRUCT_MEMBER(gfx::Size, size)
   IPC_STRUCT_MEMBER(int32_t, share_group_id)
   IPC_STRUCT_MEMBER(int32_t, stream_id)
   IPC_STRUCT_MEMBER(gpu::GpuStreamPriority, stream_priority)
-  IPC_STRUCT_MEMBER(std::vector<int>, attribs)
+  IPC_STRUCT_MEMBER(gpu::gles2::ContextCreationAttribHelper, attribs)
   IPC_STRUCT_MEMBER(GURL, active_url)
   IPC_STRUCT_MEMBER(gfx::GpuPreference, gpu_preference)
 IPC_STRUCT_END()
@@ -70,6 +72,25 @@ IPC_STRUCT_BEGIN(GpuCommandBufferMsg_CreateImage_Params)
   IPC_STRUCT_MEMBER(uint64_t, image_release_count)
 IPC_STRUCT_END()
 
+IPC_STRUCT_BEGIN(GpuCommandBufferMsg_SwapBuffersCompleted_Params)
+#if defined(OS_MACOSX)
+  // Mac-specific parameters used to present CALayers hosted in the GPU process.
+  // TODO(ccameron): Remove these parameters once the CALayer tree is hosted in
+  // the browser process.
+  // https://crbug.com/604052
+  IPC_STRUCT_MEMBER(gpu::SurfaceHandle, surface_handle)
+  // Only one of ca_context_id or io_surface may be non-0.
+  IPC_STRUCT_MEMBER(CAContextID, ca_context_id)
+  IPC_STRUCT_MEMBER(bool, fullscreen_low_power_ca_context_valid)
+  IPC_STRUCT_MEMBER(CAContextID, fullscreen_low_power_ca_context_id)
+  IPC_STRUCT_MEMBER(gfx::ScopedRefCountedIOSurfaceMachPort, io_surface)
+  IPC_STRUCT_MEMBER(gfx::Size, pixel_size)
+  IPC_STRUCT_MEMBER(float, scale_factor)
+#endif
+  IPC_STRUCT_MEMBER(std::vector<ui::LatencyInfo>, latency_info)
+  IPC_STRUCT_MEMBER(gfx::SwapResult, result)
+IPC_STRUCT_END()
+
 //------------------------------------------------------------------------------
 // GPU Channel Messages
 // These are messages from a renderer process to the GPU process.
@@ -79,12 +100,12 @@ IPC_STRUCT_END()
 // ignored, and it will render directly to the native surface (only the browser
 // process is allowed to create those). Otherwise it will create an offscreen
 // backbuffer of dimensions |size|.
-IPC_SYNC_MESSAGE_CONTROL4_1(GpuChannelMsg_CreateCommandBuffer,
-                            gpu::SurfaceHandle /* surface_handle */,
-                            gfx::Size /* size */,
+IPC_SYNC_MESSAGE_CONTROL3_2(GpuChannelMsg_CreateCommandBuffer,
                             GPUCreateCommandBufferConfig /* init_params */,
                             int32_t /* route_id */,
-                            bool /* succeeded */)
+                            base::SharedMemoryHandle /* shared_state */,
+                            bool /* result */,
+                            gpu::Capabilities /* capabilities */)
 
 // The CommandBufferProxy sends this to the GpuCommandBufferStub in its
 // destructor, so that the stub deletes the actual CommandBufferService
@@ -126,13 +147,6 @@ IPC_MESSAGE_ROUTED0(GpuStreamTextureMsg_FrameAvailable)
 // GPU Command Buffer Messages
 // These are messages between a renderer process to the GPU process relating to
 // a single OpenGL context.
-// Initialize a command buffer with the given number of command entries.
-// Returns the shared memory handle for the command buffer mapped to the
-// calling process.
-IPC_SYNC_MESSAGE_ROUTED1_2(GpuCommandBufferMsg_Initialize,
-                           base::SharedMemoryHandle /* shared_state */,
-                           bool /* result */,
-                           gpu::Capabilities /* capabilities */)
 
 // Sets the shared memory buffer used for commands.
 IPC_SYNC_MESSAGE_ROUTED1_0(GpuCommandBufferMsg_SetGetBuffer,
@@ -185,9 +199,9 @@ IPC_MESSAGE_ROUTED2(GpuCommandBufferMsg_Destroyed,
                     gpu::error::Error /* error */)
 
 // Tells the browser that SwapBuffers returned and passes latency info
-IPC_MESSAGE_ROUTED2(GpuCommandBufferMsg_SwapBuffersCompleted,
-                    std::vector<ui::LatencyInfo> /* latency_info */,
-                    gfx::SwapResult /* result */)
+IPC_MESSAGE_ROUTED1(
+    GpuCommandBufferMsg_SwapBuffersCompleted,
+    GpuCommandBufferMsg_SwapBuffersCompleted_Params /* params */)
 
 // Tells the browser about updated parameters for vsync alignment.
 IPC_MESSAGE_ROUTED2(GpuCommandBufferMsg_UpdateVSyncParameters,

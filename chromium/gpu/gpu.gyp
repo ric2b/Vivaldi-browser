@@ -21,6 +21,7 @@
         '../third_party/khronos/khronos.gyp:khronos_headers',
         '../ui/gfx/gfx.gyp:gfx_geometry',
         '../ui/gl/gl.gyp:gl',
+        '../ui/gl/init/gl_init.gyp:gl_init',
         'command_buffer/command_buffer.gyp:gles2_utils',
         'gles2_cmd_helper',
       ],
@@ -50,6 +51,7 @@
         '../base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
         '../ui/gfx/gfx.gyp:gfx_geometry',
         '../ui/gl/gl.gyp:gl',
+        '../ui/gl/init/gl_init.gyp:gl_init',
       ],
       'defines': [
         'GL_IN_PROCESS_CONTEXT_IMPLEMENTATION',
@@ -166,6 +168,7 @@
         '../ui/gfx/gfx.gyp:gfx_geometry',
         '../ui/gfx/gfx.gyp:gfx_test_support',
         '../ui/gl/gl.gyp:gl',
+        '../ui/gl/init/gl_init.gyp:gl_init',
         '../ui/gl/gl.gyp:gl_test_support',
         'command_buffer/command_buffer.gyp:gles2_utils',
         'command_buffer_client',
@@ -214,6 +217,7 @@
         'command_buffer/service/framebuffer_manager_unittest.cc',
         'command_buffer/service/gl_context_mock.cc',
         'command_buffer/service/gl_context_mock.h',
+        'command_buffer/service/gl_context_virtual_unittest.cc',
         'command_buffer/service/gl_surface_mock.cc',
         'command_buffer/service/gl_surface_mock.h',
         'command_buffer/service/gles2_cmd_decoder_unittest.cc',
@@ -237,11 +241,11 @@
         'command_buffer/service/gles2_cmd_decoder_unittest_framebuffers.cc',
         'command_buffer/service/gles2_cmd_decoder_unittest_programs.cc',
         'command_buffer/service/gles2_cmd_decoder_unittest_textures.cc',
-        'command_buffer/service/gles2_cmd_decoder_unittest_valuebuffer.cc',
         'command_buffer/service/gpu_service_test.cc',
         'command_buffer/service/gpu_service_test.h',
         'command_buffer/service/gpu_tracer_unittest.cc',
         'command_buffer/service/id_manager_unittest.cc',
+        'command_buffer/service/indexed_buffer_binding_host_unittest.cc',
         'command_buffer/service/mailbox_manager_unittest.cc',
         'command_buffer/service/memory_program_cache_unittest.cc',
         'command_buffer/service/mocks.cc',
@@ -259,7 +263,7 @@
         'command_buffer/service/test_helper.h',
         'command_buffer/service/texture_manager_unittest.cc',
         'command_buffer/service/transfer_buffer_manager_unittest.cc',
-        'command_buffer/service/valuebuffer_manager_unittest.cc',
+        'command_buffer/service/transform_feedback_manager_unittest.cc',
         'command_buffer/service/vertex_array_manager_unittest.cc',
         'command_buffer/service/vertex_attrib_manager_unittest.cc',
         'config/gpu_blacklist_unittest.cc',
@@ -282,10 +286,13 @@
           'dependencies': [
             '../testing/android/native_test.gyp:native_test_native_code',
           ],
+          'sources+': [
+            'ipc/client/gpu_memory_buffer_impl_surface_texture_unittest.cc',
+          ],
         }],
         ['OS == "mac"', {
           'sources+': [
-           'ipc/client/gpu_memory_buffer_impl_io_surface_unittest.cc',
+            'ipc/client/gpu_memory_buffer_impl_io_surface_unittest.cc',
           ]
         }],
         ['use_ozone == 1', {
@@ -293,7 +300,7 @@
             '../ui/ozone/ozone.gyp:ozone',
           ],
           'sources+': [
-           'ipc/client/gpu_memory_buffer_impl_ozone_native_pixmap_unittest.cc',
+            'ipc/client/gpu_memory_buffer_impl_ozone_native_pixmap_unittest.cc',
           ]
         }],
       ],
@@ -311,9 +318,15 @@
         '../ipc/ipc.gyp:test_support_ipc',
         '../skia/skia.gyp:skia',
         '../testing/gtest.gyp:gtest',
+        '../testing/gmock.gyp:gmock',
         '../third_party/mesa/mesa.gyp:mesa_headers',
         '../ui/gfx/gfx.gyp:gfx_test_support',
+        '../ui/gl/gl.gyp:gl',
+        '../ui/gl/init/gl_init.gyp:gl_init',
+        '../ui/gl/gl.gyp:gl_unittest_utils',
+        '../ui/gl/gl.gyp:gl_test_support',
         '../url/url.gyp:url_lib',
+        'command_buffer/command_buffer.gyp:gles2_utils',
         'command_buffer_common',
         'command_buffer_service',
         'gpu_config',
@@ -332,22 +345,17 @@
       ],
       'conditions': [
         ['OS == "android"', {
+          'dependencies': [
+            '../testing/android/native_test.gyp:native_test_native_code',
+          ],
           'sources': [
             'ipc/service/gpu_memory_buffer_factory_surface_texture_unittest.cc',
           ],
         }],
         ['OS == "mac"', {
           'sources': [
-            'ipc/service/ca_layer_tree_unittest_mac.mm',
             'ipc/service/gpu_memory_buffer_factory_io_surface_unittest.cc',
           ],
-          'link_settings': {
-            'libraries': [
-              '$(SDKROOT)/System/Library/Frameworks/CoreMedia.framework',
-              '$(SDKROOT)/System/Library/Frameworks/AVFoundation.framework',
-              '$(SDKROOT)/System/Library/Frameworks/QuartzCore.framework',
-            ],
-          },
         }],
         ['use_ozone == 1', {
           'sources': [
@@ -368,6 +376,7 @@
         '../testing/perf/perf_test.gyp:perf_test',
         '../ui/gfx/gfx.gyp:gfx_geometry',
         '../ui/gl/gl.gyp:gl',
+        '../ui/gl/init/gl_init.gyp:gl_init',
         'command_buffer_service',
       ],
       'sources': [
@@ -400,6 +409,7 @@
         '../ui/gfx/gfx.gyp:gfx_test_support',
         '../ui/gfx/gfx.gyp:gfx_geometry',
         '../ui/gl/gl.gyp:gl',
+        '../ui/gl/init/gl_init.gyp:gl_init',
         'command_buffer/command_buffer.gyp:gles2_utils',
         'command_buffer_client',
         'command_buffer_common',
@@ -497,6 +507,9 @@
       'target_name': 'gpu_ipc_service_test_support',
       'type': 'static_library',
       'dependencies': [
+        # TODO(markdittmer): Shouldn't depend on client code for server tests.
+        # See crbug.com/608800.
+        'gpu_ipc_client',
       ],
       'include_dirs': [
         '..',
@@ -515,6 +528,8 @@
         '../gpu/gpu.gyp:command_buffer_service',
         '../ui/gfx/gfx.gyp:gfx_geometry',
         '../ui/gl/gl.gyp:gl',
+        '../ui/gl/init/gl_init.gyp:gl_init',
+        'command_buffer/command_buffer.gyp:gles2_utils',
         'gles2_c_lib',
         'gles2_implementation',
       ],
@@ -523,6 +538,8 @@
         # TODO(hendrikw): Move egl out of gles2_conform_support.
         'gles2_conform_support/egl/config.cc',
         'gles2_conform_support/egl/config.h',
+        'gles2_conform_support/egl/context.cc',
+        'gles2_conform_support/egl/context.h',
         'gles2_conform_support/egl/display.cc',
         'gles2_conform_support/egl/display.h',
         'gles2_conform_support/egl/egl.cc',
@@ -530,18 +547,20 @@
         'gles2_conform_support/egl/surface.h',
         'gles2_conform_support/egl/test_support.cc',
         'gles2_conform_support/egl/test_support.h',
+        'gles2_conform_support/egl/thread_state.cc',
+        'gles2_conform_support/egl/thread_state.h',
       ],
-          'defines': [
+      'defines': [
         'COMMAND_BUFFER_GLES_LIB_SUPPORT_ONLY',
         'EGLAPIENTRY=',
-          ],
+      ],
       'conditions': [
         ['OS=="win"', {
           'defines': [
             'EGLAPI=__declspec(dllexport)',
           ],
         }, { # OS!="win"
-                  'defines': [
+          'defines': [
             'EGLAPI=__attribute__((visibility(\"default\")))'
           ],
         }],
@@ -564,7 +583,7 @@
         'command_buffer/tests/command_buffer_gles2_tests_main.cc',
         'command_buffer/tests/egl_test.cc',
       ],
-          'defines': [
+      'defines': [
          'COMMAND_BUFFER_GLES_LIB_SUPPORT_ONLY',
          'EGLAPIENTRY=',
       ],
@@ -574,7 +593,7 @@
             'EGLAPI=__declspec(dllimport)',
           ],
         }, { # OS!="win"
-                  'defines': [
+          'defines': [
             'EGLAPI=',
           ],
         }],
@@ -954,6 +973,17 @@
           ],
         },
         {
+          'target_name': 'gpu_ipc_service_unittests_apk',
+          'type': 'none',
+          'dependencies': [
+            'gpu_ipc_service_unittests',
+          ],
+          'variables': {
+            'test_suite_name': 'gpu_ipc_service_unittests',
+          },
+          'includes': [ '../build/apk_test.gypi' ],
+        },
+        {
           'target_name': 'gpu_unittests_apk',
           'type': 'none',
           'dependencies': [
@@ -1031,6 +1061,19 @@
     }],
     ['test_isolation_mode != "noop"', {
       'targets': [
+        {
+          'target_name': 'gpu_ipc_service_unittests_run',
+          'type': 'none',
+          'dependencies': [
+            'gpu_ipc_service_unittests',
+          ],
+          'includes': [
+            '../build/isolate.gypi',
+          ],
+          'sources': [
+            'gpu_ipc_service_unittests.isolate',
+          ],
+        },
         {
           'target_name': 'gpu_unittests_run',
           'type': 'none',
@@ -1138,6 +1181,19 @@
             ],
             'sources': [
               'gl_tests_apk.isolate',
+            ],
+          },
+          {
+            'target_name': 'gpu_ipc_service_unittests_apk_run',
+            'type': 'none',
+            'dependencies': [
+              'gpu_ipc_service_unittests_apk',
+            ],
+            'includes': [
+              '../build/isolate.gypi',
+            ],
+            'sources': [
+              'gpu_ipc_service_unittests_apk.isolate',
             ],
           },
           {

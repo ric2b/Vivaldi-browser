@@ -11,7 +11,6 @@
 
 #include <string>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread.h"
 #include "media/base/data_source.h"
@@ -80,11 +79,11 @@ class MEDIA_EXPORT CoreAudioDemuxer : public Demuxer {
   DemuxerHost* host_;         // Weak, owned by WebMediaPlayerImpl
   DataSource* data_source_;   // Weak, owned by WebMediaPlayerImpl
 
-  scoped_ptr<CoreAudioDemuxerStream> audio_stream_;
+  std::unique_ptr<CoreAudioDemuxerStream> audio_stream_;
 
   // Thread on which all blocking operations are executed.
   base::Thread blocking_thread_;
-  scoped_ptr<BlockingUrlProtocol> url_protocol_;
+  std::unique_ptr<BlockingUrlProtocol> url_protocol_;
   AudioStreamBasicDescription input_format_info_;
   AudioFileStreamID audio_stream_id_;
   uint8_t buffer_[kStreamInfoBufferSize];

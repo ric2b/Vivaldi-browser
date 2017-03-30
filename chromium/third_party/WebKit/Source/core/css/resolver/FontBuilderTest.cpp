@@ -109,11 +109,19 @@ static void fontFeatureSettingsValue(FontBuilder& b) { b.setFeatureSettings(Font
 static void fontStyleBase(FontDescription& d) { d.setStyle(FontStyleItalic); }
 static void fontStyleValue(FontBuilder& b) { b.setStyle(FontStyleNormal); }
 
-static void fontVariantBase(FontDescription& d) { d.setVariant(FontVariantSmallCaps); }
-static void fontVariantValue(FontBuilder& b) { b.setVariant(FontVariantNormal); }
+static void fontVariantCapsBase(FontDescription& d) { d.setVariantCaps(FontDescription::SmallCaps); }
+static void fontVariantCapsValue(FontBuilder& b) { b.setVariantCaps(FontDescription::CapsNormal); }
 
 static void fontVariantLigaturesBase(FontDescription& d) { d.setVariantLigatures(FontDescription::VariantLigatures(FontDescription::EnabledLigaturesState)); }
 static void fontVariantLigaturesValue(FontBuilder& b) { b.setVariantLigatures(FontDescription::VariantLigatures(FontDescription::DisabledLigaturesState)); }
+
+static void fontVariantNumericBase(FontDescription& d) { d.setVariantNumeric(FontVariantNumeric()); }
+static void fontVariantNumericValue(FontBuilder& b)
+{
+    FontVariantNumeric variantNumeric;
+    variantNumeric.setNumericFraction(FontVariantNumeric::StackedFractions);
+    b.setVariantNumeric(variantNumeric);
+}
 
 static void fontTextRenderingBase(FontDescription& d) { d.setTextRendering(GeometricPrecision); }
 static void fontTextRenderingValue(FontBuilder& b) { b.setTextRendering(OptimizeLegibility); }
@@ -151,8 +159,9 @@ INSTANTIATE_TEST_CASE_P(AllFields, FontBuilderAdditiveTest,
     FunctionPair(fontFamilyBase, fontFamilyValue),
     FunctionPair(fontFeatureSettingsBase, fontFeatureSettingsValue),
     FunctionPair(fontStyleBase, fontStyleValue),
-    FunctionPair(fontVariantBase, fontVariantValue),
+    FunctionPair(fontVariantCapsBase, fontVariantCapsValue),
     FunctionPair(fontVariantLigaturesBase, fontVariantLigaturesValue),
+    FunctionPair(fontVariantNumericBase, fontVariantNumericValue),
     FunctionPair(fontTextRenderingBase, fontTextRenderingValue),
     FunctionPair(fontKerningBase, fontKerningValue),
     FunctionPair(fontFontSmoothingBase, fontFontSmoothingValue),

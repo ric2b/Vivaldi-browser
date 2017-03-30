@@ -12,6 +12,7 @@
 #include <stddef.h>
 
 #include <deque>
+#include <memory>
 
 #include "base/macros.h"
 #include "net/base/linked_hash_map.h"
@@ -42,10 +43,12 @@ class QuicTimeWaitListManager : public QuicBlockedWriterInterface {
  public:
   // writer - the entity that writes to the socket. (Owned by the dispatcher)
   // visitor - the entity that manages blocked writers. (The dispatcher)
-  // helper - used to run clean up alarms. (Owned by the dispatcher)
+  // helper - provides a clock (Owned by the dispatcher)
+  // alarm_factory - used to run clean up alarms. (Owned by the dispatcher)
   QuicTimeWaitListManager(QuicPacketWriter* writer,
                           QuicServerSessionVisitor* visitor,
-                          QuicConnectionHelperInterface* helper);
+                          QuicConnectionHelperInterface* helper,
+                          QuicAlarmFactory* alarm_factory);
   ~QuicTimeWaitListManager() override;
 
   // Adds the given connection_id to time wait state for time_wait_period_.
@@ -60,7 +63,7 @@ class QuicTimeWaitListManager : public QuicBlockedWriterInterface {
       QuicConnectionId connection_id,
       QuicVersion version,
       bool connection_rejected_statelessly,
-      std::vector<QuicEncryptedPacket*>* termination_packets);
+      std::vector<std::unique_ptr<QuicEncryptedPacket>>* termination_packets);
 
   // Returns true if the connection_id is in time wait state, false otherwise.
   // Packets received for this connection_id should not lead to creation of new
@@ -157,7 +160,8 @@ class QuicTimeWaitListManager : public QuicBlockedWriterInterface {
                      QuicTime time_added_,
                      bool connection_rejected_statelessly);
 
-    ConnectionIdData(const ConnectionIdData& other);
+    ConnectionIdData(const ConnectionIdData& other) = delete;
+    ConnectionIdData(ConnectionIdData&& other);
 
     ~ConnectionIdData();
 
@@ -165,7 +169,7 @@ class QuicTimeWaitListManager : public QuicBlockedWriterInterface {
     QuicVersion version;
     QuicTime time_added;
     // These packets may contain CONNECTION_CLOSE frames, or SREJ messages.
-    std::vector<QuicEncryptedPacket*> termination_packets;
+    std::vector<std::unique_ptr<QuicEncryptedPacket>> termination_packets;
     bool connection_rejected_statelessly;
   };
 
@@ -182,7 +186,7 @@ class QuicTimeWaitListManager : public QuicBlockedWriterInterface {
 
   // Alarm to clean up connection_ids that have out lived their duration in
   // time wait state.
-  scoped_ptr<QuicAlarm> connection_id_clean_up_alarm_;
+  std::unique_ptr<QuicAlarm> connection_id_clean_up_alarm_;
 
   // Clock to efficiently measure approximate time.
   const QuicClock* clock_;

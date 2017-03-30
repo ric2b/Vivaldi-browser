@@ -7,6 +7,8 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/compiler_specific.h"
 #include "base/containers/hash_tables.h"
 #include "base/macros.h"
@@ -19,7 +21,7 @@
 #include "gpu/GLES2/gl2extchromium.h"
 #include "mojo/public/c/gles2/gles2.h"
 
-namespace mojo {
+namespace shell {
 class Connector;
 }
 
@@ -35,7 +37,7 @@ class BITMAP_UPLOADER_EXPORT BitmapUploader
   explicit BitmapUploader(mus::Window* window);
   ~BitmapUploader() override;
 
-  void Init(mojo::Connector* connector);
+  void Init(shell::Connector* connector);
 
   // Sets the color which is RGBA.
   void SetColor(uint32_t color);
@@ -48,7 +50,7 @@ class BITMAP_UPLOADER_EXPORT BitmapUploader
   // Sets a bitmap.
   void SetBitmap(int width,
                  int height,
-                 scoped_ptr<std::vector<unsigned char>> data,
+                 std::unique_ptr<std::vector<unsigned char>> data,
                  Format format);
 
  private:
@@ -69,7 +71,7 @@ class BITMAP_UPLOADER_EXPORT BitmapUploader
 
   mus::Window* window_;
   mus::mojom::GpuPtr gpu_service_;
-  scoped_ptr<mus::WindowSurface> surface_;
+  std::unique_ptr<mus::WindowSurface> surface_;
   MojoGLES2Context gles2_context_;
 
   mojo::Size size_;
@@ -77,7 +79,7 @@ class BITMAP_UPLOADER_EXPORT BitmapUploader
   int width_;
   int height_;
   Format format_;
-  scoped_ptr<std::vector<unsigned char>> bitmap_;
+  std::unique_ptr<std::vector<unsigned char>> bitmap_;
   uint32_t next_resource_id_;
   uint32_t id_namespace_;
   base::hash_map<uint32_t, uint32_t> resource_to_texture_id_map_;

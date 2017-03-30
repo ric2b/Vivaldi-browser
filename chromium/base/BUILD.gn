@@ -345,8 +345,6 @@ component("base") {
     "gtest_prod_util.h",
     "guid.cc",
     "guid.h",
-    "guid_posix.cc",
-    "guid_win.cc",
     "hash.cc",
     "hash.h",
     "id_map.h",
@@ -471,7 +469,6 @@ component("base") {
     "memory/ref_counted_memory.cc",
     "memory/ref_counted_memory.h",
     "memory/scoped_policy.h",
-    "memory/scoped_ptr.h",
     "memory/scoped_vector.h",
     "memory/shared_memory.h",
     "memory/shared_memory_android.cc",
@@ -559,6 +556,7 @@ component("base") {
     "numerics/safe_math_impl.h",
     "observer_list.h",
     "observer_list_threadsafe.h",
+    "optional.h",
     "os_compat_android.cc",
     "os_compat_android.h",
     "os_compat_nacl.cc",
@@ -760,19 +758,32 @@ component("base") {
     "task_runner.cc",
     "task_runner.h",
     "task_runner_util.h",
+    "task_scheduler/delayed_task_manager.cc",
+    "task_scheduler/delayed_task_manager.h",
     "task_scheduler/priority_queue.cc",
     "task_scheduler/priority_queue.h",
     "task_scheduler/scheduler_lock.h",
     "task_scheduler/scheduler_lock_impl.cc",
     "task_scheduler/scheduler_lock_impl.h",
+    "task_scheduler/scheduler_service_thread.cc",
+    "task_scheduler/scheduler_service_thread.h",
+    "task_scheduler/scheduler_thread_pool.h",
+    "task_scheduler/scheduler_thread_pool_impl.cc",
+    "task_scheduler/scheduler_thread_pool_impl.h",
     "task_scheduler/scheduler_worker_thread.cc",
     "task_scheduler/scheduler_worker_thread.h",
+    "task_scheduler/scheduler_worker_thread_stack.cc",
+    "task_scheduler/scheduler_worker_thread_stack.h",
     "task_scheduler/sequence.cc",
     "task_scheduler/sequence.h",
     "task_scheduler/sequence_sort_key.cc",
     "task_scheduler/sequence_sort_key.h",
     "task_scheduler/task.cc",
     "task_scheduler/task.h",
+    "task_scheduler/task_scheduler.cc",
+    "task_scheduler/task_scheduler.h",
+    "task_scheduler/task_scheduler_impl.cc",
+    "task_scheduler/task_scheduler_impl.h",
     "task_scheduler/task_tracker.cc",
     "task_scheduler/task_tracker.h",
     "task_scheduler/task_traits.cc",
@@ -786,8 +797,6 @@ component("base") {
     "third_party/nspr/prtime.cc",
     "third_party/nspr/prtime.h",
     "third_party/superfasthash/superfasthash.c",
-    "thread_task_runner_handle.cc",
-    "thread_task_runner_handle.h",
     "threading/non_thread_safe.h",
     "threading/non_thread_safe_impl.cc",
     "threading/non_thread_safe_impl.h",
@@ -826,6 +835,8 @@ component("base") {
     "threading/thread_local_win.cc",
     "threading/thread_restrictions.cc",
     "threading/thread_restrictions.h",
+    "threading/thread_task_runner_handle.cc",
+    "threading/thread_task_runner_handle.h",
     "threading/watchdog.cc",
     "threading/watchdog.h",
     "threading/worker_pool.cc",
@@ -858,6 +869,7 @@ component("base") {
     "trace_event/blame_context.cc",
     "trace_event/blame_context.h",
     "trace_event/common/trace_event_common.h",
+    "trace_event/heap_profiler.h",
     "trace_event/heap_profiler_allocation_context.cc",
     "trace_event/heap_profiler_allocation_context.h",
     "trace_event/heap_profiler_allocation_context_tracker.cc",
@@ -974,6 +986,8 @@ component("base") {
     "win/shortcut.h",
     "win/startup_information.cc",
     "win/startup_information.h",
+    "win/wait_chain.cc",
+    "win/wait_chain.h",
     "win/win_util.cc",
     "win/win_util.h",
     "win/windows_version.cc",
@@ -1231,7 +1245,7 @@ component("base") {
         ]
       }
       if (is_asan) {
-        data += [ "//third_party/llvm-build/Release+Asserts/lib/clang/3.9.0/lib/windows/clang_rt.asan_dynamic-i386.dll" ]
+        data += [ "//third_party/llvm-build/Release+Asserts/lib/clang/$clang_version/lib/windows/clang_rt.asan_dynamic-i386.dll" ]
       }
     }
 
@@ -1258,7 +1272,14 @@ component("base") {
       "trace_event/malloc_dump_provider.cc",
       "trace_event/malloc_dump_provider.h",
     ]
-    libs = [ "bsm" ]
+    libs = [
+      "ApplicationServices.framework",
+      "AppKit.framework",
+      "bsm",
+      "CoreFoundation.framework",
+      "IOKit.framework",
+      "Security.framework",
+    ]
   }
 
   # Mac or iOS.
@@ -1269,11 +1290,6 @@ component("base") {
       "strings/sys_string_conversions_posix.cc",
       "threading/platform_thread_internal_posix.cc",
     ]
-
-    if (is_asan) {
-      # TODO(GYP) hook up asan on Mac. GYP has this extra dylib:
-      #data += [ "$root_out_dir/libclang_rt.asan_osx_dynamic.dylib" ]
-    }
   } else {
     # Non-Mac/ios.
     sources -= [
@@ -1509,64 +1525,67 @@ component("i18n") {
 
   # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+
+  if (is_mac) {
+    libs = [ "CoreFoundation.framework" ]
+  }
 }
 
-if (is_ios || is_android || is_win || (is_linux && !is_chromeos)) {
-  # TODO(GYP): Figure out which of these work and are needed on other platforms.
-  test("base_perftests") {
-    sources = [
-      "message_loop/message_pump_perftest.cc",
+test("base_perftests") {
+  sources = [
+    "message_loop/message_pump_perftest.cc",
 
-      # "test/run_all_unittests.cc",
-      "threading/thread_perftest.cc",
+    # "test/run_all_unittests.cc",
+    "threading/thread_perftest.cc",
+  ]
+  deps = [
+    ":base",
+    "//base/test:test_support",
+    "//base/test:test_support_perf",
+    "//testing/gtest",
+    "//testing/perf",
+  ]
+
+  if (is_android) {
+    deps += [ "//testing/android/native_test:native_test_native_code" ]
+  }
+}
+
+test("base_i18n_perftests") {
+  sources = [
+    "i18n/streaming_utf8_validator_perftest.cc",
+  ]
+  deps = [
+    ":base",
+    ":i18n",
+    "//base/test:test_support",
+    "//base/test:test_support_perf",
+    "//testing/gtest",
+  ]
+}
+
+if (!is_ios) {
+  executable("build_utf8_validator_tables") {
+    sources = [
+      "i18n/build_utf8_validator_tables.cc",
     ]
     deps = [
       ":base",
-      "//base/test:test_support",
-      "//base/test:test_support_perf",
-      "//testing/gtest",
-      "//testing/perf",
+      "//build/config/sanitizers:deps",
+      "//build/win:default_exe_manifest",
+      "//third_party/icu:icuuc",
     ]
-
-    if (is_android) {
-      deps += [ "//testing/android/native_test:native_test_native_code" ]
-    }
   }
 
-  test("base_i18n_perftests") {
+  executable("check_example") {
     sources = [
-      "i18n/streaming_utf8_validator_perftest.cc",
+      "check_example.cc",
     ]
     deps = [
       ":base",
-      ":i18n",
-      "//base/test:test_support",
-      "//base/test:test_support_perf",
-      "//testing/gtest",
+      "//build/config/sanitizers:deps",
+      "//build/win:default_exe_manifest",
     ]
-  }
-
-  if (!is_ios) {
-    executable("build_utf8_validator_tables") {
-      sources = [
-        "i18n/build_utf8_validator_tables.cc",
-      ]
-      deps = [
-        ":base",
-        "//build/config/sanitizers:deps",
-        "//third_party/icu:icuuc",
-      ]
-    }
-
-    executable("check_example") {
-      sources = [
-        "check_example.cc",
-      ]
-      deps = [
-        ":base",
-        "//build/config/sanitizers:deps",
-      ]
-    }
   }
 }
 
@@ -1629,7 +1648,27 @@ if (is_win) {
 bundle_data("base_unittests_bundle_data") {
   testonly = true
   sources = [
-    "test/data",
+    "test/data/file_util/binary_file.bin",
+    "test/data/file_util/binary_file_diff.bin",
+    "test/data/file_util/binary_file_same.bin",
+    "test/data/file_util/blank_line.txt",
+    "test/data/file_util/blank_line_crlf.txt",
+    "test/data/file_util/crlf.txt",
+    "test/data/file_util/different.txt",
+    "test/data/file_util/different_first.txt",
+    "test/data/file_util/different_last.txt",
+    "test/data/file_util/empty1.txt",
+    "test/data/file_util/empty2.txt",
+    "test/data/file_util/first1.txt",
+    "test/data/file_util/first2.txt",
+    "test/data/file_util/original.txt",
+    "test/data/file_util/same.txt",
+    "test/data/file_util/same_length.txt",
+    "test/data/file_util/shortened.txt",
+    "test/data/json/bom_feff.json",
+    "test/data/serializer_nested_test.json",
+    "test/data/serializer_test.json",
+    "test/data/serializer_test_nowhitespace.json",
   ]
   outputs = [
     "{{bundle_resources_dir}}/" +
@@ -1656,6 +1695,7 @@ test("base_unittests") {
     "base64url_unittest.cc",
     "big_endian_unittest.cc",
     "bind_unittest.cc",
+    "bit_cast_unittest.cc",
     "bits_unittest.cc",
     "build_time_unittest.cc",
     "callback_helpers_unittest.cc",
@@ -1679,6 +1719,7 @@ test("base_unittests") {
     "debug/task_annotator_unittest.cc",
     "deferred_sequenced_task_runner_unittest.cc",
     "environment_unittest.cc",
+    "feature_list_unittest.cc",
     "file_version_info_unittest.cc",
     "files/dir_reader_posix_unittest.cc",
     "files/file_locking_unittest.cc",
@@ -1732,7 +1773,9 @@ test("base_unittests") {
     "memory/aligned_memory_unittest.cc",
     "memory/discardable_shared_memory_unittest.cc",
     "memory/linked_ptr_unittest.cc",
+    "memory/memory_pressure_listener_unittest.cc",
     "memory/memory_pressure_monitor_chromeos_unittest.cc",
+    "memory/memory_pressure_monitor_mac_unittest.cc",
     "memory/memory_pressure_monitor_win_unittest.cc",
     "memory/ptr_util_unittest.cc",
     "memory/ref_counted_memory_unittest.cc",
@@ -1765,6 +1808,7 @@ test("base_unittests") {
     "native_library_unittest.cc",
     "numerics/safe_numerics_unittest.cc",
     "observer_list_unittest.cc",
+    "optional_unittest.cc",
     "os_compat_android_unittest.cc",
     "path_service_unittest.cc",
     "pickle_unittest.cc",
@@ -1814,12 +1858,19 @@ test("base_unittests") {
     "system_monitor/system_monitor_unittest.cc",
     "task/cancelable_task_tracker_unittest.cc",
     "task_runner_util_unittest.cc",
+    "task_scheduler/delayed_task_manager_unittest.cc",
     "task_scheduler/priority_queue_unittest.cc",
     "task_scheduler/scheduler_lock_unittest.cc",
+    "task_scheduler/scheduler_service_thread_unittest.cc",
+    "task_scheduler/scheduler_thread_pool_impl_unittest.cc",
+    "task_scheduler/scheduler_worker_thread_stack_unittest.cc",
     "task_scheduler/scheduler_worker_thread_unittest.cc",
     "task_scheduler/sequence_sort_key_unittest.cc",
     "task_scheduler/sequence_unittest.cc",
+    "task_scheduler/task_scheduler_impl_unittest.cc",
     "task_scheduler/task_tracker_unittest.cc",
+    "task_scheduler/test_task_factory.cc",
+    "task_scheduler/test_task_factory.h",
     "task_scheduler/test_utils.h",
     "template_util_unittest.cc",
     "test/histogram_tester_unittest.cc",
@@ -1890,6 +1941,7 @@ test("base_unittests") {
     "win/scoped_variant_unittest.cc",
     "win/shortcut_unittest.cc",
     "win/startup_information_unittest.cc",
+    "win/wait_chain_unittest.cc",
     "win/win_util_unittest.cc",
     "win/windows_version_unittest.cc",
     "win/wrapped_window_proc_unittest.cc",
@@ -1920,7 +1972,7 @@ test("base_unittests") {
 
   # Allow more direct string conversions on platforms with native utf8
   # strings
-  if (is_mac || is_ios || is_chromeos) {
+  if (is_mac || is_ios || is_chromeos || is_chromecast) {
     defines = [ "SYSTEM_NATIVE_UTF8" ]
   }
 
@@ -1930,10 +1982,6 @@ test("base_unittests") {
       ":base_java_unittest_support",
       "//base/android/jni_generator:jni_generator_tests",
     ]
-
-    # TODO(brettw) I think this should not be here, we should not be using
-    # isolate files.
-    isolate_file = "base_unittests.isolate"
   }
 
   if (is_ios) {
@@ -1961,6 +2009,13 @@ test("base_unittests") {
     set_sources_assignment_filter(sources_assignment_filter)
 
     # TODO(GYP): dep on copy_test_data_ios action.
+  }
+
+  if (is_mac) {
+    libs = [
+      "CoreFoundation.framework",
+      "Foundation.framework",
+    ]
   }
 
   if (is_linux) {
@@ -2021,7 +2076,8 @@ test("base_unittests") {
     if (is_win) {
       data += [ "$root_out_dir/base_unittests.exe.pdb" ]
     } else if (is_mac) {
-      data += [ "$root_out_dir/base_unittests.dSYM/" ]
+      # TODO(crbug.com/330301): make this conditional on mac_strip_release.
+      # data += [ "$root_out_dir/base_unittests.dSYM/" ]
     }
   }
 }
@@ -2230,6 +2286,7 @@ if (is_android) {
       "test/android/javatests/src/org/chromium/base/test/util/DisabledTest.java",
       "test/android/javatests/src/org/chromium/base/test/util/EnormousTest.java",
       "test/android/javatests/src/org/chromium/base/test/util/Feature.java",
+      "test/android/javatests/src/org/chromium/base/test/util/FlakyTest.java",
       "test/android/javatests/src/org/chromium/base/test/util/InMemorySharedPreferences.java",
       "test/android/javatests/src/org/chromium/base/test/util/InstrumentationUtils.java",
       "test/android/javatests/src/org/chromium/base/test/util/IntegrationTest.java",

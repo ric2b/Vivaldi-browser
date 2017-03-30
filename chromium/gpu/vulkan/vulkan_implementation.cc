@@ -60,6 +60,8 @@ struct VulkanInstance {
 
 #if defined(VK_USE_PLATFORM_XLIB_KHR)
     enabled_ext_names.push_back(VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
+#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
+    enabled_ext_names.push_back(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
 #endif
 
     uint32_t num_instance_exts = 0;
@@ -131,6 +133,7 @@ struct VulkanInstance {
       return false;
     }
 
+#if DCHECK_IS_ON()
     // Register our error logging function.
     if (debug_report_enabled) {
       PFN_vkCreateDebugReportCallbackEXT vkCreateDebugReportCallbackEXT =
@@ -163,6 +166,7 @@ struct VulkanInstance {
         return false;
       }
     }
+#endif
 
     return true;
   }
@@ -181,6 +185,11 @@ bool InitializeVulkan() {
   DCHECK(!vulkan_instance);
   vulkan_instance = new VulkanInstance;
   vulkan_instance->Initialize();
+  return vulkan_instance->valid;
+}
+
+bool VulkanSupported() {
+  DCHECK(vulkan_instance);
   return vulkan_instance->valid;
 }
 

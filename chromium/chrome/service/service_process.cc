@@ -13,14 +13,15 @@
 #include "base/i18n/rtl.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/path_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_constants.h"
@@ -39,6 +40,7 @@
 #include "net/base/network_change_notifier.h"
 #include "net/url_request/url_fetcher.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_switches.h"
 
@@ -83,7 +85,7 @@ void ServiceIOThread::CleanUp() {
 // chrome executable's lifetime.
 void PrepareRestartOnCrashEnviroment(
     const base::CommandLine& parsed_command_line) {
-  scoped_ptr<base::Environment> env(base::Environment::Create());
+  std::unique_ptr<base::Environment> env(base::Environment::Create());
   // Clear this var so child processes don't show the dialog by default.
   env->UnSetVar(env_vars::kShowRestart);
 
@@ -180,6 +182,7 @@ bool ServiceProcess::Initialize(base::MessageLoopForUI* message_loop,
     if (locale.empty())
       locale = kDefaultServiceProcessLocale;
   }
+  ui::MaterialDesignController::Initialize();
   ui::ResourceBundle::InitSharedInstanceWithLocale(
       locale, NULL, ui::ResourceBundle::LOAD_COMMON_RESOURCES);
 
@@ -198,7 +201,7 @@ bool ServiceProcess::Initialize(base::MessageLoopForUI* message_loop,
       io_task_runner(),
       service_process_state_->GetServiceProcessChannel(),
       &shutdown_event_));
-  ipc_server_->AddMessageHandler(make_scoped_ptr(
+  ipc_server_->AddMessageHandler(base::WrapUnique(
       new cloud_print::CloudPrintMessageHandler(ipc_server_.get(), this)));
   ipc_server_->Init();
 

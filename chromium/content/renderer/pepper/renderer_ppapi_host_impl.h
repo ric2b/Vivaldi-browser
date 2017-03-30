@@ -5,8 +5,9 @@
 #ifndef CONTENT_RENDERER_PEPPER_RENDERER_PPAPI_HOST_IMPL_H_
 #define CONTENT_RENDERER_PEPPER_RENDERER_PPAPI_HOST_IMPL_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "content/public/renderer/renderer_ppapi_host.h"
 #include "content/renderer/pepper/content_renderer_pepper_host_factory.h"
 #include "ppapi/host/ppapi_host.h"
@@ -68,8 +69,8 @@ class RendererPpapiHostImpl : public RendererPpapiHost {
   // host impl should outlive the returned pointer. Since the resource
   // creation object is associated with the instance, this will generally
   // happen automatically.
-  scoped_ptr<ppapi::thunk::ResourceCreationAPI>
-      CreateInProcessResourceCreationAPI(PepperPluginInstanceImpl* instance);
+  std::unique_ptr<ppapi::thunk::ResourceCreationAPI>
+  CreateInProcessResourceCreationAPI(PepperPluginInstanceImpl* instance);
 
   PepperPluginInstanceImpl* GetPluginInstanceImpl(PP_Instance instance) const;
 
@@ -103,6 +104,11 @@ class RendererPpapiHostImpl : public RendererPpapiHost {
       const override;
   GURL GetDocumentURL(PP_Instance pp_instance) const override;
 
+  void set_viewport_to_dip_scale(float viewport_to_dip_scale) {
+    DCHECK_LT(0, viewport_to_dip_scale_);
+    viewport_to_dip_scale_ = viewport_to_dip_scale;
+  }
+
  private:
   RendererPpapiHostImpl(PluginModule* module,
                         ppapi::proxy::HostDispatcher* dispatcher,
@@ -124,16 +130,19 @@ class RendererPpapiHostImpl : public RendererPpapiHost {
   // Will be null when running in-process. Non-owning pointer.
   ppapi::proxy::HostDispatcher* dispatcher_;
 
-  scoped_ptr<ppapi::host::PpapiHost> ppapi_host_;
+  std::unique_ptr<ppapi::host::PpapiHost> ppapi_host_;
 
   // Null when running out-of-process.
-  scoped_ptr<PepperInProcessRouter> in_process_router_;
+  std::unique_ptr<PepperInProcessRouter> in_process_router_;
 
   // Whether the plugin is running in process.
   bool is_running_in_process_;
 
   // Whether this is a host for external plugins.
   bool is_external_plugin_host_;
+
+  // The scale between the viewport and dip.
+  float viewport_to_dip_scale_ = 1.0f;
 
   DISALLOW_COPY_AND_ASSIGN(RendererPpapiHostImpl);
 };

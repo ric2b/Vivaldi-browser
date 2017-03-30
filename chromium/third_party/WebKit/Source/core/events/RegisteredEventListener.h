@@ -24,6 +24,7 @@
 #ifndef RegisteredEventListener_h
 #define RegisteredEventListener_h
 
+#include "core/events/AddEventListenerOptions.h"
 #include "core/events/EventListener.h"
 #include "wtf/RefPtr.h"
 
@@ -32,38 +33,86 @@ namespace blink {
 class RegisteredEventListener {
     DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 public:
-    RegisteredEventListener(EventListener* listener, const EventListenerOptions& options)
-        : listener(listener)
-        , useCapture(options.capture())
-        , passive(options.passive())
+    RegisteredEventListener()
+        : m_useCapture(false)
+        , m_passive(false)
+        , m_blockedEventWarningEmitted(false)
+    {
+    }
+
+    RegisteredEventListener(EventListener* listener, const AddEventListenerOptions& options)
+        : m_listener(listener)
+        , m_useCapture(options.capture())
+        , m_passive(options.passive())
+        , m_blockedEventWarningEmitted(false)
     {
     }
 
     DEFINE_INLINE_TRACE()
     {
-        visitor->trace(listener);
+        visitor->trace(m_listener);
     }
 
-    EventListenerOptions options() const
+    AddEventListenerOptions options() const
     {
-        EventListenerOptions result;
-        result.setCapture(useCapture);
-        result.setPassive(passive);
+        AddEventListenerOptions result;
+        result.setCapture(m_useCapture);
+        result.setPassive(m_passive);
         return result;
     }
 
-    Member<EventListener> listener;
-    unsigned useCapture : 1;
-    unsigned passive : 1;
+    const EventListener* listener() const
+    {
+        return m_listener;
+    }
+
+    EventListener* listener()
+    {
+        return m_listener;
+    }
+
+    bool passive() const
+    {
+        return m_passive;
+    }
+
+    bool capture() const
+    {
+        return m_useCapture;
+    }
+
+    bool blockedEventWarningEmitted() const
+    {
+        return m_blockedEventWarningEmitted;
+    }
+
+    void setBlockedEventWarningEmitted()
+    {
+        m_blockedEventWarningEmitted = true;
+    }
+
+    bool matches(const EventListener* listener, const EventListenerOptions& options) const
+    {
+        // Equality is soley based on the listener and useCapture flags.
+        ASSERT(m_listener);
+        ASSERT(listener);
+        return *m_listener == *listener && static_cast<bool>(m_useCapture) == options.capture();
+    }
+
+    bool operator==(const RegisteredEventListener& other) const
+    {
+        // Equality is soley based on the listener and useCapture flags.
+        ASSERT(m_listener);
+        ASSERT(other.m_listener);
+        return *m_listener == *other.m_listener && m_useCapture == other.m_useCapture;
+    }
+
+private:
+    Member<EventListener> m_listener;
+    unsigned m_useCapture : 1;
+    unsigned m_passive : 1;
+    unsigned m_blockedEventWarningEmitted : 1;
 };
-
-inline bool operator==(const RegisteredEventListener& a, const RegisteredEventListener& b)
-{
-
-    ASSERT(a.listener);
-    ASSERT(b.listener);
-    return *a.listener == *b.listener && a.useCapture == b.useCapture && a.passive == b.passive;
-}
 
 } // namespace blink
 

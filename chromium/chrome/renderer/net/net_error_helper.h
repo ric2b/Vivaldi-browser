@@ -5,10 +5,10 @@
 #ifndef CHROME_RENDERER_NET_NET_ERROR_HELPER_H_
 #define CHROME_RENDERER_NET_NET_ERROR_HELPER_H_
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "chrome/renderer/net/net_error_page_controller.h"
@@ -16,7 +16,7 @@
 #include "components/error_page/renderer/net_error_helper_core.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_frame_observer_tracker.h"
-#include "content/public/renderer/render_process_observer.h"
+#include "content/public/renderer/render_thread_observer.h"
 
 class GURL;
 
@@ -42,7 +42,7 @@ struct ErrorPageParams;
 class NetErrorHelper
     : public content::RenderFrameObserver,
       public content::RenderFrameObserverTracker<NetErrorHelper>,
-      public content::RenderProcessObserver,
+      public content::RenderThreadObserver,
       public error_page::NetErrorHelperCore::Delegate,
       public NetErrorPageController::Delegate {
  public:
@@ -65,7 +65,7 @@ class NetErrorHelper
   // IPC::Listener implementation.
   bool OnMessageReceived(const IPC::Message& message) override;
 
-  // RenderProcessObserver implementation.
+  // RenderThreadObserver implementation.
   void NetworkStateChanged(bool online) override;
 
   // Initializes |error_html| with the HTML of an error page in response to
@@ -87,7 +87,7 @@ class NetErrorHelper
       bool is_failed_post,
       bool can_use_local_diagnostics_service,
       bool has_offline_pages,
-      scoped_ptr<error_page::ErrorPageParams> params,
+      std::unique_ptr<error_page::ErrorPageParams> params,
       bool* reload_button_shown,
       bool* show_saved_copy_button_shown,
       bool* show_cached_copy_button_shown,
@@ -131,10 +131,10 @@ class NetErrorHelper
   void OnSetHasOfflinePages(bool has_offline_pages);
 #endif
 
-  scoped_ptr<content::ResourceFetcher> correction_fetcher_;
-  scoped_ptr<content::ResourceFetcher> tracking_fetcher_;
+  std::unique_ptr<content::ResourceFetcher> correction_fetcher_;
+  std::unique_ptr<content::ResourceFetcher> tracking_fetcher_;
 
-  scoped_ptr<error_page::NetErrorHelperCore> core_;
+  std::unique_ptr<error_page::NetErrorHelperCore> core_;
 
   // Weak factory for vending a weak pointer to a NetErrorPageController. Weak
   // pointers are invalidated on each commit, to prevent getting messages from

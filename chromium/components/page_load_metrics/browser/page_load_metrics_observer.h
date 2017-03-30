@@ -8,6 +8,7 @@
 #include "base/macros.h"
 #include "components/page_load_metrics/common/page_load_timing.h"
 #include "content/public/browser/navigation_handle.h"
+#include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "url/gurl.h"
 
 namespace page_load_metrics {
@@ -57,6 +58,7 @@ struct PageLoadExtraInfo {
                     UserAbortType abort_type,
                     base::TimeDelta time_to_abort,
                     const PageLoadMetadata& metadata);
+  PageLoadExtraInfo(const PageLoadExtraInfo& other);
 
   // The first time that the page was backgrounded since the navigation started.
   // If the page has not been backgrounded this will be base::TimeDelta().
@@ -104,7 +106,8 @@ class PageLoadMetricsObserver {
   // initiated, or the empty URL if there was no committed page load at the time
   // the navigation was initiated.
   virtual void OnStart(content::NavigationHandle* navigation_handle,
-                       const GURL& currently_committed_url) {}
+                       const GURL& currently_committed_url,
+                       bool started_in_foreground) {}
 
   // OnRedirect is triggered when a page load redirects to another URL.
   // The navigation handle holds relevant data for the navigation, but will
@@ -133,6 +136,15 @@ class PageLoadMetricsObserver {
   virtual void OnTimingUpdate(const PageLoadTiming& timing,
                               const PageLoadExtraInfo& extra_info) {}
 
+  // OnHidden is triggered when a page leaves the foreground. It does not fire
+  // when a foreground page is permanently closed; for that, listen to
+  // OnComplete instead.
+  virtual void OnHidden() {}
+
+  // OnShown is triggered when a page is brought to the foreground. It does not
+  // fire when the page first loads; for that, listen for OnStart instead.
+  virtual void OnShown() {}
+
   // OnComplete is triggered when we are ready to record metrics for this page
   // load. This will happen some time after commit. The PageLoadTiming struct
   // contains timing data and the PageLoadExtraInfo struct contains other useful
@@ -141,6 +153,32 @@ class PageLoadMetricsObserver {
   // After this call, the object will be deleted.
   virtual void OnComplete(const PageLoadTiming& timing,
                           const PageLoadExtraInfo& extra_info) {}
+
+  // OnUserInput is triggered when a new user input is passed in to
+  // web_contents. Contains a TimeDelta from navigation start.
+  virtual void OnUserInput(const blink::WebInputEvent& event) {}
+
+  // The following methods are invoked at most once, when the timing for the
+  // associated event first becomes available.
+  virtual void OnDomContentLoadedEventStart(
+      const PageLoadTiming& timing,
+      const PageLoadExtraInfo& extra_info) {}
+  virtual void OnLoadEventStart(const PageLoadTiming& timing,
+                                const PageLoadExtraInfo& extra_info) {}
+  virtual void OnFirstLayout(const PageLoadTiming& timing,
+                             const PageLoadExtraInfo& extra_info) {}
+  virtual void OnFirstPaint(const PageLoadTiming& timing,
+                            const PageLoadExtraInfo& extra_info) {}
+  virtual void OnFirstTextPaint(const PageLoadTiming& timing,
+                                const PageLoadExtraInfo& extra_info) {}
+  virtual void OnFirstImagePaint(const PageLoadTiming& timing,
+                                 const PageLoadExtraInfo& extra_info) {}
+  virtual void OnFirstContentfulPaint(const PageLoadTiming& timing,
+                                      const PageLoadExtraInfo& extra_info) {}
+  virtual void OnParseStart(const PageLoadTiming& timing,
+                            const PageLoadExtraInfo& extra_info) {}
+  virtual void OnParseStop(const PageLoadTiming& timing,
+                           const PageLoadExtraInfo& extra_info) {}
 };
 
 }  // namespace page_load_metrics

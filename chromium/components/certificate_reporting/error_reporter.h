@@ -7,11 +7,11 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <set>
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "net/url_request/certificate_report_sender.h"
 #include "url/gurl.h"
 
@@ -44,7 +44,7 @@ class ErrorReporter {
       const GURL& upload_url,
       const uint8_t server_public_key[/* 32 */],
       const uint32_t server_public_key_version,
-      scoped_ptr<net::CertificateReportSender> certificate_report_sender);
+      std::unique_ptr<net::CertificateReportSender> certificate_report_sender);
 
   virtual ~ErrorReporter();
 
@@ -68,16 +68,14 @@ class ErrorReporter {
   // Whether sending reports over HTTP is supported.
   static bool IsHttpUploadUrlSupported();
 
-#if defined(USE_OPENSSL)
   // Used by tests.
   static bool DecryptErrorReport(
       const uint8_t server_private_key[32],
       const EncryptedCertLoggerRequest& encrypted_report,
       std::string* decrypted_serialized_report);
-#endif
 
  private:
-  scoped_ptr<net::CertificateReportSender> certificate_report_sender_;
+  std::unique_ptr<net::CertificateReportSender> certificate_report_sender_;
 
   const GURL upload_url_;
 

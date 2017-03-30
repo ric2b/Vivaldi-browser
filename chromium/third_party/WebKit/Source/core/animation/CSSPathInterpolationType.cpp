@@ -18,7 +18,7 @@ void CSSPathInterpolationType::apply(const InterpolableValue& interpolableValue,
         environment.state().style()->setD(nullptr);
         return;
     }
-    environment.state().style()->setD(StylePath::create(pathByteStream.release()));
+    environment.state().style()->setD(StylePath::create(std::move(pathByteStream)));
 }
 
 void CSSPathInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value, double interpolationFraction) const
@@ -31,7 +31,7 @@ InterpolationValue CSSPathInterpolationType::maybeConvertNeutral(const Interpola
     return PathInterpolationFunctions::maybeConvertNeutral(underlying, conversionCheckers);
 }
 
-InterpolationValue CSSPathInterpolationType::maybeConvertInitial(const StyleResolverState&) const
+InterpolationValue CSSPathInterpolationType::maybeConvertInitial(const StyleResolverState&, ConversionCheckers&) const
 {
     return PathInterpolationFunctions::convertValue(nullptr);
 }
@@ -81,9 +81,9 @@ InterpolationValue CSSPathInterpolationType::maybeConvertUnderlyingValue(const I
     return PathInterpolationFunctions::convertValue(environment.state().style()->svgStyle().d());
 }
 
-PairwiseInterpolationValue CSSPathInterpolationType::mergeSingleConversions(InterpolationValue&& start, InterpolationValue&& end) const
+PairwiseInterpolationValue CSSPathInterpolationType::maybeMergeSingles(InterpolationValue&& start, InterpolationValue&& end) const
 {
-    return PathInterpolationFunctions::mergeSingleConversions(std::move(start), std::move(end));
+    return PathInterpolationFunctions::maybeMergeSingles(std::move(start), std::move(end));
 }
 
 } // namespace blink

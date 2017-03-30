@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/memory/memory_pressure_monitor.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
@@ -88,7 +89,7 @@ TabLoader::TabLoader(base::TimeTicks restore_started)
   if (!vivaldi::IsVivaldiRunning()) {
   stats_collector_ = new SessionRestoreStatsCollector(
       restore_started,
-      make_scoped_ptr(
+      base::WrapUnique(
           new SessionRestoreStatsCollector::UmaStatsReportingDelegate()));
   }
   shared_tab_loader_ = this;

@@ -37,7 +37,6 @@ including crash logs, and mismatches with expectations.
 The Manager object has a constructor and one main method called run.
 """
 
-import datetime
 import json
 import logging
 import random
@@ -499,6 +498,9 @@ class Manager(object):
         # We write failing_results.json out as jsonp because we need to load it
         # from a file url for results.html and Chromium doesn't allow that.
         json_results_generator.write_json(self._filesystem, summarized_failing_results, full_results_path, callback="ADD_RESULTS")
+
+        if self._options.json_test_results:
+            json_results_generator.write_json(self._filesystem, summarized_failing_results, self._options.json_test_results)
 
         _log.debug("Finished writing JSON files.")
 

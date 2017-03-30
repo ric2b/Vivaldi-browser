@@ -8,13 +8,13 @@
 #include <shlobj.h>
 #include <time.h>
 
+#include <memory>
 #include <string>
 
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -136,7 +136,7 @@ void AddChromeToMediaPlayerList() {
   reg_path.push_back(base::FilePath::kSeparators[0]);
   reg_path.append(installer::kChromeExe);
   VLOG(1) << "Adding Chrome to Media player list at " << reg_path;
-  scoped_ptr<WorkItem> work_item(WorkItem::CreateCreateRegKeyWorkItem(
+  std::unique_ptr<WorkItem> work_item(WorkItem::CreateCreateRegKeyWorkItem(
       HKEY_LOCAL_MACHINE, reg_path, WorkItem::kWow64Default));
 
   // if the operation fails we log the error but still continue
@@ -244,7 +244,8 @@ installer::InstallStatus InstallNewVersion(
     const base::FilePath& src_path,
     const base::FilePath& temp_path,
     const Version& new_version,
-    scoped_ptr<Version>* current_version) {
+    std::unique_ptr<Version>* current_version,
+    bool is_downgrade_allowed) {
   DCHECK(current_version);
 
   installer_state.UpdateStage(installer::BUILDING);
@@ -252,7 +253,7 @@ installer::InstallStatus InstallNewVersion(
   current_version->reset(installer_state.GetCurrentVersion(original_state));
   installer::SetCurrentVersionCrashKey(current_version->get());
 
-  scoped_ptr<WorkItemList> install_list(WorkItem::CreateWorkItemList());
+  std::unique_ptr<WorkItemList> install_list(WorkItem::CreateWorkItemList());
 
   AddInstallWorkItems(original_state,
                       installer_state,
@@ -296,14 +297,25 @@ installer::InstallStatus InstallNewVersion(
     return installer::INSTALL_REPAIRED;
   }
 
+  bool new_chrome_exe_exists = base::PathExists(new_chrome_exe);
   if (new_version > **current_version) {
-    if (base::PathExists(new_chrome_exe)) {
+    if (new_chrome_exe_exists) {
       VLOG(1) << "Version updated to " << new_version
               << " while running " << **current_version;
       return installer::IN_USE_UPDATED;
     }
     VLOG(1) << "Version updated to " << new_version;
     return installer::NEW_VERSION_UPDATED;
+  }
+
+  if (is_downgrade_allowed) {
+    if (new_chrome_exe_exists) {
+      VLOG(1) << "Version downgrades to " << new_version << " while running "
+              << **current_version;
+      return installer::IN_USE_DOWNGRADE;
+    }
+    VLOG(1) << "Version downgrades to " << new_version;
+    return installer::OLD_VERSION_DOWNGRADE;
   }
 
   if (installer_state.is_standalone()) {  // if standalone install we treat this as a first install
@@ -666,10 +678,11 @@ InstallStatus InstallOrUpdateProduct(
   installer_state.UpdateStage(installer::CREATING_VISUAL_MANIFEST);
   CreateVisualElementsManifest(src_path, new_version);
 
-  scoped_ptr<Version> existing_version;
-  InstallStatus result = InstallNewVersion(original_state, installer_state,
-      setup_path, archive_path, src_path, install_temp_path, new_version,
-      &existing_version);
+  std::unique_ptr<Version> existing_version;
+  InstallStatus result =
+      InstallNewVersion(original_state, installer_state, setup_path,
+                        archive_path, src_path, install_temp_path, new_version,
+                        &existing_version, IsDowngradeAllowed(prefs));
 
   // TODO(robertshield): Everything below this line should instead be captured
   // by WorkItems.
@@ -738,8 +751,8 @@ InstallStatus InstallOrUpdateProduct(
       // force it here because the master_preferences file will not get copied
       // into the build.
       bool force_chrome_default_for_user = false;
-      if (result == NEW_VERSION_UPDATED ||
-          result == INSTALL_REPAIRED) {
+      if (result == NEW_VERSION_UPDATED || result == INSTALL_REPAIRED ||
+          result == OLD_VERSION_DOWNGRADE || result == IN_USE_DOWNGRADE) {
         prefs.GetBool(master_preferences::kMakeChromeDefaultForUser,
                       &force_chrome_default_for_user);
       }
@@ -799,7 +812,7 @@ void HandleOsUpgradeForBrowser(const installer::InstallerState& installer_state,
   // TODO(gab): This should really perform all registry only update steps (i.e.,
   // something between InstallOrUpdateProduct and AddActiveSetupWorkItems, but
   // this takes care of what is most required for now).
-  scoped_ptr<WorkItemList> work_item_list(WorkItem::CreateWorkItemList());
+  std::unique_ptr<WorkItemList> work_item_list(WorkItem::CreateWorkItemList());
   AddActiveSetupWorkItems(installer_state, installed_version, chrome,
                           work_item_list.get());
   if (!work_item_list->Do()) {
@@ -837,9 +850,12 @@ void HandleActiveSetupForBrowser(const base::FilePath& installation_root,
                                  bool force) {
   DCHECK(chrome.is_chrome());
 
-  NoRollbackWorkItemList cleanup_list;
-  AddCleanupDeprecatedPerUserRegistrationsWorkItems(chrome, &cleanup_list);
-  cleanup_list.Do();
+  std::unique_ptr<WorkItemList> cleanup_list(WorkItem::CreateWorkItemList());
+  cleanup_list->set_log_message("Cleanup deprecated per-user registrations");
+  cleanup_list->set_rollback_enabled(false);
+  cleanup_list->set_best_effort(true);
+  AddCleanupDeprecatedPerUserRegistrationsWorkItems(chrome, cleanup_list.get());
+  cleanup_list->Do();
 
   // Only create shortcuts on Active Setup if the first run sentinel is not
   // present for this user (as some shortcuts used to be installed on first

@@ -14,6 +14,8 @@
 #include "build/build_config.h"
 #include "chrome/browser/fullscreen.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
+#include "chrome/browser/ui/ash/launcher/arc_launcher_context_menu.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/desktop_shell_launcher_context_menu.h"
 #include "chrome/browser/ui/ash/launcher/extension_launcher_context_menu.h"
@@ -23,11 +25,6 @@
 #include "content/public/common/context_menu_params.h"
 #include "grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
-
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
-#include "chrome/browser/ui/ash/launcher/arc_launcher_context_menu.h"
-#endif  // defined(OS_CHROMEOS)
 
 namespace {
 
@@ -51,13 +48,11 @@ LauncherContextMenu* LauncherContextMenu::Create(
     return new DesktopShellLauncherContextMenu(controller, item, shelf);
 
 // Create ArcLauncherContextMenu if the item is an Arc app.
-#if defined(OS_CHROMEOS)
   const std::string& app_id = controller->GetAppIDForShelfID(item->id);
   ArcAppListPrefs* arc_prefs = ArcAppListPrefs::Get(controller->profile());
   DCHECK(arc_prefs);
   if (arc_prefs->IsRegistered(app_id))
     return new ArcLauncherContextMenu(controller, item, shelf);
-#endif  // defined(OS_CHROMEOS)
 
   // Create ExtensionLauncherContextMenu for the item.
   return new ExtensionLauncherContextMenu(controller, item, shelf);
@@ -160,14 +155,23 @@ void LauncherContextMenu::ExecuteCommand(int command_id, int event_flags) {
 void LauncherContextMenu::AddPinMenu() {
   // Expect an item with a none zero id to add pin/unpin menu item.
   DCHECK(item_.id);
-  const std::string app_id = controller_->GetAppIDForShelfID(item_.id);
   int menu_pin_string_id;
-  if (!controller_->CanPin(app_id))
-    menu_pin_string_id = IDS_LAUNCHER_CONTEXT_MENU_PIN_ENFORCED_BY_POLICY;
-  else if (controller_->IsPinned(item_.id))
-    menu_pin_string_id = IDS_LAUNCHER_CONTEXT_MENU_UNPIN;
-  else
-    menu_pin_string_id = IDS_LAUNCHER_CONTEXT_MENU_PIN;
+  const std::string app_id = controller_->GetAppIDForShelfID(item_.id);
+  switch (controller_->GetPinnable(app_id)) {
+    case AppListControllerDelegate::PIN_EDITABLE:
+      menu_pin_string_id = controller_->IsPinned(item_.id)
+                               ? IDS_LAUNCHER_CONTEXT_MENU_UNPIN
+                               : IDS_LAUNCHER_CONTEXT_MENU_PIN;
+      break;
+    case AppListControllerDelegate::PIN_FIXED:
+      menu_pin_string_id = IDS_LAUNCHER_CONTEXT_MENU_PIN_ENFORCED_BY_POLICY;
+      break;
+    case AppListControllerDelegate::NO_PIN:
+      return;
+    default:
+      NOTREACHED();
+      return;
+  }
   AddItemWithStringId(MENU_PIN, menu_pin_string_id);
 }
 
@@ -187,10 +191,8 @@ void LauncherContextMenu::AddShelfOptionsMenu() {
                            IDS_ASH_SHELF_CONTEXT_MENU_POSITION,
                            &shelf_alignment_menu_);
   }
-#if defined(OS_CHROMEOS)
   if (!controller_->IsLoggedInAsGuest())
     AddItemWithStringId(MENU_CHANGE_WALLPAPER, IDS_AURA_SET_DESKTOP_WALLPAPER);
-#endif
 }
 
 bool LauncherContextMenu::ExecuteCommonCommand(int command_id,

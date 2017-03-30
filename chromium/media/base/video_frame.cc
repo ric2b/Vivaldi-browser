@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <climits>
 
+#include "base/atomic_sequence_num.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
@@ -21,6 +22,9 @@
 #include "ui/gfx/geometry/point.h"
 
 namespace media {
+
+// Static POD class for generating unique identifiers for each VideoFrame.
+static base::StaticAtomicSequenceNumber g_unique_id_generator;
 
 static bool IsPowerOfTwo(size_t x) {
   return x != 0 && (x & (x - 1)) == 0;
@@ -156,16 +160,17 @@ scoped_refptr<VideoFrame> VideoFrame::CreateZeroInitializedFrame(
 }
 
 // static
-scoped_refptr<VideoFrame> VideoFrame::WrapNativeTexture(
+scoped_refptr<VideoFrame> VideoFrame::WrapNativeTextures(
     VideoPixelFormat format,
-    const gpu::MailboxHolder& mailbox_holder,
+    const gpu::MailboxHolder (&mailbox_holders)[kMaxPlanes],
     const ReleaseMailboxCB& mailbox_holder_release_cb,
     const gfx::Size& coded_size,
     const gfx::Rect& visible_rect,
     const gfx::Size& natural_size,
     base::TimeDelta timestamp) {
   if (format != PIXEL_FORMAT_ARGB && format != PIXEL_FORMAT_XRGB &&
-      format != PIXEL_FORMAT_UYVY && format != PIXEL_FORMAT_NV12) {
+      format != PIXEL_FORMAT_UYVY && format != PIXEL_FORMAT_NV12 &&
+      format != PIXEL_FORMAT_I420) {
     LOG(DFATAL) << "Unsupported pixel format supported, got "
                 << VideoPixelFormatToString(format);
     return nullptr;
@@ -178,35 +183,6 @@ scoped_refptr<VideoFrame> VideoFrame::WrapNativeTexture(
     return nullptr;
   }
 
-  gpu::MailboxHolder mailbox_holders[kMaxPlanes];
-  mailbox_holders[kARGBPlane] = mailbox_holder;
-  return new VideoFrame(format, storage, coded_size, visible_rect, natural_size,
-                        mailbox_holders, mailbox_holder_release_cb, timestamp);
-}
-
-// static
-scoped_refptr<VideoFrame> VideoFrame::WrapYUV420NativeTextures(
-    const gpu::MailboxHolder& y_mailbox_holder,
-    const gpu::MailboxHolder& u_mailbox_holder,
-    const gpu::MailboxHolder& v_mailbox_holder,
-    const ReleaseMailboxCB& mailbox_holder_release_cb,
-    const gfx::Size& coded_size,
-    const gfx::Rect& visible_rect,
-    const gfx::Size& natural_size,
-    base::TimeDelta timestamp) {
-  const StorageType storage = STORAGE_OPAQUE;
-  VideoPixelFormat format = PIXEL_FORMAT_I420;
-  if (!IsValidConfig(format, storage, coded_size, visible_rect, natural_size)) {
-    LOG(DFATAL) << __FUNCTION__ << " Invalid config."
-                << ConfigToString(format, storage, coded_size, visible_rect,
-                                  natural_size);
-    return nullptr;
-  }
-
-  gpu::MailboxHolder mailbox_holders[kMaxPlanes];
-  mailbox_holders[kYPlane] = y_mailbox_holder;
-  mailbox_holders[kUPlane] = u_mailbox_holder;
-  mailbox_holders[kVPlane] = v_mailbox_holder;
   return new VideoFrame(format, storage, coded_size, visible_rect, natural_size,
                         mailbox_holders, mailbox_holder_release_cb, timestamp);
 }
@@ -320,10 +296,6 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalDmabufs(
     const gfx::Size& natural_size,
     const std::vector<int>& dmabuf_fds,
     base::TimeDelta timestamp) {
-#if defined(OS_CHROMEOS)
-  DCHECK_EQ(format, PIXEL_FORMAT_NV12);
-#endif
-
   const StorageType storage = STORAGE_DMABUFS;
   if (!IsValidConfig(format, storage, coded_size, visible_rect, natural_size)) {
     LOG(DFATAL) << __FUNCTION__ << " Invalid config."
@@ -849,7 +821,8 @@ VideoFrame::VideoFrame(VideoPixelFormat format,
       natural_size_(natural_size),
       shared_memory_handle_(base::SharedMemory::NULLHandle()),
       shared_memory_offset_(0),
-      timestamp_(timestamp) {
+      timestamp_(timestamp),
+      unique_id_(g_unique_id_generator.GetNext()) {
   DCHECK(IsValidConfig(format_, storage_type, coded_size_, visible_rect_,
                        natural_size_));
   memset(&mailbox_holders_, 0, sizeof(mailbox_holders_));

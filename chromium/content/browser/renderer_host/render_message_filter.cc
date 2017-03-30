@@ -20,11 +20,14 @@
 #include "base/threading/thread.h"
 #include "base/threading/worker_pool.h"
 #include "build/build_config.h"
+#include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/browser_main_loop.h"
+#include "content/browser/cache_storage/cache_storage_cache.h"
+#include "content/browser/cache_storage/cache_storage_context_impl.h"
+#include "content/browser/cache_storage/cache_storage_manager.h"
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
 #include "content/browser/download/download_stats.h"
-#include "content/browser/fileapi/chrome_blob_storage_context.h"
 #include "content/browser/gpu/browser_gpu_memory_buffer_manager.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/gpu/gpu_process_host.h"
@@ -35,6 +38,7 @@
 #include "content/browser/renderer_host/render_view_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_helper.h"
 #include "content/browser/resource_context_impl.h"
+#include "content/common/cache_storage/cache_storage_types.h"
 #include "content/common/child_process_host_impl.h"
 #include "content/common/child_process_messages.h"
 #include "content/common/content_constants_internal.h"
@@ -55,9 +59,9 @@
 #include "gpu/ipc/client/gpu_memory_buffer_impl.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_platform_file.h"
+#include "media/audio/audio_device_description.h"
 #include "media/audio/audio_manager.h"
-#include "media/audio/audio_manager_base.h"
-#include "media/audio/audio_parameters.h"
+#include "media/base/audio_parameters.h"
 #include "media/base/media_log_event.h"
 #include "net/base/io_buffer.h"
 #include "net/base/keygen_handler.h"
@@ -88,7 +92,7 @@
 #endif
 
 #if defined(OS_MACOSX)
-#include "content/browser/renderer_host/render_widget_resize_helper_mac.h"
+#include "ui/accelerated_widget_mac/window_resize_helper_mac.h"
 #endif
 
 namespace content {
@@ -106,7 +110,24 @@ base::LazyInstance<gfx::ColorProfile>::Leaky g_color_profile =
     LAZY_INSTANCE_INITIALIZER;
 #endif
 
-void DownloadUrlOnUIThread(scoped_ptr<DownloadUrlParameters> parameters) {
+#if defined(OS_MACOSX)
+void ResizeHelperHandleMsgOnUIThread(int render_process_id,
+                                     const IPC::Message& message) {
+  RenderProcessHost* host = RenderProcessHost::FromID(render_process_id);
+  if (host)
+    host->OnMessageReceived(message);
+}
+
+void ResizeHelperPostMsgToUIThread(int render_process_id,
+                                   const IPC::Message& msg) {
+  ui::WindowResizeHelperMac::Get()->task_runner()->PostDelayedTask(
+      FROM_HERE,
+      base::Bind(ResizeHelperHandleMsgOnUIThread, render_process_id, msg),
+      base::TimeDelta());
+}
+#endif
+
+void DownloadUrlOnUIThread(std::unique_ptr<DownloadUrlParameters> parameters) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   RenderProcessHost* render_process_host =
@@ -121,6 +142,8 @@ void DownloadUrlOnUIThread(scoped_ptr<DownloadUrlParameters> parameters) {
   download_manager->DownloadUrl(std::move(parameters));
 }
 
+void NoOpCacheStorageErrorCallback(CacheStorageError error) {}
+
 }  // namespace
 
 RenderMessageFilter::RenderMessageFilter(
@@ -130,7 +153,8 @@ RenderMessageFilter::RenderMessageFilter(
     RenderWidgetHelper* render_widget_helper,
     media::AudioManager* audio_manager,
     MediaInternals* media_internals,
-    DOMStorageContextWrapper* dom_storage_context)
+    DOMStorageContextWrapper* dom_storage_context,
+    CacheStorageContextImpl* cache_storage_context)
     : BrowserMessageFilter(kFilteredMessageClasses,
                            arraysize(kFilteredMessageClasses)),
       resource_dispatcher_host_(ResourceDispatcherHostImpl::Get()),
@@ -143,6 +167,7 @@ RenderMessageFilter::RenderMessageFilter(
       render_process_id_(render_process_id),
       audio_manager_(audio_manager),
       media_internals_(media_internals),
+      cache_storage_context_(cache_storage_context),
       weak_ptr_factory_(this) {
   DCHECK(request_context_.get());
 
@@ -173,14 +198,15 @@ bool RenderMessageFilter::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(ViewHostMsg_SaveImageFromDataURL,
                         OnSaveImageFromDataURL)
 #if defined(OS_MACOSX)
+    // On Mac, the IPCs ViewHostMsg_SwapCompositorFrame, ViewHostMsg_UpdateRect,
+    // and GpuCommandBufferMsg_SwapBuffersCompleted need to be handled in a
+    // nested message loop during resize.
     IPC_MESSAGE_HANDLER_GENERIC(
         ViewHostMsg_SwapCompositorFrame,
-        RenderWidgetResizeHelper::PostRendererProcessMsg(render_process_id_,
-                                                         message))
+        ResizeHelperPostMsgToUIThread(render_process_id_, message))
     IPC_MESSAGE_HANDLER_GENERIC(
         ViewHostMsg_UpdateRect,
-        RenderWidgetResizeHelper::PostRendererProcessMsg(render_process_id_,
-                                                         message))
+        ResizeHelperPostMsgToUIThread(render_process_id_, message))
 #endif
     // NB: The SyncAllocateSharedMemory, SyncAllocateGpuMemoryBuffer, and
     // DeletedGpuMemoryBuffer IPCs are handled here for renderer processes. For
@@ -210,6 +236,9 @@ bool RenderMessageFilter::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER_DELAY_REPLY(RenderProcessHostMsg_Keygen, OnKeygen)
     IPC_MESSAGE_HANDLER(RenderProcessHostMsg_DidGenerateCacheableMetadata,
                         OnCacheableMetadataAvailable)
+    IPC_MESSAGE_HANDLER(
+        RenderProcessHostMsg_DidGenerateCacheableMetadataInCacheStorage,
+        OnCacheableMetadataAvailableForCacheStorage)
     IPC_MESSAGE_HANDLER(ViewHostMsg_GetAudioHardwareConfig,
                         OnGetAudioHardwareConfig)
 #if defined(OS_MACOSX)
@@ -247,7 +276,7 @@ base::TaskRunner* RenderMessageFilter::OverrideTaskRunnerForMessage(
 #endif
   // Always query audio device parameters on the audio thread.
   if (message.type() == ViewHostMsg_GetAudioHardwareConfig::ID)
-    return audio_manager_->GetTaskRunner().get();
+    return audio_manager_->GetTaskRunner();
   return NULL;
 }
 
@@ -318,7 +347,7 @@ void RenderMessageFilter::OnGetAudioHardwareConfig(
 
   // TODO(henrika): add support for all available input devices.
   *input_params = audio_manager_->GetInputStreamParameters(
-      media::AudioManagerBase::kDefaultDeviceId);
+      media::AudioDeviceDescription::kDefaultDeviceId);
 }
 
 #if defined(OS_MACOSX)
@@ -399,7 +428,7 @@ void RenderMessageFilter::DownloadUrl(int render_view_id,
   if (!resource_context_)
     return;
 
-  scoped_ptr<DownloadUrlParameters> parameters(
+  std::unique_ptr<DownloadUrlParameters> parameters(
       new DownloadUrlParameters(url, render_process_id_, render_view_id,
                                 render_frame_id, request_context_.get()));
   parameters->set_content_initiated(true);
@@ -493,8 +522,7 @@ void RenderMessageFilter::OnAllocatedSharedBitmap(
     size_t buffer_size,
     const base::SharedMemoryHandle& handle,
     const cc::SharedBitmapId& id) {
-  bitmap_manager_client_.ChildAllocatedSharedBitmap(buffer_size, handle,
-                                                    PeerHandle(), id);
+  bitmap_manager_client_.ChildAllocatedSharedBitmap(buffer_size, handle, id);
 }
 
 void RenderMessageFilter::OnDeletedSharedBitmap(const cc::SharedBitmapId& id) {
@@ -562,6 +590,36 @@ void RenderMessageFilter::OnCacheableMetadataAvailable(
                        data.size());
 }
 
+void RenderMessageFilter::OnCacheableMetadataAvailableForCacheStorage(
+    const GURL& url,
+    base::Time expected_response_time,
+    const std::vector<char>& data,
+    const url::Origin& cache_storage_origin,
+    const std::string& cache_storage_cache_name) {
+  scoped_refptr<net::IOBuffer> buf(new net::IOBuffer(data.size()));
+  if (!data.empty())
+    memcpy(buf->data(), &data.front(), data.size());
+
+  cache_storage_context_->cache_manager()->OpenCache(
+      GURL(cache_storage_origin.Serialize()), cache_storage_cache_name,
+      base::Bind(&RenderMessageFilter::OnCacheStorageOpenCallback,
+                 weak_ptr_factory_.GetWeakPtr(), url, expected_response_time,
+                 buf, data.size()));
+}
+
+void RenderMessageFilter::OnCacheStorageOpenCallback(
+    const GURL& url,
+    base::Time expected_response_time,
+    scoped_refptr<net::IOBuffer> buf,
+    int buf_len,
+    scoped_refptr<CacheStorageCache> cache,
+    CacheStorageError error) {
+  if (error != CACHE_STORAGE_OK)
+    return;
+  cache->WriteSideData(base::Bind(&NoOpCacheStorageErrorCallback), url,
+                       expected_response_time, buf, buf_len);
+}
+
 void RenderMessageFilter::OnKeygen(uint32_t key_size_index,
                                    const std::string& challenge_string,
                                    const GURL& url,
@@ -604,7 +662,7 @@ void RenderMessageFilter::OnKeygen(uint32_t key_size_index,
 
 void RenderMessageFilter::PostKeygenToWorkerThread(
     IPC::Message* reply_msg,
-    scoped_ptr<net::KeygenHandler> keygen_handler) {
+    std::unique_ptr<net::KeygenHandler> keygen_handler) {
   VLOG(1) << "Dispatching keygen task to worker pool.";
   // Dispatch to worker pool, so we do not block the IO thread.
   if (!base::WorkerPool::PostTask(
@@ -621,7 +679,7 @@ void RenderMessageFilter::PostKeygenToWorkerThread(
 }
 
 void RenderMessageFilter::OnKeygenOnWorkerThread(
-    scoped_ptr<net::KeygenHandler> keygen_handler,
+    std::unique_ptr<net::KeygenHandler> keygen_handler,
     IPC::Message* reply_msg) {
   DCHECK(reply_msg);
 
@@ -677,7 +735,7 @@ void RenderMessageFilter::OnEstablishGpuChannel(
     CauseForGpuLaunch cause_for_gpu_launch,
     IPC::Message* reply_ptr) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  scoped_ptr<IPC::Message> reply(reply_ptr);
+  std::unique_ptr<IPC::Message> reply(reply_ptr);
 
 #if defined(OS_WIN) && defined(ARCH_CPU_X86_64)
   // TODO(jbauman): Remove this when we know why renderer processes are
@@ -725,14 +783,14 @@ void RenderMessageFilter::OnEstablishGpuChannel(
 }
 
 void RenderMessageFilter::OnHasGpuProcess(IPC::Message* reply_ptr) {
-  scoped_ptr<IPC::Message> reply(reply_ptr);
+  std::unique_ptr<IPC::Message> reply(reply_ptr);
   GpuProcessHost::GetProcessHandles(
       base::Bind(&RenderMessageFilter::GetGpuProcessHandlesCallback,
                  weak_ptr_factory_.GetWeakPtr(), base::Passed(&reply)));
 }
 
 void RenderMessageFilter::EstablishChannelCallback(
-    scoped_ptr<IPC::Message> reply,
+    std::unique_ptr<IPC::Message> reply,
     const IPC::ChannelHandle& channel,
     const gpu::GPUInfo& gpu_info) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -743,7 +801,7 @@ void RenderMessageFilter::EstablishChannelCallback(
 }
 
 void RenderMessageFilter::GetGpuProcessHandlesCallback(
-    scoped_ptr<IPC::Message> reply,
+    std::unique_ptr<IPC::Message> reply,
     const std::list<base::ProcessHandle>& handles) {
   bool has_gpu_process = handles.size() > 0;
   ChildProcessHostMsg_HasGpuProcess::WriteReplyParams(reply.get(),

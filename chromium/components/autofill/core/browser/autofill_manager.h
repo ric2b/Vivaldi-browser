@@ -27,6 +27,7 @@
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/card_unmask_delegate.h"
 #include "components/autofill/core/browser/form_structure.h"
+#include "components/autofill/core/browser/payments/full_card_request.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/common/form_data.h"
@@ -67,8 +68,8 @@ struct FormFieldData;
 // Manages saving and restoring the user's personal information entered into web
 // forms. One per frame; owned by the AutofillDriver.
 class AutofillManager : public AutofillDownloadManager::Observer,
-                        public CardUnmaskDelegate,
-                        public payments::PaymentsClientDelegate {
+                        public payments::PaymentsClientDelegate,
+                        public payments::FullCardRequest::Delegate {
  public:
   enum AutofillDownloadManagerState {
     ENABLE_AUTOFILL_DOWNLOAD_MANAGER,
@@ -102,7 +103,8 @@ class AutofillManager : public AutofillDownloadManager::Observer,
   virtual void FillCreditCardForm(int query_id,
                                   const FormData& form,
                                   const FormFieldData& field,
-                                  const CreditCard& credit_card);
+                                  const CreditCard& credit_card,
+                                  const base::string16& cvc);
   void DidShowSuggestions(bool is_new_popup,
                           const FormData& form,
                           const FormFieldData& field);
@@ -132,14 +134,13 @@ class AutofillManager : public AutofillDownloadManager::Observer,
   // Returns the present form structures seen by Autofill manager.
   const std::vector<FormStructure*>& GetFormStructures();
 
-  // Happens when the autocomplete dialog runs its callback when being closed.
-  void RequestAutocompleteDialogClosed();
-
   AutofillClient* client() { return client_; }
 
   AutofillDownloadManager* download_manager() {
     return download_manager_.get();
   }
+
+  payments::FullCardRequest* GetOrCreateFullCardRequest();
 
   const std::string& app_locale() const { return app_locale_; }
 
@@ -267,10 +268,6 @@ class AutofillManager : public AutofillDownloadManager::Observer,
       std::string response,
       const std::vector<std::string>& form_signatures) override;
 
-  // CardUnmaskDelegate:
-  void OnUnmaskResponse(const UnmaskResponse& response) override;
-  void OnUnmaskPromptClosed() override;
-
   // payments::PaymentsClientDelegate:
   IdentityProvider* GetIdentityProvider() override;
   void OnDidGetRealPan(AutofillClient::PaymentsRpcResult result,
@@ -281,9 +278,10 @@ class AutofillManager : public AutofillDownloadManager::Observer,
       std::unique_ptr<base::DictionaryValue> legal_message) override;
   void OnDidUploadCard(AutofillClient::PaymentsRpcResult result) override;
 
-  // Saves risk data in |unmasking_risk_data_| and calls UnmaskCard if the user
-  // has accepted the prompt.
-  void OnDidGetUnmaskRiskData(const std::string& risk_data);
+  // FullCardRequest::Delegate:
+  void OnFullCardDetails(const CreditCard& card,
+                         const base::string16& cvc) override;
+  void OnFullCardError() override;
 
   // Sets |user_did_accept_upload_prompt_| and calls UploadCard if the risk data
   // is available.
@@ -295,10 +293,6 @@ class AutofillManager : public AutofillDownloadManager::Observer,
 
   // Returns false if Autofill is disabled or if no Autofill data is available.
   bool RefreshDataModels();
-
-  // Returns true if the unique_id refers to a credit card and false if
-  // it refers to a profile.
-  bool IsCreditCard(int unique_id);
 
   // Gets the profile referred by |unique_id|. Returns true if the profile
   // exists.
@@ -337,7 +331,8 @@ class AutofillManager : public AutofillDownloadManager::Observer,
                                   const FormData& form,
                                   const FormFieldData& field,
                                   const AutofillDataModel& data_model,
-                                  bool is_credit_card);
+                                  bool is_credit_card,
+                                  const base::string16& cvc);
 
   // Creates a FormStructure using the FormData received from the renderer. Will
   // return an empty scoped_ptr if the data should not be processed for upload
@@ -495,14 +490,16 @@ class AutofillManager : public AutofillDownloadManager::Observer,
   // A copy of the currently interacted form data.
   std::unique_ptr<FormData> pending_form_data_;
 
-  // Collected information about a pending unmask request, and data about the
-  // form.
-  payments::PaymentsClient::UnmaskRequestDetails unmask_request_;
+  // Responsible for getting the full card details, including the PAN and the
+  // CVC.
+  std::unique_ptr<payments::FullCardRequest> full_card_request_;
+
+  // Collected information about the autofill form where unmasked card will be
+  // filled.
   int unmasking_query_id_;
   FormData unmasking_form_;
   FormFieldData unmasking_field_;
-  // Time when we requested the last real pan.
-  base::Time real_pan_request_timestamp_;
+  CreditCard masked_card_;
 
   // Collected information about a pending upload request.
   payments::PaymentsClient::UploadRequestDetails upload_request_;
@@ -549,6 +546,9 @@ class AutofillManager : public AutofillDownloadManager::Observer,
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, CreditCardGetRealPanDuration);
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, CreditCardWillSubmitFormEvents);
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, CreditCardSubmittedFormEvents);
+  FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest,
+                           CreditCardCheckoutFlowUserActions);
+  FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, ProfileCheckoutFlowUserActions);
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, DeveloperEngagement);
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, FormFillDuration);
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest,
@@ -573,6 +573,12 @@ class AutofillManager : public AutofillDownloadManager::Observer,
                            AutocompleteSuggestions_SomeWhenAutofillEmpty);
   FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,
                            AutocompleteSuggestions_NoneWhenAutofillPresent);
+  FRIEND_TEST_ALL_PREFIXES(
+      AutofillManagerTest,
+      AutocompleteSuggestions_CreditCardNameFieldShouldAutocomplete);
+  FRIEND_TEST_ALL_PREFIXES(
+      AutofillManagerTest,
+      AutocompleteSuggestions_CreditCardNumberShouldNotAutocomplete);
   FRIEND_TEST_ALL_PREFIXES(
       AutofillManagerTest,
       AutocompleteSuggestions_AutofillDisabledAndFieldShouldNotAutocomplete);

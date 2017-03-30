@@ -68,12 +68,12 @@ import org.chromium.chrome.browser.metrics.StartupMetrics;
 import org.chromium.chrome.browser.metrics.UmaUtils;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.ntp.NativePageAssassin;
+import org.chromium.chrome.browser.ntp.NewTabPageUma;
 import org.chromium.chrome.browser.omaha.OmahaClient;
 import org.chromium.chrome.browser.omnibox.AutocompleteController;
 import org.chromium.chrome.browser.partnercustomizations.HomepageManager;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
-import org.chromium.chrome.browser.preferences.ConnectionChangeReceiver;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.datareduction.DataReductionPromoScreen;
 import org.chromium.chrome.browser.signin.SigninPromoUtil;
@@ -104,6 +104,7 @@ import org.chromium.ui.widget.Toast;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.List;
 
 /**
  * This is the main activity for ChromeMobile when not running in document mode.  All the tabs
@@ -185,8 +186,6 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
     private TabModelSelectorTabObserver mTabModelSelectorTabObserver;
     private TabModelObserver mTabModelObserver;
 
-    private ConnectionChangeReceiver mConnectionChangeReceiver;
-
     private boolean mUIInitialized = false;
 
     private boolean mIsOnFirstRun = false;
@@ -231,24 +230,28 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
             mTabModelObserver = new EmptyTabModelObserver() {
                 @Override
                 public void didCloseTab(int tabId, boolean incognito) {
-                    closeIfNoTabsAndHomepageEnabled();
+                    closeIfNoTabsAndHomepageEnabled(false);
                 }
 
                 @Override
                 public void tabPendingClosure(Tab tab) {
-                    closeIfNoTabsAndHomepageEnabled();
+                    closeIfNoTabsAndHomepageEnabled(true);
                 }
 
                 @Override
                 public void tabRemoved(Tab tab) {
-                    closeIfNoTabsAndHomepageEnabled();
+                    closeIfNoTabsAndHomepageEnabled(false);
                 }
 
-                private void closeIfNoTabsAndHomepageEnabled() {
-                    // If the last tab is closed, and homepage is enabled, then exit Chrome.
-                    if (HomepageManager.isHomepageEnabled(getApplicationContext())
-                            && getTabModelSelector().getTotalTabCount() == 0) {
-                        finish();
+                private void closeIfNoTabsAndHomepageEnabled(boolean isPendingClosure) {
+                    if (getTabModelSelector().getTotalTabCount() == 0) {
+                        // If the last tab is closed, and homepage is enabled, then exit Chrome.
+                        if (HomepageManager.isHomepageEnabled(getApplicationContext())) {
+                            finish();
+                        } else if (isPendingClosure) {
+                            NewTabPageUma.recordNTPImpression(
+                                    NewTabPageUma.NTP_IMPESSION_POTENTIAL_NOTAB);
+                        }
                     }
                 }
 
@@ -260,6 +263,12 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                                 R.string.open_in_new_tab_toast,
                                 Toast.LENGTH_SHORT).show();
                     }
+                }
+
+                @Override
+                public void allTabsPendingClosure(List<Integer> tabIds) {
+                    NewTabPageUma.recordNTPImpression(
+                            NewTabPageUma.NTP_IMPESSION_POTENTIAL_NOTAB);
                 }
             };
             for (TabModel model : mTabModelSelectorImpl.getModels()) {
@@ -352,11 +361,6 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
         if (getActivityTab() != null) getActivityTab().setIsAllowedToReturnToExternalApp(false);
 
         mTabModelSelectorImpl.saveState();
-        try {
-            getConnectionChangeReceiver().unregisterReceiver(ChromeTabbedActivity.this);
-        } catch (IllegalArgumentException e) {
-            // This may happen when onStop get called very early in UI test.
-        }
         StartupMetrics.getInstance().recordHistogram(true);
         mActivityStopMetrics.onStopWithNative(this);
     }
@@ -372,8 +376,6 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
         super.onStartWithNative();
         // If we don't have a current tab, show the overview mode.
         if (getActivityTab() == null) mLayoutManager.showOverview(false);
-
-        getConnectionChangeReceiver().registerReceiver(ChromeTabbedActivity.this);
 
         resetSavedInstanceState();
 
@@ -554,7 +556,8 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
 
             Intent intent = getIntent();
 
-            CipherFactory.getInstance().restoreFromBundle(getSavedInstanceState());
+            boolean hadCipherData =
+                    CipherFactory.getInstance().restoreFromBundle(getSavedInstanceState());
 
             boolean noRestoreState =
                     CommandLine.getInstance().hasSwitch(ChromeSwitches.NO_RESTORE_STATE);
@@ -565,7 +568,10 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                 // State should be clear when we start first run and hence we do not need to load
                 // a previous state. This may change the current Model, watch out for initialization
                 // based on the model.
-                mTabModelSelectorImpl.loadState();
+                // Never attempt to restore incognito tabs when this activity was previously swiped
+                // away in Recents. http://crbug.com/626629
+                boolean ignoreIncognitoFiles = !hadCipherData;
+                mTabModelSelectorImpl.loadState(ignoreIncognitoFiles);
             }
 
             mIntentWithEffect = false;
@@ -1094,8 +1100,7 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
         if (targetActivity == null) return;
 
         Intent intent = new Intent(this, targetActivity);
-        intent.setClass(this, targetActivity);
-        intent.setFlags(MultiWindowUtils.FLAG_ACTIVITY_LAUNCH_ADJACENT);
+        MultiWindowUtils.setOpenInOtherWindowIntentExtras(intent, this, targetActivity);
 
         tab.detachAndStartReparenting(intent, null, null);
     }
@@ -1233,10 +1238,12 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
             getToolbarManager().finishAnimations();
         }
         if (TextUtils.equals(externalAppId, getPackageName())) {
-            // If the intent was launched by chrome, open the new tab in the current model.
+            // If the intent was launched by chrome, open the new tab in the appropriate model.
             // Using FROM_LINK ensures the tab is parented to the current tab, which allows
             // the back button to close these tabs and restore selection to the previous tab.
-            return getCurrentTabCreator().launchUrl(url, TabLaunchType.FROM_LINK, intent,
+            boolean isIncognito = IntentUtils.safeGetBooleanExtra(intent,
+                    IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, false);
+            return getTabCreator(isIncognito).launchUrl(url, TabLaunchType.FROM_LINK, intent,
                     mIntentHandlingTimeMs);
         } else {
             return getTabCreator(false).launchUrlFromExternalApp(url, referer, headers,
@@ -1338,13 +1345,6 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                 && (!isTablet() || getCurrentTabModel().getCount() != 0);
         return KeyboardShortcuts.onKeyDown(event, this, isCurrentTabVisible, true)
                 || super.onKeyDown(keyCode, event);
-    }
-
-    private ConnectionChangeReceiver getConnectionChangeReceiver() {
-        if (mConnectionChangeReceiver == null) {
-            mConnectionChangeReceiver = new ConnectionChangeReceiver();
-        }
-        return mConnectionChangeReceiver;
     }
 
     @VisibleForTesting

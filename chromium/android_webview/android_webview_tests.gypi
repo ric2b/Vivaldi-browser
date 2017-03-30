@@ -116,7 +116,7 @@
         'java_in_dir': '../android_webview/javatests',
         'is_test_apk': 1,
         'test_type': 'instrumentation',
-        'isolate_file': 'android_webview_test_apk.isolate',
+        'isolate_file': 'android_webview_test_data.isolate',
       },
       'includes': [
         '../build/java_apk.gypi',
@@ -136,6 +136,7 @@
         '../testing/gtest.gyp:gtest',
         '../ui/base/ui_base.gyp:ui_base_jni_headers',
         '../ui/gl/gl.gyp:gl',
+        '../ui/gl/init/gl_init.gyp:gl_init',
         '../ui/gl/gl.gyp:gl_test_support',
         'android_webview_common',
         'android_webview_unittests_jni',
@@ -256,7 +257,7 @@
               '../build/isolate.gypi',
             ],
             'sources': [
-              'android_webview_test_apk_run.isolate',
+              'android_webview_test_apk.isolate',
             ],
           },
           {

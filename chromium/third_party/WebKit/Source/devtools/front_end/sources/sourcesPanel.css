@@ -68,10 +68,25 @@
     margin-left: 10px;
 }
 
+.function-location-step-into {
+    position: relative;
+    height: 14px;
+    transform: rotate(-90deg);
+}
+
 .function-popover-title {
     border-bottom: 1px solid #AAA;
     margin-bottom: 3px;
     padding-bottom: 2px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.function-title-link-container {
+    display: flex;
+    align-items: center;
+    position: relative;
 }
 
 .function-popover-title .function-name {
@@ -80,36 +95,6 @@
 
 .panel.sources .sidebar-pane-stack {
     overflow: auto;
-}
-
-.source-frame-breakpoint-condition {
-    z-index: 30;
-    padding: 4px;
-    background-color: rgb(203, 226, 255);
-    border-radius: 7px;
-    border: 2px solid rgb(169, 172, 203);
-    width: 90%;
-    pointer-events: auto;
-}
-
-.source-frame-breakpoint-message {
-    background-color: transparent;
-    font-weight: normal;
-    font-size: 11px;
-    text-align: left;
-    text-shadow: none;
-    color: rgb(85, 85, 85);
-    cursor: default;
-    margin: 0 0 2px 0;
-}
-
-#source-frame-breakpoint-condition {
-    margin: 0;
-    border: 1px inset rgb(190, 190, 190) !important;
-    width: 100%;
-    box-shadow: none !important;
-    outline: none !important;
-    -webkit-user-modify: read-write;
 }
 
 .cursor-pointer {

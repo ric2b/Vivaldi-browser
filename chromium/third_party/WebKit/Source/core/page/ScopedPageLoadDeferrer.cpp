@@ -40,10 +40,6 @@ ScopedPageLoadDeferrer::ScopedPageLoadDeferrer(Page* exclusion)
             continue;
 
         m_deferredFrames.append(page->deprecatedLocalMainFrame());
-
-        // Ensure that we notify the client if the initial empty document is accessed before
-        // showing anything modal, to prevent spoofs while the modal window or sheet is visible.
-        page->deprecatedLocalMainFrame()->loader().notifyIfInitialDocumentAccessed();
     }
 
     setDefersLoading(true);

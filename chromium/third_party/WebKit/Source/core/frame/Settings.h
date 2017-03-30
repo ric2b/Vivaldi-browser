@@ -28,10 +28,12 @@
 #define Settings_h
 
 #include "bindings/core/v8/V8CacheOptions.h"
+#include "bindings/core/v8/V8CacheStrategiesForCacheStorage.h"
 #include "core/CoreExport.h"
 #include "core/SettingsMacros.h"
 #include "core/editing/EditingBehaviorTypes.h"
 #include "core/editing/SelectionStrategy.h"
+#include "core/events/AddEventListenerOptionsDefaults.h"
 #include "core/frame/SettingsDelegate.h"
 #include "core/html/track/TextTrackKindUserPreference.h"
 #include "platform/Timer.h"
@@ -41,13 +43,13 @@
 #include "platform/weborigin/KURL.h"
 #include "public/platform/PointerProperties.h"
 #include "public/platform/WebDisplayMode.h"
-#include "wtf/HashSet.h"
-#include "wtf/RefCounted.h"
+#include "public/platform/WebViewportStyle.h"
 
 namespace blink {
 
 class CORE_EXPORT Settings {
-    WTF_MAKE_NONCOPYABLE(Settings); USING_FAST_MALLOC(Settings);
+    WTF_MAKE_NONCOPYABLE(Settings);
+    USING_FAST_MALLOC(Settings);
 public:
     static PassOwnPtr<Settings> create();
 

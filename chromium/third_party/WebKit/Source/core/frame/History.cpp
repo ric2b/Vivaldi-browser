@@ -27,7 +27,6 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/Document.h"
-#include "core/dom/ExceptionCode.h"
 #include "core/frame/LocalFrame.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
@@ -221,7 +220,7 @@ void History::stateObjectAdded(PassRefPtr<SerializedScriptValue> data, const Str
         return;
     }
 
-    m_frame->loader().updateForSameDocumentNavigation(fullURL, SameDocumentNavigationHistoryApi, data, restorationType, type);
+    m_frame->loader().updateForSameDocumentNavigation(fullURL, SameDocumentNavigationHistoryApi, data, restorationType, type, m_frame->document());
 }
 
 } // namespace blink

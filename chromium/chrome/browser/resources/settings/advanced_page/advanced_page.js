@@ -6,19 +6,11 @@
  * @fileoverview
  * 'settings-advanced-page' is the settings page containing the advanced
  * settings.
- *
- * Example:
- *
- *    <iron-animated-pages>
- *      <settings-advanced-page prefs="{{prefs}}">
- *      </settings-advanced-page>
- *      ... other pages ...
- *    </iron-animated-pages>
  */
 Polymer({
   is: 'settings-advanced-page',
 
-  behaviors: [I18nBehavior, SettingsPageVisibility, RoutableBehavior],
+  behaviors: [SettingsPageVisibility, RoutableBehavior],
 
   properties: {
     /**
@@ -31,6 +23,7 @@ Polymer({
 
     /**
      * The current active route.
+     * @type {SettingsRoute}
      */
     currentRoute: {
       type: Object,

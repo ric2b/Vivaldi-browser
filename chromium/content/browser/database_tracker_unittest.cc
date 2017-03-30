@@ -5,14 +5,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "content/public/test/mock_special_storage_policy.h"
 #include "net/base/net_errors.h"

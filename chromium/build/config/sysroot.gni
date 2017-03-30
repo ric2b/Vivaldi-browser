@@ -14,7 +14,8 @@ declare_args() {
   use_sysroot = true
 }
 
-if (current_toolchain == default_toolchain && target_sysroot != "") {
+if (current_os == target_os && current_cpu == target_cpu &&
+    target_sysroot != "") {
   sysroot = target_sysroot
 } else if (is_android) {
   import("//build/config/android/config.gni")
@@ -28,7 +29,7 @@ if (current_toolchain == default_toolchain && target_sysroot != "") {
     sysroot = "$android_ndk_root/$x86_64_android_sysroot_subdir"
   } else if (current_cpu == "arm64") {
     sysroot = "$android_ndk_root/$arm64_android_sysroot_subdir"
-  } else if (current_cpu == "mips64") {
+  } else if (current_cpu == "mips64el") {
     sysroot = "$android_ndk_root/$mips64_android_sysroot_subdir"
   } else {
     sysroot = ""

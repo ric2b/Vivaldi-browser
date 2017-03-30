@@ -12,6 +12,7 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/mhtml_generation_params.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -24,6 +25,7 @@
 
 using testing::ContainsRegex;
 using testing::HasSubstr;
+using testing::Not;
 
 namespace content {
 
@@ -39,17 +41,28 @@ class MHTMLGenerationTest : public ContentBrowserTest {
   }
 
   void GenerateMHTML(const base::FilePath& path, const GURL& url) {
+    GenerateMHTML(MHTMLGenerationParams(path), url);
+  }
+
+  void GenerateMHTML(const MHTMLGenerationParams& params, const GURL& url) {
     NavigateToURL(shell(), url);
 
     base::RunLoop run_loop;
+
     shell()->web_contents()->GenerateMHTML(
-        path, base::Bind(&MHTMLGenerationTest::MHTMLGenerated, this,
-                         run_loop.QuitClosure()));
+        params, base::Bind(&MHTMLGenerationTest::MHTMLGenerated, this,
+                           run_loop.QuitClosure()));
 
     // Block until the MHTML is generated.
     run_loop.Run();
 
     EXPECT_TRUE(has_mhtml_callback_run());
+  }
+
+  int64_t ReadFileSizeFromDisk(base::FilePath path) {
+    int64_t file_size;
+    if (!base::GetFileSize(path, &file_size)) return -1;
+    return file_size;
   }
 
   bool has_mhtml_callback_run() const { return has_mhtml_callback_run_; }
@@ -81,9 +94,12 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTML) {
 
   // Make sure the actual generated file has some contents.
   EXPECT_GT(file_size(), 0);  // Verify the size reported by the callback.
-  int64_t file_size;
-  ASSERT_TRUE(base::GetFileSize(path, &file_size));
-  EXPECT_GT(file_size, 100);  // Verify the actual file size.
+  EXPECT_GT(ReadFileSizeFromDisk(path), 100);  // Verify the actual file size.
+
+  std::string mhtml;
+  ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
+  EXPECT_THAT(mhtml,
+              HasSubstr("Content-Transfer-Encoding: quoted-printable"));
 }
 
 IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, InvalidPath) {
@@ -94,6 +110,93 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, InvalidPath) {
   ASSERT_FALSE(HasFailure());  // No failures with the invocation itself?
 
   EXPECT_EQ(file_size(), -1);  // Expecting that the callback reported failure.
+}
+
+// Tests that MHTML generated using the default 'quoted-printable' encoding does
+// not contain the 'binary' Content-Transfer-Encoding header, and generates
+// base64 encoding for the image part.
+IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateNonBinaryMHTMLWithImage) {
+  base::FilePath path(temp_dir_.path());
+  path = path.Append(FILE_PATH_LITERAL("test_binary.mht"));
+
+  GURL url(embedded_test_server()->GetURL("/page_with_image.html"));
+  GenerateMHTML(path, url);
+  ASSERT_FALSE(HasFailure());
+  EXPECT_GT(file_size(), 0);  // Verify the size reported by the callback.
+  EXPECT_GT(ReadFileSizeFromDisk(path), 100);  // Verify the actual file size.
+
+  std::string mhtml;
+  ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
+  EXPECT_THAT(mhtml, HasSubstr("Content-Transfer-Encoding: base64"));
+  EXPECT_THAT(mhtml, Not(HasSubstr("Content-Transfer-Encoding: binary")));
+  EXPECT_THAT(mhtml, ContainsRegex("Content-Location:.*blank.jpg"));
+}
+
+// Tests that MHTML generated using the binary encoding contains the 'binary'
+// Content-Transfer-Encoding header, and does not contain any base64 encoded
+// parts.
+IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateBinaryMHTMLWithImage) {
+  base::FilePath path(temp_dir_.path());
+  path = path.Append(FILE_PATH_LITERAL("test_binary.mht"));
+
+  GURL url(embedded_test_server()->GetURL("/page_with_image.html"));
+  MHTMLGenerationParams params(path);
+  params.use_binary_encoding = true;
+
+  GenerateMHTML(params, url);
+  ASSERT_FALSE(HasFailure());
+  EXPECT_GT(file_size(), 0);  // Verify the size reported by the callback.
+  EXPECT_GT(ReadFileSizeFromDisk(path), 100);  // Verify the actual file size.
+
+  std::string mhtml;
+  ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
+  EXPECT_THAT(mhtml, HasSubstr("Content-Transfer-Encoding: binary"));
+  EXPECT_THAT(mhtml, Not(HasSubstr("Content-Transfer-Encoding: base64")));
+  EXPECT_THAT(mhtml, ContainsRegex("Content-Location:.*blank.jpg"));
+}
+
+IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTMLIgnoreNoStore) {
+  base::FilePath path(temp_dir_.path());
+  path = path.Append(FILE_PATH_LITERAL("test.mht"));
+
+  GURL url(embedded_test_server()->GetURL("/nostore.html"));
+
+  // Generate MHTML without specifying the FAIL_FOR_NO_STORE_MAIN_FRAME policy.
+  GenerateMHTML(path, url);
+
+  // We expect that there wasn't an error (file size -1 indicates an error.)
+  ASSERT_FALSE(HasFailure());
+
+  std::string mhtml;
+  ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
+
+  // Make sure the contents of the body are present.
+  EXPECT_THAT(mhtml, HasSubstr("test body"));
+
+  // Make sure that URL of the content is present.
+  EXPECT_THAT(mhtml, ContainsRegex("Content-Location:.*/nostore.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTMLObeyNoStoreMainFrame) {
+  base::FilePath path(temp_dir_.path());
+  path = path.Append(FILE_PATH_LITERAL("test.mht"));
+
+  GURL url(embedded_test_server()->GetURL("/nostore.html"));
+
+  // Generate MHTML, specifying the FAIL_FOR_NO_STORE_MAIN_FRAME policy.
+  MHTMLGenerationParams params(path);
+  params.cache_control_policy =
+      content::MHTMLCacheControlPolicy::FAIL_FOR_NO_STORE_MAIN_FRAME;
+
+  GenerateMHTML(params, url);
+  // We expect that there was an error (file size -1 indicates an error.)
+  EXPECT_EQ(-1, file_size());
+
+  std::string mhtml;
+  ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
+
+  // Make sure the contents are missing.
+  EXPECT_THAT(mhtml, Not(HasSubstr("test body")));
 }
 
 // Test suite that allows testing --site-per-process against cross-site frames.
@@ -114,7 +217,7 @@ class MHTMLGenerationSitePerProcessTest : public MHTMLGenerationTest {
     MHTMLGenerationTest::SetUpOnMainThread();
 
     host_resolver()->AddRule("*", "127.0.0.1");
-    ASSERT_TRUE(embedded_test_server()->Start());
+    ASSERT_TRUE(embedded_test_server()->Started());
     content::SetupCrossSiteRedirector(embedded_test_server());
   }
 
@@ -123,10 +226,7 @@ class MHTMLGenerationSitePerProcessTest : public MHTMLGenerationTest {
 };
 
 // Test for crbug.com/538766.
-// Disabled because the test will fail until the bug is fixed
-// (but note that the test only fails with --site-per-process flag).
-IN_PROC_BROWSER_TEST_F(MHTMLGenerationSitePerProcessTest,
-                       DISABLED_GenerateMHTML) {
+IN_PROC_BROWSER_TEST_F(MHTMLGenerationSitePerProcessTest, GenerateMHTML) {
   base::FilePath path(temp_dir_.path());
   path = path.Append(FILE_PATH_LITERAL("test.mht"));
 

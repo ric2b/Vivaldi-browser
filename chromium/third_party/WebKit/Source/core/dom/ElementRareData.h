@@ -23,6 +23,7 @@
 #define ElementRareData_h
 
 #include "core/animation/ElementAnimations.h"
+#include "core/css/cssom/InlineStylePropertyMap.h"
 #include "core/dom/Attr.h"
 #include "core/dom/CompositorProxiedPropertySet.h"
 #include "core/dom/DatasetDOMStringMap.h"
@@ -30,7 +31,8 @@
 #include "core/dom/NodeIntersectionObserverData.h"
 #include "core/dom/NodeRareData.h"
 #include "core/dom/PseudoElement.h"
-#include "core/dom/custom/CustomElementDefinition.h"
+#include "core/dom/PseudoElementData.h"
+#include "core/dom/custom/V0CustomElementDefinition.h"
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/html/ClassList.h"
 #include "core/style/StyleInheritedData.h"
@@ -52,7 +54,7 @@ public:
 
     ~ElementRareData();
 
-    void setPseudoElement(PseudoId, RawPtr<PseudoElement>);
+    void setPseudoElement(PseudoId, PseudoElement*);
     PseudoElement* pseudoElement(PseudoId) const;
 
     short tabIndex() const { return m_tabindex; }
@@ -70,6 +72,9 @@ public:
     }
 
     CSSStyleDeclaration& ensureInlineCSSStyleDeclaration(Element* ownerElement);
+    InlineStylePropertyMap& ensureInlineStylePropertyMap(Element* ownerElement);
+
+    InlineStylePropertyMap* inlineStylePropertyMap() { return m_cssomMapWrapper.get(); }
 
     void clearShadow() { m_shadow = nullptr; }
     ElementShadow* shadow() const { return m_shadow.get(); }
@@ -81,14 +86,14 @@ public:
     }
 
     NamedNodeMap* attributeMap() const { return m_attributeMap.get(); }
-    void setAttributeMap(RawPtr<NamedNodeMap> attributeMap) { m_attributeMap = attributeMap; }
+    void setAttributeMap(NamedNodeMap* attributeMap) { m_attributeMap = attributeMap; }
 
     ComputedStyle* ensureComputedStyle() const { return m_computedStyle.get(); }
     void setComputedStyle(PassRefPtr<ComputedStyle> computedStyle) { m_computedStyle = computedStyle; }
     void clearComputedStyle() { m_computedStyle = nullptr; }
 
     ClassList* classList() const { return m_classList.get(); }
-    void setClassList(RawPtr<ClassList> classList) { m_classList = classList.leakRef(); }
+    void setClassList(ClassList* classList) { m_classList = classList; }
     void clearClassListValueForQuirksMode()
     {
         if (!m_classList)
@@ -97,7 +102,7 @@ public:
     }
 
     DatasetDOMStringMap* dataset() const { return m_dataset.get(); }
-    void setDataset(RawPtr<DatasetDOMStringMap> dataset) { m_dataset = dataset; }
+    void setDataset(DatasetDOMStringMap* dataset) { m_dataset = dataset; }
 
     LayoutSize minimumSizeForResizing() const { return m_minimumSizeForResizing; }
     void setMinimumSizeForResizing(LayoutSize size) { m_minimumSizeForResizing = size; }
@@ -118,8 +123,8 @@ public:
     void decrementCompositorProxiedProperties(uint32_t properties);
     CompositorProxiedPropertySet* proxiedPropertyCounts() const { return m_proxiedProperties.get(); }
 
-    void setCustomElementDefinition(RawPtr<CustomElementDefinition> definition) { m_customElementDefinition = definition; }
-    CustomElementDefinition* customElementDefinition() const { return m_customElementDefinition.get(); }
+    void setCustomElementDefinition(V0CustomElementDefinition* definition) { m_customElementDefinition = definition; }
+    V0CustomElementDefinition* customElementDefinition() const { return m_customElementDefinition.get(); }
 
     AttrNodeList& ensureAttrNodeList();
     AttrNodeList* attrNodeList() { return m_attrNodeList.get(); }
@@ -134,6 +139,8 @@ public:
     }
 
     DECLARE_TRACE_AFTER_DISPATCH();
+
+    DECLARE_TRACE_WRAPPERS_AFTER_DISPATCH();
 
 private:
     CompositorProxiedPropertySet& ensureCompositorProxiedPropertySet();
@@ -150,18 +157,16 @@ private:
     Member<NamedNodeMap> m_attributeMap;
     Member<AttrNodeList> m_attrNodeList;
     Member<InlineCSSStyleDeclaration> m_cssomWrapper;
+    Member<InlineStylePropertyMap> m_cssomMapWrapper;
     OwnPtr<CompositorProxiedPropertySet> m_proxiedProperties;
 
     Member<ElementAnimations> m_elementAnimations;
     Member<NodeIntersectionObserverData> m_intersectionObserverData;
 
     RefPtr<ComputedStyle> m_computedStyle;
-    Member<CustomElementDefinition> m_customElementDefinition;
+    Member<V0CustomElementDefinition> m_customElementDefinition;
 
-    Member<PseudoElement> m_generatedBefore;
-    Member<PseudoElement> m_generatedAfter;
-    Member<PseudoElement> m_generatedFirstLetter;
-    Member<PseudoElement> m_backdrop;
+    Member<PseudoElementData> m_pseudoElementData;
 
     explicit ElementRareData(LayoutObject*);
 };
@@ -182,74 +187,34 @@ inline ElementRareData::ElementRareData(LayoutObject* layoutObject)
 
 inline ElementRareData::~ElementRareData()
 {
-#if !ENABLE(OILPAN)
-    if (m_elementAnimations)
-        m_elementAnimations->dispose();
-    if (m_intersectionObserverData)
-        m_intersectionObserverData->dispose();
-    DCHECK(!m_shadow);
-#endif
-    DCHECK(!m_generatedBefore);
-    DCHECK(!m_generatedAfter);
-    DCHECK(!m_generatedFirstLetter);
-    DCHECK(!m_backdrop);
+    DCHECK(!m_pseudoElementData);
 }
 
 inline bool ElementRareData::hasPseudoElements() const
 {
-    return m_generatedBefore || m_generatedAfter || m_backdrop || m_generatedFirstLetter;
+    return (m_pseudoElementData && m_pseudoElementData->hasPseudoElements());
 }
 
 inline void ElementRareData::clearPseudoElements()
 {
-    setPseudoElement(PseudoIdBefore, nullptr);
-    setPseudoElement(PseudoIdAfter, nullptr);
-    setPseudoElement(PseudoIdBackdrop, nullptr);
-    setPseudoElement(PseudoIdFirstLetter, nullptr);
+    if (m_pseudoElementData) {
+        m_pseudoElementData->clearPseudoElements();
+        m_pseudoElementData.clear();
+    }
 }
 
-inline void ElementRareData::setPseudoElement(PseudoId pseudoId, RawPtr<PseudoElement> element)
+inline void ElementRareData::setPseudoElement(PseudoId pseudoId, PseudoElement* element)
 {
-    switch (pseudoId) {
-    case PseudoIdBefore:
-        if (m_generatedBefore)
-            m_generatedBefore->dispose();
-        m_generatedBefore = element;
-        break;
-    case PseudoIdAfter:
-        if (m_generatedAfter)
-            m_generatedAfter->dispose();
-        m_generatedAfter = element;
-        break;
-    case PseudoIdBackdrop:
-        if (m_backdrop)
-            m_backdrop->dispose();
-        m_backdrop = element;
-        break;
-    case PseudoIdFirstLetter:
-        if (m_generatedFirstLetter)
-            m_generatedFirstLetter->dispose();
-        m_generatedFirstLetter = element;
-        break;
-    default:
-        ASSERT_NOT_REACHED();
-    }
+    if (!m_pseudoElementData)
+        m_pseudoElementData = PseudoElementData::create();
+    m_pseudoElementData->setPseudoElement(pseudoId, element);
 }
 
 inline PseudoElement* ElementRareData::pseudoElement(PseudoId pseudoId) const
 {
-    switch (pseudoId) {
-    case PseudoIdBefore:
-        return m_generatedBefore.get();
-    case PseudoIdAfter:
-        return m_generatedAfter.get();
-    case PseudoIdBackdrop:
-        return m_backdrop.get();
-    case PseudoIdFirstLetter:
-        return m_generatedFirstLetter.get();
-    default:
-        return 0;
-    }
+    if (!m_pseudoElementData)
+        return nullptr;
+    return m_pseudoElementData->pseudoElement(pseudoId);
 }
 
 inline void ElementRareData::incrementCompositorProxiedProperties(uint32_t properties)

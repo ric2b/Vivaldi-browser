@@ -13,7 +13,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "content/browser/appcache/chrome_appcache_service.h"
-#include "content/browser/background_sync/background_sync_context_impl.h"
+#include "content/browser/background_sync/background_sync_context.h"
 #include "content/browser/cache_storage/cache_storage_context_impl.h"
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
 #include "content/browser/host_zoom_level_context.h"
@@ -25,22 +25,30 @@
 #include "content/common/storage_partition_service.mojom.h"
 #include "content/public/browser/storage_partition.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "net/cookies/cookie_store.h"
 #include "storage/browser/quota/special_storage_policy.h"
 
 namespace content {
 
-class StoragePartitionImpl : public StoragePartition,
-                             public mojom::StoragePartitionService {
+class CONTENT_EXPORT  StoragePartitionImpl
+    : public StoragePartition,
+      public NON_EXPORTED_BASE(mojom::StoragePartitionService) {
  public:
-  CONTENT_EXPORT ~StoragePartitionImpl() override;
+  ~StoragePartitionImpl() override;
 
   // Quota managed data uses a different bitmask for types than
   // StoragePartition uses. This method generates that mask.
-  CONTENT_EXPORT static int GenerateQuotaClientMask(uint32_t remove_mask);
+  static int GenerateQuotaClientMask(uint32_t remove_mask);
 
-  CONTENT_EXPORT void OverrideQuotaManagerForTesting(
+  // This creates a CookiePredicate that matches all host (NOT domain) cookies
+  // that match the host of |url|. This is intended to be used with
+  // DeleteAllCreatedBetweenWithPredicateAsync.
+  static net::CookieStore::CookiePredicate
+  CreatePredicateForHostCookies(const GURL& url);
+
+  void OverrideQuotaManagerForTesting(
       storage::QuotaManager* quota_manager);
-  CONTENT_EXPORT void OverrideSpecialStoragePolicyForTesting(
+  void OverrideSpecialStoragePolicyForTesting(
       storage::SpecialStoragePolicy* special_storage_policy);
 
   // StoragePartition interface.
@@ -55,12 +63,12 @@ class StoragePartitionImpl : public StoragePartition,
   IndexedDBContextImpl* GetIndexedDBContext() override;
   CacheStorageContextImpl* GetCacheStorageContext() override;
   ServiceWorkerContextWrapper* GetServiceWorkerContext() override;
-  GeofencingManager* GetGeofencingManager() override;
   HostZoomMap* GetHostZoomMap() override;
   HostZoomLevelContext* GetHostZoomLevelContext() override;
   ZoomLevelDelegate* GetZoomLevelDelegate() override;
   PlatformNotificationContextImpl* GetPlatformNotificationContext() override;
-  BackgroundSyncContextImpl* GetBackgroundSyncContext() override;
+
+  BackgroundSyncContext* GetBackgroundSyncContext();
 
   // mojom::StoragePartitionService interface.
   void OpenLocalStorage(
@@ -77,6 +85,14 @@ class StoragePartitionImpl : public StoragePartition,
                  uint32_t quota_storage_remove_mask,
                  const GURL& storage_origin,
                  const OriginMatcherFunction& origin_matcher,
+                 const base::Time begin,
+                 const base::Time end,
+                 const base::Closure& callback) override;
+
+  void ClearData(uint32_t remove_mask,
+                 uint32_t quota_storage_remove_mask,
+                 const OriginMatcherFunction& origin_matcher,
+                 const CookieMatcherFunction& cookie_matcher,
                  const base::Time begin,
                  const base::Time end,
                  const base::Closure& callback) override;
@@ -123,6 +139,7 @@ class StoragePartitionImpl : public StoragePartition,
                            RemoveQuotaManagedIgnoreDevTools);
   FRIEND_TEST_ALL_PREFIXES(StoragePartitionImplTest, RemoveCookieForever);
   FRIEND_TEST_ALL_PREFIXES(StoragePartitionImplTest, RemoveCookieLastHour);
+  FRIEND_TEST_ALL_PREFIXES(StoragePartitionImplTest, RemoveCookieWithMatcher);
   FRIEND_TEST_ALL_PREFIXES(StoragePartitionImplTest,
                            RemoveUnprotectedLocalStorageForever);
   FRIEND_TEST_ALL_PREFIXES(StoragePartitionImplTest,
@@ -141,7 +158,7 @@ class StoragePartitionImpl : public StoragePartition,
       bool in_memory,
       const base::FilePath& relative_partition_path);
 
-  CONTENT_EXPORT StoragePartitionImpl(
+  StoragePartitionImpl(
       BrowserContext* browser_context,
       const base::FilePath& partition_path,
       storage::QuotaManager* quota_manager,
@@ -154,15 +171,16 @@ class StoragePartitionImpl : public StoragePartition,
       ServiceWorkerContextWrapper* service_worker_context,
       WebRTCIdentityStore* webrtc_identity_store,
       storage::SpecialStoragePolicy* special_storage_policy,
-      GeofencingManager* geofencing_manager,
       HostZoomLevelContext* host_zoom_level_context,
       PlatformNotificationContextImpl* platform_notification_context,
-      BackgroundSyncContextImpl* background_sync_context);
+      BackgroundSyncContext* background_sync_context);
 
+  // We will never have both remove_origin be populated and a cookie_matcher.
   void ClearDataImpl(uint32_t remove_mask,
                      uint32_t quota_storage_remove_mask,
                      const GURL& remove_origin,
                      const OriginMatcherFunction& origin_matcher,
+                     const CookieMatcherFunction& cookie_matcher,
                      net::URLRequestContextGetter* rq_context,
                      const base::Time begin,
                      const base::Time end,
@@ -180,7 +198,7 @@ class StoragePartitionImpl : public StoragePartition,
   // appropriate time.  These should move back into the constructor once
   // URLRequestContextGetter's lifetime is sorted out. We should also move the
   // PostCreateInitialization() out of StoragePartitionImplMap.
-  CONTENT_EXPORT void SetURLRequestContext(
+  void SetURLRequestContext(
       net::URLRequestContextGetter* url_request_context);
   void SetMediaURLRequestContext(
       net::URLRequestContextGetter* media_url_request_context);
@@ -198,10 +216,9 @@ class StoragePartitionImpl : public StoragePartition,
   scoped_refptr<ServiceWorkerContextWrapper> service_worker_context_;
   scoped_refptr<WebRTCIdentityStore> webrtc_identity_store_;
   scoped_refptr<storage::SpecialStoragePolicy> special_storage_policy_;
-  scoped_refptr<GeofencingManager> geofencing_manager_;
   scoped_refptr<HostZoomLevelContext> host_zoom_level_context_;
   scoped_refptr<PlatformNotificationContextImpl> platform_notification_context_;
-  scoped_refptr<BackgroundSyncContextImpl> background_sync_context_;
+  scoped_refptr<BackgroundSyncContext> background_sync_context_;
 
   mojo::BindingSet<mojom::StoragePartitionService> bindings_;
 

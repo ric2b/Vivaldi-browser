@@ -41,6 +41,7 @@
 #include "core/html/HTMLVideoElement.h"
 #include "core/html/ImageData.h"
 #include "core/imagebitmap/ImageBitmapOptions.h"
+#include "core/svg/graphics/SVGImage.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "platform/SharedBuffer.h"
 #include "platform/ThreadSafeFunctional.h"
@@ -53,10 +54,23 @@
 
 namespace blink {
 
-static inline ImageBitmapSource* toImageBitmapSourceInternal(const ImageBitmapSourceUnion& value)
+static inline ImageBitmapSource* toImageBitmapSourceInternal(const ImageBitmapSourceUnion& value, ExceptionState& exceptionState, bool hasCropRect)
 {
-    if (value.isHTMLImageElement())
-        return value.getAsHTMLImageElement();
+    if (value.isHTMLImageElement()) {
+        HTMLImageElement* imageElement = value.getAsHTMLImageElement();
+        if (!imageElement || !imageElement->cachedImage()) {
+            exceptionState.throwDOMException(InvalidStateError, "No image can be retrieved from the provided element.");
+            return nullptr;
+        }
+        if (imageElement->cachedImage()->getImage()->isSVGImage()) {
+            SVGImage* image = toSVGImage(imageElement->cachedImage()->getImage());
+            if (!image->hasIntrinsicDimensions() && !hasCropRect) {
+                exceptionState.throwDOMException(InvalidStateError, "The image element contains an SVG image without intrinsic dimensions.");
+                return nullptr;
+            }
+        }
+        return imageElement;
+    }
     if (value.isHTMLVideoElement())
         return value.getAsHTMLVideoElement();
     if (value.isHTMLCanvasElement())
@@ -71,17 +85,13 @@ static inline ImageBitmapSource* toImageBitmapSourceInternal(const ImageBitmapSo
     return nullptr;
 }
 
-ScriptPromise ImageBitmapFactories::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, const ImageBitmapSourceUnion& bitmapSource, ExceptionState& exceptionState)
+ScriptPromise ImageBitmapFactories::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, const ImageBitmapSourceUnion& bitmapSource, const ImageBitmapOptions& options, ExceptionState& exceptionState)
 {
     UseCounter::Feature feature = UseCounter::CreateImageBitmap;
     UseCounter::count(scriptState->getExecutionContext(), feature);
-    ImageBitmapOptions options;
-    return createImageBitmap(scriptState, eventTarget, bitmapSource, options, exceptionState);
-}
-
-ScriptPromise ImageBitmapFactories::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, const ImageBitmapSourceUnion& bitmapSource, const ImageBitmapOptions& options, ExceptionState& exceptionState)
-{
-    ImageBitmapSource* bitmapSourceInternal = toImageBitmapSourceInternal(bitmapSource);
+    ImageBitmapSource* bitmapSourceInternal = toImageBitmapSourceInternal(bitmapSource, exceptionState, false);
+    if (!bitmapSourceInternal)
+        return ScriptPromise();
     if (bitmapSourceInternal->isBlob()) {
         Blob* blob = static_cast<Blob*>(bitmapSourceInternal);
         ImageBitmapLoader* loader = ImageBitmapFactories::ImageBitmapLoader::create(from(eventTarget), IntRect(), options, scriptState);
@@ -94,17 +104,13 @@ ScriptPromise ImageBitmapFactories::createImageBitmap(ScriptState* scriptState, 
     return createImageBitmap(scriptState, eventTarget, bitmapSourceInternal, 0, 0, srcSize.width(), srcSize.height(), options, exceptionState);
 }
 
-ScriptPromise ImageBitmapFactories::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, const ImageBitmapSourceUnion& bitmapSource, int sx, int sy, int sw, int sh, ExceptionState& exceptionState)
+ScriptPromise ImageBitmapFactories::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, const ImageBitmapSourceUnion& bitmapSource, int sx, int sy, int sw, int sh, const ImageBitmapOptions& options, ExceptionState& exceptionState)
 {
     UseCounter::Feature feature = UseCounter::CreateImageBitmap;
     UseCounter::count(scriptState->getExecutionContext(), feature);
-    ImageBitmapOptions options;
-    return createImageBitmap(scriptState, eventTarget, bitmapSource, sx, sy, sw, sh, options, exceptionState);
-}
-
-ScriptPromise ImageBitmapFactories::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, const ImageBitmapSourceUnion& bitmapSource, int sx, int sy, int sw, int sh, const ImageBitmapOptions& options, ExceptionState& exceptionState)
-{
-    ImageBitmapSource* bitmapSourceInternal = toImageBitmapSourceInternal(bitmapSource);
+    ImageBitmapSource* bitmapSourceInternal = toImageBitmapSourceInternal(bitmapSource, exceptionState, true);
+    if (!bitmapSourceInternal)
+        return ScriptPromise();
     return createImageBitmap(scriptState, eventTarget, bitmapSourceInternal, sx, sy, sw, sh, options, exceptionState);
 }
 
@@ -133,7 +139,7 @@ const char* ImageBitmapFactories::supplementName()
 
 ImageBitmapFactories& ImageBitmapFactories::from(EventTarget& eventTarget)
 {
-    if (LocalDOMWindow* window = eventTarget.toDOMWindow())
+    if (LocalDOMWindow* window = eventTarget.toLocalDOMWindow())
         return fromInternal(*window);
 
     ASSERT(eventTarget.getExecutionContext()->isWorkerGlobalScope());
@@ -191,11 +197,12 @@ void ImageBitmapFactories::ImageBitmapLoader::rejectPromise()
 
 void ImageBitmapFactories::ImageBitmapLoader::didFinishLoading()
 {
-    if (!m_loader.arrayBufferResult()) {
+    DOMArrayBuffer* arrayBuffer = m_loader.arrayBufferResult();
+    if (!arrayBuffer) {
         rejectPromise();
         return;
     }
-    scheduleAsyncImageBitmapDecoding();
+    scheduleAsyncImageBitmapDecoding(arrayBuffer);
 }
 
 void ImageBitmapFactories::ImageBitmapLoader::didFail(FileError::ErrorCode)
@@ -203,35 +210,37 @@ void ImageBitmapFactories::ImageBitmapLoader::didFail(FileError::ErrorCode)
     rejectPromise();
 }
 
-void ImageBitmapFactories::ImageBitmapLoader::scheduleAsyncImageBitmapDecoding()
+void ImageBitmapFactories::ImageBitmapLoader::scheduleAsyncImageBitmapDecoding(DOMArrayBuffer* arrayBuffer)
 {
     // For a 4000*4000 png image where each 10*10 tile is filled in by a random RGBA value,
     // the byteLength is around 2M, and it typically takes around 4.5ms to decode on a
     // current model of Linux desktop.
     const int longTaskByteLengthThreshold = 2000000;
-    BackgroundTaskRunner::TaskSize taskSize = (m_loader.arrayBufferResult()->byteLength() >= longTaskByteLengthThreshold) ? BackgroundTaskRunner::TaskSizeLongRunningTask : BackgroundTaskRunner::TaskSizeShortRunningTask;
+    BackgroundTaskRunner::TaskSize taskSize = BackgroundTaskRunner::TaskSizeShortRunningTask;
+    if (arrayBuffer->byteLength() >= longTaskByteLengthThreshold)
+        taskSize = BackgroundTaskRunner::TaskSizeLongRunningTask;
     WebTaskRunner* taskRunner = Platform::current()->currentThread()->getWebTaskRunner();
-    BackgroundTaskRunner::postOnBackgroundThread(BLINK_FROM_HERE, threadSafeBind(&ImageBitmapFactories::ImageBitmapLoader::decodeImageOnDecoderThread, AllowCrossThreadAccess(this), AllowCrossThreadAccess(taskRunner)), taskSize);
+    BackgroundTaskRunner::postOnBackgroundThread(BLINK_FROM_HERE, threadSafeBind(&ImageBitmapFactories::ImageBitmapLoader::decodeImageOnDecoderThread, wrapCrossThreadPersistent(this), AllowCrossThreadAccess(taskRunner), wrapCrossThreadPersistent(arrayBuffer)), taskSize);
 }
 
-void ImageBitmapFactories::ImageBitmapLoader::decodeImageOnDecoderThread(WebTaskRunner* taskRunner)
+void ImageBitmapFactories::ImageBitmapLoader::decodeImageOnDecoderThread(WebTaskRunner* taskRunner, DOMArrayBuffer* arrayBuffer)
 {
     ASSERT(!isMainThread());
-    RefPtr<SharedBuffer> sharedBuffer = SharedBuffer::create((char*)m_loader.arrayBufferResult()->data(), static_cast<size_t>(m_loader.arrayBufferResult()->byteLength()));
+    RefPtr<SharedBuffer> sharedBuffer = SharedBuffer::create(static_cast<char*>(arrayBuffer->data()), static_cast<size_t>(arrayBuffer->byteLength()));
 
     ImageDecoder::AlphaOption alphaOp = ImageDecoder::AlphaPremultiplied;
     if (m_options.premultiplyAlpha() == "none")
         alphaOp = ImageDecoder::AlphaNotPremultiplied;
-    ImageDecoder::GammaAndColorProfileOption colorspaceOp = ImageDecoder::GammaAndColorProfileApplied;
-    if (m_options.colorspaceConversion() == "none")
-        colorspaceOp = ImageDecoder::GammaAndColorProfileIgnored;
-    OwnPtr<ImageDecoder> decoder(ImageDecoder::create(*sharedBuffer, alphaOp, colorspaceOp));
+    ImageDecoder::GammaAndColorProfileOption colorSpaceOp = ImageDecoder::GammaAndColorProfileApplied;
+    if (m_options.colorSpaceConversion() == "none")
+        colorSpaceOp = ImageDecoder::GammaAndColorProfileIgnored;
+    OwnPtr<ImageDecoder> decoder(ImageDecoder::create(*sharedBuffer, alphaOp, colorSpaceOp));
     RefPtr<SkImage> frame;
     if (decoder) {
         decoder->setData(sharedBuffer.get(), true);
-        frame = ImageBitmap::getSkImageFromDecoder(decoder.release());
+        frame = ImageBitmap::getSkImageFromDecoder(std::move(decoder));
     }
-    taskRunner->postTask(BLINK_FROM_HERE, threadSafeBind(&ImageBitmapFactories::ImageBitmapLoader::resolvePromiseOnOriginalThread, AllowCrossThreadAccess(this), frame.release()));
+    taskRunner->postTask(BLINK_FROM_HERE, threadSafeBind(&ImageBitmapFactories::ImageBitmapLoader::resolvePromiseOnOriginalThread, wrapCrossThreadPersistent(this), frame.release()));
 }
 
 void ImageBitmapFactories::ImageBitmapLoader::resolvePromiseOnOriginalThread(PassRefPtr<SkImage> frame)

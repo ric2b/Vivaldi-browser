@@ -7,21 +7,22 @@
 #include "ash/screen_util.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/common/wm_event.h"
+#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm/wm_event.h"
 #include "ash/wm/workspace_controller.h"
 #include "ash/wm/workspace_controller_test_helper.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/hit_test.h"
+#include "ui/display/screen.h"
 #include "ui/events/event_processor.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/test/event_generator.h"
-#include "ui/gfx/screen.h"
 #include "ui/wm/core/window_util.h"
 #include "ui/wm/public/window_move_client.h"
 
@@ -108,7 +109,7 @@ TEST_F(WorkspaceEventHandlerTest, DoubleClickSingleAxisResizeEdge) {
 
   wm::ActivateWindow(window.get());
 
-  gfx::Rect work_area = gfx::Screen::GetScreen()
+  gfx::Rect work_area = display::Screen::GetScreen()
                             ->GetDisplayNearestWindow(window.get())
                             .work_area();
 
@@ -216,7 +217,7 @@ TEST_F(WorkspaceEventHandlerTest, DoubleClickSingleAxisWhenSideSnapped) {
   std::unique_ptr<aura::Window> window(
       CreateTestWindow(&delegate, restored_bounds));
 
-  gfx::Rect work_area_in_screen = gfx::Screen::GetScreen()
+  gfx::Rect work_area_in_screen = display::Screen::GetScreen()
                                       ->GetDisplayNearestWindow(window.get())
                                       .work_area();
 
@@ -259,7 +260,7 @@ TEST_F(WorkspaceEventHandlerTest,
 
   wm::ActivateWindow(window.get());
 
-  gfx::Rect work_area = gfx::Screen::GetScreen()
+  gfx::Rect work_area = display::Screen::GetScreen()
                             ->GetDisplayNearestWindow(window.get())
                             .work_area();
 
@@ -285,7 +286,7 @@ TEST_F(WorkspaceEventHandlerTest,
 
   wm::ActivateWindow(window.get());
 
-  gfx::Rect work_area = gfx::Screen::GetScreen()
+  gfx::Rect work_area = display::Screen::GetScreen()
                             ->GetDisplayNearestWindow(window.get())
                             .work_area();
 

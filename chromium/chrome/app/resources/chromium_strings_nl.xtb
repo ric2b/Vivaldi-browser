@@ -55,6 +55,7 @@ Sommige functies zijn wellicht niet beschikbaar en wijzigingen in voorkeuren wor
 <translation id="2673087257647337101">Bijwerken bijna voltooid. Start Chromium opnieuw om de update te voltooien.</translation>
 <translation id="2685838254101182273">Chromium is gestopt met bijwerken en ondersteunt deze versie van je besturingssysteem niet langer.</translation>
 <translation id="2705212601509139398">Deze site maakt gebruik van de plug-in Chromium Frame die binnenkort niet meer wordt ondersteund. Verwijder deze en download een compatibele browser.</translation>
+<translation id="2711502716910134313">Chromium-tabblad</translation>
 <translation id="2770231113462710648">Standaardbrowser wijzigen in:</translation>
 <translation id="2801146392936645542"><ph name="FILE_NAME" /> is schadelijk en is door Chromium geblokkeerd.</translation>
 <translation id="2847479871509788944">Verwijderen uit Chromium…</translation>
@@ -68,7 +69,6 @@ Sommige functies zijn wellicht niet beschikbaar en wijzigingen in voorkeuren wor
 <translation id="3130323860337406239">Chromium gebruikt je microfoon.</translation>
 <translation id="313551035350905294">Je logt in met een beheerd account en geeft de beheerderscontrole over aan je Chromium-profiel. Je Chromium-gegevens zoals je apps, bladwijzers, geschiedenis, wachtwoorden en andere instellingen worden permanent gekoppeld aan <ph name="USER_NAME" />. Je kunt deze gegevens verwijderen via het Google Accounts Dashboard, maar je kunt deze gegevens niet koppelen aan een ander account.</translation>
 <translation id="3190315855212034486">Chromium is gecrasht. Nu opnieuw starten?</translation>
-<translation id="3197823471738295152">Het apparaat is bijgewerkt.</translation>
 <translation id="3244477511402911926">Meldingscentrum van Chromium</translation>
 <translation id="3256316712990552818">Gekopieerd naar Chromium</translation>
 <translation id="3258596308407688501">Chrome kan niet lezen van en schrijven naar de eigen gegevensdirectory :
@@ -122,6 +122,7 @@ Sommige functies zijn wellicht niet beschikbaar en wijzigingen in voorkeuren wor
 <translation id="549669000822060376">Wacht terwijl Chromium de nieuwste systeemupdates installeert.</translation>
 <translation id="5563479599352954471">Zoeken met een aanraking</translation>
 <translation id="5620765574781326016">Bekijk informatie over onderwerpen op websites zonder de pagina te verlaten.</translation>
+<translation id="5634636535844844681">Voor Chromium is Windows 7 of hoger vereist.</translation>
 <translation id="5680901439334282664">inloggen bij Chromium</translation>
 <translation id="5772805321386874569">(je moet Chromium <ph name="BEGIN_BUTTON" />opnieuw starten<ph name="END_BUTTON" />)</translation>
 <translation id="5796460469508169315">Chromium is bijna klaar.</translation>
@@ -181,6 +182,12 @@ Chromium kan je instellingen niet herstellen.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7339898014177206373">Nieuw venster</translation>
 <translation id="734373864078049451">Hier vind je internet, bladwijzers en andere Chromium-instellingen.</translation>
+<translation id="7344413941077984497">Als je wilt instellen welke websites <ph name="NEW_PROFILE_NAME" /> kan bekijken, kun je beperkingen en instellingen configureren door naar <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" /> te gaan. Als je de standaardinstellingen niet wijzigt, kan <ph name="NEW_PROFILE_NAME" /> overal op internet browsen.
+
+Als je wilt voorkomen dat <ph name="NEW_PROFILE_NAME" /> toegang krijgt tot je account, moet je ervoor zorgen dat je je profiel vergrendelt wanneer je Chromium niet gebruikt. Klik hiervoor op je profielnaam in de rechterbovenhoek van de browser en selecteer 'Afsluiten en kinderslot'.
+<ph name="BEGIN_LINK_2" />Meer informatie<ph name="END_LINK_2" />
+
+Controleer je e-mail op <ph name="ACCOUNT_EMAIL" /> voor verdere instructies.</translation>
 <translation id="7419987137528340081">Als je je huidige Chromium-gegevens liever gescheiden houdt, kun je een nieuwe Chromium-gebruiker maken voor <ph name="USER_NAME" />.</translation>
 <translation id="7421823331379285070">Voor Chromium is Windows XP of hoger vereist. Sommige functies werken mogelijk niet.</translation>
 <translation id="7463979740390522693">Chromium - Meldingen (<ph name="QUANTITY" /> ongelezen)</translation>
@@ -209,6 +216,7 @@ Chromium kan je instellingen niet herstellen.</translation>
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> De auteurs van Chromium. Alle rechten voorbehouden.</translation>
 <translation id="8621669128220841554">De installatie is mislukt wegens een onbekende fout. Download Chromium opnieuw.</translation>
 <translation id="8628626585870903697">Chromium bevat niet de pdf-viewer die nodig is om de functie 'Afdrukvoorbeeld' te laten werken.</translation>
+<translation id="8667808506758191620">Je <ph name="DEVICE_TYPE" /> is up-to-date.</translation>
 <translation id="8697124171261953979">Hiermee wordt ook gecontroleerd welke pagina wordt weergegeven wanneer je Chromium start of vanuit de omnibox zoekt.</translation>
 <translation id="8704119203788522458">Personaliseer jouw Chromium</translation>
 <translation id="872034308864968620">Chromium laten uitvoeren op de achtergrond</translation>
@@ -225,7 +233,6 @@ Chromium kan je instellingen niet herstellen.</translation>
 
 Als je toch inlogt, worden Chromium-gegevens zoals bladwijzers, geschiedenis en andere instellingen samengevoegd met <ph name="ACCOUNT_EMAIL_NEW" />.</translation>
 <translation id="9013087743919948559">Toevoegen aan Chromium</translation>
-<translation id="9013262824292842194">Voor Chromium is Windows Vista of Windows XP met SP2 of hoger vereist.</translation>
 <translation id="9019929317751753759">We hebben de volgende extensie uitgeschakeld die niet wordt vermeld in de <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> en mogelijk zonder je medeweten is toegevoegd. We doen dit om Chromium veiliger te maken.</translation>
 <translation id="9022552996538154597">Inloggen bij Chromium</translation>
 <translation id="9036189287518468038">App-opstartprogramma van Chromium</translation>

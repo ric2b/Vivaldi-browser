@@ -5,19 +5,26 @@
 #ifndef UI_VIEWS_TEST_PLATFORM_TEST_HELPER_H_
 #define UI_VIEWS_TEST_PLATFORM_TEST_HELPER_H_
 
+#include <memory>
+
+#include "base/callback_forward.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 
 namespace views {
 
 class PlatformTestHelper {
  public:
+  using Factory = base::Callback<std::unique_ptr<PlatformTestHelper>(void)>;
   PlatformTestHelper() {}
   virtual ~PlatformTestHelper() {}
 
-  static scoped_ptr<PlatformTestHelper> Create();
+  static void set_factory(const Factory& factory);
+  static std::unique_ptr<PlatformTestHelper> Create();
 
-  virtual bool IsMus() const = 0;
+  // Whether we are running under the mus environment. Methods are static so
+  // that they can be called before Create().
+  static void SetIsMus();
+  static bool IsMus();
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PlatformTestHelper);

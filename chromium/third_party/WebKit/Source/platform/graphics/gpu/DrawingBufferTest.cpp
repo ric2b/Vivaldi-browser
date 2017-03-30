@@ -31,16 +31,15 @@
 #include "platform/graphics/gpu/DrawingBuffer.h"
 
 #include "gpu/command_buffer/client/gles2_interface_stub.h"
+#include "gpu/command_buffer/common/capabilities.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/UnacceleratedImageBufferSurface.h"
 #include "platform/graphics/gpu/Extensions3DUtil.h"
-#include "platform/graphics/test/MockWebGraphicsContext3D.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebExternalTextureMailbox.h"
-#include "public/platform/WebGraphicsContext3D.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
-#include "public/platform/callback/WebClosure.h"
+#include "public/platform/functional/WebFunction.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "wtf/RefPtr.h"
@@ -181,7 +180,7 @@ public:
     GLuint boundTexture() const { return m_boundTexture; }
     GLuint boundTextureTarget() const { return m_boundTextureTarget; }
     GLuint mostRecentlyWaitedSyncToken() const { return m_mostRecentlyWaitedSyncToken; }
-    GLuint currentImageId() const { return m_currentImageId; }
+    GLuint nextImageIdToBeCreated() const { return m_currentImageId; }
     IntSize mostRecentlyProducedSize() const { return m_mostRecentlyProducedSize; }
     bool allowImageChromium() const { return m_allowImageChromium; }
 
@@ -200,33 +199,6 @@ private:
     HashMap<GLuint, GLuint> m_imageToTextureMap;
 };
 
-class WebGraphicsContext3DForTests : public MockWebGraphicsContext3D {
-public:
-    WebGraphicsContext3DForTests(GLES2InterfaceForTests* contextGL)
-        : m_contextGL(contextGL)
-    {
-    }
-
-    GLuint mostRecentlyWaitedSyncToken()
-    {
-        return m_contextGL->mostRecentlyWaitedSyncToken();
-    }
-
-    IntSize mostRecentlyProducedSize()
-    {
-        return m_contextGL->mostRecentlyProducedSize();
-    }
-
-
-    GLuint nextImageIdToBeCreated()
-    {
-        return m_contextGL->currentImageId();
-    }
-
-private:
-    GLES2InterfaceForTests* m_contextGL;
-};
-
 static const int initialWidth = 100;
 static const int initialHeight = 100;
 static const int alternateHeight = 50;
@@ -236,11 +208,9 @@ public:
     static PassRefPtr<DrawingBufferForTests> create(PassOwnPtr<WebGraphicsContext3DProvider> contextProvider, const IntSize& size, PreserveDrawingBuffer preserve)
     {
         OwnPtr<Extensions3DUtil> extensionsUtil = Extensions3DUtil::create(contextProvider->contextGL());
-        RefPtr<DrawingBufferForTests> drawingBuffer = adoptRef(new DrawingBufferForTests(contextProvider, extensionsUtil.release(), preserve));
-        bool wantDepthBuffer = false;
-        bool wantStencilBuffer = false;
+        RefPtr<DrawingBufferForTests> drawingBuffer = adoptRef(new DrawingBufferForTests(std::move(contextProvider), std::move(extensionsUtil), preserve));
         bool multisampleExtensionSupported = false;
-        if (!drawingBuffer->initialize(size, wantDepthBuffer, wantStencilBuffer, multisampleExtensionSupported)) {
+        if (!drawingBuffer->initialize(size, multisampleExtensionSupported)) {
             drawingBuffer->beginDestruction();
             return nullptr;
         }
@@ -248,7 +218,7 @@ public:
     }
 
     DrawingBufferForTests(PassOwnPtr<WebGraphicsContext3DProvider> contextProvider, PassOwnPtr<Extensions3DUtil> extensionsUtil, PreserveDrawingBuffer preserve)
-        : DrawingBuffer(contextProvider, extensionsUtil, false /* discardFramebufferSupported */, true /* wantAlphaChannel */, false /* premultipliedAlpha */, preserve)
+        : DrawingBuffer(std::move(contextProvider), std::move(extensionsUtil), false /* discardFramebufferSupported */, true /* wantAlphaChannel */, false /* premultipliedAlpha */, preserve, false /* wantDepth */, false /* wantStencil */)
         , m_live(0)
     { }
 
@@ -263,20 +233,23 @@ public:
 
 class WebGraphicsContext3DProviderForTests : public WebGraphicsContext3DProvider {
 public:
-    WebGraphicsContext3DProviderForTests(PassOwnPtr<WebGraphicsContext3D> context, PassOwnPtr<gpu::gles2::GLES2Interface> gl)
-        : m_context(std::move(context))
-        , m_gl(std::move(gl))
+    WebGraphicsContext3DProviderForTests(PassOwnPtr<gpu::gles2::GLES2Interface> gl)
+        : m_gl(std::move(gl))
     {
     }
 
-    WebGraphicsContext3D* context3d() override { return m_context.get(); }
     gpu::gles2::GLES2Interface* contextGL() override { return m_gl.get(); }
     // Not used by WebGL code.
     GrContext* grContext() override { return nullptr; }
+    bool bindToCurrentThread() override { return false; }
+    gpu::Capabilities getCapabilities()
+    {
+        return gpu::Capabilities();
+    }
     void setLostContextCallback(WebClosure) {}
+    void setErrorMessageCallback(WebFunction<void(const char*, int32_t id)>) {}
 
 private:
-    OwnPtr<WebGraphicsContext3D> m_context;
     OwnPtr<gpu::gles2::GLES2Interface> m_gl;
 };
 
@@ -286,19 +259,11 @@ protected:
     {
         OwnPtr<GLES2InterfaceForTests> gl = adoptPtr(new GLES2InterfaceForTests);
         m_gl = gl.get();
-        OwnPtr<WebGraphicsContext3DForTests> context = adoptPtr(new WebGraphicsContext3DForTests(m_gl));
-        m_context = context.get();
-        OwnPtr<WebGraphicsContext3DProviderForTests> provider = adoptPtr(new WebGraphicsContext3DProviderForTests(context.release(), gl.release()));
-        m_drawingBuffer = DrawingBufferForTests::create(provider.release(), IntSize(initialWidth, initialHeight), DrawingBuffer::Preserve);
+        OwnPtr<WebGraphicsContext3DProviderForTests> provider = adoptPtr(new WebGraphicsContext3DProviderForTests(std::move(gl)));
+        m_drawingBuffer = DrawingBufferForTests::create(std::move(provider), IntSize(initialWidth, initialHeight), DrawingBuffer::Preserve);
         CHECK(m_drawingBuffer);
     }
 
-    WebGraphicsContext3DForTests* webContext()
-    {
-        return m_context;
-    }
-
-    WebGraphicsContext3DForTests* m_context;
     GLES2InterfaceForTests* m_gl;
     RefPtr<DrawingBufferForTests> m_drawingBuffer;
 };
@@ -313,31 +278,31 @@ TEST_F(DrawingBufferTest, verifyResizingProperlyAffectsMailboxes)
     // Produce one mailbox at size 100x100.
     m_drawingBuffer->markContentsChanged();
     EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&mailbox, 0));
-    EXPECT_EQ(initialSize, webContext()->mostRecentlyProducedSize());
+    EXPECT_EQ(initialSize, m_gl->mostRecentlyProducedSize());
 
     // Resize to 100x50.
-    m_drawingBuffer->reset(IntSize(initialWidth, alternateHeight), false);
+    m_drawingBuffer->reset(IntSize(initialWidth, alternateHeight));
     m_drawingBuffer->mailboxReleased(mailbox, false);
 
     // Produce a mailbox at this size.
     m_drawingBuffer->markContentsChanged();
     EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&mailbox, 0));
-    EXPECT_EQ(alternateSize, webContext()->mostRecentlyProducedSize());
+    EXPECT_EQ(alternateSize, m_gl->mostRecentlyProducedSize());
 
     // Reset to initial size.
-    m_drawingBuffer->reset(IntSize(initialWidth, initialHeight), false);
+    m_drawingBuffer->reset(IntSize(initialWidth, initialHeight));
     m_drawingBuffer->mailboxReleased(mailbox, false);
 
     // Prepare another mailbox and verify that it's the correct size.
     m_drawingBuffer->markContentsChanged();
     EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&mailbox, 0));
-    EXPECT_EQ(initialSize, webContext()->mostRecentlyProducedSize());
+    EXPECT_EQ(initialSize, m_gl->mostRecentlyProducedSize());
 
     // Prepare one final mailbox and verify that it's the correct size.
     m_drawingBuffer->mailboxReleased(mailbox, false);
     m_drawingBuffer->markContentsChanged();
     EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&mailbox, 0));
-    EXPECT_EQ(initialSize, webContext()->mostRecentlyProducedSize());
+    EXPECT_EQ(initialSize, m_gl->mostRecentlyProducedSize());
     m_drawingBuffer->mailboxReleased(mailbox, false);
     m_drawingBuffer->beginDestruction();
 }
@@ -483,10 +448,10 @@ TEST_F(DrawingBufferTest, verifyInsertAndWaitSyncTokenCorrectly)
 
     // Produce mailboxes.
     m_drawingBuffer->markContentsChanged();
-    EXPECT_EQ(0u, webContext()->mostRecentlyWaitedSyncToken());
+    EXPECT_EQ(0u, m_gl->mostRecentlyWaitedSyncToken());
     EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&mailbox, 0));
     // prepareMailbox() does not wait for any sync point.
-    EXPECT_EQ(0u, webContext()->mostRecentlyWaitedSyncToken());
+    EXPECT_EQ(0u, m_gl->mostRecentlyWaitedSyncToken());
 
     GLuint64 waitSyncToken = 0;
     m_gl->GenSyncTokenCHROMIUM(m_gl->InsertFenceSyncCHROMIUM(), reinterpret_cast<GLbyte*>(&waitSyncToken));
@@ -494,12 +459,12 @@ TEST_F(DrawingBufferTest, verifyInsertAndWaitSyncTokenCorrectly)
     mailbox.validSyncToken = true;
     m_drawingBuffer->mailboxReleased(mailbox, false);
     // m_drawingBuffer will wait for the sync point when recycling.
-    EXPECT_EQ(0u, webContext()->mostRecentlyWaitedSyncToken());
+    EXPECT_EQ(0u, m_gl->mostRecentlyWaitedSyncToken());
 
     m_drawingBuffer->markContentsChanged();
     EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&mailbox, 0));
     // m_drawingBuffer waits for the sync point when recycling in prepareMailbox().
-    EXPECT_EQ(waitSyncToken, webContext()->mostRecentlyWaitedSyncToken());
+    EXPECT_EQ(waitSyncToken, m_gl->mostRecentlyWaitedSyncToken());
 
     m_drawingBuffer->beginDestruction();
     m_gl->GenSyncTokenCHROMIUM(m_gl->InsertFenceSyncCHROMIUM(), reinterpret_cast<GLbyte*>(&waitSyncToken));
@@ -507,7 +472,7 @@ TEST_F(DrawingBufferTest, verifyInsertAndWaitSyncTokenCorrectly)
     mailbox.validSyncToken = true;
     m_drawingBuffer->mailboxReleased(mailbox, false);
     // m_drawingBuffer waits for the sync point because the destruction is in progress.
-    EXPECT_EQ(waitSyncToken, webContext()->mostRecentlyWaitedSyncToken());
+    EXPECT_EQ(waitSyncToken, m_gl->mostRecentlyWaitedSyncToken());
 }
 
 class DrawingBufferImageChromiumTest : public DrawingBufferTest {
@@ -516,16 +481,14 @@ protected:
     {
         OwnPtr<GLES2InterfaceForTests> gl = adoptPtr(new GLES2InterfaceForTests);
         m_gl = gl.get();
-        OwnPtr<WebGraphicsContext3DForTests> context = adoptPtr(new WebGraphicsContext3DForTests(m_gl));
-        m_context = context.get();
-        OwnPtr<WebGraphicsContext3DProviderForTests> provider = adoptPtr(new WebGraphicsContext3DProviderForTests(context.release(), gl.release()));
+        OwnPtr<WebGraphicsContext3DProviderForTests> provider = adoptPtr(new WebGraphicsContext3DProviderForTests(std::move(gl)));
         RuntimeEnabledFeatures::setWebGLImageChromiumEnabled(true);
-        m_imageId0 = webContext()->nextImageIdToBeCreated();
+        m_imageId0 = m_gl->nextImageIdToBeCreated();
         EXPECT_CALL(*m_gl, BindTexImage2DMock(m_imageId0)).Times(1);
-        m_drawingBuffer = DrawingBufferForTests::create(provider.release(),
+        m_drawingBuffer = DrawingBufferForTests::create(std::move(provider),
             IntSize(initialWidth, initialHeight), DrawingBuffer::Preserve);
         CHECK(m_drawingBuffer);
-        testing::Mock::VerifyAndClearExpectations(webContext());
+        testing::Mock::VerifyAndClearExpectations(m_gl);
     }
 
     void TearDown() override
@@ -543,60 +506,60 @@ TEST_F(DrawingBufferImageChromiumTest, verifyResizingReallocatesImages)
     IntSize initialSize(initialWidth, initialHeight);
     IntSize alternateSize(initialWidth, alternateHeight);
 
-    GLuint m_imageId1 = webContext()->nextImageIdToBeCreated();
+    GLuint m_imageId1 = m_gl->nextImageIdToBeCreated();
     EXPECT_CALL(*m_gl, BindTexImage2DMock(m_imageId1)).Times(1);
     // Produce one mailbox at size 100x100.
     m_drawingBuffer->markContentsChanged();
     EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&mailbox, 0));
-    EXPECT_EQ(initialSize, webContext()->mostRecentlyProducedSize());
+    EXPECT_EQ(initialSize, m_gl->mostRecentlyProducedSize());
     EXPECT_TRUE(mailbox.allowOverlay);
-    testing::Mock::VerifyAndClearExpectations(webContext());
+    testing::Mock::VerifyAndClearExpectations(m_gl);
 
-    GLuint m_imageId2 = webContext()->nextImageIdToBeCreated();
+    GLuint m_imageId2 = m_gl->nextImageIdToBeCreated();
     EXPECT_CALL(*m_gl, BindTexImage2DMock(m_imageId2)).Times(1);
     EXPECT_CALL(*m_gl, DestroyImageMock(m_imageId0)).Times(1);
     EXPECT_CALL(*m_gl, ReleaseTexImage2DMock(m_imageId0)).Times(1);
     // Resize to 100x50.
-    m_drawingBuffer->reset(IntSize(initialWidth, alternateHeight), false);
+    m_drawingBuffer->reset(IntSize(initialWidth, alternateHeight));
     m_drawingBuffer->mailboxReleased(mailbox, false);
-    testing::Mock::VerifyAndClearExpectations(webContext());
+    testing::Mock::VerifyAndClearExpectations(m_gl);
 
-    GLuint m_imageId3 = webContext()->nextImageIdToBeCreated();
+    GLuint m_imageId3 = m_gl->nextImageIdToBeCreated();
     EXPECT_CALL(*m_gl, BindTexImage2DMock(m_imageId3)).Times(1);
     EXPECT_CALL(*m_gl, DestroyImageMock(m_imageId1)).Times(1);
     EXPECT_CALL(*m_gl, ReleaseTexImage2DMock(m_imageId1)).Times(1);
     // Produce a mailbox at this size.
     m_drawingBuffer->markContentsChanged();
     EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&mailbox, 0));
-    EXPECT_EQ(alternateSize, webContext()->mostRecentlyProducedSize());
+    EXPECT_EQ(alternateSize, m_gl->mostRecentlyProducedSize());
     EXPECT_TRUE(mailbox.allowOverlay);
-    testing::Mock::VerifyAndClearExpectations(webContext());
+    testing::Mock::VerifyAndClearExpectations(m_gl);
 
-    GLuint m_imageId4 = webContext()->nextImageIdToBeCreated();
+    GLuint m_imageId4 = m_gl->nextImageIdToBeCreated();
     EXPECT_CALL(*m_gl, BindTexImage2DMock(m_imageId4)).Times(1);
     EXPECT_CALL(*m_gl, DestroyImageMock(m_imageId2)).Times(1);
     EXPECT_CALL(*m_gl, ReleaseTexImage2DMock(m_imageId2)).Times(1);
     // Reset to initial size.
-    m_drawingBuffer->reset(IntSize(initialWidth, initialHeight), false);
+    m_drawingBuffer->reset(IntSize(initialWidth, initialHeight));
     m_drawingBuffer->mailboxReleased(mailbox, false);
-    testing::Mock::VerifyAndClearExpectations(webContext());
+    testing::Mock::VerifyAndClearExpectations(m_gl);
 
-    GLuint m_imageId5 = webContext()->nextImageIdToBeCreated();
+    GLuint m_imageId5 = m_gl->nextImageIdToBeCreated();
     EXPECT_CALL(*m_gl, BindTexImage2DMock(m_imageId5)).Times(1);
     EXPECT_CALL(*m_gl, DestroyImageMock(m_imageId3)).Times(1);
     EXPECT_CALL(*m_gl, ReleaseTexImage2DMock(m_imageId3)).Times(1);
     // Prepare another mailbox and verify that it's the correct size.
     m_drawingBuffer->markContentsChanged();
     EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&mailbox, 0));
-    EXPECT_EQ(initialSize, webContext()->mostRecentlyProducedSize());
+    EXPECT_EQ(initialSize, m_gl->mostRecentlyProducedSize());
     EXPECT_TRUE(mailbox.allowOverlay);
-    testing::Mock::VerifyAndClearExpectations(webContext());
+    testing::Mock::VerifyAndClearExpectations(m_gl);
 
     // Prepare one final mailbox and verify that it's the correct size.
     m_drawingBuffer->mailboxReleased(mailbox, false);
     m_drawingBuffer->markContentsChanged();
     EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&mailbox, 0));
-    EXPECT_EQ(initialSize, webContext()->mostRecentlyProducedSize());
+    EXPECT_EQ(initialSize, m_gl->mostRecentlyProducedSize());
     EXPECT_TRUE(mailbox.allowOverlay);
     m_drawingBuffer->mailboxReleased(mailbox, false);
 
@@ -605,7 +568,7 @@ TEST_F(DrawingBufferImageChromiumTest, verifyResizingReallocatesImages)
     EXPECT_CALL(*m_gl, DestroyImageMock(m_imageId4)).Times(1);
     EXPECT_CALL(*m_gl, ReleaseTexImage2DMock(m_imageId4)).Times(1);
     m_drawingBuffer->beginDestruction();
-    testing::Mock::VerifyAndClearExpectations(webContext());
+    testing::Mock::VerifyAndClearExpectations(m_gl);
 }
 
 class DepthStencilTrackingGLES2Interface : public gpu::gles2::GLES2InterfaceStub {
@@ -667,23 +630,6 @@ private:
     GLuint m_depthStencilAttachment = 0;
 };
 
-class DepthStencilTrackingContext : public MockWebGraphicsContext3D {
-public:
-    DepthStencilTrackingContext(DepthStencilTrackingGLES2Interface* gl)
-        : m_contextGL(gl)
-    {
-    }
-    ~DepthStencilTrackingContext() override {}
-
-    size_t numAllocatedRenderBuffer() const { return m_contextGL->numAllocatedRenderBuffer(); }
-    GLuint stencilAttachment() const { return m_contextGL->stencilAttachment(); }
-    GLuint depthAttachment() const { return m_contextGL->depthAttachment(); }
-    GLuint depthStencilAttachment() const { return m_contextGL->depthStencilAttachment(); }
-
-private:
-    DepthStencilTrackingGLES2Interface* m_contextGL;
-};
-
 struct DepthStencilTestCase {
     DepthStencilTestCase(bool requestStencil, bool requestDepth, int expectedRenderBuffers, const char* const testCaseName)
         : requestStencil(requestStencil)
@@ -715,9 +661,7 @@ TEST(DrawingBufferDepthStencilTest, packedDepthStencilSupported)
         SCOPED_TRACE(cases[i].testCaseName);
         OwnPtr<DepthStencilTrackingGLES2Interface> gl = adoptPtr(new DepthStencilTrackingGLES2Interface);
         DepthStencilTrackingGLES2Interface* trackingGL = gl.get();
-        OwnPtr<DepthStencilTrackingContext> context = adoptPtr(new DepthStencilTrackingContext(trackingGL));
-        DepthStencilTrackingContext* trackingContext = context.get();
-        OwnPtr<WebGraphicsContext3DProviderForTests> provider = adoptPtr(new WebGraphicsContext3DProviderForTests(context.release(), gl.release()));
+        OwnPtr<WebGraphicsContext3DProviderForTests> provider = adoptPtr(new WebGraphicsContext3DProviderForTests(std::move(gl)));
         DrawingBuffer::PreserveDrawingBuffer preserve = DrawingBuffer::Preserve;
 
         bool premultipliedAlpha = false;
@@ -726,7 +670,7 @@ TEST(DrawingBufferDepthStencilTest, packedDepthStencilSupported)
         bool wantStencilBuffer = cases[i].requestStencil;
         bool wantAntialiasing = false;
         RefPtr<DrawingBuffer> drawingBuffer = DrawingBuffer::create(
-            provider.release(),
+            std::move(provider),
             IntSize(10, 10),
             premultipliedAlpha,
             wantAlphaChannel,
@@ -738,29 +682,29 @@ TEST(DrawingBufferDepthStencilTest, packedDepthStencilSupported)
         // When we request a depth or a stencil buffer, we will get both.
         EXPECT_EQ(cases[i].requestDepth || cases[i].requestStencil, drawingBuffer->hasDepthBuffer());
         EXPECT_EQ(cases[i].requestDepth || cases[i].requestStencil, drawingBuffer->hasStencilBuffer());
-        EXPECT_EQ(cases[i].expectedRenderBuffers, trackingContext->numAllocatedRenderBuffer());
+        EXPECT_EQ(cases[i].expectedRenderBuffers, trackingGL->numAllocatedRenderBuffer());
         if (cases[i].requestDepth || cases[i].requestStencil) {
-            EXPECT_NE(0u, trackingContext->depthStencilAttachment());
-            EXPECT_EQ(0u, trackingContext->depthAttachment());
-            EXPECT_EQ(0u, trackingContext->stencilAttachment());
+            EXPECT_NE(0u, trackingGL->depthStencilAttachment());
+            EXPECT_EQ(0u, trackingGL->depthAttachment());
+            EXPECT_EQ(0u, trackingGL->stencilAttachment());
         } else {
-            EXPECT_EQ(0u, trackingContext->depthStencilAttachment());
-            EXPECT_EQ(0u, trackingContext->depthAttachment());
-            EXPECT_EQ(0u, trackingContext->stencilAttachment());
+            EXPECT_EQ(0u, trackingGL->depthStencilAttachment());
+            EXPECT_EQ(0u, trackingGL->depthAttachment());
+            EXPECT_EQ(0u, trackingGL->stencilAttachment());
         }
 
-        drawingBuffer->reset(IntSize(10, 20), false);
+        drawingBuffer->reset(IntSize(10, 20));
         EXPECT_EQ(cases[i].requestDepth || cases[i].requestStencil, drawingBuffer->hasDepthBuffer());
         EXPECT_EQ(cases[i].requestDepth || cases[i].requestStencil, drawingBuffer->hasStencilBuffer());
-        EXPECT_EQ(cases[i].expectedRenderBuffers, trackingContext->numAllocatedRenderBuffer());
+        EXPECT_EQ(cases[i].expectedRenderBuffers, trackingGL->numAllocatedRenderBuffer());
         if (cases[i].requestDepth || cases[i].requestStencil) {
-            EXPECT_NE(0u, trackingContext->depthStencilAttachment());
-            EXPECT_EQ(0u, trackingContext->depthAttachment());
-            EXPECT_EQ(0u, trackingContext->stencilAttachment());
+            EXPECT_NE(0u, trackingGL->depthStencilAttachment());
+            EXPECT_EQ(0u, trackingGL->depthAttachment());
+            EXPECT_EQ(0u, trackingGL->stencilAttachment());
         } else {
-            EXPECT_EQ(0u, trackingContext->depthStencilAttachment());
-            EXPECT_EQ(0u, trackingContext->depthAttachment());
-            EXPECT_EQ(0u, trackingContext->stencilAttachment());
+            EXPECT_EQ(0u, trackingGL->depthStencilAttachment());
+            EXPECT_EQ(0u, trackingGL->depthAttachment());
+            EXPECT_EQ(0u, trackingGL->stencilAttachment());
         }
 
         drawingBuffer->beginDestruction();
@@ -783,7 +727,7 @@ TEST_F(DrawingBufferTest, verifySetIsHiddenProperlyAffectsMailboxes)
 
     GLuint waitSyncToken = 0;
     memcpy(&waitSyncToken, mailbox.syncToken, sizeof(waitSyncToken));
-    EXPECT_EQ(waitSyncToken, webContext()->mostRecentlyWaitedSyncToken());
+    EXPECT_EQ(waitSyncToken, m_gl->mostRecentlyWaitedSyncToken());
 
     m_drawingBuffer->beginDestruction();
 }
@@ -795,11 +739,9 @@ protected:
         OwnPtr<GLES2InterfaceForTests> gl = adoptPtr(new GLES2InterfaceForTests);
         gl->setAllowImageChromium(false);
         m_gl = gl.get();
-        OwnPtr<WebGraphicsContext3DForTests> context = adoptPtr(new WebGraphicsContext3DForTests(m_gl));
-        m_context = context.get();
-        OwnPtr<WebGraphicsContext3DProviderForTests> provider = adoptPtr(new WebGraphicsContext3DProviderForTests(context.release(), gl.release()));
+        OwnPtr<WebGraphicsContext3DProviderForTests> provider = adoptPtr(new WebGraphicsContext3DProviderForTests(std::move(gl)));
         RuntimeEnabledFeatures::setWebGLImageChromiumEnabled(true);
-        m_drawingBuffer = DrawingBufferForTests::create(provider.release(),
+        m_drawingBuffer = DrawingBufferForTests::create(std::move(provider),
             IntSize(initialWidth, initialHeight), DrawingBuffer::Preserve);
     }
 
@@ -816,7 +758,7 @@ TEST_F(DrawingBufferImageChromiumFallbackTest, verifyImageChromiumFallback)
     IntSize initialSize(initialWidth, initialHeight);
     m_drawingBuffer->markContentsChanged();
     EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&mailbox, 0));
-    EXPECT_EQ(initialSize, webContext()->mostRecentlyProducedSize());
+    EXPECT_EQ(initialSize, m_gl->mostRecentlyProducedSize());
     EXPECT_FALSE(mailbox.allowOverlay);
 
     m_drawingBuffer->mailboxReleased(mailbox, false);

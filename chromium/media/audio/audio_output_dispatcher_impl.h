@@ -16,6 +16,7 @@
 #include <stddef.h>
 
 #include <map>
+#include <memory>
 #include <vector>
 
 #include "base/macros.h"
@@ -25,7 +26,7 @@
 #include "media/audio/audio_logging.h"
 #include "media/audio/audio_manager.h"
 #include "media/audio/audio_output_dispatcher.h"
-#include "media/audio/audio_parameters.h"
+#include "media/base/audio_parameters.h"
 
 namespace media {
 
@@ -91,7 +92,7 @@ class MEDIA_EXPORT AudioOutputDispatcherImpl : public AudioOutputDispatcher {
   typedef std::map<AudioOutputProxy*, AudioOutputStream*> AudioStreamMap;
   AudioStreamMap proxy_to_physical_map_;
 
-  scoped_ptr<AudioLog> audio_log_;
+  std::unique_ptr<AudioLog> audio_log_;
   typedef std::map<AudioOutputStream*, int> AudioStreamIDMap;
   AudioStreamIDMap audio_stream_ids_;
   int audio_stream_id_;

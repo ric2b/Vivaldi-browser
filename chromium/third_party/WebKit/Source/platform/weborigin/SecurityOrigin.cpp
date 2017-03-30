@@ -75,7 +75,7 @@ KURL SecurityOrigin::extractInnerURL(const KURL& url)
         return *url.innerURL();
     // FIXME: Update this callsite to use the innerURL member function when
     // we finish implementing it.
-    return KURL(ParsedURLString, decodeURLEscapeSequences(url.path()));
+    return KURL(ParsedURLString, url.path());
 }
 
 void SecurityOrigin::setCache(SecurityOriginCache* originCache)
@@ -565,7 +565,7 @@ PassOwnPtr<SecurityOrigin::PrivilegeData> SecurityOrigin::createPrivilegeData() 
     privilegeData->m_universalAccess = m_universalAccess;
     privilegeData->m_canLoadLocalResources = m_canLoadLocalResources;
     privilegeData->m_blockLocalAccessFromLocalOrigin = m_blockLocalAccessFromLocalOrigin;
-    return privilegeData.release();
+    return privilegeData;
 }
 
 void SecurityOrigin::transferPrivilegesFrom(PassOwnPtr<PrivilegeData> privilegeData)

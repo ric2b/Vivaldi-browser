@@ -9,7 +9,9 @@
 #define UI_GFX_IPC_GFX_PARAM_TRAITS_MACROS_H_
 
 #include "ui/gfx/buffer_types.h"
+#include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gfx/ipc/gfx_ipc_export.h"
+#include "ui/gfx/swap_result.h"
 #include "ipc/ipc_message_macros.h"
 
 #if defined(USE_OZONE)
@@ -22,6 +24,28 @@
 IPC_ENUM_TRAITS_MAX_VALUE(gfx::BufferFormat, gfx::BufferFormat::LAST)
 
 IPC_ENUM_TRAITS_MAX_VALUE(gfx::BufferUsage, gfx::BufferUsage::LAST)
+
+IPC_ENUM_TRAITS_MAX_VALUE(gfx::GpuMemoryBufferType,
+                          gfx::GPU_MEMORY_BUFFER_TYPE_LAST)
+
+IPC_ENUM_TRAITS_MAX_VALUE(gfx::SwapResult, gfx::SwapResult::SWAP_RESULT_LAST)
+
+IPC_STRUCT_TRAITS_BEGIN(gfx::GpuMemoryBufferHandle)
+  IPC_STRUCT_TRAITS_MEMBER(id)
+  IPC_STRUCT_TRAITS_MEMBER(type)
+  IPC_STRUCT_TRAITS_MEMBER(handle)
+  IPC_STRUCT_TRAITS_MEMBER(offset)
+  IPC_STRUCT_TRAITS_MEMBER(stride)
+#if defined(USE_OZONE)
+  IPC_STRUCT_TRAITS_MEMBER(native_pixmap_handle)
+#elif defined(OS_MACOSX)
+  IPC_STRUCT_TRAITS_MEMBER(mach_port)
+#endif
+IPC_STRUCT_TRAITS_END()
+
+IPC_STRUCT_TRAITS_BEGIN(gfx::GpuMemoryBufferId)
+  IPC_STRUCT_TRAITS_MEMBER(id)
+IPC_STRUCT_TRAITS_END()
 
 #if defined(USE_OZONE)
 IPC_STRUCT_TRAITS_BEGIN(gfx::NativePixmapHandle)

@@ -44,16 +44,17 @@
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/web_notification/web_notification_tray.h"
 #include "ash/touch/touch_hud_debug.h"
-#include "ash/utility/partial_screenshot_controller.h"
+#include "ash/utility/screenshot_controller.h"
 #include "ash/volume_control_delegate.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/common/wm_event.h"
 #include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/window_selector_controller.h"
 #include "ash/wm/power_button_controller.h"
 #include "ash/wm/window_cycle_controller.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm/wm_event.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
@@ -68,9 +69,9 @@
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_sequence.h"
 #include "ui/compositor/layer_animator.h"
+#include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
-#include "ui/gfx/screen.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/notification.h"
 #include "ui/message_center/notifier_settings.h"
@@ -79,6 +80,8 @@
 #include "ash/display/display_configuration_controller.h"
 #include "ash/system/chromeos/keyboard_brightness_controller.h"
 #include "base/sys_info.h"
+#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/power_manager_client.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #endif  // defined(OS_CHROMEOS)
@@ -358,19 +361,19 @@ void HandleRestoreTab() {
   Shell::GetInstance()->new_window_delegate()->RestoreTab();
 }
 
-gfx::Display::Rotation GetNextRotation(gfx::Display::Rotation current) {
+display::Display::Rotation GetNextRotation(display::Display::Rotation current) {
   switch (current) {
-    case gfx::Display::ROTATE_0:
-      return gfx::Display::ROTATE_90;
-    case gfx::Display::ROTATE_90:
-      return gfx::Display::ROTATE_180;
-    case gfx::Display::ROTATE_180:
-      return gfx::Display::ROTATE_270;
-    case gfx::Display::ROTATE_270:
-      return gfx::Display::ROTATE_0;
+    case display::Display::ROTATE_0:
+      return display::Display::ROTATE_90;
+    case display::Display::ROTATE_90:
+      return display::Display::ROTATE_180;
+    case display::Display::ROTATE_180:
+      return display::Display::ROTATE_270;
+    case display::Display::ROTATE_270:
+      return display::Display::ROTATE_0;
   }
   NOTREACHED() << "Unknown rotation:" << current;
-  return gfx::Display::ROTATE_0;
+  return display::Display::ROTATE_0;
 }
 
 // Rotates the screen.
@@ -379,14 +382,14 @@ void HandleRotateScreen() {
     return;
 
   base::RecordAction(UserMetricsAction("Accel_Rotate_Window"));
-  gfx::Point point = gfx::Screen::GetScreen()->GetCursorScreenPoint();
-  gfx::Display display =
-      gfx::Screen::GetScreen()->GetDisplayNearestPoint(point);
+  gfx::Point point = display::Screen::GetScreen()->GetCursorScreenPoint();
+  display::Display display =
+      display::Screen::GetScreen()->GetDisplayNearestPoint(point);
   const DisplayInfo& display_info =
       Shell::GetInstance()->display_manager()->GetDisplayInfo(display.id());
   ash::ScreenRotationAnimator(display.id())
       .Rotate(GetNextRotation(display_info.GetActiveRotation()),
-              gfx::Display::ROTATION_SOURCE_USER);
+              display::Display::ROTATION_SOURCE_USER);
 }
 
 // Rotate the active window.
@@ -459,12 +462,18 @@ void HandleSwitchIme(ImeControlDelegate* ime_control_delegate,
   ime_control_delegate->HandleSwitchIme(accelerator);
 }
 
+void HandleTakeWindowScreenshot(ScreenshotDelegate* screenshot_delegate) {
+  base::RecordAction(UserMetricsAction("Accel_Take_Window_Screenshot"));
+  DCHECK(screenshot_delegate);
+  Shell::GetInstance()->screenshot_controller()->StartWindowScreenshotSession(
+      screenshot_delegate);
+}
+
 void HandleTakePartialScreenshot(ScreenshotDelegate* screenshot_delegate) {
   base::RecordAction(UserMetricsAction("Accel_Take_Partial_Screenshot"));
   DCHECK(screenshot_delegate);
-  Shell::GetInstance()
-      ->partial_screenshot_controller()
-      ->StartPartialScreenshotSession(screenshot_delegate);
+  Shell::GetInstance()->screenshot_controller()->StartPartialScreenshotSession(
+      screenshot_delegate);
 }
 
 void HandleTakeScreenshot(ScreenshotDelegate* screenshot_delegate) {
@@ -607,6 +616,11 @@ bool CanHandleLock() {
 void HandleLock() {
   base::RecordAction(UserMetricsAction("Accel_LockScreen_L"));
   Shell::GetInstance()->session_state_delegate()->LockScreen();
+}
+
+void HandleSuspend() {
+  base::RecordAction(UserMetricsAction("Accel_Suspend"));
+  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->RequestSuspend();
 }
 
 void HandleCrosh() {
@@ -770,14 +784,12 @@ void AcceleratorController::UnregisterAll(ui::AcceleratorTarget* target) {
 }
 
 bool AcceleratorController::Process(const ui::Accelerator& accelerator) {
-  if (ime_control_delegate_)
-    return accelerator_manager_->Process(accelerator);
   return accelerator_manager_->Process(accelerator);
 }
 
 bool AcceleratorController::IsRegistered(
     const ui::Accelerator& accelerator) const {
-  return accelerator_manager_->GetCurrentTarget(accelerator) != NULL;
+  return accelerator_manager_->IsRegistered(accelerator);
 }
 
 bool AcceleratorController::IsPreferred(
@@ -1051,7 +1063,7 @@ bool AcceleratorController::CanPerformAction(
     case TOUCH_HUD_MODE_CHANGE:
       return CanHandleTouchHud();
     case SWAP_PRIMARY_DISPLAY:
-      return gfx::Screen::GetScreen()->GetNumDisplays() > 1;
+      return display::Screen::GetScreen()->GetNumDisplays() > 1;
 #endif
     case CYCLE_BACKWARD_MRU:
     case CYCLE_FORWARD_MRU:
@@ -1081,6 +1093,7 @@ bool AcceleratorController::CanPerformAction(
     case SHOW_KEYBOARD_OVERLAY:
     case SHOW_SYSTEM_TRAY_BUBBLE:
     case SHOW_TASK_MANAGER:
+    case TAKE_WINDOW_SCREENSHOT:
     case TAKE_PARTIAL_SCREENSHOT:
     case TAKE_SCREENSHOT:
     case TOGGLE_FULLSCREEN:
@@ -1100,6 +1113,7 @@ bool AcceleratorController::CanPerformAction(
     case OPEN_GET_HELP:
     case POWER_PRESSED:
     case POWER_RELEASED:
+    case SUSPEND:
     case TOGGLE_MIRROR_MODE:
     case TOGGLE_SPOKEN_FEEDBACK:
     case TOGGLE_WIFI:
@@ -1252,6 +1266,9 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
     case SWITCH_IME:
       HandleSwitchIme(ime_control_delegate_.get(), accelerator);
       break;
+    case TAKE_WINDOW_SCREENSHOT:
+      HandleTakeWindowScreenshot(screenshot_delegate_.get());
+      break;
     case TAKE_PARTIAL_SCREENSHOT:
       HandleTakePartialScreenshot(screenshot_delegate_.get());
       break;
@@ -1336,6 +1353,9 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
       // (power button events are reported to us from powerm via
       // D-BUS), but we consume them to prevent them from getting
       // passed to apps -- see http://crbug.com/146609.
+      break;
+    case SUSPEND:
+      HandleSuspend();
       break;
     case SWAP_PRIMARY_DISPLAY:
       HandleSwapPrimaryDisplay();

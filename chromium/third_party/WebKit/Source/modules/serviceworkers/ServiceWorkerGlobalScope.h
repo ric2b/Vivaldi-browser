@@ -30,14 +30,13 @@
 #ifndef ServiceWorkerGlobalScope_h
 #define ServiceWorkerGlobalScope_h
 
-#include "bindings/modules/v8/UnionTypesModules.h"
+#include "bindings/modules/v8/RequestOrUSVString.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "modules/ModulesExport.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerRegistration.h"
 #include "wtf/Assertions.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
+#include "wtf/Forward.h"
 
 namespace blink {
 
@@ -70,8 +69,6 @@ public:
 
     ScriptPromise fetch(ScriptState*, const RequestInfo&, const Dictionary&, ExceptionState&);
 
-    void close(ExceptionState&);
-
     ScriptPromise skipWaiting(ScriptState*);
 
     void setRegistration(std::unique_ptr<WebServiceWorkerRegistration::Handle>);
@@ -92,7 +89,7 @@ public:
 protected:
     // EventTarget
     DispatchEventResult dispatchEventInternal(Event*) override;
-    bool addEventListenerInternal(const AtomicString& eventType, EventListener*, const EventListenerOptions&) override;
+    bool addEventListenerInternal(const AtomicString& eventType, EventListener*, const AddEventListenerOptions&) override;
 
 private:
     ServiceWorkerGlobalScope(const KURL&, const String& userAgent, ServiceWorkerThread*, double timeOrigin, PassOwnPtr<SecurityOrigin::PrivilegeData>, WorkerClients*);

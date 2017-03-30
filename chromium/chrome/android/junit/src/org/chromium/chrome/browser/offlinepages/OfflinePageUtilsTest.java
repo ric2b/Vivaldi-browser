@@ -5,13 +5,12 @@
 package org.chromium.chrome.browser.offlinepages;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.when;
 
 import android.os.Environment;
 
 import org.chromium.base.BaseChromiumApplication;
+import org.chromium.base.test.shadows.ShadowMultiDex;
 import org.chromium.base.test.util.Feature;
 import org.chromium.testing.local.LocalRobolectricTestRunner;
 import org.junit.Before;
@@ -31,7 +30,7 @@ import java.io.File;
 @RunWith(LocalRobolectricTestRunner.class)
 @Config(manifest = Config.NONE,
         application = BaseChromiumApplication.class,
-        shadows = { OfflinePageUtilsTest.WrappedEnvironment.class })
+        shadows = { OfflinePageUtilsTest.WrappedEnvironment.class, ShadowMultiDex.class })
 public class OfflinePageUtilsTest {
 
     @Mock private File mMockDataDirectory;
@@ -54,16 +53,6 @@ public class OfflinePageUtilsTest {
     public void testGetTotalSpaceInBytes() {
         when(mMockDataDirectory.getTotalSpace()).thenReturn(56789L);
         assertEquals(56789L, OfflinePageUtils.getTotalSpaceInBytes());
-    }
-
-    @Test
-    @Feature({"OfflinePages"})
-    public void testIsStorageAlmostFull() {
-        when(mMockDataDirectory.getUsableSpace()).thenReturn(16L * (1 << 20));  // 16MB
-        assertFalse(OfflinePageUtils.isStorageAlmostFull());
-
-        when(mMockDataDirectory.getUsableSpace()).thenReturn(8L * (1 << 20));  // 8MB
-        assertTrue(OfflinePageUtils.isStorageAlmostFull());
     }
 
     @Test

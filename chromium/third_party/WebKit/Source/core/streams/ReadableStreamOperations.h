@@ -30,7 +30,7 @@ public:
     // createBuiltInCountQueuingStrategy
     static ScriptValue createCountQueuingStrategy(ScriptState*, size_t highWaterMark);
 
-    // AcquireReadableStreamReader
+    // AcquireReadableStreamDefaultReader
     // This function assumes |isReadableStream(stream)|.
     // Returns an empty value and throws an error via the ExceptionState when
     // errored.
@@ -47,12 +47,28 @@ public:
     // This function assumes |isReadableStream(stream)|.
     static bool isLocked(ScriptState*, ScriptValue stream);
 
-    // IsReadableStreamReader
-    static bool isReadableStreamReader(ScriptState*, ScriptValue);
+    // IsReadableStreamReadable
+    // This function assumes |isReadableStream(stream)|.
+    static bool isReadable(ScriptState*, ScriptValue stream);
 
-    // ReadFromReadableStreamReader
-    // This function assumes |isReadableStreamReader(reader)|.
-    static ScriptPromise read(ScriptState*, ScriptValue reader);
+    // IsReadableStreamClosed
+    // This function assumes |isReadableStream(stream)|.
+    static bool isClosed(ScriptState*, ScriptValue stream);
+
+    // IsReadableStreamErrored
+    // This function assumes |isReadableStream(stream)|.
+    static bool isErrored(ScriptState*, ScriptValue stream);
+
+    // IsReadableStreamDefaultReader
+    static bool isReadableStreamDefaultReader(ScriptState*, ScriptValue);
+
+    // ReadableStreamDefaultReaderRead
+    // This function assumes |isReadableStreamDefaultReader(reader)|.
+    static ScriptPromise defaultReaderRead(ScriptState*, ScriptValue reader);
+
+    // ReadableStreamTee
+    // This function assumes |isReadableStream(stream)| and |!isLocked(stream)|
+    static void tee(ScriptState*, ScriptValue stream, ScriptValue* newStream1, ScriptValue* newStream2);
 };
 
 } // namespace blink

@@ -100,12 +100,12 @@ template <typename Strategy>
 static SelectionType computeSelectionType(const PositionTemplate<Strategy>& start, const PositionTemplate<Strategy>& end)
 {
     if (start.isNull()) {
-        ASSERT(end.isNull());
+        DCHECK(end.isNull());
         return NoSelection;
     }
     if (start == end)
         return CaretSelection;
-    // TODO(yosin) We should call |Document::updateLayout()| here for
+    // TODO(yosin) We should call |Document::updateStyleAndLayout()| here for
     // |mostBackwardCaretPosition()|. However, we are here during
     // |Node::removeChild()|.
     start.anchorNode()->updateDistribution();
@@ -150,18 +150,10 @@ VisibleSelectionTemplate<Strategy>& VisibleSelectionTemplate<Strategy>::operator
     return *this;
 }
 
-#if !ENABLE(OILPAN)
-template <typename Strategy>
-VisibleSelectionTemplate<Strategy>::~VisibleSelectionTemplate()
-{
-    didChange();
-}
-#endif
-
 template <typename Strategy>
 VisibleSelectionTemplate<Strategy> VisibleSelectionTemplate<Strategy>::selectionFromContentsOfNode(Node* node)
 {
-    ASSERT(!Strategy::editingIgnoresContent(node));
+    DCHECK(!Strategy::editingIgnoresContent(node));
     return VisibleSelectionTemplate(PositionTemplate<Strategy>::firstPositionInNode(node), PositionTemplate<Strategy>::lastPositionInNode(node));
 }
 
@@ -214,7 +206,7 @@ EphemeralRange firstEphemeralRangeOf(const VisibleSelection& selection)
     return EphemeralRange(start, end);
 }
 
-RawPtr<Range> firstRangeOf(const VisibleSelection& selection)
+Range* firstRangeOf(const VisibleSelection& selection)
 {
     return createRange(firstEphemeralRangeOf(selection));
 }
@@ -229,7 +221,7 @@ EphemeralRangeTemplate<Strategy> VisibleSelectionTemplate<Strategy>::toNormalize
     // in the course of running edit commands which modify the DOM.
     // Failing to call this can result in equivalentXXXPosition calls returning
     // incorrect results.
-    m_start.document()->updateLayout();
+    m_start.document()->updateStyleAndLayout();
 
     // Check again, because updating layout can clear the selection.
     if (isNone())
@@ -253,7 +245,7 @@ EphemeralRangeTemplate<Strategy> VisibleSelectionTemplate<Strategy>::toNormalize
     // On a treasure map, <b>X</b> marks the spot.
     //                       ^ selected
     //
-    ASSERT(isRange());
+    DCHECK(isRange());
     return normalizeRange(EphemeralRangeTemplate<Strategy>(m_start, m_end));
 }
 
@@ -293,10 +285,14 @@ static EphemeralRangeTemplate<Strategy> makeSearchRange(const PositionTemplate<S
 template <typename Strategy>
 void VisibleSelectionTemplate<Strategy>::appendTrailingWhitespace()
 {
-    ASSERT(m_granularity == WordGranularity);
+    DCHECK_EQ(m_granularity, WordGranularity);
     const EphemeralRangeTemplate<Strategy> searchRange = makeSearchRange(end());
     if (searchRange.isNull())
         return;
+
+    // TODO(dglazkov): The use of updateStyleAndLayoutIgnorePendingStylesheets needs to be audited.
+    // see http://crbug.com/590369 for more details.
+    searchRange.startPosition().document()->updateStyleAndLayoutIgnorePendingStylesheets();
 
     CharacterIteratorAlgorithm<Strategy> charIt(searchRange.startPosition(), searchRange.endPosition(), TextIteratorEmitsCharactersBetweenAllVisiblePositions);
     bool changed = false;
@@ -344,8 +340,8 @@ void VisibleSelectionTemplate<Strategy>::setBaseAndExtentToDeepEquivalents()
 template <typename Strategy>
 void VisibleSelectionTemplate<Strategy>::setStartRespectingGranularity(TextGranularity granularity, EWordSide wordSide)
 {
-    ASSERT(m_base.isNotNull());
-    ASSERT(m_extent.isNotNull());
+    DCHECK(m_base.isNotNull());
+    DCHECK(m_extent.isNotNull());
 
     m_start = m_baseIsFirst ? m_base : m_extent;
 
@@ -404,8 +400,8 @@ void VisibleSelectionTemplate<Strategy>::setStartRespectingGranularity(TextGranu
 template <typename Strategy>
 void VisibleSelectionTemplate<Strategy>::setEndRespectingGranularity(TextGranularity granularity, EWordSide wordSide)
 {
-    ASSERT(m_base.isNotNull());
-    ASSERT(m_extent.isNotNull());
+    DCHECK(m_base.isNotNull());
+    DCHECK(m_extent.isNotNull());
 
     m_end = m_baseIsFirst ? m_extent : m_base;
 
@@ -436,7 +432,7 @@ void VisibleSelectionTemplate<Strategy>::setEndRespectingGranularity(TextGranula
             // to the start of the next one) to match TextEdit.
             end = nextPositionOf(wordEnd);
 
-            if (Element* table = isFirstPositionAfterTable(end)) {
+            if (Element* table = tableElementJustBefore(end)) {
                 // The paragraph break after the last paragraph in the last cell
                 // of a block table ends at the start of the paragraph after the
                 // table.
@@ -480,7 +476,7 @@ void VisibleSelectionTemplate<Strategy>::setEndRespectingGranularity(TextGranula
         // paragraph to the start of the next one) in the selection.
         VisiblePositionTemplate<Strategy> end = nextPositionOf(visibleParagraphEnd);
 
-        if (Element* table = isFirstPositionAfterTable(end)) {
+        if (Element* table = tableElementJustBefore(end)) {
             // The paragraph break after the last paragraph in the last cell of
             // a block table ends at the start of the paragraph after the table,
             // not at the position just after the table.
@@ -540,9 +536,9 @@ void VisibleSelectionTemplate<Strategy>::validate(TextGranularity granularity)
     m_start = m_baseIsFirst ? m_base : m_extent;
     m_end = m_baseIsFirst ? m_extent : m_base;
     setStartRespectingGranularity(granularity);
-    ASSERT(m_start.isNotNull());
+    DCHECK(m_start.isNotNull());
     setEndRespectingGranularity(granularity);
-    ASSERT(m_end.isNotNull());
+    DCHECK(m_end.isNotNull());
     adjustSelectionToAvoidCrossingShadowBoundaries();
     adjustSelectionToAvoidCrossingEditingBoundaries();
     updateSelectionType();
@@ -806,14 +802,14 @@ VisibleSelectionChangeObserver::~VisibleSelectionChangeObserver()
 template <typename Strategy>
 void VisibleSelectionTemplate<Strategy>::setChangeObserver(VisibleSelectionChangeObserver& observer)
 {
-    ASSERT(!m_changeObserver);
+    DCHECK(!m_changeObserver);
     m_changeObserver = &observer;
 }
 
 template <typename Strategy>
 void VisibleSelectionTemplate<Strategy>::clearChangeObserver()
 {
-    ASSERT(m_changeObserver);
+    DCHECK(m_changeObserver);
     m_changeObserver = nullptr;
 }
 
@@ -847,7 +843,7 @@ void VisibleSelectionTemplate<Strategy>::updateIfNeeded()
     Document* document = m_base.document();
     if (!document)
         return;
-    document->updateLayoutIgnorePendingStylesheets();
+    document->updateStyleAndLayoutIgnorePendingStylesheets();
     const bool hasTrailingWhitespace = m_hasTrailingWhitespace;
     validate(m_granularity);
     if (!hasTrailingWhitespace)
@@ -858,8 +854,13 @@ void VisibleSelectionTemplate<Strategy>::updateIfNeeded()
 template <typename Strategy>
 void VisibleSelectionTemplate<Strategy>::validatePositionsIfNeeded()
 {
-    if (!isValidPosition(m_base) || !isValidPosition(m_extent) || !isValidPosition(m_start) || !isValidPosition(m_end))
-        validate();
+    if (!m_base.inShadowIncludingDocument() || !m_extent.inShadowIncludingDocument()) {
+        *this = VisibleSelectionTemplate();
+        return;
+    }
+    if (isValidPosition(m_base) && isValidPosition(m_extent) && isValidPosition(m_start) && isValidPosition(m_end))
+        return;
+    validate();
 }
 
 template <typename Strategy>

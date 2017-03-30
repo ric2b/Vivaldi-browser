@@ -92,7 +92,6 @@ enum IPCMessageStart {
   ScreenOrientationMsgStart,
   MediaStreamTrackMetricsHostMsgStart,
   ChromeExtensionMsgStart,
-  MojoMsgStart,
   TranslateMsgStart,
   CldDataProviderMsgStart,
   PushMessagingMsgStart,
@@ -102,11 +101,9 @@ enum IPCMessageStart {
   OzoneGpuMsgStart,
   ChromeUtilityExtensionsMsgStart,
   PlatformNotificationMsgStart,
-  CredentialManagerMsgStart,
   PDFMsgStart,
   ManifestManagerMsgStart,
   ExtensionUtilityMsgStart,
-  GeofencingMsgStart,
   LayoutTestMsgStart,
   NetworkHintsMsgStart,
   BluetoothMsgStart,
@@ -122,7 +119,6 @@ enum IPCMessageStart {
   DataReductionProxyStart,
   ContentSettingsMsgStart,
   ChromeAppBannerMsgStart,
-  SafeJsonParserMsgStart,
   AttachmentBrokerMsgStart,
   RenderProcessMsgStart,
   PageLoadMetricsMsgStart,
@@ -137,6 +133,7 @@ enum IPCMessageStart {
   DWriteFontProxyMsgStart,
   MediaPlayerDelegateMsgStart,
   SurfaceViewManagerMsgStart,
+  VivaldiMsgStart,
   LastIPCMsgStart  // Must come last.
 };
 

@@ -8,7 +8,7 @@
 #include <string>
 
 #include "base/callback.h"
-#include "media/audio/audio_parameters.h"
+#include "media/base/audio_parameters.h"
 #include "media/base/media_export.h"
 
 namespace media {
@@ -18,12 +18,15 @@ enum OutputDeviceStatus {
   OUTPUT_DEVICE_STATUS_OK = 0,
   OUTPUT_DEVICE_STATUS_ERROR_NOT_FOUND,
   OUTPUT_DEVICE_STATUS_ERROR_NOT_AUTHORIZED,
+  OUTPUT_DEVICE_STATUS_ERROR_TIMED_OUT,
   OUTPUT_DEVICE_STATUS_ERROR_INTERNAL,
   OUTPUT_DEVICE_STATUS_LAST = OUTPUT_DEVICE_STATUS_ERROR_INTERNAL,
 };
 
 using OutputDeviceStatusCB = base::Callback<void(OutputDeviceStatus)>;
 
+// Output device information returned by
+// AudioRendererSink::GetOutputDeviceInfo()
 class MEDIA_EXPORT OutputDeviceInfo {
  public:
   // Use this constructor to initialize with "no info available" values.

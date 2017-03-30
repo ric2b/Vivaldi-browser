@@ -4,7 +4,7 @@
 
 #include "content/test/test_background_sync_manager.h"
 
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -77,7 +77,7 @@ void TestBackgroundSyncManager::GetDataFromBackend(
 void TestBackgroundSyncManager::DispatchSyncEvent(
     const std::string& tag,
     const scoped_refptr<ServiceWorkerVersion>& active_version,
-    mojom::BackgroundSyncEventLastChance last_chance,
+    blink::mojom::BackgroundSyncEventLastChance last_chance,
     const ServiceWorkerVersion::StatusCallback& callback) {
   ASSERT_FALSE(dispatch_sync_callback_.is_null());
   last_chance_ = last_chance;

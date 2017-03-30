@@ -10,12 +10,19 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/ref_counted.h"
+#include "base/sequenced_task_runner.h"
+#include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task_scheduler/task.h"
 #include "base/task_scheduler/task_traits.h"
 #include "base/task_scheduler/test_utils.h"
+#include "base/test/test_simple_task_runner.h"
 #include "base/threading/platform_thread.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/simple_thread.h"
+#include "base/threading/thread_restrictions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
@@ -49,7 +56,7 @@ class ThreadCallingShutdown : public SimpleThread {
 // Runs a task asynchronously.
 class ThreadRunningTask : public SimpleThread {
  public:
-  explicit ThreadRunningTask(TaskTracker* tracker, const Task* task)
+  ThreadRunningTask(TaskTracker* tracker, const Task* task)
       : SimpleThread("ThreadRunningTask"), tracker_(tracker), task_(task) {}
 
  private:
@@ -59,6 +66,19 @@ class ThreadRunningTask : public SimpleThread {
   const Task* const task_;
 
   DISALLOW_COPY_AND_ASSIGN(ThreadRunningTask);
+};
+
+class ScopedSetSingletonAllowed {
+ public:
+  ScopedSetSingletonAllowed(bool singleton_allowed)
+      : previous_value_(
+            ThreadRestrictions::SetSingletonAllowed(singleton_allowed)) {}
+  ~ScopedSetSingletonAllowed() {
+    ThreadRestrictions::SetSingletonAllowed(previous_value_);
+  }
+
+ private:
+  const bool previous_value_;
 };
 
 class TaskSchedulerTaskTrackerTest
@@ -71,7 +91,7 @@ class TaskSchedulerTaskTrackerTest
     return WrapUnique(new Task(
         FROM_HERE,
         Bind(&TaskSchedulerTaskTrackerTest::RunTaskCallback, Unretained(this)),
-        TaskTraits().WithShutdownBehavior(shutdown_behavior)));
+        TaskTraits().WithShutdownBehavior(shutdown_behavior), TimeDelta()));
   }
 
   // Calls tracker_->Shutdown() on a new thread. When this returns, Shutdown()
@@ -146,7 +166,7 @@ TEST_P(TaskSchedulerTaskTrackerTest, WillPostAndRunLongTaskBeforeShutdown) {
   WaitableEvent event(false, false);
   std::unique_ptr<Task> blocked_task(
       new Task(FROM_HERE, Bind(&WaitableEvent::Wait, Unretained(&event)),
-               TaskTraits().WithShutdownBehavior(GetParam())));
+               TaskTraits().WithShutdownBehavior(GetParam()), TimeDelta()));
 
   // Inform |task_tracker_| that |blocked_task| will be posted.
   EXPECT_TRUE(tracker_.WillPostTask(blocked_task.get()));
@@ -281,6 +301,110 @@ TEST_P(TaskSchedulerTaskTrackerTest, WillPostAfterShutdown) {
   } else {
     EXPECT_FALSE(tracker_.WillPostTask(task.get()));
   }
+}
+
+// Verify that BLOCK_SHUTDOWN and SKIP_ON_SHUTDOWN tasks can
+// AssertSingletonAllowed() but CONTINUE_ON_SHUTDOWN tasks can't.
+TEST_P(TaskSchedulerTaskTrackerTest, SingletonAllowed) {
+  const bool can_use_singletons =
+      (GetParam() != TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN);
+
+  TaskTracker tracker;
+  Task task(FROM_HERE, Bind(&ThreadRestrictions::AssertSingletonAllowed),
+            TaskTraits().WithShutdownBehavior(GetParam()), TimeDelta());
+  EXPECT_TRUE(tracker.WillPostTask(&task));
+
+  // Set the singleton allowed bit to the opposite of what it is expected to be
+  // when |tracker| runs |task| to verify that |tracker| actually sets the
+  // correct value.
+  ScopedSetSingletonAllowed scoped_singleton_allowed(!can_use_singletons);
+
+  // Running the task should fail iff the task isn't allowed to use singletons.
+  if (can_use_singletons) {
+    tracker.RunTask(&task);
+  } else {
+    EXPECT_DCHECK_DEATH({ tracker.RunTask(&task); }, "");
+  }
+}
+
+static void RunTaskRunnerHandleVerificationTask(TaskTracker* tracker,
+                                         const Task* verify_task) {
+  // Pretend |verify_task| is posted to respect TaskTracker's contract.
+  EXPECT_TRUE(tracker->WillPostTask(verify_task));
+
+  // Confirm that the test conditions are right (no TaskRunnerHandles set
+  // already).
+  EXPECT_FALSE(ThreadTaskRunnerHandle::IsSet());
+  EXPECT_FALSE(SequencedTaskRunnerHandle::IsSet());
+
+  tracker->RunTask(verify_task);
+
+  // TaskRunnerHandle state is reset outside of task's scope.
+  EXPECT_FALSE(ThreadTaskRunnerHandle::IsSet());
+  EXPECT_FALSE(SequencedTaskRunnerHandle::IsSet());
+}
+
+static void VerifyNoTaskRunnerHandle() {
+  EXPECT_FALSE(ThreadTaskRunnerHandle::IsSet());
+  EXPECT_FALSE(SequencedTaskRunnerHandle::IsSet());
+}
+
+TEST_P(TaskSchedulerTaskTrackerTest, TaskRunnerHandleIsNotSetOnParallel) {
+  // Create a task that will verify that TaskRunnerHandles are not set in its
+  // scope per no TaskRunner ref being set to it.
+  std::unique_ptr<Task> verify_task(
+      new Task(FROM_HERE, Bind(&VerifyNoTaskRunnerHandle),
+               TaskTraits().WithShutdownBehavior(GetParam()), TimeDelta()));
+
+  RunTaskRunnerHandleVerificationTask(&tracker_, verify_task.get());
+}
+
+static void VerifySequencedTaskRunnerHandle(
+    const SequencedTaskRunner* expected_task_runner) {
+  EXPECT_FALSE(ThreadTaskRunnerHandle::IsSet());
+  EXPECT_TRUE(SequencedTaskRunnerHandle::IsSet());
+  EXPECT_EQ(expected_task_runner, SequencedTaskRunnerHandle::Get());
+}
+
+TEST_P(TaskSchedulerTaskTrackerTest,
+       SequencedTaskRunnerHandleIsSetOnSequenced) {
+  scoped_refptr<SequencedTaskRunner> test_task_runner(new TestSimpleTaskRunner);
+
+  // Create a task that will verify that SequencedTaskRunnerHandle is properly
+  // set to |test_task_runner| in its scope per |sequenced_task_runner_ref|
+  // being set to it.
+  std::unique_ptr<Task> verify_task(
+      new Task(FROM_HERE, Bind(&VerifySequencedTaskRunnerHandle,
+                               base::Unretained(test_task_runner.get())),
+               TaskTraits().WithShutdownBehavior(GetParam()), TimeDelta()));
+  verify_task->sequenced_task_runner_ref = test_task_runner;
+
+  RunTaskRunnerHandleVerificationTask(&tracker_, verify_task.get());
+}
+
+static void VerifyThreadTaskRunnerHandle(
+    const SingleThreadTaskRunner* expected_task_runner) {
+  EXPECT_TRUE(ThreadTaskRunnerHandle::IsSet());
+  // SequencedTaskRunnerHandle inherits ThreadTaskRunnerHandle for thread.
+  EXPECT_TRUE(SequencedTaskRunnerHandle::IsSet());
+  EXPECT_EQ(expected_task_runner, ThreadTaskRunnerHandle::Get());
+}
+
+TEST_P(TaskSchedulerTaskTrackerTest,
+       ThreadTaskRunnerHandleIsSetOnSingleThreaded) {
+  scoped_refptr<SingleThreadTaskRunner> test_task_runner(
+      new TestSimpleTaskRunner);
+
+  // Create a task that will verify that ThreadTaskRunnerHandle is properly set
+  // to |test_task_runner| in its scope per |single_thread_task_runner_ref|
+  // being set on it.
+  std::unique_ptr<Task> verify_task(
+      new Task(FROM_HERE, Bind(&VerifyThreadTaskRunnerHandle,
+                               base::Unretained(test_task_runner.get())),
+               TaskTraits().WithShutdownBehavior(GetParam()), TimeDelta()));
+  verify_task->single_thread_task_runner_ref = test_task_runner;
+
+  RunTaskRunnerHandleVerificationTask(&tracker_, verify_task.get());
 }
 
 INSTANTIATE_TEST_CASE_P(

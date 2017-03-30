@@ -4,13 +4,15 @@
 
 #include "components/plugins/renderer/loadable_plugin_placeholder.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/json/string_escape.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "content/public/child/v8_value_converter.h"
 #include "content/public/renderer/render_frame.h"
@@ -58,6 +60,7 @@ LoadablePluginPlaceholder::LoadablePluginPlaceholder(
     const blink::WebPluginParams& params,
     const std::string& html_data)
     : PluginPlaceholderBase(render_frame, frame, params, html_data),
+      is_delayed_placeholder_(false),
       is_blocked_for_background_tab_(false),
       is_blocked_for_prerendering_(false),
       is_blocked_for_power_saver_poster_(false),
@@ -69,6 +72,11 @@ LoadablePluginPlaceholder::LoadablePluginPlaceholder(
       weak_factory_(this) {}
 
 LoadablePluginPlaceholder::~LoadablePluginPlaceholder() {
+}
+
+void LoadablePluginPlaceholder::SetDelegate(
+    std::unique_ptr<Delegate> delegate) {
+  delegate_ = std::move(delegate);
 }
 
 void LoadablePluginPlaceholder::MarkPluginEssential(
@@ -183,7 +191,9 @@ v8::Local<v8::Object> LoadablePluginPlaceholder::GetV8ScriptableObject(
 void LoadablePluginPlaceholder::OnUnobscuredRectUpdate(
     const gfx::Rect& unobscured_rect) {
   DCHECK(content::RenderThread::Get());
-  if (!plugin() || !power_saver_enabled_ || !finished_loading_)
+
+  // TODO(groby): Handle the case of power saver not being enabled.
+  if (!plugin() || !finished_loading_)
     return;
 
   if (unobscured_rect_ == unobscured_rect)
@@ -194,23 +204,31 @@ void LoadablePluginPlaceholder::OnUnobscuredRectUpdate(
   float zoom_factor = plugin()->container()->pageZoomFactor();
   int width = roundf(unobscured_rect_.width() / zoom_factor);
   int height = roundf(unobscured_rect_.height() / zoom_factor);
+  int x = roundf(unobscured_rect_.x() / zoom_factor);
+  int y = roundf(unobscured_rect_.y() / zoom_factor);
+
+  // On a size update check if we now qualify as a essential plugin.
+  url::Origin content_origin = url::Origin(GetPluginParams().url);
+  content::RenderFrame::PeripheralContentStatus status =
+      render_frame()->GetPeripheralContentStatus(
+          render_frame()->GetWebFrame()->top()->getSecurityOrigin(),
+          content_origin, gfx::Size(width, height));
+  // If this is a "delay" placeholder, delegate decisions.
+  if (is_delayed_placeholder_) {
+    OnLoadedRectUpdate(gfx::Rect(x, y, width, height), status);
+    is_delayed_placeholder_ = false;
+    return;
+  }
 
   if (is_blocked_for_power_saver_poster_) {
     // Adjust poster container padding and dimensions to center play button for
     // plugins and plugin posters that have their top or left portions obscured.
-    int x = roundf(unobscured_rect_.x() / zoom_factor);
-    int y = roundf(unobscured_rect_.y() / zoom_factor);
     std::string script = base::StringPrintf(
         "window.resizePoster('%dpx', '%dpx', '%dpx', '%dpx')", x, y, width,
         height);
     plugin()->web_view()->mainFrame()->executeScript(
         blink::WebScriptSource(base::UTF8ToUTF16(script)));
 
-    // On a size update check if we now qualify as a essential plugin.
-    url::Origin content_origin = url::Origin(GetPluginParams().url);
-    auto status = render_frame()->GetPeripheralContentStatus(
-        render_frame()->GetWebFrame()->top()->getSecurityOrigin(),
-        content_origin, gfx::Size(width, height));
     if (status != content::RenderFrame::CONTENT_STATUS_PERIPHERAL) {
       MarkPluginEssential(
           heuristic_run_before_
@@ -309,7 +327,7 @@ void LoadablePluginPlaceholder::DidFinishIconRepositionForTestingCallback() {
   blink::WebElement element = plugin()->container()->element();
   element.setAttribute("placeholderReady", "true");
 
-  scoped_ptr<content::V8ValueConverter> converter(
+  std::unique_ptr<content::V8ValueConverter> converter(
       content::V8ValueConverter::create());
   base::StringValue value("placeholderReady");
   blink::WebSerializedScriptValue message_data =
@@ -317,7 +335,7 @@ void LoadablePluginPlaceholder::DidFinishIconRepositionForTestingCallback() {
           &value, element.document().frame()->mainWorldScriptContext()));
   blink::WebDOMMessageEvent msg_event(message_data);
 
-  element.dispatchEvent(msg_event);
+  plugin()->container()->enqueueMessageEvent(msg_event);
 }
 
 void LoadablePluginPlaceholder::SetPluginInfo(

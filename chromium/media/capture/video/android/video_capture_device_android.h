@@ -54,8 +54,9 @@ class MEDIA_EXPORT VideoCaptureDeviceAndroid : public VideoCaptureDevice {
 
   // VideoCaptureDevice implementation.
   void AllocateAndStart(const VideoCaptureParams& params,
-                        scoped_ptr<Client> client) override;
+                        std::unique_ptr<Client> client) override;
   void StopAndDeAllocate() override;
+  bool TakePhoto(const TakePhotoCallback& photo_callback) override;
 
   // Implement org.chromium.media.VideoCapture.nativeOnFrameAvailable.
   void OnFrameAvailable(JNIEnv* env,
@@ -68,6 +69,12 @@ class MEDIA_EXPORT VideoCaptureDeviceAndroid : public VideoCaptureDevice {
   void OnError(JNIEnv* env,
                const base::android::JavaParamRef<jobject>& obj,
                const base::android::JavaParamRef<jstring>& message);
+
+  // Implement org.chromium.media.VideoCapture.nativeOnPhotoTaken.
+  void OnPhotoTaken(JNIEnv* env,
+                    const base::android::JavaParamRef<jobject>& obj,
+                    jlong callback_id,
+                    const base::android::JavaParamRef<jbyteArray>& data);
 
  private:
   enum InternalState {
@@ -87,7 +94,11 @@ class MEDIA_EXPORT VideoCaptureDeviceAndroid : public VideoCaptureDevice {
   bool got_first_frame_;
   base::TimeTicks expected_next_frame_time_;
   base::TimeDelta frame_interval_;
-  scoped_ptr<VideoCaptureDevice::Client> client_;
+  std::unique_ptr<VideoCaptureDevice::Client> client_;
+
+  // List of |photo_callbacks_| in flight, being served in Java side.
+  base::Lock photo_callbacks_lock_;
+  std::list<std::unique_ptr<TakePhotoCallback>> photo_callbacks_;
 
   Name device_name_;
   VideoCaptureFormat capture_format_;

@@ -8,6 +8,15 @@
 
 namespace blink {
 
+namespace {
+
+class DummyGCBase final : public GarbageCollected<DummyGCBase> {
+public:
+    DEFINE_INLINE_TRACE() { }
+};
+
+}
+
 PersistentRegion::~PersistentRegion()
 {
     PersistentNodeSlots* slots = m_slots;
@@ -45,11 +54,26 @@ void PersistentRegion::ensurePersistentNodeSlots(void* self, TraceCallback trace
     m_slots = slots;
 }
 
+void PersistentRegion::releasePersistentNode(PersistentNode* persistentNode, ThreadState::PersistentClearCallback callback)
+{
+    ASSERT(!persistentNode->isUnused());
+    // 'self' is in use, containing the persistent wrapper object.
+    void* self = persistentNode->self();
+    if (callback) {
+        (*callback)(self);
+        ASSERT(persistentNode->isUnused());
+        return;
+    }
+    Persistent<DummyGCBase>* persistent = reinterpret_cast<Persistent<DummyGCBase>*>(self);
+    persistent->clear();
+    ASSERT(persistentNode->isUnused());
+}
+
 // This function traces all PersistentNodes. If we encounter
 // a PersistentNodeSlot that contains only freed PersistentNodes,
 // we delete the PersistentNodeSlot. This function rebuilds the free
 // list of PersistentNodes.
-void PersistentRegion::tracePersistentNodes(Visitor* visitor)
+void PersistentRegion::tracePersistentNodes(Visitor* visitor, ShouldTraceCallback shouldTrace)
 {
     size_t debugMarkedObjectSize = ProcessHeap::totalMarkedObjectSize();
     base::debug::Alias(&debugMarkedObjectSize);
@@ -71,8 +95,10 @@ void PersistentRegion::tracePersistentNodes(Visitor* visitor)
                 freeListNext = node;
                 ++freeCount;
             } else {
-                node->tracePersistentNode(visitor);
                 ++persistentCount;
+                if (!shouldTrace(visitor, node))
+                    continue;
+                node->tracePersistentNode(visitor);
                 debugMarkedObjectSize = ProcessHeap::totalMarkedObjectSize();
             }
         }
@@ -95,11 +121,14 @@ void PersistentRegion::tracePersistentNodes(Visitor* visitor)
     ASSERT(persistentCount == m_persistentCount);
 }
 
-namespace {
-class GCObject final : public GarbageCollected<GCObject> {
-public:
-    DEFINE_INLINE_TRACE() { }
-};
+bool CrossThreadPersistentRegion::shouldTracePersistentNode(Visitor* visitor, PersistentNode* node)
+{
+    CrossThreadPersistent<DummyGCBase>* persistent = reinterpret_cast<CrossThreadPersistent<DummyGCBase>*>(node->self());
+    ASSERT(persistent);
+    Address rawObject = reinterpret_cast<Address>(persistent->get());
+    if (!rawObject)
+        return false;
+    return &visitor->heap() == &ThreadState::fromObject(rawObject)->heap();
 }
 
 void CrossThreadPersistentRegion::prepareForThreadStateTermination(ThreadState* threadState)
@@ -119,7 +148,7 @@ void CrossThreadPersistentRegion::prepareForThreadStateTermination(ThreadState* 
                 continue;
 
             // 'self' is in use, containing the cross-thread persistent wrapper object.
-            CrossThreadPersistent<GCObject>* persistent = reinterpret_cast<CrossThreadPersistent<GCObject>*>(slots->m_slot[i].self());
+            CrossThreadPersistent<DummyGCBase>* persistent = reinterpret_cast<CrossThreadPersistent<DummyGCBase>*>(slots->m_slot[i].self());
             ASSERT(persistent);
             void* rawObject = persistent->atomicGet();
             if (!rawObject)
@@ -130,8 +159,10 @@ void CrossThreadPersistentRegion::prepareForThreadStateTermination(ThreadState* 
             // but not invalidate its CrossThreadPersistent<>s.
             if (page->orphaned())
                 continue;
-            if (page->arena()->getThreadState() == threadState)
+            if (page->arena()->getThreadState() == threadState) {
                 persistent->clear();
+                ASSERT(slots->m_slot[i].isUnused());
+            }
         }
         slots = slots->m_next;
     }

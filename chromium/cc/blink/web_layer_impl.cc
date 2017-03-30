@@ -25,7 +25,7 @@
 #include "third_party/WebKit/public/platform/WebLayerPositionConstraint.h"
 #include "third_party/WebKit/public/platform/WebLayerScrollClient.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
-#include "third_party/skia/include/utils/SkMatrix44.h"
+#include "third_party/skia/include/core/SkMatrix44.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
 
@@ -215,10 +215,6 @@ bool WebLayerImpl::hasActiveAnimationForTesting() {
   return layer_->HasActiveAnimationForTesting();
 }
 
-void WebLayerImpl::setForceRenderSurface(bool force_render_surface) {
-  layer_->SetForceRenderSurface(force_render_surface);
-}
-
 void WebLayerImpl::setScrollPositionDouble(blink::WebDoublePoint position) {
   layer_->SetScrollOffset(gfx::ScrollOffset(position.x, position.y));
 }
@@ -297,31 +293,6 @@ WebVector<WebRect> WebLayerImpl::nonFastScrollableRegion() const {
        region_rects.next()) {
     result[i] = region_rects.rect();
     ++i;
-  }
-  return result;
-}
-
-void WebLayerImpl::setFrameTimingRequests(
-    const WebVector<std::pair<int64_t, WebRect>>& requests) {
-  std::vector<cc::FrameTimingRequest> frame_timing_requests(requests.size());
-  for (size_t i = 0; i < requests.size(); ++i) {
-    frame_timing_requests[i] = cc::FrameTimingRequest(
-        requests[i].first, gfx::Rect(requests[i].second));
-  }
-  layer_->SetFrameTimingRequests(frame_timing_requests);
-}
-
-WebVector<std::pair<int64_t, WebRect>> WebLayerImpl::frameTimingRequests()
-    const {
-  const std::vector<cc::FrameTimingRequest>& frame_timing_requests =
-      layer_->FrameTimingRequests();
-
-  size_t num_requests = frame_timing_requests.size();
-
-  WebVector<std::pair<int64_t, WebRect>> result(num_requests);
-  for (size_t i = 0; i < num_requests; ++i) {
-    result[i] = std::make_pair(frame_timing_requests[i].id(),
-                               frame_timing_requests[i].rect());
   }
   return result;
 }
@@ -444,6 +415,10 @@ Layer* WebLayerImpl::layer() const {
 
 void WebLayerImpl::SetContentsOpaqueIsFixed(bool fixed) {
   contents_opaque_is_fixed_ = fixed;
+}
+
+void WebLayerImpl::setHasWillChangeTransformHint(bool has_will_change) {
+  layer_->SetHasWillChangeTransformHint(has_will_change);
 }
 
 }  // namespace cc_blink

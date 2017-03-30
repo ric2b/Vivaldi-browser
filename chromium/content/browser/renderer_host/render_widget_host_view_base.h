@@ -8,12 +8,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/process/kill.h"
 #include "base/timer/timer.h"
@@ -31,7 +31,7 @@
 #include "third_party/WebKit/public/web/WebTextDirection.h"
 #include "ui/base/ime/text_input_mode.h"
 #include "ui/base/ime/text_input_type.h"
-#include "ui/gfx/display.h"
+#include "ui/display/display.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/range/range.h"
@@ -41,7 +41,6 @@ class SkBitmap;
 
 struct AccessibilityHostMsg_EventParams;
 struct ViewHostMsg_SelectionBounds_Params;
-struct ViewHostMsg_TextInputState_Params;
 
 namespace media {
 class VideoFrame;
@@ -70,6 +69,7 @@ class SyntheticGestureTarget;
 class WebCursor;
 struct DidOverscrollParams;
 struct NativeWebKeyboardEvent;
+struct TextInputState;
 
 // Basic implementation shared by concrete RenderWidgetHostView subclasses.
 class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
@@ -97,7 +97,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   gfx::Size GetVisibleViewportSize() const override;
   void SetInsets(const gfx::Insets& insets) override;
   void BeginFrameSubscription(
-      scoped_ptr<RenderWidgetHostViewFrameSubscriber> subscriber) override;
+      std::unique_ptr<RenderWidgetHostViewFrameSubscriber> subscriber) override;
   void EndFrameSubscription() override;
 
   // This only needs to be overridden by RenderWidgetHostViewBase subclasses
@@ -171,7 +171,8 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
 
   // Create a platform specific SyntheticGestureTarget implementation that will
   // be used to inject synthetic input events.
-  virtual scoped_ptr<SyntheticGestureTarget> CreateSyntheticGestureTarget();
+  virtual std::unique_ptr<SyntheticGestureTarget>
+  CreateSyntheticGestureTarget();
 
   // Create a BrowserAccessibilityManager for a frame in this view.
   // If |for_root_frame| is true, creates a BrowserAccessibilityManager
@@ -188,8 +189,9 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // Informs that the focused DOM node has changed.
   virtual void FocusedNodeChanged(bool is_editable_node) {}
 
-  virtual void OnSwapCompositorFrame(uint32_t output_surface_id,
-                                     scoped_ptr<cc::CompositorFrame> frame) {}
+  virtual void OnSwapCompositorFrame(
+      uint32_t output_surface_id,
+      std::unique_ptr<cc::CompositorFrame> frame) {}
 
   // This method exists to allow removing of displayed graphics, after a new
   // page has been loaded, to prevent the displayed URL from being out of sync
@@ -266,8 +268,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   virtual void SetIsLoading(bool is_loading) = 0;
 
   // Updates the state of the input method attached to the view.
-  virtual void TextInputStateChanged(
-      const ViewHostMsg_TextInputState_Params& params) = 0;
+  virtual void TextInputStateChanged(const TextInputState& params) = 0;
 
   // Cancel the ongoing composition of the input method attached to the view.
   virtual void ImeCancelComposition() = 0;
@@ -334,11 +335,11 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
 
   // Compute the orientation type of the display assuming it is a mobile device.
   static blink::WebScreenOrientationType GetOrientationTypeForMobile(
-      const gfx::Display& display);
+      const display::Display& display);
 
   // Compute the orientation type of the display assuming it is a desktop.
   static blink::WebScreenOrientationType GetOrientationTypeForDesktop(
-      const gfx::Display& display);
+      const display::Display& display);
 
   virtual void GetScreenInfo(blink::WebScreenInfo* results) = 0;
   virtual bool GetScreenColorProfile(std::vector<char>* color_profile) = 0;
@@ -418,7 +419,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   float current_device_scale_factor_;
 
   // The orientation of the display the renderer is currently on.
-  gfx::Display::Rotation current_display_rotation_;
+  display::Display::Rotation current_display_rotation_;
 
   // Whether pinch-to-zoom should be enabled and pinch events forwarded to the
   // renderer.

@@ -14,6 +14,8 @@
 #include <string>
 #include <vector>
 
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "components/safe_browsing_db/hit_report.h"
 #include "components/safe_browsing_db/util.h"
@@ -54,6 +56,7 @@ class SafeBrowsingDatabaseManager
         const std::set<std::string>& threats) {}
 
     // Called when the result of checking the API blacklist is known.
+    // TODO(kcarattini): Consider if we need |url| passed here, remove if not.
     virtual void OnCheckApiBlacklistUrlResult(const GURL& url,
                                               const ThreatMetadata& metadata) {}
 
@@ -62,7 +65,6 @@ class SafeBrowsingDatabaseManager
                                           SBThreatType threat_type,
                                           const std::string& threat_hash) {}
   };
-
 
   // Returns true if URL-checking is supported on this build+device.
   // If false, calls to CheckBrowseUrl may dcheck-fail.
@@ -129,12 +131,6 @@ class SafeBrowsingDatabaseManager
   // method must be called on the IO thread.
   virtual bool MatchDownloadWhitelistString(const std::string& str) = 0;
 
-  // Check if the |url| matches any of the full-length hashes from the off-
-  // domain inclusion whitelist. Returns true if there was a match and false
-  // otherwise. To make sure we are conservative, we will return true if an
-  // error occurs.  This method must be called on the IO thread.
-  virtual bool MatchInclusionWhitelistUrl(const GURL& url) = 0;
-
   // Check if |str|, a lowercase DLL file name, matches any of the full-length
   // hashes from the module whitelist.  Returns true if there was a match and
   // false otherwise.  To make sure we are conservative we will return true if
@@ -148,15 +144,24 @@ class SafeBrowsingDatabaseManager
   virtual bool IsCsdWhitelistKillSwitchOn() = 0;
 
   // Called on the IO thread to cancel a pending check if the result is no
-  // longer needed.  Also called after the result has been handled.
+  // longer needed.  Also called after the result has been handled. Api checks
+  // are handled separately. To cancel an API check use CancelApiCheck.
   virtual void CancelCheck(Client* client) = 0;
 
+  // Called on the IO thread to cancel a pending API check if the result is no
+  // longer needed. Returns true if the client was found and the check
+  // successfully cancelled.
+  virtual bool CancelApiCheck(Client* client);
+
   // Called on the IO thread to check if the given url has blacklisted APIs.
-  // "client" is called asynchronously with the result when it is ready.
-  // This method has the same implementation for both the local and remote
-  // database managers since it pings Safe Browsing servers directly without
-  // accessing the database at all.
-  virtual void CheckApiBlacklistUrl(const GURL& url, Client* client);
+  // "client" is called asynchronously with the result when it is ready. Callers
+  // should wait for results before calling this method a second time with the
+  // same client. This method has the same implementation for both the local and
+  // remote database managers since it pings Safe Browsing servers directly
+  // without accessing the database at all.  Returns true if we can
+  // synchronously determine that the url is safe. Otherwise it returns false,
+  // and "client" is called asynchronously with the result when it is ready.
+  virtual bool CheckApiBlacklistUrl(const GURL& url, Client* client);
 
   // Called to initialize objects that are used on the io_thread, such as the
   // v4 protocol manager.  This may be called multiple times during the life of
@@ -169,14 +174,64 @@ class SafeBrowsingDatabaseManager
   virtual void StopOnIOThread(bool shutdown);
 
  protected:
+  // Bundled client info for an API abuse hash prefix check.
+  class SafeBrowsingApiCheck {
+   public:
+    SafeBrowsingApiCheck(const GURL& url,
+                         const std::vector<SBFullHash>& full_hashes,
+                         Client* client);
+    ~SafeBrowsingApiCheck();
+
+    const GURL& url() {return url_;}
+    std::vector<SBFullHash>& full_hashes() {return full_hashes_;}
+    SafeBrowsingDatabaseManager::Client* client() {return client_;}
+
+   private:
+    GURL url_;
+    std::vector<SBFullHash> full_hashes_;
+    // Not owned.
+    SafeBrowsingDatabaseManager::Client* client_;
+
+    DISALLOW_COPY_AND_ASSIGN(SafeBrowsingApiCheck);
+  };
+
   SafeBrowsingDatabaseManager();
 
   virtual ~SafeBrowsingDatabaseManager();
 
   friend class base::RefCountedThreadSafe<SafeBrowsingDatabaseManager>;
 
-  // Created and destroyed via StartonIOThread/StopOnIOThread.
+  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingDatabaseManagerTest,
+                           CheckApiBlacklistUrlPrefixes);
+  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingDatabaseManagerTest,
+                           HandleGetHashesWithApisResults);
+  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingDatabaseManagerTest,
+                           HandleGetHashesWithApisResultsNoMatch);
+  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingDatabaseManagerTest,
+                           HandleGetHashesWithApisResultsMatches);
+  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingDatabaseManagerTest,
+                           CancelApiCheck);
+
+  typedef std::set<SafeBrowsingApiCheck*> CurrentApiChecks;
+
+  // In-progress checks. This set owns the SafeBrowsingApiCheck pointers and is
+  // responsible for deleting them when removing from the set.
+  CurrentApiChecks api_checks_;
+
+  // Called on the IO thread wheh the SafeBrowsingProtocolManager has received
+  // the full hash and api results for prefixes of the |url| argument in
+  // CheckApiBlacklistUrl.
+  virtual void HandleGetHashesWithApisResults(
+      SafeBrowsingApiCheck* check,
+      const std::vector<SBFullHashResult>& full_hash_results,
+      const base::Time& negative_cache_expire);
+
+  // Created and destroyed via StartOnIOThread/StopOnIOThread.
   V4GetHashProtocolManager* v4_get_hash_protocol_manager_;
+
+ private:
+  // Returns an iterator to the pending API check with the given |client|.
+  CurrentApiChecks::iterator FindClientApiCheck(Client* client);
 };  // class SafeBrowsingDatabaseManager
 
 }  // namespace safe_browsing

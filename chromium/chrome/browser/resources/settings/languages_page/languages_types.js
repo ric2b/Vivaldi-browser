@@ -8,28 +8,41 @@
  */
 
 /**
- * Current properties of a language.
- * @typedef {{spellCheckEnabled: boolean, translateEnabled: boolean,
- *            removable: boolean}} */
+ * Settings and state for a particular enabled language.
+ * @typedef {{
+ *   language: !chrome.languageSettingsPrivate.Language,
+ *   removable: boolean,
+ *   spellCheckEnabled: boolean,
+ *   translateEnabled: boolean,
+ * }}
+ */
 var LanguageState;
 
 /**
- * Information about a language including intrinsic information (|language|)
- * and the |state| of the language.
- * @typedef {{language: !chrome.languageSettingsPrivate.Language,
- *            state: !LanguageState}}
+ * Input method data to expose to consumers (Chrome OS only).
+ * supported: an array of supported input methods set once at initialization.
+ * enabled: an array of the currently enabled input methods.
+ * currentId: ID of the currently active input method.
+ * @typedef {{
+ *     supported: !Array<!chrome.languageSettingsPrivate.InputMethod>,
+ *     enabled: !Array<!chrome.languageSettingsPrivate.InputMethod>,
+ *     currentId: string,
+ * }}
  */
-var LanguageInfo;
+var InputMethodsModel;
 
 /**
  * Languages data to expose to consumers.
- * supportedLanguages: an array of languages, ordered alphabetically.
- * enabledLanguages: an array of enabled language info, ordered by preference.
+ * supported: an array of languages, ordered alphabetically, set once
+ *     at initialization.
+ * enabled: an array of enabled language states, ordered by preference.
  * translateTarget: the default language to translate into.
+ * inputMethods: the InputMethodsModel (Chrome OS only).
  * @typedef {{
- *   supportedLanguages: !Array<!chrome.languageSettingsPrivate.Language>,
- *   enabledLanguages: !Array<!LanguageInfo>,
- *   translateTarget: string
+ *   supported: !Array<!chrome.languageSettingsPrivate.Language>,
+ *   enabled: !Array<!LanguageState>,
+ *   translateTarget: string,
+ *   inputMethods: (!InputMethodsModel|undefined),
  * }}
  */
 var LanguagesModel;
@@ -45,7 +58,9 @@ var LanguageHelper = function() {};
 
 LanguageHelper.prototype = {
 
-<if expr="chromeos or is_win">
+  /** @return {!Promise} */
+  whenReady: assertNotReached,
+
   /**
    * Sets the prospective UI language to the chosen language. This won't affect
    * the actual UI language until a restart.
@@ -55,7 +70,6 @@ LanguageHelper.prototype = {
 
   /** Resets the prospective UI language back to the actual UI language. */
   resetUILanguage: assertNotReached,
-</if>
 
   /**
    * Returns the "prospective" UI language, i.e. the one to be used on next
@@ -120,8 +134,55 @@ LanguageHelper.prototype = {
   convertLanguageCodeForTranslate: assertNotReached,
 
   /**
+   * Given a language code, returns just the base language. E.g., converts
+   * 'en-GB' to 'en'.
+   * @param {string} languageCode
+   * @return {string}
+   */
+  getLanguageCodeWithoutRegion: assertNotReached,
+
+  /**
    * @param {string} languageCode
    * @return {!chrome.languageSettingsPrivate.Language|undefined}
    */
   getLanguage: assertNotReached,
+
+  /**
+   * @param {string} id
+   * @return {!chrome.languageSettingsPrivate.InputMethod|undefined}
+   */
+  getInputMethod: assertNotReached,
+
+  /** @param {string} id */
+  addInputMethod: assertNotReached,
+
+  /** @param {string} id */
+  removeInputMethod: assertNotReached,
+
+  /** @param {string} id */
+  setCurrentInputMethod: assertNotReached,
+
+  /**
+   * param {string} languageCode
+   * @return {!Array<!chrome.languageSettingsPrivate.InputMethod>}
+   */
+  getInputMethodsForLanguage: assertNotReached,
+
+  /**
+   * @param {!chrome.languageSettingsPrivate.InputMethod} inputMethod
+   * @return {boolean}
+   */
+  isComponentIme: assertNotReached,
+
+  /** @param {string} id Input method ID. */
+  openInputMethodOptions: assertNotReached,
+
+  /** @param {string} id New current input method ID. */
+  onInputMethodChanged_: assertNotReached,
+
+  /** @param {string} id Added input method ID. */
+  onInputMethodAdded_: assertNotReached,
+
+  /** @param {string} id Removed input method ID. */
+  onInputMethodRemoved_: assertNotReached,
 };

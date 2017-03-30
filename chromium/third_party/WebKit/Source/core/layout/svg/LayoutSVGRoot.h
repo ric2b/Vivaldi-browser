@@ -47,6 +47,7 @@ public:
     LayoutObject* lastChild() const { ASSERT(children() == virtualChildren()); return children()->lastChild(); }
 
     bool isLayoutSizeChanged() const { return m_isLayoutSizeChanged; }
+    bool didScreenScaleFactorChange() const { return m_didScreenScaleFactorChange; }
     void setNeedsBoundariesUpdate() override { m_needsBoundariesOrTransformUpdate = true; }
     void setNeedsTransformUpdate() override { m_needsBoundariesOrTransformUpdate = true; }
 
@@ -65,6 +66,8 @@ public:
     const AffineTransform& localToBorderBoxTransform() const { return m_localToBorderBoxTransform; }
     bool shouldApplyViewportClip() const;
 
+    LayoutRect visualOverflowRect() const override;
+
     bool hasNonIsolatedBlendingDescendants() const final;
 
     const char* name() const override { return "LayoutSVGRoot"; }
@@ -79,7 +82,7 @@ private:
     bool isOfType(LayoutObjectType type) const override { return type == LayoutObjectSVG || type == LayoutObjectSVGRoot || LayoutReplaced::isOfType(type); }
 
     LayoutUnit computeReplacedLogicalWidth(ShouldComputePreferred  = ComputeActual) const override;
-    LayoutUnit computeReplacedLogicalHeight() const override;
+    LayoutUnit computeReplacedLogicalHeight(LayoutUnit estimatedUsedWidth = LayoutUnit()) const override;
     void layout() override;
     void paintReplaced(const PaintInfo&, const LayoutPoint&) const override;
 
@@ -124,6 +127,7 @@ private:
     mutable AffineTransform m_localToParentTransform;
     AffineTransform m_localToBorderBoxTransform;
     bool m_isLayoutSizeChanged : 1;
+    bool m_didScreenScaleFactorChange : 1;
     bool m_needsBoundariesOrTransformUpdate : 1;
     bool m_hasBoxDecorationBackground : 1;
     mutable bool m_hasNonIsolatedBlendingDescendants : 1;

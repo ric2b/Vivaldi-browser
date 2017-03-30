@@ -47,7 +47,6 @@ const char* ChromiumVersion() {
   // properly formed, e.g. the version string is at least as long as "0.0.0.0",
   // and starts and ends with numeric digits. This is to prevent another
   // regression like http://crbug.com/595471.
-#if !defined(_MSC_VER) || _MSC_VER >= 1900
   static_assert(arraysize(PRODUCT_VERSION) >= arraysize("0.0.0.0") &&
                     '0' <= PRODUCT_VERSION[0] && PRODUCT_VERSION[0] <= '9' &&
                     '0' <= PRODUCT_VERSION[arraysize(PRODUCT_VERSION) - 2] &&
@@ -55,7 +54,6 @@ const char* ChromiumVersion() {
                 "PRODUCT_VERSION must be a string of the form "
                 "'MAJOR.MINOR.BUILD.PATCH', e.g. '1.2.3.4'. "
                 "PRODUCT_VERSION='" PRODUCT_VERSION "' is badly formed.");
-#endif
 
   return PRODUCT_VERSION;
 }
@@ -179,40 +177,21 @@ void DataReductionProxyRequestOptions::RandBytes(void* output,
   crypto::RandBytes(output, length);
 }
 
-void DataReductionProxyRequestOptions::MaybeAddRequestHeader(
-    const net::ProxyServer& proxy_server,
+void DataReductionProxyRequestOptions::AddRequestHeader(
     net::HttpRequestHeaders* request_headers) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  if (!proxy_server.is_valid())
-    return;
-  if (proxy_server.is_direct())
-    return;
-  MaybeAddRequestHeaderImpl(proxy_server.host_port_pair(), false,
-                            request_headers);
-}
-
-void DataReductionProxyRequestOptions::MaybeAddProxyTunnelRequestHandler(
-    const net::HostPortPair& proxy_server,
-    net::HttpRequestHeaders* request_headers) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  MaybeAddRequestHeaderImpl(proxy_server, true, request_headers);
-}
-
-void DataReductionProxyRequestOptions::SetHeader(
-    net::HttpRequestHeaders* headers) {
   base::Time now = Now();
   // Authorization credentials must be regenerated if they are expired.
   if (!use_assigned_credentials_ && (now > credentials_expiration_time_))
     UpdateCredentials();
   const char kChromeProxyHeader[] = "Chrome-Proxy";
   std::string header_value;
-  if (headers->HasHeader(kChromeProxyHeader)) {
-    headers->GetHeader(kChromeProxyHeader, &header_value);
-    headers->RemoveHeader(kChromeProxyHeader);
+  if (request_headers->HasHeader(kChromeProxyHeader)) {
+    request_headers->GetHeader(kChromeProxyHeader, &header_value);
+    request_headers->RemoveHeader(kChromeProxyHeader);
     header_value += ", ";
   }
   header_value += header_value_;
-  headers->SetHeader(kChromeProxyHeader, header_value);
+  request_headers->SetHeader(kChromeProxyHeader, header_value);
 }
 
 void DataReductionProxyRequestOptions::ComputeCredentials(
@@ -290,19 +269,6 @@ std::string DataReductionProxyRequestOptions::GetDefaultKey() const {
 
 const std::string& DataReductionProxyRequestOptions::GetSecureSession() const {
   return secure_session_;
-}
-
-void DataReductionProxyRequestOptions::MaybeAddRequestHeaderImpl(
-    const net::HostPortPair& proxy_server,
-    bool expect_ssl,
-    net::HttpRequestHeaders* request_headers) {
-  if (proxy_server.IsEmpty())
-    return;
-  if (data_reduction_proxy_config_->IsDataReductionProxy(proxy_server, NULL) &&
-      data_reduction_proxy_config_->UsingHTTPTunnel(proxy_server) ==
-          expect_ssl) {
-    SetHeader(request_headers);
-  }
 }
 
 void DataReductionProxyRequestOptions::RegenerateRequestHeaderValue() {

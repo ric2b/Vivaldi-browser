@@ -4,10 +4,11 @@
 
 #include "net/websockets/websocket_stream.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/strings/stringprintf.h"
@@ -85,8 +86,9 @@ class StreamRequestImpl : public WebSocketStreamRequest {
       const GURL& url,
       const URLRequestContext* context,
       const url::Origin& origin,
-      scoped_ptr<WebSocketStream::ConnectDelegate> connect_delegate,
-      scoped_ptr<WebSocketHandshakeStreamCreateHelper> create_helper)
+      const GURL& first_party_for_cookies,
+      std::unique_ptr<WebSocketStream::ConnectDelegate> connect_delegate,
+      std::unique_ptr<WebSocketHandshakeStreamCreateHelper> create_helper)
       : delegate_(new Delegate(this)),
         url_request_(
             context->CreateRequest(url, DEFAULT_PRIORITY, delegate_.get())),
@@ -100,6 +102,8 @@ class StreamRequestImpl : public WebSocketStreamRequest {
     headers.SetHeader(websockets::kSecWebSocketVersion,
                       websockets::kSupportedVersion);
     url_request_->SetExtraRequestHeaders(headers);
+    url_request_->set_initiator(origin);
+    url_request_->set_first_party_for_cookies(first_party_for_cookies);
 
     // This passes the ownership of |create_helper_| to |url_request_|.
     url_request_->SetUserData(
@@ -112,7 +116,7 @@ class StreamRequestImpl : public WebSocketStreamRequest {
   // and so terminates the handshake if it is incomplete.
   ~StreamRequestImpl() override {}
 
-  void Start(scoped_ptr<base::Timer> timer) {
+  void Start(std::unique_ptr<base::Timer> timer) {
     DCHECK(timer);
     base::TimeDelta timeout(base::TimeDelta::FromSeconds(
         kHandshakeTimeoutIntervalInSeconds));
@@ -187,13 +191,13 @@ class StreamRequestImpl : public WebSocketStreamRequest {
  private:
   // |delegate_| needs to be declared before |url_request_| so that it gets
   // initialised first.
-  scoped_ptr<Delegate> delegate_;
+  std::unique_ptr<Delegate> delegate_;
 
   // Deleting the StreamRequestImpl object deletes this URLRequest object,
   // cancelling the whole connection.
-  scoped_ptr<URLRequest> url_request_;
+  std::unique_ptr<URLRequest> url_request_;
 
-  scoped_ptr<WebSocketStream::ConnectDelegate> connect_delegate_;
+  std::unique_ptr<WebSocketStream::ConnectDelegate> connect_delegate_;
 
   // Owned by the URLRequest.
   WebSocketHandshakeStreamCreateHelper* create_helper_;
@@ -202,7 +206,7 @@ class StreamRequestImpl : public WebSocketStreamRequest {
   std::string failure_message_;
 
   // A timer for handshake timeout.
-  scoped_ptr<base::Timer> timer_;
+  std::unique_ptr<base::Timer> timer_;
 };
 
 class SSLErrorCallbacks : public WebSocketEventInterface::SSLErrorCallbacks {
@@ -309,10 +313,9 @@ void Delegate::OnSSLCertificateError(URLRequest* request,
                                      const SSLInfo& ssl_info,
                                      bool fatal) {
   owner_->connect_delegate()->OnSSLCertificateError(
-      scoped_ptr<WebSocketEventInterface::SSLErrorCallbacks>(
+      std::unique_ptr<WebSocketEventInterface::SSLErrorCallbacks>(
           new SSLErrorCallbacks(request)),
-      ssl_info,
-      fatal);
+      ssl_info, fatal);
 }
 
 void Delegate::OnReadCompleted(URLRequest* request, int bytes_read) {
@@ -328,34 +331,38 @@ WebSocketStream::~WebSocketStream() {}
 
 WebSocketStream::ConnectDelegate::~ConnectDelegate() {}
 
-scoped_ptr<WebSocketStreamRequest> WebSocketStream::CreateAndConnectStream(
+std::unique_ptr<WebSocketStreamRequest> WebSocketStream::CreateAndConnectStream(
     const GURL& socket_url,
     const std::vector<std::string>& requested_subprotocols,
     const url::Origin& origin,
+    const GURL& first_party_for_cookies,
     URLRequestContext* url_request_context,
     const BoundNetLog& net_log,
-    scoped_ptr<ConnectDelegate> connect_delegate) {
-  scoped_ptr<WebSocketHandshakeStreamCreateHelper> create_helper(
+    std::unique_ptr<ConnectDelegate> connect_delegate) {
+  std::unique_ptr<WebSocketHandshakeStreamCreateHelper> create_helper(
       new WebSocketHandshakeStreamCreateHelper(connect_delegate.get(),
                                                requested_subprotocols));
-  scoped_ptr<StreamRequestImpl> request(new StreamRequestImpl(
-      socket_url, url_request_context, origin, std::move(connect_delegate),
+  std::unique_ptr<StreamRequestImpl> request(new StreamRequestImpl(
+      socket_url, url_request_context, origin, first_party_for_cookies,
+      std::move(connect_delegate),
       std::move(create_helper)));
-  request->Start(scoped_ptr<base::Timer>(new base::Timer(false, false)));
+  request->Start(std::unique_ptr<base::Timer>(new base::Timer(false, false)));
   return std::move(request);
 }
 
 // This is declared in websocket_test_util.h.
-scoped_ptr<WebSocketStreamRequest> CreateAndConnectStreamForTesting(
+std::unique_ptr<WebSocketStreamRequest> CreateAndConnectStreamForTesting(
     const GURL& socket_url,
-    scoped_ptr<WebSocketHandshakeStreamCreateHelper> create_helper,
+    std::unique_ptr<WebSocketHandshakeStreamCreateHelper> create_helper,
     const url::Origin& origin,
+    const GURL& first_party_for_cookies,
     URLRequestContext* url_request_context,
     const BoundNetLog& net_log,
-    scoped_ptr<WebSocketStream::ConnectDelegate> connect_delegate,
-    scoped_ptr<base::Timer> timer) {
-  scoped_ptr<StreamRequestImpl> request(new StreamRequestImpl(
-      socket_url, url_request_context, origin, std::move(connect_delegate),
+    std::unique_ptr<WebSocketStream::ConnectDelegate> connect_delegate,
+    std::unique_ptr<base::Timer> timer) {
+  std::unique_ptr<StreamRequestImpl> request(new StreamRequestImpl(
+      socket_url, url_request_context, origin, first_party_for_cookies,
+      std::move(connect_delegate),
       std::move(create_helper)));
   request->Start(std::move(timer));
   return std::move(request);
@@ -368,12 +375,10 @@ void WebSocketDispatchOnFinishOpeningHandshake(
     base::Time response_time) {
   DCHECK(connect_delegate);
   if (headers.get()) {
-    connect_delegate->OnFinishOpeningHandshake(make_scoped_ptr(
-        new WebSocketHandshakeResponseInfo(url,
-                                           headers->response_code(),
-                                           headers->GetStatusText(),
-                                           headers,
-                                           response_time)));
+    connect_delegate->OnFinishOpeningHandshake(
+        base::WrapUnique(new WebSocketHandshakeResponseInfo(
+            url, headers->response_code(), headers->GetStatusText(), headers,
+            response_time)));
   }
 }
 

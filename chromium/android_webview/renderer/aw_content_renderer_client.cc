@@ -52,18 +52,14 @@ using content::RenderThread;
 
 namespace android_webview {
 
-AwContentRendererClient::AwContentRendererClient()
-    : disable_page_visibility_(
-          base::CommandLine::ForCurrentProcess()
-              ->HasSwitch(switches::kDisablePageVisibility)) {}
+AwContentRendererClient::AwContentRendererClient() {}
 
-AwContentRendererClient::~AwContentRendererClient() {
-}
+AwContentRendererClient::~AwContentRendererClient() {}
 
 void AwContentRendererClient::RenderThreadStarted() {
   RenderThread* thread = RenderThread::Get();
-  aw_render_process_observer_.reset(new AwRenderProcessObserver);
-  thread->AddObserver(aw_render_process_observer_.get());
+  aw_render_thread_observer_.reset(new AwRenderThreadObserver);
+  thread->AddObserver(aw_render_thread_observer_.get());
 
   visited_link_slave_.reset(new visitedlink::VisitedLinkSlave);
   thread->AddObserver(visited_link_slave_.get());
@@ -222,8 +218,8 @@ bool AwContentRendererClient::IsLinkVisited(unsigned long long link_hash) {
   return visited_link_slave_->IsVisited(link_hash);
 }
 
-void AwContentRendererClient::AddKeySystems(
-    std::vector<media::KeySystemInfo>* key_systems) {
+void AwContentRendererClient::AddSupportedKeySystems(
+    std::vector<std::unique_ptr<::media::KeySystemProperties>>* key_systems) {
   AwAddKeySystems(key_systems);
 }
 
@@ -247,17 +243,6 @@ bool AwContentRendererClient::ShouldUseMediaPlayerForURL(const GURL& url) {
       return true;
     }
   }
-  return false;
-}
-
-bool AwContentRendererClient::ShouldOverridePageVisibilityState(
-    const content::RenderFrame* render_frame,
-    blink::WebPageVisibilityState* override_state) {
-  if (disable_page_visibility_) {
-    *override_state = blink::WebPageVisibilityStateVisible;
-    return true;
-  }
-
   return false;
 }
 

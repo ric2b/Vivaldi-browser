@@ -29,6 +29,7 @@
 #include "chrome/browser/extensions/signin/gaia_auth_extension_loader.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/webui/about_ui.h"
 #include "chrome/browser/ui/webui/chromeos/login/app_launch_splash_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/auto_enrollment_check_screen_handler.h"
@@ -93,6 +94,7 @@ OobeScreen kDimOverlayScreenIds[] = {
 };
 
 const char kStringsJSPath[] = "strings.js";
+const char kLockJSPath[] = "lock.js";
 const char kLoginJSPath[] = "login.js";
 const char kOobeJSPath[] = "oobe.js";
 const char kKeyboardUtilsJSPath[] = "keyboard_utils.js";
@@ -100,9 +102,17 @@ const char kCustomElementsHTMLPath[] = "custom_elements.html";
 const char kCustomElementsJSPath[] = "custom_elements.js";
 
 // Paths for deferred resource loading.
+const char kCustomElementsPinKeyboardHTMLPath[] =
+    "custom_elements/pin_keyboard.html";
+const char kCustomElementsPinKeyboardJSPath[] =
+    "custom_elements/pin_keyboard.js";
 const char kEnrollmentHTMLPath[] = "enrollment.html";
 const char kEnrollmentCSSPath[] = "enrollment.css";
 const char kEnrollmentJSPath[] = "enrollment.js";
+
+// Shared parameter with JS that enables or disables the PIN screen. This needs
+// to stay synchronized with the JS definition.
+const char kShowPinKey[] = "showPin";
 
 // Creates a WebUIDataSource for chrome://oobe
 content::WebUIDataSource* CreateOobeUIDataSource(
@@ -119,6 +129,19 @@ content::WebUIDataSource* CreateOobeUIDataSource(
     source->AddResourcePath(kCustomElementsHTMLPath,
                             IDR_CUSTOM_ELEMENTS_OOBE_HTML);
     source->AddResourcePath(kCustomElementsJSPath, IDR_CUSTOM_ELEMENTS_OOBE_JS);
+  } else if (display_type == OobeUI::kLockDisplay) {
+    source->SetDefaultResource(IDR_LOCK_HTML);
+    source->AddResourcePath(kLockJSPath, IDR_LOCK_JS);
+    source->AddResourcePath(kCustomElementsHTMLPath,
+                            IDR_CUSTOM_ELEMENTS_LOCK_HTML);
+    source->AddResourcePath(kCustomElementsJSPath, IDR_CUSTOM_ELEMENTS_LOCK_JS);
+    source->AddResourcePath(kCustomElementsPinKeyboardHTMLPath,
+                            IDR_CUSTOM_ELEMENTS_PIN_KEYBOARD_HTML);
+    source->AddResourcePath(kCustomElementsPinKeyboardJSPath,
+                            IDR_CUSTOM_ELEMENTS_PIN_KEYBOARD_JS);
+
+    // TODO(jdufault): Dynamically show pin when it is enabled.
+    source->AddBoolean(kShowPinKey, false);
   } else {
     source->SetDefaultResource(IDR_LOGIN_HTML);
     source->AddResourcePath(kLoginJSPath, IDR_LOGIN_JS);
@@ -343,9 +366,13 @@ OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
 OobeUI::~OobeUI() {
   core_handler_->SetDelegate(nullptr);
   network_dropdown_handler_->RemoveObserver(error_screen_handler_);
-  ash::ScreenDimmer::GetForContainer(
-      ash::kShellWindowId_LockScreenContainersContainer)
-      ->SetDimming(false);
+  if (!chrome::IsRunningInMash()) {
+    ash::ScreenDimmer::GetForContainer(
+        ash::kShellWindowId_LockScreenContainersContainer)
+        ->SetDimming(false);
+  } else {
+    NOTIMPLEMENTED();
+  }
 }
 
 CoreOobeActor* OobeUI::GetCoreOobeActor() {
@@ -563,10 +590,14 @@ void OobeUI::OnCurrentScreenChanged(const std::string& screen) {
       std::find(std::begin(kDimOverlayScreenIds),
                 std::end(kDimOverlayScreenIds),
                 new_screen) != std::end(kDimOverlayScreenIds);
-  ash::ScreenDimmer* screen_dimmer = ash::ScreenDimmer::GetForContainer(
-      ash::kShellWindowId_LockScreenContainersContainer);
-  screen_dimmer->set_at_bottom(true);
-  screen_dimmer->SetDimming(should_dim);
+  if (!chrome::IsRunningInMash()) {
+    ash::ScreenDimmer* screen_dimmer = ash::ScreenDimmer::GetForContainer(
+        ash::kShellWindowId_LockScreenContainersContainer);
+    screen_dimmer->set_at_bottom(true);
+    screen_dimmer->SetDimming(should_dim);
+  } else {
+    NOTIMPLEMENTED();
+  }
 
   FOR_EACH_OBSERVER(Observer,
                     observer_list_,

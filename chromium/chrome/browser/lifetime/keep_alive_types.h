@@ -43,10 +43,8 @@ enum class KeepAliveOrigin {
 // restarts
 enum class KeepAliveRestartOption { DISABLED, ENABLED };
 
-#ifndef NDEBUG
 std::ostream& operator<<(std::ostream& out, const KeepAliveOrigin& origin);
 std::ostream& operator<<(std::ostream& out,
                          const KeepAliveRestartOption& restart);
-#endif  // ndef NDEBUG
 
 #endif  // CHROME_BROWSER_LIFETIME_KEEP_ALIVE_TYPES_H_

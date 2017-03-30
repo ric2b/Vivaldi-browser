@@ -69,6 +69,7 @@
       'target_name': 'site_settings_behavior',
       'dependencies': [
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:assert',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:icon',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
         '<(EXTERNS_GYP):settings_private',
         'constants',

@@ -16,34 +16,26 @@
 #include "content/public/common/service_registry.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/system/core.h"
-#include "mojo/shell/public/interfaces/interface_provider.mojom.h"
 
 namespace content {
 
 class CONTENT_EXPORT ServiceRegistryImpl
     : public ServiceRegistry,
-      public NON_EXPORTED_BASE(mojo::shell::mojom::InterfaceProvider) {
+      public NON_EXPORTED_BASE(shell::mojom::InterfaceProvider) {
  public:
   using ServiceFactory = base::Callback<void(mojo::ScopedMessagePipeHandle)>;
 
   ServiceRegistryImpl();
   ~ServiceRegistryImpl() override;
 
-  // Binds this ServiceProvider implementation to a message pipe endpoint.
-  void Bind(mojo::shell::mojom::InterfaceProviderRequest request);
-
-  // Binds to a remote ServiceProvider. This will expose added services to the
-  // remote ServiceProvider with the corresponding handle and enable
-  // ConnectToRemoteService to provide access to services exposed by the remote
-  // ServiceProvider.
-  void BindRemoteServiceProvider(
-      mojo::shell::mojom::InterfaceProviderPtr service_provider);
-
   // ServiceRegistry overrides.
+  void Bind(shell::mojom::InterfaceProviderRequest request) override;
+  void BindRemoteServiceProvider(
+      shell::mojom::InterfaceProviderPtr service_provider) override;
   void AddService(const std::string& service_name,
-                  const ServiceFactory service_factory) override;
+                  const ServiceFactory& service_factory) override;
   void RemoveService(const std::string& service_name) override;
-  void ConnectToRemoteService(const base::StringPiece& service_name,
+  void ConnectToRemoteService(base::StringPiece service_name,
                               mojo::ScopedMessagePipeHandle handle) override;
   void AddServiceOverrideForTesting(
       const std::string& service_name,
@@ -61,8 +53,8 @@ class CONTENT_EXPORT ServiceRegistryImpl
 
   void OnConnectionError();
 
-  mojo::Binding<mojo::shell::mojom::InterfaceProvider> binding_;
-  mojo::shell::mojom::InterfaceProviderPtr remote_provider_;
+  mojo::Binding<shell::mojom::InterfaceProvider> binding_;
+  shell::mojom::InterfaceProviderPtr remote_provider_;
 
   std::map<std::string, ServiceFactory> service_factories_;
   std::queue<std::pair<std::string, mojo::MessagePipeHandle> >

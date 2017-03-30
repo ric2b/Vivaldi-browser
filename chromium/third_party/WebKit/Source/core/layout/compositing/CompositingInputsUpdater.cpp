@@ -4,7 +4,9 @@
 
 #include "core/layout/compositing/CompositingInputsUpdater.h"
 
+#include "core/frame/FrameView.h"
 #include "core/layout/LayoutBlock.h"
+#include "core/layout/LayoutView.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/paint/PaintLayer.h"
@@ -34,13 +36,6 @@ static const PaintLayer* findParentLayerOnClippingContainerChain(const PaintLaye
     while (current) {
         if (current->style()->position() == FixedPosition) {
             for (current = current->parent(); current && !current->canContainFixedPositionObjects(); current = current->parent()) {
-                // All types of clips apply to fixed-position descendants of other fixed-position elements.
-                // Note: it's unclear whether this is what the spec says. Firefox does not clip, but Chrome does.
-                if (current->style()->position() == FixedPosition && current->hasClipRelatedProperty()) {
-                    ASSERT(current->hasLayer());
-                    return static_cast<const LayoutBoxModelObject*>(current)->layer();
-                }
-
                 // CSS clip applies to fixed position elements even for ancestors that are not what the
                 // fixed element is positioned with respect to.
                 if (current->hasClip()) {
@@ -96,6 +91,28 @@ void CompositingInputsUpdater::updateRecursive(PaintLayer* layer, UpdateType upd
 {
     if (!layer->childNeedsCompositingInputsUpdate() && updateType != ForceUpdate)
         return;
+
+    const PaintLayer* previousOverflowLayer = layer->ancestorOverflowLayer();
+    layer->updateAncestorOverflowLayer(info.lastOverflowClipLayer);
+    if (info.lastOverflowClipLayer && layer->needsCompositingInputsUpdate() && layer->layoutObject()->style()->position() == StickyPosition) {
+        if (info.lastOverflowClipLayer != previousOverflowLayer) {
+            // Old ancestor scroller should no longer have these constraints.
+            ASSERT(!previousOverflowLayer || !previousOverflowLayer->getScrollableArea()->stickyConstraintsMap().contains(layer));
+
+            if (info.lastOverflowClipLayer->isRootLayer())
+                layer->layoutObject()->view()->frameView()->addViewportConstrainedObject(layer->layoutObject());
+            else if (previousOverflowLayer && previousOverflowLayer->isRootLayer())
+                layer->layoutObject()->view()->frameView()->removeViewportConstrainedObject(layer->layoutObject());
+        }
+        layer->layoutObject()->updateStickyPositionConstraints();
+
+        // Sticky position constraints and ancestor overflow scroller affect
+        // the sticky layer position, so we need to update it again here.
+        // TODO(flackr): This should be refactored in the future to be clearer
+        // (i.e. update layer position and ancestor inputs updates in the
+        // same walk)
+        layer->updateLayerPosition();
+    }
 
     m_geometryMap.pushMappingsToAncestor(layer, layer->parent());
 
@@ -162,6 +179,9 @@ void CompositingInputsUpdater::updateRecursive(PaintLayer* layer, UpdateType upd
 
     if (layer->stackingNode()->isStackingContext())
         info.ancestorStackingContext = layer;
+
+    if (layer->isRootLayer() || layer->layoutObject()->hasOverflowClip())
+        info.lastOverflowClipLayer = layer;
 
     if (layer->scrollsOverflow())
         info.lastScrollingAncestor = layer;

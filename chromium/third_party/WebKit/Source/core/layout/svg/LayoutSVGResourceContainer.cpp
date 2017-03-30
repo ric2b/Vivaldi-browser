@@ -73,11 +73,9 @@ void LayoutSVGResourceContainer::willBeDestroyed()
     // LayoutSVGHiddenContainer::willBeDestroyed() below.
     detachAllClients();
 
-#if !ENABLE(OILPAN)
     for (SVGResourceClient* client : m_resourceClients)
         client->filterWillBeDestroyed(toSVGFilterElement(element()));
     m_resourceClients.clear();
-#endif
 
     LayoutSVGHiddenContainer::willBeDestroyed();
     if (m_registered)
@@ -229,7 +227,7 @@ void LayoutSVGResourceContainer::registerResource()
         return;
     }
 
-    RawPtr<SVGDocumentExtensions::SVGPendingElements> clients(extensions.removePendingResource(m_id));
+    SVGDocumentExtensions::SVGPendingElements* clients(extensions.removePendingResource(m_id));
 
     // Cache us with the new id.
     extensions.addResource(m_id, this);

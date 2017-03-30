@@ -53,6 +53,7 @@
 <translation id="2673087257647337101">Майже оновлено. Перезапустіть Chromium, щоб закінчити оновлення.</translation>
 <translation id="2685838254101182273">Оновлення Chromium припинилось. Ця версія вашої операційної системи більше не підтримується.</translation>
 <translation id="2705212601509139398">Цей сайт використовує Chromium Frame. Ми припиняємо підтримку цього плагіна. Видаліть його та встановіть сумісний веб-переглядач.</translation>
+<translation id="2711502716910134313">Вкладка Chromium</translation>
 <translation id="2770231113462710648">Змінити веб-переглядач за умовчанням на:</translation>
 <translation id="2801146392936645542">Файл <ph name="FILE_NAME" /> шкідливий, тому Chromium заблокував його.</translation>
 <translation id="2847479871509788944">Видалити з Chromium…</translation>
@@ -66,7 +67,6 @@
 <translation id="3130323860337406239">Chromium використовує ваш мікрофон.</translation>
 <translation id="313551035350905294">Ви входите, використовуючи дані керованого облікового запису, що дає його адміністратору контролювати ваш профіль Chromium. Ваші дані Chromium, як-от програми, закладки, історія, паролі й інші налаштування, буде назавжди пов’язано з обліковим записом <ph name="USER_NAME" />. Ви зможете видалити ці дані на інформаційній панелі облікових записів Google, але не зможете пов’язати їх з іншим обліковим записом.</translation>
 <translation id="3190315855212034486">Помилка. Chromium аварійно завершив роботу. Перезапустити зараз?</translation>
-<translation id="3197823471738295152">Пристрій оновлено.</translation>
 <translation id="3244477511402911926">Центр сповіщень Chromium</translation>
 <translation id="3256316712990552818">Скопійовано в Chromium</translation>
 <translation id="3258596308407688501">Chromium не може читати та писати дані у свій каталог даних:
@@ -120,6 +120,7 @@
 <translation id="549669000822060376">Зачекайте, доки Chromium установить найновіші оновлення системи.</translation>
 <translation id="5563479599352954471">Пошук одним дотиком</translation>
 <translation id="5620765574781326016">Дізнавайтеся про теми на веб-сайтах, залишаючись на сторінці.</translation>
+<translation id="5634636535844844681">Для роботи Chromium потрібно мати ОС Windows 7 або новішої версії.</translation>
 <translation id="5680901439334282664">увійдіть в обліковий запис Chromium</translation>
 <translation id="5772805321386874569">(потрібно <ph name="BEGIN_BUTTON" />перезапустити<ph name="END_BUTTON" /> Chromium)</translation>
 <translation id="5796460469508169315">Chromium майже готовий.</translation>
@@ -179,6 +180,12 @@ Chromium не може відновити ваші налаштування.</tr
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7339898014177206373">Нове вікно</translation>
 <translation id="734373864078049451">Тут містяться ваші веб-сторінки, закладки та інші дані Chromium.</translation>
+<translation id="7344413941077984497">Щоб указати, які веб-сайти може переглядати <ph name="NEW_PROFILE_NAME" />, налаштуйте обмеження й параметри на сторінці <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. Якщо не змінити налаштування за умовчанням, <ph name="NEW_PROFILE_NAME" /> зможе переглядати всі сайти в Інтернеті.
+
+Щоб користувач <ph name="NEW_PROFILE_NAME" /> не мав доступу до вашого облікового запису, блокуйте свій профіль, коли не користуєтеся Chromium. Для цього натисніть назву свого профілю у верхньому правому куті екрана й виберіть "Вийти та заблокувати".
+<ph name="BEGIN_LINK_2" />Докладніше<ph name="END_LINK_2" />
+
+Подальші вказівки надійдуть на електронну адресу <ph name="ACCOUNT_EMAIL" />.</translation>
 <translation id="7419987137528340081">Якщо ви хочете зберігати існуючі дані Chromium окремо, можна створити нового користувача Chromium для облікового запису <ph name="USER_NAME" />.</translation>
 <translation id="7421823331379285070">Chromium потребує ОС Windows XP або новішої версії. Деякі функції можуть не працювати.</translation>
 <translation id="7463979740390522693">Chromium – сповіщення (непрочитаних: <ph name="QUANTITY" />)</translation>
@@ -207,6 +214,7 @@ Chromium не може відновити ваші налаштування.</tr
 <translation id="8586442755830160949">Авторське право <ph name="YEAR" /> Автори Chromium. Усі права захищено.</translation>
 <translation id="8621669128220841554">Не вдалося встановити через невизначену помилку. Завантажте Chromium ще раз.</translation>
 <translation id="8628626585870903697">У Chromium немає засобу перегляду файлів PDF, який потрібен для перегляду версії для друку.</translation>
+<translation id="8667808506758191620">Ваш пристрій <ph name="DEVICE_TYPE" /> оновлено.</translation>
 <translation id="8697124171261953979">Розширення також змінило сторінку, яка відкривається під час запуску Chromium або пошуку в універсальному вікні пошуку.</translation>
 <translation id="8704119203788522458">Це ваш Chromium</translation>
 <translation id="872034308864968620">Дозволити Chromium працювати у фоновому режимі</translation>
@@ -223,7 +231,6 @@ Chromium не може відновити ваші налаштування.</tr
 
 Якщо ви все одно ввійдете, наявні дані Chromium, як-от закладки, історію й інші налаштування, буде об’єднано з обліковим записом <ph name="ACCOUNT_EMAIL_NEW" />.</translation>
 <translation id="9013087743919948559">Додати в Chromium</translation>
-<translation id="9013262824292842194">Chromium потребує ОС Windows Vista чи Windows XP із SP2 або новішу версію.</translation>
 <translation id="9019929317751753759">Щоб зробити Chromium безпечнішим, ми вимкнули наведене нижче розширення, установлене не із сайту <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> і, можливо, додане без вашого відома.</translation>
 <translation id="9022552996538154597">Вхід у Chromium</translation>
 <translation id="9036189287518468038">Панель запуску програм Chromium</translation>

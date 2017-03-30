@@ -7,7 +7,6 @@
 
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "mojo/message_pump/message_pump_mojo.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/public/cpp/test_support/test_utils.h"
@@ -157,7 +156,7 @@ class SampleFactoryImpl : public sample::Factory {
 
 class HandlePassingTest : public testing::Test {
  public:
-  HandlePassingTest() : loop_(common::MessagePumpMojo::Create()) {}
+  HandlePassingTest() {}
 
   void TearDown() override { PumpMessages(); }
 
@@ -343,11 +342,7 @@ TEST_F(HandlePassingTest, PipesAreClosed) {
 TEST_F(HandlePassingTest, IsHandle) {
   // Validate that mojo::internal::IsHandle<> works as expected since this.
   // template is key to ensuring that we don't leak handles.
-  EXPECT_TRUE(internal::IsHandle<Handle>::value);
-  EXPECT_TRUE(internal::IsHandle<MessagePipeHandle>::value);
-  EXPECT_TRUE(internal::IsHandle<DataPipeConsumerHandle>::value);
-  EXPECT_TRUE(internal::IsHandle<DataPipeProducerHandle>::value);
-  EXPECT_TRUE(internal::IsHandle<SharedBufferHandle>::value);
+  EXPECT_TRUE(internal::IsHandle<internal::Handle_Data>::value);
 
   // Basic sanity checks...
   EXPECT_FALSE(internal::IsHandle<int>::value);

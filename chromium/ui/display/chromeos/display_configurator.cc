@@ -18,12 +18,12 @@
 #include "ui/display/chromeos/display_snapshot_virtual.h"
 #include "ui/display/chromeos/display_util.h"
 #include "ui/display/chromeos/update_display_configuration_task.h"
+#include "ui/display/display.h"
 #include "ui/display/display_switches.h"
 #include "ui/display/types/display_mode.h"
 #include "ui/display/types/display_snapshot.h"
 #include "ui/display/types/native_display_delegate.h"
 #include "ui/display/util/display_util.h"
-#include "ui/gfx/display.h"
 
 namespace ui {
 
@@ -34,12 +34,6 @@ typedef std::vector<const DisplayMode*> DisplayModeList;
 // The delay to perform configuration after RRNotify. See the comment for
 // |configure_timer_|.
 const int kConfigureDelayMs = 500;
-
-// The delay spent before reading the display configuration after coming out of
-// suspend. While coming out of suspend the display state may be updating. This
-// is used to wait until the hardware had a chance to update the display state
-// such that we read an up to date state.
-const int kResumeDelayMs = 500;
 
 // The EDID specification marks the top bit of the manufacturer id as reserved.
 const int16_t kReservedManufacturerID = static_cast<int16_t>(1 << 15);
@@ -476,8 +470,9 @@ DisplayConfigurator::DisplayConfigurator()
       current_power_state_(chromeos::DISPLAY_POWER_ALL_ON),
       requested_display_state_(MULTIPLE_DISPLAY_STATE_INVALID),
       requested_power_state_(chromeos::DISPLAY_POWER_ALL_ON),
-      requested_power_state_change_(false),
-      requested_power_flags_(kSetDisplayPowerNoFlags),
+      pending_power_state_(chromeos::DISPLAY_POWER_ALL_ON),
+      has_pending_power_state_(false),
+      pending_power_flags_(kSetDisplayPowerNoFlags),
       force_configure_(false),
       next_display_protection_client_id_(1),
       display_externally_controlled_(false),
@@ -506,7 +501,7 @@ DisplayConfigurator::~DisplayConfigurator() {
 }
 
 void DisplayConfigurator::SetDelegateForTesting(
-    scoped_ptr<NativeDisplayDelegate> display_delegate) {
+    std::unique_ptr<NativeDisplayDelegate> display_delegate) {
   DCHECK(!native_display_delegate_);
 
   native_display_delegate_ = std::move(display_delegate);
@@ -520,7 +515,9 @@ void DisplayConfigurator::SetInitialDisplayPower(
   NotifyPowerStateObservers();
 }
 
-void DisplayConfigurator::Init(bool is_panel_fitting_enabled) {
+void DisplayConfigurator::Init(
+    std::unique_ptr<NativeDisplayDelegate> display_delegate,
+    bool is_panel_fitting_enabled) {
   is_panel_fitting_enabled_ = is_panel_fitting_enabled;
   if (!configure_display_ || display_externally_controlled_)
     return;
@@ -528,7 +525,7 @@ void DisplayConfigurator::Init(bool is_panel_fitting_enabled) {
   // If the delegate is already initialized don't update it (For example, tests
   // set their own delegates).
   if (!native_display_delegate_) {
-    native_display_delegate_ = CreatePlatformNativeDisplayDelegate();
+    native_display_delegate_ = std::move(display_delegate);
     native_display_delegate_->AddObserver(this);
   }
 }
@@ -608,6 +605,7 @@ void DisplayConfigurator::ForceInitialConfigure(
   if (!configure_display_ || display_externally_controlled_)
     return;
 
+  DCHECK(native_display_delegate_);
   native_display_delegate_->Initialize();
 
   // ForceInitialConfigure should be the first configuration so there shouldn't
@@ -841,6 +839,24 @@ void DisplayConfigurator::PrepareForExit() {
   configure_display_ = false;
 }
 
+void DisplayConfigurator::SetDisplayPowerInternal(
+    chromeos::DisplayPowerState power_state,
+    int flags,
+    const ConfigurationCallback& callback) {
+  if (power_state == current_power_state_ &&
+      !(flags & kSetDisplayPowerForceProbe)) {
+    callback.Run(true);
+    return;
+  }
+
+  pending_power_state_ = power_state;
+  has_pending_power_state_ = true;
+  pending_power_flags_ = flags;
+  queued_configuration_callbacks_.push_back(callback);
+
+  RunPendingConfiguration();
+}
+
 void DisplayConfigurator::SetDisplayPower(
     chromeos::DisplayPowerState power_state,
     int flags,
@@ -854,18 +870,9 @@ void DisplayConfigurator::SetDisplayPower(
           << DisplayPowerStateToString(power_state) << " flags=" << flags
           << ", configure timer="
           << (configure_timer_.IsRunning() ? "Running" : "Stopped");
-  if (power_state == requested_power_state_ &&
-      !(flags & kSetDisplayPowerForceProbe)) {
-    callback.Run(true);
-    return;
-  }
 
   requested_power_state_ = power_state;
-  requested_power_state_change_ = true;
-  requested_power_flags_ = flags;
-  queued_configuration_callbacks_.push_back(callback);
-
-  RunPendingConfiguration();
+  SetDisplayPowerInternal(requested_power_state_, flags, callback);
 }
 
 void DisplayConfigurator::SetDisplayMode(MultipleDisplayState new_state) {
@@ -928,21 +935,9 @@ void DisplayConfigurator::RemoveObserver(Observer* observer) {
 
 void DisplayConfigurator::SuspendDisplays(
     const ConfigurationCallback& callback) {
-  // If the display is off due to user inactivity and there's only a single
-  // internal display connected, switch to the all-on state before
-  // suspending.  This shouldn't be very noticeable to the user since the
-  // backlight is off at this point, and doing this lets us resume directly
-  // into the "on" state, which greatly reduces resume times.
-  if (requested_power_state_ == chromeos::DISPLAY_POWER_ALL_OFF) {
-    SetDisplayPower(chromeos::DISPLAY_POWER_ALL_ON,
-                    kSetDisplayPowerOnlyIfSingleInternalDisplay, callback);
-
-    // We need to make sure that the monitor configuration we just did actually
-    // completes before we return, because otherwise the X message could be
-    // racing with the HandleSuspendReadiness message.
-    native_display_delegate_->SyncWithServer();
-  } else {
-    callback.Run(true);
+  if (!configure_display_ || display_externally_controlled_) {
+    callback.Run(false);
+    return;
   }
 
   displays_suspended_ = true;
@@ -950,16 +945,29 @@ void DisplayConfigurator::SuspendDisplays(
   // Stop |configure_timer_| because we will force probe and configure all the
   // displays at resume time anyway.
   configure_timer_.Stop();
+
+  // Turn off the displays for suspend. This way, if we wake up for lucid sleep,
+  // the displays will not turn on (all displays should be off for lucid sleep
+  // unless explicitly requested by lucid sleep code). Use
+  // SetDisplayPowerInternal so requested_power_state_ is maintained.
+  SetDisplayPowerInternal(chromeos::DISPLAY_POWER_ALL_OFF,
+                          kSetDisplayPowerNoFlags, callback);
+
+  // We need to make sure that the monitor configuration we just did actually
+  // completes before we return.
+  native_display_delegate_->SyncWithServer();
 }
 
 void DisplayConfigurator::ResumeDisplays() {
+  if (!configure_display_ || display_externally_controlled_)
+    return;
+
   displays_suspended_ = false;
 
-  configure_timer_.Start(
-      FROM_HERE,
-      base::TimeDelta::FromMilliseconds(kResumeDelayMs),
-      base::Bind(&DisplayConfigurator::RestoreRequestedPowerStateAfterResume,
-                 base::Unretained(this)));
+  // If requested_power_state_ is ALL_OFF due to idle suspend, powerd will turn
+  // the display power on when it enables the backlight.
+  SetDisplayPower(requested_power_state_, kSetDisplayPowerNoFlags,
+                  base::Bind(&DoNothing));
 }
 
 void DisplayConfigurator::ConfigureDisplays() {
@@ -985,7 +993,7 @@ void DisplayConfigurator::RunPendingConfiguration() {
 
   configuration_task_.reset(new UpdateDisplayConfigurationTask(
       native_display_delegate_.get(), layout_manager_.get(),
-      requested_display_state_, requested_power_state_, requested_power_flags_,
+      requested_display_state_, pending_power_state_, pending_power_flags_,
       0, force_configure_, base::Bind(&DisplayConfigurator::OnConfigured,
                                       weak_ptr_factory_.GetWeakPtr())));
   configuration_task_->set_virtual_display_snapshots(
@@ -994,8 +1002,8 @@ void DisplayConfigurator::RunPendingConfiguration() {
   // Reset the flags before running the task; otherwise it may end up scheduling
   // another configuration.
   force_configure_ = false;
-  requested_power_flags_ = kSetDisplayPowerNoFlags;
-  requested_power_state_change_ = false;
+  pending_power_flags_ = kSetDisplayPowerNoFlags;
+  has_pending_power_state_ = false;
   requested_display_state_ = MULTIPLE_DISPLAY_STATE_INVALID;
 
   DCHECK(in_progress_configuration_callbacks_.empty());
@@ -1031,12 +1039,12 @@ void DisplayConfigurator::OnConfigured(
     if (!framebuffer_size.IsEmpty())
       framebuffer_size_ = framebuffer_size;
 
-    // If the requested power state hasn't changed then make sure that value
+    // If the pending power state hasn't changed then make sure that value
     // gets updated as well since the last requested value may have been
     // dependent on certain conditions (ie: if only the internal monitor was
     // present).
-    if (!requested_power_state_change_)
-      requested_power_state_ = new_power_state;
+    if (!has_pending_power_state_)
+      pending_power_state_ = new_power_state;
 
     if (old_power_state != current_power_state_)
       NotifyPowerStateObservers();
@@ -1069,7 +1077,7 @@ bool DisplayConfigurator::ShouldRunConfigurationTask() const {
     return true;
 
   // Schedule if there is a request to change the power state.
-  if (requested_power_state_change_)
+  if (has_pending_power_state_)
     return true;
 
   return false;
@@ -1087,13 +1095,6 @@ void DisplayConfigurator::CallAndClearQueuedCallbacks(bool success) {
     callback.Run(success);
 
   queued_configuration_callbacks_.clear();
-}
-
-void DisplayConfigurator::RestoreRequestedPowerStateAfterResume() {
-  // Force probing to ensure that we pick up any changes that were made while
-  // the system was suspended.
-  SetDisplayPower(requested_power_state_, kSetDisplayPowerForceProbe,
-                  base::Bind(&DoNothing));
 }
 
 void DisplayConfigurator::NotifyDisplayStateObservers(
@@ -1117,7 +1118,7 @@ void DisplayConfigurator::NotifyPowerStateObservers() {
 int64_t DisplayConfigurator::AddVirtualDisplay(gfx::Size display_size) {
   if (last_virtual_display_id_ == 0xff) {
     LOG(WARNING) << "Exceeded virtual display id limit";
-    return gfx::Display::kInvalidDisplayID;
+    return display::Display::kInvalidDisplayID;
   }
 
   DisplaySnapshotVirtual* virtual_snapshot =

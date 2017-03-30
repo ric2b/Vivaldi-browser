@@ -16,13 +16,13 @@ namespace gfx {
 class Insets;
 }
 
-namespace mojo {
-class Connector;
-}
-
 namespace mus {
 class Window;
 class WindowManagerClient;
+}
+
+namespace shell {
+class Connector;
 }
 
 namespace mash {
@@ -33,7 +33,8 @@ class NonClientFrameController : public views::WidgetDelegateView,
                                  public mus::WindowObserver {
  public:
   // NonClientFrameController deletes itself when |window| is destroyed.
-  static void Create(mojo::Connector* connector,
+  static void Create(shell::Connector* connector,
+                     mus::Window* parent,
                      mus::Window* window,
                      mus::WindowManagerClient* window_manager_client);
 
@@ -47,7 +48,8 @@ class NonClientFrameController : public views::WidgetDelegateView,
   mus::Window* window() { return window_; }
 
  private:
-  NonClientFrameController(mojo::Connector* connector,
+  NonClientFrameController(shell::Connector* connector,
+                           mus::Window* parent,
                            mus::Window* window,
                            mus::WindowManagerClient* window_manager_client);
   ~NonClientFrameController() override;
@@ -58,6 +60,7 @@ class NonClientFrameController : public views::WidgetDelegateView,
   bool CanResize() const override;
   bool CanMaximize() const override;
   bool CanMinimize() const override;
+  bool ShouldShowWindowTitle() const override;
   views::ClientView* CreateClientView(views::Widget* widget) override;
 
   // mus::WindowObserver:

@@ -9,6 +9,7 @@
 #include "base/time/tick_clock.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
+#include "ui/accessibility/ax_enums.h"
 #include "ui/chromeos/ui_chromeos_export.h"
 #include "ui/events/event.h"
 #include "ui/events/event_rewriter.h"
@@ -56,6 +57,10 @@ class TouchExplorationControllerDelegate {
   // This function should be called when the enter screen earcon should be
   // played.
   virtual void PlayEnterScreenEarcon() = 0;
+
+  // Called when the user performed an accessibility gesture while in touch
+  // accessibility mode, that should be forwarded to ChromeVox.
+  virtual void HandleAccessibilityGesture(ui::AXGesture gesture) = 0;
 };
 
 // TouchExplorationController is used in tandem with "Spoken Feedback" to
@@ -179,38 +184,51 @@ class UI_CHROMEOS_EXPORT TouchExplorationController
   // Overridden from ui::EventRewriter
   ui::EventRewriteStatus RewriteEvent(
       const ui::Event& event,
-      scoped_ptr<ui::Event>* rewritten_event) override;
+      std::unique_ptr<ui::Event>* rewritten_event) override;
   ui::EventRewriteStatus NextDispatchEvent(
       const ui::Event& last_event,
-      scoped_ptr<ui::Event>* new_event) override;
+      std::unique_ptr<ui::Event>* new_event) override;
 
   // Event handlers based on the current state - see State, below.
   ui::EventRewriteStatus InNoFingersDown(
-      const ui::TouchEvent& event, scoped_ptr<ui::Event>* rewritten_event);
+      const ui::TouchEvent& event,
+      std::unique_ptr<ui::Event>* rewritten_event);
   ui::EventRewriteStatus InSingleTapPressed(
-      const ui::TouchEvent& event, scoped_ptr<ui::Event>* rewritten_event);
+      const ui::TouchEvent& event,
+      std::unique_ptr<ui::Event>* rewritten_event);
   ui::EventRewriteStatus InSingleTapOrTouchExploreReleased(
-      const ui::TouchEvent& event, scoped_ptr<ui::Event>* rewritten_event);
+      const ui::TouchEvent& event,
+      std::unique_ptr<ui::Event>* rewritten_event);
   ui::EventRewriteStatus InDoubleTapPending(
-      const ui::TouchEvent& event, scoped_ptr<ui::Event>* rewritten_event);
+      const ui::TouchEvent& event,
+      std::unique_ptr<ui::Event>* rewritten_event);
   ui::EventRewriteStatus InTouchReleasePending(
-      const ui::TouchEvent& event, scoped_ptr<ui::Event>* rewritten_event);
+      const ui::TouchEvent& event,
+      std::unique_ptr<ui::Event>* rewritten_event);
   ui::EventRewriteStatus InTouchExploration(
-      const ui::TouchEvent& event, scoped_ptr<ui::Event>* rewritten_event);
+      const ui::TouchEvent& event,
+      std::unique_ptr<ui::Event>* rewritten_event);
   ui::EventRewriteStatus InCornerPassthrough(
-      const ui::TouchEvent& event, scoped_ptr<ui::Event>* rewritten_event);
+      const ui::TouchEvent& event,
+      std::unique_ptr<ui::Event>* rewritten_event);
   ui::EventRewriteStatus InOneFingerPassthrough(
-      const ui::TouchEvent& event, scoped_ptr<ui::Event>* rewritten_event);
+      const ui::TouchEvent& event,
+      std::unique_ptr<ui::Event>* rewritten_event);
   ui::EventRewriteStatus InGestureInProgress(
-      const ui::TouchEvent& event, scoped_ptr<ui::Event>* rewritten_event);
+      const ui::TouchEvent& event,
+      std::unique_ptr<ui::Event>* rewritten_event);
   ui::EventRewriteStatus InTouchExploreSecondPress(
-      const ui::TouchEvent& event, scoped_ptr<ui::Event>* rewritten_event);
+      const ui::TouchEvent& event,
+      std::unique_ptr<ui::Event>* rewritten_event);
   ui::EventRewriteStatus InWaitForNoFingers(
-      const ui::TouchEvent& event, scoped_ptr<ui::Event>* rewritten_event);
+      const ui::TouchEvent& event,
+      std::unique_ptr<ui::Event>* rewritten_event);
   ui::EventRewriteStatus InSlideGesture(
-      const ui::TouchEvent& event, scoped_ptr<ui::Event>* rewritten_event);
+      const ui::TouchEvent& event,
+      std::unique_ptr<ui::Event>* rewritten_event);
   ui::EventRewriteStatus InTwoFingerTap(
-      const ui::TouchEvent& event, scoped_ptr<ui::Event>* rewritten_event);
+      const ui::TouchEvent& event,
+      std::unique_ptr<ui::Event>* rewritten_event);
 
   // Returns the current time of the tick clock.
   base::TimeDelta Now();
@@ -248,21 +266,15 @@ class UI_CHROMEOS_EXPORT TouchExplorationController
 
   void SideSlideControl(ui::GestureEvent* gesture);
 
-  // Dispatches the keyboard short cut Shift+Search+<arrow key>
-  // outside the event rewritting flow.
-  void DispatchShiftSearchKeyEvent(const ui::KeyboardCode third_key);
-
-  // Binds DispatchShiftSearchKeyEvent to a specific third key.
-  base::Closure BindShiftSearchKeyEvent(const ui::KeyboardCode third_key);
-
   // Dispatches a single key with the given flags.
   void DispatchKeyWithFlags(const ui::KeyboardCode key, int flags);
 
   // Binds DispatchKeyWithFlags to a specific key and flags.
   base::Closure BindKeyEventWithFlags(const ui::KeyboardCode key, int flags);
 
-  scoped_ptr<ui::MouseEvent> CreateMouseMoveEvent(const gfx::PointF& location,
-                                                  int flags);
+  std::unique_ptr<ui::MouseEvent> CreateMouseMoveEvent(
+      const gfx::PointF& location,
+      int flags);
 
   void EnterTouchToMouseMode();
 
@@ -400,10 +412,6 @@ class UI_CHROMEOS_EXPORT TouchExplorationController
   // Gets enum name from integer value.
   const char* EnumStateToString(State state);
 
-  // Maps each single/multi finger swipe to the function that dispatches
-  // the corresponding key events.
-  void InitializeSwipeGestureMaps();
-
   aura::Window* root_window_;
 
   // Handles volume control. Not owned.
@@ -419,7 +427,7 @@ class UI_CHROMEOS_EXPORT TouchExplorationController
   State state_;
 
   // A copy of the event from the initial touch press.
-  scoped_ptr<ui::TouchEvent> initial_press_;
+  std::unique_ptr<ui::TouchEvent> initial_press_;
 
   // Map of touch ids to where its initial press occurred relative to the
   // screen.
@@ -432,11 +440,11 @@ class UI_CHROMEOS_EXPORT TouchExplorationController
   // Stores the most recent event from a finger that is currently not
   // sending events through, but might in the future (e.g. before a finger
   // enters double-tap-hold passthrough, we need to update its location.)
-  scoped_ptr<ui::TouchEvent> last_unused_finger_event_;
+  std::unique_ptr<ui::TouchEvent> last_unused_finger_event_;
 
   // The last synthesized mouse move event. When the user double-taps,
   // we send the passed-through tap to the location of this event.
-  scoped_ptr<ui::TouchEvent> last_touch_exploration_;
+  std::unique_ptr<ui::TouchEvent> last_touch_exploration_;
 
   // A timer that fires after the double-tap delay.
   base::OneShotTimer tap_timer_;
@@ -452,13 +460,13 @@ class UI_CHROMEOS_EXPORT TouchExplorationController
   ui::GestureDetector::Config gesture_detector_config_;
 
   // Gesture Handler to interpret the touch events.
-  scoped_ptr<ui::GestureProviderAura> gesture_provider_;
+  std::unique_ptr<ui::GestureProviderAura> gesture_provider_;
 
   // The previous state entered.
   State prev_state_;
 
   // A copy of the previous event passed.
-  scoped_ptr<ui::TouchEvent> prev_event_;
+  std::unique_ptr<ui::TouchEvent> prev_event_;
 
   // This toggles whether VLOGS are turned on or not.
   bool VLOG_on_;
@@ -466,13 +474,6 @@ class UI_CHROMEOS_EXPORT TouchExplorationController
   // When touch_exploration_controller gets time relative to real time during
   // testing, this clock is set to the simulated clock and used.
   base::TickClock* tick_clock_;
-
-  // Maps the number of fingers in a swipe to the resulting functions that
-  // dispatch key events.
-  std::map<int, base::Closure> left_swipe_gestures_;
-  std::map<int, base::Closure> right_swipe_gestures_;
-  std::map<int, base::Closure> up_swipe_gestures_;
-  std::map<int, base::Closure> down_swipe_gestures_;
 
   DISALLOW_COPY_AND_ASSIGN(TouchExplorationController);
 };

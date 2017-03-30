@@ -157,7 +157,6 @@ void HTMLPlugInElement::attach(const AttachContext& context)
 
 void HTMLPlugInElement::updateWidget()
 {
-    RawPtr<HTMLPlugInElement> protector(this);
     updateWidgetInternal();
     if (m_isDelayingLoadEvent) {
         m_isDelayingLoadEvent = false;
@@ -231,7 +230,7 @@ void HTMLPlugInElement::detach(const AttachContext& context)
     // Only try to persist a plugin widget we actually own.
     Widget* plugin = ownedWidget();
     if (plugin && context.performingReattach) {
-        setPersistedPluginWidget(releaseWidget().get());
+        setPersistedPluginWidget(releaseWidget());
     } else {
         // Clear the widget; will trigger disposal of it with Oilpan.
         setWidget(nullptr);
@@ -351,7 +350,7 @@ void HTMLPlugInElement::defaultEventHandler(Event* event)
         if (LayoutEmbeddedItem(toLayoutEmbeddedObject(r)).showsUnavailablePluginIndicator())
             return;
     }
-    RawPtr<Widget> widget = toLayoutPart(r)->widget();
+    Widget* widget = toLayoutPart(r)->widget();
     if (!widget)
         return;
     widget->handleEvent(event);
@@ -365,7 +364,7 @@ LayoutPart* HTMLPlugInElement::layoutPartForJSBindings() const
     // Needs to load the plugin immediatedly because this function is called
     // when JavaScript code accesses the plugin.
     // FIXME: Check if dispatching events here is safe.
-    document().updateLayoutIgnorePendingStylesheets(Document::RunPostLayoutTasksSynchronously);
+    document().updateStyleAndLayoutIgnorePendingStylesheets(Document::RunPostLayoutTasksSynchronously);
     return existingLayoutPart();
 }
 
@@ -487,7 +486,7 @@ bool HTMLPlugInElement::loadPlugin(const KURL& url, const String& mimeType, cons
     } else {
         bool loadManually = document().isPluginDocument() && !document().containsPlugins();
         FrameLoaderClient::DetachedPluginPolicy policy = requireLayoutObject ? FrameLoaderClient::FailOnDetachedPlugin : FrameLoaderClient::AllowDetachedPlugin;
-        RawPtr<Widget> widget = frame->loader().client()->createPlugin(this, url, paramNames, paramValues, mimeType, loadManually, policy);
+        Widget* widget = frame->loader().client()->createPlugin(this, url, paramNames, paramValues, mimeType, loadManually, policy);
         if (!widget) {
             if (!layoutItem.isNull() && !layoutItem.showsUnavailablePluginIndicator())
                 layoutItem.setPluginUnavailabilityReason(LayoutEmbeddedObject::PluginMissing);
@@ -497,7 +496,7 @@ bool HTMLPlugInElement::loadPlugin(const KURL& url, const String& mimeType, cons
         if (!layoutItem.isNull())
             setWidget(widget);
         else
-            setPersistedPluginWidget(widget.get());
+            setPersistedPluginWidget(widget);
     }
 
     document().setContainsPlugins();
@@ -517,7 +516,7 @@ bool HTMLPlugInElement::shouldUsePlugin(const KURL& url, const String& mimeType,
     // installed a plugin that can handle TIFF (which QuickTime can also
     // handle) they probably intended to override QT.
     if (document().frame()->page() && (mimeType == "image/tiff" || mimeType == "image/tif" || mimeType == "image/x-tiff")) {
-        const PluginData* pluginData = document().frame()->page()->pluginData();
+        const PluginData* pluginData = document().frame()->pluginData();
         String pluginName = pluginData ? pluginData->pluginNameForMimeType(mimeType) : String();
         if (!pluginName.isEmpty() && !pluginName.contains("QuickTime", TextCaseInsensitive)) {
             useFallback = false;
@@ -535,8 +534,8 @@ bool HTMLPlugInElement::shouldUsePlugin(const KURL& url, const String& mimeType,
 
 void HTMLPlugInElement::dispatchErrorEvent()
 {
-    if (document().isPluginDocument() && document().ownerElement())
-        document().ownerElement()->dispatchEvent(Event::create(EventTypeNames::error));
+    if (document().isPluginDocument() && document().localOwner())
+        document().localOwner()->dispatchEvent(Event::create(EventTypeNames::error));
     else
         dispatchEvent(Event::create(EventTypeNames::error));
 }
@@ -559,8 +558,8 @@ bool HTMLPlugInElement::allowedToLoadObject(const KURL& url, const String& mimeT
         return false;
     }
 
-    AtomicString declaredMimeType = document().isPluginDocument() && document().ownerElement() ?
-        document().ownerElement()->fastGetAttribute(HTMLNames::typeAttr) :
+    AtomicString declaredMimeType = document().isPluginDocument() && document().localOwner() ?
+        document().localOwner()->fastGetAttribute(HTMLNames::typeAttr) :
         fastGetAttribute(HTMLNames::typeAttr);
     if (!document().contentSecurityPolicy()->allowObjectFromSource(url)
         || !document().contentSecurityPolicy()->allowPluginTypeForDocument(document(), mimeType, declaredMimeType, url)) {
@@ -587,11 +586,6 @@ void HTMLPlugInElement::didAddUserAgentShadowRoot(ShadowRoot&)
     userAgentShadowRoot()->appendChild(HTMLContentElement::create(document()));
 }
 
-void HTMLPlugInElement::willAddFirstAuthorShadowRoot()
-{
-    lazyReattachIfAttached();
-}
-
 bool HTMLPlugInElement::hasFallbackContent() const
 {
     return false;
@@ -599,7 +593,7 @@ bool HTMLPlugInElement::hasFallbackContent() const
 
 bool HTMLPlugInElement::useFallbackContent() const
 {
-    return openShadowRoot();
+    return false;
 }
 
 void HTMLPlugInElement::lazyReattachIfNeeded()

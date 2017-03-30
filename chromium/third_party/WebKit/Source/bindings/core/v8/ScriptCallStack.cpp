@@ -45,7 +45,8 @@ PassRefPtr<ScriptCallStack> ScriptCallStack::create(v8::Isolate* isolate, v8::Lo
     V8PerIsolateData* data = V8PerIsolateData::from(isolate);
     if (!data->threadDebugger())
         return nullptr;
-    return adoptRef(new ScriptCallStack(data->threadDebugger()->debugger()->createStackTrace(stackTrace, maxStackSize)));
+    OwnPtr<V8StackTrace> stack = data->threadDebugger()->debugger()->createStackTrace(stackTrace, maxStackSize);
+    return stack ? adoptRef(new ScriptCallStack(std::move(stack))) : nullptr;
 }
 
 PassRefPtr<ScriptCallStack> ScriptCallStack::capture(size_t maxStackSize)
@@ -58,7 +59,7 @@ PassRefPtr<ScriptCallStack> ScriptCallStack::capture(size_t maxStackSize)
         return nullptr;
     ScriptForbiddenScope::AllowUserAgentScript allowScripting;
     OwnPtr<V8StackTrace> stack = data->threadDebugger()->debugger()->captureStackTrace(maxStackSize);
-    return stack ? adoptRef(new ScriptCallStack(stack.release())) : nullptr;
+    return stack ? adoptRef(new ScriptCallStack(std::move(stack))) : nullptr;
 }
 
 PassRefPtr<ScriptCallStack> ScriptCallStack::captureForConsole()
@@ -75,7 +76,7 @@ PassRefPtr<ScriptCallStack> ScriptCallStack::captureForConsole()
 }
 
 ScriptCallStack::ScriptCallStack(PassOwnPtr<V8StackTrace> stackTrace)
-    : m_stackTrace(stackTrace)
+    : m_stackTrace(std::move(stackTrace))
 {
 }
 

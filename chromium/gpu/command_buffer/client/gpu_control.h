@@ -29,6 +29,7 @@ class GpuMemoryBuffer;
 }
 
 namespace gpu {
+class GpuControlClient;
 struct SyncToken;
 
 // Common interface for GpuControl implementations.
@@ -36,6 +37,8 @@ class GPU_EXPORT GpuControl {
  public:
   GpuControl() {}
   virtual ~GpuControl() {}
+
+  virtual void SetGpuControlClient(GpuControlClient* gpu_control_client) = 0;
 
   virtual Capabilities GetCapabilities() = 0;
 
@@ -65,10 +68,6 @@ class GPU_EXPORT GpuControl {
   // the GPU implementation if it is to be used from multiple threads. This
   // may not be supported with all implementations.
   virtual void SetLock(base::Lock*) = 0;
-
-  // Returns true if the channel to the Gpu is lost. When true, all contexts
-  // should be considered as lost.
-  virtual bool IsGpuChannelLost() = 0;
 
   // When this function returns it ensures all previously flushed work is
   // visible by the service. This command does this by sending a synchronous

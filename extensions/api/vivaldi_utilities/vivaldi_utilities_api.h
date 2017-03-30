@@ -13,14 +13,29 @@
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
+#include "extensions/browser/event_router.h"
 #include "extensions/schema/vivaldi_utilities.h"
 
 class Browser;
 
 namespace extensions {
 
+class VivaldiUtilitiesEventRouter {
+ public:
+    explicit VivaldiUtilitiesEventRouter(Profile* profile);
+    ~VivaldiUtilitiesEventRouter();
+
+    // Helper to actually dispatch an event to extension listeners.
+    void DispatchEvent(const std::string& event_name,
+                       std::unique_ptr<base::ListValue> event_args);
+private:
+    content::BrowserContext* browser_context_;
+    DISALLOW_COPY_AND_ASSIGN(VivaldiUtilitiesEventRouter);
+};
+
 class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
-                            public extensions::AppWindowRegistry::Observer {
+                            public extensions::AppWindowRegistry::Observer,
+                            public EventRouter::Observer {
  public:
   explicit VivaldiUtilitiesAPI(content::BrowserContext* context);
   ~VivaldiUtilitiesAPI() override;
@@ -32,8 +47,15 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
   static BrowserContextKeyedAPIFactory<VivaldiUtilitiesAPI>*
   GetFactoryInstance();
 
+  // EventRouter::Observer implementation.
+  void OnListenerAdded(const EventListenerInfo& details) override;
+
   // Returns the window id based on the given app window id.
   Browser* FindBrowserFromAppWindowId(const std::string& appwindow_id);
+
+  // Fires an event to JS with the active device that triggers scrolling.
+  // 1: Mouse, 2: Trackpad 3: Inertial"
+  void ScrollType(int scrollType);
 
   // Maps the given app window id to a window id.
   void MapAppWindowIdToWindowId(const std::string& appwindow_id, int window_id);
@@ -52,10 +74,13 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
     return "UtilitiesAPI";
   }
   static const bool kServiceIsNULLWhileTesting = true;
+  static const bool kServiceRedirectedInIncognito = true;
 
   // Maps the window id of the Browser window to a AppWindow id
   typedef std::map<std::string, int> WindowIdToAppWindowId;
   WindowIdToAppWindowId appwindow_id_to_window_id_;
+
+  std::unique_ptr<VivaldiUtilitiesEventRouter> event_router_;
 };
 
 
@@ -138,6 +163,20 @@ class UtilitiesMapFocusAppWindowToWindowIdFunction
 
  private:
   DISALLOW_COPY_AND_ASSIGN(UtilitiesMapFocusAppWindowToWindowIdFunction);
+};
+
+class UtilitiesBasicPrintFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.basicPrint",
+                             UTILITIES_BASICPRINT)
+  UtilitiesBasicPrintFunction();
+
+  bool RunAsync() override;
+ protected:
+  ~UtilitiesBasicPrintFunction() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesBasicPrintFunction);
 };
 
 }  // namespace extensions

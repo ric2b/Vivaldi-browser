@@ -17,12 +17,11 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -99,7 +98,7 @@
 #include "ui/gfx/vector_icons_public.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/views/animation/button_ink_drop_delegate.h"
-#include "ui/views/animation/flood_fill_ink_drop_animation.h"
+#include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_hover.h"
 #include "ui/views/button_drag_utils.h"
 #include "ui/views/controls/button/label_button.h"
@@ -253,18 +252,18 @@ class BookmarkButtonBase : public views::LabelButton {
            event_utils::IsPossibleDispositionEvent(e);
   }
 
-  scoped_ptr<views::InkDropAnimation> CreateInkDropAnimation() const override {
-    return make_scoped_ptr(new views::FloodFillInkDropAnimation(
+  std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override {
+    return base::WrapUnique(new views::FloodFillInkDropRipple(
         CalculateInkDropBounds(size()), GetInkDropCenter(),
         GetInkDropBaseColor()));
   }
 
-  scoped_ptr<views::InkDropHover> CreateInkDropHover() const override {
+  std::unique_ptr<views::InkDropHover> CreateInkDropHover() const override {
     if (!ShouldShowInkDropHover())
       return nullptr;
 
     const gfx::Rect bounds = CalculateInkDropBounds(size());
-    return make_scoped_ptr(new views::InkDropHover(
+    return base::WrapUnique(new views::InkDropHover(
         bounds.size(), 0, bounds.CenterPoint(), GetInkDropBaseColor()));
   }
 
@@ -274,7 +273,7 @@ class BookmarkButtonBase : public views::LabelButton {
   }
 
  private:
-  scoped_ptr<gfx::SlideAnimation> show_animation_;
+  std::unique_ptr<gfx::SlideAnimation> show_animation_;
   base::string16 nickname_;
   base::string16 description_;
   base::Time created_time_;
@@ -298,11 +297,8 @@ class BookmarkButton : public BookmarkButtonBase {
   BookmarkButton(views::ButtonListener* listener,
                  const GURL& url,
                  const base::string16& title,
-                 const BookmarkNode *node,
-                 Profile* profile)
-      : BookmarkButtonBase(listener, title, node),
-        url_(url),
-        profile_(profile) {}
+                 const BookmarkNode *node)
+      : BookmarkButtonBase(listener, title, node), url_(url) {}
 
   bool GetTooltipText(const gfx::Point& p,
                       base::string16* tooltip) const override {
@@ -318,7 +314,6 @@ class BookmarkButton : public BookmarkButtonBase {
 
  private:
   GURL url_;
-  Profile* profile_;
 
   DISALLOW_COPY_AND_ASSIGN(BookmarkButton);
 };
@@ -362,18 +357,18 @@ class BookmarkMenuButtonBase : public views::MenuButton {
     set_ink_drop_delegate(&ink_drop_delegate_);
   }
 
-  scoped_ptr<views::InkDropAnimation> CreateInkDropAnimation() const override {
-    return make_scoped_ptr(new views::FloodFillInkDropAnimation(
+  std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override {
+    return base::WrapUnique(new views::FloodFillInkDropRipple(
         CalculateInkDropBounds(size()), GetInkDropCenter(),
         GetInkDropBaseColor()));
   }
 
-  scoped_ptr<views::InkDropHover> CreateInkDropHover() const override {
+  std::unique_ptr<views::InkDropHover> CreateInkDropHover() const override {
     if (!ShouldShowInkDropHover())
       return nullptr;
 
     const gfx::Rect bounds = CalculateInkDropBounds(size());
-    return make_scoped_ptr(new views::InkDropHover(
+    return base::WrapUnique(new views::InkDropHover(
         bounds.size(), 0, bounds.CenterPoint(), GetInkDropBaseColor()));
   }
 
@@ -589,11 +584,9 @@ class BookmarkBarView::ButtonSeparatorView : public views::View {
 
       const int height = gfx::kFaviconSize * scale;
       const int top_y = (scaled_bounds.height() - height) / 2;
-      canvas->DrawLine(
-          gfx::Point(x, top_y), gfx::Point(x, top_y + height),
-          SkColorSetA(GetThemeProvider()->GetColor(
-                          ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON),
-                      0x4D));
+      canvas->DrawLine(gfx::Point(x, top_y), gfx::Point(x, top_y + height),
+                       GetThemeProvider()->GetColor(
+                           ThemeProperties::COLOR_TOOLBAR_VERTICAL_SEPARATOR));
     } else {
       PaintVerticalDivider(
           canvas, kSeparatorStartX, height(), 1, kEdgeDividerColor,
@@ -650,6 +643,7 @@ BookmarkBarView::BookmarkBarView(Browser* browser, BrowserView* browser_view)
     // Don't let the bookmarks show on top of the location bar while animating.
     SetPaintToLayer(true);
     layer()->SetMasksToBounds(true);
+    layer()->SetFillsBoundsOpaquely(false);
   }
 
   size_animation_.Reset(1);
@@ -1815,8 +1809,8 @@ MenuButton* BookmarkBarView::CreateOverflowButton() {
 
 views::View* BookmarkBarView::CreateBookmarkButton(const BookmarkNode* node) {
   if (node->is_url()) {
-    BookmarkButton* button = new BookmarkButton(
-        this, node->url(), node->GetTitle(), node, browser_->profile());
+    BookmarkButton* button =
+        new BookmarkButton(this, node->url(), node->GetTitle(), node);
     ConfigureButton(node, button);
     return button;
   }

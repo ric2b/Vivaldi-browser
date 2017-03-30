@@ -3,7 +3,7 @@
         {
             "type": "@WebInspector.PanelFactory",
             "name": "resources",
-            "title": "Resources",
+            "title": "Application",
             "order": 70,
             "className": "WebInspector.ResourcesPanelFactory"
         },
@@ -15,7 +15,9 @@
     ],
     "dependencies": ["source_frame", "ui_lazy", "components_lazy"],
     "scripts": [
+        "AppManifestView.js",
         "ApplicationCacheItemsView.js",
+        "ClearStorageView.js",
         "CookieItemsView.js",
         "DatabaseModel.js",
         "DOMStorageModel.js",
@@ -29,8 +31,11 @@
         "ServiceWorkersView.js"
     ],
     "resources": [
+        "appManifestView.css",
+        "clearStorageView.css",
         "indexedDBViews.css",
         "resourcesPanel.css",
+        "resourcesSidebar.css",
         "serviceWorkerCacheViews.css",
         "serviceWorkersView.css"
     ]

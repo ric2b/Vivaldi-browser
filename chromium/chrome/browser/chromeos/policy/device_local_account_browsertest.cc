@@ -37,8 +37,8 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -1420,7 +1420,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExternalData) {
       PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()));
   policy_entry = policies.Get(key::kUserAvatarImage);
   ASSERT_TRUE(policy_entry);
-  EXPECT_TRUE(base::Value::Equals(metadata.get(), policy_entry->value));
+  EXPECT_TRUE(base::Value::Equals(metadata.get(), policy_entry->value.get()));
   ASSERT_TRUE(policy_entry->external_data_fetcher);
 
   // Retrieve the external data via the ProfilePolicyConnector. The retrieval

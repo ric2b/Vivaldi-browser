@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/singleton.h"
 
@@ -109,7 +110,9 @@ class VariationsParamAssociator {
 
   // Retrieve the singleton.
   static VariationsParamAssociator* GetInstance() {
-    return base::Singleton<VariationsParamAssociator>::get();
+    return base::Singleton<
+        VariationsParamAssociator,
+        base::LeakySingletonTraits<VariationsParamAssociator>>::get();
   }
 
   bool AssociateVariationParams(const std::string& trial_name,
@@ -210,6 +213,18 @@ bool GetVariationParams(const std::string& trial_name,
       trial_name, params);
 }
 
+bool GetVariationParamsByFeature(const base::Feature& feature,
+                                 std::map<std::string, std::string>* params) {
+  if (!base::FeatureList::IsEnabled(feature))
+    return false;
+
+  base::FieldTrial* trial = base::FeatureList::GetFieldTrial(feature);
+  if (!trial)
+    return false;
+
+  return GetVariationParams(trial->trial_name(), params);
+}
+
 std::string GetVariationParamValue(const std::string& trial_name,
                                    const std::string& param_name) {
   std::map<std::string, std::string> params;
@@ -219,6 +234,18 @@ std::string GetVariationParamValue(const std::string& trial_name,
       return it->second;
   }
   return std::string();
+}
+
+std::string GetVariationParamValueByFeature(const base::Feature& feature,
+                                            const std::string& param_name) {
+  if (!base::FeatureList::IsEnabled(feature))
+    return std::string();
+
+  base::FieldTrial* trial = base::FeatureList::GetFieldTrial(feature);
+  if (!trial)
+    return std::string();
+
+  return GetVariationParamValue(trial->trial_name(), param_name);
 }
 
 // Functions below are exposed for testing explicitly behind this namespace.

@@ -35,11 +35,20 @@ class UserWindowControllerImpl : public mojom::UserWindowController,
   void Initialize(RootWindowController* root_controller);
 
  private:
+  void AssignIdIfNecessary(mus::Window* window);
+
+  // Removes observers from the window and connection.
+  void RemoveObservers(mus::Window* user_container);
+
+  // Returns the window with the specified user id.
+  mus::Window* GetUserWindowById(uint32_t id);
+
   // A helper to get the container for user windows.
   mus::Window* GetUserWindowContainer() const;
 
   // mus::WindowObserver:
   void OnTreeChanging(const TreeChangeParams& params) override;
+  void OnWindowDestroying(mus::Window* window) override;
 
   // mus::WindowTreeConnectionObserver:
   void OnWindowTreeFocusChanged(mus::Window* gained_focus,
@@ -52,6 +61,7 @@ class UserWindowControllerImpl : public mojom::UserWindowController,
   RootWindowController* root_controller_;
   mojom::UserWindowObserverPtr user_window_observer_;
   std::unique_ptr<WindowPropertyObserver> window_property_observer_;
+  uint32_t next_id_ = 1u;
 
   DISALLOW_COPY_AND_ASSIGN(UserWindowControllerImpl);
 };

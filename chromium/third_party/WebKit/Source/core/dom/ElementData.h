@@ -48,15 +48,9 @@ class UniqueElementData;
 // data such as attributes, inline style, and parsed class names and ids.
 class ElementData : public GarbageCollectedFinalized<ElementData> {
 public:
-#if ENABLE(OILPAN)
     // Override GarbageCollectedFinalized's finalizeGarbageCollectedObject to
     // dispatch to the correct subclass destructor.
     void finalizeGarbageCollectedObject();
-#else
-    // Override RefCounted's deref() to ensure operator delete is called on
-    // the appropriate subclass type.
-    void deref();
-#endif
 
     void clearClass() const { m_classNames.clear(); }
     void setClass(const AtomicString& className, bool shouldFoldCase) const { m_classNames.set(shouldFoldCase ? className.lowerASCII() : className , SpaceSplitString::ShouldNotFoldCase); }
@@ -103,11 +97,7 @@ private:
     friend class UniqueElementData;
     friend class SVGElement;
 
-#if !ENABLE(OILPAN)
-    void destroy();
-#endif
-
-    RawPtr<UniqueElementData> makeUniqueCopy() const;
+    UniqueElementData* makeUniqueCopy() const;
 };
 
 #define DEFINE_ELEMENT_DATA_TYPE_CASTS(thisType,  pointerPredicate, referencePredicate) \
@@ -125,7 +115,7 @@ private:
 // duplicate sets of attributes (ex. the same classes).
 class ShareableElementData final : public ElementData {
 public:
-    static RawPtr<ShareableElementData> createWithAttributes(const Vector<Attribute>&);
+    static ShareableElementData* createWithAttributes(const Vector<Attribute>&);
 
     explicit ShareableElementData(const Vector<Attribute>&);
     explicit ShareableElementData(const UniqueElementData&);
@@ -135,7 +125,7 @@ public:
 
     // Add support for placement new as ShareableElementData is not allocated
     // with a fixed size. Instead the allocated memory size is computed based on
-    // the number of attributes. This requires us to use Heap::allocate directly
+    // the number of attributes. This requires us to use ThreadHeap::allocate directly
     // with the computed size and subsequently call placement new with the
     // allocated memory address.
     void* operator new(std::size_t, void* location)
@@ -162,8 +152,8 @@ DEFINE_ELEMENT_DATA_TYPE_CASTS(ShareableElementData, !data->isUnique(), !data.is
 // attribute will have the same inline style.
 class UniqueElementData final : public ElementData {
 public:
-    static RawPtr<UniqueElementData> create();
-    RawPtr<ShareableElementData> makeShareableCopy() const;
+    static UniqueElementData* create();
+    ShareableElementData* makeShareableCopy() const;
 
     MutableAttributeCollection attributes();
     AttributeCollection attributes() const;
@@ -183,15 +173,6 @@ public:
 };
 
 DEFINE_ELEMENT_DATA_TYPE_CASTS(UniqueElementData, data->isUnique(), data.isUnique());
-
-#if !ENABLE(OILPAN)
-inline void ElementData::deref()
-{
-    if (!derefBase())
-        return;
-    destroy();
-}
-#endif
 
 inline const StylePropertySet* ElementData::presentationAttributeStyle() const
 {

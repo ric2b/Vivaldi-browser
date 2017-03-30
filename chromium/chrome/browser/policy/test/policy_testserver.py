@@ -290,7 +290,8 @@ class PolicyRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     # device_management_backend.proto.
     if (self.GetUniqueParam('devicetype') != '2' or
         self.GetUniqueParam('apptype') != 'Chrome' or
-        len(self.GetUniqueParam('deviceid')) >= 64):
+        (self.GetUniqueParam('deviceid') is not None and
+         len(self.GetUniqueParam('deviceid')) >= 64)):
       return (400, 'Invalid request parameter')
     if request_type == 'register':
       response = self.ProcessRegister(rmsg.register_request)
@@ -308,6 +309,16 @@ class PolicyRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     elif request_type == 'status_upload':
       response = self.ProcessStatusUploadRequest(
           rmsg.device_status_report_request, rmsg.session_status_report_request)
+    elif request_type == 'device_attribute_update_permission':
+      response = self.ProcessDeviceAttributeUpdatePermissionRequest()
+    elif request_type == 'device_attribute_update':
+      response = self.ProcessDeviceAttributeUpdateRequest()
+    elif request_type == 'remote_commands':
+      response = self.ProcessRemoteCommandsRequest()
+    elif request_type == 'check_android_management':
+      response = self.ProcessCheckAndroidManagementRequest(
+          rmsg.check_android_management_request,
+          str(self.GetUniqueParam('oauth_token')))
     else:
       return (400, 'Invalid request parameter')
 
@@ -585,6 +596,56 @@ class PolicyRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         session_status_report_response)
 
     return (200, response)
+
+  def ProcessDeviceAttributeUpdatePermissionRequest(self):
+    """Handles a device attribute update permission request.
+
+    Returns:
+      A tuple of HTTP status code and response data to send to the client.
+    """
+    response = dm.DeviceManagementResponse()
+    response.device_attribute_update_permission_response.result = (
+        dm.DeviceAttributeUpdatePermissionResponse.ATTRIBUTE_UPDATE_ALLOWED)
+
+    return (200, response)
+
+  def ProcessDeviceAttributeUpdateRequest(self):
+    """Handles a device attribute update request.
+
+    Returns:
+      A tuple of HTTP status code and response data to send to the client.
+    """
+    response = dm.DeviceManagementResponse()
+    response.device_attribute_update_response.result = (
+        dm.DeviceAttributeUpdateResponse.ATTRIBUTE_UPDATE_SUCCESS)
+
+    return (200, response)
+
+  def ProcessRemoteCommandsRequest(self):
+    """Handles a remote command request.
+
+    Returns:
+      A tuple of HTTP status code and response data to send to the client.
+    """
+    return (200, '')
+
+  def ProcessCheckAndroidManagementRequest(self, msg, oauth_token):
+    """Handles a check Android management request.
+
+    Returns:
+      A tuple of HTTP status code and response data to send to the client.
+    """
+    check_android_management_response = dm.CheckAndroidManagementResponse()
+
+    response = dm.DeviceManagementResponse()
+    response.check_android_management_response.CopyFrom(
+        check_android_management_response)
+    if oauth_token == 'managed-auth-token':
+      return (409, response)
+    elif oauth_token == 'unmanaged-auth-token':
+      return (200, response)
+    else:
+      return (403, response)
 
   def SetProtobufMessageField(self, group_message, field, field_value):
     """Sets a field in a protobuf message.

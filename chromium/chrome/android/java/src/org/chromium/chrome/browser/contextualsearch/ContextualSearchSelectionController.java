@@ -54,6 +54,8 @@ public class ContextualSearchSelectionController {
     // Max selection length must be limited or the entire request URL can go past the 2K limit.
     private static final int MAX_SELECTION_LENGTH = 100;
 
+    private static final int MILLISECONDS_TO_NANOSECONDS = 1000000;
+
     private final ChromeActivity mActivity;
     private final ContextualSearchSelectionHandler mHandler;
     private final Runnable mHandleInvalidTapRunnable;
@@ -76,6 +78,10 @@ public class ContextualSearchSelectionController {
 
     // The time of the most last scroll activity, or 0 if none.
     private long mLastScrollTimeNs;
+
+    // Tracks whether a Context Menu has just been shown and the UX has been dismissed.
+    // The selection may be unreliable until the next reset.  See crbug.com/628436.
+    private boolean mIsContextMenuShown;
 
     private class ContextualSearchGestureStateListener extends GestureStateListener {
         @Override
@@ -142,6 +148,16 @@ public class ContextualSearchSelectionController {
     }
 
     /**
+     * Notifies that a Context Menu has been shown.
+     * Future controller events may be unreliable until the next reset.
+     */
+    void onContextMenuShown() {
+        // Hide the UX.
+        mHandler.handleSelectionDismissal();
+        mIsContextMenuShown = true;
+    }
+
+    /**
      * Notifies that the Contextual Search has ended.
      * @param reason The reason for ending the Contextual Search.
      */
@@ -167,6 +183,14 @@ public class ContextualSearchSelectionController {
      */
     public ContextualSearchGestureStateListener getGestureStateListener() {
         return new ContextualSearchGestureStateListener();
+    }
+
+    /**
+     * @return the {@link ChromeActivity}.
+     */
+    ChromeActivity getActivity() {
+        // TODO(donnd): don't expose the activity.
+        return mActivity;
     }
 
     /**
@@ -276,11 +300,14 @@ public class ContextualSearchSelectionController {
         boolean shouldHandleSelection = false;
         switch (eventType) {
             case SelectionEventType.SELECTION_HANDLES_SHOWN:
-                mWasTapGestureDetected = false;
-                mSelectionType = SelectionType.LONG_PRESS;
-                shouldHandleSelection = true;
-                // Since we're showing pins, we don't care if the previous tap was invalid anymore.
-                unscheduleInvalidTapNotification();
+                if (!mIsContextMenuShown) {
+                    mWasTapGestureDetected = false;
+                    mSelectionType = SelectionType.LONG_PRESS;
+                    shouldHandleSelection = true;
+                    // Since we're showing pins, we don't care if the previous tap was invalid
+                    // anymore.
+                    unscheduleInvalidTapNotification();
+                }
                 break;
             case SelectionEventType.SELECTION_HANDLES_CLEARED:
                 mHandler.handleSelectionDismissal();
@@ -331,6 +358,7 @@ public class ContextualSearchSelectionController {
         resetSelectionStates();
         mWasLastTapValid = false;
         mLastScrollTimeNs = 0;
+        mIsContextMenuShown = false;
     }
 
     /**
@@ -353,6 +381,7 @@ public class ContextualSearchSelectionController {
         if (mSelectionType != SelectionType.LONG_PRESS) {
             mWasTapGestureDetected = true;
             TapSuppressionHeuristics tapHeuristics = new TapSuppressionHeuristics(this, x, y);
+            // TODO(donnd): Move to be called when the panel closes to work with states that change.
             tapHeuristics.logConditionState();
             // Tell the manager what it needs in order to log metrics on whether the tap would have
             // been suppressed if each of the heuristics were satisfied.
@@ -408,6 +437,10 @@ public class ContextualSearchSelectionController {
         }
     }
 
+    // ============================================================================================
+    // Invalid Tap Notification
+    // ============================================================================================
+
     /**
      * Schedules a notification to check if the tap was invalid.
      * When we call selectWordAroundCaret it selects nothing in cases where the tap was invalid.
@@ -437,6 +470,10 @@ public class ContextualSearchSelectionController {
         mIsWaitingForInvalidTapDetection = false;
     }
 
+    // ============================================================================================
+    // Selection Modification
+    // ============================================================================================
+
     /**
      * This method checks whether the selection modification should be handled. This method
      * is needed to allow modifying selections that are occluded by the Panel.
@@ -463,6 +500,10 @@ public class ContextualSearchSelectionController {
     private void preventHandlingCurrentSelectionModification() {
         mShouldHandleSelectionModification = false;
     }
+
+    // ============================================================================================
+    // Misc.
+    // ============================================================================================
 
     /**
      * @return whether a tap gesture has been detected, for testing.

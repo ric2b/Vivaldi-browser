@@ -31,6 +31,7 @@
 #include "core/style/BasicShapes.h"
 #include "core/style/CounterDirectives.h"
 #include "core/style/CursorData.h"
+#include "core/style/DataPersistent.h"
 #include "core/style/DataRef.h"
 #include "core/style/FillLayer.h"
 #include "core/style/ComputedStyleConstants.h"
@@ -43,6 +44,7 @@
 #include "platform/LengthPoint.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassRefPtr.h"
+#include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 
 namespace blink {
@@ -115,8 +117,8 @@ public:
     DataRef<StyleTransformData> m_transform; // Transform properties (rotate, scale, skew, etc.)
     DataRef<StyleWillChangeData> m_willChange; // CSS Will Change
 
-    DataRef<StyleFilterData> m_filter; // Filter operations (url, sepia, blur, etc.)
-    DataRef<StyleFilterData> m_backdropFilter; // Backdrop filter operations (url, sepia, blur, etc.)
+    DataPersistent<StyleFilterData> m_filter; // Filter operations (url, sepia, blur, etc.)
+    DataPersistent<StyleFilterData> m_backdropFilter; // Backdrop filter operations (url, sepia, blur, etc.)
 
     DataRef<StyleGridData> m_grid;
     DataRef<StyleGridItemData> m_gridItem;
@@ -150,6 +152,8 @@ public:
     StyleColor m_visitedLinkBorderBottomColor;
 
     Vector<String> m_callbackSelectors;
+
+    std::unique_ptr<Vector<Persistent<StyleImage>>> m_paintImages;
 
     StyleContentAlignmentData m_alignContent;
     StyleSelfAlignmentData m_alignItems;
@@ -189,7 +193,7 @@ public:
 
     unsigned m_isolation : 1; // Isolation
 
-    unsigned m_contain : 3; // Containment
+    unsigned m_contain : 4; // Containment
 
     // ScrollBehavior. 'scroll-behavior' has 2 accepted values, but ScrollBehavior has a third
     // value (that can only be specified using CSSOM scroll APIs) so 2 bits are needed.

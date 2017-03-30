@@ -8,7 +8,7 @@
 
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_job_coordinator.h"
 #include "content/browser/service_worker/service_worker_metrics.h"
@@ -558,7 +558,7 @@ void ServiceWorkerRegisterJob::ResolvePromise(
 void ServiceWorkerRegisterJob::AddRegistrationToMatchingProviderHosts(
     ServiceWorkerRegistration* registration) {
   DCHECK(registration);
-  for (scoped_ptr<ServiceWorkerContextCore::ProviderHostIterator> it =
+  for (std::unique_ptr<ServiceWorkerContextCore::ProviderHostIterator> it =
            context_->GetProviderHostIterator();
        !it->IsAtEnd(); it->Advance()) {
     ServiceWorkerProviderHost* host = it->GetProviderHost();

@@ -28,6 +28,7 @@
 <translation id="2479520428668657293">ডানদিকে সরান এবং নির্বাচন পরিবর্তন করুন</translation>
 <translation id="2482878487686419369">বিজ্ঞপ্তিগুলি</translation>
 <translation id="2497284189126895209">সকল ফাইল</translation>
+<translation id="2515586267016047495">Alt</translation>
 <translation id="2538759511191347839">লাইনের শেষ অবধি সরান এবং নির্বাচন পরিবর্তন করুন</translation>
 <translation id="2557207087669398617">লাইনের শুরু পর্যন্ত সরান</translation>
 <translation id="2666092431469916601">শীর্ষ</translation>
@@ -61,7 +62,6 @@
 <translation id="4552416320897244156">PgDwn</translation>
 <translation id="4588090240171750605">ডান দিকে স্ক্রোল করুন</translation>
 <translation id="4820616160060340806">Command+<ph name="KEY_COMBO_NAME" /></translation>
-<translation id="4927753642311223124">এখানে দেখার কিছু নেই , এগিয়ে যান৷</translation>
 <translation id="4968171027979920686">{SECONDS,plural, =1{১ সেকেন্ড}one{# সেকেন্ড}other{# সেকেন্ড}}</translation>
 <translation id="4971687151119236543">মিডিয়া পূর্ববর্তী ট্র্যাক</translation>
 <translation id="4999762576397546063">Ctrl+<ph name="KEY_COMBO_NAME" /></translation>
@@ -104,7 +104,7 @@
 <translation id="6907759265145635167"><ph name="QUANTITY" /> PB/s</translation>
 <translation id="6918245111648057970">প্রত্যেক ব্যবহারকারীর জন্য নিম্নলিখিত থেকে বিজ্ঞপ্তি মঞ্জুর করুন:</translation>
 <translation id="6945221475159498467">নির্বাচন</translation>
-<translation id="6965382102122355670">ওকে</translation>
+<translation id="6965382102122355670">ঠিক আছে</translation>
 <translation id="7052633198403197513">F1</translation>
 <translation id="7135556860107312402">নিম্নলিখিত থেকে বিজ্ঞপ্তিগুলি মঞ্জুরি করুন:</translation>
 <translation id="7139614227326422685">ডানদিকে শব্দ সরান</translation>
@@ -130,6 +130,7 @@
 <translation id="8328145009876646418">বাম প্রান্ত</translation>
 <translation id="8331626408530291785">উপরে স্ক্রোল করুন</translation>
 <translation id="8371695176452482769">এখনই বলুন</translation>
+<translation id="8392688371657486010">আপনার জন্য কোনো বিজ্ঞপ্তি নেই</translation>
 <translation id="8394908167088220973">মিডিয়া প্লে করুন/বিরতি</translation>
 <translation id="8400147561352026160">Shift+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="8428213095426709021">সেটিংস</translation>

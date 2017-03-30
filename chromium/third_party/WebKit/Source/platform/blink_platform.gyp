@@ -63,10 +63,19 @@
       '<(SHARED_INTERMEDIATE_DIR)/blink',
     ],
     'sources': [
+      '../web/WebInputEvent.cpp',
       'exported/FilePathConversion.cpp',
       'exported/URLConversion.cpp',
       'exported/WebCString.cpp',
       'exported/WebString.cpp',
+      'exported/linux/WebFontRenderStyle.cpp',
+    ],
+    'target_conditions': [
+      ['OS=="android"', {
+        'sources/': [
+          ['include', 'exported/linux/WebFontRenderStyle\\.cpp$'],
+        ],
+      }],
     ],
   },
   {
@@ -132,11 +141,13 @@
       'platform_generated.gyp:make_platform_generated',
       '<(DEPTH)/base/base.gyp:base',
       '<(DEPTH)/cc/cc.gyp:cc',
+      '<(DEPTH)/components/link_header_util/link_header_util.gyp:link_header_util',
       '<(DEPTH)/gpu/gpu.gyp:gles2_c_lib',
       '<(DEPTH)/gpu/gpu.gyp:gles2_implementation',
       '<(DEPTH)/mojo/mojo_edk.gyp:mojo_system_impl',
       '<(DEPTH)/mojo/mojo_public.gyp:mojo_cpp_bindings',
       '<(DEPTH)/mojo/mojo_public.gyp:mojo_cpp_bindings_wtf_support',
+      '<(DEPTH)/net/net.gyp:net',
       '<(DEPTH)/skia/skia.gyp:skia',
       '<(DEPTH)/third_party/harfbuzz-ng/harfbuzz.gyp:harfbuzz-ng',
       '<(DEPTH)/third_party/iccjpeg/iccjpeg.gyp:iccjpeg',
@@ -149,7 +160,7 @@
       '<(DEPTH)/ui/gfx/gfx.gyp:gfx',
       '<(DEPTH)/ui/gfx/gfx.gyp:gfx_geometry',
       '<(DEPTH)/url/url.gyp:url_lib',
-      '<(DEPTH)/v8/tools/gyp/v8.gyp:v8',
+      '<(DEPTH)/v8/src/v8.gyp:v8',
       '<(libjpeg_gyp_path):libjpeg',
     ],
     'export_dependent_settings': [
@@ -162,7 +173,7 @@
       '<(DEPTH)/third_party/libwebp/libwebp.gyp:libwebp',
       '<(DEPTH)/third_party/ots/ots.gyp:ots',
       '<(DEPTH)/third_party/qcms/qcms.gyp:qcms',
-      '<(DEPTH)/v8/tools/gyp/v8.gyp:v8',
+      '<(DEPTH)/v8/src/v8.gyp:v8',
       '<(DEPTH)/url/url.gyp:url_lib',
       '<(DEPTH)/third_party/iccjpeg/iccjpeg.gyp:iccjpeg',
       '<(libjpeg_gyp_path):libjpeg',
@@ -254,6 +265,8 @@
           # Use native Mac font code from core.
           ['include', '(fonts/)?mac/[^/]*Font[^/]*\\.(cpp|mm?)$'],
 
+          ['include', 'text/mac/HyphenationMac\\.cpp$'],
+
           # Cherry-pick some files that can't be included by broader regexps.
           # Some of these are used instead of Chromium platform files, see
           # the specific exclusions in the "exclude" list below.
@@ -318,6 +331,8 @@
           ['include', 'fonts/win/FontFallbackWin\\.(cpp|h)$'],
           ['include', 'fonts/win/FontPlatformDataWin\\.cpp$'],
 
+          ['include', 'text/win/HyphenationWin\\.cpp$'],
+
           # SystemInfo.cpp is useful and we don't want to copy it.
           ['include', 'win/SystemInfo\\.cpp$'],
         ],
@@ -372,8 +387,7 @@
     'target_conditions': [
       ['OS=="android"', {
         'sources/': [
-            ['include', 'exported/linux/WebFontRenderStyle\\.cpp$'],
-            ['include', 'fonts/linux/FontPlatformDataLinux\\.cpp$'],
+          ['include', 'fonts/linux/FontPlatformDataLinux\\.cpp$'],
         ],
       }],
     ],

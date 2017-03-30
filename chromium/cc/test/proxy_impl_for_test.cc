@@ -4,24 +4,18 @@
 
 #include "cc/test/proxy_impl_for_test.h"
 
+#include "base/memory/ptr_util.h"
+
 namespace cc {
-scoped_ptr<ProxyImplForTest> ProxyImplForTest::Create(
+std::unique_ptr<ProxyImplForTest> ProxyImplForTest::Create(
     TestHooks* test_hooks,
     ChannelImpl* channel_impl,
     LayerTreeHost* layer_tree_host,
     TaskRunnerProvider* task_runner_provider,
-    scoped_ptr<BeginFrameSource> external_begin_frame_source) {
-  return make_scoped_ptr(new ProxyImplForTest(
+    std::unique_ptr<BeginFrameSource> external_begin_frame_source) {
+  return base::WrapUnique(new ProxyImplForTest(
       test_hooks, channel_impl, layer_tree_host, task_runner_provider,
       std::move(external_begin_frame_source)));
-}
-
-bool ProxyImplForTest::HasCommitCompletionEvent() const {
-  return commit_completion_event_ != nullptr;
-}
-
-bool ProxyImplForTest::GetNextCommitWaitsForActivation() const {
-  return next_commit_waits_for_activation_;
 }
 
 ProxyImplForTest::ProxyImplForTest(
@@ -29,7 +23,7 @@ ProxyImplForTest::ProxyImplForTest(
     ChannelImpl* channel_impl,
     LayerTreeHost* layer_tree_host,
     TaskRunnerProvider* task_runner_provider,
-    scoped_ptr<BeginFrameSource> external_begin_frame_source)
+    std::unique_ptr<BeginFrameSource> external_begin_frame_source)
     : ProxyImpl(channel_impl,
                 layer_tree_host,
                 task_runner_provider,

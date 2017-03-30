@@ -5,7 +5,7 @@
 #include "cc/layers/picture_layer_impl.h"
 
 #include "base/macros.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "cc/debug/lap_timer.h"
 #include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
@@ -63,11 +63,11 @@ class PictureLayerImplPerfTest : public testing::Test {
     LayerTreeImpl* pending_tree = host_impl_.pending_tree();
     pending_tree->ClearLayers();
 
-    scoped_ptr<FakePictureLayerImpl> pending_layer =
+    std::unique_ptr<FakePictureLayerImpl> pending_layer =
         FakePictureLayerImpl::CreateWithRasterSource(pending_tree, 7,
                                                      raster_source);
     pending_layer->SetDrawsContent(true);
-    pending_layer->SetForceRenderSurface(true);
+    pending_layer->test_properties()->force_render_surface = true;
     pending_tree->SetRootLayer(std::move(pending_layer));
     pending_tree->BuildPropertyTreesForTesting();
 
@@ -85,8 +85,9 @@ class PictureLayerImplPerfTest : public testing::Test {
     timer_.Reset();
     do {
       int count = num_tiles;
-      scoped_ptr<TilingSetRasterQueueAll> queue(new TilingSetRasterQueueAll(
-          pending_layer_->picture_layer_tiling_set(), false));
+      std::unique_ptr<TilingSetRasterQueueAll> queue(
+          new TilingSetRasterQueueAll(
+              pending_layer_->picture_layer_tiling_set(), false));
       while (count--) {
         ASSERT_TRUE(!queue->IsEmpty()) << "count: " << count;
         ASSERT_TRUE(queue->Top().tile()) << "count: " << count;
@@ -112,8 +113,9 @@ class PictureLayerImplPerfTest : public testing::Test {
 
     timer_.Reset();
     do {
-      scoped_ptr<TilingSetRasterQueueAll> queue(new TilingSetRasterQueueAll(
-          pending_layer_->picture_layer_tiling_set(), false));
+      std::unique_ptr<TilingSetRasterQueueAll> queue(
+          new TilingSetRasterQueueAll(
+              pending_layer_->picture_layer_tiling_set(), false));
       timer_.NextLap();
     } while (!timer_.HasTimeLimitExpired());
 
@@ -132,7 +134,7 @@ class PictureLayerImplPerfTest : public testing::Test {
     timer_.Reset();
     do {
       int count = num_tiles;
-      scoped_ptr<TilingSetEvictionQueue> queue(new TilingSetEvictionQueue(
+      std::unique_ptr<TilingSetEvictionQueue> queue(new TilingSetEvictionQueue(
           pending_layer_->picture_layer_tiling_set()));
       while (count--) {
         ASSERT_TRUE(!queue->IsEmpty()) << "count: " << count;
@@ -160,7 +162,7 @@ class PictureLayerImplPerfTest : public testing::Test {
 
     timer_.Reset();
     do {
-      scoped_ptr<TilingSetEvictionQueue> queue(new TilingSetEvictionQueue(
+      std::unique_ptr<TilingSetEvictionQueue> queue(new TilingSetEvictionQueue(
           pending_layer_->picture_layer_tiling_set()));
       timer_.NextLap();
     } while (!timer_.HasTimeLimitExpired());
@@ -173,7 +175,7 @@ class PictureLayerImplPerfTest : public testing::Test {
   TestSharedBitmapManager shared_bitmap_manager_;
   TestTaskGraphRunner task_graph_runner_;
   FakeImplTaskRunnerProvider task_runner_provider_;
-  scoped_ptr<OutputSurface> output_surface_;
+  std::unique_ptr<OutputSurface> output_surface_;
   FakeLayerTreeHostImpl host_impl_;
   FakePictureLayerImpl* pending_layer_;
   LapTimer timer_;

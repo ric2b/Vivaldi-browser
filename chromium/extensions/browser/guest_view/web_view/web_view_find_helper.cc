@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "components/guest_view/browser/guest_view_event.h"
 #include "extensions/browser/api/guest_view/web_view/web_view_internal_api.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
@@ -35,12 +36,12 @@ void WebViewFindHelper::CancelAllFindSessions() {
 void WebViewFindHelper::DispatchFindUpdateEvent(bool canceled,
                                                 bool final_update) {
   DCHECK(find_update_event_.get());
-  scoped_ptr<base::DictionaryValue> args(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
   find_update_event_->PrepareResults(args.get());
   args->SetBoolean(webview::kFindCanceled, canceled);
   args->SetBoolean(webview::kFindFinalUpdate, final_update);
   DCHECK(webview_guest_);
-  webview_guest_->DispatchEventToView(make_scoped_ptr(
+  webview_guest_->DispatchEventToView(base::WrapUnique(
       new GuestViewEvent(webview::kEventFindReply, std::move(args))));
 }
 
@@ -157,13 +158,13 @@ void WebViewFindHelper::FindReply(int request_id,
   DCHECK(current_find_session_);
 
   WebViewFindHelper::FindInfo* find_info = find_iterator->second.get();
-
   // Handle canceled find requests.
   if (!find_info->options()->findNext &&
       find_info_map_.begin()->first < request_id) {
     DCHECK_NE(current_find_session_->request_id(),
               find_info_map_.begin()->first);
-    DispatchFindUpdateEvent(true /* canceled */, true /* final_update */);
+    if (find_update_event_)
+      DispatchFindUpdateEvent(true /* canceled */, true /* final_update */);
     EndFindSession(find_info_map_.begin()->first, true /* canceled */);
   }
 

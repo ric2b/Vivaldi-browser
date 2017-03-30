@@ -20,8 +20,15 @@ import controller
 import devtools_monitor
 import device_setup
 import loading_trace
-import sandwich_metrics
 
+
+# Standard filenames in the sandwich runner's output directory.
+TRACE_FILENAME = 'trace.json'
+VIDEO_FILENAME = 'video.mp4'
+WPR_LOG_FILENAME = 'wpr.log'
+
+# Memory dump category used to get memory metrics.
+MEMORY_DUMP_CATEGORY = 'disabled-by-default-memory-infra'
 
 _JOB_SEARCH_PATH = 'sandwich_jobs'
 
@@ -117,11 +124,17 @@ class SandwichRunner(object):
     # Configures whether to record speed-index video.
     self.record_video = False
 
+    # Configures whether to record memory dumps.
+    self.record_memory_dumps = False
+
     # Path to the WPR archive to load or save. Is str or None.
     self.wpr_archive_path = None
 
     # Configures whether the WPR archive should be read or generated.
     self.wpr_record = False
+
+    # The android DeviceUtils to run sandwich on or None to run it locally.
+    self.android_device = None
 
     self._chrome_ctl = None
     self._local_cache_directory_path = None
@@ -158,17 +171,6 @@ class SandwichRunner(object):
     else:
       _CleanPreviousTraces(self.trace_output_directory)
 
-  def _SaveRunInfos(self, urls):
-    assert self.trace_output_directory
-    run_infos = {
-      'cache-op': self.cache_operation,
-      'job_name': self.job_name,
-      'urls': urls
-    }
-    with open(os.path.join(self.trace_output_directory, 'run_infos.json'),
-              'w') as file_output:
-      json.dump(run_infos, file_output, indent=2)
-
   def _GetEmulatorNetworkCondition(self, emulator):
     if self.network_emulator == emulator:
       return self.network_condition
@@ -190,34 +192,39 @@ class SandwichRunner(object):
         os.makedirs(run_path)
     self._chrome_ctl.SetNetworkEmulation(
         self._GetEmulatorNetworkCondition('browser'))
+    additional_categories = []
+    if self.record_memory_dumps:
+      additional_categories = [MEMORY_DUMP_CATEGORY]
     # TODO(gabadie): add a way to avoid recording a trace.
     with self._chrome_ctl.Open() as connection:
       if clear_cache:
         connection.ClearCache()
       if run_path is not None and self.record_video:
         device = self._chrome_ctl.GetDevice()
-        assert device, 'Can only record video on a remote device.'
-        video_recording_path = os.path.join(run_path, 'video.mp4')
+        if device is None:
+          raise RuntimeError('Can only record video on a remote device.')
+        video_recording_path = os.path.join(run_path, VIDEO_FILENAME)
         with device_setup.RemoteSpeedIndexRecorder(device, connection,
                                                    video_recording_path):
           trace = loading_trace.LoadingTrace.RecordUrlNavigation(
               url=url,
               connection=connection,
               chrome_metadata=self._chrome_ctl.ChromeMetadata(),
-              categories=sandwich_metrics.CATEGORIES,
+              additional_categories=additional_categories,
               timeout_seconds=_DEVTOOLS_TIMEOUT)
       else:
         trace = loading_trace.LoadingTrace.RecordUrlNavigation(
             url=url,
             connection=connection,
             chrome_metadata=self._chrome_ctl.ChromeMetadata(),
-            categories=sandwich_metrics.CATEGORIES,
+            additional_categories=additional_categories,
             timeout_seconds=_DEVTOOLS_TIMEOUT)
     if run_path is not None:
-      trace_path = os.path.join(run_path, 'trace.json')
+      trace_path = os.path.join(run_path, TRACE_FILENAME)
       trace.ToJsonFile(trace_path)
 
   def _RunUrl(self, url, run_id):
+    self._chrome_ctl.ResetBrowserState()
     clear_cache = False
     if self.cache_operation == 'clear':
       clear_cache = True
@@ -245,9 +252,10 @@ class SandwichRunner(object):
     if self.trace_output_directory:
       self._CleanTraceOutputDirectory()
 
-    # TODO(gabadie): Make sandwich working on desktop.
-    device = device_utils.DeviceUtils.HealthyDevices()[0]
-    self._chrome_ctl = controller.RemoteChromeController(device)
+    if self.android_device:
+      self._chrome_ctl = controller.RemoteChromeController(self.android_device)
+    else:
+      self._chrome_ctl = controller.LocalChromeController()
     self._chrome_ctl.AddChromeArgument('--disable-infobars')
     if self.cache_operation == 'save':
       self._chrome_ctl.SetSlowDeath()
@@ -258,12 +266,16 @@ class SandwichRunner(object):
       chrome_cache.UnzipDirectoryContent(
           self.cache_archive_path, self._local_cache_directory_path)
 
+    out_log_path = None
+    if self.trace_output_directory:
+      out_log_path = os.path.join(self.trace_output_directory, WPR_LOG_FILENAME)
+
     ran_urls = []
     with self._chrome_ctl.OpenWprHost(self.wpr_archive_path,
         record=self.wpr_record,
         network_condition_name=self._GetEmulatorNetworkCondition('wpr'),
-        disable_script_injection=self.disable_wpr_script_injection
-        ):
+        disable_script_injection=self.disable_wpr_script_injection,
+        out_log_path=out_log_path):
       for _ in xrange(self.job_repeat):
         for url in self.urls:
           self._RunUrl(url, run_id=len(ran_urls))
@@ -274,7 +286,5 @@ class SandwichRunner(object):
       self._local_cache_directory_path = None
     if self.cache_operation == 'save':
       self._PullCacheFromDevice()
-    if self.trace_output_directory:
-      self._SaveRunInfos(ran_urls)
 
     self._chrome_ctl = None

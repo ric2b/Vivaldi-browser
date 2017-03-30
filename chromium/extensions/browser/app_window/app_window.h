@@ -7,12 +7,12 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "components/sessions/core/session_id.h"
 #include "components/web_modal/web_contents_modal_dialog_manager_delegate.h"
@@ -194,7 +194,11 @@ class AppWindow : public content::WebContentsDelegate,
 
     // (Vivaldi) If true, this window will be used as a hidden window for
     // thumbnail generation.
-    bool thumbnail_window;
+    bool thumbnail_window = false;
+
+    // (Vivaldi) If true, this window will not use the position cache app
+    // windows usually use but rather the provided dimensions as-is.
+    bool avoid_cached_positions = false;
 
     // The API enables developers to specify content or window bounds. This
     // function combines them into a single, constrained window size.
@@ -277,7 +281,7 @@ class AppWindow : public content::WebContentsDelegate,
   void SetAppIconUrl(const GURL& icon_url);
 
   // Set the window shape. Passing a NULL |region| sets the default shape.
-  void UpdateShape(scoped_ptr<SkRegion> region);
+  void UpdateShape(std::unique_ptr<SkRegion> region);
 
   // Called from the render interface to modify the draggable regions.
   void UpdateDraggableRegions(const std::vector<DraggableRegion>& regions);
@@ -356,8 +360,6 @@ class AppWindow : public content::WebContentsDelegate,
   // the renderer.
   void GetSerializedState(base::DictionaryValue* properties) const;
 
-  void SetGuestViewDialogHost(WebViewGuest* host) { dialoghost_guestwebview_ = host;  }
-
   // Called by the window API when events can be sent to the window for this
   // app.
   void WindowEventsReady();
@@ -375,7 +377,8 @@ class AppWindow : public content::WebContentsDelegate,
   // remove this TODO.
   bool is_ime_window() const { return is_ime_window_; }
 
-  void SetAppWindowContentsForTesting(scoped_ptr<AppWindowContents> contents) {
+  void SetAppWindowContentsForTesting(
+      std::unique_ptr<AppWindowContents> contents) {
     app_window_contents_ = std::move(contents);
   }
 
@@ -523,12 +526,12 @@ class AppWindow : public content::WebContentsDelegate,
   GURL app_icon_url_;
 
   // An object to load the app's icon as an extension resource.
-  scoped_ptr<IconImage> app_icon_image_;
+  std::unique_ptr<IconImage> app_icon_image_;
 
-  scoped_ptr<NativeAppWindow> native_app_window_;
-  scoped_ptr<AppWindowContents> app_window_contents_;
-  scoped_ptr<AppDelegate> app_delegate_;
-  scoped_ptr<AppWebContentsHelper> helper_;
+  std::unique_ptr<NativeAppWindow> native_app_window_;
+  std::unique_ptr<AppWindowContents> app_window_contents_;
+  std::unique_ptr<AppDelegate> app_delegate_;
+  std::unique_ptr<AppWebContentsHelper> helper_;
 
   // The initial url this AppWindow was navigated to.
   GURL initial_url_;
@@ -568,10 +571,6 @@ class AppWindow : public content::WebContentsDelegate,
   // reinstated when the window exits fullscreen and moves away from the
   // taskbar.
   bool cached_always_on_top_;
-
-  // Used for webviews contained within this window to determine if a
-  // webcontent is visible or not.
-  extensions::WebViewGuest* dialoghost_guestwebview_;
 
   // Whether |alpha_enabled| was set in the CreateParams.
   bool requested_alpha_enabled_;

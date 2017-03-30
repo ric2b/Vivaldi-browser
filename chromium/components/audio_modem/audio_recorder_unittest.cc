@@ -6,19 +6,21 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/aligned_memory.h"
 #include "base/run_loop.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/audio_modem/audio_recorder_impl.h"
 #include "components/audio_modem/public/audio_modem_types.h"
 #include "components/audio_modem/test/random_samples.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "media/audio/audio_device_description.h"
 #include "media/audio/audio_manager.h"
-#include "media/audio/audio_manager_base.h"
 #include "media/base/audio_bus.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -62,7 +64,7 @@ class TestAudioInputStream : public media::AudioInputStream {
   void SimulateRecording() {
     const int fpb = params_.frames_per_buffer();
     for (int i = 0; i < buffer_->frames() / fpb; ++i) {
-      scoped_ptr<media::AudioBus> source = media::AudioBus::Create(2, fpb);
+      std::unique_ptr<media::AudioBus> source = media::AudioBus::Create(2, fpb);
       buffer_->CopyPartialFramesTo(i * fpb, fpb, 0, source.get());
       callback_->OnData(this, source.get(), fpb, 1.0);
     }
@@ -70,7 +72,7 @@ class TestAudioInputStream : public media::AudioInputStream {
 
   AudioInputCallback* callback_;
   media::AudioParameters params_;
-  scoped_ptr<media::AudioBus> buffer_;
+  std::unique_ptr<media::AudioBus> buffer_;
 
   DISALLOW_COPY_AND_ASSIGN(TestAudioInputStream);
 };
@@ -82,8 +84,9 @@ namespace audio_modem {
 class AudioRecorderTest : public testing::Test {
  public:
   AudioRecorderTest() : total_samples_(0), recorder_(nullptr) {
-    if (!media::AudioManager::Get())
-      media::AudioManager::CreateForTesting();
+    audio_manager_ = media::AudioManager::CreateForTesting(
+        base::ThreadTaskRunnerHandle::Get());
+    base::RunLoop().RunUntilIdle();
   }
 
   ~AudioRecorderTest() override {
@@ -101,6 +104,7 @@ class AudioRecorderTest : public testing::Test {
       recorder_ = new AudioRecorderImpl();
       recorder_->Initialize(base::Bind(&AudioRecorderTest::DecodeSamples,
                                        base::Unretained(this)));
+      base::RunLoop().RunUntilIdle();
     } else {
       CreateRecorder(kSomeNumber);
     }
@@ -110,7 +114,7 @@ class AudioRecorderTest : public testing::Test {
     DeleteRecorder();
 
     params_ = media::AudioManager::Get()->GetInputStreamParameters(
-        media::AudioManagerBase::kDefaultDeviceId);
+        media::AudioDeviceDescription::kDefaultDeviceId);
 
     channel_data_.clear();
     channel_data_.push_back(GenerateSamples(0x1337, samples));
@@ -124,6 +128,7 @@ class AudioRecorderTest : public testing::Test {
     recorder_->set_params_for_testing(new media::AudioParameters(params_));
     recorder_->Initialize(
         base::Bind(&AudioRecorderTest::DecodeSamples, base::Unretained(this)));
+    base::RunLoop().RunUntilIdle();
   }
 
   void DeleteRecorder() {
@@ -131,6 +136,7 @@ class AudioRecorderTest : public testing::Test {
       return;
     recorder_->Finalize();
     recorder_ = nullptr;
+    base::RunLoop().RunUntilIdle();
   }
 
   void RecordAndVerifySamples() {
@@ -183,9 +189,12 @@ class AudioRecorderTest : public testing::Test {
     return samples;
   }
   bool IsRecording() {
-    recorder_->FlushAudioLoopForTesting();
+    base::RunLoop().RunUntilIdle();
     return recorder_->is_recording_;
   }
+
+  content::TestBrowserThreadBundle thread_bundle_;
+  media::ScopedAudioManagerPtr audio_manager_;
 
   std::vector<float*> channel_data_;
   media::AudioParameters params_;
@@ -196,8 +205,7 @@ class AudioRecorderTest : public testing::Test {
 
   std::string received_samples_;
 
-  scoped_ptr<base::RunLoop> run_loop_;
-  content::TestBrowserThreadBundle thread_bundle_;
+  std::unique_ptr<base::RunLoop> run_loop_;
 };
 
 
@@ -213,16 +221,19 @@ TEST_F(AudioRecorderTest, MAYBE_BasicRecordAndStop) {
 
   recorder_->Record();
   EXPECT_TRUE(IsRecording());
+
   recorder_->Stop();
   EXPECT_FALSE(IsRecording());
-  recorder_->Record();
 
+  recorder_->Record();
   EXPECT_TRUE(IsRecording());
+
   recorder_->Stop();
   EXPECT_FALSE(IsRecording());
-  recorder_->Record();
 
+  recorder_->Record();
   EXPECT_TRUE(IsRecording());
+
   recorder_->Stop();
   EXPECT_FALSE(IsRecording());
 

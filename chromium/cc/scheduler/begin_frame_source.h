@@ -61,9 +61,6 @@ class CC_EXPORT BeginFrameObserver {
   virtual const BeginFrameArgs& LastUsedBeginFrameArgs() const = 0;
 
   virtual void OnBeginFrameSourcePausedChanged(bool paused) = 0;
-
-  // Tracing support
-  virtual void AsValueInto(base::trace_event::TracedValue* dict) const = 0;
 };
 
 // Simple base class which implements a BeginFrameObserver which checks the
@@ -86,9 +83,6 @@ class CC_EXPORT BeginFrameObserverBase : public BeginFrameObserver {
   // true.
   void OnBeginFrame(const BeginFrameArgs& args) override;
   const BeginFrameArgs& LastUsedBeginFrameArgs() const override;
-
-  // Outputs last_begin_frame_args_
-  void AsValueInto(base::trace_event::TracedValue* dict) const override;
 
  protected:
   // Subclasses should override this method!
@@ -119,16 +113,13 @@ class CC_EXPORT BeginFrameSource {
   // processing (rather than toggling SetNeedsBeginFrames every frame). It is
   // used by systems like the BackToBackFrameSource to make sure only one frame
   // is pending at a time.
-  virtual void DidFinishFrame(size_t remaining_frames) = 0;
+  virtual void DidFinishFrame(BeginFrameObserver* obs,
+                              size_t remaining_frames) = 0;
 
   // Add/Remove an observer from the source. When no observers are added the BFS
   // should shut down its timers, disable vsync, etc.
   virtual void AddObserver(BeginFrameObserver* obs) = 0;
   virtual void RemoveObserver(BeginFrameObserver* obs) = 0;
-
-  // Tracing support - Recommend (but not required) to call this implementation
-  // in any override.
-  virtual void AsValueInto(base::trace_event::TracedValue* dict) const = 0;
 };
 
 // Simple base class which implements a BeginFrameSource.
@@ -136,20 +127,15 @@ class CC_EXPORT BeginFrameSource {
 //  - Implement the pure virtual (Set)NeedsBeginFrames methods from
 //    BeginFrameSource.
 //  - Use the CallOnBeginFrame method to call to the observer(s).
-//  - Recommended (but not required) to call BeginFrameSourceBase::AsValueInto
-//    in their own AsValueInto implementation.
 class CC_EXPORT BeginFrameSourceBase : public BeginFrameSource {
  public:
   ~BeginFrameSourceBase() override;
 
   // BeginFrameSource
-  void DidFinishFrame(size_t remaining_frames) override {}
+  void DidFinishFrame(BeginFrameObserver* obs,
+                      size_t remaining_frames) override {}
   void AddObserver(BeginFrameObserver* obs) override;
   void RemoveObserver(BeginFrameObserver* obs) override;
-
-  // Tracing support - Recommend (but not required) to call this implementation
-  // in any override.
-  void AsValueInto(base::trace_event::TracedValue* dict) const override;
 
  protected:
   BeginFrameSourceBase();
@@ -183,23 +169,20 @@ class CC_EXPORT BackToBackBeginFrameSource : public BeginFrameSourceBase {
   ~BackToBackBeginFrameSource() override;
 
   // BeginFrameSource
-  void DidFinishFrame(size_t remaining_frames) override;
-
-  // BeginFrameSourceBase
   void AddObserver(BeginFrameObserver* obs) override;
-  void OnNeedsBeginFramesChanged(bool needs_begin_frames) override;
-
-  // Tracing
-  void AsValueInto(base::trace_event::TracedValue* dict) const override;
+  void RemoveObserver(BeginFrameObserver* obs) override;
+  void DidFinishFrame(BeginFrameObserver* obs,
+                      size_t remaining_frames) override;
 
  protected:
   virtual base::TimeTicks Now();  // Now overridable for testing
 
   base::SingleThreadTaskRunner* task_runner_;
   base::CancelableClosure begin_frame_task_;
+  std::set<BeginFrameObserver*> pending_begin_frame_observers_;
 
-  void PostBeginFrame();
-  void BeginFrame();
+  void PostPendingBeginFramesTask();
+  void SendPendingBeginFrames();
 
  private:
   base::WeakPtrFactory<BackToBackBeginFrameSource> weak_factory_;
@@ -215,18 +198,17 @@ class CC_EXPORT SyntheticBeginFrameSource : public BeginFrameSourceBase,
   explicit SyntheticBeginFrameSource(base::SingleThreadTaskRunner* task_runner,
                                      base::TimeDelta initial_vsync_interval);
   explicit SyntheticBeginFrameSource(
-      scoped_ptr<DelayBasedTimeSource> time_source);
+      std::unique_ptr<DelayBasedTimeSource> time_source);
   ~SyntheticBeginFrameSource() override;
 
-  void OnUpdateVSyncParameters(base::TimeTicks new_vsync_timebase,
-                               base::TimeDelta new_vsync_interval);
+  void OnUpdateVSyncParameters(base::TimeTicks timebase,
+                               base::TimeDelta interval);
+  // This overrides any past or future interval from updating vsync parameters.
+  void SetAuthoritativeVSyncInterval(base::TimeDelta interval);
 
   // BeginFrameSourceBase
   void AddObserver(BeginFrameObserver* obs) override;
   void OnNeedsBeginFramesChanged(bool needs_begin_frames) override;
-
-  // Tracing
-  void AsValueInto(base::trace_event::TracedValue* dict) const override;
 
   // DelayBasedTimeSourceClient
   void OnTimerTick() override;
@@ -235,7 +217,9 @@ class CC_EXPORT SyntheticBeginFrameSource : public BeginFrameSourceBase,
   BeginFrameArgs CreateBeginFrameArgs(base::TimeTicks frame_time,
                                       BeginFrameArgs::BeginFrameArgsType type);
 
-  scoped_ptr<DelayBasedTimeSource> time_source_;
+  std::unique_ptr<DelayBasedTimeSource> time_source_;
+  base::TimeTicks last_timebase_;
+  base::TimeDelta authoritative_interval_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SyntheticBeginFrameSource);

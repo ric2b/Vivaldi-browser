@@ -10,7 +10,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/quota/mock_quota_manager_proxy.h"
 #include "content/public/test/mock_special_storage_policy.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -108,7 +108,7 @@ class CacheStorageTest : public testing::Test {
   scoped_refptr<MockSpecialStoragePolicy> quota_policy_;
   scoped_refptr<MockQuotaManager> mock_quota_manager_;
   scoped_refptr<MockQuotaManagerProxy> quota_manager_proxy_;
-  scoped_ptr<TestCacheStorage> test_cache_storage_;
+  std::unique_ptr<TestCacheStorage> test_cache_storage_;
 
   scoped_refptr<CacheStorageCache> callback_cache_;
   CacheStorageError callback_error_;

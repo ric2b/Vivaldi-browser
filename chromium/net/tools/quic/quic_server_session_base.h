@@ -9,13 +9,13 @@
 
 #include <stdint.h>
 
+#include <cstdint>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
 
-#include "base/containers/hash_tables.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "net/quic/crypto/quic_compressed_certs_cache.h"
 #include "net/quic/quic_crypto_server_stream.h"
 #include "net/quic/quic_protocol.h"
@@ -47,11 +47,8 @@ class QuicServerSessionVisitor {
                                   const std::string& error_details) = 0;
   virtual void OnWriteBlocked(QuicBlockedWriterInterface* blocked_writer) = 0;
   // Called after the given connection is added to the time-wait list.
-  virtual void OnConnectionAddedToTimeWaitList(QuicConnectionId connection_id) {
-  }
-  // Called after the given connection is removed from the time-wait list.
-  virtual void OnConnectionRemovedFromTimeWaitList(
-      QuicConnectionId connection_id) {}
+  virtual void OnConnectionAddedToTimeWaitList(
+      QuicConnectionId connection_id) = 0;
 };
 
 class QuicServerSessionBase : public QuicSpdySession {
@@ -89,6 +86,8 @@ class QuicServerSessionBase : public QuicSpdySession {
     serving_region_ = serving_region;
   }
 
+  bool server_push_enabled() const { return server_push_enabled_; }
+
  protected:
   // QuicSession methods(override them with return type of QuicSpdyStream*):
   QuicCryptoServerStreamBase* GetCryptoStream() override;
@@ -110,6 +109,8 @@ class QuicServerSessionBase : public QuicSpdySession {
 
   const QuicCryptoServerConfig* crypto_config() { return crypto_config_; }
 
+  void set_server_push_enabled(bool enable) { server_push_enabled_ = enable; }
+
  private:
   friend class test::QuicServerSessionBasePeer;
   friend class test::QuicSimpleServerSessionPeer;
@@ -120,7 +121,7 @@ class QuicServerSessionBase : public QuicSpdySession {
   // Owned by QuicDispatcher.
   QuicCompressedCertsCache* compressed_certs_cache_;
 
-  scoped_ptr<QuicCryptoServerStreamBase> crypto_stream_;
+  std::unique_ptr<QuicCryptoServerStreamBase> crypto_stream_;
   QuicServerSessionVisitor* visitor_;
 
   // Whether bandwidth resumption is enabled for this connection.
@@ -144,6 +145,10 @@ class QuicServerSessionBase : public QuicSpdySession {
   // should go away once we fix http://b//27897982
   int32_t BandwidthToCachedParameterBytesPerSecond(
       const QuicBandwidth& bandwidth);
+
+  // Set during handshake. If true, resources in x-associated-content and link
+  // headers will be pushed. see: go/gfe_server_push.
+  bool server_push_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicServerSessionBase);
 };

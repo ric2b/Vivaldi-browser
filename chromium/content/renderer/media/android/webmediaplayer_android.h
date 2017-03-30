@@ -79,7 +79,6 @@ class RendererMediaPlayerManager;
 class WebMediaPlayerAndroid
     : public blink::WebMediaPlayer,
       public cc::VideoFrameProvider,
-      public StreamTextureFactoryContextObserver,
       public media::RendererMediaPlayerInterface,
       public NON_EXPORTED_BASE(media::WebMediaPlayerDelegate::Observer) {
  public:
@@ -107,7 +106,7 @@ class WebMediaPlayerAndroid
 
   // Resource loading.
   void load(LoadType load_type,
-            const blink::WebURL& url,
+            const blink::WebMediaPlayerSource& source,
             CORSMode cors_mode) override;
 
   // Playback controls.
@@ -214,9 +213,6 @@ class WebMediaPlayerAndroid
   void OnMediaPlayerPlay() override;
   void OnMediaPlayerPause() override;
   void OnRemoteRouteAvailabilityChanged(bool routes_available) override;
-
-  // StreamTextureFactoryContextObserver implementation.
-  void ResetStreamTextureProxy() override;
 
   // Called when the player is released.
   void OnPlayerReleased() override;
@@ -350,6 +346,9 @@ class WebMediaPlayerAndroid
   // The video frame object used for rendering by the compositor.
   scoped_refptr<media::VideoFrame> current_frame_;
   base::Lock current_frame_lock_;
+
+  // A lazily created transparent video frame to be displayed in fullscreen.
+  scoped_refptr<media::VideoFrame> fullscreen_frame_;
 
   base::ThreadChecker main_thread_checker_;
 

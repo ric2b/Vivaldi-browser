@@ -112,7 +112,6 @@ class AppliedTextDecoration;
 class BorderData;
 struct BorderEdge;
 class CSSVariableData;
-class CounterContent;
 class Font;
 class FontMetrics;
 class RotateTransformOperation;
@@ -501,7 +500,7 @@ public:
     EPosition position() const { return static_cast<EPosition>(noninherited_flags.position); }
     bool hasOutOfFlowPosition() const { return position() == AbsolutePosition || position() == FixedPosition; }
     bool hasInFlowPosition() const { return position() == RelativePosition || position() == StickyPosition; }
-    bool hasViewportConstrainedPosition() const { return position() == FixedPosition; }
+    bool hasViewportConstrainedPosition() const { return position() == FixedPosition || position() == StickyPosition; }
     EFloat floating() const { return static_cast<EFloat>(noninherited_flags.floating); }
 
     const Length& width() const { return m_box->width(); }
@@ -752,8 +751,6 @@ public:
 
     short widows() const { return rareInheritedData->widows; }
     short orphans() const { return rareInheritedData->orphans; }
-    bool hasAutoWidows() const { return rareInheritedData->widows == 1; }
-    bool hasAutoOrphans() const { return rareInheritedData->m_hasAutoOrphans; }
     EBreak breakAfter() const { return static_cast<EBreak>(noninherited_flags.breakAfter); }
     EBreak breakBefore() const { return static_cast<EBreak>(noninherited_flags.breakBefore); }
     EBreak breakInside() const { return static_cast<EBreak>(noninherited_flags.breakInside); }
@@ -819,7 +816,8 @@ public:
     const Vector<GridTrackSize>& gridAutoRepeatRows() const { return rareNonInheritedData->m_grid->m_gridAutoRepeatRows; }
     size_t gridAutoRepeatColumnsInsertionPoint() const { return rareNonInheritedData->m_grid->m_autoRepeatColumnsInsertionPoint; }
     size_t gridAutoRepeatRowsInsertionPoint() const { return rareNonInheritedData->m_grid->m_autoRepeatRowsInsertionPoint; }
-    AutoRepeatType gridAutoRepeatType() const  { return rareNonInheritedData->m_grid->m_autoRepeatType; }
+    AutoRepeatType gridAutoRepeatColumnsType() const  { return rareNonInheritedData->m_grid->m_autoRepeatColumnsType; }
+    AutoRepeatType gridAutoRepeatRowsType() const  { return rareNonInheritedData->m_grid->m_autoRepeatRowsType; }
     const NamedGridLinesMap& namedGridColumnLines() const { return rareNonInheritedData->m_grid->m_namedGridColumnLines; }
     const NamedGridLinesMap& namedGridRowLines() const { return rareNonInheritedData->m_grid->m_namedGridRowLines; }
     const OrderedNamedGridLines& orderedNamedGridColumnLines() const { return rareNonInheritedData->m_grid->m_orderedNamedGridColumnLines; }
@@ -861,6 +859,7 @@ public:
     bool containsPaint() const { return rareNonInheritedData->m_contain & ContainsPaint; }
     bool containsStyle() const { return rareNonInheritedData->m_contain & ContainsStyle; }
     bool containsLayout() const { return rareNonInheritedData->m_contain & ContainsLayout; }
+    bool containsSize() const { return rareNonInheritedData->m_contain & ContainsSize; }
 
     EBoxSizing boxSizing() const { return m_box->boxSizing(); }
     EUserModify userModify() const { return static_cast<EUserModify>(rareInheritedData->userModify); }
@@ -873,6 +872,7 @@ public:
     EOverflowWrap overflowWrap() const { return static_cast<EOverflowWrap>(rareInheritedData->overflowWrap); }
     LineBreak getLineBreak() const { return static_cast<LineBreak>(rareInheritedData->lineBreak); }
     const AtomicString& highlight() const { return rareInheritedData->highlight; }
+    Hyphens getHyphens() const { return static_cast<Hyphens>(rareInheritedData->hyphens); }
     const AtomicString& hyphenationString() const { return rareInheritedData->hyphenationString; }
     const AtomicString& locale() const { return getFontDescription().locale(false); }
     EResize resize() const { return static_cast<EResize>(rareNonInheritedData->m_resize); }
@@ -1024,10 +1024,10 @@ public:
     ScrollBehavior getScrollBehavior() const { return static_cast<ScrollBehavior>(rareNonInheritedData->m_scrollBehavior); }
 
     ScrollSnapType getScrollSnapType() const { return static_cast<ScrollSnapType>(rareNonInheritedData->m_scrollSnapType); }
-    ScrollSnapPoints scrollSnapPointsX() const { return rareNonInheritedData->m_scrollSnap->m_xPoints; }
-    ScrollSnapPoints scrollSnapPointsY() const { return rareNonInheritedData->m_scrollSnap->m_yPoints; }
-    Vector<LengthPoint> scrollSnapCoordinate() const { return rareNonInheritedData->m_scrollSnap->m_coordinates; }
-    LengthPoint scrollSnapDestination() const { return rareNonInheritedData->m_scrollSnap->m_destination; }
+    const ScrollSnapPoints& scrollSnapPointsX() const { return rareNonInheritedData->m_scrollSnap->m_xPoints; }
+    const ScrollSnapPoints& scrollSnapPointsY() const { return rareNonInheritedData->m_scrollSnap->m_yPoints; }
+    const Vector<LengthPoint>& scrollSnapCoordinate() const { return rareNonInheritedData->m_scrollSnap->m_coordinates; }
+    const LengthPoint& scrollSnapDestination() const { return rareNonInheritedData->m_scrollSnap->m_destination; }
 
     const Vector<CSSPropertyID>& willChangeProperties() const { return rareNonInheritedData->m_willChange->m_properties; }
     bool willChangeContents() const { return rareNonInheritedData->m_willChange->m_contents; }
@@ -1302,13 +1302,8 @@ public:
     void setHasAutoZIndex() { SET_VAR(m_box, m_hasAutoZIndex, true); SET_VAR(m_box, m_zIndex, 0); }
     int zIndex() const { return m_box->zIndex(); }
     void setZIndex(int v) { SET_VAR(m_box, m_hasAutoZIndex, false); SET_VAR(m_box, m_zIndex, v); }
-
-    void setHasAutoWidows() { SET_VAR(rareInheritedData, widows, initialWidows()); }
     void setWidows(short w) { SET_VAR(rareInheritedData, widows, w); }
-
-    void setHasAutoOrphans() { SET_VAR(rareInheritedData, m_hasAutoOrphans, true); SET_VAR(rareInheritedData, orphans, initialOrphans()); }
-    void setOrphans(short o) { SET_VAR(rareInheritedData, m_hasAutoOrphans, false); SET_VAR(rareInheritedData, orphans, o); }
-
+    void setOrphans(short o) { SET_VAR(rareInheritedData, orphans, o); }
     void setBreakAfter(EBreak b) { ASSERT(b <= BreakValueLastAllowedForBreakAfterAndBefore); noninherited_flags.breakAfter = b; }
     void setBreakBefore(EBreak b) { ASSERT(b <= BreakValueLastAllowedForBreakAfterAndBefore); noninherited_flags.breakBefore = b;  }
     void setBreakInside(EBreak b) { ASSERT(b <= BreakValueLastAllowedForBreakInside); noninherited_flags.breakInside = b;  }
@@ -1372,7 +1367,8 @@ public:
     void setGridAutoRepeatRows(const Vector<GridTrackSize>& trackSizes) { SET_NESTED_VAR(rareNonInheritedData, m_grid, m_gridAutoRepeatRows, trackSizes); }
     void setGridAutoRepeatColumnsInsertionPoint(const size_t insertionPoint) { SET_NESTED_VAR(rareNonInheritedData, m_grid, m_autoRepeatColumnsInsertionPoint, insertionPoint); }
     void setGridAutoRepeatRowsInsertionPoint(const size_t insertionPoint) { SET_NESTED_VAR(rareNonInheritedData, m_grid, m_autoRepeatRowsInsertionPoint, insertionPoint); }
-    void setGridAutoRepeatType(const AutoRepeatType autoRepeatType) { SET_NESTED_VAR(rareNonInheritedData, m_grid, m_autoRepeatType, autoRepeatType); }
+    void setGridAutoRepeatColumnsType(const AutoRepeatType autoRepeatType) { SET_NESTED_VAR(rareNonInheritedData, m_grid, m_autoRepeatColumnsType, autoRepeatType); }
+    void setGridAutoRepeatRowsType(const AutoRepeatType autoRepeatType) { SET_NESTED_VAR(rareNonInheritedData, m_grid, m_autoRepeatRowsType, autoRepeatType); }
     void setNamedGridColumnLines(const NamedGridLinesMap& namedGridColumnLines) { SET_NESTED_VAR(rareNonInheritedData, m_grid, m_namedGridColumnLines, namedGridColumnLines); }
     void setNamedGridRowLines(const NamedGridLinesMap& namedGridRowLines) { SET_NESTED_VAR(rareNonInheritedData, m_grid, m_namedGridRowLines, namedGridRowLines); }
     void setOrderedNamedGridColumnLines(const OrderedNamedGridLines& orderedNamedGridColumnLines) { SET_NESTED_VAR(rareNonInheritedData, m_grid, m_orderedNamedGridColumnLines, orderedNamedGridColumnLines); }
@@ -1403,6 +1399,7 @@ public:
     void setOverflowWrap(EOverflowWrap b) { SET_VAR(rareInheritedData, overflowWrap, b); }
     void setLineBreak(LineBreak b) { SET_VAR(rareInheritedData, lineBreak, b); }
     void setHighlight(const AtomicString& h) { SET_VAR(rareInheritedData, highlight, h); }
+    void setHyphens(Hyphens h) { SET_VAR(rareInheritedData, hyphens, h); }
     void setHyphenationString(const AtomicString& h) { SET_VAR(rareInheritedData, hyphenationString, h); }
     void setResize(EResize r) { SET_VAR(rareNonInheritedData, m_resize, r); }
     void setColumnWidth(float f) { SET_NESTED_VAR(rareNonInheritedData, m_multiCol, m_autoWidth, false); SET_NESTED_VAR(rareNonInheritedData, m_multiCol, m_width, f); }
@@ -1589,11 +1586,7 @@ public:
     bool hasContent() const { return contentData(); }
     ContentData* contentData() const { return rareNonInheritedData->m_content.get(); }
     bool contentDataEquivalent(const ComputedStyle* otherStyle) const { return const_cast<ComputedStyle*>(this)->rareNonInheritedData->contentDataEquivalent(*const_cast<ComputedStyle*>(otherStyle)->rareNonInheritedData); }
-    void clearContent();
-    void setContent(const String&);
-    void setContent(StyleImage*);
-    void setContent(PassOwnPtr<CounterContent>);
-    void setContent(QuoteType);
+    void setContent(ContentData*);
 
     const CounterDirectiveMap* counterDirectives() const;
     CounterDirectiveMap& accessCounterDirectives();
@@ -1665,6 +1658,8 @@ public:
     bool hasAuthorBackground() const { return rareNonInheritedData->m_hasAuthorBackground; };
     bool hasAuthorBorder() const { return rareNonInheritedData->m_hasAuthorBorder; };
 
+    void addPaintImage(StyleImage*);
+
     // Initial values for all the properties
     static EBorderCollapse initialBorderCollapse() { return BorderCollapseSeparate; }
     static EBorderStyle initialBorderStyle() { return BorderStyleNone; }
@@ -1716,7 +1711,7 @@ public:
     static TextIndentLine initialTextIndentLine() { return TextIndentFirstLine; }
     static TextIndentType initialTextIndentType() { return TextIndentNormal; }
     static EVerticalAlign initialVerticalAlign() { return VerticalAlignBaseline; }
-    static short initialWidows() { return 1; }
+    static short initialWidows() { return 2; }
     static short initialOrphans() { return 2; }
     static Length initialLineHeight() { return Length(-100.0, Percent); }
     static ETextAlign initialTextAlign() { return TASTART; }
@@ -1758,6 +1753,7 @@ public:
     static LineBreak initialLineBreak() { return LineBreakAuto; }
     static const AtomicString& initialHighlight() { return nullAtom; }
     static ESpeak initialSpeak() { return SpeakNormal; }
+    static Hyphens initialHyphens() { return HyphensManual; }
     static const AtomicString& initialHyphenationString() { return nullAtom; }
     static EResize initialResize() { return RESIZE_NONE; }
     static ControlPart initialAppearance() { return NoControlPart; }
@@ -1926,14 +1922,14 @@ private:
     Color floodColor() const { return svgStyle().floodColor(); }
     Color lightingColor() const { return svgStyle().lightingColor(); }
 
-    void appendContent(ContentData*);
     void addAppliedTextDecoration(const AppliedTextDecoration&);
     void applyMotionPathTransform(float originX, float originY, TransformationMatrix&) const;
 
     bool diffNeedsFullLayoutAndPaintInvalidation(const ComputedStyle& other) const;
     bool diffNeedsFullLayout(const ComputedStyle& other) const;
-    bool diffNeedsPaintInvalidationLayer(const ComputedStyle& other) const;
+    bool diffNeedsPaintInvalidationSubtree(const ComputedStyle& other) const;
     bool diffNeedsPaintInvalidationObject(const ComputedStyle& other) const;
+    bool diffNeedsPaintInvalidationObjectForPaintImage(const StyleImage*, const ComputedStyle& other) const;
     void updatePropertySpecificDifferences(const ComputedStyle& other, StyleDifference&) const;
 
     bool requireTransformOrigin(ApplyTransformOrigin applyOrigin, ApplyMotionPath) const;

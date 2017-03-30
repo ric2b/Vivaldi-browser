@@ -39,7 +39,7 @@ protected:
         element->setInnerHTML("<option><option><option><option style='display:none;'><option style='display:none;'><option><option>", ASSERT_NO_EXCEPTION);
         m_dummyPageHolder->document().body()->appendChild(element, ASSERT_NO_EXCEPTION);
         m_ownerElement = element;
-        m_dummyPageHolder->document().updateLayoutIgnorePendingStylesheets();
+        m_dummyPageHolder->document().updateStyleAndLayoutIgnorePendingStylesheets();
     }
 
     OwnPtr<DummyPageHolder> m_dummyPageHolder;
@@ -120,6 +120,8 @@ protected:
     void loadFrame(const std::string& fileName)
     {
         FrameTestHelpers::loadFrame(mainFrame(), m_baseURL + fileName);
+        webView()->resize(WebSize(800, 600));
+        webView()->updateAllLifecyclePhases();
     }
 
     WebViewImpl* webView() const { return m_helper.webViewImpl(); }

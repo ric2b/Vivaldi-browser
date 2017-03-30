@@ -12,6 +12,9 @@
 #include "ui/views/widget/desktop_aura/desktop_drop_target_win.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_win.h"
 
+#include "app/vivaldi_apptools.h"
+#include "ui/dragging/custom_drag_source_win.h"
+
 namespace views {
 
 DesktopDragDropClientWin::DesktopDragDropClientWin(
@@ -34,13 +37,19 @@ int DesktopDragDropClientWin::StartDragAndDrop(
     aura::Window* source_window,
     const gfx::Point& screen_location,
     int operation,
-    ui::DragDropTypes::DragEventSource source) {
+    ui::DragDropTypes::DragEventSource source,
+    bool& cancelled) {
   drag_drop_in_progress_ = true;
   drag_operation_ = operation;
 
   base::WeakPtr<DesktopDragDropClientWin> alive(weak_factory_.GetWeakPtr());
 
-  drag_source_ = Microsoft::WRL::Make<ui::DragSourceWin>();
+  if (vivaldi::IsVivaldiRunning()) {
+    drag_source_ = Microsoft::WRL::Make<vivaldi::CustomDragSourceWin>(
+        vivaldi::IsTabDragInProgress());
+  } else {
+    drag_source_ = Microsoft::WRL::Make<ui::DragSourceWin>();
+  }
   Microsoft::WRL::ComPtr<ui::DragSourceWin> drag_source_copy = drag_source_;
   drag_source_copy->set_data(&data);
   ui::OSExchangeDataProviderWin::GetDataObjectImpl(data)
@@ -58,6 +67,8 @@ int DesktopDragDropClientWin::StartDragAndDrop(
 
   if (alive)
     drag_drop_in_progress_ = false;
+
+  cancelled = (result == DRAGDROP_S_CANCEL);
 
   if (result != DRAGDROP_S_DROP)
     effect = DROPEFFECT_NONE;

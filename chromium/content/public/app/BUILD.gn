@@ -59,17 +59,17 @@ if (is_component_build) {
 
   # These all just forward to content, which in turn depends on "both_sources".
   group("browser") {
-    deps = [
+    public_deps = [
       "//content",
     ]
   }
   group("child") {
-    deps = [
+    public_deps = [
       "//content",
     ]
   }
   group("both") {
-    deps = [
+    public_deps = [
       "//content",
     ]
   }
@@ -146,6 +146,14 @@ mojo_application_manifest("browser_manifest") {
   type = "exe"
   application_name = "content_browser"
   source = "mojo/content_browser_manifest.json"
+  packaged_applications = [
+    "media",
+    "user",
+  ]
+  deps = [
+    "//media/mojo/services:media_manifest",
+    "//services/user:manifest",
+  ]
 }
 
 mojo_application_manifest("renderer_manifest") {

@@ -90,12 +90,12 @@ SessionsPrivateSaveOpenTabsFunction::SessionsPrivateSaveOpenTabsFunction() {}
 SessionsPrivateSaveOpenTabsFunction::~SessionsPrivateSaveOpenTabsFunction() {}
 
 bool SessionsPrivateSaveOpenTabsFunction::RunAsync() {
-  scoped_ptr<vivaldi::sessions_private::SaveOpenTabs::Params> params(
+  std::unique_ptr<vivaldi::sessions_private::SaveOpenTabs::Params> params(
       vivaldi::sessions_private::SaveOpenTabs::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   int error_code = SessionErrorCodes::kNoError;
-  scoped_ptr<::vivaldi::VivaldiSessionService> service(
+  std::unique_ptr<::vivaldi::VivaldiSessionService> service(
       new ::vivaldi::VivaldiSessionService(GetProfile()));
 
   if (params->name.empty()) {
@@ -169,7 +169,7 @@ SessionsPrivateOpenFunction::~SessionsPrivateOpenFunction() {}
 
 bool SessionsPrivateOpenFunction::RunAsync() {
   base::ThreadRestrictions::ScopedAllowIO allow_io;
-  scoped_ptr<vivaldi::sessions_private::Open::Params> params(
+  std::unique_ptr<vivaldi::sessions_private::Open::Params> params(
       vivaldi::sessions_private::Open::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -179,7 +179,7 @@ bool SessionsPrivateOpenFunction::RunAsync() {
     error_code = kErrorFileMissing;
   } else {
     Browser* browser = GetActiveBrowser();
-    scoped_ptr<::vivaldi::VivaldiSessionService> service(
+    std::unique_ptr<::vivaldi::VivaldiSessionService> service(
         new ::vivaldi::VivaldiSessionService(GetProfile()));
     if (!service->Load(path, browser)) {
       error_code = kErrorFileMissing;
@@ -198,7 +198,7 @@ SessionsPrivateDeleteFunction::~SessionsPrivateDeleteFunction() {}
 
 bool SessionsPrivateDeleteFunction::RunAsync() {
   base::ThreadRestrictions::ScopedAllowIO allow_io;
-  scoped_ptr<vivaldi::sessions_private::Delete::Params> params(
+  std::unique_ptr<vivaldi::sessions_private::Delete::Params> params(
       vivaldi::sessions_private::Delete::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 

@@ -30,6 +30,7 @@
     'disable_nacl': '1',
     'disable_pnacl': 1,
     'disable_newlib': 1,
+    'fieldtrial_testing_like_official_build': 1, # disables Chrome fieldtrials
 
     'test_isolation_mode': 'noop',
 
@@ -213,6 +214,7 @@
           'VCLinkerTool': {
             'AdditionalOptions': [
               '/ignore:4199',
+              'notelemetry.obj',
             ],
           },
         },
@@ -261,6 +263,15 @@
       ['_target_name == "browser"', {
         'sources': [
           '<@(vivaldi_browser_sources)',
+        ],
+      }],
+      ['_target_name == "ui_base"', {
+        'conditions': [
+          ['OS == "win"', {
+            'sources': [
+              '<@(vivaldi_ui_base_win)',
+            ],
+          }],
         ],
       }],
       ['_target_name == "browser_ui"', {
@@ -324,14 +335,19 @@
           '<@(vivaldi_extensions_renderer)',
         ],
       }],
-      ['_target_name == "blink_web"', {
+      ['_target_name == "blink_common"', {
         'sources': [
-          '<@(vivaldi_keycode_translation)',
+          '<@(vivaldi_keycode_translation_win)',
         ],
       }],
-      ['_target_name == "content"', {
+      ['_target_name in ["content", "content_browser"]', {
         'sources': [
-          '<@(vivaldi_keycode_translation)',
+          '<@(vivaldi_keycode_translation_linux)',
+        ],
+      }],
+      ['_target_name == "renderer"', {
+        'sources': [
+          '<@(vivaldi_renderer)',
         ],
       }],
       ['_target_name == "components_unittests" and _target_build_file=="<(DEPTH)/components/components_tests.gyp"', {
@@ -347,7 +363,9 @@
           '<@(vivaldi_add_mac_resources_chrome_exe)',
         ],
       }],
-
+      ['OS=="win" and _target_name in ["browser_tests", "unit_tests", "interactive_ui_tests"]', {
+        'huge_link': 1,
+      }],
     ],
   },
 }

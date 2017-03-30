@@ -29,8 +29,8 @@ ScrollState* ScrollState::create(ScrollStateInit init)
     OwnPtr<ScrollStateData> scrollStateData = adoptPtr(new ScrollStateData());
     scrollStateData->delta_x = init.deltaX();
     scrollStateData->delta_y = init.deltaY();
-    scrollStateData->start_position_x = init.startPositionX();
-    scrollStateData->start_position_y = init.startPositionY();
+    scrollStateData->position_x = init.positionX();
+    scrollStateData->position_y = init.positionY();
     scrollStateData->velocity_x = init.velocityX();
     scrollStateData->velocity_y = init.velocityY();
     scrollStateData->is_beginning = init.isBeginning();
@@ -40,18 +40,18 @@ ScrollState* ScrollState::create(ScrollStateInit init)
     scrollStateData->from_user_input = init.fromUserInput();
     scrollStateData->is_direct_manipulation = init.isDirectManipulation();
     scrollStateData->delta_granularity = init.deltaGranularity();
-    ScrollState* scrollState = new ScrollState(scrollStateData.release());
+    ScrollState* scrollState = new ScrollState(std::move(scrollStateData));
     return scrollState;
 }
 
 ScrollState* ScrollState::create(PassOwnPtr<ScrollStateData> data)
 {
-    ScrollState* scrollState = new ScrollState(data);
+    ScrollState* scrollState = new ScrollState(std::move(data));
     return scrollState;
 }
 
 ScrollState::ScrollState(PassOwnPtr<ScrollStateData> data)
-    : m_data(data)
+    : m_data(std::move(data))
 {
 }
 

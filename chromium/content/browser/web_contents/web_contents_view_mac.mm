@@ -32,6 +32,8 @@
 #include "ui/base/dragdrop/cocoa_dnd_util.h"
 #include "ui/gfx/image/image_skia_util_mac.h"
 
+#include "content/public/browser/web_drag_dest_delegate.h"
+
 using blink::WebDragOperation;
 using blink::WebDragOperationsMask;
 using content::DropData;
@@ -481,6 +483,34 @@ void WebContentsViewMac::CloseTab() {
   mouseDownCanMoveWindow_ = canMove;
 }
 
+- (void)VivaldiSetInFramelessContentView:(BOOL)framelessContentView {
+  vivaldiFramelessContentView_ = framelessContentView;
+}
+
+// Reimplemented for vivaldi.
+- (void)setFrame:(NSRect)rect {
+  if (vivaldiFramelessContentView_) {
+    // This view must cover the entire framless window area.
+    rect = [[[self.window contentView] superview] frame];
+    [[self.window contentView] setFrame:rect];
+    [super setFrame:rect];
+  } else {
+    [super setFrame:rect];
+  }
+}
+
+// Reimplemented for vivaldi.
+- (void)setFrameSize:(NSSize)size {
+  if (vivaldiFramelessContentView_) {
+    // This view must cover the entire framless window area.
+    size = [[[self.window contentView] superview] frame].size;
+    [[self.window contentView] setFrameSize:size];
+    [super setFrameSize:size];
+  } else {
+    [super setFrameSize:size];
+  }
+}
+
 - (BOOL)mouseDownCanMoveWindow {
   // This is needed to prevent mouseDowns from moving the window
   // around.  The default implementation returns YES only for opaque
@@ -540,6 +570,16 @@ void WebContentsViewMac::CloseTab() {
              endedAt:(NSPoint)screenPoint
            operation:(NSDragOperation)operation {
   [dragSource_ endDragAt:screenPoint operation:operation];
+
+
+  // NOTE(pettern@vivaldi.com): To be able to create a custom window
+  // when dropping tabs outside a window, we add this extra event.
+  content::WebDragDestDelegate* delegate = [dragDest_ getDragDelegate];
+  if (delegate) {
+    delegate->OnDragEnd(screenPoint.x, screenPoint.y,
+        static_cast<blink::WebDragOperation>(operation),
+        [dragDest_ isCanceled]);
+  }
 
   // Might as well throw out this object now.
   dragSource_.reset();

@@ -14,9 +14,10 @@
 namespace test_runner {
 
 class AccessibilityController;
-class EventSender;
 class TestRunner;
+class WebFrameTestProxyBase;
 class WebTestDelegate;
+class WebTestProxyBase;
 
 // WebFrameTestClient implements WebFrameClient interface, providing behavior
 // expected by tests.  WebFrameTestClient ends up used by WebFrameTestProxy
@@ -28,8 +29,8 @@ class WebFrameTestClient : public blink::WebFrameClient {
   // forth) live longer than |this|.
   WebFrameTestClient(TestRunner* test_runner,
                      WebTestDelegate* delegate,
-                     AccessibilityController* accessibility_controller,
-                     EventSender* event_sender);
+                     WebTestProxyBase* web_test_proxy_base,
+                     WebFrameTestProxyBase* web_frame_test_proxy_base);
 
   ~WebFrameTestClient() override;
 
@@ -83,6 +84,7 @@ class WebFrameTestClient : public blink::WebFrameClient {
                    const blink::WebURLError& error,
                    blink::WebHistoryCommitType commit_type) override;
   void didFinishLoad(blink::WebLocalFrame* frame) override;
+  void didStopLoading() override;
   void didDetectXSS(const blink::WebURL& insecure_url,
                     bool did_block_entire_page) override;
   void didDispatchPingLoader(const blink::WebURL& url) override;
@@ -99,22 +101,18 @@ class WebFrameTestClient : public blink::WebFrameClient {
                              unsigned identifier) override;
   blink::WebNavigationPolicy decidePolicyForNavigation(
       const blink::WebFrameClient::NavigationPolicyInfo& info) override;
-  bool willCheckAndDispatchMessageEvent(
-      blink::WebLocalFrame* source_frame,
-      blink::WebFrame* target_frame,
-      blink::WebSecurityOrigin target,
-      blink::WebDOMMessageEvent event) override;
   void checkIfAudioSinkExistsAndIsAuthorized(
       const blink::WebString& sink_id,
       const blink::WebSecurityOrigin& security_origin,
       blink::WebSetSinkIdCallbacks* web_callbacks) override;
+  void didClearWindowObject(blink::WebLocalFrame* frame) override;
 
  private:
   // Borrowed pointers to other parts of Layout Tests state.
   TestRunner* test_runner_;
   WebTestDelegate* delegate_;
-  AccessibilityController* accessibility_controller_;
-  EventSender* event_sender_;
+  WebTestProxyBase* web_test_proxy_base_;
+  WebFrameTestProxyBase* web_frame_test_proxy_base_;
 
   // Map from request identifier into resource url description.  The map is used
   // to track resource requests spanning willSendRequest, didReceiveResponse,

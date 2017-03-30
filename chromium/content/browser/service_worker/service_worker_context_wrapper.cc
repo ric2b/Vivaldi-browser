@@ -18,8 +18,8 @@
 #include "base/logging.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_observer.h"
 #include "content/browser/service_worker/service_worker_process_manager.h"
@@ -70,6 +70,17 @@ void StartActiveWorkerOnIO(
                           base::Bind(callback, SERVICE_WORKER_ERROR_NOT_FOUND));
 }
 
+void SkipWaitingWorkerOnIO(
+    ServiceWorkerStatusCode status,
+    const scoped_refptr<ServiceWorkerRegistration>& registration) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  if (status != SERVICE_WORKER_OK || !registration->waiting_version())
+    return;
+
+  registration->waiting_version()->set_skip_waiting(true);
+  registration->ActivateWaitingVersionWhenReady();
+}
+
 }  // namespace
 
 void ServiceWorkerContext::AddExcludedHeadersForFetchEvent(
@@ -114,7 +125,7 @@ void ServiceWorkerContextWrapper::Init(
 
   is_incognito_ = user_data_directory.empty();
   base::SequencedWorkerPool* pool = BrowserThread::GetBlockingPool();
-  scoped_ptr<ServiceWorkerDatabaseTaskManager> database_task_manager(
+  std::unique_ptr<ServiceWorkerDatabaseTaskManager> database_task_manager(
       new ServiceWorkerDatabaseTaskManagerImpl(pool));
   scoped_refptr<base::SingleThreadTaskRunner> disk_cache_thread =
       BrowserThread::GetMessageLoopProxyForThread(BrowserThread::CACHE);
@@ -289,6 +300,20 @@ void ServiceWorkerContextWrapper::StartServiceWorker(
   context_core_->storage()->FindRegistrationForPattern(
       net::SimplifyUrlForRequest(pattern),
       base::Bind(&StartActiveWorkerOnIO, callback));
+}
+
+void ServiceWorkerContextWrapper::SkipWaitingWorker(const GURL& pattern) {
+  if (!BrowserThread::CurrentlyOn(BrowserThread::IO)) {
+    BrowserThread::PostTask(
+        BrowserThread::IO, FROM_HERE,
+        base::Bind(&ServiceWorkerContextWrapper::SkipWaitingWorker, this,
+                   pattern));
+    return;
+  }
+  if (!context_core_)
+    return;
+  context_core_->storage()->FindRegistrationForPattern(
+      net::SimplifyUrlForRequest(pattern), base::Bind(&SkipWaitingWorkerOnIO));
 }
 
 void ServiceWorkerContextWrapper::SetForceUpdateOnPageLoad(
@@ -597,21 +622,21 @@ void ServiceWorkerContextWrapper::GetAllRegistrations(
 
 void ServiceWorkerContextWrapper::GetRegistrationUserData(
     int64_t registration_id,
-    const std::string& key,
+    const std::vector<std::string>& keys,
     const GetUserDataCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (!context_core_) {
-    RunSoon(base::Bind(callback, std::string(), SERVICE_WORKER_ERROR_ABORT));
+    RunSoon(base::Bind(callback, std::vector<std::string>(),
+                       SERVICE_WORKER_ERROR_ABORT));
     return;
   }
-  context_core_->storage()->GetUserData(registration_id, key, callback);
+  context_core_->storage()->GetUserData(registration_id, keys, callback);
 }
 
 void ServiceWorkerContextWrapper::StoreRegistrationUserData(
     int64_t registration_id,
     const GURL& origin,
-    const std::string& key,
-    const std::string& data,
+    const std::vector<std::pair<std::string, std::string>>& key_value_pairs,
     const StatusCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (!context_core_) {
@@ -619,19 +644,19 @@ void ServiceWorkerContextWrapper::StoreRegistrationUserData(
     return;
   }
   context_core_->storage()->StoreUserData(registration_id, origin.GetOrigin(),
-                                          key, data, callback);
+                                          key_value_pairs, callback);
 }
 
 void ServiceWorkerContextWrapper::ClearRegistrationUserData(
     int64_t registration_id,
-    const std::string& key,
+    const std::vector<std::string>& keys,
     const StatusCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (!context_core_) {
     RunSoon(base::Bind(callback, SERVICE_WORKER_ERROR_ABORT));
     return;
   }
-  context_core_->storage()->ClearUserData(registration_id, key, callback);
+  context_core_->storage()->ClearUserData(registration_id, keys, callback);
 }
 
 void ServiceWorkerContextWrapper::GetUserDataForAllRegistrations(
@@ -666,7 +691,7 @@ bool ServiceWorkerContextWrapper::OriginHasForeignFetchRegistrations(
 
 void ServiceWorkerContextWrapper::InitInternal(
     const base::FilePath& user_data_directory,
-    scoped_ptr<ServiceWorkerDatabaseTaskManager> database_task_manager,
+    std::unique_ptr<ServiceWorkerDatabaseTaskManager> database_task_manager,
     const scoped_refptr<base::SingleThreadTaskRunner>& disk_cache_thread,
     storage::QuotaManagerProxy* quota_manager_proxy,
     storage::SpecialStoragePolicy* special_storage_policy) {

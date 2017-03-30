@@ -8,7 +8,7 @@
 #include "media/mojo/interfaces/content_decryption_module.mojom.h"
 #include "media/mojo/interfaces/renderer.mojom.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
-#include "mojo/shell/public/cpp/connect.h"
+#include "services/shell/public/cpp/connect.h"
 
 namespace content {
 
@@ -27,30 +27,29 @@ void MediaInterfaceProvider::GetInterface(const mojo::String& interface_name,
   DVLOG(1) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (interface_name == media::interfaces::ContentDecryptionModule::Name_) {
+  if (interface_name == media::mojom::ContentDecryptionModule::Name_) {
     GetMediaServiceFactory()->CreateCdm(
-        mojo::MakeRequest<media::interfaces::ContentDecryptionModule>(
+        mojo::MakeRequest<media::mojom::ContentDecryptionModule>(
             std::move(pipe)));
-  } else if (interface_name == media::interfaces::Renderer::Name_) {
+  } else if (interface_name == media::mojom::Renderer::Name_) {
     GetMediaServiceFactory()->CreateRenderer(
-        mojo::MakeRequest<media::interfaces::Renderer>(std::move(pipe)));
-  } else if (interface_name == media::interfaces::AudioDecoder::Name_) {
+        mojo::MakeRequest<media::mojom::Renderer>(std::move(pipe)));
+  } else if (interface_name == media::mojom::AudioDecoder::Name_) {
     GetMediaServiceFactory()->CreateAudioDecoder(
-        mojo::MakeRequest<media::interfaces::AudioDecoder>(std::move(pipe)));
+        mojo::MakeRequest<media::mojom::AudioDecoder>(std::move(pipe)));
   } else {
     NOTREACHED();
   }
 }
 
-media::interfaces::ServiceFactory*
-MediaInterfaceProvider::GetMediaServiceFactory() {
+media::mojom::ServiceFactory* MediaInterfaceProvider::GetMediaServiceFactory() {
   DVLOG(1) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (!media_service_factory_) {
-    mojo::shell::mojom::InterfaceProviderPtr interface_provider =
+    shell::mojom::InterfaceProviderPtr interface_provider =
         connect_to_app_cb_.Run(GURL("mojo:media"));
-    mojo::GetInterface(interface_provider.get(), &media_service_factory_);
+    shell::GetInterface(interface_provider.get(), &media_service_factory_);
     media_service_factory_.set_connection_error_handler(base::Bind(
         &MediaInterfaceProvider::OnConnectionError, base::Unretained(this)));
   }

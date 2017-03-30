@@ -13,7 +13,7 @@
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/clock.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_ui_util.h"
@@ -239,8 +239,7 @@ AppSearchProvider::AppSearchProvider(Profile* profile,
                                      AppListControllerDelegate* list_controller,
                                      std::unique_ptr<base::Clock> clock,
                                      AppListItemList* top_level_item_list)
-    : profile_(profile),
-      list_controller_(list_controller),
+    : list_controller_(list_controller),
       top_level_item_list_(top_level_item_list),
       clock_(std::move(clock)),
       update_results_factory_(this) {

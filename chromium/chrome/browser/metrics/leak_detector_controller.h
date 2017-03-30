@@ -27,19 +27,16 @@ class LeakDetectorController : public LeakDetector::Observer {
 
  protected:
   // LeakDetector::Observer:
-  void OnLeakFound(const LeakDetector::LeakReport& report) override;
+  void OnLeaksFound(const std::vector<MemoryLeakReportProto>& reports) override;
 
  private:
   // All leak reports received through OnLeakFound() are stored in protobuf
   // format.
   std::vector<MemoryLeakReportProto> stored_reports_;
 
-  // All incoming leak reports should be converted to a MemoryLeakReportProto
-  // starting with this template, which has some fields already filled in, e.g.
-  // leak detection parameters. Storing the LeakDetector parameters in the
-  // protobuf template avoids having to store these params as individual member
-  // variables.
-  const MemoryLeakReportProto leak_report_proto_template_;
+  // Contains all the parameters passed to LeakDetector. Store them in a single
+  // protobuf message instead of in separate member variables.
+  const MemoryLeakReportProto::Params params_;
 
   // For thread safety.
   base::ThreadChecker thread_checker_;

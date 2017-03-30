@@ -4,12 +4,14 @@
 
 #include "components/mus/public/cpp/tests/window_server_shelltest_base.h"
 
+#include <memory>
+
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
-#include "components/mus/common/args.h"
-#include "mojo/shell/public/cpp/shell_client.h"
-#include "mojo/shell/public/cpp/shell_test.h"
+#include "base/memory/ptr_util.h"
+#include "components/mus/common/switches.h"
+#include "services/shell/public/cpp/shell_client.h"
+#include "services/shell/public/cpp/shell_test.h"
 #include "ui/gl/gl_switches.h"
 
 namespace mus {
@@ -18,15 +20,15 @@ namespace {
 
 const char kTestAppName[] = "mojo:mus_ws_unittests_app";
 
-class WindowServerShellTestClient : public mojo::test::ShellTestClient {
+class WindowServerShellTestClient : public shell::test::ShellTestClient {
  public:
   explicit WindowServerShellTestClient(WindowServerShellTestBase* test)
       : ShellTestClient(test), test_(test) {}
   ~WindowServerShellTestClient() override {}
 
  private:
-  // mojo::test::ShellTestClient:
-  bool AcceptConnection(mojo::Connection* connection) override {
+  // shell::test::ShellTestClient:
+  bool AcceptConnection(shell::Connection* connection) override {
     return test_->AcceptConnection(connection);
   }
 
@@ -45,14 +47,15 @@ void EnsureCommandLineSwitch(const std::string& name) {
 
 WindowServerShellTestBase::WindowServerShellTestBase()
     : ShellTest(kTestAppName) {
-  EnsureCommandLineSwitch(kUseX11TestConfig);
-  EnsureCommandLineSwitch(switches::kOverrideUseGLWithOSMesaForTests);
+  EnsureCommandLineSwitch(switches::kUseTestConfig);
+  EnsureCommandLineSwitch(::switches::kOverrideUseGLWithOSMesaForTests);
 }
 
 WindowServerShellTestBase::~WindowServerShellTestBase() {}
 
-scoped_ptr<mojo::ShellClient> WindowServerShellTestBase::CreateShellClient() {
-  return make_scoped_ptr(new WindowServerShellTestClient(this));
+std::unique_ptr<shell::ShellClient>
+WindowServerShellTestBase::CreateShellClient() {
+  return base::WrapUnique(new WindowServerShellTestClient(this));
 }
 
 }  // namespace mus

@@ -5,16 +5,3 @@
 :host {
   display: block;
 }
-
-.settings-list > paper-icon-item {
-  border-bottom: 1px solid var(--paper-grey-300);
-}
-
-.settings-list > paper-icon-item:last-of-type {
-  border-bottom: none;
-}
-
-.option-value {
-  color: gray;
-  font-size: 80%;
-}

@@ -34,6 +34,7 @@
 <translation id="1779766957982586368">ปิดหน้าต่าง</translation>
 <translation id="1841799852846221389">กำลังปิดใช้งานการเชื่อมต่อระยะไกลสำหรับคอมพิวเตอร์เครื่องนี้…</translation>
 <translation id="189172778771606813">ปิดลิ้นชักการนำทาง</translation>
+<translation id="1897488610212723051">ลบ</translation>
 <translation id="195619862187186579">การจัดวางแป้นพิมพ์</translation>
 <translation id="1996161829609978754">Chrome กำลังดาวน์โหลดตัวติดตั้ง Chromoting Host เมื่อดาวน์โหลดเสร็จแล้ว โปรดเรียกใช้โปรแกรมติดตั้งก่อนดำเนินการต่อ</translation>
 <translation id="2009755455353575666">การเชื่อมต่อล้มเหลว</translation>
@@ -122,9 +123,6 @@ Host</translation>
 <translation id="3950820424414687140">ลงชื่อเข้าใช้</translation>
 <translation id="3989511127559254552">หากต้องการดำเนินการต่อ คุณจะต้องให้สิทธิ์เพิ่มเติมในการเข้าถึงคอมพิวเตอร์ของคุณก่อน โดยต้องทำเพียงครั้งเดียว</translation>
 <translation id="4006787130661126000">คุณต้องเปิดใช้งานการเชื่อมต่อระยะไกลหากคุณต้องการใช้ Chrome Remote Desktop ในการเข้าถึงคอมพิวเตอร์เครื่องนี้</translation>
-<translation id="4028465833180158312">• การอัปเดต UI ตามดีไซน์ Material
-• เครดิตการให้สัญญาอนุญาตบุคคลที่สาม
-• แสดงข้อมูลสำหรับคอมพิวเตอร์ระยะไกลที่ออฟไลน์</translation>
 <translation id="405887016757208221">คอมพิวเตอร์ระยะไกลไม่สามารถเริ่มต้นเซสชัน หากปัญหายังคงอยู่ โปรดลองกำหนดค่าโฮสต์อีกครั้ง</translation>
 <translation id="4068946408131579958">การเชื่อมต่อทั้งหมด</translation>
 <translation id="409800995205263688">หมายเหตุ: การตั้งค่านโยบายอนุญาตเฉพาะการเชื่อมต่อระหว่างคอมพิวเตอร์ภายในเครือข่ายของคุณเท่านั้น</translation>
@@ -168,6 +166,7 @@ Desktop Host</translation>
 <translation id="4985296110227979402">คุณต้องตั้งค่าคอมพิวเตอร์สำหรับการเข้าถึงระยะไกลก่อน</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (ออฟไลน์)</translation>
 <translation id="5070121137485264635">โฮสต์ระยะไกลกำหนดให้คุณตรวจสอบสิทธิ์กับเว็บไซต์ของบุคคลที่สาม หากต้องการดำเนินการต่อ คุณต้องให้สิทธิ์อนุญาตเพิ่มเติมแก่ Chrome Remote Desktop เพื่อเข้าถึงที่อยู่นี้:</translation>
+<translation id="507204348399810022">คุณแน่ใจไหมว่าต้องการปิดใช้การเชื่อมต่อระยะไกลกับ <ph name="HOSTNAME" /></translation>
 <translation id="5156271271724754543">โปรดป้อน PIN เดียวกันลงในทั้งสองช่อง</translation>
 <translation id="5168917394043976756">เปิดลิ้นชักการนำทาง</translation>
 <translation id="5170982930780719864">รหัสโฮสต์ไม่ถูกต้อง</translation>
@@ -178,7 +177,6 @@ Desktop Host</translation>
 <translation id="533625276787323658">ไม่มีปลายทางให้เชื่อมต่อ</translation>
 <translation id="5363265567587775042">ขอให้ผู้ใช้ที่เป็นเจ้าของคอมพิวเตอร์ที่คุณต้องการใช้งานคลิก “<ph name="SHARE" />” และให้รหัสการเข้าถึงแก่คุณ</translation>
 <translation id="5379087427956679853">Chrome Remote Desktop อนุญาตให้คุณแชร์คอมพิวเตอร์ของคุณผ่านเว็บอย่างปลอดภัย ผู้ใช้ทั้งสองฝ่ายจะต้องเรียกใช้แอปพลิเคชัน Chrome Remote Desktop ซึ่งสามารถรับได้ที่ <ph name="URL" /></translation>
-<translation id="5394895745784982830">สำหรับ Mac (OS X 10.6 ขึ้นไป)</translation>
 <translation id="5397086374758643919">Chrome Remote Desktop Host Uninstaller</translation>
 <translation id="5419185025274123272">ไม่สามารถรีเซ็ตแอปพลิเคชันนี้ คุณยังคงสามารถส่งรายงานข้อบกพร่องได้</translation>
 <translation id="544077782045763683">โฮสต์ปิดตัวลงแล้ว</translation>
@@ -214,6 +212,10 @@ Desktop Host</translation>
 <translation id="6324708100353784493">คุณได้เปิดใช้โหมดการผนวกรวม Google Cardboard หากต้องการใช้โหมดนี้ ให้ใส่อุปกรณ์ของคุณในอุปกรณ์ดูภาพที่ใช้งานได้กับ Google Cardboard</translation>
 <translation id="6381670701864002291">มีปัญหาอื่น</translation>
 <translation id="6398765197997659313">ออกจากการแสดงแบบเต็มหน้าจอ</translation>
+<translation id="6408143143164565232">• ฟังเสียงจากคอมพิวเตอร์ที่ใช้ Windows หรือ Linux
+• นำการเชื่อมต่อที่ไม่พึงประสงค์ออกโดยการกดชื่อคอมพิวเตอร์ค้างไว้
+• การบีบเพื่อซูมเข้าและเลื่อนด้วย 2 นิ้วที่ง่ายขึ้น
+• หน้าจอช่วยเหลือและความคิดเห็นใหม่</translation>
 <translation id="6441316101718669559">การรวมระบบเดสก์ท็อปไม่ได้รับการสนับสนุนบนแพลตฟอร์มนี้ คุณยังคงสามารถใช้แอปพลิเคชันนี้ได้ แต่ประสบการณ์ของผู้ใช้จะมีคุณภาพลดลง</translation>
 <translation id="652218476070540101">กำลังอัปเดต PIN สำหรับคอมพิวเตอร์เครื่องนี้…</translation>
 <translation id="6527303717912515753">แชร์</translation>
@@ -221,6 +223,7 @@ Desktop Host</translation>
 <translation id="6542902059648396432">รายงานปัญหา…</translation>
 <translation id="6550675742724504774">ตัวเลือก</translation>
 <translation id="6570205395680337606">รีเซ็ตแอปพลิเคชัน คุณจะสูญเสียงานที่ไม่ได้บันทึกไว้ทั้งหมด</translation>
+<translation id="6572345186230665992">สำหรับ Mac (OS X Mavericks 10.9 ขึ้นไป)</translation>
 <translation id="6612717000975622067">ส่ง Ctrl-Alt-Del</translation>
 <translation id="6640610550128933069">ออนไลน์ล่าสุด <ph name="DATE" /></translation>
 <translation id="6668065415969892472">PIN ของคุณได้รับการอัปเดตแล้ว</translation>
@@ -232,7 +235,6 @@ Desktop Host</translation>
 <translation id="6930242544192836755">ระยะเวลา</translation>
 <translation id="6939719207673461467">แสดง/ซ่อนแป้นพิมพ์</translation>
 <translation id="6944854424004126054">กู้คืนหน้าต่าง</translation>
-<translation id="6962773374262604195">สำหรับ Windows (XP ขึ้นไป)</translation>
 <translation id="6965382102122355670">ตกลง</translation>
 <translation id="6985691951107243942">คุณแน่ใจหรือไม่ว่าต้องการปิดใช้งานการเชื่อมต่อระยะไกลกับ <ph name="HOSTNAME" /> หากคุณเปลี่ยนใจภายหลัง คุณจะต้องไปที่คอมพิวเตอร์เครื่องนั้นเพื่อเปิดใช้งานการเชื่อมต่ออีกครั้ง</translation>
 <translation id="6998989275928107238">ถึง</translation>
@@ -288,6 +290,7 @@ Desktop Host</translation>
 <translation id="8759753423332885148">เรียนรู้เพิ่มเติม</translation>
 <translation id="8791202241915690908">ดาวน์โหลด Chromoting Host Installer</translation>
 <translation id="894763922177556086">ดี</translation>
+<translation id="895780780740011433">สำหรับ Windows 7 ขึ้นไป</translation>
 <translation id="897805526397249209">ในการเปิดใช้งานการเชื่อมต่อระยะไกลกับคอมพิวเตอร์เครื่องอื่น ให้ติดตั้ง Chromoting ที่คอมพิวเตอร์ที่ต้องการใช้งานและคลิก "<ph name="BUTTON_NAME" />"</translation>
 <translation id="8998327464021325874">Chrome Remote Desktop Host Controller</translation>
 <translation id="9016232822027372900">ยังต้องการเชื่อมต่อ</translation>

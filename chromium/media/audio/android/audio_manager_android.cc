@@ -17,9 +17,10 @@
 #include "media/audio/android/audio_record_input.h"
 #include "media/audio/android/opensles_input.h"
 #include "media/audio/android/opensles_output.h"
+#include "media/audio/audio_device_description.h"
 #include "media/audio/audio_manager.h"
-#include "media/audio/audio_parameters.h"
 #include "media/audio/fake_audio_input_stream.h"
+#include "media/base/audio_parameters.h"
 #include "media/base/channel_layout.h"
 
 using base::android::AppendJavaStringArrayToStringVector;
@@ -33,8 +34,7 @@ namespace {
 
 void AddDefaultDevice(AudioDeviceNames* device_names) {
   DCHECK(device_names->empty());
-  device_names->push_front(AudioDeviceName(AudioManager::GetDefaultDeviceName(),
-                                           AudioManagerBase::kDefaultDeviceId));
+  device_names->push_front(AudioDeviceName::CreateDefault());
 }
 
 // Maximum number of output streams that can be open simultaneously.
@@ -45,12 +45,22 @@ const int kDefaultOutputBufferSize = 2048;
 
 }  // namespace
 
-AudioManager* CreateAudioManager(AudioLogFactory* audio_log_factory) {
-  return new AudioManagerAndroid(audio_log_factory);
+ScopedAudioManagerPtr CreateAudioManager(
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> worker_task_runner,
+    AudioLogFactory* audio_log_factory) {
+  return ScopedAudioManagerPtr(new AudioManagerAndroid(
+      std::move(task_runner), std::move(worker_task_runner),
+      audio_log_factory));
 }
 
-AudioManagerAndroid::AudioManagerAndroid(AudioLogFactory* audio_log_factory)
-    : AudioManagerBase(audio_log_factory),
+AudioManagerAndroid::AudioManagerAndroid(
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> worker_task_runner,
+    AudioLogFactory* audio_log_factory)
+    : AudioManagerBase(std::move(task_runner),
+                       std::move(worker_task_runner),
+                       audio_log_factory),
       communication_mode_is_on_(false),
       output_volume_override_set_(false),
       output_volume_override_(0) {
@@ -68,11 +78,13 @@ AudioManagerAndroid::AudioManagerAndroid(AudioLogFactory* audio_log_factory)
 }
 
 AudioManagerAndroid::~AudioManagerAndroid() {
-  // It's safe to post a task here since Shutdown() will wait for all tasks to
-  // complete before returning.
-  GetTaskRunner()->PostTask(FROM_HERE, base::Bind(
-      &AudioManagerAndroid::ShutdownOnAudioThread, base::Unretained(this)));
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
   Shutdown();
+
+  DVLOG(2) << "Destroying Java part of the audio manager";
+  Java_AudioManagerAndroid_close(base::android::AttachCurrentThread(),
+                                 j_audio_manager_.obj());
+  j_audio_manager_.Reset();
 }
 
 bool AudioManagerAndroid::HasAudioOutputDevices() {
@@ -346,15 +358,6 @@ void AudioManagerAndroid::InitializeOnAudioThread() {
       j_audio_manager_.obj());
 }
 
-void AudioManagerAndroid::ShutdownOnAudioThread() {
-  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
-  DVLOG(2) << "Destroying Java part of the audio manager";
-  Java_AudioManagerAndroid_close(
-      base::android::AttachCurrentThread(),
-      j_audio_manager_.obj());
-  j_audio_manager_.Reset();
-}
-
 void AudioManagerAndroid::SetCommunicationAudioModeOn(bool on) {
   Java_AudioManagerAndroid_setCommunicationAudioModeOn(
       base::android::AttachCurrentThread(),
@@ -369,9 +372,8 @@ bool AudioManagerAndroid::SetAudioDevice(const std::string& device_id) {
   // if the default device is selected.
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jstring> j_device_id = ConvertUTF8ToJavaString(
-      env,
-      device_id == AudioManagerBase::kDefaultDeviceId ?
-          std::string() : device_id);
+      env, device_id == AudioDeviceDescription::kDefaultDeviceId ? std::string()
+                                                                 : device_id);
   return Java_AudioManagerAndroid_setDevice(
       env, j_audio_manager_.obj(), j_device_id.obj());
 }

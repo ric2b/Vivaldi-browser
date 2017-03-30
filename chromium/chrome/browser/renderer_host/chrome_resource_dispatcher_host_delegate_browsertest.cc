@@ -5,6 +5,8 @@
 #include "chrome/browser/renderer_host/chrome_resource_dispatcher_host_delegate.h"
 
 #include <stddef.h>
+
+#include <memory>
 #include <utility>
 
 #include "base/command_line.h"
@@ -13,14 +15,21 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/policy/cloud/policy_header_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/renderer_host/chrome_navigation_data.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_data.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/policy_header_io_helper.h"
 #include "components/policy/core/common/cloud/policy_header_service.h"
 #include "components/policy/core/common/policy_switches.h"
+#include "content/public/browser/navigation_data.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/resource_dispatcher_host.h"
+#include "content/public/browser/web_contents_observer.h"
+#include "content/public/test/browser_test_utils.h"
 #include "net/http/http_request_headers.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
@@ -33,7 +42,7 @@ namespace {
 static const char kTestPolicyHeader[] = "test_header";
 static const char kServerRedirectUrl[] = "/server-redirect";
 
-scoped_ptr<net::test_server::HttpResponse> HandleTestRequest(
+std::unique_ptr<net::test_server::HttpResponse> HandleTestRequest(
     const net::test_server::HttpRequest& request) {
   if (base::StartsWith(request.relative_url, kServerRedirectUrl,
                        base::CompareCase::SENSITIVE)) {
@@ -42,13 +51,13 @@ scoped_ptr<net::test_server::HttpResponse> HandleTestRequest(
     std::string redirect_target =
         request.relative_url.substr(query_string_pos + 1);
 
-    scoped_ptr<net::test_server::BasicHttpResponse> http_response(
+    std::unique_ptr<net::test_server::BasicHttpResponse> http_response(
         new net::test_server::BasicHttpResponse);
     http_response->set_code(net::HTTP_MOVED_PERMANENTLY);
     http_response->AddCustomHeader("Location", redirect_target);
     return std::move(http_response);
   } else {
-    scoped_ptr<net::test_server::BasicHttpResponse> http_response(
+    std::unique_ptr<net::test_server::BasicHttpResponse> http_response(
         new net::test_server::BasicHttpResponse);
     http_response->set_code(net::HTTP_OK);
     http_response->set_content("Success");
@@ -58,7 +67,7 @@ scoped_ptr<net::test_server::HttpResponse> HandleTestRequest(
 
 class TestDispatcherHostDelegate : public ChromeResourceDispatcherHostDelegate {
  public:
-  TestDispatcherHostDelegate() {}
+  TestDispatcherHostDelegate() : should_add_data_reduction_proxy_data_(false) {}
   ~TestDispatcherHostDelegate() override {}
 
   void RequestBeginning(
@@ -88,10 +97,50 @@ class TestDispatcherHostDelegate : public ChromeResourceDispatcherHostDelegate {
     request_headers_.MergeFrom(request->extra_request_headers());
   }
 
+  content::NavigationData* GetNavigationData(
+      net::URLRequest* request) const override {
+    if (request && should_add_data_reduction_proxy_data_) {
+      data_reduction_proxy::DataReductionProxyData* data =
+          data_reduction_proxy::DataReductionProxyData::
+              GetDataAndCreateIfNecessary(request);
+      data->set_used_data_reduction_proxy(true);
+    }
+    return ChromeResourceDispatcherHostDelegate::GetNavigationData(request);
+  }
+
+  bool should_add_data_reduction_proxy_data_;
   net::HttpRequestHeaders request_headers_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(TestDispatcherHostDelegate);
+};
+
+// Helper class to track DidFinishNavigation and verify that NavigationData is
+// added to NavigationHandle and pause/resume execution of the test.
+class DidFinishNavigationObserver : public content::WebContentsObserver {
+ public:
+  DidFinishNavigationObserver(content::WebContents* web_contents,
+                                       bool add_data_reduction_proxy_data)
+      : content::WebContentsObserver(web_contents),
+        add_data_reduction_proxy_data_(add_data_reduction_proxy_data) {}
+  ~DidFinishNavigationObserver() override {}
+
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override {
+    ChromeNavigationData* data = static_cast<ChromeNavigationData*>(
+        navigation_handle->GetNavigationData());
+    if (add_data_reduction_proxy_data_) {
+      EXPECT_TRUE(data->GetDataReductionProxyData());
+      EXPECT_TRUE(
+          data->GetDataReductionProxyData()->used_data_reduction_proxy());
+    } else {
+      EXPECT_FALSE(data->GetDataReductionProxyData());
+    }
+  }
+
+ private:
+  bool add_data_reduction_proxy_data_;
+  DISALLOW_COPY_AND_ASSIGN(DidFinishNavigationObserver);
 };
 
 }  // namespace
@@ -135,11 +184,14 @@ class ChromeResourceDispatcherHostDelegateBrowserTest :
     dispatcher_host_delegate_.reset();
   }
 
+  void SetShouldAddDataReductionProxyData(bool add_data) {
+    dispatcher_host_delegate_->should_add_data_reduction_proxy_data_ = add_data;
+  }
+
  protected:
   // The fake URL for DMServer we are using.
   GURL dm_url_;
-  scoped_ptr<TestDispatcherHostDelegate> dispatcher_host_delegate_;
-
+  std::unique_ptr<TestDispatcherHostDelegate> dispatcher_host_delegate_;
  private:
   DISALLOW_COPY_AND_ASSIGN(ChromeResourceDispatcherHostDelegateBrowserTest);
 };
@@ -181,4 +233,21 @@ IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
   ASSERT_TRUE(dispatcher_host_delegate_->request_headers_.GetHeader(
       policy::kChromePolicyHeader, &value));
   ASSERT_EQ(kTestPolicyHeader, value);
+}
+
+IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
+                       NavigationDataProcessed) {
+  ui_test_utils::NavigateToURL(browser(), embedded_test_server()->base_url());
+  {
+    DidFinishNavigationObserver nav_observer(
+        browser()->tab_strip_model()->GetActiveWebContents(), false);
+    ui_test_utils::NavigateToURL(
+        browser(), embedded_test_server()->GetURL("/google/google.html"));
+  }
+  SetShouldAddDataReductionProxyData(true);
+  {
+    DidFinishNavigationObserver nav_observer(
+        browser()->tab_strip_model()->GetActiveWebContents(), true);
+    ui_test_utils::NavigateToURL(browser(), embedded_test_server()->base_url());
+  }
 }

@@ -9,9 +9,9 @@
 
 #include <vector>
 
+#include "chrome/install_static/install_util.h"
 #include "chrome_elf/blacklist/blacklist_interceptions.h"
 #include "chrome_elf/chrome_elf_constants.h"
-#include "chrome_elf/chrome_elf_util.h"
 #include "chrome_elf/thunk_getter.h"
 #include "sandbox/win/src/interception_internal.h"
 #include "sandbox/win/src/internal_types.h"
@@ -331,7 +331,7 @@ bool Initialize(bool force) {
     return false;
 
   // Check to see if this is a non-browser process, abort if so.
-  if (IsNonBrowserProcess())
+  if (install_static::IsNonBrowserProcess())
     return false;
 
   // Check to see if the blacklist beacon is still set to running (indicating a

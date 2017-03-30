@@ -8,13 +8,14 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "content/common/render_widget_window_tree_client_factory.mojom.h"
 #include "content/public/common/mojo_shell_connection.h"
 #include "content/renderer/mus/render_widget_mus_connection.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
-#include "mojo/shell/public/cpp/connection.h"
-#include "mojo/shell/public/cpp/interface_factory.h"
+#include "services/shell/public/cpp/connection.h"
+#include "services/shell/public/cpp/interface_factory.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -25,25 +26,25 @@ namespace {
 // MojoShellConnection::Listener.
 class RenderWidgetWindowTreeClientFactoryImpl
     : public MojoShellConnection::Listener,
-      public mojo::InterfaceFactory<mojom::RenderWidgetWindowTreeClientFactory>,
+      public shell::InterfaceFactory<
+          mojom::RenderWidgetWindowTreeClientFactory>,
       public mojom::RenderWidgetWindowTreeClientFactory {
  public:
   RenderWidgetWindowTreeClientFactoryImpl() {
     DCHECK(MojoShellConnection::Get());
-    MojoShellConnection::Get()->AddListener(this);
   }
 
   ~RenderWidgetWindowTreeClientFactoryImpl() override {}
 
  private:
   // MojoShellConnection::Listener implementation:
-  bool AcceptConnection(mojo::Connection* connection) override {
+  bool AcceptConnection(shell::Connection* connection) override {
     connection->AddInterface<mojom::RenderWidgetWindowTreeClientFactory>(this);
     return true;
   }
 
-  // mojo::InterfaceFactory<mojom::RenderWidgetWindowTreeClientFactory>:
-  void Create(mojo::Connection* connection,
+  // shell::InterfaceFactory<mojom::RenderWidgetWindowTreeClientFactory>:
+  void Create(shell::Connection* connection,
               mojo::InterfaceRequest<mojom::RenderWidgetWindowTreeClientFactory>
                   request) override {
     bindings_.AddBinding(this, std::move(request));
@@ -66,7 +67,8 @@ class RenderWidgetWindowTreeClientFactoryImpl
 }  // namespace
 
 void CreateRenderWidgetWindowTreeClientFactory() {
-  new RenderWidgetWindowTreeClientFactoryImpl;
+  MojoShellConnection::Get()->AddListener(
+      base::WrapUnique(new RenderWidgetWindowTreeClientFactoryImpl()));
 }
 
 }  // namespace content

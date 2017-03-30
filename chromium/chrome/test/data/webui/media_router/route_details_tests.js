@@ -61,6 +61,12 @@ cr.define('route_details', function() {
         assertEquals(expected, details.$[elementId].innerText);
       };
 
+      /**
+       * Fake sink that corresponds to |fakeRouteOne|.
+       * @type {media_router.Sink}
+       */
+      var fakeSinkOne;
+
       // Import route_details.html before running suite.
       suiteSetup(function() {
         return PolymerTest.importHtml(
@@ -80,46 +86,101 @@ cr.define('route_details', function() {
             'chrome-extension://123/custom_view.html');
         fakeRouteTwo = new media_router.Route('route id 2', 'sink id 2',
             'Video 2', 2, false, true);
+        fakeSinkOne = new media_router.Sink(
+            'sink id 1', 'sink 1', 'description', null,
+            media_router.SinkIconType.CAST, media_router.SinkStatus.ACTIVE,
+            2 | 4);
 
         // Allow for the route details to be created and attached.
         setTimeout(done);
       });
 
+      // Tests that the cast button is shown under the correct circumstances and
+      // that updating |replaceRouteAvailable| updates the cast button
+      // visibility.
+      test('cast button visibility', function() {
+        details.route = fakeRouteTwo;
+        checkStartCastButtonIsShown();
+
+        details.route = fakeRouteOne;
+        checkStartCastButtonIsNotShown();
+
+        details.sink = fakeSinkOne;
+        checkStartCastButtonIsShown();
+
+        // Retrigger observer because it's not necessary for it to watch
+        // |route.currentCastMode| in general.
+        fakeRouteOne.currentCastMode = 2;
+        details.route = null;
+        details.route = fakeRouteOne;
+        checkStartCastButtonIsNotShown();
+
+        // Simulate user changing cast modes to be compatible or incompatible
+        // with the route's sink.
+        details.shownCastModeValue = 4;
+        checkStartCastButtonIsShown();
+
+        details.shownCastModeValue = 1;
+        checkStartCastButtonIsNotShown();
+
+        details.shownCastModeValue = 4;
+        checkStartCastButtonIsShown();
+
+        // Cast button should be hidden while another sink is launching.
+        details.isAnySinkCurrentlyLaunching = true;
+        checkStartCastButtonIsNotShown();
+
+        details.isAnySinkCurrentlyLaunching = false;
+        checkStartCastButtonIsShown();
+      });
+
       // Tests for 'close-route-click' event firing when the
       // 'close-route-button' button is clicked.
       test('close route button click', function(done) {
-        details.addEventListener('close-route-click', function() {
+        details.addEventListener('close-route', function() {
           done();
         });
         MockInteractions.tap(details.$['close-route-button']);
       });
 
-      // Tests for 'start-casting-to-route-click' event firing when the
-      // 'start-casting-to-route-button' button is clicked.
+      // Tests for 'join-route-click' event firing when the
+      // 'start-casting-to-route-button' button is clicked when the current
+      // route is joinable.
       test('start casting to route button click', function(done) {
+        details.addEventListener('join-route-click', function() { done(); });
+        details.route = fakeRouteTwo;
+        MockInteractions.tap(details.$['start-casting-to-route-button']);
+      });
+
+      // Tests for 'replace-route-click' event firing when the
+      // 'start-casting-to-route-button' button is clicked when the current
+      // route is not joinable.
+      test('start casting button click replaces route', function(done) {
         details.addEventListener(
-            'start-casting-to-route-click', function() { done(); });
+            'replace-route-click', function() { done(); });
+        details.route = fakeRouteOne;
+        details.availableCastModes = 1;
         MockInteractions.tap(details.$['start-casting-to-route-button']);
       });
 
       // Tests the initial expected text.
       test('initial text setting', function() {
         // <paper-button> text is styled as upper case.
-        checkSpanText(loadTimeData.getString('stopCastingButton')
+        checkSpanText(loadTimeData.getString('stopCastingButtonText')
             .toUpperCase(), 'close-route-button');
         checkSpanText(
-            loadTimeData.getString('startCastingButton'),
+            loadTimeData.getString('startCastingButtonText').toUpperCase(),
             'start-casting-to-route-button');
         checkSpanText('', 'route-information');
       });
 
-      // Tests when |route| is null or set.
-      test('route is null or set', function() {
-        // |route| is null.
-        assertEquals(null, details.route);
+      // Tests when |route| is undefined or set.
+      test('route is undefined or set', function() {
+        // |route| is initially undefined.
+        assertEquals(undefined, details.route);
         checkDefaultViewIsShown();
 
-        // Set |route| to be non-null.
+        // Set |route|.
         details.route = fakeRouteOne;
         assertEquals(fakeRouteOne, details.route);
         checkSpanText(loadTimeData.getStringF('castingActivityStatus',

@@ -131,16 +131,25 @@ void MdDownloadsDOMHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback("openDownloadsFolder",
       base::Bind(&MdDownloadsDOMHandler::HandleOpenDownloadsFolder,
                  weak_ptr_factory_.GetWeakPtr()));
+
+  Observe(GetWebUIWebContents());
 }
 
-void MdDownloadsDOMHandler::RenderViewReused(
-    content::RenderViewHost* render_view_host) {
+void MdDownloadsDOMHandler::OnJavascriptDisallowed() {
   list_tracker_.Stop();
   list_tracker_.Reset();
   CheckForRemovedFiles();
 }
 
+void MdDownloadsDOMHandler::RenderProcessGone(base::TerminationStatus status) {
+  // TODO(dbeam): WebUI + WebUIMessageHandler should do this automatically.
+  // http://crbug.com/610450
+  DisallowJavascript();
+}
+
 void MdDownloadsDOMHandler::HandleGetDownloads(const base::ListValue* args) {
+  AllowJavascript();
+
   CountDownloadsDOMEvents(DOWNLOADS_DOM_EVENT_GET_DOWNLOADS);
 
   bool terms_changed = list_tracker_.SetSearchTerms(*args);
@@ -192,9 +201,7 @@ void MdDownloadsDOMHandler::HandleSaveDangerous(const base::ListValue* args) {
 void MdDownloadsDOMHandler::HandleDiscardDangerous(
     const base::ListValue* args) {
   CountDownloadsDOMEvents(DOWNLOADS_DOM_EVENT_DISCARD_DANGEROUS);
-  content::DownloadItem* file = GetDownloadByValue(args);
-  if (file)
-    file->Remove();
+  RemoveDownloadInArgs(args);
 }
 
 void MdDownloadsDOMHandler::HandleShow(const base::ListValue* args) {
@@ -223,13 +230,7 @@ void MdDownloadsDOMHandler::HandleRemove(const base::ListValue* args) {
     return;
 
   CountDownloadsDOMEvents(DOWNLOADS_DOM_EVENT_REMOVE);
-  content::DownloadItem* file = GetDownloadByValue(args);
-  if (!file)
-    return;
-
-  DownloadVector downloads;
-  downloads.push_back(file);
-  RemoveDownloads(downloads);
+  RemoveDownloadInArgs(args);
 }
 
 void MdDownloadsDOMHandler::HandleUndo(const base::ListValue* args) {
@@ -296,6 +297,12 @@ void MdDownloadsDOMHandler::RemoveDownloads(const DownloadVector& to_remove) {
   IdSet ids;
 
   for (auto* download : to_remove) {
+    if (download->IsDangerous()) {
+      // Don't allow users to revive dangerous downloads; just nuke 'em.
+      download->Remove();
+      continue;
+    }
+
     DownloadItemModel item_model(download);
     if (!item_model.ShouldShowInShelf() ||
         download->GetState() == content::DownloadItem::IN_PROGRESS) {
@@ -417,4 +424,14 @@ void MdDownloadsDOMHandler::CheckForRemovedFiles() {
     GetMainNotifierManager()->CheckForHistoryFilesRemoval();
   if (GetOriginalNotifierManager())
     GetOriginalNotifierManager()->CheckForHistoryFilesRemoval();
+}
+
+void MdDownloadsDOMHandler::RemoveDownloadInArgs(const base::ListValue* args) {
+  content::DownloadItem* file = GetDownloadByValue(args);
+  if (!file)
+    return;
+
+  DownloadVector downloads;
+  downloads.push_back(file);
+  RemoveDownloads(downloads);
 }

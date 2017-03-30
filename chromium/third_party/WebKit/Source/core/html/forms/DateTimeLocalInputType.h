@@ -31,25 +31,18 @@
 #ifndef DateTimeLocalInputType_h
 #define DateTimeLocalInputType_h
 
-#include "core/html/forms/BaseChooserOnlyDateAndTimeInputType.h"
-#include "core/html/forms/BaseMultipleFieldsDateAndTimeInputType.h"
+#include "core/html/forms/BaseTemporalInputType.h"
 
 namespace blink {
 
 class ExceptionState;
 
-#if ENABLE(INPUT_MULTIPLE_FIELDS_UI)
-using BaseDateTimeLocalInputType = BaseMultipleFieldsDateAndTimeInputType;
-#else
-using BaseDateTimeLocalInputType = BaseChooserOnlyDateAndTimeInputType;
-#endif
-
-class DateTimeLocalInputType final : public BaseDateTimeLocalInputType {
+class DateTimeLocalInputType final : public BaseTemporalInputType {
 public:
     static InputType* create(HTMLInputElement&);
 
 private:
-    explicit DateTimeLocalInputType(HTMLInputElement& element) : BaseDateTimeLocalInputType(element) { }
+    explicit DateTimeLocalInputType(HTMLInputElement& element) : BaseTemporalInputType(element) {}
 
     void countUsage() override;
     const AtomicString& formControlType() const override;
@@ -61,12 +54,10 @@ private:
     String localizeValue(const String&) const override;
     void warnIfValueIsInvalid(const String&) const override;
 
-#if ENABLE(INPUT_MULTIPLE_FIELDS_UI)
-    // BaseMultipleFieldsDateAndTimeInputType functions
+    // BaseTemporalInputType functions
     String formatDateTimeFieldsState(const DateTimeFieldsState&) const final;
     void setupLayoutParameters(DateTimeEditElement::LayoutParameters&, const DateComponents&) const final;
     bool isValidFormat(bool hasYear, bool hasMonth, bool hasWeek, bool hasDay, bool hasAMPM, bool hasHour, bool hasMinute, bool hasSecond) const override;
-#endif
 };
 
 } // namespace blink

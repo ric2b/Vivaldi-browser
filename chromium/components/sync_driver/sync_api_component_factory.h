@@ -5,9 +5,9 @@
 #ifndef COMPONENTS_SYNC_DRIVER_SYNC_API_COMPONENT_FACTORY_H_
 #define COMPONENTS_SYNC_DRIVER_SYNC_API_COMPONENT_FACTORY_H_
 
+#include <memory>
 #include <string>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "components/sync_driver/data_type_controller.h"
 #include "sync/api/syncable_service.h"
@@ -32,6 +32,7 @@ class InvalidationService;
 
 namespace syncer {
 class DataTypeDebugInfoListener;
+class DataTypeErrorHandler;
 class SyncableService;
 
 struct UserShare;
@@ -42,7 +43,6 @@ namespace sync_driver {
 class AssociatorInterface;
 class ChangeProcessor;
 class DataTypeEncryptionHandler;
-class DataTypeErrorHandler;
 class DataTypeManager;
 class DataTypeManagerObserver;
 class DataTypeStatusTable;
@@ -111,13 +111,13 @@ class SyncApiComponentFactory {
       const base::FilePath& sync_folder) = 0;
 
   // Creating this in the factory helps us mock it out in testing.
-  virtual scoped_ptr<sync_driver::LocalDeviceInfoProvider>
-      CreateLocalDeviceInfoProvider() = 0;
+  virtual std::unique_ptr<sync_driver::LocalDeviceInfoProvider>
+  CreateLocalDeviceInfoProvider() = 0;
 
   // Legacy datatypes that need to be converted to the SyncableService API.
   virtual SyncComponents CreateBookmarkSyncComponents(
       sync_driver::SyncService* sync_service,
-      sync_driver::DataTypeErrorHandler* error_handler) = 0;
+      syncer::DataTypeErrorHandler* error_handler) = 0;
 
   // Creates attachment service.
   // Note: Should only be called from the model type thread.
@@ -130,8 +130,8 @@ class SyncApiComponentFactory {
   // asynchronous events (AttachmentUploaded). Pass NULL if delegate is not
   // provided. AttachmentService doesn't take ownership of delegate, the pointer
   // must be valid throughout AttachmentService lifetime.
-  virtual scoped_ptr<syncer::AttachmentService> CreateAttachmentService(
-      scoped_ptr<syncer::AttachmentStoreForSync> attachment_store,
+  virtual std::unique_ptr<syncer::AttachmentService> CreateAttachmentService(
+      std::unique_ptr<syncer::AttachmentStoreForSync> attachment_store,
       const syncer::UserShare& user_share,
       const std::string& store_birthday,
       syncer::ModelType model_type,

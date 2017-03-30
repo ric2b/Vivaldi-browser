@@ -129,6 +129,9 @@ source_set("blink_headers") {
     "//third_party/icu:icu_config",
   ]
   sources = blink_headers_values.blink_public_sources
+  deps = [
+    ":generate_mojo_bindings",
+  ]
 }
 
 # GYP version: WebKit/public/blink_devtools.gyp:blink_devtools_frontend_resources
@@ -174,36 +177,37 @@ grit("image_resources") {
   ]
 }
 
-# GYP version: WebKit/public/blink.gyp:mojo_bindings_blink_mojom
-mojom("mojo_bindings_blink") {
-  sources = [
-    "platform/modules/bluetooth/web_bluetooth.mojom",
-    "platform/modules/geolocation/geolocation.mojom",
-    "platform/modules/notifications/notification.mojom",
-    "platform/modules/payments/payment_request.mojom",
-    "platform/modules/permissions/permission.mojom",
-    "platform/modules/permissions/permission_status.mojom",
-  ]
-  for_blink = true
-  variant = "wtf"
-}
-
-# GYP version: WebKit/public/blink.gyp:mojo_bindings_mojom
+# GYP versions: WebKit/public/blink.gyp:mojo_bindings_mojom,
+# WebKit/public/blink.gyp:mojo_bindings_blink_mojom
 mojom("mojo_bindings") {
   sources = [
+    "platform/modules/background_sync/background_sync.mojom",
     "platform/modules/bluetooth/web_bluetooth.mojom",
     "platform/modules/geolocation/geolocation.mojom",
+    "platform/modules/imagecapture/image_capture.mojom",
     "platform/modules/notifications/notification.mojom",
     "platform/modules/permissions/permission.mojom",
     "platform/modules/permissions/permission_status.mojom",
+    "platform/modules/presentation/presentation.mojom",
+    "platform/modules/serviceworker/service_worker_event_status.mojom",
+    "platform/modules/vr/vr_service.mojom",
+    "platform/modules/wake_lock/wake_lock_service.mojom",
+  ]
+  public_deps = [
+    ":android_mojo_bindings",
   ]
 }
 
-if (is_android) {
-  # GYP version: WebKit/public/blink.gyp:android_mojo_bindings_java
-  mojom("android_mojo_bindings") {
-    sources = [
-      "platform/modules/payments/payment_request.mojom",
-    ]
-  }
+# GYP version: WebKit/public/blink.gyp:android_mojo_bindings_java
+mojom("android_mojo_bindings") {
+  sources = [
+    "platform/modules/payments/payment_request.mojom",
+  ]
+}
+
+group("generate_mojo_bindings") {
+  deps = [
+    ":mojo_bindings__generator",
+    ":mojo_bindings_blink__generator",
+  ]
 }

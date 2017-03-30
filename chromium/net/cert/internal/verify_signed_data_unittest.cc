@@ -4,6 +4,7 @@
 
 #include "net/cert/internal/verify_signed_data.h"
 
+#include <memory>
 #include <set>
 
 #include "net/cert/internal/signature_algorithm.h"
@@ -14,9 +15,7 @@
 #include "net/der/parser.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if defined(USE_OPENSSL)
 #include <openssl/obj.h>
-#endif
 
 namespace net {
 
@@ -38,11 +37,6 @@ enum VerifyResult {
 void RunTestCaseUsingPolicy(VerifyResult expected_result,
                             const char* file_name,
                             const SignaturePolicy* policy) {
-#if !defined(USE_OPENSSL)
-  LOG(INFO) << "Skipping test, only implemented for BoringSSL";
-  return;
-#endif
-
   std::string path =
       std::string("net/data/verify_signed_data_unittest/") + file_name;
 
@@ -60,7 +54,7 @@ void RunTestCaseUsingPolicy(VerifyResult expected_result,
 
   ASSERT_TRUE(ReadTestDataFromPemFile(path, mappings));
 
-  scoped_ptr<SignatureAlgorithm> signature_algorithm =
+  std::unique_ptr<SignatureAlgorithm> signature_algorithm =
       SignatureAlgorithm::CreateFromDer(der::Input(&algorithm));
   ASSERT_TRUE(signature_algorithm);
 
@@ -222,10 +216,8 @@ TEST(VerifySignedDataTest, EcdsaPrime256v1Sha512UnusedBitsSignature) {
 class RejectSecp384r1Policy : public SignaturePolicy {
  public:
   bool IsAcceptableCurveForEcdsa(int curve_nid) const override {
-#if defined(USE_OPENSSL)
     if (curve_nid == NID_secp384r1)
       return false;
-#endif
     return true;
   }
 };

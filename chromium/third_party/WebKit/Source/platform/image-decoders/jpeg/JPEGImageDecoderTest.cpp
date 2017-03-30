@@ -36,9 +36,9 @@
 #include "public/platform/WebData.h"
 #include "public/platform/WebSize.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "wtf/ArrayBuffer.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
+#include "wtf/typed_arrays/ArrayBuffer.h"
 
 namespace blink {
 
@@ -68,8 +68,8 @@ void downsample(size_t maxDecodedBytes, unsigned* outputWidth, unsigned* outputH
 
     ImageFrame* frame = decoder->frameBufferAtIndex(0);
     ASSERT_TRUE(frame);
-    *outputWidth = frame->getSkBitmap().width();
-    *outputHeight = frame->getSkBitmap().height();
+    *outputWidth = frame->bitmap().width();
+    *outputHeight = frame->bitmap().height();
     EXPECT_EQ(IntSize(*outputWidth, *outputHeight), decoder->decodedSize());
 }
 
@@ -83,7 +83,7 @@ void readYUV(size_t maxDecodedBytes, unsigned* outputYWidth, unsigned* outputYHe
 
     // Setting a dummy ImagePlanes object signals to the decoder that we want to do YUV decoding.
     OwnPtr<ImagePlanes> dummyImagePlanes = adoptPtr(new ImagePlanes());
-    decoder->setImagePlanes(dummyImagePlanes.release());
+    decoder->setImagePlanes(std::move(dummyImagePlanes));
 
     bool sizeIsAvailable = decoder->isSizeAvailable();
     ASSERT_TRUE(sizeIsAvailable);
@@ -115,7 +115,7 @@ void readYUV(size_t maxDecodedBytes, unsigned* outputYWidth, unsigned* outputYHe
     planes[2] = ((char*) planes[1]) + rowBytes[1] * uSize.height();
 
     OwnPtr<ImagePlanes> imagePlanes = adoptPtr(new ImagePlanes(planes, rowBytes));
-    decoder->setImagePlanes(imagePlanes.release());
+    decoder->setImagePlanes(std::move(imagePlanes));
 
     ASSERT_TRUE(decoder->decodeToYUV());
 }
@@ -251,7 +251,7 @@ TEST(JPEGImageDecoderTest, yuv)
     decoder->setData(data.get(), true);
 
     OwnPtr<ImagePlanes> imagePlanes = adoptPtr(new ImagePlanes());
-    decoder->setImagePlanes(imagePlanes.release());
+    decoder->setImagePlanes(std::move(imagePlanes));
     ASSERT_TRUE(decoder->isSizeAvailable());
     ASSERT_FALSE(decoder->canDecodeToYUV());
 }

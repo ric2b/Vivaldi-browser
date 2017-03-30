@@ -59,14 +59,19 @@ public:
     ~MainThreadDebugger() override;
 
     static MainThreadDebugger* instance();
-    static void interruptMainThreadAndRun(PassOwnPtr<InspectorTaskRunner::Task>);
+    static void interruptMainThreadAndRun(std::unique_ptr<InspectorTaskRunner::Task>);
 
     InspectorTaskRunner* taskRunner() const { return m_taskRunner.get(); }
     bool isWorker() override { return false; }
     void setClientMessageLoop(PassOwnPtr<ClientMessageLoop>);
     int contextGroupId(LocalFrame*);
+    void didClearContextsForFrame(LocalFrame*);
     void contextCreated(ScriptState*, LocalFrame*, SecurityOrigin*);
     void contextWillBeDestroyed(ScriptState*);
+
+    v8::MaybeLocal<v8::Value> memoryInfo(v8::Isolate*, v8::Local<v8::Context>) override;
+protected:
+    void reportMessageToConsole(v8::Local<v8::Context>, ConsoleMessage*) override;
 
 private:
     // V8DebuggerClient implementation.

@@ -10,7 +10,6 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
-#include "base/threading/thread_checker.h"
 #include "base/trace_event/trace_event.h"
 #include "content/renderer/media/webrtc/track_observer.h"
 #include "media/base/bind_to_current_loop.h"
@@ -19,7 +18,6 @@
 #include "media/base/video_util.h"
 #include "third_party/webrtc/media/base/videoframe.h"
 #include "third_party/webrtc/media/base/videosinkinterface.h"
-#include "third_party/webrtc/system_wrappers/include/tick_util.h"
 
 namespace content {
 
@@ -46,9 +44,6 @@ class MediaStreamRemoteVideoSource::RemoteVideoSourceDelegate
       const scoped_refptr<media::VideoFrame>& video_frame);
 
  private:
-  // Bound to the render thread.
-  base::ThreadChecker thread_checker_;
-
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
 
   // |frame_callback_| is accessed on the IO thread.
@@ -71,8 +66,7 @@ MediaStreamRemoteVideoSource::RemoteVideoSourceDelegate::
       // the offset, 2) the rate (i.e., one clock runs faster than the other).
       // See http://crbug/516700
       time_diff_(base::TimeTicks::Now() - base::TimeTicks() -
-                 base::TimeDelta::FromMicroseconds(
-                     webrtc::TickTime::MicrosecondTimestamp())) {}
+                 base::TimeDelta::FromMicroseconds(rtc::TimeMicros())) {}
 
 MediaStreamRemoteVideoSource::
 RemoteVideoSourceDelegate::~RemoteVideoSourceDelegate() {
@@ -95,15 +89,16 @@ void MediaStreamRemoteVideoSource::RemoteVideoSourceDelegate::OnFrame(
       incoming_timestamp - start_timestamp_;
 
   scoped_refptr<media::VideoFrame> video_frame;
-  if (incoming_frame.GetNativeHandle() != NULL) {
+  if (incoming_frame.video_frame_buffer()->native_handle() != NULL) {
     video_frame =
-        static_cast<media::VideoFrame*>(incoming_frame.GetNativeHandle());
+        static_cast<media::VideoFrame*>(
+            incoming_frame.video_frame_buffer()->native_handle());
     video_frame->set_timestamp(elapsed_timestamp);
   } else {
     const cricket::VideoFrame* frame =
         incoming_frame.GetCopyWithRotationApplied();
 
-    gfx::Size size(frame->GetWidth(), frame->GetHeight());
+    gfx::Size size(frame->width(), frame->height());
 
     // Make a shallow copy. Both |frame| and |video_frame| will share a single
     // reference counted frame buffer. Const cast and hope no one will overwrite
@@ -112,10 +107,13 @@ void MediaStreamRemoteVideoSource::RemoteVideoSourceDelegate::OnFrame(
     // need to const cast here.
     video_frame = media::VideoFrame::WrapExternalYuvData(
         media::PIXEL_FORMAT_YV12, size, gfx::Rect(size), size,
-        frame->GetYPitch(), frame->GetUPitch(), frame->GetVPitch(),
-        const_cast<uint8_t*>(frame->GetYPlane()),
-        const_cast<uint8_t*>(frame->GetUPlane()),
-        const_cast<uint8_t*>(frame->GetVPlane()), elapsed_timestamp);
+        frame->video_frame_buffer()->StrideY(),
+        frame->video_frame_buffer()->StrideU(),
+        frame->video_frame_buffer()->StrideV(),
+        const_cast<uint8_t*>(frame->video_frame_buffer()->DataY()),
+        const_cast<uint8_t*>(frame->video_frame_buffer()->DataU()),
+        const_cast<uint8_t*>(frame->video_frame_buffer()->DataV()),
+        elapsed_timestamp);
     if (!video_frame)
       return;
     video_frame->AddDestructionObserver(

@@ -7,6 +7,7 @@
 
 #include "ash/ash_export.h"
 #include "base/time/time.h"
+#include "ui/accessibility/ax_enums.h"
 #include "ui/chromeos/accessibility_types.h"
 
 namespace ash {
@@ -58,6 +59,12 @@ class ASH_EXPORT AccessibilityDelegate {
 
   // Returns if the a11y virtual keyboard is enabled.
   virtual bool IsVirtualKeyboardEnabled() const = 0;
+
+  // Invoked to enable or disable the mono audio output.
+  virtual void SetMonoAudioEnabled(bool enabled) = 0;
+
+  // Returns if the mono audio output is enabled.
+  virtual bool IsMonoAudioEnabled() const = 0;
 
   // Invoked to enable or disable caret highlighting.
   virtual void SetCaretHighlightEnabled(bool enabled) = 0;
@@ -118,6 +125,10 @@ class ASH_EXPORT AccessibilityDelegate {
 
   // Initiates play of shutdown sound and returns it's duration.
   virtual base::TimeDelta PlayShutdownSound() const = 0;
+
+  // Forward an accessibility gesture from the touch exploration controller to
+  // ChromeVox.
+  virtual void HandleAccessibilityGesture(ui::AXGesture gesture) = 0;
 };
 
 }  // namespace ash

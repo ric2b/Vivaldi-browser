@@ -48,10 +48,16 @@ public:
             .WillByDefault(Return(false));
 
         // Other handy defaults.
+        ON_CALL(*this, paused())
+            .WillByDefault(Return(true));
         ON_CALL(*this, ended())
             .WillByDefault(Return(false));
         ON_CALL(*this, pageVisibilityState())
             .WillByDefault(Return(PageVisibilityStateVisible));
+        ON_CALL(*this, isCrossOrigin())
+            .WillByDefault(Return(false));
+        ON_CALL(*this, isAutoplayAllowedPerSettings())
+            .WillByDefault(Return(true));
         ON_CALL(*this, absoluteBoundingBoxRect())
             .WillByDefault(Return(
                 IntRect(10, 10, 100, 100)));
@@ -60,7 +66,7 @@ public:
         // state unless we explicitly expect it.
         EXPECT_CALL(*this, setMuted(_))
             .Times(0);
-        EXPECT_CALL(*this, removeUserGestureRequirement())
+        EXPECT_CALL(*this, unlockUserGesture())
             .Times(0);
         EXPECT_CALL(*this, setRequestPositionUpdates(true))
             .Times(0);
@@ -72,12 +78,14 @@ public:
 
     MOCK_CONST_METHOD0(currentTime, double());
     MOCK_CONST_METHOD0(duration, double());
+    MOCK_CONST_METHOD0(paused, bool());
     MOCK_CONST_METHOD0(ended, bool());
     MOCK_CONST_METHOD0(muted, bool());
     MOCK_METHOD1(setMuted, void(bool));
     MOCK_METHOD0(playInternal, void());
-    MOCK_CONST_METHOD0(isUserGestureRequiredForPlay, bool());
-    MOCK_METHOD0(removeUserGestureRequirement, void());
+    MOCK_METHOD0(pauseInternal, void());
+    MOCK_CONST_METHOD0(isLockedPendingUserGesture, bool());
+    MOCK_METHOD0(unlockUserGesture, void());
     MOCK_METHOD1(recordAutoplayMetric, void(AutoplayMetrics));
     MOCK_METHOD0(shouldAutoplay, bool());
     MOCK_CONST_METHOD0(isHTMLVideoElement, bool());
@@ -85,6 +93,8 @@ public:
     MOCK_METHOD0(isLegacyViewportType, bool());
     MOCK_CONST_METHOD0(pageVisibilityState, PageVisibilityState());
     MOCK_CONST_METHOD0(autoplayExperimentMode, String());
+    MOCK_CONST_METHOD0(isCrossOrigin, bool());
+    MOCK_CONST_METHOD0(isAutoplayAllowedPerSettings, bool());
     MOCK_METHOD1(setRequestPositionUpdates, void(bool));
     MOCK_CONST_METHOD0(absoluteBoundingBoxRect, IntRect());
 
@@ -104,7 +114,12 @@ public:
         return m_helper->isEligible();
     }
 
-    void setInterface(RawPtr<MockAutoplayClient> client)
+    bool meetsVisibilityRequirements()
+    {
+        return m_helper->meetsVisibilityRequirements();
+    }
+
+    void setInterface(MockAutoplayClient* client)
     {
         m_client = client;
 
@@ -116,7 +131,6 @@ public:
         m_helper = AutoplayExperimentHelper::create(m_client.get());
     }
 
-#if ENABLE(OILPAN)
     void TearDown()
     {
         // Be sure that the mock is destructed before the test, so that any
@@ -125,9 +139,8 @@ public:
         // causing a test failure.
         m_helper.clear();
         m_client.clear();
-        Heap::collectAllGarbage();
+        ThreadHeap::collectAllGarbage();
     }
-#endif
 
     Persistent<MockAutoplayClient> m_client;
     Persistent<AutoplayExperimentHelper> m_helper;
@@ -155,7 +168,7 @@ public:
 
     void setUserGestureRequiredForPlay(bool required)
     {
-        ON_CALL(*m_client, isUserGestureRequiredForPlay())
+        ON_CALL(*m_client, isLockedPendingUserGesture())
             .WillByDefault(Return(required));
     }
 
@@ -249,7 +262,7 @@ TEST_F(AutoplayExperimentTest, IsEligibleRequiresUserGesture)
 {
     setInterface(new NiceMock<MockAutoplayClient>("enabled-forvideo", MockAutoplayClient::Video));
     // If a user gesture is not required, then we're not eligible.
-    ON_CALL(*m_client, isUserGestureRequiredForPlay())
+    ON_CALL(*m_client, isLockedPendingUserGesture())
         .WillByDefault(Return(false));
     EXPECT_FALSE(isEligible());
 }
@@ -295,11 +308,10 @@ TEST_F(AutoplayExperimentTest, BecameReadyAutoplayThenBailout)
 {
     setInterface(new NiceMock<MockAutoplayClient>("enabled-forvideo", MockAutoplayClient::Video));
 
-    EXPECT_CALL(*m_client, removeUserGestureRequirement())
-        .Times(1);
     EXPECT_CALL(*m_client, recordAutoplayMetric(AutoplayMediaFound))
         .Times(1);
     m_helper->becameReadyToPlay();
+    EXPECT_TRUE(m_helper->isGestureRequirementOverridden());
 
     EXPECT_CALL(*m_client, recordAutoplayMetric(GesturelessPlaybackStartedByAutoplayFlagImmediately))
         .Times(1);
@@ -312,11 +324,10 @@ TEST_F(AutoplayExperimentTest, BecameReadyAutoplayThenPause)
 {
     setInterface(new NiceMock<MockAutoplayClient>("enabled-forvideo", MockAutoplayClient::Video));
 
-    EXPECT_CALL(*m_client, removeUserGestureRequirement())
-        .Times(1);
     EXPECT_CALL(*m_client, recordAutoplayMetric(AutoplayMediaFound))
         .Times(1);
     m_helper->becameReadyToPlay();
+    EXPECT_TRUE(m_helper->isGestureRequirementOverridden());
 
     EXPECT_CALL(*m_client, recordAutoplayMetric(GesturelessPlaybackStartedByAutoplayFlagImmediately))
         .Times(1);
@@ -329,11 +340,10 @@ TEST_F(AutoplayExperimentTest, BecameReadyAutoplayThenComplete)
 {
     setInterface(new NiceMock<MockAutoplayClient>("enabled-forvideo", MockAutoplayClient::Video));
 
-    EXPECT_CALL(*m_client, removeUserGestureRequirement())
-        .Times(1);
     EXPECT_CALL(*m_client, recordAutoplayMetric(AutoplayMediaFound))
         .Times(1);
     m_helper->becameReadyToPlay();
+    EXPECT_TRUE(m_helper->isGestureRequirementOverridden());
 
     EXPECT_CALL(*m_client, recordAutoplayMetric(GesturelessPlaybackStartedByAutoplayFlagImmediately))
         .Times(1);
@@ -377,11 +387,10 @@ TEST_F(AutoplayExperimentTest, PlayMethodThenBailout)
     setInterface(new NiceMock<MockAutoplayClient>("enabled-forvideo", MockAutoplayClient::Video));
     setShouldAutoplay(false); // No autoplay attribute.
 
-    EXPECT_CALL(*m_client, removeUserGestureRequirement())
-        .Times(1);
     EXPECT_CALL(*m_client, recordAutoplayMetric(AutoplayMediaFound))
         .Times(1);
     m_helper->playMethodCalled();
+    EXPECT_TRUE(m_helper->isGestureRequirementOverridden());
 
     EXPECT_CALL(*m_client, recordAutoplayMetric(GesturelessPlaybackStartedByPlayMethodImmediately))
         .Times(1);
@@ -399,19 +408,10 @@ TEST_F(AutoplayExperimentTest, DeferAutoplayUntilMuted)
         .Times(1);
     m_helper->becameReadyToPlay();
 
-    // When we toggle the muted attribute, it should start.
-    EXPECT_CALL(*m_client, removeUserGestureRequirement())
-        .Times(1);
-    EXPECT_CALL(*m_client, playInternal())
-        .Times(1);
+    // When we toggle the muted attribute, it should become eligible to start.
+    EXPECT_FALSE(m_helper->isGestureRequirementOverridden());
     setIsMuted(true);
-    m_helper->mutedChanged();
-
-    // When playback starts (in response to playInternal()), it should also
-    // record why.  'After scroll' isn't the best name, but this isn't a common case.
-    EXPECT_CALL(*m_client, recordAutoplayMetric(GesturelessPlaybackStartedByAutoplayFlagAfterScroll))
-        .Times(1);
-    startPlaybackWithoutUserGesture();
+    EXPECT_TRUE(m_helper->isGestureRequirementOverridden());
 }
 
 TEST_F(AutoplayExperimentTest, DeferPlaybackUntilInViewport)
@@ -425,12 +425,82 @@ TEST_F(AutoplayExperimentTest, DeferPlaybackUntilInViewport)
         .Times(1);
     m_helper->becameReadyToPlay();
 
-    EXPECT_CALL(*m_client, removeUserGestureRequirement())
-        .Times(1);
     EXPECT_CALL(*m_client, playInternal())
         .Times(1);
     EXPECT_CALL(*m_client, setRequestPositionUpdates(false))
         .Times(1);
     moveIntoViewport();
+    EXPECT_TRUE(m_helper->isGestureRequirementOverridden());
 }
+
+TEST_F(AutoplayExperimentTest, WithSameOriginTests)
+{
+    setInterface(new NiceMock<MockAutoplayClient>("enabled-forvideo-ifsameorigin", MockAutoplayClient::Video));
+    ON_CALL(*m_client, isCrossOrigin()).WillByDefault(Return(false));
+    EXPECT_TRUE(isEligible());
+    ON_CALL(*m_client, isCrossOrigin()).WillByDefault(Return(true));
+    EXPECT_FALSE(isEligible());
+}
+
+TEST_F(AutoplayExperimentTest, WithoutSameOriginTests)
+{
+    setInterface(new NiceMock<MockAutoplayClient>("enabled-forvideo", MockAutoplayClient::Video));
+    ON_CALL(*m_client, isCrossOrigin()).WillByDefault(Return(false));
+    EXPECT_TRUE(isEligible());
+    ON_CALL(*m_client, isCrossOrigin()).WillByDefault(Return(true));
+    EXPECT_TRUE(isEligible());
+}
+
+TEST_F(AutoplayExperimentTest, AudioPageVisibility)
+{
+    setInterface(new NiceMock<MockAutoplayClient>("enabled-foraudio-ifpagevisible", MockAutoplayClient::Audio));
+    ON_CALL(*m_client, pageVisibilityState()).WillByDefault(Return(PageVisibilityStateVisible));
+    EXPECT_TRUE(isEligible());
+    EXPECT_TRUE(meetsVisibilityRequirements());
+
+    ON_CALL(*m_client, pageVisibilityState()).WillByDefault(Return(PageVisibilityStateHidden));
+    EXPECT_TRUE(isEligible());
+    EXPECT_FALSE(meetsVisibilityRequirements());
+}
+
+TEST_F(AutoplayExperimentTest, PlayTwiceIsIgnored)
+{
+    setInterface(new NiceMock<MockAutoplayClient>("enabled-forvideo", MockAutoplayClient::Video));
+    setShouldAutoplay(false); // No autoplay attribute.
+
+    EXPECT_CALL(*m_client, recordAutoplayMetric(AutoplayMediaFound))
+        .Times(1);
+    m_helper->playMethodCalled();
+    ON_CALL(*m_client, paused()).WillByDefault(Return(false));
+    m_helper->playMethodCalled();
+}
+
+TEST_F(AutoplayExperimentTest, CrossOriginMutedTests)
+{
+    setInterface(new NiceMock<MockAutoplayClient>("enabled-forvideo-ifsameorigin-ormuted", MockAutoplayClient::Video));
+    ON_CALL(*m_client, isCrossOrigin()).WillByDefault(Return(true));
+
+    // Cross-orgin unmuted content should be eligible.
+    setIsMuted(true);
+    EXPECT_TRUE(isEligible());
+
+    // Cross-origin muted content should not be eligible.
+    setIsMuted(false);
+    EXPECT_FALSE(isEligible());
+
+    // Start playback.
+    EXPECT_CALL(*m_client, recordAutoplayMetric(AutoplayMediaFound))
+        .Times(1);
+    m_helper->becameReadyToPlay();
+    ON_CALL(*m_client, paused()).WillByDefault(Return(false));
+    setIsMuted(true);
+    m_helper->mutedChanged();
+
+    // Verify that unmuting pauses playback.
+    setIsMuted(false);
+    EXPECT_CALL(*m_client, pauseInternal())
+        .Times(1);
+    m_helper->mutedChanged();
+}
+
 }

@@ -20,7 +20,7 @@
 #include "ui/gl/test/gl_surface_test_support.h"
 
 #if defined(OS_WIN)
-#include "ui/gfx/win/dpi.h"
+#include "ui/display/win/dpi.h"
 #endif
 
 #if defined(OS_MACOSX)
@@ -29,11 +29,8 @@
 #endif
 
 #if defined(OS_ANDROID)
-#include "content/browser/android/in_process_surface_texture_manager.h"
-#endif
-
-#if defined(USE_OZONE)
-#include "ui/ozone/public/client_native_pixmap_factory.h"
+#include "content/browser/media/android/browser_media_player_manager.h"
+#include "gpu/ipc/client/android/in_process_surface_texture_manager.h"
 #endif
 
 namespace content {
@@ -75,7 +72,7 @@ void ContentTestSuite::Initialize() {
 #endif
 
 #if defined(OS_WIN)
-  gfx::SetDefaultDeviceScaleFactor(1.0f);
+  display::win::SetDefaultDeviceScaleFactor(1.0f);
 #endif
 
   ContentTestSuiteBase::Initialize();
@@ -101,14 +98,8 @@ void ContentTestSuite::Initialize() {
   listeners.Append(new TestInitializationListener);
 #if defined(OS_ANDROID)
   gpu::SurfaceTextureManager::SetInstance(
-      InProcessSurfaceTextureManager::GetInstance());
-#endif
-#if defined(USE_OZONE)
-  if (!is_child_process) {
-    client_native_pixmap_factory_ = ui::ClientNativePixmapFactory::Create();
-    ui::ClientNativePixmapFactory::SetInstance(
-        client_native_pixmap_factory_.get());
-  }
+      gpu::InProcessSurfaceTextureManager::GetInstance());
+  content::BrowserMediaPlayerManager::InitSurfaceTexturePeer();
 #endif
 }
 

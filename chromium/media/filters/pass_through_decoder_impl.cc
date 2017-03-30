@@ -62,10 +62,12 @@ scoped_refptr<VideoFrame> GetVideoFrameFromMemory(
 scoped_refptr<VideoFrame> GetVideoFrameFromTexture(
     const scoped_refptr<DecoderBuffer>& buffer,
     const VideoDecoderConfig& config,
-    scoped_ptr<media::PassThroughDecoderTexture> texture) {
+    std::unique_ptr<media::PassThroughDecoderTexture> texture) {
   DCHECK(texture);
-  return VideoFrame::WrapNativeTexture(PIXEL_FORMAT_ARGB,
-      *texture->mailbox_holder, texture->mailbox_holder_release_cb,
+   gpu::MailboxHolder mailbox_holders[media::VideoFrame::kMaxPlanes] = {
+       *texture->mailbox_holder};
+  return VideoFrame::WrapNativeTextures(PIXEL_FORMAT_ARGB,
+      mailbox_holders, texture->mailbox_holder_release_cb,
       config.coded_size(), config.visible_rect(), config.natural_size(),
       buffer->timestamp());
 }
@@ -157,7 +159,7 @@ PassThroughDecoderImpl<DemuxerStream::AUDIO>::DecoderBufferToOutputBuffer(
   const int frame_count = buffer->data_size() / config_.bytes_per_frame();
 
   typedef const uint8_t* ChannelData;
-  scoped_ptr<ChannelData[]> data(new ChannelData[channel_count]);
+  std::unique_ptr<ChannelData[]> data(new ChannelData[channel_count]);
   for (int channel = 0; channel < channel_count; ++channel)
     data[channel] = buffer->data() + channel * channel_size;
 
@@ -176,7 +178,7 @@ PassThroughDecoderImpl<DemuxerStream::VIDEO>::DecoderBufferToOutputBuffer(
     const scoped_refptr<DecoderBuffer>& buffer) const {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
-  scoped_ptr<AutoReleasedPassThroughDecoderTexture> wrapped_texture =
+  std::unique_ptr<AutoReleasedPassThroughDecoderTexture> wrapped_texture =
       buffer->PassWrappedTexture();
   if (wrapped_texture)
     return GetVideoFrameFromTexture(buffer, config_, wrapped_texture->Pass());

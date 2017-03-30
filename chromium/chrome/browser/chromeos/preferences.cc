@@ -94,6 +94,8 @@ void Preferences::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kOwnerTapToClickEnabled, true);
   registry->RegisterBooleanPref(prefs::kAccessibilityVirtualKeyboardEnabled,
                                 false);
+  registry->RegisterBooleanPref(prefs::kAccessibilityMonoAudioEnabled,
+                                false);
   registry->RegisterStringPref(prefs::kLogoutStartedLast, std::string());
   registry->RegisterBooleanPref(prefs::kResolveDeviceTimezoneByGeolocation,
                                 true);
@@ -179,6 +181,10 @@ void Preferences::RegisterProfilePrefs(
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(
       prefs::kAccessibilityVirtualKeyboardEnabled,
+      false,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterBooleanPref(
+      prefs::kAccessibilityMonoAudioEnabled,
       false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(
@@ -306,6 +312,9 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kForceMaximizeOnFirstRun, false);
 
   registry->RegisterBooleanPref(prefs::kLanguageImeMenuActivated, false);
+
+  registry->RegisterInt64Pref(prefs::kHatsLastInteractionTimestamp,
+                              base::Time().ToInternalValue());
 }
 
 void Preferences::InitUserPrefs(syncable_prefs::PrefServiceSyncable* prefs) {

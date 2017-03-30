@@ -6,12 +6,14 @@
 #define UI_EVENTS_EVENT_H_
 
 #include <stdint.h>
+
+#include <memory>
+
 #include "base/compiler_specific.h"
 #include "base/event_types.h"
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/gesture_event_details.h"
@@ -33,6 +35,7 @@ template <class P> struct ParamTraits;
 namespace ui {
 class EventTarget;
 class KeyEvent;
+class LocatedEvent;
 class MouseEvent;
 class MouseWheelEvent;
 class PointerEvent;
@@ -42,11 +45,11 @@ enum class DomCode;
 class Event;
 class MouseWheelEvent;
 
-using ScopedEvent = scoped_ptr<Event>;
+using ScopedEvent = std::unique_ptr<Event>;
 
 class EVENTS_EXPORT Event {
  public:
-  static scoped_ptr<Event> Clone(const Event& event);
+  static std::unique_ptr<Event> Clone(const Event& event);
 
   virtual ~Event();
 
@@ -228,6 +231,11 @@ class EVENTS_EXPORT Event {
   // must be true as a precondition to calling these methods.
   KeyEvent* AsKeyEvent();
   const KeyEvent* AsKeyEvent() const;
+
+  // Convenience methods to cast |this| to a LocatedEvent. IsLocatedEvent()
+  // must be true as a precondition to calling these methods.
+  LocatedEvent* AsLocatedEvent();
+  const LocatedEvent* AsLocatedEvent() const;
 
   // Convenience methods to cast |this| to a MouseEvent. IsMouseEvent()
   // must be true as a precondition to calling these methods.
@@ -859,7 +867,7 @@ class EVENTS_EXPORT KeyEvent : public Event {
   // native HWNDs or XEvents. And we can't reliably send those native data
   // types across mojo types in a cross-platform way. So instead, we set the
   // resulting data when read across IPC boundaries.
-  void SetExtendedKeyEventData(scoped_ptr<ExtendedKeyEventData> data);
+  void SetExtendedKeyEventData(std::unique_ptr<ExtendedKeyEventData> data);
   const ExtendedKeyEventData* extended_key_event_data() const {
     return extended_key_event_data_.get();
   }
@@ -972,7 +980,7 @@ class EVENTS_EXPORT KeyEvent : public Event {
   // windows and linux implementations of web_input_event in content/). Because
   // mojo instead serializes and deserializes events in potentially different
   // processes, we need to have a mechanism to keep track of this data.
-  scoped_ptr<ExtendedKeyEventData> extended_key_event_data_;
+  std::unique_ptr<ExtendedKeyEventData> extended_key_event_data_;
 
   static bool IsRepeated(const KeyEvent& event);
 

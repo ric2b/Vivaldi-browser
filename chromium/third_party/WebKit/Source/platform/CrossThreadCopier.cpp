@@ -55,12 +55,12 @@ CrossThreadCopier<ResourceError>::Type CrossThreadCopier<ResourceError>::copy(co
 
 CrossThreadCopier<ResourceRequest>::Type CrossThreadCopier<ResourceRequest>::copy(const ResourceRequest& request)
 {
-    return request.copyData();
+    return passed(request.copyData());
 }
 
 CrossThreadCopier<ResourceResponse>::Type CrossThreadCopier<ResourceResponse>::copy(const ResourceResponse& response)
 {
-    return response.copyData();
+    return passed(response.copyData());
 }
 
 // Test CrossThreadCopier using static_assert.
@@ -87,7 +87,7 @@ static_assert((std::is_same<
 
 
 // Add a generic specialization which will let's us verify that no other template matches.
-template<typename T> struct CrossThreadCopierBase<T, false, false, false> {
+template<typename T> struct CrossThreadCopierBase<T, false, false> {
     typedef int Type;
 };
 
@@ -119,12 +119,5 @@ static_assert((std::is_same<
     CrossThreadCopier<PassOwnPtr<float>>::Type
     >::value),
     "PassOwnPtr test");
-
-// Verify that PassOwnPtr does not get passed through.
-static_assert((std::is_same<
-    int,
-    CrossThreadCopier<OwnPtr<float>>::Type
-    >::value),
-    "OwnPtr test");
 
 } // namespace blink

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "base/command_line.h"
 #include "base/run_loop.h"
 #include "content/browser/media/session/media_session.h"
@@ -16,9 +18,8 @@ class MediaSessionDelegateAndroidBrowserTest : public ContentBrowserTest {};
 // MAYBE_OnAudioFocusChangeAfterDtorCrash will hit a DCHECK before the crash, it
 // is the only way found to actually reproduce the crash so as a result, the
 // test will only run on builds without DCHECK's.
-// TODO(mlamouri): the test is flaky on one bot. It is disabled until the cause
-// is found.
 #if defined(NDEBUG) && !defined(DCHECK_ALWAYS_ON)
+// TODO(crbug.com/602787) The test is flaky, disabling it everywhere.
 #define MAYBE_OnAudioFocusChangeAfterDtorCrash \
   DISABLED_OnAudioFocusChangeAfterDtorCrash
 #else
@@ -28,7 +29,7 @@ class MediaSessionDelegateAndroidBrowserTest : public ContentBrowserTest {};
 
 IN_PROC_BROWSER_TEST_F(MediaSessionDelegateAndroidBrowserTest,
                        MAYBE_OnAudioFocusChangeAfterDtorCrash) {
-  scoped_ptr<MockMediaSessionObserver> media_session_observer(
+  std::unique_ptr<MockMediaSessionObserver> media_session_observer(
       new MockMediaSessionObserver);
 
   MediaSession* media_session = MediaSession::Get(shell()->web_contents());

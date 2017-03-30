@@ -36,6 +36,7 @@
 #include "bindings/core/v8/V8Initializer.h"
 #include "core/animation/AnimationClock.h"
 #include "core/page/Page.h"
+#include "core/workers/WorkerBackingThread.h"
 #include "gin/public/v8_platform.h"
 #include "modules/ModulesInitializer.h"
 #include "platform/LayoutTestSupport.h"
@@ -44,8 +45,8 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebThread.h"
 #include "wtf/Assertions.h"
-#include "wtf/Partitions.h"
 #include "wtf/WTF.h"
+#include "wtf/allocator/Partitions.h"
 #include "wtf/text/AtomicString.h"
 #include "wtf/text/TextEncoding.h"
 #include <v8.h>
@@ -81,9 +82,9 @@ void initialize(Platform* platform)
 {
     Platform::initialize(platform);
 
-    modulesInitializer().initialize();
-
     V8Initializer::initializeMainThread();
+
+    modulesInitializer().initialize();
 
     // currentThread is null if we are running on a thread without a message loop.
     if (WebThread* currentThread = platform->currentThread()) {
@@ -106,9 +107,9 @@ void shutdown()
         s_endOfTaskRunner = nullptr;
     }
 
-    V8Initializer::shutdownMainThread();
-
     modulesInitializer().shutdown();
+
+    V8Initializer::shutdownMainThread();
 
     Platform::shutdown();
 }
@@ -174,6 +175,13 @@ void resetPluginCache(bool reloadPages)
 void decommitFreeableMemory()
 {
     WTF::Partitions::decommitFreeableMemory();
+}
+
+void MemoryPressureNotificationToWorkerThreadIsolates(
+    v8::MemoryPressureLevel level)
+{
+    WorkerBackingThread::
+        MemoryPressureNotificationToWorkerThreadIsolates(level);
 }
 
 } // namespace blink

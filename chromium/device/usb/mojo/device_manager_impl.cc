@@ -5,12 +5,11 @@
 #include "device/usb/mojo/device_manager_impl.h"
 
 #include <stddef.h>
+
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
-#include "base/location.h"
-#include "base/memory/scoped_ptr.h"
-#include "base/stl_util.h"
 #include "device/core/device_client.h"
 #include "device/usb/mojo/device_impl.h"
 #include "device/usb/mojo/permission_provider.h"
@@ -46,8 +45,8 @@ DeviceManagerImpl::DeviceManagerImpl(
       binding_(this, std::move(request)),
       weak_factory_(this) {
   // This object owns itself and will be destroyed if the message pipe it is
-  // bound to is closed or the UsbService is shut down.
-  binding_.set_connection_error_handler([this]() { delete this; });
+  // bound to is closed, the message loop is destructed, or the UsbService is
+  // shut down.
   observer_.Add(usb_service_);
 }
 
@@ -62,12 +61,6 @@ void DeviceManagerImpl::GetDevices(EnumerationOptionsPtr options,
                                       base::Passed(&options), callback));
 }
 
-void DeviceManagerImpl::GetDeviceChanges(
-    const GetDeviceChangesCallback& callback) {
-  device_change_callbacks_.push(callback);
-  MaybeRunDeviceChangesCallback();
-}
-
 void DeviceManagerImpl::GetDevice(
     const mojo::String& guid,
     mojo::InterfaceRequest<Device> device_request) {
@@ -75,12 +68,15 @@ void DeviceManagerImpl::GetDevice(
   if (!device)
     return;
 
-  DeviceInfoPtr device_info = DeviceInfo::From(*device);
   if (permission_provider_ &&
-      permission_provider_->HasDevicePermission(*device_info)) {
-    new DeviceImpl(device, std::move(device_info), permission_provider_,
+      permission_provider_->HasDevicePermission(device)) {
+    new DeviceImpl(device, DeviceInfo::From(*device), permission_provider_,
                    std::move(device_request));
   }
+}
+
+void DeviceManagerImpl::SetClient(DeviceManagerClientPtr client) {
+  client_ = std::move(client);
 }
 
 void DeviceManagerImpl::OnGetDevices(
@@ -94,10 +90,9 @@ void DeviceManagerImpl::OnGetDevices(
   mojo::Array<DeviceInfoPtr> device_infos;
   for (const auto& device : devices) {
     if (filters.empty() || UsbDeviceFilter::MatchesAny(device, filters)) {
-      DeviceInfoPtr device_info = DeviceInfo::From(*device);
       if (permission_provider_ &&
-          permission_provider_->HasDevicePermission(*device_info)) {
-        device_infos.push_back(std::move(device_info));
+          permission_provider_->HasDevicePermission(device)) {
+        device_infos.push_back(DeviceInfo::From(*device));
       }
     }
   }
@@ -106,43 +101,19 @@ void DeviceManagerImpl::OnGetDevices(
 }
 
 void DeviceManagerImpl::OnDeviceAdded(scoped_refptr<UsbDevice> device) {
-  DeviceInfoPtr device_info = DeviceInfo::From(*device);
-  if (permission_provider_ &&
-      permission_provider_->HasDevicePermission(*device_info)) {
-    devices_added_[device->guid()] = std::move(device_info);
-    MaybeRunDeviceChangesCallback();
-  }
+  if (client_ && permission_provider_ &&
+      permission_provider_->HasDevicePermission(device))
+    client_->OnDeviceAdded(DeviceInfo::From(*device));
 }
 
 void DeviceManagerImpl::OnDeviceRemoved(scoped_refptr<UsbDevice> device) {
-  if (devices_added_.erase(device->guid()) == 0) {
-    DeviceInfoPtr device_info = DeviceInfo::From(*device);
-    if (permission_provider_ &&
-        permission_provider_->HasDevicePermission(*device_info)) {
-      devices_removed_.push_back(std::move(device_info));
-      MaybeRunDeviceChangesCallback();
-    }
-  }
+  if (client_ && permission_provider_ &&
+      permission_provider_->HasDevicePermission(device))
+    client_->OnDeviceRemoved(DeviceInfo::From(*device));
 }
 
 void DeviceManagerImpl::WillDestroyUsbService() {
   delete this;
-}
-
-void DeviceManagerImpl::MaybeRunDeviceChangesCallback() {
-  if (!device_change_callbacks_.empty() &&
-      !(devices_added_.empty() && devices_removed_.empty())) {
-    DeviceChangeNotificationPtr notification = DeviceChangeNotification::New();
-    notification->devices_added.SetToEmpty();
-    notification->devices_removed.SetToEmpty();
-    for (auto& map_entry : devices_added_)
-      notification->devices_added.push_back(std::move(map_entry.second));
-    devices_added_.clear();
-    notification->devices_removed.Swap(&devices_removed_);
-
-    device_change_callbacks_.front().Run(std::move(notification));
-    device_change_callbacks_.pop();
-  }
 }
 
 }  // namespace usb

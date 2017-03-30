@@ -98,26 +98,6 @@ void InlineTextBoxPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& 
         drawingRecorder.emplace(paintInfo.context, m_inlineTextBox, DisplayItem::paintPhaseToDrawingType(paintInfo.phase), FloatRect(paintRect));
     }
 
-    if (m_inlineTextBox.truncation() != cNoTruncation) {
-        if (m_inlineTextBox.getLineLayoutItem().containingBlock().style()->isLeftToRightDirection() != m_inlineTextBox.isLeftToRightDirection()) {
-            // Make the visible fragment of text hug the edge closest to the rest of the run by moving the origin
-            // at which we start drawing text.
-            // e.g. In the case of LTR text truncated in an RTL Context, the correct behavior is:
-            // |Hello|CBA| -> |...He|CBA|
-            // In order to draw the fragment "He" aligned to the right edge of it's box, we need to start drawing
-            // farther to the right.
-            // NOTE: WebKit's behavior differs from that of IE which appears to just overlay the ellipsis on top of the
-            // truncated string i.e.  |Hello|CBA| -> |...lo|CBA|
-            LayoutUnit widthOfVisibleText = LayoutUnit(m_inlineTextBox.getLineLayoutItem().width(
-                m_inlineTextBox.start(), m_inlineTextBox.truncation(), m_inlineTextBox.textPos(),
-                m_inlineTextBox.isLeftToRightDirection() ? LTR : RTL, m_inlineTextBox.isFirstLineStyle()));
-            LayoutUnit widthOfHiddenText = m_inlineTextBox.logicalWidth() - widthOfVisibleText;
-            // FIXME: The hit testing logic also needs to take this translation into account.
-            LayoutSize truncationOffset(m_inlineTextBox.isLeftToRightDirection() ? widthOfHiddenText : -widthOfHiddenText, LayoutUnit());
-            adjustedPaintOffset.move(m_inlineTextBox.isHorizontal() ? truncationOffset : truncationOffset.transposedSize());
-        }
-    }
-
     GraphicsContext& context = paintInfo.context;
     const ComputedStyle& styleToUse = m_inlineTextBox.getLineLayoutItem().styleRef(m_inlineTextBox.isFirstLineStyle());
 
@@ -204,12 +184,17 @@ void InlineTextBoxPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& 
         textPainter.setCombinedText(combinedText);
 
     if (!paintSelectedTextOnly) {
-        // FIXME: Truncate right-to-left text correctly.
         int startOffset = 0;
         int endOffset = length;
         if (paintSelectedTextSeparately && selectionStart < selectionEnd) {
             startOffset = selectionEnd;
             endOffset = selectionStart;
+        }
+        // Where the text and its flow have opposite directions then our offset into the text given by |truncation| is at
+        // the start of the part that will be visible.
+        if (m_inlineTextBox.truncation() != cNoTruncation && m_inlineTextBox.getLineLayoutItem().containingBlock().style()->isLeftToRightDirection() != m_inlineTextBox.isLeftToRightDirection()) {
+            startOffset = m_inlineTextBox.truncation();
+            endOffset = textRun.length();
         }
 
         // FIXME: This cache should probably ultimately be held somewhere else.
@@ -857,11 +842,6 @@ void InlineTextBoxPainter::paintTextMatchMarkerBackground(const PaintInfo& paint
     if (!LineLayoutAPIShim::layoutObjectFrom(m_inlineTextBox.getLineLayoutItem())->frame()->editor().markedTextMatchesAreHighlighted())
         return;
 
-    // Use same y positioning and height as for selection, so that when the selection and this highlight are on
-    // the same word there are no pieces sticking out.
-    int deltaY = m_inlineTextBox.getLineLayoutItem().style()->isFlippedLinesWritingMode() ? m_inlineTextBox.root().selectionBottom() - m_inlineTextBox.logicalBottom() : m_inlineTextBox.logicalTop() - m_inlineTextBox.root().selectionTop();
-    int selHeight = m_inlineTextBox.root().selectionHeight();
-
     int sPos = std::max(marker->startOffset() - m_inlineTextBox.start(), (unsigned)0);
     int ePos = std::min(marker->endOffset() - m_inlineTextBox.start(), m_inlineTextBox.len());
     TextRun run = m_inlineTextBox.constructTextRun(style, font);
@@ -869,8 +849,10 @@ void InlineTextBoxPainter::paintTextMatchMarkerBackground(const PaintInfo& paint
     Color color = LayoutTheme::theme().platformTextSearchHighlightColor(marker->activeMatch());
     GraphicsContext& context = paintInfo.context;
     GraphicsContextStateSaver stateSaver(context);
-    context.clip(FloatRect(boxOrigin.x().toFloat(), (boxOrigin.y() - deltaY).toFloat(), m_inlineTextBox.logicalWidth().toFloat(), selHeight));
-    context.drawHighlightForText(font, run, FloatPoint(boxOrigin.x().toFloat(), (boxOrigin.y() - deltaY).toFloat()), selHeight, color, sPos, ePos);
+
+    LayoutRect boxRect(boxOrigin, LayoutSize(m_inlineTextBox.logicalWidth(), m_inlineTextBox.logicalHeight()));
+    context.clip(FloatRect(boxRect));
+    context.drawHighlightForText(font, run, FloatPoint(boxOrigin), boxRect.height(), color, sPos, ePos);
 }
 
 

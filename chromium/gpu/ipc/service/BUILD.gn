@@ -50,11 +50,13 @@ source_set("ipc_service_sources") {
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/gl",
+    "//ui/gl/init",
     "//url",
   ]
   deps = [
     "//gpu/command_buffer/common:common_sources",
     "//gpu/command_buffer/service:service_sources",
+    "//gpu/config:config_sources",
     "//gpu/ipc/common:ipc_common_sources",
   ]
   libs = []
@@ -67,25 +69,17 @@ source_set("ipc_service_sources") {
   }
   if (is_mac) {
     sources += [
-      "ca_layer_partial_damage_tree_mac.h",
-      "ca_layer_partial_damage_tree_mac.mm",
-      "ca_layer_tree_mac.h",
-      "ca_layer_tree_mac.mm",
       "gpu_memory_buffer_factory_io_surface.cc",
       "gpu_memory_buffer_factory_io_surface.h",
       "image_transport_surface_mac.mm",
       "image_transport_surface_overlay_mac.h",
       "image_transport_surface_overlay_mac.mm",
     ]
-    deps += [
-      "//skia",
-      "//ui/accelerated_widget_mac",
-    ]
+    deps += [ "//ui/accelerated_widget_mac" ]
     lib_dirs = [ "$mac_sdk_path/usr/lib" ]
     libs += [
-      "AVFoundation.framework",
-      "CoreMedia.framework",
       "QuartzCore.framework",
+      "CoreGraphics.framework",
     ]
   }
   if (is_android) {
@@ -123,6 +117,9 @@ source_set("test_support") {
     "//testing/gtest:gtest",
   ]
   deps = [
+    # TODO(markdittmer): Shouldn't depend on client code for server tests.
+    # See crbug.com/608800.
+    "//gpu/ipc/client",
     "//gpu/ipc/common",
   ]
 }
@@ -142,31 +139,27 @@ test("gpu_ipc_service_unittests") {
     "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//gpu/command_buffer/common",
+    "//gpu/command_buffer/common:gles2_utils",
     "//gpu/command_buffer/service",
     "//gpu/config",
     "//gpu/ipc/common",
     "//ipc:test_support",
     "//skia",
+    "//testing/gmock",
     "//testing/gtest",
     "//third_party/mesa:mesa_headers",
     "//ui/gfx:test_support",
+    "//ui/gl:gl_unittest_utils",
+    "//ui/gl:test_support",
     "//url",
   ]
   libs = []
   if (is_android) {
     sources += [ "gpu_memory_buffer_factory_surface_texture_unittest.cc" ]
+    deps += [ "//ui/android:ui_java" ]
   }
   if (is_mac) {
-    sources += [
-      "ca_layer_tree_unittest_mac.mm",
-      "gpu_memory_buffer_factory_io_surface_unittest.cc",
-    ]
-    deps += [ "//ui/accelerated_widget_mac" ]
-    libs += [
-      "AVFoundation.framework",
-      "CoreMedia.framework",
-      "QuartzCore.framework",
-    ]
+    sources += [ "gpu_memory_buffer_factory_io_surface_unittest.cc" ]
   }
   if (use_ozone) {
     sources += [ "gpu_memory_buffer_factory_ozone_native_pixmap_unittest.cc" ]

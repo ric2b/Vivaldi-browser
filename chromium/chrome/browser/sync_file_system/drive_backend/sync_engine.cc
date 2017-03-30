@@ -11,8 +11,8 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/drive/drive_notification_manager_factory.h"
@@ -50,6 +50,7 @@
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/storage_partition.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_system_provider.h"
 #include "extensions/browser/extensions_browser_client.h"
@@ -74,7 +75,6 @@ SyncEngine::DriveServiceFactory::CreateDriveService(
       drive::DriveServiceInterface>(new drive::DriveAPIService(
       oauth2_token_service, url_request_context_getter, blocking_task_runner,
       GURL(google_apis::DriveApiUrlGenerator::kBaseUrlForProduction),
-      GURL(google_apis::DriveApiUrlGenerator::kBaseDownloadUrlForProduction),
       GURL(google_apis::DriveApiUrlGenerator::kBaseThumbnailUrlForProduction),
       std::string() /* custom_user_agent */));
 }
@@ -194,7 +194,8 @@ std::unique_ptr<SyncEngine> SyncEngine::CreateForBrowserContext(
   OAuth2TokenService* token_service =
       ProfileOAuth2TokenServiceFactory::GetForProfile(profile);
   scoped_refptr<net::URLRequestContextGetter> request_context =
-      context->GetRequestContext();
+      content::BrowserContext::GetDefaultStoragePartition(context)->
+            GetURLRequestContext();
 
   std::unique_ptr<drive_backend::SyncEngine> sync_engine(new SyncEngine(
       ui_task_runner.get(), worker_task_runner.get(), drive_task_runner.get(),

@@ -20,8 +20,9 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/callback.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/time/tick_clock.h"
@@ -49,12 +50,30 @@ struct RtcpTimeData;
 
 // Following the initialization of either audio or video an initialization
 // status will be sent via this callback.
-typedef base::Callback<void(CastTransportStatus status)>
-    CastTransportStatusCallback;
+using CastTransportStatusCallback =
+    base::Callback<void(CastTransportStatus status)>;
 
-typedef base::Callback<void(scoped_ptr<std::vector<FrameEvent>>,
-                            scoped_ptr<std::vector<PacketEvent>>)>
-    BulkRawEventsCallback;
+using BulkRawEventsCallback =
+    base::Callback<void(std::unique_ptr<std::vector<FrameEvent>>,
+                        std::unique_ptr<std::vector<PacketEvent>>)>;
+
+// Interface to handle received RTCP messages on RTP sender.
+class RtcpObserver {
+ public:
+  virtual ~RtcpObserver() {}
+
+  // Called on receiving cast message from RTP receiver.
+  virtual void OnReceivedCastMessage(const RtcpCastMessage& cast_message) = 0;
+
+  // Called on receiving Rtt message from RTP receiver.
+  virtual void OnReceivedRtt(base::TimeDelta round_trip_time) = 0;
+
+  // Called on receiving PLI from RTP receiver.
+  virtual void OnReceivedPli() = 0;
+
+  // Called on receiving RTP receiver logs.
+  virtual void OnReceivedReceiverLog(const RtcpReceiverLogMessage& log) {}
+};
 
 // The application should only trigger this class from the transport thread.
 class CastTransport : public base::NonThreadSafe {
@@ -72,18 +91,18 @@ class CastTransport : public base::NonThreadSafe {
     // the configured logging flush interval passed to
     // CastTransport::Create().
     virtual void OnLoggingEventsReceived(
-        scoped_ptr<std::vector<FrameEvent>> frame_events,
-        scoped_ptr<std::vector<PacketEvent>> packet_events) = 0;
+        std::unique_ptr<std::vector<FrameEvent>> frame_events,
+        std::unique_ptr<std::vector<PacketEvent>> packet_events) = 0;
 
     // Called to pass RTP packets to the Client.
-    virtual void ProcessRtpPacket(scoped_ptr<Packet> packet) = 0;
+    virtual void ProcessRtpPacket(std::unique_ptr<Packet> packet) = 0;
   };
 
-  static scoped_ptr<CastTransport> Create(
+  static std::unique_ptr<CastTransport> Create(
       base::TickClock* clock,  // Owned by the caller.
       base::TimeDelta logging_flush_interval,
-      scoped_ptr<Client> client,
-      scoped_ptr<PacketTransport> transport,
+      std::unique_ptr<Client> client,
+      std::unique_ptr<PacketTransport> transport,
       const scoped_refptr<base::SingleThreadTaskRunner>& transport_task_runner);
 
   virtual ~CastTransport() {}
@@ -92,13 +111,9 @@ class CastTransport : public base::NonThreadSafe {
   // Encoded frames cannot be transmitted until the relevant initialize method
   // is called.
   virtual void InitializeAudio(const CastTransportRtpConfig& config,
-                               const RtcpCastMessageCallback& cast_message_cb,
-                               const RtcpRttCallback& rtt_cb,
-                               const RtcpPliCallback& pli_cb) = 0;
+                               std::unique_ptr<RtcpObserver> rtcp_observer) {}
   virtual void InitializeVideo(const CastTransportRtpConfig& config,
-                               const RtcpCastMessageCallback& cast_message_cb,
-                               const RtcpRttCallback& rtt_cb,
-                               const RtcpPliCallback& pli_cb) = 0;
+                               std::unique_ptr<RtcpObserver> rtcp_observer) {}
 
   // Encrypt, packetize and transmit |frame|. |ssrc| must refer to a
   // a channel already established with InitializeAudio / InitializeVideo.
@@ -116,11 +131,11 @@ class CastTransport : public base::NonThreadSafe {
   // |ssrc| is the SSRC for the stream.
   // |frame_ids| contains the IDs of the frames that will be cancelled.
   virtual void CancelSendingFrames(uint32_t ssrc,
-                                   const std::vector<uint32_t>& frame_ids) = 0;
+                                   const std::vector<FrameId>& frame_ids) = 0;
 
   // Resends a frame or part of a frame to kickstart. This is used when the
   // stream appears to be stalled.
-  virtual void ResendFrameForKickstart(uint32_t ssrc, uint32_t frame_id) = 0;
+  virtual void ResendFrameForKickstart(uint32_t ssrc, FrameId frame_id) = 0;
 
   // Returns a callback for receiving packets for testing purposes.
   virtual PacketReceiverCallback PacketReceiverForTesting();

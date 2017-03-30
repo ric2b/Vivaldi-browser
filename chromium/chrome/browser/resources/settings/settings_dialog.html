@@ -1,5 +1,5 @@
+<link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/iron-icons.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-dialog-behavior/paper-dialog-behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-dialog-behavior/paper-dialog-shared-styles.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
@@ -9,8 +9,9 @@
     <style include="paper-dialog-shared-styles"></style>
     <style>
       .body-content {
-        font-size: 1em;
-        margin: 20px 0;
+        display: flex;
+        flex-direction: column;
+        min-height: 120px;
       }
 
       .dialog-content {
@@ -27,30 +28,46 @@
 
       .top-row {
         align-items: center;
-        border-bottom: 1px solid var(--paper-grey-300);
+        border-bottom: 1px solid rgba(0, 0, 0, 0.14);
         display: flex;
-        padding-bottom: 5px;
-        padding-top: 5px;
+        min-height: 52px;
+      }
+
+      paper-icon-button {
+        height: 20px;
+        margin: 16px;
+        padding: 0;
+        width: 20px;
       }
 
       :host {
+        border-radius: 2px;
         max-width: 800px;
-        min-width: 500px;
+        min-width: 512px;
         overflow: auto;
       }
 
+      :host ::content .body,
+      :host ::content .footer,
+      :host ::content paper-button {
+        font-size: 92.86%; /* (13px / 14px) * 100 */
+      }
+
       :host ::content .body {
-        margin-bottom: 35px;
+        margin: 12px 0 24px 0;
       }
 
       :host ::content .button-container {
+        -webkit-padding-end: 16px;
+        -webkit-padding-start: 16px;
         display: flex;
         justify-content: flex-end;
+        margin-bottom: 12px;
       }
 
       :host ::content .button-container .cancel-button {
+        -webkit-margin-end: 8px;
         color: var(--paper-grey-600);
-        font-weight: 500;
       }
 
       :host ::content .footer {
@@ -70,20 +87,20 @@
       }
 
       :host ::content .title {
-        flex: 1;
-        font-size: 1.13em;
+        font-size: 114.28%; /* (16px / 14px) * 100 */
       }
 
-      :host ::content .title,
-      .body-content {
+      :host ::content .body,
+      :host ::content .title {
         -webkit-padding-end: 24px;
         -webkit-padding-start: 24px;
+        flex: 1;
       }
     </style>
     <div class="dialog-content">
       <div class="top-row">
         <content select=".title"></content>
-        <paper-icon-button icon="clear" on-tap="cancel" id="close">
+        <paper-icon-button icon="cr:clear" on-tap="cancel" id="close">
         </paper-icon-button>
       </div>
       <div class="body-content">

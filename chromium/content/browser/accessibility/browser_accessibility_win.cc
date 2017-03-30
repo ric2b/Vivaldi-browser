@@ -16,6 +16,7 @@
 #include "base/win/enum_variant.h"
 #include "base/win/scoped_comptr.h"
 #include "base/win/windows_version.h"
+#include "content/browser/accessibility/browser_accessibility_event_win.h"
 #include "content/browser/accessibility/browser_accessibility_manager_win.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
 #include "content/common/accessibility_messages.h"
@@ -2136,11 +2137,15 @@ STDMETHODIMP BrowserAccessibilityWin::get_textAtOffset(
 
   // According to the IA2 Spec, only line boundaries should succeed when
   // the offset is one past the end of the text.
-  if (offset == text_len && boundary_type != IA2_TEXT_BOUNDARY_LINE) {
-    *start_offset = 0;
-    *end_offset = 0;
-    *text = nullptr;
-    return S_FALSE;
+  if (offset == text_len) {
+    if (boundary_type == IA2_TEXT_BOUNDARY_LINE) {
+      --offset;
+    } else {
+      *start_offset = 0;
+      *end_offset = 0;
+      *text = nullptr;
+      return S_FALSE;
+    }
   }
 
   *start_offset = FindBoundary(
@@ -2521,7 +2526,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_valid(boolean* valid) {
 }
 
 //
-// IAccessibleAction mostly not implemented.
+// IAccessibleAction partly implemented.
 //
 
 STDMETHODIMP BrowserAccessibilityWin::nActions(long* n_actions) {
@@ -2531,18 +2536,29 @@ STDMETHODIMP BrowserAccessibilityWin::nActions(long* n_actions) {
   if (!n_actions)
     return E_INVALIDARG;
 
-  // Required for IAccessibleHyperlink::anchor/anchorTarget to work properly.
-  // TODO(nektar): Implement the rest of the logic required by this interface.
-  if (IsHyperlink())
+  // |IsHyperlink| is required for |IAccessibleHyperlink::anchor/anchorTarget|
+  // to work properly because the |IAccessibleHyperlink| interface inherits from
+  // |IAccessibleAction|.
+  if (IsHyperlink() || HasStringAttribute(ui::AX_ATTR_ACTION)) {
     *n_actions = 1;
-  else
+  } else {
     *n_actions = 0;
+  }
+
   return S_OK;
 }
 
 STDMETHODIMP BrowserAccessibilityWin::doAction(long action_index) {
-  return E_NOTIMPL;
+  if (!instance_active())
+    return E_FAIL;
+
+  if (!HasStringAttribute(ui::AX_ATTR_ACTION) || action_index != 0)
+    return E_INVALIDARG;
+
+  manager()->DoDefaultAction(*this);
+  return S_OK;
 }
+
 STDMETHODIMP
 BrowserAccessibilityWin::get_description(long action_index, BSTR* description) {
   return E_NOTIMPL;
@@ -2553,9 +2569,26 @@ STDMETHODIMP BrowserAccessibilityWin::get_keyBinding(long action_index,
                                                      long* n_bindings) {
   return E_NOTIMPL;
 }
+
 STDMETHODIMP BrowserAccessibilityWin::get_name(long action_index, BSTR* name) {
-  return E_NOTIMPL;
+  if (!instance_active())
+    return E_FAIL;
+
+  if (!name)
+    return E_INVALIDARG;
+
+  base::string16 action_verb;
+  if (!GetString16Attribute(ui::AX_ATTR_ACTION, &action_verb) ||
+      action_index != 0) {
+    *name = nullptr;
+    return E_INVALIDARG;
+  }
+
+  *name = SysAllocString(action_verb.c_str());
+  DCHECK(name);
+  return S_OK;
 }
+
 STDMETHODIMP
 BrowserAccessibilityWin::get_localizedName(long action_index,
                                            BSTR* localized_name) {
@@ -3380,6 +3413,36 @@ void BrowserAccessibilityWin::UpdateStep1ComputeWinAttributes() {
     win_attributes_->ia2_attributes.push_back(L"explicit-name:true");
   }
 
+  // Expose the aria-current attribute.
+  int32_t aria_current_state;
+  if (GetIntAttribute(ui::AX_ATTR_ARIA_CURRENT_STATE, &aria_current_state)) {
+    switch (static_cast<ui::AXAriaCurrentState>(aria_current_state)) {
+      case ui::AX_ARIA_CURRENT_STATE_NONE:
+        break;
+      case ui::AX_ARIA_CURRENT_STATE_FALSE:
+        win_attributes_->ia2_attributes.push_back(L"current:false");
+        break;
+      case ui::AX_ARIA_CURRENT_STATE_TRUE:
+        win_attributes_->ia2_attributes.push_back(L"current:true");
+        break;
+      case ui::AX_ARIA_CURRENT_STATE_PAGE:
+        win_attributes_->ia2_attributes.push_back(L"current:page");
+        break;
+      case ui::AX_ARIA_CURRENT_STATE_STEP:
+        win_attributes_->ia2_attributes.push_back(L"current:step");
+        break;
+      case ui::AX_ARIA_CURRENT_STATE_LOCATION:
+        win_attributes_->ia2_attributes.push_back(L"current:location");
+        break;
+      case ui::AX_ARIA_CURRENT_STATE_DATE:
+        win_attributes_->ia2_attributes.push_back(L"current:date");
+        break;
+      case ui::AX_ARIA_CURRENT_STATE_TIME:
+        win_attributes_->ia2_attributes.push_back(L"current:time");
+        break;
+    }
+  }
+
   // Expose table cell index.
   if (IsCellOrTableHeaderRole()) {
     BrowserAccessibility* table = GetParent();
@@ -3402,7 +3465,9 @@ void BrowserAccessibilityWin::UpdateStep1ComputeWinAttributes() {
   if ((ia_role() == ROLE_SYSTEM_COLUMNHEADER ||
       ia_role() == ROLE_SYSTEM_ROWHEADER) &&
       GetIntAttribute(ui::AX_ATTR_SORT_DIRECTION, &sort_direction)) {
-    switch (sort_direction) {
+    switch (static_cast<ui::AXSortDirection>(sort_direction)) {
+      case ui::AX_SORT_DIRECTION_NONE:
+        break;
       case ui::AX_SORT_DIRECTION_UNSORTED:
         win_attributes_->ia2_attributes.push_back(L"sort:none");
         break;
@@ -3415,8 +3480,6 @@ void BrowserAccessibilityWin::UpdateStep1ComputeWinAttributes() {
       case ui::AX_SORT_DIRECTION_OTHER:
         win_attributes_->ia2_attributes.push_back(L"sort:other");
         break;
-      default:
-        NOTREACHED();
     }
   }
 
@@ -3493,31 +3556,31 @@ void BrowserAccessibilityWin::UpdateStep2ComputeHypertext() {
 }
 
 void BrowserAccessibilityWin::UpdateStep3FireEvents(bool is_subtree_creation) {
-  BrowserAccessibilityManagerWin* manager =
-      this->manager()->ToBrowserAccessibilityManagerWin();
-
   // Fire an event when an alert first appears.
   if (ia_role() == ROLE_SYSTEM_ALERT &&
       old_win_attributes_->ia_role != ROLE_SYSTEM_ALERT) {
-    manager->NotifyAccessibilityEvent(ui::AX_EVENT_ALERT, this);
+    BrowserAccessibilityEvent::Create(
+        BrowserAccessibilityEvent::FromTreeChange,
+        ui::AX_EVENT_ALERT,
+        this)->Fire();
   }
 
   // Fire an event when a new subtree is created.
   if (is_subtree_creation)
-    manager->MaybeCallNotifyWinEvent(EVENT_OBJECT_SHOW, this);
+    FireNativeEvent(EVENT_OBJECT_SHOW);
 
   // The rest of the events only fire on changes, not on new objects.
   if (old_win_attributes_->ia_role != 0 ||
       !old_win_attributes_->role_name.empty()) {
     // Fire an event if the name, description, help, or value changes.
     if (name() != old_win_attributes_->name)
-      manager->MaybeCallNotifyWinEvent(EVENT_OBJECT_NAMECHANGE, this);
+      FireNativeEvent(EVENT_OBJECT_NAMECHANGE);
     if (description() != old_win_attributes_->description)
-      manager->MaybeCallNotifyWinEvent(EVENT_OBJECT_DESCRIPTIONCHANGE, this);
+      FireNativeEvent(EVENT_OBJECT_DESCRIPTIONCHANGE);
     if (value() != old_win_attributes_->value)
-      manager->MaybeCallNotifyWinEvent(EVENT_OBJECT_VALUECHANGE, this);
+      FireNativeEvent(EVENT_OBJECT_VALUECHANGE);
     if (ia_state() != old_win_attributes_->ia_state)
-      manager->MaybeCallNotifyWinEvent(EVENT_OBJECT_STATECHANGE, this);
+      FireNativeEvent(EVENT_OBJECT_STATECHANGE);
 
     // Normally focus events are handled elsewhere, however
     // focus for managed descendants is platform-specific.
@@ -3528,7 +3591,7 @@ void BrowserAccessibilityWin::UpdateStep3FireEvents(bool is_subtree_creation) {
         (ia_state() & STATE_SYSTEM_SELECTABLE) &&
         (ia_state() & STATE_SYSTEM_FOCUSED) &&
         !(old_win_attributes_->ia_state & STATE_SYSTEM_FOCUSED)) {
-      manager->MaybeCallNotifyWinEvent(EVENT_OBJECT_FOCUS, this);
+      FireNativeEvent(EVENT_OBJECT_FOCUS);
     }
 
     // Handle selection being added or removed.
@@ -3543,13 +3606,13 @@ void BrowserAccessibilityWin::UpdateStep3FireEvents(bool is_subtree_creation) {
       if (multiselect) {
         // In a multi-select box, fire SELECTIONADD and SELECTIONREMOVE events.
         if (is_selected_now && !was_selected_before) {
-          manager->MaybeCallNotifyWinEvent(EVENT_OBJECT_SELECTIONADD, this);
+          FireNativeEvent(EVENT_OBJECT_SELECTIONADD);
         } else if (!is_selected_now && was_selected_before) {
-          manager->MaybeCallNotifyWinEvent(EVENT_OBJECT_SELECTIONREMOVE, this);
+          FireNativeEvent(EVENT_OBJECT_SELECTIONREMOVE);
         }
       } else if (is_selected_now && !was_selected_before) {
         // In a single-select box, only fire SELECTION events.
-        manager->MaybeCallNotifyWinEvent(EVENT_OBJECT_SELECTION, this);
+        FireNativeEvent(EVENT_OBJECT_SELECTION);
       }
     }
 
@@ -3559,7 +3622,7 @@ void BrowserAccessibilityWin::UpdateStep3FireEvents(bool is_subtree_creation) {
     if (GetIntAttribute(ui::AX_ATTR_SCROLL_X, &sx) &&
         GetIntAttribute(ui::AX_ATTR_SCROLL_Y, &sy)) {
       if (sx != previous_scroll_x_ || sy != previous_scroll_y_)
-        manager->MaybeCallNotifyWinEvent(EVENT_SYSTEM_SCROLLINGEND, this);
+        FireNativeEvent(EVENT_SYSTEM_SCROLLINGEND);
       previous_scroll_x_ = sx;
       previous_scroll_y_ = sy;
     }
@@ -3570,12 +3633,12 @@ void BrowserAccessibilityWin::UpdateStep3FireEvents(bool is_subtree_creation) {
     if (old_len > 0) {
       // In-process screen readers may call IAccessibleText::get_oldText
       // in reaction to this event to retrieve the text that was removed.
-      manager->MaybeCallNotifyWinEvent(IA2_EVENT_TEXT_REMOVED, this);
+      FireNativeEvent(IA2_EVENT_TEXT_REMOVED);
     }
     if (new_len > 0) {
       // In-process screen readers may call IAccessibleText::get_newText
       // in reaction to this event to retrieve the text that was inserted.
-      manager->MaybeCallNotifyWinEvent(IA2_EVENT_TEXT_INSERTED, this);
+      FireNativeEvent(IA2_EVENT_TEXT_INSERTED);
     }
 
     // Changing a static text node can affect the IAccessibleText hypertext
@@ -3597,8 +3660,7 @@ void BrowserAccessibilityWin::UpdatePlatformAttributes() {
 }
 
 void BrowserAccessibilityWin::OnSubtreeWillBeDeleted() {
-  manager()->ToBrowserAccessibilityManagerWin()->MaybeCallNotifyWinEvent(
-      EVENT_OBJECT_HIDE, this);
+  FireNativeEvent(EVENT_OBJECT_HIDE);
 }
 
 void BrowserAccessibilityWin::NativeAddReference() {
@@ -3614,8 +3676,7 @@ bool BrowserAccessibilityWin::IsNative() const {
 }
 
 void BrowserAccessibilityWin::OnLocationChanged() {
-  manager()->ToBrowserAccessibilityManagerWin()->MaybeCallNotifyWinEvent(
-      EVENT_OBJECT_LOCATIONCHANGE, this);
+  FireNativeEvent(EVENT_OBJECT_LOCATIONCHANGE);
 }
 
 std::vector<base::string16> BrowserAccessibilityWin::ComputeTextAttributes()
@@ -3741,8 +3802,6 @@ std::vector<base::string16> BrowserAccessibilityWin::ComputeTextAttributes()
       }
       break;
     }
-    default:
-      NOTREACHED();
   }
 
   base::string16 language(GetInheritedString16Attribute(ui::AX_ATTR_LANGUAGE));
@@ -3787,8 +3846,6 @@ std::vector<base::string16> BrowserAccessibilityWin::ComputeTextAttributes()
       // Not listed in the IA2 Spec.
       attributes.push_back(L"writing-mode:bt");
       break;
-    default:
-      NOTREACHED();
   }
 
   return attributes;
@@ -4232,9 +4289,8 @@ ui::TextBoundaryType BrowserAccessibilityWin::IA2TextBoundaryToTextBoundary(
       return ui::PARAGRAPH_BOUNDARY;
     case IA2_TEXT_BOUNDARY_ALL:
       return ui::ALL_BOUNDARY;
-    default:
-      NOTREACHED();
   }
+  NOTREACHED();
   return ui::CHAR_BOUNDARY;
 }
 
@@ -4246,6 +4302,8 @@ LONG BrowserAccessibilityWin::FindBoundary(
   HandleSpecialTextOffset(text, &start_offset);
   if (ia2_boundary == IA2_TEXT_BOUNDARY_WORD)
     return GetWordStartBoundary(static_cast<int>(start_offset), direction);
+  if (ia2_boundary == IA2_TEXT_BOUNDARY_LINE)
+    return GetLineStartBoundary(static_cast<int>(start_offset), direction);
 
   ui::TextBoundaryType boundary = IA2TextBoundaryToTextBoundary(ia2_boundary);
   const std::vector<int32_t>& line_breaks =
@@ -4277,8 +4335,6 @@ LONG BrowserAccessibilityWin::FindStartOfStyle(
         return text_length;
       return static_cast<LONG>(iterator->first);
     }
-    default:
-      NOTREACHED();
   }
 
   return start_offset;
@@ -4390,6 +4446,14 @@ void BrowserAccessibilityWin::UpdateRequiredAttributes() {
     SanitizeStringAttributeForIA2(type, &type);
     win_attributes_->ia2_attributes.push_back(L"text-input-type:" + type);
   }
+}
+
+void BrowserAccessibilityWin::FireNativeEvent(LONG win_event_type) const {
+  (new BrowserAccessibilityEventWin(
+      BrowserAccessibilityEvent::FromTreeChange,
+      ui::AX_EVENT_NONE,
+      win_event_type,
+      this))->Fire();
 }
 
 void BrowserAccessibilityWin::InitRoleAndState() {

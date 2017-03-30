@@ -396,6 +396,13 @@ void PaintVectorIcon(Canvas* canvas,
   PaintPath(canvas, path, dip_size, color);
 }
 
+ImageSkia CreateVectorIcon(VectorIconId id, SkColor color) {
+  const PathElement* one_x_path = GetPathForVectorIconAt1xScale(id);
+  size_t size = one_x_path[0].type == CANVAS_DIMENSIONS ? one_x_path[1].arg
+                                                        : kReferenceSizeDip;
+  return CreateVectorIcon(id, size, color);
+}
+
 ImageSkia CreateVectorIcon(VectorIconId id, size_t dip_size, SkColor color) {
   return CreateVectorIconWithBadge(id, dip_size, color,
                                    VectorIconId::VECTOR_ICON_NONE);
@@ -405,7 +412,10 @@ ImageSkia CreateVectorIconWithBadge(VectorIconId id,
                                     size_t dip_size,
                                     SkColor color,
                                     VectorIconId badge_id) {
-  return g_icon_cache.Get().GetOrCreateIcon(id, dip_size, color, badge_id);
+  return (id == VectorIconId::VECTOR_ICON_NONE)
+             ? gfx::ImageSkia()
+             : g_icon_cache.Get().GetOrCreateIcon(id, dip_size, color,
+                                                  badge_id);
 }
 
 ImageSkia CreateVectorIconFromSource(const std::string& source,

@@ -35,12 +35,14 @@
 #include "platform/v8_inspector/DebuggerScript.h"
 #include "platform/v8_inspector/InspectedContext.h"
 #include "platform/v8_inspector/ScriptBreakpoint.h"
+#include "platform/v8_inspector/V8Compat.h"
 #include "platform/v8_inspector/V8DebuggerAgentImpl.h"
 #include "platform/v8_inspector/V8InspectorSessionImpl.h"
 #include "platform/v8_inspector/V8RuntimeAgentImpl.h"
 #include "platform/v8_inspector/V8StackTraceImpl.h"
 #include "platform/v8_inspector/V8StringUtil.h"
 #include "platform/v8_inspector/public/V8DebuggerClient.h"
+#include <v8-profiler.h>
 
 namespace blink {
 
@@ -266,16 +268,12 @@ void V8DebuggerImpl::setPauseOnExceptionsState(PauseOnExceptionsState pauseOnExc
 
 void V8DebuggerImpl::setPauseOnNextStatement(bool pause)
 {
-    ASSERT(!m_runningNestedMessageLoop);
+    if (m_runningNestedMessageLoop)
+        return;
     if (pause)
         v8::Debug::DebugBreak(m_isolate);
     else
         v8::Debug::CancelDebugBreak(m_isolate);
-}
-
-bool V8DebuggerImpl::pausingOnNextStatement()
-{
-    return v8::Debug::CheckDebugBreak(m_isolate);
 }
 
 bool V8DebuggerImpl::canBreakProgram()
@@ -299,14 +297,10 @@ void V8DebuggerImpl::breakProgram()
         return;
 
     v8::HandleScope scope(m_isolate);
-    if (m_breakProgramCallbackTemplate.IsEmpty()) {
-        v8::Local<v8::FunctionTemplate> templ = v8::FunctionTemplate::New(m_isolate);
-        templ->SetCallHandler(&V8DebuggerImpl::breakProgramCallback, v8::External::New(m_isolate, this));
-        m_breakProgramCallbackTemplate.Reset(m_isolate, templ);
-    }
-
-    v8::Local<v8::Function> breakProgramFunction = v8::Local<v8::FunctionTemplate>::New(m_isolate, m_breakProgramCallbackTemplate)->GetFunction();
-    v8::Debug::Call(debuggerContext(), breakProgramFunction).ToLocalChecked();
+    v8::Local<v8::Function> breakFunction;
+    if (!v8::Function::New(m_isolate->GetCurrentContext(), &V8DebuggerImpl::breakProgramCallback, v8::External::New(m_isolate, this), 0, v8::ConstructorBehavior::kThrow).ToLocal(&breakFunction))
+        return;
+    v8::Debug::Call(debuggerContext(), breakFunction).ToLocalChecked();
 }
 
 void V8DebuggerImpl::continueProgram()
@@ -409,7 +403,7 @@ bool V8DebuggerImpl::setScriptSource(const String16& sourceID, const String16& n
             *stackChanged = resultTuple->Get(1)->BooleanValue();
             // Call stack may have changed after if the edited function was on the stack.
             if (!preview && isPaused())
-                *newCallFrames = currentCallFrames();
+                newCallFrames->swap(currentCallFrames());
             return true;
         }
     // Compile error.
@@ -747,7 +741,7 @@ PassOwnPtr<V8InspectorSession> V8DebuggerImpl::connect(int contextGroupId)
     ASSERT(!m_sessions.contains(contextGroupId));
     OwnPtr<V8InspectorSessionImpl> session = V8InspectorSessionImpl::create(this, contextGroupId);
     m_sessions.set(contextGroupId, session.get());
-    return session.release();
+    return std::move(session);
 }
 
 void V8DebuggerImpl::disconnect(V8InspectorSessionImpl* session)
@@ -772,7 +766,7 @@ void V8DebuggerImpl::contextCreated(const V8ContextInfo& info)
 
     OwnPtr<InspectedContext> contextOwner = adoptPtr(new InspectedContext(this, info, contextId));
     InspectedContext* inspectedContext = contextOwner.get();
-    m_contexts.get(info.contextGroupId)->set(contextId, contextOwner.release());
+    m_contexts.get(info.contextGroupId)->set(contextId, std::move(contextOwner));
 
     if (V8InspectorSessionImpl* session = m_sessions.get(info.contextGroupId))
         session->runtimeAgentImpl()->reportExecutionContextCreated(inspectedContext);
@@ -799,6 +793,28 @@ void V8DebuggerImpl::resetContextGroup(int contextGroupId)
     if (V8InspectorSessionImpl* session = m_sessions.get(contextGroupId))
         session->reset();
     m_contexts.remove(contextGroupId);
+}
+
+void V8DebuggerImpl::willExecuteScript(v8::Local<v8::Context> context, int scriptId)
+{
+    if (V8DebuggerAgentImpl* agent = findEnabledDebuggerAgent(context))
+        agent->willExecuteScript(scriptId);
+}
+
+void V8DebuggerImpl::didExecuteScript(v8::Local<v8::Context> context)
+{
+    if (V8DebuggerAgentImpl* agent = findEnabledDebuggerAgent(context))
+        agent->didExecuteScript();
+}
+
+void V8DebuggerImpl::idleStarted()
+{
+    m_isolate->GetCpuProfiler()->SetIdle(true);
+}
+
+void V8DebuggerImpl::idleFinished()
+{
+    m_isolate->GetCpuProfiler()->SetIdle(false);
 }
 
 PassOwnPtr<V8StackTrace> V8DebuggerImpl::captureStackTrace(size_t maxStackSize)
@@ -828,6 +844,11 @@ const V8DebuggerImpl::ContextByIdMap* V8DebuggerImpl::contextGroup(int contextGr
     if (!m_contexts.contains(contextGroupId))
         return nullptr;
     return m_contexts.get(contextGroupId);
+}
+
+V8InspectorSessionImpl* V8DebuggerImpl::sessionForContextGroup(int contextGroupId)
+{
+    return contextGroupId ? m_sessions.get(contextGroupId) : nullptr;
 }
 
 } // namespace blink

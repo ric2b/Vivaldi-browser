@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chrome_build.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
 
@@ -14,8 +15,8 @@ group("blimp") {
 
   deps = [
     ":blimp_tests",
-    "//blimp/client:blimp_client",
-    "//blimp/common:blimp_common",
+    "//blimp/client",
+    "//blimp/common",
   ]
 
   if (is_android) {
@@ -27,9 +28,13 @@ group("blimp") {
 
   if (is_linux) {
     deps += [
-      "//blimp/engine:blimp_engine",
+      "//blimp/engine",
       "//blimp/engine:blimp_engine_bundle",
     ]
+
+    if (is_official_build) {
+      deps += [ "//blimp/engine:blimp_symbols" ]
+    }
   }
 
   if (is_linux && !is_chromeos && use_x11) {
@@ -48,6 +53,10 @@ group("blimp_tests") {
   if (is_android) {
     deps += [ "//blimp/client:blimp_test_apk" ]
   }
+
+  if (is_linux) {
+    deps += [ ":blimp_browsertests" ]
+  }
 }
 
 test("blimp_unittests") {
@@ -61,5 +70,13 @@ test("blimp_unittests") {
 
   if (is_linux) {
     deps += [ "//blimp/engine:unit_tests" ]
+  }
+}
+
+if (is_linux) {
+  test("blimp_browsertests") {
+    deps = [
+      "//blimp/test:engine_browsertests",
+    ]
   }
 }

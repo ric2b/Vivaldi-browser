@@ -20,6 +20,7 @@
 <translation id="112840717907525620">ನೀತಿಯ ಸಂಗ್ರಹ ಸರಿಯಾಗಿದೆ</translation>
 <translation id="113188000913989374"><ph name="SITE" /> ಹೀಗೆ ಹೇಳುತ್ತದೆ:</translation>
 <translation id="1132774398110320017">Chrome ಸ್ವಯಂತುಂಬುವಿಕೆ ಸೆಟ್ಟಿಂಗ್‌ಗಳು...</translation>
+<translation id="113770840981343808">ಪರಿಶೀಲನೆಗಾಗಿ ನಿಮ್ಮ ಕಾರ್ಡ್ ಮುಂಭಾಗದಲ್ಲಿರುವ 4-ಅಂಕಿ CVC ಅನ್ನು ನಮೂದಿಸಿ</translation>
 <translation id="1146673768181266552">ಕ್ರ್ಯಾಷ್ ID <ph name="CRASH_ID" /> (<ph name="CRASH_LOCAL_ID" />)</translation>
 <translation id="1150979032973867961">ಈ ಸರ್ವರ್ <ph name="DOMAIN" /> ಆಗಿದೆ ಎಂಬುದನ್ನು ಸಾಬೀತುಪಡಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ; ಅದರ ಸುರಕ್ಷತಾ ಪ್ರಮಾಣಪತ್ರವು ನಿಮ್ಮ ಸಾಧನದ ಆಪರೇಟಿಂಗ್ ಸಿಸ್ಟಮ್‌ ಪ್ರಕಾರ ವಿಶ್ವಾಸಾರ್ಹವಾಗಿಲ್ಲ. ಇದು ತಪ್ಪು ಕಾನ್ಫಿಗರೇಶನ್‌ನಿಂದ ಅಥವಾ ಆಕ್ರಮಣಕಾರರು ನಿಮ್ಮ ಸಂಪರ್ಕದಲ್ಲಿ ಒಳನುಸುಳಿರುವುದರಿಂದ ಆಗಿರಬಹುದು.</translation>
 <translation id="1152921474424827756"><ph name="URL" /> ನ <ph name="BEGIN_LINK" />ಸಂಗ್ರಹಿಸಲಾಗಿರುವ ನಕಲನ್ನು<ph name="END_LINK" /> ಪ್ರವೇಶಿಸಿ</translation>
@@ -38,9 +39,9 @@
 <translation id="1228893227497259893">ತಪ್ಪಾದ ಅಸ್ತಿತ್ವದ ಗುರುತು</translation>
 <translation id="1232569758102978740">ಶೀರ್ಷಿಕೆರಹಿತ</translation>
 <translation id="1254117744268754948">ಫೋಲ್ಡರ್ ಆರಿಸಿ</translation>
-<translation id="1270699273812232624">ಐಟಂಗಳನ್ನು ಅನುಮತಿಸು</translation>
 <translation id="1285320974508926690">ಈ ಸೈಟ್ ಅನ್ನು ಎಂದಿಗೂ ಭಾಷಾಂತರಿಸದಿರಿ</translation>
 <translation id="129553762522093515">ಇತ್ತೀಚೆಗೆ ಮುಚ್ಚಲಾಗಿರುವುದು</translation>
+<translation id="129863573139666797"><ph name="BEGIN_LINK" />ನಿಮ್ಮ ಕುಕೀಗಳನ್ನು ತೆರವುಗೊಳಿಸಲು ಪ್ರಯತ್ನಿಸಿ<ph name="END_LINK" /></translation>
 <translation id="1339601241726513588">ಡೊಮೇನ್ ದಾಖಲಾತಿ:</translation>
 <translation id="1344588688991793829">Chromium ಸ್ವಯಂತುಂಬುವಿಕೆ ಸೆಟ್ಟಿಂಗ್‌ಗಳು...</translation>
 <translation id="1374468813861204354">ಸಲಹೆಗಳು</translation>
@@ -85,7 +86,6 @@
 <translation id="1898423065542865115">ಫಿಲ್ಟರಿಂಗ್</translation>
 <translation id="1911837502049945214"><ph name="HOST_NAME" /> ನಿಮ್ಮ ಲಾಗಿನ್ ಪ್ರಮಾಣಪತ್ರವನ್ನು ಸ್ವೀಕರಿಸಲಿಲ್ಲ ಅಥವಾ ನಿಮ್ಮ ಲಾಗಿನ್ ಪ್ರಮಾಣಪತ್ರವು ಅವಧಿ ಮೀರಿರಬಹುದು.</translation>
 <translation id="194030505837763158"><ph name="LINK" /> ಗೆ ಹೋಗಿ</translation>
-<translation id="1958820272620550857">ಐಟಂಗಳನ್ನು ನಿರ್ಬಂಧಿಸು</translation>
 <translation id="1962204205936693436"><ph name="DOMAIN" /> ಬುಕ್‌ಮಾರ್ಕ್‌ಗಳು</translation>
 <translation id="1973335181906896915">ಅನುಕ್ರಮಗೊಳಿಸುವಿಕೆಯ ದೋಷ</translation>
 <translation id="1974060860693918893">ಸುಧಾರಿತ</translation>
@@ -118,7 +118,6 @@
 <translation id="2212735316055980242">ನೀತಿ ಕಂಡು ಬಂದಿಲ್ಲ</translation>
 <translation id="2213606439339815911">ನಮೂದುಗಳನ್ನು ಪಡೆಯಲಾಗುತ್ತಿದೆ...</translation>
 <translation id="2214283295778284209"><ph name="SITE" /> ಲಭ್ಯವಿಲ್ಲ</translation>
-<translation id="2227695659599072496">ನೆಟ್‌ವರ್ಕ್ ಕೇಬಲ್ ಅಥವಾ ರೂಟರ್ ಅನ್ನು ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ</translation>
 <translation id="2230458221926704099"><ph name="BEGIN_LINK" />ಡಯಾಗ್ನಸ್ಟಿಕ್ಸ್‌‌ ಅಪ್ಲಿಕೇಶನ್‌<ph name="END_LINK" /> ಬಳಸಿಕೊಂಡು ನಿಮ್ಮ ಸಂಪರ್ಕವನ್ನು ಸರಿಪಡಿಸಿ</translation>
 <translation id="225207911366869382">ಈ ನೀತಿಗಾಗಿ ಈ ಮೌಲ್ಯವನ್ನು ಅಸಮ್ಮತಿಸಲಾಗಿದೆ.</translation>
 <translation id="2262243747453050782">HTTP ದೋಷ</translation>
@@ -131,10 +130,11 @@
 <translation id="2317259163369394535"><ph name="DOMAIN" /> ಗೆ ಬಳಕೆದಾರಹೆಸರು ಮತ್ತು ಪಾಸ್‌ವರ್ಡ್ ಅಗತ್ಯವಿದೆ.</translation>
 <translation id="2328300916057834155">ಸೂಚ್ಯಂಕದಲ್ಲಿ <ph name="ENTRY_INDEX" /> ನಿರ್ಲಕ್ಷಿಸಲಾದ ಅಮಾನ್ಯ ಬುಕ್‌ಮಾರ್ಕ್‌</translation>
 <translation id="2354001756790975382">ಇತರ ಬುಕ್‌ಮಾರ್ಕ್‌ಗಳು</translation>
+<translation id="2357783041215512127"><ph name="CREDIT_CARD" /> ಮೂಲಕ ಪಾವತಿಸಿ</translation>
 <translation id="2359808026110333948">ಮುಂದುವರಿಸು</translation>
 <translation id="2367567093518048410">ಹಂತ</translation>
 <translation id="237718015863234333">ಯಾವುದೇ UI ಪರ್ಯಾಯಗಳು ಲಭ್ಯವಿಲ್ಲ</translation>
-<translation id="2384307209577226199">ಎಂಟರ್‌ಪ್ರೈಸ್ ಡೀಫಾಲ್ಟ್</translation>
+<translation id="2384307209577226199">ಎಂಟರ್‌ಪ್ರೈಸ್ ಡಿಫಾಲ್ಟ್</translation>
 <translation id="238526402387145295">ನೀವು ಸದ್ಯಕ್ಕೆ <ph name="SITE" /> ಗೆ ಭೇಟಿ ನೀಡಲು ಸಾಧ್ಯವಿಲ್ಲ. ಏಕೆಂದರೆ, ಆ ವೆಬ್‌ಸೈಟ್ <ph name="BEGIN_LINK" />HSTS ಬಳಸುತ್ತದೆ<ph name="END_LINK" />. ನೆಟ್‌ವರ್ಕ್ ದೋಷಗಳು ಮತ್ತು ಆಕ್ರಮಣಗಳು ತಾತ್ಕಾಲಿಕ, ಹಾಗಾಗಿ ಇದು ಸ್ವಲ್ಪ ಸಮಯದ ನಂತರ ಕಾರ್ಯ ನಿರ್ವಹಿಸಬಹುದು.</translation>
 <translation id="2386255080630008482">ಸರ್ವರ್‌ನ ಪ್ರಮಾಣಪತ್ರವನ್ನು ಹಿಂಪಡೆಯಲಾಗಿದೆ.</translation>
 <translation id="2392959068659972793">ಯಾವುದೇ ಮೌಲ್ಯ ಹೊಂದಿಸಿಲ್ಲದ ನೀತಿಗಳನ್ನು ತೋರಿಸಿ</translation>
@@ -195,6 +195,7 @@
 <translation id="2969319727213777354">ಸುರಕ್ಷಿತ ಸಂಪರ್ಕವನ್ನು ಸ್ಥಾಪಿಸಲು, ನಿಮ್ಮ ಗಡಿಯಾರವನ್ನು ಸರಿಯಾಗಿ ಹೊಂದಿಸಬೇಕಾದ ಅಗತ್ಯವಿದೆ. ವೆಬ್‌ಸೈಟ್‌ಗಳು ತಮ್ಮನ್ನು ಗುರುತಿಸಲು ಬಳಸುವ ಪ್ರಮಾಣಪತ್ರಗಳು ನಿರ್ದಿಷ್ಟ ಅವಧಿಗಳಲ್ಲಿ ಮಾತ್ರ ಮಾನ್ಯವಾಗಿರುವ ಕಾರಣ ಹೀಗಾಗುತ್ತದೆ. ನಿಮ್ಮ ಸಾಧನದ ಗಡಿಯಾರವು ತಪ್ಪಾಗಿರುವ ಕಾರಣ, Google Chrome ಗೆ ಈ ಪ್ರಮಾಣಪತ್ರಗಳನ್ನು ಪರಿಶೀಲಿಸಲು ಸಾಧ್ಯವಾಗುವುದಿಲ್ಲ.</translation>
 <translation id="2972581237482394796">&amp;ಮತ್ತೆಮಾಡು</translation>
 <translation id="2985306909656435243">ಸಕ್ರಿಯಗೊಳಿಸಿದ್ದರೆ, ವೇಗವಾಗಿ ಫಾರ್ಮ್ ಭರ್ತಿ ಮಾಡಲು Chromium ಈ ಸಾಧನದಲ್ಲಿ ನಿಮ್ಮ ಕಾರ್ಡ್‌ನ ಪ್ರತಿಯನ್ನು ಸಂಗ್ರಹಿಸುತ್ತದೆ.</translation>
+<translation id="2989984781570875765">ನಿಮ್ಮ <ph name="CREDIT_CARD" /> ನ ಮುಕ್ತಾಯದ ದಿನಾಂಕ ಮತ್ತು ಕಾರ್ಡ್‌ನ ಹಿಂದಿರುವ 3-ಅಂಕಿಯ CVC ಅನ್ನು ನಮೂದಿಸಿ</translation>
 <translation id="2991174974383378012">ವೆಬ್‌ಸೈಟ್‌ಗಳ ಜೊತೆಗೆ ಹಂಚಿಕೊಳ್ಳುವುದು</translation>
 <translation id="3005723025932146533">ಉಳಿಸಲಾದ ನಕಲನ್ನು ತೋರಿಸು</translation>
 <translation id="3010559122411665027">ಪಟ್ಟಿ ನಮೂದು "<ph name="ENTRY_INDEX" />": <ph name="ERROR" /></translation>
@@ -206,7 +207,6 @@
 <translation id="3105172416063519923">ಸ್ವತ್ತು ID:</translation>
 <translation id="3109728660330352905">ಈ ಪುಟ ವೀಕ್ಷಿಸುವ ಅಧಿಕಾರ ನಿಮಗಿಲ್ಲ</translation>
 <translation id="3118046075435288765">ಸಂಪರ್ಕವನ್ನು ಸರ್ವರ್ ಅನಿರೀಕ್ಷಿತವಾಗಿ ಮುಚ್ಚಿದೆ</translation>
-<translation id="31454997771848827">ಗುಂಪು ಡೊಮೇನ್‌ಗಳು</translation>
 <translation id="3145945101586104090">ಪ್ರತಿಕ್ರಿಯೆಯನ್ನು ಡೀಕೋಡ್ ಮಾಡಲು ವಿಫಲವಾಗಿದೆ</translation>
 <translation id="3147485256806412701">ಈ ಸೈಟ್ ಹೊಸ ಸಾರ್ವತ್ರಿಕ ಉನ್ನತ ಮಟ್ಟದ ಡೊಮೇನ್ ಬಳಸುತ್ತಿದೆ.</translation>
 <translation id="3150653042067488994">ತಾತ್ಕಾಲಿಕ ಸರ್ವರ್  ದೋಷ</translation>
@@ -225,7 +225,6 @@
 <translation id="3254409185687681395">ಈ ಪುಟ ಬುಕ್‌ಮಾರ್ಕ್ ಮಾಡಿ</translation>
 <translation id="3270847123878663523">&amp;ಮರುಕ್ರಮಗೊಳಿಸುವುದನ್ನು ರದ್ದುಗೊಳಿಸು</translation>
 <translation id="3286538390144397061">ಈಗ ಮರುಪ್ರಾರಂಭಿಸಿ</translation>
-<translation id="3288003805934695103">ಪುಟ ಮರುಲೋಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ</translation>
 <translation id="3305707030755673451">ನಿಮ್ಮ ಡೇಟಾವನ್ನು <ph name="TIME" /> ರಂದು ನಿಮ್ಮ ಸಿಂಕ್ ಪಾಸ್‌ಫ್ರೇಸ್‌ನೊಂದಿಗೆ ಎನ್‌ಕ್ರಿಪ್ಟ್ ಮಾಡಲಾಗಿದೆ. ಸಿಂಕ್ ಪ್ರಾರಂಭಿಸಲು ಅದನ್ನು ನಮೂದಿಸಿ.</translation>
 <translation id="333371639341676808">ಈ ಪುಟ ಹೆಚ್ಚುವರಿ ಸಂವಾದಗಳನ್ನು ರಚಿಸುವುದನ್ನು ತಡೆಯಿರಿ.</translation>
 <translation id="3340978935015468852">ಸೆಟ್ಟಿಂಗ್‌ಗಳು</translation>
@@ -257,6 +256,7 @@
 <translation id="3583757800736429874">&amp;ಸರಿಸುವುದನ್ನು ಮತ್ತೆಮಾಡು</translation>
 <translation id="3586931643579894722">ವಿವರಗಳನ್ನು ಮರೆಮಾಡಿ</translation>
 <translation id="3587482841069643663">ಎಲ್ಲ</translation>
+<translation id="3600246354004376029"><ph name="TITLE" />, <ph name="DOMAIN" />, <ph name="TIME" /></translation>
 <translation id="3608308818141211642">ಸಾಮಾನ್ಯ SSL ಪ್ರೊಟೋಕಾಲ್ ಆವೃತ್ತಿ ಅಥವಾ ಸೈಫರ್ ಸ್ಯೂಟ್ ಅನ್ನು ಕ್ಲೈಂಟ್ ಮತ್ತು ಸರ್ವರ್ ಬೆಂಬಲಿಸುವುದಿಲ್ಲ. ಇನ್ನು ಮುಂದೆ ಸುರಕ್ಷಿತವೆಂದು ಪರಿಗಣಿಸದೇ ಇರುವ RC4 ಎಂಬುದು ಸರ್ವರ್‌ಗೆ ಅಗತ್ಯವಾದ ಸಂದರ್ಭದಲ್ಲಿ ಇದು ಉಂಟಾಗಿರುವ ಸಾಧ್ಯತೆ ಇರುತ್ತದೆ.</translation>
 <translation id="3609138628363401169">ಸರ್ವರ್ TLS ಮರುಸಂಧಾನ ವಿಸ್ತರಣೆಯನ್ನು ಬೆಂಬಲಿಸುವುದಿಲ್ಲ.</translation>
 <translation id="362276910939193118">ಪೂರ್ಣ ಇತಿಹಾಸ ತೋರಿಸಿ</translation>
@@ -277,6 +277,7 @@
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />ಪ್ರಾಕ್ಸಿ, ಫೈರ್‌ವಾಲ್ ಮತ್ತು DNS ಕಾನ್ಫಿಗರೇಶನ್‌‌ ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ<ph name="END_LINK" /></translation>
 <translation id="3739623965217189342">ನೀವು ನಕಲಿಸಿದ ಲಿಂಕ್</translation>
 <translation id="3744899669254331632">ನೀವು ಇದೀಗ <ph name="SITE" /> ಗೆ ಭೇಟಿ ನೀಡಲು ಸಾಧ್ಯವಿಲ್ಲ ಏಕೆಂದರೆ ವೆಬ್‌ಸೈಟ್ Chromium ಗೆ ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲು ಸಾಧ್ಯವಾಗದ ಅವ್ಯವಸ್ಥಿತ ರುಜುವಾತುಗಳನ್ನು ಕಳುಹಿಸಿದೆ. ನೆಟ್‌ವರ್ಕ್ ದೋಷಗಳು ಮತ್ತು ಆಕ್ರಮಣಗಳು ಸಾಮಾನ್ಯವಾಗಿ ತಾತ್ಕಾಲಿಕವಾಗಿರುತ್ತವೆ, ಆದ್ದರಿಂದ ಈ ಪುಟವು ಬಹುಶಃ ನಂತರ ಕಾರ್ಯನಿರ್ವಹಿಸಬಹುದು.</translation>
+<translation id="3748071062818261683">ಕಾರ್ಡ್ ಪರಿಶೀಲಿಸಿ</translation>
 <translation id="3748412725338508953">ಅಲ್ಲಿ ಅತೀ ಹೆಚ್ಚು ಮರುನಿರ್ದೇಶನಗಳಿದ್ದವು</translation>
 <translation id="375403751935624634">ಸರ್ವರ್ ದೋಷದ ಕಾರಣ ಅನುವಾದವು ವಿಫಲವಾಗಿದೆ.</translation>
 <translation id="3759461132968374835">ಇತ್ತೀಚೆಗೆ ನೀವು ಯಾವುದೇ ಕ್ರ‍್ಯಾಶ್‌ಗಳನ್ನು ವರದಿ ಮಾಡಿಲ್ಲ. ಕ್ರ‍್ಯಾಶ್‌‌ ಅನ್ನು ವರದಿಮಾಡುವಿಕೆಯನ್ನು ಉಂಟಾಗಿರುವ  ಕ್ರ‍್ಯಾಶ್‌ಗಳು ಇಲ್ಲಿ ಗೋಚರಿಸುವುದಿಲ್ಲ.</translation>
@@ -296,7 +297,6 @@
 <translation id="3963721102035795474">ರೀಡರ್‌ ಮೋಡ್‌</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> ಅನ್ನು ನಿರ್ಬಂಧಿಸಲಾಗಿದೆ</translation>
 <translation id="4021036232240155012">DNS ಎನ್ನುವುದು ನೆಟ್‌ವರ್ಕ್ ಸೇವೆಯಾಗಿದ್ದು ಇದು ವೆಬ್‌ಸೈಟ್ ಹೆಸರನ್ನು ಅದರ ಇಂಟರ್ನೆಟ್ ವಿಳಾಸವಾಗಿ ಪರಿವರ್ತಿಸುತ್ತದೆ.</translation>
-<translation id="4021376465026729077">ನಿಮ್ಮ ವಿಸ್ತರಣೆಗಳನ್ನು ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗುತ್ತಿದೆ</translation>
 <translation id="4030383055268325496">&amp;ಸೇರಿಸುವುದನ್ನು ರದ್ದುಗೊಳಿಸಿ</translation>
 <translation id="4032534284272647190"><ph name="URL" /> ಗೆ ಪ್ರವೇಶವನ್ನು ನಿರಾಕರಿಸಲಾಗಿದೆ.</translation>
 <translation id="404928562651467259">ಎಚ್ಚರಿಕೆ</translation>
@@ -306,6 +306,7 @@
 <translation id="4103249731201008433">ಸಾಧನದ ಸರಣಿಯ ಸಂಖ್ಯೆ ಅಮಾನ್ಯವಾಗಿದೆ</translation>
 <translation id="4103763322291513355">ನಿಮ್ಮ ಸಿಸ್ಟಂ ನಿರ್ವಾಹಕರು ವಿಧಿಸಿರುವ ಕಪ್ಪುಪಟ್ಟಿಯ URLಗಳು ಮತ್ತು ಇತರ ನೀತಿಗಳನ್ನು ವೀಕ್ಷಿಸಲು &lt;strong&gt;chrome://policy&lt;/strong&gt; ಗೆ ಭೇಟಿ ನೀಡಿ.</translation>
 <translation id="4117700440116928470">ನೀತಿಯ ವ್ಯಾಪ್ತಿಯು ಬೆಂಬಲಿತವಾಗಿಲ್ಲ.</translation>
+<translation id="4130226655945681476">ನೆಟ್‌ವರ್ಕ್ ಕೇಬಲ್‌ಗಳು, ಮೊಡೆಮ್ ಮತ್ತು ರೂಟರ್ ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ</translation>
 <translation id="4147376274874979956">ಫೈಲ್ ಅನ್ನು ಪ್ರವೇಶಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ.</translation>
 <translation id="4148925816941278100">American Express</translation>
 <translation id="4169947484918424451">ಈ ಕಾರ್ಡ್ ಅನ್ನು Chromium ಉಳಿಸಬೇಕೆಂದು ನೀವು ಬಯಸುವಿರಾ?</translation>
@@ -319,7 +320,6 @@
 <translation id="4258748452823770588">ತಪ್ಪಾದ ಸಹಿ</translation>
 <translation id="4268298190799576220">ಈ ಸಮಯದಲ್ಲಿ Chromium ಗೆ ನಿಮ್ಮ ಕಾರ್ಡ್ ಪರಿಶೀಲಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.</translation>
 <translation id="4269787794583293679">(ಯಾವುದು ಬಳಕೆದಾರಹೆಸರಿಲ್ಲ)</translation>
-<translation id="4278390842282768270">ಅನುಮತಿಸಲಾಗಿದೆ</translation>
 <translation id="4300246636397505754">ಪೋಷಕ ಸಲಹೆಗಳು</translation>
 <translation id="4304224509867189079">ಲಾಗ್ ಇನ್</translation>
 <translation id="4325863107915753736">ಲೇಖನ ಕಂಡುಬರಲಿಲ್ಲ</translation>
@@ -341,11 +341,15 @@
 <translation id="450710068430902550">ನಿರ್ವಾಹಕರೊಂದಿಗೆ ಹಂಚಿಕೊಳ್ಳುವುದು</translation>
 <translation id="4522570452068850558">ವಿವರಗಳು</translation>
 <translation id="4535734014498033861">ಪ್ರಾಕ್ಸಿ ಸರ್ವರ್ ಸಂಪರ್ಕ ವಿಫಲವಾಗಿದೆ.</translation>
+<translation id="4553532082208702698">ನಿಮ್ಮ <ph name="CREDIT_CARD" /> ಮುಂಭಾಗದಲ್ಲಿರುವ 4-ಅಂಕಿಯ CVC ಅನ್ನು ನಮೂದಿಸಿ</translation>
+<translation id="4558551763791394412">ನಿಮ್ಮ ವಿಸ್ತರಣೆಗಳನ್ನು ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲು ಪ್ರಯತ್ನಿಸಿ.</translation>
 <translation id="4587425331216688090">Chrome ನಿಂದ ವಿಳಾಸವನ್ನು ತೆಗೆದುಹಾಕುವುದೇ?</translation>
 <translation id="4592951414987517459">ಆಧುನಿಕ ಸೈಫರ್ ಸೂಟ್ ಬಳಸುವ ಮೂಲಕ <ph name="DOMAIN" /> ಗೆ ನಿಮ್ಮ ಸಂಪರ್ಕವನ್ನು ಎನ್‌ಕ್ರಿಪ್ಟ್ ಮಾಡಲಾಗಿದೆ.</translation>
 <translation id="4594403342090139922">&amp;ಅಳಿಸುವುದನ್ನು ರದ್ದುಗೊಳಿಸಿ</translation>
 <translation id="4668929960204016307">,</translation>
+<translation id="4670097147947922288">ನೀವು ವಿಸ್ತರಣೆಯ ಪುಟವನ್ನು ವೀಕ್ಷಿಸುತ್ತಿರುವಿರಿ.</translation>
 <translation id="467662567472608290">ಈ ಸರ್ವರ್ <ph name="DOMAIN" /> ಆಗಿದೆ ಎಂಬುದನ್ನು ಸಾಬೀತುಪಡಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ; ಅದರ ಸುರಕ್ಷತಾ ಪ್ರಮಾಣಪತ್ರದಲ್ಲಿ ಸಾಕಷ್ಟು ದೋಷಗಳಿವೆ. ಇದು ತಪ್ಪು ಕಾನ್ಫಿಗರೇಶನ್‌ನಿಂದ ಅಥವಾ ಆಕ್ರಮಣಕಾರರು ನಿಮ್ಮ ಸಂಪರ್ಕದಲ್ಲಿ ಒಳನುಸುಳಿರುವುದರಿಂದ ಆಗಿರಬಹುದು.</translation>
+<translation id="4683417246209150705">ನಿಮ್ಮ <ph name="CREDIT_CARD" /> ನ ಹಿಂಭಾಗದಲ್ಲಿರುವ 3-ಅಂಕಿಯ CVC ಅನ್ನು ನಮೂದಿಸಿ</translation>
 <translation id="4697214168136963651"><ph name="URL" /> ಅನ್ನು ನಿರ್ಬಂಧಿಸಲಾಗಿದೆ</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">ನಿಮ್ಮ ಸಂಪರ್ಕಕ್ಕೆ ಅಡ್ಡಿಯಾಗಿದೆ</translation>
@@ -376,7 +380,7 @@
 <translation id="5029568752722684782">ನಕಲು ತೆರವುಗೊಳಿಸು</translation>
 <translation id="5031870354684148875">Google ಅನುವಾದದ ಕುರಿತು</translation>
 <translation id="5040262127954254034">ಗೌಪ್ಯತೆ</translation>
-<translation id="5045550434625856497">ತಪ್ಪಾದ ಪಾಸ್‌ವರ್ಡ್</translation>
+<translation id="5045550434625856497">ತಪ್ಪು ಪಾಸ್‌ವರ್ಡ್</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />ಪ್ರಾಕ್ಸಿ ವಿಳಾಸವನ್ನು ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ<ph name="END_LINK" /></translation>
 <translation id="5087286274860437796">ಈ ಸಮಯದಲ್ಲಿ ಸರ್ವರ್‌ನ ಪ್ರಮಾಣಪತ್ರ ಮಾನ್ಯವಾಗಿಲ್ಲ.</translation>
 <translation id="5089810972385038852">ರಾಜ್ಯ</translation>
@@ -395,7 +399,6 @@
 <translation id="5251803541071282808">ಮೇಘ</translation>
 <translation id="5299298092464848405">ನೀತಿಯ ಪಾರ್ಸಿಂಗ್‌ನಲ್ಲಿ ದೋಷ</translation>
 <translation id="5300589172476337783">ಪ್ರದರ್ಶಿಸಿ</translation>
-<translation id="5307361445257083764"><ph name="BEGIN_LINK" />ನಿಮ್ಮ ಕುಕೀಗಳನ್ನು ತೆರವುಗೊಳಿಸಲಾಗುತ್ತಿದೆ<ph name="END_LINK" /></translation>
 <translation id="5308689395849655368">ಕ್ರ‍್ಯಾಶ್‌‌ ವರದಿಯನ್ನು ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ.</translation>
 <translation id="5317780077021120954">ಉಳಿಸು</translation>
 <translation id="5327248766486351172">ಹೆಸರು</translation>
@@ -406,7 +409,6 @@
 <translation id="5431657950005405462">ನಿಮ್ಮ ಫೈಲ್ ಕಂಡುಬಂದಿಲ್ಲ</translation>
 <translation id="5435775191620395718">ಈ ಸಾಧನದಿಂದ ಇತಿಹಾಸವನ್ನು ತೋರಿಸಲಾಗುತ್ತಿದೆ. <ph name="BEGIN_LINK" />ಇನ್ನಷ್ಟು ತಿಳಿಯಿರಿ<ph name="END_LINK" />.</translation>
 <translation id="5439770059721715174">"<ph name="ERROR_PATH" />" ನಲ್ಲಿ ಸ್ಕೀಮಾ ಮೌಲ್ವೀಕರಣ ದೋಷ: <ph name="ERROR" /></translation>
-<translation id="5447330194051379405">ಎಲ್ಲಾ ಉಳಿಸಿದ ಪುಟಗಳನ್ನು ತೋರಿಸು</translation>
 <translation id="5452270690849572955">ಈ <ph name="HOST_NAME" /> ಪುಟ ಕಂಡುಬರುವುದಿಲ್ಲ</translation>
 <translation id="5455374756549232013">ತಪ್ಪಾದ ನೀತಿಯ ಸಮಯಸ್ಟ್ಯಾಂಪ್</translation>
 <translation id="5455790498993699893"><ph name="TOTAL_MATCHCOUNT" /> ರಲ್ಲಿ <ph name="ACTIVE_MATCH" /></translation>
@@ -430,7 +432,10 @@
 <translation id="5629630648637658800">ನೀತಿಯ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಲೋಡ್ ಮಾಡುವಲ್ಲಿ ವಿಫಲವಾಗಿದೆ</translation>
 <translation id="5631439013527180824">ಅಮಾನ್ಯವಾದ ಸಾಧನ ನಿರ್ವಹಣೆ ಟೋಕನ್</translation>
 <translation id="5650551054760837876">ಯಾವುದೇ ಫಲಿತಾಂಶಗಳು ಕಂಡುಬಂದಿಲ್ಲ.</translation>
+<translation id="5663999524854166235">ಪರಿಶೀಲನೆಗಾಗಿ ನಿಮ್ಮ ಕಾರ್ಡ್ ಹಿಂಭಾಗದಲ್ಲಿರುವ 3-ಅಂಕಿಗಳ CVC ಅನ್ನು ನಮೂದಿಸಿ</translation>
 <translation id="5677928146339483299">ನಿರ್ಬಂಧಿಸಲಾಗಿದೆ</translation>
+<translation id="5696590819423335174">ನಿಮ್ಮ <ph name="CREDIT_CARD" /> ಮುಂಭಾಗದಲ್ಲಿರುವ ಮುಕ್ತಾಯದ ದಿನಾಂಕ ಮತ್ತು 4-ಅಂಕಿಯ CVC ಅನ್ನು ನಮೂದಿಸಿ</translation>
+<translation id="5699278517904102888">ಪರಿಶೀಲನೆಗಾಗಿ ನಿಮ್ಮ <ph name="CREDIT_CARD" /> ನ ಹಿಂಭಾಗದಲ್ಲಿರುವ 3-ಅಂಕಿಗಳ CVC ಅನ್ನು ನಮೂದಿಸಿ</translation>
 <translation id="5710435578057952990">ಈ ವೆಬ್‌ಸೈಟ್‌ನ ಗುರುತಿಸುವಿಕೆಯನ್ನು ಇನ್ನೂ ಪರಿಶೀಲಿಸಲಾಗಿಲ್ಲ.</translation>
 <translation id="5720705177508910913">ಪ್ರಸ್ತುತ ಬಳಕೆದಾರ</translation>
 <translation id="5785756445106461925">ಅಲ್ಲದೇ, ಸುರಕ್ಷಿತವಲ್ಲದ ಸಂಪನ್ಮೂಲಗಳನ್ನು ಈ ಪುಟ ಒಳಗೊಂಡಿದೆ. ಪ್ರಯಾಣದ ಸಂದರ್ಭದಲ್ಲಿ ಈ ಸಂಪನ್ಮೂಲಗಳನ್ನು ಇತರರೂ ವೀಕ್ಷಿಸಬಹುದಾಗಿದೆ ಮತ್ತು ಪುಟದ ನೋಟವೇ ಬದಲಾಗುವಂತೆ ಆಕ್ರಮಣಕಾರರು ಅದನ್ನು ತಿದ್ದಬಹುದಾಗಿದೆ.</translation>
@@ -485,7 +490,7 @@
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> ಸಂಪರ್ಕಗೊಳ್ಳಲು ನಿರಾಕರಿಸಿದೆ.</translation>
 <translation id="6445051938772793705">ರಾಷ್ಟ್ರ</translation>
 <translation id="6451458296329894277">ಮರುಸಲ್ಲಿಕೆ ಫಾರ್ಮ್ ಅನ್ನು ಖಚಿತಪಡಿಸಿಕೊಳ್ಳಿ</translation>
-<translation id="6458467102616083041">ಡೀಫಾಲ್ಟ್ ಹುಡುಕಾಟವನ್ನು ನೀತಿಯಿಂದ ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿರುವುದರಿಂದ ನಿರ್ಲಕ್ಷಿಸಲಾಗಿದೆ.</translation>
+<translation id="6458467102616083041">ಡಿಫಾಲ್ಟ್ ಹುಡುಕಾಟವನ್ನು ನೀತಿಯಿಂದ ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿರುವುದರಿಂದ ನಿರ್ಲಕ್ಷಿಸಲಾಗಿದೆ.</translation>
 <translation id="647261751007945333">ಸಾಧನ ನೀತಿಗಳು</translation>
 <translation id="6489534406876378309">ವಿಫಲತೆಗಳನ್ನು ಅಪ್‌ಲೋಡ್‌ ಮಾಡುವುದನ್ನು ಪ್ರಾರಂಭಿಸು</translation>
 <translation id="6500116422101723010">ವಿನಂತಿಯನ್ನು ನಿರ್ವಹಿಸಲು ಸರ್ವರ್‌ಗೆ ಪ್ರಸ್ತುತ ಸಾಧ್ಯವಿಲ್ಲ. ಇದು ತಾತ್ಕಾಲಿಕ ಸ್ಥಿತಿಯೆಂದು  ಈ ಕೋಡ್ ಸೂಚಿಸುತ್ತದೆ ಮತ್ತು ತುಸು ಸಮಯದ ಬಳಿಕ ಸರ್ವರ್ ಮತ್ತೆ ಕ್ರಿಯಾಶೀಲವಾಗುತ್ತದೆ. </translation>
@@ -500,7 +505,6 @@
 <translation id="6628463337424475685"><ph name="ENGINE" /> ಹುಡುಕಾಟ</translation>
 <translation id="6634865548447745291">ನೀವು <ph name="SITE" /> ಗೆ ಭೇಟಿ ನೀಡಲು ಸಾಧ್ಯವಿಲ್ಲ. ಏಕೆಂದರೆ <ph name="BEGIN_LINK" />ಈ ಪ್ರಮಾಣಪತ್ರವನ್ನು ಹಿಂಪಡೆದುಕೊಳ್ಳಲಾಗಿದೆ<ph name="END_LINK" />. ನೆಟ್‌ವರ್ಕ್ ದೋಷಗಳು ಮತ್ತು ಆಕ್ರಮಣಗಳು ತಾತ್ಕಾಲಿಕ, ಹೀಗಾಗಿ ಈ ಪುಟವು ಸ್ವಲ್ಪ ಸಮಯದ ನಂತರ ಕಾರ್ಯ ನಿರ್ವಹಿಸಬಹುದು.</translation>
 <translation id="6637478299472506933">ಡೌನ್‌ಲೋಡ್ ವಿಫಲವಾಗಿದೆ</translation>
-<translation id="6642894344118208103">ಮೋಡೆಮ್‌ ಅಥವಾ ರೂಟರ್‌ ಮರುಹೊಂದಿಸಲಾಗುತ್ತಿದೆ</translation>
 <translation id="6644283850729428850">ಈ ನೀತಿಯನ್ನು ವಿನಂತಿಸಲಾಗಿದೆ.</translation>
 <translation id="6646897916597483132">ನಿಮ್ಮ ಕಾರ್ಡ್ ಮುಂಭಾಗದಲ್ಲಿರುವ 4-ಅಂಕಿ CVC ಅನ್ನು ನಮೂದಿಸಿ</translation>
 <translation id="6656103420185847513">ಫೋಲ್ಡರ್ ಸಂಪಾದಿಸಿ</translation>
@@ -515,7 +519,6 @@
 <translation id="6753269504797312559">ನೀತಿ ಮೌಲ್ಯ</translation>
 <translation id="6757797048963528358">ನಿಮ್ಮ ಸಾಧನವು ನಿದ್ರಾವಸ್ಥೆಗೆ ಹೋಗಿದೆ.</translation>
 <translation id="6781404225664080496">ಈ URL ವಿನಂತಿಗಳನ್ನು ತಾತ್ಕಾಲಿಕವಾಗಿ ನಿಯಂತ್ರಿಸಲಾಗಿದೆ.</translation>
-<translation id="6800914069727136216">ಸಂದರ್ಭಕ್ಕನುಗುಣವಾದ ಪ್ಯಾಕ್</translation>
 <translation id="6820686453637990663">CVC</translation>
 <translation id="6830600606572693159"><ph name="URL" /> ರಲ್ಲಿ ವೆಬ್‌ಪುಟವು ಪ್ರಸ್ತುತ ಲಭ್ಯವಿಲ್ಲ. ನಿರ್ವಹಣೆಗಾಗಿ ಇದು ಓವರ್ ಲೋಡ್ ಆಗಿರಬಹುದು ಅಥವಾ ಸ್ಥಗಿತಗೊಂಡಿರಬಹುದು. </translation>
 <translation id="6831043979455480757">ಅನುವಾದಿಸು</translation>
@@ -553,7 +556,6 @@
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> ಭದ್ರತೆ ಮಾನದಂಡಗಳನ್ನು ಅನುಸರಿಸುತ್ತಿಲ್ಲ.</translation>
 <translation id="721197778055552897">ಈ ತೊಂದರೆಯ ಬಗ್ಗೆ <ph name="BEGIN_LINK" />ಇನ್ನಷ್ಟು ತಿಳಿಯಿರಿ<ph name="END_LINK" />.</translation>
 <translation id="7219179957768738017">ಸಂಪರ್ಕವು <ph name="SSL_VERSION" /> ಅನ್ನು ಬಳಸುತ್ತದೆ.</translation>
-<translation id="7225807090967870017">ID ಯನ್ನು ನಿರ್ಮಿಸಿ</translation>
 <translation id="7231308970288859235">ಓಹ್! ಈ ಪುಟಕ್ಕೆ ಭೇಟಿ ನೀಡುವುದು ಸರಿಯೇ ಎಂದು ನೀವು ನಿಮ್ಮ ಪೋಷಕರನ್ನು ಕೇಳಬೇಕಾಗುತ್ತದೆ.</translation>
 <translation id="7246609911581847514">ನಿಮ್ಮ ಮೊದಲ ಭೇಟಿಯಲ್ಲಿ ನಿಮ್ಮ ವ್ಯವಸ್ಥಾಪಕರು ಹೊಸ ಸೈಟ್‌ಗಳನ್ನು ಅಂಗೀಕರಿಸಬೇಕಾಗಿರುವ ಕಾರಣ ನೀವು ಈ ಸಂದೇಶವನ್ನು ವೀಕ್ಷಿಸುತ್ತಿರುವಿರಿ.</translation>
 <translation id="725866823122871198">ನಿಮ್ಮ ಕಂಪ್ಯೂಟರ್‌ನ ದಿನಾಂಕ ಮತ್ತು ಸಮಯ (<ph name="DATE_AND_TIME" />) ತಪ್ಪಾಗಿರುವುದರಿಂದ <ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> ಗೆ ಖಾಸಗಿ ಸಂಪರ್ಕವನ್ನು ಸ್ಥಾಪಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ.</translation>
@@ -594,6 +596,7 @@
 <translation id="7610193165460212391">ಮೌಲ್ಯವು ವ್ಯಾಪ್ತಿಯಿಂದ <ph name="VALUE" /> ಹೊರಗಿದೆ.</translation>
 <translation id="7613889955535752492">ಅವಧಿ ಮೀರುವ ಸಮಯ: <ph name="EXPIRATION_MONTH" />/<ph name="EXPIRATION_YEAR" /></translation>
 <translation id="7615602087246926389">ನಿಮ್ಮ Google ಖಾತೆಯ ಪಾಸ್‌ವರ್ಡ್‌ನ ಬೇರೆ ಆವೃತ್ತಿಯನ್ನು ಬಳಸಿಕೊಂಡು ಎನ್‌ಕ್ರಿಪ್ಟ್ ಮಾಡಲಾದ ಡೇಟಾವನ್ನು ನೀವು ಈಗಾಗಲೇ ಹೊಂದಿರುವಿರಿ. ದಯವಿಟ್ಟು  ಕೆಳಗೆ ಇದನ್ನು ನಮೂದಿಸಿ.</translation>
+<translation id="7633887239437305289">ಪರಿಶೀಲನೆಗಾಗಿ ನಿಮ್ಮ <ph name="CREDIT_CARD" /> ಮುಂಭಾಗದಲ್ಲಿರುವ 4-ಅಂಕಿಯ CVC ಅನ್ನು ನಮೂದಿಸಿ</translation>
 <translation id="7634554953375732414">ಈ ಸೈಟ್‌ಗೆ ನಿಮ್ಮ ಸಂಪರ್ಕವು ಖಾಸಗಿಯಾಗಿಲ್ಲ.</translation>
 <translation id="7637571805876720304">Chromium ನಿಂದ ಕ್ರೆಡಿಟ್ ಕಾರ್ಡ್ ತೆಗೆದುಹಾಕುವುದೇ?</translation>
 <translation id="7643817847124207232">ಇಂಟರ್ನೆಟ್ ಸಂಪರ್ಕವು ನಷ್ಟವಾಗಿದೆ.</translation>
@@ -601,7 +604,6 @@
 <translation id="7658239707568436148">ರದ್ದುಮಾಡು</translation>
 <translation id="7668654391829183341">ಅಜ್ಞಾತ ಸಾಧನ</translation>
 <translation id="7674629440242451245">ಉತ್ತಮವಾದ ಹೊಸ Chrome ವೈಶಿಷ್ಟ್ಯಗಳಲ್ಲಿ ಆಸಕ್ತಿ ಇದೆಯೇ? chrome.com/dev ನಲ್ಲಿ ನಮ್ಮ dev ಚಾನಲ್ ಪ್ರಯತ್ನಿಸಿ.</translation>
-<translation id="769344199378576125">ಆಫ್‌ಲೈನ್ ಬುಕ್‌ಮಾರ್ಕ್‌ಗಳನ್ನು ತೋರಿಸು</translation>
 <translation id="7704050614460855821"><ph name="BEGIN_LINK" /><ph name="SITE" /> ಗೆ (ಅಸುರಕ್ಷಿತ) ಮುಂದುವರೆಸು<ph name="END_LINK" /></translation>
 <translation id="7716424297397655342">ಸಂಗ್ರಹದಿಂದ ಈ ಸೈಟ್ ಲೋಡ್ ಮಾಡಲಾಗುವುದಿಲ್ಲ</translation>
 <translation id="7733391738235763478">(<ph name="NUMBER_VISITS" />)</translation>
@@ -648,6 +650,7 @@
 <translation id="8225771182978767009">ಈ ಕಂಪ್ಯೂಟರ್ ಹೊಂದಿಸಿರುವ ವ್ಯಕ್ತಿಯು ಈ ಸೈಟ್ ನಿರ್ಬಂಧಿಸಲು ಆಯ್ಕೆಮಾಡಿದ್ದಾರೆ.</translation>
 <translation id="8241707690549784388">ನೀವು ಎದುರು ನೋಡುತ್ತಿರುವ ಪುಟ ನೀವು ನಮೂದಿಸಿದ ಮಾಹಿತಿಯನ್ನು ಬಳಸಿದೆ. ಆ ಪುಟಕ್ಕೆ ಹಿಂದಿರುಗುವುದರಿಂದ ನೀವು ಮಾಡಿದ ಯಾವುದೇ ಕ್ರಿಯೆ ಪುನರಾವರ್ತಿಸುವಂತೆ ಮಾಡುತ್ತದೆ. ನೀವು ಮುಂದುವರಿಸಲು ಬಯಸುತ್ತೀರಾ?</translation>
 <translation id="8249320324621329438">ಕಳೆದ ಬಾರಿ ಪಡೆದಿರುವುದು:</translation>
+<translation id="8261506727792406068">ಅಳಿಸು</translation>
 <translation id="8266098793847448402"><ph name="BEGIN_BOLD" />ಪ್ರಾರಂಭ<ph name="END_BOLD" />,
       ಕ್ಲಿಕ್ ಮಾಡಿ
       <ph name="BEGIN_BOLD" />ರನ್<ph name="END_BOLD" /> ಕ್ಲಿಕ್ ಮಾಡಿ,
@@ -691,7 +694,7 @@
 <translation id="8740359287975076522"><ph name="HOST_NAME" /> ನ &lt;abbr id="dnsDefinition"&gt;DNS ವಿಳಾಸ&lt;/abbr&gt; ಕಂಡುಬರಲಿಲ್ಲ. ಸಮಸ್ಯೆಯನ್ನು ಪತ್ತೆಹಚ್ಚಲಾಗುತ್ತಿದೆ.</translation>
 <translation id="8741995161408053644">ನಿಮ್ಮ Google ಖಾತೆಯು <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" /> ನಲ್ಲಿ ಬ್ರೌಸಿಂಗ್ ಇತಿಹಾಸದ ಇತರ ಪ್ರಕಾರಗಳನ್ನು ಹೊಂದಿರಬಹುದು.</translation>
 <translation id="8790007591277257123">&amp;ಅಳಿಸುವುದನ್ನು ಮತ್ತೆಮಾಡು</translation>
-<translation id="8798099450830957504">ಡೀಫಾಲ್ಟ್</translation>
+<translation id="8798099450830957504">ಡಿಫಾಲ್ಟ್</translation>
 <translation id="8804164990146287819">ಗೌಪ್ಯತಾ ನೀತಿ</translation>
 <translation id="88201174049725495">ಈ URL ಗೆ ವಿಸ್ತರಣೆಯು ಮಾಡುತ್ತಿರುವ ಭೇಟಿಗಳನ್ನು ತಾತ್ಕಾಲಿಕವಾಗಿ ನಿಯಂತ್ರಿಸಲಾಗಿದೆ.</translation>
 <translation id="8820817407110198400">ಬುಕ್‌ಮಾರ್ಕ್‌ಗಳು</translation>

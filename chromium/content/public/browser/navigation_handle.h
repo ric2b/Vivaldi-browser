@@ -5,7 +5,8 @@
 #ifndef CONTENT_PUBLIC_BROWSER_NAVIGATION_HANDLE_H_
 #define CONTENT_PUBLIC_BROWSER_NAVIGATION_HANDLE_H_
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
 #include "content/common/content_export.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/common/referrer.h"
@@ -15,6 +16,7 @@
 class GURL;
 
 namespace content {
+class NavigationData;
 class NavigationThrottle;
 class RenderFrameHost;
 class WebContents;
@@ -45,6 +47,14 @@ class CONTENT_EXPORT NavigationHandle {
   // Whether the navigation is taking place in a frame that is a direct child
   // of the main frame. This remains constant over the navigation lifetime.
   virtual bool IsParentMainFrame() = 0;
+
+  // Whether the navigation was initated by the renderer process. Examples of
+  // renderer-initiated navigations include:
+  //  * <a> link click
+  //  * changing window.location.href
+  //  * redirect via the <meta http-equiv="refresh"> tag
+  //  * using window.history.pushState
+  virtual bool IsRendererInitiated() = 0;
 
   // Whether the navigation is synchronous or not. Examples of synchronous
   // navigations are:
@@ -139,7 +149,7 @@ class CONTENT_EXPORT NavigationHandle {
   //
   // The following methods should be used exclusively for writing unit tests.
 
-  static scoped_ptr<NavigationHandle> CreateNavigationHandleForTesting(
+  static std::unique_ptr<NavigationHandle> CreateNavigationHandleForTesting(
       const GURL& url,
       RenderFrameHost* render_frame_host);
 
@@ -151,7 +161,7 @@ class CONTENT_EXPORT NavigationHandle {
   // ContentBrowserClient::CreateThrottlesForNavigation. This ensures proper
   // ordering of the throttles.
   virtual void RegisterThrottleForTesting(
-      scoped_ptr<NavigationThrottle> navigation_throttle) = 0;
+      std::unique_ptr<NavigationThrottle> navigation_throttle) = 0;
 
   // Simulates the network request starting.
   virtual NavigationThrottle::ThrottleCheckResult
@@ -167,6 +177,11 @@ class CONTENT_EXPORT NavigationHandle {
                                     bool new_method_is_post,
                                     const GURL& new_referrer_url,
                                     bool new_is_external_protocol) = 0;
+
+  // The NavigationData that the embedder returned from
+  // ResourceDispatcherHostDelegate::GetNavigationData during commit. This will
+  // be a clone of the NavigationData.
+  virtual NavigationData* GetNavigationData() = 0;
 };
 
 }  // namespace content

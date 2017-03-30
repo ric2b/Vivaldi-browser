@@ -53,6 +53,7 @@
 <translation id="2673087257647337101">Aggiornamento quasi completato. Riavvia Chromium per terminare l'aggiornamento.</translation>
 <translation id="2685838254101182273">Chromium non verrà più aggiornato e non supporta più questa versione del sistema operativo.</translation>
 <translation id="2705212601509139398">Questo sito utilizza il plug-in Chromium Frame che a breve non sarà più supportato. Disinstallalo e scarica un browser compatibile.</translation>
+<translation id="2711502716910134313">Scheda Chromium</translation>
 <translation id="2770231113462710648">Cambia browser predefinito con:</translation>
 <translation id="2801146392936645542"><ph name="FILE_NAME" /> è dannoso ed è stato bloccato da Chromium.</translation>
 <translation id="2847479871509788944">Rimuovi da Chromium...</translation>
@@ -66,7 +67,6 @@
 <translation id="3130323860337406239">Chromium sta utilizzando il microfono.</translation>
 <translation id="313551035350905294">Stai per accedere con un account gestito e per dare al relativo amministratore il controllo del tuo profilo Chromium. I tuoi dati di Chromium, come app, Preferiti, cronologia, password e altre impostazioni, verranno collegati definitivamente a <ph name="USER_NAME" />. Potrai eliminare questi dati tramite la Dashboard di Google Account, ma non potrai associare questi dati a un altro account.</translation>
 <translation id="3190315855212034486">Spiacenti, si è verificato un arresto anomalo di Chromium. Riavviarlo ora?</translation>
-<translation id="3197823471738295152">Il dispositivo è aggiornato.</translation>
 <translation id="3244477511402911926">Centro notifiche di Chromium</translation>
 <translation id="3256316712990552818">Copiata in Chromium</translation>
 <translation id="3258596308407688501">Chromium non è in grado di leggere e scrivere nella directory dei dati:
@@ -120,6 +120,7 @@
 <translation id="549669000822060376">Attendi mentre Chromium installa gli aggiornamenti di sistema più recenti.</translation>
 <translation id="5563479599352954471">Ricerca con un tocco</translation>
 <translation id="5620765574781326016">Leggi gli argomenti sui siti web senza uscire dalla pagina.</translation>
+<translation id="5634636535844844681">Chromium richiede Windows 7 o versioni successive.</translation>
 <translation id="5680901439334282664">accedi a Chromium</translation>
 <translation id="5772805321386874569">(è necessario <ph name="BEGIN_BUTTON" />riavviare<ph name="END_BUTTON" /> Chromium)</translation>
 <translation id="5796460469508169315">Chromium è quasi pronto.</translation>
@@ -179,6 +180,12 @@ Chromium non è in grado di recuperare le impostazioni.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7339898014177206373">Nuova finestra</translation>
 <translation id="734373864078049451">I tuoi siti web, i tuoi segnalibri e gli altri contenuti Chromium sempre disponibili e aggiornati qui.</translation>
+<translation id="7344413941077984497">Per impostare i siti web che <ph name="NEW_PROFILE_NAME" /> potrà visitare, puoi configurare limitazioni e impostazioni visitando la pagina <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. Se non cambi le impostazioni predefinite, <ph name="NEW_PROFILE_NAME" /> potrà visitare qualsiasi sito web.
+
+Per impedire a <ph name="NEW_PROFILE_NAME" /> di accedere al tuo account, assicurati di bloccare il tuo profilo quando non utilizzi Chromium. A tale scopo, fai clic sul nome del tuo profilo nell'angolo in alto a destra del browser e seleziona "Esci e blocca".
+<ph name="BEGIN_LINK_2" />Ulteriori informazioni<ph name="END_LINK_2" />
+
+Per ulteriori informazioni, controlla l'email all'indirizzo <ph name="ACCOUNT_EMAIL" />.</translation>
 <translation id="7419987137528340081">Se preferisci tenere separati i tuoi dati Chromium esistenti, puoi creare un nuovo utente Chromium per <ph name="USER_NAME" />.</translation>
 <translation id="7421823331379285070">Chromium richiede Windows XP o versioni successive. Alcune funzioni potrebbero non essere disponibili.</translation>
 <translation id="7463979740390522693">Chromium - Notifiche (<ph name="QUANTITY" /> da leggere)</translation>
@@ -207,6 +214,7 @@ Chromium non è in grado di recuperare le impostazioni.</translation>
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> The Chromium Authors. Tutti i diritti riservati.</translation>
 <translation id="8621669128220841554">Installazione non riuscita a causa di un errore imprecisato. Scarica di nuovo Chromium.</translation>
 <translation id="8628626585870903697">Chromium non include il visualizzatore PDF necessario per la funzione Anteprima di stampa.</translation>
+<translation id="8667808506758191620">Il dispositivo <ph name="DEVICE_TYPE" /> è aggiornato.</translation>
 <translation id="8697124171261953979">Controlla anche la pagina visualizzata all'avvio di Chromium o quando esegui ricerche dalla Omnibox.</translation>
 <translation id="8704119203788522458">Questo è il tuo account Chromium</translation>
 <translation id="872034308864968620">Lascia Chromium in esecuzione in background</translation>
@@ -223,7 +231,6 @@ Chromium non è in grado di recuperare le impostazioni.</translation>
 
 Se esegui comunque l'accesso, le informazioni di Chromium come Preferiti, cronologia e altre impostazioni verranno unite a quelle di <ph name="ACCOUNT_EMAIL_NEW" />.</translation>
 <translation id="9013087743919948559">Aggiungi a Chromium</translation>
-<translation id="9013262824292842194">Chromium richiede Windows Vista o Windows XP con SP2 o versioni successive.</translation>
 <translation id="9019929317751753759">Per rendere Chromium più sicuro, abbiamo disattivato la seguente estensione non presente nel <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> che potrebbe essere stata aggiunta a tua insaputa.</translation>
 <translation id="9022552996538154597">Accedi a Chromium</translation>
 <translation id="9036189287518468038">Avvio applicazioni di Chromium</translation>

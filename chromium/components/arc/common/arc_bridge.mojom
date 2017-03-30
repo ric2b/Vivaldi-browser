@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-module arc;
+module arc.mojom;
 
 import "app.mojom";
 import "audio.mojom";
@@ -11,14 +11,15 @@ import "bluetooth.mojom";
 import "clipboard.mojom";
 import "crash_collector.mojom";
 import "ime.mojom";
-import "input.mojom";
 import "intent_helper.mojom";
+import "metrics.mojom";
 import "net.mojom";
 import "notifications.mojom";
 import "policy.mojom";
 import "power.mojom";
 import "process.mojom";
 import "video.mojom";
+import "window_manager.mojom";
 
 interface ArcBridgeHost {
   // Keep the entries alphabetical. In order to do so without breaking
@@ -47,12 +48,12 @@ interface ArcBridgeHost {
   // Notifies Chrome that the ImeInstance interface is ready.
   [MinVersion=3] OnImeInstanceReady@110(ImeInstance instance_ptr);
 
-  // Notifies Chrome that the InputInstance interface is ready.
-  OnInputInstanceReady@101(InputInstance instance_ptr);
-
   // Notifies Chrome that the IntentHelperInstance interface is ready.
   [MinVersion=4] OnIntentHelperInstanceReady@111(
       IntentHelperInstance instance_ptr);
+
+  // Notifies Chrome that the MetricsInstance interface is ready.
+  [MinVersion=10] OnMetricsInstanceReady@116(MetricsInstance instance_ptr);
 
   // Notifies Chrome that the NetInstance interface is ready.
   [MinVersion=5] OnNetInstanceReady@108(NetInstance instance_ptr);
@@ -71,6 +72,9 @@ interface ArcBridgeHost {
 
   // Notifies Chrome that the VideoInstance interface is ready.
   [MinVersion=6] OnVideoInstanceReady@107(VideoInstance instance_ptr);
+  
+  // Notifies Android of entering / exiting TouchView.
+  [MinVersion=11] OnWindowManagerInstanceReady@117(WindowManagerInstance instance_ptr);
 };
 
 interface ArcBridgeInstance {

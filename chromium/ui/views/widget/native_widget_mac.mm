@@ -119,6 +119,7 @@ int NativeWidgetMac::SheetPositionY() {
 
 void NativeWidgetMac::InitNativeWidget(const Widget::InitParams& params) {
   ownership_ = params.ownership;
+  name_ = params.name;
   base::scoped_nsobject<NSWindow> window([CreateNSWindow(params) retain]);
   [window setReleasedWhenClosed:NO];  // Owned by scoped_nsobject.
   bridge_->Init(window, params);
@@ -305,6 +306,10 @@ gfx::Rect NativeWidgetMac::GetRestoredBounds() const {
   return bridge_ ? bridge_->GetRestoredBounds() : gfx::Rect();
 }
 
+std::string NativeWidgetMac::GetWorkspace() const {
+  return std::string();
+}
+
 void NativeWidgetMac::SetBounds(const gfx::Rect& bounds) {
   if (bridge_)
     bridge_->SetBounds(bounds);
@@ -371,7 +376,7 @@ void NativeWidgetMac::CloseNow() {
   // Notify observers while |bridged_| is still valid.
   delegate_->OnNativeWidgetDestroying();
   // Reset |bridge_| to NULL before destroying it.
-  scoped_ptr<BridgedNativeWidget> bridge(std::move(bridge_));
+  std::unique_ptr<BridgedNativeWidget> bridge(std::move(bridge_));
 }
 
 void NativeWidgetMac::Show() {
@@ -590,6 +595,10 @@ void NativeWidgetMac::RepostNativeEvent(gfx::NativeEvent native_event) {
   NOTIMPLEMENTED();
 }
 
+std::string NativeWidgetMac::GetName() const {
+  return name_;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // NativeWidgetMac, protected:
 
@@ -708,6 +717,13 @@ bool NativeWidgetPrivate::IsMouseButtonDown() {
 gfx::FontList NativeWidgetPrivate::GetWindowTitleFontList() {
   NOTIMPLEMENTED();
   return gfx::FontList();
+}
+
+// static
+gfx::NativeView NativeWidgetPrivate::GetGlobalCapture(
+    gfx::NativeView native_view) {
+  NOTIMPLEMENTED();
+  return nullptr;
 }
 
 }  // namespace internal

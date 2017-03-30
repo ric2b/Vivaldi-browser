@@ -37,7 +37,7 @@
 #include <unicode/uscript.h>
 
 #if defined(USING_SYSTEM_ICU)
-#include "platform/fonts/CharacterPropertyDataGenerator.h"
+#include "platform/text/CharacterPropertyDataGenerator.h"
 #include <unicode/uniset.h>
 #else
 #define MUTEX_H // Prevent compile failure of utrie2.h on Windows
@@ -160,6 +160,8 @@ CodePath Character::characterRangeCodePath(const UChar* characters, unsigned len
         0xA800, 0xABFF,
         // U+D7B0 through U+D7FF Hangul Jamo Ext. B
         0xD7B0, 0xD7FF,
+        // U+E000..U+F8FF BMP Private Use Area
+        0xE000, 0xF8FF,
         // U+FE00 through U+FE0F Unicode variation selectors
         0xFE00, 0xFE0F,
         // U+FE20 through U+FE2F Combining half marks
@@ -215,6 +217,18 @@ CodePath Character::characterRangeCodePath(const UChar* characters, unsigned len
             if (supplementaryCharacter <= 0xE01EF)
                 return ComplexPath;
 
+            // Supplemental Private Use Area-A
+            if (supplementaryCharacter < 0xF0000)
+                continue;
+            if (supplementaryCharacter <= 0xFFFFD)
+                return ComplexPath;
+
+            // Supplemental Private Use Area-B
+            if (supplementaryCharacter < 0x100000)
+                continue;
+            if (supplementaryCharacter <= 0x10FFFD)
+                return ComplexPath;
+
             // FIXME: Check for Brahmi (U+11000 block), Kaithi (U+11080 block) and other complex scripts
             // in plane 1 or higher.
 
@@ -241,6 +255,11 @@ bool Character::isCJKIdeographOrSymbol(UChar32 c)
         return false;
 
     RETURN_HAS_PROPERTY(c, isCJKIdeographOrSymbol)
+}
+
+bool Character::isPotentialCustomElementNameChar(UChar32 character)
+{
+    RETURN_HAS_PROPERTY(character, isPotentialCustomElementNameChar);
 }
 
 unsigned Character::expansionOpportunityCount(const LChar* characters, size_t length, TextDirection direction, bool& isAfterExpansion, const TextJustify textJustify)

@@ -11,6 +11,7 @@
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
 #include "net/socket/client_socket_factory.h"
+#include "net/socket/socket_performance_watcher.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/socket/stream_socket.h"
 #include "net/udp/datagram_client_socket.h"
@@ -99,27 +100,29 @@ class TestSocketFactory : public ClientSocketFactory {
   TestSocketFactory() {}
   ~TestSocketFactory() override {}
 
-  scoped_ptr<DatagramClientSocket> CreateDatagramClientSocket(
+  std::unique_ptr<DatagramClientSocket> CreateDatagramClientSocket(
       DatagramSocket::BindType,
       const RandIntCallback&,
       NetLog*,
       const NetLog::Source&) override {
-    return scoped_ptr<DatagramClientSocket>(new TestUDPClientSocket(&mapping_));
+    return std::unique_ptr<DatagramClientSocket>(
+        new TestUDPClientSocket(&mapping_));
   }
-  scoped_ptr<StreamSocket> CreateTransportClientSocket(
+  std::unique_ptr<StreamSocket> CreateTransportClientSocket(
       const AddressList&,
+      std::unique_ptr<SocketPerformanceWatcher>,
       NetLog*,
       const NetLog::Source&) override {
     NOTIMPLEMENTED();
-    return scoped_ptr<StreamSocket>();
+    return std::unique_ptr<StreamSocket>();
   }
-  scoped_ptr<SSLClientSocket> CreateSSLClientSocket(
-      scoped_ptr<ClientSocketHandle>,
+  std::unique_ptr<SSLClientSocket> CreateSSLClientSocket(
+      std::unique_ptr<ClientSocketHandle>,
       const HostPortPair&,
       const SSLConfig&,
       const SSLClientSocketContext&) override {
     NOTIMPLEMENTED();
-    return scoped_ptr<SSLClientSocket>();
+    return std::unique_ptr<SSLClientSocket>();
   }
   void ClearSSLSessionCache() override { NOTIMPLEMENTED(); }
 

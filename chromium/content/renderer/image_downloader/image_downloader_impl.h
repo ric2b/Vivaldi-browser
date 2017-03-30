@@ -13,6 +13,7 @@
 #include "base/memory/scoped_vector.h"
 #include "content/common/image_downloader/image_downloader.mojom.h"
 #include "content/public/renderer/render_frame_observer.h"
+#include "content/public/renderer/render_thread_observer.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "url/gurl.h"
 
@@ -28,11 +29,15 @@ class MultiResolutionImageResourceFetcher;
 class RenderFrame;
 
 class ImageDownloaderImpl : public content::mojom::ImageDownloader,
-                            public RenderFrameObserver {
+                            public RenderFrameObserver,
+                            public RenderThreadObserver {
  public:
   static void CreateMojoService(
       RenderFrame* render_frame,
       mojo::InterfaceRequest<content::mojom::ImageDownloader> request);
+
+  // RenderThreadObserver implementation.
+  void OnRenderProcessShutdown() override;
 
  private:
   ImageDownloaderImpl(

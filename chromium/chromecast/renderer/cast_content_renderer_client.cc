@@ -5,20 +5,16 @@
 #include "chromecast/renderer/cast_content_renderer_client.h"
 
 #include <stdint.h>
-#include <sys/sysinfo.h>
 
 #include "base/command_line.h"
-#include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/memory_pressure_listener.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chromecast/base/chromecast_switches.h"
 #include "chromecast/crash/cast_crash_keys.h"
 #include "chromecast/media/base/media_caps.h"
 #include "chromecast/renderer/cast_media_load_deferrer.h"
-#include "chromecast/renderer/cast_render_process_observer.h"
+#include "chromecast/renderer/cast_render_thread_observer.h"
 #include "chromecast/renderer/key_systems_cast.h"
 #include "chromecast/renderer/media/chromecast_media_renderer_factory.h"
 #include "components/network_hints/renderer/prescient_networking_dispatcher.h"
@@ -34,38 +30,6 @@ namespace chromecast {
 namespace shell {
 
 namespace {
-
-#if defined(ARCH_CPU_ARM_FAMILY) && !defined(OS_ANDROID)
-// This memory threshold is set for Chromecast. See the UMA histogram
-// Platform.MeminfoMemFree when tuning.
-// TODO(gunsch): These should be platform/product-dependent. Look into a way
-// to move these to platform-specific repositories.
-const int kCriticalMinFreeMemMB = 24;
-const int kPollingIntervalMS = 5000;
-
-void PlatformPollFreemem(void) {
-  struct sysinfo sys;
-
-  if (sysinfo(&sys) == -1) {
-    LOG(ERROR) << "platform_poll_freemem(): sysinfo failed";
-  } else {
-    int free_mem_mb = static_cast<int64_t>(sys.freeram) *
-        sys.mem_unit / (1024 * 1024);
-
-    if (free_mem_mb <= kCriticalMinFreeMemMB) {
-      // Memory is getting really low, we need to do whatever we can to
-      // prevent deadlocks and interfering with other processes.
-      base::MemoryPressureListener::NotifyMemoryPressure(
-          base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL);
-    }
-  }
-
-  // Setup next poll.
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::Bind(&PlatformPollFreemem),
-      base::TimeDelta::FromMilliseconds(kPollingIntervalMS));
-}
-#endif
 
 // Default background color to set for WebViews. WebColor is in ARGB format
 // though the comment of WebColor says it is in RGBA.
@@ -85,10 +49,6 @@ CastContentRendererClient::~CastContentRendererClient() {
 void CastContentRendererClient::RenderThreadStarted() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
 
-#if defined(ARCH_CPU_ARM_FAMILY) && !defined(OS_ANDROID)
-  PlatformPollFreemem();
-#endif
-
   // Set the initial known codecs mask.
   if (command_line->HasSwitch(switches::kHdmiSinkSupportedCodecs)) {
     int hdmi_codecs_mask;
@@ -99,7 +59,7 @@ void CastContentRendererClient::RenderThreadStarted() {
     }
   }
 
-  cast_observer_.reset(new CastRenderProcessObserver());
+  cast_observer_.reset(new CastRenderThreadObserver());
 
   prescient_networking_dispatcher_.reset(
       new network_hints::PrescientNetworkingDispatcher());
@@ -140,9 +100,10 @@ void CastContentRendererClient::RenderViewCreated(
   }
 }
 
-void CastContentRendererClient::AddKeySystems(
-    std::vector< ::media::KeySystemInfo>* key_systems) {
-  AddChromecastKeySystems(key_systems);
+void CastContentRendererClient::AddSupportedKeySystems(
+    std::vector<std::unique_ptr<::media::KeySystemProperties>>*
+        key_systems_properties) {
+  AddChromecastKeySystems(key_systems_properties);
 }
 
 #if !defined(OS_ANDROID)

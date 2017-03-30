@@ -24,7 +24,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/test_browser_window.h"
 #include "components/crx_file/id_util.h"
-#include "content/public/test/test_web_contents_factory.h"
+#include "content/public/test/web_contents_tester.h"
 #include "extensions/browser/event_router_factory.h"
 #include "extensions/browser/extension_error_test_util.h"
 #include "extensions/browser/extension_prefs.h"
@@ -281,17 +281,25 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateReload) {
 }
 
 // Test developerPrivate.packDirectory.
-// http://crbug.com/527228 flaky
-TEST_F(DeveloperPrivateApiUnitTest, DISABLED_DeveloperPrivatePackFunction) {
-  ResetThreadBundle(content::TestBrowserThreadBundle::DEFAULT);
-
+TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivatePackFunction) {
+  // Use a temp dir isolating the extension dir and its generated files.
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
   base::FilePath root_path = data_dir().AppendASCII("good_unpacked");
-  base::FilePath crx_path = data_dir().AppendASCII("good_unpacked.crx");
-  base::FilePath pem_path = data_dir().AppendASCII("good_unpacked.pem");
+  ASSERT_TRUE(base::CopyDirectory(root_path, temp_dir.path(), true));
+
+  base::FilePath temp_root_path = temp_dir.path().Append(root_path.BaseName());
+  base::FilePath crx_path = temp_dir.path().AppendASCII("good_unpacked.crx");
+  base::FilePath pem_path = temp_dir.path().AppendASCII("good_unpacked.pem");
+
+  EXPECT_FALSE(base::PathExists(crx_path))
+      << "crx should not exist before the test is run!";
+  EXPECT_FALSE(base::PathExists(pem_path))
+      << "pem should not exist before the test is run!";
 
   // First, test a directory that should pack properly.
   base::ListValue pack_args;
-  pack_args.AppendString(root_path.AsUTF8Unsafe());
+  pack_args.AppendString(temp_root_path.AsUTF8Unsafe());
   EXPECT_TRUE(TestPackExtensionFunction(
       pack_args, api::developer_private::PACK_STATUS_SUCCESS, 0));
 
@@ -320,18 +328,12 @@ TEST_F(DeveloperPrivateApiUnitTest, DISABLED_DeveloperPrivatePackFunction) {
   EXPECT_TRUE(pack_args.Remove(1u, nullptr));  // Remove the flags argument.
   EXPECT_TRUE(TestPackExtensionFunction(
       pack_args, api::developer_private::PACK_STATUS_ERROR, 0));
-
-  base::DeleteFile(crx_path, false);
-  base::DeleteFile(pem_path, false);
 }
 
 // Test developerPrivate.choosePath.
-// http://crbug.com/527228 flaky
-TEST_F(DeveloperPrivateApiUnitTest, DISABLED_DeveloperPrivateChoosePath) {
-  ResetThreadBundle(content::TestBrowserThreadBundle::DEFAULT);
-  content::TestWebContentsFactory web_contents_factory;
-  content::WebContents* web_contents =
-      web_contents_factory.CreateWebContents(profile());
+TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateChoosePath) {
+  std::unique_ptr<content::WebContents> web_contents(
+      content::WebContentsTester::CreateTestWebContents(profile(), nullptr));
 
   base::FilePath expected_dir_path = data_dir().AppendASCII("good_unpacked");
   api::EntryPicker::SkipPickerAndAlwaysSelectPathForTest(&expected_dir_path);
@@ -372,12 +374,9 @@ TEST_F(DeveloperPrivateApiUnitTest, DISABLED_DeveloperPrivateChoosePath) {
 }
 
 // Test developerPrivate.loadUnpacked.
-// http://crbug.com/527228 flaky
-TEST_F(DeveloperPrivateApiUnitTest, DISABLED_DeveloperPrivateLoadUnpacked) {
-  ResetThreadBundle(content::TestBrowserThreadBundle::DEFAULT);
-  content::TestWebContentsFactory web_contents_factory;
-  content::WebContents* web_contents =
-      web_contents_factory.CreateWebContents(profile());
+TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateLoadUnpacked) {
+  std::unique_ptr<content::WebContents> web_contents(
+      content::WebContentsTester::CreateTestWebContents(profile(), nullptr));
 
   base::FilePath path = data_dir().AppendASCII("good_unpacked");
   api::EntryPicker::SkipPickerAndAlwaysSelectPathForTest(&path);
@@ -418,10 +417,7 @@ TEST_F(DeveloperPrivateApiUnitTest, DISABLED_DeveloperPrivateLoadUnpacked) {
 }
 
 // Test developerPrivate.requestFileSource.
-// http://crbug.com/527228 flaky
-TEST_F(DeveloperPrivateApiUnitTest,
-       DISABLED_DeveloperPrivateRequestFileSource) {
-  ResetThreadBundle(content::TestBrowserThreadBundle::DEFAULT);
+TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateRequestFileSource) {
   // Testing of this function seems light, but that's because it basically just
   // forwards to reading a file to a string, and highlighting it - both of which
   // are already tested separately.
@@ -452,10 +448,7 @@ TEST_F(DeveloperPrivateApiUnitTest,
 }
 
 // Test developerPrivate.getExtensionsInfo.
-// http://crbug.com/527228 flaky
-TEST_F(DeveloperPrivateApiUnitTest,
-       DISABLED_DeveloperPrivateGetExtensionsInfo) {
-  ResetThreadBundle(content::TestBrowserThreadBundle::DEFAULT);
+TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateGetExtensionsInfo) {
   LoadSimpleExtension();
 
   // The test here isn't so much about the generated value (that's tested in

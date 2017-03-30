@@ -25,10 +25,16 @@
 #include "chrome/browser/ui/cocoa/website_settings/permission_selector_button.h"
 #include "chrome/browser/ui/cocoa/website_settings/split_block_button.h"
 #include "chrome/browser/ui/cocoa/website_settings/website_settings_utils_cocoa.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
+#include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/website_settings/permission_bubble_request.h"
 #include "chrome/browser/ui/website_settings/permission_bubble_view.h"
 #include "chrome/browser/ui/website_settings/permission_menu_model.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/prefs/pref_service.h"
+#include "components/url_formatter/elide_url.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/user_metrics.h"
 #include "grit/components_strings.h"
@@ -39,6 +45,7 @@
 #include "ui/base/cocoa/window_size_constants.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/base/models/simple_menu_model.h"
+#include "url/gurl.h"
 
 using base::UserMetricsAction;
 
@@ -57,21 +64,6 @@ const CGFloat kButtonRightEdgePadding = 17.0f;
 const CGFloat kTitlePaddingX = 50.0f;
 const CGFloat kBubbleMinWidth = 315.0f;
 const NSSize kPermissionIconSize = {18, 18};
-
-class MenuDelegate : public ui::SimpleMenuModel::Delegate {
- public:
-  explicit MenuDelegate(PermissionBubbleController* bubble)
-      : bubble_controller_(bubble) {}
-  bool IsCommandIdChecked(int command_id) const override { return false; }
-  bool IsCommandIdEnabled(int command_id) const override { return true; }
-  bool GetAcceleratorForCommandId(int command_id,
-                                  ui::Accelerator* accelerator) override {
-    return false;
-  }
- private:
-  PermissionBubbleController* bubble_controller_;  // Weak, owns us.
-  DISALLOW_COPY_AND_ASSIGN(MenuDelegate);
-};
 
 }  // namespace
 
@@ -186,7 +178,7 @@ class MenuDelegate : public ui::SimpleMenuModel::Delegate {
 
 // Returns an autoreleased NSView displaying the title for the bubble
 // requesting settings for |host|.
-- (NSView*)titleWithHostname:(const std::string&)host;
+- (NSView*)titleWithOrigin:(const GURL&)origin;
 
 // Returns an autoreleased NSView displaying a menu for |request|.  The
 // menu will be initialized as 'allow' if |allow| is YES.
@@ -271,7 +263,7 @@ class MenuDelegate : public ui::SimpleMenuModel::Delegate {
 
 - (void)parentWindowDidResize:(NSNotification*)notification {
   DCHECK(bridge_);
-  [self setAnchorPoint:[self getExpectedAnchorPoint]];
+  [self updateAnchorPosition];
 }
 
 - (void)parentWindowDidMove:(NSNotification*)notification {
@@ -341,7 +333,7 @@ class MenuDelegate : public ui::SimpleMenuModel::Delegate {
   }
 
   base::scoped_nsobject<NSView> titleView(
-      [[self titleWithHostname:requests[0]->GetOrigin().host()] retain]);
+      [[self titleWithOrigin:requests[0]->GetOrigin()] retain]);
   [contentView addSubview:titleView];
   [titleView setFrameOrigin:NSMakePoint(kHorizontalPadding,
                                         kVerticalPadding + yOffset)];
@@ -441,11 +433,12 @@ class MenuDelegate : public ui::SimpleMenuModel::Delegate {
 - (void)updateAnchorPosition {
   [self setParentWindow:[self getExpectedParentWindow]];
   [self setAnchorPoint:[self getExpectedAnchorPoint]];
+  [[self bubble] setArrowLocation:[self getExpectedArrowLocation]];
 }
 
 - (NSPoint)getExpectedAnchorPoint {
   NSPoint anchor;
-  if ([self hasLocationBar]) {
+  if ([self hasVisibleLocationBar]) {
     LocationBarViewMac* location_bar =
         [[[self getExpectedParentWindow] windowController] locationBarBridge];
     anchor = location_bar->GetPageInfoBubblePoint();
@@ -459,12 +452,31 @@ class MenuDelegate : public ui::SimpleMenuModel::Delegate {
                                             anchor);
 }
 
-- (bool)hasLocationBar {
-  return browser_->SupportsWindowFeature(Browser::FEATURE_LOCATIONBAR);
+- (bool)hasVisibleLocationBar {
+  if (!browser_->SupportsWindowFeature(Browser::FEATURE_LOCATIONBAR))
+    return false;
+
+  if (!browser_->exclusive_access_manager()->context()->IsFullscreen())
+    return true;
+
+  // If the browser is in browser-initiated full screen, a preference can cause
+  // the toolbar to be hidden.
+  if (browser_->exclusive_access_manager()
+          ->fullscreen_controller()
+          ->IsFullscreenForBrowser()) {
+    PrefService* prefs = browser_->profile()->GetPrefs();
+    bool show_toolbar = prefs->GetBoolean(prefs::kShowFullscreenToolbar);
+    return show_toolbar;
+  }
+
+  // Otherwise this is fullscreen without a toolbar, so there is no visible
+  // location bar.
+  return false;
 }
 
 - (info_bubble::BubbleArrowLocation)getExpectedArrowLocation {
-  return [self hasLocationBar] ? info_bubble::kTopLeft : info_bubble::kNoArrow;
+  return [self hasVisibleLocationBar] ? info_bubble::kTopLeft
+                                      : info_bubble::kNoArrow;
 }
 
 - (NSWindow*)getExpectedParentWindow {
@@ -518,16 +530,18 @@ class MenuDelegate : public ui::SimpleMenuModel::Delegate {
   return permissionView.autorelease();
 }
 
-- (NSView*)titleWithHostname:(const std::string&)host {
+- (NSView*)titleWithOrigin:(const GURL&)origin {
   base::scoped_nsobject<NSTextField> titleView(
       [[NSTextField alloc] initWithFrame:NSZeroRect]);
   [titleView setDrawsBackground:NO];
   [titleView setBezeled:NO];
   [titleView setEditable:NO];
   [titleView setSelectable:NO];
-  [titleView setStringValue:
-      l10n_util::GetNSStringF(IDS_PERMISSIONS_BUBBLE_PROMPT,
-                              base::UTF8ToUTF16(host))];
+  [titleView setStringValue:l10n_util::GetNSStringF(
+                                IDS_PERMISSIONS_BUBBLE_PROMPT,
+                                url_formatter::FormatUrlForSecurityDisplay(
+                                    origin, url_formatter::SchemeDisplay::
+                                                OMIT_CRYPTOGRAPHIC))];
   [titleView setFont:[NSFont systemFontOfSize:[NSFont smallSystemFontSize]]];
   [titleView sizeToFit];
   NSRect titleFrame = [titleView frame];

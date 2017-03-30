@@ -17,7 +17,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/prerender/prerender_field_trial.h"
@@ -83,7 +83,6 @@ int GetThreatSeverity(ListType threat) {
     case BINURL:              // Falls through.
     case CSDWHITELIST:        // Falls through.
     case DOWNLOADWHITELIST:   // Falls through.
-    case INCLUSIONWHITELIST:  // Falls through.
     case MODULEWHITELIST:     // Falls through.
     case EXTENSIONBLACKLIST:  // Falls through.
     case IPBLACKLIST:
@@ -457,14 +456,6 @@ bool LocalSafeBrowsingDatabaseManager::MatchDownloadWhitelistString(
   return database_->ContainsDownloadWhitelistedString(str);
 }
 
-bool LocalSafeBrowsingDatabaseManager::MatchInclusionWhitelistUrl(
-    const GURL& url) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (!enabled_ || !MakeDatabaseAvailable())
-    return true;
-  return database_->ContainsInclusionWhitelistedUrl(url);
-}
-
 bool LocalSafeBrowsingDatabaseManager::MatchModuleWhitelistString(
     const std::string& str) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -612,7 +603,7 @@ void LocalSafeBrowsingDatabaseManager::HandleGetHashResults(
   OnHandleGetHashResults(check, full_hashes);  // 'check' is deleted here.
 
   // Cache the GetHash results.
-  if (cache_lifetime != base::TimeDelta() && MakeDatabaseAvailable())
+  if (!cache_lifetime.is_zero() && MakeDatabaseAvailable())
     database_->CacheHashResults(prefixes, full_hashes, cache_lifetime);
 }
 
@@ -628,7 +619,7 @@ void LocalSafeBrowsingDatabaseManager::GetChunks(GetChunksCallback callback) {
 
 void LocalSafeBrowsingDatabaseManager::AddChunks(
     const std::string& list,
-    scoped_ptr<std::vector<scoped_ptr<SBChunkData>>> chunks,
+    std::unique_ptr<std::vector<std::unique_ptr<SBChunkData>>> chunks,
     AddChunksCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(enabled_);
@@ -640,7 +631,7 @@ void LocalSafeBrowsingDatabaseManager::AddChunks(
 }
 
 void LocalSafeBrowsingDatabaseManager::DeleteChunks(
-    scoped_ptr<std::vector<SBChunkDelete>> chunk_deletes) {
+    std::unique_ptr<std::vector<SBChunkDelete>> chunk_deletes) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(enabled_);
   safe_browsing_task_runner_->PostTask(
@@ -1012,7 +1003,7 @@ void LocalSafeBrowsingDatabaseManager::DatabaseLoadComplete() {
 
 void LocalSafeBrowsingDatabaseManager::AddDatabaseChunks(
     const std::string& list_name,
-    scoped_ptr<std::vector<scoped_ptr<SBChunkData>>> chunks,
+    std::unique_ptr<std::vector<std::unique_ptr<SBChunkData>>> chunks,
     AddChunksCallback callback) {
   DCHECK(safe_browsing_task_runner_->RunsTasksOnCurrentThread());
   if (chunks)
@@ -1024,7 +1015,7 @@ void LocalSafeBrowsingDatabaseManager::AddDatabaseChunks(
 }
 
 void LocalSafeBrowsingDatabaseManager::DeleteDatabaseChunks(
-    scoped_ptr<std::vector<SBChunkDelete>> chunk_deletes) {
+    std::unique_ptr<std::vector<SBChunkDelete>> chunk_deletes) {
   DCHECK(safe_browsing_task_runner_->RunsTasksOnCurrentThread());
   if (chunk_deletes)
     GetDatabase()->DeleteChunks(*chunk_deletes);

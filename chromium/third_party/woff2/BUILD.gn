@@ -15,6 +15,8 @@ source_set("woff2_dec") {
     "src/woff2_common.h",
     "src/woff2_dec.cc",
     "src/woff2_dec.h",
+    "src/woff2_out.cc",
+    "src/woff2_out.h",
   ]
 
   configs -= [ "//build/config/compiler:chromium_code" ]

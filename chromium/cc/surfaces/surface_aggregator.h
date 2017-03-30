@@ -5,12 +5,12 @@
 #ifndef CC_SURFACES_SURFACE_AGGREGATOR_H_
 #define CC_SURFACES_SURFACE_AGGREGATOR_H_
 
+#include <memory>
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "cc/quads/draw_quad.h"
 #include "cc/quads/render_pass.h"
@@ -36,12 +36,13 @@ class CC_SURFACES_EXPORT SurfaceAggregator {
                     bool aggregate_only_damaged);
   ~SurfaceAggregator();
 
-  scoped_ptr<CompositorFrame> Aggregate(SurfaceId surface_id);
+  std::unique_ptr<CompositorFrame> Aggregate(SurfaceId surface_id);
   void ReleaseResources(SurfaceId surface_id);
   SurfaceIndexMap& previous_contained_surfaces() {
     return previous_contained_surfaces_;
   }
   void SetFullDamageForSurface(SurfaceId surface_id);
+  void set_output_is_secure(bool secure) { output_is_secure_ = secure; }
 
  private:
   struct ClipData {
@@ -56,7 +57,6 @@ class CC_SURFACES_EXPORT SurfaceAggregator {
   struct PrewalkResult {
     PrewalkResult();
     ~PrewalkResult();
-    bool has_copy_requests = false;
     // This is the set of Surfaces that were referenced by another Surface, but
     // not included in a SurfaceDrawQuad.
     std::set<SurfaceId> undrawn_surfaces;
@@ -85,7 +85,10 @@ class CC_SURFACES_EXPORT SurfaceAggregator {
       const ClipData& clip_rect,
       RenderPass* dest_pass,
       SurfaceId surface_id);
-  gfx::Rect PrewalkTree(SurfaceId surface_id, PrewalkResult* result);
+  gfx::Rect PrewalkTree(SurfaceId surface_id,
+                        bool in_moved_pixel_pass,
+                        RenderPassId parent_pass,
+                        PrewalkResult* result);
   void CopyUndrawnSurfaces(PrewalkResult* prewalk);
   void CopyPasses(const DelegatedFrameData* frame_data, Surface* surface);
 
@@ -94,6 +97,8 @@ class CC_SURFACES_EXPORT SurfaceAggregator {
   // Also notifies SurfaceAggregatorClient of newly added and removed
   // child surfaces.
   void ProcessAddedAndRemovedSurfaces();
+
+  void PropagateCopyRequestPasses();
 
   int ChildIdForSurface(Surface* surface);
   gfx::Rect DamageRectForSurface(const Surface* surface,
@@ -106,11 +111,12 @@ class CC_SURFACES_EXPORT SurfaceAggregator {
   class RenderPassIdAllocator;
   using RenderPassIdAllocatorMap =
       std::unordered_map<SurfaceId,
-                         scoped_ptr<RenderPassIdAllocator>,
+                         std::unique_ptr<RenderPassIdAllocator>,
                          SurfaceIdHash>;
   RenderPassIdAllocatorMap render_pass_allocator_map_;
   int next_render_pass_id_;
   const bool aggregate_only_damaged_;
+  bool output_is_secure_;
 
   using SurfaceToResourceChildIdMap =
       std::unordered_map<SurfaceId, int, SurfaceIdHash>;
@@ -135,6 +141,21 @@ class CC_SURFACES_EXPORT SurfaceAggregator {
 
   // This is the pass list for the aggregated frame.
   RenderPassList* dest_pass_list_;
+
+  // This is the set of aggregated pass ids that are affected by filters that
+  // move pixels.
+  std::unordered_set<RenderPassId, RenderPassIdHash> moved_pixel_passes_;
+
+  // This is the set of aggregated pass ids that are drawn by copy requests, so
+  // should not have their damage rects clipped to the root damage rect.
+  std::unordered_set<RenderPassId, RenderPassIdHash> copy_request_passes_;
+
+  // This maps each aggregated pass id to the set of (aggregated) pass ids
+  // that its RenderPassDrawQuads depend on
+  std::unordered_map<RenderPassId,
+                     std::unordered_set<RenderPassId, RenderPassIdHash>,
+                     RenderPassIdHash>
+      render_pass_dependencies_;
 
   // The root damage rect of the currently-aggregating frame.
   gfx::Rect root_damage_rect_;

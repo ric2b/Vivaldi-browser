@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
@@ -15,6 +16,12 @@
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/scroll_offset.h"
 #include "ui/gfx/transform.h"
+
+namespace base {
+namespace trace_event {
+class TracedValue;
+}
+}
 
 namespace cc {
 
@@ -30,6 +37,7 @@ class TreeNode;
 }
 
 class LayerTreeImpl;
+class RenderSurfaceImpl;
 class ScrollState;
 struct ScrollAndScaleSet;
 
@@ -54,6 +62,8 @@ struct CC_EXPORT TreeNode {
 
   void ToProtobuf(proto::TreeNode* proto) const;
   void FromProtobuf(const proto::TreeNode& proto);
+
+  void AsValueInto(base::trace_event::TracedValue* value) const;
 };
 
 struct CC_EXPORT TransformNodeData {
@@ -108,10 +118,13 @@ struct CC_EXPORT TransformNodeData {
   // TODO(vollick): will be moved when accelerated effects are implemented.
   bool needs_local_transform_update : 1;
 
+  bool node_and_ancestors_are_animated_or_invertible : 1;
+
   bool is_invertible : 1;
   bool ancestors_are_invertible : 1;
 
-  bool is_animated : 1;
+  bool has_potential_animation : 1;
+  bool is_currently_animating : 1;
   bool to_screen_is_potentially_animated : 1;
   bool has_only_translation_animations : 1;
   bool to_screen_has_scale_animation : 1;
@@ -195,6 +208,8 @@ struct CC_EXPORT TransformNodeData {
 
   void ToProtobuf(proto::TreeNode* proto) const;
   void FromProtobuf(const proto::TreeNode& proto);
+
+  void AsValueInto(base::trace_event::TracedValue* value) const;
 };
 
 typedef TreeNode<TransformNodeData> TransformNode;
@@ -249,6 +264,7 @@ struct CC_EXPORT ClipNodeData {
 
   void ToProtobuf(proto::TreeNode* proto) const;
   void FromProtobuf(const proto::TreeNode& proto);
+  void AsValueInto(base::trace_event::TracedValue* value) const;
 };
 
 typedef TreeNode<ClipNodeData> ClipNode;
@@ -261,27 +277,32 @@ struct CC_EXPORT EffectNodeData {
   float screen_space_opacity;
 
   bool has_render_surface;
+  RenderSurfaceImpl* render_surface;
   bool has_copy_request;
   bool has_background_filters;
-  bool node_or_ancestor_has_background_filters;
-  bool to_screen_opacity_is_animated;
   bool hidden_by_backface_visibility;
   bool double_sided;
   bool is_drawn;
-  bool has_animated_opacity;
+  // TODO(jaydasika) : Delete this after implementation of
+  // SetHideLayerAndSubtree is cleaned up. (crbug.com/595843)
+  bool subtree_hidden;
+  bool has_potential_opacity_animation;
+  bool is_currently_animating_opacity;
   // We need to track changes to effects on the compositor to compute damage
   // rect.
   bool effect_changed;
   int num_copy_requests_in_subtree;
+  bool has_unclipped_descendants;
   int transform_id;
   int clip_id;
-  // For a node that creates a render surface, target_id is its own id.
+  // Effect node id of which this effect contributes to.
   int target_id;
 
   bool operator==(const EffectNodeData& other) const;
 
   void ToProtobuf(proto::TreeNode* proto) const;
   void FromProtobuf(const proto::TreeNode& proto);
+  void AsValueInto(base::trace_event::TracedValue* value) const;
 };
 
 typedef TreeNode<EffectNodeData> EffectNode;
@@ -304,11 +325,14 @@ struct CC_EXPORT ScrollNodeData {
   bool user_scrollable_vertical;
   int element_id;
   int transform_id;
+  // Number of drawn layers pointing to this node or any of its descendants.
+  int num_drawn_descendants;
 
   bool operator==(const ScrollNodeData& other) const;
 
   void ToProtobuf(proto::TreeNode* proto) const;
   void FromProtobuf(const proto::TreeNode& proto);
+  void AsValueInto(base::trace_event::TracedValue* value) const;
 };
 
 typedef TreeNode<ScrollNodeData> ScrollNode;
@@ -319,7 +343,7 @@ template <typename T>
 class CC_EXPORT PropertyTree {
  public:
   PropertyTree();
-  virtual ~PropertyTree();
+  ~PropertyTree();
 
   bool operator==(const PropertyTree<T>& other) const;
 
@@ -344,7 +368,7 @@ class CC_EXPORT PropertyTree {
     return size() ? &nodes_[nodes_.size() - 1] : nullptr;
   }
 
-  virtual void clear();
+  void clear();
   size_t size() const { return nodes_.size(); }
 
   void set_needs_update(bool needs_update) { needs_update_ = needs_update; }
@@ -356,12 +380,15 @@ class CC_EXPORT PropertyTree {
   int next_available_id() const { return static_cast<int>(size()); }
 
   void ToProtobuf(proto::PropertyTree* proto) const;
-  void FromProtobuf(const proto::PropertyTree& proto);
+  void FromProtobuf(const proto::PropertyTree& proto,
+                    std::unordered_map<int, int>* node_id_to_index_map);
 
   void SetPropertyTrees(PropertyTrees* property_trees) {
     property_trees_ = property_trees;
   }
   PropertyTrees* property_trees() const { return property_trees_; }
+
+  void AsValueInto(base::trace_event::TracedValue* value) const;
 
  private:
   // Copy and assign are permitted. This is how we do tree sync.
@@ -375,11 +402,11 @@ class CC_EXPORT TransformTree final : public PropertyTree<TransformNode> {
  public:
   TransformTree();
   TransformTree(const TransformTree& other);
-  ~TransformTree() override;
+  ~TransformTree();
 
   bool operator==(const TransformTree& other) const;
 
-  void clear() override;
+  void clear();
 
   // Computes the change of basis transform from node |source_id| to |dest_id|.
   // The function returns false iff the inverse of a singular transform was
@@ -421,6 +448,9 @@ class CC_EXPORT TransformTree final : public PropertyTree<TransformNode> {
   void UpdateTransformChanged(TransformNode* node,
                               TransformNode* parent_node,
                               TransformNode* source_node);
+  void UpdateNodeAndAncestorsAreAnimatedOrInvertible(
+      TransformNode* node,
+      TransformNode* parent_node);
 
   // A TransformNode's source_to_parent value is used to account for the fact
   // that fixed-position layers are positioned by Blink wrt to their layer tree
@@ -478,7 +508,8 @@ class CC_EXPORT TransformTree final : public PropertyTree<TransformNode> {
   gfx::Transform ToScreenSpaceTransformWithoutSublayerScale(int id) const;
 
   void ToProtobuf(proto::PropertyTree* proto) const;
-  void FromProtobuf(const proto::PropertyTree& proto);
+  void FromProtobuf(const proto::PropertyTree& proto,
+                    std::unordered_map<int, int>* node_id_to_index_map);
 
  private:
   // Returns true iff the node at |desc_id| is a descendant of the node at
@@ -534,12 +565,15 @@ class CC_EXPORT ClipTree final : public PropertyTree<ClipNode> {
   gfx::RectF ViewportClip();
 
   void ToProtobuf(proto::PropertyTree* proto) const;
-  void FromProtobuf(const proto::PropertyTree& proto);
+  void FromProtobuf(const proto::PropertyTree& proto,
+                    std::unordered_map<int, int>* node_id_to_index_map);
 };
 
 class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
  public:
   bool operator==(const EffectTree& other) const;
+
+  float EffectiveOpacity(const EffectNode* node) const;
 
   void UpdateEffects(int id);
 
@@ -552,7 +586,8 @@ class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
   void ResetChangeTracking();
 
   void ToProtobuf(proto::PropertyTree* proto) const;
-  void FromProtobuf(const proto::PropertyTree& proto);
+  void FromProtobuf(const proto::PropertyTree& proto,
+                    std::unordered_map<int, int>* node_id_to_index_map);
 
  private:
   void UpdateOpacities(EffectNode* node, EffectNode* parent_node);
@@ -564,15 +599,16 @@ class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
  public:
   ScrollTree();
   ScrollTree(const ScrollTree& other);
-  ~ScrollTree() override;
+  ~ScrollTree();
 
   ScrollTree& operator=(const ScrollTree& from);
   bool operator==(const ScrollTree& other) const;
 
   void ToProtobuf(proto::PropertyTree* proto) const;
-  void FromProtobuf(const proto::PropertyTree& proto);
+  void FromProtobuf(const proto::PropertyTree& proto,
+                    std::unordered_map<int, int>* node_id_to_index_map);
 
-  void clear() override;
+  void clear();
 
   typedef std::unordered_map<int, scoped_refptr<SyncedScrollOffset>>
       ScrollOffsetMap;
@@ -636,6 +672,12 @@ class CC_EXPORT PropertyTrees final {
   void ToProtobuf(proto::PropertyTrees* proto) const;
   void FromProtobuf(const proto::PropertyTrees& proto);
 
+  std::unordered_map<int, int> transform_id_to_index_map;
+  std::unordered_map<int, int> effect_id_to_index_map;
+  std::unordered_map<int, int> clip_id_to_index_map;
+  std::unordered_map<int, int> scroll_id_to_index_map;
+
+  std::vector<int> always_use_active_tree_opacity_effect_ids;
   TransformTree transform_tree;
   EffectTree effect_tree;
   ClipTree clip_tree;
@@ -656,14 +698,14 @@ class CC_EXPORT PropertyTrees final {
   int sequence_number;
   bool is_main_thread;
   bool is_active;
-  enum ResetFlags { EFFECT_TREE, TRANSFORM_TREE, ALL_TREES };
 
   void SetInnerViewportContainerBoundsDelta(gfx::Vector2dF bounds_delta);
   void SetOuterViewportContainerBoundsDelta(gfx::Vector2dF bounds_delta);
   void SetInnerViewportScrollBoundsDelta(gfx::Vector2dF bounds_delta);
+  void PushOpacityIfNeeded(PropertyTrees* target_tree);
   void UpdateChangeTracking();
   void PushChangeTrackingTo(PropertyTrees* tree);
-  void ResetAllChangeTracking(ResetFlags flag);
+  void ResetAllChangeTracking();
 
   gfx::Vector2dF inner_viewport_container_bounds_delta() const {
     return inner_viewport_container_bounds_delta_;
@@ -676,6 +718,8 @@ class CC_EXPORT PropertyTrees final {
   gfx::Vector2dF inner_viewport_scroll_bounds_delta() const {
     return inner_viewport_scroll_bounds_delta_;
   }
+
+  std::unique_ptr<base::trace_event::TracedValue> AsTracedValue() const;
 
  private:
   gfx::Vector2dF inner_viewport_container_bounds_delta_;

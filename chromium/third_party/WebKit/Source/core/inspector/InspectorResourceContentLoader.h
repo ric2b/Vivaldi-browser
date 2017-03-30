@@ -8,6 +8,7 @@
 #include "core/CoreExport.h"
 #include "core/fetch/Resource.h"
 #include "wtf/Functional.h"
+#include "wtf/HashMap.h"
 #include "wtf/HashSet.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/Vector.h"
@@ -20,7 +21,7 @@ class Resource;
 class CORE_EXPORT InspectorResourceContentLoader final : public GarbageCollectedFinalized<InspectorResourceContentLoader> {
     WTF_MAKE_NONCOPYABLE(InspectorResourceContentLoader);
 public:
-    static RawPtr<InspectorResourceContentLoader> create(LocalFrame* inspectedFrame)
+    static InspectorResourceContentLoader* create(LocalFrame* inspectedFrame)
     {
         return new InspectorResourceContentLoader(inspectedFrame);
     }
@@ -28,7 +29,9 @@ public:
     void dispose();
     DECLARE_TRACE();
 
-    void ensureResourcesContentLoaded(PassOwnPtr<SameThreadClosure> callback);
+    int createClientId();
+    void ensureResourcesContentLoaded(int clientId, std::unique_ptr<SameThreadClosure> callback);
+    void cancel(int clientId);
     void didCommitLoadForLocalFrame(LocalFrame*);
 
 private:
@@ -41,12 +44,14 @@ private:
     void stop();
     bool hasFinished();
 
-    Vector<OwnPtr<SameThreadClosure>> m_callbacks;
+    using Callbacks = Vector<std::unique_ptr<SameThreadClosure>>;
+    HashMap<int, Callbacks> m_callbacks;
     bool m_allRequestsStarted;
     bool m_started;
     Member<LocalFrame> m_inspectedFrame;
     HeapHashSet<Member<ResourceClient>> m_pendingResourceClients;
     HeapVector<Member<Resource>> m_resources;
+    int m_lastClientId;
 
     friend class ResourceClient;
 };

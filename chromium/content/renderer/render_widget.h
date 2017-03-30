@@ -10,18 +10,17 @@
 
 #include <deque>
 #include <map>
+#include <memory>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/common/cursors/webcursor.h"
-#include "content/common/gpu/client/webgraphicscontext3d_command_buffer_impl.h"
 #include "content/common/input/synthetic_gesture_params.h"
 #include "content/renderer/devtools/render_widget_screen_metrics_emulator_delegate.h"
 #include "content/renderer/gpu/render_widget_compositor_delegate.h"
@@ -49,6 +48,8 @@
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/range/range.h"
 #include "ui/surface/transport_dib.h"
+
+class GURL;
 
 namespace IPC {
 class SyncMessage;
@@ -185,25 +186,25 @@ class CONTENT_EXPORT RenderWidget
                            float page_scale,
                            float top_controls_delta) override;
   void BeginMainFrame(double frame_time_sec) override;
-  scoped_ptr<cc::OutputSurface> CreateOutputSurface(bool fallback) override;
-  scoped_ptr<cc::BeginFrameSource> CreateExternalBeginFrameSource() override;
+  std::unique_ptr<cc::OutputSurface> CreateOutputSurface(
+      bool fallback) override;
+  std::unique_ptr<cc::BeginFrameSource> CreateExternalBeginFrameSource()
+      override;
   void DidCommitAndDrawCompositorFrame() override;
   void DidCommitCompositorFrame() override;
   void DidCompletePageScaleAnimation() override;
   void DidCompleteSwapBuffers() override;
-  bool ForOOPIF() const override;
   void ForwardCompositorProto(const std::vector<uint8_t>& proto) override;
   bool IsClosing() const override;
   void OnSwapBuffersAborted() override;
   void OnSwapBuffersComplete() override;
   void OnSwapBuffersPosted() override;
-  void RecordFrameTimingEvents(
-      scoped_ptr<cc::FrameTimingTracker::CompositeTimingSet> composite_events,
-      scoped_ptr<cc::FrameTimingTracker::MainFrameTimingSet> main_frame_events)
-      override;
   void RequestScheduleAnimation() override;
   void UpdateVisualState() override;
   void WillBeginCompositorFrame() override;
+  void ReportFixedRasterScaleUseCounters(
+      bool has_blurry_content,
+      bool has_potential_performance_regression) override;
 
   // RenderWidgetInputHandlerDelegate
   void FocusChangeComplete() override;
@@ -217,9 +218,9 @@ class CONTENT_EXPORT RenderWidget
 
   void OnDidHandleKeyEvent() override;
   void OnDidOverscroll(const DidOverscrollParams& params) override;
-  void OnInputEventAck(scoped_ptr<InputEventAck> input_event_ack) override;
-  void NotifyInputEventHandled(
-      blink::WebInputEvent::Type handled_type) override;
+  void OnInputEventAck(std::unique_ptr<InputEventAck> input_event_ack) override;
+  void NotifyInputEventHandled(blink::WebInputEvent::Type handled_type,
+                               InputEventAckState ack_result) override;
   void SetInputHandler(RenderWidgetInputHandler* input_handler) override;
   void UpdateTextInputState(ShowIme show_ime,
                             ChangeSource change_source) override;
@@ -254,8 +255,8 @@ class CONTENT_EXPORT RenderWidget
   void resetInputMethod() override;
   void didHandleGestureEvent(const blink::WebGestureEvent& event,
                              bool event_cancelled) override;
-  void didOverscroll(const blink::WebFloatSize& unusedDelta,
-                     const blink::WebFloatSize& accumulatedRootOverScroll,
+  void didOverscroll(const blink::WebFloatSize& overscrollDelta,
+                     const blink::WebFloatSize& accumulatedOverscroll,
                      const blink::WebFloatPoint& position,
                      const blink::WebFloatSize& velocity) override;
   void showImeIfNeeded() override;
@@ -307,7 +308,7 @@ class CONTENT_EXPORT RenderWidget
   // Send a synthetic gesture to the browser to be queued to the synthetic
   // gesture controller.
   void QueueSyntheticGesture(
-      scoped_ptr<SyntheticGestureParams> gesture_params,
+      std::unique_ptr<SyntheticGestureParams> gesture_params,
       const SyntheticGestureCompletionCallback& callback);
 
   // Deliveres |message| together with compositor state change updates. The
@@ -362,6 +363,9 @@ class CONTENT_EXPORT RenderWidget
   void SetDeviceColorProfileForTesting(const std::vector<char>& color_profile);
   void ResetDeviceColorProfileForTesting();
 
+  // Indicates whether this widget has focus.
+  bool has_focus() const { return has_focus_; }
+
  protected:
   // Friend RefCounted so that the dtor can be non-public. Using this class
   // without ref-counting is an error.
@@ -411,6 +415,9 @@ class CONTENT_EXPORT RenderWidget
 
   void DoDeferredClose();
   void NotifyOnClose();
+
+  gfx::Size GetSizeForWebWidget() const;
+  virtual void ResizeWebWidget();
 
   // Close the underlying WebWidget.
   virtual void Close();
@@ -494,7 +501,7 @@ class CONTENT_EXPORT RenderWidget
   // the ACK that the screen has been updated. For a given paint operation,
   // these overrides will always be called in the order DidInitiatePaint,
   // DidFlushPaint.
-  virtual void DidInitiatePaint();
+  virtual void DidInitiatePaint() {}
   virtual void DidFlushPaint();
 
   virtual GURL GetURLForGraphicsContext3D();
@@ -512,7 +519,7 @@ class CONTENT_EXPORT RenderWidget
 
   // QueueMessage implementation extracted into a static method for easy
   // testing.
-  static scoped_ptr<cc::SwapPromise> QueueMessageImpl(
+  static std::unique_ptr<cc::SwapPromise> QueueMessageImpl(
       IPC::Message* msg,
       MessageDeliveryPolicy policy,
       FrameSwapMessageQueue* frame_swap_message_queue,
@@ -558,10 +565,6 @@ class CONTENT_EXPORT RenderWidget
   // by script, not by user input.
   void didUpdateTextOfFocusedElementByNonUserInput() override;
 
-  // Creates a 3D context associated with this view.
-  scoped_ptr<WebGraphicsContext3DCommandBufferImpl> CreateGraphicsContext3D(
-      gpu::GpuChannelHost* gpu_channel_host);
-
   // Sends an ACK to the browser process during the next compositor frame.
   void OnWaitNextFrameForTests(int routing_id);
 
@@ -581,7 +584,7 @@ class CONTENT_EXPORT RenderWidget
   RenderWidgetOwnerDelegate* owner_delegate_;
 
   // This is lazily constructed and must not outlive webwidget_.
-  scoped_ptr<RenderWidgetCompositor> compositor_;
+  std::unique_ptr<RenderWidgetCompositor> compositor_;
 
   // Set to the ID of the view that initiated creating this view, if any. When
   // the view was initiated by the browser (the common case), this will be
@@ -604,14 +607,6 @@ class CONTENT_EXPORT RenderWidget
 
   // The size of the view's backing surface in non-DPI-adjusted pixels.
   gfx::Size physical_backing_size_;
-
-  // Whether or not Blink's viewport size should be shrunk by the height of the
-  // URL-bar (always false on platforms where URL-bar hiding isn't supported).
-  bool top_controls_shrink_blink_size_;
-
-  // The height of the top controls (always 0 on platforms where URL-bar hiding
-  // isn't supported).
-  float top_controls_height_;
 
   // The size of the visible viewport in DPI-adjusted pixels.
   gfx::Size visible_viewport_size_;
@@ -661,8 +656,6 @@ class CONTENT_EXPORT RenderWidget
   // swapped out, the process can exit.
   bool is_swapped_out_;
 
-  // TODO(simonhong): Remove this when we enable BeginFrame scheduling for
-  // OOPIF(crbug.com/471411).
   // Whether this RenderWidget is for an out-of-process iframe or not.
   bool for_oopif_;
 
@@ -703,7 +696,7 @@ class CONTENT_EXPORT RenderWidget
   gfx::Rect view_screen_rect_;
   gfx::Rect window_screen_rect_;
 
-  scoped_ptr<RenderWidgetInputHandler> input_handler_;
+  std::unique_ptr<RenderWidgetInputHandler> input_handler_;
 
   // The time spent in input handlers this frame. Used to throttle input acks.
   base::TimeDelta total_input_handling_time_this_frame_;
@@ -738,7 +731,7 @@ class CONTENT_EXPORT RenderWidget
   std::deque<blink::WebTextInputInfo> text_input_info_history_;
 #endif
 
-  scoped_ptr<RenderWidgetScreenMetricsEmulator> screen_metrics_emulator_;
+  std::unique_ptr<RenderWidgetScreenMetricsEmulator> screen_metrics_emulator_;
 
   // Popups may be displaced when screen metrics emulation is enabled.
   // These values are used to properly adjust popup position.
@@ -747,7 +740,7 @@ class CONTENT_EXPORT RenderWidget
   float popup_origin_scale_for_emulation_;
 
   scoped_refptr<FrameSwapMessageQueue> frame_swap_message_queue_;
-  scoped_ptr<ResizingModeSelector> resizing_mode_selector_;
+  std::unique_ptr<ResizingModeSelector> resizing_mode_selector_;
 
   // Lists of RenderFrameProxy objects that need to be notified of
   // compositing-related events (e.g. DidCommitCompositorFrame).
@@ -764,12 +757,15 @@ class CONTENT_EXPORT RenderWidget
   bool has_host_context_menu_location_;
   gfx::Point host_context_menu_location_;
 
-  scoped_ptr<scheduler::RenderWidgetSchedulingState>
+  std::unique_ptr<scheduler::RenderWidgetSchedulingState>
       render_widget_scheduling_state_;
 
  private:
   // When emulated, this returns original device scale factor.
   float GetOriginalDeviceScaleFactor() const;
+
+  // Indicates whether this widget has focus.
+  bool has_focus_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderWidget);
 };

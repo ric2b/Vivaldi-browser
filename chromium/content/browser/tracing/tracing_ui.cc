@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -17,7 +18,6 @@
 #include "base/format_macros.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -29,6 +29,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/trace_uploader.h"
 #include "content/public/browser/tracing_controller.h"
 #include "content/public/browser/tracing_delegate.h"
@@ -62,7 +63,7 @@ bool GetTracingOptions(const std::string& data64,
     return false;
   }
 
-  scoped_ptr<base::Value> optionsRaw = base::JSONReader::Read(data);
+  std::unique_ptr<base::Value> optionsRaw = base::JSONReader::Read(data);
   if (!optionsRaw) {
     LOG(ERROR) << "Options were not valid JSON";
     return false;
@@ -147,7 +148,7 @@ void OnTraceBufferStatusResult(const WebUIDataSource::GotDataCallback& callback,
 
 void TracingCallbackWrapperBase64(
     const WebUIDataSource::GotDataCallback& callback,
-    scoped_ptr<const base::DictionaryValue> metadata,
+    std::unique_ptr<const base::DictionaryValue> metadata,
     base::RefCountedString* data) {
   base::RefCountedString* data_base64 = new base::RefCountedString();
   base::Base64Encode(data->data(), &data_base64->data());
@@ -169,10 +170,10 @@ bool OnBeginJSONRequest(const std::string& path,
         base::Bind(OnGotCategories, callback));
   }
 
-  const char* beginRecordingPath = "json/begin_recording?";
-  if (base::StartsWith(path, beginRecordingPath,
+  const char kBeginRecordingPath[] = "json/begin_recording?";
+  if (base::StartsWith(path, kBeginRecordingPath,
                        base::CompareCase::SENSITIVE)) {
-    std::string data = path.substr(strlen(beginRecordingPath));
+    std::string data = path.substr(strlen(kBeginRecordingPath));
     return BeginRecording(data, callback);
   }
   if (path == "json/get_buffer_percent_full") {
@@ -294,7 +295,9 @@ void TracingUI::DoUploadInternal(const std::string& file_contents,
       weak_factory_.GetWeakPtr());
 
   trace_uploader_ = delegate_->GetTraceUploader(
-      web_ui()->GetWebContents()->GetBrowserContext()->GetRequestContext());
+      BrowserContext::GetDefaultStoragePartition(
+          web_ui()->GetWebContents()->GetBrowserContext())->
+              GetURLRequestContext());
   DCHECK(trace_uploader_);
   trace_uploader_->DoUpload(file_contents, upload_mode, nullptr,
                             progress_callback, done_callback);

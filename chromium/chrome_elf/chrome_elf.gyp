@@ -44,6 +44,7 @@
         'blacklist',
         'chrome_elf_breakpad',
         'chrome_elf_resources',
+        '../chrome/chrome.gyp:install_static_util',
       ],
       'msvs_settings': {
         'VCLinkerTool': {
@@ -81,6 +82,7 @@
         '../base/base.gyp:base',
         '../base/base.gyp:run_all_unittests',
         '../base/base.gyp:test_support_base',
+        '../chrome/chrome.gyp:install_static_util',
         '../sandbox/sandbox.gyp:sandbox',
         '../testing/gtest.gyp:gtest',
         'blacklist',
@@ -98,6 +100,7 @@
       'type': 'none',
       'dependencies': [
         '../chrome/chrome.gyp:chrome',
+        '../chrome/chrome.gyp:install_static_util',
         'chrome_elf',
         'chrome_elf_unittests_exe',
       ],
@@ -123,8 +126,6 @@
         '..',
       ],
       'sources': [
-        'chrome_elf_util.cc',
-        'chrome_elf_util.h',
         'thunk_getter.cc',
         'thunk_getter.h',
       ],
@@ -144,6 +145,7 @@
         'chrome_elf_common',
         '../breakpad/breakpad.gyp:breakpad_handler',
         '../chrome/common_constants.gyp:version_header',
+        '../chrome/chrome.gyp:install_static_util',
       ],
     },
   ], # targets

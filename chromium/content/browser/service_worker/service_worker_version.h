@@ -9,6 +9,7 @@
 
 #include <functional>
 #include <map>
+#include <memory>
 #include <queue>
 #include <set>
 #include <string>
@@ -19,10 +20,10 @@
 #include "base/gtest_prod_util.h"
 #include "base/id_map.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
 #include "content/browser/service_worker/embedded_worker_instance.h"
 #include "content/browser/service_worker/service_worker_metrics.h"
@@ -54,7 +55,6 @@ class ServiceWorkerRegistration;
 class ServiceWorkerURLRequestJob;
 struct ServiceWorkerClientInfo;
 struct ServiceWorkerVersionInfo;
-struct TransferredMessagePort;
 
 // This class corresponds to a specific version of a ServiceWorker
 // script for a given pattern. When a script is upgraded, there may be
@@ -171,6 +171,9 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // This returns OK (success) if the worker is already stopped.
   void StopWorker(const StatusCallback& callback);
 
+  // Skips waiting and forces this version to become activated.
+  void SkipWaitingFromDevTools();
+
   // Schedules an update to be run 'soon'.
   void ScheduleUpdate();
 
@@ -244,14 +247,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // FinishRequest before passing the reply to the callback.
   template <typename ResponseMessage>
   void DispatchSimpleEvent(int request_id, const IPC::Message& message);
-
-  // Sends a message event to the associated embedded worker.
-  // TODO(nhiroki): Remove this after ExtendableMessageEvent is enabled by
-  // default (crbug.com/543198).
-  void DispatchMessageEvent(
-      const base::string16& message,
-      const std::vector<TransferredMessagePort>& sent_message_ports,
-      const StatusCallback& callback);
 
   // Adds and removes |provider_host| as a controllee of this ServiceWorker.
   // A potential controllee is a host having the version as its .installing
@@ -386,7 +381,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
     // Compared as pointer, so should only contain static strings. Typically
     // this would be Interface::Name_ for some mojo interface.
     const char* mojo_service = nullptr;
-    scoped_ptr<EmbeddedWorkerInstance::Listener> listener;
+    std::unique_ptr<EmbeddedWorkerInstance::Listener> listener;
   };
 
   // Base class to enable storing a list of mojo interface pointers for
@@ -494,11 +489,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   void OnStartSentAndScriptEvaluated(ServiceWorkerStatusCode status);
 
-  void DispatchMessageEventInternal(
-      const base::string16& message,
-      const std::vector<TransferredMessagePort>& sent_message_ports,
-      const StatusCallback& callback);
-
   // Message handlers.
 
   // This corresponds to the spec's get(id) steps.
@@ -520,10 +510,9 @@ class CONTENT_EXPORT ServiceWorkerVersion
   void OnClearCachedMetadata(const GURL& url);
   void OnClearCachedMetadataFinished(int64_t callback_id, int result);
 
-  void OnPostMessageToClient(
-      const std::string& client_uuid,
-      const base::string16& message,
-      const std::vector<TransferredMessagePort>& sent_message_ports);
+  void OnPostMessageToClient(const std::string& client_uuid,
+                             const base::string16& message,
+                             const std::vector<int>& sent_message_ports);
   void OnFocusClient(int request_id, const std::string& client_uuid);
   void OnNavigateClient(int request_id,
                         const std::string& client_uuid,
@@ -616,7 +605,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
   std::vector<url::Origin> foreign_fetch_origins_;
 
   Status status_ = NEW;
-  scoped_ptr<EmbeddedWorkerInstance> embedded_worker_;
+  std::unique_ptr<EmbeddedWorkerInstance> embedded_worker_;
   std::vector<StatusCallback> start_callbacks_;
   std::vector<StatusCallback> stop_callbacks_;
   std::vector<base::Closure> status_change_callbacks_;
@@ -630,7 +619,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // from this map.
   // mojo_services_[Interface::Name_] is assumed to always contain a
   // MojoServiceWrapper<Interface> instance.
-  base::ScopedPtrHashMap<const char*, scoped_ptr<BaseMojoServiceWrapper>>
+  base::ScopedPtrHashMap<const char*, std::unique_ptr<BaseMojoServiceWrapper>>
       mojo_services_;
 
   std::set<const ServiceWorkerURLRequestJob*> streaming_url_request_jobs_;
@@ -671,15 +660,17 @@ class CONTENT_EXPORT ServiceWorkerVersion
   bool in_dtor_ = false;
 
   std::vector<int> pending_skip_waiting_requests_;
-  scoped_ptr<net::HttpResponseInfo> main_script_http_info_;
+  std::unique_ptr<net::HttpResponseInfo> main_script_http_info_;
 
   // If not OK, the reason that StartWorker failed. Used for
   // running |start_callbacks_|.
   ServiceWorkerStatusCode start_worker_status_ = SERVICE_WORKER_OK;
 
-  scoped_ptr<PingController> ping_controller_;
-  scoped_ptr<Metrics> metrics_;
+  std::unique_ptr<PingController> ping_controller_;
+  std::unique_ptr<Metrics> metrics_;
   const bool should_exclude_from_uma_ = false;
+
+  bool stop_when_devtools_detached_ = false;
 
   base::WeakPtrFactory<ServiceWorkerVersion> weak_factory_;
 
@@ -706,7 +697,7 @@ base::WeakPtr<Interface> ServiceWorkerVersion::GetMojoServiceForRequest(
         base::Bind(&ServiceWorkerVersion::OnMojoConnectionError,
                    weak_factory_.GetWeakPtr(), Interface::Name_));
     service = new MojoServiceWrapper<Interface>(this, std::move(interface));
-    mojo_services_.add(Interface::Name_, make_scoped_ptr(service));
+    mojo_services_.add(Interface::Name_, base::WrapUnique(service));
   }
   request->mojo_service = Interface::Name_;
   return service->GetWeakPtr();

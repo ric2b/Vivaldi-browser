@@ -37,6 +37,16 @@ class MediaCodecUtil {
         public boolean supportsAdaptivePlayback = false;
     }
 
+    @MainDex
+    public static final class MimeTypes {
+        public static final String VIDEO_MP4 = "video/mp4";
+        public static final String VIDEO_WEBM = "video/webm";
+        public static final String VIDEO_H264 = "video/avc";
+        public static final String VIDEO_H265 = "video/hevc";
+        public static final String VIDEO_VP8 = "video/x-vnd.on2.vp8";
+        public static final String VIDEO_VP9 = "video/x-vnd.on2.vp9";
+    }
+
     /**
      * Class to abstract platform version API differences for interacting with
      * the MediaCodecList.
@@ -70,13 +80,28 @@ class MediaCodecUtil {
     }
 
     /**
+     * Return true if and only if name is a software codec.
+     * @param name The codec name, e.g. from MediaCodecInfo.getName().
+     */
+    public static boolean isSoftwareCodec(String name) {
+        // This is structured identically to libstagefright/OMXCodec.cpp .
+        if (name.startsWith("OMX.google.")) return true;
+
+        if (name.startsWith("OMX.")) return false;
+
+        return true;
+    }
+
+    /**
      * Get a name of default android codec.
      * @param mime MIME type of the media.
      * @param direction Whether this is encoder or decoder.
+     * @param requireSoftwareCodec Whether we require a software codec.
      * @return name of the codec.
      */
     @CalledByNative
-    private static String getDefaultCodecName(String mime, int direction) {
+    private static String getDefaultCodecName(
+            String mime, int direction, boolean requireSoftwareCodec) {
         MediaCodecListHelper codecListHelper = new MediaCodecListHelper();
         int codecCount = codecListHelper.getCodecCount();
         for (int i = 0; i < codecCount; ++i) {
@@ -84,6 +109,8 @@ class MediaCodecUtil {
 
             int codecDirection = info.isEncoder() ? MEDIA_CODEC_ENCODER : MEDIA_CODEC_DECODER;
             if (codecDirection != direction) continue;
+
+            if (requireSoftwareCodec && !isSoftwareCodec(info.getName())) continue;
 
             String[] supportedTypes = info.getSupportedTypes();
             for (int j = 0; j < supportedTypes.length; ++j) {
@@ -126,7 +153,8 @@ class MediaCodecUtil {
       */
     @CalledByNative
     private static boolean canDecode(String mime, boolean isSecure) {
-        CodecCreationInfo info = createDecoder(mime, isSecure);
+        // TODO(liberato): Should we insist on software here?
+        CodecCreationInfo info = createDecoder(mime, isSecure, false);
         if (info.mediaCodec == null) return false;
 
         try {
@@ -141,9 +169,11 @@ class MediaCodecUtil {
      * Creates MediaCodec decoder.
      * @param mime MIME type of the media.
      * @param secure Whether secure decoder is required.
+     * @param requireSoftwareCodec Whether a software decoder is required.
      * @return CodecCreationInfo object
      */
-    static CodecCreationInfo createDecoder(String mime, boolean isSecure) {
+    static CodecCreationInfo createDecoder(
+            String mime, boolean isSecure, boolean requireSoftwareCodec) {
         // Always return a valid CodecCreationInfo, its |mediaCodec| field will be null
         // if we cannot create the codec.
         CodecCreationInfo result = new CodecCreationInfo();
@@ -163,7 +193,8 @@ class MediaCodecUtil {
         try {
             // |isSecure| only applies to video decoders.
             if (mime.startsWith("video") && isSecure) {
-                String decoderName = getDefaultCodecName(mime, MEDIA_CODEC_DECODER);
+                String decoderName =
+                        getDefaultCodecName(mime, MEDIA_CODEC_DECODER, requireSoftwareCodec);
                 if (decoderName.equals("")) return null;
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
                     // To work around an issue that we cannot get the codec info from the secure
@@ -178,12 +209,19 @@ class MediaCodecUtil {
                 }
                 result.mediaCodec = MediaCodec.createByCodecName(decoderName + ".secure");
             } else {
-                result.mediaCodec = MediaCodec.createDecoderByType(mime);
+                if (requireSoftwareCodec) {
+                    String decoderName =
+                            getDefaultCodecName(mime, MEDIA_CODEC_DECODER, requireSoftwareCodec);
+                    result.mediaCodec = MediaCodec.createByCodecName(decoderName);
+                } else {
+                    result.mediaCodec = MediaCodec.createDecoderByType(mime);
+                }
                 result.supportsAdaptivePlayback =
                         codecSupportsAdaptivePlayback(result.mediaCodec, mime);
             }
         } catch (Exception e) {
-            Log.e(TAG, "Failed to create MediaCodec: %s, isSecure: %s", mime, isSecure, e);
+            Log.e(TAG, "Failed to create MediaCodec: %s, isSecure: %s, requireSoftwareCodec: %s",
+                    mime, isSecure, requireSoftwareCodec ? "yes" : "no", e);
             result.mediaCodec = null;
         }
         return result;
@@ -201,8 +239,9 @@ class MediaCodecUtil {
         // *** DO NOT ADD ANY NEW CODECS WITHOUT UPDATING MIME_UTIL. ***
         // *************************************************************
         if (mime.equals("video/x-vnd.on2.vp8")) {
-            // Some Samsung devices cannot render VP8 video directly to the surface.
             if (Build.MANUFACTURER.toLowerCase(Locale.getDefault()).equals("samsung")) {
+                // Some Samsung devices cannot render VP8 video directly to the surface.
+
                 // Samsung Galaxy S4.
                 // Only GT-I9505G with Android 4.3 and SPH-L720 (Sprint) with Android 5.0.1
                 // were tested. Only the first device has the problem.
@@ -219,7 +258,23 @@ class MediaCodecUtil {
                 if (Build.MODEL.startsWith("GT-I9190") || Build.MODEL.startsWith("GT-I9195")) {
                     return false;
                 }
+
+                // Some Samsung devices have problems with WebRTC.
+                // We copy blacklisting patterns from software_renderin_list_json.cc
+                // although they are broader than the bugs they refer to.
+
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
+                    // Samsung Galaxy Note 2, http://crbug.com/308721.
+                    if (Build.MODEL.startsWith("GT-")) return false;
+
+                    // Samsung Galaxy S4, http://crbug.com/329072.
+                    if (Build.MODEL.startsWith("SCH-")) return false;
+
+                    // Samsung Galaxy Tab, http://crbug.com/408353.
+                    if (Build.MODEL.startsWith("SM-T")) return false;
+                }
             }
+
             // MediaTek decoders do not work properly on vp8. See http://crbug.com/446974 and
             // http://crbug.com/597836.
             if (Build.HARDWARE.startsWith("mt")) return false;

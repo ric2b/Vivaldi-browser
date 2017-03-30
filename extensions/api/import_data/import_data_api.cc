@@ -149,10 +149,10 @@ ImportDataEventRouter::~ImportDataEventRouter() {
 
 // Helper to actually dispatch an event to extension listeners.
 void ImportDataEventRouter::DispatchEvent(
-    const std::string &event_name, scoped_ptr<base::ListValue> event_args) {
+    const std::string &event_name, std::unique_ptr<base::ListValue> event_args) {
   EventRouter *event_router = EventRouter::Get(browser_context_);
   if (event_router) {
-    event_router->BroadcastEvent(make_scoped_ptr(
+    event_router->BroadcastEvent(base::WrapUnique(
         new extensions::Event(extensions::events::VIVALDI_EXTENSION_EVENT,
                               event_name, std::move(event_args))));
   }
@@ -373,7 +373,7 @@ bool ImportDataStartImportFunction::RunAsyncImpl() {
   api_importer_list =
       ProfileSingletonFactory::getInstance()->getInstance()->getImporterList();
 
-  scoped_ptr<vivaldi::import_data::StartImport::Params> params(
+  std::unique_ptr<vivaldi::import_data::StartImport::Params> params(
       vivaldi::import_data::StartImport::Params::Create(*args_));
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -678,7 +678,7 @@ ImportDataSetVivaldiLanguageFunction::~ImportDataSetVivaldiLanguageFunction() {
 }
 
 bool ImportDataSetVivaldiLanguageFunction::RunAsync() {
-  scoped_ptr<vivaldi::import_data::SetVivaldiLanguage::Params> params(
+  std::unique_ptr<vivaldi::import_data::SetVivaldiLanguage::Params> params(
       vivaldi::import_data::SetVivaldiLanguage::Params::Create(*args_));
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -701,7 +701,7 @@ ImportDataSetDefaultContentSettingsFunction::
 }
 
 bool ImportDataSetDefaultContentSettingsFunction::RunAsync() {
-  scoped_ptr<vivaldi::import_data::SetDefaultContentSettings::Params> params(
+  std::unique_ptr<vivaldi::import_data::SetDefaultContentSettings::Params> params(
       vivaldi::import_data::SetDefaultContentSettings::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -734,7 +734,7 @@ ImportDataGetDefaultContentSettingsFunction::
 }
 
 bool ImportDataGetDefaultContentSettingsFunction::RunAsync() {
-  scoped_ptr<vivaldi::import_data::GetDefaultContentSettings::Params> params(
+  std::unique_ptr<vivaldi::import_data::GetDefaultContentSettings::Params> params(
       vivaldi::import_data::GetDefaultContentSettings::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   std::string& content_settings = params->content_setting;
@@ -765,7 +765,7 @@ ImportDataSetBlockThirdPartyCookiesFunction::
 }
 
 bool ImportDataSetBlockThirdPartyCookiesFunction::RunAsync() {
-  scoped_ptr<vivaldi::import_data::SetBlockThirdPartyCookies::Params> params(
+  std::unique_ptr<vivaldi::import_data::SetBlockThirdPartyCookies::Params> params(
       vivaldi::import_data::SetBlockThirdPartyCookies::Params::Create(*args_));
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -875,7 +875,7 @@ ImportDataSetStartupActionFunction::~ImportDataSetStartupActionFunction() {
 }
 
 bool ImportDataSetStartupActionFunction::RunAsync() {
-  scoped_ptr<vivaldi::import_data::SetStartupAction::Params> params(
+  std::unique_ptr<vivaldi::import_data::SetStartupAction::Params> params(
       vivaldi::import_data::SetStartupAction::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   std::string& content_settings = params->startup;

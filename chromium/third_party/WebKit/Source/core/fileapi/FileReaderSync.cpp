@@ -32,11 +32,9 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/DOMArrayBuffer.h"
-#include "core/dom/ExceptionCode.h"
 #include "core/fileapi/Blob.h"
 #include "core/fileapi/FileError.h"
 #include "core/fileapi/FileReaderLoader.h"
-#include "wtf/PassRefPtr.h"
 
 namespace blink {
 
@@ -44,7 +42,7 @@ FileReaderSync::FileReaderSync()
 {
 }
 
-PassRefPtr<DOMArrayBuffer> FileReaderSync::readAsArrayBuffer(ExecutionContext* executionContext, Blob* blob, ExceptionState& exceptionState)
+DOMArrayBuffer* FileReaderSync::readAsArrayBuffer(ExecutionContext* executionContext, Blob* blob, ExceptionState& exceptionState)
 {
     ASSERT(blob);
 

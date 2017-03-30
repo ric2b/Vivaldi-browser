@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -110,11 +111,6 @@ AssemblyProgram::AssemblyProgram(ExecutableType kind)
   : kind_(kind), image_base_(0) {
 }
 
-static void DeleteContainedLabels(const RVAToLabel& labels) {
-  for (RVAToLabel::const_iterator p = labels.begin();  p != labels.end();  ++p)
-    UncheckedDelete(p->second);
-}
-
 AssemblyProgram::~AssemblyProgram() {
   for (size_t i = 0;  i < instructions_.size();  ++i) {
     Instruction* instruction = instructions_[i];
@@ -125,8 +121,6 @@ AssemblyProgram::~AssemblyProgram() {
     for (size_t i = 0;  i < 256;  ++i)
       UncheckedDelete(byte_instruction_cache_[i]);
   }
-  DeleteContainedLabels(rel32_labels_);
-  DeleteContainedLabels(abs32_labels_);
 }
 
 CheckBool AssemblyProgram::EmitPeRelocsInstruction() {
@@ -177,27 +171,50 @@ CheckBool AssemblyProgram::EmitAbs64(Label* label) {
       ScopedInstruction(UncheckedNew<InstructionWithLabel>(ABS64, label)));
 }
 
-Label* AssemblyProgram::FindOrMakeAbs32Label(RVA rva) {
-  return FindLabel(rva, &abs32_labels_);
+void AssemblyProgram::PrecomputeLabels(RvaVisitor* abs32_visitor,
+                                       RvaVisitor* rel32_visitor) {
+  abs32_label_manager_.Read(abs32_visitor);
+  rel32_label_manager_.Read(rel32_visitor);
+  TrimLabels();
 }
 
-Label* AssemblyProgram::FindOrMakeRel32Label(RVA rva) {
-  return FindLabel(rva, &rel32_labels_);
-}
+// Chosen empirically to give the best reduction in payload size for
+// an update from daisy_3701.98.0 to daisy_4206.0.0.
+const int AssemblyProgram::kLabelLowerLimit = 5;
 
-void AssemblyProgram::DefaultAssignIndexes() {
-  DefaultAssignIndexes(&abs32_labels_);
-  DefaultAssignIndexes(&rel32_labels_);
+void AssemblyProgram::TrimLabels() {
+  // For now only trim for ARM binaries.
+  if (kind() != EXE_ELF_32_ARM)
+    return;
+
+  int lower_limit = kLabelLowerLimit;
+
+  VLOG(1) << "TrimLabels: threshold " << lower_limit;
+
+  rel32_label_manager_.RemoveUnderusedLabels(lower_limit);
 }
 
 void AssemblyProgram::UnassignIndexes() {
-  UnassignIndexes(&abs32_labels_);
-  UnassignIndexes(&rel32_labels_);
+  abs32_label_manager_.UnassignIndexes();
+  rel32_label_manager_.UnassignIndexes();
+}
+
+void AssemblyProgram::DefaultAssignIndexes() {
+  abs32_label_manager_.DefaultAssignIndexes();
+  rel32_label_manager_.DefaultAssignIndexes();
 }
 
 void AssemblyProgram::AssignRemainingIndexes() {
-  AssignRemainingIndexes(&abs32_labels_);
-  AssignRemainingIndexes(&rel32_labels_);
+  abs32_label_manager_.AssignRemainingIndexes();
+  rel32_label_manager_.AssignRemainingIndexes();
+}
+
+Label* AssemblyProgram::FindAbs32Label(RVA rva) {
+  return abs32_label_manager_.Find(rva);
+}
+
+Label* AssemblyProgram::FindRel32Label(RVA rva) {
+  return rel32_label_manager_.Find(rva);
 }
 
 Label* AssemblyProgram::InstructionAbs32Label(
@@ -235,17 +252,6 @@ CheckBool AssemblyProgram::Emit(ScopedInstruction instruction) {
 CheckBool AssemblyProgram::EmitShared(Instruction* instruction) {
   DCHECK(!instruction || instruction->op() == DEFBYTE);
   return instruction && instructions_.push_back(instruction);
-}
-
-Label* AssemblyProgram::FindLabel(RVA rva, RVAToLabel* labels) {
-  Label*& slot = (*labels)[rva];
-  if (slot == NULL) {
-    slot = UncheckedNew<Label>(rva);
-    if (slot == NULL)
-      return NULL;
-  }
-  slot->count_++;
-  return slot;
 }
 
 void AssemblyProgram::UnassignIndexes(RVAToLabel* labels) {
@@ -361,12 +367,12 @@ void AssemblyProgram::AssignRemainingIndexes(RVAToLabel* labels) {
           << "  infill " << fill_infill_count;
 }
 
-scoped_ptr<EncodedProgram> AssemblyProgram::Encode() const {
-  scoped_ptr<EncodedProgram> encoded(new EncodedProgram());
+std::unique_ptr<EncodedProgram> AssemblyProgram::Encode() const {
+  std::unique_ptr<EncodedProgram> encoded(new EncodedProgram());
 
   encoded->set_image_base(image_base_);
 
-  if (!encoded->DefineLabels(abs32_labels_, rel32_labels_))
+  if (!encoded->ImportLabels(abs32_label_manager_, rel32_label_manager_))
     return nullptr;
 
   for (size_t i = 0;  i < instructions_.size();  ++i) {
@@ -469,65 +475,10 @@ Instruction* AssemblyProgram::GetByteInstruction(uint8_t byte) {
   return byte_instruction_cache_[byte];
 }
 
-// Chosen empirically to give the best reduction in payload size for
-// an update from daisy_3701.98.0 to daisy_4206.0.0.
-const int AssemblyProgram::kLabelLowerLimit = 5;
-
-CheckBool AssemblyProgram::TrimLabels() {
-  // For now only trim for ARM binaries.
-  if (kind() != EXE_ELF_32_ARM)
-    return true;
-
-  int lower_limit = kLabelLowerLimit;
-
-  VLOG(1) << "TrimLabels: threshold " << lower_limit;
-
-  // Walk through the list of instructions, replacing trimmed labels
-  // with the original machine instruction.
-  for (size_t i = 0; i < instructions_.size(); ++i) {
-    Instruction* instruction = instructions_[i];
-    switch (instruction->op()) {
-      case REL32ARM: {
-        Label* label =
-            static_cast<InstructionWithLabelARM*>(instruction)->label();
-        if (label->count_ <= lower_limit) {
-          const uint8_t* arm_op =
-              static_cast<InstructionWithLabelARM*>(instruction)->arm_op();
-          uint16_t op_size =
-              static_cast<InstructionWithLabelARM*>(instruction)->op_size();
-
-          if (op_size < 1)
-            return false;
-          UncheckedDelete(instruction);
-          instructions_[i] = UncheckedNew<BytesInstruction>(arm_op, op_size);
-          if (!instructions_[i])
-            return false;
-        }
-        break;
-      }
-      default:
-        break;
-    }
-  }
-
-  // Remove and deallocate underused Labels.
-  RVAToLabel::iterator it = rel32_labels_.begin();
-  while (it != rel32_labels_.end()) {
-    if (it->second->count_ <= lower_limit) {
-      UncheckedDelete(it->second);
-      rel32_labels_.erase(it++);
-    } else {
-      ++it;
-    }
-  }
-
-  return true;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 Status Encode(const AssemblyProgram& program,
-              scoped_ptr<EncodedProgram>* output) {
+              std::unique_ptr<EncodedProgram>* output) {
   // Explicitly release any memory associated with the output before encoding.
   output->reset();
 

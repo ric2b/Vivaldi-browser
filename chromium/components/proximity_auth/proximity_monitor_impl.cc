@@ -9,7 +9,7 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "components/proximity_auth/logging/logging.h"
@@ -32,8 +32,9 @@ const int kRssiThreshold = -5;
 // The weight of the most recent RSSI sample.
 const double kRssiSampleWeight = 0.3;
 
-ProximityMonitorImpl::ProximityMonitorImpl(const RemoteDevice& remote_device,
-                                           scoped_ptr<base::TickClock> clock)
+ProximityMonitorImpl::ProximityMonitorImpl(
+    const RemoteDevice& remote_device,
+    std::unique_ptr<base::TickClock> clock)
     : remote_device_(remote_device),
       strategy_(Strategy::NONE),
       remote_device_is_in_proximity_(false),

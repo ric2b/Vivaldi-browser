@@ -27,6 +27,7 @@
 #include "components/autofill/core/browser/webdata/autofill_change.h"
 #include "components/autofill/core/browser/webdata/autofill_entry.h"
 #include "components/autofill/core/browser/webdata/autofill_table.h"
+#include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_field_data.h"
@@ -788,7 +789,7 @@ TEST_F(AutofillTableTest, AutofillProfile) {
   EXPECT_FALSE(s_billing_updated.Step());
 
   // Update the 'Billing' profile.
-  billing_profile.set_origin("Chrome settings");
+  billing_profile.set_origin(kSettingsOrigin);
   billing_profile.SetRawInfo(NAME_FIRST, ASCIIToUTF16("Janice"));
   billing_profile.SetRawInfo(NAME_MIDDLE, ASCIIToUTF16("C."));
   billing_profile.SetRawInfo(NAME_FIRST, ASCIIToUTF16("Joplin"));
@@ -1401,7 +1402,7 @@ TEST_F(AutofillTableTest, RemoveOriginURLsModifiedBetween) {
   EXPECT_EQ(std::string(), s_autofill_profiles_bounded.ColumnString(1));
   ASSERT_TRUE(s_autofill_profiles_bounded.Step());
   EXPECT_EQ(31, s_autofill_profiles_bounded.ColumnInt64(0));
-  EXPECT_EQ("Chrome settings", s_autofill_profiles_bounded.ColumnString(1));
+  EXPECT_EQ(kSettingsOrigin, s_autofill_profiles_bounded.ColumnString(1));
   sql::Statement s_credit_cards_bounded(
       db_->GetSQLConnection()->GetUniqueStatement(
           "SELECT date_modified, origin FROM credit_cards"));
@@ -1415,7 +1416,7 @@ TEST_F(AutofillTableTest, RemoveOriginURLsModifiedBetween) {
             s_credit_cards_bounded.ColumnString(1));
   ASSERT_TRUE(s_credit_cards_bounded.Step());
   EXPECT_EQ(37, s_credit_cards_bounded.ColumnInt64(0));
-  EXPECT_EQ("Chrome settings", s_credit_cards_bounded.ColumnString(1));
+  EXPECT_EQ(kSettingsOrigin, s_credit_cards_bounded.ColumnString(1));
 
   // Remove all origin URLS.
   profiles.clear();
@@ -1433,7 +1434,7 @@ TEST_F(AutofillTableTest, RemoveOriginURLsModifiedBetween) {
   EXPECT_EQ(std::string(), s_autofill_profiles_all.ColumnString(1));
   ASSERT_TRUE(s_autofill_profiles_all.Step());
   EXPECT_EQ(31, s_autofill_profiles_all.ColumnInt64(0));
-  EXPECT_EQ("Chrome settings", s_autofill_profiles_all.ColumnString(1));
+  EXPECT_EQ(kSettingsOrigin, s_autofill_profiles_all.ColumnString(1));
   sql::Statement s_credit_cards_all(
       db_->GetSQLConnection()->GetUniqueStatement(
           "SELECT date_modified, origin FROM credit_cards"));
@@ -1446,7 +1447,7 @@ TEST_F(AutofillTableTest, RemoveOriginURLsModifiedBetween) {
   EXPECT_EQ(std::string(), s_credit_cards_all.ColumnString(1));
   ASSERT_TRUE(s_credit_cards_all.Step());
   EXPECT_EQ(37, s_credit_cards_all.ColumnInt64(0));
-  EXPECT_EQ("Chrome settings", s_credit_cards_all.ColumnString(1));
+  EXPECT_EQ(kSettingsOrigin, s_credit_cards_all.ColumnString(1));
 }
 
 TEST_F(AutofillTableTest, Autofill_GetAllAutofillEntries_NoResults) {
@@ -1738,19 +1739,23 @@ TEST_F(AutofillTableTest, SetServerCardUpdateUsageStats) {
   table_->GetServerCreditCards(&outputs.get());
   ASSERT_EQ(1u, outputs.size());
   EXPECT_EQ(masked_card.server_id(), outputs[0]->server_id());
-  EXPECT_EQ(0U, outputs[0]->use_count());
-  EXPECT_EQ(base::Time(), outputs[0]->use_date());
+  EXPECT_EQ(1U, outputs[0]->use_count());
+  EXPECT_NE(base::Time(), outputs[0]->use_date());
+  // We don't track modification date for server cards. It should always be
+  // base::Time().
+  EXPECT_EQ(base::Time(), outputs[0]->modification_date());
   outputs.clear();
 
   // Update the usage stats; make sure they're reflected in GetServerProfiles.
   inputs.back().set_use_count(4U);
-  inputs.back().set_use_date(base::Time::Now());
+  inputs.back().set_use_date(base::Time());
   table_->UpdateServerCardUsageStats(inputs.back());
   table_->GetServerCreditCards(&outputs.get());
   ASSERT_EQ(1u, outputs.size());
   EXPECT_EQ(masked_card.server_id(), outputs[0]->server_id());
   EXPECT_EQ(4U, outputs[0]->use_count());
-  EXPECT_NE(base::Time(), outputs[0]->use_date());
+  EXPECT_EQ(base::Time(), outputs[0]->use_date());
+  EXPECT_EQ(base::Time(), outputs[0]->modification_date());
   outputs.clear();
 
   // Setting the cards again shouldn't delete the usage stats.
@@ -1759,7 +1764,8 @@ TEST_F(AutofillTableTest, SetServerCardUpdateUsageStats) {
   ASSERT_EQ(1u, outputs.size());
   EXPECT_EQ(masked_card.server_id(), outputs[0]->server_id());
   EXPECT_EQ(4U, outputs[0]->use_count());
-  EXPECT_NE(base::Time(), outputs[0]->use_date());
+  EXPECT_EQ(base::Time(), outputs[0]->use_date());
+  EXPECT_EQ(base::Time(), outputs[0]->modification_date());
   outputs.clear();
 
   // Set a card list where the card is missing --- this should clear metadata.
@@ -1773,8 +1779,9 @@ TEST_F(AutofillTableTest, SetServerCardUpdateUsageStats) {
   table_->GetServerCreditCards(&outputs.get());
   ASSERT_EQ(1u, outputs.size());
   EXPECT_EQ(masked_card.server_id(), outputs[0]->server_id());
-  EXPECT_EQ(0U, outputs[0]->use_count());
-  EXPECT_EQ(base::Time(), outputs[0]->use_date());
+  EXPECT_EQ(1U, outputs[0]->use_count());
+  EXPECT_NE(base::Time(), outputs[0]->use_date());
+  EXPECT_EQ(base::Time(), outputs[0]->modification_date());
   outputs.clear();
 }
 
@@ -1818,6 +1825,9 @@ TEST_F(AutofillTableTest, SetServerProfileUpdateUsageStats) {
   EXPECT_EQ(one.server_id(), outputs[0]->server_id());
   EXPECT_EQ(0U, outputs[0]->use_count());
   EXPECT_EQ(base::Time(), outputs[0]->use_date());
+  // We don't track modification date for server profiles. It should always be
+  // base::Time().
+  EXPECT_EQ(base::Time(), outputs[0]->modification_date());
   outputs.clear();
 
   // Update the usage stats; make sure they're reflected in GetServerProfiles.
@@ -1829,6 +1839,7 @@ TEST_F(AutofillTableTest, SetServerProfileUpdateUsageStats) {
   EXPECT_EQ(one.server_id(), outputs[0]->server_id());
   EXPECT_EQ(4U, outputs[0]->use_count());
   EXPECT_NE(base::Time(), outputs[0]->use_date());
+  EXPECT_EQ(base::Time(), outputs[0]->modification_date());
   outputs.clear();
 
   // Setting the profiles again shouldn't delete the usage stats.
@@ -1838,6 +1849,7 @@ TEST_F(AutofillTableTest, SetServerProfileUpdateUsageStats) {
   EXPECT_EQ(one.server_id(), outputs[0]->server_id());
   EXPECT_EQ(4U, outputs[0]->use_count());
   EXPECT_NE(base::Time(), outputs[0]->use_date());
+  EXPECT_EQ(base::Time(), outputs[0]->modification_date());
   outputs.clear();
 
   // Set a null profile list --- this should clear metadata.
@@ -1849,6 +1861,7 @@ TEST_F(AutofillTableTest, SetServerProfileUpdateUsageStats) {
   EXPECT_EQ(one.server_id(), outputs[0]->server_id());
   EXPECT_EQ(0U, outputs[0]->use_count());
   EXPECT_EQ(base::Time(), outputs[0]->use_date());
+  EXPECT_EQ(base::Time(), outputs[0]->modification_date());
   outputs.clear();
 }
 

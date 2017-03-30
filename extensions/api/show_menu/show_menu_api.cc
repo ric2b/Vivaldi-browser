@@ -11,6 +11,7 @@
 #include "apps/app_load_service.h"
 #include "base/lazy_instance.h"
 #include "base/base64.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -213,10 +214,10 @@ CommandEventRouter::~CommandEventRouter() {
 }
 
 void CommandEventRouter::DispatchEvent(const std::string& event_name,
-                                       scoped_ptr<base::ListValue> event_args) {
+                                       std::unique_ptr<base::ListValue> event_args) {
   EventRouter* event_router = EventRouter::Get(browser_context_);
   if (event_router) {
-    event_router->BroadcastEvent(make_scoped_ptr(
+    event_router->BroadcastEvent(base::WrapUnique(
         new extensions::Event(extensions::events::VIVALDI_EXTENSION_EVENT,
                               event_name, std::move(event_args))));
   }
@@ -583,7 +584,7 @@ const show_menu::MenuItem* VivaldiMenuController::getItemByCommandId(
 namespace Create = vivaldi::show_menu::Create;
 
 bool ShowMenuCreateFunction::RunAsync() {
-  scoped_ptr<Create::Params> params(Create::Params::Create(*args_));
+  std::unique_ptr<Create::Params> params(Create::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   if (params->create_properties.mode == "context") {

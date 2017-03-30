@@ -10,7 +10,9 @@
 #include <set>
 #include <vector>
 
+#include "base/memory/ptr_util.h"
 #include "cc/playback/raster_source.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 
 namespace cc {
 
@@ -18,8 +20,8 @@ namespace {
 
 class LargestToSmallestScaleFunctor {
  public:
-  bool operator()(const scoped_ptr<PictureLayerTiling>& left,
-                  const scoped_ptr<PictureLayerTiling>& right) {
+  bool operator()(const std::unique_ptr<PictureLayerTiling>& left,
+                  const std::unique_ptr<PictureLayerTiling>& right) {
     return left->contents_scale() > right->contents_scale();
   }
 };
@@ -30,31 +32,34 @@ inline float LargerRatio(float float1, float float2) {
   return float1 > float2 ? float1 / float2 : float2 / float1;
 }
 
+const float kSoonBorderDistanceViewportPercentage = 0.15f;
+const float kMaxSoonBorderDistanceInScreenPixels = 312.f;
+
 }  // namespace
 
 // static
-scoped_ptr<PictureLayerTilingSet> PictureLayerTilingSet::Create(
+std::unique_ptr<PictureLayerTilingSet> PictureLayerTilingSet::Create(
     WhichTree tree,
     PictureLayerTilingClient* client,
-    size_t tiling_interest_area_padding,
+    int tiling_interest_area_padding,
     float skewport_target_time_in_seconds,
-    int skewport_extrapolation_limit_in_content_pixels) {
-  return make_scoped_ptr(new PictureLayerTilingSet(
-      tree, client, tiling_interest_area_padding,
-      skewport_target_time_in_seconds,
-      skewport_extrapolation_limit_in_content_pixels));
+    int skewport_extrapolation_limit_in_screen_pixels) {
+  return base::WrapUnique(
+      new PictureLayerTilingSet(tree, client, tiling_interest_area_padding,
+                                skewport_target_time_in_seconds,
+                                skewport_extrapolation_limit_in_screen_pixels));
 }
 
 PictureLayerTilingSet::PictureLayerTilingSet(
     WhichTree tree,
     PictureLayerTilingClient* client,
-    size_t tiling_interest_area_padding,
+    int tiling_interest_area_padding,
     float skewport_target_time_in_seconds,
-    int skewport_extrapolation_limit_in_content_pixels)
+    int skewport_extrapolation_limit_in_screen_pixels)
     : tiling_interest_area_padding_(tiling_interest_area_padding),
       skewport_target_time_in_seconds_(skewport_target_time_in_seconds),
-      skewport_extrapolation_limit_in_content_pixels_(
-          skewport_extrapolation_limit_in_content_pixels),
+      skewport_extrapolation_limit_in_screen_pixels_(
+          skewport_extrapolation_limit_in_screen_pixels),
       tree_(tree),
       client_(client) {}
 
@@ -78,13 +83,12 @@ void PictureLayerTilingSet::CopyTilingsAndPropertiesFromPendingTwin(
     float contents_scale = pending_twin_tiling->contents_scale();
     PictureLayerTiling* this_tiling = FindTilingWithScale(contents_scale);
     if (!this_tiling) {
-      scoped_ptr<PictureLayerTiling> new_tiling = PictureLayerTiling::Create(
-          tree_, contents_scale, raster_source, client_,
-          tiling_interest_area_padding_, skewport_target_time_in_seconds_,
-          skewport_extrapolation_limit_in_content_pixels_);
+      std::unique_ptr<PictureLayerTiling> new_tiling(new PictureLayerTiling(
+          tree_, contents_scale, raster_source_, client_));
       tilings_.push_back(std::move(new_tiling));
       this_tiling = tilings_.back().get();
       tiling_sort_required = true;
+      state_since_last_tile_priority_update_.added_tilings = true;
     }
     this_tiling->TakeTilesAndPropertiesFrom(pending_twin_tiling.get(),
                                             layer_invalidation);
@@ -105,6 +109,8 @@ void PictureLayerTilingSet::UpdateTilingsToCurrentRasterSourceForActivation(
   RemoveTilingsBelowScale(minimum_contents_scale);
   RemoveTilingsAboveScale(maximum_contents_scale);
 
+  raster_source_ = raster_source;
+
   // Copy over tilings that are shared with the |pending_twin_set| tiling set.
   // Also, copy all of the properties from twin tilings.
   CopyTilingsAndPropertiesFromPendingTwin(pending_twin_set, raster_source,
@@ -118,6 +124,7 @@ void PictureLayerTilingSet::UpdateTilingsToCurrentRasterSourceForActivation(
 
     tiling->SetRasterSourceAndResize(raster_source);
     tiling->Invalidate(layer_invalidation);
+    state_since_last_tile_priority_update_.invalidated = true;
     // This is needed for cases where the live tiles rect didn't change but
     // recordings exist in the raster source that did not exist on the last
     // raster source.
@@ -143,15 +150,19 @@ void PictureLayerTilingSet::UpdateTilingsToCurrentRasterSourceForCommit(
   RemoveTilingsBelowScale(minimum_contents_scale);
   RemoveTilingsAboveScale(maximum_contents_scale);
 
+  raster_source_ = raster_source;
+
   // Invalidate tiles and update them to the new raster source.
-  for (const scoped_ptr<PictureLayerTiling>& tiling : tilings_) {
+  for (const std::unique_ptr<PictureLayerTiling>& tiling : tilings_) {
     DCHECK(tree_ != PENDING_TREE || !tiling->has_tiles());
     tiling->SetRasterSourceAndResize(raster_source);
 
     // We can commit on either active or pending trees, but only active one can
     // have tiles at this point.
-    if (tree_ == ACTIVE_TREE)
+    if (tree_ == ACTIVE_TREE) {
       tiling->Invalidate(layer_invalidation);
+      state_since_last_tile_priority_update_.invalidated = true;
+    }
 
     // This is needed for cases where the live tiles rect didn't change but
     // recordings exist in the raster source that did not exist on the last
@@ -164,9 +175,11 @@ void PictureLayerTilingSet::UpdateTilingsToCurrentRasterSourceForCommit(
 void PictureLayerTilingSet::UpdateRasterSourceDueToLCDChange(
     scoped_refptr<RasterSource> raster_source,
     const Region& layer_invalidation) {
+  raster_source_ = raster_source;
   for (const auto& tiling : tilings_) {
     tiling->SetRasterSourceAndResize(raster_source);
     tiling->Invalidate(layer_invalidation);
+    state_since_last_tile_priority_update_.invalidated = true;
     // Since the invalidation changed, we need to create any missing tiles in
     // the live tiles rect again.
     tiling->CreateMissingTilesInLiveTilesRect();
@@ -236,7 +249,7 @@ void PictureLayerTilingSet::CleanUpTilings(
 void PictureLayerTilingSet::RemoveNonIdealTilings() {
   auto to_remove =
       std::remove_if(tilings_.begin(), tilings_.end(),
-                     [](const scoped_ptr<PictureLayerTiling>& t) {
+                     [](const std::unique_ptr<PictureLayerTiling>& t) {
                        return t->resolution() == NON_IDEAL_RESOLUTION;
                      });
   tilings_.erase(to_remove, tilings_.end());
@@ -250,16 +263,18 @@ void PictureLayerTilingSet::MarkAllTilingsNonIdeal() {
 PictureLayerTiling* PictureLayerTilingSet::AddTiling(
     float contents_scale,
     scoped_refptr<RasterSource> raster_source) {
+  if (!raster_source_)
+    raster_source_ = raster_source;
+
   for (size_t i = 0; i < tilings_.size(); ++i) {
     DCHECK_NE(tilings_[i]->contents_scale(), contents_scale);
     DCHECK_EQ(tilings_[i]->raster_source(), raster_source.get());
   }
 
-  tilings_.push_back(PictureLayerTiling::Create(
-      tree_, contents_scale, raster_source, client_,
-      tiling_interest_area_padding_, skewport_target_time_in_seconds_,
-      skewport_extrapolation_limit_in_content_pixels_));
+  tilings_.push_back(base::WrapUnique(
+      new PictureLayerTiling(tree_, contents_scale, raster_source, client_)));
   PictureLayerTiling* appended = tilings_.back().get();
+  state_since_last_tile_priority_update_.added_tilings = true;
 
   std::sort(tilings_.begin(), tilings_.end(), LargestToSmallestScaleFunctor());
   return appended;
@@ -267,7 +282,7 @@ PictureLayerTiling* PictureLayerTilingSet::AddTiling(
 
 int PictureLayerTilingSet::NumHighResTilings() const {
   return std::count_if(tilings_.begin(), tilings_.end(),
-                       [](const scoped_ptr<PictureLayerTiling>& tiling) {
+                       [](const std::unique_ptr<PictureLayerTiling>& tiling) {
                          return tiling->resolution() == HIGH_RESOLUTION;
                        });
 }
@@ -283,11 +298,11 @@ PictureLayerTiling* PictureLayerTilingSet::FindTilingWithScale(
 
 PictureLayerTiling* PictureLayerTilingSet::FindTilingWithResolution(
     TileResolution resolution) const {
-  auto iter =
-      std::find_if(tilings_.begin(), tilings_.end(),
-                   [resolution](const scoped_ptr<PictureLayerTiling>& tiling) {
-                     return tiling->resolution() == resolution;
-                   });
+  auto iter = std::find_if(
+      tilings_.begin(), tilings_.end(),
+      [resolution](const std::unique_ptr<PictureLayerTiling>& tiling) {
+        return tiling->resolution() == resolution;
+      });
   if (iter == tilings_.end())
     return nullptr;
   return iter->get();
@@ -296,7 +311,7 @@ PictureLayerTiling* PictureLayerTilingSet::FindTilingWithResolution(
 void PictureLayerTilingSet::RemoveTilingsBelowScale(float minimum_scale) {
   auto to_remove = std::remove_if(
       tilings_.begin(), tilings_.end(),
-      [minimum_scale](const scoped_ptr<PictureLayerTiling>& tiling) {
+      [minimum_scale](const std::unique_ptr<PictureLayerTiling>& tiling) {
         return tiling->contents_scale() < minimum_scale;
       });
   tilings_.erase(to_remove, tilings_.end());
@@ -305,7 +320,7 @@ void PictureLayerTilingSet::RemoveTilingsBelowScale(float minimum_scale) {
 void PictureLayerTilingSet::RemoveTilingsAboveScale(float maximum_scale) {
   auto to_remove = std::remove_if(
       tilings_.begin(), tilings_.end(),
-      [maximum_scale](const scoped_ptr<PictureLayerTiling>& tiling) {
+      [maximum_scale](const std::unique_ptr<PictureLayerTiling>& tiling) {
         return tiling->contents_scale() > maximum_scale;
       });
   tilings_.erase(to_remove, tilings_.end());
@@ -316,11 +331,11 @@ void PictureLayerTilingSet::RemoveAllTilings() {
 }
 
 void PictureLayerTilingSet::Remove(PictureLayerTiling* tiling) {
-  auto iter =
-      std::find_if(tilings_.begin(), tilings_.end(),
-                   [tiling](const scoped_ptr<PictureLayerTiling>& candidate) {
-                     return candidate.get() == tiling;
-                   });
+  auto iter = std::find_if(
+      tilings_.begin(), tilings_.end(),
+      [tiling](const std::unique_ptr<PictureLayerTiling>& candidate) {
+        return candidate.get() == tiling;
+      });
   if (iter == tilings_.end())
     return;
   tilings_.erase(iter);
@@ -355,21 +370,168 @@ float PictureLayerTilingSet::GetMaximumContentsScale() const {
   return tilings_[0]->contents_scale();
 }
 
+bool PictureLayerTilingSet::TilingsNeedUpdate(
+    const gfx::Rect& visible_rect_in_layer_space,
+    double current_frame_time_in_seconds) {
+  // If we don't have any tilings, we don't need an update.
+  if (num_tilings() == 0)
+    return false;
+
+  // If we never updated the tiling set, then our history is empty. We should
+  // update tilings.
+  if (visible_rect_history_.empty())
+    return true;
+
+  // If we've added new tilings since the last update, then we have to update at
+  // least that one tiling.
+  if (state_since_last_tile_priority_update_.added_tilings)
+    return true;
+
+  // Finally, if some state changed (either frame time or visible rect), then we
+  // need to inform the tilings of the change.
+  const auto& last_frame = visible_rect_history_.front();
+  if (current_frame_time_in_seconds != last_frame.frame_time_in_seconds)
+    return true;
+
+  if (visible_rect_in_layer_space != last_frame.visible_rect_in_layer_space)
+    return true;
+  return false;
+}
+
+gfx::Rect PictureLayerTilingSet::ComputeSkewport(
+    const gfx::Rect& visible_rect_in_layer_space,
+    double current_frame_time_in_seconds,
+    float ideal_contents_scale) {
+  gfx::Rect skewport = visible_rect_in_layer_space;
+  if (skewport.IsEmpty() || visible_rect_history_.empty())
+    return skewport;
+
+  // Use the oldest recorded history to get a stable skewport.
+  const auto& historical_frame = visible_rect_history_.back();
+  double time_delta =
+      current_frame_time_in_seconds - historical_frame.frame_time_in_seconds;
+  if (time_delta == 0.)
+    return skewport;
+
+  double extrapolation_multiplier =
+      skewport_target_time_in_seconds_ / time_delta;
+  int old_x = historical_frame.visible_rect_in_layer_space.x();
+  int old_y = historical_frame.visible_rect_in_layer_space.y();
+  int old_right = historical_frame.visible_rect_in_layer_space.right();
+  int old_bottom = historical_frame.visible_rect_in_layer_space.bottom();
+
+  int new_x = visible_rect_in_layer_space.x();
+  int new_y = visible_rect_in_layer_space.y();
+  int new_right = visible_rect_in_layer_space.right();
+  int new_bottom = visible_rect_in_layer_space.bottom();
+
+  int inset_x = (new_x - old_x) * extrapolation_multiplier;
+  int inset_y = (new_y - old_y) * extrapolation_multiplier;
+  int inset_right = (old_right - new_right) * extrapolation_multiplier;
+  int inset_bottom = (old_bottom - new_bottom) * extrapolation_multiplier;
+
+  int skewport_extrapolation_limit_in_layer_pixels =
+      skewport_extrapolation_limit_in_screen_pixels_ / ideal_contents_scale;
+  gfx::Rect max_skewport = skewport;
+  max_skewport.Inset(-skewport_extrapolation_limit_in_layer_pixels,
+                     -skewport_extrapolation_limit_in_layer_pixels);
+
+  skewport.Inset(inset_x, inset_y, inset_right, inset_bottom);
+  skewport.Union(visible_rect_in_layer_space);
+  skewport.Intersect(max_skewport);
+
+  // Due to limits in int's representation, it is possible that the two
+  // operations above (union and intersect) result in an empty skewport. To
+  // avoid any unpleasant situations like that, union the visible rect again to
+  // ensure that skewport.Contains(visible_rect_in_layer_space) is always
+  // true.
+  skewport.Union(visible_rect_in_layer_space);
+  skewport.Intersect(eventually_rect_in_layer_space_);
+  return skewport;
+}
+
+gfx::Rect PictureLayerTilingSet::ComputeSoonBorderRect(
+    const gfx::Rect& visible_rect,
+    float ideal_contents_scale) {
+  int max_dimension = std::max(visible_rect.width(), visible_rect.height());
+  int distance =
+      std::min<int>(kMaxSoonBorderDistanceInScreenPixels * ideal_contents_scale,
+                    max_dimension * kSoonBorderDistanceViewportPercentage);
+
+  gfx::Rect soon_border_rect = visible_rect;
+  soon_border_rect.Inset(-distance, -distance);
+  soon_border_rect.Intersect(eventually_rect_in_layer_space_);
+  return soon_border_rect;
+}
+
+void PictureLayerTilingSet::UpdatePriorityRects(
+    const gfx::Rect& visible_rect_in_layer_space,
+    double current_frame_time_in_seconds,
+    float ideal_contents_scale) {
+  visible_rect_in_layer_space_ = gfx::Rect();
+  eventually_rect_in_layer_space_ = gfx::Rect();
+
+  // We keep things as floats in here.
+  if (!visible_rect_in_layer_space.IsEmpty()) {
+    gfx::RectF eventually_rectf(visible_rect_in_layer_space);
+    eventually_rectf.Inset(
+        -tiling_interest_area_padding_ / ideal_contents_scale,
+        -tiling_interest_area_padding_ / ideal_contents_scale);
+    if (eventually_rectf.Intersects(
+            gfx::RectF(gfx::SizeF(raster_source_->GetSize())))) {
+      visible_rect_in_layer_space_ = visible_rect_in_layer_space;
+      eventually_rect_in_layer_space_ = gfx::ToEnclosingRect(eventually_rectf);
+    }
+  }
+
+  skewport_in_layer_space_ =
+      ComputeSkewport(visible_rect_in_layer_space_,
+                      current_frame_time_in_seconds, ideal_contents_scale);
+  DCHECK(skewport_in_layer_space_.Contains(visible_rect_in_layer_space_));
+  DCHECK(eventually_rect_in_layer_space_.Contains(skewport_in_layer_space_));
+
+  soon_border_rect_in_layer_space_ =
+      ComputeSoonBorderRect(visible_rect_in_layer_space_, ideal_contents_scale);
+  DCHECK(
+      soon_border_rect_in_layer_space_.Contains(visible_rect_in_layer_space_));
+  DCHECK(eventually_rect_in_layer_space_.Contains(
+      soon_border_rect_in_layer_space_));
+
+  // Finally, update our visible rect history. Note that we use the original
+  // visible rect here, since we want as accurate of a history as possible for
+  // stable skewports.
+  visible_rect_history_.push_front(FrameVisibleRect(
+      visible_rect_in_layer_space_, current_frame_time_in_seconds));
+  if (visible_rect_history_.size() > 2)
+    visible_rect_history_.pop_back();
+}
+
 bool PictureLayerTilingSet::UpdateTilePriorities(
-    const gfx::Rect& required_rect_in_layer_space,
+    const gfx::Rect& visible_rect_in_layer_space,
     float ideal_contents_scale,
     double current_frame_time_in_seconds,
     const Occlusion& occlusion_in_layer_space,
     bool can_require_tiles_for_activation) {
-  bool updated = false;
+  StateSinceLastTilePriorityUpdate::AutoClear auto_clear_state(
+      &state_since_last_tile_priority_update_);
+
+  if (!TilingsNeedUpdate(visible_rect_in_layer_space,
+                         current_frame_time_in_seconds)) {
+    return state_since_last_tile_priority_update_.invalidated;
+  }
+
+  UpdatePriorityRects(visible_rect_in_layer_space,
+                      current_frame_time_in_seconds, ideal_contents_scale);
+
   for (const auto& tiling : tilings_) {
     tiling->set_can_require_tiles_for_activation(
         can_require_tiles_for_activation);
-    updated |= tiling->ComputeTilePriorityRects(
-        required_rect_in_layer_space, ideal_contents_scale,
-        current_frame_time_in_seconds, occlusion_in_layer_space);
+    tiling->ComputeTilePriorityRects(
+        visible_rect_in_layer_space_, skewport_in_layer_space_,
+        soon_border_rect_in_layer_space_, eventually_rect_in_layer_space_,
+        ideal_contents_scale, occlusion_in_layer_space);
   }
-  return updated;
+  return true;
 }
 
 void PictureLayerTilingSet::GetAllPrioritizedTilesForTracing(

@@ -5,7 +5,7 @@
 #include "modules/compositorworker/CompositorWorkerGlobalScope.h"
 
 #include "bindings/core/v8/SerializedScriptValue.h"
-#include "core/workers/WorkerObjectProxy.h"
+#include "core/workers/InProcessWorkerObjectProxy.h"
 #include "core/workers/WorkerThreadStartupData.h"
 #include "modules/EventTargetModules.h"
 #include "modules/compositorworker/CompositorWorkerThread.h"
@@ -16,14 +16,14 @@ CompositorWorkerGlobalScope* CompositorWorkerGlobalScope::create(CompositorWorke
 {
     // Note: startupData is finalized on return. After the relevant parts has been
     // passed along to the created 'context'.
-    CompositorWorkerGlobalScope* context = new CompositorWorkerGlobalScope(startupData->m_scriptURL, startupData->m_userAgent, thread, timeOrigin, startupData->m_starterOriginPrivilegeData.release(), startupData->m_workerClients.release());
+    CompositorWorkerGlobalScope* context = new CompositorWorkerGlobalScope(startupData->m_scriptURL, startupData->m_userAgent, thread, timeOrigin, std::move(startupData->m_starterOriginPrivilegeData), startupData->m_workerClients.release());
     context->applyContentSecurityPolicyFromVector(*startupData->m_contentSecurityPolicyHeaders);
     context->setAddressSpace(startupData->m_addressSpace);
     return context;
 }
 
 CompositorWorkerGlobalScope::CompositorWorkerGlobalScope(const KURL& url, const String& userAgent, CompositorWorkerThread* thread, double timeOrigin, PassOwnPtr<SecurityOrigin::PrivilegeData> starterOriginPrivilegeData, WorkerClients* workerClients)
-    : WorkerGlobalScope(url, userAgent, thread, timeOrigin, starterOriginPrivilegeData, workerClients)
+    : WorkerGlobalScope(url, userAgent, thread, timeOrigin, std::move(starterOriginPrivilegeData), workerClients)
     , m_callbackCollection(this)
 {
 }
@@ -43,13 +43,13 @@ const AtomicString& CompositorWorkerGlobalScope::interfaceName() const
     return EventTargetNames::CompositorWorkerGlobalScope;
 }
 
-void CompositorWorkerGlobalScope::postMessage(ExecutionContext* executionContext, PassRefPtr<SerializedScriptValue> message, const MessagePortArray* ports, ExceptionState& exceptionState)
+void CompositorWorkerGlobalScope::postMessage(ExecutionContext* executionContext, PassRefPtr<SerializedScriptValue> message, const MessagePortArray& ports, ExceptionState& exceptionState)
 {
     // Disentangle the port in preparation for sending it to the remote context.
     OwnPtr<MessagePortChannelArray> channels = MessagePort::disentanglePorts(executionContext, ports, exceptionState);
     if (exceptionState.hadException())
         return;
-    thread()->workerObjectProxy().postMessageToWorkerObject(message, channels.release());
+    thread()->workerObjectProxy().postMessageToWorkerObject(message, std::move(channels));
 }
 
 int CompositorWorkerGlobalScope::requestAnimationFrame(FrameRequestCallback* callback)

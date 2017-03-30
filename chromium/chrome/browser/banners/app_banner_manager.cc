@@ -13,7 +13,6 @@
 #include "content/public/common/frame_navigate_params.h"
 #include "content/public/common/origin_util.h"
 #include "net/base/load_flags.h"
-#include "ui/gfx/screen.h"
 
 namespace {
 bool gDisableSecureCheckForTesting = false;
@@ -61,7 +60,7 @@ void AppBannerManager::ReplaceWebContents(content::WebContents* web_contents) {
 }
 
 bool AppBannerManager::IsFetcherActive() {
-  return data_fetcher_ != nullptr && data_fetcher_->is_active();
+  return data_fetcher_ && data_fetcher_->is_active();
 }
 
 void AppBannerManager::DidNavigateMainFrame(
@@ -117,7 +116,7 @@ bool AppBannerManager::HandleNonWebApp(const std::string& platform,
 }
 
 void AppBannerManager::CancelActiveFetcher() {
-  if (data_fetcher_ != nullptr) {
+  if (data_fetcher_) {
     data_fetcher_->Cancel();
     data_fetcher_ = nullptr;
   }

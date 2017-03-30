@@ -8,7 +8,7 @@
 #include <memory>
 
 #include "ash/ash_export.h"
-#include "ash/wm/workspace/workspace_types.h"
+#include "ash/wm/common/workspace/workspace_types.h"
 #include "base/macros.h"
 
 namespace aura {
@@ -20,17 +20,23 @@ class ShelfLayoutManager;
 class WorkspaceControllerTestHelper;
 class WorkspaceEventHandler;
 class WorkspaceLayoutManager;
+class WorkspaceLayoutManagerBackdropDelegate;
+
+namespace wm {
 class WorkspaceLayoutManagerDelegate;
+}
 
 // WorkspaceController acts as a central place that ties together all the
 // various workspace pieces.
 class ASH_EXPORT WorkspaceController {
  public:
-  explicit WorkspaceController(aura::Window* viewport);
+  WorkspaceController(
+      aura::Window* viewport,
+      std::unique_ptr<wm::WorkspaceLayoutManagerDelegate> delegate);
   virtual ~WorkspaceController();
 
   // Returns the current window state.
-  WorkspaceWindowState GetWindowState() const;
+  wm::WorkspaceWindowState GetWindowState() const;
 
   void SetShelf(ShelfLayoutManager* shelf);
 
@@ -40,7 +46,7 @@ class ASH_EXPORT WorkspaceController {
   // Add a delegate which adds a backdrop behind the top window of the default
   // workspace.
   void SetMaximizeBackdropDelegate(
-      std::unique_ptr<WorkspaceLayoutManagerDelegate> delegate);
+      std::unique_ptr<WorkspaceLayoutManagerBackdropDelegate> delegate);
 
   WorkspaceLayoutManager* layout_manager() { return layout_manager_; }
 
@@ -51,6 +57,8 @@ class ASH_EXPORT WorkspaceController {
 
   ShelfLayoutManager* shelf_;
   std::unique_ptr<WorkspaceEventHandler> event_handler_;
+
+  // Owned by |viewport_|.
   WorkspaceLayoutManager* layout_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(WorkspaceController);

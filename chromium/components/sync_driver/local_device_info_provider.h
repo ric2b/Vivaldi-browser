@@ -5,10 +5,10 @@
 #ifndef COMPONENTS_SYNC_DRIVER_LOCAL_DEVICE_INFO_PROVIDER_H_
 #define COMPONENTS_SYNC_DRIVER_LOCAL_DEVICE_INFO_PROVIDER_H_
 
+#include <memory>
 #include <string>
 
 #include "base/callback_list.h"
-#include "base/memory/scoped_ptr.h"
 
 namespace base {
 class TaskRunner;
@@ -26,11 +26,10 @@ class LocalDeviceInfoProvider {
 
   virtual ~LocalDeviceInfoProvider() {}
 
-  // Returns sync's representation of the local device info;
-  // NULL if the device info is unavailable.
-  // The returned object is fully owned by LocalDeviceInfoProvider (must not
-  // be freed by the caller). It remains valid until LocalDeviceInfoProvider
-  // is destroyed.
+  // Returns sync's representation of the local device info, or nullptr if the
+  // device info is unavailable. The returned object is fully owned by
+  // LocalDeviceInfoProvider; it must not be freed by the caller and should not
+  // be stored.
   virtual const DeviceInfo* GetLocalDeviceInfo() const = 0;
 
   // Constructs a user agent string (ASCII) suitable for use by the syncapi
@@ -53,8 +52,11 @@ class LocalDeviceInfoProvider {
   // The callback will remain registered until the
   // returned Subscription is destroyed, which must occur before the
   // CallbackList is destroyed.
-  virtual scoped_ptr<Subscription> RegisterOnInitializedCallback(
+  virtual std::unique_ptr<Subscription> RegisterOnInitializedCallback(
       const base::Closure& callback) = 0;
+
+  // Clears all cached data, returning to an uninitialized state.
+  virtual void Clear() = 0;
 };
 
 }  // namespace sync_driver

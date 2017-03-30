@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <utility>
 
+#include "app/vivaldi_apptools.h"
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
@@ -14,6 +15,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/api/developer_private/developer_private_mangle.h"
 #include "chrome/browser/extensions/api/developer_private/entry_picker.h"
@@ -1385,9 +1387,15 @@ ExtensionFunction::ResponseAction DeveloperPrivateShowOptionsFunction::Run() {
   if (!web_contents)
     return RespondNow(Error(kCouldNotFindWebContentsError));
 
+  if (vivaldi::IsVivaldiRunning()) {
+    ExtensionTabUtil::OpenOptionsPage(
+      extension,
+      vivaldi::FindBrowserWithWebContents(web_contents));
+  } else {
   ExtensionTabUtil::OpenOptionsPage(
       extension,
       chrome::FindBrowserWithWebContents(web_contents));
+  }
   return RespondNow(NoArguments());
 }
 

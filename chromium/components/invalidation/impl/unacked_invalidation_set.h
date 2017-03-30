@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <set>
 
 #include "base/memory/weak_ptr.h"
@@ -28,6 +29,10 @@ class UnackedInvalidationSetEqMatcher;
 class SingleObjectInvalidationSet;
 class ObjectIdInvalidationMap;
 class AckHandle;
+class UnackedInvalidationSet;
+
+using UnackedInvalidationsMap =
+    std::map<invalidation::ObjectId, UnackedInvalidationSet, ObjectIdLessThan>;
 
 // Manages the set of invalidations that are awaiting local acknowledgement for
 // a particular ObjectId.  This set of invalidations will be persisted across
@@ -93,7 +98,13 @@ class INVALIDATION_EXPORT UnackedInvalidationSet {
   // indicate that this invalidation has been lost without being acted on.
   void Drop(const AckHandle& handle);
 
-  scoped_ptr<base::DictionaryValue> ToValue() const;
+  // Deserializes the given |dict| as an UnackedInvalidationSet and inserts the
+  // pair into |map| using the ObjectId as the key. Returns false if the
+  // deserialization fails.
+  static bool DeserializeSetIntoMap(const base::DictionaryValue& dict,
+                                    syncer::UnackedInvalidationsMap* map);
+
+  std::unique_ptr<base::DictionaryValue> ToValue() const;
   bool ResetFromValue(const base::DictionaryValue& value);
 
  private:
@@ -113,10 +124,6 @@ class INVALIDATION_EXPORT UnackedInvalidationSet {
   invalidation::ObjectId object_id_;
   InvalidationsSet invalidations_;
 };
-
-typedef std::map<invalidation::ObjectId,
-                 UnackedInvalidationSet,
-                 ObjectIdLessThan> UnackedInvalidationsMap;
 
 }  // namespace syncer
 

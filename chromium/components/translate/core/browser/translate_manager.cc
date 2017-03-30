@@ -51,20 +51,12 @@ const char kSourceLanguageQueryName[] = "sl";
 // Used in kReportLanguageDetectionErrorURL to specify the page URL.
 const char kUrlQueryName[] = "u";
 
-// Notifies |g_callback_list_| of translate errors.
-void NotifyTranslateError(const TranslateErrorDetails& details) {
-  if (!g_callback_list_)
-    return;
-
-  g_callback_list_->Notify(details);
-}
-
 }  // namespace
 
 TranslateManager::~TranslateManager() {}
 
 // static
-scoped_ptr<TranslateManager::TranslateErrorCallbackList::Subscription>
+std::unique_ptr<TranslateManager::TranslateErrorCallbackList::Subscription>
 TranslateManager::RegisterTranslateErrorCallback(
     const TranslateManager::TranslateErrorCallback& callback) {
   if (!g_callback_list_)
@@ -144,7 +136,7 @@ void TranslateManager::InitiateTranslation(const std::string& page_lang) {
     return;
   }
 
-  scoped_ptr<TranslatePrefs> translate_prefs(
+  std::unique_ptr<TranslatePrefs> translate_prefs(
       translate_client_->GetTranslatePrefs());
 
   std::string target_lang = GetTargetLanguage(translate_prefs.get());
@@ -169,6 +161,12 @@ void TranslateManager::InitiateTranslation(const std::string& page_lang) {
     return;
   }
 
+  // In the 2016Q2 UI, enable the translate in language state once we reach
+  // the above check and let omnibar to display the translate icon.
+  if (base::FeatureList::IsEnabled(kTranslateUI2016Q2)) {
+    language_state_.SetTranslateEnabled(true);
+  }
+
   TranslateAcceptLanguages* accept_languages =
       translate_client_->GetTranslateAcceptLanguages();
   // Don't translate any user black-listed languages.
@@ -191,7 +189,7 @@ void TranslateManager::InitiateTranslation(const std::string& page_lang) {
   // feature; the user will get an infobar, so they can control whether the
   // page's text is sent to the translate server.
   if (!translate_driver_->IsOffTheRecord()) {
-    scoped_ptr<TranslatePrefs> translate_prefs =
+    std::unique_ptr<TranslatePrefs> translate_prefs =
         translate_client_->GetTranslatePrefs();
     std::string auto_target_lang =
         GetAutoTargetLanguage(language_code, translate_prefs.get());
@@ -296,6 +294,20 @@ void TranslateManager::DoTranslatePage(const std::string& translate_script,
       page_seq_no_, translate_script, source_lang, target_lang);
 }
 
+// Notifies |g_callback_list_| of translate errors.
+void TranslateManager::NotifyTranslateError(TranslateErrors::Type error_type) {
+  if (!g_callback_list_ || error_type == TranslateErrors::NONE ||
+      translate_driver_->IsOffTheRecord()) {
+    return;
+  }
+
+  TranslateErrorDetails error_details;
+  error_details.time = base::Time::Now();
+  error_details.url = translate_driver_->GetLastCommittedURL();
+  error_details.error = error_type;
+  g_callback_list_->Notify(error_details);
+}
+
 void TranslateManager::PageTranslated(const std::string& source_lang,
                                       const std::string& target_lang,
                                       TranslateErrors::Type error_type) {
@@ -313,15 +325,7 @@ void TranslateManager::PageTranslated(const std::string& source_lang,
                                      target_lang,
                                      error_type,
                                      false);
-
-  if (error_type != TranslateErrors::NONE &&
-      !translate_driver_->IsOffTheRecord()) {
-    TranslateErrorDetails error_details;
-    error_details.time = base::Time::Now();
-    error_details.url = translate_driver_->GetLastCommittedURL();
-    error_details.error = error_type;
-    NotifyTranslateError(error_details);
-  }
+  NotifyTranslateError(error_type);
 }
 
 void TranslateManager::OnTranslateScriptFetchComplete(
@@ -345,13 +349,7 @@ void TranslateManager::OnTranslateScriptFetchComplete(
         target_lang,
         TranslateErrors::NETWORK,
         false);
-    if (!translate_driver_->IsOffTheRecord()) {
-      TranslateErrorDetails error_details;
-      error_details.time = base::Time::Now();
-      error_details.url = translate_driver_->GetLastCommittedURL();
-      error_details.error = TranslateErrors::NETWORK;
-      NotifyTranslateError(error_details);
-    }
+    NotifyTranslateError(TranslateErrors::NETWORK);
   }
 }
 

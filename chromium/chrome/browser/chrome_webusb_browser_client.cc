@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "ash/system/system_notifier.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
@@ -28,7 +29,14 @@
 
 namespace {
 
-const char kWebUsbDetectorNotificationID[] = "webusb.detector";
+// The WebUSB notification should be displayed for all profiles. On ChromeOS
+// that requires its notifier ID to be known by Ash so that it is not blocked in
+// multi-profile mode.
+#if defined(OS_CHROMEOS)
+#define kNotifierWebUsb ash::system_notifier::kNotifierWebUsb
+#else
+const char kNotifierWebUsb[] = "webusb.connected";
+#endif
 
 // Reasons the notification may be closed. These are used in histograms so do
 // not remove/reorder entries. Only add at the end just before
@@ -113,7 +121,7 @@ void ChromeWebUsbBrowserClient::OnDeviceAdded(
 
   ResourceBundle& rb = ResourceBundle::GetSharedInstance();
   message_center::RichNotificationData rich_notification_data;
-  scoped_ptr<message_center::Notification> notification(
+  std::unique_ptr<message_center::Notification> notification(
       new message_center::Notification(
           message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
           l10n_util::GetStringFUTF16(
@@ -121,11 +129,10 @@ void ChromeWebUsbBrowserClient::OnDeviceAdded(
           l10n_util::GetStringFUTF16(
               IDS_WEBUSB_DEVICE_DETECTED_NOTIFICATION,
               base::UTF8ToUTF16(landing_page.GetContent())),
-          rb.GetNativeImageNamed(IDR_USB_NOTIFICATION_ICON),
-          base::string16(), GURL(),
+          rb.GetNativeImageNamed(IDR_USB_NOTIFICATION_ICON), base::string16(),
+          GURL(),
           message_center::NotifierId(
-              message_center::NotifierId::SYSTEM_COMPONENT,
-              kWebUsbDetectorNotificationID),
+              message_center::NotifierId::SYSTEM_COMPONENT, kNotifierWebUsb),
           rich_notification_data,
           new WebUsbNotificationDelegate(landing_page, notification_id)));
 

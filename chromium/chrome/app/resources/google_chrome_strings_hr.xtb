@@ -66,10 +66,16 @@ Ako se ipak prijavite, podaci sustava Chrome kao što su oznake, povijest i osta
 <translation id="2997147809295888909">Chrome je potvrdio da je <ph name="ISSUER" /> izdavač certifikata web-lokacije. Poslužitelj nije pružio informacije o transparentnosti certifikata.</translation>
 <translation id="3037838751736561277">Google Chrome radi u pozadini.</translation>
 <translation id="3047079729301751317">Prekidanjem veze s računom <ph name="USERNAME" /> izbrisat ćete svoju povijest, oznake, postavke i ostale Chromeove podatke pohranjene na ovom uređaju. Podaci pohranjeni na vašem Google računu neće se izbrisati. Tim podacima možete upravljati na <ph name="GOOGLE_DASHBOARD_LINK" />Google nadzornoj ploči<ph name="END_GOOGLE_DASHBOARD_LINK" />.</translation>
+<translation id="3065168410429928842">Chromeova kartica</translation>
 <translation id="3080151273017101988">Nastavi prikazivati ​​pozadinske aplikacije po zatvaranju preglednika Google Chrome</translation>
 <translation id="3089968997497233615">Dostupna je nova, sigurnija verzija preglednika Google Chrome.</translation>
 <translation id="3149510190863420837">Aplikacije sustava Chrome</translation>
-<translation id="3197823471738295152">Uređaj je ažuran.</translation>
+<translation id="3251381707915721925">Da biste postavili koje web-lokacije <ph name="NEW_PROFILE_NAME" /> može gledati, konfigurirajte ograničenja i postavke na stranici <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. Ako ne promijenite zadane postavke, <ph name="NEW_PROFILE_NAME" /> može pregledavati sve na webu.
+
+Ako ne želite da <ph name="NEW_PROFILE_NAME" /> pristupa vašem računu, zaključajte svoj profil kada ne upotrebljavate Chrome. Da biste to učinili, kliknite naziv profila u gornjem desnom kutu preglednika i odaberite "Zatvori i zaključaj".
+<ph name="BEGIN_LINK_2" />Saznajte više<ph name="END_LINK_2" />
+
+Daljnje upute poslali smo vam na e-adresu <ph name="ACCOUNT_EMAIL" />.</translation>
 <translation id="3282568296779691940">Prijavite se u Chrome</translation>
 <translation id="3311976847535831054">Ovo računalo više neće primati ažuriranja za 32-bitni Google Chrome. Nadogradite na 64-bitni Google Chrome.</translation>
 <translation id="3360895254066713204">Chrome Helper</translation>
@@ -205,7 +211,6 @@ Ako se ipak prijavite, podaci sustava Chrome kao što su oznake, povijest i osta
 <translation id="7808348361785373670">Ukloni iz Chromea...</translation>
 <translation id="7825851276765848807">Instalacija nije uspjela zbog neodređene pogreške. Ponovo preuzmite Google Chrome.</translation>
 <translation id="7890208801193284374">Ako dijelite računalo, prijatelji i članovi obitelji mogu zasebno pregledavati i postaviti Chrome prema svojim željama.</translation>
-<translation id="8000275528373650868">Google Chrome zahtijeva sustav Windows Vista ili Windows XP sa SP2 ili novijim.</translation>
 <translation id="8005540215158006229">Chrome je skoro spreman.</translation>
 <translation id="8008534537613507642">Ponovo instaliraj Chrome</translation>
 <translation id="8030318113982266900">Ažuriranje vašeg uređaja na kanal <ph name="CHANNEL_NAME" />...</translation>
@@ -227,6 +232,7 @@ Ako se ipak prijavite, podaci sustava Chrome kao što su oznake, povijest i osta
 <translation id="8556340503434111824">Dostupna je nova verzija preglednika Google Chrome, brža no ikad.</translation>
 <translation id="8568392309447938879">Morate se prijaviti na Chrome da biste upotrebljavali aplikacije. To omogućuje Chromeu sinkronizaciju vaših aplikacija, oznaka, povijesti, zaporki i ostalih postavki na različitim uređajima.</translation>
 <translation id="8614913330719544658">Google Chrome ne reagira. Ponovo pokrenuti sada?</translation>
+<translation id="8667808506758191620"><ph name="DEVICE_TYPE" /> je ažuriran.</translation>
 <translation id="8669527147644353129">Google Chrome Helper</translation>
 <translation id="8679801911857917785">Upravlja i time koja se stranica prikazuje prilikom pokretanja Chromea.</translation>
 <translation id="870251953148363156">Ažuriranje preglednika Google Chrome</translation>
@@ -235,6 +241,7 @@ Ako se ipak prijavite, podaci sustava Chrome kao što su oznake, povijest i osta
 <translation id="8851136666856101339">glav</translation>
 <translation id="8862326446509486874">Nemate odgovarajuća prava za instaliranje na razini sustava. Pokušajte ponovno pokrenuti program za instalaciju kao administrator.</translation>
 <translation id="9026991721384951619">OS Chrome nije mogao sinkronizirati vaše podatke jer su vaši podaci za prijavu na račun zastarjeli.</translation>
+<translation id="9067395829937117663">Google Chrome zahtijeva Windows 7 ili noviju verziju.</translation>
 <translation id="9102715433345326100">Datoteka je zlonamjerna i Chrome ju je blokirao.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Upozorenje:<ph name="END_BOLD" /> Google Chrome ne može spriječiti proširenja da evidentiraju vašu povijest pregledavanja. Da biste onemogućili proširenje u anonimnom načinu, isključite tu opciju.</translation>
 <translation id="911206726377975832">Izbrisati i podatke o pregledavanju?</translation>

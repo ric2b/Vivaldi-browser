@@ -5,9 +5,9 @@
 #ifndef NET_TOOLS_QUIC_TEST_TOOLS_QUIC_TEST_SERVER_H_
 #define NET_TOOLS_QUIC_TEST_TOOLS_QUIC_TEST_SERVER_H_
 
+#include <memory>
 #include <string>
 
-#include "base/memory/scoped_ptr.h"
 #include "net/base/ip_endpoint.h"
 #include "net/quic/quic_session.h"
 #include "net/tools/quic/quic_dispatcher.h"
@@ -92,6 +92,8 @@ class ImmediateGoAwaySession : public QuicSimpleServerSession {
                          QuicServerSessionVisitor* visitor,
                          const QuicCryptoServerConfig* crypto_config,
                          QuicCompressedCertsCache* compressed_certs_cache);
+  // Override to send GoAway.
+  void OnStreamFrame(const QuicStreamFrame& frame) override;
 };
 
 }  // namespace test

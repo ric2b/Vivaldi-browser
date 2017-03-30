@@ -12,6 +12,7 @@
 #include <limits>
 #include <vector>
 
+#include "base/memory/ptr_util.h"
 #include "cc/output/bsp_compare_result.h"
 #include "cc/quads/draw_polygon.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -30,11 +31,20 @@ namespace {
 #define CREATE_NEW_DRAW_POLYGON(name, points_vector, normal, polygon_id) \
   DrawPolygon name(NULL, points_vector, normal, polygon_id)
 
-#define CREATE_TEST_DRAW_POLYGON(name, points_vector, polygon_id)             \
-  DrawPolygon name(NULL, points_vector, gfx::Vector3dF(1, 2, 3), polygon_id); \
+#define CREATE_NEW_DRAW_POLYGON_PTR(name, points_vector, normal, polygon_id) \
+  std::unique_ptr<DrawPolygon> name(base::MakeUnique<DrawPolygon>(           \
+      nullptr, points_vector, normal, polygon_id))
+
+#define CREATE_TEST_DRAW_FORWARD_POLYGON(name, points_vector, id)        \
+  DrawPolygon name(NULL, points_vector, gfx::Vector3dF(0, 0, 1.0f), id); \
   name.RecomputeNormalForTesting()
 
-#define EXPECT_FLOAT_WITHIN_EPSILON_OF(a, b) \
+#define CREATE_TEST_DRAW_REVERSE_POLYGON(name, points_vector, id)         \
+  DrawPolygon name(NULL, points_vector, gfx::Vector3dF(0, 0, -1.0f), id); \
+  name.RecomputeNormalForTesting()
+
+#define EXPECT_FLOAT_WITHIN_EPSILON_OF(a, b)                               \
+  LOG(WARNING) << "a=" << a << " b= " << b << " diff=" << std::abs(a - b); \
   EXPECT_TRUE(std::abs(a - b) < std::numeric_limits<float>::epsilon());
 
 #define EXPECT_POINT_EQ(point_a, point_b)    \
@@ -55,6 +65,36 @@ static void ValidatePoints(const DrawPolygon& polygon,
   }
 }
 
+static void ValidatePointsWithinDeltaOf(const DrawPolygon& polygon,
+                                        const std::vector<gfx::Point3F>& points,
+                                        float delta) {
+  EXPECT_EQ(polygon.points().size(), points.size());
+  for (size_t i = 0; i < points.size(); i++) {
+    EXPECT_LE((polygon.points()[i] - points[i]).Length(), delta);
+  }
+}
+
+std::unique_ptr<DrawPolygon> ClonePolygon(const DrawPolygon& polygon) {
+  return base::MakeUnique<DrawPolygon>(polygon.original_ref(), polygon.points(),
+                                       polygon.normal(), polygon.order_index());
+}
+
+// Classifies polygon a with respect to b
+BspCompareResult SideCompare(const DrawPolygon& a, const DrawPolygon& b) {
+  std::unique_ptr<DrawPolygon> front;
+  std::unique_ptr<DrawPolygon> back;
+  bool is_coplanar;
+  b.SplitPolygon(ClonePolygon(a), &front, &back, &is_coplanar);
+  if (is_coplanar) {
+    return (front != nullptr) ? BSP_COPLANAR_FRONT : BSP_COPLANAR_BACK;
+  }
+  if (front == nullptr)
+    return BSP_BACK;
+  if (back == nullptr)
+    return BSP_FRONT;
+  return BSP_SPLIT;
+}
+
 // A simple square in a plane.
 TEST(DrawPolygonConstructionTest, NormalNormal) {
   gfx::Transform Identity;
@@ -70,19 +110,8 @@ TEST(DrawPolygonConstructionTest, TestNormal) {
   vertices.push_back(gfx::Point3F(10.0f, 0.0f, 0.0f));
   vertices.push_back(gfx::Point3F(10.0f, 10.0f, 0.0f));
 
-  CREATE_TEST_DRAW_POLYGON(polygon, vertices, 1);
+  CREATE_TEST_DRAW_FORWARD_POLYGON(polygon, vertices, 1);
   EXPECT_NORMAL(polygon, 0.0f, 0.0f, 1.0f);
-}
-
-TEST(DrawPolygonConstructionTest, InverseNormal) {
-  std::vector<gfx::Point3F> vertices;
-  vertices.push_back(gfx::Point3F(0.0f, 10.0f, 0.0f));
-  vertices.push_back(gfx::Point3F(10.0f, 10.0f, 0.0f));
-  vertices.push_back(gfx::Point3F(10.0f, 0.0f, 0.0f));
-  vertices.push_back(gfx::Point3F(0.0f, 0.0f, 0.0f));
-
-  CREATE_TEST_DRAW_POLYGON(polygon, vertices, 1);
-  EXPECT_NORMAL(polygon, 0.0f, 0.0f, -1.0f);
 }
 
 TEST(DrawPolygonConstructionTest, ClippedNormal) {
@@ -94,7 +123,7 @@ TEST(DrawPolygonConstructionTest, ClippedNormal) {
   vertices.push_back(gfx::Point3F(10.0f, 0.0f, 0.0f));
   vertices.push_back(gfx::Point3F(10.0f, 10.0f, 0.0f));
 
-  CREATE_TEST_DRAW_POLYGON(polygon, vertices, 1);
+  CREATE_TEST_DRAW_FORWARD_POLYGON(polygon, vertices, 1);
   EXPECT_NORMAL(polygon, 0.0f, 0.0f, 1.0f);
 }
 
@@ -104,7 +133,7 @@ TEST(DrawPolygonConstructionTest, SlimTriangleNormal) {
   vertices.push_back(gfx::Point3F(5000.0f, 0.0f, 0.0f));
   vertices.push_back(gfx::Point3F(10000.0f, 1.0f, 0.0f));
 
-  CREATE_TEST_DRAW_POLYGON(polygon, vertices, 2);
+  CREATE_TEST_DRAW_FORWARD_POLYGON(polygon, vertices, 2);
   EXPECT_NORMAL(polygon, 0.0f, 0.0f, 1.0f);
 }
 
@@ -117,36 +146,83 @@ TEST(DrawPolygonConstructionTest, ManyVertexNormal) {
     vertices_d.push_back(gfx::Point3F(cos(i * M_PI / 50) + 99.0f,
                                       sin(i * M_PI / 50) + 99.0f, 100.0f));
   }
-  CREATE_TEST_DRAW_POLYGON(polygon_c, vertices_c, 3);
+  CREATE_TEST_DRAW_FORWARD_POLYGON(polygon_c, vertices_c, 3);
   EXPECT_NORMAL(polygon_c, 0.0f, 0.0f, 1.0f);
 
-  CREATE_TEST_DRAW_POLYGON(polygon_d, vertices_d, 4);
+  CREATE_TEST_DRAW_FORWARD_POLYGON(polygon_d, vertices_d, 4);
   EXPECT_NORMAL(polygon_c, 0.0f, 0.0f, 1.0f);
 }
 
 // A simple rect being transformed.
-TEST(DrawPolygonConstructionTest, DizzyNormal) {
+TEST(DrawPolygonConstructionTest, SimpleNormal) {
   gfx::RectF src(-0.1f, -10.0f, 0.2f, 20.0f);
 
   gfx::Transform transform_i(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
   DrawPolygon polygon_i(NULL, src, transform_i, 1);
 
   EXPECT_NORMAL(polygon_i, 0.0f, 0.0f, 1.0f);
+}
 
-  gfx::Transform tranform_a(0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
-  DrawPolygon polygon_a(NULL, src, tranform_a, 2);
-  EXPECT_NORMAL(polygon_a, 0.0f, 0.0f, -1.0f);
+TEST(DrawPolygonConstructionTest, DISABLED_NormalInvertXY) {
+  gfx::RectF src(-0.1f, -10.0f, 0.2f, 20.0f);
 
-  gfx::Transform tranform_b(0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1);
-  DrawPolygon polygon_b(NULL, src, tranform_b, 3);
-  EXPECT_NORMAL(polygon_b, -1.0f, 0.0f, 0.0f);
+  gfx::Transform transform(0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+  DrawPolygon polygon_a(NULL, src, transform, 2);
 
-  gfx::Transform tranform_c(1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1);
-  DrawPolygon polygon_c(NULL, src, tranform_c, 4);
-  EXPECT_NORMAL(polygon_c, 0.0f, -1.0f, 0.0f);
+  EXPECT_NORMAL(polygon_a, 0.0f, 0.0f, 1.0f);
+}
 
-  gfx::Transform tranform_d(-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
-  DrawPolygon polygon_d(NULL, src, tranform_d, 5);
+TEST(DrawPolygonConstructionTest, DISABLED_NormalInvertXZ) {
+  gfx::RectF src(-0.1f, -10.0f, 0.2f, 20.0f);
+
+  gfx::Transform transform(0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1);
+  DrawPolygon polygon_b(NULL, src, transform, 3);
+
+  EXPECT_NORMAL(polygon_b, 1.0f, 0.0f, 0.0f);
+}
+
+TEST(DrawPolygonConstructionTest, DISABLED_NormalInvertYZ) {
+  gfx::RectF src(-0.1f, -10.0f, 0.2f, 20.0f);
+
+  gfx::Transform transform(1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1);
+  DrawPolygon polygon_c(NULL, src, transform, 4);
+
+  EXPECT_NORMAL(polygon_c, 0.0f, 1.0f, 0.0f);
+}
+
+TEST(DrawPolygonConstructionTest, NormalRotate90) {
+  gfx::RectF src(-0.1f, -10.0f, 0.2f, 20.0f);
+
+  gfx::Transform transform(0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1);
+  DrawPolygon polygon_b(NULL, src, transform, 3);
+
+  EXPECT_NORMAL(polygon_b, 0.0f, 0.0f, 1.0f);
+}
+
+TEST(DrawPolygonConstructionTest, InvertXNormal) {
+  gfx::RectF src(-0.1f, -10.0f, 0.2f, 20.0f);
+
+  gfx::Transform transform(-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+  DrawPolygon polygon_d(NULL, src, transform, 5);
+
+  EXPECT_NORMAL(polygon_d, 0.0f, 0.0f, 1.0f);
+}
+
+TEST(DrawPolygonConstructionTest, InvertYNormal) {
+  gfx::RectF src(-0.1f, -10.0f, 0.2f, 20.0f);
+
+  gfx::Transform transform(1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+  DrawPolygon polygon_d(NULL, src, transform, 5);
+
+  EXPECT_NORMAL(polygon_d, 0.0f, 0.0f, 1.0f);
+}
+
+TEST(DrawPolygonConstructionTest, InvertZNormal) {
+  gfx::RectF src(-0.1f, -10.0f, 0.2f, 20.0f);
+
+  gfx::Transform transform(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1);
+  DrawPolygon polygon_d(NULL, src, transform, 5);
+
   EXPECT_NORMAL(polygon_d, 0.0f, 0.0f, -1.0f);
 }
 
@@ -168,7 +244,7 @@ TEST(DrawPolygonSplitTest, NearlyTouchingOrder) {
   CREATE_NEW_DRAW_POLYGON(polygon_a, vertices_a, normal, 0);
   CREATE_NEW_DRAW_POLYGON(polygon_b, vertices_b, normal, 1);
 
-  EXPECT_EQ(BSP_BACK, DrawPolygon::SideCompare(polygon_b, polygon_a));
+  EXPECT_EQ(BSP_BACK, SideCompare(polygon_b, polygon_a));
 }
 
 // Two quads are definitely not touching and so no split should occur.
@@ -194,7 +270,7 @@ TEST(DrawPolygonSplitTest, NotClearlyInFront) {
   CREATE_NEW_DRAW_POLYGON(polygon_a, vertices_a, normal_a, 0);
   CREATE_NEW_DRAW_POLYGON(polygon_b, vertices_b, normal_b, 1);
 
-  EXPECT_EQ(BSP_FRONT, DrawPolygon::SideCompare(polygon_b, polygon_a));
+  EXPECT_EQ(BSP_FRONT, SideCompare(polygon_b, polygon_a));
 }
 
 // Two quads are definitely not touching and so no split should occur.
@@ -206,19 +282,20 @@ TEST(DrawPolygonSplitTest, NotTouchingNoSplit) {
   vertices_a.push_back(gfx::Point3F(10.0f, 10.0f, 0.0f));
   std::vector<gfx::Point3F> vertices_b;
   vertices_b.push_back(gfx::Point3F(5.0f, 10.0f, 5.0f));
+  vertices_b.push_back(gfx::Point3F(5.0f, 10.0f, 15.0f));
   vertices_b.push_back(gfx::Point3F(5.0f, 0.0f, 15.0f));
-  vertices_b.push_back(gfx::Point3F(5.0f, 0.0f, 15.0f));
-  vertices_b.push_back(gfx::Point3F(5.0f, 10.0f, 5.0f));
+  vertices_b.push_back(gfx::Point3F(5.0f, 0.0f, 5.0f));
 
-  CREATE_NEW_DRAW_POLYGON(
-      polygon_a, vertices_a, gfx::Vector3dF(0.0f, 0.0f, 1.0f), 0);
-  CREATE_NEW_DRAW_POLYGON(
-      polygon_b, vertices_b, gfx::Vector3dF(-1.0f, 0.0f, 0.0f), 1);
+  CREATE_NEW_DRAW_POLYGON(polygon_a, vertices_a,
+                          gfx::Vector3dF(0.0f, 0.0f, 1.0f), 0);
+  CREATE_NEW_DRAW_POLYGON(polygon_b, vertices_b,
+                          gfx::Vector3dF(-1.0f, 0.0f, 0.0f), 1);
 
-  EXPECT_EQ(BSP_FRONT, DrawPolygon::SideCompare(polygon_b, polygon_a));
+  EXPECT_EQ(BSP_FRONT, SideCompare(polygon_b, polygon_a));
 }
 
-// One quad is resting against another, but doesn't cross its plane so no split
+// One quad is resting against another, but doesn't cross its plane so no
+// split
 // should occur.
 TEST(DrawPolygonSplitTest, BarelyTouchingNoSplit) {
   std::vector<gfx::Point3F> vertices_a;
@@ -228,16 +305,16 @@ TEST(DrawPolygonSplitTest, BarelyTouchingNoSplit) {
   vertices_a.push_back(gfx::Point3F(10.0f, 10.0f, 0.0f));
   std::vector<gfx::Point3F> vertices_b;
   vertices_b.push_back(gfx::Point3F(5.0f, 10.0f, 0.0f));
+  vertices_b.push_back(gfx::Point3F(5.0f, 10.0f, -10.0f));
   vertices_b.push_back(gfx::Point3F(5.0f, 0.0f, -10.0f));
-  vertices_b.push_back(gfx::Point3F(5.0f, 0.0f, -10.0f));
-  vertices_b.push_back(gfx::Point3F(5.0f, 10.0f, 0.0f));
+  vertices_b.push_back(gfx::Point3F(5.0f, 0.0f, 0.0f));
 
-  CREATE_NEW_DRAW_POLYGON(
-      polygon_a, vertices_a, gfx::Vector3dF(0.0f, 0.0f, 1.0f), 0);
-  CREATE_NEW_DRAW_POLYGON(
-      polygon_b, vertices_b, gfx::Vector3dF(-1.0f, 0.0f, 0.0f), 1);
+  CREATE_NEW_DRAW_POLYGON(polygon_a, vertices_a,
+                          gfx::Vector3dF(0.0f, 0.0f, 1.0f), 0);
+  CREATE_NEW_DRAW_POLYGON(polygon_b, vertices_b,
+                          gfx::Vector3dF(-1.0f, 0.0f, 0.0f), 1);
 
-  EXPECT_EQ(BSP_BACK, DrawPolygon::SideCompare(polygon_b, polygon_a));
+  EXPECT_EQ(BSP_BACK, SideCompare(polygon_b, polygon_a));
 }
 
 // One quad intersects another and becomes two pieces.
@@ -253,18 +330,20 @@ TEST(DrawPolygonSplitTest, BasicSplit) {
   vertices_b.push_back(gfx::Point3F(5.0f, 0.0f, 5.0f));
   vertices_b.push_back(gfx::Point3F(5.0f, 10.0f, 5.0f));
 
-  CREATE_NEW_DRAW_POLYGON(
-      polygon_a, vertices_a, gfx::Vector3dF(0.0f, 0.0f, 1.0f), 0);
-  CREATE_NEW_DRAW_POLYGON(
-      polygon_b, vertices_b, gfx::Vector3dF(-1.0f, 0.0f, 0.0f), 1);
+  CREATE_NEW_DRAW_POLYGON_PTR(polygon_a, vertices_a,
+                              gfx::Vector3dF(0.0f, 0.0f, 1.0f), 0);
+  CREATE_NEW_DRAW_POLYGON_PTR(polygon_b, vertices_b,
+                              gfx::Vector3dF(-1.0f, 0.0f, 0.0f), 1);
 
-  EXPECT_EQ(BSP_SPLIT, DrawPolygon::SideCompare(polygon_b, polygon_a));
+  std::unique_ptr<DrawPolygon> front_polygon;
+  std::unique_ptr<DrawPolygon> back_polygon;
+  bool is_coplanar;
 
-  scoped_ptr<DrawPolygon> front_polygon;
-  scoped_ptr<DrawPolygon> back_polygon;
-  polygon_b.Split(polygon_a, &front_polygon, &back_polygon);
-  EXPECT_EQ(BSP_FRONT, DrawPolygon::SideCompare(*front_polygon, polygon_a));
-  EXPECT_EQ(BSP_BACK, DrawPolygon::SideCompare(*back_polygon, polygon_a));
+  polygon_a->SplitPolygon(std::move(polygon_b), &front_polygon, &back_polygon,
+                          &is_coplanar);
+  EXPECT_FALSE(is_coplanar);
+  EXPECT_TRUE(front_polygon != nullptr);
+  EXPECT_TRUE(back_polygon != nullptr);
 
   std::vector<gfx::Point3F> test_points_a;
   test_points_a.push_back(gfx::Point3F(5.0f, 0.0f, 0.0f));
@@ -297,21 +376,20 @@ TEST(DrawPolygonSplitTest, AngledSplit) {
   vertices_b.push_back(gfx::Point3F(-1.0f, -5.0f, -2.0f));
   vertices_b.push_back(gfx::Point3F(-1.0f, 5.0f, -2.0f));
 
-  CREATE_NEW_DRAW_POLYGON(
-      polygon_a, vertices_a, gfx::Vector3dF(0.0f, 1.0f, 0.0f), 0);
-  CREATE_NEW_DRAW_POLYGON(
-      polygon_b, vertices_b, gfx::Vector3dF(0.707107f, 0.0f, -0.707107f), 1);
+  CREATE_NEW_DRAW_POLYGON_PTR(polygon_a, vertices_a,
+                              gfx::Vector3dF(0.0f, 1.0f, 0.0f), 0);
+  CREATE_NEW_DRAW_POLYGON_PTR(polygon_b, vertices_b,
+                              gfx::Vector3dF(0.707107f, 0.0f, -0.707107f), 1);
 
-  EXPECT_EQ(BSP_SPLIT, DrawPolygon::SideCompare(polygon_a, polygon_b));
+  std::unique_ptr<DrawPolygon> front_polygon;
+  std::unique_ptr<DrawPolygon> back_polygon;
+  bool is_coplanar;
 
-  scoped_ptr<DrawPolygon> front_polygon;
-  scoped_ptr<DrawPolygon> back_polygon;
-  polygon_a.Split(polygon_b, &front_polygon, &back_polygon);
-  EXPECT_EQ(BSP_FRONT, DrawPolygon::SideCompare(*front_polygon, polygon_b));
-  EXPECT_EQ(BSP_BACK, DrawPolygon::SideCompare(*back_polygon, polygon_b));
-
-  EXPECT_EQ(3u, front_polygon->points().size());
-  EXPECT_EQ(5u, back_polygon->points().size());
+  polygon_b->SplitPolygon(std::move(polygon_a), &front_polygon, &back_polygon,
+                          &is_coplanar);
+  EXPECT_FALSE(is_coplanar);
+  EXPECT_TRUE(front_polygon != nullptr);
+  EXPECT_TRUE(back_polygon != nullptr);
 
   std::vector<gfx::Point3F> test_points_a;
   test_points_a.push_back(gfx::Point3F(10.0f, 0.0f, 9.0f));
@@ -324,8 +402,8 @@ TEST(DrawPolygonSplitTest, AngledSplit) {
   test_points_b.push_back(gfx::Point3F(10.0f, 0.0f, 10.0f));
   test_points_b.push_back(gfx::Point3F(10.0f, 0.0f, 9.0f));
 
-  ValidatePoints(*(front_polygon.get()), test_points_a);
-  ValidatePoints(*(back_polygon.get()), test_points_b);
+  ValidatePointsWithinDeltaOf(*(front_polygon.get()), test_points_a, 1e-6f);
+  ValidatePointsWithinDeltaOf(*(back_polygon.get()), test_points_b, 1e-6f);
 }
 
 TEST(DrawPolygonTransformTest, TransformNormal) {
@@ -333,13 +411,8 @@ TEST(DrawPolygonTransformTest, TransformNormal) {
   vertices_a.push_back(gfx::Point3F(1.0f, 0.0f, 1.0f));
   vertices_a.push_back(gfx::Point3F(-1.0f, 0.0f, -1.0f));
   vertices_a.push_back(gfx::Point3F(0.0f, 1.0f, 0.0f));
-  CREATE_NEW_DRAW_POLYGON(
-      polygon_a, vertices_a, gfx::Vector3dF(0.707107f, 0.0f, -0.707107f), 0);
-  // Check we believe your little white lie.
-  EXPECT_NORMAL(polygon_a, 0.707107f, 0.0f, -0.707107f);
-
-  polygon_a.RecomputeNormalForTesting();
-  // Check that we recompute it more accurately.
+  CREATE_NEW_DRAW_POLYGON(polygon_a, vertices_a,
+                          gfx::Vector3dF(sqrt(2) / 2, 0.0f, -sqrt(2) / 2), 0);
   EXPECT_NORMAL(polygon_a, sqrt(2) / 2, 0.0f, -sqrt(2) / 2);
 
   gfx::Transform transform;

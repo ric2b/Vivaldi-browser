@@ -40,19 +40,13 @@ bool StaticBitmapImage::currentFrameKnownToBeOpaque(MetadataMode)
 void StaticBitmapImage::draw(SkCanvas* canvas, const SkPaint& paint, const FloatRect& dstRect,
     const FloatRect& srcRect, RespectImageOrientationEnum, ImageClampingMode clampMode)
 {
-    ASSERT(dstRect.width() >= 0 && dstRect.height() >= 0);
-    ASSERT(srcRect.width() >= 0 && srcRect.height() >= 0);
-
     FloatRect adjustedSrcRect = srcRect;
-    adjustedSrcRect.intersect(FloatRect(0, 0, m_image->width(), m_image->height()));
+    adjustedSrcRect.intersect(SkRect::Make(m_image->bounds()));
 
-    if (adjustedSrcRect.isEmpty() || dstRect.isEmpty())
+    if (dstRect.isEmpty() || adjustedSrcRect.isEmpty())
         return; // Nothing to draw.
 
-    ASSERT(adjustedSrcRect.width() <= m_image->width() && adjustedSrcRect.height() <= m_image->height());
-
-    SkRect srcSkRect = adjustedSrcRect;
-    canvas->drawImageRect(m_image.get(), srcSkRect, dstRect, &paint,
+    canvas->drawImageRect(m_image.get(), adjustedSrcRect, dstRect, &paint,
         WebCoreClampingModeToSkiaRectConstraint(clampMode));
 
     if (ImageObserver* observer = getImageObserver())

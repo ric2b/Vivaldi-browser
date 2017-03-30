@@ -5,7 +5,6 @@
 #include "media/ffmpeg/ffmpeg_common.h"
 
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -76,8 +75,7 @@ int64_t ConvertToTimeBase(const AVRational& time_base,
   return av_rescale_q(timestamp.InMicroseconds(), kMicrosBase, time_base);
 }
 
-// Converts an FFmpeg audio codec ID into its corresponding supported codec id.
-static AudioCodec CodecIDToAudioCodec(AVCodecID codec_id) {
+AudioCodec CodecIDToAudioCodec(AVCodecID codec_id) {
   switch (codec_id) {
     case AV_CODEC_ID_AAC:
       return kCodecAAC;

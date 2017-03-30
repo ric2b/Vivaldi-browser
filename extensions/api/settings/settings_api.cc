@@ -52,6 +52,9 @@ struct PrefsMapping kPrefsValues[] {
   // Download preferences
   { prefs::kDownloadDefaultDirectory, stringPreftype },
 
+  // Privacy preferences
+  { prefs::kWebRTCIPHandlingPolicy, stringPreftype },
+
   // vivaldi preferences
   { vivaldiprefs::kMousegesturesEnabled, booleanPreftype },
   { vivaldiprefs::kRockerGesturesEnabled, booleanPreftype },
@@ -88,10 +91,10 @@ struct PrefsMapping kPrefsValues[] {
 };
 
 namespace {
-scoped_ptr<vivaldi::settings::PreferenceItem> GetPref(Profile* profile,
+std::unique_ptr<vivaldi::settings::PreferenceItem> GetPref(Profile* profile,
                                                   const std::string prefName,
                                                   PrefType type) {
-  scoped_ptr<vivaldi::settings::PreferenceItem> prefItem(
+  std::unique_ptr<vivaldi::settings::PreferenceItem> prefItem(
       new vivaldi::settings::PreferenceItem);
 
   switch (type) {
@@ -158,9 +161,9 @@ PrefType FindTypeForPrefsName(const std::string& name) {
 /*static*/
 void VivaldiSettingsApiNotification::BroadcastEvent(
     const std::string& eventname,
-    scoped_ptr<base::ListValue>& args,
+    std::unique_ptr<base::ListValue>& args,
     content::BrowserContext* context) {
-  scoped_ptr<extensions::Event> event(new extensions::Event(
+  std::unique_ptr<extensions::Event> event(new extensions::Event(
       extensions::events::VIVALDI_EXTENSION_EVENT, eventname, std::move(args)));
   event->restrict_to_browser_context = context;
   EventRouter* event_router = EventRouter::Get(context);
@@ -173,10 +176,10 @@ void VivaldiSettingsApiNotification::OnChanged(
     const std::string& pref_changed) {
   PrefType type = FindTypeForPrefsName(pref_changed);
   if (type != unknownPreftype) {
-    scoped_ptr<vivaldi::settings::PreferenceItem> item(
+    std::unique_ptr<vivaldi::settings::PreferenceItem> item(
         GetPref(profile_, pref_changed.c_str(), type));
 
-    scoped_ptr<base::ListValue> args =
+    std::unique_ptr<base::ListValue> args =
         vivaldi::settings::OnChanged::Create(*item.release());
     BroadcastEvent(vivaldi::settings::OnChanged::kEventName, args,
                    profile_);
@@ -293,7 +296,7 @@ SettingsTogglePreferenceFunction::SettingsTogglePreferenceFunction() {
 }
 
 bool SettingsTogglePreferenceFunction::RunAsync() {
-  scoped_ptr<vivaldi::settings::TogglePreference::Params> params(
+  std::unique_ptr<vivaldi::settings::TogglePreference::Params> params(
     vivaldi::settings::TogglePreference::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -315,7 +318,7 @@ SettingsGetPreferenceFunction::SettingsGetPreferenceFunction() {
 }
 
 bool SettingsGetPreferenceFunction::RunAsync() {
-  scoped_ptr<vivaldi::settings::GetPreference::Params> params(
+  std::unique_ptr<vivaldi::settings::GetPreference::Params> params(
     vivaldi::settings::GetPreference::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   Profile* profile = GetProfile();
@@ -324,7 +327,7 @@ bool SettingsGetPreferenceFunction::RunAsync() {
     error_ = "Preferences name not found: " + params->pref_name;
     return false;
   }
-  scoped_ptr<vivaldi::settings::PreferenceItem> item(
+  std::unique_ptr<vivaldi::settings::PreferenceItem> item(
       GetPref(profile, params->pref_name, type));
   results_ = vivaldi::settings::GetPreference::Results::Create(*item.release());
   SendResponse(true);
@@ -337,7 +340,7 @@ SettingsSetPreferenceFunction::SettingsSetPreferenceFunction() {}
 SettingsSetPreferenceFunction::~SettingsSetPreferenceFunction() {}
 
 bool SettingsSetPreferenceFunction::RunAsync() {
-  scoped_ptr<vivaldi::settings::SetPreference::Params> params(
+  std::unique_ptr<vivaldi::settings::SetPreference::Params> params(
       vivaldi::settings::SetPreference::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -421,7 +424,7 @@ bool SettingsGetAllPreferencesFunction::RunAsync() {
   Profile* profile = GetProfile();
 
   for (size_t i = 0; i < arraysize(kPrefsValues); i++) {
-    scoped_ptr<vivaldi::settings::PreferenceItem> item(GetPref(
+    std::unique_ptr<vivaldi::settings::PreferenceItem> item(GetPref(
         profile, kPrefsValues[i].prefs_name, kPrefsValues[i].prefs_type));
     nodes.push_back(std::move(*item));
   }

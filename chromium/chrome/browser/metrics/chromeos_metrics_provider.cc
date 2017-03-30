@@ -25,8 +25,8 @@
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/bluetooth_device.h"
+#include "ui/display/display.h"
 #include "ui/events/event_utils.h"
-#include "ui/gfx/screen.h"
 
 #if defined(USE_X11)
 #include "ui/events/devices/x11/touch_factory_x11.h"
@@ -145,9 +145,13 @@ ChromeOSMetricsProvider::GetEnrollmentStatus() {
 void ChromeOSMetricsProvider::Init() {
   perf_provider_.Init();
 
+#if defined(ARCH_CPU_X86_64)
+  // Currently, the runtime memory leak detector is only supported on x86_64
+  // systems.
   if (base::FeatureList::IsEnabled(features::kRuntimeMemoryLeakDetector)) {
     leak_detector_controller_.reset(new metrics::LeakDetectorController);
   }
+#endif
 }
 
 void ChromeOSMetricsProvider::OnDidCreateMetricsLog() {
@@ -192,10 +196,11 @@ void ChromeOSMetricsProvider::ProvideSystemProfileMetrics(
   metrics::SystemProfileProto::Hardware* hardware =
       system_profile_proto->mutable_hardware();
   hardware->set_hardware_class(hardware_class_);
-  gfx::Display::TouchSupport has_touch = ui::GetInternalDisplayTouchSupport();
-  if (has_touch == gfx::Display::TOUCH_SUPPORT_AVAILABLE)
+  display::Display::TouchSupport has_touch =
+      ui::GetInternalDisplayTouchSupport();
+  if (has_touch == display::Display::TOUCH_SUPPORT_AVAILABLE)
     hardware->set_internal_display_supports_touch(true);
-  else if (has_touch == gfx::Display::TOUCH_SUPPORT_UNAVAILABLE)
+  else if (has_touch == display::Display::TOUCH_SUPPORT_UNAVAILABLE)
     hardware->set_internal_display_supports_touch(false);
   WriteExternalTouchscreensProto(hardware);
 }
@@ -228,12 +233,19 @@ void ChromeOSMetricsProvider::ProvideGeneralMetrics(
     metrics::ChromeUserMetricsExtension* uma_proto) {
   std::vector<SampledProfile> sampled_profiles;
   if (perf_provider_.GetSampledProfiles(&sampled_profiles)) {
-    for (std::vector<SampledProfile>::iterator iter = sampled_profiles.begin();
-         iter != sampled_profiles.end();
-         ++iter) {
-      uma_proto->add_sampled_profile()->Swap(&(*iter));
+    for (auto& profile : sampled_profiles) {
+      uma_proto->add_sampled_profile()->Swap(&profile);
     }
   }
+
+  if (leak_detector_controller_) {
+    std::vector<metrics::MemoryLeakReportProto> reports;
+    leak_detector_controller_->GetLeakReports(&reports);
+    for (auto& report : reports) {
+      uma_proto->add_memory_leak_report()->Swap(&report);
+    }
+  }
+
   RecordEnrollmentStatus();
 }
 

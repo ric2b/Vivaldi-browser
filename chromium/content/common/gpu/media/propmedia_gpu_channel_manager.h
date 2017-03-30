@@ -27,7 +27,7 @@ class ProprietaryMediaGpuChannelManager : public GpuChannelManager {
   ~ProprietaryMediaGpuChannelManager() override;
 
  protected:
-  scoped_ptr<GpuChannel> CreateGpuChannel(
+  std::unique_ptr<GpuChannel> CreateGpuChannel(
       int client_id,
       uint64_t client_tracing_id,
       bool preempts,

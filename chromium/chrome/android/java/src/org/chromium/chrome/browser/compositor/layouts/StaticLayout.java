@@ -10,7 +10,6 @@ import android.os.Handler;
 
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
-import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
@@ -31,7 +30,7 @@ import java.util.LinkedList;
  * {@link #tabSelecting(long, int)} call, and is used to show a thumbnail of a {@link Tab}
  * until that {@link Tab} is ready to be shown.
  */
-public class StaticLayout extends ContextualSearchSupportedLayout {
+public class StaticLayout extends Layout {
     public static final String TAG = "StaticLayout";
 
     private static final int HIDE_TIMEOUT_MS = 2000;
@@ -67,7 +66,7 @@ public class StaticLayout extends ContextualSearchSupportedLayout {
      */
     public StaticLayout(Context context, LayoutUpdateHost updateHost, LayoutRenderHost renderHost,
             EventFilter eventFilter, OverlayPanelManager panelManager) {
-        super(context, updateHost, renderHost, eventFilter, panelManager);
+        super(context, updateHost, renderHost, eventFilter);
 
         mHandler = new Handler();
         mUnstallRunnable = new UnstallRunnable();
@@ -191,7 +190,7 @@ public class StaticLayout extends ContextualSearchSupportedLayout {
 
     @Override
     public boolean handlesTabCreating() {
-        return mHandlesTabLifecycles;
+        return super.handlesTabCreating() || mHandlesTabLifecycles;
     }
 
     @Override
@@ -236,14 +235,6 @@ public class StaticLayout extends ContextualSearchSupportedLayout {
 
         mSceneLayer.update(dpToPx, contentViewport, layerTitleCache, tabContentManager,
                 fullscreenManager, layoutTab);
-
-        // TODO(pedrosimonetti): Coordinate w/ dtrainor@ to improve integration with TreeProvider.
-        SceneLayer overlayLayer = null;
-        OverlayPanel panel = mPanelManager.getActivePanel();
-        if (panel != null && panel.isShowing()) {
-            overlayLayer = super.getSceneLayer();
-        }
-        mSceneLayer.setContentSceneLayer(overlayLayer);
 
         // TODO(dtrainor): Find the best way to properly track this metric for cold starts.
         // We should probably erase the thumbnail when we select a tab that we need to restore.

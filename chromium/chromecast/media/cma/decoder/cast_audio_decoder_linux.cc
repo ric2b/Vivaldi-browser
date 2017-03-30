@@ -11,13 +11,10 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
-#include "base/strings/string_number_conversions.h"
-#include "chromecast/base/chromecast_switches.h"
 #include "chromecast/media/cma/base/decoder_buffer_adapter.h"
 #include "chromecast/media/cma/base/decoder_buffer_base.h"
 #include "chromecast/media/cma/base/decoder_config_adapter.h"
@@ -50,8 +47,7 @@ const uint8_t kFakeOpusExtraData[19] = {
   0,  // offset 18, stereo mapping
 };
 
-const int kStereoOutputChannelCount = 2;
-const int kLayout71OutputChannelCount = 8;
+const int kOutputChannelCount = 2;  // Always output stereo audio.
 const int kMaxChannelInput = 2;
 
 class CastAudioDecoderImpl : public CastAudioDecoder {
@@ -65,20 +61,7 @@ class CastAudioDecoderImpl : public CastAudioDecoder {
         output_format_(output_format),
         initialized_(false),
         decode_pending_(false),
-        weak_factory_(this) {
-    if (base::CommandLine::InitializedForCurrentProcess() &&
-        base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kAlsaNumOutputChannels)) {
-      base::StringToInt(
-          base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-              switches::kAlsaNumOutputChannels),
-          &num_output_channels_);
-    } else {
-      num_output_channels_ = kStereoOutputChannelCount;
-    }
-    DCHECK(num_output_channels_ == kStereoOutputChannelCount ||
-           num_output_channels_ == kLayout71OutputChannelCount);
-  }
+        weak_factory_(this) {}
 
   ~CastAudioDecoderImpl() override {}
 
@@ -87,23 +70,17 @@ class CastAudioDecoderImpl : public CastAudioDecoder {
     DCHECK_LE(config_.channel_number, kMaxChannelInput);
     config_ = config;
 
+    // Media pipeline should already decrypt the stream with the selected key
+    // system. If media pipeline fails to decrypt the stream for some reason,
+    // the decoder will report kDecodeError when decoding.
+    config_.encryption_scheme = Unencrypted();
+
     if (config_.channel_number == 1) {
       // If the input is mono, create a ChannelMixer to convert mono to stereo.
       // TODO(kmackay) Support other channel format conversions?
       mixer_.reset(new ::media::ChannelMixer(::media::CHANNEL_LAYOUT_MONO,
                                              ::media::CHANNEL_LAYOUT_STEREO));
     }
-    if (num_output_channels_ == kLayout71OutputChannelCount) {
-      // If there are 8 output channel, create a Channel Mixer to convert
-      // stereo to CHANNEL_LAYOUT_7_1.
-      // TODO(tianyuwang): This is a hack for 8 channel test USB speaker.
-      // Channel mixer from MONO TO LAYOUT 7_1 doesn't work with the current
-      // test USB speaker. As a result, we need to convert MONO channel
-      // to STEREO first then convert it to LAYOUT_7_1.
-      mixer_7_1_.reset(new ::media::ChannelMixer(::media::CHANNEL_LAYOUT_STEREO,
-                                                 ::media::CHANNEL_LAYOUT_7_1));
-    }
-
     base::WeakPtr<CastAudioDecoderImpl> self = weak_factory_.GetWeakPtr();
     if (config.codec == media::kCodecOpus) {
       // Insert fake extradata to make OpusAudioDecoder work with v2mirroring.
@@ -131,7 +108,11 @@ class CastAudioDecoderImpl : public CastAudioDecoder {
               const DecodeCallback& decode_callback) override {
     DCHECK(!decode_callback.is_null());
     DCHECK(task_runner_->BelongsToCurrentThread());
-    if (!initialized_ || decode_pending_) {
+
+    if (data->decrypt_context() != nullptr) {
+      LOG(ERROR) << "Audio decoder doesn't support encrypted stream";
+      decode_callback.Run(kDecodeError, data);
+    } else if (!initialized_ || decode_pending_) {
       decode_queue_.push(std::make_pair(data, decode_callback));
     } else {
       DecodeNow(data, decode_callback);
@@ -240,18 +221,9 @@ class CastAudioDecoderImpl : public CastAudioDecoder {
     if (mixer_) {
       // Convert to stereo if necessary.
       std::unique_ptr<::media::AudioBus> converted_to_stereo =
-          ::media::AudioBus::Create(kStereoOutputChannelCount, num_frames);
+          ::media::AudioBus::Create(kOutputChannelCount, num_frames);
       mixer_->Transform(decoded.get(), converted_to_stereo.get());
       decoded.swap(converted_to_stereo);
-    }
-
-    // TODO(tianyuwang): Remove this hack for 7_1 USB test speaker.
-    if (mixer_7_1_) {
-      // Convert to layout 7_1 if necessary.
-      std::unique_ptr<::media::AudioBus> converted_to_7_1 =
-          ::media::AudioBus::Create(num_output_channels_, num_frames);
-      mixer_7_1_->Transform(decoded.get(), converted_to_7_1.get());
-      decoded.swap(converted_to_7_1);
     }
 
     // Convert to the desired output format.
@@ -260,8 +232,8 @@ class CastAudioDecoderImpl : public CastAudioDecoder {
 
   scoped_refptr<media::DecoderBufferBase> FinishConversion(
       ::media::AudioBus* bus) {
-    DCHECK_EQ(num_output_channels_, bus->channels());
-    int size = bus->frames() * num_output_channels_ *
+    DCHECK_EQ(kOutputChannelCount, bus->channels());
+    int size = bus->frames() * kOutputChannelCount *
                OutputFormatSizeInBytes(output_format_);
     scoped_refptr<::media::DecoderBuffer> result(
         new ::media::DecoderBuffer(size));
@@ -295,9 +267,7 @@ class CastAudioDecoderImpl : public CastAudioDecoder {
   std::unique_ptr<::media::AudioDecoder> decoder_;
   std::queue<DecodeBufferCallbackPair> decode_queue_;
   bool initialized_;
-  int num_output_channels_;
   std::unique_ptr<::media::ChannelMixer> mixer_;
-  std::unique_ptr<::media::ChannelMixer> mixer_7_1_;
   bool decode_pending_;
   std::vector<scoped_refptr<::media::AudioBuffer>> decoded_chunks_;
   base::WeakPtrFactory<CastAudioDecoderImpl> weak_factory_;

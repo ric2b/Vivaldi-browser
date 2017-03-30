@@ -5,8 +5,9 @@
 #ifndef CHROME_APP_ANDROID_CHROME_MAIN_DELEGATE_ANDROID_H_
 #define CHROME_APP_ANDROID_CHROME_MAIN_DELEGATE_ANDROID_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "chrome/app/chrome_main_delegate.h"
 #include "content/public/browser/browser_main_runner.h"
 
@@ -30,16 +31,11 @@ class ChromeMainDelegateAndroid : public ChromeMainDelegate {
       const content::MainFunctionParams& main_function_params) override;
   void ProcessExiting(const std::string& process_type) override;
 
-#if defined(SAFE_BROWSING_DB_REMOTE)
-  virtual safe_browsing::SafeBrowsingApiHandler* CreateSafeBrowsingApiHandler();
-#endif
-
  private:
-  scoped_ptr<content::BrowserMainRunner> browser_runner_;
+  std::unique_ptr<content::BrowserMainRunner> browser_runner_;
 
-#if defined(SAFE_BROWSING_DB_REMOTE)
-  scoped_ptr<safe_browsing::SafeBrowsingApiHandler> safe_browsing_api_handler_;
-#endif
+  std::unique_ptr<safe_browsing::SafeBrowsingApiHandler>
+      safe_browsing_api_handler_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeMainDelegateAndroid);
 };

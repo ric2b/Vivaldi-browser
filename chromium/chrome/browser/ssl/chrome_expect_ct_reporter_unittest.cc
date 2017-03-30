@@ -27,6 +27,9 @@
 
 namespace {
 
+const char kSendHistogramName[] = "SSL.ExpectCTReportSendingAttempt";
+const char kFailureHistogramName[] = "SSL.ExpectCTReportFailure";
+
 // A test CertificateReportSender that exposes the latest report URI and
 // serialized report to be sent.
 class TestCertificateReportSender : public net::CertificateReportSender {
@@ -66,7 +69,7 @@ void MakeTestSCTAndStatus(
     net::SignedCertificateTimestampAndStatusList* sct_list) {
   scoped_refptr<net::ct::SignedCertificateTimestamp> sct(
       new net::ct::SignedCertificateTimestamp());
-  sct->version = net::ct::SignedCertificateTimestamp::SCT_VERSION_1;
+  sct->version = net::ct::SignedCertificateTimestamp::V1;
   sct->log_id = log_id;
   sct->extensions = extensions;
   sct->timestamp = timestamp;
@@ -217,7 +220,7 @@ void CheckReportSCTs(
 void CheckExpectCTReport(const std::string& serialized_report,
                          const net::HostPortPair& host_port,
                          const net::SSLInfo& ssl_info) {
-  scoped_ptr<base::Value> value(base::JSONReader::Read(serialized_report));
+  std::unique_ptr<base::Value> value(base::JSONReader::Read(serialized_report));
   ASSERT_TRUE(value);
   ASSERT_TRUE(value->IsType(base::Value::TYPE_DICTIONARY));
 
@@ -328,6 +331,9 @@ void EnableFeature() {
 
 // Test that no report is sent when the feature is not enabled.
 TEST(ChromeExpectCTReporterTest, FeatureDisabled) {
+  base::HistogramTester histograms;
+  histograms.ExpectTotalCount(kSendHistogramName, 0);
+
   TestCertificateReportSender* sender = new TestCertificateReportSender();
   net::TestURLRequestContext context;
   ChromeExpectCTReporter reporter(&context);
@@ -347,10 +353,15 @@ TEST(ChromeExpectCTReporterTest, FeatureDisabled) {
   reporter.OnExpectCTFailed(host_port, report_uri, ssl_info);
   EXPECT_TRUE(sender->latest_report_uri().is_empty());
   EXPECT_TRUE(sender->latest_serialized_report().empty());
+
+  histograms.ExpectTotalCount(kSendHistogramName, 0);
 }
 
 // Test that no report is sent if the report URI is empty.
 TEST(ChromeExpectCTReporterTest, EmptyReportURI) {
+  base::HistogramTester histograms;
+  histograms.ExpectTotalCount(kSendHistogramName, 0);
+
   EnableFeature();
   TestCertificateReportSender* sender = new TestCertificateReportSender();
   net::TestURLRequestContext context;
@@ -363,14 +374,16 @@ TEST(ChromeExpectCTReporterTest, EmptyReportURI) {
                             net::SSLInfo());
   EXPECT_TRUE(sender->latest_report_uri().is_empty());
   EXPECT_TRUE(sender->latest_serialized_report().empty());
+
+  histograms.ExpectTotalCount(kSendHistogramName, 0);
 }
 
 // Test that if a report fails to send, the UMA metric is recorded.
 TEST_F(ChromeExpectCTReporterWaitTest, SendReportFailure) {
   EnableFeature();
   base::HistogramTester histograms;
-  const std::string histogram_name = "SSL.ExpectCTReportFailure";
-  histograms.ExpectTotalCount(histogram_name, 0);
+  histograms.ExpectTotalCount(kFailureHistogramName, 0);
+  histograms.ExpectTotalCount(kSendHistogramName, 0);
 
   ChromeExpectCTReporter reporter(context());
 
@@ -386,12 +399,19 @@ TEST_F(ChromeExpectCTReporterWaitTest, SendReportFailure) {
 
   SendReport(&reporter, host_port, report_uri, ssl_info);
 
-  histograms.ExpectTotalCount(histogram_name, 1);
-  histograms.ExpectBucketCount(histogram_name, net::ERR_CONNECTION_FAILED, 1);
+  histograms.ExpectTotalCount(kFailureHistogramName, 1);
+  histograms.ExpectBucketCount(kFailureHistogramName,
+                               net::ERR_CONNECTION_FAILED, 1);
+  histograms.ExpectTotalCount(kSendHistogramName, 1);
+  histograms.ExpectBucketCount(kSendHistogramName, true, 1);
 }
 
 // Test that a sent report has the right format.
 TEST(ChromeExpectCTReporterTest, SendReport) {
+  base::HistogramTester histograms;
+  histograms.ExpectTotalCount(kFailureHistogramName, 0);
+  histograms.ExpectTotalCount(kSendHistogramName, 0);
+
   EnableFeature();
   TestCertificateReportSender* sender = new TestCertificateReportSender();
   net::TestURLRequestContext context;
@@ -447,4 +467,8 @@ TEST(ChromeExpectCTReporterTest, SendReport) {
   EXPECT_FALSE(sender->latest_serialized_report().empty());
   ASSERT_NO_FATAL_FAILURE(CheckExpectCTReport(
       sender->latest_serialized_report(), host_port, ssl_info));
+
+  histograms.ExpectTotalCount(kFailureHistogramName, 0);
+  histograms.ExpectTotalCount(kSendHistogramName, 1);
+  histograms.ExpectBucketCount(kSendHistogramName, true, 1);
 }

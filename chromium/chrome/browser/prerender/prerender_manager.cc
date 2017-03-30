@@ -18,7 +18,7 @@
 #include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/values.h"
@@ -86,39 +86,6 @@ const char* const kValidHttpMethods[] = {
 // Length of prerender history, for display in chrome://net-internals
 const int kHistoryLength = 100;
 
-// Indicates whether a Prerender has been cancelled such that we need
-// a dummy replacement for the purpose of recording the correct PPLT for
-// the Match Complete case.
-// Traditionally, "Match" means that a prerendered page was actually visited &
-// the prerender was used.  Our goal is to have "Match" cases line up in the
-// control group & the experiment group, so that we can make meaningful
-// comparisons of improvements.  However, in the control group, since we don't
-// actually perform prerenders, many of the cancellation reasons cannot be
-// detected.  Therefore, in the Prerender group, when we cancel for one of these
-// reasons, we keep track of a dummy Prerender representing what we would
-// have in the control group.  If that dummy prerender in the prerender group
-// would then be swapped in (but isn't actually b/c it's a dummy), we record
-// this as a MatchComplete.  This allows us to compare MatchComplete's
-// across Prerender & Control group which ideally should be lining up.
-// This ensures that there is no bias in terms of the page load times
-// of the pages forming the difference between the two sets.
-
-bool NeedMatchCompleteDummyForFinalStatus(FinalStatus final_status) {
-  return final_status != FINAL_STATUS_USED &&
-      final_status != FINAL_STATUS_TIMED_OUT &&
-      final_status != FINAL_STATUS_MANAGER_SHUTDOWN &&
-      final_status != FINAL_STATUS_PROFILE_DESTROYED &&
-      final_status != FINAL_STATUS_APP_TERMINATING &&
-      final_status != FINAL_STATUS_WINDOW_OPENER &&
-      final_status != FINAL_STATUS_CACHE_OR_HISTORY_CLEARED &&
-      final_status != FINAL_STATUS_CANCELLED &&
-      final_status != FINAL_STATUS_DEVTOOLS_ATTACHED &&
-      final_status != FINAL_STATUS_CROSS_SITE_NAVIGATION_PENDING &&
-      final_status != FINAL_STATUS_PAGE_BEING_CAPTURED &&
-      final_status != FINAL_STATUS_NAVIGATION_UNCOMMITTED &&
-      final_status != FINAL_STATUS_NON_EMPTY_BROWSING_INSTANCE;
-}
-
 }  // namespace
 
 class PrerenderManager::OnCloseWebContentsDeleter
@@ -144,11 +111,6 @@ class PrerenderManager::OnCloseWebContentsDeleter
     ScheduleWebContentsForDeletion(false);
   }
 
-  void SwappedOut(WebContents* source) override {
-    DCHECK_EQ(tab_.get(), source);
-    ScheduleWebContentsForDeletion(false);
-  }
-
   bool ShouldSuppressDialogs(WebContents* source) override {
     // Use this as a proxy for getting statistics on how often we fail to honor
     // the beforeunload event.
@@ -170,7 +132,7 @@ class PrerenderManager::OnCloseWebContentsDeleter
   }
 
   PrerenderManager* manager_;
-  scoped_ptr<WebContents> tab_;
+  std::unique_ptr<WebContents> tab_;
   bool suppressed_dialog_;
 
   DISALLOW_COPY_AND_ASSIGN(OnCloseWebContentsDeleter);
@@ -325,6 +287,14 @@ PrerenderHandle* PrerenderManager::AddPrerenderForInstant(
                       session_storage_namespace);
 }
 
+PrerenderHandle* PrerenderManager::AddPrerenderForOffline(
+    const GURL& url,
+    content::SessionStorageNamespace* session_storage_namespace,
+    const gfx::Size& size) {
+  return AddPrerender(ORIGIN_OFFLINE, url, content::Referrer(), size,
+                      session_storage_namespace);
+}
+
 void PrerenderManager::CancelAllPrerenders() {
   DCHECK(CalledOnValidThread());
   while (!active_prerenders_.empty()) {
@@ -442,16 +412,18 @@ WebContents* PrerenderManager::SwapInternal(
   // Don't use prerendered pages if debugger is attached to the tab.
   // See http://crbug.com/98541
   if (content::DevToolsAgentHost::IsDebuggerAttached(web_contents)) {
-    DestroyAndMarkMatchCompleteAsUsed(prerender_data->contents(),
-                                      FINAL_STATUS_DEVTOOLS_ATTACHED);
+    histograms_->RecordFinalStatus(prerender_data->contents()->origin(),
+                                   FINAL_STATUS_DEVTOOLS_ATTACHED);
+    prerender_data->contents()->Destroy(FINAL_STATUS_DEVTOOLS_ATTACHED);
     return NULL;
   }
 
   // If the prerendered page is in the middle of a cross-site navigation,
   // don't swap it in because there isn't a good way to merge histories.
   if (prerender_data->contents()->IsCrossSiteNavigationPending()) {
-    DestroyAndMarkMatchCompleteAsUsed(
-        prerender_data->contents(),
+    histograms_->RecordFinalStatus(prerender_data->contents()->origin(),
+                                   FINAL_STATUS_CROSS_SITE_NAVIGATION_PENDING);
+    prerender_data->contents()->Destroy(
         FINAL_STATUS_CROSS_SITE_NAVIGATION_PENDING);
     return NULL;
   }
@@ -489,8 +461,8 @@ WebContents* PrerenderManager::SwapInternal(
       FindIteratorForPrerenderContents(prerender_data->contents());
   DCHECK(active_prerenders_.end() != to_erase);
   DCHECK_EQ(prerender_data, *to_erase);
-  scoped_ptr<PrerenderContents>
-      prerender_contents(prerender_data->ReleaseContents());
+  std::unique_ptr<PrerenderContents> prerender_contents(
+      prerender_data->ReleaseContents());
   active_prerenders_.erase(to_erase);
 
   // Mark prerender as used.
@@ -526,7 +498,7 @@ WebContents* PrerenderManager::SwapInternal(
     // TODO(davidben): Honor the beforeunload event. http://crbug.com/304932
     on_close_web_contents_deleters_.push_back(
         new OnCloseWebContentsDeleter(this, old_web_contents));
-    old_web_contents->DispatchBeforeUnload(false);
+    old_web_contents->DispatchBeforeUnload();
   } else {
     // No unload handler to run, so delete asap.
     ScheduleDeleteOldWebContents(old_web_contents, NULL);
@@ -547,29 +519,8 @@ void PrerenderManager::MoveEntryToPendingDelete(PrerenderContents* entry,
   ScopedVector<PrerenderData>::iterator it =
       FindIteratorForPrerenderContents(entry);
   DCHECK(it != active_prerenders_.end());
-
-  // If this PrerenderContents is being deleted due to a cancellation any time
-  // after the prerender has started then we need to create a dummy replacement
-  // for PPLT accounting purposes for the Match Complete group. This is the case
-  // if the cancellation is for any reason that would not occur in the control
-  // group case.
-  if (entry->prerendering_has_started() &&
-      entry->match_complete_status() ==
-          PrerenderContents::MATCH_COMPLETE_DEFAULT &&
-      NeedMatchCompleteDummyForFinalStatus(final_status) &&
-      ActuallyPrerendering() &&
-      GetMode() == PRERENDER_MODE_EXPERIMENT_MATCH_COMPLETE_GROUP) {
-    // TODO(tburkard): I'd like to DCHECK that we are actually prerendering.
-    // However, what if new conditions are added and
-    // NeedMatchCompleteDummyForFinalStatus is not being updated.  Not sure
-    // what's the best thing to do here.  For now, I will just check whether
-    // we are actually prerendering.
-    (*it)->MakeIntoMatchCompleteReplacement();
-  } else {
-    to_delete_prerenders_.push_back(*it);
-    active_prerenders_.weak_erase(it);
-  }
-
+  to_delete_prerenders_.push_back(*it);
+  active_prerenders_.weak_erase(it);
   // Destroy the old WebContents relatively promptly to reduce resource usage.
   PostCleanupTask();
 }
@@ -629,8 +580,6 @@ const char* PrerenderManager::GetModeString() {
       return "_15MinTTL";
     case PRERENDER_MODE_EXPERIMENT_NO_USE_GROUP:
       return "_NoUse";
-    case PRERENDER_MODE_EXPERIMENT_MATCH_COMPLETE_GROUP:
-      return "_MatchComplete";
     case PRERENDER_MODE_MAX:
     default:
       NOTREACHED() << "Invalid PrerenderManager mode.";
@@ -835,11 +784,9 @@ void PrerenderManager::ClearData(int clear_flags) {
     prerender_history_->Clear();
 }
 
-void PrerenderManager::RecordFinalStatusWithMatchCompleteStatus(
-    Origin origin,
-    PrerenderContents::MatchCompleteStatus mc_status,
-    FinalStatus final_status) const {
-  histograms_->RecordFinalStatus(origin, mc_status, final_status);
+void PrerenderManager::RecordFinalStatus(Origin origin,
+                                         FinalStatus final_status) const {
+  histograms_->RecordFinalStatus(origin, final_status);
 }
 
 void PrerenderManager::RecordNavigation(const GURL& url) {
@@ -867,16 +814,6 @@ PrerenderManager::PrerenderData::PrerenderData(PrerenderManager* manager,
 }
 
 PrerenderManager::PrerenderData::~PrerenderData() {
-}
-
-void PrerenderManager::PrerenderData::MakeIntoMatchCompleteReplacement() {
-  DCHECK(contents_);
-  contents_->set_match_complete_status(
-      PrerenderContents::MATCH_COMPLETE_REPLACED);
-  PrerenderData* to_delete = new PrerenderData(manager_, contents_.release(),
-                                               expiry_time_);
-  contents_.reset(to_delete->contents_->CreateMatchCompleteReplacement());
-  manager_->to_delete_prerenders_.push_back(to_delete);
 }
 
 void PrerenderManager::PrerenderData::OnHandleCreated(PrerenderHandle* handle) {
@@ -956,7 +893,8 @@ PrerenderHandle* PrerenderManager::AddPrerender(
   // histogram tracking.
   histograms_->RecordPrerender(origin, url_arg);
 
-  if (profile_->GetPrefs()->GetBoolean(prefs::kBlockThirdPartyCookies)) {
+  if (profile_->GetPrefs()->GetBoolean(prefs::kBlockThirdPartyCookies) &&
+      origin != ORIGIN_OFFLINE) {
     RecordFinalStatusWithoutCreatingPrerenderContents(
         url, origin, FINAL_STATUS_BLOCK_THIRD_PARTY_COOKIES);
     return nullptr;
@@ -1152,8 +1090,12 @@ PrerenderManager::PrerenderData* PrerenderManager::FindPrerenderData(
     const SessionStorageNamespace* session_storage_namespace) {
   for (ScopedVector<PrerenderData>::iterator it = active_prerenders_.begin();
        it != active_prerenders_.end(); ++it) {
-    if ((*it)->contents()->Matches(url, session_storage_namespace))
+    PrerenderContents* contents = (*it)->contents();
+    if (contents->Matches(url, session_storage_namespace)) {
+      if (contents->origin() == ORIGIN_OFFLINE)
+        return NULL;
       return *it;
+    }
   }
   return NULL;
 }
@@ -1174,6 +1116,11 @@ bool PrerenderManager::DoesRateLimitAllowPrerender(Origin origin) const {
   base::TimeDelta elapsed_time =
       GetCurrentTimeTicks() - last_prerender_start_time_;
   histograms_->RecordTimeBetweenPrerenderRequests(origin, elapsed_time);
+  // TODO(gabadie,pasko): Re-implement missing tests for
+  // FINAL_STATUS_RATE_LIMIT_EXCEEDED that where removed by:
+  //    http://crrev.com/a2439eeab37f7cb7a118493fb55ec0cb07f93b49.
+  if (origin == ORIGIN_OFFLINE)
+    return true;
   if (!config_.rate_limit_enabled)
     return true;
   return elapsed_time >=
@@ -1246,23 +1193,11 @@ void PrerenderManager::DestroyAllContents(FinalStatus final_status) {
   to_delete_prerenders_.clear();
 }
 
-void PrerenderManager::DestroyAndMarkMatchCompleteAsUsed(
-    PrerenderContents* prerender_contents,
-    FinalStatus final_status) {
-  prerender_contents->set_match_complete_status(
-      PrerenderContents::MATCH_COMPLETE_REPLACED);
-  histograms_->RecordFinalStatus(prerender_contents->origin(),
-                                 PrerenderContents::MATCH_COMPLETE_REPLACEMENT,
-                                 FINAL_STATUS_WOULD_HAVE_BEEN_USED);
-  prerender_contents->Destroy(final_status);
-}
-
 void PrerenderManager::RecordFinalStatusWithoutCreatingPrerenderContents(
     const GURL& url, Origin origin, FinalStatus final_status) const {
   PrerenderHistory::Entry entry(url, final_status, origin, base::Time::Now());
   prerender_history_->AddEntry(entry);
-  RecordFinalStatusWithMatchCompleteStatus(
-      origin, PrerenderContents::MATCH_COMPLETE_DEFAULT, final_status);
+  histograms_->RecordFinalStatus(origin, final_status);
 }
 
 void PrerenderManager::Observe(int type,
@@ -1316,10 +1251,18 @@ NetworkPredictionStatus PrerenderManager::GetPredictionStatusForOrigin(
     Origin origin) const {
   DCHECK(CalledOnValidThread());
 
-  // LINK rel=prerender origins ignore the network state and the privacy
-  // settings.
+  // <link rel=prerender> origins ignore the network state and the privacy
+  // settings. Web developers should be able prefetch with all possible privacy
+  // settings and with all possible network types. This would avoid web devs
+  // coming up with creative ways to prefetch in cases they are not allowed to
+  // do so.
+  //
+  // Offline originated prerenders also ignore the network state and privacy
+  // settings because they are controlled by the offliner logic via
+  // PrerenderHandle.
   if (origin == ORIGIN_LINK_REL_PRERENDER_SAMEDOMAIN ||
-      origin == ORIGIN_LINK_REL_PRERENDER_CROSSDOMAIN) {
+      origin == ORIGIN_LINK_REL_PRERENDER_CROSSDOMAIN ||
+      origin == ORIGIN_OFFLINE) {
     return NetworkPredictionStatus::ENABLED;
   }
 

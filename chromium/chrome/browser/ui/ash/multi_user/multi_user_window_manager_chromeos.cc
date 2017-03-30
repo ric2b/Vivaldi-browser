@@ -13,8 +13,9 @@
 #include "ash/shell_delegate.h"
 #include "ash/shell_window_ids.h"
 #include "ash/system/tray/system_tray_notifier.h"
+#include "ash/wm/common/window_state.h"
 #include "ash/wm/maximize_mode/maximize_mode_controller.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "base/auto_reset.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
@@ -631,6 +632,10 @@ void MultiUserWindowManagerChromeOS::SetWindowVisibility(
     ShowWithTransientChildrenRecursive(window, animation_time_in_ms);
   else
     SetWindowVisible(window, false, animation_time_in_ms);
+}
+
+void MultiUserWindowManagerChromeOS::NotifyAfterUserSwitchAnimationFinished() {
+  FOR_EACH_OBSERVER(Observer, observers_, OnUserSwitchAnimationFinished());
 }
 
 void MultiUserWindowManagerChromeOS::AddBrowserWindow(Browser* browser) {

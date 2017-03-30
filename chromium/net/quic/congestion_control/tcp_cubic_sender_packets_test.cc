@@ -5,9 +5,9 @@
 #include "net/quic/congestion_control/tcp_cubic_sender_packets.h"
 
 #include <algorithm>
+#include <memory>
 
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "net/quic/congestion_control/rtt_stats.h"
 #include "net/quic/crypto/crypto_protocol.h"
 #include "net/quic/proto/cached_network_parameters.pb.h"
@@ -28,6 +28,7 @@ namespace test {
 // an initial CWND of 10. They have carefully calculated values which should be
 // updated to be based on kInitialCongestionWindow.
 const uint32_t kInitialCongestionWindowPackets = 10;
+const uint32_t kMaxCongestionWindowPackets = 200;
 const uint32_t kDefaultWindowTCP =
     kInitialCongestionWindowPackets * kDefaultTCPMSS;
 const float kRenoBeta = 0.7f;  // Reno backoff factor.
@@ -62,8 +63,9 @@ class TcpCubicSenderPacketsTest : public ::testing::Test {
  protected:
   TcpCubicSenderPacketsTest()
       : one_ms_(QuicTime::Delta::FromMilliseconds(1)),
-        sender_(
-            new TcpCubicSenderPacketsPeer(&clock_, true, kMaxCongestionWindow)),
+        sender_(new TcpCubicSenderPacketsPeer(&clock_,
+                                              true,
+                                              kMaxCongestionWindowPackets)),
         packet_number_(1),
         acked_packet_number_(0),
         bytes_in_flight_(0) {}
@@ -132,7 +134,7 @@ class TcpCubicSenderPacketsTest : public ::testing::Test {
 
   const QuicTime::Delta one_ms_;
   MockClock clock_;
-  scoped_ptr<TcpCubicSenderPacketsPeer> sender_;
+  std::unique_ptr<TcpCubicSenderPacketsPeer> sender_;
   QuicPacketNumber packet_number_;
   QuicPacketNumber acked_packet_number_;
   QuicByteCount bytes_in_flight_;
@@ -239,6 +241,7 @@ TEST_F(TcpCubicSenderPacketsTest, SlowStartPacketLoss) {
 }
 
 TEST_F(TcpCubicSenderPacketsTest, SlowStartPacketLossWithLargeReduction) {
+  FLAGS_quic_sslr_limit_reduction = true;
   QuicConfig config;
   QuicTagVector options;
   options.push_back(kSSLR);
@@ -246,7 +249,7 @@ TEST_F(TcpCubicSenderPacketsTest, SlowStartPacketLossWithLargeReduction) {
   sender_->SetFromConfig(config, Perspective::IS_SERVER);
 
   sender_->SetNumEmulatedConnections(1);
-  const int kNumberOfAcks = 10;
+  const int kNumberOfAcks = (kDefaultWindowTCP / (2 * kDefaultTCPMSS)) - 1;
   for (int i = 0; i < kNumberOfAcks; ++i) {
     // Send our full send window.
     SendAvailableSendWindow();
@@ -267,6 +270,11 @@ TEST_F(TcpCubicSenderPacketsTest, SlowStartPacketLossWithLargeReduction) {
   // further.
   LoseNPackets(5);
   expected_send_window -= 5 * kDefaultTCPMSS;
+  EXPECT_EQ(expected_send_window, sender_->GetCongestionWindow());
+  // Lose another 10 packets and ensure it reduces below half the peak CWND,
+  // because we never acked the full IW.
+  LoseNPackets(10);
+  expected_send_window -= 10 * kDefaultTCPMSS;
   EXPECT_EQ(expected_send_window, sender_->GetCongestionWindow());
 
   size_t packets_in_recovery_window = expected_send_window / kDefaultTCPMSS;
@@ -296,7 +304,6 @@ TEST_F(TcpCubicSenderPacketsTest, SlowStartPacketLossWithLargeReduction) {
 }
 
 TEST_F(TcpCubicSenderPacketsTest, SlowStartHalfPacketLossWithLargeReduction) {
-  FLAGS_quic_sslr_byte_conservation = true;
   QuicConfig config;
   QuicTagVector options;
   options.push_back(kSSLR);
@@ -325,6 +332,41 @@ TEST_F(TcpCubicSenderPacketsTest, SlowStartHalfPacketLossWithLargeReduction) {
   // by 5 packets.
   LoseNPackets(10, kDefaultTCPMSS / 2);
   expected_send_window -= 5 * kDefaultTCPMSS;
+  EXPECT_EQ(expected_send_window, sender_->GetCongestionWindow());
+}
+
+TEST_F(TcpCubicSenderPacketsTest, SlowStartPacketLossWithMaxHalfReduction) {
+  FLAGS_quic_sslr_limit_reduction = true;
+  QuicConfig config;
+  QuicTagVector options;
+  options.push_back(kSSLR);
+  QuicConfigPeer::SetReceivedConnectionOptions(&config, options);
+  sender_->SetFromConfig(config, Perspective::IS_SERVER);
+
+  sender_->SetNumEmulatedConnections(1);
+  const int kNumberOfAcks = kInitialCongestionWindowPackets / 2;
+  for (int i = 0; i < kNumberOfAcks; ++i) {
+    // Send our full send window.
+    SendAvailableSendWindow();
+    AckNPackets(2);
+  }
+  SendAvailableSendWindow();
+  QuicByteCount expected_send_window =
+      kDefaultWindowTCP + (kDefaultTCPMSS * 2 * kNumberOfAcks);
+  EXPECT_EQ(expected_send_window, sender_->GetCongestionWindow());
+
+  // Lose a packet to exit slow start. We should now have fallen out of
+  // slow start with a window reduced by 1.
+  LoseNPackets(1);
+  expected_send_window -= kDefaultTCPMSS;
+  EXPECT_EQ(expected_send_window, sender_->GetCongestionWindow());
+
+  // Lose half the outstanding packets in recovery and verify the congestion
+  // window is only reduced by a max of half.
+  LoseNPackets(kNumberOfAcks * 2);
+  expected_send_window -= (kNumberOfAcks * 2 - 1) * kDefaultTCPMSS;
+  EXPECT_EQ(expected_send_window, sender_->GetCongestionWindow());
+  LoseNPackets(5);
   EXPECT_EQ(expected_send_window, sender_->GetCongestionWindow());
 }
 
@@ -447,7 +489,7 @@ TEST_F(TcpCubicSenderPacketsTest, SlowStartBurstPacketLossPRR) {
 
 TEST_F(TcpCubicSenderPacketsTest, RTOCongestionWindow) {
   EXPECT_EQ(kDefaultWindowTCP, sender_->GetCongestionWindow());
-  EXPECT_EQ(kMaxCongestionWindow, sender_->slowstart_threshold());
+  EXPECT_EQ(kMaxCongestionWindowPackets, sender_->slowstart_threshold());
 
   // Expect the window to decrease to the minimum once the RTO fires
   // and slow start threshold to be set to 1/2 of the CWND.
@@ -839,21 +881,28 @@ TEST_F(TcpCubicSenderPacketsTest, BandwidthResumption) {
 
   // Resumed CWND is limited to be in a sensible range.
   cached_network_params.set_bandwidth_estimate_bytes_per_second(
-      (kMaxCongestionWindow + 1) * kDefaultTCPMSS);
+      (kMaxCongestionWindowPackets + 1) * kDefaultTCPMSS);
   sender_->ResumeConnectionState(cached_network_params, false);
-  EXPECT_EQ(kMaxCongestionWindow, sender_->congestion_window());
+  EXPECT_EQ(kMaxCongestionWindowPackets, sender_->congestion_window());
 
-  cached_network_params.set_bandwidth_estimate_bytes_per_second(
-      (kMinCongestionWindowForBandwidthResumption - 1) * kDefaultTCPMSS);
-  sender_->ResumeConnectionState(cached_network_params, false);
-  EXPECT_EQ(kMinCongestionWindowForBandwidthResumption,
-            sender_->congestion_window());
+  if (FLAGS_quic_no_lower_bw_resumption_limit) {
+    // Resume with an illegal value of 0 and verify the server uses 1 instead.
+    cached_network_params.set_bandwidth_estimate_bytes_per_second(0);
+    sender_->ResumeConnectionState(cached_network_params, false);
+    EXPECT_EQ(sender_->min_congestion_window(), sender_->congestion_window());
+  } else {
+    cached_network_params.set_bandwidth_estimate_bytes_per_second(
+        (kMinCongestionWindowForBandwidthResumption - 1) * kDefaultTCPMSS);
+    sender_->ResumeConnectionState(cached_network_params, false);
+    EXPECT_EQ(kMinCongestionWindowForBandwidthResumption,
+              sender_->congestion_window());
+  }
 
   // Resume to the max value.
   cached_network_params.set_max_bandwidth_estimate_bytes_per_second(
-      (kMinCongestionWindowForBandwidthResumption + 10) * kDefaultTCPMSS);
+      kMaxCongestionWindowPackets * kDefaultTCPMSS);
   sender_->ResumeConnectionState(cached_network_params, true);
-  EXPECT_EQ((kMinCongestionWindowForBandwidthResumption + 10) * kDefaultTCPMSS,
+  EXPECT_EQ(kMaxCongestionWindowPackets * kDefaultTCPMSS,
             sender_->GetCongestionWindow());
 }
 
@@ -880,7 +929,7 @@ TEST_F(TcpCubicSenderPacketsTest, PaceBelowCWND) {
 
 TEST_F(TcpCubicSenderPacketsTest, ResetAfterConnectionMigration) {
   EXPECT_EQ(kDefaultWindowTCP, sender_->GetCongestionWindow());
-  EXPECT_EQ(kMaxCongestionWindow, sender_->slowstart_threshold());
+  EXPECT_EQ(kMaxCongestionWindowPackets, sender_->slowstart_threshold());
 
   // Starts with slow start.
   sender_->SetNumEmulatedConnections(1);
@@ -908,7 +957,7 @@ TEST_F(TcpCubicSenderPacketsTest, ResetAfterConnectionMigration) {
   // Resets cwnd and slow start threshold on connection migrations.
   sender_->OnConnectionMigration();
   EXPECT_EQ(kDefaultWindowTCP, sender_->GetCongestionWindow());
-  EXPECT_EQ(kMaxCongestionWindow, sender_->slowstart_threshold());
+  EXPECT_EQ(kMaxCongestionWindowPackets, sender_->slowstart_threshold());
   EXPECT_FALSE(sender_->hybrid_slow_start().started());
 }
 

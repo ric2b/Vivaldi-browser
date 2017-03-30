@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "components/drive/sync/entry_update_performer.h"
+#include "components/drive/chromeos/sync/entry_update_performer.h"
 
 #include <stdint.h>
 
@@ -10,12 +10,12 @@
 #include "base/files/file_util.h"
 #include "base/md5.h"
 #include "base/task_runner_util.h"
+#include "components/drive/chromeos/file_cache.h"
+#include "components/drive/chromeos/file_system/download_operation.h"
+#include "components/drive/chromeos/resource_metadata.h"
 #include "components/drive/drive_api_util.h"
-#include "components/drive/file_cache.h"
-#include "components/drive/file_system/download_operation.h"
 #include "components/drive/file_system/operation_test_base.h"
 #include "components/drive/job_scheduler.h"
-#include "components/drive/resource_metadata.h"
 #include "components/drive/service/fake_drive_service.h"
 #include "content/public/test/test_utils.h"
 #include "google_apis/drive/drive_api_parser.h"
@@ -59,7 +59,7 @@ class EntryUpdatePerformerTest : public file_system::OperationTestBase {
     return error;
   }
 
-  scoped_ptr<EntryUpdatePerformer> performer_;
+  std::unique_ptr<EntryUpdatePerformer> performer_;
 };
 
 TEST_F(EntryUpdatePerformerTest, UpdateEntry) {
@@ -108,7 +108,7 @@ TEST_F(EntryUpdatePerformerTest, UpdateEntry) {
 
   // Verify the file is updated on the server.
   google_apis::DriveApiErrorCode gdata_error = google_apis::DRIVE_OTHER_ERROR;
-  scoped_ptr<google_apis::FileResource> gdata_entry;
+  std::unique_ptr<google_apis::FileResource> gdata_entry;
   fake_service()->GetFileResource(
       src_entry.resource_id(),
       google_apis::test_util::CreateCopyResultCallback(&gdata_error,
@@ -196,7 +196,7 @@ TEST_F(EntryUpdatePerformerTest, UpdateEntry_WithNonDirtyCache) {
       temp_dir());
   FileError error = FILE_ERROR_FAILED;
   base::FilePath cache_file_path;
-  scoped_ptr<ResourceEntry> src_entry;
+  std::unique_ptr<ResourceEntry> src_entry;
   download_operation.EnsureFileDownloadedByPath(
       src_path,
       ClientContext(USER_INITIATED),
@@ -234,7 +234,7 @@ TEST_F(EntryUpdatePerformerTest, UpdateEntry_WithNonDirtyCache) {
 
   // Verify the file is updated on the server.
   google_apis::DriveApiErrorCode gdata_error = google_apis::DRIVE_OTHER_ERROR;
-  scoped_ptr<google_apis::FileResource> gdata_entry;
+  std::unique_ptr<google_apis::FileResource> gdata_entry;
   fake_service()->GetFileResource(
       src_entry->resource_id(),
       google_apis::test_util::CreateCopyResultCallback(&gdata_error,
@@ -283,7 +283,7 @@ TEST_F(EntryUpdatePerformerTest, UpdateEntry_ContentUpdate) {
 
   // Check that the file size is updated to that of the updated content.
   google_apis::DriveApiErrorCode gdata_error = google_apis::DRIVE_OTHER_ERROR;
-  scoped_ptr<google_apis::FileResource> server_entry;
+  std::unique_ptr<google_apis::FileResource> server_entry;
   fake_service()->GetFileResource(
       kResourceId,
       google_apis::test_util::CreateCopyResultCallback(&gdata_error,
@@ -327,7 +327,7 @@ TEST_F(EntryUpdatePerformerTest, UpdateEntry_ContentUpdateMd5Check) {
 
   // Check that the file size is updated to that of the updated content.
   google_apis::DriveApiErrorCode gdata_error = google_apis::DRIVE_OTHER_ERROR;
-  scoped_ptr<google_apis::FileResource> server_entry;
+  std::unique_ptr<google_apis::FileResource> server_entry;
   fake_service()->GetFileResource(
       kResourceId,
       google_apis::test_util::CreateCopyResultCallback(&gdata_error,
@@ -343,7 +343,7 @@ TEST_F(EntryUpdatePerformerTest, UpdateEntry_ContentUpdateMd5Check) {
   EXPECT_FALSE(entry.file_specific_info().cache_state().is_dirty());
 
   // Again mark the cache file dirty.
-  scoped_ptr<base::ScopedClosureRunner> file_closer;
+  std::unique_ptr<base::ScopedClosureRunner> file_closer;
   error = FILE_ERROR_FAILED;
   base::PostTaskAndReplyWithResult(
       blocking_task_runner(),
@@ -388,7 +388,7 @@ TEST_F(EntryUpdatePerformerTest, UpdateEntry_OpenedForWrite) {
   EXPECT_EQ(FILE_ERROR_OK, StoreAndMarkDirty(local_id, kTestFileContent));
 
   // Emulate a situation where someone is writing to the file.
-  scoped_ptr<base::ScopedClosureRunner> file_closer;
+  std::unique_ptr<base::ScopedClosureRunner> file_closer;
   FileError error = FILE_ERROR_FAILED;
   base::PostTaskAndReplyWithResult(
       blocking_task_runner(),
@@ -477,7 +477,7 @@ TEST_F(EntryUpdatePerformerTest, UpdateEntry_UploadNewFile) {
 
   // Make sure that we really created a file.
   google_apis::DriveApiErrorCode status = google_apis::DRIVE_OTHER_ERROR;
-  scoped_ptr<google_apis::FileResource> server_entry;
+  std::unique_ptr<google_apis::FileResource> server_entry;
   fake_service()->GetFileResource(
       entry.resource_id(),
       google_apis::test_util::CreateCopyResultCallback(&status, &server_entry));
@@ -517,7 +517,7 @@ TEST_F(EntryUpdatePerformerTest, UpdateEntry_NewFileOpendForWrite) {
   EXPECT_EQ(FILE_ERROR_OK, StoreAndMarkDirty(local_id, kTestFileContent));
 
   // Emulate a situation where someone is writing to the file.
-  scoped_ptr<base::ScopedClosureRunner> file_closer;
+  std::unique_ptr<base::ScopedClosureRunner> file_closer;
   error = FILE_ERROR_FAILED;
   base::PostTaskAndReplyWithResult(
       blocking_task_runner(),
@@ -603,7 +603,7 @@ TEST_F(EntryUpdatePerformerTest, UpdateEntry_CreateDirectory) {
 
   // Make sure that we really created a directory.
   google_apis::DriveApiErrorCode status = google_apis::DRIVE_OTHER_ERROR;
-  scoped_ptr<google_apis::FileResource> server_entry;
+  std::unique_ptr<google_apis::FileResource> server_entry;
   fake_service()->GetFileResource(
       entry.resource_id(),
       google_apis::test_util::CreateCopyResultCallback(&status, &server_entry));

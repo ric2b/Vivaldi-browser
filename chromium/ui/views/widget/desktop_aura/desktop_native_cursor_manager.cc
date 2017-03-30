@@ -14,7 +14,7 @@
 namespace views {
 
 DesktopNativeCursorManager::DesktopNativeCursorManager(
-    scoped_ptr<DesktopCursorLoaderUpdater> cursor_loader_updater)
+    std::unique_ptr<DesktopCursorLoaderUpdater> cursor_loader_updater)
     : cursor_loader_updater_(std::move(cursor_loader_updater)),
       cursor_loader_(ui::CursorLoader::Create()) {
   if (cursor_loader_updater_.get())
@@ -39,7 +39,7 @@ void DesktopNativeCursorManager::RemoveHost(aura::WindowTreeHost* host) {
 }
 
 void DesktopNativeCursorManager::SetDisplay(
-    const gfx::Display& display,
+    const display::Display& display,
     wm::NativeCursorManagerDelegate* delegate) {
   cursor_loader_->UnloadAll();
   cursor_loader_->set_rotation(display.rotation());

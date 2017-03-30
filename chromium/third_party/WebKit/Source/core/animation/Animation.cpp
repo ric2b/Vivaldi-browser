@@ -66,7 +66,7 @@ Animation* Animation::create(AnimationEffect* effect, AnimationTimeline* timelin
         return nullptr;
     }
 
-    Animation* animation = new Animation(timeline->document()->contextDocument().get(), *timeline, effect);
+    Animation* animation = new Animation(timeline->document()->contextDocument(), *timeline, effect);
     animation->suspendIfNeeded();
 
     if (timeline) {
@@ -762,7 +762,7 @@ void Animation::setCompositorPending(bool effectChanged)
     // FIXME: KeyframeEffect could notify this directly?
     if (!hasActiveAnimationsOnCompositor()) {
         destroyCompositorPlayer();
-        m_compositorState.release();
+        m_compositorState.clear();
     }
     if (effectChanged && m_compositorState) {
         m_compositorState->effectChanged = true;
@@ -1049,11 +1049,11 @@ Animation::PlayStateUpdateScope::~PlayStateUpdateScope()
         InspectorInstrumentation::animationPlayStateChanged(m_animation->timeline()->document(), m_animation, oldPlayState, newPlayState);
 }
 
-bool Animation::addEventListenerInternal(const AtomicString& eventType, EventListener* listener, const EventListenerOptions& options)
+void Animation::addedEventListener(const AtomicString& eventType, RegisteredEventListener& registeredListener)
 {
+    EventTargetWithInlineData::addedEventListener(eventType, registeredListener);
     if (eventType == EventTypeNames::finish)
         UseCounter::count(getExecutionContext(), UseCounter::AnimationFinishEvent);
-    return EventTargetWithInlineData::addEventListenerInternal(eventType, listener, options);
 }
 
 void Animation::pauseForTesting(double pauseTime)
@@ -1087,7 +1087,7 @@ DEFINE_TRACE(Animation)
     visitor->trace(m_pendingCancelledEvent);
     visitor->trace(m_finishedPromise);
     visitor->trace(m_readyPromise);
-    RefCountedGarbageCollectedEventTargetWithInlineData<Animation>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
     ActiveDOMObject::trace(visitor);
 }
 

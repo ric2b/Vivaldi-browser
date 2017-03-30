@@ -4,9 +4,9 @@
 
 #include "net/base/network_interfaces.h"
 
-#include <string>
-
 #include <ostream>
+#include <string>
+#include <unordered_set>
 
 // TODO(eroman): Remove unneeeded headers.
 #include "base/files/file_path.h"
@@ -229,7 +229,7 @@ TEST(NetworkInterfacesTest, GetNetworkListTrimming) {
   IPAddress ipv6_address(kIPv6Addr);
 
   NetworkInterfaceList results;
-  ::base::hash_set<int> online_links;
+  std::unordered_set<int> online_links;
   internal::AddressTrackerLinux::AddressMap address_map;
 
   // Interface 1 is offline.
@@ -665,8 +665,8 @@ int GetWifiOptions() {
                                         &interface_list_ptr);
   if (result != ERROR_SUCCESS)
     return -1;
-  scoped_ptr<WLAN_INTERFACE_INFO_LIST, internal::WlanApiDeleter> interface_list(
-      interface_list_ptr);
+  std::unique_ptr<WLAN_INTERFACE_INFO_LIST, internal::WlanApiDeleter>
+      interface_list(interface_list_ptr);
 
   for (unsigned i = 0; i < interface_list->dwNumberOfItems; ++i) {
     WLAN_INTERFACE_INFO* info = &interface_list->InterfaceInfo[i];
@@ -723,7 +723,7 @@ int GetWifiOptions() {
 
 void TryChangeWifiOptions(int options) {
   int previous_options = GetWifiOptions();
-  scoped_ptr<ScopedWifiOptions> scoped_options = SetWifiOptions(options);
+  std::unique_ptr<ScopedWifiOptions> scoped_options = SetWifiOptions(options);
   EXPECT_EQ(previous_options | options, GetWifiOptions());
   scoped_options.reset();
   EXPECT_EQ(previous_options, GetWifiOptions());

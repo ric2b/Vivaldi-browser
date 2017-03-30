@@ -10,7 +10,7 @@
 #include "mash/session/public/interfaces/session.mojom.h"
 #include "mash/wm/public/interfaces/container.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "mojo/shell/public/cpp/connector.h"
+#include "services/shell/public/cpp/connector.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/mus/aura_init.h"
@@ -25,7 +25,7 @@ namespace {
 class ScreenlockView : public views::WidgetDelegateView,
                        public views::ButtonListener {
  public:
-  explicit ScreenlockView(mojo::Connector* connector)
+  explicit ScreenlockView(shell::Connector* connector)
       : connector_(connector),
         unlock_button_(
             new views::LabelButton(this, base::ASCIIToUTF16("Unlock"))) {
@@ -64,7 +64,7 @@ class ScreenlockView : public views::WidgetDelegateView,
     session->UnlockScreen();
   }
 
-  mojo::Connector* connector_;
+  shell::Connector* connector_;
   views::LabelButton* unlock_button_;
 
   DISALLOW_COPY_AND_ASSIGN(ScreenlockView);
@@ -75,8 +75,8 @@ class ScreenlockView : public views::WidgetDelegateView,
 Screenlock::Screenlock() {}
 Screenlock::~Screenlock() {}
 
-void Screenlock::Initialize(mojo::Connector* connector,
-                            const mojo::Identity& identity,
+void Screenlock::Initialize(shell::Connector* connector,
+                            const shell::Identity& identity,
                             uint32_t id) {
   tracing_.Initialize(connector, identity.name());
 
@@ -86,7 +86,7 @@ void Screenlock::Initialize(mojo::Connector* connector,
       bindings_.CreateInterfacePtrAndBind(this));
 
   aura_init_.reset(new views::AuraInit(connector, "views_mus_resources.pak"));
-  views::WindowManagerConnection::Create(connector);
+  views::WindowManagerConnection::Create(connector, identity);
 
   views::Widget* widget = new views::Widget;
   views::Widget::InitParams params(

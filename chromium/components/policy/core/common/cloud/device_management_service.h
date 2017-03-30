@@ -9,6 +9,7 @@
 
 #include <deque>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -18,6 +19,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_split.h"
+#include "base/threading/thread_checker.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/policy_export.h"
 #include "net/url_request/url_fetcher_delegate.h"
@@ -52,6 +54,7 @@ class POLICY_EXPORT DeviceManagementRequestJob {
     TYPE_ATTRIBUTE_UPDATE_PERMISSION,
     TYPE_ATTRIBUTE_UPDATE,
     TYPE_GCM_ID_UPDATE,
+    TYPE_ANDROID_MANAGEMENT_CHECK,
   };
 
   typedef base::Callback<
@@ -129,7 +132,8 @@ class POLICY_EXPORT DeviceManagementService : public net::URLFetcherDelegate {
     virtual std::string GetPlatformParameter() = 0;
   };
 
-  explicit DeviceManagementService(scoped_ptr<Configuration> configuration);
+  explicit DeviceManagementService(
+      std::unique_ptr<Configuration> configuration);
   ~DeviceManagementService() override;
 
   // The ID of URLFetchers created by the DeviceManagementService. This can be
@@ -152,6 +156,10 @@ class POLICY_EXPORT DeviceManagementService : public net::URLFetcherDelegate {
   // Gets the URL that the DMServer requests are sent to.
   std::string GetServerUrl();
 
+  // Sets the retry delay to a shorter time to prevent browser tests from
+  // timing out.
+  static void SetRetryDelayForTesting(long retryDelayMs);
+
  private:
   typedef std::map<const net::URLFetcher*,
                    DeviceManagementRequestJobImpl*> JobFetcherMap;
@@ -167,6 +175,7 @@ class POLICY_EXPORT DeviceManagementService : public net::URLFetcherDelegate {
 
   // Starts a job.
   void StartJob(DeviceManagementRequestJobImpl* job);
+  void StartJobAfterDelay(base::WeakPtr<DeviceManagementRequestJobImpl> job);
 
   // Adds a job. Caller must make sure the job pointer stays valid until the job
   // completes or gets canceled via RemoveJob().
@@ -178,7 +187,7 @@ class POLICY_EXPORT DeviceManagementService : public net::URLFetcherDelegate {
 
   // A Configuration implementation that is used to obtain various parameters
   // used to talk to the device management server.
-  scoped_ptr<Configuration> configuration_;
+  std::unique_ptr<Configuration> configuration_;
 
   // The jobs we currently have in flight.
   JobFetcherMap pending_jobs_;
@@ -190,7 +199,12 @@ class POLICY_EXPORT DeviceManagementService : public net::URLFetcherDelegate {
   // If it is not initialized, incoming requests are queued.
   bool initialized_;
 
-  // Used to create tasks to run |Initialize| delayed on the UI thread.
+  // TaskRunner used to schedule retry attempts.
+  const scoped_refptr<base::SequencedTaskRunner> task_runner_;
+
+  base::ThreadChecker thread_checker_;
+
+  // Used to create tasks which run delayed on the UI thread.
   base::WeakPtrFactory<DeviceManagementService> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(DeviceManagementService);

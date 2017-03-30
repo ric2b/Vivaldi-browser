@@ -202,13 +202,6 @@ source_set("html") {
   deps = [
     ":prerequisites",
   ]
-
-  # TODO(GYP)
-  # Shard this target into parts to work around linker limitations.
-  # on link time code generation builds.
-  #['OS=="win" and buildtype=="Official"', {
-  #  'msvs_shard': 5,
-  #}],
 }
 
 # GYP version: //third_party/WebKit/Source/core/core.gyp:webcore_svg
@@ -221,13 +214,6 @@ source_set("svg") {
   deps = [
     ":prerequisites",
   ]
-
-  # TODO(GYP)
-  # Shard this target into parts to work around linker limitations.
-  # on link time code generation builds.
-  #['OS=="win" and buildtype=="Official"', {
-  #  'msvs_shard': 5,
-  #}],
 }
 
 # GYP version: //third_party/WebKit/Source/core/core.gyp:webcore_remaining
@@ -278,7 +264,10 @@ source_set("remaining") {
   }
 
   if (is_mac) {
-    libs += [ "Carbon.framework" ]
+    libs += [
+      "AppKit.framework",
+      "Carbon.framework",
+    ]
   } else {  # !is_mac
     sources -= [ "editing/commands/SmartReplaceCF.cpp" ]
   }
@@ -327,12 +316,12 @@ source_set("testing") {
     "$bindings_core_v8_output_dir/V8LayerRectList.h",
     "$bindings_core_v8_output_dir/V8PrivateScriptTest.cpp",
     "$bindings_core_v8_output_dir/V8PrivateScriptTest.h",
-    "$bindings_core_v8_output_dir/V8RefCountedScriptWrappable.cpp",
-    "$bindings_core_v8_output_dir/V8RefCountedScriptWrappable.h",
     "$bindings_core_v8_output_dir/V8TypeConversions.cpp",
     "$bindings_core_v8_output_dir/V8TypeConversions.h",
     "$bindings_core_v8_output_dir/V8UnionTypesTest.cpp",
     "$bindings_core_v8_output_dir/V8UnionTypesTest.h",
+    "$bindings_core_v8_output_dir/V8WorkerInternals.cpp",
+    "$bindings_core_v8_output_dir/V8WorkerInternals.h",
   ]
 }
 
@@ -398,7 +387,7 @@ source_set("core_generated") {
     "$blink_core_output_dir/InspectorInstrumentationImpl.cpp",
     "$blink_core_output_dir/InspectorInstrumentationInl.h",
     "$blink_core_output_dir/InspectorOverridesInl.h",
-    "$blink_core_output_dir/InstrumentingAgentsInl.h",
+    "$blink_core_output_dir/InstrumentingAgents.h",
 
     # Additional .cpp files for SVG.
     "$blink_core_output_dir/SVGElementFactory.cpp",
@@ -979,7 +968,7 @@ action("make_core_generated_html_element_lookup_trie") {
   script = "../build/scripts/make_element_lookup_trie.py"
 
   input_file = "html/HTMLTagNames.in"
-  inputs = scripts_for_in_files + [
+  inputs = make_trie_helpers_files + [
              input_file,
              "../build/scripts/templates/ElementLookupTrie.cpp.tmpl",
              "../build/scripts/templates/ElementLookupTrie.h.tmpl",

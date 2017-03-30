@@ -10,7 +10,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "media/base/audio_buffer.h"
 #include "media/base/cdm_context.h"
 #include "media/mojo/common/media_type_converters.h"
@@ -19,7 +19,7 @@ namespace media {
 
 MojoAudioDecoder::MojoAudioDecoder(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-    interfaces::AudioDecoderPtr remote_decoder)
+    mojom::AudioDecoderPtr remote_decoder)
     : task_runner_(task_runner),
       remote_decoder_info_(remote_decoder.PassInterface()),
       binding_(this),
@@ -75,11 +75,11 @@ void MojoAudioDecoder::Initialize(const AudioDecoderConfig& config,
   // and the callback won't be dispatched if |remote_decoder_| is destroyed.
   remote_decoder_->Initialize(
       binding_.CreateInterfacePtrAndBind(),
-      interfaces::AudioDecoderConfig::From(config), cdm_id,
+      mojom::AudioDecoderConfig::From(config), cdm_id,
       base::Bind(&MojoAudioDecoder::OnInitialized, base::Unretained(this)));
 }
 
-void MojoAudioDecoder::Decode(const scoped_refptr<DecoderBuffer>& media_buffer,
+void MojoAudioDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
                               const DecodeCB& decode_cb) {
   DVLOG(3) << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
@@ -90,18 +90,11 @@ void MojoAudioDecoder::Decode(const scoped_refptr<DecoderBuffer>& media_buffer,
     return;
   }
 
-  interfaces::DecoderBufferPtr buffer = TransferDecoderBuffer(media_buffer);
-  if (!buffer) {
-    task_runner_->PostTask(FROM_HERE,
-                           base::Bind(decode_cb, DecodeStatus::DECODE_ERROR));
-    return;
-  }
-
   DCHECK(decode_cb_.is_null());
   decode_cb_ = decode_cb;
 
   remote_decoder_->Decode(
-      std::move(buffer),
+      TransferDecoderBuffer(buffer),
       base::Bind(&MojoAudioDecoder::OnDecodeStatus, base::Unretained(this)));
 }
 
@@ -133,7 +126,7 @@ bool MojoAudioDecoder::NeedsBitstreamConversion() const {
   return needs_bitstream_conversion_;
 }
 
-void MojoAudioDecoder::OnBufferDecoded(interfaces::AudioBufferPtr buffer) {
+void MojoAudioDecoder::OnBufferDecoded(mojom::AudioBufferPtr buffer) {
   DVLOG(1) << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
 
@@ -171,13 +164,13 @@ void MojoAudioDecoder::OnInitialized(bool success,
 }
 
 static media::DecodeStatus ConvertDecodeStatus(
-    interfaces::AudioDecoder::DecodeStatus status) {
+    mojom::AudioDecoder::DecodeStatus status) {
   switch (status) {
-    case interfaces::AudioDecoder::DecodeStatus::OK:
+    case mojom::AudioDecoder::DecodeStatus::OK:
       return media::DecodeStatus::OK;
-    case interfaces::AudioDecoder::DecodeStatus::ABORTED:
+    case mojom::AudioDecoder::DecodeStatus::ABORTED:
       return media::DecodeStatus::ABORTED;
-    case interfaces::AudioDecoder::DecodeStatus::DECODE_ERROR:
+    case mojom::AudioDecoder::DecodeStatus::DECODE_ERROR:
       return media::DecodeStatus::DECODE_ERROR;
   }
   NOTREACHED();
@@ -185,7 +178,7 @@ static media::DecodeStatus ConvertDecodeStatus(
 }
 
 void MojoAudioDecoder::OnDecodeStatus(
-    interfaces::AudioDecoder::DecodeStatus status) {
+    mojom::AudioDecoder::DecodeStatus status) {
   DVLOG(1) << __FUNCTION__ << ": status:" << status;
   DCHECK(task_runner_->BelongsToCurrentThread());
 
@@ -221,24 +214,19 @@ void MojoAudioDecoder::CreateDataPipe() {
   remote_decoder_->SetDataSource(std::move(write_pipe.consumer_handle));
 }
 
-interfaces::DecoderBufferPtr MojoAudioDecoder::TransferDecoderBuffer(
+mojom::DecoderBufferPtr MojoAudioDecoder::TransferDecoderBuffer(
     const scoped_refptr<DecoderBuffer>& media_buffer) {
-  interfaces::DecoderBufferPtr buffer =
-      interfaces::DecoderBuffer::From(media_buffer);
+  mojom::DecoderBufferPtr buffer = mojom::DecoderBuffer::From(media_buffer);
   if (media_buffer->end_of_stream())
     return buffer;
 
   // Serialize the data section of the DecoderBuffer into our pipe.
   uint32_t num_bytes = base::checked_cast<uint32_t>(media_buffer->data_size());
   DCHECK_GT(num_bytes, 0u);
-  MojoResult result =
-      WriteDataRaw(producer_handle_.get(), media_buffer->data(), &num_bytes,
-                   MOJO_WRITE_DATA_FLAG_ALL_OR_NONE);
-  if (result != MOJO_RESULT_OK || num_bytes != media_buffer->data_size()) {
-    DVLOG(1) << __FUNCTION__ << ": writing to data pipe failed";
-    return nullptr;
-  }
-
+  CHECK_EQ(WriteDataRaw(producer_handle_.get(), media_buffer->data(),
+                        &num_bytes, MOJO_READ_DATA_FLAG_ALL_OR_NONE),
+           MOJO_RESULT_OK);
+  CHECK_EQ(num_bytes, static_cast<uint32_t>(media_buffer->data_size()));
   return buffer;
 }
 

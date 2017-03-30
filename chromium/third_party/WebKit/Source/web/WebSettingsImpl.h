@@ -123,6 +123,7 @@ public:
     void setMinimumLogicalFontSize(int) override;
     void setMockScrollbarsEnabled(bool) override;
     void setOfflineWebApplicationCacheEnabled(bool) override;
+    void setPassiveEventListenerDefault(PassiveEventListenerDefault) override;
     void setPasswordEchoDurationInSeconds(double) override;
     void setPasswordEchoEnabled(bool) override;
     void setPerTilePaintingEnabled(bool) override;
@@ -177,11 +178,12 @@ public:
     void setUnifiedTextCheckerEnabled(bool) override;
     void setUsesEncodingDetector(bool) override;
     void setUseLegacyBackgroundSizeShorthandBehavior(bool) override;
-    void setUseMobileViewportStyle(bool) override;
+    void setViewportStyle(WebViewportStyle) override;
     void setUseSolidColorScrollbars(bool) override;
     void setUseWideViewport(bool) override;
     void setServeResourceFromCacheOnly(bool) override;
     void setV8CacheOptions(V8CacheOptions) override;
+    void setV8CacheStrategiesForCacheStorage(V8CacheStrategiesForCacheStorage) override;
     void setValidationMessageTimerMagnification(int) override;
     void setViewportEnabled(bool) override;
     void setViewportMetaEnabled(bool) override;

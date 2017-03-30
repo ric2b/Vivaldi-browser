@@ -6,13 +6,16 @@
 #define MOJO_PUBLIC_CPP_BINDINGS_LIB_INTERFACE_PTR_STATE_H_
 
 #include <stdint.h>
+
 #include <algorithm>  // For |std::swap()|.
+#include <memory>
 #include <utility>
 
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/single_thread_task_runner.h"
 #include "mojo/public/cpp/bindings/associated_group.h"
 #include "mojo/public/cpp/bindings/callback.h"
 #include "mojo/public/cpp/bindings/interface_ptr_info.h"
@@ -23,7 +26,7 @@
 #include "mojo/public/cpp/bindings/lib/message_header_validator.h"
 #include "mojo/public/cpp/bindings/lib/multiplex_router.h"
 #include "mojo/public/cpp/bindings/lib/router.h"
-#include "mojo/public/cpp/bindings/lib/scoped_interface_endpoint_handle.h"
+#include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 
 namespace mojo {
 namespace internal {
@@ -89,10 +92,12 @@ class InterfacePtrState<Interface, false> {
     swap(other->proxy_, proxy_);
     swap(other->router_, router_);
     handle_.swap(other->handle_);
+    runner_.swap(other->runner_);
     swap(other->version_, version_);
   }
 
-  void Bind(InterfacePtrInfo<Interface> info) {
+  void Bind(InterfacePtrInfo<Interface> info,
+            scoped_refptr<base::SingleThreadTaskRunner> runner) {
     DCHECK(!proxy_);
     DCHECK(!router_);
     DCHECK(!handle_.is_valid());
@@ -101,6 +106,7 @@ class InterfacePtrState<Interface, false> {
 
     handle_ = info.PassHandle();
     version_ = info.version();
+    runner_ = std::move(runner);
   }
 
   bool HasAssociatedInterfaces() const { return false; }
@@ -161,7 +167,8 @@ class InterfacePtrState<Interface, false> {
     filters.Append<MessageHeaderValidator>();
     filters.Append<typename Interface::ResponseValidator_>();
 
-    router_ = new Router(std::move(handle_), std::move(filters), false);
+    router_ = new Router(std::move(handle_), std::move(filters), false,
+                         std::move(runner_));
 
     proxy_ = new Proxy(router_);
   }
@@ -173,6 +180,7 @@ class InterfacePtrState<Interface, false> {
   // message pipe handle is needed. |handle_| is valid between the Bind() call
   // and the initialization of |proxy_| and |router_|.
   ScopedMessagePipeHandle handle_;
+  scoped_refptr<base::SingleThreadTaskRunner> runner_;
 
   uint32_t version_;
 
@@ -236,10 +244,12 @@ class InterfacePtrState<Interface, true> {
     swap(other->endpoint_client_, endpoint_client_);
     swap(other->proxy_, proxy_);
     handle_.swap(other->handle_);
+    runner_.swap(other->runner_);
     swap(other->version_, version_);
   }
 
-  void Bind(InterfacePtrInfo<Interface> info) {
+  void Bind(InterfacePtrInfo<Interface> info,
+            scoped_refptr<base::SingleThreadTaskRunner> runner) {
     DCHECK(!router_);
     DCHECK(!endpoint_client_);
     DCHECK(!proxy_);
@@ -249,6 +259,7 @@ class InterfacePtrState<Interface, true> {
 
     handle_ = info.PassHandle();
     version_ = info.version();
+    runner_ = std::move(runner);
   }
 
   bool HasAssociatedInterfaces() const {
@@ -313,23 +324,25 @@ class InterfacePtrState<Interface, true> {
     if (!handle_.is_valid())
       return;
 
-    router_ = new MultiplexRouter(true, std::move(handle_));
+    router_ = new MultiplexRouter(true, std::move(handle_), runner_);
     endpoint_client_.reset(new InterfaceEndpointClient(
         router_->CreateLocalEndpointHandle(kMasterInterfaceId), nullptr,
-        make_scoped_ptr(new typename Interface::ResponseValidator_()), false));
+        base::WrapUnique(new typename Interface::ResponseValidator_()), false,
+        std::move(runner_)));
     proxy_.reset(new Proxy(endpoint_client_.get()));
     proxy_->serialization_context()->router = endpoint_client_->router();
   }
 
   scoped_refptr<MultiplexRouter> router_;
 
-  scoped_ptr<InterfaceEndpointClient> endpoint_client_;
-  scoped_ptr<Proxy> proxy_;
+  std::unique_ptr<InterfaceEndpointClient> endpoint_client_;
+  std::unique_ptr<Proxy> proxy_;
 
   // |router_| (as well as other members above) is not initialized until
   // read/write with the message pipe handle is needed. |handle_| is valid
   // between the Bind() call and the initialization of |router_|.
   ScopedMessagePipeHandle handle_;
+  scoped_refptr<base::SingleThreadTaskRunner> runner_;
 
   uint32_t version_;
 

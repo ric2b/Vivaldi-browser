@@ -53,6 +53,7 @@
 <translation id="2673087257647337101">Sistemul de operare este aproape actualizat! Reporniți Chromium pentru a finaliza actualizarea.</translation>
 <translation id="2685838254101182273">Chromium nu se mai actualizează și nu mai acceptă această versiune a sistemului dvs. de operare.</translation>
 <translation id="2705212601509139398">Acest site folosește pluginul Chromium Frame, care nu va mai fi acceptat în curând. Dezinstalează-l și descarcă un browser compatibil.</translation>
+<translation id="2711502716910134313">Fila Chromium</translation>
 <translation id="2770231113462710648">Schimbă browserul prestabilit la:</translation>
 <translation id="2801146392936645542">Fișierul <ph name="FILE_NAME" /> este rău-intenționat și a fost blocat de Chromium.</translation>
 <translation id="2847479871509788944">Elimină din Chromium...</translation>
@@ -66,7 +67,6 @@
 <translation id="3130323860337406239">Chromium utilizează microfonul.</translation>
 <translation id="313551035350905294">Vă conectați cu un cont gestionat și îi permiteți administratorului acestuia controlul asupra profilului dvs. Chromium. Datele dvs. Chromium, cum ar fi aplicațiile, marcajele, istoricul, parolele și alte setări vor fi asociate definitiv cu <ph name="USER_NAME" />. Veți putea să ștergeți aceste date prin intermediul Tabloului de bord pentru Conturi Google, însă nu veți putea să asociați aceste date cu un alt cont.</translation>
 <translation id="3190315855212034486">Hopa! Chromium s-a închis cu eroare. Reporniți acum?</translation>
-<translation id="3197823471738295152">Dispozitivul dvs. este actualizat.</translation>
 <translation id="3244477511402911926">Centrul de notificări Chromium</translation>
 <translation id="3256316712990552818">Copiat în Chromium</translation>
 <translation id="3258596308407688501">Chromium nu poate citi și scrie în directorul propriu de date:
@@ -120,6 +120,7 @@
 <translation id="549669000822060376">Așteaptă până când Chromium instalează cele mai recente actualizări de sistem.</translation>
 <translation id="5563479599352954471">Caută cu o atingere</translation>
 <translation id="5620765574781326016">Află despre subiectele de pe site-uri fără să părăsești pagina.</translation>
+<translation id="5634636535844844681">Chromium necesită Windows 7 sau o versiune ulterioară.</translation>
 <translation id="5680901439334282664">conectează-te la Chromium</translation>
 <translation id="5772805321386874569">(necesită <ph name="BEGIN_BUTTON" />repornirea<ph name="END_BUTTON" /> Chromium)</translation>
 <translation id="5796460469508169315">Chromium este aproape configurat.</translation>
@@ -179,6 +180,12 @@ Chromium nu poate recupera setările.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7339898014177206373">Fereastră nouă</translation>
 <translation id="734373864078049451">Experiența web personalizată, marcajele și celelalte date Chromium chiar aici.</translation>
+<translation id="7344413941077984497">Pentru a stabili ce site-uri poate accesa utilizatorul <ph name="NEW_PROFILE_NAME" />, poți configura restricții și setări accesând <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. Dacă nu modifici setările prestabilite, utilizatorul <ph name="NEW_PROFILE_NAME" /> poate naviga oriunde pe web.
+
+Pentru a împiedica utilizatorul <ph name="NEW_PROFILE_NAME" /> să îți acceseze contul, asigură-te că îți blochezi profilul când nu folosești Chromium. Pentru a face acest lucru, dă clic pe numele de profil din colțul din dreapta sus al browserului și selectează „Ieși și blochează”.
+<ph name="BEGIN_LINK_2" />Află mai multe<ph name="END_LINK_2" />
+
+Verifică e-mailul la <ph name="ACCOUNT_EMAIL" /> pentru instrucțiuni suplimentare.</translation>
 <translation id="7419987137528340081">Dacă preferați să păstrați separat datele Chromium existente, puteți crea un utilizator Chromium nou pentru <ph name="USER_NAME" />.</translation>
 <translation id="7421823331379285070">Chromium necesită Windows XP sau o versiune ulterioară. Este posibil ca unele funcții să nu fie disponibile.</translation>
 <translation id="7463979740390522693">Chromium – Notificări (<ph name="QUANTITY" /> necitite)</translation>
@@ -207,6 +214,7 @@ Chromium nu poate recupera setările.</translation>
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> The Chromium Authors. Toate drepturile rezervate.</translation>
 <translation id="8621669128220841554">Instalarea nu a reușit din cauza unei erori neprecizate. Descărcați Chromium din nou.</translation>
 <translation id="8628626585870903697">Chromium nu include vizualizatorul PDF care este necesar pentru funcționarea Previzualizării înainte de printare.</translation>
+<translation id="8667808506758191620">Dispozitivul <ph name="DEVICE_TYPE" /> este actualizat.</translation>
 <translation id="8697124171261953979">Stabilește și ce pagină se afișează când porniți Chromium sau când căutați din caseta polivalentă.</translation>
 <translation id="8704119203788522458">Acesta este browserul dvs. Chromium</translation>
 <translation id="872034308864968620">Permiteți Chromium să ruleze în fundal</translation>
@@ -223,7 +231,6 @@ Chromium nu poate recupera setările.</translation>
 
 Dacă totuși vă conectați, informațiile Chromium cum ar fi marcajele, istoricul și alte setări vor fi îmbinate cu <ph name="ACCOUNT_EMAIL_NEW" />.</translation>
 <translation id="9013087743919948559">Adăugați la Chromium</translation>
-<translation id="9013262824292842194">Chromium necesită Windows Vista sau Windows XP cu SP2 sau o versiune ulterioară.</translation>
 <translation id="9019929317751753759">Pentru mai multă siguranță în Chromium, am dezactivat următoarea extensie care nu este inclusă în <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> și care este posibil să fi fost adăugată fără știrea ta.</translation>
 <translation id="9022552996538154597">Conectați-vă la Chromium</translation>
 <translation id="9036189287518468038">Lansatorul de aplicații Chromium</translation>

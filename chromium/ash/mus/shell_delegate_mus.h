@@ -5,10 +5,9 @@
 #ifndef ASH_MUS_SHELL_DELEGATE_MUS_H_
 #define ASH_MUS_SHELL_DELEGATE_MUS_H_
 
-#include <string>
+#include <memory>
 
 #include "ash/shell_delegate.h"
-#include "base/compiler_specific.h"
 #include "base/macros.h"
 
 namespace keyboard {
@@ -16,11 +15,14 @@ class KeyboardUI;
 }
 
 namespace ash {
+
+class AppListPresenterMus;
+
 namespace sysui {
 
 class ShellDelegateMus : public ash::ShellDelegate {
  public:
-  ShellDelegateMus();
+  explicit ShellDelegateMus(std::unique_ptr<AppListPresenterMus>);
   ~ShellDelegateMus() override;
 
   bool IsFirstRunAfterBoot() const override;
@@ -39,7 +41,7 @@ class ShellDelegateMus : public ash::ShellDelegate {
   void RemoveVirtualKeyboardStateObserver(
       VirtualKeyboardStateObserver* observer) override;
   void OpenUrl(const GURL& url) override;
-  app_list::AppListViewDelegate* GetAppListViewDelegate() override;
+  app_list::AppListPresenter* GetAppListPresenter() override;
   ShelfDelegate* CreateShelfDelegate(ShelfModel* model) override;
   ash::SystemTrayDelegate* CreateSystemTrayDelegate() override;
   ash::UserWallpaperDelegate* CreateUserWallpaperDelegate() override;
@@ -47,6 +49,9 @@ class ShellDelegateMus : public ash::ShellDelegate {
   ash::AccessibilityDelegate* CreateAccessibilityDelegate() override;
   ash::NewWindowDelegate* CreateNewWindowDelegate() override;
   ash::MediaDelegate* CreateMediaDelegate() override;
+  std::unique_ptr<ContainerDelegate> CreateContainerDelegate() override;
+  std::unique_ptr<PointerWatcherDelegate> CreatePointerWatcherDelegate()
+      override;
   ui::MenuModel* CreateContextMenu(ash::Shelf* shelf,
                                    const ash::ShelfItem* item) override;
   GPUSupport* CreateGPUSupport() override;
@@ -54,6 +59,8 @@ class ShellDelegateMus : public ash::ShellDelegate {
   gfx::Image GetDeprecatedAcceleratorImage() const override;
 
  private:
+  std::unique_ptr<app_list::AppListPresenter> app_list_presenter_;
+
   DISALLOW_COPY_AND_ASSIGN(ShellDelegateMus);
 };
 

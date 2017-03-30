@@ -36,8 +36,7 @@
 #include "core/events/EventListener.h"
 #include "core/events/EventTarget.h"
 #include "platform/heap/Handle.h"
-#include "wtf/RefCounted.h"
-#include "wtf/text/AtomicStringHash.h"
+#include "wtf/Forward.h"
 
 namespace blink {
 
@@ -45,8 +44,7 @@ class ExceptionState;
 class KURL;
 class ExecutionContext;
 
-class CORE_EXPORT AbstractWorker : public RefCountedGarbageCollectedEventTargetWithInlineData<AbstractWorker>, public ActiveDOMObject {
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(AbstractWorker);
+class CORE_EXPORT AbstractWorker : public EventTargetWithInlineData, public ActiveDOMObject {
     USING_GARBAGE_COLLECTED_MIXIN(AbstractWorker);
 public:
     // EventTarget APIs

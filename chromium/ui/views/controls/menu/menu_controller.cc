@@ -12,13 +12,13 @@
 #include "build/build_config.h"
 #include "ui/base/dragdrop/drag_utils.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
+#include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/native_widget_types.h"
-#include "ui/gfx/screen.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/controls/button/menu_button.h"
 #include "ui/views/controls/menu/menu_config.h"
@@ -41,7 +41,7 @@
 #if defined(OS_WIN)
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/win/internal_constants.h"
-#include "ui/gfx/win/dpi.h"
+#include "ui/display/win/screen_win.h"
 #include "ui/views/win/hwnd_util.h"
 #endif
 
@@ -176,7 +176,8 @@ static void RepostEventImpl(const ui::LocatedEvent* event,
     return;
 
 #if defined(OS_WIN)
-  gfx::Point screen_loc_pixels = gfx::win::DIPToScreenPoint(screen_loc);
+  gfx::Point screen_loc_pixels =
+      display::win::ScreenWin::DIPToScreenPoint(screen_loc);
   HWND target_window = ::WindowFromPoint(screen_loc_pixels.ToPOINT());
   // If we don't find a native window for the HWND at the current location,
   // then attempt to find a native window from its parent if one exists.
@@ -490,6 +491,11 @@ MenuItemView* MenuController::Run(Widget* parent,
 
   if (result_event_flags)
     *result_event_flags = accept_event_flags_;
+
+  // The nested message loop could have been killed externally. Check to see if
+  // there are nested asynchronous menus to shutdown.
+  if (async_run_ && delegate_stack_.size() > 1)
+    ExitAsyncRun();
 
   return ExitMenuRun();
 }
@@ -1034,14 +1040,17 @@ ui::PostDispatchAction MenuController::OnWillDispatchKeyEvent(
   else
     OnKeyDown(key_code);
 
-  TerminateNestedMessageLoopIfNecessary();
+  // MenuController may have been deleted, so check for an active instance
+  // before accessing member variables.
+  if (GetActiveInstance())
+    TerminateNestedMessageLoopIfNecessary();
 
   return ui::POST_DISPATCH_NONE;
 }
 
 void MenuController::UpdateSubmenuSelection(SubmenuView* submenu) {
   if (submenu->IsShowing()) {
-    gfx::Point point = gfx::Screen::GetScreen()->GetCursorScreenPoint();
+    gfx::Point point = display::Screen::GetScreen()->GetCursorScreenPoint();
     const SubmenuView* root_submenu =
         submenu->GetMenuItem()->GetRootMenuItem()->GetSubmenu();
     View::ConvertPointFromScreen(
@@ -1186,7 +1195,7 @@ void MenuController::StartDrag(SubmenuView* source,
   View::ConvertPointFromScreen(item, &press_loc);
   gfx::Point widget_loc(press_loc);
   View::ConvertPointToWidget(item, &widget_loc);
-  scoped_ptr<gfx::Canvas> canvas(GetCanvasForDragImage(
+  std::unique_ptr<gfx::Canvas> canvas(GetCanvasForDragImage(
       source->GetWidget(), gfx::Size(item->width(), item->height())));
   item->PaintButton(canvas.get(), MenuItemView::PB_FOR_DRAG);
 
@@ -1396,14 +1405,14 @@ void MenuController::UpdateInitialLocation(const gfx::Rect& bounds,
 
   // Calculate the bounds of the monitor we'll show menus on. Do this once to
   // avoid repeated system queries for the info.
-  pending_state_.monitor_bounds = gfx::Screen::GetScreen()
+  pending_state_.monitor_bounds = display::Screen::GetScreen()
                                       ->GetDisplayNearestPoint(bounds.origin())
                                       .work_area();
 
   if (!pending_state_.monitor_bounds.Contains(bounds)) {
     // Use the monitor area if the work area doesn't contain the bounds. This
     // handles showing a menu from the launcher.
-    gfx::Rect monitor_area = gfx::Screen::GetScreen()
+    gfx::Rect monitor_area = display::Screen::GetScreen()
                                  ->GetDisplayNearestPoint(bounds.origin())
                                  .bounds();
     if (monitor_area.Contains(bounds))
@@ -1438,11 +1447,12 @@ bool MenuController::ShowSiblingMenu(SubmenuView* source,
     return false;
   }
 
-  gfx::NativeWindow window_under_mouse =
-      gfx::Screen::GetScreen()->GetWindowUnderCursor();
   // TODO(oshima): Replace with views only API.
-  if (!owner_ || window_under_mouse != owner_->GetNativeWindow())
+  if (!owner_ ||
+      !display::Screen::GetScreen()->IsWindowUnderCursor(
+          owner_->GetNativeWindow())) {
     return false;
+  }
 
   // The user moved the mouse outside the menu and over the owning window. See
   // if there is a sibling menu we should show.
@@ -2325,7 +2335,7 @@ void MenuController::RepostEventAndCancel(SubmenuView* source,
   gfx::NativeView native_view = source->GetWidget()->GetNativeView();
   gfx::NativeWindow window = nullptr;
   if (native_view) {
-    gfx::Screen* screen = gfx::Screen::GetScreen();
+    display::Screen* screen = display::Screen::GetScreen();
     window = screen->GetWindowAtScreenPoint(screen_loc);
   }
 #endif
@@ -2663,15 +2673,19 @@ void MenuController::SetInitialHotTrackedView(
 void MenuController::SetHotTrackedButton(CustomButton* hot_button) {
   if (hot_button == hot_button_) {
     // Hot-tracked state may change outside of the MenuController. Correct it.
-    if (hot_button && !hot_button->IsHotTracked())
+    if (hot_button && !hot_button->IsHotTracked()) {
       hot_button->SetHotTracked(true);
+      hot_button->NotifyAccessibilityEvent(ui::AX_EVENT_SELECTION, true);
+    }
     return;
   }
   if (hot_button_)
     hot_button_->SetHotTracked(false);
   hot_button_ = hot_button;
-  if (hot_button)
+  if (hot_button) {
     hot_button->SetHotTracked(true);
+    hot_button->NotifyAccessibilityEvent(ui::AX_EVENT_SELECTION, true);
+  }
 }
 
 }  // namespace views

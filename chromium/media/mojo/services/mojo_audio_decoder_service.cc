@@ -14,24 +14,24 @@
 
 namespace media {
 
-static interfaces::AudioDecoder::DecodeStatus ConvertDecodeStatus(
+static mojom::AudioDecoder::DecodeStatus ConvertDecodeStatus(
     media::DecodeStatus status) {
   switch (status) {
     case media::DecodeStatus::OK:
-      return interfaces::AudioDecoder::DecodeStatus::OK;
+      return mojom::AudioDecoder::DecodeStatus::OK;
     case media::DecodeStatus::ABORTED:
-      return interfaces::AudioDecoder::DecodeStatus::ABORTED;
+      return mojom::AudioDecoder::DecodeStatus::ABORTED;
     case media::DecodeStatus::DECODE_ERROR:
-      return interfaces::AudioDecoder::DecodeStatus::DECODE_ERROR;
+      return mojom::AudioDecoder::DecodeStatus::DECODE_ERROR;
   }
   NOTREACHED();
-  return interfaces::AudioDecoder::DecodeStatus::DECODE_ERROR;
+  return mojom::AudioDecoder::DecodeStatus::DECODE_ERROR;
 }
 
 MojoAudioDecoderService::MojoAudioDecoderService(
     base::WeakPtr<MojoCdmServiceContext> mojo_cdm_service_context,
     std::unique_ptr<media::AudioDecoder> decoder,
-    mojo::InterfaceRequest<interfaces::AudioDecoder> request)
+    mojo::InterfaceRequest<mojom::AudioDecoder> request)
     : binding_(this, std::move(request)),
       mojo_cdm_service_context_(mojo_cdm_service_context),
       decoder_(std::move(decoder)),
@@ -41,11 +41,10 @@ MojoAudioDecoderService::MojoAudioDecoderService(
 
 MojoAudioDecoderService::~MojoAudioDecoderService() {}
 
-void MojoAudioDecoderService::Initialize(
-    interfaces::AudioDecoderClientPtr client,
-    interfaces::AudioDecoderConfigPtr config,
-    int32_t cdm_id,
-    const InitializeCallback& callback) {
+void MojoAudioDecoderService::Initialize(mojom::AudioDecoderClientPtr client,
+                                         mojom::AudioDecoderConfigPtr config,
+                                         int32_t cdm_id,
+                                         const InitializeCallback& callback) {
   DVLOG(1) << __FUNCTION__ << " "
            << config.To<media::AudioDecoderConfig>().AsHumanReadableString();
 
@@ -89,7 +88,7 @@ void MojoAudioDecoderService::SetDataSource(
   consumer_handle_ = std::move(receive_pipe);
 }
 
-void MojoAudioDecoderService::Decode(interfaces::DecoderBufferPtr buffer,
+void MojoAudioDecoderService::Decode(mojom::DecoderBufferPtr buffer,
                                      const DecodeCallback& callback) {
   DVLOG(3) << __FUNCTION__;
 
@@ -141,11 +140,11 @@ void MojoAudioDecoderService::OnAudioBufferReady(
   DVLOG(1) << __FUNCTION__;
 
   // TODO(timav): Use DataPipe.
-  client_->OnBufferDecoded(interfaces::AudioBuffer::From(audio_buffer));
+  client_->OnBufferDecoded(mojom::AudioBuffer::From(audio_buffer));
 }
 
 scoped_refptr<DecoderBuffer> MojoAudioDecoderService::ReadDecoderBuffer(
-    interfaces::DecoderBufferPtr buffer) {
+    mojom::DecoderBufferPtr buffer) {
   scoped_refptr<DecoderBuffer> media_buffer(
       buffer.To<scoped_refptr<DecoderBuffer>>());
 
@@ -154,27 +153,27 @@ scoped_refptr<DecoderBuffer> MojoAudioDecoderService::ReadDecoderBuffer(
 
   // Wait for the data to become available in the DataPipe.
   MojoHandleSignalsState state;
-  MojoResult result =
-      MojoWait(consumer_handle_.get().value(), MOJO_HANDLE_SIGNAL_READABLE,
-               MOJO_DEADLINE_INDEFINITE, &state);
+  CHECK_EQ(MOJO_RESULT_OK,
+           MojoWait(consumer_handle_.get().value(), MOJO_HANDLE_SIGNAL_READABLE,
+                    MOJO_DEADLINE_INDEFINITE, &state));
 
-  if (result != MOJO_RESULT_OK) {
+  if (state.satisfied_signals & MOJO_HANDLE_SIGNAL_PEER_CLOSED) {
     DVLOG(1) << __FUNCTION__ << ": Peer closed the data pipe";
-    return nullptr;
+    return scoped_refptr<DecoderBuffer>();
   }
+
+  CHECK_EQ(MOJO_HANDLE_SIGNAL_READABLE,
+           state.satisfied_signals & MOJO_HANDLE_SIGNAL_READABLE);
 
   // Read the inner data for the DecoderBuffer from our DataPipe.
-  uint32_t data_size = static_cast<uint32_t>(media_buffer->data_size());
-  DCHECK_EQ(data_size, buffer->data_size);
-  DCHECK_GT(data_size, 0u);
-
-  uint32_t bytes_read = data_size;
-  result = ReadDataRaw(consumer_handle_.get(), media_buffer->writable_data(),
-                       &bytes_read, MOJO_READ_DATA_FLAG_ALL_OR_NONE);
-  if (result != MOJO_RESULT_OK || bytes_read != data_size) {
-    DVLOG(1) << __FUNCTION__ << ": reading from pipe failed";
-    return nullptr;
-  }
+  uint32_t bytes_to_read =
+      base::checked_cast<uint32_t>(media_buffer->data_size());
+  DCHECK_GT(bytes_to_read, 0u);
+  uint32_t bytes_read = bytes_to_read;
+  CHECK_EQ(ReadDataRaw(consumer_handle_.get(), media_buffer->writable_data(),
+                       &bytes_read, MOJO_READ_DATA_FLAG_ALL_OR_NONE),
+           MOJO_RESULT_OK);
+  CHECK_EQ(bytes_to_read, bytes_read);
 
   return media_buffer;
 }

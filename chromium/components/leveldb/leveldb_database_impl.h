@@ -5,7 +5,8 @@
 #ifndef COMPONENTS_LEVELDB_LEVELDB_DATABASE_IMPL_H_
 #define COMPONENTS_LEVELDB_LEVELDB_DATABASE_IMPL_H_
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
 #include "components/leveldb/public/interfaces/leveldb.mojom.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
@@ -16,11 +17,11 @@ namespace leveldb {
 class MojoEnv;
 
 // The backing to a database object that we pass to our called.
-class LevelDBDatabaseImpl : public LevelDBDatabase {
+class LevelDBDatabaseImpl : public mojom::LevelDBDatabase {
  public:
-  LevelDBDatabaseImpl(leveldb::LevelDBDatabaseRequest request,
-                      scoped_ptr<leveldb::Env> environment,
-                      scoped_ptr<leveldb::DB> db);
+  LevelDBDatabaseImpl(leveldb::mojom::LevelDBDatabaseRequest request,
+                      std::unique_ptr<leveldb::Env> environment,
+                      std::unique_ptr<leveldb::DB> db);
   ~LevelDBDatabaseImpl() override;
 
   // Overridden from LevelDBDatabase:
@@ -29,9 +30,13 @@ class LevelDBDatabaseImpl : public LevelDBDatabase {
            const PutCallback& callback) override;
   void Delete(mojo::Array<uint8_t> key,
               const DeleteCallback& callback) override;
-  void Write(mojo::Array<BatchedOperationPtr> operations,
+  void DeletePrefixed(mojo::Array<uint8_t> key_prefix,
+                      const DeletePrefixedCallback& callback) override;
+  void Write(mojo::Array<mojom::BatchedOperationPtr> operations,
              const WriteCallback& callback) override;
   void Get(mojo::Array<uint8_t> key, const GetCallback& callback) override;
+  void GetPrefixed(mojo::Array<uint8_t> key_prefix,
+                   const GetPrefixedCallback& callback) override;
   void GetSnapshot(const GetSnapshotCallback& callback) override;
   void ReleaseSnapshot(uint64_t snapshot_id) override;
   void GetFromSnapshot(uint64_t snapshot_id,
@@ -61,9 +66,12 @@ class LevelDBDatabaseImpl : public LevelDBDatabase {
   void ReplyToIteratorMessage(leveldb::Iterator* it,
                               const IteratorSeekToFirstCallback& callback);
 
-  mojo::StrongBinding<LevelDBDatabase> binding_;
-  scoped_ptr<leveldb::Env> environment_;
-  scoped_ptr<leveldb::DB> db_;
+  leveldb::Status DeletePrefixedHelper(const leveldb::Slice& key_prefix,
+                                       leveldb::WriteBatch* batch);
+
+  mojo::StrongBinding<mojom::LevelDBDatabase> binding_;
+  std::unique_ptr<leveldb::Env> environment_;
+  std::unique_ptr<leveldb::DB> db_;
 
   std::map<uint64_t, const Snapshot*> snapshot_map_;
 

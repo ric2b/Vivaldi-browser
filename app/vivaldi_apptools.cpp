@@ -10,6 +10,7 @@
 namespace vivaldi {
 
 namespace {
+
 const char *vivaldi_extra_locales_array[] = {
   "be",
   "eo",
@@ -32,8 +33,7 @@ const char *vivaldi_extra_locales_array[] = {
 base::LazyInstance<std::set<std::string>> vivaldi_extra_locales =
     LAZY_INSTANCE_INITIALIZER;
 
-}
-
+}  // namespace
 
 bool IsVivaldiApp(const std::string &extension_id) {
   return extension_id == kVivaldiAppId;

@@ -40,19 +40,16 @@
 #include "core/fileapi/FileReaderLoaderClient.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
-#include "wtf/RefCounted.h"
 
 namespace blink {
 
 class Blob;
-class DOMArrayBuffer;
 class ExceptionState;
 class ExecutionContext;
 class StringOrArrayBuffer;
 
-class CORE_EXPORT FileReader final : public RefCountedGarbageCollectedEventTargetWithInlineData<FileReader>, public ActiveScriptWrappable, public ActiveDOMObject, public FileReaderLoaderClient {
+class CORE_EXPORT FileReader final : public EventTargetWithInlineData, public ActiveScriptWrappable, public ActiveDOMObject, public FileReaderLoaderClient {
     DEFINE_WRAPPERTYPEINFO();
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(FileReader);
     USING_GARBAGE_COLLECTED_MIXIN(FileReader);
 public:
     static FileReader* create(ExecutionContext*);

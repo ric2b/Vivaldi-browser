@@ -188,6 +188,8 @@ class CONTENT_EXPORT BrowserThread {
   // The order or execution of tasks posted here is unspecified even when
   // posting to a SequencedTaskRunner and tasks are not guaranteed to be run
   // prior to browser shutdown.
+  // When called after the browser startup is complete, will post |task|
+  // to |task_runner| immediately.
   // Note: see related ContentBrowserClient::PostAfterStartupTask.
   static void PostAfterStartupTask(
       const tracked_objects::Location& from_here,
@@ -285,7 +287,7 @@ class CONTENT_EXPORT BrowserThread {
   //   ~Foo();
   //
   // Sample usage with scoped_ptr:
-  // scoped_ptr<Foo, BrowserThread::DeleteOnIOThread> ptr;
+  // std::unique_ptr<Foo, BrowserThread::DeleteOnIOThread> ptr;
   struct DeleteOnUIThread : public DeleteOnThread<UI> { };
   struct DeleteOnIOThread : public DeleteOnThread<IO> { };
   struct DeleteOnFileThread : public DeleteOnThread<FILE> { };

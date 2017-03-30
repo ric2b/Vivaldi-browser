@@ -29,18 +29,7 @@ OPTIONS = options.OPTIONS
 
 
 # Cache back-end types supported by cachetool.
-BACKEND_TYPES = ['simple']
-
-# Default build output directory.
-OUT_DIRECTORY = os.getenv('CR_OUT_FULL', os.path.join(
-    os.path.dirname(__file__), '../../../out/Release'))
-
-# Default cachetool binary location.
-CACHETOOL_BIN_PATH = os.path.join(OUT_DIRECTORY, 'cachetool')
-
-# Default content_decoder_tool binary location.
-CONTENT_DECODER_TOOL_BIN_PATH = os.path.join(OUT_DIRECTORY,
-                                             'content_decoder_tool')
+BACKEND_TYPES = {'simple', 'blockfile'}
 
 # Regex used to parse HTTP headers line by line.
 HEADER_PARSING_REGEX = re.compile(r'^(?P<header>\S+):(?P<value>.*)$')
@@ -132,7 +121,7 @@ def PushBrowserCache(device, local_cache_path):
 
   # Clear previous cache.
   _AdbShell(device.adb, ['rm', '-rf', remote_cache_directory])
-  _AdbShell(device.adb, ['mkdir', remote_cache_directory])
+  _AdbShell(device.adb, ['mkdir', '-p', remote_cache_directory])
 
   # Push cache content.
   device.adb.Push(local_cache_path, remote_cache_directory)
@@ -219,7 +208,11 @@ def UnzipDirectoryContent(archive_path, directory_dest_path):
           f.write(zip_input.read(file_archive_name))
 
     assert timestamps
-    for relative_path, stats in timestamps.iteritems():
+    # os.utime(file_path, ...) modifies modification time of file_path's parent
+    # directories. Therefore we call os.utime on files and directories that have
+    # longer relative paths first.
+    for relative_path in sorted(timestamps.keys(), key=len, reverse=True):
+      stats = timestamps[relative_path]
       output_path = os.path.join(directory_dest_path, relative_path)
       if not os.path.exists(output_path):
         os.makedirs(output_path)
@@ -243,24 +236,25 @@ class CacheBackend(object):
   """Takes care of reading and deleting cached keys.
   """
 
-  def __init__(self, cache_directory_path, cache_backend_type,
-               cachetool_bin_path=CACHETOOL_BIN_PATH):
+  def __init__(self, cache_directory_path, cache_backend_type):
     """Chrome cache back-end constructor.
 
     Args:
       cache_directory_path: The directory path where the cache is locally
         stored.
       cache_backend_type: A cache back-end type in BACKEND_TYPES.
-      cachetool_bin_path: Path of the cachetool binary.
     """
     assert os.path.isdir(cache_directory_path)
     assert cache_backend_type in BACKEND_TYPES
-    assert os.path.isfile(cachetool_bin_path), 'invalid ' + cachetool_bin_path
     self._cache_directory_path = cache_directory_path
     self._cache_backend_type = cache_backend_type
-    self._cachetool_bin_path = cachetool_bin_path
     # Make sure cache_directory_path is a valid cache.
     self._CachetoolCmd('validate')
+
+  def GetSize(self):
+    """Gets total size of cache entries in bytes."""
+    size = self._CachetoolCmd('get_size')
+    return int(size.strip())
 
   def ListKeys(self):
     """Lists cache's keys.
@@ -283,7 +277,16 @@ class CacheBackend(object):
     Returns:
       String holding stream binary content.
     """
-    return self._CachetoolCmd('get_stream', key, str(index))
+    return self._CachetoolCmd('get_stream', [key, str(index)])
+
+  def DeleteStreamForKey(self, key, index):
+    """Delete a key's stream.
+
+    Args:
+      key: The key to access the stream.
+      index: The stream index
+    """
+    self._CachetoolCmd('delete_stream', [key, str(index)])
 
   def DeleteKey(self, key):
     """Deletes a key from the cache.
@@ -291,28 +294,39 @@ class CacheBackend(object):
     Args:
       key: The key delete.
     """
-    self._CachetoolCmd('delete_key', key)
+    self._CachetoolCmd('delete_key', [key])
 
-  def _CachetoolCmd(self, operation, *args):
+  def _CachetoolCmd(self, operation, args=None, stdin=''):
     """Runs the cache editor tool and return the stdout.
 
     Args:
       operation: Cachetool operation.
-      *args: Additional operation argument to append to the command line.
+      args: Additional operation argument to append to the command line.
+      stdin: String to pipe to the Cachetool's stdin.
 
     Returns:
       Cachetool's stdout string.
     """
     editor_tool_cmd = [
-        self._cachetool_bin_path,
+        OPTIONS.LocalBinary('cachetool'),
         self._cache_directory_path,
         self._cache_backend_type,
         operation]
-    editor_tool_cmd.extend(args)
-    process = subprocess.Popen(editor_tool_cmd, stdout=subprocess.PIPE)
-    stdout_data, _ = process.communicate()
+    editor_tool_cmd.extend(args or [])
+    process = subprocess.Popen(
+        editor_tool_cmd, stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+    stdout_data, _ = process.communicate(input=stdin)
     assert process.returncode == 0
     return stdout_data
+
+  def UpdateRawResponseHeaders(self, key, raw_headers):
+    """Updates a key's raw response headers.
+
+    Args:
+      key: The key to modify.
+      raw_headers: Raw response headers to set.
+    """
+    self._CachetoolCmd('update_raw_headers', [key], stdin=raw_headers)
 
   def GetDecodedContentForKey(self, key):
     """Gets a key's decoded content.
@@ -341,7 +355,7 @@ class CacheBackend(object):
     if content_encoding == None:
       return encoded_content
 
-    cmd = [CONTENT_DECODER_TOOL_BIN_PATH]
+    cmd = [OPTIONS.LocalBinary('content_decoder_tool')]
     cmd.extend([s.strip() for s in content_encoding.split(',')])
     process = subprocess.Popen(cmd,
                                stdin=subprocess.PIPE,

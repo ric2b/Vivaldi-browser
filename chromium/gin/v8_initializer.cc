@@ -402,6 +402,20 @@ base::PlatformFile V8Initializer::GetOpenSnapshotFileForChildProcesses(
   *region_out = opened.second;
   return opened.first;
 }
+
+// static
+base::FilePath V8Initializer::GetNativesFilePath(bool abi_32_bit) {
+  base::FilePath path;
+  GetV8FilePath(abi_32_bit ? kNativesFileName32 : kNativesFileName64, &path);
+  return path;
+}
+
+// static
+base::FilePath V8Initializer::GetSnapshotFilePath(bool abi_32_bit) {
+  base::FilePath path;
+  GetV8FilePath(abi_32_bit ? kSnapshotFileName32 : kSnapshotFileName64, &path);
+  return path;
+}
 #endif  // defined(OS_ANDROID)
 #endif  // defined(V8_USE_EXTERNAL_STARTUP_DATA)
 
@@ -425,6 +439,11 @@ void V8Initializer::Initialize(IsolateHolder::ScriptMode mode,
 
   if (base::FeatureList::IsEnabled(features::kV8Ignition)) {
     std::string flag("--ignition");
+    v8::V8::SetFlagsFromString(flag.c_str(), static_cast<int>(flag.size()));
+  }
+
+  if (base::FeatureList::IsEnabled(features::kV8IgnitionLazy)) {
+    std::string flag("--no-ignition-eager");
     v8::V8::SetFlagsFromString(flag.c_str(), static_cast<int>(flag.size()));
   }
 
@@ -469,21 +488,5 @@ void V8Initializer::GetV8ExternalSnapshotData(const char** natives_data_out,
     *snapshot_size_out = 0;
   }
 }
-
-#if defined(OS_ANDROID)
-// static
-base::FilePath V8Initializer::GetNativesFilePath(bool abi_32_bit) {
-  base::FilePath path;
-  GetV8FilePath(abi_32_bit ? kNativesFileName32 : kNativesFileName64, &path);
-  return path;
-}
-
-// static
-base::FilePath V8Initializer::GetSnapshotFilePath(bool abi_32_bit) {
-  base::FilePath path;
-  GetV8FilePath(abi_32_bit ? kSnapshotFileName32 : kSnapshotFileName64, &path);
-  return path;
-}
-#endif  // defined(OS_ANDROID)
 
 }  // namespace gin

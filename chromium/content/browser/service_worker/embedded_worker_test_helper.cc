@@ -11,7 +11,7 @@
 #include "base/atomic_sequence_num.h"
 #include "base/bind.h"
 #include "base/memory/scoped_vector.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/message_port_message_filter.h"
 #include "content/browser/service_worker/embedded_worker_instance.h"
 #include "content/browser/service_worker/embedded_worker_registry.h"
@@ -61,8 +61,8 @@ class EmbeddedWorkerTestHelper::MockEmbeddedWorkerSetup
 
   void ExchangeInterfaceProviders(
       int32_t thread_id,
-      mojo::shell::mojom::InterfaceProviderRequest services,
-      mojo::shell::mojom::InterfaceProviderPtr exposed_services) override {
+      shell::mojom::InterfaceProviderRequest services,
+      shell::mojom::InterfaceProviderPtr exposed_services) override {
     if (!helper_)
       return;
     helper_->OnSetupMojoStub(thread_id, std::move(services),
@@ -87,7 +87,7 @@ EmbeddedWorkerTestHelper::EmbeddedWorkerTestHelper(
       next_thread_id_(0),
       mock_render_process_id_(render_process_host_->GetID()),
       weak_factory_(this) {
-  scoped_ptr<MockServiceWorkerDatabaseTaskManager> database_task_manager(
+  std::unique_ptr<MockServiceWorkerDatabaseTaskManager> database_task_manager(
       new MockServiceWorkerDatabaseTaskManager(
           base::ThreadTaskRunnerHandle::Get()));
   wrapper_->InitInternal(user_data_directory, std::move(database_task_manager),
@@ -98,11 +98,11 @@ EmbeddedWorkerTestHelper::EmbeddedWorkerTestHelper(
                                     NewMessagePortMessageFilter());
 
   // Setup process level mojo service registry pair.
-  scoped_ptr<ServiceRegistryImpl> host_service_registry(
+  std::unique_ptr<ServiceRegistryImpl> host_service_registry(
       new ServiceRegistryImpl);
   render_process_service_registry_.ServiceRegistry::AddService(
       base::Bind(&MockEmbeddedWorkerSetup::Create, weak_factory_.GetWeakPtr()));
-  mojo::shell::mojom::InterfaceProviderPtr services;
+  shell::mojom::InterfaceProviderPtr services;
   render_process_service_registry_.Bind(mojo::GetProxy(&services));
   host_service_registry->BindRemoteServiceProvider(std::move(services));
   render_process_host_->SetServiceRegistry(std::move(host_service_registry));
@@ -421,9 +421,9 @@ void EmbeddedWorkerTestHelper::OnPushEventStub(
 
 void EmbeddedWorkerTestHelper::OnSetupMojoStub(
     int thread_id,
-    mojo::shell::mojom::InterfaceProviderRequest services,
-    mojo::shell::mojom::InterfaceProviderPtr exposed_services) {
-  scoped_ptr<ServiceRegistryImpl> new_registry(new ServiceRegistryImpl);
+    shell::mojom::InterfaceProviderRequest services,
+    shell::mojom::InterfaceProviderPtr exposed_services) {
+  std::unique_ptr<ServiceRegistryImpl> new_registry(new ServiceRegistryImpl);
   new_registry->Bind(std::move(services));
   new_registry->BindRemoteServiceProvider(std::move(exposed_services));
   OnSetupMojo(new_registry.get());

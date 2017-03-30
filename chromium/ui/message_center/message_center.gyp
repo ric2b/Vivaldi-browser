@@ -20,6 +20,7 @@
         '../../skia/skia.gyp:skia',
         '../../url/url.gyp:url_lib',
         '../base/ui_base.gyp:ui_base',
+        '../display/display.gyp:display',
         '../gfx/gfx.gyp:gfx',
         '../gfx/gfx.gyp:gfx_geometry',
         '../resources/ui_resources.gyp:ui_resources',
@@ -59,6 +60,7 @@
         'notification_blocker.h',
         'notification_delegate.cc',
         'notification_delegate.h',
+        'notification_delegate_views.cc',
         'notification_list.cc',
         'notification_list.h',
         'notification_types.cc',
@@ -71,6 +73,8 @@
         'popup_timers_controller.h',
         'views/bounded_label.cc',
         'views/bounded_label.h',
+        "views/custom_notification_view.cc",
+        "views/custom_notification_view.h",
         'views/constants.h',
         'views/desktop_popup_alignment_delegate.cc',
         'views/desktop_popup_alignment_delegate.h',
@@ -89,6 +93,8 @@
         'views/message_popup_collection.h',
         'views/message_view.cc',
         'views/message_view.h',
+        'views/message_view_factory.cc',
+        'views/message_view_factory.h',
         'views/message_view_context_menu_controller.cc',
         'views/message_view_context_menu_controller.h',
         'views/notification_button.cc',
@@ -130,6 +136,7 @@
         }, {
           'sources/': [
             ['exclude', 'views/'],
+            ['exclude', '_views\\.(h|cc)$'],
           ],
         }],
         # iOS disables notifications altogether, Android implements its own
@@ -221,6 +228,7 @@
           ],
           'sources': [
             'views/bounded_label_unittest.cc',
+            'views/custom_notification_view_unittest.cc',
             'views/message_center_view_unittest.cc',
             'views/message_popup_collection_unittest.cc',
             'views/notification_view_unittest.cc',

@@ -10,9 +10,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "gpu/command_buffer/client/gpu_control.h"
 #include "gpu/command_buffer/common/cmd_buffer_common.h"
 #include "gpu/command_buffer/common/gpu_memory_allocation.h"
@@ -33,7 +34,6 @@ class MockCommandBufferBase : public CommandBufferServiceBase {
   MockCommandBufferBase();
   ~MockCommandBufferBase() override;
 
-  bool Initialize() override;
   State GetLastState() override;
   int32_t GetLastToken() override;
   void WaitForTokenInRange(int32_t start, int32_t end) override;
@@ -96,6 +96,7 @@ class MockClientGpuControl : public GpuControl {
   MockClientGpuControl();
   virtual ~MockClientGpuControl();
 
+  MOCK_METHOD1(SetGpuControlClient, void(GpuControlClient*));
   MOCK_METHOD0(GetCapabilities, Capabilities());
   MOCK_METHOD4(CreateImage,
                int32_t(ClientBuffer buffer,
@@ -112,7 +113,6 @@ class MockClientGpuControl : public GpuControl {
                void(uint32_t query, const base::Closure& callback));
   MOCK_METHOD1(CreateStreamTexture, uint32_t(uint32_t));
   MOCK_METHOD1(SetLock, void(base::Lock*));
-  MOCK_METHOD0(IsGpuChannelLost, bool());
   MOCK_METHOD0(EnsureWorkVisible, void());
   MOCK_CONST_METHOD0(GetNamespaceID, CommandBufferNamespace());
   MOCK_CONST_METHOD0(GetCommandBufferID, CommandBufferId());

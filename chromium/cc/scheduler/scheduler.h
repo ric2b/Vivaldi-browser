@@ -6,11 +6,11 @@
 #define CC_SCHEDULER_SCHEDULER_H_
 
 #include <deque>
+#include <memory>
 #include <string>
 
 #include "base/cancelable_callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "cc/base/cc_export.h"
 #include "cc/output/begin_frame_args.h"
@@ -46,7 +46,6 @@ class SchedulerClient {
   virtual void ScheduledActionPrepareTiles() = 0;
   virtual void ScheduledActionInvalidateOutputSurface() = 0;
   virtual void DidFinishImplFrame() = 0;
-  virtual void SendBeginFramesToChildren(const BeginFrameArgs& args) = 0;
   virtual void SendBeginMainFrameNotExpectedSoon() = 0;
 
  protected:
@@ -55,13 +54,13 @@ class SchedulerClient {
 
 class CC_EXPORT Scheduler : public BeginFrameObserverBase {
  public:
-  static scoped_ptr<Scheduler> Create(
+  static std::unique_ptr<Scheduler> Create(
       SchedulerClient* client,
       const SchedulerSettings& scheduler_settings,
       int layer_tree_host_id,
       base::SingleThreadTaskRunner* task_runner,
       BeginFrameSource* begin_frame_source,
-      scoped_ptr<CompositorTimingHistory> compositor_timing_history);
+      std::unique_ptr<CompositorTimingHistory> compositor_timing_history);
 
   ~Scheduler() override;
 
@@ -135,10 +134,8 @@ class CC_EXPORT Scheduler : public BeginFrameObserverBase {
 
   void SetDeferCommits(bool defer_commits);
 
-  scoped_ptr<base::trace_event::ConvertableToTraceFormat> AsValue() const;
-  void AsValueInto(base::trace_event::TracedValue* value) const override;
+  std::unique_ptr<base::trace_event::ConvertableToTraceFormat> AsValue() const;
 
-  void SetChildrenNeedBeginFrames(bool children_need_begin_frames);
   void SetVideoNeedsBeginFrames(bool video_needs_begin_frames);
 
   const BeginFrameSource* begin_frame_source() const {
@@ -151,7 +148,7 @@ class CC_EXPORT Scheduler : public BeginFrameObserverBase {
             int layer_tree_host_id,
             base::SingleThreadTaskRunner* task_runner,
             BeginFrameSource* begin_frame_source,
-            scoped_ptr<CompositorTimingHistory> compositor_timing_history);
+            std::unique_ptr<CompositorTimingHistory> compositor_timing_history);
 
   // Virtual for testing.
   virtual base::TimeTicks Now() const;
@@ -166,7 +163,7 @@ class CC_EXPORT Scheduler : public BeginFrameObserverBase {
   BeginFrameSource* begin_frame_source_;
   bool observing_begin_frame_source_;
 
-  scoped_ptr<CompositorTimingHistory> compositor_timing_history_;
+  std::unique_ptr<CompositorTimingHistory> compositor_timing_history_;
   base::TimeDelta estimated_parent_draw_time_;
 
   std::deque<BeginFrameArgs> begin_retro_frame_args_;

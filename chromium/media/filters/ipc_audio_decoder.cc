@@ -42,7 +42,7 @@ base::LazyInstance<scoped_refptr<base::SequencedTaskRunner>>
 
 void RunCreatorOnMainThread(
     DataSource* data_source,
-    scoped_ptr<IPCMediaPipelineHost>* ipc_media_pipeline_host) {
+    std::unique_ptr<IPCMediaPipelineHost>* ipc_media_pipeline_host) {
   *ipc_media_pipeline_host = g_ipc_media_pipeline_host_creator.Get()
                                 .Run(g_media_task_runner.Get(), data_source);
 }

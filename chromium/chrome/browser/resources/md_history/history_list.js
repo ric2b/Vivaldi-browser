@@ -6,31 +6,22 @@ Polymer({
   is: 'history-list',
 
   properties: {
-    // An array of history entries in reverse chronological order.
-    historyData: {
-      type: Array
-    },
-
-    // The time of access of the last history item in historyData.
-    lastVisitedTime: {
-      type: Number,
-      value: 0
-    },
-
-    searchTerm: {
+    // The search term for the current query. Set when the query returns.
+    searchedTerm: {
       type: String,
-      value: ''
+      value: '',
     },
 
-    // True if there is a pending request to the backend.
-    loading_: {
-      type: Boolean,
-      value: true
-    },
+    lastSearchedTerm_: String,
+
+    querying: Boolean,
+
+    // An array of history entries in reverse chronological order.
+    historyData_: Array,
 
     resultLoadingDisabled_: {
       type: Boolean,
-      value: false
+      value: false,
     },
   },
 
@@ -49,28 +40,36 @@ Polymer({
   },
 
   /**
-   * Mark the page as currently loading new data from the back-end.
-   */
-  setLoading: function() {
-    this.loading_ = true;
-  },
-
-  /**
    * Opens the overflow menu unless the menu is already open and the same button
    * is pressed.
-   * @param {{detail: {itemIdentifier: !Object}}} e
+   * @param {{detail: {item: !HistoryEntry, target: !HTMLElement}}} e
    * @private
    */
   toggleMenu_: function(e) {
     var target = e.detail.target;
     /** @type {CrSharedMenuElement} */(this.$.sharedMenu).toggleMenu(
-        target, e.detail.itemIdentifier);
+        target, e.detail.item);
   },
 
   /** @private */
   onMoreFromSiteTap_: function() {
     var menu = /** @type {CrSharedMenuElement} */(this.$.sharedMenu);
-    this.fire('search-changed', {search: menu.itemData.domain});
+    this.fire('search-domain', {domain: menu.itemData.domain});
+    menu.closeMenu();
+  },
+
+  /** @private */
+  onRemoveFromHistoryTap_: function() {
+    var menu = /** @type {CrSharedMenuElement} */(this.$.sharedMenu);
+    md_history.BrowserService.getInstance()
+        .deleteItems([menu.itemData])
+        .then(function(items) {
+          this.removeDeletedHistory_(items);
+          // This unselect-all is to reset the toolbar when deleting a selected
+          // item. TODO(tsergeant): Make this automatic based on observing list
+          // modifications.
+          this.fire('unselect-all');
+        }.bind(this));
     menu.closeMenu();
   },
 
@@ -82,18 +81,19 @@ Polymer({
   },
 
   /**
-   * Adds the newly updated history results into historyData. Adds new fields
+   * Adds the newly updated history results into historyData_. Adds new fields
    * for each result.
    * @param {!Array<!HistoryEntry>} historyResults The new history results.
-   * @param {string} searchTerm Search query used to find these results.
    */
-  addNewResults: function(historyResults, searchTerm) {
-    this.loading_ = false;
+  addNewResults: function(historyResults) {
+    /** @type {IronScrollThresholdElement} */(this.$['scroll-threshold'])
+        .clearTriggers();
 
-    if (this.searchTerm != searchTerm) {
-      if (this.historyData)
-        this.splice('historyData', 0, this.historyData.length);
-      this.searchTerm = searchTerm;
+    if (this.lastSearchedTerm_ != this.searchedTerm) {
+      this.resultLoadingDisabled_ = false;
+      if (this.historyData_)
+        this.splice('historyData_', 0, this.historyData_.length);
+      this.lastSearchedTerm_ = this.searchedTerm;
     }
 
     if (historyResults.length == 0)
@@ -105,62 +105,42 @@ Polymer({
 
     var currentDate = results[0].dateRelativeDay;
 
-    // Resets the last history item for the currentDate if new history results
-    // for currentDate is loaded.
-    if (this.historyData && this.historyData.length > 0) {
-      var lastHistoryItem = this.historyData[this.historyData.length - 1];
-      if (lastHistoryItem && lastHistoryItem.dateRelativeDay == currentDate) {
-        this.set('historyData.' + (this.historyData.length - 1) +
-            '.isLastItem', false);
-      }
-    }
-
     for (var i = 0; i < results.length; i++) {
       // Sets the default values for these fields to prevent undefined types.
       results[i].selected = false;
-      results[i].isLastItem = false;
-      results[i].isFirstItem = false;
-      results[i].needsTimeGap = this.needsTimeGap_(results, i);
       results[i].readableTimestamp =
-          searchTerm == '' ? results[i].dateTimeOfDay : results[i].dateShort;
+          this.searchedTerm == '' ?
+              results[i].dateTimeOfDay : results[i].dateShort;
 
       if (results[i].dateRelativeDay != currentDate) {
-        results[i - 1].isLastItem = true;
-        results[i].isFirstItem = true;
         currentDate = results[i].dateRelativeDay;
       }
     }
-    results[i - 1].isLastItem = true;
 
-    if (!this.historyData || this.historyData.length == 0)
-      results[0].isFirstItem = true;
-
-    if (this.historyData) {
+    if (this.historyData_) {
       // If we have previously received data, push the new items onto the
       // existing array.
-      results.unshift('historyData');
+      results.unshift('historyData_');
       this.push.apply(this, results);
     } else {
       // The first time we receive data, use set() to ensure the iron-list is
       // initialized correctly.
-      this.set('historyData', results);
+      this.set('historyData_', results);
     }
-
-    this.lastVisitedTime = this.historyData[this.historyData.length - 1].time;
   },
 
   /**
-   * Cycle through each entry in historyData and set all items to be
+   * Cycle through each entry in historyData_ and set all items to be
    * unselected.
    * @param {number} overallItemCount The number of checkboxes selected.
    */
   unselectAllItems: function(overallItemCount) {
-    if (this.historyData === undefined)
+    if (this.historyData_ === undefined)
       return;
 
-    for (var i = 0; i < this.historyData.length; i++) {
-      if (this.historyData[i].selected) {
-        this.set('historyData.' + i + '.selected', false);
+    for (var i = 0; i < this.historyData_.length; i++) {
+      if (this.historyData_[i].selected) {
+        this.set('historyData_.' + i + '.selected', false);
         overallItemCount--;
         if (overallItemCount == 0)
           break;
@@ -169,113 +149,81 @@ Polymer({
   },
 
   /**
-   * Remove all selected items from the overall array so that they are also
-   * removed from view. Make sure that the card length and positioning is
-   * updated accordingly.
-   * @param {number} overallItemCount The number of items selected.
-   */
-  removeDeletedHistory: function(overallItemCount) {
-    for (var i = this.historyData.length - 1; i >= 0; i--) {
-      if (!this.historyData[i].selected)
-        continue;
-
-      // TODO: Change to using computed properties to recompute the first and
-      // last cards.
-
-      // Resets the first history item.
-      if (this.historyData[i].isFirstItem &&
-          (i + 1) < this.historyData.length &&
-          this.historyData[i].dateRelativeDay ==
-          this.historyData[i + 1].dateRelativeDay) {
-        this.set('historyData.' + (i + 1) + '.isFirstItem', true);
-      }
-
-      // Resets the last history item.
-      if (this.historyData[i].isLastItem && i > 0 &&
-          this.historyData[i].dateRelativeDay ==
-          this.historyData[i - 1].dateRelativeDay) {
-        this.set('historyData.' + (i - 1) + '.isLastItem', true);
-
-        if (this.historyData[i - 1].needsTimeGap)
-          this.set('historyData.' + (i - 1) + '.needsTimeGap', false);
-      }
-
-      // Makes sure that the time gap separators are preserved.
-      if (this.historyData[i].needsTimeGap && i > 0)
-        this.set('historyData.' + (i - 1) + '.needsTimeGap', true);
-
-      // Removes the selected item from historyData.
-      this.splice('historyData', i, 1);
-
-      overallItemCount--;
-      if (overallItemCount == 0)
-        break;
-    }
-  },
-
-  /**
-   * Based on which items are selected, collect an array of the info required
-   * for chrome.send('removeHistory', ...).
-   * @param {number} count The number of items that are selected.
-   * @return {Array<HistoryEntry>} toBeRemoved An array of objects which contain
-   * information on which history-items should be deleted.
-   */
-  getSelectedItems: function(count) {
-    var toBeRemoved = [];
-    for (var i = 0; i < this.historyData.length; i++) {
-      if (this.historyData[i].selected) {
-        toBeRemoved.push({
-          url: this.historyData[i].url,
-          timestamps: this.historyData[i].allTimestamps
-        });
-
-        count--;
-        if (count == 0)
-          break;
-      }
-    }
-    return toBeRemoved;
-  },
-
-  /**
-   * Called when the card manager is scrolled.
+   * Remove the given |items| from the list. Expected to be called after the
+   * items are removed from the backend.
+   * @param {!Array<!HistoryEntry>} removalList
    * @private
    */
-  scrollHandler_: function() {
-    if (this.resultLoadingDisabled_)
+  removeDeletedHistory_: function(removalList) {
+    // This set is only for speed. Note that set inclusion for objects is by
+    // reference, so this relies on the HistoryEntry objects never being copied.
+    var deletedItems = new Set(removalList);
+    var splices = [];
+
+    for (var i = this.historyData_.length - 1; i >= 0; i--) {
+      var item = this.historyData_[i];
+      if (deletedItems.has(item)) {
+        // Removes the selected item from historyData_. Use unshift so
+        // |splices| ends up in index order.
+        splices.unshift({
+          index: i,
+          removed: [item],
+          addedCount: 0,
+          object: this.historyData_,
+          type: 'splice'
+        });
+        this.historyData_.splice(i, 1);
+      }
+    }
+    // notifySplices gives better performance than individually splicing as it
+    // batches all of the updates together.
+    this.notifySplices('historyData_', splices);
+  },
+
+  /**
+   * Performs a request to the backend to delete all selected items. If
+   * successful, removes them from the view.
+   */
+  deleteSelected: function() {
+    var toBeRemoved = this.historyData_.filter(function(item) {
+      return item.selected;
+    });
+    md_history.BrowserService.getInstance()
+        .deleteItems(toBeRemoved)
+        .then(function(items) {
+          this.removeDeletedHistory_(items);
+          this.fire('unselect-all');
+        }.bind(this));
+  },
+
+  /**
+   * Called when the page is scrolled to near the bottom of the list.
+   * @private
+   */
+  loadMoreData_: function() {
+    if (this.resultLoadingDisabled_ || this.querying)
       return;
 
-    // Requests the next list of results when the scrollbar is near the bottom
-    // of the window.
-    var scrollOffset = 10;
-    var scrollElem = this.$['infinite-list'];
-
-    if (!this.loading_ && scrollElem.scrollHeight <=
-        scrollElem.scrollTop + scrollElem.clientHeight + scrollOffset) {
-      this.loading_ = true;
-      chrome.send('queryHistory',
-          [this.searchTerm, 0, 0, this.lastVisitedTime, RESULTS_PER_PAGE]);
-    }
+    this.fire('load-more-history');
   },
 
   /**
    * Check whether the time difference between the given history item and the
    * next one is large enough for a spacer to be required.
-   * @param {Array<HistoryEntry>} results A list of history results.
-   * @param {number} index The index number of the first item being compared.
+   * @param {HistoryEntry} item
+   * @param {number} index The index of |item| in |historyData_|.
+   * @param {number} length The length of |historyData_|.
    * @return {boolean} Whether or not time gap separator is required.
    * @private
    */
-  needsTimeGap_: function(results, index) {
-    // TODO(tsergeant): Allow the final item from one batch of results to have a
-    // timegap once more results are added.
-    if (index == results.length - 1)
+  needsTimeGap_: function(item, index, length) {
+    if (index >= length - 1 || length == 0)
       return false;
 
-    var currentItem = results[index];
-    var nextItem = results[index + 1];
+    var currentItem = this.historyData_[index];
+    var nextItem = this.historyData_[index + 1];
 
-    if (this.searchTerm)
+    if (this.searchedTerm)
       return currentItem.dateShort != nextItem.dateShort;
 
     return currentItem.time - nextItem.time > BROWSING_GAP_TIME &&
@@ -286,10 +234,42 @@ Polymer({
     return historyDataLength > 0;
   },
 
-  noResultsMessage_: function(searchTerm, isLoading) {
+  noResultsMessage_: function(searchedTerm, isLoading) {
     if (isLoading)
       return '';
-    var messageId = searchTerm !== '' ? 'noSearchResults' : 'noResults';
+    var messageId = searchedTerm !== '' ? 'noSearchResults' : 'noResults';
     return loadTimeData.getString(messageId);
-  }
+  },
+
+  /**
+   * True if the given item is the beginning of a new card.
+   * @param {HistoryEntry} item
+   * @param {number} i Index of |item| within |historyData_|.
+   * @param {number} length
+   * @return {boolean}
+   * @private
+   */
+  isCardStart_: function(item, i, length) {
+    if (length == 0 || i > length - 1)
+      return false;
+    return i == 0 ||
+        this.historyData_[i].dateRelativeDay !=
+        this.historyData_[i - 1].dateRelativeDay;
+  },
+
+  /**
+   * True if the given item is the end of a card.
+   * @param {HistoryEntry} item
+   * @param {number} i Index of |item| within |historyData_|.
+   * @param {number} length
+   * @return {boolean}
+   * @private
+   */
+  isCardEnd_: function(item, i, length) {
+    if (length == 0 || i > length - 1)
+      return false;
+    return i == length - 1 ||
+        this.historyData_[i].dateRelativeDay !=
+        this.historyData_[i + 1].dateRelativeDay;
+  },
 });

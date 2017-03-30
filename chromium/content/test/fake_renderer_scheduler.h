@@ -16,7 +16,7 @@ class FakeRendererScheduler : public scheduler::RendererScheduler {
   ~FakeRendererScheduler() override;
 
   // RendererScheduler implementation.
-  scoped_ptr<blink::WebThread> CreateMainThread() override;
+  std::unique_ptr<blink::WebThread> CreateMainThread() override;
   scoped_refptr<scheduler::TaskQueue> DefaultTaskRunner() override;
   scoped_refptr<scheduler::TaskQueue> CompositorTaskRunner() override;
   scoped_refptr<scheduler::TaskQueue> LoadingTaskRunner() override;
@@ -27,7 +27,7 @@ class FakeRendererScheduler : public scheduler::RendererScheduler {
       const char* name) override;
   scoped_refptr<scheduler::TaskQueue> NewTimerTaskRunner(
       const char* name) override;
-  scoped_ptr<scheduler::RenderWidgetSchedulingState>
+  std::unique_ptr<scheduler::RenderWidgetSchedulingState>
   NewRenderWidgetSchedulingState() override;
   void WillBeginFrame(const cc::BeginFrameArgs& args) override;
   void BeginFrameNotExpectedSoon() override;
@@ -40,8 +40,11 @@ class FakeRendererScheduler : public scheduler::RendererScheduler {
   void DidAnimateForInputOnCompositorThread() override;
   void OnRendererBackgrounded() override;
   void OnRendererForegrounded() override;
-  void AddPendingNavigation() override;
-  void RemovePendingNavigation() override;
+  void SuspendRenderer() override;
+  void AddPendingNavigation(
+      blink::WebScheduler::NavigatingFrameType type) override;
+  void RemovePendingNavigation(
+      blink::WebScheduler::NavigatingFrameType type) override;
   void OnNavigationStarted() override;
   bool IsHighPriorityWorkAnticipated() override;
   bool CanExceedIdleDeadlineIfRequired() const override;

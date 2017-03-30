@@ -8,7 +8,7 @@
 #include "base/location.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "chrome/browser/ui/browser.h"
@@ -170,14 +170,10 @@ IN_PROC_BROWSER_TEST_F(TracingBrowserTest, DISABLED_TestMemoryInfra) {
 }
 
 // Single-process mode.
-// Flaky (leaking) on linux_chromium_asan_rel_ng: https://crbug.com/585026
-// and Windows https://crbug.com/594884
-#if defined(ADDRESS_SANITIZER) || defined(OS_WIN)
-#define MAYBE_TestMemoryInfra DISABLED_TestMemoryInfra
-#else
-#define MAYBE_TestMemoryInfra TestMemoryInfra
-#endif
-IN_PROC_BROWSER_TEST_F(SingleProcessTracingBrowserTest, MAYBE_TestMemoryInfra) {
+// Flaky on Windows and Linux: https://crbug.com/594884
+// Linux ASan: https://crbug.com/585026
+IN_PROC_BROWSER_TEST_F(SingleProcessTracingBrowserTest,
+    DISABLED_TestMemoryInfra) {
   PerformDumpMemoryTestActions();
 }
 

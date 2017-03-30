@@ -186,15 +186,15 @@ TEST_F(ReadableStreamOperationsTest, IsReadableStream)
     EXPECT_TRUE(ReadableStreamOperations::isReadableStream(getScriptState(), stream));
 }
 
-TEST_F(ReadableStreamOperationsTest, IsReadableStreamReaderInvalid)
+TEST_F(ReadableStreamOperationsTest, IsReadableStreamDefaultReaderInvalid)
 {
-    EXPECT_FALSE(ReadableStreamOperations::isReadableStreamReader(getScriptState(), ScriptValue(getScriptState(), v8::Undefined(isolate()))));
-    EXPECT_FALSE(ReadableStreamOperations::isReadableStreamReader(getScriptState(), ScriptValue::createNull(getScriptState())));
-    EXPECT_FALSE(ReadableStreamOperations::isReadableStreamReader(getScriptState(), ScriptValue(getScriptState(), v8::Object::New(isolate()))));
+    EXPECT_FALSE(ReadableStreamOperations::isReadableStreamDefaultReader(getScriptState(), ScriptValue(getScriptState(), v8::Undefined(isolate()))));
+    EXPECT_FALSE(ReadableStreamOperations::isReadableStreamDefaultReader(getScriptState(), ScriptValue::createNull(getScriptState())));
+    EXPECT_FALSE(ReadableStreamOperations::isReadableStreamDefaultReader(getScriptState(), ScriptValue(getScriptState(), v8::Object::New(isolate()))));
     ScriptValue stream = evalWithPrintingError("new ReadableStream()");
     EXPECT_FALSE(stream.isEmpty());
 
-    EXPECT_FALSE(ReadableStreamOperations::isReadableStreamReader(getScriptState(), stream));
+    EXPECT_FALSE(ReadableStreamOperations::isReadableStreamDefaultReader(getScriptState(), stream));
 }
 
 TEST_F(ReadableStreamOperationsTest, GetReader)
@@ -213,7 +213,7 @@ TEST_F(ReadableStreamOperationsTest, GetReader)
     ASSERT_FALSE(reader.isEmpty());
 
     EXPECT_FALSE(ReadableStreamOperations::isReadableStream(getScriptState(), reader));
-    EXPECT_TRUE(ReadableStreamOperations::isReadableStreamReader(getScriptState(), reader));
+    EXPECT_TRUE(ReadableStreamOperations::isReadableStreamDefaultReader(getScriptState(), reader));
 
     // Already locked!
     {
@@ -243,14 +243,14 @@ TEST_F(ReadableStreamOperationsTest, Read)
         "function start(c) { controller = c; }"
         "new ReadableStream({start}).getReader()");
     EXPECT_FALSE(reader.isEmpty());
-    ASSERT_TRUE(ReadableStreamOperations::isReadableStreamReader(getScriptState(), reader));
+    ASSERT_TRUE(ReadableStreamOperations::isReadableStreamDefaultReader(getScriptState(), reader));
 
     Iteration* it1 = new Iteration();
     Iteration* it2 = new Iteration();
-    ReadableStreamOperations::read(getScriptState(), reader).then(
+    ReadableStreamOperations::defaultReaderRead(getScriptState(), reader).then(
         Function::createFunction(getScriptState(), it1),
         NotReached::createFunction(getScriptState()));
-    ReadableStreamOperations::read(getScriptState(), reader).then(
+    ReadableStreamOperations::defaultReaderRead(getScriptState(), reader).then(
         Function::createFunction(getScriptState(), it2),
         NotReached::createFunction(getScriptState()));
 
@@ -306,9 +306,9 @@ TEST_F(ReadableStreamOperationsTest, CreateReadableStreamWithCustomUnderlyingSou
     Iteration* it1 = new Iteration();
     Iteration* it2 = new Iteration();
     Iteration* it3 = new Iteration();
-    ReadableStreamOperations::read(getScriptState(), reader).then(Function::createFunction(getScriptState(), it1), NotReached::createFunction(getScriptState()));
-    ReadableStreamOperations::read(getScriptState(), reader).then(Function::createFunction(getScriptState(), it2), NotReached::createFunction(getScriptState()));
-    ReadableStreamOperations::read(getScriptState(), reader).then(Function::createFunction(getScriptState(), it3), NotReached::createFunction(getScriptState()));
+    ReadableStreamOperations::defaultReaderRead(getScriptState(), reader).then(Function::createFunction(getScriptState(), it1), NotReached::createFunction(getScriptState()));
+    ReadableStreamOperations::defaultReaderRead(getScriptState(), reader).then(Function::createFunction(getScriptState(), it2), NotReached::createFunction(getScriptState()));
+    ReadableStreamOperations::defaultReaderRead(getScriptState(), reader).then(Function::createFunction(getScriptState(), it3), NotReached::createFunction(getScriptState()));
 
     v8::MicrotasksScope::PerformCheckpoint(isolate());
 
@@ -334,7 +334,112 @@ TEST_F(ReadableStreamOperationsTest, CreateReadableStreamWithCustomUnderlyingSou
     EXPECT_TRUE(it3->isDone());
 }
 
+TEST_F(ReadableStreamOperationsTest, UnderlyingSourceShouldHavePendingActivityWhenLockedAndControllerIsActive)
+{
+    auto underlyingSource = new TestUnderlyingSource(getScriptState());
+
+    ScriptValue strategy = ReadableStreamOperations::createCountQueuingStrategy(getScriptState(), 10);
+    ASSERT_FALSE(strategy.isEmpty());
+
+    ScriptValue stream = ReadableStreamOperations::createReadableStream(getScriptState(), underlyingSource, strategy);
+    ASSERT_FALSE(stream.isEmpty());
+
+    v8::Local<v8::Object> global = getScriptState()->context()->Global();
+    ASSERT_TRUE(global->Set(getScriptState()->context(), v8String(getScriptState()->isolate(), "stream"), stream.v8Value()).IsJust());
+
+    EXPECT_FALSE(underlyingSource->hasPendingActivity());
+    evalWithPrintingError("let reader = stream.getReader();");
+    EXPECT_TRUE(underlyingSource->hasPendingActivity());
+    evalWithPrintingError("reader.releaseLock();");
+    EXPECT_FALSE(underlyingSource->hasPendingActivity());
+    evalWithPrintingError("reader = stream.getReader();");
+    EXPECT_TRUE(underlyingSource->hasPendingActivity());
+    underlyingSource->enqueue(ScriptValue(getScriptState(), v8::Undefined(getScriptState()->isolate())));
+    underlyingSource->close();
+    EXPECT_FALSE(underlyingSource->hasPendingActivity());
+}
+
+TEST_F(ReadableStreamOperationsTest, IsReadable)
+{
+    ScriptValue readable = evalWithPrintingError("new ReadableStream()");
+    ScriptValue closed = evalWithPrintingError("new ReadableStream({start: c => c.close()})");
+    ScriptValue errored = evalWithPrintingError("new ReadableStream({start: c => c.error()})");
+    ASSERT_FALSE(readable.isEmpty());
+    ASSERT_FALSE(closed.isEmpty());
+    ASSERT_FALSE(errored.isEmpty());
+
+    EXPECT_TRUE(ReadableStreamOperations::isReadable(getScriptState(), readable));
+    EXPECT_FALSE(ReadableStreamOperations::isReadable(getScriptState(), closed));
+    EXPECT_FALSE(ReadableStreamOperations::isReadable(getScriptState(), errored));
+}
+
+TEST_F(ReadableStreamOperationsTest, IsClosed)
+{
+    ScriptValue readable = evalWithPrintingError("new ReadableStream()");
+    ScriptValue closed = evalWithPrintingError("new ReadableStream({start: c => c.close()})");
+    ScriptValue errored = evalWithPrintingError("new ReadableStream({start: c => c.error()})");
+    ASSERT_FALSE(readable.isEmpty());
+    ASSERT_FALSE(closed.isEmpty());
+    ASSERT_FALSE(errored.isEmpty());
+
+    EXPECT_FALSE(ReadableStreamOperations::isClosed(getScriptState(), readable));
+    EXPECT_TRUE(ReadableStreamOperations::isClosed(getScriptState(), closed));
+    EXPECT_FALSE(ReadableStreamOperations::isClosed(getScriptState(), errored));
+}
+
+TEST_F(ReadableStreamOperationsTest, IsErrored)
+{
+    ScriptValue readable = evalWithPrintingError("new ReadableStream()");
+    ScriptValue closed = evalWithPrintingError("new ReadableStream({start: c => c.close()})");
+    ScriptValue errored = evalWithPrintingError("new ReadableStream({start: c => c.error()})");
+    ASSERT_FALSE(readable.isEmpty());
+    ASSERT_FALSE(closed.isEmpty());
+    ASSERT_FALSE(errored.isEmpty());
+
+    EXPECT_FALSE(ReadableStreamOperations::isErrored(getScriptState(), readable));
+    EXPECT_FALSE(ReadableStreamOperations::isErrored(getScriptState(), closed));
+    EXPECT_TRUE(ReadableStreamOperations::isErrored(getScriptState(), errored));
+}
+
+TEST_F(ReadableStreamOperationsTest, Tee)
+{
+    ScriptValue original = evalWithPrintingError(
+        "var controller;"
+        "new ReadableStream({start: c => controller = c})");
+    ASSERT_FALSE(original.isEmpty());
+    ScriptValue new1, new2;
+    ReadableStreamOperations::tee(getScriptState(), original, &new1, &new2);
+
+    NonThrowableExceptionState ec;
+    ScriptValue reader1 = ReadableStreamOperations::getReader(getScriptState(), new1, ec);
+    ScriptValue reader2 = ReadableStreamOperations::getReader(getScriptState(), new2, ec);
+
+    Iteration* it1 = new Iteration();
+    Iteration* it2 = new Iteration();
+    ReadableStreamOperations::defaultReaderRead(getScriptState(), reader1).then(
+        Function::createFunction(getScriptState(), it1),
+        NotReached::createFunction(getScriptState()));
+    ReadableStreamOperations::defaultReaderRead(getScriptState(), reader2).then(
+        Function::createFunction(getScriptState(), it2),
+        NotReached::createFunction(getScriptState()));
+
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
+    EXPECT_FALSE(it1->isSet());
+    EXPECT_FALSE(it2->isSet());
+
+    ASSERT_FALSE(evalWithPrintingError("controller.enqueue('hello')").isEmpty());
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
+
+    EXPECT_TRUE(it1->isSet());
+    EXPECT_TRUE(it1->isValid());
+    EXPECT_FALSE(it1->isDone());
+    EXPECT_EQ("hello", it1->value());
+    EXPECT_TRUE(it2->isSet());
+    EXPECT_TRUE(it2->isValid());
+    EXPECT_FALSE(it2->isDone());
+    EXPECT_EQ("hello", it2->value());
+}
+
 } // namespace
 
 } // namespace blink
-

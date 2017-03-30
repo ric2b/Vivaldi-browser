@@ -10,6 +10,7 @@
 /**
  * @typedef {{embeddingOrigin: string,
  *            origin: string,
+ *            originForDisplay: string,
  *            setting: string,
  *            source: string}}
  */
@@ -62,10 +63,10 @@ cr.define('settings', function() {
     /**
      * Resets the category permission for a given origin (expressed as primary
      *    and secondary patterns).
-     * @param {!string} primaryPattern The origin to change (primary pattern).
-     * @param {!string} secondaryPattern The embedding origin to change
+     * @param {string} primaryPattern The origin to change (primary pattern).
+     * @param {string} secondaryPattern The embedding origin to change
      *    (secondary pattern).
-     * @param {!number} contentType The category to change.
+     * @param {number} contentType The category to change.
      */
     resetCategoryPermissionForOrigin: function(
         primaryPattern, secondaryPattern, contentType) {},
@@ -73,14 +74,21 @@ cr.define('settings', function() {
     /**
      * Sets the category permission for a given origin (expressed as primary
      *    and secondary patterns).
-     * @param {!string} primaryPattern The origin to change (primary pattern).
-     * @param {!string} secondaryPattern The embedding origin to change
+     * @param {string} primaryPattern The origin to change (primary pattern).
+     * @param {string} secondaryPattern The embedding origin to change
      *    (secondary pattern).
-     * @param {!number} contentType The category to change.
-     * @param {!number} value The value to change the permission to.
+     * @param {number} contentType The category to change.
+     * @param {string} value The value to change the permission to.
      */
     setCategoryPermissionForOrigin: function(
         primaryPattern, secondaryPattern, contentType, value) {},
+
+    /**
+     * Checks whether a pattern is valid.
+     * @param {string} pattern The pattern to check
+     * @return {!Promise<boolean>} True if the pattern is valid.
+     */
+    isPatternValid: function(pattern) {},
   };
 
   /**
@@ -122,6 +130,12 @@ cr.define('settings', function() {
       chrome.send('setCategoryPermissionForOrigin',
           [primaryPattern, secondaryPattern, contentType, value]);
     },
+
+    /** @override */
+    isPatternValid: function(pattern) {
+      return cr.sendWithPromise('isPatternValid', pattern);
+    },
+
   };
 
   return {

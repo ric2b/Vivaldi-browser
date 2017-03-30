@@ -43,14 +43,6 @@ TextTrackList::TextTrackList(HTMLMediaElement* owner)
 
 TextTrackList::~TextTrackList()
 {
-#if !ENABLE(OILPAN)
-    ASSERT(!m_owner);
-
-    // TextTrackList and m_asyncEventQueue always become unreachable
-    // together. So TextTrackList and m_asyncEventQueue are destructed in the
-    // same GC. We don't need to close it explicitly in Oilpan.
-    m_asyncEventQueue->close();
-#endif
 }
 
 unsigned TextTrackList::length() const
@@ -262,13 +254,6 @@ ExecutionContext* TextTrackList::getExecutionContext() const
     return m_owner ? m_owner->getExecutionContext() : 0;
 }
 
-#if !ENABLE(OILPAN)
-void TextTrackList::clearOwner()
-{
-    m_owner = nullptr;
-}
-#endif
-
 void TextTrackList::scheduleTrackEvent(const AtomicString& eventName, TextTrack* track)
 {
     m_asyncEventQueue->enqueueEvent(TrackEvent::create(eventName, track));
@@ -333,5 +318,15 @@ DEFINE_TRACE(TextTrackList)
     visitor->trace(m_addTrackTracks);
     visitor->trace(m_elementTracks);
     visitor->trace(m_inbandTracks);
-    RefCountedGarbageCollectedEventTargetWithInlineData<TextTrackList>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
+}
+
+DEFINE_TRACE_WRAPPERS(TextTrackList)
+{
+    for (auto track : m_addTrackTracks)
+        visitor->traceWrappers(track);
+    for (auto track : m_elementTracks)
+        visitor->traceWrappers(track);
+    for (auto track : m_inbandTracks)
+        visitor->traceWrappers(track);
 }

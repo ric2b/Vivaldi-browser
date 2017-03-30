@@ -72,7 +72,7 @@ TEST(InputMessageTest, TestGestureScrollUpdateRoundTrip) {
   event.data.scrollUpdate.velocityY = 5.67f;
   event.data.scrollUpdate.previousUpdateInSequencePrevented = true;
   event.data.scrollUpdate.preventPropagation = true;
-  event.data.scrollUpdate.inertial = true;
+  event.data.scrollUpdate.inertialPhase = blink::WebGestureEvent::MomentumPhase;
   ValidateWebGestureEventRoundTripping(event);
 }
 
@@ -137,6 +137,37 @@ TEST(InputMessageConverterTest, TestTextInputTypeToProtoConversion) {
     EXPECT_EQ(type, InputMessageConverter::TextInputTypeFromProto(
                         InputMessageConverter::TextInputTypeToProto(type)));
   }
+}
+
+TEST(InputMessageTest, TestGestureTapDownRoundTrip) {
+  blink::WebGestureEvent event = BuildBaseTestEvent();
+  event.type = blink::WebGestureEvent::Type::GestureTapDown;
+  event.data.tapDown.width = 2.3f;
+  event.data.tapDown.height = 3.4f;
+  ValidateWebGestureEventRoundTripping(event);
+}
+
+TEST(InputMessageTest, TestGestureTapCancelRoundTrip) {
+  blink::WebGestureEvent event = BuildBaseTestEvent();
+  event.type = blink::WebGestureEvent::Type::GestureTapCancel;
+  ValidateWebGestureEventRoundTripping(event);
+}
+
+TEST(InputMessageTest, TestGestureTapUnconfirmedRoundTrip) {
+  blink::WebGestureEvent event = BuildBaseTestEvent();
+  event.type = blink::WebGestureEvent::Type::GestureTapUnconfirmed;
+  event.data.tap.tapCount = 2;
+  event.data.tap.width = 2.3f;
+  event.data.tap.height = 3.4f;
+  ValidateWebGestureEventRoundTripping(event);
+}
+
+TEST(InputMessageTest, TestGestureShowPressRoundTrip) {
+  blink::WebGestureEvent event = BuildBaseTestEvent();
+  event.type = blink::WebGestureEvent::Type::GestureShowPress;
+  event.data.showPress.width = 2.3f;
+  event.data.showPress.height = 3.4f;
+  ValidateWebGestureEventRoundTripping(event);
 }
 
 }  // namespace blimp

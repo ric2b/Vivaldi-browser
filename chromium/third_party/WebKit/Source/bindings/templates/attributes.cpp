@@ -1,4 +1,4 @@
-{% from 'utilities.cpp' import declare_enum_validation_variable, v8_value_to_local_cpp_value, check_origin_trial %}
+{% from 'utilities.cpp' import declare_enum_validation_variable, v8_value_to_local_cpp_value %}
 
 {##############################################################################}
 {% macro attribute_getter(attribute, world_suffix) %}
@@ -9,9 +9,6 @@ const v8::PropertyCallbackInfo<v8::Value>& info
 const v8::FunctionCallbackInfo<v8::Value>& info
 {%- endif %})
 {
-    {% if attribute.origin_trial_enabled_function %}
-    {{check_origin_trial(attribute) | indent}}
-    {% endif %}
     {% if attribute.is_reflect and not attribute.is_url
           and attribute.idl_type == 'DOMString' and is_node
           and not attribute.is_implemented_in_private_script %}
@@ -27,9 +24,21 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     v8::Local<v8::Object> holder = info.Holder();
     {% endif %}
     {# impl #}
+    {% if not attribute.is_static %}
+    {{cpp_class}}* impl = {{v8_class}}::toImpl(holder);
+    {% endif %}
+    {% if attribute.is_same_object %}
+    v8::Local<v8::String> propertyName = v8AtomicString(info.GetIsolate(), "sameobject_{{attribute.name}}");
+    {
+        v8::Local<v8::Value> v8Value = V8HiddenValue::getHiddenValue(ScriptState::current(info.GetIsolate()), holder, propertyName);
+        if (!v8Value.IsEmpty()) {
+            v8SetReturnValue(info, v8Value);
+            return;
+        }
+    }
+    {% endif %}
     {% if attribute.cached_attribute_validation_method %}
     v8::Local<v8::String> propertyName = v8AtomicString(info.GetIsolate(), "{{attribute.name}}");
-    {{cpp_class}}* impl = {{v8_class}}::toImpl(holder);
     if (!impl->{{attribute.cached_attribute_validation_method}}()) {
         v8::Local<v8::Value> v8Value = V8HiddenValue::getHiddenValue(ScriptState::current(info.GetIsolate()), holder, propertyName);
         if (!v8Value.IsEmpty() && !v8Value->IsUndefined()) {
@@ -37,8 +46,6 @@ const v8::FunctionCallbackInfo<v8::Value>& info
             return;
         }
     }
-    {% elif not attribute.is_static %}
-    {{cpp_class}}* impl = {{v8_class}}::toImpl(holder);
     {% endif %}
     {% if interface_name == 'Window' and attribute.idl_type == 'EventHandler' %}
     if (!impl->document())
@@ -107,9 +114,9 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     {% endif %}
     {# v8SetReturnValue #}
     {% if attribute.is_keep_alive_for_gc %}
-    if ({{attribute.cpp_value}} && DOMDataStore::setReturnValue{{world_suffix}}(info.GetReturnValue(), {{attribute.cpp_value}}.get()))
+    if ({{attribute.cpp_value}} && DOMDataStore::setReturnValue{{world_suffix}}(info.GetReturnValue(), {{attribute.cpp_value}}))
         return;
-    v8::Local<v8::Value> v8Value(toV8({{attribute.cpp_value}}.get(), holder, info.GetIsolate()));
+    v8::Local<v8::Value> v8Value(toV8({{attribute.cpp_value}}, holder, info.GetIsolate()));
     if (!v8Value.IsEmpty()) {
         V8HiddenValue::setHiddenValue(ScriptState::current(info.GetIsolate()), holder, v8AtomicString(info.GetIsolate(), "{{attribute.name}}"), v8Value);
         {{attribute.v8_set_return_value}};
@@ -122,6 +129,9 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     {{attribute.cpp_value}};
     {% endif %}
     {{attribute.v8_set_return_value}};
+    {% endif %}
+    {% if attribute.is_same_object %}
+    V8HiddenValue::setHiddenValue(ScriptState::current(info.GetIsolate()), holder, propertyName, info.GetReturnValue().Get());
     {% endif %}
 }
 {% endmacro %}
@@ -176,9 +186,6 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     {% if attribute.measure_as %}
     UseCounter::countIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{attribute.measure_as('AttributeGetter')}});
     {% endif %}
-    {% if attribute.origin_trial_enabled_function %}
-    {{check_origin_trial(attribute) | indent}}
-    {% endif %}
     {% if world_suffix in attribute.activity_logging_world_list_for_getter %}
     ScriptState* scriptState = ScriptState::from(info.GetIsolate()->GetCurrentContext());
     V8PerContextData* contextData = scriptState->perContextData();
@@ -207,9 +214,6 @@ static void {{attribute.name}}ConstructorGetterCallback{{world_suffix}}(v8::Loca
     {% endif %}
     {% if attribute.measure_as %}
     UseCounter::countIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{attribute.measure_as('ConstructorGetter')}});
-    {% endif %}
-    {% if attribute.origin_trial_enabled_function %}
-    {{check_origin_trial(attribute) | indent}}
     {% endif %}
     v8ConstructorAttributeGetter(property, info);
 }
@@ -325,7 +329,7 @@ v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info
           (attribute.is_reflect and
            not(attribute.idl_type == 'DOMString' and is_node)) %}
     {# Skip on compact node DOMString getters #}
-    CustomElementProcessingStack::CallbackDeliveryScope deliveryScope;
+    V0CustomElementProcessingStack::CallbackDeliveryScope deliveryScope;
     {% endif %}
     {% if attribute.is_call_with_execution_context or
           attribute.is_setter_call_with_execution_context %}
@@ -379,7 +383,7 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     }
     {% endif %}
     {% if attribute.is_custom_element_callbacks or attribute.is_reflect %}
-    CustomElementProcessingStack::CallbackDeliveryScope deliveryScope;
+    V0CustomElementProcessingStack::CallbackDeliveryScope deliveryScope;
     {% endif %}
     {% if attribute.has_custom_setter %}
     {{v8_class}}::{{attribute.name}}AttributeSetterCustom(v8Value, info);
@@ -410,9 +414,6 @@ bool {{v8_class}}::PrivateScript::{{attribute.name}}AttributeGetter(LocalFrame* 
     if (holder.IsEmpty())
         return false;
 
-    {% if attribute.origin_trial_enabled_function %}
-    {{check_origin_trial(attribute, "scriptState->isolate()") | indent}}
-    {% endif %}
 
     ExceptionState exceptionState(ExceptionState::GetterContext, "{{attribute.name}}", "{{cpp_class}}", scriptState->context()->Global(), scriptState->isolate());
     v8::Local<v8::Value> v8Value = PrivateScriptRunner::runDOMAttributeGetter(scriptState, scriptStateInUserScript, "{{cpp_class}}", "{{attribute.name}}", holder);

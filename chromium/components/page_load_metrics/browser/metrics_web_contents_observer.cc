@@ -10,6 +10,7 @@
 
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/user_metrics.h"
 #include "components/page_load_metrics/browser/page_load_metrics_util.h"
@@ -19,6 +20,7 @@
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
@@ -202,6 +204,36 @@ void LogAbortChainSameURLHistogram(int aborted_chain_size_same_url) {
   }
 }
 
+void DispatchObserverTimingCallbacks(PageLoadMetricsObserver* observer,
+                                     const PageLoadTiming& last_timing,
+                                     const PageLoadTiming& new_timing,
+                                     const PageLoadExtraInfo& extra_info) {
+  observer->OnTimingUpdate(new_timing, extra_info);
+  if (!new_timing.dom_content_loaded_event_start.is_zero() &&
+      last_timing.dom_content_loaded_event_start.is_zero())
+    observer->OnDomContentLoadedEventStart(new_timing, extra_info);
+  if (!new_timing.load_event_start.is_zero() &&
+      last_timing.load_event_start.is_zero())
+    observer->OnLoadEventStart(new_timing, extra_info);
+  if (!new_timing.first_layout.is_zero() && last_timing.first_layout.is_zero())
+    observer->OnFirstLayout(new_timing, extra_info);
+  if (!new_timing.first_paint.is_zero() && last_timing.first_paint.is_zero())
+    observer->OnFirstPaint(new_timing, extra_info);
+  if (!new_timing.first_text_paint.is_zero() &&
+      last_timing.first_text_paint.is_zero())
+    observer->OnFirstTextPaint(new_timing, extra_info);
+  if (!new_timing.first_image_paint.is_zero() &&
+      last_timing.first_image_paint.is_zero())
+    observer->OnFirstImagePaint(new_timing, extra_info);
+  if (!new_timing.first_contentful_paint.is_zero() &&
+      last_timing.first_contentful_paint.is_zero())
+    observer->OnFirstContentfulPaint(new_timing, extra_info);
+  if (!new_timing.parse_start.is_zero() && last_timing.parse_start.is_zero())
+    observer->OnParseStart(new_timing, extra_info);
+  if (!new_timing.parse_stop.is_zero() && last_timing.parse_stop.is_zero())
+    observer->OnParseStop(new_timing, extra_info);
+}
+
 }  // namespace
 
 PageLoadTracker::PageLoadTracker(
@@ -222,7 +254,8 @@ PageLoadTracker::PageLoadTracker(
   DCHECK(!navigation_handle->HasCommitted());
   embedder_interface_->RegisterObservers(this);
   for (const auto& observer : observers_) {
-    observer->OnStart(navigation_handle, currently_committed_url);
+    observer->OnStart(navigation_handle, currently_committed_url,
+                      started_in_foreground_);
   }
 }
 
@@ -297,6 +330,9 @@ void PageLoadTracker::WebContentsHidden() {
     DCHECK_EQ(started_in_foreground_, foreground_time_.is_null());
     background_time_ = base::TimeTicks::Now();
   }
+
+  for (const auto& observer : observers_)
+    observer->OnHidden();
 }
 
 void PageLoadTracker::WebContentsShown() {
@@ -308,6 +344,9 @@ void PageLoadTracker::WebContentsShown() {
     DCHECK_NE(started_in_foreground_, background_time_.is_null());
     foreground_time_ = base::TimeTicks::Now();
   }
+
+  for (const auto& observer : observers_)
+    observer->OnShown();
 }
 
 void PageLoadTracker::Commit(content::NavigationHandle* navigation_handle) {
@@ -334,6 +373,12 @@ void PageLoadTracker::Redirect(content::NavigationHandle* navigation_handle) {
   }
 }
 
+void PageLoadTracker::OnInputEvent(const blink::WebInputEvent& event) {
+  for (const auto& observer : observers_) {
+    observer->OnUserInput(event);
+  }
+}
+
 bool PageLoadTracker::UpdateTiming(const PageLoadTiming& new_timing,
                                    const PageLoadMetadata& new_metadata) {
   // Throw away IPCs that are not relevant to the current navigation.
@@ -349,11 +394,19 @@ bool PageLoadTracker::UpdateTiming(const PageLoadTiming& new_timing,
       metadata_.behavior_flags;
   if (IsValidPageLoadTiming(new_timing) && valid_timing_descendent &&
       valid_behavior_descendent) {
+    // There are some subtle ordering constraints here. GetPageLoadMetricsInfo()
+    // must be called before DispatchObserverTimingCallbacks, but its
+    // implementation depends on the state of metadata_, so we need to update
+    // metadata_ before calling GetPageLoadMetricsInfo. Thus, we make a copy of
+    // timing here, update timing_ and metadata_, and then proceed to dispatch
+    // the observer timing callbacks.
+    const PageLoadTiming last_timing = timing_;
     timing_ = new_timing;
     metadata_ = new_metadata;
     const PageLoadExtraInfo info = GetPageLoadMetricsInfo();
     for (const auto& observer : observers_) {
-      observer->OnTimingUpdate(timing_, info);
+      DispatchObserverTimingCallbacks(observer.get(), last_timing, new_timing,
+                                      info);
     }
     return true;
   }
@@ -365,7 +418,7 @@ void PageLoadTracker::set_renderer_tracked(bool renderer_tracked) {
 }
 
 void PageLoadTracker::AddObserver(
-    scoped_ptr<PageLoadMetricsObserver> observer) {
+    std::unique_ptr<PageLoadMetricsObserver> observer) {
   observers_.push_back(std::move(observer));
 }
 
@@ -458,15 +511,17 @@ void PageLoadTracker::UpdateAbortInternal(UserAbortType abort_type,
 // static
 MetricsWebContentsObserver::MetricsWebContentsObserver(
     content::WebContents* web_contents,
-    scoped_ptr<PageLoadMetricsEmbedderInterface> embedder_interface)
+    std::unique_ptr<PageLoadMetricsEmbedderInterface> embedder_interface)
     : content::WebContentsObserver(web_contents),
       in_foreground_(false),
       embedder_interface_(std::move(embedder_interface)),
-      has_navigated_(false) {}
+      has_navigated_(false) {
+  RegisterInputEventObserver(web_contents->GetRenderViewHost());
+}
 
 MetricsWebContentsObserver* MetricsWebContentsObserver::CreateForWebContents(
     content::WebContents* web_contents,
-    scoped_ptr<PageLoadMetricsEmbedderInterface> embedder_interface) {
+    std::unique_ptr<PageLoadMetricsEmbedderInterface> embedder_interface) {
   DCHECK(web_contents);
 
   MetricsWebContentsObserver* metrics = FromWebContents(web_contents);
@@ -480,6 +535,25 @@ MetricsWebContentsObserver* MetricsWebContentsObserver::CreateForWebContents(
 
 MetricsWebContentsObserver::~MetricsWebContentsObserver() {
   NotifyAbortAllLoads(ABORT_CLOSE);
+}
+
+void MetricsWebContentsObserver::RegisterInputEventObserver(
+    content::RenderViewHost* host) {
+  if (host != nullptr)
+    host->GetWidget()->AddInputEventObserver(this);
+}
+
+void MetricsWebContentsObserver::UnregisterInputEventObserver(
+    content::RenderViewHost* host) {
+  if (host != nullptr)
+    host->GetWidget()->RemoveInputEventObserver(this);
+}
+
+void MetricsWebContentsObserver::RenderViewHostChanged(
+    content::RenderViewHost* old_host,
+    content::RenderViewHost* new_host) {
+  UnregisterInputEventObserver(old_host);
+  RegisterInputEventObserver(new_host);
 }
 
 bool MetricsWebContentsObserver::OnMessageReceived(
@@ -504,7 +578,7 @@ void MetricsWebContentsObserver::DidStartNavigation(
   if (navigation_handle->GetURL().spec().compare(url::kAboutBlankURL) == 0)
     return;
 
-  scoped_ptr<PageLoadTracker> last_aborted =
+  std::unique_ptr<PageLoadTracker> last_aborted =
       NotifyAbortedProvisionalLoadsNewNavigation(navigation_handle);
 
   int chain_size_same_url = 0;
@@ -543,7 +617,7 @@ void MetricsWebContentsObserver::DidStartNavigation(
   // committed_load_ or navigation_handle beyond the scope of the constructor.
   provisional_loads_.insert(std::make_pair(
       navigation_handle,
-      make_scoped_ptr(new PageLoadTracker(
+      base::WrapUnique(new PageLoadTracker(
           in_foreground_, embedder_interface_.get(), currently_committed_url,
           navigation_handle, chain_size, chain_size_same_url))));
 }
@@ -553,7 +627,7 @@ void MetricsWebContentsObserver::DidFinishNavigation(
   if (!navigation_handle->IsInMainFrame())
     return;
 
-  scoped_ptr<PageLoadTracker> finished_nav(
+  std::unique_ptr<PageLoadTracker> finished_nav(
       std::move(provisional_loads_[navigation_handle]));
   provisional_loads_.erase(navigation_handle);
 
@@ -615,6 +689,20 @@ void MetricsWebContentsObserver::DidFinishNavigation(
 
 void MetricsWebContentsObserver::NavigationStopped() {
   NotifyAbortAllLoads(ABORT_STOP);
+}
+
+void MetricsWebContentsObserver::OnInputEvent(
+    const blink::WebInputEvent& event) {
+  // Ignore browser navigation or reload which comes with type Undefined.
+  if (event.type == blink::WebInputEvent::Type::Undefined)
+    return;
+
+  if (!committed_load_) {
+    RecordInternalError(ERR_USER_INPUT_WITH_NO_RELEVANT_LOAD);
+    return;
+  }
+
+  committed_load_->OnInputEvent(event);
 }
 
 void MetricsWebContentsObserver::DidRedirectNavigation(
@@ -689,7 +777,7 @@ void MetricsWebContentsObserver::NotifyAbortAllLoadsWithTimestamp(
   aborted_provisional_loads_.clear();
 }
 
-scoped_ptr<PageLoadTracker>
+std::unique_ptr<PageLoadTracker>
 MetricsWebContentsObserver::NotifyAbortedProvisionalLoadsNewNavigation(
     content::NavigationHandle* new_navigation) {
   // If there are multiple aborted loads that can be attributed to this one,
@@ -700,7 +788,7 @@ MetricsWebContentsObserver::NotifyAbortedProvisionalLoadsNewNavigation(
   if (aborted_provisional_loads_.size() > 1)
     RecordInternalError(ERR_NAVIGATION_SIGNALS_MULIPLE_ABORTED_LOADS);
 
-  scoped_ptr<PageLoadTracker> last_aborted_load =
+  std::unique_ptr<PageLoadTracker> last_aborted_load =
       std::move(aborted_provisional_loads_.back());
   aborted_provisional_loads_.pop_back();
 

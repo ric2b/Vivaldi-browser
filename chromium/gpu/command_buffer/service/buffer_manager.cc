@@ -10,7 +10,7 @@
 
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
@@ -18,8 +18,10 @@
 #include "gpu/command_buffer/service/error_state.h"
 #include "gpu/command_buffer/service/feature_info.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
+#include "gpu/command_buffer/service/transform_feedback_manager.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_implementation.h"
+#include "ui/gl/gl_version_info.h"
 #include "ui/gl/trace_util.h"
 
 namespace gpu {
@@ -35,7 +37,7 @@ BufferManager::BufferManager(MemoryTracker* memory_tracker,
       allow_fixed_attribs_(false),
       buffer_count_(0),
       primitive_restart_fixed_index_(0),
-      have_context_(true),
+      lost_context_(false),
       use_client_side_arrays_for_stream_buffers_(
           feature_info
               ? feature_info->workarounds()
@@ -57,8 +59,11 @@ BufferManager::~BufferManager() {
       this);
 }
 
-void BufferManager::Destroy(bool have_context) {
-  have_context_ = have_context;
+void BufferManager::MarkContextLost() {
+  lost_context_ = true;
+}
+
+void BufferManager::Destroy() {
   buffers_.clear();
   DCHECK_EQ(0u, memory_type_tracker_->GetMemRepresented());
 }
@@ -128,7 +133,7 @@ Buffer::Buffer(BufferManager* manager, GLuint service_id)
 
 Buffer::~Buffer() {
   if (manager_) {
-    if (manager_->have_context_) {
+    if (!manager_->lost_context_) {
       GLuint id = service_id();
       glDeleteBuffersARB(1, &id);
     }
@@ -409,6 +414,12 @@ void BufferManager::ValidateAndDoBufferData(
   }
 
   DoBufferData(error_state, buffer, target, size, usage, data);
+
+  if (context_state->bound_transform_feedback.get()) {
+    // buffer size might have changed, and on Desktop GL lower than 4.2,
+    // we might need to reset transform feedback buffer range.
+    context_state->bound_transform_feedback->OnBufferData(target, buffer);
+  }
 }
 
 

@@ -6,14 +6,13 @@
 
 #include <stdint.h>
 
-#include "base/memory/scoped_ptr.h"
-#include "gpu/command_buffer/common/value_state.h"
+#include <memory>
+
 #include "gpu/command_buffer/service/gles2_cmd_decoder_mock.h"
 #include "gpu/command_buffer/service/gpu_service_test.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/test_helper.h"
 #include "gpu/command_buffer/service/texture_manager.h"
-#include "gpu/command_buffer/service/valuebuffer_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gl/gl_mock.h"
 
@@ -42,13 +41,14 @@ class ContextGroupTest : public GpuServiceTest {
   void SetUp() override {
     GpuServiceTest::SetUp();
     decoder_.reset(new MockGLES2Decoder());
-    group_ = scoped_refptr<ContextGroup>(new ContextGroup(
-        gpu_preferences_, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-        kBindGeneratesResource));
+    scoped_refptr<FeatureInfo> feature_info = new FeatureInfo;
+    group_ = scoped_refptr<ContextGroup>(
+        new ContextGroup(gpu_preferences_, NULL, NULL, NULL, NULL, feature_info,
+                         kBindGeneratesResource));
   }
 
   GpuPreferences gpu_preferences_;
-  scoped_ptr<MockGLES2Decoder> decoder_;
+  std::unique_ptr<MockGLES2Decoder> decoder_;
   scoped_refptr<ContextGroup> group_;
 };
 
@@ -105,7 +105,7 @@ TEST_F(ContextGroupTest, InitializeNoExtensions) {
 }
 
 TEST_F(ContextGroupTest, MultipleContexts) {
-  scoped_ptr<MockGLES2Decoder> decoder2_(new MockGLES2Decoder());
+  std::unique_ptr<MockGLES2Decoder> decoder2_(new MockGLES2Decoder());
   TestHelper::SetupContextGroupInitExpectations(
       gl_.get(), DisallowedFeatures(), "", "", kBindGeneratesResource);
   EXPECT_TRUE(group_->Initialize(decoder_.get(), CONTEXT_TYPE_OPENGLES2,

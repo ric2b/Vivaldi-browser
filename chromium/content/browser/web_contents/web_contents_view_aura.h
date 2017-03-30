@@ -5,12 +5,12 @@
 #ifndef CONTENT_BROWSER_WEB_CONTENTS_WEB_CONTENTS_VIEW_AURA_H_
 #define CONTENT_BROWSER_WEB_CONTENTS_WEB_CONTENTS_VIEW_AURA_H_
 
+#include <memory>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "content/browser/renderer_host/overscroll_controller_delegate.h"
 #include "content/browser/renderer_host/render_view_host_delegate_view.h"
 #include "content/browser/web_contents/web_contents_view.h"
@@ -53,6 +53,12 @@ class CONTENT_EXPORT WebContentsViewAura
   // Allow the WebContentsViewDelegate to be set explicitly.
   void SetDelegateForTesting(WebContentsViewDelegate* delegate);
 
+  // Set a flag to pass nullptr as the parent_view argument to
+  // RenderWidgetHostViewAura::InitAsChild().
+  void set_init_rwhv_with_null_parent_for_testing(bool set) {
+    init_rwhv_with_null_parent_for_testing_ = set;
+  }
+
  private:
   class WindowObserver;
 
@@ -77,6 +83,9 @@ class CONTENT_EXPORT WebContentsViewAura
 
   ui::TouchSelectionController* GetSelectionController() const;
   TouchSelectionControllerClientAura* GetSelectionControllerClient() const;
+
+  // Returns GetNativeView unless overridden for testing.
+  gfx::NativeView GetRenderWidgetHostViewParent() const;
 
   // Overridden from WebContentsView:
   gfx::NativeView GetNativeView() const override;
@@ -113,12 +122,6 @@ class CONTENT_EXPORT WebContentsViewAura
   void UpdateDragCursor(blink::WebDragOperation operation) override;
   void GotFocus() override;
   void TakeFocus(bool reverse) override;
-  void ShowDisambiguationPopup(
-      const gfx::Rect& target_rect,
-      const SkBitmap& zoomed_bitmap,
-      const base::Callback<void(ui::GestureEvent*)>& gesture_cb,
-      const base::Callback<void(ui::MouseEvent*)>& mouse_cb) override;
-  void HideDisambiguationPopup() override;
 
   // Overridden from OverscrollControllerDelegate:
   gfx::Rect GetVisibleBounds() const override;
@@ -162,18 +165,18 @@ class CONTENT_EXPORT WebContentsViewAura
 
   FRIEND_TEST_ALL_PREFIXES(WebContentsViewAuraTest, EnableDisableOverscroll);
 
-  scoped_ptr<aura::Window> window_;
+  std::unique_ptr<aura::Window> window_;
 
-  scoped_ptr<WindowObserver> window_observer_;
+  std::unique_ptr<WindowObserver> window_observer_;
 
   // The WebContentsImpl whose contents we display.
   WebContentsImpl* web_contents_;
 
-  scoped_ptr<WebContentsViewDelegate> delegate_;
+  std::unique_ptr<WebContentsViewDelegate> delegate_;
 
   blink::WebDragOperationsMask current_drag_op_;
 
-  scoped_ptr<DropData> current_drop_data_;
+  std::unique_ptr<DropData> current_drop_data_;
 
   WebDragDestDelegate* drag_dest_delegate_;
 
@@ -192,9 +195,11 @@ class CONTENT_EXPORT WebContentsViewAura
 
   // This manages the overlay window that shows the screenshot during a history
   // navigation triggered by the overscroll gesture.
-  scoped_ptr<OverscrollNavigationOverlay> navigation_overlay_;
+  std::unique_ptr<OverscrollNavigationOverlay> navigation_overlay_;
 
-  scoped_ptr<GestureNavSimple> gesture_nav_simple_;
+  std::unique_ptr<GestureNavSimple> gesture_nav_simple_;
+
+  bool init_rwhv_with_null_parent_for_testing_;
 
   DISALLOW_COPY_AND_ASSIGN(WebContentsViewAura);
 };

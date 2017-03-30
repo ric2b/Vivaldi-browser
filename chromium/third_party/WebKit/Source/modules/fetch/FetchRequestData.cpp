@@ -4,6 +4,7 @@
 
 #include "modules/fetch/FetchRequestData.h"
 
+#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/fetch/ResourceLoaderOptions.h"
 #include "core/loader/ThreadableLoader.h"
@@ -11,7 +12,6 @@
 #include "modules/credentialmanager/PasswordCredential.h"
 #include "modules/fetch/BodyStreamBuffer.h"
 #include "modules/fetch/DataConsumerHandleUtil.h"
-#include "modules/fetch/DataConsumerTee.h"
 #include "modules/fetch/FetchBlobDataConsumerHandle.h"
 #include "modules/fetch/FetchHeaderList.h"
 #include "platform/HTTPNames.h"
@@ -26,7 +26,7 @@ FetchRequestData* FetchRequestData::create()
     return new FetchRequestData();
 }
 
-FetchRequestData* FetchRequestData::create(ExecutionContext* executionContext, const WebServiceWorkerRequest& webRequest)
+FetchRequestData* FetchRequestData::create(ScriptState* scriptState, const WebServiceWorkerRequest& webRequest)
 {
     FetchRequestData* request = FetchRequestData::create();
     request->m_url = webRequest.url();
@@ -34,9 +34,9 @@ FetchRequestData* FetchRequestData::create(ExecutionContext* executionContext, c
     for (HTTPHeaderMap::const_iterator it = webRequest.headers().begin(); it != webRequest.headers().end(); ++it)
         request->m_headerList->append(it->key, it->value);
     if (webRequest.blobDataHandle())
-        request->setBuffer(new BodyStreamBuffer(FetchBlobDataConsumerHandle::create(executionContext, webRequest.blobDataHandle())));
+        request->setBuffer(new BodyStreamBuffer(scriptState, FetchBlobDataConsumerHandle::create(scriptState->getExecutionContext(), webRequest.blobDataHandle())));
     request->setContext(webRequest.requestContext());
-    request->setReferrer(Referrer(webRequest.referrerUrl().string(), ReferrerPolicyDefault));
+    request->setReferrer(Referrer(webRequest.referrerUrl().string(), static_cast<ReferrerPolicy>(webRequest.referrerPolicy())));
     request->setMode(webRequest.mode());
     request->setCredentials(webRequest.credentialsMode());
     request->setRedirect(webRequest.redirectMode());
@@ -65,25 +65,26 @@ FetchRequestData* FetchRequestData::cloneExceptBody()
     return request;
 }
 
-FetchRequestData* FetchRequestData::clone(ExecutionContext* executionContext)
+FetchRequestData* FetchRequestData::clone(ScriptState* scriptState)
 {
     FetchRequestData* request = FetchRequestData::cloneExceptBody();
     if (m_buffer) {
-        OwnPtr<FetchDataConsumerHandle> dest1, dest2;
-        DataConsumerTee::create(executionContext, m_buffer->releaseHandle(executionContext), &dest1, &dest2);
-        m_buffer = new BodyStreamBuffer(dest1.release());
-        request->m_buffer = new BodyStreamBuffer(dest2.release());
+        BodyStreamBuffer* new1 = nullptr;
+        BodyStreamBuffer* new2 = nullptr;
+        m_buffer->tee(&new1, &new2);
+        m_buffer = new1;
+        request->m_buffer = new2;
     }
     return request;
 }
 
-FetchRequestData* FetchRequestData::pass(ExecutionContext* executionContext)
+FetchRequestData* FetchRequestData::pass(ScriptState* scriptState)
 {
     FetchRequestData* request = FetchRequestData::cloneExceptBody();
     if (m_buffer) {
         request->m_buffer = m_buffer;
-        m_buffer = new BodyStreamBuffer(createFetchDataConsumerHandleFromWebHandle(createDoneDataConsumerHandle()));
-        m_buffer->stream()->setIsDisturbed();
+        m_buffer = new BodyStreamBuffer(scriptState, createFetchDataConsumerHandleFromWebHandle(createDoneDataConsumerHandle()));
+        m_buffer->closeAndLockAndDisturb();
     }
     return request;
 }

@@ -226,6 +226,62 @@ TEST_F(LayerTreeHostFiltersScaledPixelTest, HiDpi_Software) {
   RunPixelTestType(50, 2.f, PIXEL_TEST_SOFTWARE);
 }
 
+class LayerTreeHostNullFilterPixelTest : public LayerTreeHostFiltersPixelTest {
+  void InitializeSettings(LayerTreeSettings* settings) override {}
+
+ protected:
+  void RunPixelTestType(PixelTestType test_type) {
+    scoped_refptr<SolidColorLayer> foreground =
+        CreateSolidColorLayer(gfx::Rect(0, 0, 200, 200), SK_ColorGREEN);
+
+    FilterOperations filters;
+    filters.Append(FilterOperation::CreateReferenceFilter(nullptr));
+    foreground->SetFilters(filters);
+
+    RunPixelTest(test_type, foreground,
+                 base::FilePath(FILE_PATH_LITERAL("green.png")));
+  }
+};
+
+TEST_F(LayerTreeHostNullFilterPixelTest, GL) {
+  RunPixelTestType(PIXEL_TEST_GL);
+}
+
+TEST_F(LayerTreeHostNullFilterPixelTest, Software) {
+  RunPixelTestType(PIXEL_TEST_SOFTWARE);
+}
+
+class LayerTreeHostCroppedFilterPixelTest
+    : public LayerTreeHostFiltersPixelTest {
+  void InitializeSettings(LayerTreeSettings* settings) override {}
+
+ protected:
+  void RunPixelTestType(PixelTestType test_type) {
+    scoped_refptr<SolidColorLayer> foreground =
+        CreateSolidColorLayer(gfx::Rect(0, 0, 200, 200), SK_ColorGREEN);
+
+    // Check that a filter with a zero-height crop rect crops out its
+    // result completely.
+    FilterOperations filters;
+    SkImageFilter::CropRect cropRect(SkRect::MakeXYWH(0, 0, 100, 0));
+    sk_sp<SkImageFilter> offset(
+        SkOffsetImageFilter::Make(0, 0, nullptr, &cropRect));
+    filters.Append(FilterOperation::CreateReferenceFilter(offset));
+    foreground->SetFilters(filters);
+
+    RunPixelTest(test_type, foreground,
+                 base::FilePath(FILE_PATH_LITERAL("white.png")));
+  }
+};
+
+TEST_F(LayerTreeHostCroppedFilterPixelTest, GL) {
+  RunPixelTestType(PIXEL_TEST_GL);
+}
+
+TEST_F(LayerTreeHostCroppedFilterPixelTest, Software) {
+  RunPixelTestType(PIXEL_TEST_SOFTWARE);
+}
+
 class ImageFilterClippedPixelTest : public LayerTreeHostFiltersPixelTest {
  protected:
   void RunPixelTestType(PixelTestType test_type) {
@@ -246,12 +302,11 @@ class ImageFilterClippedPixelTest : public LayerTreeHostFiltersPixelTest {
     matrix[2] = matrix[6] = matrix[10] = matrix[18] = SK_Scalar1;
     // We filter only the bottom 200x100 pixels of the foreground.
     SkImageFilter::CropRect crop_rect(SkRect::MakeXYWH(0, 100, 200, 100));
-    sk_sp<SkColorFilter> color_filter =
-        SkColorFilter::MakeMatrixFilterRowMajor255(matrix);
-    skia::RefPtr<SkImageFilter> filter = skia::AdoptRef(
-        SkColorFilterImageFilter::Create(color_filter.get(), NULL, &crop_rect));
     FilterOperations filters;
-    filters.Append(FilterOperation::CreateReferenceFilter(filter));
+    filters.Append(
+        FilterOperation::CreateReferenceFilter(SkColorFilterImageFilter::Make(
+            SkColorFilter::MakeMatrixFilterRowMajor255(matrix), nullptr,
+            &crop_rect)));
 
     // Make the foreground layer's render surface be clipped by the background
     // layer.
@@ -445,7 +500,7 @@ class ImageScaledRenderSurface : public LayerTreeHostFiltersPixelTest {
     gfx::Transform render_surface_transform;
     render_surface_transform.Scale(1.5f, 1.5f);
     render_surface_layer->SetTransform(render_surface_transform);
-    render_surface_layer->SetForceRenderSurface(true);
+    render_surface_layer->SetForceRenderSurfaceForTesting(true);
 
     background->AddChild(render_surface_layer);
 
@@ -476,6 +531,111 @@ TEST_F(ImageScaledRenderSurface, ImageRenderSurfaceScaled_Software) {
   RunPixelTestType(
       PIXEL_TEST_SOFTWARE,
       base::FilePath(FILE_PATH_LITERAL("scaled_render_surface_layer_sw.png")));
+}
+
+class RotatedFilterTest : public LayerTreeHostFiltersPixelTest {
+ protected:
+  void RunPixelTestType(PixelTestType test_type, base::FilePath image_name) {
+    scoped_refptr<SolidColorLayer> background =
+        CreateSolidColorLayer(gfx::Rect(300, 300), SK_ColorWHITE);
+
+    gfx::Rect rect(50, 50, 100, 100);
+
+    scoped_refptr<SolidColorLayer> child =
+        CreateSolidColorLayer(rect, SK_ColorBLUE);
+
+    gfx::Transform transform;
+    transform.Translate(50.0f, 50.0f);
+    transform.RotateAboutZAxis(1.0);
+    transform.Translate(-50.0f, -50.0f);
+    child->SetTransform(transform);
+    FilterOperations filters;
+    // We need a clamping brightness filter here to force the Skia filter path.
+    filters.Append(FilterOperation::CreateBrightnessFilter(1.1f));
+    filters.Append(FilterOperation::CreateGrayscaleFilter(1.0f));
+    child->SetFilters(filters);
+
+    background->AddChild(child);
+
+#if defined(OS_WIN)
+    // Windows has 1 pixel off by 1: crbug.com/259915
+    float percentage_pixels_large_error = 0.00111112f;  // 1px / (300*300)
+    float percentage_pixels_small_error = 0.0f;
+    float average_error_allowed_in_bad_pixels = 1.f;
+    int large_error_allowed = 1;
+    int small_error_allowed = 0;
+    pixel_comparator_.reset(new FuzzyPixelComparator(
+        true,  // discard_alpha
+        percentage_pixels_large_error, percentage_pixels_small_error,
+        average_error_allowed_in_bad_pixels, large_error_allowed,
+        small_error_allowed));
+#endif
+
+    RunPixelTest(test_type, background, image_name);
+  }
+};
+
+TEST_F(RotatedFilterTest, RotatedFilterTest_GL) {
+  RunPixelTestType(PIXEL_TEST_GL,
+                   base::FilePath(FILE_PATH_LITERAL("rotated_filter_gl.png")));
+}
+
+TEST_F(RotatedFilterTest, RotatedFilterTest_Software) {
+  RunPixelTestType(PIXEL_TEST_SOFTWARE,
+                   base::FilePath(FILE_PATH_LITERAL("rotated_filter_sw.png")));
+}
+
+class RotatedDropShadowFilterTest : public LayerTreeHostFiltersPixelTest {
+ protected:
+  void RunPixelTestType(PixelTestType test_type, base::FilePath image_name) {
+    scoped_refptr<SolidColorLayer> background =
+        CreateSolidColorLayer(gfx::Rect(300, 300), SK_ColorWHITE);
+
+    gfx::Rect rect(50, 50, 100, 100);
+
+    scoped_refptr<SolidColorLayer> child =
+        CreateSolidColorLayer(rect, SK_ColorBLUE);
+
+    gfx::Transform transform;
+    transform.Translate(50.0f, 50.0f);
+    transform.RotateAboutZAxis(1.0);
+    transform.Translate(-50.0f, -50.0f);
+    child->SetTransform(transform);
+    FilterOperations filters;
+    filters.Append(FilterOperation::CreateDropShadowFilter(
+        gfx::Point(10.0f, 10.0f), 0.0f, SK_ColorBLACK));
+    child->SetFilters(filters);
+
+    background->AddChild(child);
+
+#if defined(OS_WIN)
+    // Windows has 2 pixels off by 1: crbug.com/259915
+    float percentage_pixels_large_error = 0.00222223f;  // 1px / (300*300)
+    float percentage_pixels_small_error = 0.0f;
+    float average_error_allowed_in_bad_pixels = 1.f;
+    int large_error_allowed = 1;
+    int small_error_allowed = 0;
+    pixel_comparator_.reset(new FuzzyPixelComparator(
+        true,  // discard_alpha
+        percentage_pixels_large_error, percentage_pixels_small_error,
+        average_error_allowed_in_bad_pixels, large_error_allowed,
+        small_error_allowed));
+#endif
+
+    RunPixelTest(test_type, background, image_name);
+  }
+};
+
+TEST_F(RotatedDropShadowFilterTest, RotatedDropShadowFilterTest_GL) {
+  RunPixelTestType(
+      PIXEL_TEST_GL,
+      base::FilePath(FILE_PATH_LITERAL("rotated_drop_shadow_filter_gl.png")));
+}
+
+TEST_F(RotatedDropShadowFilterTest, RotatedDropShadowFilterTest_Software) {
+  RunPixelTestType(
+      PIXEL_TEST_SOFTWARE,
+      base::FilePath(FILE_PATH_LITERAL("rotated_drop_shadow_filter_sw.png")));
 }
 
 class EnlargedTextureWithAlphaThresholdFilter
@@ -561,9 +721,8 @@ class EnlargedTextureWithCropOffsetFilter
 
     FilterOperations filters;
     SkImageFilter::CropRect cropRect(SkRect::MakeXYWH(10, 10, 80, 80));
-    skia::RefPtr<SkImageFilter> filter(
-        skia::AdoptRef(SkOffsetImageFilter::Create(0, 0, nullptr, &cropRect)));
-    filters.Append(FilterOperation::CreateReferenceFilter(filter));
+    filters.Append(FilterOperation::CreateReferenceFilter(
+        SkOffsetImageFilter::Make(0, 0, nullptr, &cropRect)));
     filter_layer->SetFilters(filters);
 
     background->AddChild(filter_layer);
@@ -607,12 +766,10 @@ class FilterWithGiantCropRectPixelTest : public LayerTreeHostFiltersPixelTest {
     FilterOperations filters;
     SkImageFilter::CropRect cropRect(
         SkRect::MakeXYWH(-40000, -40000, 80000, 80000));
-    sk_sp<SkColorFilter> color_filter =
-        SkColorFilter::MakeMatrixFilterRowMajor255(matrix);
-    skia::RefPtr<SkImageFilter> filter(
-        skia::AdoptRef(SkColorFilterImageFilter::Create(color_filter.get(),
-                                                        nullptr, &cropRect)));
-    filters.Append(FilterOperation::CreateReferenceFilter(filter));
+    filters.Append(
+        FilterOperation::CreateReferenceFilter((SkColorFilterImageFilter::Make(
+            SkColorFilter::MakeMatrixFilterRowMajor255(matrix), nullptr,
+            &cropRect))));
     filter_layer->SetFilters(filters);
     background->SetMasksToBounds(masks_to_bounds);
     background->AddChild(filter_layer);

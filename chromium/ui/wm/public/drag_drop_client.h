@@ -35,7 +35,8 @@ class AURA_EXPORT DragDropClient {
                                aura::Window* source_window,
                                const gfx::Point& screen_location,
                                int operation,
-                               ui::DragDropTypes::DragEventSource source) = 0;
+                               ui::DragDropTypes::DragEventSource source,
+                               bool& cancelled) = 0;
 
   // Called when mouse is dragged during a drag and drop.
   virtual void DragUpdate(aura::Window* target,

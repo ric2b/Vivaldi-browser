@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
 
 assert(!is_ios)
 
@@ -59,6 +60,10 @@ source_set("usb") {
 
   if (is_android) {
     deps += [ ":jni_headers" ]
+    sources += [
+      "usb_device_handle_usbfs.cc",
+      "usb_device_handle_usbfs.h",
+    ]
   } else {
     sources += [
       "usb_context.cc",
@@ -74,6 +79,17 @@ source_set("usb") {
     ]
 
     deps += [ "//third_party/libusb" ]
+  }
+
+  if (is_linux || is_chromeos) {
+    sources += [
+      "usb_device_handle_usbfs.cc",
+      "usb_device_handle_usbfs.h",
+    ]
+    sources -= [
+      "usb_device_handle_impl.cc",
+      "usb_device_handle_impl.h",
+    ]
   }
 
   if (is_chromeos) {
@@ -124,6 +140,22 @@ action("usb_device_ids") {
 
   # Only the device_usb target can depend on us.
   visibility = [ ":usb" ]
+}
+
+fuzzer_test("webusb_descriptors_fuzzer") {
+  sources = [
+    "webusb_descriptors_fuzzer.cc",
+  ]
+  deps = [
+    ":mocks",
+    ":usb",
+    "//base",
+    "//base:i18n",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+  seed_corpus = "fuzz_corpus"
+  libfuzzer_options = [ "max_len=2048" ]
 }
 
 if (is_android) {

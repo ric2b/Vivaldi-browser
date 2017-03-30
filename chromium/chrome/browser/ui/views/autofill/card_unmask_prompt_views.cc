@@ -7,8 +7,7 @@
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
-#include "chrome/browser/ui/autofill/autofill_dialog_types.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/ui/autofill/create_card_unmask_prompt_view.h"
 #include "chrome/browser/ui/views/autofill/decorated_textfield.h"
 #include "chrome/browser/ui/views/autofill/tooltip_icon.h"
@@ -42,11 +41,19 @@
 
 namespace autofill {
 
+namespace {
+
 // The number of pixels of blank space on the outer horizontal edges of the
 // dialog.
 const int kEdgePadding = 19;
 
 SkColor kGreyTextColor = SkColorSetRGB(0x64, 0x64, 0x64);
+
+SkColor const kWarningColor = gfx::kGoogleRed700;
+SkColor const kLightShadingColor = SkColorSetARGB(7, 0, 0, 0);
+SkColor const kSubtleBorderColor = SkColorSetARGB(10, 0, 0, 0);
+
+}  // namespace
 
 CardUnmaskPromptView* CreateCardUnmaskPromptView(
     CardUnmaskPromptController* controller,
@@ -291,7 +298,7 @@ void CardUnmaskPromptViews::DeleteDelegate() {
 base::string16 CardUnmaskPromptViews::GetDialogButtonLabel(
     ui::DialogButton button) const {
   if (button == ui::DIALOG_BUTTON_OK)
-    return l10n_util::GetStringUTF16(IDS_AUTOFILL_CARD_UNMASK_CONFIRM_BUTTON);
+    return controller_->GetOkButtonLabel();
 
   return DialogDelegateView::GetDialogButtonLabel(button);
 }
@@ -452,8 +459,8 @@ void CardUnmaskPromptViews::InitIfNecessary() {
 
   error_icon_ = new views::ImageView();
   error_icon_->SetVisible(false);
-  error_icon_->SetImage(gfx::CreateVectorIcon(gfx::VectorIconId::WARNING, 16,
-                                              gfx::kGoogleRed700));
+  error_icon_->SetImage(
+      gfx::CreateVectorIcon(gfx::VectorIconId::WARNING, 16, kWarningColor));
   temporary_error->AddChildView(error_icon_);
 
   // Reserve vertical space for the error label, assuming it's one line.

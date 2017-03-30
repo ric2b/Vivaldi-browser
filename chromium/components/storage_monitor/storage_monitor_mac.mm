@@ -135,7 +135,7 @@ struct EjectDiskOptions {
 void PostEjectCallback(DADiskRef disk,
                        DADissenterRef dissenter,
                        void* context) {
-  scoped_ptr<EjectDiskOptions> options_deleter(
+  std::unique_ptr<EjectDiskOptions> options_deleter(
       static_cast<EjectDiskOptions*>(context));
   if (dissenter) {
     options_deleter->callback.Run(StorageMonitor::EJECT_IN_USE);
@@ -148,7 +148,7 @@ void PostEjectCallback(DADiskRef disk,
 void PostUnmountCallback(DADiskRef disk,
                          DADissenterRef dissenter,
                          void* context) {
-  scoped_ptr<EjectDiskOptions> options_deleter(
+  std::unique_ptr<EjectDiskOptions> options_deleter(
       static_cast<EjectDiskOptions*>(context));
   if (dissenter) {
     options_deleter->callback.Run(StorageMonitor::EJECT_IN_USE);
@@ -201,10 +201,8 @@ void StorageMonitorMac::Init() {
   DASessionScheduleWithRunLoop(
       session_, CFRunLoopGetCurrent(), kCFRunLoopCommonModes);
 
-  if (base::mac::IsOSLionOrLater()) {
-    image_capture_device_manager_.reset(new ImageCaptureDeviceManager);
-    image_capture_device_manager_->SetNotifications(receiver());
-  }
+  image_capture_device_manager_.reset(new ImageCaptureDeviceManager);
+  image_capture_device_manager_->SetNotifications(receiver());
 }
 
 void StorageMonitorMac::UpdateDisk(

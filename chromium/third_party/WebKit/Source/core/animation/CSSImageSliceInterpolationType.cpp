@@ -141,7 +141,7 @@ InterpolationValue convertImageSlice(const ImageSlice& slice, double zoom)
         list->set(i, InterpolableNumber::create(side.isFixed() ? side.pixels() / zoom : side.percent()));
     }
 
-    return InterpolationValue(list.release(), CSSImageSliceNonInterpolableValue::create(SliceTypes(slice)));
+    return InterpolationValue(std::move(list), CSSImageSliceNonInterpolableValue::create(SliceTypes(slice)));
 }
 
 } // namespace
@@ -158,7 +158,7 @@ InterpolationValue CSSImageSliceInterpolationType::maybeConvertNeutral(const Int
     return convertImageSlice(ImageSlice(zeroBox, underlyingTypes.fill), 1);
 }
 
-InterpolationValue CSSImageSliceInterpolationType::maybeConvertInitial(const StyleResolverState&) const
+InterpolationValue CSSImageSliceInterpolationType::maybeConvertInitial(const StyleResolverState&, ConversionCheckers& conversionCheckers) const
 {
     return convertImageSlice(ImageSlicePropertyFunctions::getInitialImageSlice(cssProperty()), 1);
 }
@@ -189,7 +189,7 @@ InterpolationValue CSSImageSliceInterpolationType::maybeConvertValue(const CSSVa
         list->set(i, InterpolableNumber::create(sides[i]->getDoubleValue()));
     }
 
-    return InterpolationValue(list.release(), CSSImageSliceNonInterpolableValue::create(SliceTypes(slice)));
+    return InterpolationValue(std::move(list), CSSImageSliceNonInterpolableValue::create(SliceTypes(slice)));
 }
 
 InterpolationValue CSSImageSliceInterpolationType::maybeConvertUnderlyingValue(const InterpolationEnvironment& environment) const
@@ -198,7 +198,7 @@ InterpolationValue CSSImageSliceInterpolationType::maybeConvertUnderlyingValue(c
     return convertImageSlice(ImageSlicePropertyFunctions::getImageSlice(cssProperty(), style), style.effectiveZoom());
 }
 
-PairwiseInterpolationValue CSSImageSliceInterpolationType::mergeSingleConversions(InterpolationValue&& start, InterpolationValue&& end) const
+PairwiseInterpolationValue CSSImageSliceInterpolationType::maybeMergeSingles(InterpolationValue&& start, InterpolationValue&& end) const
 {
     const SliceTypes& startSliceTypes = toCSSImageSliceNonInterpolableValue(*start.nonInterpolableValue).types();
     const SliceTypes& endSliceTypes = toCSSImageSliceNonInterpolableValue(*end.nonInterpolableValue).types();
@@ -206,7 +206,7 @@ PairwiseInterpolationValue CSSImageSliceInterpolationType::mergeSingleConversion
     if (startSliceTypes != endSliceTypes)
         return nullptr;
 
-    return PairwiseInterpolationValue(start.interpolableValue.release(), end.interpolableValue.release(), start.nonInterpolableValue.release());
+    return PairwiseInterpolationValue(std::move(start.interpolableValue), std::move(end.interpolableValue), start.nonInterpolableValue.release());
 }
 
 void CSSImageSliceInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value, double interpolationFraction) const

@@ -188,6 +188,8 @@
       'common/extensions/permissions/chrome_permission_message_rules.h',
       'common/extensions/sync_helper.cc',
       'common/extensions/sync_helper.h',
+      'common/extensions/webstore_install_result.cc',
+      'common/extensions/webstore_install_result.h',
     ],
     'chrome_common_printing_sources': [
       'common/chrome_utility_printing_messages.h',
@@ -210,6 +212,10 @@
       'common/extensions/api/input_ime/input_components_handler.cc',
       'common/extensions/api/input_ime/input_components_handler.h',
     ],
+    'chrome_common_shared_safe_browsing_sources': [
+      'common/safe_browsing/file_type_policies.cc',
+      'common/safe_browsing/file_type_policies.h',
+    ],
     'chrome_common_full_safe_browsing_sources': [
       'common/safe_browsing/binary_feature_extractor.cc',
       'common/safe_browsing/binary_feature_extractor.h',
@@ -227,6 +233,7 @@
       'common/safe_browsing/protobuf_message_log_macros.h',
       'common/safe_browsing/protobuf_message_param_traits.h',
       'common/safe_browsing/protobuf_message_read_macros.h',
+      'common/safe_browsing/protobuf_message_size_macros.h',
       'common/safe_browsing/protobuf_message_write_macros.h',
       'common/safe_browsing/zip_analyzer.cc',
       'common/safe_browsing/zip_analyzer.h',
@@ -322,6 +329,7 @@
         '<(DEPTH)/chrome/chrome_resources.gyp:theme_resources',
         '<(DEPTH)/chrome/common_constants.gyp:common_constants',
         '<(DEPTH)/chrome/common/variations/fieldtrial_testing_config.gyp:fieldtrial_testing_config',
+        '<(DEPTH)/components/components.gyp:cast_certificate',
         '<(DEPTH)/components/components.gyp:cloud_devices_common',
         '<(DEPTH)/components/components.gyp:component_updater',
         '<(DEPTH)/components/components.gyp:content_settings_core_common',
@@ -355,6 +363,7 @@
         '<(DEPTH)/third_party/icu/icu.gyp:icuuc',
         '<(DEPTH)/third_party/kasko/kasko.gyp:kasko_features',
         '<(DEPTH)/third_party/zlib/google/zip.gyp:zip',
+        '<(DEPTH)/ui/gfx/ipc/geometry/gfx_ipc_geometry.gyp:gfx_ipc_geometry',
         '<(DEPTH)/ui/gfx/ipc/gfx_ipc.gyp:gfx_ipc',
         '<(DEPTH)/ui/gfx/ipc/skia/gfx_ipc_skia.gyp:gfx_ipc_skia',
         '<(DEPTH)/ui/resources/ui_resources.gyp:ui_resources',
@@ -408,8 +417,8 @@
             'common_mojo_bindings',
             '<(DEPTH)/components/components.gyp:autofill_core_common',
             '<(DEPTH)/components/components.gyp:autofill_content_common',
+            '<(DEPTH)/components/components.gyp:password_manager_content_mojo_bindings',
             '<(DEPTH)/components/components.gyp:password_manager_core_common',
-            '<(DEPTH)/components/components.gyp:password_manager_content_common',
             '<(DEPTH)/components/components.gyp:signin_core_common',
             '<(DEPTH)/components/components.gyp:translate_content_common',
             '<(DEPTH)/components/components.gyp:visitedlink_common',
@@ -537,8 +546,16 @@
             'common/media/webrtc_logging_messages.h',
           ]
         }],
+        # Desktop uses full safe-browsing, including download protection
         ['safe_browsing==1', {
-          'sources': [ '<@(chrome_common_full_safe_browsing_sources)', ],
+          'sources': [
+            '<@(chrome_common_shared_safe_browsing_sources)',
+            '<@(chrome_common_full_safe_browsing_sources)',
+          ],
+        }],
+        # Android uses only the file_type_policies code.
+        ['safe_browsing==2', {
+          'sources': ['<@(chrome_common_shared_safe_browsing_sources)', ],
         }],
       ],
       'target_conditions': [
@@ -564,7 +581,6 @@
         'common/net/x509_certificate_model.cc',
         'common/net/x509_certificate_model.h',
         'common/net/x509_certificate_model_nss.cc',
-        'common/net/x509_certificate_model_openssl.cc',
       ],
       'dependencies': [
         '<(DEPTH)/base/base.gyp:base',
@@ -590,15 +606,6 @@
             'common/net/x509_certificate_model.cc',
           ],
         }],
-        ['use_openssl_certs == 1 and OS != "android"', {
-          'dependencies': [
-            '<(DEPTH)/third_party/boringssl/boringssl.gyp:boringssl',
-          ],
-        }, {
-          'sources!': [
-            'common/net/x509_certificate_model_openssl.cc',
-          ],
-        }],
         ['use_nss_certs == 1', {
           'sources': [
             # GN version: //chrome/third_party/mozilla_security_manager
@@ -610,7 +617,7 @@
             'third_party/mozilla_security_manager/nsUsageArrayHelper.h',
           ],
           'dependencies': [
-            '../build/linux/system.gyp:ssl',
+            '../build/linux/system.gyp:nss',
           ],
         }, {
           'sources!': [
@@ -625,8 +632,8 @@
     },
     {
       # Protobuf compiler / generator for the safebrowsing client
-      # model proto and the client-side detection (csd) request
-      # protocol buffer.
+      # model proto, the client-side detection (csd) request
+      # proto, and the download file types proto.
 
       # GN version: //chrome/common/safe_browsing:proto
       'target_name': 'safe_browsing_proto',
@@ -634,7 +641,8 @@
       'sources': [
         'common/safe_browsing/client_model.proto',
         'common/safe_browsing/crx_info.proto',
-        'common/safe_browsing/csd.proto'
+        'common/safe_browsing/csd.proto',
+        'common/safe_browsing/download_file_types.proto',
       ],
       'variables': {
         'proto_in_dir': 'common/safe_browsing',
@@ -658,5 +666,24 @@
         '../skia/skia.gyp:skia_mojo',
       ],
     },
+  ],
+  'conditions': [
+    ['OS == "win"', {
+      'targets': [
+        {
+          # GN version: //chrome/common:metrics_constants_util_win
+          'target_name': 'metrics_constants_util_win',
+          'type': 'static_library',
+          'sources': [
+            'common/metrics_constants_util_win.cc',
+            'common/metrics_constants_util_win.h',
+          ],
+          'dependencies': [
+            'installer_util',
+            '../base/base.gyp:base',
+          ],
+        },
+      ],
+    }],
   ],
 }

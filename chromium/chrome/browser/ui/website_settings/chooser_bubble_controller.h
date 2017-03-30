@@ -5,14 +5,16 @@
 #ifndef CHROME_BROWSER_UI_WEBSITE_SETTINGS_CHOOSER_BUBBLE_CONTROLLER_H_
 #define CHROME_BROWSER_UI_WEBSITE_SETTINGS_CHOOSER_BUBBLE_CONTROLLER_H_
 
-#include <vector>
-
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "components/bubble/bubble_delegate.h"
 
 class Browser;
 class GURL;
+
+namespace url {
+class Origin;
+}
 
 // Subclass ChooserBubbleController to implement a chooser bubble, which has
 // some introductory text and a list of options that users can pick one of.
@@ -52,6 +54,9 @@ class ChooserBubbleController : public BubbleDelegate {
    protected:
     virtual ~Observer() {}
   };
+
+  // Return the origin URL to be displayed on the bubble title.
+  url::Origin GetOrigin() const;
 
   // Open help center URL.
   void OpenHelpCenterUrl() const;

@@ -50,6 +50,7 @@ namespace IPC {
 template <>
 struct ParamTraits<ContentSettingsPattern> {
   typedef ContentSettingsPattern param_type;
+  static void GetSize(base::PickleSizer* s, const param_type& p);
   static void Write(base::Pickle* m, const param_type& p);
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
@@ -134,6 +135,7 @@ IPC_STRUCT_TRAITS_END()
 IPC_STRUCT_TRAITS_BEGIN(RendererContentSettingRules)
   IPC_STRUCT_TRAITS_MEMBER(image_rules)
   IPC_STRUCT_TRAITS_MEMBER(script_rules)
+  IPC_STRUCT_TRAITS_MEMBER(autoplay_rules)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(RGBAColor)
@@ -202,10 +204,11 @@ IPC_MESSAGE_CONTROL1(ChromeViewMsg_SetContentSettingRules,
 
 // Tells the renderer to create a FieldTrial, and by using a 100% probability
 // for the FieldTrial, forces the FieldTrial to have assigned group name.
-IPC_MESSAGE_CONTROL3(ChromeViewMsg_SetFieldTrialGroup,
+IPC_MESSAGE_CONTROL4(ChromeViewMsg_SetFieldTrialGroup,
                      std::string /* field trial name */,
                      std::string /* group name that was assigned. */,
-                     base::ProcessId /* for debugging, the sender process id */)
+                     base::ProcessId /* for debugging, the sender process id */,
+                     int32_t /* for debugging, the debug token */)
 
 IPC_MESSAGE_ROUTED1(ChromeViewMsg_SetPageSequenceNumber,
                     int /* page_seq_no */)
@@ -446,10 +449,9 @@ IPC_MESSAGE_ROUTED1(ChromeViewMsg_AppBannerDismissed,
 
 // Notification that the page has an OpenSearch description document
 // associated with it.
-IPC_MESSAGE_ROUTED3(ChromeViewHostMsg_PageHasOSDD,
+IPC_MESSAGE_ROUTED2(ChromeViewHostMsg_PageHasOSDD,
                     GURL /* page_url */,
-                    GURL /* osdd_url */,
-                    search_provider::OSDDType)
+                    GURL /* osdd_url */)
 
 // Find out if the given url's security origin is installed as a search
 // provider.

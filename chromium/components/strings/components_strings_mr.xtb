@@ -21,6 +21,7 @@
 <translation id="112840717907525620">धोरण कॅशे ठीक</translation>
 <translation id="113188000913989374"><ph name="SITE" /> म्हणते:</translation>
 <translation id="1132774398110320017">Chrome स्वयंभरण सेटिंग्ज...</translation>
+<translation id="113770840981343808">सत्यापनासाठी आपल्या कार्डच्या पुढील भागावर असलेले 4-अंकी CVC प्रविष्ट करा</translation>
 <translation id="1146673768181266552">क्रॅश ID <ph name="CRASH_ID" /> (<ph name="CRASH_LOCAL_ID" />)</translation>
 <translation id="1150979032973867961">हा सर्व्हर हे <ph name="DOMAIN" /> असल्याचे सिद्ध करू शकला नाही; त्याचे सुरक्षितता प्रमाणपत्र आपल्या संगणकाच्या ऑपरेटिंग प्रणालीद्वारे विश्वसनीय नाही. हे कदाचित एका चुकीच्या कॉन्फिगरेशनमुळे किंवा आक्रमणकर्त्याने आपले कनेक्शन आंतरखंडित केल्यामुळे झाले असू शकते.</translation>
 <translation id="1152921474424827756"><ph name="URL" /> च्या <ph name="BEGIN_LINK" />कॅशे केलेल्या कॉपीवर<ph name="END_LINK" /> प्रवेश करा</translation>
@@ -39,9 +40,9 @@
 <translation id="1228893227497259893">चुकीचा अस्तित्व ओळखकर्ता</translation>
 <translation id="1232569758102978740">अशीर्षकांकित</translation>
 <translation id="1254117744268754948">फोल्डर निवडा</translation>
-<translation id="1270699273812232624">आयटमला अनुमती द्या</translation>
 <translation id="1285320974508926690">या साइटचा कधीही अनुवाद करु नका</translation>
 <translation id="129553762522093515">अलीकडे बंद केलेले</translation>
+<translation id="129863573139666797"><ph name="BEGIN_LINK" />आपल्या कुकीज साफ करून पहा<ph name="END_LINK" /></translation>
 <translation id="1339601241726513588">नावनोंदणी डोमेन:</translation>
 <translation id="1344588688991793829">Chromium स्वयंभरण सेटिंग्ज...</translation>
 <translation id="1374468813861204354">सूचना</translation>
@@ -86,7 +87,6 @@
 <translation id="1898423065542865115">फिल्टर करणे</translation>
 <translation id="1911837502049945214"><ph name="HOST_NAME" /> नी आपले लॉग इन प्रमाणपत्र स्वीकारले नाही किंवा कदाचित आपले लॉग इन प्रमाणपत्र कालबाह्य झाले असावे.</translation>
 <translation id="194030505837763158"><ph name="LINK" /> दुव्याकडे जा</translation>
-<translation id="1958820272620550857">आयटम अवरोधित करा</translation>
 <translation id="1962204205936693436"><ph name="DOMAIN" /> बुकमार्क</translation>
 <translation id="1973335181906896915">क्रमीकरण त्रुटी</translation>
 <translation id="1974060860693918893">प्रगत</translation>
@@ -119,7 +119,6 @@
 <translation id="2212735316055980242">धोरण आढळले नाही</translation>
 <translation id="2213606439339815911">प्रविष्ट्या आणत आहे...</translation>
 <translation id="2214283295778284209"><ph name="SITE" /> उपलब्ध नाही</translation>
-<translation id="2227695659599072496">नेटवर्क केबल किंवा राउटर तपासणे</translation>
 <translation id="2230458221926704099"><ph name="BEGIN_LINK" />निदान अॅप<ph name="END_LINK" /> वापरून आपल्या कनेक्शनचे निराकरण करा</translation>
 <translation id="225207911366869382">हे मूल्य या धोरणासाठी नापसंत करण्‍यात आले आहे.</translation>
 <translation id="2262243747453050782">HTTP त्रुटी</translation>
@@ -132,6 +131,7 @@
 <translation id="2317259163369394535"><ph name="DOMAIN" /> साठी वापरकर्तानाव आणि संकेतशब्द आवश्यक आहेत.</translation>
 <translation id="2328300916057834155"><ph name="ENTRY_INDEX" /> अनुक्रमणिकेमधील अवैध बुकमार्ककडे दुर्लक्ष केले</translation>
 <translation id="2354001756790975382">इतर बुकमार्क</translation>
+<translation id="2357783041215512127"><ph name="CREDIT_CARD" /> सह देय द्या</translation>
 <translation id="2359808026110333948">सुरू ठेवा</translation>
 <translation id="2367567093518048410">दर्जा</translation>
 <translation id="237718015863234333">कोणतेही UI विकल्प उपलब्ध नाहीत</translation>
@@ -198,6 +198,7 @@
 <translation id="2969319727213777354">एक सुरक्षित कनेक्‍शन स्‍थापित करण्‍यापूर्वी, आपले घड्‍याळ योग्यरित्या सेट केले असणे आवश्यक आहे. वेबसाइट त्यांना स्‍वत:ला ओळखण्‍यासाठी वापरतात ती प्रमाणपत्रे केवळ निर्दिष्‍ट केलेल्‍या कालावधीसाठी वैध असल्याने हे असू शकते. आपल्‍या डिव्‍हाइसचे घड्‍याळ चुकीचे असल्‍यामुळे, Google Chrome ही प्रमाणपत्रे सत्यापित करू शकत नाही.</translation>
 <translation id="2972581237482394796">&amp;पुन्हा करा</translation>
 <translation id="2985306909656435243">सक्षम केल्‍यास, Chromium जलदपणे फॉर्म भरण्‍यासाठी आपल्‍या कार्डची एक प्रत या डिव्‍हाइसवर संग्रहित करेल.</translation>
+<translation id="2989984781570875765">आपल्या <ph name="CREDIT_CARD" /> च्या मागील बाजूवर असलेली कालबाह्य तारीख आणि 3-अंकी CVC प्रविष्ट करा</translation>
 <translation id="2991174974383378012">वेबसाइटसह शेअर करीत आहे</translation>
 <translation id="3005723025932146533">जतन केलेली प्रत दर्शवा</translation>
 <translation id="3010559122411665027">सूची प्रविष्टी "<ph name="ENTRY_INDEX" />": <ph name="ERROR" /></translation>
@@ -209,7 +210,6 @@
 <translation id="3105172416063519923">मालमत्ता ID:</translation>
 <translation id="3109728660330352905">हे पृष्ठ पाहण्यासाठी आपण प्राधिकृत नाही.</translation>
 <translation id="3118046075435288765">सर्व्हरने अनपेक्षितरित्या कनेक्शन बंद केले.</translation>
-<translation id="31454997771848827">गट डोमेन</translation>
 <translation id="3145945101586104090">प्रतिसाद डीकोड करण्यात अयशस्वी</translation>
 <translation id="3147485256806412701">ही साइट एक नवीन सामान्य शीर्ष-स्तरीय डोमेन वापरत आहे.</translation>
 <translation id="3150653042067488994">तात्पुरती सर्व्हर त्रुटी</translation>
@@ -230,7 +230,6 @@
 <translation id="3254409185687681395">या पृष्ठास बुकमार्क करा</translation>
 <translation id="3270847123878663523">&amp;पुनर्क्रमित करा पूर्ववत करा</translation>
 <translation id="3286538390144397061">त्वरित रीस्टार्ट करा</translation>
-<translation id="3288003805934695103">पृष्ठ रीलोड करणे</translation>
 <translation id="3305707030755673451">आपला डेटा आपल्या संकालन सांकेतिक वाक्यांशासह <ph name="TIME" /> वाजता कूटबद्ध केला होता. संकालन सुरु करण्यासाठी तो प्रविष्ट करा.</translation>
 <translation id="333371639341676808">अतिरिक्त संवाद तयार करण्यापासून या पृष्ठाला प्रतिबंधित करा.</translation>
 <translation id="3340978935015468852">सेटिंग्ज</translation>
@@ -262,6 +261,7 @@
 <translation id="3583757800736429874">&amp;हलवा पुन्हा करा</translation>
 <translation id="3586931643579894722">तपशील लपवा</translation>
 <translation id="3587482841069643663">सर्व</translation>
+<translation id="3600246354004376029"><ph name="TITLE" />, <ph name="DOMAIN" />, <ph name="TIME" /></translation>
 <translation id="3608308818141211642">क्लायंट आणि सर्व्हर एका सामान्य SSL प्रोटोकॉल आवृत्तीस किंवा सायफर संचास समर्थन देत नाहीत. सर्व्हरला आवश्यक असणारे RC4, यापुढे सुरक्षित वाटत नसल्याने कदाचित हे होऊ शकते.</translation>
 <translation id="3609138628363401169">सर्व्हर TLS रीनिगोसिएशन विस्तारास समर्थन देत नाही.</translation>
 <translation id="362276910939193118">पूर्ण इतिहास दर्शवा</translation>
@@ -283,6 +283,7 @@
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />प्रॉक्सी, फायरवॉल आणि DNS कॉन्फिगरेशन तपासणे<ph name="END_LINK" /></translation>
 <translation id="3739623965217189342">आपण कॉपी केलेल्याचा दुवा जोडा</translation>
 <translation id="3744899669254331632">Chromium प्रक्रिया करू शकत नसलेले सरमिसळ केलेले क्रेडेन्‍शियल वेबसाइटने पाठविल्‍याने आपण आत्ता <ph name="SITE" /> ला भेट देऊ शकत नाही. नेटवर्क त्रुटी आणि आक्रमण सहसा तात्पुरते आहेत त्यामुळे संभवत: हे पृष्‍ठ नंतर कार्य करेल.</translation>
+<translation id="3748071062818261683">कार्ड सत्यापित करा</translation>
 <translation id="3748412725338508953">तेथे बरेच पुनर्निर्देशित होते.</translation>
 <translation id="375403751935624634">सर्व्हर त्रुटीमुळे अनुवाद अयशस्वी झाला.</translation>
 <translation id="3759461132968374835">आपण अलीकडे कोणतेही क्रॅश नोंदवले नाहीत. क्रॅश नोंदवणे अक्षम असताना झालेले क्रॅश येथे दिसून येणार नाहीत.</translation>
@@ -302,7 +303,6 @@
 <translation id="3963721102035795474">वाचक मोड</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> अवरोधित केले आहे</translation>
 <translation id="4021036232240155012">DNS ही नेटवर्क सेवा आहे जी वेबसाइटचे नाव तिच्या इंटरनेट पत्त्यामध्‍ये भाषांतरित करते.</translation>
-<translation id="4021376465026729077">विस्तार अक्षम करणे</translation>
 <translation id="4030383055268325496">&amp;जोडा पूर्ववत करा</translation>
 <translation id="4032534284272647190"><ph name="URL" /> वर प्रवेश नाकारला.</translation>
 <translation id="404928562651467259">चेतावणी:</translation>
@@ -312,6 +312,7 @@
 <translation id="4103249731201008433">डिव्हाइस सिरीयल क्रमांक अवैध आहे</translation>
 <translation id="4103763322291513355">आपल्या सिस्टीम प्रशासकाद्वारे प्रवर्तित काळ्यासूचीतील URLs आणि अन्य धोरणांची सूची पाहण्यासाठी &lt;strong&gt;chrome://policy&lt;/strong&gt; ला भेट द्या.</translation>
 <translation id="4117700440116928470">धोरण कक्षा समर्थित नाही.</translation>
+<translation id="4130226655945681476">नेटवर्क केबल, मोडेम आणि राउटर तपासत आहे</translation>
 <translation id="4147376274874979956">फाइलमध्ये प्रवेश करण्‍यास अक्षम.</translation>
 <translation id="4148925816941278100">American Express</translation>
 <translation id="4169947484918424451">Chromium ने हे कार्ड जतन करावे असे आपण इच्छिता?</translation>
@@ -325,7 +326,6 @@
 <translation id="4258748452823770588">खराब स्वाक्षरी</translation>
 <translation id="4268298190799576220">Chromium यावेळी आपले कार्ड सत्यापित करण्यात अक्षम होते. कृपया नंतर पुन्हा प्रयत्न करा.</translation>
 <translation id="4269787794583293679">(वापरकर्तानाव नाही)</translation>
-<translation id="4278390842282768270">अनुमत</translation>
 <translation id="4300246636397505754">पालक सूचना</translation>
 <translation id="4304224509867189079">लॉग इन</translation>
 <translation id="4325863107915753736">लेख शोधण्यात अयशस्वी</translation>
@@ -347,11 +347,15 @@
 <translation id="450710068430902550">प्रशासकासह सामायिक करीत आहे</translation>
 <translation id="4522570452068850558">तपशील</translation>
 <translation id="4535734014498033861">प्रॉक्सी सर्व्हर कनेक्शनमध्ये बिघाड.</translation>
+<translation id="4553532082208702698">आपल्या <ph name="CREDIT_CARD" /> च्या पुढील बाजूूस असलेला 4-अंकी CVC प्रविष्‍ट करा</translation>
+<translation id="4558551763791394412">आपले विस्तार अक्षम करून पहा.</translation>
 <translation id="4587425331216688090">Chrome मधून पत्ता काढायचा?</translation>
 <translation id="4592951414987517459">आपले <ph name="DOMAIN" /> वरील कनेक्शन आधुनिक सायफर सूट वापरून कूटबद्ध केलेले आहे.</translation>
 <translation id="4594403342090139922">&amp;हटवा पूर्ववत करा</translation>
 <translation id="4668929960204016307">,</translation>
+<translation id="4670097147947922288">आपण एक विस्तार पृष्ठ पाहत आहात.</translation>
 <translation id="467662567472608290">हा सर्व्हर हे <ph name="DOMAIN" /> असल्याचे सिद्ध करू शकला नाही; त्याच्या सुरक्षितता प्रमाणपत्रात त्रुटी आहेत. हे कदाचित एका चुकीच्या कॉन्फिगरेशनमुळे किंवा आक्रमणकर्त्याने आपले कनेक्शन आंतरखंडित केल्यामुळे झाले असू शकते.</translation>
+<translation id="4683417246209150705">आपल्या <ph name="CREDIT_CARD" /> च्या मागील बाजूस असलेला 3-अंकी CVC प्रविष्ट करा</translation>
 <translation id="4697214168136963651"><ph name="URL" /> अवरोधित करण्‍यात आली</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">आपल्या कनेक्शनमध्ये व्यत्यय आला</translation>
@@ -401,7 +405,6 @@
 <translation id="5251803541071282808">मेघ</translation>
 <translation id="5299298092464848405">धोरण विश्लेषित करताना त्रुटी</translation>
 <translation id="5300589172476337783">दर्शवा</translation>
-<translation id="5307361445257083764"><ph name="BEGIN_LINK" />आपल्या कुकीज साफ करणे<ph name="END_LINK" /></translation>
 <translation id="5308689395849655368">क्रॅश अहवाल अक्षम केला गेला आहे.</translation>
 <translation id="5317780077021120954">जतन करा</translation>
 <translation id="5327248766486351172">नाव</translation>
@@ -412,7 +415,6 @@
 <translation id="5431657950005405462">आपली फाईल आढळली नाही</translation>
 <translation id="5435775191620395718">या डिव्हाइस वरील इतिहास दर्शवित आहे. <ph name="BEGIN_LINK" />अधिक जाणून घ्या<ph name="END_LINK" /></translation>
 <translation id="5439770059721715174">"<ph name="ERROR_PATH" />" वर स्कीमा प्रमाणीकरण त्रुटी: <ph name="ERROR" /></translation>
-<translation id="5447330194051379405">सर्व जतन केलेली पृष्ठे दर्शवा</translation>
 <translation id="5452270690849572955">हे <ph name="HOST_NAME" /> पृष्ठ शोधले जाऊ शकत नाही</translation>
 <translation id="5455374756549232013">खराब धोरण टाइमस्टँप</translation>
 <translation id="5455790498993699893"><ph name="TOTAL_MATCHCOUNT" /> पैकी <ph name="ACTIVE_MATCH" /></translation>
@@ -436,7 +438,10 @@
 <translation id="5629630648637658800">धोरण सेटिंग्ज लोड करण्यात अयशस्वी</translation>
 <translation id="5631439013527180824">अवैध डिव्हाइस व्यवस्थापन टोकन</translation>
 <translation id="5650551054760837876">शोध परिणाम आढळले नाहीत.</translation>
+<translation id="5663999524854166235">सत्यापनासाठी आपल्या कार्डच्या पाठीमागे असलेले 3-अंकी CVC प्रविष्ट करा</translation>
 <translation id="5677928146339483299">अवरोधित</translation>
+<translation id="5696590819423335174">आपल्या <ph name="CREDIT_CARD" /> च्या पुढील बाजूस असलेला 4-अंकी CVC आणि कालबाह्य तारीख प्रविष्ट करा</translation>
+<translation id="5699278517904102888">सत्यापनासाठी आपल्या <ph name="CREDIT_CARD" /> च्या मागील बाजूस असलेला 3-अंकी CVC प्रविष्ट करा</translation>
 <translation id="5710435578057952990">या वेबसाइटची ओळख सत्यापित केली गेली नाही.</translation>
 <translation id="5720705177508910913">वर्तमान वापरकर्ता</translation>
 <translation id="5785756445106461925">पुढे, या पृष्ठात सुरक्षित नसलेली इतर संसाधने समाविष्ट आहेत. ही संसाधने संक्रमणात असताना इतरांद्वारे पाहिली जाऊ शकतात आणि पृष्ठाचे स्वरूप बदलण्यासाठी आक्रमणकर्त्याद्वारे सुधारित केली जाऊ शकतात.</translation>
@@ -509,7 +514,6 @@
 <translation id="6628463337424475685"><ph name="ENGINE" /> शोध</translation>
 <translation id="6634865548447745291"><ph name="BEGIN_LINK" />हे प्रमाणपत्र रद्द केले गेल्यामुळे<ph name="END_LINK" /> आपण आत्ता <ph name="SITE" /> ला भेट देऊ शकत नाही. नेटवर्क त्रुटी आणि आक्रमणे सामान्यतः तात्पुरती असतात, यामुळे हे पृष्ठ कदाचित नंतर कार्य करेल.</translation>
 <translation id="6637478299472506933">डाउनलोड अयशस्वी</translation>
-<translation id="6642894344118208103">मोडेम किंवा राउटर रीसेट करणे</translation>
 <translation id="6644283850729428850">हे धोरण नापसंत आहे.</translation>
 <translation id="6646897916597483132">आपल्या कार्डच्या पुढील भागावर असलेले 4-अंकी CVC प्रविष्ट करा</translation>
 <translation id="6656103420185847513">फोल्डर संपादित करा</translation>
@@ -525,7 +529,6 @@
 <translation id="6753269504797312559">धोरण मूल्य</translation>
 <translation id="6757797048963528358">आपले डिव्हाइस निष्क्रीय झाले.</translation>
 <translation id="6781404225664080496">या URL कडे विनंत्या पाठविणे तात्पुरते बंद केले गेले आहे.</translation>
-<translation id="6800914069727136216">सामग्री पॅकमध्ये</translation>
 <translation id="6820686453637990663">CVC</translation>
 <translation id="6830600606572693159"><ph name="URL" /> येथील वेबपृष्ठ सध्या अनुपलब्ध आहे. ते ओव्हरलोड असावे किंवा देखरेखीसाठी डाउन असावे.</translation>
 <translation id="6831043979455480757">अनुवाद करा</translation>
@@ -563,7 +566,6 @@
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> नी सुरक्षितता मानकांचे पालन केले नाही.</translation>
 <translation id="721197778055552897">या समस्येबद्दल <ph name="BEGIN_LINK" />अधिक जाणून घ्या<ph name="END_LINK" />.</translation>
 <translation id="7219179957768738017">कनेक्शन <ph name="SSL_VERSION" /> वापरते.</translation>
-<translation id="7225807090967870017">बिल्ड ID</translation>
 <translation id="7231308970288859235">अरेरे! या पृष्‍ठास भेट देणे ठीक आहे का ते आपल्‍या पालकांना विचारण्‍याची आपल्‍याला आवश्‍यकता आहे.</translation>
 <translation id="7246609911581847514">आपल्याला हा संदेश दिसत आहे कारण नवीन साइटच्या आपल्या प्रथम भेटीवर आपल्या व्यवस्थापकाने मंजूरी देणे आवश्यक आहे.</translation>
 <translation id="725866823122871198">आपल्या संगणकाची तारीख आणि वेळ (<ph name="DATE_AND_TIME" />) चुकीची असल्यामुळे <ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> सह खाजगी कनेक्शन स्थापित केले जाऊ शकत नाही.</translation>
@@ -604,6 +606,7 @@
 <translation id="7610193165460212391">मूल्य <ph name="VALUE" /> श्रेणीच्या बाहेर आहे.</translation>
 <translation id="7613889955535752492">कालबाह्य: <ph name="EXPIRATION_MONTH" />/<ph name="EXPIRATION_YEAR" /></translation>
 <translation id="7615602087246926389">आपल्याकडे आधीपासूनच डेटा आहे जो आपल्या Google खाते संकेतशब्दाची विभिन्न आवृत्ती वापरुन कूटबद्ध करण्‍यात आला आहे. कृपया तो खाली प्रविष्‍ट करा.</translation>
+<translation id="7633887239437305289">सत्यापनासाठी आपल्या <ph name="CREDIT_CARD" /> च्या पुढील बाजूस असलेला 4-अंकी CVC प्रविष्ट करा</translation>
 <translation id="7634554953375732414">या साइटवर आपले कनेक्शन खाजगी नाही.</translation>
 <translation id="7637571805876720304">Chromium वरून क्रेडिट कार्ड काढायचे?</translation>
 <translation id="7643817847124207232">इंटरनेट कनेक्शन गमावले गेले आहे.</translation>
@@ -611,7 +614,6 @@
 <translation id="7658239707568436148">रद्द करा</translation>
 <translation id="7668654391829183341">अज्ञात डिव्हाइस</translation>
 <translation id="7674629440242451245">छान नवीन Chrome वैशिष्ट्यांमध्ये स्वारस्य आहे? chrome.com/dev येथे आमचे dev चॅनेल वापरून पहा.</translation>
-<translation id="769344199378576125">ऑफलाइन बुकमार्क दर्शवा</translation>
 <translation id="7704050614460855821"><ph name="BEGIN_LINK" /> <ph name="SITE" /> (असुरक्षित) वर सुरु ठेवा<ph name="END_LINK" /></translation>
 <translation id="7716424297397655342">ही साइट कॅशे मधून लोड करणे शक्य नाही</translation>
 <translation id="7733391738235763478">(<ph name="NUMBER_VISITS" />)</translation>
@@ -658,6 +660,7 @@
 <translation id="8225771182978767009">ज्या व्यक्तीने हा संगणक सेट केला त्या व्यक्तीने ही साइट अवरोधित करण्याचे निवडले आहे.</translation>
 <translation id="8241707690549784388">आपण जे पृष्ठ शोधत आहत ते आपण प्रविष्ट केलेली माहिती वापरत आहे. त्या पृष्ठाकडे परत गेल्यास कदाचित आपण केलेल्या कोणत्याही क्रियेची पुनरावृत्ती होईल. आपण सुरू ठेवू इच्छिता?</translation>
 <translation id="8249320324621329438">अंतिम प्राप्त केलेले:</translation>
+<translation id="8261506727792406068">हटवा</translation>
 <translation id="8266098793847448402"><ph name="BEGIN_BOLD" />प्रारंभ करा<ph name="END_BOLD" /> क्लिक करा,
       <ph name="BEGIN_BOLD" />चालवा<ph name="END_BOLD" /> क्लिक करा,
             <ph name="BEGIN_BOLD" />%windir%\network diagnostic\xpnetdiag.exe<ph name="END_BOLD" /> टाइप करा

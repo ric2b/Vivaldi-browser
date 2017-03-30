@@ -12,9 +12,11 @@
 #include "ash/shelf/shelf_view.h"
 #include "ash/shell.h"
 #include "ash/shell_window_ids.h"
+#include "ash/wm/common/shelf/wm_shelf_constants.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/gfx/geometry/insets.h"
-#include "ui/gfx/screen.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/widget/widget.h"
 
@@ -42,8 +44,9 @@ void OverflowBubbleView::InitOverflowBubble(views::View* anchor,
 
   SetAnchorView(anchor);
   set_arrow(GetBubbleArrow());
+  set_mirror_arrow_in_rtl(false);
   set_background(NULL);
-  set_color(SkColorSetARGB(kShelfBackgroundAlpha, 0, 0, 0));
+  set_color(SkColorSetARGB(wm::kShelfBackgroundAlpha, 0, 0, 0));
   set_margins(gfx::Insets(kPadding, kPadding, kPadding, kPadding));
   // Overflow bubble should not get focus. If it get focus when it is shown,
   // active state item is changed to running state.
@@ -57,7 +60,7 @@ void OverflowBubbleView::InitOverflowBubble(views::View* anchor,
   set_parent_window(Shell::GetContainer(
       anchor->GetWidget()->GetNativeWindow()->GetRootWindow(),
       kShellWindowId_ShelfBubbleContainer));
-  views::BubbleDelegateView::CreateBubble(this);
+  views::BubbleDialogDelegateView::CreateBubble(this);
   AddChildView(shelf_view_);
 }
 
@@ -102,7 +105,7 @@ gfx::Size OverflowBubbleView::GetPreferredSize() const {
   gfx::Size preferred_size = GetContentsSize();
 
   const gfx::Rect monitor_rect =
-      gfx::Screen::GetScreen()
+      display::Screen::GetScreen()
           ->GetDisplayNearestPoint(GetAnchorRect().CenterPoint())
           .work_area();
   if (!monitor_rect.IsEmpty()) {
@@ -161,6 +164,10 @@ void OverflowBubbleView::OnScrollEvent(ui::ScrollEvent* event) {
   event->SetHandled();
 }
 
+int OverflowBubbleView::GetDialogButtons() const {
+  return ui::DIALOG_BUTTON_NONE;
+}
+
 gfx::Rect OverflowBubbleView::GetBubbleBounds() {
   views::BubbleBorder* border = GetBubbleFrameView()->bubble_border();
   gfx::Insets bubble_insets = border->GetInsets();
@@ -181,7 +188,7 @@ gfx::Rect OverflowBubbleView::GetBubbleBounds() {
       false);
 
   gfx::Rect monitor_rect =
-      gfx::Screen::GetScreen()
+      display::Screen::GetScreen()
           ->GetDisplayNearestPoint(anchor_rect.CenterPoint())
           .work_area();
 

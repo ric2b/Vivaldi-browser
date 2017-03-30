@@ -27,19 +27,6 @@
       ],
     },
     {
-      # GN version: //mojo/edk/system/ports:mojo_system_ports_unittests
-      'target_name': 'mojo_system_ports_unittests',
-      'type': 'executable',
-      'dependencies': [
-        '../testing/gtest.gyp:gtest',
-        '../testing/gtest.gyp:gtest_main',
-        'mojo_edk.gyp:mojo_system_impl',
-      ],
-      'sources': [
-        'edk/system/ports/ports_unittest.cc',
-      ],
-    },
-    {
       # GN version: //mojo/edk/test:mojo_public_bindings_unittests
       'target_name': 'mojo_public_bindings_unittests',
       'type': 'executable',
@@ -47,20 +34,18 @@
         '../testing/gtest.gyp:gtest',
         'mojo_edk.gyp:mojo_run_all_unittests',
         'mojo_public.gyp:mojo_cpp_bindings',
-        'mojo_public.gyp:mojo_message_pump_lib',
         'mojo_public.gyp:mojo_public_bindings_test_utils',
         'mojo_public.gyp:mojo_public_test_associated_interfaces',
         'mojo_public.gyp:mojo_public_test_interfaces',
         'mojo_public.gyp:mojo_public_test_interfaces_blink',
-        'mojo_public.gyp:mojo_public_test_interfaces_chromium',
         'mojo_public.gyp:mojo_public_test_interfaces_struct_traits',
         'mojo_public.gyp:mojo_public_test_utils',
-        'mojo_public.gyp:mojo_public_test_variant',
       ],
       'sources': [
         'public/cpp/bindings/tests/array_common_test.h',
         'public/cpp/bindings/tests/array_unittest.cc',
         'public/cpp/bindings/tests/associated_interface_unittest.cc',
+        'public/cpp/bindings/tests/bind_task_runner_unittest.cc',
         'public/cpp/bindings/tests/binding_callback_unittest.cc',
         'public/cpp/bindings/tests/binding_unittest.cc',
         'public/cpp/bindings/tests/bounds_checker_unittest.cc',
@@ -73,7 +58,6 @@
         'public/cpp/bindings/tests/equals_unittest.cc',
         'public/cpp/bindings/tests/handle_passing_unittest.cc',
         'public/cpp/bindings/tests/interface_ptr_unittest.cc',
-        'public/cpp/bindings/tests/macros_unittest.cc',
         'public/cpp/bindings/tests/map_unittest.cc',
         'public/cpp/bindings/tests/message_queue.cc',
         'public/cpp/bindings/tests/message_queue.h',
@@ -107,6 +91,23 @@
         'public/cpp/bindings/tests/validation_unittest.cc',
         'public/cpp/bindings/tests/variant_test_util.h',
       ],
+      'conditions': [
+        ['OS=="ios"', {
+          'dependencies!': [
+            'mojo_public.gyp:mojo_public_test_interfaces_blink',
+          ],
+          'sources!': [
+            'public/cpp/bindings/tests/pickle_unittest.cc',
+            'public/cpp/bindings/tests/pickled_struct_blink.cc',
+            'public/cpp/bindings/tests/pickled_struct_blink.h',
+            'public/cpp/bindings/tests/pickled_struct_chromium.cc',
+            'public/cpp/bindings/tests/pickled_struct_chromium.h',
+            'public/cpp/bindings/tests/rect_blink.h',
+            'public/cpp/bindings/tests/rect_blink_traits.h',
+            'public/cpp/bindings/tests/struct_traits_unittest.cc',
+          ],
+        }],
+      ],
     },
     {
       # GN version: //mojo/public/cpp/bindings/tests:for_blink_tests
@@ -138,7 +139,6 @@
         'mojo_base.gyp:mojo_common_lib',
         'mojo_edk.gyp:mojo_run_all_perftests',
         'mojo_public.gyp:mojo_cpp_bindings',
-        'mojo_public.gyp:mojo_message_pump_lib',
         'mojo_public.gyp:mojo_public_bindings_test_utils',
         'mojo_public.gyp:mojo_public_test_interfaces',
         'mojo_public.gyp:mojo_public_test_utils',
@@ -180,13 +180,14 @@
     {
       # GN version: //mojo/edk/system:mojo_system_unittests
       'target_name': 'mojo_system_unittests',
-      'type': 'executable',
+      'type': '<(gtest_target_type)',
       'dependencies': [
         '../base/base.gyp:base',
         '../testing/gtest.gyp:gtest',
         'mojo_edk.gyp:mojo_common_test_support',
         'mojo_edk.gyp:mojo_run_all_unittests',
         'mojo_edk.gyp:mojo_system_impl',
+        'mojo_edk.gyp:mojo_system_ports',
       ],
       'sources': [
         'edk/embedder/embedder_unittest.cc',
@@ -200,6 +201,7 @@
         'edk/system/multiprocess_message_pipe_unittest.cc',
         'edk/system/options_validation_unittest.cc',
         'edk/system/platform_handle_dispatcher_unittest.cc',
+        'edk/system/ports/ports_unittest.cc',
         'edk/system/shared_buffer_dispatcher_unittest.cc',
         'edk/system/shared_buffer_unittest.cc',
         'edk/system/test_utils.cc',
@@ -214,6 +216,11 @@
         ['OS=="ios"', {
           'sources!': [
             'edk/system/multiprocess_message_pipe_unittest.cc',
+          ],
+        }],
+        ['OS == "android"', {
+          'dependencies': [
+            '../testing/android/native_test.gyp:native_test_native_code',
           ],
         }],
       ],
@@ -310,6 +317,60 @@
           'sources': [
             'mojo_public_system_unittests.isolate',
           ],
+        },
+        {
+          'target_name': 'mojo_js_unittests_run',
+          'type': 'none',
+          'dependencies': [
+            'mojo_js_unittests',
+          ],
+          'includes': [
+            '../build/isolate.gypi',
+          ],
+          'sources': [
+            'mojo_js_unittests.isolate',
+          ],
+        },
+        {
+          'target_name': 'mojo_js_integration_tests_run',
+          'type': 'none',
+          'dependencies': [
+            'mojo_js_integration_tests',
+          ],
+          'includes': [
+            '../build/isolate.gypi',
+          ],
+          'sources': [
+            'mojo_js_integration_tests.isolate',
+          ],
+        },
+        {
+          'target_name': 'mojo_system_unittests_run',
+          'type': 'none',
+          'dependencies': [
+            'mojo_system_unittests',
+          ],
+          'includes': [
+            '../build/isolate.gypi',
+          ],
+          'sources': [
+            'mojo_system_unittests.isolate',
+          ],
+        },
+      ],
+    }],
+    ['OS == "android"', {
+      'targets': [
+        {
+          'target_name': 'mojo_system_unittests_apk',
+          'type': 'none',
+          'dependencies': [
+            'mojo_system_unittests',
+          ],
+          'variables': {
+            'test_suite_name': 'mojo_system_unittests',
+          },
+          'includes': [ '../build/apk_test.gypi' ],
         },
       ],
     }],

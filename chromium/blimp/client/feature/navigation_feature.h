@@ -10,7 +10,6 @@
 
 #include "base/containers/small_map.h"
 #include "base/macros.h"
-#include "blimp/client/blimp_client_export.h"
 #include "blimp/net/blimp_message_processor.h"
 
 class GURL;
@@ -22,12 +21,13 @@ namespace client {
 // Handles all incoming and outgoing protobuf messages of type
 // RenderWidget::NAVIGATION.  Delegates can be added to be notified of incoming
 // messages.
-class BLIMP_CLIENT_EXPORT NavigationFeature : public BlimpMessageProcessor {
+class NavigationFeature : public BlimpMessageProcessor {
  public:
   // A delegate to be notified of specific navigation events related to a
   // a particular tab.
   class NavigationFeatureDelegate {
    public:
+    virtual ~NavigationFeatureDelegate() {}
     virtual void OnUrlChanged(int tab_id, const GURL& url) = 0;
     virtual void OnFaviconChanged(int tab_id, const SkBitmap& favicon) = 0;
     virtual void OnTitleChanged(int tab_id, const std::string& title) = 0;

@@ -8,7 +8,6 @@
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "core/dom/DOMException.h"
-#include "core/dom/ExceptionCode.h"
 #include "core/events/Event.h"
 #include "modules/bluetooth/BluetoothError.h"
 #include "modules/bluetooth/BluetoothRemoteGATTServer.h"
@@ -17,20 +16,19 @@
 
 namespace blink {
 
-BluetoothDevice::BluetoothDevice(ExecutionContext* context, PassOwnPtr<WebBluetoothDevice> webDevice)
+BluetoothDevice::BluetoothDevice(ExecutionContext* context, PassOwnPtr<WebBluetoothDeviceInit> webDevice)
     : ActiveDOMObject(context)
-    , m_webDevice(webDevice)
-    , m_adData(BluetoothAdvertisingData::create(m_webDevice->txPower, m_webDevice->rssi))
+    , m_webDevice(std::move(webDevice))
     , m_gatt(BluetoothRemoteGATTServer::create(this))
 {
     // See example in Source/platform/heap/ThreadState.h
     ThreadState::current()->registerPreFinalizer(this);
 }
 
-BluetoothDevice* BluetoothDevice::take(ScriptPromiseResolver* resolver, PassOwnPtr<WebBluetoothDevice> webDevice)
+BluetoothDevice* BluetoothDevice::take(ScriptPromiseResolver* resolver, PassOwnPtr<WebBluetoothDeviceInit> webDevice)
 {
     ASSERT(webDevice);
-    BluetoothDevice* device = new BluetoothDevice(resolver->getExecutionContext(), webDevice);
+    BluetoothDevice* device = new BluetoothDevice(resolver->getExecutionContext(), std::move(webDevice));
     device->suspendIfNeeded();
     return device;
 }
@@ -65,47 +63,19 @@ ExecutionContext* BluetoothDevice::getExecutionContext() const
     return ActiveDOMObject::getExecutionContext();
 }
 
+void BluetoothDevice::dispatchGattServerDisconnected()
+{
+    if (m_gatt->connected()) {
+        m_gatt->setConnected(false);
+        dispatchEvent(Event::createBubble(EventTypeNames::gattserverdisconnected));
+    }
+}
+
 DEFINE_TRACE(BluetoothDevice)
 {
-    RefCountedGarbageCollectedEventTargetWithInlineData<BluetoothDevice>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
     ActiveDOMObject::trace(visitor);
-    visitor->trace(m_adData);
     visitor->trace(m_gatt);
-}
-
-unsigned BluetoothDevice::deviceClass(bool& isNull)
-{
-    isNull = false;
-    return m_webDevice->deviceClass;
-}
-
-String BluetoothDevice::vendorIDSource()
-{
-    switch (m_webDevice->vendorIDSource) {
-    case WebBluetoothDevice::VendorIDSource::Unknown: return String();
-    case WebBluetoothDevice::VendorIDSource::Bluetooth: return "bluetooth";
-    case WebBluetoothDevice::VendorIDSource::USB: return "usb";
-    }
-    ASSERT_NOT_REACHED();
-    return String();
-}
-
-unsigned BluetoothDevice::vendorID(bool& isNull)
-{
-    isNull = false;
-    return m_webDevice->vendorID;
-}
-
-unsigned BluetoothDevice::productID(bool& isNull)
-{
-    isNull = false;
-    return m_webDevice->productID;
-}
-
-unsigned BluetoothDevice::productVersion(bool& isNull)
-{
-    isNull = false;
-    return m_webDevice->productVersion;
 }
 
 Vector<String> BluetoothDevice::uuids()

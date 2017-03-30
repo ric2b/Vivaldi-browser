@@ -13,7 +13,11 @@
 #include "base/task_runner_util.h"
 #include "base/values.h"
 #include "chrome/browser/android/ntp/popular_sites.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "components/ntp_tiles/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_ui.h"
@@ -39,8 +43,8 @@ void PopularSitesInternalsMessageHandler::RegisterMessages() {
       base::Bind(&PopularSitesInternalsMessageHandler::HandleRegisterForEvents,
                  base::Unretained(this)));
 
-  web_ui()->RegisterMessageCallback("download",
-      base::Bind(&PopularSitesInternalsMessageHandler::HandleDownload,
+  web_ui()->RegisterMessageCallback("update",
+      base::Bind(&PopularSitesInternalsMessageHandler::HandleUpdate,
                  base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
@@ -53,35 +57,56 @@ void PopularSitesInternalsMessageHandler::HandleRegisterForEvents(
     const base::ListValue* args) {
   DCHECK(args->empty());
 
-  std::string country;
-  std::string version;
+  SendOverrides();
+
+  Profile* profile = Profile::FromWebUI(web_ui());
   popular_sites_.reset(new PopularSites(
-      Profile::FromWebUI(web_ui()), country, version, false,
+      profile->GetPrefs(), TemplateURLServiceFactory::GetForProfile(profile),
+      g_browser_process->variations_service(), profile->GetRequestContext(),
+      ChromePopularSites::GetDirectory(), std::string(), std::string(),
+      false,
       base::Bind(&PopularSitesInternalsMessageHandler::OnPopularSitesAvailable,
                  base::Unretained(this), false)));
 }
 
-void PopularSitesInternalsMessageHandler::HandleDownload(
+void PopularSitesInternalsMessageHandler::HandleUpdate(
     const base::ListValue* args) {
   DCHECK_EQ(3u, args->GetSize());
+  Profile* profile = Profile::FromWebUI(web_ui());
   auto callback =
       base::Bind(&PopularSitesInternalsMessageHandler::OnPopularSitesAvailable,
                  base::Unretained(this), true);
+
+  PrefService* prefs = profile->GetPrefs();
+
+  std::string country;
+  args->GetString(1, &country);
+  if (country.empty())
+    prefs->ClearPref(ntp_tiles::prefs::kPopularSitesOverrideCountry);
+  else
+    prefs->SetString(ntp_tiles::prefs::kPopularSitesOverrideCountry, country);
+
+  std::string version;
+  args->GetString(2, &version);
+  if (version.empty())
+    prefs->ClearPref(ntp_tiles::prefs::kPopularSitesOverrideVersion);
+  else
+    prefs->SetString(ntp_tiles::prefs::kPopularSitesOverrideVersion, version);
 
   std::string url;
   args->GetString(0, &url);
   if (!url.empty()) {
     popular_sites_.reset(new PopularSites(
-        Profile::FromWebUI(web_ui()),
+        prefs, profile->GetRequestContext(), ChromePopularSites::GetDirectory(),
         url_formatter::FixupURL(url, std::string()), callback));
     return;
   }
-  std::string country;
-  args->GetString(1, &country);
-  std::string version;
-  args->GetString(2, &version);
-  popular_sites_.reset(new PopularSites(Profile::FromWebUI(web_ui()), country,
-                                        version, true, callback));
+
+  popular_sites_.reset(new PopularSites(
+      prefs, TemplateURLServiceFactory::GetForProfile(profile),
+      g_browser_process->variations_service(), profile->GetRequestContext(),
+      ChromePopularSites::GetDirectory(), std::string(), std::string(), true,
+      callback));
 }
 
 void PopularSitesInternalsMessageHandler::HandleViewJson(
@@ -97,6 +122,17 @@ void PopularSitesInternalsMessageHandler::HandleViewJson(
       FROM_HERE, base::Bind(&ReadFileToString, path),
       base::Bind(&PopularSitesInternalsMessageHandler::SendJson,
                  weak_ptr_factory_.GetWeakPtr()));
+}
+
+void PopularSitesInternalsMessageHandler::SendOverrides() {
+  PrefService* prefs = Profile::FromWebUI(web_ui())->GetPrefs();
+  std::string country =
+      prefs->GetString(ntp_tiles::prefs::kPopularSitesOverrideCountry);
+  std::string version =
+      prefs->GetString(ntp_tiles::prefs::kPopularSitesOverrideVersion);
+  web_ui()->CallJavascriptFunction(
+      "chrome.popular_sites_internals.receiveOverrides",
+      base::StringValue(country), base::StringValue(version));
 }
 
 void PopularSitesInternalsMessageHandler::SendDownloadResult(bool success) {

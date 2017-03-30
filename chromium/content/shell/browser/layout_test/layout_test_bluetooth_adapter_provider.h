@@ -117,32 +117,6 @@ class LayoutTestBluetoothAdapterProvider {
   static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
   GetEmptyAdapter();
 
-  // |PowerValueAdapter|(tx_power, rssi)
-  // Inherits from |EmptyAdapter|
-  // Internal Structure:
-  //  - |HeartRateDevice|
-  //    - Mock Functions:
-  //      - GetInquiryTxPower(): Returns tx_power
-  //      - GetInquiryRSSI(): Returns rssi
-  static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
-  GetPowerValueAdapter(int8_t tx_power, int8_t rssi);
-
-  // |PowerPresenceAdapter|(tx_power_present, rssi_present)
-  // Inherits from |EmptyAdapter|
-  // Internal Structure:
-  //  - |HeartRateDevice|
-  //    - Mock Functions:
-  //      - GetInquiryTxPower(): If tx_power_present is true, returns -10,
-  //        the TxPower of a device broadcasting at 0.1mW. Otherwise
-  //        returns 127 which denotes a missing Tx Power.
-  //        TODO(ortuno): Change 127 to -128 when Tx Power Unknown value gets
-  //        fixed: http://crbug.com/551572
-  //      - GetInquiryRSSI(): If rssi_present is true returns -51,
-  //        the RSSI at 1m from a device broadcasting at 0.1mW. Otherwise
-  //        returns 127 which denotes a missing RSSI.
-  static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
-  GetPowerPresenceAdapter(bool tx_power_present, bool rssi_present);
-
   // |GlucoseHeartRateAdapter|
   // Inherits from |EmptyAdapter|
   // Devices added:
@@ -207,6 +181,24 @@ class LayoutTestBluetoothAdapterProvider {
   //           GetHeartRateService.
   static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
   GetHeartRateAdapter();
+
+  // |DisconnectingHeartRateAdapter|
+  // Inherits from |HeartRateAdapter|
+  // Internal Structure:
+  //   - Heart Rate Device
+  //      - UUIDs:
+  //         - Generic Access UUID (0x1800)
+  //         - Heart Rate UUID (0x180d)
+  //      - Services:
+  //         - Generic Access Service - Characteristics as described in
+  //           GetGenericAccessService.
+  //         - Heart Rate Service - Characteristics as described in
+  //           GetHeartRateService.
+  //         - Request Disconnection Service:
+  //           - Request Disconnection Characteristic - A write will cause the
+  //             device to disconnect.
+  static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
+  GetDisconnectingHeartRateAdapter();
 
   // |BlacklistTestAdapter|
   // Inherits from |EmptyAdapter|
@@ -293,35 +285,35 @@ class LayoutTestBluetoothAdapterProvider {
   // type of GATT Error that can be thrown. Trying to write or read from these
   // characteristics results in the corresponding error being returned.
   // GetProperties returns the following for all characteristics:
-  // (BluetoothGattCharacteristic::PROPERTY_READ |
-  // BluetoothGattCharacteristic::PROPERTY_WRITE |
-  // BluetoothGattCharacteristic::PROPERTY_INDICATE)
+  // (BluetoothRemoteGattCharacteristic::PROPERTY_READ |
+  // BluetoothRemoteGattCharacteristic::PROPERTY_WRITE |
+  // BluetoothRemoteGattCharacteristic::PROPERTY_INDICATE)
   // Internal Structure:
   //   - ErrorsDevice
   //      - ErrorsService errorUUID(0xA0)
   //          - ErrorCharacteristic(
-  //              BluetoothGattService::GATT_ERROR_UNKNOWN)
+  //              BluetoothRemoteGattService::GATT_ERROR_UNKNOWN)
   //              errorUUID(0xA1)
   //          - ErrorCharacteristic(
-  //              BluetoothGattService::GATT_ERROR_FAILED)
+  //              BluetoothRemoteGattService::GATT_ERROR_FAILED)
   //              errorUUID(0xA2)
   //          - ErrorCharacteristic(
-  //              BluetoothGattService::GATT_ERROR_IN_PROGRESS)
+  //              BluetoothRemoteGattService::GATT_ERROR_IN_PROGRESS)
   //              errorUUID(0xA3)
   //          - ErrorCharacteristic(
-  //              BluetoothGattService::GATT_ERROR_INVALID_LENGTH)
+  //              BluetoothRemoteGattService::GATT_ERROR_INVALID_LENGTH)
   //              errorUUID(0xA4)
   //          - ErrorCharacteristic(
-  //              BluetoothGattService::GATT_ERROR_NOT_PERMITTED)
+  //              BluetoothRemoteGattService::GATT_ERROR_NOT_PERMITTED)
   //              errorUUID(0xA5)
   //          - ErrorCharacteristic(
-  //              BluetoothGattService::GATT_ERROR_NOT_AUTHORIZED)
+  //              BluetoothRemoteGattService::GATT_ERROR_NOT_AUTHORIZED)
   //              errorUUID(0xA6)
   //          - ErrorCharacteristic(
-  //              BluetoothGattService::GATT_ERROR_NOT_PAIRED)
+  //              BluetoothRemoteGattService::GATT_ERROR_NOT_PAIRED)
   //              errorUUID(0xA7)
   //          - ErrorCharacteristic(
-  //              BluetoothGattService::GATT_ERROR_NOT_SUPPORTED)
+  //              BluetoothRemoteGattService::GATT_ERROR_NOT_SUPPORTED)
   //              errorUUID(0xA8)
   static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
   GetFailingGATTOperationsAdapter();
@@ -332,7 +324,8 @@ class LayoutTestBluetoothAdapterProvider {
   // Mock Functions:
   //  - Stop:
   //      Run success callback.
-  static scoped_ptr<testing::NiceMock<device::MockBluetoothDiscoverySession>>
+  static std::unique_ptr<
+      testing::NiceMock<device::MockBluetoothDiscoverySession>>
   GetDiscoverySession();
 
   // Devices
@@ -354,20 +347,9 @@ class LayoutTestBluetoothAdapterProvider {
   //      Returns: address
   //  - GetName:
   //      Returns: device_name.
-  //  - GetBluetoothClass:
-  //      Returns: 0x1F00. “Unspecified Device Class” see
-  //      bluetooth.org/en-us/specification/assigned-numbers/baseband
-  //  - GetVendorIDSource:
-  //      Returns: BluetoothDevice::VENDOR_ID_BLUETOOTH.
-  //  - GetVendorID:
-  //      Returns: 0xFFFF.
-  //  - GetProductID:
-  //      Returns: 1.
-  //  - GetDeviceID:
-  //      Returns: 2.
   //  - IsPaired:
   //      Returns true.
-  static scoped_ptr<testing::NiceMock<device::MockBluetoothDevice>>
+  static std::unique_ptr<testing::NiceMock<device::MockBluetoothDevice>>
   GetBaseDevice(device::MockBluetoothAdapter* adapter,
                 const std::string& device_name = "Base Device",
                 device::BluetoothDevice::UUIDList uuids =
@@ -381,7 +363,7 @@ class LayoutTestBluetoothAdapterProvider {
   //   - Battery Service UUID (0x180F)
   // Services added:
   // None.
-  static scoped_ptr<testing::NiceMock<device::MockBluetoothDevice>>
+  static std::unique_ptr<testing::NiceMock<device::MockBluetoothDevice>>
   GetBatteryDevice(device::MockBluetoothAdapter* adapter);
 
   // |GlucoseDevice|
@@ -393,7 +375,7 @@ class LayoutTestBluetoothAdapterProvider {
   //   - Tx Power (0x1804)
   // Services added:
   // None.
-  static scoped_ptr<testing::NiceMock<device::MockBluetoothDevice>>
+  static std::unique_ptr<testing::NiceMock<device::MockBluetoothDevice>>
   GetGlucoseDevice(device::MockBluetoothAdapter* adapter);
 
   // |ConnectableDevice|
@@ -405,7 +387,7 @@ class LayoutTestBluetoothAdapterProvider {
   // Mock Functions:
   //   - CreateGattConnection:
   //       - Run success callback with BaseGATTConnection
-  static scoped_ptr<testing::NiceMock<device::MockBluetoothDevice>>
+  static std::unique_ptr<testing::NiceMock<device::MockBluetoothDevice>>
   GetConnectableDevice(
       device::MockBluetoothAdapter* adapter,
       const std::string& device_name = "Connectable Device",
@@ -421,7 +403,7 @@ class LayoutTestBluetoothAdapterProvider {
   // Mock Functions:
   //  - CreateGATTConnection:
   //      - Run error callback with error_type
-  static scoped_ptr<testing::NiceMock<device::MockBluetoothDevice>>
+  static std::unique_ptr<testing::NiceMock<device::MockBluetoothDevice>>
   GetUnconnectableDevice(
       device::MockBluetoothAdapter* adapter,
       device::BluetoothDevice::ConnectErrorCode error_code,
@@ -435,7 +417,7 @@ class LayoutTestBluetoothAdapterProvider {
   // Services added:
   // None. Each user of the HeartRateDevice is in charge of adding the
   // relevant services, characteristics and descriptors.
-  static scoped_ptr<testing::NiceMock<device::MockBluetoothDevice>>
+  static std::unique_ptr<testing::NiceMock<device::MockBluetoothDevice>>
   GetHeartRateDevice(device::MockBluetoothAdapter* adapter);
 
   // Services
@@ -459,7 +441,7 @@ class LayoutTestBluetoothAdapterProvider {
   //       Returns: true
   //   - GetDevice:
   //       Returns: device
-  static scoped_ptr<testing::NiceMock<device::MockBluetoothGattService>>
+  static std::unique_ptr<testing::NiceMock<device::MockBluetoothGattService>>
   GetBaseGATTService(device::MockBluetoothDevice* device,
                      const std::string& uuid);
 
@@ -470,8 +452,8 @@ class LayoutTestBluetoothAdapterProvider {
   //        - Mock Functions:
   //           - Read: Fails test.
   //           - GetProperties: Returns
-  //               BluetoothGattCharacteristic::PROPERTY_READ
-  static scoped_ptr<testing::NiceMock<device::MockBluetoothGattService>>
+  //               BluetoothRemoteGattCharacteristic::PROPERTY_READ
+  static std::unique_ptr<testing::NiceMock<device::MockBluetoothGattService>>
   GetDeviceInformationService(device::MockBluetoothDevice* device);
 
   // |BlacklistTestService|
@@ -483,9 +465,9 @@ class LayoutTestBluetoothAdapterProvider {
   //           - Read: Fails test.
   //           - Write: Calls success callback.
   //           - GetProperties: Returns
-  //               BluetoothGattCharacteristic::PROPERTY_READ |
-  //               BluetoothGattCharacteristic::PROPERTY_WRITE
-  static scoped_ptr<testing::NiceMock<device::MockBluetoothGattService>>
+  //               BluetoothRemoteGattCharacteristic::PROPERTY_READ |
+  //               BluetoothRemoteGattCharacteristic::PROPERTY_WRITE
+  static std::unique_ptr<testing::NiceMock<device::MockBluetoothGattService>>
   GetBlacklistTestService(device::MockBluetoothDevice* device);
 
   // |GenericAccessService|
@@ -496,16 +478,16 @@ class LayoutTestBluetoothAdapterProvider {
   //           - Read: Calls success callback with device's name.
   //           - Write: Calls success callback.
   //           - GetProperties: Returns
-  //               BluetoothGattCharacteristic::PROPERTY_READ |
-  //               BluetoothGattCharacteristic::PROPERTY_WRITE
+  //               BluetoothRemoteGattCharacteristic::PROPERTY_READ |
+  //               BluetoothRemoteGattCharacteristic::PROPERTY_WRITE
   //     - Peripheral Privacy Flag: (0x2A02) (blacklisted for writes)
   //        - Mock Functions:
   //           - Read: Calls success callback with boolean value 'false'.
   //           - Write: Fails test.
   //           - GetProperties: Returns
-  //               BluetoothGattCharacteristic::PROPERTY_READ |
-  //               BluetoothGattCharacteristic::PROPERTY_WRITE
-  static scoped_ptr<testing::NiceMock<device::MockBluetoothGattService>>
+  //               BluetoothRemoteGattCharacteristic::PROPERTY_READ |
+  //               BluetoothRemoteGattCharacteristic::PROPERTY_WRITE
+  static std::unique_ptr<testing::NiceMock<device::MockBluetoothGattService>>
   GetGenericAccessService(device::MockBluetoothDevice* device);
 
   // |HeartRateService|
@@ -521,20 +503,20 @@ class LayoutTestBluetoothAdapterProvider {
   //               to call GattCharacteristicValueChanged from js.
   //               https://crbug.com/543884
   //           - GetProperties: Returns
-  //               BluetoothGattCharacteristic::PROPERTY_NOTIFY
+  //               BluetoothRemoteGattCharacteristic::PROPERTY_NOTIFY
   //     - Body Sensor Location (0x2a38)
   //        - Mock Functions:
   //           - Read: Calls GattCharacteristicValueChanged and success
   //               callback with [1] which corresponds to chest.
   //           - GetProperties: Returns
-  //               BluetoothGattCharacteristic::PROPERTY_READ
+  //               BluetoothRemoteGattCharacteristic::PROPERTY_READ
   //     - Body Sensor Location (0x2a38)
   //        - Mock Functions:
   //           - Read: Calls GattCharacteristicValueChanged and success
   //               callback with [2] which corresponds to wrist.
   //           - GetProperties: Returns
-  //               BluetoothGattCharacteristic::PROPERTY_READ
-  static scoped_ptr<testing::NiceMock<device::MockBluetoothGattService>>
+  //               BluetoothRemoteGattCharacteristic::PROPERTY_READ
+  static std::unique_ptr<testing::NiceMock<device::MockBluetoothGattService>>
   GetHeartRateService(device::MockBluetoothAdapter* adapter,
                       device::MockBluetoothDevice* device);
 
@@ -561,12 +543,13 @@ class LayoutTestBluetoothAdapterProvider {
   //       Returns: NULL
   //   - GetPermissions:
   //       Returns: NULL
-  static scoped_ptr<testing::NiceMock<device::MockBluetoothGattCharacteristic>>
+  static std::unique_ptr<
+      testing::NiceMock<device::MockBluetoothGattCharacteristic>>
   GetBaseGATTCharacteristic(
       const std::string& identifier,
       device::MockBluetoothGattService* service,
       const std::string& uuid,
-      device::BluetoothGattCharacteristic::Properties properties);
+      device::BluetoothRemoteGattCharacteristic::Properties properties);
 
   // |ErrorCharacteristic|(service, error_type)
   // Inherits from BaseCharacteristic(service, errorUUID(error_type + 0xA1))
@@ -579,10 +562,11 @@ class LayoutTestBluetoothAdapterProvider {
   //       Run error callback with error_type
   //   - StartNotifySession:
   //       Run error callback with error_type
-  static scoped_ptr<testing::NiceMock<device::MockBluetoothGattCharacteristic>>
+  static std::unique_ptr<
+      testing::NiceMock<device::MockBluetoothGattCharacteristic>>
   GetErrorCharacteristic(
       device::MockBluetoothGattService* service,
-      device::BluetoothGattService::GattErrorCode error_code);
+      device::BluetoothRemoteGattService::GattErrorCode error_code);
 
   // Notify Sessions
 
@@ -594,7 +578,8 @@ class LayoutTestBluetoothAdapterProvider {
   //       Returns: true
   //   - Stop:
   //       Stops calling GattCharacteristicValueChanged and runs callback.
-  static scoped_ptr<testing::NiceMock<device::MockBluetoothGattNotifySession>>
+  static std::unique_ptr<
+      testing::NiceMock<device::MockBluetoothGattNotifySession>>
   GetBaseGATTNotifySession(const std::string& characteristic_identifier);
 
   // Helper functions:

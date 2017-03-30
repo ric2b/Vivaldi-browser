@@ -43,6 +43,7 @@
 #include "core/loader/HistoryItem.h"
 #include "core/loader/NavigationPolicy.h"
 #include "platform/Timer.h"
+#include "platform/TracedValue.h"
 #include "platform/heap/Handle.h"
 #include "platform/network/ResourceRequest.h"
 #include "wtf/Forward.h"
@@ -97,15 +98,11 @@ public:
 
     void replaceDocumentWhileExecutingJavaScriptURL(const String& source, Document* ownerDocument);
 
-    // Sets a timer to notify the client that the initial empty document has
-    // been accessed, and thus it is no longer safe to show a provisional URL
-    // above the document without risking a URL spoof.
+    // Notifies the client that the initial empty document has been accessed,
+    // and thus it is no longer safe to show a provisional URL above the
+    // document without risking a URL spoof. The client must not call back into
+    // JavaScript.
     void didAccessInitialDocument();
-
-    // If the initial empty document is showing and has been accessed, this
-    // cancels the timer and immediately notifies the client in cases that
-    // waiting to notify would allow a URL spoof.
-    void notifyIfInitialDocumentAccessed();
 
     DocumentLoader* documentLoader() const { return m_documentLoader.get(); }
     DocumentLoader* provisionalDocumentLoader() const { return m_provisionalDocumentLoader.get(); }
@@ -127,7 +124,9 @@ public:
     void didExplicitOpen();
 
     // Callbacks from DocumentWriter
-    void didBeginDocument(bool dispatchWindowObjectAvailable);
+    void didInstallNewDocument(bool dispatchWindowObjectAvailable);
+
+    void didBeginDocument();
 
     void receivedFirstData();
 
@@ -178,7 +177,7 @@ public:
 
     bool allowPlugins(ReasonForCallingAllowPlugins);
 
-    void updateForSameDocumentNavigation(const KURL&, SameDocumentNavigationSource, PassRefPtr<SerializedScriptValue>, HistoryScrollRestorationType, FrameLoadType);
+    void updateForSameDocumentNavigation(const KURL&, SameDocumentNavigationSource, PassRefPtr<SerializedScriptValue>, HistoryScrollRestorationType, FrameLoadType, Document*);
 
     HistoryItem* currentItem() const { return m_currentItem.get(); }
     void saveScrollState();
@@ -212,11 +211,14 @@ private:
     };
     void setHistoryItemStateForCommit(HistoryCommitType, HistoryNavigationType);
 
-    void loadInSameDocument(const KURL&, PassRefPtr<SerializedScriptValue> stateObject, FrameLoadType, HistoryLoadType, ClientRedirectPolicy);
+    void loadInSameDocument(const KURL&, PassRefPtr<SerializedScriptValue> stateObject, FrameLoadType, HistoryLoadType, ClientRedirectPolicy, Document*);
 
     void scheduleCheckCompleted();
 
     void detachDocumentLoader(Member<DocumentLoader>&);
+
+    PassOwnPtr<TracedValue> toTracedValue() const;
+    void takeObjectSnapshot() const;
 
     Member<LocalFrame> m_frame;
 
@@ -274,7 +276,6 @@ private:
     Timer<FrameLoader> m_checkTimer;
 
     bool m_didAccessInitialDocument;
-    Timer<FrameLoader> m_didAccessInitialDocumentTimer;
 
     SandboxFlags m_forcedSandboxFlags;
 

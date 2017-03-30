@@ -4,10 +4,10 @@
 
 module content.mojom;
 
-import "mojo/shell/public/interfaces/interface_provider.mojom";
+import "services/shell/public/interfaces/interface_provider.mojom";
 
 interface ApplicationSetup {
   ExchangeInterfaceProviders(
-      mojo.shell.mojom.InterfaceProvider& remote_interfaces,
-      mojo.shell.mojom.InterfaceProvider local_interfaces);
+      shell.mojom.InterfaceProvider& remote_interfaces,
+      shell.mojom.InterfaceProvider local_interfaces);
 };

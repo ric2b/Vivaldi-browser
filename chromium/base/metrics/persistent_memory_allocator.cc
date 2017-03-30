@@ -116,8 +116,10 @@ struct PersistentMemoryAllocator::SharedMetadata {
 const PersistentMemoryAllocator::Reference
     PersistentMemoryAllocator::kReferenceQueue =
         offsetof(SharedMetadata, queue);
-const PersistentMemoryAllocator::Reference
-    PersistentMemoryAllocator::kReferenceNull = 0;
+
+const base::FilePath::CharType PersistentMemoryAllocator::kFileExtension[] =
+    FILE_PATH_LITERAL(".pma");
+
 
 PersistentMemoryAllocator::Iterator::Iterator(
     const PersistentMemoryAllocator* allocator)
@@ -228,6 +230,7 @@ PersistentMemoryAllocator::Iterator::GetNextOfType(uint32_t type_match) {
   }
   return kReferenceNull;
 }
+
 
 // static
 bool PersistentMemoryAllocator::IsMemoryAcceptable(const void* base,

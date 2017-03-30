@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -17,9 +18,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
-#include "skia/ext/refptr.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "ui/gfx/break_list.h"
@@ -62,7 +61,6 @@ class GFX_EXPORT SkiaTextRenderer {
                            bool subpixel_rendering_suppressed);
   void SetTypeface(SkTypeface* typeface);
   void SetTextSize(SkScalar size);
-  void SetFontWithStyle(const Font& font, int font_style);
   void SetForegroundColor(SkColor foreground);
   void SetShader(sk_sp<SkShader> shader);
   // Sets underline metrics to use if the text will be drawn with an underline.
@@ -113,7 +111,7 @@ class GFX_EXPORT SkiaTextRenderer {
   SkPaint paint_;
   SkScalar underline_thickness_;
   SkScalar underline_position_;
-  scoped_ptr<DiagonalStrike> diagonal_;
+  std::unique_ptr<DiagonalStrike> diagonal_;
 
   DISALLOW_COPY_AND_ASSIGN(SkiaTextRenderer);
 };
@@ -187,8 +185,8 @@ struct Line {
 };
 
 // Creates an SkTypeface from a font and a |gfx::Font::FontStyle|.
-// May return NULL.
-skia::RefPtr<SkTypeface> CreateSkiaTypeface(const gfx::Font& font, int style);
+// May return null.
+sk_sp<SkTypeface> CreateSkiaTypeface(const gfx::Font& font, int style);
 
 // Applies the given FontRenderParams to a Skia |paint|.
 void ApplyRenderParams(const FontRenderParams& params,
@@ -210,7 +208,11 @@ class GFX_EXPORT RenderText {
   static RenderText* CreateInstanceForEditing();
 
   // Creates another instance of the same concrete class.
-  virtual scoped_ptr<RenderText> CreateInstanceOfSameType() const = 0;
+  virtual std::unique_ptr<RenderText> CreateInstanceOfSameType() const = 0;
+
+  // Like above but copies all style settings too.
+  std::unique_ptr<RenderText> CreateInstanceOfSameStyle(
+      const base::string16& text) const;
 
   const base::string16& text() const { return text_; }
   void SetText(const base::string16& text);
@@ -266,6 +268,14 @@ class GFX_EXPORT RenderText {
   // TODO(ckocagil): Multiline text rendering is not supported on Mac.
   bool multiline() const { return multiline_; }
   void SetMultiline(bool multiline);
+
+  // If multiline, a non-zero value will cap the number of lines rendered,
+  // and elide the rest (currently only ELIDE_TAIL supported.)
+  void SetMaxLines(size_t max_lines);
+  size_t max_lines() const { return max_lines_; }
+
+  // Returns the actual number of lines, broken by |lines_|.
+  size_t GetNumLines();
 
   // TODO(mukai): ELIDE_LONG_WORDS is not supported.
   WordWrapBehavior word_wrap_behavior() const { return word_wrap_behavior_; }
@@ -778,6 +788,9 @@ class GFX_EXPORT RenderText {
   // Whether the text should be broken into multiple lines. Uses the width of
   // |display_rect_| as the width cap.
   bool multiline_;
+
+  // If multiple lines, the maximum number of lines to render, or 0.
+  size_t max_lines_;
 
   // The wrap behavior when the text is broken into lines. Do nothing unless
   // |multiline_| is set. The default value is IGNORE_LONG_WORDS.

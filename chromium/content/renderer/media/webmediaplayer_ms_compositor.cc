@@ -5,12 +5,13 @@
 #include "content/renderer/media/webmediaplayer_ms_compositor.h"
 
 #include <stdint.h>
+#include <string>
 
 #include "base/command_line.h"
 #include "base/hash.h"
 #include "base/single_thread_task_runner.h"
 #include "base/values.h"
-#include "cc/blink/context_provider_web_context.h"
+#include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "content/renderer/media/webmediaplayer_ms.h"
 #include "content/renderer/render_thread_impl.h"
 #include "media/base/media_switches.h"
@@ -22,8 +23,6 @@
 #include "third_party/WebKit/public/platform/WebMediaStream.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamSource.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/web/WebMediaStreamRegistry.h"
 #include "third_party/libyuv/include/libyuv/convert.h"
 #include "third_party/libyuv/include/libyuv/video_common.h"
 
@@ -36,8 +35,6 @@ scoped_refptr<media::VideoFrame> CopyFrame(
     const scoped_refptr<media::VideoFrame>& frame,
     media::SkCanvasVideoRenderer* video_renderer) {
   scoped_refptr<media::VideoFrame> new_frame;
-  const gfx::Size& size = frame->coded_size();
-
   if (frame->HasTextures()) {
     DCHECK(frame->format() == media::PIXEL_FORMAT_ARGB ||
            frame->format() == media::PIXEL_FORMAT_XRGB ||
@@ -52,7 +49,7 @@ scoped_refptr<media::VideoFrame> CopyFrame(
                           frame->visible_rect().height());
     SkCanvas canvas(bitmap);
 
-    cc::ContextProvider* const provider =
+    auto* provider =
         RenderThreadImpl::current()->SharedMainThreadContextProvider().get();
     if (provider) {
       const media::Context3D context_3d =
@@ -65,22 +62,23 @@ scoped_refptr<media::VideoFrame> CopyFrame(
     }
     libyuv::ARGBToI420(reinterpret_cast<uint8_t*>(bitmap.getPixels()),
                        bitmap.rowBytes(),
-                       new_frame->data(media::VideoFrame::kYPlane),
+                       new_frame->visible_data(media::VideoFrame::kYPlane),
                        new_frame->stride(media::VideoFrame::kYPlane),
-                       new_frame->data(media::VideoFrame::kUPlane),
+                       new_frame->visible_data(media::VideoFrame::kUPlane),
                        new_frame->stride(media::VideoFrame::kUPlane),
-                       new_frame->data(media::VideoFrame::kVPlane),
+                       new_frame->visible_data(media::VideoFrame::kVPlane),
                        new_frame->stride(media::VideoFrame::kVPlane),
-                       size.width(), size.height());
+                       bitmap.width(), bitmap.height());
   } else {
     DCHECK(frame->IsMappable());
     DCHECK(frame->format() == media::PIXEL_FORMAT_YV12 ||
            frame->format() == media::PIXEL_FORMAT_YV12A ||
            frame->format() == media::PIXEL_FORMAT_I420);
+    const gfx::Size& coded_size = frame->coded_size();
     new_frame = media::VideoFrame::CreateFrame(
         media::IsOpaque(frame->format()) ? media::PIXEL_FORMAT_I420
                                          : media::PIXEL_FORMAT_YV12A,
-        frame->coded_size(), frame->visible_rect(), frame->natural_size(),
+        coded_size, frame->visible_rect(), frame->natural_size(),
         frame->timestamp());
     libyuv::I420Copy(frame->data(media::VideoFrame::kYPlane),
                      frame->stride(media::VideoFrame::kYPlane),
@@ -94,14 +92,13 @@ scoped_refptr<media::VideoFrame> CopyFrame(
                      new_frame->stride(media::VideoFrame::kUPlane),
                      new_frame->data(media::VideoFrame::kVPlane),
                      new_frame->stride(media::VideoFrame::kVPlane),
-                     size.width(), size.height());
+                     coded_size.width(), coded_size.height());
     if (frame->format() == media::PIXEL_FORMAT_YV12A) {
       libyuv::CopyPlane(frame->data(media::VideoFrame::kAPlane),
                         frame->stride(media::VideoFrame::kAPlane),
                         new_frame->data(media::VideoFrame::kAPlane),
                         new_frame->stride(media::VideoFrame::kAPlane),
-                        size.width(),
-                        size.height());
+                        coded_size.width(), coded_size.height());
     }
   }
 
@@ -116,7 +113,7 @@ scoped_refptr<media::VideoFrame> CopyFrame(
 
 WebMediaPlayerMSCompositor::WebMediaPlayerMSCompositor(
     const scoped_refptr<base::SingleThreadTaskRunner>& compositor_task_runner,
-    const blink::WebURL& url,
+    const blink::WebMediaStream& web_stream,
     const base::WeakPtr<WebMediaPlayerMS>& player)
     : compositor_task_runner_(compositor_task_runner),
       player_(player),
@@ -129,8 +126,6 @@ WebMediaPlayerMSCompositor::WebMediaPlayerMSCompositor(
       weak_ptr_factory_(this) {
   main_message_loop_ = base::MessageLoop::current();
 
-  const blink::WebMediaStream web_stream(
-      blink::WebMediaStreamRegistry::lookupMediaStreamDescriptor(url));
   blink::WebVector<blink::WebMediaStreamTrack> video_tracks;
   if (!web_stream.isNull())
     web_stream.videoTracks(video_tracks);
@@ -148,7 +143,9 @@ WebMediaPlayerMSCompositor::WebMediaPlayerMSCompositor(
   }
 
   // Just for logging purpose.
-  const uint32_t hash_value = base::Hash(url.string().utf8());
+  std::string stream_id =
+      web_stream.isNull() ? std::string() : web_stream.id().utf8();
+  const uint32_t hash_value = base::Hash(stream_id);
   serial_ = (hash_value << 1) | (remote_video ? 1 : 0);
 }
 

@@ -11,7 +11,7 @@
 #include "base/json/json_writer.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -126,7 +126,7 @@ void MediaRouterIntegrationBrowserTest::ExecuteJavaScriptAPI(
   // Read the test result, the test result set by javascript is a
   // JSON string with the following format:
   // {"passed": "<true/false>", "errorMessage": "<error_message>"}
-  scoped_ptr<base::Value> value =
+  std::unique_ptr<base::Value> value =
       base::JSONReader::Read(result, base::JSON_ALLOW_TRAILING_COMMAS);
 
   // Convert to dictionary.
@@ -229,7 +229,7 @@ void MediaRouterIntegrationBrowserTest::SetTestData(
   JSONFileValueDeserializer deserializer(full_path);
   int error_code = 0;
   std::string error_message;
-  scoped_ptr<base::Value> value =
+  std::unique_ptr<base::Value> value =
       deserializer.Deserialize(&error_code, &error_message);
   CHECK(value.get()) << "Deserialize failed: " << error_message;
   std::string test_data_str;
@@ -502,6 +502,10 @@ IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationBrowserTest,
   ExecuteJavaScriptAPI(web_contents, kCheckSessionScript);
   std::string session_id(GetStartedConnectionId(web_contents));
 
+  // Wait a few seconds for MediaRouter to receive updates containing the
+  // created route.
+  Wait(base::TimeDelta::FromSeconds(3));
+
   OpenTestPageInNewTab(FILE_PATH_LITERAL("basic_test.html"));
   content::WebContents* new_web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
@@ -531,6 +535,10 @@ IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationBrowserTest,
   ChooseSink(web_contents, kTestSinkName);
   ExecuteJavaScriptAPI(web_contents, kCheckSessionScript);
   std::string session_id(GetStartedConnectionId(web_contents));
+
+  // Wait a few seconds for MediaRouter to receive updates containing the
+  // created route.
+  Wait(base::TimeDelta::FromSeconds(3));
 
   SetTestData(FILE_PATH_LITERAL("fail_reconnect_session.json"));
   OpenTestPage(FILE_PATH_LITERAL("fail_reconnect_session.html"));

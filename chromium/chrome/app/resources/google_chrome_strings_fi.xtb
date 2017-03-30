@@ -66,10 +66,16 @@ Jos kirjaudut silti sisään, Chrome-tiedot, kuten kirjanmerkit, historia ja ase
 <translation id="2997147809295888909">Chrome vahvisti, että <ph name="ISSUER" /> on myöntänyt tämän sivuston varmenteen. Palvelin ei lähettänyt Certificate Transparency -tietoja.</translation>
 <translation id="3037838751736561277">Google Chrome on käynnissä taustalla.</translation>
 <translation id="3047079729301751317">Jos irrotat tilin <ph name="USERNAME" />, historiasi, kirjanmerkkisi ja muut laitteelle tallennetut Chrome-tiedot poistetaan. Google-tiliisi tallennetut tiedot säilyvät ennallaan ja voit hallinnoida niitä <ph name="GOOGLE_DASHBOARD_LINK" />Google Hallintapaneelin kautta<ph name="END_GOOGLE_DASHBOARD_LINK" />.</translation>
+<translation id="3065168410429928842">Chrome-välilehti</translation>
 <translation id="3080151273017101988">Jätä taustaohjelmat käyntiin, kun Google Chrome suljetaan</translation>
 <translation id="3089968997497233615">Google Chromesta on saatavillaa uusi, turvallisempi versio.</translation>
 <translation id="3149510190863420837">Chrome-sovellukset</translation>
-<translation id="3197823471738295152">Laite on ajan tasalla.</translation>
+<translation id="3251381707915721925">Jos haluat valita, mitä verkkosivustoja <ph name="NEW_PROFILE_NAME" /> voi katsella, määritä rajoituksia ja asetuksia osoitteessa <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. Jos et muokkaa oletusasetuksia, <ph name="NEW_PROFILE_NAME" /> voi selata kaikkia verkkosivustoja.
+
+Jotta <ph name="NEW_PROFILE_NAME" /> ei voi käyttää tiliäsi, lukitse profiilisi, kun et enää käytä Chromea. Voit tehdä tämän klikkaamalla profiilisi nimeä selainikkunan oikeassa yläkulmassa ja valitsemalla Sulje ja aseta lapsilukko.
+<ph name="BEGIN_LINK_2" />Lisätietoja<ph name="END_LINK_2" />
+
+Lähetimme lisäohjeita sähköpostiisi osoitteeseen <ph name="ACCOUNT_EMAIL" />.</translation>
 <translation id="3282568296779691940">Kirjaudu Chromeen</translation>
 <translation id="3311976847535831054">Tämän tietokoneen 32-bittistä Google Chromea ei enää päivitetä. Päivitä Google Chrome 64-bittiseen versioon.</translation>
 <translation id="3360895254066713204">Chrome Helper</translation>
@@ -206,7 +212,6 @@ Jos kirjaudut silti sisään, Chrome-tiedot, kuten kirjanmerkit, historia ja ase
 <translation id="7808348361785373670">Poista Chromesta…</translation>
 <translation id="7825851276765848807">Asennus epäonnistui tuntemattoman virheen vuoksi. Lataa Google Chrome uudelleen.</translation>
 <translation id="7890208801193284374">Jos käytät jaettua tietokonetta, kaverisi ja perheenjäsenesi voivat selata verkkoa omista profiileistaan käsin ja muokata Chromesta juuri itselleen sopivan.</translation>
-<translation id="8000275528373650868">Google Chrome edellyttää, että käyttöjärjestelmä on Windows Vista tai Windows XP (SP2 tai uudempi).</translation>
 <translation id="8005540215158006229">Chrome on melkein valmis.</translation>
 <translation id="8008534537613507642">Asenna Chrome uudelleen</translation>
 <translation id="8030318113982266900">Päivitetään laitteeseen kanavaa <ph name="CHANNEL_NAME" />…</translation>
@@ -228,6 +233,7 @@ Jos kirjaudut silti sisään, Chrome-tiedot, kuten kirjanmerkit, historia ja ase
 <translation id="8556340503434111824">Chromesta on saatavissa uusi versio, joka on entistäkin nopeampi.</translation>
 <translation id="8568392309447938879">Sinun täytyy kirjautua Chromeen käyttääksesi sovelluksia. Kirjauduttuasi Chrome voi synkronoida sovelluksesi, kirjanmerkkisi, historiasi, salasanasi ja muut asetuksesi eri laitteille.</translation>
 <translation id="8614913330719544658">Google Chrome ei vastaa. Käynnistetäänkö uudelleen?</translation>
+<translation id="8667808506758191620"><ph name="DEVICE_TYPE" /> on ajan tasalla.</translation>
 <translation id="8669527147644353129">Google Chrome Helper</translation>
 <translation id="8679801911857917785">Määrittää myös Chromen aloitussivun.</translation>
 <translation id="870251953148363156">Päivitä &amp;Google Chrome</translation>
@@ -236,6 +242,7 @@ Jos kirjaudut silti sisään, Chrome-tiedot, kuten kirjanmerkit, historia ja ase
 <translation id="8851136666856101339">pää</translation>
 <translation id="8862326446509486874">Sinulla ei ole käyttöoikeuksia järjestelmätason asennukseen. Kokeile asennusohjelman suorittamista uudelleen järjestelmänvalvojana.</translation>
 <translation id="9026991721384951619">Chrome-käyttöjärjestelmä ei voi synkronoida tietoja, sillä tilin kirjautumistiedot ovat vanhentuneet.</translation>
+<translation id="9067395829937117663">Google Chrome edellyttää Windows 7:ää tai uudempaa versiota.</translation>
 <translation id="9102715433345326100">Tämä tiedosto on haitallinen, ja Chrome on estänyt sen.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Varoitus:<ph name="END_BOLD" /> Google Chrome ei voi estää laajennuksia tallentamasta selaushistoriaasi. Voit poistaa tämän laajennuksen käytöstä incognito-tilassa poistamalla tämän valinnan.</translation>
 <translation id="911206726377975832">Poistetaanko myös selailutiedot?</translation>

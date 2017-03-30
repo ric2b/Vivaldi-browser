@@ -32,7 +32,6 @@
 
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/V8ScriptRunner.h"
-#include "core/inspector/WorkerDebuggerAgent.h"
 #include "core/workers/WorkerThread.h"
 #include <v8.h>
 
@@ -61,7 +60,7 @@ WorkerThreadDebugger::~WorkerThreadDebugger()
 
 void WorkerThreadDebugger::contextCreated(v8::Local<v8::Context> context)
 {
-    debugger()->contextCreated(V8ContextInfo(context, workerContextGroupId, true, m_workerThread->workerGlobalScope()->url().getString(), "", ""));
+    debugger()->contextCreated(V8ContextInfo(context, workerContextGroupId, true, m_workerThread->workerGlobalScope()->url().getString(), "", "", false));
 }
 
 void WorkerThreadDebugger::contextWillBeDestroyed(v8::Local<v8::Context> context)
@@ -98,6 +97,19 @@ int WorkerThreadDebugger::ensureDefaultContextInGroup(int contextGroupId)
         return 0;
     v8::HandleScope scopes(scriptState->isolate());
     return V8Debugger::contextId(scriptState->context());
+}
+
+void WorkerThreadDebugger::reportMessageToConsole(v8::Local<v8::Context> context, ConsoleMessage* message)
+{
+    ExecutionContext* executionContext = toExecutionContext(context);
+    ASSERT(executionContext->isWorkerGlobalScope());
+    executionContext->addConsoleMessage(message);
+}
+
+v8::MaybeLocal<v8::Value> WorkerThreadDebugger::memoryInfo(v8::Isolate*, v8::Local<v8::Context>)
+{
+    ASSERT_NOT_REACHED();
+    return v8::MaybeLocal<v8::Value>();
 }
 
 } // namespace blink

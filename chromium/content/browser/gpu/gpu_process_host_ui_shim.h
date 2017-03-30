@@ -44,9 +44,6 @@ struct VideoMemoryUsageStats;
 }
 
 namespace content {
-#if defined(OS_MACOSX)
-struct AcceleratedSurfaceBuffersSwappedParams;
-#endif
 void RouteToGpuProcessHostUIShimTask(int host_id, const IPC::Message& msg);
 
 class GpuProcessHostUIShim : public IPC::Listener,
@@ -72,7 +69,7 @@ class GpuProcessHostUIShim : public IPC::Listener,
   CONTENT_EXPORT static GpuProcessHostUIShim* GetOneInstance();
 
   // Stops the GPU process.
-  void StopGpuProcess(const base::Closure& callback);
+  CONTENT_EXPORT void StopGpuProcess(const base::Closure& callback);
 
   // IPC::Sender implementation.
   bool Send(IPC::Message* msg) override;
@@ -93,20 +90,11 @@ class GpuProcessHostUIShim : public IPC::Listener,
 
   // Message handlers.
   bool OnControlMessageReceived(const IPC::Message& message);
-
   void OnLogMessage(int level, const std::string& header,
       const std::string& message);
-
   void OnGraphicsInfoCollected(const gpu::GPUInfo& gpu_info);
-
-#if defined(OS_MACOSX)
-  void OnAcceleratedSurfaceBuffersSwapped(
-      const AcceleratedSurfaceBuffersSwappedParams& params);
-#endif
   void OnVideoMemoryUsageStatsReceived(
       const gpu::VideoMemoryUsageStats& video_memory_usage_stats);
-  void OnAddSubscription(int32_t process_id, unsigned int target);
-  void OnRemoveSubscription(int32_t process_id, unsigned int target);
 
   // The serial number of the GpuProcessHost / GpuProcessHostUIShim pair.
   int host_id_;

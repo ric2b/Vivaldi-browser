@@ -5,6 +5,8 @@
         "../cm/css.js",
         "../cm/xml.js",
         "../common/WebInspector.js",
+        "../common/Text.js",
+        "../common/TextRange.js",
         "../es_tree/ESTreeWalker.js",
         "FormatterWorker.js",
         "../acorn/acorn.js",
@@ -15,7 +17,8 @@
         "CSSRuleParser.js",
         "HTMLFormatter.js",
         "IdentityFormatter.js",
-        "JavaScriptOutline.js"
+        "JavaScriptOutline.js",
+        "RelaxedJSONParser.js"
     ],
     "skip_compilation": [
         "../acorn/acorn.js",

@@ -456,6 +456,15 @@ template<> inline CSSPrimitiveValue::CSSPrimitiveValue(ControlPart e)
     case MediaTimeRemainingPart:
         m_value.valueID = CSSValueMediaTimeRemainingDisplay;
         break;
+    case MediaTrackSelectionCheckmarkPart:
+        m_value.valueID = CSSValueInternalMediaTrackSelectionCheckmark;
+        break;
+    case MediaClosedCaptionsIconPart:
+        m_value.valueID = CSSValueInternalMediaClosedCaptionsIcon;
+        break;
+    case MediaSubtitlesIconPart:
+        m_value.valueID = CSSValueInternalMediaSubtitlesIcon;
+        break;
     case MenulistPart:
         m_value.valueID = CSSValueMenulist;
         break;
@@ -1390,6 +1399,41 @@ template<> inline EFloat CSSPrimitiveValue::convertTo() const
     return NoFloat;
 }
 
+template<> inline CSSPrimitiveValue::CSSPrimitiveValue(Hyphens e)
+    : CSSValue(PrimitiveClass)
+{
+    init(UnitType::ValueID);
+    switch (e) {
+    case HyphensAuto:
+        m_value.valueID = CSSValueAuto;
+        break;
+    case HyphensManual:
+        m_value.valueID = CSSValueManual;
+        break;
+    case HyphensNone:
+        m_value.valueID = CSSValueNone;
+        break;
+    }
+}
+
+template<> inline Hyphens CSSPrimitiveValue::convertTo() const
+{
+    DCHECK(isValueID());
+    switch (m_value.valueID) {
+    case CSSValueAuto:
+        return HyphensAuto;
+    case CSSValueManual:
+        return HyphensManual;
+    case CSSValueNone:
+        return HyphensNone;
+    default:
+        break;
+    }
+
+    NOTREACHED();
+    return HyphensManual;
+}
+
 template<> inline CSSPrimitiveValue::CSSPrimitiveValue(LineBreak e)
     : CSSValue(PrimitiveClass)
 {
@@ -1978,6 +2022,8 @@ template<> inline ETextAlign CSSPrimitiveValue::convertTo() const
         return TASTART;
     case CSSValueEnd:
         return TAEND;
+    case CSSValueInternalCenter:
+        return CENTER;
     default:
         return static_cast<ETextAlign>(m_value.valueID - CSSValueLeft);
     }
@@ -3326,38 +3372,6 @@ template<> inline FontStretch CSSPrimitiveValue::convertTo() const
     return FontStretchNormal;
 }
 
-template<> inline CSSPrimitiveValue::CSSPrimitiveValue(FontVariant smallCaps)
-    : CSSValue(PrimitiveClass)
-{
-    init(UnitType::ValueID);
-    switch (smallCaps) {
-    case FontVariantNormal:
-        m_value.valueID = CSSValueNormal;
-        return;
-    case FontVariantSmallCaps:
-        m_value.valueID = CSSValueSmallCaps;
-        return;
-    }
-
-    ASSERT_NOT_REACHED();
-    m_value.valueID = CSSValueNormal;
-}
-
-template<> inline FontVariant CSSPrimitiveValue::convertTo() const
-{
-    ASSERT(isValueID());
-    switch (m_value.valueID) {
-    case CSSValueSmallCaps:
-        return FontVariantSmallCaps;
-    case CSSValueNormal:
-        return FontVariantNormal;
-    default:
-        break;
-    }
-    ASSERT_NOT_REACHED();
-    return FontVariantNormal;
-}
-
 template<> inline CSSPrimitiveValue::CSSPrimitiveValue(TextRenderingMode e)
     : CSSValue(PrimitiveClass)
 {
@@ -4623,6 +4637,9 @@ template<> inline CSSPrimitiveValue::CSSPrimitiveValue(Containment snapType)
     case ContainsStrict:
         m_value.valueID = CSSValueStrict;
         break;
+    case ContainsContent:
+        m_value.valueID = CSSValueContent;
+        break;
     case ContainsPaint:
         m_value.valueID = CSSValuePaint;
         break;
@@ -4631,6 +4648,9 @@ template<> inline CSSPrimitiveValue::CSSPrimitiveValue(Containment snapType)
         break;
     case ContainsLayout:
         m_value.valueID = CSSValueLayout;
+        break;
+    case ContainsSize:
+        m_value.valueID = CSSValueSize;
         break;
     }
 }
@@ -4642,12 +4662,16 @@ template<> inline Containment CSSPrimitiveValue::convertTo() const
         return ContainsNone;
     case CSSValueStrict:
         return ContainsStrict;
+    case CSSValueContent:
+        return ContainsContent;
     case CSSValuePaint:
         return ContainsPaint;
     case CSSValueStyle:
         return ContainsStyle;
     case CSSValueLayout:
         return ContainsLayout;
+    case CSSValueSize:
+        return ContainsSize;
     default:
         break;
     }

@@ -58,10 +58,12 @@ blink::WebPointerProperties::PointerType EventPointerTypeToWebPointerType(
 #if defined(OS_WIN)
 blink::WebMouseEvent MakeUntranslatedWebMouseEventFromNativeEvent(
     const base::NativeEvent& native_event,
-    const base::TimeDelta& time_stamp);
+    const base::TimeDelta& time_stamp,
+    blink::WebPointerProperties::PointerType pointer_type);
 blink::WebMouseWheelEvent MakeUntranslatedWebMouseWheelEventFromNativeEvent(
     const base::NativeEvent& native_event,
-    const base::TimeDelta& time_stamp);
+    const base::TimeDelta& time_stamp,
+    blink::WebPointerProperties::PointerType pointer_type);
 blink::WebKeyboardEvent MakeWebKeyboardEventFromNativeEvent(
     const base::NativeEvent& native_event,
     const base::TimeDelta& time_stamp);
@@ -147,6 +149,9 @@ blink::WebMouseWheelEvent MakeWebMouseWheelEventFromAuraEvent(
   webkit_event.wheelTicksY = webkit_event.deltaY / kPixelsPerTick;
   if (offset_ordinal_y != 0.f && webkit_event.deltaY != 0.f)
     webkit_event.accelerationRatioY = offset_ordinal_y / webkit_event.deltaY;
+
+  webkit_event.pointerType =
+      EventPointerTypeToWebPointerType(event.pointer_details().pointer_type);
   return webkit_event;
 }
 
@@ -211,8 +216,10 @@ blink::WebMouseEvent MakeWebMouseEvent(const ui::MouseEvent& event) {
       // On Windows we have WM_ events comming from desktop and pure aura
       // events comming from metro mode.
       event.native_event().message && (event.type() != ui::ET_MOUSE_EXITED)
-          ? MakeUntranslatedWebMouseEventFromNativeEvent(event.native_event(),
-                                                         event.time_stamp())
+          ? MakeUntranslatedWebMouseEventFromNativeEvent(
+                event.native_event(), event.time_stamp(),
+                EventPointerTypeToWebPointerType(
+                    event.pointer_details().pointer_type))
           : MakeWebMouseEventFromAuraEvent(event);
 #else
       MakeWebMouseEventFromAuraEvent(event);
@@ -240,7 +247,9 @@ blink::WebMouseWheelEvent MakeWebMouseWheelEvent(
   blink::WebMouseWheelEvent webkit_event =
       event.native_event().message
           ? MakeUntranslatedWebMouseWheelEventFromNativeEvent(
-                event.native_event(), event.time_stamp())
+                event.native_event(), event.time_stamp(),
+                EventPointerTypeToWebPointerType(
+                    event.pointer_details().pointer_type))
           : MakeWebMouseWheelEventFromAuraEvent(event);
 #else
   blink::WebMouseWheelEvent webkit_event =
@@ -273,7 +282,9 @@ blink::WebMouseWheelEvent MakeWebMouseWheelEvent(const ui::ScrollEvent& event) {
   blink::WebMouseWheelEvent webkit_event =
       event.native_event().message
           ? MakeUntranslatedWebMouseWheelEventFromNativeEvent(
-                event.native_event(), event.time_stamp())
+                event.native_event(), event.time_stamp(),
+                EventPointerTypeToWebPointerType(
+                    event.pointer_details().pointer_type))
           : MakeWebMouseWheelEventFromAuraEvent(event);
 #else
   blink::WebMouseWheelEvent webkit_event =
@@ -360,6 +371,7 @@ blink::WebGestureEvent MakeWebGestureEventFlingCancel() {
 
   // All other fields are ignored on a GestureFlingCancel event.
   gesture_event.type = blink::WebInputEvent::GestureFlingCancel;
+  gesture_event.timeStampSeconds = ui::EventTimeForNow().InSecondsF();
   gesture_event.sourceDevice = blink::WebGestureDeviceTouchpad;
   return gesture_event;
 }

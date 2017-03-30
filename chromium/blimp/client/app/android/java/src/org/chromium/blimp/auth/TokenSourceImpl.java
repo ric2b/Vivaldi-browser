@@ -10,7 +10,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.AsyncTask;
-import android.preference.PreferenceManager;
 
 import com.google.android.gms.auth.GoogleAuthException;
 import com.google.android.gms.auth.GoogleAuthUtil;
@@ -18,6 +17,7 @@ import com.google.android.gms.auth.GooglePlayServicesAvailabilityException;
 import com.google.android.gms.auth.UserRecoverableNotifiedException;
 import com.google.android.gms.common.ConnectionResult;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.blimp.R;
@@ -82,12 +82,12 @@ public class TokenSourceImpl implements TokenSource {
         if (mCallback == null) return;
 
         // Find the current account tracked by settings.
-        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(mAppContext);
+        SharedPreferences preferences = ContextUtils.getAppSharedPreferences();
         String accountName = preferences.getString(ACCOUNT_NAME_PREF, null);
 
         if (accountName == null || !doesAccountExist(accountName)) {
             // Remove any old preference value in case the account is invalid.
-            preferences.edit().remove(ACCOUNT_NAME_PREF).commit();
+            preferences.edit().remove(ACCOUNT_NAME_PREF).apply();
 
             // Trigger account selection.
             mCallback.onNeedsAccountToBeSelected(getAccountChooserIntent());
@@ -129,8 +129,8 @@ public class TokenSourceImpl implements TokenSource {
         ThreadUtils.assertOnUiThread();
 
         String accountName = data.getStringExtra(AccountManager.KEY_ACCOUNT_NAME);
-        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(mAppContext);
-        preferences.edit().putString(ACCOUNT_NAME_PREF, accountName).commit();
+        SharedPreferences preferences = ContextUtils.getAppSharedPreferences();
+        preferences.edit().putString(ACCOUNT_NAME_PREF, accountName).apply();
     }
 
     @SuppressWarnings("deprecation")

@@ -70,7 +70,7 @@ enum class CaretVisibility;
 class CORE_EXPORT FrameSelection final : public GarbageCollectedFinalized<FrameSelection> {
     WTF_MAKE_NONCOPYABLE(FrameSelection);
 public:
-    static RawPtr<FrameSelection> create(LocalFrame* frame = nullptr)
+    static FrameSelection* create(LocalFrame* frame)
     {
         return new FrameSelection(frame);
     }
@@ -81,11 +81,10 @@ public:
         // 1 << 0 is reserved for EUserTriggered
         CloseTyping = 1 << 1,
         ClearTypingStyle = 1 << 2,
-        SpellCorrectionTriggered = 1 << 3,
-        DoNotSetFocus = 1 << 4,
-        DoNotUpdateAppearance = 1 << 5,
-        DoNotClearStrategy = 1 << 6,
-        DoNotAdjustInFlatTree = 1 << 7,
+        DoNotSetFocus = 1 << 3,
+        DoNotUpdateAppearance = 1 << 4,
+        DoNotClearStrategy = 1 << 5,
+        DoNotAdjustInFlatTree = 1 << 6,
     };
     typedef unsigned SetSelectionOptions; // Union of values in SetSelectionOption and EUserTriggered
     static inline EUserTriggered selectionOptionsToUserTriggered(SetSelectionOptions options)
@@ -146,9 +145,6 @@ public:
 
     TextGranularity granularity() const { return m_granularity; }
 
-    void setStart(const VisiblePosition &, EUserTriggered = NotUserTriggered);
-    void setEnd(const VisiblePosition &, EUserTriggered = NotUserTriggered);
-
     void setBase(const VisiblePosition&, EUserTriggered = NotUserTriggered);
     void setExtent(const VisiblePosition&, EUserTriggered = NotUserTriggered);
 
@@ -174,7 +170,7 @@ public:
 
     // If this FrameSelection has a logical range which is still valid, this function return its clone. Otherwise,
     // the return value from underlying VisibleSelection's firstRange() is returned.
-    RawPtr<Range> firstRange() const;
+    Range* firstRange() const;
 
     void nodeWillBeRemoved(Node&);
     void dataWillChange(const CharacterData& node);
@@ -219,7 +215,7 @@ public:
     void notifyLayoutObjectOfSelectionChange(EUserTriggered);
 
     EditingStyle* typingStyle() const;
-    void setTypingStyle(RawPtr<EditingStyle>);
+    void setTypingStyle(EditingStyle*);
     void clearTypingStyle();
 
     String selectedHTMLForClipboard() const;
@@ -303,6 +299,7 @@ private:
     VisiblePosition m_originalBase;
     VisiblePositionInFlatTree m_originalBaseInFlatTree;
     TextGranularity m_granularity;
+    LayoutUnit m_xPosForVerticalArrowNavigation;
 
     Member<Node> m_previousCaretNode; // The last node which painted the caret. Retained for clearing the old caret when it moves.
     LayoutRect m_previousCaretRect;
@@ -334,7 +331,7 @@ inline void FrameSelection::clearTypingStyle()
     m_typingStyle.clear();
 }
 
-inline void FrameSelection::setTypingStyle(RawPtr<EditingStyle> style)
+inline void FrameSelection::setTypingStyle(EditingStyle* style)
 {
     m_typingStyle = style;
 }

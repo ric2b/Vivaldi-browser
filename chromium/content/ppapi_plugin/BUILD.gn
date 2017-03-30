@@ -21,6 +21,9 @@ source_set("ppapi_plugin_sources") {
   visibility = [
     ":ppapi_plugin",
     "//content",  # For the component build.
+    "//content/app:both",
+    "//content/app:browser",
+    "//content/app:child",
     "//gin",
   ]
 
@@ -47,8 +50,8 @@ source_set("ppapi_plugin_sources") {
     "//content:export",
     "//content/public/child:child_sources",
     "//content/public/common:common_sources",
-    "//mojo/shell/public/interfaces",
     "//ppapi/proxy:ipc",
+    "//services/shell/public/interfaces",
     "//skia",
     "//third_party/WebKit/public:blink",
     "//third_party/icu",

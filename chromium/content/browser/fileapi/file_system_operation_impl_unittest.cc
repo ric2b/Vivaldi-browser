@@ -7,16 +7,18 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/fileapi/mock_file_change_observer.h"
 #include "content/browser/fileapi/mock_file_update_observer.h"
 #include "content/browser/quota/mock_quota_manager.h"
@@ -113,12 +115,12 @@ class FileSystemOperationImplTest
     return &change_observer_;
   }
 
-  scoped_ptr<FileSystemOperationContext> NewContext() {
+  std::unique_ptr<FileSystemOperationContext> NewContext() {
     FileSystemOperationContext* context =
         sandbox_file_system_.NewOperationContext();
     // Grant enough quota for all test cases.
     context->set_allowed_bytes_growth(1000000);
-    return make_scoped_ptr(context);
+    return base::WrapUnique(context);
   }
 
   FileSystemURL URLForPath(const std::string& path) const {

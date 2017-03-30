@@ -12,6 +12,7 @@
 #include "base/process/process.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
+#include "cc/ipc/cc_param_traits.h"
 #include "cc/output/begin_frame_args.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/compositor_frame_ack.h"
@@ -20,16 +21,15 @@
 #include "content/common/content_param_traits.h"
 #include "content/common/date_time_suggestion.h"
 #include "content/common/frame_replication_state.h"
-#include "content/common/media/media_param_traits.h"
 #include "content/common/navigation_gesture.h"
 #include "content/common/resize_params.h"
+#include "content/common/text_input_state.h"
 #include "content/common/view_message_enums.h"
 #include "content/public/common/common_param_traits.h"
 #include "content/public/common/favicon_url.h"
 #include "content/public/common/file_chooser_file_info.h"
 #include "content/public/common/file_chooser_params.h"
 #include "content/public/common/menu_item.h"
-#include "content/public/common/message_port_types.h"
 #include "content/public/common/page_state.h"
 #include "content/public/common/page_zoom.h"
 #include "content/public/common/referrer.h"
@@ -38,8 +38,9 @@
 #include "content/public/common/window_container_type.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_message_macros.h"
-#include "media/audio/audio_parameters.h"
+#include "media/base/audio_parameters.h"
 #include "media/base/channel_layout.h"
+#include "media/base/ipc/media_param_traits.h"
 #include "media/base/media_log_event.h"
 #include "net/base/network_change_notifier.h"
 #include "third_party/WebKit/public/platform/WebDisplayMode.h"
@@ -258,7 +259,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::RendererPreferences)
   IPC_STRUCT_TRAITS_MEMBER(enable_referrers)
   IPC_STRUCT_TRAITS_MEMBER(enable_do_not_track)
   IPC_STRUCT_TRAITS_MEMBER(webrtc_ip_handling_policy)
-  IPC_STRUCT_TRAITS_MEMBER(default_zoom_level)
   IPC_STRUCT_TRAITS_MEMBER(user_agent_override)
   IPC_STRUCT_TRAITS_MEMBER(accept_languages)
   IPC_STRUCT_TRAITS_MEMBER(report_frame_name_changes)
@@ -293,6 +293,20 @@ IPC_STRUCT_TRAITS_BEGIN(media::MediaLogEvent)
   IPC_STRUCT_TRAITS_MEMBER(type)
   IPC_STRUCT_TRAITS_MEMBER(params)
   IPC_STRUCT_TRAITS_MEMBER(time)
+IPC_STRUCT_TRAITS_END()
+
+IPC_STRUCT_TRAITS_BEGIN(content::TextInputState)
+  IPC_STRUCT_TRAITS_MEMBER(type)
+  IPC_STRUCT_TRAITS_MEMBER(mode)
+  IPC_STRUCT_TRAITS_MEMBER(flags)
+  IPC_STRUCT_TRAITS_MEMBER(value)
+  IPC_STRUCT_TRAITS_MEMBER(selection_start)
+  IPC_STRUCT_TRAITS_MEMBER(selection_end)
+  IPC_STRUCT_TRAITS_MEMBER(composition_start)
+  IPC_STRUCT_TRAITS_MEMBER(composition_end)
+  IPC_STRUCT_TRAITS_MEMBER(can_compose_inline)
+  IPC_STRUCT_TRAITS_MEMBER(show_ime_if_needed)
+  IPC_STRUCT_TRAITS_MEMBER(is_non_ime_change)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_BEGIN(ViewHostMsg_CreateWindow_Params)
@@ -416,45 +430,6 @@ IPC_STRUCT_BEGIN(ViewHostMsg_SelectionBounds_Params)
   IPC_STRUCT_MEMBER(bool, is_anchor_first)
 IPC_STRUCT_END()
 
-IPC_STRUCT_BEGIN(ViewHostMsg_TextInputState_Params)
-  // The type of input field
-  IPC_STRUCT_MEMBER(ui::TextInputType, type)
-
-  // The mode of input field
-  IPC_STRUCT_MEMBER(ui::TextInputMode, mode)
-
-  // The flags of the input field (autocorrect, autocomplete, etc.)
-  IPC_STRUCT_MEMBER(int, flags)
-
-  // The value of the input field
-  IPC_STRUCT_MEMBER(std::string, value)
-
-  // The cursor position of the current selection start, or the caret position
-  // if nothing is selected
-  IPC_STRUCT_MEMBER(int, selection_start)
-
-  // The cursor position of the current selection end, or the caret position
-  // if nothing is selected
-  IPC_STRUCT_MEMBER(int, selection_end)
-
-  // The start position of the current composition, or -1 if there is none
-  IPC_STRUCT_MEMBER(int, composition_start)
-
-  // The end position of the current composition, or -1 if there is none
-  IPC_STRUCT_MEMBER(int, composition_end)
-
-  // Whether or not inline composition can be performed for the current input.
-  IPC_STRUCT_MEMBER(bool, can_compose_inline)
-
-  // Whether or not the IME should be shown as a result of this update. Even if
-  // true, the IME will only be shown if the type is appropriate (e.g. not
-  // TEXT_INPUT_TYPE_NONE).
-  IPC_STRUCT_MEMBER(bool, show_ime_if_needed)
-
-  // Whether this change is originated from non-IME (e.g. Javascript, Autofill).
-  IPC_STRUCT_MEMBER(bool, is_non_ime_change)
-IPC_STRUCT_END()
-
 IPC_STRUCT_BEGIN(ViewHostMsg_UpdateRect_Params)
   // The size of the RenderView when this message was generated.  This is
   // included so the host knows how large the view is from the perspective of
@@ -539,6 +514,9 @@ IPC_STRUCT_BEGIN(ViewMsg_New_Params)
 
   // The maximum size to layout the page if auto-resize is enabled.
   IPC_STRUCT_MEMBER(gfx::Size, max_size)
+
+  // The page zoom level.
+  IPC_STRUCT_MEMBER(double, page_zoom_level)
 IPC_STRUCT_END()
 
 #if defined(OS_MACOSX)
@@ -697,19 +675,6 @@ IPC_MESSAGE_ROUTED1(ViewMsg_Zoom,
 // and ignored otherwise.
 IPC_MESSAGE_ROUTED2(ViewMsg_SetZoomLevelForLoadingURL,
                     GURL /* url */,
-                    double /* zoom_level */)
-
-// Set the zoom level for a particular url, so all render views
-// displaying this url can update their zoom levels to match.
-// If scheme is empty, then only host is used for matching.
-IPC_MESSAGE_CONTROL3(ViewMsg_SetZoomLevelForCurrentURL,
-                     std::string /* scheme */,
-                     std::string /* host */,
-                     double /* zoom_level */)
-
-// Set the zoom level for a particular render view.
-IPC_MESSAGE_ROUTED2(ViewMsg_SetZoomLevelForView,
-                    bool /* uses_temporary_zoom_level */,
                     double /* zoom_level */)
 
 // Change encoding of page in the renderer.
@@ -1166,7 +1131,7 @@ IPC_MESSAGE_ROUTED1(ViewHostMsg_OpenDateTimeDialog,
 
 // Required for updating text input state.
 IPC_MESSAGE_ROUTED1(ViewHostMsg_TextInputStateChanged,
-                    ViewHostMsg_TextInputState_Params /* input state params */)
+                    content::TextInputState /* text_input_state */)
 
 // Sent when the renderer changes the zoom level for a particular url, so the
 // browser can update its records.  If the view is a plugin doc, then url is

@@ -18,6 +18,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
+#include "chrome/browser/chromeos/arc/arc_auth_service.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -42,8 +43,9 @@ class PrefRegistrySyncable;
 // information is used to pre-create non-ready app items while ARC bridge
 // service is not ready to provide information about available ARC apps.
 class ArcAppListPrefs : public KeyedService,
-                        public arc::AppHost,
-                        public arc::ArcBridgeService::Observer {
+                        public arc::mojom::AppHost,
+                        public arc::ArcBridgeService::Observer,
+                        public arc::ArcAuthService::Observer {
  public:
   struct AppInfo {
     AppInfo(const std::string& name,
@@ -76,6 +78,15 @@ class ArcAppListPrefs : public KeyedService,
     // Notifies an observer that the name of an app has changed.
     virtual void OnAppNameUpdated(const std::string& id,
                                   const std::string& name) {}
+    // Notifies that task has been created and provides information about
+    // initial activity.
+    virtual void OnTaskCreated(int32_t task_id,
+                               const std::string& package_name,
+                               const std::string& activity) {}
+    // Notifies that task has been destroyed.
+    virtual void OnTaskDestroyed(int32_t task_id) {}
+    // Notifies that task has been activated and moved to the front.
+    virtual void OnTaskSetActive(int32_t task_id) {}
 
    protected:
     virtual ~Observer() {}
@@ -125,8 +136,14 @@ class ArcAppListPrefs : public KeyedService,
 
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
+  bool HasObserver(Observer* observer);
+
+  // arc::ArcAuthService::Observer:
+  void OnOptInEnabled(bool enabled) override;
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(ChromeLauncherControllerTest, ArcAppPinPolicy);
+
   // See the Create methods.
   ArcAppListPrefs(const base::FilePath& base_path, PrefService* prefs);
 
@@ -134,18 +151,30 @@ class ArcAppListPrefs : public KeyedService,
   void OnStateChanged(arc::ArcBridgeService::State state) override;
   void OnAppInstanceReady() override;
 
-  // arc::AppHost:
-  void OnAppListRefreshed(mojo::Array<arc::AppInfoPtr> apps) override;
-  void OnAppAdded(arc::AppInfoPtr app) override;
+  // arc::mojom::AppHost:
+  void OnAppListRefreshed(mojo::Array<arc::mojom::AppInfoPtr> apps) override;
+  void OnAppAdded(arc::mojom::AppInfoPtr app) override;
   void OnPackageRemoved(const mojo::String& package_name) override;
   void OnAppIcon(const mojo::String& package_name,
                  const mojo::String& activity,
-                 arc::ScaleFactor scale_factor,
+                 arc::mojom::ScaleFactor scale_factor,
                  mojo::Array<uint8_t> icon_png_data) override;
+  void OnTaskCreated(int32_t task_id,
+                     const mojo::String& package_name,
+                     const mojo::String& activity) override;
+  void OnTaskDestroyed(int32_t task_id) override;
+  void OnTaskSetActive(int32_t task_id) override;
 
-  void AddApp(const arc::AppInfo& app);
+
+  void AddApp(const arc::mojom::AppInfo& app);
   void RemoveApp(const std::string& app_id);
   void DisableAllApps();
+  void RemoveAllApps();
+  std::vector<std::string> GetAppIdsNoArcEnabledCheck() const;
+  // Enumerates apps from preferences and notifies listeners about available
+  // apps while Arc is not started yet. All apps in this case have disabled
+  // state.
+  void NotifyRegisteredApps();
 
   // Installs an icon to file system in the special folder of the profile
   // directory.
@@ -172,8 +201,10 @@ class ArcAppListPrefs : public KeyedService,
   std::map<std::string, uint32_t> request_icon_deferred_;
   // True if this preference has been initialized once.
   bool is_initialized_ = false;
+  // True if apps were restored.
+  bool apps_restored_ = false;
 
-  mojo::Binding<arc::AppHost> binding_;
+  mojo::Binding<arc::mojom::AppHost> binding_;
 
   base::WeakPtrFactory<ArcAppListPrefs> weak_ptr_factory_;
 

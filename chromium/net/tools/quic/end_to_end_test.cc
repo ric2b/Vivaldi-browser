@@ -6,10 +6,10 @@
 #include <sys/epoll.h>
 
 #include <list>
+#include <memory>
 #include <string>
 #include <vector>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/waitable_event.h"
@@ -97,7 +97,8 @@ struct TestParams {
              bool client_supports_stateless_rejects,
              bool server_uses_stateless_rejects_if_peer_supported,
              QuicTag congestion_control_tag,
-             bool auto_tune_flow_control_window)
+             bool auto_tune_flow_control_window,
+             bool disable_hpack_dynamic_table)
       : client_supported_versions(client_supported_versions),
         server_supported_versions(server_supported_versions),
         negotiated_version(negotiated_version),
@@ -105,7 +106,8 @@ struct TestParams {
         server_uses_stateless_rejects_if_peer_supported(
             server_uses_stateless_rejects_if_peer_supported),
         congestion_control_tag(congestion_control_tag),
-        auto_tune_flow_control_window(auto_tune_flow_control_window) {}
+        auto_tune_flow_control_window(auto_tune_flow_control_window),
+        disable_hpack_dynamic_table(disable_hpack_dynamic_table) {}
 
   friend ostream& operator<<(ostream& os, const TestParams& p) {
     os << "{ server_supported_versions: "
@@ -119,7 +121,8 @@ struct TestParams {
        << p.server_uses_stateless_rejects_if_peer_supported;
     os << " congestion_control_tag: "
        << QuicUtils::TagToString(p.congestion_control_tag);
-    os << " auto_tune_flow_control_window: " << p.auto_tune_flow_control_window
+    os << " auto_tune_flow_control_window: " << p.auto_tune_flow_control_window;
+    os << " disable_hpack_dynamic_table: " << p.disable_hpack_dynamic_table
        << " }";
     return os;
   }
@@ -131,6 +134,7 @@ struct TestParams {
   bool server_uses_stateless_rejects_if_peer_supported;
   QuicTag congestion_control_tag;
   bool auto_tune_flow_control_window;
+  bool disable_hpack_dynamic_table;
 };
 
 // Constructs various test permutations.
@@ -144,79 +148,103 @@ vector<TestParams> GetTestParams() {
   // to do 0-RTT across incompatible versions. Chromium only supports
   // a single version at a time anyway. :)
   QuicVersionVector all_supported_versions = QuicSupportedVersions();
-  QuicVersionVector version_buckets[2];
+  QuicVersionVector version_buckets[4];
+
   for (const QuicVersion version : all_supported_versions) {
     if (version <= QUIC_VERSION_25) {
       // SPDY/4
       version_buckets[0].push_back(version);
-    } else {
+    } else if (version <= QUIC_VERSION_32) {
       // QUIC_VERSION_26 changes the kdf in a way that is incompatible with
       // version negotiation across the version 26 boundary.
       version_buckets[1].push_back(version);
+    } else if (version <= QUIC_VERSION_33) {
+      // QUIC_VERSION_33 changes the kdf in a way that is incompatible with
+      // version negotiation across the version 33 boundary, by using the
+      // diversification nonce.
+      version_buckets[2].push_back(version);
+    } else {
+      // QUIC_VERSION_34 deprecates entropy and uses new ack and stop waiting
+      // wire formats, so it is incompatible with version negotiation across the
+      // version 34 boundary.
+      version_buckets[3].push_back(version);
     }
   }
 
+  // This must be kept in sync with the number of nested for-loops below as it
+  // is used to prune the number of tests that are run.
+  const int kMaxEnabledOptions = 5;
+  int max_enabled_options = 0;
   vector<TestParams> params;
   for (bool server_uses_stateless_rejects_if_peer_supported : {true, false}) {
     for (bool client_supports_stateless_rejects : {true, false}) {
-      // TODO(rtenneti): Add kTBBR after BBR code is checked in.
       for (const QuicTag congestion_control_tag : {kRENO, kQBIC}) {
         for (bool auto_tune_flow_control_window : {true, false}) {
-          const int kMaxEnabledOptions = 5;
-          int enabled_options = 0;
-          if (congestion_control_tag != kQBIC) {
-            ++enabled_options;
-          }
-          if (auto_tune_flow_control_window) {
-            ++enabled_options;
-          }
-          if (client_supports_stateless_rejects) {
-            ++enabled_options;
-          }
-          if (server_uses_stateless_rejects_if_peer_supported) {
-            ++enabled_options;
-          }
-          CHECK_GE(kMaxEnabledOptions, enabled_options);
+          for (bool disable_hpack_dynamic_table : {true, false}) {
+            int enabled_options = 0;
+            if (congestion_control_tag != kQBIC) {
+              ++enabled_options;
+            }
+            if (auto_tune_flow_control_window) {
+              ++enabled_options;
+            }
+            if (disable_hpack_dynamic_table) {
+              ++enabled_options;
+            }
+            if (client_supports_stateless_rejects) {
+              ++enabled_options;
+            }
+            if (server_uses_stateless_rejects_if_peer_supported) {
+              ++enabled_options;
+            }
+            CHECK_GE(kMaxEnabledOptions, enabled_options);
+            if (enabled_options > max_enabled_options) {
+              max_enabled_options = enabled_options;
+            }
 
-          // Run tests with no options, a single option, or all the options
-          // enabled to avoid a combinatorial explosion.
-          if (enabled_options > 1 && enabled_options < kMaxEnabledOptions) {
-            continue;
-          }
-
-          for (const QuicVersionVector& client_versions : version_buckets) {
-            CHECK(!client_versions.empty());
-            // Add an entry for server and client supporting all versions.
-            params.push_back(TestParams(
-                client_versions, all_supported_versions,
-                client_versions.front(), client_supports_stateless_rejects,
-                server_uses_stateless_rejects_if_peer_supported,
-                congestion_control_tag, auto_tune_flow_control_window));
-
-            // Run version negotiation tests tests with no options, or all
-            // the options enabled to avoid a combinatorial explosion.
-            if (enabled_options > 0 && enabled_options < kMaxEnabledOptions) {
+            // Run tests with no options, a single option, or all the options
+            // enabled to avoid a combinatorial explosion.
+            if (enabled_options > 1 && enabled_options < kMaxEnabledOptions) {
               continue;
             }
 
-            // Test client supporting all versions and server supporting 1
-            // version. Simulate an old server and exercise version downgrade
-            // in the client. Protocol negotiation should occur. Skip the i =
-            // 0 case because it is essentially the same as the default case.
-            for (size_t i = 1; i < client_versions.size(); ++i) {
-              QuicVersionVector server_supported_versions;
-              server_supported_versions.push_back(client_versions[i]);
+            for (const QuicVersionVector& client_versions : version_buckets) {
+              CHECK(!client_versions.empty());
+              // Add an entry for server and client supporting all versions.
               params.push_back(TestParams(
-                  client_versions, server_supported_versions,
-                  server_supported_versions.front(),
-                  client_supports_stateless_rejects,
+                  client_versions, all_supported_versions,
+                  client_versions.front(), client_supports_stateless_rejects,
                   server_uses_stateless_rejects_if_peer_supported,
-                  congestion_control_tag, auto_tune_flow_control_window));
+                  congestion_control_tag, auto_tune_flow_control_window,
+                  disable_hpack_dynamic_table));
+
+              // Run version negotiation tests tests with no options, or all
+              // the options enabled to avoid a combinatorial explosion.
+              if (enabled_options > 0 && enabled_options < kMaxEnabledOptions) {
+                continue;
+              }
+
+              // Test client supporting all versions and server supporting 1
+              // version. Simulate an old server and exercise version downgrade
+              // in the client. Protocol negotiation should occur. Skip the i =
+              // 0 case because it is essentially the same as the default case.
+              for (size_t i = 1; i < client_versions.size(); ++i) {
+                QuicVersionVector server_supported_versions;
+                server_supported_versions.push_back(client_versions[i]);
+                params.push_back(TestParams(
+                    client_versions, server_supported_versions,
+                    server_supported_versions.front(),
+                    client_supports_stateless_rejects,
+                    server_uses_stateless_rejects_if_peer_supported,
+                    congestion_control_tag, auto_tune_flow_control_window,
+                    disable_hpack_dynamic_table));
+              }
             }
           }
         }
       }
     }
+    CHECK_EQ(kMaxEnabledOptions, max_enabled_options);
   }
   return params;
 }
@@ -254,7 +282,8 @@ class EndToEndTest : public ::testing::TestWithParam<TestParams> {
         server_started_(false),
         strike_register_no_startup_period_(false),
         chlo_multiplier_(0),
-        stream_factory_(nullptr) {
+        stream_factory_(nullptr),
+        support_server_push_(false) {
     client_supported_versions_ = GetParam().client_supported_versions;
     server_supported_versions_ = GetParam().server_supported_versions;
     negotiated_version_ = GetParam().negotiated_version;
@@ -270,6 +299,14 @@ class EndToEndTest : public ::testing::TestWithParam<TestParams> {
         3 * kInitialStreamFlowControlWindowForTest);
     server_config_.SetInitialSessionFlowControlWindowToSend(
         3 * kInitialSessionFlowControlWindowForTest);
+
+    // The default idle timeouts can be too strict when running on a busy
+    // machine.
+    const QuicTime::Delta timeout = QuicTime::Delta::FromSeconds(30);
+    client_config_.set_max_time_before_crypto_handshake(timeout);
+    client_config_.set_max_idle_time_before_crypto_handshake(timeout);
+    server_config_.set_max_time_before_crypto_handshake(timeout);
+    server_config_.set_max_idle_time_before_crypto_handshake(timeout);
 
     QuicInMemoryCachePeer::ResetForTests();
     AddToCache("/foo", 200, kFooResponseBody);
@@ -343,13 +380,18 @@ class EndToEndTest : public ::testing::TestWithParam<TestParams> {
     // TODO(nimia): Consider setting the congestion control algorithm for the
     // client as well according to the test parameter.
     copt.push_back(GetParam().congestion_control_tag);
-
+    if (support_server_push_) {
+      copt.push_back(kSPSH);
+    }
     if (GetParam().client_supports_stateless_rejects) {
       copt.push_back(kSREJ);
     }
     if (GetParam().auto_tune_flow_control_window) {
       copt.push_back(kAFCW);
       copt.push_back(kIFW5);
+    }
+    if (GetParam().disable_hpack_dynamic_table) {
+      copt.push_back(kDHDT);
     }
     client_config_.SetConnectionOptionsToSend(copt);
 
@@ -363,7 +405,10 @@ class EndToEndTest : public ::testing::TestWithParam<TestParams> {
         reinterpret_cast<QuicEpollConnectionHelper*>(
             QuicConnectionPeer::GetHelper(
                 client_->client()->session()->connection())),
+        QuicConnectionPeer::GetAlarmFactory(
+            client_->client()->session()->connection()),
         new ClientDelegate(client_->client()));
+
     initialized_ = true;
     return client_->client()->connected();
   }
@@ -400,6 +445,7 @@ class EndToEndTest : public ::testing::TestWithParam<TestParams> {
         GetParam().server_uses_stateless_rejects_if_peer_supported;
 
     server_writer_->Initialize(QuicDispatcherPeer::GetHelper(dispatcher),
+                               QuicDispatcherPeer::GetAlarmFactory(dispatcher),
                                new ServerDelegate(dispatcher));
     if (stream_factory_ != nullptr) {
       static_cast<QuicTestServer*>(server_thread_->server())
@@ -510,8 +556,8 @@ class EndToEndTest : public ::testing::TestWithParam<TestParams> {
   bool initialized_;
   IPEndPoint server_address_;
   string server_hostname_;
-  scoped_ptr<ServerThread> server_thread_;
-  scoped_ptr<QuicTestClient> client_;
+  std::unique_ptr<ServerThread> server_thread_;
+  std::unique_ptr<QuicTestClient> client_;
   PacketDroppingTestWriter* client_writer_;
   PacketDroppingTestWriter* server_writer_;
   bool server_started_;
@@ -523,6 +569,7 @@ class EndToEndTest : public ::testing::TestWithParam<TestParams> {
   bool strike_register_no_startup_period_;
   size_t chlo_multiplier_;
   QuicTestServer::StreamFactory* stream_factory_;
+  bool support_server_push_;
 };
 
 // Run all end to end tests with all supported versions.
@@ -591,7 +638,7 @@ TEST_P(EndToEndTest, MultipleRequestResponse) {
 
 TEST_P(EndToEndTest, MultipleClients) {
   ASSERT_TRUE(Initialize());
-  scoped_ptr<QuicTestClient> client2(CreateQuicClient(nullptr));
+  std::unique_ptr<QuicTestClient> client2(CreateQuicClient(nullptr));
 
   HTTPMessage request(HttpConstants::HTTP_1_1, HttpConstants::POST, "/foo");
   request.AddHeader("content-length", "3");
@@ -786,9 +833,15 @@ TEST_P(EndToEndTest, LargePostZeroRTTFailure) {
   client_->WaitForResponseForMs(-1);
   ASSERT_TRUE(client_->client()->connected());
   EXPECT_EQ(kFooResponseBody, client_->SendCustomSynchronousRequest(request));
-  EXPECT_EQ(expected_num_hellos_latest_session,
-            client_->client()->session()->GetNumSentClientHellos());
-  EXPECT_EQ(2, client_->client()->GetNumSentClientHellos());
+
+  if (negotiated_version_ <= QUIC_VERSION_32) {
+    EXPECT_EQ(expected_num_hellos_latest_session,
+              client_->client()->session()->GetNumSentClientHellos());
+    EXPECT_EQ(2, client_->client()->GetNumSentClientHellos());
+  } else {
+    EXPECT_EQ(1, client_->client()->session()->GetNumSentClientHellos());
+    EXPECT_EQ(1, client_->client()->GetNumSentClientHellos());
+  }
 
   client_->Disconnect();
 
@@ -839,9 +892,15 @@ TEST_P(EndToEndTest, SynchronousRequestZeroRTTFailure) {
   client_->WaitForInitialResponse();
   ASSERT_TRUE(client_->client()->connected());
   EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(expected_num_hellos_latest_session,
-            client_->client()->session()->GetNumSentClientHellos());
-  EXPECT_EQ(2, client_->client()->GetNumSentClientHellos());
+
+  if (negotiated_version_ <= QUIC_VERSION_32) {
+    EXPECT_EQ(expected_num_hellos_latest_session,
+              client_->client()->session()->GetNumSentClientHellos());
+    EXPECT_EQ(2, client_->client()->GetNumSentClientHellos());
+  } else {
+    EXPECT_EQ(1, client_->client()->session()->GetNumSentClientHellos());
+    EXPECT_EQ(1, client_->client()->GetNumSentClientHellos());
+  }
 
   client_->Disconnect();
 
@@ -898,9 +957,15 @@ TEST_P(EndToEndTest, LargePostSynchronousRequest) {
   client_->WaitForInitialResponse();
   ASSERT_TRUE(client_->client()->connected());
   EXPECT_EQ(kFooResponseBody, client_->SendCustomSynchronousRequest(request));
-  EXPECT_EQ(expected_num_hellos_latest_session,
-            client_->client()->session()->GetNumSentClientHellos());
-  EXPECT_EQ(2, client_->client()->GetNumSentClientHellos());
+
+  if (negotiated_version_ <= QUIC_VERSION_32) {
+    EXPECT_EQ(expected_num_hellos_latest_session,
+              client_->client()->session()->GetNumSentClientHellos());
+    EXPECT_EQ(2, client_->client()->GetNumSentClientHellos());
+  } else {
+    EXPECT_EQ(1, client_->client()->session()->GetNumSentClientHellos());
+    EXPECT_EQ(1, client_->client()->GetNumSentClientHellos());
+  }
 
   client_->Disconnect();
 
@@ -1274,30 +1339,6 @@ TEST_P(EndToEndTest, 0ByteConnectionId) {
             header->public_header.connection_id_length);
 }
 
-TEST_P(EndToEndTest, 1ByteConnectionId) {
-  client_config_.SetBytesForConnectionIdToSend(1);
-  ASSERT_TRUE(Initialize());
-
-  EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
-  QuicPacketHeader* header = QuicConnectionPeer::GetLastHeader(
-      client_->client()->session()->connection());
-  EXPECT_EQ(PACKET_1BYTE_CONNECTION_ID,
-            header->public_header.connection_id_length);
-}
-
-TEST_P(EndToEndTest, 4ByteConnectionId) {
-  client_config_.SetBytesForConnectionIdToSend(4);
-  ASSERT_TRUE(Initialize());
-
-  EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
-  QuicPacketHeader* header = QuicConnectionPeer::GetLastHeader(
-      client_->client()->session()->connection());
-  EXPECT_EQ(PACKET_4BYTE_CONNECTION_ID,
-            header->public_header.connection_id_length);
-}
-
 TEST_P(EndToEndTest, 8ByteConnectionId) {
   client_config_.SetBytesForConnectionIdToSend(8);
   ASSERT_TRUE(Initialize());
@@ -1441,14 +1482,14 @@ TEST_P(EndToEndTest, ConnectionMigrationClientPortChanged) {
 
   // Store the client address which was used to send the first request.
   IPEndPoint old_address = client_->client()->GetLatestClientAddress();
-
-  // Stop listening and close the old FD.
-  QuicClientPeer::CleanUpUDPSocket(client_->client(),
-                                   client_->client()->GetLatestFD());
+  int old_fd = client_->client()->GetLatestFD();
 
   // Create a new socket before closing the old one, which will result in a new
   // ephemeral port.
   QuicClientPeer::CreateUDPSocketAndBind(client_->client());
+
+  // Stop listening and close the old FD.
+  QuicClientPeer::CleanUpUDPSocket(client_->client(), old_fd);
 
   // The packet writer needs to be updated to use the new FD.
   client_->client()->CreateQuicPacketWriter();
@@ -1540,7 +1581,7 @@ TEST_P(EndToEndTest, DifferentFlowControlWindows) {
 
 TEST_P(EndToEndTest, HeadersAndCryptoStreamsNoConnectionFlowControl) {
   // The special headers and crypto streams should be subject to per-stream flow
-  // control limits, but should not be subject to connection level flow control.
+  // control limits, but should not be subject to connection level flow control
   const uint32_t kStreamIFCW =
       GetParam().auto_tune_flow_control_window ? 32 * 1024 : 123456;
   const uint32_t kSessionIFCW =
@@ -1730,6 +1771,36 @@ TEST_P(EndToEndTest, AckNotifierWithPacketLossAndBlockedSocket) {
   server_thread_->Resume();
 }
 
+// Send a public reset from the server.
+TEST_P(EndToEndTest, ServerSendPublicReset) {
+  ASSERT_TRUE(Initialize());
+
+  // Send the public reset.
+  QuicConnectionId connection_id =
+      client_->client()->session()->connection()->connection_id();
+  QuicPublicResetPacket header;
+  header.public_header.connection_id = connection_id;
+  header.public_header.reset_flag = true;
+  header.public_header.version_flag = false;
+  header.rejected_packet_number = 10101;
+  QuicFramer framer(server_supported_versions_, QuicTime::Zero(),
+                    Perspective::IS_SERVER);
+  std::unique_ptr<QuicEncryptedPacket> packet(
+      framer.BuildPublicResetPacket(header));
+  // We must pause the server's thread in order to call WritePacket without
+  // race conditions.
+  server_thread_->Pause();
+  server_writer_->WritePacket(
+      packet->data(), packet->length(), server_address_.address(),
+      client_->client()->GetLatestClientAddress(), nullptr);
+  server_thread_->Resume();
+
+  // The request should fail.
+  EXPECT_EQ("", client_->SendSynchronousRequest("/foo"));
+  EXPECT_EQ(0u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ(QUIC_PUBLIC_RESET, client_->connection_error());
+}
+
 // Send a public reset from the server for a different connection ID.
 // It should be ignored.
 TEST_P(EndToEndTest, ServerSendPublicResetWithDifferentConnectionId) {
@@ -1745,7 +1816,8 @@ TEST_P(EndToEndTest, ServerSendPublicResetWithDifferentConnectionId) {
   header.rejected_packet_number = 10101;
   QuicFramer framer(server_supported_versions_, QuicTime::Zero(),
                     Perspective::IS_SERVER);
-  scoped_ptr<QuicEncryptedPacket> packet(framer.BuildPublicResetPacket(header));
+  std::unique_ptr<QuicEncryptedPacket> packet(
+      framer.BuildPublicResetPacket(header));
   testing::NiceMock<MockQuicConnectionDebugVisitor> visitor;
   client_->client()->session()->connection()->set_debug_visitor(&visitor);
   EXPECT_CALL(visitor, OnIncorrectConnectionId(incorrect_connection_id))
@@ -1780,7 +1852,8 @@ TEST_P(EndToEndTest, ClientSendPublicResetWithDifferentConnectionId) {
   header.rejected_packet_number = 10101;
   QuicFramer framer(server_supported_versions_, QuicTime::Zero(),
                     Perspective::IS_CLIENT);
-  scoped_ptr<QuicEncryptedPacket> packet(framer.BuildPublicResetPacket(header));
+  std::unique_ptr<QuicEncryptedPacket> packet(
+      framer.BuildPublicResetPacket(header));
   client_writer_->WritePacket(
       packet->data(), packet->length(),
       client_->client()->GetLatestClientAddress().address(), server_address_,
@@ -1799,7 +1872,7 @@ TEST_P(EndToEndTest, ServerSendVersionNegotiationWithDifferentConnectionId) {
   // Send the version negotiation packet.
   QuicConnectionId incorrect_connection_id =
       client_->client()->session()->connection()->connection_id() + 1;
-  scoped_ptr<QuicEncryptedPacket> packet(
+  std::unique_ptr<QuicEncryptedPacket> packet(
       QuicFramer::BuildVersionNegotiationPacket(incorrect_connection_id,
                                                 server_supported_versions_));
   testing::NiceMock<MockQuicConnectionDebugVisitor> visitor;
@@ -1902,7 +1975,7 @@ TEST_P(EndToEndTest, BadEncryptedData) {
   EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
   EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
 
-  scoped_ptr<QuicEncryptedPacket> packet(ConstructEncryptedPacket(
+  std::unique_ptr<QuicEncryptedPacket> packet(ConstructEncryptedPacket(
       client_->client()->session()->connection()->connection_id(), false, false,
       false, kDefaultPathId, 1, "At least 20 characters.",
       PACKET_8BYTE_CONNECTION_ID, PACKET_6BYTE_PACKET_NUMBER));
@@ -2247,7 +2320,7 @@ TEST_P(EndToEndTest, LargePostEarlyResponse) {
     // Receive the reset stream from server on early response.
     client_->WaitForResponseForMs(100);
     ReliableQuicStream* stream =
-        client_->client()->session()->GetStream(kClientDataStreamId1);
+        client_->client()->session()->GetOrCreateStream(kClientDataStreamId1);
     // The stream is reset by server's reset stream.
     EXPECT_EQ(stream, nullptr);
     return;
@@ -2263,7 +2336,7 @@ TEST_P(EndToEndTest, LargePostEarlyResponse) {
   client_->WaitForResponse();
   // There should be no buffered data to write in the client's stream.
   ReliableQuicStream* stream =
-      client_->client()->session()->GetStream(kClientDataStreamId1);
+      client_->client()->session()->GetOrCreateStream(kClientDataStreamId1);
   EXPECT_FALSE(stream != nullptr && stream->HasBufferedData());
 }
 
@@ -2302,6 +2375,7 @@ class EndToEndTestServerPush : public EndToEndTest {
   EndToEndTestServerPush() : EndToEndTest() {
     FLAGS_quic_supports_push_promise = true;
     client_config_.SetMaxStreamsPerConnection(kNumMaxStreams, kNumMaxStreams);
+    support_server_push_ = true;
   }
 
   // Add a request with its response and |num_resources| push resources into
@@ -2549,6 +2623,37 @@ TEST_P(EndToEndTestServerPush, ServerPushOverLimitWithBlocking) {
   EXPECT_EQ(12u, client_->num_responses());
 }
 
+TEST_P(EndToEndTestServerPush, DisabledWithoutConnectionOption) {
+  // Tests that server push won't be triggered when kSPSH is not set by client.
+  support_server_push_ = false;
+  ASSERT_TRUE(Initialize());
+
+  // Add a response with headers, body, and push resources.
+  const string kBody = "body content";
+  size_t const kNumResources = 4;
+  string push_urls[] = {
+      "https://example.com/font.woff", "https://example.com/script.js",
+      "https://fonts.example.com/font.woff",
+      "https://example.com/logo-hires.jpg",
+  };
+  AddRequestAndResponseWithServerPush("example.com", "/push_example", kBody,
+                                      push_urls, kNumResources, 0);
+  client_->client()->set_response_listener(new TestResponseListener);
+  EXPECT_EQ(kBody, client_->SendSynchronousRequest(
+                       "https://example.com/push_example"));
+
+  for (const string& url : push_urls) {
+    // Sending subsequent requests will trigger sending real requests because
+    // client doesn't support server push.
+    const string expected_body = "This is server push response body for " + url;
+    const string response_body = client_->SendSynchronousRequest(url);
+    EXPECT_EQ(expected_body, response_body);
+  }
+  // Same number of requests are sent as that of responses received.
+  EXPECT_EQ(1 + kNumResources, client_->num_requests());
+  EXPECT_EQ(1 + kNumResources, client_->num_responses());
+}
+
 // TODO(fayang): this test seems to cause net_unittests timeouts :|
 TEST_P(EndToEndTest, DISABLED_TestHugePostWithPacketLoss) {
   // This test tests a huge post with introduced packet loss from client to
@@ -2608,6 +2713,8 @@ TEST_P(EndToEndTest, DISABLED_TestHugeResponseWithPacketLoss) {
   static EpollEvent event(EPOLLOUT, false);
   client_writer_->Initialize(
       QuicConnectionPeer::GetHelper(client_->client()->session()->connection()),
+      QuicConnectionPeer::GetAlarmFactory(
+          client_->client()->session()->connection()),
       new ClientDelegate(client_->client()));
   initialized_ = true;
   ASSERT_TRUE(client_->client()->connected());
@@ -2616,7 +2723,10 @@ TEST_P(EndToEndTest, DISABLED_TestHugeResponseWithPacketLoss) {
   SetPacketLossPercentage(1);
   client_->SendRequest("/huge_response");
   client_->WaitForResponse();
-  VerifyCleanConnection(false);
+  // TODO(fayang): Fix this test to work with stateless rejects.
+  if (!BothSidesSupportStatelessRejects()) {
+    VerifyCleanConnection(false);
+  }
 }
 
 }  // namespace

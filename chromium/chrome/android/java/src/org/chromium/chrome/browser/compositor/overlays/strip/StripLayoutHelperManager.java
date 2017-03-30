@@ -126,6 +126,13 @@ public class StripLayoutHelperManager implements SceneOverlay {
     }
 
     @Override
+    public boolean isSceneOverlayTreeShowing() {
+        // TODO(mdjones): This matches existing behavior but can be improved to return false if
+        // the top controls offset is equal to the top controls height.
+        return true;
+    }
+
+    @Override
     public EventFilter getEventFilter() {
         return mEventFilter;
     }
@@ -190,13 +197,6 @@ public class StripLayoutHelperManager implements SceneOverlay {
     }
 
     /**
-     * @param brightness Sets the brightness for the entire tabstrip.
-     */
-    public void setBrightness(float brightness) {
-        getActiveStripLayoutHelper().setBrightness(brightness);
-    }
-
-    /**
      * @return The brightness of the entire tabstrip.
      */
     public float getBrightness() {
@@ -255,6 +255,19 @@ public class StripLayoutHelperManager implements SceneOverlay {
     public boolean updateOverlay(long time, long dt) {
         getInactiveStripLayoutHelper().finishAnimation();
         return getActiveStripLayoutHelper().updateLayout(time, dt);
+    }
+
+    @Override
+    public boolean onBackPressed() {
+        return false;
+    }
+
+    @Override
+    public void onHideLayout() {}
+
+    @Override
+    public boolean handlesTabCreating() {
+        return false;
     }
 
     @Override

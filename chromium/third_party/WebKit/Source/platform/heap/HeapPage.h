@@ -31,6 +31,7 @@
 #ifndef HeapPage_h
 #define HeapPage_h
 
+#include "base/trace_event/memory_allocator_dump.h"
 #include "platform/PlatformExport.h"
 #include "platform/heap/BlinkGC.h"
 #include "platform/heap/GCInfo.h"
@@ -41,7 +42,7 @@
 #include "wtf/Assertions.h"
 #include "wtf/ContainerAnnotations.h"
 #include "wtf/Forward.h"
-#include "wtf/PageAllocator.h"
+#include "wtf/allocator/PageAllocator.h"
 #include <stdint.h>
 
 namespace blink {
@@ -85,7 +86,7 @@ const uint8_t reuseAllowedZapValue = 0x2a;
 const uint8_t reuseForbiddenZapValue = 0x2c;
 
 // In non-production builds, memory is zapped when it's freed. The zapped
-// memory is zeroed out when the memory is reused in Heap::allocateObject().
+// memory is zeroed out when the memory is reused in ThreadHeap::allocateObject().
 // In production builds, memory is not zapped (for performance). The memory
 // is just zeroed out when it is added to the free list.
 #if defined(MEMORY_SANITIZER)
@@ -142,7 +143,7 @@ class WebMemoryAllocatorDump;
 // - 1 bit used to mark DOM trees for V8.
 // - 14 bit is enough for gcInfoIndex because there are less than 2^14 types
 //   in Blink.
-const size_t headerDOMMarkBitMask = 1u << 17;
+const size_t headerWrapperMarkBitMask = 1u << 17;
 const size_t headerGCInfoIndexShift = 18;
 const size_t headerGCInfoIndexMask = (static_cast<size_t>((1 << 14) - 1)) << headerGCInfoIndexShift;
 const size_t headerSizeMask = (static_cast<size_t>((1 << 14) - 1)) << 3;
@@ -205,6 +206,9 @@ public:
         ASSERT(size < nonLargeObjectPageSizeMax);
         m_encoded = static_cast<uint32_t>(size) | (m_encoded & ~headerSizeMask);
     }
+    bool isWrapperHeaderMarked() const;
+    void markWrapperHeader();
+    void unmarkWrapperHeader();
     bool isMarked() const;
     void mark();
     void unmark();
@@ -398,7 +402,7 @@ public:
         size_t freeSize = 0;
     };
 
-    virtual void takeSnapshot(WebMemoryAllocatorDump*, ThreadState::GCSnapshotInfo&, HeapSnapshotInfo&) = 0;
+    virtual void takeSnapshot(base::trace_event::MemoryAllocatorDump*, ThreadState::GCSnapshotInfo&, HeapSnapshotInfo&) = 0;
 #if ENABLE(ASSERT)
     virtual bool contains(Address) = 0;
 #endif
@@ -474,7 +478,7 @@ public:
     void checkAndMarkPointer(Visitor*, Address) override;
     void markOrphaned() override;
 
-    void takeSnapshot(WebMemoryAllocatorDump*, ThreadState::GCSnapshotInfo&, HeapSnapshotInfo&) override;
+    void takeSnapshot(base::trace_event::MemoryAllocatorDump*, ThreadState::GCSnapshotInfo&, HeapSnapshotInfo&) override;
 #if ENABLE(ASSERT)
     // Returns true for the whole blinkPageSize page that the page is on, even
     // for the header, and the unmapped guard page at the start. That ensures
@@ -531,7 +535,7 @@ public:
     void checkAndMarkPointer(Visitor*, Address) override;
     void markOrphaned() override;
 
-    void takeSnapshot(WebMemoryAllocatorDump*, ThreadState::GCSnapshotInfo&, HeapSnapshotInfo&) override;
+    void takeSnapshot(base::trace_event::MemoryAllocatorDump*, ThreadState::GCSnapshotInfo&, HeapSnapshotInfo&) override;
 #if ENABLE(ASSERT)
     // Returns true for any address that is on one of the pages that this
     // large object uses. That ensures that we can use a negative result to
@@ -832,6 +836,29 @@ inline HeapObjectHeader* HeapObjectHeader::fromPayload(const void* payload)
     HeapObjectHeader* header = reinterpret_cast<HeapObjectHeader*>(addr - sizeof(HeapObjectHeader));
     ASSERT(header->checkHeader());
     return header;
+}
+
+NO_SANITIZE_ADDRESS inline
+bool HeapObjectHeader::isWrapperHeaderMarked() const
+{
+    ASSERT(checkHeader());
+    return m_encoded & headerWrapperMarkBitMask;
+}
+
+NO_SANITIZE_ADDRESS inline
+void HeapObjectHeader::markWrapperHeader()
+{
+    ASSERT(checkHeader());
+    ASSERT(!isWrapperHeaderMarked());
+    m_encoded |= headerWrapperMarkBitMask;
+}
+
+NO_SANITIZE_ADDRESS inline
+void HeapObjectHeader::unmarkWrapperHeader()
+{
+    ASSERT(checkHeader());
+    ASSERT(isWrapperHeaderMarked());
+    m_encoded &= ~headerWrapperMarkBitMask;
 }
 
 NO_SANITIZE_ADDRESS inline

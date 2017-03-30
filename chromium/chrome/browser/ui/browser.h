@@ -29,7 +29,6 @@
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/profile_chooser_constants.h"
 #include "chrome/browser/ui/search/search_tab_helper_delegate.h"
-#include "chrome/browser/ui/search_engines/search_engine_tab_helper_delegate.h"
 #include "chrome/browser/ui/signin_view_controller.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
@@ -110,7 +109,6 @@ class WebContentsModalDialogHost;
 class Browser : public TabStripModelObserver,
                 public content::WebContentsDelegate,
                 public CoreTabHelperDelegate,
-                public SearchEngineTabHelperDelegate,
                 public SearchTabHelperDelegate,
                 public ChromeWebModalDialogManagerDelegate,
                 public BookmarkTabHelperDelegate,
@@ -165,6 +163,7 @@ class Browser : public TabStripModelObserver,
     explicit CreateParams(Profile* profile);
     CreateParams(Type type, Profile* profile);
     CreateParams(const CreateParams& other);
+    ~CreateParams();
 
     static CreateParams CreateForApp(const std::string& app_name,
                                      bool trusted_source,
@@ -192,6 +191,9 @@ class Browser : public TabStripModelObserver,
 
     // The bounds of the window to open.
     gfx::Rect initial_bounds;
+
+    // The workspace the window should open in, if the platform supports it.
+    std::string initial_workspace;
 
     ui::WindowShowState initial_show_state;
 
@@ -249,6 +251,7 @@ class Browser : public TabStripModelObserver,
   const std::string& ext_data() const { return ext_data_; }
   Profile* profile() const { return profile_; }
   gfx::Rect override_bounds() const { return override_bounds_; }
+  const std::string& initial_workspace() const { return initial_workspace_; }
 
   // |window()| will return NULL if called before |CreateBrowserWindow()|
   // is done.
@@ -496,8 +499,6 @@ class Browser : public TabStripModelObserver,
   void RequestAppBannerFromDevTools(
       content::WebContents* web_contents) override;
 
-  bool RequestAppBanner(content::WebContents* web_contents);
-
   bool is_type_tabbed() const { return type_ == TYPE_TABBED; }
   bool is_type_popup() const { return type_ == TYPE_POPUP; }
 
@@ -523,6 +524,9 @@ class Browser : public TabStripModelObserver,
   extensions::WindowController* extension_window_controller() const {
     return extension_window_controller_.get();
   }
+
+  bool ShouldRunUnloadListenerBeforeClosing(content::WebContents* web_contents);
+  bool RunUnloadListenerBeforeClosing(content::WebContents* web_contents);
 
  private:
   friend class BrowserTest;
@@ -700,10 +704,6 @@ class Browser : public TabStripModelObserver,
                        bool did_finish_load) override;
   bool CanReloadContents(content::WebContents* web_contents) const override;
   bool CanSaveContents(content::WebContents* web_contents) const override;
-
-  // Overridden from SearchEngineTabHelperDelegate:
-  void ConfirmAddSearchProvider(TemplateURL* template_url,
-                                Profile* profile) override;
 
   // Overridden from SearchTabHelperDelegate:
   void NavigateOnThumbnailClick(const GURL& url,
@@ -971,6 +971,7 @@ class Browser : public TabStripModelObserver,
   // shell shortcut's startup info.
   gfx::Rect override_bounds_;
   ui::WindowShowState initial_show_state_;
+  const std::string initial_workspace_;
 
   // Tracks when this browser is being created by session restore.
   bool is_session_restore_;
@@ -1024,7 +1025,7 @@ class Browser : public TabStripModelObserver,
   // True if the browser window has been shown at least once.
   bool window_has_shown_;
 
-  std::unique_ptr<ValidationMessageBubble> validation_message_bubble_;
+  base::WeakPtr<ValidationMessageBubble> validation_message_bubble_;
 
   SigninViewController signin_view_controller_;
 

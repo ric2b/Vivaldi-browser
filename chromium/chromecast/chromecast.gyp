@@ -410,8 +410,8 @@
         'renderer/cast_content_renderer_client.h',
         'renderer/cast_media_load_deferrer.cc',
         'renderer/cast_media_load_deferrer.h',
-        'renderer/cast_render_process_observer.cc',
-        'renderer/cast_render_process_observer.h',
+        'renderer/cast_render_thread_observer.cc',
+        'renderer/cast_render_thread_observer.h',
         'renderer/key_systems_cast.cc',
         'renderer/key_systems_cast.h',
         'renderer/media/capabilities_message_filter.cc',
@@ -571,7 +571,7 @@
           'type': 'none',
           'dependencies': [
             '../third_party/icu/icu.gyp:icudata',
-            '../v8/tools/gyp/v8.gyp:v8_external_snapshot',
+            '../v8/src/v8.gyp:v8_external_snapshot',
           ],
           'variables': {
             'dest_path': '<(cast_shell_assets_path)',
@@ -779,13 +779,6 @@
             'cast_shell_media',
             'cast_shell_common',
             'media/media.gyp:cast_media',
-          ],
-          'conditions': [
-            ['ozone_platform_egltest==1', {
-              'dependencies': [
-                '../ui/ozone/ozone.gyp:eglplatform_shim_x11',
-              ],
-            }],
           ],
         },
         {

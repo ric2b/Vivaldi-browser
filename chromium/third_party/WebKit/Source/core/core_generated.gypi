@@ -47,12 +47,12 @@
       '<(bindings_core_v8_output_dir)/V8LayerRect.h',
       '<(bindings_core_v8_output_dir)/V8LayerRectList.cpp',
       '<(bindings_core_v8_output_dir)/V8LayerRectList.h',
-      '<(bindings_core_v8_output_dir)/V8RefCountedScriptWrappable.cpp',
-      '<(bindings_core_v8_output_dir)/V8RefCountedScriptWrappable.h',
       '<(bindings_core_v8_output_dir)/V8InternalDictionary.cpp',
       '<(bindings_core_v8_output_dir)/V8InternalDictionary.h',
       '<(bindings_core_v8_output_dir)/V8InternalDictionaryDerived.cpp',
       '<(bindings_core_v8_output_dir)/V8InternalDictionaryDerived.h',
+      '<(bindings_core_v8_output_dir)/V8WorkerInternals.cpp',
+      '<(bindings_core_v8_output_dir)/V8WorkerInternals.h',
     ],
 
     'generated_core_additional_files': [
@@ -102,7 +102,7 @@
       '<(blink_core_output_dir)/InspectorConsoleInstrumentationInl.h',
       '<(blink_core_output_dir)/InspectorInstrumentationInl.h',
       '<(blink_core_output_dir)/InspectorOverridesInl.h',
-      '<(blink_core_output_dir)/InstrumentingAgentsInl.h',
+      '<(blink_core_output_dir)/InstrumentingAgents.h',
       '<(blink_core_output_dir)/InspectorInstrumentationImpl.cpp',
 
       # Additional .cpp files for SVG.

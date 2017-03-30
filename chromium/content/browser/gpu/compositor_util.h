@@ -26,6 +26,9 @@ CONTENT_EXPORT bool IsGpuMemoryBufferCompositorResourcesEnabled();
 // Returns true if gpu rasterization is on (via flags) for the renderer.
 CONTENT_EXPORT bool IsGpuRasterizationEnabled();
 
+// returns true if async worker context is on (via flags).
+CONTENT_EXPORT bool IsAsyncWorkerContextEnabled();
+
 // Returns the number of multisample antialiasing samples (via flags) for
 // GPU rasterization.
 CONTENT_EXPORT int GpuRasterizationMSAASampleCount();
@@ -35,6 +38,9 @@ CONTENT_EXPORT bool IsForceGpuRasterizationEnabled();
 
 // Returns the number of raster threads to use for compositing.
 CONTENT_EXPORT int NumberOfRendererRasterThreads();
+
+// Returns true if main thread can be pipelined with activation.
+CONTENT_EXPORT bool IsMainFrameBeforeActivationEnabled();
 
 CONTENT_EXPORT base::DictionaryValue* GetFeatureStatus();
 CONTENT_EXPORT base::Value* GetProblems();

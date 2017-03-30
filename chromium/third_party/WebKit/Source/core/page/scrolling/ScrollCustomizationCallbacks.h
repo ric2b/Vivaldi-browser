@@ -22,6 +22,7 @@ public:
     void setDistributeScroll(Element*, ScrollStateCallback*);
     ScrollStateCallback* getDistributeScroll(Element*);
     void setApplyScroll(Element*, ScrollStateCallback*);
+    void removeApplyScroll(Element*);
     ScrollStateCallback* getApplyScroll(Element*);
 
     DEFINE_INLINE_TRACE()
@@ -29,10 +30,6 @@ public:
         visitor->trace(m_applyScrollCallbacks);
         visitor->trace(m_distributeScrollCallbacks);
     };
-
-#if !ENABLE(OILPAN)
-    void removeCallbacksForElement(Element*);
-#endif
 
 private:
     using ScrollStateCallbackList = HeapHashMap<WeakMember<Element>, Member<ScrollStateCallback>>;

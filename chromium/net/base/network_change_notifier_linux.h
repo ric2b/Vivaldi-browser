@@ -5,10 +5,11 @@
 #ifndef NET_BASE_NETWORK_CHANGE_NOTIFIER_LINUX_H_
 #define NET_BASE_NETWORK_CHANGE_NOTIFIER_LINUX_H_
 
+#include <memory>
+#include <unordered_set>
+
 #include "base/compiler_specific.h"
-#include "base/containers/hash_tables.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "net/base/net_export.h"
 #include "net/base/network_change_notifier.h"
 
@@ -24,7 +25,7 @@ class NET_EXPORT_PRIVATE NetworkChangeNotifierLinux
   // interfaces used to connect to the internet can cause critical network
   // changed signals to be lost allowing incorrect stale state to persist.
   explicit NetworkChangeNotifierLinux(
-      const base::hash_set<std::string>& ignored_interfaces);
+      const std::unordered_set<std::string>& ignored_interfaces);
 
  private:
   class Thread;
@@ -42,7 +43,7 @@ class NET_EXPORT_PRIVATE NetworkChangeNotifierLinux
   // to the registered observers without posting back to the thread the object
   // was created on.
   // Also used for DnsConfigService which requires TYPE_IO message loop.
-  scoped_ptr<Thread> notifier_thread_;
+  std::unique_ptr<Thread> notifier_thread_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkChangeNotifierLinux);
 };

@@ -54,22 +54,20 @@ class TestMultiBufferDataProvider : public ResourceMultiBufferDataProvider {
   ~TestMultiBufferDataProvider() override {
     CHECK_EQ(static_cast<size_t>(1), test_data_providers.erase(this));
   }
-  void SetLoadingToFalse() {
-    // Check that we have not been destroyed first.
-    if (test_data_providers.find(this) != test_data_providers.end()) {
-      loading_ = false;
-    }
-  }
   void Start() override {
     // Create a mock active loader.
     // Keep track of active loading state via loadAsynchronously() and cancel().
     NiceMock<MockWebURLLoader>* url_loader = new NiceMock<MockWebURLLoader>();
     ON_CALL(*url_loader, cancel())
-        .WillByDefault(
-            Invoke(this, &TestMultiBufferDataProvider::SetLoadingToFalse));
+        .WillByDefault(Invoke([this]() {
+          // Check that we have not been destroyed first.
+          if (test_data_providers.find(this) != test_data_providers.end()) {
+            this->loading_ = false;
+          }
+        }));
     loading_ = true;
     active_loader_.reset(
-        new ActiveLoader(scoped_ptr<WebURLLoader>(url_loader)));
+        new ActiveLoader(std::unique_ptr<WebURLLoader>(url_loader)));
     if (!on_start_.is_null()) {
       on_start_.Run();
     }
@@ -90,12 +88,12 @@ class TestResourceMultiBuffer : public ResourceMultiBuffer {
   explicit TestResourceMultiBuffer(UrlData* url_data, int shift)
       : ResourceMultiBuffer(url_data, shift) {}
 
-  scoped_ptr<MultiBuffer::DataProvider> CreateWriter(
+  std::unique_ptr<MultiBuffer::DataProvider> CreateWriter(
       const BlockId& pos) override {
     TestMultiBufferDataProvider* ret =
         new TestMultiBufferDataProvider(url_data_, pos);
     ret->Start();
-    return scoped_ptr<MultiBuffer::DataProvider>(ret);
+    return std::unique_ptr<MultiBuffer::DataProvider>(ret);
   }
 
   // TODO: Make these global
@@ -146,7 +144,7 @@ class TestUrlData : public UrlData {
   ~TestUrlData() override {}
   const int block_shift_;
 
-  scoped_ptr<TestResourceMultiBuffer> test_multibuffer_;
+  std::unique_ptr<TestResourceMultiBuffer> test_multibuffer_;
 };
 
 class TestUrlIndex : public UrlIndex {
@@ -322,7 +320,7 @@ class MultibufferDataSourceTest : public testing::Test {
     EXPECT_TRUE(url_loader());
     if (!url_loader())
       return;
-    scoped_ptr<char[]> data(new char[size]);
+    std::unique_ptr<char[]> data(new char[size]);
     memset(data.get(), 0xA5, size);  // Arbitrary non-zero value.
 
     data_provider()->didReceiveData(url_loader(), data.get(), size, size);
@@ -479,9 +477,9 @@ class MultibufferDataSourceTest : public testing::Test {
   base::MessageLoop message_loop_;
   linked_ptr<TestUrlIndex> url_index_;
 
-  scoped_ptr<MockMultibufferDataSource> data_source_;
+  std::unique_ptr<MockMultibufferDataSource> data_source_;
 
-  scoped_ptr<TestResponseGenerator> response_generator_;
+  std::unique_ptr<TestResponseGenerator> response_generator_;
 
   StrictMock<MockBufferedDataSourceHost> host_;
 
@@ -526,6 +524,14 @@ TEST_F(MultibufferDataSourceTest, Range_NotSupported) {
 
   EXPECT_TRUE(loading());
   EXPECT_TRUE(data_source_->IsStreaming());
+  Stop();
+}
+
+TEST_F(MultibufferDataSourceTest, Range_NotSatisfiable) {
+  Initialize(kHttpUrl, true);
+  EXPECT_CALL(host_, AddBufferedByteRange(0, kDataSize));
+  Respond(response_generator_->GenerateResponse(416));
+  EXPECT_FALSE(loading());
   Stop();
 }
 
@@ -1375,6 +1381,20 @@ TEST_F(MultibufferDataSourceTest, Http_NotStreamingAfterRedirect) {
 
   FinishLoading();
   EXPECT_FALSE(loading());
+  Stop();
+}
+
+TEST_F(MultibufferDataSourceTest, Http_RangeNotSatisfiableAfterRedirect) {
+  Initialize(kHttpUrl, true);
+
+  // Server responds with a redirect.
+  blink::WebURLRequest request((GURL(kHttpDifferentPathUrl)));
+  blink::WebURLResponse response((GURL(kHttpUrl)));
+  response.setHTTPStatusCode(307);
+  data_provider()->willFollowRedirect(url_loader(), request, response);
+
+  EXPECT_CALL(host_, AddBufferedByteRange(0, kDataSize));
+  Respond(response_generator_->GenerateResponse(416));
   Stop();
 }
 

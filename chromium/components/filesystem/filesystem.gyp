@@ -26,15 +26,17 @@
         'file_system_impl.h',
         'lock_table.cc',
         'lock_table.h',
+        'shared_temp_dir.cc',
+        'shared_temp_dir.h',
         'util.cc',
         'util.h',
       ],
       'dependencies': [
         'filesystem_bindings',
-        '../../mojo/mojo_base.gyp:mojo_application_base',
         '../../mojo/mojo_edk.gyp:mojo_system_impl',
         '../../mojo/mojo_public.gyp:mojo_cpp_bindings',
         '../../mojo/mojo_platform_handle.gyp:platform_handle',
+        '../../services/shell/shell_public.gyp:shell_public',
         '../../url/url.gyp:url_lib',
       ],
       'export_dependent_settings': [
@@ -48,6 +50,7 @@
       'dependencies': [
         'filesystem_bindings_mojom',
       ],
+      'hard_dependency': 1,
     },
     {
       'target_name': 'filesystem_bindings_mojom',

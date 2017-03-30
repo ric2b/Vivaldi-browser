@@ -22,7 +22,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/tabs/tabs_constants.h"
 #include "chrome/browser/extensions/api/tabs/windows_util.h"
@@ -467,19 +467,41 @@ bool WindowsCreateFunction::RunSync() {
     }
   }
 
+  // Decide whether we are opening a normal window or an incognito window.
+  bool is_error = true;
+  bool open_incognito_window =
+      ShouldOpenIncognitoWindow(create_data, &urls, &is_error);
+  if (is_error)
+    return false;  // error_ member is set inside of ShouldOpenIncognitoWindow.
+
+  Profile* window_profile = GetProfile();
+  if (open_incognito_window)
+    window_profile = window_profile->GetOffTheRecordProfile();
+
   // Look for optional tab id.
   if (create_data && create_data->tab_id) {
     // Find the tab. |source_tab_strip| and |tab_index| will later be used to
     // move the tab into the created window.
+    Browser* source_browser = nullptr;
     if (!GetTabById(*create_data->tab_id,
                     GetProfile(),
                     include_incognito(),
-                    NULL,
+                    &source_browser,
                     &source_tab_strip,
-                    NULL,
+                    nullptr,
                     &tab_index,
                     &error_))
       return false;
+
+    if (!source_browser->window()->IsTabStripEditable()) {
+      error_ = keys::kTabStripNotEditableError;
+      return false;
+    }
+
+    if (source_browser->profile() != window_profile) {
+      error_ = keys::kCanOnlyMoveTabsWithinSameProfileError;
+      return false;
+    }
   }
 
   if (!IsValidStateForWindowsCreateFunction(create_data)) {
@@ -487,7 +509,6 @@ bool WindowsCreateFunction::RunSync() {
     return false;
   }
 
-  Profile* window_profile = GetProfile();
   Browser::Type window_type = Browser::TYPE_TABBED;
   bool create_panel = false;
 
@@ -498,22 +519,6 @@ bool WindowsCreateFunction::RunSync() {
   bool focused = true;
   bool saw_focus_key = false;
   std::string extension_id;
-
-  // Decide whether we are opening a normal window or an incognito window.
-  bool is_error = true;
-  bool open_incognito_window = ShouldOpenIncognitoWindow(create_data, &urls,
-                                                         &is_error);
-  if (is_error) {
-    // error_ member variable is set inside of ShouldOpenIncognitoWindow.
-    return false;
-  }
-  if (open_incognito_window) {
-    window_profile = window_profile->GetOffTheRecordProfile();
-  }
-
-  // TODO(gisli):  Could make sense here to use new Browser type TYPE_VIVALDI
-  // Would use it to control the creation here (instead of other checks for
-  // Vialdi) and controls access to the Browser objects (which is based on type).
 
   if (create_data) {
     // Figure out window type before figuring out bounds so that default
@@ -662,6 +667,9 @@ bool WindowsCreateFunction::RunSync() {
     chrome::NavigateParams navigate_params(new_window, url,
                                            ui::PAGE_TRANSITION_LINK);
     navigate_params.disposition = NEW_FOREGROUND_TAB;
+    // NOTE(andre@vivaldi.com) : We cannot inherit the siteinstance here in
+    // Vivaldi. We might end up with the same siteintance in subframes.
+    if (!vivaldi::IsVivaldiRunning())
     navigate_params.source_site_instance =
         render_frame_host()->GetSiteInstance();
     chrome::Navigate(&navigate_params);

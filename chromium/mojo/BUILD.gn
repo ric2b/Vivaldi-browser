@@ -10,7 +10,6 @@ group("mojo") {
   deps = [
     ":tests",
     "//mojo/common",
-    "//mojo/services",
   ]
 
   if (!(is_linux && target_cpu == "x86")) {
@@ -24,7 +23,7 @@ group("mojo") {
     deps += [ "//mojo/android" ]
   }
 
-  deps += [ "//mojo/shell:all" ]
+  deps += [ "//services/shell:all" ]
 }
 
 group("tests") {
@@ -32,6 +31,7 @@ group("tests") {
   deps = [
     "//ipc/mojo:ipc_mojo_unittests",
     "//mojo/common:mojo_common_unittests",
+    "//mojo/converters/blink:blink_converters_unittests",
     "//mojo/converters/surfaces/tests:mojo_surfaces_lib_unittests",
     "//mojo/edk/js/test:js_integration_tests",
     "//mojo/edk/js/test:js_unittests",
@@ -41,8 +41,8 @@ group("tests") {
     "//mojo/edk/test:mojo_public_bindings_unittests",
     "//mojo/edk/test:mojo_public_system_perftests",
     "//mojo/edk/test:mojo_public_system_unittests",
-    "//mojo/shell/public/cpp/tests:mojo_public_application_unittests",
-    "//mojo/shell/runner/host:mojo_runner_host_unittests",
-    "//mojo/shell/tests",
+    "//services/shell/public/cpp/tests:mojo_public_application_unittests",
+    "//services/shell/runner/host:mojo_runner_host_unittests",
+    "//services/shell/tests",
   ]
 }

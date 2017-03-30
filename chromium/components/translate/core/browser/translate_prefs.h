@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "base/feature_list.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/time/time.h"
@@ -30,6 +31,16 @@ class PrefRegistrySyncable;
 }
 
 namespace translate {
+
+// Feature flag for "Translate UI 2016 Q2" project.
+extern const base::Feature kTranslateUI2016Q2;
+
+// The trial (study) name in finch study config.
+extern const char kTranslateUI2016Q2TrialName[];
+
+// The name of the parameter for the number of translations, after which the
+// "Always Translate" checkbox default to checked.
+extern const char kAlwaysTranslateOfferThreshold[];
 
 class TranslateAcceptLanguages;
 
@@ -70,6 +81,7 @@ class TranslatePrefs {
   static const char kPrefTranslateSiteBlacklist[];
   static const char kPrefTranslateWhitelists[];
   static const char kPrefTranslateDeniedCount[];
+  static const char kPrefTranslateIgnoredCount[];
   static const char kPrefTranslateAcceptedCount[];
   static const char kPrefTranslateBlockedLanguages[];
   static const char kPrefTranslateLastDeniedTimeForLanguage[];
@@ -93,10 +105,6 @@ class TranslatePrefs {
   bool IsBlockedLanguage(const std::string& original_language) const;
   void BlockLanguage(const std::string& original_language);
   void UnblockLanguage(const std::string& original_language);
-
-  // Removes a language from the old blacklist. Only used internally for
-  // diagnostics. Don't use this if there is no special reason.
-  void RemoveLanguageFromLegacyBlacklist(const std::string& original_language);
 
   bool IsSiteBlacklisted(const std::string& site) const;
   void BlacklistSite(const std::string& site);
@@ -124,6 +132,12 @@ class TranslatePrefs {
   void IncrementTranslationDeniedCount(const std::string& language);
   void ResetTranslationDeniedCount(const std::string& language);
 
+  // These methods are used to track how many times the user has ignored the
+  // translation bubble for a specific language.
+  int GetTranslationIgnoredCount(const std::string& language) const;
+  void IncrementTranslationIgnoredCount(const std::string& language);
+  void ResetTranslationIgnoredCount(const std::string& language);
+
   // These methods are used to track how many times the user has accepted the
   // translation for a specific language. (So we can present a UI to white-list
   // that language if the user keeps accepting translations).
@@ -150,15 +164,13 @@ class TranslatePrefs {
                             const std::string& language);
   bool ShouldAutoTranslate(const std::string& original_language,
                            std::string* target_language);
+
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
   static void MigrateUserPrefs(PrefService* user_prefs,
                                const char* accept_languages_pref);
 
  private:
   friend class TranslatePrefsTest;
-  FRIEND_TEST_ALL_PREFIXES(TranslatePrefsTest, CreateBlockedLanguages);
-  FRIEND_TEST_ALL_PREFIXES(TranslatePrefsTest,
-                           CreateBlockedLanguagesNonEnglishUI);
 
   // Merges two language sets to migrate to the language setting UI.
   static void CreateBlockedLanguages(

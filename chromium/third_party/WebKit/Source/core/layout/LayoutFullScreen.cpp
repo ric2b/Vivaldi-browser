@@ -54,7 +54,7 @@ private:
 
 void LayoutFullScreenPlaceholder::willBeDestroyed()
 {
-    m_owner->setPlaceholder(nullptr);
+    m_owner->resetPlaceholder();
     LayoutBlockFlow::willBeDestroyed();
 }
 
@@ -137,7 +137,8 @@ LayoutObject* LayoutFullScreen::wrapLayoutObject(LayoutObject* object, LayoutObj
             ASSERT(containingBlock);
             // Since we are moving the |object| to a new parent |fullscreenLayoutObject|,
             // the line box tree underneath our |containingBlock| is not longer valid.
-            containingBlock->deleteLineBoxTree();
+            if (containingBlock->isLayoutBlockFlow())
+                toLayoutBlockFlow(containingBlock)->deleteLineBoxTree();
 
             parent->addChildWithWritingModeOfParent(fullscreenLayoutObject, object);
             object->remove();
@@ -179,11 +180,6 @@ void LayoutFullScreen::unwrapLayoutObject()
         placeholder()->remove();
     remove();
     destroy();
-}
-
-void LayoutFullScreen::setPlaceholder(LayoutBlock* placeholder)
-{
-    m_placeholder = placeholder;
 }
 
 void LayoutFullScreen::createPlaceholder(PassRefPtr<ComputedStyle> style, const LayoutRect& frameRect)

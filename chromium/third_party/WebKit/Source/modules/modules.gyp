@@ -39,7 +39,9 @@
     # GN version: //third_party/WebKit/Source/modules:modules
     'target_name': 'modules',
     'dependencies': [
-      '<(DEPTH)/device/battery/battery.gyp:device_battery_mojo_bindings',
+      '<(DEPTH)/device/battery/battery.gyp:device_battery_mojo_bindings_for_blink',
+      '<(DEPTH)/device/usb/usb.gyp:device_usb_mojo_bindings_for_blink',
+      '<(DEPTH)/device/vibration/vibration.gyp:device_vibration_mojo_bindings_for_blink',
       '<(DEPTH)/mojo/mojo_edk.gyp:mojo_system_impl',
       '<(DEPTH)/mojo/mojo_public.gyp:mojo_cpp_bindings',
       '<(DEPTH)/third_party/icu/icu.gyp:icui18n',
@@ -78,7 +80,7 @@
           '<(DEPTH)/base/base.gyp:base',
           '<(DEPTH)/skia/skia.gyp:skia',
           '<(DEPTH)/url/url.gyp:url_lib',
-          '<(DEPTH)/v8/tools/gyp/v8.gyp:v8',
+          '<(DEPTH)/v8/src/v8.gyp:v8',
         ],
       }, {
         'type': 'static_library',

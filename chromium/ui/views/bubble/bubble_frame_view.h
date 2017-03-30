@@ -70,7 +70,7 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
 
   // Use bubble_border() and SetBubbleBorder(), not border() and SetBorder().
   BubbleBorder* bubble_border() const { return bubble_border_; }
-  void SetBubbleBorder(scoped_ptr<BubbleBorder> border);
+  void SetBubbleBorder(std::unique_ptr<BubbleBorder> border);
 
   gfx::Insets content_margins() const { return content_margins_; }
 
@@ -84,6 +84,8 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
                                    bool adjust_if_offscreen);
 
   bool close_button_clicked() const { return close_button_clicked_; }
+
+  LabelButton* GetCloseButtonForTest() { return close_; }
 
  protected:
   // Returns the available screen bounds if the frame were to show in |rect|.

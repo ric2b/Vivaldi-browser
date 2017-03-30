@@ -80,7 +80,7 @@ HeadsUpDisplayLayerImpl::HeadsUpDisplayLayerImpl(LayerTreeImpl* tree_impl,
 
 HeadsUpDisplayLayerImpl::~HeadsUpDisplayLayerImpl() {}
 
-scoped_ptr<LayerImpl> HeadsUpDisplayLayerImpl::CreateLayerImpl(
+std::unique_ptr<LayerImpl> HeadsUpDisplayLayerImpl::CreateLayerImpl(
     LayerTreeImpl* tree_impl) {
   return HeadsUpDisplayLayerImpl::Create(tree_impl, id());
 }
@@ -94,7 +94,7 @@ void HeadsUpDisplayLayerImpl::AcquireResource(
     }
   }
 
-  scoped_ptr<ScopedResource> resource =
+  std::unique_ptr<ScopedResource> resource =
       ScopedResource::Create(resource_provider);
   resource->Allocate(internal_content_bounds_,
                      ResourceProvider::TEXTURE_HINT_IMMUTABLE,
@@ -106,7 +106,7 @@ void HeadsUpDisplayLayerImpl::ReleaseUnmatchedSizeResources(
     ResourceProvider* resource_provider) {
   auto it_erase =
       std::remove_if(resources_.begin(), resources_.end(),
-                     [this](const scoped_ptr<ScopedResource>& resource) {
+                     [this](const std::unique_ptr<ScopedResource>& resource) {
                        return internal_content_bounds_ != resource->size();
                      });
   resources_.erase(it_erase, resources_.end());
@@ -147,18 +147,10 @@ void HeadsUpDisplayLayerImpl::AppendQuads(
   bool nearest_neighbor = false;
   TextureDrawQuad* quad =
       render_pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
-  quad->SetNew(shared_quad_state,
-               quad_rect,
-               opaque_rect,
-               visible_quad_rect,
-               resources_.back()->id(),
-               premultiplied_alpha,
-               uv_top_left,
-               uv_bottom_right,
-               SK_ColorTRANSPARENT,
-               vertex_opacity,
-               flipped,
-               nearest_neighbor);
+  quad->SetNew(shared_quad_state, quad_rect, opaque_rect, visible_quad_rect,
+               resources_.back()->id(), premultiplied_alpha, uv_top_left,
+               uv_bottom_right, SK_ColorTRANSPARENT, vertex_opacity, flipped,
+               nearest_neighbor, false);
   ValidateQuadResources(quad);
 }
 
@@ -198,13 +190,12 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
   }
 
   TRACE_EVENT0("cc", "UploadHudTexture");
-  SkImageInfo info;
-  size_t row_bytes = 0;
-  const void* pixels = hud_surface_->peekPixels(&info, &row_bytes);
-  DCHECK(pixels);
-  DCHECK(info.colorType() == kN32_SkColorType);
+  SkPixmap pixmap;
+  hud_surface_->peekPixels(&pixmap);
+  DCHECK(pixmap.addr());
+  DCHECK(pixmap.info().colorType() == kN32_SkColorType);
   resource_provider->CopyToResource(resources_.back()->id(),
-                                    static_cast<const uint8_t*>(pixels),
+                                    static_cast<const uint8_t*>(pixmap.addr()),
                                     internal_content_bounds_);
   resource_provider->GenerateSyncTokenForResource(resources_.back()->id());
 }
@@ -218,13 +209,12 @@ gfx::Rect HeadsUpDisplayLayerImpl::GetEnclosingRectInTargetSpace() const {
   return GetScaledEnclosingRectInTargetSpace(internal_contents_scale_);
 }
 
-void HeadsUpDisplayLayerImpl::SetHUDTypeface(
-    const skia::RefPtr<SkTypeface>& typeface) {
+void HeadsUpDisplayLayerImpl::SetHUDTypeface(sk_sp<SkTypeface> typeface) {
   if (typeface_ == typeface)
     return;
 
   DCHECK(typeface_.get() == nullptr);
-  typeface_ = typeface;
+  typeface_ = std::move(typeface);
   NoteLayerPropertyChanged();
 }
 
@@ -292,7 +282,7 @@ int HeadsUpDisplayLayerImpl::MeasureText(SkPaint* paint,
   const bool anti_alias = paint->isAntiAlias();
   paint->setAntiAlias(true);
   paint->setTextSize(size);
-  paint->setTypeface(typeface_.get());
+  paint->setTypeface(typeface_);
   SkScalar text_width = paint->measureText(text.c_str(), text.length());
 
   paint->setAntiAlias(anti_alias);
@@ -311,7 +301,7 @@ void HeadsUpDisplayLayerImpl::DrawText(SkCanvas* canvas,
 
   paint->setTextSize(size);
   paint->setTextAlign(align);
-  paint->setTypeface(typeface_.get());
+  paint->setTypeface(typeface_);
   canvas->drawText(text.c_str(), text.length(), x, y, *paint);
 
   paint->setAntiAlias(anti_alias);
@@ -686,7 +676,7 @@ void HeadsUpDisplayLayerImpl::DrawDebugRect(
 
     SkPaint label_paint = CreatePaint();
     label_paint.setTextSize(kFontHeight);
-    label_paint.setTypeface(typeface_.get());
+    label_paint.setTypeface(typeface_);
     label_paint.setColor(stroke_color);
 
     const SkScalar label_text_width =

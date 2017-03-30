@@ -5,17 +5,19 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/synchronization/lock.h"
 #include "base/test/test_timeouts.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "media/audio/audio_device_description.h"
 #include "media/audio/audio_io.h"
-#include "media/audio/audio_manager_base.h"
 #include "media/audio/audio_unittest_util.h"
 #include "media/audio/fake_audio_log_factory.h"
 #include "media/base/seekable_buffer.h"
@@ -96,12 +98,11 @@ struct AudioDelayState {
 // the main thread instead of the audio thread.
 class MockAudioManager : public AudioManagerAnyPlatform {
  public:
-  MockAudioManager() : AudioManagerAnyPlatform(&fake_audio_log_factory_) {}
+  MockAudioManager()
+      : AudioManagerAnyPlatform(base::ThreadTaskRunnerHandle::Get(),
+                                base::ThreadTaskRunnerHandle::Get(),
+                                &fake_audio_log_factory_) {}
   ~MockAudioManager() override {}
-
-  scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() override {
-    return base::MessageLoop::current()->task_runner();
-  }
 
  private:
   FakeAudioLogFactory fake_audio_log_factory_;
@@ -260,13 +261,13 @@ class FullDuplexAudioSinkSource
 
  private:
   base::Lock lock_;
-  scoped_ptr<media::SeekableBuffer> buffer_;
+  std::unique_ptr<media::SeekableBuffer> buffer_;
   int sample_rate_;
   int samples_per_packet_;
   int channels_;
   int frame_size_;
   double frames_to_ms_;
-  scoped_ptr<AudioDelayState[]> delay_states_;
+  std::unique_ptr<AudioDelayState[]> delay_states_;
   size_t input_elements_to_write_;
   size_t output_elements_to_write_;
   base::TimeTicks previous_write_time_;
@@ -279,13 +280,13 @@ class AudioInputStreamTraits {
   static AudioParameters GetDefaultAudioStreamParameters(
       AudioManager* audio_manager) {
     return audio_manager->GetInputStreamParameters(
-        AudioManagerBase::kDefaultDeviceId);
+        AudioDeviceDescription::kDefaultDeviceId);
   }
 
   static StreamType* CreateStream(AudioManager* audio_manager,
       const AudioParameters& params) {
-    return audio_manager->MakeAudioInputStream(params,
-      AudioManagerBase::kDefaultDeviceId);
+    return audio_manager->MakeAudioInputStream(
+        params, AudioDeviceDescription::kDefaultDeviceId);
   }
 };
 

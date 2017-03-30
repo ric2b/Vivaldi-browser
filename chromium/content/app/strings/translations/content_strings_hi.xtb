@@ -3,7 +3,7 @@
 <translationbundle lang="hi">
 <translation id="1014825444426747588">खाली</translation>
 <translation id="1018939186200882850">मेनू आइटम</translation>
-<translation id="1020833440720551630">ऑडियो ट्रैक म्यूट करें</translation>
+<translation id="1020833440720551630">ऑडियो ट्रैक की आवाज़ बंद करें</translation>
 <translation id="10623998915015855">टॉगल बटन</translation>
 <translation id="1088086359088493902">सेकंड</translation>
 <translation id="1171774979989969504">कृपया ई-मेल पता दर्ज करें.</translation>
@@ -109,7 +109,9 @@
 <translation id="561939826962581046">समय</translation>
 <translation id="5641012560118721995">प्लेबैक रोकें</translation>
 <translation id="5643186887447432888">बटन</translation>
+<translation id="583281660410589416">अज्ञात</translation>
 <translation id="5843503607508392247">अन्य...</translation>
+<translation id="5860033963881614850">बंद</translation>
 <translation id="5939518447894949180">रीसेट करें</translation>
 <translation id="5944544982112848342">2048 (उच्च ग्रेड)</translation>
 <translation id="5966707198760109579">सप्ताह</translation>
@@ -133,7 +135,7 @@
 <translation id="6739588121953935928">पैमाना</translation>
 <translation id="6755330956360078551">टूलटिप</translation>
 <translation id="6820355525329141109">प्लग इन लोड नहीं किया जा सका.</translation>
-<translation id="6843725295806269523">म्यूट करें</translation>
+<translation id="6843725295806269523">आवाज़ बंद करें</translation>
 <translation id="6845533974506654842">दबाएं</translation>
 <translation id="6853785296079745596">बंद कैप्शन छिपाएं</translation>
 <translation id="6885760532393684712">निर्देशिका</translation>

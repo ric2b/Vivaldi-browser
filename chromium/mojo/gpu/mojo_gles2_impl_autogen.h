@@ -13,6 +13,8 @@
 #ifndef MOJO_GPU_MOJO_GLES2_IMPL_AUTOGEN_H_
 #define MOJO_GPU_MOJO_GLES2_IMPL_AUTOGEN_H_
 
+#include <memory>
+
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "mojo/public/c/gles2/gles2.h"
 
@@ -732,16 +734,6 @@ class MojoGLES2Impl : public gpu::gles2::GLES2Interface {
   void BindUniformLocationCHROMIUM(GLuint program,
                                    GLint location,
                                    const char* name) override;
-  void GenValuebuffersCHROMIUM(GLsizei n, GLuint* buffers) override;
-  void DeleteValuebuffersCHROMIUM(GLsizei n,
-                                  const GLuint* valuebuffers) override;
-  GLboolean IsValuebufferCHROMIUM(GLuint valuebuffer) override;
-  void BindValuebufferCHROMIUM(GLenum target, GLuint valuebuffer) override;
-  void SubscribeValueCHROMIUM(GLenum target, GLenum subscription) override;
-  void PopulateSubscribedValuesCHROMIUM(GLenum target) override;
-  void UniformValuebufferCHROMIUM(GLint location,
-                                  GLenum target,
-                                  GLenum subscription) override;
   void BindTexImage2DCHROMIUM(GLenum target, GLint imageId) override;
   void ReleaseTexImage2DCHROMIUM(GLenum target, GLint imageId) override;
   void TraceBeginCHROMIUM(const char* category_name,
@@ -779,7 +771,8 @@ class MojoGLES2Impl : public gpu::gles2::GLES2Interface {
                                GLboolean is_clipped,
                                const GLfloat* clip_rect,
                                GLint sorting_context_id,
-                               const GLfloat* transform) override;
+                               const GLfloat* transform,
+                               GLuint filter) override;
   void CommitOverlayPlanesCHROMIUM() override;
   void SwapInterval(GLint interval) override;
   void FlushDriverCachesCHROMIUM() override;

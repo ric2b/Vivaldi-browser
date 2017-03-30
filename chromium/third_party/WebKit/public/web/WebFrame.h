@@ -61,6 +61,7 @@ namespace blink {
 class Frame;
 class OpenedFrameTracker;
 class Visitor;
+class WebDOMEvent;
 class WebData;
 class WebDataSource;
 class WebDocument;
@@ -337,6 +338,8 @@ public:
 
 
     // Navigation ----------------------------------------------------------
+    // TODO(clamy): Remove the reload, reloadWithOverrideURL, and loadRequest
+    // functions once RenderFrame only calls WebLoadFrame::load.
 
     // Reload the current document.
     // Note: reload() and reloadWithOverrideURL() will be deprecated.
@@ -348,14 +351,6 @@ public:
 
     // Load the given URL.
     virtual void loadRequest(const WebURLRequest&) = 0;
-
-    // Load the given history state, corresponding to a back/forward
-    // navigation of a frame. Multiple frames may be navigated via separate calls.
-    virtual void loadHistoryItem(
-        const WebHistoryItem&,
-        WebHistoryLoadType,
-        WebCachePolicy = WebCachePolicy::UseProtocolCachePolicy)
-        = 0;
 
     // This method is short-hand for calling LoadData, where mime_type is
     // "text/html" and text_encoding is "UTF-8".
@@ -424,8 +419,8 @@ public:
     // Supports commands like Undo, Redo, Cut, Copy, Paste, SelectAll,
     // Unselect, etc. See EditorCommand.cpp for the full list of supported
     // commands.
-    virtual bool executeCommand(const WebString&, const WebNode& = WebNode()) = 0;
-    virtual bool executeCommand(const WebString&, const WebString& value, const WebNode& = WebNode()) = 0;
+    virtual bool executeCommand(const WebString&) = 0;
+    virtual bool executeCommand(const WebString&, const WebString& value) = 0;
     virtual bool isCommandEnabled(const WebString&) const = 0;
 
     // Spell-checking support.
@@ -563,12 +558,10 @@ public:
 
     bool inShadowTree() const { return m_scope == WebTreeScopeType::Shadow; }
 
-#if ENABLE(OILPAN)
     static void traceFrames(Visitor*, WebFrame*);
     static void traceFrames(InlinedGlobalMarkingVisitor, WebFrame*);
     void clearWeakFrames(Visitor*);
     void clearWeakFrames(InlinedGlobalMarkingVisitor);
-#endif
 #endif
 
 protected:
@@ -583,7 +576,6 @@ protected:
 
 private:
 #if BLINK_IMPLEMENTATION
-#if ENABLE(OILPAN)
     friend class OpenedFrameTracker;
 
     static void traceFrame(Visitor*, WebFrame*);
@@ -596,7 +588,6 @@ private:
     void clearWeakFramesImpl(VisitorDispatcher);
     template <typename VisitorDispatcher>
     static void traceFrameImpl(VisitorDispatcher, WebFrame*);
-#endif
 #endif
 
     const WebTreeScopeType m_scope;

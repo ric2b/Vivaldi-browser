@@ -14,7 +14,7 @@
 #include "net/test/cert_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if defined(USE_NSS_VERIFIER)
+#if defined(USE_NSS_CERTS)
 #include <nss.h>
 #endif
 
@@ -68,14 +68,13 @@ TEST(TestRootCertsTest, AddFromFile) {
 // the results of the rest of net_unittests, ensuring that the trust status
 // is properly being set and cleared.
 TEST(TestRootCertsTest, OverrideTrust) {
-#if defined(USE_NSS_VERIFIER)
+#if defined(USE_NSS_CERTS)
   if (NSS_VersionCheck("3.14.2") && !NSS_VersionCheck("3.15")) {
     // See http://bugzil.la/863947 for details
     LOG(INFO) << "Skipping test for NSS 3.14.2 - NSS 3.15";
     return;
   }
 #endif
-
   TestRootCerts* test_roots = TestRootCerts::GetInstance();
   ASSERT_NE(static_cast<TestRootCerts*>(NULL), test_roots);
   EXPECT_TRUE(test_roots->IsEmpty());

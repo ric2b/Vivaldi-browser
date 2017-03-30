@@ -60,6 +60,33 @@ protected:
     }
 };
 
+// TODO(ymalik): Currently, this should be the first test in the file to avoid
+// failure when running with other tests. Dig into this more and fix.
+TEST_F(ScrollAnchorTest, UMAMetricUpdated)
+{
+    HistogramTester histogramTester;
+    setBodyInnerHTML(
+        "<style> body { height: 1000px } div { height: 100px } </style>"
+        "<div id='block1'>abc</div>"
+        "<div id='block2'>def</div>");
+
+    ScrollableArea* viewport = layoutViewport();
+
+    // Scroll position not adjusted, metric not updated.
+    scrollLayoutViewport(DoubleSize(0, 150));
+    histogramTester.expectTotalCount(
+        "Layout.ScrollAnchor.AdjustedScrollOffset", 0);
+
+    // Height changed, verify metric updated once.
+    setHeight(document().getElementById("block1"), 200);
+    histogramTester.expectUniqueSample(
+        "Layout.ScrollAnchor.AdjustedScrollOffset", 1, 1);
+
+    EXPECT_EQ(250, viewport->scrollPosition().y());
+    EXPECT_EQ(document().getElementById("block2")->layoutObject(),
+        scrollAnchor(viewport).anchorObject());
+}
+
 TEST_F(ScrollAnchorTest, Basic)
 {
     setBodyInnerHTML(
@@ -84,29 +111,21 @@ TEST_F(ScrollAnchorTest, Basic)
     EXPECT_EQ(nullptr, scrollAnchor(viewport).anchorObject());
 }
 
-TEST_F(ScrollAnchorTest, UMAMetricUpdated)
+TEST_F(ScrollAnchorTest, FractionalOffsetsAreRoundedBeforeComparing)
 {
-    HistogramTester histogramTester;
     setBodyInnerHTML(
-        "<style> body { height: 1000px } div { height: 100px } </style>"
-        "<div id='block1'>abc</div>"
-        "<div id='block2'>def</div>");
+        "<style> body { height: 1000px } </style>"
+        "<div id='block1' style='height: 50.4px'>abc</div>"
+        "<div id='block2' style='height: 100px'>def</div>");
 
     ScrollableArea* viewport = layoutViewport();
+    scrollLayoutViewport(DoubleSize(0, 100));
 
-    // Scroll position not adjusted, metric not updated.
-    scrollLayoutViewport(DoubleSize(0, 150));
-    histogramTester.expectTotalCount(
-        "Layout.ScrollAnchor.AdjustedScrollOffset", 0);
+    document().getElementById("block1")->setAttribute(
+        HTMLNames::styleAttr, "height: 50.6px");
+    update();
 
-    // Height changed, verify metric updated once.
-    setHeight(document().getElementById("block1"), 200);
-    histogramTester.expectUniqueSample(
-        "Layout.ScrollAnchor.AdjustedScrollOffset", 1, 1);
-
-    EXPECT_EQ(250, viewport->scrollPosition().y());
-    EXPECT_EQ(document().getElementById("block2")->layoutObject(),
-        scrollAnchor(viewport).anchorObject());
+    EXPECT_EQ(101, viewport->scrollPosition().y());
 }
 
 TEST_F(ScrollAnchorTest, AnchorWithLayerInScrollingDiv)
@@ -246,6 +265,68 @@ TEST_F(ScrollAnchorTest, ExcludeAbsolutePosition)
     EXPECT_EQ(absPos->layoutObject(), scrollAnchor(scroller).anchorObject());
 }
 
+// Test that we descend into zero-height containers that have overflowing content.
+TEST_F(ScrollAnchorTest, DescendsIntoContainerWithOverflow)
+{
+    setBodyInnerHTML(
+        "<style>"
+        "    body { height: 1000; }"
+        "    #outer { width: 300px; }"
+        "    #zeroheight { height: 0px; }"
+        "    #changer { height: 100px; background-color: red; }"
+        "    #bottom { margin-top: 600px; }"
+        "</style>"
+        "<div id='outer'>"
+        "    <div id='zeroheight'>"
+        "      <div id='changer'></div>"
+        "      <div id='bottom'>bottom</div>"
+        "    </div>"
+        "</div>");
+
+    ScrollableArea* viewport = layoutViewport();
+
+    scrollLayoutViewport(DoubleSize(0, 200));
+    setHeight(document().getElementById("changer"), 200);
+
+    EXPECT_EQ(300, viewport->scrollPosition().y());
+    EXPECT_EQ(document().getElementById("bottom")->layoutObject(),
+        scrollAnchor(viewport).anchorObject());
+}
+
+// Test that we descend into zero-height containers that have floating content.
+TEST_F(ScrollAnchorTest, DescendsIntoContainerWithFloat)
+{
+    setBodyInnerHTML(
+        "<style>"
+        "    body { height: 1000; }"
+        "    #outer { width: 300px; }"
+        "    #outer:after { content: ' '; clear:both; display: table; }"
+        "    #float {"
+        "         float: left; background-color: #ccc;"
+        "         height: 500px; width: 100%;"
+        "    }"
+        "    #inner { height: 21px; background-color:#7f0; }"
+        "</style>"
+        "<div id='outer'>"
+        "    <div id='zeroheight'>"
+        "      <div id='float'>"
+        "         <div id='inner'></div>"
+        "      </div>"
+        "    </div>"
+        "</div>");
+
+    EXPECT_EQ(0, toLayoutBox(document().getElementById("zeroheight")->layoutObject())->size().height());
+
+    ScrollableArea* viewport = layoutViewport();
+
+    scrollLayoutViewport(DoubleSize(0, 200));
+    setHeight(document().getElementById("float"), 600);
+
+    EXPECT_EQ(200, viewport->scrollPosition().y());
+    EXPECT_EQ(document().getElementById("float")->layoutObject(),
+        scrollAnchor(viewport).anchorObject());
+}
+
 class ScrollAnchorCornerTest : public ScrollAnchorTest {
 protected:
     void checkCorner(const AtomicString& id, Corner corner, DoublePoint startPos, DoubleSize expectedAdjustment)
@@ -292,10 +373,106 @@ TEST_F(ScrollAnchorCornerTest, Corners)
         "<div id=c></div>"
         "<div id=d></div>");
 
-    checkCorner("a", Corner::BottomRight, DoublePoint(20,  20),  DoubleSize(+400, +300));
-    checkCorner("b", Corner::BottomLeft,  DoublePoint(420, 20),  DoubleSize(-400, +300));
-    checkCorner("c", Corner::TopRight,    DoublePoint(20,  320), DoubleSize(+400, -300));
-    checkCorner("d", Corner::TopLeft,     DoublePoint(420, 320), DoubleSize(-400, -300));
+    checkCorner("a", Corner::TopLeft, DoublePoint(20,  20),  DoubleSize(0, 0));
+    checkCorner("b", Corner::TopLeft, DoublePoint(420, 20),  DoubleSize(-400, 0));
+    checkCorner("c", Corner::TopLeft, DoublePoint(20,  320), DoubleSize(0, -300));
+    checkCorner("d", Corner::TopLeft, DoublePoint(420, 320), DoubleSize(-400, -300));
+}
+
+TEST_F(ScrollAnchorCornerTest, CornersVerticalLR)
+{
+    setBodyInnerHTML(
+        "<style>"
+        "    html {"
+        "        writing-mode: vertical-lr;"
+        "    }"
+        "    body {"
+        "        position: absolute; border: 10px solid #ccc;"
+        "        width: 1220px; height: 920px;"
+        "    }"
+        "    #a, #b, #c, #d {"
+        "        position: absolute; background-color: #ace;"
+        "        width: 400px; height: 300px;"
+        "    }"
+        "    #a, #b { top: 0; }"
+        "    #a, #c { left: 0; }"
+        "    #b, #d { right: 0; }"
+        "    #c, #d { bottom: 0; }"
+        "    .big { width: 800px !important; height: 600px !important }"
+        "</style>"
+        "<div id=a></div>"
+        "<div id=b></div>"
+        "<div id=c></div>"
+        "<div id=d></div>");
+
+    checkCorner("a", Corner::TopLeft, DoublePoint(20,  20),  DoubleSize(0, 0));
+    checkCorner("b", Corner::TopLeft, DoublePoint(420, 20),  DoubleSize(-400, 0));
+    checkCorner("c", Corner::TopLeft, DoublePoint(20,  320), DoubleSize(0, -300));
+    checkCorner("d", Corner::TopLeft, DoublePoint(420, 320), DoubleSize(-400, -300));
+}
+
+TEST_F(ScrollAnchorCornerTest, CornersRTL)
+{
+    setBodyInnerHTML(
+        "<style>"
+        "    html {"
+        "        direction: rtl;"
+        "    }"
+        "    body {"
+        "        position: absolute; border: 10px solid #ccc;"
+        "        width: 1220px; height: 920px;"
+        "    }"
+        "    #a, #b, #c, #d {"
+        "        position: absolute; background-color: #ace;"
+        "        width: 400px; height: 300px;"
+        "    }"
+        "    #a, #b { top: 0; }"
+        "    #a, #c { left: 0; }"
+        "    #b, #d { right: 0; }"
+        "    #c, #d { bottom: 0; }"
+        "    .big { width: 800px !important; height: 600px !important }"
+        "</style>"
+        "<div id=a></div>"
+        "<div id=b></div>"
+        "<div id=c></div>"
+        "<div id=d></div>");
+
+    checkCorner("b", Corner::TopRight, DoublePoint(-20,  20),  DoubleSize(0, 0));
+    checkCorner("a", Corner::TopRight, DoublePoint(-420, 20),  DoubleSize(400, 0));
+    checkCorner("d", Corner::TopRight, DoublePoint(-20,  320), DoubleSize(0, -300));
+    checkCorner("c", Corner::TopRight, DoublePoint(-420, 320), DoubleSize(400, -300));
+}
+
+TEST_F(ScrollAnchorCornerTest, CornersVerticalRL)
+{
+    setBodyInnerHTML(
+        "<style>"
+        "    html {"
+        "        writing-mode: vertical-rl;"
+        "    }"
+        "    body {"
+        "        position: absolute; border: 10px solid #ccc;"
+        "        width: 1220px; height: 920px;"
+        "    }"
+        "    #a, #b, #c, #d {"
+        "        position: absolute; background-color: #ace;"
+        "        width: 400px; height: 300px;"
+        "    }"
+        "    #a, #b { top: 0; }"
+        "    #a, #c { left: 0; }"
+        "    #b, #d { right: 0; }"
+        "    #c, #d { bottom: 0; }"
+        "    .big { width: 800px !important; height: 600px !important }"
+        "</style>"
+        "<div id=a></div>"
+        "<div id=b></div>"
+        "<div id=c></div>"
+        "<div id=d></div>");
+
+    checkCorner("b", Corner::TopRight, DoublePoint(-20,  20),  DoubleSize(0, 0));
+    checkCorner("a", Corner::TopRight, DoublePoint(-420, 20),  DoubleSize(400, 0));
+    checkCorner("d", Corner::TopRight, DoublePoint(-20,  320), DoubleSize(0, -300));
+    checkCorner("c", Corner::TopRight, DoublePoint(-420, 320), DoubleSize(400, -300));
 }
 
 }

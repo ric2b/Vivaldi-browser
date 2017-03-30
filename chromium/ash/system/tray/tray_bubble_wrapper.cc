@@ -19,10 +19,10 @@ TrayBubbleWrapper::TrayBubbleWrapper(TrayBackgroundView* tray,
                                      views::TrayBubbleView* bubble_view)
     : tray_(tray),
       bubble_view_(bubble_view) {
-  bubble_widget_ = views::BubbleDelegateView::CreateBubble(bubble_view_);
+  bubble_widget_ = views::BubbleDialogDelegateView::CreateBubble(bubble_view_);
   bubble_widget_->AddObserver(this);
 
-  tray_->InitializeBubbleAnimations(bubble_widget_);
+  TrayBackgroundView::InitializeBubbleAnimations(bubble_widget_);
   tray_->UpdateBubbleViewArrow(bubble_view_);
   bubble_view_->InitializeAndShowBubble();
 

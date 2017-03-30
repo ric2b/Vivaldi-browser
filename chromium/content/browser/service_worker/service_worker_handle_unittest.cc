@@ -106,8 +106,9 @@ class ServiceWorkerHandleTest : public testing::Test {
 
     provider_host_.reset(new ServiceWorkerProviderHost(
         helper_->mock_render_process_id(), kRenderFrameId, 1,
-        SERVICE_WORKER_PROVIDER_FOR_WINDOW, helper_->context()->AsWeakPtr(),
-        dispatcher_host_.get()));
+        SERVICE_WORKER_PROVIDER_FOR_WINDOW,
+        ServiceWorkerProviderHost::FrameSecurityLevel::SECURE,
+        helper_->context()->AsWeakPtr(), dispatcher_host_.get()));
 
     helper_->SimulateAddProcessToPattern(pattern,
                                          helper_->mock_render_process_id());
@@ -126,8 +127,8 @@ class ServiceWorkerHandleTest : public testing::Test {
   TestBrowserThreadBundle browser_thread_bundle_;
   MockResourceContext resource_context_;
 
-  scoped_ptr<EmbeddedWorkerTestHelper> helper_;
-  scoped_ptr<ServiceWorkerProviderHost> provider_host_;
+  std::unique_ptr<EmbeddedWorkerTestHelper> helper_;
+  std::unique_ptr<ServiceWorkerProviderHost> provider_host_;
   scoped_refptr<ServiceWorkerRegistration> registration_;
   scoped_refptr<ServiceWorkerVersion> version_;
   scoped_refptr<TestingServiceWorkerDispatcherHost> dispatcher_host_;
@@ -137,10 +138,9 @@ class ServiceWorkerHandleTest : public testing::Test {
 };
 
 TEST_F(ServiceWorkerHandleTest, OnVersionStateChanged) {
-  scoped_ptr<ServiceWorkerHandle> handle =
+  std::unique_ptr<ServiceWorkerHandle> handle =
       ServiceWorkerHandle::Create(helper_->context()->AsWeakPtr(),
-                                  provider_host_->AsWeakPtr(),
-                                  version_.get());
+                                  provider_host_->AsWeakPtr(), version_.get());
 
   // Start the worker, and then...
   ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_FAILED;

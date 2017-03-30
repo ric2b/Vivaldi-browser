@@ -9,13 +9,13 @@ import android.content.SharedPreferences;
 import android.os.AsyncTask;
 import android.os.StrictMode;
 import android.os.SystemClock;
-import android.preference.PreferenceManager;
 import android.support.annotation.Nullable;
 import android.support.v4.util.AtomicFile;
 import android.text.TextUtils;
 import android.util.Pair;
 import android.util.SparseIntArray;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.StreamUtil;
 import org.chromium.base.ThreadUtils;
@@ -184,7 +184,7 @@ public class TabPersistentStore extends TabPersister {
         mTabsToRestore = new ArrayDeque<TabRestoreDetails>();
         mSelectorIndex = selectorIndex;
         mObserver = observer;
-        mPreferences = PreferenceManager.getDefaultSharedPreferences(mContext);
+        mPreferences = ContextUtils.getAppSharedPreferences();
         createMigrationTask();
     }
 
@@ -200,7 +200,7 @@ public class TabPersistentStore extends TabPersister {
     @Override
     protected File getStateDirectory() {
         if (mStateDirectory == null) {
-            mStateDirectory = getStateDirectory(mContext, mSelectorIndex);
+            mStateDirectory = getOrCreateSelectorStateDirectory(mSelectorIndex);
         }
         return mStateDirectory;
     }
@@ -215,24 +215,26 @@ public class TabPersistentStore extends TabPersister {
     }
 
     /**
-     * @return Folder that all metadata for the ChromeTabbedActivity TabModels should be located.
-     *         Each subdirectory stores info about different instances of ChromeTabbedActivity.
+     * Folder that all metadata for the TabModels should be located. Each subdirectory stores info
+     * about different instances of ChromeTabbedActivity.
+     *
+     * @return The parent state directory.
      */
-    private static File getBaseStateDirectory(Context context) {
+    private static File getBaseStateDirectory() {
         if (sBaseStateDirectory == null) {
-            setBaseStateDirectory(context.getDir(BASE_STATE_FOLDER, Context.MODE_PRIVATE));
+            Context appContext = ContextUtils.getApplicationContext();
+            setBaseStateDirectory(appContext.getDir(BASE_STATE_FOLDER, Context.MODE_PRIVATE));
         }
         return sBaseStateDirectory;
     }
 
     /**
      * The folder where the state should be saved to.
-     * @param context A Context instance.
      * @param index   The TabModelSelector index.
      * @return        A file representing the directory that contains the TabModelSelector state.
      */
-    public static File getStateDirectory(Context context, int index) {
-        File file = new File(getBaseStateDirectory(context), Integer.toString(index));
+    public static File getOrCreateSelectorStateDirectory(int index) {
+        File file = new File(getBaseStateDirectory(), Integer.toString(index));
         StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
         StrictMode.allowThreadDiskWrites();
         try {
@@ -249,17 +251,13 @@ public class TabPersistentStore extends TabPersister {
      * Waits for the task that migrates all state files to their new location to finish.
      */
     @VisibleForTesting
-    public static void waitForMigrationToFinish() {
+    public void waitForMigrationToFinish() {
         assert sMigrationTask != null : "The migration should be initialized by now.";
         try {
             sMigrationTask.get();
         } catch (InterruptedException e) {
         } catch (ExecutionException e) {
         }
-    }
-
-    private static void logSaveException(Exception e) {
-        Log.w(TAG, "Error while saving tabs state; will attempt to continue...", e);
     }
 
     /**
@@ -270,7 +268,7 @@ public class TabPersistentStore extends TabPersister {
         mTabContentManager = cache;
     }
 
-    private static void logExecutionTime(String name, long time) {
+    private void logExecutionTime(String name, long time) {
         if (LibraryLoader.isInitialized()) {
             RecordHistogram.recordTimesHistogram("Android.StrictMode.TabPersistentStore." + name,
                     SystemClock.elapsedRealtime() - time, TimeUnit.MILLISECONDS);
@@ -289,7 +287,7 @@ public class TabPersistentStore extends TabPersister {
             try {
                 saveListToFile(serializeTabMetadata());
             } catch (IOException e) {
-                logSaveException(e);
+                Log.w(TAG, "Error while saving tabs state; will attempt to continue...", e);
             }
 
             // Add current tabs to save because they did not get a save signal yet.
@@ -337,7 +335,7 @@ public class TabPersistentStore extends TabPersister {
                         TabState.saveState(stream, state, incognito);
                     }
                 } catch (IOException e) {
-                    logSaveException(e);
+                    Log.w(TAG, "Error while saving tabs state; will attempt to continue...", e);
                 } catch (OutOfMemoryError e) {
                     Log.w(TAG, "Out of memory error while attempting to save tab state.  Erasing.");
                     deleteTabState(id, incognito);
@@ -354,14 +352,15 @@ public class TabPersistentStore extends TabPersister {
 
     /**
      * Restore saved state. Must be called before any tabs are added to the list.
+     * @param ignoreIncognitoFiles Whether to skip loading incognito tabs.
      */
-    public void loadState() {
+    public void loadState(boolean ignoreIncognitoFiles) {
         long time = SystemClock.elapsedRealtime();
         waitForMigrationToFinish();
         logExecutionTime("LoadStateTime", time);
 
         mCancelNormalTabLoads = false;
-        mCancelIncognitoTabLoads = false;
+        mCancelIncognitoTabLoads = ignoreIncognitoFiles;
         mNormalTabsRestored = new SparseIntArray();
         mIncognitoTabsRestored = new SparseIntArray();
         try {
@@ -778,7 +777,7 @@ public class TabPersistentStore extends TabPersister {
         // Temporarily allowing disk access. TODO: Fix. See http://crbug.com/473357
         StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
         try {
-            File[] folders = getBaseStateDirectory(mContext).listFiles();
+            File[] folders = getBaseStateDirectory().listFiles();
             if (folders == null) return;
             for (File folder : folders) {
                 if (!folder.isDirectory()) continue;
@@ -791,7 +790,7 @@ public class TabPersistentStore extends TabPersister {
         mPreferences.edit().putBoolean(PREF_HAS_COMPUTED_MAX_ID, true).apply();
     }
 
-    public static int readSavedStateFile(File folder, OnTabStateReadCallback callback)
+    private int readSavedStateFile(File folder, OnTabStateReadCallback callback)
             throws IOException {
         DataInputStream stream = null;
         // As we do this in startup, and restoring the tab state is critical to
@@ -962,6 +961,12 @@ public class TabPersistentStore extends TabPersister {
         }
     }
 
+    /**
+     * File mutations (e.g. saving & deleting) are explicitly serialized to ensure that they occur
+     * in the correct order.
+     *
+     * @param file Name of file under the state directory to be deleted.
+     */
     private void deleteFileAsync(final String file) {
         new AsyncTask<Void, Void, Void>() {
             @Override
@@ -973,7 +978,6 @@ public class TabPersistentStore extends TabPersister {
                 return null;
             }
         }.executeOnExecutor(AsyncTask.SERIAL_EXECUTOR);
-        // Explicitly serializing file mutations (save & delete) to ensure they occur in order.
     }
 
     private class CleanUpTabStateDataTask extends AsyncTask<Void, Void, String[]> {
@@ -1005,7 +1009,6 @@ public class TabPersistentStore extends TabPersister {
     }
 
     private class LoadTabTask extends AsyncTask<Void, Void, TabState> {
-
         public final TabRestoreDetails mTabToRestore;
 
         public LoadTabTask(TabRestoreDetails tabToRestore) {
@@ -1037,7 +1040,6 @@ public class TabPersistentStore extends TabPersister {
     }
 
     private static final class TabRestoreDetails {
-
         public final int id;
         public final int originalIndex;
         public final String url;
@@ -1054,12 +1056,13 @@ public class TabPersistentStore extends TabPersister {
     private class FileMigrationTask extends AsyncTask<Void, Void, Void> {
         @Override
         protected Void doInBackground(Void... params) {
-            File oldFolder = mContext.getFilesDir();
             File newFolder = getStateDirectory();
+
             // If we already have files here just return.
             File[] newFiles = newFolder.listFiles();
             if (newFiles != null && newFiles.length > 0) return null;
 
+            File oldFolder = mContext.getFilesDir();
             File modelFile = new File(oldFolder, SAVED_STATE_FILE);
             if (modelFile.exists()) {
                 if (!modelFile.renameTo(new File(newFolder, SAVED_STATE_FILE))) {
@@ -1095,8 +1098,7 @@ public class TabPersistentStore extends TabPersister {
      *
      * @return True if the tab is definitely Incognito, false if it's not or if it's undecideable.
      */
-    private static boolean isIncognitoTabBeingRestored(
-            TabRestoreDetails tabDetails, TabState tabState) {
+    private boolean isIncognitoTabBeingRestored(TabRestoreDetails tabDetails, TabState tabState) {
         if (tabState != null) {
             // The Tab's previous state was completely restored.
             return tabState.isIncognito();

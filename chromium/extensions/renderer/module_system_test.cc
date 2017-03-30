@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -15,7 +16,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/string_piece.h"
 #include "extensions/common/extension_paths.h"
@@ -52,9 +53,9 @@ class V8ExtensionConfigurator {
   }
 
  private:
-  scoped_ptr<v8::Extension> safe_builtins_;
+  std::unique_ptr<v8::Extension> safe_builtins_;
   std::vector<const char*> names_;
-  scoped_ptr<v8::ExtensionConfiguration> configuration_;
+  std::unique_ptr<v8::ExtensionConfiguration> configuration_;
 };
 
 base::LazyInstance<V8ExtensionConfigurator>::Leaky g_v8_extension_configurator =
@@ -106,13 +107,14 @@ class ModuleSystemTestEnvironment::StringSourceMap
   ~StringSourceMap() override {}
 
   v8::Local<v8::Value> GetSource(v8::Isolate* isolate,
-                                 const std::string& name) override {
-    if (source_map_.count(name) == 0)
+                                 const std::string& name) const override {
+    const auto& source_map_iter = source_map_.find(name);
+    if (source_map_iter == source_map_.end())
       return v8::Undefined(isolate);
-    return v8::String::NewFromUtf8(isolate, source_map_[name].c_str());
+    return v8::String::NewFromUtf8(isolate, source_map_iter->second.c_str());
   }
 
-  bool Contains(const std::string& name) override {
+  bool Contains(const std::string& name) const override {
     return source_map_.count(name);
   }
 
@@ -142,21 +144,21 @@ ModuleSystemTestEnvironment::ModuleSystemTestEnvironment(v8::Isolate* isolate)
   assert_natives_ = new AssertNatives(context_.get());
 
   {
-    scoped_ptr<ModuleSystem> module_system(
+    std::unique_ptr<ModuleSystem> module_system(
         new ModuleSystem(context_.get(), source_map_.get()));
     context_->set_module_system(std::move(module_system));
   }
   ModuleSystem* module_system = context_->module_system();
   module_system->RegisterNativeHandler(
-      "assert", scoped_ptr<NativeHandler>(assert_natives_));
+      "assert", std::unique_ptr<NativeHandler>(assert_natives_));
   module_system->RegisterNativeHandler(
       "logging",
-      scoped_ptr<NativeHandler>(new LoggingNativeHandler(context_.get())));
+      std::unique_ptr<NativeHandler>(new LoggingNativeHandler(context_.get())));
   module_system->RegisterNativeHandler(
       "utils",
-      scoped_ptr<NativeHandler>(new UtilsNativeHandler(context_.get())));
+      std::unique_ptr<NativeHandler>(new UtilsNativeHandler(context_.get())));
   module_system->SetExceptionHandlerForTest(
-      scoped_ptr<ModuleSystem::ExceptionHandler>(new FailsOnException));
+      std::unique_ptr<ModuleSystem::ExceptionHandler>(new FailsOnException));
 }
 
 ModuleSystemTestEnvironment::~ModuleSystemTestEnvironment() {
@@ -246,8 +248,9 @@ void ModuleSystemTest::TearDown() {
   }
 }
 
-scoped_ptr<ModuleSystemTestEnvironment> ModuleSystemTest::CreateEnvironment() {
-  return make_scoped_ptr(new ModuleSystemTestEnvironment(isolate_));
+std::unique_ptr<ModuleSystemTestEnvironment>
+ModuleSystemTest::CreateEnvironment() {
+  return base::WrapUnique(new ModuleSystemTestEnvironment(isolate_));
 }
 
 void ModuleSystemTest::ExpectNoAssertionsMade() {

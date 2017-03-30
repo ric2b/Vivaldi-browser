@@ -6,8 +6,9 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/files/file_path.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/pickle.h"
 #include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
@@ -24,10 +25,6 @@
 
 #if defined(USE_NSS_CERTS)
 #include <cert.h>
-#endif
-
-#if defined(OS_WIN)
-#include "base/win/windows_version.h"
 #endif
 
 using base::HexEncode;
@@ -1209,14 +1206,6 @@ class X509CertificatePublicKeyInfoTest
 
 TEST_P(X509CertificatePublicKeyInfoTest, GetPublicKeyInfo) {
   PublicKeyInfoTestData data = GetParam();
-
-#if defined(OS_WIN)
-  if (base::win::GetVersion() < base::win::VERSION_VISTA &&
-      data.expected_type == X509Certificate::kPublicKeyTypeECDSA) {
-    // ECC is only supported on Vista+. Skip the test.
-    return;
-  }
-#endif
 
   scoped_refptr<X509Certificate> cert(
       ImportCertFromFile(GetTestCertsDirectory(), data.cert_file));

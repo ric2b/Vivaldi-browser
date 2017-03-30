@@ -37,13 +37,13 @@ DownloadUrlParameters::~DownloadUrlParameters() {
 }
 
 // static
-scoped_ptr<DownloadUrlParameters> DownloadUrlParameters::FromWebContents(
+std::unique_ptr<DownloadUrlParameters> DownloadUrlParameters::FromWebContents(
     WebContents* web_contents,
     const GURL& url) {
   RenderFrameHost* render_frame_host = web_contents->GetMainFrame();
   StoragePartition* storage_partition = BrowserContext::GetStoragePartition(
       web_contents->GetBrowserContext(), render_frame_host->GetSiteInstance());
-  return scoped_ptr<DownloadUrlParameters>(new DownloadUrlParameters(
+  return std::unique_ptr<DownloadUrlParameters>(new DownloadUrlParameters(
       url, render_frame_host->GetProcess()->GetID(),
       web_contents->GetRenderViewHost()->GetRoutingID(),
       render_frame_host->GetRoutingID(),

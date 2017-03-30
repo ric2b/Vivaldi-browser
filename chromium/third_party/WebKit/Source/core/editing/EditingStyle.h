@@ -39,8 +39,6 @@
 #include "core/editing/WritingDirection.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
-#include "wtf/RefCounted.h"
-#include "wtf/RefPtr.h"
 #include "wtf/TriState.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
@@ -59,7 +57,7 @@ class QualifiedName;
 class ComputedStyle;
 class StylePropertySet;
 
-class EditingStyle final : public GarbageCollectedFinalized<EditingStyle> {
+class EditingStyle final : public GarbageCollected<EditingStyle> {
 public:
 
     enum PropertiesToInclude { AllProperties, OnlyEditingInheritableProperties, EditingPropertiesInEffect };
@@ -67,41 +65,39 @@ public:
     enum ShouldExtractMatchingStyle { ExtractMatchingStyle, DoNotExtractMatchingStyle };
     static float NoFontDelta;
 
-    static RawPtr<EditingStyle> create()
+    static EditingStyle* create()
     {
         return new EditingStyle();
     }
 
-    static RawPtr<EditingStyle> create(ContainerNode* node, PropertiesToInclude propertiesToInclude = OnlyEditingInheritableProperties)
+    static EditingStyle* create(ContainerNode* node, PropertiesToInclude propertiesToInclude = OnlyEditingInheritableProperties)
     {
         return new EditingStyle(node, propertiesToInclude);
     }
 
-    static RawPtr<EditingStyle> create(const Position& position, PropertiesToInclude propertiesToInclude = OnlyEditingInheritableProperties)
+    static EditingStyle* create(const Position& position, PropertiesToInclude propertiesToInclude = OnlyEditingInheritableProperties)
     {
         return new EditingStyle(position, propertiesToInclude);
     }
 
-    static RawPtr<EditingStyle> create(const StylePropertySet* style)
+    static EditingStyle* create(const StylePropertySet* style)
     {
         return new EditingStyle(style);
     }
 
-    static RawPtr<EditingStyle> create(CSSPropertyID propertyID, const String& value)
+    static EditingStyle* create(CSSPropertyID propertyID, const String& value)
     {
         return new EditingStyle(propertyID, value);
     }
-
-    ~EditingStyle();
 
     MutableStylePropertySet* style() { return m_mutableStyle.get(); }
     bool textDirection(WritingDirection&) const;
     bool isEmpty() const;
     void overrideWithStyle(const StylePropertySet*);
     void clear();
-    RawPtr<EditingStyle> copy() const;
-    RawPtr<EditingStyle> extractAndRemoveBlockProperties();
-    RawPtr<EditingStyle> extractAndRemoveTextDirection();
+    EditingStyle* copy() const;
+    EditingStyle* extractAndRemoveBlockProperties();
+    EditingStyle* extractAndRemoveTextDirection();
     void removeBlockProperties();
     void removeStyleAddedByElement(Element*);
     void removeStyleConflictingWithStyleOfElement(Element*);
@@ -126,8 +122,8 @@ public:
     void mergeTypingStyle(Document*);
     enum CSSPropertyOverrideMode { OverrideValues, DoNotOverrideValues };
     void mergeInlineStyleOfElement(HTMLElement*, CSSPropertyOverrideMode, PropertiesToInclude = AllProperties);
-    static RawPtr<EditingStyle> wrappingStyleForAnnotatedSerialization(ContainerNode* context);
-    static RawPtr<EditingStyle> wrappingStyleForSerialization(ContainerNode* context);
+    static EditingStyle* wrappingStyleForAnnotatedSerialization(ContainerNode* context);
+    static EditingStyle* wrappingStyleForSerialization(ContainerNode* context);
     void mergeStyleFromRules(Element*);
     void mergeStyleFromRulesForSerialization(Element*);
     void removeStyleFromRulesAndContext(Element*, ContainerNode* context);
@@ -139,7 +135,7 @@ public:
     float fontSizeDelta() const { return m_fontSizeDelta; }
     bool hasFontSizeDelta() const { return m_fontSizeDelta != NoFontDelta; }
 
-    static RawPtr<EditingStyle> styleAtSelectionStart(const VisibleSelection&, bool shouldUseBackgroundColorInEffect = false);
+    static EditingStyle* styleAtSelectionStart(const VisibleSelection&, bool shouldUseBackgroundColorInEffect = false);
     static WritingDirection textDirectionForSelection(const VisibleSelection&, EditingStyle* typingStyle, bool& hasNestedOrMultipleEmbeddings);
     static bool isEmbedOrIsolate(CSSValueID unicodeBidi)
     {

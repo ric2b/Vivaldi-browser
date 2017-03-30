@@ -13,7 +13,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/run_loop.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
@@ -153,7 +153,8 @@ int DragDropController::StartDragAndDrop(
     aura::Window* source_window,
     const gfx::Point& screen_location,
     int operation,
-    ui::DragDropTypes::DragEventSource source) {
+    ui::DragDropTypes::DragEventSource source,
+    bool& cancelled) {
   if (IsDragDropInProgress())
     return 0;
 

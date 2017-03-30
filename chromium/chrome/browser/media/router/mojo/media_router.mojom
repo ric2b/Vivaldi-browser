@@ -97,8 +97,8 @@ struct Issue {
 
   array<ActionType>? secondary_actions;
 
-  // A help page to be opened if users select learn_more.
-  string? help_url;
+  // The ID of the help page to be opened if users select learn_more.
+  int32 help_page_id;
 };
 
 struct RouteMessage {
@@ -114,12 +114,21 @@ struct RouteMessage {
   array<uint8>? data;
 };
 
+struct SinkSearchCriteria {
+  // Input to the search method which each Media Route Provider may interpret
+  // differently.
+  string input;
+  // The user's current hosted domain.
+  string domain;
+};
+
 // Maps to a ResultCode value in route_request_result.h
 // The enum defined here is a subset of those defined in route_request_result.h.
 enum RouteRequestResultCode {
   UNKNOWN_ERROR,
   OK,
-  TIMED_OUT
+  TIMED_OUT,
+  ROUTE_NOT_FOUND
 };
 
 // Modeled after the MediaRouter interface defined in
@@ -188,7 +197,7 @@ interface MediaRouteProvider {
 
   // Creates a new route for |media_source| that connects to the established
   // route given by |route_id|.
-  // 
+  //
   // The presentation ID of the new route will be |presentation_id|, but it may
   // be overridden by a provider implementation.  The presentation ID will be
   // used by the presentation API to refer to the created route.
@@ -289,6 +298,17 @@ interface MediaRouteProvider {
 
   // Updates media sinks capable of displaying |media_source|.
   UpdateMediaSinks(string media_source);
+
+  // Indicates that the Media Router is interested in finding a sink that
+  // matches |search_criteria| and is compatible with the source urn
+  // |media_source|. |search_criteria| should contain an exact copy of the user
+  // input. The user's current domain is also used to search.  The domain is the
+  // hosted domain of the user's signed-in identity, or empty if the user has no
+  // domain or is not signed in.
+  SearchSinks(string sink_id,
+              string media_source,
+              SinkSearchCriteria search_criteria) =>
+                  (string sink_id);
 };
 
 // Interface for a service which observes state changes across media

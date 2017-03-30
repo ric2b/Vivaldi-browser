@@ -10,12 +10,11 @@
 #include "ash/system/chromeos/power/tray_power.h"
 #include "ash/system/tray/fixed_sized_image_view.h"
 #include "ash/system/tray/tray_constants.h"
-#include "base/strings/string_number_conversions.h"
+#include "base/i18n/message_formatter.h"
+#include "base/i18n/time_formatting.h"
 #include "base/strings/utf_string_conversions.h"
 #include "grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/l10n/time_format.h"
-#include "ui/base/resource/resource_bundle.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
@@ -28,12 +27,15 @@ const int kPaddingBetweenBatteryStatusAndIcon = 3;
 
 PowerStatusView::PowerStatusView(bool default_view_right_align)
     : default_view_right_align_(default_view_right_align),
-      time_status_label_(new views::Label),
       percentage_label_(new views::Label),
-      icon_(NULL) {
-  PowerStatus::Get()->AddObserver(this);
+      separator_label_(new views::Label),
+      time_status_label_(new views::Label),
+      icon_(nullptr) {
   percentage_label_->SetEnabledColor(kHeaderTextColorNormal);
+  separator_label_->SetEnabledColor(kHeaderTextColorNormal);
+  separator_label_->SetText(base::ASCIIToUTF16(" - "));
   LayoutView();
+  PowerStatus::Get()->AddObserver(this);
   OnPowerStatusChanged();
 }
 
@@ -43,11 +45,13 @@ PowerStatusView::~PowerStatusView() {
 
 void PowerStatusView::OnPowerStatusChanged() {
   UpdateText();
-
-  if (icon_) {
+  const PowerStatus::BatteryImageInfo info =
+      PowerStatus::Get()->GetBatteryImageInfo(PowerStatus::ICON_DARK);
+  if (info != previous_battery_image_info_) {
     icon_->SetImage(
         PowerStatus::Get()->GetBatteryImage(PowerStatus::ICON_DARK));
     icon_->SetVisible(true);
+    previous_battery_image_info_ = info;
   }
 }
 
@@ -59,6 +63,7 @@ void PowerStatusView::LayoutView() {
     SetLayoutManager(layout);
 
     AddChildView(percentage_label_);
+    AddChildView(separator_label_);
     AddChildView(time_status_label_);
 
     icon_ = new views::ImageView;
@@ -74,53 +79,46 @@ void PowerStatusView::LayoutView() {
     AddChildView(icon_);
 
     AddChildView(percentage_label_);
+    AddChildView(separator_label_);
     AddChildView(time_status_label_);
   }
 }
 
 void PowerStatusView::UpdateText() {
   const PowerStatus& status = *PowerStatus::Get();
-  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   base::string16 battery_percentage;
   base::string16 battery_time_status;
 
   if (status.IsBatteryFull()) {
     battery_time_status =
-        rb.GetLocalizedString(IDS_ASH_STATUS_TRAY_BATTERY_FULL);
+        l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_BATTERY_FULL);
   } else {
-    battery_percentage = l10n_util::GetStringFUTF16(
-        IDS_ASH_STATUS_TRAY_BATTERY_PERCENT_ONLY,
-        base::IntToString16(status.GetRoundedBatteryPercent()));
+    battery_percentage = base::i18n::MessageFormatter::FormatWithNumberedArgs(
+        base::ASCIIToUTF16("{0,number,percent}"),
+        static_cast<double>(status.GetRoundedBatteryPercent()) / 100.0);
     if (status.IsUsbChargerConnected()) {
-      battery_time_status = rb.GetLocalizedString(
+      battery_time_status = l10n_util::GetStringUTF16(
           IDS_ASH_STATUS_TRAY_BATTERY_CHARGING_UNRELIABLE);
     } else if (status.IsBatteryTimeBeingCalculated()) {
       battery_time_status =
-          rb.GetLocalizedString(IDS_ASH_STATUS_TRAY_BATTERY_CALCULATING);
+          l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_BATTERY_CALCULATING);
     } else {
       base::TimeDelta time = status.IsBatteryCharging() ?
           status.GetBatteryTimeToFull() : status.GetBatteryTimeToEmpty();
       if (PowerStatus::ShouldDisplayBatteryTime(time) &&
           !status.IsBatteryDischargingOnLinePower()) {
-        int hour = 0, min = 0;
-        PowerStatus::SplitTimeIntoHoursAndMinutes(time, &hour, &min);
-        base::string16 minute = min < 10 ?
-            base::ASCIIToUTF16("0") + base::IntToString16(min) :
-            base::IntToString16(min);
-        battery_time_status =
-            l10n_util::GetStringFUTF16(
-                status.IsBatteryCharging() ?
-                IDS_ASH_STATUS_TRAY_BATTERY_TIME_UNTIL_FULL_SHORT :
-                IDS_ASH_STATUS_TRAY_BATTERY_TIME_LEFT_SHORT,
-                base::IntToString16(hour),
-                minute);
+        battery_time_status = l10n_util::GetStringFUTF16(
+            status.IsBatteryCharging()
+                ? IDS_ASH_STATUS_TRAY_BATTERY_TIME_UNTIL_FULL_SHORT
+                : IDS_ASH_STATUS_TRAY_BATTERY_TIME_LEFT_SHORT,
+            TimeDurationFormat(time, base::DURATION_WIDTH_NUMERIC));
       }
     }
-    battery_percentage = battery_time_status.empty() ?
-        battery_percentage : battery_percentage + base::ASCIIToUTF16(" - ");
   }
   percentage_label_->SetVisible(!battery_percentage.empty());
   percentage_label_->SetText(battery_percentage);
+  separator_label_->SetVisible(!battery_percentage.empty() &&
+                               !battery_time_status.empty());
   time_status_label_->SetVisible(!battery_time_status.empty());
   time_status_label_->SetText(battery_time_status);
 }
@@ -141,10 +139,12 @@ int PowerStatusView::GetHeightForWidth(int width) const {
 void PowerStatusView::Layout() {
   views::View::Layout();
 
-  // Move the time_status_label_ closer to percentage_label_.
-  if (percentage_label_ && time_status_label_ &&
+  // Move the time_status_label_, separator_label_, and percentage_label_
+  // closer to each other.
+  if (percentage_label_ && separator_label_ && time_status_label_ &&
       percentage_label_->visible() && time_status_label_->visible()) {
-    time_status_label_->SetX(percentage_label_->bounds().right() + 1);
+    separator_label_->SetX(percentage_label_->bounds().right() + 1);
+    time_status_label_->SetX(separator_label_->bounds().right() + 1);
   }
 }
 

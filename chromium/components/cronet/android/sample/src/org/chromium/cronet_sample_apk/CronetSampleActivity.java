@@ -8,7 +8,6 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.os.Bundle;
-import android.os.Environment;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.EditText;
@@ -57,7 +56,7 @@ public class CronetSampleActivity extends Activity {
             Log.i(TAG, "****** Response Started ******");
             Log.i(TAG, "*** Headers Are *** %s", info.getAllHeaders());
 
-            request.readNew(ByteBuffer.allocateDirect(32 * 1024));
+            request.read(ByteBuffer.allocateDirect(32 * 1024));
         }
 
         @Override
@@ -72,7 +71,7 @@ public class CronetSampleActivity extends Activity {
                 Log.i(TAG, "IOException during ByteBuffer read. Details: ", e);
             }
             byteBuffer.clear();
-            request.readNew(byteBuffer);
+            request.read(byteBuffer);
         }
 
         @Override
@@ -175,12 +174,16 @@ public class CronetSampleActivity extends Activity {
         builder.build().start();
     }
 
+    // Starts writing NetLog to disk. startNetLog() should be called afterwards.
     private void startNetLog() {
-        mCronetEngine.startNetLogToFile(
-                Environment.getExternalStorageDirectory().getPath() + "/cronet_sample_netlog.json",
-                false);
+        mCronetEngine.startNetLogToFile(getCacheDir().getPath() + "/netlog.json", false);
     }
 
+    // Stops writing NetLog to disk. Should be called after calling startNetLog().
+    // NetLog can be downloaded afterwards via:
+    //   adb root
+    //   adb pull /data/data/org.chromium.cronet_sample_apk/cache/netlog.json
+    // netlog.json can then be viewed in a Chrome tab navigated to chrome://net-internals/#import
     private void stopNetLog() {
         mCronetEngine.stopNetLog();
     }

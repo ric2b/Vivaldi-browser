@@ -7,7 +7,8 @@
 
 #include <stdint.h>
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "components/mus/public/interfaces/display.mojom.h"
@@ -15,10 +16,6 @@
 #include "components/mus/ws/event_dispatcher_delegate.h"
 #include "components/mus/ws/user_id.h"
 #include "components/mus/ws/window_server.h"
-
-namespace cc {
-struct SurfaceId;
-}
 
 namespace mus {
 namespace ws {
@@ -38,12 +35,9 @@ class WindowManagerStateTestApi;
 class WindowManagerState : public EventDispatcherDelegate {
  public:
   // Creates a WindowManagerState that can host content from any user.
+  WindowManagerState(Display* display, PlatformDisplay* platform_display);
   WindowManagerState(Display* display,
                      PlatformDisplay* platform_display,
-                     cc::SurfaceId surface_id);
-  WindowManagerState(Display* display,
-                     PlatformDisplay* platform_display,
-                     cc::SurfaceId surface_id,
                      const UserId& user_id);
   ~WindowManagerState() override;
 
@@ -74,13 +68,10 @@ class WindowManagerState : public EventDispatcherDelegate {
     return event_dispatcher_.capture_window();
   }
 
-  // Checks if |modal_window| is a visible modal window that blocks current
-  // capture window and if that's the case, releases the capture.
   void ReleaseCaptureBlockedByModalWindow(const ServerWindow* modal_window);
-
-  // Checks if the current capture window is blocked by any visible modal window
-  // and if that's the case, releases the capture.
   void ReleaseCaptureBlockedByAnyModalWindow();
+
+  void AddSystemModalWindow(ServerWindow* window);
 
   // Returns true if this is the WindowManager of the active user.
   bool IsActive() const;
@@ -96,9 +87,9 @@ class WindowManagerState : public EventDispatcherDelegate {
   void ProcessEvent(const ui::Event& event);
 
   // Called when the ack from an event dispatched to WindowTree |tree| is
-  // received. When |handled| is true, the client consumed the event.
+  // received.
   // TODO(sky): make this private and use a callback.
-  void OnEventAck(mojom::WindowTree* tree, bool handled);
+  void OnEventAck(mojom::WindowTree* tree, mojom::EventResult result);
 
   // Returns a mojom::Display for the specified display. WindowManager specific
   // values are not set.
@@ -123,13 +114,12 @@ class WindowManagerState : public EventDispatcherDelegate {
     QueuedEvent();
     ~QueuedEvent();
 
-    scoped_ptr<ui::Event> event;
-    scoped_ptr<ProcessedEventTarget> processed_target;
+    std::unique_ptr<ui::Event> event;
+    std::unique_ptr<ProcessedEventTarget> processed_target;
   };
 
   WindowManagerState(Display* display,
                      PlatformDisplay* platform_display,
-                     cc::SurfaceId surface_id,
                      bool is_user_id_valid,
                      const UserId& user_id);
 
@@ -139,7 +129,7 @@ class WindowManagerState : public EventDispatcherDelegate {
 
   // Schedules an event to be processed later.
   void QueueEvent(const ui::Event& event,
-                  scoped_ptr<ProcessedEventTarget> processed_event_target);
+                  std::unique_ptr<ProcessedEventTarget> processed_event_target);
 
   // Processes the next valid event in |event_queue_|. If the event has already
   // been processed it is dispatched, otherwise the event is passed to the
@@ -152,6 +142,12 @@ class WindowManagerState : public EventDispatcherDelegate {
                                       const ui::Event& event,
                                       base::WeakPtr<Accelerator> accelerator);
 
+  // Registers accelerators used internally for debugging.
+  void AddDebugAccelerators();
+
+  // Returns true if the accelerator was handled.
+  bool HandleDebugAccelerator(uint32_t accelerator_id);
+
   // EventDispatcherDelegate:
   void OnAccelerator(uint32_t accelerator_id, const ui::Event& event) override;
   void SetFocusedWindowFromEventDispatcher(ServerWindow* window) override;
@@ -159,10 +155,12 @@ class WindowManagerState : public EventDispatcherDelegate {
   void SetNativeCapture() override;
   void ReleaseNativeCapture() override;
   void OnServerWindowCaptureLost(ServerWindow* window) override;
+  void OnMouseCursorLocationChanged(const gfx::Point& point) override;
   void DispatchInputEventToWindow(ServerWindow* target,
                                   bool in_nonclient_area,
                                   const ui::Event& event,
                                   Accelerator* accelerator) override;
+  void OnEventTargetNotFound(const ui::Event& event) override;
 
   Display* display_;
   PlatformDisplay* platform_display_;
@@ -173,7 +171,7 @@ class WindowManagerState : public EventDispatcherDelegate {
   const UserId user_id_;
   // Root ServerWindow of this WindowManagerState. |root_| has a parent, the
   // root ServerWindow of the Display.
-  scoped_ptr<ServerWindow> root_;
+  std::unique_ptr<ServerWindow> root_;
   WindowTree* tree_ = nullptr;
 
   // Set to true the first time SetFrameDecorationValues() is received.
@@ -181,9 +179,9 @@ class WindowManagerState : public EventDispatcherDelegate {
   mojom::FrameDecorationValuesPtr frame_decoration_values_;
 
   mojom::WindowTree* tree_awaiting_input_ack_ = nullptr;
-  scoped_ptr<ui::Event> event_awaiting_input_ack_;
+  std::unique_ptr<ui::Event> event_awaiting_input_ack_;
   base::WeakPtr<Accelerator> post_target_accelerator_;
-  std::queue<scoped_ptr<QueuedEvent>> event_queue_;
+  std::queue<std::unique_ptr<QueuedEvent>> event_queue_;
   base::OneShotTimer event_ack_timer_;
 
   EventDispatcher event_dispatcher_;

@@ -7,6 +7,7 @@ package org.chromium.android_webview;
 import android.graphics.Canvas;
 import android.view.ViewGroup;
 
+import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.content.common.CleanupReference;
@@ -19,15 +20,19 @@ import org.chromium.content.common.CleanupReference;
  * the render node hierarchy.
  */
 @JNINamespace("android_webview")
-class AwGLFunctor {
+public class AwGLFunctor {
     private static final class DestroyRunnable implements Runnable {
         private final long mNativeAwGLFunctor;
+        private final Runnable mNativeDrawGLFunctorDestroyRunnable;
 
-        private DestroyRunnable(long nativeAwGLFunctor) {
+        private DestroyRunnable(
+                long nativeAwGLFunctor, Runnable nativeDrawGLFunctorDestroyRunnable) {
             mNativeAwGLFunctor = nativeAwGLFunctor;
+            mNativeDrawGLFunctorDestroyRunnable = nativeDrawGLFunctorDestroyRunnable;
         }
         @Override
         public void run() {
+            mNativeDrawGLFunctorDestroyRunnable.run();
             nativeDestroy(mNativeAwGLFunctor);
         }
     }
@@ -36,28 +41,38 @@ class AwGLFunctor {
     // Same gc-life time as this, but does not reference any members like |mContainerView|.
     private final Object mLifetimeObject;
     private final CleanupReference mCleanupReference;
-    private final AwContents.NativeGLDelegate mNativeGLDelegate;
+    private final AwContents.NativeDrawGLFunctor mNativeDrawGLFunctor;
     private final ViewGroup mContainerView;
     private final Runnable mFunctorReleasedCallback;
+    // Counts outstanding requestDrawGL calls as well as window attach count.
+    private int mRefCount;
 
-    public AwGLFunctor(AwContents.NativeGLDelegate nativeGLDelegate, ViewGroup containerView) {
+    public AwGLFunctor(AwContents.NativeDrawGLFunctorFactory nativeDrawGLFunctorFactory,
+            ViewGroup containerView) {
         mNativeAwGLFunctor = nativeCreate(this);
+        mNativeDrawGLFunctor = nativeDrawGLFunctorFactory.createFunctor(getAwDrawGLViewContext());
         mLifetimeObject = new Object();
-        mCleanupReference =
-                new CleanupReference(mLifetimeObject, new DestroyRunnable(mNativeAwGLFunctor));
-        mNativeGLDelegate = nativeGLDelegate;
+        mCleanupReference = new CleanupReference(mLifetimeObject,
+                new DestroyRunnable(mNativeAwGLFunctor, mNativeDrawGLFunctor.getDestroyRunnable()));
         mContainerView = containerView;
-        if (mNativeGLDelegate.supportsDrawGLFunctorReleasedCallback()) {
+        if (mNativeDrawGLFunctor.supportsDrawGLFunctorReleasedCallback()) {
             mFunctorReleasedCallback = new Runnable() {
                 @Override
                 public void run() {
-                    // Deliberate no-op. This Runnable is holding a strong reference back to the
-                    // AwGLFunctor, which serves its purpose for now.
+                    removeReference();
                 }
             };
         } else {
             mFunctorReleasedCallback = null;
         }
+    }
+
+    public void onAttachedToWindow() {
+        addReference();
+    }
+
+    public void onDetachedFromWindow() {
+        removeReference();
     }
 
     public static long getAwDrawGLFunction() {
@@ -68,23 +83,35 @@ class AwGLFunctor {
         return mNativeAwGLFunctor;
     }
 
-    public Object getNativeLifetimeObject() {
-        return mLifetimeObject;
+    public boolean requestDrawGL(Canvas canvas) {
+        boolean success = mNativeDrawGLFunctor.requestDrawGL(canvas, mFunctorReleasedCallback);
+        if (success && mFunctorReleasedCallback != null) {
+            addReference();
+        }
+        return success;
     }
 
-    public boolean requestDrawGLForCanvas(Canvas canvas) {
-        return mNativeGLDelegate.requestDrawGL(
-                canvas, false, mContainerView, mFunctorReleasedCallback);
+    private void addReference() {
+        ++mRefCount;
+    }
+
+    private void removeReference() {
+        if (--mRefCount == 0) {
+            // When |mRefCount| decreases to zero, the functor is neither attached to a view, nor
+            // referenced from the render tree, and so it is safe to delete the HardwareRenderer
+            // instance to free up resources because the current state will not be drawn again.
+            deleteHardwareRenderer();
+        }
     }
 
     @CalledByNative
-    private boolean requestDrawGL(boolean waitForCompletion) {
-        return mNativeGLDelegate.requestDrawGL(null, waitForCompletion, mContainerView, null);
+    private boolean requestInvokeGL(boolean waitForCompletion) {
+        return mNativeDrawGLFunctor.requestInvokeGL(mContainerView, waitForCompletion);
     }
 
     @CalledByNative
     private void detachFunctorFromView() {
-        mNativeGLDelegate.detachGLFunctor();
+        mNativeDrawGLFunctor.detach(mContainerView);
         mContainerView.invalidate();
     }
 
@@ -96,10 +123,20 @@ class AwGLFunctor {
         return nativeGetAwDrawGLViewContext(mNativeAwGLFunctor);
     }
 
+    /**
+     * Intended for test code.
+     * @return the number of native instances of this class.
+     */
+    @VisibleForTesting
+    public static int getNativeInstanceCount() {
+        return nativeGetNativeInstanceCount();
+    }
+
     private native void nativeDeleteHardwareRenderer(long nativeAwGLFunctor);
     private native long nativeGetAwDrawGLViewContext(long nativeAwGLFunctor);
 
     private static native long nativeGetAwDrawGLFunction();
     private static native void nativeDestroy(long nativeAwGLFunctor);
     private static native long nativeCreate(AwGLFunctor javaProxy);
+    private static native int nativeGetNativeInstanceCount();
 }

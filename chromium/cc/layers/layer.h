@@ -20,7 +20,6 @@
 #include "cc/animation/target_property.h"
 #include "cc/base/cc_export.h"
 #include "cc/base/region.h"
-#include "cc/debug/frame_timing_request.h"
 #include "cc/debug/micro_benchmark.h"
 #include "cc/input/input_handler.h"
 #include "cc/layers/layer_collections.h"
@@ -29,7 +28,6 @@
 #include "cc/output/filter_operations.h"
 #include "cc/trees/property_tree.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "third_party/skia/include/core/SkImageFilter.h"
 #include "third_party/skia/include/core/SkPicture.h"
 #include "third_party/skia/include/core/SkXfermode.h"
 #include "ui/gfx/geometry/point3_f.h"
@@ -103,7 +101,7 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   // first), then the callback is called with a nullptr/empty result. If the
   // request's source property is set, any prior uncommitted requests having the
   // same source will be aborted.
-  void RequestCopyOfOutput(scoped_ptr<CopyOutputRequest> request);
+  void RequestCopyOfOutput(std::unique_ptr<CopyOutputRequest> request);
   bool HasCopyRequest() const {
     return !copy_requests_.empty();
   }
@@ -136,6 +134,8 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   bool OpacityIsAnimating() const;
   bool HasPotentiallyRunningOpacityAnimation() const;
   virtual bool OpacityCanAnimateOnImplThread() const;
+
+  virtual bool AlwaysUseActiveTreeOpacity() const;
 
   void SetBlendMode(SkXfermode::Mode blend_mode);
   SkXfermode::Mode blend_mode() const { return blend_mode_; }
@@ -200,7 +200,6 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   bool HasPotentiallyRunningTransformAnimation() const;
   bool HasOnlyTranslationTransforms() const;
   bool AnimationsPreserveAxisAlignment() const;
-  bool transform_is_invertible() const { return transform_is_invertible_; }
 
   bool MaximumTargetScale(float* max_scale) const;
   bool AnimationStartScale(float* start_scale) const;
@@ -289,8 +288,10 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
     did_scroll_callback_ = callback;
   }
 
-  void SetForceRenderSurface(bool force_render_surface);
-  bool force_render_surface() const { return force_render_surface_; }
+  void SetForceRenderSurfaceForTesting(bool force_render_surface);
+  bool force_render_surface_for_testing() const {
+    return force_render_surface_for_testing_;
+  }
 
   gfx::ScrollOffset CurrentScrollOffset() const { return scroll_offset_; }
 
@@ -350,7 +351,7 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   virtual void SetIsMask(bool is_mask) {}
   virtual bool IsSuitableForGpuRasterization() const;
 
-  virtual scoped_ptr<base::trace_event::ConvertableToTraceFormat>
+  virtual std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
   TakeDebugInfo();
 
   void SetLayerClient(LayerClient* client) { client_ = client; }
@@ -409,7 +410,7 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   virtual sk_sp<SkPicture> GetPicture() const;
 
   // Constructs a LayerImpl of the correct runtime type for this Layer type.
-  virtual scoped_ptr<LayerImpl> CreateLayerImpl(LayerTreeImpl* tree_impl);
+  virtual std::unique_ptr<LayerImpl> CreateLayerImpl(LayerTreeImpl* tree_impl);
 
   bool NeedsDisplayForTesting() const { return !update_rect_.IsEmpty(); }
   void ResetNeedsDisplayForTesting() { update_rect_ = gfx::Rect(); }
@@ -477,24 +478,8 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
 
   void set_clip_rect(const gfx::Rect& rect) {}
 
-  // This should only be called during BeginMainFrame since it does not trigger
-  // a Commit. This is called right after property tree being built and should
-  // not trigger property tree rebuild.
-  void SetHasRenderSurface(bool has_render_surface);
-  bool has_render_surface() const {
-    return has_render_surface_;
-  }
-
   void SetSubtreePropertyChanged();
   bool subtree_property_changed() const { return subtree_property_changed_; }
-
-  // Sets new frame timing requests for this layer.
-  void SetFrameTimingRequests(const std::vector<FrameTimingRequest>& requests);
-
-  // Accessor for unit tests
-  const std::vector<FrameTimingRequest>& FrameTimingRequests() const {
-    return frame_timing_requests_;
-  }
 
   void DidBeginTracing();
 
@@ -512,8 +497,16 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   void OnOpacityAnimated(float opacity);
   void OnTransformAnimated(const gfx::Transform& transform);
   void OnScrollOffsetAnimated(const gfx::ScrollOffset& scroll_offset);
+  void OnTransformIsCurrentlyAnimatingChanged(bool is_animating);
   void OnTransformIsPotentiallyAnimatingChanged(bool is_animating);
+  void OnOpacityIsCurrentlyAnimatingChanged(bool is_currently_animating);
+  void OnOpacityIsPotentiallyAnimatingChanged(bool has_potential_animation);
   bool HasActiveAnimationForTesting() const;
+
+  void SetHasWillChangeTransformHint(bool has_will_change);
+  bool has_will_change_transform_hint() const {
+    return has_will_change_transform_hint_;
+  }
 
  protected:
   friend class LayerImpl;
@@ -648,10 +641,9 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   bool use_parent_backface_visibility_ : 1;
   bool use_local_transform_for_backface_visibility_ : 1;
   bool should_check_backface_visibility_ : 1;
-  bool force_render_surface_ : 1;
-  bool transform_is_invertible_ : 1;
-  bool has_render_surface_ : 1;
+  bool force_render_surface_for_testing_ : 1;
   bool subtree_property_changed_ : 1;
+  bool has_will_change_transform_hint_ : 1;
   Region non_fast_scrollable_region_;
   Region touch_event_handler_region_;
   gfx::PointF position_;
@@ -666,10 +658,10 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   FilterOperations background_filters_;
   LayerPositionConstraint position_constraint_;
   Layer* scroll_parent_;
-  scoped_ptr<std::set<Layer*>> scroll_children_;
+  std::unique_ptr<std::set<Layer*>> scroll_children_;
 
   Layer* clip_parent_;
-  scoped_ptr<std::set<Layer*>> clip_children_;
+  std::unique_ptr<std::set<Layer*>> clip_children_;
 
   gfx::Transform transform_;
   gfx::Point3F transform_origin_;
@@ -679,7 +671,7 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
 
   LayerClient* client_;
 
-  std::vector<scoped_ptr<CopyOutputRequest>> copy_requests_;
+  std::vector<std::unique_ptr<CopyOutputRequest>> copy_requests_;
 
   base::Closure did_scroll_callback_;
 
@@ -688,9 +680,6 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   // These all act like draw properties, so don't need push properties.
   gfx::Rect visible_layer_rect_;
   size_t num_unclipped_descendants_;
-
-  std::vector<FrameTimingRequest> frame_timing_requests_;
-  bool frame_timing_requests_dirty_;
 
   DISALLOW_COPY_AND_ASSIGN(Layer);
 };

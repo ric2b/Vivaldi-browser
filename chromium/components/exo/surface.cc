@@ -9,6 +9,7 @@
 #include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/resources/single_release_callback.h"
@@ -135,6 +136,9 @@ Surface::Surface()
       pending_input_region_(SkIRect::MakeLargest()),
       pending_buffer_scale_(1.0f),
       pending_only_visible_on_secure_output_(false),
+      pending_blend_mode_(SkXfermode::kSrcOver_Mode),
+      pending_alpha_(1.0f),
+      alpha_(0.0f),
       input_region_(SkIRect::MakeLargest()),
       needs_commit_surface_hierarchy_(false),
       update_contents_after_successful_compositing_(false),
@@ -144,7 +148,7 @@ Surface::Surface()
   SetName("ExoSurface");
   SetProperty(kSurfaceKey, this);
   Init(ui::LAYER_SOLID_COLOR);
-  SetEventTargeter(make_scoped_ptr(new CustomWindowTargeter));
+  SetEventTargeter(base::WrapUnique(new CustomWindowTargeter));
   set_owned_by_parent(false);
   AddObserver(this);
 }
@@ -313,6 +317,18 @@ void Surface::SetOnlyVisibleOnSecureOutput(bool only_visible_on_secure_output) {
   pending_only_visible_on_secure_output_ = only_visible_on_secure_output;
 }
 
+void Surface::SetBlendMode(SkXfermode::Mode blend_mode) {
+  TRACE_EVENT1("exo", "Surface::SetBlendMode", "blend_mode", blend_mode);
+
+  pending_blend_mode_ = blend_mode;
+}
+
+void Surface::SetAlpha(float alpha) {
+  TRACE_EVENT1("exo", "Surface::SetAlpha", "alpha", alpha);
+
+  pending_alpha_ = alpha;
+}
+
 void Surface::Commit() {
   TRACE_EVENT0("exo", "Surface::Commit");
 
@@ -342,7 +358,7 @@ void Surface::CommitSurfaceHierarchy() {
     pending_only_visible_on_secure_output_ = false;
 
     cc::TextureMailbox texture_mailbox;
-    scoped_ptr<cc::SingleReleaseCallback> texture_mailbox_release_callback;
+    std::unique_ptr<cc::SingleReleaseCallback> texture_mailbox_release_callback;
     if (current_buffer_) {
       texture_mailbox_release_callback = current_buffer_->ProduceTextureMailbox(
           &texture_mailbox, secure_output_only, false);
@@ -362,13 +378,12 @@ void Surface::CommitSurfaceHierarchy() {
                                  contents_size);
       layer()->SetTextureFlipped(false);
       layer()->SetBounds(gfx::Rect(layer()->bounds().origin(), contents_size));
-      layer()->SetFillsBoundsOpaquely(pending_opaque_region_.contains(
-          gfx::RectToSkIRect(gfx::Rect(contents_size))));
     } else {
       // Show solid color content if no buffer is attached or we failed
       // to produce a texture mailbox for the currently attached buffer.
       layer()->SetShowSolidColorContent();
       layer()->SetColor(SK_ColorBLACK);
+      alpha_ = 1.0f;
     }
 
     // Schedule redraw of the damage region.
@@ -384,6 +399,18 @@ void Surface::CommitSurfaceHierarchy() {
 
   // Move pending frame callbacks to the end of |frame_callbacks_|.
   frame_callbacks_.splice(frame_callbacks_.end(), pending_frame_callbacks_);
+
+  // Update alpha compositing properties.
+  // TODO(reveman): Use a more reliable way to force blending off than setting
+  // fills-bounds-opaquely.
+  layer()->SetFillsBoundsOpaquely(
+      pending_blend_mode_ == SkXfermode::kSrc_Mode ||
+      pending_opaque_region_.contains(
+          gfx::RectToSkIRect(gfx::Rect(layer()->size()))));
+  if (layer()->has_external_content()) {
+    layer()->SetTextureAlpha(pending_alpha_);
+    alpha_ = pending_alpha_;
+  }
 
   // Synchronize window hierarchy. This will position and update the stacking
   // order of all sub-surfaces after committing all pending state of sub-surface
@@ -416,18 +443,15 @@ void Surface::CommitSurfaceHierarchy() {
   }
 }
 
-gfx::Rect Surface::GetVisibleBounds() const {
-  // Simple clients expect the visible bounds "geometry" of a surface to match
-  // the input region bounds. To accommodate that we return the intersection
-  // of the layer bounds and the input region bounds.
-  SkIRect visible_bounds = input_region_.getBounds();
-  if (!visible_bounds.intersect(gfx::RectToSkIRect(gfx::Rect(layer()->size()))))
-    return gfx::Rect();
-  return gfx::SkIRectToRect(visible_bounds);
-}
-
 bool Surface::IsSynchronized() const {
   return delegate_ ? delegate_->IsSurfaceSynchronized() : false;
+}
+
+gfx::Rect Surface::GetHitTestBounds() const {
+  SkIRect bounds = input_region_.getBounds();
+  if (!bounds.intersect(gfx::RectToSkIRect(gfx::Rect(layer()->size()))))
+    return gfx::Rect();
+  return gfx::SkIRectToRect(bounds);
 }
 
 bool Surface::HitTestRect(const gfx::Rect& rect) const {
@@ -444,6 +468,22 @@ bool Surface::HasHitTestMask() const {
 
 void Surface::GetHitTestMask(gfx::Path* mask) const {
   input_region_.getBoundaryPath(mask);
+}
+
+gfx::Rect Surface::GetNonTransparentBounds() const {
+  gfx::Rect non_transparent_bounds;
+  if (alpha_)
+    non_transparent_bounds = gfx::Rect(layer()->size());
+
+  for (auto& sub_surface_entry : pending_sub_surfaces_) {
+    Surface* sub_surface = sub_surface_entry.first;
+    if (!sub_surface->has_contents())
+      continue;
+    non_transparent_bounds.Union(sub_surface->GetNonTransparentBounds() +
+                                 sub_surface->bounds().OffsetFromOrigin());
+  }
+
+  return non_transparent_bounds;
 }
 
 void Surface::SetSurfaceDelegate(SurfaceDelegate* delegate) {
@@ -467,8 +507,8 @@ bool Surface::HasSurfaceObserver(const SurfaceObserver* observer) const {
   return observers_.HasObserver(observer);
 }
 
-scoped_ptr<base::trace_event::TracedValue> Surface::AsTracedValue() const {
-  scoped_ptr<base::trace_event::TracedValue> value(
+std::unique_ptr<base::trace_event::TracedValue> Surface::AsTracedValue() const {
+  std::unique_ptr<base::trace_event::TracedValue> value(
       new base::trace_event::TracedValue());
   value->SetString("name", layer()->name());
   return value;
@@ -527,7 +567,7 @@ void Surface::OnCompositingEnded(ui::Compositor* compositor) {
 
   // Update contents by producing a new texture mailbox for the current buffer.
   cc::TextureMailbox texture_mailbox;
-  scoped_ptr<cc::SingleReleaseCallback> texture_mailbox_release_callback =
+  std::unique_ptr<cc::SingleReleaseCallback> texture_mailbox_release_callback =
       current_buffer_->ProduceTextureMailbox(&texture_mailbox,
                                              secure_output_only, true);
   if (texture_mailbox_release_callback) {

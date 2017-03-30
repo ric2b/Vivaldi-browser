@@ -3,11 +3,12 @@
 // found in the LICENSE file.
 
 #include <string.h>
+
+#include <memory>
 #include <utility>
 
 #include "base/command_line.h"
 #include "base/guid.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/dom_distiller/dom_distiller_service_factory.h"
@@ -119,18 +120,18 @@ class DomDistillerViewerSourceBrowserTest : public InProcessBrowserTest {
     command_line->AppendSwitch(switches::kEnableDomDistiller);
   }
 
-  static scoped_ptr<KeyedService> Build(content::BrowserContext* context) {
+  static std::unique_ptr<KeyedService> Build(content::BrowserContext* context) {
     FakeDB<ArticleEntry>* fake_db = new FakeDB<ArticleEntry>(database_model_);
     distiller_factory_ = new MockDistillerFactory();
     MockDistillerPageFactory* distiller_page_factory_ =
         new MockDistillerPageFactory();
-    scoped_ptr<DomDistillerContextKeyedService> service(
+    std::unique_ptr<DomDistillerContextKeyedService> service(
         new DomDistillerContextKeyedService(
-            scoped_ptr<DomDistillerStoreInterface>(CreateStoreWithFakeDB(
+            std::unique_ptr<DomDistillerStoreInterface>(CreateStoreWithFakeDB(
                 fake_db, FakeDB<ArticleEntry>::EntryMap())),
-            scoped_ptr<DistillerFactory>(distiller_factory_),
-            scoped_ptr<DistillerPageFactory>(distiller_page_factory_),
-            scoped_ptr<DistilledPagePrefs>(new DistilledPagePrefs(
+            std::unique_ptr<DistillerFactory>(distiller_factory_),
+            std::unique_ptr<DistillerPageFactory>(distiller_page_factory_),
+            std::unique_ptr<DistilledPagePrefs>(new DistilledPagePrefs(
                 Profile::FromBrowserContext(context)->GetPrefs()))));
     fake_db->InitCallback(true);
     fake_db->LoadCallback(true);
@@ -194,8 +195,14 @@ IN_PROC_BROWSER_TEST_F(DomDistillerViewerSourceBrowserTest,
 
 // The DomDistillerViewerSource renders untrusted content, so ensure no bindings
 // are enabled when requesting to view an arbitrary URL.
+// Flaky on Linux: see http://crbug.com/606040.
+#if defined(OS_LINUX)
+#define MAYBE_NoWebUIBindingsViewUrl DISABLED_NoWebUIBindingsViewUrl
+#else
+#define MAYBE_NoWebUIBindingsViewUrl NoWebUIBindingsViewUrl
+#endif
 IN_PROC_BROWSER_TEST_F(DomDistillerViewerSourceBrowserTest,
-                       NoWebUIBindingsViewUrl) {
+                       MAYBE_NoWebUIBindingsViewUrl) {
   // We should expect distillation for any valid URL.
   expect_distillation_ = true;
   expect_distiller_page_ = true;
@@ -226,8 +233,14 @@ void DomDistillerViewerSourceBrowserTest::ViewSingleDistilledPage(
   EXPECT_EQ(expected_mime_type, contents_after_nav->GetContentsMimeType());
 }
 
+#if defined(OS_LINUX)
+// Flaky on Ubuntu-12.04 bots: https://crbug.com/604362
+#define MAYBE_TestBadUrlErrorPage DISABLED_TestBadUrlErrorPage
+#else
+#define MAYBE_TestBadUrlErrorPage TestBadUrlErrorPage
+#endif
 IN_PROC_BROWSER_TEST_F(DomDistillerViewerSourceBrowserTest,
-                       TestBadUrlErrorPage) {
+                       MAYBE_TestBadUrlErrorPage) {
   GURL url("chrome-distiller://bad");
 
   // Navigate to a distiller URL.
@@ -266,8 +279,15 @@ IN_PROC_BROWSER_TEST_F(DomDistillerViewerSourceBrowserTest,
   ViewSingleDistilledPage(url, "text/css");
 }
 
+
+#if defined(OS_LINUX)
+// Flaky on Ubuntu-12.04 bots: https://crbug.com/604362
+#define MAYBE_EmptyURLShouldNotCrash DISABLED_EmptyURLShouldNotCrash
+#else
+#define MAYBE_EmptyURLShouldNotCrash EmptyURLShouldNotCrash
+#endif
 IN_PROC_BROWSER_TEST_F(DomDistillerViewerSourceBrowserTest,
-                       EmptyURLShouldNotCrash) {
+                       MAYBE_EmptyURLShouldNotCrash) {
   // This is a bogus URL, so no distillation will happen.
   expect_distillation_ = false;
   expect_distiller_page_ = false;
@@ -323,7 +343,7 @@ IN_PROC_BROWSER_TEST_F(DomDistillerViewerSourceBrowserTest,
   // Finish distillation and make sure the spinner has been replaced by text.
   std::vector<scoped_refptr<ArticleDistillationUpdate::RefCountedPageProto> >
       update_pages;
-  scoped_ptr<DistilledArticleProto> article(new DistilledArticleProto());
+  std::unique_ptr<DistilledArticleProto> article(new DistilledArticleProto());
 
   scoped_refptr<base::RefCountedData<DistilledPageProto> > page_proto =
       new base::RefCountedData<DistilledPageProto>();
@@ -432,7 +452,7 @@ IN_PROC_BROWSER_TEST_F(DomDistillerViewerSourceBrowserTest, MultiPageArticle) {
 
   std::vector<scoped_refptr<ArticleDistillationUpdate::RefCountedPageProto> >
       update_pages;
-  scoped_ptr<DistilledArticleProto> article(new DistilledArticleProto());
+  std::unique_ptr<DistilledArticleProto> article(new DistilledArticleProto());
 
   // Flush page 1.
   {
@@ -498,13 +518,28 @@ IN_PROC_BROWSER_TEST_F(DomDistillerViewerSourceBrowserTest, MultiPageArticle) {
   EXPECT_THAT(result, HasSubstr("Page 2 content"));
 }
 
-IN_PROC_BROWSER_TEST_F(DomDistillerViewerSourceBrowserTest, PrefChange) {
+// Flaky on Ubuntu-12.04 bots: https://crbug.com/606037
+#if defined(OS_LINUX)
+#define MAYBE_PrefChange DISABLED_PrefChange
+#else
+#define MAYBE_PrefChange PrefChange
+#endif
+IN_PROC_BROWSER_TEST_F(DomDistillerViewerSourceBrowserTest,
+                       MAYBE_PrefChange) {
   PrefTest(false);
 }
 
-IN_PROC_BROWSER_TEST_F(DomDistillerViewerSourceBrowserTest, PrefChangeError) {
+#if defined(OS_LINUX)
+// Flaky on Ubuntu-12.04 bots: https://crbug.com/604362
+#define MAYBE_PrefChangeError DISABLED_PrefChangeError
+#else
+#define MAYBE_PrefChangeError PrefChangeError
+#endif
+IN_PROC_BROWSER_TEST_F(DomDistillerViewerSourceBrowserTest,
+                       MAYBE_PrefChangeError) {
   PrefTest(true);
 }
+
 
 void DomDistillerViewerSourceBrowserTest::PrefTest(bool is_error_page) {
   GURL url;

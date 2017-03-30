@@ -16,7 +16,6 @@ class Isolate;
 
 namespace blink {
 
-class V8DebuggerImpl;
 class V8InspectorSessionImpl;
 
 class V8ProfilerAgentImpl : public V8ProfilerAgent {
@@ -24,6 +23,8 @@ class V8ProfilerAgentImpl : public V8ProfilerAgent {
 public:
     explicit V8ProfilerAgentImpl(V8InspectorSessionImpl*);
     ~V8ProfilerAgentImpl() override;
+
+    bool enabled() const { return m_enabled; }
 
     void setInspectorState(protocol::DictionaryValue* state) override { m_state = state; }
     void setFrontend(protocol::Frontend::Profiler* frontend) override { m_frontend = frontend; }
@@ -36,11 +37,8 @@ public:
     void start(ErrorString*) override;
     void stop(ErrorString*, OwnPtr<protocol::Profiler::CPUProfile>*) override;
 
-    void consoleProfile(const String16& title) override;
-    void consoleProfileEnd(const String16& title) override;
-
-    void idleStarted() override;
-    void idleFinished() override;
+    void consoleProfile(const String16& title);
+    void consoleProfileEnd(const String16& title);
 
 private:
     String16 nextProfileId();
@@ -50,7 +48,7 @@ private:
 
     bool isRecording() const;
 
-    V8DebuggerImpl* m_debugger;
+    V8InspectorSessionImpl* m_session;
     v8::Isolate* m_isolate;
     protocol::DictionaryValue* m_state;
     protocol::Frontend::Profiler* m_frontend;

@@ -9,6 +9,20 @@
 #import "chrome/browser/ui/cocoa/themed_window.h"
 #include "ui/base/theme_provider.h"
 
+namespace {
+
+// Upper and lower bounds for determining if a theme's colors indicate that
+// it's a "dark" theme. In Material Design, dark themes have controls that are
+// drawn using transparent white instead of a transparent shade of gray.
+const CGFloat kDarkThemeToolbarColorUpperBound = 0.55;
+const CGFloat kDarkThemeTabTextColorLowerBound = 0.7;
+
+}  // namespace
+
+@interface NSWindow (Private)
+- (BOOL)hasKeyAppearance;
+@end
+
 @implementation ChromeBrowserWindow
 
 - (const ui::ThemeProvider*)themeProvider {
@@ -61,7 +75,7 @@
         [theColor colorUsingColorSpaceName:NSCalibratedWhiteColorSpace];
     if (theColor != nil) {
       // The white componement cutoff is an empirical value.
-      return [theColor whiteComponent] < 0.7;
+      return [theColor whiteComponent] < kDarkThemeToolbarColorUpperBound;
     }
   }
 
@@ -73,11 +87,29 @@
     theColor =
         [theColor colorUsingColorSpaceName:NSCalibratedWhiteColorSpace];
     if (theColor != nil) {
-      return [theColor whiteComponent] >= 0.7;
+      return [theColor whiteComponent] >= kDarkThemeTabTextColorLowerBound;
     }
   }
 
   return NO;
+}
+
+- (BOOL)hasKeyAppearance {
+  // If not key, but a non-main child window without its own traffic lights _is_
+  // key, then show this window with key appearance to keep the traffic lights
+  // lit. This does not currently handle WebModal dialogs, since they are
+  // children of an overlay window. But WebModals also temporarily lose key
+  // status while animating closed, so extra logic is needed to avoid flicker.
+  // Start with an early exit, since this is called for every mouseMove and
+  // every cursor blink in an NSTextField.
+  if (![self isKeyWindow]) {
+    for (NSWindow* child in [self childWindows]) {
+      if ([child isKeyWindow] && ![child isMainWindow] &&
+          ([child styleMask] & NSClosableWindowMask) == 0)
+        return YES;
+    }
+  }
+  return [super hasKeyAppearance];
 }
 
 @end

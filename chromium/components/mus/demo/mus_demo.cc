@@ -58,8 +58,8 @@ MusDemo::MusDemo() {}
 
 MusDemo::~MusDemo() {}
 
-void MusDemo::Initialize(mojo::Connector* connector,
-                         const mojo::Identity& identity,
+void MusDemo::Initialize(shell::Connector* connector,
+                         const shell::Identity& identity,
                          uint32_t id) {
   connector_ = connector;
 
@@ -67,7 +67,7 @@ void MusDemo::Initialize(mojo::Connector* connector,
   window_tree_host_->SetTitle("MUS Demo");
 }
 
-bool MusDemo::AcceptConnection(mojo::Connection* connection) {
+bool MusDemo::AcceptConnection(shell::Connection* connection) {
   return true;
 }
 
@@ -90,6 +90,8 @@ void MusDemo::OnConnectionLost(mus::WindowTreeConnection* connection) {
   timer_.Stop();
 }
 
+void MusDemo::OnEventObserved(const ui::Event& event, mus::Window* target) {}
+
 void MusDemo::SetWindowManagerClient(mus::WindowManagerClient* client) {}
 
 bool MusDemo::OnWmSetBounds(mus::Window* window, gfx::Rect* bounds) {
@@ -98,7 +100,7 @@ bool MusDemo::OnWmSetBounds(mus::Window* window, gfx::Rect* bounds) {
 
 bool MusDemo::OnWmSetProperty(mus::Window* window,
                               const std::string& name,
-                              scoped_ptr<std::vector<uint8_t>>* new_data) {
+                              std::unique_ptr<std::vector<uint8_t>>* new_data) {
   return true;
 }
 
@@ -147,7 +149,7 @@ void MusDemo::DrawFrame() {
   const unsigned char* addr =
       static_cast<const unsigned char*>(bitmap_.getPixels());
   const int bytes = bounds.width() * bounds.height() * 4;
-  scoped_ptr<std::vector<unsigned char>> data(
+  std::unique_ptr<std::vector<unsigned char>> data(
       new std::vector<unsigned char>(addr, addr + bytes));
   bitmap_.unlockPixels();
 

@@ -3,6 +3,8 @@
 The perf bot sheriff is responsible for keeping the bots on the chromium.perf
 waterfall up and running, and triaging performance test failures and flakes.
 
+**[Rotation calendar](https://calendar.google.com/calendar/embed?src=google.com_2fpmo740pd1unrui9d7cgpbg2k%40group.calendar.google.com)**
+
 ## Key Responsibilities
 
 *   [Handle Device and Bot Failures](#botfailures)
@@ -52,9 +54,28 @@ postings for important announcements about bot turndowns and other known issues.
 
 ##<a name="botfailures"></a> Handle Device and Bot Failures
 
+###<a name="offline"></a> Offline Buildslaves
+
+Some build configurations, in particular the perf builders and trybots, have
+multiple machines attached. If one or more of the machines go down, there are
+still other machines running, so the console or waterfall view will still show
+green, but those configs will run at reduced throughput. At least once during
+your shift, you should check the lists of buildslaves and ensure they're all
+running.
+
+*   [chromium.perf buildslaves](https://build.chromium.org/p/chromium.perf/buildslaves)
+*   [tryserver.chromium.perf buildslaves](https://build.chromium.org/p/tryserver.chromium.perf/buildslaves)
+
+The machines restart between test runs, so just looking for "Status: Not
+connected" is not enough to indicate a problem. For each disconnected machine,
+you can also check the "Last heard from" column to ensure that it's been gone
+for at least an hour. To get it running again,
+[file a bug](https://bugs.chromium.org/p/chromium/issues/entry?labels=Pri-1,Performance-BotHealth,Infra-Troopers,OS-?&comment=Hostname:&summary=Buildslave+offline+on+chromium.perf)
+against the current trooper and read [go/bug-a-trooper](http://go/bug-a-trooper) for contacting troopers.
+
 ###<a name="purplebots"></a> Purple bots
 
-When a bot goes purple, it's it's usually because of an infrastructure failure
+When a bot goes purple, it's usually because of an infrastructure failure
 outside of the tests. But you should first check the logs of a purple bot to
 try to better understand the problem. Sometimes a telemetry test failure can
 turn the bot purple, for example.
@@ -63,7 +84,7 @@ If the bot goes purple and you believe it's an infrastructure issue, file a bug
 with
 [this template](https://bugs.chromium.org/p/chromium/issues/entry?labels=Pri-1,Performance-BotHealth,Infra-Troopers,OS-?&comment=Link+to+buildbot+status+page:&summary=Purple+Bot+on+chromium.perf),
 which will automatically add the bug to the trooper queue. Be sure to note
-which step is failing, and paste any relevant info from the logs into the bug.
+which step is failing, and paste any relevant info from the logs into the bug. Also be sure to read [go/bug-a-trooper](http://go/bug-a-trooper) for contacting troopers.
 
 ###<a name="devicefailures"></a> Android Device failures
 
@@ -80,7 +101,7 @@ There are two types of device failures:
     failure.
 
 For both types of failures, please file a bug with
-[this template](https://bugs.chromium.org/p/chromium/issues/entry?labels=Pri-1,Performance-BotHealth,Infra-Labs,OS-Android&comment=Link+to+buildbot+status+page:&summary=Device+offline+on+chromium.perf)
+[this template](https://bugs.chromium.org/p/chromium/issues/entry?components=Infra%3ELabs&labels=Pri-1,Performance-BotHealth,OS-Android&comment=Link+to+buildbot+status+page:&summary=Device+offline+on+chromium.perf)
 which will add an issue to the infra labs queue.
 
 If you need help triaging, here are the common labels you should use:
@@ -90,7 +111,11 @@ If you need help triaging, here are the common labels you should use:
 *   **Infra-Troopers** adds the bug to the trooper queue. This is for high
     priority issues, like a build breakage. Please add a comment explaining what
     you want the trooper to do.
-*   **Infra-Labs** adds the bug to the labs queue. If there is a hardware
+
+
+Here are the common components you should also use:
+
+*   **Infra>Labs** adds the bug to the labs queue. If there is a hardware
     problem, like an android device not responding or a bot that likely needs a
     restart, please use this label. Make sure you set the **OS-** label
     correctly as well, and add a comment explaining what you want the labs team
@@ -100,8 +125,8 @@ If you need help triaging, here are the common labels you should use:
     is weird or we are getting some infra-related log spam. The infra team works
     to triage these bugs within 24 hours, so you should ping if you do not get a
     response.
-*   **Cr-Tests-Telemetry** for telemetry failures.
-*   **Cr-Tests-AutoBisect** for bisect and perf try job failures.
+*   **Tests>Telemetry** for telemetry failures.
+*   **Tests>AutoBisect** for bisect and perf try job failures.
 
  If you still need help, ask the speed infra chat, or escalate to sullivan@.
 
@@ -140,7 +165,12 @@ be investigated. When a test fails:
     ensure that the bug title reflects something like "Fix and re-enable
     testname".
 4.  Investigate the failure. Some tips for investigating:
-    *   [Debugging telemetry failures](https://www.chromium.org/developers/telemetry/diagnosing-test-failures)
+    *   If it's a non flaky failure, indentify the first failed
+        build so you can narrow down the range of CLs that causes the failure.
+        You can use the
+        [diagnose_test_failure](https://code.google.com/p/chromium/codesearch#chromium/src/tools/perf/diagnose_test_failure)
+        script to automatically find the first failed build and the good & bad
+        revisions (which can also be used for return code bisect).
     *   If you suspect a specific CL in the range, you can revert it locally and
         run the test on the
         [perf trybots](https://www.chromium.org/developers/telemetry/performance-try-bots).
@@ -152,6 +182,7 @@ be investigated. When a test fails:
         3.  Type the **Bug ID** from step 1, the **Good Revision** the last
             commit pos data was received from, the **Bad Revision** the last
             commit pos and set **Bisect mode** to `return_code`.
+    *   [Debugging telemetry failures](https://www.chromium.org/developers/telemetry/diagnosing-test-failures)
     *   On Android and Mac, you can view platform-level screenshots of the
         device screen for failing tests, links to which are printed in the logs.
         Often this will immediately reveal failure causes that are opaque from

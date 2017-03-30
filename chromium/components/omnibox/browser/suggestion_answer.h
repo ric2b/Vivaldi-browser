@@ -5,12 +5,13 @@
 #ifndef COMPONENTS_OMNIBOX_BROWSER_SUGGESTION_ANSWER_H_
 #define COMPONENTS_OMNIBOX_BROWSER_SUGGESTION_ANSWER_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "url/gurl.h"
 
 namespace base {
@@ -39,18 +40,18 @@ class SuggestionAnswer {
   // These values are named and numbered to match a specification at go/ais_api.
   // The values are only used for answer results.
   enum TextType {
-    ANSWER = 1,
-    HEADLINE = 2,
+    // Deprecated: ANSWER = 1,
+    // Deprecated: HEADLINE = 2,
     TOP_ALIGNED = 3,
-    DESCRIPTION = 4,
+    // Deprecated: DESCRIPTION = 4,
     DESCRIPTION_NEGATIVE = 5,
     DESCRIPTION_POSITIVE = 6,
-    MORE_INFO = 7,
+    // Deprecated: MORE_INFO = 7,
     SUGGESTION = 8,
-    SUGGESTION_POSITIVE = 9,
-    SUGGESTION_NEGATIVE = 10,
-    SUGGESTION_LINK = 11,
-    STATUS = 12,
+    // Deprecated: SUGGESTION_POSITIVE = 9,
+    // Deprecated: SUGGESTION_NEGATIVE = 10,
+    // Deprecated: SUGGESTION_LINK = 11,
+    // Deprecated: STATUS = 12,
     PERSONALIZED_SUGGESTION = 13,
     // Deprecated: IMMERSIVE_DESCRIPTION_TEXT = 14,
     // Deprecated: DATE_TEXT = 15,
@@ -115,8 +116,8 @@ class SuggestionAnswer {
     ImageLine& operator=(const ImageLine&);
 
     TextFields text_fields_;
-    scoped_ptr<TextField> additional_text_;
-    scoped_ptr<TextField> status_text_;
+    std::unique_ptr<TextField> additional_text_;
+    std::unique_ptr<TextField> status_text_;
     GURL image_url_;
 
     FRIEND_TEST_ALL_PREFIXES(SuggestionAnswerTest, DifferentValuesAreUnequal);
@@ -129,14 +130,15 @@ class SuggestionAnswer {
   // Parses |answer_json| and returns a SuggestionAnswer containing the
   // contents.  If the supplied data is not well formed or is missing required
   // elements, returns nullptr instead.
-  static scoped_ptr<SuggestionAnswer> ParseAnswer(
-        const base::DictionaryValue* answer_json);
+  static std::unique_ptr<SuggestionAnswer> ParseAnswer(
+      const base::DictionaryValue* answer_json);
 
   // TODO(jdonnelly): Once something like std::optional<T> is available in base/
   // (see discussion at http://goo.gl/zN2GNy) remove this in favor of having
   // SuggestResult and AutocompleteMatch use optional<SuggestionAnswer>.
-  static scoped_ptr<SuggestionAnswer> copy(const SuggestionAnswer* source) {
-    return make_scoped_ptr(source ? new SuggestionAnswer(*source) : nullptr);
+  static std::unique_ptr<SuggestionAnswer> copy(
+      const SuggestionAnswer* source) {
+    return base::WrapUnique(source ? new SuggestionAnswer(*source) : nullptr);
   }
 
   const ImageLine& first_line() const { return first_line_; }

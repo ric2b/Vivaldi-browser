@@ -4,7 +4,9 @@
 
 #include "remoting/protocol/webrtc_transport.h"
 
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/base64.h"
 #include "base/callback_helpers.h"
@@ -16,12 +18,13 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/task_runner_util.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "jingle/glue/thread_wrapper.h"
 #include "remoting/protocol/authenticator.h"
 #include "remoting/protocol/port_allocator_factory.h"
 #include "remoting/protocol/stream_message_pipe_adapter.h"
 #include "remoting/protocol/transport_context.h"
+#include "remoting/protocol/webrtc_video_encoder_factory.h"
 #include "third_party/webrtc/api/test/fakeconstraints.h"
 #include "third_party/webrtc/libjingle/xmllite/xmlelement.h"
 #include "third_party/webrtc/modules/audio_device/include/fake_audio_device.h"
@@ -122,7 +125,7 @@ class SetSessionDescriptionObserver
   }
 
  protected:
-  SetSessionDescriptionObserver(const ResultCallback& result_callback)
+  explicit SetSessionDescriptionObserver(const ResultCallback& result_callback)
       : result_callback_(result_callback) {}
   ~SetSessionDescriptionObserver() override {}
 
@@ -173,10 +176,12 @@ void WebrtcTransport::Start(
   }
 
   fake_audio_device_module_.reset(new webrtc::FakeAudioDeviceModule());
+  video_encoder_factory_ = new remoting::WebRtcVideoEncoderFactory();
 
+  // Takes ownership of video_encoder_factory_
   peer_connection_factory_ = webrtc::CreatePeerConnectionFactory(
-      worker_thread_, rtc::Thread::Current(),
-      fake_audio_device_module_.get(), nullptr, nullptr);
+      worker_thread_, rtc::Thread::Current(), fake_audio_device_module_.get(),
+      video_encoder_factory_, nullptr);
 
   webrtc::PeerConnectionInterface::IceServer stun_server;
   stun_server.urls.push_back("stun:stun.l.google.com:19302");
@@ -191,9 +196,7 @@ void WebrtcTransport::Start(
       transport_context_->port_allocator_factory()->CreatePortAllocator(
           transport_context_);
   peer_connection_ = peer_connection_factory_->CreatePeerConnection(
-      rtc_config, &constraints,
-      rtc::scoped_ptr<cricket::PortAllocator>(port_allocator.release()),
-      nullptr, this);
+      rtc_config, &constraints, std::move(port_allocator), nullptr, this);
 
   outgoing_data_stream_adapter_.Initialize(peer_connection_);
   incoming_data_stream_adapter_.Initialize(peer_connection_);
@@ -249,6 +252,15 @@ bool WebrtcTransport::ProcessTransportInfo(XmlElement* transport_info) {
         return true;
       }
     }
+
+    // TODO(isheriff): The need for this should go away once we have a proper
+    // API to provide max bitrate for the case of handing over encoded
+    // frames to webrtc.
+    // Increase max bitrate from 600 kbps to 5 Mbps.
+    std::string vp8line = "a=rtpmap:100 VP8/90000\n";
+    std::string vp8line_with_bitrate =
+        vp8line + "a=fmtp:100 x-google-max-bitrate=5000\n";
+    base::ReplaceSubstringsAfterOffset(&sdp, 0, vp8line, vp8line_with_bitrate);
 
     webrtc::SdpParseError error;
     std::unique_ptr<webrtc::SessionDescriptionInterface> session_description(
@@ -546,6 +558,8 @@ void WebrtcTransport::AddPendingCandidatesIfPossible() {
 
 void WebrtcTransport::Close(ErrorCode error) {
   DCHECK(thread_checker_.CalledOnValidThread());
+  if (!peer_connection_)
+    return;
 
   weak_factory_.InvalidateWeakPtrs();
   peer_connection_->Close();

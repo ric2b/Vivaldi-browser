@@ -12,6 +12,7 @@
 #include "base/files/file_path.h"
 #include "base/mac/scoped_cftyperef.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/values.h"
 #include "components/policy/core/common/async_policy_provider.h"
@@ -74,7 +75,7 @@ ConfigurationPolicyProvider* TestHarness::CreateProvider(
     SchemaRegistry* registry,
     scoped_refptr<base::SequencedTaskRunner> task_runner) {
   prefs_ = new MockPreferences();
-  scoped_ptr<AsyncPolicyLoader> loader(
+  std::unique_ptr<AsyncPolicyLoader> loader(
       new PolicyLoaderMac(task_runner, base::FilePath(), prefs_));
   return new AsyncPolicyProvider(registry, std::move(loader));
 }
@@ -145,7 +146,7 @@ class PolicyLoaderMacTest : public PolicyTestBase {
 
   void SetUp() override {
     PolicyTestBase::SetUp();
-    scoped_ptr<AsyncPolicyLoader> loader(
+    std::unique_ptr<AsyncPolicyLoader> loader(
         new PolicyLoaderMac(loop_.task_runner(), base::FilePath(), prefs_));
     provider_.reset(
         new AsyncPolicyProvider(&schema_registry_, std::move(loader)));
@@ -158,7 +159,7 @@ class PolicyLoaderMacTest : public PolicyTestBase {
   }
 
   MockPreferences* prefs_;
-  scoped_ptr<AsyncPolicyProvider> provider_;
+  std::unique_ptr<AsyncPolicyProvider> provider_;
 };
 
 TEST_F(PolicyLoaderMacTest, Invalid) {
@@ -193,12 +194,9 @@ TEST_F(PolicyLoaderMacTest, TestNonForcedValue) {
   loop_.RunUntilIdle();
   PolicyBundle expected_bundle;
   expected_bundle.Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()))
-      .Set(test_keys::kKeyString,
-           POLICY_LEVEL_RECOMMENDED,
-           POLICY_SCOPE_USER,
+      .Set(test_keys::kKeyString, POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_USER,
            POLICY_SOURCE_PLATFORM,
-           new base::StringValue("string value"),
-           NULL);
+           base::WrapUnique(new base::StringValue("string value")), nullptr);
   EXPECT_TRUE(provider_->policies().Equals(expected_bundle));
 }
 

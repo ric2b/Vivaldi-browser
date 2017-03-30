@@ -11,6 +11,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/process/process_handle.h"
 #include "base/run_loop.h"
+#include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -22,7 +23,7 @@ namespace content {
 class ClipboardMessageFilterTest : public ::testing::Test {
  protected:
   ClipboardMessageFilterTest()
-      : filter_(new ClipboardMessageFilter),
+      : filter_(new ClipboardMessageFilter(nullptr)),
         clipboard_(ui::TestClipboard::CreateForCurrentThread()) {
     filter_->set_peer_process_for_testing(base::Process::Current());
   }
@@ -31,15 +32,16 @@ class ClipboardMessageFilterTest : public ::testing::Test {
     ui::Clipboard::DestroyClipboardForCurrentThread();
   }
 
-  scoped_ptr<base::SharedMemory> CreateAndMapReadOnlySharedMemory(size_t size) {
-    scoped_ptr<base::SharedMemory> m = CreateReadOnlySharedMemory(size);
+  std::unique_ptr<base::SharedMemory> CreateAndMapReadOnlySharedMemory(
+      size_t size) {
+    std::unique_ptr<base::SharedMemory> m = CreateReadOnlySharedMemory(size);
     if (!m->Map(size))
       return nullptr;
     return m;
   }
 
-  scoped_ptr<base::SharedMemory> CreateReadOnlySharedMemory(size_t size) {
-    scoped_ptr<base::SharedMemory> m(new base::SharedMemory());
+  std::unique_ptr<base::SharedMemory> CreateReadOnlySharedMemory(size_t size) {
+    std::unique_ptr<base::SharedMemory> m(new base::SharedMemory());
     base::SharedMemoryCreateOptions options;
     options.size = size;
     options.share_read_only = true;
@@ -84,7 +86,7 @@ TEST_F(ClipboardMessageFilterTest, SimpleImage) {
       0xffffffff, 0x11111111, 0x22222222, 0xcccccccc,
   };
 
-  scoped_ptr<base::SharedMemory> shared_memory =
+  std::unique_ptr<base::SharedMemory> shared_memory =
       CreateAndMapReadOnlySharedMemory(sizeof(bitmap_data));
   memcpy(shared_memory->memory(), bitmap_data, sizeof(bitmap_data));
 
@@ -109,7 +111,7 @@ TEST_F(ClipboardMessageFilterTest, SimpleImage) {
 
 // Test with a size that would overflow a naive 32-bit row bytes calculation.
 TEST_F(ClipboardMessageFilterTest, ImageSizeOverflows32BitRowBytes) {
-  scoped_ptr<base::SharedMemory> shared_memory =
+  std::unique_ptr<base::SharedMemory> shared_memory =
       CreateReadOnlySharedMemory(0x20000000);
 
   CallWriteImage(gfx::Size(0x20000000, 1), shared_memory.get());

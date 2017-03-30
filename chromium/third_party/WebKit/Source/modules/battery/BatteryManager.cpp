@@ -20,9 +20,6 @@ BatteryManager* BatteryManager::create(ExecutionContext* context)
 
 BatteryManager::~BatteryManager()
 {
-#if !ENABLE(OILPAN)
-    stopUpdating();
-#endif
 }
 
 BatteryManager::BatteryManager(ExecutionContext* context)
@@ -141,7 +138,7 @@ DEFINE_TRACE(BatteryManager)
 {
     visitor->trace(m_batteryProperty);
     PlatformEventController::trace(visitor);
-    RefCountedGarbageCollectedEventTargetWithInlineData<BatteryManager>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
     ActiveDOMObject::trace(visitor);
 }
 

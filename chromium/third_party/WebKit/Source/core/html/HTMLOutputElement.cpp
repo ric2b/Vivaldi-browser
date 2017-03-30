@@ -45,12 +45,9 @@ inline HTMLOutputElement::HTMLOutputElement(Document& document, HTMLFormElement*
 
 HTMLOutputElement::~HTMLOutputElement()
 {
-#if !ENABLE(OILPAN)
-    m_tokens->setObserver(nullptr);
-#endif
 }
 
-RawPtr<HTMLOutputElement> HTMLOutputElement::create(Document& document, HTMLFormElement* form)
+HTMLOutputElement* HTMLOutputElement::create(Document& document, HTMLFormElement* form)
 {
     return new HTMLOutputElement(document, form);
 }
@@ -62,6 +59,11 @@ const AtomicString& HTMLOutputElement::formControlType() const
 }
 
 bool HTMLOutputElement::isDisabledFormControl() const
+{
+    return false;
+}
+
+bool HTMLOutputElement::matchesEnabledPseudoClass() const
 {
     return false;
 }

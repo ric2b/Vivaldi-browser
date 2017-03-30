@@ -412,23 +412,29 @@ std::string SegmentURLInternal(std::string* text, url::Parsed* parts) {
   int trimmed_length = static_cast<int>(trimmed.length());
   if (url::DoesBeginWindowsDriveSpec(trimmed.data(), 0, trimmed_length) ||
       url::DoesBeginUNCPath(trimmed.data(), 0, trimmed_length, true))
-    return "file";
+    return url::kFileScheme;
 #elif defined(OS_POSIX)
   if (base::FilePath::IsSeparator(trimmed.data()[0]) ||
       trimmed.data()[0] == '~')
-    return "file";
+    return url::kFileScheme;
 #endif
 
   // Otherwise, we need to look at things carefully.
   std::string scheme;
   if (!GetValidScheme(*text, &parts->scheme, &scheme)) {
     // Try again if there is a ';' in the text. If changing it to a ':' results
-    // in a scheme being found, continue processing with the modified text.
+    // in a standard scheme, "about", "chrome" or "file" scheme being found,
+    // continue processing with the modified text.
     bool found_scheme = false;
     size_t semicolon = text->find(';');
     if (semicolon != 0 && semicolon != std::string::npos) {
       (*text)[semicolon] = ':';
-      if (GetValidScheme(*text, &parts->scheme, &scheme))
+      if (GetValidScheme(*text, &parts->scheme, &scheme) &&
+          (url::IsStandard(
+               scheme.c_str(),
+               url::Component(0, static_cast<int>(scheme.length()))) ||
+           scheme == url::kAboutScheme || scheme == kChromeUIScheme ||
+           scheme == url::kFileScheme))
         found_scheme = true;
       else
         (*text)[semicolon] = ';';

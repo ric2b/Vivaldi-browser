@@ -8,14 +8,16 @@
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/ScriptWrappable.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/events/EventTarget.h"
 #include "modules/ModulesExport.h"
 #include "modules/payments/PaymentCompleter.h"
 #include "modules/payments/PaymentDetails.h"
 #include "modules/payments/PaymentOptions.h"
+#include "modules/payments/PaymentUpdater.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "platform/heap/Handle.h"
-#include "public/platform/modules/payments/payment_request.mojom-wtf.h"
+#include "public/platform/modules/payments/payment_request.mojom-blink.h"
 #include "wtf/Compiler.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/RefPtr.h"
@@ -29,9 +31,8 @@ class ScriptPromiseResolver;
 class ScriptState;
 class ShippingAddress;
 
-class MODULES_EXPORT PaymentRequest final : public RefCountedGarbageCollectedEventTargetWithInlineData<PaymentRequest>, WTF_NON_EXPORTED_BASE(public mojom::wtf::PaymentRequestClient), public PaymentCompleter {
+class MODULES_EXPORT PaymentRequest final : public EventTargetWithInlineData, WTF_NON_EXPORTED_BASE(public mojom::blink::PaymentRequestClient), public PaymentCompleter, public PaymentUpdater, public ContextLifecycleObserver, public ActiveScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(PaymentRequest);
     USING_GARBAGE_COLLECTED_MIXIN(PaymentRequest)
     WTF_MAKE_NONCOPYABLE(PaymentRequest);
 
@@ -58,22 +59,31 @@ public:
     // PaymentCompleter:
     ScriptPromise complete(ScriptState*, bool success) override;
 
+    // PaymentUpdater:
+    void onUpdatePaymentDetails(const ScriptValue& detailsScriptValue) override;
+    void onUpdatePaymentDetailsFailure(const ScriptValue& error) override;
+
     DECLARE_TRACE();
 
 private:
     PaymentRequest(ScriptState*, const Vector<String>& supportedMethods, const PaymentDetails&, const PaymentOptions&, const ScriptValue& data, ExceptionState&);
 
-    // mojom::wtf::PaymentRequestClient:
-    void OnShippingAddressChange(mojom::wtf::ShippingAddressPtr) override;
+    // LifecycleObserver:
+    void contextDestroyed() override;
+
+    // ActiveScriptWrappable:
+    bool hasPendingActivity() const override;
+
+    // mojom::blink::PaymentRequestClient:
+    void OnShippingAddressChange(mojom::blink::ShippingAddressPtr) override;
     void OnShippingOptionChange(const String& shippingOptionId) override;
-    void OnPaymentResponse(mojom::wtf::PaymentResponsePtr) override;
+    void OnPaymentResponse(mojom::blink::PaymentResponsePtr) override;
     void OnError() override;
     void OnComplete() override;
 
     // Clears the promise resolvers and closes the Mojo connection.
-    void cleanUp();
+    void clearResolversAndCloseMojoConnection();
 
-    RefPtr<ScriptState> m_scriptState;
     Vector<String> m_supportedMethods;
     PaymentDetails m_details;
     PaymentOptions m_options;
@@ -82,8 +92,8 @@ private:
     String m_shippingOption;
     Member<ScriptPromiseResolver> m_showResolver;
     Member<ScriptPromiseResolver> m_completeResolver;
-    mojom::wtf::PaymentRequestPtr m_paymentProvider;
-    mojo::Binding<mojom::wtf::PaymentRequestClient> m_clientBinding;
+    mojom::blink::PaymentRequestPtr m_paymentProvider;
+    mojo::Binding<mojom::blink::PaymentRequestClient> m_clientBinding;
 };
 
 } // namespace blink

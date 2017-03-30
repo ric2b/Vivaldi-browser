@@ -35,6 +35,7 @@
 #include "core/frame/LocalFrame.h"
 #include "platform/geometry/FloatRect.h"
 #include "public/platform/WebFileSystemType.h"
+#include "public/web/WebFrameWidget.h"
 #include "public/web/WebLocalFrame.h"
 #include "web/FrameLoaderClientImpl.h"
 #include "web/UserMediaClientImpl.h"
@@ -48,7 +49,6 @@
 namespace blink {
 
 class ChromePrintContext;
-class GeolocationClientProxy;
 class IntSize;
 class KURL;
 class Range;
@@ -59,7 +59,6 @@ class WebDataSourceImpl;
 class WebDevToolsAgentImpl;
 class WebDevToolsFrontendImpl;
 class WebFrameClient;
-class WebFrameWidget;
 class WebNode;
 class WebPerformance;
 class WebPlugin;
@@ -128,7 +127,6 @@ public:
     void reloadImage(const WebNode&) override;
     void reloadLoFiImages() override;
     void loadRequest(const WebURLRequest&) override;
-    void loadHistoryItem(const WebHistoryItem&, WebHistoryLoadType, WebCachePolicy) override;
     void loadHTMLString(
         const WebData& html, const WebURL& baseURL, const WebURL& unreachableURL,
         bool replace) override;
@@ -148,8 +146,8 @@ public:
     WebRange markedRange() const override;
     bool firstRectForCharacterRange(unsigned location, unsigned length, WebRect&) const override;
     size_t characterIndexForPoint(const WebPoint&) const override;
-    bool executeCommand(const WebString&, const WebNode& = WebNode()) override;
-    bool executeCommand(const WebString&, const WebString& value, const WebNode& = WebNode()) override;
+    bool executeCommand(const WebString&) override;
+    bool executeCommand(const WebString&, const WebString& value) override;
     bool isCommandEnabled(const WebString&) const override;
     void enableContinuousSpellChecking(bool) override;
     bool isContinuousSpellCheckingEnabled() const override;
@@ -197,13 +195,7 @@ public:
     bool selectionStartHasSpellingMarkerFor(int from, int length) const override;
     WebString layerTreeAsText(bool showDebugInfo = false) const override;
 
-    void registerTestInterface(const WebString& name, WebTestInterfaceFactory*) override;
-
     WebFrameImplBase* toImplBase() override { return this; }
-
-    // Creates a test interface by name if available, returns an empty handle
-    // for unknown names.
-    v8::Local<v8::Value> createTestInterface(const AtomicString& name);
 
     // WebLocalFrame methods:
     void setAutofillClient(WebAutofillClient*) override;
@@ -214,7 +206,7 @@ public:
     WebLocalFrameImpl* localRoot() override;
     WebLocalFrame* traversePreviousLocal(bool wrap) const override;
     WebLocalFrame* traverseNextLocal(bool wrap) const override;
-    void sendPings(const WebNode& contextNode, const WebURL& destinationURL) override;
+    void sendPings(const WebURL& destinationURL) override;
     WebURLRequest requestFromHistoryItem(const WebHistoryItem&, WebCachePolicy) const override;
     WebURLRequest requestForReload(WebFrameLoadType, const WebURL&) const override;
     void load(const WebURLRequest&, WebFrameLoadType, const WebHistoryItem&,
@@ -224,7 +216,6 @@ public:
         const WebURL& baseURL, const WebURL& unreachableURL, bool replace, WebFrameLoadType,
         const WebHistoryItem&, WebHistoryLoadType, bool isClientRedirect) override;
     bool isLoading() const override;
-    bool isResourceLoadInProgress() const override;
     bool isNavigationScheduledWithin(double interval) const override;
     void setCommittedFirstRealLoad() override;
     void sendOrientationChangeEvent() override;
@@ -250,6 +241,7 @@ public:
     void findMatchRects(WebVector<WebFloatRect>&) override;
     int selectNearestFindMatch(const WebFloatPoint&, WebRect* selectionRect) override;
     void setTickmarks(const WebVector<WebRect>&) override;
+    WebFrameWidget* frameWidget() const override;
 
     // WebFrameImplBase methods:
     void initializeCoreFrame(FrameHost*, FrameOwner*, const AtomicString& name, const AtomicString& uniqueName) override;
@@ -278,8 +270,8 @@ public:
 
     // If the frame hosts a PluginDocument, this method returns the WebPluginContainerImpl
     // that hosts the plugin. If the provided node is a plugin, then it runs its
-    // WebPluginContainerImpl.
-    static WebPluginContainerImpl* pluginContainerFromNode(LocalFrame*, const WebNode&);
+    // WebPluginContainerImpl. Otherwise, uses the currently focused element (if any).
+    static WebPluginContainerImpl* currentPluginContainer(LocalFrame*, Node* = nullptr);
 
     WebViewImpl* viewImpl() const;
 
@@ -291,15 +283,6 @@ public:
     // may return 0 if there is no corresponding data source.
     WebDataSourceImpl* dataSourceImpl() const;
     WebDataSourceImpl* provisionalDataSourceImpl() const;
-
-    // Returns which frame has an active match. This function should only be
-    // called on the main frame, as it is the only frame keeping track. Returned
-    // value can be 0 if no frame has an active match.
-    WebLocalFrameImpl* activeMatchFrame() const;
-
-    // Returns the active match in the current frame. Could be a null range if
-    // the local frame has no active match.
-    Range* activeMatch() const;
 
     // When a Find operation ends, we want to set the selection to what was active
     // and set focus to the first focusable node we find (starting with the first
@@ -327,6 +310,7 @@ public:
 
     static void selectWordAroundPosition(LocalFrame*, VisiblePosition);
 
+    TextFinder* textFinder() const;
     // Returns the text finder object if it already exists.
     // Otherwise creates it and then returns.
     TextFinder& ensureTextFinder();
@@ -335,15 +319,16 @@ public:
     VisiblePosition visiblePositionForViewportPoint(const WebPoint&);
 
     void setFrameWidget(WebFrameWidget*);
-    WebFrameWidget* frameWidget() const;
 
     // DevTools front-end bindings.
     void setDevToolsFrontend(WebDevToolsFrontendImpl* frontend) { m_webDevToolsFrontend = frontend; }
     WebDevToolsFrontendImpl* devToolsFrontend() { return m_webDevToolsFrontend; }
 
-#if ENABLE(OILPAN)
+    WebNode contextMenuNode() const { return m_contextMenuNode.get(); }
+    void setContextMenuNode(Node* node) { m_contextMenuNode = node; }
+    void clearContextMenuNode() { m_contextMenuNode.clear(); }
+
     DECLARE_TRACE();
-#endif
 
 private:
     friend class FrameLoaderClientImpl;
@@ -396,18 +381,14 @@ private:
 
     UserMediaClientImpl m_userMediaClientImpl;
 
-    Member<GeolocationClientProxy> m_geolocationClientProxy;
-
     WebDevToolsFrontendImpl* m_webDevToolsFrontend;
 
-    HashMap<AtomicString, OwnPtr<WebTestInterfaceFactory>> m_testInterfaces;
+    Member<Node> m_contextMenuNode;
 
-#if ENABLE(OILPAN)
     // Oilpan: WebLocalFrameImpl must remain alive until close() is called.
     // Accomplish that by keeping a self-referential Persistent<>. It is
     // cleared upon close().
     SelfKeepAlive<WebLocalFrameImpl> m_selfKeepAlive;
-#endif
 };
 
 DEFINE_TYPE_CASTS(WebLocalFrameImpl, WebFrame, frame, frame->isWebLocalFrame(), frame.isWebLocalFrame());

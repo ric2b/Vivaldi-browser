@@ -10,7 +10,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/common/device_sensors/device_orientation_hardware_buffer.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -114,8 +114,8 @@ class DeviceOrientationEventPumpTest : public testing::Test {
   DeviceOrientationHardwareBuffer* buffer() { return buffer_; }
 
  private:
-  scoped_ptr<MockDeviceOrientationListener> listener_;
-  scoped_ptr<DeviceOrientationEventPumpForTesting> orientation_pump_;
+  std::unique_ptr<MockDeviceOrientationListener> listener_;
+  std::unique_ptr<DeviceOrientationEventPumpForTesting> orientation_pump_;
   base::SharedMemoryHandle handle_;
   base::SharedMemory shared_memory_;
   DeviceOrientationHardwareBuffer* buffer_;

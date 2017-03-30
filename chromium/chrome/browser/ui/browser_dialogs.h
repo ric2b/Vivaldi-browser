@@ -42,13 +42,16 @@ class URLRequest;
 }
 
 namespace ui {
+class TableModel;
 class WebDialogDelegate;
 }
 
 namespace chrome {
 
 // Shows or hides the Task Manager. |browser| can be NULL when called from Ash.
-void ShowTaskManager(Browser* browser);
+// Returns a pointer to the underlying TableModel, which can be ignored, or used
+// for testing.
+ui::TableModel* ShowTaskManager(Browser* browser);
 void HideTaskManager();
 
 #if !defined(OS_MACOSX)
@@ -85,6 +88,11 @@ content::ColorChooser* ShowColorChooser(content::WebContents* web_contents,
 // dialog using one of the functions below, rather than showing a Cocoa dialog.
 bool ToolkitViewsDialogsEnabled();
 
+// For Mac, returns true if Chrome should show an equivalent toolkit-views based
+// dialog instead of a WebUI-styled Cocoa dialog. ToolkitViewsDialogsEnabled()
+// implies ToolkitViewsWebUIDialogsEnabled().
+bool ToolkitViewsWebUIDialogsEnabled();
+
 // Shows a Views website settings bubble at the given anchor point.
 void ShowWebsiteSettingsBubbleViewsAtPoint(
     const gfx::Point& anchor_point,
@@ -102,6 +110,10 @@ void ShowBookmarkBubbleViewsAtPoint(const gfx::Point& anchor_point,
                                     Browser* browser,
                                     const GURL& url,
                                     bool newly_bookmarked);
+
+// Bridging methods that show/hide the toolkit-views based Task Manager on Mac.
+ui::TableModel* ShowTaskManagerViews(Browser* browser);
+void HideTaskManagerViews();
 
 #endif  // OS_MACOSX
 

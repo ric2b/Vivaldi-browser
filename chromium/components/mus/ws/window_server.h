@@ -8,10 +8,11 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
+#include <string>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "components/mus/public/interfaces/window_manager_factory.mojom.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "components/mus/public/interfaces/window_tree_host.mojom.h"
@@ -73,12 +74,12 @@ class WindowServer : public ServerWindowDelegate,
   WindowTree* EmbedAtWindow(ServerWindow* root,
                             const UserId& user_id,
                             mojom::WindowTreeClientPtr client,
-                            scoped_ptr<AccessPolicy> access_policy);
+                            std::unique_ptr<AccessPolicy> access_policy);
 
   // Adds |tree_impl_ptr| to the set of known trees. Use DestroyTree() to
   // destroy the tree.
-  WindowTree* AddTree(scoped_ptr<WindowTree> tree_impl_ptr,
-                      scoped_ptr<WindowTreeBinding> binding,
+  WindowTree* AddTree(std::unique_ptr<WindowTree> tree_impl_ptr,
+                      std::unique_ptr<WindowTreeBinding> binding,
                       mojom::WindowTreePtr tree_ptr);
   WindowTree* CreateTreeForWindowManager(Display* display,
                                          mojom::WindowManagerFactory* factory,
@@ -89,6 +90,8 @@ class WindowServer : public ServerWindowDelegate,
 
   // Returns the connection by id.
   WindowTree* GetTreeWithId(ConnectionSpecificId connection_id);
+
+  WindowTree* GetTreeWithConnectionName(const std::string& connection_name);
 
   size_t num_trees() const { return tree_map_.size(); }
 
@@ -186,10 +189,21 @@ class WindowServer : public ServerWindowDelegate,
   void ProcessWillChangeWindowPredefinedCursor(ServerWindow* window,
                                                int32_t cursor_id);
 
+  // Sends an |event| to all WindowTrees belonging to |user_id| that might be
+  // observing events. Skips |ignore_tree| if it is non-null.
+  void SendToEventObservers(const ui::Event& event,
+                            const UserId& user_id,
+                            WindowTree* ignore_tree);
+
+  // Sets a callback to be called whenever a ServerWindow is scheduled for
+  // a [re]paint. This should only be called in a test configuration.
+  void SetPaintCallback(const base::Callback<void(ServerWindow*)>& callback);
+
  private:
   friend class Operation;
 
-  using WindowTreeMap = std::map<ConnectionSpecificId, scoped_ptr<WindowTree>>;
+  using WindowTreeMap =
+      std::map<ConnectionSpecificId, std::unique_ptr<WindowTree>>;
 
   struct InFlightWindowManagerChange {
     // Identifies the client that initiated the change.
@@ -217,8 +231,15 @@ class WindowServer : public ServerWindowDelegate,
   // Balances a call to PrepareForOperation().
   void FinishOperation();
 
-  // Run in response to events which may cause us to change the native cursor.
-  void MaybeUpdateNativeCursor(ServerWindow* window);
+  // Updates the native cursor by figuring out what window is under the mouse
+  // cursor. This is run in response to events that change the bounds or window
+  // hierarchy.
+  void UpdateNativeCursorFromMouseLocation(ServerWindow* window);
+
+  // Updates the native cursor if the cursor is currently inside |window|. This
+  // is run in response to events that change the mouse cursor properties of
+  // |window|.
+  void UpdateNativeCursorIfOver(ServerWindow* window);
 
   // Overridden from ServerWindowDelegate:
   mus::SurfacesState* GetSurfacesState() override;
@@ -259,6 +280,8 @@ class WindowServer : public ServerWindowDelegate,
       const std::vector<uint8_t>* new_data) override;
   void OnWindowPredefinedCursorChanged(ServerWindow* window,
                                        int32_t cursor_id) override;
+  void OnWindowNonClientCursorChanged(ServerWindow* window,
+                                      int32_t cursor_id) override;
   void OnWindowTextInputStateChanged(ServerWindow* window,
                                      const ui::TextInputState& state) override;
   void OnTransientWindowAdded(ServerWindow* window,
@@ -280,7 +303,7 @@ class WindowServer : public ServerWindowDelegate,
   // ID to use for next WindowTree.
   ConnectionSpecificId next_connection_id_;
 
-  scoped_ptr<DisplayManager> display_manager_;
+  std::unique_ptr<DisplayManager> display_manager_;
 
   // Set of WindowTrees.
   WindowTreeMap tree_map_;
@@ -297,6 +320,8 @@ class WindowServer : public ServerWindowDelegate,
 
   // Next id supplied to the window manager.
   uint32_t next_wm_change_id_;
+
+  base::Callback<void(ServerWindow*)> window_paint_callback_;
 
   WindowManagerFactoryRegistry window_manager_factory_registry_;
 

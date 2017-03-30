@@ -12,7 +12,7 @@ PassThroughDecoderTexture::PassThroughDecoderTexture() = default;
 PassThroughDecoderTexture::~PassThroughDecoderTexture() = default;
 
 AutoReleasedPassThroughDecoderTexture::AutoReleasedPassThroughDecoderTexture(
-    scoped_ptr<PassThroughDecoderTexture> texture)
+    std::unique_ptr<PassThroughDecoderTexture> texture)
     : texture_(std::move(texture)) {
   DCHECK(texture_);
 }

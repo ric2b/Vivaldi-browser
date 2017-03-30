@@ -16,7 +16,6 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/path.h"
-#include "ui/gfx/screen.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/resources/grit/views_resources.h"
@@ -126,7 +125,7 @@ gfx::Image* GetHandleImage(ui::SelectionBound::Type bound_type) {
     case ui::SelectionBound::RIGHT:
       return GetRightHandleImage();
     default:
-      NOTREACHED() << "Invalid touch handle bound type.";
+      NOTREACHED() << "Invalid touch handle bound type: " << bound_type;
       return nullptr;
   };
 }
@@ -241,7 +240,7 @@ class TouchSelectionControllerImpl::EditingHandleView
     widget_->SetContentsView(this);
 
     aura::Window* window = widget_->GetNativeWindow();
-    window->SetEventTargeter(scoped_ptr<ui::EventTargeter>(
+    window->SetEventTargeter(std::unique_ptr<ui::EventTargeter>(
         new TouchHandleWindowTargeter(window, this)));
 
     // We are owned by the TouchSelectionControllerImpl.
@@ -249,6 +248,10 @@ class TouchSelectionControllerImpl::EditingHandleView
   }
 
   ~EditingHandleView() override { SetWidgetVisible(false, false); }
+
+  ui::SelectionBound::Type selection_bound_type() {
+    return selection_bound_.type();
+  }
 
   // Overridden from views::WidgetDelegateView:
   bool WidgetHasHitTestMask() const override { return true; }
@@ -337,7 +340,11 @@ class TouchSelectionControllerImpl::EditingHandleView
       widget_->Hide();
   }
 
-  void SetBoundInScreen(const ui::SelectionBound& bound) {
+  // If |is_visible| is true, this will update the widget and trigger a repaint
+  // if necessary. Otherwise this will only update the internal state:
+  // |selection_bound_| and |image_|, so that the state is valid for the time
+  // this becomes visible.
+  void SetBoundInScreen(const ui::SelectionBound& bound, bool is_visible) {
     bool update_bound_type = false;
     // Cursor handle should always have the bound type CENTER
     DCHECK(!is_cursor_handle_ || bound.type() == ui::SelectionBound::CENTER);
@@ -354,8 +361,13 @@ class TouchSelectionControllerImpl::EditingHandleView
     if (update_bound_type) {
       selection_bound_.set_type(bound.type());
       image_ = GetHandleImage(bound.type());
-      SchedulePaint();
+      if (is_visible)
+        SchedulePaint();
     }
+
+    if (!is_visible)
+      return;
+
     selection_bound_.SetEdge(bound.edge_top(), bound.edge_bottom());
 
     widget_->SetBounds(GetSelectionWidgetBounds(selection_bound_));
@@ -376,7 +388,7 @@ class TouchSelectionControllerImpl::EditingHandleView
   }
 
  private:
-  scoped_ptr<Widget> widget_;
+  std::unique_ptr<Widget> widget_;
   TouchSelectionControllerImpl* controller_;
 
   // In local coordinates
@@ -493,7 +505,7 @@ void TouchSelectionControllerImpl::SelectionChanged() {
     // If the new location of this handle is out of client view, its widget
     // should not get hidden, since it should still receive touch events.
     // Hence, we are not using |SetHandleBound()| method here.
-    dragging_handle_->SetBoundInScreen(screen_bound_focus_clipped);
+    dragging_handle_->SetBoundInScreen(screen_bound_focus_clipped, true);
 
     // Temporary fix for selection handle going outside a window. On a webpage,
     // the page should scroll if the selection handle is dragged outside the
@@ -593,8 +605,7 @@ void TouchSelectionControllerImpl::SetHandleBound(
     const ui::SelectionBound& bound,
     const ui::SelectionBound& bound_in_screen) {
   handle->SetWidgetVisible(ShouldShowHandleFor(bound), false);
-  if (handle->IsWidgetVisible())
-    handle->SetBoundInScreen(bound_in_screen);
+  handle->SetBoundInScreen(bound_in_screen, handle->IsWidgetVisible());
 }
 
 bool TouchSelectionControllerImpl::ShouldShowHandleFor(
@@ -738,6 +749,11 @@ gfx::Rect TouchSelectionControllerImpl::GetQuickMenuAnchorRect() const {
 
 gfx::NativeView TouchSelectionControllerImpl::GetCursorHandleNativeView() {
   return cursor_handle_->GetWidget()->GetNativeView();
+}
+
+ui::SelectionBound::Type
+TouchSelectionControllerImpl::GetSelectionHandle1Type() {
+  return selection_handle_1_->selection_bound_type();
 }
 
 gfx::Rect TouchSelectionControllerImpl::GetSelectionHandle1Bounds() {

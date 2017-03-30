@@ -6,6 +6,9 @@
 
 #include <stdint.h>
 
+#include <memory>
+#include <tuple>
+
 #include "base/command_line.h"
 #include "base/debug/crash_logging.h"
 #include "base/file_version_info.h"
@@ -19,7 +22,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/tuple.h"
 #include "build/build_config.h"
 #include "chrome/common/child_process_logging.h"
 #include "chrome/common/chrome_constants.h"
@@ -33,6 +35,7 @@
 #include "components/data_reduction_proxy/content/common/data_reduction_proxy_messages.h"
 #include "components/dom_distiller/core/url_constants.h"
 #include "components/version_info/version_info.h"
+#include "content/public/common/cdm_info.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
@@ -43,7 +46,6 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
 #include "ui/base/resource/resource_bundle.h"
-
 #include "widevine_cdm_version.h"  // In SHARED_INTERMEDIATE_DIR.
 
 #if defined(OS_LINUX)
@@ -74,6 +76,7 @@
 
 #if defined(WIDEVINE_CDM_AVAILABLE) && defined(ENABLE_PEPPER_CDMS) && \
     !defined(WIDEVINE_CDM_IS_COMPONENT)
+#define WIDEVINE_CDM_AVAILABLE_NOT_COMPONENT
 #include "chrome/common/widevine_cdm_constants.h"
 #endif
 
@@ -103,6 +106,41 @@ content::PepperPluginInfo::PPP_InitializeModuleFunc g_nacl_initialize_module;
 content::PepperPluginInfo::PPP_ShutdownModuleFunc g_nacl_shutdown_module;
 #endif
 
+#if defined(WIDEVINE_CDM_AVAILABLE_NOT_COMPONENT)
+bool IsWidevineAvailable(base::FilePath* adapter_path,
+                         base::FilePath* cdm_path,
+                         std::vector<std::string>* codecs_supported) {
+  static enum {
+    NOT_CHECKED,
+    FOUND,
+    NOT_FOUND,
+  } widevine_cdm_file_check = NOT_CHECKED;
+  // TODO(jrummell): We should add a new path for DIR_WIDEVINE_CDM and use that
+  // to locate the CDM and the CDM adapter.
+  if (PathService::Get(chrome::FILE_WIDEVINE_CDM_ADAPTER, adapter_path)) {
+    *cdm_path = adapter_path->DirName().AppendASCII(kWidevineCdmFileName);
+    if (widevine_cdm_file_check == NOT_CHECKED) {
+      widevine_cdm_file_check =
+          (base::PathExists(*adapter_path) && base::PathExists(*cdm_path))
+              ? FOUND
+              : NOT_FOUND;
+    }
+    if (widevine_cdm_file_check == FOUND) {
+      // Add the supported codecs as if they came from the component manifest.
+      // This list must match the CDM that is being bundled with Chrome.
+      codecs_supported->push_back(kCdmSupportedCodecVp8);
+      codecs_supported->push_back(kCdmSupportedCodecVp9);
+#if defined(USE_PROPRIETARY_CODECS)
+      codecs_supported->push_back(kCdmSupportedCodecAvc1);
+#endif  // defined(USE_PROPRIETARY_CODECS)
+      return true;
+    }
+  }
+
+  return false;
+}
+#endif  // defined(WIDEVINE_CDM_AVAILABLE_NOT_COMPONENT)
+
 // Appends the known built-in plugins to the given vector. Some built-in
 // plugins are "internal" which means they are compiled into the Chrome binary,
 // and some are extra shared libraries distributed with the browser (these are
@@ -129,13 +167,12 @@ void ComputeBuiltInPlugins(std::vector<content::PepperPluginInfo>* plugins) {
   plugins->push_back(pdf_info);
 #endif  // defined(ENABLE_PDF)
 
-  base::FilePath path;
-
 #if !defined(DISABLE_NACL)
   // Handle Native Client just like the PDF plugin. This means that it is
   // enabled by default for the non-portable case.  This allows apps installed
   // from the Chrome Web Store to use NaCl even if the command line switch
   // isn't set.  For other uses of NaCl we check for the command line switch.
+  base::FilePath path;
   if (PathService::Get(chrome::FILE_NACL_PLUGIN, &path)) {
     content::PepperPluginInfo nacl;
     // The nacl plugin is now built into the Chromium binary.
@@ -158,48 +195,34 @@ void ComputeBuiltInPlugins(std::vector<content::PepperPluginInfo>* plugins) {
   }
 #endif  // !defined(DISABLE_NACL)
 
-#if defined(WIDEVINE_CDM_AVAILABLE) && defined(ENABLE_PEPPER_CDMS) && \
-    !defined(WIDEVINE_CDM_IS_COMPONENT)
-  static bool skip_widevine_cdm_file_check = false;
-  if (PathService::Get(chrome::FILE_WIDEVINE_CDM_ADAPTER, &path)) {
-    if (skip_widevine_cdm_file_check || base::PathExists(path)) {
-      content::PepperPluginInfo widevine_cdm;
-      widevine_cdm.is_out_of_process = true;
-      widevine_cdm.path = path;
-      widevine_cdm.name = kWidevineCdmDisplayName;
-      widevine_cdm.description = kWidevineCdmDescription +
-                                 std::string(" (version: ") +
-                                 WIDEVINE_CDM_VERSION_STRING + ")";
-      widevine_cdm.version = WIDEVINE_CDM_VERSION_STRING;
-      content::WebPluginMimeType widevine_cdm_mime_type(
-          kWidevineCdmPluginMimeType,
-          kWidevineCdmPluginExtension,
-          kWidevineCdmPluginMimeTypeDescription);
+#if defined(WIDEVINE_CDM_AVAILABLE_NOT_COMPONENT)
+  base::FilePath adapter_path;
+  base::FilePath cdm_path;
+  std::vector<std::string> codecs_supported;
+  if (IsWidevineAvailable(&adapter_path, &cdm_path, &codecs_supported)) {
+    content::PepperPluginInfo widevine_cdm;
+    widevine_cdm.is_out_of_process = true;
+    widevine_cdm.path = adapter_path;
+    widevine_cdm.name = kWidevineCdmDisplayName;
+    widevine_cdm.description =
+        base::StringPrintf("%s (version: " WIDEVINE_CDM_VERSION_STRING ")",
+                           kWidevineCdmDescription);
+    widevine_cdm.version = WIDEVINE_CDM_VERSION_STRING;
+    content::WebPluginMimeType widevine_cdm_mime_type(
+        kWidevineCdmPluginMimeType, kWidevineCdmPluginExtension,
+        kWidevineCdmPluginMimeTypeDescription);
 
-      // Add the supported codecs as if they came from the component manifest.
-      // This list must match the CDM that is being bundled with Chrome.
-      std::vector<std::string> codecs;
-      codecs.push_back(kCdmSupportedCodecVp8);
-      codecs.push_back(kCdmSupportedCodecVp9);
-#if defined(USE_PROPRIETARY_CODECS)
-      codecs.push_back(kCdmSupportedCodecAvc1);
-#endif  // defined(USE_PROPRIETARY_CODECS)
-      std::string codec_string = base::JoinString(
-          codecs, std::string(1, kCdmSupportedCodecsValueDelimiter));
-      widevine_cdm_mime_type.additional_param_names.push_back(
-          base::ASCIIToUTF16(kCdmSupportedCodecsParamName));
-      widevine_cdm_mime_type.additional_param_values.push_back(
-          base::ASCIIToUTF16(codec_string));
+    widevine_cdm_mime_type.additional_param_names.push_back(
+        base::ASCIIToUTF16(kCdmSupportedCodecsParamName));
+    widevine_cdm_mime_type.additional_param_values.push_back(base::ASCIIToUTF16(
+        base::JoinString(codecs_supported,
+                         std::string(1, kCdmSupportedCodecsValueDelimiter))));
 
-      widevine_cdm.mime_types.push_back(widevine_cdm_mime_type);
-      widevine_cdm.permissions = kWidevineCdmPluginPermissions;
-      plugins->push_back(widevine_cdm);
-
-      skip_widevine_cdm_file_check = true;
-    }
+    widevine_cdm.mime_types.push_back(widevine_cdm_mime_type);
+    widevine_cdm.permissions = kWidevineCdmPluginPermissions;
+    plugins->push_back(widevine_cdm);
   }
-#endif  // defined(WIDEVINE_CDM_AVAILABLE) && defined(ENABLE_PEPPER_CDMS) &&
-        // !defined(WIDEVINE_CDM_IS_COMPONENT)
+#endif  // defined(WIDEVINE_CDM_AVAILABLE_NOT_COMPONENT)
 }
 
 // Creates a PepperPluginInfo for the specified plugin.
@@ -275,7 +298,7 @@ void AddPepperFlashFromCommandLine(
 
   // if no version is specified try to look for it in the library
   if (flash_version.length() == 0) {
-    scoped_ptr<FileVersionInfo> version_info(
+    std::unique_ptr<FileVersionInfo> version_info(
       FileVersionInfo::CreateFileVersionInfo(base::FilePath(flash_path)));
 
     if (version_info.get()) {
@@ -382,7 +405,7 @@ bool GetSystemPepperFlash(content::PepperPluginInfo* plugin) {
   std::string manifest_data;
   if (!base::ReadFileToString(manifest_path, &manifest_data))
     return false;
-  scoped_ptr<base::Value> manifest_value(
+  std::unique_ptr<base::Value> manifest_value(
       base::JSONReader::Read(manifest_data, base::JSON_ALLOW_TRAILING_COMMAS));
   if (!manifest_value.get())
     return false;
@@ -481,7 +504,7 @@ content::PepperPluginInfo* ChromeContentClient::FindMostRecentPlugin(
   if (plugins.empty())
     return nullptr;
 
-  using PluginSortKey = base::Tuple<base::Version, bool, bool, bool, bool>;
+  using PluginSortKey = std::tuple<base::Version, bool, bool, bool, bool>;
 
   std::map<PluginSortKey, content::PepperPluginInfo*> plugin_map;
 
@@ -516,18 +539,18 @@ void ChromeContentClient::AddPepperPlugins(
   ScopedVector<content::PepperPluginInfo> flash_versions;
 
 #if defined(OS_LINUX)
-  scoped_ptr<content::PepperPluginInfo> component_flash(
+  std::unique_ptr<content::PepperPluginInfo> component_flash(
       new content::PepperPluginInfo);
   if (GetComponentUpdatedPepperFlash(component_flash.get()))
     flash_versions.push_back(component_flash.release());
 #endif  // defined(OS_LINUX)
 
-  scoped_ptr<content::PepperPluginInfo> bundled_flash(
+  std::unique_ptr<content::PepperPluginInfo> bundled_flash(
       new content::PepperPluginInfo);
   if (GetBundledPepperFlash(bundled_flash.get()))
     flash_versions.push_back(bundled_flash.release());
 
-  scoped_ptr<content::PepperPluginInfo> system_flash(
+  std::unique_ptr<content::PepperPluginInfo> system_flash(
       new content::PepperPluginInfo);
   if (GetSystemPepperFlash(system_flash.get()))
     flash_versions.push_back(system_flash.release());
@@ -538,6 +561,29 @@ void ChromeContentClient::AddPepperPlugins(
   if (max_flash)
     plugins->push_back(*max_flash);
 #endif  // defined(ENABLE_PLUGINS)
+}
+
+void ChromeContentClient::AddContentDecryptionModules(
+    std::vector<content::CdmInfo>* cdms) {
+// TODO(jrummell): Need to have a better flag to indicate systems Widevine
+// is available on. For now we continue to use ENABLE_PEPPER_CDMS so that
+// we can experiment between pepper and mojo.
+#if defined(WIDEVINE_CDM_AVAILABLE_NOT_COMPONENT)
+  base::FilePath adapter_path;
+  base::FilePath cdm_path;
+  std::vector<std::string> codecs_supported;
+  if (IsWidevineAvailable(&adapter_path, &cdm_path, &codecs_supported)) {
+    // CdmInfo needs |path| to be the actual Widevine library,
+    // not the adapter, so adjust as necessary. It will be in the
+    // same directory as the installed adapter.
+    const base::Version version(WIDEVINE_CDM_VERSION_STRING);
+    DCHECK(version.IsValid());
+    cdms->push_back(content::CdmInfo(kWidevineCdmType, version, cdm_path,
+                                     codecs_supported));
+  }
+#endif  // defined(WIDEVINE_CDM_AVAILABLE_NOT_COMPONENT)
+
+  // TODO(jrummell): Add External Clear Key CDM for testing, if it's available.
 }
 
 #if defined(OS_CHROMEOS)

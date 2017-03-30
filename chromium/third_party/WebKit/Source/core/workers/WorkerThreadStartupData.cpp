@@ -34,11 +34,11 @@
 
 namespace blink {
 
-WorkerThreadStartupData::WorkerThreadStartupData(const KURL& scriptURL, const String& userAgent, const String& sourceCode, PassOwnPtr<Vector<char>> cachedMetaData, WorkerThreadStartMode startMode, const PassOwnPtr<Vector<CSPHeaderAndType>> contentSecurityPolicyHeaders, const SecurityOrigin* starterOrigin, WorkerClients* workerClients, WebAddressSpace addressSpace, V8CacheOptions v8CacheOptions)
+WorkerThreadStartupData::WorkerThreadStartupData(const KURL& scriptURL, const String& userAgent, const String& sourceCode, PassOwnPtr<Vector<char>> cachedMetaData, WorkerThreadStartMode startMode, const Vector<CSPHeaderAndType>* contentSecurityPolicyHeaders, const SecurityOrigin* starterOrigin, WorkerClients* workerClients, WebAddressSpace addressSpace, const Vector<String>* originTrialTokens, V8CacheOptions v8CacheOptions)
     : m_scriptURL(scriptURL.copy())
     , m_userAgent(userAgent.isolatedCopy())
     , m_sourceCode(sourceCode.isolatedCopy())
-    , m_cachedMetaData(cachedMetaData)
+    , m_cachedMetaData(std::move(cachedMetaData))
     , m_startMode(startMode)
     , m_starterOriginPrivilegeData(starterOrigin ? starterOrigin->createPrivilegeData() : nullptr)
     , m_workerClients(workerClients)
@@ -46,12 +46,17 @@ WorkerThreadStartupData::WorkerThreadStartupData(const KURL& scriptURL, const St
     , m_v8CacheOptions(v8CacheOptions)
 {
     m_contentSecurityPolicyHeaders = adoptPtr(new Vector<CSPHeaderAndType>());
-    if (!contentSecurityPolicyHeaders)
-        return;
+    if (contentSecurityPolicyHeaders) {
+        for (const auto& header : *contentSecurityPolicyHeaders) {
+            CSPHeaderAndType copiedHeader(header.first.isolatedCopy(), header.second);
+            m_contentSecurityPolicyHeaders->append(copiedHeader);
+        }
+    }
 
-    for (const auto& header : *contentSecurityPolicyHeaders) {
-        CSPHeaderAndType copiedHeader(header.first.isolatedCopy(), header.second);
-        m_contentSecurityPolicyHeaders->append(copiedHeader);
+    m_originTrialTokens = std::unique_ptr<Vector<String>>(new Vector<String>());
+    if (originTrialTokens) {
+        for (const String& token : *originTrialTokens)
+            m_originTrialTokens->append(token.isolatedCopy());
     }
 }
 

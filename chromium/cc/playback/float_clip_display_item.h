@@ -7,9 +7,10 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <vector>
 
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "cc/base/cc_export.h"
 #include "cc/playback/display_item.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -36,7 +37,6 @@ class CC_EXPORT FloatClipDisplayItem : public DisplayItem {
   size_t ExternalMemoryUsage() const override;
 
   int ApproximateOpCount() const { return 1; }
-  bool IsSuitableForGpuRasterization() const { return true; }
 
  private:
   void SetNew(const gfx::RectF& clip_rect);
@@ -50,8 +50,8 @@ class CC_EXPORT EndFloatClipDisplayItem : public DisplayItem {
   explicit EndFloatClipDisplayItem(const proto::DisplayItem& proto);
   ~EndFloatClipDisplayItem() override;
 
-  static scoped_ptr<EndFloatClipDisplayItem> Create() {
-    return make_scoped_ptr(new EndFloatClipDisplayItem());
+  static std::unique_ptr<EndFloatClipDisplayItem> Create() {
+    return base::WrapUnique(new EndFloatClipDisplayItem());
   }
 
   void ToProtobuf(proto::DisplayItem* proto,

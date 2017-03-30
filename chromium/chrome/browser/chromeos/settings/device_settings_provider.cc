@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/settings/device_settings_provider.h"
 
+#include <memory.h>
 #include <stddef.h>
 #include <utility>
 
@@ -70,6 +71,7 @@ const char* const kKnownSettings[] = {
     kHeartbeatEnabled,
     kHeartbeatFrequency,
     kLoginAuthenticationBehavior,
+    kLoginVideoCaptureAllowedUrls,
     kPolicyMissingMitigationMode,
     kRebootOnShutdown,
     kReleaseChannel,
@@ -270,6 +272,17 @@ void DecodeLoginPolicies(
         kLoginAuthenticationBehavior,
         policy.login_authentication_behavior().login_authentication_behavior());
   }
+
+  if (policy.has_login_video_capture_allowed_urls()) {
+    std::unique_ptr<base::ListValue> list(new base::ListValue());
+    const em::LoginVideoCaptureAllowedUrlsProto&
+        login_video_capture_allowed_urls_proto =
+            policy.login_video_capture_allowed_urls();
+    for (const auto& value : login_video_capture_allowed_urls_proto.urls()) {
+      list->Append(new base::StringValue(value));
+    }
+    new_values_cache->SetValue(kLoginVideoCaptureAllowedUrls, std::move(list));
+  }
 }
 
 void DecodeNetworkPolicies(
@@ -457,10 +470,13 @@ void DecodeGenericPolicies(
         policy.display_rotation_default().display_rotation_default());
   }
 
-  new_values_cache->SetBoolean(
-      kAllowBluetooth, policy.has_allow_bluetooth() &&
-                           policy.allow_bluetooth().has_allow_bluetooth() &&
-                           policy.allow_bluetooth().allow_bluetooth());
+  if (policy.has_allow_bluetooth() &&
+      policy.allow_bluetooth().has_allow_bluetooth()) {
+    new_values_cache->SetBoolean(kAllowBluetooth,
+                                 policy.allow_bluetooth().allow_bluetooth());
+  } else {
+    new_values_cache->SetBoolean(kAllowBluetooth, true);
+  }
 
   if (policy.has_quirks_download_enabled() &&
       policy.quirks_download_enabled().has_quirks_download_enabled()) {
@@ -573,7 +589,6 @@ void DeviceSettingsProvider::DoSet(const std::string& path,
       return;
     }
   }
-
 }
 
 void DeviceSettingsProvider::OwnershipStatusChanged() {

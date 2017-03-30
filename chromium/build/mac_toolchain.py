@@ -19,6 +19,7 @@ versions can be modified to allow for user input on developer machines.
 """
 
 import os
+import plistlib
 import shutil
 import subprocess
 import sys
@@ -97,16 +98,57 @@ def CanAccessToolchainBucket():
   proc.communicate()
   return proc.returncode == 0
 
+def LoadPlist(path):
+  """Loads Plist at |path| and returns it as a dictionary."""
+  fd, name = tempfile.mkstemp()
+  try:
+    subprocess.check_call(['plutil', '-convert', 'xml1', '-o', name, path])
+    with os.fdopen(fd, 'r') as f:
+      return plistlib.readPlist(f)
+  finally:
+    os.unlink(name)
 
-def AcceptLicense(directory):
-  """Use xcodebuild to accept new toolchain license.  This only
-  works if xcodebuild and xcode-select are in sudoers."""
-  xcodebuild_dir = os.path.join(TOOLCHAIN_BUILD_DIR, 'Contents/Developer')
+
+def AcceptLicense():
+  """Use xcodebuild to accept new toolchain license if necessary.  Don't accept
+  the license if a newer license has already been accepted. This only works if
+  xcodebuild and xcode-select are passwordless in sudoers."""
+
+  # Check old license
+  try:
+    target_license_plist_path = \
+        os.path.join(TOOLCHAIN_BUILD_DIR,
+                     *['Contents','Resources','LicenseInfo.plist'])
+    target_license_plist = LoadPlist(target_license_plist_path)
+    build_type = target_license_plist['licenseType']
+    build_version = target_license_plist['licenseID']
+
+    accepted_license_plist = LoadPlist(
+        '/Library/Preferences/com.apple.dt.Xcode.plist')
+    agreed_to_key = 'IDELast%sLicenseAgreedTo' % build_type
+    last_license_agreed_to = accepted_license_plist[agreed_to_key]
+
+    # Historically all Xcode build numbers have been in the format of AANNNN, so
+    # a simple string compare works.  If Xcode's build numbers change this may
+    # need a more complex compare.
+    if build_version <= last_license_agreed_to:
+      # Don't accept the license of older toolchain builds, this will break the
+      # license of newer builds.
+      return
+  except (subprocess.CalledProcessError, KeyError):
+    # If there's never been a license of type |build_type| accepted,
+    # |target_license_plist_path| or |agreed_to_key| may not exist.
+    pass
+
+  print "Accepting license."
   old_path = subprocess.Popen(['/usr/bin/xcode-select', '-p'],
                                stdout=subprocess.PIPE).communicate()[0].strip()
-  subprocess.check_call(['sudo', '/usr/bin/xcode-select', '-s', xcodebuild_dir])
-  subprocess.check_call(['sudo', '/usr/bin/xcodebuild', '-license', 'accept'])
-  subprocess.check_call(['sudo', '/usr/bin/xcode-select', '-s', old_path])
+  try:
+    build_dir = os.path.join(TOOLCHAIN_BUILD_DIR, 'Contents/Developer')
+    subprocess.check_call(['sudo', '/usr/bin/xcode-select', '-s', build_dir])
+    subprocess.check_call(['sudo', '/usr/bin/xcodebuild', '-license', 'accept'])
+  finally:
+    subprocess.check_call(['sudo', '/usr/bin/xcode-select', '-s', old_path])
 
 
 def UseLocalMacSDK():
@@ -134,7 +176,7 @@ def main():
                                       TOOLCHAIN_VERSION)
   if ReadStampFile() == toolchain_revision:
     print 'Toolchain (%s) is already up to date.' % toolchain_revision
-    AcceptLicense(TOOLCHAIN_BUILD_DIR)
+    AcceptLicense()
     return 0
 
   if not CanAccessToolchainBucket():
@@ -152,13 +194,14 @@ def main():
     toolchain_file = 'toolchain-%s.tgz' % toolchain_revision
     toolchain_full_url = TOOLCHAIN_URL + toolchain_file
     DownloadAndUnpack(toolchain_full_url, TOOLCHAIN_BUILD_DIR)
-    AcceptLicense(TOOLCHAIN_BUILD_DIR)
+    AcceptLicense()
 
     print 'Toolchain %s unpacked.' % toolchain_revision
     WriteStampFile(toolchain_revision)
     return 0
-  except:
+  except Exception as e:
     print 'Failed to download toolchain %s.' % toolchain_file
+    print 'Exception %s' % e
     print 'Exiting.'
     return 1
 

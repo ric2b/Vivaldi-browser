@@ -9,9 +9,6 @@
   // never stop loading; disabled widevine pepper support(?)
   DISABLE(PepperContentSettingsSpecialCasesPluginsBlockedTest, WidevineCdm)
 
-  // never stop loading; disabled widevine pepper support(?)
-  DISABLE(PepperContentSettingsSpecialCasesJavaScriptBlockedTest, WidevineCdm)
-
 #if defined(OFFICIAL_BUILD)
   DISABLE_ALL(End2EndTest)
 

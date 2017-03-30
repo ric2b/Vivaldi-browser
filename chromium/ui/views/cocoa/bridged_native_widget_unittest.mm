@@ -6,19 +6,21 @@
 
 #import <Cocoa/Cocoa.h>
 
+#include <memory>
+
 #import "base/mac/foundation_util.h"
 #import "base/mac/mac_util.h"
 #import "base/mac/sdk_forward_declarations.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #import "testing/gtest_mac.h"
 #import "ui/base/cocoa/window_size_constants.h"
 #include "ui/base/ime/input_method.h"
-#import "ui/gfx/test/ui_cocoa_test_helper.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
+#import "ui/gfx/test/ui_cocoa_test_helper.h"
 #import "ui/views/cocoa/bridged_content_view.h"
 #import "ui/views/cocoa/native_widget_mac_nswindow.h"
 #import "ui/views/cocoa/views_nswindow_delegate.h"
@@ -37,6 +39,21 @@ using base::SysUTF8ToNSString;
 #define EXPECT_EQ_RANGE(a, b)        \
   EXPECT_EQ(a.location, b.location); \
   EXPECT_EQ(a.length, b.length);
+
+// Helpers to verify an expectation against both the actual toolkit-views
+// behaviour and the Cocoa behaviour.
+
+#define EXPECT_NSEQ_3(expected_literal, expected_cocoa, actual_views) \
+  EXPECT_NSEQ(expected_literal, actual_views);                        \
+  EXPECT_NSEQ(expected_cocoa, actual_views);
+
+#define EXPECT_EQ_RANGE_3(expected_literal, expected_cocoa, actual_views) \
+  EXPECT_EQ_RANGE(expected_literal, actual_views);                        \
+  EXPECT_EQ_RANGE(expected_cocoa, actual_views);
+
+#define EXPECT_EQ_3(expected_literal, expected_cocoa, actual_views) \
+  EXPECT_EQ(expected_literal, actual_views);                        \
+  EXPECT_EQ(expected_cocoa, actual_views);
 
 namespace {
 
@@ -125,9 +142,7 @@ class MockNativeWidgetMac : public NativeWidgetMac {
   MockNativeWidgetMac(Widget* delegate) : NativeWidgetMac(delegate) {}
 
   // Expose a reference, so that it can be reset() independently.
-  scoped_ptr<BridgedNativeWidget>& bridge() {
-    return bridge_;
-  }
+  std::unique_ptr<BridgedNativeWidget>& bridge() { return bridge_; }
 
   // internal::NativeWidgetPrivate:
   void InitNativeWidget(const Widget::InitParams& params) override {
@@ -157,7 +172,7 @@ class BridgedNativeWidgetTestBase : public ui::CocoaTest {
         native_widget_mac_(new MockNativeWidgetMac(widget_.get())) {
   }
 
-  scoped_ptr<BridgedNativeWidget>& bridge() {
+  std::unique_ptr<BridgedNativeWidget>& bridge() {
     return native_widget_mac_->bridge();
   }
 
@@ -184,7 +199,7 @@ class BridgedNativeWidgetTestBase : public ui::CocoaTest {
   }
 
  protected:
-  scoped_ptr<Widget> widget_;
+  std::unique_ptr<Widget> widget_;
   MockNativeWidgetMac* native_widget_mac_;  // Weak. Owned by |widget_|.
 
   // Make the InitParams available to tests to cover initialization codepaths.
@@ -197,24 +212,69 @@ class BridgedNativeWidgetTest : public BridgedNativeWidgetTestBase {
   ~BridgedNativeWidgetTest() override;
 
   // Install a textfield with input type |text_input_type| in the view hierarchy
-  // and make it the text input client.
-  void InstallTextField(const std::string& text,
+  // and make it the text input client. Also initializes |dummy_text_view_|.
+  void InstallTextField(const base::string16& text,
                         ui::TextInputType text_input_type);
 
   // Install a textfield with input type ui::TEXT_INPUT_TYPE_TEXT in the view
-  // hierarchy and make it the text input client.
+  // hierarchy and make it the text input client. Also initializes
+  // |dummy_text_view_|.
+  void InstallTextField(const base::string16& text);
+
   void InstallTextField(const std::string& text);
 
-  // Returns the current text as std::string.
-  std::string GetText();
+  // Returns the actual current text for |ns_view_|.
+  NSString* GetActualText();
+
+  // Returns the expected current text from |dummy_text_view_|.
+  NSString* GetExpectedText();
+
+  // Returns the actual selection range for |ns_view_|.
+  NSRange GetActualSelectionRange();
+
+  // Returns the expected selection range from |dummy_text_view_|.
+  NSRange GetExpectedSelectionRange();
+
+  // Set the selection range for the installed textfield and |dummy_text_view_|.
+  void SetSelectionRange(NSRange range);
+
+  // Perform command |sel| on |ns_view_| and |dummy_text_view_|.
+  void PerformCommand(SEL sel);
+
+  // Make selection from |start| to |end| on installed views::Textfield and
+  // |dummy_text_view_|. If |start| > |end|, extend selection to left from
+  // |start|.
+  void MakeSelection(int start, int end);
 
   // testing::Test:
   void SetUp() override;
   void TearDown() override;
 
  protected:
-  scoped_ptr<views::View> view_;
-  BridgedContentView* ns_view_;  // Weak. Owned by bridge().
+  // Test delete to beginning of line or paragraph based on |sel|. |sel| can be
+  // either deleteToBeginningOfLine: or deleteToBeginningOfParagraph:.
+  void TestDeleteBeginning(SEL sel);
+
+  // Test delete to end of line or paragraph based on |sel|. |sel| can be
+  // either deleteToEndOfLine: or deleteToEndOfParagraph:.
+  void TestDeleteEnd(SEL sel);
+
+  // Test editing commands in |selectors| against the expectations set by
+  // |dummy_text_view_|. This is done by selecting every substring within a set
+  // of test strings (both RTL and non-RTL) and performing every selector on
+  // both the NSTextView and the BridgedContentView hosting a focused
+  // views::TextField to ensure the resulting text and selection ranges match.
+  // |selectors| is an NSArray of NSStrings.
+  void TestEditingCommands(NSArray* selectors);
+
+  std::unique_ptr<views::View> view_;
+
+  // Weak. Owned by bridge().
+  BridgedContentView* ns_view_;
+
+  // An NSTextView which helps set the expectations for our tests.
+  base::scoped_nsobject<NSTextView> dummy_text_view_;
+
   base::MessageLoopForUI message_loop_;
 
  private:
@@ -228,10 +288,10 @@ BridgedNativeWidgetTest::~BridgedNativeWidgetTest() {
 }
 
 void BridgedNativeWidgetTest::InstallTextField(
-    const std::string& text,
+    const base::string16& text,
     ui::TextInputType text_input_type) {
   Textfield* textfield = new Textfield();
-  textfield->SetText(ASCIIToUTF16(text));
+  textfield->SetText(text);
   textfield->SetTextInputType(text_input_type);
   view_->RemoveAllChildViews(true);
   view_->AddChildView(textfield);
@@ -243,17 +303,67 @@ void BridgedNativeWidgetTest::InstallTextField(
   textfield->RequestFocus();
 
   [ns_view_ setTextInputClient:textfield];
+
+  // Initialize the dummy text view.
+  dummy_text_view_.reset([[NSTextView alloc] initWithFrame:NSZeroRect]);
+  [dummy_text_view_ setString:SysUTF16ToNSString(text)];
 }
 
-void BridgedNativeWidgetTest::InstallTextField(const std::string& text) {
+void BridgedNativeWidgetTest::InstallTextField(const base::string16& text) {
   InstallTextField(text, ui::TEXT_INPUT_TYPE_TEXT);
 }
 
-std::string BridgedNativeWidgetTest::GetText() {
+void BridgedNativeWidgetTest::InstallTextField(const std::string& text) {
+  InstallTextField(base::ASCIIToUTF16(text), ui::TEXT_INPUT_TYPE_TEXT);
+}
+
+NSString* BridgedNativeWidgetTest::GetActualText() {
   NSRange range = NSMakeRange(0, NSUIntegerMax);
-  NSAttributedString* text =
-      [ns_view_ attributedSubstringForProposedRange:range actualRange:NULL];
-  return SysNSStringToUTF8([text string]);
+  return [[ns_view_ attributedSubstringForProposedRange:range
+                                            actualRange:nullptr] string];
+}
+
+NSString* BridgedNativeWidgetTest::GetExpectedText() {
+  NSRange range = NSMakeRange(0, NSUIntegerMax);
+  return
+      [[dummy_text_view_ attributedSubstringForProposedRange:range
+                                                 actualRange:nullptr] string];
+}
+
+NSRange BridgedNativeWidgetTest::GetActualSelectionRange() {
+  return [ns_view_ selectedRange];
+}
+
+NSRange BridgedNativeWidgetTest::GetExpectedSelectionRange() {
+  return [dummy_text_view_ selectedRange];
+}
+
+void BridgedNativeWidgetTest::SetSelectionRange(NSRange range) {
+  ui::TextInputClient* client = [ns_view_ textInputClient];
+  client->SetSelectionRange(gfx::Range(range));
+
+  [dummy_text_view_ setSelectedRange:range];
+}
+
+void BridgedNativeWidgetTest::PerformCommand(SEL sel) {
+  [ns_view_ doCommandBySelector:sel];
+  [dummy_text_view_ doCommandBySelector:sel];
+}
+
+void BridgedNativeWidgetTest::MakeSelection(int start, int end) {
+  ui::TextInputClient* client = [ns_view_ textInputClient];
+  client->SetSelectionRange(gfx::Range(start, end));
+
+  // Though NSTextView has a selectionAffinity property, it does not seem to
+  // correspond to the selection direction. Hence we extend the selection from
+  //|start| to |end|.
+  [dummy_text_view_ setSelectedRange:NSMakeRange(start, 0)];
+  SEL sel = start > end ? @selector(moveBackwardAndModifySelection:)
+                        : @selector(moveForwardAndModifySelection:);
+  size_t delta = std::abs(end - start);
+
+  for (size_t i = 0; i < delta; i++)
+    [dummy_text_view_ doCommandBySelector:sel];
 }
 
 void BridgedNativeWidgetTest::SetUp() {
@@ -283,6 +393,97 @@ void BridgedNativeWidgetTest::TearDown() {
     bridge()->SetRootView(nullptr);
   view_.reset();
   BridgedNativeWidgetTestBase::TearDown();
+}
+
+void BridgedNativeWidgetTest::TestDeleteBeginning(SEL sel) {
+  InstallTextField("foo bar baz");
+  EXPECT_EQ_RANGE_3(NSMakeRange(11, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
+
+  // Move the caret to the beginning of the line.
+  SetSelectionRange(NSMakeRange(0, 0));
+  // Verify no deletion takes place.
+  PerformCommand(sel);
+  EXPECT_NSEQ_3(@"foo bar baz", GetExpectedText(), GetActualText());
+  EXPECT_EQ_RANGE_3(NSMakeRange(0, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
+
+  // Move the caret as- "foo| bar baz".
+  SetSelectionRange(NSMakeRange(3, 0));
+  PerformCommand(sel);
+  // Verify state is "| bar baz".
+  EXPECT_NSEQ_3(@" bar baz", GetExpectedText(), GetActualText());
+  EXPECT_EQ_RANGE_3(NSMakeRange(0, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
+
+  // Make a selection as- " bar |baz|".
+  SetSelectionRange(NSMakeRange(5, 3));
+  PerformCommand(sel);
+  // Verify only the selection is deleted so that the state is " bar |".
+  EXPECT_NSEQ_3(@" bar ", GetExpectedText(), GetActualText());
+  EXPECT_EQ_RANGE_3(NSMakeRange(5, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
+}
+
+void BridgedNativeWidgetTest::TestDeleteEnd(SEL sel) {
+  InstallTextField("foo bar baz");
+  EXPECT_EQ_RANGE_3(NSMakeRange(11, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
+
+  // Caret is at the end of the line. Verify no deletion takes place.
+  PerformCommand(sel);
+  EXPECT_NSEQ_3(@"foo bar baz", GetExpectedText(), GetActualText());
+  EXPECT_EQ_RANGE_3(NSMakeRange(11, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
+
+  // Move the caret as- "foo bar| baz".
+  SetSelectionRange(NSMakeRange(7, 0));
+  PerformCommand(sel);
+  // Verify state is "foo bar|".
+  EXPECT_NSEQ_3(@"foo bar", GetExpectedText(), GetActualText());
+  EXPECT_EQ_RANGE_3(NSMakeRange(7, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
+
+  // Make a selection as- "|foo |bar".
+  SetSelectionRange(NSMakeRange(0, 4));
+  PerformCommand(sel);
+  // Verify only the selection is deleted so that the state is "|bar".
+  EXPECT_NSEQ_3(@"bar", GetExpectedText(), GetActualText());
+  EXPECT_EQ_RANGE_3(NSMakeRange(0, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
+}
+
+void BridgedNativeWidgetTest::TestEditingCommands(NSArray* selectors) {
+  const base::string16 test_strings[] = {
+      base::WideToUTF16(L"ab c"),
+      base::WideToUTF16(L"\x0634\x0632 \x064A")  // RTL string.
+  };
+
+  for (const base::string16& test_string : test_strings) {
+    for (NSString* selector_string in selectors) {
+      SEL sel = NSSelectorFromString(selector_string);
+      const int len = test_string.length();
+      for (int i = 0; i <= len; i++) {
+        for (int j = 0; j <= len; j++) {
+          SCOPED_TRACE(base::StringPrintf(
+              "Testing range [%d-%d] for case %s and selector %s\n", i, j,
+              base::UTF16ToUTF8(test_string).c_str(),
+              base::SysNSStringToUTF8(selector_string).c_str()));
+
+          InstallTextField(test_string);
+          MakeSelection(i, j);
+          EXPECT_EQ_RANGE_3(NSMakeRange(std::min(i, j), std::abs(i - j)),
+                            GetExpectedSelectionRange(),
+                            GetActualSelectionRange());
+
+          PerformCommand(sel);
+          EXPECT_NSEQ(GetExpectedText(), GetActualText());
+          EXPECT_EQ_RANGE(GetExpectedSelectionRange(),
+                          GetActualSelectionRange());
+        }
+      }
+    }
+  }
 }
 
 // The TEST_VIEW macro expects the view it's testing to have a superview. In
@@ -418,7 +619,7 @@ TEST_F(BridgedNativeWidgetInitTest, ShadowType) {
 // Ensure a nil NSTextInputContext is returned when the ui::TextInputClient is
 // not editable, a password field, or unset.
 TEST_F(BridgedNativeWidgetTest, InputContext) {
-  const std::string test_string = "test_str";
+  const base::string16 test_string = base::ASCIIToUTF16("test_str");
   InstallTextField(test_string, ui::TEXT_INPUT_TYPE_PASSWORD);
   EXPECT_FALSE([ns_view_ inputContext]);
   InstallTextField(test_string, ui::TEXT_INPUT_TYPE_TEXT);
@@ -436,11 +637,18 @@ TEST_F(BridgedNativeWidgetTest, TextInput_GetCompleteString) {
 
   NSRange range = NSMakeRange(0, test_string.size());
   NSRange actual_range;
-  NSAttributedString* text =
+
+  NSAttributedString* actual_text =
       [ns_view_ attributedSubstringForProposedRange:range
                                         actualRange:&actual_range];
-  EXPECT_EQ(test_string, SysNSStringToUTF8([text string]));
-  EXPECT_EQ_RANGE(range, actual_range);
+
+  NSRange expected_range;
+  NSAttributedString* expected_text =
+      [dummy_text_view_ attributedSubstringForProposedRange:range
+                                                actualRange:&expected_range];
+
+  EXPECT_NSEQ_3(@"foo bar baz", [expected_text string], [actual_text string]);
+  EXPECT_EQ_RANGE_3(range, expected_range, actual_range);
 }
 
 // Test getting middle substring using text input protocol.
@@ -450,11 +658,17 @@ TEST_F(BridgedNativeWidgetTest, TextInput_GetMiddleSubstring) {
 
   NSRange range = NSMakeRange(4, 3);
   NSRange actual_range;
-  NSAttributedString* text =
+  NSAttributedString* actual_text =
       [ns_view_ attributedSubstringForProposedRange:range
                                         actualRange:&actual_range];
-  EXPECT_EQ("bar", SysNSStringToUTF8([text string]));
-  EXPECT_EQ_RANGE(range, actual_range);
+
+  NSRange expected_range;
+  NSAttributedString* expected_text =
+      [dummy_text_view_ attributedSubstringForProposedRange:range
+                                                actualRange:&expected_range];
+
+  EXPECT_NSEQ_3(@"bar", [expected_text string], [actual_text string]);
+  EXPECT_EQ_RANGE_3(range, expected_range, actual_range);
 }
 
 // Test getting ending substring using text input protocol.
@@ -464,12 +678,16 @@ TEST_F(BridgedNativeWidgetTest, TextInput_GetEndingSubstring) {
 
   NSRange range = NSMakeRange(8, 100);
   NSRange actual_range;
-  NSAttributedString* text =
+  NSAttributedString* actual_text =
       [ns_view_ attributedSubstringForProposedRange:range
                                         actualRange:&actual_range];
-  EXPECT_EQ("baz", SysNSStringToUTF8([text string]));
-  EXPECT_EQ(range.location, actual_range.location);
-  EXPECT_EQ(3U, actual_range.length);
+  NSRange expected_range;
+  NSAttributedString* expected_text =
+      [dummy_text_view_ attributedSubstringForProposedRange:range
+                                                actualRange:&expected_range];
+
+  EXPECT_NSEQ_3(@"baz", [expected_text string], [actual_text string]);
+  EXPECT_EQ_RANGE_3(NSMakeRange(8, 3), expected_range, actual_range);
 }
 
 // Test getting empty substring using text input protocol.
@@ -477,13 +695,45 @@ TEST_F(BridgedNativeWidgetTest, TextInput_GetEmptySubstring) {
   const std::string test_string = "foo bar baz";
   InstallTextField(test_string);
 
+  // Try with EmptyRange(). This behaves specially and should return the
+  // complete string and the corresponding text range.
   NSRange range = EmptyRange();
-  NSRange actual_range;
-  NSAttributedString* text =
+  NSRange actual_range = EmptyRange();
+  NSRange expected_range = EmptyRange();
+  NSAttributedString* actual_text =
       [ns_view_ attributedSubstringForProposedRange:range
                                         actualRange:&actual_range];
-  EXPECT_EQ("", SysNSStringToUTF8([text string]));
-  EXPECT_EQ_RANGE(range, actual_range);
+  NSAttributedString* expected_text =
+      [dummy_text_view_ attributedSubstringForProposedRange:range
+                                                actualRange:&expected_range];
+  EXPECT_NSEQ_3(@"foo bar baz", [expected_text string], [actual_text string]);
+  EXPECT_EQ_RANGE_3(NSMakeRange(0, test_string.length()), expected_range,
+                    actual_range);
+
+  // Try with a valid empty range.
+  range = NSMakeRange(2, 0);
+  actual_range = EmptyRange();
+  expected_range = EmptyRange();
+  actual_text = [ns_view_ attributedSubstringForProposedRange:range
+                                                  actualRange:&actual_range];
+  expected_text =
+      [dummy_text_view_ attributedSubstringForProposedRange:range
+                                                actualRange:&expected_range];
+  EXPECT_NSEQ_3(nil, [expected_text string], [actual_text string]);
+  EXPECT_EQ_RANGE_3(range, expected_range, actual_range);
+
+  // Try with an out of bounds empty range.
+  range = NSMakeRange(20, 0);
+  actual_range = EmptyRange();
+  expected_range = EmptyRange();
+  actual_text = [ns_view_ attributedSubstringForProposedRange:range
+                                                  actualRange:&actual_range];
+  expected_text =
+      [dummy_text_view_ attributedSubstringForProposedRange:range
+                                                actualRange:&expected_range];
+
+  EXPECT_NSEQ_3(nil, [expected_text string], [actual_text string]);
+  EXPECT_EQ_RANGE_3(NSMakeRange(0, 0), expected_range, actual_range);
 }
 
 // Test inserting text using text input protocol.
@@ -493,10 +743,10 @@ TEST_F(BridgedNativeWidgetTest, TextInput_InsertText) {
 
   [ns_view_ insertText:SysUTF8ToNSString(test_string)
       replacementRange:EmptyRange()];
-  gfx::Range range(0, test_string.size());
-  base::string16 text;
-  EXPECT_TRUE([ns_view_ textInputClient]->GetTextFromRange(range, &text));
-  EXPECT_EQ(ASCIIToUTF16(test_string), text);
+  [dummy_text_view_ insertText:SysUTF8ToNSString(test_string)
+              replacementRange:EmptyRange()];
+
+  EXPECT_NSEQ_3(@"foofoo", GetExpectedText(), GetActualText());
 }
 
 // Test replacing text using text input protocol.
@@ -505,7 +755,9 @@ TEST_F(BridgedNativeWidgetTest, TextInput_ReplaceText) {
   InstallTextField(test_string);
 
   [ns_view_ insertText:@"baz" replacementRange:NSMakeRange(4, 3)];
-  EXPECT_EQ("foo baz", GetText());
+  [dummy_text_view_ insertText:@"baz" replacementRange:NSMakeRange(4, 3)];
+
+  EXPECT_NSEQ_3(@"foo baz", GetExpectedText(), GetActualText());
 }
 
 // Test IME composition using text input protocol.
@@ -513,7 +765,14 @@ TEST_F(BridgedNativeWidgetTest, TextInput_Compose) {
   const std::string test_string = "foo ";
   InstallTextField(test_string);
 
-  EXPECT_FALSE([ns_view_ hasMarkedText]);
+  EXPECT_EQ_3(NO, [dummy_text_view_ hasMarkedText], [ns_view_ hasMarkedText]);
+
+  // As per NSTextInputClient documentation, markedRange should return
+  // {NSNotFound, 0} iff hasMarked returns false. However, NSTextView returns
+  // {text_length, text_length} for this case. We maintain consistency with the
+  // documentation, hence the EXPECT_FALSE check.
+  EXPECT_FALSE(
+      NSEqualRanges([dummy_text_view_ markedRange], [ns_view_ markedRange]));
   EXPECT_EQ_RANGE(EmptyRange(), [ns_view_ markedRange]);
 
   // Start composition.
@@ -522,68 +781,234 @@ TEST_F(BridgedNativeWidgetTest, TextInput_Compose) {
   [ns_view_ setMarkedText:compositionText
             selectedRange:NSMakeRange(0, 2)
          replacementRange:EmptyRange()];
-  EXPECT_TRUE([ns_view_ hasMarkedText]);
-  EXPECT_EQ_RANGE(NSMakeRange(test_string.size(), compositionLength),
-                  [ns_view_ markedRange]);
-  EXPECT_EQ_RANGE(NSMakeRange(test_string.size(), 2), [ns_view_ selectedRange]);
+  [dummy_text_view_ setMarkedText:compositionText
+                    selectedRange:NSMakeRange(0, 2)
+                 replacementRange:EmptyRange()];
+  EXPECT_EQ_3(YES, [dummy_text_view_ hasMarkedText], [ns_view_ hasMarkedText]);
+  EXPECT_EQ_RANGE_3(NSMakeRange(test_string.size(), compositionLength),
+                    [dummy_text_view_ markedRange], [ns_view_ markedRange]);
+  EXPECT_EQ_RANGE_3(NSMakeRange(test_string.size(), 2),
+                    GetExpectedSelectionRange(), GetActualSelectionRange());
 
   // Confirm composition.
   [ns_view_ unmarkText];
-  EXPECT_FALSE([ns_view_ hasMarkedText]);
+  [dummy_text_view_ unmarkText];
+
+  EXPECT_EQ_3(NO, [dummy_text_view_ hasMarkedText], [ns_view_ hasMarkedText]);
+  EXPECT_FALSE(
+      NSEqualRanges([dummy_text_view_ markedRange], [ns_view_ markedRange]));
   EXPECT_EQ_RANGE(EmptyRange(), [ns_view_ markedRange]);
-  EXPECT_EQ("foo bar", GetText());
-  EXPECT_EQ_RANGE(NSMakeRange(GetText().size(), 0), [ns_view_ selectedRange]);
+  EXPECT_NSEQ_3(@"foo bar", GetExpectedText(), GetActualText());
+  EXPECT_EQ_RANGE_3(NSMakeRange([GetActualText() length], 0),
+                    GetExpectedSelectionRange(), GetActualSelectionRange());
 }
 
 // Test moving the caret left and right using text input protocol.
 TEST_F(BridgedNativeWidgetTest, TextInput_MoveLeftRight) {
   InstallTextField("foo");
-  EXPECT_EQ_RANGE(NSMakeRange(3, 0), [ns_view_ selectedRange]);
+  EXPECT_EQ_RANGE_3(NSMakeRange(3, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
 
   // Move right not allowed, out of range.
-  [ns_view_ doCommandBySelector:@selector(moveRight:)];
-  EXPECT_EQ_RANGE(NSMakeRange(3, 0), [ns_view_ selectedRange]);
+  PerformCommand(@selector(moveRight:));
+  EXPECT_EQ_RANGE_3(NSMakeRange(3, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
 
   // Move left.
-  [ns_view_ doCommandBySelector:@selector(moveLeft:)];
-  EXPECT_EQ_RANGE(NSMakeRange(2, 0), [ns_view_ selectedRange]);
+  PerformCommand(@selector(moveLeft:));
+  EXPECT_EQ_RANGE_3(NSMakeRange(2, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
 
   // Move right.
-  [ns_view_ doCommandBySelector:@selector(moveRight:)];
-  EXPECT_EQ_RANGE(NSMakeRange(3, 0), [ns_view_ selectedRange]);
+  PerformCommand(@selector(moveRight:));
+  EXPECT_EQ_RANGE_3(NSMakeRange(3, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
 }
 
 // Test backward delete using text input protocol.
 TEST_F(BridgedNativeWidgetTest, TextInput_DeleteBackward) {
   InstallTextField("a");
-  EXPECT_EQ_RANGE(NSMakeRange(1, 0), [ns_view_ selectedRange]);
+  EXPECT_EQ_RANGE_3(NSMakeRange(1, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
 
   // Delete one character.
-  [ns_view_ doCommandBySelector:@selector(deleteBackward:)];
-  EXPECT_EQ("", GetText());
-  EXPECT_EQ_RANGE(NSMakeRange(0, 0), [ns_view_ selectedRange]);
+  PerformCommand(@selector(deleteBackward:));
+  EXPECT_NSEQ_3(nil, GetExpectedText(), GetActualText());
+  EXPECT_EQ_RANGE_3(NSMakeRange(0, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
 
   // Try to delete again on an empty string.
-  [ns_view_ doCommandBySelector:@selector(deleteBackward:)];
-  EXPECT_EQ("", GetText());
-  EXPECT_EQ_RANGE(NSMakeRange(0, 0), [ns_view_ selectedRange]);
+  PerformCommand(@selector(deleteBackward:));
+  EXPECT_NSEQ_3(nil, GetExpectedText(), GetActualText());
+  EXPECT_EQ_RANGE_3(NSMakeRange(0, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
 }
 
 // Test forward delete using text input protocol.
 TEST_F(BridgedNativeWidgetTest, TextInput_DeleteForward) {
   InstallTextField("a");
-  EXPECT_EQ_RANGE(NSMakeRange(1, 0), [ns_view_ selectedRange]);
+  EXPECT_EQ_RANGE_3(NSMakeRange(1, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
 
   // At the end of the string, can't delete forward.
-  [ns_view_ doCommandBySelector:@selector(deleteForward:)];
-  EXPECT_EQ("a", GetText());
-  EXPECT_EQ_RANGE(NSMakeRange(1, 0), [ns_view_ selectedRange]);
+  PerformCommand(@selector(deleteForward:));
+  EXPECT_NSEQ_3(@"a", GetExpectedText(), GetActualText());
+  EXPECT_EQ_RANGE_3(NSMakeRange(1, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
 
   // Should succeed after moving left first.
-  [ns_view_ doCommandBySelector:@selector(moveLeft:)];
-  [ns_view_ doCommandBySelector:@selector(deleteForward:)];
-  EXPECT_EQ("", GetText());
-  EXPECT_EQ_RANGE(NSMakeRange(0, 0), [ns_view_ selectedRange]);
+  PerformCommand(@selector(moveLeft:));
+  PerformCommand(@selector(deleteForward:));
+  EXPECT_NSEQ_3(nil, GetExpectedText(), GetActualText());
+  EXPECT_EQ_RANGE_3(NSMakeRange(0, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
+}
+
+// Test forward word deletion using text input protocol.
+TEST_F(BridgedNativeWidgetTest, TextInput_DeleteWordForward) {
+  InstallTextField("foo bar baz");
+  EXPECT_EQ_RANGE_3(NSMakeRange(11, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
+
+  // Caret is at the end of the line. Verify no deletion takes place.
+  PerformCommand(@selector(deleteWordForward:));
+  EXPECT_NSEQ_3(@"foo bar baz", GetExpectedText(), GetActualText());
+  EXPECT_EQ_RANGE_3(NSMakeRange(11, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
+
+  // Move the caret as- "foo b|ar baz".
+  SetSelectionRange(NSMakeRange(5, 0));
+  PerformCommand(@selector(deleteWordForward:));
+  // Verify state is "foo b| baz"
+  EXPECT_NSEQ_3(@"foo b baz", GetExpectedText(), GetActualText());
+  EXPECT_EQ_RANGE_3(NSMakeRange(5, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
+
+  // Make a selection as- "|fo|o b baz".
+  SetSelectionRange(NSMakeRange(0, 2));
+  PerformCommand(@selector(deleteWordForward:));
+  // Verify only the selection is deleted and state is "|o b baz".
+  EXPECT_NSEQ_3(@"o b baz", GetExpectedText(), GetActualText());
+  EXPECT_EQ_RANGE_3(NSMakeRange(0, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
+}
+
+// Test backward word deletion using text input protocol.
+TEST_F(BridgedNativeWidgetTest, TextInput_DeleteWordBackward) {
+  InstallTextField("foo bar baz");
+  EXPECT_EQ_RANGE_3(NSMakeRange(11, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
+
+  // Move the caret to the beginning of the line.
+  SetSelectionRange(NSMakeRange(0, 0));
+  // Verify no deletion takes place.
+  PerformCommand(@selector(deleteWordBackward:));
+  EXPECT_NSEQ_3(@"foo bar baz", GetExpectedText(), GetActualText());
+  EXPECT_EQ_RANGE_3(NSMakeRange(0, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
+
+  // Move the caret as- "foo ba|r baz".
+  SetSelectionRange(NSMakeRange(6, 0));
+  PerformCommand(@selector(deleteWordBackward:));
+  // Verify state is "foo |r baz".
+  EXPECT_NSEQ_3(@"foo r baz", GetExpectedText(), GetActualText());
+  EXPECT_EQ_RANGE_3(NSMakeRange(4, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
+
+  // Make a selection as- "f|oo r b|az".
+  SetSelectionRange(NSMakeRange(1, 6));
+  PerformCommand(@selector(deleteWordBackward:));
+  // Verify only the selection is deleted and state is "f|az"
+  EXPECT_NSEQ_3(@"faz", GetExpectedText(), GetActualText());
+  EXPECT_EQ_RANGE_3(NSMakeRange(1, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
+}
+
+// Test deleting to beginning/end of line/paragraph using text input protocol.
+
+TEST_F(BridgedNativeWidgetTest, TextInput_DeleteToBeginningOfLine) {
+  TestDeleteBeginning(@selector(deleteToBeginningOfLine:));
+}
+
+TEST_F(BridgedNativeWidgetTest, TextInput_DeleteToEndOfLine) {
+  TestDeleteEnd(@selector(deleteToEndOfLine:));
+}
+
+TEST_F(BridgedNativeWidgetTest, TextInput_DeleteToBeginningOfParagraph) {
+  TestDeleteBeginning(@selector(deleteToBeginningOfParagraph:));
+}
+
+TEST_F(BridgedNativeWidgetTest, TextInput_DeleteToEndOfParagraph) {
+  TestDeleteEnd(@selector(deleteToEndOfParagraph:));
+}
+
+// Test move commands against expectations set by |dummy_text_view_|.
+TEST_F(BridgedNativeWidgetTest, TextInput_MoveEditingCommands) {
+  NSArray* selectors = @[
+    @"moveForward:",
+    @"moveRight:",
+    @"moveBackward:",
+    @"moveLeft:",
+    @"moveUp:",
+    @"moveDown:",
+    @"moveWordForward:",
+    @"moveWordBackward:",
+    @"moveToBeginningOfLine:",
+    @"moveToEndOfLine:",
+    @"moveToBeginningOfParagraph:",
+    @"moveToEndOfParagraph:",
+    @"moveToEndOfDocument:",
+    @"moveToBeginningOfDocument:",
+    @"pageDown:",
+    @"pageUp:",
+    @"moveWordRight:",
+    @"moveWordLeft:",
+    @"moveToLeftEndOfLine:",
+    @"moveToRightEndOfLine:"
+  ];
+  TestEditingCommands(selectors);
+}
+
+// Todo(karandeepb): Enable this test once the behavior of all move and select
+// commands are fixed.
+// Test move and select commands against expectations set by |dummy_text_view_|.
+TEST_F(BridgedNativeWidgetTest,
+       TextInput_MoveAndSelectEditingCommands_DISABLED) {
+  NSArray* selectors = @[
+    @"moveBackwardAndModifySelection:",
+    @"moveForwardAndModifySelection:",
+    @"moveWordForwardAndModifySelection:",
+    @"moveWordBackwardAndModifySelection:",
+    @"moveUpAndModifySelection:",
+    @"moveDownAndModifySelection:",
+    @"moveToBeginningOfLineAndModifySelection:",
+    @"moveToEndOfLineAndModifySelection:",
+    @"moveToBeginningOfParagraphAndModifySelection:",
+    @"moveToEndOfParagraphAndModifySelection:",
+    @"moveToEndOfDocumentAndModifySelection:",
+    @"moveToBeginningOfDocumentAndModifySelection:",
+    @"pageDownAndModifySelection:",
+    @"pageUpAndModifySelection:",
+    @"moveParagraphForwardAndModifySelection:",
+    @"moveParagraphBackwardAndModifySelection:",
+    @"moveRightAndModifySelection:",
+    @"moveLeftAndModifySelection:",
+    @"moveWordRightAndModifySelection:",
+    @"moveWordLeftAndModifySelection:",
+    @"moveToLeftEndOfLineAndModifySelection:",
+    @"moveToRightEndOfLineAndModifySelection:"
+  ];
+  TestEditingCommands(selectors);
+}
+
+// Test delete commands against expectations set by |dummy_text_view_|.
+TEST_F(BridgedNativeWidgetTest, TextInput_DeleteCommands) {
+  NSArray* selectors = @[
+    @"deleteForward:", @"deleteBackward:", @"deleteWordForward:",
+    @"deleteWordBackward:", @"deleteToBeginningOfLine:", @"deleteToEndOfLine:",
+    @"deleteToBeginningOfParagraph:", @"deleteToEndOfParagraph:"
+  ];
+  TestEditingCommands(selectors);
 }
 
 // Test firstRectForCharacterRange:actualRange for cases where query range is
@@ -717,8 +1142,7 @@ TEST_F(BridgedNativeWidgetSimulateFullscreenTest, FailToEnterAndExit) {
   EXPECT_FALSE(bridge()->target_fullscreen_state());
 
   // Cocoa follows up with a failure message sent to the NSWindowDelegate (there
-  // is no equivalent notification for failure). Called via id so that this
-  // compiles on 10.6.
+  // is no equivalent notification for failure).
   ViewsNSWindowDelegate* window_delegate =
       base::mac::ObjCCast<ViewsNSWindowDelegate>([window delegate]);
   [window_delegate windowDidFailToEnterFullScreen:window];

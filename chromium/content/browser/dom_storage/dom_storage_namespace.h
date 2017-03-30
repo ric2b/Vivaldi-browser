@@ -15,6 +15,12 @@
 #include "content/common/content_export.h"
 #include "url/gurl.h"
 
+namespace base {
+namespace trace_event {
+class ProcessMemoryDump;
+}
+}
+
 namespace content {
 
 class DOMStorageArea;
@@ -75,6 +81,11 @@ class CONTENT_EXPORT DOMStorageNamespace
   void Flush();
 
   unsigned int CountInMemoryAreas() const;
+
+  // Adds memory statistics to |pmd| for chrome://tracing.
+  void OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd);
+
+  void GetOriginsWithAreas(std::vector<GURL>* origins) const;
 
  private:
   friend class base::RefCountedThreadSafe<DOMStorageNamespace>;

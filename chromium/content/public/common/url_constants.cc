@@ -13,8 +13,6 @@ const char kChromeDevToolsScheme[] = "chrome-devtools";
 const char kChromeUIScheme[] = "chrome";
 const char kVivaldiUIScheme[] = "vivaldi";
 const char kGuestScheme[] = "chrome-guest";
-const char kMetadataScheme[] = "metadata";
-const char kSwappedOutScheme[] = "swappedout";
 const char kViewSourceScheme[] = "view-source";
 #if defined(OS_CHROMEOS)
 const char kExternalFileScheme[] = "externalfile";

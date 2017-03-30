@@ -34,6 +34,7 @@
 <translation id="1779766957982586368">关闭窗口</translation>
 <translation id="1841799852846221389">正在对此计算机停用远程连接…</translation>
 <translation id="189172778771606813">关闭抽屉式导航栏</translation>
+<translation id="1897488610212723051">删除</translation>
 <translation id="195619862187186579">键盘布局</translation>
 <translation id="1996161829609978754">Chrome 正在下载 Chrome 远程访问主机安装程序。下载完成后，请先运行该安装程序，再继续操作。</translation>
 <translation id="2009755455353575666">连接失败</translation>
@@ -122,9 +123,6 @@
 <translation id="3950820424414687140">登录</translation>
 <translation id="3989511127559254552">要继续，您必须先为该应用授予对您的计算机的扩展访问权限（该操作只需执行一次）。</translation>
 <translation id="4006787130661126000">如果您想使用 Chrome 远程桌面来访问此计算机，就必须启用远程连接。</translation>
-<translation id="4028465833180158312">• Material Design 界面更新。
-• 加入了第三方许可信息。
-• 针对离线的远程计算机显示相关信息。</translation>
 <translation id="405887016757208221">远程计算机未能将该会话初始化。如果问题仍然存在，请尝试重新配置主机。</translation>
 <translation id="4068946408131579958">所有连接</translation>
 <translation id="409800995205263688">注意：策略设置仅允许您网络内的计算机之间建立连接。</translation>
@@ -168,6 +166,7 @@
 <translation id="4985296110227979402">您需要先设置计算机，然后才能进行远程访问</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" />（离线）</translation>
 <translation id="5070121137485264635">远程主机要求您对第三方网站进行身份验证。要继续操作，您必须向 Chrome 远程桌面授予访问以下地址的额外权限：</translation>
+<translation id="507204348399810022">确定要停用与“<ph name="HOSTNAME" />”的远程连接吗？</translation>
 <translation id="5156271271724754543">请在两个框中输入相同的 PIN。</translation>
 <translation id="5168917394043976756">打开抽屉式导航栏</translation>
 <translation id="5170982930780719864">主机 ID 无效。</translation>
@@ -178,7 +177,6 @@
 <translation id="533625276787323658">没有可连接到的计算机</translation>
 <translation id="5363265567587775042">请让您想访问其计算机的用户点击“<ph name="SHARE" />”，然后向您提供访问代码。</translation>
 <translation id="5379087427956679853">Chrome 远程桌面可让您通过网络安全地共享自己的计算机。双方用户必须同时运行 Chrome 远程桌面应用（下载地址为 <ph name="URL" />）。</translation>
-<translation id="5394895745784982830">适用于 Mac（OS X 10.6 及更高版本）</translation>
 <translation id="5397086374758643919">Chrome 远程桌面主机卸载程序</translation>
 <translation id="5419185025274123272">无法重置该应用。您仍可以发送错误报告。</translation>
 <translation id="544077782045763683">主机已关机。</translation>
@@ -211,9 +209,13 @@
 <translation id="6284412385303060032">在控制台逻辑屏幕运行的主机已关闭。这是为了切换到在用户特定会话中运行的主机，以便为 Curtain 模式提供支持。</translation>
 <translation id="629730747756840877">帐户</translation>
 <translation id="6304318647555713317">客户端</translation>
-<translation id="6324708100353784493">您已启用 Google Cardboard 集成模式。要使用此模式，请将您的设备插入一个支持 Google Cardboard 的查看器。</translation>
+<translation id="6324708100353784493">您已启用 Google Cardboard 集成模式。要使用此模式，请将您的设备插入一个支持 Google Cardboard 的眼镜。</translation>
 <translation id="6381670701864002291">其他。</translation>
 <translation id="6398765197997659313">退出全屏模式</translation>
+<translation id="6408143143164565232">• 聆听 Windows 或 Linux 计算机中的音频内容。
+• 长按相应的计算机名称即可移除不需要的连接。
+• 双指张合缩放和双指滚动操作更顺畅。
+• 全新的“帮助和反馈”屏幕。</translation>
 <translation id="6441316101718669559">该平台不支持桌面集成。您仍可以使用该应用，但用户体验将会受到影响。</translation>
 <translation id="652218476070540101">正在更新此计算机的 PIN…</translation>
 <translation id="6527303717912515753">分享</translation>
@@ -221,6 +223,7 @@
 <translation id="6542902059648396432">报告问题…</translation>
 <translation id="6550675742724504774">选项</translation>
 <translation id="6570205395680337606">重置该应用。所有未保存的工作都将会丢失。</translation>
+<translation id="6572345186230665992">适用于 Mac（OS X Mavericks 10.9 及更高版本）</translation>
 <translation id="6612717000975622067">发送Ctrl-Alt-Del</translation>
 <translation id="6640610550128933069">上次联网日期：<ph name="DATE" /></translation>
 <translation id="6668065415969892472">您的 PIN 已更新。</translation>
@@ -232,7 +235,6 @@
 <translation id="6930242544192836755">持续时间</translation>
 <translation id="6939719207673461467">显示/隐藏键盘。</translation>
 <translation id="6944854424004126054">恢复窗口</translation>
-<translation id="6962773374262604195">适用于 Windows（XP 及更高版本）</translation>
 <translation id="6965382102122355670">确定</translation>
 <translation id="6985691951107243942">您确定要停用与“<ph name="HOSTNAME" />”的远程连接吗？如果您日后想要重新启用连接，需要访问该计算机。</translation>
 <translation id="6998989275928107238">指向</translation>
@@ -288,6 +290,7 @@
 <translation id="8759753423332885148">了解详情。</translation>
 <translation id="8791202241915690908">下载 Chrome 远程访问主机安装程序</translation>
 <translation id="894763922177556086">良好</translation>
+<translation id="895780780740011433">适用于 Windows 7 及更高版本</translation>
 <translation id="897805526397249209">要启用到另一台计算机的远程连接，请在该计算机上安装 Chrome 远程访问并点击“<ph name="BUTTON_NAME" />”。</translation>
 <translation id="8998327464021325874">Chrome 远程桌面主机控制器</translation>
 <translation id="9016232822027372900">仍然连接</translation>

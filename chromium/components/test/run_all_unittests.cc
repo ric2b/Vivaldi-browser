@@ -2,11 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/path_service.h"
 #include "base/test/launcher/unit_test_launcher.h"
@@ -25,6 +26,8 @@
 
 #if defined(OS_ANDROID)
 #include "base/android/jni_android.h"
+#include "components/gcm_driver/instance_id/android/component_jni_registrar.h"
+#include "components/gcm_driver/instance_id/scoped_use_fake_instance_id_android.h"
 #include "components/invalidation/impl/android/component_jni_registrar.h"
 #include "components/policy/core/browser/android/component_jni_registrar.h"
 #include "components/safe_json/android/component_jni_registrar.h"
@@ -63,6 +66,8 @@ class ComponentsTestSuite : public base::TestSuite {
     JNIEnv* env = base::android::AttachCurrentThread();
     ASSERT_TRUE(content::RegisterJniForTesting(env));
     ASSERT_TRUE(gfx::android::RegisterJni(env));
+    ASSERT_TRUE(instance_id::android::RegisterInstanceIDJni(env));
+    ASSERT_TRUE(instance_id::ScopedUseFakeInstanceIDAndroid::RegisterJni(env));
     ASSERT_TRUE(invalidation::android::RegisterInvalidationJni(env));
     ASSERT_TRUE(policy::android::RegisterPolicy(env));
     ASSERT_TRUE(safe_json::android::RegisterSafeJsonJni(env));
@@ -129,7 +134,7 @@ class ComponentsUnitTestEventListener : public testing::EmptyTestEventListener {
 
  private:
 #if !defined(OS_IOS)
-  scoped_ptr<content::TestContentClientInitializer> content_initializer_;
+  std::unique_ptr<content::TestContentClientInitializer> content_initializer_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(ComponentsUnitTestEventListener);

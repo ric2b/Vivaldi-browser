@@ -8,10 +8,11 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "base/memory/scoped_ptr.h"
-#include "base/thread_task_runner_handle.h"
+#include <memory>
+
 #include "base/threading/platform_thread.h"
 #include "base/threading/simple_thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "ipc/ipc_test_sink.h"
 #include "native_client/src/public/nacl_desc_custom.h"
 #include "native_client/src/trusted/service_runtime/include/sys/fcntl.h"
@@ -31,7 +32,7 @@ class NaClIPCAdapterTest : public testing::Test {
     // Takes ownership of the sink_ pointer. Note we provide the current message
     // loop instead of using a real IO thread. This should work OK since we do
     // not need real IPC for the tests.
-    adapter_ = new NaClIPCAdapter(scoped_ptr<IPC::Channel>(sink_),
+    adapter_ = new NaClIPCAdapter(std::unique_ptr<IPC::Channel>(sink_),
                                   base::ThreadTaskRunnerHandle::Get().get());
   }
   void TearDown() override {

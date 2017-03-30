@@ -41,10 +41,7 @@ class WorkerGlobalScope;
 class WorkerConsoleAgent final : public InspectorConsoleAgent {
     WTF_MAKE_NONCOPYABLE(WorkerConsoleAgent);
 public:
-    static RawPtr<WorkerConsoleAgent> create(V8RuntimeAgent* runtimeAgent, V8DebuggerAgent* debuggerAgent, WorkerGlobalScope* workerGlobalScope)
-    {
-        return new WorkerConsoleAgent(runtimeAgent, debuggerAgent, workerGlobalScope);
-    }
+    WorkerConsoleAgent(V8InspectorSession*, WorkerGlobalScope*);
     ~WorkerConsoleAgent() override;
     DECLARE_VIRTUAL_TRACE();
 
@@ -58,8 +55,6 @@ protected:
     void disableStackCapturingIfNeeded() override;
 
 private:
-    WorkerConsoleAgent(V8RuntimeAgent*, V8DebuggerAgent*, WorkerGlobalScope*);
-
     Member<WorkerGlobalScope> m_workerGlobalScope;
 };
 

@@ -13,27 +13,30 @@
 #include "media/base/media_log.h"
 #include "media/base/renderer_factory.h"
 #include "media/base/video_renderer_sink.h"
+#include "media/mojo/services/media_mojo_export.h"
 
 namespace base {
 class SingleThreadTaskRunner;
 }
 
-namespace mojo {
 namespace shell {
 namespace mojom {
 class InterfaceProvider;
 }
 }
-}
 
 namespace media {
 
-class MojoMediaClient {
+class MEDIA_MOJO_EXPORT MojoMediaClient {
  public:
   virtual ~MojoMediaClient();
 
   // Called exactly once before any other method.
   virtual void Initialize();
+  // Called before the host application is scheduled to quit.
+  // The application message loop is still valid at this point, so all clean
+  // up tasks requiring the message loop must be completed before returning.
+  virtual void WillQuit();
 
   virtual std::unique_ptr<AudioDecoder> CreateAudioDecoder(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
@@ -55,7 +58,7 @@ class MojoMediaClient {
 
   // Returns the CdmFactory to be used by MojoCdmService.
   virtual std::unique_ptr<CdmFactory> CreateCdmFactory(
-      mojo::shell::mojom::InterfaceProvider* interface_provider);
+      shell::mojom::InterfaceProvider* interface_provider);
 
  protected:
   MojoMediaClient();

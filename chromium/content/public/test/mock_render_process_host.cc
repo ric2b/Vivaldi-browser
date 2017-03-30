@@ -263,7 +263,11 @@ ServiceRegistry* MockRenderProcessHost::GetServiceRegistry() {
   return service_registry_.get();
 }
 
-scoped_ptr<base::SharedPersistentMemoryAllocator>
+shell::Connection* MockRenderProcessHost::GetChildConnection() {
+  return nullptr;
+}
+
+std::unique_ptr<base::SharedPersistentMemoryAllocator>
 MockRenderProcessHost::TakeMetricsAllocator() {
   return nullptr;
 }
@@ -272,20 +276,6 @@ const base::TimeTicks& MockRenderProcessHost::GetInitTimeForNavigationMetrics()
     const {
   static base::TimeTicks dummy_time = base::TimeTicks::Now();
   return dummy_time;
-}
-
-bool MockRenderProcessHost::SubscribeUniformEnabled() const {
-  return false;
-}
-
-void MockRenderProcessHost::OnAddSubscription(unsigned int target) {
-}
-
-void MockRenderProcessHost::OnRemoveSubscription(unsigned int target) {
-}
-
-void MockRenderProcessHost::SendUpdateValueState(
-    unsigned int target, const gpu::ValueState& state) {
 }
 
 #if defined(ENABLE_BROWSER_CDMS)
@@ -307,6 +297,8 @@ void MockRenderProcessHost::IncrementWorkerRefCount() {
 void MockRenderProcessHost::DecrementWorkerRefCount() {
   --worker_ref_count_;
 }
+
+void MockRenderProcessHost::PurgeAndSuspend() {}
 
 void MockRenderProcessHost::FilterURL(bool empty_allowed, GURL* url) {
   RenderProcessHostImpl::FilterURL(this, empty_allowed, url);

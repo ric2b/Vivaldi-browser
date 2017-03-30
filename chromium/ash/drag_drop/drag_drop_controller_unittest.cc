@@ -155,11 +155,13 @@ class TestDragDropController : public DragDropController {
                        aura::Window* source_window,
                        const gfx::Point& location,
                        int operation,
-                       ui::DragDropTypes::DragEventSource source) override {
+                       ui::DragDropTypes::DragEventSource source,
+                       bool& cancelled) override {
     drag_start_received_ = true;
     data.GetString(&drag_string_);
     return DragDropController::StartDragAndDrop(
-        data, root_window, source_window, location, operation, source);
+        data, root_window, source_window, location, operation, source,
+        cancelled);
   }
 
   void DragUpdate(aura::Window* target,
@@ -989,6 +991,7 @@ TEST_F(DragDropControllerTest, DragCancelAcrossDisplays) {
   ui::OSExchangeData data;
   data.SetString(base::UTF8ToUTF16("I am being dragged"));
   {
+    bool cancelled;
     std::unique_ptr<views::Widget> widget(CreateNewWidget());
     aura::Window* window = widget->GetNativeWindow();
     drag_drop_controller_->StartDragAndDrop(
@@ -997,7 +1000,8 @@ TEST_F(DragDropControllerTest, DragCancelAcrossDisplays) {
         window,
         gfx::Point(5, 5),
         ui::DragDropTypes::DRAG_MOVE,
-        ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE);
+        ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE,
+        cancelled);
 
     DragImageWindowObserver observer;
     ASSERT_TRUE(GetDragImageWindow());
@@ -1023,6 +1027,7 @@ TEST_F(DragDropControllerTest, DragCancelAcrossDisplays) {
   }
 
   {
+    bool cancelled;
     std::unique_ptr<views::Widget> widget(CreateNewWidget());
     aura::Window* window = widget->GetNativeWindow();
     drag_drop_controller_->StartDragAndDrop(
@@ -1031,7 +1036,8 @@ TEST_F(DragDropControllerTest, DragCancelAcrossDisplays) {
         window,
         gfx::Point(405, 405),
         ui::DragDropTypes::DRAG_MOVE,
-        ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE);
+        ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE,
+        cancelled);
     DragImageWindowObserver observer;
     ASSERT_TRUE(GetDragImageWindow());
     GetDragImageWindow()->AddObserver(&observer);

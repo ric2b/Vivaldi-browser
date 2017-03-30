@@ -27,6 +27,7 @@ namespace chrome {
 namespace android {
 
 class ContentLayer;
+class ToolbarLayer;
 
 // A SceneLayer to render a static tab.
 class StaticTabSceneLayer : public SceneLayer {
@@ -58,13 +59,6 @@ class StaticTabSceneLayer : public SceneLayer {
       jfloat static_to_view_blend,
       jfloat saturation,
       jfloat brightness);
-
-  // Set the given |jscene_layer| as content of this SceneLayer, along with its
-  // own content.
-  void SetContentSceneLayer(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& jobj,
-      const base::android::JavaParamRef<jobject>& jscene_layer);
 
  private:
   scoped_refptr<chrome::android::ContentLayer> content_layer_;

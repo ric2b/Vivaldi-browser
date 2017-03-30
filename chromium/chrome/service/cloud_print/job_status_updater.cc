@@ -11,7 +11,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/common/cloud_print/cloud_print_constants.h"
 #include "chrome/service/cloud_print/cloud_print_service_helpers.h"
@@ -30,7 +30,7 @@ bool IsTerminalJobState(PrintJobStatus status) {
 
 JobStatusUpdater::JobStatusUpdater(const std::string& printer_name,
                                    const std::string& job_id,
-                                   PlatformJobId& local_job_id,
+                                   PlatformJobId local_job_id,
                                    const GURL& cloud_print_server_url,
                                    PrintSystem* print_system,
                                    Delegate* delegate)
@@ -98,10 +98,10 @@ void JobStatusUpdater::Stop() {
 
 // CloudPrintURLFetcher::Delegate implementation.
 CloudPrintURLFetcher::ResponseAction JobStatusUpdater::HandleJSONData(
-      const net::URLFetcher* source,
-      const GURL& url,
-      base::DictionaryValue* json_data,
-      bool succeeded) {
+    const net::URLFetcher* source,
+    const GURL& url,
+    const base::DictionaryValue* json_data,
+    bool succeeded) {
   if (IsTerminalJobState(last_job_details_.status)) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(&JobStatusUpdater::Stop, this));

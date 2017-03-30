@@ -13,7 +13,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/password_manager/native_backend_libsecret.h"
 #include "chrome/test/base/testing_profile.h"
@@ -215,7 +215,7 @@ class MockLibsecretLoader : public LibsecretLoader {
                                    mock_secret_item_load_secret_sync;
     secret_value_unref =
         (decltype(&::secret_value_unref)) & mock_secret_value_unref;
-    libsecret_loaded = true;
+    libsecret_loaded_ = true;
     // Reset the state of the mock library.
     global_mock_libsecret_items->clear();
     global_mock_libsecret_reject_local_ids = false;

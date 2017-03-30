@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_USER_MANAGER_USER_H_
 #define COMPONENTS_USER_MANAGER_USER_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -67,8 +68,6 @@ class USER_MANAGER_EXPORT User : public UserInfo {
   // Hence,
   //   (a) existing enumerated constants should never be deleted or reordered,
   //   (b) new constants should only be appended at the end of the enumeration.
-  // TODO(xdai): Add THIRDPARTY enum to keep track of third party wallpapers.
-  // See http://crbug.com/563627.
   enum WallpaperType {
     DAILY = 0,         // Surprise wallpaper. Changes once a day if enabled.
     CUSTOMIZED = 1,    // Selected by user.
@@ -76,11 +75,15 @@ class USER_MANAGER_EXPORT User : public UserInfo {
     /* UNKNOWN = 3 */  // Removed.
     ONLINE = 4,        // WallpaperInfo.location denotes an URL.
     POLICY = 5,        // Controlled by policy, can't be changed by the user.
-    WALLPAPER_TYPE_COUNT = 6
+    THIRDPARTY = 6,    // Current wallpaper is set by a third party app.
+    WALLPAPER_TYPE_COUNT = 7
   };
 
   // Returns true if user type has gaia account.
   static bool TypeHasGaiaAccount(UserType user_type);
+
+  explicit User(const AccountId& account_id);
+  ~User() override;
 
   // UserInfo
   std::string GetEmail() const override;
@@ -110,6 +113,9 @@ class USER_MANAGER_EXPORT User : public UserInfo {
 
   // True if the user is affiliated to the device.
   virtual bool IsAffiliated() const;
+
+  // True if the user is a device local account user.
+  virtual bool IsDeviceLocalAccount() const;
 
   // The email the user used to log in.
   // TODO(alemate): rename this to GetUserEmail() (see crbug.com/548923)
@@ -193,22 +199,19 @@ class USER_MANAGER_EXPORT User : public UserInfo {
   static User* CreateSupervisedUser(const AccountId& account_id);
   static User* CreatePublicAccountUser(const AccountId& account_id);
 
-  explicit User(const AccountId& account_id);
-  ~User() override;
-
   const std::string* GetAccountLocale() const { return account_locale_.get(); }
 
   // Setters are private so only UserManager can call them.
   void SetAccountLocale(const std::string& resolved_account_locale);
 
-  void SetImage(scoped_ptr<UserImage> user_image, int image_index);
+  void SetImage(std::unique_ptr<UserImage> user_image, int image_index);
 
   void SetImageURL(const GURL& image_url);
 
   // Sets a stub image until the next |SetImage| call. |image_index| may be
   // one of |USER_IMAGE_EXTERNAL| or |USER_IMAGE_PROFILE|.
   // If |is_loading| is |true|, that means user image is being loaded from file.
-  void SetStubImage(scoped_ptr<UserImage> stub_user_image,
+  void SetStubImage(std::unique_ptr<UserImage> stub_user_image,
                     int image_index,
                     bool is_loading);
 
@@ -260,7 +263,7 @@ class USER_MANAGER_EXPORT User : public UserInfo {
   // The displayed user email, defaults to |email_|.
   std::string display_email_;
   bool using_saml_ = false;
-  scoped_ptr<UserImage> user_image_;
+  std::unique_ptr<UserImage> user_image_;
   OAuthTokenStatus oauth_token_status_ = OAUTH_TOKEN_STATUS_UNKNOWN;
   bool force_online_signin_ = false;
 
@@ -268,7 +271,7 @@ class USER_MANAGER_EXPORT User : public UserInfo {
   // (Or failed to download, but at least one download attempt finished).
   // An empty string indicates error in data load, or in
   // translation of Account locale to chromeos locale.
-  scoped_ptr<std::string> account_locale_;
+  std::unique_ptr<std::string> account_locale_;
 
   // Used to identify homedir mount point.
   std::string username_hash_;

@@ -21,13 +21,13 @@
 #include "ui/base/ui_base_switches_util.h"
 #include "ui/compositor/canvas_painter.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/canvas.h"
-#include "ui/gfx/display.h"
 #include "ui/gfx/geometry/insets.h"
-#include "ui/gfx/screen.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/background.h"
@@ -40,6 +40,7 @@
 #include "ui/views/metrics.h"
 #include "ui/views/native_cursor.h"
 #include "ui/views/painter.h"
+#include "ui/views/style/platform_style.h"
 #include "ui/views/views_delegate.h"
 #include "ui/views/widget/widget.h"
 
@@ -82,8 +83,8 @@ int GetDragSelectionDelay() {
   return 100;
 }
 
-// Get the default command for a given key |event| and selection state.
-int GetCommandForKeyEvent(const ui::KeyEvent& event, bool has_selection) {
+// Get the default command for a given key |event|.
+int GetCommandForKeyEvent(const ui::KeyEvent& event) {
   if (event.type() != ui::ET_KEY_PRESSED || event.IsUnicodeKeyCode())
     return kNoCommand;
 
@@ -128,7 +129,7 @@ int GetCommandForKeyEvent(const ui::KeyEvent& event, bool has_selection) {
       return shift ? IDS_MOVE_TO_END_OF_LINE_AND_MODIFY_SELECTION :
                       IDS_MOVE_TO_END_OF_LINE;
     case ui::VKEY_BACK:
-      if (!control || has_selection)
+      if (!control)
         return IDS_DELETE_BACKWARD;
 #if defined(OS_LINUX)
       // Only erase by line break on Linux and ChromeOS.
@@ -137,14 +138,14 @@ int GetCommandForKeyEvent(const ui::KeyEvent& event, bool has_selection) {
 #endif
       return IDS_DELETE_WORD_BACKWARD;
     case ui::VKEY_DELETE:
-      if (!control || has_selection)
-        return (shift && has_selection) ? IDS_APP_CUT : IDS_DELETE_FORWARD;
 #if defined(OS_LINUX)
       // Only erase by line break on Linux and ChromeOS.
-      if (shift)
+      if (shift && control)
         return IDS_DELETE_TO_END_OF_LINE;
 #endif
-      return IDS_DELETE_WORD_FORWARD;
+      if (control)
+        return IDS_DELETE_WORD_FORWARD;
+      return shift ? IDS_APP_CUT : IDS_DELETE_FORWARD;
     case ui::VKEY_INSERT:
       if (control && !shift)
         return IDS_APP_COPY;
@@ -292,8 +293,8 @@ Textfield::Textfield()
   set_context_menu_controller(this);
   set_drag_controller(this);
   GetRenderText()->SetFontList(GetDefaultFontList());
-  SetBorder(scoped_ptr<Border>(new FocusableBorder()));
-  SetFocusable(true);
+  SetBorder(std::unique_ptr<Border>(new FocusableBorder()));
+  SetFocusBehavior(FocusBehavior::ALWAYS);
 
   if (ViewsDelegate::GetInstance()) {
     password_reveal_duration_ =
@@ -572,7 +573,7 @@ void Textfield::ExecuteCommand(int command_id) {
   ExecuteCommand(command_id, ui::EF_NONE);
 }
 
-void Textfield::SetFocusPainter(scoped_ptr<Painter> focus_painter) {
+void Textfield::SetFocusPainter(std::unique_ptr<Painter> focus_painter) {
   focus_painter_ = std::move(focus_painter);
 }
 
@@ -729,7 +730,7 @@ bool Textfield::OnKeyPressed(const ui::KeyEvent& event) {
 #endif
 
   if (edit_command == kNoCommand)
-    edit_command = GetCommandForKeyEvent(event, HasSelection());
+    edit_command = GetCommandForKeyEvent(event);
 
   if (!handled && IsCommandIdEnabled(edit_command)) {
     ExecuteCommand(edit_command);
@@ -833,7 +834,7 @@ void Textfield::OnGestureEvent(ui::GestureEvent* event) {
 bool Textfield::AcceleratorPressed(const ui::Accelerator& accelerator) {
   ui::KeyEvent event(accelerator.type(), accelerator.key_code(),
                      accelerator.modifiers());
-  ExecuteCommand(GetCommandForKeyEvent(event, HasSelection()));
+  ExecuteCommand(GetCommandForKeyEvent(event));
   return true;
 }
 
@@ -1098,11 +1099,11 @@ void Textfield::WriteDragDataForView(View* sender,
   label.SetSubpixelRenderingEnabled(false);
   gfx::Size size(label.GetPreferredSize());
   gfx::NativeView native_view = GetWidget()->GetNativeView();
-  gfx::Display display =
-      gfx::Screen::GetScreen()->GetDisplayNearestWindow(native_view);
+  display::Display display =
+      display::Screen::GetScreen()->GetDisplayNearestWindow(native_view);
   size.SetToMin(gfx::Size(display.size().width(), height()));
   label.SetBoundsRect(gfx::Rect(size));
-  scoped_ptr<gfx::Canvas> canvas(
+  std::unique_ptr<gfx::Canvas> canvas(
       GetCanvasForDragImage(GetWidget(), label.size()));
   label.SetEnabledColor(GetTextColor());
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
@@ -1302,6 +1303,22 @@ bool Textfield::GetAcceleratorForCommandId(int command_id,
 
 void Textfield::ExecuteCommand(int command_id, int event_flags) {
   DestroyTouchSelection();
+
+  // Some codepaths may bypass GetCommandForKeyEvent, so any selection-dependent
+  // modifications of the command should happen here.
+  if (HasSelection()) {
+    switch (command_id) {
+      case IDS_DELETE_WORD_BACKWARD:
+      case IDS_DELETE_TO_BEGINNING_OF_LINE:
+        command_id = IDS_DELETE_BACKWARD;
+        break;
+      case IDS_DELETE_WORD_FORWARD:
+      case IDS_DELETE_TO_END_OF_LINE:
+        command_id = IDS_DELETE_FORWARD;
+        break;
+    }
+  }
+
   if (!IsCommandIdEnabled(command_id))
     return;
 
@@ -1475,7 +1492,7 @@ void Textfield::InsertChar(const ui::KeyEvent& event) {
   DoInsertChar(ch);
 
   if (text_input_type_ == ui::TEXT_INPUT_TYPE_PASSWORD &&
-      password_reveal_duration_ != base::TimeDelta()) {
+      !password_reveal_duration_.is_zero()) {
     const size_t change_offset = model_->GetCursorPosition();
     DCHECK_GT(change_offset, 0u);
     RevealPasswordChar(change_offset - 1);
@@ -1746,7 +1763,18 @@ void Textfield::MoveCursorTo(const gfx::Point& point, bool select) {
 
 void Textfield::SelectThroughLastDragLocation() {
   OnBeforeUserAction();
-  model_->MoveCursorTo(last_drag_location_, true);
+
+  const bool drags_to_end = PlatformStyle::kTextfieldDragVerticallyDragsToEnd;
+  if (drags_to_end && last_drag_location_.y() < 0) {
+    model_->MoveCursor(gfx::BreakType::LINE_BREAK,
+                       gfx::VisualCursorDirection::CURSOR_LEFT, true);
+  } else if (drags_to_end && last_drag_location_.y() > height()) {
+    model_->MoveCursor(gfx::BreakType::LINE_BREAK,
+                       gfx::VisualCursorDirection::CURSOR_RIGHT, true);
+  } else {
+    model_->MoveCursorTo(last_drag_location_, true);
+  }
+
   if (aggregated_clicks_ == 1) {
     model_->SelectWord();
     // Expand the selection so the initially selected word remains selected.

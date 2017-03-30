@@ -8,28 +8,45 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "cc/output/compositor_frame.h"
-#include "content/browser/android/synchronous_compositor_base.h"
+#include "content/common/input/input_event_ack_state.h"
+#include "content/public/browser/android/synchronous_compositor.h"
 #include "ui/gfx/geometry/scroll_offset.h"
 #include "ui/gfx/geometry/size_f.h"
 
 namespace IPC {
+class Message;
 class Sender;
+}
+
+namespace blink {
+class WebInputEvent;
+}
+
+namespace cc {
+struct BeginFrameArgs;
 }
 
 namespace content {
 
 class RenderWidgetHostViewAndroid;
 class SynchronousCompositorClient;
+class WebContents;
 struct DidOverscrollParams;
 struct SyncCompositorCommonBrowserParams;
 struct SyncCompositorCommonRendererParams;
 
-class SynchronousCompositorHost : public SynchronousCompositorBase {
+class SynchronousCompositorHost : public SynchronousCompositor {
  public:
+  static std::unique_ptr<SynchronousCompositorHost> Create(
+      RenderWidgetHostViewAndroid* rwhva,
+      WebContents* web_contents);
+
   ~SynchronousCompositorHost() override;
 
   // SynchronousCompositor overrides.
@@ -50,13 +67,11 @@ class SynchronousCompositorHost : public SynchronousCompositorBase {
   void SetIsActive(bool is_active) override;
   void OnComputeScroll(base::TimeTicks animation_time) override;
 
-  // SynchronousCompositorBase overrides.
-  InputEventAckState HandleInputEvent(
-      const blink::WebInputEvent& input_event) override;
-  void DidOverscroll(const DidOverscrollParams& over_scroll_params) override;
-  void BeginFrame(const cc::BeginFrameArgs& args) override;
-  bool OnMessageReceived(const IPC::Message& message) override;
-  void DidBecomeCurrent() override;
+  InputEventAckState HandleInputEvent(const blink::WebInputEvent& input_event);
+  void DidOverscroll(const DidOverscrollParams& over_scroll_params);
+  void BeginFrame(const cc::BeginFrameArgs& args);
+  bool OnMessageReceived(const IPC::Message& message);
+  void DidBecomeCurrent();
 
  private:
   class ScopedSendZeroMemory;
@@ -72,6 +87,7 @@ class SynchronousCompositorHost : public SynchronousCompositorBase {
   void ProcessCommonParams(const SyncCompositorCommonRendererParams& params);
   void UpdateNeedsBeginFrames();
   void UpdateFrameMetaData(const cc::CompositorFrameMetadata& frame_metadata);
+  void OutputSurfaceCreated();
   void OnOverScroll(const SyncCompositorCommonRendererParams& params,
                     const DidOverscrollParams& over_scroll_params);
   void SendAsyncCompositorStateIfNeeded();
@@ -90,13 +106,10 @@ class SynchronousCompositorHost : public SynchronousCompositorBase {
 
   bool is_active_;
   size_t bytes_limit_;
-  uint32_t output_surface_id_from_last_draw_;
-  cc::ReturnedResourceArray returned_resources_;
-  scoped_ptr<SharedMemoryWithSize> software_draw_shm_;
+  std::unique_ptr<SharedMemoryWithSize> software_draw_shm_;
 
   // Updated by both renderer and browser.
   gfx::ScrollOffset root_scroll_offset_;
-  bool root_scroll_offset_updated_by_browser_;
 
   // From renderer.
   uint32_t renderer_param_version_;

@@ -11,12 +11,12 @@
 
 class SkBitmap;
 
-namespace mojo {
-class Connector;
-}
-
 namespace mus {
 class Window;
+}
+
+namespace shell {
+class Connector;
 }
 
 namespace views {
@@ -27,25 +27,22 @@ class PlatformWindowMus;
 
 class VIEWS_MUS_EXPORT WindowTreeHostMus : public aura::WindowTreeHostPlatform {
  public:
-  WindowTreeHostMus(mojo::Connector* connector,
+  WindowTreeHostMus(shell::Connector* connector,
                     NativeWidgetMus* native_widget,
                     mus::Window* window);
   ~WindowTreeHostMus() override;
 
   PlatformWindowMus* platform_window();
-  ui::PlatformWindowState show_state() const { return show_state_; }
 
  private:
   // aura::WindowTreeHostPlatform:
   void DispatchEvent(ui::Event* event) override;
   void OnClosed() override;
-  void OnWindowStateChanged(ui::PlatformWindowState new_state) override;
   void OnActivationChanged(bool active) override;
   void OnCloseRequest() override;
 
   NativeWidgetMus* native_widget_;
-  scoped_ptr<InputMethodMUS> input_method_;
-  ui::PlatformWindowState show_state_;
+  std::unique_ptr<InputMethodMUS> input_method_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowTreeHostMus);
 };

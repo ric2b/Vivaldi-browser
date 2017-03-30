@@ -39,18 +39,6 @@ namespace blink {
 static const double initialFrameDelay = 0.025;
 static const double animationPolicyOnceDuration = 3.000;
 
-#if !ENABLE(OILPAN)
-// Every entry-point that calls updateAnimations() should instantiate a
-// DiscardScope to prevent deletion of the ownerElement (and hence itself.)
-class DiscardScope {
-public:
-    explicit DiscardScope(SVGSVGElement& timeContainerOwner) : m_discardScopeElement(&timeContainerOwner) { }
-
-private:
-    RefPtr<SVGSVGElement> m_discardScopeElement;
-};
-#endif
-
 SMILTimeContainer::SMILTimeContainer(SVGSVGElement& owner)
     : m_beginTime(0)
     , m_pauseTime(0)
@@ -182,9 +170,6 @@ void SMILTimeContainer::begin()
     // If 'm_presetStartTime' is set, the timeline was modified via setElapsed() before the document began.
     // In this case pass on 'seekToTime=true' to updateAnimations().
     m_beginTime = now - m_presetStartTime;
-#if !ENABLE(OILPAN)
-    DiscardScope discardScope(ownerSVGElement());
-#endif
     SMILTime earliestFireTime = updateAnimations(SMILTime(m_presetStartTime), m_presetStartTime ? true : false);
     m_presetStartTime = 0;
 
@@ -424,7 +409,7 @@ void SMILTimeContainer::serviceOnNextFrame()
     }
 }
 
-void SMILTimeContainer::serviceAnimations(double monotonicAnimationStartTime)
+void SMILTimeContainer::serviceAnimations()
 {
     if (m_frameSchedulingState != AnimationFrame)
         return;
@@ -438,9 +423,6 @@ void SMILTimeContainer::updateAnimationsAndScheduleFrameIfNeeded(SMILTime elapse
     if (!document().isActive())
         return;
 
-#if !ENABLE(OILPAN)
-    DiscardScope discardScope(ownerSVGElement());
-#endif
     SMILTime earliestFireTime = updateAnimations(elapsed, seekToTime);
     // If updateAnimations() ended up triggering a synchronization (most likely
     // via syncbases), then give that priority.
@@ -496,20 +478,27 @@ SMILTime SMILTimeContainer::updateAnimations(SMILTime elapsed, bool seekToTime)
             ASSERT(animation->hasValidAttributeType());
 
             // Results are accumulated to the first animation that animates and contributes to a particular element/attribute pair.
-            if (!resultElement)
+            if (!resultElement) {
                 resultElement = animation;
+                resultElement->lockAnimatedType();
+            }
 
-            // This will calculate the contribution from the animation and add it to the resultsElement.
-            if (!animation->progress(elapsed, resultElement, seekToTime) && resultElement == animation)
+            // This will calculate the contribution from the animation and add it to the resultElement.
+            if (!animation->progress(elapsed, resultElement, seekToTime) && resultElement == animation) {
+                resultElement->unlockAnimatedType();
+                resultElement->clearAnimatedType();
                 resultElement = nullptr;
+            }
 
             SMILTime nextFireTime = animation->nextProgressTime();
             if (nextFireTime.isFinite())
                 earliestFireTime = std::min(nextFireTime, earliestFireTime);
         }
 
-        if (resultElement)
+        if (resultElement) {
             animationsToApply.append(resultElement);
+            resultElement->unlockAnimatedType();
+        }
     }
     m_scheduledAnimations.removeAll(invalidKeys);
 

@@ -4,6 +4,8 @@
 
 #include "base/task_scheduler/task_traits.h"
 
+#include <stddef.h>
+
 #include <ostream>
 
 namespace base {
@@ -14,7 +16,7 @@ namespace base {
 TaskTraits::TaskTraits()
     : with_file_io_(false),
       priority_(TaskPriority::BACKGROUND),
-      shutdown_behavior_(TaskShutdownBehavior::BLOCK_SHUTDOWN) {}
+      shutdown_behavior_(TaskShutdownBehavior::SKIP_ON_SHUTDOWN) {}
 
 TaskTraits::~TaskTraits() = default;
 

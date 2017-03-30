@@ -194,25 +194,12 @@ bool Args::VerifyAllOverridesUsed(Err* err) const {
   if (all_overrides.empty())
     return true;
 
-  // Get a list of all possible overrides for help with error finding.
-  //
-  // It might be nice to do edit distance checks to see if we can find one close
-  // to what you typed.
-  std::string all_declared_str;
-  for (const auto& map_pair : declared_arguments_per_toolchain_) {
-    for (const auto& cur_str : map_pair.second) {
-      if (!all_declared_str.empty())
-        all_declared_str += ", ";
-      all_declared_str += cur_str.first.as_string();
-    }
-  }
-
   *err = Err(
       all_overrides.begin()->second.origin(), "Build argument has no effect.",
       "The variable \"" + all_overrides.begin()->first.as_string() +
           "\" was set as a build argument\nbut never appeared in a " +
-          "declare_args() block in any buildfile.\n\nPossible arguments: " +
-          all_declared_str);
+          "declare_args() block in any buildfile.\n\n"
+          "To view possible args, run \"gn args --list <builddir>\"");
   return false;
 }
 
@@ -245,6 +232,7 @@ void Args::SetSystemVarsLocked(Scope* dest) const {
   static const char kX86[] = "x86";
   static const char kX64[] = "x64";
   static const char kArm[] = "arm";
+  static const char kMips[] = "mipsel";
   const char* arch = nullptr;
 
   // Set the host CPU architecture based on the underlying OS, not
@@ -254,8 +242,10 @@ void Args::SetSystemVarsLocked(Scope* dest) const {
     arch = kX86;
   else if (os_arch == "x86_64")
     arch = kX64;
-  else if (os_arch.substr(3) == "arm")
+  else if (os_arch.substr(0, 3) == "arm")
     arch = kArm;
+  else if (os_arch == "mips")
+    arch = kMips;
   else
     CHECK(false) << "OS architecture not handled.";
 

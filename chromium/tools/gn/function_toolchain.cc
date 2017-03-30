@@ -194,8 +194,8 @@ bool IsCompilerTool(Toolchain::ToolType type) {
 }
 
 bool IsLinkerTool(Toolchain::ToolType type) {
-  return type == Toolchain::TYPE_ALINK ||
-         type == Toolchain::TYPE_SOLINK ||
+  // "alink" is not counted as in the generic "linker" tool list.
+  return type == Toolchain::TYPE_SOLINK ||
          type == Toolchain::TYPE_SOLINK_MODULE ||
          type == Toolchain::TYPE_LINK;
 }
@@ -418,6 +418,20 @@ const char kTool_Help[] =
     "\n"
     "        The command to run.\n"
     "\n"
+    "    default_output_dir  [string with substitutions]\n"
+    "        Valid for: linker tools\n"
+    "\n"
+    "        Default directory name for the output file relative to the\n"
+    "        root_build_dir. It can contain other substitution patterns.\n"
+    "        This will be the default value for the {{output_dir}} expansion\n"
+    "        (discussed below) but will be overridden by the \"output_dir\"\n"
+    "        variable in a target, if one is specified.\n"
+    "\n"
+    "        GN doesn't do anything with this string other than pass it\n"
+    "        along, potentially with target-specific overrides. It is the\n"
+    "        tool's job to use the expansion so that the files will be in\n"
+    "        the right place.\n"
+    "\n"
     "    default_output_extension  [string]\n"
     "        Valid for: linker tools\n"
     "\n"
@@ -434,7 +448,7 @@ const char kTool_Help[] =
     "\n"
     "        Example: default_output_extension = \".exe\"\n"
     "\n"
-    "    depfile  [string]\n"
+    "    depfile  [string with substitutions]\n"
     "        Valid for: compiler tools (optional)\n"
     "\n"
     "        If the tool can write \".d\" files, this specifies the name of\n"
@@ -496,14 +510,12 @@ const char kTool_Help[] =
     "          ]\n"
     "\n"
     "        Example for a linker tool that produces a .dll and a .lib. The\n"
-    "        use of {{output_extension}} rather than hardcoding \".dll\"\n"
-    "        allows the extension of the library to be overridden on a\n"
-    "        target-by-target basis, but in this example, it always\n"
-    "        produces a \".lib\" import library:\n"
+    "        use of {{target_output_name}}, {{output_extension}} and\n"
+    "        {{output_dir}} allows the target to override these values.\n"
     "          outputs = [\n"
-    "            \"{{root_out_dir}}/{{target_output_name}}"
+    "            \"{{output_dir}}/{{target_output_name}}"
                      "{{output_extension}}\",\n"
-    "            \"{{root_out_dir}}/{{target_output_name}}.lib\",\n"
+    "            \"{{output_dir}}/{{target_output_name}}.lib\",\n"
     "          ]\n"
     "\n"
     "    link_output  [string with substitutions]\n"
@@ -516,7 +528,7 @@ const char kTool_Help[] =
     "        should match entries in the \"outputs\". If unspecified, the\n"
     "        first item in the \"outputs\" array will be used for all. See\n"
     "        \"Separate linking and dependencies for shared libraries\"\n"
-    "        below for more.  If link_output is set but runtime_link_output\n"
+    "        below for more. If link_output is set but runtime_link_output\n"
     "        is not set, runtime_link_output defaults to link_output.\n"
     "\n"
     "        On Windows, where the tools produce a .dll shared library and\n"
@@ -624,7 +636,7 @@ const char kTool_Help[] =
     "    {{target_out_dir}}\n"
     "        The directory of the generated file and output directories,\n"
     "        respectively, for the current target. There is no trailing\n"
-    "        slash.\n"
+    "        slash. See also {{output_dir}} for linker tools.\n"
     "        Example: \"out/base/test\"\n"
     "\n"
     "    {{target_output_name}}\n"
@@ -678,6 +690,7 @@ const char kTool_Help[] =
     "        Example: \"gen/base/test\"\n"
     "\n"
     "  Linker tools have multiple inputs and (potentially) multiple outputs\n"
+    "  The static library tool (\"alink\") is not considered a linker tool.\n"
     "  The following expansions are available:\n"
     "\n"
     "    {{inputs}}\n"
@@ -707,6 +720,21 @@ const char kTool_Help[] =
     "\n"
     "        Example: \"-lfoo -lbar\"\n"
     "\n"
+    "    {{output_dir}}\n"
+    "        The value of the \"output_dir\" variable in the target, or the\n"
+    "        the value of the \"default_output_dir\" value in the tool if the\n"
+    "        target does not override the output directory. This will be\n"
+    "        relative to the root_build_dir and will not end in a slash.\n"
+    "        Will be \".\" for output to the root_build_dir.\n"
+    "\n"
+    "        This is subtly different than {{target_out_dir}} which is\n"
+    "        defined by GN based on the target's path and not overridable.\n"
+    "        {{output_dir}} is for the final output, {{target_out_dir}} is\n"
+    "        generally for object files and other outputs.\n"
+    "\n"
+    "        Usually {{output_dir}} would be defined in terms of either\n"
+    "        {{target_out_dir}} or {{root_out_dir}}\n"
+    "\n"
     "    {{output_extension}}\n"
     "        The value of the \"output_extension\" variable in the target,\n"
     "        or the value of the \"default_output_extension\" value in the\n"
@@ -721,6 +749,9 @@ const char kTool_Help[] =
     "\n"
     "        These should generally be treated the same as libs by your tool.\n"
     "        Example: \"libfoo.so libbar.so\"\n"
+    "\n"
+    "  The static library (\"alink\") tool allows {{arflags}} plus the common\n"
+    "  tool substitutions.\n"
     "\n"
     "  The copy tool allows the common compiler/linker substitutions, plus\n"
     "  {{source}} which is the source of the copy. The stamp tool allows\n"
@@ -759,14 +790,14 @@ const char kTool_Help[] =
     "    tool(\"solink\") {\n"
     "      command = \"...\"\n"
     "      outputs = [\n"
-    "        \"{{root_out_dir}}/{{target_output_name}}{{output_extension}}\",\n"
-    "        \"{{root_out_dir}}/{{target_output_name}}"
+    "        \"{{output_dir}}/{{target_output_name}}{{output_extension}}\",\n"
+    "        \"{{output_dir}}/{{target_output_name}}"
                  "{{output_extension}}.TOC\",\n"
     "      ]\n"
     "      link_output =\n"
-    "        \"{{root_out_dir}}/{{target_output_name}}{{output_extension}}\"\n"
+    "        \"{{output_dir}}/{{target_output_name}}{{output_extension}}\"\n"
     "      depend_output =\n"
-    "        \"{{root_out_dir}}/{{target_output_name}}"
+    "        \"{{output_dir}}/{{target_output_name}}"
                  "{{output_extension}}.TOC\"\n"
     "      restat = true\n"
     "    }\n"
@@ -832,6 +863,10 @@ Value RunTool(Scope* scope,
   } else if (IsLinkerTool(tool_type)) {
     subst_validator = &IsValidLinkerSubstitution;
     subst_output_validator = &IsValidLinkerOutputsSubstitution;
+  } else if (tool_type == Toolchain::TYPE_ALINK) {
+    subst_validator = &IsValidALinkSubstitution;
+    // ALink uses the standard output file patterns as other linker tools.
+    subst_output_validator = &IsValidLinkerOutputsSubstitution;
   } else if (tool_type == Toolchain::TYPE_COPY ||
              tool_type == Toolchain::TYPE_COPY_BUNDLE_DATA) {
     subst_validator = &IsValidCopySubstitution;
@@ -866,6 +901,8 @@ Value RunTool(Scope* scope,
                    tool.get(), &Tool::set_runtime_link_output, err) ||
       !ReadString(&block_scope, "output_prefix", tool.get(),
                   &Tool::set_output_prefix, err) ||
+      !ReadPattern(&block_scope, "default_output_dir", subst_validator,
+                   tool.get(), &Tool::set_default_output_dir, err) ||
       !ReadPrecompiledHeaderType(&block_scope, tool.get(), err) ||
       !ReadBool(&block_scope, "restat", tool.get(), &Tool::set_restat, err) ||
       !ReadPattern(&block_scope, "rspfile", subst_validator, tool.get(),

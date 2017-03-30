@@ -13,7 +13,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "components/url_formatter/elide_url.h"
@@ -21,13 +21,14 @@
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "ui/base/theme_provider.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/animation/linear_animation.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/screen.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/gfx/text_elider.h"
 #include "ui/gfx/text_utils.h"
@@ -38,7 +39,13 @@
 #include "url/gurl.h"
 
 #if defined(USE_ASH)
-#include "ash/wm/window_state.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/window_state_aura.h"
+#endif
+
+#if defined(MOJO_SHELL_CLIENT)
+#include "components/mus/public/cpp/property_type_converters.h"
+#include "components/mus/public/interfaces/window_manager.mojom.h"
 #endif
 
 // The alpha and color of the bubble's shadow.
@@ -433,12 +440,13 @@ void StatusBubbleViews::StatusView::OnPaint(gfx::Canvas* canvas) {
   // Make sure the text is aligned to the right on RTL UIs.
   text_bounds.set_x(GetMirroredXForRect(text_bounds));
 
-  // Text color is the foreground tab text color at 50% alpha.
-  SkColor text_color =
-      theme_provider_->GetColor(ThemeProperties::COLOR_TAB_TEXT);
-  canvas->DrawStringRect(text_, font_list,
-                         SkColorSetA(text_color, SkColorGetA(text_color) / 2),
-                         text_bounds);
+  // Text color is the foreground tab text color at 60% alpha.
+  SkColor text_color = color_utils::AlphaBlend(
+      theme_provider_->GetColor(ThemeProperties::COLOR_TAB_TEXT), toolbar_color,
+      0x99);
+  canvas->DrawStringRect(
+      text_, font_list,
+      color_utils::GetReadableColor(text_color, toolbar_color), text_bounds);
 }
 
 
@@ -599,6 +607,11 @@ void StatusBubbleViews::Init() {
     params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
     params.parent = frame->GetNativeView();
     params.context = frame->GetNativeWindow();
+#if defined(MOJO_SHELL_CLIENT)
+    params.mus_properties
+        [mus::mojom::WindowManager::kWindowIgnoredByShelf_Property] =
+        mojo::ConvertTo<std::vector<uint8_t>>(true);
+#endif
     popup_->Init(params);
     // We do our own animation and don't want any from the system.
     popup_->SetVisibilityChangedAnimationsEnabled(false);
@@ -806,8 +819,9 @@ void StatusBubbleViews::AvoidMouse(const gfx::Point& location) {
     // Check if the bubble sticks out from the monitor or will obscure
     // download shelf.
     gfx::NativeView window = base_view_->GetWidget()->GetNativeView();
-    gfx::Rect monitor_rect =
-        gfx::Screen::GetScreen()->GetDisplayNearestWindow(window).work_area();
+    gfx::Rect monitor_rect = display::Screen::GetScreen()
+                                 ->GetDisplayNearestWindow(window)
+                                 .work_area();
     const int bubble_bottom_y = top_left.y() + position_.y() + size_.height();
 
     if (bubble_bottom_y + offset > monitor_rect.height() ||

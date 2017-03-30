@@ -5,14 +5,15 @@
 #include "extensions/common/features/feature_provider.h"
 
 #include <map>
+#include <memory>
 
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/common/extensions_client.h"
+#include "extensions/common/features/feature.h"
 #include "extensions/common/features/feature_util.h"
 #include "extensions/common/switches.h"
 
@@ -58,7 +59,7 @@ class Static {
     }
   }
 
-  std::map<std::string, scoped_ptr<FeatureProvider>> feature_providers_;
+  std::map<std::string, std::unique_ptr<FeatureProvider>> feature_providers_;
 };
 
 base::LazyInstance<Static> g_static = LAZY_INSTANCE_INITIALIZER;
@@ -67,10 +68,10 @@ const Feature* GetFeatureFromProviderByName(const std::string& provider_name,
                                             const std::string& feature_name) {
   const Feature* feature =
       FeatureProvider::GetByName(provider_name)->GetFeature(feature_name);
-  if (!feature) {
-    CRASH_WITH_MINIDUMP("Feature \"" + feature_name + "\" not found in " +
-                        "FeatureProvider \"" + provider_name + "\"");
-  }
+  // We should always refer to existing features, but we can't CHECK here
+  // due to flaky JSONReader fails, see: crbug.com/176381, crbug.com/602936
+  DCHECK(feature) << "Feature \"" << feature_name << "\" not found in "
+                  << "FeatureProvider \"" << provider_name << "\"";
   return feature;
 }
 

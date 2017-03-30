@@ -436,12 +436,43 @@ std::string AXNodeData::ToString() const {
       case AX_ATTR_ACTIVEDESCENDANT_ID:
         result += " activedescendant=" + value;
         break;
+      case AX_ATTR_NEXT_ON_LINE_ID:
+        result += " next_on_line_id=" + value;
+        break;
+      case AX_ATTR_PREVIOUS_ON_LINE_ID:
+        result += " previous_on_line_id=" + value;
+        break;
       case AX_ATTR_CHILD_TREE_ID:
         result += " child_tree_id=" + value;
         break;
       case AX_ATTR_COLOR_VALUE:
         result += base::StringPrintf(" color_value=&%X",
                                      int_attributes[i].second);
+        break;
+      case AX_ATTR_ARIA_CURRENT_STATE:
+        switch (int_attributes[i].second) {
+          case AX_ARIA_CURRENT_STATE_FALSE:
+            result += " aria_current_state=false";
+            break;
+          case AX_ARIA_CURRENT_STATE_TRUE:
+            result += " aria_current_state=true";
+            break;
+          case AX_ARIA_CURRENT_STATE_PAGE:
+            result += " aria_current_state=page";
+            break;
+          case AX_ARIA_CURRENT_STATE_STEP:
+            result += " aria_current_state=step";
+            break;
+          case AX_ARIA_CURRENT_STATE_LOCATION:
+            result += " aria_current_state=location";
+            break;
+          case AX_ARIA_CURRENT_STATE_DATE:
+            result += " aria_current_state=date";
+            break;
+          case AX_ARIA_CURRENT_STATE_TIME:
+            result += " aria_current_state=time";
+            break;
+        }
         break;
       case AX_ATTR_BACKGROUND_COLOR:
         result += base::StringPrintf(" background_color=&%X",
@@ -677,15 +708,6 @@ std::string AXNodeData::ToString() const {
     result += " child_ids=" + IntVectorToString(child_ids);
 
   return result;
-}
-
-bool AXNodeData::IsRoot() const {
-  return (role == AX_ROLE_ROOT_WEB_AREA ||
-          role == AX_ROLE_DESKTOP);
-}
-
-void AXNodeData::SetRoot() {
-  role = AX_ROLE_ROOT_WEB_AREA;
 }
 
 }  // namespace ui

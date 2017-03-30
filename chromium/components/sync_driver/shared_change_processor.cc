@@ -6,12 +6,13 @@
 
 #include <utility>
 
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/sync_driver/generic_change_processor.h"
 #include "components/sync_driver/generic_change_processor_factory.h"
 #include "components/sync_driver/sync_client.h"
 #include "sync/api/sync_change.h"
 #include "sync/api/syncable_service.h"
+#include "sync/internal_api/public/data_type_error_handler.h"
 
 using base::AutoLock;
 
@@ -53,7 +54,7 @@ base::WeakPtr<syncer::SyncableService> SharedChangeProcessor::Connect(
     SyncClient* sync_client,
     GenericChangeProcessorFactory* processor_factory,
     syncer::UserShare* user_share,
-    DataTypeErrorHandler* error_handler,
+    syncer::DataTypeErrorHandler* error_handler,
     syncer::ModelType type,
     const base::WeakPtr<syncer::SyncMergeResult>& merge_result) {
   DCHECK(sync_client);
@@ -81,7 +82,7 @@ base::WeakPtr<syncer::SyncableService> SharedChangeProcessor::Connect(
                                                       merge_result,
                                                       sync_client).release();
   // If available, propagate attachment service to the syncable service.
-  scoped_ptr<syncer::AttachmentService> attachment_service =
+  std::unique_ptr<syncer::AttachmentService> attachment_service =
       generic_change_processor_->GetAttachmentService();
   if (attachment_service) {
     local_service->SetAttachmentService(std::move(attachment_service));

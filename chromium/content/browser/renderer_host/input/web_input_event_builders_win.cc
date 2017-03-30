@@ -6,9 +6,9 @@
 
 #include "base/logging.h"
 #include "content/browser/renderer_host/input/web_input_event_util.h"
+#include "ui/display/win/screen_win.h"
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/events/event_utils.h"
-#include "ui/gfx/win/dpi.h"
 
 using blink::WebInputEvent;
 using blink::WebKeyboardEvent;
@@ -90,11 +90,13 @@ static LPARAM GetRelativeCursorPos(HWND hwnd) {
   return MAKELPARAM(pos.x, pos.y);
 }
 
-WebMouseEvent WebMouseEventBuilder::Build(HWND hwnd,
-                                          UINT message,
-                                          WPARAM wparam,
-                                          LPARAM lparam,
-                                          double time_stamp) {
+WebMouseEvent WebMouseEventBuilder::Build(
+    HWND hwnd,
+    UINT message,
+    WPARAM wparam,
+    LPARAM lparam,
+    double time_stamp,
+    blink::WebPointerProperties::PointerType pointer_type) {
   WebMouseEvent result;
 
   switch (message) {
@@ -151,6 +153,7 @@ WebMouseEvent WebMouseEventBuilder::Build(HWND hwnd,
   }
 
   result.timeStampSeconds = time_stamp;
+  result.pointerType = pointer_type;
 
   // set position fields:
 
@@ -163,7 +166,7 @@ WebMouseEvent WebMouseEventBuilder::Build(HWND hwnd,
   ClientToScreen(hwnd, &global_point);
 
   // We need to convert the global point back to DIP before using it.
-  gfx::Point dip_global_point = gfx::win::ScreenToDIPPoint(
+  gfx::Point dip_global_point = display::win::ScreenWin::ScreenToDIPPoint(
       gfx::Point(global_point.x, global_point.y));
 
   result.globalX = dip_global_point.x();
@@ -225,11 +228,13 @@ WebMouseEvent WebMouseEventBuilder::Build(HWND hwnd,
 
 // WebMouseWheelEvent ---------------------------------------------------------
 
-WebMouseWheelEvent WebMouseWheelEventBuilder::Build(HWND hwnd,
-                                                    UINT message,
-                                                    WPARAM wparam,
-                                                    LPARAM lparam,
-                                                    double time_stamp) {
+WebMouseWheelEvent WebMouseWheelEventBuilder::Build(
+    HWND hwnd,
+    UINT message,
+    WPARAM wparam,
+    LPARAM lparam,
+    double time_stamp,
+    blink::WebPointerProperties::PointerType pointer_type) {
   WebMouseWheelEvent result;
 
   result.type = WebInputEvent::MouseWheel;
@@ -237,6 +242,8 @@ WebMouseWheelEvent WebMouseWheelEventBuilder::Build(HWND hwnd,
   result.timeStampSeconds = time_stamp;
 
   result.button = WebMouseEvent::ButtonNone;
+
+  result.pointerType = pointer_type;
 
   // Get key state, coordinates, and wheel delta from event.
   UINT key_state;

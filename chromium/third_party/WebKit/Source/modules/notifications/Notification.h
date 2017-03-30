@@ -46,9 +46,7 @@
 #include "public/platform/WebVector.h"
 #include "public/platform/modules/notifications/WebNotificationData.h"
 #include "public/platform/modules/notifications/WebNotificationDelegate.h"
-#include "public/platform/modules/notifications/WebNotificationPermission.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
+#include "public/platform/modules/permissions/permission_status.mojom-blink.h"
 
 namespace blink {
 
@@ -56,10 +54,10 @@ class ExecutionContext;
 class NotificationAction;
 class NotificationOptions;
 class NotificationPermissionCallback;
+class NotificationResourcesLoader;
 class ScriptState;
 
-class MODULES_EXPORT Notification final : public RefCountedGarbageCollectedEventTargetWithInlineData<Notification>, public ActiveScriptWrappable, public ActiveDOMObject, public WebNotificationDelegate {
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(Notification);
+class MODULES_EXPORT Notification final : public EventTargetWithInlineData, public ActiveScriptWrappable, public ActiveDOMObject, public WebNotificationDelegate {
     USING_GARBAGE_COLLECTED_MIXIN(Notification);
     DEFINE_WRAPPERTYPEINFO();
 public:
@@ -101,9 +99,9 @@ public:
     ScriptValue data(ScriptState*);
     HeapVector<NotificationAction> actions() const;
 
-    static String permissionString(WebNotificationPermission);
+    static String permissionString(mojom::blink::PermissionStatus);
     static String permission(ExecutionContext*);
-    static WebNotificationPermission checkPermission(ExecutionContext*);
+    static mojom::blink::PermissionStatus checkPermission(ExecutionContext*);
     static ScriptPromise requestPermission(ScriptState*, NotificationPermissionCallback*);
 
     static size_t maxActions();
@@ -127,14 +125,17 @@ protected:
 private:
     Notification(ExecutionContext*, const WebNotificationData&);
 
-    void scheduleShow();
+    // Schedules an asynchronous call to |prepareShow|, allowing the constructor
+    // to return so that events can be fired on the notification object.
+    void schedulePrepareShow();
 
-    // Calling show() may start asynchronous operation. If this object has
-    // a V8 wrapper, hasPendingActivity() prevents the wrapper from being
-    // collected while m_state is Showing, and so this instance stays alive
-    // until the operation completes. Otherwise, you need to hold a ref on this
-    // instance until the operation completes.
-    void show();
+    // Checks permission and loads any necessary resources (this may be async)
+    // before showing the notification.
+    void prepareShow();
+
+    // Shows the notification, using the resources loaded by the
+    // NotificationResourcesLoader.
+    void didLoadResources(NotificationResourcesLoader*);
 
     void setPersistentId(int64_t persistentId) { m_persistentId = persistentId; }
 
@@ -161,7 +162,9 @@ private:
 
     NotificationState m_state;
 
-    Member<AsyncMethodRunner<Notification>> m_asyncRunner;
+    Member<AsyncMethodRunner<Notification>> m_prepareShowMethodRunner;
+
+    Member<NotificationResourcesLoader> m_loader;
 };
 
 } // namespace blink

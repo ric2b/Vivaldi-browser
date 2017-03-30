@@ -2,23 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "media/cast/sender/video_encoder.h"
+
 #include <stdint.h>
 
+#include <memory>
 #include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "build/build_config.h"
 #include "media/base/fake_single_thread_task_runner.h"
 #include "media/base/video_frame.h"
-#include "media/cast/cast_defines.h"
 #include "media/cast/cast_environment.h"
 #include "media/cast/common/rtp_time.h"
 #include "media/cast/sender/fake_video_encode_accelerator_factory.h"
-#include "media/cast/sender/video_encoder.h"
 #include "media/cast/sender/video_frame_factory.h"
 #include "media/cast/test/utility/default_config.h"
 #include "media/cast/test/utility/video_utility.h"
@@ -37,11 +37,11 @@ class VideoEncoderTest
   VideoEncoderTest()
       : testing_clock_(new base::SimpleTestTickClock()),
         task_runner_(new FakeSingleThreadTaskRunner(testing_clock_)),
-        cast_environment_(
-            new CastEnvironment(scoped_ptr<base::TickClock>(testing_clock_),
-                                task_runner_,
-                                task_runner_,
-                                task_runner_)),
+        cast_environment_(new CastEnvironment(
+            std::unique_ptr<base::TickClock>(testing_clock_),
+            task_runner_,
+            task_runner_,
+            task_runner_)),
         video_config_(GetDefaultVideoSenderConfig()),
         operational_status_(STATUS_UNINITIALIZED),
         count_frames_delivered_(0) {
@@ -169,8 +169,8 @@ class VideoEncoderTest
   // encoder rejected the request.
   bool EncodeAndCheckDelivery(
       const scoped_refptr<media::VideoFrame>& video_frame,
-      uint32_t frame_id,
-      uint32_t reference_frame_id) {
+      FrameId frame_id,
+      FrameId reference_frame_id) {
     return video_encoder_->EncodeVideoFrame(
         video_frame, Now(),
         base::Bind(&VideoEncoderTest::DeliverEncodedVideoFrame,
@@ -214,11 +214,12 @@ class VideoEncoderTest
 
   // Checks that |encoded_frame| matches expected values.  This is the method
   // bound in the callback returned from EncodeAndCheckDelivery().
-  void DeliverEncodedVideoFrame(uint32_t expected_frame_id,
-                                uint32_t expected_last_referenced_frame_id,
-                                RtpTimeTicks expected_rtp_timestamp,
-                                const base::TimeTicks& expected_reference_time,
-                                scoped_ptr<SenderEncodedFrame> encoded_frame) {
+  void DeliverEncodedVideoFrame(
+      FrameId expected_frame_id,
+      FrameId expected_last_referenced_frame_id,
+      RtpTimeTicks expected_rtp_timestamp,
+      const base::TimeTicks& expected_reference_time,
+      std::unique_ptr<SenderEncodedFrame> encoded_frame) {
     EXPECT_TRUE(cast_environment_->CurrentlyOn(CastEnvironment::MAIN));
 
     EXPECT_EQ(expected_frame_id, encoded_frame->frame_id);
@@ -265,11 +266,11 @@ class VideoEncoderTest
   const scoped_refptr<FakeSingleThreadTaskRunner> task_runner_;
   const scoped_refptr<CastEnvironment> cast_environment_;
   VideoSenderConfig video_config_;
-  scoped_ptr<FakeVideoEncodeAcceleratorFactory> vea_factory_;
+  std::unique_ptr<FakeVideoEncodeAcceleratorFactory> vea_factory_;
   base::TimeTicks first_frame_time_;
   OperationalStatus operational_status_;
-  scoped_ptr<VideoEncoder> video_encoder_;
-  scoped_ptr<VideoFrameFactory> video_frame_factory_;
+  std::unique_ptr<VideoEncoder> video_encoder_;
+  std::unique_ptr<VideoFrameFactory> video_frame_factory_;
 
   int count_frames_delivered_;
 
@@ -285,8 +286,8 @@ TEST_P(VideoEncoderTest, GeneratesKeyFrameThenOnlyDeltaFrames) {
   EXPECT_EQ(0, count_frames_delivered());
   ExpectVEAResponsesForExternalVideoEncoder(0, 0);
 
-  uint32_t frame_id = 0;
-  uint32_t reference_frame_id = 0;
+  FrameId frame_id = FrameId::first();
+  FrameId reference_frame_id = FrameId::first();
   const gfx::Size frame_size(1280, 720);
 
   // Some encoders drop one or more frames initially while the encoder
@@ -302,7 +303,8 @@ TEST_P(VideoEncoderTest, GeneratesKeyFrameThenOnlyDeltaFrames) {
   ExpectVEAResponsesForExternalVideoEncoder(1, 3);
 
   // Expect the remaining frames are encoded as delta frames.
-  for (++frame_id; frame_id < 3; ++frame_id, ++reference_frame_id) {
+  for (++frame_id; frame_id < FrameId::first() + 3;
+       ++frame_id, ++reference_frame_id) {
     EXPECT_TRUE(EncodeAndCheckDelivery(CreateTestVideoFrame(frame_size),
                                        frame_id,
                                        reference_frame_id));
@@ -337,7 +339,7 @@ TEST_P(VideoEncoderTest, EncodesVariedFrameSizes) {
   frame_sizes.push_back(gfx::Size(34, 20));    // Grow the other dimension.
   frame_sizes.push_back(gfx::Size(192, 108));  // Grow both dimensions again.
 
-  uint32_t frame_id = 0;
+  FrameId frame_id = FrameId::first();
 
   // Encode one frame at each size. For encoders with a resize delay, except no
   // frames to be delivered since each frame size change will sprun
@@ -386,7 +388,8 @@ TEST_P(VideoEncoderTest, CanBeDestroyedBeforeVEAIsCreated) {
   CreateEncoder();
 
   // Send a frame to spawn creation of the ExternalVideoEncoder instance.
-  EncodeAndCheckDelivery(CreateTestVideoFrame(gfx::Size(128, 72)), 0, 0);
+  EncodeAndCheckDelivery(CreateTestVideoFrame(gfx::Size(128, 72)),
+                         FrameId::first(), FrameId::first());
 
   // Destroy the encoder, and confirm the VEA Factory did not respond yet.
   DestroyEncoder();

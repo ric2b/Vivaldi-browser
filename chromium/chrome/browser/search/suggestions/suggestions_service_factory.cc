@@ -4,9 +4,9 @@
 
 #include "chrome/browser/search/suggestions/suggestions_service_factory.h"
 
+#include <memory>
 #include <utility>
 
-#include "base/memory/scoped_ptr.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/suggestions/image_fetcher_impl.h"
@@ -14,6 +14,7 @@
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/image_fetcher/image_fetcher.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/leveldb_proto/proto_database.h"
 #include "components/leveldb_proto/proto_database_impl.h"
@@ -22,7 +23,6 @@
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/suggestions/blacklist_store.h"
-#include "components/suggestions/image_fetcher.h"
 #include "components/suggestions/image_manager.h"
 #include "components/suggestions/proto/suggestions.pb.h"
 #include "components/suggestions/suggestions_service.h"
@@ -71,23 +71,22 @@ KeyedService* SuggestionsServiceFactory::BuildServiceInstanceFor(
   ProfileSyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile);
 
-  scoped_ptr<SuggestionsStore> suggestions_store(
+  std::unique_ptr<SuggestionsStore> suggestions_store(
       new SuggestionsStore(profile->GetPrefs()));
-  scoped_ptr<BlacklistStore> blacklist_store(
+  std::unique_ptr<BlacklistStore> blacklist_store(
       new BlacklistStore(profile->GetPrefs()));
 
-  scoped_ptr<leveldb_proto::ProtoDatabaseImpl<ImageData> > db(
+  std::unique_ptr<leveldb_proto::ProtoDatabaseImpl<ImageData>> db(
       new leveldb_proto::ProtoDatabaseImpl<ImageData>(background_task_runner));
 
   base::FilePath database_dir(
       profile->GetPath().Append(FILE_PATH_LITERAL("Thumbnails")));
 
-  scoped_ptr<ImageFetcherImpl> image_fetcher(
+  std::unique_ptr<ImageFetcherImpl> image_fetcher(
       new ImageFetcherImpl(profile->GetRequestContext()));
-  scoped_ptr<ImageManager> thumbnail_manager(
-      new ImageManager(
-          std::move(image_fetcher), std::move(db), database_dir,
-          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::DB)));
+  std::unique_ptr<ImageManager> thumbnail_manager(new ImageManager(
+      std::move(image_fetcher), std::move(db), database_dir,
+      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::DB)));
   return new SuggestionsService(
       signin_manager, token_service, sync_service, profile->GetRequestContext(),
       std::move(suggestions_store), std::move(thumbnail_manager),

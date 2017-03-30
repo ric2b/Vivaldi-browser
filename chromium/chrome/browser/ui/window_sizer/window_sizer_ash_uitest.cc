@@ -19,6 +19,8 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/test/ui_controls.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/view.h"
@@ -61,8 +63,8 @@ void OpenBrowserUsingShelfOnRootWindow(aura::Window* root_window) {
   ui::test::EventGenerator generator(root_window);
   gfx::Point center =
       GetChromeIconBoundsForRootWindow(root_window).CenterPoint();
-  gfx::Display display =
-      gfx::Screen::GetScreen()->GetDisplayNearestWindow(root_window);
+  display::Display display =
+      display::Screen::GetScreen()->GetDisplayNearestWindow(root_window);
   const gfx::Point& origin = display.bounds().origin();
   center.Offset(- origin.x(), - origin.y());
   generator.MoveMouseTo(center);

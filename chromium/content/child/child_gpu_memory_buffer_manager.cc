@@ -4,6 +4,7 @@
 
 #include "content/child/child_gpu_memory_buffer_manager.h"
 
+#include <memory>
 #include <utility>
 
 #include "content/common/child_process_messages.h"
@@ -32,11 +33,12 @@ ChildGpuMemoryBufferManager::~ChildGpuMemoryBufferManager() {
 }
 
 std::unique_ptr<gfx::GpuMemoryBuffer>
-ChildGpuMemoryBufferManager::AllocateGpuMemoryBuffer(const gfx::Size& size,
-                                                     gfx::BufferFormat format,
-                                                     gfx::BufferUsage usage,
-                                                     int32_t surface_id) {
-  DCHECK_EQ(0, surface_id);
+ChildGpuMemoryBufferManager::AllocateGpuMemoryBuffer(
+    const gfx::Size& size,
+    gfx::BufferFormat format,
+    gfx::BufferUsage usage,
+    gpu::SurfaceHandle surface_handle) {
+  DCHECK_EQ(gpu::kNullSurfaceHandle, surface_handle);
   TRACE_EVENT2("renderer",
                "ChildGpuMemoryBufferManager::AllocateGpuMemoryBuffer",
                "width",

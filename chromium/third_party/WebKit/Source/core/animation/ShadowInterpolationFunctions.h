@@ -18,8 +18,9 @@ class ShadowInterpolationFunctions {
 public:
     static InterpolationValue convertShadowData(const ShadowData&, double zoom);
     static InterpolationValue maybeConvertCSSValue(const CSSValue&);
+    static PassOwnPtr<InterpolableValue> createNeutralInterpolableValue();
     static bool nonInterpolableValuesAreCompatible(const NonInterpolableValue*, const NonInterpolableValue*);
-    static PairwiseInterpolationValue mergeSingleConversions(InterpolationValue&& start, InterpolationValue&& end);
+    static PairwiseInterpolationValue maybeMergeSingles(InterpolationValue&& start, InterpolationValue&& end);
     static void composite(OwnPtr<InterpolableValue>&, RefPtr<NonInterpolableValue>&, double underlyingFraction, const InterpolableValue&, const NonInterpolableValue*);
     static ShadowData createShadowData(const InterpolableValue&, const NonInterpolableValue*, const StyleResolverState&);
 };

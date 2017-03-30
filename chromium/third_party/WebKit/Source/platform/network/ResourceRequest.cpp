@@ -28,8 +28,8 @@
 
 #include "platform/HTTPNames.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/network/NetworkUtils.h"
 #include "platform/weborigin/SecurityOrigin.h"
-#include "public/platform/Platform.h"
 #include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebURLRequest.h"
@@ -49,7 +49,7 @@ ResourceRequest::ResourceRequest(CrossThreadResourceRequestData* data)
     setHTTPMethod(AtomicString(data->m_httpMethod));
     setPriority(data->m_priority, data->m_intraPriorityValue);
 
-    m_httpHeaderFields.adopt(data->m_httpHeaders.release());
+    m_httpHeaderFields.adopt(std::move(data->m_httpHeaders));
 
     setHTTPBody(data->m_httpBody);
     setAttachedCredential(data->m_attachedCredential);
@@ -118,7 +118,7 @@ PassOwnPtr<CrossThreadResourceRequestData> ResourceRequest::copyData() const
     data->m_isExternalRequest = m_isExternalRequest;
     data->m_inputPerfMetricReportPolicy = m_inputPerfMetricReportPolicy;
     data->m_followedRedirect = m_followedRedirect;
-    return data.release();
+    return data;
 }
 
 bool ResourceRequest::isEmpty() const
@@ -351,7 +351,7 @@ void ResourceRequest::setExternalRequestStateFromRequestorAddressSpace(WebAddres
     }
 
     WebAddressSpace targetSpace = WebAddressSpacePublic;
-    if (Platform::current()->isReservedIPAddress(m_url.host()))
+    if (NetworkUtils::isReservedIPAddress(m_url.host()))
         targetSpace = WebAddressSpacePrivate;
     if (SecurityOrigin::create(m_url)->isLocalhost())
         targetSpace = WebAddressSpaceLocal;

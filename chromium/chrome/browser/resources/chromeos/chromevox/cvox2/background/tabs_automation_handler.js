@@ -26,8 +26,10 @@ TabsAutomationHandler = function(tabRoot) {
     throw new Error('Expected rootWebArea node but got ' + tabRoot.role);
 
   // When the root is focused, simulate what happens on a load complete.
-  if (tabRoot.state.focused)
-    this.onLoadComplete({target: tabRoot, type: EventType.loadComplete});
+  if (tabRoot.state.focused) {
+    this.onLoadComplete(
+        new chrome.automation.AutomationEvent(EventType.loadComplete, tabRoot));
+  }
 };
 
 TabsAutomationHandler.prototype = {
@@ -40,9 +42,10 @@ TabsAutomationHandler.prototype = {
 
   /** @override */
   onLoadComplete: function(evt) {
-    ChromeVoxState.instance.refreshMode(evt.target.docUrl);
+    ChromeVoxState.instance.refreshMode(evt.target);
     var focused = evt.target.find({state: {focused: true}}) || evt.target;
-    this.onFocus({target: focused, type: EventType.focus});
+    this.onFocus(new chrome.automation.AutomationEvent(
+        EventType.focus, focused));
   }
 };
 

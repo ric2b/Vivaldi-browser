@@ -39,7 +39,6 @@
 #include "core/frame/Settings.h"
 #include "core/inspector/IdentifiersFactory.h"
 #include "core/inspector/InspectedFrames.h"
-#include "core/inspector/InstrumentingAgents.h"
 #include "core/layout/LayoutPart.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
@@ -51,7 +50,7 @@
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/PictureSnapshot.h"
 #include "platform/graphics/paint/SkPictureBuilder.h"
-#include "platform/image-encoders/skia/PNGImageEncoder.h"
+#include "platform/image-encoders/PNGImageEncoder.h"
 #include "platform/inspector_protocol/Parser.h"
 #include "platform/transforms/TransformationMatrix.h"
 #include "public/platform/WebFloatPoint.h"
@@ -77,9 +76,9 @@ static PassOwnPtr<protocol::LayerTree::ScrollRect> buildScrollRect(const WebRect
         .setHeight(rect.height)
         .setWidth(rect.width).build();
     OwnPtr<protocol::LayerTree::ScrollRect> scrollRectObject = protocol::LayerTree::ScrollRect::create()
-        .setRect(rectObject.release())
+        .setRect(std::move(rectObject))
         .setType(type).build();
-    return scrollRectObject.release();
+    return scrollRectObject;
 }
 
 static PassOwnPtr<Array<protocol::LayerTree::ScrollRect>> buildScrollRectsForLayer(GraphicsLayer* graphicsLayer, bool reportWheelScrollers)
@@ -96,7 +95,7 @@ static PassOwnPtr<Array<protocol::LayerTree::ScrollRect>> buildScrollRectsForLay
         WebRect webRect(webLayer->position().x, webLayer->position().y, webLayer->bounds().width, webLayer->bounds().height);
         scrollRects->addItem(buildScrollRect(webRect, protocol::LayerTree::ScrollRect::TypeEnum::WheelEventHandler));
     }
-    return scrollRects->length() ? scrollRects.release() : nullptr;
+    return scrollRects->length() ? std::move(scrollRects) : nullptr;
 }
 
 static PassOwnPtr<protocol::LayerTree::Layer> buildObjectForLayer(GraphicsLayer* graphicsLayer, int nodeId, bool reportWheelEventListeners)
@@ -128,7 +127,7 @@ static PassOwnPtr<protocol::LayerTree::Layer> buildObjectForLayer(GraphicsLayer*
         OwnPtr<Array<double>> transformArray = Array<double>::create();
         for (size_t i = 0; i < WTF_ARRAY_LENGTH(flattenedMatrix); ++i)
             transformArray->addItem(flattenedMatrix[i]);
-        layerObject->setTransform(transformArray.release());
+        layerObject->setTransform(std::move(transformArray));
         const FloatPoint3D& transformOrigin = graphicsLayer->transformOrigin();
         // FIXME: rename these to setTransformOrigin*
         if (webLayer->bounds().width > 0)
@@ -143,8 +142,8 @@ static PassOwnPtr<protocol::LayerTree::Layer> buildObjectForLayer(GraphicsLayer*
     }
     OwnPtr<Array<protocol::LayerTree::ScrollRect>> scrollRects = buildScrollRectsForLayer(graphicsLayer, reportWheelEventListeners);
     if (scrollRects)
-        layerObject->setScrollRects(scrollRects.release());
-    return layerObject.release();
+        layerObject->setScrollRects(std::move(scrollRects));
+    return layerObject;
 }
 
 InspectorLayerTreeAgent::InspectorLayerTreeAgent(InspectedFrames* inspectedFrames)
@@ -172,7 +171,7 @@ void InspectorLayerTreeAgent::restore()
 
 void InspectorLayerTreeAgent::enable(ErrorString*)
 {
-    m_instrumentingAgents->setInspectorLayerTreeAgent(this);
+    m_instrumentingAgents->addInspectorLayerTreeAgent(this);
     Document* document = m_inspectedFrames->root()->document();
     if (document && document->lifecycle().state() >= DocumentLifecycle::CompositingClean)
         layerTreeDidChange();
@@ -180,7 +179,7 @@ void InspectorLayerTreeAgent::enable(ErrorString*)
 
 void InspectorLayerTreeAgent::disable(ErrorString*)
 {
-    m_instrumentingAgents->setInspectorLayerTreeAgent(0);
+    m_instrumentingAgents->removeInspectorLayerTreeAgent(this);
     m_snapshotById.clear();
     ErrorString unused;
 }
@@ -190,7 +189,7 @@ void InspectorLayerTreeAgent::layerTreeDidChange()
     frontend()->layerTreeDidChange(buildLayerTree());
 }
 
-void InspectorLayerTreeAgent::didPaint(LayoutObject*, const GraphicsLayer* graphicsLayer, GraphicsContext&, const LayoutRect& rect)
+void InspectorLayerTreeAgent::didPaint(const GraphicsLayer* graphicsLayer, GraphicsContext&, const LayoutRect& rect)
 {
     // Should only happen for FrameView paints when compositing is off. Consider different instrumentation method for that.
     if (!graphicsLayer)
@@ -201,7 +200,7 @@ void InspectorLayerTreeAgent::didPaint(LayoutObject*, const GraphicsLayer* graph
         .setY(rect.y())
         .setWidth(rect.width())
         .setHeight(rect.height()).build();
-    frontend()->layerPainted(idForLayer(graphicsLayer), domRect.release());
+    frontend()->layerPainted(idForLayer(graphicsLayer), std::move(domRect));
 }
 
 PassOwnPtr<Array<protocol::LayerTree::Layer>> InspectorLayerTreeAgent::buildLayerTree()
@@ -217,7 +216,7 @@ PassOwnPtr<Array<protocol::LayerTree::Layer>> InspectorLayerTreeAgent::buildLaye
     bool haveBlockingWheelEventHandlers = m_inspectedFrames->root()->chromeClient().eventListenerProperties(WebEventListenerClass::MouseWheel) == WebEventListenerProperties::Blocking;
 
     gatherGraphicsLayers(rootGraphicsLayer(), layerIdToNodeIdMap, layers, haveBlockingWheelEventHandlers, scrollingLayerId);
-    return layers.release();
+    return layers;
 }
 
 void InspectorLayerTreeAgent::buildLayerIdToNodeIdMap(PaintLayer* root, LayerIdToNodeIdMap& layerIdToNodeIdMap)
@@ -233,8 +232,9 @@ void InspectorLayerTreeAgent::buildLayerIdToNodeIdMap(PaintLayer* root, LayerIdT
     if (!root->layoutObject()->isLayoutIFrame())
         return;
     FrameView* childFrameView = toFrameView(toLayoutPart(root->layoutObject())->widget());
-    if (LayoutView* childLayoutView = childFrameView->layoutView()) {
-        if (PaintLayerCompositor* childCompositor = childLayoutView->compositor())
+    LayoutViewItem childLayoutViewItem = childFrameView->layoutViewItem();
+    if (!childLayoutViewItem.isNull()) {
+        if (PaintLayerCompositor* childCompositor = childLayoutViewItem.compositor())
             buildLayerIdToNodeIdMap(childCompositor->rootLayer(), layerIdToNodeIdMap);
     }
 }
@@ -431,7 +431,7 @@ void InspectorLayerTreeAgent::profileSnapshot(ErrorString* errorString, const St
         OwnPtr<Array<double>> outRow = Array<double>::create();
         for (size_t j = 0; j < row.size(); ++j)
             outRow->addItem(row[j]);
-        (*outTimings)->addItem(outRow.release());
+        (*outTimings)->addItem(std::move(outRow));
     }
 }
 

@@ -7,13 +7,13 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "cc/base/region.h"
 #include "cc/layers/content_layer_client.h"
@@ -212,7 +212,7 @@ class COMPOSITOR_EXPORT Layer
 
   // Set the shape of this layer.
   SkRegion* alpha_shape() const { return alpha_shape_.get(); }
-  void SetAlphaShape(scoped_ptr<SkRegion> region);
+  void SetAlphaShape(std::unique_ptr<SkRegion> region);
 
   // Invert the layer.
   bool layer_inverted() const { return layer_inverted_; }
@@ -273,12 +273,22 @@ class COMPOSITOR_EXPORT Layer
 
   // Set new TextureMailbox for this layer. Note that |mailbox| may hold a
   // shared memory resource or an actual mailbox for a texture.
-  void SetTextureMailbox(const cc::TextureMailbox& mailbox,
-                         scoped_ptr<cc::SingleReleaseCallback> release_callback,
-                         gfx::Size texture_size_in_dip);
+  void SetTextureMailbox(
+      const cc::TextureMailbox& mailbox,
+      std::unique_ptr<cc::SingleReleaseCallback> release_callback,
+      gfx::Size texture_size_in_dip);
   void SetTextureSize(gfx::Size texture_size_in_dip);
   void SetTextureFlipped(bool flipped);
   bool TextureFlipped() const;
+
+  // The alpha value applied to the whole texture. The effective value of each
+  // pixel is computed as:
+  // pixel.a = pixel.a * alpha.
+  // Note: This is different from SetOpacity() as it only applies to the
+  // texture and child layers are unaffected.
+  // TODO(reveman): Remove once components/exo code is using SetShowSurface.
+  // crbug.com/610086
+  void SetTextureAlpha(float alpha);
 
   // Begins showing content from a surface with a particular id.
   void SetShowSurface(cc::SurfaceId surface_id,
@@ -318,7 +328,6 @@ class COMPOSITOR_EXPORT Layer
   // Uses damaged rectangles recorded in |damaged_region_| to invalidate the
   // |cc_layer_|.
   void SendDamagedRects();
-  void ClearDamagedRects();
 
   const cc::Region& damaged_region() const { return damaged_region_; }
 
@@ -335,7 +344,7 @@ class COMPOSITOR_EXPORT Layer
   void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip);
 
   // Requets a copy of the layer's output as a texture or bitmap.
-  void RequestCopyOfOutput(scoped_ptr<cc::CopyOutputRequest> request);
+  void RequestCopyOfOutput(std::unique_ptr<cc::CopyOutputRequest> request);
 
   // ContentLayerClient
   gfx::Rect PaintableRegion() override;
@@ -349,18 +358,13 @@ class COMPOSITOR_EXPORT Layer
   // TextureLayerClient
   bool PrepareTextureMailbox(
       cc::TextureMailbox* mailbox,
-      scoped_ptr<cc::SingleReleaseCallback>* release_callback,
+      std::unique_ptr<cc::SingleReleaseCallback>* release_callback,
       bool use_shared_memory) override;
 
   float device_scale_factor() const { return device_scale_factor_; }
 
-  // Forces a render surface to be used on this layer. This has no positive
-  // impact, and is only used for benchmarking/testing purpose.
-  void SetForceRenderSurface(bool force);
-  bool force_render_surface() const { return force_render_surface_; }
-
   // LayerClient
-  scoped_ptr<base::trace_event::ConvertableToTraceFormat> TakeDebugInfo(
+  std::unique_ptr<base::trace_event::ConvertableToTraceFormat> TakeDebugInfo(
       cc::Layer* layer) override;
 
   // Whether this layer has animations waiting to get sent to its cc::Layer.
@@ -368,6 +372,10 @@ class COMPOSITOR_EXPORT Layer
 
   // Triggers a call to SwitchToLayer.
   void SwitchCCLayerForTest();
+
+  const cc::Region& damaged_region_for_testing() const {
+    return damaged_region_;
+  }
 
  private:
   friend class LayerOwner;
@@ -436,14 +444,16 @@ class COMPOSITOR_EXPORT Layer
   // Visibility of this layer. See SetVisible/IsDrawn for more details.
   bool visible_;
 
-  bool force_render_surface_;
-
   bool fills_bounds_opaquely_;
   bool fills_bounds_completely_;
 
+  // Union of damaged rects, in layer space, that SetNeedsDisplayRect should
+  // be called on.
+  cc::Region damaged_region_;
+
   // Union of damaged rects, in layer space, to be used when compositor is ready
   // to paint the content.
-  cc::Region damaged_region_;
+  cc::Region paint_region_;
 
   int background_blur_radius_;
 
@@ -469,7 +479,7 @@ class COMPOSITOR_EXPORT Layer
   int zoom_inset_;
 
   // Shape of the window.
-  scoped_ptr<SkRegion> alpha_shape_;
+  std::unique_ptr<SkRegion> alpha_shape_;
 
   std::string name_;
 
@@ -501,7 +511,7 @@ class COMPOSITOR_EXPORT Layer
 
   // The callback to release the mailbox. This is only set after
   // SetTextureMailbox is called, before we give it to the TextureLayer.
-  scoped_ptr<cc::SingleReleaseCallback> mailbox_release_callback_;
+  std::unique_ptr<cc::SingleReleaseCallback> mailbox_release_callback_;
 
   // The size of the frame or texture in DIP, set when SetShowDelegatedContent
   // or SetTextureMailbox was called.

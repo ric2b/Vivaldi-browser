@@ -61,7 +61,6 @@ public class BrowserAccessibilityManager {
     private int mSelectionStartIndex;
     private int mSelectionEndIndex;
     protected int mAccessibilityFocusId;
-    protected boolean mVisible = true;
     private Runnable mSendWindowContentChangedRunnable;
 
     /**
@@ -141,21 +140,6 @@ public class BrowserAccessibilityManager {
      */
     public AccessibilityNodeProvider getAccessibilityNodeProvider() {
         return mAccessibilityNodeProvider;
-    }
-
-    /**
-     * Set whether the web content made accessible by this class is currently visible.
-     * Set it to false if the web view is still on the screen but it's obscured by a
-     * dialog or overlay. This will make every virtual view in the web hierarchy report
-     * that it's not visible, and not accessibility focusable.
-     *
-     * @param visible Whether the web content is currently visible and not obscured.
-     */
-    public void setVisible(boolean visible) {
-        if (visible == mVisible) return;
-
-        mVisible = visible;
-        sendWindowContentChangedOnView();
     }
 
     /**
@@ -286,7 +270,7 @@ public class BrowserAccessibilityManager {
                     selectionStart = arguments.getInt(
                             AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT);
                     selectionEnd = arguments.getInt(
-                            AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT);
+                            AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT);
                 }
                 nativeSetSelection(mNativeObj, virtualViewId, selectionStart, selectionEnd);
                 return true;
@@ -633,7 +617,7 @@ public class BrowserAccessibilityManager {
         }
 
         // Populate the minimum required fields.
-        result.setVisibleToUser(source.isVisibleToUser() && mVisible);
+        result.setVisibleToUser(source.isVisibleToUser());
         result.setEnabled(source.isEnabled());
         result.setPackageName(source.getPackageName());
         result.setClassName(source.getClassName());
@@ -784,7 +768,7 @@ public class BrowserAccessibilityManager {
         node.setPassword(password);
         node.setScrollable(scrollable);
         node.setSelected(selected);
-        node.setVisibleToUser(visibleToUser && mVisible);
+        node.setVisibleToUser(visibleToUser);
 
         node.setMovementGranularities(
                 AccessibilityNodeInfo.MOVEMENT_GRANULARITY_CHARACTER
@@ -793,7 +777,7 @@ public class BrowserAccessibilityManager {
 
         if (mAccessibilityFocusId == virtualViewId) {
             node.setAccessibilityFocused(true);
-        } else if (mVisible) {
+        } else {
             node.setAccessibilityFocused(false);
         }
     }
@@ -837,7 +821,7 @@ public class BrowserAccessibilityManager {
 
         if (mAccessibilityFocusId == virtualViewId) {
             node.addAction(AccessibilityNodeInfo.ACTION_CLEAR_ACCESSIBILITY_FOCUS);
-        } else if (mVisible) {
+        } else {
             node.addAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS);
         }
 
@@ -854,14 +838,19 @@ public class BrowserAccessibilityManager {
 
     @SuppressLint("NewApi")
     @CalledByNative
-    private void setAccessibilityNodeInfoContentDescription(
-            AccessibilityNodeInfo node, String contentDescription, boolean annotateAsLink) {
+    private void setAccessibilityNodeInfoText(
+            AccessibilityNodeInfo node, String text, boolean annotateAsLink,
+            boolean isEditableText) {
+        CharSequence charSequence = text;
         if (annotateAsLink) {
-            SpannableString spannable = new SpannableString(contentDescription);
+            SpannableString spannable = new SpannableString(text);
             spannable.setSpan(new URLSpan(""), 0, spannable.length(), 0);
-            node.setContentDescription(spannable);
+            charSequence = spannable;
+        }
+        if (isEditableText) {
+            node.setText(charSequence);
         } else {
-            node.setContentDescription(contentDescription);
+            node.setContentDescription(charSequence);
         }
     }
 
@@ -926,7 +915,7 @@ public class BrowserAccessibilityManager {
 
     @CalledByNative
     protected void setAccessibilityNodeInfoKitKatAttributes(AccessibilityNodeInfo node,
-            boolean isRoot, String roleDescription) {
+            boolean isRoot, boolean isEditableText, String roleDescription) {
         // Requires KitKat or higher.
     }
 

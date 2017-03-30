@@ -2,10 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "base/at_exit.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/i18n/icu_util.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/power_monitor/power_monitor.h"
@@ -13,11 +16,12 @@
 #include "base/run_loop.h"
 #include "build/build_config.h"
 #include "ui/base/ime/input_method_initializer.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/compositor/test/in_process_context_factory.h"
-#include "ui/gfx/screen.h"
-#include "ui/gl/gl_surface.h"
+#include "ui/display/screen.h"
+#include "ui/gl/init/gl_factory.h"
 #include "ui/views/examples/example_base.h"
 #include "ui/views/examples/examples_window.h"
 #include "ui/views/test/desktop_test_views_delegate.h"
@@ -55,11 +59,11 @@ int main(int argc, char** argv) {
   gfx::InitializeThreadedX11();
 #endif
 
-  gfx::GLSurface::InitializeOneOff();
+  gl::init::InitializeGLOneOff();
 
   // The ContextFactory must exist before any Compositors are created.
   bool context_factory_for_test = false;
-  scoped_ptr<ui::InProcessContextFactory> context_factory(
+  std::unique_ptr<ui::InProcessContextFactory> context_factory(
       new ui::InProcessContextFactory(context_factory_for_test, nullptr));
   context_factory->set_use_test_surface(false);
 
@@ -73,18 +77,19 @@ int main(int argc, char** argv) {
   CHECK(PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
   ui::ResourceBundle::InitSharedInstanceWithPakPath(ui_test_pak_path);
 
-  base::PowerMonitor power_monitor(make_scoped_ptr(
-      new base::PowerMonitorDeviceSource));
+  base::PowerMonitor power_monitor(
+      base::WrapUnique(new base::PowerMonitorDeviceSource));
 
 #if defined(OS_WIN)
     gfx::win::MaybeInitializeDirectWrite();
 #endif
 
 #if defined(USE_AURA)
-  aura::Env::CreateInstance(true);
+  std::unique_ptr<aura::Env> env = aura::Env::CreateInstance();
   aura::Env::GetInstance()->set_context_factory(context_factory.get());
 #endif
   ui::InitializeInputMethodForTesting();
+  ui::MaterialDesignController::Initialize();
 
   {
     views::DesktopTestViewsDelegate views_delegate;
@@ -92,13 +97,14 @@ int main(int argc, char** argv) {
     wm::WMState wm_state;
 #endif
 #if !defined(OS_CHROMEOS) && defined(USE_AURA)
-    scoped_ptr<gfx::Screen> desktop_screen(views::CreateDesktopScreen());
-    gfx::Screen::SetScreenInstance(desktop_screen.get());
+    std::unique_ptr<display::Screen> desktop_screen(
+        views::CreateDesktopScreen());
+    display::Screen::SetScreenInstance(desktop_screen.get());
 #endif
 
     views::examples::ShowExamplesWindow(
         views::examples::QUIT_ON_CLOSE, nullptr,
-        scoped_ptr<ScopedVector<views::examples::ExampleBase>>());
+        std::unique_ptr<ScopedVector<views::examples::ExampleBase>>());
 
     base::RunLoop().Run();
 
@@ -108,7 +114,7 @@ int main(int argc, char** argv) {
   ui::ShutdownInputMethod();
 
 #if defined(USE_AURA)
-  aura::Env::DeleteInstance();
+  env.reset();
 #endif
 
   return 0;

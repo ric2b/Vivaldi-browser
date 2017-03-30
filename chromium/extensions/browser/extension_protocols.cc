@@ -19,6 +19,7 @@
 #include "base/format_macros.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
@@ -283,7 +284,7 @@ class URLRequestExtensionJob : public net::URLRequestFileJob {
 
   scoped_refptr<ContentVerifyJob> verify_job_;
 
-  scoped_ptr<base::ElapsedTimer> request_timer_;
+  std::unique_ptr<base::ElapsedTimer> request_timer_;
 
   // The position we seeked to in the file.
   int64_t seek_position_;
@@ -577,10 +578,10 @@ net::HttpResponseHeaders* BuildHttpHeaders(
   return new net::HttpResponseHeaders(raw_headers);
 }
 
-scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
+std::unique_ptr<net::URLRequestJobFactory::ProtocolHandler>
 CreateExtensionProtocolHandler(bool is_incognito,
                                extensions::InfoMap* extension_info_map) {
-  return make_scoped_ptr(
+  return base::WrapUnique(
       new ExtensionProtocolHandler(is_incognito, extension_info_map));
 }
 

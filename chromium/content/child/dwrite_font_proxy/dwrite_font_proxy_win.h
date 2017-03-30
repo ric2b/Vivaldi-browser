@@ -71,6 +71,12 @@ class CONTENT_EXPORT DWriteFontCollectionProxy
   bool LoadFamily(UINT32 family_index,
                   IDWriteFontCollection** containing_collection);
 
+  // Gets the family at the specified index with the expected name. This can be
+  // used to avoid an IPC call when both the index and family name are known.
+  bool GetFontFamily(UINT32 family_index,
+                     const base::string16& family_name,
+                     IDWriteFontFamily** font_family);
+
   bool LoadFamilyNames(UINT32 family_index, IDWriteLocalizedStrings** strings);
 
   bool CreateFamily(UINT32 family_index);
@@ -124,6 +130,8 @@ class CONTENT_EXPORT DWriteFontFamilyProxy
 
   void SetName(const base::string16& family_name);
 
+  const base::string16& GetName();
+
   bool IsLoaded();
 
  protected:
@@ -172,7 +180,6 @@ class CONTENT_EXPORT FontFileEnumerator
 // Implements the DirectWrite font file stream interface that maps the file to
 // be loaded as a memory mapped file, and subsequently returns pointers into
 // the mapped memory block.
-// TODO(kulshin): confirm that using custom streams is actually an improvement
 class CONTENT_EXPORT FontFileStream
     : public Microsoft::WRL::RuntimeClass<
           Microsoft::WRL::RuntimeClassFlags<Microsoft::WRL::ClassicCom>,

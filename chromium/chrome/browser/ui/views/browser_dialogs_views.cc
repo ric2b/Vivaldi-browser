@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/browser_dialogs.h"
 
+#include "chrome/browser/extensions/api/chrome_device_permissions_prompt.h"
+#include "chrome/browser/extensions/extension_install_prompt.h"
 #include "chrome/browser/ui/login/login_handler.h"
 
 // This file provides definitions of desktop browser dialog-creation methods for
@@ -26,4 +28,14 @@ void BookmarkEditor::Show(gfx::NativeWindow parent_window,
                           Configuration configuration) {
   chrome::ShowBookmarkEditorViews(parent_window, profile, details,
                                   configuration);
+}
+
+// static
+ExtensionInstallPrompt::ShowDialogCallback
+ExtensionInstallPrompt::GetDefaultShowDialogCallback() {
+  return ExtensionInstallPrompt::GetViewsShowDialogCallback();
+}
+
+void ChromeDevicePermissionsPrompt::ShowDialog() {
+  ShowDialogViews();
 }

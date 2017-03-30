@@ -7,6 +7,8 @@
 
 #include "ui/touch_selection/touch_handle.h"
 
+#include <memory>
+
 #include "base/android/jni_android.h"
 #include "base/android/jni_weak_ref.h"
 #include "base/macros.h"
@@ -18,7 +20,7 @@ class ContentViewCore;
 // Touch handle drawable backed by an Android PopupWindow.
 class PopupTouchHandleDrawable : public ui::TouchHandleDrawable {
  public:
-  static scoped_ptr<PopupTouchHandleDrawable> Create(
+  static std::unique_ptr<PopupTouchHandleDrawable> Create(
       ContentViewCore* content_view_core);
   ~PopupTouchHandleDrawable() override;
 

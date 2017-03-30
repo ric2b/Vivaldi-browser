@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 /**
- * Parse a very small subset of HTML.  This ensures that insecure HTML /
+ * Parses a very small subset of HTML.  This ensures that insecure HTML /
  * javascript cannot be injected into the new tab page.
  * @param {string} s The string to parse.
  * @param {Array<string>=} opt_extraTags Optional extra allowed tags.
@@ -22,12 +22,10 @@ var parseHtmlSubset = (function() {
           value.indexOf('https://') == 0);
     },
     'target': function(node, value) {
-      // Allow a[target] but reset the value to "".
-      if (node.tagName != 'A')
-        return false;
-      node.setAttribute('target', '');
-      return true;
-    }
+      // Only allow a[target='_blank'].
+      // TODO(dbeam): are there valid use cases for target != '_blank'?
+      return node.tagName == 'A' && value == '_blank';
+    },
   };
 
   /**
@@ -35,7 +33,7 @@ var parseHtmlSubset = (function() {
    * @type {!Array<string>}
    * @const
    */
-  var allowedTags = ['A', 'B', 'STRONG'];
+  var allowedTags = ['A', 'B', 'SPAN', 'STRONG'];
 
   /** @param {...Object} var_args Objects to merge. */
   function merge(var_args) {

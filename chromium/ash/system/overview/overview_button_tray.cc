@@ -10,6 +10,7 @@
 #include "ash/shell.h"
 #include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/tray_utils.h"
+#include "ash/wm/common/shelf/wm_shelf_util.h"
 #include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/wm/overview/window_selector_controller.h"
 #include "grit/ash_resources.h"
@@ -84,11 +85,7 @@ void OverviewButtonTray::OnOverviewModeEnded() {
   SetDrawBackgroundAsActive(false);
 }
 
-bool OverviewButtonTray::ClickedOutsideBubble() {
-  // This class has no bubbles dismiss, but acknowledge that the message was
-  // handled.
-  return true;
-}
+void OverviewButtonTray::ClickedOutsideBubble() {}
 
 base::string16 OverviewButtonTray::GetAccessibleNameForTray() {
   return l10n_util::GetStringUTF16(IDS_ASH_OVERVIEW_BUTTON_ACCESSIBLE_NAME);
@@ -99,7 +96,7 @@ void OverviewButtonTray::HideBubbleWithView(
   // This class has no bubbles to hide.
 }
 
-void OverviewButtonTray::SetShelfAlignment(ShelfAlignment alignment) {
+void OverviewButtonTray::SetShelfAlignment(wm::ShelfAlignment alignment) {
   if (alignment == shelf_alignment())
     return;
 
@@ -108,7 +105,7 @@ void OverviewButtonTray::SetShelfAlignment(ShelfAlignment alignment) {
 }
 
 void OverviewButtonTray::SetIconBorderForShelfAlignment() {
-  if (IsHorizontalAlignment(shelf_alignment())) {
+  if (wm::IsHorizontalAlignment(shelf_alignment())) {
     icon_->SetBorder(views::Border::CreateEmptyBorder(
         kHorizontalShelfVerticalPadding,
         kHorizontalShelfHorizontalPadding,

@@ -16,27 +16,7 @@
         ],
         'files': [
           '../testing/test_env.py',
-        ],
-      },
-    }],
-    ['OS=="win"', {
-      'variables': {
-        'files': [
-          '<(PRODUCT_DIR)/mojo_public_test_support.dll',
-        ],
-      },
-    }],
-    ['OS=="linux"', {
-      'variables': {
-        'files': [
-          '<(PRODUCT_DIR)/lib/libmojo_public_test_support.so',
-        ],
-      },
-    }],
-    ['OS=="mac"', {
-      'variables': {
-        'files': [
-          '<(PRODUCT_DIR)/libmojo_public_test_support.dylib',
+          'public/interfaces/bindings/tests/data/validation/',
         ],
       },
     }],

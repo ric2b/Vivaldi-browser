@@ -20,7 +20,7 @@
 namespace content {
 
 // Can be used by callers to store extra data on every ResourceRequest
-// which will be incorporated into the ResourceHostMsg_Request message
+// which will be incorporated into the ResourceHostMsg_RequestResource message
 // sent by ResourceDispatcher.
 class CONTENT_EXPORT RequestExtraData
     : public NON_EXPORTED_BASE(blink::WebURLRequest::ExtraData) {
@@ -98,12 +98,6 @@ class CONTENT_EXPORT RequestExtraData
   void set_originated_from_service_worker(bool originated_from_service_worker) {
     originated_from_service_worker_ = originated_from_service_worker;
   }
-  LoFiState lofi_state() const {
-    return lofi_state_;
-  }
-  void set_lofi_state(LoFiState lofi_state) {
-    lofi_state_ = lofi_state;
-  }
   // |custom_user_agent| is used to communicate an overriding custom user agent
   // to |RenderViewImpl::willSendRequest()|; set to a null string to indicate no
   // override and an empty string to indicate that there should be no user
@@ -149,7 +143,6 @@ class CONTENT_EXPORT RequestExtraData
   blink::WebString custom_user_agent_;
   blink::WebString requested_with_;
   std::unique_ptr<StreamOverrideParameters> stream_override_;
-  LoFiState lofi_state_;
 
   DISALLOW_COPY_AND_ASSIGN(RequestExtraData);
 };

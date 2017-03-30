@@ -1,4 +1,3 @@
-<link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
@@ -44,7 +43,7 @@
         section="search">
       <neon-animatable id="main">
         <div class="settings-box first">
-          <p class="start" i18n-content="searchExplanation"></p>
+          <p class="start">$i18n{searchExplanation}</p>
           <paper-dropdown-menu>
             <paper-listbox class="dropdown-content"
                 selected="[[getSelectedSearchEngineIndex_(searchEngines_)]]"
@@ -56,13 +55,14 @@
           </paper-dropdown-menu>
         </div>
         <div class="settings-box">
-          <paper-button i18n-content="searchEnginesManage"
-              on-tap="onManageSearchEnginesTap_" class="primary-button">
+          <paper-button on-tap="onManageSearchEnginesTap_"
+              class="primary-button">
+            $i18n{searchEnginesManage}
           </paper-button>
         </div>
       </neon-animatable>
       <template is="dom-if" name="search-engines">
-        <settings-subpage page-title="[[i18n('searchEnginesManage')]]">
+        <settings-subpage page-title="$i18n{searchEnginesManage}">
           <settings-search-engines-page></settings-search-engines-page>
         </settings-subpage>
       </template>

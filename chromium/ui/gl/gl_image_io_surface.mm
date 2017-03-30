@@ -46,6 +46,7 @@ bool ValidFormat(BufferFormat format) {
   switch (format) {
     case BufferFormat::R_8:
     case BufferFormat::BGRA_8888:
+    case BufferFormat::BGRX_8888:
     case BufferFormat::RGBA_8888:
     case BufferFormat::UYVY_422:
     case BufferFormat::YUV_420_BIPLANAR:
@@ -55,9 +56,9 @@ bool ValidFormat(BufferFormat format) {
     case BufferFormat::DXT1:
     case BufferFormat::DXT5:
     case BufferFormat::ETC1:
+    case BufferFormat::BGR_565:
     case BufferFormat::RGBA_4444:
     case BufferFormat::RGBX_8888:
-    case BufferFormat::BGRX_8888:
     case BufferFormat::YUV_420:
       return false;
   }
@@ -71,6 +72,7 @@ GLenum TextureFormat(BufferFormat format) {
     case BufferFormat::R_8:
       return GL_RED;
     case BufferFormat::BGRA_8888:
+    case BufferFormat::BGRX_8888:
     case BufferFormat::RGBA_8888:
       return GL_RGBA;
     case BufferFormat::UYVY_422:
@@ -82,9 +84,9 @@ GLenum TextureFormat(BufferFormat format) {
     case BufferFormat::DXT1:
     case BufferFormat::DXT5:
     case BufferFormat::ETC1:
+    case BufferFormat::BGR_565:
     case BufferFormat::RGBA_4444:
     case BufferFormat::RGBX_8888:
-    case BufferFormat::BGRX_8888:
     case BufferFormat::YUV_420:
       NOTREACHED();
       return 0;
@@ -99,6 +101,7 @@ GLenum DataFormat(BufferFormat format) {
     case BufferFormat::R_8:
       return GL_RED;
     case BufferFormat::BGRA_8888:
+    case BufferFormat::BGRX_8888:
     case BufferFormat::RGBA_8888:
       return GL_BGRA;
     case BufferFormat::UYVY_422:
@@ -108,9 +111,9 @@ GLenum DataFormat(BufferFormat format) {
     case BufferFormat::DXT1:
     case BufferFormat::DXT5:
     case BufferFormat::ETC1:
+    case BufferFormat::BGR_565:
     case BufferFormat::RGBA_4444:
     case BufferFormat::RGBX_8888:
-    case BufferFormat::BGRX_8888:
     case BufferFormat::YUV_420:
     case BufferFormat::YUV_420_BIPLANAR:
       NOTREACHED();
@@ -126,6 +129,7 @@ GLenum DataType(BufferFormat format) {
     case BufferFormat::R_8:
       return GL_UNSIGNED_BYTE;
     case BufferFormat::BGRA_8888:
+    case BufferFormat::BGRX_8888:
     case BufferFormat::RGBA_8888:
       return GL_UNSIGNED_INT_8_8_8_8_REV;
     case BufferFormat::UYVY_422:
@@ -136,9 +140,9 @@ GLenum DataType(BufferFormat format) {
     case BufferFormat::DXT1:
     case BufferFormat::DXT5:
     case BufferFormat::ETC1:
+    case BufferFormat::BGR_565:
     case BufferFormat::RGBA_4444:
     case BufferFormat::RGBX_8888:
-    case BufferFormat::BGRX_8888:
     case BufferFormat::YUV_420:
     case BufferFormat::YUV_420_BIPLANAR:
       NOTREACHED();
@@ -149,12 +153,22 @@ GLenum DataType(BufferFormat format) {
   return 0;
 }
 
+// When an IOSurface is bound to a texture with internalformat "GL_RGB", many
+// OpenGL operations are broken. Therefore, never allow an IOSurface to be bound
+// with GL_RGB. https://crbug.com/595948.
+GLenum ConvertRequestedInternalFormat(GLenum internalformat) {
+  if (internalformat == GL_RGB)
+    return GL_RGBA;
+  return internalformat;
+}
+
 }  // namespace
 
 GLImageIOSurface::GLImageIOSurface(const gfx::Size& size,
                                    unsigned internalformat)
     : size_(size),
-      internalformat_(internalformat),
+      internalformat_(ConvertRequestedInternalFormat(internalformat)),
+      client_internalformat_(internalformat),
       format_(BufferFormat::RGBA_8888) {}
 
 GLImageIOSurface::~GLImageIOSurface() {
@@ -240,7 +254,8 @@ bool GLImageIOSurface::BindTexImage(unsigned target) {
                              size_.width(), size_.height(), DataFormat(format_),
                              DataType(format_), io_surface_.get(), 0);
   if (cgl_error != kCGLNoError) {
-    LOG(ERROR) << "Error in CGLTexImageIOSurface2D";
+    LOG(ERROR) << "Error in CGLTexImageIOSurface2D: "
+               << CGLErrorString(cgl_error);
     return false;
   }
 
@@ -338,6 +353,10 @@ void GLImageIOSurface::OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,
       GetGenericSharedMemoryGUIDForTracing(process_tracing_id, io_surface_id_);
   pmd->CreateSharedGlobalAllocatorDump(guid);
   pmd->AddOwnershipEdge(dump->guid(), guid);
+}
+
+bool GLImageIOSurface::EmulatingRGB() const {
+  return client_internalformat_ == GL_RGB;
 }
 
 base::ScopedCFTypeRef<IOSurfaceRef> GLImageIOSurface::io_surface() {

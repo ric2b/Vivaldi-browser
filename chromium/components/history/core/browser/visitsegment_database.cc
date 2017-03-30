@@ -12,11 +12,11 @@
 #include <string>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/stl_util.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
-#include "base/strings/utf_string_conversions.h"
 #include "components/history/core/browser/page_usage_data.h"
 #include "sql/statement.h"
 #include "sql/transaction.h"
@@ -201,10 +201,11 @@ bool VisitSegmentDatabase::IncreaseSegmentVisitCount(SegmentID segment_id,
   }
 }
 
-void VisitSegmentDatabase::QuerySegmentUsage(
+std::vector<std::unique_ptr<PageUsageData>>
+VisitSegmentDatabase::QuerySegmentUsage(
     base::Time from_time,
     int max_result_count,
-    std::vector<PageUsageData*>* results) {
+    const base::Callback<bool(const GURL&)>& url_filter) {
   // This function gathers the highest-ranked segments in two queries.
   // The first gathers scores for all segments.
   // The second gathers segment data (url, title, etc.) for the highest-ranked
@@ -216,26 +217,19 @@ void VisitSegmentDatabase::QuerySegmentUsage(
       "FROM segment_usage WHERE time_slot >= ? "
       "ORDER BY segment_id"));
   if (!statement.is_valid())
-    return;
+    return std::vector<std::unique_ptr<PageUsageData>>();
 
   base::Time ts = from_time.LocalMidnight();
   statement.BindInt64(0, ts.ToInternalValue());
 
+  std::vector<std::unique_ptr<PageUsageData>> segments;
   base::Time now = base::Time::Now();
-  SegmentID last_segment_id = 0;
-  PageUsageData* pud = NULL;
-  float score = 0;
+  SegmentID previous_segment_id = 0;
   while (statement.Step()) {
     SegmentID segment_id = statement.ColumnInt64(0);
-    if (segment_id != last_segment_id) {
-      if (pud) {
-        pud->SetScore(score);
-        results->push_back(pud);
-      }
-
-      pud = new PageUsageData(segment_id);
-      score = 0;
-      last_segment_id = segment_id;
+    if (segment_id != previous_segment_id) {
+      segments.push_back(base::WrapUnique(new PageUsageData(segment_id)));
+      previous_segment_id = segment_id;
     }
 
     base::Time timeslot =
@@ -251,22 +245,16 @@ void VisitSegmentDatabase::QuerySegmentUsage(
     // Today gets 3x, a week ago 2x, three weeks ago 1.5x, falling off to 1x
     // at the limit of how far we reach into the past.
     float recency_boost = 1.0f + (2.0f * (1.0f / (1.0f + days_ago/7.0f)));
-    score += recency_boost * day_visits_score;
+    float score = recency_boost * day_visits_score;
+    segments.back()->SetScore(segments.back()->GetScore() + score);
   }
 
-  if (pud) {
-    pud->SetScore(score);
-    results->push_back(pud);
-  }
-
-  // Limit to the top kResultCount results.
-  std::sort(results->begin(), results->end(), PageUsageData::Predicate);
-  DCHECK_GE(max_result_count, 0);
-  if (results->size() > static_cast<size_t>(max_result_count)) {
-    STLDeleteContainerPointers(results->begin() + max_result_count,
-                               results->end());
-    results->resize(max_result_count);
-  }
+  // Order by descending scores.
+  std::sort(segments.begin(), segments.end(),
+            [](const std::unique_ptr<PageUsageData>& lhs,
+               const std::unique_ptr<PageUsageData>& rhs) {
+              return lhs->GetScore() > rhs->GetScore();
+            });
 
   // Now fetch the details about the entries we care about.
   sql::Statement statement2(GetDB().GetCachedStatement(SQL_FROM_HERE,
@@ -275,17 +263,26 @@ void VisitSegmentDatabase::QuerySegmentUsage(
       "WHERE segments.id = ?"));
 
   if (!statement2.is_valid())
-    return;
+    return std::vector<std::unique_ptr<PageUsageData>>();
 
-  for (size_t i = 0; i < results->size(); ++i) {
-    PageUsageData* pud = (*results)[i];
+  std::vector<std::unique_ptr<PageUsageData>> results;
+  DCHECK_GE(max_result_count, 0);
+  for (std::unique_ptr<PageUsageData>& pud : segments) {
     statement2.BindInt64(0, pud->GetID());
     if (statement2.Step()) {
-      pud->SetURL(GURL(statement2.ColumnString(0)));
-      pud->SetTitle(statement2.ColumnString16(1));
+      GURL url(statement2.ColumnString(0));
+      if (url_filter.is_null() || url_filter.Run(url)) {
+        pud->SetURL(url);
+        pud->SetTitle(statement2.ColumnString16(1));
+        results.push_back(std::move(pud));
+        if (results.size() >= static_cast<size_t>(max_result_count))
+          break;
+      }
     }
     statement2.Reset(true);
   }
+
+  return results;
 }
 
 bool VisitSegmentDatabase::DeleteSegmentData(base::Time older_than) {

@@ -29,11 +29,11 @@ namespace net {
 
 namespace {
 
-scoped_ptr<base::Value> NetLogQuicPushStreamCallback(
+std::unique_ptr<base::Value> NetLogQuicPushStreamCallback(
     QuicStreamId stream_id,
     const GURL* url,
     NetLogCaptureMode capture_mode) {
-  scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetInteger("stream_id", stream_id);
   dict->SetString("url", url->spec());
   return std::move(dict);
@@ -529,7 +529,8 @@ void QuicHttpStream::OnDataAvailable() {
 }
 
 void QuicHttpStream::OnClose(QuicErrorCode error) {
-  if (error != QUIC_NO_ERROR) {
+  if (error != QUIC_NO_ERROR ||
+      stream_->stream_error() != QUIC_STREAM_NO_ERROR) {
     response_status_ = was_handshake_confirmed_ ? ERR_QUIC_PROTOCOL_ERROR
                                                 : ERR_QUIC_HANDSHAKE_FAILED;
   } else if (!response_headers_received_) {

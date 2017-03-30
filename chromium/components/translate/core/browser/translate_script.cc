@@ -13,7 +13,7 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/translate/core/browser/translate_url_fetcher.h"
 #include "components/translate/core/browser/translate_url_util.h"
@@ -124,7 +124,7 @@ void TranslateScript::OnScriptFetchComplete(
     int id, bool success, const std::string& data) {
   DCHECK_EQ(kFetcherId, id);
 
-  scoped_ptr<const TranslateURLFetcher> delete_ptr(fetcher_.release());
+  std::unique_ptr<const TranslateURLFetcher> delete_ptr(fetcher_.release());
 
   if (success) {
     DCHECK(data_.empty());

@@ -9,7 +9,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/child/child_process.h"
 #include "content/renderer/media/media_stream_video_track.h"
 #include "content/renderer/media/mock_media_stream_video_sink.h"
@@ -53,7 +53,7 @@ class MediaStreamRemoteVideoSourceTest
     webkit_source_.initialize(base::UTF8ToUTF16("dummy_source_id"),
                               blink::WebMediaStreamSource::TypeVideo,
                               base::UTF8ToUTF16("dummy_source_name"),
-                              true /* remote */ , true /* readonly */);
+                              true /* remote */);
     webkit_source_.setExtraData(remote_source_);
   }
 
@@ -123,7 +123,7 @@ TEST_F(MediaStreamRemoteVideoSourceTest, StartTrack) {
   EXPECT_EQ(1, NumberOfSuccessConstraintsCallbacks());
 
   MockMediaStreamVideoSink sink;
-  track->AddSink(&sink, sink.GetDeliverFrameCB());
+  track->AddSink(&sink, sink.GetDeliverFrameCB(), false);
   base::RunLoop run_loop;
   base::Closure quit_closure = run_loop.QuitClosure();
   EXPECT_CALL(sink, OnVideoFrame()).WillOnce(
@@ -141,7 +141,7 @@ TEST_F(MediaStreamRemoteVideoSourceTest, RemoteTrackStop) {
   std::unique_ptr<MediaStreamVideoTrack> track(CreateTrack());
 
   MockMediaStreamVideoSink sink;
-  track->AddSink(&sink, sink.GetDeliverFrameCB());
+  track->AddSink(&sink, sink.GetDeliverFrameCB(), false);
   EXPECT_EQ(blink::WebMediaStreamSource::ReadyStateLive, sink.state());
   EXPECT_EQ(blink::WebMediaStreamSource::ReadyStateLive,
             webkit_source().getReadyState());

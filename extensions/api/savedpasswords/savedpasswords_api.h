@@ -26,7 +26,7 @@ class SavedpasswordsGetListFunction :
   std::string languages_;
 
   vivaldi::savedpasswords::SavedPasswordItem*
-  GetSavedPasswordItem(const scoped_ptr<autofill::PasswordForm> &form, int id);
+  GetSavedPasswordItem(const std::unique_ptr<autofill::PasswordForm> &form, int id);
 
  protected:
    ~SavedpasswordsGetListFunction() override;

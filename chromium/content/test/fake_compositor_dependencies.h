@@ -22,6 +22,7 @@ class FakeCompositorDependencies : public CompositorDependencies {
   // CompositorDependencies implementation.
   bool IsGpuRasterizationForced() override;
   bool IsGpuRasterizationEnabled() override;
+  bool IsAsyncWorkerContextEnabled() override;
   int GetGpuRasterizationMSAASampleCount() override;
   bool IsLcdTextEnabled() override;
   bool IsDistanceFieldTextEnabled() override;
@@ -37,8 +38,7 @@ class FakeCompositorDependencies : public CompositorDependencies {
   cc::SharedBitmapManager* GetSharedBitmapManager() override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
   scheduler::RendererScheduler* GetRendererScheduler() override;
-  cc::ContextProvider* GetSharedMainThreadContextProvider() override;
-  scoped_ptr<cc::BeginFrameSource> CreateExternalBeginFrameSource(
+  std::unique_ptr<cc::BeginFrameSource> CreateExternalBeginFrameSource(
       int routing_id) override;
   cc::ImageSerializationProcessor* GetImageSerializationProcessor() override;
   cc::TaskGraphRunner* GetTaskGraphRunner() override;

@@ -36,11 +36,11 @@ namespace blink {
 
 class IdTargetObserver;
 
-class IdTargetObserverRegistry final : public GarbageCollectedFinalized<IdTargetObserverRegistry> {
+class IdTargetObserverRegistry final : public GarbageCollected<IdTargetObserverRegistry> {
     WTF_MAKE_NONCOPYABLE(IdTargetObserverRegistry);
     friend class IdTargetObserver;
 public:
-    static RawPtr<IdTargetObserverRegistry> create();
+    static IdTargetObserverRegistry* create();
     DECLARE_TRACE();
     void notifyObservers(const AtomicString& id);
     bool hasObservers(const AtomicString& id) const;

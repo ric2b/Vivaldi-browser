@@ -36,9 +36,7 @@
 #include "core/css/CSSValue.h"
 #include "core/css/parser/CSSParserTokenRange.h"
 #include "platform/CalculationValue.h"
-#include "wtf/PassOwnPtr.h"
-#include "wtf/RefCounted.h"
-#include "wtf/RefPtr.h"
+#include "wtf/Forward.h"
 
 namespace blink {
 
@@ -75,7 +73,7 @@ public:
     virtual bool isZero() const = 0;
     virtual double doubleValue() const = 0;
     virtual double computeLengthPx(const CSSToLengthConversionData&) const = 0;
-    virtual void accumulateLengthArray(CSSLengthArray&, CSSLengthTypeArray&, double multiplier) const = 0;
+    virtual void accumulateLengthArray(CSSLengthArray&, double multiplier) const = 0;
     virtual void accumulatePixelsAndPercent(const CSSToLengthConversionData&, PixelsAndPercent&, float multiplier = 1) const = 0;
     virtual String customCSSText() const = 0;
     virtual bool equals(const CSSCalcExpressionNode& other) const { return m_category == other.m_category && m_isInteger == other.m_isInteger; }
@@ -120,7 +118,7 @@ public:
     bool isNegative() const { return m_expression->doubleValue() < 0; }
     ValueRange permittedValueRange() { return m_nonNegative ? ValueRangeNonNegative : ValueRangeAll; }
     double computeLengthPx(const CSSToLengthConversionData&) const;
-    void accumulateLengthArray(CSSLengthArray& lengthArray, CSSLengthTypeArray& lengthTypeArray, double multiplier) const { m_expression->accumulateLengthArray(lengthArray, lengthTypeArray, multiplier); }
+    void accumulateLengthArray(CSSLengthArray& lengthArray, double multiplier) const { m_expression->accumulateLengthArray(lengthArray, multiplier); }
     CSSCalcExpressionNode* expressionNode() const { return m_expression.get(); }
 
     String customCSSText() const;

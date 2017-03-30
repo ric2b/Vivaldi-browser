@@ -7,10 +7,10 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "gpu/command_buffer/client/gles2_implementation.h"
 #include "mojo/gles2/command_buffer_client_impl.h"
 #include "mojo/public/c/gles2/gles2.h"
@@ -27,14 +27,13 @@ class GLES2Implementation;
 
 namespace gles2 {
 
-class GLES2Context : public CommandBufferDelegate,
-                     public MojoGLES2ContextPrivate {
+class GLES2Context : public MojoGLES2ContextPrivate {
  public:
   explicit GLES2Context(const std::vector<int32_t>& attribs,
                         mojo::ScopedMessagePipeHandle command_buffer_handle,
                         MojoGLES2ContextLost lost_callback,
                         void* closure);
-  ~GLES2Context() override;
+  virtual ~GLES2Context();
   bool Initialize();
 
   gpu::gles2::GLES2Interface* interface() const {
@@ -43,12 +42,12 @@ class GLES2Context : public CommandBufferDelegate,
   gpu::ContextSupport* context_support() const { return implementation_.get(); }
 
  private:
-  void ContextLost() override;
+  void OnLostContext();
 
   CommandBufferClientImpl command_buffer_;
-  scoped_ptr<gpu::gles2::GLES2CmdHelper> gles2_helper_;
-  scoped_ptr<gpu::TransferBuffer> transfer_buffer_;
-  scoped_ptr<gpu::gles2::GLES2Implementation> implementation_;
+  std::unique_ptr<gpu::gles2::GLES2CmdHelper> gles2_helper_;
+  std::unique_ptr<gpu::TransferBuffer> transfer_buffer_;
+  std::unique_ptr<gpu::gles2::GLES2Implementation> implementation_;
   MojoGLES2ContextLost lost_callback_;
   void* closure_;
 

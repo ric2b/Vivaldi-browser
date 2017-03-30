@@ -4,10 +4,10 @@
 
 #include "skia/ext/benchmarking_canvas.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "third_party/skia/include/core/SkColorFilter.h"
@@ -18,7 +18,6 @@
 #include "third_party/skia/include/core/SkRRect.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "third_party/skia/include/core/SkString.h"
-#include "third_party/skia/include/core/SkTLazy.h"
 #include "third_party/skia/include/core/SkTextBlob.h"
 #include "third_party/skia/include/core/SkXfermode.h"
 
@@ -48,22 +47,23 @@ private:
 };
 
 WARN_UNUSED_RESULT
-scoped_ptr<base::Value> AsValue(bool b) {
-  scoped_ptr<base::FundamentalValue> val(new base::FundamentalValue(b));
+std::unique_ptr<base::Value> AsValue(bool b) {
+  std::unique_ptr<base::FundamentalValue> val(new base::FundamentalValue(b));
 
   return std::move(val);
 }
 
 WARN_UNUSED_RESULT
-scoped_ptr<base::Value> AsValue(SkScalar scalar) {
-  scoped_ptr<base::FundamentalValue> val(new base::FundamentalValue(scalar));
+std::unique_ptr<base::Value> AsValue(SkScalar scalar) {
+  std::unique_ptr<base::FundamentalValue> val(
+      new base::FundamentalValue(scalar));
 
   return std::move(val);
 }
 
 WARN_UNUSED_RESULT
-scoped_ptr<base::Value> AsValue(const SkSize& size) {
-  scoped_ptr<base::DictionaryValue> val(new base::DictionaryValue());
+std::unique_ptr<base::Value> AsValue(const SkSize& size) {
+  std::unique_ptr<base::DictionaryValue> val(new base::DictionaryValue());
   val->Set("width",  AsValue(size.width()));
   val->Set("height", AsValue(size.height()));
 
@@ -71,8 +71,8 @@ scoped_ptr<base::Value> AsValue(const SkSize& size) {
 }
 
 WARN_UNUSED_RESULT
-scoped_ptr<base::Value> AsValue(const SkPoint& point) {
-  scoped_ptr<base::DictionaryValue> val(new base::DictionaryValue());
+std::unique_ptr<base::Value> AsValue(const SkPoint& point) {
+  std::unique_ptr<base::DictionaryValue> val(new base::DictionaryValue());
   val->Set("x", AsValue(point.x()));
   val->Set("y", AsValue(point.y()));
 
@@ -80,8 +80,8 @@ scoped_ptr<base::Value> AsValue(const SkPoint& point) {
 }
 
 WARN_UNUSED_RESULT
-scoped_ptr<base::Value> AsValue(const SkRect& rect) {
-  scoped_ptr<base::DictionaryValue> val(new base::DictionaryValue());
+std::unique_ptr<base::Value> AsValue(const SkRect& rect) {
+  std::unique_ptr<base::DictionaryValue> val(new base::DictionaryValue());
   val->Set("left", AsValue(rect.fLeft));
   val->Set("top", AsValue(rect.fTop));
   val->Set("right", AsValue(rect.fRight));
@@ -91,14 +91,14 @@ scoped_ptr<base::Value> AsValue(const SkRect& rect) {
 }
 
 WARN_UNUSED_RESULT
-scoped_ptr<base::Value> AsValue(const SkRRect& rrect) {
-  scoped_ptr<base::DictionaryValue> radii_val(new base::DictionaryValue());
+std::unique_ptr<base::Value> AsValue(const SkRRect& rrect) {
+  std::unique_ptr<base::DictionaryValue> radii_val(new base::DictionaryValue());
   radii_val->Set("upper-left", AsValue(rrect.radii(SkRRect::kUpperLeft_Corner)));
   radii_val->Set("upper-right", AsValue(rrect.radii(SkRRect::kUpperRight_Corner)));
   radii_val->Set("lower-right", AsValue(rrect.radii(SkRRect::kLowerRight_Corner)));
   radii_val->Set("lower-left", AsValue(rrect.radii(SkRRect::kLowerLeft_Corner)));
 
-  scoped_ptr<base::DictionaryValue> val(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> val(new base::DictionaryValue());
   val->Set("rect", AsValue(rrect.rect()));
   val->Set("radii", std::move(radii_val));
 
@@ -106,8 +106,8 @@ scoped_ptr<base::Value> AsValue(const SkRRect& rrect) {
 }
 
 WARN_UNUSED_RESULT
-scoped_ptr<base::Value> AsValue(const SkMatrix& matrix) {
-  scoped_ptr<base::ListValue> val(new base::ListValue());
+std::unique_ptr<base::Value> AsValue(const SkMatrix& matrix) {
+  std::unique_ptr<base::ListValue> val(new base::ListValue());
   for (int i = 0; i < 9; ++i)
     val->Append(AsValue(matrix[i]).release()); // no scoped_ptr-aware Append() variant
 
@@ -115,8 +115,8 @@ scoped_ptr<base::Value> AsValue(const SkMatrix& matrix) {
 }
 
 WARN_UNUSED_RESULT
-scoped_ptr<base::Value> AsValue(SkColor color) {
-  scoped_ptr<base::DictionaryValue> val(new base::DictionaryValue());
+std::unique_ptr<base::Value> AsValue(SkColor color) {
+  std::unique_ptr<base::DictionaryValue> val(new base::DictionaryValue());
   val->SetInteger("a", SkColorGetA(color));
   val->SetInteger("r", SkColorGetR(color));
   val->SetInteger("g", SkColorGetG(color));
@@ -126,36 +126,37 @@ scoped_ptr<base::Value> AsValue(SkColor color) {
 }
 
 WARN_UNUSED_RESULT
-scoped_ptr<base::Value> AsValue(SkXfermode::Mode mode) {
-  scoped_ptr<base::StringValue> val(
+std::unique_ptr<base::Value> AsValue(SkXfermode::Mode mode) {
+  std::unique_ptr<base::StringValue> val(
       new base::StringValue(SkXfermode::ModeName(mode)));
 
   return std::move(val);
 }
 
 WARN_UNUSED_RESULT
-scoped_ptr<base::Value> AsValue(SkCanvas::PointMode mode) {
+std::unique_ptr<base::Value> AsValue(SkCanvas::PointMode mode) {
   static const char* gModeStrings[] = { "Points", "Lines", "Polygon" };
   DCHECK_LT(static_cast<size_t>(mode), SK_ARRAY_COUNT(gModeStrings));
 
-  scoped_ptr<base::StringValue> val(new base::StringValue(gModeStrings[mode]));
+  std::unique_ptr<base::StringValue> val(
+      new base::StringValue(gModeStrings[mode]));
 
   return std::move(val);
 }
 
 WARN_UNUSED_RESULT
-scoped_ptr<base::Value> AsValue(const SkXfermode& xfermode) {
+std::unique_ptr<base::Value> AsValue(const SkXfermode& xfermode) {
   SkXfermode::Mode mode;
   if (xfermode.asMode(&mode))
     return AsValue(mode);
 
-  scoped_ptr<base::StringValue> val(new base::StringValue("unknown"));
+  std::unique_ptr<base::StringValue> val(new base::StringValue("unknown"));
   return std::move(val);
 }
 
 WARN_UNUSED_RESULT
-scoped_ptr<base::Value> AsValue(const SkColorFilter& filter) {
-  scoped_ptr<base::DictionaryValue> val(new base::DictionaryValue());
+std::unique_ptr<base::Value> AsValue(const SkColorFilter& filter) {
+  std::unique_ptr<base::DictionaryValue> val(new base::DictionaryValue());
 
   if (unsigned flags = filter.getFlags()) {
     FlagsBuilder builder('|');
@@ -167,7 +168,7 @@ scoped_ptr<base::Value> AsValue(const SkColorFilter& filter) {
 
   SkScalar color_matrix[20];
   if (filter.asColorMatrix(color_matrix)) {
-    scoped_ptr<base::ListValue> color_matrix_val(new base::ListValue());
+    std::unique_ptr<base::ListValue> color_matrix_val(new base::ListValue());
     for (unsigned i = 0; i < 20; ++i)
       color_matrix_val->Append(AsValue(color_matrix[i]).release());
 
@@ -177,7 +178,7 @@ scoped_ptr<base::Value> AsValue(const SkColorFilter& filter) {
   SkColor color;
   SkXfermode::Mode mode;
   if (filter.asColorMode(&color, &mode)) {
-    scoped_ptr<base::DictionaryValue> color_mode_val(
+    std::unique_ptr<base::DictionaryValue> color_mode_val(
         new base::DictionaryValue());
     color_mode_val->Set("color", AsValue(color));
     color_mode_val->Set("mode", AsValue(mode));
@@ -186,7 +187,7 @@ scoped_ptr<base::Value> AsValue(const SkColorFilter& filter) {
   }
 
   if (filter.asComponentTable(nullptr)) {
-    scoped_ptr<base::DictionaryValue> component_table_val(
+    std::unique_ptr<base::DictionaryValue> component_table_val(
         new base::DictionaryValue());
     // use this as a marker for now
     val->Set("component_table", std::move(component_table_val));
@@ -196,8 +197,8 @@ scoped_ptr<base::Value> AsValue(const SkColorFilter& filter) {
 }
 
 WARN_UNUSED_RESULT
-scoped_ptr<base::Value> AsValue(const SkImageFilter& filter) {
-  scoped_ptr<base::DictionaryValue> val(new base::DictionaryValue());
+std::unique_ptr<base::Value> AsValue(const SkImageFilter& filter) {
+  std::unique_ptr<base::DictionaryValue> val(new base::DictionaryValue());
   val->SetInteger("inputs", filter.countInputs());
 
   SkColorFilter* color_filter;
@@ -210,8 +211,8 @@ scoped_ptr<base::Value> AsValue(const SkImageFilter& filter) {
 }
 
 WARN_UNUSED_RESULT
-scoped_ptr<base::Value> AsValue(const SkPaint& paint) {
-  scoped_ptr<base::DictionaryValue> val(new base::DictionaryValue());
+std::unique_ptr<base::Value> AsValue(const SkPaint& paint) {
+  std::unique_ptr<base::DictionaryValue> val(new base::DictionaryValue());
   SkPaint default_paint;
 
   if (paint.getColor() != default_paint.getColor())
@@ -275,20 +276,21 @@ scoped_ptr<base::Value> AsValue(const SkPaint& paint) {
 }
 
 WARN_UNUSED_RESULT
-scoped_ptr<base::Value> SaveLayerFlagsAsValue(SkCanvas::SaveLayerFlags flags) {
+std::unique_ptr<base::Value> SaveLayerFlagsAsValue(
+    SkCanvas::SaveLayerFlags flags) {
   FlagsBuilder builder('|');
   builder.addFlag(flags & SkCanvas::kIsOpaque_SaveLayerFlag,
                   "kIsOpaque");
   builder.addFlag(flags & SkCanvas::kPreserveLCDText_SaveLayerFlag,
                   "kPreserveLCDText");
 
-  scoped_ptr<base::StringValue> val(new base::StringValue(builder.str()));
+  std::unique_ptr<base::StringValue> val(new base::StringValue(builder.str()));
 
   return std::move(val);
 }
 
 WARN_UNUSED_RESULT
-scoped_ptr<base::Value> AsValue(SkRegion::Op op) {
+std::unique_ptr<base::Value> AsValue(SkRegion::Op op) {
   static const char* gOpStrings[] = { "Difference",
                                       "Intersect",
                                       "Union",
@@ -297,45 +299,45 @@ scoped_ptr<base::Value> AsValue(SkRegion::Op op) {
                                       "Replace"
                                     };
   DCHECK_LT(static_cast<size_t>(op), SK_ARRAY_COUNT(gOpStrings));
-  scoped_ptr<base::StringValue> val(new base::StringValue(gOpStrings[op]));
+  std::unique_ptr<base::StringValue> val(new base::StringValue(gOpStrings[op]));
   return std::move(val);
 }
 
 WARN_UNUSED_RESULT
-scoped_ptr<base::Value> AsValue(const SkRegion& region) {
-  scoped_ptr<base::DictionaryValue> val(new base::DictionaryValue());
+std::unique_ptr<base::Value> AsValue(const SkRegion& region) {
+  std::unique_ptr<base::DictionaryValue> val(new base::DictionaryValue());
   val->Set("bounds", AsValue(SkRect::Make(region.getBounds())));
 
   return std::move(val);
 }
 
 WARN_UNUSED_RESULT
-scoped_ptr<base::Value> AsValue(const SkBitmap& bitmap) {
-  scoped_ptr<base::DictionaryValue> val(new base::DictionaryValue());
+std::unique_ptr<base::Value> AsValue(const SkBitmap& bitmap) {
+  std::unique_ptr<base::DictionaryValue> val(new base::DictionaryValue());
   val->Set("size", AsValue(SkSize::Make(bitmap.width(), bitmap.height())));
 
   return std::move(val);
 }
 
 WARN_UNUSED_RESULT
-scoped_ptr<base::Value> AsValue(const SkImage& image) {
-  scoped_ptr<base::DictionaryValue> val(new base::DictionaryValue());
+std::unique_ptr<base::Value> AsValue(const SkImage& image) {
+  std::unique_ptr<base::DictionaryValue> val(new base::DictionaryValue());
   val->Set("size", AsValue(SkSize::Make(image.width(), image.height())));
 
   return std::move(val);
 }
 
 WARN_UNUSED_RESULT
-scoped_ptr<base::Value> AsValue(const SkTextBlob& blob) {
-  scoped_ptr<base::DictionaryValue> val(new base::DictionaryValue());
+std::unique_ptr<base::Value> AsValue(const SkTextBlob& blob) {
+  std::unique_ptr<base::DictionaryValue> val(new base::DictionaryValue());
   val->Set("bounds", AsValue(blob.bounds()));
 
   return std::move(val);
 }
 
 WARN_UNUSED_RESULT
-scoped_ptr<base::Value> AsValue(const SkPath& path) {
-  scoped_ptr<base::DictionaryValue> val(new base::DictionaryValue());
+std::unique_ptr<base::Value> AsValue(const SkPath& path) {
+  std::unique_ptr<base::DictionaryValue> val(new base::DictionaryValue());
 
   static const char* gFillStrings[] =
       { "winding", "even-odd", "inverse-winding", "inverse-even-odd" };
@@ -365,7 +367,7 @@ scoped_ptr<base::Value> AsValue(const SkPath& path) {
       SK_ARRAY_COUNT(gVerbStrings) == SK_ARRAY_COUNT(gPtOffsetPerVerb),
       "gPtOffsetPerVerb size mismatch");
 
-  scoped_ptr<base::ListValue> verbs_val(new base::ListValue());
+  std::unique_ptr<base::ListValue> verbs_val(new base::ListValue());
   SkPath::Iter iter(const_cast<SkPath&>(path), false);
   SkPoint points[4];
 
@@ -373,8 +375,9 @@ scoped_ptr<base::Value> AsValue(const SkPath& path) {
       verb != SkPath::kDone_Verb; verb = iter.next(points, false)) {
       DCHECK_LT(static_cast<size_t>(verb), SK_ARRAY_COUNT(gVerbStrings));
 
-      scoped_ptr<base::DictionaryValue> verb_val(new base::DictionaryValue());
-      scoped_ptr<base::ListValue> pts_val(new base::ListValue());
+      std::unique_ptr<base::DictionaryValue> verb_val(
+          new base::DictionaryValue());
+      std::unique_ptr<base::ListValue> pts_val(new base::ListValue());
 
       for (int i = 0; i < gPtsPerVerb[verb]; ++i)
         pts_val->Append(AsValue(points[i + gPtOffsetPerVerb[verb]]).release());
@@ -391,10 +394,10 @@ scoped_ptr<base::Value> AsValue(const SkPath& path) {
   return std::move(val);
 }
 
-template<typename T>
-WARN_UNUSED_RESULT
-scoped_ptr<base::Value> AsListValue(const T array[], size_t count) {
-  scoped_ptr<base::ListValue> val(new base::ListValue());
+template <typename T>
+WARN_UNUSED_RESULT std::unique_ptr<base::Value> AsListValue(const T array[],
+                                                            size_t count) {
+  std::unique_ptr<base::ListValue> val(new base::ListValue());
 
   for (size_t i = 0; i < count; ++i)
     val->Append(AsValue(array[i]).release());
@@ -449,14 +452,13 @@ namespace skia {
 
 class BenchmarkingCanvas::AutoOp {
 public:
+  // AutoOp objects are always scoped within draw call frames,
+  // so the paint is guaranteed to be valid for their lifetime.
   AutoOp(BenchmarkingCanvas* canvas, const char op_name[],
          const SkPaint* paint = nullptr)
       : canvas_(canvas)
       , op_record_(new base::DictionaryValue())
-      , op_params_(new base::ListValue())
-      // AutoOp objects are always scoped within draw call frames,
-      // so the paint is guaranteed to be valid for their lifetime.
-      , paint_(paint) {
+      , op_params_(new base::ListValue()) {
 
     DCHECK(canvas);
     DCHECK(op_name);
@@ -464,15 +466,16 @@ public:
     op_record_->SetString("cmd_string", op_name);
     op_record_->Set("info", op_params_);
 
-    if (paint)
+    if (paint) {
       this->addParam("paint", AsValue(*paint));
+      filtered_paint_ = *paint;
+    }
 
     if (canvas->flags_ & kOverdrawVisualization_Flag) {
       DCHECK(canvas->overdraw_xfermode_);
 
-      paint_ = paint ? filtered_paint_.set(*paint) : filtered_paint_.init();
-      filtered_paint_.get()->setXfermode(canvas->overdraw_xfermode_);
-      filtered_paint_.get()->setAntiAlias(false);
+      filtered_paint_.setXfermode(canvas->overdraw_xfermode_);
+      filtered_paint_.setAntiAlias(false);
     }
 
     start_ticks_ = base::TimeTicks::Now();
@@ -485,14 +488,14 @@ public:
     canvas_->op_records_.Append(op_record_);
   }
 
-  void addParam(const char name[], scoped_ptr<base::Value> value) {
-    scoped_ptr<base::DictionaryValue> param(new base::DictionaryValue());
+  void addParam(const char name[], std::unique_ptr<base::Value> value) {
+    std::unique_ptr<base::DictionaryValue> param(new base::DictionaryValue());
     param->Set(name, std::move(value));
 
     op_params_->Append(param.release());
   }
 
-  const SkPaint* paint() const { return paint_; }
+  const SkPaint* paint() const { return &filtered_paint_; }
 
 private:
   BenchmarkingCanvas* canvas_;
@@ -500,8 +503,7 @@ private:
   base::ListValue* op_params_;
   base::TimeTicks start_ticks_;
 
-  const SkPaint* paint_;
-  SkTLazy<SkPaint> filtered_paint_;
+  SkPaint filtered_paint_;
 };
 
 BenchmarkingCanvas::BenchmarkingCanvas(SkCanvas* canvas, unsigned flags)

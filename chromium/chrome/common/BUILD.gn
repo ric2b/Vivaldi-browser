@@ -7,6 +7,7 @@ import("//chrome/common/features.gni")
 import("//chrome/version.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//tools/grit/grit_rule.gni")
+import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 
 gypi_values = exec_script("//build/gypi_to_gn.py",
                           [ rebase_path("../chrome_common.gypi") ],
@@ -72,6 +73,7 @@ static_library("common") {
     "//chrome/common/safe_browsing:proto",
     "//chrome/common/variations:fieldtrial_testing_config",
     "//chrome/installer/util:with_no_strings",
+    "//components/cast_certificate",
     "//components/cdm/common",
     "//components/cloud_devices/common",
     "//components/component_updater",
@@ -113,6 +115,7 @@ static_library("common") {
     "//ui/accessibility",
     "//ui/base",
     "//ui/gfx/ipc",
+    "//ui/gfx/ipc/geometry",
     "//ui/gfx/ipc/skia",
     "//ui/gl",
     "//ui/message_center",
@@ -140,7 +143,7 @@ static_library("common") {
       "//chrome/common/net",
       "//components/autofill/content/common",
       "//components/autofill/core/common",
-      "//components/password_manager/content/common",
+      "//components/password_manager/content/public/interfaces",
       "//components/password_manager/core/common",
       "//components/signin/core/common",
       "//components/translate/content/common",
@@ -277,10 +280,26 @@ static_library("common") {
     sources -= [ "media/webrtc_logging_messages.h" ]
   }
 
-  if (safe_browsing_mode == 1) {
-    sources += rebase_path(gypi_values.chrome_common_full_safe_browsing_sources,
-                           ".",
-                           "//chrome")
+  if (safe_browsing_mode != 0) {
+    sources +=
+        rebase_path(gypi_values.chrome_common_shared_safe_browsing_sources,
+                    ".",
+                    "//chrome")
+
+    if (safe_browsing_mode == 1) {
+      sources +=
+          rebase_path(gypi_values.chrome_common_full_safe_browsing_sources,
+                      ".",
+                      "//chrome")
+    }
+  }
+
+  if (enable_ipc_fuzzer) {
+    configs += [ "//tools/ipc_fuzzer:ipc_fuzzer_config" ]
+    sources += [
+      "external_ipc_dumper.cc",
+      "external_ipc_dumper.h",
+    ]
   }
 }
 
@@ -350,6 +369,25 @@ static_library("constants") {
     # implemented in //ui/base, so we need that dependency.
     deps += [ "//ui/base" ]
   }
+
+  if (enable_ipc_fuzzer) {
+    configs += [ "//tools/ipc_fuzzer:ipc_fuzzer_config" ]
+  }
+}
+
+if (is_win) {
+  # GYP version: chrome/chrome_common.gypi:metrics_constants_util_win
+  source_set("metrics_constants_util_win") {
+    sources = [
+      "metrics_constants_util_win.cc",
+      "metrics_constants_util_win.h",
+    ]
+
+    deps = [
+      "//base",
+      "//chrome/installer/util:with_no_strings",
+    ]
+  }
 }
 
 source_set("test_support") {
@@ -383,8 +421,8 @@ source_set("test_support") {
   }
 }
 
-# GN version: chrome/chrome.gyp:app_mode_app_support
-static_library("app_mode_app_support") {
+# GYP version: chrome/chrome.gyp:app_mode_app_support
+source_set("app_mode_app_support") {
   sources = [
     "mac/app_mode_chrome_locator.h",
     "mac/app_mode_chrome_locator.mm",

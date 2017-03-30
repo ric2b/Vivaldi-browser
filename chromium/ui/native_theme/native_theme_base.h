@@ -5,9 +5,11 @@
 #ifndef UI_NATIVE_THEME_NATIVE_THEME_BASE_H_
 #define UI_NATIVE_THEME_NATIVE_THEME_BASE_H_
 
+#include <memory>
+
 #include "base/compiler_specific.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "skia/ext/platform_canvas.h"
 #include "ui/native_theme/native_theme.h"
 
@@ -154,16 +156,6 @@ class NATIVE_THEME_EXPORT NativeThemeBase : public NativeTheme {
   }
   int scrollbar_button_length() const { return scrollbar_button_length_; }
 
-  void DrawImageInt(SkCanvas* canvas, const gfx::ImageSkia& image,
-                    int src_x, int src_y, int src_w, int src_h,
-                    int dest_x, int dest_y, int dest_w, int dest_h) const;
-
-  void DrawTiledImage(SkCanvas* canvas,
-                      const gfx::ImageSkia& image,
-                      int src_x, int src_y,
-                      float tile_scale_x, float tile_scale_y,
-                      int dest_x, int dest_y, int w, int h) const;
-
   SkColor SaturateAndBrighten(SkScalar* hsv,
                               SkScalar saturate_amount,
                               SkScalar brighten_amount) const;
@@ -178,6 +170,11 @@ class NATIVE_THEME_EXPORT NativeThemeBase : public NativeTheme {
   SkColor GetArrowColor(State state) const;
 
  private:
+  friend class NativeThemeAuraTest;
+
+  SkPath PathForArrow(const gfx::Rect& rect, Part direction) const;
+  gfx::Rect BoundingRectForArrow(const gfx::Rect& rect) const;
+
   void DrawVertLine(SkCanvas* canvas,
                     int x,
                     int y1,

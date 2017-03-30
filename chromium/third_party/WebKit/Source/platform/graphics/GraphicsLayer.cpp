@@ -71,14 +71,16 @@ namespace blink {
 
 static bool s_drawDebugRedFill = true;
 
-// TODO(wangxianzhu): Remove this when we no longer invalidate rects.
-struct PaintInvalidationTrackingInfo {
+struct PaintInvalidationInfo {
     DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
-    Vector<FloatRect> invalidationRects;
-    Vector<String> invalidationObjects;
+    // This is for comparison only. Don't dereference because the client may have died.
+    const DisplayItemClient* client;
+    String clientDebugName;
+    FloatRect rect;
+    PaintInvalidationReason reason;
 };
 
-typedef HashMap<const GraphicsLayer*, PaintInvalidationTrackingInfo> PaintInvalidationTrackingMap;
+typedef HashMap<const GraphicsLayer*, Vector<PaintInvalidationInfo>> PaintInvalidationTrackingMap;
 static PaintInvalidationTrackingMap& paintInvalidationTrackingMap()
 {
     DEFINE_STATIC_LOCAL(PaintInvalidationTrackingMap, map, ());
@@ -87,8 +89,7 @@ static PaintInvalidationTrackingMap& paintInvalidationTrackingMap()
 
 PassOwnPtr<GraphicsLayer> GraphicsLayer::create(GraphicsLayerClient* client)
 {
-    OwnPtr<GraphicsLayer> layer = adoptPtr(new GraphicsLayer(client));
-    return layer.release();
+    return adoptPtr(new GraphicsLayer(client));
 }
 
 GraphicsLayer::GraphicsLayer(GraphicsLayerClient* client)
@@ -161,6 +162,11 @@ LayoutRect GraphicsLayer::visualRect() const
     LayoutRect bounds = LayoutRect(FloatPoint(), size());
     bounds.move(offsetFromLayoutObjectWithSubpixelAccumulation());
     return bounds;
+}
+
+void GraphicsLayer::setHasWillChangeTransformHint(bool hasWillChangeTransform)
+{
+    m_layer->layer()->setHasWillChangeTransformHint(hasWillChangeTransform);
 }
 
 void GraphicsLayer::setDrawDebugRedFillForTesting(bool enabled)
@@ -537,43 +543,44 @@ bool GraphicsLayer::hasTrackedPaintInvalidations() const
 {
     PaintInvalidationTrackingMap::iterator it = paintInvalidationTrackingMap().find(this);
     if (it != paintInvalidationTrackingMap().end())
-        return !it->value.invalidationRects.isEmpty();
+        return !it->value.isEmpty();
     return false;
 }
 
-void GraphicsLayer::trackPaintInvalidationRect(const FloatRect& rect)
+void GraphicsLayer::trackPaintInvalidation(const DisplayItemClient& client, const FloatRect& rect, PaintInvalidationReason reason)
 {
-    if (rect.isEmpty())
-        return;
-
     // The caller must check isTrackingPaintInvalidations() before calling this method
     // to avoid constructing the rect unnecessarily.
     ASSERT(isTrackingPaintInvalidations());
 
-    paintInvalidationTrackingMap().add(this, PaintInvalidationTrackingInfo()).storedValue->value.invalidationRects.append(rect);
-}
-
-void GraphicsLayer::trackPaintInvalidationObject(const String& objectDebugString)
-{
-    if (objectDebugString.isEmpty())
+    Vector<PaintInvalidationInfo>& infos = paintInvalidationTrackingMap().add(this, Vector<PaintInvalidationInfo>()).storedValue->value;
+    // Omit the entry for invalidateDisplayItemClient() if the last entry is for the same client.
+    // This is to avoid duplicated entries for setNeedsDisplayInRect() and invalidateDisplayItemClient().
+    if (rect.isEmpty() && !infos.isEmpty() && infos.last().client == &client)
         return;
 
-    // The caller must check isTrackingPaintInvalidations() before calling this method
-    // because constructing the debug string will be costly.
-    ASSERT(isTrackingPaintInvalidations());
-
-    paintInvalidationTrackingMap().add(this, PaintInvalidationTrackingInfo()).storedValue->value.invalidationObjects.append(objectDebugString);
+    PaintInvalidationInfo info = { &client, client.debugName(), rect, reason };
+    infos.append(info);
 }
 
-static bool compareFloatRects(const FloatRect& a, const FloatRect& b)
+static bool comparePaintInvalidationInfo(const PaintInvalidationInfo& a, const PaintInvalidationInfo& b)
 {
-    if (a.x() != b.x())
-        return a.x() > b.x();
-    if (a.y() != b.y())
-        return a.y() > b.y();
-    if (a.width() != b.width())
-        return a.width() > b.width();
-    return a.height() > b.height();
+    // Sort by rect first, bigger rects before smaller ones.
+    if (a.rect.width() != b.rect.width())
+        return a.rect.width() > b.rect.width();
+    if (a.rect.height() != b.rect.height())
+        return a.rect.height() > b.rect.height();
+    if (a.rect.x() != b.rect.x())
+        return a.rect.x() > b.rect.x();
+    if (a.rect.y() != b.rect.y())
+        return a.rect.y() > b.rect.y();
+
+    // Then compare clientDebugName, in alphabetic order.
+    int nameCompareResult = codePointCompare(a.clientDebugName, b.clientDebugName);
+    if (nameCompareResult != 0)
+        return nameCompareResult < 0;
+
+    return a.reason < b.reason;
 }
 
 template <typename T>
@@ -725,27 +732,20 @@ PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSON(LayerTreeFlags flags, Rend
 
     PaintInvalidationTrackingMap::iterator it = paintInvalidationTrackingMap().find(this);
     if (it != paintInvalidationTrackingMap().end()) {
-        if (flags & LayerTreeIncludesPaintInvalidationRects) {
-            Vector<FloatRect>& rects = it->value.invalidationRects;
-            if (!rects.isEmpty()) {
-                std::sort(rects.begin(), rects.end(), &compareFloatRects);
-                RefPtr<JSONArray> rectsJSON = JSONArray::create();
-                for (auto& rect : rects) {
-                    if (rect.isEmpty())
-                        continue;
-                    rectsJSON->pushArray(rectAsJSONArray(rect));
+        if (flags & LayerTreeIncludesPaintInvalidations) {
+            Vector<PaintInvalidationInfo>& infos = it->value;
+            if (!infos.isEmpty()) {
+                std::sort(infos.begin(), infos.end(), &comparePaintInvalidationInfo);
+                RefPtr<JSONArray> paintInvalidationsJSON = JSONArray::create();
+                for (auto& info : infos) {
+                    RefPtr<JSONObject> infoJSON = JSONObject::create();
+                    infoJSON->setString("object", info.clientDebugName);
+                    if (!info.rect.isEmpty())
+                        infoJSON->setArray("rect", rectAsJSONArray(info.rect));
+                    infoJSON->setString("reason", paintInvalidationReasonToString(info.reason));
+                    paintInvalidationsJSON->pushObject(infoJSON);
                 }
-                json->setArray("repaintRects", rectsJSON);
-            }
-        }
-
-        if (flags & LayerTreeIncludesPaintInvalidationObjects) {
-            Vector<String>& clients = it->value.invalidationObjects;
-            if (!clients.isEmpty()) {
-                RefPtr<JSONArray> clientsJSON = JSONArray::create();
-                for (auto& clientString : clients)
-                    clientsJSON->pushString(clientString);
-                json->setArray("paintInvalidationClients", clientsJSON);
+                json->setArray("paintInvalidations", paintInvalidationsJSON);
             }
         }
     }
@@ -1038,7 +1038,7 @@ void GraphicsLayer::setContentsNeedsDisplay()
     if (WebLayer* contentsLayer = contentsLayerIfRegistered()) {
         contentsLayer->invalidate();
         if (isTrackingPaintInvalidations())
-            trackPaintInvalidationRect(m_contentsRect);
+            trackPaintInvalidation(*this, m_contentsRect, PaintInvalidationFull);
     }
 }
 
@@ -1049,17 +1049,15 @@ void GraphicsLayer::setNeedsDisplay()
 
     // TODO(chrishtr): stop invalidating the rects once FrameView::paintRecursively does so.
     m_layer->layer()->invalidate();
-    if (isTrackingPaintInvalidations())
-        trackPaintInvalidationRect(FloatRect(FloatPoint(), m_size));
     for (size_t i = 0; i < m_linkHighlights.size(); ++i)
         m_linkHighlights[i]->invalidate();
-
     getPaintController().invalidateAll();
+
     if (isTrackingPaintInvalidations())
-        trackPaintInvalidationObject("##ALL##");
+        trackPaintInvalidation(*this, FloatRect(FloatPoint(), m_size), PaintInvalidationFull);
 }
 
-void GraphicsLayer::setNeedsDisplayInRect(const IntRect& rect, PaintInvalidationReason invalidationReason)
+void GraphicsLayer::setNeedsDisplayInRect(const IntRect& rect, PaintInvalidationReason invalidationReason, const DisplayItemClient& client)
 {
     if (!drawsContent())
         return;
@@ -1067,20 +1065,22 @@ void GraphicsLayer::setNeedsDisplayInRect(const IntRect& rect, PaintInvalidation
     m_layer->layer()->invalidateRect(rect);
     if (firstPaintInvalidationTrackingEnabled())
         m_debugInfo.appendAnnotatedInvalidateRect(rect, invalidationReason);
-    if (isTrackingPaintInvalidations())
-        trackPaintInvalidationRect(rect);
     for (size_t i = 0; i < m_linkHighlights.size(); ++i)
         m_linkHighlights[i]->invalidate();
+
+    if (isTrackingPaintInvalidations())
+        trackPaintInvalidation(client, rect, invalidationReason);
 }
 
-void GraphicsLayer::invalidateDisplayItemClient(const DisplayItemClient& displayItemClient, PaintInvalidationReason)
+void GraphicsLayer::invalidateDisplayItemClient(const DisplayItemClient& displayItemClient, PaintInvalidationReason invalidationReason)
 {
     if (!drawsContent())
         return;
 
     getPaintController().invalidate(displayItemClient);
+
     if (isTrackingPaintInvalidations())
-        trackPaintInvalidationObject(displayItemClient.debugName());
+        trackPaintInvalidation(displayItemClient, FloatRect(), invalidationReason);
 }
 
 void GraphicsLayer::setContentsRect(const IntRect& rect)
@@ -1128,17 +1128,15 @@ WebLayer* GraphicsLayer::platformLayer() const
 
 void GraphicsLayer::setFilters(const FilterOperations& filters)
 {
-    SkiaImageFilterBuilder builder;
     OwnPtr<CompositorFilterOperations> webFilters = adoptPtr(CompositorFactory::current().createFilterOperations());
-    builder.buildFilterOperations(filters, webFilters.get());
+    SkiaImageFilterBuilder::buildFilterOperations(filters, webFilters.get());
     m_layer->layer()->setFilters(webFilters->asFilterOperations());
 }
 
 void GraphicsLayer::setBackdropFilters(const FilterOperations& filters)
 {
-    SkiaImageFilterBuilder builder;
     OwnPtr<CompositorFilterOperations> webFilters = adoptPtr(CompositorFactory::current().createFilterOperations());
-    builder.buildFilterOperations(filters, webFilters.get());
+    SkiaImageFilterBuilder::buildFilterOperations(filters, webFilters.get());
     m_layer->layer()->setBackgroundFilters(webFilters->asFilterOperations());
 }
 

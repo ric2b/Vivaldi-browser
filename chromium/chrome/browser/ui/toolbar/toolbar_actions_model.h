@@ -29,6 +29,7 @@ class ToolbarActionViewController;
 
 namespace extensions {
 class ExtensionActionManager;
+class ExtensionMessageBubbleController;
 class ExtensionRegistry;
 class ExtensionSet;
 }
@@ -172,6 +173,11 @@ class ToolbarActionsModel
   bool is_highlighting() const { return highlight_type_ != HIGHLIGHT_NONE; }
   HighlightType highlight_type() const { return highlight_type_; }
 
+  bool has_active_bubble() const { return has_active_bubble_; }
+  void set_has_active_bubble(bool has_active_bubble) {
+    has_active_bubble_ = has_active_bubble;
+  }
+
   void SetActionVisibility(const std::string& action_id, bool visible);
 
   // ComponentMigrationHelper::ComponentActionDelegate:
@@ -193,9 +199,10 @@ class ToolbarActionsModel
   // number of visible icons will be reset to what it was before highlighting.
   void StopHighlighting();
 
-  // Returns true if the toolbar model is running with the redesign and is
-  // showing new icons as a result.
-  bool RedesignIsShowingNewIcons() const;
+  // Gets the ExtensionMessageBubbleController that should be shown for this
+  // profile, if any.
+  std::unique_ptr<extensions::ExtensionMessageBubbleController>
+  GetExtensionMessageBubbleController(Browser* browser);
 
  private:
   // Callback when actions are ready.
@@ -317,6 +324,10 @@ class ToolbarActionsModel
   // TODO(devlin): Make a new variable to indicate that all icons should be
   // visible, instead of overloading this one.
   int visible_icon_count_;
+
+  // Whether or not there is an active ExtensionMessageBubbleController
+  // associated with the profile. There should only be one at a time.
+  bool has_active_bubble_;
 
   ScopedObserver<extensions::ExtensionActionAPI,
                  extensions::ExtensionActionAPI::Observer>

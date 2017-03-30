@@ -30,6 +30,7 @@ group("safe_browsing_db_shared") {
 group("safe_browsing_db") {
   deps = [
     ":safe_browsing_db_shared",
+    ":v4_local_database_manager",
     ":v4_update_protocol_manager",
   ]
 }
@@ -154,6 +155,21 @@ source_set("util") {
   }
 }
 
+source_set("v4_database") {
+  sources = [
+    "v4_database.cc",
+    "v4_database.h",
+  ]
+  public_deps = [
+    ":proto",
+  ]
+  deps = [
+    ":v4_protocol_manager_util",
+    ":v4_store",
+    "//base",
+  ]
+}
+
 source_set("v4_get_hash_protocol_manager") {
   sources = [
     "v4_get_hash_protocol_manager.cc",
@@ -179,6 +195,8 @@ source_set("v4_local_database_manager") {
   deps = [
     ":database_manager",
     ":hit_report",
+    ":proto",
+    ":v4_database",
     ":v4_protocol_manager_util",
     ":v4_update_protocol_manager",
     "//base",
@@ -201,6 +219,13 @@ source_set("v4_protocol_manager_util") {
   ]
 }
 
+source_set("v4_store") {
+  sources = [
+    "v4_store.h",
+  ]
+  deps = []
+}
+
 source_set("v4_update_protocol_manager") {
   sources = [
     "v4_update_protocol_manager.cc",
@@ -219,6 +244,7 @@ source_set("v4_update_protocol_manager") {
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "database_manager_unittest.cc",
     "prefix_set_unittest.cc",
     "util_unittest.cc",
     "v4_get_hash_protocol_manager_unittest.cc",
@@ -226,14 +252,17 @@ source_set("unit_tests") {
     "v4_update_protocol_manager_unittest.cc",
   ]
   deps = [
+    ":database_manager",
     ":prefix_set",
     ":proto",
+    ":test_database_manager",
     ":util",
     ":v4_get_hash_protocol_manager",
     ":v4_local_database_manager",
     ":v4_protocol_manager_util",
     ":v4_update_protocol_manager",
     "//base",
+    "//content/test:test_support",
     "//net",
     "//net:test_support",
     "//testing/gtest",

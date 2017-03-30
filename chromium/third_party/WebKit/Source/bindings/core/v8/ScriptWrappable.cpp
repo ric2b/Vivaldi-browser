@@ -5,6 +5,7 @@
 #include "bindings/core/v8/ScriptWrappable.h"
 
 #include "bindings/core/v8/DOMDataStore.h"
+#include "bindings/core/v8/ScriptWrappableVisitor.h"
 #include "bindings/core/v8/V8DOMWrapper.h"
 
 namespace blink {
@@ -16,40 +17,13 @@ struct SameSizeAsScriptWrappable {
 
 static_assert(sizeof(ScriptWrappable) <= sizeof(SameSizeAsScriptWrappable), "ScriptWrappable should stay small");
 
-namespace {
-
-class ScriptWrappableProtector final {
-    WTF_MAKE_NONCOPYABLE(ScriptWrappableProtector);
-public:
-    ScriptWrappableProtector(ScriptWrappable* scriptWrappable, const WrapperTypeInfo* wrapperTypeInfo)
-        : m_scriptWrappable(scriptWrappable), m_wrapperTypeInfo(wrapperTypeInfo)
-    {
-        m_wrapperTypeInfo->refObject(m_scriptWrappable);
-    }
-    ~ScriptWrappableProtector()
-    {
-        m_wrapperTypeInfo->derefObject(m_scriptWrappable);
-    }
-
-private:
-    ScriptWrappable* m_scriptWrappable;
-    const WrapperTypeInfo* m_wrapperTypeInfo;
-};
-
-} // namespace
-
 v8::Local<v8::Object> ScriptWrappable::wrap(v8::Isolate* isolate, v8::Local<v8::Object> creationContext)
 {
     const WrapperTypeInfo* wrapperTypeInfo = this->wrapperTypeInfo();
 
-    // It's possible that no one except for the new wrapper owns this object at
-    // this moment, so we have to prevent GC to collect this object until the
-    // object gets associated with the wrapper.
-    ScriptWrappableProtector protect(this, wrapperTypeInfo);
-
     ASSERT(!DOMDataStore::containsWrapper(this, isolate));
 
-    v8::Local<v8::Object> wrapper = V8DOMWrapper::createWrapper(isolate, creationContext, wrapperTypeInfo, this);
+    v8::Local<v8::Object> wrapper = V8DOMWrapper::createWrapper(isolate, creationContext, wrapperTypeInfo);
     if (UNLIKELY(wrapper.IsEmpty()))
         return wrapper;
 
@@ -60,6 +34,12 @@ v8::Local<v8::Object> ScriptWrappable::wrap(v8::Isolate* isolate, v8::Local<v8::
 v8::Local<v8::Object> ScriptWrappable::associateWithWrapper(v8::Isolate* isolate, const WrapperTypeInfo* wrapperTypeInfo, v8::Local<v8::Object> wrapper)
 {
     return V8DOMWrapper::associateObjectWithWrapper(isolate, this, wrapperTypeInfo, wrapper);
+}
+
+void ScriptWrappable::markWrapper(v8::Isolate* isolate) const
+{
+    if (containsWrapper())
+        ScriptWrappableVisitor::markWrapper(&m_wrapper, isolate);
 }
 
 } // namespace blink

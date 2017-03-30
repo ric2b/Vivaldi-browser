@@ -39,14 +39,12 @@ WebInspector.SourcesPanel = function(workspaceForTest)
     this._workspace = workspaceForTest || WebInspector.workspace;
     this._networkMapping = WebInspector.networkMapping;
 
-    this._runSnippetAction = WebInspector.actionRegistry.action("debugger.run-snippet");
-    this._togglePauseAction = WebInspector.actionRegistry.action("debugger.toggle-pause");
-    this._stepOverAction = WebInspector.actionRegistry.action("debugger.step-over");
-    this._stepIntoAction = WebInspector.actionRegistry.action("debugger.step-into");
-    this._stepOutAction = WebInspector.actionRegistry.action("debugger.step-out");
-    this._toggleBreakpointsActiveAction = WebInspector.actionRegistry.action("debugger.toggle-breakpoints-active");
-    this._toggleBreakpointsActiveAction.setToggled(false);
-    this._toggleBreakpointsActiveAction.setTitle(WebInspector.UIString("Deactivate breakpoints"));
+    this._runSnippetAction = /** @type {!WebInspector.Action }*/ (WebInspector.actionRegistry.action("debugger.run-snippet"));
+    this._togglePauseAction = /** @type {!WebInspector.Action }*/ (WebInspector.actionRegistry.action("debugger.toggle-pause"));
+    this._stepOverAction = /** @type {!WebInspector.Action }*/ (WebInspector.actionRegistry.action("debugger.step-over"));
+    this._stepIntoAction = /** @type {!WebInspector.Action }*/ (WebInspector.actionRegistry.action("debugger.step-into"));
+    this._stepOutAction = /** @type {!WebInspector.Action }*/ (WebInspector.actionRegistry.action("debugger.step-out"));
+    this._toggleBreakpointsActiveAction = /** @type {!WebInspector.Action }*/ (WebInspector.actionRegistry.action("debugger.toggle-breakpoints-active"));
 
     this._debugToolbar = this._createDebugToolbar();
     this._debugToolbarDrawer = this._createDebugToolbarDrawer();
@@ -174,12 +172,33 @@ WebInspector.SourcesPanel.prototype = {
     {
         WebInspector.context.setFlavor(WebInspector.SourcesPanel, this);
         WebInspector.Panel.prototype.wasShown.call(this);
+        var wrapper = WebInspector.SourcesPanel.WrapperView._instance;
+        if (wrapper && wrapper.isShowing()) {
+            WebInspector.inspectorView.setDrawerMinimized(true);
+            WebInspector.SourcesPanel.updateResizer(this);
+        }
+        this.editorView.setMainWidget(this._sourcesView);
     },
 
     willHide: function()
     {
         WebInspector.Panel.prototype.willHide.call(this);
         WebInspector.context.setFlavor(WebInspector.SourcesPanel, null);
+        if (WebInspector.SourcesPanel.WrapperView.isShowing()) {
+            WebInspector.SourcesPanel.WrapperView._instance._showViewInWrapper();
+            WebInspector.inspectorView.setDrawerMinimized(false);
+            WebInspector.SourcesPanel.updateResizer(this);
+        }
+    },
+
+    /**
+     * @return {boolean}
+     */
+    _ensureSourcesViewVisible: function()
+    {
+        if (WebInspector.SourcesPanel.WrapperView.isShowing())
+            return true;
+        return this === WebInspector.inspectorView.setCurrentPanel(this);
     },
 
     onResize: function()
@@ -340,24 +359,34 @@ WebInspector.SourcesPanel.prototype = {
      * @param {!WebInspector.UISourceCode} uiSourceCode
      * @param {number=} lineNumber 0-based
      * @param {number=} columnNumber
+     * @param {boolean=} omitFocus
      */
-    showUISourceCode: function(uiSourceCode, lineNumber, columnNumber)
+    showUISourceCode: function(uiSourceCode, lineNumber, columnNumber, omitFocus)
     {
-        this._showEditor();
-        this._sourcesView.showSourceLocation(uiSourceCode, lineNumber, columnNumber);
+        if (omitFocus) {
+            var wrapperShowing = WebInspector.SourcesPanel.WrapperView._instance && WebInspector.SourcesPanel.WrapperView._instance.isShowing();
+            if (!this.isShowing() && !wrapperShowing)
+                return;
+        } else {
+            this._showEditor();
+        }
+        this._sourcesView.showSourceLocation(uiSourceCode, lineNumber, columnNumber, omitFocus);
     },
 
     _showEditor: function()
     {
+        if (WebInspector.SourcesPanel.WrapperView._instance && WebInspector.SourcesPanel.WrapperView._instance.isShowing())
+            return;
         WebInspector.inspectorView.setCurrentPanel(this);
     },
 
     /**
      * @param {!WebInspector.UILocation} uiLocation
+     * @param {boolean=} omitFocus
      */
-    showUILocation: function(uiLocation)
+    showUILocation: function(uiLocation, omitFocus)
     {
-        this.showUISourceCode(uiLocation.uiSourceCode, uiLocation.lineNumber, uiLocation.columnNumber);
+        this.showUISourceCode(uiLocation.uiSourceCode, uiLocation.lineNumber, uiLocation.columnNumber, omitFocus);
     },
 
     /**
@@ -466,14 +495,12 @@ WebInspector.SourcesPanel.prototype = {
             this._stepIntoAction.setEnabled(false);
             this._stepOutAction.setEnabled(false);
         } else if (this._paused) {
-            this._togglePauseAction.setTitle(WebInspector.UIString("Resume script execution"));
             this._togglePauseAction.setToggled(true);
             this._togglePauseAction.setEnabled(true);
             this._stepOverAction.setEnabled(true);
             this._stepIntoAction.setEnabled(true);
             this._stepOutAction.setEnabled(true);
         } else {
-            this._togglePauseAction.setTitle(WebInspector.UIString("Pause script execution"));
             this._togglePauseAction.setToggled(false);
             this._togglePauseAction.setEnabled(!currentDebuggerModel.isPausing());
             this._stepOverAction.setEnabled(false);
@@ -703,10 +730,6 @@ WebInspector.SourcesPanel.prototype = {
         this._toggleBreakpointsActiveAction.setToggled(!active);
         this.sidebarPanes.jsBreakpoints.listElement.classList.toggle("breakpoints-list-deactivated", !active);
         this._sourcesView.toggleBreakpointsActiveState(active);
-        if (active)
-            this._toggleBreakpointsActiveAction.setTitle(WebInspector.UIString("Deactivate breakpoints"));
-        else
-            this._toggleBreakpointsActiveAction.setTitle(WebInspector.UIString("Activate breakpoints"));
     },
 
     /**
@@ -1075,10 +1098,7 @@ WebInspector.SourcesPanel.prototype = {
         this._splitWidget.setVertical(!vertically);
         this._splitWidget.element.classList.toggle("sources-split-view-vertical", vertically);
 
-        if (!vertically)
-            this._splitWidget.uninstallResizer(this._sourcesView.toolbarContainerElement());
-        else
-            this._splitWidget.installResizer(this._sourcesView.toolbarContainerElement());
+        WebInspector.SourcesPanel.updateResizer(this);
 
         // Create vertical box with stack.
         var vbox = new WebInspector.VBox();
@@ -1217,13 +1237,14 @@ WebInspector.SourcesPanel.UILocationRevealer.prototype = {
     /**
      * @override
      * @param {!Object} uiLocation
+     * @param {boolean=} omitFocus
      * @return {!Promise}
      */
-    reveal: function(uiLocation)
+    reveal: function(uiLocation, omitFocus)
     {
         if (!(uiLocation instanceof WebInspector.UILocation))
             return Promise.reject(new Error("Internal error: not a ui location"));
-        WebInspector.SourcesPanel.instance().showUILocation(uiLocation);
+        WebInspector.SourcesPanel.instance().showUILocation(uiLocation, omitFocus);
         return Promise.resolve();
     }
 }
@@ -1240,13 +1261,14 @@ WebInspector.SourcesPanel.DebuggerLocationRevealer.prototype = {
     /**
      * @override
      * @param {!Object} rawLocation
+     * @param {boolean=} omitFocus
      * @return {!Promise}
      */
-    reveal: function(rawLocation)
+    reveal: function(rawLocation, omitFocus)
     {
         if (!(rawLocation instanceof WebInspector.DebuggerModel.Location))
             return Promise.reject(new Error("Internal error: not a debugger location"));
-        WebInspector.SourcesPanel.instance().showUILocation(WebInspector.debuggerWorkspaceBinding.rawLocationToUILocation(rawLocation));
+        WebInspector.SourcesPanel.instance().showUILocation(WebInspector.debuggerWorkspaceBinding.rawLocationToUILocation(rawLocation), omitFocus);
         return Promise.resolve();
     }
 }
@@ -1263,13 +1285,14 @@ WebInspector.SourcesPanel.UISourceCodeRevealer.prototype = {
     /**
      * @override
      * @param {!Object} uiSourceCode
+     * @param {boolean=} omitFocus
      * @return {!Promise}
      */
-    reveal: function(uiSourceCode)
+    reveal: function(uiSourceCode, omitFocus)
     {
         if (!(uiSourceCode instanceof WebInspector.UISourceCode))
             return Promise.reject(new Error("Internal error: not a ui source code"));
-        WebInspector.SourcesPanel.instance().showUISourceCode(uiSourceCode);
+        WebInspector.SourcesPanel.instance().showUISourceCode(uiSourceCode, undefined, undefined, omitFocus);
         return Promise.resolve();
     }
 }
@@ -1311,7 +1334,7 @@ WebInspector.SourcesPanel.RevealingActionDelegate.prototype = {
     handleAction: function(context, actionId)
     {
         var panel = WebInspector.SourcesPanel.instance();
-        if (panel !== WebInspector.inspectorView.setCurrentPanel(panel))
+        if (!panel._ensureSourcesViewVisible())
             return false;
         switch (actionId) {
         case "debugger.toggle-pause":
@@ -1380,6 +1403,17 @@ WebInspector.SourcesPanel.instance = function()
 }
 
 /**
+ * @param {!WebInspector.SourcesPanel} panel
+ */
+WebInspector.SourcesPanel.updateResizer = function(panel)
+{
+    if (panel._splitWidget.isVertical() || (WebInspector.SourcesPanel.WrapperView.isShowing() && !WebInspector.inspectorView.isDrawerMinimized()))
+        panel._splitWidget.uninstallResizer(panel._sourcesView.toolbarContainerElement());
+    else
+        panel._splitWidget.installResizer(panel._sourcesView.toolbarContainerElement());
+}
+
+/**
  * @constructor
  * @implements {WebInspector.PanelFactory}
  */
@@ -1396,4 +1430,62 @@ WebInspector.SourcesPanelFactory.prototype = {
     {
         return WebInspector.SourcesPanel.instance();
     }
+}
+
+/**
+ * @constructor
+ * @extends {WebInspector.VBox}
+ */
+WebInspector.SourcesPanel.WrapperView = function()
+{
+    WebInspector.VBox.call(this);
+    this.element.classList.add("sources-view-wrapper");
+    WebInspector.SourcesPanel.WrapperView._instance = this;
+    this._view = WebInspector.SourcesPanel.instance()._sourcesView;
+}
+
+WebInspector.SourcesPanel.WrapperView.prototype = {
+    wasShown: function()
+    {
+        if (WebInspector.inspectorView.currentPanel() && WebInspector.inspectorView.currentPanel().name !== "sources")
+            this._showViewInWrapper();
+        else
+            WebInspector.inspectorView.setDrawerMinimized(true);
+        WebInspector.SourcesPanel.updateResizer(WebInspector.SourcesPanel.instance());
+    },
+
+    willHide: function()
+    {
+        WebInspector.inspectorView.setDrawerMinimized(false);
+        setImmediate(() => WebInspector.SourcesPanel.updateResizer(WebInspector.SourcesPanel.instance()));
+    },
+
+    /**
+     * @override
+     * @return {!Element}
+     */
+    defaultFocusedElement: function()
+    {
+        return this._view.defaultFocusedElement();
+    },
+
+    focus: function()
+    {
+        this._view.focus();
+    },
+
+    _showViewInWrapper: function()
+    {
+        this._view.show(this.element);
+    },
+
+    __proto__: WebInspector.VBox.prototype
+}
+
+/**
+ * @return {boolean}
+ */
+WebInspector.SourcesPanel.WrapperView.isShowing = function()
+{
+    return !!WebInspector.SourcesPanel.WrapperView._instance && WebInspector.SourcesPanel.WrapperView._instance.isShowing();
 }

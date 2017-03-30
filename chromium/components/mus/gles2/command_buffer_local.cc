@@ -8,7 +8,7 @@
 #include "base/bind.h"
 #include "base/memory/shared_memory.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/mus/gles2/command_buffer_driver.h"
 #include "components/mus/gles2/command_buffer_local_client.h"
 #include "components/mus/gles2/command_buffer_type_conversions.h"
@@ -16,6 +16,7 @@
 #include "components/mus/gles2/gpu_state.h"
 #include "components/mus/gles2/mojo_buffer_backing.h"
 #include "components/mus/gles2/mojo_gpu_memory_buffer.h"
+#include "gpu/command_buffer/client/gpu_control_client.h"
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/command_buffer/service/command_buffer_service.h"
@@ -24,7 +25,6 @@
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/command_buffer/service/shader_translator_cache.h"
 #include "gpu/command_buffer/service/transfer_buffer_manager.h"
-#include "gpu/command_buffer/service/valuebuffer_manager.h"
 #include "mojo/platform_handle/platform_handle_functions.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/vsync_provider.h"
@@ -76,10 +76,12 @@ CommandBufferLocal::CommandBufferLocal(CommandBufferLocalClient* client,
       gpu_state_(gpu_state),
       client_(client),
       client_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
+      gpu_control_client_(nullptr),
       next_transfer_buffer_id_(0),
       next_image_id_(0),
       next_fence_sync_release_(1),
       flushed_fence_sync_release_(0),
+      lost_context_(false),
       sync_point_client_waiter_(
           gpu_state->sync_point_manager()->CreateSyncPointClientWaiter()),
       weak_factory_(this) {
@@ -202,7 +204,7 @@ scoped_refptr<gpu::Buffer> CommandBufferLocal::CreateTransferBuffer(
       base::Bind(&CommandBufferLocal::RegisterTransferBufferOnGpuThread,
                  base::Unretained(this), *id, base::Passed(&duped),
                  static_cast<uint32_t>(size)));
-  scoped_ptr<gpu::BufferBacking> backing(
+  std::unique_ptr<gpu::BufferBacking> backing(
       new mus::MojoBufferBacking(std::move(handle), memory, size));
   scoped_refptr<gpu::Buffer> buffer(new gpu::Buffer(std::move(backing)));
   return buffer;
@@ -214,6 +216,10 @@ void CommandBufferLocal::DestroyTransferBuffer(int32_t id) {
       driver_.get(),
       base::Bind(&CommandBufferLocal::DestroyTransferBufferOnGpuThread,
                  base::Unretained(this), id));
+}
+
+void CommandBufferLocal::SetGpuControlClient(gpu::GpuControlClient* client) {
+  gpu_control_client_ = client;
 }
 
 gpu::Capabilities CommandBufferLocal::GetCapabilities() {
@@ -305,7 +311,7 @@ int32_t CommandBufferLocal::CreateGpuMemoryBufferImage(size_t width,
                                                        unsigned usage) {
   DCHECK(CalledOnValidThread());
   DCHECK_EQ(usage, static_cast<unsigned>(GL_READ_WRITE_CHROMIUM));
-  scoped_ptr<gfx::GpuMemoryBuffer> buffer(MojoGpuMemoryBufferImpl::Create(
+  std::unique_ptr<gfx::GpuMemoryBuffer> buffer(MojoGpuMemoryBufferImpl::Create(
       gfx::Size(static_cast<int>(width), static_cast<int>(height)),
       gpu::DefaultBufferFormatForImageFormat(internal_format),
       gfx::BufferUsage::SCANOUT));
@@ -326,12 +332,6 @@ void CommandBufferLocal::SignalQuery(uint32_t query_id,
 void CommandBufferLocal::SetLock(base::Lock* lock) {
   DCHECK(CalledOnValidThread());
   NOTIMPLEMENTED();
-}
-
-bool CommandBufferLocal::IsGpuChannelLost() {
-  DCHECK(CalledOnValidThread());
-  // This is only possible for out-of-process command buffers.
-  return false;
 }
 
 void CommandBufferLocal::EnsureWorkVisible() {
@@ -566,8 +566,10 @@ bool CommandBufferLocal::SignalQueryOnGpuThread(uint32_t query_id,
 }
 
 void CommandBufferLocal::DidLoseContextOnClientThread(uint32_t reason) {
-  if (client_)
-    client_->DidLoseContext();
+  DCHECK(gpu_control_client_);
+  if (!lost_context_)
+    gpu_control_client_->OnGpuControlLostContext();
+  lost_context_ = true;
 }
 
 void CommandBufferLocal::UpdateVSyncParametersOnClientThread(int64_t timebase,

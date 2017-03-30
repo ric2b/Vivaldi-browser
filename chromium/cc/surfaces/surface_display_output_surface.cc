@@ -21,7 +21,7 @@ SurfaceDisplayOutputSurface::SurfaceDisplayOutputSurface(
     scoped_refptr<ContextProvider> worker_context_provider)
     : OutputSurface(std::move(context_provider),
                     std::move(worker_context_provider)),
-      display_client_(NULL),
+      display_client_(nullptr),
       factory_(surface_manager, this),
       allocator_(allocator) {
   factory_.set_needs_sync_points(false);
@@ -33,18 +33,28 @@ SurfaceDisplayOutputSurface::SurfaceDisplayOutputSurface(
   capabilities_.delegated_sync_points_required = false;
 }
 
+SurfaceDisplayOutputSurface::SurfaceDisplayOutputSurface(
+    SurfaceManager* surface_manager,
+    SurfaceIdAllocator* allocator,
+    scoped_refptr<VulkanContextProvider> vulkan_context_provider)
+    : OutputSurface(nullptr,
+                    nullptr,
+                    std::move(vulkan_context_provider),
+                    nullptr),
+      display_client_(NULL),
+      factory_(surface_manager, this),
+      allocator_(allocator) {
+  capabilities_.delegated_rendering = true;
+  capabilities_.adjust_deadline_for_parent = true;
+  capabilities_.can_force_reclaim_resources = true;
+}
+
 SurfaceDisplayOutputSurface::~SurfaceDisplayOutputSurface() {
   if (HasClient())
     DetachFromClient();
   if (!surface_id_.is_null()) {
     factory_.Destroy(surface_id_);
   }
-}
-
-void SurfaceDisplayOutputSurface::ReceivedVSyncParameters(
-    base::TimeTicks timebase,
-    base::TimeDelta interval) {
-  CommitVSyncParameters(timebase, interval);
 }
 
 void SurfaceDisplayOutputSurface::SwapBuffers(CompositorFrame* frame) {
@@ -63,7 +73,7 @@ void SurfaceDisplayOutputSurface::SwapBuffers(CompositorFrame* frame) {
 
   client_->DidSwapBuffers();
 
-  scoped_ptr<CompositorFrame> frame_copy(new CompositorFrame());
+  std::unique_ptr<CompositorFrame> frame_copy(new CompositorFrame());
   frame->AssignTo(frame_copy.get());
   factory_.SubmitCompositorFrame(
       surface_id_, std::move(frame_copy),
@@ -74,10 +84,10 @@ void SurfaceDisplayOutputSurface::SwapBuffers(CompositorFrame* frame) {
 bool SurfaceDisplayOutputSurface::BindToClient(OutputSurfaceClient* client) {
   DCHECK(client);
   DCHECK(display_client_);
+  client_ = client;
   factory_.manager()->RegisterSurfaceFactoryClient(allocator_->id_namespace(),
                                                    this);
 
-  client_ = client;
   // Avoid initializing GL context here, as this should be sharing the
   // Display's context.
   return display_client_->Initialize();
@@ -109,7 +119,8 @@ void SurfaceDisplayOutputSurface::ReturnResources(
 
 void SurfaceDisplayOutputSurface::SetBeginFrameSource(
     BeginFrameSource* begin_frame_source) {
-  // TODO(tansell): Hook this up.
+  DCHECK(client_);
+  client_->SetBeginFrameSource(begin_frame_source);
 }
 
 void SurfaceDisplayOutputSurface::SwapBuffersComplete(SurfaceDrawStatus drawn) {

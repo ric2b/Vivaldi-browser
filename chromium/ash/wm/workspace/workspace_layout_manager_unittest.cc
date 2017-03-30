@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/wm/workspace/workspace_layout_manager.h"
+#include "ash/wm/common/workspace/workspace_layout_manager.h"
 
 #include <string>
 #include <utility>
@@ -18,11 +18,13 @@
 #include "ash/shell_window_ids.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/display_manager_test_api.h"
+#include "ash/wm/aura/wm_window_aura.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/common/wm_event.h"
+#include "ash/wm/common/workspace/workspace_window_resizer.h"
 #include "ash/wm/maximize_mode/workspace_backdrop_delegate.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm/wm_event.h"
-#include "ash/wm/workspace/workspace_window_resizer.h"
 #include "base/compiler_specific.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_windows.h"
@@ -30,8 +32,8 @@
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/display/manager/display_layout.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/geometry/insets.h"
-#include "ui/gfx/screen.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/wm/core/window_util.h"
@@ -387,7 +389,7 @@ TEST_F(WorkspaceLayoutManagerTest, MaximizeWithEmptySize) {
   default_container->AddChild(window.get());
   window->Show();
   gfx::Rect work_area(
-      gfx::Screen::GetScreen()->GetPrimaryDisplay().work_area());
+      display::Screen::GetScreen()->GetPrimaryDisplay().work_area());
   EXPECT_EQ(work_area.ToString(), window->GetBoundsInScreen().ToString());
 }
 
@@ -462,7 +464,7 @@ TEST_F(WorkspaceLayoutManagerTest, WindowShouldBeOnScreenWhenAdded) {
 TEST_F(WorkspaceLayoutManagerTest, SizeToWorkArea) {
   // Normal window bounds shouldn't be changed.
   gfx::Size work_area(
-      gfx::Screen::GetScreen()->GetPrimaryDisplay().work_area().size());
+      display::Screen::GetScreen()->GetPrimaryDisplay().work_area().size());
   const gfx::Rect window_bounds(
       100, 101, work_area.width() + 1, work_area.height() + 2);
   std::unique_ptr<aura::Window> window(
@@ -637,7 +639,7 @@ TEST_F(WorkspaceLayoutManagerSoloTest, Fullscreen) {
   std::unique_ptr<aura::Window> window(CreateTestWindow(bounds));
   window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_FULLSCREEN);
   // Fullscreen window fills the whole display.
-  EXPECT_EQ(gfx::Screen::GetScreen()
+  EXPECT_EQ(display::Screen::GetScreen()
                 ->GetDisplayNearestWindow(window.get())
                 .bounds()
                 .ToString(),
@@ -680,14 +682,14 @@ TEST_F(WorkspaceLayoutManagerSoloTest, FullscreenRootWindowResize) {
   std::unique_ptr<aura::Window> window(CreateTestWindow(bounds));
   // Fullscreen window fills the whole display.
   window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_FULLSCREEN);
-  EXPECT_EQ(gfx::Screen::GetScreen()
+  EXPECT_EQ(display::Screen::GetScreen()
                 ->GetDisplayNearestWindow(window.get())
                 .bounds()
                 .ToString(),
             window->bounds().ToString());
   // Enlarge the root window.  We should still match the display size.
   UpdateDisplay("800x600");
-  EXPECT_EQ(gfx::Screen::GetScreen()
+  EXPECT_EQ(display::Screen::GetScreen()
                 ->GetDisplayNearestWindow(window.get())
                 .bounds()
                 .ToString(),
@@ -699,7 +701,7 @@ TEST_F(WorkspaceLayoutManagerSoloTest, FullscreenRootWindowResize) {
 TEST_F(WorkspaceLayoutManagerSoloTest, RootWindowResizeShrinksWindows) {
   std::unique_ptr<aura::Window> window(
       CreateTestWindow(gfx::Rect(10, 20, 500, 400)));
-  gfx::Rect work_area = gfx::Screen::GetScreen()
+  gfx::Rect work_area = display::Screen::GetScreen()
                             ->GetDisplayNearestWindow(window.get())
                             .work_area();
   // Invariant: Window is smaller than work area.
@@ -708,7 +710,7 @@ TEST_F(WorkspaceLayoutManagerSoloTest, RootWindowResizeShrinksWindows) {
 
   // Make the root window narrower than our window.
   UpdateDisplay("300x400");
-  work_area = gfx::Screen::GetScreen()
+  work_area = display::Screen::GetScreen()
                   ->GetDisplayNearestWindow(window.get())
                   .work_area();
   EXPECT_LE(window->bounds().width(), work_area.width());
@@ -716,7 +718,7 @@ TEST_F(WorkspaceLayoutManagerSoloTest, RootWindowResizeShrinksWindows) {
 
   // Make the root window shorter than our window.
   UpdateDisplay("300x200");
-  work_area = gfx::Screen::GetScreen()
+  work_area = display::Screen::GetScreen()
                   ->GetDisplayNearestWindow(window.get())
                   .work_area();
   EXPECT_LE(window->bounds().width(), work_area.width());
@@ -823,6 +825,11 @@ TEST_F(WorkspaceLayoutManagerSoloTest, NotResizeWhenScreenIsLocked) {
 
 namespace {
 
+WorkspaceLayoutManager* GetWorkspaceLayoutManager(aura::Window* container) {
+  return static_cast<WorkspaceLayoutManager*>(
+      wm::WmWindowAura::Get(container)->GetLayoutManager());
+}
+
 class WorkspaceLayoutManagerBackdropTest : public test::AshTestBase {
  public:
   WorkspaceLayoutManagerBackdropTest() : default_container_(nullptr) {}
@@ -842,11 +849,11 @@ class WorkspaceLayoutManagerBackdropTest : public test::AshTestBase {
 
   // Turn the top window back drop on / off.
   void ShowTopWindowBackdrop(bool show) {
-    std::unique_ptr<ash::WorkspaceLayoutManagerDelegate> backdrop;
+    std::unique_ptr<ash::WorkspaceLayoutManagerBackdropDelegate> backdrop;
     if (show) {
       backdrop.reset(new ash::WorkspaceBackdropDelegate(default_container_));
     }
-    (static_cast<WorkspaceLayoutManager*>(default_container_->layout_manager()))
+    GetWorkspaceLayoutManager(default_container_)
         ->SetMaximizeBackdropDelegate(std::move(backdrop));
     // Closing and / or opening can be a delayed operation.
     base::MessageLoop::current()->RunUntilIdle();
@@ -1025,8 +1032,7 @@ class WorkspaceLayoutManagerKeyboardTest : public test::AshTestBase {
     UpdateDisplay("800x600");
     aura::Window* default_container = Shell::GetContainer(
         Shell::GetPrimaryRootWindow(), kShellWindowId_DefaultContainer);
-    layout_manager_ = static_cast<WorkspaceLayoutManager*>(
-        default_container->layout_manager());
+    layout_manager_ = GetWorkspaceLayoutManager(default_container);
   }
 
   aura::Window* CreateTestWindow(const gfx::Rect& bounds) {
@@ -1036,7 +1042,7 @@ class WorkspaceLayoutManagerKeyboardTest : public test::AshTestBase {
   void ShowKeyboard() {
     layout_manager_->OnKeyboardBoundsChanging(keyboard_bounds_);
     restore_work_area_insets_ =
-        gfx::Screen::GetScreen()->GetPrimaryDisplay().GetWorkAreaInsets();
+        display::Screen::GetScreen()->GetPrimaryDisplay().GetWorkAreaInsets();
     Shell::GetInstance()->SetDisplayWorkAreaInsets(
         Shell::GetPrimaryRootWindow(),
         gfx::Insets(0, 0, keyboard_bounds_.height(), 0));
@@ -1065,7 +1071,7 @@ class WorkspaceLayoutManagerKeyboardTest : public test::AshTestBase {
 // is resized to fit the remaining workspace area.
 TEST_F(WorkspaceLayoutManagerKeyboardTest, ChildWindowFocused) {
   gfx::Rect work_area(
-      gfx::Screen::GetScreen()->GetPrimaryDisplay().work_area());
+      display::Screen::GetScreen()->GetPrimaryDisplay().work_area());
   gfx::Rect keyboard_bounds(work_area.x(),
                             work_area.y() + work_area.height() / 2,
                             work_area.width(),
@@ -1084,7 +1090,7 @@ TEST_F(WorkspaceLayoutManagerKeyboardTest, ChildWindowFocused) {
   wm::ActivateWindow(window.get());
 
   int available_height =
-      gfx::Screen::GetScreen()->GetPrimaryDisplay().bounds().height() -
+      display::Screen::GetScreen()->GetPrimaryDisplay().bounds().height() -
       keyboard_bounds.height();
 
   gfx::Rect initial_window_bounds(50, 50, 100, 500);
@@ -1101,7 +1107,7 @@ TEST_F(WorkspaceLayoutManagerKeyboardTest, ChildWindowFocused) {
 
 TEST_F(WorkspaceLayoutManagerKeyboardTest, AdjustWindowForA11yKeyboard) {
   gfx::Rect work_area(
-      gfx::Screen::GetScreen()->GetPrimaryDisplay().work_area());
+      display::Screen::GetScreen()->GetPrimaryDisplay().work_area());
   gfx::Rect keyboard_bounds(work_area.x(),
                             work_area.y() + work_area.height() / 2,
                             work_area.width(),
@@ -1114,7 +1120,7 @@ TEST_F(WorkspaceLayoutManagerKeyboardTest, AdjustWindowForA11yKeyboard) {
       CreateTestWindowInShellWithDelegate(&delegate, -1, work_area));
 
   int available_height =
-      gfx::Screen::GetScreen()->GetPrimaryDisplay().bounds().height() -
+      display::Screen::GetScreen()->GetPrimaryDisplay().bounds().height() -
       keyboard_bounds.height();
 
   wm::ActivateWindow(window.get());

@@ -49,9 +49,33 @@ class CorePageLoadMetricsObserver
   ~CorePageLoadMetricsObserver() override;
 
   // page_load_metrics::PageLoadMetricsObserver:
-  void OnTimingUpdate(
+  void OnDomContentLoadedEventStart(
       const page_load_metrics::PageLoadTiming& timing,
-      const page_load_metrics::PageLoadExtraInfo& info) override;
+      const page_load_metrics::PageLoadExtraInfo& extra_info) override;
+  void OnLoadEventStart(
+      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& extra_info) override;
+  void OnFirstLayout(
+      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& extra_info) override;
+  void OnFirstPaint(
+      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& extra_info) override;
+  void OnFirstTextPaint(
+      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& extra_info) override;
+  void OnFirstImagePaint(
+      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& extra_info) override;
+  void OnFirstContentfulPaint(
+      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& extra_info) override;
+  void OnParseStart(
+      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& extra_info) override;
+  void OnParseStop(
+      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& extra_info) override;
   void OnComplete(const page_load_metrics::PageLoadTiming& timing,
                   const page_load_metrics::PageLoadExtraInfo& info) override;
   void OnFailedProvisionalLoad(
@@ -73,7 +97,6 @@ class CorePageLoadMetricsObserver
                     const page_load_metrics::PageLoadExtraInfo& info);
 
   FailedProvisionalLoadInfo failed_provisional_load_info_;
-  bool logged_first_contentful_paint_from_timing_update_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(CorePageLoadMetricsObserver);
 };

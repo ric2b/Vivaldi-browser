@@ -27,21 +27,33 @@ template("ash_test_resources") {
 
     sources = [
       "$root_gen_dir/ash/resources/ash_resources_${percent}_percent.pak",
+      "$root_gen_dir/ash/wm/common/resources/ash_wm_common_resources_${percent}_percent.pak",
       "$root_gen_dir/ui/resources/ui_resources_${percent}_percent.pak",
     ]
 
     if (percent == "100") {
-      sources += [ "$root_gen_dir/ui/resources/webui_resources.pak" ]
+      sources += [
+        "$root_gen_dir/content/content_resources.pak",
+        "$root_gen_dir/ui/resources/webui_resources.pak",
+      ]
     }
 
     deps = [
-      "//ash/resources",
+      ":resources",
+      "//ash/wm/common/resources",
+      "//content:resources",
       "//ui/resources",
     ]
 
     if (toolkit_views) {
-      deps += [ "//ui/views/resources" ]
-      sources += [ "$root_gen_dir/ui/views/resources/views_resources_${percent}_percent.pak" ]
+      deps += [
+        "//ui/app_list/resources",
+        "//ui/views/resources",
+      ]
+      sources += [
+        "$root_gen_dir/ui/app_list/resources/app_list_resources_${percent}_percent.pak",
+        "$root_gen_dir/ui/views/resources/views_resources_${percent}_percent.pak",
+      ]
 
       if (percent == "100") {
         # TODO(msw): This seems bad, but follows repack_ui_test_pak's example.
@@ -54,11 +66,6 @@ template("ash_test_resources") {
     if (is_chromeos) {
       sources += [ "$root_gen_dir/ui/chromeos/resources/ui_chromeos_resources_${percent}_percent.pak" ]
       deps += [ "//ui/chromeos/resources" ]
-    }
-
-    if (enable_app_list) {
-      sources += [ "$root_gen_dir/ui/app_list/resources/app_list_resources_${percent}_percent.pak" ]
-      deps += [ "//ui/app_list/resources" ]
     }
   }
 }

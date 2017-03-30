@@ -66,10 +66,16 @@
 <translation id="2997147809295888909">Chrome підтвердив, що компанія <ph name="ISSUER" /> видала сертифікат цього веб-сайту. Сервер не надав інформацію про прозорість сертифіката.</translation>
 <translation id="3037838751736561277">Google Chrome у фоновому режимі.</translation>
 <translation id="3047079729301751317">Якщо від’єднати користувача <ph name="USERNAME" />, вашу історію, закладки, налаштування й інші дані Chrome, збережені на цьому пристрої, буде видалено. Дані, які зберігаються в обліковому записі Google, не буде видалено. Ними можна керувати на <ph name="GOOGLE_DASHBOARD_LINK" />Інформаційній панелі Google<ph name="END_GOOGLE_DASHBOARD_LINK" />.</translation>
+<translation id="3065168410429928842">Chrome</translation>
 <translation id="3080151273017101988">Продовжувати роботу фонових програм, коли Google Chrome закрито</translation>
 <translation id="3089968997497233615">Доступна нова, безпечніша версія Google Chrome.</translation>
 <translation id="3149510190863420837">Додатки Chrome</translation>
-<translation id="3197823471738295152">Пристрій оновлено.</translation>
+<translation id="3251381707915721925">Щоб указати, які веб-сайти може переглядати <ph name="NEW_PROFILE_NAME" />, налаштуйте обмеження й параметри на сторінці <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. Якщо не змінити налаштування за умовчанням, <ph name="NEW_PROFILE_NAME" /> зможе переглядати всі сайти в Інтернеті.
+
+Щоб користувач <ph name="NEW_PROFILE_NAME" /> не мав доступу до вашого облікового запису, блокуйте свій профіль, коли не користуєтеся Chrome. Для цього натисніть назву свого профілю у верхньому правому куті екрана й виберіть "Вийти та заблокувати".
+<ph name="BEGIN_LINK_2" />Докладніше<ph name="END_LINK_2" />
+
+Подальші вказівки надійдуть на електронну адресу <ph name="ACCOUNT_EMAIL" />.</translation>
 <translation id="3282568296779691940">Вхід у Chrome</translation>
 <translation id="3311976847535831054">Цей комп’ютер більше не отримуватиме оновлення для 32-розрядної версії Google Chrome. Установіть 64-розрядну версію.</translation>
 <translation id="3360895254066713204">Помічник Chrome</translation>
@@ -205,7 +211,6 @@
 <translation id="7808348361785373670">Видалити з Chrome…</translation>
 <translation id="7825851276765848807">Програму не вдалося встановити через невизначену помилку. Завантажте Google Chrome ще раз.</translation>
 <translation id="7890208801193284374">Якщо вашим комп’ютером користуєтесь не лише ви, а й ваші друзі чи сім’я, вони можуть налаштувати Chrome на свій смак.</translation>
-<translation id="8000275528373650868">Для роботи Google Chrome потрібно мати ОС Windows Vista чи Windows XP із SP2 або новішу версію.</translation>
 <translation id="8005540215158006229">Chrome майже готовий.</translation>
 <translation id="8008534537613507642">Перевстановити Chrome</translation>
 <translation id="8030318113982266900">Оновлення пристрою до каналу <ph name="CHANNEL_NAME" />…</translation>
@@ -227,6 +232,7 @@
 <translation id="8556340503434111824">Доступна нова версія Google Chrome – швидша, ніж будь-коли.</translation>
 <translation id="8568392309447938879">Щоб користуватися програмами, потрібно ввійти в Chrome. Це дозволяє веб-переглядачу Chrome синхронізувати ваші програми, закладки, історію, паролі й інші налаштування на різних пристроях.</translation>
 <translation id="8614913330719544658">Google Chrome не відповідає. Перезапустити зараз?</translation>
+<translation id="8667808506758191620">Ваш пристрій <ph name="DEVICE_TYPE" /> оновлено.</translation>
 <translation id="8669527147644353129">Помічник Google Chrome</translation>
 <translation id="8679801911857917785">Розширення також змінило сторінку, яка відкривається під час запуску Chrome.</translation>
 <translation id="870251953148363156">Оновити &amp;Google Chrome</translation>
@@ -235,6 +241,7 @@
 <translation id="8851136666856101339">головний</translation>
 <translation id="8862326446509486874">У вас немає відповідних прав для встановлення на рівні системи. Спробуйте запустити програму встановлення, увійшовши з правами адміністратора.</translation>
 <translation id="9026991721384951619">ОС Chrome не вдалося синхронізувати ваші дані, оскільки дані для входу в обліковий запис застаріли.</translation>
+<translation id="9067395829937117663">Для роботи Google Chrome потрібно мати ОС Windows 7 або новішої версії.</translation>
 <translation id="9102715433345326100">Цей файл шкідливий, тому Chrome заблокував його.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Застереження:<ph name="END_BOLD" /> Google Chrome не може заборонити розширенням реєструвати вашу історію веб-перегляду. Щоб вимкнути це розширення в режимі анонімного перегляду, зніміть прапорець поруч із цим параметром.</translation>
 <translation id="911206726377975832">Також видалити дані веб-перегляду?</translation>

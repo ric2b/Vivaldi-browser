@@ -26,6 +26,7 @@
 <translation id="1602076796624386989">Aktifkan data seluler</translation>
 <translation id="1621499497873603021">Waktu yang tersisa hingga baterai kosong, <ph name="TIME_LEFT" /></translation>
 <translation id="164969095109328410">Perangkat Chrome</translation>
+<translation id="1677472565718498478">Sisa waktu <ph name="TIME" /></translation>
 <translation id="1723752762323179280">Keluar dari Sesi</translation>
 <translation id="1747827819627189109">Keyboard di layar diaktifkan</translation>
 <translation id="1812696562331527143">Metode masukan Anda telah berubah menjadi <ph name="INPUT_METHOD_ID" />*(<ph name="BEGIN_LINK" />pihak ketiga<ph name="END_LINK" />).
@@ -92,7 +93,6 @@ Tekan Telusuri atau Shift untuk membatalkan.</translation>
 <translation id="3621712662352432595">Setelan Audio</translation>
 <translation id="3625258641415618104">Tangkapan layar dinonaktifkan</translation>
 <translation id="3626281679859535460">Kecerahan</translation>
-<translation id="3626637461649818317">Sisa <ph name="PERCENTAGE" />%</translation>
 <translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079"><ph name="DISPLAY_NAME" /> resolusi diubah menjadi <ph name="RESOLUTION" /></translation>
 <translation id="370649949373421643">Aktifkan Wi-Fi</translation>
@@ -111,13 +111,13 @@ Tekan Telusuri atau Shift untuk membatalkan.</translation>
 <translation id="397105322502079400">Menghitung...</translation>
 <translation id="3995138139523574647">Perangkat USB-C (port belakang sebelah kanan)</translation>
 <translation id="4053612967614057854">Nonaktifkan keyboard di layar</translation>
-<translation id="412065659894267608"><ph name="HOUR" />j <ph name="MINUTE" />m sampai penuh</translation>
 <translation id="4250680216510889253">Tidak</translation>
 <translation id="4279490309300973883">Mencerminkan</translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4421231901400348175">Berbagi kontrol layar dengan <ph name="HELPER_NAME" /> via Remote Assistance.</translation>
 <translation id="4430019312045809116">Volume</translation>
 <translation id="4527045527269911712">Perangkat Bluetooth "<ph name="DEVICE_NAME" />" meminta izin untuk bersanding.</translation>
+<translation id="453661520163887813"><ph name="TIME" /> hingga penuh</translation>
 <translation id="4544944664594876241">Pintasan untuk mengunci layar telah berubah. Gunakan <ph name="NEW_SHORTCUT" /> sebagai gantinya <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="479989351350248267">search</translation>
 <translation id="4804818685124855865">Putuskan</translation>
@@ -129,7 +129,6 @@ Tekan Telusuri atau Shift untuk membatalkan.</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl+Shift+Spasi</translation>
 <translation id="5045002648206642691">Setelan Google Drive...</translation>
-<translation id="5102001756192215136">Sisa <ph name="HOUR" />:<ph name="MINUTE" /></translation>
 <translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">Perangkat transmisi tersedia</translation>
 <translation id="5222676887888702881">Keluar</translation>
@@ -166,7 +165,6 @@ Tekan Shift + Alt untuk beralih.</translation>
 <translation id="615957422585914272">Tampilkan keyboard di layar</translation>
 <translation id="6165508094623778733">Pelajari lebih lanjut</translation>
 <translation id="6203030746557259519">Tampilan Virtual</translation>
-<translation id="6247708409970142803"><ph name="PERCENTAGE" />%</translation>
 <translation id="6248847161401822652">Tekan Control Shift Q dua kali untuk keluar.</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" /> diputar ke <ph name="ROTATION" /></translation>
 <translation id="6359806961507272919">SMS dari <ph name="PHONE_NUMBER" /></translation>
@@ -207,6 +205,7 @@ Tekan Alt+Telusuri atau Shift untuk membatalkan.</translation>
 <translation id="7510334386202674593">Ctrl+Shift+L</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> tidak mendukung <ph name="SPECIFIED_RESOLUTION" />. Resolusi diubah menjadi <ph name="FALLBACK_RESOLUTION" /></translation>
 <translation id="7573962313813535744">Mode digalangkan</translation>
+<translation id="7580671184200851182">Putar audio yang sama melalui semua speaker (audio mono)</translation>
 <translation id="7593891976182323525">Telusuri atau Shift</translation>
 <translation id="7649070708921625228">Bantuan</translation>
 <translation id="7692480393933218409">Mengisi daya perangkat USB-C yang tersambung</translation>
@@ -225,13 +224,14 @@ Tekan Alt+Telusuri atau Shift untuk membatalkan.</translation>
 <translation id="8308637677604853869">Menu sebelumnya</translation>
 <translation id="8356164830168736643">Tutup <ph name="WINDOW_TITLE" /></translation>
 <translation id="8428213095426709021">Setelan</translation>
-<translation id="8456362689280298700"><ph name="HOUR" />.<ph name="MINUTE" /> sampai penuh</translation>
 <translation id="8517041960877371778"><ph name="DEVICE_TYPE" /> Anda mungkin tidak diisi daya saat dinyalakan.</translation>
 <translation id="8528322925433439945">Seluler ...</translation>
+<translation id="8639760480004882931">Sisa <ph name="PERCENTAGE" /></translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">Pengisi daya rendah terpasang</translation>
 <translation id="8814190375133053267">Wi-Fi</translation>
 <translation id="882279321799040148">Klik untuk melihat</translation>
+<translation id="8825534185036233643">Pencerminan dengan lebih dari dua layar tidak didukung.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8850991929411075241">Search+Esc</translation>
 <translation id="8878886163241303700">Memperluas layar</translation>

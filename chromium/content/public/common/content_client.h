@@ -49,6 +49,7 @@ class ContentClient;
 class ContentGpuClient;
 class ContentRendererClient;
 class ContentUtilityClient;
+struct CdmInfo;
 struct PepperPluginInfo;
 
 // Setter and getter for the client.  The client should be set early, before any
@@ -89,6 +90,11 @@ class CONTENT_EXPORT ContentClient {
   // Gives the embedder a chance to register its own pepper plugins.
   virtual void AddPepperPlugins(
       std::vector<content::PepperPluginInfo>* plugins) {}
+
+  // Gives the embedder a chance to register the content decryption
+  // modules it supports.
+  virtual void AddContentDecryptionModules(
+      std::vector<content::CdmInfo>* cdms) {}
 
   // Gives the embedder a chance to register its own standard, referrer and
   // saveable url schemes early on in the startup sequence.
@@ -163,6 +169,11 @@ class CONTENT_EXPORT ContentClient {
   virtual base::StringPiece GetOriginTrialPublicKey();
 
 #if defined(OS_ANDROID)
+  // Returns true for clients like Android WebView that uses synchronous
+  // compositor. Note setting this to true will permit synchronous IPCs from
+  // the browser UI thread.
+  virtual bool UsingSynchronousCompositing();
+
   // Returns the MediaClientAndroid to be used by media code on Android.
   virtual media::MediaClientAndroid* GetMediaClientAndroid();
 #endif  // OS_ANDROID

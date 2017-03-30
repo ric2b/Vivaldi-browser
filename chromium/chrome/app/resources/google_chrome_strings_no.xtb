@@ -66,10 +66,16 @@ Hvis du logger deg på allikevel, blir Chrome-informasjon som bokmerker, loggen 
 <translation id="2997147809295888909">Chrome bekreftet at sertifikatet for dette nettstedet er utstedt av <ph name="ISSUER" />. Tjeneren oppga ingen informasjon om sertifikatåpenhet.</translation>
 <translation id="3037838751736561277">Google Chrome er i bakgrunnsmodus.</translation>
 <translation id="3047079729301751317">Hvis du kobler fra <ph name="USERNAME" />, slettes loggen din, bokmerkene, innstillingene og andre Chrome-data som er lagret på denne enheten. Data som er lagret i Google-kontoen din, blir ikke tømt og kan administreres på <ph name="GOOGLE_DASHBOARD_LINK" />Google Oversikt<ph name="END_GOOGLE_DASHBOARD_LINK" />.</translation>
+<translation id="3065168410429928842">Chrome-fane</translation>
 <translation id="3080151273017101988">Fortsett kjøringen av bakgrunnsprogrammer når Google Chrome er lukket</translation>
 <translation id="3089968997497233615">En ny, sikrere versjon av Google Chrome er tilgjengelig</translation>
 <translation id="3149510190863420837">Chrome-apper</translation>
-<translation id="3197823471738295152">Enheten er oppdatert.</translation>
+<translation id="3251381707915721925">Du kan konfigurere hvilke nettsteder <ph name="NEW_PROFILE_NAME" /> kan se, ved å angi begrensninger og innstillinger her: <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. Hvis du ikke endrer standardinnstillingene, kan <ph name="NEW_PROFILE_NAME" /> surfe på hele nettet.
+
+Hvis du vil hindre <ph name="NEW_PROFILE_NAME" /> i å få tilgang til kontoen din, må du låse profilen din når du ikke bruker Chrome. For å gjøre det, klikk på profilnavnet øverst til høyre i nettleseren og velg «Avslutt og barnelås».
+<ph name="BEGIN_LINK_2" />Finn ut mer<ph name="END_LINK_2" />
+
+Vi har sendt deg (<ph name="ACCOUNT_EMAIL" />) en e-post med nærmere instruksjoner.</translation>
 <translation id="3282568296779691940">Logg på Chrome</translation>
 <translation id="3311976847535831054">Denne maskinen mottar ikke oppdateringer for 32-bit-versjonen av Google Chrome lenger. Oppgrader til 64-bit-versjonen av Google Chrome.</translation>
 <translation id="3360895254066713204">Chrome-hjelper</translation>
@@ -205,7 +211,6 @@ Hvis du logger deg på allikevel, blir Chrome-informasjon som bokmerker, loggen 
 <translation id="7808348361785373670">Fjern fra Chrome</translation>
 <translation id="7825851276765848807">Installeringen mislyktes på grunn av en uspesifisert feil. Last ned Google Chrome på nytt.</translation>
 <translation id="7890208801193284374">Hvis du deler en datamaskin med andre, kan venner og familie surfe hver for seg og konfigurere Chrome akkurat slik de vil.</translation>
-<translation id="8000275528373650868">Google Chrome krever Windows Vista eller Windows XP med SP2 eller nyere.</translation>
 <translation id="8005540215158006229">Chrome er nesten klar.</translation>
 <translation id="8008534537613507642">Installer Chrome på nytt</translation>
 <translation id="8030318113982266900">Oppdaterer enheten din til <ph name="CHANNEL_NAME" />-kanalen ...</translation>
@@ -227,6 +232,7 @@ Hvis du logger deg på allikevel, blir Chrome-informasjon som bokmerker, loggen 
 <translation id="8556340503434111824">En ny versjon av Google Chrome er tilgjengelig, og den er nå raskere en noen sinne.</translation>
 <translation id="8568392309447938879">Du må være logget på Chrome for å bruke apper. På denne måten kan Chrome synkronisere appene, bokmerkene og passordene samt loggen din og andre innstillinger, på alle enhetene dine.</translation>
 <translation id="8614913330719544658">Google Chrome svarer ikke. Vil du starte på nytt nå?</translation>
+<translation id="8667808506758191620"><ph name="DEVICE_TYPE" />-enheten er oppdatert.</translation>
 <translation id="8669527147644353129">Google Chrome-hjelper</translation>
 <translation id="8679801911857917785">Den styrer også hvilken side som vises når du starter Chrome.</translation>
 <translation id="870251953148363156">Oppdater &amp;Google Chrome</translation>
@@ -235,6 +241,7 @@ Hvis du logger deg på allikevel, blir Chrome-informasjon som bokmerker, loggen 
 <translation id="8851136666856101339">main</translation>
 <translation id="8862326446509486874">Du har ikke de nødvendige rettighetene for å installere på systemnivå. Prøv å kjøre installasjonsprogrammet som administrator.</translation>
 <translation id="9026991721384951619">Chrome OS kunne ikke synkronisere dataene fordi påloggingsopplysningene dine er foreldede.</translation>
+<translation id="9067395829937117663">Google Chrome krever Windows 7 eller nyere.</translation>
 <translation id="9102715433345326100">Denne filen er skadelig, og Chrome har blokkert den.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Advarsel:<ph name="END_BOLD" /> Google Chrome kan ikke forhindre utvidelser fra å lagre nettleserloggen din. Du kan deaktivere denne utvidelsen i inkognitomodus ved å oppheve merkingen av dette alternativet.</translation>
 <translation id="911206726377975832">Vil du slette all nettleserdata også?</translation>

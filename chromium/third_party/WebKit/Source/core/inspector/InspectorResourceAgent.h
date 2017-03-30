@@ -37,7 +37,6 @@
 #include "core/inspector/InspectorPageAgent.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
-#include "platform/network/ResourceRequest.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/text/WTFString.h"
 
@@ -56,7 +55,6 @@ class InspectorFrontend;
 class KURL;
 class NetworkResourcesData;
 class ResourceError;
-class ResourceLoader;
 class ResourceResponse;
 class ThreadableLoaderClient;
 class XHRReplayData;
@@ -71,7 +69,7 @@ class DictionaryValue;
 
 class CORE_EXPORT InspectorResourceAgent final : public InspectorBaseAgent<InspectorResourceAgent, protocol::Frontend::Network>, public protocol::Backend::Network {
 public:
-    static RawPtr<InspectorResourceAgent> create(InspectedFrames* inspectedFrames)
+    static InspectorResourceAgent* create(InspectedFrames* inspectedFrames)
     {
         return new InspectorResourceAgent(inspectedFrames);
     }
@@ -83,19 +81,22 @@ public:
 
     // Called from instrumentation.
     void didBlockRequest(LocalFrame*, const ResourceRequest&, DocumentLoader*, const FetchInitiatorInfo&, ResourceRequestBlockedReason);
+    void didChangeResourcePriority(unsigned long identifier, ResourceLoadPriority);
     void willSendRequest(LocalFrame*, unsigned long identifier, DocumentLoader*, ResourceRequest&, const ResourceResponse& redirectResponse, const FetchInitiatorInfo&);
     void markResourceAsCached(unsigned long identifier);
-    void didReceiveResourceResponse(LocalFrame*, unsigned long identifier, DocumentLoader*, const ResourceResponse&, ResourceLoader*);
+    void didReceiveResourceResponse(LocalFrame*, unsigned long identifier, DocumentLoader*, const ResourceResponse&, Resource*);
     void didReceiveData(LocalFrame*, unsigned long identifier, const char* data, int dataLength, int encodedDataLength);
     void didFinishLoading(unsigned long identifier, double monotonicFinishTime, int64_t encodedDataLength);
-    void didReceiveCORSRedirectResponse(LocalFrame*, unsigned long identifier, DocumentLoader*, const ResourceResponse&, ResourceLoader*);
+    void didReceiveCORSRedirectResponse(LocalFrame*, unsigned long identifier, DocumentLoader*, const ResourceResponse&, Resource*);
     void didFailLoading(unsigned long identifier, const ResourceError&);
     void didCommitLoad(LocalFrame*, DocumentLoader*);
     void scriptImported(unsigned long identifier, const String& sourceString);
     void didReceiveScriptResponse(unsigned long identifier);
     bool shouldForceCORSPreflight();
+    bool shouldBlockRequest(const ResourceRequest&);
 
     void documentThreadableLoaderStartedLoadingForClient(unsigned long identifier, ThreadableLoaderClient*);
+    void documentThreadableLoaderFailedToStartLoadingForClient(ThreadableLoaderClient*);
     void willLoadXHR(XMLHttpRequest*, ThreadableLoaderClient*, const AtomicString& method, const KURL&, bool async, PassRefPtr<EncodedFormData> body, const HTTPHeaderMap& headers, bool includeCrendentials);
     void didFailXHRLoading(ExecutionContext*, XMLHttpRequest*, ThreadableLoaderClient*, const AtomicString&, const String&);
     void didFinishXHRLoading(ExecutionContext*, XMLHttpRequest*, ThreadableLoaderClient*, const AtomicString&, const String&);
@@ -108,13 +109,13 @@ public:
     void willDispatchEventSourceEvent(ThreadableLoaderClient*, const AtomicString& eventName, const AtomicString& eventId, const String& data);
     void didFinishEventSourceRequest(ThreadableLoaderClient*);
 
-    void removedResourceFromMemoryCache(Resource*);
+    void willDestroyResource(Resource*);
 
     void applyUserAgentOverride(String* userAgent);
 
     // FIXME: InspectorResourceAgent should not be aware of style recalculation.
     void willRecalculateStyle(Document*);
-    void didRecalculateStyle(int);
+    void didRecalculateStyle();
     void didScheduleStyleRecalculation(Document*);
 
     void frameScheduledNavigation(LocalFrame*, double);
@@ -144,12 +145,12 @@ public:
     void canClearBrowserCookies(ErrorString*, bool* result) override;
     void emulateNetworkConditions(ErrorString*, bool offline, double latency, double downloadThroughput, double uploadThroughput) override;
     void setCacheDisabled(ErrorString*, bool cacheDisabled) override;
+    void setBypassServiceWorker(ErrorString*, bool bypass) override;
     void setDataSizeLimitsForTest(ErrorString*, int maxTotalSize, int maxResourceSize) override;
 
     // Called from other agents.
     void setHostId(const String&);
     bool fetchResourceContent(Document*, const KURL&, String* content, bool* base64Encoded);
-    bool shouldBlockRequest(const ResourceRequest&);
 
 private:
     explicit InspectorResourceAgent(InspectedFrames*);
@@ -162,6 +163,7 @@ private:
 
     bool canGetResponseBodyBlob(const String& requestId);
     void getResponseBodyBlob(const String& requestId, PassOwnPtr<GetResponseBodyCallback>);
+    void clearPendingRequestData();
 
     Member<InspectedFrames> m_inspectedFrames;
     String m_userAgentOverride;

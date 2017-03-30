@@ -86,7 +86,7 @@ class VivaldiMenuController : public ui::SimpleMenuModel::Delegate {
   std::vector<vivaldi::show_menu::MenuItem>*
       menu_items_;  // Not owned by us.
   ui::SimpleMenuModel menu_model_;
-  scoped_ptr<::vivaldi::VivaldiContextMenu> menu_;
+  std::unique_ptr<::vivaldi::VivaldiContextMenu> menu_;
   ScopedVector<ui::SimpleMenuModel> models_;
   content::WebContents* web_contents_;  // Not owned by us.
   Profile* profile_;
@@ -107,7 +107,7 @@ class CommandEventRouter {
 
     // Helper to actually dispatch an event to extension listeners.
     void DispatchEvent(const std::string& event_name,
-                       scoped_ptr<base::ListValue> event_args);
+                       std::unique_ptr<base::ListValue> event_args);
 private:
     content::BrowserContext* browser_context_;
     DISALLOW_COPY_AND_ASSIGN(CommandEventRouter);
@@ -144,7 +144,7 @@ public EventRouter::Observer {
     static const bool kServiceIsNULLWhileTesting = true;
 
     // Created lazily upon OnListenerAdded.
-    scoped_ptr<CommandEventRouter> command_event_router_;
+    std::unique_ptr<CommandEventRouter> command_event_router_;
 };
 
 class ShowMenuCreateFunction : public ChromeAsyncExtensionFunction,

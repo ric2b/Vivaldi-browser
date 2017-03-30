@@ -6,11 +6,11 @@
 #define CHROME_BROWSER_RENDERER_CONTEXT_MENU_RENDER_VIEW_CONTEXT_MENU_H_
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/files/file_path.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
@@ -28,10 +28,14 @@
 #include "chrome/browser/extensions/menu_manager.h"
 #endif
 
+#include "notes/notes_submenu_observer.h"
+
+class OpenWithMenuObserver;
 class PrintPreviewContextMenuObserver;
 class Profile;
 class SpellingMenuObserver;
 class SpellingOptionsSubMenuObserver;
+class NotesSubMenuObserver;
 
 namespace content {
 class RenderFrameHost;
@@ -122,6 +126,7 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   void AppendDeveloperItems();
   void AppendDevtoolsForUnpackedExtensions();
   void AppendLinkItems();
+  void AppendOpenWithLinkItems();
   void AppendImageItems();
   void AppendAudioItems();
   void AppendCanvasItems();
@@ -135,6 +140,7 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   void AppendRotationItems();
   void AppendEditableItems();
   void AppendLanguageSettings();
+  void AppendInsertNoteSubMenu();
   void AppendSpellingSuggestionItems();
   void AppendSearchProvider();
 #if defined(ENABLE_EXTENSIONS)
@@ -184,17 +190,24 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
 
   // An observer that handles spelling suggestions, "Add to dictionary", and
   // "Ask Google for suggestions" items.
-  scoped_ptr<SpellingMenuObserver> spelling_suggestions_menu_observer_;
+  std::unique_ptr<SpellingMenuObserver> spelling_suggestions_menu_observer_;
 
 #if !defined(OS_MACOSX)
   // An observer that handles the submenu for showing spelling options. This
   // submenu lets users select the spelling language, for example.
-  scoped_ptr<SpellingOptionsSubMenuObserver> spelling_options_submenu_observer_;
+  std::unique_ptr<SpellingOptionsSubMenuObserver>
+      spelling_options_submenu_observer_;
 #endif
+
+  std::unique_ptr<NotesSubMenuObserver>
+    insert_note_submenu_observer_;
+
+  // An observer that handles "Open with <app>" items.
+  std::unique_ptr<RenderViewContextMenuObserver> open_with_menu_observer_;
 
 #if defined(ENABLE_PRINT_PREVIEW)
   // An observer that disables menu items when print preview is active.
-  scoped_ptr<PrintPreviewContextMenuObserver> print_preview_menu_observer_;
+  std::unique_ptr<PrintPreviewContextMenuObserver> print_preview_menu_observer_;
 #endif
 
   // In the case of a MimeHandlerView this will point to the WebContents that
@@ -202,7 +215,7 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   // |source_web_contents_|.
   content::WebContents* const embedder_web_contents_;
 
-  scoped_ptr<RenderViewContextMenuObserver> vivaldi_menu_observer_;
+  std::unique_ptr<RenderViewContextMenuObserver> vivaldi_menu_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderViewContextMenu);
 };

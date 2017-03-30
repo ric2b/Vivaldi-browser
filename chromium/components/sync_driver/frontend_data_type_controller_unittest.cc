@@ -4,14 +4,15 @@
 
 #include "components/sync_driver/frontend_data_type_controller.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/location.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/tracked_objects.h"
 #include "components/sync_driver/change_processor_mock.h"
 #include "components/sync_driver/data_type_controller_mock.h"

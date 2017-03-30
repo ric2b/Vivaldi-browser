@@ -27,7 +27,10 @@ class PickledStructChromium {
  public:
   PickledStructChromium();
   PickledStructChromium(int foo, int bar);
+  PickledStructChromium(PickledStructChromium&& other) = default;
   ~PickledStructChromium();
+
+  PickledStructChromium& operator=(PickledStructChromium&& other) = default;
 
   int foo() const { return foo_; }
   void set_foo(int foo) { foo_ = foo; }
@@ -46,6 +49,9 @@ class PickledStructChromium {
 
   DISALLOW_COPY_AND_ASSIGN(PickledStructChromium);
 };
+
+bool operator==(const PickledStructChromium& a,
+                const PickledStructChromium& b);
 
 }  // namespace test
 }  // namespace mojo

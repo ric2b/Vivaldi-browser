@@ -40,6 +40,28 @@ RenderSurfaceImpl::RenderSurfaceImpl(LayerImpl* owning_layer)
 
 RenderSurfaceImpl::~RenderSurfaceImpl() {}
 
+RenderSurfaceImpl* RenderSurfaceImpl::render_target() {
+  EffectTree& effect_tree =
+      owning_layer_->layer_tree_impl()->property_trees()->effect_tree;
+  EffectNode* node = effect_tree.Node(EffectTreeIndex());
+  EffectNode* target_node = effect_tree.Node(node->data.target_id);
+  if (target_node->id != 0)
+    return target_node->data.render_surface;
+  else
+    return this;
+}
+
+const RenderSurfaceImpl* RenderSurfaceImpl::render_target() const {
+  const EffectTree& effect_tree =
+      owning_layer_->layer_tree_impl()->property_trees()->effect_tree;
+  const EffectNode* node = effect_tree.Node(EffectTreeIndex());
+  const EffectNode* target_node = effect_tree.Node(node->data.target_id);
+  if (target_node->id != 0)
+    return target_node->data.render_surface;
+  else
+    return this;
+}
+
 RenderSurfaceImpl::DrawProperties::DrawProperties() {
   draw_opacity = 1.f;
   is_clipped = false;
@@ -48,16 +70,23 @@ RenderSurfaceImpl::DrawProperties::DrawProperties() {
 RenderSurfaceImpl::DrawProperties::~DrawProperties() {}
 
 gfx::RectF RenderSurfaceImpl::DrawableContentRect() const {
-  gfx::RectF drawable_content_rect =
-      MathUtil::MapClippedRect(draw_transform(), gfx::RectF(content_rect()));
-  if (owning_layer_->has_replica()) {
-    drawable_content_rect.Union(MathUtil::MapClippedRect(
-        replica_draw_transform(), gfx::RectF(content_rect())));
-  }
+  if (content_rect().IsEmpty())
+    return gfx::RectF();
+
+  gfx::Rect surface_content_rect = content_rect();
   if (!owning_layer_->filters().IsEmpty()) {
     int left, top, right, bottom;
     owning_layer_->filters().GetOutsets(&top, &right, &bottom, &left);
-    drawable_content_rect.Inset(-left, -top, -right, -bottom);
+    surface_content_rect.Inset(-left, -top, -right, -bottom);
+  }
+  gfx::RectF drawable_content_rect = MathUtil::MapClippedRect(
+      draw_transform(), gfx::RectF(surface_content_rect));
+  if (owning_layer_->has_replica()) {
+    drawable_content_rect.Union(MathUtil::MapClippedRect(
+        replica_draw_transform(), gfx::RectF(surface_content_rect)));
+  } else if (!owning_layer_->filters().IsEmpty() && is_clipped()) {
+    // Filter could move pixels around, but still need to be clipped.
+    drawable_content_rect.Intersect(gfx::RectF(clip_rect()));
   }
 
   // If the rect has a NaN coordinate, we return empty rect to avoid crashes in
@@ -128,9 +157,111 @@ void RenderSurfaceImpl::SetContentRect(const gfx::Rect& content_rect) {
   draw_properties_.content_rect = content_rect;
 }
 
-void RenderSurfaceImpl::SetAccumulatedContentRect(
-    const gfx::Rect& content_rect) {
-  accumulated_content_rect_ = content_rect;
+void RenderSurfaceImpl::SetContentRectForTesting(const gfx::Rect& rect) {
+  SetContentRect(rect);
+}
+
+gfx::Rect RenderSurfaceImpl::CalculateClippedAccumulatedContentRect() {
+  if (owning_layer_->replica_layer() || owning_layer_->HasCopyRequest() ||
+      !is_clipped())
+    return accumulated_content_rect();
+
+  if (accumulated_content_rect().IsEmpty())
+    return gfx::Rect();
+
+  // Calculate projection from the target surface rect to local
+  // space. Non-invertible draw transforms means no able to bring clipped rect
+  // in target space back to local space, early out without clip.
+  gfx::Transform target_to_surface(gfx::Transform::kSkipInitialization);
+  if (!draw_transform().GetInverse(&target_to_surface))
+    return accumulated_content_rect();
+
+  // Clip rect is in target space. Bring accumulated content rect to
+  // target space in preparation for clipping.
+  gfx::Rect accumulated_rect_in_target_space =
+      MathUtil::MapEnclosingClippedRect(draw_transform(),
+                                        accumulated_content_rect());
+  // If accumulated content rect is contained within clip rect, early out
+  // without clipping.
+  if (clip_rect().Contains(accumulated_rect_in_target_space))
+    return accumulated_content_rect();
+
+  gfx::Rect clipped_accumulated_rect_in_target_space = clip_rect();
+  clipped_accumulated_rect_in_target_space.Intersect(
+      accumulated_rect_in_target_space);
+
+  if (clipped_accumulated_rect_in_target_space.IsEmpty())
+    return gfx::Rect();
+
+  gfx::Rect clipped_accumulated_rect_in_local_space =
+      MathUtil::ProjectEnclosingClippedRect(
+          target_to_surface, clipped_accumulated_rect_in_target_space);
+  // Bringing clipped accumulated rect back to local space may result
+  // in inflation due to axis-alignment.
+  clipped_accumulated_rect_in_local_space.Intersect(accumulated_content_rect());
+  return clipped_accumulated_rect_in_local_space;
+}
+
+void RenderSurfaceImpl::CalculateContentRectFromAccumulatedContentRect(
+    int max_texture_size) {
+  // Root render surface use viewport, and does not calculate content rect.
+  DCHECK_NE(render_target(), this);
+
+  // Surface's content rect is the clipped accumulated content rect. By default
+  // use accumulated content rect, and then try to clip it.
+  gfx::Rect surface_content_rect = CalculateClippedAccumulatedContentRect();
+
+  // The RenderSurfaceImpl backing texture cannot exceed the maximum
+  // supported texture size.
+  surface_content_rect.set_width(
+      std::min(surface_content_rect.width(), max_texture_size));
+  surface_content_rect.set_height(
+      std::min(surface_content_rect.height(), max_texture_size));
+
+  SetContentRect(surface_content_rect);
+}
+
+void RenderSurfaceImpl::SetContentRectToViewport() {
+  // Only root render surface use viewport as content rect.
+  DCHECK_EQ(render_target(), this);
+  gfx::Rect viewport = gfx::ToEnclosingRect(owning_layer_->layer_tree_impl()
+                                                ->property_trees()
+                                                ->clip_tree.ViewportClip());
+  SetContentRect(viewport);
+}
+
+void RenderSurfaceImpl::ClearAccumulatedContentRect() {
+  accumulated_content_rect_ = gfx::Rect();
+}
+
+void RenderSurfaceImpl::AccumulateContentRectFromContributingLayer(
+    LayerImpl* layer) {
+  DCHECK(layer->DrawsContent());
+  DCHECK_EQ(this, layer->render_target());
+
+  // Root render surface doesn't accumulate content rect, it always uses
+  // viewport for content rect.
+  if (render_target() == this)
+    return;
+
+  accumulated_content_rect_.Union(layer->drawable_content_rect());
+}
+
+void RenderSurfaceImpl::AccumulateContentRectFromContributingRenderSurface(
+    RenderSurfaceImpl* contributing_surface) {
+  DCHECK_NE(this, contributing_surface);
+  DCHECK_EQ(this, contributing_surface->render_target());
+
+  // Root render surface doesn't accumulate content rect, it always uses
+  // viewport for content rect.
+  if (render_target() == this)
+    return;
+
+  // The content rect of contributing surface is in its own space. Instead, we
+  // will use contributing surface's DrawableContentRect which is in target
+  // space (local space for this render surface) as required.
+  accumulated_content_rect_.Union(
+      gfx::ToEnclosedRect(contributing_surface->DrawableContentRect()));
 }
 
 bool RenderSurfaceImpl::SurfacePropertyChanged() const {
@@ -163,7 +294,7 @@ RenderPassId RenderSurfaceImpl::GetRenderPassId() {
 }
 
 void RenderSurfaceImpl::AppendRenderPasses(RenderPassSink* pass_sink) {
-  scoped_ptr<RenderPass> pass = RenderPass::Create(layer_list_.size());
+  std::unique_ptr<RenderPass> pass = RenderPass::Create(layer_list_.size());
   pass->SetNew(GetRenderPassId(), content_rect(),
                gfx::IntersectRects(content_rect(),
                                    damage_tracker_->current_damage_rect()),

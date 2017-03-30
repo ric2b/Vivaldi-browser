@@ -37,11 +37,19 @@ source_set("browser") {
     "credentials_filter.h",
     "export/csv_writer.cc",
     "export/csv_writer.h",
+    "export/password_csv_writer.cc",
+    "export/password_csv_writer.h",
+    "export/password_exporter.cc",
+    "export/password_exporter.h",
     "facet_manager.cc",
     "facet_manager.h",
     "facet_manager_host.h",
     "import/csv_reader.cc",
     "import/csv_reader.h",
+    "import/password_csv_reader.cc",
+    "import/password_csv_reader.h",
+    "import/password_importer.cc",
+    "import/password_importer.h",
     "keychain_migration_status_mac.h",
     "log_manager.cc",
     "log_manager.h",
@@ -189,6 +197,38 @@ source_set("test_support") {
   ]
 }
 
+bundle_data("unit_tests_bundle_data") {
+  visibility = [ ":unit_tests" ]
+  testonly = true
+  sources = [
+    "//components/test/data/password_manager/login_db_v1.sql",
+    "//components/test/data/password_manager/login_db_v10.sql",
+    "//components/test/data/password_manager/login_db_v11.sql",
+    "//components/test/data/password_manager/login_db_v12.sql",
+    "//components/test/data/password_manager/login_db_v13.sql",
+    "//components/test/data/password_manager/login_db_v14.sql",
+    "//components/test/data/password_manager/login_db_v15.sql",
+    "//components/test/data/password_manager/login_db_v16.sql",
+    "//components/test/data/password_manager/login_db_v17.sql",
+    "//components/test/data/password_manager/login_db_v1_broken.sql",
+    "//components/test/data/password_manager/login_db_v2.sql",
+    "//components/test/data/password_manager/login_db_v2_broken.sql",
+    "//components/test/data/password_manager/login_db_v3.sql",
+    "//components/test/data/password_manager/login_db_v3_broken.sql",
+    "//components/test/data/password_manager/login_db_v4.sql",
+    "//components/test/data/password_manager/login_db_v5.sql",
+    "//components/test/data/password_manager/login_db_v6.sql",
+    "//components/test/data/password_manager/login_db_v7.sql",
+    "//components/test/data/password_manager/login_db_v8.sql",
+    "//components/test/data/password_manager/login_db_v9.sql",
+    "//components/test/data/password_manager/login_db_v9_without_use_additional_auth_field.sql",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/" +
+        "{{source_root_relative_dir}}/{{source_file_part}}",
+  ]
+}
+
 source_set("unit_tests") {
   testonly = true
   sources = [
@@ -201,8 +241,12 @@ source_set("unit_tests") {
     "affiliation_utils_unittest.cc",
     "browser_save_password_progress_logger_unittest.cc",
     "export/csv_writer_unittest.cc",
+    "export/password_csv_writer_unittest.cc",
+    "export/password_exporter_unittest.cc",
     "facet_manager_unittest.cc",
     "import/csv_reader_unittest.cc",
+    "import/password_csv_reader_unittest.cc",
+    "import/password_importer_unittest.cc",
     "log_manager_unittest.cc",
     "log_router_unittest.cc",
     "login_database_unittest.cc",
@@ -222,8 +266,12 @@ source_set("unit_tests") {
     "psl_matching_helper_unittest.cc",
     "statistics_table_unittest.cc",
   ]
+  if (is_mac) {
+    sources -= [ "password_store_default_unittest.cc" ]
+  }
   deps = [
     ":test_support",
+    ":unit_tests_bundle_data",
     "//base/test:test_support",
     "//components/autofill/core/browser:test_support",
     "//components/autofill/core/browser/proto",

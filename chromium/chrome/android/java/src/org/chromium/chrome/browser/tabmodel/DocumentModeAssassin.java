@@ -9,10 +9,9 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.AsyncTask;
 import android.os.Build;
-import android.preference.PreferenceManager;
 import android.util.Pair;
 
-import org.chromium.base.ApplicationStatus;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.FileUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
@@ -151,7 +150,7 @@ public class DocumentModeAssassin {
         //   with a bunch of inaccessible document mode data instead of being stuck trying to
         //   migrate, which is a lesser evil.  This case will be caught by the check above to see if
         //   migration is even necessary.
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(getContext());
+        SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
         int numMigrationAttempts = prefs.getInt(PREF_NUM_MIGRATION_ATTEMPTS, 0);
         if (numMigrationAttempts >= MAX_MIGRATION_ATTEMPTS_BEFORE_FAILURE) {
             Log.e(TAG, "Too many failures.  Migrating user to tabbed mode without data.");
@@ -519,12 +518,12 @@ public class DocumentModeAssassin {
 
     /** @return Whether or not a migration to tabbed mode from document mode is necessary. */
     public boolean isMigrationNecessary() {
-        return FeatureUtilities.isDocumentMode(ApplicationStatus.getApplicationContext());
+        return FeatureUtilities.isDocumentMode(ContextUtils.getApplicationContext());
     }
 
     /** @return Context to use when grabbing SharedPreferences, Files, and other resources. */
     protected Context getContext() {
-        return ApplicationStatus.getApplicationContext();
+        return ContextUtils.getApplicationContext();
     }
 
     /** @return Interfaces with the Android ActivityManager. */
@@ -544,6 +543,6 @@ public class DocumentModeAssassin {
 
     /** @return Where tabbed mode data is stored for the main {@link TabModelImpl}. */
     protected File getTabbedDataDirectory() {
-        return TabPersistentStore.getStateDirectory(getContext(), TAB_MODEL_INDEX);
+        return TabPersistentStore.getOrCreateSelectorStateDirectory(TAB_MODEL_INDEX);
     }
 }

@@ -25,6 +25,8 @@
 #include "base/win/scoped_hdc.h"
 #include "base/win/scoped_select_object.h"
 #include "base/win/win_util.h"
+#include "third_party/skia/include/core/SkFontLCDConfig.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/core/SkTypeface.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/font.h"
@@ -583,23 +585,23 @@ PlatformFontWin::HFontRef* PlatformFontWin::CreateHFontRefFromSkia(
   DWRITE_FONT_METRICS dwrite_font_metrics = {0};
   dwrite_font->GetMetrics(&dwrite_font_metrics);
 
-  skia::RefPtr<SkTypeface> skia_face = skia::AdoptRef(
+  sk_sp<SkTypeface> skia_face(
       SkTypeface::CreateFromName(
           base::SysWideToUTF8(font_info.lfFaceName).c_str(),
                               static_cast<SkTypeface::Style>(skia_style)));
 
   gfx::FontRenderParams font_params =
       gfx::GetFontRenderParams(gfx::FontRenderParamsQuery(), nullptr);
-  SkFontHost::SetSubpixelOrder(
+  SkFontLCDConfig::SetSubpixelOrder(
       gfx::FontRenderParams::SubpixelRenderingToSkiaLCDOrder(
           font_params.subpixel_rendering));
-  SkFontHost::SetSubpixelOrientation(
+  SkFontLCDConfig::SetSubpixelOrientation(
       gfx::FontRenderParams::SubpixelRenderingToSkiaLCDOrientation(
           font_params.subpixel_rendering));
 
   SkPaint paint;
   paint.setAntiAlias(font_params.antialiasing);
-  paint.setTypeface(skia_face.get());
+  paint.setTypeface(std::move(skia_face));
   paint.setTextSize(-font_info.lfHeight);
   SkPaint::FontMetrics skia_metrics;
   paint.getFontMetrics(&skia_metrics);

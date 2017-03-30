@@ -21,12 +21,13 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 using base::StringPrintf;
+using google::protobuf::implicit_cast;
 using net::test::ConstructEncryptedPacket;
 using net::test::ConstructMisFramedEncryptedPacket;
 using net::test::CryptoTestUtils;
 using net::test::DefaultQuicConfig;
-using net::test::MockConnection;
-using net::test::MockConnectionHelper;
+using net::test::MockQuicConnection;
+using net::test::MockQuicConnectionHelper;
 using net::test::MockQuicSpdyClientStream;
 using net::test::PacketSavingConnection;
 using net::test::QuicConnectionPeer;
@@ -94,7 +95,8 @@ class QuicClientSessionTest : public ::testing::TestWithParam<QuicVersion> {
 
   void Initialize() {
     session_.reset();
-    connection_ = new PacketSavingConnection(&helper_, Perspective::IS_CLIENT,
+    connection_ = new PacketSavingConnection(&helper_, &alarm_factory_,
+                                             Perspective::IS_CLIENT,
                                              SupportedVersions(GetParam()));
     session_.reset(new TestQuicClientSession(
         DefaultQuicConfig(), connection_,
@@ -114,14 +116,15 @@ class QuicClientSessionTest : public ::testing::TestWithParam<QuicVersion> {
     QuicCryptoClientStream* stream =
         static_cast<QuicCryptoClientStream*>(session_->GetCryptoStream());
     CryptoTestUtils::FakeServerOptions options;
-    CryptoTestUtils::HandshakeWithFakeServer(&helper_, connection_, stream,
-                                             options);
+    CryptoTestUtils::HandshakeWithFakeServer(&helper_, &alarm_factory_,
+                                             connection_, stream, options);
   }
 
   QuicCryptoClientConfig crypto_config_;
-  MockConnectionHelper helper_;
+  MockQuicConnectionHelper helper_;
+  MockAlarmFactory alarm_factory_;
   PacketSavingConnection* connection_;
-  scoped_ptr<TestQuicClientSession> session_;
+  std::unique_ptr<TestQuicClientSession> session_;
   QuicClientPushPromiseIndex push_promise_index_;
   SpdyHeaderBlock push_promise_;
   string promise_url_;
@@ -172,7 +175,7 @@ TEST_P(QuicClientSessionTest, NoEncryptionAfterInitialEncryption) {
   struct iovec iov = {data, arraysize(data)};
   QuicIOVector iovector(&iov, 1, iov.iov_len);
   QuicConsumedData consumed =
-      session_->WritevData(stream->id(), iovector, 0, false, nullptr);
+      session_->WritevData(stream, stream->id(), iovector, 0, false, nullptr);
   EXPECT_FALSE(consumed.fin_consumed);
   EXPECT_EQ(0u, consumed.bytes_consumed);
 }
@@ -243,8 +246,8 @@ TEST_P(QuicClientSessionTest, InvalidPacketReceived) {
   IPEndPoint client_address(TestPeerIPAddress(), kTestPort);
 
   EXPECT_CALL(*connection_, ProcessUdpPacket(server_address, client_address, _))
-      .WillRepeatedly(Invoke(static_cast<MockConnection*>(connection_),
-                             &MockConnection::ReallyProcessUdpPacket));
+      .WillRepeatedly(Invoke(implicit_cast<MockQuicConnection*>(connection_),
+                             &MockQuicConnection::ReallyProcessUdpPacket));
   EXPECT_CALL(*connection_, OnCanWrite()).Times(AnyNumber());
   EXPECT_CALL(*connection_, OnError(_)).Times(1);
 
@@ -263,9 +266,11 @@ TEST_P(QuicClientSessionTest, InvalidPacketReceived) {
 
   // Verify that a non-decryptable packet doesn't close the connection.
   QuicConnectionId connection_id = session_->connection()->connection_id();
-  scoped_ptr<QuicEncryptedPacket> packet(ConstructEncryptedPacket(
-      connection_id, false, false, false, kDefaultPathId, 100, "data"));
-  scoped_ptr<QuicReceivedPacket> received(
+  std::unique_ptr<QuicEncryptedPacket> packet(ConstructEncryptedPacket(
+      connection_id, false, false, false, kDefaultPathId, 100, "data",
+      PACKET_8BYTE_CONNECTION_ID, PACKET_6BYTE_PACKET_NUMBER, nullptr,
+      Perspective::IS_SERVER));
+  std::unique_ptr<QuicReceivedPacket> received(
       ConstructReceivedPacket(*packet, QuicTime::Zero()));
   // Change the last byte of the encrypted data.
   *(const_cast<char*>(received->data() + received->length() - 1)) += 1;
@@ -280,16 +285,17 @@ TEST_P(QuicClientSessionTest, InvalidFramedPacketReceived) {
   IPEndPoint client_address(TestPeerIPAddress(), kTestPort);
 
   EXPECT_CALL(*connection_, ProcessUdpPacket(server_address, client_address, _))
-      .WillRepeatedly(Invoke(static_cast<MockConnection*>(connection_),
-                             &MockConnection::ReallyProcessUdpPacket));
+      .WillRepeatedly(Invoke(implicit_cast<MockQuicConnection*>(connection_),
+                             &MockQuicConnection::ReallyProcessUdpPacket));
   EXPECT_CALL(*connection_, OnError(_)).Times(1);
 
   // Verify that a decryptable packet with bad frames does close the connection.
   QuicConnectionId connection_id = session_->connection()->connection_id();
-  scoped_ptr<QuicEncryptedPacket> packet(ConstructMisFramedEncryptedPacket(
+  std::unique_ptr<QuicEncryptedPacket> packet(ConstructMisFramedEncryptedPacket(
       connection_id, false, false, false, kDefaultPathId, 100, "data",
-      PACKET_8BYTE_CONNECTION_ID, PACKET_6BYTE_PACKET_NUMBER, nullptr));
-  scoped_ptr<QuicReceivedPacket> received(
+      PACKET_8BYTE_CONNECTION_ID, PACKET_6BYTE_PACKET_NUMBER, nullptr,
+      Perspective::IS_SERVER));
+  std::unique_ptr<QuicReceivedPacket> received(
       ConstructReceivedPacket(*packet, QuicTime::Zero()));
   EXPECT_CALL(*connection_, CloseConnection(_, _, _)).Times(1);
   session_->ProcessUdpPacket(client_address, server_address, *received);
@@ -372,7 +378,7 @@ TEST_P(QuicClientSessionTest, PushPromiseAlreadyClosed) {
   CompleteCryptoHandshake();
 
   session_->CreateOutgoingDynamicStream(kDefaultPriority);
-  session_->GetStream(promised_stream_id_);
+  session_->GetOrCreateStream(promised_stream_id_);
 
   EXPECT_CALL(*connection_,
               SendRstStream(promised_stream_id_, QUIC_REFUSED_STREAM, 0));
@@ -442,7 +448,7 @@ TEST_P(QuicClientSessionTest, IsClosedTrueAfterResetPromisedAlreadyOpen) {
   // Initialize crypto before the client session will create a stream.
   CompleteCryptoHandshake();
 
-  session_->GetStream(promised_stream_id_);
+  session_->GetOrCreateStream(promised_stream_id_);
   session_->ResetPromised(promised_stream_id_, QUIC_REFUSED_STREAM);
   EXPECT_TRUE(session_->IsClosedStream(promised_stream_id_));
 }
@@ -458,7 +464,7 @@ TEST_P(QuicClientSessionTest, IsClosedTrueAfterResetPromisedNonexistant) {
 TEST_P(QuicClientSessionTest, OnInitialHeadersCompleteIsPush) {
   // Initialize crypto before the client session will create a stream.
   CompleteCryptoHandshake();
-  session_->GetStream(promised_stream_id_);
+  session_->GetOrCreateStream(promised_stream_id_);
   session_->HandlePromised(associated_stream_id_, promised_stream_id_,
                            push_promise_);
   EXPECT_NE(session_->GetPromisedById(promised_stream_id_), nullptr);
@@ -478,7 +484,7 @@ TEST_P(QuicClientSessionTest, OnInitialHeadersCompleteIsNotPush) {
 TEST_P(QuicClientSessionTest, DeletePromised) {
   // Initialize crypto before the client session will create a stream.
   CompleteCryptoHandshake();
-  session_->GetStream(promised_stream_id_);
+  session_->GetOrCreateStream(promised_stream_id_);
   session_->HandlePromised(associated_stream_id_, promised_stream_id_,
                            push_promise_);
   QuicClientPromisedInfo* promised =
@@ -495,7 +501,7 @@ TEST_P(QuicClientSessionTest, DeletePromised) {
 TEST_P(QuicClientSessionTest, ResetPromised) {
   // Initialize crypto before the client session will create a stream.
   CompleteCryptoHandshake();
-  session_->GetStream(promised_stream_id_);
+  session_->GetOrCreateStream(promised_stream_id_);
   session_->HandlePromised(associated_stream_id_, promised_stream_id_,
                            push_promise_);
   EXPECT_CALL(*connection_, SendRstStream(promised_stream_id_,

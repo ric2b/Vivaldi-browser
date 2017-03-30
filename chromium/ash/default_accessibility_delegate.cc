@@ -64,6 +64,14 @@ bool DefaultAccessibilityDelegate::IsVirtualKeyboardEnabled() const {
   return virtual_keyboard_enabled_;
 }
 
+void DefaultAccessibilityDelegate::SetMonoAudioEnabled(bool enabled) {
+  mono_audio_enabled_ = enabled;
+}
+
+bool DefaultAccessibilityDelegate::IsMonoAudioEnabled() const {
+  return mono_audio_enabled_;
+}
+
 void DefaultAccessibilityDelegate::SetCaretHighlightEnabled(bool enabled) {
   caret_highlight_enabled_ = enabled;
 }
@@ -110,7 +118,8 @@ bool DefaultAccessibilityDelegate::ShouldShowAccessibilityMenu() const {
          screen_magnifier_enabled_ ||
          large_cursor_enabled_ ||
          autoclick_enabled_ ||
-         virtual_keyboard_enabled_;
+         virtual_keyboard_enabled_ ||
+         mono_audio_enabled_;
 }
 
 bool DefaultAccessibilityDelegate::IsBrailleDisplayConnected() const {
@@ -148,5 +157,8 @@ void DefaultAccessibilityDelegate::PlayEarcon(int sound_key) {
 base::TimeDelta DefaultAccessibilityDelegate::PlayShutdownSound() const {
   return base::TimeDelta();
 }
+
+void DefaultAccessibilityDelegate::HandleAccessibilityGesture(
+    ui::AXGesture gesture) {}
 
 }  // namespace ash

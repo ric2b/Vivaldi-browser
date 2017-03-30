@@ -19,16 +19,14 @@ const wchar_t kChromeBinariesName[] = L"Vivaldi binaries";
 }  // namespace
 
 GoogleChromeBinariesDistribution::GoogleChromeBinariesDistribution()
-    : ChromiumBinariesDistribution(scoped_ptr<AppRegistrationData>(
-          new UpdatingAppRegistrationData(kChromeBinariesGuid))) {
-}
+    : ChromiumBinariesDistribution(std::unique_ptr<AppRegistrationData>(
+          new UpdatingAppRegistrationData(kChromeBinariesGuid))) {}
 
 base::string16 GoogleChromeBinariesDistribution::GetDisplayName() {
   return kChromeBinariesName;
 }
 
-base::string16 GoogleChromeBinariesDistribution::GetShortcutName(
-    ShortcutType shortcut_type) {
+base::string16 GoogleChromeBinariesDistribution::GetShortcutName() {
   NOTREACHED();
   return base::string16();
 }

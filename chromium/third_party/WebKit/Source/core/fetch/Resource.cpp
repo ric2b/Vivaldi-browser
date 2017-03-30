@@ -31,7 +31,6 @@
 #include "core/fetch/ResourceClientOrObserverWalker.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/fetch/ResourceLoader.h"
-#include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InstanceCounters.h"
 #include "platform/Logging.h"
 #include "platform/SharedBuffer.h"
@@ -41,12 +40,13 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebProcessMemoryDump.h"
 #include "public/platform/WebScheduler.h"
+#include "public/platform/WebSecurityOrigin.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/MathExtras.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/Vector.h"
-#include "wtf/WeakPtr.h"
 #include "wtf/text/CString.h"
+#include "wtf/text/StringBuilder.h"
 #include <algorithm>
 
 namespace blink {
@@ -93,53 +93,136 @@ static inline bool shouldUpdateHeaderAfterRevalidation(const AtomicString& heade
     return true;
 }
 
-class Resource::CacheHandler : public CachedMetadataHandler {
+class Resource::CachedMetadataHandlerImpl : public CachedMetadataHandler {
 public:
-    static CacheHandler* create(Resource* resource)
+    static Resource::CachedMetadataHandlerImpl* create(Resource* resource)
     {
-        return new CacheHandler(resource);
+        return new CachedMetadataHandlerImpl(resource);
     }
-    ~CacheHandler() override { }
+    ~CachedMetadataHandlerImpl() override {}
     DECLARE_VIRTUAL_TRACE();
     void setCachedMetadata(unsigned, const char*, size_t, CacheType) override;
     void clearCachedMetadata(CacheType) override;
     CachedMetadata* cachedMetadata(unsigned) const override;
     String encoding() const override;
+    // Sets the serialized metadata retrieved from the platform's cache.
+    void setSerializedCachedMetadata(const char*, size_t);
+
+protected:
+    explicit CachedMetadataHandlerImpl(Resource*);
+    virtual void sendToPlatform();
+    const ResourceResponse& response() const { return m_resource->response(); }
+
+    RefPtr<CachedMetadata> m_cachedMetadata;
 
 private:
-    explicit CacheHandler(Resource*);
     Member<Resource> m_resource;
 };
 
-Resource::CacheHandler::CacheHandler(Resource* resource)
+Resource::CachedMetadataHandlerImpl::CachedMetadataHandlerImpl(Resource* resource)
     : m_resource(resource)
 {
 }
 
-DEFINE_TRACE(Resource::CacheHandler)
+DEFINE_TRACE(Resource::CachedMetadataHandlerImpl)
 {
     visitor->trace(m_resource);
     CachedMetadataHandler::trace(visitor);
 }
 
-void Resource::CacheHandler::setCachedMetadata(unsigned dataTypeID, const char* data, size_t size, CacheType type)
+void Resource::CachedMetadataHandlerImpl::setCachedMetadata(unsigned dataTypeID, const char* data, size_t size, CachedMetadataHandler::CacheType cacheType)
 {
-    m_resource->setCachedMetadata(dataTypeID, data, size, type);
+    // Currently, only one type of cached metadata per resource is supported.
+    // If the need arises for multiple types of metadata per resource this could
+    // be enhanced to store types of metadata in a map.
+    ASSERT(!m_cachedMetadata);
+    m_cachedMetadata = CachedMetadata::create(dataTypeID, data, size);
+    if (cacheType == CachedMetadataHandler::SendToPlatform)
+        sendToPlatform();
 }
 
-void Resource::CacheHandler::clearCachedMetadata(CacheType type)
+void Resource::CachedMetadataHandlerImpl::clearCachedMetadata(CachedMetadataHandler::CacheType cacheType)
 {
-    m_resource->clearCachedMetadata(type);
+    m_cachedMetadata.clear();
+    if (cacheType == CachedMetadataHandler::SendToPlatform)
+        sendToPlatform();
 }
 
-CachedMetadata* Resource::CacheHandler::cachedMetadata(unsigned dataTypeID) const
+CachedMetadata* Resource::CachedMetadataHandlerImpl::cachedMetadata(unsigned dataTypeID) const
 {
-    return m_resource->cachedMetadata(dataTypeID);
+    if (!m_cachedMetadata || m_cachedMetadata->dataTypeID() != dataTypeID)
+        return nullptr;
+    return m_cachedMetadata.get();
 }
 
-String Resource::CacheHandler::encoding() const
+String Resource::CachedMetadataHandlerImpl::encoding() const
 {
     return m_resource->encoding();
+}
+
+void Resource::CachedMetadataHandlerImpl::setSerializedCachedMetadata(const char* data, size_t size)
+{
+    // We only expect to receive cached metadata from the platform once.
+    // If this triggers, it indicates an efficiency problem which is most
+    // likely unexpected in code designed to improve performance.
+    ASSERT(!m_cachedMetadata);
+    m_cachedMetadata = CachedMetadata::deserialize(data, size);
+}
+
+void Resource::CachedMetadataHandlerImpl::sendToPlatform()
+{
+    if (m_cachedMetadata) {
+        const Vector<char>& serializedData = m_cachedMetadata->serialize();
+        Platform::current()->cacheMetadata(response().url(), response().responseTime(), serializedData.data(), serializedData.size());
+    } else {
+        Platform::current()->cacheMetadata(response().url(), response().responseTime(), nullptr, 0);
+    }
+}
+
+class Resource::ServiceWorkerResponseCachedMetadataHandler : public Resource::CachedMetadataHandlerImpl {
+public:
+    static Resource::CachedMetadataHandlerImpl* create(Resource* resource, SecurityOrigin* securityOrigin)
+    {
+        return new ServiceWorkerResponseCachedMetadataHandler(resource, securityOrigin);
+    }
+    ~ServiceWorkerResponseCachedMetadataHandler() override {}
+    DECLARE_VIRTUAL_TRACE();
+
+protected:
+    void sendToPlatform() override;
+
+private:
+    explicit ServiceWorkerResponseCachedMetadataHandler(Resource*, SecurityOrigin*);
+    String m_cacheStorageCacheName;
+    RefPtr<SecurityOrigin> m_securityOrigin;
+};
+
+Resource::ServiceWorkerResponseCachedMetadataHandler::ServiceWorkerResponseCachedMetadataHandler(Resource* resource, SecurityOrigin* securityOrigin)
+    : CachedMetadataHandlerImpl(resource)
+    , m_securityOrigin(securityOrigin)
+{
+}
+
+DEFINE_TRACE(Resource::ServiceWorkerResponseCachedMetadataHandler)
+{
+    CachedMetadataHandlerImpl::trace(visitor);
+}
+
+void Resource::ServiceWorkerResponseCachedMetadataHandler::sendToPlatform()
+{
+    // We don't support sending the metadata to the platform when the response
+    // was directly fetched via a ServiceWorker
+    // (eg: FetchEvent.respondWith(fetch(FetchEvent.request))) to prevent an
+    // attacker's Service Worker from poisoning the metadata cache of HTTPCache.
+    if (response().cacheStorageCacheName().isNull())
+        return;
+
+    if (m_cachedMetadata) {
+        const Vector<char>& serializedData = m_cachedMetadata->serialize();
+        Platform::current()->cacheMetadataInCacheStorage(response().url(), response().responseTime(), serializedData.data(), serializedData.size(), WebSecurityOrigin(m_securityOrigin), response().cacheStorageCacheName());
+    } else {
+        Platform::current()->cacheMetadataInCacheStorage(response().url(), response().responseTime(), nullptr, 0, WebSecurityOrigin(m_securityOrigin), response().cacheStorageCacheName());
+    }
 }
 
 class Resource::ResourceCallback final : public GarbageCollectedFinalized<ResourceCallback> {
@@ -214,9 +297,6 @@ Resource::Resource(const ResourceRequest& request, Type type, const ResourceLoad
     , m_options(options)
     , m_responseTimestamp(currentTime())
     , m_cancelTimer(this, &Resource::cancelTimerFired)
-#if !ENABLE(OILPAN)
-    , m_weakPtrFactory(this)
-#endif
     , m_loadFinishTime(0)
     , m_identifier(0)
     , m_encodedSize(0)
@@ -235,17 +315,12 @@ Resource::Resource(const ResourceRequest& request, Type type, const ResourceLoad
 
     // Currently we support the metadata caching only for HTTP family.
     if (m_resourceRequest.url().protocolIsInHTTPFamily())
-        m_cacheHandler = CacheHandler::create(this);
+        m_cacheHandler = CachedMetadataHandlerImpl::create(this);
 }
 
 Resource::~Resource()
 {
     InstanceCounters::decrementCounter(InstanceCounters::ResourceCounter);
-}
-
-void Resource::removedFromMemoryCache()
-{
-    InspectorInstrumentation::removedResourceFromMemoryCache(this);
 }
 
 DEFINE_TRACE(Resource)
@@ -256,13 +331,20 @@ DEFINE_TRACE(Resource)
 
 void Resource::load(ResourceFetcher* fetcher)
 {
+    // TOOD(japhet): Temporary, out of place hack to stop a top crasher.
+    // Make this more organic.
+    if (!fetcher->loadingTaskRunner())
+        return;
+
     RELEASE_ASSERT(!m_loader);
+    ASSERT(stillNeedsLoad());
     m_status = Pending;
 
     ResourceRequest& request(m_revalidatingRequest.isNull() ? m_resourceRequest : m_revalidatingRequest);
     KURL url = request.url();
     request.setAllowStoredCredentials(m_options.allowCredentials == AllowStoredCredentials);
 
+    m_fetcherSecurityOrigin = fetcher->context().getSecurityOrigin();
     m_loader = ResourceLoader::create(fetcher, this);
     m_loader->start(request);
     // If the request reference is null (i.e., a synchronous revalidation will
@@ -322,26 +404,31 @@ void Resource::markClientsAndObserversFinished()
     }
 }
 
-void Resource::error(Resource::Status status)
+void Resource::error(const ResourceError& error)
 {
+    ASSERT(!error.isNull());
+    m_error = error;
     if (!m_revalidatingRequest.isNull())
         m_revalidatingRequest = ResourceRequest();
 
-    if (!m_error.isNull() && (m_error.isCancellation() || !isPreloaded()))
+    if (m_error.isCancellation() || !isPreloaded())
         memoryCache()->remove(this);
 
-    setStatus(status);
+    setStatus(LoadError);
     ASSERT(errorOccurred());
     m_data.clear();
+    m_loader = nullptr;
     checkNotify();
     markClientsAndObserversFinished();
 }
 
-void Resource::finish()
+void Resource::finish(double loadFinishTime)
 {
     ASSERT(m_revalidatingRequest.isNull());
+    m_loadFinishTime = loadFinishTime;
     if (!errorOccurred())
         m_status = Cached;
+    m_loader = nullptr;
     checkNotify();
     markClientsAndObserversFinished();
 }
@@ -457,10 +544,27 @@ const ResourceRequest& Resource::lastResourceRequest() const
     return m_redirectChain.last().m_request;
 }
 
+void Resource::setRevalidatingRequest(const ResourceRequest& request)
+{
+    SECURITY_CHECK(m_redirectChain.isEmpty());
+    m_revalidatingRequest = request;
+    m_status = NotStarted;
+}
+
 void Resource::willFollowRedirect(ResourceRequest& newRequest, const ResourceResponse& redirectResponse)
 {
+    if (!m_revalidatingRequest.isNull())
+        revalidationFailed();
+
     newRequest.setAllowStoredCredentials(m_options.allowCredentials == AllowStoredCredentials);
     m_redirectChain.append(RedirectPair(newRequest, redirectResponse));
+}
+
+void Resource::setResponse(const ResourceResponse& response)
+{
+    m_response = response;
+    if (m_response.wasFetchedViaServiceWorker())
+        m_cacheHandler = ServiceWorkerResponseCachedMetadataHandler::create(this, m_fetcherSecurityOrigin.get());
 }
 
 bool Resource::unlock()
@@ -497,13 +601,10 @@ void Resource::responseReceived(const ResourceResponse& response, PassOwnPtr<Web
 
 void Resource::setSerializedCachedMetadata(const char* data, size_t size)
 {
-    // We only expect to receive cached metadata from the platform once.
-    // If this triggers, it indicates an efficiency problem which is most
-    // likely unexpected in code designed to improve performance.
-    ASSERT(!m_cachedMetadata);
     ASSERT(m_revalidatingRequest.isNull());
-
-    m_cachedMetadata = CachedMetadata::deserialize(data, size);
+    ASSERT(!m_response.isNull());
+    if (m_cacheHandler)
+        m_cacheHandler->setSerializedCachedMetadata(data, size);
 }
 
 CachedMetadataHandler* Resource::cacheHandler()
@@ -511,42 +612,6 @@ CachedMetadataHandler* Resource::cacheHandler()
     return m_cacheHandler.get();
 }
 
-void Resource::setCachedMetadata(unsigned dataTypeID, const char* data, size_t size, CachedMetadataHandler::CacheType cacheType)
-{
-    // Currently, only one type of cached metadata per resource is supported.
-    // If the need arises for multiple types of metadata per resource this could
-    // be enhanced to store types of metadata in a map.
-    ASSERT(!m_cachedMetadata);
-
-    m_cachedMetadata = CachedMetadata::create(dataTypeID, data, size);
-
-    // We don't support sending the metadata to the platform when the response
-    // was fetched via a ServiceWorker to prevent an attacker's Service Worker
-    // from poisoning the metadata cache.
-    // FIXME: Support sending the metadata even if the response was fetched via
-    // a ServiceWorker. https://crbug.com/448706
-    if (cacheType == CachedMetadataHandler::SendToPlatform && !m_response.wasFetchedViaServiceWorker()) {
-        const Vector<char>& serializedData = m_cachedMetadata->serialize();
-        Platform::current()->cacheMetadata(m_response.url(), m_response.responseTime(), serializedData.data(), serializedData.size());
-    }
-}
-
-void Resource::clearCachedMetadata(CachedMetadataHandler::CacheType cacheType)
-{
-    m_cachedMetadata.clear();
-
-    if (cacheType == CachedMetadataHandler::SendToPlatform)
-        Platform::current()->cacheMetadata(m_response.url(), m_response.responseTime(), 0, 0);
-}
-
-Resource* Resource::asWeakPtr()
-{
-#if ENABLE(OILPAN)
-    return this;
-#else
-    return m_weakPtrFactory.createWeakPtr();
-#endif
-}
 
 String Resource::reasonNotDeletable() const
 {
@@ -582,18 +647,6 @@ String Resource::reasonNotDeletable() const
         builder.append("in_memory_cache");
     }
     return builder.toString();
-}
-
-CachedMetadata* Resource::cachedMetadata(unsigned dataTypeID) const
-{
-    if (!m_cachedMetadata || m_cachedMetadata->dataTypeID() != dataTypeID)
-        return nullptr;
-    return m_cachedMetadata.get();
-}
-
-void Resource::clearLoader()
-{
-    m_loader = nullptr;
 }
 
 void Resource::didAddClient(ResourceClient* c)
@@ -703,7 +756,7 @@ void Resource::allClientsAndObserversRemoved()
 {
     if (!m_loader)
         return;
-    if (m_type == MainResource || m_type == Raw || !memoryCache()->contains(this))
+    if (m_type == Raw)
         cancelTimerFired(&m_cancelTimer);
     else if (!m_cancelTimer.isActive())
         m_cancelTimer.startOneShot(0, BLINK_FROM_HERE);
@@ -714,10 +767,8 @@ void Resource::allClientsAndObserversRemoved()
 void Resource::cancelTimerFired(Timer<Resource>* timer)
 {
     ASSERT_UNUSED(timer, timer == &m_cancelTimer);
-    if (hasClientsOrObservers() || !m_loader)
-        return;
-    m_loader->cancelIfNotFinishing();
-    memoryCache()->remove(this);
+    if (!hasClientsOrObservers() && m_loader)
+        m_loader->cancel();
 }
 
 void Resource::setDecodedSize(size_t decodedSize)
@@ -850,6 +901,8 @@ String Resource::getMemoryDumpName() const
 
 void Resource::revalidationSucceeded(const ResourceResponse& validatingResponse)
 {
+    SECURITY_CHECK(m_redirectChain.isEmpty());
+    SECURITY_CHECK(equalIgnoringFragmentIdentifier(validatingResponse.url(), m_response.url()));
     m_response.setResourceLoadTiming(validatingResponse.resourceLoadTiming());
 
     // RFC2616 10.3.5
@@ -874,9 +927,9 @@ void Resource::revalidationFailed()
 {
     m_resourceRequest = m_revalidatingRequest;
     m_revalidatingRequest = ResourceRequest();
-    m_redirectChain.clear();
+    SECURITY_CHECK(m_redirectChain.isEmpty());
     m_data.clear();
-    m_cachedMetadata.clear();
+    m_cacheHandler.clear();
     destroyDecodedDataForFailedRevalidation();
 }
 
@@ -913,6 +966,11 @@ bool Resource::canUseCacheValidator()
 
     if (hasCacheControlNoStoreHeader())
         return false;
+
+    // Do not revalidate Resource with redirects. https://crbug.com/613971
+    if (!redirectChain().isEmpty())
+        return false;
+
     return m_response.hasCacheValidatorFields() || m_resourceRequest.hasCacheValidatorFields();
 }
 

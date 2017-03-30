@@ -4,6 +4,7 @@
 
 #include <memory>
 
+#include "base/strings/stringprintf.h"
 #include "content/public/test/browser_test.h"
 #include "headless/public/headless_browser.h"
 #include "headless/public/headless_web_contents.h"
@@ -15,18 +16,24 @@
 namespace headless {
 
 IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, CreateAndDestroyWebContents) {
-  std::unique_ptr<HeadlessWebContents> web_contents =
+  HeadlessWebContents* web_contents =
       browser()->CreateWebContents(GURL("about:blank"), gfx::Size(800, 600));
   EXPECT_TRUE(web_contents);
+
+  EXPECT_EQ(static_cast<size_t>(1), browser()->GetAllWebContents().size());
+  EXPECT_EQ(web_contents, browser()->GetAllWebContents()[0]);
   // TODO(skyostil): Verify viewport dimensions once we can.
-  web_contents.reset();
+  web_contents->Close();
+
+  EXPECT_TRUE(browser()->GetAllWebContents().empty());
 }
 
 IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, CreateWithBadURL) {
   GURL bad_url("not_valid");
-  std::unique_ptr<HeadlessWebContents> web_contents =
+  HeadlessWebContents* web_contents =
       browser()->CreateWebContents(bad_url, gfx::Size(800, 600));
   EXPECT_FALSE(web_contents);
+  EXPECT_TRUE(browser()->GetAllWebContents().empty());
 }
 
 class HeadlessBrowserTestWithProxy : public HeadlessBrowserTest {
@@ -60,11 +67,31 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTestWithProxy, SetProxyServer) {
 
   // Load a page which doesn't actually exist, but for which the our proxy
   // returns valid content anyway.
-  std::unique_ptr<HeadlessWebContents> web_contents =
-      browser()->CreateWebContents(
-          GURL("http://not-an-actual-domain.tld/hello.html"),
-          gfx::Size(800, 600));
-  EXPECT_TRUE(WaitForLoad(web_contents.get()));
+  //
+  // TODO(altimin): Currently this construction does not serve hello.html
+  // from headless/test/data as expected. We should fix this.
+  HeadlessWebContents* web_contents = browser()->CreateWebContents(
+      GURL("http://not-an-actual-domain.tld/hello.html"), gfx::Size(800, 600));
+  EXPECT_TRUE(WaitForLoad(web_contents));
+  EXPECT_EQ(static_cast<size_t>(1), browser()->GetAllWebContents().size());
+  EXPECT_EQ(web_contents, browser()->GetAllWebContents()[0]);
+  web_contents->Close();
+  EXPECT_TRUE(browser()->GetAllWebContents().empty());
+}
+
+IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, SetHostResolverRules) {
+  EXPECT_TRUE(embedded_test_server()->Start());
+  HeadlessBrowser::Options::Builder builder;
+  builder.SetHostResolverRules(
+      base::StringPrintf("MAP not-an-actual-domain.tld 127.0.0.1:%d",
+                         embedded_test_server()->host_port_pair().port()));
+  SetBrowserOptions(builder.Build());
+
+  // Load a page which doesn't actually exist, but which is turned into a valid
+  // address by our host resolver rules.
+  HeadlessWebContents* web_contents = browser()->CreateWebContents(
+      GURL("http://not-an-actual-domain.tld/hello.html"), gfx::Size(800, 600));
+  EXPECT_TRUE(WaitForLoad(web_contents));
 }
 
 }  // namespace headless

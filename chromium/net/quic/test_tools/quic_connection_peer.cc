@@ -146,6 +146,12 @@ QuicConnectionHelperInterface* QuicConnectionPeer::GetHelper(
 }
 
 // static
+QuicAlarmFactory* QuicConnectionPeer::GetAlarmFactory(
+    QuicConnection* connection) {
+  return connection->alarm_factory_;
+}
+
+// static
 QuicFramer* QuicConnectionPeer::GetFramer(QuicConnection* connection) {
   return &connection->framer_;
 }
@@ -217,7 +223,7 @@ QuicEncryptedPacket* QuicConnectionPeer::GetConnectionClosePacket(
       connection->termination_packets_->empty()) {
     return nullptr;
   }
-  return (*connection->termination_packets_)[0];
+  return (*connection->termination_packets_)[0].get();
 }
 
 // static
@@ -260,6 +266,12 @@ void QuicConnectionPeer::SetNextMtuProbeAt(QuicConnection* connection,
 void QuicConnectionPeer::SetAckMode(QuicConnection* connection,
                                     QuicConnection::AckMode ack_mode) {
   connection->ack_mode_ = ack_mode;
+}
+
+// static
+void QuicConnectionPeer::SetAckDecimationDelay(QuicConnection* connection,
+                                               float ack_decimation_delay) {
+  connection->ack_decimation_delay_ = ack_decimation_delay;
 }
 
 }  // namespace test

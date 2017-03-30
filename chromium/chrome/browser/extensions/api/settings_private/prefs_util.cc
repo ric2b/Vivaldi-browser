@@ -221,6 +221,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["settings.a11y.virtual_keyboard"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["settings.a11y.mono_audio"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["settings.clock.use_24hour_clock"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["settings.language.preferred_languages"] =
@@ -236,7 +238,13 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   (*s_whitelist)["settings.enable_screen_lock"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
-  // Input settings.
+  // Input method settings.
+  (*s_whitelist)["settings.language.preload_engines"] =
+      settings_private::PrefType::PREF_TYPE_STRING;
+  (*s_whitelist)["settings.language.enabled_extension_imes"] =
+      settings_private::PrefType::PREF_TYPE_STRING;
+
+  // Device settings.
   (*s_whitelist)["settings.touchpad.enable_tap_to_click"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["settings.touchpad.natural_scroll"] =
@@ -253,6 +261,12 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_NUMBER;
   (*s_whitelist)["settings.language.send_function_keys"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["settings.language.xkb_auto_repeat_enabled_r2"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["settings.language.xkb_auto_repeat_delay_r2"] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)["settings.language.xkb_auto_repeat_interval_r2"] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
 #else
   (*s_whitelist)["intl.accept_languages"] =
       settings_private::PrefType::PREF_TYPE_STRING;

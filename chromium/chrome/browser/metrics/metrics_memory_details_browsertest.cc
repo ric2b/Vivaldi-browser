@@ -19,7 +19,7 @@ class TestMemoryDetails : public MetricsMemoryDetails {
       : MetricsMemoryDetails(base::Bind(&base::DoNothing), nullptr) {}
 
   void StartFetchAndWait() {
-    StartFetch(FROM_CHROME_ONLY);
+    StartFetch();
     content::RunMessageLoop();
   }
 
@@ -54,7 +54,7 @@ IN_PROC_BROWSER_TEST_F(MetricsMemoryDetailsBrowserTest, TestMemoryDetails) {
 
   // Memory.Browser histogram should have a single non-0 sample recorded.
   histogram_tester.ExpectTotalCount("Memory.Browser", 1);
-  scoped_ptr<base::HistogramSamples> samples(
+  std::unique_ptr<base::HistogramSamples> samples(
       histogram_tester.GetHistogramSamplesSinceCreation("Memory.Browser"));
   ASSERT_TRUE(samples);
   EXPECT_NE(0, samples->sum());

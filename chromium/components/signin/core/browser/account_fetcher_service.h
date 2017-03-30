@@ -7,6 +7,8 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "base/macros.h"
 #include "base/threading/non_thread_safe.h"
@@ -110,7 +112,7 @@ class AccountFetcherService : public KeyedService,
 
   // Called by AccountInfoFetcher.
   void OnUserInfoFetchSuccess(const std::string& account_id,
-                              scoped_ptr<base::DictionaryValue> user_info);
+                              std::unique_ptr<base::DictionaryValue> user_info);
   void OnUserInfoFetchFailure(const std::string& account_id);
 
   AccountTrackerService* account_tracker_service_;  // Not owned.
@@ -127,13 +129,14 @@ class AccountFetcherService : public KeyedService,
   bool scheduled_refresh_enabled_;
 
   std::string child_request_account_id_;
-  scoped_ptr<ChildAccountInfoFetcher> child_info_request_;
+  std::unique_ptr<ChildAccountInfoFetcher> child_info_request_;
 
   // Holds references to account info fetchers keyed by account_id.
-  base::ScopedPtrHashMap<std::string, scoped_ptr<AccountInfoFetcher>>
+  base::ScopedPtrHashMap<std::string, std::unique_ptr<AccountInfoFetcher>>
       user_info_requests_;
   // Holds references to refresh token annotation requests keyed by account_id.
-  base::ScopedPtrHashMap<std::string, scoped_ptr<RefreshTokenAnnotationRequest>>
+  base::ScopedPtrHashMap<std::string,
+                         std::unique_ptr<RefreshTokenAnnotationRequest>>
       refresh_token_annotation_requests_;
 
   DISALLOW_COPY_AND_ASSIGN(AccountFetcherService);

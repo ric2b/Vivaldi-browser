@@ -8,13 +8,13 @@
 #include <stddef.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/observer_list.h"
 #include "base/scoped_observer.h"
@@ -183,9 +183,14 @@ class SupervisedUserService : public KeyedService,
   void RemoveObserver(SupervisedUserServiceObserver* observer);
 
   void AddPermissionRequestCreator(
-      scoped_ptr<PermissionRequestCreator> creator);
+      std::unique_ptr<PermissionRequestCreator> creator);
 
-  void SetSafeSearchURLReporter(scoped_ptr<SafeSearchURLReporter> reporter);
+  void SetSafeSearchURLReporter(
+      std::unique_ptr<SafeSearchURLReporter> reporter);
+
+  // Returns true if the syncer::SESSIONS type should be included in Sync.
+  // Public for testing.
+  bool IncludesSyncSessionsType() const;
 
   // ProfileKeyedService override:
   void Shutdown() override;
@@ -209,10 +214,6 @@ class SupervisedUserService : public KeyedService,
   friend class SupervisedUserServiceFactory;
   FRIEND_TEST_ALL_PREFIXES(SingleClientSupervisedUserSettingsSyncTest, Sanity);
   FRIEND_TEST_ALL_PREFIXES(SupervisedUserServiceTest, ClearOmitOnRegistration);
-  FRIEND_TEST_ALL_PREFIXES(SupervisedUserServiceTest,
-                           ChangesIncludedSessionOnChangedSettings);
-  FRIEND_TEST_ALL_PREFIXES(SupervisedUserServiceTest,
-                           ChangesSyncSessionStateOnChangedSettings);
   FRIEND_TEST_ALL_PREFIXES(SupervisedUserServiceExtensionTest,
                            ExtensionManagementPolicyProvider);
 
@@ -238,8 +239,8 @@ class SupervisedUserService : public KeyedService,
     // will retain a reference to the blacklist.
     void SetBlacklist(const SupervisedUserBlacklist* blacklist);
     bool HasBlacklist() const;
-    void SetManualHosts(scoped_ptr<std::map<std::string, bool>> host_map);
-    void SetManualURLs(scoped_ptr<std::map<GURL, bool>> url_map);
+    void SetManualHosts(std::unique_ptr<std::map<std::string, bool>> host_map);
+    void SetManualURLs(std::unique_ptr<std::map<GURL, bool>> url_map);
 
     void InitAsyncURLChecker(
         const scoped_refptr<net::URLRequestContextGetter>& context);
@@ -357,10 +358,7 @@ class SupervisedUserService : public KeyedService,
   // Subscribes to the SupervisedUserPrefStore, refreshes
   // |includes_sync_sessions_type_| and triggers reconfiguring the
   // ProfileSyncService.
-  void OnHistoryRecordingStateChanged();
-
-  // Returns true if the syncer::SESSIONS type should be included in Sync.
-  bool IncludesSyncSessionsType() const;
+  void OnForceSessionSyncChanged();
 
   // The option a custodian sets to either record or prevent recording the
   // supervised user's history. Set by |FetchNewSessionSyncState()| and
@@ -397,9 +395,9 @@ class SupervisedUserService : public KeyedService,
   } blacklist_state_;
 
   SupervisedUserBlacklist blacklist_;
-  scoped_ptr<FileDownloader> blacklist_downloader_;
+  std::unique_ptr<FileDownloader> blacklist_downloader_;
 
-  scoped_ptr<SupervisedUserWhitelistService> whitelist_service_;
+  std::unique_ptr<SupervisedUserWhitelistService> whitelist_service_;
 
   std::vector<scoped_refptr<SupervisedUserSiteList>> whitelists_;
 
@@ -407,7 +405,7 @@ class SupervisedUserService : public KeyedService,
   ScopedVector<PermissionRequestCreator> permissions_creators_;
 
   // Used to report inappropriate URLs to SafeSarch API.
-  scoped_ptr<SafeSearchURLReporter> url_reporter_;
+  std::unique_ptr<SafeSearchURLReporter> url_reporter_;
 
   base::ObserverList<SupervisedUserServiceObserver> observer_list_;
 

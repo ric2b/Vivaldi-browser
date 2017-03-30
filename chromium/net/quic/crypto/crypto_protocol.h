@@ -81,7 +81,10 @@ const QuicTag k1CON = TAG('1', 'C', 'O', 'N');   // Emulate a single connection
 const QuicTag kNTLP = TAG('N', 'T', 'L', 'P');   // No tail loss probe
 const QuicTag kNCON = TAG('N', 'C', 'O', 'N');   // N Connection Congestion Ctrl
 const QuicTag kNRTO = TAG('N', 'R', 'T', 'O');   // CWND reduction on loss
+const QuicTag kUNDO = TAG('U', 'N', 'D', 'O');   // Undo any pending retransmits
+                                                 // if they're likely spurious.
 const QuicTag kTIME = TAG('T', 'I', 'M', 'E');   // Time based loss detection
+const QuicTag kATIM = TAG('A', 'T', 'I', 'M');   // Adaptive time loss detection
 const QuicTag kMIN1 = TAG('M', 'I', 'N', '1');   // Min CWND of 1 packet
 const QuicTag kMIN4 = TAG('M', 'I', 'N', '4');   // Min CWND of 4 packets,
                                                  // with a min rate of 1 BDP.
@@ -90,10 +93,16 @@ const QuicTag kTLPR = TAG('T', 'L', 'P', 'R');   // Tail loss probe delay of
 const QuicTag kACKD = TAG('A', 'C', 'K', 'D');   // Ack decimation style acking.
 const QuicTag kAKD2 = TAG('A', 'K', 'D', '2');   // Ack decimation tolerating
                                                  // out of order packets.
+const QuicTag kAKD3 = TAG('A', 'K', 'D', '3');   // Ack decimation style acking
+                                                 // with 1/8 RTT acks.
+const QuicTag kAKD4 = TAG('A', 'K', 'D', '4');   // Ack decimation with 1/8 RTT
+                                                 // tolerating out of order.
 const QuicTag kSSLR = TAG('S', 'S', 'L', 'R');   // Slow Start Large Reduction.
 const QuicTag k5RTO = TAG('5', 'R', 'T', 'O');   // Close connection on 5 RTOs
 const QuicTag kCTIM = TAG('C', 'T', 'I', 'M');   // Client timestamp in seconds
                                                  // since UNIX epoch.
+const QuicTag kDHDT = TAG('D', 'H', 'D', 'T');   // Disable HPACK dynamic table.
+const QuicTag kIPFS = TAG('I', 'P', 'F', 'S');   // Immediate Forward Secrecy.
 
 // Optional support of truncated Connection IDs.  If sent by a peer, the value
 // is the minimum number of bytes allowed for the connection ID sent to the
@@ -175,6 +184,9 @@ const QuicTag kRSEQ = TAG('R', 'S', 'E', 'Q');   // Rejected packet number
 
 // Universal tags
 const QuicTag kPAD  = TAG('P', 'A', 'D', '\0');  // Padding
+
+// Server push tags
+const QuicTag kSPSH = TAG('S', 'P', 'S', 'H');  // Support server push.
 
 // Sent by clients with the fix to crbug/566156
 const QuicTag kFIXD = TAG('F', 'I', 'X', 'D');   // Client hello

@@ -5,10 +5,10 @@
 #include <limits>
 
 #include "base/base64.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
+#include "net/base/parse_number.h"
 #include "net/http/http_security_headers.h"
 #include "net/http/http_util.h"
 #include "url/gurl.h"
@@ -19,9 +19,6 @@ namespace {
 
 enum MaxAgeParsing { REQUIRE_MAX_AGE, DO_NOT_REQUIRE_MAX_AGE };
 
-static_assert(kMaxHSTSAgeSecs <= UINT32_MAX, "kMaxHSTSAgeSecs too large");
-static_assert(kMaxHPKPAgeSecs <= UINT32_MAX, "kMaxHPKPAgeSecs too large");
-
 // MaxAgeToLimitedInt converts a string representation of a "whole number" of
 // seconds into a uint32_t. The string may contain an arbitrarily large number,
 // which will be clipped to a supplied limit and which is guaranteed to fit
@@ -31,25 +28,19 @@ bool MaxAgeToLimitedInt(std::string::const_iterator begin,
                         uint32_t limit,
                         uint32_t* result) {
   const base::StringPiece s(begin, end);
-  if (s.empty())
-    return false;
 
-  int64_t i = 0;
+  ParseIntError error;
+  if (!ParseUint32(s, result, &error)) {
+    if (error == ParseIntError::FAILED_OVERFLOW) {
+      *result = limit;
+    } else {
+      return false;
+    }
+  }
 
-  // Return false on any StringToInt64 parse errors *except* for int64_t
-  // overflow. StringToInt64 is used, rather than StringToUint64, in order to
-  // properly handle and reject negative numbers (StringToUint64 does not return
-  // false on negative numbers). For values too large to be stored in an
-  // int64_t, StringToInt64 will return false with i set to
-  // std::numeric_limits<int64_t>::max(), so this case is allowed to fall
-  // through so that i gets clipped to limit.
-  if (!base::StringToInt64(s, &i) && i != std::numeric_limits<int64_t>::max())
-    return false;
-  if (i < 0)
-    return false;
-  if (i > limit)
-    i = limit;
-  *result = (uint32_t)i;
+  if (*result > limit)
+    *result = limit;
+
   return true;
 }
 
@@ -57,15 +48,11 @@ bool MaxAgeToLimitedInt(std::string::const_iterator begin,
 // |from_cert_chain|. Such an SPKI hash is called a "backup pin".
 bool IsBackupPinPresent(const HashValueVector& pins,
                         const HashValueVector& from_cert_chain) {
-  for (HashValueVector::const_iterator i = pins.begin(); i != pins.end();
-       ++i) {
-    HashValueVector::const_iterator j =
-        std::find_if(from_cert_chain.begin(), from_cert_chain.end(),
-                     HashValuesEqual(*i));
-    if (j == from_cert_chain.end())
+  for (const auto& pin : pins) {
+    auto p = std::find(from_cert_chain.begin(), from_cert_chain.end(), pin);
+    if (p == from_cert_chain.end())
       return true;
   }
-
   return false;
 }
 
@@ -73,10 +60,9 @@ bool IsBackupPinPresent(const HashValueVector& pins,
 // |a| or |b| is empty, returns false.
 bool HashesIntersect(const HashValueVector& a,
                      const HashValueVector& b) {
-  for (HashValueVector::const_iterator i = a.begin(); i != a.end(); ++i) {
-    HashValueVector::const_iterator j =
-        std::find_if(b.begin(), b.end(), HashValuesEqual(*i));
-    if (j != b.end())
+  for (const auto& pin : a) {
+    auto p = std::find(b.begin(), b.end(), pin);
+    if (p != b.end())
       return true;
   }
   return false;
@@ -137,7 +123,8 @@ bool ParseHPKPHeaderImpl(const std::string& value,
 
   HttpUtil::NameValuePairsIterator name_value_pairs(
       value.begin(), value.end(), ';',
-      HttpUtil::NameValuePairsIterator::VALUES_OPTIONAL);
+      HttpUtil::NameValuePairsIterator::Values::NOT_REQUIRED,
+      HttpUtil::NameValuePairsIterator::Quotes::NOT_STRICT);
 
   while (name_value_pairs.GetNext()) {
     if (base::LowerCaseEqualsASCII(

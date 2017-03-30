@@ -6,10 +6,22 @@
   display: block;
 }
 
+.toggle-icon {
+  -webkit-margin-start: 4px;
+}
+
+.toggle-text {
+  -webkit-margin-start: -11px;
+}
+
 settings-site-list {
   border-bottom: 1px solid var(--paper-grey-300);
 }
 
 settings-site-list:last-of-type {
   border-bottom: none;
+}
+
+.button-container {
+  -webkit-margin-start: 18px;
 }

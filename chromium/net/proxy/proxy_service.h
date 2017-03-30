@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -14,7 +15,6 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/non_thread_safe.h"
 #include "net/base/completion_callback.h"
@@ -25,6 +25,7 @@
 #include "net/proxy/proxy_config_service.h"
 #include "net/proxy/proxy_info.h"
 #include "net/proxy/proxy_server.h"
+#include "url/gurl.h"
 
 class GURL;
 
@@ -52,6 +53,25 @@ class NET_EXPORT ProxyService : public NetworkChangeNotifier::IPAddressObserver,
                                 public ProxyConfigService::Observer,
                                 NON_EXPORTED_BASE(public base::NonThreadSafe) {
  public:
+  // Enumerates the policy to use when sanitizing URLs for proxy resolution
+  // (before passing them off to PAC scripts).
+  enum class SanitizeUrlPolicy {
+    // Do a basic level of sanitization for URLs:
+    //   - strip embedded identities (ex: "username:password@")
+    //   - strip the fragment (ex: "#blah")
+    //
+    // This is considered "unsafe" because it does not do any additional
+    // stripping for https:// URLs.
+    UNSAFE,
+
+    // SAFE does the same sanitization as UNSAFE, but additionally strips
+    // everything but the (scheme,host,port) from cryptographic URL schemes
+    // (https:// and wss://).
+    //
+    // In other words, it strips the path and query portion of https:// URLs.
+    SAFE,
+  };
+
   static const size_t kDefaultNumPacThreads = 4;
 
   // This interface defines the set of policies for when to poll the PAC
@@ -97,8 +117,8 @@ class NET_EXPORT ProxyService : public NetworkChangeNotifier::IPAddressObserver,
 
   // |net_log| is a possibly NULL destination to send log events to. It must
   // remain alive for the lifetime of this ProxyService.
-  ProxyService(scoped_ptr<ProxyConfigService> config_service,
-               scoped_ptr<ProxyResolverFactory> resolver_factory,
+  ProxyService(std::unique_ptr<ProxyConfigService> config_service,
+               std::unique_ptr<ProxyResolverFactory> resolver_factory,
                NetLog* net_log);
 
   ~ProxyService() override;
@@ -206,7 +226,7 @@ class NET_EXPORT ProxyService : public NetworkChangeNotifier::IPAddressObserver,
   // ProxyService takes ownership of proxy_script_fetcher.
   void SetProxyScriptFetchers(
       ProxyScriptFetcher* proxy_script_fetcher,
-      scoped_ptr<DhcpProxyScriptFetcher> dhcp_proxy_script_fetcher);
+      std::unique_ptr<DhcpProxyScriptFetcher> dhcp_proxy_script_fetcher);
   ProxyScriptFetcher* GetProxyScriptFetcher() const;
 
   // Tells this ProxyService to start using a new ProxyConfigService to
@@ -214,7 +234,7 @@ class NET_EXPORT ProxyService : public NetworkChangeNotifier::IPAddressObserver,
   // be queried for new config info which will be used for all subsequent
   // ResolveProxy calls.
   void ResetConfigService(
-      scoped_ptr<ProxyConfigService> new_proxy_config_service);
+      std::unique_ptr<ProxyConfigService> new_proxy_config_service);
 
   // Returns the last configuration fetched from ProxyConfigService.
   const ProxyConfig& fetched_config() {
@@ -244,37 +264,37 @@ class NET_EXPORT ProxyService : public NetworkChangeNotifier::IPAddressObserver,
   // Same as CreateProxyServiceUsingV8ProxyResolver, except it uses system
   // libraries for evaluating the PAC script if available, otherwise skips
   // proxy autoconfig.
-  static scoped_ptr<ProxyService> CreateUsingSystemProxyResolver(
-      scoped_ptr<ProxyConfigService> proxy_config_service,
+  static std::unique_ptr<ProxyService> CreateUsingSystemProxyResolver(
+      std::unique_ptr<ProxyConfigService> proxy_config_service,
       size_t num_pac_threads,
       NetLog* net_log);
 
   // Creates a ProxyService without support for proxy autoconfig.
-  static scoped_ptr<ProxyService> CreateWithoutProxyResolver(
-      scoped_ptr<ProxyConfigService> proxy_config_service,
+  static std::unique_ptr<ProxyService> CreateWithoutProxyResolver(
+      std::unique_ptr<ProxyConfigService> proxy_config_service,
       NetLog* net_log);
 
   // Convenience methods that creates a proxy service using the
   // specified fixed settings.
-  static scoped_ptr<ProxyService> CreateFixed(const ProxyConfig& pc);
-  static scoped_ptr<ProxyService> CreateFixed(const std::string& proxy);
+  static std::unique_ptr<ProxyService> CreateFixed(const ProxyConfig& pc);
+  static std::unique_ptr<ProxyService> CreateFixed(const std::string& proxy);
 
   // Creates a proxy service that uses a DIRECT connection for all requests.
-  static scoped_ptr<ProxyService> CreateDirect();
+  static std::unique_ptr<ProxyService> CreateDirect();
   // |net_log|'s lifetime must exceed ProxyService.
-  static scoped_ptr<ProxyService> CreateDirectWithNetLog(NetLog* net_log);
+  static std::unique_ptr<ProxyService> CreateDirectWithNetLog(NetLog* net_log);
 
   // This method is used by tests to create a ProxyService that returns a
   // hardcoded proxy fallback list (|pac_string|) for every URL.
   //
   // |pac_string| is a list of proxy servers, in the format that a PAC script
   // would return it. For example, "PROXY foobar:99; SOCKS fml:2; DIRECT"
-  static scoped_ptr<ProxyService> CreateFixedFromPacResult(
+  static std::unique_ptr<ProxyService> CreateFixedFromPacResult(
       const std::string& pac_string);
 
   // Creates a config service appropriate for this platform that fetches the
   // system proxy settings.
-  static scoped_ptr<ProxyConfigService> CreateSystemProxyConfigService(
+  static std::unique_ptr<ProxyConfigService> CreateSystemProxyConfigService(
       const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner,
       const scoped_refptr<base::SingleThreadTaskRunner>& file_task_runner);
 
@@ -290,10 +310,14 @@ class NET_EXPORT ProxyService : public NetworkChangeNotifier::IPAddressObserver,
 
   // This method should only be used by unit tests. Creates an instance
   // of the default internal PacPollPolicy used by ProxyService.
-  static scoped_ptr<PacPollPolicy> CreateDefaultPacPollPolicy();
+  static std::unique_ptr<PacPollPolicy> CreateDefaultPacPollPolicy();
 
   void set_quick_check_enabled(bool value) {
     quick_check_enabled_ = value;
+  }
+
+  void set_sanitize_url_policy(SanitizeUrlPolicy policy) {
+    sanitize_url_policy_ = policy;
   }
 
  private:
@@ -397,9 +421,9 @@ class NET_EXPORT ProxyService : public NetworkChangeNotifier::IPAddressObserver,
       const ProxyConfig& config,
       ProxyConfigService::ConfigAvailability availability) override;
 
-  scoped_ptr<ProxyConfigService> config_service_;
-  scoped_ptr<ProxyResolverFactory> resolver_factory_;
-  scoped_ptr<ProxyResolver> resolver_;
+  std::unique_ptr<ProxyConfigService> config_service_;
+  std::unique_ptr<ProxyResolverFactory> resolver_factory_;
+  std::unique_ptr<ProxyResolver> resolver_;
 
   // We store the proxy configuration that was last fetched from the
   // ProxyConfigService, as well as the resulting "effective" configuration.
@@ -424,21 +448,21 @@ class NET_EXPORT ProxyService : public NetworkChangeNotifier::IPAddressObserver,
   // The fetcher to use when downloading PAC scripts for the ProxyResolver.
   // This dependency can be NULL if our ProxyResolver has no need for
   // external PAC script fetching.
-  scoped_ptr<ProxyScriptFetcher> proxy_script_fetcher_;
+  std::unique_ptr<ProxyScriptFetcher> proxy_script_fetcher_;
 
   // The fetcher to use when attempting to download the most appropriate PAC
   // script configured in DHCP, if any. Can be NULL if the ProxyResolver has
   // no need for DHCP PAC script fetching.
-  scoped_ptr<DhcpProxyScriptFetcher> dhcp_proxy_script_fetcher_;
+  std::unique_ptr<DhcpProxyScriptFetcher> dhcp_proxy_script_fetcher_;
 
   // Helper to download the PAC script (wpad + custom) and apply fallback rules.
   //
   // Note that the declaration is important here: |proxy_script_fetcher_| and
   // |proxy_resolver_| must outlive |init_proxy_resolver_|.
-  scoped_ptr<InitProxyResolver> init_proxy_resolver_;
+  std::unique_ptr<InitProxyResolver> init_proxy_resolver_;
 
   // Helper to poll the PAC script for changes.
-  scoped_ptr<ProxyScriptDeciderPoller> script_poller_;
+  std::unique_ptr<ProxyScriptDeciderPoller> script_poller_;
 
   State current_state_;
 
@@ -459,6 +483,9 @@ class NET_EXPORT ProxyService : public NetworkChangeNotifier::IPAddressObserver,
 
   // Whether child ProxyScriptDeciders should use QuickCheck
   bool quick_check_enabled_;
+
+  // The method to use for sanitizing URLs seen by the proxy resolver.
+  SanitizeUrlPolicy sanitize_url_policy_;
 
   DISALLOW_COPY_AND_ASSIGN(ProxyService);
 };

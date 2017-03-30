@@ -17,11 +17,11 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Environment;
 import android.os.Handler;
-import android.preference.PreferenceManager;
 import android.text.TextUtils;
 import android.util.LongSparseArray;
 import android.util.Pair;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
@@ -29,7 +29,6 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationDelegateImpl;
 import org.chromium.content.browser.DownloadController;
 import org.chromium.content.browser.DownloadInfo;
@@ -229,8 +228,7 @@ public class DownloadManagerService extends BroadcastReceiver implements
             Handler handler,
             long updateDelayInMillis) {
         mContext = context;
-        mSharedPrefs = PreferenceManager.getDefaultSharedPreferences(context
-                .getApplicationContext());
+        mSharedPrefs = ContextUtils.getAppSharedPreferences();
         mDownloadNotifier = downloadNotifier;
         mUpdateDelayInMillis = updateDelayInMillis;
         mHandler = handler;
@@ -979,10 +977,6 @@ public class DownloadManagerService extends BroadcastReceiver implements
         launchIntent.setDataAndType(uri, manager.getMimeTypeForDownloadedFile(downloadId));
         launchIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                 | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        Uri referrer = new Uri.Builder().scheme(
-                IntentHandler.ANDROID_APP_REFERRER_SCHEME).authority(
-                        context.getPackageName()).build();
-        launchIntent.putExtra(Intent.EXTRA_REFERRER, referrer);
         return launchIntent;
     }
 
@@ -1135,12 +1129,14 @@ public class DownloadManagerService extends BroadcastReceiver implements
     /**
      * Called to cancel a download.
      * @param downloadGuid GUID of the download.
+     * @param isNotificationDismissed Whether cancel is caused by dismissing the notification.
      */
-    void cancelDownload(String downloadGuid) {
+    void cancelDownload(String downloadGuid, boolean isNotificationDismissed) {
         DownloadProgress progress = mDownloadProgressMap.get(downloadGuid);
         boolean isOffTheRecord = progress == null
                 ? false : progress.mDownloadItem.getDownloadInfo().isOffTheRecord();
-        nativeCancelDownload(getNativeDownloadManagerService(), downloadGuid, isOffTheRecord);
+        nativeCancelDownload(getNativeDownloadManagerService(), downloadGuid, isOffTheRecord,
+                isNotificationDismissed);
         recordDownloadFinishedUMA(DOWNLOAD_STATUS_CANCELLED, downloadGuid, 0);
     }
 
@@ -1474,6 +1470,7 @@ public class DownloadManagerService extends BroadcastReceiver implements
     private native void nativeResumeDownload(
             long nativeDownloadManagerService, String downloadGuid);
     private native void nativeCancelDownload(
-            long nativeDownloadManagerService, String downloadGuid, boolean isOffTheRecord);
+            long nativeDownloadManagerService, String downloadGuid, boolean isOffTheRecord,
+            boolean isNotificationDismissed);
     private native void nativePauseDownload(long nativeDownloadManagerService, String downloadGuid);
 }

@@ -52,11 +52,14 @@
     }
   },
   "tracing_track": {
+   "categories": [],
     "events": [
       {
         "args": {
-          "priority": 4,
-          "url": "http://l/"
+          "data": {
+            "priority": 4,
+            "url": "http://l/"
+          }
         },
         "cat": "blink.net",
         "name": "Resource",
@@ -74,8 +77,10 @@
       },
       {
         "args": {
-          "priority": 1,
-          "url": "http://l/0.png"
+          "data": {
+            "priority": 1,
+            "url": "http://l/0.png"
+          }
         },
         "cat": "blink.net",
         "name": "Resource",
@@ -95,8 +100,10 @@
       },
       {
         "args": {
-          "priority": 1,
-          "url": "http://l/1.png"
+          "data": {
+            "priority": 1,
+            "url": "http://l/1.png"
+          }
         },
         "cat": "blink.net",
         "name": "Resource",

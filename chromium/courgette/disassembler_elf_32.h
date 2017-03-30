@@ -8,10 +8,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+#include <string>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "courgette/disassembler.h"
 #include "courgette/image_utils.h"
 #include "courgette/memory_allocator.h"
@@ -46,29 +47,50 @@ class DisassemblerElf32 : public Disassembler {
     void set_relative_target(RVA relative_target) {
       relative_target_ = relative_target;
     }
-    void set_file_offset(FileOffset file_offset) {
-      file_offset_ = file_offset;
-    }
+    void set_file_offset(FileOffset file_offset) { file_offset_ = file_offset; }
 
     // Computes the relative jump's offset from the op in p.
     virtual CheckBool ComputeRelativeTarget(const uint8_t* op_pointer) = 0;
 
-    // Emits the courgette instruction corresponding to the RVA type.
+    // Emits the assembly instruction corresponding to |label|.
     virtual CheckBool EmitInstruction(AssemblyProgram* program,
-                                      RVA target_rva) = 0;
+                                      Label* label) = 0;
 
     // Returns the size of the instruction containing the RVA.
     virtual uint16_t op_size() const = 0;
 
     // Comparator for sorting, which assumes uniqueness of RVAs.
-    static bool IsLessThan(TypedRVA* a, TypedRVA* b) {
+    static bool IsLessThanByRVA(const std::unique_ptr<TypedRVA>& a,
+                                const std::unique_ptr<TypedRVA>& b) {
       return a->rva() < b->rva();
+    }
+
+    // Comparator for sorting, which assumes uniqueness of file offsets.
+    static bool IsLessThanByFileOffset(const std::unique_ptr<TypedRVA>& a,
+                                       const std::unique_ptr<TypedRVA>& b) {
+      return a->file_offset() < b->file_offset();
     }
 
   private:
     const RVA rva_;
     RVA relative_target_ = kNoRVA;
     FileOffset file_offset_ = kNoFileOffset;
+  };
+
+  // Visitor/adaptor to translate RVA to target RVA. This is the ELF
+  // counterpart to RvaVisitor_Rel32 that uses TypedRVA.
+  class Elf32RvaVisitor_Rel32 :
+  public VectorRvaVisitor<std::unique_ptr<TypedRVA>> {
+   public:
+    Elf32RvaVisitor_Rel32(
+        const std::vector<std::unique_ptr<TypedRVA>>& rva_locations);
+    ~Elf32RvaVisitor_Rel32() override { }
+
+    // VectorRvaVisitor<TypedRVA*> interfaces.
+    RVA Get() const override;
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(Elf32RvaVisitor_Rel32);
   };
 
  public:
@@ -86,9 +108,17 @@ class DisassemblerElf32 : public Disassembler {
 
   virtual e_machine_values ElfEM() const = 0;
 
+  CheckBool IsValidTargetRVA(RVA rva) const WARN_UNUSED_RESULT;
+
+  // Converts an ELF relocation instruction into an RVA.
+  virtual CheckBool RelToRVA(Elf32_Rel rel, RVA* result)
+    const WARN_UNUSED_RESULT = 0;
+
   // Public for unittests only
-  std::vector<RVA> &Abs32Locations() { return abs32_locations_; }
-  ScopedVector<TypedRVA> &Rel32Locations() { return rel32_locations_; }
+  std::vector<RVA>& Abs32Locations() { return abs32_locations_; }
+  std::vector<std::unique_ptr<TypedRVA>>& Rel32Locations() {
+    return rel32_locations_;
+  }
 
  protected:
   bool UpdateLength();
@@ -101,12 +131,16 @@ class DisassemblerElf32 : public Disassembler {
 
   const Elf32_Shdr* SectionHeader(Elf32_Half id) const {
     assert(id >= 0 && id < SectionHeaderCount());
-    return section_header_table_ + id;
+    return &section_header_table_[id];
   }
 
   const uint8_t* SectionBody(Elf32_Half id) const {
+    // TODO(huangs): Assert that section does not have SHT_NOBITS.
     return FileOffsetToPointer(SectionHeader(id)->sh_offset);
   }
+
+  // Gets the |name| of section |shdr|. Returns true on success.
+  CheckBool SectionName(const Elf32_Shdr& shdr, std::string* name) const;
 
   // Misc Segment Helpers
 
@@ -121,16 +155,11 @@ class DisassemblerElf32 : public Disassembler {
 
   // Misc address space helpers
 
-  CheckBool IsValidTargetRVA(RVA rva) const WARN_UNUSED_RESULT;
-
-  // Converts an ELF relocation instruction into an RVA.
-  virtual CheckBool RelToRVA(Elf32_Rel rel, RVA* result)
-    const WARN_UNUSED_RESULT = 0;
-
   CheckBool RVAsToFileOffsets(const std::vector<RVA>& rvas,
                               std::vector<FileOffset>* file_offsets);
 
-  CheckBool RVAsToFileOffsets(ScopedVector<TypedRVA>* typed_rvas);
+  CheckBool RVAsToFileOffsets(
+      std::vector<std::unique_ptr<TypedRVA>>* typed_rvas);
 
   // Parsing code for Disassemble().
 
@@ -141,14 +170,19 @@ class DisassemblerElf32 : public Disassembler {
   virtual CheckBool ParseRel32RelocsFromSection(const Elf32_Shdr* section)
       WARN_UNUSED_RESULT = 0;
 
+  // Disassembler interfaces.
+  RvaVisitor* CreateAbs32TargetRvaVisitor() override;
+  RvaVisitor* CreateRel32TargetRvaVisitor() override;
+  void RemoveUnusedRel32Locations(AssemblyProgram* program) override;
+
   CheckBool ParseFile(AssemblyProgram* target) WARN_UNUSED_RESULT;
 
   CheckBool ParseProgbitsSection(
       const Elf32_Shdr* section_header,
       std::vector<FileOffset>::iterator* current_abs_offset,
       std::vector<FileOffset>::iterator end_abs_offset,
-      ScopedVector<TypedRVA>::iterator* current_rel,
-      ScopedVector<TypedRVA>::iterator end_rel,
+      std::vector<std::unique_ptr<TypedRVA>>::iterator* current_rel,
+      std::vector<std::unique_ptr<TypedRVA>>::iterator end_rel,
       AssemblyProgram* program) WARN_UNUSED_RESULT;
 
   CheckBool ParseSimpleRegion(FileOffset start_file_offset,
@@ -159,20 +193,28 @@ class DisassemblerElf32 : public Disassembler {
 
   CheckBool CheckSection(RVA rva) WARN_UNUSED_RESULT;
 
+  // Extracts all rel32 TypedRVAs. Does not sort the result.
   CheckBool ParseRel32RelocsFromSections() WARN_UNUSED_RESULT;
 
   const Elf32_Ehdr* header_;
-  const Elf32_Shdr* section_header_table_;
+
   Elf32_Half section_header_table_size_;
+
+  // Section header table, ordered by section id.
+  std::vector<Elf32_Shdr> section_header_table_;
+
+  // An ordering of |section_header_table_|, sorted by file offset.
+  std::vector<Elf32_Half> section_header_file_offset_order_;
 
   const Elf32_Phdr* program_header_table_;
   Elf32_Half program_header_table_size_;
 
-  // Section header for default
+  // Pointer to string table containing section names.
   const char* default_string_section_;
+  size_t default_string_section_size_;
 
   std::vector<RVA> abs32_locations_;
-  ScopedVector<TypedRVA> rel32_locations_;
+  std::vector<std::unique_ptr<TypedRVA>> rel32_locations_;
 
   DISALLOW_COPY_AND_ASSIGN(DisassemblerElf32);
 };

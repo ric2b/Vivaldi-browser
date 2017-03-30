@@ -39,8 +39,7 @@ namespace blink {
 
 class PlatformSpeechSynthesizerClient;
 
-class MODULES_EXPORT SpeechSynthesis final : public RefCountedGarbageCollectedEventTargetWithInlineData<SpeechSynthesis>, public PlatformSpeechSynthesizerClient, public ContextLifecycleObserver {
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(SpeechSynthesis);
+class MODULES_EXPORT SpeechSynthesis final : public EventTargetWithInlineData, public PlatformSpeechSynthesizerClient, public ContextLifecycleObserver {
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(SpeechSynthesis);
 public:

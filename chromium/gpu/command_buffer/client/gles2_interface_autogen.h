@@ -730,16 +730,6 @@ virtual GLuint CreateAndConsumeTextureCHROMIUM(GLenum target,
 virtual void BindUniformLocationCHROMIUM(GLuint program,
                                          GLint location,
                                          const char* name) = 0;
-virtual void GenValuebuffersCHROMIUM(GLsizei n, GLuint* buffers) = 0;
-virtual void DeleteValuebuffersCHROMIUM(GLsizei n,
-                                        const GLuint* valuebuffers) = 0;
-virtual GLboolean IsValuebufferCHROMIUM(GLuint valuebuffer) = 0;
-virtual void BindValuebufferCHROMIUM(GLenum target, GLuint valuebuffer) = 0;
-virtual void SubscribeValueCHROMIUM(GLenum target, GLenum subscription) = 0;
-virtual void PopulateSubscribedValuesCHROMIUM(GLenum target) = 0;
-virtual void UniformValuebufferCHROMIUM(GLint location,
-                                        GLenum target,
-                                        GLenum subscription) = 0;
 virtual void BindTexImage2DCHROMIUM(GLenum target, GLint imageId) = 0;
 virtual void ReleaseTexImage2DCHROMIUM(GLenum target, GLint imageId) = 0;
 virtual void TraceBeginCHROMIUM(const char* category_name,
@@ -777,7 +767,8 @@ virtual void ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
                                      GLboolean is_clipped,
                                      const GLfloat* clip_rect,
                                      GLint sorting_context_id,
-                                     const GLfloat* transform) = 0;
+                                     const GLfloat* transform,
+                                     GLuint filter) = 0;
 virtual void CommitOverlayPlanesCHROMIUM() = 0;
 virtual void SwapInterval(GLint interval) = 0;
 virtual void FlushDriverCachesCHROMIUM() = 0;

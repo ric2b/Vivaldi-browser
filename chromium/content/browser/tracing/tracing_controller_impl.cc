@@ -12,7 +12,7 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/sys_info.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -46,7 +46,7 @@
 #endif
 
 #if defined(OS_WIN)
-#include "content/browser/tracing/etw_system_event_consumer_win.h"
+#include "content/browser/tracing/etw_tracing_agent_win.h"
 #endif
 
 using base::trace_event::TraceLog;
@@ -108,8 +108,9 @@ std::string GetClockString() {
   return std::string();
 }
 
-scoped_ptr<base::DictionaryValue> GenerateTracingMetadataDict()  {
-  scoped_ptr<base::DictionaryValue> metadata_dict(new base::DictionaryValue());
+std::unique_ptr<base::DictionaryValue> GenerateTracingMetadataDict() {
+  std::unique_ptr<base::DictionaryValue> metadata_dict(
+      new base::DictionaryValue());
 
   metadata_dict->SetString("network-type", GetNetworkTypeString());
   metadata_dict->SetString("product-version", GetContentClient()->GetProduct());
@@ -158,7 +159,7 @@ scoped_ptr<base::DictionaryValue> GenerateTracingMetadataDict()  {
   metadata_dict->SetString("gpu-gl-renderer", gpu_info.gl_renderer);
 #endif
 
-  scoped_ptr<TracingDelegate> delegate(
+  std::unique_ptr<TracingDelegate> delegate(
       GetContentClient()->browser()->GetTracingDelegate());
   if (delegate)
     delegate->GenerateMetadataDict(metadata_dict.get());
@@ -278,7 +279,7 @@ bool TracingControllerImpl::StartTracing(
       ++pending_start_tracing_ack_count_;
     }
 #elif defined(OS_WIN)
-    EtwSystemEventConsumer::GetInstance()->StartAgentTracing(
+    EtwTracingAgent::GetInstance()->StartAgentTracing(
         trace_config,
         base::Bind(&TracingControllerImpl::OnStartAgentTracingAcked,
                    base::Unretained(this)));
@@ -348,7 +349,7 @@ bool TracingControllerImpl::StopTracing(
   if (trace_data_sink) {
     if (TraceLog::GetInstance()->GetCurrentTraceConfig()
         .IsArgumentFilterEnabled()) {
-      scoped_ptr<TracingDelegate> delegate(
+      std::unique_ptr<TracingDelegate> delegate(
           GetContentClient()->browser()->GetTracingDelegate());
       if (delegate) {
         trace_data_sink->SetMetadataFilterPredicate(
@@ -585,7 +586,7 @@ void TracingControllerImpl::AddTracingAgent(const std::string& agent_name) {
     return;
   }
 #elif defined(OS_WIN)
-  auto etw_agent = EtwSystemEventConsumer::GetInstance();
+  auto etw_agent = EtwTracingAgent::GetInstance();
   if (agent_name == etw_agent->GetTracingAgentName()) {
     additional_tracing_agents_.push_back(etw_agent);
     return;

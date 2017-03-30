@@ -2,7 +2,50 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/ios/ios_sdk.gni")
+import("//build/config/mac/base_rules.gni")
+
+# Generates Info.plist files for Mac apps and frameworks.
+#
+# Arguments
+#
+#     info_plist:
+#         string, the path to an plist file that will be included in the final
+#         Info.plist generated.
+#
+#     executable_name:
+#         string, name of the generated target used for the product
+#         and executable name as specified in the output Info.plist.
+#
+#     extra_substitutions:
+#         (optional) string array, 'key=value' pairs for extra fields which are
+#         specified in a source Info.plist template.
+template("ios_info_plist") {
+  info_plist(target_name) {
+    format = "binary1"
+    extra_substitutions = []
+    if (defined(invoker.extra_substitutions)) {
+      extra_substitutions = invoker.extra_substitutions
+    }
+    extra_substitutions += [
+      "IOS_DEPLOYMENT_TARGET=$ios_deployment_target",
+      "IOS_PLATFORM_BUILD=$ios_platform_build",
+      "IOS_PLATFORM_NAME=$ios_sdk_name",
+      "IOS_PLATFORM_VERSION=$ios_sdk_version",
+      "IOS_SDK_BUILD=$ios_sdk_build",
+      "IOS_SDK_NAME=$ios_sdk_name$ios_sdk_version",
+      "IOS_SUPPORTED_PLATFORM=$ios_sdk_platform",
+    ]
+    plist_templates = [
+      "//build/config/ios/BuildInfo.plist",
+      invoker.info_plist,
+    ]
+    forward_variables_from(invoker,
+                           [
+                             "executable_name",
+                             "visibility",
+                           ])
+  }
+}
 
 # TODO(crbug.com/297668): refactor this template to extract common behaviour
 # between OS X and iOS bundle generation, then create a generic "app" template
@@ -31,7 +74,7 @@ import("//build/config/ios/ios_sdk.gni")
 #       by performing variable substitutions.
 #
 # For more information, see "gn help executable".
-template("app") {
+template("ios_app_bundle") {
   assert(defined(invoker.info_plist),
          "info_plist must be specified for target $target_name")
 
@@ -44,40 +87,13 @@ template("app") {
   _generate_info_plist = target_name + "_generate_info_plist"
   _bundle_data_info_plist = target_name + "_bundle_data_info_plist"
 
-  action(_generate_info_plist) {
-    visibility = [ ":$_bundle_data_info_plist" ]
-    script = "//build/config/ios/ios_gen_plist.py"
-    sources = [
-      "//build/config/ios/BuildInfo.plist",
-      invoker.info_plist,
-    ]
-    outputs = [
-      "$target_gen_dir/$target_name/Info.plist",
-    ]
-    extra_args = []
-    if (defined(invoker.extra_substitutions)) {
-      foreach(substitution, invoker.extra_substitutions) {
-        extra_args += [ "-s=$substitution" ]
-      }
-    }
-    response_file_contents =
-        extra_args + [
-          "-s=BUILD_MACHINE_OS_BUILD=$machine_os_build",
-          "-s=EXECUTABLE_NAME=$_output_name",
-          "-s=GCC_VERSION=com.apple.compilers.llvm.clang.1_0",
-          "-s=IOS_DEPLOYMENT_TARGET=$ios_deployment_target",
-          "-s=IOS_PLATFORM_BUILD=$ios_platform_build",
-          "-s=IOS_PLATFORM_NAME=$ios_sdk_name",
-          "-s=IOS_PLATFORM_VERSION=$ios_sdk_version",
-          "-s=IOS_SDK_BUILD=$ios_sdk_build",
-          "-s=IOS_SDK_NAME=$ios_sdk_name$ios_sdk_version",
-          "-s=IOS_SUPPORTED_PLATFORM=$ios_sdk_platform",
-          "-s=PRODUCT_NAME=$_output_name",
-          "-s=XCODE_BUILD=$xcode_build",
-          "-s=XCODE_VERSION=$xcode_version",
-          "-o=" + rebase_path(outputs[0], root_build_dir),
-        ] + rebase_path(sources, root_build_dir)
-    args = [ "@{{response_file_name}}" ]
+  ios_info_plist(_generate_info_plist) {
+    executable_name = _output_name
+    forward_variables_from(invoker,
+                           [
+                             "extra_substitutions",
+                             "info_plist",
+                           ])
   }
 
   bundle_data(_bundle_data_info_plist) {
@@ -109,21 +125,11 @@ template("app") {
                              "visibility",
                            ])
 
-    output_name = rebase_path("$target_gen_dir/$_output_name", root_build_dir)
+    output_name = rebase_path("$target_gen_dir/$_output_name", root_out_dir)
     if (!defined(libs)) {
       libs = []
     }
     libs += [ "UIKit.framework" ]
-
-    # TODO(crbug.com/599203) - iossim should probably be a data dependency
-    # of the create_bundle(target_name) target instead but at the moment
-    # create_bundle() is ignoring data_deps.
-    if (use_ios_simulator) {
-      if (!defined(data_deps)) {
-        data_deps = []
-      }
-      data_deps += [ "//testing/iossim(${host_toolchain})" ]
-    }
   }
 
   bundle_data(_bundle_data_executable) {
@@ -158,6 +164,14 @@ template("app") {
       ":$_bundle_data_info_plist",
     ]
 
+    if (use_ios_simulator) {
+      if (!defined(data_deps)) {
+        data_deps = []
+      }
+      data_deps += [ "//testing/iossim" ]
+    }
+
+    product_type = "com.apple.product-type.application"
     bundle_root_dir = "$root_out_dir/$_output_name.app"
     bundle_resources_dir = bundle_root_dir
     bundle_executable_dir = bundle_root_dir
@@ -190,26 +204,19 @@ template("bundle_data_xib") {
   _target_name = target_name
   _compile_xib = target_name + "_compile_xib"
 
-  _nib_basename = get_path_info(invoker.source, "name")
-  _nib_filename = "$_nib_basename.nib"
-
-  action(_compile_xib) {
-    visibility = [ ":$_target_name" ]
-    script = "//build/config/ios/ios_compile_xib.py"
+  compile_xibs(_compile_xib) {
     sources = [
       invoker.source,
     ]
-    outputs = [
-      "$target_gen_dir/$_nib_filename/objects.nib",
-      "$target_gen_dir/$_nib_filename/runtime.nib",
-    ]
-    args = [
+    visibility = [ ":$_target_name" ]
+    ibtool_flags = [
       "--minimum-deployment-target",
       ios_deployment_target,
-      "--output",
-      rebase_path("$target_gen_dir/$_nib_filename"),
-      "--input",
-      rebase_path(invoker.source, root_build_dir),
+      "--auto-activate-custom-fonts",
+      "--target-device",
+      "iphone",
+      "--target-device",
+      "ipad",
     ]
   }
 
@@ -221,12 +228,206 @@ template("bundle_data_xib") {
     }
     public_deps += [ ":$_compile_xib" ]
 
-    sources = [
-      "$target_gen_dir/$_nib_filename/objects.nib",
-      "$target_gen_dir/$_nib_filename/runtime.nib",
-    ]
+    sources = get_target_outputs(":$_compile_xib")
+
     outputs = [
-      "{{bundle_resources_dir}}/$_nib_filename/{{source_file_part}}",
+      "{{bundle_resources_dir}}/{{source_file_part}}",
     ]
+  }
+}
+
+# Template to package a shared library into an iOS framework bundle.
+#
+# This template provides two targets to control whether the framework is
+# merely built when targets depend on it, or whether it is linked as well:
+# "$target_name" and "$target_name+link".
+#
+# See the //build/config/mac/base_rules.gni:framework_bundle for a discussion
+# and examples.
+#
+# Arguments
+#
+#     output_name:
+#         (optional) string, name of the generated framework without the
+#         .framework suffix. If omitted, defaults to target_name.
+#
+#     framework_version:
+#         (optional) string, version of the framework. Typically this is a
+#         single letter, like "A". If omitted, the Versions/ subdirectory
+#         structure will not be created, and build output will go directly
+#         into the framework subdirectory.
+#
+#     public_headers:
+#         (optional) list of paths to header file that needs to be copied
+#         into the framework bundle Headers subdirectory. If omitted or
+#         empty then the Headers subdirectory is not created.
+#
+#     sources
+#         (optional) list of files. Needs to be defined and non-empty if
+#         public_headers is defined and non-empty.
+#
+# See "gn help shared_library" for more information on arguments supported
+# by shared library target.
+template("ios_framework_bundle") {
+  _target_name = target_name
+  _output_name = target_name
+  if (defined(invoker.output_name)) {
+    _output_name = invoker.output_name
+  }
+  _framework_target = _target_name
+
+  if (defined(invoker.public_headers) && invoker.public_headers != []) {
+    _public_headers = invoker.public_headers
+    _framework_name = _output_name + ".framework"
+    _framework_root = "$root_out_dir/$_framework_name"
+    _framework_target = target_name + "_internal"
+
+    _header_map_filename = "$target_gen_dir/$_output_name.headers.hmap"
+    _framework_headers_target = _target_name + "_framework_headers"
+
+    _compile_headers_map_target = _target_name + "_compile_headers_map"
+    action(_compile_headers_map_target) {
+      visibility = [ ":$_framework_headers_target" ]
+      script = "$root_out_dir/gyp-mac-tool"
+      outputs = [
+        _header_map_filename,
+      ]
+
+      # The header map generation only wants the list of headers, not all of
+      # sources, so filter any non-header source files from "sources". It is
+      # less error prone that having the developer duplicate the list of all
+      # headers in addition to "sources".
+      set_sources_assignment_filter([
+                                      "*.c",
+                                      "*.cc",
+                                      "*.cpp",
+                                      "*.m",
+                                      "*.mm",
+                                    ])
+      sources = invoker.sources
+      set_sources_assignment_filter([])
+
+      args = [
+               "compile-ios-framework-header-map",
+               rebase_path(_header_map_filename),
+               rebase_path(_framework_root, root_out_dir),
+             ] + rebase_path(sources, root_out_dir)
+    }
+
+    _create_module_map_target = _target_name + "_module_map"
+    action(_create_module_map_target) {
+      visibility = [ ":$_framework_headers_target" ]
+      script = "$root_out_dir/gyp-mac-tool"
+      outputs = [
+        "$_framework_root/Modules/module.modulemap",
+      ]
+      args = [
+        "package-ios-framework",
+        rebase_path("$_framework_root", root_out_dir),
+      ]
+    }
+
+    _copy_public_headers_target = _target_name + "_copy_public_headers"
+    copy(_copy_public_headers_target) {
+      visibility = [ ":$_framework_headers_target" ]
+      sources = _public_headers
+      outputs = [
+        "$_framework_root/Headers/{{source_file_part}}",
+      ]
+    }
+
+    _headers_map_config = _target_name + "_headers_map"
+    config(_headers_map_config) {
+      visibility = [ ":$_target_name" ]
+      include_dirs = [ _header_map_filename ]
+      ldflags = [
+        "-install_name",
+        "@rpath/$_framework_name/$_output_name",
+      ]
+    }
+
+    group(_framework_headers_target) {
+      deps = [
+        ":$_compile_headers_map_target",
+        ":$_copy_public_headers_target",
+        ":$_create_module_map_target",
+      ]
+    }
+  }
+
+  _framework_public_config = _target_name + "_ios_public_config"
+  config(_framework_public_config) {
+    visibility = [ ":$_framework_public_config" ]
+    if (defined(_public_headers)) {
+      common_flags = [ "-F" + rebase_path("$root_out_dir/.", root_out_dir) ]
+      cflags_objc = common_flags
+      cflags_objcc = common_flags
+    }
+
+    # The link settings are inherited from the framework_bundle config.
+  }
+
+  framework_bundle(_framework_target) {
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "output_name",
+                             "public_headers",
+                             "visibility",
+                           ])
+    output_name = _output_name
+
+    if (!defined(public_configs)) {
+      public_configs = []
+    }
+    public_configs += [ ":$_framework_public_config" ]
+
+    if (defined(_public_headers)) {
+      visibility = [
+        ":$_target_name",
+        ":$_target_name+link",
+      ]
+      configs += [ ":$_headers_map_config" ]
+
+      if (!defined(deps)) {
+        deps = []
+      }
+      deps += [ ":$_framework_headers_target" ]
+    } else {
+      if (defined(invoker.visibility)) {
+        visibility = invoker.visibility
+        visibility += [ ":$_target_name+link" ]
+      }
+    }
+  }
+
+  if (defined(_public_headers)) {
+    group(_target_name) {
+      forward_variables_from(invoker,
+                             [
+                               "testonly",
+                               "public_configs",
+                             ])
+
+      if (defined(invoker.visibility)) {
+        visibility = invoker.visibility
+        visibility += [ ":$_target_name+link" ]
+      }
+
+      public_deps = [
+        ":$_framework_target",
+      ]
+    }
+
+    group(_target_name + "+link") {
+      forward_variables_from(invoker,
+                             [
+                               "testonly",
+                               "visibility",
+                             ])
+      public_deps = [
+        ":$_framework_target+link",
+      ]
+    }
   }
 }

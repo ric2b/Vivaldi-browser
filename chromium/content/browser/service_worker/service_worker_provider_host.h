@@ -58,8 +58,10 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   // Used to pre-create a ServiceWorkerProviderHost for a navigation. The
   // ServiceWorkerNetworkProvider will later be created in the renderer, should
   // the navigation succeed.
-  static scoped_ptr<ServiceWorkerProviderHost> PreCreateNavigationHost(
+  static std::unique_ptr<ServiceWorkerProviderHost> PreCreateNavigationHost(
       base::WeakPtr<ServiceWorkerContextCore> context);
+
+  enum class FrameSecurityLevel { UNINITIALIZED, INSECURE, SECURE };
 
   // When this provider host is for a Service Worker context, |route_id| is
   // MSG_ROUTING_NONE. When this provider host is for a Document,
@@ -72,6 +74,7 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
                             int route_id,
                             int provider_id,
                             ServiceWorkerProviderType provider_type,
+                            FrameSecurityLevel parent_frame_security_level,
                             base::WeakPtr<ServiceWorkerContextCore> context,
                             ServiceWorkerDispatcherHost* dispatcher_host);
   virtual ~ServiceWorkerProviderHost();
@@ -81,6 +84,27 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   int provider_id() const { return provider_id_; }
   int frame_id() const;
   int route_id() const { return route_id_; }
+
+  bool is_parent_frame_secure() const {
+    return parent_frame_security_level_ == FrameSecurityLevel::SECURE;
+  }
+  void set_parent_frame_secure(bool is_parent_frame_secure) {
+    CHECK_EQ(static_cast<int>(parent_frame_security_level_),
+             static_cast<int>(FrameSecurityLevel::UNINITIALIZED));
+    parent_frame_security_level_ = is_parent_frame_secure
+                                       ? FrameSecurityLevel::SECURE
+                                       : FrameSecurityLevel::INSECURE;
+  }
+
+  // Returns whether this provider host is secure enough to have a service
+  // worker controller.
+  // Analogous to Blink's Document::isSecureContext. Because of how service
+  // worker intercepts main resource requests, this check must be done
+  // browser-side once the URL is known (see comments in
+  // ServiceWorkerNetworkProvider::CreateForNavigation). This function uses
+  // |document_url_| and |is_parent_frame_secure_| to determine context
+  // security, so they must be set properly before calling this function.
+  bool IsContextSecureForServiceWorker() const;
 
   bool IsHostToRunningServiceWorker() {
     return running_hosted_version_.get() != NULL;
@@ -137,7 +161,7 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
 
   // Returns a handler for a request, the handler may return NULL if
   // the request doesn't require special handling.
-  scoped_ptr<ServiceWorkerRequestHandler> CreateRequestHandler(
+  std::unique_ptr<ServiceWorkerRequestHandler> CreateRequestHandler(
       FetchRequestMode request_mode,
       FetchCredentialsMode credentials_mode,
       FetchRedirectMode redirect_mode,
@@ -168,10 +192,9 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   bool IsContextAlive();
 
   // Dispatches message event to the document.
-  void PostMessageToClient(
-      ServiceWorkerVersion* version,
-      const base::string16& message,
-      const std::vector<TransferredMessagePort>& sent_message_ports);
+  void PostMessageToClient(ServiceWorkerVersion* version,
+                           const base::string16& message,
+                           const std::vector<int>& sent_message_ports);
 
   // Adds reference of this host's process to the |pattern|, the reference will
   // be removed in destructor.
@@ -260,6 +283,7 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
                            UpdateForceBypassCache);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerContextRequestHandlerTest,
                            ServiceWorkerDataRequestAnnotation);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerProviderHostTest, ContextSecurity);
 
   struct OneShotGetReadyCallback {
     GetRegistrationForReadyCallback callback;
@@ -308,6 +332,7 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   int render_thread_id_;
   int provider_id_;
   ServiceWorkerProviderType provider_type_;
+  FrameSecurityLevel parent_frame_security_level_;
   GURL document_url_;
   GURL topmost_frame_url_;
 
@@ -317,11 +342,12 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   // Keyed by registration scope URL length.
   typedef std::map<size_t, scoped_refptr<ServiceWorkerRegistration>>
       ServiceWorkerRegistrationMap;
-  // Contains all living registrations which has pattern this document's
-  // URL starts with.
+  // Contains all living registrations whose pattern this document's URL
+  // starts with. It is empty if IsContextSecureForServiceWorker() is
+  // false.
   ServiceWorkerRegistrationMap matching_registrations_;
 
-  scoped_ptr<OneShotGetReadyCallback> get_ready_callback_;
+  std::unique_ptr<OneShotGetReadyCallback> get_ready_callback_;
   scoped_refptr<ServiceWorkerVersion> controlling_version_;
   scoped_refptr<ServiceWorkerVersion> running_hosted_version_;
   base::WeakPtr<ServiceWorkerContextCore> context_;

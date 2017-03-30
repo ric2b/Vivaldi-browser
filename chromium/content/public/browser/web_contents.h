@@ -60,6 +60,7 @@ class WebContentsDelegate;
 struct CustomContextMenuContext;
 struct DropData;
 struct Manifest;
+struct MHTMLGenerationParams;
 struct PageImportanceSignals;
 struct RendererPreferences;
 
@@ -67,7 +68,7 @@ struct RendererPreferences;
 // (usually HTML) in a rectangular area.
 //
 // Instantiating one is simple:
-//   scoped_ptr<content::WebContents> web_contents(
+//   std::unique_ptr<content::WebContents> web_contents(
 //       content::WebContents::Create(
 //           content::WebContents::CreateParams(browser_context)));
 //   gfx::NativeView view = web_contents->GetNativeView();
@@ -76,7 +77,8 @@ struct RendererPreferences;
 //
 // That's it; go to your kitchen, grab a scone, and chill. WebContents will do
 // all the multi-process stuff behind the scenes. More details are at
-// http://www.chromium.org/developers/design-documents/multi-process-architecture .
+// http://www.chromium.org/developers/design-documents/multi-process-architecture
+// .
 //
 // Each WebContents has exactly one NavigationController; each
 // NavigationController belongs to one WebContents. The NavigationController can
@@ -248,6 +250,12 @@ class WebContents : public PageNavigator,
   // time and can be nullptr (during setup and teardown).
   virtual RenderWidgetHostView* GetRenderWidgetHostView() const = 0;
 
+  // Returns the outermost RenderWidgetHostView. This will return the platform
+  // specific RenderWidgetHostView (as opposed to
+  // RenderWidgetHostViewChildFrame), which can be used to create context
+  // menus.
+  virtual RenderWidgetHostView* GetTopLevelRenderWidgetHostView() = 0;
+
   // Causes the current page to be closed, including running its onunload event
   // handler.
   virtual void ClosePage() = 0;
@@ -398,13 +406,9 @@ class WebContents : public PageNavigator,
   // Runs the beforeunload handler for the main frame. See also ClosePage and
   // SwapOut in RenderViewHost, which run the unload handler.
   //
-  // |for_cross_site_transition| indicates whether this call is for the current
-  // frame during a cross-process navigation. False means we're closing the
-  // entire tab.
-  //
   // TODO(creis): We should run the beforeunload handler for every frame that
   // has one.
-  virtual void DispatchBeforeUnload(bool for_cross_site_transition) = 0;
+  virtual void DispatchBeforeUnload() = 0;
 
   // Attaches this inner WebContents to its container frame
   // |outer_contents_frame| in |outer_web_contents|.
@@ -543,8 +547,12 @@ class WebContents : public PageNavigator,
                                     const std::string& headers) = 0;
 
   // Generate an MHTML representation of the current page in the given file.
+  // If |use_binary_encoding| is specified, a Content-Transfer-Encoding value of
+  // 'binary' will be used, instead of a combination of 'quoted-printable' and
+  // 'base64'.  Binary encoding is known to have interoperability issues and is
+  // not the recommended encoding for shareable content.
   virtual void GenerateMHTML(
-      const base::FilePath& file,
+      const MHTMLGenerationParams& params,
       const base::Callback<void(int64_t /* size of the file */)>& callback) = 0;
 
   // Returns the contents MIME type after a navigation.
@@ -711,6 +719,20 @@ class WebContents : public PageNavigator,
   CONTENT_EXPORT static WebContents* FromJavaWebContents(
       jobject jweb_contents_android);
   virtual base::android::ScopedJavaLocalRef<jobject> GetJavaWebContents() = 0;
+
+  // Selects and zooms to the find result nearest to the point (x,y) defined in
+  // find-in-page coordinates.
+  virtual void ActivateNearestFindResult(float x, float y) = 0;
+
+  // Requests the rects of the current find matches from the renderer
+  // process. |current_version| is the version of find rects that the caller
+  // already knows about. This version will be compared to the current find
+  // rects version in the renderer process (which is updated whenever the rects
+  // change), to see which new rect data will need to be sent back.
+  //
+  // TODO(paulmeyer): This process will change slightly once multi-process
+  // find-in-page is implemented. This comment should be updated at that time.
+  virtual void RequestFindMatchRects(int current_version) = 0;
 #elif defined(OS_MACOSX)
   // Allowing other views disables optimizations which assume that only a single
   // WebContents is present.

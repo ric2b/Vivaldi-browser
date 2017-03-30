@@ -9,6 +9,7 @@
 #include "base/command_line.h"
 #include "base/metrics/user_metrics_action.h"
 #include "build/build_config.h"
+#include "chrome/browser/permissions/permission_uma_util.h"
 #include "chrome/browser/ui/website_settings/permission_bubble_request.h"
 #include "chrome/common/chrome_switches.h"
 #include "content/public/browser/browser_thread.h"
@@ -26,13 +27,11 @@ class CancelledRequest : public PermissionBubbleRequest {
  public:
   explicit CancelledRequest(PermissionBubbleRequest* cancelled)
       : icon_(cancelled->GetIconId()),
-        message_text_(cancelled->GetMessageText()),
         message_fragment_(cancelled->GetMessageTextFragment()),
         origin_(cancelled->GetOrigin()) {}
   ~CancelledRequest() override {}
 
   int GetIconId() const override { return icon_; }
-  base::string16 GetMessageText() const override { return message_text_; }
   base::string16 GetMessageTextFragment() const override {
     return message_fragment_;
   }
@@ -47,7 +46,6 @@ class CancelledRequest : public PermissionBubbleRequest {
 
  private:
   int icon_;
-  base::string16 message_text_;
   base::string16 message_fragment_;
   GURL origin_;
 };
@@ -146,7 +144,6 @@ void PermissionBubbleManager::AddRequest(PermissionBubbleRequest* request) {
 
   if (is_main_frame) {
     requests_.push_back(request);
-    // TODO(gbillock): do we need to make default state a request property?
     accept_states_.push_back(true);
   } else {
     content::RecordAction(
@@ -312,6 +309,8 @@ void PermissionBubbleManager::ToggleAccept(int request_index, bool new_value) {
 }
 
 void PermissionBubbleManager::Accept() {
+  PermissionUmaUtil::PermissionPromptAccepted(requests_, accept_states_);
+
   std::vector<PermissionBubbleRequest*>::iterator requests_iter;
   std::vector<bool>::iterator accepts_iter = accept_states_.begin();
   for (requests_iter = requests_.begin(), accepts_iter = accept_states_.begin();
@@ -327,6 +326,8 @@ void PermissionBubbleManager::Accept() {
 }
 
 void PermissionBubbleManager::Deny() {
+  PermissionUmaUtil::PermissionPromptDenied(requests_);
+
   std::vector<PermissionBubbleRequest*>::iterator requests_iter;
   for (requests_iter = requests_.begin();
        requests_iter != requests_.end();
@@ -378,13 +379,11 @@ void PermissionBubbleManager::TriggerShowBubble() {
       requests_.swap(queued_frame_requests_);
 
     // Sets the default value for each request to be 'accept'.
-    // TODO(leng):  Currently all requests default to true.  If that changes:
-    // a) Add additional accept_state queues to store default values.
-    // b) Change the request API to provide the default value.
     accept_states_.resize(requests_.size(), true);
   }
 
   view_->Show(requests_, accept_states_);
+  PermissionUmaUtil::PermissionPromptShown(requests_);
   NotifyBubbleAdded();
 
   // If in testing mode, automatically respond to the bubble that was shown.

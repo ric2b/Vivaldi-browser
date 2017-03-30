@@ -2,8 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef COMPONENTS_RENDERER_CONTEXT_MENU_RENDER_TOOLKIT_DELEGATE_VIEWS_H_
-#define COMPONENTS_RENDERER_CONTEXT_MENU_RENDER_TOOLKIT_DELEGATE_VIEWS_H_
+#ifndef COMPONENTS_RENDERER_CONTEXT_MENU_VIEWS_TOOLKIT_DELEGATE_VIEWS_H_
+#define COMPONENTS_RENDERER_CONTEXT_MENU_VIEWS_TOOLKIT_DELEGATE_VIEWS_H_
+
+#include <memory>
 
 #include "base/macros.h"
 #include "components/renderer_context_menu/render_view_context_menu_base.h"
@@ -43,9 +45,12 @@ class ToolkitDelegateViews : public RenderViewContextMenuBase::ToolkitDelegate {
                       bool enabled,
                       bool hidden,
                       const base::string16& title) override;
+#if defined(OS_CHROMEOS)
+  void UpdateMenuIcon(int command_id, const gfx::Image& image) override;
+#endif
 
-  scoped_ptr<views::MenuModelAdapter> menu_adapter_;
-  scoped_ptr<views::MenuRunner> menu_runner_;
+  std::unique_ptr<views::MenuModelAdapter> menu_adapter_;
+  std::unique_ptr<views::MenuRunner> menu_runner_;
 
   // Weak. Owned by menu_runner_;
   views::MenuItemView* menu_view_;
@@ -53,4 +58,4 @@ class ToolkitDelegateViews : public RenderViewContextMenuBase::ToolkitDelegate {
   DISALLOW_COPY_AND_ASSIGN(ToolkitDelegateViews);
 };
 
-#endif  // COMPONENTS_RENDERER_CONTEXT_MENU_RENDER_TOOLKIT_DELEGATE_VIEWS_H_
+#endif  // COMPONENTS_RENDERER_CONTEXT_MENU_VIEWS_TOOLKIT_DELEGATE_VIEWS_H_

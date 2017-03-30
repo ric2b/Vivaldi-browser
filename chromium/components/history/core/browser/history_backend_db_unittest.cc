@@ -523,6 +523,24 @@ TEST_F(HistoryBackendDBTest, MigrateDownloadMimeType) {
   }
 }
 
+bool IsValidRFC4122Ver4GUID(const std::string& guid) {
+  // base::IsValidGUID() doesn't restrict its validation to version (or subtype)
+  // 4 GUIDs as described in RFC 4122. So we check if base::IsValidGUID() thinks
+  // it's a valid GUID first, and then check the additional constraints.
+  //
+  // * Bits 4-7 of time_hi_and_version should be set to 0b0100 == 4
+  //   => guid[14] == '4'
+  //
+  // * Bits 6-7 of clk_seq_hi_res should be set to 0b10
+  //   => guid[19] in {'8','9','A','B'}
+  //
+  // * All other bits should be random or pseudo random.
+  //   => http://dilbert.com/strip/2001-10-25
+  return base::IsValidGUID(guid) && guid[14] == '4' &&
+         (guid[19] == '8' || guid[19] == '9' || guid[19] == 'A' ||
+          guid[19] == 'B');
+}
+
 TEST_F(HistoryBackendDBTest, MigrateHashHttpMethodAndGenerateGuids) {
   const size_t kDownloadCount = 100;
   ASSERT_NO_FATAL_FAILURE(CreateDBVersion(29));
@@ -583,12 +601,15 @@ TEST_F(HistoryBackendDBTest, MigrateHashHttpMethodAndGenerateGuids) {
       EXPECT_EQ(cur_version, s.ColumnInt(0));
     }
     {
-      sql::Statement s(db.GetUniqueStatement("SELECT guid from downloads"));
+      sql::Statement s(db.GetUniqueStatement("SELECT guid, id from downloads"));
       std::unordered_set<std::string> guids;
       while (s.Step()) {
         std::string guid = s.ColumnString(0);
-        EXPECT_TRUE(base::IsValidGUID(guid));
+        uint32_t id = static_cast<uint32_t>(s.ColumnInt64(1));
+        EXPECT_TRUE(IsValidRFC4122Ver4GUID(guid));
         EXPECT_EQ(guid, base::ToUpperASCII(guid));
+        // Id is used as time_low in RFC 4122 to guarantee unique GUIDs
+        EXPECT_EQ(guid.substr(0, 8), base::StringPrintf("%08" PRIX32, id));
         guids.insert(guid);
       }
       EXPECT_TRUE(s.Succeeded());
@@ -1042,13 +1063,12 @@ TEST_F(HistoryBackendDBTest, MigratePresentations) {
   // Re-open the db, triggering migration.
   CreateBackendAndDatabase();
 
-  std::vector<PageUsageData*> results;
-  db_->QuerySegmentUsage(segment_time, 10, &results);
+  std::vector<std::unique_ptr<PageUsageData>> results = db_->QuerySegmentUsage(
+      segment_time, 10, base::Callback<bool(const GURL&)>());
   ASSERT_EQ(1u, results.size());
   EXPECT_EQ(url, results[0]->GetURL());
   EXPECT_EQ(segment_id, results[0]->GetID());
   EXPECT_EQ(title, results[0]->GetTitle());
-  STLDeleteElements(&results);
 }
 
 TEST_F(HistoryBackendDBTest, CheckLastCompatibleVersion) {
@@ -1086,6 +1106,50 @@ TEST_F(HistoryBackendDBTest, CheckLastCompatibleVersion) {
       EXPECT_EQ(28, meta.GetVersionNumber());
     }
   }
+}
+
+bool FilterURL(const GURL& url) {
+  return url.SchemeIsHTTPOrHTTPS();
+}
+
+TEST_F(HistoryBackendDBTest, QuerySegmentUsage) {
+  CreateBackendAndDatabase();
+
+  const GURL url1("file://bar");
+  const GURL url2("http://www.foo.com");
+  const int visit_count1 = 10;
+  const int visit_count2 = 5;
+  const base::Time time(base::Time::Now());
+
+  URLID url_id1 = db_->AddURL(URLRow(url1));
+  ASSERT_NE(0, url_id1);
+  URLID url_id2 = db_->AddURL(URLRow(url2));
+  ASSERT_NE(0, url_id2);
+
+  SegmentID segment_id1 = db_->CreateSegment(
+      url_id1, VisitSegmentDatabase::ComputeSegmentName(url1));
+  ASSERT_NE(0, segment_id1);
+  SegmentID segment_id2 = db_->CreateSegment(
+      url_id2, VisitSegmentDatabase::ComputeSegmentName(url2));
+  ASSERT_NE(0, segment_id2);
+
+  ASSERT_TRUE(db_->IncreaseSegmentVisitCount(segment_id1, time, visit_count1));
+  ASSERT_TRUE(db_->IncreaseSegmentVisitCount(segment_id2, time, visit_count2));
+
+  // Without a filter, the "file://" URL should win.
+  std::vector<std::unique_ptr<PageUsageData>> results =
+      db_->QuerySegmentUsage(time, 1, base::Callback<bool(const GURL&)>());
+  ASSERT_EQ(1u, results.size());
+  EXPECT_EQ(url1, results[0]->GetURL());
+  EXPECT_EQ(segment_id1, results[0]->GetID());
+
+  // With the filter, the "file://" URL should be filtered out, so the "http://"
+  // URL should win instead.
+  std::vector<std::unique_ptr<PageUsageData>> results2 =
+      db_->QuerySegmentUsage(time, 1, base::Bind(&FilterURL));
+  ASSERT_EQ(1u, results2.size());
+  EXPECT_EQ(url2, results2[0]->GetURL());
+  EXPECT_EQ(segment_id2, results2[0]->GetID());
 }
 
 }  // namespace

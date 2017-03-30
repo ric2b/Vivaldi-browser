@@ -4,6 +4,7 @@
 
 #include "content/browser/android/download_controller_android_impl.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/android/context_utils.h"
@@ -12,7 +13,7 @@
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/synchronization/lock.h"
 #include "base/time/time.h"
 #include "content/browser/android/content_view_core_impl.h"
@@ -80,7 +81,7 @@ void CreateContextMenuDownload(int render_process_id,
       static_cast<content::DownloadManagerImpl*>(
           content::BrowserContext::GetDownloadManager(
               web_contents->GetBrowserContext()));
-  scoped_ptr<content::DownloadUrlParameters> dl_params(
+  std::unique_ptr<content::DownloadUrlParameters> dl_params(
       content::DownloadUrlParameters::FromWebContents(web_contents, url));
   content::Referrer referrer = content::Referrer::SanitizeForRequest(
       url,
@@ -126,10 +127,15 @@ static void OnRequestFileAccessResult(JNIEnv* env,
   DCHECK(callback_id);
 
   // Convert java long long int to c++ pointer, take ownership.
-  scoped_ptr<DownloadControllerAndroid::AcquireFileAccessPermissionCallback> cb(
-      reinterpret_cast<
-          DownloadControllerAndroid::AcquireFileAccessPermissionCallback*>(
-              callback_id));
+  std::unique_ptr<
+      DownloadControllerAndroid::AcquireFileAccessPermissionCallback>
+  cb(reinterpret_cast<
+      DownloadControllerAndroid::AcquireFileAccessPermissionCallback*>(
+      callback_id));
+  if (!granted) {
+    DownloadControllerAndroid::RecordDownloadCancelReason(
+        DownloadControllerAndroid::CANCEL_REASON_NO_STORAGE_PERMISSION);
+  }
   cb->Run(granted);
 }
 
@@ -158,6 +164,13 @@ void DownloadControllerAndroid::SetDownloadControllerAndroid(
     DownloadControllerAndroid* download_controller) {
   base::AutoLock lock(g_download_controller_lock_.Get());
   DownloadControllerAndroid::download_controller_ = download_controller;
+}
+
+// static
+void DownloadControllerAndroid::RecordDownloadCancelReason(
+    DownloadCancelReason reason) {
+  UMA_HISTOGRAM_ENUMERATION(
+      "MobileDownload.CancelReason", reason, CANCEL_REASON_MAX);
 }
 
 // static
@@ -493,6 +506,8 @@ void DownloadControllerAndroidImpl::OnDownloadUpdated(DownloadItem* item) {
           jmime_type.obj(), jfilename.obj(), jpath.obj(),
           item->GetReceivedBytes(), item->GetId(), jguid.obj(),
           joriginal_url.obj(), jreferrer_url.obj(), item->HasUserGesture());
+      DownloadControllerAndroid::RecordDownloadCancelReason(
+          DownloadControllerAndroid::CANCEL_REASON_NOT_CANCELED);
       break;
     case DownloadItem::CANCELLED:
       Java_DownloadController_onDownloadCancelled(
@@ -577,10 +592,14 @@ void DownloadControllerAndroidImpl::DangerousDownloadValidated(
   DownloadItem* item = dlm->GetDownloadByGuid(download_guid);
   if (!item)
     return;
-  if (accept)
+  if (accept) {
     item->ValidateDangerousDownload();
-  else
+  } else {
+    DownloadControllerAndroid::RecordDownloadCancelReason(
+        DownloadControllerAndroid::
+            CANCEL_REASON_DANGEROUS_DOWNLOAD_INFOBAR_DISMISSED);
     item->Remove();
+  }
 }
 
 DownloadControllerAndroidImpl::DownloadInfoAndroid::DownloadInfoAndroid(
@@ -607,6 +626,9 @@ DownloadControllerAndroidImpl::DownloadInfoAndroid::DownloadInfoAndroid(
   if (info)
     has_user_gesture = info->HasUserGesture();
 }
+
+DownloadControllerAndroidImpl::DownloadInfoAndroid::DownloadInfoAndroid(
+    const DownloadInfoAndroid& other) = default;
 
 DownloadControllerAndroidImpl::DownloadInfoAndroid::~DownloadInfoAndroid() {}
 

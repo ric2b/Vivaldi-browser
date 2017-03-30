@@ -61,6 +61,10 @@ public:
     {
         return V8ScriptRunner::tagForCodeCache(cacheHandler);
     }
+    void setCacheTimeStamp(CachedMetadataHandler* cacheHandler)
+    {
+        V8ScriptRunner::setCacheTimeStamp(cacheHandler);
+    }
 
     bool compileScript(V8CacheOptions cacheOptions)
     {
@@ -118,23 +122,22 @@ TEST_F(V8ScriptRunnerTest, parseOption)
     EXPECT_FALSE(cacheHandler()->cachedMetadata(tagForCodeCache(cacheHandler())));
     // The cached data is associated with the encoding.
     ResourceRequest request(url());
-    RawPtr<ScriptResource> anotherResource = ScriptResource::create(request, "UTF-16");
+    ScriptResource* anotherResource = ScriptResource::create(request, "UTF-16");
     EXPECT_FALSE(cacheHandler()->cachedMetadata(tagForParserCache(anotherResource->cacheHandler())));
 }
 
 TEST_F(V8ScriptRunnerTest, codeOption)
 {
     setResource();
+    setCacheTimeStamp(cacheHandler());
 
-    // Compile twice, since 'code' has a probation period before it caches.
-    EXPECT_TRUE(compileScript(V8CacheOptionsCode));
     EXPECT_TRUE(compileScript(V8CacheOptionsCode));
 
     EXPECT_FALSE(cacheHandler()->cachedMetadata(tagForParserCache(cacheHandler())));
     EXPECT_TRUE(cacheHandler()->cachedMetadata(tagForCodeCache(cacheHandler())));
     // The cached data is associated with the encoding.
     ResourceRequest request(url());
-    RawPtr<ScriptResource> anotherResource = ScriptResource::create(request, "UTF-16");
+    ScriptResource* anotherResource = ScriptResource::create(request, "UTF-16");
     EXPECT_FALSE(cacheHandler()->cachedMetadata(tagForCodeCache(anotherResource->cacheHandler())));
 }
 

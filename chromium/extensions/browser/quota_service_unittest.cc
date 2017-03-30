@@ -30,7 +30,6 @@ namespace {
 const char kGenericName[] = "name";
 const Config kFrozenConfig = {0, TimeDelta::FromDays(0)};
 const Config k2PerMinute = {2, TimeDelta::FromMinutes(1)};
-const Config k20PerHour = {20, TimeDelta::FromHours(1)};
 const TimeTicks kStartTime = TimeTicks();
 const TimeTicks k1MinuteAfterStart = kStartTime + TimeDelta::FromMinutes(1);
 
@@ -121,7 +120,7 @@ class QuotaServiceTest : public testing::Test {
   std::string extension_a_;
   std::string extension_b_;
   std::string extension_c_;
-  scoped_ptr<QuotaService> service_;
+  std::unique_ptr<QuotaService> service_;
   base::MessageLoop loop_;
   content::TestBrowserThread ui_thread_;
 };

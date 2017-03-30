@@ -88,10 +88,7 @@ void MediaRouterAndroid::CreateRoute(
     return;
   }
 
-  // TODO(avayvod): unify presentation id generation code between platforms.
-  // https://crbug.com/522239
-  std::string presentation_id("mr_");
-  presentation_id += base::GenerateGUID();
+  std::string presentation_id = MediaRouterBase::CreatePresentationId();
 
   int tab_id = -1;
   TabAndroid* tab = web_contents
@@ -118,8 +115,6 @@ void MediaRouterAndroid::CreateRoute(
   ScopedJavaLocalRef<jstring> jorigin =
           base::android::ConvertUTF8ToJavaString(env, origin.spec());
 
-  // TODO(avayvod): Pass the off_the_record flag to Android.
-  // https://bugs.chromium.org/p/chromium/issues/detail?id=588239
   Java_ChromeMediaRouter_createRoute(
       env,
       java_media_router_.obj(),
@@ -199,7 +194,6 @@ void MediaRouterAndroid::TerminateRoute(const MediaRoute::Id& route_id) {
           base::android::ConvertUTF8ToJavaString(env, route_id);
   Java_ChromeMediaRouter_closeRoute(
       env, java_media_router_.obj(), jroute_id.obj());
-  OnRouteTerminated(route_id);
 }
 
 void MediaRouterAndroid::SendRouteMessage(
@@ -246,6 +240,15 @@ void MediaRouterAndroid::ClearIssue(const Issue::Id& issue_id) {
 }
 
 void MediaRouterAndroid::OnUserGesture() {
+}
+
+void MediaRouterAndroid::SearchSinks(
+    const MediaSink::Id& sink_id,
+    const MediaSource::Id& source_id,
+    const std::string& search_input,
+    const std::string& domain,
+    const MediaSinkSearchResponseCallback& sink_callback) {
+  NOTIMPLEMENTED();
 }
 
 void MediaRouterAndroid::DetachRoute(const MediaRoute::Id& route_id) {
@@ -393,8 +396,6 @@ void MediaRouterAndroid::OnRouteCreated(
                    jis_local, std::string(),
                    true);  // TODO(avayvod): Populate for_display.
 
-  // TODO(crbug.com/588239): Call OnOffTheRecordRouteCreated() if |route|
-  // is OTR
   std::unique_ptr<RouteRequestResult> result = RouteRequestResult::FromSuccess(
       base::WrapUnique(new MediaRoute(route)), request->presentation_id);
   for (const MediaRouteResponseCallback& callback : request->callbacks)
@@ -439,6 +440,23 @@ void MediaRouterAndroid::OnRouteClosed(
 
   FOR_EACH_OBSERVER(MediaRoutesObserver, routes_observers_,
       OnRoutesUpdated(active_routes_, std::vector<MediaRoute::Id>()));
+  NotifyPresentationConnectionStateChange(
+      route_id, content::PRESENTATION_CONNECTION_STATE_TERMINATED);
+}
+
+void MediaRouterAndroid::OnRouteClosedWithError(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jstring>& jmedia_route_id,
+    const JavaParamRef<jstring>& jmessage) {
+  MediaRoute::Id route_id = ConvertJavaStringToUTF8(env, jmedia_route_id);
+  std::string message = ConvertJavaStringToUTF8(env, jmessage);
+  NotifyPresentationConnectionClose(
+      route_id,
+      content::PRESENTATION_CONNECTION_CLOSE_REASON_CONNECTION_ERROR,
+      message);
+
+  OnRouteClosed(env, obj, jmedia_route_id);
 }
 
 void MediaRouterAndroid::OnMessageSentResult(JNIEnv* env,

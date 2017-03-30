@@ -23,7 +23,7 @@
 #include "base/time/time.h"
 #include "base/win/registry.h"
 #include "base/win/windows_version.h"
-#include "chrome/app/chrome_crash_reporter_client.h"
+#include "chrome/app/chrome_crash_reporter_client_win.h"
 #include "chrome/app/main_dll_loader_win.h"
 #include "chrome/browser/chrome_process_finder_win.h"
 #include "chrome/browser/policy/policy_path_parser.h"
@@ -39,7 +39,6 @@
 #include "components/startup_metric_utils/common/pre_read_field_trial_utils_win.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
-#include "ui/gfx/win/dpi.h"
 
 namespace {
 
@@ -251,11 +250,7 @@ int main() {
   // The exit manager is in charge of calling the dtors of singletons.
   base::AtExitManager exit_manager;
 
-  // We don't want to set DPI awareness on pre-Win7 because we don't support
-  // DirectWrite there. GDI fonts are kerned very badly, so better to leave
-  // DPI-unaware and at effective 1.0. See also ShouldUseDirectWrite().
-  if (base::win::GetVersion() >= base::win::VERSION_WIN7)
-    EnableHighDPISupport();
+  EnableHighDPISupport();
 
   if (AttemptFastNotify(*command_line))
     return 0;

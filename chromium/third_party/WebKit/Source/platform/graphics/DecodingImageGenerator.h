@@ -27,10 +27,12 @@
 #define DecodingImageGenerator_h
 
 #include "platform/PlatformExport.h"
+#include "platform/image-decoders/SegmentReader.h"
 #include "third_party/skia/include/core/SkImageGenerator.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "wtf/Allocator.h"
 #include "wtf/Noncopyable.h"
+#include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
 
 class SkData;
@@ -48,14 +50,13 @@ class PLATFORM_EXPORT DecodingImageGenerator final : public SkImageGenerator {
 public:
     static SkImageGenerator* create(SkData*);
 
-    DecodingImageGenerator(PassRefPtr<ImageFrameGenerator>, const SkImageInfo&, size_t index);
+    DecodingImageGenerator(PassRefPtr<ImageFrameGenerator>, const SkImageInfo&, PassRefPtr<SegmentReader>, bool allDataReceived, size_t index);
     ~DecodingImageGenerator() override;
 
-    void setGenerationId(size_t id) { m_generationId = id; }
     void setCanYUVDecode(bool yes) { m_canYUVDecode = yes; }
 
 protected:
-    SkData* onRefEncodedData() override;
+    SkData* onRefEncodedData(GrContext* ctx) override;
 
     bool onGetPixels(const SkImageInfo&, void* pixels, size_t rowBytes, SkPMColor table[], int* tableCount) override;
 
@@ -65,8 +66,9 @@ protected:
 
 private:
     RefPtr<ImageFrameGenerator> m_frameGenerator;
-    size_t m_frameIndex;
-    size_t m_generationId;
+    const RefPtr<SegmentReader> m_data; // Data source.
+    const bool m_allDataReceived;
+    const size_t m_frameIndex;
     bool m_canYUVDecode;
 };
 

@@ -63,13 +63,13 @@ InterpolationValue PathInterpolationFunctions::convertValue(const SVGPathByteStr
 
     OwnPtr<InterpolableList> pathArgs = InterpolableList::create(length);
     for (size_t i = 0; i < interpolablePathSegs.size(); i++)
-        pathArgs->set(i, interpolablePathSegs[i].release());
+        pathArgs->set(i, std::move(interpolablePathSegs[i]));
 
     OwnPtr<InterpolableList> result = InterpolableList::create(PathComponentIndexCount);
-    result->set(PathArgsIndex, pathArgs.release());
+    result->set(PathArgsIndex, std::move(pathArgs));
     result->set(PathNeutralIndex, InterpolableNumber::create(0));
 
-    return InterpolationValue(result.release(), SVGPathNonInterpolableValue::create(pathSegTypes));
+    return InterpolationValue(std::move(result), SVGPathNonInterpolableValue::create(pathSegTypes));
 }
 
 InterpolationValue PathInterpolationFunctions::convertValue(const StylePath* stylePath)
@@ -114,7 +114,7 @@ InterpolationValue PathInterpolationFunctions::maybeConvertNeutral(const Interpo
     OwnPtr<InterpolableList> result = InterpolableList::create(PathComponentIndexCount);
     result->set(PathArgsIndex, toInterpolableList(*underlying.interpolableValue).get(PathArgsIndex)->cloneAndZero());
     result->set(PathNeutralIndex, InterpolableNumber::create(1));
-    return InterpolationValue(result.release(), underlying.nonInterpolableValue.get());
+    return InterpolationValue(std::move(result), underlying.nonInterpolableValue.get());
 }
 
 static bool pathSegTypesMatch(const Vector<SVGPathSegType>& a, const Vector<SVGPathSegType>& b)
@@ -130,14 +130,14 @@ static bool pathSegTypesMatch(const Vector<SVGPathSegType>& a, const Vector<SVGP
     return true;
 }
 
-PairwiseInterpolationValue PathInterpolationFunctions::mergeSingleConversions(InterpolationValue&& start, InterpolationValue&& end)
+PairwiseInterpolationValue PathInterpolationFunctions::maybeMergeSingles(InterpolationValue&& start, InterpolationValue&& end)
 {
     const Vector<SVGPathSegType>& startTypes = toSVGPathNonInterpolableValue(*start.nonInterpolableValue).pathSegTypes();
     const Vector<SVGPathSegType>& endTypes = toSVGPathNonInterpolableValue(*end.nonInterpolableValue).pathSegTypes();
     if (!pathSegTypesMatch(startTypes, endTypes))
         return nullptr;
 
-    return PairwiseInterpolationValue(start.interpolableValue.release(), end.interpolableValue.release(), end.nonInterpolableValue.release());
+    return PairwiseInterpolationValue(std::move(start.interpolableValue), std::move(end.interpolableValue), end.nonInterpolableValue.release());
 }
 
 void PathInterpolationFunctions::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationType& type, const InterpolationValue& value)
@@ -165,7 +165,7 @@ PassOwnPtr<SVGPathByteStream> PathInterpolationFunctions::appliedValue(const Int
         toSVGPathNonInterpolableValue(nonInterpolableValue)->pathSegTypes());
     SVGPathByteStreamBuilder builder(*pathByteStream);
     SVGPathParser::parsePath(source, builder);
-    return pathByteStream.release();
+    return pathByteStream;
 }
 
 } // namespace blink

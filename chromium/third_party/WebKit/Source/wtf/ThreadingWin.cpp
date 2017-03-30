@@ -96,8 +96,7 @@
 #include "wtf/ThreadSpecific.h"
 #include "wtf/ThreadingPrimitives.h"
 #include "wtf/WTFThreadData.h"
-#include "wtf/dtoa.h"
-#include "wtf/dtoa/cached-powers.h"
+#include "wtf/dtoa/double-conversion.h"
 #include <errno.h>
 #include <process.h>
 #include <windows.h>
@@ -138,7 +137,6 @@ void initializeThreading()
     StringImpl::empty16Bit();
     atomicallyInitializedStaticMutex = new Mutex;
     wtfThreadData();
-    s_dtoaP5Mutex = new Mutex;
     initializeDates();
     // Force initialization of static DoubleToStringConverter converter variable
     // inside EcmaScriptConverter function while we are in single thread mode.
@@ -334,14 +332,21 @@ ThreadCondition::ThreadCondition()
             CloseHandle(m_condition.m_blockQueue);
         if (m_condition.m_unblockLock)
             CloseHandle(m_condition.m_unblockLock);
+
+        m_condition.m_blockLock = nullptr;
+        m_condition.m_blockQueue = nullptr;
+        m_condition.m_unblockLock = nullptr;
     }
 }
 
 ThreadCondition::~ThreadCondition()
 {
-    CloseHandle(m_condition.m_blockLock);
-    CloseHandle(m_condition.m_blockQueue);
-    CloseHandle(m_condition.m_unblockLock);
+    if (m_condition.m_blockLock)
+        CloseHandle(m_condition.m_blockLock);
+    if (m_condition.m_blockQueue)
+        CloseHandle(m_condition.m_blockQueue);
+    if (m_condition.m_unblockLock)
+        CloseHandle(m_condition.m_unblockLock);
 }
 
 void ThreadCondition::wait(MutexBase& mutex)

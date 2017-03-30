@@ -6,6 +6,7 @@
 
 #include "base/debug/leak_annotations.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/common/chrome_content_client.h"
@@ -68,9 +69,25 @@ class MockAutofillAgent : public AutofillAgent {
 
   ~MockAutofillAgent() override {}
 
+  void WaitForAutofillDidAssociateFormControl() {
+    DCHECK(run_loop_ == nullptr);
+    run_loop_.reset(new base::RunLoop);
+    run_loop_->Run();
+    run_loop_.reset();
+  }
+
   MOCK_CONST_METHOD0(IsUserGesture, bool());
 
  private:
+  void didAssociateFormControls(
+      const blink::WebVector<blink::WebNode>& nodes) override {
+    AutofillAgent::didAssociateFormControls(nodes);
+    if (run_loop_)
+      run_loop_->Quit();
+  }
+
+  std::unique_ptr<base::RunLoop> run_loop_;
+
   DISALLOW_COPY_AND_ASSIGN(MockAutofillAgent);
 };
 
@@ -141,9 +158,8 @@ ChromeRenderViewTest::CreateContentRendererClient() {
       new ChromeExtensionsDispatcherDelegate());
   ChromeExtensionsRendererClient* ext_client =
       ChromeExtensionsRendererClient::GetInstance();
-  ext_client->SetExtensionDispatcherForTest(
-      make_scoped_ptr(
-          new extensions::Dispatcher(extension_dispatcher_delegate_.get())));
+  ext_client->SetExtensionDispatcherForTest(base::WrapUnique(
+      new extensions::Dispatcher(extension_dispatcher_delegate_.get())));
 #endif
 #if defined(ENABLE_SPELLCHECK)
   client->SetSpellcheck(new SpellCheck());
@@ -159,4 +175,9 @@ void ChromeRenderViewTest::EnableUserGestureSimulationForAutofill() {
 void ChromeRenderViewTest::DisableUserGestureSimulationForAutofill() {
   EXPECT_CALL(*(static_cast<MockAutofillAgent*>(autofill_agent_)),
               IsUserGesture()).WillRepeatedly(Return(false));
+}
+
+void ChromeRenderViewTest::WaitForAutofillDidAssociateFormControl() {
+  static_cast<MockAutofillAgent*>(autofill_agent_)
+      ->WaitForAutofillDidAssociateFormControl();
 }

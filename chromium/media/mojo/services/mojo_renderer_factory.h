@@ -11,21 +11,23 @@
 #include "media/base/renderer_factory.h"
 #include "media/mojo/interfaces/renderer.mojom.h"
 
-namespace mojo {
 namespace shell {
 namespace mojom {
 class InterfaceProvider;
 }
 }
-}
 
 namespace media {
+
+class GpuVideoAcceleratorFactories;
 
 // The default factory class for creating MojoRendererImpl.
 class MojoRendererFactory : public RendererFactory {
  public:
-  explicit MojoRendererFactory(
-      mojo::shell::mojom::InterfaceProvider* interface_provider);
+  using GetGpuFactoriesCB = base::Callback<GpuVideoAcceleratorFactories*()>;
+
+  MojoRendererFactory(const GetGpuFactoriesCB& get_gpu_factories_cb,
+                      shell::mojom::InterfaceProvider* interface_provider);
   ~MojoRendererFactory() final;
 
   std::unique_ptr<Renderer> CreateRenderer(
@@ -36,7 +38,8 @@ class MojoRendererFactory : public RendererFactory {
       const RequestSurfaceCB& request_surface_cb) final;
 
  private:
-  mojo::shell::mojom::InterfaceProvider* interface_provider_;
+  GetGpuFactoriesCB get_gpu_factories_cb_;
+  shell::mojom::InterfaceProvider* interface_provider_;
 
   DISALLOW_COPY_AND_ASSIGN(MojoRendererFactory);
 };

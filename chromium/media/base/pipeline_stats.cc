@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/lazy_instance.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "media/base/demuxer_stream.h"
 #include "media/filters/platform_media_pipeline_types.h"
@@ -65,7 +66,7 @@ void StatusQueue::Serialize(const StatusQueue& queue,
   if (queue.queue_.empty())
     return;
 
-  auto list = make_scoped_ptr(new base::ListValue);
+  auto list = base::WrapUnique(new base::ListValue);
   for (const auto value : queue.queue_)
     list->AppendInteger(value);
 

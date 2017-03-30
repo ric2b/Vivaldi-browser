@@ -33,6 +33,7 @@ extern const char kAllowHttpScreenCapture[];
 extern const char kAllowInsecureLocalhost[];
 extern const char kAllowOutdatedPlugins[];
 extern const char kAllowRunningInsecureContent[];
+extern const char kAllowSilentPush[];
 extern const char kAlwaysAuthorizePlugins[];
 extern const char kAppId[];
 extern const char kApp[];
@@ -63,6 +64,9 @@ extern const char kDiagnosticsFormat[];
 extern const char kDiagnosticsRecovery[];
 extern const char kDisableAboutInSettings[];
 extern const char kDisableAddToShelf[];
+#if defined(OS_ANDROID)
+extern const char kDisableAppLink[];
+#endif
 extern const char kDisableAsyncDns[];
 extern const char kDisableBackgroundNetworking[];
 extern const char kDisableBundledPpapiFlash[];
@@ -83,7 +87,6 @@ extern const char kDisableFieldTrialTestingConfig[];
 extern const char kDisableHttp2[];
 extern const char kDisableMinimizeOnSecondLauncherItemClick[];
 extern const char kDisableNewBookmarkApps[];
-extern const char kDisableNTPPopularSites[];
 extern const char kDisableOfflineAutoReload[];
 extern const char kDisableOfflineAutoReloadVisibleOnly[];
 extern const char kDisableOutOfProcessPac[];
@@ -108,6 +111,10 @@ extern const char kDnsPrefetchDisable[];
 extern const char kDumpBrowserHistograms[];
 extern const char kEasyUnlockAppPath[];
 extern const char kEnableAddToShelf[];
+extern const char kEnableAllBookmarksView[];
+#if defined(OS_ANDROID)
+extern const char kEnableAppLink[];
+#endif
 extern const char kEnableAppsFileAssociations[];
 extern const char kEnableAudioDebugRecordingsFromExtension[];
 extern const char kEnableBenchmarking[];
@@ -126,14 +133,16 @@ extern const char kEnableFastUnload[];
 extern const char kEnableGoogleBrandedContextMenu[];
 #endif  // defined(GOOGLE_CHROME_BUILD)
 extern const char kEnableMaterialDesignExtensions[];
+extern const char kEnableMaterialDesignFeedback[];
 extern const char kEnableMaterialDesignPolicyPage[];
 extern const char kEnableNaCl[];
+#if defined(OS_CHROMEOS)
+extern const char kEnableNativeCups[];
+#endif // defined(OS_CHROMEOS)
 extern const char kEnableNativeNotifications[];
 extern const char kEnableNavigationTracing[];
 extern const char kEnableNetBenchmarking[];
 extern const char kEnableNewBookmarkApps[];
-extern const char kEnableNTPPopularSites[];
-extern const char kEnableNTPSearchEngineCountryDetection[];
 extern const char kEnableOfflineAutoReload[];
 extern const char kEnableOfflineAutoReloadVisibleOnly[];
 extern const char kEnablePanels[];
@@ -146,7 +155,7 @@ extern const char kEnableProfiling[];
 extern const char kEnablePushApiBackgroundMode[];
 extern const char kEnableQuic[];
 extern const char kEnableQuicPortSelection[];
-extern const char kEnableAlternativeServices[];
+extern const char kEnableWebRtcEventLoggingFromExtension[];
 extern const char kEnableSessionCrashedBubble[];
 extern const char kEnableSettingsWindow[];
 extern const char kDisableSettingsWindow[];
@@ -211,6 +220,7 @@ extern const char kNumPacThreads[];
 extern const char kOpenInNewWindow[];
 extern const char kOriginToForceQuicOn[];
 extern const char kOriginalProcessStartTime[];
+extern const char kOriginTrialPublicKey[];
 extern const char kPackExtension[];
 extern const char kPackExtensionKey[];
 extern const char kParentProfile[];
@@ -235,13 +245,13 @@ extern const char kProxyAutoDetect[];
 extern const char kProxyBypassList[];
 extern const char kProxyPacUrl[];
 extern const char kProxyServer[];
+extern const char kPurgeAndSuspendTime[];
 extern const char kQuicConnectionOptions[];
 extern const char kQuicHostWhitelist[];
 extern const char kQuicMaxPacketLength[];
 extern const char kQuicVersion[];
 extern const char kRemoteDebuggingTargets[];
 extern const char kRestoreLastSession[];
-extern const char kRestrictIFramePermissions[];
 extern const char kSavePageAsMHTML[];
 extern const char kSbDisableAutoUpdate[];
 extern const char kSbDisableDownloadProtection[];
@@ -278,6 +288,7 @@ extern const char kTestName[];
 extern const char kTryChromeAgain[];
 extern const char kUnlimitedStorage[];
 extern const char kUnsafelyTreatInsecureOriginAsSecure[];
+extern const char kUnsafePacUrl[];
 extern const char kUseSimpleCacheBackend[];
 extern const char kUserAgent[];
 extern const char kUserDataDir[];
@@ -287,6 +298,7 @@ extern const char kValidateCrx[];
 extern const char kVersion[];
 extern const char kWindowPosition[];
 extern const char kWindowSize[];
+extern const char kWindowWorkspace[];
 extern const char kWinHttpProxyResolver[];
 extern const char kWinJumplistAction[];
 
@@ -299,7 +311,6 @@ extern const char kEnableHostedMode[];
 extern const char kEnableHungRendererInfoBar[];
 extern const char kProgressBarAnimation[];
 extern const char kEnableThemeColorInTabbedMode[];
-extern const char kDisableAutoHidingToolbarThreshold[];
 extern const char kEnableTabSwitcherInDocumentMode[];
 extern const char kNtpSwitchToExistingTab[];
 extern const char kForceShowUpdateMenuItem[];
@@ -324,6 +335,7 @@ extern const char kOpenAsh[];
 extern const char kHelp[];
 extern const char kHelpShort[];
 extern const char kPasswordStore[];
+extern const char kWmUserTimeMs[];
 #endif
 
 #if defined(OS_MACOSX)
@@ -334,14 +346,13 @@ extern const char kDisableAppWindowCycling[];
 extern const char kDisableHostedAppShimCreation[];
 extern const char kDisableHostedAppsInWindows[];
 extern const char kDisableMacViewsNativeAppWindows[];
-extern const char kDisableSavePasswordBubble[];
 extern const char kDisableTranslateNewUX[];
 extern const char kEnableAppInfoDialogMac[];
 extern const char kEnableAppWindowCycling[];
+extern const char kEnableFullscreenTabDetaching[];
 extern const char kEnableHostedAppsInWindows[];
 extern const char kEnableMacViewsNativeAppWindows[];
 extern const char kEnableMacViewsDialogs[];
-extern const char kEnableSavePasswordBubble[];
 extern const char kEnableTranslateNewUX[];
 extern const char kMetricsClientID[];
 extern const char kRelauncherProcess[];
@@ -376,11 +387,6 @@ extern const char kAllowNaClFileHandleAPI[];
 extern const char kAllowNaClSocketAPI[];
 #endif
 
-#if defined(FULL_SAFE_BROWSING)
-extern const char kAllowUncheckedDangerousDownloads[];
-extern const char kDisallowUncheckedDangerousDownloads[];
-#endif
-
 #if defined(ENABLE_TASK_MANAGER)
 extern const char kDisableNewTaskManager[];
 #endif  // defined(ENABLE_TASK_MANAGER)
@@ -396,6 +402,7 @@ extern const char kDisableInputImeAPI[];
 
 bool AboutInSettingsEnabled();
 bool MdExtensionsEnabled();
+bool MdFeedbackEnabled();
 bool MdPolicyPageEnabled();
 bool PdfMaterialUIEnabled();
 bool SettingsWindowEnabled();

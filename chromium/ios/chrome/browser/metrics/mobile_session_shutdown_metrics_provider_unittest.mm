@@ -8,22 +8,17 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
+#include "base/metrics/user_metrics.h"
 #include "base/test/histogram_tester.h"
+#include "base/test/test_simple_task_runner.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_service.h"
 #include "components/metrics/metrics_state_manager.h"
+#include "components/metrics/test_enabled_state_provider.h"
 #include "components/metrics/test_metrics_service_client.h"
 #include "components/prefs/testing_pref_service.h"
 #include "testing/gtest/include/gtest/gtest-param-test.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
-namespace {
-
-bool IsMetricsReportingEnabled() {
-  return false;
-}
-
-}  // namespace
 
 // An MobileSessionShutdownMetricsProvider that returns fake values for the last
 // session environment query methods.
@@ -71,7 +66,9 @@ class MobileSessionShutdownMetricsProviderForTesting
 class MobileSessionShutdownMetricsProviderTest
     : public testing::TestWithParam<int> {
  public:
-  MobileSessionShutdownMetricsProviderTest() {
+  MobileSessionShutdownMetricsProviderTest()
+      : task_runner_(new base::TestSimpleTaskRunner) {
+    base::SetRecordActionTaskRunner(task_runner_);
     metrics::MetricsService::RegisterPrefs(local_state_.registry());
   }
 
@@ -82,6 +79,7 @@ class MobileSessionShutdownMetricsProviderTest
   std::unique_ptr<metrics::MetricsService> metrics_service_;
   std::unique_ptr<MobileSessionShutdownMetricsProviderForTesting>
       metrics_provider_;
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MobileSessionShutdownMetricsProviderTest);
@@ -149,7 +147,7 @@ TEST_P(MobileSessionShutdownMetricsProviderTest, ProvideStabilityMetrics) {
   local_state_.SetBoolean(metrics::prefs::kStabilityExitedCleanly,
                           was_last_shutdown_clean);
   metrics_state_ = metrics::MetricsStateManager::Create(
-      &local_state_, base::Bind(&IsMetricsReportingEnabled),
+      &local_state_, new metrics::TestEnabledStateProvider(false, false),
       metrics::MetricsStateManager::StoreClientInfoCallback(),
       metrics::MetricsStateManager::LoadClientInfoCallback());
   metrics_service_.reset(new metrics::MetricsService(

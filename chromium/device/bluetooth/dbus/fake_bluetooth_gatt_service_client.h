@@ -5,11 +5,11 @@
 #ifndef DEVICE_BLUETOOTH_DBUS_FAKE_BLUETOOTH_GATT_SERVICE_CLIENT_H_
 #define DEVICE_BLUETOOTH_DBUS_FAKE_BLUETOOTH_GATT_SERVICE_CLIENT_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "dbus/object_path.h"
@@ -55,6 +55,11 @@ class DEVICE_BLUETOOTH_EXPORT FakeBluetoothGattServiceClient
   void ExposeHeartRateService(const dbus::ObjectPath& device_path);
   void HideHeartRateService();
 
+  // Makes a service visible for device with object path |device_path| without
+  // delay. Note that only one instance of a specific service is simulated at a
+  // time, if the service is already visible.
+  void ExposeHeartRateServiceWithoutDelay(const dbus::ObjectPath& device_path);
+
   // Returns whether or not the Heart Rate Service is visible.
   bool IsHeartRateVisible() const;
 
@@ -85,9 +90,14 @@ class DEVICE_BLUETOOTH_EXPORT FakeBluetoothGattServiceClient
   // time this method is called, then it does nothing.
   void ExposeHeartRateCharacteristics();
 
+  // Toggles the ServicesResolved property for the device with |object_path|.
+  // This should be done after a service is fully discovered.
+  void ToggleServicesResolvedProperty(const dbus::ObjectPath& object_path,
+                                      bool resolved);
+
   // Static properties we return. As long as a service is exposed, this will be
   // non-null. Otherwise it will be null.
-  scoped_ptr<Properties> heart_rate_service_properties_;
+  std::unique_ptr<Properties> heart_rate_service_properties_;
   std::string heart_rate_service_path_;
 
   // List of observers interested in event notifications from us.

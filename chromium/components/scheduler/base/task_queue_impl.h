@@ -7,10 +7,10 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <set>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/pending_task.h"
 #include "base/threading/thread_checker.h"
 #include "base/trace_event/trace_event.h"
@@ -199,8 +199,8 @@ class SCHEDULER_EXPORT TaskQueueImpl final : public TaskQueue {
     PumpPolicy pump_policy;
     TimeDomain* time_domain;
 
-    scoped_ptr<WorkQueue> delayed_work_queue;
-    scoped_ptr<WorkQueue> immediate_work_queue;
+    std::unique_ptr<WorkQueue> delayed_work_queue;
+    std::unique_ptr<WorkQueue> immediate_work_queue;
     std::priority_queue<Task> delayed_incoming_queue;
     base::ObserverList<base::MessageLoop::TaskObserver> task_observers;
     size_t set_index;
@@ -220,14 +220,14 @@ class SCHEDULER_EXPORT TaskQueueImpl final : public TaskQueue {
 
   // Push the task onto the |delayed_incoming_queue|. Lock-free main thread
   // only fast path.
-  void PushOntoDelayedIncomingQueueFromMainThread(Task&& pending_task,
+  void PushOntoDelayedIncomingQueueFromMainThread(const Task& pending_task,
                                                   base::TimeTicks now);
 
   // Push the task onto the |delayed_incoming_queue|.  Slow path from other
   // threads.
-  void PushOntoDelayedIncomingQueueLocked(Task&& pending_task);
+  void PushOntoDelayedIncomingQueueLocked(const Task& pending_task);
 
-  void ScheduleDelayedWorkTask(const Task pending_task);
+  void ScheduleDelayedWorkTask(const Task& pending_task);
 
   // Enqueues any delayed tasks which should be run now on the
   // |delayed_work_queue|.  Must be called from the main thread.
@@ -257,7 +257,7 @@ class SCHEDULER_EXPORT TaskQueueImpl final : public TaskQueue {
   // Push the task onto the |immediate_incoming_queue| and for auto pumped
   // queues it calls MaybePostDoWorkOnMainRunner if the Incoming queue was
   // empty.
-  void PushOntoImmediateIncomingQueueLocked(Task&& pending_task);
+  void PushOntoImmediateIncomingQueueLocked(const Task& pending_task);
 
   void TraceQueueSize(bool is_locked) const;
   static void QueueAsValueInto(const std::queue<Task>& queue,

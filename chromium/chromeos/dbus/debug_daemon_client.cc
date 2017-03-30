@@ -14,23 +14,35 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_path.h"
+#include "base/json/json_string_value_serializer.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/strings/string_util.h"
 #include "base/task_runner_util.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "base/threading/worker_pool.h"
 #include "chromeos/dbus/pipe_reader.h"
 #include "dbus/bus.h"
 #include "dbus/message.h"
 #include "dbus/object_path.h"
 #include "dbus/object_proxy.h"
 
+namespace chromeos {
+
 namespace {
 
 const char kCrOSTracingAgentName[] = "cros";
 const char kCrOSTraceLabel[] = "systemTraceEvents";
+
+// Because the cheets logs are very huge, we set the D-Bus timeout to 2 minutes.
+const int kBigLogsDBusTimeoutMS = 120 * 1000;
+
+// The type of the callback to be invoked once the pipe reader has been
+// initialized and a D-Bus file descriptor has been created for it.
+using OnPipeReaderInitializedCallback =
+    base::Callback<void(dbus::ScopedFileDescriptor)>;
 
 // Used in DebugDaemonClient::EmptyStopAgentTracingCallback().
 void EmptyStopAgentTracingCallbackBody(
@@ -38,9 +50,83 @@ void EmptyStopAgentTracingCallbackBody(
     const std::string& events_label,
     const scoped_refptr<base::RefCountedString>& unused_result) {}
 
-}  // namespace
+// Creates a D-Bus file descriptor from a base::File.
+dbus::ScopedFileDescriptor CreateFileDescriptorForPipeWriteEnd(
+    base::File pipe_write_end) {
+  if (!pipe_write_end.IsValid()) {
+    VLOG(1) << "Cannot create pipe reader";
+    // NB: continue anyway; toss the data
+    pipe_write_end.Initialize(base::FilePath(FILE_PATH_LITERAL("/dev/null")),
+                              base::File::FLAG_OPEN | base::File::FLAG_WRITE);
+    // TODO(afakhry): If this fails AppendFileDescriptor will abort.
+  }
+  dbus::ScopedFileDescriptor file_descriptor(new dbus::FileDescriptor);
+  file_descriptor->PutValue(pipe_write_end.TakePlatformFile());
+  file_descriptor->CheckValidity();
+  return file_descriptor;
+}
 
-namespace chromeos {
+// A self-deleting object that wraps the pipe reader operations for reading the
+// big feedback logs. It will delete itself once the pipe stream has been
+// terminated. Once the data has been completely read from the pipe, it invokes
+// the GetLogsCallback |callback| passing the deserialized logs data back to
+// the requester.
+class PipeReaderWrapper : public base::SupportsWeakPtr<PipeReaderWrapper> {
+ public:
+  explicit PipeReaderWrapper(const DebugDaemonClient::GetLogsCallback& callback)
+      : task_runner_(
+            base::WorkerPool::GetTaskRunner(true /** tasks_are_slow */)),
+        pipe_reader_(task_runner_,
+                     base::Bind(&PipeReaderWrapper::OnIOComplete, AsWeakPtr())),
+        callback_(callback) {}
+
+  void Initialize(const OnPipeReaderInitializedCallback& on_initialized) {
+    base::File pipe_write_end = pipe_reader_.StartIO();
+    base::PostTaskAndReplyWithResult(
+        task_runner_.get(), FROM_HERE,
+        base::Bind(&CreateFileDescriptorForPipeWriteEnd,
+                   base::Passed(&pipe_write_end)),
+        on_initialized);
+  }
+
+  void OnIOComplete() {
+    std::string pipe_data;
+    pipe_reader_.GetData(&pipe_data);
+    JSONStringValueDeserializer json_reader(pipe_data);
+
+    std::map<std::string, std::string> data;
+    const base::DictionaryValue* dictionary = nullptr;
+    std::unique_ptr<base::Value> logs_value =
+        json_reader.Deserialize(nullptr, nullptr);
+    if (!logs_value.get() || !logs_value->GetAsDictionary(&dictionary)) {
+      VLOG(1) << "Failed to deserialize the JSON logs.";
+      callback_.Run(false, data);
+      delete this;
+      return;
+    }
+
+    base::DictionaryValue::Iterator itr(*dictionary);
+    for (; !itr.IsAtEnd(); itr.Advance()) {
+      std::string value;
+      itr.value().GetAsString(&value);
+      data[itr.key()] = value;
+    }
+
+    callback_.Run(true, data);
+    delete this;
+  }
+
+  void TerminateStream() { pipe_reader_.OnDataReady(-1); }
+
+ private:
+  scoped_refptr<base::TaskRunner> task_runner_;
+  PipeReaderForString pipe_reader_;
+  DebugDaemonClient::GetLogsCallback callback_;
+
+  DISALLOW_COPY_AND_ASSIGN(PipeReaderWrapper);
+};
+
+}  // namespace
 
 // The DebugDaemonClient implementation used in production.
 class DebugDaemonClientImpl : public DebugDaemonClient {
@@ -154,19 +240,23 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
                    callback));
   }
 
-  void GetPerfOutput(uint32_t duration,
+  void GetPerfOutput(base::TimeDelta duration,
                      const std::vector<std::string>& perf_args,
-                     const GetPerfOutputCallback& callback) override {
+                     dbus::ScopedFileDescriptor file_descriptor,
+                     const DBusMethodErrorCallback& error_callback) override {
+    DCHECK(file_descriptor);
     dbus::MethodCall method_call(debugd::kDebugdInterface,
-                                 debugd::kGetPerfOutput);
+                                 debugd::kGetPerfOutputFd);
     dbus::MessageWriter writer(&method_call);
-    writer.AppendUint32(duration);
+    writer.AppendUint32(duration.InSeconds());
     writer.AppendArrayOfStrings(perf_args);
+    writer.AppendFileDescriptor(*file_descriptor);
 
-    debugdaemon_proxy_->CallMethod(
+    debugdaemon_proxy_->CallMethodWithErrorCallback(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&DebugDaemonClientImpl::OnGetPerfOutput,
-                   weak_ptr_factory_.GetWeakPtr(), callback));
+        dbus::ObjectProxy::EmptyResponseCallback(),
+        base::Bind(&DebugDaemonClientImpl::OnDBusMethodError,
+                   weak_ptr_factory_.GetWeakPtr(), error_callback));
   }
 
   void GetScrubbedLogs(const GetLogsCallback& callback) override {
@@ -178,6 +268,18 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
         base::Bind(&DebugDaemonClientImpl::OnGetAllLogs,
                    weak_ptr_factory_.GetWeakPtr(),
                    callback));
+  }
+
+  void GetScrubbedBigLogs(const GetLogsCallback& callback) override {
+    // The PipeReaderWrapper is a self-deleting object; we don't have to worry
+    // about ownership or lifetime. We need to create a new one for each Big
+    // Logs requests in order to queue these requests. One request can take a
+    // long time to be processed and a new request should never be ignored nor
+    // cancels the on-going one.
+    PipeReaderWrapper* pipe_reader = new PipeReaderWrapper(callback);
+    pipe_reader->Initialize(
+        base::Bind(&DebugDaemonClientImpl::OnBigLogsPipeReaderReady,
+                   weak_ptr_factory_.GetWeakPtr(), pipe_reader->AsWeakPtr()));
   }
 
   void GetAllLogs(const GetLogsCallback& callback) override {
@@ -244,9 +346,8 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
     // issue the D-Bus request to stop tracing and collect results.
     base::PostTaskAndReplyWithResult(
         stop_agent_tracing_task_runner_.get(), FROM_HERE,
-        base::Bind(
-            &DebugDaemonClientImpl::CreateFileDescriptorToStopSystemTracing,
-            base::Passed(&pipe_write_end)),
+        base::Bind(&CreateFileDescriptorForPipeWriteEnd,
+                   base::Passed(&pipe_write_end)),
         base::Bind(
             &DebugDaemonClientImpl::OnCreateFileDescriptorRequestStopSystem,
             weak_ptr_factory_.GetWeakPtr(), callback));
@@ -460,35 +561,6 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
       callback.Run(false, "");
   }
 
-  void OnGetPerfOutput(const GetPerfOutputCallback& callback,
-                       dbus::Response* response) {
-    if (!response)
-      return;
-
-    dbus::MessageReader reader(response);
-
-    int status = 0;
-    if (!reader.PopInt32(&status))
-      return;
-
-    const uint8_t* buffer = nullptr;
-    size_t buf_size = 0;
-
-    if (!reader.PopArrayOfBytes(&buffer, &buf_size))
-      return;
-    std::vector<uint8_t> perf_data;
-    if (buf_size > 0)
-      perf_data.insert(perf_data.end(), buffer, buffer + buf_size);
-
-    if (!reader.PopArrayOfBytes(&buffer, &buf_size))
-      return;
-    std::vector<uint8_t> perf_stat;
-    if (buf_size > 0)
-      perf_stat.insert(perf_stat.end(), buffer, buffer + buf_size);
-
-    callback.Run(status, perf_data, perf_stat);
-  }
-
   void OnGetAllLogs(const GetLogsCallback& callback,
                     dbus::Response* response) {
     std::map<std::string, std::string> logs;
@@ -517,12 +589,51 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
     return OnGetAllLogs(callback, response);
   }
 
+  void OnBigLogsPipeReaderReady(base::WeakPtr<PipeReaderWrapper> pipe_reader,
+                                dbus::ScopedFileDescriptor file_descriptor) {
+    DCHECK(file_descriptor);
+
+    dbus::MethodCall method_call(debugd::kDebugdInterface,
+                                 debugd::kGetBigFeedbackLogs);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendFileDescriptor(*file_descriptor);
+
+    DVLOG(1) << "Requesting big feedback logs";
+    debugdaemon_proxy_->CallMethod(
+        &method_call, kBigLogsDBusTimeoutMS,
+        base::Bind(&DebugDaemonClientImpl::OnBigFeedbackLogsResponse,
+                   weak_ptr_factory_.GetWeakPtr(), pipe_reader));
+  }
+
+  void OnBigFeedbackLogsResponse(base::WeakPtr<PipeReaderWrapper> pipe_reader,
+                                 dbus::Response* response) {
+    if (!response && pipe_reader.get()) {
+      // We need to terminate the data stream if an error occurred while the
+      // pipe reader is still waiting on read.
+      pipe_reader->TerminateStream();
+    }
+  }
+
   // Called when a response for a simple start is received.
   void OnStartMethod(dbus::Response* response) {
     if (!response) {
       LOG(ERROR) << "Failed to request start";
       return;
     }
+  }
+
+  void OnDBusMethodError(DBusMethodErrorCallback error_callback,
+                         dbus::ErrorResponse* response) {
+    // Error response has optional error message argument.
+    std::string error_name = "<unknown>";
+    std::string error_message = "<empty>";
+    if (response) {
+      dbus::MessageReader reader(response);
+      error_name = response->GetErrorName();
+      reader.PopString(&error_message);
+    }
+    VLOG(1) << "DBus method error: " << error_name << ": " << error_message;
+    error_callback.Run(error_name, error_message);
   }
 
   void OnEnableDebuggingFeatures(
@@ -558,27 +669,10 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
     callback.Run(response != NULL);
   }
 
-  // Creates dbus::FileDescriptor from base::File.
-  static std::unique_ptr<dbus::FileDescriptor>
-  CreateFileDescriptorToStopSystemTracing(base::File pipe_write_end) {
-    if (!pipe_write_end.IsValid()) {
-      LOG(ERROR) << "Cannot create pipe reader";
-      // NB: continue anyway to shutdown tracing; toss trace data
-      pipe_write_end.Initialize(base::FilePath(FILE_PATH_LITERAL("/dev/null")),
-                                base::File::FLAG_OPEN | base::File::FLAG_WRITE);
-      // TODO(sleffler) if this fails AppendFileDescriptor will abort
-    }
-    std::unique_ptr<dbus::FileDescriptor> file_descriptor(
-        new dbus::FileDescriptor);
-    file_descriptor->PutValue(pipe_write_end.TakePlatformFile());
-    file_descriptor->CheckValidity();
-    return file_descriptor;
-  }
-
   // Called when a CheckValidity response is received.
   void OnCreateFileDescriptorRequestStopSystem(
       const StopAgentTracingCallback& callback,
-      std::unique_ptr<dbus::FileDescriptor> file_descriptor) {
+      dbus::ScopedFileDescriptor file_descriptor) {
     DCHECK(file_descriptor);
 
     // Issue the dbus request to stop system tracing

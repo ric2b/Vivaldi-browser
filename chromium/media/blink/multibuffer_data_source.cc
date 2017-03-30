@@ -65,7 +65,7 @@ class MultibufferDataSource::ReadOperation {
 
   // Runs |callback_| with the given |result|, deleting the operation
   // afterwards.
-  static void Run(scoped_ptr<ReadOperation> read_op, int result);
+  static void Run(std::unique_ptr<ReadOperation> read_op, int result);
 
   int64_t position() { return position_; }
   int size() { return size_; }
@@ -95,7 +95,7 @@ MultibufferDataSource::ReadOperation::~ReadOperation() {
 
 // static
 void MultibufferDataSource::ReadOperation::Run(
-    scoped_ptr<ReadOperation> read_op,
+    std::unique_ptr<ReadOperation> read_op,
     int result) {
   base::ResetAndReturn(&read_op->callback_).Run(result);
 }
@@ -326,6 +326,10 @@ int64_t MultibufferDataSource::GetMemoryUsage() const {
   // TODO(hubbe): Make more accurate when url_data_ is shared.
   return url_data_->CachedSize()
          << url_data_->multibuffer()->block_size_shift();
+}
+
+GURL MultibufferDataSource::GetUrlAfterRedirects() const {
+  return url_data_->url();
 }
 
 void MultibufferDataSource::Read(int64_t position,
@@ -575,16 +579,25 @@ void MultibufferDataSource::UpdateBufferSizes() {
 
   int64_t preload = clamp(kTargetSecondsBufferedAhead * bytes_per_second,
                           kMinBufferPreload, kMaxBufferPreload);
+  int64_t preload_high = preload + kPreloadHighExtra;
+
+  // Assert that kMaxBufferSize is big enough that the subtraction on the next
+  // line cannot go negative.
+  static_assert(kMaxBufferSize > kMaxBufferPreload + kPreloadHighExtra,
+                "kMaxBufferSize too small to contain preload.");
   int64_t back_buffer = clamp(kTargetSecondsBufferedBehind * bytes_per_second,
-                              kMinBufferPreload, kMaxBufferPreload);
-  int64_t pin_forwards = kMaxBufferSize - back_buffer;
-  DCHECK_LE(preload + kPreloadHighExtra, pin_forwards);
-  reader_->SetMaxBuffer(back_buffer, preload + kPreloadHighExtra);
+                              kMinBufferPreload, kMaxBufferSize - preload_high);
+  int64_t buffer_size =
+      std::min((kTargetSecondsBufferedAhead + kTargetSecondsBufferedBehind) *
+                   bytes_per_second,
+               kMaxBufferSize);
+  reader_->SetMaxBuffer(buffer_size);
+  reader_->SetPinRange(back_buffer, kMaxBufferPreload + kPreloadHighExtra);
 
   if (preload_ == METADATA) {
     reader_->SetPreload(0, 0);
   } else {
-    reader_->SetPreload(preload + kPreloadHighExtra, preload);
+    reader_->SetPreload(preload_high, preload);
   }
 }
 

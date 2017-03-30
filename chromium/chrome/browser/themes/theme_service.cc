@@ -15,7 +15,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -355,7 +355,7 @@ void ThemeService::RemoveUnusedThemes(bool ignore_infobars) {
 
   std::string current_theme = GetThemeID();
   std::vector<std::string> remove_list;
-  scoped_ptr<const extensions::ExtensionSet> extensions(
+  std::unique_ptr<const extensions::ExtensionSet> extensions(
       extensions::ExtensionRegistry::Get(profile_)
           ->GenerateInstalledExtensionsSet());
   extensions::ExtensionPrefs* prefs = extensions::ExtensionPrefs::Get(profile_);
@@ -440,6 +440,11 @@ SkColor ThemeService::GetDefaultColor(int id, bool incognito) const {
       const SkColor separator_color = GetSeparatorColor(tab_color, frame_color);
       separator_color_cache_[key] = separator_color;
       return separator_color;
+    }
+    case ThemeProperties::COLOR_TOOLBAR_VERTICAL_SEPARATOR: {
+      return SkColorSetA(
+          GetColor(ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON, incognito),
+          0x4D);
     }
     case ThemeProperties::COLOR_BACKGROUND_TAB: {
       // The tints here serve a different purpose than TINT_BACKGROUND_TAB.
@@ -568,7 +573,8 @@ void ThemeService::LoadThemePrefs() {
                            ? chrome::kThemePackMaterialDesignFilename
                            : chrome::kThemePackFilename);
     SwapThemeSupplier(BrowserThemePack::BuildFromDataPack(path, current_id));
-    loaded_pack = theme_supplier_ != nullptr;
+    if (theme_supplier_)
+      loaded_pack = true;
   }
 
   if (loaded_pack) {

@@ -8,9 +8,10 @@
 #define TestDictionary_h
 
 #include "bindings/core/v8/Dictionary.h"
+#include "bindings/core/v8/DoubleOrString.h"
 #include "bindings/core/v8/Nullable.h"
 #include "bindings/core/v8/ScriptValue.h"
-#include "bindings/core/v8/UnionTypesCore.h"
+#include "bindings/core/v8/TestInterface2OrUint8Array.h"
 #include "bindings/tests/idls/core/TestInterface2.h"
 #include "bindings/tests/idls/core/TestInterfaceGarbageCollected.h"
 #include "bindings/tests/idls/core/TestInterfaceImplementation.h"
@@ -141,21 +142,21 @@ public:
     void setTestInterfaceGarbageCollectedSequenceMember(const HeapVector<Member<TestInterfaceGarbageCollected>>& value) { m_testInterfaceGarbageCollectedSequenceMember = value; }
 
     bool hasTestInterfaceMember() const { return m_testInterfaceMember; }
-    PassRefPtr<TestInterfaceImplementation> testInterfaceMember() const { return m_testInterfaceMember; }
-    void setTestInterfaceMember(PassRefPtr<TestInterfaceImplementation> value) { m_testInterfaceMember = value; }
+    TestInterfaceImplementation* testInterfaceMember() const { return m_testInterfaceMember; }
+    void setTestInterfaceMember(TestInterfaceImplementation* value) { m_testInterfaceMember = value; }
 
     bool hasTestInterfaceOrNullMember() const { return m_testInterfaceOrNullMember; }
-    PassRefPtr<TestInterfaceImplementation> testInterfaceOrNullMember() const { return m_testInterfaceOrNullMember; }
-    void setTestInterfaceOrNullMember(PassRefPtr<TestInterfaceImplementation> value) { m_testInterfaceOrNullMember = value; }
-    void setTestInterfaceOrNullMemberToNull() { m_testInterfaceOrNullMember = RefPtr<TestInterfaceImplementation>(); }
+    TestInterfaceImplementation* testInterfaceOrNullMember() const { return m_testInterfaceOrNullMember; }
+    void setTestInterfaceOrNullMember(TestInterfaceImplementation* value) { m_testInterfaceOrNullMember = value; }
+    void setTestInterfaceOrNullMemberToNull() { m_testInterfaceOrNullMember = Member<TestInterfaceImplementation>(); }
 
     bool hasTestInterfaceSequenceMember() const { return !m_testInterfaceSequenceMember.isNull(); }
-    const Vector<RefPtr<TestInterfaceImplementation>>& testInterfaceSequenceMember() const { return m_testInterfaceSequenceMember.get(); }
-    void setTestInterfaceSequenceMember(const Vector<RefPtr<TestInterfaceImplementation>>& value) { m_testInterfaceSequenceMember = value; }
+    const HeapVector<Member<TestInterfaceImplementation>>& testInterfaceSequenceMember() const { return m_testInterfaceSequenceMember.get(); }
+    void setTestInterfaceSequenceMember(const HeapVector<Member<TestInterfaceImplementation>>& value) { m_testInterfaceSequenceMember = value; }
 
     bool hasUint8ArrayMember() const { return m_uint8ArrayMember; }
-    PassRefPtr<DOMUint8Array> uint8ArrayMember() const { return m_uint8ArrayMember; }
-    void setUint8ArrayMember(PassRefPtr<DOMUint8Array> value) { m_uint8ArrayMember = value; }
+    DOMUint8Array* uint8ArrayMember() const { return m_uint8ArrayMember; }
+    void setUint8ArrayMember(DOMUint8Array* value) { m_uint8ArrayMember = value; }
 
     bool hasUnrestrictedDoubleMember() const { return !m_unrestrictedDoubleMember.isNull(); }
     double unrestrictedDoubleMember() const { return m_unrestrictedDoubleMember.get(); }
@@ -190,10 +191,10 @@ private:
     Member<TestInterfaceGarbageCollected> m_testInterfaceGarbageCollectedMember;
     Member<TestInterfaceGarbageCollected> m_testInterfaceGarbageCollectedOrNullMember;
     Nullable<HeapVector<Member<TestInterfaceGarbageCollected>>> m_testInterfaceGarbageCollectedSequenceMember;
-    RefPtr<TestInterfaceImplementation> m_testInterfaceMember;
-    RefPtr<TestInterfaceImplementation> m_testInterfaceOrNullMember;
-    Nullable<Vector<RefPtr<TestInterfaceImplementation>>> m_testInterfaceSequenceMember;
-    RefPtr<DOMUint8Array> m_uint8ArrayMember;
+    Member<TestInterfaceImplementation> m_testInterfaceMember;
+    Member<TestInterfaceImplementation> m_testInterfaceOrNullMember;
+    Nullable<HeapVector<Member<TestInterfaceImplementation>>> m_testInterfaceSequenceMember;
+    Member<DOMUint8Array> m_uint8ArrayMember;
     Nullable<double> m_unrestrictedDoubleMember;
 
     friend class V8TestDictionary;

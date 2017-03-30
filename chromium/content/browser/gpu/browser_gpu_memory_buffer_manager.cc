@@ -30,7 +30,7 @@ namespace content {
 namespace {
 
 void HostCreateGpuMemoryBuffer(
-    int surface_id,
+    gpu::SurfaceHandle surface_handle,
     GpuProcessHost* host,
     gfx::GpuMemoryBufferId id,
     const gfx::Size& size,
@@ -38,8 +38,8 @@ void HostCreateGpuMemoryBuffer(
     gfx::BufferUsage usage,
     int client_id,
     const BrowserGpuMemoryBufferManager::CreateCallback& callback) {
-  host->CreateGpuMemoryBuffer(id, size, format, usage, client_id, surface_id,
-                              callback);
+  host->CreateGpuMemoryBuffer(id, size, format, usage, client_id,
+                              surface_handle, callback);
 }
 
 void HostCreateGpuMemoryBufferFromHandle(
@@ -84,9 +84,13 @@ GpuMemoryBufferConfigurationSet GetNativeGpuMemoryBufferConfigurations() {
 
   if (BrowserGpuMemoryBufferManager::IsNativeGpuMemoryBuffersEnabled()) {
     const gfx::BufferFormat kNativeFormats[] = {
-        gfx::BufferFormat::R_8,       gfx::BufferFormat::RGBA_4444,
-        gfx::BufferFormat::RGBA_8888, gfx::BufferFormat::BGRA_8888,
-        gfx::BufferFormat::UYVY_422,  gfx::BufferFormat::YUV_420_BIPLANAR};
+        gfx::BufferFormat::R_8,
+        gfx::BufferFormat::BGR_565,
+        gfx::BufferFormat::RGBA_4444,
+        gfx::BufferFormat::RGBA_8888,
+        gfx::BufferFormat::BGRA_8888,
+        gfx::BufferFormat::UYVY_422,
+        gfx::BufferFormat::YUV_420_BIPLANAR};
     const gfx::BufferUsage kNativeUsages[] = {
         gfx::BufferUsage::GPU_READ, gfx::BufferUsage::SCANOUT,
         gfx::BufferUsage::GPU_READ_CPU_READ_WRITE,
@@ -109,9 +113,10 @@ GpuMemoryBufferConfigurationSet GetNativeGpuMemoryBufferConfigurations() {
 #endif
   if (force_native_gpu_read_write_formats) {
     const gfx::BufferFormat kGPUReadWriteFormats[] = {
-        gfx::BufferFormat::RGBA_8888, gfx::BufferFormat::RGBX_8888,
-        gfx::BufferFormat::BGRA_8888, gfx::BufferFormat::BGRX_8888,
-        gfx::BufferFormat::UYVY_422,  gfx::BufferFormat::YUV_420_BIPLANAR};
+        gfx::BufferFormat::BGR_565,         gfx::BufferFormat::RGBA_8888,
+        gfx::BufferFormat::RGBX_8888,       gfx::BufferFormat::BGRA_8888,
+        gfx::BufferFormat::BGRX_8888,       gfx::BufferFormat::UYVY_422,
+        gfx::BufferFormat::YUV_420_BIPLANAR};
     const gfx::BufferUsage kGPUReadWriteUsages[] = {
         gfx::BufferUsage::GPU_READ, gfx::BufferUsage::SCANOUT};
     for (auto& format : kGPUReadWriteFormats) {
@@ -134,21 +139,21 @@ struct BrowserGpuMemoryBufferManager::CreateGpuMemoryBufferRequest {
                                gfx::BufferFormat format,
                                gfx::BufferUsage usage,
                                int client_id,
-                               int surface_id)
+                               gpu::SurfaceHandle surface_handle)
       : event(true, false),
         size(size),
         format(format),
         usage(usage),
         client_id(client_id),
-        surface_id(surface_id) {}
+        surface_handle(surface_handle) {}
   ~CreateGpuMemoryBufferRequest() {}
   base::WaitableEvent event;
   gfx::Size size;
   gfx::BufferFormat format;
   gfx::BufferUsage usage;
   int client_id;
-  int surface_id;
-  scoped_ptr<gfx::GpuMemoryBuffer> result;
+  gpu::SurfaceHandle surface_handle;
+  std::unique_ptr<gfx::GpuMemoryBuffer> result;
 };
 
 struct BrowserGpuMemoryBufferManager::CreateGpuMemoryBufferFromHandleRequest
@@ -162,7 +167,7 @@ struct BrowserGpuMemoryBufferManager::CreateGpuMemoryBufferFromHandleRequest
                                      format,
                                      gfx::BufferUsage::GPU_READ,
                                      client_id,
-                                     0),
+                                     gpu::kNullSurfaceHandle),
         handle(handle) {}
   ~CreateGpuMemoryBufferFromHandleRequest() {}
   gfx::GpuMemoryBufferHandle handle;
@@ -236,15 +241,16 @@ uint32_t BrowserGpuMemoryBufferManager::GetImageTextureTarget(
   return GL_TEXTURE_2D;
 }
 
-scoped_ptr<gfx::GpuMemoryBuffer>
-BrowserGpuMemoryBufferManager::AllocateGpuMemoryBuffer(const gfx::Size& size,
-                                                       gfx::BufferFormat format,
-                                                       gfx::BufferUsage usage,
-                                                       int32_t surface_id) {
-  return AllocateGpuMemoryBufferForSurface(size, format, usage, surface_id);
+std::unique_ptr<gfx::GpuMemoryBuffer>
+BrowserGpuMemoryBufferManager::AllocateGpuMemoryBuffer(
+    const gfx::Size& size,
+    gfx::BufferFormat format,
+    gfx::BufferUsage usage,
+    gpu::SurfaceHandle surface_handle) {
+  return AllocateGpuMemoryBufferForSurface(size, format, usage, surface_handle);
 }
 
-scoped_ptr<gfx::GpuMemoryBuffer>
+std::unique_ptr<gfx::GpuMemoryBuffer>
 BrowserGpuMemoryBufferManager::CreateGpuMemoryBufferFromHandle(
     const gfx::GpuMemoryBufferHandle& handle,
     const gfx::Size& size,
@@ -281,9 +287,9 @@ void BrowserGpuMemoryBufferManager::AllocateGpuMemoryBufferForChildProcess(
 
   // Use service side allocation for native configurations.
   if (IsNativeGpuMemoryBufferConfiguration(format, usage)) {
-    CreateGpuMemoryBufferOnIO(base::Bind(&HostCreateGpuMemoryBuffer, 0), id,
-                              size, format, usage, child_client_id, false,
-                              callback);
+    CreateGpuMemoryBufferOnIO(
+        base::Bind(&HostCreateGpuMemoryBuffer, gpu::kNullSurfaceHandle), id,
+        size, format, usage, child_client_id, false, callback);
     return;
   }
 
@@ -408,16 +414,16 @@ bool BrowserGpuMemoryBufferManager::IsNativeGpuMemoryBufferConfiguration(
          native_configurations_.end();
 }
 
-scoped_ptr<gfx::GpuMemoryBuffer>
+std::unique_ptr<gfx::GpuMemoryBuffer>
 BrowserGpuMemoryBufferManager::AllocateGpuMemoryBufferForSurface(
     const gfx::Size& size,
     gfx::BufferFormat format,
     gfx::BufferUsage usage,
-    int32_t surface_id) {
+    gpu::SurfaceHandle surface_handle) {
   DCHECK(!BrowserThread::CurrentlyOn(BrowserThread::IO));
 
   CreateGpuMemoryBufferRequest request(size, format, usage, gpu_client_id_,
-                                       surface_id);
+                                       surface_handle);
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::Bind(
@@ -445,7 +451,7 @@ void BrowserGpuMemoryBufferManager::HandleCreateGpuMemoryBufferOnIO(
     // Note: Unretained is safe as this is only used for synchronous allocation
     // from a non-IO thread.
     CreateGpuMemoryBufferOnIO(
-        base::Bind(&HostCreateGpuMemoryBuffer, request->surface_id), new_id,
+        base::Bind(&HostCreateGpuMemoryBuffer, request->surface_handle), new_id,
         request->size, request->format, request->usage, request->client_id,
         false,
         base::Bind(

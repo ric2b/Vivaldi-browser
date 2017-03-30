@@ -9,17 +9,27 @@ if (is_android) {
 # GYP: //components/offline_pages.gypi:offline_pages
 static_library("offline_pages") {
   sources = [
+    "archive_manager.cc",
+    "archive_manager.h",
+    "client_policy_controller.cc",
+    "client_policy_controller.h",
     "offline_page_archiver.h",
-    "offline_page_bookmark_bridge.cc",
-    "offline_page_bookmark_bridge.h",
+    "offline_page_client_policy.h",
     "offline_page_item.cc",
     "offline_page_item.h",
     "offline_page_metadata_store.cc",
     "offline_page_metadata_store.h",
     "offline_page_metadata_store_impl.cc",
     "offline_page_metadata_store_impl.h",
+    "offline_page_metadata_store_sql.cc",
+    "offline_page_metadata_store_sql.h",
     "offline_page_model.cc",
     "offline_page_model.h",
+    "offline_page_storage_manager.cc",
+    "offline_page_storage_manager.h",
+    "offline_page_types.h",
+    "snapshot_controller.cc",
+    "snapshot_controller.h",
   ]
 
   deps = [
@@ -30,6 +40,7 @@ static_library("offline_pages") {
     "//components/leveldb_proto",
     "//components/offline_pages/proto:offline_pages_proto",
     "//net",
+    "//sql:sql",
     "//third_party/leveldatabase",
     "//url",
   ]
@@ -57,8 +68,6 @@ source_set("switches") {
   sources = [
     "offline_page_feature.cc",
     "offline_page_feature.h",
-    "offline_page_switches.cc",
-    "offline_page_switches.h",
   ]
 
   deps = [
@@ -70,8 +79,12 @@ source_set("switches") {
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "archive_manager_unittest.cc",
+    "client_policy_controller_unittest.cc",
     "offline_page_metadata_store_impl_unittest.cc",
     "offline_page_model_unittest.cc",
+    "offline_page_storage_manager_unittest.cc",
+    "snapshot_controller_unittest.cc",
   ]
 
   deps = [
@@ -80,8 +93,6 @@ source_set("unit_tests") {
     ":test_support",
     "//base",
     "//base/test:test_support",
-    "//components/bookmarks/browser",
-    "//components/bookmarks/test",
     "//components/leveldb_proto",
     "//components/offline_pages/proto:offline_pages_proto",
     "//testing/gtest",
@@ -90,15 +101,9 @@ source_set("unit_tests") {
 }
 
 if (is_android) {
-  java_cpp_enum("offline_page_feature_enums_java") {
-    sources = [
-      "offline_page_feature.h",
-    ]
-  }
-
   java_cpp_enum("offline_page_model_enums_java") {
     sources = [
-      "offline_page_model.h",
+      "offline_page_types.h",
     ]
   }
 }

@@ -9,6 +9,10 @@ import re
 
 from webkitpy.common.webkit_finder import WebKitFinder
 
+# Import destination directories (under LayoutTests/imported/).
+WPT_DEST_NAME = 'wpt'
+CSS_DEST_NAME = 'csswg-test'
+
 
 class DepsUpdater(object):
 
@@ -18,36 +22,38 @@ class DepsUpdater(object):
         self.fs = host.filesystem
         self.finder = WebKitFinder(self.fs)
         self.verbose = False
-        self.allow_local_blink_commits = False
+        self.allow_local_commits = False
         self.keep_w3c_repos_around = False
 
     def main(self, argv=None):
         self.parse_args(argv)
 
-        self.cd('')
         if not self.checkout_is_okay():
             return 1
 
-        self.print_('## noting the current Blink commitish')
-        blink_commitish = self.run(['git', 'show-ref', 'HEAD'])[1].split()[0]
+        self.print_('## noting the current Chromium commitish')
+        _, show_ref_output = self.run(['git', 'show-ref', 'HEAD'])
+        chromium_commitish = show_ref_output.split()[0]
 
         if self.target == 'wpt':
-            import_commitish = self.update('web-platform-tests',
-                                           'https://chromium.googlesource.com/external/w3c/web-platform-tests.git')
+            import_commitish = self.update(
+                WPT_DEST_NAME,
+                'https://chromium.googlesource.com/external/w3c/web-platform-tests.git')
 
             for resource in ['testharnessreport.js', 'vendor-prefix.js']:
                 source = self.path_from_webkit_base('LayoutTests', 'resources', resource)
-                destination = self.path_from_webkit_base('LayoutTests', 'imported', 'web-platform-tests', 'resources', resource)
+                destination = self.path_from_webkit_base('LayoutTests', 'imported', WPT_DEST_NAME, 'resources', resource)
                 self.copyfile(source, destination)
                 self.run(['git', 'add', destination])
 
         elif self.target == 'css':
-            import_commitish = self.update('csswg-test',
-                                           'https://chromium.googlesource.com/external/w3c/csswg-test.git')
+            import_commitish = self.update(
+                CSS_DEST_NAME,
+                'https://chromium.googlesource.com/external/w3c/csswg-test.git')
         else:
             raise AssertionError("Unsupported target %s" % self.target)
 
-        self.commit_changes_if_needed(blink_commitish, import_commitish)
+        self.commit_changes_if_needed(chromium_commitish, import_commitish)
 
         return 0
 
@@ -56,89 +62,98 @@ class DepsUpdater(object):
         parser.description = __doc__
         parser.add_argument('-v', '--verbose', action='store_true',
                             help='log what we are doing')
-        parser.add_argument('--allow-local-blink-commits', action='store_true',
-                            help='allow script to run even if we have local blink commits')
+        parser.add_argument('--allow-local-commits', action='store_true',
+                            help='allow script to run even if we have local commits')
         parser.add_argument('--keep-w3c-repos-around', action='store_true',
                             help='leave the w3c repos around that were imported previously.')
         parser.add_argument('target', choices=['css', 'wpt'],
                             help='Target repository.  "css" for csswg-test, "wpt" for web-platform-tests.')
 
         args = parser.parse_args(argv)
-        self.allow_local_blink_commits = args.allow_local_blink_commits
+        self.allow_local_commits = args.allow_local_commits
         self.keep_w3c_repos_around = args.keep_w3c_repos_around
         self.verbose = args.verbose
         self.target = args.target
 
     def checkout_is_okay(self):
-        if self.run(['git', 'diff', '--quiet', 'HEAD'], exit_on_failure=False)[0]:
-            self.print_('## blink checkout is dirty, aborting')
+        git_diff_retcode, _ = self.run(['git', 'diff', '--quiet', 'HEAD'], exit_on_failure=False)
+        if git_diff_retcode:
+            self.print_('## checkout is dirty, aborting')
             return False
 
-        local_blink_commits = self.run(['git', 'log', '--oneline', 'origin/master..HEAD'])[1]
-        if local_blink_commits and not self.allow_local_blink_commits:
-            self.print_('## blink checkout has local commits, aborting')
+        local_commits = self.run(['git', 'log', '--oneline', 'origin/master..HEAD'])[1]
+        if local_commits and not self.allow_local_commits:
+            self.print_('## checkout has local commits, aborting')
             return False
 
-        if self.fs.exists(self.path_from_webkit_base('web-platform-tests')):
+        if self.fs.exists(self.path_from_webkit_base(WPT_DEST_NAME)):
             self.print_('## web-platform-tests repo exists, aborting')
             return False
 
-        if self.fs.exists(self.path_from_webkit_base('csswg-test')):
+        if self.fs.exists(self.path_from_webkit_base(CSS_DEST_NAME)):
             self.print_('## csswg-test repo exists, aborting')
             return False
 
         return True
 
-    def update(self, repo, url):
-        self.print_('## cloning %s' % repo)
-        self.cd('')
-        self.run(['git', 'clone', url])
-        self.cd(re.compile('.*/([^/]+)\.git').match(url).group(1))
-        self.run(['git', 'submodule', 'update', '--init', '--recursive'])
+    def update(self, dest_dir_name, url):
+        """Updates an imported repository.
+
+        Args:
+            dest_dir_name: The destination directory name.
+            url: URL of the git repository.
+
+        Returns:
+            A string for the commit description "<destination>@<commitish>".
+        """
+        temp_repo_path = self.path_from_webkit_base(dest_dir_name)
+        self.print_('## cloning %s into %s' % (url, temp_repo_path))
+        self.run(['git', 'clone', url, temp_repo_path])
+
+        self.run(['git', 'submodule', 'update', '--init', '--recursive'], cwd=temp_repo_path)
 
         self.print_('## noting the revision we are importing')
-        master_commitish = self.run(['git', 'show-ref', 'origin/master'])[1].split()[0]
+        _, show_ref_output = self.run(['git', 'show-ref', 'origin/master'], cwd=temp_repo_path)
+        master_commitish = show_ref_output.split()[0]
 
-        self.print_('## cleaning out tests from LayoutTests/imported/%s' % repo)
-        dest_repo = self.path_from_webkit_base('LayoutTests', 'imported', repo)
-        files_to_delete = self.fs.files_under(dest_repo, file_filter=self.is_not_baseline)
+        self.print_('## cleaning out tests from LayoutTests/imported/%s' % dest_dir_name)
+        dest_path = self.path_from_webkit_base('LayoutTests', 'imported', dest_dir_name)
+        files_to_delete = self.fs.files_under(dest_path, file_filter=self.is_not_baseline)
         for subpath in files_to_delete:
             self.remove('LayoutTests', 'imported', subpath)
 
         self.print_('## importing the tests')
-        src_repo = self.path_from_webkit_base(repo)
+        src_repo = self.path_from_webkit_base(dest_dir_name)
         import_path = self.path_from_webkit_base('Tools', 'Scripts', 'import-w3c-tests')
         self.run([self.host.executable, import_path, '-d', 'imported', src_repo])
 
-        self.cd('')
-        self.run(['git', 'add', '--all', 'LayoutTests/imported/%s' % repo])
+        self.run(['git', 'add', '--all', 'LayoutTests/imported/%s' % dest_dir_name])
 
         self.print_('## deleting manual tests')
-        files_to_delete = self.fs.files_under(dest_repo, file_filter=self.is_manual_test)
+        files_to_delete = self.fs.files_under(dest_path, file_filter=self.is_manual_test)
         for subpath in files_to_delete:
             self.remove('LayoutTests', 'imported', subpath)
 
         self.print_('## deleting any orphaned baselines')
-        previous_baselines = self.fs.files_under(dest_repo, file_filter=self.is_baseline)
+        previous_baselines = self.fs.files_under(dest_path, file_filter=self.is_baseline)
         for subpath in previous_baselines:
-            full_path = self.fs.join(dest_repo, subpath)
+            full_path = self.fs.join(dest_path, subpath)
             if self.fs.glob(full_path.replace('-expected.txt', '*')) == [full_path]:
                 self.fs.remove(full_path)
 
         if not self.keep_w3c_repos_around:
-            self.print_('## deleting %s repo' % repo)
-            self.cd('')
-            self.rmtree(repo)
+            self.print_('## deleting %s repo directory' % temp_repo_path)
+            self.rmtree(temp_repo_path)
 
-        return '%s@%s' % (repo, master_commitish)
+        return '%s@%s' % (dest_dir_name, master_commitish)
 
-    def commit_changes_if_needed(self, blink_commitish, import_commitish):
+    def commit_changes_if_needed(self, chromium_commitish, import_commitish):
         if self.run(['git', 'diff', '--quiet', 'HEAD'], exit_on_failure=False)[0]:
-            self.print_('## commiting changes')
+            self.print_('## committing changes')
             commit_msg = ('Import %s\n'
                           '\n'
-                          'Using update-w3c-deps in Blink %s.\n'
-                          % (import_commitish, blink_commitish))
+                          'Using update-w3c-deps in Chromium %s.\n'
+                          % (import_commitish, chromium_commitish))
             path_to_commit_msg = self.path_from_webkit_base('commit_msg')
             if self.verbose:
                 self.print_('cat > %s <<EOF' % path_to_commit_msg)
@@ -160,11 +175,12 @@ class DepsUpdater(object):
     def is_not_baseline(self, fs, dirname, basename):
         return not self.is_baseline(fs, dirname, basename)
 
-    def run(self, cmd, exit_on_failure=True):
+    def run(self, cmd, exit_on_failure=True, cwd=None):
         if self.verbose:
             self.print_(' '.join(cmd))
 
-        proc = self.executive.popen(cmd, stdout=self.executive.PIPE, stderr=self.executive.PIPE)
+        cwd = cwd or self.finder.webkit_base()
+        proc = self.executive.popen(cmd, stdout=self.executive.PIPE, stderr=self.executive.PIPE, cwd=cwd)
         out, err = proc.communicate()
         if proc.returncode or self.verbose:
             self.print_('# ret> %d' % proc.returncode)
@@ -177,12 +193,6 @@ class DepsUpdater(object):
         if exit_on_failure and proc.returncode:
             self.host.exit(proc.returncode)
         return proc.returncode, out
-
-    def cd(self, *comps):
-        dest = self.path_from_webkit_base(*comps)
-        if self.verbose:
-            self.print_('cd %s' % dest)
-        self.fs.chdir(dest)
 
     def copyfile(self, source, destination):
         if self.verbose:

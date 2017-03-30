@@ -64,6 +64,7 @@ ui::AXTreeUpdate MakeAXTreeUpdate(
   int32_t no_id = empty_data.id;
 
   ui::AXTreeUpdate update;
+  update.root_id = node1.id;
   update.nodes.push_back(node1);
   if (node2.id != no_id)
     update.nodes.push_back(node2);
@@ -182,7 +183,15 @@ BrowserAccessibilityManager::GetEmptyDocument() {
   return update;
 }
 
-void BrowserAccessibilityManager::FireFocusEventsIfNeeded() {
+void BrowserAccessibilityManager::NotifyAccessibilityEvent(
+    BrowserAccessibilityEvent::Source source,
+    ui::AXEvent event_type,
+    BrowserAccessibility* node) {
+  BrowserAccessibilityEvent::Create(source, event_type, node)->Fire();
+}
+
+void BrowserAccessibilityManager::FireFocusEventsIfNeeded(
+    BrowserAccessibilityEvent::Source source) {
   BrowserAccessibility* focus = GetFocus();
 
   // Don't fire focus events if the window itself doesn't have focus.
@@ -208,7 +217,7 @@ void BrowserAccessibilityManager::FireFocusEventsIfNeeded() {
   }
 
   if (focus && focus != last_focused_node_)
-    FireFocusEvent(focus);
+    FireFocusEvent(source, focus);
 
   last_focused_node_ = focus;
   last_focused_manager_ = focus ? focus->manager() : nullptr;
@@ -218,8 +227,10 @@ bool BrowserAccessibilityManager::CanFireEvents() {
   return true;
 }
 
-void BrowserAccessibilityManager::FireFocusEvent(BrowserAccessibility* node) {
-  NotifyAccessibilityEvent(ui::AX_EVENT_FOCUS, node);
+void BrowserAccessibilityManager::FireFocusEvent(
+    BrowserAccessibilityEvent::Source source,
+    BrowserAccessibility* node) {
+  NotifyAccessibilityEvent(source, ui::AX_EVENT_FOCUS, node);
 
   if (!g_focus_change_callback_for_testing.Get().is_null())
     g_focus_change_callback_for_testing.Get().Run();
@@ -291,7 +302,7 @@ const ui::AXTreeData& BrowserAccessibilityManager::GetTreeData() {
 
 void BrowserAccessibilityManager::OnWindowFocused() {
   if (this == GetRootManager())
-    FireFocusEventsIfNeeded();
+    FireFocusEventsIfNeeded(BrowserAccessibilityEvent::FromWindowFocusChange);
 }
 
 void BrowserAccessibilityManager::OnWindowBlurred() {
@@ -315,15 +326,6 @@ void BrowserAccessibilityManager::NavigationSucceeded() {
 
 void BrowserAccessibilityManager::NavigationFailed() {
   user_is_navigating_away_ = false;
-}
-
-void BrowserAccessibilityManager::GotMouseDown() {
-  BrowserAccessibility* focus = GetFocus();
-  if (!focus)
-    return;
-
-  osk_state_ = OSK_ALLOWED_WITHIN_FOCUSED_OBJECT;
-  NotifyAccessibilityEvent(ui::AX_EVENT_FOCUS, focus);
 }
 
 bool BrowserAccessibilityManager::UseRootScrollOffsetsWhenComputingBounds() {
@@ -353,8 +355,10 @@ void BrowserAccessibilityManager::OnAccessibilityEvents(
     if (!connected_to_parent_tree_node_) {
       parent->OnDataChanged();
       parent->UpdatePlatformAttributes();
-      parent->manager()->NotifyAccessibilityEvent(
-          ui::AX_EVENT_CHILDREN_CHANGED, parent);
+      NotifyAccessibilityEvent(
+          BrowserAccessibilityEvent::FromChildFrameLoading,
+          ui::AX_EVENT_CHILDREN_CHANGED,
+          parent);
       connected_to_parent_tree_node_ = true;
     }
   } else {
@@ -365,7 +369,8 @@ void BrowserAccessibilityManager::OnAccessibilityEvents(
   // Screen readers might not do the right thing if they're not aware of what
   // has focus, so always try that first. Nothing will be fired if the window
   // itself isn't focused or if focus hasn't changed.
-  GetRootManager()->FireFocusEventsIfNeeded();
+  GetRootManager()->FireFocusEventsIfNeeded(
+      BrowserAccessibilityEvent::FromBlink);
 
   // Now iterate over the events again and fire the events other than focus
   // events.
@@ -397,7 +402,13 @@ void BrowserAccessibilityManager::OnAccessibilityEvents(
     }
 
     // Fire the native event.
-    NotifyAccessibilityEvent(event_type, GetFromAXNode(node));
+    BrowserAccessibility* event_target = GetFromAXNode(node);
+    if (event_target) {
+      NotifyAccessibilityEvent(
+          BrowserAccessibilityEvent::FromBlink,
+          event_type,
+          event_target);
+    }
   }
 }
 
@@ -472,7 +483,10 @@ void BrowserAccessibilityManager::ActivateFindInPageResult(
 
   // The "scrolled to anchor" notification is a great way to get a
   // screen reader to jump directly to a specific location in a document.
-  NotifyAccessibilityEvent(ui::AX_EVENT_SCROLLED_TO_ANCHOR, node);
+  NotifyAccessibilityEvent(
+      BrowserAccessibilityEvent::FromFindInPageResult,
+      ui::AX_EVENT_SCROLLED_TO_ANCHOR,
+      node);
 }
 
 BrowserAccessibility* BrowserAccessibilityManager::GetActiveDescendantFocus(
@@ -870,10 +884,9 @@ BrowserAccessibilityDelegate*
 
 ui::AXTreeUpdate
 BrowserAccessibilityManager::SnapshotAXTreeForTesting() {
-  scoped_ptr<ui::AXTreeSource<const ui::AXNode*,
-                              ui::AXNodeData,
-                              ui::AXTreeData> > tree_source(
-      tree_->CreateTreeSource());
+  std::unique_ptr<
+      ui::AXTreeSource<const ui::AXNode*, ui::AXNodeData, ui::AXTreeData>>
+      tree_source(tree_->CreateTreeSource());
   ui::AXTreeSerializer<const ui::AXNode*,
                        ui::AXNodeData,
                        ui::AXTreeData> serializer(tree_source.get());

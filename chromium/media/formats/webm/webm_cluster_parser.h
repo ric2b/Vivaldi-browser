@@ -9,11 +9,11 @@
 
 #include <deque>
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/media_export.h"
 #include "media/base/media_log.h"
@@ -95,12 +95,6 @@ class MEDIA_EXPORT WebMClusterParser : public WebMParserClient {
     // was missing duration, and all contents of |buffers_| and
     // |ready_buffers_|.
     void Reset();
-
-    // Helper function used to inspect block data to determine if the
-    // block is a keyframe.
-    // |data| contains the bytes in the block.
-    // |size| indicates the number of bytes in |data|.
-    bool IsKeyframe(const uint8_t* data, int size) const;
 
     base::TimeDelta default_duration() const { return default_duration_; }
 
@@ -222,17 +216,18 @@ class MEDIA_EXPORT WebMClusterParser : public WebMParserClient {
                   const uint8_t* additional,
                   int additional_size,
                   int duration,
-                  int64_t discard_padding);
+                  int64_t discard_padding,
+                  bool reference_block_set);
   bool OnBlock(bool is_simple_block,
                int track_num,
                int timecode,
                int duration,
-               int flags,
                const uint8_t* data,
                int size,
                const uint8_t* additional,
                int additional_size,
-               int64_t discard_padding);
+               int64_t discard_padding,
+               bool is_keyframe);
 
   // Resets the Track objects associated with each text track.
   void ResetTextTracks();
@@ -285,18 +280,20 @@ class MEDIA_EXPORT WebMClusterParser : public WebMParserClient {
   WebMListParser parser_;
 
   int64_t last_block_timecode_ = -1;
-  scoped_ptr<uint8_t[]> block_data_;
+  std::unique_ptr<uint8_t[]> block_data_;
   int block_data_size_ = -1;
   int64_t block_duration_ = -1;
   int64_t block_add_id_ = -1;
 
-  scoped_ptr<uint8_t[]> block_additional_data_;
+  std::unique_ptr<uint8_t[]> block_additional_data_;
   // Must be 0 if |block_additional_data_| is null. Must be > 0 if
   // |block_additional_data_| is NOT null.
   int block_additional_data_size_ = 0;
 
   int64_t discard_padding_ = -1;
   bool discard_padding_set_ = false;
+
+  bool reference_block_set_ = false;
 
   int64_t cluster_timecode_ = -1;
   base::TimeDelta cluster_start_time_;

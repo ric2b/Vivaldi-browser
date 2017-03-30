@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 // Multiply-included message file, hence no include guard here.
+
 #include "gpu/command_buffer/common/capabilities.h"
 #include "gpu/command_buffer/common/constants.h"
 #include "gpu/gpu_export.h"
@@ -110,7 +111,10 @@ IPC_STRUCT_TRAITS_BEGIN(gpu::Capabilities)
   IPC_STRUCT_TRAITS_MEMBER(timer_queries)
   IPC_STRUCT_TRAITS_MEMBER(surfaceless)
   IPC_STRUCT_TRAITS_MEMBER(flips_vertically)
+  IPC_STRUCT_TRAITS_MEMBER(disable_webgl_multisampling_color_mask_usage)
+  IPC_STRUCT_TRAITS_MEMBER(disable_webgl_rgb_multisampling_usage)
   IPC_STRUCT_TRAITS_MEMBER(msaa_is_slow)
+  IPC_STRUCT_TRAITS_MEMBER(chromium_image_rgb_emulation)
 
   IPC_STRUCT_TRAITS_MEMBER(major_version)
   IPC_STRUCT_TRAITS_MEMBER(minor_version)

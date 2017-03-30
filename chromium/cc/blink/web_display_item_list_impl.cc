@@ -17,12 +17,11 @@
 #include "cc/playback/filter_display_item.h"
 #include "cc/playback/float_clip_display_item.h"
 #include "cc/playback/transform_display_item.h"
-#include "skia/ext/refptr.h"
 #include "third_party/WebKit/public/platform/WebFloatRect.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/skia/include/core/SkColorFilter.h"
+#include "third_party/skia/include/core/SkMatrix44.h"
 #include "third_party/skia/include/core/SkPicture.h"
-#include "third_party/skia/include/utils/SkMatrix44.h"
 #include "ui/gfx/geometry/safe_integer_conversions.h"
 #include "ui/gfx/transform.h"
 
@@ -228,6 +227,10 @@ void WebDisplayItemListImpl::appendScrollItem(
 void WebDisplayItemListImpl::appendEndScrollItem(
     const blink::WebRect& visual_rect) {
   appendEndTransformItem(visual_rect);
+}
+
+void WebDisplayItemListImpl::setIsSuitableForGpuRasterization(bool isSuitable) {
+  display_item_list_->SetIsSuitableForGpuRasterization(isSuitable);
 }
 
 WebDisplayItemListImpl::~WebDisplayItemListImpl() {

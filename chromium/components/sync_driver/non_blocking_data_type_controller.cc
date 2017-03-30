@@ -82,6 +82,7 @@ void NonBlockingDataTypeController::LoadModelsOnModelThread() {
   }
 
   model_type_service->OnSyncStarting(
+      this,
       base::Bind(&NonBlockingDataTypeController::OnProcessorStarted, this));
 }
 
@@ -111,7 +112,7 @@ void NonBlockingDataTypeController::LoadModelsDone(
 
 void NonBlockingDataTypeController::OnProcessorStarted(
     syncer::SyncError error,
-    scoped_ptr<syncer_v2::ActivationContext> activation_context) {
+    std::unique_ptr<syncer_v2::ActivationContext> activation_context) {
   RunOnUIThread(
       FROM_HERE,
       base::Bind(&NonBlockingDataTypeController::OnProcessorStartedOnUIThread,
@@ -120,7 +121,7 @@ void NonBlockingDataTypeController::OnProcessorStarted(
 
 void NonBlockingDataTypeController::OnProcessorStartedOnUIThread(
     syncer::SyncError error,
-    scoped_ptr<syncer_v2::ActivationContext> activation_context) {
+    std::unique_ptr<syncer_v2::ActivationContext> activation_context) {
   DCHECK(BelongsToUIThread());
   // Hold on to the activation context until ActivateDataType is called.
   if (state_ == MODEL_STARTING) {

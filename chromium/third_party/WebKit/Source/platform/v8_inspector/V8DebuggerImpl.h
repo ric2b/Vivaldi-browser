@@ -71,7 +71,6 @@ public:
     PauseOnExceptionsState getPauseOnExceptionsState();
     void setPauseOnExceptionsState(PauseOnExceptionsState);
     void setPauseOnNextStatement(bool);
-    bool pausingOnNextStatement();
     bool canBreakProgram();
     void breakProgram();
     void continueProgram();
@@ -90,7 +89,7 @@ public:
     void debuggerAgentEnabled();
     void debuggerAgentDisabled();
 
-    bool isPaused();
+    bool isPaused() override;
     v8::Local<v8::Context> pausedContext() { return m_pausedContext; }
 
     v8::MaybeLocal<v8::Value> functionScopes(v8::Local<v8::Function>);
@@ -111,6 +110,10 @@ public:
     void contextCreated(const V8ContextInfo&) override;
     void contextDestroyed(v8::Local<v8::Context>) override;
     void resetContextGroup(int contextGroupId) override;
+    void willExecuteScript(v8::Local<v8::Context>, int scriptId) override;
+    void didExecuteScript(v8::Local<v8::Context>) override;
+    void idleStarted() override;
+    void idleFinished() override;
     PassOwnPtr<V8StackTrace> createStackTrace(v8::Local<v8::StackTrace>, size_t maxStackSize) override;
     PassOwnPtr<V8StackTrace> captureStackTrace(size_t maxStackSize) override;
 
@@ -118,6 +121,7 @@ public:
     void discardInspectedContext(int contextGroupId, int contextId);
     const ContextByIdMap* contextGroup(int contextGroupId);
     void disconnect(V8InspectorSessionImpl*);
+    V8InspectorSessionImpl* sessionForContextGroup(int contextGroupId);
 
 private:
     void enable();
@@ -150,7 +154,6 @@ private:
     SessionMap m_sessions;
     int m_enabledAgentsCount;
     bool m_breakpointsActivated;
-    v8::Global<v8::FunctionTemplate> m_breakProgramCallbackTemplate;
     v8::Global<v8::Object> m_debuggerScript;
     v8::Global<v8::Context> m_debuggerContext;
     v8::Local<v8::Object> m_executionState;

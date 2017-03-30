@@ -49,25 +49,13 @@
               'AdditionalOptions': ['/ignore:4006'],
             },
           },
-          'dependencies': [
-            'libcmt',
-          ],
           'include_dirs': [
             '../..',
           ],
           'sources': [
             'allocator_shim_win.cc',
+            'allocator_shim_win.h',
           ],
-          'link_settings': {
-            'msvs_settings': {
-              'VCLinkerTool': {
-                'IgnoreDefaultLibraryNames': ['libcmtd.lib', 'libcmt.lib'],
-                'AdditionalDependencies': [
-                  '<(SHARED_INTERMEDIATE_DIR)/allocator/libcmt.lib'
-                ],
-              },
-            },
-          },
           'configurations': {
             'Debug_Base': {
               'msvs_settings': {
@@ -393,33 +381,6 @@
     },  # 'allocator_features' target.
   ],  # targets.
   'conditions': [
-    ['OS=="win" and win_use_allocator_shim==1', {
-      'targets': [
-        {
-          'target_name': 'libcmt',
-          'toolsets': ['host', 'target'],
-          'type': 'none',
-          'actions': [
-            {
-              'action_name': 'libcmt',
-              'inputs': [
-                'prep_libc.py',
-              ],
-              'outputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/allocator/libcmt.lib',
-              ],
-              'action': [
-                'python',
-                'prep_libc.py',
-                '$(VCInstallDir)lib',
-                '<(SHARED_INTERMEDIATE_DIR)/allocator',
-                '<(target_arch)',
-              ],
-            },
-          ],
-        },
-      ],
-    }],
     ['use_experimental_allocator_shim==1', {
       'targets': [
         {
@@ -445,10 +406,31 @@
                 'allocator_shim_override_glibc_weak_symbols.h',
               ],
             }],
-            ['OS=="linux" and use_allocator=="none"', {
+            ['use_allocator=="none" and (OS=="linux" or (OS=="android" and _toolset == "host" and host_os == "linux"))', {
               'sources': [
                 'allocator_shim_default_dispatch_to_glibc.cc',
               ],
+            }],
+            ['OS=="android" and _toolset == "target"', {
+              'sources': [
+                'allocator_shim_default_dispatch_to_linker_wrapped_symbols.cc',
+                'allocator_shim_override_linker_wrapped_symbols.h',
+              ],
+              # On Android all references to malloc & friends symbols are
+              # rewritten, at link time, and routed to the shim.
+              # See //base/allocator/README.md.
+              'all_dependent_settings': {
+                'ldflags': [
+                  '-Wl,-wrap,calloc',
+                  '-Wl,-wrap,free',
+                  '-Wl,-wrap,malloc',
+                  '-Wl,-wrap,memalign',
+                  '-Wl,-wrap,posix_memalign',
+                  '-Wl,-wrap,pvalloc',
+                  '-Wl,-wrap,realloc',
+                  '-Wl,-wrap,valloc',
+                ],
+              },
             }],
           ]
         },  # 'unified_allocator_shim' target.

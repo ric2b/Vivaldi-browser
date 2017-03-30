@@ -7,8 +7,13 @@
 # depend on media/media_cdm_adapter.gyp:cdmadapter which would in turn modify
 # your target with direct_dependent_settings.
 template("ppapi_cdm_adapter") {
-  # TODO(GYP) On Mac/Linux this should be a loadable_module.
-  shared_library(target_name) {
+  if (is_mac || is_linux) {
+    _target_type = "loadable_module"
+  } else {
+    _target_type = "shared_library"
+  }
+
+  target(_target_type, target_name) {
     # Don't filter sources list again.
     set_sources_assignment_filter([])
     cflags = []
@@ -18,8 +23,11 @@ template("ppapi_cdm_adapter") {
     forward_variables_from(invoker, "*")
 
     defines += [ "USE_PPAPI_CDM_ADAPTER" ]
+    deps += [
+      "//media:cdm_api",
+      "//ppapi/cpp",
+    ]
     sources += [
-      "//media/cdm/api/content_decryption_module.h",
       "//media/cdm/cdm_helpers.cc",
       "//media/cdm/cdm_helpers.h",
       "//media/cdm/cdm_wrapper.h",
@@ -42,7 +50,8 @@ template("ppapi_cdm_adapter") {
         "-Wl,-exported_symbol,_PPP_InitializeModule",
         "-Wl,-exported_symbol,_PPP_ShutdownModule",
       ]
-      #TODO(GYP) Mac: 'DYLIB_INSTALL_NAME_BASE': '@loader_path',
+
+      output_extension = "plugin"
     } else if (is_posix) {
       cflags += [ "-fvisibility=hidden" ]
 
@@ -50,8 +59,8 @@ template("ppapi_cdm_adapter") {
       libs += [ "rt" ]
     }
 
-    if (is_linux && !is_component_build) {
-      # CDM adapter depends on a CDM even in non-component builds.
+    if (is_linux) {
+      # CDM adapter depends on a CDM in component and non-component builds.
       configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
     }
 

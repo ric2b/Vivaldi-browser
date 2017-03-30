@@ -19,7 +19,7 @@ package cc.proto;
 // cc/trees/property_tree.h
 
 // Proto for struct TransformNodeData.
-// NEXT ID: 41
+// NEXT ID: 43
 message TranformNodeData {
   optional Transform pre_local = 1;
   optional Transform local = 2;
@@ -34,9 +34,11 @@ message TranformNodeData {
   optional int64 content_target_id = 10;
   optional int64 source_node_id = 11;
   optional bool needs_local_transform_update = 12;
+  optional bool node_and_ancestors_are_animated_or_invertible = 41;
   optional bool is_invertible = 13;
   optional bool ancestors_are_invertible = 14;
-  optional bool is_animated = 15;
+  optional bool has_potential_animation = 15;
+  optional bool is_currently_animating = 42;
   optional bool to_screen_is_potentially_animated = 16;
   optional bool has_only_translation_animations = 17;
   optional bool to_screen_has_scale_animation = 18;
@@ -90,12 +92,12 @@ message EffectNodeData {
   optional bool has_render_surface = 3;
   optional bool has_copy_request = 4;
   optional bool has_background_filters = 5;
-  optional bool node_or_ancestor_has_background_filters = 13;
-  optional bool to_screen_opacity_is_animated = 14;
-  optional bool hidden_by_backface_visibility = 15;
-  optional bool double_sided = 16;
+  optional bool hidden_by_backface_visibility = 14;
+  optional bool double_sided = 13;
   optional bool is_drawn = 6;
-  optional bool has_animated_opacity = 7;
+  optional bool subtree_hidden = 15;
+  optional bool has_potential_opacity_animation = 7;
+  optional bool is_currently_animating_opacity = 16;
   optional bool effect_changed = 11;
   optional int64 num_copy_requests_in_subtree = 8;
   optional int64 transform_id = 9;
@@ -186,7 +188,7 @@ message TransformTreeData {
 }
 
 // Proto for class PropertyTrees.
-// NEXT ID: 14
+// NEXT ID: 16
 message PropertyTrees {
   optional PropertyTree transform_tree = 1;
   optional PropertyTree effect_tree = 2;
@@ -204,4 +206,5 @@ message PropertyTrees {
   optional Vector2dF inner_viewport_container_bounds_delta = 8;
   optional Vector2dF outer_viewport_container_bounds_delta = 9;
   optional Vector2dF inner_viewport_scroll_bounds_delta = 10;
+  repeated int64 always_use_active_tree_opacity_effect_ids = 15 [packed = true];
 }

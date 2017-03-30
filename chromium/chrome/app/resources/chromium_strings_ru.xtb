@@ -53,6 +53,7 @@
 <translation id="2673087257647337101">Обновление завершено. Перезагрузите Chromium, чтобы изменения вступили в силу.</translation>
 <translation id="2685838254101182273">Chromium больше не обновляется и не поддерживается для этой версии операционной системы.</translation>
 <translation id="2705212601509139398">Этот сайт использует плагин Chromium Frame, поддержка которого скоро будет прекращена. Установите совместимую версию браузера.</translation>
+<translation id="2711502716910134313">Вкладка Chromium</translation>
 <translation id="2770231113462710648">Назначить браузером по умолчанию:</translation>
 <translation id="2801146392936645542">Chromium заблокировал файл <ph name="FILE_NAME" /> как вредоносный.</translation>
 <translation id="2847479871509788944">Удалить из Chromium</translation>
@@ -66,7 +67,6 @@
 <translation id="3130323860337406239">Chromium использует микрофон.</translation>
 <translation id="313551035350905294">Вы входите в управляемый аккаунт, администратор которого сможет контролировать ваш профиль Chromium. Ваши приложения, закладки, история, пароли, настройки и прочие данные Chromium будут связаны с аккаунтом <ph name="USER_NAME" />. Вы можете удалить эти данные в Личном кабинете Google Аккаунтов, но не можете связать их с другим аккаунтом.</translation>
 <translation id="3190315855212034486">Произошел сбой Chromium. Перезапустить?</translation>
-<translation id="3197823471738295152">Операционная система обновлена.</translation>
 <translation id="3244477511402911926">Центр оповещений Chromium</translation>
 <translation id="3256316712990552818">Скопировано в Chromium</translation>
 <translation id="3258596308407688501">Chromium не может выполнять операции чтения и записи в своем каталоге: <ph name="USER_DATA_DIRECTORY" /></translation>
@@ -118,6 +118,7 @@
 <translation id="549669000822060376">Подождите, пока Chromium устанавливает последние обновления системы</translation>
 <translation id="5563479599352954471">Поиск в одно касание</translation>
 <translation id="5620765574781326016">Теперь искать информацию в Интернете можно с любой страницы.</translation>
+<translation id="5634636535844844681">Для работы Chromium необходима ОС Windows 7 или более поздней версии.</translation>
 <translation id="5680901439334282664">войдите в Chromium</translation>
 <translation id="5772805321386874569">(необходимо <ph name="BEGIN_BUTTON" />перезапустить<ph name="END_BUTTON" /> Chromium)</translation>
 <translation id="5796460469508169315">Chromium почти готов к работе</translation>
@@ -175,6 +176,12 @@
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7339898014177206373">Новое окно</translation>
 <translation id="734373864078049451">Все веб-страницы, закладки и другие данные Chromium можно найти здесь.</translation>
+<translation id="7344413941077984497">Чтобы ограничить пользователю <ph name="NEW_PROFILE_NAME" /> доступ к каким-либо страницам, перейдите по этой ссылке: <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. Если вы оставите настройки по умолчанию, <ph name="NEW_PROFILE_NAME" /> сможет открывать все сайты.
+
+Чтобы пользователь <ph name="NEW_PROFILE_NAME" /> не получил доступ к вашему аккаунту, при выходе из Chromium нажмите на свое имя профиля в правом верхнем углу экрана и выберите "Выйти и заблокировать".
+<ph name="BEGIN_LINK_2" />Подробнее…<ph name="END_LINK_2" />
+
+Дальнейшие инструкции отправлены на адрес <ph name="ACCOUNT_EMAIL" />.</translation>
 <translation id="7419987137528340081">Чтобы закрыть доступ к уже существующим данным Chromium, создайте новый профиль Chromium для <ph name="USER_NAME" />.</translation>
 <translation id="7421823331379285070">Для Chromium требуется ОС Windows XP или более поздней версии. Некоторые функции могут не работать.</translation>
 <translation id="7463979740390522693">Chromium - Оповещения (новых: <ph name="QUANTITY" />)</translation>
@@ -203,6 +210,7 @@
 <translation id="8586442755830160949">© The Chromium Authors, <ph name="YEAR" /> . Все права защищены.</translation>
 <translation id="8621669128220841554">В процессе установки произошла неизвестная ошибка. Скачайте Chromium ещё раз.</translation>
 <translation id="8628626585870903697">В Chromium нет функции просмотра PDF-файлов, которая нужна для предварительного просмотра при печати.</translation>
+<translation id="8667808506758191620">На устройстве <ph name="DEVICE_TYPE" /> используется последняя версия Chromium OS.</translation>
 <translation id="8697124171261953979">Кроме того, расширение изменило стартовую страницу Chromium и поисковую систему, используемую по умолчанию при вводе запроса в омнибокс.</translation>
 <translation id="8704119203788522458">Ваш персональный Chromium</translation>
 <translation id="872034308864968620">Разрешить Chromium работать в фоновом режиме</translation>
@@ -219,7 +227,6 @@
 
 Если войти в систему сейчас, закладки, история и прочие данные Chromium будут синхронизированы с новым аккаунтом: <ph name="ACCOUNT_EMAIL_NEW" />.</translation>
 <translation id="9013087743919948559">Добавить в Chromium</translation>
-<translation id="9013262824292842194">Для установки Chromium требуется ОС Windows Vista или Windows XP SP2 или более поздней версии.</translation>
 <translation id="9019929317751753759">Чтобы обеспечить безопасность ваших данных, некоторые расширения были отключены, так как <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> не содержит сведений о них (то есть они могли быть установлены без вашего ведома).</translation>
 <translation id="9022552996538154597">Войти в Chromium</translation>
 <translation id="9036189287518468038">Панель запуска Chromium</translation>

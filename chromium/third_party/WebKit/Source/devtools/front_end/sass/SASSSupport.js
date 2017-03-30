@@ -5,247 +5,56 @@
 WebInspector.SASSSupport = {}
 
 /**
- * @param {!WebInspector.CSSParserService} cssParserService
  * @param {string} url
- * @param {string} text
+ * @param {string} content
  * @return {!Promise<!WebInspector.SASSSupport.AST>}
  */
-WebInspector.SASSSupport.parseCSS = function(cssParserService, url, text)
+WebInspector.SASSSupport.parseSCSS = function(url, content)
 {
-    return cssParserService.parseCSS(text)
-        .then(onParsed);
+    var text = new WebInspector.Text(content);
+    var document = new WebInspector.SASSSupport.ASTDocument(url, text);
+
+    return WebInspector.formatterWorkerPool.runTask("parseSCSS", {content: content}).then(onParsed);
 
     /**
-     * @param {!Array.<!WebInspector.CSSParser.Rule>} parsedCSS
+     * @param {?MessageEvent} event
      * @return {!WebInspector.SASSSupport.AST}
      */
-    function onParsed(parsedCSS)
+    function onParsed(event)
     {
-        var document = new WebInspector.SASSSupport.ASTDocument(url, new WebInspector.Text(text));
+        if (!event)
+            return new WebInspector.SASSSupport.AST(document, []);
+        var data = /** @type {!Array<!Object>} */(event.data);
         var rules = [];
-        for (var i = 0; i < parsedCSS.length; ++i) {
-            var rule = parsedCSS[i];
-            if (!rule.properties)
-                continue;
-            var properties = [];
-            for (var j = 0; j < rule.properties.length; ++j) {
-                var cssProperty = rule.properties[j];
-                var name = new WebInspector.SASSSupport.TextNode(document, cssProperty.name, WebInspector.TextRange.fromObject(cssProperty.nameRange));
-                var value = new WebInspector.SASSSupport.TextNode(document, cssProperty.value, WebInspector.TextRange.fromObject(cssProperty.valueRange));
-                var property = new WebInspector.SASSSupport.Property(document, name, value, WebInspector.TextRange.fromObject(cssProperty.range), !!cssProperty.disabled);
-                properties.push(property);
-            }
-            rules.push(new WebInspector.SASSSupport.Rule(document, rule.selectorText, WebInspector.TextRange.fromObject(rule.styleRange), properties));
+        for (var i = 0; i < data.length; ++i) {
+            var rulePayload = data[i];
+            var selectors = rulePayload.selectors.map(createTextNode);
+            var properties = rulePayload.properties.map(createProperty);
+            var range = WebInspector.TextRange.fromObject(rulePayload.styleRange);
+            var rule = new WebInspector.SASSSupport.Rule(document, selectors, range, properties);
+            rules.push(rule);
         }
         return new WebInspector.SASSSupport.AST(document, rules);
     }
-}
-
-/**
- * @param {!WebInspector.TokenizerFactory} tokenizerFactory
- * @param {string} url
- * @param {string} text
- * @return {!WebInspector.SASSSupport.AST}
- */
-WebInspector.SASSSupport.parseSCSS = function(tokenizerFactory, url, text)
-{
-    var document = new WebInspector.SASSSupport.ASTDocument(url, new WebInspector.Text(text));
-    var result = WebInspector.SASSSupport._innerParseSCSS(document, tokenizerFactory);
-
-    var rules = [
-        new WebInspector.SASSSupport.Rule(document, "variables", WebInspector.TextRange.createFromLocation(0, 0), result.variables),
-        new WebInspector.SASSSupport.Rule(document, "properties", WebInspector.TextRange.createFromLocation(0, 0), result.properties),
-        new WebInspector.SASSSupport.Rule(document, "mixins", WebInspector.TextRange.createFromLocation(0, 0), result.mixins)
-    ];
-
-    return new WebInspector.SASSSupport.AST(document, rules);
-}
-
-/** @enum {string} */
-WebInspector.SASSSupport.SCSSParserStates = {
-    Initial: "Initial",
-    PropertyName: "PropertyName",
-    PropertyValue: "PropertyValue",
-    VariableName: "VariableName",
-    VariableValue: "VariableValue",
-    MixinName: "MixinName",
-    MixinValue: "MixinValue",
-    Media: "Media"
-}
-
-/**
- * @param {!WebInspector.SASSSupport.ASTDocument} document
- * @param {!WebInspector.TokenizerFactory} tokenizerFactory
- * @return {!{variables: !Array<!WebInspector.SASSSupport.Property>, properties: !Array<!WebInspector.SASSSupport.Property>, mixins: !Array<!WebInspector.SASSSupport.Property>}}
- */
-WebInspector.SASSSupport._innerParseSCSS = function(document, tokenizerFactory)
-{
-    var properties = [];
-    var variables = [];
-    var mixins = [];
-
-    var States = WebInspector.SASSSupport.SCSSParserStates;
-    var state = States.Initial;
-    var propertyName, propertyValue;
-    var variableName, variableValue;
-    var mixinName, mixinValue;
-    var UndefTokenType = {};
-
-    var cursor = new WebInspector.TextCursor(document.text.lineEndings());
 
     /**
-     * @param {string} tokenValue
-     * @param {?string} tokenTypes
-     * @param {number} startPosition
-     * @param {number} endPosition
+     * @param {!Object} payload
      */
-    function processToken(tokenValue, tokenTypes, startPosition, endPosition)
+    function createTextNode(payload)
     {
-        cursor.advance(startPosition);
-        var startLine = cursor.lineNumber();
-        var startColumn = cursor.columnNumber();
-        cursor.advance(endPosition);
-        var endLine = cursor.lineNumber();
-        var endColumn = cursor.columnNumber();
-
-        var tokenType = tokenTypes ? tokenTypes.split(" ").keySet() : UndefTokenType;
-        switch (state) {
-        case States.Initial:
-            if (tokenType["css-variable-2"]) {
-                variableName = new WebInspector.SASSSupport.TextNode(document, tokenValue, new WebInspector.TextRange(startLine, startColumn, endLine, endColumn));
-                state = States.VariableName;
-            } else if (tokenType["css-property"] || tokenType["css-meta"]) {
-                propertyName = new WebInspector.SASSSupport.TextNode(document, tokenValue, new WebInspector.TextRange(startLine, startColumn, endLine, endColumn));
-                state = States.PropertyName;
-            } else if (tokenType["css-def"] && tokenValue === "@include") {
-                mixinName = new WebInspector.SASSSupport.TextNode(document, tokenValue, new WebInspector.TextRange(startLine, startColumn, endLine, endColumn));
-                state = States.MixinName;
-            } else if (tokenType["css-comment"]) {
-                // Support only a one-line comments.
-                if (startLine !== endLine || tokenValue.substring(0, 2) !== "/*" || tokenValue.substring(tokenValue.length - 2) !== "*/")
-                    break;
-                var uncommentedText = tokenValue.substring(2, tokenValue.length - 2);
-                var fakeRuleText = "a{" + uncommentedText + "}";
-                var fakeDocument = new WebInspector.SASSSupport.ASTDocument("", new WebInspector.Text(fakeRuleText));
-                var result = WebInspector.SASSSupport._innerParseSCSS(fakeDocument, tokenizerFactory);
-                if (result.properties.length === 1 && result.variables.length === 0 && result.mixins.length === 0) {
-                    var disabledProperty = result.properties[0];
-                    var nameRange = rebaseInsideOneLineComment(disabledProperty.name.range, startLine, startColumn);
-                    var valueRange = rebaseInsideOneLineComment(disabledProperty.value.range, startLine, startColumn);
-                    var name = new WebInspector.SASSSupport.TextNode(document, disabledProperty.name.text, nameRange);
-                    var value = new WebInspector.SASSSupport.TextNode(document, disabledProperty.value.text, valueRange);
-                    var range = new WebInspector.TextRange(startLine, startColumn, startLine, endColumn);
-                    var property = new WebInspector.SASSSupport.Property(document, name, value, range, true);
-                    properties.push(property);
-                }
-            } else if (tokenType["css-def"] && tokenValue === "@media") {
-                state = States.Media;
-            }
-            break;
-        case States.VariableName:
-            if (tokenValue === "}" && tokenType === UndefTokenType) {
-                state = States.Initial;
-            } else if (tokenValue === ")" && tokenType === UndefTokenType) {
-                state = States.Initial;
-            } else if (tokenValue === ":" && tokenType === UndefTokenType) {
-                state = States.VariableValue;
-                variableValue = new WebInspector.SASSSupport.TextNode(document, "", WebInspector.TextRange.createFromLocation(startLine, endColumn));
-            } else if (tokenType !== UndefTokenType) {
-                state = States.Initial;
-            }
-            break;
-        case States.VariableValue:
-            if (tokenValue === ";" && tokenType === UndefTokenType) {
-                variableValue.range.endLine = startLine;
-                variableValue.range.endColumn = startColumn;
-                var variable = new WebInspector.SASSSupport.Property(document, variableName, variableValue, variableName.range.clone(), false);
-                variable.range.endLine = startLine;
-                variable.range.endColumn = endColumn;
-                variables.push(variable);
-                state = States.Initial;
-            } else {
-                variableValue.text += tokenValue;
-            }
-            break;
-        case States.PropertyName:
-            if (tokenValue === "{" && tokenType === UndefTokenType) {
-                state = States.Initial;
-            } else if (tokenValue === ":" && tokenType === UndefTokenType) {
-                state = States.PropertyValue;
-                propertyName.range.endLine = startLine;
-                propertyName.range.endColumn = startColumn;
-                propertyValue = new WebInspector.SASSSupport.TextNode(document, "", WebInspector.TextRange.createFromLocation(startLine, endColumn));
-            } else if (tokenType["css-property"]) {
-                propertyName.text += tokenValue;
-            }
-            break;
-        case States.PropertyValue:
-            if (tokenValue === "{" && tokenType === UndefTokenType) {
-                state = States.Initial;
-            } else if ((tokenValue === "}" || tokenValue === ";") && tokenType === UndefTokenType) {
-                propertyValue.range.endLine = startLine;
-                propertyValue.range.endColumn = startColumn;
-                var property = new WebInspector.SASSSupport.Property(document, propertyName, propertyValue, propertyName.range.clone(), false);
-                property.range.endLine = startLine;
-                property.range.endColumn = endColumn;
-                properties.push(property);
-                state = States.Initial;
-            } else {
-                propertyValue.text += tokenValue;
-            }
-            break;
-        case States.MixinName:
-            if (tokenValue === "(" && tokenType === UndefTokenType) {
-                state = States.MixinValue;
-                mixinName.range.endLine = startLine;
-                mixinName.range.endColumn = startColumn;
-                mixinValue = new WebInspector.SASSSupport.TextNode(document, "", WebInspector.TextRange.createFromLocation(startLine, endColumn));
-            } else if (tokenValue === ";" && tokenType === UndefTokenType) {
-                state = States.Initial;
-                mixinValue = null;
-            } else {
-                mixinName.text += tokenValue;
-            }
-            break;
-        case States.MixinValue:
-            if (tokenValue === ")" && tokenType === UndefTokenType) {
-                mixinValue.range.endLine = startLine;
-                mixinValue.range.endColumn = startColumn;
-                var mixin = new WebInspector.SASSSupport.Property(document, mixinName, /** @type {!WebInspector.SASSSupport.TextNode} */(mixinValue), mixinName.range.clone(), false);
-                mixin.range.endLine = startLine;
-                mixin.range.endColumn = endColumn;
-                mixins.push(mixin);
-                state = States.Initial;
-            } else {
-                mixinValue.text += tokenValue;
-            }
-            break;
-        case States.Media:
-            if (tokenValue === "{" && tokenType === UndefTokenType)
-                state = States.Initial;
-            break;
-        default:
-            console.assert(false, "Unknown SASS parser state.");
-        }
+        var range = WebInspector.TextRange.fromObject(payload);
+        var value = text.extract(range);
+        return new WebInspector.SASSSupport.TextNode(document, text.extract(range), range);
     }
-    var tokenizer = tokenizerFactory.createTokenizer("text/x-scss");
-    tokenizer(document.text.value(), processToken);
-
-    return {
-        variables: variables,
-        properties: properties,
-        mixins: mixins
-    };
 
     /**
-     * @param {!WebInspector.TextRange} range
-     * @param {number} startLine
-     * @param {number} startColumn
-     * @return {!WebInspector.TextRange}
+     * @param {!Object} payload
      */
-    function rebaseInsideOneLineComment(range, startLine, startColumn)
+    function createProperty(payload)
     {
-        return new WebInspector.TextRange(range.startLine + startLine, range.startColumn + startColumn, range.endLine + startLine, range.endColumn + startColumn);
+        var name = createTextNode(payload.name);
+        var value = createTextNode(payload.value);
+        return new WebInspector.SASSSupport.Property(document, name, value, WebInspector.TextRange.fromObject(payload.range), payload.disabled);
     }
 }
 
@@ -470,16 +279,22 @@ WebInspector.SASSSupport.Property.prototype = {
  * @constructor
  * @extends {WebInspector.SASSSupport.Node}
  * @param {!WebInspector.SASSSupport.ASTDocument} document
- * @param {string} selector
+ * @param {!Array<!WebInspector.SASSSupport.TextNode>} selectors
  * @param {!WebInspector.TextRange} styleRange
  * @param {!Array<!WebInspector.SASSSupport.Property>} properties
  */
-WebInspector.SASSSupport.Rule = function(document, selector, styleRange, properties)
+WebInspector.SASSSupport.Rule = function(document, selectors, styleRange, properties)
 {
     WebInspector.SASSSupport.Node.call(this, document);
-    this.selector = selector;
+    this.selectors = selectors;
     this.properties = properties;
     this.styleRange = styleRange;
+
+    var blockStartRange = styleRange.collapseToStart();
+    blockStartRange.startColumn -= 1;
+    this.blockStart = new WebInspector.SASSSupport.TextNode(document, this.document.text.extract(blockStartRange), blockStartRange);
+    this.blockStart.parent = this;
+
     for (var i = 0; i < this.properties.length; ++i)
         this.properties[i].parent = this;
 
@@ -496,7 +311,10 @@ WebInspector.SASSSupport.Rule.prototype = {
         var properties = [];
         for (var i = 0; i < this.properties.length; ++i)
             properties.push(this.properties[i].clone(document));
-        return new WebInspector.SASSSupport.Rule(document, this.selector, this.styleRange.clone(), properties);
+        var selectors = [];
+        for (var i = 0; i < this.selectors.length; ++i)
+            selectors.push(this.selectors[i].clone(document));
+        return new WebInspector.SASSSupport.Rule(document, selectors, this.styleRange.clone(), properties);
     },
 
     /**
@@ -505,6 +323,9 @@ WebInspector.SASSSupport.Rule.prototype = {
     visit: function(callback)
     {
         callback(this);
+        for (var i = 0; i < this.selectors.length; ++i)
+            callback(this.selectors[i]);
+        callback(this.blockStart);
         for (var i = 0; i < this.properties.length; ++i)
             this.properties[i].visit(callback);
     },
@@ -516,13 +337,15 @@ WebInspector.SASSSupport.Rule.prototype = {
      */
     match: function(other, outNodeMapping)
     {
-        if (this.selector !== other.selector)
+        if (this.selectors.length !== other.selectors.length)
             return false;
         if (this.properties.length !== other.properties.length)
             return false;
         if (outNodeMapping)
             outNodeMapping.set(this, other);
-        var result = true;
+        var result = this.blockStart.match(other.blockStart, outNodeMapping);
+        for (var i = 0; result && i < this.selectors.length; ++i)
+            result = result && this.selectors[i].match(other.selectors[i], outNodeMapping);
         for (var i = 0; result && i < this.properties.length; ++i)
             result = result && this.properties[i].match(other.properties[i], outNodeMapping);
         return result;
@@ -537,63 +360,69 @@ WebInspector.SASSSupport.Rule.prototype = {
     },
 
     /**
+     * @param {?WebInspector.SASSSupport.Property} anchorProperty
      * @param {!Array<string>} nameTexts
      * @param {!Array<string>} valueTexts
      * @param {!Array<boolean>} disabledStates
-     * @param {!WebInspector.SASSSupport.Property} anchorProperty
-     * @param {boolean} insertBefore
      * @return {!Array<!WebInspector.SASSSupport.Property>}
      */
-    insertProperties: function(nameTexts, valueTexts, disabledStates, anchorProperty, insertBefore)
+    insertProperties: function(anchorProperty, nameTexts, valueTexts, disabledStates)
     {
-        console.assert(this.properties.length, "Cannot insert in empty rule.");
         console.assert(nameTexts.length === valueTexts.length && valueTexts.length === disabledStates.length, "Input array should be of the same size.");
 
         this._addTrailingSemicolon();
         var newProperties = [];
-        var index = this.properties.indexOf(anchorProperty);
+        var index = anchorProperty ? this.properties.indexOf(anchorProperty) : -1;
         for (var i = 0; i < nameTexts.length; ++i) {
             var nameText = nameTexts[i];
             var valueText = valueTexts[i];
             var disabled = disabledStates[i];
-            this.document.edits.push(this._insertPropertyEdit(nameText, valueText, disabled, anchorProperty, insertBefore));
+            this.document.edits.push(this._insertPropertyEdit(anchorProperty, nameText, valueText, disabled));
 
             var name = new WebInspector.SASSSupport.TextNode(this.document, nameText, WebInspector.TextRange.createFromLocation(0, 0));
             var value = new WebInspector.SASSSupport.TextNode(this.document, valueText, WebInspector.TextRange.createFromLocation(0, 0));
             var newProperty = new WebInspector.SASSSupport.Property(this.document, name, value, WebInspector.TextRange.createFromLocation(0, 0), disabled);
 
-            this.properties.splice(insertBefore ? index + i : index + i + 1, 0, newProperty);
+            this.properties.splice(index + i + 1, 0, newProperty);
             newProperty.parent = this;
-
             newProperties.push(newProperty);
         }
         return newProperties;
     },
 
     /**
+     * @param {?WebInspector.SASSSupport.Property} anchorProperty
      * @param {string} nameText
      * @param {string} valueText
      * @param {boolean} disabled
-     * @param {!WebInspector.SASSSupport.Property} anchorProperty
-     * @param {boolean} insertBefore
      * @return {!WebInspector.SourceEdit}
      */
-    _insertPropertyEdit: function(nameText, valueText, disabled, anchorProperty, insertBefore)
+    _insertPropertyEdit: function(anchorProperty, nameText, valueText, disabled)
     {
-        var oldRange = insertBefore ? anchorProperty.range.collapseToStart() : anchorProperty.range.collapseToEnd();
-        var indent = this.document.text.extract(new WebInspector.TextRange(anchorProperty.range.startLine, 0, anchorProperty.range.startLine, anchorProperty.range.startColumn));
-        if (!/^\s+$/.test(indent)) indent = "";
-
-        var newText = "";
+        var anchorRange = anchorProperty ? anchorProperty.range : this.blockStart.range;
+        var indent = this._computePropertyIndent();
         var leftComment = disabled ? "/* " : "";
         var rightComment = disabled ? " */" : "";
+        var newText = String.sprintf("\n%s%s%s: %s;%s", indent, leftComment, nameText, valueText, rightComment);
+        return new WebInspector.SourceEdit(this.document.url, anchorRange.collapseToEnd(), newText);
+    },
 
-        if (insertBefore) {
-            newText = String.sprintf("%s%s: %s;%s\n%s", leftComment, nameText, valueText, rightComment, indent);
+    /**
+     * @return {string}
+     */
+    _computePropertyIndent: function()
+    {
+        var indentProperty = this.properties.find(property => !property.range.isEmpty());
+        var result = "";
+        if (indentProperty) {
+            result = this.document.text.extract(new WebInspector.TextRange(indentProperty.range.startLine, 0, indentProperty.range.startLine, indentProperty.range.startColumn));
         } else {
-            newText = String.sprintf("\n%s%s%s: %s;%s", indent, leftComment, nameText, valueText, rightComment);
+            var lineNumber = this.blockStart.range.startLine;
+            var columnNumber = this.blockStart.range.startColumn;
+            var baseLine = this.document.text.extract(new WebInspector.TextRange(lineNumber, 0, lineNumber, columnNumber));
+            result = WebInspector.TextUtils.lineIndent(baseLine) + WebInspector.moduleSetting("textEditorIndent").get();
         }
-        return new WebInspector.SourceEdit(this.document.url, oldRange, newText);
+        return result.isWhitespace() ? result : "";
     },
 
     __proto__: WebInspector.SASSSupport.Node.prototype

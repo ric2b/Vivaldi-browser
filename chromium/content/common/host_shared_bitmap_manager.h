@@ -8,13 +8,13 @@
 #include <stddef.h>
 
 #include <map>
+#include <memory>
 #include <set>
 
 #include "base/containers/hash_tables.h"
 #include "base/hash.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "base/synchronization/lock.h"
 #include "base/trace_event/memory_dump_provider.h"
@@ -47,7 +47,6 @@ class CONTENT_EXPORT HostSharedBitmapManagerClient {
       base::SharedMemoryHandle* shared_memory_handle);
   void ChildAllocatedSharedBitmap(size_t buffer_size,
                                   const base::SharedMemoryHandle& handle,
-                                  base::ProcessHandle process_handle,
                                   const cc::SharedBitmapId& id);
   void ChildDeletedSharedBitmap(const cc::SharedBitmapId& id);
 
@@ -71,9 +70,9 @@ class CONTENT_EXPORT HostSharedBitmapManager
   static HostSharedBitmapManager* current();
 
   // cc::SharedBitmapManager implementation.
-  scoped_ptr<cc::SharedBitmap> AllocateSharedBitmap(
+  std::unique_ptr<cc::SharedBitmap> AllocateSharedBitmap(
       const gfx::Size& size) override;
-  scoped_ptr<cc::SharedBitmap> GetSharedBitmapFromId(
+  std::unique_ptr<cc::SharedBitmap> GetSharedBitmapFromId(
       const gfx::Size& size,
       const cc::SharedBitmapId&) override;
 
@@ -95,7 +94,6 @@ class CONTENT_EXPORT HostSharedBitmapManager
       base::SharedMemoryHandle* shared_memory_handle);
   bool ChildAllocatedSharedBitmap(size_t buffer_size,
                                   const base::SharedMemoryHandle& handle,
-                                  base::ProcessHandle process_handle,
                                   const cc::SharedBitmapId& id);
   void ChildDeletedSharedBitmap(const cc::SharedBitmapId& id);
 

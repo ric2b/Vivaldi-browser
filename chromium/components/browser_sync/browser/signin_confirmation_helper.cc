@@ -5,7 +5,7 @@
 #include "components/browser_sync/browser/signin_confirmation_helper.h"
 
 #include "base/strings/string16.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/history/core/browser/history_backend.h"
 #include "components/history/core/browser/history_db_task.h"
 #include "components/history/core/browser/history_service.h"
@@ -91,7 +91,7 @@ void SigninConfirmationHelper::CheckHasTypedURLs() {
     return;
   }
   history_service_->ScheduleDBTask(
-      scoped_ptr<history::HistoryDBTask>(new HasTypedURLsTask(base::Bind(
+      std::unique_ptr<history::HistoryDBTask>(new HasTypedURLsTask(base::Bind(
           &SigninConfirmationHelper::ReturnResult, base::Unretained(this)))),
       &task_tracker_);
 }

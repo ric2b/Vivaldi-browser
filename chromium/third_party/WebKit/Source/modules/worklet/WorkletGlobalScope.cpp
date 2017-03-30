@@ -8,7 +8,6 @@
 #include "core/frame/FrameConsole.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/MainThreadDebugger.h"
-#include "modules/worklet/WorkletConsole.h"
 
 namespace blink {
 
@@ -33,13 +32,6 @@ void WorkletGlobalScope::dispose()
     m_scriptController->willScheduleExecutionTermination();
     m_scriptController->dispose();
     m_scriptController.clear();
-}
-
-WorkletConsole* WorkletGlobalScope::console()
-{
-    if (!m_console)
-        m_console = WorkletConsole::create(this);
-    return m_console.get();
 }
 
 v8::Local<v8::Object> WorkletGlobalScope::wrap(v8::Isolate*, v8::Local<v8::Object> creationContext)
@@ -77,18 +69,17 @@ void WorkletGlobalScope::reportBlockedScriptExecutionToInspector(const String& d
     InspectorInstrumentation::scriptExecutionBlockedByCSP(this, directiveText);
 }
 
-void WorkletGlobalScope::addConsoleMessage(RawPtr<ConsoleMessage> prpConsoleMessage)
+void WorkletGlobalScope::addConsoleMessage(ConsoleMessage* consoleMessage)
 {
-    RawPtr<ConsoleMessage> consoleMessage = prpConsoleMessage;
-    frame()->console().addMessage(consoleMessage.release());
+    frame()->console().addMessage(consoleMessage);
 }
 
 void WorkletGlobalScope::logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack> callStack)
 {
-    RawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage, sourceURL, lineNumber, columnNumber);
+    ConsoleMessage* consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage, sourceURL, lineNumber, columnNumber);
     consoleMessage->setScriptId(scriptId);
     consoleMessage->setCallStack(callStack);
-    addConsoleMessage(consoleMessage.release());
+    addConsoleMessage(consoleMessage);
 }
 
 KURL WorkletGlobalScope::virtualCompleteURL(const String& url) const
@@ -105,7 +96,6 @@ KURL WorkletGlobalScope::virtualCompleteURL(const String& url) const
 DEFINE_TRACE(WorkletGlobalScope)
 {
     visitor->trace(m_scriptController);
-    visitor->trace(m_console);
     ExecutionContext::trace(visitor);
     SecurityContext::trace(visitor);
     MainThreadWorkletGlobalScope::trace(visitor);

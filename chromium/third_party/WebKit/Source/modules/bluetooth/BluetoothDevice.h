@@ -8,10 +8,10 @@
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "modules/EventTargetModules.h"
-#include "modules/bluetooth/BluetoothAdvertisingData.h"
 #include "modules/bluetooth/BluetoothRemoteGATTServer.h"
 #include "platform/heap/Heap.h"
 #include "public/platform/modules/bluetooth/WebBluetoothDevice.h"
+#include "public/platform/modules/bluetooth/WebBluetoothDeviceInit.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/text/WTFString.h"
@@ -30,18 +30,18 @@ class ScriptState;
 // "Interface required by CallbackPromiseAdapter" section and the
 // CallbackPromiseAdapter class comments.
 class BluetoothDevice final
-    : public RefCountedGarbageCollectedEventTargetWithInlineData<BluetoothDevice>
-    , public ActiveDOMObject {
+    : public EventTargetWithInlineData
+    , public ActiveDOMObject
+    , public WebBluetoothDevice {
     USING_PRE_FINALIZER(BluetoothDevice, dispose);
     DEFINE_WRAPPERTYPEINFO();
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(BluetoothDevice);
     USING_GARBAGE_COLLECTED_MIXIN(BluetoothDevice);
 public:
-    BluetoothDevice(ExecutionContext*, PassOwnPtr<WebBluetoothDevice>);
+    BluetoothDevice(ExecutionContext*, PassOwnPtr<WebBluetoothDeviceInit>);
 
     // Interface required by CallbackPromiseAdapter:
-    using WebType = OwnPtr<WebBluetoothDevice>;
-    static BluetoothDevice* take(ScriptPromiseResolver*, PassOwnPtr<WebBluetoothDevice>);
+    using WebType = OwnPtr<WebBluetoothDeviceInit>;
+    static BluetoothDevice* take(ScriptPromiseResolver*, PassOwnPtr<WebBluetoothDeviceInit>);
 
     // We should disconnect from the device in all of the following cases:
     // 1. When the object gets GarbageCollected e.g. it went out of scope.
@@ -67,18 +67,15 @@ public:
     const AtomicString& interfaceName() const override;
     ExecutionContext* getExecutionContext() const override;
 
+    // WebBluetoothDevice interface:
+    void dispatchGattServerDisconnected() override;
+
     // Interface required by Garbage Collection:
     DECLARE_VIRTUAL_TRACE();
 
     // IDL exposed interface:
     String id() { return m_webDevice->id; }
     String name() { return m_webDevice->name; }
-    BluetoothAdvertisingData* adData() { return m_adData; }
-    unsigned deviceClass(bool& isNull);
-    String vendorIDSource();
-    unsigned vendorID(bool& isNull);
-    unsigned productID(bool& isNull);
-    unsigned productVersion(bool& isNull);
     BluetoothRemoteGATTServer* gatt() { return m_gatt; }
     Vector<String> uuids();
     // TODO(ortuno): Remove connectGATT
@@ -88,8 +85,7 @@ public:
     DEFINE_ATTRIBUTE_EVENT_LISTENER(gattserverdisconnected);
 
 private:
-    OwnPtr<WebBluetoothDevice> m_webDevice;
-    Member<BluetoothAdvertisingData> m_adData;
+    OwnPtr<WebBluetoothDeviceInit> m_webDevice;
     Member<BluetoothRemoteGATTServer> m_gatt;
 };
 

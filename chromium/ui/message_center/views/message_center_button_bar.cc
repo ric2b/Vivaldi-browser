@@ -76,8 +76,7 @@ NotificationCenterButton::NotificationCenterButton(
   if (text_id)
     SetTooltipText(resource_bundle.GetLocalizedString(text_id));
 
-  SetFocusable(true);
-  set_request_focus_on_press(false);
+  SetFocusForPlatform();
 
   SetFocusPainter(views::Painter::CreateSolidFocusPainter(
       kFocusBorderColor,
@@ -119,7 +118,7 @@ MessageCenterButtonBar::MessageCenterButtonBar(
   title_arrow_->set_size(gfx::Size(kButtonSize, kButtonSize));
 
   // Keyboardists can use the gear button to switch modes.
-  title_arrow_->SetFocusable(false);
+  title_arrow_->SetFocusBehavior(FocusBehavior::NEVER);
   AddChildView(title_arrow_);
 
   notification_label_ = new views::Label(title);
@@ -255,9 +254,8 @@ void MessageCenterButtonBar::ViewVisibilityChanged() {
 
 MessageCenterButtonBar::~MessageCenterButtonBar() {}
 
-void MessageCenterButtonBar::SetAllButtonsEnabled(bool enabled) {
-  if (close_all_button_)
-    close_all_button_->SetEnabled(enabled);
+void MessageCenterButtonBar::SetSettingsAndQuietModeButtonsEnabled(
+    bool enabled) {
   settings_button_->SetEnabled(enabled);
   quiet_mode_button_->SetEnabled(enabled);
 }
@@ -276,6 +274,10 @@ void MessageCenterButtonBar::SetBackArrowVisible(bool visible) {
     title_arrow_->SetVisible(visible);
   ViewVisibilityChanged();
   Layout();
+}
+
+void MessageCenterButtonBar::SetTitle(const base::string16& title) {
+  notification_label_->SetText(title);
 }
 
 void MessageCenterButtonBar::ChildVisibilityChanged(views::View* child) {

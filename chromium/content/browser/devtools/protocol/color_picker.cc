@@ -181,7 +181,7 @@ void ColorPicker::UpdateCursor() {
   SkPaint paint;
 
   // Paint original spot with cross.
-  if (kHotspotRadius) {
+  if (kHotspotRadius > 0) {
     paint.setStrokeWidth(1);
     paint.setAntiAlias(false);
     paint.setColor(SK_ColorDKGRAY);
@@ -253,9 +253,6 @@ void ColorPicker::UpdateCursor() {
   cursor_info.hotspot =
       gfx::Point(kHotspotOffset * device_scale_factor,
                  kHotspotOffset * device_scale_factor);
-#if defined(OS_WIN)
-  cursor_info.external_handle = 0;
-#endif
 
   cursor.InitFromCursorInfo(cursor_info);
   DCHECK(host_);

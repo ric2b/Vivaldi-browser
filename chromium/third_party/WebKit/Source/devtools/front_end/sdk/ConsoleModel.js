@@ -125,7 +125,7 @@ WebInspector.ConsoleModel.prototype = {
             return false;
 
         // ignore Chromecast's cast_sender spam
-        if (msg.url.includes("://boadgeojelhgndaghljhdicfkmllpafd") ||  msg.url.includes("://dliochdbjfkdbacpmhlcpmleaejidimm") ||  msg.url.includes("://pkedcjkdefgpdelpbcmbmeomcjbeemfm") || msg.url.includes("://fjhoaacokmgbjemoflkofnenfaiekifl") || msg.url.includes("://ekpaaapppgpmolpcldedioblbkmijaca"))
+        if (msg.url.includes("://boadgeojelhgndaghljhdicfkmllpafd") ||  msg.url.includes("://dliochdbjfkdbacpmhlcpmleaejidimm") ||  msg.url.includes("://pkedcjkdefgpdelpbcmbmeomcjbeemfm") || msg.url.includes("://fjhoaacokmgbjemoflkofnenfaiekifl") || msg.url.includes("://fmfcbgogabcbclcofgocippekhfcmgfj") || msg.url.includes("://enhhojjnijigcajfphajepfemndkmdlo") || msg.url.includes("://ekpaaapppgpmolpcldedioblbkmijaca"))
             return true;
 
         return false;
@@ -190,6 +190,7 @@ WebInspector.ConsoleModel.prototype = {
 WebInspector.ConsoleModel.evaluateCommandInConsole = function(executionContext, text, useCommandLineAPI)
 {
     var target = executionContext.target();
+    var requestedText = text;
 
     var commandMessage = new WebInspector.ConsoleMessage(target, WebInspector.ConsoleMessage.MessageSource.JS, null, text, WebInspector.ConsoleMessage.MessageType.Command);
     commandMessage.setExecutionContextId(executionContext.id);
@@ -209,11 +210,11 @@ WebInspector.ConsoleModel.evaluateCommandInConsole = function(executionContext, 
         WebInspector.console.showPromise().then(reportUponEvaluation);
         function reportUponEvaluation()
         {
-            target.consoleModel.dispatchEventToListeners(WebInspector.ConsoleModel.Events.CommandEvaluated, {result: result, wasThrown: wasThrown, text: text, commandMessage: commandMessage, exceptionDetails: exceptionDetails});
+            target.consoleModel.dispatchEventToListeners(WebInspector.ConsoleModel.Events.CommandEvaluated, {result: result, wasThrown: wasThrown, text: requestedText, commandMessage: commandMessage, exceptionDetails: exceptionDetails});
         }
     }
     if (/^\s*\{/.test(text) && /\}\s*$/.test(text))
-        text = '(' + text + ')';
+        text = "(" + text + ")";
     executionContext.evaluate(text, "console", !!useCommandLineAPI, false, false, true, true, printResult);
 
     WebInspector.userMetrics.actionTaken(WebInspector.UserMetrics.Action.ConsoleEvaluated);
@@ -464,7 +465,7 @@ WebInspector.ConsoleMessage.MessageLevel = {
  * @param {!WebInspector.ConsoleMessage} b
  * @return {number}
  */
-WebInspector.ConsoleMessage.timestampComparator = function (a, b)
+WebInspector.ConsoleMessage.timestampComparator = function(a, b)
 {
     return a.timestamp - b.timestamp;
 }

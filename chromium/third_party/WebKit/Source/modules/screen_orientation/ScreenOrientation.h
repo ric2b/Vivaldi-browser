@@ -22,9 +22,8 @@ class ScriptState;
 class ScreenOrientationController;
 
 class ScreenOrientation final
-    : public RefCountedGarbageCollectedEventTargetWithInlineData<ScreenOrientation>
+    : public EventTargetWithInlineData
     , public DOMWindowProperty {
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(ScreenOrientation);
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(ScreenOrientation);
 public:

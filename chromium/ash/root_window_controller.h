@@ -34,9 +34,12 @@ class KeyboardController;
 
 namespace ui {
 class EventHandler;
+class MenuModel;
 }
 
 namespace views {
+class MenuModelAdapter;
+class MenuRunner;
 class Widget;
 }
 
@@ -77,6 +80,10 @@ class AshTouchExplorationManager;
 // The RootWindowController for particular root window is stored in
 // its property (RootWindowSettings) and can be obtained using
 // |GetRootWindowController(aura::WindowEventDispatcher*)| function.
+//
+// NOTE: In classic ash there is one RootWindow per display, so every RootWindow
+// has a RootWindowController. In mus/mash there is one RootWindow per top-level
+// Widget, so not all RootWindows have a RootWindowController.
 class ASH_EXPORT RootWindowController : public ShellObserver {
  public:
   // Creates and Initialize the RootWindowController for primary display.
@@ -90,9 +97,6 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
 
   // Returns the RootWindowController of the target root window.
   static RootWindowController* ForTargetRootWindow();
-
-  // Returns container which contains a given |window|.
-  static aura::Window* GetContainerForWindow(aura::Window* window);
 
   ~RootWindowController() override;
 
@@ -253,6 +257,9 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
   // Disables projection touch HUD.
   void DisableTouchHudProjection();
 
+  // Callback for MenuModelAdapter.
+  void OnMenuClosed();
+
   // Overridden from ShellObserver.
   void OnLoginStateChanged(user::LoginStatus status) override;
   void OnTouchHudProjectionToggled(bool enabled) override;
@@ -302,11 +309,17 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
   std::unique_ptr<AnimatingDesktopController> animating_wallpaper_controller_;
   std::unique_ptr<::wm::ScopedCaptureClient> capture_client_;
 
+  // Manages the context menu.
+  std::unique_ptr<ui::MenuModel> menu_model_;
+  std::unique_ptr<views::MenuModelAdapter> menu_model_adapter_;
+  std::unique_ptr<views::MenuRunner> menu_runner_;
+
   DISALLOW_COPY_AND_ASSIGN(RootWindowController);
 };
 
-
-// Gets the RootWindowController for |root_window|.
+// On classic ash, returns the RootWindowController for the given |root_window|.
+// On mus ash, returns the RootWindowController for the primary display.
+// See RootWindowController class comment above.
 ASH_EXPORT RootWindowController* GetRootWindowController(
     const aura::Window* root_window);
 

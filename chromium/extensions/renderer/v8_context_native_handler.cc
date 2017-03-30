@@ -20,10 +20,9 @@ V8ContextNativeHandler::V8ContextNativeHandler(ScriptContext* context)
   RouteFunction("GetModuleSystem",
                 base::Bind(&V8ContextNativeHandler::GetModuleSystem,
                            base::Unretained(this)));
-  RouteFunction(
-      "RunWithNativesEnabled",
-      base::Bind(&V8ContextNativeHandler::RunWithNativesEnabled,
-                 base::Unretained(this)));
+  RouteFunction("RunWithNativesEnabled", "test",
+                base::Bind(&V8ContextNativeHandler::RunWithNativesEnabled,
+                           base::Unretained(this)));
 }
 
 void V8ContextNativeHandler::GetAvailability(
@@ -34,6 +33,9 @@ void V8ContextNativeHandler::GetAvailability(
   Feature::Availability availability = context_->GetAvailability(api_name);
 
   v8::Local<v8::Object> ret = v8::Object::New(isolate);
+  v8::Maybe<bool> maybe =
+      ret->SetPrototype(context_->v8_context(), v8::Null(isolate));
+  CHECK(maybe.IsJust() && maybe.FromJust());
   ret->Set(v8::String::NewFromUtf8(isolate, "is_available"),
            v8::Boolean::New(isolate, availability.is_available()));
   ret->Set(v8::String::NewFromUtf8(isolate, "message"),

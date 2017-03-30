@@ -16,7 +16,6 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/synchronization/lock.h"
 #include "base/task_runner.h"
@@ -145,14 +144,12 @@ class ChannelPosix : public Channel,
     // On OSX, we can have mach ports which are located in the extra header
     // section.
     using MachPortsEntry = Channel::Message::MachPortsEntry;
-    CHECK(extra_header_size >= num_handles * sizeof(MachPortsEntry));
-    size_t num_mach_ports = 0;
-    const MachPortsEntry* mach_ports =
-        reinterpret_cast<const MachPortsEntry*>(extra_header);
-    for (size_t i = 0; i < num_handles; i++) {
-      if (mach_ports[i].mach_port != MACH_PORT_NULL)
-        num_mach_ports++;
-    }
+    using MachPortsExtraHeader = Channel::Message::MachPortsExtraHeader;
+    CHECK(extra_header_size >=
+          sizeof(MachPortsExtraHeader) + num_handles * sizeof(MachPortsEntry));
+    const MachPortsExtraHeader* mach_ports_header =
+        reinterpret_cast<const MachPortsExtraHeader*>(extra_header);
+    size_t num_mach_ports = mach_ports_header->num_ports;
     CHECK(num_mach_ports <= num_handles);
     if (incoming_platform_handles_.size() + num_mach_ports < num_handles) {
       handles->reset();
@@ -160,6 +157,7 @@ class ChannelPosix : public Channel,
     }
 
     handles->reset(new PlatformHandleVector(num_handles));
+    const MachPortsEntry* mach_ports = mach_ports_header->entries;
     for (size_t i = 0, mach_port_index = 0; i < num_handles; ++i) {
       if (mach_port_index < num_mach_ports &&
           mach_ports[mach_port_index].index == i) {
@@ -476,8 +474,8 @@ class ChannelPosix : public Channel,
   scoped_refptr<base::TaskRunner> io_task_runner_;
 
   // These watchers must only be accessed on the IO thread.
-  scoped_ptr<base::MessageLoopForIO::FileDescriptorWatcher> read_watcher_;
-  scoped_ptr<base::MessageLoopForIO::FileDescriptorWatcher> write_watcher_;
+  std::unique_ptr<base::MessageLoopForIO::FileDescriptorWatcher> read_watcher_;
+  std::unique_ptr<base::MessageLoopForIO::FileDescriptorWatcher> write_watcher_;
 
   std::deque<PlatformHandle> incoming_platform_handles_;
 

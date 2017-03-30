@@ -27,6 +27,7 @@
 #include "core/css/resolver/ElementResolveContext.h"
 #include "core/css/resolver/MatchRequest.h"
 #include "core/css/resolver/MatchResult.h"
+#include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
 
@@ -68,7 +69,7 @@ public:
     }
 
 private:
-    // FIXME: Oilpan: RuleData is in the oilpan heap and this pointer
+    // TODO(Oilpan): RuleData is in the oilpan heap and this pointer
     // really should be traced. However, RuleData objects are
     // allocated inside larger TerminatedArray objects and we cannot
     // trace a raw rule data pointer at this point.
@@ -84,20 +85,7 @@ WTF_ALLOW_MOVE_AND_INIT_WITH_MEM_FUNCTIONS(blink::MatchedRule);
 
 namespace blink {
 
-#if ENABLE(OILPAN)
 using StyleRuleList = HeapVector<Member<StyleRule>>;
-#else
-class StyleRuleList final : public RefCounted<StyleRuleList> {
-public:
-    static PassRefPtr<StyleRuleList> create() { return adoptRef(new StyleRuleList()); }
-
-    void append(StyleRule* rule) { m_list.append(rule); }
-    StyleRule* at(size_t index) const { return m_list[index]; }
-    size_t size() const { return m_list.size(); }
-
-    Vector<StyleRule*> m_list;
-};
-#endif
 
 // ElementRuleCollector is designed to be used as a stack object.
 // Create one, ask what rules the ElementResolveContext matches

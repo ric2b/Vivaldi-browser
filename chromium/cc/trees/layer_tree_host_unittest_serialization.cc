@@ -47,12 +47,10 @@ class LayerTreeHostSerializationTest : public testing::Test {
 
   void VerifyHostHasAllExpectedLayersInTree(Layer* root_layer) {
     LayerTreeHostCommon::CallFunctionForEveryLayer(
-        root_layer->layer_tree_host(),
-        [root_layer](Layer* layer) {
+        root_layer->layer_tree_host(), [root_layer](Layer* layer) {
           DCHECK(layer->layer_tree_host());
           EXPECT_EQ(layer, layer->layer_tree_host()->LayerById(layer->id()));
-        },
-        CallFunctionLayerType::ALL_LAYERS);
+        });
   }
 
   void VerifySerializationAndDeserialization() {
@@ -69,8 +67,6 @@ class LayerTreeHostSerializationTest : public testing::Test {
               layer_tree_host_dst_->needs_meta_info_recomputation_);
     EXPECT_EQ(layer_tree_host_src_->source_frame_number_,
               layer_tree_host_dst_->source_frame_number_);
-    EXPECT_EQ(layer_tree_host_src_->meta_information_sequence_number_,
-              layer_tree_host_dst_->meta_information_sequence_number_);
     EXPECT_EQ(layer_tree_host_src_->root_layer()->id(),
               layer_tree_host_dst_->root_layer()->id());
     EXPECT_EQ(layer_tree_host_dst_.get(),
@@ -135,31 +131,31 @@ class LayerTreeHostSerializationTest : public testing::Test {
       }
       EXPECT_TRUE(found_hud_layer_type);
     } else {
-      EXPECT_EQ(nullptr, layer_tree_host_dst_->hud_layer_);
+      EXPECT_FALSE(layer_tree_host_dst_->hud_layer_);
     }
     if (layer_tree_host_src_->overscroll_elasticity_layer_) {
       EXPECT_EQ(layer_tree_host_src_->overscroll_elasticity_layer_->id(),
                 layer_tree_host_dst_->overscroll_elasticity_layer_->id());
     } else {
-      EXPECT_EQ(nullptr, layer_tree_host_dst_->overscroll_elasticity_layer_);
+      EXPECT_FALSE(layer_tree_host_dst_->overscroll_elasticity_layer_);
     }
     if (layer_tree_host_src_->page_scale_layer_) {
       EXPECT_EQ(layer_tree_host_src_->page_scale_layer_->id(),
                 layer_tree_host_dst_->page_scale_layer_->id());
     } else {
-      EXPECT_EQ(nullptr, layer_tree_host_dst_->page_scale_layer_);
+      EXPECT_FALSE(layer_tree_host_dst_->page_scale_layer_);
     }
     if (layer_tree_host_src_->inner_viewport_scroll_layer_) {
       EXPECT_EQ(layer_tree_host_src_->inner_viewport_scroll_layer_->id(),
                 layer_tree_host_dst_->inner_viewport_scroll_layer_->id());
     } else {
-      EXPECT_EQ(nullptr, layer_tree_host_dst_->inner_viewport_scroll_layer_);
+      EXPECT_FALSE(layer_tree_host_dst_->inner_viewport_scroll_layer_);
     }
     if (layer_tree_host_src_->outer_viewport_scroll_layer_) {
       EXPECT_EQ(layer_tree_host_src_->outer_viewport_scroll_layer_->id(),
                 layer_tree_host_dst_->outer_viewport_scroll_layer_->id());
     } else {
-      EXPECT_EQ(nullptr, layer_tree_host_dst_->outer_viewport_scroll_layer_);
+      EXPECT_FALSE(layer_tree_host_dst_->outer_viewport_scroll_layer_);
     }
     EXPECT_EQ(layer_tree_host_src_->selection_,
               layer_tree_host_dst_->selection_);
@@ -174,11 +170,9 @@ class LayerTreeHostSerializationTest : public testing::Test {
     if (layer_tree_host_dst_->property_trees_.sequence_number) {
       int seq_num = layer_tree_host_dst_->property_trees_.sequence_number;
       LayerTreeHostCommon::CallFunctionForEveryLayer(
-          layer_tree_host_dst_.get(),
-          [seq_num](Layer* layer) {
+          layer_tree_host_dst_.get(), [seq_num](Layer* layer) {
             EXPECT_EQ(seq_num, layer->property_tree_sequence_number());
-          },
-          CallFunctionLayerType::ALL_LAYERS);
+          });
     }
   }
 
@@ -188,7 +182,6 @@ class LayerTreeHostSerializationTest : public testing::Test {
     layer_tree_host_src_->needs_meta_info_recomputation_ =
         !layer_tree_host_src_->needs_meta_info_recomputation_;
     layer_tree_host_src_->source_frame_number_ *= 3;
-    layer_tree_host_src_->meta_information_sequence_number_ *= 3;
 
     // Just fake setup a layer for both source and dest.
     scoped_refptr<Layer> root_layer_src = Layer::Create();
@@ -353,11 +346,11 @@ class LayerTreeHostSerializationTest : public testing::Test {
  private:
   TestTaskGraphRunner task_graph_runner_src_;
   FakeLayerTreeHostClient client_src_;
-  scoped_ptr<LayerTreeHost> layer_tree_host_src_;
+  std::unique_ptr<LayerTreeHost> layer_tree_host_src_;
 
   TestTaskGraphRunner task_graph_runner_dst_;
   FakeLayerTreeHostClient client_dst_;
-  scoped_ptr<LayerTreeHost> layer_tree_host_dst_;
+  std::unique_ptr<LayerTreeHost> layer_tree_host_dst_;
 };
 
 TEST_F(LayerTreeHostSerializationTest, AllMembersChanged) {

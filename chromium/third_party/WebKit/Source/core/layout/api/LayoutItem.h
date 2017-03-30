@@ -7,11 +7,13 @@
 
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/layout/LayoutObject.h"
+
 #include "wtf/Allocator.h"
 
 namespace blink {
 
 class FrameView;
+class Node;
 
 class LayoutItem {
     DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
@@ -139,6 +141,16 @@ public:
         return LayoutItem(m_layoutObject->container());
     }
 
+    Node* node() const
+    {
+        return m_layoutObject->node();
+    }
+
+    void updateStyleAndLayout()
+    {
+        return m_layoutObject->document().updateStyleAndLayout();
+    }
+
     const ComputedStyle& styleRef() const
     {
         return m_layoutObject->styleRef();
@@ -164,6 +176,11 @@ public:
         return m_layoutObject->style();
     }
 
+    PaintLayer* enclosingLayer() const
+    {
+        return m_layoutObject->enclosingLayer();
+    }
+
     bool hasLayer() const
     {
         return m_layoutObject->hasLayer();
@@ -172,6 +189,16 @@ public:
     void setShouldDoFullPaintInvalidationIncludingNonCompositingDescendants()
     {
         m_layoutObject->setShouldDoFullPaintInvalidationIncludingNonCompositingDescendants();
+    }
+
+    void computeLayerHitTestRects(LayerHitTestRects& layerRects) const
+    {
+        m_layoutObject->computeLayerHitTestRects(layerRects);
+    }
+
+    FloatPoint absoluteToLocal(const FloatPoint& point, MapCoordinatesFlags mode = 0) const
+    {
+        return m_layoutObject->absoluteToLocal(point, mode);
     }
 
     void setNeedsLayoutAndPrefWidthsRecalc(LayoutInvalidationReasonForTracing reason)

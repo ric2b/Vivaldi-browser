@@ -135,8 +135,8 @@ static inline LayoutInline* startOfContinuations(LayoutObject* r)
     }
 
     // Blocks with a previous continuation always have a next continuation
-    if (r->isLayoutBlock() && toLayoutBlock(r)->inlineElementContinuation())
-        return toLayoutInline(toLayoutBlock(r)->inlineElementContinuation()->node()->layoutObject());
+    if (r->isLayoutBlockFlow() && toLayoutBlockFlow(r)->inlineElementContinuation())
+        return toLayoutInline(toLayoutBlockFlow(r)->inlineElementContinuation()->node()->layoutObject());
 
     return 0;
 }
@@ -146,7 +146,7 @@ static inline LayoutObject* endOfContinuations(LayoutObject* layoutObject)
     LayoutObject* prev = layoutObject;
     LayoutObject* cur = layoutObject;
 
-    if (!cur->isLayoutInline() && !cur->isLayoutBlock())
+    if (!cur->isLayoutInline() && !cur->isLayoutBlockFlow())
         return layoutObject;
 
     while (cur) {
@@ -155,7 +155,7 @@ static inline LayoutObject* endOfContinuations(LayoutObject* layoutObject)
             cur = toLayoutInline(cur)->inlineElementContinuation();
             ASSERT(cur || !toLayoutInline(prev)->continuation());
         } else {
-            cur = toLayoutBlock(cur)->inlineElementContinuation();
+            cur = toLayoutBlockFlow(cur)->inlineElementContinuation();
         }
     }
 
@@ -173,8 +173,8 @@ static LayoutBoxModelObject* nextContinuation(LayoutObject* layoutObject)
     ASSERT(layoutObject);
     if (layoutObject->isLayoutInline() && !layoutObject->isAtomicInlineLevel())
         return toLayoutInline(layoutObject)->continuation();
-    if (layoutObject->isLayoutBlock())
-        return toLayoutBlock(layoutObject)->inlineElementContinuation();
+    if (layoutObject->isLayoutBlockFlow())
+        return toLayoutBlockFlow(layoutObject)->inlineElementContinuation();
     return 0;
 }
 
@@ -202,21 +202,10 @@ LayoutRect AXLayoutObject::elementRect() const
 {
     if (!m_explicitElementRect.isEmpty())
         return m_explicitElementRect;
-    if (!m_layoutObject)
-        return LayoutRect();
-    if (!m_layoutObject->isBox())
-        return computeElementRect();
 
-    for (const AXObject* obj = this; obj; obj = obj->parentObject()) {
-        if (obj->isAXLayoutObject())
-            toAXLayoutObject(obj)->checkCachedElementRect();
-    }
-    for (const AXObject* obj = this; obj; obj = obj->parentObject()) {
-        if (obj->isAXLayoutObject())
-            toAXLayoutObject(obj)->updateCachedElementRect();
-    }
-
-    return m_cachedElementRect;
+    // FIXME(dmazzoni): use relative bounds instead since this is a bottleneck.
+    // http://crbug.com/618120
+    return computeElementRect();
 }
 
 SkMatrix44 AXLayoutObject::transformFromLocalParentFrame() const
@@ -241,16 +230,6 @@ LayoutBoxModelObject* AXLayoutObject::getLayoutBoxModelObject() const
     if (!m_layoutObject || !m_layoutObject->isBoxModelObject())
         return 0;
     return toLayoutBoxModelObject(m_layoutObject);
-}
-
-bool AXLayoutObject::shouldNotifyActiveDescendant() const
-{
-    // We want to notify that the combo box has changed its active descendant,
-    // but we do not want to change the focus, because focus should remain with the combo box.
-    if (isComboBox())
-        return true;
-
-    return shouldFocusActiveDescendant();
 }
 
 ScrollableArea* AXLayoutObject::getScrollableAreaIfScrollable() const
@@ -473,18 +452,20 @@ bool AXLayoutObject::isVisited() const
 
 bool AXLayoutObject::isFocused() const
 {
-    if (!m_layoutObject)
+    if (!getDocument())
         return false;
 
-    Document& document = m_layoutObject->document();
-    Element* focusedElement = document.focusedElement();
+    Element* focusedElement = getDocument()->focusedElement();
     if (!focusedElement)
+        return false;
+    AXObject* focusedObject = axObjectCache().getOrCreate(focusedElement);
+    if (!focusedObject || !focusedObject->isAXLayoutObject())
         return false;
 
     // A web area is represented by the Document node in the DOM tree, which isn't focusable.
     // Check instead if the frame's selection controller is focused
-    if (focusedElement == m_layoutObject->node()
-        || (roleValue() == WebAreaRole && document.frame()->selection().isFocusedAndActive()))
+    if (focusedObject == this
+        || (roleValue() == WebAreaRole && getDocument()->frame()->selection().isFocusedAndActive()))
         return true;
 
     return false;
@@ -492,16 +473,18 @@ bool AXLayoutObject::isFocused() const
 
 bool AXLayoutObject::isSelected() const
 {
-    if (!m_layoutObject)
-        return false;
-
-    Node* node = m_layoutObject->node();
-    if (!node)
+    if (!getLayoutObject() || !getNode())
         return false;
 
     const AtomicString& ariaSelected = getAttribute(aria_selectedAttr);
     if (equalIgnoringCase(ariaSelected, "true"))
         return true;
+
+    AXObject* focusedObject = axObjectCache().focusedObject();
+    if (ariaRoleAttribute() == ListBoxOptionRole && focusedObject
+        && focusedObject->activeDescendant() == this) {
+        return true;
+    }
 
     if (isTabItem() && isTabItemSelected())
         return true;
@@ -1024,18 +1007,19 @@ void AXLayoutObject::loadInlineTextBoxes()
 
 AXObject* AXLayoutObject::nextOnLine() const
 {
-    if (!m_layoutObject)
-        return 0;
+    if (!getLayoutObject())
+        return nullptr;
 
-    InlineBox* inlineBox;
-    if (m_layoutObject->isLayoutInline())
-        inlineBox = toLayoutInline(m_layoutObject)->lastLineBox();
-    else if (m_layoutObject->isText())
-        inlineBox = toLayoutText(m_layoutObject)->lastTextBox();
-    else
-        return 0;
+    InlineBox* inlineBox = nullptr;
+    if (getLayoutObject()->isLayoutInline())
+        inlineBox = toLayoutInline(getLayoutObject())->lastLineBox();
+    else if (getLayoutObject()->isText())
+        inlineBox = toLayoutText(getLayoutObject())->lastTextBox();
 
-    AXObject* result = 0;
+    if (!inlineBox)
+        return nullptr;
+
+    AXObject* result = nullptr;
     for (InlineBox* next = inlineBox->nextOnLine(); next; next = next->nextOnLine()) {
         LayoutObject* layoutObject = LineLayoutAPIShim::layoutObjectFrom(next->getLineLayoutItem());
         result = axObjectCache().getOrCreate(layoutObject);
@@ -1053,18 +1037,19 @@ AXObject* AXLayoutObject::nextOnLine() const
 
 AXObject* AXLayoutObject::previousOnLine() const
 {
-    if (!m_layoutObject)
-        return 0;
+    if (!getLayoutObject())
+        return nullptr;
 
-    InlineBox* inlineBox;
-    if (m_layoutObject->isLayoutInline())
-        inlineBox = toLayoutInline(m_layoutObject)->firstLineBox();
-    else if (m_layoutObject->isText())
-        inlineBox = toLayoutText(m_layoutObject)->firstTextBox();
-    else
-        return 0;
+    InlineBox* inlineBox = nullptr;
+    if (getLayoutObject()->isLayoutInline())
+        inlineBox = toLayoutInline(getLayoutObject())->firstLineBox();
+    else if (getLayoutObject()->isText())
+        inlineBox = toLayoutText(getLayoutObject())->firstTextBox();
 
-    AXObject* result = 0;
+    if (!inlineBox)
+        return nullptr;
+
+    AXObject* result = nullptr;
     for (InlineBox* prev = inlineBox->prevOnLine(); prev; prev = prev->prevOnLine()) {
         LayoutObject* layoutObject = LineLayoutAPIShim::layoutObjectFrom(prev->getLineLayoutItem());
         result = axObjectCache().getOrCreate(layoutObject);
@@ -1175,35 +1160,6 @@ String AXLayoutObject::textAlternative(bool recursive, bool inAriaLabelledByTrav
 // ARIA attributes.
 //
 
-AXObject* AXLayoutObject::activeDescendant() const
-{
-    if (!m_layoutObject)
-        return 0;
-
-    if (m_layoutObject->node() && !m_layoutObject->node()->isElementNode())
-        return 0;
-
-    Element* element = toElement(m_layoutObject->node());
-    if (!element)
-        return 0;
-
-    const AtomicString& activeDescendantAttrStr = element->getAttribute(aria_activedescendantAttr);
-    if (activeDescendantAttrStr.isNull() || activeDescendantAttrStr.isEmpty())
-        return 0;
-
-    Element* target = element->treeScope().getElementById(activeDescendantAttrStr);
-    if (!target)
-        return 0;
-
-    AXObject* obj = axObjectCache().getOrCreate(target);
-
-    // An activedescendant is only useful if it has a layoutObject, because that's what's needed to post the notification.
-    if (obj && obj->isAXLayoutObject())
-        return obj;
-
-    return 0;
-}
-
 void AXLayoutObject::ariaFlowToElements(AXObjectVector& flowTo) const
 {
     accessibilityChildrenFromAttribute(aria_flowtoAttr, flowTo);
@@ -1267,30 +1223,6 @@ AXObject* AXLayoutObject::ancestorForWhichThisIsAPresentationalChild() const
     }
 
     return parent;
-}
-
-bool AXLayoutObject::shouldFocusActiveDescendant() const
-{
-    switch (ariaRoleAttribute()) {
-    case ComboBoxRole:
-    case GridRole:
-    case GroupRole:
-    case ListBoxRole:
-    case MenuRole:
-    case MenuBarRole:
-    case OutlineRole:
-    case PopUpButtonRole:
-    case ProgressIndicatorRole:
-    case RadioGroupRole:
-    case RowRole:
-    case TabListRole:
-    case ToolbarRole:
-    case TreeRole:
-    case TreeGridRole:
-        return true;
-    default:
-        return false;
-    }
 }
 
 bool AXLayoutObject::supportsARIADragging() const
@@ -1473,8 +1405,11 @@ AXObject* AXLayoutObject::accessibilityHitTest(const IntPoint& point) const
 
     Node* node = hitTestResult.innerNode();
 
+    // MediaDocument has a special shadow root for displaying the save button.
+    bool allowNodeInShadowTree = node->document().isMediaDocument() && RuntimeEnabledFeatures::mediaDocumentDownloadButtonEnabled();
+
     // Allow the hit test to return media control buttons.
-    if (node->isInShadowTree() && (!isHTMLInputElement(*node) || !node->isMediaControlElement()))
+    if (node->isInShadowTree() && (!isHTMLInputElement(*node) || !node->isMediaControlElement()) && !allowNodeInShadowTree)
         node = node->shadowHost();
 
     if (isHTMLAreaElement(node))
@@ -1599,7 +1534,7 @@ AXObject* AXLayoutObject::rawNextSibling() const
 
     LayoutObject* nextSibling = 0;
 
-    LayoutInline* inlineContinuation = m_layoutObject->isLayoutBlock() ? toLayoutBlock(m_layoutObject)->inlineElementContinuation() : 0;
+    LayoutInline* inlineContinuation = m_layoutObject->isLayoutBlockFlow() ? toLayoutBlockFlow(m_layoutObject)->inlineElementContinuation() : nullptr;
     if (inlineContinuation) {
         // Case 1: node is a block and has an inline continuation. Next sibling is the inline continuation's first child.
         nextSibling = firstChildConsideringContinuation(inlineContinuation);
@@ -1617,7 +1552,7 @@ AXObject* AXLayoutObject::rawNextSibling() const
         // Case 4: node is an inline with a continuation. Next sibling is the next sibling of the end
         // of the continuation chain.
         nextSibling = endOfContinuations(m_layoutObject)->nextSibling();
-    } else if (isInlineWithContinuation(m_layoutObject->parent())) {
+    } else if (m_layoutObject->parent() && isInlineWithContinuation(m_layoutObject->parent())) {
         // Case 5: node has no next sibling, and its parent is an inline with a continuation.
         LayoutObject* continuation = toLayoutInline(m_layoutObject->parent())->continuation();
 
@@ -1720,14 +1655,14 @@ double AXLayoutObject::estimatedLoadingProgress() const
 
 Node* AXLayoutObject::getNode() const
 {
-    return m_layoutObject ? m_layoutObject->node() : 0;
+    return getLayoutObject() ? getLayoutObject()->node() : nullptr;
 }
 
 Document* AXLayoutObject::getDocument() const
 {
-    if (!m_layoutObject)
-        return 0;
-    return &m_layoutObject->document();
+    if (!getLayoutObject())
+        return nullptr;
+    return &getLayoutObject()->document();
 }
 
 FrameView* AXLayoutObject::documentFrameView() const
@@ -1763,9 +1698,11 @@ Element* AXLayoutObject::anchorElement() const
     // search up the DOM tree for an anchor element
     // NOTE: this assumes that any non-image with an anchor is an HTMLAnchorElement
     Node* node = currLayoutObject->node();
-    for ( ; node; node = node->parentNode()) {
-        if (isHTMLAnchorElement(*node) || (node->layoutObject() && cache.getOrCreate(node->layoutObject())->isAnchor()))
-            return toElement(node);
+    if (!node)
+        return nullptr;
+    for (Node& runner : NodeTraversal::inclusiveAncestorsOf(*node)) {
+        if (isHTMLAnchorElement(runner) || (runner.layoutObject() && cache.getOrCreate(runner.layoutObject())->isAnchor()))
+            return toElement(&runner);
     }
 
     return 0;
@@ -1992,9 +1929,15 @@ void AXLayoutObject::setSelection(const AXRange& selection)
     if (!frame)
         return;
 
-    frame->selection().setSelection(VisibleSelection(
-        Position(anchorNode, selection.anchorOffset),
-        Position(focusNode, selection.focusOffset)));
+    // Set the selection based on visible positions, because the offsets in accessibility nodes
+    // are based on visible indexes, which often skips redundant whitespace, for example.
+    VisiblePosition anchorVisiblePosition = anchorNode->isTextNode()
+        ? blink::visiblePositionForIndex(selection.anchorOffset, anchorNode->parentNode())
+        : createVisiblePosition(Position(anchorNode, selection.anchorOffset));
+    VisiblePosition focusVisiblePosition = focusNode->isTextNode()
+        ? blink::visiblePositionForIndex(selection.focusOffset, focusNode->parentNode())
+        : createVisiblePosition(Position(focusNode, selection.focusOffset));
+    frame->selection().setSelection(VisibleSelection(anchorVisiblePosition, focusVisiblePosition));
 }
 
 bool AXLayoutObject::isValidSelectionBound(const AXObject* boundObject) const
@@ -2025,16 +1968,14 @@ void AXLayoutObject::setValue(const String& string)
 
 void AXLayoutObject::handleActiveDescendantChanged()
 {
-    Element* element = toElement(getLayoutObject()->node());
-    if (!element)
+    if (!getLayoutObject())
         return;
-    Document& doc = getLayoutObject()->document();
-    if (!doc.frame()->selection().isFocusedAndActive() || doc.focusedElement() != element)
-        return;
-    AXLayoutObject* activedescendant = toAXLayoutObject(activeDescendant());
 
-    if (activedescendant && shouldNotifyActiveDescendant())
-        toAXObjectCacheImpl(doc.axObjectCache())->postNotification(m_layoutObject, AXObjectCacheImpl::AXActiveDescendantChanged);
+    AXObject* focusedObject = axObjectCache().focusedObject();
+    if (focusedObject == this && supportsActiveDescendant()) {
+        axObjectCache().postNotification(
+            getLayoutObject(), AXObjectCacheImpl::AXActiveDescendantChanged);
+    }
 }
 
 void AXLayoutObject::handleAriaExpandedChanged()
@@ -2076,6 +2017,8 @@ void AXLayoutObject::handleAriaExpandedChanged()
             notification = AXObjectCacheImpl::AXRowCollapsed;
 
         axObjectCache().postNotification(this, notification);
+    } else {
+        axObjectCache().postNotification(this, AXObjectCacheImpl::AXExpandedChanged);
     }
 }
 
@@ -2207,10 +2150,10 @@ AXObject* AXLayoutObject::treeAncestorDisallowingChild() const
 
 bool AXLayoutObject::isTabItemSelected() const
 {
-    if (!isTabItem() || !m_layoutObject)
+    if (!isTabItem() || !getLayoutObject())
         return false;
 
-    Node* node = m_layoutObject->node();
+    Node* node = getNode();
     if (!node || !node->isElementNode())
         return false;
 
@@ -2265,7 +2208,7 @@ LayoutObject* AXLayoutObject::layoutParentObject() const
     if (!m_layoutObject)
         return 0;
 
-    LayoutObject* startOfConts = m_layoutObject->isLayoutBlock() ? startOfContinuations(m_layoutObject) : 0;
+    LayoutObject* startOfConts = m_layoutObject->isLayoutBlockFlow() ? startOfContinuations(m_layoutObject) : nullptr;
     if (startOfConts) {
         // Case 1: node is a block and is an inline's continuation. Parent
         // is the start of the continuation chain.

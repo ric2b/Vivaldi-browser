@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include <deque>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -40,14 +41,14 @@ struct Mailbox;
 struct SyncToken;
 class SyncPointClient;
 class SyncPointManager;
-class ValueStateMap;
 namespace gles2 {
 class MailboxManager;
-class SubscriptionRefSet;
 }
 }
 
+struct GPUCreateCommandBufferConfig;
 struct GpuCommandBufferMsg_CreateImage_Params;
+struct GpuCommandBufferMsg_SwapBuffersCompleted_Params;
 
 namespace gpu {
 
@@ -72,24 +73,12 @@ class GPU_EXPORT GpuCommandBufferStub
   typedef base::Callback<void(const std::vector<ui::LatencyInfo>&)>
       LatencyInfoCallback;
 
-  GpuCommandBufferStub(
-      GpuChannel* channel,
-      SyncPointManager* sync_point_manager,
-      base::SingleThreadTaskRunner* task_runner,
-      GpuCommandBufferStub* share_group,
-      SurfaceHandle surface_handle,
-      gles2::MailboxManager* mailbox_manager,
-      PreemptionFlag* preempt_by_flag,
-      gles2::SubscriptionRefSet* subscription_ref_set,
-      ValueStateMap* pending_valuebuffer_state,
-      const gfx::Size& size,
-      const gles2::DisallowedFeatures& disallowed_features,
-      const std::vector<int32_t>& attribs,
-      gfx::GpuPreference gpu_preference,
-      int32_t stream_id,
-      int32_t route_id,
-      GpuWatchdog* watchdog,
-      const GURL& active_url);
+  static std::unique_ptr<GpuCommandBufferStub> Create(
+    GpuChannel* channel,
+    GpuCommandBufferStub* share_group,
+    const GPUCreateCommandBufferConfig& init_params,
+    int32_t route_id,
+    std::unique_ptr<base::SharedMemory> shared_state_shm);
 
   ~GpuCommandBufferStub() override;
 
@@ -121,10 +110,6 @@ class GPU_EXPORT GpuCommandBufferStub
   // Identifies the stream for this command buffer.
   int32_t stream_id() const { return stream_id_; }
 
-  gfx::GpuPreference gpu_preference() { return gpu_preference_; }
-
-  int32_t GetRequestedAttribute(int attr) const;
-
   // Sends a message to the console.
   void SendConsoleMessage(int32_t id, const std::string& message);
 
@@ -142,26 +127,26 @@ class GPU_EXPORT GpuCommandBufferStub
   const gles2::FeatureInfo* GetFeatureInfo() const;
 
   void SendSwapBuffersCompleted(
-      const std::vector<ui::LatencyInfo>& latency_info,
-      gfx::SwapResult result);
+      const GpuCommandBufferMsg_SwapBuffersCompleted_Params& params);
   void SendUpdateVSyncParameters(base::TimeTicks timebase,
                                  base::TimeDelta interval);
 
  private:
+  GpuCommandBufferStub(GpuChannel* channel,
+                       const GPUCreateCommandBufferConfig& init_params,
+                       int32_t route_id);
+
+  bool Initialize(GpuCommandBufferStub* share_group,
+                  const GPUCreateCommandBufferConfig& init_params,
+                  std::unique_ptr<base::SharedMemory> shared_state_shm);
+
   GpuMemoryManager* GetMemoryManager() const;
 
   void Destroy();
 
   bool MakeCurrent();
 
-  // Cleans up and sends reply if OnInitialize failed.
-  void OnInitializeFailed(IPC::Message* reply_message);
-
-  scoped_refptr<gfx::GLSurface> CreateSurface();
-
   // Message handlers:
-  void OnInitialize(base::SharedMemoryHandle shared_state_shm,
-                    IPC::Message* reply_message);
   void OnSetGetBuffer(int32_t shm_id, IPC::Message* reply_message);
   void OnProduceFrontBuffer(const Mailbox& mailbox);
   void OnGetState(IPC::Message* reply_message);
@@ -199,10 +184,8 @@ class GPU_EXPORT GpuCommandBufferStub
   void OnCreateStreamTexture(uint32_t texture_id,
                              int32_t stream_id,
                              bool* succeeded);
-
   void OnCommandProcessed();
   void OnParseError();
-  void OnSchedulingChanged(bool scheduled);
 
   void ReportState();
 
@@ -230,35 +213,22 @@ class GPU_EXPORT GpuCommandBufferStub
   // are destroyed. So a raw pointer is safe.
   GpuChannel* const channel_;
 
-  // Outlives the stub.
-  SyncPointManager* const sync_point_manager_;
-
-  // Task runner for main thread.
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
-
   // The group of contexts that share namespaces with this context.
   scoped_refptr<gles2::ContextGroup> context_group_;
 
   bool initialized_;
   const SurfaceHandle surface_handle_;
-  gfx::Size initial_size_;
-  gles2::DisallowedFeatures disallowed_features_;
-  std::vector<int32_t> requested_attribs_;
-  gfx::GpuPreference gpu_preference_;
   bool use_virtualized_gl_context_;
   const CommandBufferId command_buffer_id_;
   const int32_t stream_id_;
   const int32_t route_id_;
   uint32_t last_flush_count_;
 
-  scoped_ptr<CommandBufferService> command_buffer_;
-  scoped_ptr<gles2::GLES2Decoder> decoder_;
-  scoped_ptr<CommandExecutor> executor_;
-  scoped_ptr<SyncPointClient> sync_point_client_;
+  std::unique_ptr<CommandBufferService> command_buffer_;
+  std::unique_ptr<gles2::GLES2Decoder> decoder_;
+  std::unique_ptr<CommandExecutor> executor_;
+  std::unique_ptr<SyncPointClient> sync_point_client_;
   scoped_refptr<gfx::GLSurface> surface_;
-  gfx::GLSurface::Format surface_format_;
-
-  GpuWatchdog* watchdog_;
 
   base::ObserverList<DestructionObserver> destruction_observers_;
 
@@ -268,15 +238,13 @@ class GPU_EXPORT GpuCommandBufferStub
   uint32_t previous_processed_num_;
   base::TimeTicks last_idle_time_;
 
-  scoped_refptr<PreemptionFlag> preemption_flag_;
-
   LatencyInfoCallback latency_info_callback_;
 
   GURL active_url_;
   size_t active_url_hash_;
 
-  scoped_ptr<WaitForCommandState> wait_for_token_;
-  scoped_ptr<WaitForCommandState> wait_for_get_offset_;
+  std::unique_ptr<WaitForCommandState> wait_for_token_;
+  std::unique_ptr<WaitForCommandState> wait_for_get_offset_;
 
   DISALLOW_COPY_AND_ASSIGN(GpuCommandBufferStub);
 };

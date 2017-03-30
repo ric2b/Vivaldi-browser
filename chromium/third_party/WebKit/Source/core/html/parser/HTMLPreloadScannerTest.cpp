@@ -51,15 +51,17 @@ public:
             EXPECT_FALSE(m_preloadRequest);
             return;
         }
-        ASSERT(m_preloadRequest.get());
-        EXPECT_FALSE(m_preloadRequest->isPreconnect());
-        EXPECT_EQ(type, m_preloadRequest->resourceType());
-        EXPECT_STREQ(url, m_preloadRequest->resourceURL().ascii().data());
-        EXPECT_STREQ(baseURL, m_preloadRequest->baseURL().getString().ascii().data());
-        EXPECT_EQ(width, m_preloadRequest->resourceWidth());
-        EXPECT_EQ(preferences.shouldSendDPR(), m_preloadRequest->preferences().shouldSendDPR());
-        EXPECT_EQ(preferences.shouldSendResourceWidth(), m_preloadRequest->preferences().shouldSendResourceWidth());
-        EXPECT_EQ(preferences.shouldSendViewportWidth(), m_preloadRequest->preferences().shouldSendViewportWidth());
+        EXPECT_NE(nullptr, m_preloadRequest.get());
+        if (m_preloadRequest) {
+            EXPECT_FALSE(m_preloadRequest->isPreconnect());
+            EXPECT_EQ(type, m_preloadRequest->resourceType());
+            EXPECT_STREQ(url, m_preloadRequest->resourceURL().ascii().data());
+            EXPECT_STREQ(baseURL, m_preloadRequest->baseURL().getString().ascii().data());
+            EXPECT_EQ(width, m_preloadRequest->resourceWidth());
+            EXPECT_EQ(preferences.shouldSendDPR(), m_preloadRequest->preferences().shouldSendDPR());
+            EXPECT_EQ(preferences.shouldSendResourceWidth(), m_preloadRequest->preferences().shouldSendResourceWidth());
+            EXPECT_EQ(preferences.shouldSendViewportWidth(), m_preloadRequest->preferences().shouldSendViewportWidth());
+        }
     }
 
     void preloadRequestVerification(Resource::Type type, const char* url, const char* baseURL, int width, ReferrerPolicy referrerPolicy)
@@ -80,7 +82,7 @@ public:
 protected:
     void preload(PassOwnPtr<PreloadRequest> preloadRequest, const NetworkHintsInterface&) override
     {
-        m_preloadRequest = preloadRequest;
+        m_preloadRequest = std::move(preloadRequest);
     }
 
 private:
@@ -123,13 +125,14 @@ protected:
         return data;
     }
 
-    void runSetUp(ViewportState viewportState, PreloadState preloadState = PreloadEnabled)
+    void runSetUp(ViewportState viewportState, PreloadState preloadState = PreloadEnabled, ReferrerPolicy documentReferrerPolicy = ReferrerPolicyDefault)
     {
         HTMLParserOptions options(&m_dummyPageHolder->document());
         KURL documentURL(ParsedURLString, "http://whatever.test/");
         m_dummyPageHolder->document().settings()->setViewportEnabled(viewportState == ViewportEnabled);
         m_dummyPageHolder->document().settings()->setViewportMetaEnabled(viewportState == ViewportEnabled);
         m_dummyPageHolder->document().settings()->setDoHtmlPreloadScanning(preloadState == PreloadEnabled);
+        m_dummyPageHolder->document().setReferrerPolicy(documentReferrerPolicy);
         m_scanner = HTMLPreloadScanner::create(options, documentURL, CachedDocumentParameters::create(&m_dummyPageHolder->document()), createMediaValuesData());
     }
 
@@ -362,6 +365,28 @@ TEST_F(HTMLPreloadScannerTest, testReferrerPolicy)
         test(testCase);
 }
 
+// Tests that a document-level referrer policy (e.g. one set by HTTP
+// header) is applied for preload requests.
+TEST_F(HTMLPreloadScannerTest, testReferrerPolicyOnDocument)
+{
+    runSetUp(ViewportEnabled, PreloadEnabled, ReferrerPolicyOrigin);
+    ReferrerPolicyTestCase testCases[] = {
+        { "http://example.test", "<img src='blah.gif'/>", "blah.gif", "http://example.test/", Resource::Image, 0, ReferrerPolicyOrigin },
+        { "http://example.test", "<style>@import url('blah.css');</style>", "blah.css", "http://example.test/", Resource::CSSStyleSheet, 0, ReferrerPolicyOrigin },
+        // Tests that a meta-delivered referrer policy with an
+        // unrecognized policy value does not override the document's
+        // referrer policy.
+        { "http://example.test", "<meta name='referrer' content='not-a-valid-policy'><img src='bla.gif'/>", "bla.gif", "http://example.test/", Resource::Image, 0, ReferrerPolicyOrigin },
+        // Tests that a meta-delivered referrer policy with a
+        // valid policy value does override the document's
+        // referrer policy.
+        { "http://example.test", "<meta name='referrer' content='unsafe-url'><img src='bla.gif'/>", "bla.gif", "http://example.test/", Resource::Image, 0, ReferrerPolicyAlways },
+    };
+
+    for (const auto& testCase : testCases)
+        test(testCase);
+}
+
 TEST_F(HTMLPreloadScannerTest, testLinkRelPreload)
 {
     TestCase testCases[] = {
@@ -372,6 +397,8 @@ TEST_F(HTMLPreloadScannerTest, testLinkRelPreload)
         {"http://example.test", "<link rel=preload href=bla as=font>", "bla", "http://example.test/", Resource::Font, 0},
         {"http://example.test", "<link rel=preload href=bla as=media>", "bla", "http://example.test/", Resource::Media, 0},
         {"http://example.test", "<link rel=preload href=bla as=track>", "bla", "http://example.test/", Resource::TextTrack, 0},
+        {"http://example.test", "<link rel=preload href=bla as=image media=\"(max-width: 800px)\">", "bla", "http://example.test/", Resource::Image, 0},
+        {"http://example.test", "<link rel=preload href=bla as=image media=\"(max-width: 400px)\">", nullptr, "http://example.test/", Resource::Image, 0},
     };
 
     for (const auto& testCase : testCases)

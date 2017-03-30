@@ -68,10 +68,16 @@
 <translation id="2997147809295888909">Chrome đã xác minh rằng <ph name="ISSUER" /> cấp chứng chỉ của trang web này. Máy chủ không cung cấp bất kỳ thông tin nào về Tính minh mạch của chứng chỉ.</translation>
 <translation id="3037838751736561277">Google Chrome đang chạy trong nền.</translation>
 <translation id="3047079729301751317">Ngắt kết nối <ph name="USERNAME" /> sẽ xóa lịch sử, dấu trang, cài đặt và các dữ liệu Chrome khác của bạn trên thiết bị này. Dữ liệu được lưu trữ trong tài khoản Google của bạn sẽ không bị xóa và có thể được quản lý trên <ph name="GOOGLE_DASHBOARD_LINK" />Trang tổng quan của Google<ph name="END_GOOGLE_DASHBOARD_LINK" />.</translation>
+<translation id="3065168410429928842">Tab Chrome</translation>
 <translation id="3080151273017101988">Tiếp tục chạy các ứng dụng nền khi Google Chrome đóng</translation>
 <translation id="3089968997497233615">Đã có phiên bản Google Chrome mới và an toàn hơn.</translation>
 <translation id="3149510190863420837">Ứng dụng Chrome</translation>
-<translation id="3197823471738295152">Thiết bị của bạn đã được cập nhật.</translation>
+<translation id="3251381707915721925">Để đặt những trang web mà <ph name="NEW_PROFILE_NAME" /> có thể xem, bạn có thể định cấu hình các hạn chế và cài đặt bằng cách truy cập <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. Nếu bạn không thay đổi cài đặt mặc định thì <ph name="NEW_PROFILE_NAME" /> có thể duyệt mọi nội dung trên web.
+
+Để ngăn <ph name="NEW_PROFILE_NAME" /> truy cập vào tài khoản của bạn, hãy nhớ khóa hồ sơ khi bạn không sử dụng Chrome. Để làm điều này, nhấp vào tên hồ sơ trong góc phía trên bên phải của trình duyệt, sau đó chọn "Thoát và khóa chặn trẻ em".
+<ph name="BEGIN_LINK_2" />Tìm hiểu thêm<ph name="END_LINK_2" />
+
+Vui lòng xem email của bạn tại <ph name="ACCOUNT_EMAIL" /> để biết thêm hướng dẫn.</translation>
 <translation id="3282568296779691940">Đăng nhập Chrome</translation>
 <translation id="3311976847535831054">Máy tính này sẽ không còn nhận bản cập nhật Google Chrome 32 bit nữa. Vui lòng nâng cấp lên Google Chrome 64 bit.</translation>
 <translation id="3360895254066713204">Trình trợ giúp của Chrome</translation>
@@ -210,7 +216,6 @@ Một số tính năng có thể không khả dụng. Vui lòng chỉ định th
 <translation id="7808348361785373670">Xóa khỏi Chrome...</translation>
 <translation id="7825851276765848807">Không thể cài đặt do lỗi không xác định. Hãy tải xuống lại Google Chrome.</translation>
 <translation id="7890208801193284374">Nếu bạn chia sẻ máy tính, bạn bè và gia đình có thể duyệt web một cách riêng biệt và thiết lập Chrome theo ý của họ.</translation>
-<translation id="8000275528373650868">Google Chrome yêu cầu Windows Vista hoặc Windows XP với SP2 trở lên.</translation>
 <translation id="8005540215158006229">Chrome sắp sẵn sàng.</translation>
 <translation id="8008534537613507642">Cài đặt lại Chrome</translation>
 <translation id="8030318113982266900">Đang cập nhật thiết bị tới kênh <ph name="CHANNEL_NAME" />...</translation>
@@ -232,6 +237,7 @@ Một số tính năng có thể không khả dụng. Vui lòng chỉ định th
 <translation id="8556340503434111824">Hiện đã có phiên bản mới của Google Chrome và phiên bản này nhanh hơn bao giờ hết.</translation>
 <translation id="8568392309447938879">Bạn cần đăng nhập vào Chrome để sử dụng ứng dụng. Điều này cho phép Chrome đồng bộ hóa ứng dụng, dấu trang, lịch sử, mật khẩu và cài đặt khác của bạn trên các thiết bị.</translation>
 <translation id="8614913330719544658">Google Chrome không hồi đáp. Chạy lại ngay bây giờ?</translation>
+<translation id="8667808506758191620"><ph name="DEVICE_TYPE" /> của bạn đã cập nhật.</translation>
 <translation id="8669527147644353129">Trình trợ giúp của Google Chrome</translation>
 <translation id="8679801911857917785">Tiện ích này cũng điều khiển trang nào được hiển thị khi bạn khởi động Chrome.</translation>
 <translation id="870251953148363156">Cập nhật &amp;Google Chrome</translation>
@@ -240,6 +246,7 @@ Một số tính năng có thể không khả dụng. Vui lòng chỉ định th
 <translation id="8851136666856101339">chính</translation>
 <translation id="8862326446509486874">Bạn không có quyền thích hợp để cài đặt cấp hệ thống. Thử chạy lại trình cài đặt với vai trò Quản trị viên.</translation>
 <translation id="9026991721384951619">Chrome OS không thể đồng bộ hóa dữ liệu của bạn do chi tiết đăng nhập tài khoản của bạn đã lỗi thời.</translation>
+<translation id="9067395829937117663">Google Chrome yêu cầu Windows 7 trở lên.</translation>
 <translation id="9102715433345326100">Đây là tệp độc hại và Chrome đã chặn tệp này.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Cảnh báo:<ph name="END_BOLD" /> Google Chrome không thể ngăn các tiện ích ghi lại lịch sử duyệt web của bạn. Để tắt tiện ích này trong chế độ ẩn danh, hãy bỏ chọn tùy chọn này.</translation>
 <translation id="911206726377975832">Bạn cũng muốn xóa dữ liệu duyệt web của mình?</translation>

@@ -29,6 +29,7 @@
 #include "core/dom/RawDataDocumentParser.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/html/HTMLEmbedElement.h"
 #include "core/html/HTMLHtmlElement.h"
@@ -45,7 +46,7 @@ using namespace HTMLNames;
 // FIXME: Share more code with MediaDocumentParser.
 class PluginDocumentParser : public RawDataDocumentParser {
 public:
-    static RawPtr<PluginDocumentParser> create(PluginDocument* document)
+    static PluginDocumentParser* create(PluginDocument* document)
     {
         return new PluginDocumentParser(document);
     }
@@ -89,7 +90,7 @@ void PluginDocumentParser::createDocumentStructure()
     if (!frame->settings() || !frame->loader().allowPlugins(NotAboutToInstantiatePlugin))
         return;
 
-    RawPtr<HTMLHtmlElement> rootElement = HTMLHtmlElement::create(*document());
+    HTMLHtmlElement* rootElement = HTMLHtmlElement::create(*document());
     rootElement->insertedByParser();
     document()->appendChild(rootElement);
     frame->loader().dispatchDocumentElementAvailable();
@@ -97,7 +98,7 @@ void PluginDocumentParser::createDocumentStructure()
     if (isStopped())
         return; // runScriptsAtDocumentElementAvailable can detach the frame.
 
-    RawPtr<HTMLBodyElement> body = HTMLBodyElement::create(*document());
+    HTMLBodyElement* body = HTMLBodyElement::create(*document());
     body->setAttribute(styleAttr, "background-color: rgb(38,38,38); height: 100%; width: 100%; overflow: hidden; margin: 0");
     rootElement->appendChild(body);
     if (isStopped())
@@ -116,7 +117,7 @@ void PluginDocumentParser::createDocumentStructure()
 
     toPluginDocument(document())->setPluginNode(m_embedElement.get());
 
-    document()->updateLayout();
+    document()->updateStyleAndLayout();
 
     // We need the plugin to load synchronously so we can get the PluginView
     // below so flush the layout tasks now instead of waiting on the timer.
@@ -166,9 +167,12 @@ PluginDocument::PluginDocument(const DocumentInit& initializer)
 {
     setCompatibilityMode(QuirksMode);
     lockCompatibilityMode();
+    UseCounter::count(*this, UseCounter::PluginDocument);
+    if (!isInMainFrame())
+        UseCounter::count(*this, UseCounter::PluginDocumentInFrame);
 }
 
-RawPtr<DocumentParser> PluginDocument::createParser()
+DocumentParser* PluginDocument::createParser()
 {
     return PluginDocumentParser::create(this);
 }

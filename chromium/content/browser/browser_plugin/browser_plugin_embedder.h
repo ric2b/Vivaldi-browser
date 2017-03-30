@@ -18,7 +18,7 @@
 #include "base/memory/weak_ptr.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "third_party/WebKit/public/web/WebDragOperation.h"
+#include "third_party/WebKit/public/platform/WebDragOperation.h"
 
 struct BrowserPluginHostMsg_Attach_Params;
 
@@ -83,6 +83,10 @@ class CONTENT_EXPORT BrowserPluginEmbedder : public WebContentsObserver {
   // is returned.
   BrowserPluginGuest* GetFullPageGuest();
 
+  // Polls all guests for this web contents and returns true if any of them
+  // were audible recently.
+  bool WereAnyGuestsRecentlyAudible();
+
  private:
   explicit BrowserPluginEmbedder(WebContentsImpl* web_contents);
 
@@ -106,6 +110,8 @@ class CONTENT_EXPORT BrowserPluginEmbedder : public WebContentsObserver {
                           const blink::WebFindOptions& options,
                           WebContents* guest);
   static bool StopFindingInGuest(StopFindAction action, WebContents* guest);
+
+  static bool GuestRecentlyAudibleCallback(WebContents* guest);
 
   // Message handlers.
 

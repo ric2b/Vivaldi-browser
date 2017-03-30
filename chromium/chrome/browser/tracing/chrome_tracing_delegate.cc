@@ -49,9 +49,9 @@ void ChromeTracingDelegate::OnBrowserAdded(Browser* browser) {
     incognito_launched_ = true;
 }
 
-scoped_ptr<content::TraceUploader> ChromeTracingDelegate::GetTraceUploader(
+std::unique_ptr<content::TraceUploader> ChromeTracingDelegate::GetTraceUploader(
     net::URLRequestContextGetter* request_context) {
-  return scoped_ptr<content::TraceUploader>(
+  return std::unique_ptr<content::TraceUploader>(
       new TraceCrashServiceUploader(request_context));
 }
 
@@ -85,10 +85,10 @@ bool ProfileAllowsScenario(const content::BackgroundTracingConfig& config,
   PrefService* local_state = g_browser_process->local_state();
   DCHECK(local_state);
 
-#if !defined(OS_CHROMEOS)
+#if !defined(OS_CHROMEOS) && defined(OFFICIAL_BUILD)
   if (!local_state->GetBoolean(metrics::prefs::kMetricsReportingEnabled))
     return false;
-#endif // OS_CHROMEOS
+#endif // !OS_CHROMEOS && OFFICIAL_BUILD
 
   if (config.tracing_mode() == content::BackgroundTracingConfig::PREEMPTIVE) {
     const base::Time last_upload_time = base::Time::FromInternalValue(
@@ -148,7 +148,7 @@ void ChromeTracingDelegate::GenerateMetadataDict(
   std::vector<std::string> variations;
   variations::GetFieldTrialActiveGroupIdsAsStrings(&variations);
 
-  scoped_ptr<base::ListValue> variations_list(new base::ListValue());
+  std::unique_ptr<base::ListValue> variations_list(new base::ListValue());
   for (const auto& it : variations)
     variations_list->Append(new base::StringValue(it));
 

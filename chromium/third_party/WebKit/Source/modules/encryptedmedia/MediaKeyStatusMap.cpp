@@ -4,6 +4,7 @@
 
 #include "modules/encryptedmedia/MediaKeyStatusMap.h"
 
+#include "bindings/core/v8/ArrayBufferOrArrayBufferView.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMArrayPiece.h"
 #include "public/platform/WebData.h"
@@ -59,6 +60,7 @@ public:
 
     DEFINE_INLINE_VIRTUAL_TRACE()
     {
+        visitor->trace(m_keyId);
     }
 
 private:
@@ -68,7 +70,7 @@ private:
     {
     }
 
-    RefPtr<DOMArrayBuffer> m_keyId;
+    const Member<DOMArrayBuffer> m_keyId;
     const String m_status;
 };
 

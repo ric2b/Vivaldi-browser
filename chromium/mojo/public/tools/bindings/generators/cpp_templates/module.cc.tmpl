@@ -26,11 +26,10 @@
 
 #include "base/logging.h"
 #include "base/trace_event/trace_event.h"
-#include "mojo/public/cpp/bindings/lib/bindings_serialization.h"
 #include "mojo/public/cpp/bindings/lib/bounds_checker.h"
-#include "mojo/public/cpp/bindings/lib/macros.h"
 #include "mojo/public/cpp/bindings/lib/map_data_internal.h"
 #include "mojo/public/cpp/bindings/lib/message_builder.h"
+#include "mojo/public/cpp/bindings/lib/serialization_util.h"
 #include "mojo/public/cpp/bindings/lib/validate_params.h"
 #include "mojo/public/cpp/bindings/lib/validation_errors.h"
 #include "mojo/public/cpp/bindings/lib/validation_util.h"
@@ -85,7 +84,9 @@ const uint32_t {{method_name}} = {{method.ordinal}};
 
 {#--- Struct definitions #}
 {%  for struct in structs %}
-{%-   include "struct_definition.tmpl" %}
+{%-   if not struct|is_native_only_kind %}
+{%-     include "struct_definition.tmpl" %}
+{%-   endif %}
 {%- endfor %}
 
 {#--- Union definitions #}
@@ -95,20 +96,41 @@ const uint32_t {{method_name}} = {{method.ordinal}};
 
 }  // namespace internal
 
+namespace {
+
+{#--- Interface parameter data view definitions #}
+{%- for interface in interfaces %}
+{%-   for method in interface.methods %}
+{%      set struct = method.param_struct %}
+{%      include "struct_data_view_declaration.tmpl" %}
+{%      include "struct_data_view_definition.tmpl" %}
+{%-     if method.response_parameters != None %}
+{%-       set struct = method.response_param_struct %}
+{%        include "struct_data_view_declaration.tmpl" %}
+{%        include "struct_data_view_definition.tmpl" %}
+{%-     endif %}
+{%-   endfor %}
+{%- endfor %}
+
+}  // namespace
+
 {#--- Struct Constants #}
 {%- for struct in structs %}
 {%-   for constant in struct.constants %}
 {%-     if constant.kind|is_integral_kind %}
-MOJO_STATIC_CONST_MEMBER_DEFINITION const {{constant.kind|cpp_pod_type}} {{struct.name}}::{{constant.name}};
+const {{constant.kind|cpp_pod_type}} {{struct.name}}::{{constant.name}};
 {%-     else %}
-MOJO_STATIC_CONST_MEMBER_DEFINITION const {{constant.kind|cpp_pod_type}} {{struct.name}}::{{constant.name}} = {{constant|constant_value}};
+const {{constant.kind|cpp_pod_type}} {{struct.name}}::{{constant.name}} = {{constant|constant_value}};
 {%-     endif %}
 {%-   endfor %}
 {%- endfor %}
 
 {#--- Struct builder definitions #}
 {%- for struct in structs %}
-{%-   include "wrapper_class_definition.tmpl" %}
+{%-   if not struct|is_native_only_kind %}
+{%-     include "wrapper_class_definition.tmpl" %}
+{%-     include "struct_data_view_definition.tmpl" %}
+{%-   endif %}
 {%- endfor %}
 
 {#--- Union builder definitions #}
@@ -121,9 +143,20 @@ MOJO_STATIC_CONST_MEMBER_DEFINITION const {{constant.kind|cpp_pod_type}} {{struc
 {%-   include "interface_definition.tmpl" %}
 {%- endfor %}
 
-{#--- Struct Serialization Helpers #}
-{%- for struct in structs %}
-{%-   include "struct_serialization_definition.tmpl" %}
+{%- if variant %}
+}  // namespace {{variant}}
+{%- endif %}
+{%- for namespace in namespaces_as_array|reverse %}
+}  // namespace {{namespace}}
+{%- endfor %}
+
+namespace mojo {
+
+{#--- Struct Serialization Helpers -#}
+{%  for struct in structs %}
+{%-   if not struct|is_native_only_kind %}
+{%      include "struct_serialization_definition.tmpl" %}
+{%-   endif %}
 {%- endfor %}
 
 {#--- Union Serialization Helpers #}
@@ -131,12 +164,8 @@ MOJO_STATIC_CONST_MEMBER_DEFINITION const {{constant.kind|cpp_pod_type}} {{struc
 {%-   include "union_serialization_definition.tmpl" %}
 {%- endfor %}
 
-{%- if variant %}
-}  // namespace {{variant}}
-{%- endif %}
-{%- for namespace in namespaces_as_array|reverse %}
-}  // namespace {{namespace}}
-{%- endfor %}
+}  // namespace mojo
+
 
 #if defined(__clang__)
 #pragma clang diagnostic pop

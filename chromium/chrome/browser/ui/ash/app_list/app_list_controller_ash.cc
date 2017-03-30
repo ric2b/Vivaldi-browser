@@ -10,64 +10,63 @@
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "extensions/common/extension.h"
+#include "ui/app_list/presenter/app_list_presenter_impl.h"
 #include "ui/app_list/views/app_list_view.h"
 
-AppListControllerDelegateAsh::AppListControllerDelegateAsh() {}
+AppListControllerDelegateAsh::AppListControllerDelegateAsh(
+    app_list::AppListPresenterImpl* app_list_presenter)
+    : app_list_presenter_(app_list_presenter) {}
 
 AppListControllerDelegateAsh::~AppListControllerDelegateAsh() {}
 
 void AppListControllerDelegateAsh::DismissView() {
-  DCHECK(ash::Shell::HasInstance());
-  ash::Shell::GetInstance()->DismissAppList();
+  app_list_presenter_->Dismiss();
 }
 
 gfx::NativeWindow AppListControllerDelegateAsh::GetAppListWindow() {
-  DCHECK(ash::Shell::HasInstance());
-  return ash::Shell::GetInstance()->GetAppListWindow();
+  return app_list_presenter_->GetWindow();
 }
 
 gfx::Rect AppListControllerDelegateAsh::GetAppListBounds() {
-  app_list::AppListView* app_list_view =
-      ash::Shell::GetInstance()->GetAppListView();
+  app_list::AppListView* app_list_view = app_list_presenter_->GetView();
   if (app_list_view)
     return app_list_view->GetBoundsInScreen();
   return gfx::Rect();
 }
 
-gfx::ImageSkia AppListControllerDelegateAsh::GetWindowIcon() {
-  return gfx::ImageSkia();
+bool AppListControllerDelegateAsh::IsAppPinned(const std::string& app_id) {
+  return ChromeLauncherController::instance()->IsAppPinned(app_id);
 }
 
-bool AppListControllerDelegateAsh::IsAppPinned(
-    const std::string& extension_id) {
-  return ChromeLauncherController::instance()->IsAppPinned(extension_id);
+bool AppListControllerDelegateAsh::IsAppOpen(const std::string& app_id) const {
+  ChromeLauncherController* controller = ChromeLauncherController::instance();
+  ash::ShelfID id = controller->GetShelfIDForAppID(app_id);
+  if (!id)
+    return false;
+  return controller->IsOpen(id);
 }
 
-void AppListControllerDelegateAsh::PinApp(const std::string& extension_id) {
-  ChromeLauncherController::instance()->PinAppWithID(extension_id);
+void AppListControllerDelegateAsh::PinApp(const std::string& app_id) {
+  ChromeLauncherController::instance()->PinAppWithID(app_id);
 }
 
-void AppListControllerDelegateAsh::UnpinApp(const std::string& extension_id) {
-  ChromeLauncherController::instance()->UnpinAppWithID(extension_id);
+void AppListControllerDelegateAsh::UnpinApp(const std::string& app_id) {
+  ChromeLauncherController::instance()->UnpinAppWithID(app_id);
 }
 
 AppListControllerDelegate::Pinnable AppListControllerDelegateAsh::GetPinnable(
-    const std::string& extension_id) {
-  return ChromeLauncherController::instance()->CanPin(extension_id)
-             ? PIN_EDITABLE
-             : PIN_FIXED;
+    const std::string& app_id) {
+  return ChromeLauncherController::instance()->GetPinnable(app_id);
 }
 
 void AppListControllerDelegateAsh::OnShowChildDialog() {
-  app_list::AppListView* app_list_view =
-      ash::Shell::GetInstance()->GetAppListView();
+  app_list::AppListView* app_list_view = app_list_presenter_->GetView();
   if (app_list_view)
     app_list_view->SetAppListOverlayVisible(true);
 }
 
 void AppListControllerDelegateAsh::OnCloseChildDialog() {
-  app_list::AppListView* app_list_view =
-      ash::Shell::GetInstance()->GetAppListView();
+  app_list::AppListView* app_list_view = app_list_presenter_->GetView();
   if (app_list_view)
     app_list_view->SetAppListOverlayVisible(false);
 }

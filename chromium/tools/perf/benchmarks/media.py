@@ -5,7 +5,7 @@
 from core import perf_benchmark
 
 from telemetry import benchmark
-from telemetry.page import page_test
+from telemetry.page import legacy_page_test
 from telemetry.value import list_of_scalar_values
 from telemetry.value import scalar
 
@@ -13,7 +13,7 @@ from measurements import media
 import page_sets
 
 
-class _MSEMeasurement(page_test.PageTest):
+class _MSEMeasurement(legacy_page_test.LegacyPageTest):
 
   def __init__(self):
     super(_MSEMeasurement, self).__init__()
@@ -38,10 +38,8 @@ class _MSEMeasurement(page_test.PageTest):
 
 # android: See media.android.tough_video_cases below
 # win8: crbug.com/531618
-# win7: crbug.com/555079
-# mac: crbug.com/595665
 # crbug.com/565180: Only include cases that report time_to_play
-@benchmark.Disabled('android', 'win8', 'win7', 'mac')
+@benchmark.Disabled('android', 'win8')
 class Media(perf_benchmark.PerfBenchmark):
   """Obtains media metrics for key user scenarios."""
   test = media.Media
@@ -53,7 +51,7 @@ class Media(perf_benchmark.PerfBenchmark):
 
 
 # crbug.com/565180: Only include cases that don't report time_to_play
-@benchmark.Disabled('android', 'win8', 'win7')
+@benchmark.Disabled('android', 'win8')
 class MediaExtra(perf_benchmark.PerfBenchmark):
   """Obtains extra media metrics for key user scenarios."""
   test = media.Media
@@ -75,7 +73,7 @@ class MediaNetworkSimulation(perf_benchmark.PerfBenchmark):
     return 'media.media_cns_cases'
 
 
-@benchmark.Disabled('all')  # crbug.com/448092
+@benchmark.Enabled('android')
 @benchmark.Disabled('l', 'android-webview')  # WebView: crbug.com/419689
 class MediaAndroid(perf_benchmark.PerfBenchmark):
   """Obtains media metrics for key user scenarios on Android."""
@@ -84,6 +82,11 @@ class MediaAndroid(perf_benchmark.PerfBenchmark):
   page_set = page_sets.ToughVideoCasesPageSet
   # Exclude is_4k and 50 fps media files (garden* & crowd*).
   options = {'story_label_filter_exclude': 'is_4k,is_50fps'}
+
+  @classmethod
+  def ShouldDisable(cls, possible_browser):  # crbug.com/448092
+    """Disable test for Android One device."""
+    return cls.IsSvelte(possible_browser)
 
   @classmethod
   def Name(cls):

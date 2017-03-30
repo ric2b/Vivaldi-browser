@@ -12,13 +12,13 @@
 #include <shlwapi.h>
 
 #include <algorithm>
+#include <memory>
 
 #include "base/command_line.h"
 #include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
@@ -271,18 +271,10 @@ void InstallUtil::GetCriticalUpdateVersion(BrowserDistribution* dist,
 }
 
 bool InstallUtil::IsOSSupported() {
-  // We do not support Win2K or older, or XP without service pack 2.
-  // NOTE(jarle@vivaldi.com): From Chr-50, XP and Vista are no longer supported.
+  // We do not support anything prior to Windows 7.
   VLOG(1) << base::SysInfo::OperatingSystemName() << ' '
           << base::SysInfo::OperatingSystemVersion();
-  base::win::Version version = base::win::GetVersion();
-#if defined(VIVALDI_BUILD)
-  return (version >= base::win::VERSION_WIN7);
-#else
-  return (version > base::win::VERSION_XP) ||
-      ((version == base::win::VERSION_XP) &&
-       (base::win::OSInfo::GetInstance()->service_pack().major >= 2));
-#endif
+  return base::win::GetVersion() >= base::win::VERSION_WIN7;
 }
 
 void InstallUtil::AddInstallerResultItems(
@@ -293,6 +285,9 @@ void InstallUtil::AddInstallerResultItems(
     const base::string16* const launch_cmd,
     WorkItemList* install_list) {
   DCHECK(install_list);
+  DCHECK(install_list->best_effort());
+  DCHECK(!install_list->rollback_enabled());
+
   const HKEY root = system_install ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
   DWORD installer_result = (GetInstallReturnCode(status) == 0) ? 0 : 1;
   install_list->AddCreateRegKeyWorkItem(root, state_key, KEY_WOW64_32KEY);
@@ -369,7 +364,7 @@ void InstallUtil::UpdateInstallerStage(bool system_install,
 }
 
 bool InstallUtil::IsPerUserInstall(const base::FilePath& exe_path) {
-  scoped_ptr<base::Environment> env(base::Environment::Create());
+  std::unique_ptr<base::Environment> env(base::Environment::Create());
 
   static const char kEnvProgramFilesPath[] = "CHROME_PROBED_PROGRAM_FILES_PATH";
   std::string env_program_files_path;
@@ -592,6 +587,8 @@ int InstallUtil::GetInstallReturnCode(installer::InstallStatus status) {
     case installer::NEW_VERSION_UPDATED:
     case installer::IN_USE_UPDATED:
     case installer::UNUSED_BINARIES_UNINSTALLED:
+    case installer::OLD_VERSION_DOWNGRADE:
+    case installer::IN_USE_DOWNGRADE:
       return 0;
     default:
       return status;

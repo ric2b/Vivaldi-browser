@@ -17,7 +17,7 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/media_galleries/fileapi/itunes_data_provider.h"
 #include "chrome/browser/media_galleries/fileapi/media_file_system_backend.h"
@@ -132,7 +132,7 @@ class TestMediaFileSystemBackend : public MediaFileSystemBackend {
   }
 
  private:
-  scoped_ptr<storage::AsyncFileUtil> test_file_util_;
+  std::unique_ptr<storage::AsyncFileUtil> test_file_util_;
 };
 
 class ItunesFileUtilTest : public testing::Test {
@@ -229,8 +229,8 @@ class ItunesFileUtilTest : public testing::Test {
   base::ScopedTempDir fake_library_dir_;
 
   scoped_refptr<storage::FileSystemContext> file_system_context_;
-  scoped_ptr<MediaPathFilter> media_path_filter_;
-  scoped_ptr<TestITunesDataProvider> itunes_data_provider_;
+  std::unique_ptr<MediaPathFilter> media_path_filter_;
+  std::unique_ptr<TestITunesDataProvider> itunes_data_provider_;
 
   DISALLOW_COPY_AND_ASSIGN(ItunesFileUtilTest);
 };

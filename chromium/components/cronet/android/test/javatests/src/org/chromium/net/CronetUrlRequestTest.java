@@ -5,12 +5,12 @@
 package org.chromium.net;
 
 import android.os.ConditionVariable;
-import android.test.FlakyTest;
 import android.test.MoreAsserts;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.util.Log;
 
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.net.TestUrlRequestCallback.FailureType;
 import org.chromium.net.TestUrlRequestCallback.ResponseStep;
 import org.chromium.net.test.FailurePhase;
@@ -150,6 +150,42 @@ public class CronetUrlRequestTest extends CronetTestBase {
                 Arrays.asList(urls), statusCode, message, headersList, false, "unknown", ":0");
         unknown.setReceivedBytesCount(receivedBytes);
         return unknown;
+    }
+
+    void runConnectionMigrationTest(boolean disableConnectionMigration) {
+        // URLRequest load flags at net/base/load_flags_list.h.
+        int connectionMigrationLoadFlag = 1 << 18;
+        TestUrlRequestCallback callback = new TestUrlRequestCallback();
+        callback.setAutoAdvance(false);
+        // Create builder, start a request, and check if default load_flags are set correctly.
+        UrlRequest.Builder builder =
+                new UrlRequest.Builder(NativeTestServer.getFileURL("/success.txt"), callback,
+                        callback.getExecutor(), mTestFramework.mCronetEngine);
+        // Disable connection migration.
+        if (disableConnectionMigration) builder.disableConnectionMigration();
+        UrlRequest urlRequest = builder.build();
+        urlRequest.start();
+        callback.waitForNextStep();
+        int loadFlags = CronetTestUtil.getLoadFlags(urlRequest);
+        if (disableConnectionMigration) {
+            assertEquals(connectionMigrationLoadFlag, loadFlags & connectionMigrationLoadFlag);
+        } else {
+            assertEquals(0, loadFlags & connectionMigrationLoadFlag);
+        }
+        callback.setAutoAdvance(true);
+        callback.startNextRead(urlRequest);
+        callback.blockForDone();
+    }
+
+    /**
+     * Tests that disabling connection migration sets the URLRequest load flag correctly.
+     */
+    @SmallTest
+    @Feature({"Cronet"})
+    @OnlyRunNativeCronet
+    public void testLoadFlagsWithConnectionMigration() throws Exception {
+        runConnectionMigrationTest(/*disableConnectionMigration=*/false);
+        runConnectionMigrationTest(/*disableConnectionMigration=*/true);
     }
 
     /**
@@ -764,7 +800,7 @@ public class CronetUrlRequestTest extends CronetTestBase {
         try {
             ByteBuffer readBuffer = ByteBuffer.allocateDirect(4);
             readBuffer.put("full".getBytes());
-            urlRequest.readNew(readBuffer);
+            urlRequest.read(readBuffer);
             fail("Exception not thrown");
         } catch (IllegalArgumentException e) {
             assertEquals("ByteBuffer is already full.",
@@ -774,7 +810,7 @@ public class CronetUrlRequestTest extends CronetTestBase {
         // Try to read using a non-direct buffer.
         try {
             ByteBuffer readBuffer = ByteBuffer.allocate(5);
-            urlRequest.readNew(readBuffer);
+            urlRequest.read(readBuffer);
             fail("Exception not thrown");
         } catch (IllegalArgumentException e) {
             assertEquals("byteBuffer must be a direct ByteBuffer.",
@@ -784,7 +820,7 @@ public class CronetUrlRequestTest extends CronetTestBase {
         // Finish the request with a direct ByteBuffer.
         callback.setAutoAdvance(true);
         ByteBuffer readBuffer = ByteBuffer.allocateDirect(5);
-        urlRequest.readNew(readBuffer);
+        urlRequest.read(readBuffer);
         callback.blockForDone();
         assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
         assertEquals("GET", callback.mResponseAsString);
@@ -1519,9 +1555,8 @@ public class CronetUrlRequestTest extends CronetTestBase {
     /*
     @SmallTest
     @Feature({"Cronet"})
-    https://crbug.com/592444
     */
-    @FlakyTest
+    @FlakyTest(message = "https://crbug.com/592444")
     public void testFailures() throws Exception {
         throwOrCancel(FailureType.CANCEL_SYNC, ResponseStep.ON_RECEIVED_REDIRECT,
                 false, false);
@@ -1595,7 +1630,7 @@ public class CronetUrlRequestTest extends CronetTestBase {
         // Shutdown the executor, so posting the task will throw an exception.
         callback.shutdownExecutor();
         ByteBuffer readBuffer = ByteBuffer.allocateDirect(5);
-        urlRequest.readNew(readBuffer);
+        urlRequest.read(readBuffer);
         // Callback will never be called again because executor is shutdown,
         // but request will be destroyed from network thread.
         requestDestroyed.block();

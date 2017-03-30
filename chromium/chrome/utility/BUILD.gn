@@ -14,7 +14,7 @@ gypi_values = exec_script("//build/gypi_to_gn.py",
 # Provides a way for the utility library to push ldflags to dependents.
 config("utility_ldflags") {
   if (is_mac && safe_browsing_mode == 1) {
-    ldflags = [ "/usr/lib/libbz2.dylib" ]
+    libs = [ "bz2" ]
   }
 }
 
@@ -31,7 +31,7 @@ static_library("utility") {
     "//chrome:strings",
     "//chrome/common",
     "//chrome/common:mojo_bindings",
-    "//components/safe_json:safe_json_parser_message_filter",
+    "//components/safe_json/utility",
     "//components/search_engines",
     "//components/strings",
     "//components/url_formatter",
@@ -115,5 +115,27 @@ static_library("utility") {
 
   if (enable_pdf) {
     deps += [ "//pdf" ]
+  }
+}
+
+if (is_mac) {
+  import("//testing/libfuzzer/fuzzer_test.gni")
+  fuzzer_test("safe_browsing_dmg_fuzzer") {
+    sources = [
+      "safe_browsing/mac/fuzzer.cc",
+      "safe_browsing/mac/hfs.cc",
+      "safe_browsing/mac/hfs.h",
+      "safe_browsing/mac/read_stream.cc",
+      "safe_browsing/mac/read_stream.h",
+      "safe_browsing/mac/udif.cc",
+      "safe_browsing/mac/udif.h",
+    ]
+
+    additional_configs = [ ":utility_ldflags" ]
+
+    deps = [
+      "//base",
+      "//third_party/zlib",
+    ]
   }
 }

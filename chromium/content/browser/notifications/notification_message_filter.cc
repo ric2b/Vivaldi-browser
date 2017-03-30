@@ -10,7 +10,6 @@
 #include "content/browser/bad_message.h"
 #include "content/browser/notifications/page_notification_delegate.h"
 #include "content/browser/notifications/platform_notification_context_impl.h"
-#include "content/common/notification_constants.h"
 #include "content/common/platform_notification_messages.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -20,6 +19,7 @@
 #include "content/public/browser/platform_notification_service.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_client.h"
+#include "third_party/WebKit/public/platform/modules/notifications/WebNotificationConstants.h"
 
 namespace content {
 
@@ -39,8 +39,8 @@ PlatformNotificationData SanitizeNotificationData(
   }
 
   // Ensure there aren't more actions than supported.
-  if (sanitized_data.actions.size() > kPlatformNotificationMaxActions)
-    sanitized_data.actions.resize(kPlatformNotificationMaxActions);
+  if (sanitized_data.actions.size() > blink::kWebNotificationMaxActions)
+    sanitized_data.actions.resize(blink::kWebNotificationMaxActions);
 
   return sanitized_data;
 }
@@ -48,18 +48,18 @@ PlatformNotificationData SanitizeNotificationData(
 // Returns true when |resources| looks ok, false otherwise.
 bool ValidateNotificationResources(const NotificationResources& resources) {
   if (resources.notification_icon.width() >
-          kPlatformNotificationMaxIconSizePx ||
+          blink::kWebNotificationMaxIconSizePx ||
       resources.notification_icon.height() >
-          kPlatformNotificationMaxIconSizePx) {
+          blink::kWebNotificationMaxIconSizePx) {
     return false;
   }
-  if (resources.badge.width() > kPlatformNotificationMaxBadgeSizePx ||
-      resources.badge.height() > kPlatformNotificationMaxBadgeSizePx) {
+  if (resources.badge.width() > blink::kWebNotificationMaxBadgeSizePx ||
+      resources.badge.height() > blink::kWebNotificationMaxBadgeSizePx) {
     return false;
   }
   for (const auto& action_icon : resources.action_icons) {
-    if (action_icon.width() > kPlatformNotificationMaxActionIconSizePx ||
-        action_icon.height() > kPlatformNotificationMaxActionIconSizePx) {
+    if (action_icon.width() > blink::kWebNotificationMaxActionIconSizePx ||
+        action_icon.height() > blink::kWebNotificationMaxActionIconSizePx) {
       return false;
     }
   }
@@ -114,17 +114,19 @@ bool NotificationMessageFilter::OnMessageReceived(const IPC::Message& message) {
 }
 
 void NotificationMessageFilter::OverrideThreadForMessage(
-    const IPC::Message& message, content::BrowserThread::ID* thread) {
+    const IPC::Message& message,
+    content::BrowserThread::ID* thread) {
   if (message.type() == PlatformNotificationHostMsg_Show::ID ||
       message.type() == PlatformNotificationHostMsg_Close::ID)
     *thread = BrowserThread::UI;
 }
 
 void NotificationMessageFilter::OnCheckNotificationPermission(
-    const GURL& origin, blink::WebNotificationPermission* permission) {
+    const GURL& origin,
+    blink::mojom::PermissionStatus* permission_status) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  *permission = GetPermissionForOriginOnIO(origin);
+  *permission_status = GetPermissionForOriginOnIO(origin);
 }
 
 void NotificationMessageFilter::OnShowPlatformNotification(
@@ -141,7 +143,7 @@ void NotificationMessageFilter::OnShowPlatformNotification(
     return;
   }
 
-  scoped_ptr<DesktopNotificationDelegate> delegate(
+  std::unique_ptr<DesktopNotificationDelegate> delegate(
       new PageNotificationDelegate(process_id_, notification_id));
 
   PlatformNotificationService* service =
@@ -168,7 +170,7 @@ void NotificationMessageFilter::OnShowPersistentNotification(
     const NotificationResources& notification_resources) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (GetPermissionForOriginOnIO(origin) !=
-      blink::WebNotificationPermissionAllowed) {
+      blink::mojom::PermissionStatus::GRANTED) {
     bad_message::ReceivedBadMessage(this, bad_message::NMF_NO_PERMISSION_SHOW);
     return;
   }
@@ -227,7 +229,7 @@ void NotificationMessageFilter::OnGetNotifications(
     const std::string& filter_tag) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (GetPermissionForOriginOnIO(origin) !=
-      blink::WebNotificationPermissionAllowed) {
+      blink::mojom::PermissionStatus::GRANTED) {
     // No permission has been granted for the given origin. It is harmless to
     // try to get notifications without permission, so return an empty vector
     // indicating that no (accessible) notifications exist at this time.
@@ -281,7 +283,7 @@ void NotificationMessageFilter::OnClosePersistentNotification(
     int64_t persistent_notification_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (GetPermissionForOriginOnIO(origin) !=
-      blink::WebNotificationPermissionAllowed) {
+      blink::mojom::PermissionStatus::GRANTED) {
     bad_message::ReceivedBadMessage(this, bad_message::NMF_NO_PERMISSION_CLOSE);
     return;
   }
@@ -312,7 +314,7 @@ void NotificationMessageFilter::DidDeletePersistentNotificationData(
   // has been closed.
 }
 
-blink::WebNotificationPermission
+blink::mojom::PermissionStatus
 NotificationMessageFilter::GetPermissionForOriginOnIO(
     const GURL& origin) const {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -320,7 +322,7 @@ NotificationMessageFilter::GetPermissionForOriginOnIO(
   PlatformNotificationService* service =
       GetContentClient()->browser()->GetPlatformNotificationService();
   if (!service)
-    return blink::WebNotificationPermissionDenied;
+    return blink::mojom::PermissionStatus::DENIED;
 
   return service->CheckPermissionOnIOThread(resource_context_, origin,
                                             process_id_);
@@ -331,10 +333,10 @@ bool NotificationMessageFilter::VerifyNotificationPermissionGranted(
     const GURL& origin) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  blink::WebNotificationPermission permission =
+  blink::mojom::PermissionStatus permission_status =
       service->CheckPermissionOnUIThread(browser_context_, origin, process_id_);
 
-  if (permission == blink::WebNotificationPermissionAllowed)
+  if (permission_status == blink::mojom::PermissionStatus::GRANTED)
     return true;
 
   bad_message::ReceivedBadMessage(this, bad_message::NMF_NO_PERMISSION_VERIFY);

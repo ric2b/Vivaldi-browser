@@ -87,6 +87,7 @@ public:
         }
 
         ASSERT(credential->isPasswordCredential() || credential->isFederatedCredential());
+        UseCounter::count(m_resolver->getScriptState()->getExecutionContext(), UseCounter::CredentialManagerGetReturnedCredential);
         if (credential->isPasswordCredential())
             m_resolver->resolve(PasswordCredential::create(static_cast<WebPasswordCredential*>(credential.get())));
         else
@@ -170,8 +171,8 @@ ScriptPromise CredentialsContainer::store(ScriptState* scriptState, Credential* 
     if (!checkBoilerplate(resolver))
         return promise;
 
-    auto web_credential = WebCredential::create(credential->getPlatformCredential());
-    CredentialManagerClient::from(scriptState->getExecutionContext())->dispatchStore(*web_credential, new NotificationCallbacks(resolver));
+    auto webCredential = WebCredential::create(credential->getPlatformCredential());
+    CredentialManagerClient::from(scriptState->getExecutionContext())->dispatchStore(*webCredential, new NotificationCallbacks(resolver));
     return promise;
 }
 

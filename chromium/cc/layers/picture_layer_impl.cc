@@ -69,6 +69,7 @@ PictureLayerImpl::PictureLayerImpl(LayerTreeImpl* tree_impl,
       ideal_device_scale_(0.f),
       ideal_source_scale_(0.f),
       ideal_contents_scale_(0.f),
+      last_ideal_source_scale_(0.f),
       raster_page_scale_(0.f),
       raster_device_scale_(0.f),
       raster_source_scale_(0.f),
@@ -92,7 +93,7 @@ const char* PictureLayerImpl::LayerTypeAsString() const {
   return "cc::PictureLayerImpl";
 }
 
-scoped_ptr<LayerImpl> PictureLayerImpl::CreateLayerImpl(
+std::unique_ptr<LayerImpl> PictureLayerImpl::CreateLayerImpl(
     LayerTreeImpl* tree_impl) {
   return PictureLayerImpl::Create(tree_impl, id(), is_mask_);
 }
@@ -433,6 +434,17 @@ bool PictureLayerImpl::UpdateTiles() {
     AddTilingsForRasterScale();
   }
 
+  // Inform layer tree impl if we will have blurry content because of fixed
+  // raster scale (note that this check should happen after we
+  // ReclaculateRasterScales, since that's the function that will determine
+  // whether our raster scale is fixed.
+  if (raster_source_scale_is_fixed_ && !has_will_change_transform_hint()) {
+    if (raster_source_scale_ != ideal_source_scale_)
+      layer_tree_impl()->SetFixedRasterScaleHasBlurryContent();
+    if (ideal_source_scale_ != last_ideal_source_scale_)
+      layer_tree_impl()->SetFixedRasterScaleAttemptedToChangeScale();
+  }
+
   if (layer_tree_impl()->IsActiveTree())
     AddLowResolutionTilingIfNeeded();
 
@@ -510,7 +522,7 @@ void PictureLayerImpl::UpdateViewportRectForTilePriorityInContentSpace() {
       gfx::Rect padded_bounds(bounds());
       int padding_amount = layer_tree_impl()
                                ->settings()
-                               .skewport_extrapolation_limit_in_content_pixels *
+                               .skewport_extrapolation_limit_in_screen_pixels *
                            MaximumTilingContentsScale();
       padded_bounds.Inset(-padding_amount, -padding_amount);
       visible_rect_in_content_space.Intersect(padded_bounds);
@@ -544,7 +556,7 @@ void PictureLayerImpl::UpdateRasterSource(
 
   // Only set the image decode controller when we're committing.
   if (!pending_set) {
-    raster_source_->SetImageDecodeController(
+    raster_source_->set_image_decode_controller(
         layer_tree_impl()->image_decode_controller());
   }
 
@@ -640,7 +652,7 @@ void PictureLayerImpl::ReleaseResources() {
 void PictureLayerImpl::RecreateResources() {
   tilings_ = CreatePictureLayerTilingSet();
   if (raster_source_) {
-    raster_source_->SetImageDecodeController(
+    raster_source_->set_image_decode_controller(
         layer_tree_impl()->image_decode_controller());
   }
 
@@ -1184,7 +1196,7 @@ float PictureLayerImpl::MaximumTilingContentsScale() const {
   return std::max(max_contents_scale, MinimumContentsScale());
 }
 
-scoped_ptr<PictureLayerTilingSet>
+std::unique_ptr<PictureLayerTilingSet>
 PictureLayerImpl::CreatePictureLayerTilingSet() {
   const LayerTreeSettings& settings = layer_tree_impl()->settings();
   return PictureLayerTilingSet::Create(
@@ -1192,7 +1204,7 @@ PictureLayerImpl::CreatePictureLayerTilingSet() {
       layer_tree_impl()->use_gpu_rasterization()
           ? settings.gpu_rasterization_skewport_target_time_in_seconds
           : settings.skewport_target_time_in_seconds,
-      settings.skewport_extrapolation_limit_in_content_pixels);
+      settings.skewport_extrapolation_limit_in_screen_pixels);
 }
 
 void PictureLayerImpl::UpdateIdealScales() {
@@ -1206,6 +1218,7 @@ void PictureLayerImpl::UpdateIdealScales() {
                           : 1.f;
   ideal_device_scale_ = layer_tree_impl()->device_scale_factor();
   ideal_contents_scale_ = std::max(GetIdealContentsScale(), min_contents_scale);
+  last_ideal_source_scale_ = ideal_source_scale_;
   ideal_source_scale_ =
       ideal_contents_scale_ / ideal_page_scale_ / ideal_device_scale_;
 }
@@ -1280,7 +1293,8 @@ bool PictureLayerImpl::IsOnActiveOrPendingTree() const {
 }
 
 bool PictureLayerImpl::HasValidTilePriorities() const {
-  return IsOnActiveOrPendingTree() && IsDrawnRenderSurfaceLayerListMember();
+  return IsOnActiveOrPendingTree() &&
+         is_drawn_render_surface_layer_list_member();
 }
 
 }  // namespace cc

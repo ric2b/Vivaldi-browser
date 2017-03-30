@@ -29,6 +29,7 @@ class ScriptWrappable;
     V(customElementNamespaceURI) \
     V(customElementTagName) \
     V(customElementType) \
+    V(customElementsRegistryMap) \
     V(callback) \
     V(condition) \
     V(data) \
@@ -37,15 +38,27 @@ class ScriptWrappable;
     V(error) \
     V(event) \
     V(idbCursorRequest) \
+    V(internalBodyBuffer) \
+    V(internalBodyStream) \
     V(port1) \
     V(port2) \
     V(readableStreamReaderInResponse) \
+    V(requestInFetchEvent) \
     V(state) \
     V(stringData) \
     V(testInterfaces) \
     V(thenableHiddenPromise) \
     V(toStringString) \
     V(injectedScriptNative) \
+    V(webgl2DTextures) \
+    V(webgl2DArrayTextures) \
+    V(webgl3DTextures) \
+    V(webglAttachments) \
+    V(webglBuffers) \
+    V(webglCubeMapTextures) \
+    V(webglExtensions) \
+    V(webglMisc) \
+    V(webglShaders) \
     SCRIPT_PROMISE_PROPERTIES(V, Promise)  \
     SCRIPT_PROMISE_PROPERTIES(V, Resolver)
 

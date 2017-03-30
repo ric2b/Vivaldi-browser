@@ -14,9 +14,10 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/paint_context.h"
 #include "ui/compositor/paint_recorder.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/path.h"
-#include "ui/gfx/screen.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/resources/grit/ui_resources.h"
@@ -220,7 +221,6 @@ void BubbleFrameView::UpdateWindowIcon() {
   title_icon_->SetImage(&image);
 }
 
-
 void BubbleFrameView::UpdateWindowTitle() {
   title_->SetText(GetWidget()->widget_delegate()->GetWindowTitle());
   title_->SetVisible(GetWidget()->widget_delegate()->ShouldShowWindowTitle());
@@ -303,6 +303,7 @@ void BubbleFrameView::Layout() {
 
   gfx::Size title_icon_pref_size(title_icon_->GetPreferredSize());
   int padding = 0;
+  int title_height = title_icon_pref_size.height();
 
   if (title_->visible() && !title_->text().empty()) {
     if (title_icon_pref_size.width() > 0)
@@ -311,11 +312,11 @@ void BubbleFrameView::Layout() {
     const int title_label_x =
         bounds.x() + title_icon_pref_size.width() + padding;
     title_->SizeToFit(std::max(1, close_->x() - title_label_x));
-    title_->SetPosition(gfx::Point(title_label_x, bounds.y()));
+    title_height = std::max(title_height, title_->height());
+    title_->SetPosition(gfx::Point(
+        title_label_x, bounds.y() + (title_height - title_->height()) / 2));
   }
 
-  const int title_height =
-      std::max(title_icon_pref_size.height(), title_->height());
   title_icon_->SetBounds(bounds.x(), bounds.y(), title_icon_pref_size.width(),
                          title_height);
   bounds.set_width(title_->bounds().right() - bounds.x());
@@ -364,7 +365,7 @@ void BubbleFrameView::ButtonPressed(Button* sender, const ui::Event& event) {
   }
 }
 
-void BubbleFrameView::SetBubbleBorder(scoped_ptr<BubbleBorder> border) {
+void BubbleFrameView::SetBubbleBorder(std::unique_ptr<BubbleBorder> border) {
   bubble_border_ = border.get();
   SetBorder(std::move(border));
 
@@ -414,7 +415,7 @@ gfx::Rect BubbleFrameView::GetUpdatedWindowBounds(const gfx::Rect& anchor_rect,
 gfx::Rect BubbleFrameView::GetAvailableScreenBounds(
     const gfx::Rect& rect) const {
   // The bubble attempts to fit within the current screen bounds.
-  return gfx::Screen::GetScreen()
+  return display::Screen::GetScreen()
       ->GetDisplayNearestPoint(rect.CenterPoint())
       .work_area();
 }

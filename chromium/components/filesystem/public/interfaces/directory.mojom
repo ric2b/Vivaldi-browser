@@ -2,10 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-module filesystem;
+module filesystem.mojom;
 
 import "components/filesystem/public/interfaces/file.mojom";
 import "components/filesystem/public/interfaces/types.mojom";
+
+struct FileOpenDetails {
+  string path;
+  uint32 open_flags;
+};
+
+struct FileOpenResult {
+  string path;
+  FileError error;
+  handle file_handle;
+};
 
 // This interface provides access to a directory in a "file system", providing
 // operations such as creating/opening/removing/renaming files/directories
@@ -36,6 +47,11 @@ interface Directory {
   [Sync]
   OpenFileHandle(string path, uint32 open_flags)
       => (FileError error, handle file_handle);
+
+  // Like OpenFileHandle, but opens multiple files.
+  [Sync]
+  OpenFileHandles(array<FileOpenDetails> files)
+      => (array<FileOpenResult> results);
 
   // Opens the directory specified by |path|. |directory| is optional, so that
   // this may be used as a simple "mkdir()" with |kOpenFlagCreate|.
@@ -70,6 +86,9 @@ interface Directory {
   // non-null and will contain this information.
   [Sync]
   StatFile(string path) => (FileError error, FileInformation? file_information);
+
+  // Creates a copy of this directory.
+  Clone(Directory& directory);
 
   // Reads the contents of an entire file.
   ReadEntireFile(string path) => (FileError error, array<uint8> data);

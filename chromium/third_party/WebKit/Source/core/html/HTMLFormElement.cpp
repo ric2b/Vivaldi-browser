@@ -24,17 +24,15 @@
 
 #include "core/html/HTMLFormElement.h"
 
+#include "bindings/core/v8/RadioNodeListOrElement.h"
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptEventListener.h"
-#include "bindings/core/v8/UnionTypesCore.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/NodeListsNodeData.h"
-#include "core/events/AutocompleteErrorEvent.h"
 #include "core/events/Event.h"
-#include "core/events/GenericEventQueue.h"
 #include "core/events/ScopedEventQueue.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
@@ -64,9 +62,6 @@ using namespace HTMLNames;
 
 HTMLFormElement::HTMLFormElement(Document& document)
     : HTMLElement(formTag, document)
-#if !ENABLE(OILPAN)
-    , m_weakPtrFactory(this)
-#endif
     , m_associatedElementsAreDirty(false)
     , m_imageElementsAreDirty(false)
     , m_hasElementsAssociatedByParser(false)
@@ -76,11 +71,10 @@ HTMLFormElement::HTMLFormElement(Document& document)
     , m_shouldSubmit(false)
     , m_isInResetFunction(false)
     , m_wasDemoted(false)
-    , m_pendingAutocompleteEventsQueue(GenericEventQueue::create(this))
 {
 }
 
-RawPtr<HTMLFormElement> HTMLFormElement::create(Document& document)
+HTMLFormElement* HTMLFormElement::create(Document& document)
 {
     UseCounter::count(document, UseCounter::FormElement);
     return new HTMLFormElement(document);
@@ -88,12 +82,6 @@ RawPtr<HTMLFormElement> HTMLFormElement::create(Document& document)
 
 HTMLFormElement::~HTMLFormElement()
 {
-#if !ENABLE(OILPAN)
-    // With Oilpan, either removedFrom is called or the document and
-    // form controller are dead as well and there is no need to remove
-    // this form element from it.
-    document().formController().willDeleteForm(this);
-#endif
 }
 
 DEFINE_TRACE(HTMLFormElement)
@@ -102,7 +90,6 @@ DEFINE_TRACE(HTMLFormElement)
     visitor->trace(m_radioButtonGroupScope);
     visitor->trace(m_associatedElements);
     visitor->trace(m_imageElements);
-    visitor->trace(m_pendingAutocompleteEventsQueue);
     HTMLElement::trace(visitor);
 }
 
@@ -189,9 +176,7 @@ void HTMLFormElement::removedFrom(ContainerNode* insertionPoint)
             notifyFormRemovedFromTree(images, root);
         }
     }
-#if ENABLE(OILPAN)
     document().formController().willDeleteForm(this);
-#endif
     HTMLElement::removedFrom(insertionPoint);
 }
 
@@ -278,9 +263,8 @@ bool HTMLFormElement::validateInteractively()
 
     // Needs to update layout now because we'd like to call isFocusable(), which
     // has !layoutObject()->needsLayout() assertion.
-    document().updateLayoutIgnorePendingStylesheets();
+    document().updateStyleAndLayoutIgnorePendingStylesheets();
 
-    RawPtr<HTMLFormElement> protector(this);
     // Focus on the first focusable control and show a validation message.
     for (unsigned i = 0; i < unhandledInvalidControls.size(); ++i) {
         HTMLFormControlElement* unhandled = unhandledInvalidControls[i].get();
@@ -306,7 +290,6 @@ bool HTMLFormElement::validateInteractively()
 
 void HTMLFormElement::prepareForSubmission(Event* event)
 {
-    RawPtr<HTMLFormElement> protector(this);
     LocalFrame* frame = document().frame();
     if (!frame || m_isSubmittingOrInUserJSSubmitEvent)
         return;
@@ -341,7 +324,7 @@ void HTMLFormElement::submitFromJavaScript()
     submit(0, false);
 }
 
-void HTMLFormElement::submitDialog(RawPtr<FormSubmission> formSubmission)
+void HTMLFormElement::submitDialog(FormSubmission* formSubmission)
 {
     for (Node* node = this; node; node = node->parentOrShadowHostNode()) {
         if (isHTMLDialogElement(*node)) {
@@ -357,6 +340,9 @@ void HTMLFormElement::submit(Event* event, bool activateSubmitButton)
     LocalFrame* frame = document().frame();
     if (!view || !frame || !frame->page())
         return;
+    // See crbug.com/586749.
+    if (!inShadowIncludingDocument())
+        UseCounter::count(document(), UseCounter::FormSubmissionNotInDocumentTree);
 
     if (m_isSubmittingOrInUserJSSubmitEvent) {
         m_shouldSubmit = true;
@@ -365,7 +351,7 @@ void HTMLFormElement::submit(Event* event, bool activateSubmitButton)
 
     m_isSubmittingOrInUserJSSubmitEvent = true;
 
-    RawPtr<HTMLFormControlElement> firstSuccessfulSubmitButton = nullptr;
+    HTMLFormControlElement* firstSuccessfulSubmitButton = nullptr;
     bool needButtonActivation = activateSubmitButton; // do we need to activate a submit button?
 
     const FormAssociatedElement::List& elements = associatedElements();
@@ -385,12 +371,12 @@ void HTMLFormElement::submit(Event* event, bool activateSubmitButton)
     if (needButtonActivation && firstSuccessfulSubmitButton)
         firstSuccessfulSubmitButton->setActivatedSubmit(true);
 
-    RawPtr<FormSubmission> formSubmission = FormSubmission::create(this, m_attributes, event);
+    FormSubmission* formSubmission = FormSubmission::create(this, m_attributes, event);
     EventQueueScope scopeForDialogClose; // Delay dispatching 'close' to dialog until done submitting.
     if (formSubmission->method() == FormSubmission::DialogMethod)
-        submitDialog(formSubmission.release());
+        submitDialog(formSubmission);
     else
-        scheduleFormSubmission(formSubmission.release());
+        scheduleFormSubmission(formSubmission);
 
     if (needButtonActivation && firstSuccessfulSubmitButton)
         firstSuccessfulSubmitButton->setActivatedSubmit(false);
@@ -399,7 +385,7 @@ void HTMLFormElement::submit(Event* event, bool activateSubmitButton)
     m_isSubmittingOrInUserJSSubmitEvent = false;
 }
 
-void HTMLFormElement::scheduleFormSubmission(RawPtr<FormSubmission> submission)
+void HTMLFormElement::scheduleFormSubmission(FormSubmission* submission)
 {
     ASSERT(submission->method() == FormSubmission::PostMethod || submission->method() == FormSubmission::GetMethod);
     ASSERT(submission->data());
@@ -461,53 +447,19 @@ void HTMLFormElement::reset()
     m_isInResetFunction = false;
 }
 
-void HTMLFormElement::requestAutocomplete()
-{
-    String errorMessage;
-
-    if (!document().frame())
-        errorMessage = "requestAutocomplete: form is not owned by a displayed document.";
-    else if (!shouldAutocomplete())
-        errorMessage = "requestAutocomplete: form autocomplete attribute is set to off.";
-    else if (!UserGestureIndicator::utilizeUserGesture())
-        errorMessage = "requestAutocomplete: must be called in response to a user gesture.";
-
-    if (!errorMessage.isEmpty()) {
-        document().addConsoleMessage(ConsoleMessage::create(RenderingMessageSource, LogMessageLevel, errorMessage));
-        finishRequestAutocomplete(AutocompleteResultErrorDisabled);
-    } else {
-        document().frame()->loader().client()->didRequestAutocomplete(this);
-    }
-}
-
-void HTMLFormElement::finishRequestAutocomplete(AutocompleteResult result)
-{
-    RawPtr<Event> event = nullptr;
-    if (result == AutocompleteResultSuccess)
-        event = Event::createBubble(EventTypeNames::autocomplete);
-    else if (result == AutocompleteResultErrorDisabled)
-        event = AutocompleteErrorEvent::create("disabled");
-    else if (result == AutocompleteResultErrorCancel)
-        event = AutocompleteErrorEvent::create("cancel");
-    else if (result == AutocompleteResultErrorInvalid)
-        event = AutocompleteErrorEvent::create("invalid");
-    else
-        ASSERT_NOT_REACHED();
-
-    event->setTarget(this);
-    m_pendingAutocompleteEventsQueue->enqueueEvent(event.release());
-}
-
 void HTMLFormElement::parseAttribute(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& value)
 {
     if (name == actionAttr) {
         m_attributes.parseAction(value);
-        // If the new action attribute is pointing to insecure "action" location from a secure page
-        // it is marked as "passive" mixed content.
-        KURL actionURL = document().completeURL(m_attributes.action().isEmpty() ? document().url().getString() : m_attributes.action());
-        if (MixedContentChecker::isMixedFormAction(document().frame(), actionURL))
-            UseCounter::count(document().frame(), UseCounter::MixedContentFormPresent);
         logUpdateAttributeIfIsolatedWorldAndInDocument("form", actionAttr, oldValue, value);
+
+        if (document().getInsecureRequestsPolicy() != SecurityContext::InsecureRequestsUpgrade) {
+            // If we're not upgrading insecure requests, and the new action attribute is pointing to
+            // an insecure "action" location from a secure page it is marked as "passive" mixed content.
+            KURL actionURL = document().completeURL(m_attributes.action().isEmpty() ? document().url().getString() : m_attributes.action());
+            if (MixedContentChecker::isMixedFormAction(document().frame(), actionURL))
+                UseCounter::count(document().frame(), UseCounter::MixedContentFormPresent);
+        }
     } else if (name == targetAttr) {
         m_attributes.setTarget(value);
     } else if (name == methodAttr) {
@@ -516,10 +468,6 @@ void HTMLFormElement::parseAttribute(const QualifiedName& name, const AtomicStri
         m_attributes.updateEncodingType(value);
     } else if (name == accept_charsetAttr) {
         m_attributes.setAcceptCharset(value);
-    } else if (name == onautocompleteAttr) {
-        setAttributeEventListener(EventTypeNames::autocomplete, createAttributeEventListener(this, name, value, eventParameterName()));
-    } else if (name == onautocompleteerrorAttr) {
-        setAttributeEventListener(EventTypeNames::autocompleteerror, createAttributeEventListener(this, name, value, eventParameterName()));
     } else {
         HTMLElement::parseAttribute(name, oldValue, value);
     }
@@ -563,13 +511,6 @@ void HTMLFormElement::disassociate(HTMLImageElement& e)
     removeFromPastNamesMap(e);
 }
 
-#if !ENABLE(OILPAN)
-WeakPtr<HTMLFormElement> HTMLFormElement::createWeakPtr()
-{
-    return m_weakPtrFactory.createWeakPtr();
-}
-#endif
-
 void HTMLFormElement::didAssociateByParser()
 {
     if (!m_didFinishParsingChildren)
@@ -578,7 +519,7 @@ void HTMLFormElement::didAssociateByParser()
     UseCounter::count(document(), UseCounter::FormAssociationByParser);
 }
 
-RawPtr<HTMLFormControlsCollection> HTMLFormElement::elements()
+HTMLFormControlsCollection* HTMLFormElement::elements()
 {
     return ensureCachedCollection<HTMLFormControlsCollection>(FormControls);
 }
@@ -687,7 +628,6 @@ bool HTMLFormElement::checkValidity()
 
 bool HTMLFormElement::checkInvalidControlsAndCollectUnhandled(HeapVector<Member<HTMLFormControlElement>>* unhandledInvalidControls, CheckValidityEventBehavior eventBehavior)
 {
-    RawPtr<HTMLFormElement> protector(this);
     // Copy associatedElements because event handlers called from
     // HTMLFormControlElement::checkValidity() might change associatedElements.
     const FormAssociatedElement::List& associatedElements = this->associatedElements();

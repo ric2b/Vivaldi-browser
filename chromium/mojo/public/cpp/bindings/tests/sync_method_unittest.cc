@@ -8,7 +8,6 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/threading/thread.h"
-#include "mojo/message_pump/message_pump_mojo.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/interfaces/bindings/tests/test_sync_methods.mojom.h"
@@ -172,10 +171,7 @@ class TestSyncServiceThread {
  public:
   TestSyncServiceThread()
       : thread_("TestSyncServiceThread"), ping_called_(false) {
-    base::Thread::Options thread_options;
-    thread_options.message_pump_factory =
-        base::Bind(&common::MessagePumpMojo::Create);
-    thread_.StartWithOptions(thread_options);
+    thread_.Start();
   }
 
   void SetUp(InterfaceRequest<Interface> request) {
@@ -205,7 +201,7 @@ class TestSyncServiceThread {
  private:
   base::Thread thread_;
 
-  scoped_ptr<typename ImplTraits<Interface>::Type> impl_;
+  std::unique_ptr<typename ImplTraits<Interface>::Type> impl_;
 
   mutable base::Lock lock_;
   bool ping_called_;
@@ -215,7 +211,7 @@ class TestSyncServiceThread {
 
 class SyncMethodTest : public testing::Test {
  public:
-  SyncMethodTest() : loop_(common::MessagePumpMojo::Create()) {}
+  SyncMethodTest() {}
   ~SyncMethodTest() override { loop_.RunUntilIdle(); }
 
  protected:
@@ -271,7 +267,7 @@ class SyncMethodAssociatedTest : public SyncMethodTest {
   }
 
   InterfacePtr<TestSyncMaster> master_ptr_;
-  scoped_ptr<TestSyncMasterImpl> master_impl_;
+  std::unique_ptr<TestSyncMasterImpl> master_impl_;
 
   // An associated interface whose binding lives at the |master_impl_| side.
   TestSyncAssociatedPtrInfo asso_ptr_info_;

@@ -4,7 +4,8 @@
 
 #include "chrome/browser/renderer_context_menu/spelling_options_submenu_observer.h"
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
 #include "base/values.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/renderer_context_menu/mock_render_view_context_menu.h"
@@ -26,7 +27,9 @@ class SpellingOptionsSubMenuObserverTest : public InProcessBrowserTest {
   void SetUpOnMainThread() override {
     menu_.reset(new MockRenderViewContextMenu(false));
     observer_.reset(
-        new SpellingOptionsSubMenuObserver(menu_.get(), menu_.get(), 1));
+        // Pass nullptr as a delegate so that submenu items do not get put into
+        // MockRenderViewContextMenu::items_.
+        new SpellingOptionsSubMenuObserver(menu_.get(), nullptr, 1));
     menu_->SetObserver(observer_.get());
   }
 
@@ -62,8 +65,8 @@ class SpellingOptionsSubMenuObserverTest : public InProcessBrowserTest {
   SpellingOptionsSubMenuObserver* observer() { return observer_.get(); }
 
  private:
-  scoped_ptr<MockRenderViewContextMenu> menu_;
-  scoped_ptr<SpellingOptionsSubMenuObserver> observer_;
+  std::unique_ptr<MockRenderViewContextMenu> menu_;
+  std::unique_ptr<SpellingOptionsSubMenuObserver> observer_;
 
   DISALLOW_COPY_AND_ASSIGN(SpellingOptionsSubMenuObserverTest);
 };

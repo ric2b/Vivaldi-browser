@@ -21,6 +21,20 @@
 
 namespace blink {
 
+template<typename T, typename Traits = WTF::VectorTraits<T>> class HeapVectorBacking {
+    DISALLOW_NEW();
+public:
+    static void finalize(void* pointer);
+    void finalizeGarbageCollectedObject() { finalize(this); }
+};
+
+template<typename Table> class HeapHashTableBacking {
+    DISALLOW_NEW();
+public:
+    static void finalize(void* pointer);
+    void finalizeGarbageCollectedObject() { finalize(this); }
+};
+
 // This is a static-only class used as a trait on collections to make them heap
 // allocated.  However see also HeapListHashSetAllocator.
 class PLATFORM_EXPORT HeapAllocator {
@@ -33,25 +47,25 @@ public:
     static size_t quantizedSize(size_t count)
     {
         RELEASE_ASSERT(count <= maxHeapObjectSize / sizeof(T));
-        return Heap::allocationSizeFromSize(count * sizeof(T)) - sizeof(HeapObjectHeader);
+        return ThreadHeap::allocationSizeFromSize(count * sizeof(T)) - sizeof(HeapObjectHeader);
     }
     template <typename T>
     static T* allocateVectorBacking(size_t size)
     {
         ThreadState* state = ThreadStateFor<ThreadingTrait<T>::Affinity>::state();
         ASSERT(state->isAllocationAllowed());
-        size_t gcInfoIndex = GCInfoTrait<HeapVectorBacking<T, VectorTraits<T>>>::index();
+        size_t gcInfoIndex = GCInfoTrait<HeapVectorBacking<T>>::index();
         NormalPageArena* arena = static_cast<NormalPageArena*>(state->vectorBackingArena(gcInfoIndex));
-        return reinterpret_cast<T*>(arena->allocateObject(Heap::allocationSizeFromSize(size), gcInfoIndex));
+        return reinterpret_cast<T*>(arena->allocateObject(ThreadHeap::allocationSizeFromSize(size), gcInfoIndex));
     }
     template <typename T>
     static T* allocateExpandedVectorBacking(size_t size)
     {
         ThreadState* state = ThreadStateFor<ThreadingTrait<T>::Affinity>::state();
         ASSERT(state->isAllocationAllowed());
-        size_t gcInfoIndex = GCInfoTrait<HeapVectorBacking<T, VectorTraits<T>>>::index();
+        size_t gcInfoIndex = GCInfoTrait<HeapVectorBacking<T>>::index();
         NormalPageArena* arena = static_cast<NormalPageArena*>(state->expandedVectorBackingArena(gcInfoIndex));
-        return reinterpret_cast<T*>(arena->allocateObject(Heap::allocationSizeFromSize(size), gcInfoIndex));
+        return reinterpret_cast<T*>(arena->allocateObject(ThreadHeap::allocationSizeFromSize(size), gcInfoIndex));
     }
     static void freeVectorBacking(void*);
     static bool expandVectorBacking(void*, size_t);
@@ -59,12 +73,10 @@ public:
     template <typename T>
     static T* allocateInlineVectorBacking(size_t size)
     {
-        size_t gcInfoIndex = GCInfoTrait<HeapVectorBacking<T, VectorTraits<T>>>::index();
+        size_t gcInfoIndex = GCInfoTrait<HeapVectorBacking<T>>::index();
         ThreadState* state = ThreadStateFor<ThreadingTrait<T>::Affinity>::state();
-#define COMMA ,
-        const char* typeName = WTF_HEAP_PROFILER_TYPE_NAME(HeapVectorBacking<T COMMA VectorTraits<T>>);
-#undef COMMA
-        return reinterpret_cast<T*>(Heap::allocateOnArenaIndex(state, size, BlinkGC::InlineVectorArenaIndex, gcInfoIndex, typeName));
+        const char* typeName = WTF_HEAP_PROFILER_TYPE_NAME(HeapVectorBacking<T>);
+        return reinterpret_cast<T*>(ThreadHeap::allocateOnArenaIndex(state, size, BlinkGC::InlineVectorArenaIndex, gcInfoIndex, typeName));
     }
     static void freeInlineVectorBacking(void*);
     static bool expandInlineVectorBacking(void*, size_t);
@@ -76,7 +88,7 @@ public:
         size_t gcInfoIndex = GCInfoTrait<HeapHashTableBacking<HashTable>>::index();
         ThreadState* state = ThreadStateFor<ThreadingTrait<T>::Affinity>::state();
         const char* typeName = WTF_HEAP_PROFILER_TYPE_NAME(HeapHashTableBacking<HashTable>);
-        return reinterpret_cast<T*>(Heap::allocateOnArenaIndex(state, size, BlinkGC::HashTableArenaIndex, gcInfoIndex, typeName));
+        return reinterpret_cast<T*>(ThreadHeap::allocateOnArenaIndex(state, size, BlinkGC::HashTableArenaIndex, gcInfoIndex, typeName));
     }
     template <typename T, typename HashTable>
     static T* allocateZeroedHashTableBacking(size_t size)
@@ -89,7 +101,7 @@ public:
     template <typename Return, typename Metadata>
     static Return malloc(size_t size, const char* typeName)
     {
-        return reinterpret_cast<Return>(Heap::allocate<Metadata>(size, IsEagerlyFinalizedType<Metadata>::value));
+        return reinterpret_cast<Return>(ThreadHeap::allocate<Metadata>(size, IsEagerlyFinalizedType<Metadata>::value));
     }
     static void free(void* address) { }
     template<typename T>
@@ -112,7 +124,7 @@ public:
     template<typename T>
     static bool isHeapObjectAlive(T* object)
     {
-        return Heap::isHeapObjectAlive(object);
+        return ThreadHeap::isHeapObjectAlive(object);
     }
 
     template<typename VisitorDispatcher>
@@ -149,22 +161,6 @@ public:
         return visitor->weakTableRegistered(closure);
     }
 #endif
-
-    template<typename T>
-    struct ResultType {
-        using Type = T*;
-    };
-
-    template<typename T>
-    struct OtherType {
-        using Type = T*;
-    };
-
-    template<typename T>
-    static T& getOther(T* other)
-    {
-        return *other;
-    }
 
     static void enterGCForbiddenScope()
     {
@@ -246,13 +242,6 @@ public:
     }
 };
 
-template<typename T, typename Traits = WTF::VectorTraits<T>> class HeapVectorBacking {
-    DISALLOW_NEW();
-public:
-    static void finalize(void* pointer);
-    void finalizeGarbageCollectedObject() { finalize(this); }
-};
-
 template<typename T, typename Traits>
 void HeapVectorBacking<T, Traits>::finalize(void* pointer)
 {
@@ -284,13 +273,6 @@ void HeapVectorBacking<T, Traits>::finalize(void* pointer)
     }
 }
 
-template<typename Table> class HeapHashTableBacking {
-    DISALLOW_NEW();
-public:
-    static void finalize(void* pointer);
-    void finalizeGarbageCollectedObject() { finalize(this); }
-};
-
 template<typename Table>
 void HeapHashTableBacking<Table>::finalize(void* pointer)
 {
@@ -316,6 +298,7 @@ template<
     typename MappedTraitsArg = HashTraits<MappedArg>>
 class HeapHashMap : public HashMap<KeyArg, MappedArg, HashArg, KeyTraitsArg, MappedTraitsArg, HeapAllocator> {
     IS_GARBAGE_COLLECTED_TYPE();
+    static_assert(WTF::IsWeak<KeyArg>::value || WTF::IsWeak<MappedArg>::value || WTF::NeedsTracing<KeyArg>::value || WTF::NeedsTracing<MappedArg>::value, "For hash maps without traceable elements, use HashMap<> instead of HeapHashMap<>");
 };
 
 template<
@@ -324,6 +307,7 @@ template<
     typename TraitsArg = HashTraits<ValueArg>>
 class HeapHashSet : public HashSet<ValueArg, HashArg, TraitsArg, HeapAllocator> {
     IS_GARBAGE_COLLECTED_TYPE();
+    static_assert(WTF::IsWeak<ValueArg>::value || WTF::NeedsTracing<ValueArg>::value, "For hash sets without traceable elements, use HashSet<> instead of HeapHashSet<>");
 };
 
 template<
@@ -332,6 +316,7 @@ template<
     typename TraitsArg = HashTraits<ValueArg>>
 class HeapLinkedHashSet : public LinkedHashSet<ValueArg, HashArg, TraitsArg, HeapAllocator> {
     IS_GARBAGE_COLLECTED_TYPE();
+    static_assert(WTF::IsWeak<ValueArg>::value || WTF::NeedsTracing<ValueArg>::value, "For sets without traceable elements, use LinkedHashSet<> instead of HeapLinkedHashSet<>");
 };
 
 template<
@@ -340,6 +325,7 @@ template<
     typename HashArg = typename DefaultHash<ValueArg>::Hash>
 class HeapListHashSet : public ListHashSet<ValueArg, inlineCapacity, HashArg, HeapListHashSetAllocator<ValueArg, inlineCapacity>> {
     IS_GARBAGE_COLLECTED_TYPE();
+    static_assert(WTF::IsWeak<ValueArg>::value || WTF::NeedsTracing<ValueArg>::value, "For sets without traceable elements, use ListHashSet<> instead of HeapListHashSet<>");
 };
 
 template<
@@ -348,13 +334,17 @@ template<
     typename Traits = HashTraits<Value>>
 class HeapHashCountedSet : public HashCountedSet<Value, HashFunctions, Traits, HeapAllocator> {
     IS_GARBAGE_COLLECTED_TYPE();
+    static_assert(WTF::IsWeak<Value>::value || WTF::NeedsTracing<Value>::value, "For counted sets without traceable elements, use HashCountedSet<> instead of HeapHashCountedSet<>");
 };
 
 template<typename T, size_t inlineCapacity = 0>
 class HeapVector : public Vector<T, inlineCapacity, HeapAllocator> {
     IS_GARBAGE_COLLECTED_TYPE();
 public:
-    HeapVector() { }
+    HeapVector()
+    {
+        static_assert(WTF::NeedsTracing<T>::value, "For vectors without traceable elements, use Vector<> instead of HeapVector<>");
+    }
 
     explicit HeapVector(size_t size) : Vector<T, inlineCapacity, HeapAllocator>(size)
     {
@@ -375,7 +365,10 @@ template<typename T, size_t inlineCapacity = 0>
 class HeapDeque : public Deque<T, inlineCapacity, HeapAllocator> {
     IS_GARBAGE_COLLECTED_TYPE();
 public:
-    HeapDeque() { }
+    HeapDeque()
+    {
+        static_assert(WTF::NeedsTracing<T>::value, "For vectors without traceable elements, use Deque<> instead of HeapDeque<>");
+    }
 
     explicit HeapDeque(size_t size) : Deque<T, inlineCapacity, HeapAllocator>(size)
     {
@@ -466,24 +459,21 @@ template<typename T> struct HashTraits<blink::Member<T>> : SimpleClassHashTraits
     // types can be merged into PassInType.
     // FIXME: Implement proper const'ness for iterator types. Requires support
     // in the marking Visitor.
-    using PeekInType = RawPtr<T>;
-    using PassInType = RawPtr<T>;
+    using PeekInType = T*;
+    using PassInType = T*;
     using IteratorGetType = blink::Member<T>*;
     using IteratorConstGetType = const blink::Member<T>*;
     using IteratorReferenceType = blink::Member<T>&;
     using IteratorConstReferenceType = const blink::Member<T>&;
     static IteratorReferenceType getToReferenceConversion(IteratorGetType x) { return *x; }
     static IteratorConstReferenceType getToReferenceConstConversion(IteratorConstGetType x) { return *x; }
-    // FIXME: Similarly, there is no need for a distinction between PeekOutType
-    // and PassOutType without reference counting.
+
     using PeekOutType = T*;
-    using PassOutType = T*;
 
     template<typename U>
     static void store(const U& value, blink::Member<T>& storage) { storage = value; }
 
     static PeekOutType peek(const blink::Member<T>& value) { return value; }
-    static PassOutType passOut(const blink::Member<T>& value) { return value; }
 };
 
 template<typename T> struct HashTraits<blink::WeakMember<T>> : SimpleClassHashTraits<blink::WeakMember<T>> {
@@ -494,24 +484,21 @@ template<typename T> struct HashTraits<blink::WeakMember<T>> : SimpleClassHashTr
     // types can be merged into PassInType.
     // FIXME: Implement proper const'ness for iterator types. Requires support
     // in the marking Visitor.
-    using PeekInType = RawPtr<T>;
-    using PassInType = RawPtr<T>;
+    using PeekInType = T*;
+    using PassInType = T*;
     using IteratorGetType = blink::WeakMember<T>*;
     using IteratorConstGetType = const blink::WeakMember<T>*;
     using IteratorReferenceType = blink::WeakMember<T>&;
     using IteratorConstReferenceType = const blink::WeakMember<T>&;
     static IteratorReferenceType getToReferenceConversion(IteratorGetType x) { return *x; }
     static IteratorConstReferenceType getToReferenceConstConversion(IteratorConstGetType x) { return *x; }
-    // FIXME: Similarly, there is no need for a distinction between PeekOutType
-    // and PassOutType without reference counting.
+
     using PeekOutType = T*;
-    using PassOutType = T*;
 
     template<typename U>
     static void store(const U& value, blink::WeakMember<T>& storage) { storage = value; }
 
     static PeekOutType peek(const blink::WeakMember<T>& value) { return value; }
-    static PassOutType passOut(const blink::WeakMember<T>& value) { return value; }
 
     template<typename VisitorDispatcher>
     static bool traceInCollection(VisitorDispatcher visitor, blink::WeakMember<T>& weakMember, ShouldWeakPointersBeMarkedStrongly strongify)
@@ -520,7 +507,7 @@ template<typename T> struct HashTraits<blink::WeakMember<T>> : SimpleClassHashTr
             visitor->trace(weakMember.get()); // Strongified visit.
             return false;
         }
-        return !blink::Heap::isHeapObjectAlive(weakMember);
+        return !blink::ThreadHeap::isHeapObjectAlive(weakMember);
     }
 };
 
@@ -531,24 +518,20 @@ template<typename T> struct HashTraits<blink::UntracedMember<T>> : SimpleClassHa
     // the sake of the reference counting handles. When they are gone the two
     // types can be merged into PassInType.
     // FIXME: Implement proper const'ness for iterator types.
-    using PeekInType = RawPtr<T>;
-    using PassInType = RawPtr<T>;
+    using PeekInType = T*;
+    using PassInType = T*;
     using IteratorGetType = blink::UntracedMember<T>*;
     using IteratorConstGetType = const blink::UntracedMember<T>*;
     using IteratorReferenceType = blink::UntracedMember<T>&;
     using IteratorConstReferenceType = const blink::UntracedMember<T>&;
     static IteratorReferenceType getToReferenceConversion(IteratorGetType x) { return *x; }
     static IteratorConstReferenceType getToReferenceConstConversion(IteratorConstGetType x) { return *x; }
-    // FIXME: Similarly, there is no need for a distinction between PeekOutType
-    // and PassOutType without reference counting.
     using PeekOutType = T*;
-    using PassOutType = T*;
 
     template<typename U>
     static void store(const U& value, blink::UntracedMember<T>& storage) { storage = value; }
 
     static PeekOutType peek(const blink::UntracedMember<T>& value) { return value; }
-    static PassOutType passOut(const blink::UntracedMember<T>& value) { return value; }
 };
 
 template<typename T, size_t inlineCapacity>

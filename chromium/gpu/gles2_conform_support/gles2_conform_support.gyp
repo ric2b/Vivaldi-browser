@@ -27,6 +27,7 @@
       'type': 'static_library',
       'dependencies': [
         '../../base/base.gyp:base',
+	'../../gpu/command_buffer/command_buffer.gyp:gles2_utils',
         '../../gpu/gpu.gyp:command_buffer_service',
         '../../gpu/gpu.gyp:gles2_implementation_no_check',
         '../../gpu/gpu.gyp:gpu',
@@ -34,15 +35,22 @@
         '../../ui/base/ui_base.gyp:ui_base',
         '../../ui/gfx/gfx.gyp:gfx_geometry',
         '../../ui/gl/gl.gyp:gl',
+        '../../ui/gl/init/gl_init.gyp:gl_init',
       ],
       'sources': [
         'egl/config.cc',
         'egl/config.h',
+        'egl/context.cc',
+        'egl/context.h',
         'egl/display.cc',
         'egl/display.h',
         'egl/egl.cc',
         'egl/surface.cc',
         'egl/surface.h',
+        'egl/test_support.cc',
+        'egl/test_support.h',
+        'egl/thread_state.cc',
+        'egl/thread_state.h',
       ],
       'defines': [
         'EGLAPI=',
@@ -96,7 +104,6 @@
       'type': 'executable',
       'dependencies': [
         'egl_native',
-        '../../base/allocator/allocator.gyp:allocator',
         '../../base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
         '../../gpu/gpu.gyp:gles2_c_lib_nocheck',
         '../../third_party/expat/expat.gyp:expat',

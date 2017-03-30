@@ -56,7 +56,7 @@ public:
         InterpolationValue end = maybeConvertSingle(endKeyframe, environment, underlying, conversionCheckers);
         if (!end)
             return nullptr;
-        return mergeSingleConversions(std::move(start), std::move(end));
+        return maybeMergeSingles(std::move(start), std::move(end));
     }
 
     virtual InterpolationValue maybeConvertSingle(const PropertySpecificKeyframe&, const InterpolationEnvironment&, const InterpolationValue& underlying, ConversionCheckers&) const = 0;
@@ -81,13 +81,13 @@ protected:
         : m_property(property)
     { }
 
-    virtual PairwiseInterpolationValue mergeSingleConversions(InterpolationValue&& start, InterpolationValue&& end) const
+    virtual PairwiseInterpolationValue maybeMergeSingles(InterpolationValue&& start, InterpolationValue&& end) const
     {
         ASSERT(!start.nonInterpolableValue);
         ASSERT(!end.nonInterpolableValue);
         return PairwiseInterpolationValue(
-            start.interpolableValue.release(),
-            end.interpolableValue.release(),
+            std::move(start.interpolableValue),
+            std::move(end.interpolableValue),
             nullptr);
     }
 

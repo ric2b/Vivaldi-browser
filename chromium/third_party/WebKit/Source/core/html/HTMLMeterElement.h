@@ -31,7 +31,7 @@ class HTMLDivElement;
 class CORE_EXPORT HTMLMeterElement final : public LabelableElement {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static RawPtr<HTMLMeterElement> create(Document&);
+    static HTMLMeterElement* create(Document&);
 
     enum GaugeRegion {
         GaugeRegionOptimum,
@@ -60,7 +60,7 @@ public:
     double valueRatio() const;
     GaugeRegion getGaugeRegion() const;
 
-    bool canContainRangeEndPoint() const override { return false; }
+    bool canContainRangeEndPoint() const override;
 
     DECLARE_VIRTUAL_TRACE();
 

@@ -50,6 +50,9 @@ struct GPU_EXPORT GpuPreferences {
 #if defined(OS_WIN)
   // Enables experimental hardware acceleration for VP8/VP9 video decoding.
   bool enable_accelerated_vpx_decode = false;
+
+  // Enables support for avoiding copying DXGI NV12 textures.
+  bool enable_zero_copy_dxgi_video = false;
 #endif
 
   // ===================================
@@ -96,9 +99,6 @@ struct GPU_EXPORT GpuPreferences {
 
   // Allows async texture uploads (off main thread) via GL context sharing.
   bool enable_share_group_async_texture_upload = false;
-
-  // Enable WebGL subscribe uniform extension.
-  bool enable_subscribe_uniform_extension = false;
 
   // Simulates shared textures when share groups are not available.
   // Not available everywhere.

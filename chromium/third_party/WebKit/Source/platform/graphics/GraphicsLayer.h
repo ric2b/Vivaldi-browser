@@ -49,7 +49,7 @@
 #include "public/platform/WebContentLayer.h"
 #include "public/platform/WebImageLayer.h"
 #include "public/platform/WebLayerScrollClient.h"
-#include "third_party/skia/include/core/SkPaint.h"
+#include "third_party/skia/include/core/SkFilterQuality.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/Vector.h"
@@ -182,7 +182,7 @@ public:
 
     void setNeedsDisplay();
     // Mark the given rect (in layer coords) as needing display. Never goes deep.
-    void setNeedsDisplayInRect(const IntRect&, PaintInvalidationReason);
+    void setNeedsDisplayInRect(const IntRect&, PaintInvalidationReason, const DisplayItemClient&);
 
     void setContentsNeedsDisplay();
 
@@ -211,8 +211,7 @@ public:
     bool isTrackingPaintInvalidations() const { return m_client->isTrackingPaintInvalidations(); }
     void resetTrackedPaintInvalidations();
     bool hasTrackedPaintInvalidations() const;
-    void trackPaintInvalidationRect(const FloatRect&);
-    void trackPaintInvalidationObject(const String&);
+    void trackPaintInvalidation(const DisplayItemClient&, const FloatRect&, PaintInvalidationReason);
 
     void addLinkHighlight(LinkHighlight*);
     void removeLinkHighlight(LinkHighlight*);
@@ -251,6 +250,8 @@ public:
     // DisplayItemClient methods
     String debugName() const final { return m_client->debugName(this); }
     LayoutRect visualRect() const override;
+
+    void setHasWillChangeTransformHint(bool);
 
 protected:
     String debugName(cc::Layer*) const;

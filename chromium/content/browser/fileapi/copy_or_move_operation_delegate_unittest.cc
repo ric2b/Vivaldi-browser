@@ -16,7 +16,7 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/quota/mock_quota_manager.h"
 #include "content/browser/quota/mock_quota_manager_proxy.h"
 #include "content/public/test/async_file_test_helper.h"
@@ -216,7 +216,7 @@ class CopyOrMoveOperationTestHelper {
     if (dest_type_ == storage::kFileSystemTypeTest) {
       TestFileSystemBackend* test_backend =
           static_cast<TestFileSystemBackend*>(backend);
-      scoped_ptr<storage::CopyOrMoveFileValidatorFactory> factory(
+      std::unique_ptr<storage::CopyOrMoveFileValidatorFactory> factory(
           new TestValidatorFactory);
       test_backend->set_require_copy_or_move_validator(
           require_copy_or_move_validator);
@@ -738,11 +738,11 @@ TEST(LocalFileSystemCopyOrMoveOperationTest, StreamCopyHelper) {
   scoped_refptr<base::SingleThreadTaskRunner> task_runner =
       file_thread.task_runner();
 
-  scoped_ptr<storage::FileStreamReader> reader(
+  std::unique_ptr<storage::FileStreamReader> reader(
       storage::FileStreamReader::CreateForLocalFile(
           task_runner.get(), source_path, 0, base::Time()));
 
-  scoped_ptr<FileStreamWriter> writer(FileStreamWriter::CreateForLocalFile(
+  std::unique_ptr<FileStreamWriter> writer(FileStreamWriter::CreateForLocalFile(
       task_runner.get(), dest_path, 0, FileStreamWriter::CREATE_NEW_FILE));
 
   std::vector<int64_t> progress;
@@ -794,11 +794,11 @@ TEST(LocalFileSystemCopyOrMoveOperationTest, StreamCopyHelperWithFlush) {
   scoped_refptr<base::SingleThreadTaskRunner> task_runner =
       file_thread.task_runner();
 
-  scoped_ptr<storage::FileStreamReader> reader(
+  std::unique_ptr<storage::FileStreamReader> reader(
       storage::FileStreamReader::CreateForLocalFile(
           task_runner.get(), source_path, 0, base::Time()));
 
-  scoped_ptr<FileStreamWriter> writer(FileStreamWriter::CreateForLocalFile(
+  std::unique_ptr<FileStreamWriter> writer(FileStreamWriter::CreateForLocalFile(
       task_runner.get(), dest_path, 0, FileStreamWriter::CREATE_NEW_FILE));
 
   std::vector<int64_t> progress;
@@ -845,11 +845,11 @@ TEST(LocalFileSystemCopyOrMoveOperationTest, StreamCopyHelper_Cancel) {
   scoped_refptr<base::SingleThreadTaskRunner> task_runner =
       file_thread.task_runner();
 
-  scoped_ptr<storage::FileStreamReader> reader(
+  std::unique_ptr<storage::FileStreamReader> reader(
       storage::FileStreamReader::CreateForLocalFile(
           task_runner.get(), source_path, 0, base::Time()));
 
-  scoped_ptr<FileStreamWriter> writer(FileStreamWriter::CreateForLocalFile(
+  std::unique_ptr<FileStreamWriter> writer(FileStreamWriter::CreateForLocalFile(
       task_runner.get(), dest_path, 0, FileStreamWriter::CREATE_NEW_FILE));
 
   std::vector<int64_t> progress;

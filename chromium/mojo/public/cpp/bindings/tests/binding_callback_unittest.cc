@@ -9,7 +9,6 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
-#include "mojo/message_pump/message_pump_mojo.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
 #include "mojo/public/cpp/bindings/string.h"
@@ -131,7 +130,7 @@ class InterfaceImpl : public sample::Provider {
 
 class BindingCallbackTest : public testing::Test {
  public:
-  BindingCallbackTest() : loop_(common::MessagePumpMojo::Create()) {}
+  BindingCallbackTest() {}
   ~BindingCallbackTest() override {}
 
  protected:
@@ -335,7 +334,7 @@ TEST_F(BindingCallbackTest, DeleteCallbackBeforeBindingDeathTest) {
   EXPECT_EQ(7, server_impl.last_server_value_seen());
   EXPECT_EQ(0, last_client_callback_value_seen_);
 
-#if !defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)
+#if (!defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)) && !defined(OS_ANDROID)
   // Delete the callback without running it. This should cause a crash in debug
   // builds due to a DCHECK.
   std::string regex("Check failed: !is_valid");
@@ -344,7 +343,8 @@ TEST_F(BindingCallbackTest, DeleteCallbackBeforeBindingDeathTest) {
   regex.clear();
 #endif  // OS_WIN
   EXPECT_DEATH_IF_SUPPORTED(server_impl.DeleteCallback(), regex.c_str());
-#endif  // !defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)
+#endif  // (!defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)) &&
+        // !defined(OS_ANDROID)
 }
 
 }  // namespace

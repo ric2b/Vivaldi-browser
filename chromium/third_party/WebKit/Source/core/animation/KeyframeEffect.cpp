@@ -58,15 +58,24 @@ KeyframeEffect* KeyframeEffect::create(ExecutionContext* executionContext, Eleme
     ASSERT(RuntimeEnabledFeatures::webAnimationsAPIEnabled());
     if (element)
         UseCounter::count(element->document(), UseCounter::AnimationConstructorKeyframeListEffectObjectTiming);
-    return create(element, EffectInput::convert(element, effectInput, executionContext, exceptionState), TimingInput::convert(duration));
+    Timing timing;
+    if (!TimingInput::convert(duration, timing, exceptionState))
+        return nullptr;
+    return create(element, EffectInput::convert(element, effectInput, executionContext, exceptionState), timing);
 }
+
 KeyframeEffect* KeyframeEffect::create(ExecutionContext* executionContext, Element* element, const EffectModelOrDictionarySequenceOrDictionary& effectInput, const KeyframeEffectOptions& timingInput, ExceptionState& exceptionState)
 {
     ASSERT(RuntimeEnabledFeatures::webAnimationsAPIEnabled());
     if (element)
         UseCounter::count(element->document(), UseCounter::AnimationConstructorKeyframeListEffectObjectTiming);
-    return create(element, EffectInput::convert(element, effectInput, executionContext, exceptionState), TimingInput::convert(timingInput, &element->document()));
+    Timing timing;
+    Document* document = element ? &element->document() : nullptr;
+    if (!TimingInput::convert(timingInput, timing, document, exceptionState))
+        return nullptr;
+    return create(element, EffectInput::convert(element, effectInput, executionContext, exceptionState), timing);
 }
+
 KeyframeEffect* KeyframeEffect::create(ExecutionContext* executionContext, Element* element, const EffectModelOrDictionarySequenceOrDictionary& effectInput, ExceptionState& exceptionState)
 {
     ASSERT(RuntimeEnabledFeatures::webAnimationsAPIEnabled());
@@ -175,10 +184,10 @@ void KeyframeEffect::applyEffects()
     ASSERT(iteration >= 0);
     bool changed = false;
     if (m_sampledEffect) {
-        changed = m_model->sample(clampTo<int>(iteration, 0), timeFraction(), iterationDuration(), m_sampledEffect->mutableInterpolations());
+        changed = m_model->sample(clampTo<int>(iteration, 0), progress(), iterationDuration(), m_sampledEffect->mutableInterpolations());
     } else {
         Vector<RefPtr<Interpolation>> interpolations;
-        m_model->sample(clampTo<int>(iteration, 0), timeFraction(), iterationDuration(), interpolations);
+        m_model->sample(clampTo<int>(iteration, 0), progress(), iterationDuration(), interpolations);
         if (!interpolations.isEmpty()) {
             SampledEffect* sampledEffect = SampledEffect::create(this);
             sampledEffect->mutableInterpolations().swap(interpolations);
@@ -224,21 +233,23 @@ void KeyframeEffect::updateChildrenAndEffects() const
 
 double KeyframeEffect::calculateTimeToEffectChange(bool forwards, double localTime, double timeToNextIteration) const
 {
-    const double start = specifiedTiming().startDelay;
-    const double end = start + activeDurationInternal();
+    const double startTime = specifiedTiming().startDelay;
+    const double endTimeMinusEndDelay = startTime + activeDurationInternal();
+    const double endTime = endTimeMinusEndDelay + specifiedTiming().endDelay;
+    const double afterTime = std::min(endTimeMinusEndDelay, endTime);
 
     switch (getPhase()) {
     case PhaseNone:
         return std::numeric_limits<double>::infinity();
     case PhaseBefore:
-        ASSERT(start >= localTime);
+        ASSERT(startTime >= localTime);
         return forwards
-            ? start - localTime
+            ? startTime - localTime
             : std::numeric_limits<double>::infinity();
     case PhaseActive:
         if (forwards) {
             // Need service to apply fill / fire events.
-            const double timeToEnd = end - localTime;
+            const double timeToEnd = afterTime - localTime;
             if (requiresIterationEvents()) {
                 return std::min(timeToEnd, timeToNextIteration);
             }
@@ -246,13 +257,13 @@ double KeyframeEffect::calculateTimeToEffectChange(bool forwards, double localTi
         }
         return 0;
     case PhaseAfter:
-        ASSERT(localTime >= end);
+        ASSERT(localTime >= afterTime);
         // If this KeyframeEffect is still in effect then it will need to update
         // when its parent goes out of effect. We have no way of knowing when
         // that will be, however, so the parent will need to supply it.
         return forwards
             ? std::numeric_limits<double>::infinity()
-            : localTime - end;
+            : localTime - afterTime;
     default:
         ASSERT_NOT_REACHED();
         return std::numeric_limits<double>::infinity();
@@ -284,8 +295,7 @@ bool KeyframeEffect::maybeStartAnimationOnCompositor(int group, double startTime
         return false;
     if (!CompositorAnimations::instance()->canStartAnimationOnCompositor(*m_target))
         return false;
-    if (!CompositorAnimations::instance()->startAnimationOnCompositor(*m_target, group, startTime, currentTime, specifiedTiming(), *animation(), *model(), m_compositorAnimationIds, animationPlaybackRate))
-        return false;
+    CompositorAnimations::instance()->startAnimationOnCompositor(*m_target, group, startTime, currentTime, specifiedTiming(), *animation(), *model(), m_compositorAnimationIds, animationPlaybackRate);
     ASSERT(!m_compositorAnimationIds.isEmpty());
     return true;
 }

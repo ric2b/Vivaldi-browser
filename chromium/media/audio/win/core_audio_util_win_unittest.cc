@@ -2,19 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "media/audio/win/core_audio_util_win.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/win/scoped_co_mem.h"
 #include "base/win/scoped_com_initializer.h"
 #include "base/win/scoped_handle.h"
-#include "media/audio/audio_manager_base.h"
+#include "media/audio/audio_device_description.h"
 #include "media/audio/audio_unittest_util.h"
-#include "media/audio/win/core_audio_util_win.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -269,7 +269,7 @@ TEST_F(CoreAudioUtilWinTest, IsChannelLayoutSupported) {
   // particular channel layout.
   AudioParameters mix_params;
   HRESULT hr = CoreAudioUtil::GetPreferredAudioParameters(
-      AudioManagerBase::kDefaultDeviceId, true, &mix_params);
+      AudioDeviceDescription::kDefaultDeviceId, true, &mix_params);
   EXPECT_TRUE(SUCCEEDED(hr));
   EXPECT_TRUE(mix_params.IsValid());
   EXPECT_TRUE(CoreAudioUtil::IsChannelLayoutSupported(

@@ -10,18 +10,6 @@ This document will walk you through:
 * creating your first fuzzer.
 * running the fuzzer and verifying its vitals.
 
-## Check Out ToT Clang
-
-libFuzzer relies heavily on compile-time instrumentation. Because it is still
-under heavy development you need to use tot clang with libFuzzer ([crbug/598448]):
-
-```bash
-# In chrome/src
-LLVM_FORCE_HEAD_REVISION=1 ./tools/clang/scripts/update.py --force-local-build --without-android
-```
-
-To revert this run the same script without specifying `LLVM_FORCE_HEAD_REVISION`.
-
 ## Configure Build
 
 Use `use_libfuzzer` GN argument together with sanitizer to generate build files:
@@ -37,6 +25,7 @@ Supported sanitizer configurations are:
 |--------------|----|
 | is_asan=true | enables [Address Sanitizer] to catch problems like buffer overruns. |
 | is_msan=true | enables [Memory Sanitizer] to catch problems like uninitialed reads. |
+| is_ubsan_security=true | enables [Undefined Behavior Sanitizer] to catch<sup>\[[1](#Notes)\]</sup> undefined behavior like integer overflow. |
 
 
 ## Write Fuzzer Function
@@ -99,6 +88,19 @@ efficient fuzzer should be able to finds lots of them rather quickly.
 The `... pulse ...` line will appear periodically to show the current status.
 
 
+### Default value for maximum testcase length
+
+By default, when run manually, libFuzzer uses `-max_len=64` or takes the length
+of the biggest testcase in corpus if corpus is not empty. ClusterFuzz takes
+random value in range from `1` to `10000` for each fuzzing session and passes
+that value to libFuzzers. If corpus contains testcases of size greater than
+`max_len`, libFuzzer will use only first `max_len` bytes of such testcases.
+
+
+You can specify custom `max_len` value to be used by ClusterFuzz. For more
+information check out [Maximum Testcase Length] section of the [Efficient Fuzzer
+Guide].
+
 ## Submitting Fuzzer to ClusterFuzz
 
 ClusterFuzz builds and executes all `fuzzer_test` targets in the source tree.
@@ -112,9 +114,25 @@ a day or two.
 performance and for optimization hints.
 
 
+## Notes
+[1] By default UBSan doesn't crash once undefined behavior has been detected.
+To make it crash the following additional option should be provided:
+
+```bash
+UBSAN_OPTIONS=halt_on_error=1 ./fuzzer <corpus_directory_or_single_testcase_path>
+```
+
+Other useful options (used by ClusterFuzz) are:
+```bash
+UBSAN_OPTIONS=symbolize=1:halt_on_error=1:print_stacktrace=1 ./fuzzer <corpus_directory_or_single_testcase_path>
+```
+
+
 [Address Sanitizer]: http://clang.llvm.org/docs/AddressSanitizer.html
 [Memory Sanitizer]: http://clang.llvm.org/docs/MemorySanitizer.html
-[url_parse_fuzzer.cc]: https://code.google.com/p/chromium/codesearch#chromium/src/testing/libfuzzer/fuzzers/url_parse_fuzzer.cc
+[Undefined Behavior Sanitizer]: http://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html
 [ClusterFuzz status]: clusterfuzz.md#Status-Links
-[Efficient Fuzzer Guide]: efficient_fuzzer.md
 [crbug/598448]: https://bugs.chromium.org/p/chromium/issues/detail?id=598448
+[Efficient Fuzzer Guide]: efficient_fuzzer.md
+[Maximum Testcase Length]: efficient_fuzzer.md#Maximum-Testcase-Length
+[url_parse_fuzzer.cc]: https://code.google.com/p/chromium/codesearch#chromium/src/testing/libfuzzer/fuzzers/url_parse_fuzzer.cc

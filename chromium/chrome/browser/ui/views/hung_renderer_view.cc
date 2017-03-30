@@ -27,7 +27,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
-#include "ui/views/controls/button/label_button.h"
+#include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/grid_layout.h"
@@ -38,7 +38,7 @@
 #if defined(OS_WIN)
 #include "chrome/browser/hang_monitor/hang_crash_dump_win.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/shell_integration.h"
+#include "chrome/browser/shell_integration_win.h"
 #include "ui/base/win/shell.h"
 #include "ui/views/win/hwnd_util.h"
 #endif
@@ -267,7 +267,8 @@ void HungRendererDialogView::ShowForWebContents(WebContents* contents) {
     Profile* profile =
         Profile::FromBrowserContext(contents->GetBrowserContext());
     ui::win::SetAppIdForWindow(
-        shell_integration::GetChromiumModelIdForProfile(profile->GetPath()),
+        shell_integration::win::GetChromiumModelIdForProfile(
+            profile->GetPath()),
         views::HWNDForWidget(GetWidget()));
 #endif
 
@@ -332,9 +333,8 @@ base::string16 HungRendererDialogView::GetDialogButtonLabel(
 
 views::View* HungRendererDialogView::CreateExtraView() {
   DCHECK(!kill_button_);
-  kill_button_ = new views::LabelButton(this,
+  kill_button_ = views::MdTextButton::CreateSecondaryUiButton(this,
       l10n_util::GetStringUTF16(IDS_BROWSER_HANGMONITOR_RENDERER_END));
-  kill_button_->SetStyle(views::Button::STYLE_BUTTON);
   return kill_button_;
 }
 
@@ -349,13 +349,13 @@ bool HungRendererDialogView::Cancel() {
   return true;
 }
 
-bool HungRendererDialogView::UseNewStyleForThisDialog() const {
+bool HungRendererDialogView::ShouldUseCustomFrame() const {
 #if defined(OS_WIN)
   // Use the old dialog style without Aero glass, otherwise the dialog will be
   // visually constrained to browser window bounds. See http://crbug.com/323278
   return ui::win::IsAeroGlassEnabled();
 #else
-  return views::DialogDelegateView::UseNewStyleForThisDialog();
+  return views::DialogDelegateView::ShouldUseCustomFrame();
 #endif
 }
 

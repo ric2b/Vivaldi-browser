@@ -34,8 +34,12 @@
 WebInspector.UISourceCodeFrame = function(uiSourceCode)
 {
     this._uiSourceCode = uiSourceCode;
-    WebInspector.SourceFrame.call(this, this._uiSourceCode);
+    WebInspector.SourceFrame.call(this, uiSourceCode.contentURL(), workingCopy);
+
+    if (Runtime.experiments.isEnabled("sourceDiff"))
+        this._diff = new WebInspector.SourceCodeDiff(uiSourceCode, this.textEditor);
     this.textEditor.setAutocompleteDelegate(new WebInspector.SimpleAutocompleteDelegate());
+
     this._rowMessageBuckets = {};
     /** @type {!Set<string>} */
     this._typeDecorationsPending = new Set();
@@ -49,6 +53,16 @@ WebInspector.UISourceCodeFrame = function(uiSourceCode)
 
     this._errorPopoverHelper = new WebInspector.PopoverHelper(this.element, this._getErrorAnchor.bind(this), this._showErrorPopover.bind(this));
     this._errorPopoverHelper.setTimeout(100, 100);
+
+    /**
+     * @return {!Promise<?string>}
+     */
+    function workingCopy()
+    {
+        if (uiSourceCode.isDirty())
+            return /** @type {!Promise<?string>} */(Promise.resolve(uiSourceCode.workingCopy()));
+        return uiSourceCode.requestContent();
+    }
 }
 
 WebInspector.UISourceCodeFrame.prototype = {
@@ -149,6 +163,8 @@ WebInspector.UISourceCodeFrame.prototype = {
      */
     _onWorkingCopyChanged: function(event)
     {
+        if (this._diff)
+            this._diff.updateDiffMarkersWhenPossible();
         if (this._muteSourceCodeEvents)
             return;
         this._innerSetContent(this._uiSourceCode.workingCopy());
@@ -166,6 +182,8 @@ WebInspector.UISourceCodeFrame.prototype = {
         }
         this._textEditor.markClean();
         this._updateStyle();
+        if (this._diff)
+            this._diff.updateDiffMarkersWhenPossible();
     },
 
     _updateStyle: function()
@@ -183,7 +201,14 @@ WebInspector.UISourceCodeFrame.prototype = {
     _innerSetContent: function(content)
     {
         this._isSettingContent = true;
-        this.setContent(content);
+        if (this._diff) {
+            var oldContent = this._textEditor.text();
+            this.setContent(content);
+            this._diff.updateDiffMarkersImmediately();
+            this._diff.highlightModifiedLines(oldContent, content);
+        } else {
+            this.setContent(content);
+        }
         delete this._isSettingContent;
     },
 

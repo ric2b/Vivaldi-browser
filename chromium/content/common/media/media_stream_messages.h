@@ -11,7 +11,7 @@
 #include "content/common/media/media_stream_options.h"
 #include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_platform_file.h"
-#include "url/gurl.h"
+#include "url/origin.h"
 
 #undef IPC_MESSAGE_EXPORT
 #define IPC_MESSAGE_EXPORT CONTENT_EXPORT
@@ -95,6 +95,9 @@ IPC_MESSAGE_ROUTED3(MediaStreamMsg_DeviceOpened,
 IPC_MESSAGE_ROUTED1(MediaStreamMsg_DeviceOpenFailed,
                     int /* request id */)
 
+// The browser has detected a change in the set of media devices.
+IPC_MESSAGE_ROUTED0(MediaStreamMsg_DevicesChanged)
+
 // Messages sent from the renderer to the browser.
 
 // Request a new media stream.
@@ -102,7 +105,7 @@ IPC_MESSAGE_CONTROL5(MediaStreamHostMsg_GenerateStream,
                      int /* render frame id */,
                      int /* request id */,
                      content::StreamControls /* controls */,
-                     GURL /* security origin */,
+                     url::Origin /* security origin */,
                      bool /* user_gesture */)
 
 // Request to cancel the request for a new media stream.
@@ -121,7 +124,7 @@ IPC_MESSAGE_CONTROL4(MediaStreamHostMsg_EnumerateDevices,
                      int /* render frame id */,
                      int /* request id */,
                      content::MediaStreamType /* type */,
-                     GURL /* security origin */)
+                     url::Origin /* security origin */)
 
 // Request to stop enumerating devices.
 IPC_MESSAGE_CONTROL2(MediaStreamHostMsg_CancelEnumerateDevices,
@@ -134,9 +137,30 @@ IPC_MESSAGE_CONTROL5(MediaStreamHostMsg_OpenDevice,
                      int /* request id */,
                      std::string /* device_id */,
                      content::MediaStreamType /* type */,
-                     GURL /* security origin */)
+                     url::Origin /* security origin */)
 
 // Request to close a device.
 IPC_MESSAGE_CONTROL2(MediaStreamHostMsg_CloseDevice,
                      int /* render frame id */,
                      std::string /*label*/)
+
+// Subscribe to notifications about changes in the set of media devices.
+IPC_MESSAGE_CONTROL2(MediaStreamHostMsg_SubscribeToDeviceChangeNotifications,
+                     int /* render frame id */,
+                     url::Origin /* security origin */)
+
+// Cancel notifications about changes in the set of media devices.
+IPC_MESSAGE_CONTROL1(MediaStreamHostMsg_CancelDeviceChangeNotifications,
+                     int /* render frame id */)
+
+// Tell the browser process if the video capture is secure (i.e., all
+// connected video sinks meet the requirement of output protection.).
+// Note: the browser process only trusts the |is_sucure| value in this IPC
+// message if it's comimg from a trusted, whitelisted extension. Extensions run
+// in separate render processes. So it shouldn't be possible, for example, for
+// a user's visit to a malicious web page to compromise a render process running
+// a trusted extension to make it report falsehood in this IPC message.
+IPC_MESSAGE_CONTROL3(MediaStreamHostMsg_SetCapturingLinkSecured,
+                     int,                      /* session_id */
+                     content::MediaStreamType, /* type */
+                     bool /* is_secure */)

@@ -30,6 +30,7 @@
 
 #include "platform/v8_inspector/V8FunctionCall.h"
 
+#include "platform/v8_inspector/V8Compat.h"
 #include "platform/v8_inspector/V8DebuggerImpl.h"
 #include "platform/v8_inspector/V8StringUtil.h"
 #include "platform/v8_inspector/public/V8DebuggerClient.h"
@@ -80,12 +81,6 @@ v8::Local<v8::Value> V8FunctionCall::call(bool& hadException, bool reportExcepti
     v8::Local<v8::Value> result = callWithoutExceptionHandling();
     hadException = tryCatch.HasCaught();
     return result;
-}
-
-v8::Local<v8::Value> V8FunctionCall::call()
-{
-    bool hadException = false;
-    return call(hadException);
 }
 
 v8::Local<v8::Value> V8FunctionCall::callWithoutExceptionHandling()

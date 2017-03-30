@@ -147,6 +147,55 @@ CSSParserToken CSSParserToken::copyWithUpdatedString(const CSSParserString& pars
     return copy;
 }
 
+bool CSSParserToken::valueDataCharRawEqual(const CSSParserToken& other) const
+{
+    if (m_valueLength != other.m_valueLength)
+        return false;
+
+    if (m_valueDataCharRaw == other.m_valueDataCharRaw && m_valueIs8Bit == other.m_valueIs8Bit)
+        return true;
+
+    if (m_valueIs8Bit) {
+        return other.m_valueIs8Bit ?
+            equal(static_cast<const LChar*>(m_valueDataCharRaw), static_cast<const LChar*>(other.m_valueDataCharRaw), m_valueLength) :
+            equal(static_cast<const LChar*>(m_valueDataCharRaw), static_cast<const UChar*>(other.m_valueDataCharRaw), m_valueLength);
+    } else {
+        return other.m_valueIs8Bit ?
+            equal(static_cast<const UChar*>(m_valueDataCharRaw), static_cast<const LChar*>(other.m_valueDataCharRaw), m_valueLength) :
+            equal(static_cast<const UChar*>(m_valueDataCharRaw), static_cast<const UChar*>(other.m_valueDataCharRaw), m_valueLength);
+    }
+}
+
+bool CSSParserToken::operator==(const CSSParserToken& other) const
+{
+    if (m_type != other.m_type)
+        return false;
+    switch (m_type) {
+    case DelimiterToken:
+        return delimiter() == other.delimiter();
+    case HashToken:
+        if (m_hashTokenType != other.m_hashTokenType)
+            return false;
+        // fallthrough
+    case IdentToken:
+    case FunctionToken:
+    case StringToken:
+    case UrlToken:
+        return valueDataCharRawEqual(other);
+    case DimensionToken:
+        if (!valueDataCharRawEqual(other))
+            return false;
+        // fallthrough
+    case NumberToken:
+    case PercentageToken:
+        return m_numericSign == other.m_numericSign && m_numericValue == other.m_numericValue && m_numericValueType == other.m_numericValueType;
+    case UnicodeRangeToken:
+        return m_unicodeRange.start == other.m_unicodeRange.start && m_unicodeRange.end == other.m_unicodeRange.end;
+    default:
+        return true;
+    }
+}
+
 void CSSParserToken::serialize(StringBuilder& builder) const
 {
     // This is currently only used for @supports CSSOM. To keep our implementation

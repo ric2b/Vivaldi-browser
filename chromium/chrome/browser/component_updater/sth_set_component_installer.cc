@@ -10,16 +10,15 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "base/version.h"
 #include "components/component_updater/component_updater_paths.h"
-#include "components/safe_json/safe_json_parser.h"
 #include "content/public/browser/browser_thread.h"
 #include "crypto/sha2.h"
-#include "net/cert/ct_known_logs_static.h"
 #include "net/cert/ct_log_response_parser.h"
 #include "net/cert/signed_tree_head.h"
 #include "net/cert/sth_distributor.h"
@@ -50,8 +49,8 @@ const uint8_t kPublicKeySHA256[32] = {
 const char kSTHSetFetcherManifestName[] = "Signed Tree Heads";
 
 STHSetComponentInstallerTraits::STHSetComponentInstallerTraits(
-    scoped_ptr<net::ct::STHObserver> sth_observer)
-    : sth_observer_(std::move(sth_observer)) {}
+    std::unique_ptr<net::ct::STHObserver> sth_observer)
+    : sth_observer_(std::move(sth_observer)), weak_ptr_factory_(this) {}
 
 STHSetComponentInstallerTraits::~STHSetComponentInstallerTraits() {}
 
@@ -73,14 +72,13 @@ bool STHSetComponentInstallerTraits::OnCustomInstall(
 void STHSetComponentInstallerTraits::ComponentReady(
     const base::Version& version,
     const base::FilePath& install_dir,
-    scoped_ptr<base::DictionaryValue> manifest) {
-  if (!content::BrowserThread::PostBlockingPoolTask(
-          FROM_HERE,
-          base::Bind(&STHSetComponentInstallerTraits::LoadSTHsFromDisk,
-                     base::Unretained(this), GetInstalledPath(install_dir),
-                     version))) {
-    NOTREACHED();
-  }
+    std::unique_ptr<base::DictionaryValue> manifest) {
+  const base::Closure load_sths_closure = base::Bind(
+      &STHSetComponentInstallerTraits::LoadSTHsFromDisk,
+      weak_ptr_factory_.GetWeakPtr(), GetInstalledPath(install_dir), version);
+
+  content::BrowserThread::PostAfterStartupTask(
+      FROM_HERE, content::BrowserThread::GetBlockingPool(), load_sths_closure);
 }
 
 // Called during startup and installation before ComponentReady().
@@ -90,10 +88,8 @@ bool STHSetComponentInstallerTraits::VerifyInstallation(
   return base::PathExists(GetInstalledPath(install_dir));
 }
 
-base::FilePath STHSetComponentInstallerTraits::GetBaseDirectory() const {
-  base::FilePath result;
-  PathService::Get(DIR_CERT_TRANS_TREE_STATES, &result);
-  return result;
+base::FilePath STHSetComponentInstallerTraits::GetRelativeInstallDir() const {
+  return base::FilePath(FILE_PATH_LITERAL("CertificateTransparency"));
 }
 
 void STHSetComponentInstallerTraits::GetHash(std::vector<uint8_t>* hash) const {
@@ -146,18 +142,24 @@ void STHSetComponentInstallerTraits::LoadSTHsFromDisk(
     }
 
     DVLOG(1) << "STH: Successfully read: " << json_sth;
-    safe_json::SafeJsonParser::Parse(
-        json_sth,
-        base::Bind(&STHSetComponentInstallerTraits::OnJsonParseSuccess,
-                   base::Unretained(this), log_id),
-        base::Bind(&STHSetComponentInstallerTraits::OnJsonParseError,
-                   base::Unretained(this), log_id));
+
+    int error_code = 0;
+    std::string error_message;
+    std::unique_ptr<base::Value> parsed_json =
+        base::JSONReader::ReadAndReturnError(json_sth, base::JSON_PARSE_RFC,
+                                             &error_code, &error_message);
+
+    if (error_code == base::JSONReader::JSON_NO_ERROR) {
+      OnJsonParseSuccess(log_id, std::move(parsed_json));
+    } else {
+      OnJsonParseError(log_id, error_message);
+    }
   }
 }
 
 void STHSetComponentInstallerTraits::OnJsonParseSuccess(
     const std::string& log_id,
-    scoped_ptr<base::Value> parsed_json) {
+    std::unique_ptr<base::Value> parsed_json) {
   net::ct::SignedTreeHead signed_tree_head;
   DVLOG(1) << "STH parsing success for log: "
            << base::HexEncode(log_id.data(), log_id.length());
@@ -188,10 +190,10 @@ void RegisterSTHSetComponent(ComponentUpdateService* cus,
   // TODO(eranm): The next step in auditing CT logs (crbug.com/506227) is to
   // pass the distributor to the IOThread so it can be used in a per-profile
   // context for checking inclusion of SCTs.
-  scoped_ptr<net::ct::STHDistributor> distributor(
+  std::unique_ptr<net::ct::STHDistributor> distributor(
       new net::ct::STHDistributor());
 
-  scoped_ptr<ComponentInstallerTraits> traits(
+  std::unique_ptr<ComponentInstallerTraits> traits(
       new STHSetComponentInstallerTraits(std::move(distributor)));
   // |cus| will take ownership of |installer| during installer->Register(cus).
   DefaultComponentInstaller* installer =

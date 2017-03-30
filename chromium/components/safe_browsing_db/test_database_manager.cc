@@ -94,12 +94,6 @@ bool TestSafeBrowsingDatabaseManager::MatchDownloadWhitelistString(
   return true;
 }
 
-bool TestSafeBrowsingDatabaseManager::MatchInclusionWhitelistUrl(
-    const GURL& url) {
-  NOTIMPLEMENTED();
-  return true;
-}
-
 bool TestSafeBrowsingDatabaseManager::MatchModuleWhitelistString(
     const std::string& str) {
   NOTIMPLEMENTED();
@@ -118,19 +112,6 @@ bool TestSafeBrowsingDatabaseManager::IsCsdWhitelistKillSwitchOn() {
 
 void TestSafeBrowsingDatabaseManager::CancelCheck(Client* client) {
   NOTIMPLEMENTED();
-}
-
-void TestSafeBrowsingDatabaseManager::CheckApiBlacklistUrl(const GURL& url,
-                                                           Client* client) {
-  NOTIMPLEMENTED();
-}
-
-void TestSafeBrowsingDatabaseManager::StartOnIOThread(
-    net::URLRequestContextGetter* request_context_getter,
-    const V4ProtocolConfig& config) {
-}
-
-void TestSafeBrowsingDatabaseManager::StopOnIOThread(bool shutdown) {
 }
 
 }  // namespace safe_browsing

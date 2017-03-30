@@ -23,8 +23,9 @@
 #include "grit/chrome_unscaled_resources.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_switches.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/screen.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/widget/native_widget.h"
 #include "ui/views/widget/widget.h"
@@ -58,9 +59,9 @@
 #if defined(USE_ASH)
 #include "ash/accelerators/accelerator_controller.h"
 #include "ash/shell.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "chrome/browser/ui/ash/ash_init.h"
-#include "chrome/browser/ui/ash/ash_util.h"
 #endif
 
 // Helpers --------------------------------------------------------------------
@@ -185,6 +186,7 @@ ChromeViewsDelegate::ChromeViewsDelegate() {
 }
 
 ChromeViewsDelegate::~ChromeViewsDelegate() {
+  DCHECK_EQ(0u, ref_count_);
 }
 
 void ChromeViewsDelegate::SaveWindowPlacement(const views::Widget* window,
@@ -205,7 +207,7 @@ void ChromeViewsDelegate::SaveWindowPlacement(const views::Widget* window,
   window_preferences->SetBoolean("maximized",
                                  show_state == ui::SHOW_STATE_MAXIMIZED);
   window_preferences->SetBoolean("docked", show_state == ui::SHOW_STATE_DOCKED);
-  gfx::Rect work_area(gfx::Screen::GetScreen()
+  gfx::Rect work_area(display::Screen::GetScreen()
                           ->GetDisplayNearestWindow(window->GetNativeView())
                           .work_area());
   window_preferences->SetInteger("work_area_left", work_area.x());
@@ -246,7 +248,8 @@ bool ChromeViewsDelegate::GetSavedWindowPlacement(
   // On Ash environment, a window won't span across displays.  Adjust
   // the bounds to fit the work area.
   gfx::NativeView window = widget->GetNativeView();
-  gfx::Display display = gfx::Screen::GetScreen()->GetDisplayMatching(*bounds);
+  display::Display display =
+      display::Screen::GetScreen()->GetDisplayMatching(*bounds);
   bounds->AdjustToFit(display.work_area());
   ash::wm::GetWindowState(window)->set_minimum_visibility(true);
 #endif
@@ -304,18 +307,25 @@ gfx::ImageSkia* ChromeViewsDelegate::GetDefaultWindowIcon() const {
 #if defined(USE_ASH)
 views::NonClientFrameView* ChromeViewsDelegate::CreateDefaultNonClientFrameView(
     views::Widget* widget) {
-  return chrome::IsNativeViewInAsh(widget->GetNativeView()) ?
-      ash::Shell::GetInstance()->CreateDefaultNonClientFrameView(widget) : NULL;
+  return ash::Shell::GetInstance()->CreateDefaultNonClientFrameView(widget);
 }
 #endif
 
 void ChromeViewsDelegate::AddRef() {
-  keep_alive_.reset(new ScopedKeepAlive(KeepAliveOrigin::CHROME_VIEWS_DELEGATE,
-                                        KeepAliveRestartOption::DISABLED));
+  if (ref_count_ == 0u) {
+    keep_alive_.reset(
+        new ScopedKeepAlive(KeepAliveOrigin::CHROME_VIEWS_DELEGATE,
+                            KeepAliveRestartOption::DISABLED));
+  }
+
+  ++ref_count_;
 }
 
 void ChromeViewsDelegate::ReleaseRef() {
-  keep_alive_.reset();
+  DCHECK_NE(0u, ref_count_);
+
+  if (--ref_count_ == 0u)
+    keep_alive_.reset();
 }
 
 void ChromeViewsDelegate::OnBeforeWidgetInit(

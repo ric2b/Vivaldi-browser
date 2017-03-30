@@ -38,13 +38,17 @@ class CC_EXPORT LayerTreeSettings {
 
   RendererSettings renderer_settings;
   bool single_thread_proxy_scheduler;
+  // TODO(enne): Remove this after everything uses output surface begin frames.
   bool use_external_begin_frame_source;
+  // TODO(enne): Temporary staging for unified begin frame source work.
+  bool use_output_surface_begin_frame_source;
   bool main_frame_before_activation_enabled;
   bool using_synchronous_renderer_compositor;
   bool can_use_lcd_text;
   bool use_distance_field_text;
   bool gpu_rasterization_enabled;
   bool gpu_rasterization_forced;
+  bool async_worker_context_enabled;
   int gpu_rasterization_msaa_sample_count;
   float gpu_rasterization_skewport_target_time_in_seconds;
   bool create_low_res_tiling;
@@ -70,9 +74,9 @@ class CC_EXPORT LayerTreeSettings {
   gfx::Size default_tile_size;
   gfx::Size max_untiled_layer_size;
   gfx::Size minimum_occlusion_tracking_size;
-  size_t tiling_interest_area_padding;
+  int tiling_interest_area_padding;
   float skewport_target_time_in_seconds;
-  int skewport_extrapolation_limit_in_content_pixels;
+  int skewport_extrapolation_limit_in_screen_pixels;
   size_t max_memory_for_prepaint_percentage;
   bool use_zero_copy;
   bool use_partial_raster;
@@ -82,10 +86,12 @@ class CC_EXPORT LayerTreeSettings {
   bool ignore_root_layer_flings;
   size_t scheduled_raster_task_limit;
   bool use_occlusion_for_tile_prioritization;
+  bool verify_clip_tree_calculations;
   bool image_decode_tasks_enabled;
   bool wait_for_beginframe_interval;
   bool abort_commit_before_output_surface_creation;
   bool use_mouse_wheel_gestures;
+  bool use_layer_lists;
   int max_staging_buffer_usage_in_bytes;
   ManagedMemoryPolicy memory_policy_;
 

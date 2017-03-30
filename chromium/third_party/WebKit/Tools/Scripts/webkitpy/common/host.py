@@ -33,8 +33,10 @@ import sys
 
 from webkitpy.common.checkout.scm.detection import SCMDetector
 from webkitpy.common.memoized import memoized
-from webkitpy.common.net import buildbot, web
+from webkitpy.common.net.buildbot import BuildBot
+from webkitpy.common.net import web
 from webkitpy.common.system.systemhost import SystemHost
+from webkitpy.layout_tests.builders import Builders
 from webkitpy.layout_tests.port.factory import PortFactory
 
 
@@ -50,7 +52,7 @@ class Host(SystemHost):
         self._scm = None
 
         # Everything below this line is WebKit-specific and belongs on a higher-level object.
-        self.buildbot = buildbot.BuildBot()
+        self.buildbot = BuildBot()
 
         # FIXME: Unfortunately Port objects are currently the central-dispatch objects of the NRWT world.
         # In order to instantiate a port correctly, we have to pass it at least an executive, user, scm, and filesystem
@@ -60,10 +62,12 @@ class Host(SystemHost):
 
         self._engage_awesome_locale_hacks()
 
+        self.builders = Builders()
+
     # We call this from the Host constructor, as it's one of the
     # earliest calls made for all webkitpy-based programs.
     def _engage_awesome_locale_hacks(self):
-        # To make life easier on our non-english users, we override
+        # To make life easier on our non-English users, we override
         # the locale environment variables inside webkitpy.
         # If we don't do this, programs like SVN will output localized
         # messages and svn.py will fail to parse them.

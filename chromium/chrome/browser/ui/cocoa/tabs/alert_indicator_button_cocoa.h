@@ -8,6 +8,7 @@
 #include <memory>
 
 #import "base/mac/scoped_nsobject.h"
+#import "chrome/browser/ui/cocoa/themed_window.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #import "ui/base/cocoa/hover_button.h"
 
@@ -27,7 +28,7 @@ class AnimationDelegate;
 //
 // Note: Send the |-setClickTarget:withAction:| message instead of the
 // |-setTarget:| and |-setAction:| messages to be notified of button clicks.
-@interface AlertIndicatorButton : HoverButton {
+@interface AlertIndicatorButton : HoverButton <ThemedWindowDrawing> {
  @private
   class FadeAnimationDelegate;
 
@@ -40,6 +41,10 @@ class AnimationDelegate;
   std::unique_ptr<gfx::AnimationDelegate> fadeAnimationDelegate_;
   std::unique_ptr<gfx::Animation> fadeAnimation_;
   TabAlertState showingAlertState_;
+
+  // Set to YES while the button is in the temporary dormant period after mute
+  // has been toggled.
+  BOOL isDormant_;
 
   // Target and action invoked whenever a fade-in/out animation completes.  This
   // is used by TabController to layout the TabView after an indicator has
@@ -78,6 +83,10 @@ class AnimationDelegate;
 // Request a message be sent to |target| whenever the enabled button has been
 // clicked.  A weak reference on |target| is held.
 - (void)setClickTarget:(id)target withAction:(SEL)action;
+
+// ThemedWindowDrawing protocol support.
+- (void)windowDidChangeTheme;
+- (void)windowDidChangeActive;
 
 @end
 

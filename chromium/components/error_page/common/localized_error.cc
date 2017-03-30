@@ -48,8 +48,6 @@ static const char kRedirectLoopLearnMoreUrl[] =
     "https://support.google.com/chrome?p=rl_error";
 static const char kWeakDHKeyLearnMoreUrl[] =
     "https://support.google.com/chrome?p=dh_error";
-static const char kSslInvalidResponseLearnMoreUrl[] =
-    "https://support.google.com/chrome?p=ir_ssl_error";
 static const int kGoogleCachedCopySuggestionType = 0;
 
 enum NAV_SUGGESTIONS {
@@ -59,7 +57,7 @@ enum NAV_SUGGESTIONS {
   SUGGEST_DNS_CONFIG                        = 1 << 2,
   SUGGEST_FIREWALL_CONFIG                   = 1 << 3,
   SUGGEST_PROXY_CONFIG                      = 1 << 4,
-  SUGGEST_DISABLE_EXTENSION                 = 1 << 5,
+  SUGGEST_DISABLE_EXTENSION_STANDALONE      = 1 << 5,
   SUGGEST_LEARNMORE                         = 1 << 6,
   // Unprefixed suggestion which occurs in a list.
   SUGGEST_CONTACT_ADMINISTRATOR             = 1 << 7,
@@ -217,7 +215,7 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
    IDS_ERRORPAGES_SUMMARY_TOO_MANY_REDIRECTS,
    IDS_ERRORPAGES_DETAILS_TOO_MANY_REDIRECTS,
-   SUGGEST_RELOAD | SUGGEST_LEARNMORE,
+   SUGGEST_RELOAD | SUGGEST_LEARNMORE_STANDALONE,
   },
   {net::ERR_EMPTY_RESPONSE,
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
@@ -266,7 +264,7 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_HEADING_INSECURE_CONNECTION,
    IDS_ERRORPAGES_SUMMARY_INVALID_RESPONSE,
    IDS_ERRORPAGES_DETAILS_SSL_PROTOCOL_ERROR,
-   SUGGEST_RELOAD | SUGGEST_LEARNMORE,
+   SUGGEST_RELOAD,
   },
   {net::ERR_BAD_SSL_CLIENT_AUTH_CERT,
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
@@ -294,14 +292,14 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
    IDS_ERRORPAGES_SUMMARY_NOT_AVAILABLE,
    IDS_ERRORPAGES_DETAILS_TEMPORARILY_THROTTLED,
-   SUGGEST_DISABLE_EXTENSION,
+   SUGGEST_DISABLE_EXTENSION_STANDALONE,
   },
   {net::ERR_BLOCKED_BY_CLIENT,
    IDS_ERRORPAGES_TITLE_BLOCKED,
    IDS_ERRORPAGES_HEADING_BLOCKED,
    IDS_ERRORPAGES_SUMMARY_BLOCKED_BY_EXTENSION,
    IDS_ERRORPAGES_DETAILS_BLOCKED_BY_EXTENSION,
-   SUGGEST_RELOAD | SUGGEST_DISABLE_EXTENSION,
+   SUGGEST_RELOAD | SUGGEST_DISABLE_EXTENSION_STANDALONE,
   },
   {net::ERR_NETWORK_CHANGED,
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
@@ -329,7 +327,7 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_HEADING_INSECURE_CONNECTION,
    IDS_ERRORPAGES_SUMMARY_INVALID_RESPONSE,
    IDS_ERRORPAGES_DETAILS_SSL_FALLBACK_BEYOND_MINIMUM_VERSION,
-   SUGGEST_LEARNMORE_STANDALONE,
+   SUGGEST_NONE,
   },
   {net::ERR_SSL_VERSION_OR_CIPHER_MISMATCH,
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
@@ -542,7 +540,8 @@ void AddGoogleCachedCopyButton(base::ListValue* suggestions_summary_list,
       suggestion->GetString("urlCorrection", &cache_url);
       int cache_tracking_id = -1;
       suggestion->GetInteger("trackingId", &cache_tracking_id);
-      scoped_ptr<base::DictionaryValue> cache_button(new base::DictionaryValue);
+      std::unique_ptr<base::DictionaryValue> cache_button(
+          new base::DictionaryValue);
       cache_button->SetString(
             "msg",
             l10n_util::GetStringUTF16(IDS_ERRORPAGES_BUTTON_SHOW_SAVED_COPY));
@@ -586,20 +585,10 @@ void AddLinkedSuggestionToList(const int error_code,
       suggestion_string = l10n_util::GetStringUTF16(
           IDS_ERRORPAGES_SUGGESTION_LEARNMORE_SUMMARY);
       break;
-    case net::ERR_SSL_FALLBACK_BEYOND_MINIMUM_VERSION:
-      learn_more_url =  GURL(kSslInvalidResponseLearnMoreUrl);
-      suggestion_string = l10n_util::GetStringUTF16(
-          IDS_ERRORPAGES_SUGGESTION_LEARNMORE_SUMMARY);
-      break;
     case net::ERR_TOO_MANY_REDIRECTS:
       learn_more_url = GURL(kRedirectLoopLearnMoreUrl);
       suggestion_string = l10n_util::GetStringUTF16(
           IDS_ERRORPAGES_SUGGESTION_CLEAR_COOKIES_SUMMARY);
-      break;
-    case net::ERR_SSL_PROTOCOL_ERROR:
-      learn_more_url = GURL(kSslInvalidResponseLearnMoreUrl);
-      suggestion_string = l10n_util::GetStringUTF16(
-          IDS_ERRORPAGES_SUGGESTION_LEARNMORE_SUMMARY);
       break;
     default:
       NOTREACHED();
@@ -622,6 +611,8 @@ void AddLinkedSuggestionToList(const int error_code,
 
 // Creates a list of suggestions that a user may try to resolve a particular
 // network error. Appears above the fold underneath heading and intro paragraph.
+// Note that the SUGGEST_RELOAD suggestion isn't shown in the list, only as a
+// reload button.
 void GetSuggestionsSummaryList(int error_code,
                                base::DictionaryValue* error_strings,
                                int suggestions,
@@ -659,8 +650,14 @@ void GetSuggestionsSummaryList(int error_code,
 
   if (suggestions & SUGGEST_LEARNMORE_STANDALONE) {
     DCHECK(suggestions_summary_list->empty());
-    DCHECK(!(suggestions & ~SUGGEST_LEARNMORE_STANDALONE));
     AddLinkedSuggestionToList(error_code, locale, suggestions_summary_list);
+    return;
+  }
+
+  if (suggestions & SUGGEST_DISABLE_EXTENSION_STANDALONE) {
+    DCHECK(suggestions_summary_list->empty());
+    AddSingleEntryDictionaryToList(suggestions_summary_list, "summary",
+        IDS_ERRORPAGES_SUGGESTION_DISABLE_EXTENSION_SUMMARY, false);
     return;
   }
 
@@ -708,28 +705,14 @@ void GetSuggestionsSummaryList(int error_code,
         IDS_ERRORPAGES_SUGGESTION_CHECKING_SIGNAL_SUMMARY, false);
 #else
     AddSingleEntryDictionaryToList(suggestions_summary_list, "summary",
-        IDS_ERRORPAGES_SUGGESTION_CHECK_CABLES_SUMMARY, false);
-    AddSingleEntryDictionaryToList(suggestions_summary_list, "summary",
-        IDS_ERRORPAGES_SUGGESTION_RESET_HARDWARE_SUMMARY, false);
+        IDS_ERRORPAGES_SUGGESTION_CHECK_HARDWARE_SUMMARY, false);
     AddSingleEntryDictionaryToList(suggestions_summary_list, "summary",
         IDS_ERRORPAGES_SUGGESTION_CHECK_WIFI_SUMMARY, false);
 #endif
   }
 
-  if (suggestions & SUGGEST_DISABLE_EXTENSION) {
-    AddSingleEntryDictionaryToList(suggestions_summary_list, "summary",
-        IDS_ERRORPAGES_SUGGESTION_DISABLE_EXTENSION_SUMMARY, false);
-  }
-
   if (suggestions & SUGGEST_LEARNMORE) {
     AddLinkedSuggestionToList(error_code, locale, suggestions_summary_list);
-  }
-
-  // Only add a explicit reload suggestion if there are other suggestions.
-  // Otherwise rely on the reload button being used.
-  if (!suggestions_summary_list->empty() && (suggestions & SUGGEST_RELOAD)) {
-    AddSingleEntryDictionaryToList(suggestions_summary_list, "summary",
-        IDS_ERRORPAGES_SUGGESTION_RELOAD_SUMMARY, true);
   }
 
   // Add list prefix header.
@@ -837,16 +820,17 @@ std::string HttpErrorCodeToString(int error) {
 
 const char LocalizedError::kHttpErrorDomain[] = "http";
 
-void LocalizedError::GetStrings(int error_code,
-                                const std::string& error_domain,
-                                const GURL& failed_url,
-                                bool is_post,
-                                bool stale_copy_in_cache,
-                                bool can_show_network_diagnostics_dialog,
-                                bool has_offline_pages,
-                                const std::string& locale,
-                                scoped_ptr<error_page::ErrorPageParams> params,
-                                base::DictionaryValue* error_strings) {
+void LocalizedError::GetStrings(
+    int error_code,
+    const std::string& error_domain,
+    const GURL& failed_url,
+    bool is_post,
+    bool stale_copy_in_cache,
+    bool can_show_network_diagnostics_dialog,
+    bool has_offline_pages,
+    const std::string& locale,
+    std::unique_ptr<error_page::ErrorPageParams> params,
+    base::DictionaryValue* error_strings) {
   webui::SetLoadTimeDataDefaults(locale, error_strings);
 
   // Grab the strings and settings that depend on the error type.  Init
@@ -1055,22 +1039,6 @@ void LocalizedError::GetStrings(int error_code,
       show_saved_copy_button->SetString("primary", "true");
     error_strings->Set("showSavedCopyButton", show_saved_copy_button);
   }
-
-#if defined(OS_ANDROID)
-  // Offline button will not be provided when we want to show something in the
-  // cache.
-  if (!show_saved_copy_visible && has_offline_pages) {
-    base::DictionaryValue* show_offline_pages_button =
-        new base::DictionaryValue;
-    base::string16 button_text = l10n_util::GetStringUTF16(
-        offline_pages::GetOfflinePageFeatureMode() ==
-            offline_pages::FeatureMode::ENABLED_AS_BOOKMARKS
-                ? IDS_ERRORPAGES_BUTTON_SHOW_OFFLINE_PAGES_AS_BOOKMARKS
-                : IDS_ERRORPAGES_BUTTON_SHOW_OFFLINE_PAGES);
-    show_offline_pages_button->SetString("msg", button_text);
-    error_strings->Set("showOfflinePagesButton", show_offline_pages_button);
-  }
-#endif  // defined(OS_ANDROID)
 
 #if defined(OS_CHROMEOS)
   // ChromeOS has its own diagnostics extension, which doesn't rely on a

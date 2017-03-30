@@ -6,9 +6,11 @@
 
 #include <utility>
 
+#include "app/vivaldi_apptools.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "build/build_config.h"
 #include "cc/surfaces/surface.h"
@@ -17,16 +19,19 @@
 #include "cc/surfaces/surface_sequence.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/compositor/surface_utils.h"
+#include "content/browser/renderer_host/input/input_router.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/common/browser_plugin/browser_plugin_messages.h"
+#include "content/common/content_switches_internal.h"
 #include "content/common/frame_messages.h"
 #include "content/common/input/web_touch_event_traits.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/common/view_messages.h"
 #include "content/public/common/content_switches.h"
 #include "gpu/ipc/common/gpu_messages.h"
+#include "renderer/vivaldi_render_messages.h"
 #include "skia/ext/platform_canvas.h"
 #include "third_party/WebKit/public/platform/WebScreenInfo.h"
 
@@ -39,6 +44,29 @@
 #endif
 
 namespace content {
+namespace {
+
+class ScopedInputScaleDisabler {
+ public:
+  ScopedInputScaleDisabler(RenderWidgetHostImpl* host, float scale_factor)
+      : host_(host), scale_factor_(scale_factor) {
+    if (IsUseZoomForDSFEnabled())
+      host_->input_router()->SetDeviceScaleFactor(1.0f);
+  }
+
+  ~ScopedInputScaleDisabler() {
+    if (IsUseZoomForDSFEnabled())
+      host_->input_router()->SetDeviceScaleFactor(scale_factor_);
+  }
+
+ private:
+  RenderWidgetHostImpl* host_;
+  float scale_factor_;
+
+  DISALLOW_COPY_AND_ASSIGN(ScopedInputScaleDisabler);
+};
+
+}  // namespace
 
 RenderWidgetHostViewGuest::RenderWidgetHostViewGuest(
     RenderWidgetHost* widget_host,
@@ -48,8 +76,9 @@ RenderWidgetHostViewGuest::RenderWidgetHostViewGuest(
       // |guest| is NULL during test.
       guest_(guest ? guest->AsWeakPtr() : base::WeakPtr<BrowserPluginGuest>()),
       platform_view_(platform_view) {
-  // Inputs for guest view are already scaled.
-  host_->set_scale_input_to_viewport(false);
+  gfx::NativeView view = GetNativeView();
+  if (view)
+    UpdateScreenInfo(view);
 }
 
 RenderWidgetHostViewGuest::~RenderWidgetHostViewGuest() {}
@@ -148,6 +177,34 @@ void RenderWidgetHostViewGuest::ProcessTouchEvent(
         guest_->GetOwnerRenderWidgetHostView()->GetRenderWidgetHost());
     if (!embedder->GetView()->HasFocus())
       embedder->GetView()->Focus();
+
+    // Since we now route GestureEvents directly to the guest renderer, we need
+    // a way to make sure that the BrowserPlugin in the embedder gets focused so
+    // that keyboard input (which still travels via BrowserPlugin) is routed to
+    // the plugin and thus onwards to the guest.
+    // TODO(wjmaclean): When we remove BrowserPlugin, delete this code.
+    // http://crbug.com/533069
+    if (!HasFocus()) {
+      // We need to a account for the position of the guest view within the
+      // embedder, as well as the fact that the embedder's host will add its
+      // offset in screen coordinates before sending the event (with the latter
+      // component just serving to confuse the renderer, hence why it should be
+      // removed).
+      gfx::Vector2d offset = GetViewBounds().origin() -
+          GetOwnerRenderWidgetHostView()->GetBoundsInRootWindow().origin();
+      blink::WebGestureEvent gesture_tap_event;
+      gesture_tap_event.sourceDevice = blink::WebGestureDeviceTouchscreen;
+      gesture_tap_event.type = blink::WebGestureEvent::GestureTapDown;
+      gesture_tap_event.x = event.touches[0].position.x + offset.x();
+      gesture_tap_event.y = event.touches[0].position.y + offset.y();
+      gesture_tap_event.globalX = event.touches[0].screenPosition.x;
+      gesture_tap_event.globalY = event.touches[0].screenPosition.y;
+      GetOwnerRenderWidgetHostView()->ProcessGestureEvent(gesture_tap_event,
+                                                          ui::LatencyInfo());
+      gesture_tap_event.type = blink::WebGestureEvent::GestureTapCancel;
+      GetOwnerRenderWidgetHostView()->ProcessGestureEvent(gesture_tap_event,
+                                                          ui::LatencyInfo());
+    }
   }
 
   host_->ForwardTouchEventWithLatencyInfo(event, latency);
@@ -177,14 +234,11 @@ void RenderWidgetHostViewGuest::RenderProcessGone(
   if (platform_view_)
     platform_view_->RenderProcessGone(status, error_code);
 
-  // Destroy the guest view instance only, so we don't end up calling
-  // platform_view_->Destroy().
-  DestroyGuestView();
+  RenderWidgetHostViewChildFrame::RenderProcessGone(status, error_code);
 }
 
 void RenderWidgetHostViewGuest::Destroy() {
-  // The RenderWidgetHost's destruction led here, so don't call it.
-  DestroyGuestView();
+  RenderWidgetHostViewChildFrame::Destroy();
 
   if (platform_view_)  // The platform view might have been destroyed already.
     platform_view_->Destroy();
@@ -206,7 +260,7 @@ void RenderWidgetHostViewGuest::SetTooltipText(
 
 void RenderWidgetHostViewGuest::OnSwapCompositorFrame(
     uint32_t output_surface_id,
-    scoped_ptr<cc::CompositorFrame> frame) {
+    std::unique_ptr<cc::CompositorFrame> frame) {
   TRACE_EVENT0("content", "RenderWidgetHostViewGuest::OnSwapCompositorFrame");
 
   last_scroll_offset_ = frame->metadata.root_scroll_offset;
@@ -235,7 +289,7 @@ void RenderWidgetHostViewGuest::OnSwapCompositorFrame(
 
   if (!surface_factory_) {
     cc::SurfaceManager* manager = GetSurfaceManager();
-    surface_factory_ = make_scoped_ptr(new cc::SurfaceFactory(manager, this));
+    surface_factory_ = base::WrapUnique(new cc::SurfaceFactory(manager, this));
   }
 
   if (surface_id_.is_null()) {
@@ -272,7 +326,7 @@ void RenderWidgetHostViewGuest::OnSwapCompositorFrame(
 
 bool RenderWidgetHostViewGuest::OnMessageReceived(const IPC::Message& msg) {
   if (!platform_view_) {
-    // In theory, we can get here if there's a delay between DestroyGuestView()
+    // In theory, we can get here if there's a delay between Destroy()
     // being called and when our destructor is invoked.
     return false;
   }
@@ -307,16 +361,6 @@ gfx::NativeView RenderWidgetHostViewGuest::GetNativeView() const {
   return rwhv->GetNativeView();
 }
 
-gfx::NativeViewId RenderWidgetHostViewGuest::GetNativeViewId() const {
-  if (!guest_)
-    return static_cast<gfx::NativeViewId>(NULL);
-
-  RenderWidgetHostView* rwhv = guest_->GetOwnerRenderWidgetHostView();
-  if (!rwhv)
-    return static_cast<gfx::NativeViewId>(NULL);
-  return rwhv->GetNativeViewId();
-}
-
 gfx::NativeViewAccessible RenderWidgetHostViewGuest::GetNativeViewAccessible() {
   if (!guest_)
     return gfx::NativeViewAccessible();
@@ -349,7 +393,7 @@ void RenderWidgetHostViewGuest::SetIsLoading(bool is_loading) {
 }
 
 void RenderWidgetHostViewGuest::TextInputStateChanged(
-    const ViewHostMsg_TextInputState_Params& params) {
+    const TextInputState& params) {
   if (!guest_)
     return;
 
@@ -486,29 +530,12 @@ void RenderWidgetHostViewGuest::StopSpeaking() {
 }
 #endif  // defined(OS_MACOSX)
 
-#if defined(OS_ANDROID) || defined(USE_AURA)
-void RenderWidgetHostViewGuest::ShowDisambiguationPopup(
-    const gfx::Rect& rect_pixels,
-    const SkBitmap& zoomed_bitmap) {
-}
-#endif  // defined(OS_ANDROID) || defined(USE_AURA)
-
 void RenderWidgetHostViewGuest::LockCompositingSurface() {
   NOTIMPLEMENTED();
 }
 
 void RenderWidgetHostViewGuest::UnlockCompositingSurface() {
   NOTIMPLEMENTED();
-}
-
-void RenderWidgetHostViewGuest::DestroyGuestView() {
-  // Let our observers know we're going away, since we don't want any event
-  // processing calls coming in after we release host_.
-  NotifyObserversAboutShutdown();
-
-  host_->SetView(NULL);
-  host_ = NULL;
-  base::MessageLoop::current()->DeleteSoon(FROM_HERE, this);
 }
 
 RenderWidgetHostViewBase*
@@ -541,6 +568,25 @@ void RenderWidgetHostViewGuest::OnHandleInputEvent(
     RenderWidgetHostImpl* embedder,
     int browser_plugin_instance_id,
     const blink::WebInputEvent* event) {
+  // WebMouseWheelEvents go into a queue, and may not be forwarded to the
+  // renderer until after this method goes out of scope. Therefore we need to
+  // explicitly remove the additional device scale factor from the coordinates
+  // before allowing the event to be queued.
+  if (IsUseZoomForDSFEnabled() &&
+      event->type == blink::WebInputEvent::MouseWheel) {
+    blink::WebMouseWheelEvent rescaled_event =
+        *static_cast<const blink::WebMouseWheelEvent*>(event);
+    rescaled_event.x /= current_device_scale_factor();
+    rescaled_event.y /= current_device_scale_factor();
+    rescaled_event.deltaX /= current_device_scale_factor();
+    rescaled_event.deltaY /= current_device_scale_factor();
+    rescaled_event.wheelTicksX /= current_device_scale_factor();
+    rescaled_event.wheelTicksY /= current_device_scale_factor();
+    host_->ForwardWheelEvent(rescaled_event);
+    return;
+  }
+
+  ScopedInputScaleDisabler disable(host_, current_device_scale_factor());
   if (blink::WebInputEvent::isMouseEventType(event->type)) {
     // The mouse events for BrowserPlugin are modified by all
     // the CSS transforms applied on the <object> and embedder. As a result of
@@ -564,6 +610,20 @@ void RenderWidgetHostViewGuest::OnHandleInputEvent(
   }
 
   if (event->type == blink::WebInputEvent::MouseWheel) {
+    if (vivaldi::IsVivaldiRunning() &&
+       !((blink::WebMouseWheelEvent*)event)->canScroll &&
+       ((blink::WebMouseWheelEvent*)event)->hasPreciseScrollingDeltas) {
+      // Hook for pinching. The render translates a pinch event into a wheel
+      // event and sends it back to the host for guest views. It simplifies
+      // the code in the renderer to send a separate pinch message to the
+      // renderer instead of let it handle the syntethic wheel event again.
+      // Letting the render handle the initial pinch event means we support
+      // both tabs and panels.
+      blink::WebMouseWheelEvent* wheelEvent = (blink::WebMouseWheelEvent*)event;
+      float scale = exp(wheelEvent->deltaY / 100.0f);
+      host_->Send(new VivaldiMsg_SetPinchZoom(
+          host_->GetRoutingID(), scale, wheelEvent->x, wheelEvent->y));
+    } else
     host_->ForwardWheelEvent(
         *static_cast<const blink::WebMouseWheelEvent*>(event));
     return;
@@ -602,7 +662,8 @@ void RenderWidgetHostViewGuest::OnHandleInputEvent(
     // a signal to let the guest handle the fling, though we'd need to be
     // sure other plugins would behave appropriately (i.e. return 'false').
     if (gesture_event.type == blink::WebInputEvent::GestureScrollUpdate &&
-        gesture_event.data.scrollUpdate.inertial) {
+        gesture_event.data.scrollUpdate.inertialPhase ==
+            blink::WebGestureEvent::MomentumPhase) {
       return;
     }
     host_->ForwardGestureEvent(gesture_event);

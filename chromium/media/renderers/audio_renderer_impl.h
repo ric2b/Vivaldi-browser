@@ -22,10 +22,11 @@
 #include <stdint.h>
 
 #include <deque>
+#include <memory>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/power_monitor/power_observer.h"
 #include "base/synchronization/lock.h"
 #include "media/base/audio_decoder.h"
 #include "media/base/audio_renderer.h"
@@ -53,6 +54,7 @@ class DecryptingDemuxerStream;
 class MEDIA_EXPORT AudioRendererImpl
     : public AudioRenderer,
       public TimeSource,
+      public base::PowerObserver,
       NON_EXPORTED_BASE(public AudioRendererSink::RenderCallback) {
  public:
   // |task_runner| is the thread on which AudioRendererImpl will execute.
@@ -80,17 +82,17 @@ class MEDIA_EXPORT AudioRendererImpl
 
   // AudioRenderer implementation.
   void Initialize(DemuxerStream* stream,
-                  const PipelineStatusCB& init_cb,
                   CdmContext* cdm_context,
-                  const StatisticsCB& statistics_cb,
-                  const BufferingStateCB& buffering_state_cb,
-                  const base::Closure& ended_cb,
-                  const PipelineStatusCB& error_cb,
-                  const base::Closure& waiting_for_decryption_key_cb) override;
+                  RendererClient* client,
+                  const PipelineStatusCB& init_cb) override;
   TimeSource* GetTimeSource() override;
   void Flush(const base::Closure& callback) override;
   void StartPlaying() override;
   void SetVolume(float volume) override;
+
+  // base::PowerObserver implementation.
+  void OnSuspend() override;
+  void OnResume() override;
 
   // Determines whether the decoded audio queue size is increased as part of
   // underflow handling.
@@ -182,6 +184,13 @@ class MEDIA_EXPORT AudioRendererImpl
   // by the value of |success|).
   void OnAudioBufferStreamInitialized(bool succes);
 
+  // Callback functions to be called on |client_|.
+  void OnPlaybackError(PipelineStatus error);
+  void OnPlaybackEnded();
+  void OnStatisticsUpdate(const PipelineStatistics& stats);
+  void OnBufferingStateChange(BufferingState state);
+  void OnWaitingForDecryptionKey();
+
   // Used to initiate the flush operation once all pending reads have
   // completed.
   void DoFlush_Locked();
@@ -200,8 +209,8 @@ class MEDIA_EXPORT AudioRendererImpl
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
-  scoped_ptr<AudioSplicer> splicer_;
-  scoped_ptr<AudioBufferConverter> buffer_converter_;
+  std::unique_ptr<AudioSplicer> splicer_;
+  std::unique_ptr<AudioBufferConverter> buffer_converter_;
 
   // Whether or not we expect to handle config changes.
   bool expecting_config_changes_;
@@ -211,7 +220,7 @@ class MEDIA_EXPORT AudioRendererImpl
   // may deadlock between |task_runner_| and the audio callback thread.
   scoped_refptr<media::AudioRendererSink> sink_;
 
-  scoped_ptr<AudioBufferStream> audio_buffer_stream_;
+  std::unique_ptr<AudioBufferStream> audio_buffer_stream_;
 
   // Interface to the hardware audio params.
   const AudioHardwareConfig& hardware_config_;
@@ -221,18 +230,16 @@ class MEDIA_EXPORT AudioRendererImpl
   // Cached copy of hardware params from |hardware_config_|.
   AudioParameters audio_parameters_;
 
-  // Callbacks provided during Initialize().
+  RendererClient* client_;
+
+  // Callback provided during Initialize().
   PipelineStatusCB init_cb_;
-  BufferingStateCB buffering_state_cb_;
-  base::Closure ended_cb_;
-  PipelineStatusCB error_cb_;
-  StatisticsCB statistics_cb_;
 
   // Callback provided to Flush().
   base::Closure flush_cb_;
 
   // Overridable tick clock for testing.
-  scoped_ptr<base::TickClock> tick_clock_;
+  std::unique_ptr<base::TickClock> tick_clock_;
 
   // Memory usage of |algorithm_| recorded during the last
   // HandleSplicerBuffer_Locked() call.
@@ -248,7 +255,7 @@ class MEDIA_EXPORT AudioRendererImpl
 
   // Algorithm for scaling audio.
   double playback_rate_;
-  scoped_ptr<AudioRendererAlgorithm> algorithm_;
+  std::unique_ptr<AudioRendererAlgorithm> algorithm_;
   bool increase_queue_size_on_underflow_;
 
   // Simple state tracking variable.
@@ -268,7 +275,7 @@ class MEDIA_EXPORT AudioRendererImpl
   bool received_end_of_stream_;
   bool rendered_end_of_stream_;
 
-  scoped_ptr<AudioClock> audio_clock_;
+  std::unique_ptr<AudioClock> audio_clock_;
 
   // The media timestamp to begin playback at after seeking. Set via
   // SetMediaTime().
@@ -294,6 +301,10 @@ class MEDIA_EXPORT AudioRendererImpl
   // Set by CurrentMediaTime(), used to prevent the current media time value as
   // reported to JavaScript from going backwards in time.
   base::TimeDelta last_media_timestamp_;
+
+  // Set by OnSuspend() and OnResume() to indicate when the system is about to
+  // suspend/is suspended and when it resumes.
+  bool is_suspending_;
 
   // End variables which must be accessed under |lock_|. ----------------------
 

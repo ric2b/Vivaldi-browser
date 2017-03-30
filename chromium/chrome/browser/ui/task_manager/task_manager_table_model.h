@@ -101,6 +101,8 @@ class TaskManagerTableModel
   void ToggleColumnVisibility(int column_id);
 
  private:
+  friend class TaskManagerTesterImpl;
+
   // Start / stop observing the task manager.
   void StartUpdating();
   void StopUpdating();

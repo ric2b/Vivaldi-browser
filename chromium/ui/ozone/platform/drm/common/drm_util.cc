@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/mman.h>
+#include <xf86drm.h>
 #include <xf86drmMode.h>
 #include <utility>
 
@@ -17,9 +18,25 @@
 #define DRM_MODE_CONNECTOR_DSI 16
 #endif
 
+#if !defined(DRM_CAP_CURSOR_WIDTH)
+#define DRM_CAP_CURSOR_WIDTH 0x8
+#endif
+
+#if !defined(DRM_CAP_CURSOR_HEIGHT)
+#define DRM_CAP_CURSOR_HEIGHT 0x9
+#endif
+
+#if !defined(DRM_FORMAT_R8)
+// TODO(dshwang): after most linux and libdrm has this definition, remove it.
+#define DRM_FORMAT_R8 fourcc_code('R', '8', ' ', ' ')
+#endif
+
 namespace ui {
 
 namespace {
+
+static const size_t kDefaultCursorWidth = 64;
+static const size_t kDefaultCursorHeight = 64;
 
 bool IsCrtcInUse(uint32_t crtc,
                  const ScopedVector<HardwareDisplayControllerInfo>& displays) {
@@ -172,6 +189,20 @@ bool HasColorCorrectionMatrix(int fd, drmModeCrtc* crtc) {
 
 }  // namespace
 
+gfx::Size GetMaximumCursorSize(int fd) {
+  uint64_t width = 0, height = 0;
+  if (drmGetCap(fd, DRM_CAP_CURSOR_WIDTH, &width)) {
+    PLOG(WARNING) << "Unable to get cursor width capability";
+    return gfx::Size(kDefaultCursorWidth, kDefaultCursorHeight);
+  }
+  if (drmGetCap(fd, DRM_CAP_CURSOR_HEIGHT, &height)) {
+    PLOG(WARNING) << "Unable to get cursor height capability";
+    return gfx::Size(kDefaultCursorWidth, kDefaultCursorHeight);
+  }
+
+  return gfx::Size(width, height);
+}
+
 HardwareDisplayControllerInfo::HardwareDisplayControllerInfo(
     ScopedDrmConnectorPtr connector,
     ScopedDrmCrtcPtr crtc,
@@ -244,6 +275,7 @@ DisplaySnapshot_Params CreateDisplaySnapshotParams(
       IsAspectPreserving(fd, info->connector());
   params.has_color_correction_matrix =
       HasColorCorrectionMatrix(fd, info->crtc());
+  params.maximum_cursor_size = GetMaximumCursorSize(fd);
 
   ScopedDrmPropertyBlobPtr edid_blob(
       GetDrmPropertyBlob(fd, info->connector(), "EDID"));
@@ -291,6 +323,8 @@ DisplaySnapshot_Params CreateDisplaySnapshotParams(
 
 int GetFourCCFormatFromBufferFormat(gfx::BufferFormat format) {
   switch (format) {
+    case gfx::BufferFormat::R_8:
+      return DRM_FORMAT_R8;
     case gfx::BufferFormat::RGBA_8888:
       return DRM_FORMAT_ABGR8888;
     case gfx::BufferFormat::RGBX_8888:
@@ -309,6 +343,8 @@ int GetFourCCFormatFromBufferFormat(gfx::BufferFormat format) {
 
 gfx::BufferFormat GetBufferFormatFromFourCCFormat(int format) {
   switch (format) {
+    case DRM_FORMAT_R8:
+      return gfx::BufferFormat::R_8;
     case DRM_FORMAT_ABGR8888:
       return gfx::BufferFormat::RGBA_8888;
     case DRM_FORMAT_XBGR8888:

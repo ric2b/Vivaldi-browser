@@ -346,7 +346,7 @@ InspectorBackendClass.Connection.prototype = {
                 console.log("time-stats: " + callback.methodName + " = " + (processingStartTime - callback.sendRequestTime) + " + " + (Date.now() - processingStartTime));
 
             if (this._scripts && !this._pendingResponsesCount)
-                this.runAfterPendingDispatches();
+                this.deprecatedRunAfterPendingDispatches();
             return;
         } else {
             var method = messageObject.method.split(".");
@@ -376,7 +376,7 @@ InspectorBackendClass.Connection.prototype = {
     /**
      * @param {function()=} script
      */
-    runAfterPendingDispatches: function(script)
+    deprecatedRunAfterPendingDispatches: function(script)
     {
         if (!this._scripts)
             this._scripts = [];
@@ -389,7 +389,7 @@ InspectorBackendClass.Connection.prototype = {
             if (!this._pendingResponsesCount)
                 this._executeAfterPendingDispatches();
             else
-                this.runAfterPendingDispatches();
+                this.deprecatedRunAfterPendingDispatches();
         }.bind(this), 0);
     },
 
@@ -637,7 +637,7 @@ InspectorBackendClass.AgentPrototype.prototype = {
         }
 
         var argumentsArray = [];
-        argumentsArray[0] = messageObject.error ? messageObject.error.message: null;
+        argumentsArray[0] = messageObject.error ? messageObject.error.message : null;
 
         if (this._hasErrorData[methodName])
             argumentsArray[1] = messageObject.error ? messageObject.error.data : null;

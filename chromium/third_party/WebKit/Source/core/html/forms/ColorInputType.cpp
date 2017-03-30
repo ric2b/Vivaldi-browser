@@ -76,6 +76,12 @@ static bool isValidColorString(const String& value)
     return color.setFromString(value) && !color.hasAlpha();
 }
 
+ColorInputType::ColorInputType(HTMLInputElement& element)
+    : InputType(element)
+    , KeyboardClickableInputTypeView(element)
+{
+}
+
 InputType* ColorInputType::create(HTMLInputElement& element)
 {
     return new ColorInputType(element);
@@ -88,8 +94,14 @@ ColorInputType::~ColorInputType()
 DEFINE_TRACE(ColorInputType)
 {
     visitor->trace(m_chooser);
-    BaseClickableWithKeyInputType::trace(visitor);
+    KeyboardClickableInputTypeView::trace(visitor);
     ColorChooserClient::trace(visitor);
+    InputType::trace(visitor);
+}
+
+InputTypeView* ColorInputType::createView()
+{
+    return this;
 }
 
 void ColorInputType::countUsage()

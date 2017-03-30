@@ -14,8 +14,9 @@
 #import "ios/web/navigation/crw_session_controller.h"
 #include "ios/web/public/active_state_manager.h"
 #include "ios/web/public/referrer.h"
+#include "ios/web/public/url_schemes.h"
 #import "ios/web/public/web_state/ui/crw_web_delegate.h"
-#import "ios/web/web_state/ui/crw_wk_web_view_web_controller.h"
+#import "ios/web/web_state/ui/crw_web_controller.h"
 #import "ios/web/web_state/web_state_impl.h"
 #include "third_party/ocmock/OCMock/OCMock.h"
 
@@ -38,6 +39,7 @@ namespace web {
 #pragma mark -
 
 WebTest::WebTest() : web_client_(base::WrapUnique(new TestWebClient)) {}
+
 WebTest::~WebTest() {}
 
 void WebTest::SetUp() {
@@ -68,16 +70,19 @@ static int s_html_load_count;
 
 void WebTestWithWebController::SetUp() {
   WebTest::SetUp();
-  webController_.reset(this->CreateWebController());
+  web_state_impl_.reset(new WebStateImpl(GetBrowserState()));
+  web_state_impl_->GetNavigationManagerImpl().InitializeSession(nil, nil, NO,
+                                                                0);
+  web_state_impl_->SetWebUsageEnabled(true);
+  webController_.reset(web_state_impl_->GetWebController());
 
-  [webController_ setWebUsageEnabled:YES];
   // Force generation of child views; necessary for some tests.
   [webController_ triggerPendingLoad];
   s_html_load_count = 0;
 }
 
 void WebTestWithWebController::TearDown() {
-  [webController_ close];
+  web_state_impl_.reset();
   WebTest::TearDown();
 }
 
@@ -159,12 +164,12 @@ void WebTestWithWebController::WaitForCondition(ConditionBlock condition) {
 }
 
 NSString* WebTestWithWebController::EvaluateJavaScriptAsString(
-    NSString* script) const {
+    NSString* script) {
   __block base::scoped_nsobject<NSString> evaluationResult;
   [webController_ evaluateJavaScript:script
-                 stringResultHandler:^(NSString* result, NSError* error) {
-                     DCHECK([result isKindOfClass:[NSString class]]);
-                     evaluationResult.reset([result copy]);
+                 stringResultHandler:^(NSString* result, NSError*) {
+                   DCHECK([result isKindOfClass:[NSString class]]);
+                   evaluationResult.reset([result copy]);
                  }];
   base::test::ios::WaitUntilCondition(^bool() {
     return evaluationResult;
@@ -172,62 +177,18 @@ NSString* WebTestWithWebController::EvaluateJavaScriptAsString(
   return [[evaluationResult retain] autorelease];
 }
 
-NSString* WebTestWithWebController::RunJavaScript(NSString* script) {
-  // The platform JSON serializer is used to safely escape the |script| and
-  // decode the result while preserving unicode encoding that can be lost when
-  // converting to Chromium string types.
-  NSError* error = nil;
-  NSData* data = [NSJSONSerialization dataWithJSONObject:@[ script ]
-                                                 options:0
-                                                   error:&error];
-  DCHECK(data && !error);
-  base::scoped_nsobject<NSString> jsonString(
-      [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]);
-  // 'eval' is used because it is the only way to stay 100% compatible with
-  // stringByEvaluatingJavaScriptFromString in the event that the script is a
-  // statement.
-  NSString* wrappedScript = [NSString stringWithFormat:
-      @"try {"
-      @"  JSON.stringify({"  // Expression for the success case.
-      @"    result: '' + eval(%@[0]),"  // '' + converts result to string.
-      @"    toJSON: null"  // Use default JSON stringifier.
-      @"  });"
-      @"} catch(e) {"
-      @"  JSON.stringify({"  // Expression for the exception case.
-      @"    exception: e.toString(),"
-      @"    toJSON: null"  // Use default JSON stringifier.
-      @"  });"
-      @"}", jsonString.get()];
-
-  // Run asyncronious JavaScript evaluation and wait for its completion.
-  __block base::scoped_nsobject<NSData> evaluationData;
-  [webController_ evaluateJavaScript:wrappedScript
-                 stringResultHandler:^(NSString* result, NSError* error) {
-                   DCHECK([result length]);
-                   evaluationData.reset([[result dataUsingEncoding:
-                       NSUTF8StringEncoding] retain]);
-                 }];
-  base::test::ios::WaitUntilCondition(^bool() {
-    return evaluationData;
+id WebTestWithWebController::ExecuteJavaScript(NSString* script) {
+  __block base::scoped_nsprotocol<id> executionResult;
+  __block bool executionCompleted = false;
+  [webController_ executeJavaScript:script
+                  completionHandler:^(id result, NSError*) {
+                    executionResult.reset([result copy]);
+                    executionCompleted = true;
+                  }];
+  base::test::ios::WaitUntilCondition(^{
+    return executionCompleted;
   });
-
-  // The output is wrapped in a JSON dictionary to distinguish between an
-  // exception string and a result string.
-  NSDictionary* dictionary = [NSJSONSerialization
-      JSONObjectWithData:evaluationData
-                 options:0
-                   error:&error];
-  DCHECK(dictionary && !error);
-  NSString* exception = [dictionary objectForKey:@"exception"];
-  CHECK(!exception) << "Script error: " << [exception UTF8String];
-  return [dictionary objectForKey:@"result"];
-}
-
-CRWWebController* WebTestWithWebController::CreateWebController() {
-  std::unique_ptr<WebStateImpl> web_state_impl(
-      new WebStateImpl(GetBrowserState()));
-  return [[CRWWKWebViewWebController alloc]
-      initWithWebState:std::move(web_state_impl)];
+  return [[executionResult retain] autorelease];
 }
 
 void WebTestWithWebController::WillProcessTask(
@@ -242,11 +203,11 @@ void WebTestWithWebController::DidProcessTask(
 
 bool WebTestWithWebController::ResetPageIfNavigationStalled(
     NSString* load_check) {
-  NSString* inner_html = RunJavaScript(
+  NSString* inner_html = EvaluateJavaScriptAsString(
       @"(document && document.body && document.body.innerHTML) || 'undefined'");
   if ([inner_html rangeOfString:load_check].location == NSNotFound) {
-    [webController_ setWebUsageEnabled:NO];
-    [webController_ setWebUsageEnabled:YES];
+    web_state_impl_->SetWebUsageEnabled(false);
+    web_state_impl_->SetWebUsageEnabled(true);
     [webController_ triggerPendingLoad];
     return true;
   }

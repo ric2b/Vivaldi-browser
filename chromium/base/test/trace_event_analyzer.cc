@@ -26,33 +26,12 @@ TraceEvent::TraceEvent()
       other_event(NULL) {
 }
 
-#if !defined(_MSC_VER) || _MSC_VER >= 1900
 TraceEvent::TraceEvent(TraceEvent&& other) = default;
-#else
-TraceEvent::TraceEvent(TraceEvent&& other)
-  : thread(other.thread),
-    timestamp(other.timestamp),
-    duration(other.duration),
-    phase(other.phase),
-    other_event(other.other_event)
-{}
-#endif
 
 TraceEvent::~TraceEvent() {
 }
 
-#if !defined(_MSC_VER) || _MSC_VER >= 1900
 TraceEvent& TraceEvent::operator=(TraceEvent&& rhs) = default;
-#else
-TraceEvent& TraceEvent::operator=(TraceEvent&& rhs) {
-  thread = rhs.thread;
-  timestamp = rhs.timestamp;
-  duration = rhs.duration;
-  phase = rhs.phase;
-  other_event = rhs.other_event;
-  return *this;
-}
-#endif
 
 bool TraceEvent::SetFromJSON(const base::Value* event_value) {
   if (event_value->GetType() != base::Value::TYPE_DICTIONARY) {

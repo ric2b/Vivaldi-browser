@@ -8,8 +8,9 @@
 
 #include "ash/ash_constants.h"
 #include "ash/shell.h"
+#include "ash/wm/common/window_state.h"
 #include "ash/wm/resize_handle_window_targeter.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "base/metrics/histogram.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
@@ -18,12 +19,11 @@
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/animation/slide_animation.h"
-#include "ui/gfx/display.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/screen.h"
-#include "ui/views/bubble/bubble_delegate.h"
 #include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
@@ -63,19 +63,6 @@ const int kSwipeVerticalThresholdMultiplier = 3;
 // See ShouldIgnoreMouseEventAtLocation() for more details.
 const int kHeightOfDeadRegionAboveTopContainer = 10;
 
-// Returns the BubbleDelegateView corresponding to |maybe_bubble| if
-// |maybe_bubble| is a bubble. TODO(estade): remove this when all bubbles are
-// BubbleDialogDelegateViews, or create a common interface for the two bubble
-// types.
-views::BubbleDelegateView* AsBubbleDelegate(aura::Window* maybe_bubble) {
-  if (!maybe_bubble)
-    return nullptr;
-  views::Widget* widget = views::Widget::GetWidgetForNativeView(maybe_bubble);
-  if (!widget)
-    return nullptr;
-  return widget->widget_delegate()->AsBubbleDelegate();
-}
-
 // Returns the BubbleDialogDelegateView corresponding to |maybe_bubble| if
 // |maybe_bubble| is a bubble.
 views::BubbleDialogDelegateView* AsBubbleDialogDelegate(
@@ -89,10 +76,6 @@ views::BubbleDialogDelegateView* AsBubbleDialogDelegate(
 }
 
 views::View* GetAnchorView(aura::Window* maybe_bubble) {
-  views::BubbleDelegateView* bubble = AsBubbleDelegate(maybe_bubble);
-  if (bubble)
-    return bubble->GetAnchorView();
-
   views::BubbleDialogDelegateView* bubble_dialog =
       AsBubbleDialogDelegate(maybe_bubble);
   return bubble_dialog ? bubble_dialog->GetAnchorView() : nullptr;
@@ -124,7 +107,7 @@ gfx::Point GetEventLocationInScreen(const ui::LocatedEvent& event) {
 
 // Returns the bounds of the display nearest to |window| in screen coordinates.
 gfx::Rect GetDisplayBoundsInScreen(aura::Window* window) {
-  return gfx::Screen::GetScreen()->GetDisplayNearestWindow(window).bounds();
+  return display::Screen::GetScreen()->GetDisplayNearestWindow(window).bounds();
 }
 
 }  // namespace
@@ -187,10 +170,8 @@ ImmersiveFullscreenController::BubbleObserver::BubbleObserver(
     : controller_(controller) {}
 
 ImmersiveFullscreenController::BubbleObserver::~BubbleObserver() {
-  for (std::set<aura::Window*>::const_iterator it = bubbles_.begin();
-       it != bubbles_.end(); ++it) {
-    (*it)->RemoveObserver(this);
-  }
+  for (aura::Window* bubble : bubbles_)
+    bubble->RemoveObserver(this);
 }
 
 void ImmersiveFullscreenController::BubbleObserver::StartObserving(
@@ -211,9 +192,8 @@ void ImmersiveFullscreenController::BubbleObserver::StopObserving(
 
 void ImmersiveFullscreenController::BubbleObserver::UpdateRevealedLock() {
   bool has_visible_bubble = false;
-  for (std::set<aura::Window*>::const_iterator it = bubbles_.begin();
-       it != bubbles_.end(); ++it) {
-    if ((*it)->IsVisible()) {
+  for (aura::Window* bubble : bubbles_) {
+    if (bubble->IsVisible()) {
       has_visible_bubble = true;
       break;
     }
@@ -236,16 +216,10 @@ void ImmersiveFullscreenController::BubbleObserver::UpdateRevealedLock() {
     // Currently, there is no nice way for bubbles to reposition themselves
     // whenever the anchor view moves. Tell the bubbles to reposition themselves
     // explicitly instead. The hidden bubbles are also repositioned because
-    // BubbleDelegateView does not reposition its widget as a result of a
+    // BubbleDialogDelegateView does not reposition its widget as a result of a
     // visibility change.
-    for (std::set<aura::Window*>::const_iterator it = bubbles_.begin();
-         it != bubbles_.end(); ++it) {
-      views::BubbleDelegateView* bubble = AsBubbleDelegate(*it);
-      if (bubble)
-        bubble->OnAnchorBoundsChanged();
-      else
-        AsBubbleDialogDelegate(*it)->OnAnchorBoundsChanged();
-    }
+    for (aura::Window* bubble : bubbles_)
+      AsBubbleDialogDelegate(bubble)->OnAnchorBoundsChanged();
   }
 }
 
@@ -950,7 +924,7 @@ bool ImmersiveFullscreenController::ShouldHandleGestureEvent(
   // closest screen ensures that the event is from a valid bezel (as opposed to
   // another screen in an extended desktop).
   gfx::Rect screen_bounds =
-      gfx::Screen::GetScreen()->GetDisplayNearestPoint(location).bounds();
+      display::Screen::GetScreen()->GetDisplayNearestPoint(location).bounds();
   return (!screen_bounds.Contains(location) &&
           location.y() < hit_bounds_in_screen.y() &&
           location.x() >= hit_bounds_in_screen.x() &&

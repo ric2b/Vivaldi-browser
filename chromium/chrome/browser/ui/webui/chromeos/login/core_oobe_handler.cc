@@ -18,6 +18,7 @@
 #include "chrome/browser/chromeos/policy/device_cloud_policy_manager_chromeos.h"
 #include "chrome/browser/chromeos/system/input_device_settings.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
 #include "chrome/common/channel_info.h"
@@ -30,9 +31,9 @@
 #include "google_apis/google_api_keys.h"
 #include "grit/components_strings.h"
 #include "ui/chromeos/accessibility_types.h"
-#include "ui/gfx/display.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/gfx/screen.h"
 #include "ui/keyboard/keyboard_controller.h"
 
 namespace {
@@ -51,11 +52,15 @@ CoreOobeHandler::CoreOobeHandler(OobeUI* oobe_ui)
       show_oobe_ui_(false),
       version_info_updater_(this),
       delegate_(NULL) {
-  AccessibilityManager* accessibility_manager = AccessibilityManager::Get();
-  CHECK(accessibility_manager);
-  accessibility_subscription_ = accessibility_manager->RegisterCallback(
-      base::Bind(&CoreOobeHandler::OnAccessibilityStatusChanged,
-                 base::Unretained(this)));
+  if (!chrome::IsRunningInMash()) {
+    AccessibilityManager* accessibility_manager = AccessibilityManager::Get();
+    CHECK(accessibility_manager);
+    accessibility_subscription_ = accessibility_manager->RegisterCallback(
+        base::Bind(&CoreOobeHandler::OnAccessibilityStatusChanged,
+                   base::Unretained(this)));
+  } else {
+    NOTIMPLEMENTED();
+  }
 }
 
 CoreOobeHandler::~CoreOobeHandler() {
@@ -78,6 +83,7 @@ void CoreOobeHandler::DeclareLocalizedValues(
   builder->Add("highContrastOption", IDS_OOBE_HIGH_CONTRAST_MODE_OPTION);
   builder->Add("screenMagnifierOption", IDS_OOBE_SCREEN_MAGNIFIER_OPTION);
   builder->Add("virtualKeyboardOption", IDS_OOBE_VIRTUAL_KEYBOARD_OPTION);
+  builder->Add("monoAudioOption", IDS_OOBE_MONO_AUDIO_OPTION);
   builder->Add("closeAccessibilityMenu", IDS_OOBE_CLOSE_ACCESSIBILITY_MENU);
 
   // Strings for the device requisition prompt.
@@ -129,6 +135,8 @@ void CoreOobeHandler::RegisterMessages() {
               &CoreOobeHandler::HandleEnableLargeCursor);
   AddCallback("enableVirtualKeyboard",
               &CoreOobeHandler::HandleEnableVirtualKeyboard);
+  AddCallback("enableMonoAudio",
+              &CoreOobeHandler::HandleEnableMonoAudio);
   AddCallback("enableScreenMagnifier",
               &CoreOobeHandler::HandleEnableScreenMagnifier);
   AddCallback("enableSpokenFeedback",
@@ -266,6 +274,10 @@ void CoreOobeHandler::HandleEnableVirtualKeyboard(bool enabled) {
   AccessibilityManager::Get()->EnableVirtualKeyboard(enabled);
 }
 
+void CoreOobeHandler::HandleEnableMonoAudio(bool enabled) {
+  AccessibilityManager::Get()->EnableMonoAudio(enabled);
+}
+
 void CoreOobeHandler::HandleEnableScreenMagnifier(bool enabled) {
   // TODO(nkostylev): Add support for partial screen magnifier.
   DCHECK(MagnificationManager::Get());
@@ -329,6 +341,10 @@ void CoreOobeHandler::UpdateShutdownAndRebootVisibility(
 }
 
 void CoreOobeHandler::UpdateA11yState() {
+  if (chrome::IsRunningInMash()) {
+    NOTIMPLEMENTED();
+    return;
+  }
   // TODO(dpolukhin): crbug.com/412891
   DCHECK(MagnificationManager::Get());
   base::DictionaryValue a11y_info;
@@ -396,7 +412,8 @@ void CoreOobeHandler::UpdateKeyboardState() {
 }
 
 void CoreOobeHandler::UpdateClientAreaSize() {
-  const gfx::Size& size = gfx::Screen::GetScreen()->GetPrimaryDisplay().size();
+  const gfx::Size& size =
+      display::Screen::GetScreen()->GetPrimaryDisplay().size();
   SetClientAreaSize(size.width(), size.height());
 }
 

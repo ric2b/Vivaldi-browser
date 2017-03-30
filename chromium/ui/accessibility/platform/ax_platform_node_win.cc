@@ -138,18 +138,24 @@ AXPlatformNodeWin::AXPlatformNodeWin() {
 }
 
 AXPlatformNodeWin::~AXPlatformNodeWin() {
-  CHECK(!delegate_);
+}
+
+//
+// AXPlatformNodeBase implementation.
+//
+
+void AXPlatformNodeWin::Dispose() {
+  Release();
+}
+
+void AXPlatformNodeWin::Destroy() {
+  RemoveAlertTarget();
+  AXPlatformNodeBase::Destroy();
 }
 
 //
 // AXPlatformNode implementation.
 //
-
-void AXPlatformNodeWin::Destroy() {
-  delegate_ = nullptr;
-  RemoveAlertTarget();
-  Release();
-}
 
 gfx::NativeViewAccessible AXPlatformNodeWin::GetNativeViewAccessible() {
   return this;

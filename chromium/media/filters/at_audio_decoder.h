@@ -76,10 +76,10 @@ class MEDIA_EXPORT ATAudioDecoder : public AudioDecoder {
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   AudioDecoderConfig config_;
-  scoped_ptr<ATCodecHelper> codec_helper_;
+  std::unique_ptr<ATCodecHelper> codec_helper_;
   ScopedAudioConverterRef converter_;
   std::deque<scoped_refptr<DecoderBuffer>> queued_input_;
-  scoped_ptr<AudioDiscardHelper> discard_helper_;
+  std::unique_ptr<AudioDiscardHelper> discard_helper_;
   const bool needs_eos_workaround_;
   OutputCB output_cb_;
 

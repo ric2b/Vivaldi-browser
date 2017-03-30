@@ -3,6 +3,16 @@
 // found in the LICENSE file.
 
 /**
+ * @typedef {{
+ *   url: string,
+ *   page: string,
+ *   section: string,
+ *   subpage: !Array<string>,
+ * }}
+ */
+var SettingsRoute;
+
+/**
  * @fileoverview
  * 'settings-router' is a simple router for settings. Its responsibilities:
  *  - Update the URL when the routing state changes.
@@ -31,6 +41,7 @@ Polymer({
      * the user is on. The previous elements are the ancestor subpages. This
      * enables support for multiple paths to the same subpage. This is used by
      * both the Back button and the Breadcrumb to determine ancestor subpages.
+     * @type {SettingsRoute}
      */
     currentRoute: {
       notify: true,
@@ -43,6 +54,7 @@ Polymer({
           var route = this.routes_[i];
           if (route.url == window.location.pathname) {
             return {
+              url: route.url,
               page: route.page,
               section: route.section,
               subpage: route.subpage,
@@ -72,11 +84,11 @@ Polymer({
   },
 
 
- /**
-  * @private
-  * The 'url' property is not accessible to other elements.
-  */
- routes_: [
+  /**
+   * @private {!Array<!SettingsRoute>}
+   * The 'url' property is not accessible to other elements.
+   */
+  routes_: [
     {
       url: '/',
       page: 'basic',
@@ -84,12 +96,32 @@ Polymer({
       subpage: [],
     },
     {
+      url: '/help',
+      page: 'about',
+      section: '',
+      subpage: [],
+    },
+<if expr="chromeos">
+    {
+      url: '/help/details',
+      page: 'about',
+      section: 'about',
+      subpage: ['detailed-build-info'],
+    },
+</if>
+    {
       url: '/advanced',
       page: 'advanced',
       section: '',
       subpage: [],
     },
 <if expr="chromeos">
+    {
+      url: '/internet',
+      page: 'basic',
+      section: 'internet',
+      subpage: [],
+    },
     {
       url: '/networkDetail',
       page: 'basic',
@@ -104,10 +136,28 @@ Polymer({
     },
 </if>
     {
+      url: '/appearance',
+      page: 'basic',
+      section: 'appearance',
+      subpage: [],
+    },
+    {
       url: '/fonts',
       page: 'basic',
       section: 'appearance',
       subpage: ['appearance-fonts'],
+    },
+    {
+      url: '/defaultBrowser',
+      page: 'basic',
+      section: 'defaultBrowser',
+      subpage: [],
+    },
+    {
+      url: '/search',
+      page: 'basic',
+      section: 'search',
+      subpage: [],
     },
     {
       url: '/searchEngines',
@@ -116,10 +166,16 @@ Polymer({
       subpage: ['search-engines'],
     },
     {
-      url: '/searchEngines/advanced',
+      url: '/onStartup',
       page: 'basic',
-      section: 'search',
-      subpage: ['search-engines', 'search-engines-advanced'],
+      section: 'onStartup',
+      subpage: [],
+    },
+    {
+      url: '/people',
+      page: 'basic',
+      section: 'people',
+      subpage: [],
     },
 <if expr="chromeos">
     {
@@ -151,6 +207,12 @@ Polymer({
       subpage: ['users'],
     },
 </if>
+    {
+      url: '/advanced',
+      page: 'advanced',
+      section: 'privacy',
+      subpage: [],
+    },
     {
       url: '/certificates',
       page: 'advanced',
@@ -302,6 +364,18 @@ Polymer({
     },
 <if expr="chromeos">
     {
+      url: '/dateTime',
+      page: 'advanced',
+      section: 'dateTime',
+      subpage: [],
+    },
+    {
+      url: '/bluetooth',
+      page: 'advanced',
+      section: 'bluetooth',
+      subpage: [],
+    },
+    {
       url: '/bluetoothAddDevice',
       page: 'advanced',
       section: 'bluetooth',
@@ -315,13 +389,31 @@ Polymer({
     },
 </if>
     {
+      url: '/autofill',
+      page: 'advanced',
+      section: 'passwordsAndForms',
+      subpage: ['manage-autofill'],
+    },
+    {
       url: '/passwords',
+      page: 'advanced',
+      section: 'passwordsAndForms',
+      subpage: [],
+    },
+    {
+      url: '/managePasswords',
       page: 'advanced',
       section: 'passwordsAndForms',
       subpage: ['manage-passwords'],
     },
     {
       url: '/languages',
+      page: 'advanced',
+      section: 'languages',
+      subpage: [],
+    },
+    {
+      url: '/manageLanguages',
       page: 'advanced',
       section: 'languages',
       subpage: ['manage-languages'],
@@ -332,6 +424,14 @@ Polymer({
       section: 'languages',
       subpage: ['language-detail'],
     },
+<if expr="chromeos">
+    {
+      url: '/inputMethods',
+      page: 'advanced',
+      section: 'languages',
+      subpage: ['manage-input-methods'],
+    },
+</if>
 <if expr="not is_macosx">
     {
       url: '/editDictionary',
@@ -340,7 +440,37 @@ Polymer({
       subpage: ['edit-dictionary'],
     },
 </if>
+    {
+      url: '/downloadsDirectory',
+      page: 'advanced',
+      section: 'downloads',
+      subpage: [],
+    },
+    {
+      url: '/accessibility',
+      page: 'advanced',
+      section: 'a11y',
+      subpage: [],
+    },
+    {
+      url: '/system',
+      page: 'advanced',
+      section: 'system',
+      subpage: [],
+    },
+    {
+      url: '/reset',
+      page: 'advanced',
+      section: 'reset',
+      subpage: [],
+    },
 <if expr="chromeos">
+    {
+      url: '/device',
+      page: 'basic',
+      section: 'device',
+      subpage: [],
+    },
     {
       url: '/pointer-overlay',
       page: 'basic',
@@ -373,10 +503,12 @@ Polymer({
   },
 
   /**
-   * @private
    * Is called when another element modifies the route. This observer validates
    * the route change against the pre-defined list of routes, and updates the
    * URL appropriately.
+   * @param {!SettingsRoute} newRoute Where we're headed.
+   * @param {!SettingsRoute|undefined} oldRoute Where we've been.
+   * @private
    */
   currentRouteChanged_: function(newRoute, oldRoute) {
     for (var i = 0; i < this.routes_.length; ++i) {

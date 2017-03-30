@@ -99,12 +99,14 @@ class CardUnmaskPromptControllerImplTest : public testing::Test {
   void ShowPrompt() {
     controller_->ShowPrompt(test_unmask_prompt_view_.get(),
                             test::GetMaskedServerCard(),
+                            AutofillClient::UNMASK_FOR_AUTOFILL,
                             delegate_->GetWeakPtr());
   }
 
   void ShowPromptAmex() {
     controller_->ShowPrompt(test_unmask_prompt_view_.get(),
                             test::GetMaskedServerCardAmex(),
+                            AutofillClient::UNMASK_FOR_AUTOFILL,
                             delegate_->GetWeakPtr());
   }
 
@@ -112,7 +114,7 @@ class CardUnmaskPromptControllerImplTest : public testing::Test {
     ShowPrompt();
     controller_->OnUnmaskResponse(ASCIIToUTF16("444"),
                                   ASCIIToUTF16("01"),
-                                  ASCIIToUTF16("2015"),
+                                  ASCIIToUTF16("2050"),
                                   should_store_pan);
     EXPECT_EQ(
         should_store_pan,
@@ -211,7 +213,7 @@ TEST_F(CardUnmaskPromptControllerImplTest, LogUnmaskedCardAfterFailure) {
   controller_->OnVerificationResult(AutofillClient::TRY_AGAIN_FAILURE);
   controller_->OnUnmaskResponse(ASCIIToUTF16("444"),
                                 ASCIIToUTF16("01"),
-                                ASCIIToUTF16("2015"),
+                                ASCIIToUTF16("2050"),
                                 false /* should_store_pan */);
   base::HistogramTester histogram_tester;
 
@@ -364,7 +366,7 @@ TEST_F(CardUnmaskPromptControllerImplTest,
   controller_->OnVerificationResult(AutofillClient::TRY_AGAIN_FAILURE);
   controller_->OnUnmaskResponse(
       base::ASCIIToUTF16("444"), base::ASCIIToUTF16("01"),
-      base::ASCIIToUTF16("2015"), false /* should_store_pan */);
+      base::ASCIIToUTF16("2050"), false /* should_store_pan */);
   base::HistogramTester histogram_tester;
 
   controller_->OnVerificationResult(AutofillClient::SUCCESS);
@@ -454,7 +456,8 @@ TEST_F(CardUnmaskPromptControllerImplTest, CvcInputValidation) {
       continue;
 
     controller_->OnUnmaskResponse(ASCIIToUTF16(cvc_cases[i].input),
-                                  base::string16(), base::string16(), false);
+                                  ASCIIToUTF16("1"), ASCIIToUTF16("2050"),
+                                  false);
     EXPECT_EQ(ASCIIToUTF16(cvc_cases[i].canonicalized_input),
               delegate_->response().cvc);
   }

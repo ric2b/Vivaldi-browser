@@ -5,8 +5,9 @@
 #ifndef CHROME_TEST_BASE_CHROME_TEST_LAUNCHER_H_
 #define CHROME_TEST_BASE_CHROME_TEST_LAUNCHER_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "content/public/test/test_launcher.h"
 
 // Allows a test suite to override the TestSuite class used. By default it is an
@@ -35,7 +36,6 @@ class ChromeTestLauncherDelegate : public content::TestLauncherDelegate {
       base::CommandLine* command_line,
       const base::FilePath& temp_data_dir) override;
   content::ContentMainDelegate* CreateContentMainDelegate() override;
-  void AdjustDefaultParallelJobs(int* default_jobs) override;
 
  private:
   ChromeTestSuiteRunner* runner_;

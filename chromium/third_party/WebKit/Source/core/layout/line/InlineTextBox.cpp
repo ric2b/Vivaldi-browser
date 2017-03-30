@@ -80,12 +80,8 @@ void InlineTextBox::markDirty()
 
 LayoutRect InlineTextBox::logicalOverflowRect() const
 {
-    if (knownToHaveNoOverflow() || !gTextBoxesWithOverflow) {
-        // FIXME: the call to rawValue() below is temporary and should be removed once the transition
-        // to LayoutUnit-based types is complete (crbug.com/321237). The call to enclosingIntRect()
-        // should also likely be switched to LayoutUnit pixel-snapping.
-        return LayoutRect(enclosingIntRect(logicalFrameRect()));
-    }
+    if (knownToHaveNoOverflow() || !gTextBoxesWithOverflow)
+        return logicalFrameRect();
 
     return gTextBoxesWithOverflow->get(this);
 }
@@ -237,8 +233,6 @@ LayoutRect InlineTextBox::localSelectionRect(int startPos, int endPos) const
     if (sPos || ePos != static_cast<int>(m_len)) {
         r = LayoutRect(enclosingIntRect(font.selectionRectForText(textRun, FloatPoint(startingPoint), selHeight, sPos, ePos)));
     } else { // Avoid computing the font width when the entire line box is selected as an optimization.
-        // FIXME: the call to rawValue() below is temporary and should be removed once the transition
-        // to LayoutUnit-based types is complete (crbug.com/321237)
         r = LayoutRect(enclosingIntRect(LayoutRect(startingPoint, LayoutSize(m_logicalWidth, selHeight))));
     }
 
@@ -342,8 +336,8 @@ LayoutUnit InlineTextBox::placeEllipsisBox(bool flowIsLTR, LayoutUnit visibleLef
         bool ltr = isLeftToRightDirection();
         if (ltr != flowIsLTR) {
             // Width in pixels of the visible portion of the box, excluding the ellipsis.
-            int visibleBoxWidth = visibleRightEdge - visibleLeftEdge  - ellipsisWidth;
-            ellipsisX = ltr ? logicalLeft() + visibleBoxWidth : logicalRight() - visibleBoxWidth;
+            int visibleBoxWidth = visibleRightEdge - visibleLeftEdge - ellipsisWidth;
+            ellipsisX = flowIsLTR ? logicalLeft() + visibleBoxWidth : logicalRight() - visibleBoxWidth;
         }
 
         int offset = offsetForPosition(ellipsisX, false);
@@ -359,8 +353,9 @@ LayoutUnit InlineTextBox::placeEllipsisBox(bool flowIsLTR, LayoutUnit visibleLef
         setTruncation(offset);
 
         // If we got here that means that we were only partially truncated and we need to return the pixel offset at which
-        // to place the ellipsis.
-        LayoutUnit widthOfVisibleText(getLineLayoutItem().width(m_start, offset, textPos(), flowIsLTR ? LTR : RTL, isFirstLineStyle()));
+        // to place the ellipsis. Where the text and its flow have opposite directions then our offset into the text is at
+        // the start of the part that will be visible.
+        LayoutUnit widthOfVisibleText(getLineLayoutItem().width(ltr == flowIsLTR ? m_start : offset, ltr == flowIsLTR ? offset : m_len - offset, textPos(), flowIsLTR ? LTR : RTL, isFirstLineStyle()));
 
         // The ellipsis needs to be placed just after the last visible character.
         // Where "after" is defined by the flow directionality, not the inline

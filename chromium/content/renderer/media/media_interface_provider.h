@@ -10,7 +10,7 @@
 #include "base/threading/thread_checker.h"
 #include "content/common/content_export.h"
 #include "media/mojo/interfaces/service_factory.mojom.h"
-#include "mojo/shell/public/interfaces/interface_provider.mojom.h"
+#include "services/shell/public/interfaces/interface_provider.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -19,11 +19,11 @@ namespace content {
 // provides media related services and handles app disconnection automatically.
 // This class is single threaded.
 class CONTENT_EXPORT MediaInterfaceProvider
-    : public mojo::shell::mojom::InterfaceProvider {
+    : public shell::mojom::InterfaceProvider {
  public:
   // Callback used to connect to a mojo application.
   using ConnectToApplicationCB =
-      base::Callback<mojo::shell::mojom::InterfaceProviderPtr(const GURL& url)>;
+      base::Callback<shell::mojom::InterfaceProviderPtr(const GURL& url)>;
 
   explicit MediaInterfaceProvider(
       const ConnectToApplicationCB& connect_to_app_cb);
@@ -34,12 +34,12 @@ class CONTENT_EXPORT MediaInterfaceProvider
                     mojo::ScopedMessagePipeHandle pipe) final;
 
  private:
-  media::interfaces::ServiceFactory* GetMediaServiceFactory();
+  media::mojom::ServiceFactory* GetMediaServiceFactory();
   void OnConnectionError();
 
   base::ThreadChecker thread_checker_;
   ConnectToApplicationCB connect_to_app_cb_;
-  media::interfaces::ServiceFactoryPtr media_service_factory_;
+  media::mojom::ServiceFactoryPtr media_service_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaInterfaceProvider);
 };

@@ -87,7 +87,7 @@ WebUIDataSourceImpl::WebUIDataSourceImpl(const std::string& source_name)
       object_src_set_(false),
       frame_src_set_(false),
       deny_xframe_options_(true),
-      disable_set_font_strings_(false),
+      add_load_time_data_defaults_(true),
       replace_existing_source_(true) {}
 
 WebUIDataSourceImpl::~WebUIDataSourceImpl() {
@@ -117,6 +117,15 @@ void WebUIDataSourceImpl::AddLocalizedString(const std::string& name,
 void WebUIDataSourceImpl::AddLocalizedStrings(
     const base::DictionaryValue& localized_strings) {
   localized_strings_.MergeDictionary(&localized_strings);
+
+  for (base::DictionaryValue::Iterator it(localized_strings); !it.IsAtEnd();
+       it.Advance()) {
+    if (it.value().IsType(base::Value::TYPE_STRING)) {
+      std::string value;
+      it.value().GetAsString(&value);
+      replacements_[it.key()] = value;
+    }
+  }
 }
 
 void WebUIDataSourceImpl::AddBoolean(const std::string& name, bool value) {
@@ -206,6 +215,14 @@ void WebUIDataSourceImpl::StartDataRequest(
     return;
   }
 
+  if (add_load_time_data_defaults_) {
+    std::string locale = GetContentClient()->browser()->GetApplicationLocale();
+    base::DictionaryValue defaults;
+    webui::SetLoadTimeDataDefaults(locale, &defaults);
+    AddLocalizedStrings(defaults);
+    add_load_time_data_defaults_ = false;
+  }
+
   if (!json_path_.empty() && path == json_path_) {
     SendLocalizedStringsAsJSON(callback);
     return;
@@ -237,11 +254,6 @@ void WebUIDataSourceImpl::StartDataRequest(
 void WebUIDataSourceImpl::SendLocalizedStringsAsJSON(
     const URLDataSource::GotDataCallback& callback) {
   std::string template_data;
-  if (!disable_set_font_strings_) {
-    std::string locale = GetContentClient()->browser()->GetApplicationLocale();
-    webui::SetLoadTimeDataDefaults(locale, &localized_strings_);
-  }
-
   webui::AppendJsonJS(&localized_strings_, &template_data);
   callback.Run(base::RefCountedString::TakeString(&template_data));
 }

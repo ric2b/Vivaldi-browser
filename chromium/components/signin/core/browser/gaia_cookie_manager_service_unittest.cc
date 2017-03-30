@@ -2,23 +2,24 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/signin/core/browser/gaia_cookie_manager_service.h"
+
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/histogram_tester.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
-#include "components/signin/core/browser/gaia_cookie_manager_service.h"
 #include "components/signin/core/browser/test_signin_client.h"
 #include "components/signin/core/common/signin_pref_names.h"
 #include "google_apis/gaia/fake_oauth2_token_service.h"
@@ -161,7 +162,7 @@ class GaiaCookieManagerServiceTest : public testing::Test {
   GoogleServiceAuthError error_;
   GoogleServiceAuthError canceled_;
   TestingPrefServiceSimple pref_service_;
-  scoped_ptr<TestSigninClient> signin_client_;
+  std::unique_ptr<TestSigninClient> signin_client_;
 };
 
 }  // namespace

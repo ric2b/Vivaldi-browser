@@ -280,7 +280,8 @@ GURL GURL::ReplaceComponents(
 
   output.Complete();
   if (result.is_valid_ && result.SchemeIsFileSystem()) {
-    result.inner_url_.reset(new GURL(spec_.data(), result.parsed_.Length(),
+    result.inner_url_.reset(new GURL(result.spec_.data(),
+                                     result.parsed_.Length(),
                                      *result.parsed_.inner_parsed(), true));
   }
   return result;
@@ -306,7 +307,8 @@ GURL GURL::ReplaceComponents(
 
   output.Complete();
   if (result.is_valid_ && result.SchemeIsFileSystem()) {
-    result.inner_url_.reset(new GURL(spec_.data(), result.parsed_.Length(),
+    result.inner_url_.reset(new GURL(result.spec_.data(),
+                                     result.parsed_.Length(),
                                      *result.parsed_.inner_parsed(), true));
   }
   return result;

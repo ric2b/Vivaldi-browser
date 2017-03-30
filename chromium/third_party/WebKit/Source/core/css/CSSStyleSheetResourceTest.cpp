@@ -23,6 +23,7 @@
 #include "core/fetch/ResourceFetcher.h"
 #include "core/testing/DummyPageHolder.h"
 #include "platform/heap/Handle.h"
+#include "platform/heap/Heap.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
@@ -112,7 +113,7 @@ TEST_F(CSSStyleSheetResourceTest, PruneCanCauseEviction)
         }
         ASSERT_TRUE(memoryCache()->isInSameLRUListForTest(cssResource, imageResource));
     }
-    Heap::collectAllGarbage();
+    ThreadHeap::collectAllGarbage();
     // This operation should not lead to crash!
     memoryCache()->pruneAll();
 }
@@ -125,7 +126,7 @@ TEST_F(CSSStyleSheetResourceTest, DuplicateResourceNotCached)
 
     // Emulate using <img> to do async stylesheet preloads.
 
-    Resource* imageResource = ImageResource::create(ResourceRequest(imageURL), nullptr);
+    Resource* imageResource = ImageResource::create(ResourceRequest(imageURL));
     ASSERT_TRUE(imageResource);
     memoryCache()->add(imageResource);
     ASSERT_TRUE(memoryCache()->contains(imageResource));
@@ -134,7 +135,8 @@ TEST_F(CSSStyleSheetResourceTest, DuplicateResourceNotCached)
     cssResource->responseReceived(ResourceResponse(cssURL, "style/css", 0, nullAtom, String()), nullptr);
     cssResource->finish();
 
-    StyleSheetContents* contents = StyleSheetContents::create(CSSParserContext(HTMLStandardMode, nullptr));
+    CSSParserContext parserContext(HTMLStandardMode, nullptr);
+    StyleSheetContents* contents = StyleSheetContents::create(parserContext);
     CSSStyleSheet* sheet = CSSStyleSheet::create(contents, document());
     EXPECT_TRUE(sheet);
 
@@ -143,10 +145,11 @@ TEST_F(CSSStyleSheetResourceTest, DuplicateResourceNotCached)
 
     // Verify that the cache will have a mapping for |imageResource| at |url|.
     // The underlying |contents| for the stylesheet resource must have a
-    // matching cache status.
-    ASSERT_TRUE(memoryCache()->contains(imageResource));
-    ASSERT_FALSE(memoryCache()->contains(cssResource));
-    ASSERT_FALSE(contents->isInMemoryCache());
+    // matching reference status.
+    EXPECT_TRUE(memoryCache()->contains(imageResource));
+    EXPECT_FALSE(memoryCache()->contains(cssResource));
+    EXPECT_FALSE(contents->isReferencedFromResource());
+    EXPECT_FALSE(cssResource->restoreParsedStyleSheet(parserContext));
 }
 
 } // namespace

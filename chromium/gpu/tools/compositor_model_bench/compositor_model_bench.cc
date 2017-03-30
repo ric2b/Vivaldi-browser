@@ -28,15 +28,14 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "gpu/tools/compositor_model_bench/render_model_utils.h"
 #include "gpu/tools/compositor_model_bench/render_models.h"
 #include "gpu/tools/compositor_model_bench/render_tree.h"
-#include "ui/gl/gl_surface.h"
+#include "ui/gl/init/gl_factory.h"
 
 using base::TimeTicks;
 using base::DirectoryExists;
@@ -187,8 +186,8 @@ class Simulator {
 
   // Initialize the OpenGL context.
   bool InitGLContext() {
-    if (!gfx::GLSurface::InitializeOneOff()) {
-      LOG(FATAL) << "gfx::GLSurface::InitializeOneOff failed";
+    if (!gl::init::InitializeGLOneOff()) {
+      LOG(FATAL) << "gl::init::InitializeGLOneOff failed";
       return false;
     }
 

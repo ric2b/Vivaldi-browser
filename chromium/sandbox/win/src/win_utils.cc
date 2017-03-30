@@ -92,8 +92,7 @@ bool StartsWithDriveLetter(const base::string16& path) {
   if (path[1] != L':' || path[2] != L'\\')
     return false;
 
-  return (path[0] >= 'a' && path[0] <= 'z') ||
-         (path[0] >= 'A' && path[0] <= 'Z');
+  return base::IsAsciiAlpha(path[0]);
 }
 
 const wchar_t kNTDotPrefix[] = L"\\\\.\\";
@@ -403,6 +402,12 @@ bool WriteProtectedChildMemory(HANDLE child_process, void* address,
     return false;
 
   return ok;
+}
+
+DWORD GetLastErrorFromNtStatus(NTSTATUS status) {
+  RtlNtStatusToDosErrorFunction NtStatusToDosError = nullptr;
+  ResolveNTFunctionPtr("RtlNtStatusToDosError", &NtStatusToDosError);
+  return NtStatusToDosError(status);
 }
 
 };  // namespace sandbox

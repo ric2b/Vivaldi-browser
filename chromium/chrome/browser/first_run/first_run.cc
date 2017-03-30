@@ -125,17 +125,9 @@ class ImportEndedObserver : public importer::ImporterProgressObserver {
 // chrome infrastructure to be up and running before they can be attempted.
 class FirstRunDelayedTasks : public content::NotificationObserver {
  public:
-  enum Tasks {
-    NO_TASK,
-    INSTALL_EXTENSIONS
-  };
-
-  explicit FirstRunDelayedTasks(Tasks task) {
-    if (task == INSTALL_EXTENSIONS) {
-      registrar_.Add(this,
-                     extensions::NOTIFICATION_EXTENSIONS_READY_DEPRECATED,
-                     content::NotificationService::AllSources());
-    }
+  FirstRunDelayedTasks() {
+    registrar_.Add(this, extensions::NOTIFICATION_EXTENSIONS_READY_DEPRECATED,
+                   content::NotificationService::AllSources());
     registrar_.Add(this, chrome::NOTIFICATION_BROWSER_CLOSED,
                    content::NotificationService::AllSources());
   }
@@ -171,7 +163,7 @@ class FirstRunDelayedTasks : public content::NotificationObserver {
 // Installs a task to do an extensions update check once the extensions system
 // is running.
 void DoDelayedInstallExtensions() {
-  new FirstRunDelayedTasks(FirstRunDelayedTasks::INSTALL_EXTENSIONS);
+  new FirstRunDelayedTasks();
 }
 
 void DoDelayedInstallExtensionsIfNeeded(
@@ -282,7 +274,7 @@ void ImportFromFile(Profile* profile,
 
 // Imports settings from the first profile in |importer_list|.
 void ImportSettings(Profile* profile,
-                    scoped_ptr<ImporterList> importer_list,
+                    std::unique_ptr<ImporterList> importer_list,
                     int items_to_import) {
   const importer::SourceProfile& source_profile =
       importer_list->GetSourceProfileAt(0);
@@ -463,9 +455,9 @@ installer::MasterPreferences* LoadMasterPrefs() {
 // Makes chrome the user's default browser according to policy or
 // |make_chrome_default_for_user| if no policy is set.
 void ProcessDefaultBrowserPolicy(bool make_chrome_default_for_user) {
-  // Only proceed if chrome can be made default unattended. The interactive case
-  // (Windows 8+) is handled by the first run default browser prompt.
-  if (shell_integration::CanSetAsDefaultBrowser() ==
+  // Only proceed if chrome can be made default unattended. In other cases, this
+  // is handled by the first run default browser prompt (on Windows 8+).
+  if (shell_integration::GetDefaultWebClientSetPermission() ==
       shell_integration::SET_DEFAULT_UNATTENDED) {
     // The policy has precedence over the user's choice.
     if (g_browser_process->local_state()->IsManagedPreference(
@@ -645,7 +637,7 @@ bool IsMetricsReportingOptIn() {
 #if defined(OS_CHROMEOS)
   return false;
 #elif defined(OS_ANDROID)
-  return chrome::GetChannel() == version_info::Channel::STABLE;
+#error This file shouldn not be compiled on Android.
 #elif defined(OS_MACOSX)
   return chrome::GetChannel() != version_info::Channel::CANARY;
 #elif defined(OS_LINUX) || defined(OS_BSD) || defined(OS_SOLARIS)
@@ -658,6 +650,8 @@ bool IsMetricsReportingOptIn() {
   // it's opt-in or out can change without changes to Chrome. We should get this
   // information directly from the download page for it to be accurate.
   return chrome::GetChannel() == version_info::Channel::STABLE;
+#else
+#error Unsupported platform.
 #endif
 }
 
@@ -724,7 +718,8 @@ ProcessMasterPreferencesResult ProcessMasterPreferences(
     MasterPrefs* out_prefs) {
   DCHECK(!user_data_dir.empty());
 
-  scoped_ptr<installer::MasterPreferences> install_prefs(LoadMasterPrefs());
+  std::unique_ptr<installer::MasterPreferences> install_prefs(
+      LoadMasterPrefs());
 
   // Default value in case master preferences is missing or corrupt, or
   // ping_delay is missing.
@@ -760,7 +755,7 @@ void AutoImport(
   // It may be possible to do the if block below asynchronously. In which case,
   // get rid of this RunLoop. http://crbug.com/366116.
   base::RunLoop run_loop;
-  scoped_ptr<ImporterList> importer_list(new ImporterList());
+  std::unique_ptr<ImporterList> importer_list(new ImporterList());
   importer_list->DetectSourceProfiles(
       g_browser_process->GetApplicationLocale(),
       false,  // include_interactive_profiles?

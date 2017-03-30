@@ -9,10 +9,10 @@
 #include <X11/extensions/XInput2.h>
 
 #include <map>
+#include <memory>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
-#include "ui/events/devices/events_devices_export.h"
+#include "ui/events/devices/x11/events_devices_x11_export.h"
 #include "ui/gfx/x/x11_types.h"
 
 namespace base {
@@ -26,7 +26,7 @@ struct DeviceList {
   DeviceList() : count(0) {}
   T& operator[](int x) { return devices[x]; }
   const T& operator[](int x) const { return devices[x]; }
-  scoped_ptr<T[], gfx::XObjectDeleter<T, void, D>> devices;
+  std::unique_ptr<T[], gfx::XObjectDeleter<T, void, D>> devices;
   int count;
 };
 
@@ -38,7 +38,7 @@ namespace ui {
 // A class to cache the current XInput device list. This minimized the
 // round-trip time to the X server whenever such a device list is needed. The
 // update function will be called on each incoming XI_HierarchyChanged event.
-class EVENTS_DEVICES_EXPORT DeviceListCacheX11 {
+class EVENTS_DEVICES_X11_EXPORT DeviceListCacheX11 {
  public:
   static DeviceListCacheX11* GetInstance();
 

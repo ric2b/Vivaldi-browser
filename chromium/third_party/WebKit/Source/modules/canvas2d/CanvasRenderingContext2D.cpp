@@ -35,7 +35,7 @@
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
-#include "bindings/modules/v8/UnionTypesModules.h"
+#include "bindings/modules/v8/RenderingContext.h"
 #include "core/CSSPropertyNames.h"
 #include "core/css/StylePropertySet.h"
 #include "core/css/resolver/StyleResolver.h"
@@ -61,10 +61,10 @@
 #include "public/platform/Platform.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkImageFilter.h"
-#include "wtf/ArrayBufferContents.h"
 #include "wtf/MathExtras.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/text/StringBuilder.h"
+#include "wtf/typed_arrays/ArrayBufferContents.h"
 
 namespace blink {
 
@@ -123,9 +123,7 @@ CanvasRenderingContext2D::CanvasRenderingContext2D(HTMLCanvasElement* canvas, co
     if (document.settings() && document.settings()->antialiasedClips2dCanvasEnabled())
         m_clipAntialiasing = AntiAliased;
     setShouldAntialias(true);
-#if ENABLE(OILPAN)
     ThreadState::current()->registerPreFinalizer(this);
-#endif
 }
 
 void CanvasRenderingContext2D::setCanvasGetContextResult(RenderingContext& result)
@@ -145,16 +143,12 @@ void CanvasRenderingContext2D::unwindStateStack()
 
 CanvasRenderingContext2D::~CanvasRenderingContext2D()
 {
-    if (m_pruneLocalFontCacheScheduled) {
-        Platform::current()->currentThread()->removeTaskObserver(this);
-    }
-#if !ENABLE(OILPAN)
-    dispose();
-#endif
 }
 
 void CanvasRenderingContext2D::dispose()
 {
+    if (m_pruneLocalFontCacheScheduled)
+        Platform::current()->currentThread()->removeTaskObserver(this);
     clearFilterReferences();
 }
 
@@ -308,6 +302,11 @@ void CanvasRenderingContext2D::restoreCanvasMatrixClipStack(SkCanvas* c) const
     c->restore();
 }
 
+bool CanvasRenderingContext2D::shouldAntialias() const
+{
+    return state().shouldAntialias();
+}
+
 void CanvasRenderingContext2D::setShouldAntialias(bool doAA)
 {
     modifiableState().setShouldAntialias(doAA);
@@ -328,7 +327,7 @@ void CanvasRenderingContext2D::scrollPathIntoViewInternal(const Path& path)
     if (!state().isTransformInvertible() || path.isEmpty())
         return;
 
-    canvas()->document().updateLayoutIgnorePendingStylesheets();
+    canvas()->document().updateStyleAndLayoutIgnorePendingStylesheets();
 
     LayoutObject* renderer = canvas()->layoutObject();
     LayoutBox* layoutBox = canvas()->layoutBox();
@@ -355,9 +354,9 @@ void CanvasRenderingContext2D::scrollPathIntoViewInternal(const Path& path)
 void CanvasRenderingContext2D::clearRect(double x, double y, double width, double height)
 {
     BaseRenderingContext2D::clearRect(x, y, width, height);
-    FloatRect rect(x, y, width, height);
 
     if (m_hitRegionManager) {
+        FloatRect rect(x, y, width, height);
         m_hitRegionManager->removeHitRegionsInRect(rect, state().transform());
     }
 }
@@ -378,12 +377,21 @@ void CanvasRenderingContext2D::didDraw(const SkIRect& dirtyRect)
 
 bool CanvasRenderingContext2D::stateHasFilter()
 {
-    return state().hasFilter(canvas(), accessFont(), canvas()->size(), this);
+    return state().hasFilter(canvas(), canvas()->size(), this);
 }
 
 SkImageFilter* CanvasRenderingContext2D::stateGetFilter()
 {
-    return state().getFilter(canvas(), accessFont(), canvas()->size(), this);
+    return state().getFilter(canvas(), canvas()->size(), this);
+}
+
+void CanvasRenderingContext2D::snapshotStateForFilter()
+{
+    // The style resolution required for fonts is not available in frame-less documents.
+    if (!canvas()->document().frame())
+        return;
+
+    modifiableState().setFontForFilter(accessFont());
 }
 
 SkCanvas* CanvasRenderingContext2D::drawingCanvas() const
@@ -421,7 +429,7 @@ String CanvasRenderingContext2D::font() const
         serializedFont.appendLiteral("italic ");
     if (fontDescription.weight() == FontWeightBold)
         serializedFont.appendLiteral("bold ");
-    if (fontDescription.variant() == FontVariantSmallCaps)
+    if (fontDescription.variantCaps() == FontDescription::SmallCaps)
         serializedFont.appendLiteral("small-caps ");
 
     serializedFont.appendNumber(fontDescription.computedPixelSize());
@@ -452,7 +460,7 @@ void CanvasRenderingContext2D::setFont(const String& newFont)
     if (!canvas()->document().frame())
         return;
 
-    canvas()->document().updateLayoutTreeForNode(canvas());
+    canvas()->document().updateStyleAndLayoutTreeForNode(canvas());
 
     // The following early exit is dependent on the cache not being empty
     // because an empty cache may indicate that a style change has occured
@@ -605,6 +613,16 @@ std::pair<Element*, String> CanvasRenderingContext2D::getControlAndIdIfHitRegion
     return std::make_pair(nullptr, String());
 }
 
+String CanvasRenderingContext2D::getIdFromControl(const Element* element)
+{
+    if (hitRegionsCount() <= 0)
+        return String();
+
+    if (HitRegion* hitRegion = m_hitRegionManager->getHitRegionByControl(element))
+        return hitRegion->id();
+    return String();
+}
+
 String CanvasRenderingContext2D::textAlign() const
 {
     return textAlignName(state().getTextAlign());
@@ -655,7 +673,7 @@ static inline TextDirection toTextDirection(CanvasRenderingContext2DState::Direc
 String CanvasRenderingContext2D::direction() const
 {
     if (state().getDirection() == CanvasRenderingContext2DState::DirectionInherit)
-        canvas()->document().updateLayoutTreeForNode(canvas());
+        canvas()->document().updateStyleAndLayoutTreeForNode(canvas());
     return toTextDirection(state().getDirection(), canvas()) == RTL ? rtl : ltr;
 }
 
@@ -705,7 +723,7 @@ TextMetrics* CanvasRenderingContext2D::measureText(const String& text)
     if (!canvas()->document().frame())
         return metrics;
 
-    canvas()->document().updateLayoutTreeForNode(canvas());
+    canvas()->document().updateStyleAndLayoutTreeForNode(canvas());
     const Font& font = accessFont();
 
     TextDirection direction;
@@ -753,7 +771,7 @@ void CanvasRenderingContext2D::drawTextInternal(const String& text, double x, do
     // accessFont needs the style to be up to date, but updating style can cause script to run,
     // (e.g. due to autofocus) which can free the canvas (set size to 0, for example), so update
     // style before grabbing the drawingCanvas.
-    canvas()->document().updateLayoutTreeForNode(canvas());
+    canvas()->document().updateStyleAndLayoutTreeForNode(canvas());
 
     SkCanvas* c = drawingCanvas();
     if (!c)
@@ -957,7 +975,7 @@ void CanvasRenderingContext2D::drawFocusRing(const Path& path)
 
 void CanvasRenderingContext2D::updateElementAccessibility(const Path& path, Element* element)
 {
-    element->document().updateLayoutIgnorePendingStylesheets();
+    element->document().updateStyleAndLayoutIgnorePendingStylesheets();
     AXObjectCache* axObjectCache = element->document().existingAXObjectCache();
     LayoutBoxModelObject* lbmo = canvas()->layoutBoxModelObject();
     LayoutObject* renderer = canvas()->layoutObject();

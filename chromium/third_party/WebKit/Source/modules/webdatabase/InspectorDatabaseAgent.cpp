@@ -35,6 +35,7 @@
 #include "core/page/Page.h"
 #include "modules/webdatabase/Database.h"
 #include "modules/webdatabase/DatabaseClient.h"
+#include "modules/webdatabase/DatabaseTracker.h"
 #include "modules/webdatabase/InspectorDatabaseResource.h"
 #include "modules/webdatabase/SQLError.h"
 #include "modules/webdatabase/SQLResultSet.h"
@@ -46,6 +47,7 @@
 #include "modules/webdatabase/SQLTransactionErrorCallback.h"
 #include "modules/webdatabase/sqlite/SQLValue.h"
 #include "platform/inspector_protocol/Values.h"
+#include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 
 typedef blink::protocol::Backend::Database::ExecuteSQLCallback ExecuteSQLCallback;
@@ -60,7 +62,7 @@ namespace {
 
 class ExecuteSQLCallbackWrapper : public RefCounted<ExecuteSQLCallbackWrapper> {
 public:
-    static PassRefPtr<ExecuteSQLCallbackWrapper> create(PassOwnPtr<ExecuteSQLCallback> callback) { return adoptRef(new ExecuteSQLCallbackWrapper(callback)); }
+    static PassRefPtr<ExecuteSQLCallbackWrapper> create(PassOwnPtr<ExecuteSQLCallback> callback) { return adoptRef(new ExecuteSQLCallbackWrapper(std::move(callback))); }
     ~ExecuteSQLCallbackWrapper() { }
     ExecuteSQLCallback* get() { return m_callback.get(); }
 
@@ -69,11 +71,11 @@ public:
         OwnPtr<protocol::Database::Error> errorObject = protocol::Database::Error::create()
             .setMessage(error->message())
             .setCode(error->code()).build();
-        m_callback->sendSuccess(Maybe<protocol::Array<String>>(), Maybe<protocol::Array<protocol::Value>>(), errorObject.release());
+        m_callback->sendSuccess(Maybe<protocol::Array<String>>(), Maybe<protocol::Array<protocol::Value>>(), std::move(errorObject));
     }
 
 private:
-    explicit ExecuteSQLCallbackWrapper(PassOwnPtr<ExecuteSQLCallback> callback) : m_callback(callback) { }
+    explicit ExecuteSQLCallbackWrapper(PassOwnPtr<ExecuteSQLCallback> callback) : m_callback(std::move(callback)) { }
     OwnPtr<ExecuteSQLCallback> m_callback;
 };
 
@@ -110,7 +112,7 @@ public:
             case SQLValue::NullValue: values->addItem(protocol::Value::null()); break;
             }
         }
-        m_requestCallback->get()->sendSuccess(columnNames.release(), values.release(), Maybe<protocol::Database::Error>());
+        m_requestCallback->get()->sendSuccess(std::move(columnNames), std::move(values), Maybe<protocol::Database::Error>());
         return true;
     }
 
@@ -216,6 +218,11 @@ private:
 
 } // namespace
 
+void InspectorDatabaseAgent::registerDatabaseOnCreation(blink::Database* database)
+{
+    didOpenDatabase(database, database->getSecurityOrigin()->host(), database->stringIdentifier(), database->version());
+}
+
 void InspectorDatabaseAgent::didOpenDatabase(blink::Database* database, const String& domain, const String& name, const String& version)
 {
     if (InspectorDatabaseResource* resource = findByFileName(database->fileName())) {
@@ -226,8 +233,8 @@ void InspectorDatabaseAgent::didOpenDatabase(blink::Database* database, const St
     InspectorDatabaseResource* resource = InspectorDatabaseResource::create(database, domain, name, version);
     m_resources.set(resource->id(), resource);
     // Resources are only bound while visible.
-    if (frontend() && m_enabled)
-        resource->bind(frontend());
+    ASSERT(m_enabled && frontend());
+    resource->bind(frontend());
 }
 
 void InspectorDatabaseAgent::didCommitLoadForLocalFrame(LocalFrame* frame)
@@ -244,7 +251,6 @@ InspectorDatabaseAgent::InspectorDatabaseAgent(Page* page)
     , m_page(page)
     , m_enabled(false)
 {
-    DatabaseClient::fromPage(page)->setInspectorAgent(this);
 }
 
 InspectorDatabaseAgent::~InspectorDatabaseAgent()
@@ -257,10 +263,9 @@ void InspectorDatabaseAgent::enable(ErrorString*)
         return;
     m_enabled = true;
     m_state->setBoolean(DatabaseAgentState::databaseAgentEnabled, m_enabled);
-
-    DatabaseResourcesHeapMap::iterator databasesEnd = m_resources.end();
-    for (DatabaseResourcesHeapMap::iterator it = m_resources.begin(); it != databasesEnd; ++it)
-        it->value->bind(frontend());
+    if (DatabaseClient* client = DatabaseClient::fromPage(m_page))
+        client->setInspectorAgent(this);
+    DatabaseTracker::tracker().forEachOpenDatabaseInPage(m_page, bind<blink::Database*>(&InspectorDatabaseAgent::registerDatabaseOnCreation, this));
 }
 
 void InspectorDatabaseAgent::disable(ErrorString*)
@@ -269,11 +274,17 @@ void InspectorDatabaseAgent::disable(ErrorString*)
         return;
     m_enabled = false;
     m_state->setBoolean(DatabaseAgentState::databaseAgentEnabled, m_enabled);
+    if (DatabaseClient* client = DatabaseClient::fromPage(m_page))
+        client->setInspectorAgent(nullptr);
+    m_resources.clear();
 }
 
 void InspectorDatabaseAgent::restore()
 {
-    m_enabled = m_state->booleanProperty(DatabaseAgentState::databaseAgentEnabled, false);
+    if (m_state->booleanProperty(DatabaseAgentState::databaseAgentEnabled, false)) {
+        ErrorString error;
+        enable(&error);
+    }
 }
 
 void InspectorDatabaseAgent::getDatabaseTableNames(ErrorString* error, const String& databaseId, OwnPtr<protocol::Array<String>>* names)
@@ -296,7 +307,7 @@ void InspectorDatabaseAgent::getDatabaseTableNames(ErrorString* error, const Str
 
 void InspectorDatabaseAgent::executeSQL(ErrorString*, const String& databaseId, const String& query, PassOwnPtr<ExecuteSQLCallback> prpRequestCallback)
 {
-    OwnPtr<ExecuteSQLCallback> requestCallback = prpRequestCallback;
+    OwnPtr<ExecuteSQLCallback> requestCallback = std::move(prpRequestCallback);
 
     if (!m_enabled) {
         requestCallback->sendFailure("Database agent is not enabled");
@@ -309,7 +320,7 @@ void InspectorDatabaseAgent::executeSQL(ErrorString*, const String& databaseId, 
         return;
     }
 
-    RefPtr<ExecuteSQLCallbackWrapper> wrapper = ExecuteSQLCallbackWrapper::create(requestCallback.release());
+    RefPtr<ExecuteSQLCallbackWrapper> wrapper = ExecuteSQLCallbackWrapper::create(std::move(requestCallback));
     SQLTransactionCallback* callback = TransactionCallback::create(query, wrapper);
     SQLTransactionErrorCallback* errorCallback = TransactionErrorCallback::create(wrapper);
     VoidCallback* successCallback = TransactionSuccessCallback::create();

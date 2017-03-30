@@ -4,16 +4,22 @@
 
 #include "chrome/browser/chromeos/arc/arc_auth_service.h"
 
+#include <string>
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
+#include "base/logging.h"
+#include "base/strings/string16.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_checker.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/arc/arc_auth_notification.h"
 #include "chrome/browser/chromeos/arc/arc_optin_uma.h"
+#include "chrome/browser/chromeos/arc/arc_support_host.h"
+#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
@@ -22,12 +28,16 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/ui/app_list/arc/arc_app_launcher.h"
+#include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/arc/arc_bridge_service.h"
+#include "components/policy/core/browser/browser_policy_connector.h"
+#include "components/policy/core/common/cloud/device_management_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
@@ -52,19 +62,32 @@ ArcAuthService* arc_auth_service = nullptr;
 base::LazyInstance<base::ThreadChecker> thread_checker =
     LAZY_INSTANCE_INITIALIZER;
 
-const char kArcSupportExtensionId[] = "cnbgggchhmkkdmeppjobngjoejnihlei";
-const char kArcSupportStorageId[] = "arc_support";
-
 // Skip creating UI in unit tests
 bool disable_ui_for_testing = false;
 
+// The Android management check is disabled by default, it's used only for
+// testing.
+bool enable_check_android_management_for_testing = false;
+
+const char kStateNotInitialized[] = "NOT_INITIALIZED";
 const char kStateStopped[] = "STOPPED";
 const char kStateFetchingCode[] = "FETCHING_CODE";
 const char kStateActive[] = "ACTIVE";
+
+bool IsAccountManaged(Profile* profile) {
+  return policy::ProfilePolicyConnectorFactory::GetForBrowserContext(profile)
+      ->IsManaged();
+}
+
+bool IsArcDisabledForEnterprise() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      chromeos::switches::kEnterpriseDisableArc);
+}
+
 }  // namespace
 
 ArcAuthService::ArcAuthService(ArcBridgeService* bridge_service)
-    : ArcService(bridge_service), binding_(this) {
+    : ArcService(bridge_service), binding_(this), weak_ptr_factory_(this) {
   DCHECK(!arc_auth_service);
   DCHECK(thread_checker.Get().CalledOnValidThread());
 
@@ -109,6 +132,45 @@ bool ArcAuthService::IsOptInVerificationDisabled() {
       chromeos::switches::kDisableArcOptInVerification);
 }
 
+// static
+void ArcAuthService::EnableCheckAndroidManagementForTesting() {
+  enable_check_android_management_for_testing = true;
+}
+
+// static
+bool ArcAuthService::IsAllowedForProfile(const Profile* profile) {
+  if (!arc::ArcBridgeService::GetEnabled(
+          base::CommandLine::ForCurrentProcess())) {
+    VLOG(1) << "Arc is not enabled.";
+    return false;
+  }
+
+  if (!profile) {
+    VLOG(1) << "ARC is not supported for systems without profile.";
+    return false;
+  }
+
+  if (profile->IsLegacySupervised()) {
+    VLOG(1) << "Supervised users are not supported in ARC.";
+    return false;
+  }
+
+  user_manager::User const* const user =
+      chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
+  if (!user || !user->HasGaiaAccount()) {
+    VLOG(1) << "Users without GAIA accounts are not supported in ARC.";
+    return false;
+  }
+
+  if (user_manager::UserManager::Get()
+          ->IsCurrentUserCryptohomeDataEphemeral()) {
+    VLOG(2) << "Users with ephemeral data are not supported in Arc.";
+    return false;
+  }
+
+  return true;
+}
+
 void ArcAuthService::OnAuthInstanceReady() {
   arc_bridge_service()->auth_instance()->Init(
       binding_.CreateInterfacePtrAndBind());
@@ -147,33 +209,39 @@ void ArcAuthService::OnSignInComplete() {
   DCHECK(thread_checker.Get().CalledOnValidThread());
   DCHECK_EQ(state_, State::ACTIVE);
 
+  if (!IsOptInVerificationDisabled() &&
+      !profile_->GetPrefs()->HasPrefPath(prefs::kArcSignedIn)) {
+    playstore_launcher_.reset(
+        new ArcAppLauncher(profile_, kPlayStoreAppId, true));
+  }
+
   profile_->GetPrefs()->SetBoolean(prefs::kArcSignedIn, true);
   CloseUI();
 }
 
-void ArcAuthService::OnSignInFailed(arc::ArcSignInFailureReason reason) {
+void ArcAuthService::OnSignInFailed(arc::mojom::ArcSignInFailureReason reason) {
   DCHECK(thread_checker.Get().CalledOnValidThread());
   DCHECK_EQ(state_, State::ACTIVE);
 
   int error_message_id;
   switch (reason) {
-    case arc::ArcSignInFailureReason::NETWORK_ERROR:
+    case arc::mojom::ArcSignInFailureReason::NETWORK_ERROR:
       error_message_id = IDS_ARC_SIGN_IN_NETWORK_ERROR;
       UpdateOptInCancelUMA(OptInCancelReason::NETWORK_ERROR);
       break;
-    case arc::ArcSignInFailureReason::SERVICE_UNAVAILABLE:
+    case arc::mojom::ArcSignInFailureReason::SERVICE_UNAVAILABLE:
       error_message_id = IDS_ARC_SIGN_IN_SERVICE_UNAVAILABLE_ERROR;
       UpdateOptInCancelUMA(OptInCancelReason::SERVICE_UNAVAILABLE);
       break;
-    case arc::ArcSignInFailureReason::BAD_AUTHENTICATION:
+    case arc::mojom::ArcSignInFailureReason::BAD_AUTHENTICATION:
       error_message_id = IDS_ARC_SIGN_IN_BAD_AUTHENTICATION_ERROR;
       UpdateOptInCancelUMA(OptInCancelReason::BAD_AUTHENTICATION);
       break;
-    case arc::ArcSignInFailureReason::GMS_CORE_NOT_AVAILABLE:
+    case arc::mojom::ArcSignInFailureReason::GMS_CORE_NOT_AVAILABLE:
       error_message_id = IDS_ARC_SIGN_IN_GMS_NOT_AVAILABLE_ERROR;
       UpdateOptInCancelUMA(OptInCancelReason::GMS_CORE_NOT_AVAILABLE);
       break;
-    case arc::ArcSignInFailureReason::CLOUD_PROVISION_FLOW_FAIL:
+    case arc::mojom::ArcSignInFailureReason::CLOUD_PROVISION_FLOW_FAIL:
       error_message_id = IDS_ARC_SIGN_IN_CLOUD_PROVISION_FLOW_FAIL_ERROR;
       UpdateOptInCancelUMA(OptInCancelReason::CLOUD_PROVISION_FLOW_FAIL);
       break;
@@ -182,7 +250,8 @@ void ArcAuthService::OnSignInFailed(arc::ArcSignInFailureReason reason) {
       UpdateOptInCancelUMA(OptInCancelReason::UNKNOWN_ERROR);
   }
 
-  profile_->GetPrefs()->SetBoolean(prefs::kArcSignedIn, false);
+  if (profile_->GetPrefs()->HasPrefPath(prefs::kArcSignedIn))
+    profile_->GetPrefs()->SetBoolean(prefs::kArcSignedIn, false);
   ShutdownBridgeAndShowUI(UIPage::ERROR,
                           l10n_util::GetStringUTF16(error_message_id));
 }
@@ -191,13 +260,7 @@ void ArcAuthService::GetIsAccountManaged(
     const GetIsAccountManagedCallback& callback) {
   DCHECK(thread_checker.Get().CalledOnValidThread());
 
-  const user_manager::User* const primary_user =
-      user_manager::UserManager::Get()->GetPrimaryUser();
-  Profile* const profile =
-      chromeos::ProfileHelper::Get()->GetProfileByUser(primary_user);
-  const policy::ProfilePolicyConnector* const profile_policy_connector =
-      policy::ProfilePolicyConnectorFactory::GetForBrowserContext(profile);
-  callback.Run(profile_policy_connector->IsManaged());
+  callback.Run(IsAccountManaged(profile_));
 }
 
 void ArcAuthService::SetState(State state) {
@@ -208,36 +271,56 @@ void ArcAuthService::SetState(State state) {
   FOR_EACH_OBSERVER(Observer, observer_list_, OnOptInChanged(state_));
 }
 
+bool ArcAuthService::IsAllowed() const {
+  DCHECK(thread_checker.Get().CalledOnValidThread());
+  return profile_ != nullptr;
+}
+
 void ArcAuthService::OnPrimaryUserProfilePrepared(Profile* profile) {
   DCHECK(profile && profile != profile_);
   DCHECK(thread_checker.Get().CalledOnValidThread());
 
   Shutdown();
 
-  if (profile->IsLegacySupervised()) {
-    VLOG(2) << "Supervised profiles are not supported in Arc.";
+  profile_ = profile;
+  SetState(State::STOPPED);
+
+  if (!IsAllowedForProfile(profile))
+    return;
+
+  // TODO (khmel): Move this to IsAllowedForProfile.
+  if (IsArcDisabledForEnterprise() && IsAccountManaged(profile)) {
+    VLOG(2) << "Enterprise users are not supported in ARC.";
     return;
   }
 
-  profile_ = profile;
   PrefServiceSyncableFromProfile(profile_)->AddSyncedPrefObserver(
       prefs::kArcEnabled, this);
 
   // Reuse storage used in ARC OptIn platform app.
-  const std::string site_url =
-      base::StringPrintf("%s://%s/persist?%s", content::kGuestScheme,
-                         kArcSupportExtensionId, kArcSupportStorageId);
+  const std::string site_url = base::StringPrintf(
+      "%s://%s/persist?%s", content::kGuestScheme, ArcSupportHost::kHostAppId,
+      ArcSupportHost::kStorageId);
   storage_partition_ = content::BrowserContext::GetStoragePartitionForSite(
       profile_, GURL(site_url));
   CHECK(storage_partition_);
 
+  // Get token service and account ID to fetch auth tokens.
+  token_service_ = ProfileOAuth2TokenServiceFactory::GetForProfile(profile_);
+  const SigninManagerBase* const signin_manager =
+      SigninManagerFactory::GetForProfile(profile_);
+  CHECK(token_service_ && signin_manager);
+  account_id_ = signin_manager->GetAuthenticatedAccountId();
+
   // In case UI is disabled we assume that ARC is opted-in.
   if (!IsOptInVerificationDisabled()) {
+    if (!disable_ui_for_testing || enable_check_android_management_for_testing)
+      StartAndroidManagementClient();
     pref_change_registrar_.Init(profile_->GetPrefs());
     pref_change_registrar_.Add(
         prefs::kArcEnabled,
         base::Bind(&ArcAuthService::OnOptInPreferenceChanged,
-                   base::Unretained(this)));
+                   weak_ptr_factory_.GetWeakPtr()));
     if (profile_->GetPrefs()->GetBoolean(prefs::kArcEnabled)) {
       OnOptInPreferenceChanged();
     } else {
@@ -259,7 +342,7 @@ void ArcAuthService::OnIsSyncingChanged() {
 
   pref_service_syncable->RemoveObserver(this);
 
-  if (profile_->GetPrefs()->GetBoolean(prefs::kArcEnabled))
+  if (IsArcEnabled())
     OnOptInPreferenceChanged();
 
   if (!disable_ui_for_testing && profile_->IsNewProfile() &&
@@ -278,6 +361,7 @@ void ArcAuthService::Shutdown() {
   }
   pref_change_registrar_.RemoveAll();
   profile_ = nullptr;
+  SetState(State::NOT_INITIALIZED);
 }
 
 void ArcAuthService::ShowUI(UIPage page, const base::string16& status) {
@@ -288,14 +372,16 @@ void ArcAuthService::ShowUI(UIPage page, const base::string16& status) {
   const extensions::AppWindowRegistry* const app_window_registry =
       extensions::AppWindowRegistry::Get(profile_);
   DCHECK(app_window_registry);
-  if (app_window_registry->GetCurrentAppWindowForApp(kArcSupportExtensionId))
+  if (app_window_registry->GetCurrentAppWindowForApp(
+          ArcSupportHost::kHostAppId)) {
     return;
+  }
 
   const extensions::Extension* extension =
       extensions::ExtensionRegistry::Get(profile_)->GetInstalledExtension(
-          kArcSupportExtensionId);
-  CHECK(extension &&
-        extensions::util::IsAppLaunchable(kArcSupportExtensionId, profile_));
+          ArcSupportHost::kHostAppId);
+  CHECK(extension && extensions::util::IsAppLaunchable(
+                         ArcSupportHost::kHostAppId, profile_));
 
   OpenApplication(CreateAppLaunchParamsUserContainer(
       profile_, extension, NEW_WINDOW, extensions::SOURCE_CHROME_INTERNAL));
@@ -306,7 +392,7 @@ void ArcAuthService::OnMergeSessionSuccess(const std::string& data) {
 
   DCHECK(!initial_opt_in_);
   context_prepared_ = true;
-  ShowUI(UIPage::LSO_PROGRESS, base::string16());
+  CheckAndroidManagement();
 }
 
 void ArcAuthService::OnMergeSessionFailure(
@@ -346,35 +432,49 @@ void ArcAuthService::OnOptInPreferenceChanged() {
   DCHECK(thread_checker.Get().CalledOnValidThread());
   DCHECK(profile_);
 
-  if (profile_->GetPrefs()->GetBoolean(prefs::kArcEnabled)) {
-    if (state_ != State::ACTIVE) {
-      CloseUI();
-      auth_code_.clear();
+  const bool arc_enabled = IsArcEnabled();
+  FOR_EACH_OBSERVER(Observer, observer_list_, OnOptInEnabled(arc_enabled));
 
-      if (!profile_->GetPrefs()->GetBoolean(prefs::kArcSignedIn)) {
-        // Need pre-fetch auth code and show OptIn UI if needed.
-        initial_opt_in_ = true;
-        StartUI();
-      } else {
-        // Ready to start Arc.
-        StartArc();
-      }
-
-      UpdateEnabledStateUMA(true);
-    }
-  } else {
+  if (!arc_enabled) {
     if (state_ != State::STOPPED)
       UpdateEnabledStateUMA(false);
     ShutdownBridgeAndCloseUI();
+    return;
   }
+
+  if (state_ == State::ACTIVE)
+    return;
+  CloseUI();
+  auth_code_.clear();
+
+  if (!profile_->GetPrefs()->GetBoolean(prefs::kArcSignedIn)) {
+    // Need pre-fetch auth code and show OptIn UI if needed.
+    initial_opt_in_ = true;
+    StartUI();
+  } else {
+    // Ready to start Arc, but check Android management first.
+    if (!disable_ui_for_testing ||
+        enable_check_android_management_for_testing) {
+      CheckAndroidManagement();
+    } else {
+      StartArc();
+    }
+  }
+
+  UpdateEnabledStateUMA(true);
 }
 
 void ArcAuthService::ShutdownBridge() {
+  playstore_launcher_.reset();
   auth_callback_.reset();
   ubertoken_fethcher_.reset();
   merger_fetcher_.reset();
+  token_service_ = nullptr;
+  account_id_ = "";
   arc_bridge_service()->Shutdown();
-  SetState(State::STOPPED);
+  if (state_ != State::NOT_INITIALIZED)
+    SetState(State::STOPPED);
+  FOR_EACH_OBSERVER(Observer, observer_list_, OnShutdownBridge());
 }
 
 void ArcAuthService::ShutdownBridgeAndCloseUI() {
@@ -400,6 +500,7 @@ void ArcAuthService::RemoveObserver(Observer* observer) {
 
 void ArcAuthService::CloseUI() {
   FOR_EACH_OBSERVER(Observer, observer_list_, OnOptInUIClose());
+  SetUIPage(UIPage::NO_PAGE, base::string16());
   if (!disable_ui_for_testing)
     ArcAuthNotification::Hide();
 }
@@ -455,7 +556,7 @@ void ArcAuthService::StartLso() {
 void ArcAuthService::CancelAuthCode() {
   DCHECK(thread_checker.Get().CalledOnValidThread());
 
-  if (state_ != State::FETCHING_CODE)
+  if (state_ != State::FETCHING_CODE && ui_page_ != UIPage::ERROR)
     return;
 
   // Update UMA with user cancel only if error is not currently shown.
@@ -465,30 +566,31 @@ void ArcAuthService::CancelAuthCode() {
   DisableArc();
 }
 
+bool ArcAuthService::IsArcEnabled() const {
+  DCHECK(thread_checker.Get().CalledOnValidThread());
+  DCHECK(profile_);
+  return profile_->GetPrefs()->GetBoolean(prefs::kArcEnabled);
+}
+
 void ArcAuthService::EnableArc() {
   DCHECK(thread_checker.Get().CalledOnValidThread());
+  DCHECK(profile_);
   profile_->GetPrefs()->SetBoolean(prefs::kArcEnabled, true);
 }
 
 void ArcAuthService::DisableArc() {
   DCHECK(thread_checker.Get().CalledOnValidThread());
+  DCHECK(profile_);
   profile_->GetPrefs()->SetBoolean(prefs::kArcEnabled, false);
 }
 
 void ArcAuthService::PrepareContext() {
   DCHECK(thread_checker.Get().CalledOnValidThread());
 
-  // Get auth token to continue.
-  ProfileOAuth2TokenService* token_service =
-      ProfileOAuth2TokenServiceFactory::GetForProfile(profile_);
-  SigninManagerBase* signin_manager =
-      SigninManagerFactory::GetForProfile(profile_);
-  CHECK(token_service && signin_manager);
-  const std::string& account_id = signin_manager->GetAuthenticatedAccountId();
   ubertoken_fethcher_.reset(
-      new UbertokenFetcher(token_service, this, GaiaConstants::kChromeOSSource,
+      new UbertokenFetcher(token_service_, this, GaiaConstants::kChromeOSSource,
                            storage_partition_->GetURLRequestContext()));
-  ubertoken_fethcher_->StartFetchingToken(account_id);
+  ubertoken_fethcher_->StartFetchingToken(account_id_);
 }
 
 void ArcAuthService::StartUI() {
@@ -500,7 +602,7 @@ void ArcAuthService::StartUI() {
     initial_opt_in_ = false;
     ShowUI(UIPage::START, base::string16());
   } else if (context_prepared_) {
-    ShowUI(UIPage::LSO_PROGRESS, base::string16());
+    CheckAndroidManagement();
   } else {
     PrepareContext();
   }
@@ -515,8 +617,72 @@ void ArcAuthService::OnPrepareContextFailed() {
   UpdateOptInCancelUMA(OptInCancelReason::NETWORK_ERROR);
 }
 
+void ArcAuthService::StartAndroidManagementClient() {
+  policy::BrowserPolicyConnectorChromeOS* const connector =
+      g_browser_process->platform_part()->browser_policy_connector_chromeos();
+  policy::DeviceManagementService* const service =
+      connector->device_management_service();
+  service->ScheduleInitialization(0);
+  android_management_client_.reset(new policy::AndroidManagementClient(
+      service, g_browser_process->system_request_context(), account_id_,
+      token_service_));
+}
+
+void ArcAuthService::CheckAndroidManagement() {
+  // Do not send requests for Chrome OS managed users.
+  if (IsAccountManaged(profile_)) {
+    StartArcIfSignedIn();
+    return;
+  }
+
+  // Do not send requests for well-known consumer domains.
+  if (policy::BrowserPolicyConnector::IsNonEnterpriseUser(
+          profile_->GetProfileUserName())) {
+    StartArcIfSignedIn();
+    return;
+  }
+
+  android_management_client_->StartCheckAndroidManagement(
+      base::Bind(&ArcAuthService::OnAndroidManagementChecked,
+                 weak_ptr_factory_.GetWeakPtr()));
+}
+
+void ArcAuthService::OnAndroidManagementChecked(
+    policy::AndroidManagementClient::Result result) {
+  switch (result) {
+    case policy::AndroidManagementClient::Result::RESULT_UNMANAGED:
+      StartArcIfSignedIn();
+      break;
+    case policy::AndroidManagementClient::Result::RESULT_MANAGED:
+      ShutdownBridgeAndShowUI(
+          UIPage::ERROR,
+          l10n_util::GetStringUTF16(IDS_ARC_ANDROID_MANAGEMENT_REQUIRED_ERROR));
+      UpdateOptInCancelUMA(OptInCancelReason::ANDROID_MANAGEMENT_REQUIRED);
+      break;
+    case policy::AndroidManagementClient::Result::RESULT_ERROR:
+      ShutdownBridgeAndShowUI(
+          UIPage::ERROR,
+          l10n_util::GetStringUTF16(IDS_ARC_SERVER_COMMUNICATION_ERROR));
+      UpdateOptInCancelUMA(OptInCancelReason::NETWORK_ERROR);
+      break;
+    default:
+      NOTREACHED();
+  }
+}
+
+void ArcAuthService::StartArcIfSignedIn() {
+  if (profile_->GetPrefs()->GetBoolean(prefs::kArcSignedIn) ||
+      IsOptInVerificationDisabled()) {
+    StartArc();
+  } else {
+    ShowUI(UIPage::LSO_PROGRESS, base::string16());
+  }
+}
+
 std::ostream& operator<<(std::ostream& os, const ArcAuthService::State& state) {
   switch (state) {
+    case ArcAuthService::State::NOT_INITIALIZED:
+      return os << kStateNotInitialized;
     case ArcAuthService::State::STOPPED:
       return os << kStateStopped;
     case ArcAuthService::State::FETCHING_CODE:

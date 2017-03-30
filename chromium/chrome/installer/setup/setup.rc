@@ -150,8 +150,8 @@ BEGIN
     LTEXT           "Destination folder", IDC_STATIC_DEST_FOLDER, 25, 130, 255, 12
     EDITTEXT        IDC_EDIT_DEST_FOLDER, 25, 140, 235, 14, ES_AUTOHSCROLL | WS_TABSTOP
     PUSHBUTTON      "Browse...", IDC_BTN_BROWSE, 268, 140, 70, 14, WS_TABSTOP
-    CONTROL         "Set Vivaldi as default browser", IDC_CHECK_DEFAULT, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 25, 160, 312, 15
-    CONTROL         "Register standalone Vivaldi", IDC_CHECK_REGISTER, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 25, 170, 312, 15
+    CONTROL         "Set Vivaldi as default browser", IDC_CHECK_DEFAULT, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 25, 158, 312, 12
+    CONTROL         "Register standalone Vivaldi", IDC_CHECK_REGISTER, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 25, 170, 312, 12
     LTEXT           "This is Vivaldi, a brand new web browser with powerful feature sets. \
                      Vivaldi provides flexibility and customisation for your best Web experience.", IDC_STATIC_INFO, 32, 185, 305, 25, SS_LEFT
     CONTROL         "<>", IDC_SYSLINK_TOS, "SysLink", WS_TABSTOP, 32, 205, 305, 15

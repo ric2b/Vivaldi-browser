@@ -10,8 +10,8 @@
 #include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -268,11 +268,11 @@ BrowserGpuChannelHostFactory::GetIOThreadTaskRunner() {
   return BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO);
 }
 
-scoped_ptr<base::SharedMemory>
+std::unique_ptr<base::SharedMemory>
 BrowserGpuChannelHostFactory::AllocateSharedMemory(size_t size) {
-  scoped_ptr<base::SharedMemory> shm(new base::SharedMemory());
+  std::unique_ptr<base::SharedMemory> shm(new base::SharedMemory());
   if (!shm->CreateAnonymous(size))
-    return scoped_ptr<base::SharedMemory>();
+    return std::unique_ptr<base::SharedMemory>();
   return shm;
 }
 
@@ -280,14 +280,15 @@ BrowserGpuChannelHostFactory::AllocateSharedMemory(size_t size) {
 // (Opening the initial channel to a child process involves handling a reply
 // task on the UI thread first, so we cannot block here.)
 #if !defined(OS_ANDROID)
-gpu::GpuChannelHost* BrowserGpuChannelHostFactory::EstablishGpuChannelSync(
+scoped_refptr<gpu::GpuChannelHost>
+BrowserGpuChannelHostFactory::EstablishGpuChannelSync(
     CauseForGpuLaunch cause_for_gpu_launch) {
   EstablishGpuChannel(cause_for_gpu_launch, base::Closure());
 
   if (pending_request_.get())
     pending_request_->Wait();
 
-  return gpu_channel_.get();
+  return gpu_channel_;
 }
 #endif
 

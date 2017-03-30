@@ -38,9 +38,10 @@
 #include "core/timing/PerformanceEntry.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
-#include "wtf/RefCounted.h"
-#include "wtf/RefPtr.h"
-#include "wtf/text/WTFString.h"
+#include "wtf/Forward.h"
+#include "wtf/HashSet.h"
+#include "wtf/ListHashSet.h"
+#include "wtf/Vector.h"
 
 namespace blink {
 
@@ -54,8 +55,7 @@ class UserTiming;
 using PerformanceEntryVector = HeapVector<Member<PerformanceEntry>>;
 using PerformanceObservers = HeapListHashSet<Member<PerformanceObserver>>;
 
-class CORE_EXPORT PerformanceBase : public RefCountedGarbageCollectedEventTargetWithInlineData<PerformanceBase> {
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(PerformanceBase);
+class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
 public:
     ~PerformanceBase() override;
 
@@ -112,8 +112,8 @@ public:
     DECLARE_VIRTUAL_TRACE();
 
 protected:
-
     explicit PerformanceBase(double timeOrigin);
+
     bool isResourceTimingBufferFull();
     void addResourceTimingBuffer(PerformanceEntry&);
 

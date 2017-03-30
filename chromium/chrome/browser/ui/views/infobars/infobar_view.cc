@@ -160,7 +160,8 @@ views::LabelButton* InfoBarView::CreateTextButton(
   button->set_animate_on_state_change(false);
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   button->SetFontList(rb.GetFontList(ui::ResourceBundle::MediumFont));
-  button->SetFocusable(true);
+  button->SetFocusForPlatform();
+  button->set_request_focus_on_press(true);
   button->SetTextColor(views::Button::STATE_NORMAL, GetInfobarTextColor());
   button->SetTextColor(views::Button::STATE_HOVERED, GetInfobarTextColor());
   return button;
@@ -172,8 +173,8 @@ views::MdTextButton* InfoBarView::CreateMdTextButton(
   DCHECK(ui::MaterialDesignController::IsModeMaterial());
   views::MdTextButton* button =
       views::MdTextButton::CreateMdButton(listener, text);
-  button->SetTextColor(views::Button::STATE_NORMAL, GetInfobarTextColor());
-  button->SetTextColor(views::Button::STATE_HOVERED, GetInfobarTextColor());
+  // TODO(estade): can we just remove this?
+  button->SetEnabledTextColors(GetInfobarTextColor());
   return button;
 }
 
@@ -275,10 +276,10 @@ void InfoBarView::ViewHierarchyChanged(
       BarControlButton* close = new BarControlButton(this);
       close->SetIcon(gfx::VectorIconId::BAR_CLOSE,
                      base::Bind(&GetInfobarTextColor));
-      close->set_request_focus_on_press(false);
       close_button_ = close;
     } else {
       close_button_ = new views::ImageButton(this);
+      close_button_->set_request_focus_on_press(true);
       ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
       close_button_->SetImage(views::CustomButton::STATE_NORMAL,
                               rb.GetImageNamed(IDR_CLOSE_1).ToImageSkia());
@@ -289,7 +290,7 @@ void InfoBarView::ViewHierarchyChanged(
     }
     close_button_->SetAccessibleName(
         l10n_util::GetStringUTF16(IDS_ACCNAME_CLOSE));
-    close_button_->SetFocusable(true);
+    close_button_->SetFocusForPlatform();
     // Subclasses should already be done adding child views by this point (see
     // related DCHECK in Layout()).
     child_container_->AddChildView(close_button_);

@@ -4,7 +4,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import fnmatch
 import optparse
 import os
 import sys
@@ -43,7 +42,7 @@ def GenerateJavadoc(options):
              '-Dlib.java.dir=' + lib_java_dir, '-Doverview=' + overview_file,
              'doc']
   stdout = build_utils.CheckOutput(javadoc_cmd, cwd=working_dir)
-  if " error: " in stdout or "warning" in stdout:
+  if " error: " in stdout or "warning" in stdout or "javadoc: error " in stdout:
     build_utils.DeleteDirectory(output_dir)
     raise build_utils.CalledProcessError(working_dir, javadoc_cmd, stdout)
 

@@ -8,6 +8,7 @@
 #import <IOBluetooth/objc/IOBluetoothHostController.h>
 #include <stddef.h>
 
+#include <memory>
 #include <string>
 
 #include "base/bind.h"
@@ -16,19 +17,18 @@
 #include "base/location.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/sdk_forward_declarations.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/sys_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "device/bluetooth/bluetooth_classic_device_mac.h"
 #include "device/bluetooth/bluetooth_discovery_session.h"
 #include "device/bluetooth/bluetooth_discovery_session_outcome.h"
 #include "device/bluetooth/bluetooth_low_energy_central_manager_delegate.h"
 #include "device/bluetooth/bluetooth_socket_mac.h"
-#include "device/bluetooth/bluetooth_uuid.h"
 
 namespace {
 
@@ -66,6 +66,14 @@ base::WeakPtr<BluetoothAdapterMac> BluetoothAdapterMac::CreateAdapterForTest(
   adapter->name_ = name;
   adapter->address_ = address;
   return adapter->weak_ptr_factory_.GetWeakPtr();
+}
+
+// static
+BluetoothUUID BluetoothAdapterMac::BluetoothUUIDWithCBUUID(CBUUID* uuid) {
+  // UUIDString only available OS X >= 10.10.
+  DCHECK(base::mac::IsOSYosemiteOrLater());
+  std::string uuid_c_string = base::SysNSStringToUTF8([uuid UUIDString]);
+  return device::BluetoothUUID(uuid_c_string);
 }
 
 BluetoothAdapterMac::BluetoothAdapterMac()
@@ -199,11 +207,16 @@ void BluetoothAdapterMac::RegisterAudioSink(
 }
 
 void BluetoothAdapterMac::RegisterAdvertisement(
-    scoped_ptr<BluetoothAdvertisement::Data> advertisement_data,
+    std::unique_ptr<BluetoothAdvertisement::Data> advertisement_data,
     const CreateAdvertisementCallback& callback,
     const CreateAdvertisementErrorCallback& error_callback) {
   NOTIMPLEMENTED();
   error_callback.Run(BluetoothAdvertisement::ERROR_UNSUPPORTED_PLATFORM);
+}
+
+BluetoothLocalGattService* BluetoothAdapterMac::GetGattService(
+    const std::string& identifier) const {
+  return nullptr;
 }
 
 void BluetoothAdapterMac::ClassicDeviceFound(IOBluetoothDevice* device) {
@@ -247,7 +260,7 @@ void BluetoothAdapterMac::SetCentralManagerForTesting(
       low_energy_central_manager_.get());
 }
 
-CBCentralManager* BluetoothAdapterMac::GetCentralManagerForTesting() {
+CBCentralManager* BluetoothAdapterMac::GetCentralManager() {
   return low_energy_central_manager_;
 }
 
@@ -331,7 +344,7 @@ void BluetoothAdapterMac::RemoveDiscoverySession(
 }
 
 void BluetoothAdapterMac::SetDiscoveryFilter(
-    scoped_ptr<BluetoothDiscoveryFilter> discovery_filter,
+    std::unique_ptr<BluetoothDiscoveryFilter> discovery_filter,
     const base::Closure& callback,
     const DiscoverySessionErrorCallback& error_callback) {
   NOTIMPLEMENTED();
@@ -462,7 +475,7 @@ void BluetoothAdapterMac::ClassicDeviceAdded(IOBluetoothDevice* device) {
     return;
 
   BluetoothDevice* device_classic = new BluetoothClassicDeviceMac(this, device);
-  devices_.set(device_address, make_scoped_ptr(device_classic));
+  devices_.set(device_address, base::WrapUnique(device_classic));
   FOR_EACH_OBSERVER(BluetoothAdapter::Observer, observers_,
                     DeviceAdded(this, device_classic));
 }
@@ -482,7 +495,7 @@ void BluetoothAdapterMac::LowEnergyDeviceUpdated(
                                                  advertisement_data, rssi);
     std::string device_address =
         BluetoothLowEnergyDeviceMac::GetPeripheralHashAddress(peripheral);
-    devices_.add(device_address, scoped_ptr<BluetoothDevice>(device_mac));
+    devices_.add(device_address, std::unique_ptr<BluetoothDevice>(device_mac));
     FOR_EACH_OBSERVER(BluetoothAdapter::Observer, observers_,
                       DeviceAdded(this, device_mac));
     return;
@@ -570,6 +583,7 @@ void BluetoothAdapterMac::DidConnectPeripheral(CBPeripheral* peripheral) {
     return;
   }
   device_mac->DidConnectGatt();
+  [device_mac->GetPeripheral() discoverServices:nil];
 }
 
 void BluetoothAdapterMac::DidFailToConnectPeripheral(CBPeripheral* peripheral,

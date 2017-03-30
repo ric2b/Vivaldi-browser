@@ -5,6 +5,31 @@
   'targets': [
     {
       # GN version: //media/mojo/interfaces
+      'target_name': 'audio_output_mojom',
+      'type': 'none',
+      'variables': {
+        'mojom_files': [
+          'audio_output.mojom',
+          'audio_parameters.mojom',
+        ],
+      },
+      'dependencies': [
+       '../../../mojo/mojo_public.gyp:mojo_cpp_bindings',
+      ],
+      'includes': [ '../../../mojo/mojom_bindings_generator_explicit.gypi' ],
+      'mojom_typemaps': [
+          'audio_parameters.typemap',
+      ],
+    },
+    {
+      'target_name': 'audio_output_mojom_bindings',
+      'type': 'static_library',
+      'dependencies': [
+        'audio_output_mojom',
+      ],
+    },
+    {
+      # GN version: //media/mojo/interfaces
       'target_name': 'platform_verification_mojo_bindings',
       'type': 'none',
       'sources': [
@@ -17,8 +42,8 @@
       'type': 'static_library',
       'dependencies': [
         'platform_verification_mojo_bindings',
-        '../../../mojo/mojo_base.gyp:mojo_application_bindings',
         '../../../mojo/mojo_public.gyp:mojo_cpp_bindings',
+        '../../../services/shell/shell_public.gyp:shell_public',
       ],
       'sources': [
         '<(SHARED_INTERMEDIATE_DIR)/media/mojo/interfaces/platform_verification.mojom.cc',
@@ -29,22 +54,20 @@
       # GN version: //media/mojo/interfaces
       'target_name': 'provision_fetcher_mojo_bindings',
       'type': 'none',
-      'sources': [
-        'provision_fetcher.mojom',
-      ],
-      'includes': [ '../../../mojo/mojom_bindings_generator.gypi' ],
+      'variables': {
+        'mojom_files': [
+          'provision_fetcher.mojom',
+        ],
+      },
+      'includes': [ '../../../mojo/mojom_bindings_generator_explicit.gypi' ],
     },
     {
       'target_name': 'provision_fetcher_api',
       'type': 'static_library',
       'dependencies': [
         'provision_fetcher_mojo_bindings',
-        '../../../mojo/mojo_base.gyp:mojo_application_bindings',
         '../../../mojo/mojo_public.gyp:mojo_cpp_bindings',
-      ],
-      'sources': [
-        '<(SHARED_INTERMEDIATE_DIR)/media/mojo/interfaces/provision_fetcher.mojom.cc',
-        '<(SHARED_INTERMEDIATE_DIR)/media/mojo/interfaces/provision_fetcher.mojom.h',
+        '../../../services/shell/shell_public.gyp:shell_public',
       ],
     },
   ],

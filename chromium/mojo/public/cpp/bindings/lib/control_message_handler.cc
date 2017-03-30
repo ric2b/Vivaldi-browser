@@ -10,6 +10,7 @@
 
 #include "base/logging.h"
 #include "mojo/public/cpp/bindings/lib/message_builder.h"
+#include "mojo/public/cpp/bindings/lib/serialization.h"
 #include "mojo/public/interfaces/bindings/interface_control_messages.mojom.h"
 
 namespace mojo {
@@ -55,14 +56,14 @@ bool ControlMessageHandler::Run(Message* message,
   response_params_ptr->query_version_result = QueryVersionResult::New();
   response_params_ptr->query_version_result->version = interface_version_;
 
-  size_t size = GetSerializedSize_(response_params_ptr, nullptr);
+  size_t size = PrepareToSerialize<RunResponseMessageParamsPtr>(
+      response_params_ptr, &context_);
   ResponseMessageBuilder builder(kRunMessageId, size, message->request_id());
 
   RunResponseMessageParams_Data* response_params = nullptr;
-  Serialize_(std::move(response_params_ptr), builder.buffer(), &response_params,
-             nullptr);
-  response_params->EncodePointersAndHandles(
-      builder.message()->mutable_handles());
+  Serialize<RunResponseMessageParamsPtr>(response_params_ptr, builder.buffer(),
+                                         &response_params, &context_);
+  response_params->EncodePointers();
   bool ok = responder->Accept(builder.message());
   ALLOW_UNUSED_LOCAL(ok);
   delete responder;
@@ -74,10 +75,10 @@ bool ControlMessageHandler::RunOrClosePipe(Message* message) {
   RunOrClosePipeMessageParams_Data* params =
       reinterpret_cast<RunOrClosePipeMessageParams_Data*>(
           message->mutable_payload());
-  params->DecodePointersAndHandles(message->mutable_handles());
+  params->DecodePointers();
 
   RunOrClosePipeMessageParamsPtr params_ptr;
-  Deserialize_(params, &params_ptr, nullptr);
+  Deserialize<RunOrClosePipeMessageParamsPtr>(params, &params_ptr, &context_);
 
   return interface_version_ >= params_ptr->require_version->version;
 }

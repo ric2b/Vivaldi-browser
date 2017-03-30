@@ -5,7 +5,6 @@
 #ifndef CC_TEST_FAKE_LAYER_TREE_HOST_IMPL_CLIENT_H_
 #define CC_TEST_FAKE_LAYER_TREE_HOST_IMPL_CLIENT_H_
 
-#include "cc/debug/frame_timing_tracker.h"
 #include "cc/output/begin_frame_args.h"
 #include "cc/trees/layer_tree_host_impl.h"
 
@@ -18,6 +17,7 @@ class FakeLayerTreeHostImplClient : public LayerTreeHostImplClient {
   void DidLoseOutputSurfaceOnImplThread() override {}
   void CommitVSyncParameters(base::TimeTicks timebase,
                              base::TimeDelta interval) override {}
+  void SetBeginFrameSource(BeginFrameSource* source) override {}
   void SetEstimatedParentDrawTime(base::TimeDelta draw_time) override {}
   void DidSwapBuffersOnImplThread() override {}
   void DidSwapBuffersCompleteOnImplThread() override {}
@@ -31,7 +31,7 @@ class FakeLayerTreeHostImplClient : public LayerTreeHostImplClient {
   void SetNeedsPrepareTilesOnImplThread() override {}
   void SetVideoNeedsBeginFrames(bool needs_begin_frames) override {}
   void PostAnimationEventsToMainThreadOnImplThread(
-      scoped_ptr<AnimationEvents> events) override;
+      std::unique_ptr<AnimationEvents> events) override;
   bool IsInsideDraw() override;
   void RenewTreePriority() override {}
   void PostDelayedAnimationTaskOnImplThread(const base::Closure& task,
@@ -41,10 +41,6 @@ class FakeLayerTreeHostImplClient : public LayerTreeHostImplClient {
   void DidPrepareTiles() override {}
   void DidCompletePageScaleAnimationOnImplThread() override {}
   void OnDrawForOutputSurface(bool resourceless_software_draw) override {}
-  void PostFrameTimingEventsOnImplThread(
-      scoped_ptr<FrameTimingTracker::CompositeTimingSet> composite_events,
-      scoped_ptr<FrameTimingTracker::MainFrameTimingSet> main_frame_events)
-      override {}
 };
 
 }  // namespace cc

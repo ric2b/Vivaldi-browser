@@ -2,11 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <vector>
-
 #include <stddef.h>
 #include <X11/extensions/shape.h>
 #include <X11/Xlib.h>
+
+#include <memory>
+#include <vector>
 
 // Get rid of X11 macros which conflict with gtest.
 // It is necessary to include this header before the rest so that Bool can be
@@ -17,19 +18,18 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/x/x11_util.h"
+#include "ui/display/display_switches.h"
 #include "ui/events/devices/x11/touch_factory_x11.h"
 #include "ui/events/platform/x11/x11_event_source_glib.h"
 #include "ui/events/test/platform_event_source_test_api.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/path.h"
-#include "ui/gfx/switches.h"
 #include "ui/gfx/x/x11_atom_cache.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/test/x11_property_change_waiter.h"
@@ -76,7 +76,7 @@ class WMStateWaiter : public X11PropertyChangeWaiter {
     return true;
   }
 
-  scoped_ptr<ui::X11AtomCache> atom_cache_;
+  std::unique_ptr<ui::X11AtomCache> atom_cache_;
 
   // The name of the hint to wait to get set or unset.
   const char* hint_;
@@ -140,8 +140,8 @@ class ShapedWidgetDelegate : public WidgetDelegateView {
 };
 
 // Creates a widget of size 100x100.
-scoped_ptr<Widget> CreateWidget(WidgetDelegate* delegate) {
-  scoped_ptr<Widget> widget(new Widget);
+std::unique_ptr<Widget> CreateWidget(WidgetDelegate* delegate) {
+  std::unique_ptr<Widget> widget(new Widget);
   Widget::InitParams params(Widget::InitParams::TYPE_WINDOW);
   params.delegate = delegate;
   params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
@@ -219,7 +219,7 @@ TEST_F(DesktopWindowTreeHostX11Test, Shape) {
   // 1) Test setting the window shape via the NonClientFrameView. This technique
   // is used to get rounded corners on Chrome windows when not using the native
   // window frame.
-  scoped_ptr<Widget> widget1 = CreateWidget(new ShapedWidgetDelegate());
+  std::unique_ptr<Widget> widget1 = CreateWidget(new ShapedWidgetDelegate());
   widget1->Show();
   ui::X11EventSource::GetInstance()->DispatchXEvents();
 
@@ -290,7 +290,7 @@ TEST_F(DesktopWindowTreeHostX11Test, Shape) {
   SkRegion* shape_region = new SkRegion;
   shape_region->setPath(shape2, SkRegion(shape2.getBounds().round()));
 
-  scoped_ptr<Widget> widget2(CreateWidget(NULL));
+  std::unique_ptr<Widget> widget2(CreateWidget(NULL));
   widget2->Show();
   widget2->SetShape(shape_region);
   ui::X11EventSource::GetInstance()->DispatchXEvents();
@@ -330,7 +330,7 @@ TEST_F(DesktopWindowTreeHostX11Test, WindowManagerTogglesFullscreen) {
   if (!ui::WmSupportsHint(ui::GetAtom("_NET_WM_STATE_FULLSCREEN")))
     return;
 
-  scoped_ptr<Widget> widget = CreateWidget(new ShapedWidgetDelegate());
+  std::unique_ptr<Widget> widget = CreateWidget(new ShapedWidgetDelegate());
   XID xid = widget->GetNativeWindow()->GetHost()->GetAcceleratedWidget();
   widget->Show();
   ui::X11EventSource::GetInstance()->DispatchXEvents();

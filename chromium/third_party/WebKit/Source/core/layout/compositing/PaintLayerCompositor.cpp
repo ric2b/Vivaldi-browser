@@ -115,7 +115,7 @@ void PaintLayerCompositor::setCompositingModeEnabled(bool enable)
 
     // Schedule an update in the parent frame so the <iframe>'s layer in the owner
     // document matches the compositing state here.
-    if (HTMLFrameOwnerElement* ownerElement = m_layoutView.document().ownerElement())
+    if (HTMLFrameOwnerElement* ownerElement = m_layoutView.document().localOwner())
         ownerElement->setNeedsCompositingUpdate();
 }
 
@@ -264,7 +264,8 @@ void PaintLayerCompositor::setNeedsCompositingUpdate(CompositingUpdateType updat
 {
     ASSERT(updateType != CompositingUpdateNone);
     m_pendingUpdateType = std::max(m_pendingUpdateType, updateType);
-    page()->animator().scheduleVisualUpdate(m_layoutView.frame());
+    if (Page* page = this->page())
+        page->animator().scheduleVisualUpdate(m_layoutView.frame());
     lifecycle().ensureStateAtMost(DocumentLifecycle::LayoutClean);
 }
 
@@ -434,10 +435,10 @@ void PaintLayerCompositor::updateIfNeeded()
             GraphicsLayerTreeBuilder().rebuild(*updateRoot, ancestorInfo);
         }
 
-        if (childList.isEmpty())
-            destroyRootLayer();
-        else if (m_rootContentLayer)
+        if (!childList.isEmpty()) {
+            CHECK(m_rootContentLayer && m_compositing);
             m_rootContentLayer->setChildren(childList);
+        }
 
         applyOverlayFullscreenVideoAdjustmentIfNeeded();
     }
@@ -449,8 +450,6 @@ void PaintLayerCompositor::updateIfNeeded()
 
     for (unsigned i = 0; i < layersNeedingPaintInvalidation.size(); i++)
         forceRecomputePaintInvalidationRectsIncludingNonCompositingDescendants(layersNeedingPaintInvalidation[i]->layoutObject());
-
-    m_layoutView.frameView()->setFrameTimingRequestsDirty(true);
 
     // Inform the inspector that the layer tree has changed.
     if (m_layoutView.frame()->isMainFrame())
@@ -659,8 +658,8 @@ PaintLayerCompositor* PaintLayerCompositor::frameContentsCompositor(LayoutPart* 
 
     HTMLFrameOwnerElement* element = toHTMLFrameOwnerElement(layoutObject->node());
     if (Document* contentDocument = element->contentDocument()) {
-        if (LayoutView* view = contentDocument->layoutView())
-            return view->compositor();
+        if (LayoutViewItem view = contentDocument->layoutViewItem())
+            return view.compositor();
     }
     return nullptr;
 }
@@ -1120,7 +1119,7 @@ void PaintLayerCompositor::attachRootLayer(RootLayerAttachment attachment)
         break;
     }
     case RootLayerAttachedViaEnclosingFrame: {
-        HTMLFrameOwnerElement* ownerElement = m_layoutView.document().ownerElement();
+        HTMLFrameOwnerElement* ownerElement = m_layoutView.document().localOwner();
         ASSERT(ownerElement);
         // The layer will get hooked up via CompositedLayerMapping::updateGraphicsLayerConfiguration()
         // for the frame's layoutObject in the parent document.
@@ -1146,7 +1145,7 @@ void PaintLayerCompositor::detachRootLayer()
         else
             m_rootContentLayer->removeFromParent();
 
-        if (HTMLFrameOwnerElement* ownerElement = m_layoutView.document().ownerElement())
+        if (HTMLFrameOwnerElement* ownerElement = m_layoutView.document().localOwner())
             ownerElement->setNeedsCompositingUpdate();
         break;
     }

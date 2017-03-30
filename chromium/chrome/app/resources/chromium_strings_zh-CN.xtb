@@ -53,6 +53,7 @@
 <translation id="2673087257647337101">即将更新到最新版本！重新启动 Chromium 以完成更新。</translation>
 <translation id="2685838254101182273">Chromium 已停止更新，并且不再支持您的操作系统版本。</translation>
 <translation id="2705212601509139398">此网站使用的 Chromium 内嵌框架插件即将不受支持。请卸载该插件，然后下载一款兼容的浏览器。</translation>
+<translation id="2711502716910134313">Chromium 标签页</translation>
 <translation id="2770231113462710648">将默认浏览器更改为：</translation>
 <translation id="2801146392936645542"><ph name="FILE_NAME" /> 是恶意文件，Chromium 已将其拦截。</translation>
 <translation id="2847479871509788944">从Chromium中移除…</translation>
@@ -66,7 +67,6 @@
 <translation id="3130323860337406239">Chromium 正在使用您的麦克风。</translation>
 <translation id="313551035350905294">您目前是以托管帐户登录，该帐户的管理员将能够控制您的 Chromium 个人资料。您的 Chromium 数据（例如您的应用、书签、历史记录、密码和其他设置）将永久绑定到 <ph name="USER_NAME" />。您可以通过 Google 帐户信息中心删除这些数据，但无法将这些数据关联到其他帐户。</translation>
 <translation id="3190315855212034486">哎呀！Chromium 崩溃了。要立即重新启动吗？</translation>
-<translation id="3197823471738295152">您的设备已更新到最新版本。</translation>
 <translation id="3244477511402911926">Chromium 通知中心</translation>
 <translation id="3256316712990552818">已复制到 Chromium</translation>
 <translation id="3258596308407688501">Chromium 无法读写其数据目录：
@@ -120,6 +120,7 @@
 <translation id="549669000822060376">Chromium正在安装最新的系统更新，请稍候。</translation>
 <translation id="5563479599352954471">触摸一下即可启动搜索</translation>
 <translation id="5620765574781326016">无需离开所在页面，即可了解网站上的主题。</translation>
+<translation id="5634636535844844681">Chromium 仅支持 Windows 7 或更高版本的操作系统。</translation>
 <translation id="5680901439334282664">登录 Chromium</translation>
 <translation id="5772805321386874569">（需要<ph name="BEGIN_BUTTON" />重新启动<ph name="END_BUTTON" /> Chromium）</translation>
 <translation id="5796460469508169315">Chromium 即将准备就绪。</translation>
@@ -179,6 +180,12 @@ Chromium 无法恢复您的设置。</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7339898014177206373">打开新的窗口</translation>
 <translation id="734373864078049451">您的上网记录、书签和其他Chromium内容都保存在此处。</translation>
+<translation id="7344413941077984497">要设置“<ph name="NEW_PROFILE_NAME" />”可以浏览哪些网站，请前往 <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" /> 指定相应限制和设置。如果您未更改默认设置，“<ph name="NEW_PROFILE_NAME" />”将可以浏览网络上的所有网站。
+
+要禁止“<ph name="NEW_PROFILE_NAME" />”访问您的帐户，请务必在不使用 Chromium 时锁定您的个人资料。为此，请点击您的个人资料名称（位于浏览器的右上角），然后选择“退出并启用 childlock 功能”。
+<ph name="BEGIN_LINK_2" />了解详情<ph name="END_LINK_2" />
+
+有关详细说明，请查看 <ph name="ACCOUNT_EMAIL" /> 中的电子邮件。</translation>
 <translation id="7419987137528340081">如果您更倾向于单独保存您现有的 Chromium 数据，可以为 <ph name="USER_NAME" /> 创建一个新的 Chromium 用户。</translation>
 <translation id="7421823331379285070">您需要在 Windows XP 或更高版本的操作系统中运行 Chromium，否则可能无法正常使用某些功能。</translation>
 <translation id="7463979740390522693">Chromium - 通知（<ph name="QUANTITY" />条未读）</translation>
@@ -207,6 +214,7 @@ Chromium 无法恢复您的设置。</translation>
 <translation id="8586442755830160949">版权所有<ph name="YEAR" /> The Chromium Authors。保留所有权利。</translation>
 <translation id="8621669128220841554">未指定的错误导致安装失败。请重新下载 Chromium。</translation>
 <translation id="8628626585870903697">Chromium 未包含运行打印预览所需的 PDF 查看器。</translation>
+<translation id="8667808506758191620">您的 <ph name="DEVICE_TYPE" /> 是最新版本。</translation>
 <translation id="8697124171261953979">它还能够控制您启动Chromium后或通过多功能框进行搜索时系统显示的页面。</translation>
 <translation id="8704119203788522458">这是您的专属Chromium</translation>
 <translation id="872034308864968620">让 Chromium 在后台运行</translation>
@@ -223,7 +231,6 @@ Chromium 无法恢复您的设置。</translation>
 
 如果您仍然登录，Chromium 信息（例如书签、历史记录和其他设置）将合并到 <ph name="ACCOUNT_EMAIL_NEW" />。</translation>
 <translation id="9013087743919948559">添加到 Chromium</translation>
-<translation id="9013262824292842194">Chromium 要求操作系统为 Windows Vista，或者 Windows XP SP2 或更高版本。</translation>
 <translation id="9019929317751753759">为了提高 Chromium 的安全性，我们停用了以下扩展程序（该扩展程序未列在<ph name="IDS_EXTENSION_WEB_STORE_TITLE" />中，并且可能是在您不知情的情况下添加的）。</translation>
 <translation id="9022552996538154597">登录 Chromium</translation>
 <translation id="9036189287518468038">Chromium 应用启动器</translation>

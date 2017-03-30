@@ -33,6 +33,7 @@
 
 #include "SkFontMgr.h"
 #include "SkTypeface_win.h"
+#include "platform/Language.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/fonts/FontDescription.h"
 #include "platform/fonts/FontFaceCreationParams.h"
@@ -97,17 +98,9 @@ void FontCache::setStatusFontMetrics(const wchar_t* familyName, int32_t fontHeig
 FontCache::FontCache()
     : m_purgePreventCount(0)
 {
-    if (s_fontManager) {
-        m_fontManager = s_fontManager;
-    } else if (s_useDirectWrite) {
+    m_fontManager = s_fontManager;
+    if (!m_fontManager.get())
         m_fontManager = adoptRef(SkFontMgr_New_DirectWrite());
-    } else {
-        m_fontManager = adoptRef(SkFontMgr_New_GDI());
-    }
-
-    // Subpixel text positioning is only supported by the DirectWrite backend (not GDI).
-    s_useSubpixelPositioning = s_useDirectWrite;
-
     ASSERT(m_fontManager.get());
 }
 
@@ -140,6 +133,37 @@ PassRefPtr<SimpleFontData> FontCache::fallbackFontForCharacter(
     if (family) {
         FontFaceCreationParams createByFamily(AtomicString(family, wcslen(family)));
         data = getFontPlatformData(fontDescription, createByFamily);
+    }
+
+    if ((!data || !data->fontContainsCharacter(character)) && s_useSkiaFontFallback) {
+        const char* bcp47Locale = nullptr;
+        int localeCount = 0;
+        CString fontLocale;
+        // If the font description has a locale, use that. Otherwise, Skia will
+        // fall back on the user's default locale.
+        // TODO(kulshin): extract locale fallback logic from
+        //   FontCacheAndroid.cpp and share that code
+        if (!fontDescription.locale().isEmpty()) {
+            fontLocale = toSkFontMgrLocale(fontDescription.locale());
+            bcp47Locale = fontLocale.data();
+            localeCount = 1;
+        }
+
+        CString familyName = fontDescription.family().family().utf8();
+
+        SkTypeface* typeface = m_fontManager->matchFamilyStyleCharacter(
+            familyName.data(),
+            fontDescription.skiaFontStyle(),
+            &bcp47Locale,
+            localeCount,
+            character);
+        if (typeface) {
+            SkString skiaFamily;
+            typeface->getFamilyName(&skiaFamily);
+            FontFaceCreationParams createByFamily(
+                AtomicString(skiaFamily.c_str()));
+            data = getFontPlatformData(fontDescription, createByFamily);
+        }
     }
 
     // Last resort font list : PanUnicode. CJK fonts have a pretty
@@ -374,8 +398,7 @@ PassOwnPtr<FontPlatformData> FontCache::createFontPlatformData(const FontDescrip
         fontSize,
         (fontDescription.weight() >= FontWeight600 && !tf->isBold()) || fontDescription.isSyntheticBold(),
         ((fontDescription.style() == FontStyleItalic || fontDescription.style() == FontStyleOblique) && !tf->isItalic()) || fontDescription.isSyntheticItalic(),
-        fontDescription.orientation(),
-        s_useSubpixelPositioning));
+        fontDescription.orientation()));
 
     struct FamilyMinSize {
         const wchar_t* family;
@@ -425,7 +448,7 @@ PassOwnPtr<FontPlatformData> FontCache::createFontPlatformData(const FontDescrip
         }
     }
 
-    return result.release();
+    return result;
 }
 
 } // namespace blink

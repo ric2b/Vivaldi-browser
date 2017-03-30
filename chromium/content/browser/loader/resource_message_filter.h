@@ -10,11 +10,10 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "content/browser/host_zoom_level_context.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_message_filter.h"
 #include "content/public/common/resource_type.h"
-
-struct ResourceHostMsg_Request;
 
 namespace storage {
 class FileSystemContext;
@@ -28,8 +27,6 @@ class URLRequestContext;
 namespace content {
 class ChromeAppCacheService;
 class ChromeBlobStorageContext;
-class HostZoomLevelContext;
-class HostZoomMap;
 class ResourceContext;
 class ServiceWorkerContextWrapper;
 

@@ -5,6 +5,7 @@
 #ifndef MOJO_EDK_SYSTEM_NODE_CONTROLLER_H_
 #define MOJO_EDK_SYSTEM_NODE_CONTROLLER_H_
 
+#include <memory>
 #include <queue>
 #include <unordered_map>
 #include <unordered_set>
@@ -14,13 +15,12 @@
 #include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/task_runner.h"
 #include "mojo/edk/embedder/platform_handle_vector.h"
 #include "mojo/edk/embedder/platform_shared_buffer.h"
 #include "mojo/edk/embedder/scoped_platform_handle.h"
+#include "mojo/edk/system/atomic_flag.h"
 #include "mojo/edk/system/node_channel.h"
-#include "mojo/edk/system/ports/hash_functions.h"
 #include "mojo/edk/system/ports/name.h"
 #include "mojo/edk/system/ports/node.h"
 #include "mojo/edk/system/ports/node_delegate.h"
@@ -87,10 +87,9 @@ class NodeController : public ports::NodeDelegate,
   // it ensures the port's observer has also been removed.
   void ClosePort(const ports::PortRef& port);
 
-  // Sends a message on a port to its peer. If message send fails, |message|
-  // is left intact. Otherwise ownership is transferred and it's reset.
+  // Sends a message on a port to its peer.
   int SendMessage(const ports::PortRef& port_ref,
-                  scoped_ptr<PortsMessage>* message);
+                  std::unique_ptr<PortsMessage> message);
 
   // Reserves a local port |port| associated with |token|. A peer holding a copy
   // of |token| can merge one of its own ports into this one.
@@ -138,6 +137,7 @@ class NodeController : public ports::NodeDelegate,
                        ports::ScopedMessage message);
   void AcceptIncomingMessages();
   void DropAllPeers();
+  void CancelReservation(const std::string& token);
 
   // ports::NodeDelegate:
   void GenerateRandomPortName(ports::PortName* port_name) override;
@@ -197,7 +197,7 @@ class NodeController : public ports::NodeDelegate,
   // These are safe to access from any thread as long as the Node is alive.
   Core* const core_;
   const ports::NodeName name_;
-  const scoped_ptr<ports::Node> node_;
+  const std::unique_ptr<ports::Node> node_;
   scoped_refptr<base::TaskRunner> io_task_runner_;
 
   // Guards |peers_| and |pending_peer_messages_|.
@@ -248,6 +248,8 @@ class NodeController : public ports::NodeDelegate,
   // Guards |incoming_messages_|.
   base::Lock messages_lock_;
   std::queue<ports::ScopedMessage> incoming_messages_;
+  // Flag to fast-path checking |incoming_messages_|.
+  AtomicFlag incoming_messages_flag_;
 
   // Guards |shutdown_callback_|.
   base::Lock shutdown_lock_;
@@ -256,6 +258,8 @@ class NodeController : public ports::NodeDelegate,
   // begin polling the Node to see if clean shutdown is possible any time the
   // Node's state is modified by the controller.
   base::Closure shutdown_callback_;
+  // Flag to fast-path checking |shutdown_callback_|.
+  AtomicFlag shutdown_callback_flag_;
 
   // All other fields below must only be accessed on the I/O thread, i.e., the
   // thread on which core_->io_task_runner() runs tasks.
@@ -269,13 +273,13 @@ class NodeController : public ports::NodeDelegate,
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX)
   // Broker for sync shared buffer creation (non-Mac posix-only) in children.
-  scoped_ptr<Broker> broker_;
+  std::unique_ptr<Broker> broker_;
 #endif
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)
   base::Lock mach_port_relay_lock_;
   // Relay for transferring mach ports to/from children.
-  scoped_ptr<MachPortRelay> mach_port_relay_;
+  std::unique_ptr<MachPortRelay> mach_port_relay_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(NodeController);

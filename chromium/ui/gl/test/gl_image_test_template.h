@@ -10,7 +10,8 @@
 
 #include <stdint.h>
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
 #include "base/strings/stringize_macros.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
@@ -23,6 +24,7 @@
 #include "ui/gl/gl_image.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_surface.h"
+#include "ui/gl/init/gl_factory.h"
 #include "ui/gl/test/gl_image_test_support.h"
 #include "ui/gl/test/gl_test_helper.h"
 
@@ -124,9 +126,9 @@ class GLImageTest : public testing::Test {
   // Overridden from testing::Test:
   void SetUp() override {
     GLImageTestSupport::InitializeGL();
-    surface_ = gfx::GLSurface::CreateOffscreenGLSurface(gfx::Size());
-    context_ = gfx::GLContext::CreateGLContext(nullptr, surface_.get(),
-                                               gfx::PreferIntegratedGpu);
+    surface_ = gl::init::CreateOffscreenGLSurface(gfx::Size());
+    context_ = gl::init::CreateGLContext(nullptr, surface_.get(),
+                                         gfx::PreferIntegratedGpu);
     context_->MakeCurrent(surface_.get());
   }
   void TearDown() override {
@@ -230,6 +232,53 @@ TYPED_TEST_P(GLImageZeroInitializeTest, ZeroInitialize) {
 REGISTER_TYPED_TEST_CASE_P(GLImageZeroInitializeTest, ZeroInitialize);
 
 template <typename GLImageTestDelegate>
+class GLImageBindTest : public GLImageTest<GLImageTestDelegate> {};
+
+TYPED_TEST_CASE_P(GLImageBindTest);
+
+TYPED_TEST_P(GLImageBindTest, BindTexImage) {
+  const gfx::Size image_size(256, 256);
+  const uint8_t image_color[] = {0x10, 0x20, 0, 0xff};
+
+  GLuint framebuffer =
+      GLTestHelper::SetupFramebuffer(image_size.width(), image_size.height());
+  ASSERT_TRUE(framebuffer);
+  glBindFramebufferEXT(GL_FRAMEBUFFER, framebuffer);
+  glViewport(0, 0, image_size.width(), image_size.height());
+
+  // Create a solid color green image of preferred format. This must succeed
+  // in order for a GLImage to be conformant.
+  scoped_refptr<gl::GLImage> image =
+      this->delegate_.CreateSolidColorImage(image_size, image_color);
+  ASSERT_TRUE(image);
+
+  // Initialize a blue texture of the same size as |image|.
+  unsigned target = this->delegate_.GetTextureTarget();
+  GLuint texture = GLTestHelper::CreateTexture(target);
+  glBindTexture(target, texture);
+
+  // Bind |image| to |texture|.
+  bool rv = image->BindTexImage(target);
+  EXPECT_TRUE(rv);
+
+  glClearColor(0.0f, 0.0f, 1.0f, 1.0f);
+  glClear(GL_COLOR_BUFFER_BIT);
+  // Draw |texture| to viewport.
+  DrawTextureQuad(target, image_size);
+
+  // Read back pixels to check expectations.
+  GLTestHelper::CheckPixels(0, 0, image_size.width(), image_size.height(),
+                            image_color);
+
+  // Clean up.
+  glDeleteTextures(1, &texture);
+  glDeleteFramebuffersEXT(1, &framebuffer);
+  image->Destroy(true /* have_context */);
+}
+
+REGISTER_TYPED_TEST_CASE_P(GLImageBindTest, BindTexImage);
+
+template <typename GLImageTestDelegate>
 class GLImageCopyTest : public GLImageTest<GLImageTestDelegate> {};
 
 TYPED_TEST_CASE_P(GLImageCopyTest);
@@ -257,7 +306,7 @@ TYPED_TEST_P(GLImageCopyTest, CopyTexImage) {
   // Create a solid color blue texture of the same size as |image|.
   unsigned target = this->delegate_.GetTextureTarget();
   GLuint texture = GLTestHelper::CreateTexture(target);
-  scoped_ptr<uint8_t[]> pixels(new uint8_t[BufferSizeForBufferFormat(
+  std::unique_ptr<uint8_t[]> pixels(new uint8_t[BufferSizeForBufferFormat(
       image_size, gfx::BufferFormat::RGBA_8888)]);
   GLImageTestSupport::SetBufferDataToColor(
       image_size.width(), image_size.height(),

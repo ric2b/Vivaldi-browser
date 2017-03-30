@@ -9,12 +9,12 @@
 #include "build/build_config.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_tree_connection.h"
-#include "content/browser/mojo/mojo_child_connection.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/common/render_widget_window_tree_client_factory.mojom.h"
+#include "content/common/text_input_state.h"
 #include "content/public/common/mojo_shell_connection.h"
-#include "mojo/shell/public/cpp/connector.h"
+#include "services/shell/public/cpp/connector.h"
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/window.h"
 #include "ui/base/hit_test.h"
@@ -39,7 +39,7 @@ RenderWidgetHostViewMus::RenderWidgetHostViewMus(mus::Window* parent_window,
   // Connect to the renderer, pass it a WindowTreeClient interface request
   // and embed that client inside our mus window.
   mojom::RenderWidgetWindowTreeClientFactoryPtr factory;
-  GetMojoConnection(host_->GetProcess())->GetInterface(&factory);
+  host_->GetProcess()->GetChildConnection()->GetInterface(&factory);
 
   mus::mojom::WindowTreeClientPtr window_tree_client;
   factory->CreateWindowTreeClientForRenderWidget(
@@ -171,10 +171,6 @@ gfx::NativeView RenderWidgetHostViewMus::GetNativeView() const {
   return aura_window_;
 }
 
-gfx::NativeViewId RenderWidgetHostViewMus::GetNativeViewId() const {
-  return gfx::NativeViewId();
-}
-
 gfx::NativeViewAccessible RenderWidgetHostViewMus::GetNativeViewAccessible() {
   return gfx::NativeViewAccessible();
 }
@@ -188,7 +184,7 @@ void RenderWidgetHostViewMus::SetIsLoading(bool is_loading) {
 }
 
 void RenderWidgetHostViewMus::TextInputStateChanged(
-    const ViewHostMsg_TextInputState_Params& params) {
+    const TextInputState& params) {
   // TODO(fsamuel): Implement an IME mojo app.
 }
 
@@ -269,6 +265,11 @@ gfx::Rect RenderWidgetHostViewMus::GetBoundsInRootWindow() {
 }
 
 #if defined(OS_MACOSX)
+ui::AcceleratedWidgetMac* RenderWidgetHostViewMus::GetAcceleratedWidgetMac()
+    const {
+  return nullptr;
+}
+
 void RenderWidgetHostViewMus::SetActive(bool active) {
 }
 

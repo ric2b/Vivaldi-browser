@@ -11,7 +11,6 @@
 #include "base/metrics/sparse_histogram.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/common/chrome_constants.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_process_host.h"
@@ -26,56 +25,8 @@
 
 #if defined(OS_WIN)
 #include <windows.h>  // Needed for STATUS_* codes
-#include "chrome/installer/util/install_util.h"
-#include "components/browser_watcher/crash_reporting_metrics_win.h"
+#include "chrome/common/metrics_constants_util_win.h"
 #endif
-
-namespace {
-
-#if defined(OS_WIN)
-void CountBrowserCrashDumpAttempts() {
-  enum Outcome {
-    OUTCOME_SUCCESS,
-    OUTCOME_FAILURE,
-    OUTCOME_UNKNOWN,
-    OUTCOME_MAX_VALUE
-  };
-
-  browser_watcher::CrashReportingMetrics::Values metrics =
-      browser_watcher::CrashReportingMetrics(
-          InstallUtil::IsChromeSxSProcess()
-              ? chrome::kBrowserCrashDumpAttemptsRegistryPathSxS
-              : chrome::kBrowserCrashDumpAttemptsRegistryPath)
-          .RetrieveAndResetMetrics();
-
-  for (int i = 0; i < metrics.crash_dump_attempts; ++i) {
-    Outcome outcome = OUTCOME_UNKNOWN;
-    if (i < metrics.successful_crash_dumps)
-      outcome = OUTCOME_SUCCESS;
-    else if (i < metrics.successful_crash_dumps + metrics.failed_crash_dumps)
-      outcome = OUTCOME_FAILURE;
-
-    UMA_STABILITY_HISTOGRAM_ENUMERATION("CrashReport.BreakpadCrashDumpOutcome",
-                                        outcome, OUTCOME_MAX_VALUE);
-  }
-
-  for (int i = 0; i < metrics.dump_without_crash_attempts; ++i) {
-    Outcome outcome = OUTCOME_UNKNOWN;
-    if (i < metrics.successful_dumps_without_crash) {
-      outcome = OUTCOME_SUCCESS;
-    } else if (i < metrics.successful_dumps_without_crash +
-                       metrics.failed_dumps_without_crash) {
-      outcome = OUTCOME_FAILURE;
-    }
-
-    UMA_STABILITY_HISTOGRAM_ENUMERATION(
-        "CrashReport.BreakpadDumpWithoutCrashOutcome", outcome,
-        OUTCOME_MAX_VALUE);
-  }
-}
-#endif  // defined(OS_WIN)
-
-}  // namespace
 
 ChromeStabilityMetricsProvider::ChromeStabilityMetricsProvider(
     PrefService* local_state)
@@ -106,10 +57,6 @@ void ChromeStabilityMetricsProvider::OnRecordingDisabled() {
 void ChromeStabilityMetricsProvider::ProvideStabilityMetrics(
     metrics::SystemProfileProto* system_profile_proto) {
   helper_.ProvideStabilityMetrics(system_profile_proto);
-
-#if defined(OS_WIN)
-  CountBrowserCrashDumpAttempts();
-#endif  // defined(OS_WIN)
 }
 
 void ChromeStabilityMetricsProvider::ClearSavedStabilityMetrics() {

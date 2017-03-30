@@ -82,13 +82,6 @@ class ProfileImpl : public Profile {
       const base::FilePath& partition_path) override;
   base::FilePath GetPath() const override;
   content::DownloadManagerDelegate* GetDownloadManagerDelegate() override;
-  net::URLRequestContextGetter* GetRequestContext() override;
-  net::URLRequestContextGetter* GetMediaRequestContext() override;
-  net::URLRequestContextGetter* GetMediaRequestContextForRenderProcess(
-      int renderer_child_id) override;
-  net::URLRequestContextGetter* GetMediaRequestContextForStoragePartition(
-      const base::FilePath& partition_path,
-      bool in_memory) override;
   content::ResourceContext* GetResourceContext() override;
   content::BrowserPluginGuestManager* GetGuestManager() override;
   storage::SpecialStoragePolicy* GetSpecialStoragePolicy() override;
@@ -104,6 +97,10 @@ class ProfileImpl : public Profile {
       bool in_memory,
       content::ProtocolHandlerMap* protocol_handlers,
       content::URLRequestInterceptorScopedVector request_interceptors) override;
+  net::URLRequestContextGetter* CreateMediaRequestContext() override;
+  net::URLRequestContextGetter* CreateMediaRequestContextForStoragePartition(
+      const base::FilePath& partition_path,
+      bool in_memory) override;
 
   // Profile implementation:
   scoped_refptr<base::SequencedTaskRunner> GetIOTaskRunner() override;
@@ -124,6 +121,7 @@ class ProfileImpl : public Profile {
   const PrefService* GetPrefs() const override;
   ChromeZoomLevelPrefs* GetZoomLevelPrefs() override;
   PrefService* GetOffTheRecordPrefs() override;
+  net::URLRequestContextGetter* GetRequestContext() override;
   net::URLRequestContextGetter* GetRequestContextForExtensions() override;
   net::SSLConfigService* GetSSLConfigService() override;
   bool IsSameProfile(Profile* profile) override;
@@ -180,11 +178,11 @@ class ProfileImpl : public Profile {
   void EnsureSessionServiceCreated();
 #endif
 
-  // Updates the ProfileInfoCache with data from this profile.
-  void UpdateProfileSupervisedUserIdCache();
-  void UpdateProfileNameCache();
-  void UpdateProfileAvatarCache();
-  void UpdateProfileIsEphemeralCache();
+  // Updates the ProfileAttributesStorage with the data from this profile.
+  void UpdateSupervisedUserIdInStorage();
+  void UpdateNameInStorage();
+  void UpdateAvatarInStorage();
+  void UpdateIsEphemeralInStorage();
 
   void GetCacheParameters(bool is_media_context,
                           base::FilePath* cache_path,

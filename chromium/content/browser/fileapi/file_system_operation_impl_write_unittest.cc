@@ -3,15 +3,16 @@
 // found in the LICENSE file.
 
 #include <stdint.h>
+
+#include <memory>
 #include <utility>
 #include <vector>
 
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/fileapi/mock_file_change_observer.h"
 #include "content/browser/quota/mock_quota_manager.h"
 #include "content/public/test/mock_blob_url_request_context.h"
@@ -167,7 +168,7 @@ class FileSystemOperationImplWriteTest
   int64_t bytes_written_;
   bool complete_;
 
-  scoped_ptr<MockBlobURLRequestContext> url_request_context_;
+  std::unique_ptr<MockBlobURLRequestContext> url_request_context_;
 
   storage::MockFileChangeObserver change_observer_;
   storage::ChangeObserverList change_observers_;
@@ -210,7 +211,7 @@ TEST_F(FileSystemOperationImplWriteTest, TestWriteZero) {
 
 
 TEST_F(FileSystemOperationImplWriteTest, TestWriteInvalidBlobUrl) {
-  scoped_ptr<storage::BlobDataHandle> null_handle;
+  std::unique_ptr<storage::BlobDataHandle> null_handle;
   file_system_context_->operation_runner()->Write(
       &url_request_context(), URLForPath(virtual_path_), std::move(null_handle),
       0, RecordWriteCallback());

@@ -262,31 +262,6 @@ VISIT_GL_CALL(BindUniformLocationCHROMIUM,
               void,
               (GLuint program, GLint location, const char* name),
               (program, location, name))
-VISIT_GL_CALL(GenValuebuffersCHROMIUM,
-              void,
-              (GLsizei n, GLuint* buffers),
-              (n, buffers))
-VISIT_GL_CALL(DeleteValuebuffersCHROMIUM,
-              void,
-              (GLsizei n, const GLuint* valuebuffers),
-              (n, valuebuffers))
-VISIT_GL_CALL(IsValuebufferCHROMIUM,
-              GLboolean,
-              (GLuint valuebuffer),
-              (valuebuffer))
-VISIT_GL_CALL(BindValuebufferCHROMIUM,
-              void,
-              (GLenum target, GLuint valuebuffer),
-              (target, valuebuffer))
-VISIT_GL_CALL(SubscribeValueCHROMIUM,
-              void,
-              (GLenum target, GLenum subscription),
-              (target, subscription))
-VISIT_GL_CALL(PopulateSubscribedValuesCHROMIUM, void, (GLenum target), (target))
-VISIT_GL_CALL(UniformValuebufferCHROMIUM,
-              void,
-              (GLint location, GLenum target, GLenum subscription),
-              (location, target, subscription))
 VISIT_GL_CALL(BindTexImage2DCHROMIUM,
               void,
               (GLenum target, GLint imageId),
@@ -365,7 +340,8 @@ VISIT_GL_CALL(ScheduleCALayerCHROMIUM,
                GLboolean is_clipped,
                const GLfloat* clip_rect,
                GLint sorting_context_id,
-               const GLfloat* transform),
+               const GLfloat* transform,
+               GLuint filter),
               (contents_texture_id,
                contents_rect,
                opacity,
@@ -375,7 +351,8 @@ VISIT_GL_CALL(ScheduleCALayerCHROMIUM,
                is_clipped,
                clip_rect,
                sorting_context_id,
-               transform))
+               transform,
+               filter))
 VISIT_GL_CALL(CommitOverlayPlanesCHROMIUM, void, (), ())
 VISIT_GL_CALL(SwapInterval, void, (GLint interval), (interval))
 VISIT_GL_CALL(FlushDriverCachesCHROMIUM, void, (), ())

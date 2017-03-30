@@ -11,8 +11,8 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "media/audio/audio_input_writer.h"
 #include "media/base/user_input_monitor.h"
@@ -515,7 +515,7 @@ void AudioInputController::OnData(AudioInputStream* stream,
   // to avoid copying data and posting on the audio thread, we just check for
   // non-null here.
   if (input_writer_) {
-    scoped_ptr<AudioBus> source_copy =
+    std::unique_ptr<AudioBus> source_copy =
         AudioBus::Create(source->channels(), source->frames());
     source->CopyTo(source_copy.get());
     task_runner_->PostTask(
@@ -582,7 +582,7 @@ void AudioInputController::OnData(AudioInputStream* stream,
   // TODO(henrika): Investigate if we can avoid the extra copy here.
   // (see http://crbug.com/249316 for details). AFAIK, this scope is only
   // active for WebSpeech clients.
-  scoped_ptr<AudioBus> audio_data =
+  std::unique_ptr<AudioBus> audio_data =
       AudioBus::Create(source->channels(), source->frames());
   source->CopyTo(audio_data.get());
 
@@ -594,7 +594,7 @@ void AudioInputController::OnData(AudioInputStream* stream,
           &AudioInputController::DoOnData, this, base::Passed(&audio_data)));
 }
 
-void AudioInputController::DoOnData(scoped_ptr<AudioBus> data) {
+void AudioInputController::DoOnData(std::unique_ptr<AudioBus> data) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   if (handler_)
     handler_->OnData(this, data.get());
@@ -729,7 +729,7 @@ void AudioInputController::DoDisableDebugRecording() {
 }
 
 void AudioInputController::WriteInputDataForDebugging(
-    scoped_ptr<AudioBus> data) {
+    std::unique_ptr<AudioBus> data) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   if (input_writer_)
     input_writer_->Write(std::move(data));

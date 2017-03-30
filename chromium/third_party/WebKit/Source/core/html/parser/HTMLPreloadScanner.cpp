@@ -128,15 +128,15 @@ static String initiatorFor(const StringImpl* tagImpl)
 
 static bool mediaAttributeMatches(const MediaValuesCached& mediaValues, const String& attributeValue)
 {
-    RawPtr<MediaQuerySet> mediaQueries = MediaQuerySet::createOffMainThread(attributeValue);
+    MediaQuerySet* mediaQueries = MediaQuerySet::createOffMainThread(attributeValue);
     MediaQueryEvaluator mediaQueryEvaluator(mediaValues);
-    return mediaQueryEvaluator.eval(mediaQueries.get());
+    return mediaQueryEvaluator.eval(mediaQueries);
 }
 
 class TokenPreloadScanner::StartTagScanner {
     STACK_ALLOCATED();
 public:
-    StartTagScanner(const StringImpl* tagImpl, RawPtr<MediaValuesCached> mediaValues)
+    StartTagScanner(const StringImpl* tagImpl, MediaValuesCached* mediaValues)
         : m_tagImpl(tagImpl)
         , m_linkIsStyleSheet(false)
         , m_linkTypeIsMissingOrSupportedStyleSheet(true)
@@ -205,12 +205,17 @@ public:
     PassOwnPtr<PreloadRequest> createPreloadRequest(const KURL& predictedBaseURL, const SegmentedString& source, const ClientHintsPreferences& clientHintsPreferences, const PictureData& pictureData, const ReferrerPolicy documentReferrerPolicy)
     {
         PreloadRequest::RequestType requestType = PreloadRequest::RequestTypePreload;
-        if (shouldPreconnect())
+        if (shouldPreconnect()) {
             requestType = PreloadRequest::RequestTypePreconnect;
-        else if (isLinkRelPreload())
-            requestType = PreloadRequest::RequestTypeLinkRelPreload;
-        else if (!shouldPreload() || !m_matchedMediaAttribute)
-            return nullptr;
+        } else {
+            if (isLinkRelPreload()) {
+                requestType = PreloadRequest::RequestTypeLinkRelPreload;
+            }
+            if (!shouldPreload() || !m_matchedMediaAttribute) {
+                return nullptr;
+            }
+        }
+
 
         TextPosition position = TextPosition(source.currentLine(), source.currentColumn());
         FetchRequest::ResourceWidth resourceWidth;
@@ -236,7 +241,7 @@ public:
         request->setCharset(charset());
         request->setDefer(m_defer);
         request->setIntegrityMetadata(m_integrityMetadata);
-        return request.release();
+        return request;
     }
 
 private:
@@ -478,12 +483,13 @@ TokenPreloadScanner::TokenPreloadScanner(const KURL& documentURL, PassOwnPtr<Cac
     , m_isAppCacheEnabled(false)
     , m_isCSPEnabled(false)
     , m_templateCount(0)
-    , m_documentParameters(documentParameters)
+    , m_documentParameters(std::move(documentParameters))
     , m_mediaValues(MediaValuesCached::create(mediaValuesCachedData))
     , m_didRewind(false)
 {
     ASSERT(m_documentParameters.get());
     ASSERT(m_mediaValues.get());
+    m_cssScanner.setReferrerPolicy(m_documentParameters->referrerPolicy);
 }
 
 TokenPreloadScanner::~TokenPreloadScanner()
@@ -541,8 +547,9 @@ static void handleMetaViewport(const String& attributeValue, const CachedDocumen
 
 static void handleMetaReferrer(const String& attributeValue, CachedDocumentParameters* documentParameters, CSSPreloadScanner* cssScanner)
 {
-    if (attributeValue.isEmpty() || attributeValue.isNull() || !SecurityPolicy::referrerPolicyFromString(attributeValue, &documentParameters->referrerPolicy)) {
-        documentParameters->referrerPolicy = ReferrerPolicyDefault;
+    ReferrerPolicy metaReferrerPolicy = ReferrerPolicyDefault;
+    if (!attributeValue.isEmpty() && !attributeValue.isNull() && SecurityPolicy::referrerPolicyFromString(attributeValue, &metaReferrerPolicy)) {
+        documentParameters->referrerPolicy = metaReferrerPolicy;
     }
     cssScanner->setReferrerPolicy(documentParameters->referrerPolicy);
 }
@@ -734,7 +741,7 @@ void TokenPreloadScanner::scanCommon(const Token& token, const SegmentedString& 
             scanner.handlePictureSourceURL(m_pictureData);
         OwnPtr<PreloadRequest> request = scanner.createPreloadRequest(m_predictedBaseElementURL, source, m_clientHintsPreferences, m_pictureData, m_documentParameters->referrerPolicy);
         if (request)
-            requests.append(request.release());
+            requests.append(std::move(request));
         return;
     }
     default: {
@@ -754,7 +761,7 @@ void TokenPreloadScanner::updatePredictedBaseURL(const Token& token)
 }
 
 HTMLPreloadScanner::HTMLPreloadScanner(const HTMLParserOptions& options, const KURL& documentURL, PassOwnPtr<CachedDocumentParameters> documentParameters, const MediaValuesCached::MediaValuesCachedData& mediaValuesCachedData)
-    : m_scanner(documentURL, documentParameters, mediaValuesCachedData)
+    : m_scanner(documentURL, std::move(documentParameters), mediaValuesCachedData)
     , m_tokenizer(HTMLTokenizer::create(options))
 {
 }
@@ -799,7 +806,7 @@ CachedDocumentParameters::CachedDocumentParameters(Document* document)
     defaultViewportMinWidth = document->viewportDefaultMinWidth();
     viewportMetaZeroValuesQuirk = document->settings() && document->settings()->viewportMetaZeroValuesQuirk();
     viewportMetaEnabled = document->settings() && document->settings()->viewportMetaEnabled();
-    referrerPolicy = ReferrerPolicyDefault;
+    referrerPolicy = document->getReferrerPolicy();
 }
 
 } // namespace blink

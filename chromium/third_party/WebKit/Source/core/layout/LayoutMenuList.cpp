@@ -159,11 +159,14 @@ void LayoutMenuList::styleDidChange(StyleDifference diff, const ComputedStyle* o
 
     bool fontChanged = !oldStyle || oldStyle->font() != style()->font();
     if (fontChanged)
-        updateOptionsWidth();
+        m_optionsChanged = true;
 }
 
-void LayoutMenuList::updateOptionsWidth()
+void LayoutMenuList::updateOptionsWidth() const
 {
+    if (!m_optionsChanged)
+        return;
+
     float maxOptionWidth = 0;
     const HeapVector<Member<HTMLElement>>& listItems = selectElement()->listItems();
     int size = listItems.size();
@@ -188,13 +191,15 @@ void LayoutMenuList::updateOptionsWidth()
         }
     }
 
-    int width = static_cast<int>(ceilf(maxOptionWidth));
-    if (m_optionsWidth == width)
-        return;
+    m_optionsWidth = static_cast<int>(ceilf(maxOptionWidth));
+    m_optionsChanged = false;
+}
 
-    m_optionsWidth = width;
-    if (parent())
-        setNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(LayoutInvalidationReason::MenuWidthChanged);
+void LayoutMenuList::setOptionsChanged(bool changed)
+{
+    m_optionsChanged = changed;
+    if (changed && parent())
+        setNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(LayoutInvalidationReason::MenuOptionsChanged);
 }
 
 float LayoutMenuList::computeTextWidth(const String& text) const
@@ -203,16 +208,6 @@ float LayoutMenuList::computeTextWidth(const String& text) const
 }
 
 void LayoutMenuList::updateFromElement()
-{
-    if (m_optionsChanged) {
-        updateOptionsWidth();
-        m_optionsChanged = false;
-    }
-
-    updateText();
-}
-
-void LayoutMenuList::updateText()
 {
     setTextFromOption(selectElement()->optionIndexToBeShown());
 }
@@ -308,6 +303,7 @@ LayoutRect LayoutMenuList::controlClipRect(const LayoutPoint& additionalOffset) 
 
 void LayoutMenuList::computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidth, LayoutUnit& maxLogicalWidth) const
 {
+    updateOptionsWidth();
     maxLogicalWidth = std::max(m_optionsWidth, LayoutTheme::theme().minimumMenuListSize(styleRef())) + m_innerBlock->paddingLeft() + m_innerBlock->paddingRight();
     if (!style()->width().hasPercent())
         minLogicalWidth = maxLogicalWidth;

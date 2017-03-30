@@ -5,8 +5,9 @@
 #ifndef CC_TREES_PROXY_IMPL_H_
 #define CC_TREES_PROXY_IMPL_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "cc/base/completion_event.h"
 #include "cc/base/delayed_unique_notifier.h"
 #include "cc/input/top_controls_state.h"
@@ -22,11 +23,11 @@ namespace cc {
 class CC_EXPORT ProxyImpl : public NON_EXPORTED_BASE(LayerTreeHostImplClient),
                             public NON_EXPORTED_BASE(SchedulerClient) {
  public:
-  static scoped_ptr<ProxyImpl> Create(
+  static std::unique_ptr<ProxyImpl> Create(
       ChannelImpl* channel_impl,
       LayerTreeHost* layer_tree_host,
       TaskRunnerProvider* task_runner_provider,
-      scoped_ptr<BeginFrameSource> external_begin_frame_source);
+      std::unique_ptr<BeginFrameSource> external_begin_frame_source);
 
   ~ProxyImpl() override;
 
@@ -47,20 +48,22 @@ class CC_EXPORT ProxyImpl : public NON_EXPORTED_BASE(LayerTreeHostImplClient),
   virtual void SetVisibleOnImpl(bool visible);
   virtual void ReleaseOutputSurfaceOnImpl(CompletionEvent* completion);
   virtual void FinishGLOnImpl(CompletionEvent* completion);
-  virtual void MainFrameWillHappenOnImplForTesting(
-      CompletionEvent* completion,
-      bool* main_frame_will_happen);
   virtual void StartCommitOnImpl(CompletionEvent* completion,
                                  LayerTreeHost* layer_tree_host,
                                  base::TimeTicks main_thread_start_time,
                                  bool hold_commit_for_activation);
+
+  void MainFrameWillHappenOnImplForTesting(CompletionEvent* completion,
+                                           bool* main_frame_will_happen);
+  void BlockNotifyReadyToActivateForTesting(bool block);
+  CompletionEvent* ActivationCompletionEventForTesting();
 
  protected:
   // protected for testing.
   ProxyImpl(ChannelImpl* channel_impl,
             LayerTreeHost* layer_tree_host,
             TaskRunnerProvider* task_runner_provider,
-            scoped_ptr<BeginFrameSource> external_begin_frame_source);
+            std::unique_ptr<BeginFrameSource> external_begin_frame_source);
 
  private:
   // The members of this struct should be accessed on the impl thread only when
@@ -78,6 +81,7 @@ class CC_EXPORT ProxyImpl : public NON_EXPORTED_BASE(LayerTreeHostImplClient),
   void DidLoseOutputSurfaceOnImplThread() override;
   void CommitVSyncParameters(base::TimeTicks timebase,
                              base::TimeDelta interval) override;
+  void SetBeginFrameSource(BeginFrameSource* source) override;
   void SetEstimatedParentDrawTime(base::TimeDelta draw_time) override;
   void DidSwapBuffersOnImplThread() override;
   void DidSwapBuffersCompleteOnImplThread() override;
@@ -94,7 +98,7 @@ class CC_EXPORT ProxyImpl : public NON_EXPORTED_BASE(LayerTreeHostImplClient),
   void SetNeedsCommitOnImplThread() override;
   void SetVideoNeedsBeginFrames(bool needs_begin_frames) override;
   void PostAnimationEventsToMainThreadOnImplThread(
-      scoped_ptr<AnimationEvents> events) override;
+      std::unique_ptr<AnimationEvents> events) override;
   bool IsInsideDraw() override;
   void RenewTreePriority() override;
   void PostDelayedAnimationTaskOnImplThread(const base::Closure& task,
@@ -104,11 +108,6 @@ class CC_EXPORT ProxyImpl : public NON_EXPORTED_BASE(LayerTreeHostImplClient),
   void DidPrepareTiles() override;
   void DidCompletePageScaleAnimationOnImplThread() override;
   void OnDrawForOutputSurface(bool resourceless_software_draw) override;
-  // This should only be called by LayerTreeHostImpl::PostFrameTimingEvents.
-  void PostFrameTimingEventsOnImplThread(
-      scoped_ptr<FrameTimingTracker::CompositeTimingSet> composite_events,
-      scoped_ptr<FrameTimingTracker::MainFrameTimingSet> main_frame_events)
-      override;
 
   // SchedulerClient implementation
   void WillBeginImplFrame(const BeginFrameArgs& args) override;
@@ -121,7 +120,6 @@ class CC_EXPORT ProxyImpl : public NON_EXPORTED_BASE(LayerTreeHostImplClient),
   void ScheduledActionBeginOutputSurfaceCreation() override;
   void ScheduledActionPrepareTiles() override;
   void ScheduledActionInvalidateOutputSurface() override;
-  void SendBeginFramesToChildren(const BeginFrameArgs& args) override;
   void SendBeginMainFrameNotExpectedSoon() override;
 
   DrawResult DrawAndSwapInternal(bool forced_draw);
@@ -131,14 +129,16 @@ class CC_EXPORT ProxyImpl : public NON_EXPORTED_BASE(LayerTreeHostImplClient),
 
   const int layer_tree_host_id_;
 
-  scoped_ptr<Scheduler> scheduler_;
+  std::unique_ptr<Scheduler> scheduler_;
 
   // Set when the main thread is waiting on a pending tree activation.
-  bool next_commit_waits_for_activation_;
+  bool commit_completion_waits_for_activation_;
 
-  // Set when the main thread is waiting on a commit to complete or on a
-  // pending tree activation.
+  // Set when the main thread is waiting on a commit to complete.
   CompletionEvent* commit_completion_event_;
+
+  // Set when the main thread is waiting for activation to complete.
+  CompletionEvent* activation_completion_event_;
 
   // Set when the next draw should post DidCommitAndDrawFrame to the main
   // thread.
@@ -151,17 +151,13 @@ class CC_EXPORT ProxyImpl : public NON_EXPORTED_BASE(LayerTreeHostImplClient),
 
   DelayedUniqueNotifier smoothness_priority_expiration_notifier_;
 
-  scoped_ptr<BeginFrameSource> external_begin_frame_source_;
-  scoped_ptr<BeginFrameSource> unthrottled_begin_frame_source_;
-  scoped_ptr<SyntheticBeginFrameSource> synthetic_begin_frame_source_;
+  std::unique_ptr<BeginFrameSource> external_begin_frame_source_;
+  std::unique_ptr<BeginFrameSource> unthrottled_begin_frame_source_;
+  std::unique_ptr<SyntheticBeginFrameSource> synthetic_begin_frame_source_;
 
   RenderingStatsInstrumentation* rendering_stats_instrumentation_;
 
-  // Values used to keep track of frame durations. Used only in frame timing.
-  BeginFrameArgs last_begin_main_frame_args_;
-  BeginFrameArgs last_processed_begin_main_frame_args_;
-
-  scoped_ptr<LayerTreeHostImpl> layer_tree_host_impl_;
+  std::unique_ptr<LayerTreeHostImpl> layer_tree_host_impl_;
 
   ChannelImpl* channel_impl_;
 

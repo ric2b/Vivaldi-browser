@@ -18,7 +18,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/app_browsertest_util.h"
@@ -35,8 +35,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
-#include "chrome/browser/task_management/task_management_browsertest_util.h"
-#include "chrome/browser/task_manager/task_manager_browsertest_util.h"
+#include "chrome/browser/task_management/task_manager_browsertest_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -79,9 +78,9 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/compositor_observer.h"
+#include "ui/display/display_switches.h"
 #include "ui/events/event_switches.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
-#include "ui/gfx/switches.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
@@ -105,15 +104,15 @@ using guest_view::TestGuestViewManager;
 using guest_view::TestGuestViewManagerFactory;
 using prerender::PrerenderLinkManager;
 using prerender::PrerenderLinkManagerFactory;
-using task_manager::browsertest_util::MatchAboutBlankTab;
-using task_manager::browsertest_util::MatchAnyApp;
-using task_manager::browsertest_util::MatchAnyBackground;
-using task_manager::browsertest_util::MatchAnyTab;
-using task_manager::browsertest_util::MatchAnyWebView;
-using task_manager::browsertest_util::MatchApp;
-using task_manager::browsertest_util::MatchBackground;
-using task_manager::browsertest_util::MatchWebView;
-using task_manager::browsertest_util::WaitForTaskManagerRows;
+using task_management::browsertest_util::MatchAboutBlankTab;
+using task_management::browsertest_util::MatchAnyApp;
+using task_management::browsertest_util::MatchAnyBackground;
+using task_management::browsertest_util::MatchAnyTab;
+using task_management::browsertest_util::MatchAnyWebView;
+using task_management::browsertest_util::MatchApp;
+using task_management::browsertest_util::MatchBackground;
+using task_management::browsertest_util::MatchWebView;
+using task_management::browsertest_util::WaitForTaskManagerRows;
 using ui::MenuModel;
 
 namespace {
@@ -417,21 +416,21 @@ class WebViewTestBase : public extensions::PlatformAppBrowserTest {
 
   // Handles |request| by serving a redirect response if the |User-Agent| is
   // foobar.
-  static scoped_ptr<net::test_server::HttpResponse> UserAgentResponseHandler(
-      const std::string& path,
-      const GURL& redirect_target,
-      const net::test_server::HttpRequest& request) {
+  static std::unique_ptr<net::test_server::HttpResponse>
+  UserAgentResponseHandler(const std::string& path,
+                           const GURL& redirect_target,
+                           const net::test_server::HttpRequest& request) {
     if (!base::StartsWith(path, request.relative_url,
                           base::CompareCase::SENSITIVE))
-      return scoped_ptr<net::test_server::HttpResponse>();
+      return std::unique_ptr<net::test_server::HttpResponse>();
 
     auto it = request.headers.find("User-Agent");
     EXPECT_TRUE(it != request.headers.end());
     if (!base::StartsWith("foobar", it->second,
                           base::CompareCase::SENSITIVE))
-      return scoped_ptr<net::test_server::HttpResponse>();
+      return std::unique_ptr<net::test_server::HttpResponse>();
 
-    scoped_ptr<net::test_server::BasicHttpResponse> http_response(
+    std::unique_ptr<net::test_server::BasicHttpResponse> http_response(
         new net::test_server::BasicHttpResponse);
     http_response->set_code(net::HTTP_MOVED_PERMANENTLY);
     http_response->AddCustomHeader("Location", redirect_target.spec());
@@ -439,15 +438,15 @@ class WebViewTestBase : public extensions::PlatformAppBrowserTest {
   }
 
   // Handles |request| by serving a redirect response.
-  static scoped_ptr<net::test_server::HttpResponse> RedirectResponseHandler(
-      const std::string& path,
-      const GURL& redirect_target,
-      const net::test_server::HttpRequest& request) {
+  static std::unique_ptr<net::test_server::HttpResponse>
+  RedirectResponseHandler(const std::string& path,
+                          const GURL& redirect_target,
+                          const net::test_server::HttpRequest& request) {
     if (!base::StartsWith(path, request.relative_url,
                           base::CompareCase::SENSITIVE))
-      return scoped_ptr<net::test_server::HttpResponse>();
+      return std::unique_ptr<net::test_server::HttpResponse>();
 
-    scoped_ptr<net::test_server::BasicHttpResponse> http_response(
+    std::unique_ptr<net::test_server::BasicHttpResponse> http_response(
         new net::test_server::BasicHttpResponse);
     http_response->set_code(net::HTTP_MOVED_PERMANENTLY);
     http_response->AddCustomHeader("Location", redirect_target.spec());
@@ -455,26 +454,26 @@ class WebViewTestBase : public extensions::PlatformAppBrowserTest {
   }
 
   // Handles |request| by serving an empty response.
-  static scoped_ptr<net::test_server::HttpResponse> EmptyResponseHandler(
+  static std::unique_ptr<net::test_server::HttpResponse> EmptyResponseHandler(
       const std::string& path,
       const net::test_server::HttpRequest& request) {
     if (base::StartsWith(path, request.relative_url,
                          base::CompareCase::SENSITIVE))
-      return scoped_ptr<net::test_server::HttpResponse>(
+      return std::unique_ptr<net::test_server::HttpResponse>(
           new net::test_server::RawHttpResponse("", ""));
 
-    return scoped_ptr<net::test_server::HttpResponse>();
+    return std::unique_ptr<net::test_server::HttpResponse>();
   }
 
   // Handles |request| by serving cache-able response.
-  static scoped_ptr<net::test_server::HttpResponse> CacheControlResponseHandler(
-      const std::string& path,
-      const net::test_server::HttpRequest& request) {
+  static std::unique_ptr<net::test_server::HttpResponse>
+  CacheControlResponseHandler(const std::string& path,
+                              const net::test_server::HttpRequest& request) {
     if (!base::StartsWith(path, request.relative_url,
                           base::CompareCase::SENSITIVE))
-      return scoped_ptr<net::test_server::HttpResponse>();
+      return std::unique_ptr<net::test_server::HttpResponse>();
 
-    scoped_ptr<net::test_server::BasicHttpResponse> http_response(
+    std::unique_ptr<net::test_server::BasicHttpResponse> http_response(
         new net::test_server::BasicHttpResponse);
     http_response->AddCustomHeader("Cache-control", "max-age=3600");
     http_response->set_content_type("text/plain");
@@ -647,7 +646,7 @@ class WebViewTestBase : public extensions::PlatformAppBrowserTest {
 
   void SendMessageToGuestAndWait(const std::string& message,
                                  const std::string& wait_message) {
-    scoped_ptr<ExtensionTestMessageListener> listener;
+    std::unique_ptr<ExtensionTestMessageListener> listener;
     if (!wait_message.empty()) {
       listener.reset(new ExtensionTestMessageListener(wait_message, false));
     }
@@ -720,7 +719,7 @@ class WebViewTestBase : public extensions::PlatformAppBrowserTest {
     return !strncmp(test_info->name(), name, strlen(name));
   }
 
-  scoped_ptr<content::FakeSpeechRecognitionManager>
+  std::unique_ptr<content::FakeSpeechRecognitionManager>
       fake_speech_recognition_manager_;
 
   TestGuestViewManagerFactory factory_;
@@ -755,6 +754,9 @@ INSTANTIATE_TEST_CASE_P(WebViewTests, WebViewSizeTest, testing::Bool());
 class WebViewVisibilityTest : public WebViewTest {};
 INSTANTIATE_TEST_CASE_P(WebViewTests, WebViewVisibilityTest, testing::Bool());
 
+class WebViewSpeechAPITest : public WebViewTest {};
+INSTANTIATE_TEST_CASE_P(WebViewTests, WebViewSpeechAPITest, testing::Bool());
+
 // The following test suits are created to group tests based on specific
 // features of <webview>.
 // These features current would not work with
@@ -765,10 +767,6 @@ INSTANTIATE_TEST_CASE_P(WebViewTests,
                         WebViewAccessibilityTest,
                         testing::Values(false));
 
-class WebViewSpeechAPITest : public WebViewTest {};
-INSTANTIATE_TEST_CASE_P(WebViewTests,
-                        WebViewSpeechAPITest,
-                        testing::Values(false));
 
 class WebViewDPITest : public WebViewTest {
  protected:
@@ -819,6 +817,83 @@ class WebContentsAudioMutedObserver : public content::WebContentsObserver {
 
   DISALLOW_COPY_AND_ASSIGN(WebContentsAudioMutedObserver);
 };
+
+class WasAudibleWebContentsDelegate : public content::WebContentsDelegate {
+ public:
+  WasAudibleWebContentsDelegate() : invalidate_type_tab_seen_(false) {}
+
+  void NavigationStateChanged(content::WebContents* contents,
+                              content::InvalidateTypes changed_flags) override {
+    if (changed_flags == content::INVALIDATE_TYPE_TAB) {
+      invalidate_type_tab_seen_ = true;
+      if (message_loop_runner_.get())
+        message_loop_runner_->Quit();
+    }
+  }
+
+  void WaitForInvalidateTypeTab() {
+    if (!invalidate_type_tab_seen_) {
+      message_loop_runner_ = new content::MessageLoopRunner;
+      message_loop_runner_->Run();
+    }
+    invalidate_type_tab_seen_ = false;
+  }
+
+ private:
+  bool invalidate_type_tab_seen_;
+  scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
+
+  DISALLOW_COPY_AND_ASSIGN(WasAudibleWebContentsDelegate);
+};
+
+IN_PROC_BROWSER_TEST_P(WebViewTest, AudibilityStatePropagates) {
+  ASSERT_TRUE(StartEmbeddedTestServer());  // For serving guest audio.
+
+  LoadAppWithGuest("web_view/simple");
+
+  content::WebContents* embedder = GetEmbedderWebContents();
+  content::WebContents* guest = GetGuestWebContents();
+
+  EXPECT_FALSE(embedder->WasRecentlyAudible());
+  EXPECT_FALSE(guest->WasRecentlyAudible());
+
+  std::unique_ptr<WasAudibleWebContentsDelegate> was_audible_delegate(
+      new WasAudibleWebContentsDelegate);
+  embedder->SetDelegate(was_audible_delegate.get());
+
+  // Just in case we get console error messages from the guest, we should
+  // surface them in the test output.
+  EXPECT_TRUE(content::ExecuteScript(
+      embedder,
+      "wv = document.getElementsByTagName('webview')[0];"
+      "wv.addEventListener('consolemessage', function (e) {"
+      "  console.log('WebViewTest Guest: ' + e.message);"
+      "});"));
+
+  // Inject JS to start audio.
+  GURL audio_url = embedded_test_server()->GetURL(
+      "/extensions/platform_apps/web_view/simple/ping.mp3");
+  std::string setup_audio_script = base::StringPrintf(
+      "ae = document.createElement('audio');"
+      "ae.src='%s';"
+      "document.body.appendChild(ae);"
+      "ae.play();",
+      audio_url.spec().c_str());
+  EXPECT_TRUE(content::ExecuteScript(guest, setup_audio_script));
+
+  was_audible_delegate->WaitForInvalidateTypeTab();
+  EXPECT_TRUE(embedder->WasRecentlyAudible());
+  EXPECT_TRUE(guest->WasRecentlyAudible());
+
+  // Wait for audio to stop (the .mp3 is shorter than the audio stream
+  // monitor's timeout, so no need to explicitly stop it. Other callers may
+  // call NotifyNavigationStateChanged() on the embedder web contents, so
+  // we may have to wait several times).
+  while (embedder->WasRecentlyAudible())
+    was_audible_delegate->WaitForInvalidateTypeTab();
+  EXPECT_FALSE(embedder->WasRecentlyAudible());
+  EXPECT_FALSE(guest->WasRecentlyAudible());
+}
 
 IN_PROC_BROWSER_TEST_P(WebViewTest, AudioMutesWhileAttached) {
   LoadAppWithGuest("web_view/simple");
@@ -1497,10 +1572,6 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, NoPrerenderer) {
 // Verify that existing <webview>'s are detected when the task manager starts
 // up.
 IN_PROC_BROWSER_TEST_P(WebViewTest, TaskManagerExistingWebView) {
-  // This test is for the old implementation of the task manager. We must
-  // explicitly disable the new one.
-  task_manager::browsertest_util::EnableOldTaskManager();
-
   ASSERT_TRUE(StartEmbeddedTestServer());
 
   LoadGuest("/extensions/platform_apps/web_view/task_manager/guest.html",
@@ -1523,10 +1594,6 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, TaskManagerExistingWebView) {
 
 // Verify that the task manager notices the creation of new <webview>'s.
 IN_PROC_BROWSER_TEST_P(WebViewTest, TaskManagerNewWebView) {
-  // This test is for the old implementation of the task manager. We must
-  // explicitly disable the new one.
-  task_manager::browsertest_util::EnableOldTaskManager();
-
   ASSERT_TRUE(StartEmbeddedTestServer());
 
   chrome::ShowTaskManager(browser());  // Show task manager BEFORE guest loads.
@@ -1658,7 +1725,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, IndexedDBIsolation) {
 // The test launches an app with guest and closes the window on loadcommit. It
 // then launches the app window again. The process is repeated 3 times.
 // http://crbug.com/291278
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(MAC_OS_X_VERSION_10_9)
 #define MAYBE_CloseOnLoadcommit DISABLED_CloseOnLoadcommit
 #else
 #define MAYBE_CloseOnLoadcommit CloseOnLoadcommit
@@ -1699,7 +1766,7 @@ void WebViewTestBase::MediaAccessAPIAllowTestHelper(
 
   content::WebContents* embedder_web_contents = GetFirstAppWindowWebContents();
   ASSERT_TRUE(embedder_web_contents);
-  scoped_ptr<MockWebContentsDelegate> mock(new MockWebContentsDelegate());
+  std::unique_ptr<MockWebContentsDelegate> mock(new MockWebContentsDelegate());
   embedder_web_contents->SetDelegate(mock.get());
 
   ExtensionTestMessageListener done_listener("TEST_PASSED", false);
@@ -1815,8 +1882,9 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, ContextMenuLanguageSettings) {
   content::WebContentsAddedObserver web_contents_added_observer;
 
   GURL page_url("http://www.google.com");
-  scoped_ptr<TestRenderViewContextMenu> menu(TestRenderViewContextMenu::Create(
-      guest_web_contents, page_url, GURL(), GURL()));
+  std::unique_ptr<TestRenderViewContextMenu> menu(
+      TestRenderViewContextMenu::Create(guest_web_contents, page_url, GURL(),
+                                        GURL()));
   menu->ExecuteCommand(IDC_CONTENT_CONTEXT_LANGUAGE_SETTINGS, 0);
 
   content::WebContents* new_contents =
@@ -1845,8 +1913,9 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, ContextMenusAPI_Basic) {
   ExtensionTestMessageListener click_listener("ITEM_CLICKED", false);
   GURL page_url("http://www.google.com");
   // Create and build our test context menu.
-  scoped_ptr<TestRenderViewContextMenu> menu(TestRenderViewContextMenu::Create(
-      guest_web_contents, page_url, GURL(), GURL()));
+  std::unique_ptr<TestRenderViewContextMenu> menu(
+      TestRenderViewContextMenu::Create(guest_web_contents, page_url, GURL(),
+                                        GURL()));
   // Look for the extension item in the menu, and execute it.
   int command_id = ContextMenuMatcher::ConvertToExtensionsCustomCommandId(0);
   ASSERT_TRUE(menu->IsCommandIdEnabled(command_id));
@@ -1892,11 +1961,6 @@ static bool ContextMenuNotificationCallback(
 }
 
 IN_PROC_BROWSER_TEST_P(WebViewTest, ContextMenusAPI_PreventDefault) {
-  // TODO(lfg): Fix context menu APIs on OOPIF-based webview.
-  // https://crbug.com/581894
-  if (content::BrowserPluginGuestMode::UseCrossProcessFramesForGuests())
-    return;
-
   LoadAppWithGuest("web_view/context_menus/basic");
 
   content::WebContents* guest_web_contents = GetGuestWebContents();
@@ -1929,11 +1993,6 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, ContextMenusAPI_PreventDefault) {
 // Tests that a context menu is created when right-clicking in the webview. This
 // also tests that the 'contextmenu' event is handled correctly.
 IN_PROC_BROWSER_TEST_P(WebViewTest, TestContextMenu) {
-  // TODO(lfg): Fix context menu APIs on OOPIF-based webview.
-  // https://crbug.com/581894
-  if (content::BrowserPluginGuestMode::UseCrossProcessFramesForGuests())
-    return;
-
   LoadAppWithGuest("web_view/context_menus/basic");
   content::WebContents* guest_web_contents = GetGuestWebContents();
 
@@ -1970,7 +2029,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, MediaAccessAPIAllow_TestCheck) {
 
   content::WebContents* embedder_web_contents = GetFirstAppWindowWebContents();
   ASSERT_TRUE(embedder_web_contents);
-  scoped_ptr<MockWebContentsDelegate> mock(new MockWebContentsDelegate());
+  std::unique_ptr<MockWebContentsDelegate> mock(new MockWebContentsDelegate());
   embedder_web_contents->SetDelegate(mock.get());
 
   ExtensionTestMessageListener done_listener("TEST_PASSED", false);
@@ -1993,11 +2052,8 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, ScreenCoordinates) {
 }
 
 #if defined(OS_CHROMEOS)
-IN_PROC_BROWSER_TEST_P(WebViewTest, ChromeVoxInjection) {
-  // TODO(lfg): https://crbug.com/583071
-  if (content::BrowserPluginGuestMode::UseCrossProcessFramesForGuests())
-    return;
-
+// Flaky, see http://crbug.com/611736.
+IN_PROC_BROWSER_TEST_P(WebViewTest, DISABLED_ChromeVoxInjection) {
   EXPECT_FALSE(
       chromeos::AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
 
@@ -2251,8 +2307,8 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, DownloadPermission) {
   // Replace WebContentsDelegate with mock version so we can intercept download
   // requests.
   content::WebContentsDelegate* delegate = guest_web_contents->GetDelegate();
-  scoped_ptr<MockDownloadWebContentsDelegate>
-      mock_delegate(new MockDownloadWebContentsDelegate(delegate));
+  std::unique_ptr<MockDownloadWebContentsDelegate> mock_delegate(
+      new MockDownloadWebContentsDelegate(delegate));
   guest_web_contents->SetDelegate(mock_delegate.get());
 
   // Start test.
@@ -2850,7 +2906,7 @@ IN_PROC_BROWSER_TEST_P(
 
   content::WebContents* embedder_web_contents = GetEmbedderWebContents();
   ASSERT_TRUE(embedder_web_contents);
-  scoped_ptr<EmbedderWebContentsObserver> observer(
+  std::unique_ptr<EmbedderWebContentsObserver> observer(
       new EmbedderWebContentsObserver(embedder_web_contents));
 
   content::WebContents* guest_web_contents = GetGuestWebContents();
@@ -3262,21 +3318,90 @@ IN_PROC_BROWSER_TEST_P(WebViewGuestScrollTouchTest,
   // Perform a scroll gesture of the same magnitude, but in the opposite
   // direction and centered over the GuestView this time.
   guest_rect = guest_contents->GetContainerBounds();
-  embedder_rect = embedder_contents->GetContainerBounds();
-  guest_rect.set_x(guest_rect.x() - embedder_rect.x());
-  guest_rect.set_y(guest_rect.y() - embedder_rect.y());
   {
-    gfx::Point guest_scroll_location(guest_rect.x() + guest_rect.width() / 2,
-                                     guest_rect.y());
+    gfx::Point guest_scroll_location(guest_rect.width() / 2,
+                                     guest_rect.height() / 2);
 
     ScrollWaiter waiter(embedder_host_view);
 
-    content::SimulateGestureScrollSequence(embedder_contents,
+    content::SimulateGestureScrollSequence(guest_contents,
                                            guest_scroll_location,
                                            gfx::Vector2dF(0, gesture_distance));
 
     waiter.WaitForScrollChange(gfx::Vector2dF());
   }
+}
+
+class WebViewScrollGuestContentTest : public WebViewTest {
+ public:
+  ~WebViewScrollGuestContentTest() override {}
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    WebViewTest::SetUpCommandLine(command_line);
+
+    command_line->AppendSwitchASCII(switches::kTouchEvents,
+                                    switches::kTouchEventsEnabled);
+  }
+};
+
+INSTANTIATE_TEST_CASE_P(WebViewScrollGuestContent,
+                        WebViewScrollGuestContentTest,
+                        testing::Values(false));
+
+IN_PROC_BROWSER_TEST_P(WebViewScrollGuestContentTest, ScrollGuestContent) {
+  LoadAppWithGuest("web_view/scrollable_embedder_and_guest");
+
+  content::WebContents* embedder_contents = GetEmbedderWebContents();
+
+  std::vector<content::WebContents*> guest_web_contents_list;
+  GetGuestViewManager()->WaitForNumGuestsCreated(1u);
+  GetGuestViewManager()->GetGuestWebContentsList(&guest_web_contents_list);
+  ASSERT_EQ(1u, guest_web_contents_list.size());
+
+  content::WebContents* guest_contents = guest_web_contents_list[0];
+  content::RenderWidgetHostView* guest_host_view =
+      guest_contents->GetRenderWidgetHostView();
+
+  gfx::Rect embedder_rect = embedder_contents->GetContainerBounds();
+  gfx::Rect guest_rect = guest_contents->GetContainerBounds();
+  guest_rect.set_x(guest_rect.x() - embedder_rect.x());
+  guest_rect.set_y(guest_rect.y() - embedder_rect.y());
+
+  content::RenderWidgetHostView* embedder_host_view =
+      embedder_contents->GetRenderWidgetHostView();
+  EXPECT_EQ(gfx::Vector2dF(), guest_host_view->GetLastScrollOffset());
+  EXPECT_EQ(gfx::Vector2dF(), embedder_host_view->GetLastScrollOffset());
+
+  gfx::Point guest_scroll_location(guest_rect.width() / 2, 0);
+
+  float gesture_distance = 15.f;
+  {
+    gfx::Vector2dF expected_offset(0.f, gesture_distance);
+
+    ScrollWaiter waiter(guest_host_view);
+
+    content::SimulateGestureScrollSequence(
+        guest_contents, guest_scroll_location,
+        gfx::Vector2dF(0, -gesture_distance));
+
+    waiter.WaitForScrollChange(expected_offset);
+  }
+  EXPECT_EQ(gfx::Vector2dF(), embedder_host_view->GetLastScrollOffset());
+
+  // Use fling gesture to scroll back, velocity should be big enough to scroll
+  // content back.
+  float fling_velocity = 300.f;
+  {
+    ScrollWaiter waiter(guest_host_view);
+
+    content::SimulateGestureFlingSequence(
+        guest_contents, guest_scroll_location,
+        gfx::Vector2dF(0, fling_velocity));
+
+    waiter.WaitForScrollChange(gfx::Vector2dF());
+  }
+
+  EXPECT_EQ(gfx::Vector2dF(), embedder_host_view->GetLastScrollOffset());
 }
 
 #if defined(USE_AURA)
@@ -3354,7 +3479,7 @@ IN_PROC_BROWSER_TEST_P(WebViewFocusTest, TouchFocusesEmbedder) {
   views::View* other_focusable_view = new views::View();
   other_focusable_view->SetBounds(bounds.x() + bounds.width(), bounds.y(), 100,
                                   100);
-  other_focusable_view->SetFocusable(true);
+  other_focusable_view->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
   aura_webview->parent()->AddChildView(other_focusable_view);
   other_focusable_view->SetPosition(gfx::Point(bounds.x() + bounds.width(), 0));
 
@@ -3381,95 +3506,3 @@ IN_PROC_BROWSER_TEST_P(WebViewFocusTest, TouchFocusesEmbedder) {
   EXPECT_TRUE(aura_webview->HasFocus());
 }
 #endif
-
-#if defined(ENABLE_TASK_MANAGER)
-
-namespace {
-
-base::string16 GetExpectedPrefix(content::WebContents* web_contents) {
-  DCHECK(web_contents);
-  guest_view::GuestViewBase* guest =
-      guest_view::GuestViewBase::FromWebContents(web_contents);
-  DCHECK(guest);
-
-  return l10n_util::GetStringFUTF16(guest->GetTaskPrefix(), base::string16());
-}
-
-const std::vector<task_management::WebContentsTag*>& GetTrackedTags() {
-  return task_management::WebContentsTagsManager::GetInstance()->
-      tracked_tags();
-}
-
-bool HasExpectedGuestTask(
-    const task_management::MockWebContentsTaskManager& task_manager,
-    content::WebContents* guest_contents) {
-  bool found = false;
-  for (auto* task: task_manager.tasks()) {
-    if (task->GetType() != task_management::Task::GUEST)
-      continue;
-    EXPECT_FALSE(found);
-    found = true;
-    const base::string16 title = task->title();
-    const base::string16 expected_prefix = GetExpectedPrefix(guest_contents);
-    EXPECT_TRUE(base::StartsWith(title, expected_prefix,
-                                 base::CompareCase::INSENSITIVE_ASCII));
-  }
-  return found;
-}
-
-}  // namespace
-
-// Tests that the pre-existing WebViews are provided to the task manager.
-IN_PROC_BROWSER_TEST_P(WebViewTest, TaskManagementPreExistingWebViews) {
-  ASSERT_TRUE(StartEmbeddedTestServer());
-
-  // Browser tests start with a single tab.
-  EXPECT_EQ(1U, GetTrackedTags().size());
-
-  content::WebContents* guest_contents =
-      LoadGuest("/extensions/platform_apps/web_view/task_manager/guest.html",
-                "web_view/task_manager");
-
-  task_management::MockWebContentsTaskManager task_manager;
-  task_manager.StartObserving();
-
-  // The pre-existing tab and guest tasks are provided.
-  // 4 tasks expected. The order is arbitrary.
-  // Tab: about:blank,
-  // Background Page: <webview> task manager test,
-  // App: <webview> task manager test,
-  // Webview: WebViewed test content.
-  EXPECT_EQ(4U, task_manager.tasks().size());
-  EXPECT_TRUE(HasExpectedGuestTask(task_manager, guest_contents));
-}
-
-// Tests that the post-existing WebViews are provided to the task manager.
-IN_PROC_BROWSER_TEST_P(WebViewTest, TaskManagementPostExistingWebViews) {
-  ASSERT_TRUE(StartEmbeddedTestServer());
-
-  // Browser tests start with a single tab.
-  EXPECT_EQ(1U, GetTrackedTags().size());
-
-  task_management::MockWebContentsTaskManager task_manager;
-  task_manager.StartObserving();
-
-  // Only the "about:blank" tab shows at the moment.
-  ASSERT_EQ(1U, task_manager.tasks().size());
-  const task_management::Task* about_blank_task = task_manager.tasks().back();
-  EXPECT_EQ(task_management::Task::RENDERER, about_blank_task->GetType());
-  EXPECT_EQ(base::UTF8ToUTF16("Tab: about:blank"), about_blank_task->title());
-
-  // Now load a guest web view.
-  content::WebContents* guest_contents =
-      LoadGuest("/extensions/platform_apps/web_view/task_manager/guest.html",
-                "web_view/task_manager");
-  // 4 tasks expected. The order is arbitrary.
-  // Tab: about:blank,
-  // Background Page: <webview> task manager test,
-  // App: <webview> task manager test,
-  // Webview: WebViewed test content.
-  EXPECT_EQ(4U, task_manager.tasks().size());
-  EXPECT_TRUE(HasExpectedGuestTask(task_manager, guest_contents));
-}
-
-#endif  // defined(ENABLE_TASK_MANAGER)

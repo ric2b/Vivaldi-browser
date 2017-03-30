@@ -68,10 +68,16 @@ Ak sa chcete aj napriek tomu prihlásiť, informácie prehliadača Chrome, ako s
 <translation id="2997147809295888909">Chrome overil, že certifikát tohto webu bol vydaný vydavateľom <ph name="ISSUER" />. Server neposkytol žiadne informácie o transparentnosti certifikátu.</translation>
 <translation id="3037838751736561277">Google Chrome je v režime na pozadí.</translation>
 <translation id="3047079729301751317">Ak odpojíte účet <ph name="USERNAME" />, vymaže sa história, záložky, nastavenia a všetky ďalšie údaje prehliadača Chrome uložené na vašom zariadení. Údaje uložené v účte Google sa nevymažú a môžete ich spravovať v službe <ph name="GOOGLE_DASHBOARD_LINK" />Google Dashboard<ph name="END_GOOGLE_DASHBOARD_LINK" />.</translation>
+<translation id="3065168410429928842">Karta Chrome</translation>
 <translation id="3080151273017101988">Ponechať aplikácie na pozadí spustené po zatvorení prehliadača Google Chrome</translation>
 <translation id="3089968997497233615">K dispozícii je nová, bezpečnejšia verzia prehliadača Google Chrome.</translation>
 <translation id="3149510190863420837">Aplikácie Chrome</translation>
-<translation id="3197823471738295152">Zariadenie bolo aktualizované.</translation>
+<translation id="3251381707915721925">Ak chcete nastaviť, ktoré weby môže používateľ <ph name="NEW_PROFILE_NAME" /> zobraziť, môžete na adrese <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" /> nakonfigurovať obmedzenia a nastavenia. Ak nezmeníte predvolené nastavenia, používateľ <ph name="NEW_PROFILE_NAME" /> bude môcť prehliadať všetky stránky na príslušnom webe.
+
+Ak chcete profilu <ph name="NEW_PROFILE_NAME" /> zabrániť pristupovať do vášho účtu, uzamknite svoj profil, keď Chrome nepoužívate. Urobíte to tak, že kliknete na názov profilu v pravom hornom rohu tohto prehliadača a vyberiete možnosť Ukončiť a aktivovať detskú zámku.
+<ph name="BEGIN_LINK_2" />Ďalšie informácie<ph name="END_LINK_2" />
+
+Ďalšie pokyny si prečítajte v e-mailovej správe odoslanej na adresu <ph name="ACCOUNT_EMAIL" />.</translation>
 <translation id="3282568296779691940">Prihlásenie do prehliadača Chrome</translation>
 <translation id="3311976847535831054">Tento počítač už nebude dostávať aktualizácie pre 32-bitový prehliadač Google Chrome. Inovujte ho na 64-bitovú verziu.</translation>
 <translation id="3360895254066713204">Chrome Helper</translation>
@@ -211,7 +217,6 @@ Prehliadač Google Chrome nedokáže obnoviť vaše nastavenia.</translation>
 <translation id="7808348361785373670">Odstrániť z prehliadača Chrome...</translation>
 <translation id="7825851276765848807">Inštalácia zlyhala kvôli neznámej chybe. Skúste aplikáciu Google Chrome stiahnuť znova.</translation>
 <translation id="7890208801193284374">Ak počítač zdieľate s rodinou a priateľmi, môžu v prehliadači Chrome prehliadať oddelene a tiež si ho nastaviť podľa vlastných požiadaviek.</translation>
-<translation id="8000275528373650868">Prehliadač Google Chrome vyžaduje systém Windows Vista alebo Windows XP s balíkom SP2 alebo vyšším.</translation>
 <translation id="8005540215158006229">Prehliadač Chrome je takmer pripravený.</translation>
 <translation id="8008534537613507642">Preinštalovať prehliadač Chrome</translation>
 <translation id="8030318113982266900">Prebieha aktualizácia vášho zariadenia na kanál <ph name="CHANNEL_NAME" />...</translation>
@@ -233,6 +238,7 @@ Prehliadač Google Chrome nedokáže obnoviť vaše nastavenia.</translation>
 <translation id="8556340503434111824">K dispozícii je nová verzia prehliadača Google Chrome, ktorá je rýchlejšia ako kedykoľvek predtým.</translation>
 <translation id="8568392309447938879">Aplikácie môžete používať až po prihlásení do prehliadača Chrome. Prehliadaču Chrome tým umožníte synchronizovať vaše aplikácie, záložky, históriu, heslá a ďalšie nastavenia na všetkých zariadeniach.</translation>
 <translation id="8614913330719544658">Google Chrome nereaguje. Chcete ho spustiť znova?</translation>
+<translation id="8667808506758191620">Vaše zariadenie <ph name="DEVICE_TYPE" /> je aktuálne.</translation>
 <translation id="8669527147644353129">Google Chrome Helper</translation>
 <translation id="8679801911857917785">Tiež určuje, ktorá stránka sa zobrazí pri spustení prehliadača Chrome.</translation>
 <translation id="870251953148363156">Aktualizácia prehliadača &amp;Google Chrome</translation>
@@ -241,6 +247,7 @@ Prehliadač Google Chrome nedokáže obnoviť vaše nastavenia.</translation>
 <translation id="8851136666856101339">hlavné</translation>
 <translation id="8862326446509486874">Nemáte potrebné práva na inštaláciu na úrovni systému. Skúste inštalátor spustiť znova ako správca.</translation>
 <translation id="9026991721384951619">Systému OS Chrome sa nepodarilo synchronizovať vaše údaje, pretože vaše prihlasovacie údaje účtu sú zastarané.</translation>
+<translation id="9067395829937117663">Google Chrome vyžaduje Windows 7 alebo vyšší.</translation>
 <translation id="9102715433345326100">Tento súbor je škodlivý, a preto ho prehliadač Chrome zablokoval.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Upozornenie:<ph name="END_BOLD" /> Prehliadač Google Chrome nemôže zabrániť rozšíreniam v zaznamenávaní vašej histórie prehliadania. Ak chcete toto rozšírenie v režime inkognito zakázať, zrušte výber tejto možnosti.</translation>
 <translation id="911206726377975832">Chcete tiež odstrániť svoje údaje prehliadania?</translation>

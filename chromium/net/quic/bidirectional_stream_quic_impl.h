@@ -7,8 +7,9 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "net/http/bidirectional_stream_impl.h"
 #include "net/quic/quic_chromium_client_session.h"
@@ -38,10 +39,17 @@ class NET_EXPORT_PRIVATE BidirectionalStreamQuicImpl
   // BidirectionalStreamImpl implementation:
   void Start(const BidirectionalStreamRequestInfo* request_info,
              const BoundNetLog& net_log,
+             bool send_request_headers_automatically,
              BidirectionalStreamImpl::Delegate* delegate,
-             scoped_ptr<base::Timer> timer) override;
+             std::unique_ptr<base::Timer> timer) override;
+  void SendRequestHeaders() override;
   int ReadData(IOBuffer* buffer, int buffer_len) override;
-  void SendData(IOBuffer* data, int length, bool end_stream) override;
+  void SendData(const scoped_refptr<IOBuffer>& data,
+                int length,
+                bool end_stream) override;
+  void SendvData(const std::vector<scoped_refptr<IOBuffer>>& buffers,
+                 const std::vector<int>& lengths,
+                 bool end_stream) override;
   void Cancel() override;
   NextProto GetProtocol() const override;
   int64_t GetTotalReceivedBytes() const override;
@@ -64,8 +72,6 @@ class NET_EXPORT_PRIVATE BidirectionalStreamQuicImpl
   void OnSendDataComplete(int rv);
   void OnReadDataComplete(int rv);
 
-  // Helper method to send request headers.
-  void SendRequestHeaders();
   // Notifies the delegate of an error.
   void NotifyError(int error);
   // Resets the stream and ensures that |delegate_| won't be called back.
@@ -103,6 +109,12 @@ class NET_EXPORT_PRIVATE BidirectionalStreamQuicImpl
   bool has_sent_headers_;
   // Indicates whether initial headers have been received.
   bool has_received_headers_;
+
+  // Whether to automatically send request headers when stream is negotiated.
+  // If false, headers will not be sent until SendRequestHeaders() is called or
+  // until next SendData/SendvData, during which QUIC will try to combine header
+  // frame with data frame in the same packet if possible.
+  bool send_request_headers_automatically_;
 
   base::WeakPtrFactory<BidirectionalStreamQuicImpl> weak_factory_;
 

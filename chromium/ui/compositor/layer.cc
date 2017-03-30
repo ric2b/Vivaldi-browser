@@ -5,13 +5,14 @@
 #include "ui/compositor/layer.h"
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 #include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/layers/nine_patch_layer.h"
 #include "cc/layers/picture_layer.h"
@@ -30,7 +31,6 @@
 #include "ui/compositor/paint_context.h"
 #include "ui/gfx/animation/animation.h"
 #include "ui/gfx/canvas.h"
-#include "ui/gfx/display.h"
 #include "ui/gfx/geometry/point3_f.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -53,7 +53,6 @@ Layer::Layer()
       compositor_(NULL),
       parent_(NULL),
       visible_(true),
-      force_render_surface_(false),
       fills_bounds_opaquely_(true),
       fills_bounds_completely_(false),
       background_blur_radius_(0),
@@ -77,7 +76,6 @@ Layer::Layer(LayerType type)
       compositor_(NULL),
       parent_(NULL),
       visible_(true),
-      force_render_surface_(false),
       fills_bounds_opaquely_(true),
       fills_bounds_completely_(false),
       background_blur_radius_(0),
@@ -354,7 +352,7 @@ void Layer::SetBackgroundZoom(float zoom, int inset) {
   SetLayerBackgroundFilters();
 }
 
-void Layer::SetAlphaShape(scoped_ptr<SkRegion> region) {
+void Layer::SetAlphaShape(std::unique_ptr<SkRegion> region) {
   alpha_shape_ = std::move(region);
 
   SetLayerFilters();
@@ -508,7 +506,6 @@ void Layer::SwitchToLayer(scoped_refptr<cc::Layer> new_layer) {
   cc_layer_->SetLayerClient(this);
   cc_layer_->SetTransformOrigin(gfx::Point3F());
   cc_layer_->SetContentsOpaque(fills_bounds_opaquely_);
-  cc_layer_->SetForceRenderSurface(force_render_surface_);
   cc_layer_->SetIsDrawable(type_ != LAYER_NOT_DRAWN);
   cc_layer_->SetHideLayerAndSubtree(!visible_);
 
@@ -528,7 +525,7 @@ void Layer::SwitchCCLayerForTest() {
 
 void Layer::SetTextureMailbox(
     const cc::TextureMailbox& mailbox,
-    scoped_ptr<cc::SingleReleaseCallback> release_callback,
+    std::unique_ptr<cc::SingleReleaseCallback> release_callback,
     gfx::Size texture_size_in_dip) {
   DCHECK(type_ == LAYER_TEXTURED || type_ == LAYER_SOLID_COLOR);
   DCHECK(mailbox.IsValid());
@@ -567,6 +564,11 @@ void Layer::SetTextureFlipped(bool flipped) {
 bool Layer::TextureFlipped() const {
   DCHECK(texture_layer_.get());
   return texture_layer_->flipped();
+}
+
+void Layer::SetTextureAlpha(float alpha) {
+  DCHECK(texture_layer_.get());
+  texture_layer_->SetVertexOpacity(alpha, alpha, alpha, alpha);
 }
 
 void Layer::SetShowSurface(
@@ -670,9 +672,9 @@ void Layer::SendDamagedRects() {
 
   for (cc::Region::Iterator iter(damaged_region_); iter.has_rect(); iter.next())
     cc_layer_->SetNeedsDisplayRect(iter.rect());
-}
 
-void Layer::ClearDamagedRects() {
+  if (content_layer_)
+    paint_region_.Union(damaged_region_);
   damaged_region_.Clear();
 }
 
@@ -723,7 +725,8 @@ void Layer::OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) {
   delegate_->OnDelegatedFrameDamage(damage_rect_in_dip);
 }
 
-void Layer::RequestCopyOfOutput(scoped_ptr<cc::CopyOutputRequest> request) {
+void Layer::RequestCopyOfOutput(
+    std::unique_ptr<cc::CopyOutputRequest> request) {
   cc_layer_->RequestCopyOfOutput(std::move(request));
 }
 
@@ -736,8 +739,8 @@ scoped_refptr<cc::DisplayItemList> Layer::PaintContentsToDisplayList(
   TRACE_EVENT1("ui", "Layer::PaintContentsToDisplayList", "name", name_);
   gfx::Rect local_bounds(bounds().size());
   gfx::Rect invalidation(
-      gfx::IntersectRects(damaged_region_.bounds(), local_bounds));
-  ClearDamagedRects();
+      gfx::IntersectRects(paint_region_.bounds(), local_bounds));
+  paint_region_.Clear();
   cc::DisplayItemListSettings settings;
   settings.use_cached_picture = false;
   scoped_refptr<cc::DisplayItemList> display_list =
@@ -760,21 +763,13 @@ size_t Layer::GetApproximateUnsharedMemoryUsage() const {
 
 bool Layer::PrepareTextureMailbox(
     cc::TextureMailbox* mailbox,
-    scoped_ptr<cc::SingleReleaseCallback>* release_callback,
+    std::unique_ptr<cc::SingleReleaseCallback>* release_callback,
     bool use_shared_memory) {
   if (!mailbox_release_callback_)
     return false;
   *mailbox = mailbox_;
   *release_callback = std::move(mailbox_release_callback_);
   return true;
-}
-
-void Layer::SetForceRenderSurface(bool force) {
-  if (force_render_surface_ == force)
-    return;
-
-  force_render_surface_ = force;
-  cc_layer_->SetForceRenderSurface(force_render_surface_);
 }
 
 class LayerDebugInfo : public base::trace_event::ConvertableToTraceFormat {
@@ -791,9 +786,9 @@ class LayerDebugInfo : public base::trace_event::ConvertableToTraceFormat {
   std::string name_;
 };
 
-scoped_ptr<base::trace_event::ConvertableToTraceFormat> Layer::TakeDebugInfo(
-    cc::Layer* layer) {
-  return make_scoped_ptr(new LayerDebugInfo(name_));
+std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
+Layer::TakeDebugInfo(cc::Layer* layer) {
+  return base::WrapUnique(new LayerDebugInfo(name_));
 }
 
 void Layer::CollectAnimators(

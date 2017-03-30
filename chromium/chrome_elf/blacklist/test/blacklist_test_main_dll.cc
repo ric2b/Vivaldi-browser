@@ -4,15 +4,15 @@
 
 #include <windows.h>
 
+#include "chrome/install_static/install_util.h"
 #include "chrome_elf/blacklist/blacklist.h"
-#include "chrome_elf/chrome_elf_util.h"
 
 extern "C" void InitBlacklistTestDll() {
 }
 
 BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID reserved) {
   if (reason == DLL_PROCESS_ATTACH) {
-    InitializeProcessType();
+    install_static::InitializeProcessType();
     blacklist::Initialize(true);  // force always on, no beacon
   }
 

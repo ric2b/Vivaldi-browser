@@ -5,26 +5,31 @@
 #ifndef CONTENT_BROWSER_COMPOSITOR_GPU_SURFACELESS_BROWSER_COMPOSITOR_OUTPUT_SURFACE_H_
 #define CONTENT_BROWSER_COMPOSITOR_GPU_SURFACELESS_BROWSER_COMPOSITOR_OUTPUT_SURFACE_H_
 
+#include <memory>
+
 #include "content/browser/compositor/gpu_browser_compositor_output_surface.h"
+#include "gpu/ipc/common/surface_handle.h"
 
 namespace gpu {
 class GpuMemoryBufferManager;
 }
 
-namespace content {
-
+namespace display_compositor {
 class BufferQueue;
 class GLHelper;
+}
+
+namespace content {
 
 class GpuSurfacelessBrowserCompositorOutputSurface
     : public GpuBrowserCompositorOutputSurface {
  public:
   GpuSurfacelessBrowserCompositorOutputSurface(
-      const scoped_refptr<ContextProviderCommandBuffer>& context,
-      const scoped_refptr<ContextProviderCommandBuffer>& worker_context,
-      int surface_id,
-      const scoped_refptr<ui::CompositorVSyncManager>& vsync_manager,
-      scoped_ptr<BrowserCompositorOverlayCandidateValidator>
+      scoped_refptr<ContextProviderCommandBuffer> context,
+      gpu::SurfaceHandle surface_handle,
+      scoped_refptr<ui::CompositorVSyncManager> vsync_manager,
+      base::SingleThreadTaskRunner* task_runner,
+      std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
           overlay_candidate_validator,
       unsigned int target,
       unsigned int internalformat,
@@ -43,11 +48,12 @@ class GpuSurfacelessBrowserCompositorOutputSurface
   // BrowserCompositorOutputSurface implementation.
   void OnGpuSwapBuffersCompleted(
       const std::vector<ui::LatencyInfo>& latency_info,
-      gfx::SwapResult result) override;
+      gfx::SwapResult result,
+      const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac) override;
 
   unsigned int internalformat_;
-  scoped_ptr<GLHelper> gl_helper_;
-  scoped_ptr<BufferQueue> output_surface_;
+  std::unique_ptr<display_compositor::GLHelper> gl_helper_;
+  std::unique_ptr<display_compositor::BufferQueue> output_surface_;
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager_;
 };
 

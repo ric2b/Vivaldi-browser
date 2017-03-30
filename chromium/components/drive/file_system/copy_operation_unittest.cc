@@ -2,16 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "components/drive/file_system/copy_operation.h"
+#include "components/drive/chromeos/file_system/copy_operation.h"
 
 #include "base/files/file_util.h"
 #include "base/task_runner_util.h"
+#include "components/drive/chromeos/file_cache.h"
+#include "components/drive/chromeos/resource_metadata.h"
 #include "components/drive/drive_api_util.h"
-#include "components/drive/file_cache.h"
 #include "components/drive/file_change.h"
 #include "components/drive/file_system/operation_test_base.h"
 #include "components/drive/file_system_core_util.h"
-#include "components/drive/resource_metadata.h"
 #include "components/drive/service/fake_drive_service.h"
 #include "content/public/test/test_utils.h"
 #include "google_apis/drive/drive_api_parser.h"
@@ -43,7 +43,7 @@ class CopyOperationTest : public OperationTestBase {
        blocking_task_runner(), delegate(), scheduler(), metadata(), cache()));
   }
 
-  scoped_ptr<CopyOperation> operation_;
+  std::unique_ptr<CopyOperation> operation_;
 };
 
 TEST_F(CopyOperationTest, TransferFileFromLocalToRemote_RegularFile) {
@@ -187,7 +187,7 @@ TEST_F(CopyOperationTest, TransferFileFromLocalToRemote_NewHostedDocument) {
 
   // Create a hosted document on the server that is not synced to local yet.
   google_apis::DriveApiErrorCode gdata_error = google_apis::DRIVE_OTHER_ERROR;
-  scoped_ptr<google_apis::FileResource> new_gdoc_entry;
+  std::unique_ptr<google_apis::FileResource> new_gdoc_entry;
   fake_service()->AddNewFile(
       "application/vnd.google-apps.document", "", "", "title", true,
       google_apis::test_util::CreateCopyResultCallback(&gdata_error,
@@ -483,7 +483,7 @@ TEST_F(CopyOperationTest, WaitForSyncComplete) {
 
   // Add a new directory to the server and store the resource ID locally.
   google_apis::DriveApiErrorCode status = google_apis::DRIVE_OTHER_ERROR;
-  scoped_ptr<google_apis::FileResource> file_resource;
+  std::unique_ptr<google_apis::FileResource> file_resource;
   fake_service()->AddNewDirectory(
       directory_parent.resource_id(), directory.title(),
       AddNewDirectoryOptions(),

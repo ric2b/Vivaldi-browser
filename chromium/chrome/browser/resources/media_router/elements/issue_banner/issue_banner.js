@@ -25,32 +25,33 @@ Polymer({
 
     /**
      * The text shown in the default action button.
-     * @private {string}
+     * @private {string|undefined}
      */
     defaultActionButtonText_: {
       type: String,
-      value: '',
     },
 
     /**
      * The issue to show.
-     * @type {?media_router.Issue}
+     * @type {?media_router.Issue|undefined}
      */
     issue: {
       type: Object,
-      value: null,
       observer: 'updateActionButtonText_',
     },
 
     /**
      * The text shown in the secondary action button.
-     * @private {string}
+     * @private {string|undefined}
      */
     secondaryActionButtonText_: {
       type: String,
-      value: '',
     },
   },
+
+  behaviors: [
+    I18nBehavior,
+  ],
 
   /**
    * @param {?media_router.Issue} issue
@@ -79,7 +80,7 @@ Polymer({
    * @private
    */
   computeOptionalActionHidden_: function(issue) {
-    return !issue || !issue.secondaryActionType;
+    return !issue || issue.secondaryActionType === undefined;
   },
 
   /**
@@ -127,14 +128,14 @@ Polymer({
     var defaultText = '';
     var secondaryText = '';
     if (this.issue) {
-      defaultText = loadTimeData.getString(
-          this.actionTypeToButtonTextResource_[
-          this.issue.defaultActionType]);
+      defaultText =
+          this.i18n(this.actionTypeToButtonTextResource_[
+              this.issue.defaultActionType]);
 
-      if (this.issue.secondaryActionType) {
-        secondaryText = loadTimeData.getString(
-            this.actionTypeToButtonTextResource_[
-            this.issue.secondaryActionType]);
+      if (this.issue.secondaryActionType !== undefined) {
+        secondaryText =
+            this.i18n(this.actionTypeToButtonTextResource_[
+                this.issue.secondaryActionType]);
       }
     }
 

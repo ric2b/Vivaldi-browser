@@ -147,6 +147,8 @@ cr.define('cr.login', function() {
         'loadabort', this.onLoadAbort_.bind(this));
     this.webview_.addEventListener(
         'loadcommit', this.onLoadCommit_.bind(this));
+    this.webview_.addEventListener(
+        'permissionrequest', this.onPermissionRequest_.bind(this));
 
     this.webview_.request.onBeforeRequest.addListener(
         this.onInsecureRequest.bind(this),
@@ -187,6 +189,15 @@ cr.define('cr.login', function() {
      */
     get apiPasswordBytes() {
       return this.apiPasswordBytes_;
+    },
+
+    /**
+     * Returns the first scraped password if any, or an empty string otherwise.
+     * @return {string}
+     */
+    get firstScrapedPassword() {
+      var scraped = this.getConsolidatedScrapedPasswords_();
+      return scraped.length ? scraped[0] : '';
     },
 
     /**
@@ -440,6 +451,15 @@ cr.define('cr.login', function() {
           {detail: {url: url,
                     isSAMLPage: this.isSamlPage_,
                     domain: this.authDomain}}));
+    },
+
+    onPermissionRequest_: function(permissionEvent) {
+      if (permissionEvent.permission === 'media') {
+        // The actual permission check happens in
+        // WebUILoginView::RequestMediaAccessPermission().
+        this.dispatchEvent(new CustomEvent('videoEnabled'));
+        permissionEvent.request.allow();
+      }
     },
 
     onGetSAMLFlag_: function(channel, msg) {

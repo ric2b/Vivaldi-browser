@@ -34,11 +34,13 @@
 
 namespace blink {
 
+class TextTrack;
+
 // ----------------------------
 
 class MediaControlPanelElement final : public MediaControlDivElement {
 public:
-    static RawPtr<MediaControlPanelElement> create(MediaControls&);
+    static MediaControlPanelElement* create(MediaControls&);
 
     void setIsDisplayed(bool);
 
@@ -66,7 +68,7 @@ private:
 
 class MediaControlPanelEnclosureElement final : public MediaControlDivElement {
 public:
-    static RawPtr<MediaControlPanelEnclosureElement> create(MediaControls&);
+    static MediaControlPanelEnclosureElement* create(MediaControls&);
 
 private:
     explicit MediaControlPanelEnclosureElement(MediaControls&);
@@ -76,18 +78,18 @@ private:
 
 class MediaControlOverlayEnclosureElement final : public MediaControlDivElement {
 public:
-    static RawPtr<MediaControlOverlayEnclosureElement> create(MediaControls&);
+    static MediaControlOverlayEnclosureElement* create(MediaControls&);
 
 private:
     explicit MediaControlOverlayEnclosureElement(MediaControls&);
-    void* preDispatchEventHandler(Event*) override;
+    EventDispatchHandlingState* preDispatchEventHandler(Event*) override;
 };
 
 // ----------------------------
 
 class MediaControlMuteButtonElement final : public MediaControlInputElement {
 public:
-    static RawPtr<MediaControlMuteButtonElement> create(MediaControls&);
+    static MediaControlMuteButtonElement* create(MediaControls&);
 
     bool willRespondToMouseClickEvents() override { return true; }
     void updateDisplayType() override;
@@ -102,7 +104,7 @@ private:
 
 class MediaControlPlayButtonElement final : public MediaControlInputElement {
 public:
-    static RawPtr<MediaControlPlayButtonElement> create(MediaControls&);
+    static MediaControlPlayButtonElement* create(MediaControls&);
 
     bool willRespondToMouseClickEvents() override { return true; }
     void updateDisplayType() override;
@@ -117,7 +119,7 @@ private:
 
 class MediaControlOverlayPlayButtonElement final : public MediaControlInputElement {
 public:
-    static RawPtr<MediaControlOverlayPlayButtonElement> create(MediaControls&);
+    static MediaControlOverlayPlayButtonElement* create(MediaControls&);
 
     void updateDisplayType() override;
 
@@ -132,7 +134,7 @@ private:
 
 class MediaControlToggleClosedCaptionsButtonElement final : public MediaControlInputElement {
 public:
-    static RawPtr<MediaControlToggleClosedCaptionsButtonElement> create(MediaControls&);
+    static MediaControlToggleClosedCaptionsButtonElement* create(MediaControls&);
 
     bool willRespondToMouseClickEvents() override { return true; }
 
@@ -146,9 +148,35 @@ private:
 
 // ----------------------------
 
+class MediaControlTextTrackListElement final : public MediaControlDivElement {
+public:
+    static MediaControlTextTrackListElement* create(MediaControls&);
+
+    bool willRespondToMouseClickEvents() override { return true; }
+
+    void setVisible(bool);
+
+private:
+    explicit MediaControlTextTrackListElement(MediaControls&);
+
+    void defaultEventHandler(Event*) override;
+
+    void refreshTextTrackListMenu();
+
+    // Returns the label for the track when a valid track is passed in and "Off" when the parameter is null.
+    String getTextTrackLabel(TextTrack*);
+    // Creates the track element in the list when a valid track is passed in and the "Off" item when the parameter is null.
+    Element* createTextTrackListItem(TextTrack*);
+
+    void showTextTrackAtIndex(unsigned);
+    void disableShowingTextTracks();
+};
+
+// ----------------------------
+
 class MediaControlTimelineElement final : public MediaControlInputElement {
 public:
-    static RawPtr<MediaControlTimelineElement> create(MediaControls&);
+    static MediaControlTimelineElement* create(MediaControls&);
 
     bool willRespondToMouseClickEvents() override;
 
@@ -168,7 +196,7 @@ private:
 
 class MediaControlFullscreenButtonElement final : public MediaControlInputElement {
 public:
-    static RawPtr<MediaControlFullscreenButtonElement> create(MediaControls&);
+    static MediaControlFullscreenButtonElement* create(MediaControls&);
 
     bool willRespondToMouseClickEvents() override { return true; }
 
@@ -184,7 +212,7 @@ private:
 
 class MediaControlCastButtonElement final : public MediaControlInputElement {
 public:
-    static RawPtr<MediaControlCastButtonElement> create(MediaControls&, bool isOverlayButton);
+    static MediaControlCastButtonElement* create(MediaControls&, bool isOverlayButton);
 
     bool willRespondToMouseClickEvents() override { return true; }
 
@@ -223,7 +251,7 @@ private:
 
 class MediaControlVolumeSliderElement final : public MediaControlInputElement {
 public:
-    static RawPtr<MediaControlVolumeSliderElement> create(MediaControls&);
+    static MediaControlVolumeSliderElement* create(MediaControls&);
 
     bool willRespondToMouseMoveEvents() override;
     bool willRespondToMouseClickEvents() override;
@@ -240,7 +268,7 @@ private:
 
 class MediaControlTimeRemainingDisplayElement final : public MediaControlTimeDisplayElement {
 public:
-    static RawPtr<MediaControlTimeRemainingDisplayElement> create(MediaControls&);
+    static MediaControlTimeRemainingDisplayElement* create(MediaControls&);
 
 private:
     explicit MediaControlTimeRemainingDisplayElement(MediaControls&);
@@ -250,7 +278,7 @@ private:
 
 class MediaControlCurrentTimeDisplayElement final : public MediaControlTimeDisplayElement {
 public:
-    static RawPtr<MediaControlCurrentTimeDisplayElement> create(MediaControls&);
+    static MediaControlCurrentTimeDisplayElement* create(MediaControls&);
 
 private:
     explicit MediaControlCurrentTimeDisplayElement(MediaControls&);

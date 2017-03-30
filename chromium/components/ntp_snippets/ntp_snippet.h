@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/time/time.h"
@@ -14,16 +15,27 @@
 
 namespace base {
 class DictionaryValue;
+class ListValue;
 }
 
 namespace ntp_snippets {
 
-// Stores and vend fresh content data for the NTP. This is a dumb class with no
-// smarts at all, all the logic is in the service.
+struct SnippetSource {
+  SnippetSource(const GURL& url,
+                const std::string& publisher_name,
+                const GURL& amp_url)
+      : url(url), publisher_name(publisher_name), amp_url(amp_url) {}
+  GURL url;
+  std::string publisher_name;
+  GURL amp_url;
+};
+
 class NTPSnippet {
  public:
-  // Creates a new snippet with the given URL. URL must be valid.
-  NTPSnippet(const GURL& url);
+  using PtrVector = std::vector<std::unique_ptr<NTPSnippet>>;
+
+  // Creates a new snippet with the given |id|.
+  NTPSnippet(const std::string& id);
 
   ~NTPSnippet();
 
@@ -34,20 +46,18 @@ class NTPSnippet {
   static std::unique_ptr<NTPSnippet> CreateFromDictionary(
       const base::DictionaryValue& dict);
 
+  // Creates snippets from dictionary values in |list| and adds them to
+  // |snippets|. Returns true on success, false if anything went wrong.
+  static bool AddFromListValue(const base::ListValue& list,
+                               PtrVector* snippets);
+
   std::unique_ptr<base::DictionaryValue> ToDictionary() const;
 
-  // URL of the page described by this snippet.
-  const GURL& url() const { return url_; }
-
-  // Subtitle to identify the site the snippet is from.
-  const std::string& site_title() const { return site_title_; }
-  void set_site_title(const std::string& site_title) {
-    site_title_ = site_title;
-  }
-
-  // Favicon for the site. Do not use to directly retrieve the favicon.
-  const GURL& favicon_url() const { return favicon_url_; }
-  void set_favicon_url(const GURL& favicon_url) { favicon_url_ = favicon_url; }
+  // A unique ID for identifying the snippet. If initialized by
+  // CreateFromDictionary() the relevant key is 'url'.
+  // TODO(treib): For now, the ID has to be a valid URL spec, otherwise
+  // fetching the salient image will fail. See TODO in ntp_snippets_service.cc.
+  const std::string& id() const { return id_; }
 
   // Title of the snippet.
   const std::string& title() const { return title_; }
@@ -79,15 +89,44 @@ class NTPSnippet {
     expiry_date_ = expiry_date;
   }
 
+  size_t source_index() const { return best_source_index_; }
+  void set_source_index(size_t index) { best_source_index_ = index; }
+
+  // We should never construct an NTPSnippet object if we don't have any sources
+  // so this should never fail
+  const SnippetSource& best_source() const {
+    return sources_[best_source_index_];
+  }
+
+  const std::vector<SnippetSource>& sources() const { return sources_; }
+  void add_source(const SnippetSource& source) { sources_.push_back(source); }
+
+  // If this snippet has all the data we need to show a full card to the user
+  bool is_complete() const {
+    return !id().empty() && !sources().empty() && !title().empty() &&
+           !snippet().empty() && salient_image_url().is_valid() &&
+           !publish_date().is_null() && !expiry_date().is_null() &&
+           !best_source().publisher_name.empty();
+  }
+
+  float score() const { return score_; }
+  void set_score(float score) { score_ = score; }
+
+  // Public for testing.
+  static base::Time TimeFromJsonString(const std::string& timestamp_str);
+  static std::string TimeToJsonString(const base::Time& time);
+
  private:
-  const GURL url_;
-  std::string site_title_;
+  std::string id_;
   std::string title_;
-  GURL favicon_url_;
   GURL salient_image_url_;
   std::string snippet_;
   base::Time publish_date_;
   base::Time expiry_date_;
+  float score_;
+  size_t best_source_index_;
+
+  std::vector<SnippetSource> sources_;
 
   DISALLOW_COPY_AND_ASSIGN(NTPSnippet);
 };

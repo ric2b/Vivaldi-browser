@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_QUIRKS_QUIRKS_CLIENT_H_
 #define COMPONENTS_QUIRKS_QUIRKS_CLIENT_H_
 
+#include <memory>
+
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/threading/thread_checker.h"
@@ -61,7 +63,7 @@ class QuirksClient : public net::URLFetcherDelegate {
   base::ThreadChecker thread_checker_;
 
   // This fetcher is used to download icc file.
-  scoped_ptr<net::URLFetcher> url_fetcher_;
+  std::unique_ptr<net::URLFetcher> url_fetcher_;
 
   // Pending retry.
   base::OneShotTimer request_scheduled_;

@@ -12,7 +12,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_simple_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/prefs/browser_prefs.h"
@@ -93,8 +93,8 @@ class StateStoreTest : public PlatformStateStoreTestBase {
   // store.
   void TrimPref() {
     ASSERT_EQ(nullptr, profile_);
-    scoped_ptr<base::Value> prefs(JSONFileValueDeserializer(GetPrefsPath())
-                                      .Deserialize(nullptr, nullptr));
+    std::unique_ptr<base::Value> prefs(JSONFileValueDeserializer(GetPrefsPath())
+                                           .Deserialize(nullptr, nullptr));
     ASSERT_NE(nullptr, prefs.get());
     base::DictionaryValue* dict = nullptr;
     ASSERT_TRUE(prefs->GetAsDictionary(&dict));

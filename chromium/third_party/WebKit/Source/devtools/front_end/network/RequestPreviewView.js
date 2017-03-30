@@ -55,19 +55,37 @@ WebInspector.RequestPreviewView.prototype = {
                 delete this._emptyWidget;
             }
 
-            if (!this._previewView) {
-                this._previewView = this._createPreviewView();
-                this._previewView.show(this.element);
-                if (this._previewView instanceof WebInspector.VBoxWithToolbarItems) {
-                    var toolbar = new WebInspector.Toolbar("network-item-preview-toolbar", this.element);
-                    for (var item of /** @type {!WebInspector.VBoxWithToolbarItems} */ (this._previewView).toolbarItems())
-                        toolbar.appendToolbarItem(item);
-                }
+            if (!this._previewView)
+                this._createPreviewView(handlePreviewView.bind(this));
+            else
+                this.innerView = this._previewView;
+        }
+
+        /**
+         * @param {!WebInspector.Widget} view
+         * @this {WebInspector.RequestPreviewView}
+         */
+        function handlePreviewView(view) {
+            this._previewView = view;
+            this._previewView.show(this.element);
+            if (this._previewView instanceof WebInspector.VBoxWithToolbarItems) {
+                var toolbar = new WebInspector.Toolbar("network-item-preview-toolbar", this.element);
+                for (var item of /** @type {!WebInspector.VBoxWithToolbarItems} */ (this._previewView).toolbarItems())
+                    toolbar.appendToolbarItem(item);
             }
             this.innerView = this._previewView;
+            this._previewViewHandledForTest(this._previewView);
         }
     },
 
+    /**
+     * @param {!WebInspector.Widget} view
+     */
+    _previewViewHandledForTest: function(view) { },
+
+    /**
+     * @return {!WebInspector.EmptyWidget}
+     */
     _createEmptyWidget: function()
     {
         return this._createMessageView(WebInspector.UIString("This request has no preview available."));
@@ -92,22 +110,23 @@ WebInspector.RequestPreviewView.prototype = {
     },
 
     /**
-     * @return {?WebInspector.JSONView}
+     * @param {?WebInspector.ParsedJSON} parsedJSON
+     * @return {?WebInspector.SearchableView}
      */
-    _jsonView: function()
+    _jsonView: function(parsedJSON)
     {
-        var parsedJSON = WebInspector.JSONView.parseJSON(this._requestContent());
-        return parsedJSON && new WebInspector.JSONView(parsedJSON);
+        if (!parsedJSON || typeof parsedJSON.data !== "object")
+            return null;
+        return WebInspector.JSONView.createSearchableView(/** @type {!WebInspector.ParsedJSON} */ (parsedJSON));
     },
 
     /**
-     * @return {?WebInspector.XMLView}
+     * @return {?WebInspector.SearchableView}
      */
     _xmlView: function()
     {
-        var content = this._requestContent();
-        var parsedXML = WebInspector.XMLView.parseXML(content, this.request.mimeType);
-        return parsedXML ? new WebInspector.XMLView(parsedXML) : null;
+        var parsedXML = WebInspector.XMLView.parseXML(this._requestContent(), this.request.mimeType);
+        return parsedXML ? WebInspector.XMLView.createSearchableView(parsedXML) : null;
     },
 
     /**
@@ -126,44 +145,51 @@ WebInspector.RequestPreviewView.prototype = {
         return new WebInspector.RequestHTMLView(this.request, dataURL);
     },
 
-    _createPreviewView: function()
+    /**
+     * @param {function(!WebInspector.Widget)} callback
+     */
+    _createPreviewView: function(callback)
     {
-        if (this.request.contentError())
-            return this._createMessageView(WebInspector.UIString("Failed to load response data"));
-
-        var mimeType = this.request.mimeType || "";
-        if (mimeType.endsWith("json") || mimeType.endsWith("javascript")) {
-            var jsonView = this._jsonView();
-            if (jsonView)
-                return jsonView;
-        }
-
-        if (this.request.hasErrorStatusCode()) {
-            var htmlErrorPreview = this._htmlErrorPreview();
-            if (htmlErrorPreview)
-                return htmlErrorPreview;
+        if (this.request.contentError()) {
+            callback(this._createMessageView(WebInspector.UIString("Failed to load response data")));
+            return;
         }
 
         var xmlView = this._xmlView();
-        if (xmlView)
-            return xmlView;
-
-        if (this.request.resourceType() === WebInspector.resourceTypes.XHR) {
-            var jsonView = this._jsonView();
-            if (jsonView)
-                return jsonView;
-            var htmlErrorPreview = this._htmlErrorPreview();
-            if (htmlErrorPreview)
-                return htmlErrorPreview;
+        if (xmlView) {
+            callback(xmlView);
+            return;
         }
 
-        if (this._responseView.sourceView)
-            return this._responseView.sourceView;
+        WebInspector.JSONView.parseJSON(this._requestContent()).then(chooseView.bind(this)).then(callback);
 
-        if (this.request.resourceType() === WebInspector.resourceTypes.Other)
-            return this._createEmptyWidget();
+        /**
+         * @this {WebInspector.RequestPreviewView}
+         * @param {?WebInspector.ParsedJSON} jsonData
+         * @return {!WebInspector.Widget}
+         */
+        function chooseView(jsonData)
+        {
+            if (jsonData) {
+                var jsonView = this._jsonView(jsonData);
+                if (jsonView)
+                    return jsonView;
+            }
 
-        return WebInspector.RequestView.nonSourceViewForRequest(this.request);
+            if (this.request.hasErrorStatusCode() || this.request.resourceType() === WebInspector.resourceTypes.XHR) {
+                var htmlErrorPreview = this._htmlErrorPreview();
+                if (htmlErrorPreview)
+                    return htmlErrorPreview;
+            }
+
+            if (this._responseView.sourceView)
+                return this._responseView.sourceView;
+
+            if (this.request.resourceType() === WebInspector.resourceTypes.Other)
+                return this._createEmptyWidget();
+
+            return WebInspector.RequestView.nonSourceViewForRequest(this.request);
+        }
     },
 
     __proto__: WebInspector.RequestContentView.prototype

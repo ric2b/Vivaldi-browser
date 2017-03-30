@@ -1,4 +1,5 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
+<link rel="import" href="chrome://md-settings/about_page/about_page.html">
 <link rel="import" href="chrome://md-settings/advanced_page/advanced_page.html">
 <link rel="import" href="chrome://md-settings/basic_page/basic_page.html">
 
@@ -7,7 +8,7 @@
   <template>
     <content select="paper-icon-button"></content>
     <div id="pageContainer">
-      <template is="dom-if" if="[[!showAdvancedPage_]]">
+      <template is="dom-if" if="[[showBasicPage_]]">
         <settings-basic-page prefs="{{prefs}}" current-route="{{currentRoute}}">
         </settings-basic-page>
       </template>
@@ -15,6 +16,10 @@
         <settings-advanced-page prefs="{{prefs}}"
             current-route="{{currentRoute}}">
         </settings-advanced-page>
+      </template>
+      <template is="dom-if" if="[[showAboutPage_]]">
+        <settings-about-page current-route="{{currentRoute}}">
+        </settings-about-page>
       </template>
     </div>
   </template>

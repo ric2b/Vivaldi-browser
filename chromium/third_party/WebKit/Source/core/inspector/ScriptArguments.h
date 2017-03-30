@@ -33,7 +33,6 @@
 
 #include "bindings/core/v8/ScriptState.h"
 #include "wtf/Forward.h"
-#include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
 
@@ -43,8 +42,8 @@ class ScriptValue;
 
 class ScriptArguments final : public GarbageCollectedFinalized<ScriptArguments> {
 public:
-    static RawPtr<ScriptArguments> create(ScriptState*, Vector<ScriptValue>& arguments);
-    static RawPtr<ScriptArguments> create(ScriptState*, const v8::FunctionCallbackInfo<v8::Value>& arguments, unsigned skipArgumentCount);
+    static ScriptArguments* create(ScriptState*, Vector<ScriptValue>& arguments);
+    static ScriptArguments* create(ScriptState*, const v8::FunctionCallbackInfo<v8::Value>& arguments, unsigned skipArgumentCount);
 
     ~ScriptArguments();
 

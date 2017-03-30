@@ -2,17 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "media/filters/audio_file_reader.h"
+
+#include <memory>
+
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/md5.h"
-#include "base/memory/scoped_ptr.h"
 #include "build/build_config.h"
 #include "media/base/audio_bus.h"
 #include "media/base/audio_hash.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/test_data_util.h"
 #include "media/ffmpeg/ffmpeg_common.h"
-#include "media/filters/audio_file_reader.h"
 #include "media/filters/in_memory_url_protocol.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -40,7 +42,7 @@ class AudioFileReaderTest : public testing::Test {
 
   // Reads and the entire file provided to Initialize().
   void ReadAndVerify(const char* expected_audio_hash, int expected_frames) {
-    scoped_ptr<AudioBus> decoded_audio_data =
+    std::unique_ptr<AudioBus> decoded_audio_data =
         AudioBus::Create(reader_->channels(), reader_->GetNumberOfFrames());
     int actual_frames = reader_->Read(decoded_audio_data.get());
     ASSERT_LE(actual_frames, decoded_audio_data->frames());
@@ -115,7 +117,7 @@ class AudioFileReaderTest : public testing::Test {
   void RunTestFailingDecode(const char* fn) {
     Initialize(fn);
     EXPECT_TRUE(reader_->Open());
-    scoped_ptr<AudioBus> decoded_audio_data =
+    std::unique_ptr<AudioBus> decoded_audio_data =
         AudioBus::Create(reader_->channels(), reader_->GetNumberOfFrames());
     EXPECT_EQ(reader_->Read(decoded_audio_data.get()), 0);
   }
@@ -129,8 +131,8 @@ class AudioFileReaderTest : public testing::Test {
   IPCAudioDecoder::ScopedDisableForTesting ipc_audio_decoder_disabler_;
 #endif
   scoped_refptr<DecoderBuffer> data_;
-  scoped_ptr<InMemoryUrlProtocol> protocol_;
-  scoped_ptr<AudioFileReader> reader_;
+  std::unique_ptr<InMemoryUrlProtocol> protocol_;
+  std::unique_ptr<AudioFileReader> reader_;
   bool packet_verification_disabled_;
 
   DISALLOW_COPY_AND_ASSIGN(AudioFileReaderTest);
@@ -229,13 +231,8 @@ TEST_F(AudioFileReaderTest, CorruptMP3) {
 }
 
 TEST_F(AudioFileReaderTest, AAC) {
-  RunTest("sfx.m4a",
-          "1.81,1.66,2.32,3.27,4.46,3.36,",
-          1,
-          44100,
-          base::TimeDelta::FromMicroseconds(312001),
-          13760,
-          13312);
+  RunTest("sfx.m4a", "1.81,1.66,2.32,3.27,4.46,3.36,", 1, 44100,
+          base::TimeDelta::FromMicroseconds(371660), 16391, 13312);
 }
 
 TEST_F(AudioFileReaderTest, MidStreamConfigChangesFail) {

@@ -5,16 +5,16 @@
 #ifndef EXTENSIONS_RENDERER_WAKE_EVENT_PAGE_H_
 #define EXTENSIONS_RENDERER_WAKE_EVENT_PAGE_H_
 
+#include <memory>
 #include <string>
 
 #include "base/callback.h"
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
-#include "content/public/renderer/render_process_observer.h"
+#include "content/public/renderer/render_thread_observer.h"
 #include "ipc/ipc_sync_message_filter.h"
 #include "v8/include/v8.h"
 
@@ -30,7 +30,7 @@ class ScriptContext;
 //
 // Note, the function will do a round trip to the browser even if event page is
 // open. Any optimisation to prevent this must be at the JavaScript level.
-class WakeEventPage : public content::RenderProcessObserver {
+class WakeEventPage : public content::RenderThreadObserver {
  public:
   WakeEventPage();
   ~WakeEventPage() override;
@@ -92,7 +92,7 @@ class WakeEventPage : public content::RenderProcessObserver {
   void MakeRequest(const std::string& extension_id,
                    const OnResponseCallback& on_response);
 
-  // content::RenderProcessObserver:
+  // content::RenderThreadObserver:
   bool OnControlMessageReceived(const IPC::Message& message) override;
 
   // OnControlMessageReceived handlers:
@@ -103,7 +103,7 @@ class WakeEventPage : public content::RenderProcessObserver {
 
   // All in-flight requests, keyed by request ID. Used on multiple threads, so
   // must be guarded by |requests_lock_|.
-  base::ScopedPtrHashMap<int, scoped_ptr<RequestData>> requests_;
+  base::ScopedPtrHashMap<int, std::unique_ptr<RequestData>> requests_;
 
   // Lock for |requests_|.
   base::Lock requests_lock_;

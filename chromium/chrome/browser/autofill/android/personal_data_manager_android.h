@@ -52,9 +52,15 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
 
   // Gets the labels for all known profiles. These labels are useful for
   // distinguishing the profiles from one another.
+  //
+  // The labels never contain the full name and include at least 2 fields.
+  //
+  // If |address_only| is true, then such fields as phone number and email
+  // address are also omitted, but all fields are included in the label.
   base::android::ScopedJavaLocalRef<jobjectArray> GetProfileLabels(
       JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& unused_obj);
+      const base::android::JavaParamRef<jobject>& unused_obj,
+      bool address_only);
 
   // These functions act on local credit cards.
   // --------------------
@@ -78,10 +84,16 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
       const base::android::JavaParamRef<jobject>& unused_obj,
       const base::android::JavaParamRef<jstring>& jguid);
 
-  // Adds or modifies a credit card.  If |jguid| is an empty string, we are
-  // creating a new profile.  Else we are updating an existing profile.  Always
+  // Adds or modifies a local credit card.  If |jguid| is an empty string, we
+  // are creating a new card.  Else we are updating an existing profile.  Always
   // returns the GUID for this profile; the GUID it may have just been created.
   base::android::ScopedJavaLocalRef<jstring> SetCreditCard(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& unused_obj,
+      const base::android::JavaParamRef<jobject>& jcard);
+
+  // Adds a server credit card. Used only in tests.
+  void AddServerCreditCardForTest(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& unused_obj,
       const base::android::JavaParamRef<jobject>& jcard);
@@ -96,6 +108,14 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& unused_obj,
       const base::android::JavaParamRef<jstring>& jguid);
+
+  // Gets the card CVC and unmasks the card (if it's masked).
+  void GetFullCardForPaymentRequest(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& unused_obj,
+      const base::android::JavaParamRef<jobject>& jweb_contents,
+      const base::android::JavaParamRef<jstring>& jguid,
+      const base::android::JavaParamRef<jobject>& jdelegate);
 
   // PersonalDataManagerObserver:
   void OnPersonalDataChanged() override;

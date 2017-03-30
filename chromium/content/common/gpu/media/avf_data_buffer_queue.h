@@ -10,7 +10,6 @@
 #include <string>
 
 #include "base/callback.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
@@ -57,7 +56,7 @@ class CONTENT_EXPORT AVFDataBufferQueue {
   base::Closure capacity_available_cb_;
   base::Closure capacity_depleted_cb_;
   ReadCB read_cb_;
-  scoped_ptr<Queue> buffer_queue_;
+  std::unique_ptr<Queue> buffer_queue_;
 
   // We are "catching up" if the stream associated with this queue lags behind
   // another stream.  This is when we want to allow the queue to return any

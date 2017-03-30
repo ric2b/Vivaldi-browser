@@ -51,9 +51,6 @@ const uint8_t kSha256Hash[] = {0x12, 0xf6, 0xea, 0xea, 0x64, 0xac, 0xd5, 0xae,
 const base::FilePath::CharType kCapsBinary[] =
     FILE_PATH_LITERAL("chrome_crash_svc.exe");
 
-const base::FilePath::CharType kCapsDirectory[] =
-    FILE_PATH_LITERAL("Caps");
-
 // This function is called from a worker thread to launch crash service.
 void LaunchService(const base::FilePath& exe_path) {
   base::CommandLine service_cmdline(exe_path);
@@ -86,9 +83,10 @@ class CAPSInstallerTraits : public ComponentInstallerTraits {
     return true;
   }
 
-  void ComponentReady(const base::Version& version,
-                      const base::FilePath& install_dir,
-                      scoped_ptr<base::DictionaryValue> manifest) override {
+  void ComponentReady(
+      const base::Version& version,
+      const base::FilePath& install_dir,
+      std::unique_ptr<base::DictionaryValue> manifest) override {
     // Can't block here. This is usually the browser UI thread.
     base::WorkerPool::PostTask(
         FROM_HERE,
@@ -97,10 +95,8 @@ class CAPSInstallerTraits : public ComponentInstallerTraits {
   }
 
   // Directory is usually "%appdata%\Local\Chrome\User Data\Caps".
-  base::FilePath GetBaseDirectory() const override {
-    base::FilePath user_data;
-    PathService::Get(chrome::DIR_USER_DATA, &user_data);
-    return user_data.Append(kCapsDirectory);
+  base::FilePath GetRelativeInstallDir() const override {
+    return base::FilePath(FILE_PATH_LITERAL("Caps"));
   }
 
   void GetHash(std::vector<uint8_t>* hash) const override {
@@ -118,8 +114,7 @@ class CAPSInstallerTraits : public ComponentInstallerTraits {
 
 void RegisterCAPSComponent(ComponentUpdateService* cus) {
   // The component updater takes ownership of |installer|.
-  scoped_ptr<ComponentInstallerTraits> traits(
-      new CAPSInstallerTraits());
+  std::unique_ptr<ComponentInstallerTraits> traits(new CAPSInstallerTraits());
   DefaultComponentInstaller* installer =
       new DefaultComponentInstaller(std::move(traits));
   installer->Register(cus, base::Closure());

@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <queue>
 
 #include "base/atomic_ref_count.h"
@@ -15,7 +16,6 @@
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "base/memory/weak_ptr.h"
 #include "gpu/command_buffer/service/cmd_buffer_engine.h"
@@ -76,12 +76,6 @@ class GPU_EXPORT CommandExecutor
   // determine if there's more pending queries after this has been called.
   void ProcessPendingQueries();
 
-  typedef base::Callback<void(bool /* scheduled */)> SchedulingChangedCallback;
-
-  // Sets a callback that is invoked just before scheduler is rescheduled
-  // or descheduled. Takes ownership of callback object.
-  void SetSchedulingChangedCallback(const SchedulingChangedCallback& callback);
-
   // Implementation of CommandBufferEngine.
   scoped_refptr<Buffer> GetSharedMemoryBuffer(int32_t shm_id) override;
   void set_token(int32_t token) override;
@@ -120,13 +114,11 @@ class GPU_EXPORT CommandExecutor
 
   // TODO(apatrick): The CommandExecutor currently creates and owns the parser.
   // This should be an argument to the constructor.
-  scoped_ptr<CommandParser> parser_;
+  std::unique_ptr<CommandParser> parser_;
 
   // Whether the scheduler is currently able to process more commands.
   bool scheduled_;
 
-  SchedulingChangedCallback scheduling_changed_callback_;
-  base::Closure descheduled_callback_;
   base::Closure command_processed_callback_;
 
   // If non-NULL and |preemption_flag_->IsSet()|, exit PutChanged early.

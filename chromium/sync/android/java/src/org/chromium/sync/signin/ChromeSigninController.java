@@ -6,9 +6,8 @@ package org.chromium.sync.signin;
 
 import android.accounts.Account;
 import android.content.Context;
-import android.preference.PreferenceManager;
 
-import org.chromium.base.VisibleForTesting;
+import org.chromium.base.ContextUtils;
 import org.chromium.sync.AndroidSyncSettings;
 
 /**
@@ -18,7 +17,7 @@ public class ChromeSigninController {
 
     public static final String TAG = "ChromeSigninController";
 
-    @VisibleForTesting
+    // Used by ChromeBackupAgent and for testing.
     public static final String SIGNED_IN_ACCOUNT_KEY = "google.services.username";
 
     private static final Object LOCK = new Object();
@@ -60,7 +59,7 @@ public class ChromeSigninController {
     }
 
     public void setSignedInAccountName(String accountName) {
-        PreferenceManager.getDefaultSharedPreferences(mApplicationContext).edit()
+        ContextUtils.getAppSharedPreferences().edit()
                 .putString(SIGNED_IN_ACCOUNT_KEY, accountName)
                 .apply();
         // TODO(maxbogue): Move this to SigninManager.
@@ -68,7 +67,6 @@ public class ChromeSigninController {
     }
 
     public String getSignedInAccountName() {
-        return PreferenceManager.getDefaultSharedPreferences(mApplicationContext)
-                .getString(SIGNED_IN_ACCOUNT_KEY, null);
+        return ContextUtils.getAppSharedPreferences().getString(SIGNED_IN_ACCOUNT_KEY, null);
     }
 }

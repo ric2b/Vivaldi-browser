@@ -11,6 +11,7 @@
 #include "content/public/browser/android/compositor.h"
 #include "jni/StaticTabSceneLayer_jni.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/android/resources/resource_manager_impl.h"
 
 namespace chrome {
 namespace android {
@@ -26,8 +27,8 @@ StaticTabSceneLayer::~StaticTabSceneLayer() {
 }
 
 bool StaticTabSceneLayer::ShouldShowBackground() {
-  scoped_refptr<cc::Layer> parent = layer_->parent();
-  return parent.get() && parent->bounds() != layer_->bounds();
+  scoped_refptr<cc::Layer> root = layer_->RootLayer();
+  return root && root->bounds() != layer_->bounds();
 }
 
 SkColor StaticTabSceneLayer::GetBackgroundColor() {
@@ -63,6 +64,7 @@ void StaticTabSceneLayer::UpdateTabLayer(
         chrome::android::TabContentManager::FromJavaObject(
             jtab_content_manager);
     content_layer_ = chrome::android::ContentLayer::Create(tab_content_manager);
+    layer_->AddChild(content_layer_->layer());
   }
 
   // Only override the alpha of content layers when the static tab is first
@@ -109,8 +111,6 @@ void StaticTabSceneLayer::UpdateTabLayer(
   content_layer_->layer()->SetPosition(gfx::PointF(x, y));
   content_layer_->layer()->SetIsDrawable(true);
 
-  layer_->AddChild(content_layer_->layer());
-
   // Only applies the brightness filter if the value has changed and is less
   // than 1.
   if (brightness != brightness_) {
@@ -119,31 +119,6 @@ void StaticTabSceneLayer::UpdateTabLayer(
     if (brightness_ < 1.f)
       filters.Append(cc::FilterOperation::CreateBrightnessFilter(brightness_));
     layer_->SetFilters(filters);
-  }
-}
-
-void StaticTabSceneLayer::SetContentSceneLayer(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jobj,
-    const JavaParamRef<jobject>& jcontent_scene_layer) {
-  SceneLayer* content_scene_layer = FromJavaObject(env, jcontent_scene_layer);
-  scoped_refptr<cc::Layer> layer = content_scene_layer ?
-      content_scene_layer->layer() : nullptr;
-
-  if (content_scene_layer_ && content_scene_layer_ != layer) {
-    content_scene_layer_->RemoveFromParent();
-    content_scene_layer_ = nullptr;
-  }
-
-  // TODO(pedrosimonetti): Consider being smarter with regards to when to
-  // add the layer to the hierarchy. For now, we need to keep adding the
-  // content_scene_layer on every frame because the content_layer is also
-  // added on every frame. This means that if we only add it once, the
-  // content_layer will be added again on the next frame and will
-  // occlude the content_scene_layer.
-  if (layer) {
-    content_scene_layer_ = layer;
-    layer_->AddChild(layer);
   }
 }
 

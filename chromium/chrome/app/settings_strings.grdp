@@ -1,6 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Settings-specific strings (included from generated_resources.grd). -->
 <grit-part>
+  <!-- About Page -->
+  <if expr="chromeos">
+   <message name="IDS_SETTINGS_ABOUT_PAGE_CURRENT_CHANNEL_STABLE" desc="The stable label in the message about current channel.">
+      stable
+    </message>
+    <message name="IDS_SETTINGS_ABOUT_PAGE_CURRENT_CHANNEL_BETA" desc="The beta label in the message about current channel.">
+      beta
+    </message>
+    <message name="IDS_SETTINGS_ABOUT_PAGE_CURRENT_CHANNEL_DEV" desc="The dev label in the message about current channel.">
+      dev
+    </message>
+    <message name="IDS_SETTINGS_ABOUT_PAGE_CURRENT_CHANNEL" desc="The message about current channel.">
+      Currently on <ph name="CHANNEL_NAME">$1<ex>stable</ex></ph>
+    </message>
+    <message name="IDS_SETTINGS_UPGRADE_UPDATING" desc="Status label: Updating ChromiumOS or ChromeOS">
+      Updating your device
+    </message>
+    <message name="IDS_SETTINGS_UPGRADE_SUCCESSFUL_RELAUNCH" desc="Status label: Successfully updated ChromiumOS/ChromeOS">
+      Nearly up-to-date! Restart your device to finish updating.
+    </message>
+    <message name="IDS_SETTINGS_UPGRADE_UPDATING_CHANNEL_SWITCH" desc="Status label: Updating ChromiumOS/ChromeOS to a specified channel">
+      Updating your device to <ph name="CHANNEL_NAME">$1<ex>stable</ex></ph> channel
+    </message>
+    <message name="IDS_SETTINGS_UPGRADE_SUCCESSFUL_CHANNEL_SWITCH" desc="Status label: Channel was successfully switched on ChromiumOS/ChromeOS">
+      Channel changed. Restart your device to apply changes.
+    </message>
+    <message name="IDS_SETTINGS_UPGRADE_UP_TO_DATE" desc="Status label: Already up to date (ChromiumOS/ChromeOS)">
+      Your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> is up to date.
+    </message>
+  </if>
+  <if expr="_google_chrome">
+    <message name="IDS_SETTINGS_ABOUT_PAGE_REPORT_AN_ISSUE" desc="Text of the button which allows the user to report an issue with Chrome.">
+      Report an issue
+    </message>
+  </if>
+  <message name="IDS_SETTINGS_ABOUT_UPGRADE_CHECK_STARTED" desc="Status label: About to start checking for updates">
+    Checking for updates
+  </message>
+
   <!-- Policy Indicators -->
   <message name="IDS_SETTINGS_CONTROLLED_SETTING_EXTENSION" desc="Text displayed in the controlled settings indicator tooltip when a setting's value is enforced by an extension.">
     This setting is controlled by extension <ph name="NAME">$1<ex>Settings Extension</ex></ph>
@@ -59,6 +98,9 @@
     <message name="IDS_SETTINGS_ON_SCREEN_KEYBOARD_LABEL" desc="Label for checkbox which enables an on-screen keyboard.">
       Enable on-screen keyboard
     </message>
+    <message name="IDS_SETTINGS_MONO_AUDIO_LABEL" desc="Label for checkbox which enables mono audio output.">
+      Play the same audio through all speakers (mono audio)
+    </message>
     <message name="IDS_SETTINGS_ACCESSIBILITY_EXPLANATION" desc="Informational message at the top of the accessibility section of the settings page about enabling additional accessibility-related features.">
       Enable accessibility features to make your device easier to use.
     </message>
@@ -112,6 +154,9 @@
   <message name="IDS_SETTINGS_BASIC" desc="Name of the settings page which displays advanced preferences.">
     Basic
   </message>
+  <message name="IDS_SETTINGS_INTERNAL_SEARCH" desc="Label for input field to search within settings.">
+    Search
+  </message>
   <message name="IDS_SETTINGS_SETTINGS" desc="The settings page title.">
     Settings
   </message>
@@ -132,6 +177,24 @@
   </message>
   <message name="IDS_SETTINGS_AUTOFILL" desc="Name for the autofill section and toggle.">
     Autofill settings
+  </message>
+  <message name="IDS_SETTINGS_AUTOFILL_ADDRESSES_HEADING" desc="Title for the list of addresses that chrome has saved for use in filling in forms.">
+    Addresses
+  </message>
+  <message name="IDS_SETTINGS_AUTOFILL_ADD_ADDRESS_BUTTON" desc="Label for a button that allows a user to enter a new address that can be used to fill in forms.">
+    Add address
+  </message>
+  <message name="IDS_SETTINGS_AUTOFILL_CREDIT_CARD_HEADING" desc="Title for the list of saved passwords that can be used to fill in forms.">
+    Credit cards
+  </message>
+  <message name="IDS_SETTINGS_AUTOFILL_ADD_CREDIT_CARD_BUTTON" desc="Label for a button that allows a user to enter new credit card information that can be used to fill in forms.">
+    Add credit card
+  </message>
+  <message name="IDS_SETTINGS_AUTOFILL_CREDIT_CARD_TYPE_COLUMN_LABEL" desc="Label for the column containing the type of credit card that is saved. The type is in the format: `Visa ****1234`.">
+    Type
+  </message>
+  <message name="IDS_SETTINGS_AUTOFILL_CREDIT_CARD_EXPIRATION_COLUMN_LABEL" desc="Label for the heading containing the expiration date for the credit card that has been saved.">
+    Expiration date
   </message>
   <message name="IDS_SETTINGS_AUTOFILL_DETAIL" desc="Description of what toggling the 'Autofill' setting does. Immediately underneath IDS_SETTINGS_AUTOFILL">
     Enable Autofill to fill out forms in a single click
@@ -171,6 +234,9 @@
   </message>
   <message name="IDS_SETTINGS_PASSWORDS_PASSWORD" desc="Label for the saved password when editing a password.">
     Password
+  </message>
+  <message name="IDS_SETTINGS_PASSWORDS_MANAGE_PASSWORDS" desc="Shown in the passwords section of settings. Descriptive text to inform that passwords can be accessed online. Has a link.">
+    Access your passwords from any device at <ph name="BEGIN_LINK">&lt;a is="action-link" href="$1" target="_blank"&gt;</ph>passwords.google.com<ph name="END_LINK">&lt;/a&gt;</ph>
   </message>
 
   <!-- Default Browser Page -->
@@ -503,7 +569,7 @@
     <message name="IDS_SETTINGS_EASY_UNLOCK_SETUP_INTRO" desc="The text to show in Easy Unlock section to introduce the feature.">
       Unlock your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> with your Android phone.
     </message>
-    <message name="IDS_SETTINGS_EASY_UNLOCK_SETUP_BUTTON" desc="The label of the button to set up Easy Unlock section on the settings page.">
+    <message name="IDS_SETTINGS_EASY_UNLOCK_SETUP" desc="The label of the button to set up Easy Unlock section on the settings page.">
       Set up
     </message>
     <message name="IDS_SETTINGS_EASY_UNLOCK_DESCRIPTION" desc="The text that describes what Easy Unlock does.">
@@ -512,7 +578,7 @@
     <message name="IDS_SETTINGS_EASY_UNLOCK_REQUIRE_PROXIMITY_LABEL" desc="The text label that describes the checkbox that controls whether the user's Android phone must be in close proximity to the Chromebook in order to unlock it..">
       Only unlock this <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> when your phone is within arm’s reach.
     </message>
-    <message name="IDS_SETTINGS_EASY_UNLOCK_TURN_OFF_BUTTON" desc="The label of the button to disable Easy unlock on the settings page and the turn off Easy unlock dialog.">
+    <message name="IDS_SETTINGS_EASY_UNLOCK_TURN_OFF" desc="The label of the button to disable Easy unlock on the settings page and the turn off Easy unlock dialog.">
       Turn off
     </message>
     <message name="IDS_SETTINGS_EASY_UNLOCK_TURN_OFF_TITLE" desc="The title of the Easy unlock turn off dialog.">
@@ -533,7 +599,7 @@
     <message name="IDS_SETTINGS_EASY_UNLOCK_TURN_OFF_ERROR_MESSAGE" desc="The text on the Easy unlock turn off dialog when Easy unlock could not be turned off because there is a server error.">
       Smart Lock is currently unavailable. Please try again later.
     </message>
-    <message name="IDS_SETTINGS_EASY_UNLOCK_TURN_OFF_RETRY_BUTTON" desc="The label text of the retry button on the Easy unlock turn off dialog when Easy unlock could not be turned off because there is a server error.">
+    <message name="IDS_SETTINGS_EASY_UNLOCK_TURN_OFF_RETRY" desc="The label text of the retry button on the Easy unlock turn off dialog when Easy unlock could not be turned off because there is a server error.">
       Retry
     </message>
   </if>
@@ -570,25 +636,40 @@
   <message name="IDS_SETTINGS_ON_STARTUP_ADD_NEW_PAGE" desc="Entry prompt to add a new page.">
     Add a new page
   </message>
+  <message name="IDS_SETTINGS_ON_STARTUP_EDIT_PAGE" desc="Title of the dialog that allows the user to edit an existing startup page.">
+   Edit page
+  </message>
   <message name="IDS_SETTINGS_ON_STARTUP_SITE_URL" desc="Prompt to add a new page.">
     Site URL
   </message>
+  <message name="IDS_SETTINGS_ON_STARTUP_REMOVE" desc="Text displayed on a menu button allowing the user to remove a URL from the list of startup URLs.">
+    Remove
+  </message>
+  <message name="IDS_SETTINGS_ON_STARTUP_EDIT" desc="Text displayed on a menu button allowing the user to edit a URL from the list of startup URLs.">
+    Edit
+  </message>
 
   <!-- Languages Page -->
-  <message name="IDS_SETTINGS_LANGUAGES_PAGE_TITLE" desc="Name of the settings page which displays language and input method preferences.">
+  <message name="IDS_SETTINGS_LANGUAGES_PAGE_TITLE" desc="Name of the settings page which displays language preferences.">
     Languages
   </message>
-  <message name="IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_TITLE" desc="Title for the list of languages that are enabled.">
-    Languages
+  <message name="IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_TITLE" desc="Title for the currently used language in the header for the collapsible list of languages.">
+    Language
   </message>
   <message name="IDS_SETTINGS_LANGUAGES_LANGUAGES_MANAGE" desc="Button under the list of enabled languages which opens a sub-page that lets the user enable or disable languages.">
     Manage languages
   </message>
-  <message name="IDS_SETTINGS_LANGUAGES_INPUT_METHODS_LIST_TITLE" desc="Title for the list of input methods (keyboard layouts and input method editors) that are enabled.">
-    Input methods
+  <message name="IDS_SETTINGS_LANGUAGES_OFFER_TO_TRANSLATE_IN_THIS_LANGUAGE" desc="The label for a checkbox which indicates whether or not pages in this language should be translated by default.">
+    Offer to translate pages in this language
   </message>
-  <message name="IDS_SETTINGS_LANGUAGES_INPUT_METHODS_MANAGE" desc="Button under the list of input methods which opens a sub-page that lets the user enable or disable devices (such as keyboards).">
-    Manage devices
+  <message name="IDS_SETTINGS_LANGUAGES_CANNOT_TRANSLATE_IN_THIS_LANGUAGE" desc="The string displayed in the details for a language when the language cannot be translated from.">
+    This language cannot be translated
+  </message>
+  <message name="IDS_SETTINGS_LANGUAGES_INPUT_METHODS_LIST_TITLE" desc="Title for the current input method in the header for the collapsible list of enabled input methods (keyboard layouts and input method editors).">
+    Input method
+  </message>
+  <message name="IDS_SETTINGS_LANGUAGES_INPUT_METHODS_MANAGE" desc="Button under the list of input methods which opens a sub-page that lets the user enable or disable keyboard layouts and input method editors.">
+    Manage input methods
   </message>
   <message name="IDS_SETTINGS_LANGUAGES_SPELL_CHECK_LIST_TITLE" desc="Title for the section containing the dropdown used to select the language to use for spell checking. The dropdown contains the enabled languages which support spell checking.">
     Spell check
@@ -597,7 +678,7 @@
     Custom spelling
   </message>
   <message name="IDS_SETTINGS_LANGUAGES_MANAGE_LANGUAGES_TITLE" desc="Name of the settings sub-page which allows enabling and disabling languages.">
-    Languages
+    Manage languages
   </message>
   <message name="IDS_SETTINGS_LANGUAGES_ALL_LANGUAGES" desc="Header for the list of all supported languages, which the user can use to enable languages, on the Manage Languages page.">
     All languages
@@ -605,8 +686,11 @@
   <message name="IDS_SETTINGS_LANGUAGES_ENABLED_LANGUAGES" desc="Header for the list of enabled languages, which the user can use to disable languages, on the Manage Languages page.">
     Enabled languages
   </message>
+  <message name="IDS_SETTINGS_LANGUAGES_MANAGE_INPUT_METHODS_TITLE" desc="Name of the settings sub-page which allows enabling and disabling input methods.">
+    Manage input methods
+  </message>
   <message name="IDS_SETTINGS_LANGUAGES_EDIT_DICTIONARY_TITLE" desc="Name of the settings sub-page which allows adding and remove custom words from the custom spell check dictionary.">
-    Custom spelling dictionary
+    Manage spell check
   </message>
   <message name="IDS_SETTINGS_LANGUAGES_ADD_DICTIONARY_WORD" desc="Label for the text input used to add a new word to the custom spell check dictionary.">
     Add a new word
@@ -665,6 +749,9 @@
   <!-- Reset Settings Page -->
   <message name="IDS_SETTINGS_RESET" desc="Name of the settings page where settings may be reset.">
     Reset
+  </message>
+  <message name="IDS_SETTINGS_RESET_VIEW_REPORTED_SETTINGS" desc="Label of a link that when clicked displays the settings that will be reported to Google for analysis.">
+    View reported settings
   </message>
 
   <!-- Search Page -->
@@ -943,7 +1030,10 @@
     Clear and Disconnect
   </message>
 
-  <message name="IDS_SETTINGS_SYNC" desc="Name of the settings page which manages syncing data between multiple browser instances with the same Google profile.">
+  <message name="IDS_SETTINGS_SYNC" desc="Name of the sync service.">
+    Sync
+  </message>
+  <message name="IDS_SETTINGS_SYNC_PAGE_TITLE" desc="Name of the settings page which manages syncing data between multiple browser instances with the same Google profile.">
     Advanced sync settings
   </message>
   <message name="IDS_SETTINGS_SYNC_LOADING" desc="The message shown when waiting for the sync backend to start up.">
@@ -1012,11 +1102,17 @@
   <message name="IDS_SETTINGS_PASSPHRASE_CONFIRMATION_PLACEHOLDER" desc="Placeholder for the confirm-passphrase field.">
     Confirm passphrase
   </message>
-  <message name="IDS_SETTINGS_USE_DEFAULT_SETTINGS_BUTTON" desc="Text for button which, when clicked, activates the default sync settings.">
+  <message name="IDS_SETTINGS_SUBMIT_PASSPHRASE" desc="Text for the button which, when clicked, submits a sync password for verification.">
+    Submit
+  </message>
+  <message name="IDS_SETTINGS_USE_DEFAULT_SETTINGS" desc="Text for button which, when clicked, activates the default sync settings.">
     Use default settings
   </message>
-  <message name="IDS_SETTINGS_CANCEL_BUTTON" desc="Text for the button which, when clicked, discards changes made to sync settings and navigates away from the sync settings page.">
-    Cancel
+  <message name="IDS_SETTINGS_PERSONALIZE_GOOGLE_SERVICES_TITLE" desc="Title of the personalize Google services section. When clicked, takes the user to the Google Activity Controls.">
+    Personalize Google services
+  </message>
+  <message name="IDS_SETTINGS_PERSONALIZE_GOOGLE_SERVICES_TEXT" desc="Text of the personalize Google services section. When clicked, takes the user to the Google Activity Controls.">
+    Control how Google uses your browsing history to personalize Search, ads, and other Google services
   </message>
 
   <!-- Users Page -->
@@ -1112,6 +1208,9 @@
   <message name="IDS_SETTINGS_ADVANCED_FONT_SETTINGS" desc="Label for advanced font settings.">
     Advanced font settings
   </message>
+  <message name="IDS_SETTINGS_OPEN_ADVANCED_FONT_SETTINGS" desc="Sub-label for opening advanced font extension options.">
+   Open extension options
+  </message>
   <message name="IDS_SETTINGS_QUICK_BROWN_FOX" desc="Example text to see a font style and size sample.  The quick brown fox sentence is a playful way to show all 26 English letters.  Any example text will do.  There is no need to translate this exactly.">
     The quick brown fox jumps over the lazy dog
   </message>
@@ -1135,10 +1234,13 @@
       Scrolling
     </message>
     <message name="IDS_SETTINGS_NATURAL_SCROLL_LABEL" desc="In Device Settings, the text next to the radio button that enables natural scrolling.">
-      Australian <ph name="BEGIN_LINK">&lt;a href="$1" target="_blank"&gt;</ph>Learn more<ph name="END_LINK">&lt;/a&gt;</ph>
+      Australian
     </message>
     <message name="IDS_SETTINGS_TRADITIONAL_SCROLL_LABEL" desc="In Device Settings, the text next to the radio button that enables traditional scrolling.">
       Traditional
+    </message>
+    <message name="IDS_SETTINGS_NATURAL_SCROLL_LEARN_MORE" desc="In Device Settings, the text for the link next to the Australian (natural) scrolling option; opens a page to learn more about natural scrolling.">
+      Learn more
     </message>
     <!-- Keyboard -->
     <message name="IDS_SETTINGS_KEYBOARD_TITLE" desc="In Device Settings, the title for keyboard settings.">
@@ -1171,6 +1273,34 @@
     <message name="IDS_SETTINGS_KEYBOARD_SEND_FUNCTION_KEYS_DESCRIPTION" desc="In Device Settings, the label describing how to use the top-row keys' original actions when they are set to behave like function keys.">
       Hold the Search key to switch the behavior of the top-row keys.
     </message>
+    <message name="IDS_SETTINGS_KEYBOARD_AUTO_REPEAT_ENABLE" desc="The checkbox label for enabling keyboard auto-repeat.">
+      Enable auto-repeat
+    </message>
+    <message name="IDS_SETTINGS_KEYBOARD_AUTO_REPEAT_DELAY" desc="The label for the slider for the delay before auto-repeat begins. The delay is the amount of time a key must be held down before auto-repeating begins.">
+      Delay before repeat
+    </message>
+    <message name="IDS_SETTINGS_KEYBOARD_AUTO_REPEAT_DELAY_LONG" desc="The label for the beginning of the auto-repeat delay slider, representing a long delay.">
+      Long
+    </message>
+    <message name="IDS_SETTINGS_KEYBOARD_AUTO_REPEAT_DELAY_SHORT" desc="The label for the end of the auto-repeat delay slider, representing a short delay.">
+      Short
+    </message>
+    <message name="IDS_SETTINGS_KEYBOARD_AUTO_REPEAT_RATE" desc="The label for the slider for the auto-repeat rate. The rate is how many times a key repeats per second once auto-repeating has begun.">
+      Repeat rate
+    </message>
+    <message name="IDS_SETTINGS_KEYBOARD_AUTO_REPEAT_RATE_SLOW" desc="The label for the beginning of the auto-repeat rate slider, representing a slow repeat rate.">
+      Slow
+    </message>
+    <message name="IDS_SETTINGS_KEYBOARD_AUTO_REPEAT_FAST" desc="The label for the end of the auto-repeat rate slider, representing a fast repeat rate.">
+      Fast
+    </message>
+    <message name="IDS_SETTINGS_KEYBOARD_SHOW_KEYBOARD_SHORTCUTS_OVERLAY" desc="The link to open the keyboard shortuts overlay.">
+      View keyboard shortcuts
+    </message>
+    <message name="IDS_SETTINGS_KEYBOARD_SHOW_LANGUAGE_AND_INPUT" desc="The link to navigate to the language and input method settings.">
+      Change language and input settings
+    </message>
+
     <!-- Display -->
     <message name="IDS_SETTINGS_DISPLAY_TITLE" desc="In Device Settings, the title for display settings.">
       Displays
@@ -1184,8 +1314,17 @@
     <message name="IDS_SETTINGS_DISPLAY_MAKE_PRIMARY" desc="In Device Settings > Displays, the label for the control for making a display primary.">
       Make primary
     </message>
-    <message name="IDS_SETTINGS_DISPLAY_RESOLUTION" desc="In Device Settings > Displays, the label for the control for changing a display's resolution.">
+    <message name="IDS_SETTINGS_DISPLAY_RESOLUTION_TITLE" desc="In Device Settings > Displays, the label for the section for changing a display's resolution.">
       Resolution
+    </message>
+    <message name="IDS_SETTINGS_DISPLAY_RESOLUTION_TEXT" desc="In Device Settings > Displays, the text describing the display's resolution.">
+      <ph name="WIDTH">$1<ex>1600</ex></ph> x <ph name="HEIGHT">$2<ex>1200</ex></ph>
+    </message>
+    <message name="IDS_SETTINGS_DISPLAY_RESOLUTION_TEXT_BEST" desc="In Device Settings > Displays, the text describing the display's resolution when it is the 'best' resolution.">
+      <ph name="WIDTH">$1<ex>1600</ex></ph> x <ph name="HEIGHT">$2<ex>1200</ex></ph> (Best)
+    </message>
+    <message name="IDS_SETTINGS_DISPLAY_RESOLUTION_TEXT_NATIVE" desc="In Device Settings > Displays, the text describing the display's resolution when it is the native resolution.">
+      <ph name="WIDTH">$1<ex>1600</ex></ph> x <ph name="HEIGHT">$2<ex>1200</ex></ph> (Native)
     </message>
     <message name="IDS_SETTINGS_DISPLAY_ORIENTATION" desc="In Device Settings > Displays, the label for the control for changing a display's orientation.">
       Orientation

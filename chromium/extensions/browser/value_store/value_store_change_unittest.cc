@@ -5,6 +5,7 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "extensions/browser/value_store/value_store_change.h"
 #include "extensions/common/value_builder.h"
@@ -18,46 +19,48 @@ using extensions::ListBuilder;
 namespace {
 
 TEST(ValueStoreChangeTest, NullOldValue) {
-  ValueStoreChange change("key", NULL, new base::StringValue("value"));
+  ValueStoreChange change("key", nullptr,
+                          base::WrapUnique(new base::StringValue("value")));
 
   EXPECT_EQ("key", change.key());
   EXPECT_EQ(NULL, change.old_value());
   {
-    scoped_ptr<base::Value> expected(new base::StringValue("value"));
-    EXPECT_TRUE(change.new_value()->Equals(expected.get()));
+    base::StringValue expected("value");
+    EXPECT_TRUE(change.new_value()->Equals(&expected));
   }
 }
 
 TEST(ValueStoreChangeTest, NullNewValue) {
-  ValueStoreChange change("key", new base::StringValue("value"), NULL);
+  ValueStoreChange change(
+      "key", base::WrapUnique(new base::StringValue("value")), nullptr);
 
   EXPECT_EQ("key", change.key());
   {
-    scoped_ptr<base::Value> expected(new base::StringValue("value"));
-    EXPECT_TRUE(change.old_value()->Equals(expected.get()));
+    base::StringValue expected("value");
+    EXPECT_TRUE(change.old_value()->Equals(&expected));
   }
   EXPECT_EQ(NULL, change.new_value());
 }
 
 TEST(ValueStoreChangeTest, NonNullValues) {
   ValueStoreChange change("key",
-                          new base::StringValue("old_value"),
-                          new base::StringValue("new_value"));
+                          base::WrapUnique(new base::StringValue("old_value")),
+                          base::WrapUnique(new base::StringValue("new_value")));
 
   EXPECT_EQ("key", change.key());
   {
-    scoped_ptr<base::Value> expected(new base::StringValue("old_value"));
-    EXPECT_TRUE(change.old_value()->Equals(expected.get()));
+    base::StringValue expected("old_value");
+    EXPECT_TRUE(change.old_value()->Equals(&expected));
   }
   {
-    scoped_ptr<base::Value> expected(new base::StringValue("new_value"));
-    EXPECT_TRUE(change.new_value()->Equals(expected.get()));
+    base::StringValue expected("new_value");
+    EXPECT_TRUE(change.new_value()->Equals(&expected));
   }
 }
 
 TEST(ValueStoreChangeTest, ToJson) {
   // Create a mildly complicated structure that has dots in it.
-  scoped_ptr<base::DictionaryValue> value =
+  std::unique_ptr<base::DictionaryValue> value =
       DictionaryBuilder()
           .Set("key", "value")
           .Set("key.with.dots", "value.with.dots")
@@ -66,20 +69,20 @@ TEST(ValueStoreChangeTest, ToJson) {
           .Build();
 
   ValueStoreChangeList change_list;
-  change_list.push_back(
-      ValueStoreChange("key", value->DeepCopy(), value->DeepCopy()));
-  change_list.push_back(
-      ValueStoreChange("key.with.dots", value->DeepCopy(), value->DeepCopy()));
+  change_list.push_back(ValueStoreChange("key", value->CreateDeepCopy(),
+                                         value->CreateDeepCopy()));
+  change_list.push_back(ValueStoreChange(
+      "key.with.dots", value->CreateDeepCopy(), value->CreateDeepCopy()));
 
   std::string json = ValueStoreChange::ToJson(change_list);
-  scoped_ptr<base::Value> from_json(base::JSONReader::Read(json));
+  std::unique_ptr<base::Value> from_json(base::JSONReader::Read(json));
   ASSERT_TRUE(from_json.get());
 
   DictionaryBuilder v1(*value);
   DictionaryBuilder v2(*value);
   DictionaryBuilder v3(*value);
   DictionaryBuilder v4(*value);
-  scoped_ptr<base::DictionaryValue> expected_from_json =
+  std::unique_ptr<base::DictionaryValue> expected_from_json =
       DictionaryBuilder()
           .Set("key", DictionaryBuilder()
                           .Set("oldValue", v1.Build())

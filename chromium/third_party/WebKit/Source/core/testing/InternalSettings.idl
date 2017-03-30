@@ -24,7 +24,6 @@
  */
 
 [
-    GarbageCollected,
 ] interface InternalSettings : InternalSettingsGenerated {
     // All methods which access Page::settings() can raise an exception
     // when the page cannot be accessed. (Such as during page tear-down.)
@@ -48,6 +47,7 @@
     [RaisesException] void setDefaultVideoPosterURL(DOMString poster);
     [RaisesException] void setViewportEnabled(boolean enabled);
     [RaisesException] void setViewportMetaEnabled(boolean enabled);
+    [RaisesException] void setViewportStyle(DOMString style);
     [RaisesException] void setAvailablePointerTypes(DOMString pointers);
     [RaisesException] void setPrimaryPointerType(DOMString pointer);
     [RaisesException] void setAvailableHoverTypes(DOMString types);

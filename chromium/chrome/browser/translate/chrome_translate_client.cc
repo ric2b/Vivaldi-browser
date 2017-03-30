@@ -92,14 +92,14 @@ translate::LanguageState& ChromeTranslateClient::GetLanguageState() {
 }
 
 // static
-scoped_ptr<translate::TranslatePrefs>
+std::unique_ptr<translate::TranslatePrefs>
 ChromeTranslateClient::CreateTranslatePrefs(PrefService* prefs) {
 #if defined(OS_CHROMEOS)
   const char* preferred_languages_prefs = prefs::kLanguagePreferredLanguages;
 #else
   const char* preferred_languages_prefs = NULL;
 #endif
-  scoped_ptr<translate::TranslatePrefs> translate_prefs(
+  std::unique_ptr<translate::TranslatePrefs> translate_prefs(
       new translate::TranslatePrefs(prefs, prefs::kAcceptLanguages,
                                     preferred_languages_prefs));
 
@@ -153,7 +153,7 @@ void ChromeTranslateClient::GetTranslateLanguages(
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   Profile* original_profile = profile->GetOriginalProfile();
   PrefService* prefs = original_profile->GetPrefs();
-  scoped_ptr<translate::TranslatePrefs> translate_prefs =
+  std::unique_ptr<translate::TranslatePrefs> translate_prefs =
       CreateTranslatePrefs(prefs);
   if (!web_contents->GetBrowserContext()->IsOffTheRecord()) {
     std::string auto_translate_language =
@@ -190,12 +190,8 @@ void ChromeTranslateClient::ShowTranslateUI(
         step != translate::TRANSLATE_STEP_BEFORE_TRANSLATE,
         translate_manager_->GetWeakPtr(),
         InfoBarService::FromWebContents(web_contents()),
-        web_contents()->GetBrowserContext()->IsOffTheRecord(),
-        step,
-        source_language,
-        target_language,
-        error_type,
-        triggered_from_menu);
+        web_contents()->GetBrowserContext()->IsOffTheRecord(), step,
+        source_language, target_language, error_type, triggered_from_menu);
     return;
   }
 #endif
@@ -204,8 +200,12 @@ void ChromeTranslateClient::ShowTranslateUI(
   if (step == translate::TRANSLATE_STEP_BEFORE_TRANSLATE) {
     // TODO(droger): Move this logic out of UI code.
     GetLanguageState().SetTranslateEnabled(true);
-    if (!GetLanguageState().HasLanguageChanged())
+    // In the new UI, continue offering translation after the user navigates to
+    // another page.
+    if (!base::FeatureList::IsEnabled(translate::kTranslateUI2016Q2) &&
+        !GetLanguageState().HasLanguageChanged()) {
       return;
+    }
 
     if (!triggered_from_menu) {
       if (web_contents()->GetBrowserContext()->IsOffTheRecord())
@@ -228,7 +228,7 @@ PrefService* ChromeTranslateClient::GetPrefs() {
   return profile->GetOriginalProfile()->GetPrefs();
 }
 
-scoped_ptr<translate::TranslatePrefs>
+std::unique_ptr<translate::TranslatePrefs>
 ChromeTranslateClient::GetTranslatePrefs() {
   DCHECK(web_contents());
   Profile* profile =
@@ -268,8 +268,8 @@ void ChromeTranslateClient::ShowReportLanguageDetectionErrorUI(
     return;
   }
 
-  chrome::AddSelectedTabWithURL(
-      browser, report_url, ui::PAGE_TRANSITION_AUTO_BOOKMARK);
+  chrome::AddSelectedTabWithURL(browser, report_url,
+                                ui::PAGE_TRANSITION_AUTO_BOOKMARK);
 #endif  // defined(OS_ANDROID)
 }
 
@@ -341,8 +341,8 @@ void ChromeTranslateClient::ShowBubble(
       return;
   }
 
-  TranslateBubbleFactory::Show(
-      browser->window(), web_contents(), step, error_type);
+  TranslateBubbleFactory::Show(browser->window(), web_contents(), step,
+                               error_type);
 #else
   NOTREACHED();
 #endif

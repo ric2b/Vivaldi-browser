@@ -81,12 +81,12 @@ class ServiceWorkerMetrics {
   enum class EventType {
     ACTIVATE = 0,
     INSTALL = 1,
-    DEPRECATED_FETCH = 2,  // Deprecated, use a more specific FETCH_ type.
+    // FETCH = 2,  // Obsolete
     SYNC = 3,
     NOTIFICATION_CLICK = 4,
     PUSH = 5,
-    GEOFENCING = 6,
-    // SERVICE_PORT_CONNECT = 7,
+    // GEOFENCING = 6,  // Obsolete
+    // SERVICE_PORT_CONNECT = 7,  // Obsolete
     MESSAGE = 8,
     NOTIFICATION_CLOSE = 9,
     FETCH_MAIN_FRAME = 10,
@@ -215,6 +215,11 @@ class ServiceWorkerMetrics {
   static const char* LoadSourceToString(LoadSource source);
   static StartSituation GetStartSituation(bool is_browser_startup_complete,
                                           bool is_new_process);
+
+  // Records the result of a start attempt that occurred after the worker had
+  // failed |failure_count| consecutive times.
+  static void RecordStartStatusAfterFailure(int failure_count,
+                                            ServiceWorkerStatusCode status);
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(ServiceWorkerMetrics);

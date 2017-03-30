@@ -20,6 +20,8 @@
 #include "net/base/iovec.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_export.h"
+#include "net/quic/quic_flags.h"
+#include "net/quic/quic_header_list.h"
 #include "net/quic/quic_protocol.h"
 #include "net/quic/quic_stream_sequencer.h"
 #include "net/quic/reliable_quic_stream.h"
@@ -50,6 +52,10 @@ class NET_EXPORT_PRIVATE QuicSpdyStream : public ReliableQuicStream {
 
     // Called when the stream is closed.
     virtual void OnClose(QuicSpdyStream* stream) = 0;
+
+    // Allows subclasses to override and do work.
+    virtual void OnPromiseHeadersComplete(QuicStreamId promised_id,
+                                          size_t frame_len) {}
 
    protected:
     virtual ~Visitor() {}
@@ -84,16 +90,29 @@ class NET_EXPORT_PRIVATE QuicSpdyStream : public ReliableQuicStream {
   // should be closed; no more data will be sent by the peer.
   virtual void OnStreamHeadersComplete(bool fin, size_t frame_len);
 
+  // Called by the session when decompressed headers have been completely
+  // delivered to this stream.  If |fin| is true, then this stream
+  // should be closed; no more data will be sent by the peer.
+  virtual void OnStreamHeaderList(bool fin,
+                                  size_t frame_len,
+                                  const QuicHeaderList& header_list);
+
   // Called by the session when decompressed PUSH_PROMISE headers data
   // is received for this stream.
   // May be called multiple times, with each call providing additional headers
   // data until OnPromiseHeadersComplete is called.
-  virtual void OnPromiseHeaders(StringPiece headers_data);
+  virtual void OnPromiseHeaders(base::StringPiece headers_data);
 
   // Called by the session when decompressed push promise headers have
   // been completely delivered to this stream.
   virtual void OnPromiseHeadersComplete(QuicStreamId promised_id,
                                         size_t frame_len);
+
+  // Called by the session when decompressed push promise headers have
+  // been completely delivered to this stream.
+  virtual void OnPromiseHeaderList(QuicStreamId promised_id,
+                                   size_t frame_len,
+                                   const QuicHeaderList& header_list);
 
   // Override the base class to not discard response when receiving
   // QUIC_STREAM_NO_ERROR on QUIC_VERSION_29 and later versions.
@@ -112,14 +131,17 @@ class NET_EXPORT_PRIVATE QuicSpdyStream : public ReliableQuicStream {
 
   // Writes the trailers contained in |trailer_block| to the dedicated
   // headers stream. Trailers will always have the FIN set.
-  size_t WriteTrailers(SpdyHeaderBlock trailer_block,
-                       QuicAckListenerInterface* ack_notifier_delegate);
+  virtual size_t WriteTrailers(const SpdyHeaderBlock& trailer_block,
+                               QuicAckListenerInterface* ack_notifier_delegate);
 
   // Marks |bytes_consumed| of the headers data as consumed.
   void MarkHeadersConsumed(size_t bytes_consumed);
 
   // Marks |bytes_consumed| of the trailers data as consumed.
   void MarkTrailersConsumed(size_t bytes_consumed);
+
+  // Clears |header_list_|.
+  void ConsumeHeaderList();
 
   // This block of functions wraps the sequencer's functions of the same
   // name.  These methods return uncompressed data until that has
@@ -144,6 +166,8 @@ class NET_EXPORT_PRIVATE QuicSpdyStream : public ReliableQuicStream {
     return decompressed_headers_;
   }
 
+  const QuicHeaderList& header_list() const { return header_list_; }
+
   bool trailers_decompressed() const { return trailers_decompressed_; }
 
   const std::string& decompressed_trailers() const {
@@ -165,11 +189,20 @@ class NET_EXPORT_PRIVATE QuicSpdyStream : public ReliableQuicStream {
   // use of the spdy_session_ member.
   void ClearSession();
 
+  // Latched value of --quic_avoid_empty_nonfin_writes.
+  bool avoid_empty_nonfin_writes() const { return avoid_empty_nonfin_writes_; }
+
  protected:
   // Called by OnStreamHeadersComplete depending on which type (initial or
   // trailing) headers are expected next.
   virtual void OnInitialHeadersComplete(bool fin, size_t frame_len);
   virtual void OnTrailingHeadersComplete(bool fin, size_t frame_len);
+  virtual void OnInitialHeadersComplete(bool fin,
+                                        size_t frame_len,
+                                        const QuicHeaderList& header_list);
+  virtual void OnTrailingHeadersComplete(bool fin,
+                                         size_t frame_len,
+                                         const QuicHeaderList& header_list);
   QuicSpdySession* spdy_session() const { return spdy_session_; }
   Visitor* visitor() { return visitor_; }
 
@@ -194,6 +227,9 @@ class NET_EXPORT_PRIVATE QuicSpdyStream : public ReliableQuicStream {
   // Contains a copy of the decompressed headers until they are consumed
   // via ProcessData or Readv.
   std::string decompressed_headers_;
+  // Contains a copy of the decompressed header (name, value) pairs until they
+  // are consumed via Readv.
+  QuicHeaderList header_list_;
 
   // True if the trailers have been completely decompressed.
   bool trailers_decompressed_;
@@ -202,6 +238,8 @@ class NET_EXPORT_PRIVATE QuicSpdyStream : public ReliableQuicStream {
   std::string decompressed_trailers_;
   // The parsed trailers received from the peer.
   SpdyHeaderBlock received_trailers_;
+
+  bool avoid_empty_nonfin_writes_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicSpdyStream);
 };

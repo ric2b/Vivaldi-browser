@@ -9,6 +9,7 @@
 // inline code (which shouldn't be inline).
 
 #include <list>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -850,7 +851,7 @@ class CookiesTreeModel : public ui::TreeNodeModel<CookieTreeNode> {
 
   // Map of app ids to LocalDataContainer objects to use when retrieving
   // locally stored data.
-  scoped_ptr<LocalDataContainer> data_container_;
+  std::unique_ptr<LocalDataContainer> data_container_;
 
 #if defined(ENABLE_EXTENSIONS)
   // The extension special storage policy; see ExtensionsProtectingNode() above.

@@ -45,9 +45,6 @@ SourceBufferList::SourceBufferList(ExecutionContext* context, GenericEventQueue*
 
 SourceBufferList::~SourceBufferList()
 {
-#if !ENABLE(OILPAN)
-    ASSERT(m_list.isEmpty());
-#endif
 }
 
 void SourceBufferList::add(SourceBuffer* buffer)
@@ -102,7 +99,7 @@ DEFINE_TRACE(SourceBufferList)
     visitor->trace(m_executionContext);
     visitor->trace(m_asyncEventQueue);
     visitor->trace(m_list);
-    RefCountedGarbageCollectedEventTargetWithInlineData<SourceBufferList>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
 }
 
 } // namespace blink

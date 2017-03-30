@@ -43,13 +43,17 @@ public:
     virtual void contextDestroyed(v8::Local<v8::Context>) = 0;
     // TODO(dgozman): remove this one.
     virtual void resetContextGroup(int contextGroupId) = 0;
+    virtual void willExecuteScript(v8::Local<v8::Context>, int scriptId) = 0;
+    virtual void didExecuteScript(v8::Local<v8::Context>) = 0;
+    virtual void idleStarted() = 0;
+    virtual void idleFinished() = 0;
 
     virtual PassOwnPtr<V8InspectorSession> connect(int contextGroupId) = 0;
+    virtual bool isPaused() = 0;
 
-    static v8::Local<v8::Symbol> scopeExtensionSymbol(v8::Isolate*);
+    static v8::Local<v8::Private> scopeExtensionPrivate(v8::Isolate*);
     static bool isCommandLineAPIMethod(const String16& name);
     static bool isCommandLineAPIGetter(const String16& name);
-    static bool isRemoteObjectAPIMethod(const String16& name);
 
     virtual PassOwnPtr<V8StackTrace> createStackTrace(v8::Local<v8::StackTrace>, size_t maxStackSize) = 0;
     virtual PassOwnPtr<V8StackTrace> captureStackTrace(size_t maxStackSize) = 0;

@@ -5,9 +5,10 @@
 # GYP version: components/ntp_snippets.gypi:ntp_snippets
 source_set("ntp_snippets") {
   sources = [
-    "inner_iterator.h",
     "ntp_snippet.cc",
     "ntp_snippet.h",
+    "ntp_snippets_constants.cc",
+    "ntp_snippets_constants.h",
     "ntp_snippets_fetcher.cc",
     "ntp_snippets_fetcher.h",
     "ntp_snippets_scheduler.h",
@@ -25,24 +26,38 @@ source_set("ntp_snippets") {
     "//components/prefs",
     "//components/signin/core/browser",
     "//components/suggestions",
+    "//components/sync_driver",
     "//google_apis",
     "//net",
     "//url",
+  ]
+
+  deps = [
+    "//components/data_use_measurement/core",
+    "//components/image_fetcher",
+    "//components/metrics",
+    "//components/variations",
+    "//third_party/icu/",
+    "//ui/gfx",
   ]
 }
 
 source_set("unit_tests") {
   testonly = true
   sources = [
-    "inner_iterator_unittest.cc",
+    "ntp_snippets_fetcher_unittest.cc",
     "ntp_snippets_service_unittest.cc",
   ]
 
   deps = [
     ":ntp_snippets",
     "//base",
+    "//base/test:test_support",
+    "//components/image_fetcher",
     "//components/signin/core/browser:test_support",
+    "//components/sync_driver:test_support",
     "//net:test_support",
     "//testing/gtest",
+    "//third_party/icu/",
   ]
 }

@@ -6,14 +6,30 @@ cr.define('extensions', function() {
   var ItemList = Polymer({
     is: 'extensions-item-list',
 
+    behaviors: [
+      Polymer.NeonAnimatableBehavior,
+      Polymer.IronResizableBehavior
+    ],
+
     properties: {
+      animationConfig: {
+        type: Object,
+        value: function() {
+          return {
+            exit: [{
+              name: 'hero-animation',
+              id: 'hero',
+              fromPage: this,
+            }],
+          };
+        },
+      },
+
       /** @type {Array<!chrome.developerPrivate.ExtensionInfo>} */
       items: Array,
 
       /** @type {extensions.ItemDelegate} */
       delegate: Object,
-
-      header: String,
 
       inDevMode: {
         type: Boolean,
@@ -25,6 +41,7 @@ cr.define('extensions', function() {
 
     listeners: {
       'list.extension-item-size-changed': 'itemSizeChanged_',
+      'list.extension-item-show-details': 'showItemDetails_',
     },
 
     /**
@@ -35,6 +52,15 @@ cr.define('extensions', function() {
      */
     itemSizeChanged_: function(e) {
       this.$.list.updateSizeForItem(e.detail.item);
+    },
+
+    /**
+     * Called right before an item enters the detailed view.
+     * @param {CustomEvent} e
+     * @private
+     */
+    showItemDetails_: function(e) {
+      this.sharedElements = {hero: e.detail.element};
     },
 
     /**

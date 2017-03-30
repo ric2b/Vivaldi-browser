@@ -13,6 +13,7 @@
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/numerics/safe_conversions.h"
 #include "cc/test/test_context_support.h"
@@ -46,8 +47,8 @@ TestWebGraphicsContext3D::Namespace::~Namespace() {
 }
 
 // static
-scoped_ptr<TestWebGraphicsContext3D> TestWebGraphicsContext3D::Create() {
-  return make_scoped_ptr(new TestWebGraphicsContext3D());
+std::unique_ptr<TestWebGraphicsContext3D> TestWebGraphicsContext3D::Create() {
+  return base::WrapUnique(new TestWebGraphicsContext3D());
 }
 
 TestWebGraphicsContext3D::TestWebGraphicsContext3D()
@@ -56,8 +57,6 @@ TestWebGraphicsContext3D::TestWebGraphicsContext3D()
       times_end_query_succeeds_(-1),
       context_lost_(false),
       times_map_buffer_chromium_succeeds_(-1),
-      current_used_transfer_buffer_usage_bytes_(0),
-      max_used_transfer_buffer_usage_bytes_(0),
       next_program_id_(1000),
       next_shader_id_(2000),
       next_framebuffer_id_(1),
@@ -526,10 +525,10 @@ void TestWebGraphicsContext3D::bindBuffer(GLenum target,
   DCHECK_LT(buffer_id, namespace_->next_buffer_id);
   DCHECK_EQ(context_id, context_id_);
 
-  std::unordered_map<unsigned, scoped_ptr<Buffer>>& buffers =
+  std::unordered_map<unsigned, std::unique_ptr<Buffer>>& buffers =
       namespace_->buffers;
   if (buffers.count(bound_buffer_) == 0)
-    buffers[bound_buffer_] = make_scoped_ptr(new Buffer);
+    buffers[bound_buffer_] = base::WrapUnique(new Buffer);
 
   buffers[bound_buffer_]->target = target;
 }
@@ -539,7 +538,7 @@ void TestWebGraphicsContext3D::bufferData(GLenum target,
                                           const void* data,
                                           GLenum usage) {
   base::AutoLock lock(namespace_->lock);
-  std::unordered_map<unsigned, scoped_ptr<Buffer>>& buffers =
+  std::unordered_map<unsigned, std::unique_ptr<Buffer>>& buffers =
       namespace_->buffers;
   DCHECK_GT(buffers.count(bound_buffer_), 0u);
   DCHECK_EQ(target, buffers[bound_buffer_]->target);
@@ -549,19 +548,10 @@ void TestWebGraphicsContext3D::bufferData(GLenum target,
     return;
   }
 
-  size_t old_size = buffer->size;
-
   buffer->pixels.reset(new uint8_t[size]);
   buffer->size = size;
-  if (data != NULL)
+  if (data != nullptr)
     memcpy(buffer->pixels.get(), data, size);
-  if (buffer->target == GL_PIXEL_UNPACK_TRANSFER_BUFFER_CHROMIUM)
-    current_used_transfer_buffer_usage_bytes_ +=
-        base::checked_cast<int>(buffer->size) -
-        base::checked_cast<int>(old_size);
-  max_used_transfer_buffer_usage_bytes_ =
-      std::max(max_used_transfer_buffer_usage_bytes_,
-               current_used_transfer_buffer_usage_bytes_);
 }
 
 void TestWebGraphicsContext3D::pixelStorei(GLenum pname, GLint param) {
@@ -589,7 +579,7 @@ void TestWebGraphicsContext3D::pixelStorei(GLenum pname, GLint param) {
 void* TestWebGraphicsContext3D::mapBufferCHROMIUM(GLenum target,
                                                   GLenum access) {
   base::AutoLock lock(namespace_->lock);
-  std::unordered_map<unsigned, scoped_ptr<Buffer>>& buffers =
+  std::unordered_map<unsigned, std::unique_ptr<Buffer>>& buffers =
       namespace_->buffers;
   DCHECK_GT(buffers.count(bound_buffer_), 0u);
   DCHECK_EQ(target, buffers[bound_buffer_]->target);
@@ -606,7 +596,7 @@ void* TestWebGraphicsContext3D::mapBufferCHROMIUM(GLenum target,
 GLboolean TestWebGraphicsContext3D::unmapBufferCHROMIUM(
     GLenum target) {
   base::AutoLock lock(namespace_->lock);
-  std::unordered_map<unsigned, scoped_ptr<Buffer>>& buffers =
+  std::unordered_map<unsigned, std::unique_ptr<Buffer>>& buffers =
       namespace_->buffers;
   DCHECK_GT(buffers.count(bound_buffer_), 0u);
   DCHECK_EQ(target, buffers[bound_buffer_]->target);
@@ -772,14 +762,8 @@ void TestWebGraphicsContext3D::RetireRenderbufferId(GLuint id) {
   namespace_->renderbuffer_set.erase(id);
 }
 
-void TestWebGraphicsContext3D::SetMaxTransferBufferUsageBytes(
-    size_t max_transfer_buffer_usage_bytes) {
-  test_capabilities_.max_transfer_buffer_usage_bytes =
-      max_transfer_buffer_usage_bytes;
-}
-
 void TestWebGraphicsContext3D::SetMaxSamples(int max_samples) {
-  test_capabilities_.gpu.max_samples = max_samples;
+  test_capabilities_.max_samples = max_samples;
 }
 
 TestWebGraphicsContext3D::TextureTargets::TextureTargets() {

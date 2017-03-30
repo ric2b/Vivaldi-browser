@@ -56,9 +56,9 @@ cr.define('user_manager.create_profile_tests', function() {
                        createProfileElement.signedInUsers_[0].profilePath);
 
           // The 'learn more' link is visible.
-          assertTrue(!!createProfileElement.$$('#learn-more'));
+          assertTrue(!!createProfileElement.$$('#learn-more > a'));
 
-          // The dropdown menu is visible only when the checkbox is checked.
+          // The dropdown menu becomes visible when the checkbox is checked.
           assertFalse(!!createProfileElement.$$('paper-dropdown-menu'));
 
           // Simulate checking the checkbox.
@@ -81,9 +81,9 @@ cr.define('user_manager.create_profile_tests', function() {
           Polymer.dom.flush();
 
           var dropdownMenu = createProfileElement.$$('paper-dropdown-menu');
-          var paperMenu = dropdownMenu.querySelector('paper-menu');
-          assertEquals(createProfileElement.i18n('selectAnAccount'),
-                       paperMenu.selectedItem.textContent.trim());
+          var selector = dropdownMenu.querySelector('paper-listbox');
+          assertEquals(loadTimeData.getString('selectAnAccount'),
+                       selector.selectedItem.textContent.trim());
         });
       });
 
@@ -112,6 +112,7 @@ cr.define('user_manager.create_profile_tests', function() {
           assertEquals('profile name', args.profileName);
           assertEquals('icon1.png', args.profileIconUrl);
           assertFalse(args.isSupervised);
+          assertEquals('', args.supervisedUserId);
           assertEquals('', args.custodianProfilePath);
         });
       });
@@ -130,7 +131,7 @@ cr.define('user_manager.create_profile_tests', function() {
         assertFalse(createProfileElement.$$('#message-container').hidden);
         // Error message is set.
         assertEquals(
-            createProfileElement.i18n('custodianAccountNotSelectedError'),
+            loadTimeData.getString('custodianAccountNotSelectedError'),
             createProfileElement.$.message.innerHTML);
       });
 
@@ -144,8 +145,8 @@ cr.define('user_manager.create_profile_tests', function() {
 
         // Select the first signed in user.
         var dropdownMenu = createProfileElement.$$('paper-dropdown-menu');
-        var paperMenu = dropdownMenu.querySelector('paper-menu');
-        paperMenu.selected = 0;
+        var selector = dropdownMenu.querySelector('paper-listbox');
+        selector.selected = 0;
 
         // Simulate clicking 'Create'.
         MockInteractions.tap(createProfileElement.$.save);
@@ -157,7 +158,7 @@ cr.define('user_manager.create_profile_tests', function() {
               // Message container is visible.
               assertFalse(createProfileElement.$$('#message-container').hidden);
               // Error message is set.
-              var message = createProfileElement.i18n(
+              var message = loadTimeData.getString(
                   'managedProfilesExistingLocalSupervisedUser');
               assertEquals(message, createProfileElement.$.message.innerHTML);
             });
@@ -173,8 +174,8 @@ cr.define('user_manager.create_profile_tests', function() {
 
         // Select the first signed in user.
         var dropdownMenu = createProfileElement.$$('paper-dropdown-menu');
-        var paperMenu = dropdownMenu.querySelector('paper-menu');
-        paperMenu.selected = 0;
+        var selector = dropdownMenu.querySelector('paper-listbox');
+        selector.selected = 0;
 
         // Simulate clicking 'Create'.
         MockInteractions.tap(createProfileElement.$.save);
@@ -199,8 +200,8 @@ cr.define('user_manager.create_profile_tests', function() {
 
         // Select the first signed in user.
         var dropdownMenu = createProfileElement.$$('paper-dropdown-menu');
-        var paperMenu = dropdownMenu.querySelector('paper-menu');
-        paperMenu.selected = 0;
+        var selector = dropdownMenu.querySelector('paper-listbox');
+        selector.selected = 0;
 
         // Simulate clicking 'Create'.
         MockInteractions.tap(createProfileElement.$.save);
@@ -209,6 +210,7 @@ cr.define('user_manager.create_profile_tests', function() {
           assertEquals('profile name', args.profileName);
           assertEquals('icon1.png', args.profileIconUrl);
           assertTrue(args.isSupervised);
+          assertEquals('', args.supervisedUserId);
           assertEquals('path/to/profile', args.custodianProfilePath);
         });
       });
@@ -252,7 +254,10 @@ cr.define('user_manager.create_profile_tests', function() {
       test('Create profile success', function() {
         return new Promise(function(resolve, reject) {
           // Create was successful. We expect to leave the page.
-          createProfileElement.addEventListener('change-page', resolve);
+          createProfileElement.addEventListener('change-page', function(event) {
+            if (event.detail.page == 'user-pods-page')
+              resolve();
+          });
 
           // Simulate clicking 'Create'.
           MockInteractions.tap(createProfileElement.$.save);
@@ -262,7 +267,45 @@ cr.define('user_manager.create_profile_tests', function() {
             assertTrue(createProfileElement.createInProgress_);
             assertTrue(createProfileElement.$$('paper-spinner').active);
 
-            cr.webUIListenerCallback('create-profile-success');
+            cr.webUIListenerCallback('create-profile-success',
+                                     {name: 'profile name',
+                                      filePath: 'path/to/profile'});
+
+            // The paper-spinner is not active when create is not in progress.
+            assertFalse(createProfileElement.createInProgress_);
+            assertFalse(createProfileElement.$$('paper-spinner').active);
+          });
+        });
+      });
+
+      test('Create supervised profile success', function() {
+        return new Promise(function(resolve, reject) {
+          /**
+           * Profile Info of the successfully created supervised user.
+           * @type {!ProfileInfo}
+           */
+          var profileInfo = {name: 'profile name',
+                             filePath: 'path/to/profile',
+                             showConfirmation: true};
+
+          // Create was successful. We expect to leave the page.
+          createProfileElement.addEventListener('change-page', function(event) {
+            if (event.detail.page == 'supervised-create-confirm-page' &&
+                event.detail.data == profileInfo) {
+              resolve();
+            }
+          });
+
+          // Simulate clicking 'Create'.
+          MockInteractions.tap(createProfileElement.$.save);
+
+          browserProxy.whenCalled('createProfile').then(function(args) {
+            // The paper-spinner is active when create is in progress.
+            assertTrue(createProfileElement.createInProgress_);
+            assertTrue(createProfileElement.$$('paper-spinner').active);
+
+            cr.webUIListenerCallback('create-profile-success', profileInfo);
+
             // The paper-spinner is not active when create is not in progress.
             assertFalse(createProfileElement.createInProgress_);
             assertFalse(createProfileElement.$$('paper-spinner').active);
@@ -293,8 +336,7 @@ cr.define('user_manager.create_profile_tests', function() {
         MockInteractions.tap(createProfileElement.$.save);
 
         return browserProxy.whenCalled('createProfile').then(function(args) {
-          cr.webUIListenerCallback('create-profile-warning',
-                                   'Warning Message');
+          cr.webUIListenerCallback('create-profile-warning', 'Warning Message');
 
           // Create is no longer in progress.
           assertFalse(createProfileElement.createInProgress_);
@@ -313,7 +355,7 @@ cr.define('user_manager.create_profile_tests', function() {
           });
 
           // Simulate clicking 'Learn more'.
-          MockInteractions.tap(createProfileElement.$$('#learn-more'));
+          MockInteractions.tap(createProfileElement.$$('#learn-more > a'));
         });
       });
     });
@@ -336,9 +378,16 @@ cr.define('user_manager.create_profile_tests', function() {
         return browserProxy.whenCalled('getSignedInUsers').then(function() {
           assertEquals(0, createProfileElement.signedInUsers_.length);
 
-          // '#supervised-user-container' is not present in the DOM.
-          var container = createProfileElement.$$('#supervised-user-container');
-          assertFalse(!!container);
+          // Simulate checking the checkbox.
+          MockInteractions.tap(createProfileElement.$$('paper-checkbox'));
+          Polymer.dom.flush();
+
+          // The dropdown menu is not visible when there are no signed in users.
+          assertFalse(!!createProfileElement.$$('paper-dropdown-menu'));
+
+          // Instead a message containing a link to the Help Center on how
+          // to sign in to Chrome is displaying.
+          assertTrue(!!createProfileElement.$$('#sign-in-to-chrome'));
         });
       });
 

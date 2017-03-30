@@ -15,6 +15,7 @@
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/navigation_data.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "url/gurl.h"
 
@@ -66,9 +67,10 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // both renderer-initiated and browser-initiated navigation start.
   // PlzNavigate: This value always comes from the CommonNavigationParams
   // associated with this navigation.
-  static scoped_ptr<NavigationHandleImpl> Create(
+  static std::unique_ptr<NavigationHandleImpl> Create(
       const GURL& url,
       FrameTreeNode* frame_tree_node,
+      bool is_renderer_initiated,
       bool is_synchronous,
       bool is_srcdoc,
       const base::TimeTicks& navigation_start,
@@ -79,6 +81,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   const GURL& GetURL() override;
   bool IsInMainFrame() override;
   bool IsParentMainFrame() override;
+  bool IsRendererInitiated() override;
   bool IsSynchronousNavigation() override;
   bool IsSrcdoc() override;
   bool WasServerRedirect() override;
@@ -99,7 +102,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   void CancelDeferredNavigation(
       NavigationThrottle::ThrottleCheckResult result) override;
   void RegisterThrottleForTesting(
-      scoped_ptr<NavigationThrottle> navigation_throttle) override;
+      std::unique_ptr<NavigationThrottle> navigation_throttle) override;
   NavigationThrottle::ThrottleCheckResult CallWillStartRequestForTesting(
       bool is_post,
       const Referrer& sanitized_referrer,
@@ -111,6 +114,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
       bool new_method_is_post,
       const GURL& new_referrer_url,
       bool new_is_external_protocol) override;
+  NavigationData* GetNavigationData() override;
 
   NavigatorDelegate* GetDelegate() const;
 
@@ -165,7 +169,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // Called when the URLRequest will start in the network stack.  |callback|
   // will be called when all throttle checks have completed. This will allow
   // the caller to cancel the navigation or let it proceed.
-  void WillStartRequest(bool is_post,
+  void WillStartRequest(const std::string& method,
                         const Referrer& sanitized_referrer,
                         bool has_user_gesture,
                         ui::PageTransition transition,
@@ -178,7 +182,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // This will also inform the delegate that the request was redirected.
   void WillRedirectRequest(
       const GURL& new_url,
-      bool new_method_is_post,
+      const std::string& new_method,
       const GURL& new_referrer_url,
       bool new_is_external_protocol,
       scoped_refptr<net::HttpResponseHeaders> response_headers,
@@ -211,6 +215,13 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
       bool same_page,
       RenderFrameHostImpl* render_frame_host);
 
+  // Called during commit. Takes ownership of the embedder's NavigationData
+  // instance. This NavigationData may have been cloned prior to being added
+  // here.
+  void set_navigation_data(std::unique_ptr<NavigationData> navigation_data) {
+    navigation_data_ = std::move(navigation_data);
+  }
+
  private:
   friend class NavigationHandleImplTest;
 
@@ -231,6 +242,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
 
   NavigationHandleImpl(const GURL& url,
                        FrameTreeNode* frame_tree_node,
+                       bool is_renderer_initiated,
                        bool is_synchronous,
                        bool is_srcdoc,
                        const base::TimeTicks& navigation_start,
@@ -249,18 +261,21 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
 
   // See NavigationHandle for a description of those member variables.
   GURL url_;
-  bool is_post_;
   Referrer sanitized_referrer_;
   bool has_user_gesture_;
   ui::PageTransition transition_;
   bool is_external_protocol_;
   net::Error net_error_code_;
   RenderFrameHostImpl* render_frame_host_;
+  const bool is_renderer_initiated_;
   bool is_same_page_;
   const bool is_synchronous_;
   const bool is_srcdoc_;
   bool was_redirected_;
   scoped_refptr<net::HttpResponseHeaders> response_headers_;
+
+  // The HTTP method used for the navigation.
+  std::string method_;
 
   // The state the navigation is in.
   State state_;
@@ -290,7 +305,10 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // PlzNavigate
   // Manages the lifetime of a pre-created ServiceWorkerProviderHost until a
   // corresponding ServiceWorkerNetworkProvider is created in the renderer.
-  scoped_ptr<ServiceWorkerNavigationHandle> service_worker_handle_;
+  std::unique_ptr<ServiceWorkerNavigationHandle> service_worker_handle_;
+
+  // Embedder data tied to this navigation.
+  std::unique_ptr<NavigationData> navigation_data_;
 
   DISALLOW_COPY_AND_ASSIGN(NavigationHandleImpl);
 };

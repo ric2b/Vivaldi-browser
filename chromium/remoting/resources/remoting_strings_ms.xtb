@@ -34,6 +34,7 @@ Untuk mendapatkan maklumat tentang privasi, sila lihat Dasar Privasi Google (htt
 <translation id="1779766957982586368">Tutup tetingkap</translation>
 <translation id="1841799852846221389">Melumpuhkan sambungan jauh untuk komputer ini…</translation>
 <translation id="189172778771606813">Tutup laci navigasi</translation>
+<translation id="1897488610212723051">Padam</translation>
 <translation id="195619862187186579">Reka letak papan kekunci</translation>
 <translation id="1996161829609978754">Chrome sedang memuat turun pemasang Hos Chromoting.  Setelah muat turun selesai, sila jalankan pemasang sebelum meneruskan.</translation>
 <translation id="2009755455353575666">Sambungan gagal</translation>
@@ -122,9 +123,6 @@ Chromoting</translation>
 <translation id="3950820424414687140">Log masuk</translation>
 <translation id="3989511127559254552">Untuk meneruskan, anda mesti memberikan kebenaran akses lanjutan terlebih dahulu kepada komputer anda. Anda hanya perlu melakukannya sekali.</translation>
 <translation id="4006787130661126000">Anda mesti mendayakan sambungan jauh jika anda mahu menggunakan Desktop Jauh Chrome untuk mengakses komputer ini.</translation>
-<translation id="4028465833180158312">• Kemas kini UI Reka Bentuk Bahan.
-• Kredit pelesenan pihak ketiga.
-• Maklumat yang ditunjukkan bagi komputer jauh yang berada di luar talian.</translation>
 <translation id="405887016757208221">Komputer jauh gagal memulakan sesi. Jika masalah berterusan, sila cuba mengkonfigurasi hos sekali lagi.</translation>
 <translation id="4068946408131579958">Semua sambungan</translation>
 <translation id="409800995205263688">NOTA: Tetapan dasar membenarkan sambungan antara komputer dalam rangkaian anda sahaja.</translation>
@@ -168,6 +166,7 @@ Jauh Chrome</translation>
 <translation id="4985296110227979402">Anda perlu menyediakan komputer untuk akses jauh terlebih dahulu</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (luar talian)</translation>
 <translation id="5070121137485264635">Hos jauh memerlukan anda membuat pengesahan pada tapak web pihak ketiga. Untuk meneruskan, anda hendaklah memberikan Desktop Jauh Chrome kebenaran tambahan untuk mengakses alamat ini:</translation>
+<translation id="507204348399810022">Adakah anda pasti mahu melumpuhkan sambungan jauh ke <ph name="HOSTNAME" />?</translation>
 <translation id="5156271271724754543">Sila masukkan PIN yang sama dalam kedua-dua kotak.</translation>
 <translation id="5168917394043976756">Buka laci navigasi</translation>
 <translation id="5170982930780719864">Id hos tidak sah.</translation>
@@ -178,7 +177,6 @@ Jauh Chrome</translation>
 <translation id="533625276787323658">Tiada peranti untuk disambungkan</translation>
 <translation id="5363265567587775042">Minta pemilik komputer yang ingin anda gunakan itu supaya mengklik “<ph name="SHARE" />” dan memberi anda kod aksesnya.</translation>
 <translation id="5379087427956679853">Desktop Jauh Chrome membolehkan anda berkongsi komputer anda dengan selamat melalui Web. Kedua-dua pengguna perlu menjalankan apl Desktop Jauh Chrome, yang boleh didapati di <ph name="URL" />.</translation>
-<translation id="5394895745784982830">Untuk Mac (OS X 10.6 dan ke atas)</translation>
 <translation id="5397086374758643919">Penyahpasang Hos Desktop Jauh Chrome</translation>
 <translation id="5419185025274123272">Tidak dapat menetapkan semula aplikasi. Anda masih boleh menghantar laporan pepijat.</translation>
 <translation id="544077782045763683">Hos telah ditutup.</translation>
@@ -214,6 +212,10 @@ Jauh Chrome</translation>
 <translation id="6324708100353784493">Anda telah mendayakan mod penyepaduan Google Cardboard. Untuk menggunakan mod ini, masukkan peranti anda dalam pemapar yang serasi dengan Google Cardboard.</translation>
 <translation id="6381670701864002291">Sesuatu yang lain.</translation>
 <translation id="6398765197997659313">Keluar daripada skrin penuh</translation>
+<translation id="6408143143164565232">• Dengar audio daripada komputer Windows atau Linux.
+• Alih keluar sambungan yang tidak dikehendaki dengan menekan lama pada nama komputer.
+• Ciri cubit untuk mengezum dan menatal menggunakan dua jari yang lebih lancar.
+• Skrin Bantuan &amp; Maklum Balas baharu.</translation>
 <translation id="6441316101718669559">Integrasi desktop tidak disokong pada platform ini. Anda masih boleh menggunakan aplikasi, tetapi pengalaman pengguna akan diturun taraf.</translation>
 <translation id="652218476070540101">PIN untuk komputer ini sedang dikemas kini…</translation>
 <translation id="6527303717912515753">Kongsi</translation>
@@ -221,6 +223,7 @@ Jauh Chrome</translation>
 <translation id="6542902059648396432">Laporkan isu...</translation>
 <translation id="6550675742724504774">Pilihan</translation>
 <translation id="6570205395680337606">Tetapkan semula aplikasi. Anda akan kehilangan sebarang kerja yang belum disimpan.</translation>
+<translation id="6572345186230665992">Untuk Mac (OS X Mavericks 10.9 ke atas)</translation>
 <translation id="6612717000975622067">Hantar Ctrl-Alt-Del</translation>
 <translation id="6640610550128933069">terakhir dalam talian <ph name="DATE" /></translation>
 <translation id="6668065415969892472">PIN anda telah dikemas kini.</translation>
@@ -232,7 +235,6 @@ Jauh Chrome</translation>
 <translation id="6930242544192836755">Tempoh</translation>
 <translation id="6939719207673461467">Paparkan/Sembunyikan papan kekunci.</translation>
 <translation id="6944854424004126054">Pulihkan tetingkap</translation>
-<translation id="6962773374262604195">Untuk Windows (XP dan ke atas)</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942">Adakah anda pasti mahu melumpuhkan sambungan jauh ke <ph name="HOSTNAME" />? Jika anda berubah fikiran, anda perlu pergi ke komputer tersebut untuk mendayakan semula sambungan.</translation>
 <translation id="6998989275928107238">Kepada</translation>
@@ -288,6 +290,7 @@ Jauh Chrome</translation>
 <translation id="8759753423332885148">Ketahui lebih lanjut.</translation>
 <translation id="8791202241915690908">Muat turun Pemasang Hos Chromoting</translation>
 <translation id="894763922177556086">Bagus</translation>
+<translation id="895780780740011433">Untuk Windows 7 ke atas</translation>
 <translation id="897805526397249209">Untuk mendayakan sambungan jauh untuk komputer yang berbeza, pasang Chromoting pada komputer tersebut dan klik “<ph name="BUTTON_NAME" />”.</translation>
 <translation id="8998327464021325874">Alat Kawalan Hos Desktop Jauh Chrome</translation>
 <translation id="9016232822027372900">Sambungkan juga</translation>

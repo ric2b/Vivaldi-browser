@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/i18n/rtl.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
@@ -19,18 +20,22 @@
 #include "chrome/browser/chromeos/login/ui/proxy_settings_dialog.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_display.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 #include "chrome/browser/media/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/media_stream_devices_controller.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/renderer_preferences_util.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
+#include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
+#include "chromeos/settings/cros_settings_names.h"
+#include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/notification_service.h"
@@ -167,9 +172,12 @@ WebUILoginView::~WebUILoginView() {
                     observer_list_,
                     OnHostDestroying());
 
-  if (ash::Shell::GetInstance()->HasPrimaryStatusArea()) {
+  if (!chrome::IsRunningInMash() &&
+      ash::Shell::GetInstance()->HasPrimaryStatusArea()) {
     ash::Shell::GetInstance()->GetPrimarySystemTray()->
         SetNextFocusableView(NULL);
+  } else {
+    NOTIMPLEMENTED();
   }
 }
 
@@ -307,7 +315,8 @@ void WebUILoginView::OnPostponedShow() {
 }
 
 void WebUILoginView::SetStatusAreaVisible(bool visible) {
-  if (ash::Shell::GetInstance()->HasPrimaryStatusArea()) {
+  if (!chrome::IsRunningInMash() &&
+      ash::Shell::GetInstance()->HasPrimaryStatusArea()) {
     ash::SystemTray* tray = ash::Shell::GetInstance()->GetPrimarySystemTray();
     tray->SetVisible(visible);
     if (visible) {
@@ -316,11 +325,17 @@ void WebUILoginView::SetStatusAreaVisible(bool visible) {
     } else {
       tray->GetWidget()->Hide();
     }
+  } else {
+    NOTIMPLEMENTED();
   }
 }
 
 void WebUILoginView::SetUIEnabled(bool enabled) {
   forward_keyboard_event_ = enabled;
+  if (chrome::IsRunningInMash()) {
+    NOTIMPLEMENTED();
+    return;
+  }
   ash::SystemTray* tray = ash::Shell::GetInstance()->GetPrimarySystemTray();
 
   // We disable the UI to prevent user from interracting with UI elements,
@@ -420,6 +435,11 @@ bool WebUILoginView::TakeFocus(content::WebContents* source, bool reverse) {
   if (!forward_keyboard_event_)
     return false;
 
+  // Focus is accepted, but the Ash system tray is not available in Mash, so
+  // exit early.
+  if (chrome::IsRunningInMash())
+    return true;
+
   ash::SystemTray* tray = ash::Shell::GetInstance()->GetPrimarySystemTray();
   if (tray && tray->GetWidget()->IsVisible()) {
     tray->SetNextFocusableView(this);
@@ -435,8 +455,45 @@ void WebUILoginView::RequestMediaAccessPermission(
     const content::MediaStreamRequest& request,
     const content::MediaResponseCallback& callback) {
   MediaStreamDevicesController controller(web_contents, request, callback);
-  if (controller.IsAskingForVideo() || controller.IsAskingForAudio())
-    NOTREACHED() << "Media stream not allowed for WebUI";
+  if (!controller.IsAskingForAudio() && !controller.IsAskingForVideo())
+    return;
+
+  if (controller.IsAskingForAudio()) {
+    controller.PermissionDenied();
+    return;
+  }
+
+  const CrosSettings* const settings = CrosSettings::Get();
+  if (!settings) {
+    controller.PermissionDenied();
+    return;
+  }
+
+  const base::Value* const raw_list_value =
+      settings->GetPref(kLoginVideoCaptureAllowedUrls);
+  if (!raw_list_value) {
+    controller.PermissionDenied();
+    return;
+  }
+
+  const base::ListValue* list_value;
+  CHECK(raw_list_value->GetAsList(&list_value));
+  for (base::Value* base_value : *list_value) {
+    std::string value;
+    if (base_value->GetAsString(&value)) {
+      ContentSettingsPattern pattern =
+          ContentSettingsPattern::FromString(value);
+      if (pattern == ContentSettingsPattern::Wildcard()) {
+        LOG(WARNING) << "Ignoring wildcard URL pattern: " << value;
+        continue;
+      }
+      if (pattern.IsValid() && pattern.Matches(request.security_origin)) {
+        controller.PermissionGranted();
+        return;
+      }
+    }
+  }
+  controller.PermissionDenied();
 }
 
 bool WebUILoginView::CheckMediaAccessPermission(
@@ -460,10 +517,6 @@ void WebUILoginView::LoadProgressChanged(content::WebContents* source,
                                          double progress) {
   // TODO(jdufault): Remove once crbug.com/452599 is resolved.
   VLOG(1) << "WebUILoginView loading progress updated to " << progress;
-}
-
-void WebUILoginView::SwappedOut(content::WebContents* source) {
-  VLOG(1) << "WebUILoginView got swapped out";
 }
 
 void WebUILoginView::BeforeUnloadFired(content::WebContents* tab,

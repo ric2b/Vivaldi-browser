@@ -2,14 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ui/events/event.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/events/event.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
@@ -129,7 +131,7 @@ TEST(EventTest, RepeatedClick) {
 TEST(EventTest, DoubleClickRequiresRelease) {
   const gfx::Point origin1(0, 0);
   const gfx::Point origin2(100, 0);
-  scoped_ptr<MouseEvent> ev;
+  std::unique_ptr<MouseEvent> ev;
   base::TimeDelta start = base::TimeDelta::FromMilliseconds(0);
   base::TimeDelta soon = start + base::TimeDelta::FromMilliseconds(1);
 
@@ -165,7 +167,7 @@ TEST(EventTest, DoubleClickRequiresRelease) {
 // click.
 TEST(EventTest, SingleClickRightLeft) {
   const gfx::Point origin(0, 0);
-  scoped_ptr<MouseEvent> ev;
+  std::unique_ptr<MouseEvent> ev;
   base::TimeDelta start = base::TimeDelta::FromMilliseconds(0);
   base::TimeDelta soon = start + base::TimeDelta::FromMilliseconds(1);
 
@@ -353,7 +355,7 @@ TEST(EventTest, NormalizeKeyEventFlags) {
 
 TEST(EventTest, KeyEventCopy) {
   KeyEvent key(ET_KEY_PRESSED, VKEY_A, EF_NONE);
-  scoped_ptr<KeyEvent> copied_key(new KeyEvent(key));
+  std::unique_ptr<KeyEvent> copied_key(new KeyEvent(key));
   EXPECT_EQ(copied_key->type(), key.type());
   EXPECT_EQ(copied_key->key_code(), key.key_code());
 }
@@ -425,8 +427,8 @@ TEST(EventTest, KeyEventCode) {
 
 namespace {
 #if defined(USE_X11)
-void SetKeyEventTimestamp(XEvent* event, long time) {
-  event->xkey.time = time;
+void SetKeyEventTimestamp(XEvent* event, int64_t time) {
+  event->xkey.time = time & UINT32_MAX;
 }
 
 void AdvanceKeyEventTimestamp(XEvent* event) {
@@ -434,8 +436,8 @@ void AdvanceKeyEventTimestamp(XEvent* event) {
 }
 
 #elif defined(OS_WIN)
-void SetKeyEventTimestamp(MSG& msg, long time) {
-  msg.time = time;
+void SetKeyEventTimestamp(MSG& msg, int64_t time) {
+  msg.time = static_cast<long>(time);
 }
 
 void AdvanceKeyEventTimestamp(MSG& msg) {
@@ -451,6 +453,7 @@ TEST(EventTest, AutoRepeat) {
   const uint16_t kNativeCodeB =
       ui::KeycodeConverter::DomCodeToNativeKeycode(DomCode::US_B);
 #if defined(USE_X11)
+
   ScopedXI2Event native_event_a_pressed;
   native_event_a_pressed.InitKeyEvent(ET_KEY_PRESSED, VKEY_A, kNativeCodeA);
   ScopedXI2Event native_event_a_pressed_1500;
@@ -479,8 +482,11 @@ TEST(EventTest, AutoRepeat) {
   MSG native_event_a_released = { NULL, WM_KEYUP, VKEY_A, lParam_a };
   MSG native_event_b_pressed = { NULL, WM_KEYUP, VKEY_B, lParam_b };
 #endif
-  SetKeyEventTimestamp(native_event_a_pressed_1500, 1500);
-  SetKeyEventTimestamp(native_event_a_pressed_3000, 3000);
+  int64_t ticks_base =
+      (base::TimeTicks::Now() - base::TimeTicks()).InMilliseconds() - 5000;
+  SetKeyEventTimestamp(native_event_a_pressed, ticks_base);
+  SetKeyEventTimestamp(native_event_a_pressed_1500, ticks_base + 1500);
+  SetKeyEventTimestamp(native_event_a_pressed_3000, ticks_base + 3000);
 
   {
     KeyEvent key_a1(native_event_a_pressed);
@@ -853,7 +859,7 @@ TEST(EventTest, PointerEventClone) {
     ui::PointerEvent ptr_event(
         ui::TouchEvent(ET_TOUCH_PRESSED, gfx::Point(0, 0), 0, 0,
                        ui::EventTimeForNow(), 10.0f, 5.0f, 0.0f, 15.0f));
-    scoped_ptr<ui::Event> clone(ui::Event::Clone(ptr_event));
+    std::unique_ptr<ui::Event> clone(ui::Event::Clone(ptr_event));
     EXPECT_TRUE(clone->IsPointerEvent());
     ui::PointerEvent* clone_as_ptr = clone->AsPointerEvent();
 
@@ -868,7 +874,7 @@ TEST(EventTest, PointerEventClone) {
     ui::PointerEvent ptr_event(
         ui::MouseEvent(ET_MOUSE_PRESSED, gfx::Point(0, 0), gfx::Point(0, 0),
                        ui::EventTimeForNow(), 0, 0));
-    scoped_ptr<ui::Event> clone(ui::Event::Clone(ptr_event));
+    std::unique_ptr<ui::Event> clone(ui::Event::Clone(ptr_event));
     EXPECT_TRUE(clone->IsPointerEvent());
     ui::PointerEvent* clone_as_ptr = clone->AsPointerEvent();
 

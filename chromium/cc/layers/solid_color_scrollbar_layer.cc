@@ -4,13 +4,16 @@
 
 #include "cc/layers/solid_color_scrollbar_layer.h"
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
 #include "cc/layers/layer_impl.h"
 #include "cc/layers/solid_color_scrollbar_layer_impl.h"
+#include "cc/proto/cc_conversions.h"
+#include "cc/proto/layer.pb.h"
 
 namespace cc {
 
-scoped_ptr<LayerImpl> SolidColorScrollbarLayer::CreateLayerImpl(
+std::unique_ptr<LayerImpl> SolidColorScrollbarLayer::CreateLayerImpl(
     LayerTreeImpl* tree_impl) {
   const bool kIsOverlayScrollbar = true;
   return SolidColorScrollbarLayerImpl::Create(tree_impl,
@@ -67,6 +70,10 @@ bool SolidColorScrollbarLayer::OpacityCanAnimateOnImplThread() const {
   return true;
 }
 
+bool SolidColorScrollbarLayer::AlwaysUseActiveTreeOpacity() const {
+  return true;
+}
+
 int SolidColorScrollbarLayer::ScrollLayerId() const {
   return scroll_layer_id_;
 }
@@ -81,6 +88,39 @@ void SolidColorScrollbarLayer::SetScrollLayer(int layer_id) {
 
 ScrollbarOrientation SolidColorScrollbarLayer::orientation() const {
   return orientation_;
+}
+
+void SolidColorScrollbarLayer::SetTypeForProtoSerialization(
+    proto::LayerNode* proto) const {
+  proto->set_type(proto::LayerNode::SOLID_COLOR_SCROLLBAR_LAYER);
+}
+
+void SolidColorScrollbarLayer::LayerSpecificPropertiesToProto(
+    proto::LayerProperties* proto) {
+  Layer::LayerSpecificPropertiesToProto(proto);
+
+  proto::SolidColorScrollbarLayerProperties* scrollbar =
+      proto->mutable_solid_scrollbar();
+  scrollbar->set_scroll_layer_id(scroll_layer_id_);
+  scrollbar->set_thumb_thickness(thumb_thickness_);
+  scrollbar->set_track_start(track_start_);
+  scrollbar->set_is_left_side_vertical_scrollbar(
+      is_left_side_vertical_scrollbar_);
+  scrollbar->set_orientation(ScrollbarOrientationToProto(orientation_));
+}
+
+void SolidColorScrollbarLayer::FromLayerSpecificPropertiesProto(
+    const proto::LayerProperties& proto) {
+  Layer::FromLayerSpecificPropertiesProto(proto);
+
+  const proto::SolidColorScrollbarLayerProperties& scrollbar =
+      proto.solid_scrollbar();
+  scroll_layer_id_ = scrollbar.scroll_layer_id();
+  thumb_thickness_ = scrollbar.thumb_thickness();
+  track_start_ = scrollbar.track_start();
+  is_left_side_vertical_scrollbar_ =
+      scrollbar.is_left_side_vertical_scrollbar();
+  orientation_ = ScrollbarOrientationFromProto(scrollbar.orientation());
 }
 
 }  // namespace cc

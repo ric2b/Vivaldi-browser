@@ -15,6 +15,7 @@
 #include "core/frame/FrameConsole.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/Location.h"
+#include "core/frame/RemoteDOMWindow.h"
 #include "core/frame/RemoteFrame.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
@@ -44,7 +45,7 @@ DOMWindow::~DOMWindow()
 v8::Local<v8::Object> DOMWindow::wrap(v8::Isolate*, v8::Local<v8::Object> creationContext)
 {
     // DOMWindow must never be wrapped with wrap method.  The wrappers must be
-    // created at WindowProxy::installDOMWindow().
+    // created at WindowProxy::createContext() and setupWindowPrototypeChain().
     RELEASE_NOTREACHED();
     return v8::Local<v8::Object>();
 }
@@ -58,6 +59,11 @@ v8::Local<v8::Object> DOMWindow::associateWithWrapper(v8::Isolate*, const Wrappe
 const AtomicString& DOMWindow::interfaceName() const
 {
     return EventTargetNames::DOMWindow;
+}
+
+const DOMWindow* DOMWindow::toDOMWindow() const
+{
+    return this;
 }
 
 Location* DOMWindow::location() const
@@ -168,7 +174,7 @@ bool DOMWindow::isSecureContext() const
     return document()->isSecureContext(ExecutionContext::StandardSecureContextCheck);
 }
 
-void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message, const MessagePortArray* ports, const String& targetOrigin, LocalDOMWindow* source, ExceptionState& exceptionState)
+void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message, const MessagePortArray& ports, const String& targetOrigin, LocalDOMWindow* source, ExceptionState& exceptionState)
 {
     if (!isCurrentlyDisplayedInFrame())
         return;
@@ -214,19 +220,9 @@ void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message, const Mes
     else if (MixedContentChecker::isMixedContent(frame()->securityContext()->getSecurityOrigin(), sourceDocument->url()))
         UseCounter::count(frame(), UseCounter::PostMessageFromInsecureToSecure);
 
-    MessageEvent* event = MessageEvent::create(channels.release(), message, sourceOrigin, String(), source, sourceSuborigin);
-    // Give the embedder a chance to intercept this postMessage.  If the
-    // target is a remote frame, the message will be forwarded through the
-    // browser process.
-    if (frame()->client()->willCheckAndDispatchMessageEvent(target.get(), event, source->document()->frame()))
-        return;
+    MessageEvent* event = MessageEvent::create(std::move(channels), message, sourceOrigin, String(), source, sourceSuborigin);
 
-    // Capture stack trace only when inspector front-end is loaded as it may be time consuming.
-    RefPtr<ScriptCallStack> stackTrace;
-    if (InspectorInstrumentation::consoleAgentEnabled(sourceDocument))
-        stackTrace = ScriptCallStack::capture();
-
-    toLocalDOMWindow(this)->schedulePostMessage(event, target.get(), stackTrace.release());
+    schedulePostMessage(event, std::move(target), sourceDocument);
 }
 
 // FIXME: Once we're throwing exceptions for cross-origin access violations, we will always sanitize the target
@@ -335,7 +331,7 @@ void DOMWindow::close(ExecutionContext* context)
     if (!frame()->shouldClose())
         return;
 
-    InspectorInstrumentation::allowNativeBreakpoint(context, "close", true);
+    InspectorInstrumentation::NativeBreakpoint nativeBreakpoint(context, "close", true);
 
     page->chromeClient().closeWindowSoon();
 

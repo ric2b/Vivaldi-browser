@@ -174,6 +174,9 @@ source_set("sync_core") {
     "internal_api/js_sync_encryption_handler_observer.h",
     "internal_api/js_sync_manager_observer.cc",
     "internal_api/js_sync_manager_observer.h",
+    "internal_api/model_type_connector.cc",
+    "internal_api/model_type_connector_proxy.cc",
+    "internal_api/model_type_connector_proxy.h",
     "internal_api/model_type_store_backend.cc",
     "internal_api/model_type_store_impl.cc",
     "internal_api/processor_entity_tracker.cc",
@@ -222,6 +225,7 @@ source_set("sync_core") {
     "internal_api/public/data_type_association_stats.h",
     "internal_api/public/data_type_debug_info_listener.cc",
     "internal_api/public/data_type_debug_info_listener.h",
+    "internal_api/public/data_type_error_handler.h",
     "internal_api/public/delete_journal.h",
     "internal_api/public/engine/model_safe_worker.cc",
     "internal_api/public/engine/model_safe_worker.h",
@@ -246,6 +250,7 @@ source_set("sync_core") {
     "internal_api/public/http_post_provider_interface.h",
     "internal_api/public/internal_components_factory.h",
     "internal_api/public/internal_components_factory_impl.h",
+    "internal_api/public/model_type_connector.h",
     "internal_api/public/model_type_processor.cc",
     "internal_api/public/model_type_processor.h",
     "internal_api/public/model_type_store_backend.h",
@@ -273,7 +278,6 @@ source_set("sync_core") {
     "internal_api/public/simple_metadata_change_list.cc",
     "internal_api/public/simple_metadata_change_list.h",
     "internal_api/public/sync_auth_provider.h",
-    "internal_api/public/sync_context.h",
     "internal_api/public/sync_encryption_handler.cc",
     "internal_api/public/sync_encryption_handler.h",
     "internal_api/public/sync_manager.cc",
@@ -298,9 +302,6 @@ source_set("sync_core") {
     "internal_api/read_node.cc",
     "internal_api/read_transaction.cc",
     "internal_api/shared_model_type_processor.cc",
-    "internal_api/sync_context.cc",
-    "internal_api/sync_context_proxy.cc",
-    "internal_api/sync_context_proxy.h",
     "internal_api/sync_db_util.cc",
     "internal_api/sync_encryption_handler_impl.cc",
     "internal_api/sync_encryption_handler_impl.h",
@@ -461,8 +462,8 @@ source_set("sync_core") {
 
   if (is_mac) {
     libs = [
-      # Required by get_session_name_mac.mm on Mac.
-      "SystemConfiguration.framework",
+      "CoreFoundation.framework",
+      "SystemConfiguration.framework",  # Required by get_session_name_mac.mm.
     ]
   }
 
@@ -487,12 +488,12 @@ static_library("test_support_sync_core") {
     "test/engine/fake_model_worker.h",
     "test/engine/fake_sync_scheduler.cc",
     "test/engine/fake_sync_scheduler.h",
-    "test/engine/mock_commit_queue.cc",
-    "test/engine/mock_commit_queue.h",
     "test/engine/mock_connection_manager.cc",
     "test/engine/mock_connection_manager.h",
     "test/engine/mock_model_type_processor.cc",
     "test/engine/mock_model_type_processor.h",
+    "test/engine/mock_model_type_worker.cc",
+    "test/engine/mock_model_type_worker.h",
     "test/engine/mock_nudge_handler.cc",
     "test/engine/mock_nudge_handler.h",
     "test/engine/mock_update_handler.cc",
@@ -546,16 +547,18 @@ static_library("test_support_sync_core") {
 static_library("test_support_sync_internal_api") {
   testonly = true
   sources = [
-    "internal_api/public/test/fake_model_type_service.h",
-    "internal_api/public/test/fake_sync_context.h",
+    "internal_api/public/test/data_type_error_handler_mock.h",
+    "internal_api/public/test/fake_model_type_connector.h",
+    "internal_api/public/test/fake_model_type_processor.h",
     "internal_api/public/test/fake_sync_manager.h",
     "internal_api/public/test/model_type_store_test_util.h",
     "internal_api/public/test/sync_manager_factory_for_profile_sync_test.h",
     "internal_api/public/test/test_entry_factory.h",
     "internal_api/public/test/test_internal_components_factory.h",
     "internal_api/public/test/test_user_share.h",
-    "internal_api/test/fake_model_type_service.cc",
-    "internal_api/test/fake_sync_context.cc",
+    "internal_api/test/data_type_error_handler_mock.cc",
+    "internal_api/test/fake_model_type_connector.cc",
+    "internal_api/test/fake_model_type_processor.cc",
     "internal_api/test/fake_sync_manager.cc",
     "internal_api/test/model_type_store_test_util.cc",
     "internal_api/test/sync_manager_factory_for_profile_sync_test.cc",
@@ -581,6 +584,10 @@ static_library("test_support_sync_internal_api") {
 static_library("test_support_sync_api") {
   testonly = true
   sources = [
+    "api/fake_model_type_change_processor.cc",
+    "api/fake_model_type_change_processor.h",
+    "api/fake_model_type_service.cc",
+    "api/fake_model_type_service.h",
     "api/fake_sync_change_processor.cc",
     "api/fake_sync_change_processor.h",
     "api/fake_syncable_service.cc",
@@ -609,6 +616,7 @@ test("sync_unit_tests") {
     "api/attachments/attachment_metadata_unittest.cc",
     "api/attachments/attachment_unittest.cc",
     "api/entity_data_unittest.cc",
+    "api/model_type_service_unittest.cc",
     "api/sync_change_unittest.cc",
     "api/sync_data_unittest.cc",
     "api/sync_error_unittest.cc",
@@ -640,6 +648,7 @@ test("sync_unit_tests") {
     "internal_api/js_mutation_event_observer_unittest.cc",
     "internal_api/js_sync_encryption_handler_observer_unittest.cc",
     "internal_api/js_sync_manager_observer_unittest.cc",
+    "internal_api/model_type_connector_proxy_unittest.cc",
     "internal_api/model_type_store_backend_unittest.cc",
     "internal_api/model_type_store_impl_unittest.cc",
     "internal_api/processor_entity_tracker_unittest.cc",
@@ -654,11 +663,11 @@ test("sync_unit_tests") {
     "internal_api/public/data_batch_impl_unittest.cc",
     "internal_api/public/engine/model_safe_worker_unittest.cc",
     "internal_api/public/sessions/sync_session_snapshot_unittest.cc",
+    "internal_api/public/simple_metadata_change_list_unittest.cc",
     "internal_api/public/util/immutable_unittest.cc",
     "internal_api/public/util/proto_value_ptr_unittest.cc",
     "internal_api/public/util/weak_handle_unittest.cc",
     "internal_api/shared_model_type_processor_unittest.cc",
-    "internal_api/sync_context_proxy_unittest.cc",
     "internal_api/sync_encryption_handler_impl_unittest.cc",
     "internal_api/sync_manager_impl_unittest.cc",
     "internal_api/syncapi_server_connection_manager_unittest.cc",
@@ -699,6 +708,7 @@ test("sync_unit_tests") {
   ]
 
   deps = [
+    ":test_support_sync_api",
     ":test_support_sync_core",
     ":test_support_sync_internal_api",
     "//base",
@@ -717,10 +727,6 @@ test("sync_unit_tests") {
     "//third_party/protobuf:protobuf_lite",
     "//third_party/zlib",
   ]
-
-  if (is_android) {
-    isolate_file = "sync_unit_tests.isolate"
-  }
 
   if (is_chromeos) {
     # Required by get_session_name_unittest.cc on Chrome OS.
@@ -795,8 +801,9 @@ static_library("test_support_sync_testserver") {
   ]
   deps = [
     ":sync",
+
     # The sync test server uses Python modules generated by the sync protos.
-    #  '../third_party/protobuf/protobuf.gyp:py_proto',  # TODO(GYP)
+    "//third_party/protobuf:py_proto",
   ]
 }
 
@@ -813,6 +820,7 @@ if (!is_ios) {
       "//base",
       "//base/test:test_support",
       "//build/config/sanitizers:deps",
+      "//build/win:default_exe_manifest",
       "//net:test_support",
       "//testing/gtest",
     ]

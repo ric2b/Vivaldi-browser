@@ -105,7 +105,7 @@ void UpdateModalDialogPosition(views::Widget* widget,
 
 // static
 void SetConstrainedWindowViewsClient(
-    scoped_ptr<ConstrainedWindowViewsClient> new_client) {
+    std::unique_ptr<ConstrainedWindowViewsClient> new_client) {
   delete constrained_window_views_client;
   constrained_window_views_client = new_client.release();
 }
@@ -176,7 +176,7 @@ views::Widget* CreateBrowserModalDialogViews(views::DialogDelegate* dialog,
   views::Widget* widget =
       views::DialogDelegate::CreateDialogWidget(dialog, NULL, parent_view);
 
-  bool requires_positioning = dialog->UseNewStyleForThisDialog();
+  bool requires_positioning = dialog->ShouldUseCustomFrame();
 
 #if defined(OS_MACOSX)
   // On Mac, window modal dialogs are displayed as sheets, so their position is

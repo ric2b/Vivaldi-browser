@@ -44,9 +44,9 @@ from webkitpy.common.system.executive import ScriptError
 from webkitpy.layout_tests.controllers.test_result_writer import TestResultWriter
 from webkitpy.layout_tests.models import test_failures
 from webkitpy.layout_tests.models.test_expectations import TestExpectations, BASELINE_SUFFIX_LIST, SKIP
-from webkitpy.layout_tests.port import builders
 from webkitpy.layout_tests.port import factory
-from webkitpy.tool.multicommandtool import AbstractDeclarativeCommand
+from webkitpy.layout_tests.builders import Builders
+from webkitpy.tool.commands.command import Command
 
 
 _log = logging.getLogger(__name__)
@@ -65,7 +65,7 @@ def _get_branch_name_or_ref(tool):
     return branch_name
 
 
-class AbstractRebaseliningCommand(AbstractDeclarativeCommand):
+class AbstractRebaseliningCommand(Command):
     # not overriding execute() - pylint: disable=W0223
 
     no_optimize_option = optparse.make_option('--no-optimize', dest='optimize', action='store_false', default=True,
@@ -103,7 +103,7 @@ class BaseInternalRebaselineCommand(AbstractRebaseliningCommand):
 
     def _baseline_directory(self, builder_name):
         port = self._tool.port_factory.get_from_builder_name(builder_name)
-        override_dir = builders.rebaseline_override_dir(builder_name)
+        override_dir = self._tool.builders.rebaseline_override_dir(builder_name)
         if override_dir:
             return self._tool.filesystem.join(port.layout_tests_dir(), 'platform', override_dir)
         return port.baseline_version_dir()
@@ -220,16 +220,19 @@ class RebaselineTest(BaseInternalRebaselineCommand):
                             target_baseline, baseline_directory, test_name, suffix)
 
     def _rebaseline_test_and_update_expectations(self, options):
+        self._baseline_suffix_list = options.suffixes.split(',')
+
         port = self._tool.port_factory.get_from_builder_name(options.builder)
-        if (port.reference_files(options.test)):
-            _log.warning("Cannot rebaseline reftest: %s", options.test)
-            return
+        if port.reference_files(options.test):
+            if 'png' in self._baseline_suffix_list:
+                _log.warning("Cannot rebaseline image result for reftest: %s", options.test)
+                return
+            assert self._baseline_suffix_list == ['txt']
 
         if options.results_directory:
             results_url = 'file://' + options.results_directory
         else:
             results_url = self._results_url(options.builder)
-        self._baseline_suffix_list = options.suffixes.split(',')
 
         for suffix in self._baseline_suffix_list:
             self._rebaseline_test(options.builder, options.test, suffix, results_url)
@@ -345,7 +348,7 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
     # The release builders cycle much faster than the debug ones and cover all the platforms.
     def _release_builders(self):
         release_builders = []
-        for builder_name in builders.all_builder_names():
+        for builder_name in self._tool.builders.all_builder_names():
             if builder_name.find('ASAN') != -1:
                 continue
             port = self._tool.port_factory.get_from_builder_name(builder_name)
@@ -600,7 +603,7 @@ class RebaselineExpectations(AbstractParallelRebaselineCommand):
         return tests_to_rebaseline
 
     def _add_tests_to_rebaseline_for_port(self, port_name):
-        builder_name = builders.builder_name_for_port_name(port_name)
+        builder_name = self._tool.builders.builder_name_for_port_name(port_name)
         if not builder_name:
             return
         tests = self._tests_to_rebaseline(self._tool.port_factory.get(port_name)).items()
@@ -806,7 +809,7 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
         lines_to_remove = {}
 
         for builder_name in self._release_builders():
-            port_name = builders.port_name_for_builder_name(builder_name)
+            port_name = self._tool.builders.port_name_for_builder_name(builder_name)
             port = self._tool.port_factory.get(port_name)
             expectations = TestExpectations(port, include_overrides=True)
             for test in expectations.get_needs_rebaseline_failures():
@@ -944,86 +947,3 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
                 if old_branch_name_or_ref:
                     tool.scm().checkout_branch(old_branch_name_or_ref)
                 tool.scm().delete_branch(rebaseline_branch_name)
-
-
-class RebaselineOMatic(AbstractDeclarativeCommand):
-    name = "rebaseline-o-matic"
-    help_text = "Calls webkit-patch auto-rebaseline in a loop."
-    show_in_main_help = True
-
-    SLEEP_TIME_IN_SECONDS = 30
-    LOG_SERVER = 'blinkrebaseline.appspot.com'
-    QUIT_LOG = '##QUIT##'
-
-    # Uploaded log entries append to the existing entry unless the
-    # newentry flag is set. In that case it starts a new entry to
-    # start appending to.
-    def _log_to_server(self, log='', is_new_entry=False):
-        query = {
-            'log': log,
-        }
-        if is_new_entry:
-            query['newentry'] = 'on'
-        try:
-            urllib2.urlopen("http://" + self.LOG_SERVER + "/updatelog", data=urllib.urlencode(query))
-        except:
-            traceback.print_exc(file=sys.stderr)
-
-    def _log_to_server_thread(self):
-        is_new_entry = True
-        while True:
-            messages = [self._log_queue.get()]
-            while not self._log_queue.empty():
-                messages.append(self._log_queue.get())
-            self._log_to_server('\n'.join(messages), is_new_entry=is_new_entry)
-            is_new_entry = False
-            if self.QUIT_LOG in messages:
-                return
-
-    def _post_log_to_server(self, log):
-        self._log_queue.put(log)
-
-    def _log_line(self, handle):
-        out = handle.readline().rstrip('\n')
-        if out:
-            if self._verbose:
-                print out
-            self._post_log_to_server(out)
-        return out
-
-    def _run_logged_command(self, command):
-        process = self._tool.executive.popen(command, stdout=self._tool.executive.PIPE, stderr=self._tool.executive.STDOUT)
-
-        out = self._log_line(process.stdout)
-        while out:
-            # FIXME: This should probably batch up lines if they're available and log to the server once.
-            out = self._log_line(process.stdout)
-
-    def _do_one_rebaseline(self):
-        self._log_queue = Queue.Queue(256)
-        log_thread = threading.Thread(name='LogToServer', target=self._log_to_server_thread)
-        log_thread.start()
-        old_branch_name_or_ref = ''
-        try:
-            old_branch_name_or_ref = _get_branch_name_or_ref(self._tool)
-            self._run_logged_command(['git', 'pull'])
-            rebaseline_command = [self._tool.filesystem.join(
-                self._tool.scm().checkout_root, 'third_party', 'WebKit', 'Tools', 'Scripts', 'webkit-patch'), 'auto-rebaseline']
-            if self._verbose:
-                rebaseline_command.append('--verbose')
-            self._run_logged_command(rebaseline_command)
-        except:
-            self._log_queue.put(self.QUIT_LOG)
-            traceback.print_exc(file=sys.stderr)
-            # Sometimes git crashes and leaves us on a detached head.
-            if old_branch_name_or_ref:
-                self._tool.scm().checkout_branch(old_branch_name_or_ref)
-        else:
-            self._log_queue.put(self.QUIT_LOG)
-        log_thread.join()
-
-    def execute(self, options, args, tool):
-        self._verbose = options.verbose
-        while True:
-            self._do_one_rebaseline()
-            time.sleep(self.SLEEP_TIME_IN_SECONDS)

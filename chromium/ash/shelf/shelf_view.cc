@@ -27,7 +27,8 @@
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
-#include "ash/wm/coordinate_conversion.h"
+#include "ash/wm/aura/wm_window_aura.h"
+#include "ash/wm/common/root_window_finder.h"
 #include "base/auto_reset.h"
 #include "base/metrics/histogram.h"
 #include "grit/ash_strings.h"
@@ -541,7 +542,7 @@ bool ShelfView::ShouldShowTooltipForView(const views::View* view) const {
 
 base::string16 ShelfView::GetTitleForView(const views::View* view) const {
   const ShelfItem* item = ShelfItemForView(view);
-  if (!item)
+  if (!item || !item_manager_->GetShelfItemDelegate(item->id))
     return base::string16();
   return item_manager_->GetShelfItemDelegate(item->id)->GetTitle();
 }
@@ -651,7 +652,9 @@ bool ShelfView::StartDrag(const std::string& app_id,
   views::View::ConvertPointFromScreen(drag_and_drop_view, &pt);
   gfx::Point point_in_root = location_in_screen_coordinates;
   ::wm::ConvertPointFromScreen(
-      ash::wm::GetRootWindowAt(location_in_screen_coordinates), &point_in_root);
+      wm::WmWindowAura::GetAuraWindow(
+          ash::wm::GetRootWindowAt(location_in_screen_coordinates)),
+      &point_in_root);
   ui::MouseEvent event(ui::ET_MOUSE_PRESSED, pt, point_in_root,
                        ui::EventTimeForNow(), 0, 0);
   PointerPressedOnButton(drag_and_drop_view, DRAG_AND_DROP, event);
@@ -672,7 +675,9 @@ bool ShelfView::Drag(const gfx::Point& location_in_screen_coordinates) {
   ConvertPointFromScreen(drag_and_drop_view, &pt);
   gfx::Point point_in_root = location_in_screen_coordinates;
   ::wm::ConvertPointFromScreen(
-      ash::wm::GetRootWindowAt(location_in_screen_coordinates), &point_in_root);
+      wm::WmWindowAura::GetAuraWindow(
+          ash::wm::GetRootWindowAt(location_in_screen_coordinates)),
+      &point_in_root);
   ui::MouseEvent event(ui::ET_MOUSE_DRAGGED, pt, point_in_root,
                        ui::EventTimeForNow(), 0, 0);
   PointerDraggedOnButton(drag_and_drop_view, DRAG_AND_DROP, event);
@@ -981,7 +986,8 @@ views::View* ShelfView::CreateViewForItem(const ShelfItem& item) {
     case TYPE_WINDOWED_APP:
     case TYPE_PLATFORM_APP:
     case TYPE_DIALOG:
-    case TYPE_APP_PANEL: {
+    case TYPE_APP_PANEL:
+    case TYPE_IME_MENU: {
       ShelfButton* button = new ShelfButton(this);
       button->SetImage(item.image);
       ReflectItemStatus(item, button);
@@ -1307,6 +1313,7 @@ bool ShelfView::SameDragType(ShelfItemType typea, ShelfItemType typeb) const {
     case TYPE_WINDOWED_APP:
     case TYPE_APP_PANEL:
     case TYPE_DIALOG:
+    case TYPE_IME_MENU:
       return typeb == typea;
     case TYPE_UNDEFINED:
       NOTREACHED() << "ShelfItemType must be set.";
@@ -1614,6 +1621,8 @@ void ShelfView::ShelfItemChanged(int model_index, const ShelfItem& old_item) {
     view_model_->Add(new_view, model_index);
     view_model_->set_ideal_bounds(model_index, old_ideal_bounds);
     new_view->SetBoundsRect(old_view->bounds());
+    if (overflow_button_ && overflow_button_->visible())
+      AnimateToIdealBounds();
     return;
   }
 
@@ -1626,7 +1635,8 @@ void ShelfView::ShelfItemChanged(int model_index, const ShelfItem& old_item) {
     case TYPE_WINDOWED_APP:
     case TYPE_PLATFORM_APP:
     case TYPE_DIALOG:
-    case TYPE_APP_PANEL: {
+    case TYPE_APP_PANEL:
+    case TYPE_IME_MENU: {
       CHECK_EQ(ShelfButton::kViewClassName, view->GetClassName());
       ShelfButton* button = static_cast<ShelfButton*>(view);
       ReflectItemStatus(item, button);
@@ -1713,6 +1723,7 @@ void ShelfView::ButtonPressed(views::Button* sender, const ui::Event& event) {
 
       case TYPE_APP_PANEL:
       case TYPE_DIALOG:
+      case TYPE_IME_MENU:
         break;
 
       case TYPE_UNDEFINED:
@@ -1858,7 +1869,7 @@ void ShelfView::OnBoundsAnimatorDone(views::BoundsAnimator* animator) {
 }
 
 bool ShelfView::IsRepostEvent(const ui::Event& event) {
-  if (closing_event_time_ == base::TimeDelta())
+  if (closing_event_time_.is_zero())
     return false;
 
   base::TimeDelta delta =

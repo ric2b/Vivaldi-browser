@@ -31,20 +31,23 @@
     Exposed=(Window,Worker),
     ImplementedAs=DOMURL,
     RaisesException=Constructor,
-    GarbageCollected,
 ] interface URL {
     // TODO(philipj): Implement domainToASCII() and domainToUnicode().
     // crbug.com/493908
     // static USVString domainToASCII(USVString domain);
     // static USVString domainToUnicode(USVString domain);
 
-    // TODO(philipj): This should be in a partial interface definition:
-    // File API
-    // https://w3c.github.io/FileAPI/#creating-revoking
-    // TODO(philipj): The return type should not be nullable.
-    [RaisesException, CallWith=ExecutionContext] static DOMString? createObjectURL(Blob blob);
-    [CallWith=ExecutionContext] static void revokeObjectURL(DOMString url);
-    readonly attribute URLSearchParams searchParams;
-};
+    stringifier attribute USVString href;
+    readonly attribute USVString origin;
 
-URL implements URLUtils;
+    attribute USVString protocol;
+    attribute USVString username;
+    attribute USVString password;
+    attribute USVString host;
+    attribute USVString hostname;
+    attribute USVString port;
+    attribute USVString pathname;
+    attribute USVString search;
+    readonly attribute URLSearchParams searchParams;
+    attribute USVString hash;
+};

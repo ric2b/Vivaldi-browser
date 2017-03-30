@@ -11,6 +11,7 @@
 #include "base/i18n/break_iterator.h"
 #include "base/i18n/char_iterator.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -403,9 +404,10 @@ class HarfBuzzLineBreaker {
       // Merge segments that belong to the same run.
       if (last_segment.run == segment.run) {
         DCHECK_EQ(last_segment.char_range.end(), segment.char_range.start());
+        // Check there is less than a pixel between one run and the next.
         DCHECK_LE(
             std::abs(last_segment.x_range.end() - segment.x_range.start()),
-            std::numeric_limits<float>::epsilon());
+            1.0f);
         last_segment.char_range.set_end(segment.char_range.end());
         last_segment.x_range.set_end(SkScalarToFloat(text_x_) +
                                      segment.width());
@@ -566,21 +568,31 @@ struct CaseInsensitiveCompare {
 
 namespace internal {
 
-TextRunHarfBuzz::TextRunHarfBuzz()
+#if !defined(OS_MACOSX)
+sk_sp<SkTypeface> CreateSkiaTypeface(const gfx::Font& font, int style) {
+  int skia_style = SkTypeface::kNormal;
+  skia_style |= (style & Font::BOLD) ? SkTypeface::kBold : 0;
+  skia_style |= (style & Font::ITALIC) ? SkTypeface::kItalic : 0;
+  return sk_sp<SkTypeface>(SkTypeface::CreateFromName(
+      font.GetFontName().c_str(), static_cast<SkTypeface::Style>(skia_style)));
+}
+#endif
+
+TextRunHarfBuzz::TextRunHarfBuzz(const gfx::Font& template_font)
     : width(0.0f),
       preceding_run_widths(0.0f),
       is_rtl(false),
       level(0),
       script(USCRIPT_INVALID_CODE),
       glyph_count(static_cast<size_t>(-1)),
+      font(template_font),
       font_size(0),
       baseline_offset(0),
       baseline_type(0),
       font_style(0),
       strike(false),
       diagonal_strike(false),
-      underline(false) {
-}
+      underline(false) {}
 
 TextRunHarfBuzz::~TextRunHarfBuzz() {}
 
@@ -760,8 +772,9 @@ RenderTextHarfBuzz::RenderTextHarfBuzz()
 
 RenderTextHarfBuzz::~RenderTextHarfBuzz() {}
 
-scoped_ptr<RenderText> RenderTextHarfBuzz::CreateInstanceOfSameType() const {
-  return make_scoped_ptr(new RenderTextHarfBuzz);
+std::unique_ptr<RenderText> RenderTextHarfBuzz::CreateInstanceOfSameType()
+    const {
+  return base::WrapUnique(new RenderTextHarfBuzz);
 }
 
 bool RenderTextHarfBuzz::MultilineSupported() const {
@@ -769,11 +782,9 @@ bool RenderTextHarfBuzz::MultilineSupported() const {
 }
 
 const base::string16& RenderTextHarfBuzz::GetDisplayText() {
-  // TODO(oshima): Consider supporting eliding multi-line text.
-  // This requires max_line support first.
-  if (multiline() ||
-      elide_behavior() == NO_ELIDE ||
-      elide_behavior() == FADE_TAIL) {
+  // TODO(krb): Consider other elision modes for multiline.
+  if ((multiline() && (max_lines() == 0 || elide_behavior() != ELIDE_TAIL)) ||
+      elide_behavior() == NO_ELIDE || elide_behavior() == FADE_TAIL) {
     // Call UpdateDisplayText to clear |display_text_| and |text_elided_|
     // on the RenderText class.
     UpdateDisplayText(0);
@@ -1089,7 +1100,7 @@ void RenderTextHarfBuzz::EnsureLayout() {
   if (lines().empty()) {
     // TODO(ckocagil): Remove ScopedTracker below once crbug.com/441028 is
     // fixed.
-    scoped_ptr<tracked_objects::ScopedTracker> tracking_profile(
+    std::unique_ptr<tracked_objects::ScopedTracker> tracking_profile(
         new tracked_objects::ScopedTracker(
             FROM_HERE_WITH_EXPLICIT_FUNCTION("441028 HarfBuzzLineBreaker")));
 
@@ -1135,7 +1146,7 @@ void RenderTextHarfBuzz::DrawVisualText(internal::SkiaTextRenderer* renderer) {
       renderer->SetFontRenderParams(run.render_params,
                                     subpixel_rendering_suppressed());
       Range glyphs_range = run.CharRangeToGlyphRange(segment.char_range);
-      scoped_ptr<SkPoint[]> positions(new SkPoint[glyphs_range.length()]);
+      std::unique_ptr<SkPoint[]> positions(new SkPoint[glyphs_range.length()]);
       SkScalar offset_x = preceding_segment_widths -
                           ((glyphs_range.GetMin() != 0)
                                ? run.positions[glyphs_range.GetMin()].x()
@@ -1243,7 +1254,8 @@ void RenderTextHarfBuzz::ItemizeTextToRuns(
   // to misbehave since they expect non-zero text metrics from a non-empty text.
   base::i18n::BiDiLineIterator bidi_iterator;
   if (!bidi_iterator.Open(text, GetTextDirection(text))) {
-    internal::TextRunHarfBuzz* run = new internal::TextRunHarfBuzz;
+    internal::TextRunHarfBuzz* run =
+        new internal::TextRunHarfBuzz(font_list().GetPrimaryFont());
     run->range = Range(0, text.length());
     run_list_out->add(run);
     run_list_out->InitIndexMap();
@@ -1263,7 +1275,8 @@ void RenderTextHarfBuzz::ItemizeTextToRuns(
   internal::StyleIterator style(empty_colors, baselines(), styles());
 
   for (size_t run_break = 0; run_break < text.length();) {
-    internal::TextRunHarfBuzz* run = new internal::TextRunHarfBuzz;
+    internal::TextRunHarfBuzz* run =
+        new internal::TextRunHarfBuzz(font_list().GetPrimaryFont());
     run->range.set_start(run_break);
     run->font_style = (style.style(BOLD) ? Font::BOLD : 0) |
                       (style.style(ITALIC) ? Font::ITALIC : 0);
@@ -1366,7 +1379,7 @@ void RenderTextHarfBuzz::ShapeRun(const base::string16& text,
     }
   }
 
-  Font best_font;
+  Font best_font(primary_font);
   FontRenderParams best_render_params;
   size_t best_missing_glyphs = std::numeric_limits<size_t>::max();
 
@@ -1377,7 +1390,7 @@ void RenderTextHarfBuzz::ShapeRun(const base::string16& text,
   }
 
 #if defined(OS_WIN)
-  Font uniscribe_font;
+  Font uniscribe_font(primary_font);
   std::string uniscribe_family;
   const base::char16* run_text = &(text[run->range.start()]);
   if (GetUniscribeFallbackFont(primary_font, run_text, run->range.length(),
@@ -1455,10 +1468,11 @@ bool RenderTextHarfBuzz::ShapeRunWithFont(const base::string16& text,
                                           const gfx::Font& font,
                                           const FontRenderParams& params,
                                           internal::TextRunHarfBuzz* run) {
-  skia::RefPtr<SkTypeface> skia_face =
-      internal::CreateSkiaTypeface(font, run->font_style);
-  if (skia_face == NULL)
+  sk_sp<SkTypeface> skia_face(
+      internal::CreateSkiaTypeface(font, run->font_style));
+  if (!skia_face)
     return false;
+
   run->skia_face = skia_face;
   run->font = font;
   run->render_params = params;

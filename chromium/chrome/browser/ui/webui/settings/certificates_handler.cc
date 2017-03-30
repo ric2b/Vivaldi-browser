@@ -486,6 +486,8 @@ void CertificatesHandler::AssignWebUICallbackId(const base::ListValue* args) {
 }
 
 void CertificatesHandler::HandleGetCATrust(const base::ListValue* args) {
+  AllowJavascript();
+
   CHECK_EQ(2U, args->GetSize());
   AssignWebUICallbackId(args);
   std::string node_id;
@@ -985,14 +987,16 @@ void CertificatesHandler::CertificateManagerModelReady() {
       certificate_manager_model_->is_user_db_available());
   base::FundamentalValue tpm_available_value(
       certificate_manager_model_->is_tpm_available());
-  web_ui()->CallJavascriptFunction(
-      "cr.webUIListenerCallback", base::StringValue("certificates-model-ready"),
-      user_db_available_value, tpm_available_value);
+  CallJavascriptFunction("cr.webUIListenerCallback",
+                         base::StringValue("certificates-model-ready"),
+                         user_db_available_value, tpm_available_value);
   certificate_manager_model_->Refresh();
 }
 
 void CertificatesHandler::HandleRefreshCertificates(
     const base::ListValue* args) {
+  AllowJavascript();
+
   if (certificate_manager_model_) {
     // Already have a model, the webui must be re-loading.  Just re-run the
     // webui initialization.
@@ -1076,9 +1080,9 @@ void CertificatesHandler::PopulateTree(
     }
     std::sort(nodes->begin(), nodes->end(), comparator);
 
-    web_ui()->CallJavascriptFunction("cr.webUIListenerCallback",
-                                     base::StringValue("certificates-changed"),
-                                     base::StringValue(tab_name), *nodes);
+    CallJavascriptFunction("cr.webUIListenerCallback",
+                           base::StringValue("certificates-changed"),
+                           base::StringValue(tab_name), *nodes);
   }
 }
 

@@ -7,12 +7,11 @@ package org.chromium.chrome.browser.physicalweb;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.AsyncTask;
-import android.preference.PreferenceManager;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
-
 import org.json.JSONArray;
 import org.json.JSONException;
 
@@ -54,7 +53,6 @@ public class PhysicalWebUma {
             "PhysicalWeb.TotalUrls.OnRefresh";
     private static final String ACTIVITY_REFERRALS = "PhysicalWeb.ActivityReferral";
     private static final String PHYSICAL_WEB_STATE = "PhysicalWeb.State";
-    private static final String CHROME_START = "ChromeStart";
     private static final String LAUNCH_FROM_PREFERENCES = "LaunchFromPreferences";
     private static final String LAUNCH_FROM_DIAGNOSTICS = "LaunchFromDiagnostics";
     private static final String BLUETOOTH = "Bluetooth";
@@ -208,13 +206,6 @@ public class PhysicalWebUma {
     }
 
     /**
-     * Records the Physical Web state on Chrome startup.
-     */
-    public static void onChromeStart(Context context) {
-        recordPhysicalWebState(context, CHROME_START);
-    }
-
-    /**
      * Calculate a Physical Web state.
      * The Physical Web state includes:
      * - The location provider
@@ -250,7 +241,7 @@ public class PhysicalWebUma {
         sUploadAllowed = true;
 
         // Read the metrics.
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
         if (prefs.getBoolean(HAS_DEFERRED_METRICS_KEY, false)) {
             AsyncTask.THREAD_POOL_EXECUTOR.execute(new UmaUploader(prefs));
         }
@@ -261,7 +252,7 @@ public class PhysicalWebUma {
     }
 
     private static void storeAction(Context context, String key) {
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
         int count = prefs.getInt(key, 0);
         prefs.edit()
                 .putBoolean(HAS_DEFERRED_METRICS_KEY, true)
@@ -270,7 +261,7 @@ public class PhysicalWebUma {
     }
 
     private static void storeValue(Context context, String key, Object value) {
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
         SharedPreferences.Editor prefsEditor = prefs.edit();
         JSONArray values = null;
         try {
@@ -338,11 +329,6 @@ public class PhysicalWebUma {
             uploadCounts(TOTAL_URLS_INITIAL_COUNTS);
             uploadCounts(TOTAL_URLS_REFRESH_COUNTS);
             uploadEnums(ACTIVITY_REFERRALS, ListUrlsActivity.REFERER_BOUNDARY);
-            uploadEnums(createStateString(LOCATION_SERVICES, CHROME_START), BOOLEAN_BOUNDARY);
-            uploadEnums(createStateString(LOCATION_PERMISSION, CHROME_START), BOOLEAN_BOUNDARY);
-            uploadEnums(createStateString(BLUETOOTH, CHROME_START), TRISTATE_BOUNDARY);
-            uploadEnums(createStateString(DATA_CONNECTION, CHROME_START), BOOLEAN_BOUNDARY);
-            uploadEnums(createStateString(PREFERENCE, CHROME_START), TRISTATE_BOUNDARY);
             uploadEnums(createStateString(LOCATION_SERVICES, LAUNCH_FROM_DIAGNOSTICS),
                     BOOLEAN_BOUNDARY);
             uploadEnums(createStateString(LOCATION_PERMISSION, LAUNCH_FROM_DIAGNOSTICS),

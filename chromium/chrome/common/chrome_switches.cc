@@ -52,19 +52,15 @@ const char kAllowNaClFileHandleAPI[]        = "allow-nacl-file-handle-api";
 const char kAllowNaClSocketAPI[]            = "allow-nacl-socket-api";
 #endif
 
-#if defined(FULL_SAFE_BROWSING)
-const char kAllowUncheckedDangerousDownloads[] =
-    "allow-unchecked-dangerous-downloads";
-const char kDisallowUncheckedDangerousDownloads[] =
-    "disallow-unchecked-dangerous-downloads";
-#endif
-
 // Don't block outdated plugins.
 const char kAllowOutdatedPlugins[]          = "allow-outdated-plugins";
 
 // By default, an https page cannot run JavaScript, CSS or plugins from http
 // URLs. This provides an override to get the old insecure behavior.
 const char kAllowRunningInsecureContent[]   = "allow-running-insecure-content";
+
+// Allows Web Push notifications that do not show a notification.
+const char kAllowSilentPush[] = "allow-silent-push";
 
 // Prevents Chrome from requiring authorization to run certain widely installed
 // but less commonly used plugins.
@@ -204,6 +200,10 @@ const char kDisableAboutInSettings[]        = "disable-about-in-settings";
 // app to their shelf (or platform-specific equivalent)
 const char kDisableAddToShelf[] = "disable-add-to-shelf";
 
+#if defined(OS_ANDROID)
+const char kDisableAppLink[] = "disable-app-link";
+#endif
+
 // Disables the experimental asynchronous DNS client.
 const char kDisableAsyncDns[]               = "disable-async-dns";
 
@@ -281,9 +281,6 @@ const char kDisableMinimizeOnSecondLauncherItemClick[] =
 
 // Disables the new bookmark app system.
 const char kDisableNewBookmarkApps[]        = "disable-new-bookmark-apps";
-
-// Disables showing popular sites on the NTP.
-const char kDisableNTPPopularSites[]        = "disable-ntp-popular-sites";
 
 // Disable auto-reload of error pages if offline.
 const char kDisableOfflineAutoReload[]       = "disable-offline-auto-reload";
@@ -365,6 +362,13 @@ const char kEasyUnlockAppPath[]             = "easy-unlock-app-path";
 // app to their shelf (or platform-specific equivalent)
 const char kEnableAddToShelf[] = "enable-add-to-shelf";
 
+// Enables all bookmarks view in bookmark manager.
+const char kEnableAllBookmarksView[] = "enable-all-bookmarks-view";
+
+#if defined(OS_ANDROID)
+const char kEnableAppLink[] = "enable-app-link";
+#endif
+
 // Enable OS integration for Chrome app file associations.
 const char kEnableAppsFileAssociations[]    = "enable-apps-file-associations";
 
@@ -424,12 +428,20 @@ const char kEnableGoogleBrandedContextMenu[] =
 // Enables the Material Design version of chrome://extensions.
 const char kEnableMaterialDesignExtensions[] = "enable-md-extensions";
 
+// Enables the Material Design feedback form.
+const char kEnableMaterialDesignFeedback[] = "enable-md-feedback";
+
 // Enables the Material Design policy page at chrome://md-policy.
 const char kEnableMaterialDesignPolicyPage[]  = "enable-md-policy-page";
 
 // Runs the Native Client inside the renderer process and enables GPU plugin
 // (internally adds lEnableGpuPlugin to the command line).
 const char kEnableNaCl[]                    = "enable-nacl";
+
+#if defined(OS_CHROMEOS)
+// Enables native cups integration
+const char kEnableNativeCups[] = "enable-native-cups";
+#endif // defined(OS_CHROMEOS)
 
 // Enables the use of native notifications instead of using the Chrome based
 // ones.
@@ -445,14 +457,6 @@ const char kEnableNetBenchmarking[]         = "enable-net-benchmarking";
 
 // Enables the new bookmark app system.
 const char kEnableNewBookmarkApps[]         = "enable-new-bookmark-apps";
-
-// Enables showing popular sites on the NTP.
-const char kEnableNTPPopularSites[]         = "enable-ntp-popular-sites";
-
-// Enables using the default search engine country to show country specific
-// popular sites on the NTP.
-const char kEnableNTPSearchEngineCountryDetection[] =
-    "enable-ntp-search-engine-country-detection";
 
 // Enable auto-reload of error pages if offline.
 const char kEnableOfflineAutoReload[]       = "enable-offline-auto-reload";
@@ -499,8 +503,9 @@ const char kEnableQuic[]                    = "enable-quic";
 // This only has an effect if QUIC protocol is enabled.
 const char kEnableQuicPortSelection[]       = "enable-quic-port-selection";
 
-// Enables support for HTTP alternative services.
-const char kEnableAlternativeServices[] = "enable-alternative-services";
+// If the WebRTC logging private API is active, enables WebRTC event logging.
+const char kEnableWebRtcEventLoggingFromExtension[] =
+    "enable-webrtc-event-logging-from-extension";
 
 // Enables using bubbles for session restore request instead of infobars.
 const char kEnableSessionCrashedBubble[] = "enable-session-crashed-bubble";
@@ -772,6 +777,9 @@ const char kOriginToForceQuicOn[]           = "origin-to-force-quic-on";
 // chrome process started. (See ProcessSingleton for more details.)
 const char kOriginalProcessStartTime[]      = "original-process-start-time";
 
+// Overrides the default public key for checking origin trial tokens.
+const char kOriginTrialPublicKey[] = "origin-trial-public-key";
+
 // Packages an extension to a .crx installable file from a given directory.
 const char kPackExtension[]                 = "pack-extension";
 
@@ -867,6 +875,12 @@ const char kProxyPacUrl[]                   = "proxy-pac-url";
 // highest priority.
 const char kProxyServer[]                   = "proxy-server";
 
+// Specifies the time for tab purging and suspending. When the indicated time
+// passes after a tab goes backgrounded, the backgrounded tab is purged and
+// suspended to save memory usage. The default value is "0" and purging and
+// suspending never happen.
+const char kPurgeAndSuspendTime[]           = "purge-and-suspend-time";
+
 // Specifies a comma separated list of QUIC connection options to send to
 // the server.
 const char kQuicConnectionOptions[]         = "quic-connection-options";
@@ -889,11 +903,6 @@ const char kRemoteDebuggingTargets[] = "remote-debugging-targets";
 // switch is the number of tabs to wait until loaded before 'load completed' is
 // sent to the ui_test.
 const char kRestoreLastSession[]            = "restore-last-session";
-
-// Causes all iframes to be denied all permissions by default. Allowing
-// particular permissions for an iframe may involve listing the names of
-// these permissions as values of new iframe attributes.
-const char kRestrictIFramePermissions[] = "restrict-iframe-permissions";
 
 // Disable saving pages as HTML-only, disable saving pages as HTML Complete
 // (with a directory of sub-resources). Enable only saving pages as MHTML.
@@ -1040,6 +1049,11 @@ const char kUnlimitedStorage[]              = "unlimited-storage";
 const char kUnsafelyTreatInsecureOriginAsSecure[] =
     "unsafely-treat-insecure-origin-as-secure";
 
+// Pass the full https:// URL to PAC (Proxy Auto Config) scripts. As opposed to
+// the default behavior which strips path and query components before passing
+// to the PAC scripts.
+const char kUnsafePacUrl[] = "unsafe-pac-url";
+
 // A string used to override the default user agent with a custom one.
 const char kUserAgent[]                     = "user-agent";
 
@@ -1067,6 +1081,9 @@ const char kWindowPosition[]                = "window-position";
 
 // Specify the initial window size: --window-size=w,h
 const char kWindowSize[]                    = "window-size";
+
+// Specify the initial window workspace: --window-workspace=id
+const char kWindowWorkspace[]               = "window-workspace";
 
 // Uses WinHTTP to fetch and evaluate PAC scripts. Otherwise the default is to
 // use Chromium's network stack to fetch, and V8 to evaluate.
@@ -1120,6 +1137,9 @@ const char kHelpShort[]                     = "h";
 
 // Specifies which password store to use (detect, default, gnome, kwallet).
 const char kPasswordStore[]                 = "password-store";
+
+// Updates X11Desktophandler::wm_user_time_ms with the latest X server time.
+const char kWmUserTimeMs[]              = "wm-user-time-ms";
 #endif
 
 #if defined(OS_MACOSX)
@@ -1146,9 +1166,6 @@ const char kDisableHostedAppsInWindows[] = "disable-hosted-apps-in-windows";
 const char kDisableMacViewsNativeAppWindows[] =
     "disable-mac-views-native-app-windows";
 
-// Prevents the save password bubble from being enabled.
-const char kDisableSavePasswordBubble[] = "disable-save-password-bubble";
-
 // Disables Translate experimental new UX which replaces the infobar.
 const char kDisableTranslateNewUX[] = "disable-translate-new-ux";
 
@@ -1158,6 +1175,9 @@ const char kEnableAppInfoDialogMac[] = "enable-app-info-dialog-mac";
 
 // Enables custom Cmd+` window cycling for platform apps and hosted apps.
 const char kEnableAppWindowCycling[] = "enable-app-window-cycling";
+
+// Enables tab detaching in fullscreen mode on Mac.
+const char kEnableFullscreenTabDetaching[] = "enable-fullscreen-tab-detaching";
 
 // Allows hosted apps to be opened in windows on Mac.
 const char kEnableHostedAppsInWindows[] = "enable-hosted-apps-in-windows";
@@ -1169,9 +1189,6 @@ const char kEnableMacViewsNativeAppWindows[] =
 // Causes Chrome to use an equivalent toolkit-views version of a browser dialog
 // when available, rather than a Cocoa one.
 const char kEnableMacViewsDialogs[] = "enable-mac-views-dialogs";
-
-// Enables save password prompt bubble.
-const char kEnableSavePasswordBubble[] = "enable-save-password-bubble";
 
 // Enables Translate experimental new UX which replaces the infobar.
 const char kEnableTranslateNewUX[] = "enable-translate-new-ux";
@@ -1257,13 +1274,6 @@ const char kEnableWaylandServer[] = "enable-wayland-server";
 #endif
 
 #if defined(OS_ANDROID)
-// Sets the threshold for when to disable auto-hiding the toolbar. If the
-// device's width and height are above the threshold, the toolbar will never
-// be hidden due to scrolling. It will still be hidden if page contents go
-// fullscreen.
-const char kDisableAutoHidingToolbarThreshold[] =
-    "disable-auto-hiding-toolbar-threshold";
-
 // Forces the update menu item to show.
 const char kForceShowUpdateMenuItem[] = "force-show-update-menu-item";
 
@@ -1312,6 +1322,11 @@ bool AboutInSettingsEnabled() {
 bool MdExtensionsEnabled() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       ::switches::kEnableMaterialDesignExtensions);
+}
+
+bool MdFeedbackEnabled() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      ::switches::kEnableMaterialDesignFeedback);
 }
 
 bool MdPolicyPageEnabled() {

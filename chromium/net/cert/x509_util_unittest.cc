@@ -5,9 +5,9 @@
 #include "net/cert/x509_util.h"
 
 #include <algorithm>
+#include <memory>
 
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "crypto/rsa_private_key.h"
 #include "net/cert/x509_certificate.h"
@@ -55,7 +55,7 @@ TEST(X509UtilTest, SortClientCertificates) {
 // This test creates a self-signed cert and a private key and then verifies the
 // content of the certificate.
 TEST(X509UtilTest, CreateKeyAndSelfSigned) {
-  scoped_ptr<crypto::RSAPrivateKey> private_key;
+  std::unique_ptr<crypto::RSAPrivateKey> private_key;
 
   std::string der_cert;
   ASSERT_TRUE(x509_util::CreateKeyAndSelfSignedCert(
@@ -166,7 +166,7 @@ TEST(X509UtilTest, CreateSelfSigned) {
   input.resize(sizeof(private_key_info));
   memcpy(&input.front(), private_key_info, sizeof(private_key_info));
 
-  scoped_ptr<crypto::RSAPrivateKey> private_key(
+  std::unique_ptr<crypto::RSAPrivateKey> private_key(
       crypto::RSAPrivateKey::CreateFromPrivateKeyInfo(input));
   ASSERT_TRUE(private_key.get());
 
@@ -188,7 +188,6 @@ TEST(X509UtilTest, CreateSelfSigned) {
   EXPECT_FALSE(cert->HasExpired());
 }
 
-#if defined(USE_OPENSSL)
 // This is a test case based on
 // http://blogs.msdn.com/b/openspecification/archive/2013/03/26/ntlm-and-channel-binding-hash-aka-exteneded-protection-for-authentication.aspx
 // There doesn't seem to be too many public test vectors for channel bindings.
@@ -698,7 +697,6 @@ TEST(X509UtilTest, CreateChannelBindings_Unsupported_MD4) {
       x509_util::GetTLSServerEndPointChannelBinding(*cert, &channel_bindings));
   EXPECT_TRUE(channel_bindings.empty());
 }
-#endif
 
 }  // namespace x509_util
 

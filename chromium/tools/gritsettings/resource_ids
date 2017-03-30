@@ -64,6 +64,9 @@
     "includes": [6100],
     "structures": [6150],
   },
+  "ash/wm/common/resources/ash_wm_common_resources.grd": {
+    "structures": [6700],
+  },
   "ui/keyboard/keyboard_resources.grd": {
     "includes": [6850],
   },
@@ -173,6 +176,11 @@
     "includes": [23250],
   },
   "content/content_resources.grd": {
+    "includes": [23950],
+  },
+  # ios_web strings and content strings must start at the same id.
+  # App only use one file depending on whether it is iOS or other platform.
+  "ios/web/ios_web_resources.grd": {
     "includes": [23950],
   },
   "content/shell/shell_resources.grd": {

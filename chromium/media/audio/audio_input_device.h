@@ -53,17 +53,17 @@
 #ifndef MEDIA_AUDIO_AUDIO_INPUT_DEVICE_H_
 #define MEDIA_AUDIO_AUDIO_INPUT_DEVICE_H_
 
+#include <memory>
 #include <string>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "media/audio/audio_device_thread.h"
 #include "media/audio/audio_input_ipc.h"
-#include "media/audio/audio_parameters.h"
 #include "media/audio/scoped_task_runner_observer.h"
 #include "media/base/audio_capturer_source.h"
+#include "media/base/audio_parameters.h"
 #include "media/base/media_export.h"
 
 namespace media {
@@ -81,7 +81,7 @@ class MEDIA_EXPORT AudioInputDevice
  public:
   // NOTE: Clients must call Initialize() before using.
   AudioInputDevice(
-      scoped_ptr<AudioInputIPC> ipc,
+      std::unique_ptr<AudioInputIPC> ipc,
       const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner);
 
   // AudioCapturerSource implementation.
@@ -136,7 +136,7 @@ class MEDIA_EXPORT AudioInputDevice
   // A pointer to the IPC layer that takes care of sending requests over to
   // the AudioInputRendererHost.  Only valid when state_ != IPC_CLOSED and must
   // only be accessed on the IO thread.
-  scoped_ptr<AudioInputIPC> ipc_;
+  std::unique_ptr<AudioInputIPC> ipc_;
 
   // Current state (must only be accessed from the IO thread).  See comments for
   // State enum above.
@@ -157,7 +157,7 @@ class MEDIA_EXPORT AudioInputDevice
   // guard to control stopping and starting the audio thread.
   base::Lock audio_thread_lock_;
   AudioDeviceThread audio_thread_;
-  scoped_ptr<AudioInputDevice::AudioThreadCallback> audio_callback_;
+  std::unique_ptr<AudioInputDevice::AudioThreadCallback> audio_callback_;
 
   // Temporary hack to ignore OnStreamCreated() due to the user calling Stop()
   // so we don't start the audio thread pointing to a potentially freed

@@ -21,7 +21,14 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/webrtc/base/bind.h"
 #include "third_party/webrtc/base/refcount.h"
+#include "third_party/webrtc/modules/video_coding/codecs/h264/include/h264.h"
 #include "third_party/webrtc/video_frame.h"
+
+#if defined(OS_WIN)
+#include "base/command_line.h"
+#include "base/win/windows_version.h"
+#include "content/public/common/content_switches.h"
+#endif  // defined(OS_WIN)
 
 namespace content {
 
@@ -89,6 +96,16 @@ std::unique_ptr<RTCVideoDecoder> RTCVideoDecoder::Create(
     webrtc::VideoCodecType type,
     media::GpuVideoAcceleratorFactories* factories) {
   std::unique_ptr<RTCVideoDecoder> decoder;
+// See https://bugs.chromium.org/p/webrtc/issues/detail?id=5717.
+#if defined(OS_WIN)
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableWin7WebRtcHWH264Decoding) &&
+      type == webrtc::kVideoCodecH264 &&
+      base::win::GetVersion() == base::win::VERSION_WIN7) {
+    DLOG(ERROR) << "H264 HW decoding on Win7 is not supported.";
+    return decoder;
+  }
+#endif  // defined(OS_WIN)
   // Convert WebRTC codec type to media codec profile.
   media::VideoCodecProfile profile;
   switch (type) {
@@ -163,7 +180,10 @@ int32_t RTCVideoDecoder::Decode(
   if (state_ == DECODE_ERROR) {
     LOG(ERROR) << "Decoding error occurred.";
     // Try reseting the session up to |kNumVDAErrorsHandled| times.
-    if (vda_error_counter_ > kNumVDAErrorsBeforeSWFallback) {
+    // Check if SW H264 implementation is available before falling back.
+    if (vda_error_counter_ > kNumVDAErrorsBeforeSWFallback &&
+        (video_codec_type_ != webrtc::kVideoCodecH264 ||
+         webrtc::H264Decoder::IsSupported())) {
       DLOG(ERROR) << vda_error_counter_
                   << " errors reported by VDA, falling back to software decode";
       return WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE;
@@ -384,8 +404,12 @@ void RTCVideoDecoder::PictureReady(const media::Picture& picture) {
     return;
   }
 
+  media::VideoPixelFormat pixel_format = vda_->GetOutputFormat();
+  if (pixel_format == media::PIXEL_FORMAT_UNKNOWN)
+    pixel_format = media::PIXEL_FORMAT_ARGB;
+
   scoped_refptr<media::VideoFrame> frame =
-      CreateVideoFrame(picture, pb, timestamp, visible_rect);
+      CreateVideoFrame(picture, pb, timestamp, visible_rect, pixel_format);
   if (!frame) {
     NotifyError(media::VideoDecodeAccelerator::PLATFORM_FAILURE);
     return;
@@ -416,23 +440,28 @@ scoped_refptr<media::VideoFrame> RTCVideoDecoder::CreateVideoFrame(
     const media::Picture& picture,
     const media::PictureBuffer& pb,
     uint32_t timestamp,
-    const gfx::Rect& visible_rect) {
+    const gfx::Rect& visible_rect,
+    media::VideoPixelFormat pixel_format) {
   DCHECK(decoder_texture_target_);
   // Convert timestamp from 90KHz to ms.
   base::TimeDelta timestamp_ms = base::TimeDelta::FromInternalValue(
       base::checked_cast<uint64_t>(timestamp) * 1000 / 90);
-  // TODO(mcasas): The incoming data is actually a YUV format, but is labelled
-  // as ARGB. This prevents the compositor from messing with it, since the
-  // underlying platform can handle the former format natively. Make sure the
+  // TODO(mcasas): The incoming data may actually be in a YUV format, but may be
+  // labelled as ARGB. This may or may not be reported by VDA, depending on
+  // whether it provides an implementation of VDA::GetOutputFormat().
+  // This prevents the compositor from messing with it, since the underlying
+  // platform can handle the former format natively. Make sure the
   // correct format is used and everyone down the line understands it.
-  scoped_refptr<media::VideoFrame> frame = media::VideoFrame::WrapNativeTexture(
-      media::PIXEL_FORMAT_ARGB,
+  gpu::MailboxHolder holders[media::VideoFrame::kMaxPlanes] = {
       gpu::MailboxHolder(pb.texture_mailbox(0), gpu::SyncToken(),
-                         decoder_texture_target_),
-      media::BindToCurrentLoop(base::Bind(
-          &RTCVideoDecoder::ReleaseMailbox, weak_factory_.GetWeakPtr(),
-          factories_, picture.picture_buffer_id(), pb.texture_ids()[0])),
-      pb.size(), visible_rect, visible_rect.size(), timestamp_ms);
+                         decoder_texture_target_)};
+  scoped_refptr<media::VideoFrame> frame =
+      media::VideoFrame::WrapNativeTextures(
+          pixel_format, holders,
+          media::BindToCurrentLoop(base::Bind(
+              &RTCVideoDecoder::ReleaseMailbox, weak_factory_.GetWeakPtr(),
+              factories_, picture.picture_buffer_id(), pb.texture_ids()[0])),
+          pb.size(), visible_rect, visible_rect.size(), timestamp_ms);
   if (frame && picture.allow_overlay()) {
     frame->metadata()->SetBoolean(media::VideoFrameMetadata::ALLOW_OVERLAY,
                                   true);

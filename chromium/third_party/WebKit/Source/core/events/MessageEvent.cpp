@@ -35,7 +35,7 @@ namespace blink {
 
 static inline bool isValidSource(EventTarget* source)
 {
-    return !source || source->toDOMWindow() || source->toMessagePort();
+    return !source || source->toLocalDOMWindow() || source->toMessagePort();
 }
 
 MessageEvent::MessageEvent()
@@ -93,7 +93,7 @@ MessageEvent::MessageEvent(PassRefPtr<SerializedScriptValue> data, const String&
     , m_origin(origin)
     , m_lastEventId(lastEventId)
     , m_source(source)
-    , m_channels(channels)
+    , m_channels(std::move(channels))
     , m_suborigin(suborigin)
 {
     if (m_dataAsSerializedScriptValue)
@@ -117,7 +117,7 @@ MessageEvent::MessageEvent(Blob* data, const String& origin, const String& subor
 {
 }
 
-MessageEvent::MessageEvent(PassRefPtr<DOMArrayBuffer> data, const String& origin, const String& suborigin)
+MessageEvent::MessageEvent(DOMArrayBuffer* data, const String& origin, const String& suborigin)
     : Event(EventTypeNames::message, false, false)
     , m_dataType(DataTypeArrayBuffer)
     , m_dataAsArrayBuffer(data)
@@ -140,7 +140,7 @@ MessageEvent* MessageEvent::create(const AtomicString& type, const MessageEventI
 
 void MessageEvent::initMessageEvent(const AtomicString& type, bool canBubble, bool cancelable, ScriptValue data, const String& origin, const String& lastEventId, DOMWindow* source, MessagePortArray* ports)
 {
-    if (dispatched())
+    if (isBeingDispatched())
         return;
 
     initEvent(type, canBubble, cancelable);
@@ -156,7 +156,7 @@ void MessageEvent::initMessageEvent(const AtomicString& type, bool canBubble, bo
 
 void MessageEvent::initMessageEvent(const AtomicString& type, bool canBubble, bool cancelable, PassRefPtr<SerializedScriptValue> data, const String& origin, const String& lastEventId, DOMWindow* source, MessagePortArray* ports)
 {
-    if (dispatched())
+    if (isBeingDispatched())
         return;
 
     initEvent(type, canBubble, cancelable);
@@ -200,12 +200,13 @@ MessagePortArray MessageEvent::ports() const
 
 void MessageEvent::entangleMessagePorts(ExecutionContext* context)
 {
-    m_ports = MessagePort::entanglePorts(*context, m_channels.release());
+    m_ports = MessagePort::entanglePorts(*context, std::move(m_channels));
 }
 
 DEFINE_TRACE(MessageEvent)
 {
     visitor->trace(m_dataAsBlob);
+    visitor->trace(m_dataAsArrayBuffer);
     visitor->trace(m_source);
     visitor->trace(m_ports);
     Event::trace(visitor);

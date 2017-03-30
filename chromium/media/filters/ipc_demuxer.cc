@@ -52,7 +52,7 @@ namespace media {
 IPCDemuxer::IPCDemuxer(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
     DataSource* data_source,
-    scoped_ptr<IPCMediaPipelineHost> ipc_media_pipeline_host,
+    std::unique_ptr<IPCMediaPipelineHost> ipc_media_pipeline_host,
     const std::string& content_type,
     const GURL& url,
     const scoped_refptr<MediaLog>& media_log)

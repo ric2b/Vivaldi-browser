@@ -18,6 +18,10 @@
 #include "sync/base/sync_export.h"
 #include "sync/internal_api/public/activation_context.h"
 
+namespace syncer {
+class DataTypeErrorHandler;
+}  // namespace syncer
+
 namespace syncer_v2 {
 
 class DataBatch;
@@ -92,18 +96,24 @@ class SYNC_EXPORT ModelTypeService {
       const EntityData& local_data,
       const EntityData& remote_data) const;
 
-  void clear_change_processor();
+  // Called by the DataTypeController to gather additional information needed
+  // before the processor can be connected to a sync worker. Once the
+  // metadata has been loaded, the info is collected and given to |callback|.
+  void OnSyncStarting(syncer::DataTypeErrorHandler* error_handler,
+                      const ModelTypeChangeProcessor::StartCallback& callback);
 
-  void OnSyncStarting(const ModelTypeChangeProcessor::StartCallback& callback);
+  // Indicates that we no longer want to do any sync-related things for this
+  // data type. Severs all ties to the sync thread, deletes all local sync
+  // metadata, and then destroys the change processor.
+  // TODO(crbug.com/584365): This needs to be called from DataTypeController.
+  void DisableSync();
 
  protected:
-  // TODO(skym): See crbug/547087, do we need all these accessors?
+  void CreateChangeProcessor();
+
   ModelTypeChangeProcessor* change_processor() const;
 
-  ModelTypeChangeProcessor* GetOrCreateChangeProcessor();
-
-  // Model type for this service.
-  syncer::ModelType type() const;
+  void clear_change_processor();
 
  private:
   std::unique_ptr<ModelTypeChangeProcessor> change_processor_;

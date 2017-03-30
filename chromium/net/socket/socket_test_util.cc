@@ -13,9 +13,10 @@
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "net/base/address_family.h"
 #include "net/base/address_list.h"
@@ -710,14 +711,14 @@ void MockClientSocketFactory::ResetNextMockIndexes() {
   mock_ssl_data_.ResetNextIndex();
 }
 
-scoped_ptr<DatagramClientSocket>
+std::unique_ptr<DatagramClientSocket>
 MockClientSocketFactory::CreateDatagramClientSocket(
     DatagramSocket::BindType bind_type,
     const RandIntCallback& rand_int_cb,
     NetLog* net_log,
     const NetLog::Source& source) {
   SocketDataProvider* data_provider = mock_data_.GetNext();
-  scoped_ptr<MockUDPClientSocket> socket(
+  std::unique_ptr<MockUDPClientSocket> socket(
       new MockUDPClientSocket(data_provider, net_log));
   if (bind_type == DatagramSocket::RANDOM_BIND)
     socket->set_source_port(
@@ -726,18 +727,20 @@ MockClientSocketFactory::CreateDatagramClientSocket(
   return std::move(socket);
 }
 
-scoped_ptr<StreamSocket> MockClientSocketFactory::CreateTransportClientSocket(
+std::unique_ptr<StreamSocket>
+MockClientSocketFactory::CreateTransportClientSocket(
     const AddressList& addresses,
+    std::unique_ptr<SocketPerformanceWatcher> socket_performance_watcher,
     NetLog* net_log,
     const NetLog::Source& source) {
   SocketDataProvider* data_provider = mock_data_.GetNext();
-  scoped_ptr<MockTCPClientSocket> socket(
+  std::unique_ptr<MockTCPClientSocket> socket(
       new MockTCPClientSocket(addresses, net_log, data_provider));
   return std::move(socket);
 }
 
-scoped_ptr<SSLClientSocket> MockClientSocketFactory::CreateSSLClientSocket(
-    scoped_ptr<ClientSocketHandle> transport_socket,
+std::unique_ptr<SSLClientSocket> MockClientSocketFactory::CreateSSLClientSocket(
+    std::unique_ptr<ClientSocketHandle> transport_socket,
     const HostPortPair& host_and_port,
     const SSLConfig& ssl_config,
     const SSLClientSocketContext& context) {
@@ -750,7 +753,7 @@ scoped_ptr<SSLClientSocket> MockClientSocketFactory::CreateSSLClientSocket(
                    next_ssl_data->next_protos_expected_in_ssl_config.end(),
                    ssl_config.alpn_protos.begin()));
   }
-  return scoped_ptr<SSLClientSocket>(new MockSSLClientSocket(
+  return std::unique_ptr<SSLClientSocket>(new MockSSLClientSocket(
       std::move(transport_socket), host_and_port, ssl_config, next_ssl_data));
 }
 
@@ -1137,15 +1140,14 @@ void MockSSLClientSocket::ConnectCallback(
 }
 
 MockSSLClientSocket::MockSSLClientSocket(
-    scoped_ptr<ClientSocketHandle> transport_socket,
+    std::unique_ptr<ClientSocketHandle> transport_socket,
     const HostPortPair& host_port_pair,
     const SSLConfig& ssl_config,
     SSLSocketDataProvider* data)
     : MockClientSocket(
           // Have to use the right BoundNetLog for LoadTimingInfo regression
           // tests.
-          transport_socket->socket()
-              ->NetLog()),
+          transport_socket->socket()->NetLog()),
       transport_(std::move(transport_socket)),
       data_(data) {
   DCHECK(data_);
@@ -1524,7 +1526,7 @@ int ClientSocketPoolTest::GetOrderOfRequest(size_t index) const {
 }
 
 bool ClientSocketPoolTest::ReleaseOneConnection(KeepAlive keep_alive) {
-  for (scoped_ptr<TestSocketRequest>& it : requests_) {
+  for (std::unique_ptr<TestSocketRequest>& it : requests_) {
     if (it->handle()->is_initialized()) {
       if (keep_alive == NO_KEEP_ALIVE)
         it->handle()->socket()->Disconnect();
@@ -1544,7 +1546,7 @@ void ClientSocketPoolTest::ReleaseAllConnections(KeepAlive keep_alive) {
 }
 
 MockTransportClientSocketPool::MockConnectJob::MockConnectJob(
-    scoped_ptr<StreamSocket> socket,
+    std::unique_ptr<StreamSocket> socket,
     ClientSocketHandle* handle,
     const CompletionCallback& callback)
     : socket_(std::move(socket)), handle_(handle), user_callback_(callback) {}
@@ -1612,12 +1614,12 @@ MockTransportClientSocketPool::MockTransportClientSocketPool(
                                 max_sockets_per_group,
                                 NULL,
                                 NULL,
+                                NULL,
                                 NULL),
       client_socket_factory_(socket_factory),
       last_request_priority_(DEFAULT_PRIORITY),
       release_count_(0),
-      cancel_count_(0) {
-}
+      cancel_count_(0) {}
 
 MockTransportClientSocketPool::~MockTransportClientSocketPool() {}
 
@@ -1630,18 +1632,18 @@ int MockTransportClientSocketPool::RequestSocket(
     const CompletionCallback& callback,
     const BoundNetLog& net_log) {
   last_request_priority_ = priority;
-  scoped_ptr<StreamSocket> socket =
+  std::unique_ptr<StreamSocket> socket =
       client_socket_factory_->CreateTransportClientSocket(
-          AddressList(), net_log.net_log(), NetLog::Source());
+          AddressList(), NULL, net_log.net_log(), NetLog::Source());
   MockConnectJob* job = new MockConnectJob(std::move(socket), handle, callback);
-  job_list_.push_back(make_scoped_ptr(job));
+  job_list_.push_back(base::WrapUnique(job));
   handle->set_pool_id(1);
   return job->Connect();
 }
 
 void MockTransportClientSocketPool::CancelRequest(const std::string& group_name,
                                                   ClientSocketHandle* handle) {
-  for (scoped_ptr<MockConnectJob>& it : job_list_) {
+  for (std::unique_ptr<MockConnectJob>& it : job_list_) {
     if (it->CancelHandle(handle)) {
       cancel_count_++;
       break;
@@ -1651,7 +1653,7 @@ void MockTransportClientSocketPool::CancelRequest(const std::string& group_name,
 
 void MockTransportClientSocketPool::ReleaseSocket(
     const std::string& group_name,
-    scoped_ptr<StreamSocket> socket,
+    std::unique_ptr<StreamSocket> socket,
     int id) {
   EXPECT_EQ(1, id);
   release_count_++;
@@ -1665,9 +1667,9 @@ MockSOCKSClientSocketPool::MockSOCKSClientSocketPool(
                             max_sockets_per_group,
                             NULL,
                             transport_pool,
+                            NULL,
                             NULL),
-      transport_pool_(transport_pool) {
-}
+      transport_pool_(transport_pool) {}
 
 MockSOCKSClientSocketPool::~MockSOCKSClientSocketPool() {}
 
@@ -1689,9 +1691,10 @@ void MockSOCKSClientSocketPool::CancelRequest(
   return transport_pool_->CancelRequest(group_name, handle);
 }
 
-void MockSOCKSClientSocketPool::ReleaseSocket(const std::string& group_name,
-                                              scoped_ptr<StreamSocket> socket,
-                                              int id) {
+void MockSOCKSClientSocketPool::ReleaseSocket(
+    const std::string& group_name,
+    std::unique_ptr<StreamSocket> socket,
+    int id) {
   return transport_pool_->ReleaseSocket(group_name, std::move(socket), id);
 }
 

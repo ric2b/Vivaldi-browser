@@ -184,13 +184,24 @@ _BANNED_CPP_FUNCTIONS = (
             "gnubby_auth_handler_linux\.cc$",
         r"^ui[\\\/]ozone[\\\/]platform[\\\/]drm[\\\/]host[\\\/]"
             "drm_display_host_manager\.cc$",
+        r"^ui[\\\/]base[\\\/]material_design[\\\/]"
+            "material_design_controller\.cc$",
       ),
+    ),
+    (
+      'skia::RefPtr',
+      (
+        'The use of skia::RefPtr is prohibited. ',
+        'Please use sk_sp<> instead.'
+      ),
+      True,
+      (),
     ),
     (
       'SkRefPtr',
       (
         'The use of SkRefPtr is prohibited. ',
-        'Please use skia::RefPtr instead.'
+        'Please use sk_sp<> instead.'
       ),
       True,
       (),
@@ -199,7 +210,7 @@ _BANNED_CPP_FUNCTIONS = (
       'SkAutoRef',
       (
         'The indirect use of SkRefPtr via SkAutoRef is prohibited. ',
-        'Please use skia::RefPtr instead.'
+        'Please use sk_sp<> instead.'
       ),
       True,
       (),
@@ -208,7 +219,7 @@ _BANNED_CPP_FUNCTIONS = (
       'SkAutoTUnref',
       (
         'The use of SkAutoTUnref is dangerous because it implicitly ',
-        'converts to a raw pointer. Please use skia::RefPtr instead.'
+        'converts to a raw pointer. Please use sk_sp<> instead.'
       ),
       True,
       (),
@@ -218,7 +229,7 @@ _BANNED_CPP_FUNCTIONS = (
       (
         'The indirect use of SkAutoTUnref through SkAutoUnref is dangerous ',
         'because it implicitly converts to a raw pointer. ',
-        'Please use skia::RefPtr instead.'
+        'Please use sk_sp<> instead.'
       ),
       True,
       (),
@@ -308,6 +319,7 @@ _VALID_OS_MACROS = (
 
 _ANDROID_SPECIFIC_PYDEPS_FILES = [
     'build/android/test_runner.pydeps',
+    'net/tools/testserver/testserver.pydeps',
 ]
 
 _GENERIC_PYDEPS_FILES = [
@@ -373,7 +385,7 @@ def _CheckNoIOStreamInHeaders(input_api, output_api):
       files.append(f)
 
   if len(files):
-    return [ output_api.PresubmitError(
+    return [output_api.PresubmitError(
         'Do not #include <iostream> in header files, since it inserts static '
         'initialization into every file including the header. Instead, '
         '#include <ostream>. See http://crbug.com/94794',
@@ -479,6 +491,20 @@ def _CheckUmaHistogramChanges(input_api, output_api):
     'been modified and the associated histogram name has no match in either '
     '%s or the modifications of it:' % (histograms_xml_path),  problems)]
 
+def _CheckFlakyTestUsage(input_api, output_api):
+  """Check that FlakyTest annotation is our own instead of the android one"""
+  pattern = input_api.re.compile(r'import android.test.FlakyTest;')
+  files = []
+  for f in input_api.AffectedSourceFiles(input_api.FilterSourceFile):
+    if f.LocalPath().endswith('Test.java'):
+      if pattern.search(input_api.ReadFile(f)):
+        files.append(f)
+  if len(files):
+    return [output_api.PresubmitError(
+      'Use org.chromium.base.test.util.FlakyTest instead of '
+      'android.test.FlakyTest',
+      files)]
+  return []
 
 def _CheckNoNewWStrings(input_api, output_api):
   """Checks to make sure we don't introduce use of wstrings."""
@@ -1030,6 +1056,9 @@ def _CheckAddedDepsHaveTargetApprovals(input_api, output_api):
     if input_api.tbr:
       return [output_api.PresubmitNotifyResult(
           '--tbr was specified, skipping OWNERS check for DEPS additions')]
+    if input_api.dry_run:
+      return [output_api.PresubmitNotifyResult(
+          'This is a dry run, skipping OWNERS check for DEPS additions')]
     if not input_api.change.issue:
       return [output_api.PresubmitError(
           "DEPS approval by OWNERS check failed: this change has "
@@ -1039,10 +1068,11 @@ def _CheckAddedDepsHaveTargetApprovals(input_api, output_api):
     output = output_api.PresubmitNotifyResult
 
   owners_db = input_api.owners_db
-  owner_email, reviewers = input_api.canned_checks._RietveldOwnerAndReviewers(
-      input_api,
-      owners_db.email_regexp,
-      approval_needed=input_api.is_committing)
+  owner_email, reviewers = (
+      input_api.canned_checks.GetCodereviewOwnerAndReviewers(
+        input_api,
+        owners_db.email_regexp,
+        approval_needed=input_api.is_committing))
 
   owner_email = owner_email or input_api.change.author_email
 
@@ -1102,6 +1132,7 @@ def _CheckSpamLogging(input_api, output_api):
                      r"notification_event_dispatcher_impl\.cc$",
                  r"^content[\\\/]common[\\\/]gpu[\\\/]client[\\\/]"
                      r"gl_helper_benchmark\.cc$",
+                 r"^courgette[\\\/]courgette_minimal_tool\.cc$",
                  r"^courgette[\\\/]courgette_tool\.cc$",
                  r"^extensions[\\\/]renderer[\\\/]logging_native_handler\.cc$",
                  r"^ipc[\\\/]ipc_logging\.cc$",
@@ -1409,6 +1440,13 @@ def _CheckAndroidCrLogUsage(input_api, output_api):
     - Are using 'TAG' as variable name for the tags (warn)
     - Are using a tag that is shorter than 20 characters (error)
   """
+
+  # Do not check format of logs in //chrome/android/webapk because
+  # //chrome/android/webapk cannot depend on //base
+  cr_log_check_excluded_paths = [
+    r"^chrome[\\\/]android[\\\/]webapk[\\\/].*",
+  ]
+
   cr_log_import_pattern = input_api.re.compile(
       r'^import org\.chromium\.base\.Log;$', input_api.re.MULTILINE)
   class_in_base_pattern = input_api.re.compile(
@@ -1423,7 +1461,8 @@ def _CheckAndroidCrLogUsage(input_api, output_api):
 
   REF_MSG = ('See docs/android_logging.md '
             'or contact dgn@chromium.org for more info.')
-  sources = lambda x: input_api.FilterSourceFile(x, white_list=(r'.*\.java$',))
+  sources = lambda x: input_api.FilterSourceFile(x, white_list=(r'.*\.java$',),
+      black_list=cr_log_check_excluded_paths)
 
   tag_decl_errors = []
   tag_length_errors = []
@@ -1578,6 +1617,11 @@ class PydepsChecker(object):
 
 def _CheckPydepsNeedsUpdating(input_api, output_api, checker_for_tests=None):
   """Checks if a .pydeps file needs to be regenerated."""
+  # This check is mainly for Android, and involves paths not only in the
+  # PRESUBMIT.py, but also in the .pydeps files. It doesn't work on Windows and
+  # Mac, so skip it on other platforms.
+  if input_api.platform != 'linux2':
+    return []
   # TODO(agrieve): Update when there's a better way to detect this: crbug/570091
   is_android = input_api.os_path.exists('third_party/android_tools')
   pydeps_files = _ALL_PYDEPS_FILES if is_android else _GENERIC_PYDEPS_FILES
@@ -1655,7 +1699,7 @@ def _CheckSingletonInHeaders(input_api, output_api):
           break
 
   if files:
-    return [ output_api.PresubmitError(
+    return [output_api.PresubmitError(
         'Found base::Singleton<T> in the following header files.\n' +
         'Please move them to an appropriate source file so that the ' +
         'template gets instantiated in a single compilation unit.',
@@ -1796,6 +1840,7 @@ def _CommonChecks(input_api, output_api):
   results.extend(_CheckNoAbbreviationInPngFileName(input_api, output_api))
   results.extend(_CheckForInvalidOSMacros(input_api, output_api))
   results.extend(_CheckForInvalidIfDefinedMacros(input_api, output_api))
+  results.extend(_CheckFlakyTestUsage(input_api, output_api))
   # TODO(danakj): Remove this when base/move.h is removed.
   results.extend(_CheckForUsingPass(input_api, output_api))
   results.extend(_CheckAddedDepsHaveTargetApprovals(input_api, output_api))
@@ -1904,7 +1949,7 @@ def _CheckForInvalidOSMacros(input_api, output_api):
   """Check all affected files for invalid OS macros."""
   bad_macros = []
   for f in input_api.AffectedFiles():
-    if not f.LocalPath().endswith(('.py', '.js', '.html', '.css')):
+    if not f.LocalPath().endswith(('.py', '.js', '.html', '.css', '.md')):
       bad_macros.extend(_CheckForInvalidOSMacrosInFile(input_api, f))
 
   if not bad_macros:

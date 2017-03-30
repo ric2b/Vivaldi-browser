@@ -5,7 +5,8 @@
 #include "media/muxers/webm_muxer.h"
 
 #include "base/bind.h"
-#include "media/audio/audio_parameters.h"
+#include "base/memory/ptr_util.h"
+#include "media/base/audio_parameters.h"
 #include "media/base/limits.h"
 #include "media/base/video_frame.h"
 #include "media/filters/opus_constants.h"
@@ -68,13 +69,29 @@ static double GetFrameRate(const scoped_refptr<VideoFrame>& video_frame) {
   return frame_rate;
 }
 
+static const char kH264CodecId[] = "V_MPEG4/ISO/AVC";
+
+static const char* MkvCodeIcForMediaVideoCodecId(VideoCodec video_codec) {
+  switch (video_codec) {
+    case kCodecVP8:
+      return mkvmuxer::Tracks::kVp8CodecId;
+    case kCodecVP9:
+      return mkvmuxer::Tracks::kVp9CodecId;
+    case kCodecH264:
+      return kH264CodecId;
+    default:
+      NOTREACHED() << "Unsupported codec " << GetCodecName(video_codec);
+      return "";
+  }
+}
+
 }  // anonymous namespace
 
 WebmMuxer::WebmMuxer(VideoCodec codec,
                      bool has_video,
                      bool has_audio,
                      const WriteDataCB& write_data_callback)
-    : use_vp9_(codec == kCodecVP9),
+    : video_codec_(codec),
       video_track_index_(0),
       audio_track_index_(0),
       has_video_(has_video),
@@ -83,8 +100,8 @@ WebmMuxer::WebmMuxer(VideoCodec codec,
       position_(0) {
   DCHECK(has_video_ || has_audio_);
   DCHECK(!write_data_callback_.is_null());
-  DCHECK(codec == kCodecVP8 || codec == kCodecVP9)
-      << " Only Vp8 and VP9 are supported in WebmMuxer";
+  DCHECK(codec == kCodecVP8 || codec == kCodecVP9 || codec == kCodecH264)
+      << " Unsupported codec: " << GetCodecName(codec);
 
   segment_.Init(this);
   segment_.set_mode(mkvmuxer::Segment::kLive);
@@ -106,7 +123,7 @@ WebmMuxer::~WebmMuxer() {
 }
 
 void WebmMuxer::OnEncodedVideo(const scoped_refptr<VideoFrame>& video_frame,
-                               scoped_ptr<std::string> encoded_data,
+                               std::unique_ptr<std::string> encoded_data,
                                base::TimeTicks timestamp,
                                bool is_key_frame) {
   DVLOG(1) << __FUNCTION__ << " - " << encoded_data->size() << "B";
@@ -127,7 +144,7 @@ void WebmMuxer::OnEncodedVideo(const scoped_refptr<VideoFrame>& video_frame,
     if (is_key_frame)  // Upon Key frame reception, empty the encoded queue.
       encoded_frames_queue_.clear();
 
-    encoded_frames_queue_.push_back(make_scoped_ptr(new EncodedVideoFrame(
+    encoded_frames_queue_.push_back(base::WrapUnique(new EncodedVideoFrame(
         std::move(encoded_data), timestamp, is_key_frame)));
     return;
   }
@@ -146,7 +163,7 @@ void WebmMuxer::OnEncodedVideo(const scoped_refptr<VideoFrame>& video_frame,
 }
 
 void WebmMuxer::OnEncodedAudio(const media::AudioParameters& params,
-                               scoped_ptr<std::string> encoded_data,
+                               std::unique_ptr<std::string> encoded_data,
                                base::TimeTicks timestamp) {
   DVLOG(2) << __FUNCTION__ << " - " << encoded_data->size() << "B";
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -207,14 +224,13 @@ void WebmMuxer::AddVideoTrack(const gfx::Size& frame_size, double frame_rate) {
       reinterpret_cast<mkvmuxer::VideoTrack*>(
           segment_.GetTrackByNumber(video_track_index_));
   DCHECK(video_track);
-  video_track->set_codec_id(use_vp9_ ? mkvmuxer::Tracks::kVp9CodecId
-                                     : mkvmuxer::Tracks::kVp8CodecId);
+  video_track->set_codec_id(MkvCodeIcForMediaVideoCodecId(video_codec_));
   DCHECK_EQ(0ull, video_track->crop_right());
   DCHECK_EQ(0ull, video_track->crop_left());
   DCHECK_EQ(0ull, video_track->crop_top());
   DCHECK_EQ(0ull, video_track->crop_bottom());
+  DCHECK_EQ(0.0f, video_track->frame_rate());
 
-  video_track->set_frame_rate(frame_rate);
   video_track->set_default_duration(base::Time::kNanosecondsPerSecond /
                                     frame_rate);
   // Segment's timestamps should be in milliseconds, DCHECK it. See
@@ -281,7 +297,7 @@ void WebmMuxer::ElementStartNotify(mkvmuxer::uint64 element_id,
       << "Can't go back in a live WebM stream.";
 }
 
-void WebmMuxer::AddFrame(scoped_ptr<std::string> encoded_data,
+void WebmMuxer::AddFrame(std::unique_ptr<std::string> encoded_data,
                          uint8_t track_index,
                          base::TimeDelta timestamp,
                          bool is_key_frame) {
@@ -299,9 +315,10 @@ void WebmMuxer::AddFrame(scoped_ptr<std::string> encoded_data,
                     is_key_frame);
 }
 
-WebmMuxer::EncodedVideoFrame::EncodedVideoFrame(scoped_ptr<std::string> data,
-                                                base::TimeTicks timestamp,
-                                                bool is_keyframe)
+WebmMuxer::EncodedVideoFrame::EncodedVideoFrame(
+    std::unique_ptr<std::string> data,
+    base::TimeTicks timestamp,
+    bool is_keyframe)
     : data(std::move(data)), timestamp(timestamp), is_keyframe(is_keyframe) {}
 
 WebmMuxer::EncodedVideoFrame::~EncodedVideoFrame() {}

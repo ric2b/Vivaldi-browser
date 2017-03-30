@@ -10,6 +10,7 @@
 #include "platform/heap/InlinedGlobalMarkingVisitor.h"
 #include "platform/heap/StackFrameDepth.h"
 #include "platform/heap/Visitor.h"
+#include "platform/heap/WrapperVisitor.h"
 #include "wtf/Allocator.h"
 #include "wtf/Assertions.h"
 #include "wtf/Deque.h"
@@ -37,6 +38,13 @@ template<typename T>
 class AdjustAndMarkTrait<T, false> {
     STATIC_ONLY(AdjustAndMarkTrait);
 public:
+    static void markWrapper(const WrapperVisitor* visitor, const T* t)
+    {
+        if (visitor->markWrapperHeader(t)) {
+            visitor->dispatchTraceWrappers(t);
+        }
+    }
+
     template<typename VisitorDispatcher>
     static void mark(VisitorDispatcher visitor, const T* t)
     {
@@ -74,6 +82,11 @@ template<typename T>
 class AdjustAndMarkTrait<T, true> {
     STATIC_ONLY(AdjustAndMarkTrait);
 public:
+    static void markWrapper(const WrapperVisitor* visitor, const T* t)
+    {
+        t->adjustAndMarkWrapper(visitor);
+    }
+
     template<typename VisitorDispatcher>
     static void mark(VisitorDispatcher visitor, const T* self)
     {
@@ -158,6 +171,11 @@ public:
     static void trace(Visitor*, void* self);
     static void trace(InlinedGlobalMarkingVisitor, void* self);
 
+    static void markWrapper(const WrapperVisitor* visitor, const T* t)
+    {
+        AdjustAndMarkTrait<T>::markWrapper(visitor, t);
+    }
+
     template<typename VisitorDispatcher>
     static void mark(VisitorDispatcher visitor, const T* t)
     {
@@ -173,7 +191,7 @@ void TraceTrait<T>::trace(Visitor* visitor, void* self)
     static_assert(WTF::NeedsTracing<T>::value || WTF::IsWeak<T>::value, "T should be traced");
     if (visitor->getMarkingMode() == Visitor::GlobalMarking) {
         // Switch to inlined global marking dispatch.
-        static_cast<T*>(self)->trace(InlinedGlobalMarkingVisitor(visitor));
+        static_cast<T*>(self)->trace(InlinedGlobalMarkingVisitor(visitor->state()));
     } else {
         static_cast<T*>(self)->trace(visitor);
     }
@@ -339,13 +357,12 @@ public:
 
 template <typename T> struct RemoveHeapPointerWrapperTypes {
     STATIC_ONLY(RemoveHeapPointerWrapperTypes);
-    using Type = typename WTF::RemoveTemplate<typename WTF::RemoveTemplate<typename WTF::RemoveTemplate<T, Member>::Type, WeakMember>::Type, RawPtr>::Type;
+    using Type = typename WTF::RemoveTemplate<typename WTF::RemoveTemplate<T, Member>::Type, WeakMember>::Type;
 };
 
 // FIXME: Oilpan: TraceIfNeeded should be implemented ala:
 // NeedsTracing<T>::value || IsWeakMember<T>::value. It should not need to test
-// raw pointer types. To remove these tests, we may need support for
-// instantiating a template with a RawPtrOrMember'ish template.
+// raw pointer types.
 template<typename T>
 struct TraceIfNeeded : public TraceIfEnabled<T, WTF::NeedsTracing<T>::value || IsGarbageCollectedType<typename RemoveHeapPointerWrapperTypes<typename std::remove_pointer<T>::type>::Type>::value> {
     STATIC_ONLY(TraceIfNeeded);

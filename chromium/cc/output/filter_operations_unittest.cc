@@ -5,11 +5,12 @@
 #include <stddef.h>
 
 #include "cc/output/filter_operations.h"
-#include "skia/ext/refptr.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/effects/SkBlurImageFilter.h"
 #include "third_party/skia/include/effects/SkDropShadowImageFilter.h"
+#include "third_party/skia/include/effects/SkOffsetImageFilter.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace cc {
 namespace {
@@ -26,16 +27,23 @@ TEST(FilterOperationsTest, GetOutsetsBlur) {
   EXPECT_EQ(57, left);
 }
 
+TEST(FilterOperationsTest, MapRectBlur) {
+  FilterOperations ops;
+  ops.Append(FilterOperation::CreateBlurFilter(20));
+  EXPECT_EQ(gfx::Rect(-60, -60, 130, 130),
+            ops.MapRect(gfx::Rect(0, 0, 10, 10), SkMatrix::I()));
+}
+
 TEST(FilterOperationsTest, GetOutsetsDropShadowReferenceFilter) {
   // TODO(hendrikw): We need to make outsets for reference filters be in line
   // with non-reference filters. See crbug.com/523534
-  skia::RefPtr<SkImageFilter> filter =
-      skia::AdoptRef(SkDropShadowImageFilter::Create(
+  FilterOperations ops;
+  ops.Append(
+      FilterOperation::CreateReferenceFilter(SkDropShadowImageFilter::Make(
           SkIntToScalar(3), SkIntToScalar(8), SkIntToScalar(4),
           SkIntToScalar(9), SK_ColorBLACK,
-          SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode));
-  FilterOperations ops;
-  ops.Append(FilterOperation::CreateReferenceFilter(filter));
+          SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode,
+          nullptr)));
 
   int top, right, bottom, left;
   top = right = bottom = left = 0;
@@ -44,6 +52,26 @@ TEST(FilterOperationsTest, GetOutsetsDropShadowReferenceFilter) {
   EXPECT_EQ(9, right);
   EXPECT_EQ(19, bottom);
   EXPECT_EQ(15, left);
+}
+
+TEST(FilterOperationsTest, MapRectDropShadowReferenceFilter) {
+  FilterOperations ops;
+  ops.Append(
+      FilterOperation::CreateReferenceFilter(SkDropShadowImageFilter::Make(
+          SkIntToScalar(3), SkIntToScalar(8), SkIntToScalar(4),
+          SkIntToScalar(9), SK_ColorBLACK,
+          SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode,
+          nullptr)));
+  EXPECT_EQ(gfx::Rect(-9, -19, 34, 64),
+            ops.MapRect(gfx::Rect(0, 0, 10, 10), SkMatrix::I()));
+}
+
+TEST(FilterOperationsTest, MapRectOffsetReferenceFilter) {
+  sk_sp<SkImageFilter> filter = SkOffsetImageFilter::Make(30, 40, nullptr);
+  FilterOperations ops;
+  ops.Append(FilterOperation::CreateReferenceFilter(std::move(filter)));
+  EXPECT_EQ(gfx::Rect(30, 40, 10, 10),
+            ops.MapRect(gfx::Rect(0, 0, 10, 10), SkMatrix::I()));
 }
 
 TEST(FilterOperationsTest, GetOutsetsNullReferenceFilter) {
@@ -59,6 +87,13 @@ TEST(FilterOperationsTest, GetOutsetsNullReferenceFilter) {
   EXPECT_EQ(0, left);
 }
 
+TEST(FilterOperationsTest, MapRectNullReferenceFilter) {
+  FilterOperations ops;
+  ops.Append(FilterOperation::CreateReferenceFilter(nullptr));
+  EXPECT_EQ(gfx::Rect(0, 0, 10, 10),
+            ops.MapRect(gfx::Rect(0, 0, 10, 10), SkMatrix::I()));
+}
+
 TEST(FilterOperationsTest, GetOutsetsDropShadow) {
   FilterOperations ops;
   ops.Append(FilterOperation::CreateDropShadowFilter(gfx::Point(3, 8), 20, 0));
@@ -69,6 +104,13 @@ TEST(FilterOperationsTest, GetOutsetsDropShadow) {
   EXPECT_EQ(60, right);
   EXPECT_EQ(65, bottom);
   EXPECT_EQ(54, left);
+}
+
+TEST(FilterOperationsTest, MapRectDropShadow) {
+  FilterOperations ops;
+  ops.Append(FilterOperation::CreateDropShadowFilter(gfx::Point(3, 8), 20, 0));
+  EXPECT_EQ(gfx::Rect(-57, -52, 130, 130),
+            ops.MapRect(gfx::Rect(0, 0, 10, 10), SkMatrix::I()));
 }
 
 #define SAVE_RESTORE_AMOUNT(filter_name, filter_type, a)                  \
@@ -541,12 +583,12 @@ TEST(FilterOperationsTest, BlendSaturatingBrightnessWithNull) {
 }
 
 TEST(FilterOperationsTest, BlendReferenceFilters) {
-  skia::RefPtr<SkImageFilter> from_filter =
-      skia::AdoptRef(SkBlurImageFilter::Create(1.f, 1.f));
-  skia::RefPtr<SkImageFilter> to_filter =
-      skia::AdoptRef(SkBlurImageFilter::Create(2.f, 2.f));
-  FilterOperation from = FilterOperation::CreateReferenceFilter(from_filter);
-  FilterOperation to = FilterOperation::CreateReferenceFilter(to_filter);
+  sk_sp<SkImageFilter> from_filter(SkBlurImageFilter::Make(1.f, 1.f, nullptr));
+  sk_sp<SkImageFilter> to_filter(SkBlurImageFilter::Make(2.f, 2.f, nullptr));
+  FilterOperation from =
+      FilterOperation::CreateReferenceFilter(std::move(from_filter));
+  FilterOperation to =
+      FilterOperation::CreateReferenceFilter(std::move(to_filter));
 
   FilterOperation blended = FilterOperation::Blend(&from, &to, -0.75);
   EXPECT_EQ(from, blended);
@@ -562,11 +604,10 @@ TEST(FilterOperationsTest, BlendReferenceFilters) {
 }
 
 TEST(FilterOperationsTest, BlendReferenceWithNull) {
-  skia::RefPtr<SkImageFilter> image_filter =
-      skia::AdoptRef(SkBlurImageFilter::Create(1.f, 1.f));
-  FilterOperation filter = FilterOperation::CreateReferenceFilter(image_filter);
-  FilterOperation null_filter =
-      FilterOperation::CreateReferenceFilter(skia::RefPtr<SkImageFilter>());
+  sk_sp<SkImageFilter> image_filter(SkBlurImageFilter::Make(1.f, 1.f, nullptr));
+  FilterOperation filter =
+      FilterOperation::CreateReferenceFilter(std::move(image_filter));
+  FilterOperation null_filter = FilterOperation::CreateReferenceFilter(nullptr);
 
   FilterOperation blended = FilterOperation::Blend(&filter, NULL, 0.25);
   EXPECT_EQ(filter, blended);

@@ -6,11 +6,11 @@
 #define COMPONENTS_SESSIONS_CORE_SESSION_TYPES_H_
 
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "components/sessions/core/serialized_navigation_entry.h"
@@ -142,6 +142,9 @@ struct SESSIONS_EXPORT SessionWindow {
 
   // Bounds of the window.
   gfx::Rect bounds;
+
+  // The workspace in which the window resides.
+  std::string workspace;
 
   // Index of the selected tab in tabs; -1 if no tab is selected. After restore
   // this value is guaranteed to be a valid index into tabs.

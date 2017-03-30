@@ -70,10 +70,16 @@ Pokud se přesto přihlásíte, budou data prohlížeče Chrome (například zá
 <translation id="2997147809295888909">Chrome ověřil, že certifikát tohoto webu byl vydán vydavatelem <ph name="ISSUER" />. Server neposkytl žádné údaje Certificate Transparency.</translation>
 <translation id="3037838751736561277">Google Chrome je v režimu na pozadí.</translation>
 <translation id="3047079729301751317">Odpojení uživatele <ph name="USERNAME" /> smaže také historii, záložky, nastavení a další data Chromu uložená v tomto zařízení. Data uložená ve vašem účtu Google nebudou vymazána a lze je spravovat na <ph name="GOOGLE_DASHBOARD_LINK" />Hlavním panelu Google<ph name="END_GOOGLE_DASHBOARD_LINK" />.</translation>
+<translation id="3065168410429928842">Karta prohlížeče Chrome</translation>
 <translation id="3080151273017101988">Po ukončení prohlížeče Google Chrome nechat aplikace na pozadí spuštěné</translation>
 <translation id="3089968997497233615">K dispozici je nová, bezpečnější verze prohlížeče Google Chrome.</translation>
 <translation id="3149510190863420837">Aplikace Chrome</translation>
-<translation id="3197823471738295152">Zařízení bylo aktualizováno.</translation>
+<translation id="3251381707915721925">Chcete-li nastavit, které weby může uživatel <ph name="NEW_PROFILE_NAME" /> zobrazit, nakonfigurujte omezení a nastavení na stránce <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. Pokud nezměníte výchozí nastavení, uživatel <ph name="NEW_PROFILE_NAME" /> na internetu bude moci prohlížet vše.
+
+Abyste uživateli <ph name="NEW_PROFILE_NAME" /> zabránili v přístupu k vašemu účtu, když Chrome nepoužíváte, nezapomeňte svůj profil uzamknout. Provedete to tak, že v pravém horním rohu prohlížeče kliknete na název svého profilu a vyberete Ukončit a použít rodičovský zámek.
+<ph name="BEGIN_LINK_2" />Další informace<ph name="END_LINK_2" />
+
+Další pokyny naleznete v e-mailu ve svém účtu <ph name="ACCOUNT_EMAIL" />.</translation>
 <translation id="3282568296779691940">Přihlášení do Chrome</translation>
 <translation id="3311976847535831054">Tento počítač již nebude dostávat aktualizace pro 32bitovou verzi prohlížeče Google Chrome. Nainstalujte prosím 64bitovou verzi Chromu.</translation>
 <translation id="3360895254066713204">Chrome Helper</translation>
@@ -213,7 +219,6 @@ Aplikace Google Chrome nemůže vaše nastavení obnovit.</translation>
 <translation id="7808348361785373670">Odstranit z Chromu...</translation>
 <translation id="7825851276765848807">Instalace se z neznámého důvodu nezdařila. Stáhněte prosím aplikaci Google Chrome znovu.</translation>
 <translation id="7890208801193284374">Pokud počítač sdílíte s kamarády a členy rodiny, každý může web procházet samostatně a nastavit si Chrome podle svých požadavků.</translation>
-<translation id="8000275528373650868">Google Chrome vyžaduje operační systém Windows Vista nebo Windows XP SP2 nebo vyšší.</translation>
 <translation id="8005540215158006229">Chrome je téměř připraven.</translation>
 <translation id="8008534537613507642">Přeinstalovat Chrome</translation>
 <translation id="8030318113982266900">Aktualizace zařízení na verzi <ph name="CHANNEL_NAME" />...</translation>
@@ -235,6 +240,7 @@ Aplikace Google Chrome nemůže vaše nastavení obnovit.</translation>
 <translation id="8556340503434111824">Je k dispozici nová verze prohlížeče Google Chrome, ještě rychlejší než ty předchozí.</translation>
 <translation id="8568392309447938879">Chcete-li používat aplikace, musíte být do Chromu přihlášeni. To Chromu umožňuje synchronizovat vaše aplikace, záložky, historii, hesla a další nastavení mezi zařízeními.</translation>
 <translation id="8614913330719544658">Google Chrome neodpovídá. Restartovat?</translation>
+<translation id="8667808506758191620">Vaše zařízení <ph name="DEVICE_TYPE" /> je aktuální.</translation>
 <translation id="8669527147644353129">Google Chrome Helper</translation>
 <translation id="8679801911857917785">Také řídí, která stránka se zobrazí při spuštění Chromu.</translation>
 <translation id="870251953148363156">Aktualizace aplikace &amp;Google Chrome</translation>
@@ -243,6 +249,7 @@ Aplikace Google Chrome nemůže vaše nastavení obnovit.</translation>
 <translation id="8851136666856101339">hlavní</translation>
 <translation id="8862326446509486874">Nemáte práva nutná k provádění instalací na úrovni systému. Zkuste spustit instalační program jako správce.</translation>
 <translation id="9026991721384951619">Chrome OS vaše data nemohl synchronizovat, protože vaše přihlašovací údaje nejsou aktuální.</translation>
+<translation id="9067395829937117663">Google Chrome vyžaduje systém Windows 7 nebo vyšší.</translation>
 <translation id="9102715433345326100">Tento soubor je škodlivý a prohlížeč Chrome jej zablokoval.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Upozornění:<ph name="END_BOLD" /> Google Chrome nemůže rozšířením zabránit v zaznamenávání vaší historie procházení. Chcete-li toto rozšíření v anonymním režimu deaktivovat, zrušte výběr této možnosti.</translation>
 <translation id="911206726377975832">Vymazat také všechna data procházení?</translation>

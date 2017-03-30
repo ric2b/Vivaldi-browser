@@ -27,7 +27,6 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window_state.h"
 #import "chrome/browser/ui/cocoa/autofill/save_card_bubble_view_bridge.h"
-#import "chrome/browser/ui/cocoa/browser/edit_search_engine_cocoa_controller.h"
 #import "chrome/browser/ui/cocoa/browser/exclusive_access_controller_views.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/browser_window_utils.h"
@@ -73,7 +72,6 @@
 #include "ui/gfx/geometry/rect.h"
 
 #if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
-#import "chrome/browser/ui/cocoa/one_click_signin_bubble_controller.h"
 #import "chrome/browser/ui/cocoa/one_click_signin_dialog_controller.h"
 #endif
 
@@ -372,6 +370,10 @@ gfx::Rect BrowserWindowCocoa::GetRestoredBounds() const {
   return bounds;
 }
 
+std::string BrowserWindowCocoa::GetWorkspace() const {
+  return std::string();
+}
+
 ui::WindowShowState BrowserWindowCocoa::GetRestoredState() const {
   if (IsMaximized())
     return ui::SHOW_STATE_MAXIMIZED;
@@ -431,19 +433,13 @@ bool BrowserWindowCocoa::IsFullscreenBubbleVisible() const {
   return false;  // Currently only called from toolkit-views website_settings.
 }
 
-void BrowserWindowCocoa::ConfirmAddSearchProvider(
-    TemplateURL* template_url,
-    Profile* profile) {
-  // The controller will release itself when the window closes.
-  EditSearchEngineCocoaController* editor =
-      [[EditSearchEngineCocoaController alloc] initWithProfile:profile
-                                                      delegate:NULL
-                                                   templateURL:template_url];
-  [NSApp beginSheet:[editor window]
-     modalForWindow:window()
-      modalDelegate:controller_
-     didEndSelector:@selector(sheetDidEnd:returnCode:context:)
-        contextInfo:NULL];
+void BrowserWindowCocoa::MaybeShowNewBackShortcutBubble(bool forward) {
+  [controller_ exclusiveAccessController]->MaybeShowNewBackShortcutBubble(
+      forward);
+}
+
+void BrowserWindowCocoa::HideNewBackShortcutBubble() {
+  [controller_ exclusiveAccessController]->HideNewBackShortcutBubble();
 }
 
 LocationBar* BrowserWindowCocoa::GetLocationBar() const {
@@ -643,26 +639,13 @@ void BrowserWindowCocoa::ShowTranslateBubble(
 }
 
 #if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
-void BrowserWindowCocoa::ShowOneClickSigninBubble(
-    OneClickSigninBubbleType type,
+void BrowserWindowCocoa::ShowOneClickSigninConfirmation(
     const base::string16& email,
-    const base::string16& error_message,
     const StartSyncCallback& start_sync_callback) {
-  WebContents* web_contents =
-        browser_->tab_strip_model()->GetActiveWebContents();
-  if (type == ONE_CLICK_SIGNIN_BUBBLE_TYPE_BUBBLE) {
-    base::scoped_nsobject<OneClickSigninBubbleController> bubble_controller([
-            [OneClickSigninBubbleController alloc]
-        initWithBrowserWindowController:cocoa_controller()
-                            webContents:web_contents
-                           errorMessage:base::SysUTF16ToNSString(error_message)
-                               callback:start_sync_callback]);
-    [bubble_controller showWindow:nil];
-  } else {
-    // Deletes itself when the dialog closes.
-    new OneClickSigninDialogController(
-        web_contents, start_sync_callback, email);
-  }
+  // Deletes itself when the dialog closes.
+  new OneClickSigninDialogController(
+      browser_->tab_strip_model()->GetActiveWebContents(), start_sync_callback,
+      email);
 }
 #endif
 

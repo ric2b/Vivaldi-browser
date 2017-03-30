@@ -79,15 +79,14 @@ public class NewTabPageScrollView extends ScrollView {
     protected void onFinishInflate() {
         super.onFinishInflate();
 
-        View child = getChildAt(0);
-        if (child instanceof NewTabPageLayout) mNewTabPageLayout = (NewTabPageLayout) child;
+        // Incognito also uses this scroll view but will not have the id so will return null.
+        mNewTabPageLayout = (NewTabPageLayout) findViewById(R.id.ntp_content);
     }
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         if (mNewTabPageLayout != null) {
-            mNewTabPageLayout.setParentScrollViewportHeight(
-                    MeasureSpec.getSize(heightMeasureSpec));
+            mNewTabPageLayout.setParentViewportHeight(MeasureSpec.getSize(heightMeasureSpec));
         }
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
     }

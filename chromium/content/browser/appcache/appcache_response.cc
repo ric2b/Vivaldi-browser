@@ -15,7 +15,7 @@
 #include "base/pickle.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/appcache/appcache_storage.h"
 #include "net/base/completion_callback.h"
 #include "net/base/io_buffer.h"
@@ -41,7 +41,7 @@ class WrappedPickleIOBuffer : public net::WrappedIOBuffer {
  private:
   ~WrappedPickleIOBuffer() override {}
 
-  scoped_ptr<const base::Pickle> pickle_;
+  std::unique_ptr<const base::Pickle> pickle_;
 };
 
 }  // anon namespace
@@ -94,10 +94,8 @@ AppCacheDiskCacheInterface::~AppCacheDiskCacheInterface() {}
 
 AppCacheResponseIO::AppCacheResponseIO(
     int64_t response_id,
-    int64_t group_id,
     const base::WeakPtr<AppCacheDiskCacheInterface>& disk_cache)
     : response_id_(response_id),
-      group_id_(group_id),
       disk_cache_(disk_cache),
       entry_(NULL),
       buffer_len_(0),
@@ -189,9 +187,8 @@ void AppCacheResponseIO::OpenEntryCallback(
 
 AppCacheResponseReader::AppCacheResponseReader(
     int64_t response_id,
-    int64_t group_id,
     const base::WeakPtr<AppCacheDiskCacheInterface>& disk_cache)
-    : AppCacheResponseIO(response_id, group_id, disk_cache),
+    : AppCacheResponseIO(response_id, disk_cache),
       range_offset_(0),
       range_length_(std::numeric_limits<int32_t>::max()),
       read_position_(0),
@@ -268,7 +265,7 @@ void AppCacheResponseReader::OnIOComplete(int result) {
     } else if (info_buffer_.get()) {
       // Deserialize the http info structure, ensuring we got headers.
       base::Pickle pickle(buffer_->data(), result);
-      scoped_ptr<net::HttpResponseInfo> info(new net::HttpResponseInfo);
+      std::unique_ptr<net::HttpResponseInfo> info(new net::HttpResponseInfo);
       bool response_truncated = false;
       if (!info->InitFromPickle(pickle, &response_truncated) ||
           !info->headers.get()) {
@@ -314,9 +311,8 @@ void AppCacheResponseReader::OnOpenEntryComplete() {
 
 AppCacheResponseWriter::AppCacheResponseWriter(
     int64_t response_id,
-    int64_t group_id,
     const base::WeakPtr<AppCacheDiskCacheInterface>& disk_cache)
-    : AppCacheResponseIO(response_id, group_id, disk_cache),
+    : AppCacheResponseIO(response_id, disk_cache),
       info_size_(0),
       write_position_(0),
       write_amount_(0),
@@ -459,9 +455,8 @@ void AppCacheResponseWriter::OnCreateEntryComplete(
 
 AppCacheResponseMetadataWriter::AppCacheResponseMetadataWriter(
     int64_t response_id,
-    int64_t group_id,
     const base::WeakPtr<AppCacheDiskCacheInterface>& disk_cache)
-    : AppCacheResponseIO(response_id, group_id, disk_cache),
+    : AppCacheResponseIO(response_id, disk_cache),
       write_amount_(0),
       weak_factory_(this) {}
 

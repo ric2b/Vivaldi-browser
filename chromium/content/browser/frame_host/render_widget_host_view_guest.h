@@ -8,10 +8,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "build/build_config.h"
 #include "content/browser/frame_host/render_widget_host_view_child_frame.h"
 #include "content/common/content_export.h"
@@ -24,13 +24,12 @@
 #include "ui/gfx/geometry/vector2d_f.h"
 #include "ui/gfx/native_widget_types.h"
 
-struct ViewHostMsg_TextInputState_Params;
-
 namespace content {
 class BrowserPluginGuest;
 class RenderWidgetHost;
 class RenderWidgetHostImpl;
 struct NativeWebKeyboardEvent;
+struct TextInputState;
 
 // See comments in render_widget_host_view.h about this class and its members.
 // This version is for the BrowserPlugin which handles a lot of the
@@ -68,7 +67,6 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   void Show() override;
   void Hide() override;
   gfx::NativeView GetNativeView() const override;
-  gfx::NativeViewId GetNativeViewId() const override;
   gfx::NativeViewAccessible GetNativeViewAccessible() override;
   gfx::Rect GetViewBounds() const override;
   gfx::Rect GetBoundsInRootWindow() override;
@@ -81,8 +79,7 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   void InitAsFullscreen(RenderWidgetHostView* reference_host_view) override;
   void UpdateCursor(const WebCursor& cursor) override;
   void SetIsLoading(bool is_loading) override;
-  void TextInputStateChanged(
-      const ViewHostMsg_TextInputState_Params& params) override;
+  void TextInputStateChanged(const TextInputState& params) override;
   void ImeCancelComposition() override;
 #if defined(OS_MACOSX) || defined(USE_AURA)
   void ImeCompositionRangeChanged(
@@ -98,8 +95,9 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
                         const gfx::Range& range) override;
   void SelectionBoundsChanged(
       const ViewHostMsg_SelectionBounds_Params& params) override;
-  void OnSwapCompositorFrame(uint32_t output_surface_id,
-                             scoped_ptr<cc::CompositorFrame> frame) override;
+  void OnSwapCompositorFrame(
+      uint32_t output_surface_id,
+      std::unique_ptr<cc::CompositorFrame> frame) override;
 #if defined(USE_AURA)
   void ProcessAckedTouchEvent(const TouchEventWithLatencyInfo& touch,
                               InputEventAckState ack_result) override;
@@ -122,12 +120,6 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   void StopSpeaking() override;
 #endif  // defined(OS_MACOSX)
 
-#if defined(OS_ANDROID) || defined(USE_AURA)
-  // RenderWidgetHostViewBase implementation.
-  void ShowDisambiguationPopup(const gfx::Rect& rect_pixels,
-                               const SkBitmap& zoomed_bitmap) override;
-#endif  // defined(OS_ANDROID) || defined(USE_AURA)
-
   void LockCompositingSurface() override;
   void UnlockCompositingSurface() override;
 
@@ -141,9 +133,6 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   friend class RenderWidgetHostView;
 
  private:
-  // Destroys this view without calling |Destroy| on |platform_view_|.
-  void DestroyGuestView();
-
   RenderWidgetHostViewBase* GetOwnerRenderWidgetHostView() const;
 
   void OnHandleInputEvent(RenderWidgetHostImpl* embedder,
@@ -156,7 +145,7 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   gfx::Size size_;
   // The platform view for this RenderWidgetHostView.
   // RenderWidgetHostViewGuest mostly only cares about stuff related to
-  // compositing, the rest are directly forwared to this |platform_view_|.
+  // compositing, the rest are directly forwarded to this |platform_view_|.
   base::WeakPtr<RenderWidgetHostViewBase> platform_view_;
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewGuest);
 };

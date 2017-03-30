@@ -20,6 +20,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Process;
 import android.provider.Settings;
+import android.support.annotation.IntDef;
 import android.support.v7.widget.AppCompatTextView;
 import android.text.Layout;
 import android.text.Spannable;
@@ -42,9 +43,11 @@ import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ContentSettingsType;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
+import org.chromium.chrome.browser.offlinepages.OfflinePageBridge.SingleOfflinePageItemCallback;
 import org.chromium.chrome.browser.offlinepages.OfflinePageItem;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.omnibox.OmniboxUrlEmphasizer;
@@ -67,6 +70,8 @@ import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.base.WindowAndroid.PermissionCallback;
 import org.chromium.ui.interpolators.BakedBezierInterpolator;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.text.DateFormat;
@@ -80,6 +85,13 @@ import java.util.List;
  *               WebsiteSettings* and website_settings_*. Do this on the C++ side as well.
  */
 public class WebsiteSettingsPopup implements OnClickListener {
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({OPENED_FROM_MENU, OPENED_FROM_TOOLBAR})
+    private @interface OpenedFromSource {}
+
+    public static final int OPENED_FROM_MENU = 1;
+    public static final int OPENED_FROM_TOOLBAR = 2;
+
     /**
      * An entry in the settings dropdown for a given permission. There are two options for each
      * permission: Allow and Block.
@@ -900,28 +912,45 @@ public class WebsiteSettingsPopup implements OnClickListener {
      * @param tab The tab hosting the web contents for which to show Website information. This
      *            information is retrieved for the visible entry.
      * @param contentPublisher The name of the publisher of the content.
+     * @param source Determines the source that triggered the popup.
      */
-    public static void show(Activity activity, Tab tab, String contentPublisher) {
-        WebContents webContents = tab.getWebContents();
-        String offlinePageOriginalUrl = null;
-        String offlinePageCreationDate = null;
-
-        if (tab.isOfflinePage()) {
-            OfflinePageBridge offlinePageBridge = OfflinePageBridge.getForProfile(tab.getProfile());
-            OfflinePageItem item =
-                    offlinePageBridge.getPageByOfflineUrl(webContents.getVisibleUrl());
-            if (item != null) {
-                // Get formatted creation date and original URL of the offline copy.
-                Date creationDate = new Date(item.getCreationTimeMs());
-                DateFormat df = DateFormat.getDateInstance(DateFormat.MEDIUM);
-                offlinePageCreationDate = df.format(creationDate);
-                offlinePageOriginalUrl = OfflinePageUtils.stripSchemeFromOnlineUrl(
-                        tab.getOfflinePageOriginalUrl());
-            }
+    public static void show(final Activity activity, final Tab tab, final String contentPublisher,
+            @OpenedFromSource int source) {
+        if (source == OPENED_FROM_MENU) {
+            RecordUserAction.record("MobileWebsiteSettingsOpenedFromMenu");
+        } else if (source == OPENED_FROM_TOOLBAR) {
+            RecordUserAction.record("MobileWebsiteSettingsOpenedFromToolbar");
+        } else {
+            assert false : "Invalid source passed";
         }
 
-        new WebsiteSettingsPopup(activity, tab.getProfile(), webContents, offlinePageOriginalUrl,
-                offlinePageCreationDate, contentPublisher);
+        OfflinePageBridge offlinePageBridge = OfflinePageBridge.getForProfile(tab.getProfile());
+        if (offlinePageBridge == null) {
+            new WebsiteSettingsPopup(
+                    activity, tab.getProfile(), tab.getWebContents(), null, null, contentPublisher);
+            return;
+        }
+
+        SingleOfflinePageItemCallback callback = new SingleOfflinePageItemCallback() {
+            @Override
+            public void onResult(OfflinePageItem item) {
+                String offlinePageOriginalUrl = null;
+                String offlinePageCreationDate = null;
+
+                if (item != null) {
+                    // Get formatted creation date and original URL of the offline copy.
+                    Date creationDate = new Date(item.getCreationTimeMs());
+                    DateFormat df = DateFormat.getDateInstance(DateFormat.MEDIUM);
+                    offlinePageCreationDate = df.format(creationDate);
+                    offlinePageOriginalUrl =
+                            OfflinePageUtils.stripSchemeFromOnlineUrl(item.getUrl());
+                }
+                new WebsiteSettingsPopup(activity, tab.getProfile(), tab.getWebContents(),
+                        offlinePageOriginalUrl, offlinePageCreationDate, contentPublisher);
+            }
+        };
+
+        offlinePageBridge.getPageByOfflineUrl(tab.getWebContents().getVisibleUrl(), callback);
     }
 
     private static native long nativeInit(WebsiteSettingsPopup popup, WebContents webContents);

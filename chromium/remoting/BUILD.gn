@@ -24,11 +24,10 @@ group("remoting_all") {
   testonly = true
 
   deps = [
-    #"//remoting:remoting_browser_test_resources",
     "//remoting:remoting_unittests",
     "//remoting/test:chromoting_test_driver",
-
-    #"//remoting:remoting_webapp_unittests",
+    "//remoting/webapp:browser_test_resources",
+    "//remoting/webapp:unit_tests",
   ]
 
   # TODO(GYP): add is_mac
@@ -41,9 +40,11 @@ group("remoting_all") {
       "//remoting:remoting_breakpad_tester",
       "//remoting/host:remoting_console",
       "//remoting/host:remoting_desktop",
-
-      # "//remoting:remoting_host_installation",
     ]
+
+    if (is_chrome_branded) {
+      deps += [ "//remoting/host:remoting_host_installation" ]
+    }
   }
 
   if (is_android) {
@@ -57,10 +58,13 @@ group("remoting_all") {
     deps += [
       "//remoting:remoting_perftests",
       "//remoting/host",
-      "//remoting/host:remoting_native_messaging_manifests",
     ]
 
-    if (!is_chromeos) {
+    if (!is_android) {
+      deps += [ "//remoting/host:remoting_native_messaging_manifests" ]
+    }
+
+    if (!is_chromeos && !is_android) {
       deps += [
         "//remoting/host:remoting_start_host",
         "//remoting/host/it2me:remote_assistance_host",
@@ -85,6 +89,7 @@ if (is_win) {
   executable("remoting_breakpad_tester") {
     deps = [
       "//base",
+      "//build/win:default_exe_manifest",
       "//remoting/host",
     ]
 

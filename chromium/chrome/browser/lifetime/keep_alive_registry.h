@@ -69,8 +69,5 @@ class KeepAliveRegistry {
   DISALLOW_COPY_AND_ASSIGN(KeepAliveRegistry);
 };
 
-#ifndef NDEBUG
-std::ostream& operator<<(std::ostream& out, const KeepAliveRegistry& registry);
-#endif  // ndef NDEBUG
 
 #endif  // CHROME_BROWSER_LIFETIME_KEEP_ALIVE_REGISTRY_H_

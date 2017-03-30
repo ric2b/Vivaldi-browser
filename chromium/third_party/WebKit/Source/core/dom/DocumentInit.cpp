@@ -28,13 +28,13 @@
 #include "core/dom/DocumentInit.h"
 
 #include "core/dom/Document.h"
-#include "core/dom/custom/CustomElementRegistrationContext.h"
+#include "core/dom/custom/V0CustomElementRegistrationContext.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/imports/HTMLImportsController.h"
 #include "core/loader/DocumentLoader.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "public/platform/Platform.h"
+#include "platform/network/NetworkUtils.h"
 
 namespace blink {
 
@@ -49,12 +49,12 @@ static Document* parentDocument(LocalFrame* frame)
     return &ownerElement->document();
 }
 
-DocumentInit::DocumentInit(const KURL& url, LocalFrame* frame, RawPtr<Document> contextDocument, HTMLImportsController* importsController)
+DocumentInit::DocumentInit(const KURL& url, LocalFrame* frame, Document* contextDocument, HTMLImportsController* importsController)
     : DocumentInit(nullptr, url, frame, contextDocument, importsController)
 {
 }
 
-DocumentInit::DocumentInit(RawPtr<Document> ownerDocument, const KURL& url, LocalFrame* frame, RawPtr<Document> contextDocument, HTMLImportsController* importsController)
+DocumentInit::DocumentInit(Document* ownerDocument, const KURL& url, LocalFrame* frame, Document* contextDocument, HTMLImportsController* importsController)
     : m_url(url)
     , m_frame(frame)
     , m_parent(parentDocument(frame))
@@ -131,7 +131,7 @@ bool DocumentInit::isHostedInReservedIPRange() const
     if (LocalFrame* frame = frameForSecurityContext()) {
         if (DocumentLoader* loader = frame->loader().provisionalDocumentLoader() ? frame->loader().provisionalDocumentLoader() : frame->loader().documentLoader()) {
             if (!loader->response().remoteIPAddress().isEmpty())
-                return Platform::current()->isReservedIPAddress(loader->response().remoteIPAddress());
+                return NetworkUtils::isReservedIPAddress(loader->response().remoteIPAddress());
         }
     }
     return false;
@@ -148,7 +148,7 @@ KURL DocumentInit::parentBaseURL() const
     return m_parent->baseURL();
 }
 
-DocumentInit& DocumentInit::withRegistrationContext(CustomElementRegistrationContext* registrationContext)
+DocumentInit& DocumentInit::withRegistrationContext(V0CustomElementRegistrationContext* registrationContext)
 {
     DCHECK(!m_createNewRegistrationContext);
     DCHECK(!m_registrationContext);
@@ -164,23 +164,23 @@ DocumentInit& DocumentInit::withNewRegistrationContext()
     return *this;
 }
 
-RawPtr<CustomElementRegistrationContext> DocumentInit::registrationContext(Document* document) const
+V0CustomElementRegistrationContext* DocumentInit::registrationContext(Document* document) const
 {
     if (!document->isHTMLDocument() && !document->isXHTMLDocument())
         return nullptr;
 
     if (m_createNewRegistrationContext)
-        return CustomElementRegistrationContext::create();
+        return V0CustomElementRegistrationContext::create();
 
     return m_registrationContext.get();
 }
 
-RawPtr<Document> DocumentInit::contextDocument() const
+Document* DocumentInit::contextDocument() const
 {
     return m_contextDocument;
 }
 
-DocumentInit DocumentInit::fromContext(RawPtr<Document> contextDocument, const KURL& url)
+DocumentInit DocumentInit::fromContext(Document* contextDocument, const KURL& url)
 {
     return DocumentInit(url, 0, contextDocument, 0);
 }

@@ -46,8 +46,8 @@ class PopupMenu;
 class CORE_EXPORT HTMLSelectElement final : public HTMLFormControlElementWithState, private TypeAheadDataSource {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static RawPtr<HTMLSelectElement> create(Document&);
-    static RawPtr<HTMLSelectElement> create(Document&, HTMLFormElement*);
+    static HTMLSelectElement* create(Document&);
+    static HTMLSelectElement* create(Document&, HTMLFormElement*);
     ~HTMLSelectElement() override;
 
     int selectedIndex() const;
@@ -83,10 +83,10 @@ public:
     String suggestedValue() const;
     void setSuggestedValue(const String&);
 
-    RawPtr<HTMLOptionsCollection> options();
-    RawPtr<HTMLCollection> selectedOptions();
+    HTMLOptionsCollection* options();
+    HTMLCollection* selectedOptions();
 
-    void optionElementChildrenChanged();
+    void optionElementChildrenChanged(const HTMLOptionElement&);
 
     void setRecalcListItems();
     void invalidateSelectedItems();
@@ -121,7 +121,7 @@ public:
     void optionSelectionStateChanged(HTMLOptionElement*, bool optionIsSelected);
     void optionInserted(HTMLOptionElement&, bool optionIsSelected);
     void optionRemoved(const HTMLOptionElement&);
-    bool anonymousIndexedSetter(unsigned, RawPtr<HTMLOptionElement>, ExceptionState&);
+    bool anonymousIndexedSetter(unsigned, HTMLOptionElement*, ExceptionState&);
 
     void updateListOnLayoutObject();
 
@@ -193,9 +193,14 @@ private:
     void dispatchInputAndChangeEventForMenuList();
 
     void recalcListItems() const;
-    void resetToDefaultSelection();
+    enum ResetReason {
+        ResetReasonSelectedOptionRemoved,
+        ResetReasonOthers
+    };
+    void resetToDefaultSelection(ResetReason = ResetReasonOthers);
     void typeAheadFind(KeyboardEvent*);
     void saveLastSelection();
+    void saveListboxActiveSelection();
     // Returns the first selected OPTION, or nullptr.
     HTMLOptionElement* selectedOption() const;
 
@@ -210,8 +215,8 @@ private:
         MakeOptionDirty = 1 << 2,
     };
     typedef unsigned SelectOptionFlags;
-    void selectOption(int optionIndex, SelectOptionFlags = 0);
-    void selectOption(HTMLOptionElement*, SelectOptionFlags = 0);
+    void selectOption(int optionIndex, SelectOptionFlags);
+    void selectOption(HTMLOptionElement*, SelectOptionFlags);
     void selectOption(HTMLOptionElement*, int optionIndex, SelectOptionFlags);
     void deselectItemsWithoutValidation(HTMLElement* elementToExclude = 0);
     void parseMultipleAttribute(const AtomicString&);

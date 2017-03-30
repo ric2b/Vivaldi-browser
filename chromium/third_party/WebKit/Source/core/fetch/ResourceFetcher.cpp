@@ -53,8 +53,6 @@
 #include "wtf/text/CString.h"
 #include "wtf/text/WTFString.h"
 
-#define PRELOAD_DEBUG 0
-
 using blink::WebURLRequest;
 
 namespace blink {
@@ -144,16 +142,10 @@ ResourceLoadPriority ResourceFetcher::loadPriority(Resource::Type type, const Fe
     return context().modifyPriorityForExperiments(typeToPriority(type), type, request, visibility);
 }
 
-static void populateResourceTiming(ResourceTimingInfo* info, Resource* resource, bool clearLoadTimings)
+static void populateResourceTiming(ResourceTimingInfo* info, Resource* resource)
 {
     info->setInitialRequest(resource->resourceRequest());
     info->setFinalResponse(resource->response());
-    if (clearLoadTimings) {
-        info->clearLoadTimings();
-        info->setLoadFinishTime(info->initialTime());
-    } else {
-        info->setLoadFinishTime(resource->loadFinishTime());
-    }
 }
 
 static WebURLRequest::RequestContext requestContextFromType(bool isMainFrame, Resource::Type type)
@@ -204,16 +196,11 @@ ResourceFetcher::ResourceFetcher(FetchContext* newContext)
     , m_allowStaleResources(false)
     , m_onlyLoadServeCachedResources(false)
 {
-#if ENABLE(OILPAN)
     ThreadState::current()->registerPreFinalizer(this);
-#endif
 }
 
 ResourceFetcher::~ResourceFetcher()
 {
-#if !ENABLE(OILPAN)
-    clearPreloads(ClearAllPreloads);
-#endif
 }
 
 WebTaskRunner* ResourceFetcher::loadingTaskRunner()
@@ -263,7 +250,8 @@ bool ResourceFetcher::isControlledByServiceWorker() const
 
 bool ResourceFetcher::resourceNeedsLoad(Resource* resource, const FetchRequest& request, RevalidationPolicy policy)
 {
-    if (FetchRequest::DeferredByClient == request.defer())
+    // Defer a font load until it is actually needed unless this is a preload.
+    if (resource->getType() == Resource::Font && !request.forPreload())
         return false;
     if (resource->isImage() && shouldDeferImageLoad(resource->url()))
         return false;
@@ -285,8 +273,10 @@ void ResourceFetcher::requestLoadStarted(Resource* resource, const FetchRequest&
     if (type == ResourceLoadingFromCache && !resource->stillNeedsLoad() && !m_validatedURLs.contains(request.resourceRequest().url())) {
         // Resources loaded from memory cache should be reported the first time they're used.
         OwnPtr<ResourceTimingInfo> info = ResourceTimingInfo::create(request.options().initiatorInfo.name, monotonicallyIncreasingTime(), resource->getType() == Resource::MainResource);
-        populateResourceTiming(info.get(), resource, true);
-        m_scheduledResourceTimingReports.append(info.release());
+        populateResourceTiming(info.get(), resource);
+        info->clearLoadTimings();
+        info->setLoadFinishTime(info->initialTime());
+        m_scheduledResourceTimingReports.append(std::move(info));
         if (!m_resourceTimingReportTimer.isActive())
             m_resourceTimingReportTimer.startOneShot(0, BLINK_FROM_HERE);
     }
@@ -301,7 +291,7 @@ static PassOwnPtr<TracedValue> urlForTraceEvent(const KURL& url)
 {
     OwnPtr<TracedValue> value = TracedValue::create();
     value->setString("url", url.getString());
-    return value.release();
+    return value;
 }
 
 Resource* ResourceFetcher::resourceForStaticData(const FetchRequest& request, const ResourceFactory& factory, const SubstituteData& substituteData)
@@ -435,8 +425,12 @@ Resource* ResourceFetcher::requestResource(FetchRequest& request, const Resource
 
     bool isStaticData = request.resourceRequest().url().protocolIsData() || substituteData.isValid() || m_archive;
     Resource* resource(nullptr);
-    if (isStaticData)
+    if (isStaticData) {
         resource = resourceForStaticData(request, factory, substituteData);
+        // Abort the request if the archive doesn't contain the resource.
+        if (!resource && m_archive)
+            return nullptr;
+    }
     if (!resource)
         resource = memoryCache()->resourceForURL(url, getCacheIdentifier());
 
@@ -500,7 +494,7 @@ Resource* ResourceFetcher::requestResource(FetchRequest& request, const Resource
     // If only the fragment identifiers differ, it is the same resource.
     ASSERT(equalIgnoringFragmentIdentifier(resource->url(), url));
     requestLoadStarted(resource, request, policy == Use ? ResourceLoadingFromCache : ResourceLoadingFromNetwork, isStaticData);
-    m_documentResources.set(urlWithoutFragment, resource->asWeakPtr());
+    m_documentResources.set(urlWithoutFragment, resource);
 
     if (!resourceNeedsLoad(resource, request, policy))
         return resource;
@@ -614,7 +608,7 @@ void ResourceFetcher::storeResourceTimingInitiatorInformation(Resource* resource
     }
 
     if (!isMainResource || context().updateTimingInfoForIFrameNavigation(info.get()))
-        m_resourceTimingInfoMap.add(resource, info.release());
+        m_resourceTimingInfoMap.add(resource, std::move(info));
 }
 
 ResourceFetcher::RevalidationPolicy ResourceFetcher::determineRevalidationPolicy(Resource::Type type, const FetchRequest& fetchRequest, Resource* existingResource, bool isStaticData) const
@@ -678,8 +672,6 @@ ResourceFetcher::RevalidationPolicy ResourceFetcher::determineRevalidationPolicy
     //    affected by m_imagesEnabled but not m_autoLoadImages, in order to
     //    allow for this differing behavior.
     // TODO(japhet): Can we get rid of one of these settings?
-    if (FetchRequest::DeferredByClient == fetchRequest.defer())
-        return Reload;
     if (existingResource->isImage() && !context().allowImage(m_imagesEnabled, existingResource->url()))
         return Reload;
 
@@ -749,17 +741,7 @@ ResourceFetcher::RevalidationPolicy ResourceFetcher::determineRevalidationPolicy
     if (type != Resource::Raw) {
         if (!context().isLoadComplete() && m_validatedURLs.contains(existingResource->url()))
             return Use;
-        // TODO(japhet): existingResource->isLoading() and existingResource->loader() are not identical,
-        // which is lame.
-        // Being in the loading state and having a ResourceLoader* are subtly diffent cases, either of which
-        // should indicate reuse. A resource can have isLoading() return true without a ResourceLoader* if
-        // it is a font that defers actually loading until the font is required. On the other hand,
-        // a Resource can have a non-null ResourceLoader* but have isLoading() return false in a narrow window
-        // during completion, because we set loading to false before notifying ResourceClients, but don't
-        // clear the ResourceLoader pointer until the stack unwinds. If, inside the ResourceClient callbacks,
-        // an event fires synchronously and an event handler re-requests the resource, we can reach this point
-        // while not loading but having a ResourceLoader.
-        if (existingResource->isLoading() || existingResource->loader())
+        if (existingResource->isLoading())
             return Use;
     }
 
@@ -847,19 +829,10 @@ bool ResourceFetcher::shouldDeferImageLoad(const KURL& url) const
 
 void ResourceFetcher::reloadImagesIfNotDeferred()
 {
-    // TODO(japhet): Once oilpan ships, the const auto&
-    // can be replaced with a Resource*. Also, null checking
-    // the resource probably won't be necesssary.
-    for (const auto& documentResource : m_documentResources) {
-        Resource* resource = documentResource.value.get();
-        if (resource && resource->getType() == Resource::Image && resource->stillNeedsLoad() && !shouldDeferImageLoad(resource->url()))
+    for (Resource* resource : m_documentResources.values()) {
+        if (resource->getType() == Resource::Image && resource->stillNeedsLoad() && !shouldDeferImageLoad(resource->url()))
             const_cast<Resource*>(resource)->load(this);
     }
-}
-
-void ResourceFetcher::didLoadResource(Resource* resource)
-{
-    context().didLoadResource(resource);
 }
 
 int ResourceFetcher::requestCount() const
@@ -877,10 +850,6 @@ void ResourceFetcher::preloadStarted(Resource* resource)
     if (!m_preloads)
         m_preloads = new HeapListHashSet<Member<Resource>>;
     m_preloads->add(resource);
-
-#if PRELOAD_DEBUG
-    printf("PRELOADING %s\n",  resource->url().string().latin1().data());
-#endif
 }
 
 bool ResourceFetcher::isPreloaded(const KURL& url) const
@@ -897,11 +866,10 @@ bool ResourceFetcher::isPreloaded(const KURL& url) const
 
 void ResourceFetcher::clearPreloads(ClearPreloadsPolicy policy)
 {
-#if PRELOAD_DEBUG
-    printPreloadStats();
-#endif
     if (!m_preloads)
         return;
+
+    logPreloadStats();
 
     for (auto resource : *m_preloads) {
         resource->decreasePreloadCount();
@@ -920,34 +888,47 @@ ArchiveResource* ResourceFetcher::createArchive(Resource* resource)
     return m_archive ? m_archive->mainResource() : nullptr;
 }
 
-void ResourceFetcher::didFinishLoading(Resource* resource, double finishTime, int64_t encodedDataLength)
+void ResourceFetcher::didFinishLoading(Resource* resource, double finishTime, int64_t encodedDataLength, DidFinishLoadingReason finishReason)
 {
     TRACE_EVENT_ASYNC_END0("blink.net", "Resource", resource);
-    // The ResourceLoader might be in |m_nonBlockingLoaders| for multipart responses.
-    ASSERT(resource);
-    ASSERT(!(m_loaders && m_loaders->contains(resource->loader())));
+    DCHECK(resource);
+
+    // When loading a multipart resource, make the loader non-block when
+    // finishing loading the first part.
+    if (finishReason == DidFinishFirstPartInMultipart)
+        moveResourceLoaderToNonBlocking(resource->loader());
+    else
+        removeResourceLoader(resource->loader());
+    DCHECK(!m_loaders || !m_loaders->contains(resource->loader()));
+    DCHECK(finishReason == DidFinishFirstPartInMultipart || !m_nonBlockingLoaders || !m_nonBlockingLoaders->contains(resource->loader()));
 
     if (OwnPtr<ResourceTimingInfo> info = m_resourceTimingInfoMap.take(resource)) {
         if (resource->response().isHTTP() && resource->response().httpStatusCode() < 400) {
-            populateResourceTiming(info.get(), resource, false);
+            populateResourceTiming(info.get(), resource);
+            info->setLoadFinishTime(finishTime);
             if (resource->options().requestInitiatorContext == DocumentContext)
                 context().addResourceTiming(*info);
             resource->reportResourceTimingToClients(*info);
         }
     }
     context().dispatchDidFinishLoading(resource->identifier(), finishTime, encodedDataLength);
+    if (finishReason == DidFinishLoading)
+        resource->finish(finishTime);
+    context().didLoadResource(resource);
 }
 
-void ResourceFetcher::didFailLoading(const Resource* resource, const ResourceError& error)
+void ResourceFetcher::didFailLoading(Resource* resource, const ResourceError& error)
 {
     TRACE_EVENT_ASYNC_END0("blink.net", "Resource", resource);
     removeResourceLoader(resource->loader());
     m_resourceTimingInfoMap.take(const_cast<Resource*>(resource));
     bool isInternalRequest = resource->options().initiatorInfo.name == FetchInitiatorTypeNames::internal;
     context().dispatchDidFail(resource->identifier(), error, isInternalRequest);
+    resource->error(error);
+    context().didLoadResource(resource);
 }
 
-void ResourceFetcher::didReceiveResponse(const Resource* resource, const ResourceResponse& response)
+void ResourceFetcher::didReceiveResponse(Resource* resource, const ResourceResponse& response)
 {
     // If the response is fetched via ServiceWorker, the original URL of the response could be different from the URL of the request.
     // We check the URL not to load the resources which are forbidden by the page CSP.
@@ -961,7 +942,7 @@ void ResourceFetcher::didReceiveResponse(const Resource* resource, const Resourc
             return;
         }
     }
-    context().dispatchDidReceiveResponse(resource->identifier(), response, resource->resourceRequest().frameType(), resource->resourceRequest().requestContext(), resource->loader());
+    context().dispatchDidReceiveResponse(resource->identifier(), response, resource->resourceRequest().frameType(), resource->resourceRequest().requestContext(), resource);
 }
 
 void ResourceFetcher::didReceiveData(const Resource* resource, const char* data, int dataLength, int encodedDataLength)
@@ -989,7 +970,7 @@ void ResourceFetcher::moveResourceLoaderToNonBlocking(ResourceLoader* loader)
 
 void ResourceFetcher::willStartLoadingResource(Resource* resource, ResourceLoader* loader, ResourceRequest& request)
 {
-    if (loader->cachedResource()->shouldBlockLoadEvent()) {
+    if (resource->shouldBlockLoadEvent()) {
         if (!m_loaders)
             m_loaders = ResourceLoaderSet::create();
         m_loaders->add(loader);
@@ -1105,55 +1086,114 @@ void ResourceFetcher::reloadLoFiImages()
     }
 }
 
-#if PRELOAD_DEBUG
-void ResourceFetcher::printPreloadStats()
+void ResourceFetcher::logPreloadStats()
 {
     if (!m_preloads)
         return;
-
     unsigned scripts = 0;
     unsigned scriptMisses = 0;
     unsigned stylesheets = 0;
     unsigned stylesheetMisses = 0;
     unsigned images = 0;
     unsigned imageMisses = 0;
+    unsigned fonts = 0;
+    unsigned fontMisses = 0;
+    unsigned medias = 0;
+    unsigned mediaMisses = 0;
+    unsigned textTracks = 0;
+    unsigned textTrackMisses = 0;
+    unsigned imports = 0;
+    unsigned importMisses = 0;
+    unsigned raws = 0;
+    unsigned rawMisses = 0;
     for (auto resource : *m_preloads) {
-        if (resource->getPreloadResult() == Resource::PreloadNotReferenced)
-            printf("!! UNREFERENCED PRELOAD %s\n", resource->url().string().latin1().data());
-        else if (resource->getPreloadResult() == Resource::PreloadReferencedWhileComplete)
-            printf("HIT COMPLETE PRELOAD %s\n", resource->url().string().latin1().data());
-        else if (resource->getPreloadResult() == Resource::PreloadReferencedWhileLoading)
-            printf("HIT LOADING PRELOAD %s\n", resource->url().string().latin1().data());
-
-        if (resource->getType() == Resource::Script) {
-            scripts++;
-            if (resource->getPreloadResult() < Resource::PreloadReferencedWhileLoading)
-                scriptMisses++;
-        } else if (resource->getType() == Resource::CSSStyleSheet) {
-            stylesheets++;
-            if (resource->getPreloadResult() < Resource::PreloadReferencedWhileLoading)
-                stylesheetMisses++;
-        } else {
+        int missCount = resource->getPreloadResult() == Resource::PreloadNotReferenced ? 1 : 0;
+        switch (resource->getType()) {
+        case Resource::Image:
             images++;
-            if (resource->getPreloadResult() < Resource::PreloadReferencedWhileLoading)
-                imageMisses++;
+            imageMisses += missCount;
+            break;
+        case Resource::Script:
+            scripts++;
+            scriptMisses += missCount;
+            break;
+        case Resource::CSSStyleSheet:
+            stylesheets++;
+            stylesheetMisses += missCount;
+            break;
+        case Resource::Font:
+            fonts++;
+            fontMisses += missCount;
+            break;
+        case Resource::Media:
+            medias++;
+            mediaMisses += missCount;
+            break;
+        case Resource::TextTrack:
+            textTracks++;
+            textTrackMisses += missCount;
+            break;
+        case Resource::ImportResource:
+            imports++;
+            importMisses += missCount;
+            break;
+        case Resource::Raw:
+            raws++;
+            rawMisses += missCount;
+            break;
+        default:
+            ASSERT_NOT_REACHED();
         }
-
-        if (resource->errorOccurred())
-            memoryCache()->remove(resource.get());
-
-        resource->decreasePreloadCount();
     }
-    m_preloads.clear();
-
-    if (scripts)
-        printf("SCRIPTS: %d (%d hits, hit rate %d%%)\n", scripts, scripts - scriptMisses, (scripts - scriptMisses) * 100 / scripts);
-    if (stylesheets)
-        printf("STYLESHEETS: %d (%d hits, hit rate %d%%)\n", stylesheets, stylesheets - stylesheetMisses, (stylesheets - stylesheetMisses) * 100 / stylesheets);
+    DEFINE_STATIC_LOCAL(CustomCountHistogram, imagePreloads, ("PreloadScanner.Counts.Image", 0, 100, 5));
+    DEFINE_STATIC_LOCAL(CustomCountHistogram, imagePreloadMisses, ("PreloadScanner.Counts.Miss.Image", 0, 100, 5));
+    DEFINE_STATIC_LOCAL(CustomCountHistogram, scriptPreloads, ("PreloadScanner.Counts.Script", 0, 100, 5));
+    DEFINE_STATIC_LOCAL(CustomCountHistogram, scriptPreloadMisses, ("PreloadScanner.Counts.Miss.Script", 0, 100, 5));
+    DEFINE_STATIC_LOCAL(CustomCountHistogram, stylesheetPreloads, ("PreloadScanner.Counts.CSSStyleSheet", 0, 100, 5));
+    DEFINE_STATIC_LOCAL(CustomCountHistogram, stylesheetPreloadMisses, ("PreloadScanner.Counts.Miss.CSSStyleSheet", 0, 100, 5));
+    DEFINE_STATIC_LOCAL(CustomCountHistogram, fontPreloads, ("PreloadScanner.Counts.Font", 0, 100, 5));
+    DEFINE_STATIC_LOCAL(CustomCountHistogram, fontPreloadMisses, ("PreloadScanner.Counts.Miss.Font", 0, 100, 5));
+    DEFINE_STATIC_LOCAL(CustomCountHistogram, mediaPreloads, ("PreloadScanner.Counts.Media", 0, 100, 5));
+    DEFINE_STATIC_LOCAL(CustomCountHistogram, mediaPreloadMisses, ("PreloadScanner.Counts.Miss.Media", 0, 100, 5));
+    DEFINE_STATIC_LOCAL(CustomCountHistogram, textTrackPreloads, ("PreloadScanner.Counts.TextTrack", 0, 100, 5));
+    DEFINE_STATIC_LOCAL(CustomCountHistogram, textTrackPreloadMisses, ("PreloadScanner.Counts.Miss.TextTrack", 0, 100, 5));
+    DEFINE_STATIC_LOCAL(CustomCountHistogram, importPreloads, ("PreloadScanner.Counts.Import", 0, 100, 5));
+    DEFINE_STATIC_LOCAL(CustomCountHistogram, importPreloadMisses, ("PreloadScanner.Counts.Miss.Import", 0, 100, 5));
+    DEFINE_STATIC_LOCAL(CustomCountHistogram, rawPreloads, ("PreloadScanner.Counts.Raw", 0, 100, 5));
+    DEFINE_STATIC_LOCAL(CustomCountHistogram, rawPreloadMisses, ("PreloadScanner.Counts.Miss.Raw", 0, 100, 5));
     if (images)
-        printf("IMAGES:  %d (%d hits, hit rate %d%%)\n", images, images - imageMisses, (images - imageMisses) * 100 / images);
+        imagePreloads.count(images);
+    if (imageMisses)
+        imagePreloadMisses.count(imageMisses);
+    if (scripts)
+        scriptPreloads.count(scripts);
+    if (scriptMisses)
+        scriptPreloadMisses.count(scriptMisses);
+    if (stylesheets)
+        stylesheetPreloads.count(stylesheets);
+    if (stylesheetMisses)
+        stylesheetPreloadMisses.count(stylesheetMisses);
+    if (fonts)
+        fontPreloads.count(fonts);
+    if (fontMisses)
+        fontPreloadMisses.count(fontMisses);
+    if (medias)
+        mediaPreloads.count(medias);
+    if (mediaMisses)
+        mediaPreloadMisses.count(mediaMisses);
+    if (textTracks)
+        textTrackPreloads.count(textTracks);
+    if (textTrackMisses)
+        textTrackPreloadMisses.count(textTrackMisses);
+    if (imports)
+        importPreloads.count(imports);
+    if (importMisses)
+        importPreloadMisses.count(importMisses);
+    if (raws)
+        rawPreloads.count(raws);
+    if (rawMisses)
+        rawPreloadMisses.count(rawMisses);
 }
-#endif
 
 const ResourceLoaderOptions& ResourceFetcher::defaultResourceOptions()
 {

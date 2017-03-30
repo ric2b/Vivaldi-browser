@@ -66,10 +66,17 @@ Yine de oturum açarsanız, yer işaretleriniz, geçmişiniz ve diğer ayarları
 <translation id="2997147809295888909">Chrome, bu web sitesi sertifikasının <ph name="ISSUER" /> tarafından yayınlandığını doğruladı. Sunucu herhangi bir Sertifika Şeffaflığı bilgisi sağlamadı.</translation>
 <translation id="3037838751736561277">Google Chrome arka plan modunda.</translation>
 <translation id="3047079729301751317"><ph name="USERNAME" /> kullanıcısının bağlantısını kesmek, geçmişinizi, yer işaretlerinizi, ayarlarınızı ve bu cihazda depolanan diğer Chrome verilerinizi temizler. Google Hesabınızda depolanan veriler temizlenmez ve <ph name="GOOGLE_DASHBOARD_LINK" />Google Hesap Özeti<ph name="END_GOOGLE_DASHBOARD_LINK" />'nden yönetilebilir.</translation>
+<translation id="3065168410429928842">Chrome Sekmesi</translation>
 <translation id="3080151273017101988">Google Chrome kapandığında arka plan uygulamaları çalıştırmaya devam et</translation>
 <translation id="3089968997497233615">Google Chrome'un kullanabileceğiniz yeni, daha güvenli bir sürümü var.</translation>
 <translation id="3149510190863420837">Chrome Uygulamaları</translation>
-<translation id="3197823471738295152">Cihazınız güncel.</translation>
+<translation id="3251381707915721925"><ph name="NEW_PROFILE_NAME" /> kullanıcısının hangi web sitelerini görüntüleyebileceğini ayarlamak için <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" /> bağlantısını ziyaret ederek kısıtlamaları ve ayarları yapılandırabilirsiniz. Varsayılan ayarları değiştirmezseniz <ph name="NEW_PROFILE_NAME" /> web'de bulunan her şeye göz atabilir.
+
+
+<ph name="NEW_PROFILE_NAME" /> kullanıcısının hesabınıza erişmesini önlemek için Chrome'u kullanmadığınız zamanlarda profilinizi kilitlediğinizden emin olun. Bunu yapmak için tarayıcının sağ üst köşesindeki profil adınızı tıklayıp, "Çıkış ve çocuk kilidi"ni seçin.
+<ph name="BEGIN_LINK_2" />Daha fazla bilgi edinin<ph name="END_LINK_2" />
+
+Daha fazla talimat için lütfen e-postanızı <ph name="ACCOUNT_EMAIL" /> kontrol edin.</translation>
 <translation id="3282568296779691940">Chrome'da oturum aç</translation>
 <translation id="3311976847535831054">Bu bilgisayar artık 32 bit Google Chrome güncellemelerini almayacak. Lütfen Google Chrome'un 64 bit sürümüne geçin.</translation>
 <translation id="3360895254066713204">Chrome Helper</translation>
@@ -207,7 +214,6 @@ Bazı özellikler kullanılamayabilir. Lütfen farklı bir profil dizini belirti
 <translation id="7808348361785373670">Chrome'dan kaldır...</translation>
 <translation id="7825851276765848807">Yükleme belirtilmeyen bir hata nedeniyle başarısız oldu. Lütfen Google Chrome'u tekrar yükleyin.</translation>
 <translation id="7890208801193284374">Bir bilgisayarı paylaşıyorsanız arkadaşlarınız ve aileniz web'e ayrı olarak göz atabilir ve Chrome'u tam olarak istedikleri şekilde ayarlayabilirler.</translation>
-<translation id="8000275528373650868">Google Chrome, Windows Vista veya Windows XP SP2 veya daha ileri bir sürümü gerektirir.</translation>
 <translation id="8005540215158006229">Chrome neredeyse hazır.</translation>
 <translation id="8008534537613507642">Chrome'u yeniden yükle</translation>
 <translation id="8030318113982266900">Cihazınız <ph name="CHANNEL_NAME" /> kanalına güncelleniyor...</translation>
@@ -229,6 +235,7 @@ Bazı özellikler kullanılamayabilir. Lütfen farklı bir profil dizini belirti
 <translation id="8556340503434111824">Kullanabileceğiniz yeni bir Google Chrome sürümü var ve bu sürüm, her zamankinden daha hızlı.</translation>
 <translation id="8568392309447938879">Uygulamaları kullanmak için Chrome'da oturum açmış olmanız gerekir. Oturum açmanız, Chrome'un uygulamalarınızı, yer işaretlerinizi, geçmişinizi, şifrelerinizi ve diğer ayarlarınızı tüm cihazlarınızda senkronize etmesine olanak sağlar.</translation>
 <translation id="8614913330719544658">Google Chrome yanıt vermiyor. Yeniden başlatılsın mı?</translation>
+<translation id="8667808506758191620"><ph name="DEVICE_TYPE" /> cihazınız güncel.</translation>
 <translation id="8669527147644353129">Google Chrome Helper</translation>
 <translation id="8679801911857917785">Ayrıca Chrome'u başlattığınızda gösterilecek sayfayı da denetler.</translation>
 <translation id="870251953148363156">&amp;Google Chrome'u güncelle</translation>
@@ -237,6 +244,7 @@ Bazı özellikler kullanılamayabilir. Lütfen farklı bir profil dizini belirti
 <translation id="8851136666856101339">main</translation>
 <translation id="8862326446509486874">Sistem düzeyinde yükleme için gerekli haklara sahip değilsiniz. Yükleyiciyi Yönetici olarak tekrar çalıştırmayı deneyin.</translation>
 <translation id="9026991721384951619">Hesap oturum açma ayrıntılarınız güncel olmadığından Chrome OS, verilerinizi senkronize edemedi.</translation>
+<translation id="9067395829937117663">Google Chrome, Windows 7 veya daha sonraki bir sürümü gerektirir.</translation>
 <translation id="9102715433345326100">Bu dosya kötü amaçlı ve Chrome tarafından engellendi.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Uyarı:<ph name="END_BOLD" /> Google Chrome, uzantıların göz atma geçmişinizi kaydetmesini önleyemez. Gizli modda bu uzantıyı devre dışı bırakmak için, bu seçeneğin onay işaretini kaldırın.</translation>
 <translation id="911206726377975832">Tarama verileriniz de silinsin mi?</translation>

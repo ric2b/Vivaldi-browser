@@ -8,7 +8,11 @@
 #include "base/base_export.h"
 #include "base/callback_forward.h"
 #include "base/location.h"
+#include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/pending_task.h"
+#include "base/sequenced_task_runner.h"
+#include "base/single_thread_task_runner.h"
 #include "base/task_scheduler/task_traits.h"
 #include "base/time/time.h"
 
@@ -18,9 +22,13 @@ namespace internal {
 // A task is a unit of work inside the task scheduler. Support for tracing and
 // profiling inherited from PendingTask.
 struct BASE_EXPORT Task : public PendingTask {
+  // |posted_from| is the site the task was posted from. |task| is the closure
+  // to run. |traits| is metadata about the task. |delay| is a delay that must
+  // expire before the Task runs.
   Task(const tracked_objects::Location& posted_from,
        const Closure& task,
-       const TaskTraits& traits);
+       const TaskTraits& traits,
+       const TimeDelta& delay);
   ~Task();
 
   // The TaskTraits of this task.
@@ -31,6 +39,23 @@ struct BASE_EXPORT Task : public PendingTask {
   // time after the task's delay has expired. If the task hasn't been inserted
   // in a sequence yet, this defaults to a null TimeTicks.
   TimeTicks sequenced_time;
+
+  // A reference to the SequencedTaskRunner or SingleThreadTaskRunner that
+  // posted this task, if any. Used to set ThreadTaskRunnerHandle and/or
+  // SequencedTaskRunnerHandle while the task is running.
+  // Note: this creates an ownership cycle
+  //   Sequence -> Task -> TaskRunner -> Sequence -> ...
+  // but that's okay as it's broken when the Task is popped from its Sequence
+  // after being executed which means this cycle forces the TaskRunner to stick
+  // around until all its tasks have been executed which is a requirement to
+  // support TaskRunnerHandles.
+  scoped_refptr<SequencedTaskRunner> sequenced_task_runner_ref;
+  scoped_refptr<SingleThreadTaskRunner> single_thread_task_runner_ref;
+
+ private:
+  // Disallow copies to make sure no unnecessary ref-bumps are incurred. Making
+  // it move-only would be an option, but isn't necessary for now.
+  DISALLOW_COPY_AND_ASSIGN(Task);
 };
 
 }  // namespace internal

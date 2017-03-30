@@ -9,14 +9,15 @@
 #include "ash/frame/caption_buttons/frame_caption_button_container_view.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "base/i18n/rtl.h"
 #include "grit/ash_resources.h"
 #include "ui/aura/window.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
 #include "ui/events/test/event_generator.h"
-#include "ui/gfx/display.h"
-#include "ui/gfx/screen.h"
 #include "ui/gfx/vector_icons_public.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -336,7 +337,7 @@ TEST_F(FrameSizeButtonTest, ResetButtonsAfterClick) {
   EXPECT_EQ(CAPTION_BUTTON_ICON_RIGHT_SNAPPED, close_button()->icon());
 
   const gfx::Rect& kWorkAreaBoundsInScreen =
-      gfx::Screen::GetScreen()->GetPrimaryDisplay().work_area();
+      display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
   generator.MoveMouseTo(kWorkAreaBoundsInScreen.bottom_left());
 
   // None of the buttons should be pressed because we are really far away from
@@ -387,7 +388,7 @@ TEST_F(FrameSizeButtonTest, SizeButtonPressedWhenSnapButtonHovered) {
   // the close button (snap right button) should hover the close button and
   // keep the size button pressed.
   const gfx::Rect& kWorkAreaBoundsInScreen =
-      gfx::Screen::GetScreen()->GetPrimaryDisplay().work_area();
+      display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
   generator.MoveMouseTo(kWorkAreaBoundsInScreen.bottom_left());
   EXPECT_TRUE(AllButtonsInNormalState());
   generator.MoveMouseTo(CenterPointInScreen(close_button()));

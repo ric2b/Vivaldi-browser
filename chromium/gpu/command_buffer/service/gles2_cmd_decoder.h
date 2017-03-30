@@ -43,8 +43,9 @@ class ImageManager;
 class Logger;
 class QueryManager;
 class Texture;
+class TransformFeedbackManager;
 class VertexArrayManager;
-class ValuebufferManager;
+struct ContextCreationAttribHelper;
 struct ContextState;
 
 struct DisallowedFeatures {
@@ -151,13 +152,16 @@ class GPU_EXPORT GLES2Decoder : public base::SupportsWeakPtr<GLES2Decoder>,
                           bool offscreen,
                           const gfx::Size& offscreen_size,
                           const DisallowedFeatures& disallowed_features,
-                          const std::vector<int32_t>& attribs) = 0;
+                          const ContextCreationAttribHelper& attrib_helper) = 0;
 
   // Destroys the graphics context.
   virtual void Destroy(bool have_context) = 0;
 
   // Set the surface associated with the default FBO.
   virtual void SetSurface(const scoped_refptr<gfx::GLSurface>& surface) = 0;
+  // Releases the surface associated with the GL context.
+  // The decoder should not be used until a new surface is set.
+  virtual void ReleaseSurface() = 0;
 
   virtual void ProduceFrontBuffer(const Mailbox& mailbox) = 0;
 
@@ -205,14 +209,14 @@ class GPU_EXPORT GLES2Decoder : public base::SupportsWeakPtr<GLES2Decoder>,
   // Gets the QueryManager for this context.
   virtual QueryManager* GetQueryManager() = 0;
 
+  // Gets the TransformFeedbackManager for this context.
+  virtual TransformFeedbackManager* GetTransformFeedbackManager() = 0;
+
   // Gets the VertexArrayManager for this context.
   virtual VertexArrayManager* GetVertexArrayManager() = 0;
 
   // Gets the ImageManager for this context.
   virtual ImageManager* GetImageManager() = 0;
-
-  // Gets the ValuebufferManager for this context.
-  virtual ValuebufferManager* GetValuebufferManager() = 0;
 
   // Returns false if there are no pending queries.
   virtual bool HasPendingQueries() const = 0;
@@ -245,6 +249,19 @@ class GPU_EXPORT GLES2Decoder : public base::SupportsWeakPtr<GLES2Decoder>,
                           int yoffset,
                           int width,
                           int height) = 0;
+
+  // Clears a level sub area of a compressed 2D texture.
+  // Returns false if a GL error should be generated.
+  virtual bool ClearCompressedTextureLevel(Texture* texture,
+                                           unsigned target,
+                                           int level,
+                                           unsigned format,
+                                           int width,
+                                           int height) = 0;
+
+  // Indicates whether a given internal format is one for a compressed
+  // texture.
+  virtual bool IsCompressedTextureFormat(unsigned format) = 0;
 
   // Clears a level of a 3D texture.
   // Returns false if a GL error should be generated.

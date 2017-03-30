@@ -26,14 +26,16 @@
 #import "chrome/browser/ui/cocoa/info_bubble_window.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/url_formatter/elide_url.h"
 #include "content/public/browser/native_web_keyboard_event.h"
-#include "skia/ext/skia_utils_mac.h"
+#import "third_party/google_toolbox_for_mac/src/AppKit/GTMUILocalizerAndLayoutTweaker.h"
 #include "ui/base/cocoa/cocoa_base_utils.h"
 #import "ui/base/cocoa/controls/hyperlink_button_cell.h"
 #include "ui/base/cocoa/window_size_constants.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace {
 
@@ -453,9 +455,16 @@ std::unique_ptr<BubbleUi> ChooserBubbleController::BuildBubbleUi() {
   [titleView setBezeled:NO];
   [titleView setEditable:NO];
   [titleView setSelectable:NO];
-  [titleView setStringValue:l10n_util::GetNSString(IDS_CHOOSER_BUBBLE_PROMPT)];
+  [titleView setStringValue:
+                 l10n_util::GetNSStringF(
+                     IDS_CHOOSER_BUBBLE_PROMPT,
+                     url_formatter::FormatOriginForSecurityDisplay(
+                         chooserBubbleController_->GetOrigin(),
+                         url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC))];
   [titleView setFont:[NSFont systemFontOfSize:[NSFont systemFontSize]]];
-  [titleView sizeToFit];
+  // The height is arbitrary as it will be adjusted later.
+  [titleView setFrameSize:NSMakeSize(kChooserBubbleWidth - 2 * kMarginX, 0.0f)];
+  [GTMUILocalizerAndLayoutTweaker sizeToFitFixedWidthTextField:titleView];
   return titleView;
 }
 

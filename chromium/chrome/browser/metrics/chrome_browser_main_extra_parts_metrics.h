@@ -7,12 +7,13 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
-#include "ui/gfx/display_observer.h"
+#include "ui/display/display_observer.h"
 
 class ChromeBrowserMainParts;
 
@@ -24,9 +25,8 @@ namespace ui {
 class InputDeviceEventObserver;
 }  // namespace ui
 
-class ChromeBrowserMainExtraPartsMetrics
-    : public ChromeBrowserMainExtraParts,
-      public gfx::DisplayObserver {
+class ChromeBrowserMainExtraPartsMetrics : public ChromeBrowserMainExtraParts,
+                                           public display::DisplayObserver {
  public:
   ChromeBrowserMainExtraPartsMetrics();
   ~ChromeBrowserMainExtraPartsMetrics() override;
@@ -43,9 +43,9 @@ class ChromeBrowserMainExtraPartsMetrics
 #endif  // defined(OS_MACOSX)
 
   // DisplayObserver overrides.
-  void OnDisplayAdded(const gfx::Display& new_display) override;
-  void OnDisplayRemoved(const gfx::Display& old_display) override;
-  void OnDisplayMetricsChanged(const gfx::Display& display,
+  void OnDisplayAdded(const display::Display& new_display) override;
+  void OnDisplayRemoved(const display::Display& old_display) override;
+  void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t changed_metrics) override;
 
   // If the number of displays has changed, emit a UMA metric.
@@ -59,7 +59,7 @@ class ChromeBrowserMainExtraPartsMetrics
   bool is_screen_observer_;
 
 #if defined(USE_OZONE) || defined(USE_X11)
-  scoped_ptr<ui::InputDeviceEventObserver> input_device_event_observer_;
+  std::unique_ptr<ui::InputDeviceEventObserver> input_device_event_observer_;
 #endif  // defined(USE_OZONE) || defined(USE_X11)
 
   DISALLOW_COPY_AND_ASSIGN(ChromeBrowserMainExtraPartsMetrics);

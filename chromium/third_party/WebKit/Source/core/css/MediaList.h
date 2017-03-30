@@ -26,8 +26,6 @@
 #include "core/dom/ExceptionCode.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
 
@@ -93,11 +91,6 @@ public:
     // Not part of CSSOM.
     CSSRule* parentRule() const { return m_parentRule; }
     CSSStyleSheet* parentStyleSheet() const { return m_parentStyleSheet; }
-
-#if !ENABLE(OILPAN)
-    void clearParentStyleSheet() { ASSERT(m_parentStyleSheet); m_parentStyleSheet = nullptr; }
-    void clearParentRule() { ASSERT(m_parentRule); m_parentRule = nullptr; }
-#endif
 
     const MediaQuerySet* queries() const { return m_mediaQueries.get(); }
 

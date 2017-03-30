@@ -13,15 +13,16 @@ class MockPermissionBubbleRequest : public PermissionBubbleRequest {
  public:
   MockPermissionBubbleRequest();
   explicit MockPermissionBubbleRequest(const std::string& text);
-  explicit MockPermissionBubbleRequest(const std::string& text,
-                                       const GURL& url);
-  explicit MockPermissionBubbleRequest(const std::string& text,
-                                       const std::string& accept_label,
-                                       const std::string& deny_label);
+  MockPermissionBubbleRequest(const std::string& text,
+                              PermissionBubbleType bubble_type);
+  MockPermissionBubbleRequest(const std::string& text, const GURL& url);
+  MockPermissionBubbleRequest(const std::string& text,
+                              const std::string& accept_label,
+                              const std::string& deny_label);
+
   ~MockPermissionBubbleRequest() override;
 
   int GetIconId() const override;
-  base::string16 GetMessageText() const override;
   base::string16 GetMessageTextFragment() const override;
   GURL GetOrigin() const override;
 
@@ -29,15 +30,22 @@ class MockPermissionBubbleRequest : public PermissionBubbleRequest {
   void PermissionDenied() override;
   void Cancelled() override;
   void RequestFinished() override;
+  PermissionBubbleType GetPermissionBubbleType() const override;
 
   bool granted();
   bool cancelled();
   bool finished();
 
  private:
+  MockPermissionBubbleRequest(const std::string& text,
+                              const std::string& accept_label,
+                              const std::string& deny_label,
+                              const GURL& url,
+                              PermissionBubbleType bubble_type);
   bool granted_;
   bool cancelled_;
   bool finished_;
+  PermissionBubbleType bubble_type_;
 
   base::string16 text_;
   base::string16 accept_label_;

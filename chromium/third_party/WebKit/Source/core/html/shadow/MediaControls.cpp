@@ -52,6 +52,9 @@ static bool shouldShowFullscreenButton(const HTMLMediaElement& mediaElement)
     if (mediaElement.isFullscreen())
         return true;
 
+    if (!mediaElement.isHTMLVideoElement())
+        return false;
+
     if (!mediaElement.hasVideo())
         return false;
 
@@ -113,6 +116,7 @@ MediaControls::MediaControls(HTMLMediaElement& mediaElement)
     , m_muteButton(nullptr)
     , m_volumeSlider(nullptr)
     , m_toggleClosedCaptionsButton(nullptr)
+    , m_textTrackList(nullptr)
     , m_castButton(nullptr)
     , m_fullScreenButton(nullptr)
     , m_hideMediaControlsTimer(this, &MediaControls::hideMediaControlsTimerFired)
@@ -125,12 +129,12 @@ MediaControls::MediaControls(HTMLMediaElement& mediaElement)
 {
 }
 
-RawPtr<MediaControls> MediaControls::create(HTMLMediaElement& mediaElement)
+MediaControls* MediaControls::create(HTMLMediaElement& mediaElement)
 {
-    RawPtr<MediaControls> controls = new MediaControls(mediaElement);
+    MediaControls* controls = new MediaControls(mediaElement);
     controls->setShadowPseudoId(AtomicString("-webkit-media-controls"));
     controls->initializeControls();
-    return controls.release();
+    return controls;
 }
 
 // The media controls DOM structure looks like:
@@ -154,80 +158,90 @@ RawPtr<MediaControls> MediaControls::create(HTMLMediaElement& mediaElement)
 //     +-MediaControlToggleClosedCaptionsButtonElement (-webkit-media-controls-toggle-closed-captions-button)
 //     +-MediaControlCastButtonElement                 (-internal-media-controls-cast-button)
 //     \-MediaControlFullscreenButtonElement           (-webkit-media-controls-fullscreen-button)
+// +-MediaControlTextTrackListElement                (-internal-media-controls-text-track-list)
+// | {for each renderable text track}
+//  \-MediaControlTextTrackListItem                 (-internal-media-controls-text-track-list-item)
+//  +-MediaControlTextTrackListItemInput            (-internal-media-controls-text-track-list-item-input)
+//  +-MediaControlTextTrackListItemCaptions         (-internal-media-controls-text-track-list-kind-captions)
+//  +-MediaControlTextTrackListItemSubtitles        (-internal-media-controls-text-track-list-kind-subtitles)
 void MediaControls::initializeControls()
 {
     const bool useNewUi = RuntimeEnabledFeatures::newMediaPlaybackUiEnabled();
-    RawPtr<MediaControlOverlayEnclosureElement> overlayEnclosure = MediaControlOverlayEnclosureElement::create(*this);
+    MediaControlOverlayEnclosureElement* overlayEnclosure = MediaControlOverlayEnclosureElement::create(*this);
 
     if (document().settings() && document().settings()->mediaControlsOverlayPlayButtonEnabled()) {
-        RawPtr<MediaControlOverlayPlayButtonElement> overlayPlayButton = MediaControlOverlayPlayButtonElement::create(*this);
-        m_overlayPlayButton = overlayPlayButton.get();
-        overlayEnclosure->appendChild(overlayPlayButton.release());
+        MediaControlOverlayPlayButtonElement* overlayPlayButton = MediaControlOverlayPlayButtonElement::create(*this);
+        m_overlayPlayButton = overlayPlayButton;
+        overlayEnclosure->appendChild(overlayPlayButton);
     }
 
-    RawPtr<MediaControlCastButtonElement> overlayCastButton = MediaControlCastButtonElement::create(*this, true);
-    m_overlayCastButton = overlayCastButton.get();
-    overlayEnclosure->appendChild(overlayCastButton.release());
+    MediaControlCastButtonElement* overlayCastButton = MediaControlCastButtonElement::create(*this, true);
+    m_overlayCastButton = overlayCastButton;
+    overlayEnclosure->appendChild(overlayCastButton);
 
-    m_overlayEnclosure = overlayEnclosure.get();
-    appendChild(overlayEnclosure.release());
+    m_overlayEnclosure = overlayEnclosure;
+    appendChild(overlayEnclosure);
 
     // Create an enclosing element for the panel so we can visually offset the controls correctly.
-    RawPtr<MediaControlPanelEnclosureElement> enclosure = MediaControlPanelEnclosureElement::create(*this);
+    MediaControlPanelEnclosureElement* enclosure = MediaControlPanelEnclosureElement::create(*this);
 
-    RawPtr<MediaControlPanelElement> panel = MediaControlPanelElement::create(*this);
+    MediaControlPanelElement* panel = MediaControlPanelElement::create(*this);
 
-    RawPtr<MediaControlPlayButtonElement> playButton = MediaControlPlayButtonElement::create(*this);
-    m_playButton = playButton.get();
-    panel->appendChild(playButton.release());
+    MediaControlPlayButtonElement* playButton = MediaControlPlayButtonElement::create(*this);
+    m_playButton = playButton;
+    panel->appendChild(playButton);
 
-    RawPtr<MediaControlTimelineElement> timeline = MediaControlTimelineElement::create(*this);
-    m_timeline = timeline.get();
+    MediaControlTimelineElement* timeline = MediaControlTimelineElement::create(*this);
+    m_timeline = timeline;
     // In old UX, timeline is before the time / duration text.
     if (!useNewUi)
-        panel->appendChild(timeline.release());
+        panel->appendChild(timeline);
     // else we will attach it later.
 
-    RawPtr<MediaControlCurrentTimeDisplayElement> currentTimeDisplay = MediaControlCurrentTimeDisplayElement::create(*this);
-    m_currentTimeDisplay = currentTimeDisplay.get();
+    MediaControlCurrentTimeDisplayElement* currentTimeDisplay = MediaControlCurrentTimeDisplayElement::create(*this);
+    m_currentTimeDisplay = currentTimeDisplay;
     m_currentTimeDisplay->setIsWanted(useNewUi);
-    panel->appendChild(currentTimeDisplay.release());
+    panel->appendChild(currentTimeDisplay);
 
-    RawPtr<MediaControlTimeRemainingDisplayElement> durationDisplay = MediaControlTimeRemainingDisplayElement::create(*this);
-    m_durationDisplay = durationDisplay.get();
-    panel->appendChild(durationDisplay.release());
+    MediaControlTimeRemainingDisplayElement* durationDisplay = MediaControlTimeRemainingDisplayElement::create(*this);
+    m_durationDisplay = durationDisplay;
+    panel->appendChild(durationDisplay);
 
     // Timeline is after the time / duration text if newMediaPlaybackUiEnabled.
     if (useNewUi)
-        panel->appendChild(timeline.release());
+        panel->appendChild(timeline);
 
-    RawPtr<MediaControlMuteButtonElement> muteButton = MediaControlMuteButtonElement::create(*this);
-    m_muteButton = muteButton.get();
-    panel->appendChild(muteButton.release());
+    MediaControlMuteButtonElement* muteButton = MediaControlMuteButtonElement::create(*this);
+    m_muteButton = muteButton;
+    panel->appendChild(muteButton);
 
-    RawPtr<MediaControlVolumeSliderElement> slider = MediaControlVolumeSliderElement::create(*this);
-    m_volumeSlider = slider.get();
-    panel->appendChild(slider.release());
+    MediaControlVolumeSliderElement* slider = MediaControlVolumeSliderElement::create(*this);
+    m_volumeSlider = slider;
+    panel->appendChild(slider);
     if (m_allowHiddenVolumeControls && preferHiddenVolumeControls(document()))
         m_volumeSlider->setIsWanted(false);
 
-    RawPtr<MediaControlToggleClosedCaptionsButtonElement> toggleClosedCaptionsButton = MediaControlToggleClosedCaptionsButtonElement::create(*this);
-    m_toggleClosedCaptionsButton = toggleClosedCaptionsButton.get();
-    panel->appendChild(toggleClosedCaptionsButton.release());
+    MediaControlToggleClosedCaptionsButtonElement* toggleClosedCaptionsButton = MediaControlToggleClosedCaptionsButtonElement::create(*this);
+    m_toggleClosedCaptionsButton = toggleClosedCaptionsButton;
+    panel->appendChild(toggleClosedCaptionsButton);
 
-    RawPtr<MediaControlCastButtonElement> castButton = MediaControlCastButtonElement::create(*this, false);
-    m_castButton = castButton.get();
-    panel->appendChild(castButton.release());
+    MediaControlCastButtonElement* castButton = MediaControlCastButtonElement::create(*this, false);
+    m_castButton = castButton;
+    panel->appendChild(castButton);
 
-    RawPtr<MediaControlFullscreenButtonElement> fullscreenButton = MediaControlFullscreenButtonElement::create(*this);
-    m_fullScreenButton = fullscreenButton.get();
-    panel->appendChild(fullscreenButton.release());
+    MediaControlFullscreenButtonElement* fullscreenButton = MediaControlFullscreenButtonElement::create(*this);
+    m_fullScreenButton = fullscreenButton;
+    panel->appendChild(fullscreenButton);
 
-    m_panel = panel.get();
-    enclosure->appendChild(panel.release());
+    m_panel = panel;
+    enclosure->appendChild(panel);
 
-    m_enclosure = enclosure.get();
-    appendChild(enclosure.release());
+    m_enclosure = enclosure;
+    appendChild(enclosure);
+
+    MediaControlTextTrackListElement* textTrackList = MediaControlTextTrackListElement::create(*this);
+    m_textTrackList = textTrackList;
+    appendChild(textTrackList);
 }
 
 void MediaControls::reset()
@@ -315,7 +329,7 @@ void MediaControls::makeTransparent()
 bool MediaControls::shouldHideMediaControls(unsigned behaviorFlags) const
 {
     // Never hide for a media element without visual representation.
-    if (!mediaElement().hasVideo() || mediaElement().isPlayingRemotely())
+    if (!mediaElement().isHTMLVideoElement() || !mediaElement().hasVideo() || mediaElement().isPlayingRemotely())
         return false;
     // Don't hide if the mouse is over the controls.
     const bool ignoreControlsHover = behaviorFlags & IgnoreControlsHover;
@@ -330,6 +344,9 @@ bool MediaControls::shouldHideMediaControls(unsigned behaviorFlags) const
     // through all the potential ancestor hosts for the focused element.)
     const bool ignoreFocus = behaviorFlags & IgnoreFocus;
     if (!ignoreFocus && (mediaElement().focused() || contains(document().focusedElement())))
+        return false;
+    // Don't hide the media controls when the text track list is showing.
+    if (m_textTrackList->isWanted())
         return false;
     return true;
 }
@@ -455,6 +472,16 @@ void MediaControls::refreshClosedCaptionsButtonVisibility()
 {
     m_toggleClosedCaptionsButton->setIsWanted(mediaElement().hasClosedCaptions());
     BatchedControlUpdate batch(this);
+}
+
+void MediaControls::toggleTextTrackList()
+{
+    if (!mediaElement().hasClosedCaptions()) {
+        m_textTrackList->setVisible(false);
+        return;
+    }
+
+    m_textTrackList->setVisible(!m_textTrackList->isWanted());
 }
 
 void MediaControls::refreshCastButtonVisibility()
@@ -661,7 +688,7 @@ void MediaControls::computeWhichControlsFit()
 
     // Controls that we'll hide / show, in order of decreasing priority.
     MediaControlElement* elements[] = {
-        m_playButton.get(),
+        // Exclude m_playButton; we handle it specially.
         m_toggleClosedCaptionsButton.get(),
         m_fullScreenButton.get(),
         m_timeline.get(),
@@ -671,6 +698,23 @@ void MediaControls::computeWhichControlsFit()
         m_muteButton.get(),
         m_durationDisplay.get(),
     };
+
+    int usedWidth = 0;
+
+    // Assume that all controls require 48px, unless we can get the computed
+    // style for the play button.  Since the play button is always shown, it
+    // should be available the first time we're called after layout.  This will
+    // also be the first time we have m_panelWidth!=0, so it won't matter if
+    // we get this wrong before that.
+    int minimumWidth = (m_playButton->layoutObject() && m_playButton->layoutObject()->style())
+        ? m_playButton->layoutObject()->style()->width().pixels()
+        : 48;
+
+    // Special-case the play button; it always fits.
+    if (m_playButton->isWanted()) {
+        m_playButton->setDoesFit(true);
+        usedWidth += minimumWidth;
+    }
 
     if (!m_panelWidth) {
         // No layout yet -- hide everything, then make them show up later.
@@ -684,11 +728,8 @@ void MediaControls::computeWhichControlsFit()
         return;
     }
 
-    int usedWidth = 0;
+    // For each control that fits, enable it in order of decreasing priority.
     bool droppedCastButton = false;
-    // Assume that all controls require 48px.  Ideally, we could get this
-    // the computed style, but that requires the controls to be shown.
-    const int minimumWidth = 48;
     for (MediaControlElement* element : elements) {
         if (!element)
             continue;
@@ -756,6 +797,7 @@ DEFINE_TRACE(MediaControls)
     visitor->trace(m_fullScreenButton);
     visitor->trace(m_durationDisplay);
     visitor->trace(m_enclosure);
+    visitor->trace(m_textTrackList);
     visitor->trace(m_castButton);
     visitor->trace(m_overlayCastButton);
     HTMLDivElement::trace(visitor);

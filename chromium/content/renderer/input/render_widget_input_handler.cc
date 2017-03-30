@@ -106,6 +106,7 @@ void LogInputEventLatencyUma(const WebInputEvent& event, base::TimeTicks now) {
     CASE_TYPE(TouchMove);
     CASE_TYPE(TouchEnd);
     CASE_TYPE(TouchCancel);
+    CASE_TYPE(TouchScrollStarted);
     default:
       // Must include default to let blink::WebInputEvent add new event types
       // before they're added here.
@@ -114,11 +115,6 @@ void LogInputEventLatencyUma(const WebInputEvent& event, base::TimeTicks now) {
   }
 
 #undef CASE_TYPE
-}
-
-void LogPassiveLatency(int64_t latency) {
-  UMA_HISTOGRAM_CUSTOM_COUNTS("Event.PassiveListeners.Latency", latency, 1,
-                              10000000, 100);
 }
 
 void LogPassiveEventListenersUma(WebInputEventResult result,
@@ -162,10 +158,18 @@ void LogPassiveEventListenersUma(WebInputEventResult result,
   UMA_HISTOGRAM_ENUMERATION("Event.PassiveListeners", enum_value,
                             PASSIVE_LISTENER_UMA_ENUM_COUNT);
 
-  if (enum_value == PASSIVE_LISTENER_UMA_ENUM_CANCELABLE &&
-      base::TimeTicks::IsHighResolution()) {
-    base::TimeTicks now = base::TimeTicks::Now();
-    LogPassiveLatency(GetEventLatencyMicros(event_timestamp, now));
+  if (base::TimeTicks::IsHighResolution()) {
+    if (enum_value == PASSIVE_LISTENER_UMA_ENUM_CANCELABLE) {
+      base::TimeTicks now = base::TimeTicks::Now();
+      UMA_HISTOGRAM_CUSTOM_COUNTS("Event.PassiveListeners.Latency",
+                                  GetEventLatencyMicros(event_timestamp, now),
+                                  1, 10000000, 100);
+    } else if (enum_value == PASSIVE_LISTENER_UMA_ENUM_FORCED_NON_BLOCKING) {
+      base::TimeTicks now = base::TimeTicks::Now();
+      UMA_HISTOGRAM_CUSTOM_COUNTS(
+          "Event.PassiveListeners.ForcedNonBlockingLatency",
+          GetEventLatencyMicros(event_timestamp, now), 1, 10000000, 100);
+    }
   }
 }
 
@@ -200,8 +204,8 @@ void RenderWidgetInputHandler::HandleInputEvent(
 
   // Calls into |didOverscroll()| while handling this event will populate
   // |event_overscroll|, which in turn will be bundled with the event ack.
-  scoped_ptr<DidOverscrollParams> event_overscroll;
-  base::AutoReset<scoped_ptr<DidOverscrollParams>*>
+  std::unique_ptr<DidOverscrollParams> event_overscroll;
+  base::AutoReset<std::unique_ptr<DidOverscrollParams>*>
       handling_event_overscroll_resetter(&handling_event_overscroll_,
                                          &event_overscroll);
 
@@ -253,9 +257,11 @@ void RenderWidgetInputHandler::HandleInputEvent(
   if (!start_time.is_null())
     LogInputEventLatencyUma(input_event, start_time);
 
-  scoped_ptr<cc::SwapPromiseMonitor> latency_info_swap_promise_monitor;
+  std::unique_ptr<cc::SwapPromiseMonitor> latency_info_swap_promise_monitor;
   ui::LatencyInfo swap_latency_info(latency_info);
-
+  swap_latency_info.AddLatencyNumber(
+      ui::LatencyComponentType::INPUT_EVENT_LATENCY_RENDERER_MAIN_COMPONENT, 0,
+      0);
   if (widget_->compositor()) {
     latency_info_swap_promise_monitor =
         widget_->compositor()->CreateLatencyInfoSwapPromiseMonitor(
@@ -323,9 +329,27 @@ void RenderWidgetInputHandler::HandleInputEvent(
   if (input_event.type == WebInputEvent::TouchStart ||
       input_event.type == WebInputEvent::TouchMove ||
       input_event.type == WebInputEvent::TouchEnd) {
-    LogPassiveEventListenersUma(
-        processed, static_cast<const WebTouchEvent&>(input_event).dispatchType,
-        input_event.timeStampSeconds, latency_info);
+    const WebTouchEvent& touch = static_cast<const WebTouchEvent&>(input_event);
+
+    LogPassiveEventListenersUma(processed, touch.dispatchType,
+                                input_event.timeStampSeconds, latency_info);
+
+    if (input_event.type == WebInputEvent::TouchStart &&
+        touch.dispatchType == WebInputEvent::Blocking &&
+        base::TimeTicks::IsHighResolution()) {
+      base::TimeTicks now = base::TimeTicks::Now();
+      if (touch.dispatchedDuringFling) {
+        UMA_HISTOGRAM_CUSTOM_COUNTS(
+            "Event.Touch.TouchStartLatencyDuringFling",
+            GetEventLatencyMicros(input_event.timeStampSeconds, now), 1,
+            100000000, 50);
+      } else {
+        UMA_HISTOGRAM_CUSTOM_COUNTS(
+            "Event.Touch.TouchStartLatencyOutsideFling",
+            GetEventLatencyMicros(input_event.timeStampSeconds, now), 1,
+            100000000, 50);
+      }
+    }
   } else if (input_event.type == WebInputEvent::MouseWheel) {
     LogPassiveEventListenersUma(
         processed,
@@ -414,13 +438,13 @@ void RenderWidgetInputHandler::HandleInputEvent(
       dispatch_type == DISPATCH_TYPE_NON_BLOCKING_NOTIFY_MAIN) {
     // |non_blocking| means it was ack'd already by the InputHandlerProxy
     // so let the delegate know the event has been handled.
-    delegate_->NotifyInputEventHandled(input_event.type);
+    delegate_->NotifyInputEventHandled(input_event.type, ack_result);
   }
 
   if ((dispatch_type == DISPATCH_TYPE_BLOCKING ||
        dispatch_type == DISPATCH_TYPE_BLOCKING_NOTIFY_MAIN) &&
       can_send_ack) {
-    scoped_ptr<InputEventAck> response(new InputEventAck(
+    std::unique_ptr<InputEventAck> response(new InputEventAck(
         input_event.type, ack_result, swap_latency_info,
         std::move(event_overscroll),
         WebInputEventTraits::GetUniqueTouchEventId(input_event)));
@@ -494,15 +518,15 @@ void RenderWidgetInputHandler::HandleInputEvent(
 }
 
 void RenderWidgetInputHandler::DidOverscrollFromBlink(
-    const WebFloatSize& unusedDelta,
-    const WebFloatSize& accumulatedRootOverScroll,
+    const WebFloatSize& overscrollDelta,
+    const WebFloatSize& accumulatedOverscroll,
     const WebFloatPoint& position,
     const WebFloatSize& velocity) {
-  scoped_ptr<DidOverscrollParams> params(new DidOverscrollParams());
+  std::unique_ptr<DidOverscrollParams> params(new DidOverscrollParams());
   params->accumulated_overscroll = gfx::Vector2dF(
-      accumulatedRootOverScroll.width, accumulatedRootOverScroll.height);
+      accumulatedOverscroll.width, accumulatedOverscroll.height);
   params->latest_overscroll_delta =
-      gfx::Vector2dF(unusedDelta.width, unusedDelta.height);
+      gfx::Vector2dF(overscrollDelta.width, overscrollDelta.height);
   // TODO(sataya.m): don't negate velocity once http://crbug.com/499743 is
   // fixed.
   params->current_fling_velocity =
@@ -524,7 +548,7 @@ bool RenderWidgetInputHandler::SendAckForMouseMoveFromDebugger() {
     // If we pause multiple times during a single mouse move event, we should
     // only send ACK once.
     if (!ignore_ack_for_mouse_move_from_debugger_) {
-      scoped_ptr<InputEventAck> ack(new InputEventAck(
+      std::unique_ptr<InputEventAck> ack(new InputEventAck(
           handling_event_type_, INPUT_EVENT_ACK_STATE_CONSUMED));
       delegate_->OnInputEventAck(std::move(ack));
       return true;

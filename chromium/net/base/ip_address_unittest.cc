@@ -6,7 +6,9 @@
 
 #include <vector>
 
+#include "base/format_macros.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace net {
@@ -75,6 +77,196 @@ TEST(IPAddressTest, IsValid) {
   EXPECT_TRUE(ip_address4.empty());
 }
 
+enum IPAddressReservedResult : bool { NOT_RESERVED = false, RESERVED = true };
+
+// Tests for the reserved IPv4 ranges and the (unreserved) blocks in between.
+// The reserved ranges are tested by checking the first and last address of each
+// range. The unreserved blocks are tested similarly. These tests cover the
+// entire IPv4 address range.
+TEST(IPAddressTest, IsReservedIPv4) {
+  struct {
+    const char* const address;
+    IPAddressReservedResult is_reserved;
+  } tests[] = {// 0.0.0.0/8
+               {"0.0.0.0", RESERVED},
+               {"0.255.255.255", RESERVED},
+               // Unreserved block(s)
+               {"1.0.0.0", NOT_RESERVED},
+               {"9.255.255.255", NOT_RESERVED},
+               // 10.0.0.0/8
+               {"10.0.0.0", RESERVED},
+               {"10.255.255.255", RESERVED},
+               // Unreserved block(s)
+               {"11.0.0.0", NOT_RESERVED},
+               {"100.63.255.255", NOT_RESERVED},
+               // 100.64.0.0/10
+               {"100.64.0.0", RESERVED},
+               {"100.127.255.255", RESERVED},
+               // Unreserved block(s)
+               {"100.128.0.0", NOT_RESERVED},
+               {"126.255.255.255", NOT_RESERVED},
+               // 127.0.0.0/8
+               {"127.0.0.0", RESERVED},
+               {"127.255.255.255", RESERVED},
+               // Unreserved block(s)
+               {"128.0.0.0", NOT_RESERVED},
+               {"169.253.255.255", NOT_RESERVED},
+               // 169.254.0.0/16
+               {"169.254.0.0", RESERVED},
+               {"169.254.255.255", RESERVED},
+               // Unreserved block(s)
+               {"169.255.0.0", NOT_RESERVED},
+               {"172.15.255.255", NOT_RESERVED},
+               // 172.16.0.0/12
+               {"172.16.0.0", RESERVED},
+               {"172.31.255.255", RESERVED},
+               // Unreserved block(s)
+               {"172.32.0.0", NOT_RESERVED},
+               {"191.255.255.255", NOT_RESERVED},
+               // 192.0.0.0/24 (including sub ranges)
+               {"192.0.0.0", NOT_RESERVED},
+               {"192.0.0.255", NOT_RESERVED},
+               // Unreserved block(s)
+               {"192.0.1.0", NOT_RESERVED},
+               {"192.0.1.255", NOT_RESERVED},
+               // 192.0.2.0/24
+               {"192.0.2.0", RESERVED},
+               {"192.0.2.255", RESERVED},
+               // Unreserved block(s)
+               {"192.0.3.0", NOT_RESERVED},
+               {"192.31.195.255", NOT_RESERVED},
+               // 192.31.196.0/24
+               {"192.31.196.0", NOT_RESERVED},
+               {"192.31.196.255", NOT_RESERVED},
+               // Unreserved block(s)
+               {"192.32.197.0", NOT_RESERVED},
+               {"192.52.192.255", NOT_RESERVED},
+               // 192.52.193.0/24
+               {"192.52.193.0", NOT_RESERVED},
+               {"192.52.193.255", NOT_RESERVED},
+               // Unreserved block(s)
+               {"192.52.194.0", NOT_RESERVED},
+               {"192.88.98.255", NOT_RESERVED},
+               // 192.88.99.0/24
+               {"192.88.99.0", RESERVED},
+               {"192.88.99.255", RESERVED},
+               // Unreserved block(s)
+               {"192.88.100.0", NOT_RESERVED},
+               {"192.167.255.255", NOT_RESERVED},
+               // 192.168.0.0/16
+               {"192.168.0.0", RESERVED},
+               {"192.168.255.255", RESERVED},
+               // Unreserved block(s)
+               {"192.169.0.0", NOT_RESERVED},
+               {"192.175.47.255", NOT_RESERVED},
+               // 192.175.48.0/24
+               {"192.175.48.0", NOT_RESERVED},
+               {"192.175.48.255", NOT_RESERVED},
+               // Unreserved block(s)
+               {"192.175.49.0", NOT_RESERVED},
+               {"198.17.255.255", NOT_RESERVED},
+               // 198.18.0.0/15
+               {"198.18.0.0", RESERVED},
+               {"198.19.255.255", RESERVED},
+               // Unreserved block(s)
+               {"198.20.0.0", NOT_RESERVED},
+               {"198.51.99.255", NOT_RESERVED},
+               // 198.51.100.0/24
+               {"198.51.100.0", RESERVED},
+               {"198.51.100.255", RESERVED},
+               // Unreserved block(s)
+               {"198.51.101.0", NOT_RESERVED},
+               {"203.0.112.255", NOT_RESERVED},
+               // 203.0.113.0/24
+               {"203.0.113.0", RESERVED},
+               {"203.0.113.255", RESERVED},
+               // Unreserved block(s)
+               {"203.0.114.0", NOT_RESERVED},
+               {"223.255.255.255", NOT_RESERVED},
+               // 224.0.0.0/8 - 255.0.0.0/8
+               {"224.0.0.0", RESERVED},
+               {"255.255.255.255", RESERVED}};
+
+  IPAddress address;
+  for (const auto& test : tests) {
+    EXPECT_TRUE(address.AssignFromIPLiteral(test.address));
+    EXPECT_EQ(!!test.is_reserved, address.IsReserved());
+  }
+}
+
+// Tests for the reserved IPv6 ranges and the (unreserved) blocks in between.
+// The reserved ranges are tested by checking the first and last address of each
+// range. The unreserved blocks are tested similarly. These tests cover the
+// entire IPv6 address range.
+TEST(IPAddressTest, IsReservedIPv6) {
+  struct {
+    const char* const address;
+    IPAddressReservedResult is_reserved;
+  } tests[] = {// 0000::/8
+               {"0:0:0:0:0:0:0:0", RESERVED},
+               {"ff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", RESERVED},
+               // 0100::/8
+               {"100:0:0:0:0:0:0:0", RESERVED},
+               {"1ff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", RESERVED},
+               // 0200::/7
+               {"200:0:0:0:0:0:0:0", RESERVED},
+               {"3ff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", RESERVED},
+               // 0400::/6
+               {"400:0:0:0:0:0:0:0", RESERVED},
+               {"7ff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", RESERVED},
+               // 0800::/5
+               {"800:0:0:0:0:0:0:0", RESERVED},
+               {"fff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", RESERVED},
+               // 1000::/4
+               {"1000:0:0:0:0:0:0:0", RESERVED},
+               {"1fff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", RESERVED},
+               // 2000::/3 (Global Unicast)
+               {"2000:0:0:0:0:0:0:0", NOT_RESERVED},
+               {"3fff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", NOT_RESERVED},
+               // 4000::/3
+               {"4000:0:0:0:0:0:0:0", RESERVED},
+               {"5fff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", RESERVED},
+               // 6000::/3
+               {"6000:0:0:0:0:0:0:0", RESERVED},
+               {"7fff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", RESERVED},
+               // 8000::/3
+               {"8000:0:0:0:0:0:0:0", RESERVED},
+               {"9fff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", RESERVED},
+               // c000::/3
+               {"c000:0:0:0:0:0:0:0", RESERVED},
+               {"dfff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", RESERVED},
+               // e000::/4
+               {"e000:0:0:0:0:0:0:0", RESERVED},
+               {"efff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", RESERVED},
+               // f000::/5
+               {"f000:0:0:0:0:0:0:0", RESERVED},
+               {"f7ff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", RESERVED},
+               // f800::/6
+               {"f800:0:0:0:0:0:0:0", RESERVED},
+               {"fbff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", RESERVED},
+               // fc00::/7
+               {"fc00:0:0:0:0:0:0:0", RESERVED},
+               {"fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", RESERVED},
+               // fe00::/9
+               {"fe00:0:0:0:0:0:0:0", RESERVED},
+               {"fe7f:ffff:ffff:ffff:ffff:ffff:ffff:ffff", RESERVED},
+               // fe80::/10
+               {"fe80:0:0:0:0:0:0:0", RESERVED},
+               {"febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff", RESERVED},
+               // fec0::/10
+               {"fec0:0:0:0:0:0:0:0", RESERVED},
+               {"feff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", RESERVED},
+               // ff00::/8 (Multicast)
+               {"ff00:0:0:0:0:0:0:0", NOT_RESERVED},
+               {"ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", NOT_RESERVED}};
+
+  IPAddress address;
+  for (const auto& test : tests) {
+    EXPECT_TRUE(address.AssignFromIPLiteral(test.address));
+    EXPECT_EQ(!!test.is_reserved, address.IsReserved());
+  }
+}
+
 TEST(IPAddressTest, IsZero) {
   uint8_t address1[4] = {};
   IPAddress zero_ipv4_address(address1);
@@ -96,6 +288,15 @@ TEST(IPAddressTest, IsZero) {
   EXPECT_FALSE(empty_address.IsZero());
 }
 
+TEST(IPAddressTest, IsIPv4Mapped) {
+  IPAddress ipv4_address(192, 168, 0, 1);
+  EXPECT_FALSE(ipv4_address.IsIPv4MappedIPv6());
+  IPAddress ipv6_address(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1);
+  EXPECT_FALSE(ipv6_address.IsIPv4MappedIPv6());
+  IPAddress mapped_address(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 1, 1, 0, 1);
+  EXPECT_TRUE(mapped_address.IsIPv4MappedIPv6());
+}
+
 TEST(IPAddressTest, AllZeros) {
   EXPECT_TRUE(IPAddress::AllZeros(0).empty());
 
@@ -107,25 +308,53 @@ TEST(IPAddressTest, AllZeros) {
 }
 
 TEST(IPAddressTest, ToString) {
-  uint8_t addr1[4] = {0, 0, 0, 0};
-  IPAddress ip_address1(addr1);
-  EXPECT_EQ("0.0.0.0", ip_address1.ToString());
+  EXPECT_EQ("0.0.0.0", IPAddress::IPv4AllZeros().ToString());
 
-  uint8_t addr2[4] = {192, 168, 0, 1};
-  IPAddress ip_address2(addr2);
-  EXPECT_EQ("192.168.0.1", ip_address2.ToString());
+  IPAddress address(192, 168, 0, 1);
+  EXPECT_EQ("192.168.0.1", address.ToString());
 
-  uint8_t addr3[16] = {0xFE, 0xDC, 0xBA, 0x98};
-  IPAddress ip_address3(addr3);
-  EXPECT_EQ("fedc:ba98::", ip_address3.ToString());
+  IPAddress address2(0xFE, 0xDC, 0xBA, 0x98, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                     0);
+  EXPECT_EQ("fedc:ba98::", address2.ToString());
 
   // ToString() shouldn't crash on invalid addresses.
   uint8_t addr4[2];
-  IPAddress ip_address4(addr4);
-  EXPECT_EQ("", ip_address4.ToString());
+  IPAddress address4(addr4);
+  EXPECT_EQ("", address4.ToString());
 
-  IPAddress ip_address5;
-  EXPECT_EQ("", ip_address5.ToString());
+  IPAddress address5;
+  EXPECT_EQ("", address5.ToString());
+}
+
+TEST(IPAddressTest, IPAddressToStringWithPort) {
+  EXPECT_EQ("0.0.0.0:3",
+            IPAddressToStringWithPort(IPAddress::IPv4AllZeros(), 3));
+
+  IPAddress address1(192, 168, 0, 1);
+  EXPECT_EQ("192.168.0.1:99", IPAddressToStringWithPort(address1, 99));
+
+  IPAddress address2(0xFE, 0xDC, 0xBA, 0x98, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                     0);
+  EXPECT_EQ("[fedc:ba98::]:8080", IPAddressToStringWithPort(address2, 8080));
+
+  // IPAddressToStringWithPort() shouldn't crash on invalid addresses.
+  uint8_t addr3[2];
+  EXPECT_EQ("", IPAddressToStringWithPort(IPAddress(addr3), 8080));
+}
+
+TEST(IPAddressTest, IPAddressToPackedString) {
+  IPAddress ipv4_address;
+  EXPECT_TRUE(ipv4_address.AssignFromIPLiteral("4.31.198.44"));
+  std::string expected_ipv4_address("\x04\x1f\xc6\x2c", 4);
+  EXPECT_EQ(expected_ipv4_address, IPAddressToPackedString(ipv4_address));
+
+  IPAddress ipv6_address;
+  EXPECT_TRUE(ipv6_address.AssignFromIPLiteral("2001:0700:0300:1800::000f"));
+  std::string expected_ipv6_address(
+      "\x20\x01\x07\x00\x03\x00\x18\x00"
+      "\x00\x00\x00\x00\x00\x00\x00\x0f",
+      16);
+  EXPECT_EQ(expected_ipv6_address, IPAddressToPackedString(ipv6_address));
 }
 
 // Test that invalid IP literals fail to parse.
@@ -157,17 +386,12 @@ TEST(IPAddressTest, AssignFromIPLiteral_IPv6) {
 }
 
 TEST(IPAddressTest, IsIPv4MappedIPv6) {
-  IPAddress ipv4_address;
-  EXPECT_TRUE(ipv4_address.AssignFromIPLiteral("192.168.0.1"));
+  IPAddress ipv4_address(192, 168, 0, 1);
   EXPECT_FALSE(ipv4_address.IsIPv4MappedIPv6());
-
-  IPAddress ipv6_address;
-  EXPECT_TRUE(ipv6_address.AssignFromIPLiteral("::1"));
+  IPAddress ipv6_address = IPAddress::IPv6Localhost();
   EXPECT_FALSE(ipv6_address.IsIPv4MappedIPv6());
-
-  IPAddress ipv4mapped_address;
-  EXPECT_TRUE(ipv4mapped_address.AssignFromIPLiteral("::ffff:0101:1"));
-  EXPECT_TRUE(ipv4mapped_address.IsIPv4MappedIPv6());
+  IPAddress mapped_address(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 1, 1, 0, 1);
+  EXPECT_TRUE(mapped_address.IsIPv4MappedIPv6());
 }
 
 TEST(IPAddressTest, IsEqual) {
@@ -198,58 +422,67 @@ TEST(IPAddressTest, LessThan) {
   EXPECT_FALSE(ip_address3 < ip_address1);
 }
 
-TEST(IPAddressTest, IPAddressToStringWithPort) {
-  IPAddress address1;
-  EXPECT_TRUE(address1.AssignFromIPLiteral("0.0.0.0"));
-  EXPECT_EQ("0.0.0.0:3", IPAddressToStringWithPort(address1, 3));
-
-  IPAddress address2;
-  EXPECT_TRUE(address2.AssignFromIPLiteral("192.168.0.1"));
-  EXPECT_EQ("192.168.0.1:99", IPAddressToStringWithPort(address2, 99));
-
-  IPAddress address3;
-  EXPECT_TRUE(address3.AssignFromIPLiteral("fedc:ba98::"));
-  EXPECT_EQ("[fedc:ba98::]:8080", IPAddressToStringWithPort(address3, 8080));
-
-  // ToString() shouldn't crash on invalid addresses.
-  IPAddress address4;
-  EXPECT_EQ("", IPAddressToStringWithPort(address4, 8080));
-}
-
-TEST(IPAddressTest, IPAddressToPackedString) {
-  IPAddress ipv4_address;
-  EXPECT_TRUE(ipv4_address.AssignFromIPLiteral("4.31.198.44"));
-  std::string expected_ipv4_address("\x04\x1f\xc6\x2c", 4);
-  EXPECT_EQ(expected_ipv4_address, IPAddressToPackedString(ipv4_address));
-
-  IPAddress ipv6_address;
-  EXPECT_TRUE(ipv6_address.AssignFromIPLiteral("2001:0700:0300:1800::000f"));
-  std::string expected_ipv6_address(
-      "\x20\x01\x07\x00\x03\x00\x18\x00"
-      "\x00\x00\x00\x00\x00\x00\x00\x0f",
-      16);
-  EXPECT_EQ(expected_ipv6_address, IPAddressToPackedString(ipv6_address));
-}
-
+// Test mapping an IPv4 address to an IPv6 address.
 TEST(IPAddressTest, ConvertIPv4ToIPv4MappedIPv6) {
-  IPAddress ipv4_address;
-  EXPECT_TRUE(ipv4_address.AssignFromIPLiteral("192.168.0.1"));
-
+  IPAddress ipv4_address(192, 168, 0, 1);
   IPAddress ipv6_address = ConvertIPv4ToIPv4MappedIPv6(ipv4_address);
 
   // ::ffff:192.168.0.1
+  EXPECT_EQ("0,0,0,0,0,0,0,0,0,0,255,255,192,168,0,1",
+            DumpIPAddress(ipv6_address));
   EXPECT_EQ("::ffff:c0a8:1", ipv6_address.ToString());
 }
 
+// Test reversal of a IPv6 address mapping.
 TEST(IPAddressTest, ConvertIPv4MappedIPv6ToIPv4) {
   IPAddress ipv4mapped_address;
   EXPECT_TRUE(ipv4mapped_address.AssignFromIPLiteral("::ffff:c0a8:1"));
 
-  IPAddress expected;
-  EXPECT_TRUE(expected.AssignFromIPLiteral("192.168.0.1"));
+  IPAddress expected(192, 168, 0, 1);
 
   IPAddress result = ConvertIPv4MappedIPv6ToIPv4(ipv4mapped_address);
   EXPECT_EQ(expected, result);
+}
+
+TEST(IPAddressTest, IPAddressMatchesPrefix) {
+  struct {
+    const char* const cidr_literal;
+    size_t prefix_length_in_bits;
+    const char* const ip_literal;
+    bool expected_to_match;
+  } tests[] = {
+      // IPv4 prefix with IPv4 inputs.
+      {"10.10.1.32", 27, "10.10.1.44", true},
+      {"10.10.1.32", 27, "10.10.1.90", false},
+      {"10.10.1.32", 27, "10.10.1.90", false},
+
+      // IPv6 prefix with IPv6 inputs.
+      {"2001:db8::", 32, "2001:DB8:3:4::5", true},
+      {"2001:db8::", 32, "2001:c8::", false},
+
+      // IPv6 prefix with IPv4 inputs.
+      {"2001:db8::", 33, "192.168.0.1", false},
+      {"::ffff:192.168.0.1", 112, "192.168.33.77", true},
+
+      // IPv4 prefix with IPv6 inputs.
+      {"10.11.33.44", 16, "::ffff:0a0b:89", true},
+      {"10.11.33.44", 16, "::ffff:10.12.33.44", false},
+  };
+  for (size_t i = 0; i < arraysize(tests); ++i) {
+    SCOPED_TRACE(base::StringPrintf("Test[%" PRIuS "]: %s, %s", i,
+                                    tests[i].cidr_literal,
+                                    tests[i].ip_literal));
+
+    IPAddress ip_address;
+    EXPECT_TRUE(ip_address.AssignFromIPLiteral(tests[i].ip_literal));
+
+    IPAddress ip_prefix;
+    EXPECT_TRUE(ip_prefix.AssignFromIPLiteral(tests[i].cidr_literal));
+
+    EXPECT_EQ(tests[i].expected_to_match,
+              IPAddressMatchesPrefix(ip_address, ip_prefix,
+                                     tests[i].prefix_length_in_bits));
+  }
 }
 
 // Test parsing invalid CIDR notation literals.

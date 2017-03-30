@@ -47,7 +47,7 @@ public:
     }
 };
 
-class TestingObserver final : public GarbageCollectedFinalized<TestingObserver>, public LifecycleObserver<DummyContext, TestingObserver, DummyContext> {
+class TestingObserver final : public GarbageCollected<TestingObserver>, public LifecycleObserver<DummyContext, TestingObserver> {
     USING_GARBAGE_COLLECTED_MIXIN(TestingObserver);
 public:
     static TestingObserver* create(DummyContext* context)
@@ -102,7 +102,7 @@ TEST(LifecycleContextTest, shouldObserveContextDestroyed)
     EXPECT_FALSE(observer->contextDestroyedCalled());
     context->notifyContextDestroyed();
     context = nullptr;
-    Heap::collectAllGarbage();
+    ThreadHeap::collectAllGarbage();
     EXPECT_EQ(observer->lifecycleContext(), static_cast<DummyContext*>(0));
     EXPECT_TRUE(observer->contextDestroyedCalled());
 }
@@ -114,7 +114,7 @@ TEST(LifecycleContextTest, shouldNotObserveContextDestroyedIfUnobserve)
     observer->unobserve();
     context->notifyContextDestroyed();
     context = nullptr;
-    Heap::collectAllGarbage();
+    ThreadHeap::collectAllGarbage();
     EXPECT_EQ(observer->lifecycleContext(), static_cast<DummyContext*>(0));
     EXPECT_FALSE(observer->contextDestroyedCalled());
 }
@@ -136,7 +136,7 @@ TEST(LifecycleContextTest, observerRemovedDuringNotifyDestroyed)
     context->notifyContextDestroyed();
     EXPECT_EQ(observer->innerObserver(), nullptr);
     context = nullptr;
-    Heap::collectAllGarbage();
+    ThreadHeap::collectAllGarbage();
     EXPECT_EQ(observer->lifecycleContext(), static_cast<DummyContext*>(0));
     EXPECT_TRUE(observer->contextDestroyedCalled());
 }

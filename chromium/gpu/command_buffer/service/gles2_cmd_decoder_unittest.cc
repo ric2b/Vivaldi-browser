@@ -1339,6 +1339,7 @@ TEST_P(GLES2DecoderManualInitTest, MemoryTrackerBufferData) {
 TEST_P(GLES2DecoderManualInitTest, ImmutableCopyTexImage2D) {
   const GLenum kTarget = GL_TEXTURE_2D;
   const GLint kLevel = 0;
+  const GLint kLevels = 2;
   const GLenum kInternalFormat = GL_RGBA;
   const GLenum kSizedInternalFormat = GL_RGBA8;
   const GLsizei kWidth = 4;
@@ -1349,8 +1350,9 @@ TEST_P(GLES2DecoderManualInitTest, ImmutableCopyTexImage2D) {
   init.has_alpha = true;
   init.request_alpha = true;
   init.bind_generates_resource = true;
+  init.gl_version = "OpenGL ES 2.0";  // To avoid TexStorage emulation.
   InitDecoder(init);
-  DoBindTexture(GL_TEXTURE_2D, client_texture_id_, kServiceTextureId);
+  DoBindTexture(kTarget, client_texture_id_, kServiceTextureId);
 
   // CopyTexImage2D will call arbitrary amount of GetErrors.
   EXPECT_CALL(*gl_, GetError())
@@ -1364,7 +1366,7 @@ TEST_P(GLES2DecoderManualInitTest, ImmutableCopyTexImage2D) {
 
   EXPECT_CALL(*gl_,
               TexStorage2DEXT(
-                  kTarget, kLevel, kSizedInternalFormat, kWidth, kHeight))
+                  kTarget, kLevels, kSizedInternalFormat, kWidth, kHeight))
       .Times(1);
   CopyTexImage2D copy_cmd;
   copy_cmd.Init(kTarget, kLevel, kInternalFormat, 0, 0, kWidth, kHeight);
@@ -1372,7 +1374,7 @@ TEST_P(GLES2DecoderManualInitTest, ImmutableCopyTexImage2D) {
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
 
   TexStorage2DEXT storage_cmd;
-  storage_cmd.Init(kTarget, kLevel, kSizedInternalFormat, kWidth, kHeight);
+  storage_cmd.Init(kTarget, kLevels, kSizedInternalFormat, kWidth, kHeight);
   EXPECT_EQ(error::kNoError, ExecuteCmd(storage_cmd));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
 
@@ -1422,6 +1424,67 @@ TEST_P(GLES2DecoderTest, LoseContextCHROMIUMInvalidArgs1_0) {
   EXPECT_EQ(GL_INVALID_ENUM, GetGLError());
 }
 
+TEST_P(GLES3DecoderTest, TransformFeedbackStates) {
+  cmds::BeginTransformFeedback begin_cmd;
+  begin_cmd.Init(GL_POINTS);
+  cmds::EndTransformFeedback end_cmd;
+  end_cmd.Init();
+  cmds::PauseTransformFeedback pause_cmd;
+  pause_cmd.Init();
+  cmds::ResumeTransformFeedback resume_cmd;
+  resume_cmd.Init();
+
+  // Before Begin: Pause, Resume, and End is invalid.
+  EXPECT_EQ(error::kNoError, ExecuteCmd(end_cmd));
+  EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
+
+  EXPECT_EQ(error::kNoError, ExecuteCmd(pause_cmd));
+  EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
+
+  EXPECT_EQ(error::kNoError, ExecuteCmd(resume_cmd));
+  EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
+
+  // Begin
+  EXPECT_CALL(*gl_, BeginTransformFeedback(GL_POINTS))
+      .Times(1)
+      .RetiresOnSaturation();
+  EXPECT_EQ(error::kNoError, ExecuteCmd(begin_cmd));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+
+  // Begin again is invalid.
+  EXPECT_EQ(error::kNoError, ExecuteCmd(begin_cmd));
+  EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
+
+  // Before Pause: Resume is invalid.
+  EXPECT_EQ(error::kNoError, ExecuteCmd(resume_cmd));
+  EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
+
+  // Pause
+  EXPECT_CALL(*gl_, PauseTransformFeedback())
+      .Times(1)
+      .RetiresOnSaturation();
+  EXPECT_EQ(error::kNoError, ExecuteCmd(pause_cmd));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+
+  // Pause again is invalid.
+  EXPECT_EQ(error::kNoError, ExecuteCmd(pause_cmd));
+  EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
+
+  // Resume
+  EXPECT_CALL(*gl_, ResumeTransformFeedback())
+      .Times(1)
+      .RetiresOnSaturation();
+  EXPECT_EQ(error::kNoError, ExecuteCmd(resume_cmd));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+
+  // End
+  EXPECT_CALL(*gl_, EndTransformFeedback())
+      .Times(1)
+      .RetiresOnSaturation();
+  EXPECT_EQ(error::kNoError, ExecuteCmd(end_cmd));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+}
+
 class GLES2DecoderDoCommandsTest : public GLES2DecoderTest {
  public:
   GLES2DecoderDoCommandsTest() {
@@ -1440,6 +1503,90 @@ class GLES2DecoderDoCommandsTest : public GLES2DecoderTest {
   Enable cmds_[3];
   int entries_per_cmd_;
 };
+
+TEST_P(GLES3DecoderTest, BindTransformFeedbackValidArgs) {
+  EXPECT_CALL(*gl_, BindTransformFeedback(GL_TRANSFORM_FEEDBACK,
+                                          kServiceTransformFeedbackId));
+  SpecializedSetup<cmds::BindTransformFeedback, 0>(true);
+  cmds::BindTransformFeedback cmd;
+  cmd.Init(GL_TRANSFORM_FEEDBACK, client_transformfeedback_id_);
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+}
+
+TEST_P(GLES3DecoderTest, GenDeleteTransformFeedbacksImmediateValidArgs) {
+  EXPECT_CALL(*gl_, GenTransformFeedbacks(1, _))
+      .WillOnce(SetArgPointee<1>(kNewServiceId));
+  cmds::GenTransformFeedbacksImmediate* gen_cmd =
+      GetImmediateAs<cmds::GenTransformFeedbacksImmediate>();
+  GLuint temp = kNewClientId;
+  SpecializedSetup<cmds::GenTransformFeedbacksImmediate, 0>(true);
+  gen_cmd->Init(1, &temp);
+  EXPECT_EQ(error::kNoError, ExecuteImmediateCmd(*gen_cmd, sizeof(temp)));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+  EXPECT_TRUE(GetTransformFeedback(kNewClientId) != nullptr);
+
+  EXPECT_CALL(*gl_,
+              DeleteTransformFeedbacks(1, Pointee(kNewServiceId)))
+      .Times(1);
+  cmds::DeleteTransformFeedbacksImmediate& delete_cmd =
+      *GetImmediateAs<cmds::DeleteTransformFeedbacksImmediate>();
+  SpecializedSetup<cmds::DeleteTransformFeedbacksImmediate, 0>(true);
+  delete_cmd.Init(1, &temp);
+  EXPECT_EQ(error::kNoError, ExecuteImmediateCmd(delete_cmd, sizeof(&temp)));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+  EXPECT_TRUE(GetTransformFeedback(kNewClientId) == nullptr);
+}
+
+TEST_P(GLES3DecoderTest, DeleteTransformFeedbacksImmediateInvalidArgs) {
+  cmds::DeleteTransformFeedbacksImmediate& cmd =
+      *GetImmediateAs<cmds::DeleteTransformFeedbacksImmediate>();
+  SpecializedSetup<cmds::DeleteTransformFeedbacksImmediate, 0>(false);
+  GLuint temp = kInvalidClientId;
+  cmd.Init(1, &temp);
+  EXPECT_EQ(error::kNoError, ExecuteImmediateCmd(cmd, sizeof(temp)));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+}
+
+TEST_P(GLES3DecoderTest, GenTransformFeedbacksImmediateInvalidArgs) {
+  EXPECT_CALL(*gl_, GenTransformFeedbacks(_, _)).Times(0);
+  cmds::GenTransformFeedbacksImmediate* cmd =
+      GetImmediateAs<cmds::GenTransformFeedbacksImmediate>();
+  SpecializedSetup<cmds::GenTransformFeedbacksImmediate, 0>(false);
+  cmd->Init(1, &client_transformfeedback_id_);
+  EXPECT_EQ(error::kInvalidArguments,
+            ExecuteImmediateCmd(*cmd, sizeof(&client_transformfeedback_id_)));
+}
+
+TEST_P(GLES3DecoderTest, GetIntegeri_vValidArgs) {
+  EXPECT_CALL(*gl_, GetIntegeri_v(_, _, _)).Times(0);
+  typedef cmds::GetIntegeri_v::Result Result;
+  Result* result = static_cast<Result*>(shared_memory_address_);
+  result->size = 0;
+  cmds::GetIntegeri_v cmd;
+  cmd.Init(GL_TRANSFORM_FEEDBACK_BUFFER_BINDING, 2, shared_memory_id_,
+           shared_memory_offset_);
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+  EXPECT_EQ(decoder_->GetGLES2Util()->GLGetNumValuesReturned(
+                GL_TRANSFORM_FEEDBACK_BUFFER_BINDING),
+            result->GetNumResults());
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+}
+
+TEST_P(GLES3DecoderTest, GetInteger64i_vValidArgs) {
+  EXPECT_CALL(*gl_, GetInteger64i_v(_, _, _)).Times(0);
+  typedef cmds::GetInteger64i_v::Result Result;
+  Result* result = static_cast<Result*>(shared_memory_address_);
+  result->size = 0;
+  cmds::GetInteger64i_v cmd;
+  cmd.Init(GL_UNIFORM_BUFFER_SIZE, 2, shared_memory_id_,
+           shared_memory_offset_);
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+  EXPECT_EQ(decoder_->GetGLES2Util()->GLGetNumValuesReturned(
+                GL_UNIFORM_BUFFER_SIZE),
+            result->GetNumResults());
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+}
 
 // Test that processing with 0 entries does nothing.
 TEST_P(GLES2DecoderDoCommandsTest, DoCommandsOneOfZero) {

@@ -119,15 +119,14 @@ ContentSettingsType kPermissionType[] = {
 // Determines whether to show permission |type| in the Website Settings UI. Only
 // applies to permissions listed in |kPermissionType|.
 bool ShouldShowPermission(ContentSettingsType type) {
-  // TODO(mgiuca): When simplified-fullscreen-ui is enabled on all platforms,
-  // remove these from kPermissionType, rather than having this check
+  // TODO(mgiuca): When simplified-fullscreen-ui is enabled permanently on
+  // Android, remove these from kPermissionType, rather than having this check
   // (http://crbug.com/577396).
 #if !defined(OS_ANDROID)
-  // Fullscreen and mouselock settings are not shown in simplified fullscreen
-  // mode (always allow).
+  // Fullscreen and mouselock settings are no longer shown (always allow).
   if (type == CONTENT_SETTINGS_TYPE_FULLSCREEN ||
       type == CONTENT_SETTINGS_TYPE_MOUSELOCK) {
-    return !ExclusiveAccessManager::IsSimplifiedFullscreenUIEnabled();
+    return false;
   }
 #endif
 
@@ -187,7 +186,8 @@ WebsiteSettings::SiteIdentityStatus GetSiteIdentityStatusByCTInfo(
 }
 
 base::string16 GetSimpleSiteName(const GURL& url) {
-  return url_formatter::FormatUrlForSecurityDisplayOmitScheme(url);
+  return url_formatter::FormatUrlForSecurityDisplay(
+      url, url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS);
 }
 
 ChooserContextBase* GetUsbChooserContext(Profile* profile) {
@@ -216,7 +216,9 @@ WebsiteSettings::WebsiteSettings(
     : TabSpecificContentSettings::SiteDataObserver(
           tab_specific_content_settings),
       ui_(ui),
+#if !defined(OS_ANDROID)
       web_contents_(web_contents),
+#endif
       show_info_bar_(false),
       site_url_(url),
       site_identity_status_(SITE_IDENTITY_STATUS_UNKNOWN),

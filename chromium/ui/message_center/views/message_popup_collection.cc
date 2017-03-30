@@ -16,14 +16,14 @@
 #include "ui/accessibility/ax_enums.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/animation/slide_animation.h"
-#include "ui/gfx/screen.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/message_center_style.h"
 #include "ui/message_center/message_center_tray.h"
 #include "ui/message_center/notification.h"
 #include "ui/message_center/notification_list.h"
+#include "ui/message_center/views/message_view.h"
 #include "ui/message_center/views/message_view_context_menu_controller.h"
-#include "ui/message_center/views/notification_view.h"
+#include "ui/message_center/views/message_view_factory.h"
 #include "ui/message_center/views/popup_alignment_delegate.h"
 #include "ui/message_center/views/toast_contents_view.h"
 #include "ui/views/background.h"
@@ -104,7 +104,7 @@ void MessagePopupCollection::RemoveNotification(
   }
 }
 
-scoped_ptr<ui::MenuModel> MessagePopupCollection::CreateMenuModel(
+std::unique_ptr<ui::MenuModel> MessagePopupCollection::CreateMenuModel(
     const NotifierId& notifier_id,
     const base::string16& display_source) {
   return tray_->CreateNotificationMenuModel(notifier_id, display_source);
@@ -157,7 +157,7 @@ void MessagePopupCollection::UpdateWidgets() {
     if (FindToast((*iter)->id()))
       continue;
 
-    NotificationView* view;
+    MessageView* view;
     // Create top-level notification.
 #if defined(OS_CHROMEOS)
     if ((*iter)->pinned()) {
@@ -165,11 +165,11 @@ void MessagePopupCollection::UpdateWidgets() {
       // Override pinned status, since toasts should be closable even when it's
       // pinned.
       notification.set_pinned(false);
-      view = NotificationView::Create(NULL, notification, true);
+      view = MessageViewFactory::Create(NULL, notification, true);
     } else
 #endif  // defined(OS_CHROMEOS)
     {
-      view = NotificationView::Create(NULL, *(*iter), true);
+      view = MessageViewFactory::Create(NULL, *(*iter), true);
     }
 
     view->set_context_menu_controller(context_menu_controller_.get());
@@ -506,7 +506,7 @@ void MessagePopupCollection::DoUpdateIfPossible() {
 }
 
 void MessagePopupCollection::OnDisplayMetricsChanged(
-    const gfx::Display& display) {
+    const display::Display& display) {
   alignment_delegate_->RecomputeAlignment(display);
 }
 

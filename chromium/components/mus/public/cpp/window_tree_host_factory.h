@@ -5,12 +5,13 @@
 #ifndef COMPONENTS_MUS_PUBLIC_CPP_WINDOW_TREE_HOST_FACTORY_H_
 #define COMPONENTS_MUS_PUBLIC_CPP_WINDOW_TREE_HOST_FACTORY_H_
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "components/mus/public/interfaces/window_tree_host.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
-namespace mojo {
+namespace shell {
 class Connector;
 }
 
@@ -26,7 +27,7 @@ void CreateWindowTreeHost(mojom::WindowTreeHostFactory* factory,
                           WindowTreeDelegate* delegate,
                           mojom::WindowTreeHostPtr* host,
                           WindowManagerDelegate* window_manager_delegate);
-void CreateWindowTreeHost(mojo::Connector* connector,
+void CreateWindowTreeHost(shell::Connector* connector,
                           WindowTreeDelegate* delegate,
                           mojom::WindowTreeHostPtr* host,
                           WindowManagerDelegate* window_manager_delegate);

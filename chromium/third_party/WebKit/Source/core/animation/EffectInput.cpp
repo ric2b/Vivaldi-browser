@@ -31,7 +31,7 @@
 #include "core/animation/EffectInput.h"
 
 #include "bindings/core/v8/Dictionary.h"
-#include "bindings/core/v8/UnionTypesCore.h"
+#include "bindings/core/v8/EffectModelOrDictionarySequenceOrDictionary.h"
 #include "core/animation/AnimationInputHelpers.h"
 #include "core/animation/CompositorAnimations.h"
 #include "core/animation/KeyframeEffectModel.h"
@@ -102,9 +102,9 @@ EffectModel* createEffectModelFromKeyframes(Element& element, const StringKeyfra
 {
     // TODO(alancutter): Remove this once composited animations no longer depend on AnimatableValues.
     if (encounteredCompositableProperty && element.inActiveDocument())
-        element.document().updateLayoutTreeForNode(&element);
+        element.document().updateStyleAndLayoutTreeForNode(&element);
 
-    StringKeyframeEffectModel* keyframeEffectModel = StringKeyframeEffectModel::create(keyframes);
+    StringKeyframeEffectModel* keyframeEffectModel = StringKeyframeEffectModel::create(keyframes, LinearTimingFunction::shared());
     if (!RuntimeEnabledFeatures::cssAdditiveAnimationsEnabled()) {
         for (const auto& keyframeGroup : keyframeEffectModel->getPropertySpecificKeyframeGroups()) {
             PropertyHandle property = keyframeGroup.key;
@@ -125,6 +125,7 @@ EffectModel* createEffectModelFromKeyframes(Element& element, const StringKeyfra
     }
     keyframeEffectModel->forceConversionsToAnimatableValues(element, element.computedStyle());
 
+    ASSERT(!exceptionState.hadException());
     return keyframeEffectModel;
 }
 
@@ -138,7 +139,7 @@ bool exhaustDictionaryIterator(DictionaryIterator& iterator, ExecutionContext* e
         }
         result.append(dictionary);
     }
-    return true;
+    return !exceptionState.hadException();
 }
 
 } // namespace
@@ -196,8 +197,10 @@ EffectModel* EffectInput::convertArrayForm(Element& element, const Vector<Dictio
 
         String timingFunctionString;
         if (DictionaryHelper::get(keyframeDictionary, "easing", timingFunctionString)) {
-            if (RefPtr<TimingFunction> timingFunction = AnimationInputHelpers::parseTimingFunction(timingFunctionString, &element.document()))
-                keyframe->setEasing(timingFunction);
+            RefPtr<TimingFunction> timingFunction = AnimationInputHelpers::parseTimingFunction(timingFunctionString, &element.document(), exceptionState);
+            if (!timingFunction)
+                return nullptr;
+            keyframe->setEasing(timingFunction);
         }
 
         Vector<String> keyframeProperties;
@@ -223,8 +226,7 @@ EffectModel* EffectInput::convertArrayForm(Element& element, const Vector<Dictio
         keyframes.append(keyframe);
     }
 
-    if (exceptionState.hadException())
-        return nullptr;
+    ASSERT(!exceptionState.hadException());
 
     return createEffectModelFromKeyframes(element, keyframes, encounteredCompositableProperty, exceptionState);
 }
@@ -236,8 +238,11 @@ EffectModel* EffectInput::convertObjectForm(Element& element, const Dictionary& 
 
     String timingFunctionString;
     RefPtr<TimingFunction> timingFunction = nullptr;
-    if (DictionaryHelper::get(keyframeDictionary, "easing", timingFunctionString))
-        timingFunction = AnimationInputHelpers::parseTimingFunction(timingFunctionString, &element.document());
+    if (DictionaryHelper::get(keyframeDictionary, "easing", timingFunctionString)) {
+        timingFunction = AnimationInputHelpers::parseTimingFunction(timingFunctionString, &element.document(), exceptionState);
+        if (!timingFunction)
+            return nullptr;
+    }
 
     ScriptValue scriptValue;
     bool frameHasOffset = DictionaryHelper::get(keyframeDictionary, "offset", scriptValue) && !scriptValue.isNull();
@@ -289,6 +294,8 @@ EffectModel* EffectInput::convertObjectForm(Element& element, const Dictionary& 
     }
 
     std::sort(keyframes.begin(), keyframes.end(), compareKeyframes);
+
+    ASSERT(!exceptionState.hadException());
 
     return createEffectModelFromKeyframes(element, keyframes, encounteredCompositableProperty, exceptionState);
 }

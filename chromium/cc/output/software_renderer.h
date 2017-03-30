@@ -26,11 +26,12 @@ class TileDrawQuad;
 
 class CC_EXPORT SoftwareRenderer : public DirectRenderer {
  public:
-  static scoped_ptr<SoftwareRenderer> Create(
+  static std::unique_ptr<SoftwareRenderer> Create(
       RendererClient* client,
       const RendererSettings* settings,
       OutputSurface* output_surface,
-      ResourceProvider* resource_provider);
+      ResourceProvider* resource_provider,
+      bool use_image_hijack_canvas);
 
   ~SoftwareRenderer() override;
   const RendererCapabilitiesImpl& Capabilities() const override;
@@ -58,12 +59,13 @@ class CC_EXPORT SoftwareRenderer : public DirectRenderer {
   void EnsureScissorTestDisabled() override;
   void CopyCurrentRenderPassToBitmap(
       DrawingFrame* frame,
-      scoped_ptr<CopyOutputRequest> request) override;
+      std::unique_ptr<CopyOutputRequest> request) override;
 
   SoftwareRenderer(RendererClient* client,
                    const RendererSettings* settings,
                    OutputSurface* output_surface,
-                   ResourceProvider* resource_provider);
+                   ResourceProvider* resource_provider,
+                   bool use_image_hijack_canvas);
 
   void DidChangeVisibility() override;
 
@@ -88,9 +90,10 @@ class CC_EXPORT SoftwareRenderer : public DirectRenderer {
   void DrawUnsupportedQuad(const DrawingFrame* frame,
                            const DrawQuad* quad);
   bool ShouldApplyBackgroundFilters(const RenderPassDrawQuad* quad) const;
-  skia::RefPtr<SkImage> ApplyImageFilter(SkImageFilter* filter,
-                                         const RenderPassDrawQuad* quad,
-                                         const SkBitmap* to_filter) const;
+  sk_sp<SkImage> ApplyImageFilter(SkImageFilter* filter,
+                                  const RenderPassDrawQuad* quad,
+                                  const SkBitmap& to_filter,
+                                  SkIRect* auto_bounds) const;
   gfx::Rect GetBackdropBoundingBoxForRenderPassQuad(
       const DrawingFrame* frame,
       const RenderPassDrawQuad* quad,
@@ -110,9 +113,16 @@ class CC_EXPORT SoftwareRenderer : public DirectRenderer {
   SkCanvas* root_canvas_;
   SkCanvas* current_canvas_;
   SkPaint current_paint_;
-  scoped_ptr<ResourceProvider::ScopedWriteLockSoftware>
+  std::unique_ptr<ResourceProvider::ScopedWriteLockSoftware>
       current_framebuffer_lock_;
-  skia::RefPtr<SkCanvas> current_framebuffer_canvas_;
+  sk_sp<SkCanvas> current_framebuffer_canvas_;
+
+  // Indicates whether content rasterization should happen through an
+  // ImageHijackCanvas, which causes image decodes to be managed by an
+  // ImageDecodeController. We set this to false during resourceless software
+  // draw when a GPU ImageDecodeController is in use, as software rasterization
+  // cannot use the GPU IDC.
+  const bool use_image_hijack_canvas_;
 
   DISALLOW_COPY_AND_ASSIGN(SoftwareRenderer);
 };

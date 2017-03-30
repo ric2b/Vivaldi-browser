@@ -27,10 +27,10 @@ class VirtualKeyboardTray : public TrayBackgroundView,
   ~VirtualKeyboardTray() override;
 
   // TrayBackgroundView:
-  void SetShelfAlignment(ShelfAlignment alignment) override;
+  void SetShelfAlignment(wm::ShelfAlignment alignment) override;
   base::string16 GetAccessibleNameForTray() override;
   void HideBubbleWithView(const views::TrayBubbleView* bubble_view) override;
-  bool ClickedOutsideBubble() override;
+  void ClickedOutsideBubble() override;
   bool PerformAction(const ui::Event& event) override;
 
   // views::ButtonListener:

@@ -30,6 +30,7 @@
 
 #include "modules/serviceworkers/ServiceWorkerThread.h"
 
+#include "core/workers/WorkerBackingThread.h"
 #include "core/workers/WorkerThreadStartupData.h"
 #include "modules/serviceworkers/ServiceWorkerGlobalScope.h"
 
@@ -42,6 +43,7 @@ PassOwnPtr<ServiceWorkerThread> ServiceWorkerThread::create(PassRefPtr<WorkerLoa
 
 ServiceWorkerThread::ServiceWorkerThread(PassRefPtr<WorkerLoaderProxy> workerLoaderProxy, WorkerReportingProxy& workerReportingProxy)
     : WorkerThread(workerLoaderProxy, workerReportingProxy)
+    , m_workerBackingThread(WorkerBackingThread::create("ServiceWorker Thread"))
 {
 }
 
@@ -51,14 +53,7 @@ ServiceWorkerThread::~ServiceWorkerThread()
 
 WorkerGlobalScope* ServiceWorkerThread::createWorkerGlobalScope(PassOwnPtr<WorkerThreadStartupData> startupData)
 {
-    return ServiceWorkerGlobalScope::create(this, startupData);
-}
-
-WebThreadSupportingGC& ServiceWorkerThread::backingThread()
-{
-    if (!m_thread)
-        m_thread = WebThreadSupportingGC::create("ServiceWorker Thread");
-    return *m_thread.get();
+    return ServiceWorkerGlobalScope::create(this, std::move(startupData));
 }
 
 } // namespace blink

@@ -31,10 +31,10 @@
 #ifndef WorkerWebSocketChannel_h
 #define WorkerWebSocketChannel_h
 
-#include "core/frame/ConsoleTypes.h"
 #include "modules/websockets/WebSocketChannel.h"
 #include "modules/websockets/WebSocketChannelClient.h"
 #include "platform/heap/Handle.h"
+#include "platform/v8_inspector/public/ConsoleTypes.h"
 #include "wtf/Assertions.h"
 #include "wtf/Forward.h"
 #include "wtf/OwnPtr.h"
@@ -144,7 +144,7 @@ public:
 
     private:
         // Returns false if shutdown event is received before method completion.
-        bool waitForMethodCompletion(PassOwnPtr<ExecutionContextTask>);
+        bool waitForMethodCompletion(std::unique_ptr<ExecutionContextTask>);
 
         Member<WebSocketChannelClient> m_client;
         Member<WorkerGlobalScope> m_workerGlobalScope;

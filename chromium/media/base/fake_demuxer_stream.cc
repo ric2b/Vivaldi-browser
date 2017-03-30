@@ -13,8 +13,9 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/media_util.h"
@@ -145,6 +146,11 @@ void FakeDemuxerStream::SeekToStart() {
   Initialize();
 }
 
+void FakeDemuxerStream::SeekToEndOfStream() {
+  num_configs_left_ = 0;
+  num_buffers_left_in_current_config_ = 0;
+}
+
 void FakeDemuxerStream::UpdateVideoDecoderConfig() {
   const gfx::Rect kVisibleRect(kStartWidth, kStartHeight);
   video_decoder_config_.Initialize(
@@ -181,7 +187,7 @@ void FakeDemuxerStream::DoRead() {
 
   // TODO(xhwang): Output out-of-order buffers if needed.
   if (is_encrypted_) {
-    buffer->set_decrypt_config(scoped_ptr<DecryptConfig>(
+    buffer->set_decrypt_config(base::WrapUnique(
         new DecryptConfig(std::string(kKeyId, kKeyId + arraysize(kKeyId)),
                           std::string(kIv, kIv + arraysize(kIv)),
                           std::vector<SubsampleEntry>())));

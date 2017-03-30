@@ -11,6 +11,7 @@ import("//remoting/tools/build/remoting_localize.gni")
 
 generate_jni("jni_headers") {
   sources = [
+    "host/src/org/chromium/chromoting/host/jni/Host.java",
     "java/src/org/chromium/chromoting/jni/Client.java",
     "java/src/org/chromium/chromoting/jni/JniInterface.java",
     "java/src/org/chromium/chromoting/jni/TouchEventData.java",
@@ -28,6 +29,8 @@ shared_library("remoting_client_jni") {
     "//ui/gfx",
   ]
   sources = [
+    "//remoting/client/audio_player_android.cc",
+    "//remoting/client/audio_player_android.h",
     "//remoting/client/jni/android_keymap.cc",
     "//remoting/client/jni/android_keymap.h",
     "//remoting/client/jni/chromoting_jni_instance.cc",
@@ -44,6 +47,7 @@ shared_library("remoting_client_jni") {
     "//remoting/client/jni/remoting_jni_registrar.cc",
     "//remoting/client/jni/remoting_jni_registrar.h",
   ]
+  libs = [ "OpenSLES" ]
   configs += [ "//remoting:enable_webrtc_remoting_client" ]
 }
 
@@ -75,7 +79,7 @@ remoting_localize("remoting_apk_manifest") {
   } else {
     defines = [ "ENABLE_CARDBOARD=0" ]
   }
-  variables = [ branding_path ]
+  variables = [ rebase_path(branding_path) ]
   output = "$root_gen_dir/remoting/android/{{source_name_part}}"
 }
 
@@ -128,7 +132,7 @@ remoting_localize("remoting_test_apk_manifest") {
     "javatests/AndroidManifest.xml.jinja2",
   ]
   locales = [ "en" ]
-  variables = [ branding_path ]
+  variables = [ rebase_path(branding_path) ]
   output = "$root_gen_dir/remoting/android_test/{{source_name_part}}"
 }
 
@@ -150,6 +154,24 @@ instrumentation_test_apk("remoting_test_apk") {
   ]
 }
 
+shared_library("remoting_host_jni") {
+  deps = [
+    ":jni_headers",
+    "//google_apis",
+    "//remoting/base",
+    "//remoting/host",
+    "//remoting/host/it2me:common",
+    "//remoting/protocol",
+  ]
+  sources = [
+    "//remoting/host/android/jni_host.cc",
+    "//remoting/host/android/jni_host.h",
+    "//remoting/host/android/remoting_host_jni_onload.cc",
+    "//remoting/host/android/remoting_host_jni_registrar.cc",
+    "//remoting/host/android/remoting_host_jni_registrar.h",
+  ]
+}
+
 android_resources("remoting_host_apk_resources") {
   custom_package = "org.chromium.chromoting.host"
   resource_dirs = [ "host/res" ]
@@ -161,10 +183,25 @@ android_resources("remoting_host_apk_resources") {
 android_apk("remoting_host_apk") {
   apk_name = "ChromotingHost"
   android_manifest = "host/AndroidManifest.xml"
-  java_files = [ "host/src/org/chromium/chromoting/host/MainActivity.java" ]
+  native_libs = [ "libremoting_host_jni.so" ]
+  _java_file_prefix = "host/src/org/chromium/chromoting/host"
+  _java_files = [
+    "MainActivity.java",
+    "RemotingApplication.java",
+    "jni/Host.java",
+    "jni/It2MeHostObserver.java",
+  ]
+  java_files = rebase_path(_java_files, ".", _java_file_prefix)
+  java_files +=
+      [ "java/src/org/chromium/chromoting/base/OAuthTokenFetcher.java" ]
   deps = [
     ":remoting_host_apk_resources",
+    ":remoting_host_jni",
+    "//base:base_java",
+    "//net/android:net_java",
     "//third_party/android_tools:android_support_v13_java",
     "//third_party/android_tools:android_support_v7_appcompat_java",
+    google_play_services_library,
+    google_play_services_resources,
   ]
 }

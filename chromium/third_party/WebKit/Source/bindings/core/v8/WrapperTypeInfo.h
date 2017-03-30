@@ -40,6 +40,7 @@
 
 namespace blink {
 
+class DOMWrapperWorld;
 class EventTarget;
 class ScriptWrappable;
 
@@ -51,13 +52,12 @@ static const int v8DefaultWrapperInternalFieldCount = static_cast<int>(gin::kNum
 static const int v8PrototypeTypeIndex = 0;
 static const int v8PrototypeInternalFieldcount = 1;
 
-typedef v8::Local<v8::FunctionTemplate> (*DomTemplateFunction)(v8::Isolate*);
-typedef void (*RefObjectFunction)(ScriptWrappable*);
-typedef void (*DerefObjectFunction)(ScriptWrappable*);
+typedef v8::Local<v8::FunctionTemplate> (*DomTemplateFunction)(v8::Isolate*, const DOMWrapperWorld&);
 typedef void (*TraceFunction)(Visitor*, ScriptWrappable*);
+typedef void (*TraceWrappersFunction)(WrapperVisitor*, ScriptWrappable*);
 typedef ActiveScriptWrappable* (*ToActiveScriptWrappableFunction)(v8::Local<v8::Object>);
 typedef void (*ResolveWrapperReachabilityFunction)(v8::Isolate*, ScriptWrappable*, const v8::Persistent<v8::Object>&);
-typedef void (*PreparePrototypeAndInterfaceObjectFunction)(v8::Local<v8::Context>, v8::Local<v8::Object>, v8::Local<v8::Function>, v8::Local<v8::FunctionTemplate>);
+typedef void (*PreparePrototypeAndInterfaceObjectFunction)(v8::Local<v8::Context>, const DOMWrapperWorld&, v8::Local<v8::Object>, v8::Local<v8::Function>, v8::Local<v8::FunctionTemplate>);
 typedef void (*InstallConditionallyEnabledPropertiesFunction)(v8::Local<v8::Object>, v8::Isolate*);
 
 inline void setObjectGroup(v8::Isolate* isolate, ScriptWrappable* scriptWrappable, const v8::Persistent<v8::Object>& wrapper)
@@ -90,13 +90,6 @@ struct WrapperTypeInfo {
         Independent,
     };
 
-    enum GCType {
-        GarbageCollectedObject,
-        // TODO(haraken): Remove RefCountedObject. All DOM objects that inherit
-        // from ScriptWrappable must be moved to Oilpan's heap.
-        RefCountedObject,
-    };
-
     static const WrapperTypeInfo* unwrap(v8::Local<v8::Value> typeInfoWrapper)
     {
         return reinterpret_cast<const WrapperTypeInfo*>(v8::External::Cast(*typeInfoWrapper)->Value());
@@ -124,42 +117,19 @@ struct WrapperTypeInfo {
             wrapper->MarkIndependent();
     }
 
-    v8::Local<v8::FunctionTemplate> domTemplate(v8::Isolate* isolate) const
+    v8::Local<v8::FunctionTemplate> domTemplate(v8::Isolate* isolate, const DOMWrapperWorld& world) const
     {
-        return domTemplateFunction(isolate);
+        return domTemplateFunction(isolate, world);
     }
 
-    bool isGarbageCollected() const
+    void wrapperCreated() const
     {
-        return gcType == GarbageCollectedObject;
+        ThreadState::current()->heap().heapStats().increaseWrapperCount(1);
     }
 
-    void refObject(ScriptWrappable* scriptWrappable) const
+    void wrapperDestroyed() const
     {
-        if (isGarbageCollected()) {
-            Heap::heapStats().increaseWrapperCount(1);
-        } else {
-            ASSERT(refObjectFunction);
-            refObjectFunction(scriptWrappable);
-        }
-    }
-
-    void derefObject(ScriptWrappable* scriptWrappable) const
-    {
-        if (isGarbageCollected()) {
-            ThreadHeapStats& heapStats = Heap::heapStats();
-            heapStats.decreaseWrapperCount(1);
-            heapStats.increaseCollectedWrapperCount(1);
-        } else {
-            ASSERT(derefObjectFunction);
-            derefObjectFunction(scriptWrappable);
-        }
-    }
-
-    void derefObject() const
-    {
-        ASSERT(isGarbageCollected());
-        ThreadHeapStats& heapStats = Heap::heapStats();
+        ThreadHeapStats& heapStats = ThreadState::current()->heap().heapStats();
         heapStats.decreaseWrapperCount(1);
         heapStats.increaseCollectedWrapperCount(1);
     }
@@ -170,10 +140,16 @@ struct WrapperTypeInfo {
         return traceFunction(visitor, scriptWrappable);
     }
 
-    void preparePrototypeAndInterfaceObject(v8::Local<v8::Context> context, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate) const
+    void traceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable) const
+    {
+        ASSERT(traceWrappersFunction);
+        return traceWrappersFunction(visitor, scriptWrappable);
+    }
+
+    void preparePrototypeAndInterfaceObject(v8::Local<v8::Context> context, const DOMWrapperWorld& world, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate) const
     {
         if (preparePrototypeAndInterfaceObjectFunction)
-            preparePrototypeAndInterfaceObjectFunction(context, prototypeObject, interfaceObject, interfaceTemplate);
+            preparePrototypeAndInterfaceObjectFunction(context, world, prototypeObject, interfaceObject, interfaceTemplate);
     }
 
     void installConditionallyEnabledProperties(v8::Local<v8::Object> prototypeObject, v8::Isolate* isolate) const
@@ -208,9 +184,8 @@ struct WrapperTypeInfo {
     const gin::GinEmbedder ginEmbedder;
 
     DomTemplateFunction domTemplateFunction;
-    const RefObjectFunction refObjectFunction;
-    const DerefObjectFunction derefObjectFunction;
     const TraceFunction traceFunction;
+    const TraceWrappersFunction traceWrappersFunction;
     const ToActiveScriptWrappableFunction toActiveScriptWrappableFunction;
     const ResolveWrapperReachabilityFunction visitDOMWrapperFunction;
     PreparePrototypeAndInterfaceObjectFunction preparePrototypeAndInterfaceObjectFunction;
@@ -221,7 +196,6 @@ struct WrapperTypeInfo {
     const unsigned wrapperClassId : 2; // WrapperClassId
     const unsigned eventTargetInheritance : 1; // EventTargetInheritance
     const unsigned lifetime : 1; // Lifetime
-    const unsigned gcType : 2; // GCType
 };
 
 template<typename T, int offset>

@@ -6,13 +6,13 @@
 
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
-#include "media/audio/audio_parameters.h"
+#include "media/base/audio_parameters.h"
 
 namespace media {
 
 MockAudioManager::MockAudioManager(
-    const scoped_refptr<base::SingleThreadTaskRunner>& task_runner)
-    : task_runner_(task_runner) {}
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner)
+    : AudioManager(task_runner, task_runner) {}
 
 MockAudioManager::~MockAudioManager() {
 }
@@ -63,15 +63,6 @@ media::AudioInputStream* MockAudioManager::MakeAudioInputStream(
   return NULL;
 }
 
-scoped_refptr<base::SingleThreadTaskRunner> MockAudioManager::GetTaskRunner() {
-  return task_runner_;
-}
-
-scoped_refptr<base::SingleThreadTaskRunner>
-MockAudioManager::GetWorkerTaskRunner() {
-  return task_runner_;
-}
-
 void MockAudioManager::AddOutputDeviceChangeListener(
     AudioDeviceListener* listener) {
 }
@@ -99,9 +90,9 @@ std::string MockAudioManager::GetAssociatedOutputDeviceID(
   return std::string();
 }
 
-scoped_ptr<AudioLog> MockAudioManager::CreateAudioLog(
+std::unique_ptr<AudioLog> MockAudioManager::CreateAudioLog(
     AudioLogFactory::AudioComponent component) {
-  return scoped_ptr<AudioLog>();
+  return nullptr;
 }
 
 }  // namespace media.

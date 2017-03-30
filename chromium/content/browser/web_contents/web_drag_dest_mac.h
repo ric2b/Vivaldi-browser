@@ -4,15 +4,17 @@
 
 #import <Cocoa/Cocoa.h>
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
 #include "base/strings/string16.h"
 #include "content/common/content_export.h"
 #include "content/public/common/drop_data.h"
 
+#include "content/public/browser/web_drag_dest_delegate.h"
+
 namespace content {
 class RenderViewHost;
 class WebContentsImpl;
-class WebDragDestDelegate;
 }
 
 // A typedef for a RenderViewHost used for comparison purposes only.
@@ -39,7 +41,7 @@ CONTENT_EXPORT
   RenderViewHostIdentifier currentRVH_;
 
   // The data for the current drag, or NULL if none is in progress.
-  scoped_ptr<content::DropData> dropData_;
+  std::unique_ptr<content::DropData> dropData_;
 
   // True if the drag has been canceled.
   bool canceled_;
@@ -53,6 +55,10 @@ CONTENT_EXPORT
 - (content::DropData*)currentDropData;
 
 - (void)setDragDelegate:(content::WebDragDestDelegate*)delegate;
+
+- (content::WebDragDestDelegate*)getDragDelegate;
+
+- (bool)isCanceled;
 
 // Sets the current operation negotiated by the source and destination,
 // which determines whether or not we should allow the drop. Takes effect the

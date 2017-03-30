@@ -10,7 +10,8 @@
 #include "base/location.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "chrome/browser/extensions/extension_message_bubble_controller.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -18,7 +19,8 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/extensions/extension_action_view_controller.h"
-#include "chrome/browser/ui/extensions/extension_message_bubble_factory.h"
+#include "chrome/browser/ui/extensions/extension_message_bubble_bridge.h"
+#include "chrome/browser/ui/extensions/settings_api_bubble_helpers.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/component_toolbar_actions_factory.h"
@@ -45,8 +47,13 @@ enum DimensionType { WIDTH, HEIGHT };
 
 // Returns the width or height of the toolbar action icon size.
 int GetIconDimension(DimensionType type) {
-  if (ui::MaterialDesignController::IsModeMaterial())
+if (ui::MaterialDesignController::IsModeMaterial())
+#if defined(OS_MACOSX)
+  // On the Mac, the spec is a 24x24 button in a 28x28 space.
+    return 24;
+#else
     return 28;
+#endif
 
   static bool initialized = false;
   static int icon_height = 0;
@@ -97,6 +104,9 @@ void SortContainer(std::vector<Type1>* to_sort,
   }
 }
 
+// How long to wait until showing an extension message bubble.
+int g_extension_bubble_appearance_wait_time_in_seconds = 5;
+
 }  // namespace
 
 // static
@@ -121,13 +131,17 @@ ToolbarActionsBar::ToolbarActionsBar(ToolbarActionsBarDelegate* delegate,
       model_observer_(this),
       suppress_layout_(false),
       suppress_animation_(true),
-      checked_extension_bubble_(false),
+      should_check_extension_bubble_(!main_bar),
       is_drag_in_progress_(false),
       popped_out_action_(nullptr),
       is_popped_out_sticky_(false),
+      is_showing_bubble_(false),
+      tab_strip_observer_(this),
       weak_ptr_factory_(this) {
   if (model_)  // |model_| can be null in unittests.
     model_observer_.Add(model_);
+
+  tab_strip_observer_.Add(browser_->tab_strip_model());
 }
 
 ToolbarActionsBar::~ToolbarActionsBar() {
@@ -387,18 +401,13 @@ void ToolbarActionsBar::CreateActions() {
   // haven't already shown the bubble.
   // Extension bubbles can also highlight a subset of actions, so don't show the
   // bubble if the toolbar is already highlighting a different set.
-  if (!checked_extension_bubble_ && !is_highlighting()) {
-    checked_extension_bubble_ = true;
+  if (should_check_extension_bubble_ && !is_highlighting()) {
+    should_check_extension_bubble_ = false;
     // CreateActions() can be called as part of the browser window set up, which
     // we need to let finish before showing the actions.
-    std::unique_ptr<extensions::ExtensionMessageBubbleController> controller =
-        ExtensionMessageBubbleFactory(browser_).GetController();
-    if (controller) {
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(&ToolbarActionsBar::MaybeShowExtensionBubble,
-                                weak_ptr_factory_.GetWeakPtr(),
-                                base::Passed(std::move(controller))));
-    }
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(&ToolbarActionsBar::MaybeShowExtensionBubble,
+                              weak_ptr_factory_.GetWeakPtr()));
   }
 }
 
@@ -489,18 +498,23 @@ void ToolbarActionsBar::OnDragDrop(int dragged_index,
 }
 
 void ToolbarActionsBar::OnAnimationEnded() {
+  // Notify the observers now, since showing a bubble or popup could potentially
+  // cause another animation to start.
+  FOR_EACH_OBSERVER(ToolbarActionsBarObserver, observers_,
+                    OnToolbarActionsBarAnimationEnded());
+
   // Check if we were waiting for animation to complete to either show a
   // message bubble, or to show a popup.
-  if (pending_extension_bubble_controller_) {
-    MaybeShowExtensionBubble(std::move(pending_extension_bubble_controller_));
-  } else if (pending_toolbar_bubble_controller_) {
-    ShowToolbarActionBubble(std::move(pending_toolbar_bubble_controller_));
+  if (pending_bubble_controller_) {
+    ShowToolbarActionBubble(std::move(pending_bubble_controller_));
   } else if (!popped_out_closure_.is_null()) {
     popped_out_closure_.Run();
     popped_out_closure_.Reset();
   }
-  FOR_EACH_OBSERVER(ToolbarActionsBarObserver, observers_,
-                    OnToolbarActionsBarAnimationEnded());
+}
+
+void ToolbarActionsBar::OnBubbleClosed() {
+  is_showing_bubble_ = false;
 }
 
 bool ToolbarActionsBar::IsActionVisibleOnMainBar(
@@ -581,34 +595,58 @@ void ToolbarActionsBar::RemoveObserver(ToolbarActionsBarObserver* observer) {
 
 void ToolbarActionsBar::ShowToolbarActionBubble(
     std::unique_ptr<ToolbarActionsBarBubbleDelegate> bubble) {
-  DCHECK(bubble->GetAnchorActionId().empty() ||
-         GetActionForId(bubble->GetAnchorActionId()));
-  if (delegate_->IsAnimating())
-    pending_toolbar_bubble_controller_ = std::move(bubble);
-  else
-    delegate_->ShowToolbarActionBubble(std::move(bubble));
-}
-
-void ToolbarActionsBar::MaybeShowExtensionBubble(
-    std::unique_ptr<extensions::ExtensionMessageBubbleController> controller) {
-  controller->HighlightExtensionsIfNecessary();  // Safe to call multiple times.
+  DCHECK(!in_overflow_mode());
   if (delegate_->IsAnimating()) {
     // If the toolbar is animating, we can't effectively anchor the bubble,
     // so wait until animation stops.
-    pending_extension_bubble_controller_ = std::move(controller);
-  } else if (controller->ShouldShow()) {
-    // We check ShouldShow() above because the affected extensions may have been
-    // removed since the controller was initialized.
-    const std::vector<std::string>& affected_extensions =
-        controller->GetExtensionIdList();
-    ToolbarActionViewController* anchor_action = nullptr;
-    for (const std::string& id : affected_extensions) {
-      anchor_action = GetActionForId(id);
-      if (anchor_action)
-        break;
-    }
-    delegate_->ShowExtensionMessageBubble(std::move(controller), anchor_action);
+    pending_bubble_controller_ = std::move(bubble);
+  } else if (bubble->ShouldShow()) {
+    // We check ShouldShow() above since we show the bubble asynchronously, and
+    // it might no longer have been valid.
+    is_showing_bubble_ = true;
+    delegate_->ShowToolbarActionBubble(std::move(bubble));
   }
+}
+
+void ToolbarActionsBar::ShowToolbarActionBubbleAsync(
+    std::unique_ptr<ToolbarActionsBarBubbleDelegate> bubble) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(&ToolbarActionsBar::ShowToolbarActionBubble,
+                            weak_ptr_factory_.GetWeakPtr(),
+                            base::Passed(std::move(bubble))));
+}
+
+void ToolbarActionsBar::MaybeShowExtensionBubble() {
+  std::unique_ptr<extensions::ExtensionMessageBubbleController> controller =
+      model_->GetExtensionMessageBubbleController(browser_);
+  if (!controller)
+    return;
+
+  DCHECK(controller->ShouldShow());
+  controller->HighlightExtensionsIfNecessary();  // Safe to call multiple times.
+
+  // Not showing the bubble right away (during startup) has a few benefits:
+  // We don't have to worry about focus being lost due to the Omnibox (or to
+  // other things that want focus at startup). This allows Esc to work to close
+  // the bubble and also solves the keyboard accessibility problem that comes
+  // with focus being lost (we don't have a good generic mechanism of injecting
+  // bubbles into the focus cycle). Another benefit of delaying the show is
+  // that fade-in works (the fade-in isn't apparent if the the bubble appears at
+  // startup).
+  std::unique_ptr<ToolbarActionsBarBubbleDelegate> delegate(
+      new ExtensionMessageBubbleBridge(std::move(controller)));
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE, base::Bind(&ToolbarActionsBar::ShowToolbarActionBubble,
+                            weak_ptr_factory_.GetWeakPtr(),
+                            base::Passed(std::move(delegate))),
+      base::TimeDelta::FromSeconds(
+          g_extension_bubble_appearance_wait_time_in_seconds));
+}
+
+// static
+void ToolbarActionsBar::set_extension_bubble_appearance_wait_time_for_testing(
+    int time_in_seconds) {
+  g_extension_bubble_appearance_wait_time_in_seconds = time_in_seconds;
 }
 
 void ToolbarActionsBar::OnToolbarActionAdded(
@@ -651,6 +689,8 @@ void ToolbarActionsBar::OnToolbarActionRemoved(const std::string& action_id) {
   std::unique_ptr<ToolbarActionViewController> removed_action(*iter);
   toolbar_actions_.weak_erase(iter);
   delegate_->RemoveViewForAction(removed_action.get());
+  if (popped_out_action_ == removed_action.get())
+    UndoPopOut();
   removed_action.reset();
 
   // If the extension is being upgraded we don't want the bar to shrink
@@ -771,6 +811,13 @@ void ToolbarActionsBar::OnToolbarModelInitialized() {
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
           "ToolbarActionsBar::OnToolbarModelInitialized"));
   ResizeDelegate(gfx::Tween::EASE_OUT, false);
+}
+
+void ToolbarActionsBar::TabInsertedAt(content::WebContents* contents,
+                                      int index,
+                                      bool foreground) {
+  if (foreground)
+    extensions::MaybeShowExtensionControlledNewTabPage(browser_, contents);
 }
 
 void ToolbarActionsBar::ReorderActions() {

@@ -36,6 +36,7 @@ LayoutSVGContainer::LayoutSVGContainer(SVGElement* node)
     : LayoutSVGModelObject(node)
     , m_objectBoundingBoxValid(false)
     , m_needsBoundariesUpdate(true)
+    , m_didScreenScaleFactorChange(false)
     , m_hasNonIsolatedBlendingDescendants(false)
     , m_hasNonIsolatedBlendingDescendantsDirty(false)
 {
@@ -55,11 +56,17 @@ void LayoutSVGContainer::layout()
 
     // Allow LayoutSVGTransformableContainer to update its transform.
     bool updatedTransform = calculateLocalTransform();
+    m_didScreenScaleFactorChange = updatedTransform || SVGLayoutSupport::screenScaleFactorChanged(parent());
 
     // LayoutSVGViewportContainer needs to set the 'layout size changed' flag.
     determineIfLayoutSizeChanged();
 
-    SVGLayoutSupport::layoutChildren(this, selfNeedsLayout() || SVGLayoutSupport::filtersForceContainerLayout(this));
+    // When hasRelativeLengths() is false, no descendants have relative lengths
+    // (hence no one is interested in viewport size changes).
+    bool layoutSizeChanged = element()->hasRelativeLengths()
+        && SVGLayoutSupport::layoutSizeOfNearestViewportChanged(this);
+
+    SVGLayoutSupport::layoutChildren(firstChild(), false, m_didScreenScaleFactorChange, layoutSizeChanged);
 
     // Invalidate all resources of this client if our layout changed.
     if (everHadLayout() && needsLayout())
@@ -73,6 +80,7 @@ void LayoutSVGContainer::layout()
         LayoutSVGModelObject::setNeedsBoundariesUpdate();
     }
 
+    ASSERT(!m_needsBoundariesUpdate);
     clearNeedsLayout();
 }
 
@@ -98,8 +106,7 @@ void LayoutSVGContainer::removeChild(LayoutObject* child)
 
 bool LayoutSVGContainer::selfWillPaint() const
 {
-    SVGResources* resources = SVGResourcesCache::cachedResourcesForLayoutObject(this);
-    return resources && resources->filter();
+    return SVGLayoutSupport::hasFilterResource(*this);
 }
 
 void LayoutSVGContainer::styleDidChange(StyleDifference diff, const ComputedStyle* oldStyle)

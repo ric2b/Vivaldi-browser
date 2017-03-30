@@ -34,7 +34,6 @@ enum AudioContextState {
     Constructor,
     ConstructorCallWith=Document,
     DependentLifetime,
-    GarbageCollected,
     ImplementedAs=AbstractAudioContext,
     NoInterfaceObject,
     RaisesException=Constructor,
@@ -73,14 +72,14 @@ enum AudioContextState {
     [RaisesException, MeasureAs=AudioContextCreateBiquadFilter] BiquadFilterNode createBiquadFilter();
     [RaisesException, MeasureAs=AudioContextCreateIIRFilter] IIRFilterNode createIIRFilter(sequence<double> feedForward, sequence<double> feedBack);
     [RaisesException, MeasureAs=AudioContextCreateWaveShaper] WaveShaperNode createWaveShaper();
-    [RaisesException, MeasureAs=AudioContextCreatePanner] PannerNode createPanner();
+    [RaisesException, MeasureAs=AudioContextCreatePannerAutomated] PannerNode createPanner();
     [RaisesException, MeasureAs=AudioContextCreateConvolver] ConvolverNode createConvolver();
     [RaisesException, MeasureAs=AudioContextCreateDynamicsCompressor] DynamicsCompressorNode createDynamicsCompressor();
     [RaisesException, MeasureAs=AudioContextCreateAnalyser] AnalyserNode createAnalyser();
     [RaisesException, MeasureAs=AudioContextCreateScriptProcessor] ScriptProcessorNode createScriptProcessor(optional unsigned long bufferSize, optional unsigned long numberOfInputChannels, optional unsigned long numberOfOutputChannels);
     [RaisesException, MeasureAs=AudioContextCreateStereoPanner] StereoPannerNode createStereoPanner();
     [RaisesException, MeasureAs=AudioContextCreateOscillator] OscillatorNode createOscillator();
-    [RaisesException, MeasureAs=AudioContextCreatePeriodicWave] PeriodicWave createPeriodicWave(Float32Array real, Float32Array imag, optional Dictionary options);
+    [RaisesException, MeasureAs=AudioContextCreatePeriodicWave] PeriodicWave createPeriodicWave(Float32Array real, Float32Array imag, optional PeriodicWaveConstraints options);
 
     // Channel splitting and merging
     [RaisesException, MeasureAs=AudioContextCreateChannelSplitter] ChannelSplitterNode createChannelSplitter(optional unsigned long numberOfOutputs);

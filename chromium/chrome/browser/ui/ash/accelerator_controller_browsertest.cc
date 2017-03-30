@@ -5,7 +5,8 @@
 #include "ash/accelerators/accelerator_controller.h"
 
 #include "ash/shell.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -16,7 +17,7 @@
 #include "ui/events/test/events_test_utils_x11.h"
 #endif
 
-#if defined(OS_CHROMEOS) && defined(USE_X11)
+#if defined(USE_X11)
 typedef InProcessBrowserTest AcceleratorControllerBrowserTest;
 
 // Test that pressing and holding Alt+ toggles the maximized state exactly once.

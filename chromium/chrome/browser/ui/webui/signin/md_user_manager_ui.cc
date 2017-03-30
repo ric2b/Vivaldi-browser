@@ -42,7 +42,7 @@ MDUserManagerUI::MDUserManagerUI(content::WebUI* web_ui)
   GetLocalizedStrings(&localized_strings);
 
   Profile* profile = Profile::FromWebUI(web_ui);
-  // Set up the chrome://user-chooser/ source.
+  // Set up the chrome://md-user-manager/ source.
   content::WebUIDataSource::Add(profile, CreateUIDataSource(localized_strings));
 
 #if defined(ENABLE_THEMES)
@@ -61,40 +61,41 @@ content::WebUIDataSource* MDUserManagerUI::CreateUIDataSource(
   source->AddLocalizedStrings(localized_strings);
   source->SetJsonPath("strings.js");
 
-  source->AddResourcePath("control_bar.css", IDR_MD_CONTROL_BAR_CSS);
   source->AddResourcePath("control_bar.html", IDR_MD_CONTROL_BAR_HTML);
   source->AddResourcePath("control_bar.js", IDR_MD_CONTROL_BAR_JS);
-  source->AddResourcePath("create_profile.css", IDR_MD_CREATE_PROFILE_CSS);
   source->AddResourcePath("create_profile.html", IDR_MD_CREATE_PROFILE_HTML);
   source->AddResourcePath("create_profile.js", IDR_MD_CREATE_PROFILE_JS);
+  source->AddResourcePath("icons.html", IDR_MD_USER_MANAGER_ICONS_HTML);
+  source->AddResourcePath("import_supervised_user.html",
+                          IDR_MD_IMPORT_SUPERVISED_USER_HTML);
+  source->AddResourcePath("import_supervised_user.js",
+                          IDR_MD_IMPORT_SUPERVISED_USER_JS);
   source->AddResourcePath("profile_browser_proxy.html",
                           IDR_MD_PROFILE_BROWSER_PROXY_HTML);
   source->AddResourcePath("profile_browser_proxy.js",
                           IDR_MD_PROFILE_BROWSER_PROXY_JS);
+  source->AddResourcePath("shared_styles.html",
+                          IDR_MD_USER_MANAGER_SHARED_STYLES_HTML);
   source->AddResourcePath("strings.html", IDR_MD_USER_MANAGER_STRINGS_HTML);
-  source->AddResourcePath("supervised_user_learn_more.css",
-                          IDR_MD_SUPERVISED_USER_LEARN_MORE_CSS);
+  source->AddResourcePath("supervised_user_create_confirm.html",
+                          IDR_MD_SUPERVISED_USER_CREATE_CONFIRM_HTML);
+  source->AddResourcePath("supervised_user_create_confirm.js",
+                          IDR_MD_SUPERVISED_USER_CREATE_CONFIRM_JS);
   source->AddResourcePath("supervised_user_learn_more.html",
                           IDR_MD_SUPERVISED_USER_LEARN_MORE_HTML);
   source->AddResourcePath("supervised_user_learn_more.js",
                           IDR_MD_SUPERVISED_USER_LEARN_MORE_JS);
-  source->AddResourcePath("user_manager_styles.html",
-                          IDR_MD_USER_MANAGER_STYLES_HTML);
   source->AddResourcePath("user_manager.js", IDR_MD_USER_MANAGER_JS);
-  source->AddResourcePath("user_manager_pages.css",
-                          IDR_MD_USER_MANAGER_PAGES_CSS);
   source->AddResourcePath("user_manager_pages.html",
                           IDR_MD_USER_MANAGER_PAGES_HTML);
   source->AddResourcePath("user_manager_pages.js",
                           IDR_MD_USER_MANAGER_PAGES_JS);
-  source->AddResourcePath("user_manager_tutorial.css",
-                          IDR_MD_USER_MANAGER_TUTORIAL_CSS);
+  source->AddResourcePath("user_manager_styles.html",
+                          IDR_MD_USER_MANAGER_STYLES_HTML);
   source->AddResourcePath("user_manager_tutorial.html",
                           IDR_MD_USER_MANAGER_TUTORIAL_HTML);
   source->AddResourcePath("user_manager_tutorial.js",
                           IDR_MD_USER_MANAGER_TUTORIAL_JS);
-  source->AddResourcePath("shared_styles.html",
-                          IDR_MD_USER_MANAGER_SHARED_STYLES_HTML);
 
   source->SetDefaultResource(IDR_MD_USER_MANAGER_HTML);
 
@@ -105,6 +106,9 @@ void MDUserManagerUI::GetLocalizedStrings(
     base::DictionaryValue* localized_strings) {
   user_manager_screen_handler_->GetLocalizedValues(localized_strings);
   signin_create_profile_handler_->GetLocalizedValues(localized_strings);
+#if defined(ENABLE_SUPERVISED_USERS)
+  signin_supervised_user_import_handler_->GetLocalizedValues(localized_strings);
+#endif
   const std::string& app_locale = g_browser_process->GetApplicationLocale();
   webui::SetLoadTimeDataDefaults(app_locale, localized_strings);
 

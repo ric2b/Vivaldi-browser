@@ -4,7 +4,11 @@
 
 #include "content/renderer/media/audio_device_factory.h"
 
+#include <algorithm>
+
 #include "base/logging.h"
+#include "build/build_config.h"
+#include "content/common/content_constants_internal.h"
 #include "content/renderer/media/audio_input_message_filter.h"
 #include "content/renderer/media/audio_message_filter.h"
 #include "content/renderer/media/audio_renderer_mixer_manager.h"
@@ -20,6 +24,15 @@ namespace content {
 AudioDeviceFactory* AudioDeviceFactory::factory_ = NULL;
 
 namespace {
+#if defined(OS_WIN)
+// Due to driver deadlock issues on Windows (http://crbug/422522) there is a
+// chance device authorization response is never received from the browser side.
+// In this case we will time out, to avoid renderer hang forever waiting for
+// device authorization (http://crbug/615589). This will result in "no audio".
+const int64_t kMaxAuthorizationTimeoutMs = 1000;
+#else
+const int64_t kMaxAuthorizationTimeoutMs = 0;  // No timeout.
+#endif  // defined(OS_WIN)
 
 scoped_refptr<media::AudioOutputDevice> NewOutputDevice(
     int render_frame_id,
@@ -29,7 +42,11 @@ scoped_refptr<media::AudioOutputDevice> NewOutputDevice(
   AudioMessageFilter* const filter = AudioMessageFilter::Get();
   scoped_refptr<media::AudioOutputDevice> device(new media::AudioOutputDevice(
       filter->CreateAudioOutputIPC(render_frame_id), filter->io_task_runner(),
-      session_id, device_id, security_origin));
+      session_id, device_id, security_origin,
+      // Set authorization request timeout at 80% of renderer hung timeout, but
+      // no more than kMaxAuthorizationTimeout.
+      base::TimeDelta::FromMilliseconds(std::min(kHungRendererDelayMs * 8 / 10,
+                                                 kMaxAuthorizationTimeoutMs))));
   device->RequestDeviceAuthorization();
   return device;
 }
@@ -47,21 +64,13 @@ bool IsMixable(AudioDeviceFactory::SourceType source_type) {
 
 scoped_refptr<media::SwitchableAudioRendererSink> NewMixableSink(
     int render_frame_id,
+    int session_id,
     const std::string& device_id,
     const url::Origin& security_origin) {
   RenderThreadImpl* render_thread = RenderThreadImpl::current();
   return scoped_refptr<media::AudioRendererMixerInput>(
       render_thread->GetAudioRendererMixerManager()->CreateInput(
-          render_frame_id, device_id, security_origin));
-}
-
-scoped_refptr<media::AudioRendererSink> NewUnmixableSink(
-    int render_frame_id,
-    int session_id,
-    const std::string& device_id,
-    const url::Origin& security_origin) {
-  return NewOutputDevice(render_frame_id, session_id, device_id,
-                         security_origin);
+          render_frame_id, session_id, device_id, security_origin));
 }
 
 }  // namespace
@@ -72,15 +81,8 @@ AudioDeviceFactory::NewAudioRendererMixerSink(
     int session_id,
     const std::string& device_id,
     const url::Origin& security_origin) {
-  if (factory_) {
-    scoped_refptr<media::AudioRendererSink> sink =
-        factory_->CreateAudioRendererMixerSink(render_frame_id, session_id,
-                                               device_id, security_origin);
-    if (sink)
-      return sink;
-  }
-  return NewOutputDevice(render_frame_id, session_id, device_id,
-                         security_origin);
+  return NewFinalAudioRendererSink(render_frame_id, session_id, device_id,
+                                   security_origin);
 }
 
 // static
@@ -100,10 +102,11 @@ AudioDeviceFactory::NewAudioRendererSink(SourceType source_type,
   }
 
   if (IsMixable(source_type))
-    return NewMixableSink(render_frame_id, device_id, security_origin);
-
-  return NewUnmixableSink(render_frame_id, session_id, device_id,
+    return NewMixableSink(render_frame_id, session_id, device_id,
                           security_origin);
+
+  return NewFinalAudioRendererSink(render_frame_id, session_id, device_id,
+                                   security_origin);
 }
 
 // static
@@ -124,7 +127,8 @@ AudioDeviceFactory::NewSwitchableAudioRendererSink(
   }
 
   if (IsMixable(source_type))
-    return NewMixableSink(render_frame_id, device_id, security_origin);
+    return NewMixableSink(render_frame_id, session_id, device_id,
+                          security_origin);
 
   // AudioOutputDevice is not RestartableAudioRendererSink, so we can't return
   // anything for those who wants to create an unmixable sink.
@@ -155,11 +159,14 @@ media::OutputDeviceInfo AudioDeviceFactory::GetOutputDeviceInfo(
     int session_id,
     const std::string& device_id,
     const url::Origin& security_origin) {
-  scoped_refptr<media::AudioOutputDevice> device =
-      NewOutputDevice(render_frame_id, session_id, device_id, security_origin);
+  scoped_refptr<media::AudioRendererSink> sink = NewFinalAudioRendererSink(
+      render_frame_id, session_id, device_id, security_origin);
 
-  const media::OutputDeviceInfo& device_info = device->GetOutputDeviceInfo();
-  device->Stop();  // Must be stopped.
+  const media::OutputDeviceInfo& device_info = sink->GetOutputDeviceInfo();
+
+  // TODO(olka): Cache it and reuse, http://crbug.com/586161
+  sink->Stop();  // Must be stopped.
+
   return device_info;
 }
 
@@ -170,6 +177,25 @@ AudioDeviceFactory::AudioDeviceFactory() {
 
 AudioDeviceFactory::~AudioDeviceFactory() {
   factory_ = NULL;
+}
+
+// static
+scoped_refptr<media::AudioRendererSink>
+AudioDeviceFactory::NewFinalAudioRendererSink(
+    int render_frame_id,
+    int session_id,
+    const std::string& device_id,
+    const url::Origin& security_origin) {
+  if (factory_) {
+    scoped_refptr<media::AudioRendererSink> sink =
+        factory_->CreateFinalAudioRendererSink(render_frame_id, session_id,
+                                               device_id, security_origin);
+    if (sink)
+      return sink;
+  }
+
+  return NewOutputDevice(render_frame_id, session_id, device_id,
+                         security_origin);
 }
 
 }  // namespace content

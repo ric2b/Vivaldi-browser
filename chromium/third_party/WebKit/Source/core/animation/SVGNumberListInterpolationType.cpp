@@ -21,7 +21,7 @@ InterpolationValue SVGNumberListInterpolationType::maybeConvertNeutral(const Int
     OwnPtr<InterpolableList> result = InterpolableList::create(underlyingLength);
     for (size_t i = 0; i < underlyingLength; i++)
         result->set(i, InterpolableNumber::create(0));
-    return InterpolationValue(result.release());
+    return InterpolationValue(std::move(result));
 }
 
 InterpolationValue SVGNumberListInterpolationType::maybeConvertSVGValue(const SVGPropertyBase& svgValue) const
@@ -33,16 +33,16 @@ InterpolationValue SVGNumberListInterpolationType::maybeConvertSVGValue(const SV
     OwnPtr<InterpolableList> result = InterpolableList::create(numberList.length());
     for (size_t i = 0; i < numberList.length(); i++)
         result->set(i, InterpolableNumber::create(numberList.at(i)->value()));
-    return InterpolationValue(result.release());
+    return InterpolationValue(std::move(result));
 }
 
-PairwiseInterpolationValue SVGNumberListInterpolationType::mergeSingleConversions(InterpolationValue&& start, InterpolationValue&& end) const
+PairwiseInterpolationValue SVGNumberListInterpolationType::maybeMergeSingles(InterpolationValue&& start, InterpolationValue&& end) const
 {
     size_t startLength = toInterpolableList(*start.interpolableValue).length();
     size_t endLength = toInterpolableList(*end.interpolableValue).length();
     if (startLength != endLength)
         return nullptr;
-    return InterpolationType::mergeSingleConversions(std::move(start), std::move(end));
+    return InterpolationType::maybeMergeSingles(std::move(start), std::move(end));
 }
 
 static void padWithZeroes(OwnPtr<InterpolableValue>& listPointer, size_t paddedLength)
@@ -55,10 +55,10 @@ static void padWithZeroes(OwnPtr<InterpolableValue>& listPointer, size_t paddedL
     OwnPtr<InterpolableList> result = InterpolableList::create(paddedLength);
     size_t i = 0;
     for (; i < list.length(); i++)
-        result->set(i, list.getMutable(i).release());
+        result->set(i, std::move(list.getMutable(i)));
     for (; i < paddedLength; i++)
         result->set(i, InterpolableNumber::create(0));
-    listPointer = result.release();
+    listPointer = std::move(result);
 }
 
 void SVGNumberListInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value, double interpolationFraction) const

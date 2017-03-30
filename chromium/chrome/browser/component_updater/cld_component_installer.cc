@@ -79,7 +79,7 @@ base::FilePath CldComponentInstallerTraits::GetInstalledPath(
 void CldComponentInstallerTraits::ComponentReady(
     const base::Version& version,
     const base::FilePath& path,
-    scoped_ptr<base::DictionaryValue> manifest) {
+    std::unique_ptr<base::DictionaryValue> manifest) {
   VLOG(1) << "Component ready, version " << version.GetString() << " in "
           << path.value();
   SetLatestCldDataFile(GetInstalledPath(path));
@@ -98,10 +98,8 @@ bool CldComponentInstallerTraits::VerifyInstallation(
   return result;
 }
 
-base::FilePath CldComponentInstallerTraits::GetBaseDirectory() const {
-  base::FilePath result;
-  PathService::Get(DIR_COMPONENT_CLD2, &result);
-  return result;
+base::FilePath CldComponentInstallerTraits::GetRelativeInstallDir() const {
+  return base::FilePath(FILE_PATH_LITERAL("CLD"));
 }
 
 void CldComponentInstallerTraits::GetHash(std::vector<uint8_t>* hash) const {
@@ -129,7 +127,7 @@ void RegisterCldComponent(ComponentUpdateService* cus) {
   // configured. See also: chrome://translate-internals
   VLOG(1) << "Registering CLD component with the component update service";
 
-  scoped_ptr<ComponentInstallerTraits> traits(
+  std::unique_ptr<ComponentInstallerTraits> traits(
       new CldComponentInstallerTraits());
   // |cus| will take ownership of |installer| during installer->Register(cus).
   DefaultComponentInstaller* installer =

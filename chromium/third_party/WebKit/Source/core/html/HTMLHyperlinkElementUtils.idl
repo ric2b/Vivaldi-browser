@@ -1,0 +1,22 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// https://html.spec.whatwg.org/#htmlhyperlinkelementutils
+
+[
+    NoInterfaceObject, // Always used on target of 'implements'
+] interface HTMLHyperlinkElementUtils {
+    stringifier attribute USVString href;
+    readonly attribute USVString origin;
+
+    attribute USVString protocol;
+    attribute USVString username;
+    attribute USVString password;
+    attribute USVString host;
+    attribute USVString hostname;
+    attribute USVString port;
+    attribute USVString pathname;
+    attribute USVString search;
+    attribute USVString hash;
+};

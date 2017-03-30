@@ -21,7 +21,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8TestSpecialOperationsNotEnumerable::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestSpecialOperationsNotEnumerable::domTemplate, V8TestSpecialOperationsNotEnumerable::refObject, V8TestSpecialOperationsNotEnumerable::derefObject, V8TestSpecialOperationsNotEnumerable::trace, 0, 0, V8TestSpecialOperationsNotEnumerable::preparePrototypeAndInterfaceObject, V8TestSpecialOperationsNotEnumerable::installConditionallyEnabledProperties, "TestSpecialOperationsNotEnumerable", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent, WrapperTypeInfo::RefCountedObject };
+const WrapperTypeInfo V8TestSpecialOperationsNotEnumerable::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestSpecialOperationsNotEnumerable::domTemplate, V8TestSpecialOperationsNotEnumerable::trace, V8TestSpecialOperationsNotEnumerable::traceWrappers, 0, 0, V8TestSpecialOperationsNotEnumerable::preparePrototypeAndInterfaceObject, nullptr, "TestSpecialOperationsNotEnumerable", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -49,8 +49,6 @@ static void indexedPropertyGetterCallback(uint32_t index, const v8::PropertyCall
 
 static void namedPropertyGetter(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-    if (!name->IsString())
-        return;
     auto nameString = name.As<v8::String>();
     TestSpecialOperationsNotEnumerable* impl = V8TestSpecialOperationsNotEnumerable::toImpl(info.Holder());
     AtomicString propertyName = toCoreAtomicString(nameString);
@@ -62,12 +60,14 @@ static void namedPropertyGetter(v8::Local<v8::Name> name, const v8::PropertyCall
 
 static void namedPropertyGetterCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
+    if (!name->IsString())
+        return;
     TestSpecialOperationsNotEnumerableV8Internal::namedPropertyGetter(name, info);
 }
 
 } // namespace TestSpecialOperationsNotEnumerableV8Internal
 
-static void installV8TestSpecialOperationsNotEnumerableTemplate(v8::Local<v8::FunctionTemplate> interfaceTemplate, v8::Isolate* isolate)
+static void installV8TestSpecialOperationsNotEnumerableTemplate(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::FunctionTemplate> interfaceTemplate)
 {
     // Initialize the interface object's template.
     V8DOMConfiguration::initializeDOMInterfaceTemplate(isolate, interfaceTemplate, V8TestSpecialOperationsNotEnumerable::wrapperTypeInfo.interfaceName, v8::Local<v8::FunctionTemplate>(), V8TestSpecialOperationsNotEnumerable::internalFieldCount);
@@ -79,7 +79,6 @@ static void installV8TestSpecialOperationsNotEnumerableTemplate(v8::Local<v8::Fu
     ALLOW_UNUSED_LOCAL(prototypeTemplate);
     // Register DOM constants, attributes and operations.
 
-
     // Indexed properties
     v8::IndexedPropertyHandlerConfiguration indexedPropertyHandlerConfig(TestSpecialOperationsNotEnumerableV8Internal::indexedPropertyGetterCallback, 0, 0, 0, 0, v8::Local<v8::Value>(), v8::PropertyHandlerFlags::kNone);
     instanceTemplate->SetHandler(indexedPropertyHandlerConfig);
@@ -88,9 +87,9 @@ static void installV8TestSpecialOperationsNotEnumerableTemplate(v8::Local<v8::Fu
     instanceTemplate->SetHandler(namedPropertyHandlerConfig);
 }
 
-v8::Local<v8::FunctionTemplate> V8TestSpecialOperationsNotEnumerable::domTemplate(v8::Isolate* isolate)
+v8::Local<v8::FunctionTemplate> V8TestSpecialOperationsNotEnumerable::domTemplate(v8::Isolate* isolate, const DOMWrapperWorld& world)
 {
-    return V8DOMConfiguration::domClassTemplate(isolate, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestSpecialOperationsNotEnumerableTemplate);
+    return V8DOMConfiguration::domClassTemplate(isolate, world, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestSpecialOperationsNotEnumerableTemplate);
 }
 
 bool V8TestSpecialOperationsNotEnumerable::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
@@ -106,16 +105,6 @@ v8::Local<v8::Object> V8TestSpecialOperationsNotEnumerable::findInstanceInProtot
 TestSpecialOperationsNotEnumerable* V8TestSpecialOperationsNotEnumerable::toImplWithTypeCheck(v8::Isolate* isolate, v8::Local<v8::Value> value)
 {
     return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : 0;
-}
-
-void V8TestSpecialOperationsNotEnumerable::refObject(ScriptWrappable* scriptWrappable)
-{
-    scriptWrappable->toImpl<TestSpecialOperationsNotEnumerable>()->ref();
-}
-
-void V8TestSpecialOperationsNotEnumerable::derefObject(ScriptWrappable* scriptWrappable)
-{
-    scriptWrappable->toImpl<TestSpecialOperationsNotEnumerable>()->deref();
 }
 
 } // namespace blink

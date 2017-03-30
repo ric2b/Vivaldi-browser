@@ -84,7 +84,7 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView,
   void UpdateAfterLoginStatusChange(user::LoginStatus login_status);
 
   // Updates the items when the shelf alignment changes.
-  void UpdateAfterShelfAlignmentChange(ShelfAlignment alignment);
+  void UpdateAfterShelfAlignmentChange(wm::ShelfAlignment alignment);
 
   // Temporarily hides/unhides the notification bubble.
   void SetHideNotifications(bool hidden);
@@ -124,12 +124,12 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView,
   bool CloseNotificationBubbleForTest() const;
 
   // Overridden from TrayBackgroundView.
-  void SetShelfAlignment(ShelfAlignment alignment) override;
+  void SetShelfAlignment(wm::ShelfAlignment alignment) override;
   void AnchorUpdated() override;
   base::string16 GetAccessibleNameForTray() override;
   void BubbleResized(const views::TrayBubbleView* bubble_view) override;
   void HideBubbleWithView(const views::TrayBubbleView* bubble_view) override;
-  bool ClickedOutsideBubble() override;
+  void ClickedOutsideBubble() override;
 
   // Overridden from message_center::TrayBubbleView::Delegate.
   void BubbleViewDestroyed() override;
@@ -200,6 +200,10 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView,
 
   // Deactivate the system tray in the shelf if it was active before.
   void CloseSystemBubbleAndDeactivateSystemTray();
+
+  // Records UMA metrics for the number of user-visible rows in the system menu
+  // and the percentage of the work area height covered by the system menu.
+  void RecordSystemMenuMetrics();
 
   const ScopedVector<SystemTrayItem>& items() const { return items_; }
 

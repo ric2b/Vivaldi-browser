@@ -394,7 +394,6 @@ void PaintLayerScrollableArea::setScrollOffset(const DoublePoint& newScrollOffse
     // FIXME: This invalidation will be unnecessary in slimming paint phase 2.
     if (requiresPaintInvalidation) {
         box().setShouldDoFullPaintInvalidationIncludingNonCompositingDescendants();
-        frameView->setFrameTimingRequestsDirty(true);
     }
 
     // Schedule the scroll DOM event.
@@ -593,9 +592,8 @@ void PaintLayerScrollableArea::computeScrollDimensions()
     m_overflowRect = box().layoutOverflowRect();
     box().flipForWritingMode(m_overflowRect);
 
-    int scrollableLeftOverflow = m_overflowRect.x() - box().borderLeft() - (box().shouldPlaceBlockDirectionScrollbarOnLogicalLeft() ? box().verticalScrollbarWidth() : 0);
-    int scrollableTopOverflow = m_overflowRect.y() - box().borderTop();
-    setScrollOrigin(IntPoint(-scrollableLeftOverflow, -scrollableTopOverflow));
+    LayoutPoint scrollableOverflow = m_overflowRect.location() - LayoutSize(box().borderLeft(), box().borderTop());
+    setScrollOrigin(flooredIntPoint(-scrollableOverflow) + box().originAdjustmentForScrollbars());
 }
 
 void PaintLayerScrollableArea::scrollToPosition(const DoublePoint& scrollPosition, ScrollOffsetClamping clamp, ScrollBehavior scrollBehavior, ScrollType scrollType)
@@ -1046,16 +1044,20 @@ void PaintLayerScrollableArea::setHasVerticalScrollbar(bool hasScrollbar)
         box().document().setAnnotatedRegionsDirty(true);
 }
 
-int PaintLayerScrollableArea::verticalScrollbarWidth(OverlayScrollbarSizeRelevancy relevancy) const
+int PaintLayerScrollableArea::verticalScrollbarWidth(OverlayScrollbarClipBehavior overlayScrollbarClipBehavior) const
 {
-    if (!hasVerticalScrollbar() || (verticalScrollbar()->isOverlayScrollbar() && (relevancy == IgnoreOverlayScrollbarSize || !verticalScrollbar()->shouldParticipateInHitTesting())))
+    if (!hasVerticalScrollbar())
+        return 0;
+    if (verticalScrollbar()->isOverlayScrollbar() && (overlayScrollbarClipBehavior == IgnoreOverlayScrollbarSize || !verticalScrollbar()->shouldParticipateInHitTesting()))
         return 0;
     return verticalScrollbar()->width();
 }
 
-int PaintLayerScrollableArea::horizontalScrollbarHeight(OverlayScrollbarSizeRelevancy relevancy) const
+int PaintLayerScrollableArea::horizontalScrollbarHeight(OverlayScrollbarClipBehavior overlayScrollbarClipBehavior) const
 {
-    if (!hasHorizontalScrollbar() || (horizontalScrollbar()->isOverlayScrollbar() && (relevancy == IgnoreOverlayScrollbarSize || !horizontalScrollbar()->shouldParticipateInHitTesting())))
+    if (!hasHorizontalScrollbar())
+        return 0;
+    if (horizontalScrollbar()->isOverlayScrollbar() && (overlayScrollbarClipBehavior == IgnoreOverlayScrollbarSize || !horizontalScrollbar()->shouldParticipateInHitTesting()))
         return 0;
     return horizontalScrollbar()->height();
 }
@@ -1235,6 +1237,26 @@ void PaintLayerScrollableArea::updateResizerStyle()
     }
 }
 
+void PaintLayerScrollableArea::invalidateAllStickyConstraints()
+{
+    if (PaintLayerScrollableAreaRareData* d = rareData()) {
+        for (PaintLayer* stickyLayer : d->m_stickyConstraintsMap.keys()) {
+            if (stickyLayer->layoutObject()->style()->position() == StickyPosition)
+                stickyLayer->setNeedsCompositingInputsUpdate();
+        }
+        d->m_stickyConstraintsMap.clear();
+    }
+}
+
+void PaintLayerScrollableArea::invalidateStickyConstraintsFor(PaintLayer* layer, bool needsCompositingUpdate)
+{
+    if (PaintLayerScrollableAreaRareData* d = rareData()) {
+        d->m_stickyConstraintsMap.remove(layer);
+        if (needsCompositingUpdate && layer->layoutObject()->style()->position() == StickyPosition)
+            layer->setNeedsCompositingInputsUpdate();
+    }
+}
+
 IntSize PaintLayerScrollableArea::offsetFromResizeCorner(const IntPoint& absolutePoint) const
 {
     // Currently the resize corner is either the bottom right corner or the bottom left corner.
@@ -1321,7 +1343,7 @@ void PaintLayerScrollableArea::resize(const PlatformEvent& evt, const LayoutSize
         element->setInlineStyleProperty(CSSPropertyHeight, roundToInt(baseHeight + difference.height()), CSSPrimitiveValue::UnitType::Pixels);
     }
 
-    document.updateLayout();
+    document.updateStyleAndLayout();
 
     // FIXME (Radar 4118564): We should also autoscroll the window as necessary to keep the point under the cursor in view.
 }
@@ -1453,7 +1475,7 @@ bool PaintLayerScrollableArea::visualViewportSuppliesScrollbars() const
     if (!frame || !frame->isMainFrame() || !frame->settings())
         return false;
 
-    return frame->settings()->viewportMetaEnabled();
+    return frame->settings()->viewportEnabled();
 }
 
 Widget* PaintLayerScrollableArea::getWidget()

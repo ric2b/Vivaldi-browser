@@ -31,10 +31,9 @@
 #include "core/CoreExport.h"
 #include "core/dom/SandboxFlags.h"
 #include "core/dom/SecurityContext.h"
-#include "core/dom/custom/CustomElementRegistrationContext.h"
+#include "core/dom/custom/V0CustomElementRegistrationContext.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
-#include "wtf/WeakPtr.h"
 
 namespace blink {
 
@@ -46,8 +45,8 @@ class Settings;
 class CORE_EXPORT DocumentInit final {
     STACK_ALLOCATED();
 public:
-    DocumentInit(const KURL& = KURL(), LocalFrame* = nullptr, RawPtr<Document> contextDocument = nullptr, HTMLImportsController* = nullptr);
-    DocumentInit(RawPtr<Document> ownerDocument, const KURL&, LocalFrame*, RawPtr<Document> contextDocument = nullptr, HTMLImportsController* = nullptr);
+    DocumentInit(const KURL& = KURL(), LocalFrame* = nullptr, Document* contextDocument = nullptr, HTMLImportsController* = nullptr);
+    DocumentInit(Document* ownerDocument, const KURL&, LocalFrame*, Document* contextDocument = nullptr, HTMLImportsController* = nullptr);
     DocumentInit(const DocumentInit&);
     ~DocumentInit();
 
@@ -72,12 +71,12 @@ public:
     LocalFrame* ownerFrame() const;
     Settings* settings() const;
 
-    DocumentInit& withRegistrationContext(CustomElementRegistrationContext*);
+    DocumentInit& withRegistrationContext(V0CustomElementRegistrationContext*);
     DocumentInit& withNewRegistrationContext();
-    RawPtr<CustomElementRegistrationContext> registrationContext(Document*) const;
-    RawPtr<Document> contextDocument() const;
+    V0CustomElementRegistrationContext* registrationContext(Document*) const;
+    Document* contextDocument() const;
 
-    static DocumentInit fromContext(RawPtr<Document> contextDocument, const KURL& = KURL());
+    static DocumentInit fromContext(Document* contextDocument, const KURL& = KURL());
 
 private:
     LocalFrame* frameForSecurityContext() const;
@@ -88,7 +87,7 @@ private:
     Member<Document> m_owner;
     Member<Document> m_contextDocument;
     Member<HTMLImportsController> m_importsController;
-    Member<CustomElementRegistrationContext> m_registrationContext;
+    Member<V0CustomElementRegistrationContext> m_registrationContext;
     bool m_createNewRegistrationContext;
 
     // In some rare cases, we'll re-use a LocalDOMWindow for a new Document. For example,

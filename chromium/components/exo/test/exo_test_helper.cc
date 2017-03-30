@@ -18,13 +18,14 @@ ExoTestHelper::ExoTestHelper() {}
 
 ExoTestHelper::~ExoTestHelper() {}
 
-scoped_ptr<gfx::GpuMemoryBuffer> ExoTestHelper::CreateGpuMemoryBuffer(
+std::unique_ptr<gfx::GpuMemoryBuffer> ExoTestHelper::CreateGpuMemoryBuffer(
     const gfx::Size& size) {
   return aura::Env::GetInstance()
       ->context_factory()
       ->GetGpuMemoryBufferManager()
       ->AllocateGpuMemoryBuffer(size, gfx::BufferFormat::RGBA_8888,
-                                gfx::BufferUsage::GPU_READ, 0 /* surface_id */);
+                                gfx::BufferUsage::GPU_READ,
+                                gpu::kNullSurfaceHandle);
 }
 
 }  // namespace test

@@ -22,18 +22,19 @@
 #include <deque>
 #include <list>
 #include <map>
+#include <memory>
 #include <queue>
 #include <string>
 #include <vector>
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 #include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
 #include "net/quic/crypto/quic_decrypter.h"
 #include "net/quic/quic_alarm.h"
+#include "net/quic/quic_alarm_factory.h"
 #include "net/quic/quic_blocked_writer_interface.h"
 #include "net/quic/quic_fec_group.h"
 #include "net/quic/quic_framer.h"
@@ -167,6 +168,7 @@ class NET_EXPORT_PRIVATE QuicConnectionDebugVisitor
 
   // Called when a packet has been sent.
   virtual void OnPacketSent(const SerializedPacket& serialized_packet,
+                            QuicPathId original_path_id,
                             QuicPacketNumber original_packet_number,
                             TransmissionType transmission_type,
                             QuicTime sent_time) {}
@@ -205,6 +207,9 @@ class NET_EXPORT_PRIVATE QuicConnectionDebugVisitor
 
   // Called when a StopWaitingFrame has been parsed.
   virtual void OnStopWaitingFrame(const QuicStopWaitingFrame& frame) {}
+
+  // Called when a QuicPaddingFrame has been parsed.
+  virtual void OnPaddingFrame(const QuicPaddingFrame& frame) {}
 
   // Called when a Ping has been parsed.
   virtual void OnPingFrame(const QuicPingFrame& frame) {}
@@ -273,20 +278,6 @@ class NET_EXPORT_PRIVATE QuicConnectionHelperInterface {
   // Returns a QuicRandom to be used for all random number related functions.
   virtual QuicRandom* GetRandomGenerator() = 0;
 
-  // Creates a new platform-specific alarm which will be configured to notify
-  // |delegate| when the alarm fires. Returns an alarm allocated on the heap.
-  // Caller takes ownership of the new alarm, which will not yet be "set" to
-  // fire.
-  virtual QuicAlarm* CreateAlarm(QuicAlarm::Delegate* delegate) = 0;
-
-  // Creates a new platform-specific alarm which will be configured to notify
-  // |delegate| when the alarm fires. Caller takes ownership of the new alarm,
-  // which will not yet be "set" to fire. If |arena| is null, then the alarm
-  // will be created on the heap. Otherwise, it will be created in |arena|.
-  virtual QuicArenaScopedPtr<QuicAlarm> CreateAlarm(
-      QuicArenaScopedPtr<QuicAlarm::Delegate> delegate,
-      QuicConnectionArena* arena) = 0;
-
   // Returns a QuicBufferAllocator to be used for all stream frame buffers.
   virtual QuicBufferAllocator* GetBufferAllocator() = 0;
 };
@@ -314,6 +305,7 @@ class NET_EXPORT_PRIVATE QuicConnection
   QuicConnection(QuicConnectionId connection_id,
                  IPEndPoint address,
                  QuicConnectionHelperInterface* helper,
+                 QuicAlarmFactory* alarm_factory,
                  QuicPacketWriter* writer,
                  bool owns_writer,
                  Perspective perspective,
@@ -335,6 +327,9 @@ class NET_EXPORT_PRIVATE QuicConnection
   virtual void ResumeConnectionState(
       const CachedNetworkParameters& cached_network_params,
       bool max_bandwidth_resumption);
+
+  // Called by the Session when a max pacing rate for the connection is needed.
+  virtual void SetMaxPacingRate(QuicBandwidth max_pacing_rate);
 
   // Sets the number of active streams on the connection for congestion control.
   void SetNumOpenStreams(size_t num_streams);
@@ -443,6 +438,7 @@ class NET_EXPORT_PRIVATE QuicConnection
   bool OnStreamFrame(const QuicStreamFrame& frame) override;
   bool OnAckFrame(const QuicAckFrame& frame) override;
   bool OnStopWaitingFrame(const QuicStopWaitingFrame& frame) override;
+  bool OnPaddingFrame(const QuicPaddingFrame& frame) override;
   bool OnPingFrame(const QuicPingFrame& frame) override;
   bool OnRstStreamFrame(const QuicRstStreamFrame& frame) override;
   bool OnConnectionCloseFrame(const QuicConnectionCloseFrame& frame) override;
@@ -465,8 +461,7 @@ class NET_EXPORT_PRIVATE QuicConnection
                             ConnectionCloseSource source) override;
 
   // QuicSentPacketManager::NetworkChangeVisitor
-  void OnCongestionWindowChange() override;
-  void OnRttChange() override;
+  void OnCongestionChange() override;
   void OnPathDegrading() override;
 
   // Called by the crypto stream when the handshake completes. In the server's
@@ -559,6 +554,11 @@ class NET_EXPORT_PRIVATE QuicConnection
   // Changes the encrypter used for level |level| to |encrypter|. The function
   // takes ownership of |encrypter|.
   void SetEncrypter(EncryptionLevel level, QuicEncrypter* encrypter);
+
+  // SetNonceForPublicHeader sets the nonce that will be transmitted in the
+  // public header of each packet encrypted at the initial encryption level
+  // decrypted. This should only be called on the server side.
+  void SetDiversificationNonce(const DiversificationNonce nonce);
 
   // SetDefaultEncryptionLevel sets the encryption level that will be applied
   // to new packets.
@@ -656,7 +656,7 @@ class NET_EXPORT_PRIVATE QuicConnection
   // Return the id of the cipher of the primary decrypter of the framer.
   uint32_t cipher_id() const { return framer_.decrypter()->cipher_id(); }
 
-  std::vector<QuicEncryptedPacket*>* termination_packets() {
+  std::vector<std::unique_ptr<QuicEncryptedPacket>>* termination_packets() {
     return termination_packets_.get();
   }
 
@@ -665,6 +665,7 @@ class NET_EXPORT_PRIVATE QuicConnection
   bool ack_frame_updated() const;
 
   QuicConnectionHelperInterface* helper() { return helper_; }
+  QuicAlarmFactory* alarm_factory() { return alarm_factory_; }
 
   base::StringPiece GetCurrentPacket();
 
@@ -673,6 +674,10 @@ class NET_EXPORT_PRIVATE QuicConnection
   }
 
   EncryptionLevel encryption_level() const { return encryption_level_; }
+
+  const IPEndPoint& last_packet_source_address() const {
+    return last_packet_source_address_;
+  }
 
  protected:
   // Send a packet to the peer, and takes ownership of the packet if the packet
@@ -690,10 +695,6 @@ class NET_EXPORT_PRIVATE QuicConnection
   // version from |available_versions| which is also supported. Returns true if
   // such a version exists, false otherwise.
   bool SelectMutualVersion(const QuicVersionVector& available_versions);
-
-  const IPEndPoint& last_packet_source_address() const {
-    return last_packet_source_address_;
-  }
 
   // Returns the current per-packet options for the connection.
   PerPacketOptions* per_packet_options() { return per_packet_options_; }
@@ -837,8 +838,12 @@ class NET_EXPORT_PRIVATE QuicConnection
   // handled, false otherwise.
   bool ProcessValidatedPacket(const QuicPacketHeader& header);
 
+  // Consider receiving crypto frame on non crypto stream as memory corruption.
+  bool MaybeConsiderAsMemoryCorruption(const QuicStreamFrame& frame);
+
   QuicFramer framer_;
   QuicConnectionHelperInterface* helper_;  // Not owned.
+  QuicAlarmFactory* alarm_factory_;        // Not owned.
   PerPacketOptions* per_packet_options_;   // Not owned.
   QuicPacketWriter* writer_;  // Owned or not depending on |owns_writer_|.
   bool owns_writer_;
@@ -909,7 +914,8 @@ class NET_EXPORT_PRIVATE QuicConnection
   bool save_crypto_packets_as_termination_packets_;
 
   // Contains the connection close packets if the connection has been closed.
-  scoped_ptr<std::vector<QuicEncryptedPacket*>> termination_packets_;
+  std::unique_ptr<std::vector<std::unique_ptr<QuicEncryptedPacket>>>
+      termination_packets_;
 
   // Determines whether or not a connection close packet is sent to the peer
   // after idle timeout due to lack of network activity.
@@ -937,6 +943,8 @@ class NET_EXPORT_PRIVATE QuicConnection
   int stop_waiting_count_;
   // Indicates the current ack mode, defaults to acking every 2 packets.
   AckMode ack_mode_;
+  // The max delay in fraction of min_rtt to use when sending decimated acks.
+  float ack_decimation_delay_;
 
   // Indicates the retransmit alarm is going to be set by the
   // ScopedRetransmitAlarmDelayer
@@ -960,6 +968,8 @@ class NET_EXPORT_PRIVATE QuicConnection
   QuicArenaScopedPtr<QuicAlarm> send_alarm_;
   // An alarm that is scheduled when the connection can still write and there
   // may be more data to send.
+  // TODO(ianswett): Remove resume_writes_alarm when deprecating
+  // FLAGS_quic_only_one_sending_alarm
   QuicArenaScopedPtr<QuicAlarm> resume_writes_alarm_;
   // An alarm that fires when the connection may have timed out.
   QuicArenaScopedPtr<QuicAlarm> timeout_alarm_;

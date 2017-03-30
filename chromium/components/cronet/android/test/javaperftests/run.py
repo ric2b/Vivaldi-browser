@@ -48,6 +48,7 @@ from chrome_telemetry_build import chromium_config
 sys.path.append(chromium_config.GetTelemetryDir())
 sys.path.append(os.path.join(REPOSITORY_ROOT, 'build', 'android'))
 
+import android_rndis_forwarder
 import lighttpd_server
 from pylib import constants
 from pylib import pexpect
@@ -56,9 +57,8 @@ from pylib.device import intent
 from telemetry import android
 from telemetry import benchmark
 from telemetry import benchmark_runner
+from telemetry import project_config
 from telemetry import story
-from telemetry.internal import forwarders
-from telemetry.internal.forwarders import android_forwarder
 from telemetry.value import scalar
 from telemetry.web_perf import timeline_based_measurement
 
@@ -109,7 +109,9 @@ BENCHMARK_CONFIG = {
 }
 # Add benchmark config to global state for easy access.
 globals().update(BENCHMARK_CONFIG)
-
+# Pylint doesn't really interpret the file, so it won't find the definitions
+# added from BENCHMARK_CONFIG, so suppress the undefined variable warning.
+#pylint: disable=undefined-variable
 
 def GetDevice():
   devices = device_utils.DeviceUtils.HealthyDevices()
@@ -117,12 +119,12 @@ def GetDevice():
   return devices[0]
 
 
-def GetForwarderFactory(device):
-  return android_forwarder.AndroidForwarderFactory(device, True)
+def GetAndroidRndisConfig(device):
+  return android_rndis_forwarder.AndroidRndisConfigurator(device)
 
 
 def GetServersHost(device):
-  return GetForwarderFactory(device).host_ip
+  return GetAndroidRndisConfig(device).host_ip
 
 
 def GetHttpServerURL(device, resource):
@@ -208,7 +210,7 @@ class CronetPerfTestBenchmark(benchmark.Benchmark):
     return CronetPerfTestStorySet(self._device)
 
 
-class QuicServer:
+class QuicServer(object):
 
   def __init__(self, quic_server_doc_root):
     self._process = None
@@ -253,7 +255,7 @@ def GenerateHttpTestResources():
   large_file_name = os.path.join(http_server_doc_root, LARGE_RESOURCE)
   large_file = open(large_file_name, 'wb')
   large_file.write('<html><body>');
-  for i in range(0, 1000000):
+  for _ in range(0, 1000000):
     large_file.write('1234567890');
   large_file.write('</body></html>');
   large_file.close()
@@ -296,11 +298,8 @@ def main():
   device.EnableRoot()
   device.Install(APP_APK)
   # Start USB reverse tethering.
-  # Port map is ignored for tethering; must create one to placate assertions.
-  named_port_pair_map = {'http': (forwarders.PortPair(0, 0)),
-      'https': None, 'dns': None}
-  port_pairs = forwarders.PortPairs(**named_port_pair_map)
-  forwarder = GetForwarderFactory(device).Create(port_pairs)
+  android_rndis_forwarder.AndroidRndisForwarder(device,
+      GetAndroidRndisConfig(device))
   # Start HTTP server.
   http_server_doc_root = GenerateHttpTestResources()
   config_file = tempfile.NamedTemporaryFile()
@@ -324,14 +323,13 @@ def main():
       'binary_dependencies.json')
   with open(perf_config_file, "w") as config_file:
     config_file.write('{"config_type": "BaseConfig"}')
-  runner_config = benchmark_runner.ProjectConfig(
+  runner_config = project_config.ProjectConfig(
       top_level_dir=top_level_dir,
       benchmark_dirs=[top_level_dir],
-      client_config=perf_config_file,
+      client_configs=[perf_config_file],
       default_chrome_root=REPOSITORY_ROOT)
   sys.argv.insert(1, 'run')
   sys.argv.insert(2, 'run.CronetPerfTestBenchmark')
-  sys.argv.insert(3, '--android-rndis')
   benchmark_runner.main(runner_config)
   # Shutdown.
   quic_server.ShutdownQuicServer()

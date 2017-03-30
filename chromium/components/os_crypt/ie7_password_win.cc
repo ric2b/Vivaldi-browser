@@ -10,7 +10,6 @@
 #include <string>
 #include <vector>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/sha1.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -56,6 +55,8 @@ struct PasswordEntry {
 IE7PasswordInfo::IE7PasswordInfo() {
 }
 
+IE7PasswordInfo::IE7PasswordInfo(const IE7PasswordInfo& other) = default;
+
 IE7PasswordInfo::~IE7PasswordInfo() {
 }
 
@@ -83,7 +84,6 @@ bool GetUserPassFromData(const std::vector<unsigned char>& data,
                                   information->pre_header.pre_header_size;
 
   for (int i = 0; i < entry_count / 2; ++i) {
-
     const Entry* user_entry = &information->entry[2*i];
     const Entry* pass_entry = user_entry+1;
 

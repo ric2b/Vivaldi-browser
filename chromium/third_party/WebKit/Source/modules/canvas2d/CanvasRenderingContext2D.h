@@ -27,7 +27,6 @@
 #define CanvasRenderingContext2D_h
 
 #include "bindings/core/v8/ScriptWrappable.h"
-#include "bindings/modules/v8/UnionTypesModules.h"
 #include "core/html/canvas/CanvasContextCreationAttributes.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
 #include "core/html/canvas/CanvasRenderingContextFactory.h"
@@ -78,7 +77,6 @@ public:
             return new CanvasRenderingContext2D(canvas, attrs, document);
         }
         CanvasRenderingContext::ContextType getContextType() const override { return CanvasRenderingContext::Context2d; }
-        void onError(HTMLCanvasElement*, const String& error) override { }
     };
 
     ~CanvasRenderingContext2D() override;
@@ -87,6 +85,7 @@ public:
 
     bool isContextLost() const override;
 
+    bool shouldAntialias() const override;
     void setShouldAntialias(bool) override;
 
     void scrollPathIntoView();
@@ -136,6 +135,7 @@ public:
 
     void styleDidChange(const ComputedStyle* oldStyle, const ComputedStyle& newStyle) override;
     std::pair<Element*, String> getControlAndIdIfHitRegionExists(const LayoutPoint& location) override;
+    String getIdFromControl(const Element*) override;
 
     // SVGResourceClient implementation
     void filterNeedsInvalidation() override;
@@ -143,7 +143,7 @@ public:
     // BaseRenderingContext2D implementation
     bool originClean() const final;
     void setOriginTainted() final;
-    bool wouldTaintOrigin(CanvasImageSource* source) final { return CanvasRenderingContext::wouldTaintOrigin(source); }
+    bool wouldTaintOrigin(CanvasImageSource* source, ExecutionContext*) final { return CanvasRenderingContext::wouldTaintOrigin(source); }
 
     int width() const final;
     int height() const final;
@@ -162,6 +162,7 @@ public:
 
     bool stateHasFilter() final;
     SkImageFilter* stateGetFilter() final;
+    void snapshotStateForFilter() final;
 
     void validateStateStack() final;
 

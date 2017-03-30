@@ -4,8 +4,8 @@
 
 #include "ui/events/gesture_detection/gesture_provider_config_helper.h"
 
+#include "ui/display/screen.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
-#include "ui/gfx/screen.h"
 
 namespace ui {
 namespace {
@@ -50,7 +50,6 @@ ScaleGestureDetector::Config BuildScaleGestureDetectorConfig(
     const GestureConfiguration& gesture_config) {
   ScaleGestureDetector::Config config;
   config.span_slop = gesture_config.span_slop();
-  config.min_scaling_touch_major = gesture_config.min_scaling_touch_major();
   config.min_scaling_span = gesture_config.min_scaling_span_in_pixels();
   config.min_pinch_update_span_delta =
       gesture_config.min_pinch_update_span_delta();
@@ -90,7 +89,7 @@ GestureProvider::Config GetGestureProviderConfig(
       break;
   }
 
-  gfx::Screen* screen = gfx::Screen::GetScreen();
+  display::Screen* screen = display::Screen::GetScreen();
   // |screen| is sometimes NULL during tests.
   if (screen)
     config.display = screen->GetPrimaryDisplay();

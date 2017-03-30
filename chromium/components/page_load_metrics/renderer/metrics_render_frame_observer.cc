@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "components/page_load_metrics/renderer/page_timing_metrics_sender.h"
@@ -64,8 +65,10 @@ void MetricsRenderFrameObserver::DidCommitProvisionalLoad(
   // non-null, we will send metrics for the current page at some later time, as
   // those metrics become available.
   if (ShouldSendMetrics()) {
+    PageLoadTiming timing(GetTiming());
+    DCHECK(!timing.navigation_start.is_null());
     page_timing_metrics_sender_.reset(
-        new PageTimingMetricsSender(this, routing_id(), CreateTimer()));
+        new PageTimingMetricsSender(this, routing_id(), CreateTimer(), timing));
   }
 }
 
@@ -136,8 +139,8 @@ PageLoadTiming MetricsRenderFrameObserver::GetTiming() const {
   return timing;
 }
 
-scoped_ptr<base::Timer> MetricsRenderFrameObserver::CreateTimer() const {
-  return make_scoped_ptr(new base::OneShotTimer);
+std::unique_ptr<base::Timer> MetricsRenderFrameObserver::CreateTimer() const {
+  return base::WrapUnique(new base::OneShotTimer);
 }
 
 bool MetricsRenderFrameObserver::HasNoRenderFrame() const {

@@ -1,15 +1,15 @@
 include_rules = [
-  "+components/prefs",
   "+components/url_formatter",
   "+crypto",
   "+ios/public/provider/web",
   "+ios/net",
   "+ios/web",
   "+net",
-  "+third_party/libwebp/webp",
+  "+services/shell/public",
   "+ui",
 
   # For tests.
   "+ios/testing",
   "+ios/third_party/earl_grey/src",
+  "+mojo/edk/embedder/embedder.h",
 ]

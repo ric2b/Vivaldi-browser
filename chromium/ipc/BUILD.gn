@@ -4,6 +4,7 @@
 
 import("//build/config/nacl/config.gni")
 import("//testing/test.gni")
+import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 
 component("ipc") {
   sources = [
@@ -118,7 +119,7 @@ component("ipc") {
     ]
   }
 
-  if (is_win || is_ios || is_nacl_nonsfi) {
+  if (is_win || is_nacl_nonsfi) {
     sources -= [ "unix_domain_socket_util.cc" ]
   }
 
@@ -138,6 +139,10 @@ component("ipc") {
     # On Windows HandleAttachmentWin needs to generate random IDs.
     # On Mac MachPortAttachmentMac needs to generate random IDs.
     deps += [ "//crypto" ]
+  }
+
+  if (enable_ipc_fuzzer) {
+    public_configs = [ "//tools/ipc_fuzzer:ipc_fuzzer_config" ]
   }
 }
 
@@ -169,6 +174,7 @@ test("ipc_tests") {
     "ipc_test_message_generator.cc",
     "ipc_test_message_generator.h",
     "ipc_test_messages.h",
+    "run_all_unittests.cc",
     "sync_socket_unittest.cc",
     "unix_domain_socket_util_unittest.cc",
   ]
@@ -192,11 +198,14 @@ test("ipc_tests") {
     ":test_support",
     "//base",
     "//base:i18n",
-    "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//crypto",
     "//testing/gtest",
   ]
+
+  if (is_mac) {
+    deps += [ "//sandbox/mac:seatbelt" ]
+  }
 }
 
 test("ipc_perftests") {

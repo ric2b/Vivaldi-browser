@@ -57,9 +57,9 @@ std::string SkColorToRGBAString(SkColor color) {
 
 /*static*/
 void ExtensionActionUtil::BroadcastEvent(const std::string& eventname,
-                                         scoped_ptr<base::ListValue> args,
+                                         std::unique_ptr<base::ListValue> args,
                                          content::BrowserContext* context) {
-  scoped_ptr<extensions::Event> event(new extensions::Event(
+  std::unique_ptr<extensions::Event> event(new extensions::Event(
       extensions::events::VIVALDI_EXTENSION_EVENT, eventname, std::move(args)));
   event->restrict_to_browser_context = context;
   EventRouter* event_router = EventRouter::Get(context);
@@ -127,7 +127,7 @@ void ExtensionActionUtil::OnExtensionActionUpdated(
   // different browser windows. Since the event is originating from the
   // tab-strip which is owned by the browserwindow.
 
-  scoped_ptr<base::ListValue> args =
+  std::unique_ptr<base::ListValue> args =
      vivaldi::extension_action_utils::OnUpdated::Create(info, windowId, tab_id);
 
   BroadcastEvent(vivaldi::extension_action_utils::OnUpdated::kEventName,
@@ -139,7 +139,7 @@ void ExtensionActionUtil::OnExtensionActionUpdated(
 bool ExtensionActionUtil::GetWindowIdFromExtData(const std::string& extdata,
                                                         std::string& windowId) {
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-    scoped_ptr<base::Value> json =
+  std::unique_ptr<base::Value> json =
         base::JSONReader::Read(extdata, options);
     base::DictionaryValue* dict = NULL;
     if (json && json->GetAsDictionary(&dict)) {
@@ -171,7 +171,7 @@ void ExtensionActionUtil::OnExtensionActionVisibilityChanged(
 
   int windowId = extension_misc::kCurrentWindowId;
 
-  scoped_ptr<base::ListValue> args =
+  std::unique_ptr<base::ListValue> args =
       vivaldi::extension_action_utils::OnUpdated::Create(
           info, windowId, ExtensionAction::kDefaultTabId);
   ExtensionActionUtil::BroadcastEvent(
@@ -201,7 +201,7 @@ void ExtensionActionUtil::OnImageLoaded(const std::string& extension_id,
   info.id = extension_id;
   info.badge_icon.reset(
       extensions::ExtensionActionUtil::EncodeBitmapToPng(image.ToSkBitmap()));
-  scoped_ptr<base::ListValue> args =
+  std::unique_ptr<base::ListValue> args =
       extensions::vivaldi::extension_action_utils::OnIconLoaded::Create(info);
 
   extensions::ExtensionActionUtil::BroadcastEvent(
@@ -319,7 +319,7 @@ void ExtensionActionUtil::OnExtensionUninstalled(
 
   FillInfoForTabId(info, action, ExtensionAction::kDefaultTabId, profile_);
 
-  scoped_ptr<base::ListValue> args =
+  std::unique_ptr<base::ListValue> args =
       vivaldi::extension_action_utils::OnRemoved::Create(info);
 
   BroadcastEvent(vivaldi::extension_action_utils::OnRemoved::kEventName,
@@ -342,13 +342,13 @@ void ExtensionActionUtil::OnExtensionLoaded(
 
   FillInfoForTabId(info, action, tab_id, profile_);
 
-  scoped_ptr<base::ListValue> args =
+  std::unique_ptr<base::ListValue> args =
       vivaldi::extension_action_utils::OnAdded::Create(info);
 
   BroadcastEvent(vivaldi::extension_action_utils::OnAdded::kEventName,
                  std::move(args), browser_context);
 
-  scoped_ptr<extensions::ExtensionResource> icon_resource;
+  std::unique_ptr<extensions::ExtensionResource> icon_resource;
   ExtensionAction* pageorbrowser_action = nullptr;
 
   if (extension->manifest()->HasKey(
@@ -400,7 +400,7 @@ void ExtensionActionUtil::OnExtensionUnloaded(
     extensions::UnloadedExtensionInfo::Reason reason) {
   vivaldi::extension_action_utils::ExtensionInfo info;
   info.id = extension->id();
-  scoped_ptr<base::ListValue> args =
+  std::unique_ptr<base::ListValue> args =
       vivaldi::extension_action_utils::OnRemoved::Create(info);
 
   BroadcastEvent(vivaldi::extension_action_utils::OnRemoved::kEventName,
@@ -458,7 +458,7 @@ bool ExtensionActionUtilsGetToolbarExtensionsFunction::RunAsync() {
     ExtensionAction* action = action_manager->GetExtensionAction(*extension);
 
     if (!extension->ShouldNotBeVisible()) {
-      scoped_ptr<vivaldi::extension_action_utils::ExtensionInfo> info(
+      std::unique_ptr<vivaldi::extension_action_utils::ExtensionInfo> info(
           new vivaldi::extension_action_utils::ExtensionInfo());
 
       if (ExtensionActionUtil::FillInfoForTabId(*info.get(), action,
@@ -486,7 +486,7 @@ ExtensionActionUtilsExecuteExtensionActionFunction::
 }
 
 bool ExtensionActionUtilsExecuteExtensionActionFunction::RunAsync() {
-  scoped_ptr<vivaldi::extension_action_utils::ExecuteExtensionAction::Params>
+  std::unique_ptr<vivaldi::extension_action_utils::ExecuteExtensionAction::Params>
       params(
           vivaldi::extension_action_utils::ExecuteExtensionAction::Params::Create(
               *args_));
@@ -507,7 +507,7 @@ bool ExtensionActionUtilsExecuteExtensionActionFunction::RunAsync() {
   // running in a tab.
   Browser* browser = nullptr;
   for (auto* browser_it: *BrowserList::GetInstance()) {
-    if (browser_it->profile() == GetProfile() &&
+    if (browser_it->profile()->GetOriginalProfile() == GetProfile() &&
         ExtensionTabUtil::GetWindowId(browser_it) == *params->window_id.get() &&
         browser_it->window()) {
       browser = browser_it;
@@ -569,7 +569,7 @@ ExtensionActionUtilsToggleBrowserActionVisibilityFunction::
 }
 
 bool ExtensionActionUtilsToggleBrowserActionVisibilityFunction::RunAsync() {
-  scoped_ptr<ToggleBrowserActionVisibility::Params>
+  std::unique_ptr<ToggleBrowserActionVisibility::Params>
       params(
           ToggleBrowserActionVisibility::Params::Create(
               *args_));

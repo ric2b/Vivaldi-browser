@@ -40,7 +40,7 @@ CompositingDisplayItem::CompositingDisplayItem(
   const proto::CompositingDisplayItem& details = proto.compositing_item();
   uint8_t alpha = static_cast<uint8_t>(details.alpha());
   SkXfermode::Mode xfermode = SkXfermodeModeFromProto(details.mode());
-  scoped_ptr<SkRect> bounds;
+  std::unique_ptr<SkRect> bounds;
   if (details.has_bounds()) {
     bounds.reset(
         new SkRect(gfx::RectFToSkRect(ProtoToRectF(details.bounds()))));
@@ -90,8 +90,7 @@ void CompositingDisplayItem::ToProtobuf(
     RectFToProto(gfx::SkRectToRectF(bounds_), details->mutable_bounds());
 
   if (color_filter_) {
-    skia::RefPtr<SkData> data =
-        skia::AdoptRef(SkValidatingSerializeFlattenable(color_filter_.get()));
+    sk_sp<SkData> data(SkValidatingSerializeFlattenable(color_filter_.get()));
     if (data->size() > 0)
       details->set_color_filter(data->data(), data->size());
   }

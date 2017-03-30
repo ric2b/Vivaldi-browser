@@ -6,10 +6,11 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
+#include <memory>
 #include <utility>
 
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/rand_util.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/time/tick_clock.h"
@@ -33,7 +34,7 @@ class StatsEventSubscriberTest : public ::testing::Test {
       : sender_clock_(new base::SimpleTestTickClock()),
         task_runner_(new FakeSingleThreadTaskRunner(sender_clock_)),
         cast_environment_(
-            new CastEnvironment(scoped_ptr<base::TickClock>(sender_clock_),
+            new CastEnvironment(std::unique_ptr<base::TickClock>(sender_clock_),
                                 task_runner_,
                                 task_runner_,
                                 task_runner_)),
@@ -66,14 +67,14 @@ class StatsEventSubscriberTest : public ::testing::Test {
   scoped_refptr<FakeSingleThreadTaskRunner> task_runner_;
   scoped_refptr<CastEnvironment> cast_environment_;
   test::FakeReceiverTimeOffsetEstimator fake_offset_estimator_;
-  scoped_ptr<StatsEventSubscriber> subscriber_;
+  std::unique_ptr<StatsEventSubscriber> subscriber_;
 };
 
 TEST_F(StatsEventSubscriberTest, CaptureEncode) {
   Init(VIDEO_EVENT);
 
   RtpTimeTicks rtp_timestamp;
-  uint32_t frame_id = 0;
+  FrameId frame_id = FrameId::first();
   int extra_frames = 50;
   // Only the first |extra_frames| frames logged will be taken into account
   // when computing dropped frames.
@@ -82,7 +83,7 @@ TEST_F(StatsEventSubscriberTest, CaptureEncode) {
   base::TimeTicks start_time = sender_clock_->NowTicks();
   // Drop half the frames during the encode step.
   for (int i = 0; i < num_frames; i++) {
-    scoped_ptr<FrameEvent> capture_begin_event(new FrameEvent());
+    std::unique_ptr<FrameEvent> capture_begin_event(new FrameEvent());
     capture_begin_event->timestamp = sender_clock_->NowTicks();
     capture_begin_event->type = FRAME_CAPTURE_BEGIN;
     capture_begin_event->media_type = VIDEO_EVENT;
@@ -91,7 +92,7 @@ TEST_F(StatsEventSubscriberTest, CaptureEncode) {
         std::move(capture_begin_event));
 
     AdvanceClocks(base::TimeDelta::FromMicroseconds(10));
-    scoped_ptr<FrameEvent> capture_end_event(new FrameEvent());
+    std::unique_ptr<FrameEvent> capture_end_event(new FrameEvent());
     capture_end_event->timestamp = sender_clock_->NowTicks();
     capture_end_event->type = FRAME_CAPTURE_END;
     capture_end_event->media_type = VIDEO_EVENT;
@@ -101,7 +102,7 @@ TEST_F(StatsEventSubscriberTest, CaptureEncode) {
 
     if (i % 2 == 0) {
       AdvanceClocks(base::TimeDelta::FromMicroseconds(10));
-      scoped_ptr<FrameEvent> encode_event(new FrameEvent());
+      std::unique_ptr<FrameEvent> encode_event(new FrameEvent());
       encode_event->timestamp = sender_clock_->NowTicks();
       encode_event->type = FRAME_ENCODED;
       encode_event->media_type = VIDEO_EVENT;
@@ -155,7 +156,7 @@ TEST_F(StatsEventSubscriberTest, Encode) {
   Init(VIDEO_EVENT);
 
   RtpTimeTicks rtp_timestamp;
-  uint32_t frame_id = 0;
+  FrameId frame_id = FrameId::first();
   int num_frames = 10;
   base::TimeTicks start_time = sender_clock_->NowTicks();
   AdvanceClocks(base::TimeDelta::FromMicroseconds(35678));
@@ -165,7 +166,7 @@ TEST_F(StatsEventSubscriberTest, Encode) {
   for (int i = 0; i < num_frames; i++) {
     int size = 1000 + base::RandInt(-100, 100);
     total_size += size;
-    scoped_ptr<FrameEvent> encode_event(new FrameEvent());
+    std::unique_ptr<FrameEvent> encode_event(new FrameEvent());
     encode_event->timestamp = sender_clock_->NowTicks();
     encode_event->type = FRAME_ENCODED;
     encode_event->media_type = VIDEO_EVENT;
@@ -223,11 +224,11 @@ TEST_F(StatsEventSubscriberTest, Decode) {
   Init(VIDEO_EVENT);
 
   RtpTimeTicks rtp_timestamp;
-  uint32_t frame_id = 0;
+  FrameId frame_id = FrameId::first();
   int num_frames = 10;
   base::TimeTicks start_time = sender_clock_->NowTicks();
   for (int i = 0; i < num_frames; i++) {
-    scoped_ptr<FrameEvent> decode_event(new FrameEvent());
+    std::unique_ptr<FrameEvent> decode_event(new FrameEvent());
     decode_event->timestamp = receiver_clock_.NowTicks();
     decode_event->type = FRAME_DECODED;
     decode_event->media_type = VIDEO_EVENT;
@@ -259,14 +260,14 @@ TEST_F(StatsEventSubscriberTest, PlayoutDelay) {
   Init(VIDEO_EVENT);
 
   RtpTimeTicks rtp_timestamp;
-  uint32_t frame_id = 0;
+  FrameId frame_id = FrameId::first();
   int num_frames = 10;
   int late_frames = 0;
   for (int i = 0, delay_ms = -50; i < num_frames; i++, delay_ms += 10) {
     base::TimeDelta delay = base::TimeDelta::FromMilliseconds(delay_ms);
     if (delay_ms > 0)
       late_frames++;
-    scoped_ptr<FrameEvent> playout_event(new FrameEvent());
+    std::unique_ptr<FrameEvent> playout_event(new FrameEvent());
     playout_event->timestamp = receiver_clock_.NowTicks();
     playout_event->type = FRAME_PLAYOUT;
     playout_event->media_type = VIDEO_EVENT;
@@ -294,11 +295,11 @@ TEST_F(StatsEventSubscriberTest, E2ELatency) {
   Init(VIDEO_EVENT);
 
   RtpTimeTicks rtp_timestamp;
-  uint32_t frame_id = 0;
+  FrameId frame_id = FrameId::first();
   int num_frames = 10;
   base::TimeDelta total_latency;
   for (int i = 0; i < num_frames; i++) {
-    scoped_ptr<FrameEvent> capture_begin_event(new FrameEvent());
+    std::unique_ptr<FrameEvent> capture_begin_event(new FrameEvent());
     capture_begin_event->timestamp = sender_clock_->NowTicks();
     capture_begin_event->type = FRAME_CAPTURE_BEGIN;
     capture_begin_event->media_type = VIDEO_EVENT;
@@ -314,7 +315,7 @@ TEST_F(StatsEventSubscriberTest, E2ELatency) {
     base::TimeDelta delay = base::TimeDelta::FromMilliseconds(delay_micros);
     total_latency += latency;
 
-    scoped_ptr<FrameEvent> playout_event(new FrameEvent());
+    std::unique_ptr<FrameEvent> playout_event(new FrameEvent());
     playout_event->timestamp = receiver_clock_.NowTicks();
     playout_event->type = FRAME_PLAYOUT;
     playout_event->media_type = VIDEO_EVENT;
@@ -357,12 +358,12 @@ TEST_F(StatsEventSubscriberTest, Packets) {
 
   base::TimeTicks sender_encoded_time = sender_clock_->NowTicks();
   base::TimeTicks receiver_encoded_time = receiver_clock_.NowTicks();
-  scoped_ptr<FrameEvent> encode_event(new FrameEvent());
+  std::unique_ptr<FrameEvent> encode_event(new FrameEvent());
   encode_event->timestamp = sender_encoded_time;
   encode_event->type = FRAME_ENCODED;
   encode_event->media_type = VIDEO_EVENT;
   encode_event->rtp_timestamp = rtp_timestamp;
-  encode_event->frame_id = 0;
+  encode_event->frame_id = FrameId::first();
   cast_environment_->logger()->DispatchFrameEvent(std::move(encode_event));
 
   // Every 2nd packet will be retransmitted once.
@@ -372,12 +373,12 @@ TEST_F(StatsEventSubscriberTest, Packets) {
     int size = 1000 + base::RandInt(-100, 100);
     total_size += size;
 
-    scoped_ptr<PacketEvent> send_event(new PacketEvent());
+    std::unique_ptr<PacketEvent> send_event(new PacketEvent());
     send_event->timestamp = sender_clock_->NowTicks();
     send_event->type = PACKET_SENT_TO_NETWORK;
     send_event->media_type = VIDEO_EVENT;
     send_event->rtp_timestamp = rtp_timestamp;
-    send_event->frame_id = 0;
+    send_event->frame_id = FrameId::first();
     send_event->packet_id = i;
     send_event->max_packet_id = num_packets - 1;
     send_event->size = size;
@@ -403,12 +404,12 @@ TEST_F(StatsEventSubscriberTest, Packets) {
     // Retransmission 1.
     AdvanceClocks(base::TimeDelta::FromMicroseconds(12345));
     if (i % 2 == 0) {
-      scoped_ptr<PacketEvent> retransmit_event(new PacketEvent());
+      std::unique_ptr<PacketEvent> retransmit_event(new PacketEvent());
       retransmit_event->timestamp = receiver_clock_.NowTicks();
       retransmit_event->type = PACKET_RETRANSMITTED;
       retransmit_event->media_type = VIDEO_EVENT;
       retransmit_event->rtp_timestamp = rtp_timestamp;
-      retransmit_event->frame_id = 0;
+      retransmit_event->frame_id = FrameId::first();
       retransmit_event->packet_id = i;
       retransmit_event->max_packet_id = num_packets - 1;
       retransmit_event->size = size;
@@ -423,12 +424,12 @@ TEST_F(StatsEventSubscriberTest, Packets) {
     // Retransmission 2.
     AdvanceClocks(base::TimeDelta::FromMicroseconds(13456));
     if (i % 4 == 0) {
-      scoped_ptr<PacketEvent> retransmit_event(new PacketEvent());
+      std::unique_ptr<PacketEvent> retransmit_event(new PacketEvent());
       retransmit_event->timestamp = receiver_clock_.NowTicks();
       retransmit_event->type = PACKET_RETRANSMITTED;
       retransmit_event->media_type = VIDEO_EVENT;
       retransmit_event->rtp_timestamp = rtp_timestamp;
-      retransmit_event->frame_id = 0;
+      retransmit_event->frame_id = FrameId::first();
       retransmit_event->packet_id = i;
       retransmit_event->max_packet_id = num_packets - 1;
       retransmit_event->size = size;
@@ -443,24 +444,24 @@ TEST_F(StatsEventSubscriberTest, Packets) {
     // Retransmission 3.
     AdvanceClocks(base::TimeDelta::FromMicroseconds(14567));
     if (i % 8 == 0) {
-      scoped_ptr<PacketEvent> retransmit_event(new PacketEvent());
+      std::unique_ptr<PacketEvent> retransmit_event(new PacketEvent());
       retransmit_event->timestamp = receiver_clock_.NowTicks();
       retransmit_event->type = PACKET_RETRANSMITTED;
       retransmit_event->media_type = VIDEO_EVENT;
       retransmit_event->rtp_timestamp = rtp_timestamp;
-      retransmit_event->frame_id = 0;
+      retransmit_event->frame_id = FrameId::first();
       retransmit_event->packet_id = i;
       retransmit_event->max_packet_id = num_packets - 1;
       retransmit_event->size = size;
       cast_environment_->logger()->DispatchPacketEvent(
           std::move(retransmit_event));
 
-      scoped_ptr<PacketEvent> reject_event(new PacketEvent());
+      std::unique_ptr<PacketEvent> reject_event(new PacketEvent());
       reject_event->timestamp = receiver_clock_.NowTicks();
       reject_event->type = PACKET_RTX_REJECTED;
       reject_event->media_type = VIDEO_EVENT;
       reject_event->rtp_timestamp = rtp_timestamp;
-      reject_event->frame_id = 0;
+      reject_event->frame_id = FrameId::first();
       reject_event->packet_id = i;
       reject_event->max_packet_id = num_packets - 1;
       reject_event->size = size;
@@ -472,12 +473,12 @@ TEST_F(StatsEventSubscriberTest, Packets) {
       num_packets_rtx_rejected++;
     }
 
-    scoped_ptr<PacketEvent> receive_event(new PacketEvent());
+    std::unique_ptr<PacketEvent> receive_event(new PacketEvent());
     receive_event->timestamp = received_time;
     receive_event->type = PACKET_RECEIVED;
     receive_event->media_type = VIDEO_EVENT;
     receive_event->rtp_timestamp = rtp_timestamp;
-    receive_event->frame_id = 0;
+    receive_event->frame_id = FrameId::first();
     receive_event->packet_id = i;
     receive_event->max_packet_id = num_packets - 1;
     receive_event->size = size;
@@ -569,7 +570,7 @@ TEST_F(StatsEventSubscriberTest, Histograms) {
   AdvanceClocks(base::TimeDelta::FromMilliseconds(123));
 
   RtpTimeTicks rtp_timestamp = RtpTimeTicks().Expand(UINT32_C(123));
-  uint32_t frame_id = 0;
+  FrameId frame_id = FrameId::first();
 
   // 10 Frames with capture latency in the bucket of "10-14"ms.
   // 10 Frames with encode time in the bucket of "15-19"ms.
@@ -577,7 +578,7 @@ TEST_F(StatsEventSubscriberTest, Histograms) {
     ++frame_id;
     rtp_timestamp += RtpTimeDelta::FromTicks(1);
 
-    scoped_ptr<FrameEvent> capture_begin_event(new FrameEvent());
+    std::unique_ptr<FrameEvent> capture_begin_event(new FrameEvent());
     capture_begin_event->timestamp = sender_clock_->NowTicks();
     capture_begin_event->type = FRAME_CAPTURE_BEGIN;
     capture_begin_event->media_type = VIDEO_EVENT;
@@ -586,7 +587,7 @@ TEST_F(StatsEventSubscriberTest, Histograms) {
         std::move(capture_begin_event));
 
     AdvanceClocks(base::TimeDelta::FromMilliseconds(10));
-    scoped_ptr<FrameEvent> capture_end_event(new FrameEvent());
+    std::unique_ptr<FrameEvent> capture_end_event(new FrameEvent());
     capture_end_event->timestamp = sender_clock_->NowTicks();
     capture_end_event->type = FRAME_CAPTURE_END;
     capture_end_event->media_type = VIDEO_EVENT;
@@ -595,7 +596,7 @@ TEST_F(StatsEventSubscriberTest, Histograms) {
         std::move(capture_end_event));
 
     AdvanceClocks(base::TimeDelta::FromMilliseconds(15));
-    scoped_ptr<FrameEvent> encode_event(new FrameEvent());
+    std::unique_ptr<FrameEvent> encode_event(new FrameEvent());
     encode_event->timestamp = sender_clock_->NowTicks();
     encode_event->type = FRAME_ENCODED;
     encode_event->media_type = VIDEO_EVENT;
@@ -613,12 +614,12 @@ TEST_F(StatsEventSubscriberTest, Histograms) {
   // Queueing latencies are 100ms, 200ms and 300ms.
   for (int i = 0; i < 3; ++i) {
     AdvanceClocks(base::TimeDelta::FromMilliseconds(100));
-    scoped_ptr<PacketEvent> send_event(new PacketEvent());
+    std::unique_ptr<PacketEvent> send_event(new PacketEvent());
     send_event->timestamp = sender_clock_->NowTicks();
     send_event->type = PACKET_SENT_TO_NETWORK;
     send_event->media_type = VIDEO_EVENT;
     send_event->rtp_timestamp = rtp_timestamp;
-    send_event->frame_id = 0;
+    send_event->frame_id = FrameId::first();
     send_event->packet_id = i;
     send_event->max_packet_id = 2;
     send_event->size = 123;
@@ -630,19 +631,19 @@ TEST_F(StatsEventSubscriberTest, Histograms) {
   // Packet latencies are 400ms.
   AdvanceClocks(base::TimeDelta::FromMilliseconds(100));
   for (int i = 0; i < 3; ++i) {
-    scoped_ptr<PacketEvent> receive_event(new PacketEvent());
+    std::unique_ptr<PacketEvent> receive_event(new PacketEvent());
     receive_event->timestamp = receiver_clock_.NowTicks();
     receive_event->type = PACKET_RECEIVED;
     receive_event->media_type = VIDEO_EVENT;
     receive_event->rtp_timestamp = rtp_timestamp;
-    receive_event->frame_id = 0;
+    receive_event->frame_id = FrameId::first();
     receive_event->packet_id = i;
     receive_event->max_packet_id = 2;
     receive_event->size = 123;
     cast_environment_->logger()->DispatchPacketEvent(std::move(receive_event));
   }
 
-  scoped_ptr<FrameEvent> playout_event(new FrameEvent());
+  std::unique_ptr<FrameEvent> playout_event(new FrameEvent());
   playout_event->timestamp = receiver_clock_.NowTicks();
   playout_event->type = FRAME_PLAYOUT;
   playout_event->media_type = VIDEO_EVENT;
@@ -652,7 +653,7 @@ TEST_F(StatsEventSubscriberTest, Histograms) {
   cast_environment_->logger()->DispatchFrameEvent(std::move(playout_event));
 
   StatsEventSubscriber::SimpleHistogram* histogram;
-  scoped_ptr<base::ListValue> values;
+  std::unique_ptr<base::ListValue> values;
 
   histogram = subscriber_->GetHistogramForTesting(
       StatsEventSubscriber::CAPTURE_LATENCY_MS_HISTO);

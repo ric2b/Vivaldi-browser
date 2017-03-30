@@ -108,9 +108,7 @@ MediaSource::MediaSource(ExecutionContext* context)
 MediaSource::~MediaSource()
 {
     WTF_LOG(Media, "MediaSource::~MediaSource %p", this);
-#if !ENABLE(OILPAN)
     ASSERT(isClosed());
-#endif
 }
 
 void MediaSource::logAndThrowDOMException(ExceptionState& exceptionState, const ExceptionCode& error, const String& message)
@@ -157,7 +155,7 @@ SourceBuffer* MediaSource::addSourceBuffer(const String& type, ExceptionState& e
         return 0;
     }
 
-    SourceBuffer* buffer = SourceBuffer::create(webSourceBuffer.release(), this, m_asyncEventQueue.get());
+    SourceBuffer* buffer = SourceBuffer::create(std::move(webSourceBuffer), this, m_asyncEventQueue.get());
     // 6. Add the new object to sourceBuffers and fire a addsourcebuffer on that object.
     m_sourceBuffers->add(buffer);
 
@@ -179,11 +177,8 @@ void MediaSource::removeSourceBuffer(SourceBuffer* buffer, ExceptionState& excep
         return;
     }
 
-    // 2. If the sourceBuffer.updating attribute equals true, then run the following steps: ...
-    buffer->abortIfUpdating();
-
-    // Steps 3-8 are related to updating audioTracks, videoTracks, and textTracks which aren't implmented yet.
-    // FIXME(91649): support track selection
+    // Steps 2-8 are implemented by SourceBuffer::removedFromMediaSource.
+    buffer->removedFromMediaSource();
 
     // 9. If sourceBuffer is in activeSourceBuffers, then remove sourceBuffer from activeSourceBuffers ...
     m_activeSourceBuffers->remove(buffer);
@@ -193,7 +188,7 @@ void MediaSource::removeSourceBuffer(SourceBuffer* buffer, ExceptionState& excep
     m_sourceBuffers->remove(buffer);
 
     // 11. Destroy all resources for sourceBuffer.
-    buffer->removedFromMediaSource();
+    // This should have been done already by SourceBuffer::removedFromMediaSource (steps 2-8) above.
 }
 
 void MediaSource::onReadyStateChange(const AtomicString& oldState, const AtomicString& newState)
@@ -216,6 +211,8 @@ void MediaSource::onReadyStateChange(const AtomicString& oldState, const AtomicS
     for (unsigned long i = 0; i < m_sourceBuffers->length(); ++i)
         m_sourceBuffers->item(i)->removedFromMediaSource();
     m_sourceBuffers->clear();
+
+    m_attachedElement.clear();
 
     scheduleEvent(EventTypeNames::sourceclose);
 }
@@ -286,7 +283,7 @@ DEFINE_TRACE(MediaSource)
     visitor->trace(m_attachedElement);
     visitor->trace(m_sourceBuffers);
     visitor->trace(m_activeSourceBuffers);
-    RefCountedGarbageCollectedEventTargetWithInlineData<MediaSource>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
     ActiveDOMObject::trace(visitor);
 }
 
@@ -296,7 +293,7 @@ void MediaSource::setWebMediaSourceAndOpen(PassOwnPtr<WebMediaSource> webMediaSo
     ASSERT(webMediaSource);
     ASSERT(!m_webMediaSource);
     ASSERT(m_attachedElement);
-    m_webMediaSource = webMediaSource;
+    m_webMediaSource = std::move(webMediaSource);
     setReadyState(openKeyword());
 }
 
@@ -456,7 +453,6 @@ void MediaSource::setReadyState(const AtomicString& state)
 
     if (state == closedKeyword()) {
         m_webMediaSource.clear();
-        m_attachedElement.clear();
     }
 
     if (oldState == state)

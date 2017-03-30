@@ -8,13 +8,13 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <queue>
 #include <string>
 #include <vector>
 
 #include "base/event_types.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -194,14 +194,15 @@ class DISPLAY_EXPORT DisplayConfigurator : public NativeDisplayObserver {
   // Replaces |native_display_delegate_| with the delegate passed in and sets
   // |configure_display_| to true. Should be called before Init().
   void SetDelegateForTesting(
-      scoped_ptr<NativeDisplayDelegate> display_delegate);
+      std::unique_ptr<NativeDisplayDelegate> display_delegate);
 
   // Sets the initial value of |power_state_|.  Must be called before Start().
   void SetInitialDisplayPower(chromeos::DisplayPowerState power_state);
 
   // Initialization, must be called right after constructor.
   // |is_panel_fitting_enabled| indicates hardware panel fitting support.
-  void Init(bool is_panel_fitting_enabled);
+  void Init(std::unique_ptr<NativeDisplayDelegate> delegate,
+            bool is_panel_fitting_enabled);
 
   // Does initial configuration of displays during startup.
   // If |background_color_argb| is non zero and there are multiple displays,
@@ -299,15 +300,14 @@ class DISPLAY_EXPORT DisplayConfigurator : public NativeDisplayObserver {
   typedef std::map<ContentProtectionClientId, ContentProtections>
       ProtectionRequests;
 
-  // Performs platform specific delegate initialization.
-  scoped_ptr<NativeDisplayDelegate> CreatePlatformNativeDisplayDelegate();
+  // Updates |pending_*| members and applies the passed-in state. |callback| is
+  // invoked (perhaps synchronously) on completion.
+  void SetDisplayPowerInternal(chromeos::DisplayPowerState power_state,
+                               int flags,
+                               const ConfigurationCallback& callback);
 
   // Configures displays. Invoked by |configure_timer_|.
   void ConfigureDisplays();
-
-  // Restores |requested_power_state_| after the system has resumed,
-  // additionally forcing a probe. Invoked by |configure_timer_|.
-  void RestoreRequestedPowerStateAfterResume();
 
   // Notifies observers about an attempted state change.
   void NotifyDisplayStateObservers(bool success,
@@ -370,7 +370,7 @@ class DISPLAY_EXPORT DisplayConfigurator : public NativeDisplayObserver {
 
   StateController* state_controller_;
   SoftwareMirroringController* mirroring_controller_;
-  scoped_ptr<NativeDisplayDelegate> native_display_delegate_;
+  std::unique_ptr<NativeDisplayDelegate> native_display_delegate_;
 
   // Used to enable modes which rely on panel fitting.
   bool is_panel_fitting_enabled_;
@@ -396,11 +396,15 @@ class DISPLAY_EXPORT DisplayConfigurator : public NativeDisplayObserver {
   // Stores the requested power state.
   chromeos::DisplayPowerState requested_power_state_;
 
-  // True if |requested_power_state_| has been changed due to a user request.
-  bool requested_power_state_change_;
+  // The power state used by RunPendingConfiguration(). May be
+  // |requested_power_state_| or DISPLAY_POWER_ALL_OFF for suspend.
+  chromeos::DisplayPowerState pending_power_state_;
+
+  // True if |pending_power_state_| has been changed.
+  bool has_pending_power_state_;
 
   // Bitwise-or value of the |kSetDisplayPower*| flags defined above.
-  int requested_power_flags_;
+  int pending_power_flags_;
 
   // List of callbacks from callers waiting for the display configuration to
   // start/finish. Note these callbacks belong to the pending request, not a
@@ -454,9 +458,9 @@ class DISPLAY_EXPORT DisplayConfigurator : public NativeDisplayObserver {
   // Last used virtual display id.
   uint8_t last_virtual_display_id_ = 0;
 
-  scoped_ptr<DisplayLayoutManager> layout_manager_;
+  std::unique_ptr<DisplayLayoutManager> layout_manager_;
 
-  scoped_ptr<UpdateDisplayConfigurationTask> configuration_task_;
+  std::unique_ptr<UpdateDisplayConfigurationTask> configuration_task_;
 
   // This must be the last variable.
   base::WeakPtrFactory<DisplayConfigurator> weak_ptr_factory_;

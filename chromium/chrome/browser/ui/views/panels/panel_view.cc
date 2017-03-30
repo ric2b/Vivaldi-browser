@@ -26,16 +26,16 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/content_accelerators/accelerator_util.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/path.h"
-#include "ui/gfx/screen.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/widget/widget.h"
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
-#include "chrome/browser/shell_integration.h"
+#include "chrome/browser/shell_integration_win.h"
 #include "chrome/browser/ui/views/panels/taskbar_window_thumbnailer_win.h"
 #include "ui/base/win/shell.h"
 #include "ui/gfx/icon_util.h"
@@ -323,7 +323,7 @@ PanelView::PanelView(Panel* panel, const gfx::Rect& bounds, bool always_on_top)
 
 #if defined(OS_WIN)
   ui::win::SetAppIdForWindow(
-      shell_integration::GetAppModelIdForProfile(
+      shell_integration::win::GetAppModelIdForProfile(
           base::UTF8ToWide(panel->app_name()), panel->profile()->GetPath()),
       views::HWNDForWidget(window_));
   ui::win::PreventWindowFromPinning(views::HWNDForWidget(window_));
@@ -1012,8 +1012,8 @@ void PanelView::OnWidgetActivationChanged(views::Widget* widget, bool active) {
 #if defined(OS_WIN)
   if (focused_ && panel_->IsMinimized() &&
       panel_->collection()->type() == PanelCollection::DOCKED &&
-      gfx::Screen::GetScreen()->GetWindowUnderCursor() !=
-          widget->GetNativeWindow()) {
+      !display::Screen::GetScreen()->IsWindowUnderCursor(
+          widget->GetNativeWindow())) {
     panel_->Restore();
   }
 #endif

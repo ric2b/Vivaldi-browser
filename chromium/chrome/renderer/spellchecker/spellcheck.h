@@ -5,6 +5,7 @@
 #ifndef CHROME_RENDERER_SPELLCHECKER_SPELLCHECK_H_
 #define CHROME_RENDERER_SPELLCHECKER_SPELLCHECK_H_
 
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -12,12 +13,11 @@
 #include "base/files/file.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "chrome/renderer/spellchecker/custom_dictionary_engine.h"
-#include "content/public/renderer/render_process_observer.h"
+#include "content/public/renderer/render_thread_observer.h"
 
 struct SpellCheckBDictLanguage;
 class SpellcheckLanguage;
@@ -37,7 +37,7 @@ class Message;
 // See http://crbug.com/73699.
 // Shared spellchecking logic/data for a RenderProcess. All RenderViews use
 // this object to perform spellchecking tasks.
-class SpellCheck : public content::RenderProcessObserver,
+class SpellCheck : public content::RenderThreadObserver,
                    public base::SupportsWeakPtr<SpellCheck> {
  public:
   // TODO(groby): I wonder if this can be private, non-mac only.
@@ -121,7 +121,7 @@ class SpellCheck : public content::RenderProcessObserver,
        const std::vector<std::vector<base::string16>>& suggestions_list,
        std::vector<base::string16>* optional_suggestions);
 
-  // RenderProcessObserver implementation:
+  // RenderThreadObserver implementation:
    bool OnControlMessageReceived(const IPC::Message& message) override;
 
   // Message handlers.
@@ -145,7 +145,7 @@ class SpellCheck : public content::RenderProcessObserver,
   // we save its parameters and start spellchecking after we finish initializing
   // hunspell. (When WebKit sends two or more requests, we cancel the previous
   // requests so we do not have to use vectors.)
-  scoped_ptr<SpellcheckRequest> pending_request_param_;
+  std::unique_ptr<SpellcheckRequest> pending_request_param_;
 #endif
 
   // A vector of objects used to actually check spelling, one for each enabled

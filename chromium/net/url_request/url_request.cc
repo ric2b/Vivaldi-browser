@@ -10,7 +10,6 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
-#include "base/debug/stack_trace.h"
 #include "base/lazy_instance.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop/message_loop.h"
@@ -190,7 +189,7 @@ URLRequest::~URLRequest() {
   net_log_.EndEventWithNetErrorCode(NetLog::TYPE_REQUEST_ALIVE, net_error);
 }
 
-void URLRequest::set_upload(scoped_ptr<UploadDataStream> upload) {
+void URLRequest::set_upload(std::unique_ptr<UploadDataStream> upload) {
   upload_data_stream_ = std::move(upload);
 }
 
@@ -261,12 +260,12 @@ LoadStateWithParam URLRequest::GetLoadState() const {
                             base::string16());
 }
 
-scoped_ptr<base::Value> URLRequest::GetStateAsValue() const {
-  scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+std::unique_ptr<base::Value> URLRequest::GetStateAsValue() const {
+  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetString("url", original_url().possibly_invalid_spec());
 
   if (url_chain_.size() > 1) {
-    scoped_ptr<base::ListValue> list(new base::ListValue());
+    std::unique_ptr<base::ListValue> list(new base::ListValue());
     for (const GURL& url : url_chain_) {
       list->AppendString(url.possibly_invalid_spec());
     }
@@ -853,12 +852,18 @@ void URLRequest::ContinueWithCertificate(X509Certificate* client_cert,
                                          SSLPrivateKey* client_private_key) {
   DCHECK(job_.get());
 
+  // Matches the call in NotifyCertificateRequested.
+  OnCallToDelegateComplete();
+
   status_ = URLRequestStatus::FromError(ERR_IO_PENDING);
   job_->ContinueWithCertificate(client_cert, client_private_key);
 }
 
 void URLRequest::ContinueDespiteLastError() {
   DCHECK(job_.get());
+
+  // Matches the call in NotifySSLCertificateError.
+  OnCallToDelegateComplete();
 
   status_ = URLRequestStatus::FromError(ERR_IO_PENDING);
   job_->ContinueDespiteLastError();
@@ -1089,12 +1094,14 @@ void URLRequest::NotifyAuthRequiredComplete(
 void URLRequest::NotifyCertificateRequested(
     SSLCertRequestInfo* cert_request_info) {
   status_ = URLRequestStatus();
+  OnCallToDelegate();
   delegate_->OnCertificateRequested(this, cert_request_info);
 }
 
 void URLRequest::NotifySSLCertificateError(const SSLInfo& ssl_info,
                                            bool fatal) {
   status_ = URLRequestStatus();
+  OnCallToDelegate();
   delegate_->OnSSLCertificateError(this, ssl_info, fatal);
 }
 
@@ -1189,14 +1196,6 @@ void URLRequest::OnCallToDelegateComplete() {
     return;
   calling_delegate_ = false;
   net_log_.EndEvent(NetLog::TYPE_URL_REQUEST_DELEGATE);
-}
-
-void URLRequest::set_stack_trace(const base::debug::StackTrace& stack_trace) {
-  stack_trace_.reset(new base::debug::StackTrace(stack_trace));
-}
-
-const base::debug::StackTrace* URLRequest::stack_trace() const {
-  return stack_trace_.get();
 }
 
 void URLRequest::GetConnectionAttempts(ConnectionAttempts* out) const {

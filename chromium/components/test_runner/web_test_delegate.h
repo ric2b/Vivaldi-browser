@@ -185,17 +185,6 @@ class WebTestDelegate {
   virtual void SendBluetoothManualChooserEvent(const std::string& event,
                                                const std::string& argument) = 0;
 
-  // Enables mock geofencing service while running a layout test.
-  // |service_available| indicates if the mock service should mock geofencing
-  // being available or not.
-  virtual void SetGeofencingMockProvider(bool service_available) = 0;
-
-  // Disables mock geofencing service while running a layout test.
-  virtual void ClearGeofencingMockProvider() = 0;
-
-  // Set the mock geofencing position while running a layout test.
-  virtual void SetGeofencingMockPosition(double latitude, double longitude) = 0;
-
   // Controls which WebView should be focused.
   virtual void SetFocus(blink::WebView* web_view, bool focus) = 0;
 
@@ -233,10 +222,6 @@ class WebTestDelegate {
 
   // Returns true if resource requests to external URLs should be permitted.
   virtual bool AllowExternalPages() = 0;
-
-  // Returns a text dump the back/forward history for the WebView associated
-  // with the given WebTestProxyBase.
-  virtual std::string DumpHistoryForWindow(WebTestProxyBase* proxy) = 0;
 
   // Fetch the manifest for a given WebView from the given url.
   virtual void FetchManifest(
@@ -278,6 +263,9 @@ class WebTestDelegate {
     const blink::WebPluginParams& params) = 0;
 
   virtual float GetDeviceScaleFactorForTest() const = 0;
+
+  // Run all pending idle tasks, and then run callback.
+  virtual void RunIdleTasks(const base::Closure& callback) = 0;
 };
 
 }  // namespace test_runner

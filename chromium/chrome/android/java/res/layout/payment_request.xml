@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright 2016 The Chromium Authors. All rights reserved.
+     Use of this source code is governed by a BSD-style license that can be
+     found in the LICENSE file. -->
+
+<!-- Payments fields dialog.
+     TODO(dfalcantara): Figure out if it makes sense to recombine this and the PaymentResult
+                        dialog box once redlines stabilize. -->
+<merge
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:chrome="http://schemas.android.com/apk/res-auto" >
+
+    <org.chromium.chrome.browser.widget.BoundedLinearLayout
+        android:id="@+id/payment_request_layout"
+        android:orientation="vertical"
+        android:background="@android:color/white"
+        android:layout_height="wrap_content"
+        android:layout_width="match_parent"
+        android:layout_gravity="bottom|center_horizontal"
+        chrome:maxWidth="@dimen/payments_ui_max_dialog_width" >
+
+        <!-- Box header. -->
+        <FrameLayout
+            android:layout_height="wrap_content"
+            android:layout_width="match_parent"
+            android:minHeight="64dp" >
+
+            <ImageView
+                android:id="@+id/pageFavIcon"
+                android:layout_height="24dp"
+                android:layout_width="24dp"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
+                android:layout_gravity="start|center_vertical"
+                android:importantForAccessibility="no"
+                android:scaleType="centerInside" />
+
+            <LinearLayout
+                android:layout_height="wrap_content"
+                android:layout_width="wrap_content"
+                android:layout_marginStart="56dp"
+                android:layout_marginEnd="56dp"
+                android:layout_gravity="center_vertical"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/pageTitle"
+                    android:layout_height="wrap_content"
+                    android:layout_width="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:singleLine="true"
+                    android:textColor="@color/default_text_color"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/hostname"
+                    android:layout_height="wrap_content"
+                    android:layout_width="wrap_content"
+                    android:ellipsize="start"
+                    android:maxLines="1"
+                    android:singleLine="true"
+                    android:textColor="@color/descriptive_text_color"
+                    android:textSize="14sp" />
+
+            </LinearLayout>
+
+            <ImageView
+                android:id="@+id/close_button"
+                android:layout_gravity="end|center_vertical"
+                android:layout_height="56dp"
+                android:layout_width="56dp"
+                android:src="@drawable/btn_close"
+                android:contentDescription="@string/close"
+                android:background="?attr/selectableItemBackground"
+                android:scaleType="center" />
+        </FrameLayout>
+
+        <!-- Indeterminate spinny to show that things are processing. -->
+        <ProgressBar
+            android:id="@+id/waiting_progress"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="@dimen/payments_section_largest_spacing"
+            android:layout_marginBottom="@dimen/payments_section_small_spacing" />
+
+        <!-- Message indicating that we're still waiting on payment information. -->
+        <TextView
+            android:id="@+id/waiting_message"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="@dimen/payments_section_small_spacing"
+            android:layout_marginStart="@dimen/payments_section_large_spacing"
+            android:layout_marginEnd="@dimen/payments_section_large_spacing"
+            android:layout_marginBottom="@dimen/payments_section_largest_spacing"
+            android:text="@string/payments_loading_message"
+            android:textColor="@color/descriptive_text_color"
+            android:textSize="16sp" />
+
+        <!-- Payment information. -->
+        <org.chromium.chrome.browser.payments.ui.FadingEdgeScrollView
+            android:id="@+id/paymentContainer"
+            android:layout_height="0dp"
+            android:layout_width="match_parent"
+            android:layout_weight="1"
+            android:fadingEdgeLength="9dp"
+            android:visibility="gone" >
+
+            <LinearLayout
+                android:id="@+id/paymentContainerLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+        </org.chromium.chrome.browser.payments.ui.FadingEdgeScrollView>
+
+        <!-- Edit/Cancel and Pay buttons. -->
+        <org.chromium.chrome.browser.widget.DualControlLayout
+            android:id="@+id/buttonBar"
+            android:layout_height="wrap_content"
+            android:layout_width="match_parent"
+            android:padding="@dimen/payments_section_large_spacing"
+            android:background="@android:color/white"
+            android:visibility="gone" />
+
+    </org.chromium.chrome.browser.widget.BoundedLinearLayout>
+</merge>

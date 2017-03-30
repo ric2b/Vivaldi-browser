@@ -12,7 +12,7 @@
 
 #include "base/macros.h"
 
-namespace gfx {
+namespace display {
 class Display;
 }
 
@@ -25,7 +25,7 @@ struct DisplayUnitInfo;
 }
 }
 
-typedef std::vector<api::system_display::DisplayUnitInfo> DisplayInfo;
+typedef std::vector<api::system_display::DisplayUnitInfo> DisplayUnitInfoList;
 
 class DisplayInfoProvider {
  public:
@@ -50,15 +50,15 @@ class DisplayInfoProvider {
   virtual void EnableUnifiedDesktop(bool enable);
 
   // Get display information.
-  virtual DisplayInfo GetAllDisplaysInfo();
+  virtual DisplayUnitInfoList GetAllDisplaysInfo();
 
  protected:
   DisplayInfoProvider();
 
-  // Create a DisplayUnitInfo from a gfx::Display for implementations of
+  // Create a DisplayUnitInfo from a display::Display for implementations of
   // GetAllDisplaysInfo()
   static api::system_display::DisplayUnitInfo CreateDisplayUnitInfo(
-      const gfx::Display& display,
+      const display::Display& display,
       int64_t primary_display_id);
 
  private:
@@ -67,7 +67,7 @@ class DisplayInfoProvider {
   // Update the content of the |unit| obtained for |display| using
   // platform specific method.
   virtual void UpdateDisplayUnitInfoForPlatform(
-      const gfx::Display& display,
+      const display::Display& display,
       api::system_display::DisplayUnitInfo* unit) = 0;
 
   DISALLOW_COPY_AND_ASSIGN(DisplayInfoProvider);

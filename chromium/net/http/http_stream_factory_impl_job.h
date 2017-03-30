@@ -5,9 +5,10 @@
 #ifndef NET_HTTP_HTTP_STREAM_FACTORY_IMPL_JOB_H_
 #define NET_HTTP_HTTP_STREAM_FACTORY_IMPL_JOB_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "net/base/completion_callback.h"
@@ -46,7 +47,7 @@ class HttpStreamFactoryImpl::Job {
       RequestPriority priority,
       const SSLConfig& server_ssl_config,
       const SSLConfig& proxy_ssl_config,
-      HostPortPair server,
+      HostPortPair destination,
       GURL origin_url,
       NetLog* net_log);
   // Constructor for alternative Job.
@@ -56,7 +57,7 @@ class HttpStreamFactoryImpl::Job {
       RequestPriority priority,
       const SSLConfig& server_ssl_config,
       const SSLConfig& proxy_ssl_config,
-      HostPortPair server,
+      HostPortPair destination,
       GURL origin_url,
       AlternativeService alternative_service,
       NetLog* net_log);
@@ -185,7 +186,7 @@ class HttpStreamFactoryImpl::Job {
     // |spdy_session| should not be used.
     int CreateAvailableSessionFromSocket(
         const SpdySessionKey& key,
-        scoped_ptr<ClientSocketHandle> connection,
+        std::unique_ptr<ClientSocketHandle> connection,
         const BoundNetLog& net_log,
         int certificate_error_code,
         bool is_secure,
@@ -327,7 +328,7 @@ class HttpStreamFactoryImpl::Job {
   const BoundNetLog net_log_;
 
   CompletionCallback io_callback_;
-  scoped_ptr<ClientSocketHandle> connection_;
+  std::unique_ptr<ClientSocketHandle> connection_;
   HttpNetworkSession* const session_;
   HttpStreamFactoryImpl* const stream_factory_;
   State next_state_;
@@ -335,8 +336,8 @@ class HttpStreamFactoryImpl::Job {
   SSLInfo ssl_info_;
 
   // The server we are trying to reach, could be that of the origin or of the
-  // alternative service.
-  HostPortPair server_;
+  // alternative service (after applying host mapping rules).
+  HostPortPair destination_;
 
   // The origin url we're trying to reach. This url may be different from the
   // original request when host mapping rules are set-up.
@@ -385,9 +386,9 @@ class HttpStreamFactoryImpl::Job {
   // read from the socket until the tunnel is done.
   bool establishing_tunnel_;
 
-  scoped_ptr<HttpStream> stream_;
-  scoped_ptr<WebSocketHandshakeStreamBase> websocket_stream_;
-  scoped_ptr<BidirectionalStreamImpl> bidirectional_stream_impl_;
+  std::unique_ptr<HttpStream> stream_;
+  std::unique_ptr<WebSocketHandshakeStreamBase> websocket_stream_;
+  std::unique_ptr<BidirectionalStreamImpl> bidirectional_stream_impl_;
 
   // True if we negotiated NPN.
   bool was_npn_negotiated_;
@@ -399,7 +400,7 @@ class HttpStreamFactoryImpl::Job {
   // preconnect.
   int num_streams_;
 
-  scoped_ptr<ValidSpdySessionPool> valid_spdy_session_pool_;
+  std::unique_ptr<ValidSpdySessionPool> valid_spdy_session_pool_;
 
   // Initialized when we create a new SpdySession.
   base::WeakPtr<SpdySession> new_spdy_session_;

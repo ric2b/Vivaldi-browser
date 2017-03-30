@@ -15,8 +15,9 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chromeos/chromeos_switches.h"
+#include "dbus/file_descriptor.h"
 
 namespace {
 
@@ -108,19 +109,24 @@ void FakeDebugDaemonClient::GetNetworkInterfaces(
 }
 
 void FakeDebugDaemonClient::GetPerfOutput(
-    uint32_t duration,
+    base::TimeDelta duration,
     const std::vector<std::string>& perf_args,
-    const GetPerfOutputCallback& callback) {
-  int status = 0;
-  std::vector<uint8_t> perf_data;
-  std::vector<uint8_t> perf_stat;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(callback, status, perf_data, perf_stat));
+    dbus::ScopedFileDescriptor file_descriptor,
+    const DBusMethodErrorCallback& error_callback) {
+  // Nothing to do but close the file descriptor, which its dtor will do.
 }
 
 void FakeDebugDaemonClient::GetScrubbedLogs(const GetLogsCallback& callback) {
   std::map<std::string, std::string> sample;
   sample["Sample Scrubbed Log"] = "Your email address is xxxxxxxx";
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(callback, false, sample));
+}
+
+void FakeDebugDaemonClient::GetScrubbedBigLogs(
+    const GetLogsCallback& callback) {
+  std::map<std::string, std::string> sample;
+  sample["Sample Scrubbed Big Log"] = "Your email address is xxxxxxxx";
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(callback, false, sample));
 }

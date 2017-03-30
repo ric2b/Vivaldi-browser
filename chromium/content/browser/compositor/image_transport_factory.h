@@ -5,13 +5,14 @@
 #ifndef CONTENT_BROWSER_COMPOSITOR_IMAGE_TRANSPORT_FACTORY_H_
 #define CONTENT_BROWSER_COMPOSITOR_IMAGE_TRANSPORT_FACTORY_H_
 
+#include <memory>
 #include <string>
 
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "build/build_config.h"
 #include "cc/surfaces/surface_id_allocator.h"
 #include "content/common/content_export.h"
+#include "gpu/ipc/common/surface_handle.h"
 #include "ui/events/latency_info.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -30,12 +31,11 @@ class ContextFactory;
 class Texture;
 }
 
-namespace blink {
-class WebGraphicsContext3D;
+namespace display_compositor {
+class GLHelper;
 }
 
 namespace content {
-class GLHelper;
 
 // This class provides a way to get notified when surface handles get lost.
 class CONTENT_EXPORT ImageTransportFactoryObserver {
@@ -64,7 +64,8 @@ class CONTENT_EXPORT ImageTransportFactory {
 
   // Initializes the global transport factory for unit tests using the provided
   // context factory.
-  static void InitializeForUnitTests(scoped_ptr<ImageTransportFactory> factory);
+  static void InitializeForUnitTests(
+      std::unique_ptr<ImageTransportFactory> factory);
 
   // Terminates the global transport factory.
   static void Terminate();
@@ -80,17 +81,12 @@ class CONTENT_EXPORT ImageTransportFactory {
   // Gets a GLHelper instance, associated with the shared context. This
   // GLHelper will get destroyed whenever the shared context is lost
   // (ImageTransportFactoryObserver::OnLostResources is called).
-  virtual GLHelper* GetGLHelper() = 0;
+  virtual display_compositor::GLHelper* GetGLHelper() = 0;
 
   virtual void AddObserver(ImageTransportFactoryObserver* observer) = 0;
   virtual void RemoveObserver(ImageTransportFactoryObserver* observer) = 0;
 
 #if defined(OS_MACOSX)
-  virtual void OnGpuSwapBuffersCompleted(
-      int surface_id,
-      const std::vector<ui::LatencyInfo>& latency_info,
-      gfx::SwapResult result) = 0;
-
   // Called with |suspended| as true when the ui::Compositor has been
   // disconnected from an NSView and may be attached to another one. Called
   // with |suspended| as false after the ui::Compositor has been connected to
@@ -99,10 +95,6 @@ class CONTENT_EXPORT ImageTransportFactory {
   // NSView will not flash in the new NSView.
   virtual void SetCompositorSuspendedForRecycle(ui::Compositor* compositor,
                                                 bool suspended) = 0;
-  // Used by GpuProcessHostUIShim to determine if a frame should not be
-  // displayed because it is targetted to an NSView that has been disconnected.
-  virtual bool SurfaceShouldNotShowFramesAfterSuspendForRecycle(
-      int surface_id) const = 0;
 #endif
 };
 

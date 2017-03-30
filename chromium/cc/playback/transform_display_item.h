@@ -7,7 +7,9 @@
 
 #include <stddef.h>
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
+#include "base/memory/ptr_util.h"
 #include "cc/base/cc_export.h"
 #include "cc/playback/display_item.h"
 #include "ui/gfx/transform.h"
@@ -34,7 +36,6 @@ class CC_EXPORT TransformDisplayItem : public DisplayItem {
   size_t ExternalMemoryUsage() const override;
 
   int ApproximateOpCount() const { return 1; }
-  bool IsSuitableForGpuRasterization() const { return true; }
 
  private:
   void SetNew(const gfx::Transform& transform);
@@ -48,8 +49,8 @@ class CC_EXPORT EndTransformDisplayItem : public DisplayItem {
   explicit EndTransformDisplayItem(const proto::DisplayItem& proto);
   ~EndTransformDisplayItem() override;
 
-  static scoped_ptr<EndTransformDisplayItem> Create() {
-    return make_scoped_ptr(new EndTransformDisplayItem());
+  static std::unique_ptr<EndTransformDisplayItem> Create() {
+    return base::WrapUnique(new EndTransformDisplayItem());
   }
 
   void ToProtobuf(proto::DisplayItem* proto,

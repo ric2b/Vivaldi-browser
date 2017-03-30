@@ -35,13 +35,9 @@ bool AppWebContentsHelper::ShouldSuppressGestureEvent(
     const blink::WebGestureEvent& event) {
   if (vivaldi::IsVivaldiRunning()) {
     // Extend for other platforms after support has been added.
-    // TODO(espen@vivaldi.com): Pinching does not work properly with chrome 51.
-    // Disable until we have an acceptable solution.
-    /*
 #if defined(OS_MACOSX)
     return false;
 #endif  // OS_MACOSX
-    */
   }
 
   // Disable pinch zooming in app windows.

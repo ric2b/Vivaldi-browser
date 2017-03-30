@@ -33,10 +33,6 @@ DisplayScheduler::DisplayScheduler(DisplaySchedulerClient* client,
       weak_ptr_factory_(this) {
   begin_frame_deadline_closure_ = base::Bind(
       &DisplayScheduler::OnBeginFrameDeadline, weak_ptr_factory_.GetWeakPtr());
-
-  // TODO(tansell): Set this to something useful.
-  begin_frame_source_for_children_.reset(new SyntheticBeginFrameSource(
-      task_runner, BeginFrameArgs::DefaultInterval()));
 }
 
 DisplayScheduler::~DisplayScheduler() {
@@ -59,7 +55,7 @@ void DisplayScheduler::ForceImmediateSwapIfPossible() {
   bool in_begin = inside_begin_frame_deadline_interval_;
   AttemptDrawAndSwap();
   if (in_begin)
-    begin_frame_source_->DidFinishFrame(0);
+    begin_frame_source_->DidFinishFrame(this, 0);
 }
 
 void DisplayScheduler::DisplayResized() {
@@ -293,7 +289,7 @@ void DisplayScheduler::OnBeginFrameDeadline() {
   TRACE_EVENT0("cc", "DisplayScheduler::OnBeginFrameDeadline");
 
   AttemptDrawAndSwap();
-  begin_frame_source_->DidFinishFrame(0);
+  begin_frame_source_->DidFinishFrame(this, 0);
 }
 
 void DisplayScheduler::DidSwapBuffers() {

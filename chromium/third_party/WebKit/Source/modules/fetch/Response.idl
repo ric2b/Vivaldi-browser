@@ -15,7 +15,6 @@ enum ResponseType { "basic", "cors", "default", "error", "opaque", "opaqueredire
     DependentLifetime,
     Exposed=(Window,Worker),
     RaisesException=Constructor,
-    GarbageCollected,
 ] interface Response {
     [CallWith=ExecutionContext] static Response error();
     [CallWith=ExecutionContext, RaisesException] static Response redirect(USVString url, optional unsigned short status = 302);
@@ -26,10 +25,9 @@ enum ResponseType { "basic", "cors", "default", "error", "opaque", "opaqueredire
     readonly attribute ByteString statusText;
     readonly attribute Headers headers;
 
-    [RaisesException] Response clone();
+    [RaisesException, CallWith=ScriptState] Response clone();
 
-    [ImplementedAs=bodyWithUseCounter] readonly attribute ReadableByteStream body;
-    [RuntimeEnabled=ResponseBodyWithV8ExtraStream, CallWith=ScriptState] any v8ExtraStreamBody();
+    [CallWith=ScriptState, ImplementedAs=bodyWithUseCounter] readonly attribute any body;
 };
 
 Response implements Body;

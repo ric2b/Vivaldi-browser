@@ -8,11 +8,12 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
+#include <utility>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
-#include "cc/surfaces/surface_id.h"
-#include "components/mus/public/interfaces/input_event_matcher.mojom.h"
+#include "components/mus/public/interfaces/event_matcher.mojom.h"
+#include "components/mus/ws/modal_window_controller.h"
 #include "components/mus/ws/server_window_observer.h"
 #include "ui/gfx/geometry/rect_f.h"
 
@@ -20,7 +21,6 @@ namespace ui {
 class Event;
 class KeyEvent;
 class LocatedEvent;
-class PointerEvent;
 }
 
 namespace mus {
@@ -42,8 +42,6 @@ class EventDispatcher : public ServerWindowObserver {
 
   void set_root(ServerWindow* root) { root_ = root; }
 
-  void set_surface_id(cc::SurfaceId surface_id) { surface_id_ = surface_id; }
-
   // Cancels capture and stops tracking any pointer events. This does not send
   // any events to the delegate.
   void Reset();
@@ -53,6 +51,10 @@ class EventDispatcher : public ServerWindowObserver {
     return mouse_pointer_last_location_;
   }
 
+  // If we still have the window of the last mouse move, returns true and sets
+  // the current cursor to use to |cursor_out|.
+  bool GetCurrentMouseCursor(int32_t* cursor_out);
+
   // |capture_window_| will receive all input. See window_tree.mojom for
   // details.
   ServerWindow* capture_window() { return capture_window_; }
@@ -61,10 +63,29 @@ class EventDispatcher : public ServerWindowObserver {
   // (indicated by returning |false|).
   bool SetCaptureWindow(ServerWindow* capture_window, bool in_nonclient_area);
 
+  // Adds a system modal window. The window remains modal to system until it is
+  // destroyed. There can exist multiple system modal windows, in which case the
+  // one that is visible and added most recently or shown most recently would be
+  // the active one.
+  void AddSystemModalWindow(ServerWindow* window);
+
+  // Checks if |modal_window| is a visible modal window that blocks current
+  // capture window and if that's the case, releases the capture.
+  void ReleaseCaptureBlockedByModalWindow(const ServerWindow* modal_window);
+
+  // Checks if the current capture window is blocked by any visible modal window
+  // and if that's the case, releases the capture.
+  void ReleaseCaptureBlockedByAnyModalWindow();
+
   // Retrieves the ServerWindow of the last mouse move.
   ServerWindow* mouse_cursor_source_window() const {
     return mouse_cursor_source_window_;
   }
+
+  // If the mouse cursor is still over |mouse_cursor_source_window_|, updates
+  // whether we are in the non-client area. Used when
+  // |mouse_cursor_source_window_| has changed its properties.
+  void UpdateNonClientAreaForCurrentWindow();
 
   // Possibly updates the cursor. If we aren't in an implicit capture, we take
   // the last known location of the mouse pointer, and look for the
@@ -119,7 +140,7 @@ class EventDispatcher : public ServerWindowObserver {
   //   when no buttons on the mouse are down.
   // This also generates exit events as appropriate. For example, if the mouse
   // moves between one window to another an exit is generated on the first.
-  void ProcessPointerEvent(const ui::PointerEvent& event);
+  void ProcessLocatedEvent(const ui::LocatedEvent& event);
 
   // Adds |pointer_target| to |pointer_targets_|.
   void StartTrackingPointer(int32_t pointer_id,
@@ -131,26 +152,29 @@ class EventDispatcher : public ServerWindowObserver {
   // Starts tracking the pointer for |event|, or if already tracking the
   // pointer sends the appropriate event to the delegate and updates the
   // currently tracked PointerTarget appropriately.
-  void UpdateTargetForPointer(const ui::PointerEvent& event);
+  void UpdateTargetForPointer(int32_t pointer_id,
+                              const ui::LocatedEvent& event);
 
-  // Returns a PointerTarget from the supplied Event.
-  PointerTarget PointerTargetForEvent(const ui::PointerEvent& event) const;
+  // Returns a PointerTarget from the supplied event.
+  PointerTarget PointerTargetForEvent(const ui::LocatedEvent& event) const;
 
   // Returns true if any pointers are in the pressed/down state.
   bool AreAnyPointersDown() const;
 
   // If |target->window| is valid, then passes the event to the delegate.
   void DispatchToPointerTarget(const PointerTarget& target,
-                               const ui::PointerEvent& event);
+                               const ui::LocatedEvent& event);
 
   // Stops sending pointer events to |window|. This does not remove the entry
   // for |window| from |pointer_targets_|, rather it nulls out the window. This
   // way we continue to eat events until the up/cancel is received.
   void CancelPointerEventsToTarget(ServerWindow* window);
 
-  // Returns true if we're currently an observer for |window|. We are an
-  // observer for a window if any pointer events are targeting it.
-  bool IsObservingWindow(ServerWindow* window);
+  // Used to observe a window. Can be called multiple times on a window. To
+  // unobserve a window, UnobserveWindow() should be called the same number of
+  // times.
+  void ObserveWindow(ServerWindow* winodw);
+  void UnobserveWindow(ServerWindow* winodw);
 
   // Returns an Accelerator bound to the specified code/flags, and of the
   // matching |phase|. Otherwise returns null.
@@ -166,20 +190,22 @@ class EventDispatcher : public ServerWindowObserver {
 
   EventDispatcherDelegate* delegate_;
   ServerWindow* root_;
-  ServerWindow* capture_window_;
 
+  ServerWindow* capture_window_;
   bool capture_window_in_nonclient_area_;
+
+  ModalWindowController modal_window_controller_;
+
   bool mouse_button_down_;
   ServerWindow* mouse_cursor_source_window_;
+  bool mouse_cursor_in_non_client_area_;
 
   // The on screen location of the mouse pointer. This can be outside the
   // bounds of |mouse_cursor_source_window_|, which can capture the cursor.
   gfx::Point mouse_pointer_last_location_;
 
-  cc::SurfaceId surface_id_;
-
-  using Entry = std::pair<uint32_t, scoped_ptr<Accelerator>>;
-  std::map<uint32_t, scoped_ptr<Accelerator>> accelerators_;
+  using Entry = std::pair<uint32_t, std::unique_ptr<Accelerator>>;
+  std::map<uint32_t, std::unique_ptr<Accelerator>> accelerators_;
 
   using PointerIdToTargetMap = std::map<int32_t, PointerTarget>;
   // |pointer_targets_| contains the active pointers. For a mouse based pointer
@@ -187,6 +213,9 @@ class EventDispatcher : public ServerWindowObserver {
   // touch based pointers the pointer is active while down and removed on
   // cancel or up.
   PointerIdToTargetMap pointer_targets_;
+
+  // Keeps track of number of observe requests for each observed window.
+  std::map<const ServerWindow*, uint8_t> observed_windows_;
 
   DISALLOW_COPY_AND_ASSIGN(EventDispatcher);
 };

@@ -5,11 +5,13 @@
 #include "content/browser/frame_host/render_frame_host_manager.h"
 
 #include <stdint.h>
+
 #include <utility>
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
 #include "base/time/time.h"
@@ -304,7 +306,7 @@ class RenderFrameHostManagerTest : public RenderViewHostImplTestHarness {
     WebUIControllerFactory::RegisterFactory(&factory_);
 #if !defined(OS_ANDROID)
     ImageTransportFactory::InitializeForUnitTests(
-        make_scoped_ptr(new NoTransportImageTransportFactory));
+        base::WrapUnique(new NoTransportImageTransportFactory));
 #endif
   }
 
@@ -443,7 +445,7 @@ class RenderFrameHostManagerTest : public RenderViewHostImplTestHarness {
           entry.restore_type() == NavigationEntryImpl::RESTORE_NONE
               ? FrameMsg_Navigate_Type::NORMAL
               : FrameMsg_Navigate_Type::RESTORE;
-      scoped_ptr<NavigationRequest> navigation_request =
+      std::unique_ptr<NavigationRequest> navigation_request =
           NavigationRequest::CreateBrowserInitiated(
               manager->frame_tree_node_, frame_entry->url(),
               frame_entry->referrer(), *frame_entry, entry, navigate_type,
@@ -519,7 +521,7 @@ TEST_F(RenderFrameHostManagerTest, NewTabPageProcesses) {
   EXPECT_FALSE(contents()->GetPendingMainFrame());
 
   // Make a second tab.
-  scoped_ptr<TestWebContents> contents2(
+  std::unique_ptr<TestWebContents> contents2(
       TestWebContents::Create(browser_context(), NULL));
 
   // Load the two URLs in the second tab. Note that the first navigation creates
@@ -685,7 +687,7 @@ TEST_F(RenderFrameHostManagerTest, UpdateFaviconURLWhilePendingSwapOut) {
 // widgets.
 TEST_F(RenderFrameHostManagerTest, GetRenderWidgetHostsReturnsActiveViews) {
   CreateSwappedOutRenderViewHost();
-  scoped_ptr<RenderWidgetHostIterator> widgets(
+  std::unique_ptr<RenderWidgetHostIterator> widgets(
       RenderWidgetHost::GetRenderWidgetHosts());
 
   // We know that there is the only one active widget. Another view is
@@ -705,12 +707,12 @@ TEST_F(RenderFrameHostManagerTest, GetRenderWidgetHostsReturnsActiveViews) {
 TEST_F(RenderFrameHostManagerTest,
        GetRenderWidgetHostsWithinGetAllRenderWidgetHosts) {
   CreateSwappedOutRenderViewHost();
-  scoped_ptr<RenderWidgetHostIterator> widgets(
+  std::unique_ptr<RenderWidgetHostIterator> widgets(
       RenderWidgetHost::GetRenderWidgetHosts());
 
   while (RenderWidgetHost* w = widgets->GetNextHost()) {
     bool found = false;
-    scoped_ptr<RenderWidgetHostIterator> all_widgets(
+    std::unique_ptr<RenderWidgetHostIterator> all_widgets(
         RenderWidgetHostImpl::GetAllRenderWidgetHosts());
     while (RenderWidgetHost* widget = all_widgets->GetNextHost()) {
       if (w == widget) {
@@ -737,11 +739,11 @@ TEST_F(RenderFrameHostManagerTest, ActiveFrameCountWhileSwappingInAndOut) {
 
   // Create 2 new tabs and simulate them being the opener chain for the main
   // tab.  They should be in the same SiteInstance.
-  scoped_ptr<TestWebContents> opener1(
+  std::unique_ptr<TestWebContents> opener1(
       TestWebContents::Create(browser_context(), instance1));
   contents()->SetOpener(opener1.get());
 
-  scoped_ptr<TestWebContents> opener2(
+  std::unique_ptr<TestWebContents> opener2(
       TestWebContents::Create(browser_context(), instance1));
   opener1->SetOpener(opener2.get());
 
@@ -899,7 +901,7 @@ TEST_F(RenderFrameHostManagerTest, Init) {
       SiteInstanceImpl::Create(browser_context());
   EXPECT_FALSE(instance->HasSite());
 
-  scoped_ptr<TestWebContents> web_contents(
+  std::unique_ptr<TestWebContents> web_contents(
       TestWebContents::Create(browser_context(), instance));
 
   RenderFrameHostManager* manager = web_contents->GetRenderManagerForTesting();
@@ -918,7 +920,7 @@ TEST_F(RenderFrameHostManagerTest, Init) {
 // Tests the Navigate function. We navigate three sites consecutively and check
 // how the pending/committed RenderViewHost are modified.
 TEST_F(RenderFrameHostManagerTest, Navigate) {
-  scoped_ptr<TestWebContents> web_contents(TestWebContents::Create(
+  std::unique_ptr<TestWebContents> web_contents(TestWebContents::Create(
       browser_context(), SiteInstance::Create(browser_context())));
   RenderViewHostChangedObserver change_observer(web_contents.get());
 
@@ -997,7 +999,7 @@ TEST_F(RenderFrameHostManagerTest, WebUI) {
   scoped_refptr<SiteInstance> instance =
       SiteInstance::Create(browser_context());
 
-  scoped_ptr<TestWebContents> web_contents(
+  std::unique_ptr<TestWebContents> web_contents(
       TestWebContents::Create(browser_context(), instance));
   RenderFrameHostManager* manager = web_contents->GetRenderManagerForTesting();
   RenderFrameHostImpl* initial_rfh = manager->current_frame_host();
@@ -1058,7 +1060,7 @@ TEST_F(RenderFrameHostManagerTest, WebUIInNewTab) {
   blank_instance->GetProcess()->Init();
 
   // Create a blank tab.
-  scoped_ptr<TestWebContents> web_contents1(
+  std::unique_ptr<TestWebContents> web_contents1(
       TestWebContents::Create(browser_context(), blank_instance));
   RenderFrameHostManager* manager1 =
       web_contents1->GetRenderManagerForTesting();
@@ -1091,7 +1093,7 @@ TEST_F(RenderFrameHostManagerTest, WebUIInNewTab) {
       host1->render_view_host()->GetEnabledBindings() & BINDINGS_POLICY_WEB_UI);
 
   // Now simulate clicking a link that opens in a new tab.
-  scoped_ptr<TestWebContents> web_contents2(
+  std::unique_ptr<TestWebContents> web_contents2(
       TestWebContents::Create(browser_context(), webui_instance));
   RenderFrameHostManager* manager2 =
       web_contents2->GetRenderManagerForTesting();
@@ -1202,7 +1204,7 @@ TEST_F(RenderFrameHostManagerTest, PageDoesBackAndReload) {
   params.should_update_history = false;
   params.gesture = NavigationGestureAuto;
   params.was_within_same_page = false;
-  params.is_post = false;
+  params.method = "GET";
   params.page_state = PageState::CreateFromURL(kUrl2);
 
   evil_rfh->SimulateNavigationStart(kUrl2);
@@ -1310,13 +1312,13 @@ TEST_F(RenderFrameHostManagerTest, CreateSwappedOutOpenerRFHs) {
 
   // Create 2 new tabs and simulate them being the opener chain for the main
   // tab.  They should be in the same SiteInstance.
-  scoped_ptr<TestWebContents> opener1(
+  std::unique_ptr<TestWebContents> opener1(
       TestWebContents::Create(browser_context(), site_instance1.get()));
   RenderFrameHostManager* opener1_manager =
       opener1->GetRenderManagerForTesting();
   contents()->SetOpener(opener1.get());
 
-  scoped_ptr<TestWebContents> opener2(
+  std::unique_ptr<TestWebContents> opener2(
       TestWebContents::Create(browser_context(), site_instance1.get()));
   RenderFrameHostManager* opener2_manager =
       opener2->GetRenderManagerForTesting();
@@ -1336,22 +1338,18 @@ TEST_F(RenderFrameHostManagerTest, CreateSwappedOutOpenerRFHs) {
   EXPECT_EQ(rvh1,
             manager->GetSwappedOutRenderViewHost(rvh1->GetSiteInstance()));
 
-  // Ensure a swapped out RFH and RFH is created in the first opener tab.
-  RenderFrameProxyHost* opener1_proxy =
-      opener1_manager->GetRenderFrameProxyHost(rfh2->GetSiteInstance());
-  RenderFrameHostImpl* opener1_rfh = opener1_proxy->render_frame_host();
+  // Ensure a proxy and swapped out RVH are created in the first opener tab.
+  EXPECT_TRUE(
+      opener1_manager->GetRenderFrameProxyHost(rfh2->GetSiteInstance()));
   TestRenderViewHost* opener1_rvh = static_cast<TestRenderViewHost*>(
       opener1_manager->GetSwappedOutRenderViewHost(rvh2->GetSiteInstance()));
-  EXPECT_FALSE(opener1_rfh);
   EXPECT_FALSE(opener1_rvh->is_active());
 
-  // Ensure a swapped out RFH and RVH is created in the second opener tab.
-  RenderFrameProxyHost* opener2_proxy =
-      opener2_manager->GetRenderFrameProxyHost(rfh2->GetSiteInstance());
-  RenderFrameHostImpl* opener2_rfh = opener2_proxy->render_frame_host();
+  // Ensure a proxy and swapped out RVH are created in the second opener tab.
+  EXPECT_TRUE(
+      opener2_manager->GetRenderFrameProxyHost(rfh2->GetSiteInstance()));
   TestRenderViewHost* opener2_rvh = static_cast<TestRenderViewHost*>(
       opener2_manager->GetSwappedOutRenderViewHost(rvh2->GetSiteInstance()));
-  EXPECT_FALSE(opener2_rfh);
   EXPECT_FALSE(opener2_rvh->is_active());
 
   // Navigate to a cross-BrowsingInstance URL.
@@ -1383,7 +1381,7 @@ TEST_F(RenderFrameHostManagerTest, DisownOpener) {
   scoped_refptr<SiteInstanceImpl> site_instance1 = rfh1->GetSiteInstance();
 
   // Create a new tab and simulate having it be the opener for the main tab.
-  scoped_ptr<TestWebContents> opener1(
+  std::unique_ptr<TestWebContents> opener1(
       TestWebContents::Create(browser_context(), rfh1->GetSiteInstance()));
   contents()->SetOpener(opener1.get());
   EXPECT_TRUE(contents()->HasOpener());
@@ -1410,7 +1408,7 @@ TEST_F(RenderFrameHostManagerTest, DisownSameSiteOpener) {
   TestRenderFrameHost* rfh1 = main_test_rfh();
 
   // Create a new tab and simulate having it be the opener for the main tab.
-  scoped_ptr<TestWebContents> opener1(
+  std::unique_ptr<TestWebContents> opener1(
       TestWebContents::Create(browser_context(), rfh1->GetSiteInstance()));
   contents()->SetOpener(opener1.get());
   EXPECT_TRUE(contents()->HasOpener());
@@ -1434,7 +1432,7 @@ TEST_F(RenderFrameHostManagerTest, DisownOpenerDuringNavigation) {
       main_test_rfh()->GetSiteInstance();
 
   // Create a new tab and simulate having it be the opener for the main tab.
-  scoped_ptr<TestWebContents> opener1(
+  std::unique_ptr<TestWebContents> opener1(
       TestWebContents::Create(browser_context(), site_instance1.get()));
   contents()->SetOpener(opener1.get());
   EXPECT_TRUE(contents()->HasOpener());
@@ -1476,7 +1474,7 @@ TEST_F(RenderFrameHostManagerTest, DisownOpenerAfterNavigation) {
       main_test_rfh()->GetSiteInstance();
 
   // Create a new tab and simulate having it be the opener for the main tab.
-  scoped_ptr<TestWebContents> opener1(
+  std::unique_ptr<TestWebContents> opener1(
       TestWebContents::Create(browser_context(), site_instance1.get()));
   contents()->SetOpener(opener1.get());
   EXPECT_TRUE(contents()->HasOpener());
@@ -1510,7 +1508,7 @@ TEST_F(RenderFrameHostManagerTest, CleanUpSwappedOutRVHOnProcessCrash) {
   TestRenderFrameHost* rfh1 = contents()->GetMainFrame();
 
   // Create a new tab as an opener for the main tab.
-  scoped_ptr<TestWebContents> opener1(
+  std::unique_ptr<TestWebContents> opener1(
       TestWebContents::Create(browser_context(), rfh1->GetSiteInstance()));
   RenderFrameHostManager* opener1_manager =
       opener1->GetRenderManagerForTesting();
@@ -1578,7 +1576,7 @@ TEST_F(RenderFrameHostManagerTest, EnableWebUIWithSwappedOutOpener) {
 
   // Create a new tab and simulate it being the opener for the main
   // tab.  It should be in the same SiteInstance.
-  scoped_ptr<TestWebContents> opener1(
+  std::unique_ptr<TestWebContents> opener1(
       TestWebContents::Create(browser_context(), rvh1->GetSiteInstance()));
   RenderFrameHostManager* opener1_manager =
       opener1->GetRenderManagerForTesting();
@@ -1592,13 +1590,11 @@ TEST_F(RenderFrameHostManagerTest, EnableWebUIWithSwappedOutOpener) {
   EXPECT_TRUE(rvh1->GetSiteInstance()->IsRelatedSiteInstance(
                   rvh2->GetSiteInstance()));
 
-  // Ensure a swapped out RFH and RVH is created in the first opener tab.
-  RenderFrameProxyHost* opener1_proxy =
-      opener1_manager->GetRenderFrameProxyHost(rvh2->GetSiteInstance());
-  RenderFrameHostImpl* opener1_rfh = opener1_proxy->render_frame_host();
+  // Ensure a proxy and swapped out RVH are created in the first opener tab.
+  EXPECT_TRUE(
+      opener1_manager->GetRenderFrameProxyHost(rvh2->GetSiteInstance()));
   TestRenderViewHost* opener1_rvh = static_cast<TestRenderViewHost*>(
       opener1_manager->GetSwappedOutRenderViewHost(rvh2->GetSiteInstance()));
-  EXPECT_FALSE(opener1_rfh);
   EXPECT_FALSE(opener1_rvh->is_active());
 
   // Ensure the new RVH has WebUI bindings.
@@ -1610,7 +1606,7 @@ TEST_F(RenderFrameHostManagerTest, NoSwapOnGuestNavigations) {
   GURL guest_url(std::string(kGuestScheme).append("://abc123"));
   scoped_refptr<SiteInstance> instance =
       SiteInstance::CreateForURL(browser_context(), guest_url);
-  scoped_ptr<TestWebContents> web_contents(
+  std::unique_ptr<TestWebContents> web_contents(
       TestWebContents::Create(browser_context(), instance));
 
   RenderFrameHostManager* manager = web_contents->GetRenderManagerForTesting();
@@ -1667,7 +1663,7 @@ TEST_F(RenderFrameHostManagerTest, NavigateWithEarlyClose) {
       SiteInstance::Create(browser_context());
 
   BeforeUnloadFiredWebContentsDelegate delegate;
-  scoped_ptr<TestWebContents> web_contents(
+  std::unique_ptr<TestWebContents> web_contents(
       TestWebContents::Create(browser_context(), instance));
   RenderViewHostChangedObserver change_observer(web_contents.get());
   web_contents->SetDelegate(&delegate);
@@ -2076,7 +2072,7 @@ TEST_F(RenderFrameHostManagerTestWithSiteIsolation,
 
   // |contents1| and |contents2| navigate to the same page and then crash.
   TestWebContents* contents1 = contents();
-  scoped_ptr<TestWebContents> contents2(
+  std::unique_ptr<TestWebContents> contents2(
       TestWebContents::Create(browser_context(), contents1->GetSiteInstance()));
   contents1->NavigateAndCommit(kUrl1);
   contents2->NavigateAndCommit(kUrl1);
@@ -2192,10 +2188,10 @@ TEST_F(RenderFrameHostManagerTest, CreateOpenerProxiesWithCycleOnOpenerChain) {
   //        |       ^
   //        +-------+
   //
-  scoped_ptr<TestWebContents> tab1(
+  std::unique_ptr<TestWebContents> tab1(
       TestWebContents::Create(browser_context(), site_instance1.get()));
   RenderFrameHostManager* tab1_manager = tab1->GetRenderManagerForTesting();
-  scoped_ptr<TestWebContents> tab2(
+  std::unique_ptr<TestWebContents> tab2(
       TestWebContents::Create(browser_context(), site_instance1.get()));
   RenderFrameHostManager* tab2_manager = tab2->GetRenderManagerForTesting();
 
@@ -2250,7 +2246,7 @@ TEST_F(RenderFrameHostManagerTest, CreateOpenerProxiesWhenOpenerPointsToSelf) {
   scoped_refptr<SiteInstanceImpl> site_instance1 = rfh1->GetSiteInstance();
 
   // Create an opener tab, and simulate that its opener points to itself.
-  scoped_ptr<TestWebContents> opener(
+  std::unique_ptr<TestWebContents> opener(
       TestWebContents::Create(browser_context(), site_instance1.get()));
   RenderFrameHostManager* opener_manager = opener->GetRenderManagerForTesting();
   contents()->SetOpener(opener.get());
@@ -2311,7 +2307,7 @@ TEST_F(RenderFrameHostManagerTest, TraverseComplexOpenerChain) {
                   std::string(), "uniqueName1", blink::WebSandboxFlags::None,
                   blink::WebFrameOwnerProperties());
 
-  scoped_ptr<TestWebContents> tab2(
+  std::unique_ptr<TestWebContents> tab2(
       TestWebContents::Create(browser_context(), nullptr));
   tab2->NavigateAndCommit(GURL("http://tab2.com"));
   FrameTree* tree2 = tab2->GetFrameTree();
@@ -2324,12 +2320,12 @@ TEST_F(RenderFrameHostManagerTest, TraverseComplexOpenerChain) {
                   std::string(), "uniqueName3", blink::WebSandboxFlags::None,
                   blink::WebFrameOwnerProperties());
 
-  scoped_ptr<TestWebContents> tab3(
+  std::unique_ptr<TestWebContents> tab3(
       TestWebContents::Create(browser_context(), nullptr));
   FrameTree* tree3 = tab3->GetFrameTree();
   FrameTreeNode* root3 = tree3->root();
 
-  scoped_ptr<TestWebContents> tab4(
+  std::unique_ptr<TestWebContents> tab4(
       TestWebContents::Create(browser_context(), nullptr));
   tab4->NavigateAndCommit(GURL("http://tab4.com"));
   FrameTree* tree4 = tab4->GetFrameTree();
@@ -2532,14 +2528,14 @@ TEST_F(RenderFrameHostManagerTest, RestoreNavigationToWebUI) {
   scoped_refptr<SiteInstanceImpl> initial_instance =
       SiteInstanceImpl::Create(browser_context());
   initial_instance->SetSite(kInitUrl);
-  scoped_ptr<TestWebContents> web_contents(
+  std::unique_ptr<TestWebContents> web_contents(
       TestWebContents::Create(browser_context(), initial_instance));
   RenderFrameHostManager* manager = web_contents->GetRenderManagerForTesting();
   NavigationControllerImpl& controller = web_contents->GetController();
 
   // Setup a restored entry.
-  std::vector<scoped_ptr<NavigationEntry>> entries;
-  scoped_ptr<NavigationEntry> new_entry =
+  std::vector<std::unique_ptr<NavigationEntry>> entries;
+  std::unique_ptr<NavigationEntry> new_entry =
       NavigationControllerImpl::CreateNavigationEntry(
           kInitUrl, Referrer(), ui::PAGE_TRANSITION_TYPED, false, std::string(),
           browser_context());
@@ -2786,7 +2782,7 @@ TEST_F(RenderFrameHostManagerTest, CanCommitOrigin) {
   params.should_update_history = false;
   params.gesture = NavigationGestureAuto;
   params.was_within_same_page = false;
-  params.is_post = false;
+  params.method = "GET";
   params.page_state = PageState::CreateFromURL(kUrlBar);
 
   struct TestCase {
@@ -2857,7 +2853,7 @@ TEST_F(RenderFrameHostManagerTestWithBrowserSideNavigation,
                             ui::PAGE_TRANSITION_TYPED,
                             false /* is_renderer_init */);
   FrameNavigationEntry* frame_entry = entry.root_node()->frame_entry.get();
-  scoped_ptr<NavigationRequest> navigation_request =
+  std::unique_ptr<NavigationRequest> navigation_request =
       NavigationRequest::CreateBrowserInitiated(
           contents()->GetFrameTree()->root(), frame_entry->url(),
           frame_entry->referrer(), *frame_entry, entry,
@@ -2918,7 +2914,7 @@ TEST_F(RenderFrameHostManagerTestWithBrowserSideNavigation,
                             ui::PAGE_TRANSITION_TYPED,
                             false /* is_renderer_init */);
   FrameNavigationEntry* frame_entry = entry.root_node()->frame_entry.get();
-  scoped_ptr<NavigationRequest> navigation_request =
+  std::unique_ptr<NavigationRequest> navigation_request =
       NavigationRequest::CreateBrowserInitiated(
           contents()->GetFrameTree()->root(), frame_entry->url(),
           frame_entry->referrer(), *frame_entry, entry,
@@ -2976,7 +2972,7 @@ TEST_F(RenderFrameHostManagerTestWithBrowserSideNavigation,
                             ui::PAGE_TRANSITION_TYPED,
                             false /* is_renderer_init */);
   FrameNavigationEntry* frame_entry = entry.root_node()->frame_entry.get();
-  scoped_ptr<NavigationRequest> navigation_request =
+  std::unique_ptr<NavigationRequest> navigation_request =
       NavigationRequest::CreateBrowserInitiated(
           contents()->GetFrameTree()->root(), frame_entry->url(),
           frame_entry->referrer(), *frame_entry, entry,
@@ -3094,7 +3090,7 @@ TEST_F(RenderFrameHostManagerTestWithSiteIsolation,
   commit_params.should_update_history = false;
   commit_params.gesture = NavigationGestureAuto;
   commit_params.was_within_same_page = false;
-  commit_params.is_post = false;
+  commit_params.method = "GET";
   commit_params.page_state = PageState::CreateFromURL(kUrl3);
   commit_params.should_enforce_strict_mixed_content_checking = false;
   child_host->SendNavigateWithParams(&commit_params);

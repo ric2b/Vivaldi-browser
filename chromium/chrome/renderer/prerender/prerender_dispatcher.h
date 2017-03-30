@@ -6,12 +6,12 @@
 #define CHROME_RENDERER_PRERENDER_PRERENDER_DISPATCHER_H_
 
 #include <map>
+#include <memory>
 #include <set>
 #include <vector>
 
 #include "base/compiler_specific.h"
-#include "base/memory/scoped_ptr.h"
-#include "content/public/renderer/render_process_observer.h"
+#include "content/public/renderer/render_thread_observer.h"
 #include "third_party/WebKit/public/platform/WebPrerender.h"
 #include "third_party/WebKit/public/platform/WebPrerenderingSupport.h"
 
@@ -23,7 +23,7 @@ namespace prerender {
 // prerenders were launched from this renderer, and ensures prerender navigation
 // is triggered on navigation to those. It implements the prerendering interface
 // supplied to WebKit.
-class PrerenderDispatcher : public content::RenderProcessObserver,
+class PrerenderDispatcher : public content::RenderThreadObserver,
                             public blink::WebPrerenderingSupport {
  public:
   PrerenderDispatcher();
@@ -42,7 +42,7 @@ class PrerenderDispatcher : public content::RenderProcessObserver,
   void OnPrerenderRemoveAliases(const std::vector<GURL>& aliases);
   void OnPrerenderStop(int prerender_id);
 
-  // From RenderProcessObserver:
+  // From RenderThreadObserver:
   bool OnControlMessageReceived(const IPC::Message& message) override;
   void OnRenderProcessShutdown() override;
 

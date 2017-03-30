@@ -252,6 +252,7 @@ PseudoId CSSSelector::pseudoId(PseudoType type)
     case PseudoInRange:
     case PseudoOutOfRange:
     case PseudoWebKitCustomElement:
+    case PseudoBlinkInternalElement:
     case PseudoCue:
     case PseudoFutureCue:
     case PseudoPastCue:
@@ -264,6 +265,7 @@ PseudoId CSSSelector::pseudoId(PseudoType type)
     case PseudoFullScreenAncestor:
     case PseudoSpatialNavigationFocus:
     case PseudoListBox:
+    case PseudoHostHasAppearance:
     case PseudoSlotted:
         return PseudoIdNone;
     }
@@ -285,6 +287,12 @@ const static NameToPseudoStruct pseudoTypeWithoutArgumentsMap[] = {
 {"-internal-list-box",            CSSSelector::PseudoListBox},
 {"-internal-media-controls-cast-button", CSSSelector::PseudoWebKitCustomElement},
 {"-internal-media-controls-overlay-cast-button", CSSSelector::PseudoWebKitCustomElement},
+{"-internal-media-controls-text-track-list", CSSSelector::PseudoWebKitCustomElement},
+{"-internal-media-controls-text-track-list-item", CSSSelector::PseudoWebKitCustomElement},
+{"-internal-media-controls-text-track-list-item-input", CSSSelector::PseudoWebKitCustomElement},
+{"-internal-media-controls-text-track-list-kind-captions", CSSSelector::PseudoWebKitCustomElement},
+{"-internal-media-controls-text-track-list-kind-subtitles", CSSSelector::PseudoWebKitCustomElement},
+{"-internal-shadow-host-has-appearance", CSSSelector::PseudoHostHasAppearance},
 {"-internal-spatial-navigation-focus", CSSSelector::PseudoSpatialNavigationFocus},
 {"-webkit-any-link",              CSSSelector::PseudoAnyLink},
 {"-webkit-autofill",              CSSSelector::PseudoAutofill},
@@ -448,6 +456,8 @@ CSSSelector::PseudoType CSSSelector::parsePseudoType(const AtomicString& name, b
 
     if (name.startsWith("-webkit-"))
         return PseudoWebKitCustomElement;
+    if (name.startsWith("-internal-"))
+        return PseudoBlinkInternalElement;
 
     return PseudoUnknown;
 }
@@ -481,6 +491,7 @@ void CSSSelector::updatePseudoType(const AtomicString& value, bool hasArguments)
     case PseudoScrollbarTrackPiece:
     case PseudoSelection:
     case PseudoWebKitCustomElement:
+    case PseudoBlinkInternalElement:
     case PseudoContent:
     case PseudoShadow:
     case PseudoSlotted:
@@ -517,6 +528,7 @@ void CSSSelector::updatePseudoType(const AtomicString& value, bool hasArguments)
     case PseudoHorizontal:
     case PseudoHost:
     case PseudoHostContext:
+    case PseudoHostHasAppearance:
     case PseudoHover:
     case PseudoInRange:
     case PseudoIncrement:
@@ -751,7 +763,7 @@ void CSSSelector::setArgument(const AtomicString& value)
 void CSSSelector::setSelectorList(PassOwnPtr<CSSSelectorList> selectorList)
 {
     createRareData();
-    m_data.m_rareData->m_selectorList = selectorList;
+    m_data.m_rareData->m_selectorList = std::move(selectorList);
 }
 
 static bool validateSubSelector(const CSSSelector* selector)
@@ -799,6 +811,7 @@ static bool validateSubSelector(const CSSSelector* selector)
     case CSSSelector::PseudoNot:
     case CSSSelector::PseudoSpatialNavigationFocus:
     case CSSSelector::PseudoListBox:
+    case CSSSelector::PseudoHostHasAppearance:
         return true;
     default:
         return false;

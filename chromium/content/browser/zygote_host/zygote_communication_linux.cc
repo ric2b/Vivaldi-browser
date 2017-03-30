@@ -25,6 +25,7 @@
 #include "content/public/common/result_codes.h"
 #include "sandbox/linux/services/namespace_sandbox.h"
 #include "sandbox/linux/suid/client/setuid_sandbox_host.h"
+#include "ui/display/display_switches.h"
 #include "ui/gfx/switches.h"
 
 #include "base/vivaldi_switches.h"
@@ -108,9 +109,10 @@ ssize_t ZygoteCommunication::ReadReply(void* buf, size_t buf_len) {
   return HANDLE_EINTR(read(control_fd_, buf, buf_len));
 }
 
-pid_t ZygoteCommunication::ForkRequest(const std::vector<std::string>& argv,
-                                       scoped_ptr<FileDescriptorInfo> mapping,
-                                       const std::string& process_type) {
+pid_t ZygoteCommunication::ForkRequest(
+    const std::vector<std::string>& argv,
+    std::unique_ptr<FileDescriptorInfo> mapping,
+    const std::string& process_type) {
   DCHECK(init_);
 
   base::Pickle pickle;
@@ -281,7 +283,7 @@ void ZygoteCommunication::Init() {
   // Append any switches from the browser process that need to be forwarded on
   // to the zygote/renderers.
   // Should this list be obtained from browser_render_process_host.cc?
-  static const char* kForwardSwitches[] = {
+  static const char* const kForwardSwitches[] = {
       switches::kAllowSandboxDebugging, switches::kAndroidFontsPath,
       switches::kDisableSeccompFilterSandbox,
       switches::kEnableHeapProfiling,
@@ -312,7 +314,7 @@ void ZygoteCommunication::Init() {
 
   base::ScopedFD dummy_fd;
   if (using_suid_sandbox) {
-    scoped_ptr<sandbox::SetuidSandboxHost> sandbox_host(
+    std::unique_ptr<sandbox::SetuidSandboxHost> sandbox_host(
         sandbox::SetuidSandboxHost::Create());
     sandbox_host->PrependWrapper(&cmd_line);
     sandbox_host->SetupLaunchOptions(&options, &fds_to_map, &dummy_fd);

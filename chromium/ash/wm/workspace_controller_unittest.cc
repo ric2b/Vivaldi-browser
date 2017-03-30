@@ -16,10 +16,12 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/test/shell_test_api.h"
 #include "ash/test/test_shelf_delegate.h"
-#include "ash/wm/panels/panel_layout_manager.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/aura/wm_window_aura.h"
+#include "ash/wm/common/panels/panel_layout_manager.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/common/workspace/workspace_window_resizer.h"
+#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm/workspace/workspace_window_resizer.h"
 #include "base/strings/string_number_conversions.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
@@ -30,9 +32,9 @@
 #include "ui/base/ui_base_types.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
+#include "ui/display/screen.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/test/event_generator.h"
-#include "ui/gfx/screen.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/window_animations.h"
 #include "ui/wm/core/window_util.h"
@@ -126,9 +128,8 @@ class WorkspaceControllerTest : public test::AshTestBase {
     test::TestShelfDelegate* shelf_delegate =
         test::TestShelfDelegate::instance();
     shelf_delegate->AddShelfItem(window);
-    PanelLayoutManager* manager = static_cast<PanelLayoutManager*>(
-        Shell::GetContainer(window->GetRootWindow(),
-                            kShellWindowId_PanelContainer)->layout_manager());
+    PanelLayoutManager* manager =
+        PanelLayoutManager::Get(wm::WmWindowAura::Get(window));
     manager->Relayout();
     return window;
   }
@@ -139,7 +140,9 @@ class WorkspaceControllerTest : public test::AshTestBase {
   }
 
   gfx::Rect GetFullscreenBounds(aura::Window* window) {
-    return gfx::Screen::GetScreen()->GetDisplayNearestWindow(window).bounds();
+    return display::Screen::GetScreen()
+        ->GetDisplayNearestWindow(window)
+        .bounds();
   }
 
   ShelfWidget* shelf_widget() {
@@ -508,12 +511,13 @@ TEST_F(WorkspaceControllerTest, MinimizeResetsVisibility) {
   w1->Show();
   wm::ActivateWindow(w1.get());
   w1->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_MAXIMIZED);
-  EXPECT_EQ(SHELF_BACKGROUND_MAXIMIZED, shelf_widget()->GetBackgroundType());
+  EXPECT_EQ(wm::SHELF_BACKGROUND_MAXIMIZED,
+            shelf_widget()->GetBackgroundType());
 
   w1->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_MINIMIZED);
   EXPECT_EQ(SHELF_VISIBLE,
             shelf_layout_manager()->visibility_state());
-  EXPECT_EQ(SHELF_BACKGROUND_DEFAULT, shelf_widget()->GetBackgroundType());
+  EXPECT_EQ(wm::SHELF_BACKGROUND_DEFAULT, shelf_widget()->GetBackgroundType());
 }
 
 // Verifies window visibility during various workspace changes.
@@ -626,7 +630,7 @@ TEST_F(WorkspaceControllerTest, MoveOnSwitch) {
   // Increase the size of the WorkAreaInsets. This would make |w1| fall
   // completely out of the display work area.
   gfx::Insets insets =
-      gfx::Screen::GetScreen()->GetPrimaryDisplay().GetWorkAreaInsets();
+      display::Screen::GetScreen()->GetPrimaryDisplay().GetWorkAreaInsets();
   insets.Set(0, 0, insets.bottom() + 30, 0);
   Shell::GetInstance()->SetDisplayWorkAreaInsets(w1.get(), insets);
 
@@ -1061,8 +1065,8 @@ TEST_F(WorkspaceControllerTest, TestRestoreToUserModifiedBounds) {
 
   // A user moved the window.
   std::unique_ptr<WindowResizer> resizer(
-      CreateWindowResizer(window1.get(), gfx::Point(), HTCAPTION,
-                          aura::client::WINDOW_MOVE_SOURCE_MOUSE)
+      CreateWindowResizer(wm::WmWindowAura::Get(window1.get()), gfx::Point(),
+                          HTCAPTION, aura::client::WINDOW_MOVE_SOURCE_MOUSE)
           .release());
   gfx::Point location = resizer->GetInitialLocation();
   location.Offset(-50, 0);

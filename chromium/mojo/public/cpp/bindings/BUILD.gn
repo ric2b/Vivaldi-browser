@@ -5,6 +5,9 @@
 source_set("bindings") {
   sources = [
     "array.h",
+    "array_traits.h",
+    "array_traits_standard.h",
+    "array_traits_stl.h",
     "associated_binding.h",
     "associated_group.h",
     "associated_interface_ptr.h",
@@ -19,13 +22,10 @@ source_set("bindings") {
     "lib/array_internal.cc",
     "lib/array_internal.h",
     "lib/array_serialization.h",
-    "lib/array_serialization_traits.h",
     "lib/associated_group.cc",
     "lib/associated_interface_ptr_state.h",
     "lib/binding_state.h",
     "lib/bindings_internal.h",
-    "lib/bindings_serialization.cc",
-    "lib/bindings_serialization.h",
     "lib/bounds_checker.cc",
     "lib/bounds_checker.h",
     "lib/buffer.h",
@@ -44,11 +44,12 @@ source_set("bindings") {
     "lib/interface_endpoint_controller.h",
     "lib/interface_id.h",
     "lib/interface_ptr_state.h",
-    "lib/macros.h",
     "lib/map_data_internal.h",
     "lib/map_internal.h",
     "lib/map_serialization.h",
     "lib/message.cc",
+    "lib/message_buffer.cc",
+    "lib/message_buffer.h",
     "lib/message_builder.cc",
     "lib/message_builder.h",
     "lib/message_filter.cc",
@@ -57,9 +58,12 @@ source_set("bindings") {
     "lib/message_internal.h",
     "lib/multiplex_router.cc",
     "lib/multiplex_router.h",
+    "lib/native_struct.cc",
+    "lib/native_struct_data.cc",
+    "lib/native_struct_data.h",
+    "lib/native_struct_serialization.cc",
+    "lib/native_struct_serialization.h",
     "lib/no_interface.cc",
-    "lib/pickle_buffer.cc",
-    "lib/pickle_buffer.h",
     "lib/pipe_control_message_handler.cc",
     "lib/pipe_control_message_handler.h",
     "lib/pipe_control_message_handler_delegate.h",
@@ -68,11 +72,14 @@ source_set("bindings") {
     "lib/router.cc",
     "lib/router.h",
     "lib/scoped_interface_endpoint_handle.cc",
-    "lib/scoped_interface_endpoint_handle.h",
     "lib/serialization.h",
+    "lib/serialization_context.cc",
+    "lib/serialization_context.h",
     "lib/serialization_forward.h",
-    "lib/string_serialization.cc",
+    "lib/serialization_util.cc",
+    "lib/serialization_util.h",
     "lib/string_serialization.h",
+    "lib/string_traits_string16.cc",
     "lib/sync_handle_registry.cc",
     "lib/sync_handle_registry.h",
     "lib/sync_handle_watcher.cc",
@@ -84,24 +91,27 @@ source_set("bindings") {
     "lib/validation_util.cc",
     "lib/validation_util.h",
     "lib/value_traits.h",
-
-    # Include the .h but not the .cc file. The .h file is used by
-    # serialization_forward.h.
-    "lib/wtf_string_serialization.h",
     "map.h",
     "message.h",
     "message_filter.h",
+    "native_struct.h",
     "no_interface.h",
+    "scoped_interface_endpoint_handle.h",
     "stl_converters.h",
     "string.h",
+    "string_traits.h",
+    "string_traits_standard.h",
+    "string_traits_stl.h",
+    "string_traits_string16.h",
+    "string_traits_string_piece.h",
     "strong_binding.h",
     "struct_ptr.h",
-    "struct_traits.h",
     "type_converter.h",
   ]
 
   public_deps = [
     ":callback",
+    ":struct_traits",
     "//base",
     "//ipc:param_traits",
     "//mojo/public/cpp/system",
@@ -128,12 +138,19 @@ source_set("callback") {
   ]
 }
 
+source_set("struct_traits") {
+  sources = [
+    "struct_traits.h",
+  ]
+}
+
 source_set("wtf_support") {
   sources = [
-    "lib/wtf_array_serialization.h",
+    "array_traits_wtf.h",
+    "array_traits_wtf_vector.h",
+    "lib/string_traits_wtf.cc",
     "lib/wtf_serialization.h",
-    "lib/wtf_string_serialization.cc",
-    "lib/wtf_string_serialization.h",
+    "string_traits_wtf.h",
     "wtf_array.h",
   ]
 

@@ -32,7 +32,6 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/Microtask.h"
-#include "core/dom/ExceptionCode.h"
 #include "core/dom/MutationCallback.h"
 #include "core/dom/MutationObserverInit.h"
 #include "core/dom/MutationObserverRegistration.h"
@@ -52,13 +51,13 @@ struct MutationObserver::ObserverLessThan {
     }
 };
 
-RawPtr<MutationObserver> MutationObserver::create(RawPtr<MutationCallback> callback)
+MutationObserver* MutationObserver::create(MutationCallback* callback)
 {
     DCHECK(isMainThread());
     return new MutationObserver(callback);
 }
 
-MutationObserver::MutationObserver(RawPtr<MutationCallback> callback)
+MutationObserver::MutationObserver(MutationCallback* callback)
     : m_callback(callback)
     , m_priority(s_observerPriority++)
 {
@@ -66,9 +65,6 @@ MutationObserver::MutationObserver(RawPtr<MutationCallback> callback)
 
 MutationObserver::~MutationObserver()
 {
-#if !ENABLE(OILPAN)
-    DCHECK(m_registrations.isEmpty());
-#endif
     cancelInspectorAsyncTasks();
 }
 
@@ -175,7 +171,7 @@ static MutationObserverSet& suspendedMutationObservers()
     return suspendedObservers;
 }
 
-static void activateObserver(RawPtr<MutationObserver> observer)
+static void activateObserver(MutationObserver* observer)
 {
     if (activeMutationObservers().isEmpty())
         Microtask::enqueueMicrotask(WTF::bind(&MutationObserver::deliverMutations));
@@ -183,7 +179,7 @@ static void activateObserver(RawPtr<MutationObserver> observer)
     activeMutationObservers().add(observer);
 }
 
-void MutationObserver::enqueueMutationRecord(RawPtr<MutationRecord> mutation)
+void MutationObserver::enqueueMutationRecord(MutationRecord* mutation)
 {
     DCHECK(isMainThread());
     m_records.append(mutation);

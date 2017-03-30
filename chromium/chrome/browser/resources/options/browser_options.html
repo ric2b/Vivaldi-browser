@@ -519,11 +519,18 @@
   <section id="bluetooth-devices" hidden>
     <h3 i18n-content="bluetooth"></h3>
     <div id="bluetooth-options-div">
-      <div class="checkbox">
+      <div class="checkbox controlled-setting-with-label">
         <label>
           <input type="checkbox" id="enable-bluetooth"
                  metric="Options_BluetoothEnabled">
-          <span i18n-content="enableBluetooth">
+          <span>
+            <span i18n-content="enableBluetooth"></span>
+            <span id="bluetooth-controlled-setting-indicator"
+                  class="controlled-setting-indicator"
+                  pref="cros.device.allow_bluetooth"
+                  hidden="true">
+            </span>
+          </span>
         </label>
       </div>
       <div class="settings-list bluetooth-device-list" hidden>
@@ -964,6 +971,19 @@
             <span i18n-content="accessibilityVirtualKeyboard"></span>
             <span class="controlled-setting-indicator"
                 pref="settings.a11y.virtual_keyboard"></span>
+          </span>
+        </label>
+      </div>
+    </div>
+    <div class="option-name" id="accessibility_mono_audio">
+      <div class="checkbox controlled-setting-with-label">
+        <label>
+          <input pref="settings.a11y.mono_audio" type="checkbox"
+              metric="Options_AccessibilityMonoAudio">
+          <span>
+            <span i18n-content="accessibilityMonoAudio"></span>
+            <span class="controlled-setting-indicator"
+                pref="settings.a11y.mono_audio"></span>
           </span>
         </label>
       </div>

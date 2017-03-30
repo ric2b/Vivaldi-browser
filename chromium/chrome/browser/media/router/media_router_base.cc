@@ -5,6 +5,7 @@
 #include "chrome/browser/media/router/media_router_base.h"
 
 #include "base/bind.h"
+#include "base/guid.h"
 #include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -12,9 +13,39 @@
 
 namespace media_router {
 
-MediaRouterBase::MediaRouterBase() = default;
+// A MediaRoutesObserver that maintains state about the current set of media
+// routes.
+class MediaRouterBase::InternalMediaRoutesObserver
+    : public MediaRoutesObserver {
+ public:
+  explicit InternalMediaRoutesObserver(MediaRouter* router)
+      : MediaRoutesObserver(router), has_route(false) {}
+  ~InternalMediaRoutesObserver() override {}
 
-MediaRouterBase::~MediaRouterBase() = default;
+  // MediaRoutesObserver
+  void OnRoutesUpdated(
+      const std::vector<MediaRoute>& routes,
+      const std::vector<MediaRoute::Id>& joinable_route_ids) override {
+    off_the_record_route_ids.clear();
+    // TODO(crbug.com/611486): Have the MRPM pass a list of joinable route ids
+    // via |joinable_route_ids|, and check here if it is non-empty.
+    has_route = !routes.empty();
+    for (const auto& route : routes) {
+      if (route.off_the_record())
+        off_the_record_route_ids.push_back(route.media_route_id());
+    }
+  }
+
+  bool has_route;
+  std::vector<MediaRoute::Id> off_the_record_route_ids;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(InternalMediaRoutesObserver);
+};
+
+MediaRouterBase::~MediaRouterBase() {
+  CHECK(!internal_routes_observer_);
+}
 
 std::unique_ptr<PresentationConnectionStateSubscription>
 MediaRouterBase::AddPresentationConnectionStateChangedCallback(
@@ -36,26 +67,21 @@ MediaRouterBase::AddPresentationConnectionStateChangedCallback(
 }
 
 void MediaRouterBase::OnOffTheRecordProfileShutdown() {
-  // TODO(mfoltz): There is a race condition where off-the-record routes created
-  // by pending CreateRoute requests won't be terminated.  Fixing this would
-  // extra bookeeping of route requests in progress, and a way to cancel them
-  // in-flight.
-  for (auto route_ids_it = off_the_record_route_ids_.begin();
-       route_ids_it != off_the_record_route_ids_.end();
-       /* no-op */) {
-    // TerminateRoute will erase |route_id| from |off_the_record_route_ids_|,
-    // make a copy as the iterator will be invalidated.
-    const MediaRoute::Id route_id = *route_ids_it++;
+  for (const auto& route_id :
+       internal_routes_observer_->off_the_record_route_ids)
     TerminateRoute(route_id);
-  }
+}
+
+MediaRouterBase::MediaRouterBase() : initialized_(false) {}
+
+// static
+std::string MediaRouterBase::CreatePresentationId() {
+  return "mr_" + base::GenerateGUID();
 }
 
 void MediaRouterBase::NotifyPresentationConnectionStateChange(
     const MediaRoute::Id& route_id,
     content::PresentationConnectionState state) {
-  if (state == content::PRESENTATION_CONNECTION_STATE_TERMINATED)
-    OnRouteTerminated(route_id);
-
   auto* callbacks = presentation_connection_state_callbacks_.get(route_id);
   if (!callbacks)
     return;
@@ -78,15 +104,16 @@ void MediaRouterBase::NotifyPresentationConnectionClose(
   callbacks->Notify(info);
 }
 
-void MediaRouterBase::OnOffTheRecordRouteCreated(
-    const MediaRoute::Id& route_id) {
-  DCHECK(!ContainsKey(off_the_record_route_ids_, route_id));
-  off_the_record_route_ids_.insert(route_id);
+bool MediaRouterBase::HasJoinableRoute() const {
+  return internal_routes_observer_->has_route;
 }
 
-void MediaRouterBase::OnRouteTerminated(const MediaRoute::Id& route_id) {
-  // NOTE: This is called for all routes (off the record or not).
-  off_the_record_route_ids_.erase(route_id);
+void MediaRouterBase::Initialize() {
+  DCHECK(!initialized_);
+  // The observer calls virtual methods on MediaRouter; it must be created
+  // outside of the ctor
+  internal_routes_observer_.reset(new InternalMediaRoutesObserver(this));
+  initialized_ = true;
 }
 
 void MediaRouterBase::OnPresentationConnectionStateCallbackRemoved(
@@ -94,6 +121,12 @@ void MediaRouterBase::OnPresentationConnectionStateCallbackRemoved(
   auto* callbacks = presentation_connection_state_callbacks_.get(route_id);
   if (callbacks && callbacks->empty())
     presentation_connection_state_callbacks_.erase(route_id);
+}
+
+void MediaRouterBase::Shutdown() {
+  // The observer calls virtual methods on MediaRouter; it must be destroyed
+  // outside of the dtor
+  internal_routes_observer_.reset();
 }
 
 }  // namespace media_router

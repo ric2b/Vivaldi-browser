@@ -6,8 +6,8 @@ package org.chromium.chrome.browser.preferences;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.preference.PreferenceManager;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.crash.MinidumpUploadService.ProcessType;
@@ -43,8 +43,11 @@ public class ChromePreferenceManager {
     private static final String CONTEXTUAL_SEARCH_LAST_ANIMATION_TIME =
             "contextual_search_last_animation_time";
     private static final String ENABLE_CUSTOM_TABS = "enable_custom_tabs";
+    private static final String CONTEXTUAL_SEARCH_TAP_QUICK_ANSWER_COUNT =
+            "contextual_search_tap_quick_answer_count";
     private static final String HERB_FLAVOR_KEY = "herb_flavor";
-    private static final String FORCED_TO_MIGRATE_KEY = "forced_to_migrate";
+    private static final String APP_LINK_KEY = "applink.app_link_enabled";
+    private static final String CHROME_DEFAULT_BROWSER = "applink.chrome_default_browser";
 
     private static final String SUCCESS_UPLOAD_SUFFIX = "_crash_success_upload";
     private static final String FAILURE_UPLOAD_SUFFIX = "_crash_failure_upload";
@@ -59,7 +62,7 @@ public class ChromePreferenceManager {
 
     private ChromePreferenceManager(Context context) {
         mContext = context.getApplicationContext();
-        mSharedPreferences = PreferenceManager.getDefaultSharedPreferences(mContext);
+        mSharedPreferences = ContextUtils.getAppSharedPreferences();
     }
 
     /**
@@ -308,18 +311,38 @@ public class ChromePreferenceManager {
     }
 
     /**
-     * @return Number of tap gestures that have been received when not waiting for the promo.
+     * @return Number of tap gestures that have been received since the last time the panel was
+     *         opened.
      */
     public int getContextualSearchTapCount() {
         return mSharedPreferences.getInt(CONTEXTUAL_SEARCH_TAP_COUNT, 0);
     }
 
     /**
-     * Sets the number of tap gestures that have been received when not waiting for the promo.
-     * @param count Number of taps that have been received when not waiting for the promo.
+     * Sets the number of tap gestures that have been received since the last time the panel was
+     * opened.
+     * @param count Number of taps that have been received since the last time the panel was opened.
      */
     public void setContextualSearchTapCount(int count) {
         writeInt(CONTEXTUAL_SEARCH_TAP_COUNT, count);
+    }
+
+    /**
+     * @return Number of Tap triggered Quick Answers (that "do answer") that have been shown since
+     *         the last time the panel was opened.
+     */
+    public int getContextualSearchTapQuickAnswerCount() {
+        return mSharedPreferences.getInt(CONTEXTUAL_SEARCH_TAP_QUICK_ANSWER_COUNT, 0);
+    }
+
+    /**
+     * Sets the number of tap triggered Quick Answers (that "do answer") that have been shown since
+     * the last time the panel was opened.
+     * @param count Number of Tap triggered Quick Answers (that "do answer") that have been shown
+     *              since the last time the panel was opened.
+     */
+    public void setContextualSearchTapQuickAnswerCount(int count) {
+        writeInt(CONTEXTUAL_SEARCH_TAP_QUICK_ANSWER_COUNT, count);
     }
 
     /**
@@ -337,19 +360,25 @@ public class ChromePreferenceManager {
         writeString(HERB_FLAVOR_KEY, flavor);
     }
 
-    /**
-     * @return Whether or not the user is being forced to migrate to tabbed mode.
-     */
-    public boolean getCachedIsForcedToMigrate() {
-        return mSharedPreferences.getBoolean(FORCED_TO_MIGRATE_KEY, false);
+    /** Checks the cached value for the app link feature. */
+    public boolean getCachedAppLinkEnabled() {
+        return mSharedPreferences.getBoolean(APP_LINK_KEY, false);
     }
 
-    /**
-     * Caches whether or not the user is being forced to migrate to tabbed mode.
-     */
-    public void setCachedIsForcedToMigrate(boolean state) {
+    /** Writes the cached value for whether app link is enabled. */
+    public void setCachedAppLinkEnabled(boolean isEnabled) {
         SharedPreferences.Editor ed = mSharedPreferences.edit();
-        ed.putBoolean(FORCED_TO_MIGRATE_KEY, state);
+        ed.putBoolean(APP_LINK_KEY, isEnabled);
+        ed.apply();
+    }
+
+    public boolean getCachedChromeDefaultBrowser() {
+        return mSharedPreferences.getBoolean(CHROME_DEFAULT_BROWSER, false);
+    }
+
+    public void setCachedChromeDefaultBrowser(boolean isDefault) {
+        SharedPreferences.Editor ed = mSharedPreferences.edit();
+        ed.putBoolean(CHROME_DEFAULT_BROWSER, isDefault);
         ed.apply();
     }
 

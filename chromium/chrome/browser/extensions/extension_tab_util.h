@@ -122,6 +122,9 @@ class ExtensionTabUtil {
                                    content::WebContents* contents,
                                    api::tabs::Tab* tab);
 
+  // Returns if the given WebContents at the given index is discarded.
+  static bool IsDiscarded(content::WebContents* contents);
+
   // Gets the |tab_strip_model| and |tab_index| for the given |web_contents|.
   static bool GetTabStripModel(const content::WebContents* web_contents,
                                TabStripModel** tab_strip_model,

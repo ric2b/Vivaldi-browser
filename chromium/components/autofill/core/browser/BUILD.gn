@@ -93,6 +93,8 @@ source_set("browser") {
     "name_field.h",
     "password_generator.cc",
     "password_generator.h",
+    "payments/full_card_request.cc",
+    "payments/full_card_request.h",
     "payments/payments_client.cc",
     "payments/payments_client.h",
     "payments/payments_request.h",
@@ -195,6 +197,7 @@ source_set("browser") {
     "//ui/base",
     "//ui/gfx",
     "//ui/gfx/geometry",
+    "//ui/gfx/range",
     "//url",
   ]
 
@@ -254,6 +257,29 @@ source_set("test_support") {
   ]
 }
 
+bundle_data("unit_tests_bundle_data") {
+  sources = [
+    "//components/test/data/autofill/merge/input/ambiguous.in",
+    "//components/test/data/autofill/merge/input/case.in",
+    "//components/test/data/autofill/merge/input/email.in",
+    "//components/test/data/autofill/merge/input/identical.in",
+    "//components/test/data/autofill/merge/input/primarycase.in",
+    "//components/test/data/autofill/merge/input/singlemerge.in",
+    "//components/test/data/autofill/merge/input/validation.in",
+    "//components/test/data/autofill/merge/output/ambiguous.out",
+    "//components/test/data/autofill/merge/output/case.out",
+    "//components/test/data/autofill/merge/output/email.out",
+    "//components/test/data/autofill/merge/output/identical.out",
+    "//components/test/data/autofill/merge/output/primarycase.out",
+    "//components/test/data/autofill/merge/output/singlemerge.out",
+    "//components/test/data/autofill/merge/output/validation.out",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/" +
+        "{{source_root_relative_dir}}/{{source_file_part}}",
+  ]
+}
+
 source_set("unit_tests") {
   testonly = true
   sources = [
@@ -283,6 +309,7 @@ source_set("unit_tests") {
     "legal_message_line_unittest.cc",
     "name_field_unittest.cc",
     "password_generator_unittest.cc",
+    "payments/full_card_request_unittest.cc",
     "personal_data_manager_unittest.cc",
     "phone_field_unittest.cc",
     "phone_number_i18n_unittest.cc",
@@ -299,6 +326,7 @@ source_set("unit_tests") {
   deps = [
     ":browser",
     ":test_support",
+    ":unit_tests_bundle_data",
     "//base",
     "//base/test:test_support",
     "//components/autofill/core/common",

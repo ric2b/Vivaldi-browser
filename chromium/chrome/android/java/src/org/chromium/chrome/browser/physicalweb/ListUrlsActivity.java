@@ -17,7 +17,6 @@ import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.SystemClock;
-import android.preference.PreferenceManager;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.view.Menu;
@@ -29,6 +28,7 @@ import android.widget.ListView;
 import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeApplication;
@@ -200,7 +200,7 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
         super.onStop();
     }
 
-    private void resolve(Collection<String> urls) {
+    private void resolve(Collection<UrlInfo> urls) {
         final long timestamp = SystemClock.elapsedRealtime();
         mPwsClient.resolve(urls, new PwsClient.ResolveScanCallback() {
             @Override
@@ -246,7 +246,7 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
      * @param urls The set of newly-found nearby URLs.
      */
     @Override
-    public void onDisplayableUrlsAdded(Collection<String> urls) {
+    public void onDisplayableUrlsAdded(Collection<UrlInfo> urls) {
         resolve(urls);
     }
 
@@ -261,7 +261,7 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
         // Clear the list adapter to trigger the empty list display.
         mAdapter.clear();
 
-        Collection<String> urls = UrlManager.getInstance(this).getUrls(true);
+        Collection<UrlInfo> urls = UrlManager.getInstance(this).getUrls(true);
 
         // Check the Physical Web preference to ensure we do not resolve URLs when Physical Web is
         // off or onboarding. Normally the user will not reach this activity unless the preference
@@ -346,7 +346,7 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
     }
 
     private void initSharedPreferences() {
-        mSharedPrefs = PreferenceManager.getDefaultSharedPreferences(this);
+        mSharedPrefs = ContextUtils.getAppSharedPreferences();
         int prefsVersion = mSharedPrefs.getInt(PREFS_VERSION_KEY, 0);
 
         if (prefsVersion == PREFS_VERSION) {
@@ -375,10 +375,10 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
             url = pwsResult.requestUrl;
         }
 
-        Intent intent = new Intent(Intent.ACTION_VIEW);
-        intent.addCategory(Intent.CATEGORY_BROWSABLE);
-        intent.setData(Uri.parse(url));
-        return intent;
+        return new Intent(Intent.ACTION_VIEW)
+                .addCategory(Intent.CATEGORY_BROWSABLE)
+                .setData(Uri.parse(url))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
     }
 
     @VisibleForTesting

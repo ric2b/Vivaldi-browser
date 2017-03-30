@@ -8,7 +8,6 @@ source_set("ports") {
   sources = [
     "event.cc",
     "event.h",
-    "hash_functions.h",
     "message.cc",
     "message.h",
     "message_queue.cc",
@@ -29,7 +28,9 @@ source_set("ports") {
   ]
 }
 
-test("mojo_system_ports_unittests") {
+source_set("tests") {
+  testonly = true
+
   sources = [
     "ports_unittest.cc",
   ]
@@ -38,7 +39,6 @@ test("mojo_system_ports_unittests") {
     ":ports",
     "//base",
     "//base/test:test_support",
-    "//mojo/edk/test:run_all_unittests",
     "//testing/gtest",
   ]
 }

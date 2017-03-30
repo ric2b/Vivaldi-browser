@@ -16,9 +16,9 @@
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
 #include "base/third_party/dynamic_annotations/dynamic_annotations.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/browser/gamepad/gamepad_data_fetcher.h"
 #include "content/browser/gamepad/gamepad_platform_data_fetcher.h"
@@ -50,10 +50,10 @@ GamepadProvider::GamepadProvider()
       have_scheduled_do_poll_(false),
       devices_changed_(true),
       ever_had_user_gesture_(false) {
-  Initialize(scoped_ptr<GamepadDataFetcher>());
+  Initialize(std::unique_ptr<GamepadDataFetcher>());
 }
 
-GamepadProvider::GamepadProvider(scoped_ptr<GamepadDataFetcher> fetcher)
+GamepadProvider::GamepadProvider(std::unique_ptr<GamepadDataFetcher> fetcher)
     : is_paused_(true),
       have_scheduled_do_poll_(false),
       devices_changed_(true),
@@ -124,7 +124,7 @@ void GamepadProvider::OnDevicesChanged(base::SystemMonitor::DeviceType type) {
   devices_changed_ = true;
 }
 
-void GamepadProvider::Initialize(scoped_ptr<GamepadDataFetcher> fetcher) {
+void GamepadProvider::Initialize(std::unique_ptr<GamepadDataFetcher> fetcher) {
   size_t data_size = sizeof(GamepadHardwareBuffer);
   base::SystemMonitor* monitor = base::SystemMonitor::Get();
   if (monitor)
@@ -158,7 +158,7 @@ void GamepadProvider::Initialize(scoped_ptr<GamepadDataFetcher> fetcher) {
 }
 
 void GamepadProvider::DoInitializePollingThread(
-    scoped_ptr<GamepadDataFetcher> fetcher) {
+    std::unique_ptr<GamepadDataFetcher> fetcher) {
   DCHECK(base::MessageLoop::current() == polling_thread_->message_loop());
   DCHECK(!data_fetcher_.get());  // Should only initialize once.
 

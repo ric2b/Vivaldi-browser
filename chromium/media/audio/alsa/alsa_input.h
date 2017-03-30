@@ -8,16 +8,16 @@
 #include <alsa/asoundlib.h>
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "media/audio/agc_audio_stream.h"
 #include "media/audio/audio_io.h"
-#include "media/audio/audio_parameters.h"
+#include "media/base/audio_parameters.h"
 
 namespace media {
 
@@ -83,9 +83,10 @@ class AlsaPcmInputStream : public AgcAudioStream<AudioInputStream> {
   snd_pcm_t* device_handle_;  // Handle to the ALSA PCM recording device.
   snd_mixer_t* mixer_handle_; // Handle to the ALSA microphone mixer.
   snd_mixer_elem_t* mixer_element_handle_; // Handle to the capture element.
-  scoped_ptr<uint8_t[]> audio_buffer_;  // Buffer used for reading audio data.
+  // Buffer used for reading audio data.
+  std::unique_ptr<uint8_t[]> audio_buffer_;
   bool read_callback_behind_schedule_;
-  scoped_ptr<AudioBus> audio_bus_;
+  std::unique_ptr<AudioBus> audio_bus_;
 
   // NOTE: Weak pointers must be invalidated before all other member variables.
   base::WeakPtrFactory<AlsaPcmInputStream> weak_factory_;

@@ -4,10 +4,18 @@
 
 #include "ash/mus/sysui_application.h"
 
+#include <map>
+#include <set>
+#include <string>
+#include <vector>
+
 #include "ash/desktop_background/desktop_background_controller.h"
 #include "ash/host/ash_window_tree_host_init_params.h"
 #include "ash/host/ash_window_tree_host_platform.h"
+#include "ash/material_design/material_design_controller.h"
+#include "ash/mus/app_list_presenter_mus.h"
 #include "ash/mus/keyboard_ui_mus.h"
+#include "ash/mus/shelf_delegate_mus.h"
 #include "ash/mus/shell_delegate_mus.h"
 #include "ash/mus/stub_context_factory.h"
 #include "ash/root_window_settings.h"
@@ -21,6 +29,8 @@
 #include "components/mus/public/cpp/property_type_converters.h"
 #include "mash/wm/public/interfaces/ash_window_type.mojom.h"
 #include "mash/wm/public/interfaces/container.mojom.h"
+#include "services/catalog/public/cpp/resource_loader.h"
+#include "services/shell/public/cpp/connector.h"
 #include "ui/aura/env.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
@@ -45,17 +55,20 @@ namespace sysui {
 
 namespace {
 
+const char kResourceFileStrings[] = "ash_resources_strings.pak";
+const char kResourceFile100[] = "ash_resources_100_percent.pak";
+const char kResourceFile200[] = "ash_resources_200_percent.pak";
+
 // Tries to determine the corresponding mash container from widget init params.
 mash::wm::mojom::Container GetContainerId(
     const views::Widget::InitParams& params) {
   const int id = params.parent->id();
   if (id == kShellWindowId_DesktopBackgroundContainer)
     return mash::wm::mojom::Container::USER_BACKGROUND;
-  // mash::wm::ShelfLayout manages both the shelf and the status area.
-  if (id == kShellWindowId_ShelfContainer ||
-      id == kShellWindowId_StatusContainer) {
-    return mash::wm::mojom::Container::USER_SHELF;
-  }
+  if (id == kShellWindowId_ShelfContainer)
+    return mash::wm::mojom::Container::USER_PRIVATE_SHELF;
+  if (id == kShellWindowId_StatusContainer)
+    return mash::wm::mojom::Container::STATUS;
 
   // Determine the container based on Widget type.
   switch (params.type) {
@@ -64,7 +77,7 @@ mash::wm::mojom::Container GetContainerId(
     case views::Widget::InitParams::Type::TYPE_MENU:
       return mash::wm::mojom::Container::MENUS;
     case views::Widget::InitParams::Type::TYPE_TOOLTIP:
-      return mash::wm::mojom::Container::TOOLTIPS;
+      return mash::wm::mojom::Container::DRAG_AND_TOOLTIPS;
     default:
       return mash::wm::mojom::Container::COUNT;
   }
@@ -176,32 +189,38 @@ class AshInit {
  public:
   AshInit() : worker_pool_(new base::SequencedWorkerPool(2, "AshWorkerPool")) {
     ui::RegisterPathProvider();
-    InitializeResourceBundle();
   }
 
   ~AshInit() { worker_pool_->Shutdown(); }
 
   aura::Window* root() { return ash::Shell::GetPrimaryRootWindow(); }
 
-  void Initialize(mojo::Connector* connector) {
+  void Initialize(::shell::Connector* connector,
+                  const ::shell::Identity& identity) {
+    InitializeResourceBundle(connector);
     aura_init_.reset(new views::AuraInit(connector, "views_mus_resources.pak"));
-    views::WindowManagerConnection::Create(connector);
+    ash::MaterialDesignController::Initialize();
+    views::WindowManagerConnection::Create(connector, identity);
 
-    gfx::Screen* screen = gfx::Screen::GetScreen();
+    display::Screen* screen = display::Screen::GetScreen();
     DCHECK(screen);
     gfx::Size size = screen->GetPrimaryDisplay().bounds().size();
 
     // Uninstall the ScreenMus installed by WindowManagerConnection, so that ash
     // installs and uses the ScreenAsh. This can be removed once ash learns to
     // talk to mus for managing displays.
-    gfx::Screen::SetScreenInstance(nullptr);
+    // TODO(mfomitchev): We need to fix this. http://crbug.com/607300
+    display::Screen::SetScreenInstance(nullptr);
 
     // Install some hook so that the WindowTreeHostMus created for widgets can
     // be hooked up correctly.
     native_widget_factory_.reset(new NativeWidgetFactory());
 
     ash::AshWindowTreeHost::SetFactory(base::Bind(&CreateWindowTreeHostMus));
-    ash_delegate_ = new ShellDelegateMus;
+
+    std::unique_ptr<ash::AppListPresenterMus> app_list_presenter =
+        base::WrapUnique(new ash::AppListPresenterMus(connector));
+    ash_delegate_ = new ShellDelegateMus(std::move(app_list_presenter));
 
     InitializeComponents();
 
@@ -221,24 +240,30 @@ class AshInit {
     SetupWallpaper(SkColorSetARGB(255, 0, 255, 0));
   }
 
-  void InitializeResourceBundle() {
-    // Load ash resources and en-US strings; not 'common' (Chrome) resources.
-    // TODO(msw): Do not load 'test' resources (include sys lang; rename paks?).
-    // TODO(msw): Use the ResourceProvider interface to load these pak files.
-    // TODO(msw): Check ResourceBundle::IsScaleFactorSupported; load 300% etc.
-    base::FilePath path;
-    PathService::Get(base::DIR_MODULE, &path);
-    base::FilePath ash_test_strings =
-        path.Append(FILE_PATH_LITERAL("ash_test_strings.pak"));
-    base::FilePath ash_test_resources_100 =
-        path.Append(FILE_PATH_LITERAL("ash_test_resources_100_percent.pak"));
-    base::FilePath ash_test_resources_200 =
-        path.Append(FILE_PATH_LITERAL("ash_test_resources_200_percent.pak"));
+  void InitializeResourceBundle(::shell::Connector* connector) {
+    if (ui::ResourceBundle::HasSharedInstance())
+      return;
 
-    ui::ResourceBundle::InitSharedInstanceWithPakPath(ash_test_strings);
+    std::set<std::string> resource_paths;
+    resource_paths.insert(kResourceFileStrings);
+    resource_paths.insert(kResourceFile100);
+    resource_paths.insert(kResourceFile200);
+
+    catalog::ResourceLoader loader;
+    filesystem::mojom::DirectoryPtr directory;
+    connector->ConnectToInterface("mojo:catalog", &directory);
+    CHECK(loader.OpenFiles(std::move(directory), resource_paths));
+
+    // Load ash resources and en-US strings; not 'common' (Chrome) resources.
+    // TODO(msw): Check ResourceBundle::IsScaleFactorSupported; load 300% etc.
+    ui::ResourceBundle::InitSharedInstanceWithPakFileRegion(
+        loader.TakeFile(kResourceFileStrings),
+        base::MemoryMappedFile::Region::kWholeFile);
     ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-    rb.AddDataPackFromPath(ash_test_resources_100, ui::SCALE_FACTOR_100P);
-    rb.AddDataPackFromPath(ash_test_resources_200, ui::SCALE_FACTOR_200P);
+    rb.AddDataPackFromFile(loader.TakeFile(kResourceFile100),
+                           ui::SCALE_FACTOR_100P);
+    rb.AddDataPackFromFile(loader.TakeFile(kResourceFile200),
+                           ui::SCALE_FACTOR_200P);
   }
 
   void SetupWallpaper(SkColor color) {
@@ -286,15 +311,24 @@ SysUIApplication::SysUIApplication() {}
 
 SysUIApplication::~SysUIApplication() {}
 
-void SysUIApplication::Initialize(mojo::Connector* connector,
-                                  const mojo::Identity& identity,
+void SysUIApplication::Initialize(::shell::Connector* connector,
+                                  const ::shell::Identity& identity,
                                   uint32_t id) {
   ash_init_.reset(new AshInit());
-  ash_init_->Initialize(connector);
+  ash_init_->Initialize(connector, identity);
 }
 
-bool SysUIApplication::AcceptConnection(mojo::Connection* connection) {
+bool SysUIApplication::AcceptConnection(::shell::Connection* connection) {
+  connection->AddInterface<mash::shelf::mojom::ShelfController>(this);
   return true;
+}
+
+void SysUIApplication::Create(
+    ::shell::Connection* connection,
+    mojo::InterfaceRequest<mash::shelf::mojom::ShelfController> request) {
+  mash::shelf::mojom::ShelfController* shelf_controller =
+      static_cast<ShelfDelegateMus*>(Shell::GetInstance()->GetShelfDelegate());
+  shelf_controller_bindings_.AddBinding(shelf_controller, std::move(request));
 }
 
 }  // namespace sysui

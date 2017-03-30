@@ -66,6 +66,7 @@
 #include "core/css/resolver/TransformBuilder.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
+#include "core/style/ContentData.h"
 #include "core/style/CounterContent.h"
 #include "core/style/ComputedStyle.h"
 #include "core/style/ComputedStyleConstants.h"
@@ -411,8 +412,14 @@ void StyleBuilderFunctions::applyValueCSSPropertySnapHeight(StyleResolverState& 
 void StyleBuilderFunctions::applyValueCSSPropertyTextAlign(StyleResolverState& state, CSSValue* value)
 {
     CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(value);
-    if (primitiveValue->isValueID() && primitiveValue->getValueID() != CSSValueWebkitMatchParent)
-        state.style()->setTextAlign(primitiveValue->convertTo<ETextAlign>());
+    if (primitiveValue->isValueID() && primitiveValue->getValueID() != CSSValueWebkitMatchParent) {
+        // Special case for th elements - UA stylesheet text-align does not apply if parent's computed value for text-align is not its initial value
+        // https://html.spec.whatwg.org/multipage/rendering.html#tables-2
+        if (primitiveValue->getValueID() == CSSValueInternalCenter && state.parentStyle()->textAlign() != ComputedStyle::initialTextAlign())
+            state.style()->setTextAlign(state.parentStyle()->textAlign());
+        else
+            state.style()->setTextAlign(primitiveValue->convertTo<ETextAlign>());
+    }
     else if (state.parentStyle()->textAlign() == TASTART)
         state.style()->setTextAlign(state.parentStyle()->isLeftToRightDirection() ? LEFT : RIGHT);
     else if (state.parentStyle()->textAlign() == TAEND)
@@ -646,7 +653,7 @@ void StyleBuilderFunctions::applyValueCSSPropertyWillChange(StyleResolverState& 
 
 void StyleBuilderFunctions::applyInitialCSSPropertyContent(StyleResolverState& state)
 {
-    state.style()->clearContent();
+    state.style()->setContent(nullptr);
 }
 
 void StyleBuilderFunctions::applyInheritCSSPropertyContent(StyleResolverState&)
@@ -657,20 +664,18 @@ void StyleBuilderFunctions::applyInheritCSSPropertyContent(StyleResolverState&)
 
 void StyleBuilderFunctions::applyValueCSSPropertyContent(StyleResolverState& state, CSSValue* value)
 {
-    state.style()->clearContent();
     if (value->isPrimitiveValue()) {
         ASSERT(toCSSPrimitiveValue(*value).getValueID() == CSSValueNormal || toCSSPrimitiveValue(*value).getValueID() == CSSValueNone);
+        state.style()->setContent(nullptr);
         return;
     }
 
-    // TODO(timloh): This logic shouldn't be split across here and ComputedStyle.cpp
+    ContentData* firstContent = nullptr;
+    ContentData* prevContent = nullptr;
     for (auto& item : toCSSValueList(*value)) {
-        if (item->isImageGeneratorValue()) {
-            state.style()->setContent(StyleGeneratedImage::create(toCSSImageGeneratorValue(*item)));
-        } else if (item->isImageSetValue()) {
-            state.style()->setContent(state.elementStyleResources().setOrPendingFromValue(CSSPropertyContent, toCSSImageSetValue(*item)));
-        } else if (item->isImageValue()) {
-            state.style()->setContent(state.elementStyleResources().cachedOrPendingFromValue(CSSPropertyContent, toCSSImageValue(*item)));
+        ContentData* nextContent = nullptr;
+        if (item->isImageGeneratorValue() || item->isImageSetValue() || item->isImageValue()) {
+            nextContent = ContentData::create(state.styleImage(CSSPropertyContent, *item));
         } else if (item->isCounterValue()) {
             CSSCounterValue* counterValue = toCSSCounterValue(item.get());
             EListStyleType listStyleType = NoneListStyle;
@@ -678,39 +683,59 @@ void StyleBuilderFunctions::applyValueCSSPropertyContent(StyleResolverState& sta
             if (listStyleIdent != CSSValueNone)
                 listStyleType = static_cast<EListStyleType>(listStyleIdent - CSSValueDisc);
             OwnPtr<CounterContent> counter = adoptPtr(new CounterContent(AtomicString(counterValue->identifier()), listStyleType, AtomicString(counterValue->separator())));
-            state.style()->setContent(counter.release());
-        } else if (item->isFunctionValue()) {
-            CSSFunctionValue* functionValue = toCSSFunctionValue(item.get());
-            ASSERT(functionValue->functionType() == CSSValueAttr);
-            // FIXME: Can a namespace be specified for an attr(foo)?
-            if (state.style()->styleType() == PseudoIdNone)
-                state.style()->setUnique();
-            else
-                state.parentStyle()->setUnique();
-            QualifiedName attr(nullAtom, AtomicString(toCSSCustomIdentValue(functionValue->item(0))->value()), nullAtom);
-            const AtomicString& value = state.element()->getAttribute(attr);
-            state.style()->setContent(value.isNull() ? emptyString() : value.getString());
-        } else if (item->isStringValue()) {
-            state.style()->setContent(toCSSStringValue(*item).value().impl());
-        } else {
+            nextContent = ContentData::create(std::move(counter));
+        } else if (item->isPrimitiveValue()) {
+            QuoteType quoteType;
             switch (toCSSPrimitiveValue(*item).getValueID()) {
-            case CSSValueOpenQuote:
-                state.style()->setContent(OPEN_QUOTE);
-                break;
-            case CSSValueCloseQuote:
-                state.style()->setContent(CLOSE_QUOTE);
-                break;
-            case CSSValueNoOpenQuote:
-                state.style()->setContent(NO_OPEN_QUOTE);
-                break;
-            case CSSValueNoCloseQuote:
-                state.style()->setContent(NO_CLOSE_QUOTE);
-                break;
             default:
                 ASSERT_NOT_REACHED();
+            case CSSValueOpenQuote:
+                quoteType = OPEN_QUOTE;
+                break;
+            case CSSValueCloseQuote:
+                quoteType = CLOSE_QUOTE;
+                break;
+            case CSSValueNoOpenQuote:
+                quoteType = NO_OPEN_QUOTE;
+                break;
+            case CSSValueNoCloseQuote:
+                quoteType = NO_CLOSE_QUOTE;
+                break;
             }
+            nextContent = ContentData::create(quoteType);
+        } else {
+            String string;
+            if (item->isFunctionValue()) {
+                CSSFunctionValue* functionValue = toCSSFunctionValue(item.get());
+                ASSERT(functionValue->functionType() == CSSValueAttr);
+                // FIXME: Can a namespace be specified for an attr(foo)?
+                if (state.style()->styleType() == PseudoIdNone)
+                    state.style()->setUnique();
+                else
+                    state.parentStyle()->setUnique();
+                QualifiedName attr(nullAtom, AtomicString(toCSSCustomIdentValue(functionValue->item(0))->value()), nullAtom);
+                const AtomicString& value = state.element()->getAttribute(attr);
+                string = value.isNull() ? emptyString() : value.getString();
+            } else {
+                string = toCSSStringValue(*item).value();
+            }
+            if (prevContent && prevContent->isText()) {
+                TextContentData* textContent = toTextContentData(prevContent);
+                textContent->setText(textContent->text() + string);
+                continue;
+            }
+            nextContent = ContentData::create(string);
         }
+
+        if (!firstContent)
+            firstContent = nextContent;
+        else
+            prevContent->setNext(nextContent);
+
+        prevContent = nextContent;
     }
+    ASSERT(firstContent);
+    state.style()->setContent(firstContent);
 }
 
 void StyleBuilderFunctions::applyValueCSSPropertyWebkitLocale(StyleResolverState& state, CSSValue* value)

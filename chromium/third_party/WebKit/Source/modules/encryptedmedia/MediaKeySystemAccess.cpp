@@ -8,7 +8,6 @@
 #include "bindings/core/v8/ScriptState.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
-#include "core/dom/ExceptionCode.h"
 #include "modules/encryptedmedia/ContentDecryptionModuleResultPromise.h"
 #include "modules/encryptedmedia/EncryptedMediaUtils.h"
 #include "modules/encryptedmedia/MediaKeySession.h"
@@ -108,7 +107,7 @@ static Vector<String> convertSessionTypes(const WebVector<WebEncryptedMediaSessi
 
 MediaKeySystemAccess::MediaKeySystemAccess(const String& keySystem, PassOwnPtr<WebContentDecryptionModuleAccess> access)
     : m_keySystem(keySystem)
-    , m_access(access)
+    , m_access(std::move(access))
 {
 }
 

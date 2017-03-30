@@ -37,7 +37,7 @@ public:
     HeapVector<Member<MutationObserverRegistration>> registry;
     HeapHashSet<Member<MutationObserverRegistration>> transientRegistry;
 
-    static RawPtr<NodeMutationObserverData> create()
+    static NodeMutationObserverData* create()
     {
         return new NodeMutationObserverData;
     }
@@ -102,6 +102,9 @@ public:
 
     DECLARE_TRACE_AFTER_DISPATCH();
     void finalizeGarbageCollectedObject();
+
+    DECLARE_TRACE_WRAPPERS();
+    DECLARE_TRACE_WRAPPERS_AFTER_DISPATCH();
 
 protected:
     explicit NodeRareData(LayoutObject* layoutObject)

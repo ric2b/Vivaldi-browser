@@ -31,6 +31,7 @@
 /**
  * @constructor
  * @extends {WebInspector.VBox}
+ * @implements {WebInspector.Searchable}
  * @param {!WebInspector.ParsedJSON} parsedJSON
  */
 WebInspector.JSONView = function(parsedJSON)
@@ -38,102 +39,66 @@ WebInspector.JSONView = function(parsedJSON)
     WebInspector.VBox.call(this);
     this._parsedJSON = parsedJSON;
     this.element.classList.add("json-view");
-}
 
-// "false", "true", "null", ",", "{", "}", "[", "]", number, double-quoted string.
-WebInspector.JSONView._jsonToken = new RegExp('(?:false|true|null|[/*&\\|;=\\(\\),\\{\\}\\[\\]]|(?:-?\\b(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?\\b)|(?:\"(?:[^\\0-\\x08\\x0a-\\x1f\"\\\\]|\\\\(?:[\"/\\\\bfnrt]|u[0-9A-Fa-f]{4}))*\"))', 'g');
-
-// Escaped unicode char.
-WebInspector.JSONView._escapedUnicode = new RegExp('\\\\(?:([^u])|u(.{4}))', 'g');
-
-// Map from escaped char to its literal value.
-WebInspector.JSONView._standardEscapes = {'"': '"', '/': '/', '\\': '\\', 'b': '\b', 'f': '\f', 'n': '\n', 'r': '\r', 't': '\t'};
-
-/**
- * @param {string} full
- * @param {string} standard
- * @param {string} unicode
- * @return {string}
- */
-WebInspector.JSONView._unescape = function(full, standard, unicode)
-{
-    return standard ? WebInspector.JSONView._standardEscapes[standard] : String.fromCharCode(parseInt(unicode, 16));
+    /** @type {?WebInspector.SearchableView} */
+    this._searchableView;
+    /** @type {!WebInspector.ObjectPropertiesSection} */
+    this._treeOutline;
+    /** @type {number} */
+    this._currentSearchFocusIndex = 0;
+    /** @type {!Array.<!TreeElement>} */
+    this._currentSearchTreeElements = [];
+    /** @type {?RegExp} */
+    this._searchRegex = null;
 }
 
 /**
- * @param {string} text
- * @return {string}
+ * @param {!WebInspector.ParsedJSON} parsedJSON
+ * @return {!WebInspector.SearchableView}
  */
-WebInspector.JSONView._unescapeString = function(text)
+WebInspector.JSONView.createSearchableView = function(parsedJSON)
 {
-    return text.indexOf("\\") === -1 ? text : text.replace(WebInspector.JSONView._escapedUnicode, WebInspector.JSONView._unescape);
+    var jsonView = new WebInspector.JSONView(parsedJSON);
+    var searchableView = new WebInspector.SearchableView(jsonView);
+    searchableView.setPlaceholder(WebInspector.UIString("Find"));
+    jsonView._searchableView = searchableView;
+    jsonView.show(searchableView.element);
+    jsonView.element.setAttribute("tabIndex", 0);
+    return searchableView;
 }
 
 /**
- * @return {*}
+ * @param {?string} text
+ * @return {!Promise<?WebInspector.ParsedJSON>}
  */
-WebInspector.JSONView._buildObjectFromJSON = function(text)
+WebInspector.JSONView.parseJSON = function(text)
 {
-    var regExp = WebInspector.JSONView._jsonToken;
-    regExp.lastIndex = 0;
-    var result = [];
-    var tip = result;
-    var stack = [];
-    var key = undefined;
-    var token = undefined;
-    var lastToken = undefined;
-    while (true) {
-        var match = regExp.exec(text);
-        if (match === null)
-            break;
-        lastToken = token;
-        token = match[0];
-        var code = token.charCodeAt(0);
-        if ((code === 0x5b) || (code === 0x7b)) { // [ or {
-            var newTip = (code === 0x5b) ? [] : {};
-            tip[key || tip.length] = newTip;
-            stack.push(tip);
-            tip = newTip;
-        } else if ((code === 0x5d) || (code === 0x7d)) { // ] or }
-            tip = stack.pop();
-            if (!tip)
-                break;
-        } else if (code === 0x2C) { // ,
-            if (Array.isArray(tip) && (lastToken === undefined || lastToken === "[" || lastToken === ","))
-                tip[tip.length] = undefined;
-        } else if (code === 0x22) { // "
-            token = WebInspector.JSONView._unescapeString(token.substring(1, token.length - 1));
-            if (!key) {
-                if (Array.isArray(tip)) {
-                  key = tip.length;
-                } else {
-                    key = token || "";
-                    continue;
-                }
-            }
-            tip[key] = token;
-        } else if (code === 0x66) { // f
-            tip[key || tip.length] = false;
-        } else if (code === 0x6e) { // n
-            tip[key || tip.length] = null;
-        } else if (code === 0x74) { // t
-            tip[key || tip.length] = true;
-        } else if (code === 0x2f || code === 0x2a || code === 0x26 || code === 0x7c || code === 0x3b || code === 0x3d || code === 0x28 || code === 0x29) { // /*&|;=()
-            // Looks like JavaScript
-            throw "Invalid JSON";
-        } else { // sign or digit
-            tip[key || tip.length] = +(token);
-        }
-        key = undefined;
+    var returnObj = null;
+    if (text)
+        returnObj = WebInspector.JSONView._extractJSON(/** @type {string} */ (text));
+    if (!returnObj)
+        return Promise.resolve(/** @type {?WebInspector.ParsedJSON} */ (null));
+    return WebInspector.formatterWorkerPool.runTask("relaxedJSONParser", {content: returnObj.data})
+        .then(handleReturnedJSON)
+
+    /**
+     * @param {?MessageEvent} event
+     * @return {?WebInspector.ParsedJSON}
+     */
+    function handleReturnedJSON(event)
+    {
+        if (!event || !event.data)
+            return null;
+        returnObj.data = event.data;
+        return returnObj;
     }
-    return (result.length > 1) ? result : result[0];
 }
 
 /**
  * @param {string} text
  * @return {?WebInspector.ParsedJSON}
  */
-WebInspector.JSONView.parseJSON = function(text)
+WebInspector.JSONView._extractJSON = function(text)
 {
     // Do not treat HTML as JSON.
     if (text.startsWith("<"))
@@ -154,11 +119,7 @@ WebInspector.JSONView.parseJSON = function(text)
     if (suffix.trim().length && !(suffix.trim().startsWith(")") && prefix.trim().endsWith("(")))
         return null;
 
-    try {
-        return new WebInspector.ParsedJSON(WebInspector.JSONView._buildObjectFromJSON(text), prefix, suffix);
-    } catch (e) {
-        return null;
-    }
+    return new WebInspector.ParsedJSON(text, prefix, suffix);
 }
 
 /**
@@ -191,10 +152,147 @@ WebInspector.JSONView.prototype = {
 
         var obj = WebInspector.RemoteObject.fromLocalObject(this._parsedJSON.data);
         var title = this._parsedJSON.prefix + obj.description + this._parsedJSON.suffix;
-        var section = new WebInspector.ObjectPropertiesSection(obj, title);
-        section.expand();
-        section.editable = false;
-        this.element.appendChild(section.element);
+        this._treeOutline = new WebInspector.ObjectPropertiesSection(obj, title);
+        this._treeOutline.setEditable(false);
+        this._treeOutline.expand();
+        this.element.appendChild(this._treeOutline.element);
+    },
+
+    /**
+     * @param {number} index
+     */
+    _jumpToMatch: function(index)
+    {
+        if (!this._searchRegex)
+            return;
+        var previousFocusElement = this._currentSearchTreeElements[this._currentSearchFocusIndex];
+        if (previousFocusElement)
+            previousFocusElement.setSearchRegex(this._searchRegex);
+
+        var newFocusElement = this._currentSearchTreeElements[index];
+        if (newFocusElement) {
+            this._updateSearchIndex(index);
+            newFocusElement.setSearchRegex(this._searchRegex, WebInspector.highlightedCurrentSearchResultClassName);
+            newFocusElement.reveal();
+        } else {
+            this._updateSearchIndex(0);
+        }
+    },
+
+    /**
+     * @param {number} count
+     */
+    _updateSearchCount: function(count)
+    {
+        if (!this._searchableView)
+            return;
+        this._searchableView.updateSearchMatchesCount(count);
+    },
+
+    /**
+     * @param {number} index
+     */
+    _updateSearchIndex: function(index)
+    {
+        this._currentSearchFocusIndex = index;
+        if (!this._searchableView)
+            return;
+        this._searchableView.updateCurrentMatchIndex(index);
+    },
+
+    /**
+     * @override
+     */
+    searchCanceled: function()
+    {
+        this._searchRegex = null;
+        this._currentSearchTreeElements = [];
+
+        for (var element = this._treeOutline.rootElement(); element; element = element.traverseNextTreeElement(false)) {
+            if (!(element instanceof WebInspector.ObjectPropertyTreeElement))
+                continue;
+            element.revertHighlightChanges();
+        }
+        this._updateSearchCount(0);
+        this._updateSearchIndex(0);
+    },
+
+    /**
+     * @override
+     * @param {!WebInspector.SearchableView.SearchConfig} searchConfig
+     * @param {boolean} shouldJump
+     * @param {boolean=} jumpBackwards
+     */
+    performSearch: function(searchConfig, shouldJump, jumpBackwards)
+    {
+        var newIndex = this._currentSearchFocusIndex;
+        var previousSearchFocusElement = this._currentSearchTreeElements[newIndex];
+        this.searchCanceled();
+        this._searchRegex = searchConfig.toSearchRegex(true);
+
+        for (var element = this._treeOutline.rootElement(); element; element = element.traverseNextTreeElement(false)) {
+            if (!(element instanceof WebInspector.ObjectPropertyTreeElement))
+                continue;
+            var hasMatch = element.setSearchRegex(this._searchRegex);
+            if (hasMatch)
+                this._currentSearchTreeElements.push(element);
+            if (previousSearchFocusElement === element) {
+                var currentIndex = this._currentSearchTreeElements.length - 1;
+                if (hasMatch || jumpBackwards)
+                    newIndex = currentIndex;
+                else
+                    newIndex = currentIndex + 1;
+            }
+        }
+        this._updateSearchCount(this._currentSearchTreeElements.length);
+
+        if (!this._currentSearchTreeElements.length) {
+            this._updateSearchIndex(0);
+            return;
+        }
+        newIndex = mod(newIndex, this._currentSearchTreeElements.length);
+
+        this._jumpToMatch(newIndex);
+    },
+
+    /**
+     * @override
+     */
+    jumpToNextSearchResult: function()
+    {
+        if (!this._currentSearchTreeElements.length)
+            return;
+        var newIndex = mod(this._currentSearchFocusIndex + 1, this._currentSearchTreeElements.length);
+        this._jumpToMatch(newIndex);
+    },
+
+    /**
+     * @override
+     */
+    jumpToPreviousSearchResult: function()
+    {
+        if (!this._currentSearchTreeElements.length)
+            return;
+        var newIndex = mod(this._currentSearchFocusIndex - 1, this._currentSearchTreeElements.length);
+        this._jumpToMatch(newIndex);
+    },
+
+    /**
+     * @override
+     * @return {boolean}
+     */
+    supportsCaseSensitiveSearch: function()
+    {
+        return true;
+    },
+
+    /**
+     * @override
+     * @return {boolean}
+     */
+    supportsRegexSearch: function()
+    {
+        return true;
     },
 
     __proto__: WebInspector.VBox.prototype

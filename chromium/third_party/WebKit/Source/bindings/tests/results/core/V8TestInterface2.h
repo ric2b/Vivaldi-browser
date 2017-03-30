@@ -23,25 +23,32 @@ class V8TestInterface2 {
 public:
     CORE_EXPORT static bool hasInstance(v8::Local<v8::Value>, v8::Isolate*);
     static v8::Local<v8::Object> findInstanceInPrototypeChain(v8::Local<v8::Value>, v8::Isolate*);
-    CORE_EXPORT static v8::Local<v8::FunctionTemplate> domTemplate(v8::Isolate*);
+    CORE_EXPORT static v8::Local<v8::FunctionTemplate> domTemplate(v8::Isolate*, const DOMWrapperWorld&);
     static TestInterface2* toImpl(v8::Local<v8::Object> object)
     {
         return toScriptWrappable(object)->toImpl<TestInterface2>();
     }
     CORE_EXPORT static TestInterface2* toImplWithTypeCheck(v8::Isolate*, v8::Local<v8::Value>);
-    CORE_EXPORT static const WrapperTypeInfo wrapperTypeInfo;
-    static void refObject(ScriptWrappable*);
-    static void derefObject(ScriptWrappable*);
+    CORE_EXPORT static WrapperTypeInfo wrapperTypeInfo;
+    static void traceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable)
+    {
+        visitor->traceWrappers(scriptWrappable->toImpl<TestInterface2>());
+    }
     template<typename VisitorDispatcher>
     static void trace(VisitorDispatcher visitor, ScriptWrappable* scriptWrappable)
     {
+        visitor->trace(scriptWrappable->toImpl<TestInterface2>());
     }
     static void visitDOMWrapper(v8::Isolate*, ScriptWrappable*, const v8::Persistent<v8::Object>&);
     static ActiveScriptWrappable* toActiveScriptWrappable(v8::Local<v8::Object>);
     static void constructorCallback(const v8::FunctionCallbackInfo<v8::Value>&);
     static const int internalFieldCount = v8DefaultWrapperInternalFieldCount + 0;
-    static void installConditionallyEnabledProperties(v8::Local<v8::Object>, v8::Isolate*) { }
-    static void preparePrototypeAndInterfaceObject(v8::Local<v8::Context>, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate) { }
+    CORE_EXPORT static void preparePrototypeAndInterfaceObject(v8::Local<v8::Context>, const DOMWrapperWorld&, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate) { }
+    CORE_EXPORT static void updateWrapperTypeInfo(InstallTemplateFunction, PreparePrototypeAndInterfaceObjectFunction);
+    CORE_EXPORT static void installV8TestInterface2Template(v8::Isolate*, const DOMWrapperWorld&, v8::Local<v8::FunctionTemplate> interfaceTemplate);
+
+private:
+    static InstallTemplateFunction installV8TestInterface2TemplateFunction;
 };
 
 template <>

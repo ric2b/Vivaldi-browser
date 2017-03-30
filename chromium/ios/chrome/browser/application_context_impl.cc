@@ -105,12 +105,13 @@ void ApplicationContextImpl::PreMainMessageLoopRun() {
 
 void ApplicationContextImpl::StartTearDown() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  // We need to destroy the MetricsServicesManager before the IO thread gets
-  // destroyed, since the destructor can call the URLFetcher destructor, which
-  // does a PostDelayedTask operation on the IO thread. (The IO thread will
-  // handle that URLFetcher operation before going away.)
+  // We need to destroy the MetricsServicesManager and NetworkTimeTracker before
+  // the IO thread gets destroyed, since the destructor can call the URLFetcher
+  // destructor, which does a PostDelayedTask operation on the IO thread. (The
+  // IO thread will handle that URLFetcher operation before going away.)
 
   metrics_services_manager_.reset();
+  network_time_tracker_.reset();
 
   // Need to clear browser states before the IO thread.
   chrome_browser_state_manager_.reset();
@@ -254,7 +255,8 @@ ApplicationContextImpl::GetNetworkTimeTracker() {
   if (!network_time_tracker_) {
     network_time_tracker_.reset(new network_time::NetworkTimeTracker(
         base::WrapUnique(new base::DefaultClock),
-        base::WrapUnique(new base::DefaultTickClock), GetLocalState()));
+        base::WrapUnique(new base::DefaultTickClock), GetLocalState(),
+        GetSystemURLRequestContext()));
   }
   return network_time_tracker_.get();
 }
@@ -271,12 +273,6 @@ gcm::GCMDriver* ApplicationContextImpl::GetGCMDriver() {
     CreateGCMDriver();
   DCHECK(gcm_driver_);
   return gcm_driver_.get();
-}
-
-web_resource::PromoResourceService*
-ApplicationContextImpl::GetPromoResourceService() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  return nullptr;
 }
 
 component_updater::ComponentUpdateService*

@@ -20,7 +20,7 @@ class IdleRequestOptions;
 class ScriptedIdleTaskController : public GarbageCollectedFinalized<ScriptedIdleTaskController>, public ActiveDOMObject {
     USING_GARBAGE_COLLECTED_MIXIN(ScriptedIdleTaskController);
 public:
-    static RawPtr<ScriptedIdleTaskController> create(ExecutionContext* context)
+    static ScriptedIdleTaskController* create(ExecutionContext* context)
     {
         return new ScriptedIdleTaskController(context);
     }
@@ -42,6 +42,14 @@ public:
 
 private:
     explicit ScriptedIdleTaskController(ExecutionContext*);
+
+    int nextCallbackId();
+
+    bool isValidCallbackId(int id)
+    {
+        using Traits = HashTraits<CallbackId>;
+        return !Traits::isDeletedValue(id) && !WTF::isHashTraitsEmptyValue<Traits, CallbackId>(id);
+    }
 
     void runCallback(CallbackId, double deadlineSeconds, IdleDeadline::CallbackType);
 

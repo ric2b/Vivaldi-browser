@@ -51,7 +51,7 @@ void SimplifyMarkupCommand::doApply(EditingState* editingState)
         if (node->hasChildren() || (node->isTextNode() && node->nextSibling()))
             continue;
 
-        ContainerNode* startingNode = node->parentNode();
+        ContainerNode* const startingNode = node->parentNode();
         if (!startingNode)
             continue;
         const ComputedStyle* startingStyle = startingNode->computedStyle();
@@ -80,8 +80,11 @@ void SimplifyMarkupCommand::doApply(EditingState* editingState)
 
         }
         if (topNodeWithStartingStyle) {
-            for (ContainerNode* node = startingNode; node != topNodeWithStartingStyle; node = node->parentNode())
-                nodesToRemove.append(node);
+            for (Node& node : NodeTraversal::inclusiveAncestorsOf(*startingNode)) {
+                if (node == topNodeWithStartingStyle)
+                    break;
+                nodesToRemove.append(static_cast<ContainerNode*>(&node));
+            }
         }
     }
 
@@ -106,11 +109,11 @@ int SimplifyMarkupCommand::pruneSubsequentAncestorsToRemove(HeapVector<Member<Co
     for (; pastLastNodeToRemove < nodesToRemove.size(); ++pastLastNodeToRemove) {
         if (nodesToRemove[pastLastNodeToRemove - 1]->parentNode() != nodesToRemove[pastLastNodeToRemove])
             break;
-        ASSERT(nodesToRemove[pastLastNodeToRemove]->firstChild() == nodesToRemove[pastLastNodeToRemove]->lastChild());
+        DCHECK_EQ(nodesToRemove[pastLastNodeToRemove]->firstChild(), nodesToRemove[pastLastNodeToRemove]->lastChild());
     }
 
     ContainerNode* highestAncestorToRemove = nodesToRemove[pastLastNodeToRemove - 1].get();
-    RawPtr<ContainerNode> parent = highestAncestorToRemove->parentNode();
+    ContainerNode* parent = highestAncestorToRemove->parentNode();
     if (!parent) // Parent has already been removed.
         return -1;
 

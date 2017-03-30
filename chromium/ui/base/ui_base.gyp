@@ -67,11 +67,13 @@
         '../../third_party/icu/icu.gyp:icui18n',
         '../../third_party/icu/icu.gyp:icuuc',
         '../../url/url.gyp:url_lib',
+        '../display/display.gyp:display',
         '../events/events.gyp:events',
         '../events/events.gyp:events_base',
         '../events/platform/events_platform.gyp:events_platform',
         '../gfx/gfx.gyp:gfx',
         '../gfx/gfx.gyp:gfx_geometry',
+        '../gfx/gfx.gyp:gfx_range',
         '../resources/ui_resources.gyp:ui_resources',
         '../strings/ui_strings.gyp:ui_strings',
       ],
@@ -256,10 +258,6 @@
         'idle/idle_win.cc',
         'idle/screensaver_window_finder_x11.cc',
         'idle/screensaver_window_finder_x11.h',
-        'ios/cru_context_menu_controller.h',
-        'ios/cru_context_menu_controller.mm',
-        'ios/cru_context_menu_holder.h',
-        'ios/cru_context_menu_holder.mm',
         'l10n/formatter.cc',
         'l10n/formatter.h',
         'l10n/l10n_font_util.cc',
@@ -395,13 +393,6 @@
         'x/selection_requestor.h',
         'x/selection_utils.cc',
         'x/selection_utils.h',
-        'x/x11_foreign_window_manager.cc',
-        'x/x11_foreign_window_manager.h',
-        'x/x11_menu_list.cc',
-        'x/x11_menu_list.h',
-        'x/x11_util.cc',
-        'x/x11_util.h',
-        'x/x11_util_internal.h',
       ],
       'target_conditions': [
         ['OS == "ios"', {
@@ -438,6 +429,7 @@
             ['exclude', 'clipboard/clipboard_mac.mm'],
             ['exclude', 'layout_mac.mm'],
             ['exclude', 'work_area_watcher_observer.h'],
+            ['include', 'window_tracker_template.h'],
           ],
         }, {  # use_aura!=1
           'sources!': [
@@ -454,7 +446,7 @@
             'x/selection_requestor.h',
             'x/selection_utils.cc',
             'x/selection_utils.h',
-          ]
+          ],
         }],
         ['use_aura==0 or OS!="linux"', {
           'sources!': [
@@ -606,8 +598,10 @@
             '../../build/linux/system.gyp:xfixes',
             '../../build/linux/system.gyp:xrender',  # For XRender* function calls in x11_util.cc.
             '../events/devices/events_devices.gyp:events_devices',
+            '../events/devices/x11/events_devices_x11.gyp:events_devices_x11',
             '../events/platform/x11/x11_events_platform.gyp:x11_events_platform',
             '../gfx/x/gfx_x11.gyp:gfx_x11',
+            'x/ui_base_x.gyp:ui_base_x',
           ],
         }],
         ['use_x11==1 and chromeos==0', {
@@ -705,6 +699,7 @@
         '../../testing/gtest.gyp:gtest',
         '../gfx/gfx.gyp:gfx',
         '../gfx/gfx.gyp:gfx_geometry',
+        '../gfx/gfx.gyp:gfx_range',
       ],
       'sources': [
         # Note: file list duplicated in GN build.
@@ -739,6 +734,8 @@
             'ime/dummy_text_input_client.h',
             'test/nswindow_fullscreen_notification_waiter.h',
             'test/nswindow_fullscreen_notification_waiter.mm',
+            'test/scoped_fake_full_keyboard_access.h',
+            'test/scoped_fake_full_keyboard_access.mm',
             'test/scoped_fake_nswindow_focus.h',
             'test/scoped_fake_nswindow_focus.mm',
             'test/scoped_fake_nswindow_fullscreen.h',

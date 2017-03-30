@@ -4,9 +4,12 @@
 
 #include "net/cert/x509_certificate.h"
 
+#include <memory>
+
+#include <openssl/sha.h>
+
 #include "base/logging.h"
 #include "base/memory/free_deleter.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/pickle.h"
 #include "base/sha1.h"
@@ -16,13 +19,6 @@
 #include "crypto/scoped_capi_types.h"
 #include "crypto/sha2.h"
 #include "net/base/net_errors.h"
-
-// Implement CalculateChainFingerprint() with our native crypto library.
-#if defined(USE_OPENSSL)
-#include <openssl/sha.h>
-#else
-#include <blapi.h>
-#endif
 
 using base::Time;
 
@@ -41,7 +37,7 @@ typedef crypto::ScopedCAPIHandle<
 // structure and stores it in *output.
 void GetCertSubjectAltName(
     PCCERT_CONTEXT cert,
-    scoped_ptr<CERT_ALT_NAME_INFO, base::FreeDeleter>* output) {
+    std::unique_ptr<CERT_ALT_NAME_INFO, base::FreeDeleter>* output) {
   PCERT_EXTENSION extension = CertFindExtension(szOID_SUBJECT_ALT_NAME2,
                                                 cert->pCertInfo->cExtension,
                                                 cert->pCertInfo->rgExtension);
@@ -152,7 +148,7 @@ void X509Certificate::Initialize() {
   ca_fingerprint_ = CalculateCAFingerprint(intermediate_ca_certs_);
 
   const CRYPT_INTEGER_BLOB* serial = &cert_handle_->pCertInfo->SerialNumber;
-  scoped_ptr<uint8_t[]> serial_bytes(new uint8_t[serial->cbData]);
+  std::unique_ptr<uint8_t[]> serial_bytes(new uint8_t[serial->cbData]);
   for (unsigned i = 0; i < serial->cbData; i++)
     serial_bytes[i] = serial->pbData[serial->cbData - i - 1];
   serial_number_ = std::string(
@@ -170,7 +166,7 @@ void X509Certificate::GetSubjectAltName(
   if (!cert_handle_)
     return;
 
-  scoped_ptr<CERT_ALT_NAME_INFO, base::FreeDeleter> alt_name_info;
+  std::unique_ptr<CERT_ALT_NAME_INFO, base::FreeDeleter> alt_name_info;
   GetCertSubjectAltName(cert_handle_, &alt_name_info);
   CERT_ALT_NAME_INFO* alt_name = alt_name_info.get();
   if (alt_name) {
@@ -339,7 +335,6 @@ SHA1HashValue X509Certificate::CalculateCAFingerprint(
   SHA1HashValue sha1;
   memset(sha1.data, 0, sizeof(sha1.data));
 
-#if defined(USE_OPENSSL)
   SHA_CTX ctx;
   if (!SHA1_Init(&ctx))
     return sha1;
@@ -349,19 +344,6 @@ SHA1HashValue X509Certificate::CalculateCAFingerprint(
       return sha1;
   }
   SHA1_Final(sha1.data, &ctx);
-#else  // !USE_OPENSSL
-  SHA1Context* sha1_ctx = SHA1_NewContext();
-  if (!sha1_ctx)
-    return sha1;
-  SHA1_Begin(sha1_ctx);
-  for (size_t i = 0; i < intermediates.size(); ++i) {
-    PCCERT_CONTEXT ca_cert = intermediates[i];
-    SHA1_Update(sha1_ctx, ca_cert->pbCertEncoded, ca_cert->cbCertEncoded);
-  }
-  unsigned int result_len;
-  SHA1_End(sha1_ctx, sha1.data, &result_len, SHA1_LENGTH);
-  SHA1_DestroyContext(sha1_ctx, PR_TRUE);
-#endif  // USE_OPENSSL
 
   return sha1;
 }

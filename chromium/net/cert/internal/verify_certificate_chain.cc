@@ -4,6 +4,8 @@
 
 #include "net/cert/internal/verify_certificate_chain.h"
 
+#include <memory>
+
 #include "base/logging.h"
 #include "net/cert/internal/name_constraints.h"
 #include "net/cert/internal/parse_certificate.h"
@@ -24,10 +26,12 @@ using ExtensionsMap = std::map<der::Input, ParsedExtension>;
 // Describes all parsed properties of a certificate that are relevant for
 // certificate verification.
 struct FullyParsedCert {
-  ParsedCertificate cert;
+  der::Input tbs_certificate_tlv;
+  der::Input signature_algorithm_tlv;
+  der::BitString signature_value;
   ParsedTbsCertificate tbs;
 
-  scoped_ptr<SignatureAlgorithm> signature_algorithm;
+  std::unique_ptr<SignatureAlgorithm> signature_algorithm;
 
   // Standard extensions that were parsed.
   bool has_basic_constraints = false;
@@ -36,7 +40,7 @@ struct FullyParsedCert {
   bool has_key_usage = false;
   der::BitString key_usage;
 
-  scoped_ptr<GeneralNames> subject_alt_names;
+  std::unique_ptr<GeneralNames> subject_alt_names;
 
   bool has_name_constraints = false;
   ParsedExtension name_constraints_extension;
@@ -79,22 +83,25 @@ WARN_UNUSED_RESULT bool GetSequenceValue(const der::Input& tlv,
 
 // Parses an X.509 Certificate fully (including the TBSCertificate and
 // standard extensions), saving all the properties to |out_|.
-WARN_UNUSED_RESULT bool FullyParseCertificate(const der::Input& cert_tlv,
-                                              FullyParsedCert* out) {
+WARN_UNUSED_RESULT bool FullyParseCertificate(
+    const der::Input& cert_tlv,
+    const ParseCertificateOptions& options,
+    FullyParsedCert* out) {
   // Parse the outer Certificate.
-  if (!ParseCertificate(cert_tlv, &out->cert))
+  if (!ParseCertificate(cert_tlv, &out->tbs_certificate_tlv,
+                        &out->signature_algorithm_tlv, &out->signature_value))
     return false;
 
   // Parse the signature algorithm contained in the Certificate (there is
   // another one in the TBSCertificate, which is checked later by
   // VerifySignatureAlgorithmsMatch)
   out->signature_algorithm =
-      SignatureAlgorithm::CreateFromDer(out->cert.signature_algorithm_tlv);
+      SignatureAlgorithm::CreateFromDer(out->signature_algorithm_tlv);
   if (!out->signature_algorithm)
     return false;
 
   // Parse the TBSCertificate.
-  if (!ParseTbsCertificate(out->cert.tbs_certificate_tlv, &out->tbs))
+  if (!ParseTbsCertificate(out->tbs_certificate_tlv, options, &out->tbs))
     return false;
 
   // Reset state relating to extensions (which may not get overwritten). This is
@@ -196,24 +203,6 @@ WARN_UNUSED_RESULT bool IsSelfIssued(const FullyParsedCert& cert) {
   return NameMatches(cert.tbs.subject_tlv, cert.tbs.issuer_tlv);
 }
 
-// Finds a trust anchor that matches |name| in |trust_store| or returns
-// nullptr. The returned pointer references data in |trust_store|.
-//
-// TODO(eroman): This implementation is linear in the size of the trust store,
-// and also presumes that all names are unique. In practice it is possible to
-// have multiple SPKIs with the same name. Also this mechanism of
-// searching is fairly primitive, and does not take advantage of other
-// properties like the authority key id.
-WARN_UNUSED_RESULT const TrustAnchor* FindTrustAnchorByName(
-    const TrustStore& trust_store,
-    const der::Input& name) {
-  for (const auto& anchor : trust_store.anchors) {
-    if (NameMatches(name, der::Input(&anchor.name)))
-      return &anchor;
-  }
-  return nullptr;
-}
-
 // Returns true if |cert| is valid at time |time|.
 //
 // The certificate's validity requirements are described by RFC 5280 section
@@ -231,7 +220,7 @@ WARN_UNUSED_RESULT bool VerifyTimeValidity(const FullyParsedCert& cert,
 // RSA with SHA1.
 WARN_UNUSED_RESULT bool IsRsaWithSha1SignatureAlgorithm(
     const der::Input& signature_algorithm_tlv) {
-  scoped_ptr<SignatureAlgorithm> algorithm =
+  std::unique_ptr<SignatureAlgorithm> algorithm =
       SignatureAlgorithm::CreateFromDer(signature_algorithm_tlv);
 
   return algorithm &&
@@ -260,7 +249,7 @@ WARN_UNUSED_RESULT bool IsRsaWithSha1SignatureAlgorithm(
 // compatibility sake.
 WARN_UNUSED_RESULT bool VerifySignatureAlgorithmsMatch(
     const FullyParsedCert& cert) {
-  const der::Input& alg1_tlv = cert.cert.signature_algorithm_tlv;
+  const der::Input& alg1_tlv = cert.signature_algorithm_tlv;
   const der::Input& alg2_tlv = cert.tbs.signature_algorithm_tlv;
 
   // Ensure that the two DER-encoded signature algorithms are byte-for-byte
@@ -271,26 +260,35 @@ WARN_UNUSED_RESULT bool VerifySignatureAlgorithmsMatch(
 
 // This function corresponds to RFC 5280 section 6.1.3's "Basic Certificate
 // Processing" procedure.
+//
+// |skip_issuer_checks| controls whether the function will skip:
+//   - Checking that |cert|'s signature using |working_spki|
+//   - Checkinging that |cert|'s issuer matches |working_issuer_name|
+// This should be set to true only when verifying a trusted root certificate.
 WARN_UNUSED_RESULT bool BasicCertificateProcessing(
     const FullyParsedCert& cert,
     bool is_target_cert,
+    bool skip_issuer_checks,
     const SignaturePolicy* signature_policy,
     const der::GeneralizedTime& time,
     const der::Input& working_spki,
     const der::Input& working_issuer_name,
-    const std::vector<scoped_ptr<NameConstraints>>& name_constraints_list) {
+    const std::vector<std::unique_ptr<NameConstraints>>&
+        name_constraints_list) {
   // Check that the signature algorithms in Certificate vs TBSCertificate
   // match. This isn't part of RFC 5280 section 6.1.3, but is mandated by
   // sections 4.1.1.2 and 4.1.2.3.
   if (!VerifySignatureAlgorithmsMatch(cert))
     return false;
 
-  // Verify the digital signature using the previous certificate's (or trust
-  // anchor's) key (RFC 5280 section 6.1.3 step a.1).
-  if (!VerifySignedData(
-          *cert.signature_algorithm, cert.cert.tbs_certificate_tlv,
-          cert.cert.signature_value, working_spki, signature_policy)) {
-    return false;
+  // Verify the digital signature using the previous certificate's key (RFC
+  // 5280 section 6.1.3 step a.1).
+  if (!skip_issuer_checks) {
+    if (!VerifySignedData(*cert.signature_algorithm, cert.tbs_certificate_tlv,
+                          cert.signature_value, working_spki,
+                          signature_policy)) {
+      return false;
+    }
   }
 
   // Check the time range for the certificate's validity, ensuring it is valid
@@ -301,10 +299,12 @@ WARN_UNUSED_RESULT bool BasicCertificateProcessing(
 
   // TODO(eroman): Check revocation (RFC 5280 section 6.1.3 step a.3)
 
-  // Verify the certificate's issuer name matches the issuing certificate's (or
-  // trust anchor's) subject name. (RFC 5280 section 6.1.3 step a.4)
-  if (!NameMatches(cert.tbs.issuer_tlv, working_issuer_name))
-    return false;
+  // Verify the certificate's issuer name matches the issuing certificate's
+  // subject name. (RFC 5280 section 6.1.3 step a.4)
+  if (!skip_issuer_checks) {
+    if (!NameMatches(cert.tbs.issuer_tlv, working_issuer_name))
+      return false;
+  }
 
   // Name constraints (RFC 5280 section 6.1.3 step b & c)
   // If certificate i is self-issued and it is not the final certificate in the
@@ -333,7 +333,7 @@ WARN_UNUSED_RESULT bool PrepareForNextCertificate(
     size_t* max_path_length_ptr,
     der::Input* working_spki,
     der::Input* working_issuer_name,
-    std::vector<scoped_ptr<NameConstraints>>* name_constraints_list) {
+    std::vector<std::unique_ptr<NameConstraints>>* name_constraints_list) {
   // TODO(eroman): Steps a-b are omitted, as policy constraints are not yet
   // implemented.
 
@@ -353,9 +353,10 @@ WARN_UNUSED_RESULT bool PrepareForNextCertificate(
 
   // From RFC 5280 section 6.1.4 step g:
   if (cert.has_name_constraints) {
-    scoped_ptr<NameConstraints> name_constraints(NameConstraints::CreateFromDer(
-        cert.name_constraints_extension.value,
-        cert.name_constraints_extension.critical));
+    std::unique_ptr<NameConstraints> name_constraints(
+        NameConstraints::CreateFromDer(
+            cert.name_constraints_extension.value,
+            cert.name_constraints_extension.critical));
     if (!name_constraints)
       return false;
     name_constraints_list->push_back(std::move(name_constraints));
@@ -498,26 +499,133 @@ WARN_UNUSED_RESULT bool WrapUp(const FullyParsedCert& cert) {
 
 }  // namespace
 
+TrustAnchor::TrustAnchor() {}
 TrustAnchor::~TrustAnchor() {}
 
+std::unique_ptr<TrustAnchor> TrustAnchor::CreateFromCertificateData(
+    const uint8_t* data,
+    size_t length,
+    const ParseCertificateOptions& options,
+    DataSource source) {
+  std::unique_ptr<TrustAnchor> result(new TrustAnchor);
+
+  switch (source) {
+    case DataSource::INTERNAL_COPY:
+      result->cert_data_.assign(data, data + length);
+      result->cert_ =
+          der::Input(result->cert_data_.data(), result->cert_data_.size());
+      break;
+    case DataSource::EXTERNAL_REFERENCE:
+      result->cert_ = der::Input(data, length);
+      break;
+  }
+
+  // Parse the certificate to get its name.
+  der::Input tbs_certificate_tlv;
+  der::Input signature_algorithm_tlv;
+  der::BitString signature_value;
+  if (!ParseCertificate(result->cert(), &tbs_certificate_tlv,
+                        &signature_algorithm_tlv, &signature_value))
+    return nullptr;
+
+  ParsedTbsCertificate tbs;
+  if (!ParseTbsCertificate(tbs_certificate_tlv, options, &tbs))
+    return nullptr;
+
+  result->name_ = tbs.subject_tlv;
+
+  // TODO(eroman): If adding a self-signed certificate, check that its
+  // signature is correct? This check will not otherwise be done during
+  // verification.
+
+  return result;
+}
+
+bool TrustAnchor::MatchesName(const der::Input& name) const {
+  return NameMatches(name, name_);
+}
+
 TrustStore::TrustStore() {}
-TrustStore::TrustStore(const TrustStore& other) = default;
 TrustStore::~TrustStore() {}
+
+void TrustStore::Clear() {
+  anchors_.clear();
+}
+
+bool TrustStore::AddTrustedCertificate(const uint8_t* data, size_t length) {
+  return AddTrustedCertificate(data, length,
+                               TrustAnchor::DataSource::INTERNAL_COPY);
+}
+
+bool TrustStore::AddTrustedCertificate(const base::StringPiece& data) {
+  return AddTrustedCertificate(reinterpret_cast<const uint8_t*>(data.data()),
+                               data.size());
+}
+
+bool TrustStore::AddTrustedCertificateWithoutCopying(const uint8_t* data,
+                                                     size_t length) {
+  return AddTrustedCertificate(data, length,
+                               TrustAnchor::DataSource::EXTERNAL_REFERENCE);
+}
+
+const TrustAnchor* TrustStore::FindTrustAnchorByName(
+    const der::Input& name) const {
+  for (const auto& anchor : anchors_) {
+    if (anchor->MatchesName(name)) {
+      return anchor.get();
+    }
+  }
+  return nullptr;
+}
+
+bool TrustStore::IsTrustedCertificate(const der::Input& cert_der) const {
+  for (const auto& anchor : anchors_) {
+    if (anchor->cert() == cert_der)
+      return true;
+  }
+  return false;
+}
+
+bool TrustStore::AddTrustedCertificate(const uint8_t* data,
+                                       size_t length,
+                                       TrustAnchor::DataSource source) {
+  auto anchor =
+      TrustAnchor::CreateFromCertificateData(data, length, {}, source);
+  if (!anchor)
+    return false;
+  anchors_.push_back(std::move(anchor));
+  return true;
+}
+
+// TODO(eroman): Move this into existing anonymous namespace.
+namespace {
 
 // This implementation is structured to mimic the description of certificate
 // path verification given by RFC 5280 section 6.1.
-bool VerifyCertificateChain(const std::vector<der::Input>& certs_der,
-                            const TrustStore& trust_store,
-                            const SignaturePolicy* signature_policy,
-                            const der::GeneralizedTime& time) {
+//
+// Unlike RFC 5280, the trust anchor is specified as the root certificate in
+// the chain. This root certificate is assumed to be trusted, and neither its
+// signature nor issuer name are verified. (It needn't be self-signed).
+bool VerifyCertificateChainAssumingTrustedRoot(
+    const std::vector<der::Input>& certs_der,
+    const ParseCertificateOptions& options,
+    // The trust store is only used for assertions.
+    const TrustStore& trust_store,
+    const SignaturePolicy* signature_policy,
+    const der::GeneralizedTime& time) {
   // An empty chain is necessarily invalid.
   if (certs_der.empty())
     return false;
 
+  // IMPORTANT: the assumption being made is that the root certificate in
+  // the given path is the trust anchor (and has already been verified as
+  // such).
+  DCHECK(trust_store.IsTrustedCertificate(certs_der.back()));
+
   // Will contain a NameConstraints for each previous cert in the chain which
   // had nameConstraints. This corresponds to the permitted_subtrees and
   // excluded_subtrees state variables from RFC 5280.
-  std::vector<scoped_ptr<NameConstraints>> name_constraints_list;
+  std::vector<std::unique_ptr<NameConstraints>> name_constraints_list;
 
   // |working_spki| is an amalgamation of 3 separate variables from RFC 5280:
   //    * working_public_key
@@ -532,18 +640,14 @@ bool VerifyCertificateChain(const std::vector<der::Input>& certs_der,
   // 5280 section 6.1.2:
   //
   //    working_public_key:  the public key used to verify the
-  //    signature of a certificate.  The working_public_key is
-  //    initialized from the trusted public key provided in the trust
-  //    anchor information.
+  //    signature of a certificate.
   der::Input working_spki;
 
   // |working_issuer_name| corresponds with the same named variable in RFC 5280
   // section 6.1.2:
   //
   //    working_issuer_name:  the issuer distinguished name expected
-  //    in the next certificate in the chain.  The
-  //    working_issuer_name is initialized to the trusted issuer name
-  //    provided in the trust anchor information.
+  //    in the next certificate in the chain.
   der::Input working_issuer_name;
 
   // |max_path_length| corresponds with the same named variable in RFC 5280
@@ -561,39 +665,34 @@ bool VerifyCertificateChain(const std::vector<der::Input>& certs_der,
   //
   // Note that |i| uses 0-based indexing whereas in RFC 5280 it is 1-based.
   //
-  //   * i=0    :  Certificate signed by a trust anchor.
+  //   * i=0    :  Trust anchor.
   //   * i=N-1  :  Target certificate.
   for (size_t i = 0; i < certs_der.size(); ++i) {
     const size_t index_into_certs_der = certs_der.size() - i - 1;
+
+    // |is_target_cert| is true if the current certificate is the target
+    // certificate being verified. The target certificate isn't necessarily an
+    // end-entity certificate.
     const bool is_target_cert = index_into_certs_der == 0;
+
+    // |is_trust_anchor| is true if the current certificate is the trust
+    // anchor. This certificate is implicitly trusted.
+    const bool is_trust_anchor = i == 0;
 
     // Parse the current certificate into |cert|.
     FullyParsedCert cert;
     const der::Input& cert_der = certs_der[index_into_certs_der];
-    if (!FullyParseCertificate(cert_der, &cert))
+    if (!FullyParseCertificate(cert_der, options, &cert))
       return false;
-
-    // When processing the first certificate, initialize |working_spki|
-    // and |working_issuer_name| to the trust anchor per RFC 5280 section 6.1.2.
-    // This is done inside the loop in order to have access to the parsed
-    // certificate.
-    if (i == 0) {
-      const TrustAnchor* trust_anchor =
-          FindTrustAnchorByName(trust_store, cert.tbs.issuer_tlv);
-      if (!trust_anchor)
-        return false;
-      working_spki = der::Input(&trust_anchor->spki);
-      working_issuer_name = der::Input(&trust_anchor->name);
-    }
 
     // Per RFC 5280 section 6.1:
     //  * Do basic processing for each certificate
     //  * If it is the last certificate in the path (target certificate)
     //     - Then run "Wrap up"
     //     - Otherwise run "Prepare for Next cert"
-    if (!BasicCertificateProcessing(cert, is_target_cert, signature_policy,
-                                    time, working_spki, working_issuer_name,
-                                    name_constraints_list)) {
+    if (!BasicCertificateProcessing(
+            cert, is_target_cert, is_trust_anchor, signature_policy, time,
+            working_spki, working_issuer_name, name_constraints_list)) {
       return false;
     }
     if (!is_target_cert) {
@@ -614,6 +713,67 @@ bool VerifyCertificateChain(const std::vector<der::Input>& certs_der,
   //    certification path.
 
   return true;
+}
+
+// TODO(eroman): This function is a temporary hack in the absence of full
+// path building. It may insert 1 certificate at the root of the
+// chain to ensure that the path's root certificate is a trust anchor.
+//
+// Beyond this no other verification is done on the chain. The caller is
+// responsible for verifying the subsequent chain's correctness.
+WARN_UNUSED_RESULT bool BuildSimplePathToTrustAnchor(
+    const std::vector<der::Input>& certs_der,
+    const ParseCertificateOptions& options,
+    const TrustStore& trust_store,
+    std::vector<der::Input>* certs_der_trusted_root) {
+  // Copy the input chain.
+  *certs_der_trusted_root = certs_der;
+
+  if (certs_der.empty())
+    return false;
+
+  // Check if the current root certificate is trusted. If it is then no
+  // extra work is needed.
+  if (trust_store.IsTrustedCertificate(certs_der_trusted_root->back()))
+    return true;
+
+  // Otherwise if it is not trusted, check whether its issuer is trusted. If
+  // so, make *that* trusted certificate the root. If the issuer is not in
+  // the trust store then give up and fail (this is not full path building).
+  der::Input tbs_certificate_tlv;
+  der::Input signature_algorithm_tlv;
+  der::BitString signature_value;
+  ParsedTbsCertificate tbs;
+  if (!ParseCertificate(certs_der.back(), &tbs_certificate_tlv,
+                        &signature_algorithm_tlv, &signature_value) ||
+      !ParseTbsCertificate(tbs_certificate_tlv, options, &tbs)) {
+    return false;
+  }
+
+  auto trust_anchor = trust_store.FindTrustAnchorByName(tbs.issuer_tlv);
+  if (!trust_anchor)
+    return false;
+  certs_der_trusted_root->push_back(trust_anchor->cert());
+  return true;
+}
+
+}  // namespace
+
+bool VerifyCertificateChain(const std::vector<der::Input>& certs_der,
+                            const ParseCertificateOptions& options,
+                            const TrustStore& trust_store,
+                            const SignaturePolicy* signature_policy,
+                            const der::GeneralizedTime& time) {
+  // Modify the certificate chain so that its root is a trusted certificate.
+  std::vector<der::Input> certs_der_trusted_root;
+  if (!BuildSimplePathToTrustAnchor(certs_der, options, trust_store,
+                                    &certs_der_trusted_root)) {
+    return false;
+  }
+
+  // Verify the chain.
+  return VerifyCertificateChainAssumingTrustedRoot(
+      certs_der_trusted_root, options, trust_store, signature_policy, time);
 }
 
 }  // namespace net

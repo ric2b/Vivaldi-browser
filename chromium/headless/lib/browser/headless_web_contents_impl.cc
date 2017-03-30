@@ -8,6 +8,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/trace_event/trace_event.h"
+#include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -19,6 +20,8 @@
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/service_registry.h"
 #include "content/public/renderer/render_frame.h"
+#include "headless/lib/browser/headless_browser_impl.h"
+#include "headless/lib/browser/headless_devtools_client_impl.h"
 #include "ui/aura/window.h"
 
 namespace headless {
@@ -31,16 +34,9 @@ class WebContentsObserverAdapter : public content::WebContentsObserver {
 
   ~WebContentsObserverAdapter() override {}
 
-  void RenderViewReady() override { observer_->WebContentsReady(); }
-
-  void DocumentOnLoadCompletedInMainFrame() override {
-    observer_->DocumentOnLoadCompletedInMainFrame();
-  }
-
-  void DidFinishNavigation(
-      content::NavigationHandle* navigation_handle) override {
-    observer_->DidFinishNavigation(navigation_handle->HasCommitted() &&
-                                   !navigation_handle->IsErrorPage());
+  void RenderViewReady() override {
+    DCHECK(web_contents()->GetMainFrame()->IsRenderFrameLive());
+    observer_->DevToolsTargetReady();
   }
 
  private:
@@ -51,23 +47,53 @@ class WebContentsObserverAdapter : public content::WebContentsObserver {
 
 class HeadlessWebContentsImpl::Delegate : public content::WebContentsDelegate {
  public:
-  Delegate() {}
+  explicit Delegate(HeadlessBrowserImpl* browser) : browser_(browser) {}
+
+  void WebContentsCreated(content::WebContents* source_contents,
+                          int opener_render_frame_id,
+                          const std::string& frame_name,
+                          const GURL& target_url,
+                          content::WebContents* new_contents) override {
+    browser_->RegisterWebContents(
+        HeadlessWebContentsImpl::CreateFromWebContents(new_contents, browser_));
+  }
 
  private:
+  HeadlessBrowserImpl* browser_;  // Not owned.
   DISALLOW_COPY_AND_ASSIGN(Delegate);
 };
 
-HeadlessWebContentsImpl::HeadlessWebContentsImpl(
-    content::BrowserContext* browser_context,
+// static
+std::unique_ptr<HeadlessWebContentsImpl> HeadlessWebContentsImpl::Create(
+    content::BrowserContext* context,
     aura::Window* parent_window,
-    const gfx::Size& initial_size)
-    : web_contents_delegate_(new HeadlessWebContentsImpl::Delegate()) {
-  content::WebContents::CreateParams create_params(browser_context, nullptr);
+    const gfx::Size& initial_size,
+    HeadlessBrowserImpl* browser) {
+  content::WebContents::CreateParams create_params(context, nullptr);
   create_params.initial_size = initial_size;
 
-  web_contents_.reset(content::WebContents::Create(create_params));
-  web_contents_->SetDelegate(web_contents_delegate_.get());
+  std::unique_ptr<HeadlessWebContentsImpl> headless_web_contents =
+      base::WrapUnique(new HeadlessWebContentsImpl(
+          content::WebContents::Create(create_params), browser));
 
+  headless_web_contents->InitializeScreen(parent_window, initial_size);
+
+  return headless_web_contents;
+}
+
+// static
+std::unique_ptr<HeadlessWebContentsImpl>
+HeadlessWebContentsImpl::CreateFromWebContents(
+    content::WebContents* web_contents,
+    HeadlessBrowserImpl* browser) {
+  std::unique_ptr<HeadlessWebContentsImpl> headless_web_contents =
+      base::WrapUnique(new HeadlessWebContentsImpl(web_contents, browser));
+
+  return headless_web_contents;
+}
+
+void HeadlessWebContentsImpl::InitializeScreen(aura::Window* parent_window,
+                                               const gfx::Size& initial_size) {
   aura::Window* contents = web_contents_->GetNativeView();
   DCHECK(!parent_window->Contains(contents));
   parent_window->AddChild(contents);
@@ -78,6 +104,15 @@ HeadlessWebContentsImpl::HeadlessWebContentsImpl(
       web_contents_->GetRenderWidgetHostView();
   if (host_view)
     host_view->SetSize(initial_size);
+}
+
+HeadlessWebContentsImpl::HeadlessWebContentsImpl(
+    content::WebContents* web_contents,
+    HeadlessBrowserImpl* browser)
+    : web_contents_delegate_(new HeadlessWebContentsImpl::Delegate(browser)),
+      web_contents_(web_contents),
+      browser_(browser) {
+  web_contents_->SetDelegate(web_contents_delegate_.get());
 }
 
 HeadlessWebContentsImpl::~HeadlessWebContentsImpl() {
@@ -95,6 +130,10 @@ bool HeadlessWebContentsImpl::OpenURL(const GURL& url) {
   return true;
 }
 
+void HeadlessWebContentsImpl::Close() {
+  browser_->DestroyWebContents(this);
+}
+
 void HeadlessWebContentsImpl::AddObserver(Observer* observer) {
   DCHECK(observer_map_.find(observer) == observer_map_.end());
   observer_map_[observer] = base::WrapUnique(
@@ -105,6 +144,21 @@ void HeadlessWebContentsImpl::RemoveObserver(Observer* observer) {
   ObserverMap::iterator it = observer_map_.find(observer);
   DCHECK(it != observer_map_.end());
   observer_map_.erase(it);
+}
+
+HeadlessDevToolsTarget* HeadlessWebContentsImpl::GetDevToolsTarget() {
+  return web_contents()->GetMainFrame()->IsRenderFrameLive() ? this : nullptr;
+}
+
+void HeadlessWebContentsImpl::AttachClient(HeadlessDevToolsClient* client) {
+  if (!agent_host_)
+    agent_host_ = content::DevToolsAgentHost::GetOrCreateFor(web_contents());
+  HeadlessDevToolsClientImpl::From(client)->AttachToHost(agent_host_.get());
+}
+
+void HeadlessWebContentsImpl::DetachClient(HeadlessDevToolsClient* client) {
+  DCHECK(agent_host_);
+  HeadlessDevToolsClientImpl::From(client)->DetachFromHost(agent_host_.get());
 }
 
 content::WebContents* HeadlessWebContentsImpl::web_contents() const {

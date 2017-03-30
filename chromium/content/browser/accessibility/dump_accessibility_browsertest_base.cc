@@ -15,7 +15,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/browser/accessibility/accessibility_tree_formatter.h"
 #include "content/browser/accessibility/accessibility_tree_formatter_blink.h"
@@ -93,7 +93,7 @@ void DumpAccessibilityTestBase::SetUpOnMainThread() {
 
 base::string16
 DumpAccessibilityTestBase::DumpUnfilteredAccessibilityTreeAsString() {
-  scoped_ptr<AccessibilityTreeFormatter> formatter(
+  std::unique_ptr<AccessibilityTreeFormatter> formatter(
       CreateAccessibilityTreeFormatter());
   std::vector<Filter> filters;
   filters.push_back(Filter(base::ASCIIToUTF16("*"), Filter::ALLOW));

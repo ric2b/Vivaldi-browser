@@ -35,7 +35,7 @@ class CORE_EXPORT HTMLLabelElement final : public HTMLElement, public FormAssoci
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(HTMLLabelElement);
 public:
-    static RawPtr<HTMLLabelElement> create(Document&, HTMLFormElement*);
+    static HTMLLabelElement* create(Document&, HTMLFormElement*);
     LabelableElement* control() const;
 
     bool willRespondToMouseClickEvents() override;
@@ -44,12 +44,6 @@ public:
 
     HTMLFormElement* formOwner() const override;
     HTMLFormElement* formForBinding() const;
-
-
-#if !ENABLE(OILPAN)
-    using Node::ref;
-    using Node::deref;
-#endif
 
 private:
     explicit HTMLLabelElement(Document&, HTMLFormElement*);
@@ -74,10 +68,6 @@ private:
     bool isFormControlElement() const override { return false; }
     bool isEnumeratable() const override { return false; }
     bool isLabelElement() const override { return true; }
-#if !ENABLE(OILPAN)
-    void refFormAssociatedElement() override { ref(); }
-    void derefFormAssociatedElement() override { deref(); }
-#endif
 
     void parseAttribute(const QualifiedName&, const AtomicString&, const AtomicString&) override;
 

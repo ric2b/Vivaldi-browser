@@ -10,8 +10,9 @@
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "media/audio/audio_device_description.h"
 #include "media/audio/audio_output_dispatcher_impl.h"
 #include "media/audio/audio_output_proxy.h"
 #include "media/audio/audio_output_resampler.h"
@@ -35,10 +36,6 @@ const int kDefaultMaxInputStreams = 16;
 const int kMaxInputChannels = 3;
 
 }  // namespace
-
-const char AudioManagerBase::kDefaultDeviceId[] = "default";
-const char AudioManagerBase::kCommunicationsDeviceId[] = "communications";
-const char AudioManagerBase::kLoopbackInputDeviceId[] = "loopback";
 
 struct AudioManagerBase::DispatcherParams {
   DispatcherParams(const AudioParameters& input,
@@ -77,12 +74,12 @@ class AudioManagerBase::CompareByParams {
   const DispatcherParams* dispatcher_;
 };
 
-static bool IsDefaultDeviceId(const std::string& device_id) {
-  return device_id.empty() || device_id == AudioManagerBase::kDefaultDeviceId;
-}
-
-AudioManagerBase::AudioManagerBase(AudioLogFactory* audio_log_factory)
-    : max_num_output_streams_(kDefaultMaxOutputStreams),
+AudioManagerBase::AudioManagerBase(
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> worker_task_runner,
+    AudioLogFactory* audio_log_factory)
+    : AudioManager(std::move(task_runner), std::move(worker_task_runner)),
+      max_num_output_streams_(kDefaultMaxOutputStreams),
       max_num_input_streams_(kDefaultMaxInputStreams),
       num_output_streams_(0),
       num_input_streams_(0),
@@ -91,40 +88,19 @@ AudioManagerBase::AudioManagerBase(AudioLogFactory* audio_log_factory)
       // block the UI thread when swapping devices.
       output_listeners_(
           base::ObserverList<AudioDeviceListener>::NOTIFY_EXISTING_ONLY),
-      audio_log_factory_(audio_log_factory) {
-}
+      audio_log_factory_(audio_log_factory) {}
 
 AudioManagerBase::~AudioManagerBase() {
-  // The platform specific AudioManager implementation must have already
-  // stopped the audio thread. Otherwise, we may destroy audio streams before
-  // stopping the thread, resulting an unexpected behavior.
-  // This way we make sure activities of the audio streams are all stopped
-  // before we destroy them.
-  CHECK(!audio_thread_);
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
+
   // All the output streams should have been deleted.
-  DCHECK_EQ(0, num_output_streams_);
+  CHECK_EQ(0, num_output_streams_);
   // All the input streams should have been deleted.
-  DCHECK_EQ(0, num_input_streams_);
+  CHECK_EQ(0, num_input_streams_);
 }
 
 base::string16 AudioManagerBase::GetAudioInputDeviceModel() {
   return base::string16();
-}
-
-scoped_refptr<base::SingleThreadTaskRunner> AudioManagerBase::GetTaskRunner() {
-  if (!audio_thread_) {
-    audio_thread_.reset(new base::Thread("AudioThread"));
-#if defined(OS_WIN)
-    audio_thread_->init_com_with_mta(true);
-#endif
-    CHECK(audio_thread_->Start());
-  }
-  return audio_thread_->task_runner();
-}
-
-scoped_refptr<base::SingleThreadTaskRunner>
-AudioManagerBase::GetWorkerTaskRunner() {
-  return GetTaskRunner();
 }
 
 AudioOutputStream* AudioManagerBase::MakeAudioOutputStream(
@@ -154,7 +130,7 @@ AudioOutputStream* AudioManagerBase::MakeAudioOutputStream(
   AudioOutputStream* stream;
   switch (params.format()) {
     case AudioParameters::AUDIO_PCM_LINEAR:
-      DCHECK(IsDefaultDeviceId(device_id))
+      DCHECK(AudioDeviceDescription::IsDefaultDevice(device_id))
           << "AUDIO_PCM_LINEAR supports only the default device.";
       stream = MakeLinearOutputStream(params);
       break;
@@ -234,7 +210,9 @@ AudioOutputStream* AudioManagerBase::MakeAudioOutputStreamProxy(
   // NOTE: Implementations that don't yet support opening non-default output
   // devices may return an empty string from GetDefaultOutputDeviceID().
   std::string output_device_id =
-      IsDefaultDeviceId(device_id) ? GetDefaultOutputDeviceID() : device_id;
+      AudioDeviceDescription::IsDefaultDevice(device_id)
+          ? GetDefaultOutputDeviceID()
+          : device_id;
 
   // If we're not using AudioOutputResampler our output parameters are the same
   // as our input parameters.
@@ -321,26 +299,8 @@ void AudioManagerBase::ReleaseInputStream(AudioInputStream* stream) {
 }
 
 void AudioManagerBase::Shutdown() {
-  // Only true when we're sharing the UI message loop with the browser.  The UI
-  // loop is no longer running at this time and browser destruction is imminent.
-  auto task_runner = GetTaskRunner();
-  if (task_runner->BelongsToCurrentThread()) {
-    ShutdownOnAudioThread();
-  } else {
-    task_runner->PostTask(FROM_HERE,
-                          base::Bind(&AudioManagerBase::ShutdownOnAudioThread,
-                                     base::Unretained(this)));
-  }
-
-  // Stop() will wait for any posted messages to be processed first.
-  if (audio_thread_) {
-    audio_thread_->Stop();
-    audio_thread_.reset();
-  }
-}
-
-void AudioManagerBase::ShutdownOnAudioThread() {
   DCHECK(GetTaskRunner()->BelongsToCurrentThread());
+  // Close all output streams.
   while (!output_dispatchers_.empty()) {
     output_dispatchers_.back()->dispatcher->Shutdown();
     output_dispatchers_.pop_back();
@@ -402,7 +362,7 @@ int AudioManagerBase::GetUserBufferSize() {
   return 0;
 }
 
-scoped_ptr<AudioLog> AudioManagerBase::CreateAudioLog(
+std::unique_ptr<AudioLog> AudioManagerBase::CreateAudioLog(
     AudioLogFactory::AudioComponent component) {
   return audio_log_factory_->CreateAudioLog(component);
 }

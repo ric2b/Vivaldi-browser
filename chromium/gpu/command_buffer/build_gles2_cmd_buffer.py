@@ -994,7 +994,6 @@ _NAMED_TYPE_INFO = {
   },
   'ReadBuffer': {
     'type': 'GLenum',
-    'is_complete': True,
     'valid': [
       'GL_NONE',
       'GL_BACK',
@@ -2147,18 +2146,6 @@ _NAMED_TYPE_INFO = {
       'GL_READ_WRITE_CHROMIUM',
     ],
   },
-  'ValueBufferTarget': {
-    'type': 'GLenum',
-    'valid': [
-      'GL_SUBSCRIBED_VALUES_BUFFER_CHROMIUM',
-    ],
-  },
-  'SubscriptionTarget': {
-    'type': 'GLenum',
-    'valid': [
-      'GL_MOUSE_POSITION_CHROMIUM',
-    ],
-  },
   'UniformParameter': {
     'type': 'GLenum',
     'is_complete': True,
@@ -2425,6 +2412,7 @@ _FUNCTION_INFO = {
     'type': 'Bind',
     'decoder_func': 'DoBindBufferRange',
     'gen_func': 'GenBuffersARB',
+    'unit_test': False,
     'valid_args': {
       '3': '4',
       '4': '4'
@@ -2456,12 +2444,15 @@ _FUNCTION_INFO = {
     'gen_func': 'GenTextures',
     # TODO: remove this once client side caching works.
     'client_test': False,
+    'unit_test': False,
     'trace_level': 2,
   },
   'BindTransformFeedback': {
     'type': 'Bind',
-    'id_mapping': [ 'TransformFeedback' ],
+    'decoder_func': 'DoBindTransformFeedback',
     'unsafe': True,
+    'use_helper': True,
+    'unit_test': False,
   },
   'BlitFramebufferCHROMIUM': {
     'decoder_func': 'DoBlitFramebufferCHROMIUM',
@@ -2591,57 +2582,6 @@ _FUNCTION_INFO = {
     'extension': "CHROMIUM_texture_mailbox",
     'chromium': True,
     'trace_level': 2,
-  },
-  'GenValuebuffersCHROMIUM': {
-    'type': 'GENn',
-    'gl_test_func': 'glGenValuebuffersCHROMIUM',
-    'resource_type': 'Valuebuffer',
-    'resource_types': 'Valuebuffers',
-    'unit_test': False,
-    'extension': 'CHROMIUM_subscribe_uniform',
-    'chromium': True,
-  },
-  'DeleteValuebuffersCHROMIUM': {
-    'type': 'DELn',
-    'gl_test_func': 'glDeleteValuebuffersCHROMIUM',
-    'resource_type': 'Valuebuffer',
-    'resource_types': 'Valuebuffers',
-    'unit_test': False,
-    'extension': 'CHROMIUM_subscribe_uniform',
-    'chromium': True,
-  },
-  'IsValuebufferCHROMIUM': {
-    'type': 'Is',
-    'decoder_func': 'DoIsValuebufferCHROMIUM',
-    'expectation': False,
-    'extension': 'CHROMIUM_subscribe_uniform',
-    'chromium': True,
-  },
-  'BindValuebufferCHROMIUM': {
-    'type': 'Bind',
-    'decoder_func': 'DoBindValueBufferCHROMIUM',
-    'gen_func': 'GenValueBuffersCHROMIUM',
-    'unit_test': False,
-    'extension': 'CHROMIUM_subscribe_uniform',
-    'chromium': True,
-  },
-  'SubscribeValueCHROMIUM': {
-    'decoder_func': 'DoSubscribeValueCHROMIUM',
-    'unit_test': False,
-    'extension': 'CHROMIUM_subscribe_uniform',
-    'chromium': True,
-  },
-  'PopulateSubscribedValuesCHROMIUM': {
-    'decoder_func': 'DoPopulateSubscribedValuesCHROMIUM',
-    'unit_test': False,
-    'extension': 'CHROMIUM_subscribe_uniform',
-    'chromium': True,
-  },
-  'UniformValuebufferCHROMIUM': {
-    'decoder_func': 'DoUniformValueBufferCHROMIUM',
-    'unit_test': False,
-    'extension': 'CHROMIUM_subscribe_uniform',
-    'chromium': True,
   },
   'ClearStencil': {
     'type': 'StateSet',
@@ -2859,6 +2799,8 @@ _FUNCTION_INFO = {
     'resource_type': 'TransformFeedback',
     'resource_types': 'TransformFeedbacks',
     'unsafe': True,
+    'use_helper': True,
+    'unit_test': False,
   },
   'DepthRangef': {
     'decoder_func': 'DoDepthRangef',
@@ -2949,6 +2891,7 @@ _FUNCTION_INFO = {
   'FramebufferTextureLayer': {
     'decoder_func': 'DoFramebufferTextureLayer',
     'unsafe': True,
+    'unit_test': False,
     'trace_level': 1,
   },
   'GenerateMipmap': {
@@ -2999,6 +2942,8 @@ _FUNCTION_INFO = {
     'resource_type': 'TransformFeedback',
     'resource_types': 'TransformFeedbacks',
     'unsafe': True,
+    'use_helper': True,
+    'unit_test': False,
   },
   'GetActiveAttrib': {
     'type': 'Custom',
@@ -3143,13 +3088,19 @@ _FUNCTION_INFO = {
   'GetInteger64i_v': {
     'type': 'GETn',
     'result': ['SizedResult<GLint64>'],
+    'decoder_func': 'DoGetInteger64i_v',
+    'shadowed': True,
     'client_test': False,
+    'unit_test': False,
     'unsafe': True
   },
   'GetIntegeri_v': {
     'type': 'GETn',
     'result': ['SizedResult<GLint>'],
+    'decoder_func': 'DoGetIntegeri_v',
+    'shadowed': True,
     'client_test': False,
+    'unit_test': False,
     'unsafe': True
   },
   'GetInternalformativ': {
@@ -3411,6 +3362,7 @@ _FUNCTION_INFO = {
   'InvalidateFramebuffer': {
     'type': 'PUTn',
     'count': 1,
+    'decoder_func': 'DoInvalidateFramebuffer',
     'client_test': False,
     'unit_test': False,
     'unsafe': True,
@@ -3418,6 +3370,7 @@ _FUNCTION_INFO = {
   'InvalidateSubFramebuffer': {
     'type': 'PUTn',
     'count': 1,
+    'decoder_func': 'DoInvalidateSubFramebuffer',
     'client_test': False,
     'unit_test': False,
     'unsafe': True,
@@ -3475,9 +3428,10 @@ _FUNCTION_INFO = {
   },
   'IsTransformFeedback': {
     'type': 'Is',
-    'id_mapping': [ 'TransformFeedback' ],
+    'decoder_func': 'DoIsTransformFeedback',
     'expectation': False,
     'unsafe': True,
+    'use_helper': True,
   },
   'GetLastFlushIdCHROMIUM': {
     'gen_cmd': False,
@@ -3525,6 +3479,8 @@ _FUNCTION_INFO = {
     'trace_level': 1,
   },
   'PauseTransformFeedback': {
+    'decoder_func': 'DoPauseTransformFeedback',
+    'unit_test': False,
     'unsafe': True,
   },
   'PixelStorei': {'type': 'Manual'},
@@ -3622,6 +3578,8 @@ _FUNCTION_INFO = {
     'unit_test': False,
   },
   'ResumeTransformFeedback': {
+    'decoder_func': 'DoResumeTransformFeedback',
+    'unit_test': False,
     'unsafe': True,
   },
   'SamplerParameterf': {
@@ -4187,6 +4145,8 @@ _FUNCTION_INFO = {
     'extension': "occlusion_query_EXT",
   },
   'BeginTransformFeedback': {
+    'decoder_func': 'DoBeginTransformFeedback',
+    'unit_test': False,
     'unsafe': True,
   },
   'EndQueryEXT': {
@@ -4198,6 +4158,8 @@ _FUNCTION_INFO = {
     'extension': "occlusion_query_EXT",
   },
   'EndTransformFeedback': {
+    'decoder_func': 'DoEndTransformFeedback',
+    'unit_test': False,
     'unsafe': True,
   },
   'FlushDriverCachesCHROMIUM': {
@@ -4458,7 +4420,7 @@ _FUNCTION_INFO = {
     'cmd_args': 'GLuint contents_texture_id, GLfloat opacity, '
                 'GLuint background_color, GLuint edge_aa_mask, '
                 'GLboolean is_clipped, GLint sorting_context_id, '
-                'GLuint shm_id, GLuint shm_offset',
+                'GLuint filter, GLuint shm_id, GLuint shm_offset',
     'extension': 'CHROMIUM_schedule_ca_layer',
     'chromium': True,
   },
@@ -6159,7 +6121,7 @@ class GENnHandler(TypeHandler):
       return error::kInvalidArguments;
     }
   }
-  scoped_ptr<GLuint[]> service_ids(new GLuint[n]);
+  std::unique_ptr<GLuint[]> service_ids(new GLuint[n]);
   gl%(func_name)s(n, service_ids.get());
   for (GLsizei ii = 0; ii < n; ++ii) {
     group_->Add%(resource_name)sId(%(last_arg_name)s[ii], service_ids[ii]);
@@ -7291,7 +7253,7 @@ TEST_P(%(test_name)s, %(name)sInvalidArgs%(arg_index)d_%(value_index)d) {
   def WriteGetDataSizeCode(self, func, f):
     """Overrriden from TypeHandler."""
     code = """  uint32_t data_size;
-  if (!ComputeDataSize(1, sizeof(%s), %d, &data_size)) {
+  if (!GLES2Util::ComputeDataSize(1, sizeof(%s), %d, &data_size)) {
     return error::kOutOfBounds;
   }
 """
@@ -7597,12 +7559,14 @@ TEST_P(%(test_name)s, %(name)sInvalidArgs%(arg_index)d_%(value_index)d) {
 
   def WriteGetDataSizeCode(self, func, f):
     """Overrriden from TypeHandler."""
-    code = """  uint32_t data_size;
-  if (!ComputeDataSize(count, sizeof(%s), %d, &data_size)) {
+    code = """  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(%s), %d, &data_size)) {
     return error::kOutOfBounds;
   }
 """
-    f.write(code % (self.GetArrayType(func), self.GetArrayCount(func)))
+    f.write(code % (self.GetArrayType(func),
+                    self.GetArrayCount(func)))
     if func.IsImmediate():
       f.write("  if (data_size > immediate_data_size) {\n")
       f.write("    return error::kOutOfBounds;\n")
@@ -8978,8 +8942,6 @@ class SizeArgument(Argument):
 
   def WriteValidationCode(self, f, func):
     """overridden from Argument."""
-    if func.IsUnsafe():
-      return
     code = """  if (%(var_name)s < 0) {
     LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "gl%(func_name)s", "%(var_name)s < 0");
     return error::kNoError;
@@ -9033,8 +8995,6 @@ class EnumBaseArgument(Argument):
     return self.named_type.GetConstantValue()
 
   def WriteValidationCode(self, f, func):
-    if func.IsUnsafe():
-      return
     if self.named_type.IsConstant():
       return
     f.write("  if (!validators_->%s.IsValid(%s)) {\n" %
@@ -10928,6 +10888,8 @@ extern const NameToFunc g_gles2_function_table[] = {
     comment = ("// This file is included by gles2_interface.h to declare the\n"
                "// GL api functions.\n")
     code = """
+#include <memory>
+
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "mojo/public/c/gles2/gles2.h"
 

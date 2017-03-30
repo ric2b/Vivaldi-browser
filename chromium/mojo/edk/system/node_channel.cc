@@ -194,6 +194,7 @@ void NodeChannel::ShutDown() {
 void NodeChannel::SetRemoteProcessHandle(base::ProcessHandle process_handle) {
   DCHECK(io_task_runner_->RunsTasksOnCurrentThread());
   base::AutoLock lock(remote_process_handle_lock_);
+  CHECK_NE(remote_process_handle_, base::GetCurrentProcessHandle());
   remote_process_handle_ = process_handle;
 }
 
@@ -394,6 +395,11 @@ void NodeChannel::OnChannelMessage(const void* payload,
 
   RequestContext request_context(RequestContext::Source::SYSTEM);
 
+  // Ensure this NodeChannel stays alive through the extent of this method. The
+  // delegate may have the only other reference to this object and it may choose
+  // to drop it here in response to, e.g., a malformed message.
+  scoped_refptr<NodeChannel> keepalive = this;
+
 #if defined(OS_WIN)
   // If we receive handles from a known process, rewrite them to our own
   // process. This can occur when a privileged node receives handles directly
@@ -401,11 +407,20 @@ void NodeChannel::OnChannelMessage(const void* payload,
   {
     base::AutoLock lock(remote_process_handle_lock_);
     if (handles && remote_process_handle_ != base::kNullProcessHandle) {
+      // Note that we explicitly mark the handles as being owned by the sending
+      // process before rewriting them, in order to accommodate RewriteHandles'
+      // internal sanity checks.
+      for (auto& handle : *handles)
+        handle.owning_process = remote_process_handle_;
       if (!Channel::Message::RewriteHandles(remote_process_handle_,
                                             base::GetCurrentProcessHandle(),
                                             handles->data(), handles->size())) {
         DLOG(ERROR) << "Received one or more invalid handles.";
       }
+    } else if (handles) {
+      // Handles received by an unknown process must already be owned by us.
+      for (auto& handle : *handles)
+        handle.owning_process = base::GetCurrentProcessHandle();
     }
   }
 #elif defined(OS_MACOSX) && !defined(OS_IOS)
@@ -673,6 +688,9 @@ void NodeChannel::ProcessPendingMessagesWithMachPorts() {
       channel_->Write(std::move(message));
     }
   }
+
+  // Ensure this NodeChannel stays alive while flushing relay messages.
+  scoped_refptr<NodeChannel> keepalive = this;
 
   while (!pending_relays.empty()) {
     ports::NodeName destination = pending_relays.front().first;

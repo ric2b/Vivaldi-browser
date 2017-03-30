@@ -5,9 +5,10 @@
 #ifndef UI_VIEWS_BUBBLE_TRAY_BUBBLE_VIEW_H_
 #define UI_VIEWS_BUBBLE_TRAY_BUBBLE_VIEW_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
-#include "ui/views/bubble/bubble_delegate.h"
+#include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "ui/views/mouse_watcher.h"
 #include "ui/views/views_export.h"
 
@@ -31,7 +32,7 @@ class TrayBubbleContentMask;
 // Ash status area). Mostly this handles custom anchor location and arrow and
 // border rendering. This also has its own delegate for handling mouse events
 // and other implementation specific details.
-class VIEWS_EXPORT TrayBubbleView : public views::BubbleDelegateView,
+class VIEWS_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
                                     public views::MouseWatcherListener {
  public:
   // AnchorType differentiates between bubbles that are anchored on a tray
@@ -73,7 +74,7 @@ class VIEWS_EXPORT TrayBubbleView : public views::BubbleDelegateView,
     // accessible name for the bubble.
     virtual base::string16 GetAccessibleNameForBubble() = 0;
 
-    // Passes responsibility for BubbleDelegateView::GetAnchorRect to the
+    // Passes responsibility for BubbleDialogDelegateView::GetAnchorRect to the
     // delegate.
     virtual gfx::Rect GetAnchorRect(
         views::Widget* anchor_widget,
@@ -154,7 +155,7 @@ class VIEWS_EXPORT TrayBubbleView : public views::BubbleDelegateView,
   bool WidgetHasHitTestMask() const override;
   void GetWidgetHitTestMask(gfx::Path* mask) const override;
 
-  // Overridden from views::BubbleDelegateView.
+  // Overridden from views::BubbleDialogDelegateView.
   gfx::Rect GetAnchorRect() const override;
 
   // Overridden from views::View.
@@ -174,7 +175,8 @@ class VIEWS_EXPORT TrayBubbleView : public views::BubbleDelegateView,
                  Delegate* delegate,
                  const InitParams& init_params);
 
-  // Overridden from views::BubbleDelegateView.
+  // Overridden from views::BubbleDialogDelegateView.
+  int GetDialogButtons() const override;
   void Init() override;
 
   // Overridden from views::View.
@@ -189,8 +191,8 @@ class VIEWS_EXPORT TrayBubbleView : public views::BubbleDelegateView,
   // |bubble_border_| and |owned_bubble_border_| point to the same thing, but
   // the latter ensures we don't leak it before passing off ownership.
   internal::TrayBubbleBorder* bubble_border_;
-  scoped_ptr<views::BubbleBorder> owned_bubble_border_;
-  scoped_ptr<internal::TrayBubbleContentMask> bubble_content_mask_;
+  std::unique_ptr<views::BubbleBorder> owned_bubble_border_;
+  std::unique_ptr<internal::TrayBubbleContentMask> bubble_content_mask_;
   bool is_gesture_dragging_;
 
   // True once the mouse cursor was actively moved by the user over the bubble.
@@ -198,7 +200,7 @@ class VIEWS_EXPORT TrayBubbleView : public views::BubbleDelegateView,
   bool mouse_actively_entered_;
 
   // Used to find any mouse movements.
-  scoped_ptr<MouseWatcher> mouse_watcher_;
+  std::unique_ptr<MouseWatcher> mouse_watcher_;
 
   DISALLOW_COPY_AND_ASSIGN(TrayBubbleView);
 };

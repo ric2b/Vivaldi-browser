@@ -8,12 +8,14 @@
 #include <stdint.h>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "ui/ozone/common/gpu/ozone_gpu_message_params.h"
+#include "ui/ozone/platform/drm/common/drm_util.h"
 #include "ui/ozone/platform/drm/gpu/crtc_controller.h"
 #include "ui/ozone/platform/drm/gpu/drm_buffer.h"
 #include "ui/ozone/platform/drm/gpu/drm_device.h"
@@ -24,14 +26,6 @@
 namespace ui {
 
 namespace {
-
-#ifndef DRM_CAP_CURSOR_WIDTH
-#define DRM_CAP_CURSOR_WIDTH 0x8
-#endif
-
-#ifndef DRM_CAP_CURSOR_HEIGHT
-#define DRM_CAP_CURSOR_HEIGHT 0x9
-#endif
 
 void UpdateCursorImage(DrmBuffer* cursor, const SkBitmap& image) {
   SkRect damage;
@@ -66,7 +60,7 @@ void DrmWindow::Initialize(ScanoutBufferGenerator* buffer_generator) {
 
   device_manager_->UpdateDrmDevice(widget_, nullptr);
   overlay_validator_ =
-      make_scoped_ptr(new DrmOverlayValidator(this, buffer_generator));
+      base::WrapUnique(new DrmOverlayValidator(this, buffer_generator));
 }
 
 void DrmWindow::Shutdown() {
@@ -129,6 +123,18 @@ void DrmWindow::MoveCursor(const gfx::Point& location) {
 
 void DrmWindow::SchedulePageFlip(const std::vector<OverlayPlane>& planes,
                                  const SwapCompletionCallback& callback) {
+  if (controller_) {
+    const DrmDevice* drm = controller_->GetAllocationDrmDevice().get();
+    for (const auto& plane : planes) {
+      if (plane.buffer && plane.buffer->GetDrmDevice() != drm) {
+        // Although |force_buffer_reallocation_| is set to true during window
+        // bounds update, this may still be needed because of in-flight buffers.
+        force_buffer_reallocation_ = true;
+        break;
+      }
+    }
+  }
+
   if (force_buffer_reallocation_) {
     force_buffer_reallocation_ = false;
     callback.Run(gfx::SwapResult::SWAP_NAK_RECREATE_BUFFERS);
@@ -227,19 +233,16 @@ void DrmWindow::SetController(HardwareDisplayController* controller) {
 }
 
 void DrmWindow::UpdateCursorBuffers() {
+  TRACE_EVENT0("drm", "DrmWindow::UpdateCursorBuffers");
   if (!controller_) {
     for (size_t i = 0; i < arraysize(cursor_buffers_); ++i) {
       cursor_buffers_[i] = nullptr;
     }
   } else {
     scoped_refptr<DrmDevice> drm = controller_->GetAllocationDrmDevice();
-
-    uint64_t cursor_width = 64;
-    uint64_t cursor_height = 64;
-    drm->GetCapability(DRM_CAP_CURSOR_WIDTH, &cursor_width);
-    drm->GetCapability(DRM_CAP_CURSOR_HEIGHT, &cursor_height);
-
-    SkImageInfo info = SkImageInfo::MakeN32Premul(cursor_width, cursor_height);
+    gfx::Size max_cursor_size = GetMaximumCursorSize(drm->get_fd());
+    SkImageInfo info = SkImageInfo::MakeN32Premul(max_cursor_size.width(),
+                                                  max_cursor_size.height());
     for (size_t i = 0; i < arraysize(cursor_buffers_); ++i) {
       cursor_buffers_[i] = new DrmBuffer(drm);
       // Don't register a framebuffer for cursors since they are special (they

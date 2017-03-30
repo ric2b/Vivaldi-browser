@@ -107,7 +107,13 @@ public:
 
     Page* page() const;
 
+    // TODO(pilgrim) replace all instances of layoutView() with layoutViewItem()
+    // https://crbug.com/499321
     LayoutView* layoutView() const;
+    LayoutViewItem layoutViewItem() const
+    {
+        return LayoutViewItem(this->layoutView());
+    }
 
     void setCanHaveScrollbars(bool);
 
@@ -173,6 +179,7 @@ public:
     void updateBackgroundRecursively(const Color&, bool);
 
     void adjustViewSize();
+    void adjustViewSizeAndLayout();
 
     // Scale used to convert incoming input events.
     float inputEventsScaleFactor() const;
@@ -200,6 +207,11 @@ public:
     void removeViewportConstrainedObject(LayoutObject*);
     const ViewportConstrainedObjectSet* viewportConstrainedObjects() const { return m_viewportConstrainedObjects.get(); }
     bool hasViewportConstrainedObjects() const { return m_viewportConstrainedObjects && m_viewportConstrainedObjects->size() > 0; }
+
+    // Sticky objects.
+    void addStickyPositionObject() { ++m_stickyPositionObjectCount; }
+    void removeStickyPositionObject() { --m_stickyPositionObjectCount; }
+    bool hasStickyPositionObjects() const { return m_stickyPositionObjectCount; }
 
     // Objects with background-attachment:fixed.
     void addBackgroundAttachmentFixedObject(LayoutObject*);
@@ -231,6 +243,9 @@ public:
     // If lifecycle throttling is allowed (see DocumentLifecycle::AllowThrottlingScope), some frames may skip the lifecycle update
     // (e.g., based on visibility) and will not end up being PaintInvalidationClean.
     void updateAllLifecyclePhases();
+
+    // Everything except paint (the last phase).
+    void updateAllLifecyclePhasesExceptPaint();
 
     // Computes the style, layout and compositing lifecycle stages if needed. After calling this method, all frames will be in a lifecycle
     // state >= CompositingClean, and scrolling has been updated (unless throttling is allowed).
@@ -353,7 +368,7 @@ public:
     // commit scroll offsets before a WebView::resize occurs, we need to adjust
     // our scroll extents to prevent clamping the scroll offsets.
     void setTopControlsViewportAdjustment(float);
-    IntSize topControlsSize() const { return IntSize(0, roundf(m_topControlsViewportAdjustment)); }
+    IntSize topControlsSize() const { return IntSize(0, ceilf(m_topControlsViewportAdjustment)); }
 
     IntPoint maximumScrollPosition() const override;
 
@@ -559,9 +574,6 @@ public:
 
     LayoutAnalyzer* layoutAnalyzer() { return m_analyzer.get(); }
 
-    void setFrameTimingRequestsDirty(bool isDirty) { m_frameTimingRequestsDirty = isDirty; }
-    bool frameTimingRequestsDirty() { return m_frameTimingRequestsDirty; }
-
     // Returns true if this frame should not render or schedule visual updates.
     bool shouldThrottleRendering() const;
 
@@ -639,6 +651,7 @@ private:
     enum LifeCycleUpdateOption {
         OnlyUpToLayoutClean,
         OnlyUpToCompositingCleanPlusScrolling,
+        AllPhasesExceptPaint,
         AllPhases,
     };
 
@@ -745,12 +758,7 @@ private:
 
     void collectAnnotatedRegions(LayoutObject&, Vector<AnnotatedRegionValue>&) const;
 
-    typedef WTF::HashMap <const GraphicsLayer*, Vector<std::pair<int64_t, WebRect>>> GraphicsLayerFrameTimingRequests;
-    void updateFrameTimingRequestsIfNeeded();
-    void collectFrameTimingRequests(GraphicsLayerFrameTimingRequests&);
-    void collectFrameTimingRequestsRecursive(GraphicsLayerFrameTimingRequests&);
-
-    template <typename Function> void forAllNonThrottledFrameViews(Function);
+    template <typename Function> void forAllNonThrottledFrameViews(const Function&);
 
     void setNeedsUpdateViewportIntersection();
     void updateViewportIntersectionsForSubtree(LifeCycleUpdateOption);
@@ -761,11 +769,6 @@ private:
     // PaintInvalidationCapableScrollableArea
     LayoutBox& boxForScrollControlPaintInvalidation() const override;
     LayoutScrollbarPart* resizer() const override { return nullptr; }
-
-    LayoutViewItem layoutViewItem() const
-    {
-        return LayoutViewItem(this->layoutView());
-    }
 
     LayoutSize m_size;
 
@@ -828,6 +831,7 @@ private:
     Member<ScrollableAreaSet> m_animatingScrollableAreas;
     OwnPtr<ResizerAreaSet> m_resizerAreas;
     OwnPtr<ViewportConstrainedObjectSet> m_viewportConstrainedObjects;
+    unsigned m_stickyPositionObjectCount;
     ViewportConstrainedObjectSet m_backgroundAttachmentFixedObjects;
     Member<FrameViewAutoSizeInfo> m_autoSizeInfo;
 
@@ -909,6 +913,7 @@ private:
     ScrollAnchor m_scrollAnchor;
 
     bool m_needsScrollbarsUpdate;
+    bool m_suppressAdjustViewSize;
 };
 
 inline void FrameView::incrementVisuallyNonEmptyCharacterCount(unsigned count)

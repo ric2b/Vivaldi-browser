@@ -5,6 +5,8 @@
 #ifndef UI_COMPOSITOR_FLOAT_ANIMATION_CURVE_ADAPTER_H_
 #define UI_COMPOSITOR_FLOAT_ANIMATION_CURVE_ADAPTER_H_
 
+#include <memory>
+
 #include "base/time/time.h"
 #include "cc/animation/animation_curve.h"
 #include "ui/gfx/animation/tween.h"
@@ -22,7 +24,7 @@ class FloatAnimationCurveAdapter : public cc::FloatAnimationCurve {
 
   // FloatAnimationCurve implementation.
   base::TimeDelta Duration() const override;
-  scoped_ptr<cc::AnimationCurve> Clone() const override;
+  std::unique_ptr<cc::AnimationCurve> Clone() const override;
   float GetValue(base::TimeDelta t) const override;
 
  private:

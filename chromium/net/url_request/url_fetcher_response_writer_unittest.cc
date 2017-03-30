@@ -7,7 +7,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/run_loop.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
@@ -28,7 +28,7 @@ class URLFetcherStringWriterTest : public PlatformTest {
     buf_ = new StringIOBuffer(kData);
   }
 
-  scoped_ptr<URLFetcherStringWriter> writer_;
+  std::unique_ptr<URLFetcherStringWriter> writer_;
   scoped_refptr<StringIOBuffer> buf_;
 };
 
@@ -64,7 +64,7 @@ class URLFetcherFileWriterTest : public PlatformTest {
 
   base::ScopedTempDir temp_dir_;
   base::FilePath file_path_;
-  scoped_ptr<URLFetcherFileWriter> writer_;
+  std::unique_ptr<URLFetcherFileWriter> writer_;
   scoped_refptr<StringIOBuffer> buf_;
 };
 
@@ -150,7 +150,7 @@ class URLFetcherFileWriterTemporaryFileTest : public PlatformTest {
     buf_ = new StringIOBuffer(kData);
   }
 
-  scoped_ptr<URLFetcherFileWriter> writer_;
+  std::unique_ptr<URLFetcherFileWriter> writer_;
   scoped_refptr<StringIOBuffer> buf_;
 };
 

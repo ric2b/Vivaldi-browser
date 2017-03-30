@@ -13,22 +13,22 @@
 namespace leveldb {
 
 // Creates LevelDBDatabases based scoped to a |directory|/|dbname|.
-class LevelDBServiceImpl : public LevelDBService {
+class LevelDBServiceImpl : public mojom::LevelDBService {
  public:
   LevelDBServiceImpl(scoped_refptr<base::SingleThreadTaskRunner> task_runner);
   ~LevelDBServiceImpl() override;
 
   // Overridden from LevelDBService:
-  void Open(filesystem::DirectoryPtr directory,
+  void Open(filesystem::mojom::DirectoryPtr directory,
             const mojo::String& dbname,
-            leveldb::LevelDBDatabaseRequest database,
+            leveldb::mojom::LevelDBDatabaseRequest database,
             const OpenCallback& callback) override;
-  void OpenWithOptions(leveldb::OpenOptionsPtr open_options,
-                       filesystem::DirectoryPtr directory,
+  void OpenWithOptions(leveldb::mojom::OpenOptionsPtr open_options,
+                       filesystem::mojom::DirectoryPtr directory,
                        const mojo::String& dbname,
-                       leveldb::LevelDBDatabaseRequest database,
+                       leveldb::mojom::LevelDBDatabaseRequest database,
                        const OpenCallback& callback) override;
-  void OpenInMemory(leveldb::LevelDBDatabaseRequest database,
+  void OpenInMemory(leveldb::mojom::LevelDBDatabaseRequest database,
                     const OpenInMemoryCallback& callback) override;
 
  private:

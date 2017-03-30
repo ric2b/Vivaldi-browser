@@ -51,7 +51,7 @@ namespace base {
     } while (0)
 
 class HistogramSamples;
-class PersistentMemoryAllocator;
+class PersistentHistogramAllocator;
 
 class BASE_EXPORT SparseHistogram : public HistogramBase {
  public:
@@ -59,9 +59,10 @@ class BASE_EXPORT SparseHistogram : public HistogramBase {
   // new one.
   static HistogramBase* FactoryGet(const std::string& name, int32_t flags);
 
-  // Create a histogram using data in persistent storage.
+  // Create a histogram using data in persistent storage. The allocator must
+  // live longer than the created sparse histogram.
   static std::unique_ptr<HistogramBase> PersistentCreate(
-      PersistentMemoryAllocator* allocator,
+      PersistentHistogramAllocator* allocator,
       const std::string& name,
       HistogramSamples::Metadata* meta,
       HistogramSamples::Metadata* logged_meta);
@@ -80,6 +81,7 @@ class BASE_EXPORT SparseHistogram : public HistogramBase {
   bool AddSamplesFromPickle(base::PickleIterator* iter) override;
   std::unique_ptr<HistogramSamples> SnapshotSamples() const override;
   std::unique_ptr<HistogramSamples> SnapshotDelta() override;
+  std::unique_ptr<HistogramSamples> SnapshotFinalDelta() const override;
   void WriteHTMLGraph(std::string* output) const override;
   void WriteAscii(std::string* output) const override;
 
@@ -91,7 +93,7 @@ class BASE_EXPORT SparseHistogram : public HistogramBase {
   // Clients should always use FactoryGet to create SparseHistogram.
   explicit SparseHistogram(const std::string& name);
 
-  SparseHistogram(PersistentMemoryAllocator* allocator,
+  SparseHistogram(PersistentHistogramAllocator* allocator,
                   const std::string& name,
                   HistogramSamples::Metadata* meta,
                   HistogramSamples::Metadata* logged_meta);
@@ -119,6 +121,9 @@ class BASE_EXPORT SparseHistogram : public HistogramBase {
 
   // Protects access to |samples_|.
   mutable base::Lock lock_;
+
+  // Flag to indicate if PrepareFinalDelta has been previously called.
+  mutable bool final_delta_created_ = false;
 
   std::unique_ptr<HistogramSamples> samples_;
   std::unique_ptr<HistogramSamples> logged_samples_;

@@ -14,6 +14,7 @@
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/download/download_danger_prompt.h"
 #include "chrome/browser/ui/webui/md_downloads/downloads_list_tracker.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_ui_message_handler.h"
 
 namespace base {
@@ -23,14 +24,14 @@ class ListValue;
 namespace content {
 class DownloadItem;
 class DownloadManager;
-class RenderViewHost;
 class WebContents;
 class WebUI;
 }
 
 // The handler for Javascript messages related to the "downloads" view,
 // also observes changes to the download manager.
-class MdDownloadsDOMHandler : public content::WebUIMessageHandler {
+class MdDownloadsDOMHandler : public content::WebContentsObserver,
+                              public content::WebUIMessageHandler {
  public:
   MdDownloadsDOMHandler(content::DownloadManager* download_manager,
                         content::WebUI* web_ui);
@@ -38,8 +39,10 @@ class MdDownloadsDOMHandler : public content::WebUIMessageHandler {
 
   // WebUIMessageHandler implementation.
   void RegisterMessages() override;
+  void OnJavascriptDisallowed() override;
 
-  void RenderViewReused(content::RenderViewHost* render_view_host);
+  // WebContentsObserver implementation.
+  void RenderProcessGone(base::TerminationStatus status) override;
 
   // Callback for the "getDownloads" message.
   void HandleGetDownloads(const base::ListValue* args);
@@ -93,9 +96,14 @@ class MdDownloadsDOMHandler : public content::WebUIMessageHandler {
   // Actually remove downloads with an ID in |removals_|. This cannot be undone.
   void FinalizeRemovals();
 
+  using DownloadVector = std::vector<content::DownloadItem*>;
+
+  // Remove all downloads in |to_remove|. Safe downloads can be revived,
+  // dangerous ones are immediately removed. Protected for testing.
+  void RemoveDownloads(const DownloadVector& to_remove);
+
  private:
   using IdSet = std::set<uint32_t>;
-  using DownloadVector = std::vector<content::DownloadItem*>;
 
   // Convenience method to call |main_notifier_->GetManager()| while
   // null-checking |main_notifier_|.
@@ -127,8 +135,8 @@ class MdDownloadsDOMHandler : public content::WebUIMessageHandler {
   // Returns the download with |id| or NULL if it doesn't exist.
   content::DownloadItem* GetDownloadById(uint32_t id);
 
-  // Remove all downloads in |to_remove| with the ability to undo removal later.
-  void RemoveDownloads(const DownloadVector& to_remove);
+  // Removes the download specified by an ID from JavaScript in |args|.
+  void RemoveDownloadInArgs(const base::ListValue* args);
 
   // Checks whether a download's file was removed from its original location.
   void CheckForRemovedFiles();

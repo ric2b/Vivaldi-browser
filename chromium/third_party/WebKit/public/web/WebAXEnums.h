@@ -46,6 +46,7 @@ enum WebAXEvent {
     WebAXEventChildrenChanged,
     WebAXEventClicked,
     WebAXEventDocumentSelectionChanged,
+    WebAXEventExpandedChanged,
     WebAXEventFocus,
     WebAXEventHide,
     WebAXEventHover,
@@ -254,6 +255,17 @@ enum WebAXOrientation {
     WebAXOrientationUndefined = 0,
     WebAXOrientationVertical,
     WebAXOrientationHorizontal,
+};
+
+enum WebAXAriaCurrentState {
+    WebAXAriaCurrentStateUndefined = 0,
+    WebAXAriaCurrentStateFalse,
+    WebAXAriaCurrentStateTrue,
+    WebAXAriaCurrentStatePage,
+    WebAXAriaCurrentStateStep,
+    WebAXAriaCurrentStateLocation,
+    WebAXAriaCurrentStateDate,
+    WebAXAriaCurrentStateTime
 };
 
 // Only used by HTML form controls and any other element that has

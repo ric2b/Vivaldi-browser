@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
+#include "build/build_config.h"
 #include "crypto/sha2.h"
 #include "net/base/net_errors.h"
 #include "net/base/test_data_directory.h"
@@ -28,9 +29,7 @@
 #include "net/test/test_certificate_data.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if defined(OS_WIN)
-#include "base/win/windows_version.h"
-#elif defined(OS_ANDROID)
+#if defined(OS_ANDROID)
 #include "base/android/build_info.h"
 #endif
 
@@ -103,6 +102,9 @@ bool SupportsDetectingKnownRoots() {
   // the verified certificate chain and detect known roots.
   if (base::android::BuildInfo::GetInstance()->sdk_int() < 17)
     return false;
+#elif defined(OS_IOS)
+  // iOS does not expose the APIs necessary to get the known system roots.
+  return false;
 #endif
   return true;
 }
@@ -200,7 +202,11 @@ TEST_F(CertVerifyProcTest, MAYBE_EVVerification) {
   EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_IS_EV);
 }
 
-TEST_F(CertVerifyProcTest, PaypalNullCertParsing) {
+// TODO(crbug.com/605457): the test expectation was incorrect on some
+// configurations, so disable the test until it is fixed (better to have
+// a bug to track a failing test than a false sense of security due to
+// false positive).
+TEST_F(CertVerifyProcTest, DISABLED_PaypalNullCertParsing) {
   scoped_refptr<X509Certificate> paypal_null_cert(
       X509Certificate::CreateFromBytes(
           reinterpret_cast<const char*>(paypal_null_der),
@@ -221,8 +227,12 @@ TEST_F(CertVerifyProcTest, PaypalNullCertParsing) {
                      NULL,
                      empty_cert_list_,
                      &verify_result);
-#if defined(USE_NSS_VERIFIER) || defined(OS_ANDROID)
+#if defined(USE_NSS_CERTS) || defined(OS_ANDROID)
   EXPECT_EQ(ERR_CERT_COMMON_NAME_INVALID, error);
+#elif defined(OS_IOS) && TARGET_IPHONE_SIMULATOR
+  // iOS returns a ERR_CERT_INVALID error on the simulator, while returning
+  // ERR_CERT_AUTHORITY_INVALID on the real device.
+  EXPECT_EQ(ERR_CERT_INVALID, error);
 #else
   // TOOD(bulach): investigate why macosx and win aren't returning
   // ERR_CERT_INVALID or ERR_CERT_COMMON_NAME_INVALID.
@@ -231,7 +241,7 @@ TEST_F(CertVerifyProcTest, PaypalNullCertParsing) {
   // Either the system crypto library should correctly report a certificate
   // name mismatch, or our certificate blacklist should cause us to report an
   // invalid certificate.
-#if defined(USE_NSS_VERIFIER) || defined(OS_WIN)
+#if defined(USE_NSS_CERTS) || defined(OS_WIN)
   EXPECT_TRUE(verify_result.cert_status &
               (CERT_STATUS_COMMON_NAME_INVALID | CERT_STATUS_INVALID));
 #endif
@@ -275,6 +285,29 @@ TEST_F(CertVerifyProcTest, MAYBE_IntermediateCARequireExplicitPolicy) {
                      &verify_result);
   EXPECT_EQ(OK, error);
   EXPECT_EQ(0u, verify_result.cert_status);
+}
+
+TEST_F(CertVerifyProcTest, RejectExpiredCert) {
+  base::FilePath certs_dir = GetTestCertsDirectory();
+
+  // Load root_ca_cert.pem into the test root store.
+  ScopedTestRoot test_root(
+      ImportCertFromFile(certs_dir, "root_ca_cert.pem").get());
+
+  CertificateList certs = CreateCertificateListFromFile(
+      certs_dir, "expired_cert.pem", X509Certificate::FORMAT_AUTO);
+  ASSERT_EQ(1U, certs.size());
+
+  X509Certificate::OSCertHandles intermediates;
+  scoped_refptr<X509Certificate> cert = X509Certificate::CreateFromHandle(
+      certs[0]->os_cert_handle(), intermediates);
+
+  int flags = 0;
+  CertVerifyResult verify_result;
+  int error = Verify(cert.get(), "127.0.0.1", flags, NULL, empty_cert_list_,
+                     &verify_result);
+  EXPECT_EQ(ERR_CERT_DATE_INVALID, error);
+  EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_DATE_INVALID);
 }
 
 // Test that verifying an ECDSA certificate doesn't crash on XP. (See
@@ -322,14 +355,7 @@ TEST_F(CertVerifyProcTest, RejectWeakKeys) {
   key_types.push_back("768-rsa");
   key_types.push_back("1024-rsa");
   key_types.push_back("2048-rsa");
-
-  bool use_ecdsa = true;
-#if defined(OS_WIN)
-  use_ecdsa = base::win::GetVersion() > base::win::VERSION_XP;
-#endif
-
-  if (use_ecdsa)
-    key_types.push_back("prime256v1-ecdsa");
+  key_types.push_back("prime256v1-ecdsa");
 
   // Add the root that signed the intermediates for this test.
   scoped_refptr<X509Certificate> root_cert =
@@ -1105,8 +1131,8 @@ TEST_F(CertVerifyProcTest, IsIssuedByKnownRootIgnoresTestRoots) {
   EXPECT_FALSE(verify_result.is_issued_by_known_root);
 }
 
-#if defined(USE_NSS_CERTS) || defined(OS_IOS) || defined(OS_WIN) || \
-    defined(OS_MACOSX)
+#if defined(USE_NSS_CERTS) || defined(OS_WIN) || \
+    (defined(OS_MACOSX) && !defined(OS_IOS))
 // Test that CRLSets are effective in making a certificate appear to be
 // revoked.
 TEST_F(CertVerifyProcTest, CRLSet) {

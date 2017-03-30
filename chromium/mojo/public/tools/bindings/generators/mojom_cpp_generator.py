@@ -19,16 +19,6 @@ _kind_to_cpp_type = {
   mojom.INT32:                 "int32_t",
   mojom.UINT32:                "uint32_t",
   mojom.FLOAT:                 "float",
-  mojom.HANDLE:                "mojo::Handle",
-  mojom.DCPIPE:                "mojo::DataPipeConsumerHandle",
-  mojom.DPPIPE:                "mojo::DataPipeProducerHandle",
-  mojom.MSGPIPE:               "mojo::MessagePipeHandle",
-  mojom.SHAREDBUFFER:          "mojo::SharedBufferHandle",
-  mojom.NULLABLE_HANDLE:       "mojo::Handle",
-  mojom.NULLABLE_DCPIPE:       "mojo::DataPipeConsumerHandle",
-  mojom.NULLABLE_DPPIPE:       "mojo::DataPipeProducerHandle",
-  mojom.NULLABLE_MSGPIPE:      "mojo::MessagePipeHandle",
-  mojom.NULLABLE_SHAREDBUFFER: "mojo::SharedBufferHandle",
   mojom.INT64:                 "int64_t",
   mojom.UINT64:                "uint64_t",
   mojom.DOUBLE:                "double",
@@ -82,8 +72,6 @@ class _NameFormatter(object):
   def _MapKindName(self, token, internal):
     if not internal:
       return token.name
-    if mojom.IsStructKind(token) and token.native_only:
-      return "mojo::Array_Data<uint8_t>"
     if (mojom.IsStructKind(token) or mojom.IsUnionKind(token) or
         mojom.IsInterfaceKind(token) or mojom.IsEnumKind(token)):
       return token.name + "_Data"
@@ -156,21 +144,7 @@ def IsNativeOnlyKind(kind):
 def GetNativeTypeName(typemapped_kind):
   return _current_typemap[GetFullMojomNameForKind(typemapped_kind)]["typename"]
 
-def DoesKindSupportEquality(kind):
-  if IsTypemappedKind(kind):
-    return False
-  if mojom.IsStructKind(kind) and kind.native_only:
-    return False
-  if mojom.IsArrayKind(kind):
-    return DoesKindSupportEquality(kind.kind)
-  if mojom.IsMapKind(kind):
-    return DoesKindSupportEquality(kind.value_kind)
-  return True
-
 def GetCppType(kind):
-  if mojom.IsStructKind(kind) and kind.native_only:
-    # A native-only type is just a blob of bytes.
-    return "mojo::internal::Array_Data<uint8_t>*"
   if mojom.IsArrayKind(kind):
     return "mojo::internal::Array_Data<%s>*" % GetCppType(kind.kind)
   if mojom.IsMapKind(kind):
@@ -183,15 +157,17 @@ def GetCppType(kind):
   if mojom.IsInterfaceKind(kind):
     return "mojo::internal::Interface_Data"
   if mojom.IsInterfaceRequestKind(kind):
-    return "mojo::MessagePipeHandle"
+    return "mojo::internal::Handle_Data"
   if mojom.IsAssociatedInterfaceKind(kind):
     return "mojo::internal::AssociatedInterface_Data"
   if mojom.IsAssociatedInterfaceRequestKind(kind):
     return "mojo::internal::AssociatedInterfaceRequest_Data"
   if mojom.IsEnumKind(kind):
-    return GetNameForKind(kind, internal=True)
+    return "int32_t"
   if mojom.IsStringKind(kind):
     return "mojo::internal::String_Data*"
+  if mojom.IsAnyHandleKind(kind):
+    return "mojo::internal::Handle_Data"
   return _kind_to_cpp_type[kind]
 
 def GetCppPodType(kind):
@@ -200,16 +176,8 @@ def GetCppPodType(kind):
   return _kind_to_cpp_type[kind]
 
 def GetCppArrayArgWrapperType(kind):
-  if mojom.IsStructKind(kind) and kind.native_only:
-    if IsTypemappedKind(kind):
-      return GetNativeTypeName(kind)
-    else:
-      # Without a relevant typemap to apply, a native-only struct can only be
-      # exposed as a blob of bytes.
-      return "mojo::Array<uint8_t>"
   if IsTypemappedKind(kind):
-    raise Exception(
-        "Cannot serialize containers of non-native typemapped structs yet!")
+    return GetNativeTypeName(kind)
   if mojom.IsEnumKind(kind):
     return GetNameForKind(kind)
   if mojom.IsStructKind(kind) or mojom.IsUnionKind(kind):
@@ -246,8 +214,6 @@ def GetCppArrayArgWrapperType(kind):
 def GetCppResultWrapperType(kind):
   if IsTypemappedKind(kind):
     return "const %s&" % GetNativeTypeName(kind)
-  if mojom.IsStructKind(kind) and kind.native_only:
-    return "mojo::Array<uint8_t>"
   if mojom.IsEnumKind(kind):
     return GetNameForKind(kind)
   if mojom.IsStructKind(kind) or mojom.IsUnionKind(kind):
@@ -289,8 +255,6 @@ def GetCppResultWrapperType(kind):
 def GetCppWrapperType(kind):
   if IsTypemappedKind(kind):
     return GetNativeTypeName(kind)
-  if mojom.IsStructKind(kind) and kind.native_only:
-    return "mojo::Array<uint8_t>"
   if mojom.IsEnumKind(kind):
     return GetNameForKind(kind)
   if mojom.IsStructKind(kind) or mojom.IsUnionKind(kind):
@@ -326,8 +290,6 @@ def GetCppWrapperType(kind):
 def GetCppConstWrapperType(kind):
   if IsTypemappedKind(kind):
     return "const %s&" % GetNativeTypeName(kind)
-  if mojom.IsStructKind(kind) and kind.native_only:
-    return "mojo::Array<uint8_t>"
   if mojom.IsStructKind(kind) or mojom.IsUnionKind(kind):
     return "%sPtr" % GetNameForKind(kind)
   if mojom.IsArrayKind(kind):
@@ -363,40 +325,36 @@ def GetCppConstWrapperType(kind):
   return _kind_to_cpp_type[kind]
 
 def GetCppFieldType(kind):
-  if mojom.IsStructKind(kind) and kind.native_only:
-    return "mojo::internal::ArrayPointer<uint8_t>"
   if mojom.IsStructKind(kind):
-    return ("mojo::internal::StructPointer<%s>" %
+    return ("mojo::internal::Pointer<%s>" %
         GetNameForKind(kind, internal=True))
   if mojom.IsUnionKind(kind):
     return "%s" % GetNameForKind(kind, internal=True)
   if mojom.IsArrayKind(kind):
-    return "mojo::internal::ArrayPointer<%s>" % GetCppType(kind.kind)
+    return ("mojo::internal::Pointer<mojo::internal::Array_Data<%s>>" %
+            GetCppType(kind.kind))
   if mojom.IsMapKind(kind):
-    return ("mojo::internal::StructPointer<mojo::internal::Map_Data<%s, %s>>" %
+    return ("mojo::internal::Pointer<mojo::internal::Map_Data<%s, %s>>" %
             (GetCppType(kind.key_kind), GetCppType(kind.value_kind)))
   if mojom.IsInterfaceKind(kind):
     return "mojo::internal::Interface_Data"
   if mojom.IsInterfaceRequestKind(kind):
-    return "mojo::MessagePipeHandle"
+    return "mojo::internal::Handle_Data"
   if mojom.IsAssociatedInterfaceKind(kind):
     return "mojo::internal::AssociatedInterface_Data"
   if mojom.IsAssociatedInterfaceRequestKind(kind):
     return "mojo::internal::AssociatedInterfaceRequest_Data"
   if mojom.IsEnumKind(kind):
-    return GetNameForKind(kind, internal=True)
+    return "int32_t"
   if mojom.IsStringKind(kind):
-    return "mojo::internal::StringPointer"
+    return "mojo::internal::Pointer<mojo::internal::String_Data>"
+  if mojom.IsAnyHandleKind(kind):
+    return "mojo::internal::Handle_Data"
   return _kind_to_cpp_type[kind]
 
 def GetCppUnionFieldType(kind):
-  if mojom.IsAnyHandleKind(kind):
-    return "MojoHandle"
-  if mojom.IsInterfaceKind(kind):
-    return "uint64_t"
   if mojom.IsUnionKind(kind):
-    return ("mojo::internal::UnionPointer<%s>" %
-        GetNameForKind(kind, internal=True))
+    return ("mojo::internal::Pointer<%s>" % GetNameForKind(kind, internal=True))
   return GetCppFieldType(kind)
 
 def GetUnionGetterReturnType(kind):
@@ -406,6 +364,41 @@ def GetUnionGetterReturnType(kind):
       or mojom.IsAssociatedKind(kind)):
     return "%s&" % GetCppWrapperType(kind)
   return GetCppResultWrapperType(kind)
+
+# TODO(yzshen): It is unfortunate that we have so many functions for returning
+# types. Refactor them.
+def GetUnmappedTypeForSerializer(kind):
+  if mojom.IsEnumKind(kind):
+    return GetQualifiedNameForKind(kind)
+  if mojom.IsStructKind(kind) or mojom.IsUnionKind(kind):
+    return "%sPtr" % GetQualifiedNameForKind(kind)
+  if mojom.IsArrayKind(kind):
+    return "mojo::Array<%s>" % GetUnmappedTypeForSerializer(kind.kind)
+  if mojom.IsMapKind(kind):
+    return "mojo::Map<%s, %s>" % (
+        GetUnmappedTypeForSerializer(kind.key_kind),
+        GetUnmappedTypeForSerializer(kind.value_kind))
+  if mojom.IsInterfaceKind(kind):
+    return "%sPtr" % GetQualifiedNameForKind(kind)
+  if mojom.IsInterfaceRequestKind(kind):
+    return "%sRequest" % GetQualifiedNameForKind(kind.kind)
+  if mojom.IsAssociatedInterfaceKind(kind):
+    return "%sAssociatedPtrInfo" % GetQualifiedNameForKind(kind.kind)
+  if mojom.IsAssociatedInterfaceRequestKind(kind):
+    return "%sAssociatedRequest" % GetQualifiedNameForKind(kind.kind)
+  if mojom.IsStringKind(kind):
+    return "mojo::String"
+  if mojom.IsGenericHandleKind(kind):
+    return "mojo::ScopedHandle"
+  if mojom.IsDataPipeConsumerKind(kind):
+    return "mojo::ScopedDataPipeConsumerHandle"
+  if mojom.IsDataPipeProducerKind(kind):
+    return "mojo::ScopedDataPipeProducerHandle"
+  if mojom.IsMessagePipeKind(kind):
+    return "mojo::ScopedMessagePipeHandle"
+  if mojom.IsSharedBufferKind(kind):
+    return "mojo::ScopedSharedBufferHandle"
+  return _kind_to_cpp_type[kind]
 
 def TranslateConstants(token, kind):
   if isinstance(token, mojom.NamedValue):
@@ -456,28 +449,36 @@ def ShouldInlineUnion(union):
   return not any(mojom.IsMoveOnlyKind(field.kind) for field in union.fields)
 
 def GetArrayValidateParamsCtorArgs(kind):
-  if mojom.IsStringKind(kind) or (mojom.IsStructKind(kind) and
-                                  kind.native_only):
+  if mojom.IsStringKind(kind):
     expected_num_elements = 0
     element_is_nullable = False
     element_validate_params = "nullptr"
+    enum_validate_func = "nullptr"
   elif mojom.IsMapKind(kind):
     expected_num_elements = 0
     element_is_nullable = mojom.IsNullableKind(kind.value_kind)
     element_validate_params = GetNewArrayValidateParams(kind.value_kind)
+    enum_validate_func = "nullptr"
   else:
     expected_num_elements = generator.ExpectedArraySize(kind) or 0
     element_is_nullable = mojom.IsNullableKind(kind.kind)
     element_validate_params = GetNewArrayValidateParams(kind.kind)
+    if mojom.IsEnumKind(kind.kind):
+      enum_validate_func = ("%s::Validate" %
+                            GetQualifiedNameForKind(kind.kind, internal=True))
+    else:
+      enum_validate_func = "nullptr"
 
-  return "%d, %s, %s" % (expected_num_elements,
-                         "true" if element_is_nullable else "false",
-                         element_validate_params)
+  if enum_validate_func == "nullptr":
+    return "%d, %s, %s" % (expected_num_elements,
+                           "true" if element_is_nullable else "false",
+                           element_validate_params)
+  else:
+    return "%d, %s" % (expected_num_elements, enum_validate_func)
 
 def GetNewArrayValidateParams(kind):
   if (not mojom.IsArrayKind(kind) and not mojom.IsMapKind(kind) and
-      not mojom.IsStringKind(kind) and
-      not (mojom.IsStructKind(kind) and kind.native_only)):
+      not mojom.IsStringKind(kind)):
     return "nullptr"
 
   return "new mojo::internal::ArrayValidateParams(%s)" % (
@@ -499,7 +500,6 @@ class Generator(generator.Generator):
     "cpp_union_field_type": GetCppUnionFieldType,
     "cpp_pod_type": GetCppPodType,
     "cpp_result_type": GetCppResultWrapperType,
-    "cpp_type": GetCppType,
     "cpp_union_getter_return_type": GetUnionGetterReturnType,
     "cpp_wrapper_type": GetCppWrapperType,
     "default_value": DefaultValue,
@@ -536,8 +536,8 @@ class Generator(generator.Generator):
     "passes_associated_kinds": mojom.PassesAssociatedKinds,
     "struct_size": lambda ps: ps.GetTotalSize() + _HEADER_SIZE,
     "stylize_method": generator.StudlyCapsToCamel,
-    "supports_equality": DoesKindSupportEquality,
     "under_to_camel": generator.UnderToCamel,
+    "unmapped_type_for_serializer": GetUnmappedTypeForSerializer,
   }
 
   def GetExtraTraitsHeaders(self):

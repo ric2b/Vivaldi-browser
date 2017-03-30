@@ -67,7 +67,8 @@ void WebView::SetWebContents(content::WebContents* replacement) {
     observing_render_process_host_->AddObserver(this);
   }
   // web_contents() now returns |replacement| from here onwards.
-  SetFocusable(!!web_contents());
+  SetFocusBehavior(web_contents() ? FocusBehavior::ALWAYS
+                                  : FocusBehavior::NEVER);
   if (wc_owner_.get() != replacement)
     wc_owner_.reset();
   if (embed_fullscreen_widget_mode_enabled_) {
@@ -112,11 +113,11 @@ const char* WebView::GetClassName() const {
   return kViewClassName;
 }
 
-scoped_ptr<content::WebContents> WebView::SwapWebContents(
-    scoped_ptr<content::WebContents> new_web_contents) {
+std::unique_ptr<content::WebContents> WebView::SwapWebContents(
+    std::unique_ptr<content::WebContents> new_web_contents) {
   if (wc_owner_)
     wc_owner_->SetDelegate(NULL);
-  scoped_ptr<content::WebContents> old_web_contents(std::move(wc_owner_));
+  std::unique_ptr<content::WebContents> old_web_contents(std::move(wc_owner_));
   wc_owner_ = std::move(new_web_contents);
   if (wc_owner_)
     wc_owner_->SetDelegate(this);
@@ -284,12 +285,12 @@ void WebView::WebContentsDestroyed() {
   NotifyAccessibilityWebContentsChanged();
 }
 
-void WebView::DidShowFullscreenWidget(int routing_id) {
+void WebView::DidShowFullscreenWidget() {
   if (embed_fullscreen_widget_mode_enabled_)
     ReattachForFullscreenChange(true);
 }
 
-void WebView::DidDestroyFullscreenWidget(int routing_id) {
+void WebView::DidDestroyFullscreenWidget() {
   if (embed_fullscreen_widget_mode_enabled_)
     ReattachForFullscreenChange(false);
 }

@@ -22,7 +22,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
 #include "base/task_runner_util.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/threading/worker_pool.h"
 #include "chrome/browser/about_flags.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
@@ -76,6 +76,7 @@
 #include "chrome/browser/supervised_user/child_accounts/child_account_service.h"
 #include "chrome/browser/supervised_user/child_accounts/child_account_service_factory.h"
 #include "chrome/browser/ui/app_list/start_page_service.h"
+#include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/common/chrome_switches.h"
@@ -1362,7 +1363,8 @@ void UserSessionManager::RestoreAuthSessionImpl(
   if (!auth_request_context &&
       (authenticator_.get() && authenticator_->authentication_context())) {
     auth_request_context =
-        authenticator_->authentication_context()->GetRequestContext();
+        content::BrowserContext::GetDefaultStoragePartition(
+            authenticator_->authentication_context())->GetURLRequestContext();
   }
   login_manager->RestoreSession(auth_request_context, session_restore_strategy_,
                                 user_context_.GetRefreshToken(),
@@ -1572,7 +1574,8 @@ UserSessionManager::GetAuthRequestContext() const {
       auth_request_context = signin_partition->GetURLRequestContext();
   } else if (authenticator_.get() && authenticator_->authentication_context()) {
     auth_request_context =
-        authenticator_->authentication_context()->GetRequestContext();
+        content::BrowserContext::GetDefaultStoragePartition(
+            authenticator_->authentication_context())->GetURLRequestContext();
   }
   return auth_request_context;
 }
@@ -1723,6 +1726,12 @@ void UserSessionManager::RespectLocalePreferenceWrapper(
     const base::Closure& callback) {
   if (browser_shutdown::IsTryingToQuit())
     return;
+
+  // InputEventsBlocker is not available in Mash
+  if (chrome::IsRunningInMash()) {
+    callback.Run();
+    return;
+  }
 
   const user_manager::User* const user =
       ProfileHelper::Get()->GetUserByProfile(profile);

@@ -120,9 +120,9 @@ bool RegisterBlinkTestPlugin(base::CommandLine* command_line) {
       FILE_PATH_LITERAL("application/x-blink-test-plugin#blinktestplugin")));
   plugins.push_back(
       PluginInfo(kDeprecatedPluginLibrary, kDeprecatedExtraParameters,
-                 FILE_PATH_LITERAL("application/")
-                 FILE_PATH_LITERAL("x-blink-deprecated-test-plugin#")
-                 FILE_PATH_LITERAL("blinkdeprecatedtestplugin")));
+                 FILE_PATH_LITERAL("application/"
+                                   "x-blink-deprecated-test-plugin#"
+                                   "blinkdeprecatedtestplugin")));
   return RegisterPlugins(command_line, plugins);
 }
 

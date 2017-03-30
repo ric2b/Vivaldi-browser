@@ -45,21 +45,21 @@ namespace blink {
 
 class WebFileSystemCallbacksPrivate : public RefCounted<WebFileSystemCallbacksPrivate> {
 public:
-    static PassRefPtr<WebFileSystemCallbacksPrivate> create(const PassOwnPtr<AsyncFileSystemCallbacks>& callbacks)
+    static PassRefPtr<WebFileSystemCallbacksPrivate> create(PassOwnPtr<AsyncFileSystemCallbacks> callbacks)
     {
-        return adoptRef(new WebFileSystemCallbacksPrivate(callbacks));
+        return adoptRef(new WebFileSystemCallbacksPrivate(std::move(callbacks)));
     }
 
     AsyncFileSystemCallbacks* callbacks() { return m_callbacks.get(); }
 
 private:
-    WebFileSystemCallbacksPrivate(const PassOwnPtr<AsyncFileSystemCallbacks>& callbacks) : m_callbacks(callbacks) { }
+    WebFileSystemCallbacksPrivate(PassOwnPtr<AsyncFileSystemCallbacks> callbacks) : m_callbacks(std::move(callbacks)) { }
     OwnPtr<AsyncFileSystemCallbacks> m_callbacks;
 };
 
-WebFileSystemCallbacks::WebFileSystemCallbacks(const PassOwnPtr<AsyncFileSystemCallbacks>& callbacks)
+WebFileSystemCallbacks::WebFileSystemCallbacks(PassOwnPtr<AsyncFileSystemCallbacks>&& callbacks)
 {
-    m_private = WebFileSystemCallbacksPrivate::create(callbacks);
+    m_private = WebFileSystemCallbacksPrivate::create(std::move(callbacks));
 }
 
 void WebFileSystemCallbacks::reset()
@@ -98,7 +98,7 @@ void WebFileSystemCallbacks::didCreateSnapshotFile(const WebFileInfo& webFileInf
     // to return from this method so the underlying file will not be deleted.
     OwnPtr<BlobData> blobData = BlobData::create();
     blobData->appendFile(webFileInfo.platformPath, 0, webFileInfo.length, invalidFileTime());
-    RefPtr<BlobDataHandle> snapshotBlob = BlobDataHandle::create(blobData.release(), webFileInfo.length);
+    RefPtr<BlobDataHandle> snapshotBlob = BlobDataHandle::create(std::move(blobData), webFileInfo.length);
 
     FileMetadata fileMetadata;
     fileMetadata.modificationTime = webFileInfo.modificationTime;

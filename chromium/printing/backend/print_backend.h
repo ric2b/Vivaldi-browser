@@ -39,6 +39,7 @@ using PrinterList = std::vector<PrinterBasicInfo>;
 
 struct PRINTING_EXPORT PrinterSemanticCapsAndDefaults {
   PrinterSemanticCapsAndDefaults();
+  PrinterSemanticCapsAndDefaults(const PrinterSemanticCapsAndDefaults& other);
   ~PrinterSemanticCapsAndDefaults();
 
   bool collate_capable;

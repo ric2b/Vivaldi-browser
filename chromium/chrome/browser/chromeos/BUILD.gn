@@ -23,6 +23,7 @@ source_set("chromeos") {
   public_deps = [
     "//ash/resources",
     "//ash/strings",
+    "//ash/wm/common/resources",
     "//chrome:extra_resources",
     "//chrome:resources",
     "//chrome:strings",
@@ -86,12 +87,13 @@ source_set("chromeos") {
     "//dbus",
     "//device/bluetooth",
     "//device/hid",
+    "//mash/public/interfaces",
     "//media",
     "//media/mojo/interfaces",
     "//mojo/common",
-    "//mojo/shell/public/cpp",
     "//net",
     "//ppapi/proxy:ipc",  # For PpapiMsg_LoadPlugin
+    "//services/shell/public/cpp",
 
     # TODO: care about enable_basic_printing and enable_print_preview.
     "//printing",
@@ -110,6 +112,7 @@ source_set("chromeos") {
     "//third_party/re2",
     "//third_party/zlib",
     "//ui/app_list",
+    "//ui/app_list/presenter:mojom",
     "//ui/aura",
     "//ui/base",
     "//ui/chromeos:ui_chromeos",
@@ -141,7 +144,10 @@ source_set("chromeos") {
   ]
   if (use_x11) {
     configs += [ "//build/config/linux:x11" ]
-    deps += [ "//ui/events/devices" ]
+    deps += [
+      "//ui/events/devices",
+      "//ui/events/devices/x11",
+    ]
     sources -= [
       "system/input_device_settings_impl_ozone.cc",
       "system_logs/touch_log_source_ozone.cc",
@@ -186,6 +192,7 @@ source_set("unit_tests") {
     ":attestation_proto",
     ":device_policy_proto",
     "//ash/resources",
+    "//ash/wm/common/resources",
     "//components/drive",
     "//components/drive:test_support_chromeos",
     "//components/invalidation/public",

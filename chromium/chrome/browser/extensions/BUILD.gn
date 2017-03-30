@@ -99,7 +99,7 @@ source_set("extensions") {
                     ".",
                     "//chrome")
     sources -= [ "api/music_manager_private/device_id_linux.cc" ]
-    configs += [ "//build/config/linux:dbus" ]
+    configs += [ "//build/config/linux/dbus" ]
     deps += [
       "//components/chrome_apps",
       "//remoting/host/it2me:common",
@@ -171,7 +171,7 @@ source_set("extensions") {
   }
 
   if (use_brlapi) {
-    deps += [ "//build/linux:libbrlapi" ]
+    deps += [ "//build/linux/libbrlapi" ]
     sources += rebase_path(gypi_values.chrome_browser_extensions_brlapi_sources,
                            ".",
                            "//chrome")

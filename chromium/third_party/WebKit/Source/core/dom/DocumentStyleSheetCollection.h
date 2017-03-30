@@ -29,6 +29,7 @@
 #define DocumentStyleSheetCollection_h
 
 #include "core/dom/TreeScopeStyleSheetCollection.h"
+#include "platform/heap/WrapperVisitor.h"
 
 namespace blink {
 
@@ -39,7 +40,7 @@ class TreeScope;
 class DocumentStyleSheetCollection final : public TreeScopeStyleSheetCollection {
     WTF_MAKE_NONCOPYABLE(DocumentStyleSheetCollection);
 public:
-    static RawPtr<DocumentStyleSheetCollection> create(TreeScope& treeScope)
+    static DocumentStyleSheetCollection* create(TreeScope& treeScope)
     {
         return new DocumentStyleSheetCollection(treeScope);
     }
@@ -51,6 +52,8 @@ public:
     {
         TreeScopeStyleSheetCollection::trace(visitor);
     }
+
+    DECLARE_VIRTUAL_TRACE_WRAPPERS();
 
 private:
     explicit DocumentStyleSheetCollection(TreeScope&);

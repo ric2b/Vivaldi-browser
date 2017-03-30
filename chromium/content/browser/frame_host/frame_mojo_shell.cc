@@ -9,7 +9,6 @@
 #include "build/build_config.h"
 #include "content/browser/mojo/mojo_shell_context.h"
 #include "content/common/mojo/service_registry_impl.h"
-#include "content/public/browser/browser_context.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -42,7 +41,7 @@ FrameMojoShell::FrameMojoShell(RenderFrameHost* frame_host)
 FrameMojoShell::~FrameMojoShell() {
 }
 
-void FrameMojoShell::BindRequest(mojo::shell::mojom::ConnectorRequest request) {
+void FrameMojoShell::BindRequest(shell::mojom::ConnectorRequest request) {
   connectors_.AddBinding(this, std::move(request));
 }
 
@@ -50,23 +49,21 @@ void FrameMojoShell::BindRequest(mojo::shell::mojom::ConnectorRequest request) {
 // drop it and replace it with services we provide in the browser. In the
 // future we may need to support both.
 void FrameMojoShell::Connect(
-    mojo::shell::mojom::IdentityPtr target,
-    mojo::shell::mojom::InterfaceProviderRequest services,
-    mojo::shell::mojom::InterfaceProviderPtr /* exposed_services */,
-    mojo::shell::mojom::ClientProcessConnectionPtr client_process_connection,
-    const mojo::shell::mojom::Connector::ConnectCallback& callback) {
-  mojo::shell::mojom::InterfaceProviderPtr frame_services;
+    shell::mojom::IdentityPtr target,
+    shell::mojom::InterfaceProviderRequest services,
+    shell::mojom::InterfaceProviderPtr /* exposed_services */,
+    shell::mojom::ClientProcessConnectionPtr client_process_connection,
+    const shell::mojom::Connector::ConnectCallback& callback) {
+  shell::mojom::InterfaceProviderPtr frame_services;
   service_provider_bindings_.AddBinding(GetServiceRegistry(),
                                         GetProxy(&frame_services));
-  std::string mojo_user_id = BrowserContext::GetMojoUserIdFor(
-      frame_host_->GetProcess()->GetBrowserContext());
   MojoShellContext::ConnectToApplication(
-      mojo_user_id, target->name,
+      shell::mojom::kRootUserID, target->name,
       frame_host_->GetSiteInstance()->GetSiteURL().spec(), std::move(services),
       std::move(frame_services), callback);
 }
 
-void FrameMojoShell::Clone(mojo::shell::mojom::ConnectorRequest request) {
+void FrameMojoShell::Clone(shell::mojom::ConnectorRequest request) {
   connectors_.AddBinding(this, std::move(request));
 }
 

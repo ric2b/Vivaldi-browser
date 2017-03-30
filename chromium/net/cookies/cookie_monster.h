@@ -12,6 +12,7 @@
 
 #include <deque>
 #include <map>
+#include <memory>
 #include <queue>
 #include <set>
 #include <string>
@@ -23,7 +24,6 @@
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
@@ -180,10 +180,10 @@ class NET_EXPORT CookieMonster : public CookieStore {
   void DeleteAllCreatedBetweenAsync(const base::Time& delete_begin,
                                     const base::Time& delete_end,
                                     const DeleteCallback& callback) override;
-  void DeleteAllCreatedBetweenForHostAsync(
-      const base::Time delete_begin,
-      const base::Time delete_end,
-      const GURL& url,
+  void DeleteAllCreatedBetweenWithPredicateAsync(
+      const base::Time& delete_begin,
+      const base::Time& delete_end,
+      const base::Callback<bool(const CanonicalCookie&)>& predicate,
       const DeleteCallback& callback) override;
   void DeleteSessionCookiesAsync(const DeleteCallback&) override;
   void FlushStore(const base::Closure& callback) override;
@@ -207,7 +207,7 @@ class NET_EXPORT CookieMonster : public CookieStore {
   static const char* const kDefaultCookieableSchemes[];
   static const int kDefaultCookieableSchemesCount;
 
-  scoped_ptr<CookieChangedSubscription> AddCallbackForCookie(
+  std::unique_ptr<CookieChangedSubscription> AddCallbackForCookie(
       const GURL& url,
       const std::string& name,
       const CookieChangedCallback& callback) override;
@@ -220,7 +220,7 @@ class NET_EXPORT CookieMonster : public CookieStore {
   template <typename Result>
   class DeleteTask;
   class DeleteAllCreatedBetweenTask;
-  class DeleteAllCreatedBetweenForHostTask;
+  class DeleteAllCreatedBetweenWithPredicateTask;
   class DeleteCookieTask;
   class DeleteCanonicalCookieTask;
   class GetCookieListForURLWithOptionsTask;
@@ -236,6 +236,9 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // For SetCookieWithCreationTime.
   FRIEND_TEST_ALL_PREFIXES(CookieMonsterTest,
                            TestCookieDeleteAllCreatedBetweenTimestamps);
+  FRIEND_TEST_ALL_PREFIXES(
+      CookieMonsterTest,
+      TestCookieDeleteAllCreatedBetweenTimestampsWithPredicate);
 
   // For gargage collection constants.
   FRIEND_TEST_ALL_PREFIXES(CookieMonsterTest, TestHostGarbageCollection);
@@ -403,9 +406,11 @@ class NET_EXPORT CookieMonster : public CookieStore {
   int DeleteAllCreatedBetween(const base::Time& delete_begin,
                               const base::Time& delete_end);
 
-  int DeleteAllCreatedBetweenForHost(const base::Time delete_begin,
-                                     const base::Time delete_end,
-                                     const GURL& url);
+  // Predicate will be called with the calling thread.
+  int DeleteAllCreatedBetweenWithPredicate(
+      const base::Time& delete_begin,
+      const base::Time& delete_end,
+      const base::Callback<bool(const CanonicalCookie&)>& predicate);
 
   bool SetCookieWithOptions(const GURL& url,
                             const std::string& cookie_line,
@@ -511,7 +516,7 @@ class NET_EXPORT CookieMonster : public CookieStore {
 
   // Helper function that sets a canonical cookie, deleting equivalents and
   // performing garbage collection.
-  bool SetCanonicalCookie(scoped_ptr<CanonicalCookie> cc,
+  bool SetCanonicalCookie(std::unique_ptr<CanonicalCookie> cc,
                           const CookieOptions& options);
 
   // Helper function calling SetCanonicalCookie() for all cookies in |list|.
@@ -541,6 +546,8 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // Helper for GarbageCollect(). Deletes up to |purge_goal| cookies with a
   // priority less than or equal to |priority| from |cookies|, while ensuring
   // that at least the |to_protect| most-recent cookies are retained.
+  // |protected_secure_cookies| specifies whether or not secure cookies should
+  // be protected from deletion.
   //
   // |cookies| must be sorted from least-recent to most-recent.
   //
@@ -548,7 +555,8 @@ class NET_EXPORT CookieMonster : public CookieStore {
   size_t PurgeLeastRecentMatches(CookieItVector* cookies,
                                  CookiePriority priority,
                                  size_t to_protect,
-                                 size_t purge_goal);
+                                 size_t purge_goal,
+                                 bool protect_secure_cookies);
 
   // Helper for GarbageCollect(); can be called directly as well.  Deletes all
   // expired cookies in |itpair|.  If |cookie_its| is non-NULL, all the
@@ -558,14 +566,6 @@ class NET_EXPORT CookieMonster : public CookieStore {
   size_t GarbageCollectExpired(const base::Time& current,
                                const CookieMapItPair& itpair,
                                CookieItVector* cookie_its);
-
-  // Helper for GarbageCollect(). Deletes all cookies not marked Secure in
-  // |valid_cookies_its|.  If |cookie_its| is non-NULL, all the Secure cookies
-  // from |itpair| are appended to |cookie_its|.
-  //
-  // Returns the numeber of cookies deleted.
-  size_t GarbageCollectNonSecure(const CookieItVector& valid_cookies,
-                                 CookieItVector* cookie_its);
 
   // Helper for GarbageCollect(). Deletes all cookies in the range specified by
   // [|it_begin|, |it_end|). Returns the number of cookies deleted.

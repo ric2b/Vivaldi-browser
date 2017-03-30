@@ -27,24 +27,25 @@
 
 namespace {
 
-// Maximum number of accounts displayed before vertical scrolling appears.
-const size_t kMaxAccounts = 3;
-
 // Returns height of one credential item.
-CGFloat CredentialHeight() {
-  return kAvatarImageSize + 2 * kVerticalAvatarMargin;
-}
+constexpr CGFloat kCredentialHeight =
+    kAvatarImageSize + 2 * kVerticalAvatarMargin;
+
+// Maximum height of the credential list. The unit is one row height.
+constexpr CGFloat kMaxHeightAccounts = 3.5;
 
 }  // namespace
 
 @interface AccountChooserViewController () {
   NSButton* cancelButton_;  // Weak.
+  NSButton* signInButton_;  // Weak.
   NSTextView* titleView_;   //  Weak.
   base::scoped_nsobject<NSArray> credentialButtons_;
   base::scoped_nsobject<AccountAvatarFetcherManager> avatarManager_;
 }
 - (void)onCancelClicked:(id)sender;
 - (void)onCredentialClicked:(id)sender;
+- (void)onSignInClicked:(id)sender;
 - (void)loadCredentialItems;
 @end
 
@@ -56,6 +57,10 @@ CGFloat CredentialHeight() {
       [[AccountAvatarFetcherManager alloc]
            initWithRequestContext:bridge->GetRequestContext()]);
   return [self initWithBridge:bridge avatarManager:avatarManager];
+}
+
+- (NSButton*)defaultButton {
+  return signInButton_;
 }
 
 - (void)loadView {
@@ -71,13 +76,14 @@ CGFloat CredentialHeight() {
   // | |  |  credential view            |
   // | ----                             |
   // |                                  |
-  // |                      [ Cancel ]  |
+  // |             [ Cancel ] [Sign In] |
   // ------------------------------------
 
   // Create the views.
   // Title.
+  PasswordDialogController* controller = bridge_->GetDialogController();
   std::pair<base::string16, gfx::Range> title_text =
-      bridge_->GetDialogController()->GetAccoutChooserTitle();
+      controller->GetAccoutChooserTitle();
   titleView_ =
       TitleDialogLabelWithLink(title_text.first, title_text.second, self);
   // Force the text to wrap to fit in the bubble size.
@@ -92,34 +98,51 @@ CGFloat CredentialHeight() {
   [self loadCredentialItems];
 
   // "Cancel" button.
-  cancelButton_ = DialogButton(l10n_util::GetNSString(IDS_APP_CANCEL));
+  cancelButton_ = BiggerDialogButton(l10n_util::GetNSString(IDS_APP_CANCEL));
   [cancelButton_ setTarget:self];
   [cancelButton_ setAction:@selector(onCancelClicked:)];
   [cancelButton_ setKeyEquivalent:kKeyEquivalentEscape];
   [view addSubview:cancelButton_];
 
+  // "Sign In" button.
+  if (controller->ShouldShowSignInButton()) {
+    signInButton_ = BiggerDialogButton(
+        l10n_util::GetNSString(IDS_PASSWORD_MANAGER_ACCOUNT_CHOOSER_SIGN_IN));
+    [signInButton_ setTarget:self];
+    [signInButton_ setAction:@selector(onSignInClicked:)];
+    [signInButton_ setKeyEquivalent:kKeyEquivalentReturn];
+    [view addSubview:signInButton_];
+  }
+
   // Lay out the views.
+  CGFloat curX = kFramePadding + width;
+  if (signInButton_) {
+    curX -= NSWidth([signInButton_ frame]);
+    [signInButton_ setFrameOrigin:NSMakePoint(curX, kFramePadding)];
+  }
   [cancelButton_ setFrameOrigin:NSMakePoint(
-      kFramePadding + width - NSWidth([cancelButton_ frame]),
+      curX - NSWidth([cancelButton_ frame]),
       kFramePadding)];
 
   NSSize buttonsSize = NSMakeSize(
       kDesiredBubbleWidth,
-      std::min([credentialButtons_ count], kMaxAccounts) * CredentialHeight());
+      std::min<CGFloat>([credentialButtons_ count], kMaxHeightAccounts) *
+          kCredentialHeight);
   base::scoped_nsobject<NSScrollView> scrollView = [[NSScrollView alloc]
       initWithFrame:NSMakeRect(0, 0, buttonsSize.width, buttonsSize.height)];
-  [scrollView setHasVerticalScroller:[credentialButtons_ count] > kMaxAccounts
-                                         ? YES
-                                         : NO];
+  [scrollView
+      setHasVerticalScroller:[credentialButtons_ count] > kMaxHeightAccounts
+                                 ? YES
+                                 : NO];
   [scrollView setBorderType:NSNoBorder];
   CGFloat buttonWidth = [scrollView contentSize].width;
   CGFloat curY = 0;
   base::scoped_nsobject<NSView> documentView([[NSView alloc]
       initWithFrame:NSMakeRect(0, 0, buttonWidth, [credentialButtons_ count] *
-                                                      CredentialHeight())]);
+                                                      kCredentialHeight)]);
   for (CredentialItemButton* button in credentialButtons_.get()) {
     [documentView addSubview:button];
-    [button setFrame:NSMakeRect(0, curY, buttonWidth, CredentialHeight())];
+    [button setFrame:NSMakeRect(0, curY, buttonWidth, kCredentialHeight)];
     curY = NSMaxY([button frame]);
   }
   [scrollView setDocumentView:documentView];
@@ -158,10 +181,15 @@ CGFloat CredentialHeight() {
   }
 }
 
+- (void)onSignInClicked:(id)sender {
+  if (bridge_ && bridge_->GetDialogController())
+    bridge_->GetDialogController()->OnSignInClicked();
+}
+
 - (void)loadCredentialItems {
   base::scoped_nsobject<NSMutableArray> items([[NSMutableArray alloc] init]);
   PasswordDialogController* controller = self.bridge->GetDialogController();
-  NSRect rect = NSMakeRect(0, 0, kDesiredBubbleWidth, CredentialHeight());
+  NSRect rect = NSMakeRect(0, 0, kDesiredBubbleWidth, kCredentialHeight);
   for (const auto& form : controller->GetLocalForms()) {
     base::scoped_nsobject<CredentialItemButton> item(
         [[CredentialItemButton alloc]
@@ -222,6 +250,10 @@ CGFloat CredentialHeight() {
 
 - (NSButton*)cancelButton {
   return cancelButton_;
+}
+
+- (NSButton*)signInButton {
+  return signInButton_;
 }
 
 - (NSArray*)credentialButtons {

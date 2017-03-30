@@ -32,6 +32,9 @@ using views::MenuController;
 
 namespace {
 
+NSString* const kFullKeyboardAccessChangedNotification =
+    @"com.apple.KeyboardUIModeDidChange";
+
 // Returns true if all four corners of |rect| are contained inside |path|.
 bool IsRectInsidePath(NSRect rect, NSBezierPath* path) {
   return [path containsPoint:rect.origin] &&
@@ -160,6 +163,40 @@ gfx::Rect GetFirstRectForRangeHelper(const ui::TextInputClient* client,
   return union_rect;
 }
 
+// Returns the string corresponding to |requested_range| for the given |client|.
+// If a gfx::Range::InvalidRange() is passed, the full string stored by |client|
+// is returned. Sets |actual_range| corresponding to the returned string.
+base::string16 AttributedSubstringForRangeHelper(
+    const ui::TextInputClient* client,
+    const gfx::Range& requested_range,
+    gfx::Range* actual_range) {
+  // NSRange doesn't support reversed ranges.
+  DCHECK(!requested_range.is_reversed());
+  DCHECK(actual_range);
+
+  base::string16 substring;
+  gfx::Range text_range;
+  *actual_range = gfx::Range::InvalidRange();
+  if (!client || !client->GetTextRange(&text_range))
+    return substring;
+
+  // gfx::Range::Intersect() behaves a bit weirdly. If B is an empty range
+  // contained inside a non-empty range A, B intersection A returns
+  // gfx::Range::InvalidRange(), instead of returning B.
+  *actual_range = text_range.Contains(requested_range)
+                      ? requested_range
+                      : text_range.Intersect(requested_range);
+
+  // This is a special case for which the complete string should should be
+  // returned. NSTextView also follows this, though the same is not mentioned in
+  // NSTextInputClient documentation.
+  if (!requested_range.IsValid())
+    *actual_range = text_range;
+
+  client->GetTextFromRange(*actual_range, &substring);
+  return substring;
+}
+
 }  // namespace
 
 @interface BridgedContentView ()
@@ -184,6 +221,9 @@ gfx::Rect GetFirstRectForRangeHelper(const ui::TextInputClient* client,
              keyCode:(ui::KeyboardCode)keyCode
              domCode:(ui::DomCode)domCode
           eventFlags:(int)eventFlags;
+
+// Notification handler invoked when the Full Keyboard Access mode is changed.
+- (void)onFullKeyboardAccessModeChanged:(NSNotification*)notification;
 
 // Menu action handlers.
 - (void)undo:(id)sender;
@@ -221,6 +261,17 @@ gfx::Rect GetFirstRectForRangeHelper(const ui::TextInputClient* client,
                owner:self
             userInfo:nil]);
     [self addTrackingArea:cursorTrackingArea_.get()];
+
+    // Get notified whenever Full Keyboard Access mode is changed.
+    [[NSDistributedNotificationCenter defaultCenter]
+        addObserver:self
+           selector:@selector(onFullKeyboardAccessModeChanged:)
+               name:kFullKeyboardAccessChangedNotification
+             object:nil];
+
+    // Initialize the focus manager with the correct keyboard accessibility
+    // setting.
+    [self updateFullKeyboardAccess];
   }
   return self;
 }
@@ -228,6 +279,7 @@ gfx::Rect GetFirstRectForRangeHelper(const ui::TextInputClient* client,
 - (void)clearView {
   textInputClient_ = nullptr;
   hostedView_ = nullptr;
+  [[NSDistributedNotificationCenter defaultCenter] removeObserver:self];
   [cursorTrackingArea_.get() clearOwner];
   [self removeTrackingArea:cursorTrackingArea_.get()];
 }
@@ -293,6 +345,16 @@ gfx::Rect GetFirstRectForRangeHelper(const ui::TextInputClient* client,
   [windowMask_ transformUsingAffineTransform:flipTransform];
 }
 
+- (void)updateFullKeyboardAccess {
+  if (!hostedView_)
+    return;
+
+  views::FocusManager* focusManager =
+      hostedView_->GetWidget()->GetFocusManager();
+  if (focusManager)
+    focusManager->SetKeyboardAccessible([NSApp isFullKeyboardAccessEnabled]);
+}
+
 // BridgedContentView private implementation.
 
 - (void)handleKeyEvent:(NSEvent*)theEvent {
@@ -326,6 +388,12 @@ gfx::Rect GetFirstRectForRangeHelper(const ui::TextInputClient* client,
   // Generate a synthetic event with the keycode toolkit-views expects.
   ui::KeyEvent event(ui::ET_KEY_PRESSED, keyCode, domCode, eventFlags);
   hostedView_->GetWidget()->GetInputMethod()->DispatchKeyEvent(&event);
+}
+
+- (void)onFullKeyboardAccessModeChanged:(NSNotification*)notification {
+  DCHECK([[notification name]
+      isEqualToString:kFullKeyboardAccessChangedNotification]);
+  [self updateFullKeyboardAccess];
 }
 
 - (void)undo:(id)sender {
@@ -567,6 +635,9 @@ gfx::Rect GetFirstRectForRangeHelper(const ui::TextInputClient* client,
 // TODO(tapted): Make this list complete, except for insert* methods which are
 // dispatched as regular key events in doCommandBySelector:.
 
+// views::Textfields are single-line only, map Paragraph and Document commands
+// to Line. Also, Up/Down commands correspond to beginning/end of line.
+
 // The insertText action message forwards to the TextInputClient unless a menu
 // is active. Note that NSResponder's interpretKeyEvents: implementation doesn't
 // direct insertText: through doCommandBySelector:, so this is still needed to
@@ -578,11 +649,21 @@ gfx::Rect GetFirstRectForRangeHelper(const ui::TextInputClient* client,
 
 // Selection movement and scrolling.
 
+- (void)moveForward:(id)sender {
+  IsTextRTL(textInputClient_) ? [self moveLeft:sender]
+                              : [self moveRight:sender];
+}
+
 - (void)moveRight:(id)sender {
   [self handleAction:IDS_MOVE_RIGHT
              keyCode:ui::VKEY_RIGHT
              domCode:ui::DomCode::ARROW_RIGHT
           eventFlags:0];
+}
+
+- (void)moveBackward:(id)sender {
+  IsTextRTL(textInputClient_) ? [self moveRight:sender]
+                              : [self moveLeft:sender];
 }
 
 - (void)moveLeft:(id)sender {
@@ -593,17 +674,175 @@ gfx::Rect GetFirstRectForRangeHelper(const ui::TextInputClient* client,
 }
 
 - (void)moveUp:(id)sender {
-  [self handleAction:0
+  [self handleAction:IDS_MOVE_TO_BEGINNING_OF_LINE
              keyCode:ui::VKEY_UP
              domCode:ui::DomCode::ARROW_UP
           eventFlags:0];
 }
 
 - (void)moveDown:(id)sender {
-  [self handleAction:0
+  [self handleAction:IDS_MOVE_TO_END_OF_LINE
              keyCode:ui::VKEY_DOWN
              domCode:ui::DomCode::ARROW_DOWN
           eventFlags:0];
+}
+
+- (void)moveWordForward:(id)sender {
+  IsTextRTL(textInputClient_) ? [self moveWordLeft:sender]
+                              : [self moveWordRight:sender];
+}
+
+- (void)moveWordBackward:(id)sender {
+  IsTextRTL(textInputClient_) ? [self moveWordRight:sender]
+                              : [self moveWordLeft:sender];
+}
+
+- (void)moveToBeginningOfLine:(id)sender {
+  [self handleAction:IDS_MOVE_TO_BEGINNING_OF_LINE
+             keyCode:ui::VKEY_HOME
+             domCode:ui::DomCode::HOME
+          eventFlags:0];
+}
+
+- (void)moveToEndOfLine:(id)sender {
+  [self handleAction:IDS_MOVE_TO_END_OF_LINE
+             keyCode:ui::VKEY_END
+             domCode:ui::DomCode::END
+          eventFlags:0];
+}
+
+- (void)moveToBeginningOfParagraph:(id)sender {
+  [self moveToBeginningOfLine:sender];
+}
+
+- (void)moveToEndOfParagraph:(id)sender {
+  [self moveToEndOfLine:sender];
+}
+
+- (void)moveToEndOfDocument:(id)sender {
+  [self handleAction:IDS_MOVE_TO_END_OF_LINE
+             keyCode:ui::VKEY_END
+             domCode:ui::DomCode::END
+          eventFlags:ui::EF_CONTROL_DOWN];
+}
+
+- (void)moveToBeginningOfDocument:(id)sender {
+  [self handleAction:IDS_MOVE_TO_BEGINNING_OF_LINE
+             keyCode:ui::VKEY_HOME
+             domCode:ui::DomCode::HOME
+          eventFlags:ui::EF_CONTROL_DOWN];
+}
+
+- (void)pageDown:(id)sender {
+  [self handleAction:IDS_MOVE_TO_END_OF_LINE
+             keyCode:ui::VKEY_NEXT
+             domCode:ui::DomCode::PAGE_DOWN
+          eventFlags:0];
+}
+
+- (void)pageUp:(id)sender {
+  [self handleAction:IDS_MOVE_TO_BEGINNING_OF_LINE
+             keyCode:ui::VKEY_PRIOR
+             domCode:ui::DomCode::PAGE_UP
+          eventFlags:0];
+}
+
+- (void)moveBackwardAndModifySelection:(id)sender {
+  IsTextRTL(textInputClient_) ? [self moveRightAndModifySelection:sender]
+                              : [self moveLeftAndModifySelection:sender];
+}
+
+- (void)moveForwardAndModifySelection:(id)sender {
+  IsTextRTL(textInputClient_) ? [self moveLeftAndModifySelection:sender]
+                              : [self moveRightAndModifySelection:sender];
+}
+
+- (void)moveWordForwardAndModifySelection:(id)sender {
+  IsTextRTL(textInputClient_) ? [self moveWordLeftAndModifySelection:sender]
+                              : [self moveWordRightAndModifySelection:sender];
+}
+
+- (void)moveWordBackwardAndModifySelection:(id)sender {
+  IsTextRTL(textInputClient_) ? [self moveWordRightAndModifySelection:sender]
+                              : [self moveWordLeftAndModifySelection:sender];
+}
+
+- (void)moveUpAndModifySelection:(id)sender {
+  [self handleAction:IDS_MOVE_TO_BEGINNING_OF_LINE_AND_MODIFY_SELECTION
+             keyCode:ui::VKEY_UP
+             domCode:ui::DomCode::ARROW_UP
+          eventFlags:ui::EF_SHIFT_DOWN];
+}
+
+- (void)moveDownAndModifySelection:(id)sender {
+  [self handleAction:IDS_MOVE_TO_END_OF_LINE_AND_MODIFY_SELECTION
+             keyCode:ui::VKEY_DOWN
+             domCode:ui::DomCode::ARROW_DOWN
+          eventFlags:ui::EF_SHIFT_DOWN];
+}
+
+- (void)moveToBeginningOfLineAndModifySelection:(id)sender {
+  [self handleAction:IDS_MOVE_TO_BEGINNING_OF_LINE_AND_MODIFY_SELECTION
+             keyCode:ui::VKEY_HOME
+             domCode:ui::DomCode::HOME
+          eventFlags:ui::EF_SHIFT_DOWN];
+}
+
+- (void)moveToEndOfLineAndModifySelection:(id)sender {
+  [self handleAction:IDS_MOVE_TO_END_OF_LINE_AND_MODIFY_SELECTION
+             keyCode:ui::VKEY_END
+             domCode:ui::DomCode::END
+          eventFlags:ui::EF_SHIFT_DOWN];
+}
+
+- (void)moveToBeginningOfParagraphAndModifySelection:(id)sender {
+  [self moveToBeginningOfLineAndModifySelection:sender];
+}
+
+- (void)moveToEndOfParagraphAndModifySelection:(id)sender {
+  [self moveToEndOfLineAndModifySelection:sender];
+}
+
+- (void)moveToEndOfDocumentAndModifySelection:(id)sender {
+  [self handleAction:IDS_MOVE_TO_END_OF_LINE_AND_MODIFY_SELECTION
+             keyCode:ui::VKEY_END
+             domCode:ui::DomCode::END
+          eventFlags:ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN];
+}
+
+- (void)moveToBeginningOfDocumentAndModifySelection:(id)sender {
+  [self handleAction:IDS_MOVE_TO_BEGINNING_OF_LINE_AND_MODIFY_SELECTION
+             keyCode:ui::VKEY_HOME
+             domCode:ui::DomCode::HOME
+          eventFlags:ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN];
+}
+
+- (void)pageDownAndModifySelection:(id)sender {
+  [self handleAction:IDS_MOVE_TO_END_OF_LINE_AND_MODIFY_SELECTION
+             keyCode:ui::VKEY_NEXT
+             domCode:ui::DomCode::PAGE_DOWN
+          eventFlags:ui::EF_SHIFT_DOWN];
+}
+
+- (void)pageUpAndModifySelection:(id)sender {
+  [self handleAction:IDS_MOVE_TO_BEGINNING_OF_LINE_AND_MODIFY_SELECTION
+             keyCode:ui::VKEY_PRIOR
+             domCode:ui::DomCode::PAGE_UP
+          eventFlags:ui::EF_SHIFT_DOWN];
+}
+
+- (void)moveParagraphForwardAndModifySelection:(id)sender {
+  [self handleAction:IDS_MOVE_TO_END_OF_LINE_AND_MODIFY_SELECTION
+             keyCode:ui::VKEY_DOWN
+             domCode:ui::DomCode::ARROW_DOWN
+          eventFlags:ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN];
+}
+
+- (void)moveParagraphBackwardAndModifySelection:(id)sender {
+  [self handleAction:IDS_MOVE_TO_BEGINNING_OF_LINE_AND_MODIFY_SELECTION
+             keyCode:ui::VKEY_UP
+             domCode:ui::DomCode::ARROW_UP
+          eventFlags:ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN];
 }
 
 - (void)moveWordRight:(id)sender {
@@ -620,17 +859,17 @@ gfx::Rect GetFirstRectForRangeHelper(const ui::TextInputClient* client,
           eventFlags:ui::EF_CONTROL_DOWN];
 }
 
-- (void)moveLeftAndModifySelection:(id)sender {
-  [self handleAction:IDS_MOVE_LEFT_AND_MODIFY_SELECTION
-             keyCode:ui::VKEY_LEFT
-             domCode:ui::DomCode::ARROW_LEFT
-          eventFlags:ui::EF_SHIFT_DOWN];
-}
-
 - (void)moveRightAndModifySelection:(id)sender {
   [self handleAction:IDS_MOVE_RIGHT_AND_MODIFY_SELECTION
              keyCode:ui::VKEY_RIGHT
              domCode:ui::DomCode::ARROW_RIGHT
+          eventFlags:ui::EF_SHIFT_DOWN];
+}
+
+- (void)moveLeftAndModifySelection:(id)sender {
+  [self handleAction:IDS_MOVE_LEFT_AND_MODIFY_SELECTION
+             keyCode:ui::VKEY_LEFT
+             domCode:ui::DomCode::ARROW_LEFT
           eventFlags:ui::EF_SHIFT_DOWN];
 }
 
@@ -649,31 +888,25 @@ gfx::Rect GetFirstRectForRangeHelper(const ui::TextInputClient* client,
 }
 
 - (void)moveToLeftEndOfLine:(id)sender {
-  [self handleAction:IDS_MOVE_TO_BEGINNING_OF_LINE
-             keyCode:ui::VKEY_HOME
-             domCode:ui::DomCode::HOME
-          eventFlags:0];
+  IsTextRTL(textInputClient_) ? [self moveToEndOfLine:sender]
+                              : [self moveToBeginningOfLine:sender];
 }
 
 - (void)moveToRightEndOfLine:(id)sender {
-  [self handleAction:IDS_MOVE_TO_END_OF_LINE
-             keyCode:ui::VKEY_END
-             domCode:ui::DomCode::END
-          eventFlags:0];
+  IsTextRTL(textInputClient_) ? [self moveToBeginningOfLine:sender]
+                              : [self moveToEndOfLine:sender];
 }
 
 - (void)moveToLeftEndOfLineAndModifySelection:(id)sender {
-  [self handleAction:IDS_MOVE_TO_BEGINNING_OF_LINE_AND_MODIFY_SELECTION
-             keyCode:ui::VKEY_HOME
-             domCode:ui::DomCode::HOME
-          eventFlags:ui::EF_SHIFT_DOWN];
+  IsTextRTL(textInputClient_)
+      ? [self moveToEndOfLineAndModifySelection:sender]
+      : [self moveToBeginningOfLineAndModifySelection:sender];
 }
 
 - (void)moveToRightEndOfLineAndModifySelection:(id)sender {
-  [self handleAction:IDS_MOVE_TO_END_OF_LINE_AND_MODIFY_SELECTION
-             keyCode:ui::VKEY_END
-             domCode:ui::DomCode::END
-          eventFlags:ui::EF_SHIFT_DOWN];
+  IsTextRTL(textInputClient_)
+      ? [self moveToBeginningOfLineAndModifySelection:sender]
+      : [self moveToEndOfLineAndModifySelection:sender];
 }
 
 // Deletions.
@@ -704,6 +937,28 @@ gfx::Rect GetFirstRectForRangeHelper(const ui::TextInputClient* client,
              keyCode:ui::VKEY_BACK
              domCode:ui::DomCode::BACKSPACE
           eventFlags:ui::EF_CONTROL_DOWN];
+}
+
+- (void)deleteToBeginningOfLine:(id)sender {
+  [self handleAction:IDS_DELETE_TO_BEGINNING_OF_LINE
+             keyCode:ui::VKEY_BACK
+             domCode:ui::DomCode::BACKSPACE
+          eventFlags:ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN];
+}
+
+- (void)deleteToEndOfLine:(id)sender {
+  [self handleAction:IDS_DELETE_TO_END_OF_LINE
+             keyCode:ui::VKEY_DELETE
+             domCode:ui::DomCode::DEL
+          eventFlags:ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN];
+}
+
+- (void)deleteToBeginningOfParagraph:(id)sender {
+  [self deleteToBeginningOfLine:sender];
+}
+
+- (void)deleteToEndOfParagraph:(id)sender {
+  [self deleteToEndOfLine:sender];
 }
 
 // Cancellation.
@@ -759,17 +1014,20 @@ gfx::Rect GetFirstRectForRangeHelper(const ui::TextInputClient* client,
 - (NSAttributedString*)
     attributedSubstringForProposedRange:(NSRange)range
                             actualRange:(NSRangePointer)actualRange {
-  base::string16 substring;
-  if (textInputClient_) {
-    gfx::Range textRange;
-    textInputClient_->GetTextRange(&textRange);
-    gfx::Range subrange = textRange.Intersect(gfx::Range(range));
-    textInputClient_->GetTextFromRange(subrange, &substring);
-    if (actualRange)
-      *actualRange = subrange.ToNSRange();
+  gfx::Range actual_range;
+  base::string16 substring = AttributedSubstringForRangeHelper(
+      textInputClient_, gfx::Range(range), &actual_range);
+  if (actualRange) {
+    // To maintain consistency with NSTextView, return range {0,0} for an out of
+    // bounds requested range.
+    *actualRange =
+        actual_range.IsValid() ? actual_range.ToNSRange() : NSMakeRange(0, 0);
   }
-  return [[[NSAttributedString alloc]
-      initWithString:base::SysUTF16ToNSString(substring)] autorelease];
+  return substring.empty()
+             ? nil
+             : [[[NSAttributedString alloc]
+                   initWithString:base::SysUTF16ToNSString(substring)]
+                   autorelease];
 }
 
 - (NSUInteger)characterIndexForPoint:(NSPoint)aPoint {

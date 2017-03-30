@@ -340,7 +340,7 @@ content::WebContents* CreateTargetContents(const chrome::NavigateParams& params,
                                            const GURL& url) {
   WebContents::CreateParams create_params(
       params.browser->profile(),
-      params.source_site_instance && !vivaldi::IsVivaldiRunning()
+      params.source_site_instance
           ? params.source_site_instance
           : tab_util::GetSiteInstanceForNewTab(params.browser->profile(), url));
   if (params.source_contents) {

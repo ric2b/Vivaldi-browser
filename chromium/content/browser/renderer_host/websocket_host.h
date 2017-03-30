@@ -7,17 +7,18 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
 #include "content/common/websocket.h"
 
 class GURL;
+struct WebSocketHostMsg_AddChannelRequest_Params;
 
 namespace url {
 class Origin;
@@ -66,14 +67,13 @@ class CONTENT_EXPORT WebSocketHost {
   // Handlers for each message type, dispatched by OnMessageReceived(), as
   // defined in content/common/websocket_messages.h
 
-  void OnAddChannelRequest(const GURL& socket_url,
-                           const std::vector<std::string>& requested_protocols,
-                           const url::Origin& origin,
-                           int render_frame_id);
+  void OnAddChannelRequest(
+      const WebSocketHostMsg_AddChannelRequest_Params& request);
 
   void AddChannel(const GURL& socket_url,
                   const std::vector<std::string>& requested_protocols,
                   const url::Origin& origin,
+                  const GURL& first_party_for_cookies,
                   int render_frame_id);
 
   void OnSendBlob(const std::string& uuid, uint64_t expected_size);
@@ -89,10 +89,10 @@ class CONTENT_EXPORT WebSocketHost {
   void BlobSendComplete(int result);
 
   // non-NULL if and only if this object is currently in "blob sending mode".
-  scoped_ptr<WebSocketBlobSender> blob_sender_;
+  std::unique_ptr<WebSocketBlobSender> blob_sender_;
 
   // The channel we use to send events to the network.
-  scoped_ptr<net::WebSocketChannel> channel_;
+  std::unique_ptr<net::WebSocketChannel> channel_;
 
   // The WebSocketHostDispatcher that created this object.
   WebSocketDispatcherHost* const dispatcher_;

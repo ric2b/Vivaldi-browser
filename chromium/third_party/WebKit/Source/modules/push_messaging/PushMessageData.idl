@@ -8,8 +8,6 @@ typedef object JSON;
 
 [
     Exposed=ServiceWorker,
-    GarbageCollected,
-    RuntimeEnabled=PushMessagingData,
 ] interface PushMessageData {
     ArrayBuffer arrayBuffer();
     Blob blob();

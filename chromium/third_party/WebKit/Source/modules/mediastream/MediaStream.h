@@ -39,11 +39,10 @@ namespace blink {
 class ExceptionState;
 
 class MODULES_EXPORT MediaStream final
-    : public RefCountedGarbageCollectedEventTargetWithInlineData<MediaStream>
+    : public EventTargetWithInlineData
     , public URLRegistrable
     , public MediaStreamDescriptorClient
     , public ContextLifecycleObserver {
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(MediaStream);
     USING_GARBAGE_COLLECTED_MIXIN(MediaStream);
     DEFINE_WRAPPERTYPEINFO();
 public:
@@ -88,6 +87,9 @@ public:
 
     DECLARE_VIRTUAL_TRACE();
 
+protected:
+    bool addEventListenerInternal(const AtomicString& eventType, EventListener*, const AddEventListenerOptions&) override;
+
 private:
     MediaStream(ExecutionContext*, MediaStreamDescriptor*);
     MediaStream(ExecutionContext*, const MediaStreamTrackVector& audioTracks, const MediaStreamTrackVector& videoTracks);
@@ -115,6 +117,8 @@ private:
 };
 
 typedef HeapVector<Member<MediaStream>> MediaStreamVector;
+
+MediaStream* toMediaStream(MediaStreamDescriptor*);
 
 } // namespace blink
 

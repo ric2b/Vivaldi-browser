@@ -8,6 +8,7 @@
 
 #include <string>
 
+#include "ash/system/chromeos/devicetype_utils.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
@@ -236,7 +237,6 @@ void HelpHandler::GetLocalizedValues(base::DictionaryValue* localized_strings) {
 #endif
     {"productName", IDS_PRODUCT_NAME},
     {"updateCheckStarted", IDS_UPGRADE_CHECK_STARTED},
-    {"upToDate", IDS_UPGRADE_UP_TO_DATE},
     {"updating", IDS_UPGRADE_UPDATING},
 #if defined(OS_CHROMEOS) || defined(OS_WIN)
     {"updateDisabledByPolicy", IDS_UPGRADE_DISABLED_BY_POLICY},
@@ -253,6 +253,7 @@ void HelpHandler::GetLocalizedValues(base::DictionaryValue* localized_strings) {
     {"reportAnIssue", IDS_REPORT_AN_ISSUE},
 #if defined(OS_CHROMEOS)
     {"platform", IDS_PLATFORM_LABEL},
+    {"arcVersion", IDS_ARC_VERSION_LABEL},
     {"firmware", IDS_ABOUT_PAGE_FIRMWARE},
     {"showMoreInfo", IDS_SHOW_MORE_INFO},
     {"hideMoreInfo", IDS_HIDE_MORE_INFO},
@@ -300,6 +301,14 @@ void HelpHandler::GetLocalizedValues(base::DictionaryValue* localized_strings) {
     localized_strings->SetString(resources[i].name,
                                  l10n_util::GetStringUTF16(resources[i].ids));
   }
+
+#if defined(OS_CHROMEOS)
+  localized_strings->SetString("upToDate", ash::SubstituteChromeOSDeviceType(
+      IDS_UPGRADE_UP_TO_DATE));
+#else
+  localized_strings->SetString("upToDate", l10n_util::GetStringUTF16(
+      IDS_UPGRADE_UP_TO_DATE));
+#endif
 
   localized_strings->SetString("updateObsoleteSystem",
                                ObsoleteSystem::LocalizedObsoleteString());
@@ -464,6 +473,12 @@ void HelpHandler::OnPageLoaded(const base::ListValue* args) {
       base::Bind(&chromeos::version_loader::GetVersion,
                  chromeos::version_loader::VERSION_FULL),
       base::Bind(&HelpHandler::OnOSVersion,
+                 weak_factory_.GetWeakPtr()));
+  base::PostTaskAndReplyWithResult(
+      content::BrowserThread::GetBlockingPool(),
+      FROM_HERE,
+      base::Bind(&chromeos::version_loader::GetARCVersion),
+      base::Bind(&HelpHandler::OnARCVersion,
                  weak_factory_.GetWeakPtr()));
   base::PostTaskAndReplyWithResult(
       content::BrowserThread::GetBlockingPool(),
@@ -680,6 +695,11 @@ void HelpHandler::SetPromotionState(VersionUpdater::PromotionState state) {
 void HelpHandler::OnOSVersion(const std::string& version) {
   web_ui()->CallJavascriptFunction("help.HelpPage.setOSVersion",
                                    base::StringValue(version));
+}
+
+void HelpHandler::OnARCVersion(const std::string& firmware) {
+  web_ui()->CallJavascriptFunction("help.HelpPage.setARCVersion",
+                                   base::StringValue(firmware));
 }
 
 void HelpHandler::OnOSFirmware(const std::string& firmware) {

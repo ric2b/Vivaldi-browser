@@ -49,7 +49,7 @@ const AtomicString& ServiceWorker::interfaceName() const
     return EventTargetNames::ServiceWorker;
 }
 
-void ServiceWorker::postMessage(ExecutionContext* context, PassRefPtr<SerializedScriptValue> message, const MessagePortArray* ports, ExceptionState& exceptionState)
+void ServiceWorker::postMessage(ExecutionContext* context, PassRefPtr<SerializedScriptValue> message, const MessagePortArray& ports, ExceptionState& exceptionState)
 {
     ServiceWorkerContainerClient* client = ServiceWorkerContainerClient::from(getExecutionContext());
     if (!client || !client->provider()) {
@@ -70,7 +70,7 @@ void ServiceWorker::postMessage(ExecutionContext* context, PassRefPtr<Serialized
         context->addConsoleMessage(ConsoleMessage::create(JSMessageSource, WarningMessageLevel, "ServiceWorker cannot send an ArrayBuffer as a transferable object yet. See http://crbug.com/511119"));
 
     WebString messageString = message->toWireString();
-    OwnPtr<WebMessagePortChannelArray> webChannels = MessagePort::toWebMessagePortChannelArray(channels.release());
+    OwnPtr<WebMessagePortChannelArray> webChannels = MessagePort::toWebMessagePortChannelArray(std::move(channels));
     m_handle->serviceWorker()->postMessage(client->provider(), messageString, WebSecurityOrigin(getExecutionContext()->getSecurityOrigin()), webChannels.leakPtr());
 }
 
@@ -114,7 +114,7 @@ String ServiceWorker::state() const
 
 ServiceWorker* ServiceWorker::from(ExecutionContext* executionContext, PassOwnPtr<WebServiceWorker::Handle> handle)
 {
-    return getOrCreate(executionContext, handle);
+    return getOrCreate(executionContext, std::move(handle));
 }
 
 bool ServiceWorker::hasPendingActivity() const
@@ -140,7 +140,7 @@ ServiceWorker* ServiceWorker::getOrCreate(ExecutionContext* executionContext, Pa
         return existingWorker;
     }
 
-    ServiceWorker* newWorker = new ServiceWorker(executionContext, handle);
+    ServiceWorker* newWorker = new ServiceWorker(executionContext, std::move(handle));
     newWorker->suspendIfNeeded();
     return newWorker;
 }
@@ -148,7 +148,7 @@ ServiceWorker* ServiceWorker::getOrCreate(ExecutionContext* executionContext, Pa
 ServiceWorker::ServiceWorker(ExecutionContext* executionContext, PassOwnPtr<WebServiceWorker::Handle> handle)
     : AbstractWorker(executionContext)
     , ActiveScriptWrappable(this)
-    , m_handle(handle)
+    , m_handle(std::move(handle))
     , m_wasStopped(false)
 {
     ASSERT(m_handle);
@@ -157,6 +157,11 @@ ServiceWorker::ServiceWorker(ExecutionContext* executionContext, PassOwnPtr<WebS
 
 ServiceWorker::~ServiceWorker()
 {
+}
+
+DEFINE_TRACE(ServiceWorker)
+{
+    AbstractWorker::trace(visitor);
 }
 
 } // namespace blink

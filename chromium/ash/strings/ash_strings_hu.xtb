@@ -26,6 +26,7 @@
 <translation id="1602076796624386989">Mobiladatok engedélyezése</translation>
 <translation id="1621499497873603021">Akkumulátor lemerüléséig hátralévő idő: <ph name="TIME_LEFT" /></translation>
 <translation id="164969095109328410">Chrome-eszköz</translation>
+<translation id="1677472565718498478"><ph name="TIME" /> van hátra</translation>
 <translation id="1723752762323179280">Kilépés a munkamenetből</translation>
 <translation id="1747827819627189109">Képernyő-billentyűzet bekapcsolva</translation>
 <translation id="1812696562331527143">A beviteli mód a következőre változott: <ph name="INPUT_METHOD_ID" />*(<ph name="BEGIN_LINK" />harmadik fél<ph name="END_LINK" />).
@@ -92,7 +93,6 @@ Kikapcsolásához nyomja meg a Keresés vagy a Shift billentyűt.</translation>
 <translation id="3621712662352432595">Hangbeállítások</translation>
 <translation id="3625258641415618104">Képernyőképek letiltva</translation>
 <translation id="3626281679859535460">Fényerő</translation>
-<translation id="3626637461649818317"><ph name="PERCENTAGE" />% maradt</translation>
 <translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079"><ph name="DISPLAY_NAME" /> felbontása erre módosult: <ph name="RESOLUTION" /></translation>
 <translation id="370649949373421643">Wi-Fi engedélyezése</translation>
@@ -111,13 +111,13 @@ Kikapcsolásához nyomja meg a Keresés vagy a Shift billentyűt.</translation>
 <translation id="397105322502079400">Számítás…</translation>
 <translation id="3995138139523574647">C típusú USB-vel kompatibilis eszköz (jobb hátsó port)</translation>
 <translation id="4053612967614057854">Képernyő-billentyűzet letiltása</translation>
-<translation id="412065659894267608"><ph name="HOUR" /> ó <ph name="MINUTE" /> p a teljes feltöltésig</translation>
 <translation id="4250680216510889253">Nem</translation>
 <translation id="4279490309300973883">Tükrözés</translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4421231901400348175">A képernyő irányításának megosztása <ph name="HELPER_NAME" /> segítővel a Távsegítség szolgáltatás keretein belül.</translation>
 <translation id="4430019312045809116">Hangerő</translation>
 <translation id="4527045527269911712">A(z) „<ph name="DEVICE_NAME" />” Bluetooth-eszköz engedélyt kér a párosításra.</translation>
+<translation id="453661520163887813"><ph name="TIME" /> a teljes feltöltésig</translation>
 <translation id="4544944664594876241">Megváltozott a képernyőzárolás billentyűkódja. A <ph name="OLD_SHORTCUT" /> helyett használja a következőt: <ph name="NEW_SHORTCUT" />.</translation>
 <translation id="479989351350248267">search</translation>
 <translation id="4804818685124855865">Kapcsolat bontása</translation>
@@ -129,7 +129,6 @@ Kikapcsolásához nyomja meg a Keresés vagy a Shift billentyűt.</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl+Shift+Space</translation>
 <translation id="5045002648206642691">A Google Drive beállításai...</translation>
-<translation id="5102001756192215136"><ph name="HOUR" />:<ph name="MINUTE" /> van hátra</translation>
 <translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">Cast-eszközök állnak rendelkezésre</translation>
 <translation id="5222676887888702881">Kijelentkezés</translation>
@@ -166,7 +165,6 @@ A váltáshoz nyomja meg a Shift + Alt billentyűkódot.</translation>
 <translation id="615957422585914272">A képernyő-billentyűzet megjelenítése</translation>
 <translation id="6165508094623778733">További információ</translation>
 <translation id="6203030746557259519">Virtuális kijelző</translation>
-<translation id="6247708409970142803"><ph name="PERCENTAGE" />%</translation>
 <translation id="6248847161401822652">A kilépéshez nyomja meg kétszer a Ctrl Shift Q billentyűkódot.</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" /> elfordult erre: <ph name="ROTATION" /></translation>
 <translation id="6359806961507272919">SMS innen: <ph name="PHONE_NUMBER" /></translation>
@@ -207,6 +205,7 @@ Kikapcsolásához nyomja meg az Alt + Keresés vagy a Shift billentyűt.</transl
 <translation id="7510334386202674593">Ctrl+Shift+L</translation>
 <translation id="7561014039265304140">A(z) <ph name="DISPLAY_NAME" /> nem támogatja a következő felbontást: <ph name="SPECIFIED_RESOLUTION" />. A felbontás megváltozott erre: <ph name="FALLBACK_RESOLUTION" /></translation>
 <translation id="7573962313813535744">Dokkolt mód</translation>
+<translation id="7580671184200851182">Azonos hang lejátszása mindegyik hangszórón (monó hang)</translation>
 <translation id="7593891976182323525">Keresés vagy Shift</translation>
 <translation id="7649070708921625228">Súgó</translation>
 <translation id="7692480393933218409">C típusú USB-vel kompatibilis eszközök töltése</translation>
@@ -225,13 +224,14 @@ Kikapcsolásához nyomja meg az Alt + Keresés vagy a Shift billentyűt.</transl
 <translation id="8308637677604853869">Előző menü</translation>
 <translation id="8356164830168736643"><ph name="WINDOW_TITLE" /> bezárása</translation>
 <translation id="8428213095426709021">Beállítások</translation>
-<translation id="8456362689280298700"><ph name="HOUR" />:<ph name="MINUTE" /> a teljes feltöltésig</translation>
 <translation id="8517041960877371778">Előfordulhat, hogy a(z) <ph name="DEVICE_TYPE" /> nem töltődik, amíg be van kapcsolva.</translation>
 <translation id="8528322925433439945">Mobil...</translation>
+<translation id="8639760480004882931"><ph name="PERCENTAGE" /> maradt</translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">Kis teljesítményű töltő csatlakoztatva</translation>
 <translation id="8814190375133053267">Wi-Fi</translation>
 <translation id="882279321799040148">Kattintson a megtekintéshez</translation>
+<translation id="8825534185036233643">A böngésző nem támogatja a tükrözést kettőnél több megjelenítő esetén.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8850991929411075241">Keresés+Esc</translation>
 <translation id="8878886163241303700">Kibővített képernyő</translation>

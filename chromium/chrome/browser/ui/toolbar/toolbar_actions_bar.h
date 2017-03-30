@@ -7,12 +7,15 @@
 
 #include <stddef.h>
 
+#include <memory>
+
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/scoped_observer.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar_bubble_delegate.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "ui/gfx/animation/tween.h"
@@ -46,7 +49,8 @@ class ToolbarActionViewController;
 // app menu. The main bar can have only a single row of icons with flexible
 // width, whereas the overflow bar has multiple rows of icons with a fixed
 // width (the width of the menu).
-class ToolbarActionsBar : public ToolbarActionsModel::Observer {
+class ToolbarActionsBar : public ToolbarActionsModel::Observer,
+                          public TabStripModelObserver {
  public:
   // A struct to contain the platform settings.
   struct PlatformSettings {
@@ -181,6 +185,9 @@ class ToolbarActionsBar : public ToolbarActionsModel::Observer {
   // Notifies the ToolbarActionsBar that the delegate finished animating.
   void OnAnimationEnded();
 
+  // Called when the active bubble is closed.
+  void OnBubbleClosed();
+
   // Returns true if the given |action| is visible on the main toolbar.
   bool IsActionVisibleOnMainBar(const ToolbarActionViewController* action)
       const;
@@ -214,6 +221,9 @@ class ToolbarActionsBar : public ToolbarActionsModel::Observer {
   // Displays the given |bubble| once the toolbar is no longer animating.
   void ShowToolbarActionBubble(
       std::unique_ptr<ToolbarActionsBarBubbleDelegate> bubble);
+  // Same as above, but uses PostTask() in all cases.
+  void ShowToolbarActionBubbleAsync(
+      std::unique_ptr<ToolbarActionsBarBubbleDelegate> bubble);
 
   // Returns the underlying toolbar actions, but does not order them. Primarily
   // for use in testing.
@@ -239,6 +249,7 @@ class ToolbarActionsBar : public ToolbarActionsModel::Observer {
     return popped_out_action_;
   }
   bool in_overflow_mode() const { return main_bar_ != nullptr; }
+  bool is_showing_bubble() const { return is_showing_bubble_; }
 
   ToolbarActionsBarDelegate* delegate_for_test() { return delegate_; }
 
@@ -246,6 +257,8 @@ class ToolbarActionsBar : public ToolbarActionsModel::Observer {
   // so that the bar resizes instantly, instead of having to poll it while it
   // animates to open/closed status.
   static bool disable_animations_for_testing_;
+  static void set_extension_bubble_appearance_wait_time_for_testing(
+      int time_in_seconds);
 
  private:
   using ToolbarActions = ScopedVector<ToolbarActionViewController>;
@@ -259,6 +272,11 @@ class ToolbarActionsBar : public ToolbarActionsModel::Observer {
   void OnToolbarVisibleCountChanged() override;
   void OnToolbarHighlightModeChanged(bool is_highlighting) override;
   void OnToolbarModelInitialized() override;
+
+  // TabStripModelObserver:
+  void TabInsertedAt(content::WebContents* contents,
+                     int index,
+                     bool foreground) override;
 
   // Resizes the delegate (if necessary) to the preferred size using the given
   // |tween_type| and optionally suppressing the chevron.
@@ -276,8 +294,7 @@ class ToolbarActionsBar : public ToolbarActionsModel::Observer {
   void ReorderActions();
 
   // Shows an extension message bubble, if any should be shown.
-  void MaybeShowExtensionBubble(
-      std::unique_ptr<extensions::ExtensionMessageBubbleController> controller);
+  void MaybeShowExtensionBubble();
 
   // The delegate for this object (in a real build, this is the view).
   ToolbarActionsBarDelegate* delegate_;
@@ -318,9 +335,10 @@ class ToolbarActionsBar : public ToolbarActionsModel::Observer {
   // See also TabOrderHelper in the .cc file.
   static bool pop_out_actions_to_run_;
 
-  // True if we have checked to see if there is an extension bubble that should
-  // be displayed, and, if there is, shown that bubble.
-  bool checked_extension_bubble_;
+  // True if we should check to see if there is an extension bubble that should
+  // be displayed, and, if there is, started the process for showing that
+  // bubble. This is only ever true for the main bar.
+  bool should_check_extension_bubble_;
 
   // Whether or not the user is in the middle of a drag-and-drop operation.
   bool is_drag_in_progress_;
@@ -337,16 +355,14 @@ class ToolbarActionsBar : public ToolbarActionsModel::Observer {
   // it is fully popped out.
   base::Closure popped_out_closure_;
 
-  // The controller of the extension message bubble to show once animation
-  // finishes, if any. This has priority over
-  // |pending_toolbar_bubble_controller_|.
-  std::unique_ptr<extensions::ExtensionMessageBubbleController>
-      pending_extension_bubble_controller_;
-
   // The controller for the toolbar action bubble to show once animation
   // finishes, if any.
-  std::unique_ptr<ToolbarActionsBarBubbleDelegate>
-      pending_toolbar_bubble_controller_;
+  std::unique_ptr<ToolbarActionsBarBubbleDelegate> pending_bubble_controller_;
+
+  // True if a bubble is currently being shown.
+  bool is_showing_bubble_;
+
+  ScopedObserver<TabStripModel, TabStripModelObserver> tab_strip_observer_;
 
   base::ObserverList<ToolbarActionsBarObserver> observers_;
 

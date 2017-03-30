@@ -7,6 +7,7 @@
     '../third_party/re2/re2.gyp:re2',
     '../base/base.gyp:base',
     '../ui/gl/gl.gyp:gl',
+    '../ui/gl/init/gl_init.gyp:gl_init',
   ],
   'include_dirs': [
     '..',
@@ -23,6 +24,8 @@
     'config/gpu_driver_bug_list.h',
     'config/gpu_driver_bug_list_json.cc',
     'config/gpu_driver_bug_workaround_type.h',
+    'config/gpu_driver_bug_workarounds.cc',
+    'config/gpu_driver_bug_workarounds.h',
     'config/gpu_dx_diagnostics_win.cc',
     'config/gpu_feature_type.h',
     'config/gpu_info.cc',

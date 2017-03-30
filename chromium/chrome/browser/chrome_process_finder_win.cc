@@ -27,8 +27,6 @@
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
 
-#include "base/memory/scoped_ptr.h"
-
 namespace {
 
 int timeout_in_milliseconds = 20 * 1000;
@@ -48,7 +46,7 @@ void KillVivaldiProcesses(std::vector<DWORD>& process_ids) {
     cmd_line_string += base::StringPrintf(L" /PID %d", pid);
   }
 
-  scoped_ptr<wchar_t[]> cmd_line(new wchar_t[cmd_line_string.length() + 1]);
+  std::unique_ptr<wchar_t[]> cmd_line(new wchar_t[cmd_line_string.length() + 1]);
   std::copy(cmd_line_string.begin(), cmd_line_string.end(), cmd_line.get());
   cmd_line[cmd_line_string.length()] = 0;
 

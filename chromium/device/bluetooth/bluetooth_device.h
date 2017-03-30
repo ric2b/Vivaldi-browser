@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -29,7 +30,7 @@ namespace device {
 
 class BluetoothAdapter;
 class BluetoothGattConnection;
-class BluetoothGattService;
+class BluetoothRemoteGattService;
 class BluetoothSocket;
 class BluetoothUUID;
 
@@ -437,23 +438,23 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   // returned BluetoothGattConnection will be automatically marked as inactive.
   // To monitor the state of the connection, observe the
   // BluetoothAdapter::Observer::DeviceChanged method.
-  typedef base::Callback<void(scoped_ptr<BluetoothGattConnection>)>
+  typedef base::Callback<void(std::unique_ptr<BluetoothGattConnection>)>
       GattConnectionCallback;
   virtual void CreateGattConnection(const GattConnectionCallback& callback,
                                     const ConnectErrorCallback& error_callback);
 
   // Set the gatt services discovery complete flag for this device.
-  void SetGattServicesDiscoveryComplete(bool complete);
+  virtual void SetGattServicesDiscoveryComplete(bool complete);
 
   // Indicates whether service discovery is complete for this device.
-  bool IsGattServicesDiscoveryComplete() const;
+  virtual bool IsGattServicesDiscoveryComplete() const;
 
   // Returns the list of discovered GATT services.
-  virtual std::vector<BluetoothGattService*> GetGattServices() const;
+  virtual std::vector<BluetoothRemoteGattService*> GetGattServices() const;
 
   // Returns the GATT service with device-specific identifier |identifier|.
   // Returns NULL, if no such service exists.
-  virtual BluetoothGattService* GetGattService(
+  virtual BluetoothRemoteGattService* GetGattService(
       const std::string& identifier) const;
 
   // Returns service data of a service given its UUID.
@@ -537,8 +538,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   std::set<BluetoothGattConnection*> gatt_connections_;
 
   // Mapping from the platform-specific GATT service identifiers to
-  // BluetoothGattService objects.
-  typedef base::ScopedPtrHashMap<std::string, scoped_ptr<BluetoothGattService>>
+  // BluetoothRemoteGattService objects.
+  typedef base::ScopedPtrHashMap<std::string,
+                                 std::unique_ptr<BluetoothRemoteGattService>>
       GattServiceMap;
   GattServiceMap gatt_services_;
   bool gatt_services_discovery_complete_;
@@ -546,7 +548,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   // Mapping from service UUID represented as a std::string of a bluetooth
   // service to
   // the specific data. The data is stored as BinaryValue.
-  scoped_ptr<base::DictionaryValue> services_data_;
+  std::unique_ptr<base::DictionaryValue> services_data_;
 
  private:
   // Returns a localized string containing the device's bluetooth address and

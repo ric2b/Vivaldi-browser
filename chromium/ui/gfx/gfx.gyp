@@ -68,6 +68,33 @@
       ],
     },
     {
+      'target_name': 'gfx_range',
+      'type': '<(component)',
+      'dependencies': [
+        '<(DEPTH)/base/base.gyp:base',
+      ],
+      'defines': [
+        'GFX_RANGE_IMPLEMENTATION',
+      ],
+      'sources': [
+        'range/gfx_range_export.h',
+        'range/range.cc',
+        'range/range.h',
+        'range/range_f.cc',
+        'range/range_f.h',
+        'range/range_mac.mm',
+        'range/range_win.cc',
+      ],
+      'conditions': [
+        ['OS=="win"', {
+          # TODO(jschuh): C4267: http://crbug.com/167187 size_t -> int
+          # C4324 is structure was padded due to __declspec(align()), which is
+          # uninteresting.
+          'msvs_disabled_warnings': [ 4267, 4324 ],
+        }],
+      ]
+    },
+    {
       'target_name': 'gfx',
       'type': '<(component)',
       'dependencies': [
@@ -82,6 +109,7 @@
         '<(DEPTH)/third_party/libpng/libpng.gyp:libpng',
         '<(DEPTH)/third_party/zlib/zlib.gyp:zlib',
         'gfx_geometry',
+        'gfx_range',
       ],
       # text_elider.h includes ICU headers.
       'export_dependent_settings': [
@@ -151,14 +179,6 @@
         'color_profile_win.cc',
         'color_utils.cc',
         'color_utils.h',
-        'display.cc',
-        'display.h',
-        'display_change_notifier.cc',
-        'display_change_notifier.h',
-        'display_finder.cc',
-        'display_finder.h',
-        'display_observer.cc',
-        'display_observer.h',
         'favicon_size.cc',
         'favicon_size.h',
         'font.cc',
@@ -251,30 +271,19 @@
         'platform_font_mac.mm',
         'platform_font_win.cc',
         'platform_font_win.h',
-        'range/range.cc',
-        'range/range.h',
-        'range/range_f.cc',
-        'range/range_f.h',
-        'range/range_mac.mm',
-        'range/range_win.cc',
         'render_text.cc',
         'render_text.h',
         'render_text_harfbuzz.cc',
         'render_text_harfbuzz.h',
         'render_text_mac.h',
         'render_text_mac.mm',
+        'scoped_canvas.cc',
         'scoped_canvas.h',
         'scoped_cg_context_save_gstate_mac.h',
         'scoped_ns_graphics_context_save_gstate_mac.h',
         'scoped_ns_graphics_context_save_gstate_mac.mm',
         'scoped_ui_graphics_push_context_ios.h',
         'scoped_ui_graphics_push_context_ios.mm',
-        'screen.cc',
-        'screen.h',
-        'screen_android.cc',
-        'screen_aura.cc',
-        'screen_ios.mm',
-        'screen_mac.mm',
         'scrollbar_size.cc',
         'scrollbar_size.h',
         'selection_model.cc',
@@ -310,8 +319,6 @@
         'win/direct_manipulation.h',
         'win/direct_write.cc',
         'win/direct_write.h',
-        'win/dpi.cc',
-        'win/dpi.h',
         'win/hwnd_util.cc',
         'win/hwnd_util.h',
         "win/physical_size.cc",
@@ -426,11 +433,6 @@
             'path.cc',
           ],
         }],
-        ['OS=="android" and use_aura==1', {
-          'sources!': [
-            'screen_android.cc',
-          ],
-        }],
         ['OS=="android" or OS=="ios"', {
           'sources!': [
             'harfbuzz_font_skia.cc',
@@ -529,13 +531,10 @@
         'image/image_unittest_util.h',
         'image/image_unittest_util_ios.mm',
         'image/image_unittest_util_mac.mm',
-        'test/display_util.h',
         'test/fontconfig_util_linux.cc',
         'test/fontconfig_util_linux.h',
         'test/gfx_util.cc',
         'test/gfx_util.h',
-        'test/test_screen.cc',
-        'test/test_screen.h',
         'test/ui_cocoa_test_helper.h',
         'test/ui_cocoa_test_helper.mm',
       ],

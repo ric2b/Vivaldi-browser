@@ -7,9 +7,10 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "content/browser/frame_host/frame_tree.h"
@@ -279,7 +280,7 @@ class CONTENT_EXPORT InterstitialPageImpl
   base::string16 original_web_contents_title_;
 
   // Our RenderViewHostDelegateView, necessary for accelerators to work.
-  scoped_ptr<InterstitialPageRVHDelegateView> rvh_delegate_view_;
+  std::unique_ptr<InterstitialPageRVHDelegateView> rvh_delegate_view_;
 
   // Settings passed to the renderer.
   mutable RendererPreferences renderer_preferences_;
@@ -291,7 +292,7 @@ class CONTENT_EXPORT InterstitialPageImpl
   // user chooses to proceed.
   bool pause_throbber_;
 
-  scoped_ptr<InterstitialPageDelegate> delegate_;
+  std::unique_ptr<InterstitialPageDelegate> delegate_;
 
   scoped_refptr<SessionStorageNamespace> session_storage_namespace_;
 

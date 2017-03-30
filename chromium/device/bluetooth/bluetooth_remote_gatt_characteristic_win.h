@@ -5,12 +5,14 @@
 #ifndef DEVICE_BLUETOOTH_BLUETOOTH_REMOTE_GATT_CHARACTERISTIC_WIN_H_
 #define DEVICE_BLUETOOTH_BLUETOOTH_REMOTE_GATT_CHARACTERISTIC_WIN_H_
 
+#include <memory>
 #include <unordered_map>
 
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner.h"
-#include "device/bluetooth/bluetooth_gatt_characteristic.h"
 #include "device/bluetooth/bluetooth_low_energy_defs_win.h"
+#include "device/bluetooth/bluetooth_remote_gatt_characteristic.h"
+#include "device/bluetooth/bluetooth_remote_gatt_service.h"
 
 namespace device {
 
@@ -20,9 +22,10 @@ class BluetoothRemoteGattServiceWin;
 class BluetoothTaskManagerWin;
 
 // The BluetoothRemoteGattCharacteristicWin class implements
-// BluetoothGattCharacteristic for remote GATT services on Windows 8 and later.
+// BluetoothRemoteGattCharacteristic for remote GATT services on Windows 8 and
+// later.
 class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicWin
-    : public BluetoothGattCharacteristic {
+    : public BluetoothRemoteGattCharacteristic {
  public:
   BluetoothRemoteGattCharacteristicWin(
       BluetoothRemoteGattServiceWin* parent_service,
@@ -30,20 +33,17 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicWin
       scoped_refptr<base::SequencedTaskRunner>& ui_task_runner);
   ~BluetoothRemoteGattCharacteristicWin() override;
 
-  // Override BluetoothGattCharacteristic interfaces.
+  // Override BluetoothRemoteGattCharacteristic interfaces.
   std::string GetIdentifier() const override;
   BluetoothUUID GetUUID() const override;
-  bool IsLocal() const override;
   std::vector<uint8_t>& GetValue() const override;
-  BluetoothGattService* GetService() const override;
+  BluetoothRemoteGattService* GetService() const override;
   Properties GetProperties() const override;
   Permissions GetPermissions() const override;
   bool IsNotifying() const override;
-  std::vector<BluetoothGattDescriptor*> GetDescriptors() const override;
-  BluetoothGattDescriptor* GetDescriptor(
+  std::vector<BluetoothRemoteGattDescriptor*> GetDescriptors() const override;
+  BluetoothRemoteGattDescriptor* GetDescriptor(
       const std::string& identifier) const override;
-  bool AddDescriptor(BluetoothGattDescriptor* descriptor) override;
-  bool UpdateValue(const std::vector<uint8_t>& value) override;
   void StartNotifySession(const NotifySessionCallback& callback,
                           const ErrorCallback& error_callback) override;
   void ReadRemoteCharacteristic(const ValueCallback& callback,
@@ -59,7 +59,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicWin
 
  private:
   void OnGetIncludedDescriptorsCallback(
-      scoped_ptr<BTH_LE_GATT_DESCRIPTOR> descriptors,
+      std::unique_ptr<BTH_LE_GATT_DESCRIPTOR> descriptors,
       uint16_t num,
       HRESULT hr);
   void UpdateIncludedDescriptors(PBTH_LE_GATT_DESCRIPTOR descriptors,
@@ -76,12 +76,12 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicWin
                                   BluetoothRemoteGattDescriptorWin* descriptor);
 
   void OnReadRemoteCharacteristicValueCallback(
-      scoped_ptr<BTH_LE_GATT_CHARACTERISTIC_VALUE> value,
+      std::unique_ptr<BTH_LE_GATT_CHARACTERISTIC_VALUE> value,
       HRESULT hr);
   void OnWriteRemoteCharacteristicValueCallback(HRESULT hr);
-  BluetoothGattService::GattErrorCode HRESULTToGattErrorCode(HRESULT hr);
+  BluetoothRemoteGattService::GattErrorCode HRESULTToGattErrorCode(HRESULT hr);
   void OnGattCharacteristicValueChanged(
-      scoped_ptr<std::vector<uint8_t>> new_value);
+      std::unique_ptr<std::vector<uint8_t>> new_value);
   void GattEventRegistrationCallback(PVOID event_handle, HRESULT hr);
   void ClearIncludedDescriptors();
 
@@ -89,7 +89,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicWin
   scoped_refptr<BluetoothTaskManagerWin> task_manager_;
 
   // Characteristic info from OS and used to interact with OS.
-  scoped_ptr<BTH_LE_GATT_CHARACTERISTIC> characteristic_info_;
+  std::unique_ptr<BTH_LE_GATT_CHARACTERISTIC> characteristic_info_;
   scoped_refptr<base::SequencedTaskRunner> ui_task_runner_;
   BluetoothUUID characteristic_uuid_;
   std::vector<uint8_t> characteristic_value_;
@@ -98,7 +98,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicWin
   // The key of GattDescriptorMap is the identitfier of
   // BluetoothRemoteGattDescriptorWin instance.
   typedef std::unordered_map<std::string,
-                             scoped_ptr<BluetoothRemoteGattDescriptorWin>>
+                             std::unique_ptr<BluetoothRemoteGattDescriptorWin>>
       GattDescriptorMap;
   GattDescriptorMap included_descriptors_;
 

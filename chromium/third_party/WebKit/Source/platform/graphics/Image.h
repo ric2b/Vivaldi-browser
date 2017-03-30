@@ -34,7 +34,6 @@
 #include "platform/graphics/ImageAnimationPolicy.h"
 #include "platform/graphics/ImageObserver.h"
 #include "platform/graphics/ImageOrientation.h"
-#include "third_party/skia/include/core/SkCanvas.h"
 #include "wtf/Assertions.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/PassRefPtr.h"
@@ -43,6 +42,7 @@
 #include "wtf/text/WTFString.h"
 
 class SkBitmap;
+class SkCanvas;
 class SkImage;
 
 namespace blink {
@@ -129,8 +129,10 @@ public:
     virtual void advanceAnimationForTesting() { }
 
     // Typically the ImageResource that owns us.
-    ImageObserver* getImageObserver() const { return m_imageObserver; }
-    void setImageObserver(ImageObserver* observer) { m_imageObserver = observer; }
+    ImageObserver* getImageObserver() const { return m_imageObserverDisabled ? nullptr : m_imageObserver; }
+    void clearImageObserver() { m_imageObserver = nullptr; }
+    // Do not call setImageObserverDisabled() other than from ImageObserverDisabler to avoid interleaved accesses to |m_imageObserverDisabled|.
+    void setImageObserverDisabled(bool disabled) { m_imageObserverDisabled = disabled; }
 
     enum TileRule { StretchTile, RoundTile, SpaceTile, RepeatTile };
 
@@ -163,6 +165,7 @@ private:
     // The observer (an ImageResource) is an untraced member, with the ImageResource
     // being responsible of clearing itself out.
     UntracedMember<ImageObserver> m_imageObserver;
+    bool m_imageObserverDisabled;
 };
 
 #define DEFINE_IMAGE_TYPE_CASTS(typeName) \

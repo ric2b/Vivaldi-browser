@@ -7,9 +7,9 @@
 
 #include "bindings/core/v8/ScriptState.h"
 #include "core/CoreExport.h"
-#include "core/frame/ConsoleTypes.h"
-#include "core/inspector/ConsoleAPITypes.h"
 #include "platform/heap/Handle.h"
+#include "platform/v8_inspector/public/ConsoleAPITypes.h"
+#include "platform/v8_inspector/public/ConsoleTypes.h"
 #include "wtf/Forward.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
@@ -24,10 +24,18 @@ class WorkerInspectorProxy;
 
 class CORE_EXPORT ConsoleMessage final: public GarbageCollectedFinalized<ConsoleMessage> {
 public:
-    static RawPtr<ConsoleMessage> create(MessageSource source, MessageLevel level, const String& message, const String& url = String(), unsigned lineNumber = 0, unsigned columnNumber = 0)
+    static ConsoleMessage* create(MessageSource source, MessageLevel level, const String& message, const String& url, unsigned lineNumber, unsigned columnNumber = 0)
     {
         return new ConsoleMessage(source, level, message, url, lineNumber, columnNumber);
     }
+
+    static ConsoleMessage* create(MessageSource source, MessageLevel level, const String& message)
+    {
+        ConsoleMessage* consoleMessage = new ConsoleMessage(source, level, message, String(), 0, 0);
+        consoleMessage->collectCallStack();
+        return consoleMessage;
+    }
+
     ~ConsoleMessage();
 
     MessageType type() const;
@@ -38,12 +46,14 @@ public:
     void setURL(const String&);
     unsigned lineNumber() const;
     void setLineNumber(unsigned);
+    unsigned columnNumber() const;
+    void setColumnNumber(unsigned);
     PassRefPtr<ScriptCallStack> callStack() const;
     void setCallStack(PassRefPtr<ScriptCallStack>);
     ScriptState* getScriptState() const;
     void setScriptState(ScriptState*);
-    RawPtr<ScriptArguments> scriptArguments() const;
-    void setScriptArguments(RawPtr<ScriptArguments>);
+    ScriptArguments* scriptArguments() const;
+    void setScriptArguments(ScriptArguments*);
     unsigned long requestIdentifier() const;
     void setRequestIdentifier(unsigned long);
     double timestamp() const;
@@ -58,7 +68,6 @@ public:
     MessageSource source() const;
     MessageLevel level() const;
     const String& message() const;
-    unsigned columnNumber() const;
 
     void frameWindowDiscarded(LocalDOMWindow*);
     unsigned argumentCount();

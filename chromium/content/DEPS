@@ -27,11 +27,11 @@ include_rules = [
 
   "+dbus",
   "+gpu",
+  "+media",
   "+mojo/common",
   "+mojo/edk/embedder",
   "+mojo/edk/js",
   "+mojo/edk/test",
-  "+mojo/message_pump",
   "+mojo/public",
   "+net",
   "+ppapi",
@@ -114,9 +114,8 @@ include_rules = [
 
 # content -> content/shell dependency is not allowed, except for browser tests.
 specific_include_rules = {
-  ".*_browsertest[a-z_]*\.cc": [
+  ".*_browsertest[a-z_]*\.(cc|h)": [
     "+content/shell/browser",
     "+content/shell/common",
   ],
 }
-

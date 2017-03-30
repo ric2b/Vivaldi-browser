@@ -543,7 +543,7 @@ WebInspector.TracingModel.Event.prototype = {
  * @param {!WebInspector.TracingModel.Event} b
  * @return {number}
  */
-WebInspector.TracingModel.Event.compareStartTime = function (a, b)
+WebInspector.TracingModel.Event.compareStartTime = function(a, b)
 {
     return a.startTime - b.startTime;
 }
@@ -553,7 +553,7 @@ WebInspector.TracingModel.Event.compareStartTime = function (a, b)
  * @param {!WebInspector.TracingModel.Event} b
  * @return {number}
  */
-WebInspector.TracingModel.Event.compareStartAndEndTime = function (a, b)
+WebInspector.TracingModel.Event.compareStartAndEndTime = function(a, b)
 {
     return a.startTime - b.startTime || (b.endTime != undefined && a.endTime !== undefined && b.endTime - a.endTime) || 0;
 }
@@ -563,7 +563,7 @@ WebInspector.TracingModel.Event.compareStartAndEndTime = function (a, b)
  * @param {!WebInspector.TracingModel.Event} b
  * @return {number}
  */
-WebInspector.TracingModel.Event.orderedCompareStartTime = function (a, b)
+WebInspector.TracingModel.Event.orderedCompareStartTime = function(a, b)
 {
     // Array.mergeOrdered coalesces objects if comparator returns 0.
     // To change this behavior this comparator return -1 in the case events
@@ -677,7 +677,7 @@ WebInspector.TracingModel.AsyncEvent.prototype = {
      */
     _addStep: function(event)
     {
-        this.steps.push(event)
+        this.steps.push(event);
         if (event.phase === WebInspector.TracingModel.Phase.AsyncEnd || event.phase === WebInspector.TracingModel.Phase.NestableAsyncEnd) {
             this.setEndTime(event.startTime);
             // FIXME: ideally, we shouldn't do this, but this makes the logic of converting

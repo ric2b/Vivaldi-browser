@@ -5,16 +5,19 @@
 #ifndef REMOTING_HOST_LINUX_CERTIFICATE_WATCHER_H_
 #define REMOTING_HOST_LINUX_CERTIFICATE_WATCHER_H_
 
+#include <memory>
+
 #include "base/files/file_path.h"
 #include "base/files/file_path_watcher.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "remoting/host/host_status_monitor.h"
 #include "remoting/host/host_status_observer.h"
 
 namespace remoting {
+
+class CertDbContentWatcher;
 
 // This class watches the cert database and notifies the host to restart when
 // a change of the database is detected. The runner script will restart the host
@@ -55,21 +58,14 @@ class CertificateWatcher : public remoting::HostStatusObserver {
   void SetWatchPathForTests(const base::FilePath& watch_path);
 
  private:
+  friend class CertDbContentWatcher;
+
   // Returns true if the watcher has started.
   bool is_started() const;
 
-  // Callback passed to |file_watcher_|. Runs in IO thread.
-  static void OnCertDirectoryChanged(
-      scoped_refptr<base::SingleThreadTaskRunner> network_task_runner,
-      base::WeakPtr<CertificateWatcher> watcher_, const base::FilePath& path,
-      bool error);
-
-  // Runs in the caller's thread.
-  void DirectoryChanged(const base::FilePath& path, bool error);
-
-  // Called by |restart_timer_| when it's time to reset the host.
-  // It will defer restart if |inhibit_restart_scheduled_| flag is set to true.
-  void OnTimer();
+  // Runs in the caller's thread. It will defer restarting the host if
+  // |inhibit_restart_scheduled_| flag is set to true.
+  void DatabaseChanged();
 
   // Reference to the monitor
   base::WeakPtr<HostStatusMonitor> monitor_;
@@ -90,14 +86,12 @@ class CertificateWatcher : public remoting::HostStatusObserver {
   // Path of the certificate files/directories.
   base::FilePath cert_watch_path_;
 
-  // The file watcher to watch changes inside the certificate folder.
-  scoped_ptr<base::FilePathWatcher> file_watcher_;
+  // The watcher implementation that watches the files on the IO thread.
+  std::unique_ptr<CertDbContentWatcher> content_watcher_;
 
-  // The time to wait to restart when it is scheduled.
+  // The time to wait before re-reading the DB files after a change is
+  // detected.
   base::TimeDelta delay_;
-
-  // Timer to delay the restart action.
-  scoped_ptr<base::DelayTimer> restart_timer_;
 
   base::WeakPtrFactory<CertificateWatcher> weak_factory_;
 

@@ -40,8 +40,33 @@ Polymer({
     // as the user types.
     searchTerm: {
       type: String,
-      value: ''
-    }
+      notify: true,
+    },
+
+    // True if waiting on the search backend.
+    searching: {
+      type: Boolean,
+      value: false
+    },
+
+    // Whether domain-grouped history is enabled.
+    isGroupedMode: {
+      type: Boolean,
+      reflectToAttribute: true,
+    },
+
+    // The period to search over. Matches BrowsingHistoryHandler::Range.
+    groupedRange: {
+      type: Number,
+      value: 0,
+      reflectToAttribute: true
+    },
+
+    // The start time of the query range.
+    queryStartTime: String,
+
+    // The end time of the query range.
+    queryEndTime: String,
   },
 
   /**
@@ -61,6 +86,7 @@ Polymer({
   setSearchTerm: function(search) {
     if (this.searchTerm == search)
       return;
+
     this.searchTerm = search;
     var searchField = /** @type {SearchField} */(this.$['search-input']);
     searchField.showAndFocus().then(function(showing) {
@@ -72,10 +98,8 @@ Polymer({
    * If the search term has changed reload for the new search.
    */
   onSearch: function(searchTerm) {
-    if (searchTerm != this.searchTerm) {
+    if (searchTerm != this.searchTerm)
       this.searchTerm = searchTerm;
-      this.fire('search-changed', {search: searchTerm});
-    }
   },
 
   attached: function() {
@@ -86,14 +110,6 @@ Polymer({
 
   onClearSelectionTap_: function() {
     this.fire('unselect-all');
-  },
-
-  /**
-   * Relocates the user to the clear browsing data section of the settings page.
-   * @private
-   */
-  onClearBrowsingDataTap_: function() {
-    window.location.href = 'chrome://settings/clearBrowserData';
   },
 
   onDeleteTap_: function() {
@@ -110,5 +126,11 @@ Polymer({
 
   numberOfItemsSelected_: function(count) {
     return count > 0 ? loadTimeData.getStringF('itemsSelected', count) : '';
+  },
+
+  getHistoryInterval_: function(queryStartTime, queryEndTime) {
+    // TODO(calamity): Fix the format of these dates.
+    return loadTimeData.getStringF(
+      'historyInterval', queryStartTime, queryEndTime);
   }
 });

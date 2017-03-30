@@ -24,10 +24,10 @@ media_router.CastModeType = {
 };
 
 /**
- * The ESC key maps to keycode '27'.
- * @const {number}
+ * The ESC key maps to KeyboardEvent.key value 'Escape'.
+ * @const {string}
  */
-media_router.KEYCODE_ESC = 27;
+media_router.KEY_ESC = 'Escape';
 
 /**
  * This corresponds to the C++ MediaRouterMetrics
@@ -50,6 +50,7 @@ media_router.MediaRouterUserAction = {
   STOP_LOCAL: 2,
   CLOSE: 3,
   STATUS_REMOTE: 4,
+  REPLACE_LOCAL_ROUTE: 5,
 };
 
 /**
@@ -64,6 +65,14 @@ media_router.MediaRouterView = {
   ROUTE_DETAILS: 'route-details',
   SINK_LIST: 'sink-list',
 };
+
+/**
+ * The minimum number of sinks to have to enable the search input strictly for
+ * filtering (i.e. the Media Router doesn't support search so the search input
+ * only filters existing sinks).
+ * @const {number}
+ */
+media_router.MINIMUM_SINKS_FOR_SEARCH = 20;
 
 /**
  * This corresponds to the C++ MediaSink IconType.
@@ -119,7 +128,7 @@ cr.define('media_router', function() {
    * @param {string} title The issue title.
    * @param {string} message The issue message.
    * @param {number} defaultActionType The type of default action.
-   * @param {?number} secondaryActionType The type of optional action.
+   * @param {number|undefined} secondaryActionType The type of optional action.
    * @param {?string} routeId The route ID to which this issue
    *                  pertains. If not set, this is a global issue.
    * @param {boolean} isBlocking True if this issue blocks other UI.
@@ -142,7 +151,7 @@ cr.define('media_router', function() {
     /** @type {number} */
     this.defaultActionType = defaultActionType;
 
-    /** @type {?number} */
+    /** @type {number|undefined} */
     this.secondaryActionType = secondaryActionType;
 
     /** @type {?string} */
@@ -189,6 +198,9 @@ cr.define('media_router', function() {
     /** @type {boolean} */
     this.canJoin = canJoin;
 
+    /** @type {number|undefined} */
+    this.currentCastMode = undefined;
+
     /** @type {?string} */
     this.customControllerPath = customControllerPath;
   };
@@ -227,6 +239,9 @@ cr.define('media_router', function() {
 
     /** @type {number} */
     this.castModes = castModes;
+
+    /** @type {boolean} */
+    this.isPseudoSink = false;
   };
 
 

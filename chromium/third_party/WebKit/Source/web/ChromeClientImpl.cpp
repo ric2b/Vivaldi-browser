@@ -38,7 +38,6 @@
 #include "core/dom/Fullscreen.h"
 #include "core/dom/Node.h"
 #include "core/events/UIEventWithKeyState.h"
-#include "core/frame/Console.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/Settings.h"
@@ -122,9 +121,9 @@ const char* dialogTypeToString(ChromeClient::DialogType dialogType)
     case ChromeClient::PromptDialog:
         return "prompt";
     case ChromeClient::HTMLDialog:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return "";
 }
 
@@ -140,9 +139,9 @@ const char* dismissalTypeToString(Document::PageDismissalType dismissalType)
     case Document::UnloadDismissal:
         return "unload";
     case Document::NoDismissal:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return "";
 }
 
@@ -253,6 +252,20 @@ bool ChromeClientImpl::hadFormInteraction() const
     return m_webView->pageImportanceSignals() && m_webView->pageImportanceSignals()->hadFormInteraction();
 }
 
+void ChromeClientImpl::startDragging(LocalFrame* frame,
+    const WebDragData& dragData,
+    WebDragOperationsMask mask,
+    const WebImage& dragImage,
+    const WebPoint& dragImageOffset)
+{
+    m_webView->startDragging(frame, dragData, mask, dragImage, dragImageOffset);
+}
+
+bool ChromeClientImpl::acceptsLoadDrops() const
+{
+    return !m_webView->client() || m_webView->client()->acceptsLoadDrops();
+}
+
 namespace {
 
 void updatePolicyForEvent(const WebInputEvent* inputEvent, NavigationPolicy* policy)
@@ -342,6 +355,9 @@ Page* ChromeClientImpl::createWindow(LocalFrame* frame, const FrameLoadRequest& 
     if (!m_webView->client())
         return nullptr;
 
+    if (!frame->page() || frame->page()->defersLoading())
+        return nullptr;
+
     WebNavigationPolicy policy = effectiveNavigationPolicy(navigationPolicy, features);
     DCHECK(frame->document());
     Fullscreen::fullyExitFullscreen(*frame->document());
@@ -353,12 +369,12 @@ Page* ChromeClientImpl::createWindow(LocalFrame* frame, const FrameLoadRequest& 
     return newView->page();
 }
 
-void ChromeClientImpl::didOverscroll(const FloatSize& unusedDelta, const FloatSize& accumulatedRootOverScroll, const FloatPoint& position, const FloatSize& velocity)
+void ChromeClientImpl::didOverscroll(const FloatSize& overscrollDelta, const FloatSize& accumulatedOverscroll, const FloatPoint& positionInViewport, const FloatSize& velocityInViewport)
 {
     if (!m_webView->client())
         return;
 
-    m_webView->client()->didOverscroll(unusedDelta, accumulatedRootOverScroll, position, velocity);
+    m_webView->client()->didOverscroll(overscrollDelta, accumulatedOverscroll, positionInViewport, velocityInViewport);
 }
 
 void ChromeClientImpl::show(NavigationPolicy navigationPolicy)
@@ -535,14 +551,8 @@ void ChromeClientImpl::scheduleAnimation(Widget* widget)
     // FIXME: Is this the right thing to do? Is there a way to avoid having
     // a local frame root that doesn't have a WebWidget? During initialization
     // there is no content to draw so this call serves no purpose.
-    if (WebLocalFrameImpl::fromFrame(frame) && WebLocalFrameImpl::fromFrame(frame)->frameWidget()) {
+    if (WebLocalFrameImpl::fromFrame(frame) && WebLocalFrameImpl::fromFrame(frame)->frameWidget())
         WebLocalFrameImpl::fromFrame(frame)->frameWidget()->scheduleAnimation();
-    } else {
-        // TODO(lfg): We need to keep this for now because we still have some
-        // WebViews who don't have a WebViewFrameWidget. This should be
-        // removed once the WebViewFrameWidget refactor is complete.
-        m_webView->scheduleAnimation();
-    }
 }
 
 IntRect ChromeClientImpl::viewportToScreen(const IntRect& rectInViewport, const Widget* widget) const
@@ -552,13 +562,8 @@ IntRect ChromeClientImpl::viewportToScreen(const IntRect& rectInViewport, const 
     DCHECK(widget->isFrameView());
     const FrameView* view = toFrameView(widget);
     LocalFrame* frame = view->frame().localFrameRoot();
-    WebWidgetClient* client = nullptr;
 
-    // TODO(kenrb): Consolidate this to a single case when WebViewFrameWidget refactor is complete.
-    if (WebLocalFrameImpl::fromFrame(frame) && WebLocalFrameImpl::fromFrame(frame)->frameWidget() && WebLocalFrameImpl::fromFrame(frame)->frameWidget()->forSubframe())
-        client = toWebFrameWidgetImpl(WebLocalFrameImpl::fromFrame(frame)->frameWidget())->client();
-    else
-        client = m_webView->client();
+    WebWidgetClient* client = WebLocalFrameImpl::fromFrame(frame)->frameWidget()->client();
 
     if (client) {
         client->convertViewportToWindow(&screenRect);
@@ -566,6 +571,7 @@ IntRect ChromeClientImpl::viewportToScreen(const IntRect& rectInViewport, const 
         screenRect.x += windowRect.x;
         screenRect.y += windowRect.y;
     }
+
     return screenRect;
 }
 
@@ -672,11 +678,9 @@ ColorChooser* ChromeClientImpl::openColorChooser(LocalFrame* frame, ColorChooser
 DateTimeChooser* ChromeClientImpl::openDateTimeChooser(DateTimeChooserClient* pickerClient, const DateTimeChooserParameters& parameters)
 {
     notifyPopupOpeningObservers();
-#if ENABLE(INPUT_MULTIPLE_FIELDS_UI)
-    return DateTimeChooserImpl::create(this, pickerClient, parameters);
-#else
+    if (RuntimeEnabledFeatures::inputMultipleFieldsUIEnabled())
+        return DateTimeChooserImpl::create(this, pickerClient, parameters);
     return ExternalDateTimeChooser::create(this, m_webView->client(), pickerClient, parameters);
-#endif
 }
 
 void ChromeClientImpl::openFileChooser(LocalFrame* frame, PassRefPtr<FileChooser> fileChooser)
@@ -923,6 +927,14 @@ void ChromeClientImpl::setEventListenerProperties(WebEventListenerClass eventCla
     }
 }
 
+void ChromeClientImpl::beginLifecycleUpdates()
+{
+    if (WebLayerTreeView* treeView = m_webView->layerTreeView()) {
+        treeView->setDeferCommits(false);
+        treeView->setNeedsBeginFrame();
+    }
+}
+
 WebEventListenerProperties ChromeClientImpl::eventListenerProperties(WebEventListenerClass eventClass) const
 {
     if (WebLayerTreeView* treeView = m_webView->layerTreeView())
@@ -1098,6 +1110,11 @@ void ChromeClientImpl::didObserveNonGetFetchFromScript() const
 PassOwnPtr<WebFrameScheduler> ChromeClientImpl::createFrameScheduler(BlameContext* blameContext)
 {
     return adoptPtr(m_webView->scheduler()->createFrameScheduler(blameContext).release());
+}
+
+double ChromeClientImpl::lastFrameTimeMonotonic() const
+{
+    return m_webView->lastFrameTimeMonotonic();
 }
 
 } // namespace blink

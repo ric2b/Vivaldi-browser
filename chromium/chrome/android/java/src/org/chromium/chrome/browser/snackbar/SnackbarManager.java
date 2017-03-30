@@ -10,6 +10,7 @@ import android.view.View.OnClickListener;
 import android.view.ViewGroup;
 
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 
 /**
@@ -51,16 +52,6 @@ public class SnackbarManager implements OnClickListener {
          * @param actionData Data object associated with the dismissed snackbar entry.
          */
         void onDismissNoAction(Object actionData);
-    }
-
-    /**
-     * A class used to check if an {@link Object} meets certain criteria.
-     */
-    public interface ActionDataMatcher {
-        /**
-         * @return Whether the data stored in a {@link Snackbar} matches some criteria.
-         */
-        boolean match(Object data);
     }
 
     private static final int DEFAULT_SNACKBAR_DURATION_MS = 3000;
@@ -115,6 +106,8 @@ public class SnackbarManager implements OnClickListener {
      */
     public void showSnackbar(Snackbar snackbar) {
         if (!mActivityInForeground || mIsDisabledForTesting) return;
+        RecordHistogram.recordSparseSlowlyHistogram("Snackbar.Shown", snackbar.getIdentifier());
+
         mSnackbars.add(snackbar);
         updateView();
         mView.announceforAccessibility();
@@ -139,17 +132,6 @@ public class SnackbarManager implements OnClickListener {
      */
     public void dismissSnackbars(SnackbarController controller, Object actionData) {
         if (mSnackbars.removeMatchingSnackbars(controller, actionData)) {
-            updateView();
-        }
-    }
-
-    /**
-     * Dismisses snackbars that have action data that matches the given {@link ActionDataMatcher}.
-     * @param controller Only snackbars created by this controller will be removed.
-     * @param selector   The selector that selects a subset of snackbars.
-     */
-    public void dismissSnackbars(SnackbarController controller, ActionDataMatcher selector) {
-        if (mSnackbars.removeMatchingSnackbars(controller, selector)) {
             updateView();
         }
     }

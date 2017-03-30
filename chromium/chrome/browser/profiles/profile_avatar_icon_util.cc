@@ -5,6 +5,7 @@
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 
 #include <memory>
+#include <vector>
 
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
@@ -14,8 +15,6 @@
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/profiles/profile_info_cache.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_paths.h"
 #include "grit/theme_resources.h"
 #include "skia/ext/image_operations.h"
@@ -311,7 +310,7 @@ int GetPlaceholderAvatarIconResourceID() {
 }
 
 const IconResourceInfo* GetDefaultAvatarIconResourceInfo(size_t index) {
-  DCHECK(index < kDefaultAvatarIconsCount);
+  CHECK_LT(index, kDefaultAvatarIconsCount);
   static const IconResourceInfo resource_info[kDefaultAvatarIconsCount] = {
       {IDR_PROFILE_AVATAR_0, "avatar_generic.png"},
       {IDR_PROFILE_AVATAR_1, "avatar_generic_aqua.png"},
@@ -345,13 +344,11 @@ const IconResourceInfo* GetDefaultAvatarIconResourceInfo(size_t index) {
 }
 
 int GetDefaultAvatarIconResourceIDAtIndex(size_t index) {
-  DCHECK(IsDefaultAvatarIconIndex(index));
   return GetDefaultAvatarIconResourceInfo(index)->resource_id;
 }
 
 const char* GetDefaultAvatarIconFileNameAtIndex(size_t index) {
-  DCHECK(index < kDefaultAvatarIconsCount);
-  DCHECK(index != kPlaceholderAvatarIcon);
+  CHECK_NE(index, kPlaceholderAvatarIcon);
   return GetDefaultAvatarIconResourceInfo(index)->filename;
 }
 
@@ -364,7 +361,7 @@ base::FilePath GetPathOfHighResAvatarAtIndex(size_t index) {
 }
 
 std::string GetDefaultAvatarIconUrl(size_t index) {
-  DCHECK(IsDefaultAvatarIconIndex(index));
+  CHECK(IsDefaultAvatarIconIndex(index));
   return base::StringPrintf("%s%" PRIuS, kDefaultUrlPrefix, index);
 }
 

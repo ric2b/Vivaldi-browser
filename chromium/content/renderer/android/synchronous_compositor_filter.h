@@ -7,9 +7,10 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "content/renderer/android/synchronous_compositor_registry.h"
 #include "content/renderer/input/input_handler_manager_client.h"
@@ -61,13 +62,15 @@ class SynchronousCompositorFilter
 
   // InputHandlerManagerClient overrides.
   void SetBoundHandler(const Handler& handler) override;
-  void DidAddInputHandler(int routing_id) override;
-  void DidRemoveInputHandler(int routing_id) override;
+  void RegisterRoutingID(int routing_id) override;
+  void UnregisterRoutingID(int routing_id) override;
   void DidOverscroll(int routing_id,
                      const DidOverscrollParams& params) override;
+  void DidStartFlinging(int routing_id) override;
   void DidStopFlinging(int routing_id) override;
   void NotifyInputEventHandled(int routing_id,
-                               blink::WebInputEvent::Type type) override;
+                               blink::WebInputEvent::Type type,
+                               InputEventAckState ack_result) override;
 
   // SynchronousInputHandlerProxyClient overrides.
   void DidAddSynchronousHandlerProxy(
@@ -100,7 +103,7 @@ class SynchronousCompositorFilter
   // Compositor thread-only fields.
   using SyncCompositorMap =
       base::ScopedPtrHashMap<int /* routing_id */,
-                             scoped_ptr<SynchronousCompositorProxy>>;
+                             std::unique_ptr<SynchronousCompositorProxy>>;
   SyncCompositorMap sync_compositor_map_;
   Handler input_handler_;
 

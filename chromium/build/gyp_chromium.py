@@ -320,6 +320,24 @@ def main():
   mac_toolchain_dir = mac_toolchain.GetToolchainDirectory()
   if mac_toolchain_dir:
     args.append('-Gmac_toolchain_dir=' + mac_toolchain_dir)
+    mac_toolchain.SetToolchainEnvironment()
+
+  # TODO(crbug.com/432967) - We are eventually going to switch GYP off
+  # by default for all Chromium builds, so this list of configurations
+  # will get broader and broader.
+  running_as_hook = '--running-as-hook'
+  if (running_as_hook in args and
+      os.environ.get('GYP_CHROMIUM_NO_ACTION', None) != '0' and
+      ((sys.platform.startswith('linux') and not gyp_vars_dict) or
+       (gyp_vars_dict.get('OS') == 'android'))):
+    print 'GYP is now disabled in this configuration by default in runhooks.\n'
+    print 'If you really want to run this, either run '
+    print '`python build/gyp_chromium.py` explicitly by hand'
+    print 'or set the environment variable GYP_CHROMIUM_NO_ACTION=0.'
+    sys.exit(0)
+
+  if running_as_hook in args:
+    args.remove(running_as_hook)
 
   if not use_analyzer:
     print 'Updating projects from gyp files...'
@@ -328,7 +346,7 @@ def main():
   # Off we go...
   gyp_rc = gyp.main(args)
 
-  if not use_analyzer:
+  if gyp_rc == 0 and not use_analyzer:
     vs2013_runtime_dll_dirs = vs_toolchain.SetEnvironmentAndGetRuntimeDllDirs()
     if vs2013_runtime_dll_dirs:
       x64_runtime, x86_runtime = vs2013_runtime_dll_dirs

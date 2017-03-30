@@ -8,6 +8,7 @@
 
 #include "base/macros.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
+#include "content/browser/service_worker/service_worker_response_info.h"
 #include "content/browser/service_worker/service_worker_url_request_job.h"
 #include "content/common/resource_request_body.h"
 #include "content/common/service_worker/service_worker_utils.h"
@@ -67,12 +68,18 @@ void ForeignFetchRequestHandler::InitializeHandler(
     return;
   }
 
+  if (request->initiator().IsSameOriginWith(url::Origin(request->url())))
+    return;
+  if (ServiceWorkerUtils::IsMainResourceType(resource_type))
+    return;
+
   // Any more precise checks to see if the request should be intercepted are
   // asynchronous, so just create our handler in all cases.
-  scoped_ptr<ForeignFetchRequestHandler> handler(new ForeignFetchRequestHandler(
-      context_wrapper, blob_storage_context->AsWeakPtr(), request_mode,
-      credentials_mode, redirect_mode, resource_type, request_context_type,
-      frame_type, body));
+  std::unique_ptr<ForeignFetchRequestHandler> handler(
+      new ForeignFetchRequestHandler(
+          context_wrapper, blob_storage_context->AsWeakPtr(), request_mode,
+          credentials_mode, redirect_mode, resource_type, request_context_type,
+          frame_type, body));
   request->SetUserData(&kUserDataKey, handler.release());
 }
 
@@ -82,10 +89,10 @@ ForeignFetchRequestHandler* ForeignFetchRequestHandler::GetHandler(
       request->GetUserData(&kUserDataKey));
 }
 
-scoped_ptr<net::URLRequestInterceptor>
+std::unique_ptr<net::URLRequestInterceptor>
 ForeignFetchRequestHandler::CreateInterceptor(
     ResourceContext* resource_context) {
-  return scoped_ptr<net::URLRequestInterceptor>(
+  return std::unique_ptr<net::URLRequestInterceptor>(
       new ForeignFetchRequestInterceptor(resource_context));
 }
 
@@ -96,6 +103,7 @@ net::URLRequestJob* ForeignFetchRequestHandler::MaybeCreateJob(
     net::NetworkDelegate* network_delegate,
     ResourceContext* resource_context) {
   ClearJob();
+  ServiceWorkerResponseInfo::ResetDataForRequest(request);
 
   if (!context_) {
     // We can't do anything other than to fall back to network.
@@ -198,22 +206,10 @@ void ForeignFetchRequestHandler::DidFindRegistration(
   job->ForwardToServiceWorker();
 }
 
-void ForeignFetchRequestHandler::OnPrepareToRestart(
-    base::TimeTicks service_worker_start_time,
-    base::TimeTicks service_worker_ready_time) {
+void ForeignFetchRequestHandler::OnPrepareToRestart() {
   use_network_ = true;
   ClearJob();
 }
-
-void ForeignFetchRequestHandler::OnStartCompleted(
-    bool was_fetched_via_service_worker,
-    bool was_fallback_required,
-    const GURL& original_url_via_service_worker,
-    blink::WebServiceWorkerResponseType response_type_via_service_worker,
-    base::TimeTicks service_worker_start_time,
-    base::TimeTicks service_worker_ready_time,
-    bool response_is_in_cache_storage,
-    const std::string& response_cache_storage_cache_name) {}
 
 ServiceWorkerVersion* ForeignFetchRequestHandler::GetServiceWorkerVersion(
     ServiceWorkerMetrics::URLRequestJobResult* result) {

@@ -83,6 +83,8 @@ class MEDIA_EXPORT DecoderStream {
   // Note that |closure| is always called asynchronously. This method should
   // only be called after initialization has succeeded and must not be called
   // during pending Reset().
+  // N.B: If the decoder stream has run into an error, calling this method does
+  // not 'reset' it to a normal state.
   void Reset(const base::Closure& closure);
 
   // Returns true if the decoder currently has the ability to decode and return
@@ -122,16 +124,23 @@ class MEDIA_EXPORT DecoderStream {
     return previous_decoder_.get();
   }
 
+  int get_pending_buffers_size_for_testing() const {
+    return pending_buffers_.size();
+  }
+
+  int get_fallback_buffers_size_for_testing() const {
+    return fallback_buffers_.size();
+  }
+
  private:
   enum State {
     STATE_UNINITIALIZED,
     STATE_INITIALIZING,
     STATE_NORMAL,  // Includes idle, pending decoder decode/reset.
     STATE_FLUSHING_DECODER,
-    STATE_PENDING_DEMUXER_READ,
     STATE_REINITIALIZING_DECODER,
     STATE_END_OF_STREAM,  // End of stream reached; returns EOS on all reads.
-    STATE_ERROR
+    STATE_ERROR,
   };
 
   void SelectDecoder(CdmContext* cdm_context);
@@ -140,15 +149,19 @@ class MEDIA_EXPORT DecoderStream {
   // |decrypting_demuxer_stream| was also populated if a DecryptingDemuxerStream
   // is created to help decrypt the encrypted stream.
   void OnDecoderSelected(
-      scoped_ptr<Decoder> selected_decoder,
-      scoped_ptr<DecryptingDemuxerStream> decrypting_demuxer_stream);
+      std::unique_ptr<Decoder> selected_decoder,
+      std::unique_ptr<DecryptingDemuxerStream> decrypting_demuxer_stream);
 
   // Satisfy pending |read_cb_| with |status| and |output|.
   void SatisfyRead(Status status,
                    const scoped_refptr<Output>& output);
 
   // Decodes |buffer| and returns the result via OnDecodeOutputReady().
+  // Saves |buffer| into |pending_buffers_| if appropriate.
   void Decode(const scoped_refptr<DecoderBuffer>& buffer);
+
+  // Performs the heavy lifting of the decode call.
+  void DecodeInternal(const scoped_refptr<DecoderBuffer>& buffer);
 
   // Flushes the decoder with an EOS buffer to retrieve internally buffered
   // decoder output.
@@ -192,16 +205,16 @@ class MEDIA_EXPORT DecoderStream {
 
   DemuxerStream* stream_;
 
-  scoped_ptr<DecoderSelector<StreamType> > decoder_selector_;
+  std::unique_ptr<DecoderSelector<StreamType>> decoder_selector_;
 
-  scoped_ptr<Decoder> decoder_;
+  std::unique_ptr<Decoder> decoder_;
   // When falling back from H/W decoding to S/W decoding, destructing the
   // GpuVideoDecoder too early results in black frames being displayed.
   // |previous_decoder_| is used to keep it alive.  It is destroyed once we've
   // decoded at least media::limits::kMaxVideoFrames frames after fallback.
   int decoded_frames_since_fallback_;
-  scoped_ptr<Decoder> previous_decoder_;
-  scoped_ptr<DecryptingDemuxerStream> decrypting_demuxer_stream_;
+  std::unique_ptr<Decoder> previous_decoder_;
+  std::unique_ptr<DecryptingDemuxerStream> decrypting_demuxer_stream_;
 
   SpliceObserverCB splice_observer_cb_;
   ConfigChangeObserverCB config_change_observer_cb_;
@@ -225,8 +238,29 @@ class MEDIA_EXPORT DecoderStream {
   // Tracks the duration of incoming packets over time.
   MovingAverage duration_tracker_;
 
+  // Stores buffers that might be reused if the decoder fails right after
+  // Initialize().
+  std::deque<scoped_refptr<DecoderBuffer>> pending_buffers_;
+
+  // Stores buffers that are guaranteed to be fed to the decoder before fetching
+  // more from the demuxer stream. All buffers in this queue first were in
+  // |pending_buffers_|.
+  std::deque<scoped_refptr<DecoderBuffer>> fallback_buffers_;
+
+  // TODO(tguilbert): support config changes during decoder fallback, see
+  // crbug.com/603713
+  bool received_config_change_during_reinit_;
+
+  // Used to track read requests; not rolled into |state_| since that is
+  // overwritten in many cases.
+  bool pending_demuxer_read_;
+
   // NOTE: Weak pointers must be invalidated before all other member variables.
-  base::WeakPtrFactory<DecoderStream<StreamType> > weak_factory_;
+  base::WeakPtrFactory<DecoderStream<StreamType>> weak_factory_;
+
+  // Used to invalidate pending decode requests and output callbacks when
+  // falling back to a new decoder (on first decode error).
+  base::WeakPtrFactory<DecoderStream<StreamType>> fallback_weak_factory_;
 };
 
 template <>

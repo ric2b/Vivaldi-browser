@@ -227,6 +227,14 @@
         'GCC_SYMBOLS_PRIVATE_EXTERN': 'NO',
         'USE_HEADERMAP': 'YES',
         'CLANG_ENABLE_ARC': 'YES',
+        'CODE_SIGN_IDENTITY[sdk=iphoneos*]': 'iPhone Developer',
+        'PRODUCT_BUNDLE_IDENTIFIER': 'org.hamcrest.OCHamcrest.OCHamcrest-iOS',
+        'INFOPLIST_FILE': 'src/Source/OCHamcrest-Info.plist',
+        'DYLIB_INSTALL_NAME_BASE': '@rpath',
+        'OTHER_LDFLAGS': [
+          '-Xlinker', '-rpath', '-Xlinker', '@executable_path/Frameworks',
+          '-Xlinker', '-rpath', '-Xlinker', '@loader_path/Frameworks'
+        ]
       },
       'include_dirs': [
         'src',

@@ -5,8 +5,9 @@
 #ifndef CHROME_BROWSER_METRICS_CHROME_METRICS_SERVICES_MANAGER_CLIENT_H_
 #define CHROME_BROWSER_METRICS_CHROME_METRICS_SERVICES_MANAGER_CLIENT_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "components/metrics_services_manager/metrics_services_manager_client.h"
@@ -14,6 +15,7 @@
 class PrefService;
 
 namespace metrics {
+class EnabledStateProvider;
 class MetricsStateManager;
 }
 
@@ -25,10 +27,16 @@ class ChromeMetricsServicesManagerClient
   ~ChromeMetricsServicesManagerClient() override;
 
  private:
+  // This is defined as a member class to get access to
+  // ChromeMetricsServiceAccessor through ChromeMetricsServicesManagerClient's
+  // friendship.
+  class ChromeEnabledStateProvider;
+
   // metrics_services_manager::MetricsServicesManagerClient:
-  scoped_ptr<rappor::RapporService> CreateRapporService() override;
-  scoped_ptr<variations::VariationsService> CreateVariationsService() override;
-  scoped_ptr<metrics::MetricsServiceClient> CreateMetricsServiceClient()
+  std::unique_ptr<rappor::RapporService> CreateRapporService() override;
+  std::unique_ptr<variations::VariationsService> CreateVariationsService()
+      override;
+  std::unique_ptr<metrics::MetricsServiceClient> CreateMetricsServiceClient()
       override;
   net::URLRequestContextGetter* GetURLRequestContext() override;
   bool IsSafeBrowsingEnabled(const base::Closure& on_update_callback) override;
@@ -40,7 +48,11 @@ class ChromeMetricsServicesManagerClient
   metrics::MetricsStateManager* GetMetricsStateManager();
 
   // MetricsStateManager which is passed as a parameter to service constructors.
-  scoped_ptr<metrics::MetricsStateManager> metrics_state_manager_;
+  std::unique_ptr<metrics::MetricsStateManager> metrics_state_manager_;
+
+  // EnabledStateProvider to communicate if the client has consented to metrics
+  // reporting, and if it's enabled.
+  std::unique_ptr<metrics::EnabledStateProvider> enabled_state_provider_;
 
   // Ensures that all functions are called from the same thread.
   base::ThreadChecker thread_checker_;
@@ -49,7 +61,7 @@ class ChromeMetricsServicesManagerClient
   PrefService* local_state_;
 
   // Subscription to SafeBrowsing service state changes.
-  scoped_ptr<safe_browsing::SafeBrowsingService::StateSubscription>
+  std::unique_ptr<safe_browsing::SafeBrowsingService::StateSubscription>
       sb_state_subscription_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeMetricsServicesManagerClient);

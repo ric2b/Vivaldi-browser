@@ -22,7 +22,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8TestInterfaceNamedConstructor2::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceNamedConstructor2::domTemplate, V8TestInterfaceNamedConstructor2::refObject, V8TestInterfaceNamedConstructor2::derefObject, V8TestInterfaceNamedConstructor2::trace, 0, 0, V8TestInterfaceNamedConstructor2::preparePrototypeAndInterfaceObject, V8TestInterfaceNamedConstructor2::installConditionallyEnabledProperties, "TestInterfaceNamedConstructor2", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent, WrapperTypeInfo::RefCountedObject };
+const WrapperTypeInfo V8TestInterfaceNamedConstructor2::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceNamedConstructor2::domTemplate, V8TestInterfaceNamedConstructor2::trace, V8TestInterfaceNamedConstructor2::traceWrappers, 0, 0, V8TestInterfaceNamedConstructor2::preparePrototypeAndInterfaceObject, nullptr, "TestInterfaceNamedConstructor2", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -42,7 +42,7 @@ namespace TestInterfaceNamedConstructor2V8Internal {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8TestInterfaceNamedConstructor2Constructor::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceNamedConstructor2Constructor::domTemplate, V8TestInterfaceNamedConstructor2::refObject, V8TestInterfaceNamedConstructor2::derefObject, V8TestInterfaceNamedConstructor2::trace, 0, 0, V8TestInterfaceNamedConstructor2::preparePrototypeAndInterfaceObject, V8TestInterfaceNamedConstructor2::installConditionallyEnabledProperties, "TestInterfaceNamedConstructor2", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent, WrapperTypeInfo::RefCountedObject };
+const WrapperTypeInfo V8TestInterfaceNamedConstructor2Constructor::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceNamedConstructor2Constructor::domTemplate, V8TestInterfaceNamedConstructor2::trace, V8TestInterfaceNamedConstructor2::traceWrappers, 0, 0, V8TestInterfaceNamedConstructor2::preparePrototypeAndInterfaceObject, nullptr, "TestInterfaceNamedConstructor2", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -68,17 +68,17 @@ static void V8TestInterfaceNamedConstructor2ConstructorCallback(const v8::Functi
         if (!stringArg.prepare())
             return;
     }
-    RefPtr<TestInterfaceNamedConstructor2> impl = TestInterfaceNamedConstructor2::createForJSConstructor(stringArg);
+    TestInterfaceNamedConstructor2* impl = TestInterfaceNamedConstructor2::createForJSConstructor(stringArg);
     v8::Local<v8::Object> wrapper = info.Holder();
     wrapper = impl->associateWithWrapper(info.GetIsolate(), &V8TestInterfaceNamedConstructor2Constructor::wrapperTypeInfo, wrapper);
     v8SetReturnValue(info, wrapper);
 }
 
-v8::Local<v8::FunctionTemplate> V8TestInterfaceNamedConstructor2Constructor::domTemplate(v8::Isolate* isolate)
+v8::Local<v8::FunctionTemplate> V8TestInterfaceNamedConstructor2Constructor::domTemplate(v8::Isolate* isolate, const DOMWrapperWorld& world)
 {
     static int domTemplateKey; // This address is used for a key to look up the dom template.
     V8PerIsolateData* data = V8PerIsolateData::from(isolate);
-    v8::Local<v8::FunctionTemplate> result = data->existingDOMTemplate(&domTemplateKey);
+    v8::Local<v8::FunctionTemplate> result = data->findInterfaceTemplate(world, &domTemplateKey);
     if (!result.IsEmpty())
         return result;
 
@@ -86,12 +86,12 @@ v8::Local<v8::FunctionTemplate> V8TestInterfaceNamedConstructor2Constructor::dom
     v8::Local<v8::ObjectTemplate> instanceTemplate = result->InstanceTemplate();
     instanceTemplate->SetInternalFieldCount(V8TestInterfaceNamedConstructor2::internalFieldCount);
     result->SetClassName(v8AtomicString(isolate, "TestInterfaceNamedConstructor2"));
-    result->Inherit(V8TestInterfaceNamedConstructor2::domTemplate(isolate));
-    data->setDOMTemplate(&domTemplateKey, result);
+    result->Inherit(V8TestInterfaceNamedConstructor2::domTemplate(isolate, world));
+    data->setInterfaceTemplate(world, &domTemplateKey, result);
     return result;
 }
 
-static void installV8TestInterfaceNamedConstructor2Template(v8::Local<v8::FunctionTemplate> interfaceTemplate, v8::Isolate* isolate)
+static void installV8TestInterfaceNamedConstructor2Template(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::FunctionTemplate> interfaceTemplate)
 {
     // Initialize the interface object's template.
     V8DOMConfiguration::initializeDOMInterfaceTemplate(isolate, interfaceTemplate, V8TestInterfaceNamedConstructor2::wrapperTypeInfo.interfaceName, v8::Local<v8::FunctionTemplate>(), V8TestInterfaceNamedConstructor2::internalFieldCount);
@@ -102,12 +102,11 @@ static void installV8TestInterfaceNamedConstructor2Template(v8::Local<v8::Functi
     v8::Local<v8::ObjectTemplate> prototypeTemplate = interfaceTemplate->PrototypeTemplate();
     ALLOW_UNUSED_LOCAL(prototypeTemplate);
     // Register DOM constants, attributes and operations.
-
 }
 
-v8::Local<v8::FunctionTemplate> V8TestInterfaceNamedConstructor2::domTemplate(v8::Isolate* isolate)
+v8::Local<v8::FunctionTemplate> V8TestInterfaceNamedConstructor2::domTemplate(v8::Isolate* isolate, const DOMWrapperWorld& world)
 {
-    return V8DOMConfiguration::domClassTemplate(isolate, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestInterfaceNamedConstructor2Template);
+    return V8DOMConfiguration::domClassTemplate(isolate, world, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestInterfaceNamedConstructor2Template);
 }
 
 bool V8TestInterfaceNamedConstructor2::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
@@ -123,16 +122,6 @@ v8::Local<v8::Object> V8TestInterfaceNamedConstructor2::findInstanceInPrototypeC
 TestInterfaceNamedConstructor2* V8TestInterfaceNamedConstructor2::toImplWithTypeCheck(v8::Isolate* isolate, v8::Local<v8::Value> value)
 {
     return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : 0;
-}
-
-void V8TestInterfaceNamedConstructor2::refObject(ScriptWrappable* scriptWrappable)
-{
-    scriptWrappable->toImpl<TestInterfaceNamedConstructor2>()->ref();
-}
-
-void V8TestInterfaceNamedConstructor2::derefObject(ScriptWrappable* scriptWrappable)
-{
-    scriptWrappable->toImpl<TestInterfaceNamedConstructor2>()->deref();
 }
 
 } // namespace blink

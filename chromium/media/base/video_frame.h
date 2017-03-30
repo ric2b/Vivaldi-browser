@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -123,26 +124,12 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
       const gfx::Size& natural_size,
       base::TimeDelta timestamp);
 
-  // Wraps a native texture of the given parameters with a VideoFrame.
-  // The backing of the VideoFrame is held in the mailbox held by
-  // |mailbox_holder|, and |mailbox_holder_release_cb| will be called with
-  // a sync token as the argument when the VideoFrame is to be destroyed.
-  static scoped_refptr<VideoFrame> WrapNativeTexture(
-      VideoPixelFormat format,
-      const gpu::MailboxHolder& mailbox_holder,
-      const ReleaseMailboxCB& mailbox_holder_release_cb,
-      const gfx::Size& coded_size,
-      const gfx::Rect& visible_rect,
-      const gfx::Size& natural_size,
-      base::TimeDelta timestamp);
-
-  // Wraps a set of native textures representing YUV data with a VideoFrame.
+  // Wraps a set of native textures with a VideoFrame.
   // |mailbox_holders_release_cb| will be called with a sync token as the
   // argument when the VideoFrame is to be destroyed.
-  static scoped_refptr<VideoFrame> WrapYUV420NativeTextures(
-      const gpu::MailboxHolder& y_mailbox_holder,
-      const gpu::MailboxHolder& u_mailbox_holder,
-      const gpu::MailboxHolder& v_mailbox_holder,
+  static scoped_refptr<VideoFrame> WrapNativeTextures(
+      VideoPixelFormat format,
+      const gpu::MailboxHolder (&mailbox_holder)[kMaxPlanes],
       const ReleaseMailboxCB& mailbox_holders_release_cb,
       const gfx::Size& coded_size,
       const gfx::Rect& visible_rect,
@@ -415,6 +402,10 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // Returns a human-readable string describing |*this|.
   std::string AsHumanReadableString();
 
+  // Unique identifier for this video frame; generated at construction time and
+  // guaranteed to be unique within a single process.
+  int unique_id() const { return unique_id_; }
+
  protected:
   friend class base::RefCountedThreadSafe<VideoFrame>;
 
@@ -527,8 +518,9 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   int32_t strides_[kMaxPlanes];
 
   // Array of data pointers to each plane.
-  // TODO(mcasas): we don't know on ctor if we own |data_| or not. After
-  // refactoring VideoFrame, change to scoped_ptr<uint8_t, AlignedFreeDeleter>.
+  // TODO(mcasas): we don't know on ctor if we own |data_| or not. Change
+  // to std::unique_ptr<uint8_t, AlignedFreeDeleter> after refactoring
+  // VideoFrame.
   uint8_t* data_[kMaxPlanes];
 
   // Native texture mailboxes, if this is a IsTexture() frame.
@@ -561,6 +553,9 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   gpu::SyncToken release_sync_token_;
 
   VideoFrameMetadata metadata_;
+
+  // Generated at construction time.
+  const int unique_id_;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(VideoFrame);
 };

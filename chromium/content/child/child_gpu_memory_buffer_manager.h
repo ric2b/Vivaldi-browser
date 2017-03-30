@@ -5,6 +5,8 @@
 #ifndef CONTENT_CHILD_CHILD_GPU_MEMORY_BUFFER_MANAGER_H_
 #define CONTENT_CHILD_CHILD_GPU_MEMORY_BUFFER_MANAGER_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "content/child/thread_safe_sender.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
@@ -21,7 +23,7 @@ class ChildGpuMemoryBufferManager : public gpu::GpuMemoryBufferManager {
       const gfx::Size& size,
       gfx::BufferFormat format,
       gfx::BufferUsage usage,
-      int32_t surface_id) override;
+      gpu::SurfaceHandle surface_handle) override;
   std::unique_ptr<gfx::GpuMemoryBuffer> CreateGpuMemoryBufferFromHandle(
       const gfx::GpuMemoryBufferHandle& handle,
       const gfx::Size& size,

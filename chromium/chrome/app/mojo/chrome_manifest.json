@@ -2,5 +2,16 @@
   "manifest_version": 1,
   "name": "exe:chrome",
   "display_name": "Chrome",
-  "capabilities": {}
+  "capabilities": {
+    "required": {
+      "*": { "classes": [ "app" ] },
+      "mojo:ash_sysui": {
+        "interfaces": [ "mash::shelf::mojom::ShelfController" ]
+      }
+    },
+    "provided": {
+      "mash:launchable": [ "mash::mojom::Launchable" ],
+      "app_list:presenter": [ "app_list::mojom::AppListPresenter" ]
+    }
+  }
 }

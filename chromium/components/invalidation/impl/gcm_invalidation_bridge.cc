@@ -5,8 +5,9 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/gcm_driver/gcm_driver.h"
 #include "components/invalidation/impl/gcm_invalidation_bridge.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
@@ -172,12 +173,11 @@ GCMInvalidationBridge::~GCMInvalidationBridge() {
   }
 }
 
-scoped_ptr<syncer::GCMNetworkChannelDelegate>
+std::unique_ptr<syncer::GCMNetworkChannelDelegate>
 GCMInvalidationBridge::CreateDelegate() {
   DCHECK(CalledOnValidThread());
-  scoped_ptr<syncer::GCMNetworkChannelDelegate> core(new Core(
-      weak_factory_.GetWeakPtr(), base::ThreadTaskRunnerHandle::Get()));
-  return core;
+  return base::WrapUnique(new Core(weak_factory_.GetWeakPtr(),
+                                   base::ThreadTaskRunnerHandle::Get()));
 }
 
 void GCMInvalidationBridge::CoreInitializationDone(

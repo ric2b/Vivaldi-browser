@@ -16,6 +16,8 @@ source_set("lib") {
     "file_system_impl.h",
     "lock_table.cc",
     "lock_table.h",
+    "shared_temp_dir.cc",
+    "shared_temp_dir.h",
     "util.cc",
     "util.h",
   ]
@@ -26,8 +28,8 @@ source_set("lib") {
     "//mojo/common",
     "//mojo/common:common_base",
     "//mojo/platform_handle",
-    "//mojo/shell/public/cpp",
-    "//mojo/shell/public/interfaces",
+    "//services/shell/public/cpp",
+    "//services/shell/public/interfaces",
     "//url",
   ]
 }
@@ -47,8 +49,8 @@ mojo_native_application("filesystem") {
     "//mojo/platform_handle:for_shared_library",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
-    "//mojo/services/tracing/public/cpp",
-    "//mojo/shell/public/cpp",
+    "//services/shell/public/cpp",
+    "//services/tracing/public/cpp",
   ]
 
   data_deps = [
@@ -61,9 +63,7 @@ mojo_application_manifest("manifest") {
   source = "manifest.json"
 }
 
-test("unittests") {
-  output_name = "filesystem_service_unittests"
-
+test("filesystem_service_unittests") {
   sources = [
     "directory_impl_unittest.cc",
     "file_impl_unittest.cc",
@@ -77,9 +77,9 @@ test("unittests") {
     "//mojo/common",
     "//mojo/platform_handle",
     "//mojo/public/cpp/bindings",
-    "//mojo/shell/public/cpp:shell_test_support",
-    "//mojo/shell/public/cpp:sources",
-    "//mojo/shell/public/cpp/test:run_all_shelltests",
+    "//services/shell/public/cpp:shell_test_support",
+    "//services/shell/public/cpp:sources",
+    "//services/shell/public/cpp/test:run_all_shelltests",
   ]
 
   data_deps = [

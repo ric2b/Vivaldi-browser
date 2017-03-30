@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <queue>
 #include <set>
 #include <string>
@@ -15,7 +16,6 @@
 
 #include "base/containers/hash_tables.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "components/mus/public/interfaces/surface_id.mojom.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "components/mus/ws/access_policy_delegate.h"
@@ -39,6 +39,7 @@ namespace ws {
 class AccessPolicy;
 class DisplayManager;
 class Display;
+class EventMatcher;
 class ServerWindow;
 class TargetedEvent;
 class WindowManagerState;
@@ -65,10 +66,11 @@ class WindowTree : public mojom::WindowTree,
   WindowTree(WindowServer* window_server,
              const UserId& user_id,
              ServerWindow* root,
-             scoped_ptr<AccessPolicy> access_policy);
+             std::unique_ptr<AccessPolicy> access_policy);
   ~WindowTree() override;
 
-  void Init(scoped_ptr<WindowTreeBinding> binding, mojom::WindowTreePtr tree);
+  void Init(std::unique_ptr<WindowTreeBinding> binding,
+            mojom::WindowTreePtr tree);
 
   // Called if this WindowTree hosts the WindowManager. This happens if
   // this WindowTree serves as the root of a WindowTreeHost.
@@ -108,6 +110,9 @@ class WindowTree : public mojom::WindowTree,
   bool HasRoot(const ServerWindow* window) const;
 
   std::set<const ServerWindow*> roots() { return roots_; }
+
+  void set_connection_name(const std::string& name) { connection_name_ = name; }
+  const std::string& connection_name() const { return connection_name_; }
 
   const Display* GetDisplay(const ServerWindow* window) const;
   Display* GetDisplay(const ServerWindow* window) {
@@ -206,6 +211,9 @@ class WindowTree : public mojom::WindowTree,
   void ProcessTransientWindowRemoved(const ServerWindow* window,
                                      const ServerWindow* transient_window,
                                      bool originated_change);
+
+  // Sends this event to the client if it matches an active event observer.
+  void SendToEventObserver(const ui::Event& event);
 
  private:
   friend class test::WindowTreeTestApi;
@@ -335,6 +343,8 @@ class WindowTree : public mojom::WindowTree,
       override;
   void SetCapture(uint32_t change_id, Id window_id) override;
   void ReleaseCapture(uint32_t change_id, Id window_id) override;
+  void SetEventObserver(mojom::EventMatcherPtr matcher,
+                        uint32_t observer_id) override;
   void SetWindowBounds(uint32_t change_id,
                        Id window_id,
                        mojo::RectPtr bounds) override;
@@ -365,13 +375,16 @@ class WindowTree : public mojom::WindowTree,
   void SetImeVisibility(Id transport_window_id,
                         bool visible,
                         mojo::TextInputStatePtr state) override;
-  void OnWindowInputEventAck(uint32_t event_id, bool handled) override;
+  void OnWindowInputEventAck(uint32_t event_id,
+                             mojom::EventResult result) override;
   void SetClientArea(
       Id transport_window_id,
       mojo::InsetsPtr insets,
       mojo::Array<mojo::RectPtr> transport_additional_client_areas) override;
   void GetWindowManagerClient(
       mojo::AssociatedInterfaceRequest<mojom::WindowManagerClient> internal)
+      override;
+  void GetCursorLocationMemory(const GetCursorLocationMemoryCallback& callback)
       override;
 
   // mojom::WindowManagerClient:
@@ -391,6 +404,8 @@ class WindowTree : public mojom::WindowTree,
   void WmRequestClose(Id transport_window_id) override;
   void WmSetFrameDecorationValues(
       mojom::FrameDecorationValuesPtr values) override;
+  void WmSetNonClientCursor(uint32_t window_id,
+                            mojom::Cursor cursor_id) override;
   void OnWmCreatedTopLevelWindow(uint32_t change_id,
                                  Id transport_window_id) override;
 
@@ -402,16 +417,17 @@ class WindowTree : public mojom::WindowTree,
 
   WindowServer* window_server_;
 
-  const UserId user_id_;
+  UserId user_id_;
 
   // Id of this tree as assigned by WindowServer.
   const ConnectionSpecificId id_;
+  std::string connection_name_;
 
   ConnectionSpecificId next_window_id_;
 
-  scoped_ptr<WindowTreeBinding> binding_;
+  std::unique_ptr<WindowTreeBinding> binding_;
 
-  scoped_ptr<mus::ws::AccessPolicy> access_policy_;
+  std::unique_ptr<mus::ws::AccessPolicy> access_policy_;
 
   // The roots, or embed points, of this tree. A WindowTree may have any
   // number of roots, including 0.
@@ -428,16 +444,24 @@ class WindowTree : public mojom::WindowTree,
 
   uint32_t event_ack_id_;
 
+  // Set when the client is using SetEventObserver() to observe events,
+  // otherwise null.
+  std::unique_ptr<EventMatcher> event_observer_matcher_;
+
+  // The ID supplied by the client for the current event observer.
+  uint32_t event_observer_id_ = 0;
+
   // WindowManager the current event came from.
   WindowManagerState* event_source_wms_ = nullptr;
 
-  std::queue<scoped_ptr<TargetedEvent>> event_queue_;
+  std::queue<std::unique_ptr<TargetedEvent>> event_queue_;
 
-  scoped_ptr<mojo::AssociatedBinding<mojom::WindowManagerClient>>
+  std::unique_ptr<mojo::AssociatedBinding<mojom::WindowManagerClient>>
       window_manager_internal_client_binding_;
   mojom::WindowManager* window_manager_internal_;
 
-  scoped_ptr<WaitingForTopLevelWindowInfo> waiting_for_top_level_window_info_;
+  std::unique_ptr<WaitingForTopLevelWindowInfo>
+      waiting_for_top_level_window_info_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowTree);
 };

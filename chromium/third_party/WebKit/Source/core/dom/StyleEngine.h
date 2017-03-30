@@ -36,6 +36,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/DocumentOrderedList.h"
 #include "core/dom/DocumentStyleSheetCollection.h"
+#include "core/dom/StyleEngineContext.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Allocator.h"
 #include "wtf/ListHashSet.h"
@@ -54,12 +55,6 @@ class StyleRuleFontFace;
 class StyleSheet;
 class StyleSheetContents;
 
-enum ShadowCascadeOrder {
-    ShadowCascadeNone,
-    ShadowCascadeV0,
-    ShadowCascadeV1
-};
-
 class CORE_EXPORT StyleEngine final : public GarbageCollectedFinalized<StyleEngine>, public CSSFontSelectorClient  {
     USING_GARBAGE_COLLECTED_MIXIN(StyleEngine);
 public:
@@ -75,13 +70,9 @@ public:
 
     friend class IgnoringPendingStylesheet;
 
-    static RawPtr<StyleEngine> create(Document& document) { return new StyleEngine(document); }
+    static StyleEngine* create(Document& document) { return new StyleEngine(document); }
 
     ~StyleEngine();
-
-#if !ENABLE(OILPAN)
-    void detachFromDocument();
-#endif
 
     const HeapVector<Member<StyleSheet>>& styleSheetsForStyleSheetList(TreeScope&);
 
@@ -96,7 +87,7 @@ public:
     void modifiedStyleSheetCandidateNode(Node*);
     void watchedSelectorsChanged();
 
-    void injectAuthorSheet(RawPtr<StyleSheetContents> authorSheet);
+    void injectAuthorSheet(StyleSheetContents* authorSheet);
 
     void clearMediaQueryRuleSetStyleSheets();
     void updateStyleSheetsInImport(DocumentStyleSheetCollector& parentCollector);
@@ -108,11 +99,13 @@ public:
     void setSelectedStylesheetSetName(const String&);
     void setHttpDefaultStyle(const String&);
 
-    void addPendingSheet();
-    void removePendingSheet(Node* styleSheetCandidateNode);
+    void addPendingSheet(StyleEngineContext&);
+    void removePendingSheet(Node* styleSheetCandidateNode, const StyleEngineContext&);
 
-    bool hasPendingSheets() const { return m_pendingStylesheets > 0; }
-    bool haveStylesheetsLoaded() const { return !hasPendingSheets() || m_ignorePendingStylesheets; }
+    bool hasPendingScriptBlockingSheets() const { return m_pendingScriptBlockingStylesheets > 0; }
+    bool hasPendingRenderBlockingSheets() const { return m_pendingRenderBlockingStylesheets > 0; }
+    bool haveScriptBlockingStylesheetsLoaded() const { return !hasPendingScriptBlockingSheets() || m_ignorePendingStylesheets; }
+    bool haveRenderBlockingStylesheetsLoaded() const { return !hasPendingRenderBlockingSheets() || m_ignorePendingStylesheets; }
     bool ignoringPendingStylesheets() const { return m_ignorePendingStylesheets; }
 
     unsigned maxDirectAdjacentSelectors() const { return m_maxDirectAdjacentSelectors; }
@@ -151,7 +144,7 @@ public:
     StyleInvalidator& styleInvalidator() { return m_styleInvalidator; }
 
     CSSFontSelector* fontSelector() { return m_fontSelector.get(); }
-    void setFontSelector(RawPtr<CSSFontSelector>);
+    void setFontSelector(CSSFontSelector*);
 
     void removeFontFaceRules(const HeapVector<Member<const StyleRuleFontFace>>&);
     void clearFontCache();
@@ -162,7 +155,7 @@ public:
     bool shouldClearResolver() const;
     void resolverChanged(StyleResolverUpdateMode);
 
-    RawPtr<CSSStyleSheet> createSheet(Element*, const String& text, TextPosition startPosition);
+    CSSStyleSheet* createSheet(Element*, const String& text, TextPosition startPosition, StyleEngineContext&);
     void removeSheet(StyleSheetContents*);
 
     void collectScopedStyleFeaturesTo(RuleFeatureSet&) const;
@@ -182,11 +175,9 @@ public:
     StyleResolverStats* stats() { return m_styleResolverStats.get(); }
     void setStatsEnabled(bool);
 
-    ShadowCascadeOrder shadowCascadeOrder() const { return m_shadowCascadeOrder; }
-    void setShadowCascadeOrder(ShadowCascadeOrder);
-    bool mayContainV0Shadow() const { return m_mayContainV0Shadow; }
-
     DECLARE_VIRTUAL_TRACE();
+
+    DECLARE_TRACE_WRAPPERS();
 
 private:
     // CSSFontSelectorClient implementation.
@@ -213,7 +204,7 @@ private:
 
     void createResolver();
 
-    static RawPtr<CSSStyleSheet> parseSheet(Element*, const String& text, TextPosition startPosition);
+    static CSSStyleSheet* parseSheet(Element*, const String& text, TextPosition startPosition);
 
     const DocumentStyleSheetCollection* documentStyleSheetCollection() const
     {
@@ -236,7 +227,8 @@ private:
     // Sheets loaded using the @import directive are not included in this count.
     // We use this count of pending sheets to detect when we can begin attaching
     // elements and when it is safe to execute scripts.
-    int m_pendingStylesheets = 0;
+    int m_pendingScriptBlockingStylesheets = 0;
+    int m_pendingRenderBlockingStylesheets = 0;
 
     HeapVector<Member<CSSStyleSheet>> m_injectedAuthorStyleSheets;
 
@@ -260,9 +252,6 @@ private:
 
     bool m_ignorePendingStylesheets = false;
     bool m_didCalculateResolver = false;
-    bool m_mayContainV0Shadow = false;
-
-    ShadowCascadeOrder m_shadowCascadeOrder = ShadowCascadeNone;
 
     Member<StyleResolver> m_resolver;
     StyleInvalidator m_styleInvalidator;

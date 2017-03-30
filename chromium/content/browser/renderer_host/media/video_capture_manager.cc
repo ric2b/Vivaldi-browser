@@ -18,8 +18,8 @@
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task_runner_util.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/browser/media/capture/desktop_capture_device_uma_types.h"
 #include "content/browser/media/capture/web_contents_video_capture_device.h"
@@ -125,6 +125,60 @@ const media::VideoCaptureSessionId kFakeSessionId = -1;
 
 namespace content {
 
+// This class owns a pair VideoCaptureDevice - VideoCaptureController.
+// VideoCaptureManager owns all such pairs and is responsible for deleting the
+// instances when they are not used any longer.
+class VideoCaptureManager::DeviceEntry {
+ public:
+  DeviceEntry(MediaStreamType stream_type,
+              const std::string& id,
+              std::unique_ptr<VideoCaptureController> controller,
+              const media::VideoCaptureParams& params);
+  ~DeviceEntry();
+
+  const int serial_id;
+  const MediaStreamType stream_type;
+  const std::string id;
+  const media::VideoCaptureParams parameters;
+
+  VideoCaptureController* video_capture_controller() const;
+  media::VideoCaptureDevice* video_capture_device() const;
+
+  void SetVideoCaptureDevice(std::unique_ptr<media::VideoCaptureDevice> device);
+  std::unique_ptr<media::VideoCaptureDevice> ReleaseVideoCaptureDevice();
+
+ private:
+  const std::unique_ptr<VideoCaptureController> video_capture_controller_;
+
+  std::unique_ptr<media::VideoCaptureDevice> video_capture_device_;
+
+  base::ThreadChecker thread_checker_;
+};
+
+// Class used for queuing request for starting a device.
+class VideoCaptureManager::CaptureDeviceStartRequest {
+ public:
+  CaptureDeviceStartRequest(int serial_id,
+                            media::VideoCaptureSessionId session_id,
+                            const media::VideoCaptureParams& params);
+  int serial_id() const { return serial_id_; }
+  media::VideoCaptureSessionId session_id() const { return session_id_; }
+  media::VideoCaptureParams params() const { return params_; }
+
+  // Set to true if the device should be stopped before it has successfully
+  // been started.
+  bool abort_start() const { return abort_start_; }
+  void set_abort_start() { abort_start_ = true; }
+
+ private:
+  const int serial_id_;
+  const media::VideoCaptureSessionId session_id_;
+  const media::VideoCaptureParams params_;
+  // Set to true if the device should be stopped before it has successfully
+  // been started.
+  bool abort_start_;
+};
+
 VideoCaptureManager::DeviceEntry::DeviceEntry(
     MediaStreamType stream_type,
     const std::string& id,
@@ -157,13 +211,13 @@ VideoCaptureManager::DeviceEntry::ReleaseVideoCaptureDevice() {
 }
 
 VideoCaptureController*
-VideoCaptureManager::DeviceEntry::video_capture_controller() {
+VideoCaptureManager::DeviceEntry::video_capture_controller() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   return video_capture_controller_.get();
 }
 
 media::VideoCaptureDevice*
-VideoCaptureManager::DeviceEntry::video_capture_device() {
+VideoCaptureManager::DeviceEntry::video_capture_device() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   return video_capture_device_.get();
 }
@@ -180,7 +234,7 @@ VideoCaptureManager::CaptureDeviceStartRequest::CaptureDeviceStartRequest(
 
 VideoCaptureManager::VideoCaptureManager(
     std::unique_ptr<media::VideoCaptureDeviceFactory> factory)
-    : listener_(NULL),
+    : listener_(nullptr),
       new_capture_session_id_(1),
       video_capture_device_factory_(std::move(factory)) {}
 
@@ -206,7 +260,7 @@ void VideoCaptureManager::Register(
 
 void VideoCaptureManager::Unregister() {
   DCHECK(listener_);
-  listener_ = NULL;
+  listener_ = nullptr;
 }
 
 void VideoCaptureManager::EnumerateDevices(MediaStreamType stream_type) {
@@ -786,6 +840,38 @@ void VideoCaptureManager::MaybePostDesktopCaptureWindowId(
   notification_window_ids_.erase(window_id_it);
 }
 
+bool VideoCaptureManager::TakePhoto(
+    int session_id,
+    const media::VideoCaptureDevice::TakePhotoCallback& photo_callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  SessionMap::const_iterator session_it = sessions_.find(session_id);
+  if (session_it == sessions_.end())
+    return false;
+
+  DeviceEntry* const device_info =
+      GetDeviceEntryForMediaStreamDevice(session_it->second);
+  if (!device_info)
+    return false;
+  device_task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(&VideoCaptureManager::DoTakePhotoOnDeviceThread, this,
+                 device_info->video_capture_device(), photo_callback));
+  return true;
+}
+
+void VideoCaptureManager::DoTakePhotoOnDeviceThread(
+    media::VideoCaptureDevice* device,
+    const media::VideoCaptureDevice::TakePhotoCallback& photo_callback) {
+  DCHECK(IsOnDeviceThread());
+  if (device->TakePhoto(photo_callback))
+    return;
+
+  // TakePhoto() failed synchronously: Make sure |photo_callback| is Run().
+  std::unique_ptr<std::vector<uint8_t>> empty_vector(
+      new std::vector<uint8_t>());
+  photo_callback.Run("", std::move(empty_vector));
+}
+
 void VideoCaptureManager::DoStopDeviceOnDeviceThread(
     std::unique_ptr<media::VideoCaptureDevice> device) {
   SCOPED_UMA_HISTOGRAM_TIMER("Media.VideoCaptureManager.StopDeviceTime");
@@ -886,28 +972,22 @@ VideoCaptureManager::GetDeviceEntryForMediaStreamDevice(
     const MediaStreamDevice& device_info) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  for (DeviceEntries::iterator it = devices_.begin();
-       it != devices_.end(); ++it) {
-    DeviceEntry* device = *it;
-    if (device_info.type == device->stream_type &&
-        device_info.id == device->id) {
+  for (DeviceEntry* device : devices_) {
+    if (device_info.type == device->stream_type && device_info.id == device->id)
       return device;
-    }
   }
-  return NULL;
+  return nullptr;
 }
 
 VideoCaptureManager::DeviceEntry*
 VideoCaptureManager::GetDeviceEntryForController(
     const VideoCaptureController* controller) const {
   // Look up |controller| in |devices_|.
-  for (DeviceEntries::const_iterator it = devices_.begin();
-       it != devices_.end(); ++it) {
-    if ((*it)->video_capture_controller() == controller) {
-      return *it;
-    }
+  for (DeviceEntry* device : devices_) {
+    if (device->video_capture_controller() == controller)
+      return device;
   }
-  return NULL;
+  return nullptr;
 }
 
 void VideoCaptureManager::DestroyDeviceEntryIfNoClients(DeviceEntry* entry) {
@@ -936,9 +1016,8 @@ VideoCaptureManager::DeviceEntry* VideoCaptureManager::GetOrCreateDeviceEntry(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   SessionMap::iterator session_it = sessions_.find(capture_session_id);
-  if (session_it == sessions_.end()) {
-    return NULL;
-  }
+  if (session_it == sessions_.end())
+    return nullptr;
   const MediaStreamDevice& device_info = session_it->second;
 
   // Check if another session has already opened this device. If so, just
@@ -968,7 +1047,7 @@ media::VideoCaptureDeviceInfo* VideoCaptureManager::FindDeviceInfoById(
     if (it.name.id() == id)
       return &(it);
   }
-  return NULL;
+  return nullptr;
 }
 
 void VideoCaptureManager::SetDesktopCaptureWindowIdOnDeviceThread(
@@ -1047,9 +1126,20 @@ void VideoCaptureManager::ResumeDevices() {
         entry->video_capture_device())
       continue;
 
-    // Session ID is only valid for Screen capture. So we can fake it to resume
-    // video capture devices here.
-    QueueStartDevice(kFakeSessionId, entry, entry->parameters);
+    // Check if the device is already in the start queue.
+    bool device_in_queue = false;
+    for (auto& request : device_start_queue_) {
+      if (request.serial_id() == entry->serial_id) {
+        device_in_queue = true;
+        break;
+      }
+    }
+
+    if (!device_in_queue) {
+      // Session ID is only valid for Screen capture. So we can fake it to
+      // resume video capture devices here.
+      QueueStartDevice(kFakeSessionId, entry, entry->parameters);
+    }
   }
 }
 #endif  // defined(OS_ANDROID)

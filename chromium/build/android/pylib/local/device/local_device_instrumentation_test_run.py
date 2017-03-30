@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import logging
+import os
 import re
 import time
 
@@ -247,10 +248,6 @@ class LocalDeviceInstrumentationTestRun(
 
     # TODO(jbudorick): Make instrumentation tests output a JSON so this
     # doesn't have to parse the output.
-    logging.debug('output from %s:', test_display_name)
-    for l in output:
-      logging.debug('  %s', l)
-
     result_code, result_bundle, statuses = (
         self._test_instance.ParseAmInstrumentRawOutput(output))
     results = self._test_instance.GenerateTestResults(
@@ -263,8 +260,36 @@ class LocalDeviceInstrumentationTestRun(
       for r in results:
         if r.GetType() == base_test_result.ResultType.UNKNOWN:
           r.SetType(base_test_result.ResultType.CRASH)
-    # TODO(jbudorick): ClearApplicationState on failure before switching
-    # instrumentation tests to platform mode (but respect --skip-clear-data).
+
+    if any(r.GetType() not in (base_test_result.ResultType.PASS,
+                               base_test_result.ResultType.SKIP)
+           for r in results):
+      if self._test_instance.screenshot_dir:
+        file_name = '%s-%s.png' % (
+            test_display_name,
+            time.strftime('%Y%m%dT%H%M%S', time.localtime()))
+        saved_dir = device.TakeScreenshot(
+            os.path.join(self._test_instance.screenshot_dir, file_name))
+        logging.info(
+            'Saved screenshot for %s to %s.',
+            test_display_name, saved_dir)
+      logging.info('detected failure in %s. raw output:', test_display_name)
+      for l in output:
+        logging.info('  %s', l)
+      if (not self._env.skip_clear_data
+          and self._test_instance.package_info):
+        permissions = (
+            self._test_instance.apk_under_test.GetPermissions()
+            if self._test_instance.apk_under_test
+            else None)
+        device.ClearApplicationState(self._test_instance.package_info.package,
+                                     permissions=permissions)
+
+    else:
+      logging.debug('raw output from %s:', test_display_name)
+      for l in output:
+        logging.debug('  %s', l)
+
     return results
 
   #override

@@ -18,8 +18,8 @@
 #include "base/metrics/statistics_recorder.h"
 #include "base/run_loop.h"
 #include "base/third_party/dynamic_annotations/dynamic_annotations.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread_local.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "base/tracked_objects.h"
@@ -120,6 +120,8 @@ MessageLoop::TaskObserver::~TaskObserver() {
 
 MessageLoop::DestructionObserver::~DestructionObserver() {
 }
+
+MessageLoop::NestingObserver::~NestingObserver() {}
 
 //------------------------------------------------------------------------------
 
@@ -263,6 +265,16 @@ void MessageLoop::RemoveDestructionObserver(
   destruction_observers_.RemoveObserver(destruction_observer);
 }
 
+void MessageLoop::AddNestingObserver(NestingObserver* observer) {
+  DCHECK_EQ(this, current());
+  nesting_observers_.AddObserver(observer);
+}
+
+void MessageLoop::RemoveNestingObserver(NestingObserver* observer) {
+  DCHECK_EQ(this, current());
+  nesting_observers_.RemoveObserver(observer);
+}
+
 void MessageLoop::PostTask(
     const tracked_objects::Location& from_here,
     const Closure& task) {
@@ -274,19 +286,6 @@ void MessageLoop::PostDelayedTask(
     const Closure& task,
     TimeDelta delay) {
   task_runner_->PostDelayedTask(from_here, task, delay);
-}
-
-void MessageLoop::PostNonNestableTask(
-    const tracked_objects::Location& from_here,
-    const Closure& task) {
-  task_runner_->PostNonNestableTask(from_here, task);
-}
-
-void MessageLoop::PostNonNestableDelayedTask(
-    const tracked_objects::Location& from_here,
-    const Closure& task,
-    TimeDelta delay) {
-  task_runner_->PostNonNestableDelayedTask(from_here, task, delay);
 }
 
 void MessageLoop::Run() {
@@ -576,6 +575,11 @@ void MessageLoop::HistogramEvent(int event) {
 #endif
 }
 
+void MessageLoop::NotifyBeginNestedLoop() {
+  FOR_EACH_OBSERVER(NestingObserver, nesting_observers_,
+                    OnBeginNestedMessageLoop());
+}
+
 bool MessageLoop::DoWork() {
   if (!nestable_tasks_allowed_) {
     // Task can't be executed right now.
@@ -663,14 +667,14 @@ bool MessageLoop::DoIdleWork() {
 void MessageLoop::DeleteSoonInternal(const tracked_objects::Location& from_here,
                                      void(*deleter)(const void*),
                                      const void* object) {
-  PostNonNestableTask(from_here, Bind(deleter, object));
+  task_runner()->PostNonNestableTask(from_here, Bind(deleter, object));
 }
 
 void MessageLoop::ReleaseSoonInternal(
     const tracked_objects::Location& from_here,
     void(*releaser)(const void*),
     const void* object) {
-  PostNonNestableTask(from_here, Bind(releaser, object));
+  task_runner()->PostNonNestableTask(from_here, Bind(releaser, object));
 }
 
 #if !defined(OS_NACL)
@@ -715,15 +719,6 @@ bool MessageLoopForUI::WatchFileDescriptor(
 // MessageLoopForIO
 
 #if !defined(OS_NACL_SFI)
-void MessageLoopForIO::AddIOObserver(
-    MessageLoopForIO::IOObserver* io_observer) {
-  ToPumpIO(pump_.get())->AddIOObserver(io_observer);
-}
-
-void MessageLoopForIO::RemoveIOObserver(
-    MessageLoopForIO::IOObserver* io_observer) {
-  ToPumpIO(pump_.get())->RemoveIOObserver(io_observer);
-}
 
 #if defined(OS_WIN)
 void MessageLoopForIO::RegisterIOHandler(HANDLE file, IOHandler* handler) {

@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -81,10 +83,10 @@ namespace policy {
 
 namespace {
 
-scoped_ptr<KeyedService> BuildFakeProfileInvalidationProvider(
+std::unique_ptr<KeyedService> BuildFakeProfileInvalidationProvider(
     content::BrowserContext* context) {
-  return make_scoped_ptr(new invalidation::ProfileInvalidationProvider(
-      scoped_ptr<invalidation::InvalidationService>(
+  return base::WrapUnique(new invalidation::ProfileInvalidationProvider(
+      std::unique_ptr<invalidation::InvalidationService>(
           new invalidation::FakeInvalidationService)));
 }
 
@@ -148,104 +150,68 @@ std::string GetTestPolicy(const char* homepage, int key_version) {
 
 void GetExpectedDefaultPolicy(PolicyMap* policy_map) {
 #if defined(OS_CHROMEOS)
-  policy_map->Set(key::kChromeOsMultiProfileUserBehavior,
-                  POLICY_LEVEL_MANDATORY,
-                  POLICY_SCOPE_USER,
-                  POLICY_SOURCE_ENTERPRISE_DEFAULT,
-                  new base::StringValue("primary-only"),
-                  nullptr);
-  policy_map->Set(key::kEasyUnlockAllowed,
-                  POLICY_LEVEL_MANDATORY,
-                  POLICY_SCOPE_USER,
-                  POLICY_SOURCE_ENTERPRISE_DEFAULT,
-                  new base::FundamentalValue(false),
-                  nullptr);
+  policy_map->Set(
+      key::kChromeOsMultiProfileUserBehavior, POLICY_LEVEL_MANDATORY,
+      POLICY_SCOPE_USER, POLICY_SOURCE_ENTERPRISE_DEFAULT,
+      base::WrapUnique(new base::StringValue("primary-only")), nullptr);
+  policy_map->Set(key::kEasyUnlockAllowed, POLICY_LEVEL_MANDATORY,
+                  POLICY_SCOPE_USER, POLICY_SOURCE_ENTERPRISE_DEFAULT,
+                  base::WrapUnique(new base::FundamentalValue(false)), nullptr);
   policy_map->Set(key::kCaptivePortalAuthenticationIgnoresProxy,
-                  POLICY_LEVEL_MANDATORY,
-                  POLICY_SCOPE_USER,
+                  POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
                   POLICY_SOURCE_ENTERPRISE_DEFAULT,
-                  new base::FundamentalValue(false),
-                  nullptr);
-  policy_map->Set(key::kAllowDinosaurEasterEgg,
-                  POLICY_LEVEL_MANDATORY,
-                  POLICY_SCOPE_USER,
+                  base::WrapUnique(new base::FundamentalValue(false)), nullptr);
+  policy_map->Set(key::kAllowDinosaurEasterEgg, POLICY_LEVEL_MANDATORY,
+                  POLICY_SCOPE_USER, POLICY_SOURCE_ENTERPRISE_DEFAULT,
+                  base::WrapUnique(new base::FundamentalValue(false)), nullptr);
+  policy_map->Set(key::kArcEnabled, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
                   POLICY_SOURCE_ENTERPRISE_DEFAULT,
-                  new base::FundamentalValue(false),
-                  nullptr);
-  policy_map->Set(key::kArcEnabled,
-                  POLICY_LEVEL_MANDATORY,
-                  POLICY_SCOPE_USER,
-                  POLICY_SOURCE_ENTERPRISE_DEFAULT,
-                  new base::FundamentalValue(false),
-                  nullptr);
+                  base::WrapUnique(new base::FundamentalValue(false)), nullptr);
+  policy_map->Set(key::kPacHttpsUrlStrippingEnabled, POLICY_LEVEL_MANDATORY,
+                  POLICY_SCOPE_USER, POLICY_SOURCE_ENTERPRISE_DEFAULT,
+                  base::WrapUnique(new base::FundamentalValue(false)), nullptr);
 #endif
 }
 
 void GetExpectedTestPolicy(PolicyMap* expected, const char* homepage) {
-  expected->Set(key::kShowHomeButton,
-                POLICY_LEVEL_MANDATORY,
-                POLICY_SCOPE_USER,
+  expected->Set(key::kShowHomeButton, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
                 POLICY_SOURCE_CLOUD,
-                new base::FundamentalValue(true),
-                nullptr);
-  expected->Set(key::kRestoreOnStartup,
-                POLICY_LEVEL_MANDATORY,
-                POLICY_SCOPE_USER,
-                POLICY_SOURCE_CLOUD,
-                new base::FundamentalValue(4),
-                nullptr);
+                base::WrapUnique(new base::FundamentalValue(true)), nullptr);
+  expected->Set(key::kRestoreOnStartup, POLICY_LEVEL_MANDATORY,
+                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+                base::WrapUnique(new base::FundamentalValue(4)), nullptr);
   base::ListValue list;
   list.AppendString("dev.chromium.org");
   list.AppendString("youtube.com");
-  expected->Set(key::kURLBlacklist,
-                POLICY_LEVEL_MANDATORY,
-                POLICY_SCOPE_USER,
-                POLICY_SOURCE_CLOUD,
-                list.DeepCopy(),
-                nullptr);
-  expected->Set(key::kMaxInvalidationFetchDelay,
-                POLICY_LEVEL_MANDATORY,
-                POLICY_SCOPE_USER,
-                POLICY_SOURCE_CLOUD,
-                new base::FundamentalValue(1000),
-                nullptr);
-  expected->Set(key::kHomepageLocation,
-                POLICY_LEVEL_RECOMMENDED,
-                POLICY_SCOPE_USER,
-                POLICY_SOURCE_CLOUD,
-                new base::StringValue(homepage),
-                nullptr);
+  expected->Set(key::kURLBlacklist, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+                POLICY_SOURCE_CLOUD, list.CreateDeepCopy(), nullptr);
+  expected->Set(key::kMaxInvalidationFetchDelay, POLICY_LEVEL_MANDATORY,
+                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+                base::WrapUnique(new base::FundamentalValue(1000)), nullptr);
+  expected->Set(key::kHomepageLocation, POLICY_LEVEL_RECOMMENDED,
+                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+                base::WrapUnique(new base::StringValue(homepage)), nullptr);
 #if defined(OS_CHROMEOS)
-  expected->Set(key::kChromeOsMultiProfileUserBehavior,
-                POLICY_LEVEL_MANDATORY,
-                POLICY_SCOPE_USER,
-                POLICY_SOURCE_ENTERPRISE_DEFAULT,
-                new base::StringValue("primary-only"),
+  expected->Set(key::kChromeOsMultiProfileUserBehavior, POLICY_LEVEL_MANDATORY,
+                POLICY_SCOPE_USER, POLICY_SOURCE_ENTERPRISE_DEFAULT,
+                base::WrapUnique(new base::StringValue("primary-only")),
                 nullptr);
-  expected->Set(key::kEasyUnlockAllowed,
-                POLICY_LEVEL_MANDATORY,
-                POLICY_SCOPE_USER,
-                POLICY_SOURCE_ENTERPRISE_DEFAULT,
-                new base::FundamentalValue(false),
-                nullptr);
+  expected->Set(key::kEasyUnlockAllowed, POLICY_LEVEL_MANDATORY,
+                POLICY_SCOPE_USER, POLICY_SOURCE_ENTERPRISE_DEFAULT,
+                base::WrapUnique(new base::FundamentalValue(false)), nullptr);
   expected->Set(key::kCaptivePortalAuthenticationIgnoresProxy,
-                POLICY_LEVEL_MANDATORY,
-                POLICY_SCOPE_USER,
+                POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
                 POLICY_SOURCE_ENTERPRISE_DEFAULT,
-                new base::FundamentalValue(false),
-                nullptr);
-  expected->Set(key::kAllowDinosaurEasterEgg,
-                POLICY_LEVEL_MANDATORY,
-                POLICY_SCOPE_USER,
+                base::WrapUnique(new base::FundamentalValue(false)), nullptr);
+  expected->Set(key::kAllowDinosaurEasterEgg, POLICY_LEVEL_MANDATORY,
+                POLICY_SCOPE_USER, POLICY_SOURCE_ENTERPRISE_DEFAULT,
+                base::WrapUnique(new base::FundamentalValue(false)), nullptr);
+  expected->Set(key::kArcEnabled, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
                 POLICY_SOURCE_ENTERPRISE_DEFAULT,
-                new base::FundamentalValue(false),
-                nullptr);
-  expected->Set(key::kArcEnabled,
-                POLICY_LEVEL_MANDATORY,
-                POLICY_SCOPE_USER,
-                POLICY_SOURCE_ENTERPRISE_DEFAULT,
-                new base::FundamentalValue(false),
-                nullptr);
+                base::WrapUnique(new base::FundamentalValue(false)), nullptr);
+  expected->Set(key::kPacHttpsUrlStrippingEnabled, POLICY_LEVEL_MANDATORY,
+                POLICY_SCOPE_USER, POLICY_SOURCE_ENTERPRISE_DEFAULT,
+                base::WrapUnique(new base::FundamentalValue(false)), nullptr);
 #endif
 }
 
@@ -380,7 +346,7 @@ class CloudPolicyTest : public InProcessBrowserTest,
   void OnPolicyServiceInitialized(PolicyDomain domain) override {}
 
   base::ScopedTempDir temp_dir_;
-  scoped_ptr<LocalPolicyTestServer> test_server_;
+  std::unique_ptr<LocalPolicyTestServer> test_server_;
   base::FilePath user_policy_key_file_;
   base::Closure on_policy_updated_;
 };

@@ -29,6 +29,9 @@ static void frameContentAsPlainText(size_t maxChars, LocalFrame* frame, StringBu
     if (!frame->view() || frame->view()->shouldThrottleRendering())
         return;
 
+    DCHECK(!frame->view()->needsLayout());
+    DCHECK(!document->needsLayoutTreeUpdate());
+
     // Select the document body.
     if (document->body()) {
         const EphemeralRange range = EphemeralRange::rangeOfContents(*document->body());
@@ -89,7 +92,7 @@ WebString WebFrameContentDumper::deprecatedDumpFrameTreeAsText(WebLocalFrame* fr
 
 WebString WebFrameContentDumper::dumpWebViewAsText(WebView* webView, size_t maxChars)
 {
-    ASSERT(webView);
+    DCHECK(webView);
     webView->updateAllLifecyclePhases();
     return WebFrameContentDumper::deprecatedDumpFrameTreeAsText(webView->mainFrame()->toWebLocalFrame(), maxChars);
 }

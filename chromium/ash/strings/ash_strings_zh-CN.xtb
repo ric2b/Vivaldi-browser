@@ -26,6 +26,7 @@
 <translation id="1602076796624386989">启用移动数据</translation>
 <translation id="1621499497873603021">电池电量将在 <ph name="TIME_LEFT" />后耗尽</translation>
 <translation id="164969095109328410">Chrome设备</translation>
+<translation id="1677472565718498478">电量尚余 <ph name="TIME" /></translation>
 <translation id="1723752762323179280">退出会话</translation>
 <translation id="1747827819627189109">屏幕键盘已启用</translation>
 <translation id="1812696562331527143">您的输入法已更改为“<ph name="INPUT_METHOD_ID" />”*（<ph name="BEGIN_LINK" />第三方<ph name="END_LINK" />）。
@@ -63,7 +64,7 @@
 <translation id="2819276065543622893">您将立即退出。</translation>
 <translation id="2825619548187458965">任务栏</translation>
 <translation id="2844169650293029770">USB-C 设备（左侧前端端口）</translation>
-<translation id="2872961005593481000">关闭</translation>
+<translation id="2872961005593481000">关机</translation>
 <translation id="2942516765047364088">任务栏位置</translation>
 <translation id="2946640296642327832">启用蓝牙</translation>
 <translation id="2963773877003373896">mod3</translation>
@@ -92,7 +93,6 @@
 <translation id="3621712662352432595">音频设置</translation>
 <translation id="3625258641415618104">已停用屏幕截图</translation>
 <translation id="3626281679859535460">亮度</translation>
-<translation id="3626637461649818317">剩余电量：<ph name="PERCENTAGE" />%</translation>
 <translation id="3678715477168044796"><ph name="DISPLAY_NAME" />：<ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079"><ph name="DISPLAY_NAME" />的分辨率已改为<ph name="RESOLUTION" /></translation>
 <translation id="370649949373421643">启用 Wi-Fi</translation>
@@ -105,19 +105,19 @@
 <translation id="3799026279081545374">您的充电器可能有问题。如果您居住在美国，请拨打866-628-1371寻求帮助并申请更换充电器。如果您居住在英国，请拨打0800-026-0613。如果您居住在爱尔兰，请拨打1-800-832-664。如果您居住在加拿大，请拨打866-628-1372。如果您居住在澳大利亚，请拨打1-800-067-460。</translation>
 <translation id="3866182280516392520">IPv6 地址</translation>
 <translation id="3891340733213178823">连按两次Ctrl+Shift+Q即可退出。</translation>
-<translation id="3892641579809465218">内部显示</translation>
+<translation id="3892641579809465218">内部显示屏</translation>
 <translation id="3963445509666917109">扬声器（内部）</translation>
 <translation id="3967919079500697218">您的管理员已停用屏幕截图功能。</translation>
 <translation id="397105322502079400">正在计算...</translation>
 <translation id="3995138139523574647">USB-C 设备（右侧后端端口）</translation>
 <translation id="4053612967614057854">停用屏幕键盘</translation>
-<translation id="412065659894267608">还需要 <ph name="HOUR" /> 小时 <ph name="MINUTE" /> 分钟才能充满电</translation>
 <translation id="4250680216510889253">否</translation>
 <translation id="4279490309300973883">正在镜像</translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4421231901400348175">正在通过远程协助与<ph name="HELPER_NAME" />共享您屏幕的控制权限。</translation>
 <translation id="4430019312045809116">音量</translation>
 <translation id="4527045527269911712">蓝牙设备“<ph name="DEVICE_NAME" />”需要配对许可。</translation>
+<translation id="453661520163887813"><ph name="TIME" /> 后充满</translation>
 <translation id="4544944664594876241">用于锁定屏幕的快捷键已更改。请使用 <ph name="NEW_SHORTCUT" />，而不是 <ph name="OLD_SHORTCUT" />。</translation>
 <translation id="479989351350248267">搜索</translation>
 <translation id="4804818685124855865">断开连接</translation>
@@ -129,7 +129,6 @@
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl+Shift+Space</translation>
 <translation id="5045002648206642691">Google 云端硬盘设置...</translation>
-<translation id="5102001756192215136">可用时长：<ph name="HOUR" />:<ph name="MINUTE" /></translation>
 <translation id="511445211639755999"><ph name="RESOLUTION" />，<ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">有可用的投射设备</translation>
 <translation id="5222676887888702881">退出</translation>
@@ -166,7 +165,6 @@
 <translation id="615957422585914272">显示屏幕键盘</translation>
 <translation id="6165508094623778733">了解详情</translation>
 <translation id="6203030746557259519">虚拟显示器</translation>
-<translation id="6247708409970142803"><ph name="PERCENTAGE" />%</translation>
 <translation id="6248847161401822652">连按两次 Control+Shift+Q 即可退出。</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" />已旋转为<ph name="ROTATION" /></translation>
 <translation id="6359806961507272919"><ph name="PHONE_NUMBER" /> 发来的短信</translation>
@@ -207,6 +205,7 @@
 <translation id="7510334386202674593">Ctrl+Shift+L</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" />不支持<ph name="SPECIFIED_RESOLUTION" />。分辨率已改为<ph name="FALLBACK_RESOLUTION" /></translation>
 <translation id="7573962313813535744">停靠模式</translation>
+<translation id="7580671184200851182">在所有音响设备上播放相同的音频（单声道音频）</translation>
 <translation id="7593891976182323525">搜索键或 Shift</translation>
 <translation id="7649070708921625228">帮助</translation>
 <translation id="7692480393933218409">正在为已连接的 USB-C 设备充电</translation>
@@ -225,13 +224,14 @@
 <translation id="8308637677604853869">上一菜单</translation>
 <translation id="8356164830168736643">关闭“<ph name="WINDOW_TITLE" />”</translation>
 <translation id="8428213095426709021">设置</translation>
-<translation id="8456362689280298700">电池充满还需 <ph name="HOUR" />:<ph name="MINUTE" /></translation>
 <translation id="8517041960877371778">您的 <ph name="DEVICE_TYPE" /> 在开启时可能无法充电。</translation>
 <translation id="8528322925433439945">移动...</translation>
+<translation id="8639760480004882931">剩余电量：<ph name="PERCENTAGE" /></translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">已连接低功率充电器</translation>
 <translation id="8814190375133053267">Wi-Fi</translation>
 <translation id="882279321799040148">点击即可查看</translation>
+<translation id="8825534185036233643">系统不支持镜像两个以上的显示屏。</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8850991929411075241">Search+Esc</translation>
 <translation id="8878886163241303700">正在扩展屏幕</translation>

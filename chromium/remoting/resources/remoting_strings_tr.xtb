@@ -34,6 +34,7 @@ Gizlilikle ilgili daha fazla bilgi edinmek için lütfen Google Gizlilik Politik
 <translation id="1779766957982586368">Pencereyi kapat</translation>
 <translation id="1841799852846221389">Bu bilgisayara uzaktan bağlantılar devre dışı bırakılıyor…</translation>
 <translation id="189172778771606813">Gezinme çekmecesini kapat</translation>
+<translation id="1897488610212723051">Sil</translation>
 <translation id="195619862187186579">Klavye düzenleri</translation>
 <translation id="1996161829609978754">Chrome, Chromoting Ana Bilgisayar yükleyicisini indiriyor. İndirme işlemi tamamlandığında, devam etmeden önce lütfen yükleyiciyi çalıştırın.</translation>
 <translation id="2009755455353575666">Bağlantı başarısız oldu</translation>
@@ -122,9 +123,6 @@ Ana Makinesi</translation>
 <translation id="3950820424414687140">Oturum açın</translation>
 <translation id="3989511127559254552">Devam etmek için öncelikle bilgisayarınıza genişletilmiş erişim izinleri vermelisiniz. Bunu yalnızca bir kez yapmanız yeterlidir.</translation>
 <translation id="4006787130661126000">Bu bilgisayara erişmek için Chrome Uzaktan Masaüstü uygulamasını kullanmak istiyorsanız uzaktan bağlantıları etkinleştirmelisiniz.</translation>
-<translation id="4028465833180158312">• Materyal Tasarım kullanıcı arayüzü güncellemeleri.
-• Üçüncü taraf lisanslama kredileri.
-• Çevrimdışı uzak bilgisayarlar için gösterilen bilgiler.</translation>
 <translation id="405887016757208221">Uzak bilgisayar, oturumu ilk kullanıma hazırlayamadı. Sorun devam ederse lütfen ana makineyi tekrar yapılandırmayı deneyin.</translation>
 <translation id="4068946408131579958">Tüm bağlantılar</translation>
 <translation id="409800995205263688">NOT: Politika ayarları, yalnızca ağınızdaki bilgisayarlar arasındaki bağlantılara izin veriyor.</translation>
@@ -168,6 +166,7 @@ Masaüstü Ana Makinesi</translation>
 <translation id="4985296110227979402">İlk olarak bilgisayarınızı uzaktan erişim için ayarlamanız gerekir</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (çevrimdışı)</translation>
 <translation id="5070121137485264635">Uzak ana makine üçüncü taraf bir web sitesine kimlik doğrulama işlemi yapmanızı gerektiriyor. Devam etmek üzere şu adrese erişim için Chrome Uzaktan Masaüstü'ne ek izinler vermelisiniz:</translation>
+<translation id="507204348399810022"><ph name="HOSTNAME" /> adlı ana bilgisayara uzaktan bağlantıları devre dışı bırakmak istediğinizden emin misiniz?</translation>
 <translation id="5156271271724754543">Lütfen her iki kutuya da aynı PIN'i girin.</translation>
 <translation id="5168917394043976756">Gezinme çekmecesini aç</translation>
 <translation id="5170982930780719864">Ana makine kimliği geçersiz.</translation>
@@ -178,7 +177,6 @@ Masaüstü Ana Makinesi</translation>
 <translation id="533625276787323658">Bağlanacak herhangi bir bilgisayar yok</translation>
 <translation id="5363265567587775042">Bilgisayarına erişmek istediğiniz kullanıcıdan “<ph name="SHARE" />” öğesini tıklamasını ve size erişim kodunu vermesini isteyin.</translation>
 <translation id="5379087427956679853">Chrome Uzaktan Masaüstü, bilgisayarınızı Web üzerinden güvenli bir şekilde paylaşabilmenize olanak sağlar. Her iki kullanıcının da Chrome Uzaktan Masaüstü uygulamasını çalıştırıyor olması gerekir. Uygulamayı <ph name="URL" /> adresinde bulabilirsiniz.</translation>
-<translation id="5394895745784982830">Mac (OS X 10.6 ve sonraki sürümler) için</translation>
 <translation id="5397086374758643919">Chrome Uzaktan Masaüstü Ana Makine Yüklemesini Kaldırma Programı</translation>
 <translation id="5419185025274123272">Uygulama sıfırlanamadı. Hâlâ bir hata raporu gönderebilirsiniz.</translation>
 <translation id="544077782045763683">Ana makine kapatıldı.</translation>
@@ -214,6 +212,10 @@ Masaüstü Ana Makinesi</translation>
 <translation id="6324708100353784493">Google Cardboard entegrasyon modunu etkinleştirdiniz. Bu modu kullanmak için cihazınızı Google Cardboard uyumlu bir görüntüleyiciye yerleştirin.</translation>
 <translation id="6381670701864002291">Başka bir şey.</translation>
 <translation id="6398765197997659313">Tam ekrandan çık</translation>
+<translation id="6408143143164565232">• Windows veya Linux bilgisayarlardan ses dinleme.
+• Bilgisayarın adına uzun süreli basarak istenmeyen bağlantıları kaldırma.
+• Parmakları sıkıştırarak yakınlaştırma ve iki parmakla kaydırma hareketlerini daha rahat yapabilme.
+• Yardım ve Geri Bildirim için yeni ekran.</translation>
 <translation id="6441316101718669559">Masaüstü entegrasyonu bu platformda desteklenmiyor. Uygulamayı kullanmaya devam edebilirsiniz, ancak kullanıcı deneyimi olumsuz etkilenecektir.</translation>
 <translation id="652218476070540101">Bu bilgisayarın PIN'i güncelleniyor…</translation>
 <translation id="6527303717912515753">Paylaş</translation>
@@ -221,6 +223,7 @@ Masaüstü Ana Makinesi</translation>
 <translation id="6542902059648396432">Sorun bildir…</translation>
 <translation id="6550675742724504774">Seçenekler</translation>
 <translation id="6570205395680337606">Uygulamayı sıfırlayın. Kaydedilmemiş çalışmalarınızın tümünü kaybedeceksiniz.</translation>
+<translation id="6572345186230665992">Mac (OS X Mavericks 10.9 ve sonraki sürümler) için</translation>
 <translation id="6612717000975622067">Ctrl-Alt-Del Gönder</translation>
 <translation id="6640610550128933069">çevrimiçi olduğu son tarih: <ph name="DATE" /></translation>
 <translation id="6668065415969892472">PIN'iniz güncellendi.</translation>
@@ -232,7 +235,6 @@ Masaüstü Ana Makinesi</translation>
 <translation id="6930242544192836755">Süre</translation>
 <translation id="6939719207673461467">Klavyeyi göster/gizle</translation>
 <translation id="6944854424004126054">Pencereyi geri yükle</translation>
-<translation id="6962773374262604195">Windows (XP ve sonraki sürümler) için</translation>
 <translation id="6965382102122355670">Tamam</translation>
 <translation id="6985691951107243942"><ph name="HOSTNAME" /> adlı ana bilgisayara uzaktan bağlantıları devre dışı bırakmak istediğinizden emin misiniz? Daha sonra fikrinizi değiştirirseniz, bağlantıları yeniden etkinleştirmek için söz konusu bilgisayarı ziyaret etmeniz gerekecektir.</translation>
 <translation id="6998989275928107238">Kime</translation>
@@ -288,6 +290,7 @@ Masaüstü Ana Makinesi</translation>
 <translation id="8759753423332885148">Daha fazla bilgi edinin.</translation>
 <translation id="8791202241915690908">Chromoting Ana Makine Yükleyicisi'ni indirin</translation>
 <translation id="894763922177556086">İyi</translation>
+<translation id="895780780740011433">Windows 7 ve sonraki sürümler için</translation>
 <translation id="897805526397249209">Başka bir bilgisayara uzaktan bağlantıları etkinleştirmek için Chromoting'i o bilgisayara yükleyin ve “<ph name="BUTTON_NAME" />” düğmesini tıklayın.</translation>
 <translation id="8998327464021325874">Chrome Uzaktan Masaüstü Ana Makine Denetleyicisi</translation>
 <translation id="9016232822027372900">Yine de bağlan</translation>

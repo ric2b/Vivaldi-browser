@@ -57,6 +57,14 @@ WebInspector.ProfileType.Events = {
 
 WebInspector.ProfileType.prototype = {
     /**
+     * @return {string}
+     */
+    typeName: function()
+    {
+        return "";
+    },
+
+    /**
      * @return {number}
      */
     nextProfileUid: function()
@@ -458,8 +466,9 @@ WebInspector.ProfilesPanel = function()
     this.panelSidebarElement().insertBefore(toolbarContainerLeft, this.panelSidebarElement().firstChild);
     var toolbar = new WebInspector.Toolbar("", toolbarContainerLeft);
 
-    this._toggleRecordAction = WebInspector.actionRegistry.action("profiler.toggle-recording");
-    toolbar.appendToolbarItem(WebInspector.Toolbar.createActionButton(this._toggleRecordAction));
+    this._toggleRecordAction = /** @type {!WebInspector.Action }*/ (WebInspector.actionRegistry.action("profiler.toggle-recording"));
+    this._toggleRecordButton = WebInspector.Toolbar.createActionButton(this._toggleRecordAction);
+    toolbar.appendToolbarItem(this._toggleRecordButton);
 
     this.clearResultsButton = new WebInspector.ToolbarButton(WebInspector.UIString("Clear all profiles"), "clear-toolbar-item");
     this.clearResultsButton.addEventListener("click", this._reset, this);
@@ -598,9 +607,9 @@ WebInspector.ProfilesPanel.prototype = {
         this._toggleRecordAction.setEnabled(enable);
         this._toggleRecordAction.setToggled(toggled);
         if (enable)
-            this._toggleRecordAction.setTitle(this._selectedProfileType ? this._selectedProfileType.buttonTooltip : "");
+            this._toggleRecordButton.setTitle(this._selectedProfileType ? this._selectedProfileType.buttonTooltip : "");
         else
-            this._toggleRecordAction.setTitle(WebInspector.anotherProfilerActiveLabel());
+            this._toggleRecordButton.setTitle(WebInspector.anotherProfilerActiveLabel());
         if (this._selectedProfileType)
             this._launcherView.updateProfileType(this._selectedProfileType, enable);
     },

@@ -4,16 +4,14 @@
 
 #include "content/renderer/media/webrtc_audio_device_impl.h"
 
-#include "base/bind.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string_util.h"
 #include "base/win/windows_version.h"
-#include "content/renderer/media/media_stream_audio_processor.h"
-#include "content/renderer/media/webrtc_audio_capturer.h"
+#include "content/renderer/media/webrtc/processed_local_audio_source.h"
 #include "content/renderer/media/webrtc_audio_renderer.h"
-#include "content/renderer/render_thread_impl.h"
-#include "media/audio/audio_parameters.h"
 #include "media/audio/sample_rates.h"
+#include "media/base/audio_bus.h"
+#include "media/base/audio_parameters.h"
 
 using media::AudioParameters;
 using media::ChannelLayout;
@@ -26,8 +24,7 @@ WebRtcAudioDeviceImpl::WebRtcAudioDeviceImpl()
       output_delay_ms_(0),
       initialized_(false),
       playing_(false),
-      recording_(false),
-      microphone_volume_(0) {
+      recording_(false) {
   DVLOG(1) << "WebRtcAudioDeviceImpl::WebRtcAudioDeviceImpl()";
   // This object can be constructed on either the signaling thread or the main
   // thread, so we need to detach these thread checkers here and have them
@@ -361,7 +358,7 @@ int32_t WebRtcAudioDeviceImpl::RecordingDelay(uint16_t* delay_ms) const {
   DCHECK(signaling_thread_checker_.CalledOnValidThread());
 
   // There is no way to report a correct delay value to WebRTC since there
-  // might be multiple WebRtcAudioCapturer instances.
+  // might be multiple ProcessedLocalAudioSource instances.
   NOTREACHED();
   return -1;
 }
@@ -422,7 +419,8 @@ bool WebRtcAudioDeviceImpl::SetAudioRenderer(WebRtcAudioRenderer* renderer) {
   return true;
 }
 
-void WebRtcAudioDeviceImpl::AddAudioCapturer(WebRtcAudioCapturer* capturer) {
+void WebRtcAudioDeviceImpl::AddAudioCapturer(
+    ProcessedLocalAudioSource* capturer) {
   DCHECK(main_thread_checker_.CalledOnValidThread());
   DVLOG(1) << "WebRtcAudioDeviceImpl::AddAudioCapturer()";
   DCHECK(capturer);
@@ -434,7 +432,8 @@ void WebRtcAudioDeviceImpl::AddAudioCapturer(WebRtcAudioCapturer* capturer) {
   capturers_.push_back(capturer);
 }
 
-void WebRtcAudioDeviceImpl::RemoveAudioCapturer(WebRtcAudioCapturer* capturer) {
+void WebRtcAudioDeviceImpl::RemoveAudioCapturer(
+    ProcessedLocalAudioSource* capturer) {
   DCHECK(main_thread_checker_.CalledOnValidThread());
   DVLOG(1) << "WebRtcAudioDeviceImpl::RemoveAudioCapturer()";
   DCHECK(capturer);

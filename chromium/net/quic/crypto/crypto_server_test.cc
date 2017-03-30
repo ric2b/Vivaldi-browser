@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <algorithm>
+#include <cstdint>
+#include <memory>
 #include <ostream>
 #include <vector>
 
@@ -22,6 +25,7 @@
 #include "net/quic/test_tools/delayed_verify_strike_register_client.h"
 #include "net/quic/test_tools/mock_clock.h"
 #include "net/quic/test_tools/mock_random.h"
+#include "net/quic/test_tools/quic_crypto_server_config_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -43,7 +47,7 @@ class DummyProofVerifierCallback : public ProofVerifierCallback {
 
   void Run(bool ok,
            const std::string& error_details,
-           scoped_ptr<ProofVerifyDetails>* details) override {
+           std::unique_ptr<ProofVerifyDetails>* details) override {
     // Do nothing
   }
 };
@@ -51,19 +55,6 @@ class DummyProofVerifierCallback : public ProofVerifierCallback {
 const char kOldConfigId[] = "old-config-id";
 
 }  // namespace
-
-class QuicCryptoServerConfigPeer {
- public:
-  explicit QuicCryptoServerConfigPeer(QuicCryptoServerConfig* server_config)
-      : server_config_(server_config) {}
-
-  base::Lock* GetStrikeRegisterClientLock() {
-    return &server_config_->strike_register_client_lock_;
-  }
-
- private:
-  QuicCryptoServerConfig* server_config_;
-};
 
 // Run tests with both parities of
 // FLAGS_use_early_return_when_verifying_chlo.
@@ -151,10 +142,10 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
     old_config_options.id = kOldConfigId;
     delete config_.AddDefaultConfig(rand_, &clock_, old_config_options);
     clock_.AdvanceTime(QuicTime::Delta::FromMilliseconds(1000));
-    scoped_ptr<QuicServerConfigProtobuf> primary_config(
+    std::unique_ptr<QuicServerConfigProtobuf> primary_config(
         config_.GenerateConfig(rand_, &clock_, config_options_));
     primary_config->set_primary_time(clock_.WallNow().ToUNIXSeconds());
-    scoped_ptr<CryptoHandshakeMessage> msg(
+    std::unique_ptr<CryptoHandshakeMessage> msg(
         config_.AddConfig(primary_config.get(), clock_.WallNow()));
 
     StringPiece orbit;
@@ -165,9 +156,8 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
     char public_value[32];
     memset(public_value, 42, sizeof(public_value));
 
-    const string nonce_str = GenerateNonce();
-    nonce_hex_ = "#" + base::HexEncode(nonce_str.data(), nonce_str.size());
-    pub_hex_ = "#" + base::HexEncode(public_value, sizeof(public_value));
+    nonce_hex_ = "#" + QuicUtils::HexEncode(GenerateNonce());
+    pub_hex_ = "#" + QuicUtils::HexEncode(public_value, sizeof(public_value));
 
     // clang-format off
     CryptoHandshakeMessage client_hello = CryptoTestUtils::Message(
@@ -192,7 +182,7 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
 
     StringPiece srct;
     ASSERT_TRUE(out_.GetStringPiece(kSourceAddressTokenTag, &srct));
-    srct_hex_ = "#" + base::HexEncode(srct.data(), srct.size());
+    srct_hex_ = "#" + QuicUtils::HexEncode(srct);
 
     StringPiece scfg;
     ASSERT_TRUE(out_.GetStringPiece(kSCFG, &scfg));
@@ -200,7 +190,8 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
 
     StringPiece scid;
     ASSERT_TRUE(server_config_->GetStringPiece(kSCID, &scid));
-    scid_hex_ = "#" + base::HexEncode(scid.data(), scid.size());
+    scid_hex_ = "#" + QuicUtils::HexEncode(scid);
+
     crypto_proof_ = QuicCryptoProof();
     DCHECK(crypto_proof_.chain.get() == nullptr);
   }
@@ -293,6 +284,7 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
                                bool should_succeed,
                                const char* error_substr) {
     IPAddress server_ip;
+    DiversificationNonce diversification_nonce;
     string error_details;
     QuicConnectionId server_designated_connection_id =
         rand_for_id_generation_.RandUint64();
@@ -301,7 +293,7 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
         supported_versions_.front(), supported_versions_,
         use_stateless_rejects_, server_designated_connection_id, &clock_, rand_,
         &compressed_certs_cache_, &params_, &crypto_proof_, &out_,
-        &error_details);
+        &diversification_nonce, &error_details);
 
     if (should_succeed) {
       ASSERT_EQ(error, QUIC_NO_ERROR) << "Message failed with error "
@@ -330,7 +322,7 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
       size_t expected_count) {
     const uint32_t* reject_reasons;
     size_t num_reject_reasons;
-    static_assert(sizeof(QuicTag) == sizeof(uint32_t), "header_out_of_sync");
+    static_assert(sizeof(QuicTag) == sizeof(uint32_t), "header out of sync");
     QuicErrorCode error_code =
         out_.GetTaglist(kRREJ, &reject_reasons, &num_reject_reasons);
     ASSERT_EQ(QUIC_NO_ERROR, error_code);
@@ -380,7 +372,7 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
     IPAddress server_ip;
     string sig;
     string cert_sct;
-    scoped_ptr<ProofSource> proof_source(
+    std::unique_ptr<ProofSource> proof_source(
         CryptoTestUtils::ProofSourceForTesting());
     if (!proof_source->GetProof(server_ip, "", "", client_version_, "", false,
                                 &chain, &sig, &cert_sct) ||
@@ -391,8 +383,8 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
     std::ostringstream xlct_stream;
     uint64_t xlct = QuicUtils::FNV1a_64_Hash(chain->certs.at(0).c_str(),
                                              chain->certs.at(0).length());
-
-    return "#" + base::HexEncode(reinterpret_cast<char*>(&xlct), sizeof(xlct));
+    return "#" +
+           QuicUtils::HexEncode(reinterpret_cast<char*>(&xlct), sizeof(xlct));
   }
 
  protected:
@@ -415,7 +407,7 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
   // These strings contain hex escaped values from the server suitable for using
   // when constructing client hello messages.
   string nonce_hex_, pub_hex_, srct_hex_, scid_hex_;
-  scoped_ptr<CryptoHandshakeMessage> server_config_;
+  std::unique_ptr<CryptoHandshakeMessage> server_config_;
 };
 
 // Run all CryptoServerTest with both values of
@@ -814,10 +806,17 @@ TEST_P(CryptoServerTest, NoServerNonce) {
 
   ShouldSucceed(msg);
 
-  CheckRejectTag();
-  const HandshakeFailureReason kRejectReasons[] = {
-      SERVER_NONCE_REQUIRED_FAILURE};
-  CheckRejectReasons(kRejectReasons, arraysize(kRejectReasons));
+  if (client_version_ <= QUIC_VERSION_32) {
+    CheckRejectTag();
+    const HandshakeFailureReason kRejectReasons[] = {
+        SERVER_NONCE_REQUIRED_FAILURE};
+    CheckRejectReasons(kRejectReasons, arraysize(kRejectReasons));
+  } else {
+    // Even without a server nonce, this ClientHello should be accepted in
+    // version 33.
+    ASSERT_EQ(kSHLO, out_.tag());
+    CheckServerHello(out_);
+  }
 }
 
 TEST_P(CryptoServerTest, ProofForSuppliedServerConfig) {
@@ -849,7 +848,8 @@ TEST_P(CryptoServerTest, ProofForSuppliedServerConfig) {
   EXPECT_TRUE(out_.GetStringPiece(kCertificateTag, &cert));
   EXPECT_TRUE(out_.GetStringPiece(kPROF, &proof));
   EXPECT_TRUE(out_.GetStringPiece(kSCFG, &scfg_str));
-  scoped_ptr<CryptoHandshakeMessage> scfg(CryptoFramer::ParseMessage(scfg_str));
+  std::unique_ptr<CryptoHandshakeMessage> scfg(
+      CryptoFramer::ParseMessage(scfg_str));
   StringPiece scid;
   EXPECT_TRUE(scfg->GetStringPiece(kSCID, &scid));
   EXPECT_NE(scid, kOldConfigId);
@@ -863,11 +863,11 @@ TEST_P(CryptoServerTest, ProofForSuppliedServerConfig) {
                                               common_cert_sets, &certs));
 
   // Check that the proof in the REJ message is valid.
-  scoped_ptr<ProofVerifier> proof_verifier(
+  std::unique_ptr<ProofVerifier> proof_verifier(
       CryptoTestUtils::ProofVerifierForTesting());
-  scoped_ptr<ProofVerifyContext> verify_context(
+  std::unique_ptr<ProofVerifyContext> verify_context(
       CryptoTestUtils::ProofVerifyContextForTesting());
-  scoped_ptr<ProofVerifyDetails> details;
+  std::unique_ptr<ProofVerifyDetails> details;
   string error_details;
   DummyProofVerifierCallback callback;
   string chlo_hash;
@@ -981,9 +981,9 @@ TEST(CryptoServerConfigGenerationTest, Determinism) {
                            CryptoTestUtils::ProofSourceForTesting());
   QuicCryptoServerConfig b(QuicCryptoServerConfig::TESTING, &rand_b,
                            CryptoTestUtils::ProofSourceForTesting());
-  scoped_ptr<CryptoHandshakeMessage> scfg_a(
+  std::unique_ptr<CryptoHandshakeMessage> scfg_a(
       a.AddDefaultConfig(&rand_a, &clock, options));
-  scoped_ptr<CryptoHandshakeMessage> scfg_b(
+  std::unique_ptr<CryptoHandshakeMessage> scfg_b(
       b.AddDefaultConfig(&rand_b, &clock, options));
 
   ASSERT_EQ(scfg_a->DebugString(), scfg_b->DebugString());
@@ -1002,9 +1002,9 @@ TEST(CryptoServerConfigGenerationTest, SCIDVaries) {
   rand_b.ChangeValue();
   QuicCryptoServerConfig b(QuicCryptoServerConfig::TESTING, &rand_b,
                            CryptoTestUtils::ProofSourceForTesting());
-  scoped_ptr<CryptoHandshakeMessage> scfg_a(
+  std::unique_ptr<CryptoHandshakeMessage> scfg_a(
       a.AddDefaultConfig(&rand_a, &clock, options));
-  scoped_ptr<CryptoHandshakeMessage> scfg_b(
+  std::unique_ptr<CryptoHandshakeMessage> scfg_b(
       b.AddDefaultConfig(&rand_b, &clock, options));
 
   StringPiece scid_a, scid_b;
@@ -1021,7 +1021,7 @@ TEST(CryptoServerConfigGenerationTest, SCIDIsHashOfServerConfig) {
 
   QuicCryptoServerConfig a(QuicCryptoServerConfig::TESTING, &rand_a,
                            CryptoTestUtils::ProofSourceForTesting());
-  scoped_ptr<CryptoHandshakeMessage> scfg(
+  std::unique_ptr<CryptoHandshakeMessage> scfg(
       a.AddDefaultConfig(&rand_a, &clock, options));
 
   StringPiece scid;
@@ -1033,7 +1033,7 @@ TEST(CryptoServerConfigGenerationTest, SCIDIsHashOfServerConfig) {
   scfg->MarkDirty();
   const QuicData& serialized(scfg->GetSerialized());
 
-  scoped_ptr<crypto::SecureHash> hash(
+  std::unique_ptr<crypto::SecureHash> hash(
       crypto::SecureHash::Create(crypto::SecureHash::SHA256));
   hash->Update(serialized.data(), serialized.length());
   uint8_t digest[16];

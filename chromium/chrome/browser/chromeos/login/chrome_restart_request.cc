@@ -45,6 +45,7 @@
 #include "ui/app_list/app_list_switches.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/compositor/compositor_switches.h"
+#include "ui/display/display_switches.h"
 #include "ui/events/event_switches.h"
 #include "ui/gfx/switches.h"
 #include "ui/gl/gl_switches.h"
@@ -82,6 +83,7 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kDisableCastStreamingHWEncoding,
     ::switches::kDisableDistanceFieldText,
     ::switches::kDisableGpu,
+    ::switches::kDisableGpuAsyncWorkerContext,
     ::switches::kDisableGpuMemoryBufferVideoFrames,
     ::switches::kDisableGpuShaderDiskCache,
     ::switches::kDisableGpuWatchdog,
@@ -102,6 +104,7 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kForceDisplayList2dCanvas,
     ::switches::kDisableGpuSandbox,
     ::switches::kEnableDistanceFieldText,
+    ::switches::kEnableGpuAsyncWorkerContext,
     ::switches::kEnableGpuMemoryBufferVideoFrames,
     ::switches::kEnableGpuRasterization,
     ::switches::kEnableImageColorProfiles,
@@ -142,9 +145,7 @@ void DeriveCommandLine(const GURL& start_url,
 #endif
     ::switches::kTouchDevices,
     ::switches::kTouchEvents,
-#if defined(ENABLE_TOPCHROME_MD)
     ::switches::kTopChromeMD,
-#endif
     ::switches::kTraceToConsole,
     ::switches::kUIDisablePartialSwap,
     ::switches::kUIPrioritizeInGpuProcess,
@@ -191,6 +192,7 @@ void DeriveCommandLine(const GURL& start_url,
     cc::switches::kDisableThreadedAnimation,
     cc::switches::kEnableBeginFrameScheduling,
     cc::switches::kEnableGpuBenchmarking,
+    cc::switches::kEnableLayerLists,
     cc::switches::kEnableMainFrameBeforeActivation,
     cc::switches::kShowCompositedLayerBorders,
     cc::switches::kShowFPSCounter,
@@ -200,6 +202,7 @@ void DeriveCommandLine(const GURL& start_url,
     cc::switches::kShowScreenSpaceRects,
     cc::switches::kShowSurfaceDamageRects,
     cc::switches::kSlowDownRasterScaleFactor,
+    cc::switches::kUIEnableLayerLists,
     cc::switches::kUIShowFPSCounter,
     chromeos::switches::kConsumerDeviceManagementUrl,
     chromeos::switches::kDbusStub,
@@ -208,6 +211,7 @@ void DeriveCommandLine(const GURL& start_url,
     chromeos::switches::kDisableLoginAnimations,
     chromeos::switches::kEnableArc,
     chromeos::switches::kEnableConsumerManagement,
+    chromeos::switches::kEnterpriseDisableArc,
     chromeos::switches::kEnterpriseEnableForcedReEnrollment,
     chromeos::switches::kHasChromeOSDiamondKey,
     chromeos::switches::kLoginProfile,

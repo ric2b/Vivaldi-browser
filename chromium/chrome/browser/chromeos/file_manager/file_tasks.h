@@ -84,6 +84,7 @@
 //            "file_browser_handlers" in manifest.
 // - "app" - File handler - app declaring "file_handlers" in manifest.json.
 // - "drive" - Drive App
+// - "arc" - ARC App
 //
 // <task-action-id> is an ID string used for identifying actions provided
 // from a single Chrome Extension/App. In other words, a single
@@ -110,6 +111,7 @@
 #ifndef CHROME_BROWSER_CHROMEOS_FILE_MANAGER_FILE_TASKS_H_
 #define CHROME_BROWSER_CHROMEOS_FILE_MANAGER_FILE_TASKS_H_
 
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -142,6 +144,7 @@ enum TaskType {
   TASK_TYPE_FILE_BROWSER_HANDLER,
   TASK_TYPE_FILE_HANDLER,
   TASK_TYPE_DRIVE_APP,
+  TASK_TYPE_ARC_APP,
   TASK_TYPE_UNKNOWN,  // Used only for handling errors.
 };
 
@@ -286,6 +289,11 @@ void FindFileBrowserHandlerTasks(
     const std::vector<GURL>& file_urls,
     std::vector<FullTaskDescriptor>* result_list);
 
+// Callback function type for FindAllTypesOfTasks.
+typedef base::Callback<void(
+    std::unique_ptr<std::vector<FullTaskDescriptor>> result)>
+    FindTasksCallback;
+
 // Finds all types (drive, file handlers, file browser handlers) of
 // tasks. See the comment at FindDriveAppTasks() about |result_list|.
 // Drive app tasks will be found only if all of the files are on Drive.
@@ -301,7 +309,7 @@ void FindAllTypesOfTasks(Profile* profile,
                          const drive::DriveAppRegistry* drive_app_registry,
                          const std::vector<extensions::EntryInfo>& entries,
                          const std::vector<GURL>& file_urls,
-                         std::vector<FullTaskDescriptor>* result_list);
+                         const FindTasksCallback& callback);
 
 // Chooses the default task in |tasks| and sets it as default, if the default
 // task is found (i.e. the default task may not exist in |tasks|). No tasks

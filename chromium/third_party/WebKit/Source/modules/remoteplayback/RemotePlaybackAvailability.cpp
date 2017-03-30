@@ -18,7 +18,8 @@ RemotePlaybackAvailability* RemotePlaybackAvailability::take(ScriptPromiseResolv
 }
 
 RemotePlaybackAvailability::RemotePlaybackAvailability(ExecutionContext* executionContext, bool value)
-    : ContextLifecycleObserver(executionContext)
+    : ActiveScriptWrappable(this)
+    , ContextLifecycleObserver(executionContext)
     , m_value(value)
 {
     ASSERT(executionContext->isDocument());
@@ -50,9 +51,14 @@ bool RemotePlaybackAvailability::value() const
     return m_value;
 }
 
+bool RemotePlaybackAvailability::hasPendingActivity() const
+{
+    return hasEventListeners();
+}
+
 DEFINE_TRACE(RemotePlaybackAvailability)
 {
-    RefCountedGarbageCollectedEventTargetWithInlineData<RemotePlaybackAvailability>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
     ContextLifecycleObserver::trace(visitor);
 }
 

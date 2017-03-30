@@ -35,12 +35,52 @@
 #include "modules/webaudio/AudioParamTimeline.h"
 #include "modules/webaudio/AudioSummingJunction.h"
 #include "wtf/PassRefPtr.h"
+#include "wtf/ThreadSafeRefCounted.h"
 #include "wtf/text/WTFString.h"
 #include <sys/types.h>
 
 namespace blink {
 
 class AudioNodeOutput;
+
+// Each AudioParam gets an identifier here.  This is mostly for instrospection if warnings or
+// other messages need to be printed. It's useful to know what the AudioParam represents.  The
+// name should include the node type and the name of the AudioParam.
+enum AudioParamType {
+    ParamTypeAudioBufferSourcePlaybackRate,
+    ParamTypeAudioBufferSourceDetune,
+    ParamTypeBiquadFilterFrequency,
+    ParamTypeBiquadFilterQ,
+    ParamTypeBiquadFilterQLowpass,
+    ParamTypeBiquadFilterQHighpass,
+    ParamTypeBiquadFilterGain,
+    ParamTypeBiquadFilterDetune,
+    ParamTypeDelayDelayTime,
+    ParamTypeDynamicsCompressorThreshold,
+    ParamTypeDynamicsCompressorKnee,
+    ParamTypeDynamicsCompressorRatio,
+    ParamTypeDynamicsCompressorAttack,
+    ParamTypeDynamicsCompressorRelease,
+    ParamTypeGainGain,
+    ParamTypeOscillatorFrequency,
+    ParamTypeOscillatorDetune,
+    ParamTypeStereoPannerPan,
+    ParamTypePannerPositionX,
+    ParamTypePannerPositionY,
+    ParamTypePannerPositionZ,
+    ParamTypePannerOrientationX,
+    ParamTypePannerOrientationY,
+    ParamTypePannerOrientationZ,
+    ParamTypeAudioListenerPositionX,
+    ParamTypeAudioListenerPositionY,
+    ParamTypeAudioListenerPositionZ,
+    ParamTypeAudioListenerForwardX,
+    ParamTypeAudioListenerForwardY,
+    ParamTypeAudioListenerForwardZ,
+    ParamTypeAudioListenerUpX,
+    ParamTypeAudioListenerUpY,
+    ParamTypeAudioListenerUpZ,
+};
 
 // AudioParamHandler is an actual implementation of web-exposed AudioParam
 // interface. Each of AudioParam object creates and owns an AudioParamHandler,
@@ -51,16 +91,26 @@ class AudioNodeOutput;
 // dies.
 class AudioParamHandler final : public ThreadSafeRefCounted<AudioParamHandler>, public AudioSummingJunction {
 public:
+    AudioParamType getParamType() const { return m_paramType; }
+    void setParamType(AudioParamType);
+    // Return a nice name for the AudioParam.
+    String getParamName() const;
+
     static const double DefaultSmoothingConstant;
     static const double SnapThreshold;
 
-    static PassRefPtr<AudioParamHandler> create(AbstractAudioContext& context, double defaultValue)
+    static PassRefPtr<AudioParamHandler> create(
+        AbstractAudioContext& context,
+        AudioParamType paramType,
+        double defaultValue,
+        float minValue,
+        float maxValue)
     {
-        return adoptRef(new AudioParamHandler(context, defaultValue));
+        return adoptRef(new AudioParamHandler(context, paramType, defaultValue, minValue, maxValue));
     }
 
     // This should be used only in audio rendering thread.
-    AbstractAudioContext* context() const;
+    AudioDestinationHandler& destinationHandler() const;
 
     // AudioSummingJunction
     void didUpdate() override { }
@@ -76,6 +126,8 @@ public:
     float finalValue();
 
     float defaultValue() const { return static_cast<float>(m_defaultValue); }
+    float minValue() const { return m_minValue; }
+    float maxValue() const { return m_maxValue; }
 
     // Value smoothing:
 
@@ -99,49 +151,69 @@ public:
     void connect(AudioNodeOutput&);
     void disconnect(AudioNodeOutput&);
 
+    float intrinsicValue() const { return noBarrierLoad(&m_intrinsicValue); }
+
+    // Update any histograms with the given value.
+    void updateHistograms(float newValue);
+
 private:
-    AudioParamHandler(AbstractAudioContext& context, double defaultValue)
-        : AudioSummingJunction(context.deferredTaskHandler())
-        , m_intrinsicValue(defaultValue)
-        , m_defaultValue(defaultValue)
-        , m_smoothedValue(defaultValue)
-        , m_context(&context) { }
+    AudioParamHandler(AbstractAudioContext&, AudioParamType, double defaultValue, float min, float max);
+
+    void warnIfOutsideRange(float value, float minValue, float maxValue);
 
     // sampleAccurate corresponds to a-rate (audio rate) vs. k-rate in the Web Audio specification.
     void calculateFinalValues(float* values, unsigned numberOfValues, bool sampleAccurate);
     void calculateTimelineValues(float* values, unsigned numberOfValues);
 
+    int computeQHistogramValue(float) const;
+
+    // The type of AudioParam, indicating what this AudioParam represents and what node it belongs
+    // to.  Mostly for informational purposes and doesn't affect implementation.
+    AudioParamType m_paramType;
+
     // Intrinsic value
     float m_intrinsicValue;
-    float intrinsicValue() const { return noBarrierLoad(&m_intrinsicValue); }
-    void setIntrinsicValue(float newValue) { noBarrierStore(&m_intrinsicValue, newValue); }
+    void setIntrinsicValue(float newValue);
 
     float m_defaultValue;
+
+    // Nominal range for the value
+    float m_minValue;
+    float m_maxValue;
 
     // Smoothing (de-zippering)
     float m_smoothedValue;
 
     AudioParamTimeline m_timeline;
 
-    // We can't make this Persistent because of a reference cycle. It's safe to
-    // access this field only when we're rendering audio.
-    UntracedMember<AbstractAudioContext> m_context;
+    // The destination node used to get necessary information like the smaple rate and context time.
+    RefPtr<AudioDestinationHandler> m_destinationHandler;
 };
 
 // AudioParam class represents web-exposed AudioParam interface.
 class AudioParam final : public GarbageCollectedFinalized<AudioParam>, public ScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static AudioParam* create(AbstractAudioContext&, double defaultValue);
+    static AudioParam* create(AbstractAudioContext&, AudioParamType, double defaultValue);
+    static AudioParam* create(AbstractAudioContext&, AudioParamType, double defaultValue, float minValue, float maxValue);
+
     DECLARE_TRACE();
     // |handler| always returns a valid object.
     AudioParamHandler& handler() const { return *m_handler; }
     // |context| always returns a valid object.
     AbstractAudioContext* context() const { return m_context; }
 
+    AudioParamType getParamType() const { return handler().getParamType(); }
+    void setParamType(AudioParamType);
+    String getParamName() const;
+
     float value() const;
     void setValue(float);
     float defaultValue() const;
+
+    float minValue() const;
+    float maxValue() const;
+
     AudioParam* setValueAtTime(float value, double time, ExceptionState&);
     AudioParam* linearRampToValueAtTime(float value, double time, ExceptionState&);
     AudioParam* exponentialRampToValueAtTime(float value, double time, ExceptionState&);
@@ -150,7 +222,9 @@ public:
     AudioParam* cancelScheduledValues(double startTime, ExceptionState&);
 
 private:
-    AudioParam(AbstractAudioContext&, double defaultValue);
+    AudioParam(AbstractAudioContext&, AudioParamType, double defaultValue, float min, float max);
+
+    void warnIfOutsideRange(const String& paramMethd, float value);
 
     RefPtr<AudioParamHandler> m_handler;
     Member<AbstractAudioContext> m_context;

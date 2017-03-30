@@ -12,13 +12,14 @@
 // class is to get full hash matches from the SB server for the given set of
 // hash prefixes.
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/threading/non_thread_safe.h"
+#include "base/time/default_clock.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "components/safe_browsing_db/safebrowsing.pb.h"
@@ -43,18 +44,18 @@ class V4GetHashProtocolManager : public net::URLFetcherDelegate,
   // Parameters:
   //   - The vector of full hash results. If empty, indicates that there
   //     were no matches, and that the resource is safe.
-  //   - The negative cache duration of the result.
+  //   - The negative cache expire time of the result. This value may be
+  //     uninitialized, and the results should not be cached in this case.
   typedef base::Callback<void(const std::vector<SBFullHashResult>&,
-                              const base::TimeDelta&)>
+                              const base::Time&)>
       FullHashCallback;
 
   ~V4GetHashProtocolManager() override;
 
   // Makes the passed |factory| the factory used to instantiate
   // a V4GetHashProtocolManager. Useful for tests.
-  static void RegisterFactory(V4GetHashProtocolManagerFactory* factory) {
-    factory_ = factory;
-  }
+  static void RegisterFactory(
+      std::unique_ptr<V4GetHashProtocolManagerFactory> factory);
 
   // Create an instance of the safe browsing v4 protocol manager.
   static V4GetHashProtocolManager* Create(
@@ -78,6 +79,9 @@ class V4GetHashProtocolManager : public net::URLFetcherDelegate,
   virtual void GetFullHashesWithApis(const std::vector<SBPrefix>& prefixes,
                                      FullHashCallback callback);
 
+  // Overrides the clock used to check the time.
+  void SetClockForTests(std::unique_ptr<base::Clock> clock);
+
  protected:
   // Constructs a V4GetHashProtocolManager that issues
   // network requests using |request_context_getter|.
@@ -93,7 +97,7 @@ class V4GetHashProtocolManager : public net::URLFetcherDelegate,
   FRIEND_TEST_ALL_PREFIXES(SafeBrowsingV4GetHashProtocolManagerTest,
                            TestParseHashResponseWrongThreatEntryType);
   FRIEND_TEST_ALL_PREFIXES(SafeBrowsingV4GetHashProtocolManagerTest,
-                           TestParseHashResponseSocialEngineeringThreatType);
+                           TestParseHashThreatPatternType);
   FRIEND_TEST_ALL_PREFIXES(SafeBrowsingV4GetHashProtocolManagerTest,
                            TestParseHashResponseNonPermissionMetadata);
   FRIEND_TEST_ALL_PREFIXES(SafeBrowsingV4GetHashProtocolManagerTest,
@@ -115,13 +119,13 @@ class V4GetHashProtocolManager : public net::URLFetcherDelegate,
                              ThreatType threat_type);
 
   // Parses a FindFullHashesResponse protocol buffer and fills the results in
-  // |full_hashes| and |negative_cache_duration|. |data| is a serialized
-  // FindFullHashes protocol buffer. |negative_cache_duration| is the duration
-  // to cache the response for entities that did not match the threat list.
+  // |full_hashes| and |negative_cache_expire|. |data| is a serialized
+  // FindFullHashes protocol buffer. |negative_cache_expire| is the cache expiry
+  // time of the response for entities that did not match the threat list.
   // Returns true if parsing is successful, false otherwise.
   bool ParseHashResponse(const std::string& data_base64,
                          std::vector<SBFullHashResult>* full_hashes,
-                         base::TimeDelta* negative_cache_duration);
+                         base::Time* negative_cache_expire);
 
   // Resets the gethash error counter and multiplier.
   void ResetGetHashErrors();
@@ -141,7 +145,7 @@ class V4GetHashProtocolManager : public net::URLFetcherDelegate,
   // Current active request (in case we need to cancel) for updates or chunks
   // from the SafeBrowsing service. We can only have one of these outstanding
   // at any given time unlike GetHash requests, which are tracked separately.
-  scoped_ptr<net::URLFetcher> request_;
+  std::unique_ptr<net::URLFetcher> request_;
 
   // The number of HTTP response errors since the the last successful HTTP
   // response, used for request backoff timing.
@@ -165,6 +169,9 @@ class V4GetHashProtocolManager : public net::URLFetcherDelegate,
 
   // ID for URLFetchers for testing.
   int url_fetcher_id_;
+
+  // The clock used to vend times.
+  std::unique_ptr<base::Clock> clock_;
 
   DISALLOW_COPY_AND_ASSIGN(V4GetHashProtocolManager);
 };

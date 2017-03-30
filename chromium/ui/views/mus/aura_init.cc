@@ -10,10 +10,11 @@
 #include "base/macros.h"
 #include "base/path_service.h"
 #include "build/build_config.h"
-#include "components/resource_provider/public/cpp/resource_loader.h"
-#include "mojo/shell/public/cpp/connector.h"
+#include "services/catalog/public/cpp/resource_loader.h"
+#include "services/shell/public/cpp/connector.h"
 #include "ui/aura/env.h"
 #include "ui/base/ime/input_method_initializer.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/views/views_delegate.h"
@@ -50,11 +51,12 @@ class MusViewsDelegate : public ViewsDelegate {
 
 }  // namespace
 
-AuraInit::AuraInit(mojo::Connector* connector, const std::string& resource_file)
+AuraInit::AuraInit(shell::Connector* connector,
+                   const std::string& resource_file)
     : resource_file_(resource_file),
+      env_(aura::Env::CreateInstance()),
       views_delegate_(new MusViewsDelegate) {
-  aura::Env::CreateInstance(false);
-
+  ui::MaterialDesignController::Initialize();
   InitializeResources(connector);
 
   ui::InitializeInputMethodForTesting();
@@ -72,15 +74,16 @@ AuraInit::~AuraInit() {
 #endif
 }
 
-void AuraInit::InitializeResources(mojo::Connector* connector) {
+void AuraInit::InitializeResources(shell::Connector* connector) {
   if (ui::ResourceBundle::HasSharedInstance())
     return;
-  resource_provider::ResourceLoader resource_loader(
-      connector, GetResourcePaths(resource_file_));
-  CHECK(resource_loader.BlockUntilLoaded());
-  CHECK(resource_loader.loaded());
+  catalog::ResourceLoader loader;
+  filesystem::mojom::DirectoryPtr directory;
+  connector->ConnectToInterface("mojo:catalog", &directory);
+  CHECK(loader.OpenFiles(std::move(directory),
+        GetResourcePaths(resource_file_)));
   ui::RegisterPathProvider();
-  base::File pak_file = resource_loader.ReleaseFile(resource_file_);
+  base::File pak_file = loader.TakeFile(resource_file_);
   base::File pak_file_2 = pak_file.Duplicate();
   ui::ResourceBundle::InitSharedInstanceWithPakFileRegion(
       std::move(pak_file), base::MemoryMappedFile::Region::kWholeFile);
@@ -89,7 +92,7 @@ void AuraInit::InitializeResources(mojo::Connector* connector) {
 
 // Initialize the skia font code to go ask fontconfig underneath.
 #if defined(OS_LINUX) && !defined(OS_ANDROID)
-  font_loader_ = skia::AdoptRef(new font_service::FontLoader(connector));
+  font_loader_ = sk_make_sp<font_service::FontLoader>(connector);
   SkFontConfigInterface::SetGlobal(font_loader_.get());
 #endif
 

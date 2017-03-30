@@ -37,8 +37,6 @@
 #include "platform/Timer.h"
 #include "platform/geometry/FloatPoint.h"
 #include "platform/heap/Handle.h"
-#include "wtf/PassOwnPtr.h"
-#include "wtf/RefCounted.h"
 
 namespace blink {
 
@@ -89,9 +87,9 @@ public:
 
     bool isScrollingRegion() { return m_scroll; }
 
-    RawPtr<HTMLDivElement> getDisplayTree(Document&);
+    HTMLDivElement* getDisplayTree(Document&);
 
-    void appendVTTCueBox(RawPtr<VTTCueBox>);
+    void appendVTTCueBox(VTTCueBox*);
     void displayLastVTTCueBox();
     void willRemoveVTTCueBox(VTTCueBox*);
 

@@ -282,12 +282,8 @@ def main(argv):
   possible_deps_config_paths = build_utils.ParseGypList(
       options.possible_deps_configs)
 
-  allow_unknown_deps = (options.type in
-                        ('android_apk', 'android_assets', 'android_resources'))
   unknown_deps = [
       c for c in possible_deps_config_paths if not os.path.exists(c)]
-  if unknown_deps and not allow_unknown_deps:
-    raise Exception('Unknown deps: ' + str(unknown_deps))
 
   direct_deps_config_paths = [
       c for c in possible_deps_config_paths if not c in unknown_deps]
@@ -379,6 +375,11 @@ def main(argv):
     # refer to the resources in any of its dependents.
     config['javac']['srcjars'] = [
         c['srcjar'] for c in direct_resources_deps if 'srcjar' in c]
+
+    # Used to strip out R.class for android_prebuilt()s.
+    if options.type == 'java_library':
+      config['javac']['resource_packages'] = [
+          c['package_name'] for c in all_resources_deps if 'package_name' in c]
 
   if options.type == 'android_apk':
     # Apks will get their resources srcjar explicitly passed to the java step.

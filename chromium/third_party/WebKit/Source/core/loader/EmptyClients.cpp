@@ -51,9 +51,6 @@ void fillWithEmptyClients(Page::PageClients& pageClients)
     DEFINE_STATIC_LOCAL(EmptyContextMenuClient, dummyContextMenuClient, ());
     pageClients.contextMenuClient = &dummyContextMenuClient;
 
-    DEFINE_STATIC_LOCAL(EmptyDragClient, dummyDragClient, ());
-    pageClients.dragClient = &dummyDragClient;
-
     DEFINE_STATIC_LOCAL(EmptyEditorClient, dummyEditorClient, ());
     pageClients.editorClient = &dummyEditorClient;
 
@@ -152,7 +149,7 @@ Widget* EmptyFrameLoaderClient::createPlugin(HTMLPlugInElement*, const KURL&, co
     return nullptr;
 }
 
-PassOwnPtr<WebMediaPlayer> EmptyFrameLoaderClient::createWebMediaPlayer(HTMLMediaElement&, const WebURL&, WebMediaPlayerClient*)
+PassOwnPtr<WebMediaPlayer> EmptyFrameLoaderClient::createWebMediaPlayer(HTMLMediaElement&, const WebMediaPlayerSource&, WebMediaPlayerClient*)
 {
     return nullptr;
 }
@@ -164,15 +161,6 @@ PassOwnPtr<WebMediaSession> EmptyFrameLoaderClient::createWebMediaSession()
 
 void EmptyTextCheckerClient::requestCheckingOfString(TextCheckingRequest*)
 {
-}
-
-void EmptyFrameLoaderClient::didRequestAutocomplete(HTMLFormElement*)
-{
-}
-
-v8::Local<v8::Value> EmptyFrameLoaderClient::createTestInterface(const AtomicString& name)
-{
-    return v8::Local<v8::Value>();
 }
 
 PassOwnPtr<WebServiceWorkerProvider> EmptyFrameLoaderClient::createServiceWorkerProvider()

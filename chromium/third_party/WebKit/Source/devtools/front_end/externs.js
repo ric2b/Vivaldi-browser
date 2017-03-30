@@ -43,6 +43,17 @@ Event.prototype.isMetaOrCtrlForTest;
 Event.prototype.code;
 
 /**
+ * TODO(luoe): MouseEvent properties movementX and movementY from the
+ * PointerLock API are not yet standard. Once they are included in
+ * Closure Compiler, these custom externs can be removed.
+ */
+/** @type {number} */
+MouseEvent.prototype.movementX;
+
+/** @type {number} */
+MouseEvent.prototype.movementY;
+
+/**
  * @type {number}
  */
 KeyboardEvent.DOM_KEY_LOCATION_NUMPAD;
@@ -683,6 +694,12 @@ ESTree.Node = function()
     this.name;
     /** @type {(?ESTree.Node|undefined)} */
     this.id;
+    /** @type {(number|undefined)} */
+    this.length;
+    /** @type {(?ESTree.Node|undefined)} */
+    this.argument;
+    /** @type {(string|undefined)} */
+    this.operator;
 }
 
 /**
@@ -695,4 +712,42 @@ ESTree.TemplateLiteralNode = function()
     this.quasis;
     /** @type {!Array.<!ESTree.Node>} */
     this.expressions;
+}
+
+var Gonzales = {}
+var gonzales = {
+    /**
+     * @param {string} text
+     * @param {!Object=} options
+     * @return {!Gonzales.Node}
+     */
+    parse: function(text, options) { },
+}
+
+/**
+ * @constructor
+ */
+Gonzales.Location = function()
+{
+    /** @type {number} */
+    this.line;
+    /** @type {number} */
+    this.column;
+}
+
+/**
+ * @constructor
+ */
+Gonzales.Node = function()
+{
+    /** @type {string} */
+    this.type;
+    /** @type {string} */
+    this.syntax;
+    /** @type {!Gonzales.Location} */
+    this.start;
+    /** @type {!Gonzales.Location} */
+    this.end;
+    /** @type {(string|!Array<!Gonzales.Node>)} */
+    this.content;
 }

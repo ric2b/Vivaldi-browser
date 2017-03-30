@@ -103,7 +103,7 @@ class EmptyUndoDelegate : public BookmarkUndoDelegate {
   void OnBookmarkNodeRemoved(BookmarkModel* model,
                              const BookmarkNode* parent,
                              int index,
-                             scoped_ptr<BookmarkNode> node) override {}
+                             std::unique_ptr<BookmarkNode> node) override {}
 
   DISALLOW_COPY_AND_ASSIGN(EmptyUndoDelegate);
 };
@@ -112,7 +112,7 @@ class EmptyUndoDelegate : public BookmarkUndoDelegate {
 
 // BookmarkModel --------------------------------------------------------------
 
-BookmarkModel::BookmarkModel(scoped_ptr<BookmarkClient> client)
+BookmarkModel::BookmarkModel(std::unique_ptr<BookmarkClient> client)
     : client_(std::move(client)),
       loaded_(false),
       root_(GURL()),
@@ -264,10 +264,8 @@ void BookmarkModel::RemoveAllUserBookmarks() {
   BeginGroupedChanges();
   for (const auto& removed_node_data : removed_node_data_list) {
     undo_delegate()->OnBookmarkNodeRemoved(
-        this,
-        removed_node_data.parent,
-        removed_node_data.index,
-        scoped_ptr<BookmarkNode>(removed_node_data.node));
+        this, removed_node_data.parent, removed_node_data.index,
+        std::unique_ptr<BookmarkNode>(removed_node_data.node));
   }
   EndGroupedChanges();
 }
@@ -738,7 +736,7 @@ void BookmarkModel::SortChildren(const BookmarkNode* parent) {
                     OnWillReorderBookmarkNode(this, parent));
 
   UErrorCode error = U_ZERO_ERROR;
-  scoped_ptr<icu::Collator> collator(icu::Collator::createInstance(error));
+  std::unique_ptr<icu::Collator> collator(icu::Collator::createInstance(error));
   if (U_FAILURE(error))
     collator.reset(NULL);
   BookmarkNode* mutable_parent = AsMutable(parent);
@@ -835,9 +833,10 @@ const BookmarkPermanentNode* BookmarkModel::PermanentNode(
   }
 }
 
-void BookmarkModel::RestoreRemovedNode(const BookmarkNode* parent,
-                                       int index,
-                                       scoped_ptr<BookmarkNode> scoped_node) {
+void BookmarkModel::RestoreRemovedNode(
+    const BookmarkNode* parent,
+    int index,
+    std::unique_ptr<BookmarkNode> scoped_node) {
   BookmarkNode* node = scoped_node.release();
   AddNode(AsMutable(parent), index, node);
 
@@ -880,7 +879,7 @@ void BookmarkModel::RemoveNode(BookmarkNode* node,
     RemoveNode(node->GetChild(i), removed_urls);
 }
 
-void BookmarkModel::DoneLoading(scoped_ptr<BookmarkLoadDetails> details) {
+void BookmarkModel::DoneLoading(std::unique_ptr<BookmarkLoadDetails> details) {
   DCHECK(details);
   if (loaded_) {
     // We should only ever be loaded once.
@@ -975,7 +974,7 @@ void BookmarkModel::DoneLoading(scoped_ptr<BookmarkLoadDetails> details) {
 }
 
 void BookmarkModel::RemoveAndDeleteNode(BookmarkNode* delete_me) {
-  scoped_ptr<BookmarkNode> node(delete_me);
+  std::unique_ptr<BookmarkNode> node(delete_me);
 
   const BookmarkNode* parent = node->parent();
   DCHECK(parent);
@@ -1178,7 +1177,7 @@ int64_t BookmarkModel::generate_next_node_id() {
   return next_node_id_++;
 }
 
-scoped_ptr<BookmarkLoadDetails> BookmarkModel::CreateLoadDetails() {
+std::unique_ptr<BookmarkLoadDetails> BookmarkModel::CreateLoadDetails() {
   BookmarkPermanentNode* bb_node =
       CreatePermanentNode(BookmarkNode::BOOKMARK_BAR);
   BookmarkPermanentNode* other_node =
@@ -1189,14 +1188,9 @@ scoped_ptr<BookmarkLoadDetails> BookmarkModel::CreateLoadDetails() {
        (vivaldi::IsVivaldiRunning() ?
           CreatePermanentNode(BookmarkNode::TRASH):
           NULL);
-  return scoped_ptr<BookmarkLoadDetails>(new BookmarkLoadDetails(
-      bb_node,
-      other_node,
-      mobile_node,
-      trash_node,
-      client_->GetLoadExtraNodesCallback(),
-      new BookmarkIndex(client_.get()),
-      next_node_id_));
+  return std::unique_ptr<BookmarkLoadDetails>(new BookmarkLoadDetails(
+      bb_node, other_node, mobile_node, trash_node, client_->GetLoadExtraNodesCallback(),
+      new BookmarkIndex(client_.get()), next_node_id_));
 }
 
 void BookmarkModel::SetUndoDelegate(BookmarkUndoDelegate* undo_delegate) {

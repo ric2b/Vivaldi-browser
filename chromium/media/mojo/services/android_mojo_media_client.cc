@@ -9,16 +9,16 @@
 #include "media/filters/android/media_codec_audio_decoder.h"
 #include "media/mojo/interfaces/provision_fetcher.mojom.h"
 #include "media/mojo/services/mojo_provision_fetcher.h"
-#include "mojo/shell/public/cpp/connect.h"
+#include "services/shell/public/cpp/connect.h"
 
 namespace media {
 
 namespace {
 
 std::unique_ptr<ProvisionFetcher> CreateProvisionFetcher(
-    mojo::shell::mojom::InterfaceProvider* interface_provider) {
-  interfaces::ProvisionFetcherPtr provision_fetcher_ptr;
-  mojo::GetInterface(interface_provider, &provision_fetcher_ptr);
+    shell::mojom::InterfaceProvider* interface_provider) {
+  mojom::ProvisionFetcherPtr provision_fetcher_ptr;
+  shell::GetInterface(interface_provider, &provision_fetcher_ptr);
   return base::WrapUnique(
       new MojoProvisionFetcher(std::move(provision_fetcher_ptr)));
 }
@@ -37,7 +37,7 @@ std::unique_ptr<AudioDecoder> AndroidMojoMediaClient::CreateAudioDecoder(
 }
 
 std::unique_ptr<CdmFactory> AndroidMojoMediaClient::CreateCdmFactory(
-    mojo::shell::mojom::InterfaceProvider* interface_provider) {
+    shell::mojom::InterfaceProvider* interface_provider) {
   return base::WrapUnique(new AndroidCdmFactory(
       base::Bind(&CreateProvisionFetcher, interface_provider)));
 }

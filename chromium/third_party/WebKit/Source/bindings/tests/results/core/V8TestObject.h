@@ -7,8 +7,18 @@
 #ifndef V8TestObject_h
 #define V8TestObject_h
 
+#include "bindings/core/v8/ArrayBufferOrArrayBufferViewOrDictionary.h"
+#include "bindings/core/v8/BooleanOrStringOrUnrestrictedDouble.h"
+#include "bindings/core/v8/DoubleOrString.h"
 #include "bindings/core/v8/ScriptWrappable.h"
+#include "bindings/core/v8/StringOrArrayBufferOrArrayBufferView.h"
+#include "bindings/core/v8/StringOrDouble.h"
+#include "bindings/core/v8/StringOrStringSequence.h"
+#include "bindings/core/v8/TestEnumOrDouble.h"
+#include "bindings/core/v8/TestInterfaceGarbageCollectedOrString.h"
+#include "bindings/core/v8/TestInterfaceOrLong.h"
 #include "bindings/core/v8/ToV8.h"
+#include "bindings/core/v8/UnrestrictedDoubleOrString.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8DOMWrapper.h"
 #include "bindings/core/v8/WrapperTypeInfo.h"
@@ -18,6 +28,7 @@
 
 namespace blink {
 
+class ScriptState;
 class V8TestObject {
     STATIC_ONLY(V8TestObject);
 public:
@@ -28,15 +39,15 @@ public:
         static bool shortMethodImplementedInPrivateScriptMethod(LocalFrame* frame, TestObject* holderImpl, int* result);
         static bool shortMethodWithShortArgumentImplementedInPrivateScriptMethod(LocalFrame* frame, TestObject* holderImpl, int value, int* result);
         static bool stringMethodWithStringArgumentImplementedInPrivateScriptMethod(LocalFrame* frame, TestObject* holderImpl, String value, String* result);
-        static bool nodeMethodWithNodeArgumentImplementedInPrivateScriptMethod(LocalFrame* frame, TestObject* holderImpl, Node* value, RawPtr<Node>* result);
-        static bool nodeMethodWithVariousArgumentsImplementedInPrivateScriptMethod(LocalFrame* frame, TestObject* holderImpl, Document* document, Node* node, int value1, double value2, String string, RawPtr<Node>* result);
+        static bool nodeMethodWithNodeArgumentImplementedInPrivateScriptMethod(LocalFrame* frame, TestObject* holderImpl, Node* value, Node** result);
+        static bool nodeMethodWithVariousArgumentsImplementedInPrivateScriptMethod(LocalFrame* frame, TestObject* holderImpl, Document* document, Node* node, int value1, double value2, String string, Node** result);
         static bool methodForPrivateScriptOnlyMethod(LocalFrame* frame, TestObject* holderImpl, int value1, int value2, int* result);
         static bool readonlyShortAttributeAttributeGetter(LocalFrame* frame, TestObject* holderImpl, int* result);
         static bool shortAttributeAttributeGetter(LocalFrame* frame, TestObject* holderImpl, int* result);
         static bool shortAttributeAttributeSetter(LocalFrame* frame, TestObject* holderImpl, int cppValue);
         static bool stringAttributeAttributeGetter(LocalFrame* frame, TestObject* holderImpl, String* result);
         static bool stringAttributeAttributeSetter(LocalFrame* frame, TestObject* holderImpl, String cppValue);
-        static bool nodeAttributeAttributeGetter(LocalFrame* frame, TestObject* holderImpl, RawPtr<Node>* result);
+        static bool nodeAttributeAttributeGetter(LocalFrame* frame, TestObject* holderImpl, Node** result);
         static bool nodeAttributeAttributeSetter(LocalFrame* frame, TestObject* holderImpl, Node* cppValue);
         static bool attributeForPrivateScriptOnlyAttributeGetter(LocalFrame* frame, TestObject* holderImpl, String* result);
         static bool attributeForPrivateScriptOnlyAttributeSetter(LocalFrame* frame, TestObject* holderImpl, String cppValue);
@@ -46,18 +57,21 @@ public:
 
     CORE_EXPORT static bool hasInstance(v8::Local<v8::Value>, v8::Isolate*);
     static v8::Local<v8::Object> findInstanceInPrototypeChain(v8::Local<v8::Value>, v8::Isolate*);
-    CORE_EXPORT static v8::Local<v8::FunctionTemplate> domTemplate(v8::Isolate*);
+    CORE_EXPORT static v8::Local<v8::FunctionTemplate> domTemplate(v8::Isolate*, const DOMWrapperWorld&);
     static TestObject* toImpl(v8::Local<v8::Object> object)
     {
         return toScriptWrappable(object)->toImpl<TestObject>();
     }
     CORE_EXPORT static TestObject* toImplWithTypeCheck(v8::Isolate*, v8::Local<v8::Value>);
     CORE_EXPORT static const WrapperTypeInfo wrapperTypeInfo;
-    static void refObject(ScriptWrappable*);
-    static void derefObject(ScriptWrappable*);
+    static void traceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable)
+    {
+        visitor->traceWrappers(scriptWrappable->toImpl<TestObject>());
+    }
     template<typename VisitorDispatcher>
     static void trace(VisitorDispatcher visitor, ScriptWrappable* scriptWrappable)
     {
+        visitor->trace(scriptWrappable->toImpl<TestObject>());
     }
     static void customVoidMethodMethodCustom(const v8::FunctionCallbackInfo<v8::Value>&);
     static void customCallPrologueVoidMethodMethodPrologueCustom(const v8::FunctionCallbackInfo<v8::Value>&, TestObject*);
@@ -72,8 +86,9 @@ public:
     static void customGetterImplementedAsLongAttributeAttributeGetterCustom(const v8::FunctionCallbackInfo<v8::Value>&);
     static void customSetterImplementedAsLongAttributeAttributeSetterCustom(v8::Local<v8::Value>, const v8::FunctionCallbackInfo<v8::Value>&);
     static const int internalFieldCount = v8DefaultWrapperInternalFieldCount + 0;
-    static void installConditionallyEnabledProperties(v8::Local<v8::Object>, v8::Isolate*) { }
-    static void preparePrototypeAndInterfaceObject(v8::Local<v8::Context>, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate);
+    CORE_EXPORT static void preparePrototypeAndInterfaceObject(v8::Local<v8::Context>, const DOMWrapperWorld&, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate);
+
+    static void installFeatureName(ScriptState*, v8::Local<v8::Object> instance);
 };
 
 template <>

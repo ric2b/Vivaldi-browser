@@ -6,6 +6,7 @@
 #define ScriptValueSerializerForModules_h
 
 #include "bindings/core/v8/ScriptValueSerializer.h"
+#include "modules/mediastream/RTCCertificate.h"
 #include "public/platform/WebCrypto.h"
 #include "public/platform/WebCryptoKey.h"
 #include "public/platform/WebCryptoKeyAlgorithm.h"
@@ -24,6 +25,7 @@ public:
 
     void writeDOMFileSystem(int type, const String& name, const String& url);
     bool writeCryptoKey(const WebCryptoKey&);
+    void writeRTCCertificate(const RTCCertificate&);
 
 private:
     void doWriteHmacKey(const WebCryptoKey&);
@@ -53,6 +55,7 @@ public:
 private:
     bool readDOMFileSystem(v8::Local<v8::Value>*);
     bool readCryptoKey(v8::Local<v8::Value>*);
+    bool readRTCCertificate(v8::Local<v8::Value>*);
     bool doReadHmacKey(WebCryptoKeyAlgorithm&, WebCryptoKeyType&);
     bool doReadAesKey(WebCryptoKeyAlgorithm&, WebCryptoKeyType&);
     bool doReadRsaHashedKey(WebCryptoKeyAlgorithm&, WebCryptoKeyType&);
@@ -70,13 +73,14 @@ class ScriptValueSerializerForModules final : public ScriptValueSerializer {
     STACK_ALLOCATED();
     WTF_MAKE_NONCOPYABLE(ScriptValueSerializerForModules);
 public:
-    ScriptValueSerializerForModules(SerializedScriptValueWriter&, MessagePortArray* messagePorts, ArrayBufferArray* arrayBuffers, ImageBitmapArray* imageBitmaps, WebBlobInfoArray*, BlobDataHandleMap& blobDataHandles, v8::TryCatch&, ScriptState*);
+    ScriptValueSerializerForModules(SerializedScriptValueWriter&, const Transferables*, WebBlobInfoArray*, BlobDataHandleMap&, v8::TryCatch&, ScriptState*);
 
 private:
-    ScriptValueSerializer::StateBase* doSerializeValue(v8::Local<v8::Value>, ScriptValueSerializer::StateBase* next) override;
+    ScriptValueSerializer::StateBase* doSerializeObject(v8::Local<v8::Object>, ScriptValueSerializer::StateBase* next) override;
 
     ScriptValueSerializer::StateBase* writeDOMFileSystem(v8::Local<v8::Value>, ScriptValueSerializer::StateBase* next);
     bool writeCryptoKey(v8::Local<v8::Value>);
+    ScriptValueSerializer::StateBase* writeRTCCertificate(v8::Local<v8::Value>, ScriptValueSerializer::StateBase* next);
 };
 
 class ScriptValueDeserializerForModules final : public ScriptValueDeserializer {

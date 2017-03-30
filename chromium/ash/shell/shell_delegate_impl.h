@@ -12,6 +12,11 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 
+namespace app_list {
+class AppListPresenterDelegateFactory;
+class AppListPresenterImpl;
+}
+
 namespace keyboard {
 class KeyboardUI;
 }
@@ -42,7 +47,7 @@ class ShellDelegateImpl : public ash::ShellDelegate {
   void RemoveVirtualKeyboardStateObserver(
       VirtualKeyboardStateObserver* observer) override;
   void OpenUrl(const GURL& url) override;
-  app_list::AppListViewDelegate* GetAppListViewDelegate() override;
+  app_list::AppListPresenter* GetAppListPresenter() override;
   ShelfDelegate* CreateShelfDelegate(ShelfModel* model) override;
   ash::SystemTrayDelegate* CreateSystemTrayDelegate() override;
   ash::UserWallpaperDelegate* CreateUserWallpaperDelegate() override;
@@ -50,6 +55,9 @@ class ShellDelegateImpl : public ash::ShellDelegate {
   ash::AccessibilityDelegate* CreateAccessibilityDelegate() override;
   ash::NewWindowDelegate* CreateNewWindowDelegate() override;
   ash::MediaDelegate* CreateMediaDelegate() override;
+  std::unique_ptr<ContainerDelegate> CreateContainerDelegate() override;
+  std::unique_ptr<PointerWatcherDelegate> CreatePointerWatcherDelegate()
+      override;
   ui::MenuModel* CreateContextMenu(ash::Shelf* shelf,
                                    const ash::ShelfItem* item) override;
   GPUSupport* CreateGPUSupport() override;
@@ -58,7 +66,9 @@ class ShellDelegateImpl : public ash::ShellDelegate {
 
  private:
   ShelfDelegateImpl* shelf_delegate_;
-  std::unique_ptr<app_list::AppListViewDelegate> app_list_view_delegate_;
+  std::unique_ptr<app_list::AppListPresenterDelegateFactory>
+      app_list_presenter_delegate_factory_;
+  std::unique_ptr<app_list::AppListPresenterImpl> app_list_presenter_;
 
   DISALLOW_COPY_AND_ASSIGN(ShellDelegateImpl);
 };

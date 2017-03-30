@@ -30,14 +30,14 @@
 
 namespace blink {
 
-SetNodeAttributeCommand::SetNodeAttributeCommand(RawPtr<Element> element,
+SetNodeAttributeCommand::SetNodeAttributeCommand(Element* element,
     const QualifiedName& attribute, const AtomicString& value)
     : SimpleEditCommand(element->document())
     , m_element(element)
     , m_attribute(attribute)
     , m_value(value)
 {
-    ASSERT(m_element);
+    DCHECK(m_element);
 }
 
 void SetNodeAttributeCommand::doApply(EditingState*)

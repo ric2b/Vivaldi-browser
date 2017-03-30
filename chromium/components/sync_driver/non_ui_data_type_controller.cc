@@ -6,7 +6,7 @@
 
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/sync_driver/generic_change_processor_factory.h"
 #include "components/sync_driver/shared_change_processor_ref.h"
 #include "components/sync_driver/sync_api_component_factory.h"
@@ -270,8 +270,6 @@ void NonUIDataTypeController::DisableImpl(
                             ModelTypeToHistogramInt(type()),
                             syncer::MODEL_TYPE_COUNT);
   if (!model_load_callback_.is_null()) {
-    syncer::SyncMergeResult local_merge_result(type());
-    local_merge_result.set_error(error);
     model_load_callback_.Run(type(), error);
   }
 }
@@ -380,9 +378,9 @@ void NonUIDataTypeController::
     // Passes a reference to |shared_change_processor|.
     local_merge_result = local_service_->MergeDataAndStartSyncing(
         type(), initial_sync_data,
-        scoped_ptr<syncer::SyncChangeProcessor>(
+        std::unique_ptr<syncer::SyncChangeProcessor>(
             new SharedChangeProcessorRef(shared_change_processor)),
-        scoped_ptr<syncer::SyncErrorFactory>(
+        std::unique_ptr<syncer::SyncErrorFactory>(
             new SharedChangeProcessorRef(shared_change_processor)));
     RecordAssociationTime(base::TimeTicks::Now() - start_time);
     if (local_merge_result.error().IsSet()) {

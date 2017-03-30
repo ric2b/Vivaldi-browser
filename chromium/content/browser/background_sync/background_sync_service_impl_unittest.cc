@@ -5,13 +5,14 @@
 #include "content/browser/background_sync/background_sync_service_impl.h"
 
 #include <stdint.h>
+
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
-#include "content/browser/background_sync/background_sync_context_impl.h"
+#include "content/browser/background_sync/background_sync_context.h"
 #include "content/browser/background_sync/background_sync_network_observer.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
@@ -22,7 +23,7 @@
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/test/mock_permission_manager.h"
-#include "content/test/test_background_sync_context_impl.h"
+#include "content/test/test_background_sync_context.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
 #include "net/base/network_change_notifier.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -59,10 +60,10 @@ void FindServiceWorkerRegistrationCallback(
 
 void ErrorAndRegistrationCallback(
     bool* called,
-    mojom::BackgroundSyncError* out_error,
-    mojom::SyncRegistrationPtr* out_registration,
-    mojom::BackgroundSyncError error,
-    const mojom::SyncRegistrationPtr& registration) {
+    blink::mojom::BackgroundSyncError* out_error,
+    blink::mojom::SyncRegistrationPtr* out_registration,
+    blink::mojom::BackgroundSyncError error,
+    const blink::mojom::SyncRegistrationPtr& registration) {
   *called = true;
   *out_error = error;
   *out_registration = registration.Clone();
@@ -70,13 +71,13 @@ void ErrorAndRegistrationCallback(
 
 void ErrorAndRegistrationListCallback(
     bool* called,
-    mojom::BackgroundSyncError* out_error,
+    blink::mojom::BackgroundSyncError* out_error,
     unsigned long* out_array_size,
-    mojom::BackgroundSyncError error,
-    mojo::Array<content::mojom::SyncRegistrationPtr> registrations) {
+    blink::mojom::BackgroundSyncError error,
+    mojo::Array<blink::mojom::SyncRegistrationPtr> registrations) {
   *called = true;
   *out_error = error;
-  if (error == mojom::BackgroundSyncError::NONE)
+  if (error == blink::mojom::BackgroundSyncError::NONE)
     *out_array_size = registrations.size();
 }
 
@@ -88,7 +89,7 @@ class BackgroundSyncServiceImplTest : public testing::Test {
       : thread_bundle_(
             new TestBrowserThreadBundle(TestBrowserThreadBundle::IO_MAINLOOP)),
         network_change_notifier_(net::NetworkChangeNotifier::CreateMock()) {
-    default_sync_registration_ = mojom::SyncRegistration::New();
+    default_sync_registration_ = blink::mojom::SyncRegistration::New();
   }
 
   void SetUp() override {
@@ -118,7 +119,7 @@ class BackgroundSyncServiceImplTest : public testing::Test {
   void CreateTestHelper() {
     embedded_worker_helper_.reset(
         new EmbeddedWorkerTestHelper(base::FilePath()));
-    scoped_ptr<MockPermissionManager> mock_permission_manager(
+    std::unique_ptr<MockPermissionManager> mock_permission_manager(
         new testing::NiceMock<MockPermissionManager>());
     ON_CALL(*mock_permission_manager,
             GetPermissionStatus(PermissionType::BACKGROUND_SYNC, _, _))
@@ -134,7 +135,7 @@ class BackgroundSyncServiceImplTest : public testing::Test {
     storage_partition_impl_.reset(new StoragePartitionImpl(
         embedded_worker_helper_->browser_context(), base::FilePath(), nullptr,
         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-        nullptr, nullptr, nullptr, nullptr, nullptr));
+        nullptr, nullptr, nullptr, nullptr));
     embedded_worker_helper_->context_wrapper()->set_storage_partition(
         storage_partition_impl_.get());
   }
@@ -142,7 +143,7 @@ class BackgroundSyncServiceImplTest : public testing::Test {
   void CreateBackgroundSyncContext() {
     // Registering for background sync includes a check for having a same-origin
     // main frame. Use a test context that allows control over that check.
-    background_sync_context_ = new TestBackgroundSyncContextImpl();
+    background_sync_context_ = new TestBackgroundSyncContext();
     background_sync_context_->Init(embedded_worker_helper_->context_wrapper());
 
     // Tests do not expect the sync event to fire immediately after
@@ -179,8 +180,8 @@ class BackgroundSyncServiceImplTest : public testing::Test {
   void CreateBackgroundSyncServiceImpl() {
     // Create a dummy mojo channel so that the BackgroundSyncServiceImpl can be
     // instantiated.
-    mojo::InterfaceRequest<mojom::BackgroundSyncService> service_request =
-        mojo::GetProxy(&service_ptr_);
+    mojo::InterfaceRequest<blink::mojom::BackgroundSyncService>
+        service_request = mojo::GetProxy(&service_ptr_);
     // Create a new BackgroundSyncServiceImpl bound to the dummy channel.
     background_sync_context_->CreateService(std::move(service_request));
     base::RunLoop().RunUntilIdle();
@@ -191,72 +192,73 @@ class BackgroundSyncServiceImplTest : public testing::Test {
 
   // Helpers for testing BackgroundSyncServiceImpl methods
   void Register(
-      mojom::SyncRegistrationPtr sync,
-      const mojom::BackgroundSyncService::RegisterCallback& callback) {
+      blink::mojom::SyncRegistrationPtr sync,
+      const blink::mojom::BackgroundSyncService::RegisterCallback& callback) {
     service_impl_->Register(std::move(sync), sw_registration_id_, callback);
     base::RunLoop().RunUntilIdle();
   }
 
   void GetRegistrations(
-      const mojom::BackgroundSyncService::GetRegistrationsCallback& callback) {
+      const blink::mojom::BackgroundSyncService::GetRegistrationsCallback&
+          callback) {
     service_impl_->GetRegistrations(sw_registration_id_, callback);
     base::RunLoop().RunUntilIdle();
   }
 
-  scoped_ptr<TestBrowserThreadBundle> thread_bundle_;
-  scoped_ptr<net::NetworkChangeNotifier> network_change_notifier_;
-  scoped_ptr<EmbeddedWorkerTestHelper> embedded_worker_helper_;
-  scoped_ptr<StoragePartitionImpl> storage_partition_impl_;
-  scoped_refptr<BackgroundSyncContextImpl> background_sync_context_;
+  std::unique_ptr<TestBrowserThreadBundle> thread_bundle_;
+  std::unique_ptr<net::NetworkChangeNotifier> network_change_notifier_;
+  std::unique_ptr<EmbeddedWorkerTestHelper> embedded_worker_helper_;
+  std::unique_ptr<StoragePartitionImpl> storage_partition_impl_;
+  scoped_refptr<BackgroundSyncContext> background_sync_context_;
   int64_t sw_registration_id_;
   scoped_refptr<ServiceWorkerRegistration> sw_registration_;
-  mojom::BackgroundSyncServicePtr service_ptr_;
+  blink::mojom::BackgroundSyncServicePtr service_ptr_;
   BackgroundSyncServiceImpl*
       service_impl_;  // Owned by background_sync_context_
-  mojom::SyncRegistrationPtr default_sync_registration_;
+  blink::mojom::SyncRegistrationPtr default_sync_registration_;
 };
 
 // Tests
 
 TEST_F(BackgroundSyncServiceImplTest, Register) {
   bool called = false;
-  mojom::BackgroundSyncError error;
-  mojom::SyncRegistrationPtr reg;
+  blink::mojom::BackgroundSyncError error;
+  blink::mojom::SyncRegistrationPtr reg;
   Register(default_sync_registration_.Clone(),
            base::Bind(&ErrorAndRegistrationCallback, &called, &error, &reg));
   EXPECT_TRUE(called);
-  EXPECT_EQ(mojom::BackgroundSyncError::NONE, error);
+  EXPECT_EQ(blink::mojom::BackgroundSyncError::NONE, error);
   EXPECT_EQ("", reg->tag);
 }
 
 TEST_F(BackgroundSyncServiceImplTest, GetRegistrations) {
   bool called = false;
-  mojom::BackgroundSyncError error;
+  blink::mojom::BackgroundSyncError error;
   unsigned long array_size = 0UL;
   GetRegistrations(base::Bind(&ErrorAndRegistrationListCallback, &called,
                               &error, &array_size));
   EXPECT_TRUE(called);
-  EXPECT_EQ(mojom::BackgroundSyncError::NONE, error);
+  EXPECT_EQ(blink::mojom::BackgroundSyncError::NONE, error);
   EXPECT_EQ(0UL, array_size);
 }
 
 TEST_F(BackgroundSyncServiceImplTest, GetRegistrationsWithRegisteredSync) {
   bool register_called = false;
   bool getregistrations_called = false;
-  mojom::BackgroundSyncError register_error;
-  mojom::BackgroundSyncError getregistrations_error;
-  mojom::SyncRegistrationPtr register_reg;
+  blink::mojom::BackgroundSyncError register_error;
+  blink::mojom::BackgroundSyncError getregistrations_error;
+  blink::mojom::SyncRegistrationPtr register_reg;
   unsigned long array_size = 0UL;
   Register(default_sync_registration_.Clone(),
            base::Bind(&ErrorAndRegistrationCallback, &register_called,
                       &register_error, &register_reg));
   EXPECT_TRUE(register_called);
-  EXPECT_EQ(mojom::BackgroundSyncError::NONE, register_error);
+  EXPECT_EQ(blink::mojom::BackgroundSyncError::NONE, register_error);
   GetRegistrations(base::Bind(&ErrorAndRegistrationListCallback,
                               &getregistrations_called, &getregistrations_error,
                               &array_size));
   EXPECT_TRUE(getregistrations_called);
-  EXPECT_EQ(mojom::BackgroundSyncError::NONE, getregistrations_error);
+  EXPECT_EQ(blink::mojom::BackgroundSyncError::NONE, getregistrations_error);
   EXPECT_EQ(1UL, array_size);
 }
 

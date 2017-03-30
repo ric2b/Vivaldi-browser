@@ -39,7 +39,7 @@ using namespace HTMLNames;
 
 class FormAttributeTargetObserver : public IdTargetObserver {
 public:
-    static RawPtr<FormAttributeTargetObserver> create(const AtomicString& id, FormAssociatedElement*);
+    static FormAttributeTargetObserver* create(const AtomicString& id, FormAssociatedElement*);
     DECLARE_VIRTUAL_TRACE();
     void idTargetChanged() override;
 
@@ -153,11 +153,7 @@ void FormAssociatedElement::setForm(HTMLFormElement* newForm)
     if (m_form)
         m_form->disassociate(*this);
     if (newForm) {
-#if ENABLE(OILPAN)
         m_form = newForm;
-#else
-        m_form = newForm->createWeakPtr();
-#endif
         m_form->associate(*this);
     } else {
         m_form = nullptr;
@@ -278,7 +274,7 @@ void FormAssociatedElement::setCustomValidity(const String& error)
     m_customValidationMessage = error;
 }
 
-void FormAssociatedElement::setFormAttributeTargetObserver(RawPtr<FormAttributeTargetObserver> newObserver)
+void FormAssociatedElement::setFormAttributeTargetObserver(FormAttributeTargetObserver* newObserver)
 {
     if (m_formAttributeTargetObserver)
         m_formAttributeTargetObserver->unregister();
@@ -336,7 +332,7 @@ HTMLElement& toHTMLElement(FormAssociatedElement& associatedElement)
     return const_cast<HTMLElement&>(toHTMLElement(static_cast<const FormAssociatedElement&>(associatedElement)));
 }
 
-RawPtr<FormAttributeTargetObserver> FormAttributeTargetObserver::create(const AtomicString& id, FormAssociatedElement* element)
+FormAttributeTargetObserver* FormAttributeTargetObserver::create(const AtomicString& id, FormAssociatedElement* element)
 {
     return new FormAttributeTargetObserver(id, element);
 }

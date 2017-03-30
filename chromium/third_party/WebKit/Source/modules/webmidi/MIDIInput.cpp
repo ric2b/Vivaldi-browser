@@ -40,7 +40,7 @@ using PortState = MIDIAccessor::MIDIPortState;
 
 MIDIInput* MIDIInput::create(MIDIAccess* access, const String& id, const String& manufacturer, const String& name, const String& version, PortState state)
 {
-    ASSERT(access);
+    DCHECK(access);
     MIDIInput* input = new MIDIInput(access, id, manufacturer, name, version, state);
     input->suspendIfNeeded();
     return input;
@@ -65,18 +65,18 @@ void MIDIInput::setOnmidimessage(EventListener* listener)
     setAttributeEventListener(EventTypeNames::midimessage, listener);
 }
 
-bool MIDIInput::addEventListenerInternal(const AtomicString& eventType, EventListener* listener, const EventListenerOptions& options)
+void MIDIInput::addedEventListener(const AtomicString& eventType, RegisteredEventListener& registeredListener)
 {
+    MIDIPort::addedEventListener(eventType, registeredListener);
     if (eventType == EventTypeNames::midimessage) {
         // Implicit open. See setOnmidimessage().
         open();
     }
-    return EventTarget::addEventListenerInternal(eventType, listener, options);
 }
 
 void MIDIInput::didReceiveMIDIData(unsigned portIndex, const unsigned char* data, size_t length, double timeStamp)
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
 
     if (!length)
         return;
@@ -89,7 +89,7 @@ void MIDIInput::didReceiveMIDIData(unsigned portIndex, const unsigned char* data
     // unless the current process has an explicit permission to handle sysex message.
     if (data[0] == 0xf0 && !midiAccess()->sysexEnabled())
         return;
-    RefPtr<DOMUint8Array> array = DOMUint8Array::create(data, length);
+    DOMUint8Array* array = DOMUint8Array::create(data, length);
     dispatchEvent(MIDIMessageEvent::create(timeStamp, array));
 }
 

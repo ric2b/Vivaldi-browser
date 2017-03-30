@@ -4,7 +4,8 @@
 
 #include <stdint.h>
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
 #include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/ipc/service/gpu_channel.h"
 #include "gpu/ipc/service/gpu_channel_manager.h"
@@ -34,7 +35,6 @@ class TestGpuChannelManagerDelegate : public GpuChannelManagerDelegate {
  private:
   // GpuChannelManagerDelegate implementation:
   void SetActiveURL(const GURL& url) override;
-  void AddSubscription(int32_t client_id, unsigned int target) override;
   void DidCreateOffscreenContext(const GURL& active_url) override;
   void DidDestroyChannel(int client_id) override;
   void DidDestroyOffscreenContext(const GURL& active_url) override;
@@ -42,19 +42,9 @@ class TestGpuChannelManagerDelegate : public GpuChannelManagerDelegate {
                       error::ContextLostReason reason,
                       const GURL& active_url) override;
   void GpuMemoryUmaStats(const GPUMemoryUmaStats& params) override;
-  void RemoveSubscription(int32_t client_id, unsigned int target) override;
   void StoreShaderToDisk(int32_t client_id,
                          const std::string& key,
                          const std::string& shader) override;
-#if defined(OS_MACOSX)
-  void SendAcceleratedSurfaceBuffersSwapped(
-      int32_t surface_id,
-      CAContextID ca_context_id,
-      const gfx::ScopedRefCountedIOSurfaceMachPort& io_surface,
-      const gfx::Size& size,
-      float scale_factor,
-      std::vector<ui::LatencyInfo> latency_info) override;
-#endif
 #if defined(OS_WIN)
   void SendAcceleratedSurfaceCreatedChildWindow(
       SurfaceHandle parent_window,
@@ -75,7 +65,7 @@ class TestGpuChannelManager : public GpuChannelManager {
   ~TestGpuChannelManager() override;
 
  protected:
-  scoped_ptr<GpuChannel> CreateGpuChannel(
+  std::unique_ptr<GpuChannel> CreateGpuChannel(
       int client_id,
       uint64_t client_tracing_id,
       bool preempts,
@@ -116,6 +106,9 @@ class GpuChannelTestCommon : public testing::Test {
   GpuChannelTestCommon();
   ~GpuChannelTestCommon() override;
 
+  void SetUp() override;
+  void TearDown() override;
+
  protected:
   GpuChannelManager* channel_manager() { return channel_manager_.get(); }
   TestGpuChannelManagerDelegate* channel_manager_delegate() {
@@ -127,9 +120,9 @@ class GpuChannelTestCommon : public testing::Test {
   GpuPreferences gpu_preferences_;
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
   scoped_refptr<base::TestSimpleTaskRunner> io_task_runner_;
-  scoped_ptr<SyncPointManager> sync_point_manager_;
-  scoped_ptr<TestGpuChannelManagerDelegate> channel_manager_delegate_;
-  scoped_ptr<GpuChannelManager> channel_manager_;
+  std::unique_ptr<SyncPointManager> sync_point_manager_;
+  std::unique_ptr<TestGpuChannelManagerDelegate> channel_manager_delegate_;
+  std::unique_ptr<GpuChannelManager> channel_manager_;
 };
 
 }  // namespace gpu

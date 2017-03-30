@@ -32,7 +32,7 @@ class ATAACHelper final : public ATCodecHelper {
   ConvertAudioCB convert_audio_cb_;
   InputFormatKnownCB input_format_known_cb_;
   ScopedAudioChannelLayoutPtr input_channel_layout_;
-  scoped_ptr<AudioFormatReader> input_format_reader_;
+  std::unique_ptr<AudioFormatReader> input_format_reader_;
 
   DISALLOW_COPY_AND_ASSIGN(ATAACHelper);
 };

@@ -10,7 +10,8 @@
 #include "ash/sticky_keys/sticky_keys_controller.h"
 #include "ash/sticky_keys/sticky_keys_overlay.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
@@ -188,16 +189,16 @@ TEST_F(EventRewriterTest, TestRewriteCommandToControl) {
 
       // VKEY_LWIN (left Windows key), Alt modifier.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT,
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT,
         ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN, ui::DomKey::META},
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT,
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT,
         ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN, ui::DomKey::META}},
 
       // VKEY_RWIN (right Windows key), Alt modifier.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_RWIN, ui::DomCode::OS_RIGHT,
+       {ui::VKEY_RWIN, ui::DomCode::META_RIGHT,
         ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN, ui::DomKey::META},
-       {ui::VKEY_RWIN, ui::DomCode::OS_RIGHT,
+       {ui::VKEY_RWIN, ui::DomCode::META_RIGHT,
         ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN, ui::DomKey::META}},
   };
 
@@ -233,14 +234,14 @@ TEST_F(EventRewriterTest, TestRewriteCommandToControl) {
 
       // VKEY_LWIN (left Windows key), Alt modifier.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT,
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT,
         ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN, ui::DomKey::META},
        {ui::VKEY_CONTROL, ui::DomCode::CONTROL_LEFT,
         ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, ui::DomKey::CONTROL}},
 
       // VKEY_RWIN (right Windows key), Alt modifier.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_RWIN, ui::DomCode::OS_RIGHT,
+       {ui::VKEY_RWIN, ui::DomCode::META_RIGHT,
         ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN, ui::DomKey::META},
        {ui::VKEY_CONTROL, ui::DomCode::CONTROL_RIGHT,
         ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, ui::DomKey::CONTROL}},
@@ -286,7 +287,7 @@ TEST_F(EventRewriterTest, TestRewriteCommandToControlWithControlRemapped) {
       // VKEY_LWIN (left Command key) with  Alt modifier. The remapped Command
       // key should never be re-remapped to Alt.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT,
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT,
         ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN, ui::DomKey::META},
        {ui::VKEY_CONTROL, ui::DomCode::CONTROL_LEFT,
         ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, ui::DomKey::CONTROL}},
@@ -294,7 +295,7 @@ TEST_F(EventRewriterTest, TestRewriteCommandToControlWithControlRemapped) {
       // VKEY_RWIN (right Command key) with  Alt modifier. The remapped Command
       // key should never be re-remapped to Alt.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_RWIN, ui::DomCode::OS_RIGHT,
+       {ui::VKEY_RWIN, ui::DomCode::META_RIGHT,
         ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN, ui::DomKey::META},
        {ui::VKEY_CONTROL, ui::DomCode::CONTROL_RIGHT,
         ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, ui::DomKey::CONTROL}},
@@ -488,12 +489,9 @@ TEST_F(EventRewriterTest, TestRewriteNumPadKeys) {
 
 TEST_F(EventRewriterTest, TestRewriteNumPadKeysWithDiamondKeyFlag) {
   // Make sure the num lock works correctly even when Diamond key exists.
-  const base::CommandLine original_cl(*base::CommandLine::ForCurrentProcess());
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       chromeos::switches::kHasChromeOSDiamondKey, "");
-
   TestRewriteNumPadKeys();
-  *base::CommandLine::ForCurrentProcess() = original_cl;
 }
 
 // Tests if the rewriter can handle a Command + Num Pad event.
@@ -551,8 +549,8 @@ TEST_F(EventRewriterTest, TestRewriteModifiersNoRemap) {
   KeyTestCase tests[] = {
       // Press Search. Confirm the event is not rewritten.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT, ui::EF_NONE, ui::DomKey::META},
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT, ui::EF_COMMAND_DOWN,
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT, ui::EF_NONE, ui::DomKey::META},
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT, ui::EF_COMMAND_DOWN,
         ui::DomKey::META}},
 
       // Press left Control. Confirm the event is not rewritten.
@@ -584,8 +582,8 @@ TEST_F(EventRewriterTest, TestRewriteModifiersNoRemap) {
       // Test KeyRelease event, just in case.
       // Release Search. Confirm the release event is not rewritten.
       {ui::ET_KEY_RELEASED,
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT, ui::EF_NONE, ui::DomKey::META},
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT, ui::EF_NONE, ui::DomKey::META}},
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT, ui::EF_NONE, ui::DomKey::META},
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT, ui::EF_NONE, ui::DomKey::META}},
   };
 
   for (const auto& test : tests) {
@@ -609,16 +607,16 @@ TEST_F(EventRewriterTest, TestRewriteModifiersNoRemapMultipleKeys) {
 
       // Press Search with Caps Lock mask. Confirm the event is not rewritten.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT,
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT,
         ui::EF_CAPS_LOCK_ON | ui::EF_COMMAND_DOWN, ui::DomKey::META},
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT,
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT,
         ui::EF_CAPS_LOCK_ON | ui::EF_COMMAND_DOWN, ui::DomKey::META}},
 
       // Release Search with Caps Lock mask. Confirm the event is not rewritten.
       {ui::ET_KEY_RELEASED,
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT, ui::EF_CAPS_LOCK_ON,
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT, ui::EF_CAPS_LOCK_ON,
         ui::DomKey::META},
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT, ui::EF_CAPS_LOCK_ON,
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT, ui::EF_CAPS_LOCK_ON,
         ui::DomKey::META}},
 
       // Press Shift+Ctrl+Alt+Search+A. Confirm the event is not rewritten.
@@ -664,7 +662,7 @@ TEST_F(EventRewriterTest, TestRewriteModifiersDisableSome) {
 
       // Press Search. Confirm the event is now VKEY_UNKNOWN.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT, ui::EF_NONE, ui::DomKey::META},
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT, ui::EF_NONE, ui::DomKey::META},
        {ui::VKEY_UNKNOWN, ui::DomCode::NONE, ui::EF_NONE,
         ui::DomKey::UNIDENTIFIED}},
 
@@ -678,7 +676,7 @@ TEST_F(EventRewriterTest, TestRewriteModifiersDisableSome) {
       // Press Control+Search. Confirm the event is now VKEY_UNKNOWN
       // without any modifiers.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT, ui::EF_CONTROL_DOWN,
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT, ui::EF_CONTROL_DOWN,
         ui::DomKey::META},
        {ui::VKEY_UNKNOWN, ui::DomCode::NONE, ui::EF_NONE,
         ui::DomKey::UNIDENTIFIED}},
@@ -746,7 +744,7 @@ TEST_F(EventRewriterTest, TestRewriteModifiersRemapToControl) {
   KeyTestCase s_tests[] = {
       // Press Search. Confirm the event is now VKEY_CONTROL.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT, ui::EF_COMMAND_DOWN,
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT, ui::EF_COMMAND_DOWN,
         ui::DomKey::META},
        {ui::VKEY_CONTROL, ui::DomCode::CONTROL_LEFT, ui::EF_CONTROL_DOWN,
         ui::DomKey::CONTROL}},
@@ -770,14 +768,14 @@ TEST_F(EventRewriterTest, TestRewriteModifiersRemapToControl) {
 
       // Press Alt+Search. Confirm the event is now VKEY_CONTROL.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT,
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT,
         ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN, ui::DomKey::META},
        {ui::VKEY_CONTROL, ui::DomCode::CONTROL_LEFT, ui::EF_CONTROL_DOWN,
         ui::DomKey::CONTROL}},
 
       // Press Control+Alt+Search. Confirm the event is now VKEY_CONTROL.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT,
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT,
         ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN,
         ui::DomKey::META},
        {ui::VKEY_CONTROL, ui::DomCode::CONTROL_LEFT, ui::EF_CONTROL_DOWN,
@@ -786,7 +784,7 @@ TEST_F(EventRewriterTest, TestRewriteModifiersRemapToControl) {
       // Press Shift+Control+Alt+Search. Confirm the event is now Control with
       // Shift and Control modifiers.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT,
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT,
         ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN |
             ui::EF_COMMAND_DOWN,
         ui::DomKey::META},
@@ -824,7 +822,7 @@ TEST_F(EventRewriterTest, TestRewriteModifiersRemapToEscape) {
   KeyTestCase tests[] = {
       // Press Search. Confirm the event is now VKEY_ESCAPE.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT, ui::EF_COMMAND_DOWN,
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT, ui::EF_COMMAND_DOWN,
         ui::DomKey::META},
        {ui::VKEY_ESCAPE, ui::DomCode::ESCAPE, ui::EF_NONE, ui::DomKey::ESCAPE}},
   };
@@ -849,7 +847,7 @@ TEST_F(EventRewriterTest, TestRewriteModifiersRemapMany) {
   KeyTestCase s2a_tests[] = {
       // Press Search. Confirm the event is now VKEY_MENU.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT, ui::EF_COMMAND_DOWN,
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT, ui::EF_COMMAND_DOWN,
         ui::DomKey::META},
        {ui::VKEY_MENU, ui::DomCode::ALT_LEFT, ui::EF_ALT_DOWN,
         ui::DomKey::ALT}},
@@ -900,12 +898,12 @@ TEST_F(EventRewriterTest, TestRewriteModifiersRemapMany) {
       {ui::ET_KEY_PRESSED,
        {ui::VKEY_CONTROL, ui::DomCode::CONTROL_LEFT, ui::EF_CONTROL_DOWN,
         ui::DomKey::CONTROL},
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT, ui::EF_COMMAND_DOWN,
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT, ui::EF_COMMAND_DOWN,
         ui::DomKey::META}},
 
       // Then, press all of the three, Control+Alt+Search.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT,
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT,
         ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN,
         ui::DomKey::META},
        {ui::VKEY_MENU, ui::DomCode::ALT_LEFT,
@@ -914,7 +912,7 @@ TEST_F(EventRewriterTest, TestRewriteModifiersRemapMany) {
 
       // Press Shift+Control+Alt+Search.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT,
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT,
         ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN |
             ui::EF_COMMAND_DOWN,
         ui::DomKey::META},
@@ -960,7 +958,7 @@ TEST_F(EventRewriterTest, TestRewriteModifiersRemapToCapsLock) {
                 ui::ET_KEY_PRESSED, ui::VKEY_CAPITAL, ui::DomCode::CAPS_LOCK,
                 ui::EF_MOD3_DOWN | ui::EF_CAPS_LOCK_ON, ui::DomKey::CAPS_LOCK),
             GetRewrittenEventAsString(&rewriter, ui::ET_KEY_PRESSED,
-                                      ui::VKEY_LWIN, ui::DomCode::OS_LEFT,
+                                      ui::VKEY_LWIN, ui::DomCode::META_LEFT,
                                       ui::EF_COMMAND_DOWN, ui::DomKey::META));
   // Confirm that the Caps Lock status is changed.
   EXPECT_TRUE(ime_keyboard.caps_lock_is_enabled_);
@@ -970,7 +968,7 @@ TEST_F(EventRewriterTest, TestRewriteModifiersRemapToCapsLock) {
                                       ui::DomCode::CAPS_LOCK, ui::EF_NONE,
                                       ui::DomKey::CAPS_LOCK),
             GetRewrittenEventAsString(&rewriter, ui::ET_KEY_RELEASED,
-                                      ui::VKEY_LWIN, ui::DomCode::OS_LEFT,
+                                      ui::VKEY_LWIN, ui::DomCode::META_LEFT,
                                       ui::EF_NONE, ui::DomKey::META));
   // Confirm that the Caps Lock status is not changed.
   EXPECT_TRUE(ime_keyboard.caps_lock_is_enabled_);
@@ -980,7 +978,7 @@ TEST_F(EventRewriterTest, TestRewriteModifiersRemapToCapsLock) {
                 ui::ET_KEY_PRESSED, ui::VKEY_CAPITAL, ui::DomCode::CAPS_LOCK,
                 ui::EF_CAPS_LOCK_ON | ui::EF_MOD3_DOWN, ui::DomKey::CAPS_LOCK),
             GetRewrittenEventAsString(&rewriter, ui::ET_KEY_PRESSED,
-                                      ui::VKEY_LWIN, ui::DomCode::OS_LEFT,
+                                      ui::VKEY_LWIN, ui::DomCode::META_LEFT,
                                       ui::EF_COMMAND_DOWN | ui::EF_CAPS_LOCK_ON,
                                       ui::DomKey::META));
   // Confirm that the Caps Lock status is changed.
@@ -991,7 +989,7 @@ TEST_F(EventRewriterTest, TestRewriteModifiersRemapToCapsLock) {
                                       ui::DomCode::CAPS_LOCK, ui::EF_NONE,
                                       ui::DomKey::CAPS_LOCK),
             GetRewrittenEventAsString(&rewriter, ui::ET_KEY_RELEASED,
-                                      ui::VKEY_LWIN, ui::DomCode::OS_LEFT,
+                                      ui::VKEY_LWIN, ui::DomCode::META_LEFT,
                                       ui::EF_NONE, ui::DomKey::META));
   // Confirm that the Caps Lock status is not changed.
   EXPECT_FALSE(ime_keyboard.caps_lock_is_enabled_);
@@ -2395,6 +2393,31 @@ TEST_F(EventRewriterAshTest, MouseWheelEventDispatchImpl) {
             static_cast<ui::KeyEvent*>(events[1])->key_code());
 }
 
+// Tests that if modifier keys are remapped, the flags of a mouse wheel event
+// will be rewritten properly.
+TEST_F(EventRewriterAshTest, MouseWheelEventModifiersRewritten) {
+  // Remap Control to Alt.
+  IntegerPrefMember control;
+  control.Init(prefs::kLanguageRemapControlKeyTo, prefs());
+  control.SetValue(chromeos::input_method::kAltKey);
+
+  // Generate a mouse wheel event that has a CONTROL_DOWN modifier flag and
+  // expect that it will be rewritten to ALT_DOWN.
+  ScopedVector<ui::Event> events;
+  gfx::Point location(0, 0);
+  ui::MouseEvent mev(
+      ui::ET_MOUSEWHEEL, location, location, ui::EventTimeForNow(),
+      ui::EF_LEFT_MOUSE_BUTTON | ui::EF_CONTROL_DOWN, ui::EF_LEFT_MOUSE_BUTTON);
+  ui::MouseWheelEvent positive(mev, 0, ui::MouseWheelEvent::kWheelDelta);
+  ui::EventDispatchDetails details = Send(&positive);
+  ASSERT_FALSE(details.dispatcher_destroyed);
+  PopEvents(&events);
+  EXPECT_EQ(1u, events.size());
+  EXPECT_TRUE(events[0]->IsMouseWheelEvent());
+  EXPECT_FALSE(events[0]->flags() & ui::EF_CONTROL_DOWN);
+  EXPECT_TRUE(events[0]->flags() & ui::EF_ALT_DOWN);
+}
+
 class StickyKeysOverlayTest : public EventRewriterAshTest {
  public:
   StickyKeysOverlayTest() : overlay_(NULL) {}
@@ -2535,9 +2558,9 @@ TEST_F(StickyKeysOverlayTest, ModifiersDisabled) {
                                ui::DomKey::SHIFT);
   SendActivateStickyKeyPattern(ui::VKEY_LMENU, ui::DomCode::ALT_LEFT,
                                ui::DomKey::ALT);
-  SendActivateStickyKeyPattern(ui::VKEY_COMMAND, ui::DomCode::OS_LEFT,
+  SendActivateStickyKeyPattern(ui::VKEY_COMMAND, ui::DomCode::META_LEFT,
                                ui::DomKey::META);
-  SendActivateStickyKeyPattern(ui::VKEY_COMMAND, ui::DomCode::OS_LEFT,
+  SendActivateStickyKeyPattern(ui::VKEY_COMMAND, ui::DomCode::META_LEFT,
                                ui::DomKey::META);
 
   EXPECT_TRUE(overlay_->is_visible());
@@ -2561,7 +2584,7 @@ TEST_F(StickyKeysOverlayTest, ModifiersDisabled) {
                                ui::DomKey::ALT);
   SendActivateStickyKeyPattern(ui::VKEY_LMENU, ui::DomCode::ALT_LEFT,
                                ui::DomKey::ALT);
-  SendActivateStickyKeyPattern(ui::VKEY_COMMAND, ui::DomCode::OS_LEFT,
+  SendActivateStickyKeyPattern(ui::VKEY_COMMAND, ui::DomCode::META_LEFT,
                                ui::DomKey::META);
 
   EXPECT_FALSE(overlay_->is_visible());

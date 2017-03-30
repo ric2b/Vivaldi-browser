@@ -534,12 +534,22 @@ bool CreditCard::UpdateFromImportedCard(const CreditCard& imported_card,
     return false;
   }
 
-  // Heuristically aggregated data should never overwrite verified data.
-  // Instead, discard any heuristically aggregated credit cards that disagree
-  // with explicitly entered data, so that the UI is not cluttered with
-  // duplicate cards.
-  if (this->IsVerified() && !imported_card.IsVerified())
+  // Heuristically aggregated data should never overwrite verified data, with
+  // the exception of expired verified cards. Instead, discard any heuristically
+  // aggregated credit cards that disagree with explicitly entered data, so that
+  // the UI is not cluttered with duplicate cards.
+  if (this->IsVerified() && !imported_card.IsVerified()) {
+    // If the original card is expired and the imported card is not, and the
+    // name on the cards are identical, update the expiration date.
+    if (this->IsExpired(base::Time::Now()) &&
+        !imported_card.IsExpired(base::Time::Now()) &&
+        (name_on_card_ == imported_card.name_on_card_)) {
+      DCHECK(imported_card.expiration_month_ && imported_card.expiration_year_);
+      expiration_month_ = imported_card.expiration_month_;
+      expiration_year_ = imported_card.expiration_year_;
+    }
     return true;
+  }
 
   set_origin(imported_card.origin());
 
@@ -769,6 +779,17 @@ bool CreditCard::ConvertMonth(const base::string16& month,
   }
 
   return false;
+}
+
+bool CreditCard::IsExpired(const base::Time& current_time) const {
+  return !IsValidCreditCardExpirationDate(expiration_year_, expiration_month_,
+                                          current_time);
+}
+
+bool CreditCard::ShouldUpdateExpiration(const base::Time& current_time) const {
+  // Local cards always have OK server status.
+  DCHECK(server_status_ == OK || record_type_ != LOCAL_CARD);
+  return server_status_ == EXPIRED || IsExpired(current_time);
 }
 
 // So we can compare CreditCards with EXPECT_EQ().

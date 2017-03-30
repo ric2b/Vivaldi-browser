@@ -264,6 +264,9 @@ class WebContents;
 // Default indentation for tabs (see |leftIndentForControls_|).
 + (CGFloat)defaultLeftIndentForControls;
 
+// Returns the amount by which tabs overlap.
++ (CGFloat)tabOverlap;
+
 // Returns the currently active TabContentsController.
 - (TabContentsController*)activeTabContentsController;
 
@@ -287,6 +290,9 @@ class WebContents;
 // Returns the alert state associated with the contents.
 - (TabAlertState)alertStateForContents:(content::WebContents*)contents;
 
+// Leaving visual effects enabled when fullscreen results in higher power
+// consumption. This is used to disable effects when fullscreen.
+- (void)setVisualEffectsDisabledForFullscreen:(BOOL)disabled;
 @end
 
 @interface TabStripController(TestingAPI)

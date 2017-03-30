@@ -2,13 +2,11 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="de">
 <translation id="101438888985615157">Bildschirm um 180 Grad drehen</translation>
-<translation id="1015272884520659144">Definiert die Liste der USB-Geräte, die vom jeweiligen Kerneltreiber getrennt werden können, um über die chrome.usb API direkt in einer Webanwendung eingesetzt zu werden. Die Einträge bestehen aus der USB-Hersteller-ID und der Produkt-ID, über die die Hardware identifiziert werden kann.
-
-      Wenn diese Richtlinie nicht konfiguriert ist, wird die Liste der trennbaren USB-Geräte als leer betrachtet.</translation>
 <translation id="1017967144265860778">Energieverwaltung auf dem Anmeldebildschirm</translation>
 <translation id="1019101089073227242">Verzeichnis für Nutzerdaten festlegen</translation>
 <translation id="1022361784792428773">Erweiterungs-IDs, die der Nutzer nicht installieren darf ("*" für alle)</translation>
 <translation id="102492767056134033">Standardstatus für die Bildschirmtastatur auf der Anmeldeseite festlegen</translation>
+<translation id="1040446814317236570">Stripping von PAC-URLs für https:// aktivieren</translation>
 <translation id="1044878202534415707">Mit dieser Richtlinie können Hardwarestatistiken wie CPU/RAM-Auslastung abgerufen werden.
 
       Wenn die Richtlinie auf "false" eingestellt ist, werden keine Statistiken ausgegeben.
@@ -64,7 +62,6 @@
       Wenn die Richtlinie nicht konfiguriert oder auf "false" festgelegt ist, werden RC4-Verschlüsselungssammlungen in TLS nicht aktiviert. Sie kann auf "true" gestellt werden, um die Kompatibilität mit veralteten Servern zu gewährleisten. Hierbei handelt es sich jedoch um eine provisorische Maßnahme. Der Server sollte neu konfiguriert werden.</translation>
 <translation id="1297182715641689552">PAC-Proxy-Skript verwenden</translation>
 <translation id="1304973015437969093">Ohne Nutzereingriff zu installierende Erweiterungs-/App-IDs und Aktualisierungs-URLs</translation>
-<translation id="1310699457130669094">Hier können Sie eine URL zu einer Proxy-PAC-Datei angeben. Diese Richtlinie tritt nur dann in Kraft, wenn Sie bei "Auswählen, wie Proxyserver-Einstellungen angegeben werden" manuelle Proxy-Einstellungen angegeben haben. Sie sollten diese Richtlinie nicht konfigurieren, wenn Sie sich für eine andere Methode zur Festlegung der Proxy-Richtlinien entschieden haben. Ausführliche Beispiele erhalten Sie unter <ph name="PROXY_HELP_URL" />.</translation>
 <translation id="1313457536529613143">Hiermit wird der Prozentsatz angegeben, um den die Spanne für die Bildschirmabdunkelung skaliert wird, wenn während der Bildschirmabdunkelung oder kurz nach der Bildschirmabschaltung Nutzeraktivität festgestellt wird.
 
           Wenn diese Richtlinie konfiguriert ist, wird damit der Prozentsatz für die Skalierung der Spanne für die Bildschirmabdunkelung angegeben, wenn während der Bildschirmabdunkelung oder kurz nach der Bildschirmabschaltung Nutzeraktivität festgestellt wird. Sollte die Abdunkelungsspanne skaliert werden, wird die Spanne für die Abschaltung und Sperre des Bildschirms sowie die Inaktivität so angepasst, dass die Abstände der ursprünglichen Konfiguration proportional beibehalten werden.
@@ -148,6 +145,11 @@
 <translation id="1608755754295374538">URLs, denen ohne Nachfrage Zugriff auf Audioaufnahmegeräte gestattet wird</translation>
 <translation id="1617235075406854669">Löschen des Browserverlaufs und des Downloadverlaufs aktivieren</translation>
 <translation id="1617384279878333801">"Person hinzufügen" im Profilmanager aktivieren</translation>
+<translation id="163200210584085447">Muster in dieser Liste werden mit der Sicherheitsherkunft
+      der anfragenden URL abgeglichen. Bei einer Übereinstimmung wird der Zugriff
+      auf Videoaufnahmegeräte auf SAML-Log-in-Seiten gestattet. Wird keine Übereinstimmung
+      erkannt, dann wird der Zugriff automatisch verweigert. Platzhaltermuster
+      sind nicht zulässig.</translation>
 <translation id="1655229863189977773">Cache-Größe für Datenträger in Byte festlegen</translation>
 <translation id="166427968280387991">Proxyserver</translation>
 <translation id="1675002386741412210">Unterstützt von:</translation>
@@ -226,7 +228,6 @@ Diese Richtlinien sind nur aktiv, wenn der Chrome Remote Desktop-Host installier
       Wenn diese Option aktiviert wurde, wird während einer aktiven Sitzung und bei nicht gesperrtem Bildschirm eine große, rote Schaltfläche "Abmelden" in der Taskleiste angezeigt.
 
       Wenn diese Option deaktiviert oder nicht spezifiziert wurde, befindet sich in der Taskleiste keine große, rote Schaltfläche "Abmelden".</translation>
-<translation id="1942957375738056236">Hier können Sie die URL des Proxyservers angeben. Die Richtlinie tritt nur dann in Kraft, wenn bei "Auswählen, wie Proxyserver-Einstellungen angegeben werden" manuelle Proxy-Einstellungen festgelegt wurden. Sie sollten diese Richtlinie nicht konfigurieren, wenn Sie eine andere Methode zur Festlegung der Proxy-Richtlinien ausgewählt haben. Weitere Optionen und ausführliche Beispiele finden Sie unter <ph name="PROXY_HELP_URL" />.</translation>
 <translation id="1956493342242507974">Konfiguriert die Energieverwaltung auf dem Anmeldebildschirm in <ph name="PRODUCT_OS_NAME" />.
 
       Mit dieser Richtlinie konfigurieren Sie, wie <ph name="PRODUCT_OS_NAME" /> sich verhalten soll, wenn auf dem Anmeldebildschirm keine Nutzeraktivität erfolgt. Durch die Richtlinie werden mehrere Einstellungen festgelegt. Deren Semantik und zulässige Wertebereiche finden Sie unter den entsprechenden Richtlinien zur Steuerung der Energieverwaltung innerhalb einer Sitzung. Diese Richtlinie unterscheidet sich nur in folgenden Punkten:
@@ -260,6 +261,7 @@ Diese Richtlinien sind nur aktiv, wenn der Chrome Remote Desktop-Host installier
 <translation id="2113068765175018713">Betriebsdauer der Geräte durch automatische Neustarts begrenzen</translation>
 <translation id="2127599828444728326">Benachrichtigungen auf diesen Websites zulassen</translation>
 <translation id="2131902621292742709">Verzögerung für die Bildschirmabdunkelung im Akkubetrieb</translation>
+<translation id="2134437727173969994">Sperren des Bildschirms erlauben</translation>
 <translation id="2137064848866899664">Bei Festlegen dieser Richtlinie wird jeder Bildschirm bei
       jedem Neustart und beim erstmaligen Herstellen der Verbindung nach
       Änderung des Richtlinienwerts in die angegebene Ausrichtung gedreht.
@@ -314,6 +316,7 @@ Diese Richtlinien sind nur aktiv, wenn der Chrome Remote Desktop-Host installier
 <translation id="2309390639296060546">Standardeinstellung für "geolocation"</translation>
 <translation id="2312134445771258233">Mit dieser Richtlinie können Sie konfigurieren, welche Seiten beim Start geladen werden. Der Inhalt der Liste "Beim Start zu öffnende URLs" wird ignoriert, sofern die Option "URL-Liste öffnen" unter "Aktion beim Start" nicht ausgewählt ist.</translation>
 <translation id="2337466621458842053">Ermöglicht Ihnen die Zusammenstellung einer Liste mit URL-Mustern, die Websites angeben, denen das Anzeigen von Bildern gestattet ist. Wenn diese Richtlinie nicht konfiguriert wird, so kommt für alle Websites entweder der globale Standardwert der Richtlinie "DefaultImagesSetting", falls konfiguriert, oder der persönlichen Konfiguration des Nutzers zum Einsatz.</translation>
+<translation id="2366415278352956652">Aktiviert Cast</translation>
 <translation id="2371309782685318247">Gibt das Intervall in Millisekunden an, in dem Informationen zu Nutzerrichtlinien vom Geräteverwaltungsdienst abgerufen werden.
 
       Durch das Festlegen dieser Richtlinie wird der Standardwert von 3 Stunden außer Kraft gesetzt. Gültige Werte für diese Richtlinie liegen im Bereich zwischen 1800000 (30 Minuten) und 86400000 (1 Tag). Alle Werte, die nicht in diesem Bereich liegen, werden auf den jeweiligen Grenzwert gesetzt.
@@ -462,7 +465,6 @@ Falls die Richtlinie auf "false" gesetzt wird, kann eine verzögerungsfreie auto
       Ist die Richtlinie nicht festgelegt, kann der Nutzer festlegen, ob die Funktion für den Datenkomprimierungs-Proxy verwendet werden soll oder nicht.</translation>
 <translation id="2587719089023392205"><ph name="PRODUCT_NAME" /> als Standardbrowser festlegen</translation>
 <translation id="2592091433672667839">Dauer der Inaktivität, bevor im Händlermodus der Bildschirmschoner auf der Anmeldeseite erscheint</translation>
-<translation id="260705825237536216">ARC-Apps konfigurieren</translation>
 <translation id="2623014935069176671">Auf erste Nutzeraktivität warten</translation>
 <translation id="262740370354162807">Senden von Dokumenten an <ph name="CLOUD_PRINT_NAME" /> aktivieren</translation>
 <translation id="2633084400146331575">Gesprochenes Feedback aktivieren</translation>
@@ -472,6 +474,7 @@ Falls die Richtlinie auf "false" gesetzt wird, kann eine verzögerungsfreie auto
 <translation id="267596348720209223">Gibt die vom Suchanbieter unterstützten Zeichencodierungen an. Codierungen sind Codepage-Namen wie UTF-8, GB2312 und ISO-8859-1. Sie werden in der Reihenfolge durchprobiert, in der sie angegeben werden. Diese Richtlinie ist optional. Ist sie nicht konfiguriert, so kommt der Standardwert UTF-8 zum Einsatz. Diese Richtlinie wird nur umgesetzt, wenn die Richtlinie "DefaultSearchProviderEnabled" aktiviert ist.</translation>
 <translation id="2682225790874070339">Synchronisierung zwischen Google Drive und der App "Dateien" von <ph name="PRODUCT_OS_NAME" /> deaktivieren</translation>
 <translation id="268577405881275241">Funktion für Datenkomprimierungs-Proxy aktivieren</translation>
+<translation id="2731627323327011390">Verwendung von <ph name="PRODUCT_OS_NAME" />-Zertifikaten für ARC-Apps deaktivieren</translation>
 <translation id="2742843273354638707">Hiermit werden die Chrome Web Store App und der zugehörige Fußzeilenlink auf der "Neuer Tab"-Seite und im App Launcher von <ph name="PRODUCT_OS_NAME" /> ausgeblendet.
 
       Ist diese Richtlinie auf "true" gesetzt, werden die Symbole ausgeblendet.
@@ -522,6 +525,22 @@ Falls die Richtlinie auf "false" gesetzt wird, kann eine verzögerungsfreie auto
           Bei den Einträgen in dieser Liste handelt es sich um auf die Erweiterung angepasste Übereinstimmungsmuster (siehe https://developer.chrome.com/extensions/match_patterns). Wenn eine URL mit einem Eintrag in dieser Liste übereinstimmt, können Nutzer ihn ganz einfach über diese URL installieren. Sowohl der Speicherort der CRX-Datei als auch die Seite, über die der Download gestartet wird (der Referrer), müssen durch diese Muster zugelassen sein.
 
           "ExtensionInstallBlacklist" hat Vorrang vor dieser Richtlinie. Eine Erweiterung auf der schwarzen Liste wird folglich nicht installiert, auch wenn sie von einer Website auf dieser Liste stammt.</translation>
+<translation id="2813740161943223811">Diese Richtlinie ist veraltet. Verwenden Sie stattdessen "ProxyMode".
+
+          Mit dieser Richtlinie können Sie angeben, welcher Proxyserver von <ph name="PRODUCT_NAME" /> verwendet werden soll, und verhindern, dass Nutzer die Proxy-Einstellungen ändern. Dieser Proxyserver kann auch von ARC-Apps verwendet werden.
+
+          Wenn Sie festlegen, dass nie ein Proxyserver verwendet, sondern immer eine direkte Verbindung hergestellt wird, werden alle anderen Optionen ignoriert.
+
+          Falls Sie bestimmen, dass die Proxy-Einstellungen des Systems verwendet werden sollen oder der Proxyserver automatisch erkannt werden soll, werden ebenfalls alle anderen Optionen ignoriert.
+
+          Bei der Auswahl manueller Proxy-Einstellungen können Sie in "Adresse oder URL des Proxyservers", "URL einer PAC-Proxy-Datei" und "Kommagetrennte Liste der Proxy-Umgehungsregeln" weitere Optionen angeben. Nur der HTTP-Proxyserver mit der höchsten Priorität ist für ARC-Apps verfügbar.
+
+          Ausführliche Beispiele erhalten Sie unter
+          <ph name="PROXY_HELP_URL" />.
+
+          Wenn Sie diese Einstellung aktivieren, werden von <ph name="PRODUCT_NAME" /> alle Proxy-Optionen ignoriert, die in der Befehlszeile angegeben werden.
+
+          Wenn die Richtlinie nicht konfiguriert ist, können Nutzer die Proxy-Einstellungen selbst konfigurieren.</translation>
 <translation id="2824715612115726353">Inkognitomodus aktivieren</translation>
 <translation id="2844404652289407061">Durch diese Richtlinie wird die Verfügbarkeit von "Zum Suchen tippen" in der Inhaltsansicht von <ph name="PRODUCT_NAME" /> aktiviert.
 
@@ -628,6 +647,18 @@ Falls die Richtlinie auf "false" gesetzt oder nicht festgelegt wird, treten bei 
           </translation>
 <translation id="3205825995289802549">Erstes Browserfenster bei der ersten Ausführung maximieren</translation>
 <translation id="3206731874112238027">Druckvorschau deaktivieren (eingestellt)</translation>
+<translation id="3208854390109736596">Darüber können Sie festlegen, welcher Proxyserver von <ph name="PRODUCT_NAME" /> verwendet werden soll, und verhindern, dass Nutzer Proxy-Einstellungen ändern. Dieser Proxyserver kann auch von ARC-Apps verwendet werden.
+
+      Wenn Sie festlegen, dass kein Proxyserver verwendet, sondern immer eine direkte Verbindung hergestellt werden soll, werden alle anderen Optionen ignoriert.
+
+      Wenn Sie festlegen, dass der Proxyserver automatisch erkannt werden soll, werden alle anderen Optionen ebenfalls ignoriert.
+
+      Ausführliche Beispiele finden Sie unter
+      <ph name="PROXY_HELP_URL" />.
+
+      Wenn Sie diese Einstellung aktivieren, werden von <ph name="PRODUCT_NAME" /> und den ARC-Apps alle Proxy-Optionen ignoriert, die in der Befehlszeile angegeben werden.
+
+      Wenn die Richtlinie nicht konfiguriert ist, so können Nutzer die Proxy-Einstellungen selbst konfigurieren.</translation>
 <translation id="3213821784736959823">Legt fest, ob der integrierte DNS-Client von <ph name="PRODUCT_NAME" /> verwendet werden soll.
 
       Wenn diese Richtlinie auf "true" gesetzt wurde, wird, falls verfügbar, der integrierte DNS-Client verwendet.
@@ -655,6 +686,7 @@ Falls die Richtlinie auf "false" gesetzt oder nicht festgelegt wird, treten bei 
      Wenn diese Einstellung aktiviert ist oder nicht konfiguriert wurde, können Nutzer den Google Cloud Print-Proxy durch die Authentifizierung mit ihrem Google-Konto aktivieren.
 
        Ist diese Einstellung deaktiviert, können Nutzer den Proxy nicht aktivieren und der Computer darf seine Drucker nicht für <ph name="CLOUD_PRINT_NAME" /> freigeben.</translation>
+<translation id="3297010562646015826">Ermöglicht das Beenden von Prozessen im Task-Manager</translation>
 <translation id="3322771899429619102">Ermöglicht Ihnen die Erstellung einer Liste mit URL-Mustern, die Websites angeben, denen die Schlüsselgenerierung gestattet ist. Wenn ein URL-Muster in "KeygenBlockedForUrls" angegeben ist, werden diese Ausnahmen dadurch überschrieben.
 
           Wenn diese Richtlinie nicht konfiguriert ist, wird für alle Websites entweder der globale Standardwert der Richtlinie "DefaultKeygenSetting", sofern festgelegt, oder die persönliche Konfiguration des Nutzers verwendet.</translation>
@@ -677,6 +709,9 @@ Falls die Richtlinie auf "false" gesetzt oder nicht festgelegt wird, treten bei 
 
       Ist die Richtlinie auf "false" eingestellt, können in <ph name="PRODUCT_OS_NAME" /> keine Gastsitzungen gestartet werden.</translation>
 <translation id="3428247105888806363">Netzwerkvervollständigung aktivieren</translation>
+<translation id="3449886121729668969">Hiermit werden die Proxy-Einstellungen für <ph name="PRODUCT_NAME" /> konfiguriert. Diese Proxy-Einstellungen können auch von ARC-Apps verwendet werden.
+
+      Diese Richtlinie ist noch nicht einsatzbereit und sollte daher nicht verwendet werden.</translation>
 <translation id="3460784402832014830">Gibt die URL an, die eine Suchmaschine zum Bereitstellen der "Neuer Tab"-Seite verwendet.
 
           Diese Richtlinie ist optional. Ist sie nicht festgelegt, wird keine "Neuer Tab"-Seite bereitgestellt.
@@ -686,28 +721,19 @@ Falls die Richtlinie auf "false" gesetzt oder nicht festgelegt wird, treten bei 
           Wenn diese Richtlinie auf "true" gesetzt ist, wie die erste Aktivität des Nutzers in einer Sitzung als Ausgangspunkt für Verzögerungen beim Energiesparmodus und Begrenzungen der Sitzungslänge verwendet.
 
           Ist die Richtlinie auf "false" gesetzt oder nicht definiert, wird der Start der Sitzung als Ausgangspunkt für Verzögerungen beim Energiesparmodus und Begrenzungen der Sitzungslänge verwendet.</translation>
+<translation id="3469657928310999477">Von <ph name="PRODUCT_NAME" /> werden für die Liste der hier angegebenen Hosts alle Proxys umgangen. Diese Liste kann auch von ARC-Apps als eine Umgehungsregelliste verwendet werden.
+
+          Diese Richtlinie tritt nur dann in Kraft, wenn Sie bei "Auswählen, wie Proxyserver-Einstellungen angegeben werden" manuelle Proxy-Einstellungen angegeben haben.
+
+          Sie sollten diese Richtlinie nicht konfigurieren, wenn Sie sich für eine andere Methode zur Festlegung der Proxy-Richtlinien entschieden haben.
+
+          Ausführliche Beispiele erhalten Sie unter
+          <ph name="PROXY_HELP_URL" />.</translation>
 <translation id="3478024346823118645">Nutzerdaten bei Abmeldung löschen</translation>
 <translation id="348495353354674884">Bildschirmtastatur aktivieren</translation>
 <translation id="3496296378755072552">Passwortmanager</translation>
 <translation id="349667858031092827">Zeitzone nie automatisch erkennen.</translation>
-<translation id="3502472987829488885">Mit diesen Richtlinien können Sie angeben, welchen Proxyserver <ph name="PRODUCT_NAME" /> und ARC-Apps verwenden, und verhindern, dass Nutzer die Proxy-Einstellungen ändern.
-
-          Wenn Sie festlegen, dass nie ein Proxyserver verwendet, sondern immer eine direkte Verbindung hergestellt wird, werden alle anderen Optionen ignoriert. In diesem Fall wird von ARC-Apps der aktuelle Standard-Proxyserver des Netzwerks verwendet, sofern einer vorhanden ist.
-
-          Wenn Sie angeben, die Proxy-Einstellungen des Systems zu verwenden, werden alle anderen Optionen ignoriert. In diesem Fall wird von ARC-Apps der aktuelle Standard-Proxyserver des Netzwerks verwendet, sofern einer vorhanden ist.
-
-          Sollten Sie die automatische Erkennung des Proxyservers wählen, werden ebenfalls alle anderen Optionen ignoriert.
-
-          Bei Auswahl des Modus mit festem Proxyserver können Sie in "Adresse oder URL des Proxyservers" und "Kommagetrennte Liste der Proxy-Umgehungsregeln" weitere Optionen angeben. Für ARC-Apps wird nur der HTTP-Proxyserver mit der höchsten Priorität verwendet.
-
-         Zur Verwendung eines PAC-Proxy-Skripts müssen Sie die URL des Skripts im Feld "URL einer PAC-Proxy-Datei" angeben.
-
-          Ausführliche Beispiele finden Sie unter
-          <ph name="PROXY_HELP_URL" />.
-
-         Wenn Sie diese Einstellung aktivieren, werden in <ph name="PRODUCT_NAME" /> und den ARC-Apps alle Proxy-Optionen ignoriert, die in der Eingabeaufforderung angegeben werden.
-
-          Sind diese Richtlinien nicht konfiguriert, können Nutzer ihre eigenen Proxy-Einstellungen auswählen.</translation>
+<translation id="350443680860256679">ARC konfigurieren</translation>
 <translation id="3504791027627803580">Gibt die URL der Suchmaschine für die Bildsuche an. Suchanfragen werden mithilfe der GET-Methode gesendet. Wenn die Richtlinie "DefaultSearchProviderBildURLPostParams" festgelegt ist, wird bei Bildsuchanfragen stattdessen die POST-Methode verwendet.
 
           Diese Richtlinie ist optional. Wenn sie nicht festlegt ist, wird keine Bildsuche verwendet.
@@ -824,6 +850,7 @@ Falls die Richtlinie nicht festgelegt wird, bleibt die Varianten-Seed-URL unver�
 <translation id="3967075520570946456">Einblendung der Begrüßungsseite beim ersten Start des Browsers nach einer Aktualisierung des Betriebssystems aktivieren</translation>
 <translation id="3973371701361892765">Ablage nie automatisch ausblenden</translation>
 <translation id="3984028218719007910">Legt fest, ob lokale Kontodaten nach der Abmeldung in <ph name="PRODUCT_OS_NAME" /> gespeichert werden. Bei Einstellung auf "true" werden Konten nicht dauerhaft in <ph name="PRODUCT_OS_NAME" /> gespeichert und alle Daten der Nutzersitzung werden nach der Abmeldung verworfen. Ist die Richtlinie auf "false" gesetzt oder nicht konfiguriert, können (verschlüsselte) lokale Nutzerdaten auf dem Gerät verbleiben.</translation>
+<translation id="3997519162482760140">URLs, denen auf SAML-Log-in-Seiten Zugriff auf Videoaufnahmegeräte gestattet wird</translation>
 <translation id="4001275826058808087">IT-Administratoren von Unternehmensgeräten können hiermit festlegen, ob Nutzer Angebote über die Chrome OS-Registrierung einlösen können.
 
       Wenn diese Richtlinie auf "True" gesetzt oder nicht konfiguriert ist, können Nutzer Angebote über die Chrome OS-Registrierung einlösen.
@@ -841,22 +868,6 @@ Falls die Richtlinie nicht festgelegt wird, bleibt die Varianten-Seed-URL unver�
           Wenn für diese Richtlinie "Cookies für die Dauer der Sitzung beibehalten" festgelegt wurde, werden die Cookies nach Beenden der Sitzung wieder entfernt. Hinweis: Wenn <ph name="PRODUCT_NAME" /> im Hintergrundmodus ausgeführt wird, wird die Sitzung beim Schließen des letzten Fensters möglicherweise nicht beendet. Rufen Sie für weitere Informationen zum Konfigurieren dieses Verhaltens die Richtlinie "BackgroundModeEnabled" auf.
 
           Wenn diese Richtlinie nicht konfiguriert wird, kommt "AllowCookies" zum Einsatz. Nutzer können sie dann ändern.</translation>
-<translation id="4098957623809244159">Verwenden Sie statt dieser Richtlinie "ProxyMode", da die Richtlinie veraltet ist.
-
-          Mit dieser Richtlinie können Sie angeben, welcher Proxyserver für <ph name="PRODUCT_NAME" /> und die ARC-Apps verwendet werden soll, und verhindern, dass Nutzer die Proxy-Einstellungen ändern.
-
-          Wenn Sie festlegen, dass nie ein Proxyserver verwendet, sondern immer eine direkte Verbindung hergestellt wird, werden alle anderen Optionen ignoriert.
-
-          Falls Sie bestimmen, dass die Proxy-Einstellungen des Systems verwendet werden sollen oder der Proxyserver automatisch ermittelt werden soll, werden alle anderen Optionen ignoriert.
-
-          Bei Auswahl manueller Proxy-Einstellungen können Sie in "Adresse oder URL des Proxyservers", "URL einer PAC-Proxy-Datei" und "Kommagetrennte Liste der Proxy-Umgehungsregeln" weitere Optionen angeben.
-
-          Ausführliche Beispiele finden Sie unter
-          <ph name="PROXY_HELP_URL" />.
-
-          Wenn Sie diese Einstellung aktivieren, werden in <ph name="PRODUCT_NAME" /> alle Proxy-Optionen ignoriert, die per Eingabeaufforderung angegeben werden.
-
-          Sind diese Richtlinien nicht konfiguriert, können Nutzer ihre eigenen Proxy-Einstellungen auswählen.</translation>
 <translation id="4103289232974211388">Nach Bestätigung durch Nutzer an SAML-IdP weiterleiten</translation>
 <translation id="410478022164847452">Hiermit wird angegeben, nach welchem Zeitraum ohne Nutzereingabe die Inaktivität im Netzbetrieb erfolgt.
 
@@ -865,6 +876,9 @@ Falls die Richtlinie nicht festgelegt wird, bleibt die Varianten-Seed-URL unver�
           Ist diese Richtlinie nicht konfiguriert, wird ein Standardwert verwendet.
 
           Der Wert für die Richtlinie muss in Millisekunden angegeben werden.</translation>
+<translation id="4115096483386877940">Sperren des Bildschirms erlauben
+
+      Ist diese Richtlinie auf "False" festgelegt, dann können Nutzer den Bildschirm nicht sperren, sondern sich lediglich von der Nutzersitzung abmelden. Ist diese Einstellung hingegen auf "True" oder gar nicht festgelegt, dann können Nutzer, die sich mit einem Passwort authentifiziert haben, den Bildschirm sperren.</translation>
 <translation id="4121350739760194865">App-Werbung nicht auf der "Neuer Tab"-Seite anzeigen</translation>
 <translation id="4147054660081653009">Clientzertifikat zur Herstellung einer Verbindung zu "RemoteAccessHostTokenValidationUrl"
 
@@ -936,6 +950,7 @@ Falls die Richtlinie nicht festgelegt wird, bleibt die Varianten-Seed-URL unver�
 <translation id="4449545651113180484">Bildschirm um 270 Grad im Uhrzeigersinn drehen</translation>
 <translation id="4467952432486360968">Drittanbieter-Cookies blockieren</translation>
 <translation id="4474167089968829729">Aktiviert das Speichern von Passwörtern im Passwortmanager</translation>
+<translation id="447686899376429408">Wenn diese Richtlinie nicht oder auf "true" festgelegt ist, können Nutzer Tabs, Websites oder den Desktop über den Browser streamen. Ist sie auf "false" festgelegt, wird diese Option deaktiviert.</translation>
 <translation id="4480694116501920047">SafeSearch erzwingen</translation>
 <translation id="4482640907922304445">Zeigt die Schaltfläche "Startseite" in der Symbolleiste von <ph name="PRODUCT_NAME" /> an. Wenn Sie diese Einstellung aktivieren, so wird die Schaltfläche "Startseite" immer angezeigt. Sollten Sie sie deaktivieren, erscheint die Schaltfläche nicht. Ist diese Einstellung aktiviert oder deaktiviert, können Nutzer sie in <ph name="PRODUCT_NAME" /> nicht ändern oder außer Kraft setzen. Ist die Richtlinie nicht konfiguriert, so kann der Nutzer selbst bestimmen, ob die Schaltfläche "Startseite" zur Verfügung stehen soll.</translation>
 <translation id="4492287494009043413">Aufnahme von Screenshots deaktivieren</translation>
@@ -1137,13 +1152,6 @@ Falls die Richtlinie auf "false" gesetzt wird, werden Anfragen für Bildschirm-W
 <translation id="5307432759655324440">Inkognitomodus - Verfügbarkeit</translation>
 <translation id="5318185076587284965">Verwendung von Relayservern durch den Host für den Remote-Zugriff gestatten</translation>
 <translation id="5330684698007383292">Verarbeitung der folgenden Inhaltstypen durch <ph name="PRODUCT_FRAME_NAME" /> zulassen</translation>
-<translation id="5345267406698765263">Gibt die ARC-Anwendungsrichtlinie als JSON-String an, der im aktuellen Zustand
-      für die ARC-Laufzeit übergeben werden kann. Im Moment wird die
-      Einstellung nur dazu verwendet, die erzwungene Installation der Anwendungen
-      anzugeben.
-
-      Wenn diese Richtlinie nicht konfiguriert ist, werden keine Anwendungen
-      automatisch installiert.</translation>
 <translation id="5365946944967967336">Startseiten-Schaltfläche auf Symbolleiste anzeigen</translation>
 <translation id="5366977351895725771">Wurde "false" festgelegt, kann dieser Nutzer keine betreuten Nutzer erstellen. Alle vorhandenen betreuten Nutzer sind weiterhin verfügbar.
 
@@ -1260,7 +1268,6 @@ Falls die Richtlinie auf "false" gesetzt wird, werden Anfragen für Bildschirm-W
       Wird diese Einstellung nicht konfiguriert, wird das Standardverzeichnis des Profils verwendet.</translation>
 <translation id="5826047473100157858">Gibt an, ob der Nutzer Seiten in <ph name="PRODUCT_NAME" /> im Inkognitomodus öffnen kann. Ist diese Richtlinie aktiviert oder nicht konfiguriert, so können Seiten im Inkognitomodus geöffnet werden. Wenn sie deaktiviert ist, so können Seiten nicht im Inkognitomodus geöffnet werden. Mit dem Wert "Forced" können Seiten ausschließlich im Inkognitomodus geöffnet werden.</translation>
 <translation id="5836064773277134605">Vom Host für den Remote-Zugriff verwendeten UDP-Portbereich einschränken</translation>
-<translation id="5845159892130426052">ShowModalDialog API über 2015.04.30 aktivieren</translation>
 <translation id="5862253018042179045">Hiermit wird der Standardstatus der Bedienungshilfefunktion für das gesprochene Feedback auf der Anmeldeseite festgelegt.
 
           Ist diese Richtlinie auf "true" gesetzt, ist das gesprochene Feedback aktiviert, wenn die Anmeldeseite angezeigt wird.
@@ -1291,14 +1298,6 @@ Falls die Richtlinie auf "false" gesetzt wird, werden Anfragen für Bildschirm-W
 <translation id="5893553533827140852">Wenn diese Einstellung aktiviert ist, wird für Anfragen zur Gnubby-Authentifizierung ein Proxy über eine Remotehostverbindung verwendet.
 
 Wenn diese Einstellung deaktiviert oder nicht konfiguriert ist, wird kein Proxy für Anfragen zur Gnubby-Authentifizierung verwendet.</translation>
-<translation id="5900959132054596599"><ph name="PRODUCT_NAME" /> und die ARC-Apps umgehen für die Liste der hier angegebenen Hosts alle Proxys.
-
-          Diese Richtlinie tritt nur dann in Kraft, wenn Sie unter "Auswählen, wie Proxy-Server-Einstellungen angegeben werden" manuelle Proxy-Einstellungen ausgewählt haben.
-
-          Konfigurieren Sie diese Richtlinie nicht, wenn Sie sich für eine andere Methode zum Festlegen der Proxy-Richtlinien entschieden haben.
-
-          Ausführliche Beispiele finden Sie unter
-          <ph name="PROXY_HELP_URL" />.</translation>
 <translation id="5921713479449475707">Downloads automatischer Updates über HTTP zulassen</translation>
 <translation id="5921888683953999946">Hiermit wird der Standardstatus der Bedienungshilfefunktion für den großen Cursor auf der Anmeldeseite festgelegt.
 
@@ -1344,6 +1343,9 @@ Wenn diese Einstellung deaktiviert oder nicht konfiguriert ist, wird kein Proxy 
       Diese Richtlinie gilt für alle Arten von Speichermedien, wie USB-Speichersticks, externe Festplatten, SD-Karten und andere Speicherkarten sowie optische Speichermedien. Der interne Speicher ist nicht betroffen, im Downloadordner gespeicherte Dateien können darum weiterhin abgerufen werden. Diese Richtlinie hat ebenfalls keine Auswirkungen auf Google Drive.
 
       Ist diese Einstellung deaktiviert oder nicht konfiguriert, können die Nutzer alle unterstützten externen Speichermedien auf ihrem Gerät verwenden.</translation>
+<translation id="6076099373507468537">Hiermit wird die Liste der USB-Geräte definiert, die vom jeweiligen Kerneltreiber getrennt werden können, um über die chrome.usb API direkt in einer Webanwendung eingesetzt zu werden. Die Einträge bestehen aus der USB-Hersteller-ID und der Produkt-ID, über die die Hardware identifiziert werden kann.
+
+      Wenn diese Richtlinie nicht konfiguriert ist, ist die Liste der trennbaren USB-Geräte leer.</translation>
 <translation id="6095999036251797924">Gibt die Zeitdauer ohne Nutzeraktivität an, nach der der Bildschirm im Netz- oder Akkubetrieb gesperrt wird.
 
           Wenn ein Wert über null angegeben wird, steht dieser Wert für die Zeitdauer, für die ein Nutzer inaktiv sein muss, bevor der Bildschirm durch <ph name="PRODUCT_OS_NAME" /> gesperrt wird.
@@ -1675,11 +1677,6 @@ Speicherinformationen werden unabhängig von der gewählten Option an die Seite 
 
           Falls die Richtlinie "RestoreOnStartup" zur Wiederherstellung von URLs aus vorherigen Sitzungen festgelegt ist, wird diese Richtlinie ignoriert und Cookies werden dauerhaft für die jeweiligen Websites gespeichert.</translation>
 <translation id="7207095846245296855">Google SafeSearch erzwingen</translation>
-<translation id="7213425178181578730">Wenn diese Richtlinie auf "falsch" gesetzt ist, wird Bluetooth von <ph name="PRODUCT_OS_NAME" /> deaktiviert und der Nutzer kann es nicht wieder aktivieren.
-
-      Wenn diese Richtlinie auf "wahr" gesetzt oder gar nicht eingestellt wird, kann der Nutzer Bluetooth nach Belieben aktivieren und deaktivieren.
-
-      Wenn diese Richtlinie eingestellt ist, kann der Nutzer dies nicht außer Kraft setzen.</translation>
 <translation id="7216442368414164495">Ermöglicht Nutzern die Aktivierung erweiterter Berichterstellung bei Verwendung von Safe Browsing</translation>
 <translation id="7227967227357489766">Definiert eine Liste mit Nutzern, die sich auf dem Gerät anmelden dürfen. Die Einträge haben das Format <ph name="USER_WHITELIST_ENTRY_FORMAT" />, zum Beispiel <ph name="USER_WHITELIST_ENTRY_EXAMPLE" />. Um allen Nutzern in einer Domain die Anmeldung zu erlauben, verwenden Sie Einträge im Format <ph name="USER_WHITELIST_ENTRY_WILDCARD" />.
 
@@ -1692,6 +1689,7 @@ Speicherinformationen werden unabhängig von der gewählten Option an die Seite 
           Wenn Sie diese Richtlinie konfigurieren, können die Nutzer sie vorübergehend außer Kraft setzen, indem sie die Lupe aktivieren bzw. deaktivieren. Die Nutzerauswahl ist jedoch nicht dauerhaft und die Standardeinstellung wird wiederhergestellt, sobald die Anmeldeseite erneut angezeigt wird oder der Nutzer auf der Anmeldeseite eine Minute lang inaktiv ist.
 
           Falls diese Richtlinie nicht konfiguriert wird, ist die Lupe deaktiviert, wenn die Anmeldeseite das erste Mal angezeigt wird. Die Nutzer können die Lupe jederzeit aktivieren oder deaktivieren und dieser Status bleibt auf der Anmeldeseite erhalten.</translation>
+<translation id="7249828445670652637"><ph name="PRODUCT_OS_NAME" />-CA-Zertifikate für ARC-Apps aktivieren</translation>
 <translation id="7258823566580374486">Zugangsbeschränkung für Remote-Zugriff-Hosts aktivieren</translation>
 <translation id="7260277299188117560">P2P für automatische Updates aktivieren</translation>
 <translation id="7267809745244694722">Medientasten standardmäßig als Funktionstasten verwenden</translation>
@@ -1780,9 +1778,6 @@ Speicherinformationen werden unabhängig von der gewählten Option an die Seite 
 <translation id="7632724434767231364">Name der GSSAPI-Bibliothek</translation>
 <translation id="7635471475589566552">Konfiguriert das App-Gebietsschema in <ph name="PRODUCT_NAME" /> und verhindert, dass Nutzer das Gebietsschema ändern. Wenn Sie diese Einstellung aktivieren, verwendet <ph name="PRODUCT_NAME" /> das angegebene Gebietsschema. Wird das konfigurierte Gebietsschema nicht unterstützt, kommt stattdessen "en-US" zum Einsatz. Ist diese Einstellung deaktiviert oder nicht konfiguriert, verwendet <ph name="PRODUCT_NAME" /> das vom Nutzer angegebene bevorzugte Gebietsschema (sofern konfiguriert), das Gebietsschema des Systems oder das Ersatz-Gebietsschema "en-US".</translation>
 <translation id="7651739109954974365">Legt fest, ob Daten-Roaming für das Gerät aktiviert werden soll. Bei Einstellung auf "true" ist das Roaming erlaubt. Ist die Richtlinie nicht konfiguriert oder auf "false" gesetzt, ist kein Roaming verfügbar.</translation>
-<translation id="7667184304362487902">Hiermit werden die Proxy-Einstellungen für <ph name="PRODUCT_NAME" /> und die ARC-Apps konfiguriert.
-
-      Diese Richtlinie ist noch nicht einsatzbereit und sollte daher nicht verwendet werden.</translation>
 <translation id="76810863974142048">URL, unter der Clients für den Remotezugriff ihr Authentifizierungstoken anfordern sollen
 
           Wenn diese Richtlinie konfiguriert ist, benötigt der Host für den Remotezugriff Authentifizierungsclients, um ein Authentifizierungstoken von dieser URL zum Aufbau einer Verbindung anzufordern. Diese Richtlinie muss in Verbindung mit "RemoteAccessHostTokenValidationUrl" verwendet werden.
@@ -1839,6 +1834,14 @@ Speicherinformationen werden unabhängig von der gewählten Option an die Seite 
       nicht gesendet. Wird für die Richtlinie "true" festgelegt oder wird sie nicht konfiguriert,
       werden Sitzungsinformationen gesendet.</translation>
 <translation id="7774768074957326919">System-Proxy-Einstellungen verwenden</translation>
+<translation id="7775831859772431793">Hier können Sie die URL des Proxyservers angeben.
+
+          Die Richtlinie tritt nur dann in Kraft, wenn bei "Auswählen, wie Proxyserver-Einstellungen angegeben werden" manuelle Proxy-Einstellungen festgelegt wurden.
+
+          Sie sollten diese Richtlinie nicht konfigurieren, wenn Sie eine andere Methode zur Festlegung der Proxy-Richtlinien ausgewählt haben.
+
+          Weitere Optionen und ausführliche Beispiele finden Sie unter
+          <ph name="PROXY_HELP_URL" />.</translation>
 <translation id="7788511847830146438">Nach Profil</translation>
 <translation id="7796141075993499320">Ermöglicht die Zusammenstellung einer Liste mit URL-Mustern, die Websites angeben, denen die Ausführung von Plug-ins gestattet ist. Wenn diese Richtlinie nicht konfiguriert ist, kommt für alle Websites entweder der globale Standardwert der Richtlinie "DefaultPluginsSetting", sofern konfiguriert, oder der persönlichen Konfiguration des Nutzers zu Einsatz.</translation>
 <translation id="7818131573217430250">Standardstatus für den Modus mit hohem Kontrast auf der Anmeldeseite festlegen</translation>
@@ -1864,25 +1867,25 @@ Speicherinformationen werden unabhängig von der gewählten Option an die Seite 
       Wenn diese Richtlinie konfiguriert ist, verhält sie sich so, als wäre "TimezoneAutomaticDetectionUsersDecide" aktiviert.
 
       Ist die Richtlinie "SystemTimezone" aktiviert, wird diese Richtlinie überschrieben. In diesem Fall ist die automatische Erkennung der Zeitzone komplett deaktiviert.</translation>
+<translation id="787125417158068494"><ph name="PRODUCT_OS_NAME" />-Zertifikate sind nicht für ARC-Apps verfügbar, wenn "SyncDisabled" festgelegt wurde oder die Zertifikate nicht konfiguriert wurden.
+
+      Wenn "CopyCaCerts" festgelegt wurde, sind alle über ONC installierten CA-Zertifikate mit <ph name="WEB_TRUSTED_BIT" /> für ARC-Apps verfügbar.</translation>
 <translation id="7882585827992171421">Diese Richtlinie ist nur im Händlermodus aktiv.
 
       Bestimmt die ID der Erweiterung, die als Bildschirmschoner auf der Anmeldeseite verwendet werden soll. Die Erweiterung muss Teil des App-Pakets sein, das in der DeviceAppPack-Richtlinie für diese Domain konfiguriert wurde.</translation>
 <translation id="7882890448959833986">Warnung für nicht unterstützte Betriebssysteme unterdrücken</translation>
 <translation id="7912255076272890813">Zulässige App- bzw. Erweiterungstypen konfigurieren</translation>
-<translation id="7928112526630078979">Mit diesen Richtlinien können Sie angeben, welchen Proxyserver <ph name="PRODUCT_NAME" /> und ARC-Apps verwenden, und verhindern, dass Nutzer die Proxy-Einstellungen ändern.
+<translation id="7915236031252389808">Hier können Sie eine URL zu einer Proxy-PAC-Datei angeben.
 
-      Wenn Sie festlegen, dass nie ein Proxyserver verwendet, sondern immer eine direkte Verbindung hergestellt wird, werden alle anderen Optionen ignoriert. In diesem Fall wird von ARC-Apps der aktuelle Standard-Proxyserver des Netzwerks verwendet, sofern einer vorhanden ist.
+          Diese Richtlinie tritt nur dann in Kraft, wenn Sie bei "Auswählen, wie Proxyserver-Einstellungen angegeben werden" manuelle Proxy-Einstellungen angegeben haben.
 
-      Sollten Sie die automatische Erkennung des Proxyservers wählen, werden ebenfalls alle anderen Optionen ignoriert.
+          Sie sollten diese Richtlinie nicht konfigurieren, wenn Sie sich für eine andere Methode zur Festlegung der Proxy-Richtlinien entschieden haben.
 
-      Ausführliche Beispiele finden Sie unter
-      <ph name="PROXY_HELP_URL" />.
-
-      Wenn Sie diese Einstellung aktivieren, werden in <ph name="PRODUCT_NAME" /> und den ARC-Apps alle Proxy-Optionen ignoriert, die in der Eingabeaufforderung angegeben werden.
-
-      Sind diese Richtlinien nicht konfiguriert, können Nutzer ihre eigenen Proxy-Einstellungen auswählen.</translation>
+          Ausführliche Beispiele erhalten Sie unter
+          <ph name="PROXY_HELP_URL" />.</translation>
 <translation id="793134539373873765">Gibt an, ob P2P für die Nutzdaten von Betriebssystem-Updates verwendet werden soll. Falls auf "True" gesetzt, teilen die Geräte Update-Nutzdaten im LAN und versuchen, die Daten von dort zu laden. Dadurch wird potenziell weniger Internetbandbreite verbraucht und es kommt seltener zu Datenstaus. Wenn die Update-Nutzdaten nicht im LAN verfügbar sind, lädt das Gerät sie ersatzweise von einem Updateserver herunter. Ist diese Option auf "False" gesetzt oder nicht konfiguriert, wird P2P nicht verwendet.</translation>
 <translation id="7933141401888114454">Erstellung von betreuten Nutzern aktivieren</translation>
+<translation id="793473937901685727">Verfügbarkeit von Zertifikaten für ARC-Apps festlegen</translation>
 <translation id="7936098023732125869">Ermöglicht die Verwendung einer Standardsuchmaschine
 
           Ist diese Einstellung aktiviert, wird eine Standardsuche durchgeführt, wenn der Nutzer Text in die Omnibox eingibt, der keine URL ist.
@@ -1988,6 +1991,17 @@ Wenn eine Erweiterung nicht in der Liste enthalten ist oder keine Liste festgele
       Wenn diese Richtlinie nicht eingerichtet wurde, verwendet <ph name="PRODUCT_OS_NAME" /> die E-Mail-Konto-ID des entsprechenden lokalen Gerätekontos als Anzeigename auf der Anmeldeseite.
 
       Diese Richtlinie ist für reguläre Nutzerkonten nicht relevant.</translation>
+<translation id="8279832363395120715">Entfernt datenschutz- und sicherheitsrelevante Teile aus https://-URLs, bevor diese an PAC-Skripts (Proxy Auto Config) weitergeleitet werden, die von <ph name="PRODUCT_NAME" /> während der Proxy-Auflösung verwendet werden.
+
+Wird diese Richtlinie nicht festgelegt oder auf "true" gesetzt, wird für https://-URLs vor der Weiterleitung an ein PAC-Skript standardmäßig ein Stripping durchgeführt. Auf diese Weise können für das PAC-Skript keine Daten eingesehen werden, die normalerweise durch einen verschlüsselten Kanal wie Pfad und Abfrage der URL geschützt sind.
+
+Wird die Richtlinie auf "false" gesetzt, ist diese Sicherheitsfunktion deaktiviert und für PAC-Skripts können alle Komponenten einer https://-URL eingesehen werden. Diese Einstellung gilt für alle PAC-Skripts, unabhängig von ihrem Ursprung. Sie gilt beispielsweise für PAC-Skripts, die über WPAD erlangt werden, sowie für solche, die über ein unsicheres Transportprotokoll abgerufen wurden.
+
+Diese Richtlinie ist standardmäßig auf "true", also Aktivierung der Sicherheitsfunktion, eingestellt, außer für Chrome OS Enterprise-Nutzer, für die diese Richtlinie standardmäßig auf "false" eingestellt ist.
+
+Es wird empfohlen, diese Richtlinie auf "true" einzustellen. Der einzige Grund, sie auf "false" einzustellen, besteht, wenn ein Kompatibilitätsproblem mit vorhandenen PAC-Skripts auftritt.
+
+Diese Außerkraftsetzung soll in Zukunft beseitigt werden.</translation>
 <translation id="8285435910062771358">Vollbildlupe aktiviert</translation>
 <translation id="8294750666104911727">Normalerweise werden Seiten, bei denen das Metatag "X-UA-Compatible" auf "chrome=1" gesetzt ist, unabhängig von der Richtlinie "ChromeFrameRendererSettings" in <ph name="PRODUCT_FRAME_NAME" /> gerendert.
 
@@ -2008,6 +2022,7 @@ Wenn eine Erweiterung nicht in der Liste enthalten ist oder keine Liste festgele
 
       Der Wert für die Richtlinie sollte in Millisekunden angegeben werden.</translation>
 <translation id="8344454543174932833">Lesezeichen bei erster Ausführung aus Standardbrowser importieren</translation>
+<translation id="8359734107661430198">ExampleDeprecatedFeature API bis zum 02.09.2008 aktivieren</translation>
 <translation id="8360452361555133173">Mit dieser Richtlinie kann die Anzeige der Begrüßungsseite beim ersten Start des Browsers nach einer Aktualisierung des Betriebssystems aktiviert werden.
 
       Wenn die Richtlinie auf "true" eingestellt oder nicht konfiguriert ist, zeigt der Browser die Begrüßungsseite beim ersten Start nach einer Aktualisierung des Betriebssystems erneut an.
@@ -2017,9 +2032,15 @@ Wenn eine Erweiterung nicht in der Liste enthalten ist oder keine Liste festgele
 <translation id="8382184662529825177">Verwendung von Remote-Bescheinigung (Remote Attestation) zum Schutz von Inhalten für das Gerät aktivieren</translation>
 <translation id="838870586332499308">Daten-Roaming aktivieren</translation>
 <translation id="8412312801707973447">Ob online OCSP-/CRL-Prüfungen durchgeführt werden</translation>
+<translation id="8413348101535146315">Ermöglicht das Beenden von Prozessen im Task-Manager von <ph name="PRODUCT_NAME" />.
+
+      Wenn diese Option auf "false" gesetzt ist, ist die Schaltfläche "Prozess beenden" im Task-Manager deaktiviert.
+
+      Wenn diese Option auf "true" gesetzt oder nicht konfiguriert ist, kann der Nutzer Prozesse im Task-Manager beenden.</translation>
 <translation id="8424255554404582727">Standarddrehung des Bildschirms festlegen, die bei jedem Neustart erneut angewendet wird</translation>
 <translation id="8426231401662877819">Bildschirm um 90 Grad im Uhrzeigersinn drehen</translation>
 <translation id="8451988835943702790">"Neuer Tab"-Seite als Startseite verwenden</translation>
+<translation id="8458790683633857482">Gibt die Richtlinien an, die für die ARC-Laufzeit übergeben werden. Es muss ein gültiger JSON-Wert angegeben werden.</translation>
 <translation id="8465065632133292531">Parameter für URL der Suche im Voraus, die POST verwendet</translation>
 <translation id="847472800012384958">Anzeige von Pop-ups für keine Website zulassen</translation>
 <translation id="8477885780684655676">TLS 1.0</translation>
@@ -2187,6 +2208,13 @@ Wenn eine Erweiterung nicht in der Liste enthalten ist oder keine Liste festgele
 
           Der Wert für die Richtlinie muss in Millisekunden angegeben werden. Werte müssen kleiner als der Wert für die Inaktivitätsverzögerung sein.</translation>
 <translation id="891435090623616439">Als JSON-String codiert, weitere Informationen unter <ph name="COMPLEX_POLICIES_URL" /></translation>
+<translation id="8929359433203547810">Wenn diese Richtlinien auf "false" gesetzt sind, wird Bluetooth von <ph name="PRODUCT_OS_NAME" /> deaktiviert und der Nutzer kann sie nicht wieder aktivieren.
+
+      Wenn diese Richtlinien auf "true" gesetzt oder gar nicht festgelegt werden, kann der Nutzer Bluetooth nach Belieben aktivieren und deaktivieren.
+
+      Wenn diese Richtlinien festgelegt sind, kann sie der Nutzer nicht ändern oder überschreiben.
+
+      Nachdem Bluetooth aktiviert wurde, muss das Gerät neu gestartet werden, damit die Änderungen wirksam werden. Wenn Bluetooth deaktiviert wird, ist kein Neustart erforderlich.</translation>
 <translation id="8947415621777543415">Gerätestandort melden</translation>
 <translation id="8951350807133946005">Datenträger-Cache-Verzeichnis festlegen</translation>
 <translation id="8955719471735800169">Zurück nach oben</translation>
@@ -2217,6 +2245,24 @@ Wenn eine Erweiterung nicht in der Liste enthalten ist oder keine Liste festgele
 <translation id="9112897538922695510">Damit können Sie eine Liste mit Protokoll-Handlern registrieren, wobei dies lediglich eine empfohlene Richtlinie sein kann. Für die Eigenschaft |protocol| sollte ein Schema wie "mailto" und für die Eigenschaft |url| das URL-Muster der Anwendung festgelegt werden, die das Schema verwaltet. Das Muster kann "%s" enthalten, was später durch die jeweilige URL ersetzt wird.
 
           Die von der Richtlinie registrierten Protokoll-Handler werden mit den Protokoll-Handlern zusammengeführt, die vom Nutzer registriert wurden, und können gemeinsam verwendet werden. Der Nutzer kann die durch die Richtlinie installierten Protokoll-Handler durch Installieren eines neuen standardmäßigen Handlers überschreiben. Ein von der Richtlinie registrierter Protokoll-Handler kann jedoch nicht entfernt werden.</translation>
+<translation id="913138516158420759">Mit dieser Richtlinie können Sie angeben, welchen Proxyserver <ph name="PRODUCT_NAME" /> verwenden soll, und verhindern, dass Nutzer die Proxy-Einstellungen ändern. Dieser Proxyserver kann auch von ARC-Apps verwendet werden.
+
+          Wenn Sie festlegen, dass nie ein Proxyserver verwendet, sondern immer eine direkte Verbindung hergestellt wird, werden alle anderen Optionen ignoriert.
+
+          Falls Sie sich für die Verwendung der Proxy-Einstellungen des Systems entscheiden, werden alle anderen Optionen ignoriert.
+
+          Falls Sie bestimmen, dass der Proxyserver automatisch erkannt werden soll, werden ebenfalls alle anderen Optionen ignoriert.
+
+          Bei Auswahl des Modus mit festem Proxyserver können Sie in "Adresse oder URL des Proxyservers" und "Kommagetrennte Liste der Proxy-Umgehungsregeln" weitere Optionen angeben. Nur der HTTP-Proxyserver mit der höchsten Priorität ist für ARC-Apps verfügbar.
+
+          Zur Verwendung eines PAC-Proxy-Skripts müssen Sie die URL des Skripts im Feld "URL einer PAC-Proxy-Datei" angeben.
+
+          Ausführliche Beispiele finden Sie unter
+          <ph name="PROXY_HELP_URL" />.
+
+          Wenn Sie diese Einstellung aktivieren, werden in <ph name="PRODUCT_NAME" /> und den ARC-Apps alle Proxy-Optionen ignoriert, die in der Eingabeaufforderung angegeben werden.
+
+          Sind diese Richtlinien nicht konfiguriert, können Nutzer ihre eigenen Proxy-Einstellungen auswählen.</translation>
 <translation id="913195841488580904">Zugriff auf aufgelistete URLs blockieren</translation>
 <translation id="9135033364005346124"><ph name="CLOUD_PRINT_NAME" />-Proxy aktivieren</translation>
 <translation id="9147029539363974059">Systemprotokolle an den Verwaltungsserver senden, um Administratoren die

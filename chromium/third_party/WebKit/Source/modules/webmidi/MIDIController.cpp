@@ -41,9 +41,9 @@ const char* MIDIController::supplementName()
 }
 
 MIDIController::MIDIController(PassOwnPtr<MIDIClient> client)
-    : m_client(client)
+    : m_client(std::move(client))
 {
-    ASSERT(m_client);
+    DCHECK(m_client);
 }
 
 MIDIController::~MIDIController()
@@ -52,7 +52,7 @@ MIDIController::~MIDIController()
 
 MIDIController* MIDIController::create(PassOwnPtr<MIDIClient> client)
 {
-    return new MIDIController(client);
+    return new MIDIController(std::move(client));
 }
 
 void MIDIController::requestPermission(MIDIAccessInitializer* initializer, const MIDIOptions& options)
@@ -67,7 +67,7 @@ void MIDIController::cancelPermissionRequest(MIDIAccessInitializer* initializer)
 
 void provideMIDITo(LocalFrame& frame, PassOwnPtr<MIDIClient> client)
 {
-    MIDIController::provideTo(frame, MIDIController::supplementName(), MIDIController::create(client));
+    MIDIController::provideTo(frame, MIDIController::supplementName(), MIDIController::create(std::move(client)));
 }
 
 } // namespace blink

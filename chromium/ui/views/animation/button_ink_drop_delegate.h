@@ -5,8 +5,9 @@
 #ifndef UI_VIEWS_ANIMATION_BUTTON_INK_DROP_DELEGATE_H_
 #define UI_VIEWS_ANIMATION_BUTTON_INK_DROP_DELEGATE_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "ui/events/event_handler.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/views/animation/ink_drop_delegate.h"
@@ -18,7 +19,7 @@ class ScopedTargetHandler;
 
 namespace views {
 
-class InkDropAnimationController;
+class InkDrop;
 class InkDropHost;
 class View;
 
@@ -40,6 +41,7 @@ class VIEWS_EXPORT ButtonInkDropDelegate : public InkDropDelegate,
   void OnAction(InkDropState state) override;
   void SnapToActivated() override;
   void SetHovered(bool is_hovered) override;
+  InkDropState GetTargetInkDropState() const override;
 
   // ui::EventHandler:
   void OnMouseEvent(ui::MouseEvent* event) override;
@@ -47,7 +49,7 @@ class VIEWS_EXPORT ButtonInkDropDelegate : public InkDropDelegate,
 
  private:
   // An instance of ScopedTargetHandler allowing |this| to handle events.
-  scoped_ptr<ui::ScopedTargetHandler> target_handler_;
+  std::unique_ptr<ui::ScopedTargetHandler> target_handler_;
 
   // Parent InkDropHost (typically a View) that hosts the ink ripple animations.
   InkDropHost* ink_drop_host_;
@@ -57,7 +59,7 @@ class VIEWS_EXPORT ButtonInkDropDelegate : public InkDropDelegate,
   gfx::Point last_ink_drop_location_;
 
   // Animation controller for the ink drop ripple effect.
-  scoped_ptr<InkDropAnimationController> ink_drop_animation_controller_;
+  std::unique_ptr<InkDrop> ink_drop_;
 
   DISALLOW_COPY_AND_ASSIGN(ButtonInkDropDelegate);
 };

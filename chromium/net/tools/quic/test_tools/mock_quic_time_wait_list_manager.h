@@ -17,20 +17,22 @@ class MockTimeWaitListManager : public QuicTimeWaitListManager {
  public:
   MockTimeWaitListManager(QuicPacketWriter* writer,
                           QuicServerSessionVisitor* visitor,
-                          QuicConnectionHelperInterface* helper);
+                          QuicConnectionHelperInterface* helper,
+                          QuicAlarmFactory* alarm_factory);
   ~MockTimeWaitListManager() override;
 
   MOCK_METHOD4(AddConnectionIdToTimeWait,
                void(QuicConnectionId connection_id,
                     QuicVersion version,
                     bool connection_rejected_statelessly,
-                    std::vector<QuicEncryptedPacket*>* termination_packets));
+                    std::vector<std::unique_ptr<QuicEncryptedPacket>>*
+                        termination_packets));
 
   void QuicTimeWaitListManager_AddConnectionIdToTimeWait(
       QuicConnectionId connection_id,
       QuicVersion version,
       bool connection_rejected_statelessly,
-      std::vector<QuicEncryptedPacket*>* termination_packets) {
+      std::vector<std::unique_ptr<QuicEncryptedPacket>>* termination_packets) {
     QuicTimeWaitListManager::AddConnectionIdToTimeWait(
         connection_id, version, connection_rejected_statelessly,
         termination_packets);

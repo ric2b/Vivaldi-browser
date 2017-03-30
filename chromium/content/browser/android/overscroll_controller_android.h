@@ -5,6 +5,8 @@
 #ifndef CONTENT_BROWSER_ANDROID_OVERSCROLL_CONTROLLER_ANDROID_H_
 #define CONTENT_BROWSER_ANDROID_OVERSCROLL_CONTROLLER_ANDROID_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "content/common/input/input_event_ack_state.h"
@@ -63,7 +65,7 @@ class OverscrollControllerAndroid : public ui::OverscrollGlowClient {
 
  private:
   // OverscrollGlowClient implementation.
-  scoped_ptr<ui::EdgeEffectBase> CreateEdgeEffect() override;
+  std::unique_ptr<ui::EdgeEffectBase> CreateEdgeEffect() override;
 
   void SetNeedsAnimate();
 
@@ -73,8 +75,8 @@ class OverscrollControllerAndroid : public ui::OverscrollGlowClient {
   bool enabled_;
 
   // TODO(jdduke): Factor out a common API from the two overscroll effects.
-  scoped_ptr<ui::OverscrollGlow> glow_effect_;
-  scoped_ptr<ui::OverscrollRefresh> refresh_effect_;
+  std::unique_ptr<ui::OverscrollGlow> glow_effect_;
+  std::unique_ptr<ui::OverscrollRefresh> refresh_effect_;
 
   DISALLOW_COPY_AND_ASSIGN(OverscrollControllerAndroid);
 };

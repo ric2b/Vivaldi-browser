@@ -8,7 +8,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "media/base/android/sdk_media_codec_bridge.h"
 #include "media/base/audio_buffer.h"
 #include "media/base/audio_timestamp_helper.h"
@@ -41,11 +41,12 @@ inline int GetChannelCount(const AudioDecoderConfig& config) {
   return ChannelLayoutToChannelCount(config.channel_layout());
 }
 
-scoped_ptr<MediaCodecBridge> CreateMediaCodec(const AudioDecoderConfig& config,
-                                              jobject media_crypto) {
+std::unique_ptr<MediaCodecBridge> CreateMediaCodec(
+    const AudioDecoderConfig& config,
+    jobject media_crypto) {
   DVLOG(1) << __FUNCTION__ << ": config:" << config.AsHumanReadableString();
 
-  scoped_ptr<AudioCodecBridge> audio_codec_bridge(
+  std::unique_ptr<AudioCodecBridge> audio_codec_bridge(
       AudioCodecBridge::Create(config.codec()));
   if (!audio_codec_bridge) {
     DVLOG(0) << __FUNCTION__ << " failed: cannot create AudioCodecBridge";

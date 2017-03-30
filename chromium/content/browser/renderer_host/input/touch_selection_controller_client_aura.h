@@ -5,6 +5,8 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_INPUT_TOUCH_SELECTION_CONTROLLER_CLIENT_AURA_H_
 #define CONTENT_BROWSER_RENDERER_HOST_INPUT_TOUCH_SELECTION_CONTROLLER_CLIENT_AURA_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "base/timer/timer.h"
 #include "content/common/content_export.h"
@@ -62,7 +64,7 @@ class CONTENT_EXPORT TouchSelectionControllerClientAura
   void SelectBetweenCoordinates(const gfx::PointF& base,
                                 const gfx::PointF& extent) override;
   void OnSelectionEvent(ui::SelectionEventType event) override;
-  scoped_ptr<ui::TouchHandleDrawable> CreateDrawable() override;
+  std::unique_ptr<ui::TouchHandleDrawable> CreateDrawable() override;
 
   // ui::TouchSelectionMenuClient:
   bool IsCommandIdEnabled(int command_id) const override;
@@ -82,7 +84,7 @@ class CONTENT_EXPORT TouchSelectionControllerClientAura
 
   // A pre-target event handler for aura::Env which deactivates touch selection
   // on mouse and keyboard events.
-  scoped_ptr<EnvPreTargetHandler> env_pre_target_handler_;
+  std::unique_ptr<EnvPreTargetHandler> env_pre_target_handler_;
 
   DISALLOW_COPY_AND_ASSIGN(TouchSelectionControllerClientAura);
 };

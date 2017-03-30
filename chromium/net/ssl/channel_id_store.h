@@ -6,10 +6,10 @@
 #define NET_SSL_CHANNEL_ID_STORE_H_
 
 #include <list>
+#include <memory>
 #include <string>
 
 #include "base/callback.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/time/time.h"
 #include "crypto/ec_private_key.h"
@@ -32,7 +32,7 @@ class NET_EXPORT ChannelIDStore
     ChannelID();
     ChannelID(const std::string& server_identifier,
               base::Time creation_time,
-              scoped_ptr<crypto::ECPrivateKey> key);
+              std::unique_ptr<crypto::ECPrivateKey> key);
     ChannelID(const ChannelID& other);
     ChannelID& operator=(const ChannelID& other);
     ~ChannelID();
@@ -49,13 +49,13 @@ class NET_EXPORT ChannelIDStore
    private:
     std::string server_identifier_;
     base::Time creation_time_;
-    scoped_ptr<crypto::ECPrivateKey> key_;
+    std::unique_ptr<crypto::ECPrivateKey> key_;
   };
 
   typedef std::list<ChannelID> ChannelIDList;
 
   typedef base::Callback<
-      void(int, const std::string&, scoped_ptr<crypto::ECPrivateKey>)>
+      void(int, const std::string&, std::unique_ptr<crypto::ECPrivateKey>)>
       GetChannelIDCallback;
   typedef base::Callback<void(const ChannelIDList&)> GetChannelIDListCallback;
 
@@ -68,21 +68,23 @@ class NET_EXPORT ChannelIDStore
   // return ERR_IO_PENDING and the callback will be called with the result
   // asynchronously.
   virtual int GetChannelID(const std::string& server_identifier,
-                           scoped_ptr<crypto::ECPrivateKey>* key_result,
+                           std::unique_ptr<crypto::ECPrivateKey>* key_result,
                            const GetChannelIDCallback& callback) = 0;
 
   // Adds the keypair for a hostname to the store.
-  virtual void SetChannelID(scoped_ptr<ChannelID> channel_id) = 0;
+  virtual void SetChannelID(std::unique_ptr<ChannelID> channel_id) = 0;
 
   // Removes a keypair from the store.
   virtual void DeleteChannelID(
       const std::string& server_identifier,
       const base::Closure& completion_callback) = 0;
 
-  // Deletes all of the channel ID keypairs that have a creation_date greater
-  // than or equal to |delete_begin| and less than |delete_end|.  If a
-  // base::Time value is_null, that side of the comparison is unbounded.
-  virtual void DeleteAllCreatedBetween(
+  // Deletes the channel ID keypairs that have a creation_date greater than
+  // or equal to |delete_begin| and less than |delete_end| and whose server
+  // identifier matches the |domain_predicate|. If base::Time value is_null,
+  // that side of the comparison is unbounded.
+  virtual void DeleteForDomainsCreatedBetween(
+      const base::Callback<bool(const std::string&)>& domain_predicate,
       base::Time delete_begin,
       base::Time delete_end,
       const base::Closure& completion_callback) = 0;

@@ -42,11 +42,24 @@
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/weborigin/KURL.h"
 #include "public/platform/Platform.h"
+#include "public/platform/WebTaskRunner.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
 #include "public/platform/WebURLResponse.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
+
+namespace {
+
+class MockTaskRunner : public blink::WebTaskRunner {
+    void postTask(const WebTraceLocation&, Task*) override { }
+    void postDelayedTask(const WebTraceLocation&, Task*, double) override { }
+    WebTaskRunner* clone() override { return nullptr; }
+    double virtualTimeSeconds() const override { return 0.0; }
+    double monotonicallyIncreasingVirtualTimeSeconds() const override { return 0.0; }
+};
+
+}
 
 class ResourceFetcherTestMockFetchContext : public FetchContext {
 public:
@@ -60,6 +73,7 @@ public:
     bool allowImage(bool imagesEnabled, const KURL&) const override { return true; }
     bool canRequest(Resource::Type, const ResourceRequest&, const KURL&, const ResourceLoaderOptions&, bool forPreload, FetchRequest::OriginRestriction) const override { return true; }
     bool shouldLoadNewResource(Resource::Type) const override { return true; }
+    WebTaskRunner* loadingTaskRunner() const override { return m_runner.get(); }
 
     void setCachePolicy(CachePolicy policy) { m_policy = policy; }
     CachePolicy getCachePolicy() const override { return m_policy; }
@@ -67,9 +81,11 @@ public:
 private:
     ResourceFetcherTestMockFetchContext()
         : m_policy(CachePolicyVerify)
+        , m_runner(adoptPtr(new MockTaskRunner))
     { }
 
     CachePolicy m_policy;
+    OwnPtr<MockTaskRunner> m_runner;
 };
 
 class ResourceFetcherTest : public ::testing::Test {
@@ -96,6 +112,10 @@ TEST_F(ResourceFetcherTest, StartLoadAfterFrameDetach)
     Resource* resource = fetcher->requestResource(fetchRequest, TestResourceFactory());
     EXPECT_EQ(resource, static_cast<Resource*>(nullptr));
     EXPECT_EQ(memoryCache()->resourceForURL(secureURL), static_cast<Resource*>(nullptr));
+
+    // Try calling Resource::load directly. This shouldn't crash.
+    Resource* resource2 = Resource::create(secureURL, Resource::Raw);
+    resource2->load(fetcher);
 }
 
 TEST_F(ResourceFetcherTest, UseExistingResource)
@@ -195,34 +215,56 @@ TEST_F(ResourceFetcherTest, VaryImage)
     Platform::current()->getURLLoaderMockFactory()->unregisterURL(url);
 }
 
-TEST_F(ResourceFetcherTest, RevalidateWhileLoading)
+class RequestSameResourceOnComplete : public RawResourceClient {
+public:
+    explicit RequestSameResourceOnComplete(Resource* resource)
+        : m_resource(resource)
+        , m_notifyFinishedCalled(false)
+    {
+    }
+
+    void notifyFinished(Resource* resource) override
+    {
+        ASSERT_EQ(m_resource, resource);
+        ResourceFetcherTestMockFetchContext* context = ResourceFetcherTestMockFetchContext::create();
+        context->setCachePolicy(CachePolicyRevalidate);
+        ResourceFetcher* fetcher2 = ResourceFetcher::create(context);
+        FetchRequest fetchRequest2(m_resource->url(), FetchInitiatorInfo());
+        Resource* resource2 = fetcher2->requestResource(fetchRequest2, TestResourceFactory(Resource::Image));
+        EXPECT_EQ(m_resource, resource2);
+        m_notifyFinishedCalled = true;
+    }
+    bool notifyFinishedCalled() const { return m_notifyFinishedCalled; }
+
+    String debugName() const override { return "RequestSameResourceOnComplete"; }
+
+private:
+    Persistent<Resource> m_resource;
+    bool m_notifyFinishedCalled;
+};
+
+TEST_F(ResourceFetcherTest, RevalidateWhileFinishingLoading)
 {
     KURL url(ParsedURLString, "http://127.0.0.1:8000/foo.html");
-    Platform::current()->getURLLoaderMockFactory()->registerURL(url, WebURLResponse(), "");
+    ResourceResponse response;
+    response.setURL(url);
+    response.setHTTPStatusCode(200);
+    response.setHTTPHeaderField(HTTPNames::Cache_Control, "max-age=3600");
+    response.setHTTPHeaderField(HTTPNames::ETag, "1234567890");
+    Platform::current()->getURLLoaderMockFactory()->registerURL(url, WrappedResourceResponse(response), "");
 
     ResourceFetcher* fetcher1 = ResourceFetcher::create(ResourceFetcherTestMockFetchContext::create());
     ResourceRequest request1(url);
     request1.setHTTPHeaderField(HTTPNames::Cache_Control, "no-cache");
     FetchRequest fetchRequest1 = FetchRequest(request1, FetchInitiatorInfo());
     Resource* resource1 = fetcher1->requestResource(fetchRequest1, TestResourceFactory(Resource::Image));
-    ResourceResponse response;
-    response.setURL(url);
-    response.setHTTPStatusCode(200);
-    response.setHTTPHeaderField(HTTPNames::Cache_Control, "max-age=3600");
-    response.setHTTPHeaderField(HTTPNames::ETag, "1234567890");
-    resource1->responseReceived(response, nullptr);
-    resource1->finish();
-
-    ResourceFetcherTestMockFetchContext* context = ResourceFetcherTestMockFetchContext::create();
-    context->setCachePolicy(CachePolicyRevalidate);
-    ResourceFetcher* fetcher2 = ResourceFetcher::create(context);
-    FetchRequest fetchRequest2(url, FetchInitiatorInfo());
-    Resource* resource2 = fetcher2->requestResource(fetchRequest2, TestResourceFactory(Resource::Image));
-    EXPECT_EQ(resource1, resource2);
-
-    // Tidily(?) shut down the ResourceLoader.
-    resource1->loader()->cancel();
+    RequestSameResourceOnComplete client(resource1);
+    resource1->addClient(&client);
+    Platform::current()->getURLLoaderMockFactory()->serveAsynchronousRequests();
     Platform::current()->getURLLoaderMockFactory()->unregisterURL(url);
+    EXPECT_TRUE(client.notifyFinishedCalled());
+    resource1->removeClient(&client);
+    memoryCache()->remove(resource1);
 }
 
 TEST_F(ResourceFetcherTest, DontReuseMediaDataUrl)

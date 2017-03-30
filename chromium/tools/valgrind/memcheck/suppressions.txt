@@ -625,17 +625,6 @@
    fun:_ZN4base6Thread10ThreadMainEv
 }
 {
-   # also bug 17979.  It's a nest of leaks.
-   bug_17385
-   Memcheck:Leak
-   fun:_Znw*
-   ...
-   fun:_ZN3IPC12ChannelProxy7Context13CreateChannel*Channel4ModeE
-   fun:_ZN3IPC12ChannelProxy4Init*
-   ...
-   fun:_ZN3IPC11SyncChannel*Channel4Mode*Listener*
-}
-{
    bug_17540_16661
    Memcheck:Leak
    fun:_Znw*
@@ -929,21 +918,11 @@
    fun:_ZN14GpuProcessHost4InitEv
 }
 {
-   bug_67261a
-   Memcheck:Leak
-   fun:_Znw*
-   ...
-   fun:_ZN3sql10Connection18GetUniqueStatementEPKc
-   fun:_ZN3sql10Connection18GetCachedStatementERKNS_11StatementIDEPKc
-   fun:_ZN8appcache16AppCacheDatabase22PrepareCachedStatementERKN3sql11StatementIDEPKcPNS1_9StatementE
-}
-{
    bug_67261b
    Memcheck:Leak
    fun:_Znw*
    fun:_ZN3sql10Connection18GetUniqueStatementEPKc
    fun:_ZN3sql10Connection18GetCachedStatementERKNS_11StatementIDEPKc
-   fun:_ZN3sql9MetaTable19PrepareGetStatementEPNS_9StatementEPKc
    ...
    fun:_ZN7storage13QuotaDatabase28IsOriginDatabaseBootstrappedEv
 }
@@ -1209,15 +1188,6 @@
    obj:*
    obj:*
    obj:*
-}
-{
-   bug_100982
-   Memcheck:Leak
-   fun:_Znw*
-   fun:_ZN5blink12RenderRegion22setRenderBoxRegionInfoEPKNS_9RenderBoxEiib
-   fun:_ZNK7blink9RenderBox19renderBoxRegionInfoEPNS_12RenderRegionEiNS0_24RenderBoxRegionInfoFlagsE
-   ...
-   fun:_ZN5blink11RenderBlock5paintERNS_9PaintInfoERKNS_8IntPointE
 }
 {
    bug_101750
@@ -2011,24 +1981,13 @@
    fun:_ZN5blink24DocumentThreadableLoader11loadRequestERKNS_15ResourceRequestENS_19SecurityCheckPolicyE
 }
 {
-   bug_340952
-   Memcheck:Leak
-   fun:_Znw*
-   fun:_ZN5blink15DOMWrapperWorldC2Eii
-   fun:_ZN5blink15DOMWrapperWorldC1Eii
-   fun:_ZN5blink15DOMWrapperWorld6createEii
-   fun:_ZN5blink15DOMWrapperWorld9mainWorldEv
-   ...
-   fun:_ZN7content22BufferedDataSourceTestC2Ev
-}
-{
    bug_340752
    Memcheck:Uninitialized
    ...
-   fun:_ZN5blink4Heap19checkAndMarkPointerEPNS_7VisitorEPh
+   fun:_ZN5blink10ThreadHeap19checkAndMarkPointerEPNS_7VisitorEPh
    fun:_ZN5blink11ThreadState10visitStackEPNS_7VisitorE
    ...
-   fun:_ZN5blink4Heap14collectGarbageENS_7BlinkGC10StackState*
+   fun:_ZN5blink10ThreadHeap14collectGarbageENS_7BlinkGC10StackState*
 }
 {
    bug_342591
@@ -2231,19 +2190,6 @@
    fun:_ZN3net24URLRequestJobFactoryImpl18SetProtocolHandlerERKSsPNS_20URLRequestJobFactory15ProtocolHandlerE
    ...
    fun:_ZN7content28ShellURLRequestContextGetter20GetURLRequestContextEv
-}
-{
-   bug_381065
-   Memcheck:Leak
-   fun:_Znw*
-   ...
-   fun:_ZN5blink18ModulesInitializer4initEv
-   fun:_ZN5blink19initializeWithoutV8EPNS_8PlatformE
-   fun:_ZN5blink10initializeEPNS_8PlatformE
-   fun:_ZN7content27TestBlinkWebUnitTestSupportC2Ev
-   fun:_ZN7content27TestBlinkWebUnitTestSupportC1Ev
-   fun:_ZN7content17UnitTestTestSuiteC2EPN4base9TestSuiteE
-   fun:_ZN7content17UnitTestTestSuiteC1EPN4base9TestSuiteE
 }
 {
    bug_385381
@@ -2474,20 +2420,6 @@
    fun:_ZN2v88internal27Runtime_CreateObjectLiteralEiPPNS0_6ObjectEPNS0_7IsolateE
 }
 {
-   bug_399853_a
-   Memcheck:Uninitialized
-   fun:_ZNK8SkStroke10strokePathERK6SkPathPS0_
-   fun:_ZNK11SkStrokeRec11applyToPathEP6SkPathRKS0_
-   fun:_ZNK7SkPaint11getFillPathERK6SkPathPS0_PK6SkRect
-}
-{
-   bug_399853_b
-   Memcheck:Uninitialized
-   fun:_ZNK8SkStroke10strokePathERK6SkPathPS0_
-   fun:_ZNK11SkStrokeRec11applyToPathEP6SkPathRKS0_
-   fun:_ZN15SkScalerContext15internalGetPathERK7SkGlyphP6SkPathS4_P8SkMatrix
-}
-{
    bug_417119
    Memcheck:Leak
    fun:_Znw*
@@ -2712,16 +2644,6 @@
    fun:_Znw*
    fun:_ZN7content17ResourceScheduler15OnClientCreatedEiibb
    fun:_ZN7content26ResourceDispatcherHostImpl23OnRenderViewHostCreatedEiibb
-}
-{
-   bug_492821
-   Memcheck:Uninitialized
-   fun:_ZN5blink17CSSPropertyParser9validUnitEPNS_14CSSParserValueENS0_5UnitsENS_13CSSParserModeENS0_31ReleaseParsedCalcValueConditionE
-   fun:_ZN5blink17CSSPropertyParser9validUnitEPNS_14CSSParserValueENS0_5UnitsENS0_31ReleaseParsedCalcValueConditionE
-   ...
-   fun:_ZN5blink17CSSPropertyParser10parseValueENS_13CSSPropertyIDEb
-   fun:_ZN5blink17CSSPropertyParser10parseValueENS_13CSSPropertyID*
-   fun:_ZN5blink13CSSParserImpl23consumeDeclarationValueENS_19CSSParserTokenRangeENS_13CSSPropertyIDEbNS_13StyleRuleBase4TypeE
 }
 {
    bug_514434
@@ -2963,13 +2885,6 @@
    fun:_ZN5blink9FrameView6layoutEv
 }
 {
-   bug_571272
-   Memcheck:Overlap
-   fun:memcpy*
-   fun:_ZN3net10QuicFramer14EncryptPayloadENS_15EncryptionLevel*
-   fun:_ZN3net17QuicPacketCreator15SerializePacketEPcm
-}
-{
    bug_571543
    Memcheck:Leak
    ...
@@ -2984,12 +2899,11 @@
    bug_576259_a
    Memcheck:Uninitialized
    fun:_ZN7GrGLGpu11bindTextureEiRK15GrTextureParamsbP11GrGLTexture
+   ...
    fun:_ZN7GrGLGpu12flushGLStateERK10GrPipelineRK20GrPrimitiveProcessor
    fun:_ZN7GrGLGpu6onDrawERK10GrPipelineRK20GrPrimitiveProcessorPK6GrMeshi
    fun:_ZN5GrGpu4drawERK10GrPipelineRK20GrPrimitiveProcessorPK6GrMeshi
    fun:_ZN13GrVertexBatch6onDrawEP17GrBatchFlushState
-   ...
-   fun:_ZN2cc17SingleThreadProxy36ScheduledActionDrawAndSwapIfPossibleEv
 }
 {
    bug_576259_b
@@ -3017,7 +2931,6 @@
    fun:_ZN5blink14PersistentBaseINS_15StyleFilterDataELNS_31WeaknessPersistentConfigurationE0ELNS_38CrossThreadnessPersistentConfigurationE0EEnwEm
    fun:_ZN5blink26RefCountedGarbageCollectedINS_15StyleFilterDataEE13makeKeepAliveEv
    fun:_ZN5blink26RefCountedGarbageCollectedINS_15StyleFilterDataEE3refEv
-   fun:_ZN3WTF6RefPtrIN5blink15StyleFilterDataEEC2IS2_EERKNS_6RawPtrIT_EEPNSt9enable_ifIXsr3std10is_base_ofIS2_S6_EE5valueEvE4typeE
    fun:_ZN5blink7DataRefINS_15StyleFilterDataEE4initEv
    fun:_ZN5blink13ComputedStyle18createInitialStyleEv
    fun:_ZN5blink13ComputedStyle19mutableInitialStyleEv
@@ -3145,14 +3058,12 @@
    fun:_ZN4base4BindIMN7content21ChromeAppCacheServiceEFvRKNS_8FilePathEPNS1_15ResourceContextEPN3net23URLRequestContextGetterE13scoped_refptrIN7storage20SpecialStoragePolicyEEEJPS2_S3_S7_SB_IS9_ESE_EEENS_8CallbackINS_8internal22MakeUnboundRunTypeImplIT_JDpT0_EE4TypeEEESM_DpOSN_
 }
 {
-   bug_600484
+   bug_602964
    Memcheck:Leak
    fun:_Znw*
-   fun:_ZN4mojo3edk2js13HandleWrapper6Create*
-   fun:_ZN3gin9ConverterIN4mojo6Handle*
-   fun:_ZN3gin11ConvertToV8IN4mojo6Handle*
-   fun:_ZN3gin10ToV8TraitsIN4mojo6HandleELb0EE14TryConvertToV8*
-   fun:_ZN3gin14TryConvertToV8IN4mojo6Handle*
-   fun:_ZN3gin10Dictionary3SetIN4mojo6Handle*
-   fun:_ZN4mojo3edk2js12_GLOBAL__N_114CreateDataPipe*
+   fun:_ZN4base4BindIMNS_12_GLOBAL__N_121PostTaskAndReplyRelayEFvvEJNS_8internal17UnretainedWrapper*
+   fun:_ZN4base8internal20PostTaskAndReplyImpl16PostTaskAndReplyERKN15tracked_objects8LocationERKNS*
+   fun:_ZN4base10TaskRunner16PostTaskAndReplyERKN15tracked_objects8LocationERKNS_8CallbackIFvvELNS*
+   fun:_ZN4base26PostTaskAndReplyWithResultIN3net20WifiPHYLayerProtocolES2_EEbPNS*
+   fun:_ZN7metrics22NetworkMetricsProvider25ProbeWifiPHYLayerProtocolEv
 }

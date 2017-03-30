@@ -16,9 +16,11 @@
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/drive/file_task_executor.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
+#include "chrome/browser/chromeos/file_manager/arc_file_tasks.h"
 #include "chrome/browser/chromeos/file_manager/file_browser_handlers.h"
 #include "chrome/browser/chromeos/file_manager/fileapi_util.h"
 #include "chrome/browser/chromeos/file_manager/open_util.h"
+#include "chrome/browser/extensions/api/file_handlers/mime_util.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -57,6 +59,7 @@ namespace {
 const char kFileBrowserHandlerTaskType[] = "file";
 const char kFileHandlerTaskType[] = "app";
 const char kDriveAppTaskType[] = "drive";
+const char kArcAppTaskType[] = "arc";
 
 // Drive apps always use the action ID.
 const char kDriveAppActionID[] = "open-with";
@@ -70,6 +73,8 @@ std::string TaskTypeToString(TaskType task_type) {
       return kFileHandlerTaskType;
     case TASK_TYPE_DRIVE_APP:
       return kDriveAppTaskType;
+    case TASK_TYPE_ARC_APP:
+      return kArcAppTaskType;
     case TASK_TYPE_UNKNOWN:
       break;
   }
@@ -85,6 +90,8 @@ TaskType StringToTaskType(const std::string& str) {
     return TASK_TYPE_FILE_HANDLER;
   if (str == kDriveAppTaskType)
     return TASK_TYPE_DRIVE_APP;
+  if (str == kArcAppTaskType)
+    return TASK_TYPE_ARC_APP;
   return TASK_TYPE_UNKNOWN;
 }
 
@@ -123,9 +130,6 @@ bool IsFallbackFileHandler(const file_tasks::TaskDescriptor& task) {
     kFileManagerAppId,
     kVideoPlayerAppId,
     kGalleryAppId,
-    extension_misc::kQuickOfficeComponentExtensionId,
-    extension_misc::kQuickOfficeInternalExtensionId,
-    extension_misc::kQuickOfficeExtensionId,
   };
 
   for (size_t i = 0; i < arraysize(kBuiltInApps); ++i) {
@@ -133,6 +137,32 @@ bool IsFallbackFileHandler(const file_tasks::TaskDescriptor& task) {
       return true;
   }
   return false;
+}
+
+void ExecuteByArcAfterMimeTypesCollected(
+    Profile* profile,
+    const TaskDescriptor& task,
+    const std::vector<FileSystemURL>& file_urls,
+    const FileTaskFinishedCallback& done,
+    extensions::app_file_handler_util::MimeTypeCollector* mime_collector,
+    std::unique_ptr<std::vector<std::string>> mime_types) {
+  if (ExecuteArcTask(profile, task, file_urls, *mime_types)) {
+    done.Run(extensions::api::file_manager_private::TASK_RESULT_MESSAGE_SENT);
+  } else {
+    done.Run(extensions::api::file_manager_private::TASK_RESULT_FAILED);
+  }
+}
+
+void PostProcessFoundTasks(
+    Profile* profile,
+    const std::vector<extensions::EntryInfo>& entries,
+    const FindTasksCallback& callback,
+    std::unique_ptr<std::vector<FullTaskDescriptor>> result_list) {
+  // Google documents can only be handled by internal handlers.
+  if (ContainsGoogleDocument(entries))
+    KeepOnlyFileManagerInternalTasks(result_list.get());
+  ChooseAndSetDefaultTask(*profile->GetPrefs(), entries, result_list.get());
+  callback.Run(std::move(result_list));
 }
 
 }  // namespace
@@ -270,6 +300,17 @@ bool ExecuteFileTask(Profile* profile,
                      const TaskDescriptor& task,
                      const std::vector<FileSystemURL>& file_urls,
                      const FileTaskFinishedCallback& done) {
+  // ARC apps needs mime types for launching. Retrieve them first.
+  if (task.task_type == TASK_TYPE_ARC_APP) {
+    extensions::app_file_handler_util::MimeTypeCollector* mime_collector =
+        new extensions::app_file_handler_util::MimeTypeCollector(profile);
+    mime_collector->CollectForURLs(
+        file_urls,
+        base::Bind(&ExecuteByArcAfterMimeTypesCollected, profile, task,
+                   file_urls, done, base::Owned(mime_collector)));
+    return true;
+  }
+
   // drive::FileTaskExecutor is responsible to handle drive tasks.
   if (task.task_type == TASK_TYPE_DRIVE_APP) {
     DCHECK_EQ(kDriveAppActionID, task.action_id);
@@ -509,33 +550,41 @@ void FindFileBrowserHandlerTasks(
   }
 }
 
+void FindExtensionAndAppTasks(
+    Profile* profile,
+    const std::vector<extensions::EntryInfo>& entries,
+    const std::vector<GURL>& file_urls,
+    const FindTasksCallback& callback,
+    std::unique_ptr<std::vector<FullTaskDescriptor>> result_list) {
+  // 3. Continues from FindAllTypesOfTasks. Find and append file handler tasks.
+  FindFileHandlerTasks(profile, entries, result_list.get());
+
+  // 4. Find and append file browser handler tasks. We know there aren't
+  // duplicates because "file_browser_handlers" and "file_handlers" shouldn't
+  // be used in the same manifest.json.
+  FindFileBrowserHandlerTasks(profile, file_urls, result_list.get());
+
+  // Done. Apply post-filtering and callback.
+  PostProcessFoundTasks(profile, entries, callback, std::move(result_list));
+}
+
 void FindAllTypesOfTasks(Profile* profile,
                          const drive::DriveAppRegistry* drive_app_registry,
                          const std::vector<extensions::EntryInfo>& entries,
                          const std::vector<GURL>& file_urls,
-                         std::vector<FullTaskDescriptor>* result_list) {
+                         const FindTasksCallback& callback) {
   DCHECK(profile);
-  DCHECK(result_list);
+  std::unique_ptr<std::vector<FullTaskDescriptor>> result_list(
+      new std::vector<FullTaskDescriptor>);
 
-  // Find Drive app tasks, if the drive app registry is present.
+  // 1. Find Drive app tasks, if the drive app registry is present.
   if (drive_app_registry)
-    FindDriveAppTasks(*drive_app_registry, entries, result_list);
+    FindDriveAppTasks(*drive_app_registry, entries, result_list.get());
 
-  // Find and append file handler tasks. We know there aren't duplicates
-  // because Drive apps and platform apps are entirely different kinds of
-  // tasks.
-  FindFileHandlerTasks(profile, entries, result_list);
-
-  // Find and append file browser handler tasks. We know there aren't
-  // duplicates because "file_browser_handlers" and "file_handlers" shouldn't
-  // be used in the same manifest.json.
-  FindFileBrowserHandlerTasks(profile, file_urls, result_list);
-
-  // Google documents can only be handled by internal handlers.
-  if (ContainsGoogleDocument(entries))
-    KeepOnlyFileManagerInternalTasks(result_list);
-
-  ChooseAndSetDefaultTask(*profile->GetPrefs(), entries, result_list);
+  // 2. Find and append ARC handler tasks.
+  FindArcTasks(profile, entries, std::move(result_list),
+               base::Bind(&FindExtensionAndAppTasks, profile, entries,
+                          file_urls, callback));
 }
 
 void ChooseAndSetDefaultTask(const PrefService& pref_service,

@@ -5,13 +5,13 @@
 #include "modules/vr/VRGetDevicesCallback.h"
 
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "modules/vr/VRHardwareUnitCollection.h"
+#include "modules/vr/VRDisplayCollection.h"
 
 namespace blink {
 
-VRGetDevicesCallback::VRGetDevicesCallback(ScriptPromiseResolver* resolver, VRHardwareUnitCollection* hardwareUnits)
+VRGetDevicesCallback::VRGetDevicesCallback(ScriptPromiseResolver* resolver, VRDisplayCollection* displays)
     : m_resolver(resolver)
-    , m_hardwareUnits(hardwareUnits)
+    , m_displays(displays)
 {
 }
 
@@ -19,9 +19,9 @@ VRGetDevicesCallback::~VRGetDevicesCallback()
 {
 }
 
-void VRGetDevicesCallback::onSuccess(const WebVector<WebVRDevice>& devices)
+void VRGetDevicesCallback::onSuccess(mojo::WTFArray<mojom::blink::VRDeviceInfoPtr> devices)
 {
-    m_resolver->resolve(m_hardwareUnits->updateVRHardwareUnits(devices));
+    m_resolver->resolve(m_displays->updateDisplays(std::move(devices)));
 }
 
 void VRGetDevicesCallback::onError()

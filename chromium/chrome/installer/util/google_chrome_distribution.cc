@@ -22,6 +22,7 @@
 #include "base/win/windows_version.h"
 #include "chrome/common/chrome_icon_resources_win.h"
 #include "chrome/common/chrome_paths_internal.h"
+#include "chrome/install_static/install_util.h"
 #include "chrome/installer/util/app_registration_data.h"
 #include "chrome/installer/util/channel_info.h"
 #include "chrome/installer/util/google_update_constants.h"
@@ -97,12 +98,11 @@ void NavigateToUrlWithIExplore(const base::string16& url) {
 
 GoogleChromeDistribution::GoogleChromeDistribution()
     : BrowserDistribution(CHROME_BROWSER,
-                          scoped_ptr<AppRegistrationData>(
-                              new UpdatingAppRegistrationData(kChromeGuid))) {
-}
+                          std::unique_ptr<AppRegistrationData>(
+                              new UpdatingAppRegistrationData(kChromeGuid))) {}
 
 GoogleChromeDistribution::GoogleChromeDistribution(
-    scoped_ptr<AppRegistrationData> app_reg_data)
+    std::unique_ptr<AppRegistrationData> app_reg_data)
     : BrowserDistribution(CHROME_BROWSER, std::move(app_reg_data)) {}
 
 void GoogleChromeDistribution::DoPostUninstallOperations(
@@ -159,24 +159,11 @@ base::string16 GoogleChromeDistribution::GetBaseAppName() {
   return L"Google Chrome";
 }
 
-base::string16 GoogleChromeDistribution::GetShortcutName(
-    ShortcutType shortcut_type) {
-  int string_id = IDS_PRODUCT_NAME_BASE;
-  switch (shortcut_type) {
-    case SHORTCUT_APP_LAUNCHER:
-      string_id = IDS_APP_LIST_SHORTCUT_NAME_BASE;
-      break;
-    default:
-      DCHECK_EQ(SHORTCUT_CHROME, shortcut_type);
-      break;
-  }
-  return installer::GetLocalizedString(string_id);
+base::string16 GoogleChromeDistribution::GetShortcutName() {
+  return installer::GetLocalizedString(IDS_PRODUCT_NAME_BASE);
 }
 
-int GoogleChromeDistribution::GetIconIndex(ShortcutType shortcut_type) {
-  if (shortcut_type == SHORTCUT_APP_LAUNCHER)
-    return icon_resources::kAppLauncherIndex;
-  DCHECK_EQ(SHORTCUT_CHROME, shortcut_type);
+int GoogleChromeDistribution::GetIconIndex() {
   return icon_resources::kApplicationIndex;
 }
 
@@ -250,10 +237,11 @@ base::string16 GoogleChromeDistribution::GetDistributionData(HKEY root_key) {
   result.append(ap_value);
 
   // Crash client id.
-  base::FilePath crash_dir;
-  if (chrome::GetDefaultCrashDumpLocation(&crash_dir)) {
+  base::string16 crash_dump_location;
+  if (install_static::GetDefaultCrashDumpLocation(&crash_dump_location)) {
+    base::FilePath crash_dir = base::FilePath(crash_dump_location);
     crashpad::UUID client_id;
-    scoped_ptr<crashpad::CrashReportDatabase> database(
+    std::unique_ptr<crashpad::CrashReportDatabase> database(
         crashpad::CrashReportDatabase::InitializeWithoutCreating(crash_dir));
     if (database && database->GetSettings()->GetClientID(&client_id))
       result.append(L"&crash_client_id=").append(client_id.ToString16());

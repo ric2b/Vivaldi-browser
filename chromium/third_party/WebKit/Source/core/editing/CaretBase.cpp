@@ -64,6 +64,11 @@ LayoutBlock* CaretBase::caretLayoutObject(Node* node)
 
     // if caretNode is a block and caret is inside it then caret should be painted by that block
     bool paintedByBlock = layoutObject->isLayoutBlock() && caretRendersInsideNode(node);
+    // TODO(yoichio): This function is called at least
+    // DocumentLifeCycle::LayoutClean but caretRendersInsideNode above can
+    // layout. Thus |node->layoutObject()| can be changed then this is bad
+    // design. We should make caret painting algorithm clean.
+    CHECK_EQ(layoutObject, node->layoutObject()) << "Layout tree should not changed";
     return paintedByBlock ? toLayoutBlock(layoutObject) : layoutObject->containingBlock();
 }
 
@@ -73,7 +78,7 @@ static void mapCaretRectToCaretPainter(LayoutItem caretLayoutItem, LayoutBlockIt
     // FIXME: This should probably just use mapLocalToAncestor.
     // Compute an offset between the caretLayoutItem and the caretPainterItem.
 
-    ASSERT(caretLayoutItem.isDescendantOf(caretPainterItem));
+    DCHECK(caretLayoutItem.isDescendantOf(caretPainterItem));
 
     bool unrooted = false;
     while (caretLayoutItem != caretPainterItem) {
@@ -97,7 +102,7 @@ bool CaretBase::updateCaretRect(const PositionWithAffinity& caretPosition)
     if (caretPosition.position().isNull())
         return false;
 
-    ASSERT(caretPosition.position().anchorNode()->layoutObject());
+    DCHECK(caretPosition.position().anchorNode()->layoutObject());
 
     // First compute a rect local to the layoutObject at the selection start.
     LayoutObject* layoutObject;
@@ -128,6 +133,9 @@ IntRect CaretBase::absoluteBoundsForLocalRect(Node* node, const LayoutRect& rect
     return caretPainter->localToAbsoluteQuad(FloatRect(localRect)).enclosingBoundingBox();
 }
 
+// TODO(yoichio): |node| is FrameSelection::m_previousCaretNode and this is bad
+// design. We should use only previous layoutObject or Rectangle to invalidate
+// old caret.
 void CaretBase::invalidateLocalCaretRect(Node* node, const LayoutRect& rect)
 {
     LayoutBlockItem caretPainter = LayoutBlockItem(caretLayoutObject(node));
@@ -155,10 +163,10 @@ bool CaretBase::shouldRepaintCaret(Node& node) const
     return node.isContentEditable() || (node.parentNode() && node.parentNode()->isContentEditable());
 }
 
-bool CaretBase::shouldRepaintCaret(const LayoutView* view) const
+bool CaretBase::shouldRepaintCaret(const LayoutViewItem view) const
 {
-    ASSERT(view);
-    if (FrameView* frameView = view->frameView()) {
+    DCHECK(view);
+    if (FrameView* frameView = view.frameView()) {
         LocalFrame& frame = frameView->frame(); // The frame where the selection started
         return frame.settings() && frame.settings()->caretBrowsingEnabled();
     }
@@ -170,7 +178,7 @@ void CaretBase::invalidateCaretRect(Node* node, bool caretRectChanged)
     if (caretRectChanged)
         return;
 
-    if (LayoutView* view = node->document().layoutView()) {
+    if (LayoutViewItem view = node->document().layoutViewItem()) {
         if (node->isContentEditable(Node::UserSelectAllIsAlwaysNonEditable) || shouldRepaintCaret(view))
             invalidateLocalCaretRect(node, localCaretRectWithoutUpdate());
     }

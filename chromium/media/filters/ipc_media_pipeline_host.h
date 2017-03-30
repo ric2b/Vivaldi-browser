@@ -10,7 +10,6 @@
 #include <string>
 
 #include "base/callback_forward.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/pipeline_status.h"
@@ -33,7 +32,7 @@ class GpuVideoAcceleratorFactories;
 // from the data source.
 class IPCMediaPipelineHost {
  public:
-  using Creator = base::Callback<scoped_ptr<IPCMediaPipelineHost>(
+  using Creator = base::Callback<std::unique_ptr<IPCMediaPipelineHost>(
       const scoped_refptr<base::SequencedTaskRunner>& task_runner,
       media::DataSource* data_source)>;
 

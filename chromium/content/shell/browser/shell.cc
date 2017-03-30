@@ -15,7 +15,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/navigation_controller.h"
@@ -24,7 +24,6 @@
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "content/public/common/bindings_policy.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/renderer_preferences.h"
 #include "content/public/common/webrtc_ip_handling_policy.h"
@@ -32,7 +31,7 @@
 #include "content/shell/browser/layout_test/layout_test_bluetooth_chooser_factory.h"
 #include "content/shell/browser/layout_test/layout_test_devtools_frontend.h"
 #include "content/shell/browser/layout_test/layout_test_javascript_dialog_manager.h"
-#include "content/shell/browser/layout_test/notify_done_forwarder.h"
+#include "content/shell/browser/layout_test/secondary_test_window_observer.h"
 #include "content/shell/browser/shell_browser_main_parts.h"
 #include "content/shell/browser/shell_content_browser_client.h"
 #include "content/shell/browser/shell_devtools_frontend.h"
@@ -252,7 +251,7 @@ void Shell::AddNewContents(WebContents* source,
                            bool* was_blocked) {
   CreateShell(new_contents, AdjustWindowSize(initial_rect.size()));
   if (switches::IsRunLayoutTestSwitchPresent())
-    NotifyDoneForwarder::CreateForWebContents(new_contents);
+    SecondaryTestWindowObserver::CreateForWebContents(new_contents);
 }
 
 void Shell::GoBackOrForward(int offset) {
@@ -262,6 +261,11 @@ void Shell::GoBackOrForward(int offset) {
 
 void Shell::Reload() {
   web_contents_->GetController().Reload(false);
+  web_contents_->Focus();
+}
+
+void Shell::ReloadBypassingCache() {
+  web_contents_->GetController().ReloadBypassingCache(false);
   web_contents_->Focus();
 }
 
@@ -409,7 +413,7 @@ JavaScriptDialogManager* Shell::GetJavaScriptDialogManager(
   return dialog_manager_.get();
 }
 
-scoped_ptr<BluetoothChooser> Shell::RunBluetoothChooser(
+std::unique_ptr<BluetoothChooser> Shell::RunBluetoothChooser(
     RenderFrameHost* frame,
     const BluetoothChooser::EventHandler& event_handler) {
   if (switches::IsRunLayoutTestSwitchPresent()) {
@@ -456,12 +460,6 @@ gfx::Size Shell::GetShellDefaultSize() {
       kDefaultTestWindowWidthDip, kDefaultTestWindowHeightDip);
   }
   return default_shell_size;
-}
-
-void Shell::RenderViewCreated(RenderViewHost* render_view_host) {
-  // All RenderViewHosts in layout tests should get Mojo bindings.
-  if (switches::IsRunLayoutTestSwitchPresent())
-    render_view_host->AllowBindings(BINDINGS_POLICY_MOJO);
 }
 
 void Shell::TitleWasSet(NavigationEntry* entry, bool explicit_set) {

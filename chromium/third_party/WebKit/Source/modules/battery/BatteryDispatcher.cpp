@@ -4,7 +4,7 @@
 
 #include "modules/battery/BatteryDispatcher.h"
 
-#include "platform/MojoHelper.h"
+#include "platform/mojo/MojoHelper.h"
 #include "public/platform/Platform.h"
 #include "public/platform/ServiceRegistry.h"
 #include "wtf/Assertions.h"
@@ -25,11 +25,10 @@ BatteryDispatcher::BatteryDispatcher()
 
 void BatteryDispatcher::queryNextStatus()
 {
-    m_monitor->QueryNextStatus(
-        sameThreadBindForMojo(&BatteryDispatcher::onDidChange, this));
+    m_monitor->QueryNextStatus(createBaseCallback(bind<device::blink::BatteryStatusPtr>(&BatteryDispatcher::onDidChange, this)));
 }
 
-void BatteryDispatcher::onDidChange(device::BatteryStatusPtr batteryStatus)
+void BatteryDispatcher::onDidChange(device::blink::BatteryStatusPtr batteryStatus)
 {
     queryNextStatus();
 

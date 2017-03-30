@@ -11,7 +11,7 @@
 #include "base/location.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/notifications/desktop_notification_profile_util.h"
 #include "chrome/browser/permissions/permission_request_id.h"
@@ -62,7 +62,7 @@ class VisibilityTimerTabHelper
   bool is_visible_;
 
   struct Task {
-    Task(const PermissionRequestID& id, scoped_ptr<base::Timer> timer)
+    Task(const PermissionRequestID& id, std::unique_ptr<base::Timer> timer)
         : id(id), timer(std::move(timer)) {}
 
     Task& operator=(Task&& other) {
@@ -72,7 +72,7 @@ class VisibilityTimerTabHelper
     }
 
     PermissionRequestID id;
-    scoped_ptr<base::Timer> timer;
+    std::unique_ptr<base::Timer> timer;
 
    private:
     DISALLOW_COPY_AND_ASSIGN(Task);
@@ -110,7 +110,7 @@ void VisibilityTimerTabHelper::PostTaskAfterVisibleDelay(
 
   // Safe to use Unretained, as destroying this will destroy task_queue_, hence
   // cancelling all timers.
-  scoped_ptr<base::Timer> timer(new base::Timer(
+  std::unique_ptr<base::Timer> timer(new base::Timer(
       from_here, visible_delay, base::Bind(&VisibilityTimerTabHelper::RunTask,
                                            base::Unretained(this), task),
       false /* is_repeating */));

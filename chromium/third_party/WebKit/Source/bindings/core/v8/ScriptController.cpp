@@ -57,6 +57,7 @@
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InspectorTraceEvents.h"
+#include "core/inspector/MainThreadDebugger.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
@@ -98,11 +99,8 @@ DEFINE_TRACE(ScriptController)
 
 void ScriptController::clearForClose()
 {
-    double start = currentTime();
     m_windowProxyManager->clearForClose();
-    double end = currentTime();
-    DEFINE_STATIC_LOCAL(CustomCountHistogram, clearForCloseHistogram, ("WebCore.ScriptController.clearForClose", 0, 10000, 50));
-    clearForCloseHistogram.count((end - start) * 1000);
+    MainThreadDebugger::instance()->didClearContextsForFrame(frame());
 }
 
 void ScriptController::updateSecurityOrigin(SecurityOrigin* origin)
@@ -116,8 +114,6 @@ void ScriptController::updateSecurityOrigin(SecurityOrigin* origin)
 
 v8::MaybeLocal<v8::Value> ScriptController::callFunction(v8::Local<v8::Function> function, v8::Local<v8::Value> receiver, int argc, v8::Local<v8::Value> info[])
 {
-    // Keep LocalFrame (and therefore ScriptController) alive.
-    RawPtr<LocalFrame> protect(frame());
     return ScriptController::callFunction(frame()->document(), function, receiver, argc, info, isolate());
 }
 
@@ -130,13 +126,27 @@ v8::MaybeLocal<v8::Value> ScriptController::callFunction(ExecutionContext* conte
 v8::Local<v8::Value> ScriptController::executeScriptAndReturnValue(v8::Local<v8::Context> context, const ScriptSourceCode& source, AccessControlStatus accessControlStatus, double* compilationFinishTime)
 {
     TRACE_EVENT1("devtools.timeline", "EvaluateScript", "data", InspectorEvaluateScriptEvent::data(frame(), source.url().getString(), source.startPosition()));
-    InspectorInstrumentation::allowNativeBreakpoint(frame()->document(), "scriptFirstStatement", false);
+    InspectorInstrumentation::NativeBreakpoint nativeBreakpoint(frame()->document(), "scriptFirstStatement", false);
 
     v8::Local<v8::Value> result;
     {
         V8CacheOptions v8CacheOptions(V8CacheOptionsDefault);
         if (frame()->settings())
             v8CacheOptions = frame()->settings()->v8CacheOptions();
+        if (source.resource() && !source.resource()->response().cacheStorageCacheName().isNull()) {
+            switch (frame()->settings()->v8CacheStrategiesForCacheStorage()) {
+            case V8CacheStrategiesForCacheStorage::Default:
+            case V8CacheStrategiesForCacheStorage::None:
+                v8CacheOptions = V8CacheOptionsNone;
+                break;
+            case V8CacheStrategiesForCacheStorage::Normal:
+                v8CacheOptions = V8CacheOptionsCode;
+                break;
+            case V8CacheStrategiesForCacheStorage::Aggressive:
+                v8CacheOptions = V8CacheOptionsAlways;
+                break;
+            }
+        }
 
         // Isolate exceptions that occur when compiling and executing
         // the code. These exceptions should not interfere with
@@ -152,8 +162,6 @@ v8::Local<v8::Value> ScriptController::executeScriptAndReturnValue(v8::Local<v8:
         if (compilationFinishTime) {
             *compilationFinishTime = WTF::monotonicallyIncreasingTime();
         }
-        // Keep LocalFrame (and therefore ScriptController) alive.
-        RawPtr<LocalFrame> protect(frame());
         if (!v8Call(V8ScriptRunner::runCompiledScript(isolate(), script, frame()->document()), result, tryCatch))
             return result;
     }
@@ -259,13 +267,8 @@ void ScriptController::clearWindowProxy()
 {
     // V8 binding expects ScriptController::clearWindowProxy only be called
     // when a frame is loading a new page. This creates a new context for the new page.
-
-    double start = currentTime();
-
     m_windowProxyManager->clearForNavigation();
-    double end = currentTime();
-    DEFINE_STATIC_LOCAL(CustomCountHistogram, clearWindowProxyHistogram, ("WebCore.ScriptController.clearWindowProxy", 0, 10000, 50));
-    clearWindowProxyHistogram.count((end - start) * 1000);
+    MainThreadDebugger::instance()->didClearContextsForFrame(frame());
 }
 
 void ScriptController::setCaptureCallStackForUncaughtExceptions(v8::Isolate* isolate, bool value)
@@ -348,10 +351,7 @@ bool ScriptController::executeScriptIfJavaScriptURL(const KURL& url)
     if (progressNotificationsNeeded)
         frame()->loader().progress().progressStarted();
 
-    // We need to hold onto the LocalFrame here because executing script can
-    // destroy the frame.
-    RawPtr<LocalFrame> protect(frame());
-    RawPtr<Document> ownerDocument(frame()->document());
+    Document* ownerDocument = frame()->document();
 
     const int javascriptSchemeLength = sizeof("javascript:") - 1;
 
@@ -378,7 +378,7 @@ bool ScriptController::executeScriptIfJavaScriptURL(const KURL& url)
     if (!locationChangeBefore && frame()->navigationScheduler().locationChangePending())
         return true;
 
-    frame()->loader().replaceDocumentWhileExecutingJavaScriptURL(scriptResult, ownerDocument.get());
+    frame()->loader().replaceDocumentWhileExecutingJavaScriptURL(scriptResult, ownerDocument);
     return true;
 }
 
@@ -410,7 +410,6 @@ v8::Local<v8::Value> ScriptController::evaluateScriptInMainWorld(const ScriptSou
     v8::EscapableHandleScope handleScope(isolate());
     ScriptState::Scope scope(scriptState);
 
-    RawPtr<LocalFrame> protect(frame());
     if (frame()->loader().stateMachine()->isDisplayingInitialEmptyDocument())
         frame()->loader().didAccessInitialDocument();
 
@@ -439,7 +438,7 @@ void ScriptController::executeScriptInIsolatedWorld(int worldID, const HeapVecto
         v8::Local<v8::Value> evaluationResult = executeScriptAndReturnValue(scriptState->context(), sources[i]);
         if (evaluationResult.IsEmpty())
             evaluationResult = v8::Local<v8::Value>::New(isolate(), v8::Undefined(isolate()));
-        if (!v8CallBoolean(resultArray->Set(scriptState->context(), v8::Integer::New(scriptState->isolate(), i), evaluationResult)))
+        if (!v8CallBoolean(resultArray->CreateDataProperty(scriptState->context(), i, evaluationResult)))
             return;
     }
 

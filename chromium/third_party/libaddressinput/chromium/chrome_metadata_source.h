@@ -6,6 +6,7 @@
 #define THIRD_PARTY_LIBADDRESSINPUT_CHROMIUM_CHROME_METADATA_SOURCE_H_
 
 #include <map>
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
@@ -38,14 +39,14 @@ class ChromeMetadataSource : public ::i18n::addressinput::Source,
  private:
   struct Request {
     Request(const std::string& key,
-            scoped_ptr<net::URLFetcher> fetcher,
+            std::unique_ptr<net::URLFetcher> fetcher,
             const Callback& callback);
 
     std::string key;
     // The data that's received.
     std::string data;
     // The object that manages retrieving the data.
-    scoped_ptr<net::URLFetcher> fetcher;
+    std::unique_ptr<net::URLFetcher> fetcher;
     const Callback& callback;
   };
 

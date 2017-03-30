@@ -275,7 +275,7 @@ TEST_F(PasswordManagerSettingMigratorServiceTest,
     PasswordManagerPreferencesInitialValues histogram_initial_value;
     PasswordManagerPreferencesInitialAndFinalValues histogram_initial_and_final;
   } kTestingTable[] = {
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_IOS)
     {ON, OFF, ON, EMPTY, false, N1L0, I10F00},
     {ON, OFF, OFF, EMPTY, false, N1L0, I10F00},
     {ON, OFF, EMPTY, EMPTY, false, N1L0, I10F00},
@@ -331,7 +331,7 @@ TEST_F(PasswordManagerSettingMigratorServiceTest,
     NotifyProfileAdded();
     StartSyncingPref(prefs(), prefs::kCredentialsEnableService,
                      test_case.new_pref_sync_value);
-#if !defined(OS_ANDROID)
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
     StartSyncingPref(prefs(), prefs::kPasswordManagerSavingEnabled,
                      test_case.old_pref_sync_value);
 #endif
@@ -357,7 +357,7 @@ TEST_F(PasswordManagerSettingMigratorServiceTest,
     bool result_old_pref_value;
     PasswordManagerPreferencesInitialValues histogram_initial_value;
   } kTestingTable[] = {
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_IOS)
     {ON, OFF, ON, EMPTY, true, false, N1L0},
     {ON, OFF, OFF, EMPTY, false, false, N1L0},
     {ON, OFF, EMPTY, EMPTY, true, false, N1L0},
@@ -411,7 +411,7 @@ TEST_F(PasswordManagerSettingMigratorServiceTest,
     NotifyProfileAdded();
     StartSyncingPref(prefs(), prefs::kCredentialsEnableService,
                      test_case.new_pref_sync_value);
-#if !defined(OS_ANDROID)
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
     StartSyncingPref(prefs(), prefs::kPasswordManagerSavingEnabled,
                      test_case.old_pref_sync_value);
 #endif

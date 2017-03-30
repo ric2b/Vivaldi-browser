@@ -15,7 +15,6 @@
 #include "skia/ext/analysis_canvas.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkPictureRecorder.h"
-#include "third_party/skia/include/core/SkTLazy.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 
 namespace cc {
@@ -78,11 +77,16 @@ void RasterSource::PlaybackToCanvas(SkCanvas* raster_canvas,
     SkipImageCanvas canvas(raster_canvas);
     RasterCommon(&canvas, nullptr, canvas_bitmap_rect, canvas_playback_rect,
                  contents_scale);
-  } else if (settings.use_image_hijack_canvas &&
-             display_list_->MayHaveDiscardableImages()) {
+  } else if (settings.use_image_hijack_canvas) {
     const SkImageInfo& info = raster_canvas->imageInfo();
+
     ImageHijackCanvas canvas(info.width(), info.height(),
                              image_decode_controller_);
+    // Before adding the canvas, make sure that the ImageHijackCanvas is aware
+    // of the current transform, which may affect the clip bounds. Since we
+    // query the clip bounds of the current canvas to get the list of draw
+    // commands to process, this is important to produce correct content.
+    canvas.setMatrix(raster_canvas->getTotalMatrix());
     canvas.addCanvas(raster_canvas);
 
     RasterCommon(&canvas, nullptr, canvas_bitmap_rect, canvas_playback_rect,
@@ -301,12 +305,6 @@ bool RasterSource::CanUseLCDText() const {
 scoped_refptr<RasterSource> RasterSource::CreateCloneWithoutLCDText() const {
   bool can_use_lcd_text = false;
   return scoped_refptr<RasterSource>(new RasterSource(this, can_use_lcd_text));
-}
-
-void RasterSource::SetImageDecodeController(
-    ImageDecodeController* image_decode_controller) {
-  DCHECK(image_decode_controller);
-  image_decode_controller_ = image_decode_controller;
 }
 
 RasterSource::PlaybackSettings::PlaybackSettings()

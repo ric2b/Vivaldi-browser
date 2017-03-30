@@ -23,9 +23,17 @@ import shutil
 import sys
 import subprocess
 import tempfile
+import traceback
 import urllib2
 
 from collections import OrderedDict
+
+CHROMIUM_SRC_DIR = os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))))
+sys.path = [os.path.join(CHROMIUM_SRC_DIR, 'build')] + sys.path
+
+import gn_helpers
+
 
 def main(args):
   mbw = MetaBuildWrapper()
@@ -34,11 +42,9 @@ def main(args):
 
 class MetaBuildWrapper(object):
   def __init__(self):
-    p = os.path
-    d = os.path.dirname
-    self.chromium_src_dir = p.normpath(d(d(d(p.abspath(__file__)))))
-    self.default_config = p.join(self.chromium_src_dir, 'tools', 'mb',
-                                 'mb_config.pyl')
+    self.chromium_src_dir = CHROMIUM_SRC_DIR
+    self.default_config = os.path.join(self.chromium_src_dir, 'tools', 'mb',
+                                       'mb_config.pyl')
     self.executable = sys.executable
     self.platform = sys.platform
     self.sep = os.sep
@@ -57,9 +63,11 @@ class MetaBuildWrapper(object):
     except KeyboardInterrupt:
       self.Print('interrupted, exiting', stream=sys.stderr)
       return 130
-    except Exception as e:
+    except Exception:
       self.DumpInputFiles()
-      self.Print(str(e))
+      s = traceback.format_exc()
+      for l in s.splitlines():
+        self.Print(l)
       return 1
 
   def ParseArgs(self, argv):
@@ -70,12 +78,21 @@ class MetaBuildWrapper(object):
                         help='master name to look up config from')
       subp.add_argument('-c', '--config',
                         help='configuration to analyze')
+      subp.add_argument('--phase', type=int,
+                        help=('build phase for a given build '
+                              '(int in [1, 2, ...))'))
       subp.add_argument('-f', '--config-file', metavar='PATH',
                         default=self.default_config,
                         help='path to config file '
                             '(default is //tools/mb/mb_config.pyl)')
-      subp.add_argument('-g', '--goma-dir', default=self.ExpandUser('~/goma'),
-                        help='path to goma directory (default is %(default)s).')
+      subp.add_argument('-g', '--goma-dir',
+                        help='path to goma directory')
+      subp.add_argument('--android-version-code',
+                        help='Sets GN arg android_default_version_code and '
+                             'GYP_DEFINE app_manifest_version_code')
+      subp.add_argument('--android-version-name',
+                        help='Sets GN arg android_default_version_name and '
+                             'GYP_DEFINE app_manifest_version_name')
       subp.add_argument('-n', '--dryrun', action='store_true',
                         help='Do a dry run (i.e., do nothing, just print '
                              'the commands that will run)')
@@ -222,6 +239,7 @@ class MetaBuildWrapper(object):
 
   def CmdAnalyze(self):
     vals = self.Lookup()
+    self.ClobberIfNeeded(vals)
     if vals['type'] == 'gn':
       return self.RunGNAnalyze(vals)
     else:
@@ -230,7 +248,6 @@ class MetaBuildWrapper(object):
   def CmdGen(self):
     vals = self.Lookup()
     self.ClobberIfNeeded(vals)
-
     if vals['type'] == 'gn':
       return self.RunGNGen(vals)
     else:
@@ -255,7 +272,9 @@ class MetaBuildWrapper(object):
   def CmdLookup(self):
     vals = self.Lookup()
     if vals['type'] == 'gn':
-      cmd = self.GNCmd('gen', '_path_', vals['gn_args'])
+      cmd = self.GNCmd('gen', '_path_')
+      gn_args = self.GNArgs(vals)
+      self.Print('\nWriting """\\\n%s""" to _path_/args.gn.\n' % gn_args)
       env = None
     else:
       cmd, env = self.GYPCmd('_path_', vals)
@@ -308,11 +327,19 @@ class MetaBuildWrapper(object):
     all_configs = {}
     for master in self.masters:
       for config in self.masters[master].values():
-        all_configs[config] = master
+        if isinstance(config, list):
+          for c in config:
+            all_configs[c] = master
+        else:
+          all_configs[config] = master
 
-    # Check that every referenced config actually exists.
+    # Check that every referenced args file or config actually exists.
     for config, loc in all_configs.items():
-      if not config in self.configs:
+      if config.startswith('//'):
+        if not self.Exists(self.ToAbsPath(config)):
+          errs.append('Unknown args file "%s" referenced from "%s".' %
+                      (config, loc))
+      elif not config in self.configs:
         errs.append('Unknown config "%s" referenced from "%s".' %
                     (config, loc))
 
@@ -451,8 +478,15 @@ class MetaBuildWrapper(object):
         config = self.masters[master][builder]
         if config == 'tbd':
           tbd.add(builder)
+        elif isinstance(config, list):
+          vals = self.FlattenConfig(config[0])
+          if vals['type'] == 'gyp':
+            gyp.add(builder)
+          else:
+            done.add(builder)
+        elif config.startswith('//'):
+          done.add(builder)
         else:
-          # TODO(dpranke): Check if MB is actually running?
           vals = self.FlattenConfig(config)
           if vals['type'] == 'gyp':
             gyp.add(builder)
@@ -470,7 +504,7 @@ class MetaBuildWrapper(object):
         PrintBuilders(STAT_TBD, tbd, notes)
         PrintBuilders(STAT_GYP, gyp, notes)
       else:
-        self.Print('  ... done')
+        self.Print('  All GN!')
 
       stats[STAT_DONE] += len(done)
 
@@ -495,12 +529,6 @@ class MetaBuildWrapper(object):
         # build dir.
         self.RunGNGen(vals)
       return vals
-
-    # TODO: We can only get the config for GN build dirs, not GYP build dirs.
-    # GN stores the args that were used in args.gn in the build dir,
-    # but GYP doesn't store them anywhere. We should consider modifying
-    # gyp_chromium to record the arguments it runs with in a similar
-    # manner.
 
     mb_type_path = self.PathJoin(self.ToAbsPath(build_dir), 'mb_type')
     if not self.Exists(mb_type_path):
@@ -543,11 +571,22 @@ class MetaBuildWrapper(object):
     if not vals:
       self.ReadConfigFile()
       config = self.ConfigFromArgs()
-      if not config in self.configs:
-        raise MBErr('Config "%s" not found in %s' %
-                    (config, self.args.config_file))
-
-      vals = self.FlattenConfig(config)
+      if config.startswith('//'):
+        if not self.Exists(self.ToAbsPath(config)):
+          raise MBErr('args file "%s" not found' % config)
+        vals = {
+          'args_file': config,
+          'cros_passthrough': False,
+          'gn_args': '',
+          'gyp_crosscompile': False,
+          'gyp_defines': '',
+          'type': 'gn',
+        }
+      else:
+        if not config in self.configs:
+          raise MBErr('Config "%s" not found in %s' %
+                      (config, self.args.config_file))
+        vals = self.FlattenConfig(config)
 
     # Do some basic sanity checking on the config so that we
     # don't have to do this in every caller.
@@ -574,10 +613,12 @@ class MetaBuildWrapper(object):
     gn_args = ' '.join(contents.get('gn_args', []))
 
     return {
-        'type': contents.get('mb_type', ''),
+        'args_file': '',
+        'cros_passthrough': False,
         'gn_args': gn_args,
-        'gyp_defines': gyp_defines,
         'gyp_crosscompile': False,
+        'gyp_defines': gyp_defines,
+        'type': contents.get('mb_type', ''),
     }
 
   def ReadConfigFile(self):
@@ -614,15 +655,31 @@ class MetaBuildWrapper(object):
       raise MBErr('Builder name "%s"  not found under masters[%s] in "%s"' %
                   (self.args.builder, self.args.master, self.args.config_file))
 
-    return self.masters[self.args.master][self.args.builder]
+    config = self.masters[self.args.master][self.args.builder]
+    if isinstance(config, list):
+      if self.args.phase is None:
+        raise MBErr('Must specify a build --phase for %s on %s' %
+                    (self.args.builder, self.args.master))
+      phase = int(self.args.phase)
+      if phase < 1 or phase > len(config):
+        raise MBErr('Phase %d out of bounds for %s on %s' %
+                    (phase, self.args.builder, self.args.master))
+      return config[phase-1]
+
+    if self.args.phase is not None:
+      raise MBErr('Must not specify a build --phase for %s on %s' %
+                  (self.args.builder, self.args.master))
+    return config
 
   def FlattenConfig(self, config):
     mixins = self.configs[config]
     vals = {
-      'type': None,
+      'args_file': '',
+      'cros_passthrough': False,
       'gn_args': [],
       'gyp_defines': '',
       'gyp_crosscompile': False,
+      'type': None,
     }
 
     visited = []
@@ -634,13 +691,12 @@ class MetaBuildWrapper(object):
       if m not in self.mixins:
         raise MBErr('Unknown mixin "%s"' % m)
 
-      # TODO: check for cycles in mixins.
-
       visited.append(m)
 
       mixin_vals = self.mixins[m]
-      if 'type' in mixin_vals:
-        vals['type'] = mixin_vals['type']
+
+      if 'cros_passthrough' in mixin_vals:
+        vals['cros_passthrough'] = mixin_vals['cros_passthrough']
       if 'gn_args' in mixin_vals:
         if vals['gn_args']:
           vals['gn_args'] += ' ' + mixin_vals['gn_args']
@@ -653,6 +709,9 @@ class MetaBuildWrapper(object):
           vals['gyp_defines'] += ' ' + mixin_vals['gyp_defines']
         else:
           vals['gyp_defines'] = mixin_vals['gyp_defines']
+      if 'type' in mixin_vals:
+        vals['type'] = mixin_vals['type']
+
       if 'mixins' in mixin_vals:
         self.FlattenMixins(mixin_vals['mixins'], vals, visited)
     return vals
@@ -690,7 +749,14 @@ class MetaBuildWrapper(object):
   def RunGNGen(self, vals):
     build_dir = self.args.path[0]
 
-    cmd = self.GNCmd('gen', build_dir, vals['gn_args'], extra_args=['--check'])
+    cmd = self.GNCmd('gen', build_dir, '--check')
+    gn_args = self.GNArgs(vals)
+
+    # Since GN hasn't run yet, the build directory may not even exist.
+    self.MaybeMakeDirectory(self.ToAbsPath(build_dir))
+
+    gn_args_path = self.ToAbsPath(build_dir, 'args.gn')
+    self.WriteFile(gn_args_path, gn_args, force_verbose=True)
 
     swarming_targets = []
     if getattr(self.args, 'swarming_targets_file', None):
@@ -722,10 +788,6 @@ class MetaBuildWrapper(object):
                       ('//testing/buildbot/gn_isolate_map.pyl', err))
 
       gn_runtime_deps_path = self.ToAbsPath(build_dir, 'runtime_deps')
-
-      # Since GN hasn't run yet, the build directory may not even exist.
-      self.MaybeMakeDirectory(self.ToAbsPath(build_dir))
-
       self.WriteFile(gn_runtime_deps_path, '\n'.join(gn_labels) + '\n')
       cmd.append('--runtime-deps-list-file=%s' % gn_runtime_deps_path)
 
@@ -736,9 +798,10 @@ class MetaBuildWrapper(object):
         self.Print('GN gen failed: %d' % ret)
         return ret
 
+    android = 'target_os="android"' in vals['gn_args']
     for target in swarming_targets:
-      if target.endswith('_apk'):
-        # "_apk" targets may be either android_apk or executable. The former
+      if android:
+        # Android targets may be either android_apk or executable. The former
         # will result in runtime_deps associated with the stamp file, while the
         # latter will result in runtime_deps associated with the executable.
         target_name = self.GNTargetName(target)
@@ -792,7 +855,7 @@ class MetaBuildWrapper(object):
     command, extra_files = self.GetIsolateCommand(target, vals, gn_isolate_map)
 
     label = gn_isolate_map[target_name]['label']
-    cmd = self.GNCmd('desc', build_dir, extra_args=[label, 'runtime_deps'])
+    cmd = self.GNCmd('desc', build_dir, label, 'runtime_deps')
     ret, out, _ = self.Call(cmd)
     if ret:
       if out:
@@ -841,22 +904,49 @@ class MetaBuildWrapper(object):
       isolate_path + 'd.gen.json',
     )
 
-  def GNCmd(self, subcommand, path, gn_args='', extra_args=None):
+  def GNCmd(self, subcommand, path, *args):
     if self.platform == 'linux2':
       subdir, exe = 'linux64', 'gn'
     elif self.platform == 'darwin':
       subdir, exe = 'mac', 'gn'
     else:
       subdir, exe = 'win', 'gn.exe'
+
     gn_path = self.PathJoin(self.chromium_src_dir, 'buildtools', subdir, exe)
 
-    cmd = [gn_path, subcommand, path]
-    gn_args = gn_args.replace("$(goma_dir)", self.args.goma_dir)
-    if gn_args:
-      cmd.append('--args=%s' % gn_args)
-    if extra_args:
-      cmd.extend(extra_args)
-    return cmd
+    return [gn_path, subcommand, path] + list(args)
+
+  def GNArgs(self, vals):
+    if vals['cros_passthrough']:
+      if not 'GN_ARGS' in os.environ:
+        raise MBErr('MB is expecting GN_ARGS to be in the environment')
+      gn_args = os.environ['GN_ARGS']
+      if not re.search('target_os.*=.*"chromeos"', gn_args):
+        raise MBErr('GN_ARGS is missing target_os = "chromeos": (GN_ARGS=%s)' %
+                    gn_args)
+    else:
+      gn_args = vals['gn_args']
+
+    if self.args.goma_dir:
+      gn_args += ' goma_dir="%s"' % self.args.goma_dir
+
+    android_version_code = self.args.android_version_code
+    if android_version_code:
+      gn_args += ' android_default_version_code="%s"' % android_version_code
+
+    android_version_name = self.args.android_version_name
+    if android_version_name:
+      gn_args += ' android_default_version_name="%s"' % android_version_name
+
+    # Canonicalize the arg string into a sorted, newline-separated list
+    # of key-value pairs, and de-dup the keys if need be so that only
+    # the last instance of each arg is listed.
+    gn_args = gn_helpers.ToGNString(gn_helpers.FromGNArgs(gn_args))
+
+    args_file = vals.get('args_file', None)
+    if args_file:
+      gn_args = ('import("%s")\n' % vals['args_file']) + gn_args
+    return gn_args
 
   def RunGYPGen(self, vals):
     path = self.args.path[0]
@@ -895,7 +985,6 @@ class MetaBuildWrapper(object):
 
     # This needs to mirror the settings in //build/config/ui.gni:
     # use_x11 = is_linux && !use_ozone.
-    # TODO(dpranke): Figure out how to keep this in sync better.
     use_x11 = (self.platform == 'linux2' and
                not android and
                not 'use_ozone=true' in vals['gn_args'])
@@ -913,10 +1002,12 @@ class MetaBuildWrapper(object):
     cmdline = []
     extra_files = []
 
-    if android:
-      # TODO(jbudorick): This won't work with instrumentation test targets.
-      # Revisit this logic when those are added to gn_isolate_map.pyl.
-      cmdline = [self.PathJoin('bin', 'run_%s' % target_name)]
+    if android and test_type != "script":
+      cmdline = [
+          self.PathJoin('bin', 'run_%s' % target_name),
+          '--logcat-output-dir', '${ISOLATED_OUTDIR}/logcats',
+          '-v',
+      ]
     elif use_x11 and test_type == 'windowed_test_launcher':
       extra_files = [
           'xdisplaycheck',
@@ -998,15 +1089,34 @@ class MetaBuildWrapper(object):
     return output_dir
 
   def GYPCmd(self, output_dir, vals):
-    gyp_defines = vals['gyp_defines']
+    if vals['cros_passthrough']:
+      if not 'GYP_DEFINES' in os.environ:
+        raise MBErr('MB is expecting GYP_DEFINES to be in the environment')
+      gyp_defines = os.environ['GYP_DEFINES']
+      if not 'chromeos=1' in gyp_defines:
+        raise MBErr('GYP_DEFINES is missing chromeos=1: (GYP_DEFINES=%s)' %
+                    gyp_defines)
+    else:
+      gyp_defines = vals['gyp_defines']
+
     goma_dir = self.args.goma_dir
 
     # GYP uses shlex.split() to split the gyp defines into separate arguments,
     # so we can support backslashes and and spaces in arguments by quoting
     # them, even on Windows, where this normally wouldn't work.
-    if '\\' in goma_dir or ' ' in goma_dir:
+    if goma_dir and ('\\' in goma_dir or ' ' in goma_dir):
       goma_dir = "'%s'" % goma_dir
-    gyp_defines = gyp_defines.replace("$(goma_dir)", goma_dir)
+
+    if goma_dir:
+      gyp_defines += ' gomadir=%s' % goma_dir
+
+    android_version_code = self.args.android_version_code
+    if android_version_code:
+      gyp_defines += ' app_manifest_version_code=%s' % android_version_code
+
+    android_version_name = self.args.android_version_name
+    if android_version_name:
+      gyp_defines += ' app_manifest_version_name=%s' % android_version_name
 
     cmd = [
         self.executable,
@@ -1018,6 +1128,21 @@ class MetaBuildWrapper(object):
     # Ensure that we have an environment that only contains
     # the exact values of the GYP variables we need.
     env = os.environ.copy()
+
+    # This is a terrible hack to work around the fact that
+    # //tools/clang/scripts/update.py is invoked by GYP and GN but
+    # currently relies on an environment variable to figure out
+    # what revision to embed in the command line #defines.
+    # For GN, we've made this work via a gn arg that will cause update.py
+    # to get an additional command line arg, but getting that to work
+    # via GYP_DEFINES has proven difficult, so we rewrite the GYP_DEFINES
+    # to get rid of the arg and add the old var in, instead.
+    # See crbug.com/582737 for more on this. This can hopefully all
+    # go away with GYP.
+    if 'llvm_force_head_revision=1' in gyp_defines:
+      env['LLVM_FORCE_HEAD_REVISION'] = '1'
+      gyp_defines = gyp_defines.replace('llvm_force_head_revision=1', '')
+
     env['GYP_GENERATORS'] = 'ninja'
     if 'GYP_CHROMIUM_NO_ACTION' in env:
       del env['GYP_CHROMIUM_NO_ACTION']
@@ -1083,8 +1208,11 @@ class MetaBuildWrapper(object):
 
     matching_targets = set()
     try:
-      cmd = self.GNCmd('refs', self.args.path[0]) + [
-          '@%s' % response_file.name, '--all', '--as=output']
+      cmd = self.GNCmd('refs',
+                       self.args.path[0],
+                       '@%s' % response_file.name,
+                       '--all',
+                       '--as=output')
       ret, out, _ = self.Run(cmd, force_verbose=False)
       if ret and not 'The input matches no targets' in out:
         self.WriteFailureAndRaise('gn refs returned %d: %s' % (ret, out),
@@ -1095,8 +1223,10 @@ class MetaBuildWrapper(object):
         if build_output in targets:
           matching_targets.add(build_output)
 
-      cmd = self.GNCmd('refs', self.args.path[0]) + [
-          '@%s' % response_file.name, '--all']
+      cmd = self.GNCmd('refs',
+                       self.args.path[0],
+                       '@%s' % response_file.name,
+                       '--all')
       ret, out, _ = self.Run(cmd, force_verbose=False)
       if ret and not 'The input matches no targets' in out:
         self.WriteFailureAndRaise('gn refs returned %d: %s' % (ret, out),
@@ -1214,7 +1344,7 @@ class MetaBuildWrapper(object):
     self.Print(json.dumps(obj, indent=2, sort_keys=True))
 
   def GNTargetName(self, target):
-    return target[:-len('_apk')] if target.endswith('_apk') else target
+    return target
 
   def Build(self, target):
     build_dir = self.ToSrcRelPath(self.args.path[0])

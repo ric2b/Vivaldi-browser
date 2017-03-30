@@ -12,6 +12,7 @@
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/threading/thread_local.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/output_surface.h"
@@ -26,7 +27,7 @@
 #include "mojo/converters/geometry/geometry_type_converters.h"
 #include "mojo/converters/surfaces/surfaces_type_converters.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "mojo/shell/public/cpp/connector.h"
+#include "services/shell/public/cpp/connector.h"
 #include "ui/views/mus/window_tree_host_mus.h"
 
 namespace views {
@@ -41,10 +42,10 @@ namespace views {
 class SurfaceBinding::PerConnectionState
     : public base::RefCounted<PerConnectionState> {
  public:
-  static PerConnectionState* Get(mojo::Connector* connector,
+  static PerConnectionState* Get(shell::Connector* connector,
                                  mus::WindowTreeConnection* connection);
 
-  scoped_ptr<cc::OutputSurface> CreateOutputSurface(
+  std::unique_ptr<cc::OutputSurface> CreateOutputSurface(
       mus::Window* window,
       mus::mojom::SurfaceType type);
 
@@ -54,7 +55,7 @@ class SurfaceBinding::PerConnectionState
 
   friend class base::RefCounted<PerConnectionState>;
 
-  PerConnectionState(mojo::Connector* connector,
+  PerConnectionState(shell::Connector* connector,
                      mus::WindowTreeConnection* connection);
   ~PerConnectionState();
 
@@ -63,7 +64,7 @@ class SurfaceBinding::PerConnectionState
   static base::LazyInstance<
       base::ThreadLocalPointer<ConnectionToStateMap>>::Leaky window_states;
 
-  mojo::Connector* connector_;
+  shell::Connector* connector_;
   mus::WindowTreeConnection* connection_;
 
   // Set of state needed to create an OutputSurface.
@@ -79,7 +80,7 @@ base::LazyInstance<base::ThreadLocalPointer<
 
 // static
 SurfaceBinding::PerConnectionState* SurfaceBinding::PerConnectionState::Get(
-    mojo::Connector* connector,
+    shell::Connector* connector,
     mus::WindowTreeConnection* connection) {
   ConnectionToStateMap* window_map = window_states.Pointer()->Get();
   if (!window_map) {
@@ -93,10 +94,12 @@ SurfaceBinding::PerConnectionState* SurfaceBinding::PerConnectionState::Get(
   return (*window_map)[connection];
 }
 
-scoped_ptr<cc::OutputSurface>
+std::unique_ptr<cc::OutputSurface>
 SurfaceBinding::PerConnectionState::CreateOutputSurface(
     mus::Window* window,
     mus::mojom::SurfaceType surface_type) {
+  if (gpu_.encountered_error())
+    return nullptr;
   // TODO(sky): figure out lifetime here. Do I need to worry about the return
   // value outliving this?
   mus::mojom::CommandBufferPtr cb;
@@ -104,12 +107,12 @@ SurfaceBinding::PerConnectionState::CreateOutputSurface(
 
   scoped_refptr<cc::ContextProvider> context_provider(
       new mus::ContextProvider(cb.PassInterface().PassHandle()));
-  return make_scoped_ptr(new mus::OutputSurface(
+  return base::WrapUnique(new mus::OutputSurface(
       context_provider, window->RequestSurface(surface_type)));
 }
 
 SurfaceBinding::PerConnectionState::PerConnectionState(
-    mojo::Connector* connector,
+    shell::Connector* connector,
     mus::WindowTreeConnection* connection)
     : connector_(connector), connection_(connection) {}
 
@@ -126,11 +129,17 @@ SurfaceBinding::PerConnectionState::~PerConnectionState() {
 
 void SurfaceBinding::PerConnectionState::Init() {
   connector_->ConnectToInterface("mojo:mus", &gpu_);
+
+  // TODO(sad): If connection is lost (e.g. if gpu crashes), then the
+  // connections need to be restored. https://crbug.com/613366
+  // TODO(rockot|yzshen): It is necessary to install a connection-error handler,
+  // even if the handler doesn't actually do anything. https://crbug.com/613371
+  gpu_.set_connection_error_handler([]{});
 }
 
 // SurfaceBinding --------------------------------------------------------------
 
-SurfaceBinding::SurfaceBinding(mojo::Connector* connector,
+SurfaceBinding::SurfaceBinding(shell::Connector* connector,
                                mus::Window* window,
                                mus::mojom::SurfaceType surface_type)
     : window_(window),
@@ -139,7 +148,7 @@ SurfaceBinding::SurfaceBinding(mojo::Connector* connector,
 
 SurfaceBinding::~SurfaceBinding() {}
 
-scoped_ptr<cc::OutputSurface> SurfaceBinding::CreateOutputSurface() {
+std::unique_ptr<cc::OutputSurface> SurfaceBinding::CreateOutputSurface() {
   return state_->CreateOutputSurface(window_, surface_type_);
 }
 

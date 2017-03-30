@@ -25,13 +25,13 @@
 
 #include "core/html/HTMLAllCollection.h"
 
-#include "bindings/core/v8/UnionTypesCore.h"
+#include "bindings/core/v8/NodeListOrElement.h"
 #include "core/dom/Element.h"
 #include "core/dom/StaticNodeList.h"
 
 namespace blink {
 
-RawPtr<HTMLAllCollection> HTMLAllCollection::create(ContainerNode& node, CollectionType type)
+HTMLAllCollection* HTMLAllCollection::create(ContainerNode& node, CollectionType type)
 {
     ASSERT_UNUSED(type, type == DocAll);
     return new HTMLAllCollection(node);

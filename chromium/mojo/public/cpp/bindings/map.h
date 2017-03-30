@@ -24,20 +24,23 @@ namespace mojo {
 //   - There can only be one entry per unique key.
 //   - Values of move-only types will be moved into the Map when they are added
 //     using the insert() method.
-template <typename Key, typename Value>
+template <typename K, typename V>
 class Map {
   MOVE_ONLY_TYPE_FOR_CPP_03(Map);
 
  public:
+  using Key = K;
+  using Value = V;
+
   // Map keys cannot be move only classes.
   static_assert(!internal::IsMoveOnlyType<Key>::value,
                 "Map keys cannot be move only types.");
 
   using ConstIterator = typename std::map<Key, Value>::const_iterator;
 
-  using Data_ =
-      internal::Map_Data<typename internal::WrapperTraits<Key>::DataType,
-                         typename internal::WrapperTraits<Value>::DataType>;
+  using Data_ = internal::Map_Data<
+      typename internal::GetDataTypeAsArrayElement<Key>::Data,
+      typename internal::GetDataTypeAsArrayElement<Value>::Data>;
 
   // Constructs an empty map.
   Map() : is_null_(false) {}

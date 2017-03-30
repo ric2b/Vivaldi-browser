@@ -5,6 +5,7 @@
 #include "chrome/app/chrome_main_delegate.h"
 
 #include <stddef.h>
+#include <string>
 
 #include "base/base_paths.h"
 #include "base/command_line.h"
@@ -23,7 +24,6 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event_impl.h"
 #include "build/build_config.h"
-#include "chrome/app/chrome_crash_reporter_client.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/defaults.h"
 #include "chrome/common/channel_info.h"
@@ -40,6 +40,7 @@
 #include "chrome/common/switch_utils.h"
 #include "chrome/common/trace_event_args_whitelist.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/gpu/chrome_content_gpu_client.h"
 #include "chrome/renderer/chrome_content_renderer_client.h"
 #include "chrome/utility/chrome_content_utility_client.h"
 #include "components/component_updater/component_updater_paths.h"
@@ -50,6 +51,7 @@
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/common/constants.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_switches.h"
 
@@ -79,6 +81,7 @@
 #if defined(OS_POSIX)
 #include <locale.h>
 #include <signal.h>
+#include "chrome/app/chrome_crash_reporter_client.h"
 #endif
 
 #if !defined(DISABLE_NACL) && defined(OS_LINUX)
@@ -109,7 +112,7 @@
 #if defined(USE_X11)
 #include <stdlib.h>
 #include <string.h>
-#include "ui/base/x/x11_util.h"
+#include "ui/base/x/x11_util.h"  // nogncheck
 #endif
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX)
@@ -141,6 +144,8 @@
 #if !defined(CHROME_MULTIPLE_DLL_BROWSER)
 #include "chrome/child/pdf_child_init.h"
 
+base::LazyInstance<ChromeContentGpuClient> g_chrome_content_gpu_client =
+    LAZY_INSTANCE_INITIALIZER;
 base::LazyInstance<ChromeContentRendererClient>
     g_chrome_content_renderer_client = LAZY_INSTANCE_INITIALIZER;
 base::LazyInstance<ChromeContentUtilityClient>
@@ -228,8 +233,8 @@ static void AdjustLinuxOOMScore(const std::string& process_type) {
   const int kPluginScore = kMiscScore - kScoreBump;
   int score = -1;
 
-  DCHECK(kMiscScore > 0);
-  DCHECK(kPluginScore > 0);
+  DCHECK_GT(kMiscScore, 0);
+  DCHECK_GT(kPluginScore, 0);
 
   if (process_type == switches::kPpapiPluginProcess) {
     score = kPluginScore;
@@ -335,7 +340,7 @@ void SIGTERMProfilingShutdown(int signal) {
   struct sigaction sigact;
   memset(&sigact, 0, sizeof(sigact));
   sigact.sa_handler = SIG_DFL;
-  CHECK(sigaction(SIGTERM, &sigact, NULL) == 0);
+  CHECK_EQ(sigaction(SIGTERM, &sigact, NULL), 0);
   raise(signal);
 }
 
@@ -344,7 +349,7 @@ void SetUpProfilingShutdownHandler() {
   sigact.sa_handler = SIGTERMProfilingShutdown;
   sigact.sa_flags = SA_RESETHAND;
   sigemptyset(&sigact.sa_mask);
-  CHECK(sigaction(SIGTERM, &sigact, NULL) == 0);
+  CHECK_EQ(sigaction(SIGTERM, &sigact, NULL), 0);
 }
 #endif  // !defined(OS_MACOSX) && !defined(OS_ANDROID)
 
@@ -373,7 +378,7 @@ void InitializeUserDataDir() {
   // support the virtual desktop use-case.
   if (user_data_dir.empty()) {
     std::string user_data_dir_string;
-    scoped_ptr<base::Environment> environment(base::Environment::Create());
+    std::unique_ptr<base::Environment> environment(base::Environment::Create());
     if (environment->GetVar("CHROME_USER_DATA_DIR", &user_data_dir_string) &&
         base::IsStringUTF8(user_data_dir_string)) {
       user_data_dir = base::FilePath::FromUTF8Unsafe(user_data_dir_string);
@@ -639,6 +644,12 @@ bool ChromeMainDelegate::BasicStartupComplete(int* exit_code) {
   }
 #endif
 
+  if (command_line.HasSwitch(switches::kOriginTrialPublicKey)) {
+    chrome_content_client_.origin_trial_key_manager()
+        ->SetPublicKeyFromASCIIString(
+            command_line.GetSwitchValueASCII(switches::kOriginTrialPublicKey));
+  }
+
   content::SetContentClient(&chrome_content_client_);
 
   return false;
@@ -726,7 +737,8 @@ void ChromeMainDelegate::PreSandboxStartup() {
 
   // Register component_updater PathProvider after DIR_USER_DATA overidden by
   // command line flags. Maybe move the chrome PathProvider down here also?
-  component_updater::RegisterPathProvider(chrome::DIR_USER_DATA);
+  component_updater::RegisterPathProvider(chrome::DIR_COMPONENTS,
+                                          chrome::DIR_USER_DATA);
 
   // Enable Message Loop related state asap.
   if (command_line.HasSwitch(switches::kMessageLoopHistogrammer))
@@ -796,6 +808,7 @@ void ChromeMainDelegate::PreSandboxStartup() {
     base::i18n::SetICUDefaultLocale(locale);
     const std::string loaded_locale = locale;
 #else
+    ui::MaterialDesignController::Initialize();
     const std::string loaded_locale =
         ui::ResourceBundle::InitSharedInstanceWithLocale(
             locale, NULL, ui::ResourceBundle::LOAD_COMMON_RESOURCES);
@@ -985,6 +998,14 @@ ChromeMainDelegate::CreateContentBrowserClient() {
   return NULL;
 #else
   return g_chrome_content_browser_client.Pointer();
+#endif
+}
+
+content::ContentGpuClient* ChromeMainDelegate::CreateContentGpuClient() {
+#if defined(CHROME_MULTIPLE_DLL_BROWSER)
+  return nullptr;
+#else
+  return g_chrome_content_gpu_client.Pointer();
 #endif
 }
 

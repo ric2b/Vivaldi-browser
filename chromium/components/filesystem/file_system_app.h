@@ -10,9 +10,9 @@
 #include "components/filesystem/file_system_impl.h"
 #include "components/filesystem/lock_table.h"
 #include "components/filesystem/public/interfaces/file_system.mojom.h"
-#include "mojo/services/tracing/public/cpp/tracing_impl.h"
-#include "mojo/shell/public/cpp/interface_factory.h"
-#include "mojo/shell/public/cpp/shell_client.h"
+#include "services/shell/public/cpp/interface_factory.h"
+#include "services/shell/public/cpp/shell_client.h"
+#include "services/tracing/public/cpp/tracing_impl.h"
 
 namespace mojo {
 class Connector;
@@ -20,8 +20,8 @@ class Connector;
 
 namespace filesystem {
 
-class FileSystemApp : public mojo::ShellClient,
-                      public mojo::InterfaceFactory<FileSystem> {
+class FileSystemApp : public shell::ShellClient,
+                      public shell::InterfaceFactory<mojom::FileSystem> {
  public:
   FileSystemApp();
   ~FileSystemApp() override;
@@ -30,13 +30,14 @@ class FileSystemApp : public mojo::ShellClient,
   // Gets the system specific toplevel profile directory.
   static base::FilePath GetUserDataDir();
 
-  // |mojo::ShellClient| override:
-  void Initialize(mojo::Connector* connector, const mojo::Identity& identity,
+  // |shell::ShellClient| override:
+  void Initialize(shell::Connector* connector,
+                  const shell::Identity& identity,
                   uint32_t id) override;
-  bool AcceptConnection(mojo::Connection* connection) override;
+  bool AcceptConnection(shell::Connection* connection) override;
   // |InterfaceFactory<Files>| implementation:
-  void Create(mojo::Connection* connection,
-              mojo::InterfaceRequest<FileSystem> request) override;
+  void Create(shell::Connection* connection,
+              mojo::InterfaceRequest<mojom::FileSystem> request) override;
 
   mojo::TracingImpl tracing_;
 

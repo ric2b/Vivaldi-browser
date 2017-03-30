@@ -23,12 +23,11 @@
 GoogleChromeDistribution::GoogleChromeDistribution()
     : BrowserDistribution(
           CHROME_BROWSER,
-          scoped_ptr<AppRegistrationData>(
-              new NonUpdatingAppRegistrationData(base::string16()))) {
-}
+          std::unique_ptr<AppRegistrationData>(
+              new NonUpdatingAppRegistrationData(base::string16()))) {}
 
 GoogleChromeDistribution::GoogleChromeDistribution(
-    scoped_ptr<AppRegistrationData> app_reg_data)
+    std::unique_ptr<AppRegistrationData> app_reg_data)
     : BrowserDistribution(CHROME_BROWSER, std::move(app_reg_data)) {}
 
 void GoogleChromeDistribution::DoPostUninstallOperations(
@@ -45,12 +44,11 @@ base::string16 GoogleChromeDistribution::GetBaseAppName() {
   return base::string16();
 }
 
-base::string16 GoogleChromeDistribution::GetShortcutName(
-    ShortcutType shortcut_type) {
+base::string16 GoogleChromeDistribution::GetShortcutName() {
   return base::string16();
 }
 
-int GoogleChromeDistribution::GetIconIndex(ShortcutType shortcut_type) {
+int GoogleChromeDistribution::GetIconIndex() {
   return 0;
 }
 

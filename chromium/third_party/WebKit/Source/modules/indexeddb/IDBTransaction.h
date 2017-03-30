@@ -29,6 +29,7 @@
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "core/dom/ActiveDOMObject.h"
+#include "core/dom/DOMStringList.h"
 #include "core/events/EventListener.h"
 #include "modules/EventModules.h"
 #include "modules/EventTargetModules.h"
@@ -50,10 +51,9 @@ class IDBOpenDBRequest;
 struct IDBObjectStoreMetadata;
 
 class MODULES_EXPORT IDBTransaction final
-    : public RefCountedGarbageCollectedEventTargetWithInlineData<IDBTransaction>
+    : public EventTargetWithInlineData
     , public ActiveScriptWrappable
     , public ActiveDOMObject {
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(IDBTransaction);
     USING_GARBAGE_COLLECTED_MIXIN(IDBTransaction);
     DEFINE_WRAPPERTYPEINFO();
 public:

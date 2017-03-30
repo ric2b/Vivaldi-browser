@@ -6,6 +6,7 @@
 #define PaymentsValidators_h
 
 #include "modules/ModulesExport.h"
+#include "public/platform/modules/payments/payment_request.mojom-blink.h"
 #include "wtf/Allocator.h"
 #include "wtf/text/WTFString.h"
 
@@ -27,8 +28,15 @@ public:
     // Returns true if |code| is a valid ISO 639 language code.
     static bool isValidLanguageCodeFormat(const String& code, String* optionalErrorMessage);
 
-    // Returns true if |code| is a valid ISO 1524 script code.
+    // Returns true if |code| is a valid ISO 15924 script code.
     static bool isValidScriptCodeFormat(const String& code, String* optionalErrorMessage);
+
+    // Returns true if the shipping address is valid:
+    //  - Has a valid region code
+    //  - Has a valid language code, if any.
+    //  - Has a valid script code, if any.
+    // A script code should be present only if language code is present.
+    static bool isValidShippingAddress(const mojom::blink::ShippingAddressPtr&, String* optionalErrorMessage);
 };
 
 } // namespace blink

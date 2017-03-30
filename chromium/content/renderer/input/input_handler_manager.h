@@ -59,6 +59,9 @@ class CONTENT_EXPORT InputHandlerManager {
                        bool enable_smooth_scrolling,
                        bool enable_wheel_gestures);
 
+  void RegisterRoutingID(int routing_id);
+  void UnregisterRoutingID(int routing_id);
+
   void ObserveWheelEventAndResultOnMainThread(
       int routing_id,
       const blink::WebMouseWheelEvent& wheel_event,
@@ -70,7 +73,8 @@ class CONTENT_EXPORT InputHandlerManager {
       const cc::InputHandlerScrollResult& scroll_result);
 
   void NotifyInputEventHandledOnMainThread(int routing_id,
-                                           blink::WebInputEvent::Type);
+                                           blink::WebInputEvent::Type,
+                                           InputEventAckState);
 
   // Callback only from the compositor's thread.
   void RemoveInputHandler(int routing_id);
@@ -85,6 +89,7 @@ class CONTENT_EXPORT InputHandlerManager {
   void DidOverscroll(int routing_id, const DidOverscrollParams& params);
 
   // Called from the compositor's thread.
+  void DidStartFlinging(int routing_id);
   void DidStopFlinging(int routing_id);
 
   // Called from the compositor's thread.
@@ -100,6 +105,9 @@ class CONTENT_EXPORT InputHandlerManager {
       bool enable_smooth_scrolling,
       bool enable_wheel_gestures);
 
+  void RegisterRoutingIDOnCompositorThread(int routing_id);
+  void UnregisterRoutingIDOnCompositorThread(int routing_id);
+
   void ObserveWheelEventAndResultOnCompositorThread(
       int routing_id,
       const blink::WebMouseWheelEvent& wheel_event,
@@ -111,10 +119,11 @@ class CONTENT_EXPORT InputHandlerManager {
       const cc::InputHandlerScrollResult& scroll_result);
 
   void NotifyInputEventHandledOnCompositorThread(int routing_id,
-                                                 blink::WebInputEvent::Type);
+                                                 blink::WebInputEvent::Type,
+                                                 InputEventAckState);
 
   typedef base::ScopedPtrHashMap<int,  // routing_id
-                                 scoped_ptr<InputHandlerWrapper>>
+                                 std::unique_ptr<InputHandlerWrapper>>
       InputHandlerMap;
   InputHandlerMap input_handlers_;
 

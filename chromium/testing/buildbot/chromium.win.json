@@ -11,7 +11,7 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "app_list_shower_unittests"
+        "test": "app_list_presenter_unittests"
       },
       {
         "swarming": {
@@ -192,6 +192,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "gpu_ipc_service_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "gpu_unittests"
       },
       {
@@ -265,6 +271,9 @@
         "test": "mojo_public_system_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_system_unittests"
       },
       {
@@ -436,7 +445,7 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "app_list_shower_unittests"
+        "test": "app_list_presenter_unittests"
       },
       {
         "swarming": {
@@ -877,7 +886,7 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "app_list_shower_unittests"
+        "test": "app_list_presenter_unittests"
       },
       {
         "swarming": {
@@ -1058,6 +1067,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "gpu_ipc_service_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "gpu_unittests"
       },
       {
@@ -1124,6 +1139,9 @@
         "test": "mojo_public_system_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_system_unittests"
       },
       {
@@ -1301,7 +1319,7 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "app_list_shower_unittests"
+        "test": "app_list_presenter_unittests"
       },
       {
         "swarming": {
@@ -1488,6 +1506,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "gpu_ipc_service_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "gpu_unittests"
       },
       {
@@ -1561,6 +1585,9 @@
         "test": "mojo_public_system_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_system_unittests"
       },
       {
@@ -1869,6 +1896,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "gpu_ipc_service_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "gpu_unittests"
       },
       {
@@ -1933,6 +1966,9 @@
         "test": "mojo_public_system_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_system_unittests"
       },
       {
@@ -2088,7 +2124,7 @@
     "additional_compile_targets": [
       "accessibility_unittests",
       "app_list_unittests",
-      "app_list_shower_unittests",
+      "app_list_presenter_unittests",
       "app_shell_unittests",
       "ash_shell_with_content",
       "ash_unittests",
@@ -2113,6 +2149,7 @@
       "gcm_unit_tests",
       "gfx_unittests",
       "google_apis_unittests",
+      "gpu_ipc_service_unittests",
       "gpu_unittests",
       "interactive_ui_tests",
       "ipc_mojo_unittests",
@@ -2158,43 +2195,85 @@
         "test": "events_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "ipc_mojo_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_common_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_public_application_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_public_bindings_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_public_system_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_runner_host_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_shell_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_surfaces_lib_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mojo_system_unittests"
       },
       {
-        "test": "mojo_view_manager_lib_unittests"
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "mus_public_unittests"
       },
       {
+        "args": [
+          "--override-use-gl-with-osmesa-for-tests"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "mash_unittests"
+      },
+      {
+        "test": "mus_gpu_unittests"
       },
       {
         "test": "mus_ws_unittests"
       },
       {
-        "test": "resource_provider_unittests"
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "navigation_unittests"
       },
       {
         "test": "ui_touch_selection_unittests"

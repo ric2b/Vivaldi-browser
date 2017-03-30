@@ -19,6 +19,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
+#include "content/public/browser/storage_partition.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_registry.h"
@@ -79,13 +80,14 @@ void OperationManager::StartWriteFromUrl(
     return callback.Run(false, error::kOperationAlreadyInProgress);
   }
 
-  scoped_refptr<Operation> operation(
-      new WriteFromUrlOperation(weak_factory_.GetWeakPtr(),
-                                extension_id,
-                                browser_context_->GetRequestContext(),
-                                url,
-                                hash,
-                                device_path));
+  scoped_refptr<Operation> operation(new WriteFromUrlOperation(
+      weak_factory_.GetWeakPtr(),
+      extension_id,
+      content::BrowserContext::GetDefaultStoragePartition(browser_context_)->
+          GetURLRequestContext(),
+      url,
+      hash,
+      device_path));
   operations_[extension_id] = operation;
   BrowserThread::PostTask(BrowserThread::FILE,
                           FROM_HERE,
@@ -241,16 +243,14 @@ void OperationManager::Observe(int type,
       DeleteOperation(content::Details<const Extension>(details).ptr()->id());
       break;
     }
-    case extensions::NOTIFICATION_EXTENSION_HOST_VIEW_SHOULD_CLOSE: {
+    case extensions::NOTIFICATION_EXTENSION_HOST_VIEW_SHOULD_CLOSE:
+      // Intentional fall-through.
+    case extensions::NOTIFICATION_EXTENSION_HOST_DESTROYED:
+      // Note: |ExtensionHost::extension()| can be null if the extension was
+      // already unloaded, use ExtensionHost::extension_id() instead.
       DeleteOperation(
-        content::Details<ExtensionHost>(details)->extension()->id());
+          content::Details<ExtensionHost>(details)->extension_id());
       break;
-    }
-    case extensions::NOTIFICATION_EXTENSION_HOST_DESTROYED: {
-      DeleteOperation(
-        content::Details<ExtensionHost>(details)->extension()->id());
-      break;
-    }
     default: {
       NOTREACHED();
       break;

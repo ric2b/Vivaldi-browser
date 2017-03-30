@@ -7,6 +7,7 @@
 # tool and those that do not. A XIB should be listed in either one or the
 # other, but not both.
 {
+  # GN version: //chrome/app/nibs
   'variables': {
     'mac_translated_xibs': [
       'app/nibs/AppMenu.xib',
@@ -30,10 +31,8 @@
       'app/nibs/CookieDetailsView.xib',
       'app/nibs/DownloadItem.xib',
       'app/nibs/DownloadShelf.xib',
-      'app/nibs/EditSearchEngine.xib',
       'app/nibs/ExclusiveAccessBubble.xib',
       'app/nibs/ExtensionInstalledBubble.xib',
-      'app/nibs/ExtensionInstallPromptBundle.xib',
       'app/nibs/ExtensionInstallPromptNoWarnings.xib',
       'app/nibs/ExtensionInstallPromptWebstoreData.xib',
       'app/nibs/ExtensionInstallPrompt.xib',
@@ -52,10 +51,8 @@
     'mac_untranslated_xibs': [
       'app/nibs/BookmarkBarFolderWindow.xib',
       'app/nibs/DevicePermissionsPrompt.xib',
-      'app/nibs/ExtensionInstalledBubbleBundle.xib',
       'app/nibs/FindBar.xib',
       'app/nibs/GlobalErrorBubble.xib',
-      'app/nibs/HungRendererDialog.xib',
       'app/nibs/InfoBar.xib',
       'app/nibs/Panel.xib',
     ],  # mac_untranslated_xibs

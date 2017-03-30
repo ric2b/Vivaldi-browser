@@ -188,22 +188,22 @@ TEST(NameInfoTest, ParsedNamesAreEqual) {
        {"Marion", "Mitchell", "Morrison"},
        true},
 
-      // Case-insensative comparisons.
+      // Case-sensitive comparisons.
       {{"Marion", "Mitchell", "Morrison"},
        {"Marion", "Mitchell", "MORRISON"},
-       true},
+       false},
       {{"Marion", "Mitchell", "Morrison"},
        {"MARION", "Mitchell", "MORRISON"},
-       true},
+       false},
       {{"Marion", "Mitchell", "Morrison"},
        {"MARION", "MITCHELL", "MORRISON"},
-       true},
+       false},
       {{"Marion", "", "Mitchell Morrison"},
        {"MARION", "", "MITCHELL MORRISON"},
-       true},
+       false},
       {{"Marion Mitchell", "", "Morrison"},
        {"MARION MITCHELL", "", "MORRISON"},
-       true},
+       false},
 
       // Identical full names but different canonical forms.
       {{"Marion", "Mitchell", "Morrison"},
@@ -222,7 +222,7 @@ TEST(NameInfoTest, ParsedNamesAreEqual) {
 
       // Non-ASCII characters.
       {{"M\xc3\xa1rion Mitchell", "", "Morrison"},
-       {"M\xc3\x81RION MITCHELL", "", "MORRISON"},
+       {"M\xc3\xa1rion Mitchell", "", "Morrison"},
        true},
   };
 
@@ -250,6 +250,133 @@ TEST(NameInfoTest, ParsedNamesAreEqual) {
     // Verify the test expectations.
     EXPECT_EQ(test_cases[i].expected_result,
               starting_profile.ParsedNamesAreEqual(additional_profile));
+  }
+}
+
+TEST(NameInfoTest, OverwriteName) {
+  struct TestCase {
+    std::string existing_name[4];
+    std::string new_name[4];
+    std::string expected_name[4];
+  };
+
+  struct TestCase test_cases[] = {
+      // Missing information in the original name gets filled with the new
+      // name's information.
+      {
+          {"", "", "", ""},
+          {"Marion", "Mitchell", "Morrison", "Marion Mitchell Morrison"},
+          {"Marion", "Mitchell", "Morrison", "Marion Mitchell Morrison"},
+      },
+      // The new name's values overwrite the exsiting name values if they are
+      // different
+      {
+          {"Marion", "Mitchell", "Morrison", "Marion Mitchell Morrison"},
+          {"Mario", "Mitchell", "Thompson", "Mario Mitchell Morrison"},
+          {"Mario", "Mitchell", "Thompson", "Mario Mitchell Morrison"},
+      },
+      // An existing name values do not get replaced with empty values.
+      {
+          {"Marion", "Mitchell", "Morrison", "Marion Mitchell Morrison"},
+          {"", "", "", ""},
+          {"Marion", "Mitchell", "Morrison", "Marion Mitchell Morrison"},
+      },
+      // An existing full middle not does not get replaced by a middle name
+      // initial.
+      {
+          {"Marion", "Mitchell", "Morrison", "Marion Mitchell Morrison"},
+          {"Marion", "M", "Morrison", "Marion Mitchell Morrison"},
+          {"Marion", "Mitchell", "Morrison", "Marion Mitchell Morrison"},
+      },
+      // An existing middle name initial is overwritten by the new profile's
+      // middle name value.
+      {
+          {"Marion", "M", "Morrison", "Marion Mitchell Morrison"},
+          {"Marion", "Mitchell", "Morrison", "Marion Mitchell Morrison"},
+          {"Marion", "Mitchell", "Morrison", "Marion Mitchell Morrison"},
+      },
+      // A NameInfo with only the full name set overwritten with a NameInfo
+      // with only the name parts set result in a NameInfo with all the name
+      // parts and name full set.
+      {
+          {"", "", "", "Marion Mitchell Morrison"},
+          {"Marion", "Mitchell", "Morrison", ""},
+          {"Marion", "Mitchell", "Morrison", "Marion Mitchell Morrison"},
+      },
+      // A NameInfo with only the name parts set overwritten with a NameInfo
+      // with only the full name set result in a NameInfo with all the name
+      // parts and name full set.
+      {
+          {"Marion", "Mitchell", "Morrison", ""},
+          {"", "", "", "Marion Mitchell Morrison"},
+          {"Marion", "Mitchell", "Morrison", "Marion Mitchell Morrison"},
+      },
+  };
+
+  for (size_t i = 0; i < arraysize(test_cases); ++i) {
+    SCOPED_TRACE(base::StringPrintf("i: %" PRIuS, i));
+
+    // Construct the starting_profile.
+    NameInfo existing_name;
+    existing_name.SetRawInfo(NAME_FIRST,
+                             UTF8ToUTF16(test_cases[i].existing_name[0]));
+    existing_name.SetRawInfo(NAME_MIDDLE,
+                             UTF8ToUTF16(test_cases[i].existing_name[1]));
+    existing_name.SetRawInfo(NAME_LAST,
+                             UTF8ToUTF16(test_cases[i].existing_name[2]));
+    existing_name.SetRawInfo(NAME_FULL,
+                             UTF8ToUTF16(test_cases[i].existing_name[3]));
+
+    // Construct the additional_profile.
+    NameInfo new_name;
+    new_name.SetRawInfo(NAME_FIRST, UTF8ToUTF16(test_cases[i].new_name[0]));
+    new_name.SetRawInfo(NAME_MIDDLE, UTF8ToUTF16(test_cases[i].new_name[1]));
+    new_name.SetRawInfo(NAME_LAST, UTF8ToUTF16(test_cases[i].new_name[2]));
+    new_name.SetRawInfo(NAME_FULL, UTF8ToUTF16(test_cases[i].new_name[3]));
+
+    existing_name.OverwriteName(new_name);
+
+    // Verify the test expectations.
+    EXPECT_EQ(UTF8ToUTF16(test_cases[i].expected_name[0]),
+              existing_name.GetRawInfo(NAME_FIRST));
+    EXPECT_EQ(UTF8ToUTF16(test_cases[i].expected_name[1]),
+              existing_name.GetRawInfo(NAME_MIDDLE));
+    EXPECT_EQ(UTF8ToUTF16(test_cases[i].expected_name[2]),
+              existing_name.GetRawInfo(NAME_LAST));
+    EXPECT_EQ(UTF8ToUTF16(test_cases[i].expected_name[3]),
+              existing_name.GetRawInfo(NAME_FULL));
+  }
+}
+
+TEST(NameInfoTest, NamePartsAreEmpty) {
+  struct TestCase {
+    std::string first;
+    std::string middle;
+    std::string last;
+    std::string full;
+    bool expected_result;
+  };
+
+  struct TestCase test_cases[] = {
+      {"", "", "", "", true},
+      {"", "", "", "Marion Mitchell Morrison", true},
+      {"Marion", "", "", "", false},
+      {"", "Mitchell", "", "", false},
+      {"", "", "Morrison", "", false},
+  };
+
+  for (size_t i = 0; i < arraysize(test_cases); ++i) {
+    SCOPED_TRACE(base::StringPrintf("i: %" PRIuS, i));
+
+    // Construct the NameInfo.
+    NameInfo name;
+    name.SetRawInfo(NAME_FIRST, UTF8ToUTF16(test_cases[i].first));
+    name.SetRawInfo(NAME_MIDDLE, UTF8ToUTF16(test_cases[i].middle));
+    name.SetRawInfo(NAME_LAST, UTF8ToUTF16(test_cases[i].last));
+    name.SetRawInfo(NAME_FULL, UTF8ToUTF16(test_cases[i].full));
+
+    // Verify the test expectations.
+    EXPECT_EQ(test_cases[i].expected_result, name.NamePartsAreEmpty());
   }
 }
 

@@ -175,7 +175,7 @@
       <output filename="remoting/android/res/values-uk/remoting_strings.xml" lang="uk" type="android" context="android_java"/>
       <output filename="remoting/android/res/values-vi/remoting_strings.xml" lang="vi" type="android" context="android_java"/>
       <output filename="remoting/android/res/values-zh-rCN/remoting_strings.xml" lang="zh-CN" type="android" context="android_java"/>
-      <output filename="remoting/android/res/values-zh-rTW/remoting_strings.xml" lang="zh-TW" type="android" context="android_java"/>
+      <output filename="remoting/android/res/values-zh/remoting_strings.xml" lang="zh-TW" type="android" context="android_java"/>
     </if>
 
   </outputs>
@@ -654,9 +654,10 @@ Remote computers with non US-English keyboards may receive incorrect text input.
 For information about privacy, please see the Google Privacy Policy (http://goo.gl/SyrVzj) and the Chrome Privacy Policy (http://goo.gl/0uXE5d).
         </message>
         <message name="IDS_PLAY_STORE_CHANGES" desc="List of what's changed in this release of Chrome Remote Desktop for Android. [CHAR-LIMIT=500] [NAME=play_store_changes]">
-• Material Design UI updates.
-• Third-party licensing credits.
-• Information shown for remote computers that are offline.
+• Listen to audio from Windows or Linux computers.
+• Remove unwanted connections by long-pressing on the computer name.
+• Smoother pinch-to-zoom and two-finger scrolling.
+• New Help &amp; Feedback screen.
         </message>
       </if>  <!-- is_android or is_ios -->
 
@@ -707,6 +708,9 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
       </message>
       <message desc="Confirmation prompt shown when a user attempts to delete a Me2Me host from their host list." name="IDS_CONFIRM_HOST_DELETE">
         Are you sure you want to disable remote connections to <ph name="HOSTNAME">$1<ex>My Linux desktop</ex></ph>? If you change your mind, you'll need to visit that computer to re-enable connections.
+      </message>
+      <message desc="Confirmation prompt shown when a user attempts remove or deactivate a machine from the list of their remotely-accessible machines." name="IDS_CONFIRM_HOST_DELETE_ANDROID" formatter_data="android_java">
+        Are you sure you want to disable remote connections to <ph name="HOSTNAME">%1$s<ex>My Linux desktop</ex></ph>?
       </message>
       <message desc="Column header in the connection history table showing the email address of the client end of the connection (the initiator) which may be this or another computer." name="IDS_CONNECTION_FROM_HEADER">
         From
@@ -1113,6 +1117,9 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
       <message desc="Link to allow a host's paired clients to be viewed or edited." name="IDS_HOME_DAEMON_MANAGE_PAIRINGS">
         View/edit
       </message>
+      <message desc="This text is used on a button or context-menu or similar control. When chosen or pressed, it deletes a selected item from a list." meaning="Delete an item from a list." name="IDS_DELETE_LIST_ITEM" formatter_data="android_java">
+        Delete
+      </message>
       <message desc="Link to delete a specific paired client." name="IDS_DELETE_PAIRED_CLIENT">
         Delete
       </message>
@@ -1165,10 +1172,10 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
         This setting is managed by your domain policy.
       </message>
       <message desc="Platform-specific text indicating that a component is for the Windows OS." name="IDS_FOR_PLATFORM_WINDOWS">
-        For Windows (XP and above)
+        For Windows 7 and above
       </message>
       <message desc="Platform-specific text indicating that a component is for the Mac OS." name="IDS_FOR_PLATFORM_MAC">
-        For Mac (OS X 10.6 and above)
+        For Mac (OS X Mavericks 10.9 and above)
       </message>
       <message desc="Text for the button the user clicks to indicate that they agree to the terms of service and want to proceed with downloading the installer." name="IDS_ACCEPT_AND_INSTALL">
         Accept and Install

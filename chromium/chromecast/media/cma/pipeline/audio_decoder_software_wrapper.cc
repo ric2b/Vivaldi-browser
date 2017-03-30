@@ -6,7 +6,7 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chromecast/media/cma/base/decoder_buffer_base.h"
 
 namespace chromecast {
@@ -59,7 +59,7 @@ bool AudioDecoderSoftwareWrapper::SetConfig(const AudioConfig& config) {
     return true;
   }
 
-  if (config.is_encrypted() || !CreateSoftwareDecoder(config))
+  if (!CreateSoftwareDecoder(config))
     return false;
 
   output_config_.codec = media::kCodecPCM;

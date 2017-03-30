@@ -11,6 +11,7 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/stl_util.h"
+#include "base/test/scoped_command_line.h"
 #include "base/values.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/value_builder.h"
@@ -27,21 +28,6 @@ struct IsAvailableTestData {
   Feature::Platform platform;
   int manifest_version;
   Feature::AvailabilityResult expected_result;
-};
-
-class ScopedCommandLineSwitch {
- public:
-  explicit ScopedCommandLineSwitch(const std::string& arg)
-      : original_command_line_(*base::CommandLine::ForCurrentProcess()) {
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(arg);
-  }
-
-  ~ScopedCommandLineSwitch() {
-    *base::CommandLine::ForCurrentProcess() = original_command_line_;
-  }
-
- private:
-  base::CommandLine original_command_line_;
 };
 
 }  // namespace
@@ -508,8 +494,8 @@ TEST_F(SimpleFeatureTest, ManifestVersion) {
 }
 
 TEST_F(SimpleFeatureTest, ParseNull) {
-  scoped_ptr<base::DictionaryValue> value(new base::DictionaryValue());
-  scoped_ptr<SimpleFeature> feature(new SimpleFeature());
+  std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
+  std::unique_ptr<SimpleFeature> feature(new SimpleFeature());
   feature->Parse(value.get());
   EXPECT_TRUE(feature->whitelist()->empty());
   EXPECT_TRUE(feature->extension_types()->empty());
@@ -521,12 +507,12 @@ TEST_F(SimpleFeatureTest, ParseNull) {
 }
 
 TEST_F(SimpleFeatureTest, ParseWhitelist) {
-  scoped_ptr<base::DictionaryValue> value(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
   base::ListValue* whitelist = new base::ListValue();
   whitelist->Append(new base::StringValue("foo"));
   whitelist->Append(new base::StringValue("bar"));
   value->Set("whitelist", whitelist);
-  scoped_ptr<SimpleFeature> feature(new SimpleFeature());
+  std::unique_ptr<SimpleFeature> feature(new SimpleFeature());
   feature->Parse(value.get());
   EXPECT_EQ(2u, feature->whitelist()->size());
   EXPECT_TRUE(STLCount(*(feature->whitelist()), "foo"));
@@ -534,7 +520,7 @@ TEST_F(SimpleFeatureTest, ParseWhitelist) {
 }
 
 TEST_F(SimpleFeatureTest, ParsePackageTypes) {
-  scoped_ptr<base::DictionaryValue> value(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
   base::ListValue* extension_types = new base::ListValue();
   extension_types->Append(new base::StringValue("extension"));
   extension_types->Append(new base::StringValue("theme"));
@@ -543,7 +529,7 @@ TEST_F(SimpleFeatureTest, ParsePackageTypes) {
   extension_types->Append(new base::StringValue("platform_app"));
   extension_types->Append(new base::StringValue("shared_module"));
   value->Set("extension_types", extension_types);
-  scoped_ptr<SimpleFeature> feature(new SimpleFeature());
+  std::unique_ptr<SimpleFeature> feature(new SimpleFeature());
   feature->Parse(value.get());
   EXPECT_EQ(6u, feature->extension_types()->size());
   EXPECT_TRUE(
@@ -561,13 +547,13 @@ TEST_F(SimpleFeatureTest, ParsePackageTypes) {
       STLCount(*(feature->extension_types()), Manifest::TYPE_SHARED_MODULE));
 
   value->SetString("extension_types", "all");
-  scoped_ptr<SimpleFeature> feature2(new SimpleFeature());
+  std::unique_ptr<SimpleFeature> feature2(new SimpleFeature());
   feature2->Parse(value.get());
   EXPECT_EQ(*(feature->extension_types()), *(feature2->extension_types()));
 }
 
 TEST_F(SimpleFeatureTest, ParseContexts) {
-  scoped_ptr<base::DictionaryValue> value(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
   base::ListValue* contexts = new base::ListValue();
   contexts->Append(new base::StringValue("blessed_extension"));
   contexts->Append(new base::StringValue("unblessed_extension"));
@@ -576,7 +562,7 @@ TEST_F(SimpleFeatureTest, ParseContexts) {
   contexts->Append(new base::StringValue("blessed_web_page"));
   contexts->Append(new base::StringValue("webui"));
   value->Set("contexts", contexts);
-  scoped_ptr<SimpleFeature> feature(new SimpleFeature());
+  std::unique_ptr<SimpleFeature> feature(new SimpleFeature());
   feature->Parse(value.get());
   EXPECT_EQ(6u, feature->contexts()->size());
   EXPECT_TRUE(
@@ -591,22 +577,22 @@ TEST_F(SimpleFeatureTest, ParseContexts) {
       STLCount(*(feature->contexts()), Feature::BLESSED_WEB_PAGE_CONTEXT));
 
   value->SetString("contexts", "all");
-  scoped_ptr<SimpleFeature> feature2(new SimpleFeature());
+  std::unique_ptr<SimpleFeature> feature2(new SimpleFeature());
   feature2->Parse(value.get());
   EXPECT_EQ(*(feature->contexts()), *(feature2->contexts()));
 }
 
 TEST_F(SimpleFeatureTest, ParseLocation) {
-  scoped_ptr<base::DictionaryValue> value(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
   value->SetString("location", "component");
-  scoped_ptr<SimpleFeature> feature(new SimpleFeature());
+  std::unique_ptr<SimpleFeature> feature(new SimpleFeature());
   feature->Parse(value.get());
   EXPECT_EQ(SimpleFeature::COMPONENT_LOCATION, feature->location());
 }
 
 TEST_F(SimpleFeatureTest, ParsePlatforms) {
-  scoped_ptr<base::DictionaryValue> value(new base::DictionaryValue());
-  scoped_ptr<SimpleFeature> feature(new SimpleFeature());
+  std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
+  std::unique_ptr<SimpleFeature> feature(new SimpleFeature());
   base::ListValue* platforms = new base::ListValue();
   value->Set("platforms", platforms);
   feature->Parse(value.get());
@@ -636,10 +622,10 @@ TEST_F(SimpleFeatureTest, ParsePlatforms) {
 }
 
 TEST_F(SimpleFeatureTest, ParseManifestVersion) {
-  scoped_ptr<base::DictionaryValue> value(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
   value->SetInteger("min_manifest_version", 1);
   value->SetInteger("max_manifest_version", 5);
-  scoped_ptr<SimpleFeature> feature(new SimpleFeature());
+  std::unique_ptr<SimpleFeature> feature(new SimpleFeature());
   feature->Parse(value.get());
   EXPECT_EQ(1, feature->min_manifest_version());
   EXPECT_EQ(5, feature->max_manifest_version());
@@ -704,27 +690,34 @@ TEST_F(SimpleFeatureTest, CommandLineSwitch) {
               feature.IsAvailableToEnvironment().result());
   }
   {
-    ScopedCommandLineSwitch scoped_switch("laser-beams");
+    base::test::ScopedCommandLine scoped_command_line;
+    scoped_command_line.GetProcessCommandLine()->AppendSwitch("laser-beams");
     EXPECT_EQ(Feature::MISSING_COMMAND_LINE_SWITCH,
               feature.IsAvailableToEnvironment().result());
   }
   {
-    ScopedCommandLineSwitch scoped_switch("enable-laser-beams");
+    base::test::ScopedCommandLine scoped_command_line;
+    scoped_command_line.GetProcessCommandLine()->AppendSwitch(
+        "enable-laser-beams");
     EXPECT_EQ(Feature::IS_AVAILABLE,
               feature.IsAvailableToEnvironment().result());
   }
   {
-    ScopedCommandLineSwitch scoped_switch("disable-laser-beams");
+    base::test::ScopedCommandLine scoped_command_line;
+    scoped_command_line.GetProcessCommandLine()->AppendSwitch(
+        "disable-laser-beams");
     EXPECT_EQ(Feature::MISSING_COMMAND_LINE_SWITCH,
               feature.IsAvailableToEnvironment().result());
   }
   {
-    ScopedCommandLineSwitch scoped_switch("laser-beams=1");
+    base::test::ScopedCommandLine scoped_command_line;
+    scoped_command_line.GetProcessCommandLine()->AppendSwitch("laser-beams=1");
     EXPECT_EQ(Feature::IS_AVAILABLE,
               feature.IsAvailableToEnvironment().result());
   }
   {
-    ScopedCommandLineSwitch scoped_switch("laser-beams=0");
+    base::test::ScopedCommandLine scoped_command_line;
+    scoped_command_line.GetProcessCommandLine()->AppendSwitch("laser-beams=0");
     EXPECT_EQ(Feature::MISSING_COMMAND_LINE_SWITCH,
               feature.IsAvailableToEnvironment().result());
   }

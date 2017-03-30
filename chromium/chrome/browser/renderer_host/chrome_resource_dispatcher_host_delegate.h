@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_RENDERER_HOST_CHROME_RESOURCE_DISPATCHER_HOST_DELEGATE_H_
 
 #include <map>
+#include <memory>
 #include <set>
 
 #include "base/compiler_specific.h"
@@ -17,8 +18,16 @@
 class DelayedResourceQueue;
 class DownloadRequestLimiter;
 
+namespace content {
+class NavigationData;
+}
+
 namespace extensions {
 class UserScriptListener;
+}
+
+namespace net {
+class URLRequest;
 }
 
 namespace safe_browsing {
@@ -72,7 +81,7 @@ class ChromeResourceDispatcherHostDelegate
                                        GURL* origin,
                                        std::string* payload) override;
   void OnStreamCreated(net::URLRequest* request,
-                       scoped_ptr<content::StreamInfo> stream) override;
+                       std::unique_ptr<content::StreamInfo> stream) override;
   void OnResponseStarted(net::URLRequest* request,
                          content::ResourceContext* resource_context,
                          content::ResourceResponse* response,
@@ -85,6 +94,8 @@ class ChromeResourceDispatcherHostDelegate
   bool ShouldEnableLoFiMode(
       const net::URLRequest& url_request,
       content::ResourceContext* resource_context) override;
+  content::NavigationData* GetNavigationData(
+      net::URLRequest* request) const override;
 
   // Called on the UI thread. Allows switching out the
   // ExternalProtocolHandler::Delegate for testing code.

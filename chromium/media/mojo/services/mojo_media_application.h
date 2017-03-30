@@ -10,11 +10,13 @@
 #include <memory>
 
 #include "base/callback.h"
+#include "base/compiler_specific.h"
 #include "base/memory/ref_counted.h"
 #include "media/mojo/interfaces/service_factory.mojom.h"
-#include "mojo/shell/public/cpp/interface_factory.h"
-#include "mojo/shell/public/cpp/message_loop_ref.h"
-#include "mojo/shell/public/cpp/shell_client.h"
+#include "media/mojo/services/media_mojo_export.h"
+#include "services/shell/public/cpp/interface_factory.h"
+#include "services/shell/public/cpp/shell_client.h"
+#include "services/shell/public/cpp/shell_connection_ref.h"
 #include "url/gurl.h"
 
 namespace media {
@@ -22,33 +24,34 @@ namespace media {
 class MediaLog;
 class MojoMediaClient;
 
-class MojoMediaApplication
-    : public mojo::ShellClient,
-      public mojo::InterfaceFactory<interfaces::ServiceFactory> {
+class MEDIA_MOJO_EXPORT MojoMediaApplication
+    : public NON_EXPORTED_BASE(shell::ShellClient),
+      public NON_EXPORTED_BASE(shell::InterfaceFactory<mojom::ServiceFactory>) {
  public:
-  explicit MojoMediaApplication(
-      std::unique_ptr<MojoMediaClient> mojo_media_client);
+  MojoMediaApplication(std::unique_ptr<MojoMediaClient> mojo_media_client,
+                       const base::Closure& quit_closure);
   ~MojoMediaApplication() final;
 
  private:
-  // mojo::ShellClient implementation.
-  void Initialize(mojo::Connector* connector,
-                  const mojo::Identity& identity,
+  // shell::ShellClient implementation.
+  void Initialize(shell::Connector* connector,
+                  const shell::Identity& identity,
                   uint32_t id) final;
-  bool AcceptConnection(mojo::Connection* connection) final;
+  bool AcceptConnection(shell::Connection* connection) final;
+  bool ShellConnectionLost() final;
 
-  // mojo::InterfaceFactory<interfaces::ServiceFactory> implementation.
-  void Create(mojo::Connection* connection,
-              mojo::InterfaceRequest<interfaces::ServiceFactory> request) final;
+  // shell::InterfaceFactory<mojom::ServiceFactory> implementation.
+  void Create(shell::Connection* connection,
+              mojo::InterfaceRequest<mojom::ServiceFactory> request) final;
 
   // Note: Since each instance runs on a different thread, do not share a common
   // MojoMediaClient with other instances to avoid threading issues. Hence using
   // a unique_ptr here.
   std::unique_ptr<MojoMediaClient> mojo_media_client_;
 
-  mojo::Connector* connector_;
+  shell::Connector* connector_;
   scoped_refptr<MediaLog> media_log_;
-  mojo::MessageLoopRefFactory ref_factory_;
+  shell::ShellConnectionRefFactory ref_factory_;
 };
 
 }  // namespace media

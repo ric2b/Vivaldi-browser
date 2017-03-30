@@ -7,6 +7,7 @@
 
 #include "platform/CrossThreadCopier.h"
 #include "wtf/Functional.h"
+#include <type_traits>
 
 namespace blink {
 
@@ -27,13 +28,13 @@ namespace blink {
 //     bind(func1, 42, str.isolatedCopy());
 
 template<typename... FreeVariableTypes, typename FunctionType, typename... Ps>
-PassOwnPtr<Function<typename WTF::FunctionWrapper<FunctionType>::ResultType(FreeVariableTypes...), WTF::CrossThreadAffinity>> threadSafeBind(
+std::unique_ptr<Function<typename WTF::FunctionWrapper<FunctionType>::ResultType(FreeVariableTypes...), WTF::CrossThreadAffinity>> threadSafeBind(
     FunctionType function,
-    const Ps&... parameters)
+    Ps&&... parameters)
 {
     return WTF::bindInternal<WTF::CrossThreadAffinity, FreeVariableTypes...>(
         function,
-        CrossThreadCopier<Ps>::copy(parameters)...);
+        CrossThreadCopier<typename std::decay<Ps>::type>::copy(std::forward<Ps>(parameters))...);
 }
 
 } // namespace blink

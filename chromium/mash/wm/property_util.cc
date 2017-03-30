@@ -33,7 +33,7 @@ mus::mojom::ShowState GetWindowShowState(const mus::Window* window) {
         window->GetSharedProperty<int32_t>(
             mus::mojom::WindowManager::kShowState_Property));
   }
-  return mus::mojom::ShowState::RESTORED;
+  return mus::mojom::ShowState::DEFAULT;
 }
 
 void SetWindowUserSetBounds(mus::Window* window, const gfx::Rect& bounds) {
@@ -74,7 +74,7 @@ mojom::Container GetRequestedContainer(const mus::Window* window) {
     return static_cast<mojom::Container>(
         window->GetSharedProperty<int32_t>(mojom::kWindowContainer_Property));
   }
-  return mojom::Container::USER_WINDOWS;
+  return mojom::Container::USER_PRIVATE_WINDOWS;
 }
 
 int32_t GetResizeBehavior(const mus::Window* window) {
@@ -129,6 +129,41 @@ mus::mojom::WindowType GetWindowType(
   return mus::mojom::WindowType::POPUP;
 }
 
+ui::wm::WindowType GetWmWindowType(const mus::Window* window) {
+  switch (GetWindowType(window)) {
+    case mus::mojom::WindowType::WINDOW:
+      return ui::wm::WINDOW_TYPE_NORMAL;
+
+    case mus::mojom::WindowType::PANEL:
+      return ui::wm::WINDOW_TYPE_PANEL;
+
+    case mus::mojom::WindowType::CONTROL:
+      return ui::wm::WINDOW_TYPE_CONTROL;
+
+    case mus::mojom::WindowType::WINDOW_FRAMELESS:
+    case mus::mojom::WindowType::POPUP:
+    case mus::mojom::WindowType::BUBBLE:
+    case mus::mojom::WindowType::DRAG:
+      return ui::wm::WINDOW_TYPE_POPUP;
+
+    case mus::mojom::WindowType::MENU:
+      return ui::wm::WINDOW_TYPE_MENU;
+
+    case mus::mojom::WindowType::TOOLTIP:
+      return ui::wm::WINDOW_TYPE_TOOLTIP;
+  }
+
+  return ui::wm::WINDOW_TYPE_UNKNOWN;
+}
+
+mojom::AshWindowType GetAshWindowType(const mus::Window* window) {
+  if (!window->HasSharedProperty(mojom::kAshWindowType_Property))
+    return mojom::AshWindowType::COUNT;
+
+  return static_cast<mojom::AshWindowType>(
+      window->GetSharedProperty<int32_t>(mojom::kAshWindowType_Property));
+}
+
 base::string16 GetWindowTitle(const mus::Window* window) {
   if (!window->HasSharedProperty(
           mus::mojom::WindowManager::kWindowTitle_Property)) {
@@ -137,6 +172,48 @@ base::string16 GetWindowTitle(const mus::Window* window) {
 
   return window->GetSharedProperty<base::string16>(
       mus::mojom::WindowManager::kWindowTitle_Property);
+}
+
+mojo::Array<uint8_t> GetWindowAppIcon(const mus::Window* window) {
+  if (window->HasSharedProperty(
+          mus::mojom::WindowManager::kWindowAppIcon_Property)) {
+    return mojo::Array<uint8_t>::From(
+        window->GetSharedProperty<std::vector<uint8_t>>(
+            mus::mojom::WindowManager::kWindowAppIcon_Property));
+  }
+  return mojo::Array<uint8_t>();
+}
+
+void SetAppID(mus::Window* window, const base::string16& app_id) {
+  window->SetSharedProperty<base::string16>(
+      mus::mojom::WindowManager::kAppID_Property, app_id);
+}
+
+base::string16 GetAppID(const mus::Window* window) {
+  if (!window->HasSharedProperty(mus::mojom::WindowManager::kAppID_Property))
+    return base::string16();
+
+  return window->GetSharedProperty<base::string16>(
+      mus::mojom::WindowManager::kAppID_Property);
+}
+
+bool GetWindowIgnoredByShelf(mus::Window* window) {
+  return window->HasSharedProperty(
+             mus::mojom::WindowManager::kWindowIgnoredByShelf_Property) &&
+         window->GetSharedProperty<bool>(
+             mus::mojom::WindowManager::kWindowIgnoredByShelf_Property);
+}
+
+void SetAlwaysOnTop(mus::Window* window, bool value) {
+  window->SetSharedProperty<bool>(
+      mus::mojom::WindowManager::kAlwaysOnTop_Property, value);
+}
+
+bool IsAlwaysOnTop(mus::Window* window) {
+  return window->HasSharedProperty(
+             mus::mojom::WindowManager::kAlwaysOnTop_Property) &&
+         window->GetSharedProperty<bool>(
+             mus::mojom::WindowManager::kAlwaysOnTop_Property);
 }
 
 }  // namespace wm

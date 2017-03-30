@@ -63,7 +63,7 @@ public:
     // used from worker context and the worker shuts down in the middle of an
     // operation. This will cause leaks when we support nested workers.
     // Note that callbacks could be invoked before loadAsynchronously() returns.
-    void loadAsynchronously(ExecutionContext&, const KURL&, CrossOriginRequestPolicy, WebAddressSpace, PassOwnPtr<SameThreadClosure> responseCallback, PassOwnPtr<SameThreadClosure> finishedCallback);
+    void loadAsynchronously(ExecutionContext&, const KURL&, CrossOriginRequestPolicy, WebAddressSpace, std::unique_ptr<SameThreadClosure> responseCallback, std::unique_ptr<SameThreadClosure> finishedCallback);
 
     // This will immediately invoke |finishedCallback| if loadAsynchronously()
     // is in progress.
@@ -76,13 +76,15 @@ public:
     unsigned long identifier() const { return m_identifier; }
     long long appCacheID() const { return m_appCacheID; }
 
-    PassOwnPtr<Vector<char>> releaseCachedMetadata() { return m_cachedMetadata.release(); }
+    PassOwnPtr<Vector<char>> releaseCachedMetadata() { return std::move(m_cachedMetadata); }
     const Vector<char>* cachedMetadata() const { return m_cachedMetadata.get(); }
 
     ContentSecurityPolicy* contentSecurityPolicy() { return m_contentSecurityPolicy.get(); }
     ContentSecurityPolicy* releaseContentSecurityPolicy() { return m_contentSecurityPolicy.release(); }
 
     WebAddressSpace responseAddressSpace() const { return m_responseAddressSpace; }
+
+    const Vector<String>* originTrialTokens() const { return m_originTrialTokens.get(); }
 
     // ThreadableLoaderClient
     void didReceiveResponse(unsigned long /*identifier*/, const ResourceResponse&, PassOwnPtr<WebDataConsumerHandle>) override;
@@ -107,8 +109,8 @@ private:
     void processContentSecurityPolicy(const ResourceResponse&);
 
     // Callbacks for loadAsynchronously().
-    OwnPtr<SameThreadClosure> m_responseCallback;
-    OwnPtr<SameThreadClosure> m_finishedCallback;
+    std::unique_ptr<SameThreadClosure> m_responseCallback;
+    std::unique_ptr<SameThreadClosure> m_finishedCallback;
 
     OwnPtr<ThreadableLoader> m_threadableLoader;
     String m_responseEncoding;
@@ -124,6 +126,7 @@ private:
     WebURLRequest::RequestContext m_requestContext;
     Persistent<ContentSecurityPolicy> m_contentSecurityPolicy;
     WebAddressSpace m_responseAddressSpace;
+    std::unique_ptr<Vector<String>> m_originTrialTokens;
 };
 
 } // namespace blink

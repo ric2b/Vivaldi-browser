@@ -54,19 +54,12 @@ class CORE_EXPORT InspectorRuntimeAgent
     , public protocol::Backend::Runtime {
     WTF_MAKE_NONCOPYABLE(InspectorRuntimeAgent);
 public:
-    class Client {
-    public:
-        virtual ~Client() { }
-
-        virtual void resumeStartup() { }
-    };
-
+    explicit InspectorRuntimeAgent(V8RuntimeAgent*);
     ~InspectorRuntimeAgent() override;
 
     // InspectorBaseAgent overrides.
-    void setState(protocol::DictionaryValue*) override;
-    void setFrontend(protocol::Frontend*) override;
-    void clearFrontend() override;
+    void init(InstrumentingAgents*, protocol::Frontend*, protocol::Dispatcher*, protocol::DictionaryValue*) override;
+    void dispose() override;
     void restore() override;
 
     // Part of the protocol.
@@ -83,11 +76,7 @@ public:
     void runScript(ErrorString*, const String16& scriptId, int executionContextId, const Maybe<String16>& objectGroup, const Maybe<bool>& doNotPauseOnExceptionsAndMuteConsole, const Maybe<bool>& includeCommandLineAPI, OwnPtr<protocol::Runtime::RemoteObject>* result, Maybe<protocol::Runtime::ExceptionDetails>*) override;
 
 protected:
-    InspectorRuntimeAgent(V8RuntimeAgent*, Client*);
-
-    bool m_enabled;
     V8RuntimeAgent* m_v8RuntimeAgent;
-    Client* m_client;
 };
 
 } // namespace blink

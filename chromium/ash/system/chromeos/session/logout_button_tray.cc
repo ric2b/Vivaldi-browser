@@ -70,8 +70,7 @@ LogoutButton::LogoutButton(views::ButtonListener* listener)
     : views::LabelButton(listener, base::string16()) {
   SetupLabelForTray(label());
   SetFontList(label()->font_list());
-  for (size_t state = 0; state < views::Button::STATE_COUNT; ++state)
-    SetTextColor(static_cast<views::Button::ButtonState>(state), SK_ColorWHITE);
+  SetEnabledTextColors(SK_ColorWHITE);
 
   std::unique_ptr<views::LabelButtonAssetBorder> border(
       new views::LabelButtonAssetBorder(views::Button::STYLE_TEXTBUTTON));
@@ -110,7 +109,7 @@ LogoutButtonTray::~LogoutButtonTray() {
       RemoveLogoutButtonObserver(this);
 }
 
-void LogoutButtonTray::SetShelfAlignment(ShelfAlignment alignment) {
+void LogoutButtonTray::SetShelfAlignment(wm::ShelfAlignment alignment) {
   TrayBackgroundView::SetShelfAlignment(alignment);
   tray_container()->SetBorder(views::Border::NullBorder());
 }
@@ -123,9 +122,7 @@ void LogoutButtonTray::HideBubbleWithView(
     const views::TrayBubbleView* bubble_view) {
 }
 
-bool LogoutButtonTray::ClickedOutsideBubble() {
-  return false;
-}
+void LogoutButtonTray::ClickedOutsideBubble() {}
 
 void LogoutButtonTray::OnShowLogoutButtonInTrayChanged(bool show) {
   show_logout_button_in_tray_ = show;

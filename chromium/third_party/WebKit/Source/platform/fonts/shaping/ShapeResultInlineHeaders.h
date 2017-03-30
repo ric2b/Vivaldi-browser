@@ -80,14 +80,9 @@ public:
     bool rtl() const { return HB_DIRECTION_IS_BACKWARD(m_direction); }
     float xPositionForVisualOffset(unsigned, AdjustMidCluster) const;
     float xPositionForOffset(unsigned, AdjustMidCluster) const;
-    int characterIndexForXPosition(float) const;
+    int characterIndexForXPosition(float, bool includePartialGlyphs) const;
     void setGlyphAndPositions(unsigned index, uint16_t glyphId, float advance,
         float offsetX, float offsetY);
-
-    void addAdvance(unsigned index, float advance)
-    {
-        m_glyphData[index].advance += advance;
-    }
 
     size_t glyphToCharacterIndex(size_t i) const
     {

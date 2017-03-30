@@ -6,11 +6,12 @@
 
 #include "base/logging.h"
 #include "base/run_loop.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_request_info.h"
 #include "net/http/http_response_info.h"
 #include "net/quic/crypto/quic_random.h"
+#include "net/quic/quic_chromium_alarm_factory.h"
 #include "net/quic/quic_chromium_connection_helper.h"
 #include "net/quic/quic_chromium_packet_reader.h"
 #include "net/quic/quic_chromium_packet_writer.h"
@@ -42,6 +43,7 @@ QuicSimpleClient::QuicSimpleClient(IPEndPoint server_address,
                      supported_versions,
                      QuicConfig(),
                      CreateQuicConnectionHelper(),
+                     CreateQuicAlarmFactory(),
                      proof_verifier),
       server_address_(server_address),
       local_port_(0),
@@ -58,6 +60,7 @@ QuicSimpleClient::QuicSimpleClient(IPEndPoint server_address,
                      supported_versions,
                      config,
                      CreateQuicConnectionHelper(),
+                     CreateQuicAlarmFactory(),
                      proof_verifier),
       server_address_(server_address),
       local_port_(0),
@@ -68,7 +71,7 @@ QuicSimpleClient::QuicSimpleClient(IPEndPoint server_address,
 QuicSimpleClient::~QuicSimpleClient() {
   if (connected()) {
     session()->connection()->CloseConnection(
-        QUIC_PEER_GOING_AWAY, "",
+        QUIC_PEER_GOING_AWAY, "Shutting down",
         ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
   }
   STLDeleteElements(&data_to_resend_on_connect_);
@@ -89,7 +92,7 @@ bool QuicSimpleClient::Initialize() {
 }
 
 QuicSimpleClient::QuicDataToResend::QuicDataToResend(HttpRequestInfo* headers,
-                                                     StringPiece body,
+                                                     base::StringPiece body,
                                                      bool fin)
     : headers_(headers), body_(body), fin_(fin) {}
 
@@ -100,7 +103,7 @@ QuicSimpleClient::QuicDataToResend::~QuicDataToResend() {
 }
 
 bool QuicSimpleClient::CreateUDPSocket() {
-  scoped_ptr<UDPClientSocket> socket(
+  std::unique_ptr<UDPClientSocket> socket(
       new UDPClientSocket(DatagramSocket::DEFAULT_BIND, RandIntCallback(),
                           &net_log_, NetLog::Source()));
 
@@ -214,7 +217,8 @@ void QuicSimpleClient::StartConnect() {
   }
 
   CreateQuicClientSession(new QuicConnection(
-      GetNextConnectionId(), server_address_, helper(), writer(),
+      GetNextConnectionId(), server_address_, helper(), alarm_factory(),
+      writer(),
       /* owns_writer= */ false, Perspective::IS_CLIENT, supported_versions()));
 
   session()->Initialize();
@@ -235,12 +239,13 @@ void QuicSimpleClient::Disconnect() {
 
   reset_writer();
   packet_reader_.reset();
+  packet_reader_started_ = false;
 
   initialized_ = false;
 }
 
 void QuicSimpleClient::SendRequest(const HttpRequestInfo& headers,
-                                   StringPiece body,
+                                   base::StringPiece body,
                                    bool fin) {
   QuicSpdyClientStream* stream = CreateReliableClientStream();
   if (stream == nullptr) {
@@ -280,7 +285,7 @@ void QuicSimpleClient::MaybeAddQuicDataToResend(
 
 void QuicSimpleClient::SendRequestAndWaitForResponse(
     const HttpRequestInfo& request,
-    StringPiece body,
+    base::StringPiece body,
     bool fin) {
   SendRequest(request, body, fin);
   while (WaitForEvents()) {
@@ -376,9 +381,12 @@ QuicConnectionId QuicSimpleClient::GenerateNewConnectionId() {
 }
 
 QuicChromiumConnectionHelper* QuicSimpleClient::CreateQuicConnectionHelper() {
-  return new QuicChromiumConnectionHelper(
-      base::ThreadTaskRunnerHandle::Get().get(), &clock_,
-      QuicRandom::GetInstance());
+  return new QuicChromiumConnectionHelper(&clock_, QuicRandom::GetInstance());
+}
+
+QuicChromiumAlarmFactory* QuicSimpleClient::CreateQuicAlarmFactory() {
+  return new QuicChromiumAlarmFactory(base::ThreadTaskRunnerHandle::Get().get(),
+                                      &clock_);
 }
 
 QuicPacketWriter* QuicSimpleClient::CreateQuicPacketWriter() {

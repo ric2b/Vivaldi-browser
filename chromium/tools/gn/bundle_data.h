@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "tools/gn/bundle_file_rule.h"
+#include "tools/gn/source_dir.h"
 #include "tools/gn/unique_vector.h"
 
 class OutputFile;
@@ -64,6 +65,21 @@ class BundleData {
   // asset_catalog_sources() is not empty.
   SourceFile GetCompiledAssetCatalogPath() const;
 
+  // Returns the path to the top-level directory of the bundle. This is
+  // based on root_dir(), but since that can be Bundle.app/Contents/ or
+  // any other subpath, this is just the most top-level directory (e.g.,
+  // just Bundle.app/).
+  //
+  // Note that this is a SourceFile instead of a SourceDir. This is because
+  // the output of a create_bundle rule is a single logical unit, even though
+  // it is really a directory containing many outputs. This allows other
+  // targets to treat the bundle as a single unit, rather than a collection
+  // of its contents.
+  SourceFile GetBundleRootDirOutput(const Settings* settings) const;
+
+  // Performs GetBundleRootDirOutput but returns the result as a directory.
+  SourceDir GetBundleRootDirOutputAsDir(const Settings* settings) const;
+
   // Returns the list of inputs for the compilation of the asset catalog.
   SourceFiles& asset_catalog_sources() { return asset_catalog_sources_; }
   const SourceFiles& asset_catalog_sources() const {
@@ -73,17 +89,20 @@ class BundleData {
   BundleFileRules& file_rules() { return file_rules_; }
   const BundleFileRules& file_rules() const { return file_rules_; }
 
-  std::string& root_dir() { return root_dir_; }
-  const std::string& root_dir() const { return root_dir_; }
+  SourceDir& root_dir() { return root_dir_; }
+  const SourceDir& root_dir() const { return root_dir_; }
 
-  std::string& resources_dir() { return resources_dir_; }
-  const std::string& resources_dir() const { return resources_dir_; }
+  SourceDir& resources_dir() { return resources_dir_; }
+  const SourceDir& resources_dir() const { return resources_dir_; }
 
-  std::string& executable_dir() { return executable_dir_; }
-  const std::string& executable_dir() const { return executable_dir_; }
+  SourceDir& executable_dir() { return executable_dir_; }
+  const SourceDir& executable_dir() const { return executable_dir_; }
 
-  std::string& plugins_dir() { return plugins_dir_; }
-  const std::string& plugins_dir() const { return plugins_dir_; }
+  SourceDir& plugins_dir() { return plugins_dir_; }
+  const SourceDir& plugins_dir() const { return plugins_dir_; }
+
+  std::string& product_type() { return product_type_; }
+  const std::string& product_type() const { return product_type_; }
 
   // Recursive collection of all bundle_data that the target depends on.
   const UniqueTargets& bundle_deps() const { return bundle_deps_; }
@@ -95,10 +114,16 @@ class BundleData {
 
   // All those values are subdirectories relative to root_build_dir, and apart
   // from root_dir, they are either equal to root_dir_ or subdirectories of it.
-  std::string root_dir_;
-  std::string resources_dir_;
-  std::string executable_dir_;
-  std::string plugins_dir_;
+  SourceDir root_dir_;
+  SourceDir resources_dir_;
+  SourceDir executable_dir_;
+  SourceDir plugins_dir_;
+
+  // This is the target type as known to Xcode. This is only used to generate
+  // the Xcode project file when using --ide=xcode.
+  std::string product_type_;
+
+  DISALLOW_COPY_AND_ASSIGN(BundleData);
 };
 
 #endif  // TOOLS_GN_BUNDLE_DATA_H_

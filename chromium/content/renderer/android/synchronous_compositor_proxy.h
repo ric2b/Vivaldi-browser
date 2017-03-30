@@ -46,9 +46,6 @@ class SynchronousCompositorProxy
       public SynchronousCompositorExternalBeginFrameSourceClient,
       public SynchronousCompositorOutputSurfaceClient {
  public:
-  // Called by browser side.
-  static void SetSkCanvasForDraw(SkCanvas* canvas);
-
   SynchronousCompositorProxy(
       int routing_id,
       IPC::Sender* sender,
@@ -70,6 +67,7 @@ class SynchronousCompositorProxy
   void OnNeedsBeginFramesChange(bool needs_begin_frames) override;
 
   // SynchronousCompositorOutputSurfaceClient overrides.
+  void DidActivatePendingTree() override;
   void Invalidate() override;
   void SwapBuffers(uint32_t output_surface_id,
                    cc::CompositorFrame* frame) override;
@@ -114,6 +112,7 @@ class SynchronousCompositorProxy
       float zoom_delta,
       const gfx::Point& anchor,
       SyncCompositorCommonRendererParams* common_renderer_params);
+  void SetScroll(const gfx::ScrollOffset& total_scroll_offset);
 
   void SwapBuffersHw(uint32_t output_surface_id, cc::CompositorFrame* frame);
   void SendDemandDrawHwReply(cc::CompositorFrame* frame,
@@ -124,8 +123,6 @@ class SynchronousCompositorProxy
   void SendDemandDrawSwReply(bool success,
                              cc::CompositorFrame* frame,
                              IPC::Message* reply_message);
-  void DidActivatePendingTree();
-  void DeliverMessages();
   void SendAsyncRendererStateIfNeeded();
 
   const int routing_id_;
@@ -140,8 +137,7 @@ class SynchronousCompositorProxy
   IPC::Message* software_draw_reply_;
 
   // From browser.
-  size_t bytes_limit_;
-  scoped_ptr<SharedMemoryWithSize> software_draw_shm_;
+  std::unique_ptr<SharedMemoryWithSize> software_draw_shm_;
 
   // To browser.
   mutable uint32_t version_;  // Mustable so PopulateCommonParams can be const.

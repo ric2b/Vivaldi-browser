@@ -12,11 +12,10 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/public/test/test_browser_thread_bundle.h"
-#include "media/audio/audio_manager_base.h"
+#include "media/audio/audio_device_description.h"
 #include "media/audio/fake_audio_log_factory.h"
 #include "media/audio/fake_audio_manager.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -31,7 +30,10 @@ namespace {
 class MockAudioManager : public media::FakeAudioManager {
  public:
   MockAudioManager(size_t num_devices)
-      : FakeAudioManager(&fake_audio_log_factory_), num_devices_(num_devices) {}
+      : FakeAudioManager(base::ThreadTaskRunnerHandle::Get(),
+                         base::ThreadTaskRunnerHandle::Get(),
+                         &fake_audio_log_factory_),
+        num_devices_(num_devices) {}
   MockAudioManager() : MockAudioManager(0) {}
   ~MockAudioManager() override {}
 
@@ -42,9 +44,7 @@ class MockAudioManager : public media::FakeAudioManager {
     DCHECK(device_names->empty());
     MockGetAudioOutputDeviceNames(device_names);
     if (num_devices_ > 0) {
-      device_names->push_back(
-          media::AudioDeviceName(AudioManager::GetDefaultDeviceName(),
-                                 AudioManagerBase::kDefaultDeviceId));
+      device_names->push_back(media::AudioDeviceName::CreateDefault());
       for (size_t i = 0; i < num_devices_; i++) {
         device_names->push_back(
             media::AudioDeviceName("FakeDeviceName_" + base::IntToString(i),
@@ -68,9 +68,7 @@ class OnlyDefaultDeviceAudioManager : public MockAudioManager {
       media::AudioDeviceNames* device_names) override {
     DCHECK(device_names->empty());
     MockGetAudioOutputDeviceNames(device_names);
-    device_names->push_front(
-        media::AudioDeviceName(AudioManager::GetDefaultDeviceName(),
-                               AudioManagerBase::kDefaultDeviceId));
+    device_names->push_front(media::AudioDeviceName::CreateDefault());
   }
 
  private:
@@ -81,9 +79,7 @@ class OnlyDefaultDeviceAudioManager : public MockAudioManager {
 
 class AudioOutputDeviceEnumeratorTest : public ::testing::Test {
  public:
-  AudioOutputDeviceEnumeratorTest()
-      : thread_bundle_(), task_runner_(base::ThreadTaskRunnerHandle::Get()) {}
-
+  AudioOutputDeviceEnumeratorTest() {}
   ~AudioOutputDeviceEnumeratorTest() override {}
 
   MOCK_METHOD1(MockCallback, void(const AudioOutputDeviceEnumeration&));
@@ -110,18 +106,19 @@ class AudioOutputDeviceEnumeratorTest : public ::testing::Test {
                               const AudioOutputDeviceEnumeration& result) {
     EXPECT_EQ(actual_devices_expected, result.has_actual_devices);
     EXPECT_EQ(num_entries_expected, result.devices.size());
-    task_runner_->PostTask(FROM_HERE, run_loop_.QuitClosure());
+    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                  run_loop_.QuitClosure());
   }
 
   void QuitCallback(const AudioOutputDeviceEnumeration& result) {
     MockCallback(result);
-    task_runner_->PostTask(FROM_HERE, run_loop_.QuitClosure());
+    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                  run_loop_.QuitClosure());
   }
 
  protected:
-  std::unique_ptr<MockAudioManager> audio_manager_;
   TestBrowserThreadBundle thread_bundle_;
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  std::unique_ptr<MockAudioManager, media::AudioManagerDeleter> audio_manager_;
   base::RunLoop run_loop_;
 
  private:

@@ -10,6 +10,7 @@
 #include "ash/system/toast/toast_manager.h"
 #include "ash/test/ash_test_base.h"
 #include "base/run_loop.h"
+#include "ui/compositor/scoped_animation_duration_scale_mode.h"
 
 namespace ash {
 
@@ -62,7 +63,7 @@ class ToastManagerTest : public test::AshTestBase {
       overlay->ClickDismissButtonForTesting(DummyEvent());
   }
 
-  void SetShelfAlignment(ShelfAlignment alignment) {
+  void SetShelfAlignment(wm::ShelfAlignment alignment) {
     Shelf::ForPrimaryDisplay()->shelf_layout_manager()->SetAlignment(alignment);
   }
 
@@ -83,7 +84,6 @@ class ToastManagerTest : public test::AshTestBase {
 
 TEST_F(ToastManagerTest, ShowAndCloseAutomatically) {
   manager()->Show("DUMMY", 10);
-  base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ(1, GetToastId());
 
@@ -93,10 +93,28 @@ TEST_F(ToastManagerTest, ShowAndCloseAutomatically) {
 
 TEST_F(ToastManagerTest, ShowAndCloseManually) {
   manager()->Show("DUMMY", kLongLongDuration /* prevent timeout */);
-  base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ(1, GetToastId());
 
+  EXPECT_FALSE(GetCurrentWidget()->GetLayer()->GetAnimator()->is_animating());
+
+  ClickDismissButton();
+
+  EXPECT_EQ(nullptr, GetCurrentOverlay());
+}
+
+TEST_F(ToastManagerTest, ShowAndCloseManuallyDuringAnimation) {
+  ui::ScopedAnimationDurationScaleMode slow_animation_duration(
+      ui::ScopedAnimationDurationScaleMode::SLOW_DURATION);
+
+  manager()->Show("DUMMY", kLongLongDuration /* prevent timeout */);
+  EXPECT_TRUE(GetCurrentWidget()->GetLayer()->GetAnimator()->is_animating());
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(1, GetToastId());
+  EXPECT_TRUE(GetCurrentWidget()->GetLayer()->GetAnimator()->is_animating());
+
+  // Close it during animation.
   ClickDismissButton();
 
   while (GetCurrentOverlay() != nullptr)
@@ -108,9 +126,7 @@ TEST_F(ToastManagerTest, QueueMessage) {
   manager()->Show("DUMMY2", 10);
   manager()->Show("DUMMY3", 10);
 
-  while (GetToastId() != 1)
-    base::RunLoop().RunUntilIdle();
-
+  EXPECT_EQ(1, GetToastId());
   EXPECT_EQ("DUMMY1", GetCurrentText());
 
   while (GetToastId() != 2)
@@ -128,10 +144,9 @@ TEST_F(ToastManagerTest, PositionWithVisibleBottomShelf) {
   ShelfLayoutManager* shelf =
       Shelf::ForPrimaryDisplay()->shelf_layout_manager();
   SetShelfState(ash::SHELF_VISIBLE);
-  SetShelfAlignment(ash::SHELF_ALIGNMENT_BOTTOM);
+  SetShelfAlignment(wm::SHELF_ALIGNMENT_BOTTOM);
 
   manager()->Show("DUMMY", kLongLongDuration /* prevent timeout */);
-  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, GetToastId());
 
   gfx::Rect toast_bounds = GetCurrentWidget()->GetWindowBoundsInScreen();
@@ -158,13 +173,12 @@ TEST_F(ToastManagerTest, PositionWithAutoHiddenBottomShelf) {
 
   ShelfLayoutManager* shelf =
       Shelf::ForPrimaryDisplay()->shelf_layout_manager();
-  SetShelfAlignment(ash::SHELF_ALIGNMENT_BOTTOM);
+  SetShelfAlignment(wm::SHELF_ALIGNMENT_BOTTOM);
   SetShelfAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
   shelf->LayoutShelf();
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->auto_hide_state());
 
   manager()->Show("DUMMY", kLongLongDuration /* prevent timeout */);
-  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, GetToastId());
 
   gfx::Rect toast_bounds = GetCurrentWidget()->GetWindowBoundsInScreen();
@@ -181,11 +195,10 @@ TEST_F(ToastManagerTest, PositionWithHiddenBottomShelf) {
   ShelfLayoutManager* shelf =
       Shelf::ForPrimaryDisplay()->shelf_layout_manager();
   SetShelfAutoHideBehavior(SHELF_AUTO_HIDE_ALWAYS_HIDDEN);
-  SetShelfAlignment(ash::SHELF_ALIGNMENT_BOTTOM);
+  SetShelfAlignment(wm::SHELF_ALIGNMENT_BOTTOM);
   SetShelfState(ash::SHELF_HIDDEN);
 
   manager()->Show("DUMMY", kLongLongDuration /* prevent timeout */);
-  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, GetToastId());
 
   gfx::Rect toast_bounds = GetCurrentWidget()->GetWindowBoundsInScreen();
@@ -201,10 +214,9 @@ TEST_F(ToastManagerTest, PositionWithVisibleLeftShelf) {
   ShelfLayoutManager* shelf =
       Shelf::ForPrimaryDisplay()->shelf_layout_manager();
   SetShelfState(ash::SHELF_VISIBLE);
-  SetShelfAlignment(ash::SHELF_ALIGNMENT_LEFT);
+  SetShelfAlignment(wm::SHELF_ALIGNMENT_LEFT);
 
   manager()->Show("DUMMY", kLongLongDuration /* prevent timeout */);
-  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, GetToastId());
 
   gfx::Rect toast_bounds = GetCurrentWidget()->GetWindowBoundsInScreen();
@@ -236,10 +248,9 @@ TEST_F(ToastManagerTest, PositionWithUnifiedDesktop) {
   ShelfLayoutManager* shelf =
       Shelf::ForPrimaryDisplay()->shelf_layout_manager();
   SetShelfState(ash::SHELF_VISIBLE);
-  SetShelfAlignment(ash::SHELF_ALIGNMENT_BOTTOM);
+  SetShelfAlignment(wm::SHELF_ALIGNMENT_BOTTOM);
 
   manager()->Show("DUMMY", kLongLongDuration /* prevent timeout */);
-  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, GetToastId());
 
   gfx::Rect toast_bounds = GetCurrentWidget()->GetWindowBoundsInScreen();

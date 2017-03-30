@@ -13,13 +13,18 @@
 #include "components/mus/public/interfaces/window_tree_host.mojom.h"
 #include "mash/wm/public/interfaces/container.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "ui/display/display.h"
 
-namespace mojo {
-class Connector;
+namespace ash {
+class AlwaysOnTopController;
 }
 
 namespace mus {
 class WindowManagerClient;
+}
+
+namespace shell {
+class Connector;
 }
 
 namespace ui {
@@ -31,8 +36,14 @@ namespace wm {
 
 class LayoutManager;
 class ShadowController;
+class ShelfLayoutManager;
+class StatusLayoutManager;
 class WindowManager;
 class WindowManagerApplication;
+class WmRootWindowControllerMus;
+class WmShelfMus;
+class WmTestBase;
+class WmTestHelper;
 
 // RootWindowController manages the windows and state for a single display.
 //
@@ -49,7 +60,7 @@ class RootWindowController : public mus::WindowObserver,
   // Deletes this.
   void Destroy();
 
-  mojo::Connector* GetConnector();
+  shell::Connector* GetConnector();
 
   mus::Window* root() { return root_; }
 
@@ -57,7 +68,6 @@ class RootWindowController : public mus::WindowObserver,
   void IncrementWindowCount() { ++window_count_; }
 
   mus::Window* GetWindowForContainer(mojom::Container container);
-  mus::Window* GetWindowById(mus::Id id);
   bool WindowIsContainer(const mus::Window* window) const;
 
   WindowManager* window_manager() { return window_manager_.get(); }
@@ -66,7 +76,21 @@ class RootWindowController : public mus::WindowObserver,
 
   void OnAccelerator(uint32_t id, const ui::Event& event);
 
+  const display::Display& display() const { return display_; }
+
+  ShelfLayoutManager* GetShelfLayoutManager();
+  StatusLayoutManager* GetStatusLayoutManager();
+
+  ash::AlwaysOnTopController* always_on_top_controller() {
+    return always_on_top_controller_.get();
+  }
+
+  WmShelfMus* wm_shelf() { return wm_shelf_.get(); }
+
  private:
+  friend class WmTestBase;
+  friend class WmTestHelper;
+
   explicit RootWindowController(WindowManagerApplication* app);
   ~RootWindowController() override;
 
@@ -75,6 +99,7 @@ class RootWindowController : public mus::WindowObserver,
   // WindowTreeDelegate:
   void OnEmbed(mus::Window* root) override;
   void OnConnectionLost(mus::WindowTreeConnection* connection) override;
+  void OnEventObserved(const ui::Event& event, mus::Window* target) override;
 
   // mus::WindowObserver:
   void OnWindowDestroyed(mus::Window* window) override;
@@ -88,13 +113,18 @@ class RootWindowController : public mus::WindowObserver,
   mus::Window* root_;
   int window_count_;
 
+  std::unique_ptr<WmRootWindowControllerMus> wm_root_window_controller_;
+  std::unique_ptr<WmShelfMus> wm_shelf_;
+
   std::unique_ptr<WindowManager> window_manager_;
 
-  std::map<mus::Window*, std::unique_ptr<LayoutManager>> layout_manager_;
+  std::map<mus::Window*, std::unique_ptr<LayoutManager>> layout_managers_;
 
   std::unique_ptr<ShadowController> shadow_controller_;
 
-  mus::mojom::DisplayPtr display_;
+  display::Display display_;
+
+  std::unique_ptr<ash::AlwaysOnTopController> always_on_top_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(RootWindowController);
 };

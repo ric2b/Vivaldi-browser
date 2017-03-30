@@ -17,6 +17,7 @@
       'dependencies': [
         '../base/base.gyp:base',
         '../base/base.gyp:test_support_base',
+        '../components/components.gyp:cast_certificate_test_support',
         '../components/components.gyp:keyed_service_content',
         '../components/components.gyp:pref_registry_test_support',
         '../components/components.gyp:user_prefs',
@@ -26,10 +27,10 @@
         '../device/hid/hid.gyp:device_hid',
         '../device/serial/serial.gyp:device_serial',
         '../device/serial/serial.gyp:device_serial_test_util',
-        '../mojo/mojo_base.gyp:mojo_application_bindings',
         '../mojo/mojo_edk.gyp:mojo_js_lib',
         '../mojo/mojo_edk.gyp:mojo_system_impl',
         '../mojo/mojo_public.gyp:mojo_cpp_bindings',
+        '../services/shell/shell_public.gyp:shell_public',
         '../testing/gmock.gyp:gmock',
         '../testing/gtest.gyp:gtest',
         '../third_party/leveldatabase/leveldatabase.gyp:leveldatabase',
@@ -61,7 +62,7 @@
             'browser/api/webcam_private/visca_webcam_unittest.cc',
           ],
         }],
-        ['enable_wifi_display==1', {
+        ['proprietary_codecs==1 and enable_wifi_display==1', {
           'sources': [
             '<@(extensions_unittests_sources_wifi_display)',
           ],

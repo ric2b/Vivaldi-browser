@@ -106,9 +106,7 @@ void RecordFullscreenStyle(FullscreenStyle style) {
 @interface NSWindow (NSPrivateApis)
 // Note: These functions are private, use -[NSObject respondsToSelector:]
 // before calling them.
-
 - (NSWindow*)_windowForToolbar;
-
 @end
 
 @implementation BrowserWindowController(Private)
@@ -122,6 +120,28 @@ void RecordFullscreenStyle(FullscreenStyle style) {
         switchView:[overlayableContentsController_ activeContainer]
            browser:browser_.get()
           delegate:self]);
+}
+
+- (void)updateFullscreenCollectionBehavior {
+  // Set the window to participate in Lion Fullscreen mode.  Setting this flag
+  // has no effect on Snow Leopard or earlier.  Panels can share a fullscreen
+  // space with a tabbed window, but they can not be primary fullscreen
+  // windows.
+  // This ensures the fullscreen button is appropriately positioned. It must
+  // be done before calling layoutSubviews because the new avatar button's
+  // position depends on the fullscreen button's position, as well as
+  // TabStripController's rightIndentForControls.
+  // The fullscreen button's position may depend on the old avatar button's
+  // width, but that does not require calling layoutSubviews first.
+  NSWindow* window = [self window];
+  NSUInteger collectionBehavior = [window collectionBehavior];
+  collectionBehavior &= ~NSWindowCollectionBehaviorFullScreenAuxiliary;
+  collectionBehavior &= ~NSWindowCollectionBehaviorFullScreenPrimary;
+  collectionBehavior |= browser_->type() == Browser::TYPE_TABBED ||
+                                browser_->type() == Browser::TYPE_POPUP
+                            ? NSWindowCollectionBehaviorFullScreenPrimary
+                            : NSWindowCollectionBehaviorFullScreenAuxiliary;
+  [window setCollectionBehavior:collectionBehavior];
 }
 
 - (void)saveWindowPositionIfNeeded {
@@ -443,7 +463,7 @@ willPositionSheet:(NSWindow*)sheet
 }
 
 - (void)configurePresentationModeController {
-  BOOL fullscreenForTab = [self isFullscreenForTabContent];
+  BOOL fullscreenForTab = [self isFullscreenForTabContentOrExtension];
   BOOL kioskMode =
       base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kKioskMode);
   BOOL showDropdown =
@@ -684,6 +704,8 @@ willPositionSheet:(NSWindow*)sheet
 }
 
 - (void)windowDidEnterFullScreen:(NSNotification*)notification {
+  [tabStripController_ setVisualEffectsDisabledForFullscreen:YES];
+
   // In Yosemite, some combination of the titlebar and toolbar always show in
   // full-screen mode. We do not want either to show. Search for the window that
   // contains the views, and hide it. There is no need to ever unhide the view.
@@ -745,6 +767,8 @@ willPositionSheet:(NSWindow*)sheet
 }
 
 - (void)windowWillExitFullScreen:(NSNotification*)notification {
+  [tabStripController_ setVisualEffectsDisabledForFullscreen:NO];
+
   if (notification)  // For System Fullscreen when non-nil.
     [self registerForContentViewResizeNotifications];
   exitingAppKitFullscreen_ = YES;
@@ -827,7 +851,7 @@ willPositionSheet:(NSWindow*)sheet
 
 - (void)adjustUIForEnteringFullscreen {
   fullscreen_mac::SlidingStyle style;
-  if ([self isFullscreenForTabContent]) {
+  if ([self isFullscreenForTabContentOrExtension]) {
     style = fullscreen_mac::OMNIBOX_TABS_NONE;
   } else if (enteringPresentationMode_ || ![self shouldShowFullscreenToolbar]) {
     style = fullscreen_mac::OMNIBOX_TABS_HIDDEN;
@@ -891,7 +915,6 @@ willPositionSheet:(NSWindow*)sheet
 }
 
 - (void)enterAppKitFullscreen {
-  DCHECK(base::mac::IsOSLionOrLater());
   if (FramedBrowserWindow* framedBrowserWindow =
           base::mac::ObjCCast<FramedBrowserWindow>([self window])) {
     [framedBrowserWindow toggleSystemFullScreen];
@@ -899,7 +922,6 @@ willPositionSheet:(NSWindow*)sheet
 }
 
 - (void)exitAppKitFullscreen {
-  DCHECK(base::mac::IsOSLionOrLater());
   if (FramedBrowserWindow* framedBrowserWindow =
           base::mac::ObjCCast<FramedBrowserWindow>([self window])) {
     [framedBrowserWindow toggleSystemFullScreen];
@@ -1223,10 +1245,11 @@ willPositionSheet:(NSWindow*)sheet
   return nil;
 }
 
-- (BOOL)isFullscreenForTabContent {
-  return browser_->exclusive_access_manager()
-                 ->fullscreen_controller()
-                 ->IsWindowFullscreenForTabOrPending();
+- (BOOL)isFullscreenForTabContentOrExtension {
+  FullscreenController* controller =
+      browser_->exclusive_access_manager()->fullscreen_controller();
+  return controller->IsWindowFullscreenForTabOrPending() ||
+         controller->IsExtensionFullscreenOrPending();
 }
 
 @end  // @implementation BrowserWindowController(Private)

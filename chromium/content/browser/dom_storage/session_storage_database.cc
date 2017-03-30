@@ -14,6 +14,8 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/trace_event/memory_dump_manager.h"
+#include "base/trace_event/process_memory_dump.h"
 #include "third_party/leveldatabase/env_chromium.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
 #include "third_party/leveldatabase/src/include/leveldb/iterator.h"
@@ -276,7 +278,7 @@ bool SessionStorageDatabase::ReadNamespacesAndOrigins(
   options.snapshot = db_->GetSnapshot();
 
   std::string namespace_prefix = NamespacePrefix();
-  scoped_ptr<leveldb::Iterator> it(db_->NewIterator(options));
+  std::unique_ptr<leveldb::Iterator> it(db_->NewIterator(options));
   it->Seek(namespace_prefix);
   // If the key is not found, the status of the iterator won't be IsNotFound(),
   // but the iterator will be invalid.
@@ -323,6 +325,36 @@ bool SessionStorageDatabase::ReadNamespacesAndOrigins(
   }
   db_->ReleaseSnapshot(options.snapshot);
   return true;
+}
+
+void SessionStorageDatabase::OnMemoryDump(
+    base::trace_event::ProcessMemoryDump* pmd) {
+  std::string db_memory_usage;
+  {
+    base::AutoLock lock(db_lock_);
+    if (!db_)
+      return;
+
+    bool res =
+        db_->GetProperty("leveldb.approximate-memory-usage", &db_memory_usage);
+    DCHECK(res);
+  }
+
+  uint64_t size;
+  bool res = base::StringToUint64(db_memory_usage, &size);
+  DCHECK(res);
+
+  auto mad = pmd->CreateAllocatorDump(
+      base::StringPrintf("dom_storage/session_storage_%p", this));
+  mad->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
+                 base::trace_event::MemoryAllocatorDump::kUnitsBytes, size);
+
+  // Memory is allocated from system allocator (malloc).
+  const char* system_allocator_name =
+      base::trace_event::MemoryDumpManager::GetInstance()
+          ->system_allocator_pool_name();
+  if (system_allocator_name)
+    pmd->AddSuballocation(mad->guid(), system_allocator_name);
 }
 
 bool SessionStorageDatabase::LazyOpen(bool create_if_needed) {
@@ -447,7 +479,8 @@ bool SessionStorageDatabase::GetAreasInNamespace(
     const std::string& namespace_id,
     std::map<std::string, std::string>* areas) {
   std::string namespace_start_key = NamespaceStartKey(namespace_id);
-  scoped_ptr<leveldb::Iterator> it(db_->NewIterator(leveldb::ReadOptions()));
+  std::unique_ptr<leveldb::Iterator> it(
+      db_->NewIterator(leveldb::ReadOptions()));
   it->Seek(namespace_start_key);
   // If the key is not found, the status of the iterator won't be IsNotFound(),
   // but the iterator will be invalid.
@@ -500,7 +533,8 @@ bool SessionStorageDatabase::DeleteAreaHelper(
   // If this was the only area in the namespace, delete the namespace start key,
   // too.
   std::string namespace_start_key = NamespaceStartKey(namespace_id);
-  scoped_ptr<leveldb::Iterator> it(db_->NewIterator(leveldb::ReadOptions()));
+  std::unique_ptr<leveldb::Iterator> it(
+      db_->NewIterator(leveldb::ReadOptions()));
   it->Seek(namespace_start_key);
   if (!ConsistencyCheck(it->Valid()))
     return false;
@@ -559,7 +593,7 @@ bool SessionStorageDatabase::ReadMap(const std::string& map_id,
                                      const leveldb::ReadOptions& options,
                                      DOMStorageValuesMap* result,
                                      bool only_keys) {
-  scoped_ptr<leveldb::Iterator> it(db_->NewIterator(options));
+  std::unique_ptr<leveldb::Iterator> it(db_->NewIterator(options));
   std::string map_start_key = MapRefCountKey(map_id);
   it->Seek(map_start_key);
   // If the key is not found, the status of the iterator won't be IsNotFound(),

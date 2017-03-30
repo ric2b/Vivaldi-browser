@@ -22,7 +22,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8TestNode::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestNode::domTemplate, V8TestNode::refObject, V8TestNode::derefObject, V8TestNode::trace, 0, 0, V8TestNode::preparePrototypeAndInterfaceObject, V8TestNode::installConditionallyEnabledProperties, "TestNode", &V8Node::wrapperTypeInfo, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::NodeClassId, WrapperTypeInfo::InheritFromEventTarget, WrapperTypeInfo::Dependent, WrapperTypeInfo::GarbageCollectedObject };
+const WrapperTypeInfo V8TestNode::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestNode::domTemplate, V8TestNode::trace, V8TestNode::traceWrappers, 0, 0, V8TestNode::preparePrototypeAndInterfaceObject, nullptr, "TestNode", &V8Node::wrapperTypeInfo, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::NodeClassId, WrapperTypeInfo::InheritFromEventTarget, WrapperTypeInfo::Dependent };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -152,7 +152,7 @@ static void hrefByteStringAttributeSetterCallback(const v8::FunctionCallbackInfo
 
 static void constructor(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    RawPtr<TestNode> impl = TestNode::create();
+    TestNode* impl = TestNode::create();
     v8::Local<v8::Object> wrapper = info.Holder();
     wrapper = impl->associateWithWrapper(info.GetIsolate(), &V8TestNode::wrapperTypeInfo, wrapper);
     v8SetReturnValue(info, wrapper);
@@ -182,10 +182,10 @@ void V8TestNode::constructorCallback(const v8::FunctionCallbackInfo<v8::Value>& 
     TestNodeV8Internal::constructor(info);
 }
 
-static void installV8TestNodeTemplate(v8::Local<v8::FunctionTemplate> interfaceTemplate, v8::Isolate* isolate)
+static void installV8TestNodeTemplate(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::FunctionTemplate> interfaceTemplate)
 {
     // Initialize the interface object's template.
-    V8DOMConfiguration::initializeDOMInterfaceTemplate(isolate, interfaceTemplate, V8TestNode::wrapperTypeInfo.interfaceName, V8Node::domTemplate(isolate), V8TestNode::internalFieldCount);
+    V8DOMConfiguration::initializeDOMInterfaceTemplate(isolate, interfaceTemplate, V8TestNode::wrapperTypeInfo.interfaceName, V8Node::domTemplate(isolate, world), V8TestNode::internalFieldCount);
     interfaceTemplate->SetCallHandler(V8TestNode::constructorCallback);
     interfaceTemplate->SetLength(0);
     v8::Local<v8::Signature> signature = v8::Signature::New(isolate, interfaceTemplate);
@@ -195,12 +195,12 @@ static void installV8TestNodeTemplate(v8::Local<v8::FunctionTemplate> interfaceT
     v8::Local<v8::ObjectTemplate> prototypeTemplate = interfaceTemplate->PrototypeTemplate();
     ALLOW_UNUSED_LOCAL(prototypeTemplate);
     // Register DOM constants, attributes and operations.
-    V8DOMConfiguration::installAccessors(isolate, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, V8TestNodeAccessors, WTF_ARRAY_LENGTH(V8TestNodeAccessors));
+    V8DOMConfiguration::installAccessors(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, V8TestNodeAccessors, WTF_ARRAY_LENGTH(V8TestNodeAccessors));
 }
 
-v8::Local<v8::FunctionTemplate> V8TestNode::domTemplate(v8::Isolate* isolate)
+v8::Local<v8::FunctionTemplate> V8TestNode::domTemplate(v8::Isolate* isolate, const DOMWrapperWorld& world)
 {
-    return V8DOMConfiguration::domClassTemplate(isolate, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestNodeTemplate);
+    return V8DOMConfiguration::domClassTemplate(isolate, world, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestNodeTemplate);
 }
 
 bool V8TestNode::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
@@ -216,14 +216,6 @@ v8::Local<v8::Object> V8TestNode::findInstanceInPrototypeChain(v8::Local<v8::Val
 TestNode* V8TestNode::toImplWithTypeCheck(v8::Isolate* isolate, v8::Local<v8::Value> value)
 {
     return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : 0;
-}
-
-void V8TestNode::refObject(ScriptWrappable* scriptWrappable)
-{
-}
-
-void V8TestNode::derefObject(ScriptWrappable* scriptWrappable)
-{
 }
 
 } // namespace blink

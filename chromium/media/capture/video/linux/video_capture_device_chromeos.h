@@ -8,9 +8,9 @@
 #include "base/macros.h"
 #include "media/capture/video/linux/video_capture_device_linux.h"
 
-namespace gfx {
+namespace display {
 class Display;
-}  // namespace gfx
+}  // namespace display
 
 namespace media {
 
@@ -27,7 +27,7 @@ class VideoCaptureDeviceChromeOS : public VideoCaptureDeviceLinux {
  private:
   class ScreenObserverDelegate;
 
-  void SetDisplayRotation(const gfx::Display& display);
+  void SetDisplayRotation(const display::Display& display);
   scoped_refptr<ScreenObserverDelegate> screen_observer_delegate_;
   DISALLOW_IMPLICIT_CONSTRUCTORS(VideoCaptureDeviceChromeOS);
 };

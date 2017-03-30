@@ -60,7 +60,7 @@
 #endif
 
 #if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-#include "media/mojo/services/mojo_media_application_factory.h"
+#include "media/mojo/services/mojo_media_application_factory.h"  // nogncheck
 #endif
 
 namespace content {
@@ -180,8 +180,9 @@ bool ShellContentBrowserClient::IsHandledURL(const GURL& url) {
 void ShellContentBrowserClient::RegisterInProcessMojoApplications(
     StaticMojoApplicationMap* apps) {
 #if (ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-  apps->insert(std::make_pair("mojo:media",
-                              base::Bind(&media::CreateMojoMediaApplication)));
+  content::MojoApplicationInfo app_info;
+  app_info.application_factory = base::Bind(&media::CreateMojoMediaApplication);
+  apps->insert(std::make_pair("mojo:media", app_info));
 #endif
 }
 
@@ -253,7 +254,7 @@ ShellContentBrowserClient::CreateQuotaPermissionContext() {
 void ShellContentBrowserClient::SelectClientCertificate(
     WebContents* web_contents,
     net::SSLCertRequestInfo* cert_request_info,
-    scoped_ptr<ClientCertificateDelegate> delegate) {
+    std::unique_ptr<ClientCertificateDelegate> delegate) {
   if (!select_client_certificate_callback_.is_null())
     select_client_certificate_callback_.Run();
 }

@@ -30,6 +30,7 @@
 
 #include "core/dom/NodeRareData.h"
 
+#include "bindings/core/v8/ScriptWrappableVisitor.h"
 #include "core/dom/Element.h"
 #include "core/dom/ElementRareData.h"
 #include "core/frame/FrameHost.h"
@@ -62,6 +63,19 @@ DEFINE_TRACE(NodeRareData)
         static_cast<ElementRareData*>(this)->traceAfterDispatch(visitor);
     else
         traceAfterDispatch(visitor);
+}
+
+DEFINE_TRACE_WRAPPERS(NodeRareData)
+{
+    if (m_isElementRareData)
+        static_cast<const ElementRareData*>(this)->traceWrappersAfterDispatch(visitor);
+    else
+        traceWrappersAfterDispatch(visitor);
+}
+
+DEFINE_TRACE_WRAPPERS_AFTER_DISPATCH(NodeRareData)
+{
+    visitor->traceWrappers(m_nodeLists);
 }
 
 void NodeRareData::finalizeGarbageCollectedObject()

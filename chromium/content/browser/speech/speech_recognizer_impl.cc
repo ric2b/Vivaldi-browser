@@ -13,7 +13,6 @@
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/media/media_internals.h"
 #include "content/browser/speech/audio_buffer.h"
-#include "content/browser/speech/google_one_shot_remote_engine.h"
 #include "content/public/browser/speech_recognition_event_listener.h"
 #include "media/base/audio_converter.h"
 
@@ -55,8 +54,8 @@ class SpeechRecognizerImpl::OnDataConverter
   // parameters.
   AudioConverter audio_converter_;
 
-  scoped_ptr<AudioBus> input_bus_;
-  scoped_ptr<AudioBus> output_bus_;
+  std::unique_ptr<AudioBus> input_bus_;
+  std::unique_ptr<AudioBus> output_bus_;
   const AudioParameters input_parameters_;
   const AudioParameters output_parameters_;
   bool data_was_converted_;

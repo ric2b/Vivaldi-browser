@@ -79,6 +79,7 @@ const GLint TestHelper::kMaxTextureSize;
 const GLint TestHelper::kMaxCubeMapTextureSize;
 const GLint TestHelper::kMaxRectangleTextureSize;
 const GLint TestHelper::kMax3DTextureSize;
+const GLint TestHelper::kMaxArrayTextureLayers;
 const GLint TestHelper::kNumVertexAttribs;
 const GLint TestHelper::kNumTextureUnits;
 const GLint TestHelper::kMaxTextureImageUnits;
@@ -93,6 +94,9 @@ const GLint TestHelper::kMaxVertexOutputComponents;
 const GLint TestHelper::kMaxFragmentInputComponents;
 const GLint TestHelper::kMaxProgramTexelOffset;
 const GLint TestHelper::kMinProgramTexelOffset;
+const GLint TestHelper::kMaxTransformFeedbackSeparateAttribs;
+const GLint TestHelper::kMaxUniformBufferBindings;
+const GLint TestHelper::kUniformBufferOffsetAlignment;
 #endif
 
 std::vector<std::string> TestHelper::split_extensions_;
@@ -358,6 +362,18 @@ void TestHelper::SetupContextGroupInitExpectations(
         .RetiresOnSaturation();
   }
 
+  if (gl_info.IsES3Capable()) {
+    EXPECT_CALL(*gl, GetIntegerv(GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS, _))
+        .WillOnce(SetArgumentPointee<1>(kMaxTransformFeedbackSeparateAttribs))
+        .RetiresOnSaturation();
+    EXPECT_CALL(*gl, GetIntegerv(GL_MAX_UNIFORM_BUFFER_BINDINGS, _))
+        .WillOnce(SetArgumentPointee<1>(kMaxUniformBufferBindings))
+        .RetiresOnSaturation();
+    EXPECT_CALL(*gl, GetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, _))
+        .WillOnce(SetArgumentPointee<1>(kUniformBufferOffsetAlignment))
+        .RetiresOnSaturation();
+  }
+
   EXPECT_CALL(*gl, GetIntegerv(GL_MAX_VERTEX_ATTRIBS, _))
       .WillOnce(SetArgumentPointee<1>(kNumVertexAttribs))
       .RetiresOnSaturation();
@@ -373,6 +389,11 @@ void TestHelper::SetupContextGroupInitExpectations(
   if (gl_info.IsES3Capable()) {
     EXPECT_CALL(*gl, GetIntegerv(GL_MAX_3D_TEXTURE_SIZE, _))
         .WillOnce(SetArgumentPointee<1>(kMax3DTextureSize))
+        .RetiresOnSaturation();
+  }
+  if (gl_info.IsES3Capable()) {
+    EXPECT_CALL(*gl, GetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, _))
+        .WillOnce(SetArgumentPointee<1>(kMaxArrayTextureLayers))
         .RetiresOnSaturation();
   }
   if (strstr(extensions, "GL_ARB_texture_rectangle")) {

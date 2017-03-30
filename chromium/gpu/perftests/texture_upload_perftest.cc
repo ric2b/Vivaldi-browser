@@ -6,12 +6,12 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <memory>
 #include <vector>
 
 #include "base/containers/small_map.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/stringprintf.h"
 #include "gpu/perftests/measurements.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -25,6 +25,7 @@
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_version_info.h"
 #include "ui/gl/gpu_timing.h"
+#include "ui/gl/init/gl_factory.h"
 #include "ui/gl/scoped_make_current.h"
 
 #if defined(USE_OZONE)
@@ -84,7 +85,7 @@ GLuint LoadShader(const GLenum type, const char* const src) {
     GLint len = 0;
     glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &len);
     if (len > 1) {
-      scoped_ptr<char[]> error_log(new char[len]);
+      std::unique_ptr<char[]> error_log(new char[len]);
       glGetShaderInfoLog(shader, len, NULL, error_log.get());
       LOG(ERROR) << "Error compiling shader: " << error_log.get();
     }
@@ -183,13 +184,13 @@ class TextureUploadPerfTest : public testing::Test {
     // thread.
     base::MessageLoopForUI main_loop;
 #endif
-    static bool gl_initialized = gfx::GLSurface::InitializeOneOff();
+    static bool gl_initialized = gl::init::InitializeGLOneOff();
     DCHECK(gl_initialized);
     // Initialize an offscreen surface and a gl context.
-    surface_ = gfx::GLSurface::CreateOffscreenGLSurface(gfx::Size());
-    gl_context_ = gfx::GLContext::CreateGLContext(NULL,  // share_group
-                                                  surface_.get(),
-                                                  gfx::PreferIntegratedGpu);
+    surface_ = gl::init::CreateOffscreenGLSurface(gfx::Size());
+    gl_context_ =
+        gl::init::CreateGLContext(nullptr,  // share_group
+                                  surface_.get(), gfx::PreferIntegratedGpu);
     ui::ScopedMakeCurrent smc(gl_context_.get(), surface_.get());
     glGenTextures(1, &color_texture_);
     glBindTexture(GL_TEXTURE_2D, color_texture_);

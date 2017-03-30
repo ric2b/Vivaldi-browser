@@ -37,8 +37,7 @@
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "platform/heap/Handle.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
+#include "wtf/Forward.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
@@ -213,6 +212,8 @@ public:
     bool hasGrammarMarker(Document*, int from, int length);
     void setContinuousSpellCheckingEnabled(bool);
 
+    void setMockHyphenation(const AtomicString& locale);
+
     bool isOverwriteModeEnabled(Document*);
     void toggleOverwriteModeEnabled(Document*);
 
@@ -296,8 +297,8 @@ public:
     ClientRectList* draggableRegions(Document*, ExceptionState&);
     ClientRectList* nonDraggableRegions(Document*, ExceptionState&);
 
-    PassRefPtr<DOMArrayBuffer> serializeObject(PassRefPtr<SerializedScriptValue>) const;
-    PassRefPtr<SerializedScriptValue> deserializeBuffer(PassRefPtr<DOMArrayBuffer>) const;
+    DOMArrayBuffer* serializeObject(PassRefPtr<SerializedScriptValue>) const;
+    PassRefPtr<SerializedScriptValue> deserializeBuffer(DOMArrayBuffer*) const;
 
     String getCurrentCursorInfo();
 
@@ -387,8 +388,6 @@ public:
     void setCapsLockState(bool enabled);
 
     bool setScrollbarVisibilityInScrollableArea(Node*, bool visible);
-
-    void forceRestrictIFramePermissions();
 
     // Translate given platform monotonic time in seconds to high resolution
     // document time in seconds

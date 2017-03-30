@@ -14,13 +14,13 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/renderer/media/media_stream.h"
 #include "content/renderer/media/media_stream_track.h"
 #include "content/renderer/media/media_stream_video_track.h"
-#include "content/renderer/media/webrtc/media_stream_remote_audio_track.h"
 #include "content/renderer/media/webrtc/media_stream_remote_video_source.h"
 #include "content/renderer/media/webrtc/peer_connection_dependency_factory.h"
+#include "content/renderer/media/webrtc/peer_connection_remote_audio_source.h"
 #include "content/renderer/media/webrtc/track_observer.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamSource.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
@@ -103,7 +103,7 @@ class RemoteMediaStreamTrackAdapter
     blink::WebString webkit_track_id(base::UTF8ToUTF16(id_));
     blink::WebMediaStreamSource webkit_source;
     webkit_source.initialize(webkit_track_id, type, webkit_track_id,
-                             true /* remote */, true /* readonly */);
+                             true /* remote */);
     webkit_track_.initialize(webkit_track_id, webkit_source);
     DCHECK(!webkit_track_.isNull());
   }
@@ -239,11 +239,10 @@ void RemoteAudioTrackAdapter::Unregister() {
 void RemoteAudioTrackAdapter::InitializeWebkitAudioTrack() {
   InitializeWebkitTrack(blink::WebMediaStreamSource::TypeAudio);
 
-  webkit_track()->source().setExtraData(
-      new MediaStreamRemoteAudioSource(observed_track().get()));
-  webkit_track()->setExtraData(
-      new MediaStreamRemoteAudioTrack(
-          webkit_track()->source(), webkit_track()->isEnabled()));
+  MediaStreamAudioSource* const source =
+      new PeerConnectionRemoteAudioSource(observed_track().get());
+  webkit_track()->source().setExtraData(source);  // Takes ownership.
+  source->ConnectToTrack(*(webkit_track()));
 }
 
 void RemoteAudioTrackAdapter::OnChanged() {

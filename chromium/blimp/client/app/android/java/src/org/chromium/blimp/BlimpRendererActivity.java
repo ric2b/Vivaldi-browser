@@ -10,12 +10,15 @@ import android.os.Bundle;
 import android.text.TextUtils;
 
 import org.chromium.base.Log;
+import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.blimp.auth.RetryingTokenSource;
 import org.chromium.blimp.auth.TokenSource;
 import org.chromium.blimp.auth.TokenSourceImpl;
 import org.chromium.blimp.input.WebInputBox;
+import org.chromium.blimp.preferences.PreferencesUtil;
 import org.chromium.blimp.session.BlimpClientSession;
+import org.chromium.blimp.session.EngineInfo;
 import org.chromium.blimp.session.TabControlFeature;
 import org.chromium.blimp.toolbar.Toolbar;
 import org.chromium.ui.widget.Toast;
@@ -24,8 +27,9 @@ import org.chromium.ui.widget.Toast;
  * The {@link Activity} for rendering the main Blimp client.  This loads the Blimp rendering stack
  * and displays it.
  */
-public class BlimpRendererActivity extends Activity
-        implements BlimpLibraryLoader.Callback, TokenSource.Callback, BlimpClientSession.Callback {
+public class BlimpRendererActivity
+        extends Activity implements BlimpLibraryLoader.Callback, TokenSource.Callback,
+                                    BlimpClientSession.ConnectionObserver {
     private static final int ACCOUNT_CHOOSER_INTENT_REQUEST_CODE = 100;
     private static final String TAG = "BlimpRendererActivity";
 
@@ -40,7 +44,10 @@ public class BlimpRendererActivity extends Activity
     private TabControlFeature mTabControlFeature;
     private WebInputBox mWebInputBox;
 
+    private boolean mFirstUrlLoadDone = false;
+
     @Override
+    @SuppressFBWarnings("DM_EXIT")  // FindBugs doesn't like System.exit().
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
@@ -76,6 +83,9 @@ public class BlimpRendererActivity extends Activity
         }
 
         if (mToolbar != null) {
+            if (mBlimpClientSession != null) {
+                mBlimpClientSession.removeObserver(mToolbar);
+            }
             mToolbar.destroy();
             mToolbar = null;
         }
@@ -92,6 +102,7 @@ public class BlimpRendererActivity extends Activity
 
         // Destroy the BlimpClientSession last, as all other features may rely on it.
         if (mBlimpClientSession != null) {
+            mBlimpClientSession.removeObserver(this);
             mBlimpClientSession.destroy();
             mBlimpClientSession = null;
         }
@@ -109,6 +120,8 @@ public class BlimpRendererActivity extends Activity
                 } else {
                     onTokenUnavailable(false);
                 }
+                break;
+            default:
                 break;
         }
     }
@@ -133,26 +146,28 @@ public class BlimpRendererActivity extends Activity
 
         setContentView(R.layout.blimp_main);
 
-        mBlimpClientSession = new BlimpClientSession(this);
+        mBlimpClientSession = new BlimpClientSession(PreferencesUtil.findAssignerUrl(this));
+        mBlimpClientSession.addObserver(this);
 
         mBlimpView = (BlimpView) findViewById(R.id.renderer);
         mBlimpView.initializeRenderer(mBlimpClientSession);
 
         mToolbar = (Toolbar) findViewById(R.id.toolbar);
         mToolbar.initialize(mBlimpClientSession);
+        mBlimpClientSession.addObserver(mToolbar);
 
         mWebInputBox = (WebInputBox) findViewById(R.id.editText);
         mWebInputBox.initialize(mBlimpClientSession);
 
         mTabControlFeature = new TabControlFeature(mBlimpClientSession, mBlimpView);
 
-        handleUrl(getUrlFromIntent(getIntent()));
+        handleUrlFromIntent(getIntent());
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        handleUrl(getUrlFromIntent(intent));
+        handleUrlFromIntent(intent);
     }
 
     /**
@@ -171,15 +186,21 @@ public class BlimpRendererActivity extends Activity
     }
 
     /**
-     * Loads the url in the browser.
-     * @param url URL to load. If null, browser loads a default page.
+     * Retrieves an URL from an Intent and loads it in the browser.
+     * If the toolbar already has an URL and the new intent doesn't have an URL (e.g. bringing back
+     * from background), the intent gets ignored.
+     * @param intent Intent that contains the URL.
      */
-    private void handleUrl(String url) {
-        if (url == null) {
-            mToolbar.loadUrl("http://www.google.com/");
-        } else {
-            mToolbar.loadUrl(url);
-        }
+    private void handleUrlFromIntent(Intent intent) {
+        // TODO(shaktisahu): On a slow device, this might happen. Load the correct URL once the
+        // toolbar loading is complete (crbug/601226)
+        if (mToolbar == null) return;
+
+        String url = getUrlFromIntent(intent);
+        if (mFirstUrlLoadDone && url == null) return;
+        mFirstUrlLoadDone = true;
+
+        mToolbar.loadUrl(url == null ? "http://www.google.com/" : url);
     }
 
     // TokenSource.Callback implementation.
@@ -200,9 +221,10 @@ public class BlimpRendererActivity extends Activity
         startActivityForResult(suggestedIntent, ACCOUNT_CHOOSER_INTENT_REQUEST_CODE);
     }
 
-    // BlimpClientSession.Callback implementation.
+    // BlimpClientSession.ConnectionObserver interface.
     @Override
-    public void onAssignmentReceived(int result, int suggestedMessageResourceId) {
+    public void onAssignmentReceived(
+            int result, int suggestedMessageResourceId, EngineInfo engineInfo) {
         Toast.makeText(this, suggestedMessageResourceId, Toast.LENGTH_LONG).show();
     }
 

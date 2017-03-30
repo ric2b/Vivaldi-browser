@@ -19,13 +19,13 @@
 #include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "base/bind.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
 #include "ui/base/resource/resource_bundle.h"
-#include "ui/gfx/display.h"
+#include "ui/display/display.h"
 #include "ui/gfx/image/image.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/image_view.h"
@@ -272,7 +272,7 @@ void TrayBrightness::HandleBrightnessChanged(double percent,
   // Never show the bubble on systems that lack internal displays: if an
   // external display's brightness is changed, it may already display the new
   // level via an on-screen display.
-  if (!gfx::Display::HasInternalDisplay())
+  if (!display::Display::HasInternalDisplay())
     return;
 
   if (brightness_view_)

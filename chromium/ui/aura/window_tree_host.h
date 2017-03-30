@@ -194,6 +194,7 @@ class AURA_EXPORT WindowTreeHost : public ui::internal::InputMethodDelegate,
 
   void OnHostMoved(const gfx::Point& new_location);
   void OnHostResized(const gfx::Size& new_size);
+  void OnHostWorkspaceChanged();
   void OnHostCloseRequested();
   void OnHostActivated();
   void OnHostLostWindowCapture();
@@ -224,23 +225,23 @@ class AURA_EXPORT WindowTreeHost : public ui::internal::InputMethodDelegate,
   void MoveCursorToInternal(const gfx::Point& root_location,
                             const gfx::Point& host_location);
 
-  // We don't use a scoped_ptr for |window_| since we need this ptr to be valid
-  // during its deletion. (Window's dtor notifies observers that may attempt to
-  // reach back up to access this object which will be valid until the end of
-  // the dtor).
+  // We don't use a std::unique_ptr for |window_| since we need this ptr to be
+  // valid during its deletion. (Window's dtor notifies observers that may
+  // attempt to reach back up to access this object which will be valid until
+  // the end of the dtor).
   Window* window_;  // Owning.
 
   base::ObserverList<WindowTreeHostObserver> observers_;
 
-  scoped_ptr<WindowEventDispatcher> dispatcher_;
+  std::unique_ptr<WindowEventDispatcher> dispatcher_;
 
-  scoped_ptr<ui::Compositor> compositor_;
+  std::unique_ptr<ui::Compositor> compositor_;
 
   // Last cursor set.  Used for testing.
   gfx::NativeCursor last_cursor_;
   gfx::Point last_cursor_request_position_in_host_;
 
-  scoped_ptr<ui::ViewProp> prop_;
+  std::unique_ptr<ui::ViewProp> prop_;
 
   // The InputMethod instance used to process key events.
   // If owned it, it is created in GetInputMethod() method;

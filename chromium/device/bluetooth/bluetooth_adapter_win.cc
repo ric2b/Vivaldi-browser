@@ -4,6 +4,7 @@
 
 #include "device/bluetooth/bluetooth_adapter_win.h"
 
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -12,7 +13,7 @@
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "device/bluetooth/bluetooth_device_win.h"
 #include "device/bluetooth/bluetooth_discovery_session_outcome.h"
 #include "device/bluetooth/bluetooth_socket_thread.h"
@@ -194,11 +195,16 @@ void BluetoothAdapterWin::RegisterAudioSink(
 }
 
 void BluetoothAdapterWin::RegisterAdvertisement(
-    scoped_ptr<BluetoothAdvertisement::Data> advertisement_data,
+    std::unique_ptr<BluetoothAdvertisement::Data> advertisement_data,
     const CreateAdvertisementCallback& callback,
     const CreateAdvertisementErrorCallback& error_callback) {
   NOTIMPLEMENTED();
   error_callback.Run(BluetoothAdvertisement::ERROR_UNSUPPORTED_PLATFORM);
+}
+
+BluetoothLocalGattService* BluetoothAdapterWin::GetGattService(
+    const std::string& identifier) const {
+  return nullptr;
 }
 
 void BluetoothAdapterWin::RemovePairingDelegateInternal(
@@ -257,7 +263,8 @@ void BluetoothAdapterWin::DevicesPolled(
   for (DeviceAddressSet::const_iterator iter = removed_devices.begin();
        iter != removed_devices.end();
        ++iter) {
-    scoped_ptr<BluetoothDevice> device_win = devices_.take_and_erase(*iter);
+    std::unique_ptr<BluetoothDevice> device_win =
+        devices_.take_and_erase(*iter);
     FOR_EACH_OBSERVER(BluetoothAdapter::Observer, observers_,
                       DeviceRemoved(this, device_win.get()));
   }
@@ -277,7 +284,7 @@ void BluetoothAdapterWin::DevicesPolled(
           new BluetoothDeviceWin(this, *device_state, ui_task_runner_,
                                  socket_thread_, NULL, net::NetLog::Source());
       devices_.set(device_state->address,
-                   scoped_ptr<BluetoothDevice>(device_win));
+                   std::unique_ptr<BluetoothDevice>(device_win));
       FOR_EACH_OBSERVER(BluetoothAdapter::Observer,
                         observers_,
                         DeviceAdded(this, device_win));
@@ -331,7 +338,7 @@ void BluetoothAdapterWin::RemoveDiscoverySession(
 }
 
 void BluetoothAdapterWin::SetDiscoveryFilter(
-    scoped_ptr<BluetoothDiscoveryFilter> discovery_filter,
+    std::unique_ptr<BluetoothDiscoveryFilter> discovery_filter,
     const base::Closure& callback,
     const DiscoverySessionErrorCallback& error_callback) {
   NOTIMPLEMENTED();
@@ -351,7 +358,7 @@ void BluetoothAdapterWin::InitForTest(
     scoped_refptr<base::SequencedTaskRunner> ui_task_runner,
     scoped_refptr<base::SequencedTaskRunner> bluetooth_task_runner) {
   ui_task_runner_ = ui_task_runner;
-  if (ui_task_runner_ == nullptr)
+  if (!ui_task_runner_)
     ui_task_runner_ = base::ThreadTaskRunnerHandle::Get();
   task_manager_ =
       new BluetoothTaskManagerWin(ui_task_runner_);

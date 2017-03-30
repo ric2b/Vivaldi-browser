@@ -10,6 +10,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
 #include "build/build_config.h"
@@ -42,7 +43,6 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "chrome/test/base/test_switches.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -700,13 +700,6 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
 
 #if !defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, StartupURLsForTwoProfiles) {
-#if defined(OS_WIN) && defined(USE_ASH)
-  // Disable this test in Metro+Ash for now (http://crbug.com/262796).
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshBrowserTests))
-    return;
-#endif
-
   Profile* default_profile = browser()->profile();
 
   ProfileManager* profile_manager = g_browser_process->profile_manager();
@@ -835,13 +828,6 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, PRE_UpdateWithTwoProfiles) {
 // Disabled because it's flaky. http://crbug.com/379579
 IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
                        DISABLED_UpdateWithTwoProfiles) {
-#if defined(OS_WIN) && defined(USE_ASH)
-  // Disable this test in Metro+Ash for now (http://crbug.com/262796).
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshBrowserTests))
-    return;
-#endif
-
   // Make StartupBrowserCreator::WasRestarted() return true.
   StartupBrowserCreator::was_restarted_read_ = false;
   PrefService* pref_service = g_browser_process->local_state();
@@ -896,12 +882,6 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
 
 IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
                        ProfilesWithoutPagesNotLaunched) {
-#if defined(OS_WIN) && defined(USE_ASH)
-  // Disable this test in Metro+Ash for now (http://crbug.com/262796).
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshBrowserTests))
-    return;
-#endif
   ASSERT_TRUE(embedded_test_server()->Start());
 
   Profile* default_profile = browser()->profile();
@@ -1018,13 +998,6 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
 }
 
 IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, ProfilesLaunchedAfterCrash) {
-#if defined(OS_WIN) && defined(USE_ASH)
-  // Disable this test in Metro+Ash for now (http://crbug.com/262796).
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshBrowserTests))
-    return;
-#endif
-
   // After an unclean exit, all profiles will be launched. However, they won't
   // open any pages automatically.
 
@@ -1208,11 +1181,9 @@ void StartupBrowserCreatorFirstRunTest::SetUpInProcessBrowserTestFixture() {
 #if defined(OS_LINUX) && defined(GOOGLE_CHROME_BUILD)
   // Set a policy that prevents the first-run dialog from being shown.
   policy_map_.Set(policy::key::kMetricsReportingEnabled,
-                  policy::POLICY_LEVEL_MANDATORY,
-                  policy::POLICY_SCOPE_USER,
+                  policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
                   policy::POLICY_SOURCE_CLOUD,
-                  new base::FundamentalValue(false),
-                  NULL);
+                  base::WrapUnique(new base::FundamentalValue(false)), nullptr);
   provider_.UpdateChromePolicy(policy_map_);
 #endif  // defined(OS_LINUX) && defined(GOOGLE_CHROME_BUILD)
 
@@ -1571,18 +1542,17 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest,
   // * RestoreOnStartup = RestoreOnStartupIsURLs
   // * RestoreOnStartupURLs = [ "/title1.html" ]
   policy_map_.Set(
-      policy::key::kRestoreOnStartup,
-      policy::POLICY_LEVEL_MANDATORY,
-      policy::POLICY_SCOPE_USER,
-      policy::POLICY_SOURCE_CLOUD,
-      new base::FundamentalValue(SessionStartupPref::kPrefValueURLs),
-      NULL);
+      policy::key::kRestoreOnStartup, policy::POLICY_LEVEL_MANDATORY,
+      policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
+      base::WrapUnique(
+          new base::FundamentalValue(SessionStartupPref::kPrefValueURLs)),
+      nullptr);
   base::ListValue startup_urls;
   startup_urls.Append(new base::StringValue(
       embedded_test_server()->GetURL("/title1.html").spec()));
   policy_map_.Set(policy::key::kRestoreOnStartupURLs,
                   policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
-                  policy::POLICY_SOURCE_CLOUD, startup_urls.DeepCopy(),
+                  policy::POLICY_SOURCE_CLOUD, startup_urls.CreateDeepCopy(),
                   nullptr);
   provider_.UpdateChromePolicy(policy_map_);
   base::RunLoop().RunUntilIdle();

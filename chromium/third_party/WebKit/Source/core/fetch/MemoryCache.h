@@ -66,7 +66,7 @@ enum UpdateReason {
 // MemoryCacheEntry class is used only in MemoryCache class, but we don't make
 // MemoryCacheEntry class an inner class of MemoryCache because of dependency
 // from MemoryCacheLRUList.
-class MemoryCacheEntry final : public GarbageCollectedFinalized<MemoryCacheEntry> {
+class MemoryCacheEntry final : public GarbageCollected<MemoryCacheEntry> {
 public:
     static MemoryCacheEntry* create(Resource* resource)
     {
@@ -74,8 +74,8 @@ public:
     }
     DECLARE_TRACE();
     void dispose();
+    Resource* resource();
 
-    Member<Resource> m_resource;
     bool m_inLiveDecodedResourcesList;
     unsigned m_accessCount;
     double m_lastDecodedAccessTime; // Used as a thrash guard
@@ -87,16 +87,18 @@ public:
 
 private:
     explicit MemoryCacheEntry(Resource* resource)
-        : m_resource(resource)
-        , m_inLiveDecodedResourcesList(false)
+        : m_inLiveDecodedResourcesList(false)
         , m_accessCount(0)
         , m_lastDecodedAccessTime(0.0)
         , m_previousInLiveResourcesList(nullptr)
         , m_nextInLiveResourcesList(nullptr)
         , m_previousInAllResourcesList(nullptr)
         , m_nextInAllResourcesList(nullptr)
+        , m_resource(resource)
     {
     }
+
+    Member<Resource> m_resource;
 };
 
 WILL_NOT_BE_EAGERLY_TRACED_CLASS(MemoryCacheEntry);

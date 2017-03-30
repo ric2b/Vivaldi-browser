@@ -11,6 +11,7 @@
 
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "base/time/default_tick_clock.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/compositor_frame_ack.h"
@@ -21,7 +22,7 @@
 #include "cc/surfaces/surface_factory.h"
 #include "cc/surfaces/surface_hittest.h"
 #include "cc/surfaces/surface_manager.h"
-#include "content/browser/compositor/gl_helper.h"
+#include "components/display_compositor/gl_helper.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/renderer_host/resize_lock.h"
@@ -72,8 +73,7 @@ DelegatedFrameHost::DelegatedFrameHost(DelegatedFrameHostClient* client)
       background_color_(SK_ColorRED),
       current_scale_factor_(1.f),
       can_lock_compositor_(YES_CAN_LOCK),
-      delegated_frame_evictor_(new DelegatedFrameEvictor(this)),
-      begin_frame_source_(nullptr) {
+      delegated_frame_evictor_(new DelegatedFrameEvictor(this)) {
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
   factory->AddObserver(this);
   id_allocator_ = factory->GetContextFactory()->CreateSurfaceIdAllocator();
@@ -151,7 +151,7 @@ void DelegatedFrameHost::CopyFromCompositingSurface(
     return;
   }
 
-  scoped_ptr<cc::CopyOutputRequest> request =
+  std::unique_ptr<cc::CopyOutputRequest> request =
       cc::CopyOutputRequest::CreateRequest(
           base::Bind(&CopyFromCompositingSurfaceHasResult, output_size,
                      preferred_color_type, callback));
@@ -169,7 +169,7 @@ void DelegatedFrameHost::CopyFromCompositingSurfaceToVideoFrame(
     return;
   }
 
-  scoped_ptr<cc::CopyOutputRequest> request =
+  std::unique_ptr<cc::CopyOutputRequest> request =
       cc::CopyOutputRequest::CreateRequest(base::Bind(
           &DelegatedFrameHost::CopyFromCompositingSurfaceHasResultForVideo,
           AsWeakPtr(),  // For caching the ReadbackYUVInterface on this class.
@@ -189,7 +189,7 @@ bool DelegatedFrameHost::CanCopyToVideoFrame() const {
 }
 
 void DelegatedFrameHost::BeginFrameSubscription(
-    scoped_ptr<RenderWidgetHostViewFrameSubscriber> subscriber) {
+    std::unique_ptr<RenderWidgetHostViewFrameSubscriber> subscriber) {
   frame_subscriber_ = std::move(subscriber);
 }
 
@@ -344,12 +344,12 @@ void DelegatedFrameHost::AttemptFrameSubscriberCapture(
   if (!idle_frame_subscriber_textures_.empty()) {
     subscriber_texture = idle_frame_subscriber_textures_.back();
     idle_frame_subscriber_textures_.pop_back();
-  } else if (GLHelper* helper =
+  } else if (display_compositor::GLHelper* helper =
                  ImageTransportFactory::GetInstance()->GetGLHelper()) {
     subscriber_texture = new OwnedMailbox(helper);
   }
 
-  scoped_ptr<cc::CopyOutputRequest> request =
+  std::unique_ptr<cc::CopyOutputRequest> request =
       cc::CopyOutputRequest::CreateRequest(base::Bind(
           &DelegatedFrameHost::CopyFromCompositingSurfaceHasResultForVideo,
           AsWeakPtr(), subscriber_texture, frame,
@@ -383,8 +383,11 @@ void DelegatedFrameHost::AttemptFrameSubscriberCapture(
 
 void DelegatedFrameHost::SwapDelegatedFrame(
     uint32_t output_surface_id,
-    scoped_ptr<cc::CompositorFrame> frame) {
+    std::unique_ptr<cc::CompositorFrame> frame) {
   DCHECK(frame->delegated_frame_data.get());
+#if defined(OS_CHROMEOS)
+  DCHECK(!resize_lock_ || !client_->IsAutoResizeEnabled());
+#endif
   cc::DelegatedFrameData* frame_data = frame->delegated_frame_data.get();
   float frame_device_scale_factor = frame->metadata.device_scale_factor;
 
@@ -453,7 +456,8 @@ void DelegatedFrameHost::SwapDelegatedFrame(
     ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
     cc::SurfaceManager* manager = factory->GetSurfaceManager();
     if (!surface_factory_) {
-      surface_factory_ = make_scoped_ptr(new cc::SurfaceFactory(manager, this));
+      surface_factory_ =
+          base::WrapUnique(new cc::SurfaceFactory(manager, this));
     }
     if (surface_id_.is_null() || frame_size != current_surface_size_ ||
         frame_size_in_dip != current_frame_size_in_dip_) {
@@ -551,15 +555,18 @@ void DelegatedFrameHost::ReturnResources(
 
 void DelegatedFrameHost::WillDrawSurface(cc::SurfaceId id,
                                          const gfx::Rect& damage_rect) {
-  if (id != surface_id_)
+  // Frame subscribers are only interested in changes to the target surface, so
+  // do not attempt capture if |damage_rect| is empty.  This prevents the draws
+  // of parent surfaces from triggering extra frame captures, which can affect
+  // smoothness.
+  if (id != surface_id_ || damage_rect.IsEmpty())
     return;
   AttemptFrameSubscriberCapture(damage_rect);
 }
 
 void DelegatedFrameHost::SetBeginFrameSource(
     cc::BeginFrameSource* begin_frame_source) {
-  // TODO(enne): forward this to DelegatedFrameHostClient to observe and then to
-  // the renderer as an external begin frame source.
+  client_->SetBeginFrameSource(begin_frame_source);
 }
 
 void DelegatedFrameHost::EvictDelegatedFrame() {
@@ -590,16 +597,18 @@ void DelegatedFrameHost::ReturnSubscriberTexture(
 
 // static
 void DelegatedFrameHost::CopyFromCompositingSurfaceFinishedForVideo(
+    scoped_refptr<media::VideoFrame> video_frame,
     base::WeakPtr<DelegatedFrameHost> dfh,
     const base::Callback<void(bool)>& callback,
     scoped_refptr<OwnedMailbox> subscriber_texture,
-    scoped_ptr<cc::SingleReleaseCallback> release_callback,
+    std::unique_ptr<cc::SingleReleaseCallback> release_callback,
     bool result) {
   callback.Run(result);
 
   gpu::SyncToken sync_token;
   if (result) {
-    GLHelper* gl_helper = ImageTransportFactory::GetInstance()->GetGLHelper();
+    display_compositor::GLHelper* gl_helper =
+        ImageTransportFactory::GetInstance()->GetGLHelper();
     gl_helper->GenerateSyncToken(&sync_token);
   }
   if (release_callback) {
@@ -618,7 +627,7 @@ void DelegatedFrameHost::CopyFromCompositingSurfaceHasResultForVideo(
     scoped_refptr<OwnedMailbox> subscriber_texture,
     scoped_refptr<media::VideoFrame> video_frame,
     const base::Callback<void(const gfx::Rect&, bool)>& callback,
-    scoped_ptr<cc::CopyOutputResult> result) {
+    std::unique_ptr<cc::CopyOutputResult> result) {
   base::ScopedClosureRunner scoped_callback_runner(
       base::Bind(callback, gfx::Rect(), false));
   base::ScopedClosureRunner scoped_return_subscriber_texture(base::Bind(
@@ -647,7 +656,7 @@ void DelegatedFrameHost::CopyFromCompositingSurfaceHasResultForVideo(
 
   if (!result->HasTexture()) {
     DCHECK(result->HasBitmap());
-    scoped_ptr<SkBitmap> bitmap = result->TakeBitmap();
+    std::unique_ptr<SkBitmap> bitmap = result->TakeBitmap();
     // Scale the bitmap to the required size, if necessary.
     SkBitmap scaled_bitmap;
     if (result->size() != region_in_frame.size()) {
@@ -673,20 +682,20 @@ void DelegatedFrameHost::CopyFromCompositingSurfaceHasResultForVideo(
   }
 
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-  GLHelper* gl_helper = factory->GetGLHelper();
+  display_compositor::GLHelper* gl_helper = factory->GetGLHelper();
   if (!gl_helper)
     return;
   if (subscriber_texture.get() && !subscriber_texture->texture_id())
     return;
 
   cc::TextureMailbox texture_mailbox;
-  scoped_ptr<cc::SingleReleaseCallback> release_callback;
+  std::unique_ptr<cc::SingleReleaseCallback> release_callback;
   result->TakeTexture(&texture_mailbox, &release_callback);
   DCHECK(texture_mailbox.IsTexture());
 
   gfx::Rect result_rect(result->size());
 
-  content::ReadbackYUVInterface* yuv_readback_pipeline =
+  display_compositor::ReadbackYUVInterface* yuv_readback_pipeline =
       dfh->yuv_readback_pipeline_.get();
   if (yuv_readback_pipeline == NULL ||
       yuv_readback_pipeline->scaler()->SrcSize() != result_rect.size() ||
@@ -700,11 +709,11 @@ void DelegatedFrameHost::CopyFromCompositingSurfaceHasResultForVideo(
     // When up-scaling, always use "best" because the quality improvement is
     // huge with insignificant performance penalty.  Note that this strategy
     // differs from single-frame snapshot capture.
-    GLHelper::ScalerQuality quality =
+    display_compositor::GLHelper::ScalerQuality quality =
         ((result_rect.size().width() < region_in_frame.size().width()) &&
          (result_rect.size().height() < region_in_frame.size().height()))
-            ? GLHelper::SCALER_QUALITY_BEST
-            : GLHelper::SCALER_QUALITY_FAST;
+            ? display_compositor::GLHelper::SCALER_QUALITY_BEST
+            : display_compositor::GLHelper::SCALER_QUALITY_FAST;
 
     dfh->yuv_readback_pipeline_.reset(gl_helper->CreateReadbackPipelineYUV(
         quality, result_rect.size(), result_rect, region_in_frame.size(), true,
@@ -717,11 +726,19 @@ void DelegatedFrameHost::CopyFromCompositingSurfaceHasResultForVideo(
 
   base::Callback<void(bool result)> finished_callback = base::Bind(
       &DelegatedFrameHost::CopyFromCompositingSurfaceFinishedForVideo,
-      dfh->AsWeakPtr(), base::Bind(callback, region_in_frame),
+      video_frame, dfh->AsWeakPtr(), base::Bind(callback, region_in_frame),
       subscriber_texture, base::Passed(&release_callback));
   yuv_readback_pipeline->ReadbackYUV(
       texture_mailbox.mailbox(), texture_mailbox.sync_token(),
-      video_frame.get(), region_in_frame.origin(), finished_callback);
+      video_frame->visible_rect(),
+      video_frame->stride(media::VideoFrame::kYPlane),
+      video_frame->data(media::VideoFrame::kYPlane),
+      video_frame->stride(media::VideoFrame::kUPlane),
+      video_frame->data(media::VideoFrame::kUPlane),
+      video_frame->stride(media::VideoFrame::kVPlane),
+      video_frame->data(media::VideoFrame::kVPlane), region_in_frame.origin(),
+      finished_callback);
+  media::LetterboxYUV(video_frame.get(), region_in_frame);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -853,7 +870,7 @@ void DelegatedFrameHost::LockResources() {
 }
 
 void DelegatedFrameHost::RequestCopyOfOutput(
-    scoped_ptr<cc::CopyOutputRequest> request) {
+    std::unique_ptr<cc::CopyOutputRequest> request) {
   if (!request_copy_of_output_callback_for_testing_.is_null()) {
     request_copy_of_output_callback_for_testing_.Run(std::move(request));
   } else {

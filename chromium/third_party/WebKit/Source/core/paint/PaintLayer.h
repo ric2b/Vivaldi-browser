@@ -209,7 +209,7 @@ struct PaintLayerRareData {
 class CORE_EXPORT PaintLayer : public DisplayItemClient {
     WTF_MAKE_NONCOPYABLE(PaintLayer);
 public:
-    PaintLayer(LayoutBoxModelObject*, PaintLayerType);
+    PaintLayer(LayoutBoxModelObject*);
     ~PaintLayer() override;
 
     // DisplayItemClient methods
@@ -239,7 +239,9 @@ public:
     // FIXME: Many people call this function while it has out-of-date information.
     bool isSelfPaintingLayer() const { return m_isSelfPaintingLayer; }
 
-    void setLayerType(PaintLayerType layerType) { m_layerType = layerType; ASSERT(static_cast<PaintLayerType>(m_layerType) == layerType); }
+    // PaintLayers which represent LayoutParts may become self-painting due to being composited.
+    // If this is the case, this method returns true.
+    bool isSelfPaintingOnlyBecauseIsCompositedPart() const;
 
     bool isTransparent() const { return layoutObject()->isTransparent() || layoutObject()->style()->hasBlendMode() || layoutObject()->hasMask(); }
 
@@ -270,6 +272,8 @@ public:
     // Notification from the layoutObject that its content changed (e.g. current frame of image changed).
     // Allows updates of layer content without invalidating paint.
     void contentChanged(ContentChangeType);
+
+    void updateLayerPosition();
 
     void updateLayerPositionsAfterLayout();
     void updateLayerPositionsAfterOverflowScroll(const DoubleSize& scrollDelta);
@@ -326,7 +330,7 @@ public:
 
     PaintLayer* enclosingLayerForPaintInvalidationCrossingFrameBoundaries() const;
 
-    bool hasAncestorWithFilterOutsets() const;
+    bool hasAncestorWithFilterThatMovesPixels() const;
 
     bool canUseConvertToLayerCoords() const
     {
@@ -469,8 +473,16 @@ public:
     bool paintsWithFilters() const;
     bool paintsWithBackdropFilters() const;
     FilterEffect* lastFilterEffect() const;
-    bool hasFilterOutsets() const;
-    FilterOutsets filterOutsets() const;
+
+    // Maps "forward" to determine which pixels in a destination rect are
+    // affected by pixels in the source rect.
+    // See also FilterEffect::mapRect.
+    FloatRect mapRectForFilter(const FloatRect&) const;
+
+    // Calls the above, rounding outwards.
+    LayoutRect mapLayoutRectForFilter(const LayoutRect&) const;
+
+    bool hasFilterThatMovesPixels() const;
 
     PaintLayerFilterInfo* filterInfo() const { return m_rareData ? m_rareData->filterInfo.get() : nullptr; }
     PaintLayerFilterInfo& ensureFilterInfo();
@@ -534,6 +546,10 @@ public:
         const PaintLayer* opacityAncestor;
         const PaintLayer* transformAncestor;
         const PaintLayer* filterAncestor;
+
+        // The fist ancestor which can scroll. This is a subset of the
+        // ancestorOverflowLayer chain where the scrolling layer is visible and
+        // has a larger scroll content than its bounds.
         const PaintLayer* ancestorScrollingLayer;
         const PaintLayer* nearestFixedPositionLayer;
 
@@ -563,6 +579,7 @@ public:
         return m_needsDescendantDependentCompositingInputsUpdate;
     }
 
+    void updateAncestorOverflowLayer(const PaintLayer* ancestorOverflowLayer) { m_ancestorOverflowLayer = ancestorOverflowLayer; }
     void updateAncestorDependentCompositingInputs(const AncestorDependentCompositingInputs&, const RareAncestorDependentCompositingInputs&, bool hasAncestorWithClipPath);
     void updateDescendantDependentCompositingInputs(bool hasDescendantWithClipPath, bool hasNonIsolatedDescendantWithBlendMode);
     void didUpdateCompositingInputs();
@@ -572,6 +589,7 @@ public:
     const PaintLayer* transformAncestor() const { ASSERT(!m_needsAncestorDependentCompositingInputsUpdate); return m_rareAncestorDependentCompositingInputs ? m_rareAncestorDependentCompositingInputs->transformAncestor : nullptr; }
     const PaintLayer* filterAncestor() const { ASSERT(!m_needsAncestorDependentCompositingInputsUpdate); return m_rareAncestorDependentCompositingInputs ? m_rareAncestorDependentCompositingInputs->filterAncestor : nullptr; }
     const LayoutObject* clippingContainer() const { ASSERT(!m_needsAncestorDependentCompositingInputsUpdate); return m_ancestorDependentCompositingInputs.clippingContainer; }
+    const PaintLayer* ancestorOverflowLayer() const { return m_ancestorOverflowLayer; }
     const PaintLayer* ancestorScrollingLayer() const { ASSERT(!m_needsAncestorDependentCompositingInputsUpdate); return m_rareAncestorDependentCompositingInputs ? m_rareAncestorDependentCompositingInputs->ancestorScrollingLayer : nullptr; }
     const PaintLayer* nearestFixedPositionLayer() const { ASSERT(!m_needsAncestorDependentCompositingInputsUpdate); return m_rareAncestorDependentCompositingInputs ? m_rareAncestorDependentCompositingInputs->nearestFixedPositionLayer : nullptr; }
     const PaintLayer* scrollParent() const { ASSERT(!m_needsAncestorDependentCompositingInputsUpdate); return m_rareAncestorDependentCompositingInputs ? m_rareAncestorDependentCompositingInputs->scrollParent : nullptr; }
@@ -617,9 +635,9 @@ public:
         return m_hasSelfPaintingLayerDescendant;
     }
     LayoutRect paintingExtent(const PaintLayer* rootLayer, const LayoutSize& subPixelAccumulation, GlobalPaintFlags);
-    void appendSingleFragmentIgnoringPagination(PaintLayerFragments&, const PaintLayer* rootLayer, const LayoutRect& dirtyRect, ClipRectsCacheSlot, OverlayScrollbarSizeRelevancy = IgnoreOverlayScrollbarSize, ShouldRespectOverflowClipType = RespectOverflowClip, const LayoutPoint* offsetFromRoot = 0, const LayoutSize& subPixelAccumulation = LayoutSize());
+    void appendSingleFragmentIgnoringPagination(PaintLayerFragments&, const PaintLayer* rootLayer, const LayoutRect& dirtyRect, ClipRectsCacheSlot, OverlayScrollbarClipBehavior = IgnoreOverlayScrollbarSize, ShouldRespectOverflowClipType = RespectOverflowClip, const LayoutPoint* offsetFromRoot = 0, const LayoutSize& subPixelAccumulation = LayoutSize());
     void collectFragments(PaintLayerFragments&, const PaintLayer* rootLayer, const LayoutRect& dirtyRect,
-        ClipRectsCacheSlot, OverlayScrollbarSizeRelevancy inOverlayScrollbarSizeRelevancy = IgnoreOverlayScrollbarSize,
+        ClipRectsCacheSlot, OverlayScrollbarClipBehavior = IgnoreOverlayScrollbarSize,
         ShouldRespectOverflowClipType = RespectOverflowClip, const LayoutPoint* offsetFromRoot = 0,
         const LayoutSize& subPixelAccumulation = LayoutSize(), const LayoutRect* layerBoundingBox = 0);
 
@@ -695,9 +713,6 @@ private:
 
     void dirtyAncestorChainHasSelfPaintingLayerDescendantStatus();
 
-    // Returns true if the position changed.
-    bool updateLayerPosition();
-
     void updateLayerPositionRecursive();
     void updateLayerPositionsAfterScrollRecursive(const DoubleSize& scrollDelta, bool paintInvalidationContainerWasScrolled);
 
@@ -750,6 +765,8 @@ private:
     bool attemptDirectCompositingUpdate(StyleDifference, const ComputedStyle* oldStyle);
     void updateTransform(const ComputedStyle* oldStyle, const ComputedStyle& newStyle);
 
+    void removeAncestorOverflowLayer(const PaintLayer* removedLayer);
+
     void updateOrRemoveFilterClients();
 
     void updatePaginationRecursive(bool needsPaginationUpdate = false);
@@ -771,7 +788,7 @@ private:
         m_needsPaintPhaseDescendantBlockBackgrounds |= layer.m_needsPaintPhaseDescendantBlockBackgrounds;
     }
 
-    unsigned m_layerType : 2; // PaintLayerType
+    bool isSelfPaintingLayerForIntrinsicOrScrollingReasons() const;
 
     // Self-painting layer is an optimization where we avoid the heavy Layer painting
     // machinery for a Layer allocated only to handle the overflow clip case.
@@ -853,6 +870,9 @@ private:
     // Cached normal flow values for absolute positioned elements with static left/top values.
     LayoutUnit m_staticInlinePosition;
     LayoutUnit m_staticBlockPosition;
+
+    // The first ancestor having a non visible overflow.
+    const PaintLayer* m_ancestorOverflowLayer;
 
     AncestorDependentCompositingInputs m_ancestorDependentCompositingInputs;
     OwnPtr<RareAncestorDependentCompositingInputs> m_rareAncestorDependentCompositingInputs;

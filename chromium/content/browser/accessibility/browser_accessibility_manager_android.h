@@ -74,9 +74,13 @@ class CONTENT_EXPORT BrowserAccessibilityManagerAndroid
   }
   bool prune_tree_for_screen_reader() { return prune_tree_for_screen_reader_; }
 
-  // Implementation of BrowserAccessibilityManager.
-  void NotifyAccessibilityEvent(ui::AXEvent event_type,
-                                BrowserAccessibility* node) override;
+  bool ShouldExposePasswordText();
+
+  // BrowserAccessibilityManager overrides.
+  void NotifyAccessibilityEvent(
+      BrowserAccessibilityEvent::Source source,
+      ui::AXEvent event_type,
+      BrowserAccessibility* node) override;
   void SendLocationChangeEvents(
       const std::vector<AccessibilityHostMsg_LocationChangeParams>& params)
           override;

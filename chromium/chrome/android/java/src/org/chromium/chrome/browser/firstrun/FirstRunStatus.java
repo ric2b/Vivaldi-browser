@@ -5,14 +5,16 @@
 package org.chromium.chrome.browser.firstrun;
 
 import android.content.Context;
-import android.preference.PreferenceManager;
+
+import org.chromium.base.ContextUtils;
 
 /**
  * Gets and sets preferences related to the status of the first run experience.
  */
 public class FirstRunStatus {
 
-    private static final String FIRST_RUN_FLOW_COMPLETE = "first_run_flow";
+    // Needed by ChromeBackupAgent
+    public static final String FIRST_RUN_FLOW_COMPLETE = "first_run_flow";
 
     /**
      * Sets the "main First Run Experience flow complete" preference.
@@ -20,7 +22,7 @@ public class FirstRunStatus {
      * @param isComplete Whether the main First Run Experience flow is complete
      */
     public static void setFirstRunFlowComplete(Context context, boolean isComplete) {
-        PreferenceManager.getDefaultSharedPreferences(context)
+        ContextUtils.getAppSharedPreferences()
                 .edit()
                 .putBoolean(FIRST_RUN_FLOW_COMPLETE, isComplete)
                 .apply();
@@ -33,7 +35,7 @@ public class FirstRunStatus {
      * @param context Any context
      */
     public static boolean getFirstRunFlowComplete(Context context) {
-        return PreferenceManager.getDefaultSharedPreferences(context)
+        return ContextUtils.getAppSharedPreferences()
                 .getBoolean(FIRST_RUN_FLOW_COMPLETE, false);
     }
 

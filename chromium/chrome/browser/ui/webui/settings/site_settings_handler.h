@@ -30,6 +30,8 @@ class SiteSettingsHandler : public SettingsPageUIHandler,
 
   // SettingsPageUIHandler:
   void RegisterMessages() override;
+  void OnJavascriptAllowed() override;
+  void OnJavascriptDisallowed() override;
 
   void OnGetUsageInfo(const storage::UsageInfoEntries& entries);
   void OnUsageInfoCleared(storage::QuotaStatusCode code);
@@ -40,8 +42,10 @@ class SiteSettingsHandler : public SettingsPageUIHandler,
                                ContentSettingsType content_type,
                                std::string resource_identifier) override;
  private:
+  friend class SiteSettingsHandlerTest;
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, GetAndSetDefault);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, Origins);
+  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, Patterns);
 
   // Asynchronously fetches the usage for a given origin. Replies back with
   // OnGetUsageInfo above.
@@ -54,12 +58,15 @@ class SiteSettingsHandler : public SettingsPageUIHandler,
   void HandleSetDefaultValueForContentType(const base::ListValue* args);
   void HandleGetDefaultValueForContentType(const base::ListValue* args);
 
-  // Returns the list of site exceptions for a given content settings type;
+  // Returns the list of site exceptions for a given content settings type.
   void HandleGetExceptionList(const base::ListValue* args);
 
-  // Handles setting and resetting of an origin permission;
+  // Handles setting and resetting of an origin permission.
   void HandleResetCategoryPermissionForOrigin(const base::ListValue* args);
   void HandleSetCategoryPermissionForOrigin(const base::ListValue* args);
+
+  // Returns whether a given pattern is valid.
+  void HandleIsPatternValid(const base::ListValue* args);
 
   Profile* profile_;
 

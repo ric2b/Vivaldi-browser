@@ -21,7 +21,7 @@
 #include "content/public/common/security_style.h"
 #include "content/public/common/window_container_type.h"
 #include "third_party/WebKit/public/platform/WebDisplayMode.h"
-#include "third_party/WebKit/public/web/WebDragOperation.h"
+#include "third_party/WebKit/public/platform/WebDragOperation.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -164,10 +164,6 @@ class CONTENT_EXPORT WebContentsDelegate {
   // Request the delegate to close this web contents, and do whatever cleanup
   // it needs to do.
   virtual void CloseContents(WebContents* source) {}
-
-  // Informs the delegate that the underlying RenderViewHost has been swapped
-  // out so it can perform any cleanup necessary.
-  virtual void SwappedOut(WebContents* source) {}
 
   // Request the delegate to move this WebContents to the specified position
   // in screen coordinates.
@@ -394,7 +390,7 @@ class CONTENT_EXPORT WebContentsDelegate {
 
   // Shows a chooser for the user to select a nearby Bluetooth device. The
   // observer must live at least as long as the returned chooser object.
-  virtual scoped_ptr<BluetoothChooser> RunBluetoothChooser(
+  virtual std::unique_ptr<BluetoothChooser> RunBluetoothChooser(
       RenderFrameHost* frame,
       const BluetoothChooser::EventHandler& event_handler);
 

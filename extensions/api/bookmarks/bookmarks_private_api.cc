@@ -99,7 +99,7 @@ BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction::
 }
 
 bool BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction::RunAsync() {
-  scoped_ptr<bookmarks_private::UpdateSpeedDialsForWindowsJumplist::Params>
+  std::unique_ptr<bookmarks_private::UpdateSpeedDialsForWindowsJumplist::Params>
       params(
           bookmarks_private::UpdateSpeedDialsForWindowsJumplist::Params::Create(
               *args_));

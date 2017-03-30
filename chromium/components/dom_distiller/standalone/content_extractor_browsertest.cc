@@ -15,7 +15,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/dom_distiller/content/browser/distiller_javascript_utils.h"
 #include "components/dom_distiller/content/browser/distiller_page_web_contents.h"
 #include "components/dom_distiller/core/article_entry.h"
@@ -31,6 +31,7 @@
 #include "components/pref_registry/testing_pref_service_syncable.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/common/isolated_world_ids.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/shell/browser/shell.h"
@@ -55,7 +56,7 @@ typedef base::hash_map<std::string, std::string> FileToUrlMap;
 class TestDistillerFactoryImpl : public DistillerFactory {
  public:
   TestDistillerFactoryImpl(
-      scoped_ptr<DistillerURLFetcherFactory> distiller_url_fetcher_factory,
+      std::unique_ptr<DistillerURLFetcherFactory> distiller_url_fetcher_factory,
       const dom_distiller::proto::DomDistillerOptions& dom_distiller_options,
       const FileToUrlMap& file_to_url_map)
       : distiller_url_fetcher_factory_(
@@ -65,20 +66,20 @@ class TestDistillerFactoryImpl : public DistillerFactory {
 
   ~TestDistillerFactoryImpl() override {}
 
-  scoped_ptr<Distiller> CreateDistillerForUrl(const GURL& url) override {
+  std::unique_ptr<Distiller> CreateDistillerForUrl(const GURL& url) override {
     dom_distiller::proto::DomDistillerOptions options;
     options = dom_distiller_options_;
     FileToUrlMap::const_iterator it = file_to_url_map_.find(url.spec());
     if (it != file_to_url_map_.end()) {
       options.set_original_url(it->second);
     }
-    scoped_ptr<DistillerImpl> distiller(new DistillerImpl(
-        *distiller_url_fetcher_factory_, options));
+    std::unique_ptr<DistillerImpl> distiller(
+        new DistillerImpl(*distiller_url_fetcher_factory_, options));
     return std::move(distiller);
   }
 
  private:
-  scoped_ptr<DistillerURLFetcherFactory> distiller_url_fetcher_factory_;
+  std::unique_ptr<DistillerURLFetcherFactory> distiller_url_fetcher_factory_;
   dom_distiller::proto::DomDistillerOptions dom_distiller_options_;
   FileToUrlMap file_to_url_map_;
 };
@@ -120,7 +121,7 @@ const char* kPaginationAlgo = "pagination-algo";
 // Maximum number of concurrent started extractor requests.
 const int kMaxExtractorTasks = 8;
 
-scoped_ptr<DomDistillerService> CreateDomDistillerService(
+std::unique_ptr<DomDistillerService> CreateDomDistillerService(
     content::BrowserContext* context,
     const base::FilePath& db_path,
     const FileToUrlMap& file_to_url_map) {
@@ -130,16 +131,18 @@ scoped_ptr<DomDistillerService> CreateDomDistillerService(
 
   // TODO(cjhopman): use an in-memory database instead of an on-disk one with
   // temporary directory.
-  scoped_ptr<leveldb_proto::ProtoDatabaseImpl<ArticleEntry> > db(
+  std::unique_ptr<leveldb_proto::ProtoDatabaseImpl<ArticleEntry>> db(
       new leveldb_proto::ProtoDatabaseImpl<ArticleEntry>(
           background_task_runner));
-  scoped_ptr<DomDistillerStore> dom_distiller_store(
+  std::unique_ptr<DomDistillerStore> dom_distiller_store(
       new DomDistillerStore(std::move(db), db_path));
 
-  scoped_ptr<DistillerPageFactory> distiller_page_factory(
+  std::unique_ptr<DistillerPageFactory> distiller_page_factory(
       new DistillerPageWebContentsFactory(context));
-  scoped_ptr<DistillerURLFetcherFactory> distiller_url_fetcher_factory(
-      new DistillerURLFetcherFactory(context->GetRequestContext()));
+  std::unique_ptr<DistillerURLFetcherFactory> distiller_url_fetcher_factory(
+      new DistillerURLFetcherFactory(
+          content::BrowserContext::GetDefaultStoragePartition(context)
+              ->GetURLRequestContext()));
 
   dom_distiller::proto::DomDistillerOptions options;
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(kExtractTextOnly)) {
@@ -163,18 +166,20 @@ scoped_ptr<DomDistillerService> CreateDomDistillerService(
               kPaginationAlgo));
   }
 
-  scoped_ptr<DistillerFactory> distiller_factory(new TestDistillerFactoryImpl(
-      std::move(distiller_url_fetcher_factory), options, file_to_url_map));
+  std::unique_ptr<DistillerFactory> distiller_factory(
+      new TestDistillerFactoryImpl(std::move(distiller_url_fetcher_factory),
+                                   options, file_to_url_map));
 
   // Setting up PrefService for DistilledPagePrefs.
   user_prefs::TestingPrefServiceSyncable* pref_service =
       new user_prefs::TestingPrefServiceSyncable();
   DistilledPagePrefs::RegisterProfilePrefs(pref_service->registry());
 
-  return scoped_ptr<DomDistillerService>(new DomDistillerService(
+  return std::unique_ptr<DomDistillerService>(new DomDistillerService(
       std::move(dom_distiller_store), std::move(distiller_factory),
       std::move(distiller_page_factory),
-      scoped_ptr<DistilledPagePrefs>(new DistilledPagePrefs(pref_service))));
+      std::unique_ptr<DistilledPagePrefs>(
+          new DistilledPagePrefs(pref_service))));
 }
 
 void AddComponentsTestResources() {
@@ -308,7 +313,7 @@ class ContentExtractionRequest : public ViewRequestDelegate {
   }
 
   const DistilledArticleProto* article_proto_;
-  scoped_ptr<ViewerHandle> viewer_handle_;
+  std::unique_ptr<ViewerHandle> viewer_handle_;
   GURL url_;
   base::Closure finished_callback_;
 };
@@ -424,12 +429,14 @@ class ContentExtractor : public ContentBrowserTest {
   size_t next_request_;
 
   base::ScopedTempDir db_dir_;
-  scoped_ptr<net::ScopedDefaultHostResolverProc> mock_host_resolver_override_;
-  scoped_ptr<DomDistillerService> service_;
+  std::unique_ptr<net::ScopedDefaultHostResolverProc>
+      mock_host_resolver_override_;
+  std::unique_ptr<DomDistillerService> service_;
   ScopedVector<ContentExtractionRequest> requests_;
 
   std::string output_data_;
-  scoped_ptr<google::protobuf::io::StringOutputStream> protobuf_output_stream_;
+  std::unique_ptr<google::protobuf::io::StringOutputStream>
+      protobuf_output_stream_;
 };
 
 IN_PROC_BROWSER_TEST_F(ContentExtractor, MANUAL_ExtractUrl) {

@@ -15,6 +15,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/histogram_tester.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
@@ -22,6 +23,8 @@
 #include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
 #include "chrome/browser/browsing_data/browsing_data_remover_test_util.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/engagement/site_engagement_service.h"
+#include "chrome/browser/notifications/message_center_display_service.h"
 #include "chrome/browser/notifications/notification_test_util.h"
 #include "chrome/browser/notifications/platform_notification_service_impl.h"
 #include "chrome/browser/profiles/profile.h"
@@ -114,8 +117,6 @@ class PushMessagingBrowserTest : public InProcessBrowserTest {
 
 #if defined(ENABLE_NOTIFICATIONS)
     notification_manager_.reset(new StubNotificationUIManager);
-    notification_service()->SetNotificationUIManagerForTesting(
-        notification_manager());
 #endif
 
     InProcessBrowserTest::SetUp();
@@ -136,9 +137,14 @@ class PushMessagingBrowserTest : public InProcessBrowserTest {
     gcm_service_->set_collect(true);
     push_service_ =
         PushMessagingServiceFactory::GetForProfile(GetBrowser()->profile());
+#if defined(ENABLE_NOTIFICATIONS)
+    display_service_.reset(new MessageCenterDisplayService(
+        GetBrowser()->profile(), notification_manager_.get()));
+    notification_service()->SetNotificationDisplayServiceForTesting(
+        display_service_.get());
+#endif
 
     LoadTestPage();
-
     InProcessBrowserTest::SetUpOnMainThread();
   }
 
@@ -155,7 +161,7 @@ class PushMessagingBrowserTest : public InProcessBrowserTest {
   // InProcessBrowserTest:
   void TearDown() override {
 #if defined(ENABLE_NOTIFICATIONS)
-    notification_service()->SetNotificationUIManagerForTesting(nullptr);
+    notification_service()->SetNotificationDisplayServiceForTesting(nullptr);
 #endif
 
     InProcessBrowserTest::TearDown();
@@ -196,8 +202,10 @@ class PushMessagingBrowserTest : public InProcessBrowserTest {
       const std::string& expected_push_subscription_info,
       bool use_key = true);
 
-  std::string GetEndpointForSubscriptionId(const std::string& subscription_id) {
-    return std::string(kPushMessagingEndpoint) + "/" + subscription_id;
+  std::string GetEndpointForSubscriptionId(const std::string& subscription_id,
+                                           bool standard_protocol = true) {
+    return push_service()->GetEndpoint(standard_protocol).spec() +
+           subscription_id;
   }
 
   PushMessagingAppIdentifier GetAppIdentifierForServiceWorkerRegistration(
@@ -235,18 +243,28 @@ class PushMessagingBrowserTest : public InProcessBrowserTest {
 
   PushMessagingServiceImpl* push_service() const { return push_service_; }
 
+  void SetSiteEngagementScore(const GURL& url, double score) {
+    SiteEngagementService* service =
+        SiteEngagementService::Get(GetBrowser()->profile());
+    service->ResetScoreForURL(url, score);
+  }
+
  protected:
   virtual std::string GetTestURL() { return "/push_messaging/test.html"; }
 
   virtual Browser* GetBrowser() const { return browser(); }
 
+  base::HistogramTester* GetHistogramTester() { return &histogram_tester_; }
+
  private:
-  scoped_ptr<net::EmbeddedTestServer> https_server_;
+  std::unique_ptr<net::EmbeddedTestServer> https_server_;
   gcm::FakeGCMProfileService* gcm_service_;
   PushMessagingServiceImpl* push_service_;
+  base::HistogramTester histogram_tester_;
 
 #if defined(ENABLE_NOTIFICATIONS)
-  scoped_ptr<StubNotificationUIManager> notification_manager_;
+  std::unique_ptr<StubNotificationUIManager> notification_manager_;
+  std::unique_ptr<MessageCenterDisplayService> display_service_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(PushMessagingBrowserTest);
@@ -295,8 +313,9 @@ void PushMessagingBrowserTest::TryToSubscribeSuccessfully(
     EXPECT_TRUE(RunScript("documentSubscribePushWithoutKey()", &script_result));
   }
 
-  EXPECT_EQ(GetEndpointForSubscriptionId(expected_push_subscription_info),
-            script_result);
+  EXPECT_EQ(
+      GetEndpointForSubscriptionId(expected_push_subscription_info, use_key),
+      script_result);
 }
 
 PushMessagingAppIdentifier
@@ -496,7 +515,7 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest, SubscribeWorkerUsingManifest) {
   // the code to read sender id from the manifest and will write it to the
   // datastore.
   ASSERT_TRUE(RunScript("documentSubscribePushWithoutKey()", &script_result));
-  EXPECT_EQ(GetEndpointForSubscriptionId("1-0"), script_result);
+  EXPECT_EQ(GetEndpointForSubscriptionId("1-0", false), script_result);
 
   ASSERT_TRUE(RunScript("unsubscribePush()", &script_result));
   EXPECT_EQ("unsubscribe result: true", script_result);
@@ -505,7 +524,7 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest, SubscribeWorkerUsingManifest) {
   // Now run the subscribe from the service worker without a key.
   // In this case, the sender id will be read from the datastore.
   ASSERT_TRUE(RunScript("workerSubscribePushNoKey()", &script_result));
-  EXPECT_EQ(GetEndpointForSubscriptionId("1-1"), script_result);
+  EXPECT_EQ(GetEndpointForSubscriptionId("1-1", false), script_result);
 
   ASSERT_TRUE(RunScript("unsubscribePush()", &script_result));
   EXPECT_EQ("unsubscribe result: true", script_result);
@@ -727,6 +746,10 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest,
   content::WebContents* web_contents =
       GetBrowser()->tab_strip_model()->GetActiveWebContents();
 
+  // Set the site engagement score for the site. Setting it to 4 means it should
+  // have enough budget for two non-shown notification, which cost 2 each.
+  SetSiteEngagementScore(web_contents->GetURL(), 4.0);
+
   // If the site is visible in an active tab, we should not force a notification
   // to be shown. Try it twice, since we allow one mistake per 10 push events.
   gcm::IncomingMessage message;
@@ -745,14 +768,30 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest,
       GetBrowser(), GURL("about:blank"), NEW_FOREGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_TAB);
 
-  // If the Service Worker push event handler does not show a notification, we
-  // should show a forced one, but only on the 2nd occurrence since we allow one
-  // mistake per 10 push events.
-  message.raw_data = "testdata";
+  // If the Service Worker push event handler shows a notification, we
+  // should not show a forced one.
+  message.raw_data = "shownotification";
   SendMessageAndWaitUntilHandled(app_identifier, message);
   ASSERT_TRUE(RunScript("resultQueue.pop()", &script_result, web_contents));
-  EXPECT_EQ("testdata", script_result);
-  EXPECT_EQ(0u, notification_manager()->GetNotificationCount());
+  EXPECT_EQ("shownotification", script_result);
+  EXPECT_EQ(1u, notification_manager()->GetNotificationCount());
+  EXPECT_EQ("push_test_tag",
+            notification_manager()->GetNotificationAt(0).tag());
+  notification_manager()->CancelAll();
+
+  // If the Service Worker push event handler does not show a notification, we
+  // should show a forced one, but only once the origin is out of budget.
+  message.raw_data = "testdata";
+  for (int n = 0; n < 2; n++) {
+    // First two missed notifications shouldn't force a default one.
+    SendMessageAndWaitUntilHandled(app_identifier, message);
+    ASSERT_TRUE(RunScript("resultQueue.pop()", &script_result, web_contents));
+    EXPECT_EQ("testdata", script_result);
+    EXPECT_EQ(0u, notification_manager()->GetNotificationCount());
+  }
+
+  // Third missed notification should trigger a default notification, since the
+  // origin will be out of budget.
   message.raw_data = "testdata";
   SendMessageAndWaitUntilHandled(app_identifier, message);
   ASSERT_TRUE(RunScript("resultQueue.pop()", &script_result, web_contents));
@@ -782,29 +821,107 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest,
     EXPECT_NE(kPushMessagingForcedNotificationTag, first_notification.tag());
   }
 
+  // Check that the UMA has been recorded correctly.
+  // There should be a total of 7 budget samples, spread across 3 buckets. The
+  // first four notifications (before any budget is consumed) have budget of 4,
+  // which is the starting SES. The next one has 2 (one hidden notification) and
+  // the final two have 0 (two hidden notifications.
+  std::vector<base::Bucket> buckets =
+      GetHistogramTester()->GetAllSamples("PushMessaging.BackgroundBudget");
+  ASSERT_EQ(3.0, buckets.size());
+  // First bucket is for 0 budget, which has 2 samples.
+  EXPECT_EQ(0, buckets[0].min);
+  EXPECT_EQ(2, buckets[0].count);
+  // Second bucket is for 2 budget, which has 1 sample.
+  EXPECT_EQ(2, buckets[1].min);
+  EXPECT_EQ(1, buckets[1].count);
+  // Final bucket is for 4 budget, which has 4 samples.
+  EXPECT_EQ(4, buckets[2].min);
+  EXPECT_EQ(4, buckets[2].count);
+
+  std::vector<base::Bucket> no_budget_buckets =
+      GetHistogramTester()->GetAllSamples("PushMessaging.SESForNoBudgetOrigin");
+  ASSERT_EQ(1.0, no_budget_buckets.size());
+  EXPECT_EQ(4, no_budget_buckets[0].min);
+  EXPECT_EQ(2, no_budget_buckets[0].count);
+
+  std::vector<base::Bucket> low_budget_buckets =
+      GetHistogramTester()->GetAllSamples(
+          "PushMessaging.SESForLowBudgetOrigin");
+  ASSERT_EQ(1.0, low_budget_buckets.size());
+  EXPECT_EQ(4, low_budget_buckets[0].min);
+  EXPECT_EQ(1, low_budget_buckets[0].count);
+}
+
+IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest,
+                       PushEventAllowSilentPushCommandLineFlag) {
+  std::string script_result;
+
+  TryToSubscribeSuccessfully("1-0" /* expected_push_subscription_id */);
+
+  PushMessagingAppIdentifier app_identifier =
+      GetAppIdentifierForServiceWorkerRegistration(0LL);
+  EXPECT_EQ(app_identifier.app_id(), gcm_service()->last_registered_app_id());
+  EXPECT_EQ(kEncodedApplicationServerKey,
+            gcm_service()->last_registered_sender_ids()[0]);
+
+  ASSERT_TRUE(RunScript("isControlled()", &script_result));
+  ASSERT_EQ("false - is not controlled", script_result);
+
+  LoadTestPage();  // Reload to become controlled.
+
+  ASSERT_TRUE(RunScript("isControlled()", &script_result));
+  ASSERT_EQ("true - is controlled", script_result);
+
   notification_manager()->CancelAll();
-  EXPECT_EQ(0u, notification_manager()->GetNotificationCount());
+  ASSERT_EQ(0u, notification_manager()->GetNotificationCount());
 
-  // However if the Service Worker push event handler shows a notification, we
-  // should not show a forced one.
-  message.raw_data = "shownotification";
-  for (int n = 0; n < 9; n++) {
-    SendMessageAndWaitUntilHandled(app_identifier, message);
-    ASSERT_TRUE(RunScript("resultQueue.pop()", &script_result, web_contents));
-    EXPECT_EQ("shownotification", script_result);
-    EXPECT_EQ(1u, notification_manager()->GetNotificationCount());
-    EXPECT_EQ("push_test_tag",
-              notification_manager()->GetNotificationAt(0).tag());
-    notification_manager()->CancelAll();
-  }
+  // We'll need to specify the web_contents in which to eval script, since we're
+  // going to run script in a background tab.
+  content::WebContents* web_contents =
+      GetBrowser()->tab_strip_model()->GetActiveWebContents();
 
-  // Now that 10 push messages in a row have shown notifications, we should
-  // allow the next one to mistakenly not show a notification.
+  ui_test_utils::NavigateToURLWithDisposition(
+      GetBrowser(), GURL("about:blank"), NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_TAB);
+
+  SetSiteEngagementScore(web_contents->GetURL(), 0.0);
+
+  // If the Service Worker push event handler does not show a notification, we
+  // should show a forced one providing there is no foreground tab and the
+  // origin ran out of budget.
+  gcm::IncomingMessage message;
+  message.sender_id = GetTestApplicationServerKey();
   message.raw_data = "testdata";
+  message.decrypted = true;
+
   SendMessageAndWaitUntilHandled(app_identifier, message);
   ASSERT_TRUE(RunScript("resultQueue.pop()", &script_result, web_contents));
   EXPECT_EQ("testdata", script_result);
-  EXPECT_EQ(0u, notification_manager()->GetNotificationCount());
+
+  // Because the --allow-silent-push command line flag has not been passed,
+  // this should have shown a default notification.
+  ASSERT_EQ(1u, notification_manager()->GetNotificationCount());
+  {
+    const Notification& forced_notification =
+        notification_manager()->GetNotificationAt(0);
+
+    EXPECT_EQ(kPushMessagingForcedNotificationTag, forced_notification.tag());
+    EXPECT_TRUE(forced_notification.silent());
+  }
+
+  notification_manager()->CancelAll();
+
+  // Send the message again, but this time with the -allow-silent-push command
+  // line flag set. The default notification should *not* be shown.
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kAllowSilentPush);
+
+  SendMessageAndWaitUntilHandled(app_identifier, message);
+  ASSERT_TRUE(RunScript("resultQueue.pop()", &script_result, web_contents));
+  EXPECT_EQ("testdata", script_result);
+
+  ASSERT_EQ(0u, notification_manager()->GetNotificationCount());
 }
 
 IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest,

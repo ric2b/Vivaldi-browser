@@ -21,6 +21,7 @@
         '../../third_party/icu/icu.gyp:icui18n',
         '../../third_party/icu/icu.gyp:icuuc',
         '../../url/url.gyp:url_lib',
+        '../display/display.gyp:display',
         '../events/events.gyp:events_base',
         '../gfx/gfx.gyp:gfx_test_support',
         '../resources/ui_resources.gyp:ui_resources',
@@ -36,7 +37,6 @@
       'common_sources' : [
         # Note: file list duplicated in GN build.
         'clipboard/clipboard_util_mac_unittest.mm',
-        'ios/cru_context_menu_controller_unittest.mm',
         'l10n/l10n_util_mac_unittest.mm',
         'l10n/l10n_util_unittest.cc',
         'l10n/l10n_util_win_unittest.cc',
@@ -175,6 +175,7 @@
             '../../tools/xdisplaycheck/xdisplaycheck.gyp:xdisplaycheck',
             '../events/platform/x11/x11_events_platform.gyp:x11_events_platform',
             '../gfx/x/gfx_x11.gyp:gfx_x11',
+            'x/ui_base_x.gyp:ui_base_x',
           ],
         }],
         ['OS!="win" or use_aura==0', {

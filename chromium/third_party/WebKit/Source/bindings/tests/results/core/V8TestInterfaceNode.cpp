@@ -14,7 +14,7 @@
 #include "bindings/core/v8/V8TestInterfaceEmpty.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
-#include "core/dom/custom/CustomElementProcessingStack.h"
+#include "core/dom/custom/V0CustomElementProcessingStack.h"
 #include "wtf/GetPtr.h"
 #include "wtf/RefPtr.h"
 
@@ -26,7 +26,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8TestInterfaceNode::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceNode::domTemplate, V8TestInterfaceNode::refObject, V8TestInterfaceNode::derefObject, V8TestInterfaceNode::trace, 0, 0, V8TestInterfaceNode::preparePrototypeAndInterfaceObject, V8TestInterfaceNode::installConditionallyEnabledProperties, "TestInterfaceNode", &V8Node::wrapperTypeInfo, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::NodeClassId, WrapperTypeInfo::InheritFromEventTarget, WrapperTypeInfo::Dependent, WrapperTypeInfo::GarbageCollectedObject };
+const WrapperTypeInfo V8TestInterfaceNode::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceNode::domTemplate, V8TestInterfaceNode::trace, V8TestInterfaceNode::traceWrappers, 0, 0, V8TestInterfaceNode::preparePrototypeAndInterfaceObject, nullptr, "TestInterfaceNode", &V8Node::wrapperTypeInfo, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::NodeClassId, WrapperTypeInfo::InheritFromEventTarget, WrapperTypeInfo::Dependent };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -110,7 +110,7 @@ static void eventHandlerAttributeAttributeGetter(const v8::FunctionCallbackInfo<
 {
     v8::Local<v8::Object> holder = info.Holder();
     TestInterfaceNode* impl = V8TestInterfaceNode::toImpl(holder);
-    EventListener* cppValue(impl->eventHandlerAttribute());
+    EventListener* cppValue(WTF::getPtr(impl->eventHandlerAttribute()));
     v8SetReturnValue(info, cppValue ? v8::Local<v8::Value>(V8AbstractEventListener::cast(cppValue)->getListenerObject(impl->getExecutionContext())) : v8::Local<v8::Value>(v8::Null(info.GetIsolate())));
 }
 
@@ -181,7 +181,7 @@ static void reflectStringAttributeAttributeSetter(v8::Local<v8::Value> v8Value, 
 static void reflectStringAttributeAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     v8::Local<v8::Value> v8Value = info[0];
-    CustomElementProcessingStack::CallbackDeliveryScope deliveryScope;
+    V0CustomElementProcessingStack::CallbackDeliveryScope deliveryScope;
     TestInterfaceNodeV8Internal::reflectStringAttributeAttributeSetter(v8Value, info);
 }
 
@@ -210,14 +210,14 @@ static void reflectUrlStringAttributeAttributeSetter(v8::Local<v8::Value> v8Valu
 static void reflectUrlStringAttributeAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     v8::Local<v8::Value> v8Value = info[0];
-    CustomElementProcessingStack::CallbackDeliveryScope deliveryScope;
+    V0CustomElementProcessingStack::CallbackDeliveryScope deliveryScope;
     TestInterfaceNodeV8Internal::reflectUrlStringAttributeAttributeSetter(v8Value, info);
 }
 
 static void testInterfaceEmptyMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     TestInterfaceNode* impl = V8TestInterfaceNode::toImpl(info.Holder());
-    v8SetReturnValueFast(info, WTF::getPtr(impl->testInterfaceEmptyMethod()), impl);
+    v8SetReturnValueFast(info, impl->testInterfaceEmptyMethod(), impl);
 }
 
 static void testInterfaceEmptyMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -228,7 +228,7 @@ static void testInterfaceEmptyMethodMethodCallback(const v8::FunctionCallbackInf
 static void perWorldBindingsTestInterfaceEmptyMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     TestInterfaceNode* impl = V8TestInterfaceNode::toImpl(info.Holder());
-    v8SetReturnValueFast(info, WTF::getPtr(impl->perWorldBindingsTestInterfaceEmptyMethod()), impl);
+    v8SetReturnValueFast(info, impl->perWorldBindingsTestInterfaceEmptyMethod(), impl);
 }
 
 static void perWorldBindingsTestInterfaceEmptyMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -239,7 +239,7 @@ static void perWorldBindingsTestInterfaceEmptyMethodMethodCallback(const v8::Fun
 static void perWorldBindingsTestInterfaceEmptyMethodMethodForMainWorld(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     TestInterfaceNode* impl = V8TestInterfaceNode::toImpl(info.Holder());
-    v8SetReturnValueForMainWorld(info, WTF::getPtr(impl->perWorldBindingsTestInterfaceEmptyMethod()));
+    v8SetReturnValueForMainWorld(info, impl->perWorldBindingsTestInterfaceEmptyMethod());
 }
 
 static void perWorldBindingsTestInterfaceEmptyMethodMethodCallbackForMainWorld(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -260,14 +260,14 @@ static void perWorldBindingsTestInterfaceEmptyMethodOptionalBooleanArgMethod(con
             --numArgsPassed;
         }
         if (UNLIKELY(numArgsPassed <= 0)) {
-            v8SetReturnValueFast(info, WTF::getPtr(impl->perWorldBindingsTestInterfaceEmptyMethodOptionalBooleanArg()), impl);
+            v8SetReturnValueFast(info, impl->perWorldBindingsTestInterfaceEmptyMethodOptionalBooleanArg(), impl);
             return;
         }
         optionalBooleanArgument = toBoolean(info.GetIsolate(), info[0], exceptionState);
         if (exceptionState.throwIfNeeded())
             return;
     }
-    v8SetReturnValueFast(info, WTF::getPtr(impl->perWorldBindingsTestInterfaceEmptyMethodOptionalBooleanArg(optionalBooleanArgument)), impl);
+    v8SetReturnValueFast(info, impl->perWorldBindingsTestInterfaceEmptyMethodOptionalBooleanArg(optionalBooleanArgument), impl);
 }
 
 static void perWorldBindingsTestInterfaceEmptyMethodOptionalBooleanArgMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -288,14 +288,14 @@ static void perWorldBindingsTestInterfaceEmptyMethodOptionalBooleanArgMethodForM
             --numArgsPassed;
         }
         if (UNLIKELY(numArgsPassed <= 0)) {
-            v8SetReturnValueForMainWorld(info, WTF::getPtr(impl->perWorldBindingsTestInterfaceEmptyMethodOptionalBooleanArg()));
+            v8SetReturnValueForMainWorld(info, impl->perWorldBindingsTestInterfaceEmptyMethodOptionalBooleanArg());
             return;
         }
         optionalBooleanArgument = toBoolean(info.GetIsolate(), info[0], exceptionState);
         if (exceptionState.throwIfNeeded())
             return;
     }
-    v8SetReturnValueForMainWorld(info, WTF::getPtr(impl->perWorldBindingsTestInterfaceEmptyMethodOptionalBooleanArg(optionalBooleanArgument)));
+    v8SetReturnValueForMainWorld(info, impl->perWorldBindingsTestInterfaceEmptyMethodOptionalBooleanArg(optionalBooleanArgument));
 }
 
 static void perWorldBindingsTestInterfaceEmptyMethodOptionalBooleanArgMethodCallbackForMainWorld(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -321,10 +321,10 @@ const V8DOMConfiguration::MethodConfiguration V8TestInterfaceNodeMethods[] = {
     {"perWorldBindingsTestInterfaceEmptyMethodOptionalBooleanArg", TestInterfaceNodeV8Internal::perWorldBindingsTestInterfaceEmptyMethodOptionalBooleanArgMethodCallback, TestInterfaceNodeV8Internal::perWorldBindingsTestInterfaceEmptyMethodOptionalBooleanArgMethodCallbackForMainWorld, 0, v8::None, V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnPrototype},
 };
 
-static void installV8TestInterfaceNodeTemplate(v8::Local<v8::FunctionTemplate> interfaceTemplate, v8::Isolate* isolate)
+static void installV8TestInterfaceNodeTemplate(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::FunctionTemplate> interfaceTemplate)
 {
     // Initialize the interface object's template.
-    V8DOMConfiguration::initializeDOMInterfaceTemplate(isolate, interfaceTemplate, V8TestInterfaceNode::wrapperTypeInfo.interfaceName, V8Node::domTemplate(isolate), V8TestInterfaceNode::internalFieldCount);
+    V8DOMConfiguration::initializeDOMInterfaceTemplate(isolate, interfaceTemplate, V8TestInterfaceNode::wrapperTypeInfo.interfaceName, V8Node::domTemplate(isolate, world), V8TestInterfaceNode::internalFieldCount);
     v8::Local<v8::Signature> signature = v8::Signature::New(isolate, interfaceTemplate);
     ALLOW_UNUSED_LOCAL(signature);
     v8::Local<v8::ObjectTemplate> instanceTemplate = interfaceTemplate->InstanceTemplate();
@@ -332,13 +332,13 @@ static void installV8TestInterfaceNodeTemplate(v8::Local<v8::FunctionTemplate> i
     v8::Local<v8::ObjectTemplate> prototypeTemplate = interfaceTemplate->PrototypeTemplate();
     ALLOW_UNUSED_LOCAL(prototypeTemplate);
     // Register DOM constants, attributes and operations.
-    V8DOMConfiguration::installAccessors(isolate, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, V8TestInterfaceNodeAccessors, WTF_ARRAY_LENGTH(V8TestInterfaceNodeAccessors));
-    V8DOMConfiguration::installMethods(isolate, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, V8TestInterfaceNodeMethods, WTF_ARRAY_LENGTH(V8TestInterfaceNodeMethods));
+    V8DOMConfiguration::installAccessors(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, V8TestInterfaceNodeAccessors, WTF_ARRAY_LENGTH(V8TestInterfaceNodeAccessors));
+    V8DOMConfiguration::installMethods(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, V8TestInterfaceNodeMethods, WTF_ARRAY_LENGTH(V8TestInterfaceNodeMethods));
 }
 
-v8::Local<v8::FunctionTemplate> V8TestInterfaceNode::domTemplate(v8::Isolate* isolate)
+v8::Local<v8::FunctionTemplate> V8TestInterfaceNode::domTemplate(v8::Isolate* isolate, const DOMWrapperWorld& world)
 {
-    return V8DOMConfiguration::domClassTemplate(isolate, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestInterfaceNodeTemplate);
+    return V8DOMConfiguration::domClassTemplate(isolate, world, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestInterfaceNodeTemplate);
 }
 
 bool V8TestInterfaceNode::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
@@ -354,14 +354,6 @@ v8::Local<v8::Object> V8TestInterfaceNode::findInstanceInPrototypeChain(v8::Loca
 TestInterfaceNode* V8TestInterfaceNode::toImplWithTypeCheck(v8::Isolate* isolate, v8::Local<v8::Value> value)
 {
     return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : 0;
-}
-
-void V8TestInterfaceNode::refObject(ScriptWrappable* scriptWrappable)
-{
-}
-
-void V8TestInterfaceNode::derefObject(ScriptWrappable* scriptWrappable)
-{
 }
 
 } // namespace blink

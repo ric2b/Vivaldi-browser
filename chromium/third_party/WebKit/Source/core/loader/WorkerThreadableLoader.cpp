@@ -55,7 +55,7 @@ static PassOwnPtr<Vector<char>> createVectorFromMemoryRegion(const char* data, u
 {
     OwnPtr<Vector<char>> buffer = adoptPtr(new Vector<char>(dataLength));
     memcpy(buffer->data(), data, dataLength);
-    return buffer.release();
+    return buffer;
 }
 
 WorkerThreadableLoader::WorkerThreadableLoader(WorkerGlobalScope& workerGlobalScope, ThreadableLoaderClient* client, const ThreadableLoaderOptions& options, const ResourceLoaderOptions& resourceLoaderOptions, BlockingBehavior blockingBehavior)
@@ -142,12 +142,12 @@ void WorkerThreadableLoader::MainThreadBridgeBase::mainThreadStart(PassOwnPtr<Cr
 
 void WorkerThreadableLoader::MainThreadBridgeBase::createLoaderInMainThread(const ThreadableLoaderOptions& options, const ResourceLoaderOptions& resourceLoaderOptions)
 {
-    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&MainThreadBridgeBase::mainThreadCreateLoader, this, options, resourceLoaderOptions));
+    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&MainThreadBridgeBase::mainThreadCreateLoader, AllowCrossThreadAccess(this), options, resourceLoaderOptions));
 }
 
 void WorkerThreadableLoader::MainThreadBridgeBase::startInMainThread(const ResourceRequest& request, const WorkerGlobalScope& workerGlobalScope)
 {
-    loaderProxy()->postTaskToLoader(createCrossThreadTask(&MainThreadBridgeBase::mainThreadStart, this, request));
+    loaderProxy()->postTaskToLoader(createCrossThreadTask(&MainThreadBridgeBase::mainThreadStart, AllowCrossThreadAccess(this), request));
 }
 
 void WorkerThreadableLoader::MainThreadBridgeBase::mainThreadDestroy(ExecutionContext* context)
@@ -163,7 +163,7 @@ void WorkerThreadableLoader::MainThreadBridgeBase::destroy()
     m_workerClientWrapper->clearClient();
 
     // "delete this" and m_mainThreadLoader::deref() on the worker object's thread.
-    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&MainThreadBridgeBase::mainThreadDestroy, this));
+    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&MainThreadBridgeBase::mainThreadDestroy, AllowCrossThreadAccess(this)));
 }
 
 void WorkerThreadableLoader::MainThreadBridgeBase::mainThreadOverrideTimeout(unsigned long timeoutMilliseconds, ExecutionContext* context)
@@ -178,7 +178,7 @@ void WorkerThreadableLoader::MainThreadBridgeBase::mainThreadOverrideTimeout(uns
 
 void WorkerThreadableLoader::MainThreadBridgeBase::overrideTimeout(unsigned long timeoutMilliseconds)
 {
-    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&MainThreadBridgeBase::mainThreadOverrideTimeout, this, timeoutMilliseconds));
+    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&MainThreadBridgeBase::mainThreadOverrideTimeout, AllowCrossThreadAccess(this), timeoutMilliseconds));
 }
 
 void WorkerThreadableLoader::MainThreadBridgeBase::mainThreadCancel(ExecutionContext* context)
@@ -194,7 +194,7 @@ void WorkerThreadableLoader::MainThreadBridgeBase::mainThreadCancel(ExecutionCon
 
 void WorkerThreadableLoader::MainThreadBridgeBase::cancel()
 {
-    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&MainThreadBridgeBase::mainThreadCancel, this));
+    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&MainThreadBridgeBase::mainThreadCancel, AllowCrossThreadAccess(this)));
     RefPtr<ThreadableLoaderClientWrapper> clientWrapper = m_workerClientWrapper;
     if (!clientWrapper->done()) {
         // If the client hasn't reached a termination state, then transition it by sending a cancellation error.
@@ -218,12 +218,12 @@ void WorkerThreadableLoader::MainThreadBridgeBase::didSendData(unsigned long lon
 
 void WorkerThreadableLoader::MainThreadBridgeBase::didReceiveResponse(unsigned long identifier, const ResourceResponse& response, PassOwnPtr<WebDataConsumerHandle> handle)
 {
-    forwardTaskToWorker(createCrossThreadTask(&ThreadableLoaderClientWrapper::didReceiveResponse, m_workerClientWrapper, identifier, response, handle));
+    forwardTaskToWorker(createCrossThreadTask(&ThreadableLoaderClientWrapper::didReceiveResponse, m_workerClientWrapper, identifier, response, passed(std::move(handle))));
 }
 
 void WorkerThreadableLoader::MainThreadBridgeBase::didReceiveData(const char* data, unsigned dataLength)
 {
-    forwardTaskToWorker(createCrossThreadTask(&ThreadableLoaderClientWrapper::didReceiveData, m_workerClientWrapper, createVectorFromMemoryRegion(data, dataLength)));
+    forwardTaskToWorker(createCrossThreadTask(&ThreadableLoaderClientWrapper::didReceiveData, m_workerClientWrapper, passed(createVectorFromMemoryRegion(data, dataLength))));
 }
 
 void WorkerThreadableLoader::MainThreadBridgeBase::didDownloadData(int dataLength)
@@ -233,7 +233,7 @@ void WorkerThreadableLoader::MainThreadBridgeBase::didDownloadData(int dataLengt
 
 void WorkerThreadableLoader::MainThreadBridgeBase::didReceiveCachedMetadata(const char* data, int dataLength)
 {
-    forwardTaskToWorker(createCrossThreadTask(&ThreadableLoaderClientWrapper::didReceiveCachedMetadata, m_workerClientWrapper, createVectorFromMemoryRegion(data, dataLength)));
+    forwardTaskToWorker(createCrossThreadTask(&ThreadableLoaderClientWrapper::didReceiveCachedMetadata, m_workerClientWrapper, passed(createVectorFromMemoryRegion(data, dataLength))));
 }
 
 void WorkerThreadableLoader::MainThreadBridgeBase::didFinishLoading(unsigned long identifier, double finishTime)
@@ -280,14 +280,14 @@ WorkerThreadableLoader::MainThreadAsyncBridge::~MainThreadAsyncBridge()
 {
 }
 
-void WorkerThreadableLoader::MainThreadAsyncBridge::forwardTaskToWorker(PassOwnPtr<ExecutionContextTask> task)
+void WorkerThreadableLoader::MainThreadAsyncBridge::forwardTaskToWorker(std::unique_ptr<ExecutionContextTask> task)
 {
-    loaderProxy()->postTaskToWorkerGlobalScope(task);
+    loaderProxy()->postTaskToWorkerGlobalScope(std::move(task));
 }
 
-void WorkerThreadableLoader::MainThreadAsyncBridge::forwardTaskToWorkerOnLoaderDone(PassOwnPtr<ExecutionContextTask> task)
+void WorkerThreadableLoader::MainThreadAsyncBridge::forwardTaskToWorkerOnLoaderDone(std::unique_ptr<ExecutionContextTask> task)
 {
-    loaderProxy()->postTaskToWorkerGlobalScope(task);
+    loaderProxy()->postTaskToWorkerGlobalScope(std::move(task));
 }
 
 WorkerThreadableLoader::MainThreadSyncBridge::MainThreadSyncBridge(
@@ -303,7 +303,7 @@ WorkerThreadableLoader::MainThreadSyncBridge::MainThreadSyncBridge(
 
 void WorkerThreadableLoader::MainThreadSyncBridge::start(const ResourceRequest& request, const WorkerGlobalScope& workerGlobalScope)
 {
-    WaitableEvent* shutdownEvent = workerGlobalScope.thread()->shutdownEvent();
+    WaitableEvent* terminationEvent = workerGlobalScope.thread()->terminationEvent();
     m_loaderDoneEvent = adoptPtr(new WaitableEvent());
 
     startInMainThread(request, workerGlobalScope);
@@ -312,13 +312,13 @@ void WorkerThreadableLoader::MainThreadSyncBridge::start(const ResourceRequest& 
     {
         Vector<WaitableEvent*> events;
         // Order is important; indicies are used later.
-        events.append(shutdownEvent);
+        events.append(terminationEvent);
         events.append(m_loaderDoneEvent.get());
 
         SafePointScope scope(BlinkGC::HeapPointersOnStack);
         signaledIndex = WaitableEvent::waitMultiple(events);
     }
-    // |signaledIndex| is 0; which is shutdownEvent.
+    // |signaledIndex| is 0; which is terminationEvent.
     if (signaledIndex == 0) {
         cancel();
         return;
@@ -327,7 +327,7 @@ void WorkerThreadableLoader::MainThreadSyncBridge::start(const ResourceRequest& 
     // The following code must be run only after |m_loaderDoneEvent| is
     // signalled.
 
-    Vector<OwnPtr<ExecutionContextTask>> tasks;
+    Vector<std::unique_ptr<ExecutionContextTask>> tasks;
     {
         MutexLocker lock(m_lock);
         ASSERT(m_done);
@@ -345,24 +345,24 @@ WorkerThreadableLoader::MainThreadSyncBridge::~MainThreadSyncBridge()
     ASSERT(isMainThread());
 }
 
-void WorkerThreadableLoader::MainThreadSyncBridge::forwardTaskToWorker(PassOwnPtr<ExecutionContextTask> task)
+void WorkerThreadableLoader::MainThreadSyncBridge::forwardTaskToWorker(std::unique_ptr<ExecutionContextTask> task)
 {
     ASSERT(isMainThread());
 
     MutexLocker lock(m_lock);
     RELEASE_ASSERT(!m_done);
 
-    m_clientTasks.append(task);
+    m_clientTasks.append(std::move(task));
 }
 
-void WorkerThreadableLoader::MainThreadSyncBridge::forwardTaskToWorkerOnLoaderDone(PassOwnPtr<ExecutionContextTask> task)
+void WorkerThreadableLoader::MainThreadSyncBridge::forwardTaskToWorkerOnLoaderDone(std::unique_ptr<ExecutionContextTask> task)
 {
     ASSERT(isMainThread());
 
     MutexLocker lock(m_lock);
     RELEASE_ASSERT(!m_done);
 
-    m_clientTasks.append(task);
+    m_clientTasks.append(std::move(task));
     m_done = true;
     m_loaderDoneEvent->signal();
 }

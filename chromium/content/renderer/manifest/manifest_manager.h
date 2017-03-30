@@ -6,12 +6,13 @@
 #define CONTENT_RENDERER_MANIFEST_MANIFEST_MANAGER_H_
 
 #include <list>
+#include <memory>
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "content/public/common/manifest.h"
 #include "content/public/renderer/render_frame_observer.h"
+#include "content/renderer/manifest/manifest_debug_info.h"
 
 class GURL;
 
@@ -31,7 +32,8 @@ class ManifestFetcher;
 // GetManifest().
 class ManifestManager : public RenderFrameObserver {
  public:
-  typedef base::Callback<void(const Manifest&)> GetManifestCallback;
+  typedef base::Callback<void(const Manifest&,
+                              const ManifestDebugInfo&)> GetManifestCallback;
 
   explicit ManifestManager(RenderFrame* render_frame);
   ~ManifestManager() override;
@@ -56,7 +58,9 @@ class ManifestManager : public RenderFrameObserver {
   // process.
   void OnHasManifest(int request_id);
   void OnRequestManifest(int request_id);
-  void OnRequestManifestComplete(int request_id, const Manifest&);
+  void OnRequestManifestComplete(int request_id,
+                                 const Manifest&,
+                                 const ManifestDebugInfo&);
 
   void FetchManifest();
   void OnManifestFetchComplete(const GURL& document_url,
@@ -64,7 +68,7 @@ class ManifestManager : public RenderFrameObserver {
                                const std::string& data);
   void ResolveCallbacks(ResolveState state);
 
-  scoped_ptr<ManifestFetcher> fetcher_;
+  std::unique_ptr<ManifestFetcher> fetcher_;
 
   // Whether the RenderFrame may have an associated Manifest. If true, the frame
   // may have a manifest, if false, it can't have one. This boolean is true when
@@ -77,6 +81,9 @@ class ManifestManager : public RenderFrameObserver {
 
   // Current Manifest. Might be outdated if manifest_dirty_ is true.
   Manifest manifest_;
+
+  // Current Manifest debug information.
+  ManifestDebugInfo manifest_debug_info_;
 
   std::list<GetManifestCallback> pending_callbacks_;
 

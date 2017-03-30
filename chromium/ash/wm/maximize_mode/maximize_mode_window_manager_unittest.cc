@@ -10,16 +10,17 @@
 #include "ash/screen_util.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shell.h"
-#include "ash/switchable_windows.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/shell_test_api.h"
+#include "ash/wm/common/switchable_windows.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/common/wm_event.h"
 #include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/window_selector_controller.h"
 #include "ash/wm/window_properties.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm/wm_event.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -103,7 +104,7 @@ class MaximizeModeWindowManagerTest : public test::AshTestBase {
   // Resize our desktop.
   void ResizeDesktop(int width_delta) {
     gfx::Size size =
-        gfx::Screen::GetScreen()
+        display::Screen::GetScreen()
             ->GetDisplayNearestWindow(Shell::GetPrimaryRootWindow())
             .size();
     size.Enlarge(0, width_delta);
@@ -133,8 +134,7 @@ class MaximizeModeWindowManagerTest : public test::AshTestBase {
     if (!can_resize)
       window->SetProperty(aura::client::kCanResizeKey, false);
     aura::Window* container = Shell::GetContainer(
-        Shell::GetPrimaryRootWindow(),
-        kSwitchableWindowContainerIds[0]);
+        Shell::GetPrimaryRootWindow(), wm::kSwitchableWindowContainerIds[0]);
     container->AddChild(window);
     return window;
   }

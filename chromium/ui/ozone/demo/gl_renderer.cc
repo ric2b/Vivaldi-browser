@@ -5,11 +5,12 @@
 #include "ui/ozone/demo/gl_renderer.h"
 
 #include "base/location.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_surface.h"
+#include "ui/gl/init/gl_factory.h"
 
 namespace ui {
 
@@ -22,8 +23,8 @@ GlRenderer::~GlRenderer() {
 }
 
 bool GlRenderer::Initialize() {
-  context_ = gfx::GLContext::CreateGLContext(NULL, surface_.get(),
-                                             gfx::PreferIntegratedGpu);
+  context_ = gl::init::CreateGLContext(nullptr, surface_.get(),
+                                       gfx::PreferIntegratedGpu);
   if (!context_.get()) {
     LOG(ERROR) << "Failed to create GL context";
     return false;

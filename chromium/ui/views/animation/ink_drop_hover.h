@@ -5,8 +5,10 @@
 #ifndef UI_VIEWS_ANIMATION_INK_DROP_HOVER_H_
 #define UI_VIEWS_ANIMATION_INK_DROP_HOVER_H_
 
+#include <iosfwd>
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/point.h"
@@ -102,15 +104,23 @@ class VIEWS_EXPORT InkDropHover {
   bool last_animation_initiated_was_fade_in_;
 
   // The LayerDelegate that paints the hover |layer_|.
-  scoped_ptr<RoundedRectangleLayerDelegate> layer_delegate_;
+  std::unique_ptr<RoundedRectangleLayerDelegate> layer_delegate_;
 
   // The visual hover layer that is painted by |layer_delegate_|.
-  scoped_ptr<ui::Layer> layer_;
+  std::unique_ptr<ui::Layer> layer_;
 
   InkDropHoverObserver* observer_;
 
   DISALLOW_COPY_AND_ASSIGN(InkDropHover);
 };
+
+// Returns a human readable string for |animation_type|.  Useful for logging.
+VIEWS_EXPORT std::string ToString(InkDropHover::AnimationType animation_type);
+
+// This is declared here for use in gtest-based unit tests but is defined in
+// the views_test_support target. Depend on that to use this in your unit test.
+// This should not be used in production code - call ToString() instead.
+void PrintTo(InkDropHover::AnimationType animation_type, ::std::ostream* os);
 
 }  // namespace views
 

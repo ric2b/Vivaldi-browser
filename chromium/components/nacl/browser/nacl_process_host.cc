@@ -28,8 +28,8 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_byteorder.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/win/windows_version.h"
 #include "build/build_config.h"
 #include "components/nacl/browser/nacl_browser.h"
@@ -611,7 +611,7 @@ bool NaClProcessHost::LaunchSelLdr() {
     // x86 CRT DLLs are in e.g. out\Debug for chrome.exe etc., so the x64 ones
     // are put in out\Debug\x64 which we add to the PATH here so that loader
     // can find them. See http://crbug.com/346034.
-    scoped_ptr<base::Environment> env(base::Environment::Create());
+    std::unique_ptr<base::Environment> env(base::Environment::Create());
     static const char kPath[] = "PATH";
     std::string old_path;
     base::FilePath module_path;
@@ -633,7 +633,7 @@ bool NaClProcessHost::LaunchSelLdr() {
   }
 #endif
 
-  scoped_ptr<base::CommandLine> cmd_line(new base::CommandLine(exe_path));
+  std::unique_ptr<base::CommandLine> cmd_line(new base::CommandLine(exe_path));
   CopyNaClCommandLineArguments(cmd_line.get());
 
   cmd_line->AppendSwitchASCII(switches::kProcessType,
@@ -719,20 +719,6 @@ void NaClProcessHost::ReplyToRenderer(
     ScopedChannelHandle ppapi_channel_handle,
     ScopedChannelHandle trusted_channel_handle,
     ScopedChannelHandle manifest_service_channel_handle) {
-#if defined(OS_WIN)
-  // If we are on 64-bit Windows, the NaCl process's sandbox is
-  // managed by a different process from the renderer's sandbox.  We
-  // need to inform the renderer's sandbox about the NaCl process so
-  // that the renderer can send handles to the NaCl process using
-  // BrokerDuplicateHandle().
-  if (RunningOnWOW64()) {
-    if (!content::BrokerAddTargetPeer(process_->GetData().handle)) {
-      SendErrorToRenderer("BrokerAddTargetPeer() failed");
-      return;
-    }
-  }
-#endif
-
   // Hereafter, we always send an IPC message with handles created above
   // which, on Windows, are not closable in this process.
   std::string error_message;
@@ -1102,7 +1088,7 @@ bool NaClProcessHost::StartPPAPIProxy(ScopedChannelHandle channel_handle) {
   }
 
   ppapi_host_->GetPpapiHost()->AddHostFactoryFilter(
-      scoped_ptr<ppapi::host::HostFactory>(
+      std::unique_ptr<ppapi::host::HostFactory>(
           NaClBrowser::GetDelegate()->CreatePpapiHostFactory(
               ppapi_host_.get())));
 

@@ -15,8 +15,8 @@
 #include "components/mus/gles2/gpu_state.h"
 #include "components/mus/public/interfaces/gpu.mojom.h"
 #include "components/mus/public/interfaces/quads.mojom.h"
+#include "components/mus/surfaces/display_compositor.h"
 #include "components/mus/surfaces/surfaces_state.h"
-#include "components/mus/surfaces/top_level_display_client.h"
 #include "components/mus/ws/platform_display_factory.h"
 #include "components/mus/ws/server_window.h"
 #include "components/mus/ws/server_window_surface.h"
@@ -28,13 +28,13 @@
 #include "mojo/converters/surfaces/surfaces_type_converters.h"
 #include "mojo/converters/surfaces/surfaces_utils.h"
 #include "mojo/converters/transform/transform_type_converters.h"
-#include "mojo/shell/public/cpp/connection.h"
-#include "mojo/shell/public/cpp/connector.h"
+#include "services/shell/public/cpp/connection.h"
+#include "services/shell/public/cpp/connector.h"
 #include "third_party/skia/include/core/SkXfermode.h"
 #include "ui/base/cursor/cursor_loader.h"
+#include "ui/display/display.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
-#include "ui/gfx/display.h"
 #include "ui/platform_window/platform_ime_controller.h"
 #include "ui/platform_window/platform_window.h"
 
@@ -114,11 +114,12 @@ void DrawWindowTree(cc::RenderPass* pass,
     const gfx::Rect bounds_at_origin(window->bounds().size());
     // TODO(fsamuel): These clipping and visible rects are incorrect. They need
     // to be populated from CompositorFrame structs.
-    sqs->SetAll(
-        quad_to_target_transform, bounds_at_origin.size() /* layer_bounds */,
-        bounds_at_origin /* visible_layer_bounds */,
-        bounds_at_origin /* clip_rect */, false /* is_clipped */,
-        window->opacity(), SkXfermode::kSrc_Mode, 0 /* sorting-context_id */);
+    sqs->SetAll(quad_to_target_transform,
+                bounds_at_origin.size() /* layer_bounds */,
+                bounds_at_origin /* visible_layer_bounds */,
+                bounds_at_origin /* clip_rect */, false /* is_clipped */,
+                window->opacity(), SkXfermode::kSrcOver_Mode,
+                0 /* sorting-context_id */);
     auto quad = pass->CreateAndAppendDrawQuad<cc::SurfaceDrawQuad>();
     quad->SetAll(sqs, bounds_at_origin /* rect */,
                  gfx::Rect() /* opaque_rect */,
@@ -134,11 +135,12 @@ void DrawWindowTree(cc::RenderPass* pass,
     cc::SharedQuadState* sqs = pass->CreateAndAppendSharedQuadState();
     const gfx::Rect bounds_at_origin(
         underlay_surface->last_submitted_frame_size());
-    sqs->SetAll(
-        quad_to_target_transform, bounds_at_origin.size() /* layer_bounds */,
-        bounds_at_origin /* visible_layer_bounds */,
-        bounds_at_origin /* clip_rect */, false /* is_clipped */,
-        window->opacity(), SkXfermode::kSrc_Mode, 0 /* sorting-context_id */);
+    sqs->SetAll(quad_to_target_transform,
+                bounds_at_origin.size() /* layer_bounds */,
+                bounds_at_origin /* visible_layer_bounds */,
+                bounds_at_origin /* clip_rect */, false /* is_clipped */,
+                window->opacity(), SkXfermode::kSrcOver_Mode,
+                0 /* sorting-context_id */);
 
     auto quad = pass->CreateAndAppendDrawQuad<cc::SurfaceDrawQuad>();
     quad->SetAll(sqs, bounds_at_origin /* rect */,
@@ -164,8 +166,7 @@ PlatformDisplay* PlatformDisplay::Create(
 
 DefaultPlatformDisplay::DefaultPlatformDisplay(
     const PlatformDisplayInitParams& init_params)
-    : connector_(init_params.connector),
-      gpu_state_(init_params.gpu_state),
+    : gpu_state_(init_params.gpu_state),
       surfaces_state_(init_params.surfaces_state),
       delegate_(nullptr),
       draw_timer_(false, false),
@@ -175,8 +176,9 @@ DefaultPlatformDisplay::DefaultPlatformDisplay(
 #endif
       weak_factory_(this) {
   metrics_.size_in_pixels = mojo::Size::New();
-  metrics_.size_in_pixels->width = 1024;
-  metrics_.size_in_pixels->height = 768;
+  metrics_.size_in_pixels->width = init_params.display_bounds.width();
+  metrics_.size_in_pixels->height = init_params.display_bounds.height();
+  // TODO(rjkroege): Preserve the display_id when Ozone platform can use it.
 }
 
 void DefaultPlatformDisplay::Init(PlatformDisplayDelegate* delegate) {
@@ -204,9 +206,9 @@ DefaultPlatformDisplay::~DefaultPlatformDisplay() {
   delegate_ = nullptr;
 
   // Invalidate WeakPtrs now to avoid callbacks back into the
-  // DefaultPlatformDisplay during destruction of |top_level_display_client_|.
+  // DefaultPlatformDisplay during destruction of |display_compositor_|.
   weak_factory_.InvalidateWeakPtrs();
-  top_level_display_client_.reset();
+  display_compositor_.reset();
   // Destroy the PlatformWindow early on as it may call us back during
   // destruction and we want to be in a known state. But destroy the surface
   // first because it can still be using the platform window.
@@ -282,17 +284,17 @@ void DefaultPlatformDisplay::Draw() {
     return;
 
   // TODO(fsamuel): We should add a trace for generating a top level frame.
-  scoped_ptr<cc::CompositorFrame> frame(GenerateCompositorFrame());
+  std::unique_ptr<cc::CompositorFrame> frame(GenerateCompositorFrame());
   frame_pending_ = true;
-  if (top_level_display_client_) {
-    top_level_display_client_->SubmitCompositorFrame(
+  if (display_compositor_) {
+    display_compositor_->SubmitCompositorFrame(
         std::move(frame), base::Bind(&DefaultPlatformDisplay::DidDraw,
                                      weak_factory_.GetWeakPtr()));
   }
   dirty_rect_ = gfx::Rect();
 }
 
-void DefaultPlatformDisplay::DidDraw() {
+void DefaultPlatformDisplay::DidDraw(cc::SurfaceDrawStatus status) {
   frame_pending_ = false;
   delegate_->OnCompositorFrameDrawn();
   if (!dirty_rect_.IsEmpty())
@@ -307,6 +309,7 @@ void DefaultPlatformDisplay::WantToDraw() {
   if (draw_timer_.IsRunning() || frame_pending_)
     return;
 
+  // TODO(rjkroege): Use vblank to kick off Draw.
   draw_timer_.Start(
       FROM_HERE, base::TimeDelta(),
       base::Bind(&DefaultPlatformDisplay::Draw, weak_factory_.GetWeakPtr()));
@@ -314,8 +317,8 @@ void DefaultPlatformDisplay::WantToDraw() {
 
 void DefaultPlatformDisplay::UpdateMetrics(const gfx::Size& size,
                                            float device_pixel_ratio) {
-  if (gfx::Display::HasForceDeviceScaleFactor())
-    device_pixel_ratio = gfx::Display::GetForcedDeviceScaleFactor();
+  if (display::Display::HasForceDeviceScaleFactor())
+    device_pixel_ratio = display::Display::GetForcedDeviceScaleFactor();
   if (metrics_.size_in_pixels.To<gfx::Size>() == size &&
       metrics_.device_pixel_ratio == device_pixel_ratio)
     return;
@@ -329,9 +332,9 @@ void DefaultPlatformDisplay::UpdateMetrics(const gfx::Size& size,
   delegate_->OnViewportMetricsChanged(old_metrics, metrics_);
 }
 
-scoped_ptr<cc::CompositorFrame>
+std::unique_ptr<cc::CompositorFrame>
 DefaultPlatformDisplay::GenerateCompositorFrame() {
-  scoped_ptr<cc::RenderPass> render_pass = cc::RenderPass::Create();
+  std::unique_ptr<cc::RenderPass> render_pass = cc::RenderPass::Create();
   render_pass->damage_rect = dirty_rect_;
   render_pass->output_rect = gfx::Rect(metrics_.size_in_pixels.To<gfx::Size>());
 
@@ -339,11 +342,12 @@ DefaultPlatformDisplay::GenerateCompositorFrame() {
   DrawWindowTree(render_pass.get(), delegate_->GetRootWindow(), gfx::Vector2d(),
                  1.0f, &referenced_window_ids);
 
-  scoped_ptr<cc::DelegatedFrameData> frame_data(new cc::DelegatedFrameData);
+  std::unique_ptr<cc::DelegatedFrameData> frame_data(
+      new cc::DelegatedFrameData);
   frame_data->device_scale_factor = metrics_.device_pixel_ratio;
   frame_data->render_pass_list.push_back(std::move(render_pass));
 
-  scoped_ptr<cc::CompositorFrame> frame(new cc::CompositorFrame);
+  std::unique_ptr<cc::CompositorFrame> frame(new cc::CompositorFrame);
   frame->delegated_frame_data = std::move(frame_data);
   return frame;
 }
@@ -358,12 +362,11 @@ void DefaultPlatformDisplay::OnDamageRect(const gfx::Rect& damaged_region) {
 }
 
 void DefaultPlatformDisplay::DispatchEvent(ui::Event* event) {
-  // TODO(moshayedi): crbug.com/590226. Enable this after we support wheel
-  // events in mus event dispatcher.
-  if (event->IsMouseWheelEvent())
-    return;
-
-  if (event->IsMouseEvent()) {
+  if (event->IsScrollEvent()) {
+    // TODO(moshayedi): crbug.com/602859. Dispatch scroll events as
+    // they are once we have proper support for scroll events.
+    delegate_->OnEvent(ui::MouseWheelEvent(*event->AsScrollEvent()));
+  } else if (event->IsMouseEvent() && !event->IsMouseWheelEvent()) {
     delegate_->OnEvent(ui::PointerEvent(*event->AsMouseEvent()));
   } else if (event->IsTouchEvent()) {
     delegate_->OnEvent(ui::PointerEvent(*event->AsTouchEvent()));
@@ -416,10 +419,9 @@ void DefaultPlatformDisplay::OnAcceleratedWidgetAvailable(
     gfx::AcceleratedWidget widget,
     float device_pixel_ratio) {
   if (widget != gfx::kNullAcceleratedWidget) {
-    top_level_display_client_.reset(
-        new TopLevelDisplayClient(widget, gpu_state_, surfaces_state_));
-    delegate_->OnTopLevelSurfaceChanged(
-        top_level_display_client_->surface_id());
+    display_compositor_.reset(
+        new DisplayCompositor(base::ThreadTaskRunnerHandle::Get(), widget,
+                              gpu_state_, surfaces_state_));
   }
   UpdateMetrics(metrics_.size_in_pixels.To<gfx::Size>(), device_pixel_ratio);
 }
@@ -431,9 +433,9 @@ void DefaultPlatformDisplay::OnAcceleratedWidgetDestroyed() {
 void DefaultPlatformDisplay::OnActivationChanged(bool active) {}
 
 void DefaultPlatformDisplay::RequestCopyOfOutput(
-    scoped_ptr<cc::CopyOutputRequest> output_request) {
-  if (top_level_display_client_)
-    top_level_display_client_->RequestCopyOfOutput(std::move(output_request));
+    std::unique_ptr<cc::CopyOutputRequest> output_request) {
+  if (display_compositor_)
+    display_compositor_->RequestCopyOfOutput(std::move(output_request));
 }
 
 }  // namespace ws

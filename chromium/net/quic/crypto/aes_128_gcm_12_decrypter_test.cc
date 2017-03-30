@@ -4,7 +4,10 @@
 
 #include "net/quic/crypto/aes_128_gcm_12_decrypter.h"
 
+#include <memory>
+
 #include "net/quic/quic_flags.h"
+#include "net/quic/quic_utils.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 
 using base::StringPiece;
@@ -66,7 +69,7 @@ struct TestVector {
 
   // Expected output:
   const char* pt;  // An empty string "" means decryption succeeded and
-                   // the plaintext is zero-length. NULL means decryption
+                   // the plaintext is zero-length. nullptr means decryption
                    // failed.
 };
 
@@ -209,7 +212,7 @@ QuicData* DecryptWithNonce(Aes128Gcm12Decrypter* decrypter,
   path_id = static_cast<QuicPathId>(
       packet_number >> 8 * (sizeof(packet_number) - sizeof(path_id)));
   packet_number &= UINT64_C(0x00FFFFFFFFFFFFFF);
-  scoped_ptr<char[]> output(new char[ciphertext.length()]);
+  std::unique_ptr<char[]> output(new char[ciphertext.length()]);
   size_t output_length = 0;
   const bool success = decrypter->DecryptPacket(
       path_id, packet_number, associated_data, ciphertext, output.get(),
@@ -230,19 +233,14 @@ TEST(Aes128Gcm12DecrypterTest, Decrypt) {
       bool has_pt = test_vectors[j].pt;
 
       // Decode the test vector.
-      string key;
-      string iv;
-      string ct;
-      string aad;
-      string tag;
+      string key = QuicUtils::HexDecode(test_vectors[j].key);
+      string iv = QuicUtils::HexDecode(test_vectors[j].iv);
+      string ct = QuicUtils::HexDecode(test_vectors[j].ct);
+      string aad = QuicUtils::HexDecode(test_vectors[j].aad);
+      string tag = QuicUtils::HexDecode(test_vectors[j].tag);
       string pt;
-      ASSERT_TRUE(DecodeHexString(test_vectors[j].key, &key));
-      ASSERT_TRUE(DecodeHexString(test_vectors[j].iv, &iv));
-      ASSERT_TRUE(DecodeHexString(test_vectors[j].ct, &ct));
-      ASSERT_TRUE(DecodeHexString(test_vectors[j].aad, &aad));
-      ASSERT_TRUE(DecodeHexString(test_vectors[j].tag, &tag));
       if (has_pt) {
-        ASSERT_TRUE(DecodeHexString(test_vectors[j].pt, &pt));
+        pt = QuicUtils::HexDecode(test_vectors[j].pt);
       }
 
       // The test vector's lengths should look sane. Note that the lengths
@@ -266,7 +264,7 @@ TEST(Aes128Gcm12DecrypterTest, Decrypt) {
       Aes128Gcm12Decrypter decrypter;
       ASSERT_TRUE(decrypter.SetKey(key));
 
-      scoped_ptr<QuicData> decrypted(DecryptWithNonce(
+      std::unique_ptr<QuicData> decrypted(DecryptWithNonce(
           &decrypter, iv,
           // This deliberately tests that the decrypter can handle an AAD that
           // is set to nullptr, as opposed to a zero-length, non-nullptr

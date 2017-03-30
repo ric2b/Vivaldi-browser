@@ -2,13 +2,11 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="vi">
 <translation id="101438888985615157">Xoay màn hình 180 độ</translation>
-<translation id="1015272884520659144">Xác định dang sách thiết bị USB được phép tách khỏi trình điều khiển nhân hệ điều hành để sử dụng thông qua API chrome.usb ngay bên trong ứng dụng web. Mục nhập là các cặp Số nhận dạng nhà cung cấp USB và Số nhận dạng sản phẩm để xác định một phần cứng cụ thể.
-
-      Nếu chính sách này chưa được định cấu hình, danh sách thiết bị USB có thể tách sẽ được coi là trống.</translation>
 <translation id="1017967144265860778">Quản lý nguồn trên màn hình đăng nhập</translation>
 <translation id="1019101089073227242">Thiết lập thư mục dữ liệu người dùng</translation>
 <translation id="1022361784792428773">Các ID tiện ích mà bạn nên ngăn người dùng cài đặt (hoặc * cho tất cả)</translation>
 <translation id="102492767056134033">Đặt trạng thái mặc định của bàn phím ảo trên màn hình đăng nhập</translation>
+<translation id="1040446814317236570">Bật tách URL PAC (cho https://)</translation>
 <translation id="1044878202534415707">Báo cáo thống kê phần cứng chẳng hạn như mức sử dụng CPU/RAM.
 
       Nếu chính sách này được đặt thành false thì thống kê sẽ không được báo cáo.
@@ -73,14 +71,6 @@
       Nếu chính sách này không được đặt hoặc được đặt thành false thì bộ mã hóa RC4 trong TLS sẽ không được bật. Ngoài ra, chính sách có thể được đặt thành true để duy trì khả năng tương thích với máy chủ lỗi thời. Đây là một biện pháp tạm thời và cần phải định cấu hình lại máy chủ.</translation>
 <translation id="1297182715641689552">Sử dụng tập lệnh proxy .pac</translation>
 <translation id="1304973015437969093">Cần ID tiện ích/ứng dụng và URL cập nhật để tự động cài đặt</translation>
-<translation id="1310699457130669094">Bạn có thể chỉ định URL tới tệp .pac proxy tại đây.
-
-          Chính sách này chỉ có hiệu lực nếu bạn đã chọn cài đặt proxy theo cách thủ công tại 'Chọn cách chỉ định cài đặt máy chủ proxy'.
-
-          Bạn không nên thiết lập chính sách này nếu bạn đã chọn bất kỳ chế độ nào khác để thiết lập chính sách proxy.
-
-         Để biết thêm ví dụ cụ thể, truy cập:
-          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="1313457536529613143">Chỉ định tỷ lệ phần trăm theo đó độ trễ mờ màn hình được xác định khi hoạt động của người dùng được quan sát thấy lúc màn hình bị làm mờ hoặc ngay sau khi màn hình tắt.
 
           Nếu chính sách này được đặt, chính sách chỉ định tỷ lệ phần trăm theo đó độ trễ mờ màn hình được xác định khi hoạt động của người dùng được quan sát thấy lúc màn hình bị làm mờ hoặc ngay sau khi màn hình tắt. Khi độ trễ mờ màn hình được xác định tỷ lệ, độ trễ tắt màn hình, độ trễ khóa màn hình và độ trễ khi không hoạt động được điều chỉnh để duy trì cùng khoảng cách với độ trễ mờ màn hình như được định cấu hình ban đầu.
@@ -165,6 +155,11 @@
 <translation id="1608755754295374538">Các URL sẽ được cấp quyền truy cập thiết bị ghi âm mà không cần phải hiển thị lời nhắc</translation>
 <translation id="1617235075406854669">Bật xóa lịch sử trình duyệt và lịch sử tải xuống</translation>
 <translation id="1617384279878333801">Bật tính năng thêm người trong trình quản lý hồ sơ</translation>
+<translation id="163200210584085447">Các mẫu trong danh sách này sẽ được đối sánh dựa trên nguồn gốc
+      bảo mật của URL yêu cầu.  Nếu tìm thấy mẫu phù hợp, quyền
+      truy cập thiết bị quay video sẽ được cấp trên
+      các trang đăng nhập SAML.  Nếu không tìm thấy mẫu
+      phù hợp, quyền truy cập sẽ tự động bị từ chối.  Các mẫu ký tự đại diện không được phép.</translation>
 <translation id="1655229863189977773">Đặt kích thước bộ nhớ cache của đĩa theo byte</translation>
 <translation id="166427968280387991">Máy chủ proxy</translation>
 <translation id="1675002386741412210">Hỗ trợ trên:</translation>
@@ -251,14 +246,6 @@
       Nếu được bật, một nút đăng xuất màu đỏ, lớn được hiển thị trong khay hệ thống khi phiên hoạt động và màn hình không bị khóa.
 
       Nếu bị tắt hoặc không được chỉ định, không có nút đăng xuất màu đỏ, lớn nào hiển thị trong khay hệ thống.</translation>
-<translation id="1942957375738056236">Bạn có thể chỉ định URL của máy chủ proxy ở đây.
-
-          Chính sách này chỉ có hiệu lực nếu bạn đã chọn cài đặt proxy thủ công tại 'Chọn cách chỉ định cài đặt máy chủ proxy'.
-
-          Bạn không nên thiết lập chính sách này nếu bạn đã chọn bất kỳ chế độ nào khác để thiết lập chính sách proxy.
-
-          Để có thêm tùy chọn và các ví dụ cụ thể, hãy truy cập:
-          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="1956493342242507974">Định cấu hình quản lý điện năng trên màn hình đăng nhập trong <ph name="PRODUCT_OS_NAME" />.
 
       Chính sách này cho phép bạn định cấu hình cách <ph name="PRODUCT_OS_NAME" /> hoạt động khi không có hoạt động nào của người dùng trong một khoảng thời gian khi màn hình đăng nhập đang hiển thị. Chính sách này kiểm soát nhiều cài đặt. Để biết từng vùng giá trị và ngữ nghĩa học của các cài đặt, hãy xem các chính sách tương ứng kiểm soát quản lý điện năng trong phiên. Sai lệch duy nhất so với các chính sách này là:
@@ -292,6 +279,7 @@
 <translation id="2113068765175018713">Giới hạn thời gian hoạt động của thiết bị bằng cách tự động khởi động lại</translation>
 <translation id="2127599828444728326">Cho phép thông báo trên các trang web này</translation>
 <translation id="2131902621292742709">Độ trễ mờ màn hình khi chạy trên nguồn pin</translation>
+<translation id="2134437727173969994">Cho phép khóa màn hình</translation>
 <translation id="2137064848866899664">Nếu chính sách này được đặt, mỗi màn hình sẽ được xoay theo
       hướng đã chỉ định mỗi khi khởi động lại và lần đầu tiên màn hình được kết nối
       sau khi giá trị chính sách thay đổi. Người dùng có thể thay đổi chế độ
@@ -357,6 +345,7 @@
 <translation id="2337466621458842053">Cho phép bạn thiết lập danh sách các mẫu url chỉ định những trang web được phép hiển thị hình ảnh.
 
           Nếu không thiết lập chính sách này, giá trị mặc định chung từ chính sách 'DefaultImagesSetting' nếu chính sách này được thiết lập hoặc từ cấu hình cá nhân của người dùng sẽ được sử dụng cho tất cả các trang web.</translation>
+<translation id="2366415278352956652">Bật truyền</translation>
 <translation id="2371309782685318247">Chỉ định khoảng thời gian tính bằng mili giây mà trong khoảng đó dịch vụ quản lý thiết bị sẽ được truy vấn về thông tin chính sách người dùng.
 
       Việc đặt chính sách này sẽ ghi đè giá trị mặc định 3 giờ. Các giá trị hợp lệ cho chính sách này nằm trong khoảng từ 1800000 (30 phút) tới 86400000 (1 ngày). Mọi giá trị không nằm trong khoảng này sẽ được gắn với ranh giới tương ứng.
@@ -510,7 +499,6 @@
       Nếu chính sách này không được đặt, sẽ có tính năng proxy nén dữ liệu để người dùng chọn có sử dụng hay không.</translation>
 <translation id="2587719089023392205">Đặt <ph name="PRODUCT_NAME" /> làm trình duyệt mặc định</translation>
 <translation id="2592091433672667839">Khoảng thời gian không hoạt động trước khi trình bảo vệ màn hình hiển thị trên màn hình đăng nhập ở chế độ bán lẻ</translation>
-<translation id="260705825237536216">Định cấu hình ứng dụng ARC</translation>
 <translation id="2623014935069176671">Đợi hoạt động người dùng đầu tiên</translation>
 <translation id="262740370354162807">Cho phép gửi tài liệu tới <ph name="CLOUD_PRINT_NAME" /></translation>
 <translation id="2633084400146331575">Bật tính năng phản hồi bằng giọng nói</translation>
@@ -526,6 +514,7 @@
           Chính sách này chỉ được áp dụng nếu chính sách 'DefaultSearchProviderEnabled' được bật.</translation>
 <translation id="2682225790874070339">Tắt Drive trong ứng dụng Tệp <ph name="PRODUCT_OS_NAME" /></translation>
 <translation id="268577405881275241">Bật tính năng proxy nén dữ liệu</translation>
+<translation id="2731627323327011390">Tắt sử dụng chứng chỉ <ph name="PRODUCT_OS_NAME" /> đối với ứng dụng ARC</translation>
 <translation id="2742843273354638707">Ẩn ứng dụng Cửa hàng Chrome trực tuyến và liên kết chân trang khỏi Trang tab mới và trình chạy ứng dụng <ph name="PRODUCT_OS_NAME" />.
 
 Khi chính sách này được đặt thành true, các biểu tượng sẽ bị ẩn. 
@@ -577,6 +566,22 @@ Khi chính sách này được đặt thành false hoặc không được địn
           Từng mục trong danh sách này là một mẫu khớp với kiểu tiện ích (xem http://code.google.com/chrome/extensions/match_patterns.html). Người dùng có thể dễ dàng cài đặt các mục từ bất kỳ URL nào khớp với mục trong danh sách này. Cả vị trí tệp *.crx và trang bắt đầu tải xuống (nghĩa là liên kết tham chiếu) đều phải được phép theo các mẫu này.
 
           ExtensionInstallBlacklist được ưu tiên hơn so với chính sách này. Điều đó có nghĩa là tiện ích trên danh sách cấm sẽ không được cài đặt, ngay cả khi việc cài đặt diễn ra từ một trang web trên danh sách này.</translation>
+<translation id="2813740161943223811">Chính sách này không được dùng nữa, thay vào đó hãy sử dụng ProxyMode.
+
+          Cho phép bạn chỉ định máy chủ proxy mà <ph name="PRODUCT_NAME" /> sử dụng và ngăn người dùng thay đổi cài đặt proxy. Ứng dụng ARC cũng có thể sử dụng máy chủ proxy này.
+
+          Nếu bạn chọn không bao giờ sử dụng máy chủ proxy và luôn kết nối trực tiếp, tất cả các tùy chọn khác đều được bỏ qua.
+
+          Nếu bạn chọn sử dụng cài đặt proxy hệ thống hoặc tự động phát hiện máy chủ proxy, tất cả các tùy chọn khác đều được bỏ qua.
+
+          Nếu bạn chọn cài đặt proxy thủ công, bạn có thể chỉ định thêm tùy chọn trong 'Địa chỉ hoặc URL của máy chủ proxy', 'URL cho tệp .pac proxy' và 'Danh sách các quy tắc bỏ qua proxy được phân cách bằng dấu phẩy'. Chỉ máy chủ proxy HTTP có mức độ ưu tiên cao nhất khả dụng cho ứng dụng ARC.
+
+          Để biết các ví dụ cụ thể, hãy truy cập:
+          <ph name="PROXY_HELP_URL" />.
+
+          Nếu bạn bật cài đặt này, <ph name="PRODUCT_NAME" /> sẽ bỏ qua tất cả các tùy chọn liên quan đến proxy đã chỉ định từ dòng lệnh.
+
+          Không đặt chính sách này sẽ cho phép người dùng tự chọn cài đặt proxy.</translation>
 <translation id="2824715612115726353">Bật chế độ Ẩn danh</translation>
 <translation id="2844404652289407061">Cho phép sử dụng Chạm để tìm kiếm trong chế độ xem nội dung của <ph name="PRODUCT_NAME" />.
 
@@ -688,6 +693,18 @@ Khi chính sách này được đặt thành false hoặc không được địn
           </translation>
 <translation id="3205825995289802549">Mở tối đa cửa sổ trình duyệt đầu tiên trong lần chạy đầu tiên</translation>
 <translation id="3206731874112238027">Tắt xem trước bản in (không dùng nữa)</translation>
+<translation id="3208854390109736596">Cho phép bạn chỉ định máy chủ proxy mà <ph name="PRODUCT_NAME" /> sử dụng và ngăn người dùng thay đổi cài đặt proxy. Ứng dụng ARC cũng có thể sử dụng máy chủ proxy này.
+
+      Nếu bạn chọn không bao giờ sử dụng máy chủ proxy và luôn kết nối trực tiếp, tất cả các tùy chọn khác đều được bỏ qua.
+
+      Nếu bạn chọn tự động phát hiện máy chủ proxy, tất cả các tùy chọn khác đều được bỏ qua.
+
+      Để biết các ví dụ cụ thể, hãy truy cập:
+      <ph name="PROXY_HELP_URL" />.
+
+      Nếu bạn bật cài đặt này, <ph name="PRODUCT_NAME" /> và ứng dụng ARC sẽ bỏ qua tất cả các tùy chọn liên quan đến proxy đã chỉ định từ dòng lệnh.
+
+      Không đặt các chính sách này sẽ cho phép người dùng tự chọn cài đặt proxy.</translation>
 <translation id="3213821784736959823">Kiểm soát xem máy khách DNS tích hợp có được sử dụng trong <ph name="PRODUCT_NAME" />.
 
       Nếu chính sách được đặt thành đúng, máy khách DNS tích hợp sẽ được sử dụng, nếu có sẵn.
@@ -719,6 +736,7 @@ Khi chính sách này được đặt thành false hoặc không được địn
       Nếu cài đặt này được bật hoặc không được định cấu hình, người dùng có thể bật proxy máy in máy chủ ảo bằng cách xác thực bằng tài khoản Google của họ.
 
       Nếu cài đặt này được bật, người dùng không thể bật proxy và máy sẽ không được phép chia sẻ máy in với <ph name="CLOUD_PRINT_NAME" />.</translation>
+<translation id="3297010562646015826">Bật kết thúc quá trình trong Trình quản lý tác vụ</translation>
 <translation id="3322771899429619102">Cho phép bạn thiết lập danh sách các mẫu URL chỉ định những trang web được phép sử dụng tạo khóa. Nếu một mẫu URL nằm trong 'KeygenBlockedForUrls', chính sách đó sẽ ghi đè các ngoại lệ này.
 
           Nếu không thiết lập chính sách này, giá trị mặc định chung sẽ được sử dụng cho tất cả trang web từ chính sách 'DefaultKeygenSetting' nếu chính sách này được đặt hoặc từ cấu hình cá nhân của người dùng.</translation>
@@ -741,6 +759,9 @@ Khi chính sách này được đặt thành false hoặc không được địn
 
       Nếu chính sách này được đặt thành sai, <ph name="PRODUCT_OS_NAME" /> sẽ không cho phép bắt đầu phiên khách.</translation>
 <translation id="3428247105888806363">Bật dự đoán mạng</translation>
+<translation id="3449886121729668969">Định cấu hình cài đặt proxy cho <ph name="PRODUCT_NAME" />. Những cài đặt proxy này cũng sẽ khả dụng cho ứng dụng ARC.
+
+      Chính sách chưa sẵn sàng để sử dụng, vui lòng không sử dụng chính sách này.</translation>
 <translation id="3460784402832014830">Chỉ định URL mà công cụ tìm kiếm sử dụng để cung cấp trang tab mới.
 
           Chính sách này là tùy chọn. Nếu không được đặt, sẽ không có trang tab mới nào được cung cấp.
@@ -751,28 +772,19 @@ Khi chính sách này được đặt thành false hoặc không được địn
           Nếu chính sách này được đặt thành Đúng, độ trễ quản lý nguồn và giới hạn thời lượng phiên sẽ không bắt đầu chạy cho đến sau khi hoạt động đầu tiên của người dùng được quan sát thấy trong phiên.
 
           Nếu chính sách này bị đặt thành Sai hoặc không được đặt, độ trễ quản lý nguồn và giới hạn thời lượng phiên sẽ bắt đầu chạy ngay lập tức khi bắt đầu phiên.</translation>
+<translation id="3469657928310999477"><ph name="PRODUCT_NAME" /> sẽ bỏ qua mọi proxy cho danh sách các máy chủ lưu trữ được cung cấp ở đây. Ứng dụng ARC có thể sử dụng danh sách này làm danh sách các quy tắc bỏ qua.
+
+          Chính sách này chỉ có hiệu lực nếu bạn đã chọn cài đặt proxy thủ công tại 'Chọn cách chỉ định cài đặt máy chủ proxy'.
+
+          Bạn không nên đặt chính sách này nếu bạn đã chọn bất kỳ chế độ nào khác để đặt chính sách proxy.
+
+          Để biết thêm ví dụ cụ thể, hãy truy cập:
+          <ph name="PROXY_HELP_URL" />.</translation>
 <translation id="3478024346823118645">Xóa dữ liệu người dùng khi đăng xuất</translation>
 <translation id="348495353354674884">Bật bàn phím ảo</translation>
 <translation id="3496296378755072552">Trình quản lý mật khẩu</translation>
 <translation id="349667858031092827">Không bao giờ tự động phát hiện múi giờ.</translation>
-<translation id="3502472987829488885">Cho phép bạn chỉ định máy chủ proxy mà <ph name="PRODUCT_NAME" /> và ứng dụng ARC sử dụng, đồng thời ngăn người dùng thay đổi cài đặt proxy.
-
-          Nếu bạn chọn không bao giờ sử dụng máy chủ proxy và luôn kết nối trực tiếp, tất cả các tùy chọn khác sẽ được bỏ qua. Ứng dụng ARC sẽ sử dụng máy chủ proxy mặc định của mạng hiện tại nếu có.
-
-          Nếu bạn chọn sử dụng cài đặt proxy hệ thống, tất cả các tùy chọn khác sẽ được bỏ qua. Ứng dụng ARC sẽ sử dụng máy chủ proxy mặc định của mạng hiện tại nếu có.
-
-          Nếu bạn chọn tự động phát hiện máy chủ proxy, tất cả các tùy chọn khác sẽ được bỏ qua.
-
-          Nếu chọn chế độ proxy máy chủ cố định, bạn có thể chỉ định thêm tùy chọn trong 'Địa chỉ hoặc URL của máy chủ proxy' và 'Danh sách được phân cách bằng dấu phẩy các quy tắc bỏ qua proxy'. Ứng dụng ARC sẽ chỉ sử dụng máy chủ proxy HTTP có mức độ ưu tiên cao nhất.
-
-          Nếu chọn sử dụng tập lệnh proxy .pac, bạn phải chỉ định URL cho tập lệnh trong 'URL cho tệp .pac proxy'.
-
-          Để biết các ví dụ chi tiết, hãy truy cập:
-          <ph name="PROXY_HELP_URL" />
-
-          Nếu bạn bật cài đặt này, <ph name="PRODUCT_NAME" /> và ứng dụng ARC sẽ bỏ qua tất cả các tùy chọn liên quan đến proxy đã chỉ định từ dòng lệnh.
-
-          Không đặt chính sách này sẽ cho phép người dùng tự chọn cài đặt proxy.</translation>
+<translation id="350443680860256679">Định cấu hình ARC</translation>
 <translation id="3504791027627803580">Chỉ định URL của công cụ tìm kiếm được dùng để cung cấp tìm kiếm theo hình ảnh. Yêu cầu tìm kiếm sẽ được gửi bằng phương thức GET. Nếu đặt chính sách DefaultSearchProviderImageURLPostParams thì yêu cầu tìm kiếm theo hình ảnh sẽ sử dụng phương thức POST thay thế.
 
           Chính sách này là tùy chọn. Nếu không đặt thì sẽ không có tìm kiếm theo hình ảnh nào được sử dụng.
@@ -891,6 +903,7 @@ Khi chính sách này được đặt thành false hoặc không được địn
 <translation id="3967075520570946456">Bật hiển thị trang chào mừng vào lần khởi chạy trình duyệt đầu tiên sau khi nâng cấp hệ điều hành.</translation>
 <translation id="3973371701361892765">Không bao giờ tự động ẩn giá</translation>
 <translation id="3984028218719007910">Xác định liệu <ph name="PRODUCT_OS_NAME" /> có lưu dữ liệu tài khoản trên máy sau khi đăng xuất hay không. Nếu được đặt thành đúng, không có tài khoản lâu dài nào được <ph name="PRODUCT_OS_NAME" /> lưu và tất cả các dữ liệu từ phiên của người dùng sẽ bị hủy bỏ sau khi đăng xuất. Nếu chính sách này được đặt thành sai hoặc không được định cấu hình, thiết bị có thể lưu lại dữ liệu người dùng trên máy (được mã hóa).</translation>
+<translation id="3997519162482760140">URL sẽ được cấp quyền truy cập thiết bị quay video trên các trang đăng nhập SAML</translation>
 <translation id="4001275826058808087">Quản trị viên CNTT của thiết bị doanh nghiệp có thể sử dụng cờ này để kiểm soát xem có cho phép người dùng đổi phiếu mua hàng thông qua Đăng ký Chrome OS hay không.
 
       Nếu chính sách này được đặt thành true hoặc không được đặt, người dùng sẽ có thể đổi phiếu mua hàng thông qua Đăng ký Chrome OS.
@@ -916,22 +929,6 @@ Khi chính sách này được đặt thành false hoặc không được địn
           Nếu chính sách này được đặt thành 'Lưu giữ cookie trong thời hạn của phiên' thì cookie sẽ bị xóa khi phiên đóng. Xin lưu ý rằng nếu <ph name="PRODUCT_NAME" /> đang chạy trong 'chế độ nền', phiên có thể không đóng khi cửa sổ cuối cùng đóng. Vui lòng xem chính sách 'BackgroundModeEnabled' để biết thêm thông tin về cách định cấu hình thao tác này.
 
           Nếu chính sách này không được đặt, 'AllowCookies' sẽ được sử dụng và người dùng có thể thay đổi tùy chọn đó.</translation>
-<translation id="4098957623809244159">Chính sách này không được dùng nữa, thay vào đó hãy sử dụng ProxyMode.
-
-          Cho phép bạn chỉ định máy chủ proxy mà <ph name="PRODUCT_NAME" /> và ứng dụng ARC sử dụng và ngăn người dùng thay đổi cài đặt proxy.
-
-          Nếu bạn chọn không bao giờ sử dụng máy chủ proxy và luôn kết nối trực tiếp, tất cả các tùy chọn khác đều được bỏ qua.
-
-          Nếu bạn chọn sử dụng máy chủ proxy hoặc tự động phát hiện máy chủ proxy, tất cả các tùy chọn khác đều được bỏ qua.
-
-          Nếu chọn cài đặt proxy thủ công, bạn có thể chỉ định thêm tùy chọn trong 'Địa chỉ hoặc URL của máy chủ proxy', 'URL tới tệp .pac proxy' và 'Danh sách các quy tắc bỏ qua proxy được phân cách bằng dấu phẩy'.
-
-          Để xem ví dụ chi tiết, hãy truy cập:
-          <ph name="PROXY_HELP_URL" />
-
-          Nếu bạn bật cài đặt này, <ph name="PRODUCT_NAME" /> sẽ bỏ qua tất cả các tùy chọn liên quan đến proxy được chỉ định từ dòng lệnh.
-
-          Không đặt chính sách này sẽ cho phép người dùng tự chọn cài đặt proxy.</translation>
 <translation id="4103289232974211388">Chuyển hướng tới SAML IdP sau khi xác nhận người dùng</translation>
 <translation id="410478022164847452">Chỉ định khoảng thời gian không có thao tác nhập của người dùng mà sau khoảng thời gian đó hành động không sử dụng được thực hiện khi chạy trên nguồn AC.
 
@@ -940,6 +937,9 @@ Khi chính sách này được đặt thành false hoặc không được địn
           Khi chính sách này không được đặt, khoảng thời gian mặc định sẽ được sử dụng.
 
           Phải chỉ định giá trị chính sách bằng mili giây.</translation>
+<translation id="4115096483386877940">Cho phép khóa màn hình.
+
+      Nếu chính sách này được đặt thành false, người dùng sẽ không thể khóa màn hình (chỉ có thể đăng xuất khỏi phiên người dùng). Nếu cài đặt này được đặt thành true hoặc không được đặt, người dùng đã xác thực bằng mật khẩu có thể khóa màn hình.</translation>
 <translation id="4121350739760194865">Chặn các quảng cáo ứng dụng xuất hiện trên trang tab mới</translation>
 <translation id="4147054660081653009">Chứng chỉ ứng dụng để kết nối với RemoteAccessHostTokenValidationUrl.
 
@@ -1014,6 +1014,7 @@ Khi chính sách này được đặt thành false hoặc không được địn
 <translation id="4449545651113180484">Xoay màn hình 270 độ theo chiều kim đồng hồ</translation>
 <translation id="4467952432486360968">Chặn cookie của bên thứ ba</translation>
 <translation id="4474167089968829729">Bật lưu mật khẩu cho trình quản lý mật khẩu</translation>
+<translation id="447686899376429408">Nếu tùy chọn này được đặt là true hoặc không được đặt, thì người dùng có thể truyền tab, trang web hoặc màn hình từ trình duyệt. Nếu được đặt là false, tùy chọn này sẽ bị vô hiệu hóa.</translation>
 <translation id="4480694116501920047">Buộc Tìm kiếm an toàn</translation>
 <translation id="4482640907922304445">Hiển thị nút Trang chủ trên thanh công cụ của <ph name="PRODUCT_NAME" />.
 
@@ -1251,11 +1252,6 @@ Khi chính sách này được đặt thành false hoặc không được địn
 <translation id="5307432759655324440">Tính khả dụng của chế độ ẩn danh</translation>
 <translation id="5318185076587284965">Cho phép máy chủ truy cập từ xa sử dụng máy chủ chuyển tiếp</translation>
 <translation id="5330684698007383292">Cho phép <ph name="PRODUCT_FRAME_NAME" /> xử lý các loại nội dung sau</translation>
-<translation id="5345267406698765263">Chỉ định chính sách ứng dụng ARC làm chuỗi JSON có thể được
-      chuyển giao nguyên trạng cho thời gian chạy ARC. Tại thời điểm này,
-      cài đặt này chỉ được sử dụng để chỉ định bắt buộc cài đặt ứng dụng.
-
-      Nếu chính sách này không được đặt thì sẽ không có ứng dụng nào được cài đặt tự động.</translation>
 <translation id="5365946944967967336">Hiển thị nút Trang chủ trên thanh công cụ</translation>
 <translation id="5366977351895725771">Nếu đặt thành sai, tác vụ tạo tài khoản người dùng bị giám sát của người dùng này sẽ bị tắt. Mọi tài khoản người dùng bị giám sát hiện có sẽ vẫn khả dụng.
 
@@ -1387,7 +1383,6 @@ Khi chính sách này được đặt thành false hoặc không được địn
 
       Nếu chọn 'Bắt buộc', bạn CHỈ có thể mở trang ở chế độ Ẩn danh.</translation>
 <translation id="5836064773277134605">Hạn chế phạm vi cổng UDP được máy chủ truy cập từ xa sử dụng</translation>
-<translation id="5845159892130426052">Bật API ShowModalDialog qua 2015.04.30</translation>
 <translation id="5862253018042179045">Đặt trạng thái mặc định của tính năng trợ năng phản hồi bằng giọng nói trên màn hình đăng nhập.
 
           Nếu chính sách này được đặt thành true, phản hồi bằng giọng nói sẽ được bật khi màn hình đăng nhập hiển thị.
@@ -1418,14 +1413,6 @@ Khi chính sách này được đặt thành false hoặc không được địn
 <translation id="5893553533827140852">Nếu cài đặt này được bật, yêu cầu xác thực gnubby sẽ được proxy qua kết nối máy chủ từ xa.
 
           Nếu cài đặt này bị tắt hoặc không được định cấu hình, yêu cầu xác thực gnubby sẽ không được proxy.</translation>
-<translation id="5900959132054596599"><ph name="PRODUCT_NAME" /> và ứng dụng ARC sẽ bỏ qua mọi proxy cho danh sách các máy chủ lưu trữ được cung cấp ở đây.
-
-          Chính sách này chỉ có hiệu lực nếu bạn đã chọn cài đặt proxy thủ công tại 'Chọn cách chỉ định cài đặt máy chủ proxy'.
-
-          Bạn không nên đặt chính sách này nếu bạn đã chọn bất kỳ chế độ nào khác để đặt chính sách proxy.
-
-          Để biết thêm ví dụ cụ thể, hãy truy cập:
-          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="5921713479449475707">Cho phép tài nguyên đã tải xuống tự động cập nhật qua HTTP</translation>
 <translation id="5921888683953999946">Đặt trạng thái mặc định của tính năng trợ năng con trỏ lớn trên màn hình đăng nhập.
 
@@ -1473,6 +1460,9 @@ Khi chính sách này được đặt thành false hoặc không được địn
       Chính sách này ảnh hưởng tới tất cả các loại phương tiện lưu trữ. Ví dụ: ổ USB flash, ổ đĩa cứng bên ngoài, SD và các thẻ nhớ khác, bộ nhớ quang v.v.. Bộ nhớ trong không bị ảnh hưởng, do đó vẫn có thể truy cập vào các tệp đã lưu trong thư mục Tải xuống. Google Drive cũng không bị ảnh hưởng bởi chính sách này.
 
       Nếu cài đặt này bị tắt hoặc không được định cấu hình thì người dùng có thể sử dụng tất cả các loại bộ nhớ ngoài được hỗ trợ trên thiết bị của họ.</translation>
+<translation id="6076099373507468537">Xác định danh sách thiết bị USB được phép tách khỏi trình điều khiển nhân hệ điều hành để sử dụng thông qua API chrome.usb ngay bên trong ứng dụng web. Mục nhập là các cặp Số nhận dạng nhà cung cấp USB và Số nhận dạng sản phẩm để xác định một phần cứng cụ thể.
+
+      Nếu chính sách này chưa được định cấu hình, danh sách thiết bị USB có thể tách là trống.</translation>
 <translation id="6095999036251797924">Chỉ định khoảng thời gian không có thao tác nhập của người dùng mà sau khoảng thời gian đó màn hình bị khóa khi chạy trên nguồn AC hoặc pin.
 
           Khi được đặt thành giá trị lớn hơn không, khoảng thời gian này thể hiện khoảng thời gian mà người dùng không sử dụng trước khi <ph name="PRODUCT_OS_NAME" /> khóa màn hình.
@@ -1834,11 +1824,6 @@ Khi chính sách này được đặt thành false hoặc không được địn
 
           Nếu chính sách "RestoreOnStartup" được đặt để khôi phục URL từ các phiên trước đó, chính sách này sẽ không được áp dụng và cookie sẽ được lưu vĩnh viễn cho các trang web đó.</translation>
 <translation id="7207095846245296855">Bắt buộc bật Tìm kiếm an toàn của Google</translation>
-<translation id="7213425178181578730">Nếu chính sách này được đặt thành false, <ph name="PRODUCT_OS_NAME" /> sẽ tắt Bluetooth và người dùng không thể bật trở lại.
-
-      Nếu chính sách này được đặt thành true hoặc không được đặt, người dùng có thể bật hoặc tắt Bluetooth theo ý muốn.
-
-      Nếu chính sách này được đặt, người dùng không thể thay đổi hoặc ghi đè chính sách.</translation>
 <translation id="7216442368414164495">Cho phép người dùng chọn sử dụng báo cáo mở rộng trong Duyệt web an toàn</translation>
 <translation id="7227967227357489766">Xác định danh sách những người dùng được phép đăng nhập vào thiết bị. Các mục nhập sẽ có dạng <ph name="USER_WHITELIST_ENTRY_FORMAT" />, chẳng hạn như <ph name="USER_WHITELIST_ENTRY_EXAMPLE" />. Để cho phép bất kỳ người dùng nào trên miền, hãy sử dụng các mục nhập có dạng <ph name="USER_WHITELIST_ENTRY_WILDCARD" />.
 
@@ -1850,6 +1835,7 @@ Khi chính sách này được đặt thành false hoặc không được địn
           Nếu bạn đặt chính sách này, người dùng có thể tạm thời ghi đè chính sách bằng cách bật hoặc tắt kính lúp màn hình. Tuy nhiên, lựa chọn của người dùng sẽ không được duy trì mãi và cài đặt mặc định được khôi phục bất cứ khi nào màn hình đăng nhập mới được hiển thị hoặc người dùng không thực hiện thao tác nào trên màn hình đăng nhập trong một phút.
 
           Nếu không đặt chính sách này, kính lúp màn hình bị tắt khi màn hình đăng nhập hiển thị lần đầu. Người dùng có thể bật hoặc tắt kính lúp màn hình bất cứ lúc nào và trạng thái của kính lúp trên màn hình đăng nhập được duy trì giữa những người dùng.</translation>
+<translation id="7249828445670652637">Bật chứng chỉ CA <ph name="PRODUCT_OS_NAME" /> đối với ứng dụng ARC</translation>
 <translation id="7258823566580374486">Bật tính năng ẩn của máy chủ truy cập từ xa</translation>
 <translation id="7260277299188117560">Tự động cập nhật p2p được bật</translation>
 <translation id="7267809745244694722">Các phím phương tiện mặc định cho phím chức năng</translation>
@@ -1948,9 +1934,6 @@ Khi chính sách này được đặt thành false hoặc không được địn
 <translation id="7632724434767231364">Tên thư viện GSSAPI</translation>
 <translation id="7635471475589566552">Định cấu hình ngôn ngữ ứng dụng trong <ph name="PRODUCT_NAME" /> và ngăn người dùng thay đổi ngôn ngữ này. Nếu bạn bật cài đặt này, <ph name="PRODUCT_NAME" /> sẽ sử dụng ngôn ngữ được chỉ định. Nếu ngôn ngữ được định cấu hình không được hỗ trợ, 'en-US' sẽ được sử dụng thay thế. Nếu bạn tắt hoặc không thiết lập cài đặt này, <ph name="PRODUCT_NAME" /> sẽ sử dụng ngôn ngữ ưa thích do người dùng chỉ định (nếu được định cấu hình), ngôn ngữ hệ thống hoặc ngôn ngữ dự phòng 'en-US'.</translation>
 <translation id="7651739109954974365">Xác định liệu chuyển vùng dữ liệu có được bật cho thiết bị hay không. Nếu được đặt thành đúng, chuyển vùng dữ liệu sẽ được phép. Nếu không được định cấu hình hoặc được đặt thành sai, chuyển vùng dữ liệu sẽ không khả dụng.</translation>
-<translation id="7667184304362487902">Định cấu hình cài đặt proxy cho <ph name="PRODUCT_NAME" /> và ứng dụng ARC.
-
-      Chính sách chưa sẵn sàng để sử dụng, vui lòng không sử dụng chính sách này.</translation>
 <translation id="76810863974142048">URL nơi ứng dụng truy cập từ xa sẽ lấy mã thông báo xác thực.
 
           Nếu chính sách này được đặt thì máy chủ truy cập từ xa sẽ yêu cầu xác thực ứng dụng để lấy mã thông báo xác thực từ URL này nhằm mục đích kết nối. Phải sử dụng chính sách này cùng với RemoteAccessHostTokenValidationUrl.
@@ -2006,6 +1989,14 @@ Khi chính sách này được đặt thành false hoặc không được địn
       được báo cáo. Nếu chính sách này được đặt thành true hoặc không được
       đặt, thông tin về phiên sẽ được báo cáo.</translation>
 <translation id="7774768074957326919">Sử dụng cài đặt proxy hệ thống</translation>
+<translation id="7775831859772431793">Bạn có thể chỉ định URL của máy chủ proxy ở đây.
+
+          Chính sách này chỉ có hiệu lực nếu bạn đã chọn cài đặt proxy thủ công tại 'Chọn cách chỉ định cài đặt máy chủ proxy'.
+
+          Bạn không nên đặt chính sách này nếu bạn đã chọn bất kỳ chế độ nào khác để đặt chính sách proxy.
+
+          Để có thêm tùy chọn và các ví dụ cụ thể, hãy truy cập:
+          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="7788511847830146438">Cho mỗi hồ sơ</translation>
 <translation id="7796141075993499320">Cho phép bạn thiết lập danh sách các mẫu url chỉ định những trang web được phép chạy plugin.
 
@@ -2033,25 +2024,25 @@ Khi chính sách này được đặt thành false hoặc không được địn
       Nếu không được đặt thì chính sách này sẽ hoạt động như thể TimezoneAutomaticDetectionUsersDecide được đặt.
 
       Nếu được đặt thì chính sách SystemTimezone sẽ ghi đè chính sách này. Trong trường hợp này, tính năng phát hiện múi giờ tự động sẽ hoàn toàn bị tắt.</translation>
+<translation id="787125417158068494">Nếu được đặt thành SyncDisabled hoặc không được định cấu hình, các chứng chỉ <ph name="PRODUCT_OS_NAME" /> sẽ không khả dụng cho ứng dụng ARC.
+
+      Nếu được đặt thành CopyCaCerts, tất cả các chứng chỉ CA đã cài đặt ONC có <ph name="WEB_TRUSTED_BIT" /> sẽ khả dụng cho ứng dụng ARC.</translation>
 <translation id="7882585827992171421">Chính sách này chỉ hoạt động trong chế độ bán lẻ.
 
       Xác định id của tiện ích được sử dụng làm trình bảo vệ màn hình trên màn hình đăng nhập. Tiện ích phải thuộc AppPack được định cấu hình cho miền này thông qua chính sách DeviceAppPack.</translation>
 <translation id="7882890448959833986">Ẩn cảnh báo hệ điều hành không được hỗ trợ</translation>
 <translation id="7912255076272890813">Định cấu hình loại ứng dụng/tiện ích được cho phép</translation>
-<translation id="7928112526630078979">Cho phép bạn chỉ định máy chủ proxy mà <ph name="PRODUCT_NAME" /> và ứng dụng ARC sử dụng, đồng thời ngăn người dùng thay đổi cài đặt proxy.
+<translation id="7915236031252389808">Bạn có thể chỉ định URL cho tệp .pac proxy tại đây.
 
-      Nếu bạn chọn không bao giờ sử dụng máy chủ proxy và luôn kết nối trực tiếp, tất cả các tùy chọn khác sẽ được bỏ qua. Ứng dụng ARC sẽ sử dụng máy chủ proxy mặc định của mạng hiện tại nếu có.
+          Chính sách này chỉ có hiệu lực nếu bạn đã chọn cài đặt proxy thủ công tại 'Chọn cách chỉ định cài đặt máy chủ proxy'.
 
-      Nếu bạn chọn tự động phát hiện máy chủ proxy, tất cả các tùy chọn khác sẽ được bỏ qua.
+          Bạn không nên đặt chính sách này nếu bạn đã chọn bất kỳ chế độ nào khác để đặt chính sách proxy.
 
-      Để biết các ví dụ chi tiết, hãy truy cập:
-      <ph name="PROXY_HELP_URL" />
-
-      Nếu bạn bật cài đặt này, <ph name="PRODUCT_NAME" /> và ứng dụng ARC sẽ bỏ qua tất cả các tùy chọn liên quan đến proxy đã chỉ định từ dòng lệnh.
-
-      Không đặt các chính sách này sẽ cho phép người dùng tự chọn cài đặt proxy.</translation>
+         Để biết các ví dụ cụ thể, hãy truy cập:
+          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="793134539373873765">Chỉ định có sử dụng p2p cho các phần tải dữ liệu cập nhật OS không. Nếu được đặt thành True, các thiết bị sẽ chia sẻ và cố gắng sử dụng các phần tải dữ liệu cập nhật trên LAN, có thể làm giảm nghẽn và mức sử dụng băng thông Internet. Nếu phần tải dữ liệu cập nhật không khả dụng trên LAN, thiết bị sẽ quay lại tải xuống từ máy chủ cập nhật. Nếu được đặt thành False hay không được định cấu hình, p2p sẽ không được sử dụng.</translation>
 <translation id="7933141401888114454">Cho phép tạo người dùng được giám sát</translation>
+<translation id="793473937901685727">Đặt mức độ khả dụng của chứng chỉ cho ứng dụng ARC</translation>
 <translation id="7936098023732125869">Cho phép sử dụng nhà cung cấp dịch vụ tìm kiếm mặc định.
 
           Nếu bạn bật cài đặt này, tìm kiếm mặc định được thực hiện khi người dùng nhập văn bản vào thanh địa chỉ không phải là URL.
@@ -2168,6 +2159,28 @@ Khi chính sách này được đặt thành false hoặc không được địn
       Nếu chính sách không được đặt, <ph name="PRODUCT_OS_NAME" /> sẽ sử dụng ID tài khoản email của tài khoản trong thiết bị làm tên hiển thị trên màn hình đăng nhập.
 
       Chính sách này bị bỏ qua đối với các tài khoản người dùng thông thường.</translation>
+<translation id="8279832363395120715">Xóa phần thông tin nhạy cảm trong bảo mật và quyền riêng tư của URL https:// trước khi gửi URL này tới tập lệnh PAC (Tự động định cấu hình proxy) do <ph name="PRODUCT_NAME" /> sử dụng trong quá trình phân giải proxy.
+
+      Nếu cài đặt là True, tính năng bảo mật sẽ được bật và URL https:// sẽ bị
+      xóa trước khi được gửi tới tập lệnh PAC. Theo cách này, tập lệnh PAC
+      không thể xem dữ liệu do kênh được mã hóa bảo vệ ban đầu
+      (chẳng hạn như truy vấn và đường dẫn của URL).
+
+      Nếu cài đặt là False, tính năng bảo mật sẽ bị vô hiệu hóa và tập lệnh PAC
+      sẽ được cấp cho khả năng xem tất cả thành phần của URL https://.
+      Điều này áp dụng cho tất cả tập lệnh PAC bất kể nguồn gốc là gì (bao gồm
+      các tập lệnh được tìm nạp qua chuyển tuyến không an toàn hoặc bị phát
+      hiện là không an toàn thông qua WPAD).
+
+      Cài đặt này được đặt mặc định này là True (tính năng bảo mật được bật),
+      trừ những người dùng doanh nghiệp Chrome OS có cài đặt này hiện được 
+      đặt này là False.
+
+      Chúng tôi đề xuất đặt cài đặt này là True. Lý do duy nhất để đặt cài
+      đặt này thành False là liệu điều đó có gây ra sự cố tương thích
+      với tập lệnh PAC hiện có hay không.
+
+      Chúng tôi mong muốn xóa ghi đè này trong tương lai.</translation>
 <translation id="8285435910062771358">Đã bật kính lúp toàn màn hình</translation>
 <translation id="8294750666104911727">Thông thường các trang có Tương thích với X-UA được đặt thành chrome=1 sẽ được hiển thị trong <ph name="PRODUCT_FRAME_NAME" /> bất kể chính sách 'ChromeFrameRendererSettings'.
 
@@ -2188,6 +2201,7 @@ Khi chính sách này được đặt thành false hoặc không được địn
 
       Giá trị của chính sách phải được chỉ định theo mili giây.</translation>
 <translation id="8344454543174932833">Nhập dấu trang từ trình duyệt mặc định trong lần chạy đầu tiên</translation>
+<translation id="8359734107661430198">Bật API ExampleDeprecatedFeature đến ngày 2 tháng 9 năm 2008</translation>
 <translation id="8360452361555133173">Bật hiển thị trang chào mừng vào lần khởi chạy trình duyệt đầu tiên sau khi nâng cấp hệ điều hành.
 
       Nếu chính sách này được đặt thành true hoặc không được định cấu hình, trình duyệt sẽ hiển thị lại trang chào mừng vào lần khởi chạy đầu tiên sau khi nâng cấp hệ điều hành.
@@ -2197,9 +2211,15 @@ Khi chính sách này được đặt thành false hoặc không được địn
 <translation id="8382184662529825177">Cho phép sử dụng chứng thực từ xa để bảo vệ nội dung cho thiết bị</translation>
 <translation id="838870586332499308">Bật chuyển vùng dữ liệu</translation>
 <translation id="8412312801707973447">Liệu các kiểm tra OCSP/CRL trực tuyến có được thực hiện hay không</translation>
+<translation id="8413348101535146315">Bật kết thúc quá trình trong Trình quản lý tác vụ của <ph name="PRODUCT_NAME" />.
+
+      Nếu được đặt thành false thì nút 'Kết thúc quá trình' sẽ bị tắt trong Trình quản lý tác vụ.
+
+      Nếu được đặt thành true hoặc không được định cấu hình thì người dùng có thể kết thúc quá trình trong Trình quản lý tác vụ.</translation>
 <translation id="8424255554404582727">Đặt chế độ xoay màn hình mặc định, được áp dụng lại mỗi lần khởi động lại</translation>
 <translation id="8426231401662877819">Xoay màn hình 90 độ theo chiều kim đồng hồ</translation>
 <translation id="8451988835943702790">Sử dụng trang Tab mới làm trang chủ</translation>
+<translation id="8458790683633857482">Chỉ định nhóm chính sách sẽ được chuyển giao trong thời gian chạy ARC. Giá trị phải là JSON hợp lệ.</translation>
 <translation id="8465065632133292531">Tham số cho URL tức thì sử dụng POST</translation>
 <translation id="847472800012384958">Không cho phép bất kỳ trang web nào hiển thị cửa sổ bật lên</translation>
 <translation id="8477885780684655676">TLS 1.0</translation>
@@ -2381,6 +2401,13 @@ Khi chính sách này được đặt thành false hoặc không được địn
 
           Phải chỉ định giá trị chính sách bằng mili giây. Các giá trị được giới hạn ở mức nhỏ hơn độ trễ khi không sử dụng.</translation>
 <translation id="891435090623616439">được mã hóa dưới dạng chuỗi JSON, để biết chi tiết hãy xem <ph name="COMPLEX_POLICIES_URL" /></translation>
+<translation id="8929359433203547810">Nếu chính sách này được đặt thành false, <ph name="PRODUCT_OS_NAME" /> sẽ tắt Bluetooth và người dùng không thể bật trở lại.
+
+      Nếu chính sách này được đặt thành true hoặc không được đặt, người dùng có thể bật hoặc tắt Bluetooth theo ý muốn.
+
+      Nếu chính sách này được đặt, người dùng không thể thay đổi hoặc ghi đè chính sách.
+
+      Sau khi bật Bluetooth, cần khởi động lại thiết bị để các thay đổi có hiệu lực (không cần khởi động lại thiết bị khi tắt Bluetooth).</translation>
 <translation id="8947415621777543415">Báo cáo vị trí thiết bị</translation>
 <translation id="8951350807133946005">Thiết lập thư mục bộ nhớ cache trên đĩa</translation>
 <translation id="8955719471735800169">Quay lại đầu trang</translation>
@@ -2410,6 +2437,25 @@ Khi chính sách này được đặt thành false hoặc không được địn
 <translation id="9112897538922695510">Cho phép bạn đăng ký danh sách trình xử lý giao thức. Đây có thể chỉ là một chính sách được đề xuất. Thuộc tính |protocol| của sản phẩm nên được đặt thành lược đồ chẳng hạn như 'mailto' và thuộc tính |url| nên được đặt thành mẫu URL của ứng dụng xử lý lược đồ. Mẫu có thể bao gồm '%s' mà nếu có mặt sẽ được thay thế bằng URL đã xử lý.
 
           Trình xử lý giao thức do chính sách đăng ký được hợp nhất với trình xử lý do người dùng đăng ký và cả hai đều khả dụng. Người dùng có thể ghi đè trình xử lý giao thức do chính sách cài đặt bằng cách cài đặt trình xử lý mặc định mới nhưng không thể xóa trình xử lý giao thức do chính sách đăng ký.</translation>
+<translation id="913138516158420759">Cho phép bạn chỉ định máy chủ proxy mà <ph name="PRODUCT_NAME" /> sử dụng và ngăn người dùng thay đổi cài đặt proxy. Ứng dụng ARC cũng có thể sử dụng máy chủ proxy này.
+
+          Nếu bạn chọn không bao giờ sử dụng máy chủ proxy và luôn kết nối trực tiếp, tất cả các tùy chọn khác đều được bỏ qua.
+
+          Nếu bạn chọn sử dụng cài đặt proxy hệ thống, tất cả các tùy chọn khác đều được bỏ qua.
+
+          Nếu bạn chọn tự động phát hiện máy chủ proxy, tất cả các tùy chọn khác đều được bỏ qua.
+
+          Nếu bạn chọn chế độ proxy máy chủ cố định, bạn có thể chỉ định thêm tùy chọn trong 'Địa chỉ hoặc URL của máy chủ proxy' và 'Danh sách các quy tắc bỏ qua proxy được phân cách bằng dấu phẩy'. Chỉ máy chủ proxy HTTP có mức độ ưu tiên cao nhất khả dụng cho ứng dụng ARC.
+
+          Nếu chọn sử dụng tập lệnh proxy .pac, bạn phải chỉ định URL cho tập lệnh trong 'URL cho tệp .pac proxy'.
+
+
+          Để biết các ví dụ cụ thể, hãy truy cập:
+          <ph name="PROXY_HELP_URL" />.
+
+          Nếu bạn bật cài đặt này, <ph name="PRODUCT_NAME" /> và ứng dụng ARC sẽ bỏ qua tất cả các tùy chọn liên quan đến proxy đã chỉ định từ dòng lệnh.
+
+          Không đặt chính sách này sẽ cho phép người dùng tự chọn cài đặt proxy.</translation>
 <translation id="913195841488580904">Chặn truy cập vào danh sách các URL</translation>
 <translation id="9135033364005346124">Bật proxy <ph name="CLOUD_PRINT_NAME" /></translation>
 <translation id="9147029539363974059">Gửi nhật ký hệ thống đến máy chủ quản lý để cho phép

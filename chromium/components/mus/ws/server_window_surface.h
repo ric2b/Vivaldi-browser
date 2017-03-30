@@ -33,7 +33,6 @@ class ServerWindowSurface : public mojom::Surface,
                             public mojo::CustomSurfaceConverter {
  public:
   ServerWindowSurface(ServerWindowSurfaceManager* manager,
-                      mojom::SurfaceType surface_type,
                       mojo::InterfaceRequest<mojom::Surface> request,
                       mojom::SurfaceClientPtr client);
 
@@ -70,7 +69,7 @@ class ServerWindowSurface : public mojom::Surface,
   // CompositorFrame of this window can only refer to windows within its
   // subtree. Windows referenced in |input| are stored in
   // |referenced_window_ids_|.
-  scoped_ptr<cc::CompositorFrame> ConvertCompositorFrame(
+  std::unique_ptr<cc::CompositorFrame> ConvertCompositorFrame(
       const mojom::CompositorFramePtr& input);
 
   // Overriden from CustomSurfaceConverter:
@@ -84,8 +83,6 @@ class ServerWindowSurface : public mojom::Surface,
   void SetBeginFrameSource(cc::BeginFrameSource* begin_frame_source) override;
 
   ServerWindowSurfaceManager* manager_;  // Owns this.
-
-  const mojom::SurfaceType surface_type_;
 
   // The set of Windows referenced in the last submitted CompositorFrame.
   std::set<WindowId> referenced_window_ids_;

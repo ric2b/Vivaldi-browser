@@ -222,6 +222,21 @@ BlobTransportController::ResponsesStatus BlobTransportController::GetResponses(
   BlobConsolidation* consolidation = it->second.get();
   const auto& consolidated_items = consolidation->consolidated_items();
 
+  // We need to calculate how much memory we expect to be writing to the memory
+  // segments so we can correctly map it the first time.
+  std::vector<size_t> shared_memory_sizes(memory_handles->size());
+  for (const BlobItemBytesRequest& request : requests) {
+    if (request.transport_strategy !=
+        IPCBlobItemRequestStrategy::SHARED_MEMORY) {
+      continue;
+    }
+    DCHECK_LT(request.handle_index, memory_handles->size())
+        << "Invalid handle index.";
+    shared_memory_sizes[request.handle_index] =
+        std::max<size_t>(shared_memory_sizes[request.handle_index],
+                         request.size + request.handle_offset);
+  }
+
   // Since we can be writing to the same shared memory handle from multiple
   // requests, we keep them in a vector and lazily create them.
   ScopedVector<SharedMemory> opened_memory;
@@ -254,10 +269,11 @@ BlobTransportController::ResponsesStatus BlobTransportController::GetResponses(
         SharedMemory* memory = opened_memory[request.handle_index];
         if (!memory) {
           SharedMemoryHandle& handle = (*memory_handles)[request.handle_index];
+          size_t size = shared_memory_sizes[request.handle_index];
           DCHECK(SharedMemory::IsHandleValid(handle));
           std::unique_ptr<SharedMemory> shared_memory(
               new SharedMemory(handle, false));
-          if (!shared_memory->Map(request.size))
+          if (!shared_memory->Map(size))
             return ResponsesStatus::SHARED_MEMORY_MAP_FAILED;
           memory = shared_memory.get();
           opened_memory[request.handle_index] = shared_memory.release();

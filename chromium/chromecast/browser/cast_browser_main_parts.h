@@ -14,6 +14,7 @@
 
 namespace base {
 class SingleThreadTaskRunner;
+class Thread;
 }  // namespace base
 
 namespace net {
@@ -21,6 +22,7 @@ class NetLog;
 }
 
 namespace chromecast {
+class CastMemoryPressureMonitor;
 
 namespace media {
 class MediaPipelineBackendManager;
@@ -39,7 +41,7 @@ class CastBrowserMainParts : public content::BrowserMainParts {
                        URLRequestContextFactory* url_request_context_factory);
   ~CastBrowserMainParts() override;
 
-  scoped_refptr<base::SingleThreadTaskRunner> GetMediaTaskRunner() const;
+  scoped_refptr<base::SingleThreadTaskRunner> GetMediaTaskRunner();
 
 #if !defined(OS_ANDROID)
   media::MediaResourceTracker* media_resource_tracker();
@@ -64,12 +66,17 @@ class CastBrowserMainParts : public content::BrowserMainParts {
   std::unique_ptr<media::VideoPlaneController> video_plane_controller_;
 
 #if !defined(OS_ANDROID)
+  // CMA thread used by AudioManager, MojoRenderer, and MediaPipelineBackend.
+  std::unique_ptr<base::Thread> media_thread_;
+
   // Tracks usage of media resource by e.g. CMA pipeline, CDM.
   media::MediaResourceTracker* media_resource_tracker_;
 
   // Tracks all media pipeline backends.
   std::unique_ptr<media::MediaPipelineBackendManager>
       media_pipeline_backend_manager_;
+
+  std::unique_ptr<CastMemoryPressureMonitor> memory_pressure_monitor_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(CastBrowserMainParts);

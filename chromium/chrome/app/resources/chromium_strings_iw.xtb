@@ -53,6 +53,7 @@
 <translation id="2673087257647337101">‏כמעט מעודכן! הפעל מחדש את Chromium‏ כדי לסיים את העדכון.</translation>
 <translation id="2685838254101182273">‏Chromium הפסיק לעדכן את הגרסה הזו של מערכת ההפעלה שלך וכבר אינו תומך בה.</translation>
 <translation id="2705212601509139398">‏האתר הזה משתמש בפלאגין Chromium Frame. התמיכה בפלאגין הזה תסתיים בקרוב. הסר את ההתקנה שלו והורד דפדפן תואם.</translation>
+<translation id="2711502716910134313">‏כרטיסייה של Chromium</translation>
 <translation id="2770231113462710648">שנה את דפדפן ברירת המחדל ל:</translation>
 <translation id="2801146392936645542">‏<ph name="FILE_NAME" /> הוא קובץ זדוני, ו-Chromium חסם אותו.</translation>
 <translation id="2847479871509788944">‏הסר מ-Chromium...</translation>
@@ -66,7 +67,6 @@
 <translation id="3130323860337406239">‏Chromium משתמש במיקרופון שלך.</translation>
 <translation id="313551035350905294">‏אתה נכנס עם חשבון מנוהל ונותן למנהל המערכת שלו שליטה על הפרופיל שלך ב-Chromium. הנתונים שלך ב-Chromium, כמו יישומים, סימניות, היסטוריה, סיסמאות והגדרות אחרות ייקשרו באופן קבוע ל-<ph name="USER_NAME" />. תוכל למחוק את הנתונים האלה באמצעות לוח הבקרה של חשבונות Google, אבל לא תוכל לשייך את הנתונים האלה לחשבון אחר.</translation>
 <translation id="3190315855212034486">‏וואו! Chromium קרס. להפעיל מחדש עכשיו?</translation>
-<translation id="3197823471738295152">המכשיר שלך מעודכן.</translation>
 <translation id="3244477511402911926">‏מרכז ההתראות של Chromium</translation>
 <translation id="3256316712990552818">‏הועתק אל Chromium</translation>
 <translation id="3258596308407688501">‏Chromium אינו יכול לקרוא ולכתוב בספריית הנתונים שלו: <ph name="USER_DATA_DIRECTORY" /></translation>
@@ -118,6 +118,7 @@
 <translation id="549669000822060376">‏המתן בזמן ש-Chromium מתקין את עדכוני המערכת האחרונים.</translation>
 <translation id="5563479599352954471">חיפוש בנגיעה אחת</translation>
 <translation id="5620765574781326016">קרא מידע על נושאים באתרים בלי לעזוב את הדף.</translation>
+<translation id="5634636535844844681">‏כדי להשתמש ב-Chromium יש צורך ב-Windows מגירסה 7 ואילך.</translation>
 <translation id="5680901439334282664">‏היכנס אל Chromium</translation>
 <translation id="5772805321386874569">‏(נדרש <ph name="BEGIN_BUTTON" />אתחול<ph name="END_BUTTON" /> של Chromium)</translation>
 <translation id="5796460469508169315">‏Chromium כמעט מוכן.</translation>
@@ -177,6 +178,12 @@ Chromium לא יכול לשחזר את ההגדרות שלך.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7339898014177206373">חלון חדש</translation>
 <translation id="734373864078049451">‏היסטוריית האתרים, הסימניות ונתונים נוספים מ-Chromium נמצאים כאן.</translation>
+<translation id="7344413941077984497">‏כדי להגדיר אילו אתרים <ph name="NEW_PROFILE_NAME" /> יכול להציג, באפשרותך לקבוע הגבלות והגדרות מ-<ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. אם לא תשנה את הגדרות ברירת המחדל, <ph name="NEW_PROFILE_NAME" /> יוכל לגלוש בכל התוכן באינטרנט.
+
+כדי למנוע מ-<ph name="NEW_PROFILE_NAME" /> לגשת לחשבון שלך, הקפד לנעול את הפרופיל כשאינך משתמש ב-Chromium. כדי לעשות זאת, לחץ על שם הפרופיל שלך בפינה השמאלית העליונה של הדפדפן ובחר באפשרות 'צא והגדר נעילת ילדים'.
+<ph name="BEGIN_LINK_2" />למידע נוסף<ph name="END_LINK_2" />
+
+בדוק את האימייל בחשבון <ph name="ACCOUNT_EMAIL" /> לקבלת הנחיות נוספות.</translation>
 <translation id="7419987137528340081">‏אם אתה מעדיף לשמור את נתוני Chromium הקיימים שלך בנפרד, תוכל ליצור משתמש Chromium חדש עבור <ph name="USER_NAME" />.</translation>
 <translation id="7421823331379285070">‏Chromium דורש גרסת Windows XP או מאוחרת יותר. תכונות מסוימות עלולות שלא לפעול.</translation>
 <translation id="7463979740390522693">‏Chromium - הודעות (<ph name="QUANTITY" /> שלא נקראו)</translation>
@@ -205,6 +212,7 @@ Chromium לא יכול לשחזר את ההגדרות שלך.</translation>
 <translation id="8586442755830160949">‏Copyright <ph name="YEAR" /> The Chromium Authors. כל הזכויות שמורות.</translation>
 <translation id="8621669128220841554">‏ההתקנה נכשלה בשל שגיאה לא מזוהה. הורד שוב את Chromium.</translation>
 <translation id="8628626585870903697">‏Chromium אינו כולל מציג PDF, הנדרש להפעלת תצוגה מקדימה של הדפסה.</translation>
+<translation id="8667808506758191620">ה-<ph name="DEVICE_TYPE" /> שלך מעודכן.</translation>
 <translation id="8697124171261953979">‏הגדרה זו גם קובעת איזה דף מוצג כשאתה מפעיל את Chromium או מבצע חיפוש מסרגל הכתובות.</translation>
 <translation id="8704119203788522458">‏זהו ה-Chromium שלך</translation>
 <translation id="872034308864968620">‏אפשר ל-Chromium לפעול ברקע</translation>
@@ -221,7 +229,6 @@ Chromium לא יכול לשחזר את ההגדרות שלך.</translation>
 
 אם תמשיך בכניסה, המידע ב-Chromuim , כמו סימניות, היסטוריה והגדרות אחרות, ימוזג עם <ph name="ACCOUNT_EMAIL_NEW" />.</translation>
 <translation id="9013087743919948559">‏הוסף ל-‏Chromium‏</translation>
-<translation id="9013262824292842194">‏להפעלת Chromium יש להשתמש במערכת ההפעלה Windows Vista או Windows XP עם SP2 ואילך.</translation>
 <translation id="9019929317751753759">‏כדי לשפר את האבטחה של Chromium, השבתנו את התוסף הבא שאינו רשום ב-<ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> וייתכן שנוסף ללא ידיעתך.</translation>
 <translation id="9022552996538154597">‏היכנס אל Chromium</translation>
 <translation id="9036189287518468038">Chromium App Launcher</translation>

@@ -31,8 +31,9 @@
 
 namespace blink {
 
-CanvasRenderingContext::CanvasRenderingContext(HTMLCanvasElement* canvas)
+CanvasRenderingContext::CanvasRenderingContext(HTMLCanvasElement* canvas, OffscreenCanvas* offscreenCanvas)
     : m_canvas(canvas)
+    , m_offscreenCanvas(offscreenCanvas)
 {
 }
 
@@ -59,7 +60,7 @@ CanvasRenderingContext::ContextType CanvasRenderingContext::resolveContextTypeAl
     return type;
 }
 
-bool CanvasRenderingContext::wouldTaintOrigin(CanvasImageSource* imageSource)
+bool CanvasRenderingContext::wouldTaintOrigin(CanvasImageSource* imageSource, SecurityOrigin* destinationSecurityOrigin)
 {
     const KURL& sourceURL = imageSource->sourceURL();
     bool hasURL = (sourceURL.isValid() && !sourceURL.isAboutBlankURL());
@@ -71,7 +72,8 @@ bool CanvasRenderingContext::wouldTaintOrigin(CanvasImageSource* imageSource)
             return true;
     }
 
-    bool taintOrigin = imageSource->wouldTaintOrigin(canvas()->getSecurityOrigin());
+    ASSERT(!canvas() == !!destinationSecurityOrigin); // Must have one or the other
+    bool taintOrigin = imageSource->wouldTaintOrigin(destinationSecurityOrigin ? destinationSecurityOrigin : canvas()->getSecurityOrigin());
 
     if (hasURL) {
         if (taintOrigin)
@@ -85,6 +87,7 @@ bool CanvasRenderingContext::wouldTaintOrigin(CanvasImageSource* imageSource)
 DEFINE_TRACE(CanvasRenderingContext)
 {
     visitor->trace(m_canvas);
+    visitor->trace(m_offscreenCanvas);
 }
 
 } // namespace blink

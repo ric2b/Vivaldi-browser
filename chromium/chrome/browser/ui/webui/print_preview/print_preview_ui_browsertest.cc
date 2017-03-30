@@ -6,7 +6,7 @@
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/task_manager/task_manager_browsertest_util.h"
+#include "chrome/browser/task_management/task_manager_browsertest_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_dialogs.h"
@@ -28,11 +28,11 @@
 #include "ui/aura/window_tree_host.h"
 #endif
 
-using task_manager::browsertest_util::MatchAboutBlankTab;
-using task_manager::browsertest_util::MatchAnyPrint;
-using task_manager::browsertest_util::MatchAnyTab;
-using task_manager::browsertest_util::MatchPrint;
-using task_manager::browsertest_util::WaitForTaskManagerRows;
+using task_management::browsertest_util::MatchAboutBlankTab;
+using task_management::browsertest_util::MatchAnyPrint;
+using task_management::browsertest_util::MatchAnyTab;
+using task_management::browsertest_util::MatchPrint;
+using task_management::browsertest_util::WaitForTaskManagerRows;
 
 namespace {
 
@@ -91,10 +91,6 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewTest, PrintCommands) {
 #define MAYBE_TaskManagerNewPrintPreview TaskManagerNewPrintPreview
 #endif
 IN_PROC_BROWSER_TEST_F(PrintPreviewTest, MAYBE_TaskManagerNewPrintPreview) {
-  // This test is for the old implementation of the task manager. We must
-  // explicitly disable the new one.
-  task_manager::browsertest_util::EnableOldTaskManager();
-
   chrome::ShowTaskManager(browser());  // Show task manager BEFORE print dialog.
 
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(1, MatchAboutBlankTab()));
@@ -114,10 +110,6 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewTest, MAYBE_TaskManagerNewPrintPreview) {
 // http://crbug/367665.
 IN_PROC_BROWSER_TEST_F(PrintPreviewTest,
                        DISABLED_TaskManagerExistingPrintPreview) {
-  // This test is for the old implementation of the task manager. We must
-  // explicitly disable the new one.
-  task_manager::browsertest_util::EnableOldTaskManager();
-
   // Create the print preview dialog.
   Print();
 

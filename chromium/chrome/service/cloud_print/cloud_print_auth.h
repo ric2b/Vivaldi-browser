@@ -5,6 +5,7 @@
 #ifndef CHROME_SERVICE_CLOUD_PRINT_CLOUD_PRINT_AUTH_H_
 #define CHROME_SERVICE_CLOUD_PRINT_CLOUD_PRINT_AUTH_H_
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
@@ -21,10 +22,9 @@ namespace cloud_print {
 // CloudPrintAuth will obtain new OAuth token.
 // CloudPrintAuth will schedule periodic OAuth token refresh
 // It is running in the same thread as CloudPrintProxyBackend::Core.
-class CloudPrintAuth
-    : public base::RefCountedThreadSafe<CloudPrintAuth>,
-      public CloudPrintURLFetcherDelegate,
-      public gaia::GaiaOAuthClient::Delegate {
+class CloudPrintAuth : public base::RefCountedThreadSafe<CloudPrintAuth>,
+                       public CloudPrintURLFetcher::Delegate,
+                       public gaia::GaiaOAuthClient::Delegate {
  public:
   class Client {
    public:
@@ -69,7 +69,7 @@ class CloudPrintAuth
   CloudPrintURLFetcher::ResponseAction HandleJSONData(
       const net::URLFetcher* source,
       const GURL& url,
-      base::DictionaryValue* json_data,
+      const base::DictionaryValue* json_data,
       bool succeeded) override;
   CloudPrintURLFetcher::ResponseAction OnRequestAuthError() override;
   std::string GetAuthHeader() override;
@@ -80,7 +80,7 @@ class CloudPrintAuth
 
   Client* client_;
   gaia::OAuthClientInfo oauth_client_info_;
-  scoped_ptr<gaia::GaiaOAuthClient> oauth_client_;
+  std::unique_ptr<gaia::GaiaOAuthClient> oauth_client_;
 
   // The CloudPrintURLFetcher instance for the current request.
   scoped_refptr<CloudPrintURLFetcher> request_;

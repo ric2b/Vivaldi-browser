@@ -12,6 +12,7 @@
 #include "base/callback.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/json/json_string_value_serializer.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 
@@ -59,8 +60,8 @@ void GetSecondary(const base::ListValue* list,
 //      ...
 //    }
 //  }
-scoped_ptr<HistoryData::Associations> Parse(
-    scoped_ptr<base::DictionaryValue> dict) {
+std::unique_ptr<HistoryData::Associations> Parse(
+    std::unique_ptr<base::DictionaryValue> dict) {
   std::string version;
   if (!dict->GetStringWithoutPathExpansion(kKeyVersion, &version) ||
       version != kCurrentVersion) {
@@ -73,7 +74,8 @@ scoped_ptr<HistoryData::Associations> Parse(
     return nullptr;
   }
 
-  scoped_ptr<HistoryData::Associations> data(new HistoryData::Associations);
+  std::unique_ptr<HistoryData::Associations> data(
+      new HistoryData::Associations);
   for (base::DictionaryValue::Iterator it(*assoc_dict); !it.IsAtEnd();
        it.Advance()) {
     const base::DictionaryValue* entry_dict = NULL;
@@ -143,16 +145,14 @@ void HistoryDataStore::Load(
     data_store_->Load(base::Bind(
         &HistoryDataStore::OnDictionaryLoadedCallback, this, on_loaded));
   } else {
-    OnDictionaryLoadedCallback(on_loaded,
-                               make_scoped_ptr(cached_dict_->DeepCopy()));
+    OnDictionaryLoadedCallback(on_loaded, cached_dict_->CreateDeepCopy());
   }
 }
 
 void HistoryDataStore::SetPrimary(const std::string& query,
                                   const std::string& result) {
   base::DictionaryValue* entry_dict = GetEntryDict(query);
-  entry_dict->SetWithoutPathExpansion(kKeyPrimary,
-                                      new base::StringValue(result));
+  entry_dict->SetStringWithoutPathExpansion(kKeyPrimary, result);
   if (data_store_.get())
     data_store_->ScheduleWrite();
 }
@@ -160,7 +160,7 @@ void HistoryDataStore::SetPrimary(const std::string& query,
 void HistoryDataStore::SetSecondary(
     const std::string& query,
     const HistoryData::SecondaryDeque& results) {
-  scoped_ptr<base::ListValue> results_list(new base::ListValue);
+  std::unique_ptr<base::ListValue> results_list(new base::ListValue);
   for (size_t i = 0; i < results.size(); ++i)
     results_list->AppendString(results[i]);
 
@@ -173,9 +173,8 @@ void HistoryDataStore::SetSecondary(
 void HistoryDataStore::SetUpdateTime(const std::string& query,
                                      const base::Time& update_time) {
   base::DictionaryValue* entry_dict = GetEntryDict(query);
-  entry_dict->SetWithoutPathExpansion(kKeyUpdateTime,
-                                      new base::StringValue(base::Int64ToString(
-                                          update_time.ToInternalValue())));
+  entry_dict->SetStringWithoutPathExpansion(
+      kKeyUpdateTime, base::Int64ToString(update_time.ToInternalValue()));
   if (data_store_.get())
     data_store_->ScheduleWrite();
 }
@@ -203,11 +202,11 @@ base::DictionaryValue* HistoryDataStore::GetEntryDict(
     const std::string& query) {
   base::DictionaryValue* assoc_dict = GetAssociationDict();
 
-  base::DictionaryValue* entry_dict = NULL;
+  base::DictionaryValue* entry_dict = nullptr;
   if (!assoc_dict->GetDictionaryWithoutPathExpansion(query, &entry_dict)) {
     // Creates one if none exists. Ownership is taken in the set call after.
     entry_dict = new base::DictionaryValue;
-    assoc_dict->SetWithoutPathExpansion(query, entry_dict);
+    assoc_dict->SetWithoutPathExpansion(query, base::WrapUnique(entry_dict));
   }
 
   return entry_dict;
@@ -215,7 +214,7 @@ base::DictionaryValue* HistoryDataStore::GetEntryDict(
 
 void HistoryDataStore::OnDictionaryLoadedCallback(
     OnLoadedCallback callback,
-    scoped_ptr<base::DictionaryValue> dict) {
+    std::unique_ptr<base::DictionaryValue> dict) {
   if (!dict) {
     callback.Run(nullptr);
   } else {

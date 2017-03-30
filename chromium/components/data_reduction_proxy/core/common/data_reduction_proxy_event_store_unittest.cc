@@ -5,13 +5,14 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_event_store.h"
 
 #include <stddef.h>
+
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/json/json_writer.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -79,18 +80,16 @@ class DataReductionProxyEventStoreTest : public testing::Test {
   }
 
  private:
-  scoped_ptr<net::TestNetLog> net_log_;
-  scoped_ptr<DataReductionProxyEventStore> event_store_;
-  scoped_ptr<DataReductionProxyEventCreator> event_creator_;
+  std::unique_ptr<net::TestNetLog> net_log_;
+  std::unique_ptr<DataReductionProxyEventStore> event_store_;
+  std::unique_ptr<DataReductionProxyEventCreator> event_creator_;
   net::BoundNetLog bound_net_log_;
 };
 
 TEST_F(DataReductionProxyEventStoreTest, TestAddProxyEnabledEvent) {
   EXPECT_EQ(0u, event_count());
   std::vector<net::ProxyServer> proxies_for_http;
-  std::vector<net::ProxyServer> proxies_for_https;
-  event_creator()->AddProxyEnabledEvent(net_log(), false, proxies_for_http,
-                                        proxies_for_https);
+  event_creator()->AddProxyEnabledEvent(net_log(), false, proxies_for_http);
   EXPECT_EQ(1u, event_count());
   net::TestNetLogEntry entry = GetSingleEntry();
   EXPECT_EQ(net::NetLog::TYPE_DATA_REDUCTION_PROXY_ENABLED,
@@ -216,36 +215,31 @@ TEST_F(DataReductionProxyEventStoreTest, TestEndSecureProxyCheckFailed) {
 TEST_F(DataReductionProxyEventStoreTest, TestFeedbackMethods) {
   DataReductionProxyConfigurator configurator(net_log(), event_creator());
   EXPECT_EQ(std::string(), event_store()->GetHttpProxyList());
-  EXPECT_EQ(std::string(), event_store()->GetHttpsProxyList());
   EXPECT_EQ(std::string(), event_store()->SanitizedLastBypassEvent());
 
   std::vector<net::ProxyServer> http_proxies;
-  std::vector<net::ProxyServer> https_proxies;
   http_proxies.push_back(net::ProxyServer(net::ProxyServer::SCHEME_HTTP,
                                           net::HostPortPair("foo.com", 80)));
   http_proxies.push_back(net::ProxyServer(net::ProxyServer::SCHEME_HTTPS,
                                           net::HostPortPair("bar.com", 443)));
-  https_proxies.push_back(net::ProxyServer(net::ProxyServer::SCHEME_HTTP,
-                                           net::HostPortPair("baz.com", 80)));
-  configurator.Enable(false, http_proxies, https_proxies);
+  configurator.Enable(false, http_proxies);
   EXPECT_EQ("foo.com:80;https://bar.com:443",
             event_store()->GetHttpProxyList());
-  EXPECT_EQ("baz.com:80", event_store()->GetHttpsProxyList());
 
   configurator.Disable();
   EXPECT_EQ(std::string(), event_store()->GetHttpProxyList());
-  EXPECT_EQ(std::string(), event_store()->GetHttpsProxyList());
 }
 
 TEST_F(DataReductionProxyEventStoreTest, TestFeedbackLastBypassEventFullURL) {
   DataReductionProxyConfigurator configurator(net_log(), event_creator());
   std::vector<net::ProxyServer> http_proxies;
-  std::vector<net::ProxyServer> https_proxies;
-  configurator.Enable(false, http_proxies, https_proxies);
+  configurator.Enable(false, http_proxies);
 
-  scoped_ptr<base::DictionaryValue> bypass_event(new base::DictionaryValue());
-  scoped_ptr<base::DictionaryValue> bypass_params(new base::DictionaryValue());
-  scoped_ptr<base::DictionaryValue> sanitized_event(
+  std::unique_ptr<base::DictionaryValue> bypass_event(
+      new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> bypass_params(
+      new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> sanitized_event(
       new base::DictionaryValue());
 
   // Set bypass event time to be 4 minutes ago.
@@ -272,12 +266,13 @@ TEST_F(DataReductionProxyEventStoreTest, TestFeedbackLastBypassEventFullURL) {
 TEST_F(DataReductionProxyEventStoreTest, TestFeedbackLastBypassEventHostOnly) {
   DataReductionProxyConfigurator configurator(net_log(), event_creator());
   std::vector<net::ProxyServer> http_proxies;
-  std::vector<net::ProxyServer> https_proxies;
-  configurator.Enable(false, http_proxies, https_proxies);
+  configurator.Enable(false, http_proxies);
 
-  scoped_ptr<base::DictionaryValue> bypass_event(new base::DictionaryValue());
-  scoped_ptr<base::DictionaryValue> bypass_params(new base::DictionaryValue());
-  scoped_ptr<base::DictionaryValue> sanitized_event(
+  std::unique_ptr<base::DictionaryValue> bypass_event(
+      new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> bypass_params(
+      new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> sanitized_event(
       new base::DictionaryValue());
 
   // Set bypass event time to be 6 minutes ago.

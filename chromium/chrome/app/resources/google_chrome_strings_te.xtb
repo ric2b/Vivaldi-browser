@@ -66,10 +66,16 @@
 <translation id="2997147809295888909">Chrome ఈ వెబ్‌సైట్ ప్రమాణపత్రాన్ని <ph name="ISSUER" /> జారీ చేసినట్లు ధృవీకరించింది. సర్వర్ ప్రమాణపత్ర పారదర్శకత సమాచారం ఏదీ అందించలేదు.</translation>
 <translation id="3037838751736561277">Google Chrome నేపథ్య మోడ్‌లో ఉంది.</translation>
 <translation id="3047079729301751317"><ph name="USERNAME" />ని డిస్‌కనెక్ట్ చేయడం వలన ఈ పరికరంలో నిల్వ చేయబడిన మీ చరిత్ర, బుక్‌మార్క్‌లు, సెట్టింగ్‌లు మరియు ఇతర Chrome డేటా క్లియర్ చేయబడతాయి. మీ Google ఖాతాలో నిల్వ చేయబడిన డేటా క్లియర్ చేయబడదు మరియు దాన్ని <ph name="GOOGLE_DASHBOARD_LINK" />Google డాష్‌బోర్డ్<ph name="END_GOOGLE_DASHBOARD_LINK" />లో నిర్వహించవచ్చు.</translation>
+<translation id="3065168410429928842">Chrome ట్యాబ్</translation>
 <translation id="3080151273017101988">Google Chrome మూసివేసినపుడు అనువర్తనాలను నేపథ్యంలో అమలు చేయడాన్ని కొనసాగించు</translation>
 <translation id="3089968997497233615">Google Chrome యొక్క క్రొత్త సురక్షితమైన సంస్కరణ అందుబాటులో ఉంది.</translation>
 <translation id="3149510190863420837">Chrome అనువర్తనాలు</translation>
-<translation id="3197823471738295152">మీ పరికరం తాజాగా ఉంది.</translation>
+<translation id="3251381707915721925"><ph name="NEW_PROFILE_NAME" /> వీక్షించగల వెబ్‌సైట్‌లను సెట్ చేయడానికి, మీరు <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />ని సందర్శించడం ద్వారా పరిమితులు మరియు సెట్టింగ్‌లను కాన్ఫిగర్ చేయవచ్చు. మీరు డిఫాల్ట్ సెట్టింగ్‌లను మార్చకపోతే, <ph name="NEW_PROFILE_NAME" /> వెబ్‌లో అన్నీ బ్రౌజ్ చేయగలరు.
+
+<ph name="NEW_PROFILE_NAME" />ని మీ ఖాతా ప్రాప్యత చేయనీయకుండా నిరోధించడానికి, మీరు Chromeని ఉపయోగించనప్పుడు మీ ప్రొపైల్‌ను లాక్ చేసి ఉంచేట్లు చూసుకోండి. దీన్ని చేయడానికి, బ్రౌజర్ ఎగువ కుడి మూలన ఉన్న మీ ప్రొఫైల్ పేరును క్లిక్ చేసి, ఆపై "నిష్క్రమించి, చైల్డ్ లాక్ చేయి" ఎంపికను ఎంచుకోండి.
+<ph name="BEGIN_LINK_2" />మరింత తెలుసుకోండి<ph name="END_LINK_2" />
+
+దయచేసి తదుపరి సూచనల కోసం <ph name="ACCOUNT_EMAIL" />లో మీ ఇమెయిల్‌ను చూడండి.</translation>
 <translation id="3282568296779691940">Chromeకు సైన్ ఇన్ చేయండి</translation>
 <translation id="3311976847535831054">ఈ కంప్యూటర్ ఇకపై 32-బిట్ Google Chrome నవీకరణలను స్వీకరించదు. దయచేసి 64-బిట్ Google Chromeకి అప్‌గ్రేడ్ చేయండి.</translation>
 <translation id="3360895254066713204">Chrome సహాయకారుడు</translation>
@@ -205,7 +211,6 @@
 <translation id="7808348361785373670">Chrome నుండి తీసివేయి...</translation>
 <translation id="7825851276765848807">పేర్కొనలేని లోపం కారణంగా వ్యవస్థాపన విఫలమైంది. దయచేసి Google Chromeని మళ్ళీ డౌన్‌లోడ్ చెయ్యండి.</translation>
 <translation id="7890208801193284374">మీరు కంప్యూటర్‌ను భాగస్వామ్యం చేస్తే, స్నేహితులు మరియు కుటుంబ సభ్యులు విడివిడిగా బ్రౌజ్ చేయవచ్చు మరియు Chromeను వారికి నచ్చిన రీతిలో సెటప్ చేసుకోవచ్చు.</translation>
-<translation id="8000275528373650868">Google Chromeకి Windows Vista లేదా Windows XPతో SP2 లేదా తదుపరిది అవసరం.</translation>
 <translation id="8005540215158006229">Chrome దాదాపు సిద్ధంగా ఉంది.</translation>
 <translation id="8008534537613507642">Chromeను మళ్లీ ఇన్‌స్టాల్ చేయి</translation>
 <translation id="8030318113982266900">మీ పరికరాన్ని <ph name="CHANNEL_NAME" /> ఛానెల్‌కి నవీకరిస్తోంది...</translation>
@@ -227,6 +232,7 @@
 <translation id="8556340503434111824">Google Chrome యొక్క క్రొత్త సంస్కరణ అందుబాటులో ఉంది, ఇది ఎప్పటి కంటే వేగంగా ఉంది.</translation>
 <translation id="8568392309447938879">మీరు అనువర్తనాలను ఉపయోగించడానికి Chromeకు సైన్ ఇన్ చేయాలి. ఇది పరికరాల్లో మీ అనువర్తనాలు, బుక్‌మార్క్‌లు, చరిత్ర, పాస్‌వర్డ్‌లు మరియు ఇతర సెట్టింగ్‌లను సమకాలీకరించడానికి Chromeను అనుమతిస్తుంది.</translation>
 <translation id="8614913330719544658">Google Chrome స్పందించడం లేదు. ఇప్పుడే పునఃప్రారంభించాలా?</translation>
+<translation id="8667808506758191620">మీ <ph name="DEVICE_TYPE" /> ఆధునికంగా ఉంది.</translation>
 <translation id="8669527147644353129">Google Chrome సహాయకారుడు</translation>
 <translation id="8679801911857917785">ఇది మీరు Chromeని ప్రారంభించేటప్పుడు చూపబడే పేజీని కూడా నియంత్రిస్తుంది.</translation>
 <translation id="870251953148363156">&amp;Google Chromeను నవీకరించు</translation>
@@ -235,6 +241,7 @@
 <translation id="8851136666856101339">main</translation>
 <translation id="8862326446509486874">సిస్టమ్-స్థాయిలో ఇన్‌స్టాల్‌ చెయ్యడానికి మీకు సరైన హక్కులు లేవు. నిర్వాహకుడి లాగ ఇన్‌స్టాలర్‌ను మళ్ళీ రన్ చెయ్యడానికి ప్రయత్నించండి.</translation>
 <translation id="9026991721384951619">మీ ఖాతా సైన్-ఇన్ వివరాల గడువు ముగిసినందున Chrome OS మీ డేటాను సమకాలీకరించలేకపోయింది.</translation>
+<translation id="9067395829937117663">Google Chromeకి Windows 7 లేదా అంతకంటే ఆధునికమైనది ఉండటం ఆవశ్యకం.</translation>
 <translation id="9102715433345326100">ఈ ఫైల్ హానికరమైనది మరియు Chrome దీన్ని బ్లాక్ చేసింది.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />హెచ్చరిక:<ph name="END_BOLD" /> Google Chrome మీ బ్రౌజింగ్ చరిత్రను రికార్డ్ చేయకుండా పొడిగింపుని నిరోధించలేదు. ఈ పొడిగింపుని అజ్ఞాత మోడ్‌లో ఆపివేయడానికి, ఈ ఎంపికను రద్దు చేయండి.</translation>
 <translation id="911206726377975832">మీ బ్రౌజింగ్ డేటాని కూడా తొలగించాలా?</translation>

@@ -8,16 +8,22 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/ref_counted.h"
 #include "base/strings/string_piece.h"
+#include "base/time/time.h"
 #include "net/base/net_export.h"
-#include "net/cert/signed_certificate_timestamp.h"
-#include "net/cert/signed_tree_head.h"
 
 namespace net {
 
 // Utility functions for encoding/decoding structures used by Certificate
 // Transparency to/from the TLS wire format encoding.
 namespace ct {
+
+struct DigitallySigned;
+struct LogEntry;
+struct MerkleTreeLeaf;
+struct SignedCertificateTimestamp;
+struct SignedTreeHead;
 
 // If |input.signature_data| is less than kMaxSignatureLength, encodes the
 // |input| to |output| and returns true. Otherwise, returns false.
@@ -34,6 +40,12 @@ NET_EXPORT_PRIVATE bool DecodeDigitallySigned(base::StringPiece* input,
 // does not exceed allowed size in RFC6962, false otherwise.
 NET_EXPORT_PRIVATE bool EncodeLogEntry(const LogEntry& input,
                                        std::string* output);
+
+// Serialises the Merkle tree |leaf|, appending it to |output|.
+// These bytes can be hashed for use with audit proof fetching.
+// Note that |leaf.log_id| is not part of the TLS encoding, and so will not be
+// serialized.
+NET_EXPORT bool EncodeTreeLeaf(const MerkleTreeLeaf& leaf, std::string* output);
 
 // Encodes the data signed by a Signed Certificate Timestamp (SCT) into
 // |output|. The signature included in the SCT is then verified over these

@@ -27,8 +27,7 @@ namespace cc {
 namespace {
 
 #define EXECUTE_AND_VERIFY_SUBTREE_CHANGED(code_to_test)                    \
-  root->layer_tree_impl()->ResetAllChangeTracking(                          \
-      PropertyTrees::ResetFlags::ALL_TREES);                                \
+  root->layer_tree_impl()->ResetAllChangeTracking();                        \
   code_to_test;                                                             \
   EXPECT_TRUE(                                                              \
       root->layer_tree_impl()->LayerNeedsPushPropertiesForTesting(root));   \
@@ -41,8 +40,7 @@ namespace {
   EXPECT_TRUE(grand_child->LayerPropertyChanged());
 
 #define EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(code_to_test)             \
-  root->layer_tree_impl()->ResetAllChangeTracking(                          \
-      PropertyTrees::ResetFlags::ALL_TREES);                                \
+  root->layer_tree_impl()->ResetAllChangeTracking();                        \
   code_to_test;                                                             \
   EXPECT_FALSE(                                                             \
       root->layer_tree_impl()->LayerNeedsPushPropertiesForTesting(root));   \
@@ -56,8 +54,7 @@ namespace {
 
 #define EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE( \
     code_to_test)                                                            \
-  root->layer_tree_impl()->ResetAllChangeTracking(                           \
-      PropertyTrees::ResetFlags::ALL_TREES);                                 \
+  root->layer_tree_impl()->ResetAllChangeTracking();                         \
   code_to_test;                                                              \
   EXPECT_TRUE(                                                               \
       root->layer_tree_impl()->LayerNeedsPushPropertiesForTesting(root));    \
@@ -70,8 +67,7 @@ namespace {
   EXPECT_FALSE(grand_child->LayerPropertyChanged());
 
 #define EXECUTE_AND_VERIFY_ONLY_LAYER_CHANGED(code_to_test)                 \
-  root->layer_tree_impl()->ResetAllChangeTracking(                          \
-      PropertyTrees::ResetFlags::ALL_TREES);                                \
+  root->layer_tree_impl()->ResetAllChangeTracking();                        \
   root->layer_tree_impl()->property_trees()->full_tree_damaged = false;     \
   code_to_test;                                                             \
   EXPECT_TRUE(                                                              \
@@ -85,8 +81,7 @@ namespace {
   EXPECT_FALSE(grand_child->LayerPropertyChanged());
 
 #define VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(code_to_test)                \
-  root->layer_tree_impl()->ResetAllChangeTracking(                       \
-      PropertyTrees::ResetFlags::ALL_TREES);                             \
+  root->layer_tree_impl()->ResetAllChangeTracking();                     \
   host_impl.active_tree()->property_trees()->needs_rebuild = true;       \
   host_impl.active_tree()->BuildPropertyTreesForTesting();               \
   host_impl.ForcePrepareToDraw();                                        \
@@ -95,8 +90,7 @@ namespace {
   EXPECT_TRUE(host_impl.active_tree()->needs_update_draw_properties());
 
 #define VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(code_to_test)             \
-  root->layer_tree_impl()->ResetAllChangeTracking(                       \
-      PropertyTrees::ResetFlags::ALL_TREES);                             \
+  root->layer_tree_impl()->ResetAllChangeTracking();                     \
   host_impl.active_tree()->property_trees()->needs_rebuild = true;       \
   host_impl.active_tree()->BuildPropertyTreesForTesting();               \
   host_impl.ForcePrepareToDraw();                                        \
@@ -122,35 +116,22 @@ TEST(LayerImplTest, VerifyLayerChangesAreTrackedProperly) {
   FakeImplTaskRunnerProvider task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  scoped_ptr<OutputSurface> output_surface = FakeOutputSurface::Create3d();
+  std::unique_ptr<OutputSurface> output_surface = FakeOutputSurface::Create3d();
   FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
                                   &task_graph_runner);
   host_impl.SetVisible(true);
   EXPECT_TRUE(host_impl.InitializeRenderer(output_surface.get()));
-  scoped_ptr<LayerImpl> root_clip_ptr =
+  std::unique_ptr<LayerImpl> root_clip_ptr =
       LayerImpl::Create(host_impl.active_tree(), 1);
   LayerImpl* root_clip = root_clip_ptr.get();
-  scoped_ptr<LayerImpl> root_ptr =
+  std::unique_ptr<LayerImpl> root_ptr =
       LayerImpl::Create(host_impl.active_tree(), 2);
   LayerImpl* root = root_ptr.get();
   root_clip_ptr->AddChild(std::move(root_ptr));
   host_impl.active_tree()->SetRootLayer(std::move(root_clip_ptr));
-  scoped_ptr<LayerImpl> scroll_parent =
-      LayerImpl::Create(host_impl.active_tree(), 3);
-  LayerImpl* scroll_child = LayerImpl::Create(host_impl.active_tree(), 4).get();
-  std::set<LayerImpl*>* scroll_children = new std::set<LayerImpl*>();
-  scroll_children->insert(scroll_child);
-  scroll_children->insert(root);
-  root->SetForceRenderSurface(true);
 
-  scoped_ptr<LayerImpl> clip_parent =
-      LayerImpl::Create(host_impl.active_tree(), 5);
-  LayerImpl* clip_child = LayerImpl::Create(host_impl.active_tree(), 6).get();
-  std::set<LayerImpl*>* clip_children = new std::set<LayerImpl*>();
-  clip_children->insert(clip_child);
-  clip_children->insert(root);
-  root->layer_tree_impl()->ResetAllChangeTracking(
-      PropertyTrees::ResetFlags::ALL_TREES);
+  root->test_properties()->force_render_surface = true;
+  root->layer_tree_impl()->ResetAllChangeTracking();
 
   root->AddChild(LayerImpl::Create(host_impl.active_tree(), 7));
   LayerImpl* child = root->children()[0];
@@ -226,59 +207,31 @@ TEST(LayerImplTest, VerifyLayerChangesAreTrackedProperly) {
   // Changing these properties does not cause the layer to be marked as changed
   // but does cause the layer to need to push properties.
   EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
-      root->SetIsRootForIsolatedGroup(true));
-  EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
       root->SetElementId(2));
   EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
       root->SetMutableProperties(MutableProperty::kOpacity));
-  EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
-      root->SetScrollParent(scroll_parent.get()));
-  EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
-      root->SetScrollChildren(scroll_children));
-  EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
-      root->SetClipParent(clip_parent.get()));
-  EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
-      root->SetClipChildren(clip_children));
-  EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
-      root->SetNumDescendantsThatDrawContent(10));
 
   // After setting all these properties already, setting to the exact same
   // values again should not cause any change.
-  EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(
-      root->SetTransformOrigin(arbitrary_point_3f));
   EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(root->SetMasksToBounds(true));
   EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(
       root->SetPosition(arbitrary_point_f));
-  EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(
-      root->SetShouldFlattenTransform(false));
   EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(root->Set3dSortingContextId(1));
   EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(
       root->SetTransform(arbitrary_transform));
-  EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(
-      root->SetDoubleSided(false));  // constructor initializes it to "true".
   EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(root->SetContentsOpaque(true));
   EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(root->SetOpacity(arbitrary_number));
   EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(
       root->SetBlendMode(arbitrary_blend_mode));
-  EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(
-      root->SetIsRootForIsolatedGroup(true));
   EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(root->SetDrawsContent(true));
   EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(root->SetBounds(bounds_size));
-  EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(
-      root->SetScrollParent(scroll_parent.get()));
-  EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(
-      root->SetScrollChildren(scroll_children));
-  EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(
-      root->SetClipParent(clip_parent.get()));
-  EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(
-      root->SetClipChildren(clip_children));
 }
 
 TEST(LayerImplTest, VerifyNeedsUpdateDrawProperties) {
   FakeImplTaskRunnerProvider task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  scoped_ptr<OutputSurface> output_surface = FakeOutputSurface::Create3d();
+  std::unique_ptr<OutputSurface> output_surface = FakeOutputSurface::Create3d();
   FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
                                   &task_graph_runner);
   host_impl.SetVisible(true);
@@ -287,12 +240,12 @@ TEST(LayerImplTest, VerifyNeedsUpdateDrawProperties) {
       LayerImpl::Create(host_impl.active_tree(), 1));
   LayerImpl* root = host_impl.active_tree()->root_layer();
   root->SetHasRenderSurface(true);
-  scoped_ptr<LayerImpl> layer_ptr =
+  std::unique_ptr<LayerImpl> layer_ptr =
       LayerImpl::Create(host_impl.active_tree(), 2);
   LayerImpl* layer = layer_ptr.get();
   root->AddChild(std::move(layer_ptr));
   layer->SetScrollClipLayer(root->id());
-  scoped_ptr<LayerImpl> layer2_ptr =
+  std::unique_ptr<LayerImpl> layer2_ptr =
       LayerImpl::Create(host_impl.active_tree(), 3);
   LayerImpl* layer2 = layer2_ptr.get();
   root->AddChild(std::move(layer2_ptr));
@@ -326,11 +279,6 @@ TEST(LayerImplTest, VerifyNeedsUpdateDrawProperties) {
   // Create a render surface, because we must have a render surface if we have
   // filters.
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetHasRenderSurface(true));
-
-  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetForceRenderSurface(true));
-  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetForceRenderSurface(true));
-  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetForceRenderSurface(false));
-  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetForceRenderSurface(false));
 
   // Related filter functions.
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(
@@ -373,13 +321,8 @@ TEST(LayerImplTest, VerifyNeedsUpdateDrawProperties) {
       layer->NoteLayerPropertyChanged());
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer2->SetPosition(arbitrary_point_f);
                                       layer->NoteLayerPropertyChanged());
-  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetShouldFlattenTransform(false);
-                                      layer->NoteLayerPropertyChanged());
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->Set3dSortingContextId(1);
                                       layer->NoteLayerPropertyChanged());
-  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(
-      layer->SetDoubleSided(false);  // constructor initializes it to "true".
-      layer->NoteLayerPropertyChanged());
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(
       layer->SetBackgroundColor(arbitrary_color));
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(
@@ -394,16 +337,12 @@ TEST(LayerImplTest, VerifyNeedsUpdateDrawProperties) {
                                       layer->NoteLayerPropertyChanged());
 
   // Unrelated functions, set to the same values, no needs update.
-  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(
-      layer->SetIsRootForIsolatedGroup(true));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetFilters(arbitrary_filters));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetMasksToBounds(true));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetContentsOpaque(true));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(
       layer2->SetPosition(arbitrary_point_f));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->Set3dSortingContextId(1));
-  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(
-      layer->SetDoubleSided(false));  // constructor initializes it to "true".
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetDrawsContent(true));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(
       layer->SetBackgroundColor(arbitrary_color));
@@ -412,8 +351,6 @@ TEST(LayerImplTest, VerifyNeedsUpdateDrawProperties) {
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetOpacity(arbitrary_number));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(
       layer->SetBlendMode(arbitrary_blend_mode));
-  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(
-      layer->SetIsRootForIsolatedGroup(true));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(
       layer->SetTransform(arbitrary_transform));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetBounds(arbitrary_size));
@@ -426,7 +363,7 @@ TEST(LayerImplTest, SafeOpaqueBackgroundColor) {
   FakeImplTaskRunnerProvider task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  scoped_ptr<OutputSurface> output_surface = FakeOutputSurface::Create3d();
+  std::unique_ptr<OutputSurface> output_surface = FakeOutputSurface::Create3d();
   FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
                                   &task_graph_runner);
   host_impl.SetVisible(true);
@@ -459,38 +396,6 @@ TEST(LayerImplTest, SafeOpaqueBackgroundColor) {
       }
     }
   }
-}
-
-TEST(LayerImplTest, TransformInvertibility) {
-  FakeImplTaskRunnerProvider task_runner_provider;
-  TestSharedBitmapManager shared_bitmap_manager;
-  TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
-                                  &task_graph_runner);
-
-  scoped_ptr<LayerImpl> layer = LayerImpl::Create(host_impl.active_tree(), 1);
-  EXPECT_TRUE(layer->transform().IsInvertible());
-  EXPECT_TRUE(layer->transform_is_invertible());
-
-  gfx::Transform transform;
-  transform.Scale3d(
-      SkDoubleToMScalar(1.0), SkDoubleToMScalar(1.0), SkDoubleToMScalar(0.0));
-  layer->SetTransform(transform);
-  EXPECT_FALSE(layer->transform().IsInvertible());
-  EXPECT_FALSE(layer->transform_is_invertible());
-
-  transform.MakeIdentity();
-  transform.ApplyPerspectiveDepth(SkDoubleToMScalar(100.0));
-  transform.RotateAboutZAxis(75.0);
-  transform.RotateAboutXAxis(32.2);
-  transform.RotateAboutZAxis(-75.0);
-  transform.Translate3d(SkDoubleToMScalar(50.5),
-                        SkDoubleToMScalar(42.42),
-                        SkDoubleToMScalar(-100.25));
-
-  layer->SetTransform(transform);
-  EXPECT_TRUE(layer->transform().IsInvertible());
-  EXPECT_TRUE(layer->transform_is_invertible());
 }
 
 class LayerImplScrollTest : public testing::Test {
@@ -529,6 +434,7 @@ class LayerImplScrollTest : public testing::Test {
 
   LayerTreeSettings settings() {
     LayerTreeSettings settings;
+    settings.verify_clip_tree_calculations = true;
     return settings;
   }
 
@@ -658,7 +564,7 @@ TEST_F(LayerImplScrollTest, PushPropertiesToMirrorsCurrentScrollOffset) {
 
   scroll_tree(layer())->CollectScrollDeltasForTesting();
 
-  scoped_ptr<LayerImpl> pending_layer =
+  std::unique_ptr<LayerImpl> pending_layer =
       LayerImpl::Create(host_impl().sync_tree(), layer()->id());
   scroll_tree(pending_layer.get())
       ->UpdateScrollOffsetBaseForTesting(pending_layer->id(),

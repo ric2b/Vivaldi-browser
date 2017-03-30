@@ -102,7 +102,12 @@ bool ContentBrowserClient::ShouldSwapBrowsingInstancesForNavigation(
   return false;
 }
 
-scoped_ptr<media::CdmFactory> ContentBrowserClient::CreateCdmFactory() {
+media::ScopedAudioManagerPtr ContentBrowserClient::CreateAudioManager(
+    media::AudioLogFactory* audio_log_factory) {
+  return nullptr;
+}
+
+std::unique_ptr<media::CdmFactory> ContentBrowserClient::CreateCdmFactory() {
   return nullptr;
 }
 
@@ -220,17 +225,16 @@ QuotaPermissionContext* ContentBrowserClient::CreateQuotaPermissionContext() {
   return nullptr;
 }
 
-scoped_ptr<storage::QuotaEvictionPolicy>
+std::unique_ptr<storage::QuotaEvictionPolicy>
 ContentBrowserClient::GetTemporaryStorageEvictionPolicy(
     content::BrowserContext* context) {
-  return scoped_ptr<storage::QuotaEvictionPolicy>();
+  return std::unique_ptr<storage::QuotaEvictionPolicy>();
 }
 
 void ContentBrowserClient::SelectClientCertificate(
     WebContents* web_contents,
     net::SSLCertRequestInfo* cert_request_info,
-    scoped_ptr<ClientCertificateDelegate> delegate) {
-}
+    std::unique_ptr<ClientCertificateDelegate> delegate) {}
 
 net::URLRequestContext* ContentBrowserClient::OverrideRequestContextForURL(
     const GURL& url, ResourceContext* context) {
@@ -331,6 +335,12 @@ bool ContentBrowserClient::AllowPepperSocketAPI(
     const GURL& url,
     bool private_api,
     const SocketPermissionRequest* params) {
+  return false;
+}
+
+bool ContentBrowserClient::IsPepperVpnProviderAPIAllowed(
+    BrowserContext* browser_context,
+    const GURL& url) {
   return false;
 }
 

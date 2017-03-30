@@ -30,7 +30,6 @@
 
 #include "core/dom/Document.h"
 
-#include "core/dom/DocumentVisibilityObserver.h"
 #include "core/frame/FrameView.h"
 #include "core/html/HTMLHeadElement.h"
 #include "core/html/HTMLLinkElement.h"
@@ -48,12 +47,10 @@ class DocumentTest : public ::testing::Test {
 protected:
     void SetUp() override;
 
-#if ENABLE(OILPAN)
     void TearDown() override
     {
-        Heap::collectAllGarbage();
+        ThreadHeap::collectAllGarbage();
     }
-#endif
 
     Document& document() const { return m_dummyPageHolder->document(); }
     Page& page() const { return m_dummyPageHolder->page(); }
@@ -73,85 +70,6 @@ void DocumentTest::setHtmlInnerHTML(const char* htmlContent)
 {
     document().documentElement()->setInnerHTML(String::fromUTF8(htmlContent), ASSERT_NO_EXCEPTION);
     document().view()->updateAllLifecyclePhases();
-}
-
-class MockDocumentVisibilityObserver
-    : public GarbageCollectedFinalized<MockDocumentVisibilityObserver>
-    , public DocumentVisibilityObserver {
-    USING_GARBAGE_COLLECTED_MIXIN(MockDocumentVisibilityObserver);
-public:
-    static RawPtr<MockDocumentVisibilityObserver> create(Document& document)
-    {
-        return new MockDocumentVisibilityObserver(document);
-    }
-
-    DEFINE_INLINE_VIRTUAL_TRACE()
-    {
-        DocumentVisibilityObserver::trace(visitor);
-    }
-
-    MOCK_METHOD1(didChangeVisibilityState, void(PageVisibilityState));
-    MOCK_METHOD0(willDetachDocument, void());
-
-private:
-    MockDocumentVisibilityObserver(Document& document) : DocumentVisibilityObserver(document) { }
-};
-
-TEST_F(DocumentTest, VisibilityOberver)
-{
-    page().setVisibilityState(PageVisibilityStateVisible, true); // initial state
-    RawPtr<MockDocumentVisibilityObserver> observer1 = MockDocumentVisibilityObserver::create(document());
-
-    {
-        RawPtr<MockDocumentVisibilityObserver> observer2 = MockDocumentVisibilityObserver::create(document());
-        EXPECT_CALL(*observer1, didChangeVisibilityState(PageVisibilityStateHidden)).Times(0);
-        EXPECT_CALL(*observer1, didChangeVisibilityState(PageVisibilityStateVisible)).Times(0);
-        EXPECT_CALL(*observer2, didChangeVisibilityState(PageVisibilityStateHidden)).Times(0);
-        EXPECT_CALL(*observer2, didChangeVisibilityState(PageVisibilityStateVisible)).Times(0);
-        ::testing::Mock::VerifyAndClearExpectations(observer1.get());
-        ::testing::Mock::VerifyAndClearExpectations(observer2.get());
-
-        EXPECT_CALL(*observer1, didChangeVisibilityState(PageVisibilityStateHidden)).Times(1);
-        EXPECT_CALL(*observer1, didChangeVisibilityState(PageVisibilityStateVisible)).Times(0);
-        EXPECT_CALL(*observer2, didChangeVisibilityState(PageVisibilityStateHidden)).Times(1);
-        EXPECT_CALL(*observer2, didChangeVisibilityState(PageVisibilityStateVisible)).Times(0);
-        page().setVisibilityState(PageVisibilityStateHidden, false);
-        ::testing::Mock::VerifyAndClearExpectations(observer1.get());
-        ::testing::Mock::VerifyAndClearExpectations(observer2.get());
-
-        EXPECT_CALL(*observer1, didChangeVisibilityState(PageVisibilityStateHidden)).Times(0);
-        EXPECT_CALL(*observer1, didChangeVisibilityState(PageVisibilityStateVisible)).Times(0);
-        EXPECT_CALL(*observer2, didChangeVisibilityState(PageVisibilityStateHidden)).Times(0);
-        EXPECT_CALL(*observer2, didChangeVisibilityState(PageVisibilityStateVisible)).Times(0);
-        page().setVisibilityState(PageVisibilityStateHidden, false);
-        ::testing::Mock::VerifyAndClearExpectations(observer1.get());
-        ::testing::Mock::VerifyAndClearExpectations(observer2.get());
-
-        EXPECT_CALL(*observer1, didChangeVisibilityState(PageVisibilityStateHidden)).Times(0);
-        EXPECT_CALL(*observer1, didChangeVisibilityState(PageVisibilityStateVisible)).Times(1);
-        EXPECT_CALL(*observer2, didChangeVisibilityState(PageVisibilityStateHidden)).Times(0);
-        EXPECT_CALL(*observer2, didChangeVisibilityState(PageVisibilityStateVisible)).Times(0);
-        OwnPtr<DummyPageHolder> alternatePage = DummyPageHolder::create(IntSize(800, 600));
-        Document& alternateDocument = alternatePage->document();
-        observer2->setObservedDocument(alternateDocument);
-        page().setVisibilityState(PageVisibilityStateVisible, false);
-        ::testing::Mock::VerifyAndClearExpectations(observer1.get());
-        ::testing::Mock::VerifyAndClearExpectations(observer2.get());
-
-        EXPECT_CALL(*observer1, didChangeVisibilityState(PageVisibilityStateHidden)).Times(1);
-        EXPECT_CALL(*observer1, didChangeVisibilityState(PageVisibilityStateVisible)).Times(0);
-        EXPECT_CALL(*observer2, didChangeVisibilityState(PageVisibilityStateHidden)).Times(1);
-        EXPECT_CALL(*observer2, didChangeVisibilityState(PageVisibilityStateVisible)).Times(0);
-        observer2->setObservedDocument(document());
-        page().setVisibilityState(PageVisibilityStateHidden, false);
-        ::testing::Mock::VerifyAndClearExpectations(observer1.get());
-        ::testing::Mock::VerifyAndClearExpectations(observer2.get());
-    }
-
-    // observer2 destroyed
-    EXPECT_CALL(*observer1, didChangeVisibilityState(PageVisibilityStateHidden)).Times(0);
-    EXPECT_CALL(*observer1, didChangeVisibilityState(PageVisibilityStateVisible)).Times(1);
-    page().setVisibilityState(PageVisibilityStateVisible, false);
 }
 
 // This tests that we properly resize and re-layout pages for printing in the presence of
@@ -193,16 +111,16 @@ TEST_F(DocumentTest, LinkManifest)
     EXPECT_EQ(0, document().linkManifest());
 
     // Check that we use the first manifest with <link rel=manifest>
-    RawPtr<HTMLLinkElement> link = HTMLLinkElement::create(document(), false);
+    HTMLLinkElement* link = HTMLLinkElement::create(document(), false);
     link->setAttribute(blink::HTMLNames::relAttr, "manifest");
     link->setAttribute(blink::HTMLNames::hrefAttr, "foo.json");
     document().head()->appendChild(link);
     EXPECT_EQ(link, document().linkManifest());
 
-    RawPtr<HTMLLinkElement> link2 = HTMLLinkElement::create(document(), false);
+    HTMLLinkElement* link2 = HTMLLinkElement::create(document(), false);
     link2->setAttribute(blink::HTMLNames::relAttr, "manifest");
     link2->setAttribute(blink::HTMLNames::hrefAttr, "bar.json");
-    document().head()->insertBefore(link2, link.get());
+    document().head()->insertBefore(link2, link);
     EXPECT_EQ(link2, document().linkManifest());
     document().head()->appendChild(link2);
     EXPECT_EQ(link, document().linkManifest());
@@ -237,8 +155,8 @@ TEST_F(DocumentTest, LinkManifest)
     link->setAttribute(blink::HTMLNames::relAttr, "manifest");
 
     // Check that link outside of the <head> are ignored.
-    document().head()->removeChild(link.get(), ASSERT_NO_EXCEPTION);
-    document().head()->removeChild(link2.get(), ASSERT_NO_EXCEPTION);
+    document().head()->removeChild(link, ASSERT_NO_EXCEPTION);
+    document().head()->removeChild(link2, ASSERT_NO_EXCEPTION);
     EXPECT_EQ(0, document().linkManifest());
     document().body()->appendChild(link);
     EXPECT_EQ(0, document().linkManifest());
@@ -284,31 +202,6 @@ TEST_F(DocumentTest, referrerPolicyParsing)
         document().processReferrerPolicy(test.policy);
         EXPECT_EQ(test.expected, document().getReferrerPolicy()) << test.policy;
     }
-}
-
-// This tests that we mark Frame Timing requests as dirty correctly when we
-// update style.
-TEST_F(DocumentTest, FrameTimingRelayout)
-{
-    setHtmlInnerHTML(
-        "<style>"
-        "    #div1 {"
-        "        width: 100px;"
-        "        height: 100px;"
-        "    }"
-        "</style>"
-        "<p><div id='div1'><span>test</span></div></p>");
-
-    EXPECT_FALSE(document().view()->frameTimingRequestsDirty());
-
-    // Just calling update should have no effect.
-    document().updateLayoutTree();
-    EXPECT_FALSE(document().view()->frameTimingRequestsDirty());
-
-    // Calling update with a style change should flag Frame Timing as dirty.
-    document().setChildNeedsStyleRecalc();
-    document().updateLayoutTree();
-    EXPECT_TRUE(document().view()->frameTimingRequestsDirty());
 }
 
 TEST_F(DocumentTest, OutgoingReferrer)

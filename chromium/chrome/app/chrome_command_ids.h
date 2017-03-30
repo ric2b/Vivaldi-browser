@@ -33,6 +33,12 @@
 #define IDC_RELOAD_BYPASSING_CACHE      33007
 #define IDC_LOAD_NEW_TAB_PAGE           33008
 #define IDC_RELOAD_CLEARING_CACHE       33009
+// Temporary commands to capture the old Back/Forward shortcuts and tell users
+// the new shortcut. May also trigger Back/Forward action if the
+// BackspaceGoesBack field trial is enabled.
+// TODO(mgiuca): Remove these in M54 (https://crbug.com/610039).
+#define IDC_BACKSPACE_BACK              33010
+#define IDC_BACKSPACE_FORWARD           33011
 
 // Window management commands
 #define IDC_NEW_WINDOW                  34000
@@ -62,7 +68,6 @@
 #define IDC_MOVE_TAB_PREVIOUS           34033
 #define IDC_SEARCH                      34035
 #define IDC_DEBUG_FRAME_TOGGLE          34038
-#define IDC_PRESENTATION_MODE           34039
 #define IDC_WINDOW_MENU                 34045
 #define IDC_MINIMIZE_WINDOW             34046
 #define IDC_MAXIMIZE_WINDOW             34047
@@ -324,7 +329,22 @@
 // Search items.
 #define IDC_CONTENT_CONTEXT_GOTOURL 50180
 #define IDC_CONTENT_CONTEXT_SEARCHWEBFOR 50181
-
+// Open with items.
+#define IDC_CONTENT_CONTEXT_OPEN_WITH1 50190
+#define IDC_CONTENT_CONTEXT_OPEN_WITH2 50191
+#define IDC_CONTENT_CONTEXT_OPEN_WITH3 50192
+#define IDC_CONTENT_CONTEXT_OPEN_WITH4 50193
+#define IDC_CONTENT_CONTEXT_OPEN_WITH5 50194
+#define IDC_CONTENT_CONTEXT_OPEN_WITH6 50195
+#define IDC_CONTENT_CONTEXT_OPEN_WITH7 50196
+#define IDC_CONTENT_CONTEXT_OPEN_WITH8 50197
+#define IDC_CONTENT_CONTEXT_OPEN_WITH9 50198
+#define IDC_CONTENT_CONTEXT_OPEN_WITH10 50199
+#define IDC_CONTENT_CONTEXT_OPEN_WITH11 50200
+#define IDC_CONTENT_CONTEXT_OPEN_WITH12 50201
+#define IDC_CONTENT_CONTEXT_OPEN_WITH13 50202
+#define IDC_CONTENT_CONTEXT_OPEN_WITH14 50203
+#define IDC_CONTENT_CONTEXT_OPEN_WITH_LAST IDC_CONTENT_CONTEXT_OPEN_WITH14
 // Context menu items in the bookmark bar
 #define IDC_BOOKMARK_BAR_OPEN_ALL 51000
 #define IDC_BOOKMARK_BAR_OPEN_ALL_NEW_WINDOW 51001

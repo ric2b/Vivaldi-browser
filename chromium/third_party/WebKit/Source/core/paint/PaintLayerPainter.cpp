@@ -81,7 +81,7 @@ PaintLayerPainter::PaintResult PaintLayerPainter::paintLayer(GraphicsContext& co
     if (shouldSuppressPaintingLayer(m_paintLayer))
         return FullyPainted;
 
-    if (m_paintLayer.layoutObject()->isLayoutView() && toLayoutView(m_paintLayer.layoutObject())->frameView()->shouldThrottleRendering())
+    if (m_paintLayer.layoutObject()->view()->frame() && m_paintLayer.layoutObject()->view()->frame()->shouldThrottleRendering())
         return FullyPainted;
 
     // If this layer is totally invisible then there is nothing to paint.
@@ -185,6 +185,9 @@ private:
 
 static bool shouldCreateSubsequence(const PaintLayer& paintLayer, GraphicsContext& context, const PaintLayerPaintingInfo& paintingInfo, PaintLayerFlags paintFlags)
 {
+    if (!RuntimeEnabledFeatures::paintOptimizationsEnabled())
+        return false;
+
     // Caching is not needed during printing.
     if (context.printing())
         return false;
@@ -275,7 +278,7 @@ PaintLayerPainter::PaintResult PaintLayerPainter::paintLayerContents(GraphicsCon
     if (paintFlags & PaintLayerPaintingRootBackgroundOnly && !m_paintLayer.layoutObject()->isLayoutView() && !m_paintLayer.layoutObject()->isDocumentElement())
         return result;
 
-    if (m_paintLayer.layoutObject()->isLayoutView() && toLayoutView(m_paintLayer.layoutObject())->frameView()->shouldThrottleRendering())
+    if (m_paintLayer.layoutObject()->view()->frame() && m_paintLayer.layoutObject()->view()->frame()->shouldThrottleRendering())
         return result;
 
     // Ensure our lists are up-to-date.
@@ -337,6 +340,16 @@ PaintLayerPainter::PaintResult PaintLayerPainter::paintLayerContents(GraphicsCon
             m_paintLayer.appendSingleFragmentIgnoringPagination(layerFragments, localPaintingInfo.rootLayer, localPaintingInfo.paintDirtyRect, cacheSlot, IgnoreOverlayScrollbarSize, respectOverflowClip, &offsetFromRoot, localPaintingInfo.subPixelAccumulation);
         else
             m_paintLayer.collectFragments(layerFragments, localPaintingInfo.rootLayer, localPaintingInfo.paintDirtyRect, cacheSlot, IgnoreOverlayScrollbarSize, respectOverflowClip, &offsetFromRoot, localPaintingInfo.subPixelAccumulation);
+
+        // TODO(trchen): Needs to adjust cull rect between transform spaces. https://crbug.com/593596
+        // Disables layer culling for SPv2 for now because the space of the cull rect doesn't match
+        // the space we paint in. Clipping will still be done by clip nodes, so this won't cause
+        // rendering issues, only performance.
+        if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+            layerFragments[0].backgroundRect = LayoutRect(LayoutRect::infiniteIntRect());
+            layerFragments[0].foregroundRect = LayoutRect(LayoutRect::infiniteIntRect());
+        }
+
         if (shouldPaintContent) {
             // TODO(wangxianzhu): This is for old slow scrolling. Implement similar optimization for slimming paint v2.
             shouldPaintContent = atLeastOneFragmentIntersectsDamageRect(layerFragments, localPaintingInfo, paintFlags, offsetFromRoot);
@@ -414,6 +427,10 @@ PaintLayerPainter::PaintResult PaintLayerPainter::paintLayerContents(GraphicsCon
 
 bool PaintLayerPainter::needsToClip(const PaintLayerPaintingInfo& localPaintingInfo, const ClipRect& clipRect)
 {
+    // Clipping will be applied by property nodes directly for SPv2.
+    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+        return false;
+
     return clipRect.rect() != localPaintingInfo.paintDirtyRect || clipRect.hasRadius();
 }
 
@@ -725,13 +742,12 @@ void PaintLayerPainter::paintForegroundForFragments(const PaintLayerFragments& l
     if (selectionOnly) {
         paintForegroundForFragmentsWithPhase(PaintPhaseSelection, layerFragments, context, localPaintingInfo, paintFlags, clipState);
     } else {
-        if (m_paintLayer.needsPaintPhaseDescendantBlockBackgrounds())
+        if (!RuntimeEnabledFeatures::paintOptimizationsEnabled() || m_paintLayer.needsPaintPhaseDescendantBlockBackgrounds())
             paintForegroundForFragmentsWithPhase(PaintPhaseDescendantBlockBackgroundsOnly, layerFragments, context, localPaintingInfo, paintFlags, clipState);
-        // TODO(wangxianzhu): Enable float empty-phase optimization after fixing crbug.com/603910.
-        // if (m_paintLayer.needsPaintPhaseFloat())
-        paintForegroundForFragmentsWithPhase(PaintPhaseFloat, layerFragments, context, localPaintingInfo, paintFlags, clipState);
+        if (!RuntimeEnabledFeatures::paintOptimizationsEnabled() || m_paintLayer.needsPaintPhaseFloat())
+            paintForegroundForFragmentsWithPhase(PaintPhaseFloat, layerFragments, context, localPaintingInfo, paintFlags, clipState);
         paintForegroundForFragmentsWithPhase(PaintPhaseForeground, layerFragments, context, localPaintingInfo, paintFlags, clipState);
-        if (m_paintLayer.needsPaintPhaseDescendantOutlines())
+        if (!RuntimeEnabledFeatures::paintOptimizationsEnabled() || m_paintLayer.needsPaintPhaseDescendantOutlines())
             paintForegroundForFragmentsWithPhase(PaintPhaseDescendantOutlinesOnly, layerFragments, context, localPaintingInfo, paintFlags, clipState);
     }
 }

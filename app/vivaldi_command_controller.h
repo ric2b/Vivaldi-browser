@@ -7,6 +7,14 @@ class CommandUpdater;
 class Browser;
 
 namespace vivaldi {
+enum VivaldiScrollType {
+  kVivaldiNoScrollType = 0,
+  kVivaldiScrollWheel,
+  kVivaldiScrollTrackpad,
+  kVivaldiScrollInertial
+};
+
+void SetVivaldiScrollType(int scrollType);
 void UpdateCommandsForVivaldi(CommandUpdater &);
 bool ExecuteVivaldiCommands(Browser *browser, int id);
 }

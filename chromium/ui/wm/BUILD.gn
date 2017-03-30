@@ -73,6 +73,7 @@ component("wm") {
     "//ui/base",
     "//ui/base/ime",
     "//ui/compositor",
+    "//ui/display",
     "//ui/events",
     "//ui/events:events_base",
     "//ui/events/devices",
@@ -85,6 +86,7 @@ component("wm") {
 
   if (use_x11) {
     configs += [ "//build/config/linux:x11" ]
+    deps += [ "//ui/events/devices/x11" ]
   }
 }
 

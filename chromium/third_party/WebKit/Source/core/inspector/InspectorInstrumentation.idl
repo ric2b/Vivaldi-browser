@@ -40,19 +40,13 @@
 *
 * Where:
 *   methodAttributes - optional list of method attributes.
-*       Attributes containing "=" are code generation options:
-*           Inline=Custom - do not generate the public inline method.
-*           Inline=FastReturn - return early from the inline method if there are no frontends.
-*           Inline=Forward - generate a simple forwarding inline method that does not
-                             modify the parameter list (implies Inline=FastReturn)
 *       Attributes without "=" are the names of the agents to be invoked.
 *           Examples: DOM, Page, Debugger.
 *
 *   paramAttr - optional attribute controlling the parameters handling (one attribute per parameter max).
 *       Keep - pass first parameter (used to access the InstrumentingAgents instance) to agents.
-*       FastReturn - return early from the inline method if this parameter is 0/false.
 *
-*   returnValue: C++ return value. Only "void" and "InspectorInstrumentationCookie" are supported.
+*   returnValue: C++ return value. Only "void" and "bool" are supported.
 *
 *   methodName: C++ name for the public instrumentation method and agents methods.
 *
@@ -65,101 +59,94 @@
 
 interface InspectorInstrumentation {
 
+#include "core/animation/Animation.h"
+#include "core/dom/CharacterData.h"
 #include "core/dom/PseudoElement.h"
 
+class ThreadableLoaderClient;
+class WebSocketHandshakeRequest;
+class WebSocketHandshakeResponse;
+class WorkerInspectorProxy;
+class XMLHttpRequest;
+
     // We should call PageDebuggerAgent method first otherwise this method resets script cache and removes scripts executed by other agents.
-    [PageRuntime, Page, Animation]
+    [V8, Page, Animation]
     void didClearDocumentOfWindowObject([Keep] LocalFrame*);
 
-    [DOMDebugger, Inline=FastReturn]
+    [DOMDebugger]
     void willInsertDOMNode([Keep] Node* parent);
 
-    [DOM, DOMDebugger, Inline=FastReturn]
+    [DOM, DOMDebugger]
     void didInsertDOMNode([Keep] Node*);
 
-    [DOMDebugger, DOM, Inline=FastReturn]
+    [DOMDebugger, DOM]
     void willRemoveDOMNode([Keep] Node*);
 
-    [DOMDebugger, DOM, Inline=FastReturn]
+    [DOMDebugger, DOM]
     void willModifyDOMAttr([Keep] Element*, const AtomicString& oldValue, const AtomicString& newValue);
 
-    [DOM, Inline=FastReturn]
+    [DOM]
     void didModifyDOMAttr([Keep] Element*, const QualifiedName& name, const AtomicString& value);
 
-    [DOM, Inline=FastReturn]
+    [DOM]
     void didRemoveDOMAttr([Keep] Element*, const QualifiedName& name);
 
-    [DOM, Inline=FastReturn]
+    [DOM]
     void characterDataModified([Keep] CharacterData*);
 
-    [DOM, DOMDebugger, Inline=FastReturn]
+    [DOM, DOMDebugger]
     void didInvalidateStyleAttr([Keep] Node*);
 
-    [DOM, Inline=FastReturn]
+    [DOM]
     void didPerformElementShadowDistribution([Keep] Element*);
 
     [CSS]
     void documentDetached([Keep] Document*);
 
-    [CSS, Inline=FastReturn]
+    [CSS]
     void activeStyleSheetsUpdated([Keep] Document*);
 
-    [CSS, Inline=FastReturn]
+    [CSS]
     void mediaQueryResultChanged(Document*);
 
-    [DOM, Inline=FastReturn]
+    [DOM]
     void didPushShadowRoot([Keep] Element* host, ShadowRoot*);
 
-    [DOM, Inline=FastReturn]
+    [DOM]
     void willPopShadowRoot([Keep] Element* host, ShadowRoot*);
 
-    [DOMDebugger, Inline=FastReturn]
+    [DOMDebugger]
     void willSendXMLHttpRequest(ExecutionContext*, const String& url);
 
-    [DOMDebugger, Inline=FastReturn]
+    [DOMDebugger]
     void didFireWebGLError(Element*, const String& errorName);
 
-    [DOMDebugger, Inline=FastReturn]
+    [DOMDebugger]
     void didFireWebGLWarning(Element*);
 
-    [DOMDebugger, Inline=FastReturn]
+    [DOMDebugger]
     void didFireWebGLErrorOrWarning(Element*, const String& message);
 
-    [Debugger, Inline=FastReturn]
-    InspectorInstrumentationCookie willExecuteScript(ExecutionContext*, int scriptId);
-
-    [Debugger, Inline=FastReturn]
-    void didExecuteScript(const InspectorInstrumentationCookie&);
-
-    [DOMDebugger, Inline=FastReturn]
-    InspectorInstrumentationCookie willHandleEvent([Keep] EventTarget*, Event*, EventListener* listener, bool useCapture);
-
-    [DOMDebugger, Inline=FastReturn]
-    void cancelPauseOnNextStatement(const InspectorInstrumentationCookie&);
-
-    [Page, Inline=FastReturn]
+    [Page]
     void didUpdateLayout(LocalFrame*);
 
-    [Page, Inline=FastReturn]
+    [Page]
     void didResizeMainFrame(LocalFrame*);
 
-    [LayerTree, Inline=FastReturn]
-    void didPaint([Keep] LayoutObject*, const GraphicsLayer*, GraphicsContext&, const LayoutRect&);
+    [LayerTree]
+    void didPaint(LocalFrame*, const GraphicsLayer*, GraphicsContext&, const LayoutRect&);
 
-    [Resource, Inline=FastReturn]
-    InspectorInstrumentationCookie willRecalculateStyle([Keep] Document*);
-
-    [Resource, Page, Inline=FastReturn]
-    void didRecalculateStyle(const InspectorInstrumentationCookie&, int elementCount);
-
-    [Resource, Inline=FastReturn]
+    [Resource]
     void didScheduleStyleRecalculation([Keep] Document*);
 
-    [Resource, Inline=FastReturn]
+    [Resource]
     void applyUserAgentOverride(LocalFrame*, String* userAgent);
 
     [Resource]
     void didBlockRequest([Keep] LocalFrame*, const ResourceRequest&, DocumentLoader*, const FetchInitiatorInfo&, ResourceRequestBlockedReason);
+
+    [Resource]
+    void didChangeResourcePriority(LocalFrame*, unsigned long identifier, ResourceLoadPriority loadPriority);
 
     [Resource]
     void willSendRequest([Keep] LocalFrame*, unsigned long identifier, DocumentLoader*, ResourceRequest&, const ResourceResponse& redirectResponse, const FetchInitiatorInfo&);
@@ -168,28 +155,25 @@ interface InspectorInstrumentation {
     void markResourceAsCached(LocalFrame*, unsigned long identifier);
 
     [Resource]
-    void didReceiveResourceResponse([Keep] LocalFrame*, unsigned long identifier, DocumentLoader*, const ResourceResponse&, ResourceLoader*);
+    void didReceiveResourceResponse([Keep] LocalFrame*, unsigned long identifier, DocumentLoader*, const ResourceResponse&, Resource*);
 
-    [Inline=Forward]
-    void continueAfterXFrameOptionsDenied(LocalFrame* frame, DocumentLoader* loader, unsigned long identifier, const ResourceResponse& r);
-
-    [Inline=Forward]
-    void continueWithPolicyIgnore(LocalFrame* frame, DocumentLoader* loader, unsigned long identifier, const ResourceResponse& r);
-
-    [Resource, Inline=FastReturn]
+    [Resource]
     void didReceiveData([Keep] LocalFrame*, unsigned long identifier, const char* data, int dataLength, int encodedDataLength);
 
     [Resource]
     void didFinishLoading(LocalFrame* frame, unsigned long identifier, double finishTime, int64_t encodedDataLength);
 
     [Resource]
-    void didReceiveCORSRedirectResponse([Keep] LocalFrame*, unsigned long identifier, DocumentLoader*, const ResourceResponse&, ResourceLoader*);
+    void didReceiveCORSRedirectResponse([Keep] LocalFrame*, unsigned long identifier, DocumentLoader*, const ResourceResponse&, Resource*);
 
     [Resource]
     void didFailLoading(LocalFrame* frame, unsigned long identifier, const ResourceError&);
 
     [Resource]
     void documentThreadableLoaderStartedLoadingForClient(ExecutionContext*, unsigned long identifier, ThreadableLoaderClient* client);
+
+    [Resource]
+    void documentThreadableLoaderFailedToStartLoadingForClient(ExecutionContext*, ThreadableLoaderClient* client);
 
     [Resource]
     void willSendEventSourceRequest(ExecutionContext*, ThreadableLoaderClient* eventSource);
@@ -221,13 +205,13 @@ interface InspectorInstrumentation {
     [Resource]
     void scriptImported(ExecutionContext*, unsigned long identifier, const String& sourceString);
 
-    [Debugger]
+    [V8]
     void scriptExecutionBlockedByCSP(ExecutionContext*, const String& directiveText);
 
     [Resource]
     void didReceiveScriptResponse(ExecutionContext*, unsigned long identifier);
 
-    [PageDebugger]
+    [V8]
     void didStartProvisionalLoad([Keep] LocalFrame*);
 
     [DOM, Page]
@@ -245,7 +229,7 @@ interface InspectorInstrumentation {
     [Resource, DOM, Page]
     void didCommitLoad([Keep] LocalFrame*, DocumentLoader*);
 
-    [DOM, Inline=FastReturn]
+    [DOM]
     void frameDocumentUpdated([Keep] LocalFrame*);
 
     [Page]
@@ -260,35 +244,11 @@ interface InspectorInstrumentation {
     [Page, Resource]
     void frameClearedScheduledNavigation([Keep] LocalFrame*);
 
-    [Page, Inline=FastReturn]
-    InspectorInstrumentationCookie willRunJavaScriptDialog(LocalFrame*, const String& message, ChromeClient::DialogType dialogType);
-
-    [Page, Inline=FastReturn]
-    void didRunJavaScriptDialog(const InspectorInstrumentationCookie&, bool result);
-
-    [Inline=Forward]
-    void removedResourceFromMemoryCache(Resource* cachedResource);
-
-    [DOMDebugger]
-    InspectorInstrumentationCookie allowNativeBreakpoint(ExecutionContext*, const String& name, bool sync);
-
     [Worker]
     void didStartWorker(ExecutionContext*, WorkerInspectorProxy* proxy, bool waitingForDebugger);
 
     [Worker, PageConsole]
     void workerTerminated(ExecutionContext*, WorkerInspectorProxy* proxy);
-
-    [Profiler]
-    void willProcessTask(WorkerGlobalScope* context);
-
-    [Profiler]
-    void didProcessTask(WorkerGlobalScope* context);
-
-    [Profiler]
-    void willEnterNestedRunLoop(WorkerGlobalScope* context);
-
-    [Profiler]
-    void didLeaveNestedRunLoop(WorkerGlobalScope* context);
 
     [Resource]
     void didCreateWebSocket([Keep] Document*, unsigned long identifier, const KURL& requestURL, const String& protocol);
@@ -311,40 +271,40 @@ interface InspectorInstrumentation {
     [Resource]
     void didReceiveWebSocketFrameError(Document*, unsigned long identifier, const String& errorMessage);
 
-    [ApplicationCache, Inline=FastReturn]
+    [ApplicationCache]
     void networkStateChanged([Keep] LocalFrame*, bool online);
 
-    [ApplicationCache, Inline=FastReturn]
+    [ApplicationCache]
     void updateApplicationCacheStatus([Keep] LocalFrame*);
 
-    [LayerTree, Inline=FastReturn]
+    [LayerTree]
     void layerTreeDidChange(LocalFrame*);
 
-    [DOM, Inline=FastReturn]
+    [DOM]
     void pseudoElementCreated([Keep] PseudoElement*);
 
-    [DOM, Inline=FastReturn]
+    [DOM]
     void pseudoElementDestroyed([Keep] PseudoElement*);
 
-    [Debugger, Inline=FastReturn]
+    [V8]
     void asyncTaskScheduled(ExecutionContext*, const String& name, void*);
 
-    [Debugger, Inline=FastReturn]
+    [V8]
     void asyncTaskScheduled(ExecutionContext*, const String& name, void*, bool recurring);
 
-    [Debugger, Inline=FastReturn]
+    [V8]
     void asyncTaskCanceled(ExecutionContext*, void*);
 
-    [Debugger, Inline=FastReturn]
+    [V8]
     void allAsyncTasksCanceled(ExecutionContext*);
 
-    [Animation, Inline=FastReturn]
+    [Animation]
     void didCreateAnimation(Document*, unsigned);
 
-    [Animation, Inline=FastReturn]
+    [Animation]
     void animationPlayStateChanged(Document*, Animation*, Animation::AnimationPlayState oldPlayState, Animation::AnimationPlayState newPlayState);
 
-    [Page, Inline=FastReturn]
+    [Page]
     void windowCreated(LocalFrame* opener, LocalFrame* created);
 }
 
@@ -357,23 +317,20 @@ class ConsoleMessage;
     [Console]
     void addMessageToConsole(ExecutionContext* context, ConsoleMessage* consoleMessage);
 
-    [Profiler, Inline=FastReturn]
-    void consoleProfile([Keep] ExecutionContext* context, const String& title);
-
-    [Profiler, Inline=FastReturn]
-    void consoleProfileEnd(ExecutionContext* context, const String& title);
-
     [Console]
     void consoleMessagesCleared(ExecutionContext* context);
 }
 
 interface InspectorOverrides {
-    [CSS, Inline=FastReturn]
+    [CSS]
     bool forcePseudoState([Keep] Element* element, CSSSelector::PseudoType pseudoState);
 
-    [Worker, Inline=FastReturn]
+    [Worker]
     bool shouldWaitForDebuggerOnWorkerStart(ExecutionContext* context);
 
-    [Resource, Inline=FastReturn]
+    [Resource]
     bool shouldForceCORSPreflight(Document*);
+
+    [Resource]
+    bool shouldBlockRequest(LocalFrame*, const ResourceRequest&);
 }

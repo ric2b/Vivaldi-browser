@@ -5,19 +5,23 @@
 #include "components/mus/ws/window_tree.h"
 
 #include <stddef.h>
+
 #include <utility>
 
 #include "base/bind.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "components/mus/ws/default_access_policy.h"
 #include "components/mus/ws/display.h"
 #include "components/mus/ws/display_manager.h"
+#include "components/mus/ws/event_matcher.h"
 #include "components/mus/ws/focus_controller.h"
 #include "components/mus/ws/operation.h"
 #include "components/mus/ws/platform_display.h"
 #include "components/mus/ws/server_window.h"
 #include "components/mus/ws/server_window_observer.h"
+#include "components/mus/ws/user_display_manager.h"
 #include "components/mus/ws/window_manager_state.h"
 #include "components/mus/ws/window_server.h"
 #include "components/mus/ws/window_tree_binding.h"
@@ -48,7 +52,7 @@ class TargetedEvent : public ServerWindowObserver {
   }
 
   ServerWindow* target() { return target_; }
-  scoped_ptr<ui::Event> TakeEvent() { return std::move(event_); }
+  std::unique_ptr<ui::Event> TakeEvent() { return std::move(event_); }
 
  private:
   // ServerWindowObserver:
@@ -59,7 +63,7 @@ class TargetedEvent : public ServerWindowObserver {
   }
 
   ServerWindow* target_;
-  scoped_ptr<ui::Event> event_;
+  std::unique_ptr<ui::Event> event_;
 
   DISALLOW_COPY_AND_ASSIGN(TargetedEvent);
 };
@@ -67,7 +71,7 @@ class TargetedEvent : public ServerWindowObserver {
 WindowTree::WindowTree(WindowServer* window_server,
                        const UserId& user_id,
                        ServerWindow* root,
-                       scoped_ptr<AccessPolicy> access_policy)
+                       std::unique_ptr<AccessPolicy> access_policy)
     : window_server_(window_server),
       user_id_(user_id),
       id_(window_server_->GetAndAdvanceNextConnectionId()),
@@ -84,7 +88,7 @@ WindowTree::~WindowTree() {
   DestroyWindows();
 }
 
-void WindowTree::Init(scoped_ptr<WindowTreeBinding> binding,
+void WindowTree::Init(std::unique_ptr<WindowTreeBinding> binding,
                       mojom::WindowTreePtr tree) {
   DCHECK(!binding_);
   binding_ = std::move(binding);
@@ -230,8 +234,7 @@ bool WindowTree::AddTransientWindow(const ClientWindowId& window_id,
   if (window && transient_window && !transient_window->Contains(window) &&
       access_policy_->CanAddTransientWindow(window, transient_window)) {
     Operation op(this, window_server_, OperationType::ADD_TRANSIENT_WINDOW);
-    window->AddTransientWindow(transient_window);
-    return true;
+    return window->AddTransientWindow(transient_window);
   }
   return false;
 }
@@ -239,8 +242,15 @@ bool WindowTree::AddTransientWindow(const ClientWindowId& window_id,
 bool WindowTree::SetModal(const ClientWindowId& window_id) {
   ServerWindow* window = GetWindowByClientId(window_id);
   if (window && access_policy_->CanSetModal(window)) {
-    window->SetModal();
     WindowManagerState* wms = GetWindowManagerState(window);
+    if (window->transient_parent()) {
+      window->SetModal();
+    } else if (user_id_ != InvalidUserId()) {
+      if (wms)
+        wms->AddSystemModalWindow(window);
+    } else {
+      return false;
+    }
     if (wms)
       wms->ReleaseCaptureBlockedByModalWindow(window);
     return true;
@@ -260,10 +270,10 @@ std::vector<const ServerWindow*> WindowTree::GetWindowTree(
 bool WindowTree::SetWindowVisibility(const ClientWindowId& window_id,
                                      bool visible) {
   ServerWindow* window = GetWindowByClientId(window_id);
-  if (!window || window->visible() == visible ||
-      !access_policy_->CanChangeWindowVisibility(window)) {
+  if (!window || !access_policy_->CanChangeWindowVisibility(window))
     return false;
-  }
+  if (window->visible() == visible)
+    return true;
   Operation op(this, window_server_, OperationType::SET_WINDOW_VISIBILITY);
   window->SetVisible(visible);
   return true;
@@ -284,18 +294,28 @@ bool WindowTree::SetWindowOpacity(const ClientWindowId& window_id,
 bool WindowTree::SetFocus(const ClientWindowId& window_id) {
   ServerWindow* window = GetWindowByClientId(window_id);
   ServerWindow* currently_focused = window_server_->GetFocusedWindow();
-  if (!currently_focused && !window)
+  if (!currently_focused && !window) {
+    DVLOG(1) << "SetFocus failure, no focused window to clear.";
     return false;
+  }
 
   Display* display = GetDisplay(window);
-  if (window && (!display || !window->can_focus() || !window->IsDrawn()))
+  if (window && (!display || !window->can_focus() || !window->IsDrawn())) {
+    DVLOG(1) << "SetFocus failure, window cannot be focused.";
     return false;
+  }
 
-  if (!access_policy_->CanSetFocus(window))
+  if (!access_policy_->CanSetFocus(window)) {
+    DVLOG(1) << "SetFocus failure, blocked by access policy.";
     return false;
+  }
 
   Operation op(this, window_server_, OperationType::SET_FOCUS);
-  return window_server_->SetFocusedWindow(window);
+  bool success = window_server_->SetFocusedWindow(window);
+  if (!success) {
+    DVLOG(1) << "SetFocus failure, could not SetFocusedWindow.";
+  }
+  return success;
 }
 
 bool WindowTree::Embed(const ClientWindowId& window_id,
@@ -307,7 +327,7 @@ bool WindowTree::Embed(const ClientWindowId& window_id,
   // When embedding we don't know the user id of where the TreeClient came
   // from. Use an invalid id, which limits what the client is able to do.
   window_server_->EmbedAtWindow(window, InvalidUserId(), std::move(client),
-                                make_scoped_ptr(new DefaultAccessPolicy));
+                                base::WrapUnique(new DefaultAccessPolicy));
   return true;
 }
 
@@ -315,7 +335,7 @@ void WindowTree::DispatchInputEvent(ServerWindow* target,
                                     const ui::Event& event) {
   if (event_ack_id_) {
     // This is currently waiting for an event ack. Add it to the queue.
-    event_queue_.push(make_scoped_ptr(new TargetedEvent(target, event)));
+    event_queue_.push(base::WrapUnique(new TargetedEvent(target, event)));
     // TODO(sad): If the |event_queue_| grows too large, then this should notify
     // Display, so that it can stop sending events.
     return;
@@ -325,7 +345,7 @@ void WindowTree::DispatchInputEvent(ServerWindow* target,
   // and dispatch the latest event from the queue instead that still has a live
   // target.
   if (!event_queue_.empty()) {
-    event_queue_.push(make_scoped_ptr(new TargetedEvent(target, event)));
+    event_queue_.push(base::WrapUnique(new TargetedEvent(target, event)));
     return;
   }
 
@@ -342,8 +362,9 @@ void WindowTree::OnWindowManagerCreatedTopLevelWindow(
     uint32_t client_change_id,
     const ServerWindow* window) {
   DCHECK(IsWaitingForNewTopLevelWindow(wm_change_id));
-  scoped_ptr<WaitingForTopLevelWindowInfo> waiting_for_top_level_window_info(
-      std::move(waiting_for_top_level_window_info_));
+  std::unique_ptr<WaitingForTopLevelWindowInfo>
+      waiting_for_top_level_window_info(
+          std::move(waiting_for_top_level_window_info_));
   binding_->SetIncomingMethodCallProcessingPaused(false);
   // We were paused, so the id should still be valid.
   DCHECK(IsValidIdForNewWindow(
@@ -496,8 +517,8 @@ void WindowTree::ProcessWindowHierarchyChanged(const ServerWindow* window,
   const ClientWindowId client_window_id =
       window ? ClientWindowIdForWindow(window) : ClientWindowId();
   client()->OnWindowHierarchyChanged(
-      client_window_id.id, new_parent_client_window_id.id,
-      old_parent_client_window_id.id, WindowsToWindowDatas(to_send));
+      client_window_id.id, old_parent_client_window_id.id,
+      new_parent_client_window_id.id, WindowsToWindowDatas(to_send));
   window_server_->OnTreeMessagedClient(id_);
 }
 
@@ -951,9 +972,16 @@ void WindowTree::DispatchInputEventImpl(ServerWindow* target,
   event_source_wms_ = GetWindowManagerState(target);
   // Should only get events from windows attached to a host.
   DCHECK(event_source_wms_);
-  client()->OnWindowInputEvent(event_ack_id_,
-                               ClientWindowIdForWindow(target).id,
-                               mojom::Event::From(event));
+  bool matched_observer =
+      event_observer_matcher_ && event_observer_matcher_->MatchesEvent(event);
+  client()->OnWindowInputEvent(
+      event_ack_id_, ClientWindowIdForWindow(target).id,
+      mojom::Event::From(event), matched_observer ? event_observer_id_ : 0);
+}
+
+void WindowTree::SendToEventObserver(const ui::Event& event) {
+  if (event_observer_matcher_ && event_observer_matcher_->MatchesEvent(event))
+    client()->OnEventObserved(mojom::Event::From(event), event_observer_id_);
 }
 
 void WindowTree::NewWindow(
@@ -1109,6 +1137,17 @@ void WindowTree::ReleaseCapture(uint32_t change_id, Id window_id) {
   client()->OnChangeCompleted(change_id, success);
 }
 
+void WindowTree::SetEventObserver(mojom::EventMatcherPtr matcher,
+                                  uint32_t observer_id) {
+  if (!matcher.is_null() && observer_id != 0) {
+    event_observer_matcher_.reset(new EventMatcher(*matcher));
+    event_observer_id_ = observer_id;
+  } else {
+    event_observer_matcher_.reset();
+    event_observer_id_ = 0;
+  }
+}
+
 void WindowTree::SetWindowBounds(uint32_t change_id,
                                  Id window_id,
                                  mojo::RectPtr bounds) {
@@ -1219,7 +1258,8 @@ void WindowTree::SetImeVisibility(Id transport_window_id,
   }
 }
 
-void WindowTree::OnWindowInputEventAck(uint32_t event_id, bool handled) {
+void WindowTree::OnWindowInputEventAck(uint32_t event_id,
+                                       mojom::EventResult result) {
   if (event_ack_id_ == 0 || event_id != event_ack_id_) {
     // TODO(sad): Something bad happened. Kill the client?
     NOTIMPLEMENTED() << "Wrong event acked.";
@@ -1229,14 +1269,14 @@ void WindowTree::OnWindowInputEventAck(uint32_t event_id, bool handled) {
   WindowManagerState* event_source_wms = event_source_wms_;
   event_source_wms_ = nullptr;
   if (event_source_wms)
-    event_source_wms->OnEventAck(this, handled);
+    event_source_wms->OnEventAck(this, result);
 
   if (!event_queue_.empty()) {
     DCHECK(!event_ack_id_);
     ServerWindow* target = nullptr;
-    scoped_ptr<ui::Event> event;
+    std::unique_ptr<ui::Event> event;
     do {
-      scoped_ptr<TargetedEvent> targeted_event =
+      std::unique_ptr<TargetedEvent> targeted_event =
           std::move(event_queue_.front());
       event_queue_.pop();
       target = targeted_event->target();
@@ -1306,6 +1346,13 @@ void WindowTree::GetWindowManagerClient(
   window_manager_internal_client_binding_.reset(
       new mojo::AssociatedBinding<mojom::WindowManagerClient>(
           this, std::move(internal)));
+}
+
+void WindowTree::GetCursorLocationMemory(
+    const GetCursorLocationMemoryCallback& callback) {
+  callback.Run(
+      window_server_->display_manager()->GetUserDisplayManager(user_id_)->
+      GetCursorLocationMemory());
 }
 
 void WindowTree::AddAccelerator(uint32_t id,
@@ -1382,6 +1429,16 @@ void WindowTree::WmSetFrameDecorationValues(
   WindowManagerState* wm_state = GetWindowManagerStateForWindowManager();
   if (wm_state)
     wm_state->SetFrameDecorationValues(std::move(values));
+}
+
+void WindowTree::WmSetNonClientCursor(uint32_t window_id,
+                                      mojom::Cursor cursor_id) {
+  WindowManagerState* wm_state = GetWindowManagerStateForWindowManager();
+  if (wm_state) {
+    ServerWindow* window = GetWindowByClientId(ClientWindowId(window_id));
+    if (window)
+      window->SetNonClientCursor(cursor_id);
+  }
 }
 
 void WindowTree::OnWmCreatedTopLevelWindow(uint32_t change_id,

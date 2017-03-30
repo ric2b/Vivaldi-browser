@@ -9,7 +9,7 @@
 
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "net/base/net_errors.h"
 
 using testing::_;
@@ -67,15 +67,15 @@ MockMDnsSocketFactory::~MockMDnsSocketFactory() {
 }
 
 void MockMDnsSocketFactory::CreateSockets(
-    std::vector<scoped_ptr<DatagramServerSocket>>* sockets) {
+    std::vector<std::unique_ptr<DatagramServerSocket>>* sockets) {
   CreateSocket(ADDRESS_FAMILY_IPV4, sockets);
   CreateSocket(ADDRESS_FAMILY_IPV6, sockets);
 }
 
 void MockMDnsSocketFactory::CreateSocket(
     AddressFamily address_family,
-    std::vector<scoped_ptr<DatagramServerSocket>>* sockets) {
-  scoped_ptr<testing::NiceMock<MockMDnsDatagramServerSocket> > new_socket(
+    std::vector<std::unique_ptr<DatagramServerSocket>>* sockets) {
+  std::unique_ptr<testing::NiceMock<MockMDnsDatagramServerSocket>> new_socket(
       new testing::NiceMock<MockMDnsDatagramServerSocket>(address_family));
 
   ON_CALL(*new_socket, SendToInternal(_, _, _))

@@ -6,8 +6,9 @@
 
 #include <stddef.h>
 
+#include <memory>
+
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "content/browser/speech/audio_buffer.h"
 
@@ -15,7 +16,7 @@ namespace content {
 
 namespace {
 
-const char* const kContentTypeFLAC = "audio/x-flac; rate=";
+const char kContentTypeFLAC[] = "audio/x-flac; rate=";
 const int kFLACCompressionLevel = 0;  // 0 for speed
 
 FLAC__StreamEncoderWriteStatus WriteCallback(
@@ -62,7 +63,7 @@ void AudioEncoder::Encode(const AudioChunk& raw_audio) {
 
   // FLAC encoder wants samples as int32s.
   const int num_samples = raw_audio.NumSamples();
-  scoped_ptr<FLAC__int32[]> flac_samples(new FLAC__int32[num_samples]);
+  std::unique_ptr<FLAC__int32[]> flac_samples(new FLAC__int32[num_samples]);
   FLAC__int32* flac_samples_ptr = flac_samples.get();
   for (int i = 0; i < num_samples; ++i)
     flac_samples_ptr[i] = static_cast<FLAC__int32>(raw_audio.GetSample16(i));

@@ -11,6 +11,7 @@
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/cpu.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
 #include "base/stl_util.h"
@@ -44,7 +45,7 @@ enum { kMaxInFlightDecodes = 4 };
 // be on the beefy side.
 static const size_t kSharedMemorySegmentBytes = 100 << 10;
 
-GpuVideoDecoder::SHMBuffer::SHMBuffer(scoped_ptr<base::SharedMemory> m,
+GpuVideoDecoder::SHMBuffer::SHMBuffer(std::unique_ptr<base::SharedMemory> m,
                                       size_t s)
     : shm(std::move(m)), size(s) {}
 
@@ -189,6 +190,14 @@ void GpuVideoDecoder::Initialize(const VideoDecoderConfig& config,
     return;
   }
 
+  // TODO(sandersd): This should be moved to capabilities if we ever have a
+  // hardware decoder which supports alpha formats.
+  if (config.format() == PIXEL_FORMAT_YV12A) {
+    DVLOG(1) << "Alpha transparency formats are not supported.";
+    bound_init_cb.Run(false);
+    return;
+  }
+
   VideoDecodeAccelerator::Capabilities capabilities =
       factories_->GetVideoDecodeAcceleratorCapabilities();
   if (!IsProfileSupported(capabilities, config.profile(), config.coded_size(),
@@ -276,7 +285,16 @@ void GpuVideoDecoder::CompleteInitialization(int cdm_id, int surface_id) {
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
   DCHECK(!init_cb_.is_null());
 
-  VideoDecodeAccelerator::Config vda_config(config_);
+  // It's possible for the vda to become null if NotifyError is called.
+  if (!vda_) {
+    base::ResetAndReturn(&init_cb_).Run(false);
+    return;
+  }
+
+  VideoDecodeAccelerator::Config vda_config;
+  vda_config.profile = config_.profile();
+  vda_config.cdm_id = cdm_id;
+  vda_config.is_encrypted = config_.is_encrypted();
   vda_config.surface_id = surface_id;
   vda_config.is_deferred_initialization_allowed = true;
   vda_config.initial_expected_coded_size = config_.coded_size();
@@ -286,25 +304,15 @@ void GpuVideoDecoder::CompleteInitialization(int cdm_id, int surface_id) {
     return;
   }
 
-  // The VDA is now initialized, but if the stream is encrypted we need to
-  // attach the CDM before completing GVD's initialization.
-  if (config_.is_encrypted()) {
-    // TODO(watk,timav): Pass this in the VDA::Config.
-    vda_->SetCdm(cdm_id);
-    DCHECK(supports_deferred_initialization_);
-  }
-
-  // We enable deferred initialization in the config, so if the VDA supports it,
-  // then it will be in use.  Otherwise, initialization is already complete.
-  if (!supports_deferred_initialization_) {
+  // If deferred initialization is not supported, initialization is complete.
+  // Otherwise, a call to NotifyInitializationComplete will follow with the
+  // result of deferred initialization.
+  if (!supports_deferred_initialization_)
     base::ResetAndReturn(&init_cb_).Run(true);
-  }
-
-  // A call to NotifyInitializationComplete will follow with the status.
 }
 
 void GpuVideoDecoder::NotifyInitializationComplete(bool success) {
-  DVLOG_IF(2, !success) << __FUNCTION__ << ": CDM not attached.";
+  DVLOG_IF(1, !success) << __FUNCTION__ << " Deferred initialization failed.";
   DCHECK(!init_cb_.is_null());
 
   base::ResetAndReturn(&init_cb_).Run(success);
@@ -374,7 +382,7 @@ void GpuVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
   }
 
   size_t size = buffer->data_size();
-  scoped_ptr<SHMBuffer> shm_buffer = GetSHM(size);
+  std::unique_ptr<SHMBuffer> shm_buffer = GetSHM(size);
   if (!shm_buffer) {
     bound_decode_cb.Run(DecodeStatus::DECODE_ERROR);
     return;
@@ -569,12 +577,20 @@ void GpuVideoDecoder::PictureReady(const media::Picture& picture) {
 
   DCHECK(decoder_texture_target_);
 
-  bool opaque = IsOpaque(config_.format());
+  VideoPixelFormat pixel_format = vda_->GetOutputFormat();
+  if (pixel_format == PIXEL_FORMAT_UNKNOWN) {
+    pixel_format =
+        IsOpaque(config_.format()) ? PIXEL_FORMAT_XRGB : PIXEL_FORMAT_ARGB;
+  }
 
-  scoped_refptr<VideoFrame> frame(VideoFrame::WrapNativeTexture(
-      opaque ? PIXEL_FORMAT_XRGB : PIXEL_FORMAT_ARGB,
-      gpu::MailboxHolder(pb.texture_mailbox(0), gpu::SyncToken(),
-                         decoder_texture_target_),
+  gpu::MailboxHolder mailbox_holders[VideoFrame::kMaxPlanes];
+  for (size_t i = 0; i < pb.texture_ids().size(); ++i) {
+    mailbox_holders[i] = gpu::MailboxHolder(
+        pb.texture_mailbox(i), gpu::SyncToken(), decoder_texture_target_);
+  }
+
+  scoped_refptr<VideoFrame> frame(VideoFrame::WrapNativeTextures(
+      pixel_format, mailbox_holders,
       base::Bind(&ReleaseMailboxTrampoline, factories_->GetTaskRunner(),
                  base::Bind(&GpuVideoDecoder::ReleaseMailbox,
                             weak_factory_.GetWeakPtr(), factories_,
@@ -659,25 +675,25 @@ void GpuVideoDecoder::ReusePictureBuffer(int64_t picture_buffer_id) {
     vda_->ReusePictureBuffer(picture_buffer_id);
 }
 
-scoped_ptr<GpuVideoDecoder::SHMBuffer> GpuVideoDecoder::GetSHM(
+std::unique_ptr<GpuVideoDecoder::SHMBuffer> GpuVideoDecoder::GetSHM(
     size_t min_size) {
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
   if (available_shm_segments_.empty() ||
       available_shm_segments_.back()->size < min_size) {
     size_t size_to_allocate = std::max(min_size, kSharedMemorySegmentBytes);
-    scoped_ptr<base::SharedMemory> shm =
+    std::unique_ptr<base::SharedMemory> shm =
         factories_->CreateSharedMemory(size_to_allocate);
     // CreateSharedMemory() can return NULL during Shutdown.
     if (!shm)
       return NULL;
-    return make_scoped_ptr(new SHMBuffer(std::move(shm), size_to_allocate));
+    return base::WrapUnique(new SHMBuffer(std::move(shm), size_to_allocate));
   }
-  scoped_ptr<SHMBuffer> ret(available_shm_segments_.back());
+  std::unique_ptr<SHMBuffer> ret(available_shm_segments_.back());
   available_shm_segments_.pop_back();
   return ret;
 }
 
-void GpuVideoDecoder::PutSHM(scoped_ptr<SHMBuffer> shm_buffer) {
+void GpuVideoDecoder::PutSHM(std::unique_ptr<SHMBuffer> shm_buffer) {
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
   available_shm_segments_.push_back(shm_buffer.release());
 }
@@ -694,7 +710,7 @@ void GpuVideoDecoder::NotifyEndOfBitstreamBuffer(int32_t id) {
     return;
   }
 
-  PutSHM(make_scoped_ptr(it->second.shm_buffer));
+  PutSHM(base::WrapUnique(it->second.shm_buffer));
   it->second.done_cb.Run(state_ == kError ? DecodeStatus::DECODE_ERROR
                                           : DecodeStatus::OK);
   bitstream_buffers_in_decoder_.erase(it);

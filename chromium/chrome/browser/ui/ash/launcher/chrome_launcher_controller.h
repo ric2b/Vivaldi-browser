@@ -23,11 +23,11 @@
 #include "base/memory/scoped_vector.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/app_icon_loader.h"
+#include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ui/ash/app_sync_ui_state_observer.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_app_menu_item.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_types.h"
 #include "chrome/browser/ui/ash/launcher/launcher_app_updater.h"
-#include "chrome/browser/ui/extensions/extension_enable_flow_delegate.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/syncable_prefs/pref_service_syncable_observer.h"
 #include "extensions/common/constants.h"
@@ -37,8 +37,8 @@ class AppSyncUIState;
 class Browser;
 class BrowserShortcutLauncherItemController;
 class BrowserStatusMonitor;
-class ExtensionEnableFlow;
 class GURL;
+class LauncherControllerHelper;
 class LauncherItemController;
 class Profile;
 class AppWindowLauncherController;
@@ -66,9 +66,7 @@ namespace ui {
 class BaseWindow;
 }
 
-#if defined(OS_CHROMEOS)
 class ChromeLauncherControllerUserSwitchObserver;
-#endif
 
 // A list of the elements which makes up a simple menu description.
 typedef ScopedVector<ChromeLauncherAppMenuItem> ChromeLauncherAppMenuItems;
@@ -88,7 +86,6 @@ class ChromeLauncherController
       public AppIconLoaderDelegate,
       public syncable_prefs::PrefServiceSyncableObserver,
       public AppSyncUIStateObserver,
-      public ExtensionEnableFlowDelegate,
       public LauncherAppUpdater::Delegate,
       public ash::ShelfItemDelegateManagerObserver {
  public:
@@ -104,25 +101,6 @@ class ChromeLauncherController
     APP_STATE_WINDOW_ACTIVE,
     APP_STATE_INACTIVE,
     APP_STATE_REMOVED
-  };
-
-  // Mockable interface to get app ids from tabs.
-  class AppTabHelper {
-   public:
-    virtual ~AppTabHelper() {}
-
-    // Returns the app id of the specified tab, or an empty string if there is
-    // no app. All known profiles will be queried for this.
-    virtual std::string GetAppID(content::WebContents* tab) = 0;
-
-    // Returns true if |id| is valid for the currently active profile.
-    // Used during restore to ignore no longer valid extensions.
-    // Note that already running applications are ignored by the restore
-    // process.
-    virtual bool IsValidIDForCurrentUser(const std::string& id) = 0;
-
-    // Sets the currently active profile for the usage of |GetAppID|.
-    virtual void SetCurrentUser(Profile* profile) = 0;
   };
 
   ChromeLauncherController(Profile* profile, ash::ShelfModel* model);
@@ -307,10 +285,6 @@ class ChromeLauncherController
   // AppSyncUIStateObserver:
   void OnAppSyncUIStatusChanged() override;
 
-  // ExtensionEnableFlowDelegate:
-  void ExtensionEnableFlowFinished() override;
-  void ExtensionEnableFlowAborted(bool user_initiated) override;
-
   // AppIconLoaderDelegate:
   void OnAppImageUpdated(const std::string& app_id,
                          const gfx::ImageSkia& image) override;
@@ -365,7 +339,7 @@ class ChromeLauncherController
   // user profile or not. However, since the full visibility calculation of the
   // shelf cannot be performed here, this is only a probability used for
   // animation predictions.
-  bool ShelfBoundsChangesProbablyWithUser(aura::Window* root_window,
+  bool ShelfBoundsChangesProbablyWithUser(ash::Shelf* shelf,
                                           const std::string& user_id) const;
 
   // Called when the user profile is fully loaded and ready to switch to.
@@ -381,7 +355,8 @@ class ChromeLauncherController
     return app_window_controllers_[0].get();
   }
 
-  bool CanPin(const std::string& app_id);
+  // TODO(khmel): Find better home for Pinnable enum.
+  AppListControllerDelegate::Pinnable GetPinnable(const std::string& app_id);
 
  protected:
   // Creates a new app shortcut item and controller on the shelf at |index|.
@@ -389,9 +364,8 @@ class ChromeLauncherController
   ash::ShelfID CreateAppShortcutLauncherItem(const std::string& app_id,
                                              int index);
 
-  // Sets the AppTabHelper/AppIconLoader, taking ownership of the helper class.
-  // These are intended for testing.
-  void SetAppTabHelperForTest(AppTabHelper* helper);
+  // Sets LauncherControllerHelper/AppIconLoader for test, taking ownership.
+  void SetLauncherControllerHelperForTest(LauncherControllerHelper* helper);
   void SetAppIconLoadersForTest(
       std::vector<std::unique_ptr<AppIconLoader>>& loaders);
   const std::string& GetAppIdFromShelfIdForTest(ash::ShelfID id);
@@ -451,10 +425,8 @@ class ChromeLauncherController
   // Sets both of auto-hide behavior and alignment from prefs.
   void SetShelfBehaviorsFromPrefs();
 
-#if defined(OS_CHROMEOS)
   // Sets whether the virtual keyboard is enabled from prefs.
   void SetVirtualKeyboardBehaviorFromPrefs();
-#endif  // defined(OS_CHROMEOS)
 
   // Returns the shelf item status for the given |app_id|, which can be either
   // STATUS_ACTIVE (if the app is active), STATUS_RUNNING (if there is such an
@@ -483,9 +455,6 @@ class ChromeLauncherController
   // Update browser shortcut's index.
   void PersistChromeItemIndex(int index);
 
-  // Get browser shortcut's index from pref.
-  int GetChromeIconIndexFromPref() const;
-
   // Depending on the provided flags, move either the chrome icon, the app icon
   // or none to the given |target_index|. The provided |chrome_index| and
   // |app_list_index| locations will get adjusted within this call to finalize
@@ -504,9 +473,6 @@ class ChromeLauncherController
   // Get the browser shortcut's index in the shelf using the current's systems
   // configuration of pinned and known (but not running) apps.
   int GetChromeIconIndexForCreation();
-
-  // Get the list of pinned programs from the preferences.
-  std::vector<std::string> GetListOfPinnedAppsAndBrowser();
 
   // Close all windowed V1 applications of a certain extension which was already
   // deleted.
@@ -547,9 +513,9 @@ class ChromeLauncherController
       app_window_controllers_;
 
   // Used to get app info for tabs.
-  std::unique_ptr<AppTabHelper> app_tab_helper_;
+  std::unique_ptr<LauncherControllerHelper> launcher_controller_helper_;
 
-  // Used to load the image for an extension app item.
+  // Used to load the images for app items.
   std::vector<std::unique_ptr<AppIconLoader>> app_icon_loaders_;
 
   // Used to handle app load/unload events.
@@ -559,16 +525,12 @@ class ChromeLauncherController
 
   AppSyncUIState* app_sync_ui_state_;
 
-  std::unique_ptr<ExtensionEnableFlow> extension_enable_flow_;
-
   // The owned browser status monitor.
   std::unique_ptr<BrowserStatusMonitor> browser_status_monitor_;
 
-#if defined(OS_CHROMEOS)
   // A special observer class to detect user switches.
   std::unique_ptr<ChromeLauncherControllerUserSwitchObserver>
       user_switch_observer_;
-#endif
 
   // If true, incoming pinned state changes should be ignored.
   bool ignore_persist_pinned_state_change_;

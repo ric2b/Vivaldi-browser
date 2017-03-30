@@ -17,9 +17,7 @@
 #include "device/usb/usb_service.h"
 
 namespace device {
-namespace usb {
-class DeviceInfo;
-}
+class UsbDevice;
 }
 
 class UsbChooserContext : public ChooserContextBase,
@@ -30,11 +28,11 @@ class UsbChooserContext : public ChooserContextBase,
 
   // These methods from ChooserContextBase are overridden in order to expose
   // ephemeral devices through the public interface.
-  std::vector<scoped_ptr<base::DictionaryValue>> GetGrantedObjects(
+  std::vector<std::unique_ptr<base::DictionaryValue>> GetGrantedObjects(
       const GURL& requesting_origin,
       const GURL& embedding_origin) override;
-  std::vector<scoped_ptr<ChooserContextBase::Object>> GetAllGrantedObjects()
-      override;
+  std::vector<std::unique_ptr<ChooserContextBase::Object>>
+  GetAllGrantedObjects() override;
   void RevokeObjectPermission(const GURL& requesting_origin,
                               const GURL& embedding_origin,
                               const base::DictionaryValue& object) override;
@@ -49,7 +47,7 @@ class UsbChooserContext : public ChooserContextBase,
   // access to a device with |device_info|.
   bool HasDevicePermission(const GURL& requesting_origin,
                            const GURL& embedding_origin,
-                           const device::usb::DeviceInfo& device_info);
+                           scoped_refptr<const device::UsbDevice> device);
 
  private:
   // ChooserContextBase implementation.

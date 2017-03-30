@@ -7,13 +7,6 @@
 
     properties: {
 
-      _animationMeta: {
-        type: Object,
-        value: function() {
-          return new Polymer.IronMeta({type: 'animation'});
-        }
-      },
-
       /** @type {?Object} */
       _player: {
         type: Object
@@ -25,9 +18,9 @@
       var allAnimations = [];
       if (allConfigs.length > 0) {
         for (var config, index = 0; config = allConfigs[index]; index++) {
-          var animationConstructor = this._animationMeta.byKey(config.name);
-          if (animationConstructor) {
-            var animation = animationConstructor && new animationConstructor();
+          var animation = document.createElement(config.name);
+          // is this element actually a neon animation?
+          if (animation.isNeonAnimation) {
             var effect = animation.configure(config);
             if (effect) {
               allAnimations.push({
@@ -64,27 +57,30 @@
       if (!allConfigs) {
         return;
       }
-      var allAnimations = this._configureAnimationEffects(allConfigs);
-      var allEffects = allAnimations.map(function(animation) {
-        return animation.effect;
-      });
+      try {
+        var allAnimations = this._configureAnimationEffects(allConfigs);
+        var allEffects = allAnimations.map(function(animation) {
+          return animation.effect;
+        });
 
-      if (allEffects.length > 0) {
-        this._player = this._runAnimationEffects(allEffects);
-        this._player.onfinish = function() {
-          this._completeAnimations(allAnimations);
+        if (allEffects.length > 0) {
+          this._player = this._runAnimationEffects(allEffects);
+          this._player.onfinish = function() {
+            this._completeAnimations(allAnimations);
 
-          if (this._player) {
-            this._player.cancel();
-            this._player = null;
-          }
+            if (this._player) {
+              this._player.cancel();
+              this._player = null;
+            }
 
-          this.fire('neon-animation-finish', cookie, {bubbles: false});
-        }.bind(this);
-
-      } else {
-        this.fire('neon-animation-finish', cookie, {bubbles: false});
+            this.fire('neon-animation-finish', cookie, {bubbles: false});
+          }.bind(this);
+          return;
+        }
+      } catch (e) {
+        console.warn('Couldnt play', '(', type, allConfigs, ').', e);
       }
+      this.fire('neon-animation-finish', cookie, {bubbles: false});
     },
 
     /**

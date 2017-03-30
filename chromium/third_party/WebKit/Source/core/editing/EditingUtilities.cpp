@@ -87,8 +87,8 @@ bool isAtomicNode(const Node *node)
 template <typename Traversal>
 static int comparePositions(Node* containerA, int offsetA, Node* containerB, int offsetB, bool* disconnected)
 {
-    ASSERT(containerA);
-    ASSERT(containerB);
+    DCHECK(containerA);
+    DCHECK(containerB);
 
     if (disconnected)
         *disconnected = false;
@@ -193,21 +193,21 @@ int comparePositionsInFlatTree(Node* containerA, int offsetA, Node* containerB, 
 // could be inside a shadow tree. Only works for non-null values.
 int comparePositions(const Position& a, const Position& b)
 {
-    ASSERT(a.isNotNull());
-    ASSERT(b.isNotNull());
+    DCHECK(a.isNotNull());
+    DCHECK(b.isNotNull());
     const TreeScope* commonScope = Position::commonAncestorTreeScope(a, b);
 
-    ASSERT(commonScope);
+    DCHECK(commonScope);
     if (!commonScope)
         return 0;
 
     Node* nodeA = commonScope->ancestorInThisScope(a.computeContainerNode());
-    ASSERT(nodeA);
+    DCHECK(nodeA);
     bool hasDescendentA = nodeA != a.computeContainerNode();
     int offsetA = hasDescendentA ? 0 : a.computeOffsetInContainerNode();
 
     Node* nodeB = commonScope->ancestorInThisScope(b.computeContainerNode());
-    ASSERT(nodeB);
+    DCHECK(nodeB);
     bool hasDescendentB = nodeB != b.computeContainerNode();
     int offsetB = hasDescendentB ? 0 : b.computeOffsetInContainerNode();
 
@@ -268,9 +268,9 @@ bool isEditablePosition(const Position& p, EditableType editableType, EUpdateSty
     if (!node)
         return false;
     if (updateStyle == UpdateStyle)
-        node->document().updateLayoutIgnorePendingStylesheets();
+        node->document().updateStyleAndLayoutIgnorePendingStylesheets();
     else
-        ASSERT(updateStyle == DoNotUpdateStyle);
+        DCHECK_EQ(updateStyle, DoNotUpdateStyle);
 
     if (isDisplayInsideTable(node))
         node = node->parentNode();
@@ -679,7 +679,8 @@ PositionInFlatTree previousPositionOf(const PositionInFlatTree& position, Positi
 template <typename Strategy>
 PositionTemplate<Strategy> nextPositionOfAlgorithm(const PositionTemplate<Strategy>& position, PositionMoveType moveType)
 {
-    ASSERT(moveType != PositionMoveType::BackwardDeletion);
+    // TODO(yosin): We should have printer for PositionMoveType.
+    DCHECK(moveType != PositionMoveType::BackwardDeletion);
 
     Node* node = position.anchorNode();
     if (!node)
@@ -772,9 +773,9 @@ Element* enclosingBlockFlowElement(const Node& node)
     if (isBlockFlowElement(node))
         return const_cast<Element*>(&toElement(node));
 
-    for (Node* n = node.parentNode(); n; n = n->parentNode()) {
-        if (isBlockFlowElement(*n) || isHTMLBodyElement(*n))
-            return toElement(n);
+    for (Node& runner : NodeTraversal::ancestorsOf(node)) {
+        if (isBlockFlowElement(runner) || isHTMLBodyElement(runner))
+            return toElement(&runner);
     }
     return nullptr;
 }
@@ -843,7 +844,7 @@ String stringWithRebalancedWhitespace(const String& string, bool startIsStartOfP
         }
     }
 
-    ASSERT(rebalancedString.length() == length);
+    DCHECK_EQ(rebalancedString.length(), length);
 
     return rebalancedString.toString();
 }
@@ -885,9 +886,11 @@ static bool isSpecialHTMLElement(const Node& n)
 static HTMLElement* firstInSpecialElement(const Position& pos)
 {
     Element* rootEditableElement = pos.computeContainerNode()->rootEditableElement();
-    for (Node* n = pos.anchorNode(); n && n->rootEditableElement() == rootEditableElement; n = n->parentNode()) {
-        if (isSpecialHTMLElement(*n)) {
-            HTMLElement* specialElement = toHTMLElement(n);
+    for (Node& runner : NodeTraversal::inclusiveAncestorsOf(*pos.anchorNode())) {
+        if (runner.rootEditableElement() != rootEditableElement)
+            break;
+        if (isSpecialHTMLElement(runner)) {
+            HTMLElement* specialElement = toHTMLElement(&runner);
             VisiblePosition vPos = createVisiblePosition(pos);
             VisiblePosition firstInElement = createVisiblePosition(firstPositionInOrBeforeNode(specialElement));
             if (isDisplayInsideTable(specialElement) && vPos.deepEquivalent() == nextPositionOf(firstInElement).deepEquivalent())
@@ -902,9 +905,11 @@ static HTMLElement* firstInSpecialElement(const Position& pos)
 static HTMLElement* lastInSpecialElement(const Position& pos)
 {
     Element* rootEditableElement = pos.computeContainerNode()->rootEditableElement();
-    for (Node* n = pos.anchorNode(); n && n->rootEditableElement() == rootEditableElement; n = n->parentNode()) {
-        if (isSpecialHTMLElement(*n)) {
-            HTMLElement* specialElement = toHTMLElement(n);
+    for (Node& runner : NodeTraversal::inclusiveAncestorsOf(*pos.anchorNode())) {
+        if (runner.rootEditableElement() != rootEditableElement)
+            break;
+        if (isSpecialHTMLElement(runner)) {
+            HTMLElement* specialElement = toHTMLElement(&runner);
             VisiblePosition vPos = createVisiblePosition(pos);
             VisiblePosition lastInElement = createVisiblePosition(lastPositionInOrAfterNode(specialElement));
             if (isDisplayInsideTable(specialElement) && vPos.deepEquivalent() == previousPositionOf(lastInElement).deepEquivalent())
@@ -921,7 +926,7 @@ Position positionBeforeContainingSpecialElement(const Position& pos, HTMLElement
     HTMLElement* n = firstInSpecialElement(pos);
     if (!n)
         return pos;
-    Position result = positionInParentBeforeNode(*n);
+    Position result = Position::inParentBeforeNode(*n);
     if (result.isNull() || result.anchorNode()->rootEditableElement() != pos.anchorNode()->rootEditableElement())
         return pos;
     if (containingSpecialElement)
@@ -934,7 +939,7 @@ Position positionAfterContainingSpecialElement(const Position& pos, HTMLElement*
     HTMLElement* n = lastInSpecialElement(pos);
     if (!n)
         return pos;
-    Position result = positionInParentAfterNode(*n);
+    Position result = Position::inParentAfterNode(*n);
     if (result.isNull() || result.anchorNode()->rootEditableElement() != pos.anchorNode()->rootEditableElement())
         return pos;
     if (containingSpecialElement)
@@ -943,7 +948,7 @@ Position positionAfterContainingSpecialElement(const Position& pos, HTMLElement*
 }
 
 template <typename Strategy>
-static Element* isFirstPositionAfterTableAlgorithm(const VisiblePositionTemplate<Strategy>& visiblePosition)
+static Element* tableElementJustBeforeAlgorithm(const VisiblePositionTemplate<Strategy>& visiblePosition)
 {
     const PositionTemplate<Strategy> upstream(mostBackwardCaretPosition(visiblePosition.deepEquivalent()));
     if (isDisplayInsideTable(upstream.anchorNode()) && upstream.atLastEditingPositionForNode())
@@ -952,17 +957,17 @@ static Element* isFirstPositionAfterTableAlgorithm(const VisiblePositionTemplate
     return nullptr;
 }
 
-Element* isFirstPositionAfterTable(const VisiblePosition& visiblePosition)
+Element* tableElementJustBefore(const VisiblePosition& visiblePosition)
 {
-    return isFirstPositionAfterTableAlgorithm<EditingStrategy>(visiblePosition);
+    return tableElementJustBeforeAlgorithm<EditingStrategy>(visiblePosition);
 }
 
-Element* isFirstPositionAfterTable(const VisiblePositionInFlatTree& visiblePosition)
+Element* tableElementJustBefore(const VisiblePositionInFlatTree& visiblePosition)
 {
-    return isFirstPositionAfterTableAlgorithm<EditingInFlatTreeStrategy>(visiblePosition);
+    return tableElementJustBeforeAlgorithm<EditingInFlatTreeStrategy>(visiblePosition);
 }
 
-Element* isLastPositionBeforeTable(const VisiblePosition& visiblePosition)
+Element* tableElementJustAfter(const VisiblePosition& visiblePosition)
 {
     Position downstream(mostForwardCaretPosition(visiblePosition.deepEquivalent()));
     if (isDisplayInsideTable(downstream.anchorNode()) && downstream.atFirstEditingPositionForNode())
@@ -1023,9 +1028,9 @@ VisiblePosition visiblePositionBeforeNode(Node& node)
 {
     if (node.hasChildren())
         return createVisiblePosition(firstPositionInOrBeforeNode(&node));
-    ASSERT(node.parentNode());
-    ASSERT(!node.parentNode()->isShadowRoot());
-    return createVisiblePosition(positionInParentBeforeNode(node));
+    DCHECK(node.parentNode()) << node;
+    DCHECK(!node.parentNode()->isShadowRoot()) << node.parentNode();
+    return createVisiblePosition(Position::inParentBeforeNode(node));
 }
 
 // Returns the visible position at the ending of a node
@@ -1033,9 +1038,9 @@ VisiblePosition visiblePositionAfterNode(Node& node)
 {
     if (node.hasChildren())
         return createVisiblePosition(lastPositionInOrAfterNode(&node));
-    ASSERT(node.parentNode());
-    ASSERT(!node.parentNode()->isShadowRoot());
-    return createVisiblePosition(positionInParentAfterNode(node));
+    DCHECK(node.parentNode()) << node.parentNode();
+    DCHECK(!node.parentNode()->isShadowRoot()) << node.parentNode();
+    return createVisiblePosition(Position::inParentAfterNode(node));
 }
 
 bool isHTMLListElement(Node* n)
@@ -1080,7 +1085,7 @@ template <typename Strategy>
 static Node* enclosingNodeOfTypeAlgorithm(const PositionTemplate<Strategy>& p, bool (*nodeIsOfType)(const Node*), EditingBoundaryCrossingRule rule)
 {
     // TODO(yosin) support CanSkipCrossEditingBoundary
-    ASSERT(rule == CanCrossEditingBoundary || rule == CannotCrossEditingBoundary);
+    DCHECK(rule == CanCrossEditingBoundary || rule == CannotCrossEditingBoundary) << rule;
     if (p.isNull())
         return nullptr;
 
@@ -1177,10 +1182,10 @@ HTMLElement* enclosingList(Node* node)
 
     ContainerNode* root = highestEditableRoot(firstPositionInOrBeforeNode(node));
 
-    for (ContainerNode* n = node->parentNode(); n; n = n->parentNode()) {
-        if (isHTMLUListElement(*n) || isHTMLOListElement(*n))
-            return toHTMLElement(n);
-        if (n == root)
+    for (Node& runner : NodeTraversal::ancestorsOf(*node)) {
+        if (isHTMLUListElement(runner) || isHTMLOListElement(runner))
+            return toHTMLElement(&runner);
+        if (runner == root)
             return 0;
     }
 
@@ -1253,7 +1258,7 @@ bool canMergeLists(Element* firstList, Element* secondList)
     return firstList->hasTagName(secondList->tagQName()) // make sure the list types match (ol vs. ul)
     && firstList->hasEditableStyle() && secondList->hasEditableStyle() // both lists are editable
     && firstList->rootEditableElement() == secondList->rootEditableElement() // don't cross editing boundaries
-    && isVisiblyAdjacent(positionInParentAfterNode(*firstList), positionInParentBeforeNode(*secondList));
+    && isVisiblyAdjacent(Position::inParentAfterNode(*firstList), Position::inParentBeforeNode(*secondList));
     // Make sure there is no visible content between this li and the previous list
 }
 
@@ -1268,7 +1273,7 @@ bool isDisplayInsideTable(const Node* node)
 
 bool isTableCell(const Node* node)
 {
-    ASSERT(node);
+    DCHECK(node);
     LayoutObject* r = node->layoutObject();
     return r ? r->isTableCell() : isHTMLTableCellElement(*node);
 }
@@ -1306,7 +1311,7 @@ bool isEmptyTableCell(const Node* node)
     return !childLayoutObject->nextSibling();
 }
 
-RawPtr<HTMLElement> createDefaultParagraphElement(Document& document)
+HTMLElement* createDefaultParagraphElement(Document& document)
 {
     switch (document.frame()->editor().defaultParagraphSeparator()) {
     case EditorParagraphSeparatorIsDiv:
@@ -1319,7 +1324,7 @@ RawPtr<HTMLElement> createDefaultParagraphElement(Document& document)
     return nullptr;
 }
 
-RawPtr<HTMLElement> createHTMLElement(Document& document, const QualifiedName& name)
+HTMLElement* createHTMLElement(Document& document, const QualifiedName& name)
 {
     return HTMLElementFactory::createHTMLElement(name.localName(), document, 0, false);
 }
@@ -1342,12 +1347,10 @@ HTMLSpanElement* tabSpanElement(const Node* node)
     return isTabHTMLSpanElementTextNode(node) ? toHTMLSpanElement(node->parentNode()) : 0;
 }
 
-static RawPtr<HTMLSpanElement> createTabSpanElement(Document& document, RawPtr<Text> prpTabTextNode)
+static HTMLSpanElement* createTabSpanElement(Document& document, Text* tabTextNode)
 {
-    RawPtr<Text> tabTextNode = prpTabTextNode;
-
     // Make the span to hold the tab.
-    RawPtr<HTMLSpanElement> spanElement = HTMLSpanElement::create(document);
+    HTMLSpanElement* spanElement = HTMLSpanElement::create(document);
     spanElement->setAttribute(classAttr, AppleTabSpanClass);
     spanElement->setAttribute(styleAttr, "white-space:pre");
 
@@ -1355,19 +1358,19 @@ static RawPtr<HTMLSpanElement> createTabSpanElement(Document& document, RawPtr<T
     if (!tabTextNode)
         tabTextNode = document.createEditingTextNode("\t");
 
-    spanElement->appendChild(tabTextNode.release());
+    spanElement->appendChild(tabTextNode);
 
-    return spanElement.release();
+    return spanElement;
 }
 
-RawPtr<HTMLSpanElement> createTabSpanElement(Document& document, const String& tabText)
+HTMLSpanElement* createTabSpanElement(Document& document, const String& tabText)
 {
     return createTabSpanElement(document, document.createTextNode(tabText));
 }
 
-RawPtr<HTMLSpanElement> createTabSpanElement(Document& document)
+HTMLSpanElement* createTabSpanElement(Document& document)
 {
-    return createTabSpanElement(document, RawPtr<Text>(nullptr));
+    return createTabSpanElement(document, nullptr);
 }
 
 bool isNodeRendered(const Node& node)
@@ -1414,7 +1417,7 @@ static Position previousCharacterPosition(const Position& position, TextAffinity
 // This assumes that it starts in editable content.
 Position leadingWhitespacePosition(const Position& position, TextAffinity affinity, WhitespacePositionOption option)
 {
-    ASSERT(isEditablePosition(position, ContentIsEditable, DoNotUpdateStyle));
+    DCHECK(isEditablePosition(position, ContentIsEditable, DoNotUpdateStyle)) << position;
     if (position.isNull())
         return Position();
 
@@ -1442,7 +1445,7 @@ Position leadingWhitespacePosition(const Position& position, TextAffinity affini
 // This assumes that it starts in editable content.
 Position trailingWhitespacePosition(const Position& position, TextAffinity, WhitespacePositionOption option)
 {
-    ASSERT(isEditablePosition(position, ContentIsEditable, DoNotUpdateStyle));
+    DCHECK(isEditablePosition(position, ContentIsEditable, DoNotUpdateStyle)) << position;
     if (position.isNull())
         return Position();
 
@@ -1472,25 +1475,25 @@ void updatePositionForNodeRemoval(Position& position, Node& node)
     switch (position.anchorType()) {
     case PositionAnchorType::BeforeChildren:
         if (node.isShadowIncludingInclusiveAncestorOf(position.computeContainerNode()))
-            position = positionInParentBeforeNode(node);
+            position = Position::inParentBeforeNode(node);
         break;
     case PositionAnchorType::AfterChildren:
         if (node.isShadowIncludingInclusiveAncestorOf(position.computeContainerNode()))
-            position = positionInParentAfterNode(node);
+            position = Position::inParentAfterNode(node);
         break;
     case PositionAnchorType::OffsetInAnchor:
         if (position.computeContainerNode() == node.parentNode() && static_cast<unsigned>(position.offsetInContainerNode()) > node.nodeIndex())
             position = Position(position.computeContainerNode(), position.offsetInContainerNode() - 1);
         else if (node.isShadowIncludingInclusiveAncestorOf(position.computeContainerNode()))
-            position = positionInParentBeforeNode(node);
+            position = Position::inParentBeforeNode(node);
         break;
     case PositionAnchorType::AfterAnchor:
         if (node.isShadowIncludingInclusiveAncestorOf(position.anchorNode()))
-            position = positionInParentAfterNode(node);
+            position = Position::inParentAfterNode(node);
         break;
     case PositionAnchorType::BeforeAnchor:
         if (node.isShadowIncludingInclusiveAncestorOf(position.anchorNode()))
-            position = positionInParentBeforeNode(node);
+            position = Position::inParentBeforeNode(node);
         break;
     }
 }
@@ -1541,7 +1544,7 @@ VisibleSelection selectionForParagraphIteration(const VisibleSelection& original
     // if the start of the selection is inside that table, then the last paragraph
     // that we'll want modify is the last one inside the table, not the table itself
     // (a table is itself a paragraph).
-    if (Element* table = isFirstPositionAfterTable(endOfSelection)) {
+    if (Element* table = tableElementJustBefore(endOfSelection)) {
         if (startOfSelection.deepEquivalent().anchorNode()->isDescendantOf(table))
             newSelection = VisibleSelection(startOfSelection, previousPositionOf(endOfSelection, CannotCrossEditingBoundary));
     }
@@ -1550,7 +1553,7 @@ VisibleSelection selectionForParagraphIteration(const VisibleSelection& original
     // and if the end of the selection is inside that table, then the first paragraph
     // we'll want to modify is the first one inside the table, not the paragraph
     // containing the table itself.
-    if (Element* table = isLastPositionBeforeTable(startOfSelection)) {
+    if (Element* table = tableElementJustAfter(startOfSelection)) {
         if (endOfSelection.deepEquivalent().anchorNode()->isDescendantOf(table))
             newSelection = VisibleSelection(nextPositionOf(startOfSelection, CannotCrossEditingBoundary), endOfSelection);
     }
@@ -1564,7 +1567,7 @@ VisibleSelection selectionForParagraphIteration(const VisibleSelection& original
 // opertion is unreliable. TextIterator's TextIteratorEmitsCharactersBetweenAllVisiblePositions mode needs to be fixed,
 // or these functions need to be changed to iterate using actual VisiblePositions.
 // FIXME: Deploy these functions everywhere that TextIterators are used to convert between VisiblePositions and indices.
-int indexForVisiblePosition(const VisiblePosition& visiblePosition, RawPtr<ContainerNode>& scope)
+int indexForVisiblePosition(const VisiblePosition& visiblePosition, ContainerNode*& scope)
 {
     if (visiblePosition.isNull())
         return 0;
@@ -1578,7 +1581,7 @@ int indexForVisiblePosition(const VisiblePosition& visiblePosition, RawPtr<Conta
     else
         scope = document.documentElement();
 
-    RawPtr<Range> range = Range::create(document, firstPositionInNode(scope.get()), p.parentAnchoredEquivalent());
+    Range* range = Range::create(document, Position::firstPositionInNode(scope), p.parentAnchoredEquivalent());
 
     return TextIterator::rangeLength(range->startPosition(), range->endPosition(), true);
 }
@@ -1599,8 +1602,8 @@ EphemeralRange makeRange(const VisiblePosition &start, const VisiblePosition &en
 template <typename Strategy>
 static EphemeralRangeTemplate<Strategy> normalizeRangeAlgorithm(const EphemeralRangeTemplate<Strategy>& range)
 {
-    ASSERT(range.isNotNull());
-    range.document().updateLayoutIgnorePendingStylesheets();
+    DCHECK(range.isNotNull());
+    range.document().updateStyleAndLayoutIgnorePendingStylesheets();
 
     // TODO(yosin) We should not call |parentAnchoredEquivalent()|, it is
     // redundant.
@@ -1644,11 +1647,11 @@ bool isNodeVisiblyContainedWithin(Node& node, const Range& selectedRange)
         return true;
 
     bool startIsVisuallySame = visiblePositionBeforeNode(node).deepEquivalent() == createVisiblePosition(selectedRange.startPosition()).deepEquivalent();
-    if (startIsVisuallySame && comparePositions(positionInParentAfterNode(node), selectedRange.endPosition()) < 0)
+    if (startIsVisuallySame && comparePositions(Position::inParentAfterNode(node), selectedRange.endPosition()) < 0)
         return true;
 
     bool endIsVisuallySame = visiblePositionAfterNode(node).deepEquivalent() == createVisiblePosition(selectedRange.endPosition()).deepEquivalent();
-    if (endIsVisuallySame && comparePositions(selectedRange.startPosition(), positionInParentBeforeNode(node)) < 0)
+    if (endIsVisuallySame && comparePositions(selectedRange.startPosition(), Position::inParentBeforeNode(node)) < 0)
         return true;
 
     return startIsVisuallySame && endIsVisuallySame;
@@ -1731,6 +1734,36 @@ Position adjustedSelectionStartForStyleComputation(const VisibleSelection& selec
 bool isTextSecurityNode(const Node* node)
 {
     return node && node->layoutObject() && node->layoutObject()->style()->textSecurity() != TSNONE;
+}
+
+DispatchEventResult dispatchBeforeInputInsertText(EventTarget* target, const String& data)
+{
+    if (!RuntimeEnabledFeatures::inputEventEnabled())
+        return DispatchEventResult::NotCanceled;
+    if (!target)
+        return DispatchEventResult::NotCanceled;
+    InputEvent* beforeInputEvent = InputEvent::createBeforeInput(InputEvent::InputType::InsertText, data, InputEvent::EventCancelable::IsCancelable, InputEvent::EventIsComposing::NotComposing);
+    return target->dispatchEvent(beforeInputEvent);
+}
+
+DispatchEventResult dispatchBeforeInputFromComposition(EventTarget* target, InputEvent::InputType inputType, const String& data)
+{
+    if (!RuntimeEnabledFeatures::inputEventEnabled())
+        return DispatchEventResult::NotCanceled;
+    if (!target)
+        return DispatchEventResult::NotCanceled;
+    InputEvent* beforeInputEvent = InputEvent::createBeforeInput(inputType, data, InputEvent::EventCancelable::NotCancelable, InputEvent::EventIsComposing::IsComposing);
+    return target->dispatchEvent(beforeInputEvent);
+}
+
+DispatchEventResult dispatchBeforeInputEditorCommand(EventTarget* target, InputEvent::InputType inputType, const String& data)
+{
+    if (!RuntimeEnabledFeatures::inputEventEnabled())
+        return DispatchEventResult::NotCanceled;
+    if (!target)
+        return DispatchEventResult::NotCanceled;
+    InputEvent* beforeInputEvent = InputEvent::createBeforeInput(inputType, data, InputEvent::EventCancelable::IsCancelable, InputEvent::EventIsComposing::NotComposing);
+    return target->dispatchEvent(beforeInputEvent);
 }
 
 } // namespace blink

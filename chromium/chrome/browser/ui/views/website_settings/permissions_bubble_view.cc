@@ -30,7 +30,7 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/gfx/vector_icons_public.h"
-#include "ui/views/bubble/bubble_delegate.h"
+#include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/button/menu_button.h"
@@ -206,7 +206,8 @@ PermissionsBubbleDialogDelegateView::PermissionsBubbleDialogDelegateView(
                                         kItemMajorSpacing));
 
   display_origin_ = url_formatter::FormatUrlForSecurityDisplay(
-      requests[0]->GetOrigin());
+      requests[0]->GetOrigin(),
+      url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC);
 
   ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
   for (size_t index = 0; index < requests.size(); index++) {

@@ -33,7 +33,6 @@
 
 #include "bindings/core/v8/SerializedScriptValue.h"
 #include "core/dom/AXObjectCache.h"
-#include "core/dom/ExceptionCode.h"
 #include "core/dom/IconURL.h"
 #include "core/editing/SelectionType.h"
 #include "core/editing/TextAffinity.h"
@@ -43,7 +42,6 @@
 #include "core/frame/FrameTypes.h"
 #include "core/frame/Settings.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
-#include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/shadow/TextControlInnerElements.h"
@@ -55,8 +53,6 @@
 #include "core/page/PageVisibilityState.h"
 #include "core/style/ComputedStyleConstants.h"
 #include "modules/accessibility/AXObject.h"
-#include "modules/geolocation/GeolocationError.h"
-#include "modules/geolocation/GeolocationPosition.h"
 #include "modules/indexeddb/IDBKey.h"
 #include "modules/indexeddb/IDBKeyPath.h"
 #include "modules/indexeddb/IDBMetadata.h"
@@ -113,11 +109,8 @@
 #include "public/web/WebClientRedirectPolicy.h"
 #include "public/web/WebConsoleMessage.h"
 #include "public/web/WebContentSecurityPolicy.h"
-#include "public/web/WebFormElement.h"
 #include "public/web/WebFrameClient.h"
 #include "public/web/WebFrameLoadType.h"
-#include "public/web/WebGeolocationError.h"
-#include "public/web/WebGeolocationPosition.h"
 #include "public/web/WebHistoryCommitType.h"
 #include "public/web/WebHistoryItem.h"
 #include "public/web/WebIconURL.h"
@@ -155,6 +148,7 @@ STATIC_ASSERT_ENUM(WebAXEventCheckedStateChanged, AXObjectCache::AXCheckedStateC
 STATIC_ASSERT_ENUM(WebAXEventChildrenChanged, AXObjectCache::AXChildrenChanged);
 STATIC_ASSERT_ENUM(WebAXEventClicked, AXObjectCache::AXClicked);
 STATIC_ASSERT_ENUM(WebAXEventDocumentSelectionChanged, AXObjectCache::AXDocumentSelectionChanged);
+STATIC_ASSERT_ENUM(WebAXEventExpandedChanged, AXObjectCache::AXExpandedChanged);
 STATIC_ASSERT_ENUM(WebAXEventFocus, AXObjectCache::AXFocusedUIElementChanged);
 STATIC_ASSERT_ENUM(WebAXEventHide, AXObjectCache::AXHide);
 STATIC_ASSERT_ENUM(WebAXEventHover, AXObjectCache::AXHover);
@@ -341,6 +335,15 @@ STATIC_ASSERT_ENUM(WebAXOrientationUndefined, AccessibilityOrientationUndefined)
 STATIC_ASSERT_ENUM(WebAXOrientationVertical, AccessibilityOrientationVertical);
 STATIC_ASSERT_ENUM(WebAXOrientationHorizontal, AccessibilityOrientationHorizontal);
 
+STATIC_ASSERT_ENUM(WebAXAriaCurrentStateUndefined, AriaCurrentStateUndefined);
+STATIC_ASSERT_ENUM(WebAXAriaCurrentStateFalse, AriaCurrentStateFalse);
+STATIC_ASSERT_ENUM(WebAXAriaCurrentStateTrue, AriaCurrentStateTrue);
+STATIC_ASSERT_ENUM(WebAXAriaCurrentStatePage, AriaCurrentStatePage);
+STATIC_ASSERT_ENUM(WebAXAriaCurrentStateStep, AriaCurrentStateStep);
+STATIC_ASSERT_ENUM(WebAXAriaCurrentStateLocation, AriaCurrentStateLocation);
+STATIC_ASSERT_ENUM(WebAXAriaCurrentStateDate, AriaCurrentStateDate);
+STATIC_ASSERT_ENUM(WebAXAriaCurrentStateTime, AriaCurrentStateTime);
+
 STATIC_ASSERT_ENUM(WebAXInvalidStateUndefined, InvalidStateUndefined);
 STATIC_ASSERT_ENUM(WebAXInvalidStateFalse, InvalidStateFalse);
 STATIC_ASSERT_ENUM(WebAXInvalidStateTrue, InvalidStateTrue);
@@ -471,7 +474,6 @@ STATIC_ASSERT_ENUM(WebInputEvent::ControlKey, PlatformEvent::CtrlKey);
 STATIC_ASSERT_ENUM(WebInputEvent::AltKey, PlatformEvent::AltKey);
 STATIC_ASSERT_ENUM(WebInputEvent::MetaKey, PlatformEvent::MetaKey);
 STATIC_ASSERT_ENUM(WebInputEvent::AltGrKey, PlatformEvent::AltGrKey);
-STATIC_ASSERT_ENUM(WebInputEvent::OSKey, PlatformEvent::OSKey);
 STATIC_ASSERT_ENUM(WebInputEvent::FnKey, PlatformEvent::FnKey);
 STATIC_ASSERT_ENUM(WebInputEvent::SymbolKey, PlatformEvent::SymbolKey);
 STATIC_ASSERT_ENUM(WebInputEvent::IsKeyPad, PlatformEvent::IsKeyPad);
@@ -533,6 +535,11 @@ STATIC_ASSERT_ENUM(WebSettings::EditingBehaviorWin, EditingWindowsBehavior);
 STATIC_ASSERT_ENUM(WebSettings::EditingBehaviorUnix, EditingUnixBehavior);
 STATIC_ASSERT_ENUM(WebSettings::EditingBehaviorAndroid, EditingAndroidBehavior);
 
+STATIC_ASSERT_ENUM(WebSettings::PassiveEventListenerDefault::False, PassiveListenerDefault::False);
+STATIC_ASSERT_ENUM(WebSettings::PassiveEventListenerDefault::True, PassiveListenerDefault::True);
+STATIC_ASSERT_ENUM(WebSettings::PassiveEventListenerDefault::DocumentTrue, PassiveListenerDefault::DocumentTrue);
+STATIC_ASSERT_ENUM(WebSettings::PassiveEventListenerDefault::ForceAllTrue, PassiveListenerDefault::ForceAllTrue);
+
 STATIC_ASSERT_ENUM(WebIDBDatabaseExceptionUnknownError, UnknownError);
 STATIC_ASSERT_ENUM(WebIDBDatabaseExceptionConstraintError, ConstraintError);
 STATIC_ASSERT_ENUM(WebIDBDatabaseExceptionDataError, DataError);
@@ -574,9 +581,6 @@ STATIC_ASSERT_ENUM(WebFileErrorInvalidModification, FileError::INVALID_MODIFICAT
 STATIC_ASSERT_ENUM(WebFileErrorQuotaExceeded, FileError::QUOTA_EXCEEDED_ERR);
 STATIC_ASSERT_ENUM(WebFileErrorTypeMismatch, FileError::TYPE_MISMATCH_ERR);
 STATIC_ASSERT_ENUM(WebFileErrorPathExists, FileError::PATH_EXISTS_ERR);
-
-STATIC_ASSERT_ENUM(WebGeolocationError::ErrorPermissionDenied, GeolocationError::PermissionDenied);
-STATIC_ASSERT_ENUM(WebGeolocationError::ErrorPositionUnavailable, GeolocationError::PositionUnavailable);
 
 STATIC_ASSERT_ENUM(WebTextCheckingTypeSpelling, TextCheckingTypeSpelling);
 STATIC_ASSERT_ENUM(WebTextCheckingTypeGrammar, TextCheckingTypeGrammar);
@@ -624,9 +628,13 @@ STATIC_ASSERT_ENUM(WebReferrerPolicyNoReferrerWhenDowngrade, ReferrerPolicyNoRef
 STATIC_ASSERT_ENUM(WebReferrerPolicyNever, ReferrerPolicyNever);
 STATIC_ASSERT_ENUM(WebReferrerPolicyOrigin, ReferrerPolicyOrigin);
 STATIC_ASSERT_ENUM(WebReferrerPolicyOriginWhenCrossOrigin, ReferrerPolicyOriginWhenCrossOrigin);
+STATIC_ASSERT_ENUM(WebReferrerPolicyNoReferrerWhenDowngradeOriginWhenCrossOrigin, ReferrerPolicyNoReferrerWhenDowngradeOriginWhenCrossOrigin);
 
 STATIC_ASSERT_ENUM(WebContentSecurityPolicyTypeReport, ContentSecurityPolicyHeaderTypeReport);
 STATIC_ASSERT_ENUM(WebContentSecurityPolicyTypeEnforce, ContentSecurityPolicyHeaderTypeEnforce);
+
+STATIC_ASSERT_ENUM(WebContentSecurityPolicySourceHTTP, ContentSecurityPolicyHeaderSourceHTTP);
+STATIC_ASSERT_ENUM(WebContentSecurityPolicySourceMeta, ContentSecurityPolicyHeaderSourceMeta);
 
 STATIC_ASSERT_ENUM(WebURLResponse::HTTPVersionUnknown, ResourceResponse::HTTPVersionUnknown);
 STATIC_ASSERT_ENUM(WebURLResponse::HTTPVersion_0_9,
@@ -637,11 +645,6 @@ STATIC_ASSERT_ENUM(WebURLResponse::HTTPVersion_1_1,
     ResourceResponse::HTTPVersion_1_1);
 STATIC_ASSERT_ENUM(WebURLResponse::HTTPVersion_2_0,
     ResourceResponse::HTTPVersion_2_0);
-
-STATIC_ASSERT_ENUM(WebFormElement::AutocompleteResultSuccess, HTMLFormElement::AutocompleteResultSuccess);
-STATIC_ASSERT_ENUM(WebFormElement::AutocompleteResultErrorDisabled, HTMLFormElement::AutocompleteResultErrorDisabled);
-STATIC_ASSERT_ENUM(WebFormElement::AutocompleteResultErrorCancel, HTMLFormElement::AutocompleteResultErrorCancel);
-STATIC_ASSERT_ENUM(WebFormElement::AutocompleteResultErrorInvalid, HTMLFormElement::AutocompleteResultErrorInvalid);
 
 STATIC_ASSERT_ENUM(WebURLRequest::PriorityUnresolved, ResourceLoadPriorityUnresolved);
 STATIC_ASSERT_ENUM(WebURLRequest::PriorityVeryLow, ResourceLoadPriorityVeryLow);
@@ -705,6 +708,11 @@ STATIC_ASSERT_ENUM(WebSettings::V8CacheOptionsNone, V8CacheOptionsNone);
 STATIC_ASSERT_ENUM(WebSettings::V8CacheOptionsParse, V8CacheOptionsParse);
 STATIC_ASSERT_ENUM(WebSettings::V8CacheOptionsCode, V8CacheOptionsCode);
 
+STATIC_ASSERT_ENUM(WebSettings::V8CacheStrategiesForCacheStorage::Default, V8CacheStrategiesForCacheStorage::Default);
+STATIC_ASSERT_ENUM(WebSettings::V8CacheStrategiesForCacheStorage::None, V8CacheStrategiesForCacheStorage::None);
+STATIC_ASSERT_ENUM(WebSettings::V8CacheStrategiesForCacheStorage::Normal, V8CacheStrategiesForCacheStorage::Normal);
+STATIC_ASSERT_ENUM(WebSettings::V8CacheStrategiesForCacheStorage::Aggressive, V8CacheStrategiesForCacheStorage::Aggressive);
+
 STATIC_ASSERT_ENUM(WebSecurityPolicy::PolicyAreaNone, SchemeRegistry::PolicyAreaNone);
 STATIC_ASSERT_ENUM(WebSecurityPolicy::PolicyAreaImage, SchemeRegistry::PolicyAreaImage);
 STATIC_ASSERT_ENUM(WebSecurityPolicy::PolicyAreaStyle, SchemeRegistry::PolicyAreaStyle);
@@ -731,7 +739,7 @@ STATIC_ASSERT_ENUM(FrameLoaderClient::UnloadHandler, WebFrameClient::UnloadHandl
 STATIC_ASSERT_ENUM(WebFrameLoadType::Standard, FrameLoadTypeStandard);
 STATIC_ASSERT_ENUM(WebFrameLoadType::BackForward, FrameLoadTypeBackForward);
 STATIC_ASSERT_ENUM(WebFrameLoadType::Reload, FrameLoadTypeReload);
-STATIC_ASSERT_ENUM(WebFrameLoadType::Same, FrameLoadTypeSame);
+STATIC_ASSERT_ENUM(WebFrameLoadType::ReloadMainResource, FrameLoadTypeReloadMainResource);
 STATIC_ASSERT_ENUM(WebFrameLoadType::ReplaceCurrentItem, FrameLoadTypeReplaceCurrentItem);
 STATIC_ASSERT_ENUM(WebFrameLoadType::InitialInChildFrame, FrameLoadTypeInitialInChildFrame);
 STATIC_ASSERT_ENUM(WebFrameLoadType::InitialHistoryLoad, FrameLoadTypeInitialHistoryLoad);

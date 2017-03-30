@@ -8,9 +8,9 @@
 #include <memory>
 
 #include "ash/ash_export.h"
-#include "ash/shelf/background_animator.h"
 #include "ash/shelf/shelf_layout_manager_observer.h"
 #include "ash/shelf/shelf_types.h"
+#include "ash/wm/common/background_animator.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
 
@@ -39,12 +39,12 @@ class ASH_EXPORT ShelfWidget : public views::Widget,
   static bool ShelfAlignmentAllowed();
 
   void OnShelfAlignmentChanged();
-  ShelfAlignment GetAlignment() const;
+  wm::ShelfAlignment GetAlignment() const;
 
   // Sets the shelf's background type.
-  void SetPaintsBackground(ShelfBackgroundType background_type,
+  void SetPaintsBackground(wm::ShelfBackgroundType background_type,
                            BackgroundAnimatorChangeType change_type);
-  ShelfBackgroundType GetBackgroundType() const;
+  wm::ShelfBackgroundType GetBackgroundType() const;
 
   // Hide the shelf behind a black bar during e.g. a user transition when |hide|
   // is true. The |animation_time_ms| will be used as animation duration.

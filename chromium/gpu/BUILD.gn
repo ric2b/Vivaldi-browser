@@ -57,6 +57,8 @@ shared_library("command_buffer_gles2") {
     # TODO(hendrikw): Move egl out of gles2_conform_support.
     "gles2_conform_support/egl/config.cc",
     "gles2_conform_support/egl/config.h",
+    "gles2_conform_support/egl/context.cc",
+    "gles2_conform_support/egl/context.h",
     "gles2_conform_support/egl/display.cc",
     "gles2_conform_support/egl/display.h",
     "gles2_conform_support/egl/egl.cc",
@@ -64,6 +66,8 @@ shared_library("command_buffer_gles2") {
     "gles2_conform_support/egl/surface.h",
     "gles2_conform_support/egl/test_support.cc",
     "gles2_conform_support/egl/test_support.h",
+    "gles2_conform_support/egl/thread_state.cc",
+    "gles2_conform_support/egl/thread_state.h",
   ]
 
   deps = [
@@ -71,6 +75,7 @@ shared_library("command_buffer_gles2") {
     "//base",
     "//gpu/command_buffer/client:gles2_c_lib",
     "//gpu/command_buffer/client:gles2_implementation",
+    "//gpu/command_buffer/common:gles2_utils",
     "//ui/gl:gl",
   ]
 
@@ -117,7 +122,7 @@ test("command_buffer_gles2_tests") {
     libs += [ "android" ]
     deps += [ "//ui/android:ui_java" ]
   }
-  if (!is_component_build) {
+  if (is_linux && !is_component_build) {
     configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
   }
 }
@@ -182,6 +187,8 @@ test("gl_tests") {
     "command_buffer/tests/gl_unittests_android.cc",
     "command_buffer/tests/gl_virtual_contexts_unittest.cc",
     "command_buffer/tests/occlusion_query_unittest.cc",
+    "ipc/client/gpu_context_tests.h",
+    "ipc/client/gpu_in_process_context_tests.cc",
   ]
 
   defines = [ "GL_GLEXT_PROTOTYPES" ]
@@ -194,6 +201,7 @@ test("gl_tests") {
     "//base",
     "//base/test:test_support",
     "//base/third_party/dynamic_annotations",
+    "//gpu/command_buffer/client:gl_in_process_context",
     "//gpu/command_buffer/client:gles2_c_lib",
     "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/command_buffer/common:gles2_utils",
@@ -211,6 +219,8 @@ test("gl_tests") {
   if (is_android) {
     libs += [ "android" ]
     deps += [ "//ui/android:ui_java" ]
+  } else if (is_mac) {
+    libs += [ "IOSurface.framework" ]
   }
 }
 
@@ -250,6 +260,7 @@ test("gpu_unittests") {
     "command_buffer/service/framebuffer_manager_unittest.cc",
     "command_buffer/service/gl_context_mock.cc",
     "command_buffer/service/gl_context_mock.h",
+    "command_buffer/service/gl_context_virtual_unittest.cc",
     "command_buffer/service/gl_surface_mock.cc",
     "command_buffer/service/gl_surface_mock.h",
     "command_buffer/service/gles2_cmd_decoder_unittest.cc",
@@ -272,11 +283,11 @@ test("gpu_unittests") {
     "command_buffer/service/gles2_cmd_decoder_unittest_framebuffers.cc",
     "command_buffer/service/gles2_cmd_decoder_unittest_programs.cc",
     "command_buffer/service/gles2_cmd_decoder_unittest_textures.cc",
-    "command_buffer/service/gles2_cmd_decoder_unittest_valuebuffer.cc",
     "command_buffer/service/gpu_service_test.cc",
     "command_buffer/service/gpu_service_test.h",
     "command_buffer/service/gpu_tracer_unittest.cc",
     "command_buffer/service/id_manager_unittest.cc",
+    "command_buffer/service/indexed_buffer_binding_host_unittest.cc",
     "command_buffer/service/mailbox_manager_unittest.cc",
     "command_buffer/service/memory_program_cache_unittest.cc",
     "command_buffer/service/mocks.cc",
@@ -294,7 +305,7 @@ test("gpu_unittests") {
     "command_buffer/service/test_helper.h",
     "command_buffer/service/texture_manager_unittest.cc",
     "command_buffer/service/transfer_buffer_manager_unittest.cc",
-    "command_buffer/service/valuebuffer_manager_unittest.cc",
+    "command_buffer/service/transform_feedback_manager_unittest.cc",
     "command_buffer/service/vertex_array_manager_unittest.cc",
     "command_buffer/service/vertex_attrib_manager_unittest.cc",
     "config/gpu_blacklist_unittest.cc",
@@ -312,6 +323,12 @@ test("gpu_unittests") {
     "ipc/client/gpu_memory_buffer_impl_shared_memory_unittest.cc",
     "ipc/client/gpu_memory_buffer_impl_test_template.h",
   ]
+
+  if (is_android) {
+    sources +=
+        [ "ipc/client/gpu_memory_buffer_impl_surface_texture_unittest.cc" ]
+  }
+
   if (is_mac) {
     sources += [ "ipc/client/gpu_memory_buffer_impl_io_surface_unittest.cc" ]
   }
@@ -344,6 +361,13 @@ test("gpu_unittests") {
     "//ui/gl:test_support",
   ]
 
+  if (is_android) {
+    deps += [
+      "//ui/android:ui_java",
+      "//ui/gl:gl_jni_headers",
+    ]
+  }
+
   if (use_ozone) {
     deps += [ "//ui/ozone" ]
     sources +=
@@ -367,5 +391,9 @@ test("gpu_perftests") {
     "//testing/perf",
     "//ui/gfx/geometry",
     "//ui/gl",
+    "//ui/gl/init",
   ]
+
+  # This target should not require the Chrome executable to run.
+  assert_no_deps = [ "//chrome" ]
 }

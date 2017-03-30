@@ -55,7 +55,6 @@
 #include "public/web/WebView.h"
 #include "web/ChromeClientImpl.h"
 #include "web/ContextMenuClientImpl.h"
-#include "web/DragClientImpl.h"
 #include "web/EditorClientImpl.h"
 #include "web/MediaKeysClientImpl.h"
 #include "web/PageWidgetDelegate.h"
@@ -116,7 +115,7 @@ public:
     void updateAllLifecyclePhases() override;
     void paint(WebCanvas*, const WebRect&) override;
 #if OS(ANDROID)
-    void paintCompositedDeprecated(WebCanvas*, const WebRect&) override;
+    void paintIgnoringCompositing(WebCanvas*, const WebRect&) override;
 #endif
     void layoutAndPaintAsync(WebLayoutAndPaintAsyncCallback*) override;
     void compositeAndReadbackAsync(WebCompositeAndReadbackAsyncCallback*) override;
@@ -131,7 +130,6 @@ public:
         const WebFloatSize& elasticOverscrollDelta,
         float pageScaleDelta,
         float topControlsShownRatioDelta) override;
-    void recordFrameTimingEvent(enum FrameTimingEventType, int64_t, const WebVector<WebFrameTimingEvent>&) override;
     void mouseCaptureLost() override;
     void setFocus(bool enable) override;
     bool setComposition(
@@ -158,6 +156,7 @@ public:
     void didNotAcquirePointerLock() override;
     void didLosePointerLock() override;
     void didChangeWindowResizerRect() override;
+    void reportFixedRasterScaleUseCounters(bool hasBlurryContent, bool hasPotentialPerformanceRegression) override;
 
     // WebView methods:
     virtual bool isWebView() const { return true; }
@@ -177,6 +176,10 @@ public:
     void setDomainRelaxationForbidden(bool, const WebString& scheme) override;
     void setWindowFeatures(const WebWindowFeatures&) override;
     void setOpenedByDOM() override;
+    void resizeWithTopControls(
+        const WebSize&,
+        float topControlsHeight,
+        bool topControlsShrinkLayout) override;
     WebFrame* mainFrame() override;
     WebFrame* findFrameByName(
         const WebString& name, WebFrame* relativeToFrame) override;
@@ -192,6 +195,7 @@ public:
     void advanceFocusAcrossFrames(WebFocusType, WebRemoteFrame* from, WebLocalFrame* to) override;
     double zoomLevel() override;
     double setZoomLevel(double) override;
+    void vivaldiSetPinchZoom(float scale, int x, int y) override;
     void zoomLimitsChanged(double minimumZoomLevel, double maximumZoomLevel) override;
     float textZoomFactor() override;
     float setTextZoomFactor(float) override;
@@ -294,18 +298,12 @@ public:
     void setBaseBackgroundColor(WebColor);
     void setBackgroundColorOverride(WebColor);
     void setZoomFactorOverride(float);
-    void updateShowFPSCounter();
     void setCompositorDeviceScaleFactorOverride(float);
     void setRootLayerTransform(const WebSize& offset, float scale);
 
     Color baseBackgroundColor() const { return m_baseBackgroundColor; }
 
     WebColor backgroundColorOverride() const { return m_backgroundColorOverride; }
-
-    const WebPoint& lastMouseDownPoint() const
-    {
-        return m_lastMouseDownPoint;
-    }
 
     Frame* focusedCoreFrame() const;
 
@@ -385,10 +383,6 @@ public:
     // unless the view did not need a layout.
     void layoutUpdated(WebLocalFrameImpl*);
 
-    void mainFrameDocumentElementAvailable();
-    void willInsertMainFrameDocumentBody();
-    void didRemoveAllPendingStylesheetsInMainFrameDocument();
-    void didFinishMainFrameDocumentLoad();
     void didChangeContentsSize();
     void pageScaleFactorChanged();
 
@@ -505,7 +499,6 @@ public:
 
     bool matchesHeuristicsForGpuRasterizationForTesting() const { return m_matchesHeuristicsForGpuRasterization; }
 
-    void setTopControlsHeight(float height, bool topControlsShrinkLayoutSize) override;
     void updateTopControlsState(WebTopControlsState constraint, WebTopControlsState current, bool animate) override;
 
     TopControls& topControls();
@@ -536,20 +529,22 @@ public:
     bool isTransparent() const;
     void setIsTransparent(bool value);
 
+    double lastFrameTimeMonotonic() const { return m_lastFrameTimeMonotonic; }
+
 private:
     InspectorOverlay* inspectorOverlay();
 
     void setPageScaleFactorAndLocation(float, const FloatPoint&);
+    void propagateZoomFactorToLocalFrameRoots(Frame*, float);
 
     void scrollAndRescaleViewports(float scaleFactor, const IntPoint& mainFrameOrigin, const FloatPoint& visualViewportOrigin);
 
     float maximumLegiblePageScale() const;
     void refreshPageScaleFactorAfterLayout();
-    void resumeTreeViewCommitsIfRenderingReady();
     IntSize contentsSize() const;
 
     void performResize();
-    void resizeViewWhileAnchored(FrameView*);
+    void resizeViewWhileAnchored(FrameView*, float topControlsHeight, bool topControlsShrinkLayout);
 
     friend class WebView;  // So WebView::Create can call our constructor
     friend class WTF::RefCounted<WebViewImpl>;
@@ -634,7 +629,6 @@ private:
 
     Persistent<ChromeClientImpl> m_chromeClientImpl;
     ContextMenuClientImpl m_contextMenuClientImpl;
-    DragClientImpl m_dragClientImpl;
     EditorClientImpl m_editorClientImpl;
     SpellCheckerClientImpl m_spellCheckerClientImpl;
     StorageClientImpl m_storageClientImpl;
@@ -656,15 +650,6 @@ private:
 
     // A copy of the web drop data object we received from the browser.
     Persistent<DataObject> m_currentDragData;
-
-    // The point relative to the client area where the mouse was last pressed
-    // down. This is used by the drag client to determine what was under the
-    // mouse when the drag was initiated. We need to track this here in
-    // WebViewImpl since DragClient::startDrag does not pass the position the
-    // mouse was at when the drag was initiated, only the current point, which
-    // can be misleading as it is usually not over the element the user actually
-    // dragged by the time a drag is initiated.
-    WebPoint m_lastMouseDownPoint;
 
     // Keeps track of the current zoom level. 0 means no zoom, positive numbers
     // mean zoom in, negative numbers mean zoom out.
@@ -738,6 +723,7 @@ private:
     WebLayerTreeView* m_layerTreeView;
     WebLayer* m_rootLayer;
     GraphicsLayer* m_rootGraphicsLayer;
+    GraphicsLayer* m_visualViewportContainerLayer;
     bool m_matchesHeuristicsForGpuRasterization;
     static const WebInputEvent* m_currentInputEvent;
 
@@ -751,7 +737,6 @@ private:
     OwnPtr<CompositorAnimationTimeline> m_linkHighlightsTimeline;
     Persistent<FullscreenController> m_fullscreenController;
 
-    bool m_showFPSCounter;
     WebColor m_baseBackgroundColor;
     WebColor m_backgroundColorOverride;
     float m_zoomFactorOverride;
@@ -773,10 +758,10 @@ private:
     // Manages the layer tree created for this page in Slimming Paint v2.
     PaintArtifactCompositor m_paintArtifactCompositor;
 
-    bool m_vivaldi_handling_pinch_event;
+    double m_lastFrameTimeMonotonic;
+
 };
 
-DEFINE_TYPE_CASTS(WebViewImpl, WebWidget, widget, widget->isWebView(), widget.isWebView());
 // We have no ways to check if the specified WebView is an instance of
 // WebViewImpl because WebViewImpl is the only implementation of WebView.
 DEFINE_TYPE_CASTS(WebViewImpl, WebView, webView, true, true);

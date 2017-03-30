@@ -1,8 +1,8 @@
 include_rules = [
-  "+components/bookmarks",
   "+components/keyed_service",
   "+components/leveldb_proto",
   "+components/version_info",
   "+net",
+  "+sql",
   "+third_party/leveldatabase",
 ]

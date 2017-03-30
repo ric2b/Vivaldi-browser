@@ -4,6 +4,7 @@
 
 #include "base/trace_event/heap_profiler_stack_frame_deduplicator.h"
 
+#include <inttypes.h>
 #include <stddef.h>
 
 #include <string>
@@ -31,7 +32,7 @@ int StackFrameDeduplicator::Insert(const StackFrame* beginFrame,
   std::map<StackFrame, int>* nodes = &roots_;
 
   // Loop through the frames, early out when a frame is null.
-  for (const StackFrame* it = beginFrame; it != endFrame && *it; it++) {
+  for (const StackFrame* it = beginFrame; it != endFrame; it++) {
     StackFrame frame = *it;
 
     auto node = nodes->find(frame);
@@ -78,7 +79,25 @@ void StackFrameDeduplicator::AppendAsTraceFormat(std::string* out) const {
     out->append(stringify_buffer);
 
     std::unique_ptr<TracedValue> frame_node_value(new TracedValue);
-    frame_node_value->SetString("name", frame_node->frame);
+    const StackFrame& frame = frame_node->frame;
+    switch (frame.type) {
+      case StackFrame::Type::TRACE_EVENT_NAME:
+        frame_node_value->SetString(
+            "name", static_cast<const char*>(frame.value));
+        break;
+      case StackFrame::Type::THREAD_NAME:
+        SStringPrintf(&stringify_buffer,
+                      "[Thread: %s]",
+                      static_cast<const char*>(frame.value));
+        frame_node_value->SetString("name", stringify_buffer);
+        break;
+      case StackFrame::Type::PROGRAM_COUNTER:
+        SStringPrintf(&stringify_buffer,
+                      "pc:%" PRIxPTR,
+                      reinterpret_cast<uintptr_t>(frame.value));
+        frame_node_value->SetString("name", stringify_buffer);
+        break;
+    }
     if (frame_node->parent_frame_index >= 0) {
       SStringPrintf(&stringify_buffer, "%d", frame_node->parent_frame_index);
       frame_node_value->SetString("parent", stringify_buffer);

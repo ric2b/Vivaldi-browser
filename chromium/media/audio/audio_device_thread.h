@@ -9,11 +9,10 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "base/sync_socket.h"
 #include "base/synchronization/lock.h"
-#include "media/audio/audio_parameters.h"
+#include "media/base/audio_parameters.h"
 #include "media/base/media_export.h"
 
 namespace base {

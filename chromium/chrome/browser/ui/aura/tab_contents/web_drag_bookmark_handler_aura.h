@@ -31,6 +31,11 @@ class WebDragBookmarkHandlerAura : public content::WebDragDestDelegate {
   void OnDragEnter() override;
   void OnDrop() override;
   void OnDragLeave() override;
+  blink::WebDragOperationsMask OnDragEnd(
+      int screen_x,
+      int screen_y,
+      blink::WebDragOperationsMask ops,
+      bool cancelled) override;
 
   void OnReceiveDragData(const ui::OSExchangeData& data) override;
 

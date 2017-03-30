@@ -27,9 +27,10 @@ public class Website implements Serializable {
     private final String mTitle;
     private String mSummary;
 
+    private ContentSettingException mAutoplayExceptionInfo;
     private ContentSettingException mBackgroundSyncExceptionInfo;
     private CameraInfo mCameraInfo;
-    private CookieInfo mCookieInfo;
+    private ContentSettingException mCookieException;
     private FullscreenInfo mFullscreenInfo;
     private GeolocationInfo mGeolocationInfo;
     private ContentSettingException mJavaScriptException;
@@ -71,6 +72,29 @@ public class Website implements Serializable {
     public int compareByStorageTo(Website to) {
         if (this == to) return 0;
         return MathUtils.compareLongs(to.getTotalUsage(), getTotalUsage());
+    }
+
+    /**
+     * Returns what permission governs Autoplay access.
+     */
+    public ContentSetting getAutoplayPermission() {
+        return mAutoplayExceptionInfo != null ? mAutoplayExceptionInfo.getContentSetting() : null;
+    }
+
+    /**
+     * Configure Autoplay permission access setting for this site.
+     */
+    public void setAutoplayPermission(ContentSetting value) {
+        if (mAutoplayExceptionInfo != null) {
+            mAutoplayExceptionInfo.setContentSetting(value);
+        }
+    }
+
+    /**
+     * Sets the Autoplay exception info for this Website.
+     */
+    public void setAutoplayException(ContentSettingException exception) {
+        mAutoplayExceptionInfo = exception;
     }
 
     /**
@@ -128,33 +152,29 @@ public class Website implements Serializable {
     }
 
     /**
-     * Sets the CookieInfo object for this site.
+     * Sets the Cookie exception info for this site.
      */
-    public void setCookieInfo(CookieInfo info) {
-        mCookieInfo = info;
-        WebsiteAddress embedder = WebsiteAddress.create(info.getEmbedder());
-        if (embedder != null) {
-            mSummary = embedder.getTitle();
-        }
+    public void setCookieException(ContentSettingException exception) {
+        mCookieException = exception;
     }
 
-    public CookieInfo getCookieInfo() {
-        return mCookieInfo;
+    public ContentSettingException getCookieException() {
+        return mCookieException;
     }
 
     /**
      * Gets the permission that governs cookie preferences.
      */
     public ContentSetting getCookiePermission() {
-        return mCookieInfo != null ? mCookieInfo.getContentSetting() : null;
+        return mCookieException != null ? mCookieException.getContentSetting() : null;
     }
 
     /**
      * Sets the permission that govers cookie preferences for this site.
      */
     public void setCookiePermission(ContentSetting value) {
-        if (mCookieInfo != null) {
-            mCookieInfo.setContentSetting(value);
+        if (mCookieException != null) {
+            mCookieException.setContentSetting(value);
         }
     }
 

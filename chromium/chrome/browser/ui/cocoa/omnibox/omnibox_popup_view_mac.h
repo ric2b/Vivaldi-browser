@@ -32,6 +32,9 @@ class OmniboxPopupViewMac : public OmniboxPopupView,
                       NSTextField* field);
   ~OmniboxPopupViewMac() override;
 
+  // Return the OmniboxPopupViewMac background color.
+  static NSColor* BackgroundColor(bool is_dark_theme);
+
   // Overridden from OmniboxPopupView:
   bool IsOpen() const override;
   void InvalidateLine(size_t line) override {}

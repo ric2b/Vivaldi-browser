@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_SSL_BAD_CLOCK_BLOCKING_PAGE_H_
 #define CHROME_BROWSER_SSL_BAD_CLOCK_BLOCKING_PAGE_H_
 
+#include <memory>
 #include <string>
 
 #include "base/callback.h"
@@ -40,7 +41,7 @@ class BadClockBlockingPage : public SecurityInterstitialPage {
                        const GURL& request_url,
                        const base::Time& time_triggered,
                        ssl_errors::ClockState clock_state,
-                       scoped_ptr<SSLCertReporter> ssl_cert_reporter,
+                       std::unique_ptr<SSLCertReporter> ssl_cert_reporter,
                        const base::Callback<void(bool)>& callback);
 
   ~BadClockBlockingPage() override;
@@ -49,7 +50,7 @@ class BadClockBlockingPage : public SecurityInterstitialPage {
   InterstitialPageDelegate::TypeID GetTypeForTesting() const override;
 
   void SetSSLCertReporterForTesting(
-      scoped_ptr<SSLCertReporter> ssl_cert_reporter);
+      std::unique_ptr<SSLCertReporter> ssl_cert_reporter);
 
  protected:
   // InterstitialPageDelegate implementation:
@@ -70,10 +71,10 @@ class BadClockBlockingPage : public SecurityInterstitialPage {
   base::Callback<void(bool)> callback_;
   const net::SSLInfo ssl_info_;
   const base::Time time_triggered_;
-  scoped_ptr<ChromeControllerClient> controller_;
+  std::unique_ptr<ChromeControllerClient> controller_;
 
-  scoped_ptr<security_interstitials::BadClockUI> bad_clock_ui_;
-  scoped_ptr<CertReportHelper> cert_report_helper_;
+  std::unique_ptr<security_interstitials::BadClockUI> bad_clock_ui_;
+  std::unique_ptr<CertReportHelper> cert_report_helper_;
 
   DISALLOW_COPY_AND_ASSIGN(BadClockBlockingPage);
 };

@@ -47,12 +47,14 @@ public:
     const char* name() const override { return "LayoutFlexibleBox"; }
 
     bool isFlexibleBox() const final { return true; }
-    bool canCollapseAnonymousBlockChild() const override { return false; }
     void layoutBlock(bool relayoutChildren) final;
 
     int baselinePosition(FontBaseline, bool firstLine, LineDirectionMode, LinePositionMode = PositionOnContainingLine) const override;
     int firstLineBoxBaseline() const override;
     int inlineBlockBaseline(LineDirectionMode) const override;
+    IntSize originAdjustmentForScrollbars() const override;
+    bool hasTopOverflow() const override;
+    bool hasLeftOverflow() const override;
 
     void paintChildren(const PaintInfo&, const LayoutPoint&) const final;
 
@@ -60,16 +62,21 @@ public:
 
     const OrderIterator& orderIterator() const { return m_orderIterator; }
 
-    // Returns -1 if the height of this flexbox is indefinite
-    LayoutUnit computeDefiniteLogicalWidth();
-    LayoutUnit computeDefiniteLogicalHeight();
-
     LayoutUnit crossSizeForPercentageResolution(const LayoutBox& child);
     LayoutUnit mainSizeForPercentageResolution(const LayoutBox& child);
     LayoutUnit childLogicalHeightForPercentageResolution(const LayoutBox& child);
-    LayoutUnit childLogicalWidthForPercentageResolution(const LayoutBox& child);
 
     void clearCachedMainSizeForChild(const LayoutBox& child);
+
+    LayoutUnit staticMainAxisPositionForPositionedChild(const LayoutBox& child);
+    LayoutUnit staticCrossAxisPositionForPositionedChild(const LayoutBox& child);
+
+    LayoutUnit staticInlinePositionForPositionedChild(const LayoutBox& child);
+    LayoutUnit staticBlockPositionForPositionedChild(const LayoutBox& child);
+
+    // Returns true if the position changed. In that case, the child will have to be
+    // laid out again.
+    bool setStaticPositionForPositionedLayout(LayoutBox& child);
 protected:
     void computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidth, LayoutUnit& maxLogicalWidth) const override;
 
@@ -80,11 +87,6 @@ private:
     enum FlexSign {
         PositiveFlexibility,
         NegativeFlexibility,
-    };
-
-    enum PositionedLayoutMode {
-        FlipForRowReverse,
-        NoFlipForRowReverse,
     };
 
     enum ChildLayoutType {
@@ -177,7 +179,7 @@ private:
 
     void resetAutoMarginsAndLogicalTopInCrossAxis(LayoutBox& child);
     void setOverrideMainAxisSizeForChild(LayoutBox& child, LayoutUnit childPreferredSize);
-    void prepareChildForPositionedLayout(LayoutBox& child, LayoutUnit mainAxisOffset, LayoutUnit crossAxisOffset, PositionedLayoutMode);
+    void prepareChildForPositionedLayout(LayoutBox& child);
     size_t numberOfInFlowPositionedChildren(const OrderedFlexItemList&) const;
     void layoutAndPlaceChildren(LayoutUnit& crossAxisOffset, const OrderedFlexItemList&, const Vector<LayoutUnit, 16>& childSizes, LayoutUnit availableFreeSpace, bool relayoutChildren, SubtreeLayoutScope&, Vector<LineContext>&);
     void layoutColumnReverse(const OrderedFlexItemList&, LayoutUnit crossAxisOffset, LayoutUnit availableFreeSpace);

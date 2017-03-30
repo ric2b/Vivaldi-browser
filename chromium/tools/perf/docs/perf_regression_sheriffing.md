@@ -5,6 +5,8 @@ continuous integration tests. Note that a [new rotation](perf_bot_sheriffing.md)
 has been created to ensure the builds and tests stay green, so the perf
 regression sheriff role is now entirely focused on performance.
 
+**[Rotation calendar](https://calendar.google.com/calendar/embed?src=google.com_2fpmo740pd1unrui9d7cgpbg2k%40group.calendar.google.com)**
+
 ## Key Responsibilities
 
  * [Triage Regressions on the Perf Dashboard](#triage)
@@ -85,8 +87,9 @@ alert is fired. Some of these alerts are expected:
      to see if it has been disabled, and if so associate the alert with the
      bug for the disable.
    * When a bot has been turned down. These should be announced to
-     perf-sheriffs@chromium.org, but if you can't find the bot on the waterfall
-     and you didn't see the announcement, double check in the speed infra chat.
+     perf-sheriffs@chromium.org, but if you can't find the bot on
+     [the waterfall](https://uberchromegw.corp.google.com/i/chromium.perf/) and
+     you didn't see the announcement, double check in the speed infra chat.
      Ideally these will be associated with the bug for the bot turndown, but
      it's okay to mark them invalid if you can't find the bug.
 

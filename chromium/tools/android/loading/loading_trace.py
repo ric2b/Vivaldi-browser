@@ -4,7 +4,9 @@
 
 """Represents the trace of a page load."""
 
+import datetime
 import json
+import time
 
 import devtools_monitor
 import page_track
@@ -42,14 +44,15 @@ class LoadingTrace(object):
     result = {self._URL_KEY: self.url, self._METADATA_KEY: self.metadata,
               self._PAGE_KEY: self.page_track.ToJsonDict(),
               self._REQUEST_KEY: self.request_track.ToJsonDict(),
-              self._TRACING_KEY: self.tracing_track.ToJsonDict()}
+              self._TRACING_KEY: (self.tracing_track.ToJsonDict()
+                                  if self.tracing_track else None)}
     return result
 
   def ToJsonFile(self, json_path):
     """Save a json file representing this instance."""
     json_dict = self.ToJsonDict()
     with open(json_path, 'w') as output_file:
-       json.dump(json_dict, output_file, indent=2)
+       json.dump(json_dict, output_file)
 
   @classmethod
   def FromJsonDict(cls, json_dict):
@@ -73,7 +76,7 @@ class LoadingTrace(object):
 
   @classmethod
   def RecordUrlNavigation(
-      cls, url, connection, chrome_metadata, categories=None,
+      cls, url, connection, chrome_metadata, additional_categories=None,
       timeout_seconds=devtools_monitor.DEFAULT_TIMEOUT_SECONDS):
     """Create a loading trace by using controller to fetch url.
 
@@ -81,7 +84,8 @@ class LoadingTrace(object):
       url: (str) url to fetch.
       connection: An opened devtools connection.
       chrome_metadata: Dictionary of chrome metadata.
-      categories: TracingTrack categories to capture.
+      additional_categories: ([str] or None) TracingTrack additional categories
+                             to capture.
       timeout_seconds: monitoring connection timeout in seconds.
 
     Returns:
@@ -91,10 +95,14 @@ class LoadingTrace(object):
     request = request_track.RequestTrack(connection)
     trace = tracing.TracingTrack(
         connection,
-        categories=(tracing.DEFAULT_CATEGORIES if categories is None
-                    else categories))
+        additional_categories=additional_categories)
+    start_date_str = datetime.datetime.utcnow().isoformat()
+    seconds_since_epoch=time.time()
     connection.MonitorUrl(url, timeout_seconds=timeout_seconds)
-    return cls(url, chrome_metadata, page, request, trace)
+    trace = cls(url, chrome_metadata, page, request, trace)
+    trace.metadata.update(date=start_date_str,
+                          seconds_since_epoch=seconds_since_epoch)
+    return trace
 
   @property
   def tracing_track(self):
@@ -111,7 +119,8 @@ class LoadingTrace(object):
     self._tracing_track = None
 
   def _RestoreTracingTrack(self):
-    assert self._tracing_json_str
+    if not self._tracing_json_str:
+      return None
     self._tracing_track = tracing.TracingTrack.FromJsonDict(
         json.loads(self._tracing_json_str))
     self._tracing_json_str = None

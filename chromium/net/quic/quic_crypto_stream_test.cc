@@ -4,11 +4,12 @@
 
 #include "net/quic/quic_crypto_stream.h"
 
+#include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "net/quic/crypto/crypto_handshake.h"
 #include "net/quic/crypto/crypto_protocol.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
@@ -44,7 +45,9 @@ class MockQuicCryptoStream : public QuicCryptoStream {
 class QuicCryptoStreamTest : public ::testing::Test {
  public:
   QuicCryptoStreamTest()
-      : connection_(new MockConnection(&helper_, Perspective::IS_CLIENT)),
+      : connection_(new MockQuicConnection(&helper_,
+                                           &alarm_factory_,
+                                           Perspective::IS_CLIENT)),
         session_(connection_),
         stream_(&session_) {
     message_.set_tag(kSHLO);
@@ -59,12 +62,13 @@ class QuicCryptoStreamTest : public ::testing::Test {
   }
 
  protected:
-  MockConnectionHelper helper_;
-  MockConnection* connection_;
+  MockQuicConnectionHelper helper_;
+  MockAlarmFactory alarm_factory_;
+  MockQuicConnection* connection_;
   MockQuicSpdySession session_;
   MockQuicCryptoStream stream_;
   CryptoHandshakeMessage message_;
-  scoped_ptr<QuicData> message_data_;
+  std::unique_ptr<QuicData> message_data_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(QuicCryptoStreamTest);

@@ -14,7 +14,7 @@ AutoUpdateCheckForUpdatesFunction::AutoUpdateCheckForUpdatesFunction() {
 }
 
 bool AutoUpdateCheckForUpdatesFunction::RunAsync() {
-  scoped_ptr<vivaldi::auto_update::CheckForUpdates::Params> params(
+  std::unique_ptr<vivaldi::auto_update::CheckForUpdates::Params> params(
     vivaldi::auto_update::CheckForUpdates::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 #if defined(OS_WIN)

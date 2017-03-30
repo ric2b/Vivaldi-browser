@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_SYNC_DRIVER_SYNC_STOPPED_REPORTER_H_
 #define COMPONENTS_SYNC_DRIVER_SYNC_STOPPED_REPORTER_H_
 
+#include <memory>
 #include <string>
 
 #include "base/callback.h"
@@ -69,7 +70,7 @@ class SyncStoppedReporter : public net::URLFetcherDelegate {
   scoped_refptr<net::URLRequestContextGetter> request_context_;
 
   // The current URLFetcher. Null unless a request is in progress.
-  scoped_ptr<net::URLFetcher> fetcher_;
+  std::unique_ptr<net::URLFetcher> fetcher_;
 
   // A callback for request completion or timeout.
   ResultCallback callback_;

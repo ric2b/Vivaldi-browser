@@ -15,10 +15,6 @@
 #include "build/build_config.h"
 #include "crypto/crypto_export.h"
 
-#if !defined(USE_OPENSSL)
-#include "crypto/scoped_nss_types.h"
-#endif
-
 namespace crypto {
 
 class SymmetricKey;
@@ -55,7 +51,7 @@ class CRYPTO_EXPORT Encryptor {
   };
 
   Encryptor();
-  virtual ~Encryptor();
+  ~Encryptor();
 
   // Initializes the encryptor using |key| and |iv|. Returns false if either the
   // key or the initialization vector cannot be used.
@@ -118,7 +114,6 @@ class CRYPTO_EXPORT Encryptor {
   Mode mode_;
   std::unique_ptr<Counter> counter_;
 
-#if defined(USE_OPENSSL)
   bool Crypt(bool do_encrypt,  // Pass true to encrypt, false to decrypt.
              const base::StringPiece& input,
              std::string* output);
@@ -126,15 +121,6 @@ class CRYPTO_EXPORT Encryptor {
                 const base::StringPiece& input,
                 std::string* output);
   std::string iv_;
-#else
-  bool Crypt(PK11Context* context,
-             const base::StringPiece& input,
-             std::string* output);
-  bool CryptCTR(PK11Context* context,
-                const base::StringPiece& input,
-                std::string* output);
-  ScopedSECItem param_;
-#endif
 };
 
 }  // namespace crypto

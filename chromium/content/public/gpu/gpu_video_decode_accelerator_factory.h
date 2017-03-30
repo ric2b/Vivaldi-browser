@@ -5,6 +5,8 @@
 #ifndef CONTENT_PUBLIC_GPU_GPU_VIDEO_DECODE_ACCELERATOR_FACTORY_H_
 #define CONTENT_PUBLIC_GPU_GPU_VIDEO_DECODE_ACCELERATOR_FACTORY_H_
 
+#include <memory>
+
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "content/common/content_export.h"
@@ -25,9 +27,11 @@ class GLES2Decoder;
 }
 }
 
-namespace content {
-
+namespace media {
 class GpuVideoDecodeAcceleratorFactoryImpl;
+}
+
+namespace content {
 
 // This factory allows creation of VideoDecodeAccelerator implementations,
 // providing the most applicable VDA for current platform and given
@@ -58,34 +62,44 @@ class CONTENT_EXPORT GpuVideoDecodeAcceleratorFactory {
       base::Callback<base::WeakPtr<gpu::gles2::GLES2Decoder>(void)>;
 
   // Create a factory capable of producing VDA instances for current platform.
-  static scoped_ptr<GpuVideoDecodeAcceleratorFactory> Create(
+  static std::unique_ptr<GpuVideoDecodeAcceleratorFactory> Create(
       const GetGLContextCallback& get_gl_context_cb,
       const MakeGLContextCurrentCallback& make_context_current_cb,
       const BindGLImageCallback& bind_image_cb);
 
-  static scoped_ptr<GpuVideoDecodeAcceleratorFactory> CreateWithGLES2Decoder(
+  static std::unique_ptr<GpuVideoDecodeAcceleratorFactory>
+  CreateWithGLES2Decoder(
       const GetGLContextCallback& get_gl_context_cb,
       const MakeGLContextCurrentCallback& make_context_current_cb,
       const BindGLImageCallback& bind_image_cb,
       const GetGLES2DecoderCallback& get_gles2_decoder_cb);
+
+  // Create a factory capable of producing VDA instances for current platform
+  // with no GL support.
+  // A factory created with this method will only be able to produce VDAs with
+  // no ability to call GL functions/access GL state. This also implies no
+  // ability to decode into textures provided by the client.
+  static std::unique_ptr<GpuVideoDecodeAcceleratorFactory> CreateWithNoGL();
 
   // Return decoder capabilities supported on the current platform.
   static gpu::VideoDecodeAcceleratorCapabilities GetDecoderCapabilities();
 
   // Create a VDA for the current platform for |client| with the given |config|
   // and for given |gpu_preferences|. Return nullptr on failure.
-  virtual scoped_ptr<media::VideoDecodeAccelerator> CreateVDA(
+  virtual std::unique_ptr<media::VideoDecodeAccelerator> CreateVDA(
       media::VideoDecodeAccelerator::Client* client,
       const media::VideoDecodeAccelerator::Config& config);
 
  private:
   // TODO(posciak): This is temporary and will not be needed once
-  // GpuVideoDecodeAcceleratorFactoryImpl implements
+  // media::GpuVideoDecodeAcceleratorFactoryImpl implements
   // GpuVideoDecodeAcceleratorFactory, see crbug.com/597150 and related.
   GpuVideoDecodeAcceleratorFactory(
-      scoped_ptr<GpuVideoDecodeAcceleratorFactoryImpl> gvdafactory_impl);
+      std::unique_ptr<media::GpuVideoDecodeAcceleratorFactoryImpl>
+      gvdafactory_impl);
 
-  scoped_ptr<GpuVideoDecodeAcceleratorFactoryImpl> gvdafactory_impl_;
+  std::unique_ptr<media::GpuVideoDecodeAcceleratorFactoryImpl>
+      gvdafactory_impl_;
 };
 
 }  // namespace content

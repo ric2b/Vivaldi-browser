@@ -10,7 +10,7 @@
 
 #include "base/hash.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/favicon/core/favicon_client.h"
 #include "components/favicon_base/favicon_util.h"
 #include "components/favicon_base/select_favicon_frames.h"
@@ -50,7 +50,7 @@ std::vector<int> GetPixelSizesForFaviconScales(int size_in_dip) {
 
 }  // namespace
 
-FaviconService::FaviconService(scoped_ptr<FaviconClient> favicon_client,
+FaviconService::FaviconService(std::unique_ptr<FaviconClient> favicon_client,
                                history::HistoryService* history_service)
     : favicon_client_(std::move(favicon_client)),
       history_service_(history_service) {}

@@ -7,12 +7,12 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/containers/small_map.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/events/events_base_export.h"
@@ -44,6 +44,8 @@ enum LatencyComponentType {
   INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT,
   // Timestamp when the UI event is created.
   INPUT_EVENT_LATENCY_UI_COMPONENT,
+  // Timestamp when the event is dispatched on the main thread of the renderer.
+  INPUT_EVENT_LATENCY_RENDERER_MAIN_COMPONENT,
   // This is special component indicating there is rendering scheduled for
   // the event associated with this LatencyInfo on main thread.
   INPUT_EVENT_LATENCY_RENDERING_SCHEDULED_MAIN_COMPONENT,
@@ -214,8 +216,9 @@ class EVENTS_BASE_EXPORT LatencyInfo {
                                          const char* trace_name_str);
 
   // Converts latencyinfo into format that can be dumped into trace buffer.
-  scoped_ptr<base::trace_event::ConvertableToTraceFormat> AsTraceableData();
-  scoped_ptr<base::trace_event::ConvertableToTraceFormat>
+  std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
+  AsTraceableData();
+  std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
   CoordinatesAsTraceableData();
 
   // Shown as part of the name of the trace event for this LatencyInfo.

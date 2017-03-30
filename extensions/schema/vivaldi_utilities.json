@@ -140,6 +140,28 @@
             "name": "windowId"
           }
         ]
+      },
+      {
+        "name": "basicPrint",
+        "type": "function",
+        "description": "Open basic print dialog",
+        "parameters": [
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onScroll",
+        "type": "function",
+        "description": "Fires for Mac when scroll device changes.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "scrollType",
+            "minimum": 0,
+            "description":"Device that triggers scrolling. 1: Mouse, 2: Trackpad 3: Inertial"
+          }
+        ]
       }
     ]
   }

@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
 #include <memory>
 #include <utility>
 
@@ -14,7 +15,8 @@
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/memory/ptr_util.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_logging.h"
@@ -48,7 +50,7 @@ class MojoChannelFactory : public ChannelFactory {
 
   std::string GetName() const override { return ""; }
 
-  scoped_ptr<Channel> BuildChannel(Listener* listener) override {
+  std::unique_ptr<Channel> BuildChannel(Listener* listener) override {
     return ChannelMojo::Create(std::move(handle_), mode_, listener);
   }
 
@@ -199,24 +201,24 @@ MojoResult UnwrapAttachment(mojom::SerializedHandlePtr handle,
 //------------------------------------------------------------------------------
 
 // static
-scoped_ptr<ChannelMojo> ChannelMojo::Create(
+std::unique_ptr<ChannelMojo> ChannelMojo::Create(
     mojo::ScopedMessagePipeHandle handle,
     Mode mode,
     Listener* listener) {
-  return make_scoped_ptr(new ChannelMojo(std::move(handle), mode, listener));
+  return base::WrapUnique(new ChannelMojo(std::move(handle), mode, listener));
 }
 
 // static
-scoped_ptr<ChannelFactory> ChannelMojo::CreateServerFactory(
+std::unique_ptr<ChannelFactory> ChannelMojo::CreateServerFactory(
     mojo::ScopedMessagePipeHandle handle) {
-  return make_scoped_ptr(
+  return base::WrapUnique(
       new MojoChannelFactory(std::move(handle), Channel::MODE_SERVER));
 }
 
 // static
-scoped_ptr<ChannelFactory> ChannelMojo::CreateClientFactory(
+std::unique_ptr<ChannelFactory> ChannelMojo::CreateClientFactory(
     mojo::ScopedMessagePipeHandle handle) {
-  return make_scoped_ptr(
+  return base::WrapUnique(
       new MojoChannelFactory(std::move(handle), Channel::MODE_CLIENT));
 }
 
@@ -238,16 +240,18 @@ ChannelMojo::~ChannelMojo() {
 
 bool ChannelMojo::Connect() {
   WillConnect();
-  base::AutoLock lock(lock_);
-  DCHECK(!task_runner_);
-  task_runner_ = base::ThreadTaskRunnerHandle::Get();
-  DCHECK(!message_reader_);
+  {
+    base::AutoLock lock(lock_);
+    DCHECK(!task_runner_);
+    task_runner_ = base::ThreadTaskRunnerHandle::Get();
+    DCHECK(!message_reader_);
+  }
   bootstrap_->Connect();
   return true;
 }
 
 void ChannelMojo::Close() {
-  scoped_ptr<internal::MessagePipeReader, ReaderDeleter> reader;
+  std::unique_ptr<internal::MessagePipeReader, ReaderDeleter> reader;
   {
     base::AutoLock lock(lock_);
     if (!message_reader_)
@@ -281,9 +285,9 @@ void ChannelMojo::InitMessageReader(mojom::ChannelAssociatedPtrInfo sender,
                                     base::ProcessId peer_pid) {
   mojom::ChannelAssociatedPtr sender_ptr;
   sender_ptr.Bind(std::move(sender));
-  scoped_ptr<internal::MessagePipeReader, ChannelMojo::ReaderDeleter> reader(
-      new internal::MessagePipeReader(pipe_, std::move(sender_ptr),
-                                      std::move(receiver), peer_pid, this));
+  std::unique_ptr<internal::MessagePipeReader, ChannelMojo::ReaderDeleter>
+      reader(new internal::MessagePipeReader(
+          pipe_, std::move(sender_ptr), std::move(receiver), peer_pid, this));
 
   bool connected = true;
   {
@@ -325,15 +329,20 @@ void ChannelMojo::OnPipeError() {
 }
 
 bool ChannelMojo::Send(Message* message) {
-  base::AutoLock lock(lock_);
-  if (!message_reader_) {
-    pending_messages_.push_back(make_scoped_ptr(message));
-    // Counts as OK before the connection is established, but it's an
-    // error otherwise.
-    return waiting_connect_;
+  bool sent = false;
+  {
+    base::AutoLock lock(lock_);
+    if (!message_reader_) {
+      pending_messages_.push_back(base::WrapUnique(message));
+      // Counts as OK before the connection is established, but it's an
+      // error otherwise.
+      return waiting_connect_;
+    }
+
+    sent = message_reader_->Send(base::WrapUnique(message));
   }
 
-  if (!message_reader_->Send(make_scoped_ptr(message))) {
+  if (!sent) {
     OnPipeError();
     return false;
   }
@@ -342,7 +351,7 @@ bool ChannelMojo::Send(Message* message) {
 }
 
 bool ChannelMojo::IsSendThreadSafe() const {
-  return true;
+  return false;
 }
 
 base::ProcessId ChannelMojo::GetPeerPID() const {

@@ -8,13 +8,16 @@
 
 #include <utility>
 
+#include "ash/wm/common/container_finder.h"
 #include "components/mus/common/types.h"
+#include "components/mus/public/cpp/property_type_converters.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_property.h"
 #include "components/mus/public/cpp/window_tree_connection.h"
 #include "components/mus/public/interfaces/input_events.mojom.h"
 #include "components/mus/public/interfaces/mus_constants.mojom.h"
 #include "components/mus/public/interfaces/window_manager.mojom.h"
+#include "mash/wm/bridge/wm_window_mus.h"
 #include "mash/wm/non_client_frame_controller.h"
 #include "mash/wm/property_util.h"
 #include "mash/wm/public/interfaces/container.mojom.h"
@@ -30,13 +33,6 @@ WindowManager::WindowManager()
       binding_(this) {}
 
 WindowManager::~WindowManager() {
-  if (!root_controller_)
-    return;
-  for (auto container : root_controller_->root()->children()) {
-    container->RemoveObserver(this);
-    for (auto child : container->children())
-      child->RemoveObserver(this);
-  }
 }
 
 void WindowManager::Initialize(RootWindowController* root_controller,
@@ -44,11 +40,22 @@ void WindowManager::Initialize(RootWindowController* root_controller,
   DCHECK(root_controller);
   DCHECK(!root_controller_);
   root_controller_ = root_controller;
-  // The children of the root are considered containers.
-  for (auto container : root_controller_->root()->children()) {
-    container->AddObserver(this);
-    for (auto child : container->children())
-      child->AddObserver(this);
+
+  // Observe all the containers so that windows can be added to/removed from the
+  // |disconnected_app_handler_|.
+  int count = static_cast<int>(mojom::Container::COUNT);
+  for (int id = static_cast<int>(mojom::Container::ROOT) + 1; id < count;
+       ++id) {
+    mus::Window* container = root_controller_->GetWindowForContainer(
+        static_cast<mojom::Container>(id));
+    Add(container);
+
+    // Add any pre-existing windows in the container to
+    // |disconnected_app_handler_|.
+    for (auto child : container->children()) {
+      if (!root_controller_->WindowIsContainer(child))
+        disconnected_app_handler_.Add(child);
+    }
   }
 
   // The insets are roughly what is needed by CustomFrameView. The expectation
@@ -71,7 +78,53 @@ void WindowManager::Initialize(RootWindowController* root_controller,
     session->AddScreenlockStateListener(binding_.CreateInterfacePtrAndBind());
 }
 
+mus::Window* WindowManager::NewTopLevelWindow(
+    std::map<std::string, std::vector<uint8_t>>* properties) {
+  DCHECK(root_controller_);
+  mus::Window* root = root_controller_->root();
+  DCHECK(root);
+
+  const bool provide_non_client_frame =
+      GetWindowType(*properties) == mus::mojom::WindowType::WINDOW;
+  if (provide_non_client_frame)
+    (*properties)[mus::mojom::kWaitForUnderlay_Property].clear();
+
+  // TODO(sky): constrain and validate properties before passing to server.
+  mus::Window* window = root->connection()->NewWindow(properties);
+  window->SetBounds(CalculateDefaultBounds(window));
+
+  mus::Window* container_window = nullptr;
+  if (window->HasSharedProperty(mojom::kWindowContainer_Property)) {
+    container_window =
+        root_controller_->GetWindowForContainer(GetRequestedContainer(window));
+  } else {
+    // TODO(sky): window->bounds() isn't quite right.
+    container_window = WmWindowMus::GetMusWindow(
+        ash::wm::GetDefaultParent(WmWindowMus::Get(root_controller_->root()),
+                                  WmWindowMus::Get(window), window->bounds()));
+  }
+  DCHECK(root_controller_->WindowIsContainer(container_window));
+
+  if (provide_non_client_frame) {
+    NonClientFrameController::Create(root_controller_->GetConnector(),
+                                     container_window, window,
+                                     root_controller_->window_manager_client());
+  } else {
+    container_window->AddChild(window);
+  }
+
+  root_controller_->IncrementWindowCount();
+
+  return window;
+}
+
 gfx::Rect WindowManager::CalculateDefaultBounds(mus::Window* window) const {
+  if (window->HasSharedProperty(
+          mus::mojom::WindowManager::kInitialBounds_Property)) {
+    return window->GetSharedProperty<gfx::Rect>(
+        mus::mojom::WindowManager::kInitialBounds_Property);
+  }
+
   DCHECK(root_controller_);
   int width, height;
   const gfx::Size pref = GetWindowPreferredSize(window);
@@ -95,44 +148,17 @@ gfx::Rect WindowManager::GetMaximizedWindowBounds() const {
   return gfx::Rect(root_controller_->root()->bounds().size());
 }
 
-mus::Window* WindowManager::NewTopLevelWindow(
-    std::map<std::string, std::vector<uint8_t>>* properties) {
-  DCHECK(root_controller_);
-  mus::Window* root = root_controller_->root();
-  DCHECK(root);
-
-  const bool provide_non_client_frame =
-      GetWindowType(*properties) == mus::mojom::WindowType::WINDOW;
-  if (provide_non_client_frame)
-    (*properties)[mus::mojom::kWaitForUnderlay_Property].clear();
-
-  // TODO(sky): constrain and validate properties before passing to server.
-  mus::Window* window = root->connection()->NewWindow(properties);
-  window->SetBounds(CalculateDefaultBounds(window));
-
-  mojom::Container container = GetRequestedContainer(window);
-  root_controller_->GetWindowForContainer(container)->AddChild(window);
-
-  if (provide_non_client_frame) {
-    NonClientFrameController::Create(root_controller_->GetConnector(), window,
-                                     root_controller_->window_manager_client());
-  }
-
-  root_controller_->IncrementWindowCount();
-
-  return window;
-}
-
 void WindowManager::OnTreeChanging(const TreeChangeParams& params) {
   DCHECK(root_controller_);
-  if (root_controller_->WindowIsContainer(params.old_parent))
-    params.target->RemoveObserver(this);
-  else if (root_controller_->WindowIsContainer(params.new_parent))
-    params.target->AddObserver(this);
-}
+  if (params.old_parent == params.receiver &&
+      root_controller_->WindowIsContainer(params.old_parent))
+    disconnected_app_handler_.Remove(params.target);
 
-void WindowManager::OnWindowEmbeddedAppDisconnected(mus::Window* window) {
-  window->Destroy();
+  if (params.new_parent == params.receiver &&
+      root_controller_->WindowIsContainer(params.new_parent))
+    disconnected_app_handler_.Add(params.target);
+
+  mus::WindowTracker::OnTreeChanging(params);
 }
 
 void WindowManager::SetWindowManagerClient(mus::WindowManagerClient* client) {
@@ -140,7 +166,10 @@ void WindowManager::SetWindowManagerClient(mus::WindowManagerClient* client) {
 }
 
 bool WindowManager::OnWmSetBounds(mus::Window* window, gfx::Rect* bounds) {
-  // By returning true the bounds of |window| is updated.
+  // TODO(sky): this indirectly sets bounds, which is against what
+  // OnWmSetBounds() recommends doing. Remove that restriction, or fix this.
+  WmWindowMus::Get(window)->SetBounds(*bounds);
+  *bounds = window->bounds();
   return true;
 }
 
@@ -167,7 +196,7 @@ void WindowManager::OnAccelerator(uint32_t id, const ui::Event& event) {
 }
 
 void WindowManager::ScreenlockStateChanged(bool locked) {
-  // Hide USER_PRIVATE windows when the screen is locked.
+  // Hide USER_PRIVATE_CONTAINER windows when the screen is locked.
   mus::Window* window = root_controller_->GetWindowForContainer(
       mash::wm::mojom::Container::USER_PRIVATE);
   window->SetVisible(!locked);

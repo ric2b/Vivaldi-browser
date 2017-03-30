@@ -29,7 +29,6 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/search_test_utils.h"
-#include "chrome/test/base/test_switches.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/app_modal/javascript_app_modal_dialog.h"
 #include "components/app_modal/native_app_modal_dialog.h"
@@ -269,13 +268,6 @@ class PopupBlockerBrowserTest : public InProcessBrowserTest {
 
 IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
                        BlockWebContentsCreation) {
-#if defined(OS_WIN) && defined(USE_ASH)
-  // Disable this test in Metro+Ash for now (http://crbug.com/262796).
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshBrowserTests))
-    return;
-#endif
-
   RunCheckTest(
       browser(),
       "/popup_blocker/popup-blocked-to-post-blank.html",
@@ -285,13 +277,6 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
                        BlockWebContentsCreationIncognito) {
-#if defined(OS_WIN) && defined(USE_ASH)
-  // Disable this test in Metro+Ash for now (http://crbug.com/262796).
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshBrowserTests))
-    return;
-#endif
-
   RunCheckTest(
       CreateIncognitoBrowser(),
       "/popup_blocker/popup-blocked-to-post-blank.html",
@@ -301,13 +286,6 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
                        PopupBlockedFakeClickOnAnchor) {
-#if defined(OS_WIN) && defined(USE_ASH)
-  // Disable this test in Metro+Ash for now (http://crbug.com/262796).
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshBrowserTests))
-    return;
-#endif
-
   RunCheckTest(
       browser(),
       "/popup_blocker/popup-fake-click-on-anchor.html",
@@ -317,13 +295,6 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
                        PopupBlockedFakeClickOnAnchorNoTarget) {
-#if defined(OS_WIN) && defined(USE_ASH)
-  // Disable this test in Metro+Ash for now (http://crbug.com/262796).
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshBrowserTests))
-    return;
-#endif
-
   RunCheckTest(
       browser(),
       "/popup_blocker/popup-fake-click-on-anchor2.html",
@@ -591,7 +562,8 @@ void BuildSimpleWebKeyEvent(blink::WebInputEvent::Type type,
   event->type = type;
   event->modifiers = modifiers;
   event->isSystemKey = false;
-  event->timeStampSeconds = base::Time::Now().ToDoubleT();
+  event->timeStampSeconds =
+      (base::TimeTicks::Now() - base::TimeTicks()).InSecondsF();
   event->skip_in_browser = true;
 
   if (type == blink::WebInputEvent::Char ||
@@ -627,7 +599,7 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, CtrlEnterKey) {
   int modifiers = blink::WebInputEvent::MetaKey;
   InjectRawKeyEvent(
       tab, blink::WebInputEvent::RawKeyDown, ui::VKEY_COMMAND,
-      ui::KeycodeConverter::DomCodeToNativeKeycode(ui::DomCode::OS_LEFT),
+      ui::KeycodeConverter::DomCodeToNativeKeycode(ui::DomCode::META_LEFT),
       modifiers);
 #else
   int modifiers = blink::WebInputEvent::ControlKey;
@@ -649,7 +621,7 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, CtrlEnterKey) {
 #if defined(OS_MACOSX)
   InjectRawKeyEvent(
       tab, blink::WebInputEvent::KeyUp, ui::VKEY_COMMAND,
-      ui::KeycodeConverter::DomCodeToNativeKeycode(ui::DomCode::OS_LEFT),
+      ui::KeycodeConverter::DomCodeToNativeKeycode(ui::DomCode::META_LEFT),
       modifiers);
 #else
   InjectRawKeyEvent(

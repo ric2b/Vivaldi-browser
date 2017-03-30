@@ -39,6 +39,8 @@
         'metrics/drive_metrics_provider_linux.cc',
         'metrics/drive_metrics_provider_mac.mm',
         'metrics/drive_metrics_provider_win.cc',
+        'metrics/enabled_state_provider.cc',
+        'metrics/enabled_state_provider.h',
         'metrics/file_metrics_provider.cc',
         'metrics/file_metrics_provider.h',
         'metrics/histogram_encoder.cc',
@@ -121,6 +123,8 @@
         'version_info',
       ],
       'sources': [
+        'metrics/net/cellular_logic_helper.cc',
+        'metrics/net/cellular_logic_helper.h',
         'metrics/net/net_metrics_log_uploader.cc',
         'metrics/net/net_metrics_log_uploader.h',
         'metrics/net/network_metrics_provider.cc',
@@ -142,6 +146,7 @@
       ],
       'dependencies': [
         '../base/base.gyp:base',
+        '../ui/display/display.gyp:display',
         '../ui/gfx/gfx.gyp:gfx',
         'metrics',
       ],
@@ -194,6 +199,8 @@
         'component_metrics_proto',
       ],
       'sources': [
+        'metrics/test_enabled_state_provider.cc',
+        'metrics/test_enabled_state_provider.h',
         'metrics/test_metrics_provider.cc',
         'metrics/test_metrics_provider.h',
         'metrics/test_metrics_service_client.cc',
@@ -252,6 +259,7 @@
           'type': 'static_library',
           'dependencies': [
             '../base/base.gyp:base',
+            'component_metrics_proto',
           ],
           'sources': [
             'metrics/leak_detector/call_stack_manager.cc',

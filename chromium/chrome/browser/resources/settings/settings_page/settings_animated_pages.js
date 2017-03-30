@@ -88,11 +88,8 @@ Polymer({
       return;
     }
 
-    // route.section is only non-empty when the user is within a subpage.
-    // When the user is not in a subpage, but on the Basic page, route.section
-    // is an empty string.
-    var newRouteIsSubpage = newRoute && newRoute.section == this.section;
-    var oldRouteIsSubpage = oldRoute && oldRoute.section == this.section;
+    var newRouteIsSubpage = newRoute && newRoute.subpage.length;
+    var oldRouteIsSubpage = oldRoute && oldRoute.subpage.length;
 
     if (newRouteIsSubpage)
       this.ensureSubpageInstance_();
@@ -114,8 +111,10 @@ Polymer({
       }
     }
 
-    this.$.animatedPages.selected =
-        newRouteIsSubpage ? newRoute.subpage.slice(-1)[0] : 'main';
+    if (newRouteIsSubpage && newRoute.section == this.section)
+      this.$.animatedPages.selected = newRoute.subpage.slice(-1)[0];
+    else
+      this.$.animatedPages.selected = 'main';
   },
 
   /**
@@ -127,8 +126,9 @@ Polymer({
     var template = Polymer.dom(this).querySelector(
         'template[name="' + id + '"]');
 
-    // Do nothing if the subpage is already stamped.
-    if (template.if)
+    // Nothing to do if the subpage isn't wrapped in a <template> or the
+    // template is already stamped.
+    if (!template || template.if)
       return;
 
     // Set the subpage's id for use by neon-animated-pages.

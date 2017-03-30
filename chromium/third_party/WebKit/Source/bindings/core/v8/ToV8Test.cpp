@@ -7,7 +7,6 @@
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
 #include "core/testing/GarbageCollectedScriptWrappable.h"
-#include "core/testing/RefCountedScriptWrappable.h"
 #include "platform/heap/Heap.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "wtf/Vector.h"
@@ -41,7 +40,7 @@ public:
     V8TestingScope m_scope;
 };
 
-class GarbageCollectedHolder : public GarbageCollectedFinalized<GarbageCollectedHolder> {
+class GarbageCollectedHolder : public GarbageCollected<GarbageCollectedHolder> {
 public:
     GarbageCollectedHolder(GarbageCollectedScriptWrappable* scriptWrappable)
         : m_scriptWrappable(scriptWrappable) { }
@@ -61,21 +60,6 @@ public:
     Persistent<GarbageCollectedScriptWrappable> m_scriptWrappable;
 };
 
-TEST_F(ToV8Test, refCountedScriptWrappable)
-{
-    RefPtr<RefCountedScriptWrappable> object = RefCountedScriptWrappable::create("hello");
-
-    TEST_TOV8("hello", object);
-    TEST_TOV8("hello", object.get());
-    TEST_TOV8("hello", object.release());
-
-    ASSERT_FALSE(object);
-
-    TEST_TOV8("null", object);
-    TEST_TOV8("null", object.get());
-    TEST_TOV8("null", object.release());
-}
-
 TEST_F(ToV8Test, garbageCollectedScriptWrappable)
 {
     GarbageCollectedScriptWrappable* object = new GarbageCollectedScriptWrappable("world");
@@ -83,7 +67,6 @@ TEST_F(ToV8Test, garbageCollectedScriptWrappable)
     OffHeapGarbageCollectedHolder offHeapHolder(object);
 
     TEST_TOV8("world", object);
-    TEST_TOV8("world", RawPtr<GarbageCollectedScriptWrappable>(object));
     TEST_TOV8("world", holder.m_scriptWrappable);
     TEST_TOV8("world", offHeapHolder.m_scriptWrappable);
 
@@ -92,7 +75,6 @@ TEST_F(ToV8Test, garbageCollectedScriptWrappable)
     offHeapHolder.m_scriptWrappable = nullptr;
 
     TEST_TOV8("null", object);
-    TEST_TOV8("null", RawPtr<GarbageCollectedScriptWrappable>(object));
     TEST_TOV8("null", holder.m_scriptWrappable);
     TEST_TOV8("null", offHeapHolder.m_scriptWrappable);
 }
@@ -164,15 +146,6 @@ TEST_F(ToV8Test, scriptValue)
     ScriptValue value(m_scope.getScriptState(), v8::Number::New(m_scope.isolate(), 1234));
 
     TEST_TOV8("1234", value);
-}
-
-TEST_F(ToV8Test, vector)
-{
-    Vector<RefPtr<RefCountedScriptWrappable>> v;
-    v.append(RefCountedScriptWrappable::create("foo"));
-    v.append(RefCountedScriptWrappable::create("bar"));
-
-    TEST_TOV8("foo,bar", v);
 }
 
 TEST_F(ToV8Test, stringVectors)
@@ -249,58 +222,6 @@ TEST_F(ToV8Test, heapVector)
     v.append(nullptr);
 
     TEST_TOV8("hoge,fuga,", v);
-}
-
-TEST_F(ToV8Test, stringHeapVectors)
-{
-    HeapVector<String> stringVector;
-    stringVector.append("foo");
-    stringVector.append("bar");
-    TEST_TOV8("foo,bar", stringVector);
-
-    HeapVector<AtomicString> atomicStringVector;
-    atomicStringVector.append("quux");
-    atomicStringVector.append("bar");
-    TEST_TOV8("quux,bar", atomicStringVector);
-}
-
-TEST_F(ToV8Test, basicTypeHeapVectors)
-{
-    HeapVector<int> intVector;
-    intVector.append(42);
-    intVector.append(23);
-    TEST_TOV8("42,23", intVector);
-
-    HeapVector<long> longVector;
-    longVector.append(31773);
-    longVector.append(404);
-    TEST_TOV8("31773,404", longVector);
-
-    HeapVector<unsigned> unsignedVector;
-    unsignedVector.append(1);
-    unsignedVector.append(2);
-    TEST_TOV8("1,2", unsignedVector);
-
-    HeapVector<unsigned long> unsignedLongVector;
-    unsignedLongVector.append(1001);
-    unsignedLongVector.append(2002);
-    TEST_TOV8("1001,2002", unsignedLongVector);
-
-    HeapVector<float> floatVector;
-    floatVector.append(0.125);
-    floatVector.append(1.);
-    TEST_TOV8("0.125,1", floatVector);
-
-    HeapVector<double> doubleVector;
-    doubleVector.append(2.3);
-    doubleVector.append(4.2);
-    TEST_TOV8("2.3,4.2", doubleVector);
-
-    HeapVector<bool> boolVector;
-    boolVector.append(true);
-    boolVector.append(true);
-    boolVector.append(false);
-    TEST_TOV8("true,true,false", boolVector);
 }
 
 TEST_F(ToV8Test, withScriptState)

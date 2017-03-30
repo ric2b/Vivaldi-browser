@@ -142,7 +142,7 @@ class DisplayConfiguratorTest : public testing::Test {
 
     native_display_delegate_ = new TestNativeDisplayDelegate(log_.get());
     configurator_.SetDelegateForTesting(
-        scoped_ptr<NativeDisplayDelegate>(native_display_delegate_));
+        std::unique_ptr<NativeDisplayDelegate>(native_display_delegate_));
 
     configurator_.set_state_controller(&state_controller_);
     configurator_.set_mirroring_controller(&mirroring_controller_);
@@ -212,11 +212,17 @@ class DisplayConfiguratorTest : public testing::Test {
     }
   }
 
+  void Init(bool panel_fitting_enabled) {
+    configurator_.Init(std::unique_ptr<NativeDisplayDelegate>(),
+                       panel_fitting_enabled);
+  }
+
   // Initializes |configurator_| with a single internal display.
   void InitWithSingleOutput() {
     UpdateOutputs(1, false);
     EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
-    configurator_.Init(false);
+    configurator_.Init(std::unique_ptr<NativeDisplayDelegate>(), false);
+
     EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
     configurator_.ForceInitialConfigure(0);
     EXPECT_EQ(JoinActions(kInitXRandR, kGrab,
@@ -245,7 +251,7 @@ class DisplayConfiguratorTest : public testing::Test {
   TestMirroringController mirroring_controller_;
   DisplayConfigurator configurator_;
   TestObserver observer_;
-  scoped_ptr<ActionLogger> log_;
+  std::unique_ptr<ActionLogger> log_;
   TestNativeDisplayDelegate* native_display_delegate_;  // not owned
   DisplayConfigurator::TestApi test_api_;
 
@@ -835,9 +841,16 @@ TEST_F(DisplayConfiguratorTest, SuspendAndResume) {
   EXPECT_EQ(CALLBACK_SUCCESS, PopCallbackResult());
   EXPECT_EQ(framebuffer_size.ToString(),
             configurator_.framebuffer_size().ToString());
-  EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
+  EXPECT_EQ(
+      JoinActions(
+          kGrab,
+          GetFramebufferAction(small_mode_.size(), &outputs_[0], NULL).c_str(),
+          GetCrtcAction(outputs_[0], NULL, gfx::Point(0, 0)).c_str(),
+          kUngrab,
+          kSync,
+          NULL),
+      log_->GetActionsAndClear());
   configurator_.ResumeDisplays();
-  EXPECT_TRUE(test_api_.TriggerConfigureTimeout());
   EXPECT_EQ(
       JoinActions(
           kGrab,
@@ -868,19 +881,16 @@ TEST_F(DisplayConfiguratorTest, SuspendAndResume) {
   configurator_.SuspendDisplays(base::Bind(
       &DisplayConfiguratorTest::OnConfiguredCallback, base::Unretained(this)));
   EXPECT_EQ(CALLBACK_SUCCESS, PopCallbackResult());
-  EXPECT_EQ(
-      JoinActions(
-          kGrab,
-          GetFramebufferAction(small_mode_.size(), &outputs_[0], NULL).c_str(),
-          GetCrtcAction(outputs_[0], &small_mode_, gfx::Point(0, 0)).c_str(),
-          kForceDPMS,
-          kUngrab,
-          kSync,
-          NULL),
-      log_->GetActionsAndClear());
+  EXPECT_EQ(kSync, log_->GetActionsAndClear());
 
   configurator_.ResumeDisplays();
-  EXPECT_TRUE(test_api_.TriggerConfigureTimeout());
+  EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
+
+  configurator_.SetDisplayPower(
+      chromeos::DISPLAY_POWER_ALL_ON,
+      DisplayConfigurator::kSetDisplayPowerNoFlags,
+      base::Bind(&DisplayConfiguratorTest::OnConfiguredCallback,
+                 base::Unretained(this)));
   EXPECT_EQ(
       JoinActions(
           kGrab,
@@ -891,8 +901,6 @@ TEST_F(DisplayConfiguratorTest, SuspendAndResume) {
           NULL),
       log_->GetActionsAndClear());
 
-  // If a second, external display is connected, the displays shouldn't be
-  // powered back on before suspending.
   state_controller_.set_state(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
   UpdateOutputs(2, true);
   EXPECT_EQ(
@@ -913,31 +921,38 @@ TEST_F(DisplayConfiguratorTest, SuspendAndResume) {
                  base::Unretained(this)));
   EXPECT_EQ(CALLBACK_SUCCESS, PopCallbackResult());
   EXPECT_EQ(
-      JoinActions(kGrab,
-                  GetFramebufferAction(
-                      small_mode_.size(), &outputs_[0], &outputs_[1]).c_str(),
-                  GetCrtcAction(outputs_[0], NULL, gfx::Point(0, 0)).c_str(),
-                  GetCrtcAction(outputs_[1], NULL, gfx::Point(0, 0)).c_str(),
-                  kUngrab,
-                  NULL),
+      JoinActions(
+          kGrab,
+          GetFramebufferAction(small_mode_.size(), &outputs_[0], &outputs_[1])
+              .c_str(),
+          GetCrtcAction(outputs_[0], NULL, gfx::Point(0, 0)).c_str(),
+          GetCrtcAction(outputs_[1], NULL, gfx::Point(0, 0)).c_str(),
+          kUngrab,
+          NULL),
       log_->GetActionsAndClear());
 
   configurator_.SuspendDisplays(base::Bind(
       &DisplayConfiguratorTest::OnConfiguredCallback, base::Unretained(this)));
   EXPECT_EQ(CALLBACK_SUCCESS, PopCallbackResult());
-  EXPECT_EQ(JoinActions(kGrab, kUngrab, kSync, NULL),
-            log_->GetActionsAndClear());
+  EXPECT_EQ(kSync, log_->GetActionsAndClear());
 
   // If a display is disconnected while suspended, the configurator should
-  // pick up the change.
+  // pick up the change and only turn on the internal display.
   UpdateOutputs(1, false);
   configurator_.ResumeDisplays();
-  EXPECT_TRUE(test_api_.TriggerConfigureTimeout());
+  EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
+
+  configurator_.SetDisplayPower(
+      chromeos::DISPLAY_POWER_ALL_ON,
+      DisplayConfigurator::kSetDisplayPowerNoFlags,
+      base::Bind(&DisplayConfiguratorTest::OnConfiguredCallback,
+                 base::Unretained(this)));
   EXPECT_EQ(
       JoinActions(
           kGrab,
           GetFramebufferAction(small_mode_.size(), &outputs_[0], NULL).c_str(),
-          GetCrtcAction(outputs_[0], NULL, gfx::Point(0, 0)).c_str(),
+          GetCrtcAction(outputs_[0], &small_mode_, gfx::Point(0, 0)).c_str(),
+          kForceDPMS,
           kUngrab,
           NULL),
       log_->GetActionsAndClear());
@@ -946,7 +961,7 @@ TEST_F(DisplayConfiguratorTest, SuspendAndResume) {
 TEST_F(DisplayConfiguratorTest, Headless) {
   UpdateOutputs(0, false);
   EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
-  configurator_.Init(false);
+  Init(false);
   EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
   configurator_.ForceInitialConfigure(0);
   EXPECT_EQ(JoinActions(kInitXRandR, kGrab, kForceDPMS, kUngrab, NULL),
@@ -997,7 +1012,7 @@ TEST_F(DisplayConfiguratorTest, Headless) {
 TEST_F(DisplayConfiguratorTest, StartWithTwoOutputs) {
   UpdateOutputs(2, false);
   EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
-  configurator_.Init(false);
+  Init(false);
   EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
 
   state_controller_.set_state(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
@@ -1016,7 +1031,7 @@ TEST_F(DisplayConfiguratorTest, StartWithTwoOutputs) {
 TEST_F(DisplayConfiguratorTest, InvalidMultipleDisplayStates) {
   UpdateOutputs(0, false);
   EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
-  configurator_.Init(false);
+  Init(false);
   configurator_.ForceInitialConfigure(0);
   observer_.Reset();
   configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_HEADLESS);
@@ -1056,7 +1071,7 @@ TEST_F(DisplayConfiguratorTest, InvalidMultipleDisplayStates) {
 
 TEST_F(DisplayConfiguratorTest, GetMultipleDisplayStateForMirroredDisplays) {
   UpdateOutputs(2, false);
-  configurator_.Init(false);
+  Init(false);
   state_controller_.set_state(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
   configurator_.ForceInitialConfigure(0);
   EXPECT_EQ(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR, configurator_.display_state());
@@ -1093,7 +1108,7 @@ TEST_F(DisplayConfiguratorTest, PanelFitting) {
   // mirrored mode.
   UpdateOutputs(2, false);
   state_controller_.set_state(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
-  configurator_.Init(true /* is_panel_fitting_enabled */);
+  Init(true /* is_panel_fitting_enabled */);
   configurator_.ForceInitialConfigure(0);
   EXPECT_EQ(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR, configurator_.display_state());
   EXPECT_EQ(
@@ -1122,7 +1137,7 @@ TEST_F(DisplayConfiguratorTest, PanelFitting) {
 }
 
 TEST_F(DisplayConfiguratorTest, ContentProtection) {
-  configurator_.Init(false);
+  Init(false);
   configurator_.ForceInitialConfigure(0);
   EXPECT_NE(kNoActions, log_->GetActionsAndClear());
 
@@ -1199,7 +1214,15 @@ TEST_F(DisplayConfiguratorTest, DoNotConfigureWithSuspendedDisplays) {
   configurator_.SuspendDisplays(base::Bind(
       &DisplayConfiguratorTest::OnConfiguredCallback, base::Unretained(this)));
   EXPECT_EQ(CALLBACK_SUCCESS, PopCallbackResult());
-  EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
+  EXPECT_EQ(
+      JoinActions(
+          kGrab,
+          GetFramebufferAction(small_mode_.size(), &outputs_[0], NULL).c_str(),
+          GetCrtcAction(outputs_[0], NULL, gfx::Point(0, 0)).c_str(),
+          kUngrab,
+          kSync,
+          NULL),
+      log_->GetActionsAndClear());
 
   // The configuration timer should not be started when the displays
   // are suspended.
@@ -1207,21 +1230,15 @@ TEST_F(DisplayConfiguratorTest, DoNotConfigureWithSuspendedDisplays) {
   EXPECT_FALSE(test_api_.TriggerConfigureTimeout());
   EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
 
-  // Calls to SetDisplayPower and SetDisplayMode should be successful.
+  // Calls to SetDisplayPower should do nothing if the power state doesn't
+  // change.
   configurator_.SetDisplayPower(
       chromeos::DISPLAY_POWER_ALL_OFF,
       DisplayConfigurator::kSetDisplayPowerNoFlags,
       base::Bind(&DisplayConfiguratorTest::OnConfiguredCallback,
                  base::Unretained(this)));
   EXPECT_EQ(CALLBACK_SUCCESS, PopCallbackResult());
-  EXPECT_EQ(
-      JoinActions(
-          kGrab,
-          GetFramebufferAction(small_mode_.size(), &outputs_[0], NULL).c_str(),
-          GetCrtcAction(outputs_[0], NULL, gfx::Point(0, 0)).c_str(),
-          kUngrab,
-          NULL),
-      log_->GetActionsAndClear());
+  EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
   configurator_.SetDisplayPower(
       chromeos::DISPLAY_POWER_ALL_ON,
       DisplayConfigurator::kSetDisplayPowerNoFlags,
@@ -1251,34 +1268,33 @@ TEST_F(DisplayConfiguratorTest, DoNotConfigureWithSuspendedDisplays) {
           NULL),
       log_->GetActionsAndClear());
 
-  // The DisplayConfigurator should force a probe and reconfiguration at resume
-  // time.
+  // The DisplayConfigurator should do nothing at resume time if there is no
+  // state change.
   UpdateOutputs(1, false);
   configurator_.ResumeDisplays();
-  EXPECT_TRUE(test_api_.TriggerConfigureTimeout());
-  EXPECT_EQ(
-      JoinActions(
-          kGrab,
-          GetFramebufferAction(small_mode_.size(), &outputs_[0], NULL).c_str(),
-          GetCrtcAction(outputs_[0], &small_mode_, gfx::Point(0, 0)).c_str(),
-          kForceDPMS,
-          kUngrab,
-          NULL),
-      log_->GetActionsAndClear());
+  EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
 
   // If a configuration task is pending when the displays are suspended, that
-  // task should not run either and the timer should be stopped.
+  // task should not run either and the timer should be stopped. The displays
+  // should be turned off by suspend.
   configurator_.OnConfigurationChanged();
   configurator_.SuspendDisplays(base::Bind(
       &DisplayConfiguratorTest::OnConfiguredCallback, base::Unretained(this)));
   EXPECT_EQ(CALLBACK_SUCCESS, PopCallbackResult());
-  EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
+  EXPECT_EQ(
+      JoinActions(
+          kGrab,
+          GetFramebufferAction(small_mode_.size(), &outputs_[0], NULL).c_str(),
+          GetCrtcAction(outputs_[0], NULL, gfx::Point(0, 0)).c_str(),
+          kUngrab,
+          kSync,
+          NULL),
+      log_->GetActionsAndClear());
 
   EXPECT_FALSE(test_api_.TriggerConfigureTimeout());
   EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
 
   configurator_.ResumeDisplays();
-  EXPECT_TRUE(test_api_.TriggerConfigureTimeout());
   EXPECT_EQ(
       JoinActions(
           kGrab,
@@ -1297,7 +1313,7 @@ TEST_F(DisplayConfiguratorTest, ContentProtectionTwoClients) {
       configurator_.RegisterContentProtectionClient();
   EXPECT_NE(client1, client2);
 
-  configurator_.Init(false);
+  Init(false);
   configurator_.ForceInitialConfigure(0);
   UpdateOutputs(2, true);
   EXPECT_NE(kNoActions, log_->GetActionsAndClear());
@@ -1361,7 +1377,7 @@ TEST_F(DisplayConfiguratorTest, ContentProtectionTwoClientsEnable) {
       configurator_.RegisterContentProtectionClient();
   EXPECT_NE(client1, client2);
 
-  configurator_.Init(false);
+  Init(false);
   configurator_.ForceInitialConfigure(0);
   UpdateOutputs(2, true);
   log_->GetActionsAndClear();
@@ -1484,7 +1500,7 @@ TEST_F(DisplayConfiguratorTest, HandleConfigureCrtcFailure) {
 TEST_F(DisplayConfiguratorTest, SaveDisplayPowerStateOnConfigFailure) {
   // Start out with two displays in extended mode.
   state_controller_.set_state(MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED);
-  configurator_.Init(false);
+  Init(false);
   configurator_.ForceInitialConfigure(0);
   log_->GetActionsAndClear();
   observer_.Reset();
@@ -1532,7 +1548,7 @@ TEST_F(DisplayConfiguratorTest, SaveDisplayPowerStateOnConfigFailure) {
 TEST_F(DisplayConfiguratorTest, DontRestoreStalePowerStateAfterResume) {
   // Start out with two displays in mirrored mode.
   state_controller_.set_state(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
-  configurator_.Init(false);
+  Init(false);
   configurator_.ForceInitialConfigure(0);
   log_->GetActionsAndClear();
   observer_.Reset();
@@ -1558,12 +1574,24 @@ TEST_F(DisplayConfiguratorTest, DontRestoreStalePowerStateAfterResume) {
           NULL),
       log_->GetActionsAndClear());
 
-  // Suspend and resume the system. Resuming should post a task to restore the
-  // previous power state, additionally forcing a probe.
+  // Suspend and resume the system. Resuming should restore the previous power
+  // state and force a probe. Suspend should turn off the displays since an
+  // external monitor is connected.
   configurator_.SuspendDisplays(base::Bind(
       &DisplayConfiguratorTest::OnConfiguredCallback, base::Unretained(this)));
   EXPECT_EQ(CALLBACK_SUCCESS, PopCallbackResult());
-  configurator_.ResumeDisplays();
+  EXPECT_EQ(2, observer_.num_changes());
+  EXPECT_EQ(
+      JoinActions(
+          kGrab,
+          GetFramebufferAction(small_mode_.size(), &outputs_[0],
+              &outputs_[1]).c_str(),
+          GetCrtcAction(outputs_[0], NULL, gfx::Point(0, 0)).c_str(),
+          GetCrtcAction(outputs_[1], NULL, gfx::Point(0, 0)).c_str(),
+          kUngrab,
+          kSync,
+          NULL),
+      log_->GetActionsAndClear());
 
   // Before the task runs, exit docked mode.
   configurator_.SetDisplayPower(
@@ -1572,7 +1600,7 @@ TEST_F(DisplayConfiguratorTest, DontRestoreStalePowerStateAfterResume) {
       base::Bind(&DisplayConfiguratorTest::OnConfiguredCallback,
                  base::Unretained(this)));
   EXPECT_EQ(CALLBACK_SUCCESS, PopCallbackResult());
-  EXPECT_EQ(2, observer_.num_changes());
+  EXPECT_EQ(3, observer_.num_changes());
   EXPECT_EQ(0, observer_.num_failures());
   EXPECT_EQ(
       JoinActions(
@@ -1586,20 +1614,9 @@ TEST_F(DisplayConfiguratorTest, DontRestoreStalePowerStateAfterResume) {
           NULL),
       log_->GetActionsAndClear());
 
-  // Check that the task doesn't restore the old internal-off-external-on power
-  // state.
-  EXPECT_TRUE(test_api_.TriggerConfigureTimeout());
-  EXPECT_EQ(
-      JoinActions(
-          kGrab,
-          GetFramebufferAction(small_mode_.size(), &outputs_[0], &outputs_[1])
-              .c_str(),
-          GetCrtcAction(outputs_[0], &small_mode_, gfx::Point(0, 0)).c_str(),
-          GetCrtcAction(outputs_[1], &small_mode_, gfx::Point(0, 0)).c_str(),
-          kForceDPMS,
-          kUngrab,
-          NULL),
-      log_->GetActionsAndClear());
+  // Check that the display states are not changed after resuming.
+  configurator_.ResumeDisplays();
+  EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
 }
 
 TEST_F(DisplayConfiguratorTest, ExternalControl) {

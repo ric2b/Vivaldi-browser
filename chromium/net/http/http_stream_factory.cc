@@ -11,6 +11,7 @@
 #include "base/time/time.h"
 #include "net/base/host_mapping_rules.h"
 #include "net/base/host_port_pair.h"
+#include "net/base/parse_number.h"
 #include "net/base/port_util.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_response_headers.h"
@@ -36,15 +37,14 @@ void HttpStreamFactory::ResetStaticSettingsToInit() {
 void HttpStreamFactory::ProcessAlternativeServices(
     HttpNetworkSession* session,
     const HttpResponseHeaders* headers,
-    const HostPortPair& http_host_port_pair) {
+    const url::SchemeHostPort& http_server) {
   if (session->params().parse_alternative_services) {
     if (headers->HasHeader(kAlternativeServiceHeader)) {
       std::string alternative_service_str;
       headers->GetNormalizedHeader(kAlternativeServiceHeader,
                                    &alternative_service_str);
       ProcessAlternativeService(session->http_server_properties(),
-                                alternative_service_str, http_host_port_pair,
-                                *session);
+                                alternative_service_str, http_server, *session);
     }
     // If "Alt-Svc" is enabled, then ignore "Alternate-Protocol".
     return;
@@ -66,8 +66,7 @@ void HttpStreamFactory::ProcessAlternativeServices(
   }
 
   ProcessAlternateProtocol(session->http_server_properties(),
-                           alternate_protocol_values, http_host_port_pair,
-                           *session);
+                           alternate_protocol_values, http_server, *session);
 }
 
 GURL HttpStreamFactory::ApplyHostMappingRules(const GURL& url,
@@ -89,7 +88,7 @@ HttpStreamFactory::HttpStreamFactory() {}
 void HttpStreamFactory::ProcessAlternativeService(
     const base::WeakPtr<HttpServerProperties>& http_server_properties,
     base::StringPiece alternative_service_str,
-    const HostPortPair& http_host_port_pair,
+    const url::SchemeHostPort& http_server,
     const HttpNetworkSession& session) {
   SpdyAltSvcWireFormat::AlternativeServiceVector alternative_service_vector;
   if (!SpdyAltSvcWireFormat::ParseHeaderFieldValue(
@@ -139,13 +138,13 @@ void HttpStreamFactory::ProcessAlternativeService(
   }
 
   http_server_properties->SetAlternativeServices(
-      RewriteHost(http_host_port_pair), alternative_service_info_vector);
+      RewriteHost(http_server), alternative_service_info_vector);
 }
 
 void HttpStreamFactory::ProcessAlternateProtocol(
     const base::WeakPtr<HttpServerProperties>& http_server_properties,
     const std::vector<std::string>& alternate_protocol_values,
-    const HostPortPair& http_host_port_pair,
+    const url::SchemeHostPort& http_server,
     const HttpNetworkSession& session) {
   AlternateProtocol protocol = UNINITIALIZED_ALTERNATE_PROTOCOL;
   int port = 0;
@@ -168,7 +167,8 @@ void HttpStreamFactory::ProcessAlternateProtocol(
       break;
     }
 
-    if (!base::StringToInt(port_protocol_vector[0], &port) ||
+    if (!ParseInt32(port_protocol_vector[0], ParseIntFormat::NON_NEGATIVE,
+                    &port) ||
         port == 0 || !IsPortValid(port)) {
       DVLOG(1) << kAlternateProtocolHeader
                << " header has unrecognizable port: "
@@ -190,21 +190,24 @@ void HttpStreamFactory::ProcessAlternateProtocol(
   }
 
   if (!is_valid || protocol == UNINITIALIZED_ALTERNATE_PROTOCOL) {
-    http_server_properties->ClearAlternativeServices(http_host_port_pair);
+    http_server_properties->ClearAlternativeServices(http_server);
     return;
   }
 
   http_server_properties->SetAlternativeService(
-      RewriteHost(http_host_port_pair),
+      RewriteHost(http_server),
       AlternativeService(protocol, "", static_cast<uint16_t>(port)),
       base::Time::Now() + base::TimeDelta::FromDays(30));
 }
 
-HostPortPair HttpStreamFactory::RewriteHost(HostPortPair host_port_pair) {
+url::SchemeHostPort HttpStreamFactory::RewriteHost(
+    const url::SchemeHostPort& server) {
+  HostPortPair host_port_pair(server.host(), server.port());
   const HostMappingRules* mapping_rules = GetHostMappingRules();
   if (mapping_rules)
     mapping_rules->RewriteHost(&host_port_pair);
-  return host_port_pair;
+  return url::SchemeHostPort(server.scheme(), host_port_pair.host(),
+                             host_port_pair.port());
 }
 
 }  // namespace net

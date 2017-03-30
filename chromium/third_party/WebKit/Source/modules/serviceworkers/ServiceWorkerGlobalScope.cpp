@@ -43,6 +43,7 @@
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/WorkerInspectorController.h"
 #include "core/loader/ThreadableLoader.h"
+#include "core/origin_trials/OriginTrialContext.h"
 #include "core/workers/WorkerClients.h"
 #include "core/workers/WorkerThreadStartupData.h"
 #include "modules/EventTargetModules.h"
@@ -68,17 +69,18 @@ ServiceWorkerGlobalScope* ServiceWorkerGlobalScope::create(ServiceWorkerThread* 
 {
     // Note: startupData is finalized on return. After the relevant parts has been
     // passed along to the created 'context'.
-    ServiceWorkerGlobalScope* context = new ServiceWorkerGlobalScope(startupData->m_scriptURL, startupData->m_userAgent, thread, monotonicallyIncreasingTime(), startupData->m_starterOriginPrivilegeData.release(), startupData->m_workerClients.release());
+    ServiceWorkerGlobalScope* context = new ServiceWorkerGlobalScope(startupData->m_scriptURL, startupData->m_userAgent, thread, monotonicallyIncreasingTime(), std::move(startupData->m_starterOriginPrivilegeData), startupData->m_workerClients.release());
 
     context->setV8CacheOptions(startupData->m_v8CacheOptions);
     context->applyContentSecurityPolicyFromVector(*startupData->m_contentSecurityPolicyHeaders);
     context->setAddressSpace(startupData->m_addressSpace);
+    OriginTrialContext::addTokens(context, startupData->m_originTrialTokens.get());
 
     return context;
 }
 
 ServiceWorkerGlobalScope::ServiceWorkerGlobalScope(const KURL& url, const String& userAgent, ServiceWorkerThread* thread, double timeOrigin, PassOwnPtr<SecurityOrigin::PrivilegeData> starterOriginPrivilegeData, WorkerClients* workerClients)
-    : WorkerGlobalScope(url, userAgent, thread, timeOrigin, starterOriginPrivilegeData, workerClients)
+    : WorkerGlobalScope(url, userAgent, thread, timeOrigin, std::move(starterOriginPrivilegeData), workerClients)
     , m_didEvaluateScript(false)
     , m_hadErrorInTopLevelEventHandler(false)
     , m_eventNestingLevel(0)
@@ -122,11 +124,6 @@ ServiceWorkerRegistration* ServiceWorkerGlobalScope::registration()
     return m_registration;
 }
 
-void ServiceWorkerGlobalScope::close(ExceptionState& exceptionState)
-{
-    exceptionState.throwDOMException(InvalidAccessError, "Not supported.");
-}
-
 ScriptPromise ServiceWorkerGlobalScope::skipWaiting(ScriptState* scriptState)
 {
     ExecutionContext* executionContext = scriptState->getExecutionContext();
@@ -148,7 +145,7 @@ void ServiceWorkerGlobalScope::setRegistration(std::unique_ptr<WebServiceWorkerR
     m_registration = ServiceWorkerRegistration::getOrCreate(getExecutionContext(), adoptPtr(handle.release()));
 }
 
-bool ServiceWorkerGlobalScope::addEventListenerInternal(const AtomicString& eventType, EventListener* listener, const EventListenerOptions& options)
+bool ServiceWorkerGlobalScope::addEventListenerInternal(const AtomicString& eventType, EventListener* listener, const AddEventListenerOptions& options)
 {
     if (m_didEvaluateScript) {
         if (eventType == EventTypeNames::install) {

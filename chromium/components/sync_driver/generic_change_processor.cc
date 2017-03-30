@@ -12,7 +12,7 @@
 #include "base/location.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/sync_driver/sync_api_component_factory.h"
 #include "components/sync_driver/sync_client.h"
 #include "sync/api/sync_change.h"
@@ -20,6 +20,7 @@
 #include "sync/api/syncable_service.h"
 #include "sync/internal_api/public/base_node.h"
 #include "sync/internal_api/public/change_record.h"
+#include "sync/internal_api/public/data_type_error_handler.h"
 #include "sync/internal_api/public/read_node.h"
 #include "sync/internal_api/public/read_transaction.h"
 #include "sync/internal_api/public/util/unrecoverable_error_handler.h"
@@ -67,41 +68,52 @@ void SetAttachmentMetadata(const syncer::AttachmentIdList& attachment_ids,
 
 syncer::SyncData BuildRemoteSyncData(
     int64_t sync_id,
-    const syncer::BaseNode& read_node,
+    const syncer::ReadNode& read_node,
     const syncer::AttachmentServiceProxy& attachment_service_proxy) {
   const syncer::AttachmentIdList& attachment_ids = read_node.GetAttachmentIds();
-  // Use the specifics of non-password datatypes directly (encryption has
-  // already been handled).
-  if (read_node.GetModelType() != syncer::PASSWORDS) {
-    return syncer::SyncData::CreateRemoteData(sync_id,
-                                              read_node.GetEntitySpecifics(),
-                                              read_node.GetModificationTime(),
-                                              attachment_ids,
-                                              attachment_service_proxy);
+  switch (read_node.GetModelType()) {
+    case syncer::PASSWORDS: {
+      // Passwords must be accessed differently, to account for their
+      // encryption, and stored into a temporary EntitySpecifics.
+      sync_pb::EntitySpecifics password_holder;
+      password_holder.mutable_password()
+          ->mutable_client_only_encrypted_data()
+          ->CopyFrom(read_node.GetPasswordSpecifics());
+      return syncer::SyncData::CreateRemoteData(
+          sync_id, password_holder, read_node.GetModificationTime(),
+          attachment_ids, attachment_service_proxy);
+    }
+    case syncer::SESSIONS:
+      // Include tag hashes for sessions data type to allow discarding during
+      // merge if re-hashing by the service gives a different value. This is to
+      // allow removal of incorrectly hashed values, see crbug.com/604657. This
+      // cannot be done in the processor because only the service knows how to
+      // generate a tag from the specifics. We don't set this value for other
+      // data types because they shouldn't need it and it costs memory to hold
+      // another copy of this string around.
+      return syncer::SyncData::CreateRemoteData(
+          sync_id, read_node.GetEntitySpecifics(),
+          read_node.GetModificationTime(), attachment_ids,
+          attachment_service_proxy, read_node.GetEntry()->GetUniqueClientTag());
+    default:
+      // Use the specifics directly, encryption has already been handled.
+      return syncer::SyncData::CreateRemoteData(
+          sync_id, read_node.GetEntitySpecifics(),
+          read_node.GetModificationTime(), attachment_ids,
+          attachment_service_proxy);
   }
-
-  // Passwords must be accessed differently, to account for their encryption,
-  // and stored into a temporary EntitySpecifics.
-  sync_pb::EntitySpecifics password_holder;
-  password_holder.mutable_password()->mutable_client_only_encrypted_data()->
-      CopyFrom(read_node.GetPasswordSpecifics());
-  return syncer::SyncData::CreateRemoteData(sync_id,
-                                            password_holder,
-                                            read_node.GetModificationTime(),
-                                            attachment_ids,
-                                            attachment_service_proxy);
 }
 
 }  // namespace
 
 GenericChangeProcessor::GenericChangeProcessor(
     syncer::ModelType type,
-    DataTypeErrorHandler* error_handler,
+    syncer::DataTypeErrorHandler* error_handler,
     const base::WeakPtr<syncer::SyncableService>& local_service,
     const base::WeakPtr<syncer::SyncMergeResult>& merge_result,
     syncer::UserShare* user_share,
     SyncClient* sync_client,
-    scoped_ptr<syncer::AttachmentStoreForSync> attachment_store)
+    std::unique_ptr<syncer::AttachmentStoreForSync> attachment_store)
     : ChangeProcessor(error_handler),
       type_(type),
       local_service_(local_service),
@@ -147,7 +159,7 @@ void GenericChangeProcessor::ApplyChangesFromSyncModel(
   for (syncer::ChangeRecordList::const_iterator it =
            changes.Get().begin(); it != changes.Get().end(); ++it) {
     if (it->action == syncer::ChangeRecord::ACTION_DELETE) {
-      scoped_ptr<sync_pb::EntitySpecifics> specifics;
+      std::unique_ptr<sync_pb::EntitySpecifics> specifics;
       if (it->specifics.has_password()) {
         DCHECK(it->extra.get());
         specifics.reset(new sync_pb::EntitySpecifics(it->specifics));
@@ -316,7 +328,7 @@ syncer::SyncError LogLookupFailure(
     const tracked_objects::Location& from_here,
     const std::string& error_prefix,
     syncer::ModelType type,
-    DataTypeErrorHandler* error_handler) {
+    syncer::DataTypeErrorHandler* error_handler) {
   switch (lookup_result) {
     case syncer::BaseNode::INIT_FAILED_ENTRY_NOT_GOOD: {
       syncer::SyncError error;
@@ -366,7 +378,7 @@ syncer::SyncError AttemptDelete(const syncer::SyncChange& change,
                                 syncer::ModelType type,
                                 const std::string& type_str,
                                 syncer::WriteNode* node,
-                                DataTypeErrorHandler* error_handler) {
+                                syncer::DataTypeErrorHandler* error_handler) {
   DCHECK_EQ(change.change_type(), syncer::SyncChange::ACTION_DELETE);
   if (change.sync_data().IsLocal()) {
     const std::string& tag = syncer::SyncDataLocal(change.sync_data()).GetTag();
@@ -537,6 +549,13 @@ syncer::SyncError GenericChangeProcessor::HandleActionAdd(
         LOG(ERROR) << "Create: Bad predecessor.";
         return error;
       }
+      case syncer::WriteNode::INIT_FAILED_DECRYPT_EXISTING_ENTRY: {
+        syncer::SyncError error;
+        error.Reset(FROM_HERE, error_prefix + "failed to decrypt", type_);
+        error_handler()->OnSingleDataTypeUnrecoverableError(error);
+        LOG(ERROR) << "Create: Failed to decrypt.";
+        return error;
+      }
       default: {
         syncer::SyncError error;
         error.Reset(FROM_HERE, error_prefix + "unknown error", type_);
@@ -594,55 +613,19 @@ syncer::SyncError GenericChangeProcessor::HandleActionUpdate(
       error_handler()->OnSingleDataTypeUnrecoverableError(error);
       LOG(ERROR) << "Update: deleted entry.";
       return error;
+    } else if (result == syncer::BaseNode::INIT_FAILED_DECRYPT_IF_NECESSARY) {
+      syncer::SyncError error;
+      error.Reset(FROM_HERE, error_prefix + "failed to decrypt", type_);
+      error_handler()->OnSingleDataTypeUnrecoverableError(error);
+      LOG(ERROR) << "Update: Failed to decrypt.";
+      return error;
     } else {
-      syncer::Cryptographer* crypto = trans.GetCryptographer();
-      syncer::ModelTypeSet encrypted_types(trans.GetEncryptedTypes());
-      const sync_pb::EntitySpecifics& specifics =
-          sync_node->GetEntitySpecifics();
-      CHECK(specifics.has_encrypted());
-      const bool can_decrypt = crypto->CanDecrypt(specifics.encrypted());
-      const bool agreement = encrypted_types.Has(type_);
-      if (!agreement && !can_decrypt) {
-        syncer::SyncError error;
-        error.Reset(FROM_HERE,
-                    "Failed to load encrypted entry, missing key and "
-                    "nigori mismatch for " +
-                        type_str + ".",
-                    type_);
-        error_handler()->OnSingleDataTypeUnrecoverableError(error);
-        LOG(ERROR) << "Update: encr case 1.";
-        return error;
-      } else if (agreement && can_decrypt) {
-        syncer::SyncError error;
-        error.Reset(FROM_HERE,
-                    "Failed to load encrypted entry, we have the key "
-                    "and the nigori matches (?!) for " +
-                        type_str + ".",
-                    type_);
-        error_handler()->OnSingleDataTypeUnrecoverableError(error);
-        LOG(ERROR) << "Update: encr case 2.";
-        return error;
-      } else if (agreement) {
-        syncer::SyncError error;
-        error.Reset(FROM_HERE,
-                    "Failed to load encrypted entry, missing key and "
-                    "the nigori matches for " +
-                        type_str + ".",
-                    type_);
-        error_handler()->OnSingleDataTypeUnrecoverableError(error);
-        LOG(ERROR) << "Update: encr case 3.";
-        return error;
-      } else {
-        syncer::SyncError error;
-        error.Reset(FROM_HERE,
-                    "Failed to load encrypted entry, we have the key"
-                    "(?!) and nigori mismatch for " +
-                        type_str + ".",
-                    type_);
-        error_handler()->OnSingleDataTypeUnrecoverableError(error);
-        LOG(ERROR) << "Update: encr case 4.";
-        return error;
-      }
+      NOTREACHED();
+      syncer::SyncError error;
+      error.Reset(FROM_HERE, error_prefix + "unknown error", type_);
+      error_handler()->OnSingleDataTypeUnrecoverableError(error);
+      LOG(ERROR) << "Update: Unknown error.";
+      return error;
     }
   }
 
@@ -712,9 +695,9 @@ void GenericChangeProcessor::UploadAllAttachmentsNotOnServer() {
   }
 }
 
-scoped_ptr<syncer::AttachmentService>
+std::unique_ptr<syncer::AttachmentService>
 GenericChangeProcessor::GetAttachmentService() const {
-  return scoped_ptr<syncer::AttachmentService>(
+  return std::unique_ptr<syncer::AttachmentService>(
       new syncer::AttachmentServiceProxy(attachment_service_proxy_));
 }
 

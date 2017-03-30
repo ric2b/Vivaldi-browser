@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "components/drive/sync/remove_performer.h"
+#include "components/drive/chromeos/sync/remove_performer.h"
 
 #include "base/task_runner_util.h"
+#include "components/drive/chromeos/resource_metadata.h"
 #include "components/drive/file_system/operation_test_base.h"
 #include "components/drive/file_system_core_util.h"
 #include "components/drive/job_scheduler.h"
-#include "components/drive/resource_metadata.h"
 #include "components/drive/service/fake_drive_service.h"
 #include "content/public/test/test_utils.h"
 #include "google_apis/drive/drive_api_parser.h"
@@ -50,7 +50,7 @@ TEST_F(RemovePerformerTest, RemoveFile) {
 
   // Verify the file is indeed removed in the server.
   google_apis::DriveApiErrorCode gdata_error = google_apis::DRIVE_OTHER_ERROR;
-  scoped_ptr<google_apis::FileResource> gdata_entry;
+  std::unique_ptr<google_apis::FileResource> gdata_entry;
   fake_service()->GetFileResource(
       resource_id,
       google_apis::test_util::CreateCopyResultCallback(&gdata_error,
@@ -79,7 +79,7 @@ TEST_F(RemovePerformerTest, RemoveShared) {
 
   // Prepare a shared file to the root folder.
   google_apis::DriveApiErrorCode gdata_error = google_apis::DRIVE_OTHER_ERROR;
-  scoped_ptr<google_apis::FileResource> gdata_entry;
+  std::unique_ptr<google_apis::FileResource> gdata_entry;
   fake_service()->AddNewFile(
       "text/plain",
       "dummy content",

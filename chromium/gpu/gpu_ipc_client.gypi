@@ -11,8 +11,10 @@
     '../ui/events/events.gyp:events_base',
     '../ui/events/events.gyp:events_ipc',
     '../ui/gfx/gfx.gyp:gfx_geometry',
+    '../ui/gfx/ipc/geometry/gfx_ipc_geometry.gyp:gfx_ipc_geometry',
     '../ui/gfx/ipc/gfx_ipc.gyp:gfx_ipc',
     '../ui/gl/gl.gyp:gl',
+    '../ui/gl/init/gl_init.gyp:gl_init',
     '../url/url.gyp:url_lib',
     '../url/ipc/url_ipc.gyp:url_ipc',
   ],
@@ -43,12 +45,16 @@
       'sources+': [
         'ipc/client/gpu_memory_buffer_impl_surface_texture.cc',
         'ipc/client/gpu_memory_buffer_impl_surface_texture.h',
+        'ipc/client/android/in_process_surface_texture_manager.cc',
+        'ipc/client/android/in_process_surface_texture_manager.h',
       ],
     }],
     ['OS == "mac"', {
       'sources+': [
         'ipc/client/gpu_memory_buffer_impl_io_surface.cc',
         'ipc/client/gpu_memory_buffer_impl_io_surface.h',
+        'ipc/client/gpu_process_hosted_ca_layer_tree_params.cc',
+        'ipc/client/gpu_process_hosted_ca_layer_tree_params.h',
       ],
     }],
     ['use_ozone == 1', {

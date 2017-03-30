@@ -137,8 +137,14 @@ class MenuRunnerCocoaTest : public ViewsTestBase {
     runner_ = nullptr;
   }
 
+  void MenuCancelAndDeleteCallback() {
+    runner_->Cancel();
+    runner_->Release();
+    runner_ = nullptr;
+  }
+
  protected:
-  scoped_ptr<TestModel> menu_;
+  std::unique_ptr<TestModel> menu_;
   internal::MenuRunnerImplCocoa* runner_ = nullptr;
   views::Widget* parent_ = nullptr;
   NSRect last_anchor_frame_ = NSZeroRect;
@@ -179,6 +185,15 @@ TEST_F(MenuRunnerCocoaTest, RunMenuAndCancel) {
 TEST_F(MenuRunnerCocoaTest, RunMenuAndDelete) {
   MenuRunner::RunResult result = RunMenu(base::Bind(
       &MenuRunnerCocoaTest::MenuDeleteCallback, base::Unretained(this)));
+  EXPECT_EQ(MenuRunner::MENU_DELETED, result);
+}
+
+// Ensure a menu can be safely released immediately after a call to Cancel() in
+// the same run loop iteration.
+TEST_F(MenuRunnerCocoaTest, DestroyAfterCanceling) {
+  MenuRunner::RunResult result =
+      RunMenu(base::Bind(&MenuRunnerCocoaTest::MenuCancelAndDeleteCallback,
+                         base::Unretained(this)));
   EXPECT_EQ(MenuRunner::MENU_DELETED, result);
 }
 

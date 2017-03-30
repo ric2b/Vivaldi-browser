@@ -38,21 +38,22 @@
 
 #include <AudioUnit/AudioUnit.h>
 #include <CoreAudio/CoreAudio.h>
+
 #include <map>
+#include <memory>
 #include <vector>
 
 #include "base/atomicops.h"
 #include "base/cancelable_callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "media/audio/agc_audio_stream.h"
 #include "media/audio/audio_io.h"
-#include "media/audio/audio_parameters.h"
 #include "media/base/audio_block_fifo.h"
+#include "media/base/audio_parameters.h"
 
 namespace media {
 
@@ -229,7 +230,7 @@ class MEDIA_EXPORT AUAudioInputStream
 
   // Temporary storage for recorded data. The InputProc() renders into this
   // array as soon as a frame of the desired buffer size has been recorded.
-  scoped_ptr<uint8_t[]> audio_data_buffer_;
+  std::unique_ptr<uint8_t[]> audio_data_buffer_;
 
   // Fixed capture hardware latency in frames.
   double hardware_latency_frames_;
@@ -257,7 +258,7 @@ class MEDIA_EXPORT AUAudioInputStream
   // Timer which triggers CheckInputStartupSuccess() to verify that input
   // callbacks have started as intended after a successful call to Start().
   // This timer lives on the main browser thread.
-  scoped_ptr<base::OneShotTimer> input_callback_timer_;
+  std::unique_ptr<base::OneShotTimer> input_callback_timer_;
 
   // Set to true if the Start() call was delayed.
   // See AudioManagerMac::ShouldDeferStreamStart() for details.
@@ -285,9 +286,6 @@ class MEDIA_EXPORT AUAudioInputStream
   // Only touched on the creating thread.
   bool device_listener_is_active_;
 
-  // Set to true when audio unit is running, or performing IO. False otherwise.
-  bool started_;
-
   // Stores the timestamp of the previous audio buffer provided by the OS.
   // We use this in combination with |last_number_of_frames_| to detect when
   // the OS has decided to skip providing frames (i.e. a glitch).
@@ -304,7 +302,7 @@ class MEDIA_EXPORT AUAudioInputStream
 
   // Timer that provides periodic callbacks used to monitor if the input stream
   // is alive or not.
-  scoped_ptr<base::RepeatingTimer> check_alive_timer_;
+  std::unique_ptr<base::RepeatingTimer> check_alive_timer_;
 
   // Time tick set once in each input data callback. The time is measured on
   // the real-time priority I/O thread but this member is modified and read

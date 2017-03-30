@@ -5,8 +5,9 @@
 #ifndef CHROME_BROWSER_NET_SPDYPROXY_DATA_REDUCTION_PROXY_CHROME_IO_DATA_H_
 #define CHROME_BROWSER_NET_SPDYPROXY_DATA_REDUCTION_PROXY_CHROME_IO_DATA_H_
 
+#include <memory>
+
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 
 class DataReductionProxyChromeConfigurator;
 class PrefService;
@@ -25,12 +26,11 @@ class NetLog;
 
 // Constructs DataReductionProxyIOData suitable for use by ProfileImpl and
 // ProfileImplIOData.
-scoped_ptr<data_reduction_proxy::DataReductionProxyIOData>
+std::unique_ptr<data_reduction_proxy::DataReductionProxyIOData>
 CreateDataReductionProxyChromeIOData(
     net::NetLog* net_log,
     PrefService* prefs,
     const scoped_refptr<base::SingleThreadTaskRunner>& io_thread_runner,
-    const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread_runner,
-    bool enable_quic);
+    const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread_runner);
 
 #endif  // CHROME_BROWSER_NET_SPDYPROXY_DATA_REDUCTION_PROXY_CHROME_IO_DATA_H_

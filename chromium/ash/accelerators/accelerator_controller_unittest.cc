@@ -23,20 +23,23 @@
 #include "ash/test/test_shell_delegate.h"
 #include "ash/test/test_volume_control_delegate.h"
 #include "ash/volume_control_delegate.h"
+#include "ash/wm/aura/wm_window_aura.h"
+#include "ash/wm/common/panels/panel_layout_manager.h"
+#include "ash/wm/common/window_positioning_utils.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/common/wm_event.h"
 #include "ash/wm/lock_state_controller.h"
-#include "ash/wm/panels/panel_layout_manager.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm/wm_event.h"
 #include "base/command_line.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/test/test_windows.h"
 #include "ui/aura/window.h"
+#include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/events/event_processor.h"
 #include "ui/events/test/event_generator.h"
-#include "ui/gfx/screen.h"
 #include "ui/message_center/message_center.h"
 #include "ui/views/widget/widget.h"
 
@@ -276,9 +279,8 @@ class AcceleratorControllerTest : public test::AshTestBase {
     test::TestShelfDelegate* shelf_delegate =
       test::TestShelfDelegate::instance();
     shelf_delegate->AddShelfItem(window);
-    PanelLayoutManager* manager = static_cast<PanelLayoutManager*>(
-        Shell::GetContainer(window->GetRootWindow(),
-                            kShellWindowId_PanelContainer)->layout_manager());
+    PanelLayoutManager* manager =
+        PanelLayoutManager::Get(wm::WmWindowAura::Get(window));
     manager->Relayout();
     return window;
   }
@@ -449,13 +451,13 @@ TEST_F(AcceleratorControllerTest, WindowSnap) {
   {
     GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_LEFT);
     gfx::Rect expected_bounds = wm::GetDefaultLeftSnappedWindowBoundsInParent(
-        window.get());
+        wm::WmWindowAura::Get(window.get()));
     EXPECT_EQ(expected_bounds.ToString(), window->bounds().ToString());
   }
   {
     GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_RIGHT);
     gfx::Rect expected_bounds = wm::GetDefaultRightSnappedWindowBoundsInParent(
-        window.get());
+        wm::WmWindowAura::Get(window.get()));
     EXPECT_EQ(expected_bounds.ToString(), window->bounds().ToString());
   }
   {
@@ -504,7 +506,7 @@ TEST_F(AcceleratorControllerTest, WindowSnapLeftDockLeftRestore) {
   GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_LEFT);
   gfx::Rect normal_bounds = window1_state->GetRestoreBoundsInParent();
   gfx::Rect expected_bounds = wm::GetDefaultLeftSnappedWindowBoundsInParent(
-                                window1.get());
+      wm::WmWindowAura::Get(window1.get()));
   EXPECT_EQ(expected_bounds.ToString(), window1->bounds().ToString());
   EXPECT_TRUE(window1_state->IsSnapped());
   GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_LEFT);
@@ -526,8 +528,8 @@ TEST_F(AcceleratorControllerTest, WindowSnapRightDockRightRestore) {
 
   GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_RIGHT);
   gfx::Rect normal_bounds = window1_state->GetRestoreBoundsInParent();
-  gfx::Rect expected_bounds =
-    wm::GetDefaultRightSnappedWindowBoundsInParent(window1.get());
+  gfx::Rect expected_bounds = wm::GetDefaultRightSnappedWindowBoundsInParent(
+      wm::WmWindowAura::Get(window1.get()));
   EXPECT_EQ(expected_bounds.ToString(), window1->bounds().ToString());
   EXPECT_TRUE(window1_state->IsSnapped());
   GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_RIGHT);
@@ -548,10 +550,10 @@ TEST_F(AcceleratorControllerTest, WindowSnapLeftDockLeftSnapRight) {
   window1_state->Activate();
 
   GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_LEFT);
-  gfx::Rect expected_bounds =
-    wm::GetDefaultLeftSnappedWindowBoundsInParent(window1.get());
-  gfx::Rect expected_bounds2 =
-    wm::GetDefaultRightSnappedWindowBoundsInParent(window1.get());
+  gfx::Rect expected_bounds = wm::GetDefaultLeftSnappedWindowBoundsInParent(
+      wm::WmWindowAura::Get(window1.get()));
+  gfx::Rect expected_bounds2 = wm::GetDefaultRightSnappedWindowBoundsInParent(
+      wm::WmWindowAura::Get(window1.get()));
   EXPECT_EQ(expected_bounds.ToString(), window1->bounds().ToString());
   EXPECT_TRUE(window1_state->IsSnapped());
   GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_LEFT);
@@ -620,8 +622,8 @@ TEST_F(AcceleratorControllerTest, WindowPanelDockLeftDockRightRestore) {
 
   gfx::Rect window_restore_bounds2 = window->bounds();
   GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_LEFT);
-  gfx::Rect expected_bounds =
-      wm::GetDefaultLeftSnappedWindowBoundsInParent(window.get());
+  gfx::Rect expected_bounds = wm::GetDefaultLeftSnappedWindowBoundsInParent(
+      wm::WmWindowAura::Get(window.get()));
   gfx::Rect window_restore_bounds =
       window_state->GetRestoreBoundsInScreen();
   EXPECT_NE(expected_bounds.ToString(), window->bounds().ToString());
@@ -646,7 +648,7 @@ TEST_F(AcceleratorControllerTest, CenterWindowAccelerator) {
 
   // Center the window using accelerator.
   GetController()->PerformActionIfEnabled(WINDOW_POSITION_CENTER);
-  gfx::Rect work_area = gfx::Screen::GetScreen()
+  gfx::Rect work_area = display::Screen::GetScreen()
                             ->GetDisplayNearestWindow(window.get())
                             .work_area();
   gfx::Rect bounds = window->GetBoundsInScreen();

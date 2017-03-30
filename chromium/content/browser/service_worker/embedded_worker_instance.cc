@@ -8,6 +8,7 @@
 
 #include "base/bind_helpers.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/trace_event/trace_event.h"
@@ -55,6 +56,19 @@ void NotifyWorkerStopIgnoredOnUI(int worker_process_id, int worker_route_id) {
       worker_process_id, worker_route_id);
 }
 
+void NotifyWorkerVersionInstalledOnUI(int worker_process_id,
+                                      int worker_route_id) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  ServiceWorkerDevToolsManager::GetInstance()->WorkerVersionInstalled(
+      worker_process_id, worker_route_id);
+}
+
+void NotifyWorkerVersionDoomedOnUI(int worker_process_id, int worker_route_id) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  ServiceWorkerDevToolsManager::GetInstance()->WorkerVersionDoomed(
+      worker_process_id, worker_route_id);
+}
+
 void RegisterToWorkerDevToolsManagerOnUI(
     int process_id,
     const ServiceWorkerContextCore* service_worker_context,
@@ -62,6 +76,7 @@ void RegisterToWorkerDevToolsManagerOnUI(
     int64_t service_worker_version_id,
     const GURL& url,
     const GURL& scope,
+    bool is_installed,
     const base::Callback<void(int worker_devtools_agent_route_id,
                               bool wait_for_debugger)>& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -75,7 +90,8 @@ void RegisterToWorkerDevToolsManagerOnUI(
             process_id, worker_devtools_agent_route_id,
             ServiceWorkerDevToolsManager::ServiceWorkerIdentifier(
                 service_worker_context, service_worker_context_weak,
-                service_worker_version_id, url, scope));
+                service_worker_version_id, url, scope),
+            is_installed);
   }
   BrowserThread::PostTask(
       BrowserThread::IO,
@@ -86,8 +102,8 @@ void RegisterToWorkerDevToolsManagerOnUI(
 void SetupMojoOnUIThread(
     int process_id,
     int thread_id,
-    mojo::shell::mojom::InterfaceProviderRequest services,
-    mojo::shell::mojom::InterfaceProviderPtrInfo exposed_services) {
+    shell::mojom::InterfaceProviderRequest services,
+    shell::mojom::InterfaceProviderPtrInfo exposed_services) {
   RenderProcessHost* rph = RenderProcessHost::FromID(process_id);
   // |rph| or its ServiceRegistry may be NULL in unit tests.
   if (!rph || !rph->GetServiceRegistry())
@@ -129,6 +145,20 @@ class EmbeddedWorkerInstance::DevToolsProxy : public base::NonThreadSafe {
     BrowserThread::PostTask(BrowserThread::UI,
                             FROM_HERE,
                             base::Bind(NotifyWorkerStopIgnoredOnUI,
+                                       process_id_, agent_route_id_));
+  }
+
+  void NotifyWorkerVersionInstalled() {
+    DCHECK(CalledOnValidThread());
+    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                            base::Bind(NotifyWorkerVersionInstalledOnUI,
+                                       process_id_, agent_route_id_));
+  }
+
+  void NotifyWorkerVersionDoomed() {
+    DCHECK(CalledOnValidThread());
+    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                            base::Bind(NotifyWorkerVersionDoomedOnUI,
                                        process_id_, agent_route_id_));
   }
 
@@ -225,7 +255,7 @@ class EmbeddedWorkerInstance::StartTask {
     // TODO(nhiroki): Reconsider this bizarre layering.
   }
 
-  void Start(scoped_ptr<EmbeddedWorkerMsg_StartWorker_Params> params,
+  void Start(std::unique_ptr<EmbeddedWorkerMsg_StartWorker_Params> params,
              const StatusCallback& callback) {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
     state_ = ProcessAllocationState::ALLOCATING;
@@ -264,7 +294,7 @@ class EmbeddedWorkerInstance::StartTask {
 
  private:
   void OnProcessAllocated(
-      scoped_ptr<EmbeddedWorkerMsg_StartWorker_Params> params,
+      std::unique_ptr<EmbeddedWorkerMsg_StartWorker_Params> params,
       ServiceWorkerStatusCode status,
       int process_id,
       bool is_new_process,
@@ -299,7 +329,7 @@ class EmbeddedWorkerInstance::StartTask {
 
     // Notify the instance that a process is allocated.
     state_ = ProcessAllocationState::ALLOCATED;
-    instance_->OnProcessAllocated(make_scoped_ptr(new WorkerProcessHandle(
+    instance_->OnProcessAllocated(base::WrapUnique(new WorkerProcessHandle(
         instance_->context_, instance_->embedded_worker_id(), process_id,
         is_new_process)));
 
@@ -315,14 +345,14 @@ class EmbeddedWorkerInstance::StartTask {
         BrowserThread::UI, FROM_HERE,
         base::Bind(RegisterToWorkerDevToolsManagerOnUI, process_id,
                    instance_->context_.get(), instance_->context_,
-                   service_worker_version_id, script_url, scope,
+                   service_worker_version_id, script_url, scope, is_installed_,
                    base::Bind(&StartTask::OnRegisteredToDevToolsManager,
                               weak_factory_.GetWeakPtr(), base::Passed(&params),
                               is_new_process)));
   }
 
   void OnRegisteredToDevToolsManager(
-      scoped_ptr<EmbeddedWorkerMsg_StartWorker_Params> params,
+      std::unique_ptr<EmbeddedWorkerMsg_StartWorker_Params> params,
       bool is_new_process,
       int worker_devtools_agent_route_id,
       bool wait_for_debugger) {
@@ -341,7 +371,7 @@ class EmbeddedWorkerInstance::StartTask {
   }
 
   void SendStartWorker(
-      scoped_ptr<EmbeddedWorkerMsg_StartWorker_Params> params) {
+      std::unique_ptr<EmbeddedWorkerMsg_StartWorker_Params> params) {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
     ServiceWorkerStatusCode status = instance_->registry_->SendStartWorker(
         std::move(params), instance_->process_id());
@@ -390,7 +420,7 @@ EmbeddedWorkerInstance::~EmbeddedWorkerInstance() {
 }
 
 void EmbeddedWorkerInstance::Start(
-    scoped_ptr<EmbeddedWorkerMsg_StartWorker_Params> params,
+    std::unique_ptr<EmbeddedWorkerMsg_StartWorker_Params> params,
     const StatusCallback& callback) {
   if (!context_) {
     callback.Run(SERVICE_WORKER_ERROR_ABORT);
@@ -484,7 +514,7 @@ EmbeddedWorkerInstance::EmbeddedWorkerInstance(
       weak_factory_(this) {}
 
 void EmbeddedWorkerInstance::OnProcessAllocated(
-    scoped_ptr<WorkerProcessHandle> handle) {
+    std::unique_ptr<WorkerProcessHandle> handle) {
   DCHECK_EQ(STARTING, status_);
   DCHECK(!process_handle_);
 
@@ -578,6 +608,16 @@ void EmbeddedWorkerInstance::OnURLJobCreatedForMainScript() {
   }
 }
 
+void EmbeddedWorkerInstance::OnWorkerVersionInstalled() {
+  if (devtools_proxy_)
+    devtools_proxy_->NotifyWorkerVersionInstalled();
+}
+
+void EmbeddedWorkerInstance::OnWorkerVersionDoomed() {
+  if (devtools_proxy_)
+    devtools_proxy_->NotifyWorkerVersionDoomed();
+}
+
 void EmbeddedWorkerInstance::OnThreadStarted(int thread_id) {
   if (!inflight_start_task_)
     return;
@@ -595,11 +635,10 @@ void EmbeddedWorkerInstance::OnThreadStarted(int thread_id) {
   thread_id_ = thread_id;
   FOR_EACH_OBSERVER(Listener, listener_list_, OnThreadStarted());
 
-  mojo::shell::mojom::InterfaceProviderPtr exposed_services;
+  shell::mojom::InterfaceProviderPtr exposed_services;
   service_registry_->Bind(GetProxy(&exposed_services));
-  mojo::shell::mojom::InterfaceProviderPtr services;
-  mojo::shell::mojom::InterfaceProviderRequest services_request =
-      GetProxy(&services);
+  shell::mojom::InterfaceProviderPtr services;
+  shell::mojom::InterfaceProviderRequest services_request = GetProxy(&services);
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
       base::Bind(SetupMojoOnUIThread, process_id(), thread_id_,
@@ -769,6 +808,14 @@ base::TimeDelta EmbeddedWorkerInstance::UpdateStepTime() {
   base::TimeDelta duration = now - step_time_;
   step_time_ = now;
   return duration;
+}
+
+void EmbeddedWorkerInstance::AddMessageToConsole(ConsoleMessageLevel level,
+                                                 const std::string& message) {
+  if (status_ != RUNNING && status_ != STARTING)
+    return;
+  registry_->Send(process_id(), new EmbeddedWorkerMsg_AddMessageToConsole(
+                                    embedded_worker_id_, level, message));
 }
 
 // static

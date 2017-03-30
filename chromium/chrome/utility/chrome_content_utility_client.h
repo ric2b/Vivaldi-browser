@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -34,7 +35,7 @@ class ChromeContentUtilityClient : public content::ContentUtilityClient {
   bool OnMessageReceived(const IPC::Message& message) override;
   void RegisterMojoServices(content::ServiceRegistry* registry) override;
 
-  void AddHandler(scoped_ptr<UtilityMessageHandler> handler);
+  void AddHandler(std::unique_ptr<UtilityMessageHandler> handler);
 
   static void PreSandboxStartup();
 

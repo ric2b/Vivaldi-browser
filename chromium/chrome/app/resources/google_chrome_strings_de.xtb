@@ -66,10 +66,16 @@ Sollten Sie sich trotzdem anmelden, werden die Chrome-Daten wie Lesezeichen, Ver
 <translation id="2997147809295888909">Chrome hat verifiziert, dass <ph name="ISSUER" /> das Zertifikat dieser Website ausgestellt hat. Der Server hat keine Informationen zur Zertifikatstransparenz bereitgestellt.</translation>
 <translation id="3037838751736561277">Google Chrome wird im Hintergrundmodus ausgeführt.</translation>
 <translation id="3047079729301751317">Wenn Sie die Verbindung zu <ph name="USERNAME" /> trennen, werden Ihr Verlauf sowie Ihre Lesezeichen, Einstellungen und sonstigen auf diesem Gerät gespeicherten Chrome-Daten gelöscht. In Ihrem Google-Konto gespeicherte Daten bleiben erhalten und können über das <ph name="GOOGLE_DASHBOARD_LINK" />Google Dashboard<ph name="END_GOOGLE_DASHBOARD_LINK" /> verwaltet werden.</translation>
+<translation id="3065168410429928842">Chrome-Tab</translation>
 <translation id="3080151273017101988">Apps im Hintergrund ausführen, wenn Google Chrome geschlossen ist</translation>
 <translation id="3089968997497233615">Es gibt eine neue, sicherere Version von Google Chrome.</translation>
 <translation id="3149510190863420837">Chrome-Apps</translation>
-<translation id="3197823471738295152">Ihr Gerät ist auf dem neuesten Stand.</translation>
+<translation id="3251381707915721925">Zum Auswählen der Websites, die <ph name="NEW_PROFILE_NAME" /> besuchen kann, können Sie unter <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" /> Beschränkungen und Einstellungen festlegen. Wenn Sie die Standardeinstellungen nicht ändern, kann <ph name="NEW_PROFILE_NAME" /> alle Websites im Internet aufrufen.
+
+Um zu verhindern, dass <ph name="NEW_PROFILE_NAME" /> auf Ihr Konto zugreift, schließen Sie Chrome, wenn Sie es nicht verwenden, und aktivieren Sie die Kindersicherung. Klicken Sie dazu auf Ihren Profilnamen in der Ecke rechts oben und wählen sie "Beenden und Kindersicherung aktivieren".
+<ph name="BEGIN_LINK_2" />Weitere Infos<ph name="END_LINK_2" />
+
+Weitere Informationen wurden per E-Mail an <ph name="ACCOUNT_EMAIL" /> gesendet.</translation>
 <translation id="3282568296779691940">In Chrome anmelden</translation>
 <translation id="3311976847535831054">Für diesen Computer werden keine weiteren Updates mehr für die 32-Bit-Version von Google Chrome bereitgestellt. Aktualisieren Sie bitte auf die 64-Bit-Version von Google Chrome.</translation>
 <translation id="3360895254066713204">Chrome Helper</translation>
@@ -205,7 +211,6 @@ Sollten Sie sich trotzdem anmelden, werden die Chrome-Daten wie Lesezeichen, Ver
 <translation id="7808348361785373670">Aus Chrome entfernen...</translation>
 <translation id="7825851276765848807">Die Installation ist aufgrund eines unbekannten Fehlers fehlgeschlagen. Laden Sie Google Chrome erneut herunter.</translation>
 <translation id="7890208801193284374">Bei gemeinsam genutzten Computern können die verschiedenen Personen separat surfen und Chrome jeweils nach ihren Wünschen einrichten.</translation>
-<translation id="8000275528373650868">Für Google Chrome ist Windows Vista oder Windows XP SP2 oder höher erforderlich.</translation>
 <translation id="8005540215158006229">Chrome ist gleich bereit.</translation>
 <translation id="8008534537613507642">Chrome erneut installieren</translation>
 <translation id="8030318113982266900">Ihr Gerät wird auf Kanal <ph name="CHANNEL_NAME" /> aktualisiert...</translation>
@@ -227,6 +232,7 @@ Sollten Sie sich trotzdem anmelden, werden die Chrome-Daten wie Lesezeichen, Ver
 <translation id="8556340503434111824">Es gibt eine neue Version von Google Chrome, die schneller ist, als anderen zuvor.</translation>
 <translation id="8568392309447938879">Sie können Apps verwenden, wenn Sie in Chrome angemeldet sind. Chrome kann dann Ihre Apps, Lesezeichen, Passwörter, Ihren Verlauf und andere Einstellungen auf Ihren Geräten synchronisieren.</translation>
 <translation id="8614913330719544658">Google Chrome reagiert nicht. Jetzt neu starten?</translation>
+<translation id="8667808506758191620">Ihr <ph name="DEVICE_TYPE" /> ist auf dem neuesten Stand.</translation>
 <translation id="8669527147644353129">Google Chrome Helper</translation>
 <translation id="8679801911857917785">Die Erweiterung legt auch die Seite fest, die beim Start von Chrome angezeigt wird.</translation>
 <translation id="870251953148363156">&amp;Google Chrome aktualisieren</translation>
@@ -235,6 +241,7 @@ Sollten Sie sich trotzdem anmelden, werden die Chrome-Daten wie Lesezeichen, Ver
 <translation id="8851136666856101339">main</translation>
 <translation id="8862326446509486874">Sie verfügen nicht über die erforderlichen Rechte für eine systemweite Installation. Starten Sie das Installationsprogramm als Administrator.</translation>
 <translation id="9026991721384951619">Chrome OS konnte Ihre Daten nicht synchronisieren, da die Anmeldedaten Ihres Kontos veraltet sind.</translation>
+<translation id="9067395829937117663">Für Google Chrome ist Windows 7 oder höher erforderlich.</translation>
 <translation id="9102715433345326100">Diese Datei ist schädlich und wurde von Chrome blockiert.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Achtung:<ph name="END_BOLD" /> Google Chrome kann nicht verhindern, dass Ihr Browserverlauf von Erweiterungen protokolliert wird. Deaktivieren Sie diese Erweiterung für den Inkognitomodus, indem Sie das entsprechende Kästchen deaktivieren.</translation>
 <translation id="911206726377975832">Auch die Browserdaten löschen?</translation>

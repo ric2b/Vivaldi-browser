@@ -4,12 +4,17 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
+#include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/test/test_message_loop.h"
 #include "base/test/test_timeouts.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "media/audio/audio_device_description.h"
 #include "media/audio/cras/audio_manager_cras.h"
 #include "media/audio/fake_audio_log_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -38,7 +43,10 @@ class MockAudioInputCallback : public AudioInputStream::AudioInputCallback {
 
 class MockAudioManagerCrasInput : public AudioManagerCras {
  public:
-  MockAudioManagerCrasInput() : AudioManagerCras(&fake_audio_log_factory_) {}
+  MockAudioManagerCrasInput()
+      : AudioManagerCras(base::ThreadTaskRunnerHandle::Get(),
+                         base::ThreadTaskRunnerHandle::Get(),
+                         &fake_audio_log_factory_) {}
 
   // We need to override this function in order to skip checking the number
   // of active output streams. It is because the number of active streams
@@ -57,10 +65,10 @@ class CrasInputStreamTest : public testing::Test {
  protected:
   CrasInputStreamTest() {
     mock_manager_.reset(new StrictMock<MockAudioManagerCrasInput>());
+    base::RunLoop().RunUntilIdle();
   }
 
-  virtual ~CrasInputStreamTest() {
-  }
+  ~CrasInputStreamTest() override {}
 
   CrasInputStream* CreateStream(ChannelLayout layout) {
     return CreateStream(layout, kTestFramesPerPacket);
@@ -69,7 +77,7 @@ class CrasInputStreamTest : public testing::Test {
   CrasInputStream* CreateStream(ChannelLayout layout,
                                 int32_t samples_per_packet) {
     return CreateStream(layout, samples_per_packet,
-                        AudioManagerBase::kDefaultDeviceId);
+                        AudioDeviceDescription::kDefaultDeviceId);
   }
 
   CrasInputStream* CreateStream(ChannelLayout layout,
@@ -86,7 +94,7 @@ class CrasInputStreamTest : public testing::Test {
   void CaptureSomeFrames(const AudioParameters &params,
                          unsigned int duration_ms) {
     CrasInputStream* test_stream = new CrasInputStream(
-        params, mock_manager_.get(), AudioManagerBase::kDefaultDeviceId);
+        params, mock_manager_.get(), AudioDeviceDescription::kDefaultDeviceId);
 
     ASSERT_TRUE(test_stream->Open());
 
@@ -115,7 +123,9 @@ class CrasInputStreamTest : public testing::Test {
   static const uint32_t kTestFramesPerPacket;
   static const int kTestSampleRate;
 
-  scoped_ptr<StrictMock<MockAudioManagerCrasInput> > mock_manager_;
+  base::TestMessageLoop message_loop_;
+  std::unique_ptr<StrictMock<MockAudioManagerCrasInput>, AudioManagerDeleter>
+      mock_manager_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CrasInputStreamTest);
@@ -148,8 +158,9 @@ TEST_F(CrasInputStreamTest, BadBitsPerSample) {
                                  kTestSampleRate,
                                  kTestBitsPerSample - 1,
                                  kTestFramesPerPacket);
-  CrasInputStream* test_stream = new CrasInputStream(
-      bad_bps_params, mock_manager_.get(), AudioManagerBase::kDefaultDeviceId);
+  CrasInputStream* test_stream =
+      new CrasInputStream(bad_bps_params, mock_manager_.get(),
+                          AudioDeviceDescription::kDefaultDeviceId);
   EXPECT_FALSE(test_stream->Open());
   test_stream->Close();
 }
@@ -160,8 +171,9 @@ TEST_F(CrasInputStreamTest, BadSampleRate) {
                                   0,
                                   kTestBitsPerSample,
                                   kTestFramesPerPacket);
-  CrasInputStream* test_stream = new CrasInputStream(
-      bad_rate_params, mock_manager_.get(), AudioManagerBase::kDefaultDeviceId);
+  CrasInputStream* test_stream =
+      new CrasInputStream(bad_rate_params, mock_manager_.get(),
+                          AudioDeviceDescription::kDefaultDeviceId);
   EXPECT_FALSE(test_stream->Open());
   test_stream->Close();
 }
@@ -209,10 +221,9 @@ TEST_F(CrasInputStreamTest, CaptureFrames) {
 }
 
 TEST_F(CrasInputStreamTest, CaptureLoopback) {
-  CrasInputStream* test_stream = CreateStream(
-      CHANNEL_LAYOUT_STEREO,
-      kTestFramesPerPacket,
-      AudioManagerBase::kLoopbackInputDeviceId);
+  CrasInputStream* test_stream =
+      CreateStream(CHANNEL_LAYOUT_STEREO, kTestFramesPerPacket,
+                   AudioDeviceDescription::kLoopbackInputDeviceId);
   EXPECT_TRUE(test_stream->Open());
   test_stream->Close();
 }

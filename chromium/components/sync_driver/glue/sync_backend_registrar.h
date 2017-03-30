@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -50,7 +51,7 @@ class SyncBackendRegistrar : public syncer::SyncManager::ChangeDelegate,
   SyncBackendRegistrar(
       const std::string& name,
       sync_driver::SyncClient* sync_client,
-      scoped_ptr<base::Thread> sync_thread,
+      std::unique_ptr<base::Thread> sync_thread,
       const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
       const scoped_refptr<base::SingleThreadTaskRunner>& db_thread,
       const scoped_refptr<base::SingleThreadTaskRunner>& file_thread);
@@ -78,6 +79,11 @@ class SyncBackendRegistrar : public syncer::SyncManager::ChangeDelegate,
   // These types will be placed in the passive group.  This function should be
   // called exactly once during startup.
   void SetInitialTypes(syncer::ModelTypeSet initial_types);
+
+  // Informs SyncBackendRegistrar about non-blocking type loaded from local
+  // storage. Initial sync was already performed for this type, therefore its
+  // data shouldn't be downloaded as part of configuration.
+  void AddRestoredNonBlockingType(syncer::ModelType type);
 
   // Returns whether or not we are currently syncing encryption keys.
   // Must be called on the UI thread.
@@ -132,7 +138,7 @@ class SyncBackendRegistrar : public syncer::SyncManager::ChangeDelegate,
   void OnWorkerLoopDestroyed(syncer::ModelSafeGroup group) override;
 
   // Release ownership of |sync_thread_|. Called when sync is disabled.
-  scoped_ptr<base::Thread> ReleaseSyncThread();
+  std::unique_ptr<base::Thread> ReleaseSyncThread();
 
   // Unregister workers from loop destruction observation.
   void Shutdown();
@@ -219,7 +225,7 @@ class SyncBackendRegistrar : public syncer::SyncManager::ChangeDelegate,
   // objects above because tasks on sync thread depend on those objects,
   // e.g. Shutdown() depends on |lock_|, SyncManager::Init() depends on
   // workers, etc.
-  scoped_ptr<base::Thread> sync_thread_;
+  std::unique_ptr<base::Thread> sync_thread_;
 
   // Set of types with non-blocking implementation (as opposed to directory
   // based).

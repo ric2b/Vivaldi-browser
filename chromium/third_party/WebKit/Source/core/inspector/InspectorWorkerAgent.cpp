@@ -32,7 +32,6 @@
 
 #include "core/dom/Document.h"
 #include "core/inspector/InspectedFrames.h"
-#include "core/inspector/InstrumentingAgents.h"
 #include "core/inspector/PageConsoleAgent.h"
 #include "platform/weborigin/KURL.h"
 #include "wtf/PassOwnPtr.h"
@@ -46,7 +45,7 @@ static const char workerInspectionEnabled[] = "workerInspectionEnabled";
 static const char waitForDebuggerOnStart[] = "waitForDebuggerOnStart";
 };
 
-RawPtr<InspectorWorkerAgent> InspectorWorkerAgent::create(InspectedFrames* inspectedFrames, PageConsoleAgent* consoleAgent)
+InspectorWorkerAgent* InspectorWorkerAgent::create(InspectedFrames* inspectedFrames, PageConsoleAgent* consoleAgent)
 {
     return new InspectorWorkerAgent(inspectedFrames, consoleAgent);
 }
@@ -60,16 +59,13 @@ InspectorWorkerAgent::InspectorWorkerAgent(InspectedFrames* inspectedFrames, Pag
 
 InspectorWorkerAgent::~InspectorWorkerAgent()
 {
-#if !ENABLE(OILPAN)
-    m_instrumentingAgents->setInspectorWorkerAgent(nullptr);
-#endif
 }
 
 void InspectorWorkerAgent::restore()
 {
     if (!enabled())
         return;
-    m_instrumentingAgents->setInspectorWorkerAgent(this);
+    m_instrumentingAgents->addInspectorWorkerAgent(this);
     connectToAllProxies();
 }
 
@@ -78,7 +74,7 @@ void InspectorWorkerAgent::enable(ErrorString*)
     if (enabled())
         return;
     m_state->setBoolean(WorkerAgentState::workerInspectionEnabled, true);
-    m_instrumentingAgents->setInspectorWorkerAgent(this);
+    m_instrumentingAgents->addInspectorWorkerAgent(this);
     connectToAllProxies();
 }
 
@@ -88,7 +84,7 @@ void InspectorWorkerAgent::disable(ErrorString*)
         return;
     m_state->setBoolean(WorkerAgentState::workerInspectionEnabled, false);
     m_state->setBoolean(WorkerAgentState::waitForDebuggerOnStart, false);
-    m_instrumentingAgents->setInspectorWorkerAgent(nullptr);
+    m_instrumentingAgents->removeInspectorWorkerAgent(this);
     for (auto& idProxy : m_connectedProxies)
         idProxy.value->disconnectFromInspector(this);
     m_connectedProxies.clear();

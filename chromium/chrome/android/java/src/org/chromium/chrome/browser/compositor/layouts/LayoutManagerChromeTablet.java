@@ -68,9 +68,15 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
         // Set up state
         mDefaultTitle = context.getString(R.string.tab_loading_default_title);
 
-        addGlobalSceneOverlay(mTabStripLayoutHelperManager);
 
         setNextLayout(null);
+    }
+
+    @Override
+    protected void addAllSceneOverlays() {
+        // Add the tab strip overlay before any others.
+        addGlobalSceneOverlay(mTabStripLayoutHelperManager);
+        super.addAllSceneOverlays();
     }
 
     @Override
@@ -187,7 +193,6 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
     public SceneLayer getUpdatedActiveSceneLayer(Rect viewport, Rect contentViewport,
             LayerTitleCache layerTitleCache, TabContentManager tabContentManager,
             ResourceManager resourceManager, ChromeFullscreenManager fullscreenManager) {
-        mTabStripLayoutHelperManager.setBrightness(getActiveLayout().getToolbarBrightness());
         return super.getUpdatedActiveSceneLayer(viewport, contentViewport, layerTitleCache,
                 tabContentManager, resourceManager, fullscreenManager);
     }

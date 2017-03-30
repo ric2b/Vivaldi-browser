@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 
+#include <memory>
 #include <utility>
 
 #include "base/lazy_instance.h"
@@ -29,7 +30,6 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
-#include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/config/gpu_info_collector.h"
 #include "gpu/config/gpu_switches.h"
 #include "gpu/config/gpu_util.h"
@@ -42,6 +42,7 @@
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/gl/gpu_switching_manager.h"
+#include "ui/gl/init/gl_factory.h"
 
 #if defined(OS_WIN)
 #include <dwmapi.h>
@@ -54,14 +55,14 @@
 #endif
 
 #if defined(OS_WIN)
-#include "base/win/windows_version.h"
 #include "base/win/scoped_com_initializer.h"
-#include "content/common/gpu/media/dxva_video_decode_accelerator_win.h"
+#include "base/win/windows_version.h"
+#include "media/gpu/dxva_video_decode_accelerator_win.h"
 #include "sandbox/win/src/sandbox.h"
 #endif
 
 #if defined(USE_X11)
-#include "ui/base/x/x11_util.h"
+#include "ui/base/x/x11_util.h"     // nogncheck
 #include "ui/gfx/x/x11_switches.h"  // nogncheck
 #endif
 
@@ -75,7 +76,7 @@
 #endif
 
 #if defined(OS_CHROMEOS) && defined(ARCH_CPU_X86_FAMILY)
-#include "content/common/gpu/media/vaapi_wrapper.h"
+#include "media/gpu/vaapi_wrapper.h"
 #endif
 
 #if defined(SANITIZER_COVERAGE)
@@ -157,6 +158,8 @@ int GpuMain(const MainFunctionParams& parameters) {
 #if !defined(OS_CHROMEOS)
   DCHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kWindowDepth));
+  DCHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kX11VisualID));
 #endif
 
 #endif
@@ -193,14 +196,14 @@ int GpuMain(const MainFunctionParams& parameters) {
   // We need a UI loop so that we can grab the Expose events. See GLSurfaceGLX
   // and https://crbug.com/326995.
   base::MessageLoop main_message_loop(base::MessageLoop::TYPE_UI);
-  scoped_ptr<ui::PlatformEventSource> event_source =
+  std::unique_ptr<ui::PlatformEventSource> event_source =
       ui::PlatformEventSource::CreateDefault();
 #elif defined(OS_LINUX)
   base::MessageLoop main_message_loop(base::MessageLoop::TYPE_DEFAULT);
 #elif defined(OS_MACOSX)
   // This is necessary for CoreAnimation layers hosted in the GPU process to be
   // drawn. See http://crbug.com/312462.
-  scoped_ptr<base::MessagePump> pump(new base::MessagePumpCFRunLoop());
+  std::unique_ptr<base::MessagePump> pump(new base::MessagePumpCFRunLoop());
   base::MessageLoop main_message_loop(std::move(pump));
 #else
   base::MessageLoop main_message_loop(base::MessageLoop::TYPE_IO);
@@ -250,7 +253,7 @@ int GpuMain(const MainFunctionParams& parameters) {
   gpu_info.in_process_gpu = false;
 
 #if defined(OS_CHROMEOS) && defined(ARCH_CPU_X86_FAMILY)
-  VaapiWrapper::PreSandboxInitialization();
+  media::VaapiWrapper::PreSandboxInitialization();
 #endif
 
 #if defined(OS_ANDROID) || defined(OS_CHROMEOS)
@@ -279,13 +282,13 @@ int GpuMain(const MainFunctionParams& parameters) {
     bool gl_already_initialized = false;
 #if defined(OS_MACOSX)
     if (!command_line.HasSwitch(switches::kNoSandbox)) {
-      // On Mac, if the sandbox is enabled, then GLSurface::InitializeOneOff()
+      // On Mac, if the sandbox is enabled, then gl::init::InitializeGLOneOff()
       // is called from the sandbox warmup code before getting here.
       gl_already_initialized = true;
     }
 #endif
     if (command_line.HasSwitch(switches::kInProcessGPU)) {
-      // With in-process GPU, GLSurface::InitializeOneOff() is called from
+      // With in-process GPU, gl::init::InitializeGLOneOff() is called from
       // GpuChildThread before getting here.
       gl_already_initialized = true;
     }
@@ -294,7 +297,7 @@ int GpuMain(const MainFunctionParams& parameters) {
     bool gl_initialized =
         gl_already_initialized
             ? gfx::GetGLImplementation() != gfx::kGLImplementationNone
-            : gfx::GLSurface::InitializeOneOff();
+            : gl::init::InitializeGLOneOff();
     if (gl_initialized) {
       // We need to collect GL strings (VENDOR, RENDERER) for blacklisting
       // purposes. However, on Mac we don't actually use them. As documented in
@@ -310,7 +313,6 @@ int GpuMain(const MainFunctionParams& parameters) {
       if (!CollectGraphicsInfo(gpu_info))
         dead_on_arrival = true;
 
-#if defined(OS_CHROMEOS) || defined(OS_ANDROID) || defined(OS_LINUX)
       // Recompute gpu driver bug workarounds.
       // This is necessary on systems where vendor_id/device_id aren't available
       // (Chrome OS, Android) or where workarounds may be dependent on GL_VENDOR
@@ -323,7 +325,6 @@ int GpuMain(const MainFunctionParams& parameters) {
         gpu::ApplyGpuDriverBugWorkarounds(
             gpu_info, const_cast<base::CommandLine*>(&command_line));
       }
-#endif
 
 #if defined(OS_LINUX)
       initialized_gl_context = true;
@@ -340,7 +341,7 @@ int GpuMain(const MainFunctionParams& parameters) {
       UMA_HISTOGRAM_TIMES("GPU.CollectContextGraphicsInfo",
                           collect_context_time);
     } else {  // gl_initialized
-      VLOG(1) << "gfx::GLSurface::InitializeOneOff failed";
+      VLOG(1) << "gl::init::InitializeGLOneOff failed";
       dead_on_arrival = true;
     }
 
@@ -383,11 +384,9 @@ int GpuMain(const MainFunctionParams& parameters) {
 
   logging::SetLogMessageHandler(NULL);
 
-  scoped_ptr<gpu::GpuMemoryBufferFactory> gpu_memory_buffer_factory;
+  std::unique_ptr<gpu::GpuMemoryBufferFactory> gpu_memory_buffer_factory;
   if (gpu::GetNativeGpuMemoryBufferType() != gfx::EMPTY_BUFFER)
     gpu_memory_buffer_factory = gpu::GpuMemoryBufferFactory::CreateNativeType();
-
-  gpu::SyncPointManager sync_point_manager(false);
 
   base::ThreadPriority io_thread_priority = base::ThreadPriority::NORMAL;
 #if defined(OS_ANDROID) || defined(OS_CHROMEOS)
@@ -398,8 +397,7 @@ int GpuMain(const MainFunctionParams& parameters) {
 
   GpuChildThread* child_thread = new GpuChildThread(
       watchdog_thread.get(), dead_on_arrival, gpu_info, deferred_messages.Get(),
-      gpu_memory_buffer_factory.get(),
-      &sync_point_manager);
+      gpu_memory_buffer_factory.get());
   while (!deferred_messages.Get().empty())
     deferred_messages.Get().pop();
 
@@ -445,6 +443,37 @@ void GetGpuInfoFromCommandLine(gpu::GPUInfo& gpu_info,
       command_line.GetSwitchValueASCII(switches::kGpuDriverVendor);
   gpu_info.driver_version =
       command_line.GetSwitchValueASCII(switches::kGpuDriverVersion);
+  gpu_info.driver_date =
+      command_line.GetSwitchValueASCII(switches::kGpuDriverDate);
+  gpu::ParseSecondaryGpuDevicesFromCommandLine(command_line, &gpu_info);
+
+  // Set active gpu device.
+  if (command_line.HasSwitch(switches::kGpuActiveVendorID) &&
+      command_line.HasSwitch(switches::kGpuActiveDeviceID)) {
+    uint32_t active_vendor_id = 0;
+    uint32_t active_device_id = 0;
+    success = base::HexStringToUInt(
+        command_line.GetSwitchValueASCII(switches::kGpuActiveVendorID),
+        &active_vendor_id);
+    DCHECK(success);
+    success = base::HexStringToUInt(
+        command_line.GetSwitchValueASCII(switches::kGpuActiveDeviceID),
+        &active_device_id);
+    DCHECK(success);
+    if (gpu_info.gpu.vendor_id == active_vendor_id &&
+        gpu_info.gpu.device_id == active_device_id) {
+      gpu_info.gpu.active = true;
+    } else {
+      for (size_t i = 0; i < gpu_info.secondary_gpus.size(); ++i) {
+        if (gpu_info.secondary_gpus[i].vendor_id == active_vendor_id &&
+            gpu_info.secondary_gpus[i].device_id == active_device_id) {
+          gpu_info.secondary_gpus[i].active = true;
+          break;
+        }
+      }
+    }
+  }
+
   GetContentClient()->SetGpuInfo(gpu_info);
 }
 
@@ -457,7 +486,7 @@ bool WarmUpSandbox(const base::CommandLine& command_line) {
   }
 
 #if defined(OS_WIN)
-  content::DXVAVideoDecodeAccelerator::PreSandboxInitialization();
+  media::DXVAVideoDecodeAccelerator::PreSandboxInitialization();
 #endif
   return true;
 }
@@ -502,18 +531,18 @@ bool CanAccessNvidiaDeviceFile() {
 
 void CreateDummyGlContext() {
   scoped_refptr<gfx::GLSurface> surface(
-      gfx::GLSurface::CreateOffscreenGLSurface(gfx::Size()));
+      gl::init::CreateOffscreenGLSurface(gfx::Size()));
   if (!surface.get()) {
-    DVLOG(1) << "gfx::GLSurface::CreateOffscreenGLSurface failed";
+    DVLOG(1) << "gl::init::CreateOffscreenGLSurface failed";
     return;
   }
 
   // On Linux, this is needed to make sure /dev/nvidiactl has
   // been opened and its descriptor cached.
-  scoped_refptr<gfx::GLContext> context(gfx::GLContext::CreateGLContext(
-      NULL, surface.get(), gfx::PreferDiscreteGpu));
+  scoped_refptr<gfx::GLContext> context(
+      gl::init::CreateGLContext(NULL, surface.get(), gfx::PreferDiscreteGpu));
   if (!context.get()) {
-    DVLOG(1) << "gfx::GLContext::CreateGLContext failed";
+    DVLOG(1) << "gl::init::CreateGLContext failed";
     return;
   }
 

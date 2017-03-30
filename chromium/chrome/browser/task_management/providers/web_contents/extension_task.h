@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_TASK_MANAGEMENT_PROVIDERS_WEB_CONTENTS_EXTENSION_TASK_H_
 #define CHROME_BROWSER_TASK_MANAGEMENT_PROVIDERS_WEB_CONTENTS_EXTENSION_TASK_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "chrome/browser/task_management/providers/web_contents/renderer_task.h"
 #include "extensions/browser/extension_icon_image.h"
@@ -47,7 +49,7 @@ class ExtensionTask
   void LoadExtensionIcon(const extensions::Extension* extension);
 
   // The favicon of the extension represented by this task.
-  scoped_ptr<extensions::IconImage> extension_icon_;
+  std::unique_ptr<extensions::IconImage> extension_icon_;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionTask);
 };

@@ -10,7 +10,7 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/output/managed_memory_policy.h"
 #include "cc/output/output_surface_client.h"
@@ -121,16 +121,12 @@ class SkiaGpuTraceMemoryDump : public SkTraceMemoryDump {
 OutputSurface::OutputSurface(
     scoped_refptr<ContextProvider> context_provider,
     scoped_refptr<ContextProvider> worker_context_provider,
-#if defined(ENABLE_VULKAN)
     scoped_refptr<VulkanContextProvider> vulkan_context_provider,
-#endif
-    scoped_ptr<SoftwareOutputDevice> software_device)
+    std::unique_ptr<SoftwareOutputDevice> software_device)
     : client_(NULL),
       context_provider_(std::move(context_provider)),
       worker_context_provider_(std::move(worker_context_provider)),
-#if defined(ENABLE_VULKAN)
       vulkan_context_provider_(vulkan_context_provider),
-#endif
       software_device_(std::move(software_device)),
       device_scale_factor_(-1),
       has_alpha_(true),
@@ -142,9 +138,7 @@ OutputSurface::OutputSurface(
 OutputSurface::OutputSurface(scoped_refptr<ContextProvider> context_provider)
     : OutputSurface(std::move(context_provider),
                     nullptr,
-#if defined(ENABLE_VULKAN)
                     nullptr,
-#endif
                     nullptr) {
 }
 
@@ -153,49 +147,25 @@ OutputSurface::OutputSurface(
     scoped_refptr<ContextProvider> worker_context_provider)
     : OutputSurface(std::move(context_provider),
                     std::move(worker_context_provider),
-#if defined(ENABLE_VULKAN)
                     nullptr,
-#endif
                     nullptr) {
 }
 
-#if defined(ENABLE_VULKAN)
 OutputSurface::OutputSurface(
-    scoped_refptr<VulkanContextProvider> vulkan_context_provider)
+    std::unique_ptr<SoftwareOutputDevice> software_device)
     : OutputSurface(nullptr,
                     nullptr,
-                    std::move(vulkan_context_provider),
-                    nullptr) {}
-#endif
-
-OutputSurface::OutputSurface(scoped_ptr<SoftwareOutputDevice> software_device)
-    : OutputSurface(nullptr,
                     nullptr,
-#if defined(ENABLE_VULKAN)
-                    nullptr,
-#endif
                     std::move(software_device)) {
 }
 
-OutputSurface::OutputSurface(scoped_refptr<ContextProvider> context_provider,
-                             scoped_ptr<SoftwareOutputDevice> software_device)
+OutputSurface::OutputSurface(
+    scoped_refptr<ContextProvider> context_provider,
+    std::unique_ptr<SoftwareOutputDevice> software_device)
     : OutputSurface(std::move(context_provider),
                     nullptr,
-#if defined(ENABLE_VULKAN)
                     nullptr,
-#endif
                     std::move(software_device)) {
-}
-
-void OutputSurface::CommitVSyncParameters(base::TimeTicks timebase,
-                                          base::TimeDelta interval) {
-  TRACE_EVENT2("cc",
-               "OutputSurface::CommitVSyncParameters",
-               "timebase",
-               (timebase - base::TimeTicks()).InSecondsF(),
-               "interval",
-               interval.InSecondsF());
-  client_->CommitVSyncParameters(timebase, interval);
 }
 
 // Forwarded to OutputSurfaceClient
@@ -243,13 +213,10 @@ bool OutputSurface::BindToClient(OutputSurfaceClient* client) {
     }
   }
 
-  if (!success)
-    client_ = NULL;
-
   // In certain cases, ThreadTaskRunnerHandle isn't set (Android Webview).
   // Don't register a dump provider in these cases.
   // TODO(ericrk): Get this working in Android Webview. crbug.com/517156
-  if (client_ && base::ThreadTaskRunnerHandle::IsSet()) {
+  if (base::ThreadTaskRunnerHandle::IsSet()) {
     // Now that we are on the context thread, register a dump provider with this
     // thread's task runner. This will overwrite any previous dump provider
     // registered.
@@ -257,6 +224,8 @@ bool OutputSurface::BindToClient(OutputSurfaceClient* client) {
         this, "OutputSurface", base::ThreadTaskRunnerHandle::Get());
   }
 
+  if (!success)
+    DetachFromClient();
   return success;
 }
 

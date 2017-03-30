@@ -12,7 +12,7 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
@@ -37,13 +37,12 @@
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "ui/base/layout.h"
 #include "ui/base/ui_base_switches.h"
+#include "ui/display/display_switches.h"
 #include "ui/gfx/geometry/size_conversions.h"
-#include "ui/gfx/switches.h"
 #include "ui/gl/gl_switches.h"
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
-#include "ui/gfx/win/dpi.h"
 #endif
 
 namespace content {
@@ -343,7 +342,7 @@ IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTest,
   RenderWidgetHostViewBase* const view = GetRenderWidgetHostView();
 
   base::RunLoop run_loop;
-  scoped_ptr<RenderWidgetHostViewFrameSubscriber> subscriber(
+  std::unique_ptr<RenderWidgetHostViewFrameSubscriber> subscriber(
       new FakeFrameSubscriber(base::Bind(
           &RenderWidgetHostViewBrowserTest::FrameDelivered,
           base::Unretained(this), base::ThreadTaskRunnerHandle::Get(),

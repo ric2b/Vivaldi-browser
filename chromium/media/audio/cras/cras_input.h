@@ -9,13 +9,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "media/audio/agc_audio_stream.h"
 #include "media/audio/audio_io.h"
-#include "media/audio/audio_parameters.h"
+#include "media/base/audio_parameters.h"
 #include "media/base/media_export.h"
 
 namespace media {
@@ -110,7 +111,7 @@ class MEDIA_EXPORT CrasInputStream : public AgcAudioStream<AudioInputStream> {
   // True if the stream is a system-wide loopback stream.
   bool is_loopback_;
 
-  scoped_ptr<AudioBus> audio_bus_;
+  std::unique_ptr<AudioBus> audio_bus_;
 
   DISALLOW_COPY_AND_ASSIGN(CrasInputStream);
 };

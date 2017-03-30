@@ -70,7 +70,6 @@ public:
     void reload(WebFrameLoadType) override;
     void reloadWithOverrideURL(const WebURL& overrideUrl, WebFrameLoadType) override;
     void loadRequest(const WebURLRequest&) override;
-    void loadHistoryItem(const WebHistoryItem&, WebHistoryLoadType, WebCachePolicy) override;
     void loadHTMLString(
         const WebData& html, const WebURL& baseURL, const WebURL& unreachableURL,
         bool replace) override;
@@ -90,8 +89,8 @@ public:
     WebRange markedRange() const override;
     bool firstRectForCharacterRange(unsigned location, unsigned length, WebRect&) const override;
     size_t characterIndexForPoint(const WebPoint&) const override;
-    bool executeCommand(const WebString&, const WebNode& = WebNode()) override;
-    bool executeCommand(const WebString&, const WebString& value, const WebNode& = WebNode()) override;
+    bool executeCommand(const WebString&) override;
+    bool executeCommand(const WebString&, const WebString& value) override;
     bool isCommandEnabled(const WebString&) const override;
     void enableContinuousSpellChecking(bool) override;
     bool isContinuousSpellCheckingEnabled() const override;
@@ -156,6 +155,8 @@ public:
     void setReplicatedOrigin(const WebSecurityOrigin&) const override;
     void setReplicatedSandboxFlags(WebSandboxFlags) const override;
     void setReplicatedName(const WebString& name, const WebString& uniqueName) const override;
+    void addReplicatedContentSecurityPolicyHeader(const WebString& headerValue, WebContentSecurityPolicyType, WebContentSecurityPolicySource) const override;
+    void resetReplicatedContentSecurityPolicy() const override;
     void setReplicatedShouldEnforceStrictMixedContentChecking(bool) const override;
     void setReplicatedPotentiallyTrustworthyUniqueOrigin(bool) const override;
     void DispatchLoadEventForFrameOwner() const override;
@@ -165,9 +166,7 @@ public:
 
     bool isIgnoredForHitTest() const override;
 
-#if ENABLE(OILPAN)
     DECLARE_TRACE();
-#endif
 
 private:
     WebRemoteFrameImpl(WebTreeScopeType, WebRemoteFrameClient*);
@@ -183,12 +182,10 @@ private:
     Member<RemoteFrame> m_frame;
     WebRemoteFrameClient* m_client;
 
-#if ENABLE(OILPAN)
     // Oilpan: WebRemoteFrameImpl must remain alive until close() is called.
     // Accomplish that by keeping a self-referential Persistent<>. It is
     // cleared upon close().
     SelfKeepAlive<WebRemoteFrameImpl> m_selfKeepAlive;
-#endif
 };
 
 DEFINE_TYPE_CASTS(WebRemoteFrameImpl, WebFrame, frame, frame->isWebRemoteFrame(), frame.isWebRemoteFrame());

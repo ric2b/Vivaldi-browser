@@ -32,6 +32,8 @@ const struct QuicErrorMapping {
   // Attempt to send unencrypted STREAM frame.
   { net::QUIC_ATTEMPT_TO_SEND_UNENCRYPTED_STREAM_DATA,
     "quic.attempt.to.unencrypted.stream.data" },
+  // Received a frame which is likely the result of memory corruption.
+  { net::QUIC_MAYBE_CORRUPTED_MEMORY, "quic.maybe.corrupted.momery" },
   // FEC frame data is not encrypted.
   { net::QUIC_UNENCRYPTED_FEC_DATA, "quic.unencrypted.fec.data" },
   // RST_STREAM frame data is malformed.
@@ -240,7 +242,7 @@ bool GetDomainReliabilityBeaconQuicError(net::QuicErrorCode quic_error,
                                          std::string* beacon_quic_error_out) {
   if (quic_error != net::QUIC_NO_ERROR) {
     // Convert a QUIC error.
-    // TODO(ttuttle): Consider sorting and using binary search?
+    // TODO(juliatuttle): Consider sorting and using binary search?
     for (size_t i = 0; i < arraysize(kQuicErrorMap); i++) {
       if (kQuicErrorMap[i].quic_error == quic_error) {
         *beacon_quic_error_out = kQuicErrorMap[i].beacon_quic_error;

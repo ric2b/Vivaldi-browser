@@ -218,10 +218,6 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #   define SK_SUPPORT_LEGACY_ANISOTROPIC_MIPMAP_SCALE
 #endif
 
-#ifndef    SK_SUPPORT_LEGACY_REFENCODEDDATA_NOCTX
-#   define SK_SUPPORT_LEGACY_REFENCODEDDATA_NOCTX
-#endif
-
 #ifndef    SK_IGNORE_ETC1_SUPPORT
 #   define SK_IGNORE_ETC1_SUPPORT
 #endif
@@ -242,22 +238,13 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #   define SK_SUPPORT_LEGACY_EVAL_CUBIC
 #endif
 
-#ifndef    SK_SUPPORT_LEGACY_PEEKPIXELS_PARMS
-#   define SK_SUPPORT_LEGACY_PEEKPIXELS_PARMS
-#endif
-
-#ifndef    SK_SUPPORT_LEGACY_SETSHADER_PTR
-#   define SK_SUPPORT_LEGACY_SETSHADER_PTR
+#ifndef    SK_SUPPORT_LEGACY_COMPUTESAVELAYER_FLAG
+#   define SK_SUPPORT_LEGACY_COMPUTESAVELAYER_FLAG
 #endif
 
 #ifndef    SK_SUPPORT_LEGACY_TYPEFACE_PTR
 #   define SK_SUPPORT_LEGACY_TYPEFACE_PTR
 #endif
-
-#ifndef    SK_SUPPORT_LEGACY_MASKFILTER_PTR
-#   define SK_SUPPORT_LEGACY_MASKFILTER_PTR
-#endif
-
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi
 
 /* In some places Skia can use static initializers for global initialization,
@@ -276,9 +263,6 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #define SK_ATTR_DEPRECATED          SK_NOTHING_ARG1
 #define SK_ENABLE_INST_COUNT        0
 #define GR_GL_CUSTOM_SETUP_HEADER   "GrGLConfig_chrome.h"
-
-// Blink layout tests are baselined to Clang optimizing through the UB in SkDivBits.
-#define SK_SUPPORT_LEGACY_DIVBITS_UB
 
 // mtklein's fiddling with Src / SrcOver.  Will rebaseline these only once when done.
 #define SK_SUPPORT_LEGACY_X86_BLITS

@@ -92,8 +92,8 @@ public:
     InlineBox* firstLeafChild() const;
     InlineBox* lastLeafChild() const;
 
-    typedef void (*CustomInlineBoxRangeReverse)(void* userData, Vector<InlineBox*>::iterator first, Vector<InlineBox*>::iterator last);
-    void collectLeafBoxesInLogicalOrder(Vector<InlineBox*>&, CustomInlineBoxRangeReverse customReverseImplementation = 0, void* userData = nullptr) const;
+    typedef void (*CustomInlineBoxRangeReverse)(Vector<InlineBox*>::iterator first, Vector<InlineBox*>::iterator last);
+    void collectLeafBoxesInLogicalOrder(Vector<InlineBox*>&, CustomInlineBoxRangeReverse customReverseImplementation = 0) const;
 
     void setConstructed() final
     {
@@ -310,7 +310,7 @@ private:
     void setOverflowFromLogicalRects(const LayoutRect& logicalLayoutOverflow, const LayoutRect& logicalVisualOverflow, LayoutUnit lineTop, LayoutUnit lineBottom);
 
 protected:
-    OwnPtr<OverflowModel> m_overflow;
+    OwnPtr<SimpleOverflowModel> m_overflow;
 
     bool isInlineFlowBox() const final { return true; }
 

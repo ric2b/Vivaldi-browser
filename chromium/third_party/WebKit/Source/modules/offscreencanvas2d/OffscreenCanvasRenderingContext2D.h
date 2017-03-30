@@ -6,43 +6,46 @@
 #define OffscreenCanvasRenderingContext2D_h
 
 #include "core/html/canvas/CanvasContextCreationAttributes.h"
+#include "core/html/canvas/CanvasRenderingContext.h"
+#include "core/html/canvas/CanvasRenderingContextFactory.h"
 #include "modules/canvas2d/BaseRenderingContext2D.h"
-#include "modules/offscreencanvas/OffscreenCanvasRenderingContext.h"
-#include "modules/offscreencanvas/OffscreenCanvasRenderingContextFactory.h"
 
 namespace blink {
 
-class MODULES_EXPORT OffscreenCanvasRenderingContext2D final : public OffscreenCanvasRenderingContext, public BaseRenderingContext2D {
+class MODULES_EXPORT OffscreenCanvasRenderingContext2D final : public CanvasRenderingContext, public BaseRenderingContext2D {
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(OffscreenCanvasRenderingContext2D);
 public:
-    class Factory : public OffscreenCanvasRenderingContextFactory {
+    class Factory : public CanvasRenderingContextFactory {
     public:
         Factory() {}
         ~Factory() override {}
 
-        OffscreenCanvasRenderingContext* create(OffscreenCanvas* canvas, const CanvasContextCreationAttributes& attrs) override
+        CanvasRenderingContext* create(ScriptState* scriptState, OffscreenCanvas* canvas, const CanvasContextCreationAttributes& attrs) override
         {
             return new OffscreenCanvasRenderingContext2D(canvas, attrs);
         }
 
-        OffscreenCanvasRenderingContext::ContextType getContextType() const override
+        CanvasRenderingContext::ContextType getContextType() const override
         {
-            return OffscreenCanvasRenderingContext::Context2d;
+            return CanvasRenderingContext::Context2d;
         }
-
-        void onError(OffscreenCanvas* canvas, const String& error) override {}
     };
 
-    // OffscreenCanvasRenderingContext implementation
+    // CanvasRenderingContext implementation
     ~OffscreenCanvasRenderingContext2D() override;
     ContextType getContextType() const override { return Context2d; }
     bool is2d() const override { return true; }
+    void setOffscreenCanvasGetContextResult(OffscreenRenderingContext&) final;
+    void setIsHidden(bool) final { ASSERT_NOT_REACHED(); }
+    void stop() final { ASSERT_NOT_REACHED(); }
+    void setCanvasGetContextResult(RenderingContext&) final {}
+    void clearRect(double x, double y, double width, double height) override { BaseRenderingContext2D::clearRect(x, y, width, height); }
 
     // BaseRenderingContext2D implementation
     bool originClean() const final;
     void setOriginTainted() final;
-    bool wouldTaintOrigin(CanvasImageSource*) final;
+    bool wouldTaintOrigin(CanvasImageSource*, ExecutionContext*) final;
 
     int width() const final;
     int height() const final;
@@ -61,6 +64,7 @@ public:
 
     bool stateHasFilter() final;
     SkImageFilter* stateGetFilter() final;
+    void snapshotStateForFilter() final { }
 
     void validateStateStack() final;
 
@@ -75,7 +79,6 @@ protected:
 
 private:
     bool m_hasAlpha;
-    bool m_originClean = true;
     OwnPtr<ImageBuffer> m_imageBuffer;
 };
 

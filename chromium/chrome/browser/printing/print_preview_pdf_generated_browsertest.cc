@@ -9,6 +9,7 @@
 #include <iostream>
 #include <iterator>
 #include <limits>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -23,13 +24,12 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/md5.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/printing/print_preview_dialog_controller.h"
 #include "chrome/browser/ui/browser.h"
@@ -291,7 +291,7 @@ class PrintPreviewObserver : public WebContentsObserver {
 
   Browser* browser_;
   base::Closure quit_closure_;
-  scoped_ptr<PrintPreviewSettings> settings_;
+  std::unique_ptr<PrintPreviewSettings> settings_;
 
   // State of the observer. The state indicates what message to send
   // next. The state advances whenever the message handler calls
@@ -549,7 +549,7 @@ class PrintPreviewPdfGeneratedBrowserTest : public InProcessBrowserTest {
                                       &png_output_));
   }
 
-  scoped_ptr<PrintPreviewObserver> print_preview_observer_;
+  std::unique_ptr<PrintPreviewObserver> print_preview_observer_;
   base::FilePath pdf_file_save_path_;
 
   // Vector for storing the PNG to be sent to the layout test framework.

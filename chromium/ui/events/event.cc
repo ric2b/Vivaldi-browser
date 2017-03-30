@@ -6,6 +6,8 @@
 
 #include <utility>
 
+#include "base/memory/ptr_util.h"
+
 #if defined(USE_X11)
 #include <X11/extensions/XInput2.h>
 #include <X11/keysym.h>
@@ -31,7 +33,7 @@
 #include "ui/gfx/transform_util.h"
 
 #if defined(USE_X11)
-#include "ui/events/keycodes/keyboard_code_conversion_x.h"
+#include "ui/events/keycodes/keyboard_code_conversion_x.h"  // nogncheck
 #elif defined(USE_OZONE)
 #include "ui/events/ozone/layout/keyboard_layout_engine.h"  // nogncheck
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"  // nogncheck
@@ -163,42 +165,42 @@ namespace ui {
 // Event
 
 // static
-scoped_ptr<Event> Event::Clone(const Event& event) {
+std::unique_ptr<Event> Event::Clone(const Event& event) {
   if (event.IsKeyEvent()) {
-    return make_scoped_ptr(new KeyEvent(static_cast<const KeyEvent&>(event)));
+    return base::WrapUnique(new KeyEvent(static_cast<const KeyEvent&>(event)));
   }
 
   if (event.IsMouseEvent()) {
     if (event.IsMouseWheelEvent()) {
-      return make_scoped_ptr(
+      return base::WrapUnique(
           new MouseWheelEvent(static_cast<const MouseWheelEvent&>(event)));
     }
 
-    return make_scoped_ptr(
+    return base::WrapUnique(
         new MouseEvent(static_cast<const MouseEvent&>(event)));
   }
 
   if (event.IsTouchEvent()) {
-    return make_scoped_ptr(
+    return base::WrapUnique(
         new TouchEvent(static_cast<const TouchEvent&>(event)));
   }
 
   if (event.IsGestureEvent()) {
-    return make_scoped_ptr(
+    return base::WrapUnique(
         new GestureEvent(static_cast<const GestureEvent&>(event)));
   }
 
   if (event.IsPointerEvent()) {
-    return make_scoped_ptr(
+    return base::WrapUnique(
         new PointerEvent(static_cast<const PointerEvent&>(event)));
   }
 
   if (event.IsScrollEvent()) {
-    return make_scoped_ptr(
+    return base::WrapUnique(
         new ScrollEvent(static_cast<const ScrollEvent&>(event)));
   }
 
-  return make_scoped_ptr(new Event(event));
+  return base::WrapUnique(new Event(event));
 }
 
 Event::~Event() {
@@ -236,6 +238,16 @@ KeyEvent* Event::AsKeyEvent() {
 const KeyEvent* Event::AsKeyEvent() const {
   CHECK(IsKeyEvent());
   return static_cast<const KeyEvent*>(this);
+}
+
+LocatedEvent* Event::AsLocatedEvent() {
+  CHECK(IsLocatedEvent());
+  return static_cast<LocatedEvent*>(this);
+}
+
+const LocatedEvent* Event::AsLocatedEvent() const {
+  CHECK(IsLocatedEvent());
+  return static_cast<const LocatedEvent*>(this);
 }
 
 MouseEvent* Event::AsMouseEvent() {
@@ -846,7 +858,7 @@ PointerEvent::PointerEvent(EventType type,
                            base::TimeDelta time_stamp)
     : LocatedEvent(type,
                    gfx::PointF(location),
-                   gfx::PointF(location),
+                   gfx::PointF(root_location),
                    time_stamp,
                    flags),
       pointer_id_(pointer_id),
@@ -986,7 +998,8 @@ KeyEvent& KeyEvent::operator=(const KeyEvent& rhs) {
 
 KeyEvent::~KeyEvent() {}
 
-void KeyEvent::SetExtendedKeyEventData(scoped_ptr<ExtendedKeyEventData> data) {
+void KeyEvent::SetExtendedKeyEventData(
+    std::unique_ptr<ExtendedKeyEventData> data) {
   extended_key_event_data_ = std::move(data);
 }
 

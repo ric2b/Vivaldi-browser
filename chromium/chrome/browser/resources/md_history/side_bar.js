@@ -5,6 +5,13 @@
 Polymer({
   is: 'history-side-bar',
 
+  properties: {
+    selectedPage: {
+      type: String,
+      notify: true
+    }
+  },
+
   /**
    * Handles menu selection changes.
    * @param {Event} e
@@ -12,6 +19,14 @@ Polymer({
    */
   onSelect_: function(e) {
     this.fire('unselect-all');
-    this.fire('switch-display', {display: e.detail.item.id});
+    this.selectedPage = e.detail.item.getAttribute('view-id');
+  },
+
+  /**
+   * Relocates the user to the clear browsing data section of the settings page.
+   * @private
+   */
+  onClearBrowsingDataTap_: function() {
+    window.location.href = 'chrome://settings/clearBrowserData';
   },
 });

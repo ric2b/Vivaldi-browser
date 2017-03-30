@@ -75,6 +75,10 @@ bool VulkanDeviceQueue::Initialize(uint32_t options) {
                                                            visual_id)) {
           continue;
         }
+#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
+// On Android, all physical devices and queue families must be capable of
+// presentation with any native window.
+// As a result there is no Android-specific query for these capabilities.
 #else
 #error Non-Supported Vulkan implementation.
 #endif
@@ -166,8 +170,8 @@ void VulkanDeviceQueue::Destroy() {
   vk_physical_device_ = VK_NULL_HANDLE;
 }
 
-scoped_ptr<VulkanCommandPool> VulkanDeviceQueue::CreateCommandPool() {
-  scoped_ptr<VulkanCommandPool> command_pool(new VulkanCommandPool(this));
+std::unique_ptr<VulkanCommandPool> VulkanDeviceQueue::CreateCommandPool() {
+  std::unique_ptr<VulkanCommandPool> command_pool(new VulkanCommandPool(this));
   if (!command_pool->Initialize())
     return nullptr;
 

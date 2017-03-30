@@ -37,10 +37,6 @@ namespace blink {
 
 using protocol::Maybe;
 
-namespace DebuggerAgentState {
-static const char debuggerEnabled[] = "debuggerEnabled";
-}
-
 InspectorDebuggerAgent::InspectorDebuggerAgent(V8DebuggerAgent* agent)
     : InspectorBaseAgent<InspectorDebuggerAgent, protocol::Frontend::Debugger>("Debugger")
     , m_v8DebuggerAgent(agent)
@@ -49,9 +45,6 @@ InspectorDebuggerAgent::InspectorDebuggerAgent(V8DebuggerAgent* agent)
 
 InspectorDebuggerAgent::~InspectorDebuggerAgent()
 {
-#if !ENABLE(OILPAN)
-    ASSERT(!m_instrumentingAgents->inspectorDebuggerAgent());
-#endif
 }
 
 DEFINE_TRACE(InspectorDebuggerAgent)
@@ -63,14 +56,10 @@ DEFINE_TRACE(InspectorDebuggerAgent)
 void InspectorDebuggerAgent::enable(ErrorString* errorString)
 {
     m_v8DebuggerAgent->enable(errorString);
-    m_instrumentingAgents->setInspectorDebuggerAgent(this);
-    m_state->setBoolean(DebuggerAgentState::debuggerEnabled, true);
 }
 
 void InspectorDebuggerAgent::disable(ErrorString* errorString)
 {
-    m_state->setBoolean(DebuggerAgentState::debuggerEnabled, false);
-    m_instrumentingAgents->setInspectorDebuggerAgent(nullptr);
     m_v8DebuggerAgent->disable(errorString);
 }
 
@@ -101,7 +90,7 @@ void InspectorDebuggerAgent::setBreakpoint(ErrorString* errorString, PassOwnPtr<
     protocol::Debugger::BreakpointId* outBreakpointId,
     OwnPtr<protocol::Debugger::Location>* outActualLocation)
 {
-    m_v8DebuggerAgent->setBreakpoint(errorString, inLocation, inCondition, outBreakpointId, outActualLocation);
+    m_v8DebuggerAgent->setBreakpoint(errorString, std::move(inLocation), inCondition, outBreakpointId, std::move(outActualLocation));
 }
 
 void InspectorDebuggerAgent::removeBreakpoint(ErrorString* errorString,
@@ -114,7 +103,7 @@ void InspectorDebuggerAgent::continueToLocation(ErrorString* errorString,
     PassOwnPtr<protocol::Debugger::Location> inLocation,
     const Maybe<bool>& inInterstatementLocation)
 {
-    m_v8DebuggerAgent->continueToLocation(errorString, inLocation, inInterstatementLocation);
+    m_v8DebuggerAgent->continueToLocation(errorString, std::move(inLocation), inInterstatementLocation);
 }
 
 void InspectorDebuggerAgent::stepOver(ErrorString* errorString)
@@ -231,7 +220,7 @@ void InspectorDebuggerAgent::setVariableValue(ErrorString* errorString, int inSc
     PassOwnPtr<protocol::Runtime::CallArgument> inNewValue,
     const String16& inCallFrameId)
 {
-    m_v8DebuggerAgent->setVariableValue(errorString, inScopeNumber, inVariableName, inNewValue, inCallFrameId);
+    m_v8DebuggerAgent->setVariableValue(errorString, inScopeNumber, inVariableName, std::move(inNewValue), inCallFrameId);
 }
 
 void InspectorDebuggerAgent::getBacktrace(ErrorString* errorString,
@@ -246,92 +235,37 @@ void InspectorDebuggerAgent::setAsyncCallStackDepth(ErrorString* errorString, in
     m_v8DebuggerAgent->setAsyncCallStackDepth(errorString, inMaxDepth);
 }
 
+void InspectorDebuggerAgent::setBlackboxPatterns(ErrorString* errorString,
+    PassOwnPtr<protocol::Array<String16>> patterns)
+{
+    m_v8DebuggerAgent->setBlackboxPatterns(errorString, std::move(patterns));
+}
+
 void InspectorDebuggerAgent::setBlackboxedRanges(
     ErrorString* errorString,
     const String16& inScriptId,
     PassOwnPtr<protocol::Array<protocol::Debugger::ScriptPosition>> inPositions)
 {
-    m_v8DebuggerAgent->setBlackboxedRanges(errorString, inScriptId, inPositions);
-}
-
-bool InspectorDebuggerAgent::isPaused()
-{
-    return m_v8DebuggerAgent->isPaused();
-}
-
-void InspectorDebuggerAgent::scriptExecutionBlockedByCSP(const String& directiveText)
-{
-    OwnPtr<protocol::DictionaryValue> directive = protocol::DictionaryValue::create();
-    directive->setString("directiveText", directiveText);
-    m_v8DebuggerAgent->breakProgramOnException(protocol::Debugger::Paused::ReasonEnum::CSPViolation, directive.release());
-}
-
-void InspectorDebuggerAgent::willExecuteScript(int scriptId)
-{
-    m_v8DebuggerAgent->willExecuteScript(scriptId);
-}
-
-void InspectorDebuggerAgent::didExecuteScript()
-{
-    m_v8DebuggerAgent->didExecuteScript();
-}
-
-void InspectorDebuggerAgent::asyncTaskScheduled(const String& taskName, void* task)
-{
-    m_v8DebuggerAgent->asyncTaskScheduled(taskName, task, false);
-}
-
-void InspectorDebuggerAgent::asyncTaskScheduled(const String& operationName, void* task, bool recurring)
-{
-    m_v8DebuggerAgent->asyncTaskScheduled(operationName, task, recurring);
-}
-
-void InspectorDebuggerAgent::asyncTaskCanceled(void* task)
-{
-    m_v8DebuggerAgent->asyncTaskCanceled(task);
-}
-
-void InspectorDebuggerAgent::allAsyncTasksCanceled()
-{
-    m_v8DebuggerAgent->allAsyncTasksCanceled();
-}
-
-void InspectorDebuggerAgent::asyncTaskStarted(void* task)
-{
-    m_v8DebuggerAgent->asyncTaskStarted(task);
-}
-
-void InspectorDebuggerAgent::asyncTaskFinished(void* task)
-{
-    m_v8DebuggerAgent->asyncTaskFinished(task);
+    m_v8DebuggerAgent->setBlackboxedRanges(errorString, inScriptId, std::move(inPositions));
 }
 
 // InspectorBaseAgent overrides.
-void InspectorDebuggerAgent::setState(protocol::DictionaryValue* state)
+void InspectorDebuggerAgent::init(InstrumentingAgents* instrumentingAgents, protocol::Frontend* baseFrontend, protocol::Dispatcher* dispatcher, protocol::DictionaryValue* state)
 {
-    InspectorBaseAgent::setState(state);
+    InspectorBaseAgent::init(instrumentingAgents, baseFrontend, dispatcher, state);
     m_v8DebuggerAgent->setInspectorState(m_state);
+    m_v8DebuggerAgent->setFrontend(frontend());
 }
 
-void InspectorDebuggerAgent::setFrontend(protocol::Frontend* frontend)
-{
-    InspectorBaseAgent::setFrontend(frontend);
-    m_v8DebuggerAgent->setFrontend(protocol::Frontend::Debugger::from(frontend));
-}
-
-void InspectorDebuggerAgent::clearFrontend()
+void InspectorDebuggerAgent::dispose()
 {
     m_v8DebuggerAgent->clearFrontend();
-    InspectorBaseAgent::clearFrontend();
+    InspectorBaseAgent::dispose();
 }
 
 void InspectorDebuggerAgent::restore()
 {
-    if (!m_state->booleanProperty(DebuggerAgentState::debuggerEnabled, false))
-        return;
     m_v8DebuggerAgent->restore();
-    ErrorString errorString;
-    enable(&errorString);
 }
 
 } // namespace blink

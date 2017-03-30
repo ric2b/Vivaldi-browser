@@ -53,7 +53,7 @@
 <translation id="1594072653727561613">選單</translation>
 <translation id="1610130962244179598">切換至 6 點點字</translation>
 <translation id="1611168825862729585">欄標題：</translation>
-<translation id="1611649489706141841">下一頁</translation>
+<translation id="1611649489706141841">往前</translation>
 <translation id="1613476421962910979">聽覺標示已開啟</translation>
 <translation id="1618597272655350600">朗讀目前位置的完整說明</translation>
 <translation id="1639634871799530612">{COUNT,plural, =1{大於符號}other{# 個大於符號}}</translation>
@@ -540,7 +540,7 @@
 <translation id="6561818612645211875">前往目前列的開頭</translation>
 <translation id="6587021927234520429">沒有下一個第 4 階標題。</translation>
 <translation id="6601344353291556895">啟用詳細說明。</translation>
-<translation id="6615602925644411249">從網頁中尋找。</translation>
+<translation id="6615602925644411249">在網頁中尋找。</translation>
 <translation id="6633350132811819843">沒有下一個表格。</translation>
 <translation id="6637586476836377253">紀錄</translation>
 <translation id="6657128831881431364">進度列</translation>

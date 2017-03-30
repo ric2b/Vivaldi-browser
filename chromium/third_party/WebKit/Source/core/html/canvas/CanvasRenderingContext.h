@@ -28,6 +28,7 @@
 
 #include "core/CoreExport.h"
 #include "core/html/HTMLCanvasElement.h"
+#include "core/offscreencanvas/OffscreenCanvas.h"
 #include "wtf/HashSet.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/text/StringHash.h"
@@ -41,6 +42,7 @@ namespace blink {
 class CanvasImageSource;
 class HTMLCanvasElement;
 class ImageData;
+class ImageBitmap;
 
 class CORE_EXPORT CanvasRenderingContext : public GarbageCollectedFinalized<CanvasRenderingContext>, public ScriptWrappable {
     WTF_MAKE_NONCOPYABLE(CanvasRenderingContext);
@@ -64,19 +66,16 @@ public:
     static ContextType contextTypeFromId(const String& id);
     static ContextType resolveContextTypeAliases(ContextType);
 
-#if !ENABLE(OILPAN)
-    void ref() { m_canvas->ref(); }
-    void deref() { m_canvas->deref(); }
-#endif
-
     HTMLCanvasElement* canvas() const { return m_canvas; }
 
     virtual ContextType getContextType() const = 0;
     virtual bool isAccelerated() const { return false; }
+    virtual bool shouldAntialias() const { return false; }
     virtual bool hasAlpha() const { return true; }
     virtual void setIsHidden(bool) = 0;
     virtual bool isContextLost() const { return true; }
-    virtual void setCanvasGetContextResult(RenderingContext&) = 0;
+    virtual void setCanvasGetContextResult(RenderingContext&) { ASSERT_NOT_REACHED(); };
+    virtual void setOffscreenCanvasGetContextResult(OffscreenRenderingContext&) { ASSERT_NOT_REACHED(); }
 
     // Return true if the content is updated.
     virtual bool paintRenderingResultsToCanvas(SourceDrawingBuffer) { return false; }
@@ -108,6 +107,7 @@ public:
     virtual void setFont(const String&) { }
     virtual void styleDidChange(const ComputedStyle* oldStyle, const ComputedStyle& newStyle) { }
     virtual std::pair<Element*, String> getControlAndIdIfHitRegionExists(const LayoutPoint& location) { ASSERT_NOT_REACHED(); return std::make_pair(nullptr, String()); }
+    virtual String getIdFromControl(const Element* element) { return String(); }
 
     // WebGL-specific interface
     virtual bool is3d() const { return false; }
@@ -120,16 +120,21 @@ public:
     // ImageBitmap-specific interface
     virtual bool paint(GraphicsContext&, const IntRect&) { return false; }
 
-    bool wouldTaintOrigin(CanvasImageSource*);
+    bool wouldTaintOrigin(CanvasImageSource*, SecurityOrigin* = nullptr);
     void didMoveToNewDocument(Document*);
 
+    // OffscreenCanvas-specific methods
+    OffscreenCanvas* getOffscreenCanvas() const { return m_offscreenCanvas; }
+    virtual ImageBitmap* transferToImageBitmap(ExceptionState&) { return nullptr; }
+
 protected:
-    CanvasRenderingContext(HTMLCanvasElement*);
+    CanvasRenderingContext(HTMLCanvasElement* = nullptr, OffscreenCanvas* = nullptr);
     DECLARE_VIRTUAL_TRACE();
     virtual void stop() = 0;
 
 private:
     Member<HTMLCanvasElement> m_canvas;
+    Member<OffscreenCanvas> m_offscreenCanvas;
     HashSet<String> m_cleanURLs;
     HashSet<String> m_dirtyURLs;
 };

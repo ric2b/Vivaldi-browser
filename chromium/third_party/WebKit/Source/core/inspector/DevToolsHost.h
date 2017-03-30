@@ -31,7 +31,6 @@
 
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
-#include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
 
@@ -46,7 +45,7 @@ class LocalFrame;
 class CORE_EXPORT DevToolsHost final : public GarbageCollectedFinalized<DevToolsHost>, public ScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static RawPtr<DevToolsHost> create(InspectorFrontendClient* client, LocalFrame* frontendFrame)
+    static DevToolsHost* create(InspectorFrontendClient* client, LocalFrame* frontendFrame)
     {
         return new DevToolsHost(client, frontendFrame);
     }

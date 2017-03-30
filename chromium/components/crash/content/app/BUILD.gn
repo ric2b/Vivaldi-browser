@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+assert(!is_ios)
 if (is_android) {
   import("//build/config/android/config.gni")
 }
@@ -128,10 +129,6 @@ source_set("app_non_mac_win") {
     "//content/public/common:result_codes",
   ]
 
-  if (is_android) {
-    defines += [ "CHROME_BUILD_ID=\"$android_chrome_build_id\"" ]
-  }
-
   # Clang's -mstackrealign doesn't work well with
   # linux_syscall_support.h hand written asm syscalls.
   # See https://crbug.com/556393
@@ -189,5 +186,36 @@ source_set("app_breakpad_mac_win_to_be_deleted") {
       deps += [ "//breakpad:breakpad_handler" ]
       libs = [ "userenv.lib" ]
     }
+  }
+}
+
+if (is_mac) {
+  source_set("breakpad_stubs") {
+    sources = [
+      "breakpad_mac.h",
+      "breakpad_mac_stubs.mm",
+      "crash_reporter_client.cc",
+      "crash_reporter_client.h",
+    ]
+    deps = [
+      "//base",
+    ]
+  }
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "crash_keys_win_unittest.cc",
+  ]
+  deps = [
+    ":lib",
+    "//base",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  if (is_win) {
+    deps += [ "//breakpad:client" ]
   }
 }

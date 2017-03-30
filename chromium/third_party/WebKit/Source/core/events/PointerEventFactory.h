@@ -32,23 +32,24 @@ public:
     PointerEvent* create(
         const AtomicString& mouseEventName, const PlatformMouseEvent&,
         EventTarget* relatedTarget,
-        AbstractView*);
+        LocalDOMWindow*);
 
     PointerEvent* create(const AtomicString& type,
         const PlatformTouchPoint&, PlatformEvent::Modifiers,
-        const double width, const double height,
-        const double clientX, const double clientY);
+        const FloatSize& pointRadius,
+        const FloatPoint& clientPoint,
+        DOMWindow*);
 
     PointerEvent* createPointerCancelEvent(
-        const PlatformTouchPoint&);
+        const int pointerId, const WebPointerProperties::PointerType);
 
     // For creating capture events (i.e got/lostpointercapture)
     PointerEvent* createPointerCaptureEvent(
         PointerEvent*,
         const AtomicString&);
 
-    // For creating transition events (i.e pointerout/leave/over/enter)
-    PointerEvent* createPointerTransitionEvent(
+    // For creating boundary events (i.e pointerout/leave/over/enter)
+    PointerEvent* createPointerBoundaryEvent(
         PointerEvent*,
         const AtomicString&,
         EventTarget*);
@@ -56,20 +57,26 @@ public:
     // Clear all the existing ids.
     void clear();
 
-    // Returns true if pointerEvent is removed. When a pointerEvent with a
-    // particular id is removed that id is considered free even though there
-    // might have been other PointerEvents that were generated with the same id
-    // before.
-    bool remove(const PointerEvent*);
+    // When a particular pointerId is removed, the id is considered free even
+    // though there might have been other PointerEvents that were generated with
+    // the same id before.
+    bool remove(const int);
 
-    // Returns whether a pointer id exists and active
-    bool isActive(const int);
+    // Returns all ids of the given pointerType.
+    Vector<int> getPointerIdsOfType(WebPointerProperties::PointerType) const;
 
-    // Returns type of pointer id if exists, otherwise Unknown
-    WebPointerProperties::PointerType getPointerType(const int);
+    // Returns whether a pointer id exists and active.
+    bool isActive(const int) const;
 
-    // Returns whether a pointer id exists and has at least one pressed button
-    bool isActiveButtonsState(const int);
+    // Returns type of pointer id if exists, otherwise Unknown.
+    WebPointerProperties::PointerType getPointerType(const int) const;
+
+    // Returns whether a pointer id exists and has at least one pressed button.
+    bool isActiveButtonsState(const int) const;
+
+    // Returns the id of the pointer event corresponding to the given pointer
+    // properties if exists otherwise s_invalidId.
+    int getPointerEventId(const WebPointerProperties&) const;
 
 private:
     typedef WTF::UnsignedWithZeroKeyHashTraits<int> UnsignedHash;
@@ -92,8 +99,9 @@ private:
 
     int addIdAndActiveButtons(const IncomingId, bool isActiveButtons);
     bool isPrimary(const int) const;
-    void setIdTypeButtons(PointerEventInit &, const WebPointerProperties &,
+    void setIdTypeButtons(PointerEventInit&, const WebPointerProperties&,
         unsigned buttons);
+    void setBubblesAndCancelable(PointerEventInit&, const AtomicString& type);
 
     static const int s_invalidId;
     static const int s_mouseId;

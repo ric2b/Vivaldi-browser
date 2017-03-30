@@ -24,7 +24,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
 #include "base/task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -40,7 +40,6 @@
 #include "chrome/browser/chromeos/login/users/supervised_user_manager_impl.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
-#include "chrome/browser/chromeos/policy/device_local_account.h"
 #include "chrome/browser/chromeos/profiles/multiprofiles_session_aborted_dialog.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/session_length_limiter.h"
@@ -90,16 +89,16 @@ namespace {
 // order.
 const char kRegularUsers[] = "LoggedInUsers";
 
-// A vector pref of the public accounts defined on this device.
-const char kPublicAccounts[] = "PublicAccounts";
+// A vector pref of the device local accounts defined on this device.
+const char kDeviceLocalAccounts[] = "PublicAccounts";
 
 // Key for list of users that should be reported.
 const char kReportingUsers[] = "reporting_users";
 
-// A string pref that gets set when a public account is removed but a user is
-// currently logged into that account, requiring the account's data to be
-// removed after logout.
-const char kPublicAccountPendingDataRemoval[] =
+// A string pref that gets set when a device local account is removed but a
+// user is currently logged into that account, requiring the account's data to
+// be removed after logout.
+const char kDeviceLocalAccountPendingDataRemoval[] =
     "PublicAccountPendingDataRemoval";
 
 bool FakeOwnership() {
@@ -128,14 +127,31 @@ void ResolveLocale(const std::string& raw_locale,
   ignore_result(l10n_util::CheckAndResolveLocale(raw_locale, resolved_locale));
 }
 
+bool GetUserLockAttributes(const user_manager::User* user,
+                           bool* can_lock,
+                           std::string* multi_profile_behavior) {
+  Profile* const profile = ProfileHelper::Get()->GetProfileByUser(user);
+  if (!profile)
+    return false;
+  PrefService* const prefs = profile->GetPrefs();
+  if (can_lock)
+    *can_lock = user->can_lock() && prefs->GetBoolean(prefs::kAllowScreenLock);
+  if (multi_profile_behavior) {
+    *multi_profile_behavior =
+        prefs->GetString(prefs::kMultiProfileUserBehavior);
+  }
+  return true;
+}
+
 }  // namespace
 
 // static
 void ChromeUserManagerImpl::RegisterPrefs(PrefRegistrySimple* registry) {
   ChromeUserManager::RegisterPrefs(registry);
 
-  registry->RegisterListPref(kPublicAccounts);
-  registry->RegisterStringPref(kPublicAccountPendingDataRemoval, std::string());
+  registry->RegisterListPref(kDeviceLocalAccounts);
+  registry->RegisterStringPref(kDeviceLocalAccountPendingDataRemoval,
+                               std::string());
   registry->RegisterListPref(kReportingUsers);
 
   SupervisedUserManager::RegisterPrefs(registry);
@@ -305,29 +321,31 @@ user_manager::UserList ChromeUserManagerImpl::GetUnlockUsers() const {
   if (logged_in_users.empty())
     return user_manager::UserList();
 
+  bool can_primary_lock = false;
+  std::string primary_behavior;
+  if (!GetUserLockAttributes(GetPrimaryUser(), &can_primary_lock,
+                             &primary_behavior)) {
+    // Locking is not allowed until the primary user profile is created.
+    return user_manager::UserList();
+  }
+
   user_manager::UserList unlock_users;
-  Profile* profile =
-      ProfileHelper::Get()->GetProfileByUserUnsafe(GetPrimaryUser());
-  std::string primary_behavior =
-      profile->GetPrefs()->GetString(prefs::kMultiProfileUserBehavior);
 
   // Specific case: only one logged in user or
   // primary user has primary-only multi-profile policy.
   if (logged_in_users.size() == 1 ||
       primary_behavior == MultiProfileUserController::kBehaviorPrimaryOnly) {
-    if (GetPrimaryUser()->can_lock())
+    if (can_primary_lock)
       unlock_users.push_back(primary_user_);
   } else {
     // Fill list of potential unlock users based on multi-profile policy state.
-    for (user_manager::UserList::const_iterator it = logged_in_users.begin();
-         it != logged_in_users.end();
-         ++it) {
-      user_manager::User* user = (*it);
-      Profile* profile = ProfileHelper::Get()->GetProfileByUserUnsafe(user);
-      const std::string behavior =
-          profile->GetPrefs()->GetString(prefs::kMultiProfileUserBehavior);
+    for (user_manager::User* user : logged_in_users) {
+      bool can_lock = false;
+      std::string behavior;
+      if (!GetUserLockAttributes(user, &can_lock, &behavior))
+        continue;
       if (behavior == MultiProfileUserController::kBehaviorUnrestricted &&
-          user->can_lock()) {
+          can_lock) {
         unlock_users.push_back(user);
       } else if (behavior == MultiProfileUserController::kBehaviorPrimaryOnly) {
         NOTREACHED()
@@ -524,17 +542,24 @@ void ChromeUserManagerImpl::OnDeviceLocalAccountsChanged() {
 }
 
 bool ChromeUserManagerImpl::CanCurrentUserLock() const {
-  return ChromeUserManager::CanCurrentUserLock() &&
-         GetCurrentUserFlow()->CanLockScreen();
+  if (!ChromeUserManager::CanCurrentUserLock() ||
+      !GetCurrentUserFlow()->CanLockScreen()) {
+    return false;
+  }
+  bool can_lock = false;
+  if (!GetUserLockAttributes(active_user_, &can_lock, nullptr))
+    return false;
+  return can_lock;
 }
 
 bool ChromeUserManagerImpl::IsUserNonCryptohomeDataEphemeral(
     const AccountId& account_id) const {
-  // Data belonging to the obsolete public accounts whose data has not been
-  // removed yet is not ephemeral.
-  bool is_obsolete_public_account = IsPublicAccountMarkedForRemoval(account_id);
+  // Data belonging to the obsolete device local accounts whose data has not
+  // been removed yet is not ephemeral.
+  const bool is_obsolete_device_local_account =
+      IsDeviceLocalAccountMarkedForRemoval(account_id);
 
-  return !is_obsolete_public_account &&
+  return !is_obsolete_device_local_account &&
          ChromeUserManager::IsUserNonCryptohomeDataEphemeral(account_id);
 }
 
@@ -569,16 +594,24 @@ bool ChromeUserManagerImpl::IsEnterpriseManaged() const {
   return connector->IsEnterpriseManaged();
 }
 
-void ChromeUserManagerImpl::LoadPublicAccounts(
-    std::set<AccountId>* public_sessions_set) {
-  const base::ListValue* prefs_public_sessions =
-      GetLocalState()->GetList(kPublicAccounts);
-  std::vector<AccountId> public_sessions;
-  ParseUserList(*prefs_public_sessions, std::set<AccountId>(), &public_sessions,
-                public_sessions_set);
-  for (const AccountId& account_id : public_sessions) {
-    users_.push_back(user_manager::User::CreatePublicAccountUser(account_id));
-    UpdatePublicAccountDisplayName(account_id.GetUserEmail());
+void ChromeUserManagerImpl::LoadDeviceLocalAccounts(
+    std::set<AccountId>* device_local_accounts_set) {
+  const base::ListValue* prefs_device_local_accounts =
+      GetLocalState()->GetList(kDeviceLocalAccounts);
+  std::vector<AccountId> device_local_accounts;
+  ParseUserList(*prefs_device_local_accounts, std::set<AccountId>(),
+                &device_local_accounts, device_local_accounts_set);
+  for (const AccountId& account_id : device_local_accounts) {
+    policy::DeviceLocalAccount::Type type;
+    if (!policy::IsDeviceLocalAccountUser(account_id.GetUserEmail(), &type)) {
+      NOTREACHED();
+      continue;
+    }
+
+    users_.push_back(
+        CreateUserFromDeviceLocalAccount(account_id, type).release());
+    if (type == policy::DeviceLocalAccount::TYPE_PUBLIC_SESSION)
+      UpdatePublicAccountDisplayName(account_id.GetUserEmail());
   }
 }
 
@@ -613,18 +646,10 @@ bool ChromeUserManagerImpl::IsDemoApp(const AccountId& account_id) const {
   return DemoAppLauncher::IsDemoAppSession(account_id);
 }
 
-bool ChromeUserManagerImpl::IsKioskApp(const AccountId& account_id) const {
-  policy::DeviceLocalAccount::Type device_local_account_type;
-  return policy::IsDeviceLocalAccountUser(account_id.GetUserEmail(),
-                                          &device_local_account_type) &&
-         device_local_account_type ==
-             policy::DeviceLocalAccount::TYPE_KIOSK_APP;
-}
-
-bool ChromeUserManagerImpl::IsPublicAccountMarkedForRemoval(
+bool ChromeUserManagerImpl::IsDeviceLocalAccountMarkedForRemoval(
     const AccountId& account_id) const {
   return account_id == AccountId::FromUserEmail(GetLocalState()->GetString(
-                           kPublicAccountPendingDataRemoval));
+                           kDeviceLocalAccountPendingDataRemoval));
 }
 
 void ChromeUserManagerImpl::RetrieveTrustedDevicePolicies() {
@@ -654,7 +679,7 @@ void ChromeUserManagerImpl::RetrieveTrustedDevicePolicies() {
 
   EnsureUsersLoaded();
 
-  bool changed = UpdateAndCleanUpPublicAccounts(
+  bool changed = UpdateAndCleanUpDeviceLocalAccounts(
       policy::GetDeviceLocalAccounts(cros_settings_));
 
   // If ephemeral users are enabled and we are on the login screen, take this
@@ -789,22 +814,17 @@ void ChromeUserManagerImpl::PublicAccountUserLoggedIn(
   WallpaperManager::Get()->EnsureLoggedInUserWallpaperLoaded();
 }
 
-void ChromeUserManagerImpl::KioskAppLoggedIn(
-    const AccountId& kiosk_app_account_id) {
+void ChromeUserManagerImpl::KioskAppLoggedIn(user_manager::User* user) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  policy::DeviceLocalAccount::Type device_local_account_type;
-  DCHECK(policy::IsDeviceLocalAccountUser(kiosk_app_account_id.GetUserEmail(),
-                                          &device_local_account_type));
-  DCHECK_EQ(policy::DeviceLocalAccount::TYPE_KIOSK_APP,
-            device_local_account_type);
 
-  active_user_ = user_manager::User::CreateKioskAppUser(kiosk_app_account_id);
+  active_user_ = user;
   active_user_->SetStubImage(
       base::WrapUnique(new user_manager::UserImage(
           *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
               IDR_PROFILE_PICTURE_LOADING))),
       user_manager::User::USER_IMAGE_INVALID, false);
 
+  const AccountId& kiosk_app_account_id = user->GetAccountId();
   WallpaperManager::Get()->SetUserWallpaperNow(kiosk_app_account_id);
 
   // TODO(bartfab): Add KioskAppUsers to the users_ list and keep metadata like
@@ -822,9 +842,9 @@ void ChromeUserManagerImpl::KioskAppLoggedIn(
       break;
     }
   }
-  std::string kiosk_app_name;
+  std::string kiosk_app_id;
   if (account) {
-    kiosk_app_name = account->kiosk_app_id;
+    kiosk_app_id = account->kiosk_app_id;
   } else {
     LOG(ERROR) << "Logged into nonexistent kiosk-app account: "
                << kiosk_app_account_id.GetUserEmail();
@@ -833,7 +853,7 @@ void ChromeUserManagerImpl::KioskAppLoggedIn(
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   command_line->AppendSwitch(::switches::kForceAppMode);
-  command_line->AppendSwitchASCII(::switches::kAppId, kiosk_app_name);
+  command_line->AppendSwitchASCII(::switches::kAppId, kiosk_app_id);
 
   // Disable window animation since kiosk app runs in a single full screen
   // window and window animation causes start-up janks.
@@ -901,83 +921,70 @@ void ChromeUserManagerImpl::RemoveNonCryptohomeData(
   EasyUnlockService::ResetLocalStateForUser(account_id);
 }
 
-void
-ChromeUserManagerImpl::CleanUpPublicAccountNonCryptohomeDataPendingRemoval() {
+void ChromeUserManagerImpl::
+    CleanUpDeviceLocalAccountNonCryptohomeDataPendingRemoval() {
   PrefService* local_state = GetLocalState();
-  const std::string public_account_pending_data_removal =
-      local_state->GetString(kPublicAccountPendingDataRemoval);
-  if (public_account_pending_data_removal.empty() ||
+  const std::string device_local_account_pending_data_removal =
+      local_state->GetString(kDeviceLocalAccountPendingDataRemoval);
+  if (device_local_account_pending_data_removal.empty() ||
       (IsUserLoggedIn() &&
-       public_account_pending_data_removal == GetActiveUser()->email())) {
+       device_local_account_pending_data_removal == GetActiveUser()->email())) {
     return;
   }
 
   RemoveNonCryptohomeData(
-      AccountId::FromUserEmail(public_account_pending_data_removal));
-  local_state->ClearPref(kPublicAccountPendingDataRemoval);
+      AccountId::FromUserEmail(device_local_account_pending_data_removal));
+  local_state->ClearPref(kDeviceLocalAccountPendingDataRemoval);
 }
 
-void ChromeUserManagerImpl::CleanUpPublicAccountNonCryptohomeData(
-    const std::vector<std::string>& old_public_accounts) {
+void ChromeUserManagerImpl::CleanUpDeviceLocalAccountNonCryptohomeData(
+    const std::vector<std::string>& old_device_local_accounts) {
   std::set<std::string> users;
   for (user_manager::UserList::const_iterator it = users_.begin();
        it != users_.end();
        ++it)
     users.insert((*it)->email());
 
-  // If the user is logged into a public account that has been removed from the
-  // user list, mark the account's data as pending removal after logout.
-  if (IsLoggedInAsPublicAccount()) {
-    const std::string active_user_id = GetActiveUser()->email();
+  // If the user is logged into a device local account that has been removed
+  // from the user list, mark the account's data as pending removal after
+  // logout.
+  const user_manager::User* const active_user = GetActiveUser();
+  if (active_user && active_user->IsDeviceLocalAccount()) {
+    const std::string active_user_id = active_user->email();
     if (users.find(active_user_id) == users.end()) {
-      GetLocalState()->SetString(kPublicAccountPendingDataRemoval,
+      GetLocalState()->SetString(kDeviceLocalAccountPendingDataRemoval,
                                  active_user_id);
       users.insert(active_user_id);
     }
   }
 
-  // Remove the data belonging to any other public accounts that are no longer
-  // found on the user list.
+  // Remove the data belonging to any other device local accounts that are no
+  // longer found on the user list.
   for (std::vector<std::string>::const_iterator it =
-           old_public_accounts.begin();
-       it != old_public_accounts.end();
-       ++it) {
+           old_device_local_accounts.begin();
+       it != old_device_local_accounts.end(); ++it) {
     if (users.find(*it) == users.end())
       RemoveNonCryptohomeData(AccountId::FromUserEmail(*it));
   }
 }
 
-bool ChromeUserManagerImpl::UpdateAndCleanUpPublicAccounts(
+bool ChromeUserManagerImpl::UpdateAndCleanUpDeviceLocalAccounts(
     const std::vector<policy::DeviceLocalAccount>& device_local_accounts) {
-  // Try to remove any public account data marked as pending removal.
-  CleanUpPublicAccountNonCryptohomeDataPendingRemoval();
+  // Try to remove any device local account data marked as pending removal.
+  CleanUpDeviceLocalAccountNonCryptohomeDataPendingRemoval();
 
-  // Get the current list of public accounts.
-  std::vector<std::string> old_public_accounts;
-  for (user_manager::UserList::const_iterator it = users_.begin();
-       it != users_.end();
-       ++it) {
-    if ((*it)->GetType() == user_manager::USER_TYPE_PUBLIC_ACCOUNT)
-      old_public_accounts.push_back((*it)->email());
+  // Get the current list of device local accounts.
+  std::vector<std::string> old_accounts;
+  for (const auto& user : users_) {
+    if (user->IsDeviceLocalAccount())
+      old_accounts.push_back(user->email());
   }
 
-  // Get the new list of public accounts from policy.
-  std::vector<std::string> new_public_accounts;
-  for (std::vector<policy::DeviceLocalAccount>::const_iterator it =
-           device_local_accounts.begin();
-       it != device_local_accounts.end();
-       ++it) {
-    // TODO(mnissler, nkostylev, bartfab): Process Kiosk Apps within the
-    // standard login framework: http://crbug.com/234694
-    if (it->type == policy::DeviceLocalAccount::TYPE_PUBLIC_SESSION)
-      new_public_accounts.push_back(it->user_id);
-  }
-
-  // If the list of public accounts has not changed, return.
-  if (new_public_accounts.size() == old_public_accounts.size()) {
+  // If the list of device local accounts has not changed, return.
+  if (device_local_accounts.size() == old_accounts.size()) {
     bool changed = false;
-    for (size_t i = 0; i < new_public_accounts.size(); ++i) {
-      if (new_public_accounts[i] != old_public_accounts[i]) {
+    for (size_t i = 0; i < device_local_accounts.size(); ++i) {
+      if (device_local_accounts[i].user_id != old_accounts[i]) {
         changed = true;
         break;
       }
@@ -986,20 +993,17 @@ bool ChromeUserManagerImpl::UpdateAndCleanUpPublicAccounts(
       return false;
   }
 
-  // Persist the new list of public accounts in a pref.
-  ListPrefUpdate prefs_public_accounts_update(GetLocalState(), kPublicAccounts);
-  prefs_public_accounts_update->Clear();
-  for (std::vector<std::string>::const_iterator it =
-           new_public_accounts.begin();
-       it != new_public_accounts.end();
-       ++it) {
-    prefs_public_accounts_update->AppendString(*it);
-  }
+  // Persist the new list of device local accounts in a pref.
+  ListPrefUpdate prefs_device_local_accounts_update(GetLocalState(),
+                                                    kDeviceLocalAccounts);
+  prefs_device_local_accounts_update->Clear();
+  for (const auto& account : device_local_accounts)
+    prefs_device_local_accounts_update->AppendString(account.user_id);
 
-  // Remove the old public accounts from the user list.
+  // Remove the old device local accounts from the user list.
   for (user_manager::UserList::iterator it = users_.begin();
        it != users_.end();) {
-    if ((*it)->GetType() == user_manager::USER_TYPE_PUBLIC_ACCOUNT) {
+    if ((*it)->IsDeviceLocalAccount()) {
       if (*it != GetLoggedInUser())
         DeleteUser(*it);
       it = users_.erase(it);
@@ -1008,30 +1012,36 @@ bool ChromeUserManagerImpl::UpdateAndCleanUpPublicAccounts(
     }
   }
 
-  // Add the new public accounts to the front of the user list.
-  for (std::vector<std::string>::const_reverse_iterator it =
-           new_public_accounts.rbegin();
-       it != new_public_accounts.rend();
-       ++it) {
-    if (IsLoggedInAsPublicAccount() && *it == GetActiveUser()->email())
-      users_.insert(users_.begin(), GetLoggedInUser());
-    else
-      users_.insert(users_.begin(), user_manager::User::CreatePublicAccountUser(
-                                        AccountId::FromUserEmail(*it)));
-    UpdatePublicAccountDisplayName(*it);
+  // Add the new device local accounts to the front of the user list.
+  user_manager::User* const active_user = GetActiveUser();
+  const bool is_device_local_account_session =
+      active_user && active_user->IsDeviceLocalAccount();
+  for (auto it = device_local_accounts.rbegin();
+       it != device_local_accounts.rend(); ++it) {
+    if (is_device_local_account_session &&
+        AccountId::FromUserEmail(it->user_id) == active_user->GetAccountId()) {
+      users_.insert(users_.begin(), active_user);
+    } else {
+      users_.insert(users_.begin(),
+                    CreateUserFromDeviceLocalAccount(
+                        AccountId::FromUserEmail(it->user_id), it->type)
+                        .release());
+    }
+    if (it->type == policy::DeviceLocalAccount::TYPE_PUBLIC_SESSION) {
+      UpdatePublicAccountDisplayName(it->user_id);
+    }
   }
 
   for (user_manager::UserList::iterator
            ui = users_.begin(),
-           ue = users_.begin() + new_public_accounts.size();
-       ui != ue;
-       ++ui) {
+           ue = users_.begin() + device_local_accounts.size();
+       ui != ue; ++ui) {
     GetUserImageManager((*ui)->GetAccountId())->LoadUserImage();
   }
 
-  // Remove data belonging to public accounts that are no longer found on the
-  // user list.
-  CleanUpPublicAccountNonCryptohomeData(old_public_accounts);
+  // Remove data belonging to device local accounts that are no longer found on
+  // the user list.
+  CleanUpDeviceLocalAccountNonCryptohomeData(old_accounts);
 
   return true;
 }
@@ -1296,6 +1306,26 @@ void ChromeUserManagerImpl::ScheduleResolveLocale(
 bool ChromeUserManagerImpl::IsValidDefaultUserImageId(int image_index) const {
   return image_index >= 0 &&
          image_index < chromeos::default_user_image::kDefaultImagesCount;
+}
+
+std::unique_ptr<user_manager::User>
+ChromeUserManagerImpl::CreateUserFromDeviceLocalAccount(
+    const AccountId& account_id,
+    const policy::DeviceLocalAccount::Type type) const {
+  std::unique_ptr<user_manager::User> user;
+  switch (type) {
+    case policy::DeviceLocalAccount::TYPE_PUBLIC_SESSION:
+      user.reset(user_manager::User::CreatePublicAccountUser(account_id));
+      break;
+    case policy::DeviceLocalAccount::TYPE_KIOSK_APP:
+      user.reset(user_manager::User::CreateKioskAppUser(account_id));
+      break;
+    default:
+      NOTREACHED();
+      break;
+  }
+
+  return user;
 }
 
 }  // namespace chromeos

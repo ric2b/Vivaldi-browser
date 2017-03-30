@@ -14,10 +14,32 @@ GEN_INCLUDE(
 /**
  * @constructor
  * @extends {PolymerTest}
-*/
-function DownloadsBrowserTest() {}
+ */
+function DownloadsItemTest() {}
 
-DownloadsBrowserTest.prototype = {
+DownloadsItemTest.prototype = {
+  __proto__: PolymerTest.prototype,
+
+  /** @override */
+  browsePreload: 'chrome://downloads/item.html',
+
+  /** @override */
+  extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+    'item_tests.js',
+  ]),
+};
+
+TEST_F('DownloadsItemTest', 'All', function() {
+  mocha.run();
+});
+
+/**
+ * @constructor
+ * @extends {PolymerTest}
+ */
+function DownloadsLayoutTest() {}
+
+DownloadsLayoutTest.prototype = {
   __proto__: PolymerTest.prototype,
 
   /** @override */
@@ -29,7 +51,7 @@ DownloadsBrowserTest.prototype = {
   ]),
 };
 
-TEST_F('DownloadsBrowserTest', 'layoutTests', function() {
+TEST_F('DownloadsLayoutTest', 'layoutTests', function() {
   downloads.layout_tests.registerTests();
   mocha.run();
 });

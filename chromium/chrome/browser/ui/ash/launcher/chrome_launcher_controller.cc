@@ -21,13 +21,13 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/strings/pattern.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/browser/app_mode/app_mode_utils.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/chromeos/arc/arc_support_host.h"
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/extensions/extension_app_icon_loader.h"
 #include "chrome/browser/extensions/extension_util.h"
@@ -36,20 +36,28 @@
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/app_list/arc/arc_app_icon_loader.h"
+#include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
+#include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/ash/app_sync_ui_state.h"
 #include "chrome/browser/ui/ash/chrome_launcher_prefs.h"
+#include "chrome/browser/ui/ash/chrome_shell_delegate.h"
 #include "chrome/browser/ui/ash/launcher/app_shortcut_launcher_item_controller.h"
 #include "chrome/browser/ui/ash/launcher/app_window_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/app_window_launcher_item_controller.h"
+#include "chrome/browser/ui/ash/launcher/arc_app_window_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/browser_shortcut_launcher_item_controller.h"
 #include "chrome/browser/ui/ash/launcher/browser_status_monitor.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_app_menu_item.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_app_menu_item_browser.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_app_menu_item_tab.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_types.h"
-#include "chrome/browser/ui/ash/launcher/launcher_app_tab_helper.h"
+#include "chrome/browser/ui/ash/launcher/launcher_arc_app_updater.h"
+#include "chrome/browser/ui/ash/launcher/launcher_controller_helper.h"
 #include "chrome/browser/ui/ash/launcher/launcher_extension_app_updater.h"
 #include "chrome/browser/ui/ash/launcher/launcher_item_controller.h"
+#include "chrome/browser/ui/ash/launcher/multi_profile_app_window_launcher_controller.h"
+#include "chrome/browser/ui/ash/launcher/multi_profile_browser_status_monitor.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
 #include "chrome/browser/ui/browser.h"
@@ -58,9 +66,6 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/extensions/app_launch_params.h"
-#include "chrome/browser/ui/extensions/application_launch.h"
-#include "chrome/browser/ui/extensions/extension_enable_flow.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/common/chrome_switches.h"
@@ -73,6 +78,7 @@
 #include "components/signin/core/account_id/account_id.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/syncable_prefs/pref_service_syncable.h"
+#include "components/user_manager/user_manager.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_prefs.h"
@@ -86,7 +92,6 @@
 #include "extensions/common/url_pattern.h"
 #include "grit/ash_resources.h"
 #include "grit/theme_resources.h"
-#include "net/base/url_util.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -95,19 +100,6 @@
 #include "ui/keyboard/keyboard_util.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/wm/core/window_animations.h"
-
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/browser_process.h"
-#include "chrome/browser/ui/app_list/arc/arc_app_icon_loader.h"
-#include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
-#include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
-#include "chrome/browser/ui/ash/chrome_shell_delegate.h"
-#include "chrome/browser/ui/ash/launcher/arc_app_window_launcher_controller.h"
-#include "chrome/browser/ui/ash/launcher/launcher_arc_app_updater.h"
-#include "chrome/browser/ui/ash/launcher/multi_profile_app_window_launcher_controller.h"
-#include "chrome/browser/ui/ash/launcher/multi_profile_browser_status_monitor.h"
-#include "components/user_manager/user_manager.h"
-#endif
 
 using extensions::Extension;
 using extensions::UnloadedExtensionInfo;
@@ -119,140 +111,13 @@ ChromeLauncherController* ChromeLauncherController::instance_ = NULL;
 
 namespace {
 
-// This will be used as placeholder in the list of the pinned applciatons.
-// Note that this is NOT a valid extension identifier so that pre M31 versions
-// will ignore it.
-const char kAppShelfIdPlaceholder[] = "AppShelfIDPlaceholder--------";
-
-std::string GetPrefKeyForRootWindow(aura::Window* root_window) {
-  gfx::Display display =
-      gfx::Screen::GetScreen()->GetDisplayNearestWindow(root_window);
+int64_t GetDisplayIDForShelf(ash::Shelf* shelf) {
+  aura::Window* root_window =
+      shelf->shelf_widget()->GetNativeWindow()->GetRootWindow();
+  display::Display display =
+      display::Screen::GetScreen()->GetDisplayNearestWindow(root_window);
   DCHECK(display.is_valid());
-
-  return base::Int64ToString(display.id());
-}
-
-void UpdatePerDisplayPref(PrefService* pref_service,
-                          aura::Window* root_window,
-                          const char* pref_key,
-                          const std::string& value) {
-  std::string key = GetPrefKeyForRootWindow(root_window);
-  if (key.empty())
-    return;
-
-  DictionaryPrefUpdate update(pref_service, prefs::kShelfPreferences);
-  base::DictionaryValue* shelf_prefs = update.Get();
-  base::DictionaryValue* prefs = NULL;
-  if (!shelf_prefs->GetDictionary(key, &prefs)) {
-    prefs = new base::DictionaryValue();
-    shelf_prefs->Set(key, prefs);
-  }
-  prefs->SetStringWithoutPathExpansion(pref_key, value);
-}
-
-// Returns a pref value in |pref_service| for the display of |root_window|. The
-// pref value is stored in |local_path| and |path|, but |pref_service| may have
-// per-display preferences and the value can be specified by policy. Here is
-// the priority:
-//  * A value managed by policy. This is a single value that applies to all
-//    displays.
-//  * A user-set value for the specified display.
-//  * A user-set value in |local_path| or |path|, if no per-display settings are
-//    ever specified (see http://crbug.com/173719 for why). |local_path| is
-//    preferred. See comment in |kShelfAlignment| as to why we consider two
-//    prefs and why |local_path| is preferred.
-//  * A value recommended by policy. This is a single value that applies to all
-//    root windows.
-//  * The default value for |local_path| if the value is not recommended by
-//    policy.
-std::string GetPrefForRootWindow(PrefService* pref_service,
-                                 aura::Window* root_window,
-                                 const char* local_path,
-                                 const char* path) {
-  const PrefService::Preference* local_pref =
-      pref_service->FindPreference(local_path);
-  const std::string value(pref_service->GetString(local_path));
-  if (local_pref->IsManaged())
-    return value;
-
-  std::string pref_key = GetPrefKeyForRootWindow(root_window);
-  bool has_per_display_prefs = false;
-  if (!pref_key.empty()) {
-    const base::DictionaryValue* shelf_prefs = pref_service->GetDictionary(
-        prefs::kShelfPreferences);
-    const base::DictionaryValue* display_pref = NULL;
-    std::string per_display_value;
-    if (shelf_prefs->GetDictionary(pref_key, &display_pref) &&
-        display_pref->GetString(path, &per_display_value))
-      return per_display_value;
-
-    // If the pref for the specified display is not found, scan the whole prefs
-    // and check if the prefs for other display is already specified.
-    std::string unused_value;
-    for (base::DictionaryValue::Iterator iter(*shelf_prefs);
-         !iter.IsAtEnd(); iter.Advance()) {
-      const base::DictionaryValue* display_pref = NULL;
-      if (iter.value().GetAsDictionary(&display_pref) &&
-          display_pref->GetString(path, &unused_value)) {
-        has_per_display_prefs = true;
-        break;
-      }
-    }
-  }
-
-  if (local_pref->IsRecommended() || !has_per_display_prefs)
-    return value;
-
-  const base::Value* default_value =
-      pref_service->GetDefaultPrefValue(local_path);
-  std::string default_string;
-  default_value->GetAsString(&default_string);
-  return default_string;
-}
-
-// Gets the shelf auto hide behavior from prefs for a root window.
-ash::ShelfAutoHideBehavior GetShelfAutoHideBehaviorFromPrefs(
-    Profile* profile,
-    aura::Window* root_window) {
-  DCHECK(profile);
-
-  // Don't show the shelf in app mode.
-  if (chrome::IsRunningInAppMode())
-    return ash::SHELF_AUTO_HIDE_ALWAYS_HIDDEN;
-
-  // See comment in |kShelfAlignment| as to why we consider two prefs.
-  const std::string behavior_value(
-      GetPrefForRootWindow(profile->GetPrefs(),
-                           root_window,
-                           prefs::kShelfAutoHideBehaviorLocal,
-                           prefs::kShelfAutoHideBehavior));
-
-  // Note: To maintain sync compatibility with old images of chrome/chromeos
-  // the set of values that may be encountered includes the now-extinct
-  // "Default" as well as "Never" and "Always", "Default" should now
-  // be treated as "Never" (http://crbug.com/146773).
-  if (behavior_value == ash::kShelfAutoHideBehaviorAlways)
-    return ash::SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS;
-  return ash::SHELF_AUTO_HIDE_BEHAVIOR_NEVER;
-}
-
-// Gets the shelf alignment from prefs for a root window.
-ash::ShelfAlignment GetShelfAlignmentFromPrefs(Profile* profile,
-                                               aura::Window* root_window) {
-  DCHECK(profile);
-
-  // See comment in |kShelfAlignment| as to why we consider two prefs.
-  const std::string alignment_value(
-      GetPrefForRootWindow(profile->GetPrefs(),
-                           root_window,
-                           prefs::kShelfAlignmentLocal,
-                           prefs::kShelfAlignment));
-  if (alignment_value == ash::kShelfAlignmentLeft)
-    return ash::SHELF_ALIGNMENT_LEFT;
-  else if (alignment_value == ash::kShelfAlignmentRight)
-    return ash::SHELF_ALIGNMENT_RIGHT;
-  // Default to bottom.
-  return ash::SHELF_ALIGNMENT_BOTTOM;
+  return display.id();
 }
 
 // If prefs have synced and no user-set value exists at |local_path|, the value
@@ -266,16 +131,6 @@ void MaybePropagatePrefToLocal(
     // First time the user is using this machine, propagate from remote to
     // local.
     pref_service->SetString(local_path, pref_service->GetString(synced_path));
-  }
-}
-
-std::string GetSourceFromAppListSource(ash::LaunchSource source) {
-  switch (source) {
-    case ash::LAUNCH_FROM_APP_LIST:
-      return std::string(extension_urls::kLaunchSourceAppList);
-    case ash::LAUNCH_FROM_APP_LIST_SEARCH:
-      return std::string(extension_urls::kLaunchSourceAppListSearch);
-    default: return std::string();
   }
 }
 
@@ -327,28 +182,15 @@ bool IsAppForUserPinned(const std::string& app_id,
   return true;
 }
 
-void update_pinned_apps(const std::string& app_id,
-                        bool valid_for_current_user,
-                        std::vector<std::string>* pinned_apps,
-                        bool* chrome_icon_added,
-                        bool* app_list_icon_added) {
-  if (app_id == extension_misc::kChromeAppId) {
-    *chrome_icon_added = true;
-    pinned_apps->push_back(extension_misc::kChromeAppId);
-  } else if (app_id == kAppShelfIdPlaceholder) {
-    *app_list_icon_added = true;
-    pinned_apps->push_back(kAppShelfIdPlaceholder);
-  } else if (valid_for_current_user) {
-    // Note: In multi profile scenarios we only want to show pinnable apps
-    // here which is correct. Running applications from the other users will
-    // continue to run. So no need for multi profile modifications.
-    pinned_apps->push_back(app_id);
-  }
-}
+const char* const kPinProhibitedExtensionIds[] = {
+    ArcSupportHost::kHostAppId, arc::kPlayStoreAppId,
+};
+
+const size_t kPinProhibitedExtensionIdsLength =
+    arraysize(kPinProhibitedExtensionIds);
 
 }  // namespace
 
-#if defined(OS_CHROMEOS)
 // A class to get events from ChromeOS when a user gets changed or added.
 class ChromeLauncherControllerUserSwitchObserver
     : public user_manager::UserManager::UserSessionStateObserver {
@@ -418,7 +260,6 @@ void ChromeLauncherControllerUserSwitchObserver::AddUser(Profile* profile) {
     chrome::MultiUserWindowManager::GetInstance()->AddUser(profile);
   controller_->AdditionalUserAddedToSession(profile->GetOriginalProfile());
 }
-#endif
 
 ChromeLauncherController::ChromeLauncherController(Profile* profile,
                                                    ash::ShelfModel* model)
@@ -450,7 +291,6 @@ ChromeLauncherController::ChromeLauncherController(Profile* profile,
   // here. If the instantiation fails, the manager is not needed.
   chrome::MultiUserWindowManager::CreateInstance();
 
-#if defined(OS_CHROMEOS)
   // On Chrome OS using multi profile we want to switch the content of the shelf
   // with a user change. Note that for unit tests the instance can be NULL.
   if (chrome::MultiUserWindowManager::GetMultiProfileMode() !=
@@ -481,15 +321,6 @@ ChromeLauncherController::ChromeLauncherController(Profile* profile,
   std::unique_ptr<AppWindowLauncherController> arc_app_window_controller;
   arc_app_window_controller.reset(new ArcAppWindowLauncherController(this));
   app_window_controllers_.push_back(std::move(arc_app_window_controller));
-#else
-  // Create our v1/v2 application / browser monitors which will inform the
-  // launcher of status changes.
-  browser_status_monitor_.reset(new BrowserStatusMonitor(this));
-  std::unique_ptr<AppWindowLauncherController> extension_app_window_controller;
-  extension_app_window_controller.reset(
-      new ExtensionAppWindowLauncherController(this));
-  app_window_controllers_.push_back(std::move(extension_app_window_controller));
-#endif
 
   // Right now ash::Shell isn't created for tests.
   // TODO(mukai): Allows it to observe display change and write tests.
@@ -552,11 +383,9 @@ void ChromeLauncherController::Init() {
   CreateBrowserShortcutLauncherItem();
   UpdateAppLaunchersFromPref();
 
-#if defined(OS_CHROMEOS)
   // TODO(sky): update unit test so that this test isn't necessary.
   if (ash::Shell::HasInstance())
     SetVirtualKeyboardBehaviorFromPrefs();
-#endif  // defined(OS_CHROMEOS)
 
   syncable_prefs::PrefServiceSyncable* prefs =
       PrefServiceSyncableFromProfile(profile_);
@@ -618,7 +447,7 @@ void ChromeLauncherController::CloseLauncherItem(ash::ShelfID id) {
     CHECK(iter != id_to_item_controller_map_.end());
     SetItemStatus(id, ash::STATUS_CLOSED);
     std::string app_id = iter->second->app_id();
-    iter->second = new AppShortcutLauncherItemController(app_id, this);
+    iter->second = AppShortcutLauncherItemController::Create(app_id, this);
     iter->second->set_shelf_id(id);
     // Existing controller is destroyed and replaced by registering again.
     SetShelfItemDelegate(id, iter->second);
@@ -627,20 +456,44 @@ void ChromeLauncherController::CloseLauncherItem(ash::ShelfID id) {
   }
 }
 
-bool ChromeLauncherController::CanPin(const std::string& app_id) {
+AppListControllerDelegate::Pinnable ChromeLauncherController::GetPinnable(
+    const std::string& app_id) {
+  for (size_t i = 0; i < kPinProhibitedExtensionIdsLength; ++i) {
+    if (kPinProhibitedExtensionIds[i] == app_id)
+      return AppListControllerDelegate::NO_PIN;
+  }
+
   const base::ListValue* pref =
       profile_->GetPrefs()->GetList(prefs::kPolicyPinnedLauncherApps);
   if (!pref)
-    return true;
+    return AppListControllerDelegate::PIN_EDITABLE;
+
+  // Pinned ARC apps policy defines the package name of the apps, that must
+  // be pinned. All the launch activities of any package in policy are pinned.
+  // In turn the input parameter to this function is app_id, which
+  // is 32 chars hash. In case of ARC app this is a hash of
+  // (package name + activity). This means that we must identify the package
+  // from the hash, and check if this package is pinned by policy.
+  const ArcAppListPrefs* const arc_prefs = ArcAppListPrefs::Get(profile());
+  std::string arc_app_packege_name;
+  if (arc_prefs) {
+    std::unique_ptr<ArcAppListPrefs::AppInfo> app_info =
+        arc_prefs->GetApp(app_id);
+    if (app_info)
+      arc_app_packege_name = app_info->package_name;
+  }
+
   for (size_t index = 0; index < pref->GetSize(); ++index) {
     const base::DictionaryValue* app = nullptr;
-    std::string the_app_id;
+    std::string app_id_or_package;
     if (pref->GetDictionary(index, &app) &&
-        app->GetString(ash::kPinnedAppsPrefAppIDPath, &the_app_id) &&
-        app_id == the_app_id)
-      return false;
+        app->GetString(ash::kPinnedAppsPrefAppIDPath, &app_id_or_package) &&
+        (app_id == app_id_or_package ||
+         arc_app_packege_name == app_id_or_package)) {
+      return AppListControllerDelegate::PIN_FIXED;
+    }
   }
-  return true;
+  return AppListControllerDelegate::PIN_EDITABLE;
 }
 
 void ChromeLauncherController::Pin(ash::ShelfID id) {
@@ -666,7 +519,7 @@ void ChromeLauncherController::Pin(ash::ShelfID id) {
 void ChromeLauncherController::Unpin(ash::ShelfID id) {
   LauncherItemController* controller = GetLauncherItemController(id);
   CHECK(controller);
-  bool can_pin = controller->CanPin();
+  const bool can_pin = controller->CanPin();
 
   if (controller->type() == LauncherItemController::TYPE_APP ||
       controller->locked()) {
@@ -765,44 +618,7 @@ bool ChromeLauncherController::IsPlatformApp(ash::ShelfID id) {
 void ChromeLauncherController::LaunchApp(const std::string& app_id,
                                          ash::LaunchSource source,
                                          int event_flags) {
-#if defined(OS_CHROMEOS)
-  if (ArcAppListPrefs::Get(profile_)->IsRegistered(app_id)) {
-    arc::LaunchApp(profile_, app_id);
-    return;
-  }
-#endif
-
-  // |extension| could be NULL when it is being unloaded for updating.
-  const Extension* extension = GetExtensionForAppID(app_id);
-  if (!extension)
-    return;
-
-  if (!extensions::util::IsAppLaunchableWithoutEnabling(app_id, profile_)) {
-    // Do nothing if there is already a running enable flow.
-    if (extension_enable_flow_)
-      return;
-
-    extension_enable_flow_.reset(
-        new ExtensionEnableFlow(profile_, app_id, this));
-    extension_enable_flow_->StartForNativeWindow(NULL);
-    return;
-  }
-
-  // The app will be created for the currently active profile.
-  AppLaunchParams params = CreateAppLaunchParamsWithEventFlags(
-      profile_, extension, event_flags, extensions::SOURCE_APP_LAUNCHER);
-  if (source != ash::LAUNCH_FROM_UNKNOWN &&
-      app_id == extensions::kWebStoreAppId) {
-    // Get the corresponding source string.
-    std::string source_value = GetSourceFromAppListSource(source);
-
-    // Set an override URL to include the source.
-    GURL extension_url = extensions::AppLaunchInfo::GetFullLaunchURL(extension);
-    params.override_url = net::AppendQueryParameter(
-        extension_url, extension_urls::kWebstoreSourceField, source_value);
-  }
-
-  OpenApplication(params);
+  launcher_controller_helper_->LaunchApp(app_id, source, event_flags);
 }
 
 void ChromeLauncherController::ActivateApp(const std::string& app_id,
@@ -819,7 +635,7 @@ void ChromeLauncherController::ActivateApp(const std::string& app_id,
   // Create a temporary application launcher item and use it to see if there are
   // running instances.
   std::unique_ptr<AppShortcutLauncherItemController> app_controller(
-      new AppShortcutLauncherItemController(app_id, this));
+      AppShortcutLauncherItemController::Create(app_id, this));
   if (!app_controller->GetRunningApplications().empty())
     app_controller->Activate(source);
   else
@@ -915,7 +731,7 @@ bool ChromeLauncherController::IsWindowedAppInLauncher(
 }
 
 void ChromeLauncherController::PinAppWithID(const std::string& app_id) {
-  if (CanPin(app_id))
+  if (GetPinnable(app_id) == AppListControllerDelegate::PIN_EDITABLE)
     DoPinAppWithID(app_id);
   else
     NOTREACHED();
@@ -932,7 +748,7 @@ void ChromeLauncherController::SetLaunchType(
 }
 
 void ChromeLauncherController::UnpinAppWithID(const std::string& app_id) {
-  if (CanPin(app_id))
+  if (GetPinnable(app_id) == AppListControllerDelegate::PIN_EDITABLE)
     DoUnpinAppWithID(app_id);
   else
     NOTREACHED();
@@ -989,7 +805,11 @@ void ChromeLauncherController::PersistPinnedState() {
       if (model_->items()[i].type == ash::TYPE_APP_SHORTCUT) {
         ash::ShelfID id = model_->items()[i].id;
         LauncherItemController* controller = GetLauncherItemController(id);
-        if (controller && IsPinned(id)) {
+        // Don't persist pinning state for apps that are handled internally and
+        // have pinnable state AppListControllerDelegate::NO_PIN.
+        if (controller && IsPinned(id) &&
+            GetPinnable(controller->app_id()) !=
+                AppListControllerDelegate::NO_PIN) {
           base::DictionaryValue* app_value = ash::CreateAppDict(
               controller->app_id());
           if (app_value) {
@@ -1003,8 +823,8 @@ void ChromeLauncherController::PersistPinnedState() {
       } else if (model_->items()[i].type == ash::TYPE_BROWSER_SHORTCUT) {
         PersistChromeItemIndex(i);
       } else if (model_->items()[i].type == ash::TYPE_APP_LIST) {
-        base::DictionaryValue* app_value = ash::CreateAppDict(
-            kAppShelfIdPlaceholder);
+        base::DictionaryValue* app_value =
+            ash::CreateAppDict(ash::kPinnedAppsPlaceholder);
         if (app_value)
           updater->Append(app_value);
       }
@@ -1026,7 +846,7 @@ Profile* ChromeLauncherController::profile() {
 
 void ChromeLauncherController::UpdateAppState(content::WebContents* contents,
                                               AppState app_state) {
-  std::string app_id = app_tab_helper_->GetAppID(contents);
+  std::string app_id = launcher_controller_helper_->GetAppID(contents);
 
   // Check if the gMail app is loaded and it matches the given content.
   // This special treatment is needed to address crbug.com/234268.
@@ -1065,7 +885,7 @@ ash::ShelfID ChromeLauncherController::GetShelfIDForWebContents(
     content::WebContents* contents) {
   DCHECK(contents);
 
-  std::string app_id = app_tab_helper_->GetAppID(contents);
+  std::string app_id = launcher_controller_helper_->GetAppID(contents);
 
   if (app_id.empty() && ContentCanBeHandledByGmailApp(contents))
     app_id = kGmailAppId;
@@ -1140,77 +960,27 @@ ChromeLauncherController::ActivateWindowOrMinimizeIfActive(
 }
 
 void ChromeLauncherController::OnShelfCreated(ash::Shelf* shelf) {
-  aura::Window* root_window =
-      shelf->shelf_widget()->GetNativeWindow()->GetRootWindow();
+  PrefService* prefs = profile_->GetPrefs();
+  const int64_t display = GetDisplayIDForShelf(shelf);
 
-  shelf->SetAutoHideBehavior(
-      GetShelfAutoHideBehaviorFromPrefs(profile_, root_window));
+  shelf->SetAutoHideBehavior(ash::GetShelfAutoHideBehaviorPref(prefs, display));
 
   if (ash::ShelfWidget::ShelfAlignmentAllowed())
-    shelf->SetAlignment(GetShelfAlignmentFromPrefs(profile_, root_window));
+    shelf->SetAlignment(ash::GetShelfAlignmentPref(prefs, display));
 }
 
 void ChromeLauncherController::OnShelfDestroyed(ash::Shelf* shelf) {}
 
 void ChromeLauncherController::OnShelfAlignmentChanged(ash::Shelf* shelf) {
-  const char* value = nullptr;
-  switch (shelf->alignment()) {
-    case ash::SHELF_ALIGNMENT_BOTTOM:
-      value = ash::kShelfAlignmentBottom;
-      break;
-    case ash::SHELF_ALIGNMENT_LEFT:
-      value = ash::kShelfAlignmentLeft;
-      break;
-    case ash::SHELF_ALIGNMENT_RIGHT:
-      value = ash::kShelfAlignmentRight;
-      break;
-    case ash::SHELF_ALIGNMENT_BOTTOM_LOCKED:
-      // This should not be a valid preference option for now. We only want to
-      // lock the shelf during login or when adding a user.
-      return;
-  }
-
-  aura::Window* root_window =
-      shelf->shelf_widget()->GetNativeWindow()->GetRootWindow();
-
-  UpdatePerDisplayPref(profile_->GetPrefs(), root_window,
-                       prefs::kShelfAlignment, value);
-
-  if (root_window == ash::Shell::GetPrimaryRootWindow()) {
-    // See comment in |kShelfAlignment| about why we have two prefs here.
-    profile_->GetPrefs()->SetString(prefs::kShelfAlignmentLocal, value);
-    profile_->GetPrefs()->SetString(prefs::kShelfAlignment, value);
-  }
+  ash::SetShelfAlignmentPref(profile_->GetPrefs(), GetDisplayIDForShelf(shelf),
+                             shelf->alignment());
 }
 
 void ChromeLauncherController::OnShelfAutoHideBehaviorChanged(
     ash::Shelf* shelf) {
-  const char* value = nullptr;
-  switch (shelf->GetAutoHideBehavior()) {
-    case ash::SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS:
-      value = ash::kShelfAutoHideBehaviorAlways;
-      break;
-    case ash::SHELF_AUTO_HIDE_BEHAVIOR_NEVER:
-      value = ash::kShelfAutoHideBehaviorNever;
-      break;
-    case ash::SHELF_AUTO_HIDE_ALWAYS_HIDDEN:
-      // This one should not be a valid preference option for now. We only want
-      // to completely hide it when we run in app mode - or while we temporarily
-      // hide the shelf as part of an animation (e.g. the multi user change).
-      return;
-  }
-
-  aura::Window* root_window =
-      shelf->shelf_widget()->GetNativeWindow()->GetRootWindow();
-
-  UpdatePerDisplayPref(profile_->GetPrefs(), root_window,
-                       prefs::kShelfAutoHideBehavior, value);
-
-  if (root_window == ash::Shell::GetPrimaryRootWindow()) {
-    // See comment in |kShelfAlignment| about why we have two prefs here.
-    profile_->GetPrefs()->SetString(prefs::kShelfAutoHideBehaviorLocal, value);
-    profile_->GetPrefs()->SetString(prefs::kShelfAutoHideBehavior, value);
-  }
+  ash::SetShelfAutoHideBehaviorPref(profile_->GetPrefs(),
+                                    GetDisplayIDForShelf(shelf),
+                                    shelf->auto_hide_behavior());
 }
 
 void ChromeLauncherController::ShelfItemAdded(int index) {
@@ -1265,9 +1035,8 @@ void ChromeLauncherController::ActiveUserChanged(
   // Update the user specific shell properties from the new user profile.
   UpdateAppLaunchersFromPref();
   SetShelfBehaviorsFromPrefs();
-#if defined(OS_CHROMEOS)
   SetVirtualKeyboardBehaviorFromPrefs();
-#endif  // defined(OS_CHROMEOS)
+
   // Restore the order of running, but unpinned applications for the activated
   // user.
   RestoreUnpinnedRunningApplicationOrder(user_email);
@@ -1347,17 +1116,6 @@ void ChromeLauncherController::OnAppSyncUIStatusChanged() {
     model_->set_status(ash::ShelfModel::STATUS_LOADING);
   else
     model_->set_status(ash::ShelfModel::STATUS_NORMAL);
-}
-
-void ChromeLauncherController::ExtensionEnableFlowFinished() {
-  LaunchApp(extension_enable_flow_->extension_id(),
-            ash::LAUNCH_FROM_UNKNOWN,
-            ui::EF_NONE);
-  extension_enable_flow_.reset();
-}
-
-void ChromeLauncherController::ExtensionEnableFlowAborted(bool user_initiated) {
-  extension_enable_flow_.reset();
 }
 
 ChromeLauncherAppMenuItems ChromeLauncherController::GetApplicationList(
@@ -1464,8 +1222,9 @@ ash::ShelfID ChromeLauncherController::CreateAppShortcutLauncherItem(
                                                ash::TYPE_APP_SHORTCUT);
 }
 
-void ChromeLauncherController::SetAppTabHelperForTest(AppTabHelper* helper) {
-  app_tab_helper_.reset(helper);
+void ChromeLauncherController::SetLauncherControllerHelperForTest(
+    LauncherControllerHelper* helper) {
+  launcher_controller_helper_.reset(helper);
 }
 
 void ChromeLauncherController::SetAppIconLoadersForTest(
@@ -1545,7 +1304,7 @@ ash::ShelfID ChromeLauncherController::CreateAppShortcutLauncherItemWithType(
     int index,
     ash::ShelfItemType shelf_item_type) {
   AppShortcutLauncherItemController* controller =
-      new AppShortcutLauncherItemController(app_id, this);
+      AppShortcutLauncherItemController::Create(app_id, this);
   ash::ShelfID shelf_id = InsertAppLauncherItem(
       controller, app_id, ash::STATUS_CLOSED, index, shelf_item_type);
   return shelf_id;
@@ -1568,7 +1327,7 @@ bool ChromeLauncherController::IsBrowserFromActiveUser(Browser* browser) {
 }
 
 bool ChromeLauncherController::ShelfBoundsChangesProbablyWithUser(
-    aura::Window* root_window,
+    ash::Shelf* shelf,
     const std::string& user_id) const {
   Profile* other_profile = multi_user_util::GetProfileFromAccountId(
       AccountId::FromUserEmail(user_id));
@@ -1578,21 +1337,22 @@ bool ChromeLauncherController::ShelfBoundsChangesProbablyWithUser(
   // Note: The Auto hide state from preferences is not the same as the actual
   // visibility of the shelf. Depending on all the various states (full screen,
   // no window on desktop, multi user, ..) the shelf could be shown - or not.
+  PrefService* prefs = profile_->GetPrefs();
+  PrefService* other_prefs = other_profile->GetPrefs();
+  const int64_t display = GetDisplayIDForShelf(shelf);
   bool currently_shown = ash::SHELF_AUTO_HIDE_BEHAVIOR_NEVER ==
-      GetShelfAutoHideBehaviorFromPrefs(profile_, root_window);
+                         ash::GetShelfAutoHideBehaviorPref(prefs, display);
   bool other_shown = ash::SHELF_AUTO_HIDE_BEHAVIOR_NEVER ==
-      GetShelfAutoHideBehaviorFromPrefs(other_profile, root_window);
+                     ash::GetShelfAutoHideBehaviorPref(other_prefs, display);
 
   return currently_shown != other_shown ||
-         GetShelfAlignmentFromPrefs(profile_, root_window) !=
-             GetShelfAlignmentFromPrefs(other_profile, root_window);
+         ash::GetShelfAlignmentPref(prefs, display) !=
+             ash::GetShelfAlignmentPref(other_prefs, display);
 }
 
 void ChromeLauncherController::OnUserProfileReadyToSwitch(Profile* profile) {
-#if defined(OS_CHROMEOS)
   if (user_switch_observer_.get())
     user_switch_observer_->OnUserProfileReadyToSwitch(profile);
-#endif
 }
 
 void ChromeLauncherController::LauncherItemClosed(ash::ShelfID id) {
@@ -1623,7 +1383,7 @@ void ChromeLauncherController::DoPinAppWithID(const std::string& app_id) {
   } else {
     // Otherwise, create a shortcut item for it.
     shelf_id = CreateAppShortcutLauncherItem(app_id, model_->item_count());
-    if (CanPin(app_id))
+    if (GetPinnable(app_id) == AppListControllerDelegate::PIN_EDITABLE)
       PersistPinnedState();
   }
 }
@@ -1674,7 +1434,8 @@ void ChromeLauncherController::UpdateAppLaunchersFromPref() {
   // into the pref state. Therefore we tell |persistPinnedState| to ignore any
   // invocations while we are running.
   base::AutoReset<bool> auto_reset(&ignore_persist_pinned_state_change_, true);
-  std::vector<std::string> pinned_apps = GetListOfPinnedAppsAndBrowser();
+  std::vector<std::string> pinned_apps = ash::GetPinnedAppsFromPrefs(
+      profile_->GetPrefs(), launcher_controller_helper_.get());
 
   int index = 0;
   int max_index = model_->item_count();
@@ -1691,7 +1452,7 @@ void ChromeLauncherController::UpdateAppLaunchersFromPref() {
   for (; index < max_index && pref_app_id != pinned_apps.end(); ++index) {
     // Check if we have an item which we need to handle.
     if (*pref_app_id == extension_misc::kChromeAppId ||
-        *pref_app_id == kAppShelfIdPlaceholder ||
+        *pref_app_id == ash::kPinnedAppsPlaceholder ||
         IsAppPinned(*pref_app_id)) {
       for (; index < max_index; ++index) {
         const ash::ShelfItem& item(model_->items()[index]);
@@ -1700,7 +1461,7 @@ void ChromeLauncherController::UpdateAppLaunchersFromPref() {
         if (item.type != ash::TYPE_APP_SHORTCUT && !is_app_list && !is_chrome)
           continue;
         LauncherItemController* controller = GetLauncherItemController(item.id);
-        if ((kAppShelfIdPlaceholder == *pref_app_id && is_app_list) ||
+        if ((ash::kPinnedAppsPlaceholder == *pref_app_id && is_app_list) ||
             (extension_misc::kChromeAppId == *pref_app_id && is_chrome) ||
             (controller && controller->app_id() == *pref_app_id)) {
           // Check if an item needs to be moved here.
@@ -1786,7 +1547,7 @@ void ChromeLauncherController::UpdateAppLaunchersFromPref() {
   for (; pref_app_id != pinned_apps.end(); ++pref_app_id) {
     // All items but the chrome and / or app list shortcut needs to be added.
     bool is_chrome = *pref_app_id == extension_misc::kChromeAppId;
-    bool is_app_list = *pref_app_id == kAppShelfIdPlaceholder;
+    bool is_app_list = *pref_app_id == ash::kPinnedAppsPlaceholder;
     // Coming here we know the next item which can be finalized, either the
     // chrome item or the app launcher. The final position is the end of the
     // list. The menu model will make sure that the item is grouped according
@@ -1815,8 +1576,8 @@ void ChromeLauncherController::SetShelfAutoHideBehaviorFromPrefs() {
   for (auto* window : ash::Shell::GetAllRootWindows()) {
     ash::Shelf* shelf = ash::Shelf::ForWindow(window);
     if (shelf) {
-      shelf->SetAutoHideBehavior(
-          GetShelfAutoHideBehaviorFromPrefs(profile_, window));
+      shelf->SetAutoHideBehavior(ash::GetShelfAutoHideBehaviorPref(
+          profile_->GetPrefs(), GetDisplayIDForShelf(shelf)));
     }
   }
 }
@@ -1827,8 +1588,10 @@ void ChromeLauncherController::SetShelfAlignmentFromPrefs() {
 
   for (auto* window : ash::Shell::GetAllRootWindows()) {
     ash::Shelf* shelf = ash::Shelf::ForWindow(window);
-    if (shelf)
-      shelf->SetAlignment(GetShelfAlignmentFromPrefs(profile_, window));
+    if (shelf) {
+      shelf->SetAlignment(ash::GetShelfAlignmentPref(
+          profile_->GetPrefs(), GetDisplayIDForShelf(shelf)));
+    }
   }
 }
 
@@ -1837,7 +1600,6 @@ void ChromeLauncherController::SetShelfBehaviorsFromPrefs() {
   SetShelfAlignmentFromPrefs();
 }
 
-#if defined(OS_CHROMEOS)
 void ChromeLauncherController::SetVirtualKeyboardBehaviorFromPrefs() {
   const PrefService* service = profile_->GetPrefs();
   const bool was_enabled = keyboard::IsKeyboardEnabled();
@@ -1856,7 +1618,6 @@ void ChromeLauncherController::SetVirtualKeyboardBehaviorFromPrefs() {
   else if (is_enabled && !was_enabled)
     ash::Shell::GetInstance()->CreateKeyboard();
 }
-#endif  // defined(OS_CHROMEOS)
 
 ash::ShelfItemStatus ChromeLauncherController::GetAppState(
     const std::string& app_id) {
@@ -1959,14 +1720,6 @@ void ChromeLauncherController::PersistChromeItemIndex(int index) {
   profile_->GetPrefs()->SetInteger(prefs::kShelfChromeIconIndex, index);
 }
 
-int ChromeLauncherController::GetChromeIconIndexFromPref() const {
-  size_t index = profile_->GetPrefs()->GetInteger(prefs::kShelfChromeIconIndex);
-  const base::ListValue* pinned_apps_pref =
-      profile_->GetPrefs()->GetList(prefs::kPinnedLauncherApps);
-  return std::max(static_cast<size_t>(0),
-                  std::min(pinned_apps_pref->GetSize(), index));
-}
-
 void ChromeLauncherController::MoveChromeOrApplistToFinalPosition(
     bool is_chrome,
     bool is_app_list,
@@ -2012,7 +1765,8 @@ int ChromeLauncherController::FindInsertionPoint(bool is_app_list) {
 int ChromeLauncherController::GetChromeIconIndexForCreation() {
   // We get the list of pinned apps as they currently would get pinned.
   // Within this list the chrome icon will be the correct location.
-  std::vector<std::string> pinned_apps = GetListOfPinnedAppsAndBrowser();
+  std::vector<std::string> pinned_apps = ash::GetPinnedAppsFromPrefs(
+      profile_->GetPrefs(), launcher_controller_helper_.get());
 
   std::vector<std::string>::iterator it =
       std::find(pinned_apps.begin(),
@@ -2027,88 +1781,6 @@ int ChromeLauncherController::GetChromeIconIndexForCreation() {
   // next |UpdateAppLaunchersFromPref()| call to correct it - it will come since
   // the pinning will be done then.
   return std::min(model_->item_count(), index);
-}
-
-std::vector<std::string>
-ChromeLauncherController::GetListOfPinnedAppsAndBrowser() {
-  // Adding the app list item to the list of items requires that the ID is not
-  // a valid and known ID for the extension system. The ID was constructed that
-  // way - but just to make sure...
-  DCHECK(!app_tab_helper_->IsValidIDForCurrentUser(kAppShelfIdPlaceholder));
-
-  std::vector<std::string> pinned_apps;
-
-  // Get the new incarnation of the list.
-  const base::ListValue* pinned_apps_pref =
-      profile_->GetPrefs()->GetList(prefs::kPinnedLauncherApps);
-
-  const base::ListValue* policy_pinned_apps_pref =
-      profile_->GetPrefs()->GetList(prefs::kPolicyPinnedLauncherApps);
-
-  // Keep track of the addition of the chrome and the app list icon.
-  bool chrome_icon_added = false;
-  bool app_list_icon_added = false;
-  size_t chrome_icon_index = GetChromeIconIndexFromPref();
-
-  // See if the chrome string is already in the pinned list and remove it if
-  // needed.
-  base::Value* chrome_app = ash::CreateAppDict(extension_misc::kChromeAppId);
-  if (chrome_app) {
-    chrome_icon_added = pinned_apps_pref->Find(*chrome_app) !=
-        pinned_apps_pref->end();
-    delete chrome_app;
-  }
-
-  if (policy_pinned_apps_pref) {
-    for (size_t index = 0; index < policy_pinned_apps_pref->GetSize();
-         ++index) {
-      const base::DictionaryValue* app = NULL;
-      std::string app_id;
-      if (policy_pinned_apps_pref->GetDictionary(index, &app) &&
-          app->GetString(ash::kPinnedAppsPrefAppIDPath, &app_id) &&
-          (std::find(pinned_apps.begin(), pinned_apps.end(), app_id) ==
-           pinned_apps.end()))
-        update_pinned_apps(
-            app_id, app_tab_helper_->IsValidIDForCurrentUser(app_id),
-            &pinned_apps, &chrome_icon_added, &app_list_icon_added);
-    }
-  }
-
-  for (size_t index = 0; index < pinned_apps_pref->GetSize(); ++index) {
-    // We need to position the chrome icon relative to it's place in the pinned
-    // preference list - even if an item of that list isn't shown yet.
-    if (index == chrome_icon_index && !chrome_icon_added) {
-      pinned_apps.push_back(extension_misc::kChromeAppId);
-      chrome_icon_added = true;
-    }
-    const base::DictionaryValue* app = NULL;
-    std::string app_id;
-    if (pinned_apps_pref->GetDictionary(index, &app) &&
-        app->GetString(ash::kPinnedAppsPrefAppIDPath, &app_id) &&
-        (std::find(pinned_apps.begin(), pinned_apps.end(), app_id) ==
-             pinned_apps.end())) {
-      bool pinned_by_policy;
-      if (app->GetBoolean(ash::kPinnedAppsPrefPinnedByPolicy,
-                          &pinned_by_policy) &&
-          pinned_by_policy) {
-        continue;
-      }
-      update_pinned_apps(
-          app_id, app_tab_helper_->IsValidIDForCurrentUser(app_id),
-          &pinned_apps, &chrome_icon_added, &app_list_icon_added);
-    }
-  }
-
-  // If not added yet, the chrome item will be the last item in the list.
-  if (!chrome_icon_added)
-    pinned_apps.push_back(extension_misc::kChromeAppId);
-
-  // If not added yet, add the app list item either at the end or at the
-  // beginning - depending on the shelf layout.
-  if (!app_list_icon_added) {
-    pinned_apps.insert(pinned_apps.begin(), kAppShelfIdPlaceholder);
-  }
-  return pinned_apps;
 }
 
 bool ChromeLauncherController::IsIncognito(
@@ -2158,13 +1830,13 @@ void ChromeLauncherController::SetShelfItemDelegate(
 void ChromeLauncherController::AttachProfile(Profile* profile) {
   profile_ = profile;
   // Either add the profile to the list of known profiles and make it the active
-  // one for some functions of AppTabHelper or create a new one.
-  if (!app_tab_helper_.get())
-    app_tab_helper_.reset(new LauncherAppTabHelper(profile_));
+  // one for some functions of LauncherControllerHelper or create a new one.
+  if (!launcher_controller_helper_.get())
+    launcher_controller_helper_.reset(new LauncherControllerHelper(profile_));
   else
-    app_tab_helper_->SetCurrentUser(profile_);
+    launcher_controller_helper_->SetCurrentUser(profile_);
   // TODO(skuhne): The AppIconLoaderImpl has the same problem. Each loaded
-  // image is associated with a profile (it's loader requires the profile).
+  // image is associated with a profile (its loader requires the profile).
   // Since icon size changes are possible, the icon could be requested to be
   // reloaded. However - having it not multi profile aware would cause problems
   // if the icon cache gets deleted upon user switch.
@@ -2173,11 +1845,9 @@ void ChromeLauncherController::AttachProfile(Profile* profile) {
           profile_, extension_misc::EXTENSION_ICON_SMALL, this));
   app_icon_loaders_.push_back(std::move(extension_app_icon_loader));
 
-#if defined(OS_CHROMEOS)
   std::unique_ptr<AppIconLoader> arc_app_icon_loader(new ArcAppIconLoader(
       profile_, extension_misc::EXTENSION_ICON_SMALL, this));
   app_icon_loaders_.push_back(std::move(arc_app_icon_loader));
-#endif
 
   pref_change_registrar_.Init(profile_->GetPrefs());
   pref_change_registrar_.Add(
@@ -2201,22 +1871,18 @@ void ChromeLauncherController::AttachProfile(Profile* profile) {
       prefs::kShelfPreferences,
       base::Bind(&ChromeLauncherController::SetShelfBehaviorsFromPrefs,
                  base::Unretained(this)));
-#if defined(OS_CHROMEOS)
   pref_change_registrar_.Add(
       prefs::kTouchVirtualKeyboardEnabled,
       base::Bind(&ChromeLauncherController::SetVirtualKeyboardBehaviorFromPrefs,
                  base::Unretained(this)));
-#endif  // defined(OS_CHROMEOS)
 
   std::unique_ptr<LauncherAppUpdater> extension_app_updater(
       new LauncherExtensionAppUpdater(this, profile_));
   app_updaters_.push_back(std::move(extension_app_updater));
 
-#if defined(OS_CHROMEOS)
   std::unique_ptr<LauncherAppUpdater> arc_app_updater(
       new LauncherArcAppUpdater(this, profile_));
   app_updaters_.push_back(std::move(arc_app_updater));
-#endif
 }
 
 void ChromeLauncherController::ReleaseProfile() {

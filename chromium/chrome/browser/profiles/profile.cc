@@ -146,6 +146,8 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
 
 #if defined(OS_ANDROID)
   registry->RegisterBooleanPref(prefs::kClickedUpdateMenuItem, false);
+  registry->RegisterStringPref(prefs::kLatestVersionWhenClickedUpdateMenuItem,
+                               std::string());
 #endif
 
 #if defined(ENABLE_MEDIA_ROUTER)
@@ -163,6 +165,10 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
       prefs::kMediaRouterFirstRunFlowAcknowledged,
       false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+#endif
+
+#if defined(OS_CHROMEOS)
+  registry->RegisterBooleanPref(prefs::kAllowScreenLock, true);
 #endif
 }
 

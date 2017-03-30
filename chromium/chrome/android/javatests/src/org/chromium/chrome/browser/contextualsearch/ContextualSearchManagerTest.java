@@ -16,17 +16,18 @@ import android.content.IntentFilter;
 import android.graphics.Point;
 import android.os.Environment;
 import android.os.SystemClock;
-import android.preference.PreferenceManager;
-import android.test.FlakyTest;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
@@ -57,6 +58,7 @@ import org.chromium.content.browser.test.util.CallbackHelper;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.DOMUtils;
+import org.chromium.content.browser.test.util.KeyUtils;
 import org.chromium.content.browser.test.util.TouchCommon;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.base.PageTransition;
@@ -482,8 +484,7 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
      * @param keycode The key's code.
      */
     private void pressKey(int keycode) {
-        getInstrumentation().sendKeyDownUpSync(keycode);
-        getInstrumentation().waitForIdleSync();
+        KeyUtils.singleKeyEventActivity(getInstrumentation(), getActivity(), keycode);
     }
 
     /**
@@ -911,7 +912,7 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                PreferenceManager.getDefaultSharedPreferences(getActivity()).edit().clear().apply();
+                ContextUtils.getAppSharedPreferences().edit().clear().apply();
             }
         });
     }
@@ -1515,6 +1516,7 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     @SmallTest
     @Feature({"ContextualSearch"})
     @Restriction({ChromeRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    @DisableIf.Build(supported_abis_includes = "arm64-v8a", message = "crbug.com/596533")
     public void testTapLimitForDecided() throws InterruptedException, TimeoutException {
         mPolicy.setTapLimitForDecidedForTesting(2);
         clickToTriggerPrefetch();
@@ -1543,6 +1545,7 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     @SmallTest
     @Feature({"ContextualSearch"})
     @Restriction({ChromeRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    @DisableIf.Build(supported_abis_includes = "arm64-v8a", message = "crbug.com/596533")
     public void testTapLimitForUndecided() throws InterruptedException, TimeoutException {
         mPolicy.setTapLimitForUndecidedForTesting(2);
         mPolicy.overrideDecidedStateForTesting(false);
@@ -1693,6 +1696,7 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     @SmallTest
     @Feature({"ContextualSearch"})
     @Restriction({ChromeRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    @DisableIf.Build(supported_abis_includes = "arm64-v8a", message = "crbug.com/596533")
     public void testAppMenuSuppressedWhenExpanded() throws InterruptedException, TimeoutException {
         clickWordNode("states");
         tapPeekingBarToExpandAndAssert();
@@ -1784,6 +1788,7 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     @SmallTest
     @Feature({"ContextualSearch"})
     @Restriction({ChromeRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    @DisableIf.Build(supported_abis_includes = "arm64-v8a", message = "crbug.com/596533")
     public void testPromoOpenCountForUndecided() throws InterruptedException, TimeoutException {
         mPolicy.overrideDecidedStateForTesting(false);
 
@@ -1811,6 +1816,7 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     @SmallTest
     @Feature({"ContextualSearch"})
     @Restriction({ChromeRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    @DisableIf.Build(supported_abis_includes = "arm64-v8a", message = "crbug.com/596533")
     public void testPromoOpenCountForDecided() throws InterruptedException, TimeoutException {
         mPolicy.overrideDecidedStateForTesting(true);
 
@@ -2088,6 +2094,7 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     @Feature({"ContextualSearch"})
     @Restriction({ChromeRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
     @CommandLineFlags.Add(ContextualSearchFieldTrial.PEEK_PROMO_ENABLED + "=true")
+    @DisableIf.Build(supported_abis_includes = "arm64-v8a", message = "crbug.com/596533")
     public void testLongPressShowsPeekPromo() throws InterruptedException, TimeoutException {
         // Must be in undecided state in order to trigger the Peek Promo.
         mPolicy.overrideDecidedStateForTesting(false);

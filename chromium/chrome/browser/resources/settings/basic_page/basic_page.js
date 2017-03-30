@@ -5,16 +5,11 @@
 /**
  * @fileoverview
  * 'settings-basic-page' is the settings page containing the basic settings.
- *
- * Example:
- *
- *    <iron-animated-pages>
- *      <settings-basic-page prefs="{{prefs}}"></settings-basic-page>
- *      ... other pages ...
- *    </iron-animated-pages>
  */
 Polymer({
   is: 'settings-basic-page',
+
+  behaviors: [SettingsPageVisibility, RoutableBehavior],
 
   properties: {
     /**
@@ -27,6 +22,7 @@ Polymer({
 
     /**
      * The current active route.
+     * @type {SettingsRoute}
      */
     currentRoute: {
       type: Object,
@@ -58,8 +54,6 @@ Polymer({
     /** @override */
     this.scroller = this.parentElement;
   },
-
-  behaviors: [I18nBehavior, SettingsPageVisibility, RoutableBehavior],
 
   onResetDone_: function() {
     this.showResetProfileBanner_ = false;

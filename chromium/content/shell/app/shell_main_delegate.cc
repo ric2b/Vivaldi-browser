@@ -39,8 +39,8 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/base/ui_base_switches.h"
+#include "ui/display/display_switches.h"
 #include "ui/events/event_switches.h"
-#include "ui/gfx/switches.h"
 #include "ui/gl/gl_switches.h"
 
 #include "ipc/ipc_message.h"  // For IPC_MESSAGE_LOG_ENABLED.
@@ -204,6 +204,11 @@ bool ShellMainDelegate::BasicStartupComplete(int* exit_code) {
 
     command_line.AppendSwitch(switches::kEnablePartialRaster);
 
+    if (!command_line.HasSwitch(switches::kForceGpuRasterization) &&
+        !command_line.HasSwitch(switches::kEnableGpuRasterization)) {
+      command_line.AppendSwitch(switches::kDisableGpuRasterization);
+    }
+
     // Unless/until WebM files are added to the media layout tests, we need to
     // avoid removing MP4/H264/AAC so that layout tests can run on Android.
 #if !defined(OS_ANDROID)
@@ -273,7 +278,7 @@ int ShellMainDelegate::RunProcess(
 #if !defined(OS_ANDROID)
   // Android stores the BrowserMainRunner instance as a scoped member pointer
   // on the ShellMainDelegate class because of different object lifetime.
-  scoped_ptr<BrowserMainRunner> browser_runner_;
+  std::unique_ptr<BrowserMainRunner> browser_runner_;
 #endif
 
   base::trace_event::TraceLog::GetInstance()->SetProcessName("Browser");

@@ -15,8 +15,8 @@
 namespace blink {
 
 class BodyStreamBuffer;
-class ExecutionContext;
 class FetchHeaderList;
+class ScriptState;
 class WebServiceWorkerResponse;
 
 class MODULES_EXPORT FetchResponseData final : public GarbageCollectedFinalized<FetchResponseData> {
@@ -34,12 +34,15 @@ public:
     static FetchResponseData* createNetworkErrorResponse();
     static FetchResponseData* createWithBuffer(BodyStreamBuffer*);
 
-    FetchResponseData* createBasicFilteredResponse();
-    FetchResponseData* createCORSFilteredResponse();
-    FetchResponseData* createOpaqueFilteredResponse();
-    FetchResponseData* createOpaqueRedirectFilteredResponse();
+    FetchResponseData* createBasicFilteredResponse() const;
+    FetchResponseData* createCORSFilteredResponse() const;
+    FetchResponseData* createOpaqueFilteredResponse() const;
+    FetchResponseData* createOpaqueRedirectFilteredResponse() const;
 
-    FetchResponseData* clone(ExecutionContext*);
+    FetchResponseData* internalResponse() { return m_internalResponse; }
+    const FetchResponseData* internalResponse() const { return m_internalResponse; }
+
+    FetchResponseData* clone(ScriptState*);
 
     Type getType() const { return m_type; }
     const KURL& url() const { return m_url; }
@@ -64,6 +67,7 @@ public:
     // If the type is Basic or CORS, replaces |m_buffer| and
     // |m_internalResponse->m_buffer|.
     // If the type is Error or Opaque, does nothing.
+    // Call Response::refreshBody after calling this function.
     void replaceBodyStreamBuffer(BodyStreamBuffer*);
 
     // Does not call response.setBlobDataHandle().

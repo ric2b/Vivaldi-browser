@@ -11,12 +11,12 @@ import android.content.ContextWrapper;
 import android.os.ConditionVariable;
 import android.os.Handler;
 import android.os.Looper;
-import android.test.FlakyTest;
 import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.PathUtils;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.net.CronetEngine.UrlRequestInfo;
 import org.chromium.net.TestUrlRequestCallback.ResponseStep;
 import org.chromium.net.test.EmbeddedTestServer;
@@ -342,9 +342,8 @@ public class CronetUrlRequestContextTest extends CronetTestBase {
     @SmallTest
     @Feature({"Cronet"})
     @SuppressWarnings("deprecation")
-    https://crbug.com/592444
     */
-    @FlakyTest
+    @FlakyTest(message = "https://crbug.com/592444")
     public void testRequestFinishedListenerFailedRequest() throws Exception {
         String connectionRefusedUrl = "http://127.0.0.1:3";
         mTestFramework = startCronetTestFramework();
@@ -420,8 +419,12 @@ public class CronetUrlRequestContextTest extends CronetTestBase {
         mTestFramework.mCronetEngine.shutdown();
     }
 
+    /**
     @SmallTest
     @Feature({"Cronet"})
+    https://crbug.com/596929
+    */
+    @FlakyTest
     public void testShutdown() throws Exception {
         mTestFramework = startCronetTestFramework();
         TestUrlRequestCallback callback = new ShutdownTestUrlRequestCallback();
@@ -553,9 +556,8 @@ public class CronetUrlRequestContextTest extends CronetTestBase {
     /*
     @SmallTest
     @Feature({"Cronet"})
-    https://crbug.com/592444
     */
-    @FlakyTest
+    @FlakyTest(message = "https://crbug.com/592444")
     public void testShutdownAfterError() throws Exception {
         mTestFramework = startCronetTestFramework();
         TestUrlRequestCallback callback = new ShutdownTestUrlRequestCallback();
@@ -1110,6 +1112,7 @@ public class CronetUrlRequestContextTest extends CronetTestBase {
 
     @SmallTest
     @Feature({"Cronet"})
+    @OnlyRunNativeCronet
     public void testSkipLibraryLoading() throws Exception {
         CronetEngine.Builder builder = new CronetEngine.Builder(getContext());
         TestBadLibraryLoader loader = new TestBadLibraryLoader();
@@ -1122,5 +1125,31 @@ public class CronetUrlRequestContextTest extends CronetTestBase {
         } catch (UnsatisfiedLinkError e) {
             assertTrue(loader.wasCalled());
         }
+    }
+
+    // Creates a CronetEngine on another thread and then one on the main thread.  This shouldn't
+    // crash.
+    @SmallTest
+    @Feature({"Cronet"})
+    public void testThreadedStartup() throws Exception {
+        final ConditionVariable otherThreadDone = new ConditionVariable();
+        final ConditionVariable uiThreadDone = new ConditionVariable();
+        new Handler(Looper.getMainLooper()).post(new Runnable() {
+            public void run() {
+                final CronetEngine.Builder builder =
+                        new CronetEngine.Builder(getContext()).setLibraryName("cronet_tests");
+                new Thread() {
+                    public void run() {
+                        CronetEngine cronetEngine = builder.build();
+                        otherThreadDone.open();
+                        cronetEngine.shutdown();
+                    }
+                }.start();
+                otherThreadDone.block();
+                builder.build().shutdown();
+                uiThreadDone.open();
+            }
+        });
+        assertTrue(uiThreadDone.block(1000));
     }
 }

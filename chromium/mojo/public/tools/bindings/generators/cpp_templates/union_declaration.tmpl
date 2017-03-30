@@ -45,10 +45,8 @@ class {{class_name}} {
   {{enum_name}} tag;
   Union_ data;
 
-  void EncodePointersAndHandles(std::vector<mojo::Handle>* handles);
-  void DecodePointersAndHandles(std::vector<mojo::Handle>* handles);
+  void EncodePointers();
+  void DecodePointers();
 };
-static_assert(sizeof({{class_name}}) == 16,
+static_assert(sizeof({{class_name}}) == mojo::internal::kUnionDataSize,
               "Bad sizeof({{class_name}})");
-static_assert(sizeof({{class_name}}::Union_) == 8,
-              "Bad sizeof({{class_name}}::Union_)");

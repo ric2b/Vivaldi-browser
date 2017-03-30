@@ -13,9 +13,11 @@ import android.util.Base64;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.ShortcutHelper;
+import org.chromium.chrome.browser.ShortcutSource;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.metrics.LaunchMetrics;
 import org.chromium.chrome.browser.tab.Tab;
@@ -63,7 +65,7 @@ public class WebappLauncherActivity extends Activity {
             // Permit the launch to a standalone web app frame if the intent was sent by Chrome, or
             // if the MAC is present and valid for the URL to be opened.
             boolean isTrusted = IntentHandler.wasIntentSenderChrome(intent,
-                    ApplicationStatus.getApplicationContext());
+                    ContextUtils.getApplicationContext());
             boolean isUrlValid = (webappMac != null
                     && WebappAuthenticator.isUrlValid(this, webappUrl, webappMac));
 
@@ -86,6 +88,17 @@ public class WebappLauncherActivity extends Activity {
                 // Activity.
                 launchIntent.setAction(Intent.ACTION_VIEW);
                 launchIntent.setData(Uri.parse(WebappActivity.WEBAPP_SCHEME + "://" + webappId));
+
+                // If this is launching from a notification, we want to ensure that the URL being
+                // launched is the URL in the intent. If a paused WebappActivity exists for this id,
+                // then by default it will be focused and we have no way of sending the desired URL
+                // to it (the intent is swallowed). As a workaround, set the CLEAR_TOP flag to
+                // ensure that the existing Activity is cleared and relaunched with this intent.
+                // TODO(dominickn): ideally, we want be able to route an intent to
+                // WebappActivity.onNewIntent instead of restarting the Activity.
+                if (webappSource == ShortcutSource.NOTIFICATION) {
+                    launchIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                }
             } else {
                 Log.e(TAG, "Shortcut (%s) opened in Chrome.", webappUrl);
 

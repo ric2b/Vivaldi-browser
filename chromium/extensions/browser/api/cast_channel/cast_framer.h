@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
@@ -48,9 +49,9 @@ class MessageFramer {
   //         if no error occurred.
   // Returns A pointer to a parsed CastMessage if a message was received
   //         in its entirety, nullptr otherwise.
-  scoped_ptr<CastMessage> Ingest(size_t num_bytes,
-                                 size_t* message_length,
-                                 ChannelError* error);
+  std::unique_ptr<CastMessage> Ingest(size_t num_bytes,
+                                      size_t* message_length,
+                                      ChannelError* error);
 
   // Message header struct. If fields are added, be sure to update
   // header_size().  Public to allow use of *_size() methods in unit tests.

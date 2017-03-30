@@ -39,11 +39,14 @@ class MediaRouterWebUIMessageHandler : public content::WebUIMessageHandler {
   // Methods to update the status displayed by the dialog.
   void UpdateSinks(const std::vector<MediaSinkWithCastModes>& sinks);
   void UpdateRoutes(const std::vector<MediaRoute>& routes,
-                    const std::vector<MediaRoute::Id>& joinable_route_ids);
+                    const std::vector<MediaRoute::Id>& joinable_route_ids,
+                    const std::unordered_map<MediaRoute::Id, MediaCastMode>&
+                        current_cast_modes);
   void UpdateCastModes(const CastModeSet& cast_modes,
                        const std::string& source_host);
   void OnCreateRouteResponseReceived(const MediaSink::Id& sink_id,
                                      const MediaRoute* route);
+  void ReturnSearchResult(const std::string& sink_id);
 
   // Does not take ownership of |issue|. Note that |issue| can be nullptr, when
   // there are no more issues.
@@ -54,6 +57,9 @@ class MediaRouterWebUIMessageHandler : public content::WebUIMessageHandler {
   void UpdateMaxDialogHeight(int height);
 
   void SetWebUIForTest(content::WebUI* webui);
+  void set_off_the_record_for_test(bool off_the_record) {
+    off_the_record_ = off_the_record;
+  }
 
  private:
   // WebUIMessageHandler implementation.
@@ -80,6 +86,7 @@ class MediaRouterWebUIMessageHandler : public content::WebUIMessageHandler {
   void OnReportSinkCount(const base::ListValue* args);
   void OnReportTimeToClickSink(const base::ListValue* args);
   void OnReportTimeToInitialActionClose(const base::ListValue* args);
+  void OnSearchSinksAndCreateRoute(const base::ListValue* args);
   void OnInitialDataReceived(const base::ListValue* args);
 
   // Performs an action for an Issue of |type|.
@@ -93,10 +100,28 @@ class MediaRouterWebUIMessageHandler : public content::WebUIMessageHandler {
   // initializing the WebUI.
   void MaybeUpdateFirstRunFlowData();
 
+  // Returns the current cast mode for the route with ID |route_id| or -1 if the
+  // route has no current cast mode.
+  int CurrentCastModeForRouteId(
+      const MediaRoute::Id& route_id,
+      const std::unordered_map<MediaRoute::Id, MediaCastMode>&
+          current_cast_modes) const;
+
+  // Converts |routes| and |joinable_route_ids| into base::ListValue that can be
+  // passed to WebUI.
+  std::unique_ptr<base::ListValue> RoutesToValue(
+      const std::vector<MediaRoute>& routes,
+      const std::vector<MediaRoute::Id>& joinable_route_ids,
+      const std::unordered_map<MediaRoute::Id, MediaCastMode>&
+          current_cast_modes) const;
+
   // Retrieve the account info for email and domain of signed in users. This is
   // used when updating sinks to determine if identity should be displayed.
   // Marked virtual for tests.
   virtual AccountInfo GetAccountInfo();
+
+  // |true| if the associated Profile is off the record.
+  bool off_the_record_;
 
   // Keeps track of whether a command to close the dialog has been issued.
   bool dialog_closing_;

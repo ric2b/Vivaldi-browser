@@ -11,7 +11,7 @@
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "sync/engine/commit_queue.h"
 #include "sync/internal_api/public/activation_context.h"
 #include "sync/internal_api/public/processor_entity_tracker.h"
@@ -80,7 +80,9 @@ SharedModelTypeProcessor::SharedModelTypeProcessor(syncer::ModelType type,
                                                    ModelTypeService* service)
     : type_(type),
       is_metadata_loaded_(false),
+      is_initial_pending_data_loaded_(false),
       service_(service),
+      error_handler_(nullptr),
       weak_ptr_factory_(this) {
   DCHECK(service);
 }
@@ -96,25 +98,36 @@ SharedModelTypeProcessor::CreateAsChangeProcessor(syncer::ModelType type,
 }
 
 void SharedModelTypeProcessor::OnSyncStarting(
+    syncer::DataTypeErrorHandler* error_handler,
     const StartCallback& start_callback) {
   DCHECK(CalledOnValidThread());
   DCHECK(start_callback_.is_null());
   DCHECK(!IsConnected());
+  DCHECK(error_handler);
   DVLOG(1) << "Sync is starting for " << ModelTypeToString(type_);
 
+  error_handler_ = error_handler;
   start_callback_ = start_callback;
   ConnectIfReady();
 }
 
 void SharedModelTypeProcessor::OnMetadataLoaded(
+    syncer::SyncError error,
     std::unique_ptr<MetadataBatch> batch) {
   DCHECK(CalledOnValidThread());
   DCHECK(entities_.empty());
   DCHECK(!is_metadata_loaded_);
   DCHECK(!IsConnected());
 
+  is_metadata_loaded_ = true;
   // Flip this flag here to cover all cases where we don't need to load data.
-  is_pending_commit_data_loaded_ = true;
+  is_initial_pending_data_loaded_ = true;
+
+  if (error.IsSet()) {
+    start_error_ = error;
+    ConnectIfReady();
+    return;
+  }
 
   if (batch->GetDataTypeState().initial_sync_done()) {
     EntityMetadataMap metadata_map(batch->TakeAllMetadata());
@@ -130,10 +143,11 @@ void SharedModelTypeProcessor::OnMetadataLoaded(
     }
     data_type_state_ = batch->GetDataTypeState();
     if (!entities_to_commit.empty()) {
-      is_pending_commit_data_loaded_ = false;
-      service_->GetData(entities_to_commit,
-                        base::Bind(&SharedModelTypeProcessor::OnDataLoaded,
-                                   weak_ptr_factory_.GetWeakPtr()));
+      is_initial_pending_data_loaded_ = false;
+      service_->GetData(
+          entities_to_commit,
+          base::Bind(&SharedModelTypeProcessor::OnInitialPendingDataLoaded,
+                     weak_ptr_factory_.GetWeakPtr()));
     }
   } else {
     // First time syncing; initialize metadata.
@@ -141,39 +155,27 @@ void SharedModelTypeProcessor::OnMetadataLoaded(
         GetSpecificsFieldNumberFromModelType(type_));
   }
 
-  is_metadata_loaded_ = true;
   ConnectIfReady();
-}
-
-void SharedModelTypeProcessor::OnDataLoaded(
-    syncer::SyncError error,
-    std::unique_ptr<DataBatch> data_batch) {
-  while (data_batch->HasNext()) {
-    TagAndData data = data_batch->Next();
-    ProcessorEntityTracker* entity = GetEntityForTag(data.first);
-    // If the entity wasn't deleted or updated with new commit.
-    if (entity != nullptr && entity->RequiresCommitData()) {
-      entity->CacheCommitData(data.second.get());
-    }
-  }
-  is_pending_commit_data_loaded_ = true;
-  FlushPendingCommitRequests();
 }
 
 void SharedModelTypeProcessor::ConnectIfReady() {
   DCHECK(CalledOnValidThread());
-  if (!is_metadata_loaded_ || start_callback_.is_null()) {
+  if (!is_metadata_loaded_ || !is_initial_pending_data_loaded_ ||
+      start_callback_.is_null()) {
     return;
   }
 
-  std::unique_ptr<ActivationContext> activation_context =
-      base::WrapUnique(new ActivationContext);
-  activation_context->data_type_state = data_type_state_;
-  activation_context->type_processor =
-      base::WrapUnique(new ModelTypeProcessorProxy(
-          weak_ptr_factory_.GetWeakPtr(), base::ThreadTaskRunnerHandle::Get()));
+  std::unique_ptr<ActivationContext> activation_context;
 
-  start_callback_.Run(syncer::SyncError(), std::move(activation_context));
+  if (!start_error_.IsSet()) {
+    activation_context = base::WrapUnique(new ActivationContext);
+    activation_context->data_type_state = data_type_state_;
+    activation_context->type_processor = base::WrapUnique(
+        new ModelTypeProcessorProxy(weak_ptr_factory_.GetWeakPtr(),
+                                    base::ThreadTaskRunnerHandle::Get()));
+  }
+
+  start_callback_.Run(start_error_, std::move(activation_context));
   start_callback_.Reset();
 }
 
@@ -186,7 +188,7 @@ bool SharedModelTypeProcessor::IsConnected() const {
   return !!worker_;
 }
 
-void SharedModelTypeProcessor::Disable() {
+void SharedModelTypeProcessor::DisableSync() {
   DCHECK(CalledOnValidThread());
   std::unique_ptr<MetadataChangeList> change_list =
       service_->CreateMetadataChangeList();
@@ -196,10 +198,17 @@ void SharedModelTypeProcessor::Disable() {
   change_list->ClearDataTypeState();
   // Nothing to do if this fails, so just ignore the error it might return.
   service_->ApplySyncChanges(std::move(change_list), EntityChangeList());
+}
 
-  // Destroy this object.
-  // TODO(pavely): Revisit whether there's a better way to do this deletion.
-  service_->clear_change_processor();
+syncer::SyncError SharedModelTypeProcessor::CreateAndUploadError(
+    const tracked_objects::Location& location,
+    const std::string& message) {
+  if (error_handler_) {
+    return error_handler_->CreateAndUploadError(location, message, type_);
+  } else {
+    return syncer::SyncError(location, syncer::SyncError::DATATYPE_ERROR,
+                             message, type_);
+  }
 }
 
 void SharedModelTypeProcessor::ConnectSync(
@@ -253,7 +262,7 @@ void SharedModelTypeProcessor::Put(const std::string& tag,
       data->creation_time = data->modification_time;
     }
     entity = CreateEntity(tag, *data);
-  } else if (entity->MatchesSpecificsHash(data->specifics)) {
+  } else if (entity->MatchesData(*data)) {
     // Ignore changes that don't actually change anything.
     return;
   }
@@ -300,15 +309,10 @@ void SharedModelTypeProcessor::FlushPendingCommitRequests() {
   if (!data_type_state_.initial_sync_done())
     return;
 
-  // Dont send anything if the initial data load is incomplete.
-  if (!is_pending_commit_data_loaded_)
-    return;
-
   // TODO(rlarocque): Do something smarter than iterate here.
   for (auto it = entities_.begin(); it != entities_.end(); ++it) {
     ProcessorEntityTracker* entity = it->second.get();
-    if (entity->RequiresCommitRequest()) {
-      DCHECK(!entity->RequiresCommitData());
+    if (entity->RequiresCommitRequest() && !entity->RequiresCommitData()) {
       CommitRequestData request;
       entity->InitializeCommitRequestData(&request);
       commit_requests.push_back(request);
@@ -337,9 +341,7 @@ void SharedModelTypeProcessor::OnCommitCompleted(
       continue;
     }
 
-    entity->ReceiveCommitResponse(data.id, data.sequence_number,
-                                  data.response_version,
-                                  data_type_state_.encryption_key_name());
+    entity->ReceiveCommitResponse(data);
 
     if (entity->CanClearMetadata()) {
       change_list->ClearMetadata(entity->client_tag());
@@ -349,8 +351,11 @@ void SharedModelTypeProcessor::OnCommitCompleted(
     }
   }
 
-  // TODO(stanisc): crbug.com/570085: Error handling.
-  service_->ApplySyncChanges(std::move(change_list), EntityChangeList());
+  syncer::SyncError error =
+      service_->ApplySyncChanges(std::move(change_list), EntityChangeList());
+  if (error.IsSet()) {
+    error_handler_->OnSingleDataTypeUnrecoverableError(error);
+  }
 }
 
 void SharedModelTypeProcessor::OnUpdateReceived(
@@ -371,110 +376,155 @@ void SharedModelTypeProcessor::OnUpdateReceived(
       data_type_state.encryption_key_name();
   data_type_state_ = data_type_state;
 
+  // If new encryption requirements come from the server, the entities that are
+  // in |updates| will be recorded here so they can be ignored during the
+  // re-encryption phase at the end.
+  std::unordered_set<std::string> already_updated;
+
   for (const UpdateResponseData& update : updates) {
-    const EntityData& data = update.entity.value();
-    const std::string& client_tag_hash = data.client_tag_hash;
+    ProcessorEntityTracker* entity = ProcessUpdate(update, &entity_changes);
 
-    ProcessorEntityTracker* entity = GetEntityForTagHash(client_tag_hash);
-    if (entity == nullptr) {
-      if (data.is_deleted()) {
-        DLOG(WARNING) << "Received remote delete for a non-existing item."
-                      << " client_tag_hash: " << client_tag_hash;
-        continue;
-      }
-
-      entity = CreateEntity(data);
-      entity_changes.push_back(
-          EntityChange::CreateAdd(entity->client_tag(), update.entity));
-      entity->RecordAcceptedUpdate(update);
-    } else if (entity->UpdateIsReflection(update.response_version)) {
-      // Seen this update before; just ignore it.
+    if (!entity) {
+      // The update should be ignored.
       continue;
-    } else if (entity->IsUnsynced()) {
-      ConflictResolution::Type resolution_type =
-          ResolveConflict(update, entity, &entity_changes);
-      UMA_HISTOGRAM_ENUMERATION("Sync.ResolveConflict", resolution_type,
-                                ConflictResolution::TYPE_SIZE);
-    } else if (data.is_deleted()) {
-      // The entity was deleted; inform the service. Note that the local data
-      // can never be deleted at this point because it would have either been
-      // acked (the add case) or pending (the conflict case).
-      DCHECK(!entity->metadata().is_deleted());
-      entity_changes.push_back(
-          EntityChange::CreateDelete(entity->client_tag()));
-      entity->RecordAcceptedUpdate(update);
-    } else if (!entity->MatchesSpecificsHash(data.specifics)) {
-      // Specifics have changed, so update the service.
-      entity_changes.push_back(
-          EntityChange::CreateUpdate(entity->client_tag(), update.entity));
-      entity->RecordAcceptedUpdate(update);
-    } else {
-      // No data change; still record that the update was received.
-      entity->RecordAcceptedUpdate(update);
-    }
-
-    // If the received entity has out of date encryption, we schedule another
-    // commit to fix it.
-    if (data_type_state_.encryption_key_name() != update.encryption_key_name) {
-      DVLOG(2) << ModelTypeToString(type_) << ": Requesting re-encrypt commit "
-               << update.encryption_key_name << " -> "
-               << data_type_state_.encryption_key_name();
-      entity->UpdateDesiredEncryptionKey(
-          data_type_state_.encryption_key_name());
     }
 
     if (entity->CanClearMetadata()) {
       metadata_changes->ClearMetadata(entity->client_tag());
       entities_.erase(entity->metadata().client_tag_hash());
     } else {
-      // TODO(stanisc): crbug.com/521867: Do something special when conflicts
-      // are detected.
       metadata_changes->UpdateMetadata(entity->client_tag(),
                                        entity->metadata());
+    }
+
+    if (got_new_encryption_requirements) {
+      already_updated.insert(entity->client_tag());
     }
   }
 
   if (got_new_encryption_requirements) {
-    for (auto it = entities_.begin(); it != entities_.end(); ++it) {
-      it->second->UpdateDesiredEncryptionKey(
-          data_type_state_.encryption_key_name());
-    }
+    RecommitAllForEncryption(already_updated, metadata_changes.get());
   }
 
   // Inform the service of the new or updated data.
-  // TODO(stanisc): crbug.com/570085: Error handling.
-  service_->ApplySyncChanges(std::move(metadata_changes), entity_changes);
+  syncer::SyncError error =
+      service_->ApplySyncChanges(std::move(metadata_changes), entity_changes);
 
-  // We may have new reasons to commit by the time this function is done.
-  FlushPendingCommitRequests();
+  if (error.IsSet()) {
+    error_handler_->OnSingleDataTypeUnrecoverableError(error);
+  } else {
+    // There may be new reasons to commit by the time this function is done.
+    FlushPendingCommitRequests();
+  }
+}
+
+ProcessorEntityTracker* SharedModelTypeProcessor::ProcessUpdate(
+    const UpdateResponseData& update,
+    EntityChangeList* entity_changes) {
+  const EntityData& data = update.entity.value();
+  const std::string& client_tag_hash = data.client_tag_hash;
+  ProcessorEntityTracker* entity = GetEntityForTagHash(client_tag_hash);
+  if (entity == nullptr) {
+    if (data.is_deleted()) {
+      DLOG(WARNING) << "Received remote delete for a non-existing item."
+                    << " client_tag_hash: " << client_tag_hash;
+      return nullptr;
+    }
+
+    entity = CreateEntity(data);
+    entity_changes->push_back(
+        EntityChange::CreateAdd(entity->client_tag(), update.entity));
+    entity->RecordAcceptedUpdate(update);
+  } else if (entity->UpdateIsReflection(update.response_version)) {
+    // Seen this update before; just ignore it.
+    return nullptr;
+  } else if (entity->IsUnsynced()) {
+    ConflictResolution::Type resolution_type =
+        ResolveConflict(update, entity, entity_changes);
+    UMA_HISTOGRAM_ENUMERATION("Sync.ResolveConflict", resolution_type,
+                              ConflictResolution::TYPE_SIZE);
+  } else if (data.is_deleted()) {
+    // The entity was deleted; inform the service. Note that the local data
+    // can never be deleted at this point because it would have either been
+    // acked (the add case) or pending (the conflict case).
+    DCHECK(!entity->metadata().is_deleted());
+    entity_changes->push_back(EntityChange::CreateDelete(entity->client_tag()));
+    entity->RecordAcceptedUpdate(update);
+  } else if (!entity->MatchesData(data)) {
+    // Specifics have changed, so update the service.
+    entity_changes->push_back(
+        EntityChange::CreateUpdate(entity->client_tag(), update.entity));
+    entity->RecordAcceptedUpdate(update);
+  } else {
+    // No data change; still record that the update was received.
+    entity->RecordAcceptedUpdate(update);
+  }
+
+  // If the received entity has out of date encryption, we schedule another
+  // commit to fix it.
+  if (data_type_state_.encryption_key_name() != update.encryption_key_name) {
+    DVLOG(2) << ModelTypeToString(type_) << ": Requesting re-encrypt commit "
+             << update.encryption_key_name << " -> "
+             << data_type_state_.encryption_key_name();
+
+    entity->IncrementSequenceNumber();
+    if (entity->RequiresCommitData()) {
+      // If there is no pending commit data, then either this update wasn't
+      // in conflict or the remote data won; either way the remote data is
+      // the right data to re-queue for commit.
+      entity->CacheCommitData(update.entity);
+    }
+  }
+
+  return entity;
 }
 
 ConflictResolution::Type SharedModelTypeProcessor::ResolveConflict(
     const UpdateResponseData& update,
     ProcessorEntityTracker* entity,
     EntityChangeList* changes) {
-  // There is a pending commit in conflict with the update.
-  // For now we require that pending commit data be loaded in this
-  // situation. This may be relaxed in the future if necessary.
-  DCHECK(!entity->RequiresCommitData());
-  const EntityData& data = update.entity.value();
+  const EntityData& remote_data = update.entity.value();
 
-  if (entity->MatchesData(data)) {
-    // Record the update and squash the pending commit.
-    entity->RecordForcedUpdate(update);
-    return ConflictResolution::CHANGES_MATCH;
+  ConflictResolution::Type resolution_type = ConflictResolution::TYPE_SIZE;
+  std::unique_ptr<EntityData> new_data;
+
+  // Determine the type of resolution.
+  if (entity->MatchesData(remote_data)) {
+    // The changes are identical so there isn't a real conflict.
+    resolution_type = ConflictResolution::CHANGES_MATCH;
+  } else if (entity->RequiresCommitData() ||
+             entity->MatchesBaseData(entity->commit_data().value())) {
+    // If commit data needs to be loaded at this point, it can only be due to a
+    // re-encryption request. If the commit data matches the base data, it also
+    // must be a re-encryption request. Either way there's no real local change
+    // and the remote data should win.
+    resolution_type = ConflictResolution::IGNORE_LOCAL_ENCRYPTION;
+  } else if (entity->MatchesBaseData(remote_data)) {
+    // The remote data isn't actually changing from the last remote data that
+    // was seen, so it must have been a re-encryption and can be ignored.
+    resolution_type = ConflictResolution::IGNORE_REMOTE_ENCRYPTION;
+  } else {
+    // There's a real data conflict here; let the service resolve it.
+    ConflictResolution resolution =
+        service_->ResolveConflict(entity->commit_data().value(), remote_data);
+    resolution_type = resolution.type();
+    new_data = resolution.ExtractData();
   }
 
-  // There's a real data conflict here; let the service resolve it.
-  ConflictResolution resolution =
-      service_->ResolveConflict(entity->commit_data().value(), data);
-  switch (resolution.type()) {
+  // Apply the resolution.
+  switch (resolution_type) {
+    case ConflictResolution::CHANGES_MATCH:
+      // Record the update and squash the pending commit.
+      entity->RecordForcedUpdate(update);
+      break;
     case ConflictResolution::USE_LOCAL:
+    case ConflictResolution::IGNORE_REMOTE_ENCRYPTION:
       // Record that we received the update from the server but leave the
       // pending commit intact.
       entity->RecordIgnoredUpdate(update);
       break;
     case ConflictResolution::USE_REMOTE:
+    case ConflictResolution::IGNORE_LOCAL_ENCRYPTION:
       // Squash the pending commit.
       entity->RecordForcedUpdate(update);
       // Update client data to match server.
@@ -485,17 +535,43 @@ ConflictResolution::Type SharedModelTypeProcessor::ResolveConflict(
       // Record that we received the update.
       entity->RecordIgnoredUpdate(update);
       // Make a new pending commit to update the server.
-      entity->MakeLocalChange(resolution.ExtractData());
+      entity->MakeLocalChange(std::move(new_data));
       // Update the client with the new entity.
       changes->push_back(EntityChange::CreateUpdate(entity->client_tag(),
                                                     entity->commit_data()));
       break;
-    case ConflictResolution::CHANGES_MATCH:
     case ConflictResolution::TYPE_SIZE:
       NOTREACHED();
       break;
   }
-  return resolution.type();
+  DCHECK(!new_data);
+
+  return resolution_type;
+}
+
+void SharedModelTypeProcessor::RecommitAllForEncryption(
+    std::unordered_set<std::string> already_updated,
+    MetadataChangeList* metadata_changes) {
+  ModelTypeService::ClientTagList entities_needing_data;
+
+  for (auto it = entities_.begin(); it != entities_.end(); ++it) {
+    ProcessorEntityTracker* entity = it->second.get();
+    if (already_updated.find(entity->client_tag()) != already_updated.end()) {
+      continue;
+    }
+    entity->IncrementSequenceNumber();
+    if (entity->RequiresCommitData()) {
+      entities_needing_data.push_back(entity->client_tag());
+    }
+    metadata_changes->UpdateMetadata(entity->client_tag(), entity->metadata());
+  }
+
+  if (!entities_needing_data.empty()) {
+    service_->GetData(
+        entities_needing_data,
+        base::Bind(&SharedModelTypeProcessor::OnDataLoadedForReEncryption,
+                   weak_ptr_factory_.GetWeakPtr()));
+  }
 }
 
 void SharedModelTypeProcessor::OnInitialUpdateReceived(
@@ -523,11 +599,56 @@ void SharedModelTypeProcessor::OnInitialUpdateReceived(
   }
 
   // Let the service handle associating and merging the data.
-  // TODO(stanisc): crbug.com/570085: Error handling.
-  service_->MergeSyncData(std::move(metadata_changes), data_map);
+  syncer::SyncError error =
+      service_->MergeSyncData(std::move(metadata_changes), data_map);
 
-  // We may have new reasons to commit by the time this function is done.
+  if (error.IsSet()) {
+    error_handler_->OnSingleDataTypeUnrecoverableError(error);
+  } else {
+    // We may have new reasons to commit by the time this function is done.
+    FlushPendingCommitRequests();
+  }
+}
+
+void SharedModelTypeProcessor::OnInitialPendingDataLoaded(
+    syncer::SyncError error,
+    std::unique_ptr<DataBatch> data_batch) {
+  DCHECK(!is_initial_pending_data_loaded_);
+
+  if (error.IsSet()) {
+    start_error_ = error;
+  } else {
+    ConsumeDataBatch(std::move(data_batch));
+  }
+
+  is_initial_pending_data_loaded_ = true;
+  ConnectIfReady();
+}
+
+void SharedModelTypeProcessor::OnDataLoadedForReEncryption(
+    syncer::SyncError error,
+    std::unique_ptr<DataBatch> data_batch) {
+  DCHECK(is_initial_pending_data_loaded_);
+
+  if (error.IsSet()) {
+    error_handler_->OnSingleDataTypeUnrecoverableError(error);
+    return;
+  }
+
+  ConsumeDataBatch(std::move(data_batch));
   FlushPendingCommitRequests();
+}
+
+void SharedModelTypeProcessor::ConsumeDataBatch(
+    std::unique_ptr<DataBatch> data_batch) {
+  while (data_batch->HasNext()) {
+    TagAndData data = data_batch->Next();
+    ProcessorEntityTracker* entity = GetEntityForTag(data.first);
+    // If the entity wasn't deleted or updated with new commit.
+    if (entity != nullptr && entity->RequiresCommitData()) {
+      entity->CacheCommitData(data.second.get());
+    }
+  }
 }
 
 std::string SharedModelTypeProcessor::GetHashForTag(const std::string& tag) {

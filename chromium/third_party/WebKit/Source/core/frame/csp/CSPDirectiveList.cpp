@@ -130,10 +130,13 @@ bool CSPDirectiveList::checkHash(SourceListDirective* directive, const CSPHashVa
     return !directive || directive->allowHash(hashValue);
 }
 
+bool CSPDirectiveList::checkHashedAttributes(SourceListDirective* directive) const
+{
+    return !directive || directive->allowHashedAttributes();
+}
+
 bool CSPDirectiveList::checkDynamic(SourceListDirective* directive) const
 {
-    if (!m_policy->experimentalFeaturesEnabled())
-        return false;
     return !directive || directive->allowDynamic();
 }
 
@@ -275,7 +278,7 @@ bool CSPDirectiveList::checkSourceAndReportViolation(SourceListDirective* direct
 
     String suffix = String();
     if (checkDynamic(directive))
-        suffix = " 'unsafe-dynamic' is present, so host-based whitelisting is disabled.";
+        suffix = " 'strict-dynamic' is present, so host-based whitelisting is disabled.";
     if (directive == m_defaultSrc)
         suffix = suffix + " Note that '" + effectiveDirective + "' was not explicitly set, so 'default-src' is used as a fallback.";
 
@@ -425,13 +428,21 @@ bool CSPDirectiveList::allowStyleNonce(const String& nonce) const
     return checkNonce(operativeDirective(m_styleSrc.get()), nonce);
 }
 
-bool CSPDirectiveList::allowScriptHash(const CSPHashValue& hashValue) const
+bool CSPDirectiveList::allowScriptHash(const CSPHashValue& hashValue, ContentSecurityPolicy::InlineType type) const
 {
+    if (type == ContentSecurityPolicy::InlineType::Attribute) {
+        if (!m_policy->experimentalFeaturesEnabled())
+            return false;
+        if (!checkHashedAttributes(operativeDirective(m_scriptSrc.get())))
+            return false;
+    }
     return checkHash(operativeDirective(m_scriptSrc.get()), hashValue);
 }
 
-bool CSPDirectiveList::allowStyleHash(const CSPHashValue& hashValue) const
+bool CSPDirectiveList::allowStyleHash(const CSPHashValue& hashValue, ContentSecurityPolicy::InlineType type) const
 {
+    if (type != ContentSecurityPolicy::InlineType::Block)
+        return false;
     return checkHash(operativeDirective(m_styleSrc.get()), hashValue);
 }
 

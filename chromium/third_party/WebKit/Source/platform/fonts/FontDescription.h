@@ -25,6 +25,7 @@
 #ifndef FontDescription_h
 #define FontDescription_h
 
+#include "SkFontStyle.h"
 #include "platform/FontFamilyNames.h"
 #include "platform/fonts/FontCacheKey.h"
 #include "platform/fonts/FontFamily.h"
@@ -32,6 +33,7 @@
 #include "platform/fonts/FontOrientation.h"
 #include "platform/fonts/FontSmoothingMode.h"
 #include "platform/fonts/FontTraits.h"
+#include "platform/fonts/FontVariantNumeric.h"
 #include "platform/fonts/FontWidthVariant.h"
 #include "platform/fonts/TextRenderingMode.h"
 #include "platform/fonts/TypesettingFeatures.h"
@@ -46,6 +48,9 @@
 namespace blink {
 
 const float FontSizeAdjustNone = -1;
+typedef struct {
+    uint32_t parts[2];
+} FieldsAsUnsignedType;
 
 class PLATFORM_EXPORT FontDescription {
     USING_FAST_MALLOC(FontDescription);
@@ -57,6 +62,8 @@ public:
 
     enum LigaturesState { NormalLigaturesState, DisabledLigaturesState, EnabledLigaturesState };
 
+    enum FontVariantCaps { CapsNormal, SmallCaps, AllSmallCaps, PetiteCaps, AllPetiteCaps, Unicase, TitlingCaps };
+
     FontDescription()
         : m_specifiedSize(0)
         , m_computedSize(0)
@@ -65,12 +72,12 @@ public:
         , m_letterSpacing(0)
         , m_wordSpacing(0)
     {
-        m_fieldsAsUnsigned[0] = 0;
-        m_fieldsAsUnsigned[1] = 0;
+        m_fieldsAsUnsigned.parts[0] = 0;
+        m_fieldsAsUnsigned.parts[1] = 0;
         m_fields.m_orientation = static_cast<unsigned>(FontOrientation::Horizontal);
         m_fields.m_widthVariant = RegularWidth;
         m_fields.m_style = FontStyleNormal;
-        m_fields.m_variant = FontVariantNormal;
+        m_fields.m_variantCaps = CapsNormal;
         m_fields.m_isAbsoluteSize = false;
         m_fields.m_weight = FontWeightNormal;
         m_fields.m_stretch = FontStretchNormal;
@@ -88,6 +95,7 @@ public:
         m_fields.m_syntheticItalic = false;
         m_fields.m_subpixelTextPosition = s_useSubpixelTextPositioning;
         m_fields.m_typesettingFeatures = s_defaultTypesettingFeatures;
+        m_fields.m_variantNumeric = FontVariantNumeric().m_fieldsAsUnsigned;
     }
 
     bool operator==(const FontDescription&) const;
@@ -145,7 +153,7 @@ public:
     bool hasSizeAdjust() const { return m_sizeAdjust != FontSizeAdjustNone; }
     FontStyle style() const { return static_cast<FontStyle>(m_fields.m_style); }
     int computedPixelSize() const { return int(m_computedSize + 0.5f); }
-    FontVariant variant() const { return static_cast<FontVariant>(m_fields.m_variant); }
+    FontVariantCaps variantCaps() const { return static_cast<FontVariantCaps>(m_fields.m_variantCaps); }
     bool isAbsoluteSize() const { return m_fields.m_isAbsoluteSize; }
     FontWeight weight() const { return static_cast<FontWeight>(m_fields.m_weight); }
     FontStretch stretch() const { return static_cast<FontStretch>(m_fields.m_stretch); }
@@ -162,6 +170,7 @@ public:
     }
     Kerning getKerning() const { return static_cast<Kerning>(m_fields.m_kerning); }
     VariantLigatures getVariantLigatures() const;
+    FontVariantNumeric variantNumeric() const  { return FontVariantNumeric::initializeFromUnsigned(m_fields.m_variantNumeric); };
     LigaturesState commonLigaturesState() const { return static_cast<LigaturesState>(m_fields.m_commonLigaturesState); }
     LigaturesState discretionaryLigaturesState() const { return static_cast<LigaturesState>(m_fields.m_discretionaryLigaturesState); }
     LigaturesState historicalLigaturesState() const { return static_cast<LigaturesState>(m_fields.m_historicalLigaturesState); }
@@ -195,8 +204,9 @@ public:
     void setAdjustedSize(float s) { m_adjustedSize = clampTo<float>(s); }
     void setSizeAdjust(float aspect) { m_sizeAdjust = clampTo<float>(aspect); }
     void setStyle(FontStyle i) { m_fields.m_style = i; }
-    void setVariant(FontVariant c) { m_fields.m_variant = c; }
+    void setVariantCaps(FontVariantCaps);
     void setVariantLigatures(const VariantLigatures&);
+    void setVariantNumeric(const FontVariantNumeric&);
     void setIsAbsoluteSize(bool s) { m_fields.m_isAbsoluteSize = s; }
     void setWeight(FontWeight w) { m_fields.m_weight = w; }
     void setStretch(FontStretch s) { m_fields.m_stretch = s; }
@@ -228,8 +238,12 @@ public:
     static TypesettingFeatures defaultTypesettingFeatures();
 
     unsigned styleHashWithoutFamilyList() const;
-    unsigned bitmapFields() const { return m_fieldsAsUnsigned[0]; }
-    unsigned auxiliaryBitmapFields() const { return m_fieldsAsUnsigned[1]; }
+    // TODO(drott): We should not expose internal structure here, but rather introduce
+    // a hash function here.
+    unsigned bitmapFields() const { return m_fieldsAsUnsigned.parts[0]; }
+    unsigned auxiliaryBitmapFields() const { return m_fieldsAsUnsigned.parts[1]; }
+
+    SkFontStyle skiaFontStyle() const;
 
 private:
     FontFamily m_familyList; // The list of font families to be used.
@@ -260,7 +274,7 @@ private:
         unsigned m_widthVariant : 2; // FontWidthVariant
 
         unsigned m_style : 2; // FontStyle
-        unsigned m_variant : 1; // FontVariant
+        unsigned m_variantCaps : 3; // FontVariantCaps
         unsigned m_isAbsoluteSize : 1; // Whether or not CSS specified an explicit size
         // (logical sizes like "medium" don't count).
         unsigned m_weight : 4; // FontWeight
@@ -284,11 +298,15 @@ private:
         unsigned m_syntheticBold : 1;
         unsigned m_syntheticItalic : 1;
         unsigned m_subpixelTextPosition : 1;
-        unsigned m_typesettingFeatures : 2; // TypesettingFeatures
+        unsigned m_typesettingFeatures : 3;
+        unsigned m_variantNumeric : 8;
     };
+
+    static_assert(sizeof(BitFields) == sizeof(FieldsAsUnsignedType),
+        "Mapped bitfield datatypes must have identical size.");
     union {
         BitFields m_fields;
-        uint32_t m_fieldsAsUnsigned[2];
+        FieldsAsUnsignedType m_fieldsAsUnsigned;
     };
 
     static TypesettingFeatures s_defaultTypesettingFeatures;
@@ -306,9 +324,9 @@ inline bool FontDescription::operator==(const FontDescription& other) const
         && m_sizeAdjust == other.m_sizeAdjust
         && m_letterSpacing == other.m_letterSpacing
         && m_wordSpacing == other.m_wordSpacing
-        && m_fieldsAsUnsigned[0] == other.m_fieldsAsUnsigned[0]
-        && m_fieldsAsUnsigned[1] == other.m_fieldsAsUnsigned[1]
-        && m_featureSettings == other.m_featureSettings;
+        && m_fieldsAsUnsigned.parts[0] == other.m_fieldsAsUnsigned.parts[0]
+        && m_fieldsAsUnsigned.parts[1] == other.m_fieldsAsUnsigned.parts[1]
+        && (m_featureSettings == other.m_featureSettings || (m_featureSettings && other.m_featureSettings && *m_featureSettings == *other.m_featureSettings));
 }
 
 } // namespace blink

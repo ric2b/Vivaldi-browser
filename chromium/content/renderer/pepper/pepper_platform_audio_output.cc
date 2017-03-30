@@ -8,7 +8,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/child/child_process.h"
 #include "content/common/media/audio_messages.h"
@@ -74,7 +74,8 @@ void PepperPlatformAudioOutput::OnStateChanged(
 
 void PepperPlatformAudioOutput::OnDeviceAuthorized(
     media::OutputDeviceStatus device_status,
-    const media::AudioParameters& output_params) {
+    const media::AudioParameters& output_params,
+    const std::string& matched_device_id) {
   NOTREACHED();
 }
 

@@ -50,7 +50,6 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
-#include "chrome/browser/ui/app_list/app_list_service.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -104,10 +103,18 @@
 #include "components/search_engines/desktop_search_utils.h"
 #endif
 
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#include "ui/views/widget/desktop_aura/x11_desktop_handler.h"
+#endif
+
 #if defined(ENABLE_PRINT_PREVIEW)
 #include "chrome/browser/printing/cloud_print/cloud_print_proxy_service.h"
 #include "chrome/browser/printing/cloud_print/cloud_print_proxy_service_factory.h"
 #include "chrome/browser/printing/print_dialog_cloud.h"
+#endif
+
+#if defined(ENABLE_APP_LIST)
+#include "chrome/browser/ui/app_list/app_list_service.h"
 #endif
 
 using content::BrowserThread;
@@ -712,6 +719,21 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
   }
 #endif  // defined(OS_WIN)
 
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  // Our request to Activate may be discarded on some linux window
+  // managers unless given a recent timestamp, so update the timestamp if
+  // we were given one.
+  if (command_line.HasSwitch(switches::kWmUserTimeMs)) {
+    uint64_t time;
+    std::string switch_value =
+        command_line.GetSwitchValueASCII(switches::kWmUserTimeMs);
+    if (base::StringToUint64(switch_value, &time)) {
+      views::X11DesktopHandler::get()->set_wm_user_time_ms(
+          static_cast<Time>(time));
+    }
+  }
+#endif
+
   chrome::startup::IsProcessStartup is_process_startup = process_startup ?
       chrome::startup::IS_PROCESS_STARTUP :
       chrome::startup::IS_NOT_PROCESS_STARTUP;
@@ -748,7 +770,6 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
       last_used_profile = last_opened_profiles[0];
     }
 #endif
-
     // Launch the last used profile with the full command line, and the other
     // opened profiles without the URLs to launch.
     base::CommandLine command_line_without_urls(command_line.GetProgram());
@@ -772,7 +793,6 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
           startup_pref.type == SessionStartupPref::DEFAULT &&
           !HasPendingUncleanExit(*it))
         continue;
-
       if (!LaunchBrowser((*it == last_used_profile) ? command_line
                                                     : command_line_without_urls,
                          *it, cur_dir, is_process_startup, is_first_run))
@@ -872,10 +892,12 @@ base::FilePath GetStartupProfilePath(const base::FilePath& user_data_dir,
         command_line.GetSwitchValuePath(switches::kProfileDirectory));
   }
 
+#if defined(ENABLE_APP_LIST)
   // If we are showing the app list then chrome isn't shown so load the app
   // list's profile rather than chrome's.
   if (command_line.HasSwitch(switches::kShowAppList))
     return AppListService::Get()->GetProfilePath(user_data_dir);
+#endif
 
   return g_browser_process->profile_manager()->GetLastUsedProfileDir(
       user_data_dir);

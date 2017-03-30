@@ -12,7 +12,8 @@
 
 #include <stdint.h>
 
-#include "base/containers/hash_tables.h"
+#include <unordered_map>
+
 #include "base/strings/string_split.h"
 #include "net/disk_cache/disk_cache.h"
 #include "net/http/http_cache.h"
@@ -130,7 +131,7 @@ class MockDiskCache : public disk_cache::Backend {
   int DoomEntriesSince(base::Time initial_time,
                        const CompletionCallback& callback) override;
   int CalculateSizeOfAllEntries(const CompletionCallback& callback) override;
-  scoped_ptr<Iterator> CreateIterator() override;
+  std::unique_ptr<Iterator> CreateIterator() override;
   void GetStats(base::StringPairs* stats) override;
   void OnExternalCacheHit(const std::string& key) override;
 
@@ -155,7 +156,7 @@ class MockDiskCache : public disk_cache::Backend {
   void ReleaseAll();
 
  private:
-  typedef base::hash_map<std::string, MockDiskEntry*> EntryMap;
+  using EntryMap = std::unordered_map<std::string, MockDiskEntry*>;
   class NotImplementedIterator;
 
   void CallbackLater(const CompletionCallback& callback, int result);
@@ -172,7 +173,7 @@ class MockDiskCache : public disk_cache::Backend {
 class MockBackendFactory : public HttpCache::BackendFactory {
  public:
   int CreateBackend(NetLog* net_log,
-                    scoped_ptr<disk_cache::Backend>* backend,
+                    std::unique_ptr<disk_cache::Backend>* backend,
                     const CompletionCallback& callback) override;
 };
 
@@ -180,7 +181,7 @@ class MockHttpCache {
  public:
   MockHttpCache();
   explicit MockHttpCache(
-      scoped_ptr<HttpCache::BackendFactory> disk_cache_factory);
+      std::unique_ptr<HttpCache::BackendFactory> disk_cache_factory);
 
   HttpCache* http_cache() { return &http_cache_; }
 
@@ -191,7 +192,7 @@ class MockHttpCache {
   MockDiskCache* disk_cache();
 
   // Wrapper around http_cache()->CreateTransaction(DEFAULT_PRIORITY...)
-  int CreateTransaction(scoped_ptr<HttpTransaction>* trans);
+  int CreateTransaction(std::unique_ptr<HttpTransaction>* trans);
 
   // Wrapper to bypass the cache lock for new transactions.
   void BypassCacheLock();
@@ -239,7 +240,7 @@ class MockDiskCacheNoCB : public MockDiskCache {
 class MockBackendNoCbFactory : public HttpCache::BackendFactory {
  public:
   int CreateBackend(NetLog* net_log,
-                    scoped_ptr<disk_cache::Backend>* backend,
+                    std::unique_ptr<disk_cache::Backend>* backend,
                     const CompletionCallback& callback) override;
 };
 
@@ -250,14 +251,14 @@ class MockBlockingBackendFactory : public HttpCache::BackendFactory {
   ~MockBlockingBackendFactory() override;
 
   int CreateBackend(NetLog* net_log,
-                    scoped_ptr<disk_cache::Backend>* backend,
+                    std::unique_ptr<disk_cache::Backend>* backend,
                     const CompletionCallback& callback) override;
 
   // Completes the backend creation. Any blocked call will be notified via the
   // provided callback.
   void FinishCreation();
 
-  scoped_ptr<disk_cache::Backend>* backend() { return backend_; }
+  std::unique_ptr<disk_cache::Backend>* backend() { return backend_; }
   void set_fail(bool fail) { fail_ = fail; }
 
   const CompletionCallback& callback() { return callback_; }
@@ -265,7 +266,7 @@ class MockBlockingBackendFactory : public HttpCache::BackendFactory {
  private:
   int Result() { return fail_ ? ERR_FAILED : OK; }
 
-  scoped_ptr<disk_cache::Backend>* backend_;
+  std::unique_ptr<disk_cache::Backend>* backend_;
   CompletionCallback callback_;
   bool block_;
   bool fail_;

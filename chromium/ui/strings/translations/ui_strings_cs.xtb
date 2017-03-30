@@ -13,7 +13,7 @@
 <translation id="1752946267035950200">{MINUTES,plural, =1{1 minuta}few{# minuty}many{# minuty}other{# minut}}</translation>
 <translation id="1761785978543082658"><ph name="QUANTITY" /> B</translation>
 <translation id="1781701194097416995">Přesunout slovo doleva</translation>
-<translation id="1801827354178857021">Období</translation>
+<translation id="1801827354178857021">Tečka</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> MB/s</translation>
 <translation id="1830179671306812954">{HOURS,plural, =1{1 hodina a  }few{# hodiny a  }many{# hodiny a  }other{# hodin a  }}</translation>
 <translation id="1860796786778352021">Zavřít oznámení</translation>
@@ -28,6 +28,7 @@
 <translation id="2479520428668657293">Přesunout doprava a změnit výběr</translation>
 <translation id="2482878487686419369">Oznámení</translation>
 <translation id="2497284189126895209">Všechny soubory</translation>
+<translation id="2515586267016047495">Alt</translation>
 <translation id="2538759511191347839">Přesunout na konec řádku a změnit výběr</translation>
 <translation id="2557207087669398617">Přesunout na začátek řádku</translation>
 <translation id="2666092431469916601">Nahoru</translation>
@@ -61,7 +62,6 @@
 <translation id="4552416320897244156">Klávesa PgDwn</translation>
 <translation id="4588090240171750605">Posuv doprava</translation>
 <translation id="4820616160060340806">Příkaz + <ph name="KEY_COMBO_NAME" /></translation>
-<translation id="4927753642311223124">Tady není nic k vidění, rozejděte se.</translation>
 <translation id="4968171027979920686">{SECONDS,plural, =1{1 sekunda}few{# sekundy}many{# sekundy}other{# sekund}}</translation>
 <translation id="4971687151119236543">Média – předchozí skladba</translation>
 <translation id="4999762576397546063">Ctrl+<ph name="KEY_COMBO_NAME" /></translation>
@@ -130,6 +130,7 @@
 <translation id="8328145009876646418">Levý okraj</translation>
 <translation id="8331626408530291785">Posuv nahoru</translation>
 <translation id="8371695176452482769">Mluvte</translation>
+<translation id="8392688371657486010">Nemáte žádná oznámení.</translation>
 <translation id="8394908167088220973">Média – přehrát/pozastavit</translation>
 <translation id="8400147561352026160">Shift+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="8428213095426709021">Nastavení</translation>

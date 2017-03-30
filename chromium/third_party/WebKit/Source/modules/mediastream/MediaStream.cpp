@@ -27,6 +27,7 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/frame/Deprecation.h"
 #include "modules/mediastream/MediaStreamRegistry.h"
 #include "modules/mediastream/MediaStreamTrackEvent.h"
 #include "platform/mediastream/MediaStreamCenter.h"
@@ -301,6 +302,14 @@ void MediaStream::streamEnded()
     }
 }
 
+bool MediaStream::addEventListenerInternal(const AtomicString& eventType, EventListener* listener, const AddEventListenerOptions& options)
+{
+    if (eventType == EventTypeNames::ended)
+        Deprecation::countDeprecation(getExecutionContext(), UseCounter::MediaStreamOnEnded);
+
+    return EventTargetWithInlineData::addEventListenerInternal(eventType, listener, options);
+}
+
 void MediaStream::contextDestroyed()
 {
     ContextLifecycleObserver::contextDestroyed();
@@ -416,9 +425,14 @@ DEFINE_TRACE(MediaStream)
     visitor->trace(m_videoTracks);
     visitor->trace(m_descriptor);
     visitor->trace(m_scheduledEvents);
-    RefCountedGarbageCollectedEventTargetWithInlineData<MediaStream>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
     ContextLifecycleObserver::trace(visitor);
     MediaStreamDescriptorClient::trace(visitor);
+}
+
+MediaStream* toMediaStream(MediaStreamDescriptor* descriptor)
+{
+    return static_cast<MediaStream*>(descriptor->client());
 }
 
 } // namespace blink

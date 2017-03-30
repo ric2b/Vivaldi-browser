@@ -436,6 +436,8 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
       IDS_OPTIONS_SETTINGS_ACCESSIBILITY_TOUCHPAD_TAP_DRAGGING_DESCRIPTION },
     { "accessibilityVirtualKeyboard",
       IDS_OPTIONS_SETTINGS_ACCESSIBILITY_VIRTUAL_KEYBOARD_DESCRIPTION },
+    { "accessibilityMonoAudio",
+      IDS_OPTIONS_SETTINGS_ACCESSIBILITY_MONO_AUDIO_DESCRIPTION},
     { "androidAppsTitle", IDS_OPTIONS_ARC_TITLE },
     { "androidAppsEnabled", IDS_OPTIONS_ARC_ENABLE },
     { "autoclickDelayExtremelyShort",
@@ -724,6 +726,11 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
       "enableExperimentalAccessibilityFeatures",
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           chromeos::switches::kEnableExperimentalAccessibilityFeatures));
+
+  chromeos::CrosSettings* cros_settings = chromeos::CrosSettings::Get();
+  bool allow_bluetooth = true;
+  cros_settings->GetBoolean(chromeos::kAllowBluetooth, &allow_bluetooth);
+  values->SetBoolean("allowBluetooth", allow_bluetooth);
 #endif
 }
 
@@ -1063,7 +1070,7 @@ void BrowserOptionsHandler::InitializePage() {
         "BrowserOptions.enableFactoryResetSection");
   }
 
-  Profile* profile = Profile::FromWebUI(web_ui());
+  Profile* const profile = Profile::FromWebUI(web_ui());
   user_manager::User const* const user =
       chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
 
@@ -1076,7 +1083,7 @@ void BrowserOptionsHandler::InitializePage() {
 
   OnWallpaperManagedChanged(
       chromeos::WallpaperManager::Get()->IsPolicyControlled(
-          user_manager::UserManager::Get()->GetActiveUser()->GetAccountId()));
+          user->GetAccountId()));
 
   policy::ConsumerManagementService* consumer_management =
       g_browser_process->platform_part()->browser_policy_connector_chromeos()->
@@ -1089,8 +1096,9 @@ void BrowserOptionsHandler::InitializePage() {
   if (arc::ArcBridgeService::GetEnabled(
           base::CommandLine::ForCurrentProcess()) &&
       !arc::ArcAuthService::IsOptInVerificationDisabled() &&
-      !profile->IsLegacySupervised() &&
-      user->HasGaiaAccount()) {
+      !profile->IsLegacySupervised() && user->HasGaiaAccount() &&
+      !user_manager::UserManager::Get()
+           ->IsCurrentUserCryptohomeDataEphemeral()) {
     web_ui()->CallJavascriptFunction("BrowserOptions.showAndroidAppsSection");
   }
   OnSystemTimezoneAutomaticDetectionPolicyChanged();
@@ -1161,11 +1169,10 @@ void BrowserOptionsHandler::OnDefaultBrowserWorkerFinished(
     // default browser.
     chrome::ResetDefaultBrowserPrompt(Profile::FromWebUI(web_ui()));
   } else if (state == shell_integration::NOT_DEFAULT) {
-    if (shell_integration::CanSetAsDefaultBrowser() ==
-        shell_integration::SET_DEFAULT_NOT_ALLOWED) {
-      status_string_id = IDS_OPTIONS_DEFAULTBROWSER_SXS;
-    } else {
+    if (shell_integration::CanSetAsDefaultBrowser()) {
       status_string_id = IDS_OPTIONS_DEFAULTBROWSER_NOTDEFAULT;
+    } else {
+      status_string_id = IDS_OPTIONS_DEFAULTBROWSER_SXS;
     }
   } else if (state == shell_integration::UNKNOWN_DEFAULT) {
     status_string_id = IDS_OPTIONS_DEFAULTBROWSER_UNKNOWN;
@@ -1383,7 +1390,9 @@ void BrowserOptionsHandler::DeleteProfile(const base::ListValue* args) {
     return;
   }
 
-  webui::DeleteProfileAtPath(file_path, web_ui());
+  webui::DeleteProfileAtPath(file_path,
+                             web_ui(),
+                             ProfileMetrics::DELETE_PROFILE_SETTINGS);
 }
 
 void BrowserOptionsHandler::ObserveThemeChanged() {

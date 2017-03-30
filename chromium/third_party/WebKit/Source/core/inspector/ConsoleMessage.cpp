@@ -90,6 +90,16 @@ void ConsoleMessage::setLineNumber(unsigned lineNumber)
     m_lineNumber = lineNumber;
 }
 
+unsigned ConsoleMessage::columnNumber() const
+{
+    return m_columnNumber;
+}
+
+void ConsoleMessage::setColumnNumber(unsigned columnNumber)
+{
+    m_columnNumber = columnNumber;
+}
+
 PassRefPtr<ScriptCallStack> ConsoleMessage::callStack() const
 {
     return m_callStack;
@@ -123,12 +133,12 @@ void ConsoleMessage::setScriptState(ScriptState* scriptState)
         m_scriptState.clear();
 }
 
-RawPtr<ScriptArguments> ConsoleMessage::scriptArguments() const
+ScriptArguments* ConsoleMessage::scriptArguments() const
 {
     return m_scriptArguments;
 }
 
-void ConsoleMessage::setScriptArguments(RawPtr<ScriptArguments> scriptArguments)
+void ConsoleMessage::setScriptArguments(ScriptArguments* scriptArguments)
 {
     m_scriptArguments = scriptArguments;
 }
@@ -173,11 +183,6 @@ MessageLevel ConsoleMessage::level() const
 const String& ConsoleMessage::message() const
 {
     return m_message;
-}
-
-unsigned ConsoleMessage::columnNumber() const
-{
-    return m_columnNumber;
 }
 
 void ConsoleMessage::frameWindowDiscarded(LocalDOMWindow* window)

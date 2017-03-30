@@ -21,8 +21,8 @@ namespace media_router {
 
 const char kProviderExtensionIdForTesting[] = "test_id";
 const char kControllerPathForTesting[] = "test_path";
-const std::string kUserEmailForTesting = "nobody@example.com";
-const std::string kUserDomainForTesting = "example.com";
+const char kUserEmailForTesting[] = "nobody@example.com";
+const char kUserDomainForTesting[] = "example.com";
 
 class MockMediaRouterUI : public MediaRouterUI {
  public:
@@ -187,9 +187,34 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateSinksWithIdentity) {
   std::string value;
   EXPECT_TRUE(sinks_with_identity_value->GetString("userEmail", &value));
   EXPECT_EQ(kUserEmailForTesting, value);
+}
 
-  EXPECT_TRUE(sinks_with_identity_value->GetString("userDomain", &value));
-  EXPECT_EQ(kUserDomainForTesting, value);
+TEST_F(MediaRouterWebUIMessageHandlerTest,
+       UpdateSinksWithIdentityAndPseudoSink) {
+  MediaSink::Id sink_id("pseudo:sinkId123");
+  std::string sink_name("The sink");
+
+  std::vector<MediaSinkWithCastModes> media_sink_with_cast_modes_list;
+  MediaSinkWithCastModes media_sink_with_cast_modes(
+      MediaSink(sink_id, sink_name, MediaSink::IconType::CAST));
+  media_sink_with_cast_modes.sink.set_domain(kUserDomainForTesting);
+  media_sink_with_cast_modes.cast_modes.insert(MediaCastMode::TAB_MIRROR);
+  media_sink_with_cast_modes_list.push_back(media_sink_with_cast_modes);
+
+  handler_->UpdateSinks(media_sink_with_cast_modes_list);
+  EXPECT_EQ(1u, web_ui_->call_data().size());
+  const content::TestWebUI::CallData& call_data = *web_ui_->call_data()[0];
+  EXPECT_EQ("media_router.ui.setSinkListAndIdentity",
+            call_data.function_name());
+  const base::Value* arg1 = call_data.arg1();
+  const base::DictionaryValue* sinks_with_identity_value = nullptr;
+  ASSERT_TRUE(arg1->GetAsDictionary(&sinks_with_identity_value));
+
+  bool show_email = false;
+  bool actual_show_email = true;
+  EXPECT_TRUE(
+      sinks_with_identity_value->GetBoolean("showEmail", &actual_show_email));
+  EXPECT_EQ(show_email, actual_show_email);
 }
 
 TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateSinksWithIdentityAndDomain) {
@@ -219,10 +244,6 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateSinksWithIdentityAndDomain) {
   EXPECT_TRUE(
       sinks_with_identity_value->GetBoolean("showDomain", &actual_show_domain));
   EXPECT_EQ(show_domain, actual_show_domain);
-
-  std::string value;
-  EXPECT_TRUE(sinks_with_identity_value->GetString("userDomain", &value));
-  EXPECT_EQ(kUserDomainForTesting, value);
 }
 
 TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateSinksWithNoDomain) {
@@ -266,9 +287,6 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateSinksWithNoDomain) {
   std::string value;
   EXPECT_TRUE(sink_value->GetString("domain", &value));
   EXPECT_EQ(std::string(), value);
-
-  EXPECT_TRUE(sinks_with_identity_value->GetString("userDomain", &value));
-  EXPECT_EQ(user_domain, value);
 }
 
 TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateSinksWithDefaultDomain) {
@@ -304,11 +322,8 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateSinksWithDefaultDomain) {
       sinks_with_identity_value->GetBoolean("showDomain", &actual_show_domain));
   EXPECT_EQ(show_domain, actual_show_domain);
 
-  std::string value;
-  EXPECT_TRUE(sinks_with_identity_value->GetString("userDomain", &value));
-  EXPECT_EQ(kUserDomainForTesting, value);
-
   // Sink domain should be updated from 'default' to user domain.
+  std::string value;
   EXPECT_TRUE(sink_value->GetString("domain", &value));
   EXPECT_EQ(kUserDomainForTesting, value);
 }
@@ -326,10 +341,12 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateRoutes) {
                               is_local, kControllerPathForTesting, true));
   std::vector<MediaRoute::Id> joinable_route_ids;
   joinable_route_ids.push_back(route_id);
+  std::unordered_map<MediaRoute::Id, MediaCastMode> current_cast_modes;
+  current_cast_modes.insert(std::make_pair(route_id, MediaCastMode::DEFAULT));
 
   EXPECT_CALL(*mock_media_router_ui_, GetRouteProviderExtensionId()).WillOnce(
       ReturnRef(provider_extension_id()));
-  handler_->UpdateRoutes(routes, joinable_route_ids);
+  handler_->UpdateRoutes(routes, joinable_route_ids, current_cast_modes);
   EXPECT_EQ(1u, web_ui_->call_data().size());
   const content::TestWebUI::CallData& call_data = *web_ui_->call_data()[0];
   EXPECT_EQ("media_router.ui.setRouteList", call_data.function_name());
@@ -353,6 +370,10 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateRoutes) {
   bool actual_can_join = false;
   EXPECT_TRUE(route_value->GetBoolean("canJoin", &actual_can_join));
   EXPECT_TRUE(actual_can_join);
+  int actual_current_cast_mode = -1;
+  EXPECT_TRUE(
+      route_value->GetInteger("currentCastMode", &actual_current_cast_mode));
+  EXPECT_EQ(MediaCastMode::DEFAULT, actual_current_cast_mode);
 
   std::string custom_controller_path;
   EXPECT_TRUE(route_value->GetString("customControllerPath",
@@ -364,7 +385,111 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateRoutes) {
   EXPECT_EQ(expected_path, custom_controller_path);
 }
 
+TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateRoutesOffTheRecord) {
+  handler_->set_off_the_record_for_test(true);
+
+  MediaRoute::Id route_id("routeId123");
+  MediaSink::Id sink_id("sinkId123");
+  MediaSink sink(sink_id, "The sink", MediaSink::IconType::CAST);
+  MediaSource media_source("mediaSource");
+  std::string description("This is a route");
+  bool is_local = true;
+  std::vector<MediaRoute> routes;
+  routes.push_back(MediaRoute(route_id, media_source, sink_id, description,
+                              is_local, kControllerPathForTesting, true));
+
+  EXPECT_CALL(*mock_media_router_ui_, GetRouteProviderExtensionId())
+      .WillOnce(ReturnRef(provider_extension_id()));
+  handler_->UpdateRoutes(routes, std::vector<MediaRoute::Id>(),
+                         std::unordered_map<MediaRoute::Id, MediaCastMode>());
+  EXPECT_EQ(1u, web_ui_->call_data().size());
+  const content::TestWebUI::CallData& call_data = *web_ui_->call_data()[0];
+  EXPECT_EQ("media_router.ui.setRouteList", call_data.function_name());
+  const base::Value* arg1 = call_data.arg1();
+  const base::ListValue* routes_list_value = nullptr;
+  ASSERT_TRUE(arg1->GetAsList(&routes_list_value));
+  const base::DictionaryValue* route_value = nullptr;
+  ASSERT_TRUE(routes_list_value->GetDictionary(0, &route_value));
+
+  std::string value;
+  EXPECT_TRUE(route_value->GetString("id", &value));
+  EXPECT_EQ(route_id, value);
+  EXPECT_TRUE(route_value->GetString("sinkId", &value));
+  EXPECT_EQ(sink_id, value);
+  EXPECT_TRUE(route_value->GetString("description", &value));
+  EXPECT_EQ(description, value);
+
+  bool actual_is_local = false;
+  EXPECT_TRUE(route_value->GetBoolean("isLocal", &actual_is_local));
+  EXPECT_EQ(is_local, actual_is_local);
+  bool actual_can_join = false;
+  EXPECT_TRUE(route_value->GetBoolean("canJoin", &actual_can_join));
+  EXPECT_FALSE(actual_can_join);
+  int actual_current_cast_mode = -1;
+  EXPECT_FALSE(
+      route_value->GetInteger("currentCastMode", &actual_current_cast_mode));
+
+  std::string custom_controller_path;
+  EXPECT_FALSE(
+      route_value->GetString("customControllerPath", &custom_controller_path));
+}
+
 TEST_F(MediaRouterWebUIMessageHandlerTest, OnCreateRouteResponseReceived) {
+  MediaRoute::Id route_id("routeId123");
+  MediaSink::Id sink_id("sinkId123");
+  MediaSink sink(sink_id, "The sink", MediaSink::IconType::CAST);
+  std::string description("This is a route");
+  bool is_local = true;
+  bool is_for_display = true;
+  bool off_the_record = false;
+  MediaRoute route(route_id, MediaSource("mediaSource"), sink_id, description,
+                   is_local, kControllerPathForTesting, is_for_display);
+  route.set_off_the_record(off_the_record);
+
+  EXPECT_CALL(*mock_media_router_ui_, GetRouteProviderExtensionId())
+      .WillOnce(ReturnRef(provider_extension_id()));
+  handler_->OnCreateRouteResponseReceived(sink_id, &route);
+  EXPECT_EQ(1u, web_ui_->call_data().size());
+  const content::TestWebUI::CallData& call_data = *web_ui_->call_data()[0];
+  EXPECT_EQ("media_router.ui.onCreateRouteResponseReceived",
+            call_data.function_name());
+  const base::Value* arg1 = call_data.arg1();
+  const base::StringValue* sink_id_value = nullptr;
+  ASSERT_TRUE(arg1->GetAsString(&sink_id_value));
+  EXPECT_EQ(sink_id, sink_id_value->GetString());
+
+  const base::Value* arg2 = call_data.arg2();
+  const base::DictionaryValue* route_value = nullptr;
+  ASSERT_TRUE(arg2->GetAsDictionary(&route_value));
+  std::string value;
+  EXPECT_TRUE(route_value->GetString("id", &value));
+  EXPECT_EQ(route_id, value);
+  EXPECT_TRUE(route_value->GetString("sinkId", &value));
+  EXPECT_EQ(sink_id, value);
+  EXPECT_TRUE(route_value->GetString("description", &value));
+  EXPECT_EQ(description, value);
+
+  bool actual_is_local = false;
+  EXPECT_TRUE(route_value->GetBoolean("isLocal", &actual_is_local));
+  EXPECT_EQ(is_local, actual_is_local);
+
+  std::string actual_path;
+  EXPECT_TRUE(route_value->GetString("customControllerPath", &actual_path));
+  std::string expected_path = base::StringPrintf(
+      "%s://%s/%s", extensions::kExtensionScheme,
+      kProviderExtensionIdForTesting, kControllerPathForTesting);
+  EXPECT_EQ(expected_path, actual_path);
+
+  const base::Value* arg3 = call_data.arg3();
+  bool route_for_display = false;
+  ASSERT_TRUE(arg3->GetAsBoolean(&route_for_display));
+  EXPECT_EQ(is_for_display, route_for_display);
+}
+
+TEST_F(MediaRouterWebUIMessageHandlerTest,
+       OnCreateRouteResponseReceivedOffTheRecord) {
+  handler_->set_off_the_record_for_test(true);
+
   MediaRoute::Id route_id("routeId123");
   MediaSink::Id sink_id("sinkId123");
   MediaSink sink(sink_id, "The sink", MediaSink::IconType::CAST);
@@ -373,7 +498,7 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, OnCreateRouteResponseReceived) {
   bool is_for_display = true;
   bool off_the_record = true;
   MediaRoute route(route_id, MediaSource("mediaSource"), sink_id, description,
-                   is_local, "", is_for_display);
+                   is_local, kControllerPathForTesting, is_for_display);
   route.set_off_the_record(off_the_record);
 
   EXPECT_CALL(*mock_media_router_ui_, GetRouteProviderExtensionId()).WillOnce(
@@ -403,10 +528,8 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, OnCreateRouteResponseReceived) {
   EXPECT_TRUE(route_value->GetBoolean("isLocal", &actual_is_local));
   EXPECT_EQ(is_local, actual_is_local);
 
-  bool actual_is_off_the_record = false;
-  EXPECT_TRUE(
-      route_value->GetBoolean("isOffTheRecord", &actual_is_off_the_record));
-  EXPECT_EQ(off_the_record, actual_is_off_the_record);
+  std::string actual_path;
+  EXPECT_FALSE(route_value->GetString("customControllerPath", &actual_path));
 
   const base::Value* arg3 = call_data.arg3();
   bool route_for_display = false;
@@ -423,7 +546,7 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateIssue) {
   MediaRoute::Id route_id("routeId123");
   bool is_blocking = true;
   Issue issue(issue_title, issue_message, default_action, secondary_actions,
-              route_id, Issue::FATAL, is_blocking, "helpUrl");
+              route_id, Issue::FATAL, is_blocking, -1);
   const Issue::Id& issue_id = issue.id();
 
   handler_->UpdateIssue(&issue);

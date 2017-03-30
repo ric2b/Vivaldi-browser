@@ -14,10 +14,10 @@
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/display/screen.h"
 #include "ui/events/event_processor.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/test/event_generator.h"
-#include "ui/gfx/screen.h"
 #include "ui/views/test/native_widget_factory.h"
 #include "ui/views/test/test_views.h"
 #include "ui/views/test/test_views_delegate.h"
@@ -40,7 +40,7 @@ typedef ViewsTestBase DesktopNativeWidgetAuraTest;
 // Verifies creating a Widget with a parent that is not in a RootWindow doesn't
 // crash.
 TEST_F(DesktopNativeWidgetAuraTest, CreateWithParentNotInRootWindow) {
-  scoped_ptr<aura::Window> window(new aura::Window(NULL));
+  std::unique_ptr<aura::Window> window(new aura::Window(NULL));
   window->Init(ui::LAYER_NOT_DRAWN);
   Widget widget;
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
@@ -219,14 +219,14 @@ TEST_F(DesktopNativeWidgetAuraTest, DontAccessContentWindowDuringDestruction) {
   }
 }
 
-void QuitNestedLoopAndCloseWidget(scoped_ptr<Widget> widget,
+void QuitNestedLoopAndCloseWidget(std::unique_ptr<Widget> widget,
                                   base::Closure* quit_runloop) {
   quit_runloop->Run();
 }
 
 // Verifies that a widget can be destroyed when running a nested message-loop.
 TEST_F(DesktopNativeWidgetAuraTest, WidgetCanBeDestroyedFromNestedLoop) {
-  scoped_ptr<Widget> widget(new Widget);
+  std::unique_ptr<Widget> widget(new Widget);
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
   params.bounds = gfx::Rect(0, 0, 200, 200);
   params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
@@ -432,7 +432,8 @@ TEST_F(DesktopAuraWidgetTest, TopLevelOwnedPopupRepositionTest) {
 
   gfx::Rect new_pos(10, 10, 400, 400);
   popup_window.owned_window()->SetBoundsInScreen(
-      new_pos, gfx::Screen::GetScreen()->GetDisplayNearestPoint(gfx::Point()));
+      new_pos,
+      display::Screen::GetScreen()->GetDisplayNearestPoint(gfx::Point()));
 
   EXPECT_EQ(new_pos,
             popup_window.top_level_widget()->GetWindowBoundsInScreen());

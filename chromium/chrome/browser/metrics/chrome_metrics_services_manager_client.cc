@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/metrics/chrome_metrics_service_client.h"
@@ -14,6 +15,7 @@
 #include "chrome/browser/ui/browser_otr_state.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/installer/util/google_update_settings.h"
+#include "components/metrics/enabled_state_provider.h"
 #include "components/metrics/metrics_state_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/rappor/rappor_service.h"
@@ -32,9 +34,23 @@ void PostStoreMetricsClientInfo(const metrics::ClientInfo& client_info) {
 
 }  // namespace
 
+class ChromeMetricsServicesManagerClient::ChromeEnabledStateProvider
+    : public metrics::EnabledStateProvider {
+ public:
+  ChromeEnabledStateProvider() {}
+  ~ChromeEnabledStateProvider() override {}
+
+  bool IsConsentGiven() override {
+    return ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled();
+  }
+
+  DISALLOW_COPY_AND_ASSIGN(ChromeEnabledStateProvider);
+};
+
 ChromeMetricsServicesManagerClient::ChromeMetricsServicesManagerClient(
     PrefService* local_state)
-    : local_state_(local_state) {
+    : enabled_state_provider_(new ChromeEnabledStateProvider()),
+      local_state_(local_state) {
   DCHECK(local_state);
 
   SetupMetricsStateForChromeOS();
@@ -42,23 +58,23 @@ ChromeMetricsServicesManagerClient::ChromeMetricsServicesManagerClient(
 
 ChromeMetricsServicesManagerClient::~ChromeMetricsServicesManagerClient() {}
 
-scoped_ptr<rappor::RapporService>
+std::unique_ptr<rappor::RapporService>
 ChromeMetricsServicesManagerClient::CreateRapporService() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return make_scoped_ptr(new rappor::RapporService(
+  return base::WrapUnique(new rappor::RapporService(
       local_state_, base::Bind(&chrome::IsOffTheRecordSessionActive)));
 }
 
-scoped_ptr<variations::VariationsService>
+std::unique_ptr<variations::VariationsService>
 ChromeMetricsServicesManagerClient::CreateVariationsService() {
   DCHECK(thread_checker_.CalledOnValidThread());
   return variations::VariationsService::Create(
-      make_scoped_ptr(new ChromeVariationsServiceClient()), local_state_,
+      base::WrapUnique(new ChromeVariationsServiceClient()), local_state_,
       GetMetricsStateManager(), switches::kDisableBackgroundNetworking,
       chrome_variations::CreateUIStringOverrider());
 }
 
-scoped_ptr<metrics::MetricsServiceClient>
+std::unique_ptr<metrics::MetricsServiceClient>
 ChromeMetricsServicesManagerClient::CreateMetricsServiceClient() {
   DCHECK(thread_checker_.CalledOnValidThread());
   return ChromeMetricsServiceClient::Create(GetMetricsStateManager(),
@@ -90,7 +106,7 @@ bool ChromeMetricsServicesManagerClient::IsSafeBrowsingEnabled(
 }
 
 bool ChromeMetricsServicesManagerClient::IsMetricsReportingEnabled() {
-  return ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled();
+  return enabled_state_provider_->IsReportingEnabled();
 }
 
 bool ChromeMetricsServicesManagerClient::OnlyDoMetricsRecording() {
@@ -104,9 +120,7 @@ ChromeMetricsServicesManagerClient::GetMetricsStateManager() {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (!metrics_state_manager_) {
     metrics_state_manager_ = metrics::MetricsStateManager::Create(
-        local_state_,
-        base::Bind(
-            &ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled),
+        local_state_, enabled_state_provider_.get(),
         base::Bind(&PostStoreMetricsClientInfo),
         base::Bind(&GoogleUpdateSettings::LoadMetricsClientInfo));
   }

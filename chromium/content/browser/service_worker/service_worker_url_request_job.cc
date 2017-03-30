@@ -6,8 +6,10 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
 #include <limits>
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -15,14 +17,14 @@
 #include "base/bind.h"
 #include "base/guid.h"
 #include "base/location.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "content/browser/resource_context_impl.h"
 #include "content/browser/service_worker/service_worker_fetch_dispatcher.h"
 #include "content/browser/service_worker/service_worker_provider_host.h"
+#include "content/browser/service_worker/service_worker_response_info.h"
 #include "content/browser/streams/stream.h"
 #include "content/browser/streams/stream_context.h"
 #include "content/browser/streams/stream_registry.h"
@@ -519,13 +521,13 @@ void ServiceWorkerURLRequestJob::StartRequest() {
   NOTREACHED();
 }
 
-scoped_ptr<ServiceWorkerFetchRequest>
+std::unique_ptr<ServiceWorkerFetchRequest>
 ServiceWorkerURLRequestJob::CreateFetchRequest() {
   std::string blob_uuid;
   uint64_t blob_size = 0;
   if (HasRequestBody())
     CreateRequestBodyBlob(&blob_uuid, &blob_size);
-  scoped_ptr<ServiceWorkerFetchRequest> request(
+  std::unique_ptr<ServiceWorkerFetchRequest> request(
       new ServiceWorkerFetchRequest());
   request->mode = request_mode_;
   request->is_main_resource_load = IsMainResourceLoad();
@@ -565,8 +567,8 @@ void ServiceWorkerURLRequestJob::CreateRequestBodyBlob(std::string* blob_uuid,
                                                        uint64_t* blob_size) {
   DCHECK(HasRequestBody());
   // To ensure the blobs stick around until the end of the reading.
-  std::vector<scoped_ptr<storage::BlobDataHandle>> handles;
-  std::vector<scoped_ptr<storage::BlobDataSnapshot>> snapshots;
+  std::vector<std::unique_ptr<storage::BlobDataHandle>> handles;
+  std::vector<std::unique_ptr<storage::BlobDataSnapshot>> snapshots;
   // TODO(dmurph): Allow blobs to be added below, so that the context can
   // efficiently re-use blob items for the new blob.
   std::vector<const ResourceRequestBody::Element*> resolved_elements;
@@ -575,9 +577,10 @@ void ServiceWorkerURLRequestJob::CreateRequestBodyBlob(std::string* blob_uuid,
       resolved_elements.push_back(&element);
       continue;
     }
-    scoped_ptr<storage::BlobDataHandle> handle =
+    std::unique_ptr<storage::BlobDataHandle> handle =
         blob_storage_context_->GetBlobDataFromUUID(element.blob_uuid());
-    scoped_ptr<storage::BlobDataSnapshot> snapshot = handle->CreateSnapshot();
+    std::unique_ptr<storage::BlobDataSnapshot> snapshot =
+        handle->CreateSnapshot();
     if (snapshot->items().empty())
       continue;
     const auto& items = snapshot->items();
@@ -680,7 +683,10 @@ void ServiceWorkerURLRequestJob::DidDispatchFetchEvent(
          request_mode_ == FETCH_REQUEST_MODE_CORS_WITH_FORCED_PREFLIGHT) &&
         !request()->initiator().IsSameOriginWith(
             url::Origin(request()->url()))) {
-      fall_back_required_ = true;
+      // TODO(mek): http://crbug.com/604084 Figure out what to do about CORS
+      // preflight and fallbacks for foreign fetch events.
+      fall_back_required_ =
+          fetch_type_ != ServiceWorkerFetchType::FOREIGN_FETCH;
       RecordResult(ServiceWorkerMetrics::REQUEST_JOB_FALLBACK_FOR_CORS);
       CreateResponseHeader(
           400, "Service Worker Fallback Required", ServiceWorkerHeaderMap());
@@ -757,7 +763,7 @@ void ServiceWorkerURLRequestJob::DidDispatchFetchEvent(
   // Set up a request for reading the blob.
   if (!response.blob_uuid.empty() && blob_storage_context_) {
     SetResponseBodyType(BLOB);
-    scoped_ptr<storage::BlobDataHandle> blob_data_handle =
+    std::unique_ptr<storage::BlobDataHandle> blob_data_handle =
         blob_storage_context_->GetBlobDataFromUUID(response.blob_uuid);
     if (!blob_data_handle) {
       // The renderer gave us a bad blob UUID.
@@ -811,7 +817,8 @@ void ServiceWorkerURLRequestJob::CommitResponseHeader() {
     http_response_info_.reset(new net::HttpResponseInfo());
   http_response_info_->headers.swap(http_response_headers_);
   http_response_info_->vary_data = net::HttpVaryData();
-  http_response_info_->metadata = nullptr;
+  http_response_info_->metadata =
+      blob_request_ ? blob_request_->response_info().metadata : nullptr;
   NotifyHeadersComplete();
 }
 
@@ -891,28 +898,32 @@ void ServiceWorkerURLRequestJob::NotifyStartError(
 }
 
 void ServiceWorkerURLRequestJob::NotifyRestartRequired() {
-  delegate_->OnPrepareToRestart(worker_start_time_, worker_ready_time_);
+  ServiceWorkerResponseInfo::ForRequest(request_, true)
+      ->OnPrepareToRestart(worker_start_time_, worker_ready_time_);
+  delegate_->OnPrepareToRestart();
   URLRequestJob::NotifyRestartRequired();
 }
 
 void ServiceWorkerURLRequestJob::OnStartCompleted() const {
   if (response_type_ != FORWARD_TO_SERVICE_WORKER) {
-    delegate_->OnStartCompleted(
-        false /* was_fetched_via_service_worker */,
-        false /* was_fallback_required */,
-        GURL() /* original_url_via_service_worker */,
-        blink::WebServiceWorkerResponseTypeDefault,
-        base::TimeTicks() /* service_worker_start_time */,
-        base::TimeTicks() /* service_worker_ready_time */,
-        false /* respons_is_in_cache_storage */,
-        std::string() /* response_cache_storage_cache_name */);
+    ServiceWorkerResponseInfo::ForRequest(request_, true)
+        ->OnStartCompleted(
+            false /* was_fetched_via_service_worker */,
+            false /* was_fallback_required */,
+            GURL() /* original_url_via_service_worker */,
+            blink::WebServiceWorkerResponseTypeDefault,
+            base::TimeTicks() /* service_worker_start_time */,
+            base::TimeTicks() /* service_worker_ready_time */,
+            false /* respons_is_in_cache_storage */,
+            std::string() /* response_cache_storage_cache_name */);
     return;
   }
-  delegate_->OnStartCompleted(true /* was_fetched_via_service_worker */,
-                              fall_back_required_, response_url_,
-                              service_worker_response_type_, worker_start_time_,
-                              worker_ready_time_, response_is_in_cache_storage_,
-                              response_cache_storage_cache_name_);
+  ServiceWorkerResponseInfo::ForRequest(request_, true)
+      ->OnStartCompleted(true /* was_fetched_via_service_worker */,
+                         fall_back_required_, response_url_,
+                         service_worker_response_type_, worker_start_time_,
+                         worker_ready_time_, response_is_in_cache_storage_,
+                         response_cache_storage_cache_name_);
 }
 
 bool ServiceWorkerURLRequestJob::IsMainResourceLoad() const {

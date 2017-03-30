@@ -84,3 +84,11 @@ void WebDragBookmarkHandlerAura::OnDragLeave() {
 
   bookmark_drag_data_.Clear();
 }
+
+blink::WebDragOperationsMask WebDragBookmarkHandlerAura::OnDragEnd(
+    int screen_x,
+    int screen_y,
+    blink::WebDragOperationsMask ops,
+    bool cancelled) {
+  return ops;
+}

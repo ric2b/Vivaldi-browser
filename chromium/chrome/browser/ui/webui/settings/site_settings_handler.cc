@@ -21,13 +21,6 @@ namespace settings {
 
 SiteSettingsHandler::SiteSettingsHandler(Profile* profile)
     : profile_(profile), observer_(this) {
-  observer_.Add(HostContentSettingsMapFactory::GetForProfile(profile));
-  if (profile->HasOffTheRecordProfile()) {
-    auto map = HostContentSettingsMapFactory::GetForProfile(
-        profile->GetOffTheRecordProfile());
-    if (!observer_.IsObserving(map))
-      observer_.Add(map);
-  }
 }
 
 SiteSettingsHandler::~SiteSettingsHandler() {
@@ -62,6 +55,24 @@ void SiteSettingsHandler::RegisterMessages() {
       "setCategoryPermissionForOrigin",
       base::Bind(&SiteSettingsHandler::HandleSetCategoryPermissionForOrigin,
                  base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "isPatternValid",
+      base::Bind(&SiteSettingsHandler::HandleIsPatternValid,
+                 base::Unretained(this)));
+}
+
+void SiteSettingsHandler::OnJavascriptAllowed() {
+  observer_.Add(HostContentSettingsMapFactory::GetForProfile(profile_));
+  if (profile_->HasOffTheRecordProfile()) {
+    auto map = HostContentSettingsMapFactory::GetForProfile(
+        profile_->GetOffTheRecordProfile());
+    if (!observer_.IsObserving(map))
+      observer_.Add(map);
+  }
+}
+
+void SiteSettingsHandler::OnJavascriptDisallowed() {
+  observer_.RemoveAll();
 }
 
 void SiteSettingsHandler::OnGetUsageInfo(
@@ -71,11 +82,10 @@ void SiteSettingsHandler::OnGetUsageInfo(
   for (const auto& entry : entries) {
     if (entry.usage <= 0) continue;
     if (entry.host == usage_host_) {
-      web_ui()->CallJavascriptFunction(
-         "settings.WebsiteUsagePrivateApi.returnUsageTotal",
-         base::StringValue(entry.host),
-         base::StringValue(ui::FormatBytes(entry.usage)),
-         base::FundamentalValue(entry.type));
+      CallJavascriptFunction("settings.WebsiteUsagePrivateApi.returnUsageTotal",
+                             base::StringValue(entry.host),
+                             base::StringValue(ui::FormatBytes(entry.usage)),
+                             base::FundamentalValue(entry.type));
       return;
     }
   }
@@ -83,9 +93,8 @@ void SiteSettingsHandler::OnGetUsageInfo(
 
 void SiteSettingsHandler::OnUsageInfoCleared(storage::QuotaStatusCode code) {
   if (code == storage::kQuotaStatusOk) {
-    web_ui()->CallJavascriptFunction(
-        "settings.WebsiteUsagePrivateApi.onUsageCleared",
-        base::StringValue(clearing_origin_));
+    CallJavascriptFunction("settings.WebsiteUsagePrivateApi.onUsageCleared",
+                           base::StringValue(clearing_origin_));
   }
 }
 
@@ -95,12 +104,11 @@ void SiteSettingsHandler::OnContentSettingChanged(
     ContentSettingsType content_type,
     std::string resource_identifier) {
   if (primary_pattern.ToString().empty()) {
-    web_ui()->CallJavascriptFunction(
-        "cr.webUIListenerCallback",
-        base::StringValue("contentSettingCategoryChanged"),
-        base::FundamentalValue(content_type));
+    CallJavascriptFunction("cr.webUIListenerCallback",
+                           base::StringValue("contentSettingCategoryChanged"),
+                           base::FundamentalValue(content_type));
   } else {
-    web_ui()->CallJavascriptFunction(
+    CallJavascriptFunction(
         "cr.webUIListenerCallback",
         base::StringValue("contentSettingSitePermissionChanged"),
         base::FundamentalValue(content_type),
@@ -110,6 +118,8 @@ void SiteSettingsHandler::OnContentSettingChanged(
 
 void SiteSettingsHandler::HandleFetchUsageTotal(
     const base::ListValue* args) {
+  AllowJavascript();
+
   CHECK_EQ(1U, args->GetSize());
   std::string host;
   CHECK(args->GetString(0, &host));
@@ -154,18 +164,22 @@ void SiteSettingsHandler::HandleSetDefaultValueForContentType(
   CHECK_EQ(2U, args->GetSize());
   double content_type;
   CHECK(args->GetDouble(0, &content_type));
-  double default_setting;
-  CHECK(args->GetDouble(1, &default_setting));
+  std::string setting;
+  CHECK(args->GetString(1, &setting));
+  ContentSetting default_setting;
+  CHECK(content_settings::ContentSettingFromString(setting, &default_setting));
 
   HostContentSettingsMap* map =
       HostContentSettingsMapFactory::GetForProfile(profile_);
   map->SetDefaultContentSetting(
       static_cast<ContentSettingsType>(static_cast<int>(content_type)),
-      static_cast<ContentSetting>(static_cast<int>(default_setting)));
+      default_setting);
 }
 
 void SiteSettingsHandler::HandleGetDefaultValueForContentType(
     const base::ListValue* args) {
+  AllowJavascript();
+
   CHECK_EQ(2U, args->GetSize());
   const base::Value* callback_id;
   CHECK(args->Get(0, &callback_id));
@@ -189,6 +203,8 @@ void SiteSettingsHandler::HandleGetDefaultValueForContentType(
 }
 
 void SiteSettingsHandler::HandleGetExceptionList(const base::ListValue* args) {
+  AllowJavascript();
+
   CHECK_EQ(2U, args->GetSize());
   const base::Value* callback_id;
   CHECK(args->Get(0, &callback_id));
@@ -237,12 +253,13 @@ void SiteSettingsHandler::HandleSetCategoryPermissionForOrigin(
   CHECK(args->GetString(1, &secondary_pattern));
   double type;
   CHECK(args->GetDouble(2, &type));
-  double value;
-  CHECK(args->GetDouble(3, &value));
+  std::string value;
+  CHECK(args->GetString(3, &value));
 
   ContentSettingsType content_type =
       static_cast<ContentSettingsType>(static_cast<int>(type));
-  ContentSetting setting = static_cast<ContentSetting>(static_cast<int>(value));
+  ContentSetting setting;
+  CHECK(content_settings::ContentSettingFromString(value, &setting));
 
   HostContentSettingsMap* map =
       HostContentSettingsMapFactory::GetForProfile(profile_);
@@ -252,6 +269,20 @@ void SiteSettingsHandler::HandleSetCategoryPermissionForOrigin(
           ContentSettingsPattern::Wildcard() :
           ContentSettingsPattern::FromString(secondary_pattern),
       content_type, "", setting);
+}
+
+void SiteSettingsHandler::HandleIsPatternValid(
+    const base::ListValue* args) {
+  CHECK_EQ(2U, args->GetSize());
+  const base::Value* callback_id;
+  CHECK(args->Get(0, &callback_id));
+  std::string pattern_string;
+  CHECK(args->GetString(1, &pattern_string));
+
+  ContentSettingsPattern pattern =
+      ContentSettingsPattern::FromString(pattern_string);
+  ResolveJavascriptCallback(
+      *callback_id, base::FundamentalValue(pattern.IsValid()));
 }
 
 }  // namespace settings

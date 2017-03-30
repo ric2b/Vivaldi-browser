@@ -30,6 +30,13 @@ public interface SceneOverlay {
             ResourceManager resourceManager, float yOffset);
 
     /**
+     * Notify the layout that a SceneOverlay is visible. If not visible, the content tree will not
+     * be modified.
+     * @return True if the SceneOverlay tree is showing.
+     */
+    boolean isSceneOverlayTreeShowing();
+
+    /**
      * @return The {@link EventFilter} that processes events for this {@link SceneOverlay}.
      */
     EventFilter getEventFilter();
@@ -60,6 +67,22 @@ public interface SceneOverlay {
      * @return     Whether the updating is done.
      */
     boolean updateOverlay(long time, long dt);
+
+    /**
+     * Notification that the system back button was pressed.
+     * @return True if system back button press was consumed by this overlay.
+     */
+    boolean onBackPressed();
+
+    /**
+     * A notification to the overlay that the containing layout is being hidden.
+     */
+    void onHideLayout();
+
+    /**
+     * @return True if this overlay handles tab creation.
+     */
+    boolean handlesTabCreating();
 
     /**
      * Notify the a title has changed.

@@ -40,7 +40,7 @@ public:
 
     // ImageDecoder:
     String filenameExtension() const override { return "jpg"; }
-    void onSetData(SharedBuffer* data) override;
+    void onSetData(SegmentReader* data) override;
     IntSize decodedSize() const override { return m_decodedSize; }
     bool setSize(unsigned width, unsigned height) override;
     IntSize decodedYUVSize(int component) const override;
@@ -48,7 +48,7 @@ public:
     bool canDecodeToYUV() override;
     bool decodeToYUV() override;
     void setImagePlanes(PassOwnPtr<ImagePlanes>) override;
-    bool hasImagePlanes() const { return m_imagePlanes; }
+    bool hasImagePlanes() const { return m_imagePlanes.get(); }
 
     bool outputScanlines();
     unsigned desiredScaleNumerator() const;

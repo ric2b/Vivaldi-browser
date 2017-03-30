@@ -7,8 +7,9 @@
 
 #include "third_party/WebKit/public/web/WebPlugin.h"
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner_helpers.h"
 #include "content/renderer/mouse_lock_dispatcher.h"
@@ -173,8 +174,6 @@ class CONTENT_EXPORT BrowserPlugin :
   blink::WebPluginContainer* container_;
   // The plugin's rect in css pixels.
   gfx::Rect view_rect_;
-  // Bitmap for crashed plugin. Lazily initialized, non-owning pointer.
-  SkBitmap* sad_guest_;
   bool guest_crashed_;
   bool plugin_focused_;
   // Tracks the visibility of the browser plugin regardless of the whole
@@ -193,9 +192,6 @@ class CONTENT_EXPORT BrowserPlugin :
 
   // URL for the embedder frame.
   int browser_plugin_instance_id_;
-
-  // Indicates whether the guest content is opaque.
-  bool contents_opaque_;
 
   std::vector<EditCommand> edit_commands_;
 

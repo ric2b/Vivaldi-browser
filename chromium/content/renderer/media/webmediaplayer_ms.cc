@@ -12,13 +12,14 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "build/build_config.h"
-#include "cc/blink/context_provider_web_context.h"
 #include "cc/blink/web_layer_impl.h"
 #include "cc/layers/video_frame_provider_client_impl.h"
 #include "cc/layers/video_layer.h"
+#include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "content/public/renderer/media_stream_audio_renderer.h"
 #include "content/public/renderer/media_stream_renderer_factory.h"
 #include "content/public/renderer/video_frame_provider.h"
+#include "content/renderer/media/web_media_element_source_utils.h"
 #include "content/renderer/media/webmediaplayer_ms_compositor.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_thread_impl.h"
@@ -26,9 +27,9 @@
 #include "media/base/video_frame.h"
 #include "media/blink/webmediaplayer_util.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayerClient.h"
+#include "third_party/WebKit/public/platform/WebMediaPlayerSource.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
 
 namespace content {
 
@@ -80,10 +81,12 @@ WebMediaPlayerMS::~WebMediaPlayerMS() {
   DVLOG(1) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (compositor_ && !compositor_task_runner_->BelongsToCurrentThread())
-    compositor_task_runner_->DeleteSoon(FROM_HERE, compositor_.release());
-
+  // Destruct compositor resources in the proper order.
   get_client()->setWebLayer(nullptr);
+  if (video_weblayer_)
+    static_cast<cc::VideoLayer*>(video_weblayer_->layer())->StopUsingProvider();
+  if (compositor_)
+    compositor_task_runner_->DeleteSoon(FROM_HERE, compositor_.release());
 
   if (video_frame_provider_)
     video_frame_provider_->Stop();
@@ -101,7 +104,7 @@ WebMediaPlayerMS::~WebMediaPlayerMS() {
 }
 
 void WebMediaPlayerMS::load(LoadType load_type,
-                            const blink::WebURL& url,
+                            const blink::WebMediaPlayerSource& source,
                             CORSMode /*cors_mode*/) {
   DVLOG(1) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -109,30 +112,32 @@ void WebMediaPlayerMS::load(LoadType load_type,
   // TODO(acolwell): Change this to DCHECK_EQ(load_type, LoadTypeMediaStream)
   // once Blink-side changes land.
   DCHECK_NE(load_type, LoadTypeMediaSource);
+  blink::WebMediaStream web_stream =
+      GetWebMediaStreamFromWebMediaPlayerSource(source);
 
-  compositor_.reset(new WebMediaPlayerMSCompositor(compositor_task_runner_, url,
-                                                   AsWeakPtr()));
+  compositor_.reset(new WebMediaPlayerMSCompositor(compositor_task_runner_,
+                                                   web_stream, AsWeakPtr()));
 
   SetNetworkState(WebMediaPlayer::NetworkStateLoading);
   SetReadyState(WebMediaPlayer::ReadyStateHaveNothing);
-  media_log_->AddEvent(media_log_->CreateLoadEvent(url.string().utf8()));
+  std::string stream_id =
+      web_stream.isNull() ? std::string() : web_stream.id().utf8();
+  media_log_->AddEvent(media_log_->CreateLoadEvent(stream_id));
 
   video_frame_provider_ = renderer_factory_->GetVideoFrameProvider(
-      url,
-      base::Bind(&WebMediaPlayerMS::OnSourceError, AsWeakPtr()),
+      web_stream, base::Bind(&WebMediaPlayerMS::OnSourceError, AsWeakPtr()),
       base::Bind(&WebMediaPlayerMS::OnFrameAvailable, AsWeakPtr()),
-      media_task_runner_,
-      worker_task_runner_,
-      gpu_factories_);
+      media_task_runner_, worker_task_runner_, gpu_factories_);
 
   RenderFrame* const frame = RenderFrame::FromWebFrame(frame_);
 
   if (frame) {
     // Report UMA and RAPPOR metrics.
-    media::ReportMetrics(load_type, GURL(url), frame_->getSecurityOrigin());
+    GURL url = source.isURL() ? GURL(source.getAsURL()) : GURL();
+    media::ReportMetrics(load_type, url, frame_->getSecurityOrigin());
 
     audio_renderer_ = renderer_factory_->GetAudioRenderer(
-        url, frame->GetRoutingID(), initial_audio_output_device_id_,
+        web_stream, frame->GetRoutingID(), initial_audio_output_device_id_,
         initial_security_origin_);
   }
 
@@ -330,7 +335,7 @@ void WebMediaPlayerMS::paint(blink::WebCanvas* canvas,
 
   media::Context3D context_3d;
   if (frame && frame->HasTextures()) {
-    cc::ContextProvider* provider =
+    auto* provider =
         RenderThreadImpl::current()->SharedMainThreadContextProvider().get();
     // GPU Process crashed.
     if (!provider)

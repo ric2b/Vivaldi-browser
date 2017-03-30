@@ -2,7 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "device/usb/usb_device_handle.h"
+
 #include <stddef.h>
+
+#include <memory>
 
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
@@ -12,7 +16,6 @@
 #include "device/test/test_device_client.h"
 #include "device/test/usb_test_gadget.h"
 #include "device/usb/usb_device.h"
-#include "device/usb/usb_device_handle.h"
 #include "net/base/io_buffer.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -29,11 +32,11 @@ class UsbDeviceHandleTest : public ::testing::Test {
   }
 
  protected:
-  scoped_ptr<base::TestIOThread> io_thread_;
+  std::unique_ptr<base::TestIOThread> io_thread_;
 
  private:
-  scoped_ptr<base::MessageLoop> message_loop_;
-  scoped_ptr<TestDeviceClient> device_client_;
+  std::unique_ptr<base::MessageLoop> message_loop_;
+  std::unique_ptr<TestDeviceClient> device_client_;
 };
 
 class TestOpenCallback {
@@ -118,7 +121,7 @@ TEST_F(UsbDeviceHandleTest, InterruptTransfer) {
     return;
   }
 
-  scoped_ptr<UsbTestGadget> gadget =
+  std::unique_ptr<UsbTestGadget> gadget =
       UsbTestGadget::Claim(io_thread_->task_runner());
   ASSERT_TRUE(gadget.get());
   ASSERT_TRUE(gadget->SetType(UsbTestGadget::ECHO));
@@ -186,7 +189,7 @@ TEST_F(UsbDeviceHandleTest, BulkTransfer) {
     return;
   }
 
-  scoped_ptr<UsbTestGadget> gadget =
+  std::unique_ptr<UsbTestGadget> gadget =
       UsbTestGadget::Claim(io_thread_->task_runner());
   ASSERT_TRUE(gadget.get());
   ASSERT_TRUE(gadget->SetType(UsbTestGadget::ECHO));
@@ -250,12 +253,42 @@ TEST_F(UsbDeviceHandleTest, BulkTransfer) {
   handle->Close();
 }
 
+TEST_F(UsbDeviceHandleTest, ControlTransfer) {
+  if (!UsbTestGadget::IsTestEnabled())
+    return;
+
+  std::unique_ptr<UsbTestGadget> gadget =
+      UsbTestGadget::Claim(io_thread_->task_runner());
+  ASSERT_TRUE(gadget.get());
+
+  TestOpenCallback open_device;
+  gadget->GetDevice()->Open(open_device.callback());
+  scoped_refptr<UsbDeviceHandle> handle = open_device.WaitForResult();
+  ASSERT_TRUE(handle.get());
+
+  scoped_refptr<net::IOBufferWithSize> buffer(new net::IOBufferWithSize(255));
+  TestCompletionCallback completion;
+  handle->ControlTransfer(USB_DIRECTION_INBOUND, UsbDeviceHandle::STANDARD,
+                          UsbDeviceHandle::DEVICE, 0x06, 0x0301, 0x0409, buffer,
+                          buffer->size(), 0, completion.callback());
+  completion.WaitForResult();
+  ASSERT_EQ(USB_TRANSFER_COMPLETED, completion.status());
+  const char expected_str[] = "\x18\x03G\0o\0o\0g\0l\0e\0 \0I\0n\0c\0.\0";
+  EXPECT_EQ(sizeof(expected_str) - 1, completion.transferred());
+  for (size_t i = 0; i < completion.transferred(); ++i) {
+    EXPECT_EQ(expected_str[i], buffer->data()[i]) << "Mismatch at index " << i
+                                                  << ".";
+  }
+
+  handle->Close();
+}
+
 TEST_F(UsbDeviceHandleTest, SetInterfaceAlternateSetting) {
   if (!UsbTestGadget::IsTestEnabled()) {
     return;
   }
 
-  scoped_ptr<UsbTestGadget> gadget =
+  std::unique_ptr<UsbTestGadget> gadget =
       UsbTestGadget::Claim(io_thread_->task_runner());
   ASSERT_TRUE(gadget.get());
   ASSERT_TRUE(gadget->SetType(UsbTestGadget::ECHO));
@@ -276,6 +309,102 @@ TEST_F(UsbDeviceHandleTest, SetInterfaceAlternateSetting) {
   TestResultCallback release_interface;
   handle->ReleaseInterface(2, release_interface.callback());
   ASSERT_TRUE(release_interface.WaitForResult());
+
+  handle->Close();
+}
+
+TEST_F(UsbDeviceHandleTest, CancelOnClose) {
+  if (!UsbTestGadget::IsTestEnabled()) {
+    return;
+  }
+
+  std::unique_ptr<UsbTestGadget> gadget =
+      UsbTestGadget::Claim(io_thread_->task_runner());
+  ASSERT_TRUE(gadget.get());
+  ASSERT_TRUE(gadget->SetType(UsbTestGadget::ECHO));
+
+  TestOpenCallback open_device;
+  gadget->GetDevice()->Open(open_device.callback());
+  scoped_refptr<UsbDeviceHandle> handle = open_device.WaitForResult();
+  ASSERT_TRUE(handle.get());
+
+  TestResultCallback claim_interface;
+  handle->ClaimInterface(1, claim_interface.callback());
+  ASSERT_TRUE(claim_interface.WaitForResult());
+
+  scoped_refptr<net::IOBufferWithSize> buffer(new net::IOBufferWithSize(512));
+  TestCompletionCallback completion;
+  handle->GenericTransfer(USB_DIRECTION_INBOUND, 0x82, buffer.get(),
+                          buffer->size(),
+                          5000,  // 5 second timeout
+                          completion.callback());
+
+  handle->Close();
+  completion.WaitForResult();
+  ASSERT_EQ(USB_TRANSFER_CANCELLED, completion.status());
+}
+
+TEST_F(UsbDeviceHandleTest, CancelOnDisconnect) {
+  if (!UsbTestGadget::IsTestEnabled()) {
+    return;
+  }
+
+  std::unique_ptr<UsbTestGadget> gadget =
+      UsbTestGadget::Claim(io_thread_->task_runner());
+  ASSERT_TRUE(gadget.get());
+  ASSERT_TRUE(gadget->SetType(UsbTestGadget::ECHO));
+
+  TestOpenCallback open_device;
+  gadget->GetDevice()->Open(open_device.callback());
+  scoped_refptr<UsbDeviceHandle> handle = open_device.WaitForResult();
+  ASSERT_TRUE(handle.get());
+
+  TestResultCallback claim_interface;
+  handle->ClaimInterface(1, claim_interface.callback());
+  ASSERT_TRUE(claim_interface.WaitForResult());
+
+  scoped_refptr<net::IOBufferWithSize> buffer(new net::IOBufferWithSize(512));
+  TestCompletionCallback completion;
+  handle->GenericTransfer(USB_DIRECTION_INBOUND, 0x82, buffer.get(),
+                          buffer->size(),
+                          5000,  // 5 second timeout
+                          completion.callback());
+
+  ASSERT_TRUE(gadget->Disconnect());
+  completion.WaitForResult();
+  ASSERT_EQ(USB_TRANSFER_DISCONNECT, completion.status());
+
+  handle->Close();
+}
+
+TEST_F(UsbDeviceHandleTest, Timeout) {
+  if (!UsbTestGadget::IsTestEnabled()) {
+    return;
+  }
+
+  std::unique_ptr<UsbTestGadget> gadget =
+      UsbTestGadget::Claim(io_thread_->task_runner());
+  ASSERT_TRUE(gadget.get());
+  ASSERT_TRUE(gadget->SetType(UsbTestGadget::ECHO));
+
+  TestOpenCallback open_device;
+  gadget->GetDevice()->Open(open_device.callback());
+  scoped_refptr<UsbDeviceHandle> handle = open_device.WaitForResult();
+  ASSERT_TRUE(handle.get());
+
+  TestResultCallback claim_interface;
+  handle->ClaimInterface(1, claim_interface.callback());
+  ASSERT_TRUE(claim_interface.WaitForResult());
+
+  scoped_refptr<net::IOBufferWithSize> buffer(new net::IOBufferWithSize(512));
+  TestCompletionCallback completion;
+  handle->GenericTransfer(USB_DIRECTION_INBOUND, 0x82, buffer.get(),
+                          buffer->size(),
+                          10,  // 10 millisecond timeout
+                          completion.callback());
+
+  completion.WaitForResult();
+  ASSERT_EQ(USB_TRANSFER_TIMEOUT, completion.status());
 
   handle->Close();
 }

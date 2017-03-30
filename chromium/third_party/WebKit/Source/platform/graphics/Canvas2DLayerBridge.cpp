@@ -36,7 +36,6 @@
 #include "platform/graphics/gpu/SharedContextRateLimiter.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCompositorSupport.h"
-#include "public/platform/WebGraphicsContext3D.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
 #include "public/platform/WebScheduler.h"
 #include "public/platform/WebTraceLocation.h"
@@ -93,7 +92,7 @@ PassRefPtr<Canvas2DLayerBridge> Canvas2DLayerBridge::create(const IntSize& size,
     if (!contextProvider)
         return nullptr;
     RefPtr<Canvas2DLayerBridge> layerBridge;
-    layerBridge = adoptRef(new Canvas2DLayerBridge(contextProvider.release(), size, msaaSampleCount, opacityMode, accelerationMode));
+    layerBridge = adoptRef(new Canvas2DLayerBridge(std::move(contextProvider), size, msaaSampleCount, opacityMode, accelerationMode));
     return layerBridge.release();
 }
 
@@ -698,15 +697,6 @@ void Canvas2DLayerBridge::flushGpu()
         gl->Flush();
 }
 
-
-WebGraphicsContext3D* Canvas2DLayerBridge::context()
-{
-    // Check on m_layer is necessary because context() may be called during
-    // the destruction of m_layer
-    if (m_layer && !m_destructionInProgress)
-        checkSurfaceValid(); // To ensure rate limiter is disabled if context is lost.
-    return m_contextProvider ? m_contextProvider->context3d() : 0;
-}
 
 gpu::gles2::GLES2Interface* Canvas2DLayerBridge::contextGL()
 {

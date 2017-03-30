@@ -76,6 +76,8 @@
 #include "sync/util/time.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/protobuf/src/google/protobuf/io/coded_stream.h"
+#include "third_party/protobuf/src/google/protobuf/io/zero_copy_stream_impl_lite.h"
 #include "url/gurl.h"
 
 using base::ExpectDictStringValue;
@@ -631,13 +633,25 @@ TEST_F(SyncApiTest, BaseNodeSetSpecificsPreservesUnknownFields) {
 
   sync_pb::EntitySpecifics entity_specifics;
   entity_specifics.mutable_bookmark()->set_url("http://www.google.com");
-  entity_specifics.mutable_unknown_fields()->AddFixed32(5, 100);
+  std::string unknown_fields;
+  {
+    ::google::protobuf::io::StringOutputStream unknown_fields_stream(
+         &unknown_fields);
+    ::google::protobuf::io::CodedOutputStream output(&unknown_fields_stream);
+    const int tag = 5;
+    const int value = 100;
+    output.WriteTag(tag);
+    output.WriteLittleEndian32(value);
+  }
+  *entity_specifics.mutable_unknown_fields() = unknown_fields;
   node.SetEntitySpecifics(entity_specifics);
   EXPECT_FALSE(node.GetEntitySpecifics().unknown_fields().empty());
+  EXPECT_EQ(unknown_fields, node.GetEntitySpecifics().unknown_fields());
 
-  entity_specifics.mutable_unknown_fields()->Clear();
+  entity_specifics.mutable_unknown_fields()->clear();
   node.SetEntitySpecifics(entity_specifics);
   EXPECT_FALSE(node.GetEntitySpecifics().unknown_fields().empty());
+  EXPECT_EQ(unknown_fields, node.GetEntitySpecifics().unknown_fields());
 }
 
 TEST_F(SyncApiTest, EmptyTags) {
@@ -779,6 +793,78 @@ TEST_F(SyncApiTest, WriteNode_UniqueByCreation_UndeleteCase) {
 
   // Verify that it is gone from the index.
   EXPECT_EQ(1, GetTotalNodeCount(user_share(), preferences_root));
+}
+
+// Tests that InitUniqueByCreation called for existing encrypted entry properly
+// decrypts specifics and pust them in BaseNode::unencrypted_data_.
+TEST_F(SyncApiTest, WriteNode_UniqueByCreation_EncryptedExistingEntry) {
+  KeyParams params = {"localhost", "username", "passphrase"};
+  {
+    ReadTransaction trans(FROM_HERE, user_share());
+    trans.GetCryptographer()->AddKey(params);
+  }
+  encryption_handler()->EnableEncryptEverything();
+  WriteTransaction trans(FROM_HERE, user_share());
+  ReadNode root_node(&trans);
+  root_node.InitByRootLookup();
+
+  {
+    WriteNode pref_node(&trans);
+    WriteNode::InitUniqueByCreationResult result =
+        pref_node.InitUniqueByCreation(PREFERENCES, root_node, "bar");
+    ASSERT_EQ(WriteNode::INIT_SUCCESS, result);
+    pref_node.SetTitle("bar");
+    sync_pb::EntitySpecifics entity_specifics;
+    entity_specifics.mutable_preference();
+    pref_node.SetEntitySpecifics(entity_specifics);
+  }
+  {
+    WriteNode pref_node(&trans);
+    WriteNode::InitUniqueByCreationResult result =
+        pref_node.InitUniqueByCreation(PREFERENCES, root_node, "bar");
+    ASSERT_EQ(WriteNode::INIT_SUCCESS, result);
+    // Call GetEntitySpecifics, ensure it doesn't DCHECK.
+    pref_node.GetEntitySpecifics();
+  }
+}
+
+// Tests that undeleting deleted password doesn't trigger any issues.
+// See crbug/440430.
+TEST_F(SyncApiTest, WriteNode_PasswordUniqueByCreationAfterDelete) {
+  KeyParams params = {"localhost", "username", "passphrase"};
+  {
+    ReadTransaction trans(FROM_HERE, user_share());
+    trans.GetCryptographer()->AddKey(params);
+  }
+
+  WriteTransaction trans(FROM_HERE, user_share());
+  ReadNode root_node(&trans);
+  root_node.InitByRootLookup();
+  // Create new password.
+  {
+    WriteNode password_node(&trans);
+    WriteNode::InitUniqueByCreationResult result =
+        password_node.InitUniqueByCreation(PASSWORDS, root_node, "foo");
+    ASSERT_EQ(WriteNode::INIT_SUCCESS, result);
+    sync_pb::PasswordSpecificsData password_specifics;
+    password_specifics.set_password_value("secret");
+    password_node.SetPasswordSpecifics(password_specifics);
+  }
+  // Delete password.
+  {
+    WriteNode password_node(&trans);
+    BaseNode::InitByLookupResult result =
+        password_node.InitByClientTagLookup(PASSWORDS, "foo");
+    ASSERT_EQ(BaseNode::INIT_OK, result);
+    password_node.Tombstone();
+  }
+  // Create password again triggering undeletion.
+  {
+    WriteNode password_node(&trans);
+    WriteNode::InitUniqueByCreationResult result =
+        password_node.InitUniqueByCreation(PASSWORDS, root_node, "foo");
+    ASSERT_EQ(WriteNode::INIT_SUCCESS, result);
+  }
 }
 
 namespace {
@@ -1263,8 +1349,8 @@ TEST_F(SyncManagerTest, EncryptDataTypesWithData) {
 
   {
     ReadTransaction trans(FROM_HERE, sync_manager_.GetUserShare());
-    EXPECT_TRUE(GetEncryptedTypesWithTrans(&trans).Equals(
-        SyncEncryptionHandler::SensitiveTypes()));
+    EXPECT_EQ(SyncEncryptionHandler::SensitiveTypes(),
+              GetEncryptedTypesWithTrans(&trans));
     EXPECT_TRUE(syncable::VerifyDataTypeEncryptionForTest(
         trans.GetWrappedTrans(),
         BOOKMARKS,
@@ -1287,8 +1373,7 @@ TEST_F(SyncManagerTest, EncryptDataTypesWithData) {
   EXPECT_TRUE(IsEncryptEverythingEnabledForTest());
   {
     ReadTransaction trans(FROM_HERE, sync_manager_.GetUserShare());
-    EXPECT_TRUE(GetEncryptedTypesWithTrans(&trans).Equals(
-        EncryptableUserTypes()));
+    EXPECT_EQ(EncryptableUserTypes(), GetEncryptedTypesWithTrans(&trans));
     EXPECT_TRUE(syncable::VerifyDataTypeEncryptionForTest(
         trans.GetWrappedTrans(),
         BOOKMARKS,
@@ -1312,8 +1397,7 @@ TEST_F(SyncManagerTest, EncryptDataTypesWithData) {
   EXPECT_TRUE(IsEncryptEverythingEnabledForTest());
   {
     ReadTransaction trans(FROM_HERE, sync_manager_.GetUserShare());
-    EXPECT_TRUE(GetEncryptedTypesWithTrans(&trans).Equals(
-        EncryptableUserTypes()));
+    EXPECT_EQ(EncryptableUserTypes(), GetEncryptedTypesWithTrans(&trans));
     EXPECT_TRUE(syncable::VerifyDataTypeEncryptionForTest(
         trans.GetWrappedTrans(),
         BOOKMARKS,
@@ -1753,8 +1837,7 @@ TEST_F(SyncManagerTest, EncryptBookmarksWithLegacyData) {
 
   {
     ReadTransaction trans(FROM_HERE, sync_manager_.GetUserShare());
-    EXPECT_TRUE(GetEncryptedTypesWithTrans(&trans).Equals(
-        EncryptableUserTypes()));
+    EXPECT_EQ(EncryptableUserTypes(), GetEncryptedTypesWithTrans(&trans));
     EXPECT_TRUE(syncable::VerifyDataTypeEncryptionForTest(
         trans.GetWrappedTrans(),
         BOOKMARKS,
@@ -2617,14 +2700,14 @@ TEST_F(SyncManagerTestWithMockScheduler, BasicConfiguration) {
   EXPECT_EQ(0, retry_task_counter.times_called());
   EXPECT_EQ(sync_pb::GetUpdatesCallerInfo::RECONFIGURATION,
             params.source);
-  EXPECT_TRUE(types_to_download.Equals(params.types_to_download));
+  EXPECT_EQ(types_to_download, params.types_to_download);
   EXPECT_EQ(new_routing_info, params.routing_info);
 
   // Verify all the disabled types were purged.
-  EXPECT_TRUE(sync_manager_.InitialSyncEndedTypes().Equals(
-      enabled_types));
-  EXPECT_TRUE(sync_manager_.GetTypesWithEmptyProgressMarkerToken(
-      ModelTypeSet::All()).Equals(disabled_types));
+  EXPECT_EQ(enabled_types,
+            sync_manager_.GetUserShare()->directory->InitialSyncEndedTypes());
+  EXPECT_EQ(disabled_types, sync_manager_.GetTypesWithEmptyProgressMarkerToken(
+                                ModelTypeSet::All()));
 }
 
 // Test that on a reconfiguration (configuration where the session context
@@ -2677,12 +2760,12 @@ TEST_F(SyncManagerTestWithMockScheduler, ReConfiguration) {
   EXPECT_EQ(0, retry_task_counter.times_called());
   EXPECT_EQ(sync_pb::GetUpdatesCallerInfo::RECONFIGURATION,
             params.source);
-  EXPECT_TRUE(types_to_download.Equals(params.types_to_download));
+  EXPECT_EQ(types_to_download, params.types_to_download);
   EXPECT_EQ(new_routing_info, params.routing_info);
 
   // Verify only the recently disabled types were purged.
-  EXPECT_TRUE(sync_manager_.GetTypesWithEmptyProgressMarkerToken(
-      ProtocolTypes()).Equals(disabled_types));
+  EXPECT_EQ(disabled_types, sync_manager_.GetTypesWithEmptyProgressMarkerToken(
+                                ProtocolTypes()));
 }
 
 // Test that SyncManager::ClearServerData invokes the scheduler.
@@ -2718,7 +2801,9 @@ TEST_F(SyncManagerTest, PurgePartiallySyncedTypes) {
   }
 
   // One more redundant check.
-  ASSERT_FALSE(sync_manager_.InitialSyncEndedTypes().Has(AUTOFILL));
+  ASSERT_FALSE(
+      sync_manager_.GetUserShare()->directory->InitialSyncEndedTypes().Has(
+          AUTOFILL));
 
   // Give autofill a progress marker.
   sync_pb::DataTypeProgressMarker autofill_marker;
@@ -2733,7 +2818,9 @@ TEST_F(SyncManagerTest, PurgePartiallySyncedTypes) {
 
   // Preferences is an enabled type.  Check that the harness initialized it.
   ASSERT_TRUE(enabled_types.Has(PREFERENCES));
-  ASSERT_TRUE(sync_manager_.InitialSyncEndedTypes().Has(PREFERENCES));
+  ASSERT_TRUE(
+      sync_manager_.GetUserShare()->directory->InitialSyncEndedTypes().Has(
+          PREFERENCES));
 
   // Give preferencse a progress marker.
   sync_pb::DataTypeProgressMarker prefs_marker;
@@ -2759,7 +2846,7 @@ TEST_F(SyncManagerTest, PurgePartiallySyncedTypes) {
   EXPECT_TRUE(empty_tokens.Has(AUTOFILL));
   EXPECT_FALSE(empty_tokens.Has(PREFERENCES));
 
-  // Ensure that autofill lots its node, but preferences did not.
+  // Ensure that autofill lost its node, but preferences did not.
   {
     syncable::ReadTransaction trans(FROM_HERE, share->directory.get());
     syncable::Entry autofill_node(&trans, GET_BY_HANDLE, autofill_meta);
@@ -2778,7 +2865,8 @@ TEST_F(SyncManagerTest, PurgeDisabledTypes) {
   ModelTypeSet disabled_types = Difference(ModelTypeSet::All(), enabled_types);
 
   // The harness should have initialized the enabled_types for us.
-  EXPECT_TRUE(enabled_types.Equals(sync_manager_.InitialSyncEndedTypes()));
+  EXPECT_EQ(enabled_types,
+            sync_manager_.GetUserShare()->directory->InitialSyncEndedTypes());
 
   // Set progress markers for all types.
   ModelTypeSet protocol_types = ProtocolTypes();
@@ -2792,9 +2880,10 @@ TEST_F(SyncManagerTest, PurgeDisabledTypes) {
   sync_manager_.PurgeDisabledTypes(disabled_types,
                                    ModelTypeSet(),
                                    ModelTypeSet());
-  EXPECT_TRUE(enabled_types.Equals(sync_manager_.InitialSyncEndedTypes()));
-  EXPECT_TRUE(disabled_types.Equals(
-      sync_manager_.GetTypesWithEmptyProgressMarkerToken(ModelTypeSet::All())));
+  EXPECT_EQ(enabled_types,
+            sync_manager_.GetUserShare()->directory->InitialSyncEndedTypes());
+  EXPECT_EQ(disabled_types, sync_manager_.GetTypesWithEmptyProgressMarkerToken(
+                                ModelTypeSet::All()));
 
   // Disable some more types.
   disabled_types.Put(BOOKMARKS);
@@ -2806,9 +2895,10 @@ TEST_F(SyncManagerTest, PurgeDisabledTypes) {
   sync_manager_.PurgeDisabledTypes(disabled_types,
                                    ModelTypeSet(),
                                    ModelTypeSet());
-  EXPECT_TRUE(new_enabled_types.Equals(sync_manager_.InitialSyncEndedTypes()));
-  EXPECT_TRUE(disabled_types.Equals(
-      sync_manager_.GetTypesWithEmptyProgressMarkerToken(ModelTypeSet::All())));
+  EXPECT_EQ(new_enabled_types,
+            sync_manager_.GetUserShare()->directory->InitialSyncEndedTypes());
+  EXPECT_EQ(disabled_types, sync_manager_.GetTypesWithEmptyProgressMarkerToken(
+                                ModelTypeSet::All()));
 }
 
 // Test PurgeDisabledTypes properly unapplies types by deleting their local data
@@ -2821,7 +2911,8 @@ TEST_F(SyncManagerTest, PurgeUnappliedTypes) {
   ModelTypeSet disabled_types = Difference(ModelTypeSet::All(), enabled_types);
 
   // The harness should have initialized the enabled_types for us.
-  EXPECT_TRUE(enabled_types.Equals(sync_manager_.InitialSyncEndedTypes()));
+  EXPECT_EQ(enabled_types,
+            sync_manager_.GetUserShare()->directory->InitialSyncEndedTypes());
 
   // Set progress markers for all types.
   ModelTypeSet protocol_types = ProtocolTypes();
@@ -2887,7 +2978,9 @@ TEST_F(SyncManagerTest, PurgeUnappliedTypes) {
 
   // Verify the unapplied types still have progress markers and initial sync
   // ended after cleanup.
-  EXPECT_TRUE(sync_manager_.InitialSyncEndedTypes().HasAll(unapplied_types));
+  EXPECT_TRUE(
+      sync_manager_.GetUserShare()->directory->InitialSyncEndedTypes().HasAll(
+          unapplied_types));
   EXPECT_TRUE(
       sync_manager_.GetTypesWithEmptyProgressMarkerToken(unapplied_types).
           Empty());

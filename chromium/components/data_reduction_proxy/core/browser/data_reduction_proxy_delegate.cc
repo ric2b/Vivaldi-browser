@@ -14,6 +14,7 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_request_options.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_event_creator.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_util.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/url_util.h"
 #include "net/http/http_request_headers.h"
@@ -63,10 +64,6 @@ void DataReductionProxyDelegate::OnTunnelConnectCompleted(
     const net::HostPortPair& endpoint,
     const net::HostPortPair& proxy_server,
     int net_error) {
-  if (config_->IsDataReductionProxy(proxy_server, NULL)) {
-    UMA_HISTOGRAM_SPARSE_SLOWLY("DataReductionProxy.HTTPConnectCompleted",
-                                std::abs(net_error));
-  }
 }
 
 void DataReductionProxyDelegate::OnFallback(const net::ProxyServer& bad_proxy,
@@ -90,8 +87,6 @@ void DataReductionProxyDelegate::OnBeforeSendHeaders(
 void DataReductionProxyDelegate::OnBeforeTunnelRequest(
     const net::HostPortPair& proxy_server,
     net::HttpRequestHeaders* extra_headers) {
-  request_options_->MaybeAddProxyTunnelRequestHandler(
-      proxy_server, extra_headers);
 }
 
 bool DataReductionProxyDelegate::IsTrustedSpdyProxy(
@@ -125,7 +120,7 @@ void OnResolveProxyHandler(const GURL& url,
   bool data_saver_proxy_used = true;
   if (result->is_empty() || !result->proxy_server().is_direct() ||
       result->proxy_list().size() != 1 || url.SchemeIsWSOrWSS() ||
-      method == "POST") {
+      !IsMethodIdempotent(method)) {
     return;
   }
 

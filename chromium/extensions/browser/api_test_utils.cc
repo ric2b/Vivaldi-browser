@@ -4,10 +4,11 @@
 
 #include "extensions/browser/api_test_utils.h"
 
+#include <memory>
 #include <utility>
 
+#include "base/callback_helpers.h"
 #include "base/json/json_reader.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/values.h"
 #include "components/crx_file/id_util.h"
 #include "content/public/browser/browser_context.h"
@@ -21,11 +22,11 @@ using extensions::ExtensionFunctionDispatcher;
 
 namespace {
 
-scoped_ptr<base::Value> ParseJSON(const std::string& data) {
+std::unique_ptr<base::Value> ParseJSON(const std::string& data) {
   return base::JSONReader::Read(data);
 }
 
-scoped_ptr<base::ListValue> ParseList(const std::string& data) {
+std::unique_ptr<base::ListValue> ParseList(const std::string& data) {
   return base::ListValue::From(ParseJSON(data));
 }
 
@@ -34,13 +35,9 @@ scoped_ptr<base::ListValue> ParseList(const std::string& data) {
 class SendResponseDelegate
     : public UIThreadExtensionFunction::DelegateForTests {
  public:
-  SendResponseDelegate() : should_post_quit_(false) {}
+  SendResponseDelegate() {}
 
   virtual ~SendResponseDelegate() {}
-
-  void set_should_post_quit(bool should_quit) {
-    should_post_quit_ = should_quit;
-  }
 
   bool HasResponse() { return response_.get() != NULL; }
 
@@ -56,14 +53,19 @@ class SendResponseDelegate
     ASSERT_FALSE(HasResponse());
     response_.reset(new bool);
     *response_ = success;
-    if (should_post_quit_) {
-      base::MessageLoopForUI::current()->QuitWhenIdle();
-    }
+    run_loop_.Quit();
+  }
+
+  void WaitForResponse() {
+    // If the RunAsync of UIThreadExtensionFunction already called SendResponse,
+    // this will finish immediately.
+    run_loop_.Run();
   }
 
  private:
-  scoped_ptr<bool> response_;
-  bool should_post_quit_;
+  base::RunLoop run_loop_;
+  std::unique_ptr<bool> response_;
+  DISALLOW_COPY_AND_ASSIGN(SendResponseDelegate);
 };
 
 }  // namespace
@@ -72,7 +74,8 @@ namespace extensions {
 
 namespace api_test_utils {
 
-scoped_ptr<base::DictionaryValue> ParseDictionary(const std::string& data) {
+std::unique_ptr<base::DictionaryValue> ParseDictionary(
+    const std::string& data) {
   return base::DictionaryValue::From(ParseJSON(data));
 }
 
@@ -122,7 +125,7 @@ scoped_refptr<Extension> CreateExtension(
 
 scoped_refptr<Extension> CreateEmptyExtensionWithLocation(
     Manifest::Location location) {
-  scoped_ptr<base::DictionaryValue> test_extension_value =
+  std::unique_ptr<base::DictionaryValue> test_extension_value =
       ParseDictionary("{\"name\": \"Test\", \"version\": \"1.0\"}");
   return CreateExtension(location, test_extension_value.get(), std::string());
 }
@@ -131,7 +134,7 @@ base::Value* RunFunctionWithDelegateAndReturnSingleResult(
     UIThreadExtensionFunction* function,
     const std::string& args,
     content::BrowserContext* context,
-    scoped_ptr<extensions::ExtensionFunctionDispatcher> dispatcher) {
+    std::unique_ptr<extensions::ExtensionFunctionDispatcher> dispatcher) {
   return RunFunctionWithDelegateAndReturnSingleResult(
       function, args, context, std::move(dispatcher), NONE);
 }
@@ -140,7 +143,7 @@ base::Value* RunFunctionWithDelegateAndReturnSingleResult(
     UIThreadExtensionFunction* function,
     const std::string& args,
     content::BrowserContext* context,
-    scoped_ptr<extensions::ExtensionFunctionDispatcher> dispatcher,
+    std::unique_ptr<extensions::ExtensionFunctionDispatcher> dispatcher,
     RunFunctionFlags flags) {
   scoped_refptr<ExtensionFunction> function_owner(function);
   // Without a callback the function will not generate a result.
@@ -168,7 +171,7 @@ base::Value* RunFunctionAndReturnSingleResult(
     const std::string& args,
     content::BrowserContext* context,
     RunFunctionFlags flags) {
-  scoped_ptr<ExtensionFunctionDispatcher> dispatcher(
+  std::unique_ptr<ExtensionFunctionDispatcher> dispatcher(
       new ExtensionFunctionDispatcher(context));
 
   return RunFunctionWithDelegateAndReturnSingleResult(
@@ -185,7 +188,7 @@ std::string RunFunctionAndReturnError(UIThreadExtensionFunction* function,
                                       const std::string& args,
                                       content::BrowserContext* context,
                                       RunFunctionFlags flags) {
-  scoped_ptr<ExtensionFunctionDispatcher> dispatcher(
+  std::unique_ptr<ExtensionFunctionDispatcher> dispatcher(
       new ExtensionFunctionDispatcher(context));
   scoped_refptr<ExtensionFunction> function_owner(function);
   // Without a callback the function will not generate a result.
@@ -198,28 +201,30 @@ std::string RunFunctionAndReturnError(UIThreadExtensionFunction* function,
 bool RunFunction(UIThreadExtensionFunction* function,
                  const std::string& args,
                  content::BrowserContext* context) {
-  scoped_ptr<ExtensionFunctionDispatcher> dispatcher(
+  std::unique_ptr<ExtensionFunctionDispatcher> dispatcher(
       new ExtensionFunctionDispatcher(context));
   return RunFunction(function, args, context, std::move(dispatcher), NONE);
 }
 
-bool RunFunction(UIThreadExtensionFunction* function,
-                 const std::string& args,
-                 content::BrowserContext* context,
-                 scoped_ptr<extensions::ExtensionFunctionDispatcher> dispatcher,
-                 RunFunctionFlags flags) {
-  scoped_ptr<base::ListValue> parsed_args = ParseList(args);
+bool RunFunction(
+    UIThreadExtensionFunction* function,
+    const std::string& args,
+    content::BrowserContext* context,
+    std::unique_ptr<extensions::ExtensionFunctionDispatcher> dispatcher,
+    RunFunctionFlags flags) {
+  std::unique_ptr<base::ListValue> parsed_args = ParseList(args);
   EXPECT_TRUE(parsed_args.get())
       << "Could not parse extension function arguments: " << args;
   return RunFunction(function, std::move(parsed_args), context,
                      std::move(dispatcher), flags);
 }
 
-bool RunFunction(UIThreadExtensionFunction* function,
-                 scoped_ptr<base::ListValue> args,
-                 content::BrowserContext* context,
-                 scoped_ptr<extensions::ExtensionFunctionDispatcher> dispatcher,
-                 RunFunctionFlags flags) {
+bool RunFunction(
+    UIThreadExtensionFunction* function,
+    std::unique_ptr<base::ListValue> args,
+    content::BrowserContext* context,
+    std::unique_ptr<extensions::ExtensionFunctionDispatcher> dispatcher,
+    RunFunctionFlags flags) {
   SendResponseDelegate response_delegate;
   function->set_test_delegate(&response_delegate);
   function->SetArgs(args.get());
@@ -230,13 +235,7 @@ bool RunFunction(UIThreadExtensionFunction* function,
   function->set_browser_context(context);
   function->set_include_incognito(flags & INCLUDE_INCOGNITO);
   function->Run()->Execute();
-
-  // If the RunAsync of |function| didn't already call SendResponse, run the
-  // message loop until they do.
-  if (!response_delegate.HasResponse()) {
-    response_delegate.set_should_post_quit(true);
-    content::RunMessageLoop();
-  }
+  response_delegate.WaitForResponse();
 
   EXPECT_TRUE(response_delegate.HasResponse());
   return response_delegate.GetResponse();

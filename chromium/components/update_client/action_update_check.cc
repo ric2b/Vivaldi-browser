@@ -13,7 +13,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/version.h"
 #include "components/update_client/action_update.h"
 #include "components/update_client/configurator.h"
@@ -37,7 +37,7 @@ bool IsVersionNewer(const Version& current, const std::string& proposed) {
 }  // namespace
 
 ActionUpdateCheck::ActionUpdateCheck(
-    scoped_ptr<UpdateChecker> update_checker,
+    std::unique_ptr<UpdateChecker> update_checker,
     const base::Version& browser_version,
     const std::string& extra_request_parameters)
     : update_checker_(std::move(update_checker)),
@@ -61,7 +61,7 @@ void ActionUpdateCheck::Run(UpdateContext* update_context, Callback callback) {
   update_context_->update_items.reserve(crx_components.size());
 
   for (size_t i = 0; i != crx_components.size(); ++i) {
-    scoped_ptr<CrxUpdateItem> item(new CrxUpdateItem);
+    std::unique_ptr<CrxUpdateItem> item(new CrxUpdateItem);
     const CrxComponent& crx_component = crx_components[i];
 
     item->id = GetCrxComponentID(crx_component);

@@ -96,6 +96,7 @@ public:
     // WebDevToolsAgentClient overrides.
     void sendProtocolMessage(int sessionId, int callId, const WebString&, const WebString&) override;
     void resumeStartup() override;
+    WebDevToolsAgentClient::WebKitClientMessageLoop* createClientMessageLoop() override;
 
     // WebSharedWorker methods:
     void startWorkerContext(const WebURL&, const WebString& name, const WebString& contentSecurityPolicy, WebContentSecurityPolicyType, WebAddressSpace) override;
@@ -106,7 +107,7 @@ public:
     void attachDevTools(const WebString& hostId, int sessionId) override;
     void reattachDevTools(const WebString& hostId, int sesionId, const WebString& savedState) override;
     void detachDevTools() override;
-    void dispatchDevToolsMessage(int sessionId, const WebString&) override;
+    void dispatchDevToolsMessage(int sessionId, int callId, const WebString& method, const WebString& message) override;
 
 private:
     ~WebSharedWorkerImpl() override;
@@ -131,8 +132,8 @@ private:
     void postMessageToPageInspectorOnMainThread(const String& message);
 
     // WorkerLoaderProxyProvider
-    void postTaskToLoader(PassOwnPtr<ExecutionContextTask>);
-    bool postTaskToWorkerGlobalScope(PassOwnPtr<ExecutionContextTask>);
+    void postTaskToLoader(std::unique_ptr<ExecutionContextTask>) override;
+    bool postTaskToWorkerGlobalScope(std::unique_ptr<ExecutionContextTask>) override;
 
     // 'shadow page' - created to proxy loading requests from the worker.
     Persistent<ExecutionContext> m_loadingDocument;

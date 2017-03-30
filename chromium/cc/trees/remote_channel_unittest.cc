@@ -9,7 +9,8 @@ namespace cc {
 
 class RemoteChannelTest : public LayerTreeTest {
  protected:
-  RemoteChannelTest() : calls_received_(0) {}
+  RemoteChannelTest()
+      : calls_received_(0), calls_received_on_both_server_and_client_(0) {}
 
   ~RemoteChannelTest() override {}
 
@@ -20,6 +21,11 @@ class RemoteChannelTest : public LayerTreeTest {
   virtual void BeginChannelTest() {}
 
   int calls_received_;
+
+  // Since LayerTreeHost on engine and client share a common LayerTreeHostClient
+  // for unit tests, there are some functions called twice. This variable keep
+  // tracks of those function calls.
+  int calls_received_on_both_server_and_client_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(RemoteChannelTest);
@@ -140,8 +146,8 @@ class RemoteChannelTestCommit : public RemoteChannelTest {
   void DidCommitAndDrawFrame() override { EXPECT_EQ(3, calls_received_++); }
 
   void DidCompleteSwapBuffers() override {
-    EXPECT_EQ(4, calls_received_++);
-    EndTest();
+    if (++calls_received_on_both_server_and_client_ == 2)
+      EndTest();
   }
 
   void WillCommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
@@ -150,27 +156,12 @@ class RemoteChannelTestCommit : public RemoteChannelTest {
     EXPECT_EQ(viewport_size_, host_impl->device_viewport_size());
   }
 
-  void ScheduledActionSendBeginMainFrame() override {
-    last_args_sent_ = GetProxyImplForTest()->last_begin_frame_args();
-  }
-
-  void BeginMainFrame(const BeginFrameArgs& args) override {
-    last_args_received_ = args;
-  }
-
   void AfterTest() override {
-    EXPECT_EQ(5, calls_received_);
-
-    // Ensure that we serialized and deserialized the
-    // BeginMainFrameAndCommitState. While the last_args_received_ will be set
-    // on the impl thread, it is safe to read it here since the impl thread has
-    // been destroyed now.
-    EXPECT_EQ(last_args_sent_, last_args_received_);
+    EXPECT_EQ(4, calls_received_);
+    EXPECT_EQ(2, calls_received_on_both_server_and_client_);
   }
 
   const gfx::Size viewport_size_ = gfx::Size(5, 3);
-  BeginFrameArgs last_args_sent_;
-  BeginFrameArgs last_args_received_;
 };
 
 REMOTE_DIRECT_RENDERER_TEST_F(RemoteChannelTestCommit);

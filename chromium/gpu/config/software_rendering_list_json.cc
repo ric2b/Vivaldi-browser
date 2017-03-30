@@ -18,7 +18,7 @@ const char kSoftwareRenderingListJson[] = LONG_STRING_CONST(
 {
   "name": "software rendering list",
   // Please update the version number whenever you change this file.
-  "version": "10.18",
+  "version": "11.7",
   "entries": [
     {
       "id": 1,
@@ -33,7 +33,8 @@ const char kSoftwareRenderingListJson[] = LONG_STRING_CONST(
       "features": [
         "webgl",
         "flash_3d",
-        "flash_stage3d"
+        "flash_stage3d",
+        "gpu_rasterization"
       ]
     },
     {
@@ -122,7 +123,8 @@ const char kSoftwareRenderingListJson[] = LONG_STRING_CONST(
       "features": [
         "webgl",
         "flash_3d",
-        "flash_stage3d"
+        "flash_stage3d",
+        "gpu_rasterization"
       ]
     },
     {
@@ -397,7 +399,8 @@ const char kSoftwareRenderingListJson[] = LONG_STRING_CONST(
       "device_id": ["0x0863"],
       "multi_gpu_category": "any",
       "features": [
-        "accelerated_2d_canvas"
+        "accelerated_2d_canvas",
+        "gpu_rasterization"
       ]
     },
     {
@@ -415,7 +418,8 @@ const char kSoftwareRenderingListJson[] = LONG_STRING_CONST(
       "device_id": ["0x6760", "0x6720"],
       "multi_gpu_category": "any",
       "features": [
-        "webgl"
+        "webgl",
+        "gpu_rasterization"
       ]
     },
     {
@@ -518,7 +522,7 @@ const char kSoftwareRenderingListJson[] = LONG_STRING_CONST(
     {
       "id": 50,
       "description": "Disable VMware software renderer on older Mesa",
-      "cr_bugs": [145531, 332596],
+      "cr_bugs": [145531, 332596, 571899],
       "os": {
         "type": "linux"
       },
@@ -531,6 +535,14 @@ const char kSoftwareRenderingListJson[] = LONG_STRING_CONST(
             "value": "9.2.1"
           },
           "gl_renderer": ".*SVGA3D.*"
+        },
+        {
+          "driver_vendor": "Mesa",
+          "driver_version": {
+            "op": ">=",
+            "value": "10.1.3"
+          },
+          "gl_renderer": ".*Gallium.*llvmpipe.*"
         }
       ],
       "features": [
@@ -713,7 +725,8 @@ const char kSoftwareRenderingListJson[] = LONG_STRING_CONST(
       "device_id": ["0x0a29", "0x0861", "0x0863"],
       "multi_gpu_category": "any",
       "features": [
-        "webgl"
+        "webgl",
+        "gpu_rasterization"
       ]
     },
     {
@@ -815,38 +828,6 @@ LONG_STRING_CONST(
       },
       "features": [
         "accelerated_video_encode"
-      ]
-    },
-    {
-      "id": 83,
-      "description": "Samsung Galaxy NOTE is too buggy to use for video decoding",
-      "cr_bugs": [308721],
-      "os": {
-        "type": "android",
-        "version": {
-          "op": "<",
-          "value": "4.4"
-        }
-      },
-      "machine_model_name": ["GT-.*"],
-      "features": [
-        "accelerated_video_decode"
-      ]
-    },
-    {
-      "id": 85,
-      "description": "Samsung Galaxy S4 is too buggy to use for video decoding",
-      "cr_bugs": [329072],
-      "os": {
-        "type": "android",
-        "version": {
-          "op": "<",
-          "value": "4.4"
-        }
-      },
-      "machine_model_name": ["SCH-.*"],
-      "features": [
-        "accelerated_video_decode"
       ]
     },
     {
@@ -1072,22 +1053,6 @@ LONG_STRING_CONST(
       ]
     },
     {
-      "id": 101,
-      "description": "Samsung Galaxy Tab is too buggy to use for video decoding",
-      "cr_bugs": [408353],
-      "os": {
-        "type": "android",
-        "version": {
-          "op": "<",
-          "value": "4.4"
-        }
-      },
-      "machine_model_name": ["SM-.*"],
-      "features": [
-        "accelerated_video_decode"
-      ]
-    },
-    {
       "id": 102,
       "description": "Accelerated 2D canvas and Ganesh broken on Galaxy Tab 2",
       "cr_bugs": [416910],
@@ -1211,6 +1176,177 @@ LONG_STRING_CONST(
       },
       "features": [
         "accelerated_video_decode"
+      ]
+    },
+    {
+      "id": 110,
+      "description": "Only enable WebGL for the Mesa Gallium llvmpipe driver",
+      "cr_bugs": [571899],
+      "os": {
+        "type": "linux"
+      },
+      "driver_vendor": "Mesa",
+      "gl_vendor": "VMware.*",
+      "gl_renderer": ".*Gallium.*llvmpipe.*",
+      "features": [
+        "all",
+        {"exceptions": [
+          "webgl"
+        ]}
+      ]
+    },
+    {
+      "id": 111,
+      "description": "Apple Software Renderer used under VMWare experiences synchronization issues with GPU Raster",
+      "cr_bugs": [607829],
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x15ad",
+      "multi_gpu_category": "any",
+      "features": [
+        "gpu_rasterization"
+      ]
+    },
+    {
+      "id": 112,
+      "description": "Some GPUs on Mac can perform poorly with GPU rasterization. Disable all known Intel GPUs other than Intel 6th and 7th Generation cards, which have been tested.",
+      "cr_bugs": [613272, 614468],
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x8086",
+      "device_id": ["0x0126", "0x0116", "0x191e", "0x0046", "0x1912",
+                    "0x2a02", "0x27a2", "0x2a42"],
+      "multi_gpu_category": "any",
+      "features": [
+        "gpu_rasterization"
+      ]
+    },
+    {
+      "id": 113,
+      "description": "Some GPUs on Mac can perform poorly with GPU rasterization. Disable all known NVidia GPUs other than the Geforce 6xx and 7xx series, which have been tested.",
+      "cr_bugs": [613272, 614468],
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x10de",
+      "device_id": ["0x0863", "0x08a0", "0x0a29", "0x0869", "0x0867",
+                    "0x08a3", "0x11a3", "0x08a2", "0x0407", "0x0861",
+                    "0x08a4", "0x0647", "0x0640", "0x0866", "0x0655",
+                    "0x062e", "0x0609", "0x1187", "0x13c2", "0x0602",
+                    "0x1180", "0x1401", "0x0fc8", "0x0611", "0x1189",
+                    "0x11c0", "0x0870", "0x0a65", "0x06dd", "0x0fc1",
+                    "0x1380", "0x11c6", "0x104a", "0x1184", "0x0fc6",
+                    "0x13c0", "0x1381", "0x05e3", "0x1183", "0x05fe",
+                    "0x1004", "0x17c8", "0x11ba", "0x0a20", "0x0f00",
+                    "0x0ca3", "0x06fd", "0x0f02", "0x0614", "0x0402",
+                    "0x13bb", "0x0401", "0x0f01", "0x1287", "0x0615",
+                    "0x1402", "0x019d", "0x0400", "0x0622", "0x06e4",
+                    "0x06cd", "0x1201", "0x100a", "0x10c3", "0x1086",
+                    "0x17c2", "0x1005", "0x0a23", "0x0de0", "0x1040",
+                    "0x0421", "0x1282", "0x0e22", "0x0e23", "0x0610",
+                    "0x11c8", "0x11c2", "0x1188", "0x0de9", "0x1200",
+                    "0x1244", "0x0dc4", "0x0df8", "0x0641", "0x0613",
+                    "0x11fa", "0x100c", "0x0de1", "0x0ca5", "0x0cb1",
+                    "0x0a6c", "0x05ff", "0x05e2", "0x0a2d", "0x06c0",
+                    "0x1288", "0x1048", "0x1081", "0x0dd8", "0x05e6",
+                    "0x11c4", "0x0605", "0x1080", "0x042f", "0x0ca2",
+                    "0x1245", "0x124d", "0x1284", "0x0191", "0x1050",
+                    "0x0ffd", "0x0193", "0x061a", "0x0422", "0x1185",
+                    "0x103a", "0x0fc2", "0x0194", "0x0df5", "0x040e",
+                    "0x065b", "0x0de2", "0x0a75", "0x0601", "0x1087",
+                    "0x019e", "0x104b", "0x107d", "0x1382", "0x042b",
+                    "0x1049", "0x0df0", "0x11a1", "0x040f", "0x0de3",
+                    "0x0fc0", "0x13d8", "0x0de4", "0x11e2", "0x0644",
+                    "0x0fd1", "0x0dfa"],
+      "multi_gpu_category": "any",
+      "features": [
+        "gpu_rasterization"
+      ]
+    },
+    {
+      "id": 114,
+      "description": "Some GPUs on Mac can perform poorly with GPU rasterization. Disable all known AMD GPUs other than the R200, R300, and D series, which have been tested.",
+      "cr_bugs": [613272, 614468],
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x1002",
+      "device_id": ["0x6741", "0x6740", "0x9488", "0x9583", "0x6720",
+                    "0x6760", "0x68c0", "0x68a1", "0x944a", "0x94c8",
+                    "0x6819", "0x68b8", "0x6920", "0x6938", "0x6640",
+                    "0x9588", "0x6898", "0x9440", "0x6738", "0x6739",
+                    "0x6818", "0x6758", "0x6779", "0x9490", "0x68d9",
+                    "0x683f", "0x683d", "0x6899", "0x6759", "0x68e0",
+                    "0x68d8", "0x68ba", "0x68f9", "0x9501", "0x68a0",
+                    "0x6841", "0x6840", "0x9442", "0x6658", "0x68c8",
+                    "0x68c1"],
+      "multi_gpu_category": "any",
+      "features": [
+        "gpu_rasterization"
+      ]
+    },
+    {
+      "id": 115,
+      "description": "Some GPUs on Mac can perform poorly with GPU rasterization. Disable untested Virtualbox GPU.",
+      "cr_bugs": [613272, 614468],
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x80ee",
+      "multi_gpu_category": "any",
+      "features": [
+        "gpu_rasterization"
+      ]
+    },
+    {
+      "id": 117,
+      "description": "MediaCodec on Vivante hangs in MediaCodec often",
+      "cr_bugs": [626814],
+      "os": {
+        "type": "android",
+        "version": {
+          "op": "<=",
+          "value": "4.4.4"
+        }
+      },
+      "gl_renderer": ".*Vivante.*",
+      "features": [
+        "accelerated_video_decode"
+      ]
+    },
+    {
+      "id": 118,
+      "description": "webgl/canvas crashy on imporperly parsed vivante driver",
+      "cr_bugs": [628059],
+      "os": {
+        "type": "android",
+        "version": {
+          "op": "<=",
+          "value": "4.4.4"
+        }
+      },
+      "gl_vendor": "Vivante.*",
+      "gl_renderer": ".*PXA.*",
+      "features": [
+        "webgl",
+        "accelerated_2d_canvas"
+      ]
+    },
+    {
+      "id": 119,
+      "description": "There are display issues with GPU Raster on OSX 10.9",
+      "cr_bugs": [611310],
+      "os": {
+        "type": "macosx",
+        "version": {
+          "op": "<=",
+          "value": "10.9"
+        }
+      },
+      "features": [
+        "gpu_rasterization"
       ]
     }
   ]

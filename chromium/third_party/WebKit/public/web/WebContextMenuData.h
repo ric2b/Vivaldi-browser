@@ -39,7 +39,6 @@
 #include "../platform/WebVector.h"
 #include "WebHistoryItem.h"
 #include "WebMenuItemInfo.h"
-#include "WebNode.h"
 
 #define WEBCONTEXT_MEDIATYPEFILE_DEFINED
 
@@ -196,9 +195,6 @@ struct WebContextMenuData {
 
     // Custom context menu items provided by the WebCore internals.
     WebVector<WebMenuItemInfo> customItems;
-
-    // The node that was clicked.
-    WebNode node;
 
     WebContextMenuData()
         : mediaType(MediaTypeNone)

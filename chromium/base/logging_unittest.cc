@@ -191,7 +191,7 @@ TEST_F(LoggingTest, CheckStreamsAreLazy) {
 #endif
 
 TEST_F(LoggingTest, DebugLoggingReleaseBehavior) {
-#if !defined(NDEBUG)
+#if !defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)
   int debug_only_variable = 1;
 #endif
   // These should avoid emitting references to |debug_only_variable|
@@ -226,7 +226,7 @@ TEST_F(LoggingTest, Dcheck) {
   // Release build with real DCHECKS.
   SetLogAssertHandler(&LogSink);
   EXPECT_TRUE(DCHECK_IS_ON());
-  EXPECT_FALSE(DLOG_IS_ON(DCHECK));
+  EXPECT_TRUE(DLOG_IS_ON(DCHECK));
 #else
   // Debug build.
   SetLogAssertHandler(&LogSink);
@@ -241,6 +241,16 @@ TEST_F(LoggingTest, Dcheck) {
   EXPECT_EQ(DCHECK_IS_ON() ? 2 : 0, log_sink_call_count);
   DCHECK_EQ(0, 1);
   EXPECT_EQ(DCHECK_IS_ON() ? 3 : 0, log_sink_call_count);
+
+  // Test DCHECK on std::nullptr_t
+  log_sink_call_count = 0;
+  const void* p_null = nullptr;
+  const void* p_not_null = &p_null;
+  DCHECK_EQ(p_null, nullptr);
+  DCHECK_EQ(nullptr, p_null);
+  DCHECK_NE(p_not_null, nullptr);
+  DCHECK_NE(nullptr, p_not_null);
+  EXPECT_EQ(0, log_sink_call_count);
 }
 
 TEST_F(LoggingTest, DcheckReleaseBehavior) {

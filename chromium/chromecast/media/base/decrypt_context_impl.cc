@@ -4,6 +4,10 @@
 
 #include "chromecast/media/base/decrypt_context_impl.h"
 
+#include <vector>
+
+#include "chromecast/public/media/cast_decoder_buffer.h"
+
 namespace chromecast {
 namespace media {
 
@@ -18,11 +22,16 @@ CastKeySystem DecryptContextImpl::GetKeySystem() {
 
 bool DecryptContextImpl::Decrypt(CastDecoderBuffer* buffer,
                                  std::vector<uint8_t>* output) {
+  output->resize(buffer->data_size());
+  return Decrypt(buffer, output->data());
+}
+
+bool DecryptContextImpl::Decrypt(CastDecoderBuffer* buffer, uint8_t* output) {
   return false;
 }
 
-crypto::SymmetricKey* DecryptContextImpl::GetKey() const {
-  return NULL;
+bool DecryptContextImpl::CanDecryptToBuffer() const {
+  return false;
 }
 
 }  // namespace media

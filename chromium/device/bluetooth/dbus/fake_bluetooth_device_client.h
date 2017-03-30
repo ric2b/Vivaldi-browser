@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <vector>
 
 #include "base/bind.h"
@@ -119,10 +120,10 @@ class DEVICE_BLUETOOTH_EXPORT FakeBluetoothDeviceClient
   void CreateDeviceWithProperties(const dbus::ObjectPath& adapter_path,
                                   const IncomingDeviceProperties& props);
 
-  // Creates and returns a list of scoped_ptr<base::DictionaryValue>
+  // Creates and returns a list of std::unique_ptr<base::DictionaryValue>
   // objects, which contain all the data from the constants for devices with
   // predefined behavior.
-  scoped_ptr<base::ListValue> GetBluetoothDevicesAsDictionaries() const;
+  std::unique_ptr<base::ListValue> GetBluetoothDevicesAsDictionaries() const;
 
   SimulatedPairingOptions* GetPairingOptions(
       const dbus::ObjectPath& object_path);
@@ -145,6 +146,17 @@ class DEVICE_BLUETOOTH_EXPORT FakeBluetoothDeviceClient
   void UpdateConnectionInfo(uint16_t connection_rssi,
                             uint16_t transmit_power,
                             uint16_t max_transmit_power);
+
+  // Test specific functions:
+  // Remove all test devices from this client.
+  void RemoveAllDevices();
+
+  // Create a test Bluetooth LE device with the given properties.
+  void CreateTestDevice(const dbus::ObjectPath& adapter_path,
+                        const std::string name,
+                        const std::string alias,
+                        const std::string device_address,
+                        const std::vector<std::string>& service_uuids);
 
   void set_delay_start_discovery(bool value) { delay_start_discovery_ = value; }
 
@@ -237,6 +249,11 @@ class DEVICE_BLUETOOTH_EXPORT FakeBluetoothDeviceClient
   static const char kConnectedTrustedNotPairedDeviceName[];
   static const uint32_t kConnectedTrustedNotPairedDeviceClass;
 
+  static const char kCachedLowEnergyPath[];
+  static const char kCachedLowEnergyAddress[];
+  static const char kCachedLowEnergyName[];
+  static const uint32_t kCachedLowEnergyClass;
+
  private:
   // Property callback passed when we create Properties* structures.
   void OnPropertyChanged(const dbus::ObjectPath& object_path,
@@ -298,14 +315,14 @@ class DEVICE_BLUETOOTH_EXPORT FakeBluetoothDeviceClient
   base::ObserverList<Observer> observers_;
 
   using PropertiesMap =
-      std::map<const dbus::ObjectPath, scoped_ptr<Properties>>;
+      std::map<const dbus::ObjectPath, std::unique_ptr<Properties>>;
   PropertiesMap properties_map_;
   std::vector<dbus::ObjectPath> device_list_;
 
   // Properties which are used to decied which method of pairing should
   // be done on request.
-  using PairingOptionsMap =
-      std::map<const dbus::ObjectPath, scoped_ptr<SimulatedPairingOptions>>;
+  using PairingOptionsMap = std::map<const dbus::ObjectPath,
+                                     std::unique_ptr<SimulatedPairingOptions>>;
   PairingOptionsMap pairing_options_map_;
 
   int simulation_interval_ms_;

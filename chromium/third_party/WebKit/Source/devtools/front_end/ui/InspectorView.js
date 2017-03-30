@@ -396,6 +396,14 @@ WebInspector.InspectorView.prototype = {
     },
 
     /**
+     * @return {boolean}
+     */
+    isDrawerMinimized: function()
+    {
+        return this._drawerSplitWidget.isSidebarMinimized();
+    },
+
+    /**
      * @override
      * @return {!Element}
      */
@@ -543,8 +551,28 @@ WebInspector.InspectorView.prototype = {
         var tabs = /** @type {!Array.<!WebInspector.TabbedPaneTab>} */(event.data);
         var tabOrders = this._tabOrderSetting.get();
         for (var i = 0; i < tabs.length; i++)
-            tabOrders[tabs[i].id] = (i + 1)* 10;
+            tabOrders[tabs[i].id] = (i + 1) * 10;
         this._tabOrderSetting.set(tabOrders);
+    },
+
+    /**
+     * @param {!WebInspector.SplitWidget} splitWidget
+     */
+    setOwnerSplit: function(splitWidget)
+    {
+        this._ownerSplitWidget = splitWidget;
+    },
+
+    minimize: function()
+    {
+        if (this._ownerSplitWidget)
+            this._ownerSplitWidget.setSidebarMinimized(true);
+    },
+
+    restore: function()
+    {
+        if (this._ownerSplitWidget)
+            this._ownerSplitWidget.setSidebarMinimized(false);
     },
 
     __proto__: WebInspector.VBox.prototype

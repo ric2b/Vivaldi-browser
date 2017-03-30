@@ -19,6 +19,7 @@
         '../base/ime/ui_base_ime.gyp:ui_base_ime',
         '../base/ui_base.gyp:ui_base',
         '../compositor/compositor.gyp:compositor',
+        '../display/display.gyp:display',
         '../events/events.gyp:events',
         '../events/events.gyp:events_base',
         '../events/platform/events_platform.gyp:events_platform',
@@ -99,7 +100,6 @@
         'window_observer.h',
         'window_targeter.cc',
         'window_targeter.h',
-        'window_tracker.cc',
         'window_tracker.h',
         'window_tree_host.cc',
         'window_tree_host.h',
@@ -117,7 +117,9 @@
             '../../build/linux/system.gyp:x11',
             '../../build/linux/system.gyp:xrandr',
             '../../build/linux/system.gyp:xi',
+            '../base/x/ui_base_x.gyp:ui_base_x',
             '../events/devices/events_devices.gyp:events_devices',
+            '../events/devices/x11/events_devices_x11.gyp:events_devices_x11',
             '../events/platform/x11/x11_events_platform.gyp:x11_events_platform',
             '../gfx/x/gfx_x11.gyp:gfx_x11',
           ],
@@ -200,6 +202,13 @@
       ],
       # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
       'msvs_disabled_warnings': [ 4267, ],
+      'conditions': [
+        ['use_x11==1', {
+          'dependencies': [
+            '../base/x/ui_base_x.gyp:ui_base_x',
+          ],
+        }],
+      ],
     },
     {
       'target_name': 'aura_demo',
@@ -213,6 +222,7 @@
         '../base/ui_base.gyp:ui_base',
         '../compositor/compositor.gyp:compositor',
         '../compositor/compositor.gyp:compositor_test_support',
+        '../display/display.gyp:display',
         '../events/events.gyp:events',
         '../gfx/gfx.gyp:gfx',
         '../gfx/gfx.gyp:gfx_geometry',
@@ -251,6 +261,7 @@
         '../gfx/gfx.gyp:gfx',
         '../gfx/gfx.gyp:gfx_geometry',
         '../gl/gl.gyp:gl',
+        '../gl/init/gl_init.gyp:gl_init',
         'aura_test_support',
         'aura',
       ],

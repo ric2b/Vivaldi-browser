@@ -65,10 +65,10 @@ const char kDefaultWallpaperIsOem[] = "default-wallpaper-is-oem";
 const char kDefaultWallpaperLarge[] = "default-wallpaper-large";
 const char kDefaultWallpaperSmall[] = "default-wallpaper-small";
 
-// Time before a machine at OOBE is considered derelict.
+// Time in seconds before a machine at OOBE is considered derelict.
 const char kDerelictDetectionTimeout[] = "derelict-detection-timeout";
 
-// Time before a derelict machines starts demo mode.
+// Time in seconds before a derelict machines starts demo mode.
 const char kDerelictIdleTimeout[] = "derelict-idle-timeout";
 
 // Disables ARC Opt-in verification process and ARC is enabled by default.
@@ -123,9 +123,6 @@ const char kEafePath[] = "eafe-path";
 
 // Enables starting the ARC instance upon session start.
 const char kEnableArc[] = "enable-arc";
-
-// Enable ARC memory management in user space.
-const char kEnableArcMemoryManagement[] = "enable-arc-memory-management";
 
 // Enables consumer management, which allows user to enroll, remotely lock and
 // locate the device.
@@ -183,6 +180,9 @@ const char kEnableKioskMode[] = "enable-kiosk-mode";
 
 // Enables request of tablet site (via user agent override).
 const char kEnableRequestTabletSite[] = "enable-request-tablet-site";
+
+// Disables ARC for managed accounts.
+const char kEnterpriseDisableArc[] = "enterprise-disable-arc";
 
 // Whether to enable forced enterprise re-enrollment.
 const char kEnterpriseEnableForcedReEnrollment[] =

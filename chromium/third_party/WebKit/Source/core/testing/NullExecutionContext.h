@@ -12,7 +12,6 @@
 #include "core/inspector/ConsoleMessage.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
-#include "wtf/RefCounted.h"
 
 namespace blink {
 
@@ -24,7 +23,7 @@ public:
     void disableEval(const String&) override { }
     String userAgent() const override { return String(); }
 
-    void postTask(const WebTraceLocation&, PassOwnPtr<ExecutionContextTask>) override;
+    void postTask(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>) override;
 
     EventTarget* errorEventTarget() override { return nullptr; }
     EventQueue* getEventQueue() const override { return m_queue.get(); }
@@ -37,7 +36,7 @@ public:
     SecurityContext& securityContext() override { return *this; }
     DOMTimerCoordinator* timers() override { return nullptr; }
 
-    void addConsoleMessage(RawPtr<ConsoleMessage>) override { }
+    void addConsoleMessage(ConsoleMessage*) override { }
     void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack>) override { }
 
     void setIsSecureContext(bool);
@@ -49,14 +48,6 @@ public:
         SecurityContext::trace(visitor);
         ExecutionContext::trace(visitor);
     }
-
-#if !ENABLE(OILPAN)
-    using RefCounted<NullExecutionContext>::ref;
-    using RefCounted<NullExecutionContext>::deref;
-
-    void refExecutionContext() override { ref(); }
-    void derefExecutionContext() override { deref(); }
-#endif
 
 protected:
     const KURL& virtualURL() const override { return m_dummyURL; }

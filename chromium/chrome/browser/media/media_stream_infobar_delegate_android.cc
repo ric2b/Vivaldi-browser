@@ -22,18 +22,6 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
-namespace {
-
-enum DevicePermissionActions {
-  kAllowHttps = 0,
-  kAllowHttp,
-  kDeny,
-  kCancel,
-  kPermissionActionsMax  // Must always be last!
-};
-
-}  // namespace
-
 MediaStreamInfoBarDelegateAndroid::~MediaStreamInfoBarDelegateAndroid() {}
 
 // static
@@ -97,8 +85,6 @@ int MediaStreamInfoBarDelegateAndroid::GetIconId() const {
 void MediaStreamInfoBarDelegateAndroid::InfoBarDismissed() {
   // Deny the request if the infobar was closed with the 'x' button, since
   // we don't want WebRTC to be waiting for an answer that will never come.
-  UMA_HISTOGRAM_ENUMERATION("Media.DevicePermissionActions", kCancel,
-                            kPermissionActionsMax);
   controller_->Cancelled();
 }
 
@@ -108,13 +94,7 @@ MediaStreamInfoBarDelegateAndroid::AsMediaStreamInfoBarDelegateAndroid() {
 }
 
 base::string16 MediaStreamInfoBarDelegateAndroid::GetMessageText() const {
-  int message_id = IDS_MEDIA_CAPTURE_AUDIO_AND_VIDEO;
-  if (!controller_->IsAskingForAudio())
-    message_id = IDS_MEDIA_CAPTURE_VIDEO_ONLY;
-  else if (!controller_->IsAskingForVideo())
-    message_id = IDS_MEDIA_CAPTURE_AUDIO_ONLY;
-  return l10n_util::GetStringFUTF16(
-      message_id, base::UTF8ToUTF16(controller_->GetSecurityOriginSpec()));
+  return controller_->GetMessageText();
 }
 
 base::string16 MediaStreamInfoBarDelegateAndroid::GetButtonLabel(
@@ -125,21 +105,11 @@ base::string16 MediaStreamInfoBarDelegateAndroid::GetButtonLabel(
 }
 
 bool MediaStreamInfoBarDelegateAndroid::Accept() {
-  GURL origin(controller_->GetSecurityOriginSpec());
-  if (content::IsOriginSecure(origin)) {
-    UMA_HISTOGRAM_ENUMERATION("Media.DevicePermissionActions", kAllowHttps,
-                              kPermissionActionsMax);
-  } else {
-    UMA_HISTOGRAM_ENUMERATION("Media.DevicePermissionActions", kAllowHttp,
-                              kPermissionActionsMax);
-  }
   controller_->PermissionGranted();
   return true;
 }
 
 bool MediaStreamInfoBarDelegateAndroid::Cancel() {
-  UMA_HISTOGRAM_ENUMERATION("Media.DevicePermissionActions", kDeny,
-                            kPermissionActionsMax);
   controller_->PermissionDenied();
   return true;
 }

@@ -167,7 +167,7 @@ String.prototype.escapeForRegExp = function()
  */
 String.prototype.escapeHTML = function()
 {
-    return this.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); //" doublequotes just for editor
+    return this.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); // " doublequotes just for editor
 }
 
 /**
@@ -284,7 +284,7 @@ String.hashCode = function(string)
         zi = (zi * z) % p;
     }
     s = (s + zi * (p - 1)) % p;
-    return Math.abs(s|0);
+    return Math.abs(s | 0);
 }
 
 /**
@@ -295,7 +295,7 @@ String.hashCode = function(string)
 String.isDigitAt = function(string, index)
 {
     var c = string.charCodeAt(index);
-    return 48 <= c && c <= 57;
+    return (48 <= c && c <= 57);
 }
 
 /**
@@ -929,7 +929,7 @@ Object.defineProperty(Array.prototype, "mergeOrdered",
     }
 });
 
-}());
+})();
 
 /**
  * @param {string} format
@@ -1281,6 +1281,19 @@ Map.prototype.keysArray = function()
 }
 
 /**
+ * @return {!Multimap<!KEY, !VALUE>}
+ */
+Map.prototype.inverse = function()
+{
+    var result = new Multimap();
+    for (var key of this.keys()) {
+        var value = this.get(key);
+        result.set(value, key);
+    }
+    return result;
+}
+
+/**
  * @constructor
  * @template K, V
  */
@@ -1525,8 +1538,58 @@ Promise.prototype.spread = function(callback)
  * @template T
  */
 Promise.prototype.catchException = function(defaultValue) {
-    return this.catch(function (error) {
+    return this.catch(function(error) {
         console.error(error);
         return defaultValue;
     });
+}
+
+/**
+ * @param {!Map<number, ?>} other
+ * @param {function(!VALUE,?):boolean} isEqual
+ * @return {!{removed: !Array<!VALUE>, added: !Array<?>, equal: !Array<!VALUE>}}
+ * @this {Map<number, VALUE>}
+ */
+Map.prototype.diff = function(other, isEqual)
+{
+    var leftKeys = this.keysArray();
+    var rightKeys = other.keysArray();
+    leftKeys.sort((a, b) => a - b);
+    rightKeys.sort((a, b) => a - b);
+
+    var removed = [];
+    var added = [];
+    var equal = [];
+    var leftIndex = 0;
+    var rightIndex = 0;
+    while (leftIndex < leftKeys.length && rightIndex < rightKeys.length) {
+        var leftKey = leftKeys[leftIndex];
+        var rightKey = rightKeys[rightIndex];
+        if (leftKey === rightKey && isEqual(this.get(leftKey), other.get(rightKey))) {
+            equal.push(this.get(leftKey));
+            ++leftIndex;
+            ++rightIndex;
+            continue;
+        }
+        if (leftKey <= rightKey) {
+            removed.push(this.get(leftKey));
+            ++leftIndex;
+            continue;
+        }
+        added.push(other.get(rightKey));
+        ++rightIndex;
+    }
+    while (leftIndex < leftKeys.length) {
+        var leftKey = leftKeys[leftIndex++];
+        removed.push(this.get(leftKey));
+    }
+    while (rightIndex < rightKeys.length) {
+        var rightKey = rightKeys[rightIndex++];
+        added.push(other.get(rightKey));
+    }
+    return {
+        added: added,
+        removed: removed,
+        equal: equal
+    }
 }

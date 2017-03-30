@@ -12,6 +12,8 @@ PlatformVideoConfig::PlatformVideoConfig()
     : rotation(VIDEO_ROTATION_0),
       decoding_mode(PlatformMediaDecodingMode::SOFTWARE) {}
 
+PlatformVideoConfig::PlatformVideoConfig(const PlatformVideoConfig& other) = default;
+
 PlatformVideoConfig::~PlatformVideoConfig() {
 }
 

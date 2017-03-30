@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <memory>
 #include <utility>
 
 #include "base/command_line.h"
@@ -16,7 +17,6 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/registry.h"
@@ -281,7 +281,7 @@ bool InstallerState::CanAddProduct(const Product& product,
 // returns a pointer to the product (ownership is held by this object).
 Product* InstallerState::AddProductInDirectory(
     const base::FilePath* product_dir,
-    scoped_ptr<Product>* product) {
+    std::unique_ptr<Product>* product) {
   DCHECK(product != NULL);
   DCHECK(product->get() != NULL);
   const Product& the_product = *product->get();
@@ -308,7 +308,7 @@ Product* InstallerState::AddProductInDirectory(
   return products_[products_.size() - 1];
 }
 
-Product* InstallerState::AddProduct(scoped_ptr<Product>* product) {
+Product* InstallerState::AddProduct(std::unique_ptr<Product>* product) {
   return AddProductInDirectory(NULL, product);
 }
 
@@ -321,9 +321,8 @@ Product* InstallerState::AddProductFromPreferences(
     BrowserDistribution::Type distribution_type,
     const MasterPreferences& prefs,
     const InstallationState& machine_state) {
-  scoped_ptr<Product> product_ptr(
-      new Product(BrowserDistribution::GetSpecificDistribution(
-          distribution_type)));
+  std::unique_ptr<Product> product_ptr(new Product(
+      BrowserDistribution::GetSpecificDistribution(distribution_type)));
   product_ptr->InitializeFromPreferences(prefs);
 
   base::FilePath prod_dir;
@@ -370,7 +369,7 @@ Product* InstallerState::AddProductFromPreferences(
 Product* InstallerState::AddProductFromState(
     BrowserDistribution::Type type,
     const ProductState& state) {
-  scoped_ptr<Product> product_ptr(
+  std::unique_ptr<Product> product_ptr(
       new Product(BrowserDistribution::GetSpecificDistribution(type)));
   product_ptr->InitializeFromUninstallCommand(state.uninstall_command());
 
@@ -419,7 +418,7 @@ const Product* InstallerState::FindProduct(
 Version* InstallerState::GetCurrentVersion(
     const InstallationState& machine_state) const {
   DCHECK(!products_.empty());
-  scoped_ptr<Version> current_version;
+  std::unique_ptr<Version> current_version;
   // If we're doing a multi-install, the current version may be either an
   // existing multi or an existing single product that is being migrated
   // in place (i.e., Chrome).  In the latter case, there is no existing
@@ -550,7 +549,7 @@ bool InstallerState::AnyExistsAndIsInUse(const InstallationState& machine_state,
   // Check only for the current version (i.e., the version we are upgrading
   // _from_). Later versions from pending in-use updates need not be checked
   // since the current version is guaranteed to be in use if any such are.
-  scoped_ptr<Version> current_version(GetCurrentVersion(machine_state));
+  std::unique_ptr<Version> current_version(GetCurrentVersion(machine_state));
   if (!current_version)
     return false;
   base::FilePath directory(
@@ -576,7 +575,7 @@ void InstallerState::GetExistingExeVersions(
 
   for (size_t i = 0; i < arraysize(kChromeFilenames); ++i) {
     base::FilePath chrome_exe(target_path().Append(kChromeFilenames[i]));
-    scoped_ptr<FileVersionInfo> file_version_info(
+    std::unique_ptr<FileVersionInfo> file_version_info(
         FileVersionInfo::CreateFileVersionInfo(chrome_exe));
     if (file_version_info) {
       base::string16 version_string = file_version_info->file_version();
@@ -591,7 +590,7 @@ void InstallerState::RemoveOldVersionDirectories(
     Version* existing_version,
     const base::FilePath& temp_path) const {
   Version version;
-  scoped_ptr<WorkItem> item;
+  std::unique_ptr<WorkItem> item;
 
   std::set<std::string> existing_version_strings;
   existing_version_strings.insert(new_version.GetString());
@@ -722,26 +721,27 @@ void InstallerState::WriteInstallerResult(
     int string_resource_id,
     const std::wstring* const launch_cmd) const {
   if (!is_standalone()) {
-    // Use a no-rollback list since this is a best-effort deal.
-    scoped_ptr<WorkItemList> install_list(
-      WorkItem::CreateNoRollbackWorkItemList());
-    const bool system_install = this->system_install();
-    // Write the value for all products upon which we're operating.
-    Products::const_iterator end = products().end();
-    for (Products::const_iterator scan = products().begin(); scan != end;
-      ++scan) {
-      InstallUtil::AddInstallerResultItems(
+  // Use a no-rollback list since this is a best-effort deal.
+  std::unique_ptr<WorkItemList> install_list(WorkItem::CreateWorkItemList());
+  install_list->set_log_message("Write Installer Result");
+  install_list->set_best_effort(true);
+  install_list->set_rollback_enabled(false);
+  const bool system_install = this->system_install();
+  // Write the value for all products upon which we're operating.
+  Products::const_iterator end = products().end();
+  for (Products::const_iterator scan = products().begin(); scan != end;
+       ++scan) {
+    InstallUtil::AddInstallerResultItems(
         system_install, (*scan)->distribution()->GetStateKey(), status,
         string_resource_id, launch_cmd, install_list.get());
-    }
-    // And for the binaries if this is a multi-install.
-    if (is_multi_install()) {
-      InstallUtil::AddInstallerResultItems(
+  }
+  // And for the binaries if this is a multi-install.
+  if (is_multi_install()) {
+    InstallUtil::AddInstallerResultItems(
         system_install, multi_package_binaries_distribution()->GetStateKey(),
         status, string_resource_id, launch_cmd, install_list.get());
-    }
-    if (!install_list->Do())
-      LOG(ERROR) << "Failed to record installer error information in registry.";
+  }
+  install_list->Do();
   }
   if (string_resource_id != 0)
     InstallUtil::ShowInstallerResultMessage(status, string_resource_id);

@@ -77,12 +77,6 @@ class ExtensionInstallDialogView : public views::DialogDelegateView,
   // Creates a layout consisting of dialog header, extension name and icon.
   views::GridLayout* CreateLayout(int left_column_width, int column_set_id);
 
-  bool is_bundle_install() const {
-    return prompt_->type() == ExtensionInstallPrompt::BUNDLE_INSTALL_PROMPT ||
-           prompt_->type() ==
-               ExtensionInstallPrompt::DELEGATED_BUNDLE_PERMISSIONS_PROMPT;
-  }
-
   bool is_external_install() const {
     return prompt_->type() == ExtensionInstallPrompt::EXTERNAL_INSTALL_PROMPT;
   }
@@ -126,24 +120,13 @@ class BulletedView : public views::View {
   DISALLOW_COPY_AND_ASSIGN(BulletedView);
 };
 
-// A simple view that prepends a view with an icon with the help of a grid
-// layout.
-class IconedView : public views::View {
- public:
-  IconedView(views::View* view, const gfx::ImageSkia& image);
- private:
-  DISALLOW_COPY_AND_ASSIGN(IconedView);
-};
-
 // A view to display text with an expandable details section.
 class ExpandableContainerView : public views::View,
                                 public views::ButtonListener,
                                 public views::LinkListener,
                                 public gfx::AnimationDelegate {
  public:
-  ExpandableContainerView(ExtensionInstallDialogView* owner,
-                          const base::string16& description,
-                          const PermissionDetails& details,
+  ExpandableContainerView(const PermissionDetails& details,
                           int horizontal_space,
                           bool parent_bulleted);
   ~ExpandableContainerView() override;
@@ -188,9 +171,6 @@ class ExpandableContainerView : public views::View,
 
   // Updates |arrow_toggle_| according to the given state.
   void UpdateArrowToggle(bool expanded);
-
-  // The dialog that owns |this|. It's also an ancestor in the View hierarchy.
-  ExtensionInstallDialogView* owner_;
 
   // A view for showing |issue_advice.details|.
   DetailsView* details_view_;

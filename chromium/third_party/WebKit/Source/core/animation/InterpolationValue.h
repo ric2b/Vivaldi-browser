@@ -24,17 +24,17 @@ struct InterpolationValue {
     InterpolationValue(std::nullptr_t) { }
 
     InterpolationValue(InterpolationValue&& other)
-        : interpolableValue(other.interpolableValue.release())
+        : interpolableValue(std::move(other.interpolableValue))
         , nonInterpolableValue(other.nonInterpolableValue.release())
     { }
 
     void operator=(InterpolationValue&& other)
     {
-        interpolableValue = other.interpolableValue.release();
+        interpolableValue = std::move(other.interpolableValue);
         nonInterpolableValue = other.nonInterpolableValue.release();
     }
 
-    operator bool() const { return interpolableValue; }
+    operator bool() const { return interpolableValue.get(); }
 
     InterpolationValue clone() const
     {

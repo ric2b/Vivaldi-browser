@@ -40,23 +40,19 @@ public:
         AnnotateSourceAsXSS
     };
 
-    static RawPtr<HTMLViewSourceDocument> create(const DocumentInit& initializer, const String& mimeType)
+    static HTMLViewSourceDocument* create(const DocumentInit& initializer, const String& mimeType)
     {
         return new HTMLViewSourceDocument(initializer, mimeType);
     }
 
     void addSource(const String&, HTMLToken&, SourceAnnotation);
 
-#if !ENABLE(OILPAN)
-    void dispose() override;
-#endif
-
     DECLARE_VIRTUAL_TRACE();
 
 private:
     HTMLViewSourceDocument(const DocumentInit&, const String& mimeType);
 
-    RawPtr<DocumentParser> createParser() override;
+    DocumentParser* createParser() override;
 
     void processDoctypeToken(const String& source, HTMLToken&);
     void processEndOfFileToken(const String& source, HTMLToken&);
@@ -65,15 +61,15 @@ private:
     void processCharacterToken(const String& source, HTMLToken&, SourceAnnotation);
 
     void createContainingTable();
-    RawPtr<Element> addSpanWithClassName(const AtomicString&);
+    Element* addSpanWithClassName(const AtomicString&);
     void addLine(const AtomicString& className);
     void finishLine();
     void addText(const String& text, const AtomicString& className, SourceAnnotation = AnnotateSourceAsSafe);
     int addRange(const String& source, int start, int end, const AtomicString& className, bool isLink = false, bool isAnchor = false, const AtomicString& link = nullAtom);
     void maybeAddSpanForAnnotation(SourceAnnotation);
 
-    RawPtr<Element> addLink(const AtomicString& url, bool isAnchor);
-    RawPtr<Element> addBase(const AtomicString& href);
+    Element* addLink(const AtomicString& url, bool isAnchor);
+    Element* addBase(const AtomicString& href);
 
     String m_type;
     Member<Element> m_current;

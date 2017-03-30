@@ -4,8 +4,9 @@ per-file about_flags.cc=*
 
 per-file browser_resources.grd=bauerb@chromium.org
 per-file browser_resources.grd=dbeam@chromium.org
+per-file browser_resources.grd=dpapad@chromium.org
 per-file browser_resources.grd=estade@chromium.org
-per-file browser_resources.grd=nkostylev@chromium.org
+per-file browser_resources.grd=michaelpg@chromium.org
 per-file browser_resources.grd=pam@chromium.org
 per-file browser_resources.grd=xiyuan@chromium.org
 
@@ -14,8 +15,7 @@ per-file chrome_content_browser_client.h=*
 per-file chrome_content_browser_client_browsertest.cc=*
 per-file chrome_content_browser_client_unittest.cc=*
 
-per-file chrome_browser_field_trials*=asvitkine@chromium.org
-per-file chrome_browser_field_trials*=stevet@chromium.org
+per-file chrome_browser_field_trials*=file://components/variations/OWNERS 
 
 per-file chrome_device_client*=reillyg@chromium.org
 per-file chrome_device_client*=rockot@chromium.org
@@ -51,9 +51,7 @@ per-file *_mac.h=thakis@chromium.org
 
 per-file media_router_resources.grdp*=apacible@chromium.org
 per-file media_router_resources.grdp*=imcheng@chromium.org
-per-file media_router_resources.grdp*=kmarshall@chromium.org
 per-file media_router_resources.grdp*=mfoltz@chromium.org
-per-file media_router_resources.grdp*=wez@chromium.org
 
 per-file shell_integration_win*=gab@chromium.org
 per-file shell_integration_win*=grt@chromium.org

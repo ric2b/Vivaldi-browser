@@ -77,7 +77,6 @@ component("aura") {
     "window_observer.h",
     "window_targeter.cc",
     "window_targeter.h",
-    "window_tracker.cc",
     "window_tracker.h",
     "window_tree_host.cc",
     "window_tree_host.h",
@@ -100,6 +99,7 @@ component("aura") {
     "//ui/base",
     "//ui/base/ime",
     "//ui/compositor",
+    "//ui/display",
     "//ui/events",
     "//ui/events:events_base",
     "//ui/events/platform",
@@ -116,6 +116,7 @@ component("aura") {
     deps += [
       "//ui/events:events_base",
       "//ui/events/devices",
+      "//ui/events/devices/x11",
       "//ui/events/platform/x11",
       "//ui/gfx/x",
     ]
@@ -190,6 +191,7 @@ source_set("test_support") {
     "//ui/base:test_support",
     "//ui/base/ime",
     "//ui/compositor:test_support",
+    "//ui/display",
     "//ui/events",
     "//ui/events:events_base",
     "//ui/events:test_support",
@@ -231,15 +233,17 @@ executable("demo") {
     "//base",
     "//base:i18n",
     "//build/config/sanitizers:deps",
+    "//build/win:default_exe_manifest",
     "//skia",
     "//third_party/icu",
     "//ui/base",
     "//ui/compositor",
     "//ui/compositor:test_support",
+    "//ui/display",
     "//ui/events",
     "//ui/gfx",
     "//ui/gfx/geometry",
-    "//ui/gl",
+    "//ui/gl/init",
   ]
 
   if (use_x11) {
@@ -263,6 +267,7 @@ test("aura_unittests") {
     "//testing/gtest",
     "//ui/base:test_support",
     "//ui/compositor:test_support",
+    "//ui/display:test_support",
     "//ui/events:gesture_detection",
     "//ui/events:test_support",
     "//ui/gfx",

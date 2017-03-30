@@ -5,8 +5,6 @@
 #ifndef CONTENT_RENDERER_GPU_RENDER_WIDGET_COMPOSITOR_DELEGATE_H_
 #define CONTENT_RENDERER_GPU_RENDER_WIDGET_COMPOSITOR_DELEGATE_H_
 
-#include "cc/debug/frame_timing_tracker.h"
-
 namespace blink {
 class WebWidget;
 struct WebScreenInfo;
@@ -36,10 +34,12 @@ class CONTENT_EXPORT RenderWidgetCompositorDelegate {
   virtual void BeginMainFrame(double frame_time_sec) = 0;
 
   // Requests an OutputSurface to render into.
-  virtual scoped_ptr<cc::OutputSurface> CreateOutputSurface(bool fallback) = 0;
+  virtual std::unique_ptr<cc::OutputSurface> CreateOutputSurface(
+      bool fallback) = 0;
 
   // Requests an external BeginFrameSource from the delegate.
-  virtual scoped_ptr<cc::BeginFrameSource> CreateExternalBeginFrameSource() = 0;
+  virtual std::unique_ptr<cc::BeginFrameSource>
+  CreateExternalBeginFrameSource() = 0;
 
   // Notifies that the draw commands for a committed frame have been issued.
   virtual void DidCommitAndDrawCompositorFrame() = 0;
@@ -53,11 +53,6 @@ class CONTENT_EXPORT RenderWidgetCompositorDelegate {
   // Notifies that the compositor has posted a swapbuffers operation to the GPU
   // process.
   virtual void DidCompleteSwapBuffers() = 0;
-
-  // TODO(simonhong, fsamuel): Remove this once crbug.com/471411 is resolved.
-  // Indicates whether this RenderWidgetCompositor is for an out-of-process
-  // iframe or not.
-  virtual bool ForOOPIF() const = 0;
 
   // Called by the compositor to forward a proto that represents serialized
   // compositor state.
@@ -75,12 +70,6 @@ class CONTENT_EXPORT RenderWidgetCompositorDelegate {
   // Called by the compositor in single-threaded mode when a swap is posted.
   virtual void OnSwapBuffersPosted() = 0;
 
-  // Called by the compositor to request the delegate to record frame timing.
-  virtual void RecordFrameTimingEvents(
-      scoped_ptr<cc::FrameTimingTracker::CompositeTimingSet> composite_events,
-      scoped_ptr<cc::FrameTimingTracker::MainFrameTimingSet>
-          main_frame_events) = 0;
-
   // Requests that the client schedule a composite now, and calculate
   // appropriate delay for potential future frame.
   virtual void RequestScheduleAnimation() = 0;
@@ -93,6 +82,12 @@ class CONTENT_EXPORT RenderWidgetCompositorDelegate {
   // to signal to flow control mechanisms that a frame is beginning, not to
   // perform actual painting work.
   virtual void WillBeginCompositorFrame() = 0;
+
+  // Indicates that the last commit would have a blurry content or potential
+  // performance regression in a fixed raster scale layer.
+  virtual void ReportFixedRasterScaleUseCounters(
+      bool has_blurry_content,
+      bool has_potential_performance_regression) = 0;
 
  protected:
   virtual ~RenderWidgetCompositorDelegate() {}

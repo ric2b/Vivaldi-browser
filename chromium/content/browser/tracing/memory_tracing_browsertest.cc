@@ -7,7 +7,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/run_loop.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "base/trace_event/memory_dump_request_args.h"
@@ -126,7 +126,7 @@ class MemoryTracingTest : public ContentBrowserTest {
   }
 
   base::Closure on_memory_dump_complete_closure_;
-  scoped_ptr<MockDumpProvider> mock_dump_provider_;
+  std::unique_ptr<MockDumpProvider> mock_dump_provider_;
   uint32_t callback_call_count_;
   uint64_t last_callback_dump_guid_;
   bool last_callback_success_;

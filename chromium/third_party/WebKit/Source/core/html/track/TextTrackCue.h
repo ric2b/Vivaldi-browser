@@ -35,15 +35,13 @@
 #include "core/events/EventTarget.h"
 #include "core/html/HTMLDivElement.h"
 #include "platform/heap/Handle.h"
-#include "wtf/RefCounted.h"
 
 namespace blink {
 
 class TextTrack;
 
-class TextTrackCue : public RefCountedGarbageCollectedEventTargetWithInlineData<TextTrackCue> {
+class TextTrackCue : public EventTargetWithInlineData {
     DEFINE_WRAPPERTYPEINFO();
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(TextTrackCue);
 public:
     static const AtomicString& cueShadowPseudoId()
     {

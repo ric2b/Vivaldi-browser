@@ -4,6 +4,8 @@
 
 #include "cc/surfaces/surface_display_output_surface.h"
 
+#include <memory>
+
 #include "cc/surfaces/onscreen_display_client.h"
 #include "cc/surfaces/surface_id_allocator.h"
 #include "cc/surfaces/surface_manager.h"
@@ -25,13 +27,15 @@ class FakeOnscreenDisplayClient : public OnscreenDisplayClient {
       SharedBitmapManager* bitmap_manager,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       const RendererSettings& settings,
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner)
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+      uint32_t compositor_surface_namespace)
       : OnscreenDisplayClient(FakeOutputSurface::Create3d(),
                               manager,
                               bitmap_manager,
                               gpu_memory_buffer_manager,
                               settings,
-                              task_runner) {
+                              task_runner,
+                              compositor_surface_namespace) {
     // Ownership is passed to another object later, store a pointer
     // to it now for future reference.
     fake_output_surface_ =
@@ -57,7 +61,8 @@ class SurfaceDisplayOutputSurfaceTest : public testing::Test {
                         &bitmap_manager_,
                         &gpu_memory_buffer_manager_,
                         renderer_settings_,
-                        task_runner_),
+                        task_runner_,
+                        allocator_.id_namespace()),
         context_provider_(TestContextProvider::Create()),
         surface_display_output_surface_(&surface_manager_,
                                         &allocator_,
@@ -68,8 +73,16 @@ class SurfaceDisplayOutputSurfaceTest : public testing::Test {
     display_client_.set_surface_output_surface(
         &surface_display_output_surface_);
     surface_display_output_surface_.set_display_client(&display_client_);
+
+    // Set the Display's begin frame source like a real browser compositor
+    // output surface would.
+    begin_frame_source_.reset(
+        new BackToBackBeginFrameSource(task_runner_.get()));
+    display_client_.display()->SetBeginFrameSource(begin_frame_source_.get());
+
     surface_display_output_surface_.BindToClient(
         &surface_display_output_surface_client_);
+
     display_client_.display()->Resize(display_size_);
 
     EXPECT_FALSE(surface_display_output_surface_client_
@@ -79,11 +92,11 @@ class SurfaceDisplayOutputSurfaceTest : public testing::Test {
   ~SurfaceDisplayOutputSurfaceTest() override {}
 
   void SwapBuffersWithDamage(const gfx::Rect& damage_rect_) {
-    scoped_ptr<RenderPass> render_pass(RenderPass::Create());
+    std::unique_ptr<RenderPass> render_pass(RenderPass::Create());
     render_pass->SetNew(RenderPassId(1, 1), display_rect_, damage_rect_,
                         gfx::Transform());
 
-    scoped_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
+    std::unique_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
     frame_data->render_pass_list.push_back(std::move(render_pass));
 
     CompositorFrame frame;
@@ -102,8 +115,9 @@ class SurfaceDisplayOutputSurfaceTest : public testing::Test {
   }
 
  protected:
-  scoped_ptr<base::SimpleTestTickClock> now_src_;
+  std::unique_ptr<base::SimpleTestTickClock> now_src_;
   scoped_refptr<OrderedSimpleTaskRunner> task_runner_;
+  std::unique_ptr<BackToBackBeginFrameSource> begin_frame_source_;
   SurfaceIdAllocator allocator_;
 
   const gfx::Size display_size_;

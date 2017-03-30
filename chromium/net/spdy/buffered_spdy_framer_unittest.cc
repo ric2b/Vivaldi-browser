@@ -4,6 +4,7 @@
 
 #include "net/spdy/buffered_spdy_framer.h"
 
+#include "base/logging.h"
 #include "net/spdy/spdy_test_util_common.h"
 #include "testing/platform_test.h"
 
@@ -26,14 +27,14 @@ class TestBufferedSpdyVisitor : public BufferedSpdyFramerVisitorInterface {
         promised_stream_id_(static_cast<SpdyStreamId>(-1)) {}
 
   void OnError(SpdyFramer::SpdyError error_code) override {
-    LOG(INFO) << "SpdyFramer Error: " << error_code;
+    VLOG(1) << "SpdyFramer Error: " << error_code;
     error_count_++;
   }
 
   void OnStreamError(SpdyStreamId stream_id,
                      const std::string& description) override {
-    LOG(INFO) << "SpdyFramer Error on stream: " << stream_id  << " "
-              << description;
+    VLOG(1) << "SpdyFramer Error on stream: " << stream_id << " "
+            << description;
     error_count_++;
   }
 
@@ -79,9 +80,12 @@ class TestBufferedSpdyVisitor : public BufferedSpdyFramerVisitorInterface {
 
   void OnStreamFrameData(SpdyStreamId stream_id,
                          const char* data,
-                         size_t len,
-                         bool fin) override {
+                         size_t len) override {
     LOG(FATAL) << "Unexpected OnStreamFrameData call.";
+  }
+
+  void OnStreamEnd(SpdyStreamId stream_id) override {
+    LOG(FATAL) << "Unexpected OnStreamEnd call.";
   }
 
   void OnStreamPadding(SpdyStreamId stream_id, size_t len) override {
@@ -111,7 +115,7 @@ class TestBufferedSpdyVisitor : public BufferedSpdyFramerVisitorInterface {
 
   void OnGoAway(SpdyStreamId last_accepted_stream_id,
                 SpdyGoAwayStatus status,
-                StringPiece debug_data) override {
+                base::StringPiece debug_data) override {
     goaway_count_++;
     goaway_last_accepted_stream_id_ = last_accepted_stream_id;
     goaway_status_ = status;
@@ -227,7 +231,7 @@ TEST_P(BufferedSpdyFramerTest, ReadSynStreamHeaderBlock) {
   headers["aa"] = "vv";
   headers["bb"] = "ww";
   BufferedSpdyFramer framer(spdy_version());
-  scoped_ptr<SpdySerializedFrame> control_frame(
+  std::unique_ptr<SpdySerializedFrame> control_frame(
       framer.CreateSynStream(1,  // stream_id
                              0,  // associated_stream_id
                              1,  // priority
@@ -255,7 +259,7 @@ TEST_P(BufferedSpdyFramerTest, ReadSynReplyHeaderBlock) {
   headers["alpha"] = "beta";
   headers["gamma"] = "delta";
   BufferedSpdyFramer framer(spdy_version());
-  scoped_ptr<SpdySerializedFrame> control_frame(
+  std::unique_ptr<SpdySerializedFrame> control_frame(
       framer.CreateSynReply(1,  // stream_id
                             CONTROL_FLAG_NONE, &headers));
   EXPECT_TRUE(control_frame.get() != NULL);
@@ -282,7 +286,7 @@ TEST_P(BufferedSpdyFramerTest, ReadHeadersHeaderBlock) {
   headers["alpha"] = "beta";
   headers["gamma"] = "delta";
   BufferedSpdyFramer framer(spdy_version());
-  scoped_ptr<SpdySerializedFrame> control_frame(
+  std::unique_ptr<SpdySerializedFrame> control_frame(
       framer.CreateHeaders(1,  // stream_id
                            CONTROL_FLAG_NONE,
                            0,  // priority
@@ -308,7 +312,7 @@ TEST_P(BufferedSpdyFramerTest, ReadPushPromiseHeaderBlock) {
   headers["alpha"] = "beta";
   headers["gamma"] = "delta";
   BufferedSpdyFramer framer(spdy_version());
-  scoped_ptr<SpdySerializedFrame> control_frame(
+  std::unique_ptr<SpdySerializedFrame> control_frame(
       framer.CreatePushPromise(1, 2, &headers));
   EXPECT_TRUE(control_frame.get() != NULL);
 
@@ -330,7 +334,7 @@ TEST_P(BufferedSpdyFramerTest, GoAwayDebugData) {
   if (spdy_version() < HTTP2)
     return;
   BufferedSpdyFramer framer(spdy_version());
-  scoped_ptr<SpdySerializedFrame> goaway_frame(
+  std::unique_ptr<SpdySerializedFrame> goaway_frame(
       framer.CreateGoAway(2u, GOAWAY_FRAME_SIZE_ERROR, "foo"));
 
   TestBufferedSpdyVisitor visitor(spdy_version());

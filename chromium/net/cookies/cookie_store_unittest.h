@@ -14,8 +14,8 @@
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_tokenizer.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/cookies/cookie_store.h"
 #include "net/cookies/cookie_store_test_callbacks.h"
@@ -42,7 +42,7 @@ const char kValidCookieLine[] = "A=B; path=/";
 // The CookieStoreTestTraits must have the following members:
 // struct CookieStoreTestTraits {
 //   // Factory function. Will be called at most once per test.
-//   static scoped_ptr<CookieStore> Create();
+//   static std::unique_ptr<CookieStore> Create();
 //
 //   // The cookie store supports cookies with the exclude_httponly() option.
 //   static const bool supports_http_only;
@@ -242,17 +242,17 @@ class CookieStoreTest : public testing::Test {
     return callback.result();
   }
 
-  int DeleteAllCreatedBetweenForHost(CookieStore* cs,
-                                     const base::Time delete_begin,
-                                     const base::Time delete_end,
-                                     const GURL& url) {
+  int DeleteAllCreatedBetweenWithPredicate(
+      CookieStore* cs,
+      const base::Time delete_begin,
+      const base::Time delete_end,
+      const CookieStore::CookiePredicate& predicate) {
     DCHECK(cs);
     ResultSavingCookieCallback<int> callback;
-    cs->DeleteAllCreatedBetweenForHostAsync(
-        delete_begin, delete_end, url,
-        base::Bind(
-            &ResultSavingCookieCallback<int>::Run,
-            base::Unretained(&callback)));
+    cs->DeleteAllCreatedBetweenWithPredicateAsync(
+        delete_begin, delete_end, predicate,
+        base::Bind(&ResultSavingCookieCallback<int>::Run,
+                   base::Unretained(&callback)));
     callback.WaitUntilDone();
     return callback.result();
   }
@@ -319,8 +319,8 @@ class CookieStoreTest : public testing::Test {
   const CookieURLHelper http_foo_com_;
   const CookieURLHelper http_bar_com_;
 
-  scoped_ptr<base::WeakPtrFactory<base::MessageLoop> > weak_factory_;
-  scoped_ptr<base::MessageLoop> message_loop_;
+  std::unique_ptr<base::WeakPtrFactory<base::MessageLoop>> weak_factory_;
+  std::unique_ptr<base::MessageLoop> message_loop_;
 
  private:
   // Returns a set of strings of type "name=value". Fails in case of duplicate.
@@ -332,7 +332,7 @@ class CookieStoreTest : public testing::Test {
     return tokens;
   }
 
-  scoped_ptr<CookieStore> cookie_store_;
+  std::unique_ptr<CookieStore> cookie_store_;
 };
 
 TYPED_TEST_CASE_P(CookieStoreTest);
@@ -1044,23 +1044,53 @@ TYPED_TEST_P(CookieStoreTest, TestDeleteAllCreatedBetween) {
                          this->GetCookies(cs, this->http_www_google_.url()));
 }
 
-TYPED_TEST_P(CookieStoreTest, TestDeleteAllCreatedBetweenForHost) {
+namespace {
+static bool CookieHasValue(const std::string& value,
+                           const CanonicalCookie& cookie) {
+  return cookie.Value() == value;
+}
+}
+
+TYPED_TEST_P(CookieStoreTest, TestDeleteAllCreatedBetweenWithPredicate) {
   CookieStore* cs = this->GetCookieStore();
-  GURL url_not_google("http://www.notgoogle.com");
   base::Time now = base::Time::Now();
+  base::Time last_month = base::Time::Now() - base::TimeDelta::FromDays(30);
+  base::Time last_minute = base::Time::Now() - base::TimeDelta::FromMinutes(1);
+  std::string desired_value("B");
 
   // These 3 cookies match the time range and host.
   EXPECT_TRUE(this->SetCookie(cs, this->http_www_google_.url(), "A=B"));
   EXPECT_TRUE(this->SetCookie(cs, this->http_www_google_.url(), "C=D"));
   EXPECT_TRUE(this->SetCookie(cs, this->http_www_google_.url(), "Y=Z"));
-
-  // This cookie does not match host.
-  EXPECT_TRUE(this->SetCookie(cs, url_not_google, "E=F"));
+  EXPECT_TRUE(this->SetCookie(cs, this->https_www_google_.url(), "E=B"));
 
   // Delete cookies.
-  EXPECT_EQ(3,  // Deletes A=B, C=D, Y=Z
-            this->DeleteAllCreatedBetweenForHost(cs, now, base::Time::Max(),
-                                                 this->http_www_google_.url()));
+  EXPECT_EQ(2,  // Deletes A=B, E=B
+            this->DeleteAllCreatedBetweenWithPredicate(
+                cs, now, base::Time::Max(),
+                base::Bind(&CookieHasValue, desired_value)));
+
+  // Check that we deleted the right ones.
+  this->MatchCookieLines("C=D;Y=Z",
+                         this->GetCookies(cs, this->https_www_google_.url()));
+
+  // Now check that using a null predicate will do nothing.
+  EXPECT_EQ(0, this->DeleteAllCreatedBetweenWithPredicate(
+                   cs, now, base::Time::Max(), CookieStore::CookiePredicate()));
+
+  // Finally, check that we don't delete cookies when our time range is off.
+  desired_value = "D";
+  EXPECT_EQ(0, this->DeleteAllCreatedBetweenWithPredicate(
+                   cs, last_month, last_minute,
+                   base::Bind(&CookieHasValue, desired_value)));
+  this->MatchCookieLines("C=D;Y=Z",
+                         this->GetCookies(cs, this->https_www_google_.url()));
+  // Same thing, but with a good time range.
+  EXPECT_EQ(1, this->DeleteAllCreatedBetweenWithPredicate(
+                   cs, now, base::Time::Max(),
+                   base::Bind(&CookieHasValue, desired_value)));
+  this->MatchCookieLines("Y=Z",
+                         this->GetCookies(cs, this->https_www_google_.url()));
 }
 
 TYPED_TEST_P(CookieStoreTest, TestSecure) {
@@ -1370,7 +1400,7 @@ REGISTER_TYPED_TEST_CASE_P(CookieStoreTest,
                            TestCookieDeletion,
                            TestDeleteAll,
                            TestDeleteAllCreatedBetween,
-                           TestDeleteAllCreatedBetweenForHost,
+                           TestDeleteAllCreatedBetweenWithPredicate,
                            TestSecure,
                            NetUtilCookieTest,
                            OverwritePersistentCookie,

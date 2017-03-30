@@ -5,12 +5,16 @@
 package org.chromium.chrome.browser.media.ui;
 
 import android.app.Activity;
+import android.content.Intent;
+import android.graphics.Bitmap;
 import android.media.AudioManager;
 import android.text.TextUtils;
 
-import org.chromium.base.ApplicationStatus;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.metrics.MediaNotificationUma;
 import org.chromium.chrome.browser.metrics.MediaSessionUMA;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
@@ -32,8 +36,11 @@ public class MediaSessionTabHelper {
     private static final String TAG = "MediaSession";
 
     private static final String UNICODE_PLAY_CHARACTER = "\u25B6";
+    private static final int MINIMAL_FAVICON_SIZE = 114;
 
     private Tab mTab;
+    private Bitmap mFavicon = null;
+    private String mOrigin = null;
     private WebContents mWebContents;
     private WebContentsObserver mWebContentsObserver;
     private int mPreviousVolumeControlStream = AudioManager.USE_DEFAULT_STREAM_TYPE;
@@ -93,13 +100,6 @@ public class MediaSessionTabHelper {
                     hideNotification();
                     return;
                 }
-                String origin = mTab.getUrl();
-                try {
-                    origin = UrlUtilities.formatUrlForSecurityDisplay(new URI(origin), true);
-                } catch (URISyntaxException e) {
-                    Log.e(TAG, "Unable to parse the origin from the URL. "
-                            + "Showing the full URL instead.");
-                }
 
                 mFallbackMetadata = null;
 
@@ -113,20 +113,29 @@ public class MediaSessionTabHelper {
                     metadata = mFallbackMetadata;
                 }
 
-                mNotificationInfoBuilder = new MediaNotificationInfo.Builder()
-                        .setMetadata(metadata)
-                        .setPaused(isPaused)
-                        .setOrigin(origin)
-                        .setTabId(mTab.getId())
-                        .setPrivate(mTab.isIncognito())
-                        .setIcon(R.drawable.audio_playing)
-                        .setActions(MediaNotificationInfo.ACTION_PLAY_PAUSE
-                                | MediaNotificationInfo.ACTION_SWIPEAWAY)
-                        .setContentIntent(Tab.createBringTabToFrontIntent(mTab.getId()))
-                        .setId(R.id.media_playback_notification)
-                        .setListener(mControlsListener);
+                Intent contentIntent = Tab.createBringTabToFrontIntent(mTab.getId());
+                if (contentIntent != null) {
+                    contentIntent.putExtra(MediaNotificationUma.INTENT_EXTRA_NAME,
+                            MediaNotificationUma.SOURCE_MEDIA);
+                }
 
-                MediaNotificationManager.show(ApplicationStatus.getApplicationContext(),
+                mNotificationInfoBuilder =
+                        new MediaNotificationInfo.Builder()
+                                .setMetadata(metadata)
+                                .setPaused(isPaused)
+                                .setOrigin(mOrigin)
+                                .setTabId(mTab.getId())
+                                .setPrivate(mTab.isIncognito())
+                                .setIcon(R.drawable.audio_playing)
+                                .setLargeIcon(mFavicon)
+                                .setDefaultLargeIcon(R.drawable.audio_playing_square)
+                                .setActions(MediaNotificationInfo.ACTION_PLAY_PAUSE
+                                        | MediaNotificationInfo.ACTION_SWIPEAWAY)
+                                .setContentIntent(contentIntent)
+                                .setId(R.id.media_playback_notification)
+                                .setListener(mControlsListener);
+
+                MediaNotificationManager.show(ContextUtils.getApplicationContext(),
                         mNotificationInfoBuilder.build());
 
                 Activity activity = getActivityFromTab(mTab);
@@ -159,6 +168,46 @@ public class MediaSessionTabHelper {
         }
 
         @Override
+        public void onFaviconUpdated(Tab tab, Bitmap icon) {
+            assert tab == mTab;
+            // Don't update the large icon if using customized notification. Otherwise, the
+            // lockscreen art will be the favicon.
+            if (!ChromeFeatureList.isEnabled(ChromeFeatureList.MEDIA_STYLE_NOTIFICATION)) return;
+
+            if (!updateFavicon(icon)) return;
+
+            if (mNotificationInfoBuilder == null) return;
+
+            mNotificationInfoBuilder.setLargeIcon(mFavicon);
+            MediaNotificationManager.show(
+                    ContextUtils.getApplicationContext(), mNotificationInfoBuilder.build());
+        }
+
+        @Override
+        public void onUrlUpdated(Tab tab) {
+            assert tab == mTab;
+
+            String origin = mTab.getUrl();
+            try {
+                origin = UrlUtilities.formatUrlForSecurityDisplay(new URI(origin), true);
+            } catch (URISyntaxException e) {
+                Log.e(TAG, "Unable to parse the origin from the URL. "
+                                + "Using the full URL instead.");
+            }
+
+            if (mOrigin != null && mOrigin.equals(origin)) return;
+            mOrigin = origin;
+            mFavicon = null;
+
+            if (mNotificationInfoBuilder == null) return;
+
+            mNotificationInfoBuilder.setOrigin(mOrigin);
+            mNotificationInfoBuilder.setLargeIcon(mFavicon);
+            MediaNotificationManager.show(
+                    ContextUtils.getApplicationContext(), mNotificationInfoBuilder.build());
+        }
+
+        @Override
         public void onTitleUpdated(Tab tab) {
             assert tab == mTab;
             if (mNotificationInfoBuilder == null || mFallbackMetadata == null) return;
@@ -167,7 +216,7 @@ public class MediaSessionTabHelper {
             mFallbackMetadata.setTitle(sanitizeMediaTitle(mTab.getTitle()));
             mNotificationInfoBuilder.setMetadata(mFallbackMetadata);
 
-            MediaNotificationManager.show(ApplicationStatus.getApplicationContext(),
+            MediaNotificationManager.show(ContextUtils.getApplicationContext(),
                     mNotificationInfoBuilder.build());
         }
 
@@ -239,5 +288,23 @@ public class MediaSessionTabHelper {
         if (windowAndroid == null) return null;
 
         return windowAndroid.getActivity().get();
+    }
+
+    /**
+     * Updates the best favicon if the given icon is better.
+     * @return whether the best favicon is updated.
+     */
+    private boolean updateFavicon(Bitmap icon) {
+        if (icon == null) return false;
+
+        if (icon.getWidth() < MINIMAL_FAVICON_SIZE || icon.getHeight() < MINIMAL_FAVICON_SIZE) {
+            return false;
+        }
+        if (mFavicon != null && (icon.getWidth() < mFavicon.getWidth()
+                                        || icon.getHeight() < mFavicon.getHeight())) {
+            return false;
+        }
+        mFavicon = icon;
+        return true;
     }
 }

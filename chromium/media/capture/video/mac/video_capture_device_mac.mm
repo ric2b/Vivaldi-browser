@@ -21,7 +21,7 @@
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #import "media/base/mac/avfoundation_glue.h"
 #include "media/base/timestamp_constants.h"
@@ -326,7 +326,7 @@ VideoCaptureDeviceMac::~VideoCaptureDeviceMac() {
 
 void VideoCaptureDeviceMac::AllocateAndStart(
     const VideoCaptureParams& params,
-    scoped_ptr<VideoCaptureDevice::Client> client) {
+    std::unique_ptr<VideoCaptureDevice::Client> client) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   if (state_ != kIdle) {
     return;

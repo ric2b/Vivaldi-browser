@@ -26,6 +26,7 @@
 <translation id="1602076796624386989">Увімкнути передавання мобільних даних</translation>
 <translation id="1621499497873603021">До розрядження акумулятора залишилося <ph name="TIME_LEFT" /></translation>
 <translation id="164969095109328410">Пристрій Chrome</translation>
+<translation id="1677472565718498478">Залишилося <ph name="TIME" /></translation>
 <translation id="1723752762323179280">Завершення сеансу</translation>
 <translation id="1747827819627189109">Екранну клавіатуру ввімкнено</translation>
 <translation id="1812696562331527143">Метод введення змінено на <ph name="INPUT_METHOD_ID" />* (<ph name="BEGIN_LINK" />третя сторона<ph name="END_LINK" />).
@@ -92,7 +93,6 @@
 <translation id="3621712662352432595">Налаштування звуку</translation>
 <translation id="3625258641415618104">Знімки екрана вимкнено</translation>
 <translation id="3626281679859535460">Яскравість</translation>
-<translation id="3626637461649818317">Залишилося <ph name="PERCENTAGE" />%</translation>
 <translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079"><ph name="DISPLAY_NAME" />: установлено роздільну здатність <ph name="RESOLUTION" /></translation>
 <translation id="370649949373421643">Увімкнути Wi-Fi</translation>
@@ -111,13 +111,13 @@
 <translation id="397105322502079400">Обчислення...</translation>
 <translation id="3995138139523574647">пристрій, під’єднаний до порту USB-C (праворуч на задній панелі)</translation>
 <translation id="4053612967614057854">Вимкнути екранну клавіатуру</translation>
-<translation id="412065659894267608"><ph name="HOUR" /> год. <ph name="MINUTE" /> хв. до повного зарядження</translation>
 <translation id="4250680216510889253">ні</translation>
 <translation id="4279490309300973883">Дзеркальне відображення</translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4421231901400348175">Спільний доступ до екрана для користувача <ph name="HELPER_NAME" /> через віддалену допомогу.</translation>
 <translation id="4430019312045809116">Гучність</translation>
 <translation id="4527045527269911712">Пристрою Bluetooth "<ph name="DEVICE_NAME" />" потрібен дозвіл на підключення.</translation>
+<translation id="453661520163887813"><ph name="TIME" /> до повного заряду</translation>
 <translation id="4544944664594876241">Комбінація клавіш для блокування екрана змінилася. Тепер це <ph name="NEW_SHORTCUT" />, а не <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="479989351350248267">пошук</translation>
 <translation id="4804818685124855865">Від'єднатися</translation>
@@ -129,7 +129,6 @@
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl+Shift+пробіл</translation>
 <translation id="5045002648206642691">Налаштування Google Диска...</translation>
-<translation id="5102001756192215136">Залишилося <ph name="HOUR" />:<ph name="MINUTE" /></translation>
 <translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">Доступні пристрої для трансляції</translation>
 <translation id="5222676887888702881">Вийти</translation>
@@ -166,7 +165,6 @@
 <translation id="615957422585914272">Показувати екранну клавіатуру</translation>
 <translation id="6165508094623778733">Докладніше</translation>
 <translation id="6203030746557259519">Віртуальний дисплей</translation>
-<translation id="6247708409970142803"><ph name="PERCENTAGE" />%</translation>
 <translation id="6248847161401822652">Двічі натисніть комбінацію клавіш Control Shift Q, щоб вийти.</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" /> обернено на <ph name="ROTATION" /></translation>
 <translation id="6359806961507272919">SMS-повідомлення від <ph name="PHONE_NUMBER" /></translation>
@@ -207,6 +205,7 @@
 <translation id="7510334386202674593">Ctrl+Shift+L</translation>
 <translation id="7561014039265304140">Екран <ph name="DISPLAY_NAME" /> не підтримує роздільну здатність <ph name="SPECIFIED_RESOLUTION" />. Роздільну здатність змінено на <ph name="FALLBACK_RESOLUTION" /></translation>
 <translation id="7573962313813535744">Режим док-станції</translation>
+<translation id="7580671184200851182">Відтворювати один аудіозапис на всіх динаміках (монофонічне аудіо)</translation>
 <translation id="7593891976182323525">Клавіша пошуку або Shift</translation>
 <translation id="7649070708921625228">Довідка</translation>
 <translation id="7692480393933218409">Заряджає пристрої, під’єднанї до порту USB-C</translation>
@@ -225,13 +224,14 @@
 <translation id="8308637677604853869">Попереднє меню</translation>
 <translation id="8356164830168736643">Закрити вікно <ph name="WINDOW_TITLE" /></translation>
 <translation id="8428213095426709021">Налаштування</translation>
-<translation id="8456362689280298700"><ph name="HOUR" />:<ph name="MINUTE" /> до повного зарядження</translation>
 <translation id="8517041960877371778">Пристрій <ph name="DEVICE_TYPE" /> може не заряджатися, коли він увімкнений.</translation>
 <translation id="8528322925433439945">Мобільні ...</translation>
+<translation id="8639760480004882931">Залишилося <ph name="PERCENTAGE" /></translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">Зарядний пристрій низької потужності підключено</translation>
 <translation id="8814190375133053267">Wi-Fi</translation>
 <translation id="882279321799040148">Натисніть, щоб переглянути</translation>
+<translation id="8825534185036233643">Дзеркалювання на більше ніж двох дисплеях не підтримується.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8850991929411075241">Search (Пошук)+Esc</translation>
 <translation id="8878886163241303700">Розширення екрана</translation>

@@ -7,13 +7,14 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "components/policy/core/common/policy_bundle.h"
 #include "components/policy/core/common/policy_map.h"
@@ -46,19 +47,20 @@ void FixDeprecatedPolicies(PolicyMap* policies) {
   // first, and then only policies with those exact attributes are merged.
   PolicyMap::Entry current_priority;  // Defaults to the lowest priority.
   PolicySource inherited_source = POLICY_SOURCE_ENTERPRISE_DEFAULT;
-  scoped_ptr<base::DictionaryValue> proxy_settings(new base::DictionaryValue);
+  std::unique_ptr<base::DictionaryValue> proxy_settings(
+      new base::DictionaryValue);
   for (size_t i = 0; i < arraysize(kProxyPolicies); ++i) {
     const PolicyMap::Entry* entry = policies->Get(kProxyPolicies[i]);
     if (entry) {
       if (entry->has_higher_priority_than(current_priority)) {
         proxy_settings->Clear();
-        current_priority = *entry;
+        current_priority = entry->DeepCopy();
         if (entry->source > inherited_source)  // Higher priority?
           inherited_source = entry->source;
       }
       if (!entry->has_higher_priority_than(current_priority) &&
           !current_priority.has_higher_priority_than(*entry)) {
-        proxy_settings->Set(kProxyPolicies[i], entry->value->DeepCopy());
+        proxy_settings->Set(kProxyPolicies[i], entry->value->CreateDeepCopy());
       }
       policies->Erase(kProxyPolicies[i]);
     }
@@ -68,12 +70,9 @@ void FixDeprecatedPolicies(PolicyMap* policies) {
   const PolicyMap::Entry* existing = policies->Get(key::kProxySettings);
   if (!proxy_settings->empty() &&
       (!existing || current_priority.has_higher_priority_than(*existing))) {
-    policies->Set(key::kProxySettings,
-                  current_priority.level,
-                  current_priority.scope,
-                  inherited_source,
-                  proxy_settings.release(),
-                  NULL);
+    policies->Set(key::kProxySettings, current_priority.level,
+                  current_priority.scope, inherited_source,
+                  std::move(proxy_settings), nullptr);
   }
 }
 

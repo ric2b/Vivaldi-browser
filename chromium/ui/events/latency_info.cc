@@ -34,6 +34,7 @@ const char* GetComponentName(ui::LatencyComponentType type) {
     CASE_TYPE(INPUT_EVENT_LATENCY_ACK_RWH_COMPONENT);
     CASE_TYPE(WINDOW_SNAPSHOT_FRAME_NUMBER_COMPONENT);
     CASE_TYPE(TAB_SHOW_COMPONENT);
+    CASE_TYPE(INPUT_EVENT_LATENCY_RENDERER_MAIN_COMPONENT);
     CASE_TYPE(INPUT_EVENT_LATENCY_RENDERER_SWAP_COMPONENT);
     CASE_TYPE(INPUT_EVENT_BROWSER_RECEIVED_RENDERER_SWAP_COMPONENT);
     CASE_TYPE(INPUT_EVENT_GPU_SWAP_BUFFER_COMPONENT);
@@ -85,8 +86,8 @@ bool IsInputLatencyBeginComponent(ui::LatencyComponentType type) {
 class LatencyInfoTracedValue
     : public base::trace_event::ConvertableToTraceFormat {
  public:
-  static scoped_ptr<ConvertableToTraceFormat> FromValue(
-      scoped_ptr<base::Value> value);
+  static std::unique_ptr<ConvertableToTraceFormat> FromValue(
+      std::unique_ptr<base::Value> value);
 
   void AppendAsTraceFormat(std::string* out) const override;
 
@@ -94,14 +95,14 @@ class LatencyInfoTracedValue
   explicit LatencyInfoTracedValue(base::Value* value);
   ~LatencyInfoTracedValue() override;
 
-  scoped_ptr<base::Value> value_;
+  std::unique_ptr<base::Value> value_;
 
   DISALLOW_COPY_AND_ASSIGN(LatencyInfoTracedValue);
 };
 
-scoped_ptr<base::trace_event::ConvertableToTraceFormat>
-LatencyInfoTracedValue::FromValue(scoped_ptr<base::Value> value) {
-  return scoped_ptr<base::trace_event::ConvertableToTraceFormat>(
+std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
+LatencyInfoTracedValue::FromValue(std::unique_ptr<base::Value> value) {
+  return std::unique_ptr<base::trace_event::ConvertableToTraceFormat>(
       new LatencyInfoTracedValue(value.release()));
 }
 
@@ -315,12 +316,13 @@ void LatencyInfo::AddLatencyNumberWithTimestampImpl(
   }
 }
 
-scoped_ptr<base::trace_event::ConvertableToTraceFormat>
+std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
 LatencyInfo::AsTraceableData() {
-  scoped_ptr<base::DictionaryValue> record_data(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> record_data(
+      new base::DictionaryValue());
   for (const auto& lc : latency_components_) {
-    scoped_ptr<base::DictionaryValue>
-        component_info(new base::DictionaryValue());
+    std::unique_ptr<base::DictionaryValue> component_info(
+        new base::DictionaryValue());
     component_info->SetDouble("comp_id", static_cast<double>(lc.first.second));
     component_info->SetDouble(
         "time",
@@ -335,11 +337,11 @@ LatencyInfo::AsTraceableData() {
   return LatencyInfoTracedValue::FromValue(std::move(record_data));
 }
 
-scoped_ptr<base::trace_event::ConvertableToTraceFormat>
+std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
 LatencyInfo::CoordinatesAsTraceableData() {
-  scoped_ptr<base::ListValue> coordinates(new base::ListValue());
+  std::unique_ptr<base::ListValue> coordinates(new base::ListValue());
   for (size_t i = 0; i < input_coordinates_size_; i++) {
-    scoped_ptr<base::DictionaryValue> coordinate_pair(
+    std::unique_ptr<base::DictionaryValue> coordinate_pair(
         new base::DictionaryValue());
     coordinate_pair->SetDouble("x", input_coordinates_[i].x);
     coordinate_pair->SetDouble("y", input_coordinates_[i].y);

@@ -18,8 +18,8 @@
 #include "ash/test/ash_test_base.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/screen.h"
 #include "ui/keyboard/keyboard_switches.h"
 #include "ui/keyboard/keyboard_util.h"
 #include "ui/message_center/message_center_style.h"
@@ -64,8 +64,8 @@ class AshPopupAlignmentDelegateTest : public test::AshTestBase {
   }
 
   void UpdateWorkArea(AshPopupAlignmentDelegate* alignment_delegate,
-                      const gfx::Display& display) {
-    alignment_delegate->StartObserving(gfx::Screen::GetScreen(), display);
+                      const display::Display& display) {
+    alignment_delegate->StartObserving(display::Screen::GetScreen(), display);
     // Update the layout
     alignment_delegate->OnDisplayWorkAreaInsetsChanged();
   }
@@ -78,12 +78,12 @@ class AshPopupAlignmentDelegateTest : public test::AshTestBase {
     }
     alignment_delegate_ = std::move(delegate);
     UpdateWorkArea(alignment_delegate_.get(),
-                   gfx::Screen::GetScreen()->GetPrimaryDisplay());
+                   display::Screen::GetScreen()->GetPrimaryDisplay());
   }
 
   Position GetPositionInDisplay(const gfx::Point& point) {
     const gfx::Rect& work_area =
-        gfx::Screen::GetScreen()->GetPrimaryDisplay().work_area();
+        display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
     const gfx::Point center_point = work_area.CenterPoint();
     if (work_area.x() > point.x() || work_area.y() > point.y() ||
         work_area.right() < point.x() || work_area.bottom() < point.y()) {
@@ -120,18 +120,16 @@ TEST_F(AshPopupAlignmentDelegateTest, MAYBE_ShelfAlignment) {
   EXPECT_FALSE(alignment_delegate()->IsTopDown());
   EXPECT_FALSE(alignment_delegate()->IsFromLeft());
 
-  Shell::GetInstance()->SetShelfAlignment(
-      SHELF_ALIGNMENT_RIGHT,
-      Shell::GetPrimaryRootWindow());
+  Shell::GetInstance()->SetShelfAlignment(wm::SHELF_ALIGNMENT_RIGHT,
+                                          Shell::GetPrimaryRootWindow());
   toast_point.set_x(alignment_delegate()->GetToastOriginX(toast_size));
   toast_point.set_y(alignment_delegate()->GetBaseLine());
   EXPECT_EQ(BOTTOM_RIGHT, GetPositionInDisplay(toast_point));
   EXPECT_FALSE(alignment_delegate()->IsTopDown());
   EXPECT_FALSE(alignment_delegate()->IsFromLeft());
 
-  Shell::GetInstance()->SetShelfAlignment(
-      SHELF_ALIGNMENT_LEFT,
-      Shell::GetPrimaryRootWindow());
+  Shell::GetInstance()->SetShelfAlignment(wm::SHELF_ALIGNMENT_LEFT,
+                                          Shell::GetPrimaryRootWindow());
   toast_point.set_x(alignment_delegate()->GetToastOriginX(toast_size));
   toast_point.set_y(alignment_delegate()->GetBaseLine());
   EXPECT_EQ(BOTTOM_LEFT, GetPositionInDisplay(toast_point));
@@ -145,9 +143,8 @@ TEST_F(AshPopupAlignmentDelegateTest, LockScreen) {
 
   const gfx::Rect toast_size(0, 0, 10, 10);
 
-  Shell::GetInstance()->SetShelfAlignment(
-      SHELF_ALIGNMENT_LEFT,
-      Shell::GetPrimaryRootWindow());
+  Shell::GetInstance()->SetShelfAlignment(wm::SHELF_ALIGNMENT_LEFT,
+                                          Shell::GetPrimaryRootWindow());
   gfx::Point toast_point;
   toast_point.set_x(alignment_delegate()->GetToastOriginX(toast_size));
   toast_point.set_y(alignment_delegate()->GetBaseLine());
@@ -200,9 +197,9 @@ TEST_F(AshPopupAlignmentDelegateTest, DockedWindow) {
   EXPECT_FALSE(alignment_delegate()->IsFromLeft());
 
   // Force dock to right-side
-  Shell::GetInstance()->SetShelfAlignment(SHELF_ALIGNMENT_LEFT,
+  Shell::GetInstance()->SetShelfAlignment(wm::SHELF_ALIGNMENT_LEFT,
                                           Shell::GetPrimaryRootWindow());
-  Shell::GetInstance()->SetShelfAlignment(SHELF_ALIGNMENT_BOTTOM,
+  Shell::GetInstance()->SetShelfAlignment(wm::SHELF_ALIGNMENT_BOTTOM,
                                           Shell::GetPrimaryRootWindow());
 
   // Right-side dock should not affect popup alignment
@@ -277,7 +274,7 @@ TEST_F(AshPopupAlignmentDelegateTest, Extended) {
   SetAlignmentDelegate(base::WrapUnique(new AshPopupAlignmentDelegate(
       Shelf::ForPrimaryDisplay()->shelf_layout_manager())));
 
-  gfx::Display second_display = ScreenUtil::GetSecondaryDisplay();
+  display::Display second_display = ScreenUtil::GetSecondaryDisplay();
   aura::Window* second_root =
       Shell::GetInstance()
           ->window_tree_host_manager()

@@ -12,6 +12,7 @@ import org.chromium.base.Log;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
@@ -103,12 +104,9 @@ public class DownloadTest extends DownloadTestBase {
         assertTrue(hasDownload("superbo.txt", SUPERBO_CONTENTS));
     }
 
-    /**
-    * Bug http://crbug/286315
-    * @MediumTest
-    * @Feature({"Downloads"})
-    */
-    @DisabledTest
+    @MediumTest
+    @Feature({"Downloads"})
+    @DisabledTest(message = "crbug.com/286315")
     public void testCloseEmptyDownloadTab() throws Exception {
         loadUrl(mTestServer.getURL("/chrome/test/data/android/download/get.html"));
         waitForFocus();
@@ -164,12 +162,9 @@ public class DownloadTest extends DownloadTestBase {
                 hasDownload("superbo (1).txt", SUPERBO_CONTENTS));
     }
 
-    /**
-    * Bug http://crbug/597230
-    * @MediumTest
-    * @Feature({"Downloads"})
-    */
-    @DisabledTest
+    @MediumTest
+    @Feature({"Downloads"})
+    @DisabledTest(message = "crbug.com/597230")
     public void testDuplicateHttpPostDownload_CreateNew() throws Exception {
         // Download a file.
         loadUrl(mTestServer.getURL("/chrome/test/data/android/download/post.html"));
@@ -197,11 +192,9 @@ public class DownloadTest extends DownloadTestBase {
                 hasDownload("superbo (1).txt", SUPERBO_CONTENTS));
     }
 
-    /*
-    Bug http://crbug/415711
-    */
     @MediumTest
     @Feature({"Downloads"})
+    @FlakyTest(message = "crbug.com/415711")
     public void testDuplicateHttpPostDownload_Dismiss() throws Exception {
         // Download a file.
         loadUrl(mTestServer.getURL("/chrome/test/data/android/download/post.html"));
@@ -229,12 +222,9 @@ public class DownloadTest extends DownloadTestBase {
                 hasDownload("superbo (1).txt", SUPERBO_CONTENTS));
     }
 
-    /**
-    * Bug http://crbug/597230
-    * @MediumTest
-    * @Feature({"Downloads"})
-    */
-    @DisabledTest
+    @MediumTest
+    @Feature({"Downloads"})
+    @DisabledTest(message = "crbug.com/597230")
     public void testDuplicateHttpPostDownload_AllowMultipleInfoBars() throws Exception {
         assertFalse(hasDownload("superbo.txt", SUPERBO_CONTENTS));
         // Download a file.
@@ -328,6 +318,7 @@ public class DownloadTest extends DownloadTestBase {
     }
 
     @CommandLineFlags.Add(ChromeSwitches.DISABLE_DOCUMENT_MODE)
+    @DisabledTest(message = "crbug.com/606798")
     @MediumTest
     @Feature({"Downloads"})
     public void testDuplicateHttpPostDownload_OpenNewTabAndReplace() throws Exception {

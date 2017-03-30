@@ -9,24 +9,31 @@
 #include "build/build_config.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/output_surface_client.h"
-#include "content/browser/compositor/browser_compositor_overlay_candidate_validator.h"
+#include "components/display_compositor/compositor_overlay_candidate_validator.h"
 #include "content/browser/compositor/reflector_impl.h"
 #include "content/browser/compositor/reflector_texture.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "gpu/command_buffer/client/context_support.h"
+#include "gpu/ipc/client/command_buffer_proxy_impl.h"
+
+#if defined(OS_MACOSX)
+#include "content/browser/gpu/gpu_surface_tracker.h"
+#include "gpu/ipc/client/gpu_process_hosted_ca_layer_tree_params.h"
+#include "ui/accelerated_widget_mac/accelerated_widget_mac.h"
+#endif
 
 namespace content {
 
 GpuBrowserCompositorOutputSurface::GpuBrowserCompositorOutputSurface(
-    const scoped_refptr<ContextProviderCommandBuffer>& context,
-    const scoped_refptr<ContextProviderCommandBuffer>& worker_context,
-    const scoped_refptr<ui::CompositorVSyncManager>& vsync_manager,
-    scoped_ptr<BrowserCompositorOverlayCandidateValidator>
+    scoped_refptr<ContextProviderCommandBuffer> context,
+    scoped_refptr<ui::CompositorVSyncManager> vsync_manager,
+    base::SingleThreadTaskRunner* task_runner,
+    std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
         overlay_candidate_validator)
-    : BrowserCompositorOutputSurface(context,
-                                     worker_context,
-                                     vsync_manager,
+    : BrowserCompositorOutputSurface(std::move(context),
+                                     std::move(vsync_manager),
+                                     task_runner,
                                      std::move(overlay_candidate_validator)),
 #if defined(OS_MACOSX)
       should_show_frames_state_(SHOULD_SHOW_FRAMES),
@@ -63,7 +70,7 @@ bool GpuBrowserCompositorOutputSurface::BindToClient(
       update_vsync_parameters_callback_.callback());
   if (capabilities_.uses_default_gl_framebuffer) {
     capabilities_.flipped_output_surface =
-        context_provider()->ContextCapabilities().gpu.flips_vertically;
+        context_provider()->ContextCapabilities().flips_vertically;
   }
   return true;
 }
@@ -115,7 +122,20 @@ void GpuBrowserCompositorOutputSurface::SwapBuffers(
 
 void GpuBrowserCompositorOutputSurface::OnGpuSwapBuffersCompleted(
     const std::vector<ui::LatencyInfo>& latency_info,
-    gfx::SwapResult result) {
+    gfx::SwapResult result,
+    const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac) {
+#if defined(OS_MACOSX)
+  if (should_show_frames_state_ == SHOULD_SHOW_FRAMES) {
+    gfx::AcceleratedWidget native_widget =
+        content::GpuSurfaceTracker::Get()->AcquireNativeWidget(
+            params_mac->surface_handle);
+    ui::AcceleratedWidgetMacGotFrame(
+        native_widget, params_mac->ca_context_id,
+        params_mac->fullscreen_low_power_ca_context_valid,
+        params_mac->fullscreen_low_power_ca_context_id, params_mac->io_surface,
+        params_mac->pixel_size, params_mac->scale_factor, nullptr, nullptr);
+  }
+#endif
   RenderWidgetHostImpl::CompositorFrameDrawn(latency_info);
   OnSwapBuffersComplete();
 }
@@ -144,11 +164,6 @@ void GpuBrowserCompositorOutputSurface::SetSurfaceSuspendedForRecycle(
           SHOULD_NOT_SHOW_FRAMES_NO_SWAP_AFTER_SUSPENDED;
     }
   }
-}
-
-bool GpuBrowserCompositorOutputSurface::
-    SurfaceShouldNotShowFramesAfterSuspendForRecycle() const {
-  return should_show_frames_state_ != SHOULD_SHOW_FRAMES;
 }
 #endif
 

@@ -16,8 +16,8 @@
 #include "ui/display/types/gamma_ramp_rgb_entry.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/ipc/geometry/gfx_param_traits.h"
 #include "ui/gfx/ipc/gfx_param_traits.h"
-#include "ui/gfx/ipc/gfx_param_traits_macros.h"
 #include "ui/gfx/ipc/skia/gfx_skia_param_traits.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/ozone/common/gpu/ozone_gpu_message_params.h"
@@ -59,6 +59,7 @@ IPC_STRUCT_TRAITS_BEGIN(ui::DisplaySnapshot_Params)
   IPC_STRUCT_TRAITS_MEMBER(native_mode)
   IPC_STRUCT_TRAITS_MEMBER(product_id)
   IPC_STRUCT_TRAITS_MEMBER(string_representation)
+  IPC_STRUCT_TRAITS_MEMBER(maximum_cursor_size)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(ui::GammaRampRGBEntry)

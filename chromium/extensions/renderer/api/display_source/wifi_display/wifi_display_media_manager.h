@@ -2,19 +2,31 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef EXTENSIONS_BROWSER_API_DISPLAY_SOURCE_WIFI_DISPLAY_WIFI_DISPLAY_MEDIA_MANAGER_H_
-#define EXTENSIONS_BROWSER_API_DISPLAY_SOURCE_WIFI_DISPLAY_WIFI_DISPLAY_MEDIA_MANAGER_H_
+#ifndef EXTENSIONS_RENDERER_API_DISPLAY_SOURCE_WIFI_DISPLAY_WIFI_DISPLAY_MEDIA_MANAGER_H_
+#define EXTENSIONS_RENDERER_API_DISPLAY_SOURCE_WIFI_DISPLAY_WIFI_DISPLAY_MEDIA_MANAGER_H_
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/callback.h"
-#include "base/macros.h"
-#include "third_party/WebKit/public/web/WebDOMMediaStreamTrack.h"
+#include "base/memory/weak_ptr.h"
+#include "extensions/common/mojo/wifi_display_session_service.mojom.h"
+#include "extensions/renderer/api/display_source/wifi_display/wifi_display_media_packetizer.h"
+#include "extensions/renderer/api/display_source/wifi_display/wifi_display_video_encoder.h"
+#include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
 #include "third_party/wds/src/libwds/public/media_manager.h"
 
+namespace content {
+class ServiceRegistry;
+}  // namespace content
+
 namespace extensions {
+class WiFiDisplayAudioSink;
+class WiFiDisplayVideoSink;
+class WiFiDisplayMediaPipeline;
+class WiFiDisplaySessionService;
 
 class WiFiDisplayMediaManager : public wds::SourceMediaManager {
  public:
@@ -23,6 +35,8 @@ class WiFiDisplayMediaManager : public wds::SourceMediaManager {
   WiFiDisplayMediaManager(
       const blink::WebMediaStreamTrack& video_track,
       const blink::WebMediaStreamTrack& audio_track,
+      const std::string& sink_ip_address,
+      content::ServiceRegistry* service_registry,
       const ErrorCallback& error_callback);
 
   ~WiFiDisplayMediaManager() override;
@@ -52,18 +66,38 @@ class WiFiDisplayMediaManager : public wds::SourceMediaManager {
   std::string GetSessionId() const override;
 
  private:
+  void OnPlayerCreated(std::unique_ptr<WiFiDisplayMediaPipeline> player);
+  void OnMediaPipelineInitialized(bool success);
+  void RegisterMediaService(
+       const scoped_refptr<base::SingleThreadTaskRunner>& main_runner,
+       WiFiDisplayMediaServiceRequest service,
+       const base::Closure& on_completed);
+  void ConnectToRemoteService(WiFiDisplayMediaServiceRequest request);
   blink::WebMediaStreamTrack video_track_;
   blink::WebMediaStreamTrack audio_track_;
 
+  std::unique_ptr<WiFiDisplayAudioSink> audio_sink_;
+  std::unique_ptr<WiFiDisplayVideoSink> video_sink_;
+
+  content::ServiceRegistry* service_registry_;
+  std::string sink_ip_address_;
   std::pair<int, int> sink_rtp_ports_;
   wds::H264VideoFormat optimal_video_format_;
   wds::AudioCodec optimal_audio_codec_;
 
+  WiFiDisplayVideoEncoder::InitParameters video_encoder_parameters_;
+  WiFiDisplayMediaPipeline* player_;  // Owned on IO thread.
+  scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
   ErrorCallback error_callback_;
+  bool is_playing_;
+  bool is_initialized_;
+  mutable std::string session_id_;  // Lazily initialized.
+
+  base::WeakPtrFactory<WiFiDisplayMediaManager> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(WiFiDisplayMediaManager);
 };
 
 }  // namespace extensions
 
-#endif  // EXTENSIONS_BROWSER_API_DISPLAY_SOURCE_WIFI_DISPLAY_WIFI_DISPLAY_MEDIA_MANAGER_H_
+#endif  // EXTENSIONS_RENDERER_API_DISPLAY_SOURCE_WIFI_DISPLAY_WIFI_DISPLAY_MEDIA_MANAGER_H_

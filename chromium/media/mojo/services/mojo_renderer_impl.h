@@ -19,10 +19,12 @@ class SingleThreadTaskRunner;
 namespace media {
 
 class DemuxerStreamProvider;
+class VideoOverlayFactory;
+class VideoRendererSink;
 
-// A media::Renderer that proxies to a interfaces::Renderer. That
-// interfaces::Renderer proxies back to the MojoRendererImpl via the
-// interfaces::RendererClient interface.
+// A media::Renderer that proxies to a mojom::Renderer. That
+// mojom::Renderer proxies back to the MojoRendererImpl via the
+// mojom::RendererClient interface.
 //
 // This class can be created on any thread, where the |remote_renderer| is
 // connected and passed in the constructor. Then Initialize() will be called on
@@ -30,21 +32,19 @@ class DemuxerStreamProvider;
 // |task_runner|*. That means all Renderer and RendererClient methods will be
 // called/dispached on the |task_runner|. The only exception is GetMediaTime(),
 // which can be called on any thread.
-class MojoRendererImpl : public Renderer, public interfaces::RendererClient {
+class MojoRendererImpl : public Renderer, public mojom::RendererClient {
  public:
   MojoRendererImpl(
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-      interfaces::RendererPtr remote_renderer);
+      std::unique_ptr<VideoOverlayFactory> video_overlay_factory,
+      VideoRendererSink* video_renderer_sink,
+      mojom::RendererPtr remote_renderer);
   ~MojoRendererImpl() override;
 
   // Renderer implementation.
   void Initialize(DemuxerStreamProvider* demuxer_stream_provider,
-                  const PipelineStatusCB& init_cb,
-                  const StatisticsCB& statistics_cb,
-                  const BufferingStateCB& buffering_state_cb,
-                  const base::Closure& ended_cb,
-                  const PipelineStatusCB& error_cb,
-                  const base::Closure& waiting_for_decryption_key_cb) override;
+                  media::RendererClient* client,
+                  const PipelineStatusCB& init_cb) override;
   void SetCdm(CdmContext* cdm_context,
               const CdmAttachedCB& cdm_attached_cb) override;
   void Flush(const base::Closure& flush_cb) override;
@@ -56,12 +56,14 @@ class MojoRendererImpl : public Renderer, public interfaces::RendererClient {
   bool HasVideo() override;
 
  private:
-  // interfaces::RendererClient implementation, dispatched on the
+  // mojom::RendererClient implementation, dispatched on the
   // |task_runner_|.
   void OnTimeUpdate(int64_t time_usec, int64_t max_time_usec) override;
-  void OnBufferingStateChange(interfaces::BufferingState state) override;
+  void OnBufferingStateChange(mojom::BufferingState state) override;
   void OnEnded() override;
   void OnError() override;
+  void OnVideoNaturalSizeChange(mojo::SizePtr size) override;
+  void OnVideoOpacityChange(bool opaque) override;
 
   // Callback for connection error on |remote_renderer_|.
   void OnConnectionError();
@@ -73,17 +75,28 @@ class MojoRendererImpl : public Renderer, public interfaces::RendererClient {
   // which can be called on any thread.
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
+  // Overlay factory used to create overlays for video frames rendered
+  // by the remote renderer.
+  std::unique_ptr<VideoOverlayFactory> video_overlay_factory_;
+
+  // Video frame overlays are rendered onto this sink.
+  // Rendering of a new overlay is only needed when video natural size changes.
+  VideoRendererSink* video_renderer_sink_;
+
   // Provider of audio/video DemuxerStreams. Must be valid throughout the
   // lifetime of |this|.
   DemuxerStreamProvider* demuxer_stream_provider_;
 
+  // Client of |this| renderer passed in Initialize.
+  media::RendererClient* client_;
+
   // This class is constructed on one thread and used exclusively on another
   // thread. This member is used to safely pass the RendererPtr from one thread
   // to another. It is set in the constructor and is consumed in Initialize().
-  interfaces::RendererPtrInfo remote_renderer_info_;
+  mojom::RendererPtrInfo remote_renderer_info_;
 
   // Remote Renderer, bound to |task_runner_| during Initialize().
-  interfaces::RendererPtr remote_renderer_;
+  mojom::RendererPtr remote_renderer_;
 
   // Binding for RendererClient, bound to the |task_runner_|.
   mojo::Binding<RendererClient> binding_;
@@ -91,9 +104,6 @@ class MojoRendererImpl : public Renderer, public interfaces::RendererClient {
   // Callbacks passed to Initialize() that we forward messages from
   // |remote_renderer_| through.
   PipelineStatusCB init_cb_;
-  base::Closure ended_cb_;
-  PipelineStatusCB error_cb_;
-  BufferingStateCB buffering_state_cb_;
 
   // Lock used to serialize access for |time_|.
   mutable base::Lock lock_;

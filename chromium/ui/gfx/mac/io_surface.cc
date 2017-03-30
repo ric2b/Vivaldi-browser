@@ -35,6 +35,7 @@ int32_t BytesPerElement(gfx::BufferFormat format, int plane) {
       DCHECK_EQ(plane, 0);
       return 1;
     case gfx::BufferFormat::BGRA_8888:
+    case gfx::BufferFormat::BGRX_8888:
     case gfx::BufferFormat::RGBA_8888:
       DCHECK_EQ(plane, 0);
       return 4;
@@ -50,9 +51,9 @@ int32_t BytesPerElement(gfx::BufferFormat format, int plane) {
     case gfx::BufferFormat::DXT1:
     case gfx::BufferFormat::DXT5:
     case gfx::BufferFormat::ETC1:
+    case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBX_8888:
-    case gfx::BufferFormat::BGRX_8888:
     case gfx::BufferFormat::YUV_420:
       NOTREACHED();
       return 0;
@@ -67,6 +68,7 @@ int32_t PixelFormat(gfx::BufferFormat format) {
     case gfx::BufferFormat::R_8:
       return 'L008';
     case gfx::BufferFormat::BGRA_8888:
+    case gfx::BufferFormat::BGRX_8888:
     case gfx::BufferFormat::RGBA_8888:
       return 'BGRA';
     case gfx::BufferFormat::YUV_420_BIPLANAR:
@@ -78,9 +80,9 @@ int32_t PixelFormat(gfx::BufferFormat format) {
     case gfx::BufferFormat::DXT1:
     case gfx::BufferFormat::DXT5:
     case gfx::BufferFormat::ETC1:
+    case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBX_8888:
-    case gfx::BufferFormat::BGRX_8888:
     case gfx::BufferFormat::YUV_420:
       NOTREACHED();
       return 0;
@@ -170,6 +172,21 @@ IOSurfaceRef CreateIOSurface(const gfx::Size& size, gfx::BufferFormat format) {
     DCHECK_EQ(kIOReturnSuccess, r);
     r = IOSurfaceUnlock(surface, 0, nullptr);
     DCHECK_EQ(kIOReturnSuccess, r);
+  }
+
+  // Displaying an IOSurface that does not have a color space using an
+  // AVSampleBufferDisplayLayer can result in a black screen. Specify the
+  // main display's color profile by default, which will result in no color
+  // correction being done for the main monitor (which is the behavior of not
+  // specifying a color space).
+  // https://crbug.com/608879
+  if (format == gfx::BufferFormat::YUV_420_BIPLANAR) {
+    base::ScopedCFTypeRef<CGColorSpaceRef> color_space(
+        CGDisplayCopyColorSpace(CGMainDisplayID()));
+    base::ScopedCFTypeRef<CFDataRef> color_space_icc(
+        CGColorSpaceCopyICCProfile(color_space));
+    // Note that nullptr is an acceptable input to IOSurfaceSetValue.
+    IOSurfaceSetValue(surface, CFSTR("IOSurfaceColorSpace"), color_space_icc);
   }
 
   return surface;

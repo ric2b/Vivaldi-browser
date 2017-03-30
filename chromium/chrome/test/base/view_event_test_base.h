@@ -10,6 +10,8 @@
 // This way if a test hangs the test launcher can reliably terminate it.
 #if defined(HAS_OUT_OF_PROC_TEST_RUNNER)
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
@@ -141,7 +143,7 @@ class ViewEventTestBase : public views::WidgetDelegate,
   views::View* content_view_;
 
   // Thread for posting background MouseMoves.
-  scoped_ptr<base::Thread> dnd_thread_;
+  std::unique_ptr<base::Thread> dnd_thread_;
 
   content::TestBrowserThreadBundle thread_bundle_;
 
@@ -149,7 +151,7 @@ class ViewEventTestBase : public views::WidgetDelegate,
   ui::ScopedOleInitializer ole_initializer_;
 #endif
 
-  scoped_ptr<ViewEventTestPlatformPart> platform_part_;
+  std::unique_ptr<ViewEventTestPlatformPart> platform_part_;
 
   views::TestViewsDelegate views_delegate_;
 

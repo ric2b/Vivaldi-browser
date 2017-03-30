@@ -77,6 +77,14 @@ int GetModifierFlags() {
   delegate_ = delegate;
 }
 
+- (content::WebDragDestDelegate*)getDragDelegate {
+  return delegate_;
+}
+
+- (bool)isCanceled {
+  return canceled_;
+}
+
 // Call to set whether or not we should allow the drop. Takes effect the
 // next time |-draggingUpdated:| is called.
 - (void)setCurrentOperation:(NSDragOperation)operation {
@@ -126,7 +134,7 @@ int GetModifierFlags() {
   currentRVH_ = webContents_->GetRenderViewHost();
 
   // Fill out a DropData from pasteboard.
-  scoped_ptr<DropData> dropData;
+  std::unique_ptr<DropData> dropData;
   dropData.reset(new DropData());
   [self populateDropData:dropData.get()
              fromPasteboard:[info draggingPasteboard]];

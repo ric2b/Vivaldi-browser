@@ -9,7 +9,7 @@
 #include "base/metrics/histogram.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/common/cloud_print/cloud_print_constants.h"
 #include "chrome/common/cloud_print/cloud_print_helpers.h"
 #include "chrome/service/cloud_print/cloud_print_token_store.h"
@@ -162,7 +162,7 @@ void CloudPrintAuth::OnNetworkError(int response_code) {
 CloudPrintURLFetcher::ResponseAction CloudPrintAuth::HandleJSONData(
     const net::URLFetcher* source,
     const GURL& url,
-    base::DictionaryValue* json_data,
+    const base::DictionaryValue* json_data,
     bool succeeded) {
   if (!succeeded) {
     VLOG(1) << "CP_AUTH: Creating robot account failed";

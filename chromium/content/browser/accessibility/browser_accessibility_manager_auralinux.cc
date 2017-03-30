@@ -44,11 +44,13 @@ ui::AXTreeUpdate
   empty_document.role = ui::AX_ROLE_ROOT_WEB_AREA;
   empty_document.state = 1 << ui::AX_STATE_READ_ONLY;
   ui::AXTreeUpdate update;
+  update.root_id = empty_document.id;
   update.nodes.push_back(empty_document);
   return update;
 }
 
 void BrowserAccessibilityManagerAuraLinux::NotifyAccessibilityEvent(
+    BrowserAccessibilityEvent::Source source,
     ui::AXEvent event_type,
     BrowserAccessibility* node) {
   // TODO(shreeram.k) : Implement.

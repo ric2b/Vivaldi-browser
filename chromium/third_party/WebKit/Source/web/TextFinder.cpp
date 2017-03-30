@@ -133,7 +133,7 @@ bool TextFinder::find(int identifier, const WebString& searchText, const WebFind
     VisibleSelection selection(ownerFrame().frame()->selection().selection());
     bool activeSelection = !selection.isNone();
     if (activeSelection) {
-        m_activeMatch = firstRangeOf(selection).get();
+        m_activeMatch = firstRangeOf(selection);
         ownerFrame().frame()->selection().clear();
     }
 
@@ -427,10 +427,8 @@ void TextFinder::finishCurrentScopingEffort(int identifier)
 
 void TextFinder::cancelPendingScopingEffort()
 {
-#if ENABLE(OILPAN)
     for (DeferredScopeStringMatches* deferredWork : m_deferredScopingWork)
         deferredWork->dispose();
-#endif
     m_deferredScopingWork.clear();
 
     m_activeMatchIndexInCurrentFrame = -1;
@@ -486,8 +484,12 @@ void TextFinder::clearFindMatchesCache()
 bool TextFinder::isActiveMatchFrameValid() const
 {
     WebLocalFrameImpl* mainFrameImpl = ownerFrame().viewImpl()->mainFrameImpl();
-    WebLocalFrameImpl* activeMatchFrame = mainFrameImpl->activeMatchFrame();
-    return activeMatchFrame && activeMatchFrame->activeMatch() && activeMatchFrame->frame()->tree().isDescendantOf(mainFrameImpl->frame());
+    if (!mainFrameImpl->textFinder())
+        return false;
+
+    if (WebLocalFrameImpl* activeMatchFrame = mainFrameImpl->textFinder()->activeMatchFrame())
+        return activeMatchFrame->textFinder()->activeMatch() && activeMatchFrame->frame()->tree().isDescendantOf(mainFrameImpl->frame());
+    return false;
 }
 
 void TextFinder::updateFindMatchRects()
@@ -535,7 +537,7 @@ WebFloatRect TextFinder::activeFindMatchRect()
     if (!isActiveMatchFrameValid())
         return WebFloatRect();
 
-    return WebFloatRect(findInPageRectFromRange(m_currentActiveMatchFrame->activeMatch()));
+    return WebFloatRect(findInPageRectFromRange(m_currentActiveMatchFrame->textFinder()->activeMatch()));
 }
 
 void TextFinder::findMatchRects(WebVector<WebFloatRect>& outputRects)
@@ -676,9 +678,6 @@ TextFinder::TextFinder(WebLocalFrameImpl& ownerFrame)
 
 TextFinder::~TextFinder()
 {
-#if !ENABLE(OILPAN)
-    cancelPendingScopingEffort();
-#endif
 }
 
 void TextFinder::addMarker(Range* range, bool activeMatch)
@@ -753,10 +752,6 @@ void TextFinder::scopeStringMatchesSoon(int identifier, const WebString& searchT
 void TextFinder::callScopeStringMatches(DeferredScopeStringMatches* caller, int identifier, const WebString& searchText, const WebFindOptions& options, bool reset)
 {
     size_t index = m_deferredScopingWork.find(caller);
-#if !ENABLE(OILPAN)
-    // Finalization needs to be delayed as (m_)searchText is passed by reference.
-    OwnPtr<DeferredScopeStringMatches> item = index != kNotFound ? m_deferredScopingWork[index].release() : nullptr;
-#endif
     m_deferredScopingWork.remove(index);
 
     scopeStringMatches(identifier, searchText, options, reset);

@@ -33,7 +33,13 @@ void LayoutSVGHiddenContainer::layout()
 {
     ASSERT(needsLayout());
     LayoutAnalyzer::Scope analyzer(*this);
-    SVGLayoutSupport::layoutChildren(this, selfNeedsLayout());
+
+    // When hasRelativeLengths() is false, no descendants have relative lengths
+    // (hence no one is interested in viewport size changes).
+    bool layoutSizeChanged = element()->hasRelativeLengths()
+        && SVGLayoutSupport::layoutSizeOfNearestViewportChanged(this);
+
+    SVGLayoutSupport::layoutChildren(firstChild(), selfNeedsLayout(), false, layoutSizeChanged);
     updateCachedBoundaries();
     clearNeedsLayout();
 }

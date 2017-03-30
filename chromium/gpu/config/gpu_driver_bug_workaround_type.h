@@ -9,6 +9,9 @@
 
 #include "gpu/gpu_export.h"
 
+// Clang format is toggled off here so that newlines can be kept consistent
+// throughout the table.
+// clang-format off
 #define GPU_DRIVER_BUG_WORKAROUNDS(GPU_OP)                   \
   GPU_OP(AVDA_DONT_COPY_PICTURES,                            \
          avda_dont_copy_pictures)                            \
@@ -58,6 +61,10 @@
          disable_texture_storage)                            \
   GPU_OP(DISABLE_TIMESTAMP_QUERIES,                          \
          disable_timestamp_queries)                          \
+  GPU_OP(DISABLE_WEBGL_MULTISAMPLING_COLOR_MASK_USAGE,       \
+         disable_webgl_multisampling_color_mask_usage)       \
+  GPU_OP(DISABLE_WEBGL_RGB_MULTISAMPLING_USAGE,              \
+         disable_webgl_rgb_multisampling_usage)              \
   GPU_OP(ETC1_POWER_OF_TWO_ONLY,                             \
          etc1_power_of_two_only)                             \
   GPU_OP(EXIT_ON_CONTEXT_LOST,                               \
@@ -70,8 +77,6 @@
          force_discrete_gpu)                                 \
   GPU_OP(FORCE_INTEGRATED_GPU,                               \
          force_integrated_gpu)                               \
-  GPU_OP(GL_BEGIN_GL_END_ON_FBO_CHANGE_TO_BACKBUFFER,        \
-         gl_begin_gl_end_on_fbo_change_to_backbuffer)        \
   GPU_OP(GL_CLEAR_BROKEN,                                    \
          gl_clear_broken)                                    \
   GPU_OP(IGNORE_EGL_SYNC_FAILURES,                           \
@@ -142,6 +147,8 @@
          unfold_short_circuit_as_ternary_operation)          \
   GPU_OP(UNPACK_ALIGNMENT_WORKAROUND_WITH_UNPACK_BUFFER,     \
          unpack_alignment_workaround_with_unpack_buffer)     \
+  GPU_OP(UNPACK_OVERLAPPING_ROWS_SEPARATELY_UNPACK_BUFFER,   \
+         unpack_overlapping_rows_separately_unpack_buffer)   \
   GPU_OP(IOSURFACE_READBACK_WORKAROUND,                      \
          iosurface_readback_workaround)                      \
   GPU_OP(UNROLL_FOR_LOOP_WITH_SAMPLER_ARRAY_INDEX,           \
@@ -162,6 +169,7 @@
          wake_up_gpu_before_drawing)                         \
   GPU_OP(USE_TESTING_GPU_DRIVER_WORKAROUND,                  \
          use_gpu_driver_workaround_for_testing)              \
+// clang-format on
 
 namespace gpu {
 

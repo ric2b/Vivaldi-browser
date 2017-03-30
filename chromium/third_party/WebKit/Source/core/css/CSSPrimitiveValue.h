@@ -132,11 +132,18 @@ public:
         LengthUnitTypeCount,
     };
 
-    using CSSLengthArray = Vector<double, CSSPrimitiveValue::LengthUnitTypeCount>;
-    using CSSLengthTypeArray = BitVector;
+    struct CSSLengthArray {
+        CSSLengthArray()
+            : values(LengthUnitTypeCount)
+        {
+            typeFlags.resize(LengthUnitTypeCount);
+        }
+
+        Vector<double, CSSPrimitiveValue::LengthUnitTypeCount> values;
+        BitVector typeFlags;
+    };
 
     void accumulateLengthArray(CSSLengthArray&, double multiplier = 1) const;
-    void accumulateLengthArray(CSSLengthArray&, CSSLengthTypeArray&, double multiplier = 1) const;
 
     enum UnitCategory {
         UNumber,
@@ -155,13 +162,14 @@ public:
 
     static UnitType fromName(const String& unit);
 
-    bool isAngle() const
+    static bool isAngle(UnitType unit)
     {
-        return type() == UnitType::Degrees
-            || type() == UnitType::Radians
-            || type() == UnitType::Gradians
-            || type() == UnitType::Turns;
+        return unit == UnitType::Degrees
+            || unit == UnitType::Radians
+            || unit == UnitType::Gradians
+            || unit == UnitType::Turns;
     }
+    bool isAngle() const { return isAngle(type()); }
     bool isFontRelativeLength() const
     {
         return type() == UnitType::QuirkyEms
@@ -290,7 +298,6 @@ private:
 };
 
 using CSSLengthArray = CSSPrimitiveValue::CSSLengthArray;
-using CSSLengthTypeArray = CSSPrimitiveValue::CSSLengthTypeArray;
 
 DEFINE_CSS_VALUE_TYPE_CASTS(CSSPrimitiveValue, isPrimitiveValue());
 

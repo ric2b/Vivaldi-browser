@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#import "base/mac/mac_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
@@ -83,7 +84,187 @@ namespace {
 // bubble arrow point.
 const static int kFirstRunBubbleYOffset = 1;
 
+const int kDefaultIconSize = 16;
+
+// Color of the vector graphic icons when the location bar is dark.
+// SkColorSetARGB(0xCC, 0xFF, 0xFF 0xFF);
+const SkColor kMaterialDarkVectorIconColor = SK_ColorWHITE;
+
 }  // namespace
+
+// A temporary class that draws hardcoded HTTP graphic icons for Material
+// design. This class will be removed once the Material icons are available
+// in M53.
+@interface LocationBarImageRep : NSCustomImageRep
+@property(assign, nonatomic) gfx::VectorIconId iconId;
+@property(retain, nonatomic) NSColor* fillColor;
+
++ (NSImage*)imageForId:(gfx::VectorIconId)vectorIconId
+                 color:(SkColor)vectorIconColor;
+
+// NSCustomImageRep delegate method that performs the drawing.
++ (void)drawLocationBarIcon:(LocationBarImageRep*)imageRep;
+
+@end
+
+@implementation LocationBarImageRep
+
+@synthesize iconId = iconId_;
+@synthesize fillColor = fillColor_;
+
+- (void)dealloc {
+  [fillColor_ release];
+  [super dealloc];
+}
+
++ (NSImage*)imageForId:(gfx::VectorIconId)vectorIconId
+                 color:(SkColor)vectorIconColor {
+  if (vectorIconId != gfx::VectorIconId::LOCATION_BAR_HTTP &&
+      vectorIconId != gfx::VectorIconId::LOCATION_BAR_HTTPS_INVALID &&
+      vectorIconId != gfx::VectorIconId::LOCATION_BAR_HTTPS_VALID &&
+      vectorIconId != gfx::VectorIconId::LOCATION_BAR_HTTPS_INVALID_INVERT &&
+      vectorIconId != gfx::VectorIconId::LOCATION_BAR_HTTPS_VALID_INVERT) {
+    return NSImageFromImageSkiaWithColorSpace(
+        gfx::CreateVectorIcon(vectorIconId, kDefaultIconSize, vectorIconColor),
+        base::mac::GetSRGBColorSpace());
+  }
+
+  base::scoped_nsobject<LocationBarImageRep> imageRep =
+      [[LocationBarImageRep alloc]
+          initWithDrawSelector:@selector(drawLocationBarIcon:)
+                      delegate:[LocationBarImageRep class]];
+  [imageRep setIconId:vectorIconId];
+  [imageRep setFillColor:skia::SkColorToSRGBNSColor(vectorIconColor)];
+
+  // Create the image from the image rep.
+  const NSSize kImageSize = NSMakeSize(kDefaultIconSize, kDefaultIconSize);
+  NSImage* locationBarImage =
+      [[[NSImage alloc] initWithSize:kImageSize] autorelease];
+  [locationBarImage setCacheMode:NSImageCacheAlways];
+  [locationBarImage addRepresentation:imageRep];
+
+  return locationBarImage;
+}
+
++ (void)drawLocationBarIcon:(LocationBarImageRep*)imageRep {
+  [[imageRep fillColor] set];
+
+  // Determine the scale factor.
+  CGContextRef context = static_cast<CGContextRef>(
+      [[NSGraphicsContext currentContext] graphicsPort]);
+  CGRect unitRect = CGRectMake(0.0, 0.0, 1.0, 1.0);
+  CGRect deviceRect = CGContextConvertRectToDeviceSpace(context, unitRect);
+  int scaleFactor = deviceRect.size.height;
+
+  switch ([imageRep iconId]) {
+    case gfx::VectorIconId::LOCATION_BAR_HTTP:
+      [self drawLocationBarIconHTTPForScale:scaleFactor];
+      break;
+    case gfx::VectorIconId::LOCATION_BAR_HTTPS_INVALID:
+    case gfx::VectorIconId::LOCATION_BAR_HTTPS_INVALID_INVERT:
+      [self drawLocationBarIconHTTPSInvalidForScale:scaleFactor];
+      break;
+    case gfx::VectorIconId::LOCATION_BAR_HTTPS_VALID_INVERT:
+    case gfx::VectorIconId::LOCATION_BAR_HTTPS_VALID:
+      [self drawLocationBarIconHTTPSValidForScale:scaleFactor];
+      break;
+    default:
+      // Make it obvious that there's a problem.
+      [[NSColor redColor] set];
+      NSRectFill(NSMakeRect(0, 0, kDefaultIconSize, kDefaultIconSize));
+      break;
+  }
+}
+
++ (void)drawLocationBarIconHTTPForScale:(int)scaleFactor {
+  if (scaleFactor > 1) {
+    NSRect ovalRect = NSMakeRect(2.25, 1.75, 12, 12);
+    NSBezierPath* circlePath = [NSBezierPath bezierPathWithOvalInRect:ovalRect];
+    [circlePath setLineWidth:1.5];
+    [circlePath stroke];
+
+    NSRectFill(NSMakeRect(7.5, 4.5, 1.5, 4));
+    NSRectFill(NSMakeRect(7.5, 9.5, 1.5, 1.5));
+  } else {
+    NSRect ovalRect = NSMakeRect(2, 2, 12, 12);
+    NSBezierPath* circlePath = [NSBezierPath bezierPathWithOvalInRect:ovalRect];
+    [circlePath setLineWidth:1.5];
+    [circlePath stroke];
+
+    NSRectFill(NSMakeRect(7, 4, 2, 5));
+    NSRectFill(NSMakeRect(7, 10, 2, 2));
+  }
+}
+
++ (void)drawLocationBarIconHTTPSInvalidForScale:(int)scaleFactor {
+  // The vector icon is upside down relative to the default OS X coordinate
+  // system so rotate by 180 degrees.
+  CGContextRef context = static_cast<CGContextRef>(
+      [[NSGraphicsContext currentContext] graphicsPort]);
+  const int kHalfDefaultIconSize = kDefaultIconSize / 2;
+  CGContextTranslateCTM(context, kHalfDefaultIconSize, kHalfDefaultIconSize);
+  CGContextRotateCTM(context, M_PI);
+  CGContextTranslateCTM(context, -kHalfDefaultIconSize, -kHalfDefaultIconSize);
+
+  // If Retina, nudge the icon up 1/2pt.
+  if (scaleFactor == 2) {
+    CGContextTranslateCTM(context, 0, -0.5);
+  }
+
+  NSBezierPath* trianglePath = [NSBezierPath bezierPath];
+  [trianglePath moveToPoint:NSMakePoint(0.5f, 14)];
+  [trianglePath relativeLineToPoint:NSMakePoint(15, 0)];
+  [trianglePath lineToPoint:NSMakePoint(8, 1)];
+  [trianglePath closePath];
+
+  NSBezierPath* cutOutPath = [NSBezierPath bezierPath];
+  [cutOutPath moveToPoint:NSMakePoint(9, 12)];
+  [cutOutPath relativeLineToPoint:NSMakePoint(-2, 0)];
+  [cutOutPath relativeLineToPoint:NSMakePoint(0, -2)];
+  [cutOutPath relativeLineToPoint:NSMakePoint(2, 0)];
+  [cutOutPath relativeLineToPoint:NSMakePoint(0, 2)];
+  [cutOutPath closePath];
+  [cutOutPath relativeMoveToPoint:NSMakePoint(0, -3)];
+  [cutOutPath relativeLineToPoint:NSMakePoint(-2, 0)];
+  [cutOutPath relativeLineToPoint:NSMakePoint(0, -3)];
+  [cutOutPath relativeLineToPoint:NSMakePoint(2, 0)];
+  [cutOutPath relativeLineToPoint:NSMakePoint(0, 3)];
+  [cutOutPath closePath];
+
+  [trianglePath appendBezierPath:cutOutPath];
+  [trianglePath fill];
+}
+
++ (void)drawLocationBarIconHTTPSValidForScale:(int)scaleFactor {
+  NSAffineTransform* transform = [NSAffineTransform transform];
+  // Adjust down 1px in Retina, so that the lock sits on the text baseline.
+  if (scaleFactor > 1) {
+    [transform translateXBy:0 yBy:-0.5];
+  }
+
+  NSBezierPath* rectPath =
+      [NSBezierPath bezierPathWithRoundedRect:NSMakeRect(4, 3, 8, 7)
+                                      xRadius:1
+                                      yRadius:1];
+  [rectPath transformUsingAffineTransform:transform];
+  [rectPath fill];
+
+  NSBezierPath* curvePath = [NSBezierPath bezierPath];
+  [curvePath moveToPoint:NSMakePoint(5.5, 9.75)];
+  [curvePath lineToPoint:NSMakePoint(5.5, 10)];
+  [curvePath curveToPoint:NSMakePoint(8, 13)
+            controlPoint1:NSMakePoint(5.5, 13)
+            controlPoint2:NSMakePoint(7.5, 13)];
+  [curvePath curveToPoint:NSMakePoint(10.5, 10)
+            controlPoint1:NSMakePoint(8.5, 13)
+            controlPoint2:NSMakePoint(10.5, 13)];
+  [curvePath lineToPoint:NSMakePoint(10.5, 9.75)];
+  [curvePath setLineWidth:1.25];
+  [curvePath transformUsingAffineTransform:transform];
+  [curvePath stroke];
+}
+
+@end
 
 // TODO(shess): This code is mostly copied from the gtk
 // implementation.  Make sure it's all appropriate and flesh it out.
@@ -203,8 +384,7 @@ void LocationBarViewMac::UpdateSaveCreditCardIcon() {
   bool enabled = controller && controller->IsIconVisible();
   command_updater()->UpdateCommandEnabled(IDC_SAVE_CREDIT_CARD_FOR_PAGE,
                                           enabled);
-  bool inDarkMode = [[field_ window] inIncognitoModeWithSystemTheme];
-  save_credit_card_decoration_->SetIcon(inDarkMode);
+  save_credit_card_decoration_->SetIcon(IsLocationBarDark());
   save_credit_card_decoration_->SetVisible(enabled);
   OnDecorationsChanged();
 }
@@ -340,15 +520,13 @@ void LocationBarViewMac::SetStarred(bool starred) {
   if (star_decoration_->starred() == starred)
     return;
 
-  star_decoration_->SetStarred(starred,
-      [[field_ window] inIncognitoModeWithSystemTheme]);
+  star_decoration_->SetStarred(starred, IsLocationBarDark());
   UpdateBookmarkStarVisibility();
   OnDecorationsChanged();
 }
 
 void LocationBarViewMac::SetTranslateIconLit(bool on) {
-  bool inDarkMode = [[field_ window] inIncognitoModeWithSystemTheme];
-  translate_decoration_->SetLit(on, inDarkMode);
+  translate_decoration_->SetLit(on, IsLocationBarDark());
   OnDecorationsChanged();
 }
 
@@ -455,6 +633,10 @@ void LocationBarViewMac::Layout() {
     location_icon_decoration_->SetVisible(false);
     selected_keyword_decoration_->SetVisible(true);
     selected_keyword_decoration_->SetKeyword(short_name, is_extension_keyword);
+    // Note: the first time through this code path the
+    // |selected_keyword_decoration_| has no image set because under Material
+    // Design we need to set its color, which we cannot do until we know the
+    // theme (by being installed in a browser window).
     selected_keyword_decoration_->SetImage(GetKeywordImage(keyword));
   } else if (ShouldShowEVBubble()) {
     // Switch from location icon to show the EV bubble instead.
@@ -555,33 +737,45 @@ void LocationBarViewMac::UpdateWithoutTabRestore() {
 }
 
 void LocationBarViewMac::UpdateLocationIcon() {
-  bool inDarkMode = [[field_ window] inIncognitoModeWithSystemTheme];
+  bool in_dark_mode = IsLocationBarDark();
 
-  SkColor vectorIconColor = gfx::kPlaceholderColor;
-  gfx::VectorIconId vectorIconId = gfx::VectorIconId::VECTOR_ICON_NONE;
-  const int kIconSize = 16;
+  SkColor vector_icon_color = gfx::kPlaceholderColor;
+  gfx::VectorIconId vector_icon_id = gfx::VectorIconId::VECTOR_ICON_NONE;
   if (ShouldShowEVBubble()) {
-    vectorIconId = gfx::VectorIconId::LOCATION_BAR_HTTPS_VALID_IN_CHIP;
-    vectorIconColor = gfx::kGoogleGreen700;
+    vector_icon_id = gfx::VectorIconId::LOCATION_BAR_HTTPS_VALID;
+    vector_icon_color =
+        in_dark_mode ? kMaterialDarkVectorIconColor : gfx::kGoogleGreen700;
   } else {
-    vectorIconId = omnibox_view_->GetVectorIcon(inDarkMode);
-    if (inDarkMode) {
-      vectorIconColor = SK_ColorWHITE;
+    vector_icon_id = omnibox_view_->GetVectorIcon(in_dark_mode);
+    if (in_dark_mode) {
+      vector_icon_color = SK_ColorWHITE;
+    } else if (vector_icon_id != gfx::VectorIconId::OMNIBOX_SEARCH) {
+      security_state::SecurityStateModel::SecurityLevel security_level =
+          GetToolbarModel()->GetSecurityLevel(false);
+      if (security_level == security_state::SecurityStateModel::NONE) {
+        vector_icon_color = gfx::kChromeIconGrey;
+      } else if (vector_icon_id != gfx::VectorIconId::OMNIBOX_SEARCH &&
+            (security_level == security_state::SecurityStateModel::EV_SECURE ||
+             security_level == security_state::SecurityStateModel::SECURE)) {
+        vector_icon_color = gfx::kGoogleGreen700;
+      } else if (security_level ==
+                 security_state::SecurityStateModel::SECURITY_ERROR) {
+        vector_icon_color = gfx::kGoogleRed700;
+      } else if (security_level ==
+                 security_state::SecurityStateModel::SECURITY_WARNING){
+        vector_icon_color = gfx::kGoogleYellow700;
+      }
     } else {
-      NSColor* textColor = OmniboxViewMac::BaseTextColor(inDarkMode);
-      // Convert to the device color space before getting the SkColor.
-      textColor = [textColor colorUsingColorSpaceName:NSDeviceRGBColorSpace];
-      vectorIconColor = skia::NSDeviceColorToSkColor(textColor);
+      vector_icon_color = OmniboxViewMac::BaseTextColorSkia(in_dark_mode);
     }
   }
 
-  DCHECK(vectorIconId != gfx::VectorIconId::VECTOR_ICON_NONE);
-  NSImage* image = NSImageFromImageSkia(gfx::CreateVectorIcon(
-      vectorIconId, kIconSize, vectorIconColor));
+  DCHECK(vector_icon_id != gfx::VectorIconId::VECTOR_ICON_NONE);
+  NSImage* image =
+      [LocationBarImageRep imageForId:vector_icon_id color:vector_icon_color];
 
   location_icon_decoration_->SetImage(image);
   ev_bubble_decoration_->SetImage(image);
-
   Layout();
 }
 
@@ -597,8 +791,8 @@ void LocationBarViewMac::UpdateColorsToMatchTheme() {
   // Make sure we're displaying the correct star color for Incognito mode. If
   // the window is in Incognito mode, switching between a theme and no theme
   // can move the window in and out of dark mode.
-  bool inDarkMode = [[field_ window] inIncognitoModeWithSystemTheme];
-  star_decoration_->SetStarred(star_decoration_->starred(), inDarkMode);
+  star_decoration_->SetStarred(star_decoration_->starred(),
+                               IsLocationBarDark());
 
   // Update the appearance of the text in the Omnibox.
   omnibox_view_->Update();
@@ -613,16 +807,15 @@ void LocationBarViewMac::OnThemeChanged() {
 }
 
 void LocationBarViewMac::OnChanged() {
-  NSImage* image = nil;
-  if (ui::MaterialDesignController::IsModeMaterial()) {
-    UpdateLocationIcon();
-  } else {
+  if (!ui::MaterialDesignController::IsModeMaterial()) {
     const int resource_id = omnibox_view_->GetIcon();
-    image = OmniboxViewMac::ImageForResource(resource_id);
+    NSImage* image = OmniboxViewMac::ImageForResource(resource_id);
     location_icon_decoration_->SetImage(image);
     ev_bubble_decoration_->SetImage(image);
     Layout();
+    return;
   }
+  UpdateLocationIcon();
 }
 
 void LocationBarViewMac::OnSetFocus() {
@@ -651,6 +844,10 @@ bool LocationBarViewMac::ShouldShowEVBubble() const {
           security_state::SecurityStateModel::EV_SECURE);
 }
 
+bool LocationBarViewMac::IsLocationBarDark() const {
+  return [[field_ window] inIncognitoModeWithSystemTheme];
+}
+
 NSImage* LocationBarViewMac::GetKeywordImage(const base::string16& keyword) {
   const TemplateURL* template_url = TemplateURLServiceFactory::GetForProfile(
       profile())->GetTemplateURLForKeyword(keyword);
@@ -660,10 +857,16 @@ NSImage* LocationBarViewMac::GetKeywordImage(const base::string16& keyword) {
         GetOmniboxIcon(template_url->GetExtensionId()).AsNSImage();
   }
 
-  return ui::MaterialDesignController::IsModeMaterial()
-      ? NSImageFromImageSkia(gfx::CreateVectorIcon(
-          gfx::VectorIconId::OMNIBOX_SEARCH, 16, gfx::kGoogleBlue700))
-      : OmniboxViewMac::ImageForResource(IDR_OMNIBOX_SEARCH);
+  if (ui::MaterialDesignController::IsModeMaterial()) {
+    SkColor icon_color = IsLocationBarDark() ? kMaterialDarkVectorIconColor
+                                             : gfx::kGoogleBlue700;
+    return NSImageFromImageSkiaWithColorSpace(
+        gfx::CreateVectorIcon(gfx::VectorIconId::OMNIBOX_SEARCH,
+                              kDefaultIconSize, icon_color),
+        base::mac::GetSRGBColorSpace());
+  }
+
+  return OmniboxViewMac::ImageForResource(IDR_OMNIBOX_SEARCH);
 }
 
 void LocationBarViewMac::PostNotification(NSString* notification) {
@@ -786,8 +989,8 @@ void LocationBarViewMac::UpdateTranslateDecoration() {
   bool enabled = language_state.translate_enabled();
   command_updater()->UpdateCommandEnabled(IDC_TRANSLATE_PAGE, enabled);
   translate_decoration_->SetVisible(enabled);
-  bool inDarkMode = [[field_ window] inIncognitoModeWithSystemTheme];
-  translate_decoration_->SetLit(language_state.IsPageTranslated(), inDarkMode);
+  translate_decoration_->SetLit(language_state.IsPageTranslated(),
+                                IsLocationBarDark());
 }
 
 bool LocationBarViewMac::UpdateZoomDecoration(bool default_zoom_changed) {
@@ -795,11 +998,9 @@ bool LocationBarViewMac::UpdateZoomDecoration(bool default_zoom_changed) {
   if (!web_contents)
     return false;
 
-  bool inDarkMode = [[field_ window] inIncognitoModeWithSystemTheme];
   return zoom_decoration_->UpdateIfNecessary(
       ui_zoom::ZoomController::FromWebContents(web_contents),
-      default_zoom_changed,
-      inDarkMode);
+      default_zoom_changed, IsLocationBarDark());
 }
 
 void LocationBarViewMac::OnDefaultZoomLevelChanged() {

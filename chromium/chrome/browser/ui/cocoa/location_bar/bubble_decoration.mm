@@ -9,8 +9,10 @@
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
 #import "chrome/browser/ui/cocoa/themed_window.h"
+#include "skia/ext/skia_utils_mac.h"
 #import "ui/base/cocoa/nsview_additions.h"
 #include "ui/base/material_design/material_design_controller.h"
+#include "ui/gfx/scoped_ns_graphics_context_save_gstate_mac.h"
 
 namespace {
 
@@ -19,21 +21,28 @@ const CGFloat kRightSideMargin = 1.0;
 
 // Padding between the icon/label and bubble edges.
 CGFloat BubblePadding() {
-  return ui::MaterialDesignController::IsModeMaterial() ? 7 : 3;
+  return ui::MaterialDesignController::IsModeMaterial() ? 8.0 : 3.0;
 }
 
+// Additional padding between the divider between the omnibox text and the
+// divider. The desired value is 8px. We get 3px by subtracting the existing
+// padding in location_bar_view from 8px.
+CGFloat DividerPadding() {
+  return ui::MaterialDesignController::IsModeMaterial() ? 2.0 : 0.0;
+}
 
 // Padding between the icon and label.
-const CGFloat kIconLabelPadding = 4.0;
+CGFloat kIconLabelPadding = 4.0;
 
 // Inset for the background.
 const CGFloat kBackgroundYInset = 4.0;
 
 }  // namespace
 
-BubbleDecoration::BubbleDecoration() {
+BubbleDecoration::BubbleDecoration() : retina_baseline_offset_(0) {
   attributes_.reset([[NSMutableDictionary alloc] init]);
-  [attributes_ setObject:GetFont() forKey:NSFontAttributeName];
+  [attributes_ setObject:LocationBarDecoration::GetFont()
+                  forKey:NSFontAttributeName];
 }
 
 BubbleDecoration::~BubbleDecoration() {
@@ -53,7 +62,8 @@ CGFloat BubbleDecoration::GetWidthForImageAndLabel(NSImage* image,
   // underestimate, so floor() seems to work better.
   const CGFloat label_width =
       std::floor([label sizeWithAttributes:attributes_].width);
-  return BubblePadding() + image_width + kIconLabelPadding + label_width;
+  return BubblePadding() + image_width + kIconLabelPadding + label_width +
+         DividerPadding();
 }
 
 NSRect BubbleDecoration::GetImageRectInFrame(NSRect frame) {
@@ -61,6 +71,7 @@ NSRect BubbleDecoration::GetImageRectInFrame(NSRect frame) {
   if (image_) {
     // Center the image vertically.
     const NSSize imageSize = [image_ size];
+
     imageRect.origin.y +=
         std::floor((NSHeight(frame) - imageSize.height) / 2.0);
     imageRect.size = imageSize;
@@ -99,10 +110,39 @@ void BubbleDecoration::DrawInFrame(NSRect frame, NSView* control_view) {
     textOffset = NSMaxX(imageRect) + kIconLabelPadding;
   }
 
+  // Draw the divider and set the text color.
+  if (ui::MaterialDesignController::IsModeMaterial()) {
+    NSBezierPath* line = [NSBezierPath bezierPath];
+    [line setLineWidth:1];
+    [line moveToPoint:NSMakePoint(NSMaxX(decoration_frame) - DividerPadding(),
+                                  NSMinY(decoration_frame))];
+    [line lineToPoint:NSMakePoint(NSMaxX(decoration_frame) - DividerPadding(),
+                                  NSMaxY(decoration_frame))];
+
+    bool in_dark_mode = [[control_view window] inIncognitoModeWithSystemTheme];
+    [GetDividerColor(in_dark_mode) set];
+    [line stroke];
+
+    NSColor* text_color =
+        in_dark_mode
+            ? skia::SkColorToCalibratedNSColor(kMaterialDarkModeTextColor)
+            : GetBackgroundBorderColor();
+    SetTextColor(text_color);
+  }
+
   if (label_) {
     NSRect textRect = frame;
     textRect.origin.x = textOffset;
     textRect.size.width = NSMaxX(decoration_frame) - NSMinX(textRect);
+    // Transform the coordinate system to adjust the baseline on Retina. This is
+    // the only way to get fractional adjustments.
+    gfx::ScopedNSGraphicsContextSaveGState saveGraphicsState;
+    CGFloat lineWidth = [control_view cr_lineWidth];
+    if (lineWidth < 1) {
+      NSAffineTransform* transform = [NSAffineTransform transform];
+      [transform translateXBy:0 yBy:retina_baseline_offset_];
+      [transform concat];
+    }
     DrawLabel(label_, attributes_, textRect);
   }
 }
@@ -112,27 +152,16 @@ void BubbleDecoration::DrawWithBackgroundInFrame(NSRect background_frame,
                                                  NSView* control_view) {
   NSRect rect = NSInsetRect(background_frame, 0, 1);
   rect.size.width -= kRightSideMargin;
-  if (ui::MaterialDesignController::IsModeMaterial()) {
-    CGFloat lineWidth = [control_view cr_lineWidth];
-    rect = NSInsetRect(rect, lineWidth / 2., lineWidth / 2.);
-    NSBezierPath* path = [NSBezierPath bezierPathWithRoundedRect:rect
-                                                         xRadius:3
-                                                         yRadius:3];
-    [path setLineWidth:lineWidth];
-    bool inDarkMode = [[control_view window] inIncognitoModeWithSystemTheme];
-    if (inDarkMode) {
-      [[NSColor whiteColor] set];
-      [path fill];
-    } else {
-      [GetBackgroundBorderColor() set];
-      [path stroke];
-    }
-  } else {
+  if (!ui::MaterialDesignController::IsModeMaterial()) {
     ui::DrawNinePartImage(
         rect, GetBubbleImageIds(), NSCompositeSourceOver, 1.0, true);
   }
 
   DrawInFrame(frame, control_view);
+}
+
+NSFont* BubbleDecoration::GetFont() const {
+  return [attributes_ objectForKey:NSFontAttributeName];
 }
 
 NSImage* BubbleDecoration::GetImage() {
@@ -153,4 +182,12 @@ void BubbleDecoration::SetLabel(NSString* label) {
 
 void BubbleDecoration::SetTextColor(NSColor* text_color) {
   [attributes_ setObject:text_color forKey:NSForegroundColorAttributeName];
+}
+
+void BubbleDecoration::SetFont(NSFont* font) {
+  [attributes_ setObject:font forKey:NSFontAttributeName];
+}
+
+void BubbleDecoration::SetRetinaBaselineOffset(CGFloat offset) {
+  retina_baseline_offset_ = offset;
 }

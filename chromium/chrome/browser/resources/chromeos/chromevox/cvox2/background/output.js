@@ -257,6 +257,7 @@ Output.ROLE_INFO_ = {
   },
   popUpButton: {
     msgId: 'role_button',
+    earconId: 'POP_UP_BUTTON'
   },
   radioButton: {
     msgId: 'role_radio'
@@ -314,7 +315,7 @@ Output.ROLE_INFO_ = {
     msgId: 'role_toolbar'
   },
   toggleButton: {
-    msgId: 'role_checkbox',
+    msgId: 'role_button',
     inherits: 'checkBox'
   },
   tree: {
@@ -363,6 +364,17 @@ Output.STATE_INFO_ = {
       msgId: 'aria_expanded_false'
     }
   },
+  pressed: {
+    on: {
+      msgId: 'aria_pressed_true'
+    },
+    off: {
+      msgId: 'aria_pressed_false'
+    },
+        omitted: {
+      msgId: 'aria_pressed_false'
+    }
+  },
   visited: {
     on: {
       msgId: 'visited_state'
@@ -396,14 +408,14 @@ Output.RULES = {
       braille: ''
     },
     abstractContainer: {
-      enter: '$name $role $description',
+      enter: '$nameFromNode $role $description',
       leave: '@exited_container($role)'
     },
     alert: {
       speak: '!doNotInterrupt $role $descendants'
     },
     alertDialog: {
-      enter: '$name $role $description $descendants'
+      enter: '$nameFromNode $role $description $descendants'
     },
     cell: {
       enter: '@column_granularity $tableCellColumnIndex'
@@ -413,14 +425,14 @@ Output.RULES = {
              '$name $role $checked $description'
     },
     dialog: {
-      enter: '$name $role $description'
+      enter: '$nameFromNode $role $description'
     },
     div: {
-      enter: '$name',
-      speak: '$name $description'
+      enter: '$nameFromNode',
+      speak: '$name $description $descendants'
     },
     grid: {
-      enter: '$name $role $description'
+      enter: '$nameFromNode $role $description'
     },
     heading: {
       enter: '@tag_h+$hierarchicalLevel',
@@ -431,14 +443,15 @@ Output.RULES = {
       speak: '$name='
     },
     link: {
-      enter: '$name= $if($visited, @visited_link, $role)',
+      enter: '$nameFromNode $if($visited, @visited_link, $role)',
       speak: '$name= $if($visited, @visited_link, $role) $description'
     },
     list: {
       enter: '$role @@list_with_items($countChildren(listItem))'
     },
     listBox: {
-      enter: '$name $role @@list_with_items($countChildren(listBoxOption)) ' +
+      enter: '$nameFromNode ' +
+          '$role @@list_with_items($countChildren(listBoxOption)) ' +
           '$description'
     },
     listBoxOption: {
@@ -465,7 +478,7 @@ Output.RULES = {
       speak: '$descendants'
     },
     popUpButton: {
-      speak: '$earcon(POP_UP_BUTTON) $value $name $role @aria_has_popup ' +
+      speak: '$value $name $role @aria_has_popup ' +
           '$if($collapsed, @aria_expanded_false, @aria_expanded_true) ' +
           '$description'
     },
@@ -499,6 +512,10 @@ Output.RULES = {
       speak: '$name $value $if($multiline, @tag_textarea, $if(' +
           '$inputType, $inputType, $role)) $description',
       braille: ''
+    },
+    toggleButton: {
+      speak: '$if($pressed, $earcon(CHECK_ON), $earcon(CHECK_OFF)) ' +
+             '$name $role $pressed $description'
     },
     toolbar: {
       enter: '$name $role $description'
@@ -911,6 +928,9 @@ Output.prototype = {
    * @private
    */
   render_: function(range, prevRange, type, buff) {
+    if (prevRange && !prevRange.isValid())
+      prevRange = null;
+
     if (range.isSubNode())
       this.subNode_(range, prevRange, type, buff);
     else
@@ -923,9 +943,10 @@ Output.prototype = {
    * @param {string|!Object} format The output format either specified as an
    * output template string or a parsed output format tree.
    * @param {!Array<Spannable>} buff Buffer to receive rendered output.
+   * @param {!AutomationNode=} opt_prevNode
    * @private
    */
-  format_: function(node, format, buff) {
+  format_: function(node, format, buff, opt_prevNode) {
     var tokens = [];
     var args = null;
 
@@ -984,9 +1005,16 @@ Output.prototype = {
           this.append_(buff, text, options);
         } else if (token == 'name') {
           options.annotation.push(token);
-          var earcon = node ? this.findEarcon_(node) : null;
+          var earcon = node ? this.findEarcon_(node, opt_prevNode) : null;
           if (earcon)
             options.annotation.push(earcon);
+          this.append_(buff, node.name, options);
+        } else if (token == 'nameFromNode') {
+          if (chrome.automation.NameFromType[node.nameFrom] ==
+              'nameFromContents')
+            return;
+
+          options.annotation.push(token);
           this.append_(buff, node.name, options);
         } else if (token == 'nameOrDescendants') {
           options.annotation.push(token);
@@ -1304,7 +1332,7 @@ Output.prototype = {
 
       var roleBlock = getMergedRoleBlock(formatPrevNode.role);
       if (roleBlock.leave && localStorage['useVerboseMode'] == 'true')
-        this.format_(formatPrevNode, roleBlock.leave, buff);
+        this.format_(formatPrevNode, roleBlock.leave, buff, prevNode);
     }
 
     var enterOutputs = [];
@@ -1317,7 +1345,7 @@ Output.prototype = {
         if (enterRole[formatNode.role])
           continue;
         enterRole[formatNode.role] = true;
-        this.format_(formatNode, roleBlock.enter, buff);
+        this.format_(formatNode, roleBlock.enter, buff, prevNode);
       }
       if (formatNode.role == 'window')
         break;
@@ -1341,7 +1369,7 @@ Output.prototype = {
         parentRoleBlock.speak ||
         eventBlock['default'].speak;
 
-    this.format_(node, speakFormat, buff);
+    this.format_(node, speakFormat, buff, prevNode);
   },
 
   /**
@@ -1544,16 +1572,16 @@ Output.prototype = {
    * @return {Output.Action}
    */
   findEarcon_: function(node, opt_prevNode) {
+    if (node === opt_prevNode)
+      return null;
+
     if (this.formatOptions_.speech) {
       var earconFinder = node;
       var ancestors;
-      if (opt_prevNode) {
-        // Don't include the node itself.
+      if (opt_prevNode)
         ancestors = AutomationUtil.getUniqueAncestors(opt_prevNode, node);
-        ancestors.pop();
-      } else {
+      else
         ancestors = AutomationUtil.getAncestors(node);
-      }
 
       while (earconFinder = ancestors.pop()) {
         var info = Output.ROLE_INFO_[earconFinder.role];

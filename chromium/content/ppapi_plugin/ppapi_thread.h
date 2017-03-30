@@ -8,11 +8,11 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <string>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/process/process.h"
 #include "base/scoped_native_library.h"
 #include "build/build_config.h"
@@ -110,12 +110,14 @@ class PpapiThread : public ChildThreadImpl,
   void OnCrash();
   void OnHang();
 
-  // Sets up the channel to the given renderer. On success, returns true and
-  // fills the given ChannelHandle with the information from the new channel.
-  bool SetupRendererChannel(base::ProcessId renderer_pid,
-                            int renderer_child_id,
-                            bool incognito,
-                            IPC::ChannelHandle* handle);
+  // Sets up the channel to the given renderer. If |renderer_pid| is
+  // base::kNullProcessId, the channel is set up to the browser. On success,
+  // returns true and fills the given ChannelHandle with the information from
+  // the new channel.
+  bool SetupChannel(base::ProcessId renderer_pid,
+                    int renderer_child_id,
+                    bool incognito,
+                    IPC::ChannelHandle* handle);
 
   // Sets up the name of the plugin for logging using the given path.
   void SavePluginName(const base::FilePath& path);
@@ -163,7 +165,7 @@ class PpapiThread : public ChildThreadImpl,
   uint32_t next_plugin_dispatcher_id_;
 
   // The BlinkPlatformImpl implementation.
-  scoped_ptr<PpapiBlinkPlatformImpl> blink_platform_impl_;
+  std::unique_ptr<PpapiBlinkPlatformImpl> blink_platform_impl_;
 
 #if defined(OS_WIN)
   // Caches the handle to the peer process if this is a broker.

@@ -64,6 +64,7 @@ template <typename EventType>
 class EventWithHitTestResults;
 class FloatPoint;
 class FloatQuad;
+class FrameHost;
 class HTMLFrameSetElement;
 class HitTestRequest;
 class HitTestResult;
@@ -86,8 +87,7 @@ class Widget;
 
 enum class DragInitiator;
 
-class CORE_EXPORT EventHandler final : public GarbageCollectedFinalized<EventHandler>
-    , public UserGestureUtilizedCallback {
+class CORE_EXPORT EventHandler final : public GarbageCollectedFinalized<EventHandler> {
 
     WTF_MAKE_NONCOPYABLE(EventHandler);
 public:
@@ -108,6 +108,8 @@ public:
 
     void dispatchFakeMouseMoveEventSoon();
     void dispatchFakeMouseMoveEventSoonInQuad(const FloatQuad&);
+
+    static HitTestResult hitTestResultInFrame(LocalFrame*, const LayoutPoint&, HitTestRequest::HitTestRequestType hitType = HitTestRequest::ReadOnly | HitTestRequest::Active);
 
     HitTestResult hitTestResultAtPoint(const LayoutPoint&,
         HitTestRequest::HitTestRequestType hitType = HitTestRequest::ReadOnly | HitTestRequest::Active,
@@ -209,7 +211,6 @@ public:
     void capsLockStateMayHaveChanged(); // Only called by FrameSelection
 
     WebInputEventResult handleTouchEvent(const PlatformTouchEvent&);
-    void userGestureUtilized() override;
 
     bool useHandCursor(Node*, bool isOverLink);
 
@@ -220,25 +221,6 @@ public:
     int clickCount() { return m_clickCount; }
 
     SelectionController& selectionController() const { return *m_selectionController; }
-
-    class TouchInfo {
-        DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
-    public:
-        DEFINE_INLINE_TRACE()
-        {
-            visitor->trace(touchTarget);
-            visitor->trace(targetFrame);
-        }
-
-        PlatformTouchPoint point;
-        Member<EventTarget> touchTarget;
-        Member<LocalFrame> targetFrame;
-        FloatPoint adjustedPagePoint;
-        FloatSize adjustedRadius;
-        bool knownTarget;
-        bool consumed;
-        String region;
-    };
 
 private:
     static DragState& dragState();
@@ -284,6 +266,8 @@ private:
     // delta - The delta to scroll by, in the units of the granularity param
     //         (e.g. pixels, lines, pages, etc.). These are in a physical
     //         direction. i.e. Positive is down and right.
+    // position - Where the scroll originated from (e.g. touch location).
+    // velocity - The velocity of the scroll in the case of fling gestures.
     // startNode - The node to start the scroll chaining from.
     // stopNode - On input, if non-null, the node at which we should stop
     //            chaining. On output, if provided and a node was scrolled,
@@ -292,7 +276,14 @@ private:
     //            ScrollResult.didScroll since we might not have scrolled but
     //            have reached the stopNode and thus don't want to continue
     //            chaining the scroll.
-    ScrollResult physicalScroll(ScrollGranularity, const FloatSize& delta, Node* startNode, Node** stopNode, bool* consumed);
+    ScrollResult physicalScroll(
+        ScrollGranularity,
+        const FloatSize& delta,
+        const FloatPoint& position,
+        const FloatSize& velocity,
+        Node* startNode,
+        Node** stopNode,
+        bool* consumed);
 
     // Performs a chaining logical scroll, within a *single* frame, starting
     // from either a provided starting node or a default based on the focused or
@@ -306,12 +297,16 @@ private:
     //             If not, use the current focus or last clicked node.
     bool logicalScroll(ScrollDirection, ScrollGranularity, Node* startNode = nullptr);
 
-    void resetOverscroll(bool didScrollX, bool didScrollY);
-    void handleOverscroll(const ScrollResult&, const FloatPoint& position = FloatPoint(), const FloatSize& velocity = FloatSize());
+    ScrollResult scrollBox(
+        LayoutBox*,
+        ScrollGranularity,
+        const FloatSize& delta,
+        const FloatPoint& position,
+        const FloatSize& velocity,
+        bool* wasRootScroller);
 
+    bool isRootScroller(const Node&) const;
     void customizedScroll(const Node& startNode, ScrollState&);
-
-    HitTestResult hitTestResultInFrame(LocalFrame*, const LayoutPoint&, HitTestRequest::HitTestRequestType hitType = HitTestRequest::ReadOnly | HitTestRequest::Active);
 
     void invalidateClick();
 
@@ -378,10 +373,7 @@ private:
     // the given element.
     bool slideFocusOnShadowHostIfNecessary(const Element&);
 
-    void dispatchPointerEvents(const PlatformTouchEvent&, HeapVector<TouchInfo>&);
-    void sendPointerCancels(HeapVector<TouchInfo>&);
-
-    WebInputEventResult dispatchTouchEvents(const PlatformTouchEvent&, HeapVector<TouchInfo>&, bool, bool);
+    FrameHost* frameHost() const;
 
     // NOTE: If adding a new field to this class please ensure that it is
     // cleared in |EventHandler::clear()|.
@@ -433,8 +425,6 @@ private:
 
     LayoutSize m_offsetFromResizeCorner; // In the coords of m_resizeScrollableArea.
 
-    FloatSize m_accumulatedRootOverscroll;
-
     bool m_mousePositionIsUnknown;
     // The last mouse movement position this frame has seen in root frame coordinates.
     IntPoint m_lastKnownMousePosition;
@@ -444,24 +434,7 @@ private:
     PlatformMouseEvent m_mouseDown;
     RefPtr<UserGestureToken> m_lastMouseDownUserGestureToken;
 
-    // The target of each active touch point indexed by the touch ID.
-    using TouchTargetMap = HeapHashMap<unsigned, Member<EventTarget>, DefaultHash<unsigned>::Hash, WTF::UnsignedWithZeroKeyHashTraits<unsigned>>;
-    TouchTargetMap m_targetForTouchID;
-    using TouchRegionMap = HeapHashMap<unsigned, String, DefaultHash<unsigned>::Hash, WTF::UnsignedWithZeroKeyHashTraits<unsigned>>;
-    TouchRegionMap m_regionForTouchID;
-
-    // If set, the document of the active touch sequence. Unset if no touch sequence active.
-    Member<Document> m_touchSequenceDocument;
-    RefPtr<UserGestureToken> m_touchSequenceUserGestureToken;
-
-    bool m_touchPressed;
-
     PointerEventManager m_pointerEventManager;
-
-    // This is set upon sending a pointercancel for touch, prevents PE dispatches for touches until
-    // all touch-points become inactive.
-    // TODO(mustaq): Consider a state per pointerType, as in PointerIdManager? Exclude mouse?
-    bool m_inPointerCanceledState;
 
     Member<Node> m_scrollGestureHandlingNode;
     bool m_lastGestureScrollOverWidget;
@@ -488,13 +461,8 @@ private:
     // scroll which shouldn't propagate can't cause any element to
     // scroll other than the |m_previousGestureScrolledNode|.
     bool m_deltaConsumedForScrollSequence;
-
-    // True if waiting on first touch move after a touch start.
-    bool m_waitingForFirstTouchMove;
 };
 
 } // namespace blink
-
-WTF_ALLOW_INIT_WITH_MEM_FUNCTIONS(blink::EventHandler::TouchInfo);
 
 #endif // EventHandler_h

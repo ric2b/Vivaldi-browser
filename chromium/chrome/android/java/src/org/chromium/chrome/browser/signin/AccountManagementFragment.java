@@ -22,20 +22,18 @@ import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
-import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.UserManager;
 import android.preference.Preference;
 import android.preference.Preference.OnPreferenceClickListener;
 import android.preference.PreferenceFragment;
-import android.preference.PreferenceManager;
 import android.preference.PreferenceScreen;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Pair;
 
-import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeApplication;
@@ -270,39 +268,33 @@ public class AccountManagementFragment extends PreferenceFragment
     }
 
     private void configureSyncSettings() {
-        SyncPreference pref = (SyncPreference) findPreference(PREF_SYNC_SETTINGS);
-        // Sets preference icon and tints it to blue.
-        Drawable icon = ApiCompatibilityUtils.getDrawable(
-                getResources(), R.drawable.permission_background_sync);
-        icon.setColorFilter(
-                ApiCompatibilityUtils.getColor(getResources(), R.color.light_active_color),
-                PorterDuff.Mode.SRC_IN);
-        pref.setIcon(icon);
         final Preferences preferences = (Preferences) getActivity();
         final Account account = ChromeSigninController.get(getActivity()).getSignedInUser();
+        findPreference(PREF_SYNC_SETTINGS)
+                .setOnPreferenceClickListener(new OnPreferenceClickListener() {
+                    @Override
+                    public boolean onPreferenceClick(Preference preference) {
+                        if (!isVisible() || !isResumed()) return false;
 
-        pref.setOnPreferenceClickListener(new OnPreferenceClickListener() {
-            @Override
-            public boolean onPreferenceClick(Preference preference) {
-                if (!isVisible() || !isResumed()) return false;
+                        if (ProfileSyncService.get() == null) return true;
 
-                if (ProfileSyncService.get() == null) return true;
+                        if (AndroidSyncSettings.isMasterSyncEnabled(preferences)) {
+                            Bundle args = new Bundle();
+                            args.putString(
+                                    SyncCustomizationFragment.ARGUMENT_ACCOUNT, account.name);
+                            preferences.startFragment(
+                                    SyncCustomizationFragment.class.getName(), args);
+                        } else {
+                            openSyncSettingsPage(preferences);
+                        }
 
-                if (AndroidSyncSettings.isMasterSyncEnabled(preferences)) {
-                    Bundle args = new Bundle();
-                    args.putString(SyncCustomizationFragment.ARGUMENT_ACCOUNT, account.name);
-                    preferences.startFragment(SyncCustomizationFragment.class.getName(), args);
-                } else {
-                    openSyncSettingsPage(preferences);
-                }
-
-                return true;
-            }
-        });
+                        return true;
+                    }
+                });
     }
 
     private void configureGoogleActivityControls() {
-        Preference pref = (Preference) findPreference(PREF_GOOGLE_ACTIVITY_CONTROLS);
+        Preference pref = findPreference(PREF_GOOGLE_ACTIVITY_CONTROLS);
         pref.setOnPreferenceClickListener(new OnPreferenceClickListener() {
             @Override
             public boolean onPreferenceClick(Preference preference) {
@@ -516,7 +508,7 @@ public class AccountManagementFragment extends PreferenceFragment
     public void syncStateChanged() {
         SyncPreference pref = (SyncPreference) findPreference(PREF_SYNC_SETTINGS);
         if (pref != null) {
-            pref.updateSyncSummary();
+            pref.updateSyncSummaryAndIcon();
         }
 
         // TODO(crbug/557784): Show notification for sync error
@@ -715,7 +707,7 @@ public class AccountManagementFragment extends PreferenceFragment
      * @return Whether the sign out is not disabled due to a child/EDU account.
      */
     private static boolean getSignOutAllowedPreferenceValue(Context context) {
-        return PreferenceManager.getDefaultSharedPreferences(context)
+        return ContextUtils.getAppSharedPreferences()
                 .getBoolean(SIGN_OUT_ALLOWED, true);
     }
 
@@ -726,7 +718,7 @@ public class AccountManagementFragment extends PreferenceFragment
      * @param isAllowed True if the sign out is not disabled due to a child/EDU account
      */
     public static void setSignOutAllowedPreferenceValue(Context context, boolean isAllowed) {
-        PreferenceManager.getDefaultSharedPreferences(context)
+        ContextUtils.getAppSharedPreferences()
                 .edit()
                 .putBoolean(SIGN_OUT_ALLOWED, isAllowed)
                 .apply();

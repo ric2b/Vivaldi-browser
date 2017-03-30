@@ -9,7 +9,7 @@
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/web_preferences.h"
 #include "content/renderer/pepper/host_globals.h"
@@ -18,6 +18,7 @@
 #include "content/renderer/pepper/plugin_module.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_view_impl.h"
+#include "gpu/command_buffer/common/gles2_cmd_utils.h"
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "ppapi/c/ppp_graphics_3d.h"
@@ -25,7 +26,6 @@
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebElement.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebPluginContainer.h"
 
@@ -45,7 +45,12 @@ PPB_Graphics3D_Impl::PPB_Graphics3D_Impl(PP_Instance instance)
       has_alpha_(false),
       weak_ptr_factory_(this) {}
 
-PPB_Graphics3D_Impl::~PPB_Graphics3D_Impl() {}
+PPB_Graphics3D_Impl::~PPB_Graphics3D_Impl() {
+  // Unset the client before the command_buffer_ is destroyed, similar to how
+  // WeakPtrFactory invalidates before it.
+  if (command_buffer_)
+    command_buffer_->SetGpuControlClient(nullptr);
+}
 
 // static
 PP_Resource PPB_Graphics3D_Impl::CreateRaw(
@@ -191,15 +196,16 @@ bool PPB_Graphics3D_Impl::InitRaw(PPB_Graphics3D_API* share_context,
   if (!render_thread)
     return false;
 
-  channel_ = render_thread->EstablishGpuChannelSync(
-      CAUSE_FOR_GPU_LAUNCH_PEPPERPLATFORMCONTEXT3DIMPL_INITIALIZE);
-  if (!channel_.get())
+  scoped_refptr<gpu::GpuChannelHost> channel =
+      render_thread->EstablishGpuChannelSync(
+          CAUSE_FOR_GPU_LAUNCH_PEPPERPLATFORMCONTEXT3DIMPL_INITIALIZE);
+  if (!channel)
     return false;
 
   gfx::Size surface_size;
   std::vector<int32_t> attribs;
   gfx::GpuPreference gpu_preference = gfx::PreferDiscreteGpu;
-  // TODO(alokp): Change GpuChannelHost::CreateCommandBuffer()
+  // TODO(alokp): Change CommandBufferProxyImpl::Create()
   // interface to accept width and height in the attrib_list so that
   // we do not need to filter for width and height here.
   if (attrib_list) {
@@ -229,6 +235,9 @@ bool PPB_Graphics3D_Impl::InitRaw(PPB_Graphics3D_API* share_context,
     }
     attribs.push_back(PP_GRAPHICS3DATTRIB_NONE);
   }
+  gpu::gles2::ContextCreationAttribHelper attrib_helper;
+  if (!attrib_helper.Parse(attribs))
+    return false;
 
   gpu::CommandBufferProxyImpl* share_buffer = NULL;
   if (share_context) {
@@ -237,41 +246,39 @@ bool PPB_Graphics3D_Impl::InitRaw(PPB_Graphics3D_API* share_context,
     share_buffer = share_graphics->GetCommandBufferProxy();
   }
 
-  command_buffer_ = channel_->CreateCommandBuffer(
-      gpu::kNullSurfaceHandle, surface_size, share_buffer,
-      gpu::GpuChannelHost::kDefaultStreamId,
-      gpu::GpuChannelHost::kDefaultStreamPriority, attribs, GURL::EmptyGURL(),
-      gpu_preference);
+  command_buffer_ = gpu::CommandBufferProxyImpl::Create(
+      std::move(channel), gpu::kNullSurfaceHandle, surface_size, share_buffer,
+      gpu::GPU_STREAM_DEFAULT, gpu::GpuStreamPriority::NORMAL,
+      attrib_helper, GURL::EmptyGURL(), gpu_preference,
+      base::ThreadTaskRunnerHandle::Get());
   if (!command_buffer_)
     return false;
-  if (!command_buffer_->Initialize())
-    return false;
+
+  command_buffer_->SetGpuControlClient(this);
+
   if (shared_state_handle)
     *shared_state_handle = command_buffer_->GetSharedStateHandle();
   if (capabilities)
     *capabilities = command_buffer_->GetCapabilities();
   if (command_buffer_id)
     *command_buffer_id = command_buffer_->GetCommandBufferID();
+
   mailbox_ = gpu::Mailbox::Generate();
   if (!command_buffer_->ProduceFrontBuffer(mailbox_))
     return false;
 
-  command_buffer_->SetContextLostCallback(base::Bind(
-      &PPB_Graphics3D_Impl::OnContextLost, weak_ptr_factory_.GetWeakPtr()));
-
-  command_buffer_->SetOnConsoleMessageCallback(base::Bind(
-      &PPB_Graphics3D_Impl::OnConsoleMessage, weak_ptr_factory_.GetWeakPtr()));
   return true;
 }
 
-void PPB_Graphics3D_Impl::OnConsoleMessage(const std::string& message, int id) {
+void PPB_Graphics3D_Impl::OnGpuControlErrorMessage(const char* message,
+                                                   int32_t id) {
   if (!bound_to_instance_)
     return;
   WebPluginContainer* container =
       HostGlobals::Get()->GetInstance(pp_instance())->container();
   if (!container)
     return;
-  WebLocalFrame* frame = container->element().document().frame();
+  WebLocalFrame* frame = container->document().frame();
   if (!frame)
     return;
   WebConsoleMessage console_message = WebConsoleMessage(
@@ -279,17 +286,14 @@ void PPB_Graphics3D_Impl::OnConsoleMessage(const std::string& message, int id) {
   frame->addMessageToConsole(console_message);
 }
 
-void PPB_Graphics3D_Impl::OnSwapBuffers() {
-  if (HasPendingSwap()) {
-    // If we're off-screen, no need to trigger and wait for compositing.
-    // Just send the swap-buffers ACK to the plugin immediately.
-    commit_pending_ = false;
-    SwapBuffersACK(PP_OK);
-  }
-}
+void PPB_Graphics3D_Impl::OnGpuControlLostContext() {
+#if DCHECK_IS_ON()
+  // This should never occur more than once.
+  DCHECK(!lost_context_);
+  lost_context_ = true;
+#endif
 
-void PPB_Graphics3D_Impl::OnContextLost() {
-  // Don't need to check for NULL from GetPluginInstance since when we're
+  // Don't need to check for null from GetPluginInstance since when we're
   // bound, we know our instance is valid.
   if (bound_to_instance_) {
     HostGlobals::Get()->GetInstance(pp_instance())->BindGraphics(pp_instance(),
@@ -301,6 +305,19 @@ void PPB_Graphics3D_Impl::OnContextLost() {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(&PPB_Graphics3D_Impl::SendContextLost,
                             weak_ptr_factory_.GetWeakPtr()));
+}
+
+void PPB_Graphics3D_Impl::OnGpuControlLostContextMaybeReentrant() {
+  // No internal state to update on lost context.
+}
+
+void PPB_Graphics3D_Impl::OnSwapBuffers() {
+  if (HasPendingSwap()) {
+    // If we're off-screen, no need to trigger and wait for compositing.
+    // Just send the swap-buffers ACK to the plugin immediately.
+    commit_pending_ = false;
+    SwapBuffersACK(PP_OK);
+  }
 }
 
 void PPB_Graphics3D_Impl::SendContextLost() {

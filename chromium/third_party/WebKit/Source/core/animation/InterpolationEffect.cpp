@@ -14,7 +14,8 @@ void InterpolationEffect::getActiveInterpolations(double fraction, double iterat
     for (const auto& record : m_interpolations) {
         if (fraction >= record.m_applyFrom && fraction < record.m_applyTo) {
             RefPtr<Interpolation> interpolation = record.m_interpolation;
-            double localFraction = (fraction - record.m_start) / (record.m_end - record.m_start);
+            double recordLength = record.m_end - record.m_start;
+            double localFraction = recordLength ? (fraction - record.m_start) / recordLength : 0.0;
             if (record.m_easing)
                 localFraction = record.m_easing->evaluate(localFraction, accuracyForDuration(iterationDuration));
             interpolation->interpolate(0, localFraction);
@@ -28,44 +29,9 @@ void InterpolationEffect::getActiveInterpolations(double fraction, double iterat
         result.shrink(resultIndex);
 }
 
-void InterpolationEffect::addInterpolationsFromKeyframes(PropertyHandle property, Element* element, const ComputedStyle* baseStyle, Keyframe::PropertySpecificKeyframe& keyframeA, Keyframe::PropertySpecificKeyframe& keyframeB, double applyFrom, double applyTo)
+void InterpolationEffect::addInterpolationsFromKeyframes(PropertyHandle property, const Keyframe::PropertySpecificKeyframe& keyframeA, const Keyframe::PropertySpecificKeyframe& keyframeB, double applyFrom, double applyTo)
 {
-    RefPtr<Interpolation> interpolation = keyframeA.maybeCreateInterpolation(property, keyframeB, element, baseStyle);
-
-    if (interpolation) {
-        addInterpolation(interpolation, &keyframeA.easing(), keyframeA.offset(), keyframeB.offset(), applyFrom, applyTo);
-    } else {
-        RefPtr<Interpolation> interpolationA = keyframeA.maybeCreateInterpolation(property, keyframeA, element, baseStyle);
-        RefPtr<Interpolation> interpolationB = keyframeB.maybeCreateInterpolation(property, keyframeB, element, baseStyle);
-
-        Vector<TimingFunction::PartitionRegion> regions = Vector<TimingFunction::PartitionRegion>();
-        keyframeA.easing().partition(regions);
-
-        size_t regionIndex = 0;
-        for (const auto& region : regions) {
-            double regionStart = blend(keyframeA.offset(), keyframeB.offset(), region.start);
-            double regionEnd = blend(keyframeA.offset(), keyframeB.offset(), region.end);
-
-            double regionApplyFrom = regionIndex == 0 ? applyFrom : regionStart;
-            double regionApplyTo = regionIndex == regions.size() - 1 ? applyTo : regionEnd;
-
-            if (region.half == TimingFunction::RangeHalf::Lower) {
-                interpolation = interpolationA;
-            } else if (region.half == TimingFunction::RangeHalf::Upper) {
-                interpolation = interpolationB;
-            } else {
-                ASSERT_NOT_REACHED();
-                continue;
-            }
-
-            if (interpolation) {
-                addInterpolation(interpolation.release(),
-                    &keyframeA.easing(), regionStart, regionEnd, regionApplyFrom, regionApplyTo);
-            }
-
-            regionIndex++;
-        }
-    }
+    addInterpolation(keyframeA.createInterpolation(property, keyframeB), &keyframeA.easing(), keyframeA.offset(), keyframeB.offset(), applyFrom, applyTo);
 }
 
 } // namespace blink

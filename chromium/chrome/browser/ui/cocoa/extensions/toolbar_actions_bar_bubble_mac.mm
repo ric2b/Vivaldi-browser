@@ -63,8 +63,10 @@ CGFloat kMinWidth = 320.0;
 
 - (id)initWithParentWindow:(NSWindow*)parentWindow
                anchorPoint:(NSPoint)anchorPoint
-                  delegate:(std::unique_ptr<ToolbarActionsBarBubbleDelegate>)
-                               delegate {
+          anchoredToAction:(BOOL)anchoredToAction
+                  delegate:
+                      (std::unique_ptr<ToolbarActionsBarBubbleDelegate>)
+                          delegate {
   base::scoped_nsobject<InfoBubbleWindow> window(
       [[InfoBubbleWindow alloc]
           initWithContentRect:ui::kWindowSizeDeterminedLater
@@ -75,6 +77,7 @@ CGFloat kMinWidth = 320.0;
                        parentWindow:parentWindow
                          anchoredAt:anchorPoint])) {
     acknowledged_ = NO;
+    anchoredToAction_ = anchoredToAction;
     delegate_ = std::move(delegate);
 
     ui::NativeTheme* nativeTheme = ui::NativeThemeMac::instance();
@@ -86,6 +89,8 @@ CGFloat kMinWidth = 320.0;
 
     if (!g_animations_enabled)
       [window setAllowedAnimations:info_bubble::kAnimateNone];
+
+    [self setShouldCloseOnResignKey:delegate_->ShouldCloseOnDeactivate()];
 
     [self layout];
 
@@ -112,6 +117,10 @@ CGFloat kMinWidth = 320.0;
         ToolbarActionsBarBubbleDelegate::CLOSE_DISMISS_DEACTIVATION);
     acknowledged_ = YES;
   }
+  // Deallocation happens asynchronously in Cocoa, but that makes testing
+  // difficult. Explicitly destroy |delegate_| here so it can perform any
+  // necessary cleanup.
+  delegate_.reset();
   [super windowWillClose:notification];
 }
 
@@ -229,7 +238,7 @@ CGFloat kMinWidth = 320.0;
       std::max(std::max(kMinWidth, buttonStripWidth), headingWidth);
 
   NSTextField* content =
-      [self addTextFieldWithString:delegate_->GetBodyText()
+      [self addTextFieldWithString:delegate_->GetBodyText(anchoredToAction_)
                           fontSize:12.0
                          alignment:NSLeftTextAlignment];
   [content setFrame:NSMakeRect(0, 0, windowWidth, 0)];

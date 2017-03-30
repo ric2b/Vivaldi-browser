@@ -35,6 +35,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewStructure;
 import android.view.WindowManager;
+import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityManager.AccessibilityStateChangeListener;
 import android.view.accessibility.AccessibilityNodeProvider;
@@ -53,6 +54,7 @@ import org.chromium.base.TraceEvent;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.content.R;
 import org.chromium.content.browser.ScreenOrientationListener.ScreenOrientationObserver;
 import org.chromium.content.browser.accessibility.BrowserAccessibilityManager;
@@ -325,6 +327,9 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
         @Override
         public void renderProcessGone(boolean wasOomProtected) {
             resetPopupsAndInput();
+            ContentViewCore contentViewCore = mWeakContentViewCore.get();
+            if (contentViewCore == null) return;
+            contentViewCore.mImeAdapter.resetAndHideKeyboard();
         }
 
         @Override
@@ -338,7 +343,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
             contentViewCore.mIsMobileOptimizedHint = false;
             contentViewCore.hidePopupsAndClearSelection();
             contentViewCore.resetScrollInProgress();
-            contentViewCore.mImeAdapter.reset();
         }
 
         private void determinedProcessVisibility() {
@@ -544,6 +548,10 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
 
     // System accessibility service.
     private final AccessibilityManager mAccessibilityManager;
+
+    // If true, the web contents are obscured by another view and we shouldn't
+    // return an AccessibilityNodeProvider or process touch exploration events.
+    private boolean mIsObscuredByAnotherView;
 
     // Notifies the ContentViewCore when platform closed caption settings have changed
     // if they are supported. Otherwise does nothing.
@@ -976,7 +984,7 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
         mWebContentsObserver = null;
         setSmartClipDataListener(null);
         setZoomControlsDelegate(null);
-        mImeAdapter.reset();
+        mImeAdapter.resetAndHideKeyboard();
         // TODO(igsolla): address TODO in ContentViewClient because ContentViewClient is not
         // currently a real Null Object.
         //
@@ -1502,12 +1510,28 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
     @SuppressWarnings("javadoc")
     public void onAttachedToWindow() {
         setAccessibilityState(mAccessibilityManager.isEnabled());
-        setTextHandlesTemporarilyHidden(false);
-        restoreSelectionPopupsIfNecessary();
+        updateTextSelectionUI(true);
         ScreenOrientationListener.getInstance().addObserver(this, mContext);
         GamepadList.onAttachedToWindow(mContext);
         mAccessibilityManager.addAccessibilityStateChangeListener(this);
         mSystemCaptioningBridge.addListener(this);
+    }
+
+    /**
+     * Update the text selection UI depending on the focus of the page. This will hide the selection
+     * handles and selection popups if focus is lost.
+     * TODO(mdjones): This was added as a temporary measure to hide text UI while Reader Mode or
+     * Contextual Search are showing. This should be removed in favor of proper focusing of the
+     * panel's ContentViewCore (which is currently not being added to the view hierarchy).
+     * @param focused If the ContentViewCore currently has focus.
+     */
+    public void updateTextSelectionUI(boolean focused) {
+        setTextHandlesTemporarilyHidden(!focused);
+        if (focused) {
+            restoreSelectionPopupsIfNecessary();
+        } else {
+            hidePopupsAndPreserveSelection();
+        }
     }
 
     /**
@@ -1527,8 +1551,7 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
         // Override the handle visibility explicitly to address this, but
         // preserve the underlying selection for detachment cases like screen
         // locking and app switching.
-        setTextHandlesTemporarilyHidden(true);
-        hidePopupsAndPreserveSelection();
+        updateTextSelectionUI(false);
         mSystemCaptioningBridge.removeListener(this);
     }
 
@@ -1709,7 +1732,7 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
 
         MotionEvent offset = createOffsetMotionEvent(event);
         try {
-            if (mBrowserAccessibilityManager != null) {
+            if (mBrowserAccessibilityManager != null && !mIsObscuredByAnotherView) {
                 return mBrowserAccessibilityManager.onHoverEvent(offset);
             }
 
@@ -2007,9 +2030,17 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
                 /** Google search doesn't support requests slightly larger than this. */
                 private static final int MAX_SEARCH_QUERY_LENGTH = 1000;
 
+                // All WebContents actions record a user action internally.
                 @Override
                 public void selectAll() {
                     mWebContents.selectAll();
+                    // Even though the above statement logged a SelectAll user action, we want to
+                    // track whether the focus was in an editable field, so log that too.
+                    if (isFocusedNodeEditable()) {
+                        RecordUserAction.record("MobileActionMode.SelectAllWasEditable");
+                    } else {
+                        RecordUserAction.record("MobileActionMode.SelectAllWasNonEditable");
+                    }
                 }
 
                 @Override
@@ -2029,6 +2060,7 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
 
                 @Override
                 public void share() {
+                    RecordUserAction.record("MobileActionMode.Share");
                     final String query = sanitizeQuery(getSelectedText(), MAX_SHARE_QUERY_LENGTH);
                     if (TextUtils.isEmpty(query)) return;
 
@@ -2047,6 +2079,7 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
 
                 @Override
                 public void processText(Intent intent) {
+                    RecordUserAction.record("MobileActionMode.ProcessTextIntent");
                     assert Build.VERSION.SDK_INT >= Build.VERSION_CODES.M;
 
                     final String query = sanitizeQuery(getSelectedText(), MAX_SEARCH_QUERY_LENGTH);
@@ -2074,6 +2107,7 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
 
                 @Override
                 public void search() {
+                    RecordUserAction.record("MobileActionMode.WebSearch");
                     final String query = sanitizeQuery(getSelectedText(), MAX_SEARCH_QUERY_LENGTH);
                     if (TextUtils.isEmpty(query)) return;
 
@@ -3015,6 +3049,8 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
         if (mBrowserAccessibilityManager != null && mRenderCoordinates.hasFrameInfo()) {
             mBrowserAccessibilityManager.notifyFrameInfoInitialized();
         }
+
+        if (mBrowserAccessibilityManager == null) mNativeAccessibilityEnabled = false;
     }
 
     /**
@@ -3028,13 +3064,15 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
     }
 
     /**
-     * If native accessibility (not script injection) is enabled, and if this is
-     * running on JellyBean or later, returns an AccessibilityNodeProvider that
+     * If native accessibility is enabled and no other views are temporarily
+     * obscuring this one, returns an AccessibilityNodeProvider that
      * implements native accessibility for this view. Returns null otherwise.
      * Lazily initializes native accessibility here if it's allowed.
      * @return The AccessibilityNodeProvider, if available, or null otherwise.
      */
     public AccessibilityNodeProvider getAccessibilityNodeProvider() {
+        if (mIsObscuredByAnotherView) return null;
+
         if (mBrowserAccessibilityManager != null) {
             return mBrowserAccessibilityManager.getAccessibilityNodeProvider();
         }
@@ -3046,6 +3084,19 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
         }
 
         return null;
+    }
+
+    /**
+     * Set whether or not the web contents are obscured by another view.
+     * If true, we won't return an accessibility node provider or respond
+     * to touch exploration events.
+     */
+    public void setObscuredByAnotherView(boolean isObscured) {
+        if (isObscured != mIsObscuredByAnotherView) {
+            mIsObscuredByAnotherView = isObscured;
+            getContainerView().sendAccessibilityEvent(
+                    AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
+        }
     }
 
     @TargetApi(Build.VERSION_CODES.M)

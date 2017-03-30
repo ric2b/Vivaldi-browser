@@ -4,12 +4,12 @@
 
 #include "net/socket/tcp_server_socket.h"
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "net/base/address_list.h"
 #include "net/base/io_buffer.h"
 #include "net/base/ip_address.h"
@@ -67,12 +67,12 @@ TEST_F(TCPServerSocketTest, Accept) {
   ASSERT_NO_FATAL_FAILURE(SetUpIPv4());
 
   TestCompletionCallback connect_callback;
-  TCPClientSocket connecting_socket(local_address_list(),
-                                    NULL, NetLog::Source());
+  TCPClientSocket connecting_socket(local_address_list(), NULL, NULL,
+                                    NetLog::Source());
   connecting_socket.Connect(connect_callback.callback());
 
   TestCompletionCallback accept_callback;
-  scoped_ptr<StreamSocket> accepted_socket;
+  std::unique_ptr<StreamSocket> accepted_socket;
   int result = socket_.Accept(&accepted_socket, accept_callback.callback());
   if (result == ERR_IO_PENDING)
     result = accept_callback.WaitForResult();
@@ -92,14 +92,14 @@ TEST_F(TCPServerSocketTest, AcceptAsync) {
   ASSERT_NO_FATAL_FAILURE(SetUpIPv4());
 
   TestCompletionCallback accept_callback;
-  scoped_ptr<StreamSocket> accepted_socket;
+  std::unique_ptr<StreamSocket> accepted_socket;
 
   ASSERT_EQ(ERR_IO_PENDING,
             socket_.Accept(&accepted_socket, accept_callback.callback()));
 
   TestCompletionCallback connect_callback;
-  TCPClientSocket connecting_socket(local_address_list(),
-                                    NULL, NetLog::Source());
+  TCPClientSocket connecting_socket(local_address_list(), NULL, NULL,
+                                    NetLog::Source());
   connecting_socket.Connect(connect_callback.callback());
 
   EXPECT_EQ(OK, connect_callback.WaitForResult());
@@ -117,25 +117,25 @@ TEST_F(TCPServerSocketTest, Accept2Connections) {
   ASSERT_NO_FATAL_FAILURE(SetUpIPv4());
 
   TestCompletionCallback accept_callback;
-  scoped_ptr<StreamSocket> accepted_socket;
+  std::unique_ptr<StreamSocket> accepted_socket;
 
   ASSERT_EQ(ERR_IO_PENDING,
             socket_.Accept(&accepted_socket, accept_callback.callback()));
 
   TestCompletionCallback connect_callback;
-  TCPClientSocket connecting_socket(local_address_list(),
-                                    NULL, NetLog::Source());
+  TCPClientSocket connecting_socket(local_address_list(), NULL, NULL,
+                                    NetLog::Source());
   connecting_socket.Connect(connect_callback.callback());
 
   TestCompletionCallback connect_callback2;
-  TCPClientSocket connecting_socket2(local_address_list(),
-                                     NULL, NetLog::Source());
+  TCPClientSocket connecting_socket2(local_address_list(), NULL, NULL,
+                                     NetLog::Source());
   connecting_socket2.Connect(connect_callback2.callback());
 
   EXPECT_EQ(OK, accept_callback.WaitForResult());
 
   TestCompletionCallback accept_callback2;
-  scoped_ptr<StreamSocket> accepted_socket2;
+  std::unique_ptr<StreamSocket> accepted_socket2;
   int result = socket_.Accept(&accepted_socket2, accept_callback2.callback());
   if (result == ERR_IO_PENDING)
     result = accept_callback2.WaitForResult();
@@ -160,12 +160,12 @@ TEST_F(TCPServerSocketTest, AcceptIPv6) {
     return;
 
   TestCompletionCallback connect_callback;
-  TCPClientSocket connecting_socket(local_address_list(),
-                                    NULL, NetLog::Source());
+  TCPClientSocket connecting_socket(local_address_list(), NULL, NULL,
+                                    NetLog::Source());
   connecting_socket.Connect(connect_callback.callback());
 
   TestCompletionCallback accept_callback;
-  scoped_ptr<StreamSocket> accepted_socket;
+  std::unique_ptr<StreamSocket> accepted_socket;
   int result = socket_.Accept(&accepted_socket, accept_callback.callback());
   if (result == ERR_IO_PENDING)
     result = accept_callback.WaitForResult();
@@ -184,12 +184,12 @@ TEST_F(TCPServerSocketTest, AcceptIO) {
   ASSERT_NO_FATAL_FAILURE(SetUpIPv4());
 
   TestCompletionCallback connect_callback;
-  TCPClientSocket connecting_socket(local_address_list(),
-                                    NULL, NetLog::Source());
+  TCPClientSocket connecting_socket(local_address_list(), NULL, NULL,
+                                    NetLog::Source());
   connecting_socket.Connect(connect_callback.callback());
 
   TestCompletionCallback accept_callback;
-  scoped_ptr<StreamSocket> accepted_socket;
+  std::unique_ptr<StreamSocket> accepted_socket;
   int result = socket_.Accept(&accepted_socket, accept_callback.callback());
   ASSERT_EQ(OK, accept_callback.GetResult(result));
 

@@ -79,6 +79,7 @@
         '../ui/base/ui_base.gyp:ui_base',
         '../ui/gfx/gfx.gyp:gfx',
         '../ui/gfx/gfx.gyp:gfx_geometry',
+        '../ui/gfx/gfx.gyp:gfx_range',
         '../ui/gfx/gfx.gyp:gfx_vector_icons',
         '../url/url.gyp:url_lib',
         'autofill_core_common',
@@ -176,6 +177,8 @@
         'autofill/core/browser/name_field.h',
         'autofill/core/browser/password_generator.cc',
         'autofill/core/browser/password_generator.h',
+        'autofill/core/browser/payments/full_card_request.cc',
+        'autofill/core/browser/payments/full_card_request.h',
         'autofill/core/browser/payments/payments_client.cc',
         'autofill/core/browser/payments/payments_client.h',
         'autofill/core/browser/payments/payments_request.h',
@@ -309,6 +312,35 @@
     ['OS != "ios"', {
       'targets': [
         {
+          # GN version: //components/autofill/content/public/interfaces
+          'target_name': 'autofill_content_mojo_bindings_mojom',
+          'type': 'none',
+          'variables': {
+            'mojom_files': [
+              'autofill/content/public/interfaces/autofill_agent.mojom',
+              'autofill/content/public/interfaces/autofill_driver.mojom',
+            ],
+          },
+          'include_dirs': [
+            '..',
+          ],
+          'includes': [
+            '../mojo/mojom_bindings_generator_explicit.gypi',
+          ],
+        },
+        {
+          # GN version: //components/autofill/content/public/interfaces
+          'target_name': 'autofill_content_mojo_bindings',
+          'type': 'static_library',
+          'export_dependent_settings': [
+            '../mojo/mojo_public.gyp:mojo_cpp_bindings',
+           ],
+          'dependencies': [
+            '../mojo/mojo_public.gyp:mojo_cpp_bindings',
+            'autofill_content_mojo_bindings_mojom',
+          ],
+        },
+        {
           # GN version: //content/autofill/content/common
           'target_name': 'autofill_content_common',
           'type': 'static_library',
@@ -319,6 +351,7 @@
             '../ipc/ipc.gyp:ipc',
             '../third_party/WebKit/public/blink.gyp:blink_minimal',
             '../ui/gfx/gfx.gyp:gfx',
+            '../ui/gfx/ipc/geometry/gfx_ipc_geometry.gyp:gfx_ipc_geometry',
             '../ui/gfx/ipc/gfx_ipc.gyp:gfx_ipc',
             '../ui/gfx/ipc/skia/gfx_ipc_skia.gyp:gfx_ipc_skia',
             '../url/url.gyp:url_lib',
@@ -363,8 +396,6 @@
            '../testing/gmock.gyp:gmock',
          ],
          'sources': [
-           'autofill/content/browser/wallet/wallet_test_util.cc',
-           'autofill/content/browser/wallet/wallet_test_util.h',
            'autofill/content/renderer/test_password_autofill_agent.cc',
            'autofill/content/renderer/test_password_autofill_agent.h',
            'autofill/content/renderer/test_password_generation_agent.cc',
@@ -393,10 +424,12 @@
             '../third_party/icu/icu.gyp:icuuc',
             '../third_party/libphonenumber/libphonenumber.gyp:libphonenumber',
             '../ui/base/ui_base.gyp:ui_base',
+            '../ui/display/display.gyp:display',
             '../ui/gfx/gfx.gyp:gfx',
             '../ui/gfx/gfx.gyp:gfx_geometry',
             '../url/url.gyp:url_lib',
             'autofill_content_common',
+            'autofill_content_mojo_bindings',
             'autofill_content_risk_proto',
             'autofill_core_browser',
             'autofill_core_common',
@@ -413,14 +446,8 @@
             'autofill/content/browser/content_autofill_driver.h',
             'autofill/content/browser/content_autofill_driver_factory.cc',
             'autofill/content/browser/content_autofill_driver_factory.h',
-            'autofill/content/browser/request_autocomplete_manager.cc',
-            'autofill/content/browser/request_autocomplete_manager.h',
             'autofill/content/browser/risk/fingerprint.cc',
             'autofill/content/browser/risk/fingerprint.h',
-            'autofill/content/browser/wallet/full_wallet.cc',
-            'autofill/content/browser/wallet/full_wallet.h',
-            'autofill/content/browser/wallet/wallet_address.cc',
-            'autofill/content/browser/wallet/wallet_address.h',
             'autofill/content/browser/wallet/wallet_service_url.cc',
             'autofill/content/browser/wallet/wallet_service_url.h',
           ],
@@ -453,6 +480,7 @@
             '../third_party/WebKit/public/blink.gyp:blink',
             '../ui/base/ui_base.gyp:ui_base',
             'autofill_content_common',
+            'autofill_content_mojo_bindings',
             'autofill_core_common',
             'components_strings.gyp:components_strings',
           ],

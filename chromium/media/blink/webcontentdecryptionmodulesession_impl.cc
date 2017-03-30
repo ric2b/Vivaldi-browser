@@ -12,6 +12,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "media/base/cdm_key_information.h"
 #include "media/base/cdm_promise.h"
+#include "media/base/key_system_names.h"
 #include "media/base/key_systems.h"
 #include "media/base/limits.h"
 #include "media/base/media_keys.h"
@@ -19,7 +20,6 @@
 #include "media/blink/cdm_session_adapter.h"
 #include "media/blink/webmediaplayer_util.h"
 #include "media/cdm/json_web_key.h"
-#include "media/cdm/key_system_names.h"
 #include "third_party/WebKit/public/platform/WebData.h"
 #include "third_party/WebKit/public/platform/WebEncryptedMediaKeyInformation.h"
 #include "third_party/WebKit/public/platform/WebString.h"
@@ -300,7 +300,7 @@ void WebContentDecryptionModuleSessionImpl::initializeNewSession(
   // 9.7 Use the cdm to execute the following steps:
   adapter_->InitializeNewSession(
       eme_init_data_type, sanitized_init_data, convertSessionType(session_type),
-      scoped_ptr<NewSessionCdmPromise>(new NewSessionCdmResultPromise(
+      std::unique_ptr<NewSessionCdmPromise>(new NewSessionCdmResultPromise(
           result, adapter_->GetKeySystemUMAPrefix() + kGenerateRequestUMAName,
           base::Bind(
               &WebContentDecryptionModuleSessionImpl::OnSessionInitialized,
@@ -327,7 +327,7 @@ void WebContentDecryptionModuleSessionImpl::load(
   // constructor (and removed from initializeNewSession()).
   adapter_->LoadSession(
       MediaKeys::PERSISTENT_LICENSE_SESSION, sanitized_session_id,
-      scoped_ptr<NewSessionCdmPromise>(new NewSessionCdmResultPromise(
+      std::unique_ptr<NewSessionCdmPromise>(new NewSessionCdmResultPromise(
           result, adapter_->GetKeySystemUMAPrefix() + kLoadSessionUMAName,
           base::Bind(
               &WebContentDecryptionModuleSessionImpl::OnSessionInitialized,
@@ -353,7 +353,7 @@ void WebContentDecryptionModuleSessionImpl::update(
 
   adapter_->UpdateSession(
       session_id_, sanitized_response,
-      scoped_ptr<SimpleCdmPromise>(new CdmResultPromise<>(
+      std::unique_ptr<SimpleCdmPromise>(new CdmResultPromise<>(
           result, adapter_->GetKeySystemUMAPrefix() + kUpdateSessionUMAName)));
 }
 
@@ -363,7 +363,7 @@ void WebContentDecryptionModuleSessionImpl::close(
   DCHECK(thread_checker_.CalledOnValidThread());
   adapter_->CloseSession(
       session_id_,
-      scoped_ptr<SimpleCdmPromise>(new CdmResultPromise<>(
+      std::unique_ptr<SimpleCdmPromise>(new CdmResultPromise<>(
           result, adapter_->GetKeySystemUMAPrefix() + kCloseSessionUMAName)));
 }
 
@@ -373,7 +373,7 @@ void WebContentDecryptionModuleSessionImpl::remove(
   DCHECK(thread_checker_.CalledOnValidThread());
   adapter_->RemoveSession(
       session_id_,
-      scoped_ptr<SimpleCdmPromise>(new CdmResultPromise<>(
+      std::unique_ptr<SimpleCdmPromise>(new CdmResultPromise<>(
           result, adapter_->GetKeySystemUMAPrefix() + kRemoveSessionUMAName)));
 }
 

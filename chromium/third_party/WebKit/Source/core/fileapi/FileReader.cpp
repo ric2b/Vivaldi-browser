@@ -31,7 +31,7 @@
 #include "core/fileapi/FileReader.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/UnionTypesCore.h"
+#include "bindings/core/v8/StringOrArrayBuffer.h"
 #include "core/dom/CrossThreadTask.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/Document.h"
@@ -69,7 +69,7 @@ const CString utf8FilePath(Blob* blob)
 static const size_t kMaxOutstandingRequestsPerThread = 100;
 static const double progressNotificationIntervalMS = 50;
 
-class FileReader::ThrottlingController final : public GarbageCollectedFinalized<FileReader::ThrottlingController>, public Supplement<ExecutionContext> {
+class FileReader::ThrottlingController final : public GarbageCollected<FileReader::ThrottlingController>, public Supplement<ExecutionContext> {
     USING_GARBAGE_COLLECTED_MIXIN(FileReader::ThrottlingController);
 public:
     static ThrottlingController* from(ExecutionContext* context)
@@ -84,8 +84,6 @@ public:
         }
         return controller;
     }
-
-    ~ThrottlingController() { }
 
     enum FinishReaderType { DoNotRunPendingReaders, RunPendingReaders };
 
@@ -278,7 +276,7 @@ void FileReader::readInternal(Blob* blob, FileReaderLoader::ReadType type, Excep
         return;
     }
 
-    if (blob->hasBeenClosed()) {
+    if (blob->isClosed()) {
         exceptionState.throwDOMException(InvalidStateError, String(blob->isFile() ? "File" : "Blob") + " has been closed.");
         return;
     }
@@ -462,7 +460,7 @@ void FileReader::fireEvent(const AtomicString& type)
 DEFINE_TRACE(FileReader)
 {
     visitor->trace(m_error);
-    RefCountedGarbageCollectedEventTargetWithInlineData<FileReader>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
     ActiveDOMObject::trace(visitor);
 }
 

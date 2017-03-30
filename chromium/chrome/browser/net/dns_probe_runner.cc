@@ -29,7 +29,6 @@ using net::DnsTransactionFactory;
 using net::IPEndPoint;
 using net::NetLog;
 using net::NetworkChangeNotifier;
-using net::ParseIPLiteralToNumber;
 
 namespace chrome_browser_net {
 
@@ -83,7 +82,7 @@ DnsProbeRunner::DnsProbeRunner() : result_(UNKNOWN), weak_factory_(this) {}
 
 DnsProbeRunner::~DnsProbeRunner() {}
 
-void DnsProbeRunner::SetClient(scoped_ptr<net::DnsClient> client) {
+void DnsProbeRunner::SetClient(std::unique_ptr<net::DnsClient> client) {
   client_ = std::move(client);
 }
 

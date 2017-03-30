@@ -8,6 +8,7 @@ import("//build/config/android/rules.gni")
 import("//build/util/version.gni")
 import("//chrome/version.gni")
 import("//testing/test.gni")
+import("//url/features.gni")
 
 assert(!is_component_build, "Cronet requires static library build.")
 
@@ -40,9 +41,9 @@ java_cpp_enum("net_request_priority_java") {
   ]
 }
 
-java_cpp_enum("network_quality_observations_java") {
+java_cpp_enum("network_quality_observation_source_java") {
   sources = [
-    "//net/base/network_quality_estimator.h",
+    "//net/nqe/network_quality_observation_source.h",
   ]
 }
 
@@ -120,6 +121,7 @@ template("cronet_static_tmpl") {
       "//base/third_party/dynamic_annotations",
       "//components/metrics",
       "//components/prefs",
+      "//url:url_features",
     ]
     sources = [
       "//components/cronet/android/chromium_url_request.cc",
@@ -186,41 +188,21 @@ template("cronet_static_tmpl") {
   }
 }
 
-# cronet_static_small target has reduced binary size through using
-# ICU alternatives which requires file and ftp support be disabled.
-cronet_static_tmpl("cronet_static_small") {
-  defines = [
-    "USE_ICU_ALTERNATIVES_ON_ANDROID=1",
-    "DISABLE_FILE_SUPPORT=1",
-    "DISABLE_FTP_SUPPORT=1",
-  ]
-
-  deps = [
-    "//net:net_small",
-    "//url:url_lib_use_icu_alternatives_on_android",
-  ]
-
-  if (cronet_enable_data_reduction_proxy_support) {
-    deps += [
-      "//components/data_reduction_proxy/core/browser:browser_small",
-      "//components/data_reduction_proxy/core/common:common_small",
-    ]
-  }
-}
-
-# cronet_static target depends on ICU and includes file and ftp support.
 cronet_static_tmpl("cronet_static") {
   deps = [
-    "//base:i18n",
     "//net",
     "//url",
   ]
 
   if (cronet_enable_data_reduction_proxy_support) {
     deps += [
-      "//components/data_reduction_proxy/core/browser",
+      "//components/data_reduction_proxy/core/browser:browser_small",
       "//components/data_reduction_proxy/core/common",
     ]
+  }
+
+  if (!use_platform_icu_alternatives) {
+    deps += [ "//base:i18n" ]
   }
 }
 
@@ -229,9 +211,9 @@ shared_library("cronet") {
     "cronet_jni.cc",
   ]
   deps = [
-    ":cronet_static_small",
+    ":cronet_static",
     "//base",
-    "//net:net_small",
+    "//net:net",
   ]
   ldflags = [ "-Wl,--version-script=" +
               rebase_path("//components/cronet/android/only_jni_exports.lst") ]
@@ -282,10 +264,10 @@ android_library("cronet_api") {
     ":http_cache_type_java",
     ":url_request_error_java",
     ":load_states_list",
-    ":network_quality_observations_java",
+    ":network_quality_observation_source_java",
   ]
 
-  run_findbugs = true
+  run_findbugs_override = true
 }
 
 android_library("cronet_java") {
@@ -322,7 +304,7 @@ android_library("cronet_java") {
     ":net_request_priority_java",
   ]
 
-  run_findbugs = true
+  run_findbugs_override = true
 }
 
 android_resources("cronet_sample_apk_resources") {
@@ -343,7 +325,7 @@ android_library("cronet_sample_apk_java") {
     "//base:base_java",
   ]
 
-  run_findbugs = true
+  run_findbugs_override = true
 }
 
 android_apk("cronet_sample_apk") {
@@ -359,7 +341,7 @@ android_apk("cronet_sample_apk") {
     "//third_party/jsr-305:jsr_305_javalib",
   ]
 
-  run_findbugs = true
+  run_findbugs_override = true
   if (!is_debug) {
     proguard_enabled = true
     proguard_configs = [
@@ -398,7 +380,7 @@ instrumentation_test_apk("cronet_sample_test_apk") {
   ]
   additional_apks = [ "//net/android:net_test_support_apk" ]
 
-  run_findbugs = true
+  run_findbugs_override = true
   proguard_enabled = !is_debug
 }
 
@@ -465,7 +447,7 @@ shared_library("cronet_tests") {
   configs -= [ "//build/config/android:hide_native_jni_exports" ]
 
   if (cronet_enable_data_reduction_proxy_support) {
-    deps += [ "//components/data_reduction_proxy/core/browser" ]
+    deps += [ "//components/data_reduction_proxy/core/browser:browser_small" ]
   }
 }
 
@@ -503,7 +485,7 @@ android_library("cronet_test_apk_java") {
     "//third_party/netty4:netty_all",
   ]
 
-  run_findbugs = true
+  run_findbugs_override = true
 }
 
 android_assets("cronet_test_apk_assets") {
@@ -562,7 +544,7 @@ android_apk("cronet_test_apk") {
     "//third_party/netty-tcnative:netty-tcnative_all",
   ]
 
-  run_findbugs = true
+  run_findbugs_override = true
 }
 
 android_library("cronet_javatests") {
@@ -615,7 +597,7 @@ android_library("cronet_javatests") {
     "//net/android:net_java_test_support",
   ]
 
-  run_findbugs = true
+  run_findbugs_override = true
 }
 
 instrumentation_test_apk("cronet_test_instrumentation_apk") {
@@ -645,7 +627,7 @@ instrumentation_test_apk("cronet_test_instrumentation_apk") {
   # TODO(jbudorick): Remove this once GN uses the generated .isolate files.
   isolate_file = "cronet_test_instrumentation_apk.isolate"
 
-  run_findbugs = true
+  run_findbugs_override = true
 }
 
 android_library("cronet_perf_test_apk_java") {
@@ -661,7 +643,7 @@ android_library("cronet_perf_test_apk_java") {
     "//base:base_java",
   ]
 
-  run_findbugs = true
+  run_findbugs_override = true
 }
 
 android_apk("cronet_perf_test_apk") {
@@ -677,7 +659,7 @@ android_apk("cronet_perf_test_apk") {
     "//base:base_java",
   ]
 
-  run_findbugs = true
+  run_findbugs_override = true
   proguard_enabled = true
   proguard_configs = [
     "proguard.cfg",
@@ -700,6 +682,10 @@ test("cronet_unittests") {
     "//net",
     "//testing/gtest",
   ]
+
+  if (is_android) {
+    shard_timeout = 180
+  }
 }
 
 _package_dir = "$root_out_dir/cronet"

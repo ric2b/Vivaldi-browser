@@ -8,8 +8,8 @@
 
 #include <limits>
 
-#include "mojo/public/cpp/bindings/lib/bindings_serialization.h"
 #include "mojo/public/cpp/bindings/lib/message_internal.h"
+#include "mojo/public/cpp/bindings/lib/serialization_util.h"
 #include "mojo/public/cpp/bindings/lib/validation_errors.h"
 #include "mojo/public/interfaces/bindings/interface_control_messages.mojom.h"
 
@@ -45,6 +45,26 @@ bool ValidateStructHeaderAndClaimMemory(const void* data,
   }
 
   if (!bounds_checker->ClaimMemory(data, header->num_bytes)) {
+    ReportValidationError(VALIDATION_ERROR_ILLEGAL_MEMORY_RANGE);
+    return false;
+  }
+
+  return true;
+}
+
+bool ValidateUnionHeaderAndClaimMemory(const void* data,
+                                       bool inlined,
+                                       BoundsChecker* bounds_checker) {
+  if (!IsAligned(data)) {
+    ReportValidationError(VALIDATION_ERROR_MISALIGNED_OBJECT);
+    return false;
+  }
+
+  // If the union is inlined in another structure its memory was already
+  // claimed.
+  // This ONLY applies to the union itself, NOT anything which the union points
+  // to.
+  if (!inlined && !bounds_checker->ClaimMemory(data, kUnionDataSize)) {
     ReportValidationError(VALIDATION_ERROR_ILLEGAL_MEMORY_RANGE);
     return false;
   }
@@ -101,8 +121,9 @@ bool ValidateControlResponse(const Message* message) {
   return false;
 }
 
-bool ValidateHandleNonNullable(const Handle& input, const char* error_message) {
-  if (input.value() != kEncodedInvalidHandleValue)
+bool ValidateHandleNonNullable(const Handle_Data& input,
+                               const char* error_message) {
+  if (input.is_valid())
     return true;
 
   ReportValidationError(VALIDATION_ERROR_UNEXPECTED_INVALID_HANDLE,
@@ -120,7 +141,7 @@ bool ValidateInterfaceIdNonNullable(InterfaceId input,
   return false;
 }
 
-bool ValidateHandle(const Handle& input, BoundsChecker* bounds_checker) {
+bool ValidateHandle(const Handle_Data& input, BoundsChecker* bounds_checker) {
   if (bounds_checker->ClaimHandle(input))
     return true;
 

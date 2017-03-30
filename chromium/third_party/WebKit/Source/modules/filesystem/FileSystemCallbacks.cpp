@@ -81,22 +81,22 @@ bool FileSystemCallbacksBase::shouldScheduleCallback() const
 }
 
 template <typename CB, typename CBArg>
-void FileSystemCallbacksBase::handleEventOrScheduleCallback(RawPtr<CB> callback, CBArg* arg)
+void FileSystemCallbacksBase::handleEventOrScheduleCallback(CB* callback, CBArg* arg)
 {
     ASSERT(callback);
     if (shouldScheduleCallback())
-        DOMFileSystem::scheduleCallback(m_executionContext.get(), callback.get(), arg);
+        DOMFileSystem::scheduleCallback(m_executionContext.get(), callback, arg);
     else if (callback)
         callback->handleEvent(arg);
     m_executionContext.clear();
 }
 
 template <typename CB>
-void FileSystemCallbacksBase::handleEventOrScheduleCallback(RawPtr<CB> callback)
+void FileSystemCallbacksBase::handleEventOrScheduleCallback(CB* callback)
 {
     ASSERT(callback);
     if (shouldScheduleCallback())
-        DOMFileSystem::scheduleCallback(m_executionContext.get(), callback.get());
+        DOMFileSystem::scheduleCallback(m_executionContext.get(), callback);
     else if (callback)
         callback->handleEvent();
     m_executionContext.clear();
@@ -246,9 +246,9 @@ FileWriterBaseCallbacks::FileWriterBaseCallbacks(FileWriterBase* fileWriter, Fil
 
 void FileWriterBaseCallbacks::didCreateFileWriter(PassOwnPtr<WebFileWriter> fileWriter, long long length)
 {
-    m_fileWriter->initialize(fileWriter, length);
+    m_fileWriter->initialize(std::move(fileWriter), length);
     if (m_successCallback)
-        handleEventOrScheduleCallback(m_successCallback.release(), m_fileWriter.release().get());
+        handleEventOrScheduleCallback(m_successCallback.release(), m_fileWriter.release());
 }
 
 // SnapshotFileCallback -------------------------------------------------------

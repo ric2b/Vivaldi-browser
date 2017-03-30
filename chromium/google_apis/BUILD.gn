@@ -182,14 +182,6 @@ google_apis_tmpl("google_apis") {
   ]
 }
 
-if (is_android) {
-  google_apis_tmpl("google_apis_small") {
-    deps = [
-      "//net:net_small",
-    ]
-  }
-}
-
 source_set("test_support") {
   testonly = true
   sources = [
@@ -224,19 +216,9 @@ source_set("test_support") {
   }
 }
 
-bundle_data("google_apis_unittests_bundle_data") {
-  testonly = true
-  sources = [
-    "test",
-  ]
-  outputs = [
-    "{{bundle_resources_dir}}/" +
-        "{{source_root_relative_dir}}/{{source_file_part}}",
-  ]
-}
-
 test("google_apis_unittests") {
   sources = [
+    "gaia/account_tracker_unittest.cc",
     "gaia/gaia_auth_fetcher_unittest.cc",
     "gaia/gaia_auth_util_unittest.cc",
     "gaia/gaia_oauth_client_unittest.cc",
@@ -244,6 +226,7 @@ test("google_apis_unittests") {
     "gaia/oauth2_access_token_fetcher_impl_unittest.cc",
     "gaia/oauth2_api_call_flow_unittest.cc",
     "gaia/oauth2_mint_token_flow_unittest.cc",
+    "gaia/oauth2_token_service_request_unittest.cc",
     "gaia/oauth2_token_service_unittest.cc",
     "gaia/oauth_request_signer_unittest.cc",
     "gaia/ubertoken_fetcher_unittest.cc",
@@ -258,7 +241,6 @@ test("google_apis_unittests") {
 
   deps = [
     ":google_apis",
-    ":google_apis_unittests_bundle_data",
     ":test_support",
     "//base",
     "//base/test:run_all_unittests",
@@ -273,6 +255,7 @@ test("google_apis_unittests") {
       "drive/drive_api_parser_unittest.cc",
       "drive/drive_api_requests_unittest.cc",
       "drive/drive_api_url_generator_unittest.cc",
+      "drive/files_list_request_runner_unittest.cc",
       "drive/request_sender_unittest.cc",
       "drive/request_util_unittest.cc",
       "drive/time_util_unittest.cc",

@@ -3,11 +3,11 @@
 // found in the LICENSE file.
 
 #include <algorithm>
+#include <memory>
 #include <set>
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -21,7 +21,7 @@
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/native_widget_types.h"
-#include "ui/views/bubble/bubble_delegate.h"
+#include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/test/native_widget_factory.h"
 #include "ui/views/test/test_views.h"
@@ -61,13 +61,28 @@ gfx::Point ConvertPointFromWidgetToView(View* view, const gfx::Point& p) {
   return tmp;
 }
 
-// This class can be used as a deleter for scoped_ptr<Widget>
+// This class can be used as a deleter for std::unique_ptr<Widget>
 // to call function Widget::CloseNow automatically.
 struct WidgetCloser {
   inline void operator()(Widget* widget) const { widget->CloseNow(); }
 };
 
-using WidgetAutoclosePtr = scoped_ptr<Widget, WidgetCloser>;
+class TestBubbleDialogDelegateView : public BubbleDialogDelegateView {
+ public:
+  TestBubbleDialogDelegateView(View* anchor)
+      : BubbleDialogDelegateView(anchor, BubbleBorder::NONE),
+        reset_controls_called_(false) {}
+  ~TestBubbleDialogDelegateView() override {}
+
+  bool ShouldShowCloseButton() const override {
+    reset_controls_called_ = true;
+    return true;
+  }
+
+  mutable bool reset_controls_called_;
+};
+
+using WidgetAutoclosePtr = std::unique_ptr<Widget, WidgetCloser>;
 
 }  // namespace
 
@@ -152,6 +167,19 @@ TEST_F(WidgetTest, WidgetInitParams) {
   // Widgets are not transparent by default.
   Widget::InitParams init1;
   EXPECT_EQ(Widget::InitParams::INFER_OPACITY, init1.opacity);
+}
+
+// Tests that the internal name is propagated through widget initialization to
+// the native widget and back.
+TEST_F(WidgetTest, GetName) {
+  Widget widget;
+  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
+  params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  params.name = "MyWidget";
+  widget.Init(params);
+
+  EXPECT_EQ("MyWidget", widget.native_widget_private()->GetName());
+  EXPECT_EQ("MyWidget", widget.GetName());
 }
 
 TEST_F(WidgetTest, NativeWindowProperty) {
@@ -379,7 +407,7 @@ class OwnershipTestWidget : public Widget {
 TEST_F(WidgetOwnershipTest, Ownership_WidgetOwnsPlatformNativeWidget) {
   OwnershipTestState state;
 
-  scoped_ptr<Widget> widget(new OwnershipTestWidget(&state));
+  std::unique_ptr<Widget> widget(new OwnershipTestWidget(&state));
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
   params.native_widget = CreatePlatformNativeWidgetImpl(
       params, widget.get(), kStubCapture, &state.native_widget_deleted);
@@ -400,7 +428,7 @@ TEST_F(WidgetOwnershipTest, Ownership_WidgetOwnsPlatformNativeWidget) {
 TEST_F(WidgetOwnershipTest, Ownership_WidgetOwnsViewsNativeWidget) {
   OwnershipTestState state;
 
-  scoped_ptr<Widget> widget(new OwnershipTestWidget(&state));
+  std::unique_ptr<Widget> widget(new OwnershipTestWidget(&state));
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
   params.native_widget = CreatePlatformNativeWidgetImpl(
       params, widget.get(), kStubCapture, &state.native_widget_deleted);
@@ -425,7 +453,7 @@ TEST_F(WidgetOwnershipTest,
 
   Widget* toplevel = CreateTopLevelPlatformWidget();
 
-  scoped_ptr<Widget> widget(new OwnershipTestWidget(&state));
+  std::unique_ptr<Widget> widget(new OwnershipTestWidget(&state));
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
   params.parent = toplevel->GetNativeView();
   params.native_widget = CreatePlatformNativeWidgetImpl(
@@ -571,7 +599,7 @@ TEST_F(WidgetOwnershipTest,
 
   WidgetDelegateView* delegate_view = new WidgetDelegateView;
 
-  scoped_ptr<Widget> widget(new OwnershipTestWidget(&state));
+  std::unique_ptr<Widget> widget(new OwnershipTestWidget(&state));
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
   params.native_widget = CreatePlatformNativeWidgetImpl(
       params, widget.get(), kStubCapture, &state.native_widget_deleted);
@@ -822,11 +850,11 @@ TEST_F(WidgetObserverTest, DestroyBubble) {
   WidgetAutoclosePtr anchor(CreateTopLevelPlatformWidget());
   anchor->Show();
 
-  BubbleDelegateView* bubble_delegate =
-      new BubbleDelegateView(anchor->client_view(), BubbleBorder::NONE);
+  BubbleDialogDelegateView* bubble_delegate =
+      new TestBubbleDialogDelegateView(anchor->client_view());
   {
     WidgetAutoclosePtr bubble_widget(
-        BubbleDelegateView::CreateBubble(bubble_delegate));
+        BubbleDialogDelegateView::CreateBubble(bubble_delegate));
     bubble_widget->Show();
   }
 
@@ -1189,7 +1217,7 @@ TEST_F(WidgetTest, KeyboardInputEvent) {
 TEST_F(WidgetTest, DISABLED_FocusChangesOnBubble) {
   // Create a widget, show and activate it and focus the contents view.
   View* contents_view = new View;
-  contents_view->SetFocusable(true);
+  contents_view->SetFocusBehavior(View::FocusBehavior::ALWAYS);
   Widget widget;
   Widget::InitParams init_params =
       CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS);
@@ -1207,10 +1235,10 @@ TEST_F(WidgetTest, DISABLED_FocusChangesOnBubble) {
   EXPECT_TRUE(contents_view->HasFocus());
 
   // Show a bubble.
-  BubbleDelegateView* bubble_delegate_view =
-      new BubbleDelegateView(contents_view, BubbleBorder::TOP_LEFT);
-  bubble_delegate_view->SetFocusable(true);
-  BubbleDelegateView::CreateBubble(bubble_delegate_view)->Show();
+  BubbleDialogDelegateView* bubble_delegate_view =
+      new TestBubbleDialogDelegateView(contents_view);
+  bubble_delegate_view->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  BubbleDialogDelegateView::CreateBubble(bubble_delegate_view)->Show();
   bubble_delegate_view->RequestFocus();
 
   // |contents_view_| should no longer have focus.
@@ -1223,30 +1251,15 @@ TEST_F(WidgetTest, DISABLED_FocusChangesOnBubble) {
   EXPECT_TRUE(contents_view->HasFocus());
 }
 
-class TestBubbleDelegateView : public BubbleDelegateView {
- public:
-  TestBubbleDelegateView(View* anchor)
-      : BubbleDelegateView(anchor, BubbleBorder::NONE),
-        reset_controls_called_(false) {}
-  ~TestBubbleDelegateView() override {}
-
-  bool ShouldShowCloseButton() const override {
-    reset_controls_called_ = true;
-    return true;
-  }
-
-  mutable bool reset_controls_called_;
-};
-
 TEST_F(WidgetTest, BubbleControlsResetOnInit) {
   WidgetAutoclosePtr anchor(CreateTopLevelPlatformWidget());
   anchor->Show();
 
   {
-    TestBubbleDelegateView* bubble_delegate =
-        new TestBubbleDelegateView(anchor->client_view());
+    TestBubbleDialogDelegateView* bubble_delegate =
+        new TestBubbleDialogDelegateView(anchor->client_view());
     WidgetAutoclosePtr bubble_widget(
-        BubbleDelegateView::CreateBubble(bubble_delegate));
+        BubbleDialogDelegateView::CreateBubble(bubble_delegate));
     EXPECT_TRUE(bubble_delegate->reset_controls_called_);
     bubble_widget->Show();
   }
@@ -1351,7 +1364,7 @@ void DesktopAuraTestValidPaintWidget::InitForTest(InitParams init_params) {
   Init(init_params);
 
   View* contents_view = new View;
-  contents_view->SetFocusable(true);
+  contents_view->SetFocusBehavior(View::FocusBehavior::ALWAYS);
   SetContentsView(contents_view);
 
   Show();
@@ -1534,7 +1547,7 @@ TEST_F(WidgetTest, EventHandlersOnRootView) {
   WidgetAutoclosePtr widget(CreateTopLevelNativeWidget());
   View* root_view = widget->GetRootView();
 
-  scoped_ptr<EventCountView> view(new EventCountView());
+  std::unique_ptr<EventCountView> view(new EventCountView());
   view->set_owned_by_client();
   view->SetBounds(0, 0, 20, 20);
   root_view->AddChildView(view.get());
@@ -1688,9 +1701,6 @@ TEST_F(WidgetTest, SynthesizeMouseMoveEvent) {
   EXPECT_EQ(1, v2->GetEventCount(ui::ET_MOUSE_MOVED));
 }
 
-// No touch on desktop Mac. Tracked in http://crbug.com/445520.
-#if !defined(OS_MACOSX) || defined(USE_AURA)
-
 namespace {
 
 // ui::EventHandler which handles all mouse press events.
@@ -1710,6 +1720,9 @@ class MousePressEventConsumer : public ui::EventHandler {
 
 }  // namespace
 
+// No touch on desktop Mac. Tracked in http://crbug.com/445520.
+#if !defined(OS_MACOSX) || defined(USE_AURA)
+
 // Test that mouse presses and mouse releases are dispatched normally when a
 // touch is down.
 TEST_F(WidgetTest, MouseEventDispatchWhileTouchIsDown) {
@@ -1724,9 +1737,10 @@ TEST_F(WidgetTest, MouseEventDispatchWhileTouchIsDown) {
   MousePressEventConsumer consumer;
   event_count_view->AddPostTargetHandler(&consumer);
 
-  scoped_ptr<ui::test::EventGenerator> generator(new ui::test::EventGenerator(
-      IsMus() ? widget->GetNativeWindow() : GetContext(),
-      widget->GetNativeWindow()));
+  std::unique_ptr<ui::test::EventGenerator> generator(
+      new ui::test::EventGenerator(
+          IsMus() ? widget->GetNativeWindow() : GetContext(),
+          widget->GetNativeWindow()));
   generator->PressTouch();
   generator->ClickLeftButton();
 
@@ -1738,6 +1752,107 @@ TEST_F(WidgetTest, MouseEventDispatchWhileTouchIsDown) {
 }
 
 #endif  // !defined(OS_MACOSX) || defined(USE_AURA)
+
+// Tests that when there is no active capture, that a mouse press causes capture
+// to be set.
+TEST_F(WidgetTest, MousePressCausesCapture) {
+  Widget* widget = CreateTopLevelNativeWidget();
+  widget->Show();
+  widget->SetSize(gfx::Size(300, 300));
+
+  EventCountView* event_count_view = new EventCountView();
+  event_count_view->SetBounds(0, 0, 300, 300);
+  widget->GetRootView()->AddChildView(event_count_view);
+
+  // No capture has been set.
+  EXPECT_EQ(nullptr, internal::NativeWidgetPrivate::GetGlobalCapture(
+                         widget->GetNativeView()));
+
+  MousePressEventConsumer consumer;
+  event_count_view->AddPostTargetHandler(&consumer);
+  std::unique_ptr<ui::test::EventGenerator> generator(
+      new ui::test::EventGenerator(
+          IsMus() ? widget->GetNativeWindow() : GetContext(),
+          widget->GetNativeWindow()));
+  generator->PressLeftButton();
+
+  EXPECT_EQ(1, event_count_view->GetEventCount(ui::ET_MOUSE_PRESSED));
+  EXPECT_EQ(
+      widget->GetNativeView(),
+      internal::NativeWidgetPrivate::GetGlobalCapture(widget->GetNativeView()));
+
+  // For mus it's important we destroy the widget before the EventGenerator.
+  widget->CloseNow();
+}
+
+namespace {
+
+// An EventHandler which shows a Wiget upon receiving a mouse event. The Widget
+// proceeds to take capture.
+class CaptureEventConsumer : public ui::EventHandler {
+ public:
+  CaptureEventConsumer(Widget* widget)
+      : event_count_view_(new EventCountView()), widget_(widget) {}
+  ~CaptureEventConsumer() override { widget_->CloseNow(); }
+
+ private:
+  // ui::EventHandler:
+  void OnMouseEvent(ui::MouseEvent* event) override {
+    if (event->type() == ui::ET_MOUSE_PRESSED) {
+      event->SetHandled();
+      widget_->Show();
+      widget_->SetSize(gfx::Size(200, 200));
+
+      event_count_view_->SetBounds(0, 0, 200, 200);
+      widget_->GetRootView()->AddChildView(event_count_view_);
+      widget_->SetCapture(event_count_view_);
+    }
+  }
+
+  EventCountView* event_count_view_;
+  Widget* widget_;
+  DISALLOW_COPY_AND_ASSIGN(CaptureEventConsumer);
+};
+
+}  // namespace
+
+// Tests that if explicit capture occurs during a mouse press, that implicit
+// capture is not applied.
+TEST_F(WidgetTest, CaptureDuringMousePressNotOverridden) {
+  Widget* widget = CreateTopLevelNativeWidget();
+  widget->Show();
+  widget->SetSize(gfx::Size(300, 300));
+
+  EventCountView* event_count_view = new EventCountView();
+  event_count_view->SetBounds(0, 0, 300, 300);
+  widget->GetRootView()->AddChildView(event_count_view);
+
+  EXPECT_EQ(nullptr, internal::NativeWidgetPrivate::GetGlobalCapture(
+                         widget->GetNativeView()));
+
+  Widget* widget2 = CreateTopLevelNativeWidget();
+  // Gives explicit capture to |widget2|
+  CaptureEventConsumer consumer(widget2);
+  event_count_view->AddPostTargetHandler(&consumer);
+  std::unique_ptr<ui::test::EventGenerator> generator(
+      new ui::test::EventGenerator(
+          IsMus() ? widget->GetNativeWindow() : GetContext(),
+          widget->GetNativeWindow()));
+  // This event should implicitly give capture to |widget|, except that
+  // |consumer| will explicitly set capture on |widget2|.
+  generator->PressLeftButton();
+
+  EXPECT_EQ(1, event_count_view->GetEventCount(ui::ET_MOUSE_PRESSED));
+  EXPECT_NE(
+      widget->GetNativeView(),
+      internal::NativeWidgetPrivate::GetGlobalCapture(widget->GetNativeView()));
+  EXPECT_EQ(
+      widget2->GetNativeView(),
+      internal::NativeWidgetPrivate::GetGlobalCapture(widget->GetNativeView()));
+
+  // For mus it's important we destroy the widget before the EventGenerator.
+  widget->CloseNow();
+}
 
 // Verifies WindowClosing() is invoked correctly on the delegate when a Widget
 // is closed.
@@ -1837,8 +1952,9 @@ TEST_F(WidgetTest, WidgetDeleted_InOnMousePressed) {
 #if !defined(OS_MACOSX) || defined(USE_AURA)
 
 TEST_F(WidgetTest, WidgetDeleted_InDispatchGestureEvent) {
-  // This test doesn't make sense for mus. Force NativeWidgetAura to be used.
-  DisableNativeWidgetMus();
+  // This test doesn't make sense for mus.
+  if (IsMus())
+    return;
 
   Widget* widget = new Widget;
   Widget::InitParams params =
@@ -1996,7 +2112,7 @@ TEST_F(WidgetTest, CloseDestroys) {
 
 // Tests that killing a widget while animating it does not crash.
 TEST_F(WidgetTest, CloseWidgetWhileAnimating) {
-  scoped_ptr<Widget> widget(new Widget);
+  std::unique_ptr<Widget> widget(new Widget);
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
   params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.bounds = gfx::Rect(50, 50, 250, 250);
@@ -2058,7 +2174,7 @@ TEST_F(WidgetTest, ValidDuringOnNativeWidgetDestroyingFromClose) {
 // Tests that we do not crash when a Widget is destroyed by going out of
 // scope (as opposed to being explicitly deleted by its NativeWidget).
 TEST_F(WidgetTest, NoCrashOnWidgetDelete) {
-  scoped_ptr<Widget> widget(new Widget);
+  std::unique_ptr<Widget> widget(new Widget);
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
   params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   widget->Init(params);
@@ -2067,7 +2183,7 @@ TEST_F(WidgetTest, NoCrashOnWidgetDelete) {
 // Tests that we do not crash when a Widget is destroyed before it finishes
 // processing of pending input events in the message loop.
 TEST_F(WidgetTest, NoCrashOnWidgetDeleteWithPendingEvents) {
-  scoped_ptr<Widget> widget(new Widget);
+  std::unique_ptr<Widget> widget(new Widget);
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
   params.bounds = gfx::Rect(0, 0, 200, 200);
   params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;

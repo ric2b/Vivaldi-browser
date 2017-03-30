@@ -44,7 +44,7 @@ class WebViewInternalThumbnailFunction
                     std::string& mime_type);
   bool InternalRunAsyncSafe(
       WebViewGuest* guest,
-      scoped_ptr<web_view_private::ThumbnailParams>& params);
+      std::unique_ptr<web_view_private::ThumbnailParams>& params);
 
   // The default quality setting used when encoding jpegs.
   static const int kDefaultQuality;

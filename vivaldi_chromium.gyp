@@ -27,10 +27,12 @@
         'app/vivaldi_commands.h',
         'app/vivaldi_command_controller.cpp',
         'app/vivaldi_command_controller.h',
-        'clientparts/vivaldi_content_browser_client_parts.h',
+        'browser/vivaldi_browser_finder.cc',
+        'browser/vivaldi_browser_finder.h',
         'clientparts/vivaldi_content_browser_client_parts.cc',
-        'extraparts/vivaldi_browser_main_extra_parts.h',
+        'clientparts/vivaldi_content_browser_client_parts.h',
         'extraparts/vivaldi_browser_main_extra_parts.cc',
+        'extraparts/vivaldi_browser_main_extra_parts.h',
         'importer/imported_notes_entry.cpp',
         'importer/imported_notes_entry.h',
         'importer/imported_speeddial_entry.cpp',
@@ -66,6 +68,8 @@
         'notes/notes_model_loaded_observer.h',
         'notes/notes_storage.cpp',
         'notes/notes_storage.h',
+        'notes/notes_submenu_observer.cc',
+        'notes/notes_submenu_observer.h',
         'notifications/notification_permission_context_extensions.cc',
         'notifications/notification_permission_context_extensions.h',
         'ui/webgui/notes_ui.cpp',
@@ -79,6 +83,8 @@
         'prefs/native_settings_observer_delegate.h',
         'prefs/vivaldi_tab_zoom_pref.h',
         'prefs/vivaldi_tab_zoom_pref.cc',
+        'ui/dragging/drag_tab_handler.cc',
+        'ui/dragging/drag_tab_handler.h'
       ],
       # Disables warnings about size_t to int conversions when the types
       # have different sizes
@@ -116,6 +122,8 @@
             'importer/chromium_profile_lock_mac.mm',
             'prefs/native_settings_observer_mac.h',
             'prefs/native_settings_observer_mac.mm',
+            'ui/dragging/drag_tab_handler_helper_mac.mm',
+            'ui/dragging/drag_tab_handler_helper_mac.h'
           ],
         }, { #'OS!="mac"
           "dependencies":[

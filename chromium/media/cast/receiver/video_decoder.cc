@@ -34,32 +34,26 @@ namespace cast {
 class VideoDecoder::ImplBase
     : public base::RefCountedThreadSafe<VideoDecoder::ImplBase> {
  public:
-  ImplBase(const scoped_refptr<CastEnvironment>& cast_environment,
-           Codec codec)
+  ImplBase(const scoped_refptr<CastEnvironment>& cast_environment, Codec codec)
       : cast_environment_(cast_environment),
         codec_(codec),
-        operational_status_(STATUS_UNINITIALIZED),
-        seen_first_frame_(false) {}
+        operational_status_(STATUS_UNINITIALIZED) {}
 
   OperationalStatus InitializationResult() const {
     return operational_status_;
   }
 
-  void DecodeFrame(scoped_ptr<EncodedFrame> encoded_frame,
+  void DecodeFrame(std::unique_ptr<EncodedFrame> encoded_frame,
                    const DecodeFrameCallback& callback) {
     DCHECK_EQ(operational_status_, STATUS_INITIALIZED);
 
-    static_assert(sizeof(encoded_frame->frame_id) == sizeof(last_frame_id_),
-                  "size of frame_id types do not match");
     bool is_continuous = true;
-    if (seen_first_frame_) {
-      const uint32_t frames_ahead = encoded_frame->frame_id - last_frame_id_;
-      if (frames_ahead > 1) {
+    DCHECK(!encoded_frame->frame_id.is_null());
+    if (!last_frame_id_.is_null()) {
+      if (encoded_frame->frame_id > (last_frame_id_ + 1)) {
         RecoverBecauseFramesWereDropped();
         is_continuous = false;
       }
-    } else {
-      seen_first_frame_ = true;
     }
     last_frame_id_ = encoded_frame->frame_id;
 
@@ -69,7 +63,7 @@ class VideoDecoder::ImplBase
     decoded_frame->set_timestamp(
         encoded_frame->rtp_timestamp.ToTimeDelta(kVideoFrequency));
 
-    scoped_ptr<FrameEvent> decode_event(new FrameEvent());
+    std::unique_ptr<FrameEvent> decode_event(new FrameEvent());
     decode_event->timestamp = cast_environment_->Clock()->NowTicks();
     decode_event->type = FRAME_DECODED;
     decode_event->media_type = VIDEO_EVENT;
@@ -102,8 +96,7 @@ class VideoDecoder::ImplBase
   media::VideoFramePool video_frame_pool_;
 
  private:
-  bool seen_first_frame_;
-  uint32_t last_frame_id_;
+  FrameId last_frame_id_;
 
   DISALLOW_COPY_AND_ASSIGN(ImplBase);
 };
@@ -204,7 +197,7 @@ class VideoDecoder::FakeImpl : public VideoDecoder::ImplBase {
     if (!len || data[0] != '{')
       return NULL;
     base::JSONReader reader;
-    scoped_ptr<base::Value> values(
+    std::unique_ptr<base::Value> values(
         reader.Read(base::StringPiece(reinterpret_cast<char*>(data), len)));
     if (!values)
       return NULL;
@@ -259,9 +252,8 @@ OperationalStatus VideoDecoder::InitializationResult() const {
   return STATUS_UNSUPPORTED_CODEC;
 }
 
-void VideoDecoder::DecodeFrame(
-    scoped_ptr<EncodedFrame> encoded_frame,
-    const DecodeFrameCallback& callback) {
+void VideoDecoder::DecodeFrame(std::unique_ptr<EncodedFrame> encoded_frame,
+                               const DecodeFrameCallback& callback) {
   DCHECK(encoded_frame.get());
   DCHECK(!callback.is_null());
   if (!impl_.get() || impl_->InitializationResult() != STATUS_INITIALIZED) {

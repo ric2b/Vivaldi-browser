@@ -49,17 +49,17 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/compositing_recorder.h"
 #include "ui/compositor/paint_recorder.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/animation/animation_container.h"
 #include "ui/gfx/animation/throb_animation.h"
 #include "ui/gfx/canvas.h"
-#include "ui/gfx/display.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/path.h"
 #include "ui/gfx/scoped_canvas.h"
-#include "ui/gfx/screen.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/masked_targeter_delegate.h"
@@ -72,7 +72,7 @@
 #include "ui/views/window/non_client_view.h"
 
 #if defined(OS_WIN)
-#include "ui/gfx/win/dpi.h"
+#include "ui/display/win/screen_win.h"
 #include "ui/gfx/win/hwnd_util.h"
 #include "ui/views/widget/monitor_win.h"
 #include "ui/views/win/hwnd_util.h"
@@ -146,11 +146,9 @@ sk_sp<SkDrawLooper> CreateShadowDrawLooper(SkColor color) {
   layer_info.fPaintBits |= SkLayerDrawLooper::kColorFilter_Bit;
   layer_info.fColorMode = SkXfermode::kDst_Mode;
   layer_info.fOffset.set(0, 1);
-  skia::RefPtr<SkMaskFilter> blur_mask =
-      skia::AdoptRef(SkBlurMaskFilter::Create(
-          kNormal_SkBlurStyle, 0.5, SkBlurMaskFilter::kHighQuality_BlurFlag));
   SkPaint* layer_paint = looper_builder.addLayer(layer_info);
-  layer_paint->setMaskFilter(blur_mask.get());
+  layer_paint->setMaskFilter(SkBlurMaskFilter::Make(
+      kNormal_SkBlurStyle, 0.5, SkBlurMaskFilter::kHighQuality_BlurFlag));
   layer_paint->setColorFilter(
       SkColorFilter::MakeModeFilter(color, SkXfermode::kSrcIn_Mode));
 
@@ -347,7 +345,7 @@ void NewTabButton::OnMouseReleased(const ui::MouseEvent& event) {
   if (event.IsOnlyRightMouseButton()) {
     gfx::Point point = event.location();
     views::View::ConvertPointToScreen(this, &point);
-    point = gfx::win::DIPToScreenPoint(point);
+    point = display::win::ScreenWin::DIPToScreenPoint(point);
     bool destroyed = false;
     destroyed_ = &destroyed;
     gfx::ShowSystemMenuAtPoint(views::HWNDForView(this), point);
@@ -837,7 +835,7 @@ void TabStrip::MoveTab(int from_model_index,
                     TabStripMovedTab(this, from_model_index, to_model_index));
 }
 
-void TabStrip::RemoveTabAt(int model_index) {
+void TabStrip::RemoveTabAt(content::WebContents* contents, int model_index) {
   if (touch_layout_) {
     Tab* tab = tab_at(model_index);
     tab->set_closing(true);
@@ -857,6 +855,21 @@ void TabStrip::RemoveTabAt(int model_index) {
 
   FOR_EACH_OBSERVER(TabStripObserver, observers_,
                     TabStripRemovedTabAt(this, model_index));
+
+  // Stop dragging when a new tab is removed and dragging a window. Doing
+  // otherwise results in a confusing state if the user attempts to reattach. We
+  // could allow this and make TabDragController update itself during the
+  // remove operation, but this comes up infrequently enough that it's not worth
+  // the complexity.
+  //
+  // At the start of RemoveTabAt() the model and tabs are out sync. Any queries
+  // to find a tab given a model index can go off the end of |tabs_|. As such,
+  // it is important that we complete the drag *after* removing the tab so that
+  // the model and tabstrip are in sync.
+  if (contents && drag_controller_.get() && !drag_controller_->is_mutating() &&
+      drag_controller_->IsDraggingTab(contents)) {
+    EndDrag(END_DRAG_COMPLETE);
+  }
 }
 
 void TabStrip::SetTabData(int model_index, const TabRendererData& data) {
@@ -2352,8 +2365,8 @@ gfx::Rect TabStrip::GetDropBounds(int drop_index,
                         drop_indicator_height);
 
   // If the rect doesn't fit on the monitor, push the arrow to the bottom.
-  gfx::Screen* screen = gfx::Screen::GetScreen();
-  gfx::Display display = screen->GetDisplayMatching(drop_bounds);
+  display::Screen* screen = display::Screen::GetScreen();
+  display::Display display = screen->GetDisplayMatching(drop_bounds);
   *is_beneath = !display.bounds().Contains(drop_bounds);
   if (*is_beneath)
     drop_bounds.Offset(0, drop_bounds.height() + height());

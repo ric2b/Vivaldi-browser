@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include <deque>
+#include <memory>
 #include <set>
 #include <string>
 #include <unordered_map>
@@ -19,7 +20,6 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/memory_dump_provider.h"
@@ -37,7 +37,6 @@
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
 #include "third_party/skia/include/core/SkBitmap.h"
-#include "third_party/skia/include/core/SkCanvas.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 
@@ -86,7 +85,7 @@ class CC_EXPORT ResourceProvider
     RESOURCE_TYPE_BITMAP,
   };
 
-  static scoped_ptr<ResourceProvider> Create(
+  static std::unique_ptr<ResourceProvider> Create(
       OutputSurface* output_surface,
       SharedBitmapManager* shared_bitmap_manager,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
@@ -146,11 +145,11 @@ class CC_EXPORT ResourceProvider
   // Wraps an external texture mailbox into a GL resource.
   ResourceId CreateResourceFromTextureMailbox(
       const TextureMailbox& mailbox,
-      scoped_ptr<SingleReleaseCallbackImpl> release_callback_impl);
+      std::unique_ptr<SingleReleaseCallbackImpl> release_callback_impl);
 
   ResourceId CreateResourceFromTextureMailbox(
       const TextureMailbox& mailbox,
-      scoped_ptr<SingleReleaseCallbackImpl> release_callback_impl,
+      std::unique_ptr<SingleReleaseCallbackImpl> release_callback_impl,
       bool read_lock_fences_enabled);
 
   void DeleteResource(ResourceId id);
@@ -327,7 +326,7 @@ class CC_EXPORT ResourceProvider
    private:
     ResourceProvider* resource_provider_;
     ResourceProvider::Resource* resource_;
-    scoped_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer_;
+    std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer_;
     base::ThreadChecker thread_checker_;
 
     DISALLOW_COPY_AND_ASSIGN(ScopedWriteLockGpuMemoryBuffer);
@@ -518,7 +517,7 @@ class CC_EXPORT ResourceProvider
              const gfx::Size& size,
              Origin origin,
              GLenum filter);
-    Resource(const Resource& other);
+    Resource(Resource&& other);
 
     bool needs_sync_token() const { return needs_sync_token_; }
 
@@ -570,12 +569,15 @@ class CC_EXPORT ResourceProvider
     ResourceFormat format;
     SharedBitmapId shared_bitmap_id;
     SharedBitmap* shared_bitmap;
-    gfx::GpuMemoryBuffer* gpu_memory_buffer;
+    std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer;
+    gfx::GpuMemoryBufferId gpu_memory_buffer_id;
 
    private:
     SynchronizationState synchronization_state_ = SYNCHRONIZED;
     bool needs_sync_token_ = false;
     TextureMailbox mailbox_;
+
+    DISALLOW_COPY_AND_ASSIGN(Resource);
   };
   using ResourceMap = std::unordered_map<ResourceId, Resource>;
 
@@ -602,7 +604,7 @@ class CC_EXPORT ResourceProvider
                              ResourceType type,
                              ResourceFormat format);
   ResourceId CreateBitmap(const gfx::Size& size);
-  Resource* InsertResource(ResourceId id, const Resource& resource);
+  Resource* InsertResource(ResourceId id, Resource resource);
   Resource* GetResource(ResourceId id);
   const Resource* LockForRead(ResourceId id);
   void UnlockForRead(ResourceId id);
@@ -640,6 +642,7 @@ class CC_EXPORT ResourceProvider
   // Returns NULL if the output_surface_ does not have a ContextProvider.
   gpu::gles2::GLES2Interface* ContextGL() const;
   class GrContext* GrContext(bool worker_context) const;
+  bool IsGLContextLost() const;
 
   OutputSurface* output_surface_;
   SharedBitmapManager* shared_bitmap_manager_;
@@ -669,8 +672,8 @@ class CC_EXPORT ResourceProvider
   scoped_refptr<Fence> current_read_lock_fence_;
 
   const size_t id_allocation_chunk_size_;
-  scoped_ptr<IdAllocator> texture_id_allocator_;
-  scoped_ptr<IdAllocator> buffer_id_allocator_;
+  std::unique_ptr<IdAllocator> texture_id_allocator_;
+  std::unique_ptr<IdAllocator> buffer_id_allocator_;
 
   bool use_sync_query_;
   std::vector<unsigned> use_image_texture_targets_;

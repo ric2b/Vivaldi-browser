@@ -50,7 +50,7 @@ class CORE_EXPORT SVGLayoutSupport {
     STATIC_ONLY(SVGLayoutSupport);
 public:
     // Shares child layouting code between LayoutSVGRoot/LayoutSVG(Hidden)Container
-    static void layoutChildren(LayoutObject*, bool selfNeedsLayout);
+    static void layoutChildren(LayoutObject*, bool forceLayout, bool screenScalingFactorChanged, bool layoutSizeChanged);
 
     // Layout resources used by this node.
     static void layoutResourcesIfNeeded(const LayoutObject*);
@@ -61,8 +61,8 @@ public:
     // Calculates the paintInvalidationRect in combination with filter, clipper and masker in local coordinates.
     static void intersectPaintInvalidationRectWithResources(const LayoutObject*, FloatRect&);
 
-    // Determines whether a container needs to be laid out because it's filtered and a child is being laid out.
-    static bool filtersForceContainerLayout(LayoutObject*);
+    // Determine if the LayoutObject references a filter resource object.
+    static bool hasFilterResource(const LayoutObject&);
 
     // Determines whether the passed point lies in a clipping area
     static bool pointInClippingArea(const LayoutObject*, const FloatPoint&);
@@ -88,8 +88,11 @@ public:
 
     static DashArray resolveSVGDashArray(const SVGDashArray&, const ComputedStyle&, const SVGLengthContext&);
 
-    // Determines if any ancestor's transform has changed.
-    static bool transformToRootChanged(LayoutObject*);
+    // Determines if any ancestor has adjusted the scale factor.
+    static bool screenScaleFactorChanged(const LayoutObject*);
+
+    // Determines if any ancestor's layout size has changed.
+    static bool layoutSizeOfNearestViewportChanged(const LayoutObject*);
 
     // FIXME: These methods do not belong here.
     static const LayoutSVGRoot* findTreeRootObject(const LayoutObject*);
@@ -112,7 +115,6 @@ public:
 
 private:
     static void updateObjectBoundingBox(FloatRect& objectBoundingBox, bool& objectBoundingBoxValid, LayoutObject* other, FloatRect otherBoundingBox);
-    static bool layoutSizeOfNearestViewportChanged(const LayoutObject* start);
 };
 
 class SubtreeContentTransformScope {

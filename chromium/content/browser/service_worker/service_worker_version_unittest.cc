@@ -2,17 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "content/browser/service_worker/service_worker_version.h"
+
 #include <stdint.h>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
-#include "content/browser/message_port_service.h"
 #include "content/browser/service_worker/embedded_worker_registry.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_test_utils.h"
-#include "content/browser/service_worker/service_worker_version.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -148,15 +149,6 @@ class MessageReceiverFromWorker : public EmbeddedWorkerInstance::Listener {
   DISALLOW_COPY_AND_ASSIGN(MessageReceiverFromWorker);
 };
 
-void SetUpDummyMessagePort(std::vector<TransferredMessagePort>* ports) {
-  int port_id = -1;
-  MessagePortService::GetInstance()->Create(MSG_ROUTING_NONE, nullptr,
-                                            &port_id);
-  TransferredMessagePort dummy_port;
-  dummy_port.id = port_id;
-  ports->push_back(dummy_port);
-}
-
 base::Time GetYesterday() {
   return base::Time::Now() - base::TimeDelta::FromDays(1) -
          base::TimeDelta::FromSeconds(1);
@@ -237,8 +229,8 @@ class ServiceWorkerVersionTest : public testing::Test {
         ->PatternHasProcessToRun(pattern_));
   }
 
-  virtual scoped_ptr<MessageReceiver> GetMessageReceiver() {
-    return make_scoped_ptr(new MessageReceiver());
+  virtual std::unique_ptr<MessageReceiver> GetMessageReceiver() {
+    return base::WrapUnique(new MessageReceiver());
   }
 
   void TearDown() override {
@@ -271,7 +263,7 @@ class ServiceWorkerVersionTest : public testing::Test {
   }
 
   TestBrowserThreadBundle thread_bundle_;
-  scoped_ptr<MessageReceiver> helper_;
+  std::unique_ptr<MessageReceiver> helper_;
   scoped_refptr<ServiceWorkerRegistration> registration_;
   scoped_refptr<ServiceWorkerVersion> version_;
   GURL pattern_;
@@ -325,8 +317,8 @@ class ServiceWorkerFailToStartTest : public ServiceWorkerVersionTest {
     helper->set_start_mode(mode);
   }
 
-  scoped_ptr<MessageReceiver> GetMessageReceiver() override {
-    return make_scoped_ptr(new MessageReceiverDisallowStart());
+  std::unique_ptr<MessageReceiver> GetMessageReceiver() override {
+    return base::WrapUnique(new MessageReceiverDisallowStart());
   }
 
  private:
@@ -350,8 +342,8 @@ class ServiceWorkerStallInStoppingTest : public ServiceWorkerVersionTest {
  protected:
   ServiceWorkerStallInStoppingTest() : ServiceWorkerVersionTest() {}
 
-  scoped_ptr<MessageReceiver> GetMessageReceiver() override {
-    return make_scoped_ptr(new MessageReceiverDisallowStop());
+  std::unique_ptr<MessageReceiver> GetMessageReceiver() override {
+    return base::WrapUnique(new MessageReceiverDisallowStop());
   }
 
  private:
@@ -375,8 +367,8 @@ class ServiceWorkerVersionWithMojoTest : public ServiceWorkerVersionTest {
  protected:
   ServiceWorkerVersionWithMojoTest() : ServiceWorkerVersionTest() {}
 
-  scoped_ptr<MessageReceiver> GetMessageReceiver() override {
-    return make_scoped_ptr(new MessageReceiverMojoTestService());
+  std::unique_ptr<MessageReceiver> GetMessageReceiver() override {
+    return base::WrapUnique(new MessageReceiverMojoTestService());
   }
 
  private:
@@ -626,9 +618,10 @@ TEST_F(ServiceWorkerVersionTest, IdleTimeout) {
   // Adding a controllee resets the idle time.
   version_->idle_time_ -= kOneSecond;
   idle_time = version_->idle_time_;
-  scoped_ptr<ServiceWorkerProviderHost> host(new ServiceWorkerProviderHost(
+  std::unique_ptr<ServiceWorkerProviderHost> host(new ServiceWorkerProviderHost(
       33 /* dummy render process id */, MSG_ROUTING_NONE /* render_frame_id */,
       1 /* dummy provider_id */, SERVICE_WORKER_PROVIDER_FOR_WINDOW,
+      ServiceWorkerProviderHost::FrameSecurityLevel::SECURE,
       helper_->context()->AsWeakPtr(), NULL));
   version_->AddControllee(host.get());
   EXPECT_TRUE(version_->timeout_timer_.IsRunning());
@@ -647,20 +640,6 @@ TEST_F(ServiceWorkerVersionTest, IdleTimeout) {
       version_->StartRequest(ServiceWorkerMetrics::EventType::SYNC,
                              CreateReceiverOnCurrentThread(&status));
   EXPECT_TRUE(version_->FinishRequest(request_id, true));
-
-  EXPECT_EQ(SERVICE_WORKER_OK, status);
-  EXPECT_LT(idle_time, version_->idle_time_);
-
-  // Dispatching a message event resets the idle time.
-  std::vector<TransferredMessagePort> ports;
-  SetUpDummyMessagePort(&ports);
-  status = SERVICE_WORKER_ERROR_FAILED;
-  version_->idle_time_ -= kOneSecond;
-  idle_time = version_->idle_time_;
-  version_->DispatchMessageEvent(base::string16(), ports,
-                                 CreateReceiverOnCurrentThread(&status));
-  base::RunLoop().RunUntilIdle();
-  MessagePortService::GetInstance()->Destroy(ports[0].id);
 
   EXPECT_EQ(SERVICE_WORKER_OK, status);
   EXPECT_LT(idle_time, version_->idle_time_);
@@ -1287,6 +1266,7 @@ TEST_F(ServiceWorkerFailToStartTest, FailingWorkerUsesNewRendererProcess) {
                                        helper_->new_render_process_id());
   ServiceWorkerContextCore* context = helper_->context();
   int64_t id = version_->version_id();
+  version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
 
   // Start once. It should choose the "existing process".
   set_start_mode(MessageReceiverDisallowStart::StartMode::SUCCEED);

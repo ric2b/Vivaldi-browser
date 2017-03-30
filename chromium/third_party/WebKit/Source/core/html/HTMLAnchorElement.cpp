@@ -50,7 +50,7 @@ HTMLAnchorElement::HTMLAnchorElement(const QualifiedName& tagName, Document& doc
 {
 }
 
-RawPtr<HTMLAnchorElement> HTMLAnchorElement::create(Document& document)
+HTMLAnchorElement* HTMLAnchorElement::create(Document& document)
 {
     return new HTMLAnchorElement(aTag, document);
 }
@@ -65,6 +65,11 @@ bool HTMLAnchorElement::supportsFocus() const
         return HTMLElement::supportsFocus();
     // If not a link we should still be able to focus the element if it has tabIndex.
     return isLink() || HTMLElement::supportsFocus();
+}
+
+bool HTMLAnchorElement::matchesEnabledPseudoClass() const
+{
+    return isLink();
 }
 
 bool HTMLAnchorElement::shouldHaveFocusAppearance() const
@@ -365,7 +370,7 @@ void HTMLAnchorElement::handleClick(Event* event)
 
 bool isEnterKeyKeydownEvent(Event* event)
 {
-    return event->type() == EventTypeNames::keydown && event->isKeyboardEvent() && toKeyboardEvent(event)->keyIdentifier() == "Enter";
+    return event->type() == EventTypeNames::keydown && event->isKeyboardEvent() && toKeyboardEvent(event)->keyIdentifier() == "Enter" && !toKeyboardEvent(event)->repeat();
 }
 
 bool isLinkClick(Event* event)

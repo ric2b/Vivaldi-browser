@@ -5,14 +5,16 @@
 #ifndef CHROME_BROWSER_BITMAP_FETCHER_BITMAP_FETCHER_H_
 #define CHROME_BROWSER_BITMAP_FETCHER_BITMAP_FETCHER_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "chrome/browser/bitmap_fetcher/bitmap_fetcher_delegate.h"
 #include "chrome/browser/image_decoder.h"
 #include "net/url_request/url_fetcher_delegate.h"
 #include "net/url_request/url_request.h"
-#include "third_party/skia/include/core/SkBitmap.h"
 #include "url/gurl.h"
+
+class SkBitmap;
 
 namespace net {
 class URLFetcher;
@@ -69,7 +71,7 @@ class BitmapFetcher : public net::URLFetcherDelegate,
   // Alerts the delegate that a failure occurred.
   void ReportFailure();
 
-  scoped_ptr<net::URLFetcher> url_fetcher_;
+  std::unique_ptr<net::URLFetcher> url_fetcher_;
   const GURL url_;
   BitmapFetcherDelegate* const delegate_;
 

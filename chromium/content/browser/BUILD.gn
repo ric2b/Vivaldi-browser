@@ -32,10 +32,11 @@ source_set("browser") {
     "//base/third_party/dynamic_annotations",
     "//cc",
     "//cc/surfaces",
+    "//components/display_compositor",
     "//components/filesystem:lib",
     "//components/leveldb:lib",
+    "//components/link_header_util",
     "//components/mime_util",
-    "//components/profile_service:lib",
     "//components/scheduler:common",
     "//components/tracing",
     "//components/tracing:startup_tracing",
@@ -52,7 +53,6 @@ source_set("browser") {
     "//content/browser/speech/proto",
     "//content/common",
     "//content/public/common:common_sources",
-    "//content/public/common:mojo_bindings",
     "//crypto",
     "//device/battery",
     "//device/bluetooth",
@@ -61,43 +61,40 @@ source_set("browser") {
     "//google_apis",
     "//gpu",
     "//gpu/command_buffer/client:gles2_implementation",
+    "//gpu/command_buffer/client:gles2_interface",
     "//ipc/mojo",
     "//media",
+    "//media/gpu/ipc/client",
     "//media/midi",
     "//mojo/common",
     "//mojo/common:url_type_converters",
     "//mojo/converters/geometry",
     "//mojo/public/cpp/bindings",
     "//mojo/public/js",
-    "//mojo/shell",
-    "//mojo/shell/public/cpp:cpp_for_chromium",
-    "//mojo/shell/public/interfaces",
-    "//mojo/shell/runner/common",
-    "//mojo/shell/runner/host:lib",
     "//net",
     "//net:extras",
+    "//services/shell",
+    "//services/shell/public/cpp",
+    "//services/shell/public/interfaces",
+    "//services/shell/runner/common",
+    "//services/shell/runner/host:lib",
+    "//services/user:lib",
+    "//services/user/public/cpp",
+    "//services/user/public/interfaces",
     "//skia",
     "//skia/public",
     "//sql",
     "//storage/browser",
     "//storage/common",
-
-    # TODO(brettw) bug 582206: Blink should not be used in the browser
-    # process. This is required by devtools' input_handler.cc which calls
-    # WebKeyboardEvent::setKeyIdentifierFromWindowsKeyCode
-    "//third_party/WebKit/public:blink",
     "//third_party/WebKit/public:blink_headers",
     "//third_party/WebKit/public:image_resources",
+    "//third_party/WebKit/public:mojo_bindings",
     "//third_party/WebKit/public:resources",
-    "//third_party/angle:commit_id",
+    "//third_party/angle:angle_common",
     "//third_party/icu",
     "//third_party/kasko:kasko_features",
-    "//third_party/leveldatabase",
     "//third_party/libyuv",
     "//third_party/re2",
-    "//third_party/webrtc",
-    "//third_party/webrtc/base:rtc_base",
-    "//third_party/webrtc/modules/desktop_capture:primitives",
     "//third_party/zlib",
     "//third_party/zlib:zip",
     "//ui/accessibility",
@@ -119,14 +116,19 @@ source_set("browser") {
     "//ui/touch_selection",
   ]
 
+  public_deps = [
+    "//third_party/leveldatabase",
+  ]
+
   sources = rebase_path(content_browser_gypi_values.private_browser_sources,
                         ".",
                         "//content")
 
-  # TODO(GYP) these generated files are listed as sources in content_browser.
-  # This is a bit suspicious. The GN grit template will make a source set
-  # containing the generated code so it should be sufficient to just depend
-  # on the grit rule. But maybe some of these will need to be added?
+  # TODO(GYP_GONE) these generated files are listed as sources in
+  # content_browser.  This is a bit suspicious. The GN grit template will make
+  # a source set containing the generated code so it should be sufficient to
+  # just depend on the grit rule. But maybe some of these will need to be
+  # added?
   #
   # Need this annoying rebase_path call to match what happened with the
   # sources.
@@ -160,12 +162,6 @@ source_set("browser") {
     deps += [ "//printing" ]
   }
 
-  # TODO(GYP)
-  #   [chrome_multiple_dll!=1', {
-  #     'dependencies': [
-  #       '../third_party/WebKit/public/blink.gyp:blink',
-  #     ],
-  #   }],
   if (!is_mac) {
     deps += [ "//sandbox" ]
   }
@@ -187,6 +183,9 @@ source_set("browser") {
     deps += [
       "//jingle:jingle_glue",
       "//third_party/libjingle:libjingle_webrtc",
+      "//third_party/webrtc",
+      "//third_party/webrtc/base:rtc_base",
+      "//third_party/webrtc/modules/desktop_capture:primitives",
     ]
     if (is_linux || is_mac || is_win) {
       sources += [
@@ -258,6 +257,7 @@ source_set("browser") {
                            "//content")
     deps += [
       "//ppapi/host",
+      "//ppapi/proxy",
       "//ppapi/proxy:ipc",
       "//ppapi/shared_impl",
     ]
@@ -276,9 +276,9 @@ source_set("browser") {
                     "//content")
 
     configs += [
-      "//build/config/linux:atk",
-      "//build/config/linux:atk_warnings",
-      "//build/config/linux:gconf",
+      "//build/config/linux/atk",
+      "//build/config/linux/atk:warnings",
+      "//build/config/linux/gconf",
       "//build/config/linux:glib",
     ]
   }
@@ -318,17 +318,13 @@ source_set("browser") {
   }
 
   if (use_pango) {
-    configs += [ "//build/config/linux:pangocairo" ]
+    configs += [ "//build/config/linux/pangocairo" ]
   }
 
   if (is_android) {
     sources += rebase_path(content_browser_gypi_values.android_browser_sources,
                            ".",
                            "//content")
-    sources += rebase_path(
-            content_browser_gypi_values.android_in_process_browser_sources,
-            ".",
-            "//content")
     sources -= [
       "browser_ipc_logging.cc",
       "device_sensors/data_fetcher_shared_memory_default.cc",
@@ -339,7 +335,6 @@ source_set("browser") {
       "media/session/media_session_delegate_default.cc",
       "power_usage_monitor_impl.cc",
       "power_usage_monitor_impl.h",
-      "renderer_host/begin_frame_observer_proxy.cc",
       "tracing/tracing_ui.cc",
       "tracing/tracing_ui.h",
 
@@ -356,10 +351,6 @@ source_set("browser") {
       "speech/endpointer/energy_endpointer.h",
       "speech/endpointer/energy_endpointer_params.cc",
       "speech/endpointer/energy_endpointer_params.h",
-      "speech/google_one_shot_remote_engine.cc",
-      "speech/google_one_shot_remote_engine.h",
-      "speech/google_streaming_remote_engine.cc",
-      "speech/google_streaming_remote_engine.h",
       "speech/speech_recognition_engine.cc",
       "speech/speech_recognition_engine.h",
       "speech/speech_recognizer_impl.cc",
@@ -384,10 +375,16 @@ source_set("browser") {
       "geolocation/empty_wifi_data_provider.h",
     ]
     deps += [
+      "//media",
       "//sandbox/mac:sandbox",
       "//third_party/mozilla",
       "//third_party/sudden_motion_sensor",
       "//ui/accelerated_widget_mac",
+    ]
+    libs += [
+      "Carbon.framework",
+      "QuartzCore.framework",
+      "IOSurface.framework",
     ]
   }
 
@@ -460,6 +457,12 @@ source_set("browser") {
         rebase_path(content_browser_gypi_values.compositor_browser_sources,
                     ".",
                     "//content")
+    if (enable_vulkan) {
+      sources += [
+        "compositor/vulkan_browser_compositor_output_surface.cc",
+        "compositor/vulkan_browser_compositor_output_surface.h",
+      ]
+    }
     if (!use_x11) {
       sources -= [
         "compositor/software_output_device_x11.cc",
@@ -469,8 +472,6 @@ source_set("browser") {
 
     if (!use_ozone) {
       sources -= [
-        "compositor/browser_compositor_overlay_candidate_validator_ozone.cc",
-        "compositor/browser_compositor_overlay_candidate_validator_ozone.h",
         "compositor/software_output_device_ozone.cc",
         "compositor/software_output_device_ozone.h",
       ]
@@ -519,6 +520,17 @@ source_set("browser") {
       "vr/android/cardboard/cardboard_vr_device_provider.h",
     ]
   }
+
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
+  }
+
+  if (!is_mac && !is_android) {
+    sources -= [
+      "gpu/gpu_surface_tracker.cc",
+      "gpu/gpu_surface_tracker.h",
+    ]
+  }
 }
 
 # See comment at the top of //content/BUILD.gn for how this works.
@@ -527,6 +539,10 @@ group("for_content_tests") {
   if (!is_component_build) {
     public_deps = [
       ":browser",
+    ]
+  } else {
+    public_deps = [
+      "//third_party/leveldatabase",
     ]
   }
 }

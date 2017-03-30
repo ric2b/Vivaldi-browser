@@ -2618,73 +2618,6 @@ void BindUniformLocationCHROMIUMBucket(GLuint program,
   }
 }
 
-void GenValuebuffersCHROMIUMImmediate(GLsizei n, GLuint* buffers) {
-  const uint32_t size =
-      gles2::cmds::GenValuebuffersCHROMIUMImmediate::ComputeSize(n);
-  gles2::cmds::GenValuebuffersCHROMIUMImmediate* c =
-      GetImmediateCmdSpaceTotalSize<
-          gles2::cmds::GenValuebuffersCHROMIUMImmediate>(size);
-  if (c) {
-    c->Init(n, buffers);
-  }
-}
-
-void DeleteValuebuffersCHROMIUMImmediate(GLsizei n,
-                                         const GLuint* valuebuffers) {
-  const uint32_t size =
-      gles2::cmds::DeleteValuebuffersCHROMIUMImmediate::ComputeSize(n);
-  gles2::cmds::DeleteValuebuffersCHROMIUMImmediate* c =
-      GetImmediateCmdSpaceTotalSize<
-          gles2::cmds::DeleteValuebuffersCHROMIUMImmediate>(size);
-  if (c) {
-    c->Init(n, valuebuffers);
-  }
-}
-
-void IsValuebufferCHROMIUM(GLuint valuebuffer,
-                           uint32_t result_shm_id,
-                           uint32_t result_shm_offset) {
-  gles2::cmds::IsValuebufferCHROMIUM* c =
-      GetCmdSpace<gles2::cmds::IsValuebufferCHROMIUM>();
-  if (c) {
-    c->Init(valuebuffer, result_shm_id, result_shm_offset);
-  }
-}
-
-void BindValuebufferCHROMIUM(GLenum target, GLuint valuebuffer) {
-  gles2::cmds::BindValuebufferCHROMIUM* c =
-      GetCmdSpace<gles2::cmds::BindValuebufferCHROMIUM>();
-  if (c) {
-    c->Init(target, valuebuffer);
-  }
-}
-
-void SubscribeValueCHROMIUM(GLenum target, GLenum subscription) {
-  gles2::cmds::SubscribeValueCHROMIUM* c =
-      GetCmdSpace<gles2::cmds::SubscribeValueCHROMIUM>();
-  if (c) {
-    c->Init(target, subscription);
-  }
-}
-
-void PopulateSubscribedValuesCHROMIUM(GLenum target) {
-  gles2::cmds::PopulateSubscribedValuesCHROMIUM* c =
-      GetCmdSpace<gles2::cmds::PopulateSubscribedValuesCHROMIUM>();
-  if (c) {
-    c->Init(target);
-  }
-}
-
-void UniformValuebufferCHROMIUM(GLint location,
-                                GLenum target,
-                                GLenum subscription) {
-  gles2::cmds::UniformValuebufferCHROMIUM* c =
-      GetCmdSpace<gles2::cmds::UniformValuebufferCHROMIUM>();
-  if (c) {
-    c->Init(location, target, subscription);
-  }
-}
-
 void BindTexImage2DCHROMIUM(GLenum target, GLint imageId) {
   gles2::cmds::BindTexImage2DCHROMIUM* c =
       GetCmdSpace<gles2::cmds::BindTexImage2DCHROMIUM>();
@@ -2830,13 +2763,14 @@ void ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
                              GLuint edge_aa_mask,
                              GLboolean is_clipped,
                              GLint sorting_context_id,
+                             GLuint filter,
                              GLuint shm_id,
                              GLuint shm_offset) {
   gles2::cmds::ScheduleCALayerCHROMIUM* c =
       GetCmdSpace<gles2::cmds::ScheduleCALayerCHROMIUM>();
   if (c) {
     c->Init(contents_texture_id, opacity, background_color, edge_aa_mask,
-            is_clipped, sorting_context_id, shm_id, shm_offset);
+            is_clipped, sorting_context_id, filter, shm_id, shm_offset);
   }
 }
 

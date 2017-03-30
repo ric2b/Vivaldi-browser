@@ -18,6 +18,7 @@
 #include "base/value_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
@@ -27,15 +28,20 @@
 #include "chrome/browser/signin/signin_error_controller_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/user_manager.h"
 #include "chrome/browser/ui/webui/profile_helper.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/google_chrome_strings.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/notification_service.h"
 #include "content/public/browser/web_ui.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -64,6 +70,10 @@ void SigninCreateProfileHandler::GetLocalizedValues(
       "manageProfilesSupervisedSignedInLabel",
       l10n_util::GetStringUTF16(
           IDS_PROFILES_CREATE_SUPERVISED_MULTI_SIGNED_IN_LABEL));
+  localized_strings->SetString(
+      "noSignedInUserMessage",
+      l10n_util::GetStringUTF16(
+          IDS_PROFILES_CREATE_SUPERVISED_NO_SIGNED_IN_USER_TEXT));
   localized_strings->SetString("createProfileConfirm",
                                l10n_util::GetStringUTF16(IDS_SAVE));
   localized_strings->SetString("learnMore",
@@ -91,6 +101,10 @@ void SigninCreateProfileHandler::GetLocalizedValues(
           base::ASCIIToUTF16(
               chrome::kLegacySupervisedUserManagementDisplayURL)));
   localized_strings->SetString(
+      "importExistingSupervisedUserLink",
+      l10n_util::GetStringUTF16(
+          IDS_IMPORT_EXISTING_LEGACY_SUPERVISED_USER_TITLE));
+  localized_strings->SetString(
       "manageProfilesExistingSupervisedUser",
       l10n_util::GetStringUTF16(
           IDS_PROFILES_CREATE_LEGACY_SUPERVISED_USER_ERROR_EXISTS_REMOTELY));
@@ -102,6 +116,31 @@ void SigninCreateProfileHandler::GetLocalizedValues(
       "custodianAccountNotSelectedError",
       l10n_util::GetStringUTF16(
           IDS_PROFILES_CREATE_NO_CUSTODIAN_ACCOUNT_ERROR));
+  localized_strings->SetString(
+      "supervisedUserCreatedTitle",
+       l10n_util::GetStringUTF16(IDS_LEGACY_SUPERVISED_USER_CREATED_TITLE));
+  // The first two substitution parameters remain to be filled by the page JS.
+  localized_strings->SetString(
+      "supervisedUserCreatedText",
+      l10n_util::GetStringFUTF16(
+            IDS_SUPERVISED_USER_CREATED_TEXT,
+            base::ASCIIToUTF16("$1"),
+            base::ASCIIToUTF16("$2"),
+            base::ASCIIToUTF16(chrome::kLegacySupervisedUserManagementURL),
+            base::ASCIIToUTF16(
+                chrome::kLegacySupervisedUserManagementDisplayURL)));
+  localized_strings->SetString(
+      "exitAndChildlockLabel",
+      l10n_util::GetStringUTF16(
+          IDS_PROFILES_PROFILE_SIGNOUT_BUTTON));
+  localized_strings->SetString(
+      "supervisedUserCreatedDone",
+      l10n_util::GetStringUTF16(
+          IDS_LEGACY_SUPERVISED_USER_CREATED_DONE_BUTTON));
+  localized_strings->SetString(
+      "supervisedUserCreatedSwitch",
+      l10n_util::GetStringUTF16(
+          IDS_LEGACY_SUPERVISED_USER_CREATED_SWITCH_BUTTON));
 }
 
 void SigninCreateProfileHandler::RegisterMessages() {
@@ -110,6 +149,11 @@ void SigninCreateProfileHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "cancelCreateProfile",
       base::Bind(&SigninCreateProfileHandler::HandleCancelProfileCreation,
+                 base::Unretained(this)));
+
+  web_ui()->RegisterMessageCallback(
+      "switchToProfile",
+      base::Bind(&SigninCreateProfileHandler::SwitchToProfile,
                  base::Unretained(this)));
 #endif
   web_ui()->RegisterMessageCallback(
@@ -148,10 +192,10 @@ void SigninCreateProfileHandler::RequestDefaultProfileIcons(
 }
 
 void SigninCreateProfileHandler::SendNewProfileDefaults() {
-  ProfileInfoCache& cache =
-      g_browser_process->profile_manager()->GetProfileInfoCache();
+  ProfileAttributesStorage& storage =
+      g_browser_process->profile_manager()->GetProfileAttributesStorage();
   base::DictionaryValue profile_info;
-  profile_info.SetString("name", cache.ChooseNameForNewProfile(0));
+  profile_info.SetString("name", storage.ChooseNameForNewProfile(0));
 
   web_ui()->CallJavascriptFunction(
       "cr.webUIListenerCallback",
@@ -290,7 +334,7 @@ void SigninCreateProfileHandler::HandleProfileCreationSuccess(
   switch (profile_creation_type_) {
     case NON_SUPERVISED_PROFILE_CREATION: {
       DCHECK(supervised_user_id.empty());
-      CreateShortcutAndShowSuccess(create_shortcut, profile);
+      CreateShortcutAndShowSuccess(create_shortcut, nullptr, profile);
       break;
     }
 #if defined(ENABLE_SUPERVISED_USERS)
@@ -308,6 +352,7 @@ void SigninCreateProfileHandler::HandleProfileCreationSuccess(
 
 void SigninCreateProfileHandler::CreateShortcutAndShowSuccess(
     bool create_shortcut,
+    Profile* custodian_profile,
     Profile* profile) {
   if (create_shortcut) {
     ProfileShortcutManager* shortcut_manager =
@@ -323,34 +368,54 @@ void SigninCreateProfileHandler::CreateShortcutAndShowSuccess(
   base::DictionaryValue dict;
   dict.SetString("name", profile->GetPrefs()->GetString(prefs::kProfileName));
   dict.Set("filePath", base::CreateFilePathValue(profile->GetPath()));
+
+  bool open_new_window = true;
+
 #if defined(ENABLE_SUPERVISED_USERS)
+  // If the new profile is a supervised user, instead of opening a new window
+  // right away, a confirmation page will be shown by JS from the creation
+  // dialog. If we are importing an existing supervised profile or creating a
+  // new non-supervised user profile we don't show any confirmation, so open
+  // the new window now.
+  open_new_window = profile_creation_type_ != SUPERVISED_PROFILE_CREATION;
+  dict.SetBoolean("showConfirmation", !open_new_window);
+
   bool is_supervised = profile_creation_type_ == SUPERVISED_PROFILE_CREATION ||
                        profile_creation_type_ == SUPERVISED_PROFILE_IMPORT;
   dict.SetBoolean("isSupervised", is_supervised);
+
+  if (is_supervised) {
+    DCHECK(custodian_profile);
+    if (custodian_profile) {
+      std::string custodian_username = custodian_profile->GetProfileUserName();
+      dict.SetString("custodianUsername", custodian_username);
+    }
+  }
 #endif
+
   web_ui()->CallJavascriptFunction(
       "cr.webUIListenerCallback",
       GetWebUIListenerName(PROFILE_CREATION_SUCCESS),
       dict);
 
-  // If the new profile is a supervised user, instead of opening a new window
-  // right away, a confirmation overlay will be shown by JS from the creation
-  // dialog. If we are importing an existing supervised profile or creating a
-  // new non-supervised user profile we don't show any confirmation, so open
-  // the new window now.
-  bool should_open_new_window = true;
-#if defined(ENABLE_SUPERVISED_USERS)
-  if (profile_creation_type_ == SUPERVISED_PROFILE_CREATION)
-    should_open_new_window = false;
-#endif
-
-  if (should_open_new_window) {
+  if (open_new_window) {
     // Opening the new window must be the last action, after all callbacks
     // have been run, to give them a chance to initialize the profile.
-    webui::OpenNewWindowForProfile(
-        profile, Profile::CREATE_STATUS_INITIALIZED);
+    OpenNewWindowForProfile(profile, Profile::CREATE_STATUS_INITIALIZED);
   }
   profile_creation_type_ = NO_CREATION_IN_PROGRESS;
+}
+
+void SigninCreateProfileHandler::OpenNewWindowForProfile(
+    Profile* profile,
+    Profile::CreateStatus status) {
+  profiles::OpenBrowserWindowForProfile(
+      base::Bind(&SigninCreateProfileHandler::OnBrowserReadyCallback,
+                 weak_ptr_factory_.GetWeakPtr()),
+      false,  // Don't create a window if one already exists.
+      true,  // Create a first run window.
+      profile,
+      status);
 }
 
 void SigninCreateProfileHandler::ShowProfileCreationError(
@@ -361,8 +426,11 @@ void SigninCreateProfileHandler::ShowProfileCreationError(
                                    GetWebUIListenerName(PROFILE_CREATION_ERROR),
                                    base::StringValue(error));
   // The ProfileManager calls us back with a NULL profile in some cases.
-  if (profile)
-    webui::DeleteProfileAtPath(profile->GetPath(), web_ui());
+  if (profile) {
+    webui::DeleteProfileAtPath(profile->GetPath(),
+                               web_ui(),
+                               ProfileMetrics::DELETE_PROFILE_SETTINGS);
+  }
   profile_creation_type_ = NO_CREATION_IN_PROGRESS;
   profile_path_being_created_.clear();
 }
@@ -387,6 +455,38 @@ base::string16 SigninCreateProfileHandler::GetProfileCreationErrorMessageLocal()
   return l10n_util::GetStringUTF16(message_id);
 }
 
+void SigninCreateProfileHandler::Observe(
+    int type,
+    const content::NotificationSource& source,
+    const content::NotificationDetails& details) {
+  switch (type) {
+    case chrome::NOTIFICATION_BROWSER_WINDOW_READY:
+      // Only respond to one Browser Window Ready event.
+      registrar_.Remove(this,
+                        chrome::NOTIFICATION_BROWSER_WINDOW_READY,
+                        content::NotificationService::AllSources());
+      UserManager::Hide();
+    break;
+    default:
+      NOTREACHED();
+  }
+}
+
+void SigninCreateProfileHandler::OnBrowserReadyCallback(
+    Profile* profile,
+    Profile::CreateStatus profile_create_status) {
+  Browser* browser = chrome::FindAnyBrowser(profile, false);
+  // Closing the User Manager before the window is created can flakily cause
+  // Chrome to close.
+  if (browser && browser->window()) {
+    UserManager::Hide();
+  } else {
+    registrar_.Add(this,
+                   chrome::NOTIFICATION_BROWSER_WINDOW_READY,
+                   content::NotificationService::AllSources());
+  }
+}
+
 #if defined(ENABLE_SUPERVISED_USERS)
 base::string16 SigninCreateProfileHandler::GetProfileCreateErrorMessageRemote()
     const {
@@ -407,27 +507,12 @@ base::string16 SigninCreateProfileHandler::GetProfileCreateErrorMessageSignin()
 
 base::StringValue SigninCreateProfileHandler::GetWebUIListenerName(
     ProfileCreationStatus status) const {
-  switch (profile_creation_type_) {
-#if defined(ENABLE_SUPERVISED_USERS)
-    case SUPERVISED_PROFILE_IMPORT:
-      switch (status) {
-        case PROFILE_CREATION_SUCCESS:
-          return base::StringValue("create-profile-success");
-        case PROFILE_CREATION_ERROR:
-          return base::StringValue("create-profile-error");
-      }
-      break;
-#endif
-    default:
-      switch (status) {
-        case PROFILE_CREATION_SUCCESS:
-          return base::StringValue("create-profile-success");
-        case PROFILE_CREATION_ERROR:
-          return base::StringValue("create-profile-error");
-      }
-      break;
+  switch (status) {
+    case PROFILE_CREATION_SUCCESS:
+      return base::StringValue("create-profile-success");
+    case PROFILE_CREATION_ERROR:
+      return base::StringValue("create-profile-error");
   }
-
   NOTREACHED();
   return base::StringValue(std::string());
 }
@@ -465,7 +550,6 @@ void SigninCreateProfileHandler::LoadCustodianProfileCallback(
   // This method gets called once before with Profile::CREATE_STATUS_CREATED.
   switch (status) {
     case Profile::CREATE_STATUS_LOCAL_FAIL: {
-      // TODO(mahmadi): see if a better error message is required here.
       ShowProfileCreationError(nullptr, GetProfileCreationErrorMessageLocal());
       break;
     }
@@ -483,6 +567,8 @@ void SigninCreateProfileHandler::LoadCustodianProfileCallback(
         return;
       }
 
+      // TODO(mahmadi): return proper error message if policy-controlled prefs
+      // prohibit adding supervised users (also disable the controls in the UI).
       PrefService* prefs = custodian_profile->GetPrefs();
       if (!prefs->GetBoolean(prefs::kSupervisedUserCreationAllowed))
         return;
@@ -490,6 +576,8 @@ void SigninCreateProfileHandler::LoadCustodianProfileCallback(
       if (!supervised_user_id.empty()) {
         profile_creation_type_ = SUPERVISED_PROFILE_IMPORT;
 
+        // Load all supervised users managed by this user in order to
+        // check if this supervised user already exists on this device.
         SupervisedUserSyncService* supervised_user_sync_service =
             SupervisedUserSyncServiceFactory::GetForProfile(custodian_profile);
         if (supervised_user_sync_service) {
@@ -497,6 +585,9 @@ void SigninCreateProfileHandler::LoadCustodianProfileCallback(
               &SigninCreateProfileHandler::DoCreateProfileIfPossible,
               weak_ptr_factory_.GetWeakPtr(), name, icon_url, create_shortcut,
               supervised_user_id, custodian_profile));
+        } else {
+          ShowProfileCreationError(nullptr,
+                                   GetProfileCreateErrorMessageRemote());
         }
       } else {
         profile_creation_type_ = SUPERVISED_PROFILE_CREATION;
@@ -565,7 +656,6 @@ void SigninCreateProfileHandler::DoCreateProfileIfPossible(
           GetProfileAttributesStorage().GetAllProfilesAttributes();
   for (ProfileAttributesEntry* entry : entries) {
     if (supervised_user_id == entry->GetSupervisedUserId()) {
-      // TODO(mahmadi): see whether we need a more specific error message here.
       ShowProfileCreationError(nullptr, GetProfileCreationErrorMessageLocal());
       return;
     }
@@ -609,7 +699,9 @@ void SigninCreateProfileHandler::CancelProfileRegistration(
   // Canceling registration means the callback passed into
   // RegisterAndInitSync() won't be called, so the cleanup must be done here.
   profile_path_being_created_.clear();
-  webui::DeleteProfileAtPath(new_profile->GetPath(), web_ui());
+  webui::DeleteProfileAtPath(new_profile->GetPath(),
+                             web_ui(),
+                             ProfileMetrics::DELETE_PROFILE_SETTINGS);
 }
 
 void SigninCreateProfileHandler::RegisterSupervisedUser(
@@ -626,21 +718,25 @@ void SigninCreateProfileHandler::RegisterSupervisedUser(
   // Register the supervised user using the profile of the custodian.
   supervised_user_registration_utility_ =
       SupervisedUserRegistrationUtility::Create(custodian_profile);
-  supervised_user_service->RegisterAndInitSync(
-      supervised_user_registration_utility_.get(), custodian_profile,
-      supervised_user_id,
-      base::Bind(&SigninCreateProfileHandler::OnSupervisedUserRegistered,
-                 weak_ptr_factory_.GetWeakPtr(), create_shortcut, new_profile));
+  if (supervised_user_service) {
+    supervised_user_service->RegisterAndInitSync(
+        supervised_user_registration_utility_.get(), custodian_profile,
+        supervised_user_id,
+        base::Bind(&SigninCreateProfileHandler::OnSupervisedUserRegistered,
+                   weak_ptr_factory_.GetWeakPtr(), create_shortcut,
+                   custodian_profile, new_profile));
+  }
 }
 
 void SigninCreateProfileHandler::OnSupervisedUserRegistered(
     bool create_shortcut,
+    Profile* custodian_profile,
     Profile* profile,
     const GoogleServiceAuthError& error) {
   GoogleServiceAuthError::State state = error.state();
   RecordSupervisedProfileCreationMetrics(state);
   if (state == GoogleServiceAuthError::NONE) {
-    CreateShortcutAndShowSuccess(create_shortcut, profile);
+    CreateShortcutAndShowSuccess(create_shortcut, custodian_profile, profile);
     return;
   }
 
@@ -680,6 +776,30 @@ void SigninCreateProfileHandler::RecordSupervisedProfileCreationMetrics(
         "Profile.SupervisedProfileTotalImportTime",
         base::TimeTicks::Now() - profile_creation_start_time_);
   }
+}
+
+void SigninCreateProfileHandler::SwitchToProfile(
+      const base::ListValue* args) {
+  DCHECK(args);
+  const base::Value* file_path_value;
+  if (!args->Get(0, &file_path_value))
+    return;
+
+  base::FilePath profile_file_path;
+  if (!base::GetValueAsFilePath(*file_path_value, &profile_file_path))
+    return;
+
+  Profile* profile = g_browser_process->profile_manager()->
+      GetProfileByPath(profile_file_path);
+  DCHECK(profile);
+
+  profiles::OpenBrowserWindowForProfile(
+      base::Bind(&SigninCreateProfileHandler::OnBrowserReadyCallback,
+                 weak_ptr_factory_.GetWeakPtr()),
+      false,  // Don't create a window if one already exists.
+      true,  // Create a first run window.
+      profile,
+      Profile::CREATE_STATUS_INITIALIZED);
 }
 
 #endif

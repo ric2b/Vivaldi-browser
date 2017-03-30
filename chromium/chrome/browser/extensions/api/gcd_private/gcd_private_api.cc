@@ -7,13 +7,14 @@
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/extensions/api/gcd_private/privet_v3_context_getter.h"
 #include "chrome/browser/extensions/api/gcd_private/privet_v3_session.h"
 #include "chrome/browser/local_discovery/endpoint_resolver.h"
 #include "chrome/browser/local_discovery/service_discovery_shared_client.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/storage_partition.h"
 #include "net/url_request/url_request_context_getter.h"
 
 namespace extensions {
@@ -144,7 +145,8 @@ void GcdPrivateAPIImpl::OnServiceResolved(int session_id,
 
   if (!context_getter_) {
     context_getter_ = new PrivetV3ContextGetter(
-        browser_context_->GetRequestContext()->GetNetworkTaskRunner());
+        content::BrowserContext::GetDefaultStoragePartition(browser_context_)->
+            GetURLRequestContext()->GetNetworkTaskRunner());
   }
 
   session_data.session.reset(new PrivetV3Session(

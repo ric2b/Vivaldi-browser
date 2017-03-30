@@ -12,6 +12,7 @@
 #include "chrome/browser/permissions/permission_manager.h"
 #include "chrome/browser/permissions/permission_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/website_settings/permission_bubble_request.h"
 #include "components/rappor/rappor_service.h"
 #include "components/rappor/rappor_utils.h"
 #include "content/public/browser/permission_type.h"
@@ -19,7 +20,7 @@
 #include "url/gurl.h"
 
 // UMA keys need to be statically initialized so plain function would not
-// work. Use a Macro instead.
+// work. Use macros instead.
 #define PERMISSION_ACTION_UMA(secure_origin, permission, permission_secure, \
                               permission_insecure, action)                  \
   UMA_HISTOGRAM_ENUMERATION(permission, action, PERMISSION_ACTION_NUM);     \
@@ -31,12 +32,16 @@
                               PERMISSION_ACTION_NUM);                       \
   }
 
+#define PERMISSION_BUBBLE_TYPE_UMA(metric_name, permission_bubble_type)      \
+    UMA_HISTOGRAM_ENUMERATION(                                               \
+        metric_name,                                                         \
+        static_cast<base::HistogramBase::Sample>(permission_bubble_type),    \
+        static_cast<base::HistogramBase::Sample>(PermissionBubbleType::NUM))
+
 using content::PermissionType;
 
 namespace {
 
-// Deprecated. This method is used for the single-dimensional RAPPOR metrics
-// that are being replaced by the multi-dimensional ones.
 const std::string GetRapporMetric(PermissionType permission,
                                   PermissionAction action) {
   std::string action_str;
@@ -143,50 +148,55 @@ void RecordPermissionAction(PermissionType permission,
                    << " not accounted for";
   }
 
-  // There are two sets of semi-redundant RAPPOR metrics being reported:
-  // The soon-to-be-deprecated single dimensional ones, and the new
-  // multi-dimensional ones.
+  // Retrieve the name of the RAPPOR metric. Currently, the new metric name is
+  // the deprecated name with "2" on the end, e.g.
+  // ContentSettings.PermissionActions_Geolocation.Granted.Url2. For simplicity,
+  // we retrieve the deprecated name and append the "2" for the new name.
+  // TODO(dominickn): remove the deprecated metric and replace it solely with
+  // the new one in GetRapporMetric - crbug.com/605836.
+  const std::string deprecated_metric = GetRapporMetric(permission, action);
   rappor::RapporService* rappor_service = g_browser_process->rappor_service();
-  const std::string rappor_metric = GetRapporMetric(permission, action);
-  if (!rappor_metric.empty())
-    rappor::SampleDomainAndRegistryFromGURL(
-        rappor_service, rappor_metric, requesting_origin);
+  if (!deprecated_metric.empty() && rappor_service) {
+    rappor::SampleDomainAndRegistryFromGURL(rappor_service, deprecated_metric,
+                                            requesting_origin);
 
-  // Add multi-dimensional RAPPOR reporting for safe-browsing users.
-  std::string permission_str =
-      PermissionUtil::GetPermissionString(permission);
-  if (!rappor_service || permission_str.empty())
-    return;
-
-  scoped_ptr<rappor::Sample> sample =
-      rappor_service->CreateSample(rappor::SAFEBROWSING_RAPPOR_TYPE);
-  sample->SetStringField("Scheme", requesting_origin.scheme());
-  sample->SetStringField("Host", requesting_origin.host());
-  sample->SetStringField("Port", requesting_origin.port());
-  sample->SetStringField("Domain",
-      rappor::GetDomainAndRegistrySampleFromGURL(requesting_origin));
-  sample->SetFlagsField("Actions", static_cast<uint64_t>(1) << action,
-                        PermissionAction::PERMISSION_ACTION_NUM);
-  rappor_service->RecordSampleObj("Permissions.Action." + permission_str,
-                                  std::move(sample));
+    std::string rappor_metric = deprecated_metric + "2";
+    rappor_service->RecordSample(
+        rappor_metric, rappor::LOW_FREQUENCY_ETLD_PLUS_ONE_RAPPOR_TYPE,
+        rappor::GetDomainAndRegistrySampleFromGURL(requesting_origin));
+  }
 }
 
 void RecordPermissionRequest(PermissionType permission,
                              const GURL& requesting_origin,
                              const GURL& embedding_origin,
                              Profile* profile) {
-  bool secure_origin = content::IsOriginSecure(requesting_origin);
-  if (permission == PermissionType::GEOLOCATION) {
+  rappor::RapporService* rappor_service = g_browser_process->rappor_service();
+  if (rappor_service) {
+    if (permission == PermissionType::GEOLOCATION) {
+      // TODO(dominickn): remove this deprecated metric - crbug.com/605836.
       rappor::SampleDomainAndRegistryFromGURL(
-          g_browser_process->rappor_service(),
+          rappor_service,
           "ContentSettings.PermissionRequested.Geolocation.Url",
           requesting_origin);
-  } else if (permission == PermissionType::NOTIFICATIONS) {
+      rappor_service->RecordSample(
+          "ContentSettings.PermissionRequested.Geolocation.Url2",
+          rappor::LOW_FREQUENCY_ETLD_PLUS_ONE_RAPPOR_TYPE,
+          rappor::GetDomainAndRegistrySampleFromGURL(requesting_origin));
+    } else if (permission == PermissionType::NOTIFICATIONS) {
+      // TODO(dominickn): remove this deprecated metric - crbug.com/605836.
       rappor::SampleDomainAndRegistryFromGURL(
-          g_browser_process->rappor_service(),
+          rappor_service,
           "ContentSettings.PermissionRequested.Notifications.Url",
           requesting_origin);
+      rappor_service->RecordSample(
+          "ContentSettings.PermissionRequested.Notifications.Url2",
+          rappor::LOW_FREQUENCY_ETLD_PLUS_ONE_RAPPOR_TYPE,
+          rappor::GetDomainAndRegistrySampleFromGURL(requesting_origin));
+    }
   }
+
+  bool secure_origin = content::IsOriginSecure(requesting_origin);
   UMA_HISTOGRAM_ENUMERATION(
       "ContentSettings.PermissionRequested",
       static_cast<base::HistogramBase::Sample>(permission),
@@ -233,6 +243,21 @@ void RecordPermissionRequest(PermissionType permission,
 
 }  // anonymous namespace
 
+const char PermissionUmaUtil::kPermissionsPromptShown[] =
+    "Permissions.Prompt.Shown";
+const char PermissionUmaUtil::kPermissionsPromptAccepted[] =
+    "Permissions.Prompt.Accepted";
+const char PermissionUmaUtil::kPermissionsPromptDenied[] =
+    "Permissions.Prompt.Denied";
+const char PermissionUmaUtil::kPermissionsPromptRequestsPerPrompt[] =
+    "Permissions.Prompt.RequestsPerPrompt";
+const char PermissionUmaUtil::kPermissionsPromptMergedBubbleTypes[] =
+    "Permissions.Prompt.MergedBubbleTypes";
+const char PermissionUmaUtil::kPermissionsPromptMergedBubbleAccepted[] =
+    "Permissions.Prompt.MergedBubbleAccepted";
+const char PermissionUmaUtil::kPermissionsPromptMergedBubbleDenied[] =
+    "Permissions.Prompt.MergedBubbleDenied";
+
 // Make sure you update histograms.xml permission histogram_suffix if you
 // add new permission
 void PermissionUmaUtil::PermissionRequested(PermissionType permission,
@@ -273,4 +298,68 @@ void PermissionUmaUtil::PermissionRevoked(PermissionType permission,
       permission == PermissionType::VIDEO_CAPTURE) {
     RecordPermissionAction(permission, REVOKED, revoked_origin);
   }
+}
+
+void PermissionUmaUtil::PermissionPromptShown(
+    const std::vector<PermissionBubbleRequest*>& requests) {
+  DCHECK(!requests.empty());
+
+  PermissionBubbleType permission_prompt_type = PermissionBubbleType::MULTIPLE;
+  if (requests.size() == 1)
+    permission_prompt_type = requests[0]->GetPermissionBubbleType();
+  PERMISSION_BUBBLE_TYPE_UMA(kPermissionsPromptShown, permission_prompt_type);
+
+  UMA_HISTOGRAM_ENUMERATION(
+      kPermissionsPromptRequestsPerPrompt,
+      static_cast<base::HistogramBase::Sample>(requests.size()),
+      static_cast<base::HistogramBase::Sample>(10));
+
+  if (requests.size() > 1) {
+    for (const auto* request : requests) {
+      PERMISSION_BUBBLE_TYPE_UMA(kPermissionsPromptMergedBubbleTypes,
+                                 request->GetPermissionBubbleType());
+    }
+  }
+}
+
+void PermissionUmaUtil::PermissionPromptAccepted(
+    const std::vector<PermissionBubbleRequest*>& requests,
+    const std::vector<bool>& accept_states) {
+  DCHECK(!requests.empty());
+  DCHECK(requests.size() == accept_states.size());
+
+  bool all_accepted = accept_states[0];
+  PermissionBubbleType permission_prompt_type =
+      requests[0]->GetPermissionBubbleType();
+  if (requests.size() > 1) {
+    permission_prompt_type = PermissionBubbleType::MULTIPLE;
+    for (size_t i = 0; i < requests.size(); ++i) {
+      const auto* request = requests[i];
+      if (accept_states[i]) {
+        PERMISSION_BUBBLE_TYPE_UMA(kPermissionsPromptMergedBubbleAccepted,
+                                   request->GetPermissionBubbleType());
+      } else {
+        all_accepted = false;
+        PERMISSION_BUBBLE_TYPE_UMA(kPermissionsPromptMergedBubbleDenied,
+                                   request->GetPermissionBubbleType());
+      }
+    }
+  }
+
+  if (all_accepted) {
+    PERMISSION_BUBBLE_TYPE_UMA(kPermissionsPromptAccepted,
+                               permission_prompt_type);
+  } else {
+    PERMISSION_BUBBLE_TYPE_UMA(kPermissionsPromptDenied,
+                               permission_prompt_type);
+  }
+}
+
+void PermissionUmaUtil::PermissionPromptDenied(
+    const std::vector<PermissionBubbleRequest*>& requests) {
+  DCHECK(!requests.empty());
+  DCHECK(requests.size() == 1);
+
+  PERMISSION_BUBBLE_TYPE_UMA(kPermissionsPromptDenied,
+                             requests[0]->GetPermissionBubbleType());
 }

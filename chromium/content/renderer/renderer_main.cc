@@ -73,8 +73,8 @@ static void HandleRendererErrorTestParameters(
 }
 
 #if defined(USE_OZONE)
-base::LazyInstance<scoped_ptr<ui::ClientNativePixmapFactory>> g_pixmap_factory =
-    LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<std::unique_ptr<ui::ClientNativePixmapFactory>>
+    g_pixmap_factory = LAZY_INSTANCE_INITIALIZER;
 #endif
 
 }  // namespace
@@ -133,12 +133,12 @@ int RendererMain(const MainFunctionParams& parameters) {
   // As long as scrollbars on Mac are painted with Cocoa, the message pump
   // needs to be backed by a Foundation-level loop to process NSTimers. See
   // http://crbug.com/306348#c24 for details.
-  scoped_ptr<base::MessagePump> pump(new base::MessagePumpNSRunLoop());
-  scoped_ptr<base::MessageLoop> main_message_loop(
+  std::unique_ptr<base::MessagePump> pump(new base::MessagePumpNSRunLoop());
+  std::unique_ptr<base::MessageLoop> main_message_loop(
       new base::MessageLoop(std::move(pump)));
 #else
   // The main message loop of the renderer services doesn't have IO or UI tasks.
-  scoped_ptr<base::MessageLoop> main_message_loop(new base::MessageLoop());
+  std::unique_ptr<base::MessageLoop> main_message_loop(new base::MessageLoop());
 #endif
 
   base::PlatformThread::SetName("CrRendererMain");
@@ -149,11 +149,11 @@ int RendererMain(const MainFunctionParams& parameters) {
   base::StatisticsRecorder::Initialize();
 
 #if defined(OS_ANDROID)
-  // If we have a pending chromium android linker histogram, record it.
-  base::android::RecordChromiumAndroidLinkerRendererHistogram();
+  // If we have any pending LibraryLoader histograms, record them.
+  base::android::RecordLibraryLoaderRendererHistograms();
 #endif
 
-  scoped_ptr<scheduler::RendererScheduler> renderer_scheduler(
+  std::unique_ptr<scheduler::RendererScheduler> renderer_scheduler(
       scheduler::RendererScheduler::Create());
 
   // PlatformInitialize uses FieldTrials, so this must happen later.

@@ -68,14 +68,6 @@ component("gfx") {
     "color_profile_win.cc",
     "color_utils.cc",
     "color_utils.h",
-    "display.cc",
-    "display.h",
-    "display_change_notifier.cc",
-    "display_change_notifier.h",
-    "display_finder.cc",
-    "display_finder.h",
-    "display_observer.cc",
-    "display_observer.h",
     "favicon_size.cc",
     "favicon_size.h",
     "font.cc",
@@ -156,24 +148,11 @@ component("gfx") {
     "platform_font_mac.mm",
     "platform_font_win.cc",
     "platform_font_win.h",
-    "range/range.cc",
-    "range/range.h",
-    "range/range_f.cc",
-    "range/range_f.h",
-    "range/range_mac.mm",
-    "range/range_win.cc",
-    "scoped_canvas.h",
     "scoped_cg_context_save_gstate_mac.h",
     "scoped_ns_graphics_context_save_gstate_mac.h",
     "scoped_ns_graphics_context_save_gstate_mac.mm",
     "scoped_ui_graphics_push_context_ios.h",
     "scoped_ui_graphics_push_context_ios.mm",
-    "screen.cc",
-    "screen.h",
-    "screen_android.cc",
-    "screen_aura.cc",
-    "screen_ios.mm",
-    "screen_mac.mm",
     "scrollbar_size.cc",
     "scrollbar_size.h",
     "selection_model.cc",
@@ -209,8 +188,6 @@ component("gfx") {
     "win/direct_manipulation.h",
     "win/direct_write.cc",
     "win/direct_write.h",
-    "win/dpi.cc",
-    "win/dpi.h",
     "win/hwnd_util.cc",
     "win/hwnd_util.h",
     "win/physical_size.cc",
@@ -242,6 +219,8 @@ component("gfx") {
       "image/image_skia_operations.h",
       "paint_throbber.cc",
       "paint_throbber.h",
+      "scoped_canvas.cc",
+      "scoped_canvas.h",
     ]
   }
 
@@ -262,6 +241,7 @@ component("gfx") {
     "//skia",
     "//third_party/icu",
     "//ui/gfx/geometry",
+    "//ui/gfx/range",
   ]
   deps = [
     ":gfx_export",
@@ -321,10 +301,7 @@ component("gfx") {
   # Android.
   if (is_android) {
     if (use_aura) {
-      sources -= [
-        "canvas_notimplemented.cc",
-        "screen_android.cc",
-      ]
+      sources -= [ "canvas_notimplemented.cc" ]
       sources += [ "font_fallback_android.cc" ]
     } else {
       sources -= [
@@ -398,11 +375,16 @@ component("gfx") {
   }
 
   if (is_mac) {
-    libs = [ "IOSurface.framework" ]
+    libs = [
+      "AppKit.framework",
+      "CoreFoundation.framework",
+      "CoreGraphics.framework",
+      "CoreText.framework",
+      "IOSurface.framework",
+    ]
   }
 
   if (!use_aura) {
-    sources -= [ "screen_aura.cc" ]
     if (!toolkit_views) {
       sources -= [
         "nine_image_painter.cc",
@@ -419,7 +401,7 @@ component("gfx") {
   }
 
   if (use_cairo) {
-    configs += [ "//build/config/linux:pangocairo" ]
+    configs += [ "//build/config/linux/pangocairo" ]
   }
 }
 
@@ -518,6 +500,8 @@ action("aggregate_vector_icons") {
     "vector_icons/overflow_chevron.1x.icon",
     "vector_icons/overflow_chevron.icon",
     "vector_icons/paintbrush.icon",
+    "vector_icons/pdf.1x.icon",
+    "vector_icons/pdf.icon",
     "vector_icons/photo_camera.icon",
     "vector_icons/protocol_handler.icon",
     "vector_icons/remove_box.icon",
@@ -539,6 +523,7 @@ action("aggregate_vector_icons") {
     "vector_icons/tab_close_normal.icon",
     "vector_icons/tab_media_capturing.icon",
     "vector_icons/tab_media_recording.icon",
+    "vector_icons/tab_usb_connected.1x.icon",
     "vector_icons/tab_usb_connected.icon",
     "vector_icons/tablet.icon",
     "vector_icons/translate.icon",
@@ -656,13 +641,10 @@ source_set("test_support") {
     "image/image_unittest_util.h",
     "image/image_unittest_util_ios.mm",
     "image/image_unittest_util_mac.mm",
-    "test/display_util.h",
     "test/fontconfig_util_linux.cc",
     "test/fontconfig_util_linux.h",
     "test/gfx_util.cc",
     "test/gfx_util.h",
-    "test/test_screen.cc",
-    "test/test_screen.h",
     "test/ui_cocoa_test_helper.h",
     "test/ui_cocoa_test_helper.mm",
   ]
@@ -691,17 +673,6 @@ source_set("test_support") {
   }
 }
 
-bundle_data("gfx_unittests_bundle_data") {
-  testonly = true
-  sources = [
-    "test/data",
-  ]
-  outputs = [
-    "{{bundle_resources_dir}}/" +
-        "{{source_root_relative_dir}}/{{source_file_part}}",
-  ]
-}
-
 test("gfx_unittests") {
   sources = [
     "font_render_params_linux_unittest.cc",
@@ -713,7 +684,6 @@ test("gfx_unittests") {
     "ios/NSString+CrStringDrawing_unittest.mm",
     "ios/uikit_util_unittest.mm",
     "platform_font_linux_unittest.cc",
-    "screen_unittest.cc",
     "test/run_all_unittests.cc",
     "text_elider_unittest.cc",
     "text_utils_unittest.cc",
@@ -740,8 +710,6 @@ test("gfx_unittests") {
       "color_analysis_unittest.cc",
       "color_profile_mac_unittest.mm",
       "color_utils_unittest.cc",
-      "display_change_notifier_unittest.cc",
-      "display_unittest.cc",
       "font_fallback_mac_unittest.cc",
       "font_list_unittest.cc",
       "geometry/box_unittest.cc",
@@ -784,7 +752,6 @@ test("gfx_unittests") {
 
   deps = [
     ":gfx",
-    ":gfx_unittests_bundle_data",
     ":test_support",
     "//base",
     "//base/test:test_support",
@@ -795,6 +762,7 @@ test("gfx_unittests") {
     "//third_party/zlib",
     "//ui/base",
     "//ui/gfx/geometry",
+    "//ui/gfx/range",
     "//ui/resources:ui_test_pak",
   ]
 
@@ -811,17 +779,9 @@ test("gfx_unittests") {
 
   if (is_android) {
     deps += [ "//ui/android:ui_java" ]
-
-    sources -= [
-      # Do not run display_change_notifier_unittest.cc on Android because it
-      # does not compile display_observer.cc
-      "display_change_notifier_unittest.cc",
-    ]
   }
 
-  if (use_aura) {
-    sources -= [ "screen_unittest.cc" ]
-  } else if (!is_ios) {
+  if (!use_aura && !is_ios) {
     sources -= [ "nine_image_painter_unittest.cc" ]
   }
 

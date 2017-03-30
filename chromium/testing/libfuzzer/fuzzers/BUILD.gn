@@ -26,6 +26,7 @@ fuzzer_test("brotli_fuzzer") {
   deps = [
     "//third_party/brotli:brotli",
   ]
+  libfuzzer_options = [ "max_len=1280" ]
 }
 
 fuzzer_test("courgette_fuzzer") {
@@ -58,7 +59,7 @@ if (proprietary_codecs) {
       "//base",
       "//media",
     ]
-    libfuzzer_options = "mp4_box_reader_fuzzer.options"
+    libfuzzer_options = [ "max_len=500" ]
     dict = "dicts/mp4.dict"
   }
 }
@@ -130,15 +131,6 @@ fuzzer_test("url_parse_fuzzer") {
     "//base",
     "//base:i18n",
     "//url:url",
-  ]
-}
-
-fuzzer_test("vp9_parser_fuzzer") {
-  sources = [
-    "vp9_parser_fuzzer.cc",
-  ]
-  deps = [
-    "//media",
   ]
 }
 
@@ -219,7 +211,7 @@ fuzzer_test("icu_uregex_open_fuzzer") {
     "//third_party/icu",
   ]
   dict = "dicts/icu_regex.dict"
-  libfuzzer_options = "icu_uregex_open_fuzzer.options"
+  libfuzzer_options = [ "max_len=128" ]
 }
 
 fuzzer_test("v8_script_parser_fuzzer") {
@@ -228,6 +220,7 @@ fuzzer_test("v8_script_parser_fuzzer") {
     "//v8:parser_fuzzer",
   ]
   dict = "dicts/js.dict"
+  seed_corpus = "//v8/test/mjsunit/regress/"
 }
 
 fuzzer_test("v8_json_parser_fuzzer") {
@@ -244,7 +237,7 @@ fuzzer_test("v8_regexp_parser_fuzzer") {
     "//v8:regexp_fuzzer",
   ]
   dict = "dicts/regexp.dict"
-  libfuzzer_options = "v8_regexp_parser_fuzzer.options"
+  libfuzzer_options = [ "max_len=1024" ]
 }
 
 fuzzer_test("v8_wasm_fuzzer") {
@@ -253,7 +246,7 @@ fuzzer_test("v8_wasm_fuzzer") {
     "//v8:wasm_fuzzer",
   ]
   dict = "dicts/v8_wasm.dict"
-  libfuzzer_options = "v8_wasm_fuzzer.options"
+  libfuzzer_options = [ "max_len=500" ]
 }
 
 fuzzer_test("v8_wasm_asmjs_fuzzer") {
@@ -270,7 +263,7 @@ fuzzer_test("third_party_re2_fuzzer") {
   deps = [
     "//third_party/re2:re2",
   ]
-  libfuzzer_options = "re2_fuzzer.options"
+  libfuzzer_options = [ "max_len=32" ]
 }
 
 fuzzer_test("libxml_xml_regexp_compile_fuzzer") {
@@ -280,6 +273,29 @@ fuzzer_test("libxml_xml_regexp_compile_fuzzer") {
   deps = [
     "//third_party/libxml",
   ]
-  libfuzzer_options = "libxml_xml_regexp_compile_fuzzer.options"
+  libfuzzer_options = [ "max_len=32" ]
   additional_configs = [ "//testing/libfuzzer:no_clusterfuzz" ]
+}
+
+fuzzer_test("convert_woff2ttf_fuzzer") {
+  sources = [
+    "convert_woff2ttf_fuzzer.cc",
+  ]
+  deps = [
+    "//third_party/woff2:woff2_dec",
+  ]
+  seed_corpus = "//testing/libfuzzer/fuzzers/woff2_corpus"
+  libfuzzer_options = [ "max_len=803500" ]
+}
+
+fuzzer_test("flatbuffers_verifier_fuzzer") {
+  sources = [
+    "flatbuffers_verifier_fuzzer.cc",
+  ]
+  deps = [
+    "//third_party/flatbuffers",
+    "//third_party/flatbuffers:flatbuffers_samplebuffer",
+  ]
+  libfuzzer_options = [ "max_len=1024" ]
+  seed_corpus = "//testing/libfuzzer/fuzzers/flatbuffers_corpus"
 }

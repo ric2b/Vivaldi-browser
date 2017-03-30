@@ -6,12 +6,14 @@
 
 #include <memory>
 
+#include "base/files/important_file_writer.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_samples.h"
+#include "base/metrics/persistent_sample_map.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/synchronization/lock.h"
@@ -44,7 +46,7 @@ enum : uint32_t {
 // GlobalHistogramAllocator objects) are explicitly forbidden from doing
 // anything essential at exit anyway due to the fact that they depend on data
 // managed elsewhere and which could be destructed first.
-GlobalHistogramAllocator* g_allocator;
+GlobalHistogramAllocator* g_allocator = nullptr;
 
 // Take an array of range boundaries and create a proper BucketRanges object
 // which is returned to the caller. A return of nullptr indicates that the
@@ -91,6 +93,134 @@ const Feature kPersistentHistogramsFeature{
   "PersistentHistograms", FEATURE_DISABLED_BY_DEFAULT
 };
 
+
+PersistentSparseHistogramDataManager::PersistentSparseHistogramDataManager(
+    PersistentMemoryAllocator* allocator)
+    : allocator_(allocator), record_iterator_(allocator) {}
+
+PersistentSparseHistogramDataManager::~PersistentSparseHistogramDataManager() {}
+
+PersistentSampleMapRecords*
+PersistentSparseHistogramDataManager::UseSampleMapRecords(uint64_t id,
+                                                          const void* user) {
+  base::AutoLock auto_lock(lock_);
+  return GetSampleMapRecordsWhileLocked(id)->Acquire(user);
+}
+
+PersistentSampleMapRecords*
+PersistentSparseHistogramDataManager::GetSampleMapRecordsWhileLocked(
+    uint64_t id) {
+  lock_.AssertAcquired();
+
+  auto found = sample_records_.find(id);
+  if (found != sample_records_.end())
+    return found->second.get();
+
+  std::unique_ptr<PersistentSampleMapRecords>& samples = sample_records_[id];
+  samples = WrapUnique(new PersistentSampleMapRecords(this, id));
+  return samples.get();
+}
+
+bool PersistentSparseHistogramDataManager::LoadRecords(
+    PersistentSampleMapRecords* sample_map_records) {
+  // DataManager must be locked in order to access the found_ field of any
+  // PersistentSampleMapRecords object.
+  base::AutoLock auto_lock(lock_);
+  bool found = false;
+
+  // If there are already "found" entries for the passed object, move them.
+  if (!sample_map_records->found_.empty()) {
+    sample_map_records->records_.reserve(sample_map_records->records_.size() +
+                                         sample_map_records->found_.size());
+    sample_map_records->records_.insert(sample_map_records->records_.end(),
+                                        sample_map_records->found_.begin(),
+                                        sample_map_records->found_.end());
+    sample_map_records->found_.clear();
+    found = true;
+  }
+
+  // Acquiring a lock is a semi-expensive operation so load some records with
+  // each call. More than this number may be loaded if it takes longer to
+  // find at least one matching record for the passed object.
+  const int kMinimumNumberToLoad = 10;
+  const uint64_t match_id = sample_map_records->sample_map_id_;
+
+  // Loop while no enty is found OR we haven't yet loaded the minimum number.
+  // This will continue reading even after a match is found.
+  for (int count = 0; !found || count < kMinimumNumberToLoad; ++count) {
+    // Get the next sample-record. The iterator will always resume from where
+    // it left off even if it previously had nothing further to return.
+    uint64_t found_id;
+    PersistentMemoryAllocator::Reference ref =
+        PersistentSampleMap::GetNextPersistentRecord(record_iterator_,
+                                                     &found_id);
+
+    // Stop immediately if there are none.
+    if (!ref)
+      break;
+
+    // The sample-record could be for any sparse histogram. Add the reference
+    // to the appropriate collection for later use.
+    if (found_id == match_id) {
+      sample_map_records->records_.push_back(ref);
+      found = true;
+    } else {
+      PersistentSampleMapRecords* samples =
+          GetSampleMapRecordsWhileLocked(found_id);
+      DCHECK(samples);
+      samples->found_.push_back(ref);
+    }
+  }
+
+  return found;
+}
+
+
+PersistentSampleMapRecords::PersistentSampleMapRecords(
+    PersistentSparseHistogramDataManager* data_manager,
+    uint64_t sample_map_id)
+    : data_manager_(data_manager), sample_map_id_(sample_map_id) {}
+
+PersistentSampleMapRecords::~PersistentSampleMapRecords() {}
+
+PersistentSampleMapRecords* PersistentSampleMapRecords::Acquire(
+    const void* user) {
+  DCHECK(!user_);
+  user_ = user;
+  seen_ = 0;
+  return this;
+}
+
+void PersistentSampleMapRecords::Release(const void* user) {
+  DCHECK_EQ(user_, user);
+  user_ = nullptr;
+}
+
+PersistentMemoryAllocator::Reference PersistentSampleMapRecords::GetNext() {
+  DCHECK(user_);
+
+  // If there are no unseen records, lock and swap in all the found ones.
+  if (records_.size() == seen_) {
+    if (!data_manager_->LoadRecords(this))
+      return false;
+  }
+
+  // Return the next record. Records *must* be returned in the same order
+  // they are found in the persistent memory in order to ensure that all
+  // objects using this data always have the same state. Race conditions
+  // can cause duplicate records so using the "first found" is the only
+  // guarantee that all objects always access the same one.
+  DCHECK_LT(seen_, records_.size());
+  return records_[seen_++];
+}
+
+PersistentMemoryAllocator::Reference PersistentSampleMapRecords::CreateNew(
+    HistogramBase::Sample value) {
+  return PersistentSampleMap::CreatePersistentRecord(data_manager_->allocator_,
+                                                     sample_map_id_, value);
+}
+
+
 // This data will be held in persistent memory in order for processes to
 // locate and use histograms created elsewhere.
 struct PersistentHistogramAllocator::PersistentHistogramData {
@@ -125,9 +255,11 @@ PersistentHistogramAllocator::Iterator::GetNextWithIgnore(Reference ignore) {
   return nullptr;
 }
 
+
 PersistentHistogramAllocator::PersistentHistogramAllocator(
     std::unique_ptr<PersistentMemoryAllocator> memory)
-    : memory_allocator_(std::move(memory)) {}
+    : memory_allocator_(std::move(memory)),
+      sparse_histogram_data_manager_(memory_allocator_.get()) {}
 
 PersistentHistogramAllocator::~PersistentHistogramAllocator() {}
 
@@ -137,6 +269,10 @@ void PersistentHistogramAllocator::CreateTrackingHistograms(StringPiece name) {
 
 void PersistentHistogramAllocator::UpdateTrackingHistograms() {
   memory_allocator_->UpdateTrackingHistograms();
+}
+
+void PersistentHistogramAllocator::ClearLastCreatedReferenceForTesting() {
+  subtle::NoBarrier_Store(&last_created_, 0);
 }
 
 // static
@@ -160,9 +296,14 @@ PersistentHistogramAllocator::GetCreateHistogramResultHistogram() {
     if (!initialized) {
       initialized = true;
       if (g_allocator) {
+// Don't log in release-with-asserts builds, otherwise the test_installer step
+// fails because this code writes to a log file before the installer code had a
+// chance to set the log file's location.
+#if !defined(DCHECK_ALWAYS_ON)
         DLOG(WARNING) << "Creating the results-histogram inside persistent"
                       << " memory can cause future allocations to crash if"
                       << " that memory is ever released (for testing).";
+#endif
       }
 
       histogram_pointer = LinearHistogram::FactoryGet(
@@ -196,8 +337,7 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::CreateHistogram(
   // Sparse histograms are quite different so handle them as a special case.
   if (histogram_data_ptr->histogram_type == SPARSE_HISTOGRAM) {
     std::unique_ptr<HistogramBase> histogram =
-        SparseHistogram::PersistentCreate(memory_allocator(),
-                                          histogram_data_ptr->name,
+        SparseHistogram::PersistentCreate(this, histogram_data_ptr->name,
                                           &histogram_data_ptr->samples_metadata,
                                           &histogram_data_ptr->logged_metadata);
     DCHECK(histogram);
@@ -341,6 +481,12 @@ void PersistentHistogramAllocator::FinalizeHistogram(Reference ref,
   // acquired memory so just change the type to be empty.
   else
     memory_allocator_->SetType(ref, 0);
+}
+
+PersistentSampleMapRecords* PersistentHistogramAllocator::UseSampleMapRecords(
+    uint64_t id,
+    const void* user) {
+  return sparse_histogram_data_manager_.UseSampleMapRecords(id, user);
 }
 
 std::unique_ptr<HistogramBase> PersistentHistogramAllocator::AllocateHistogram(
@@ -519,7 +665,7 @@ void GlobalHistogramAllocator::Set(
   g_allocator = allocator.release();
   size_t existing = StatisticsRecorder::GetHistogramCount();
 
-  DLOG_IF(WARNING, existing)
+  DVLOG_IF(1, existing)
       << existing << " histograms were created before persistence was enabled.";
 }
 
@@ -562,6 +708,35 @@ GlobalHistogramAllocator::ReleaseForTesting() {
   g_allocator = nullptr;
   return WrapUnique(histogram_allocator);
 };
+
+void GlobalHistogramAllocator::SetPersistentLocation(const FilePath& location) {
+  persistent_location_ = location;
+}
+
+bool GlobalHistogramAllocator::WriteToPersistentLocation() {
+#if defined(OS_NACL)
+  // NACL doesn't support file operations, including ImportantFileWriter.
+  NOTREACHED();
+  return false;
+#else
+  // Stop if no destination is set.
+  if (persistent_location_.empty()) {
+    NOTREACHED() << "Could not write \"" << Name() << "\" persistent histograms"
+                 << " to file because no location was set.";
+    return false;
+  }
+
+  StringPiece contents(static_cast<const char*>(data()), used());
+  if (!ImportantFileWriter::WriteFileAtomically(persistent_location_,
+                                                contents)) {
+    LOG(ERROR) << "Could not write \"" << Name() << "\" persistent histograms"
+               << " to file: " << persistent_location_.value();
+    return false;
+  }
+
+  return true;
+#endif
+}
 
 GlobalHistogramAllocator::GlobalHistogramAllocator(
     std::unique_ptr<PersistentMemoryAllocator> memory)

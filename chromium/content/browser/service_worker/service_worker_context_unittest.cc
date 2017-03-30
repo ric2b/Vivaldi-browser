@@ -8,6 +8,7 @@
 
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/service_worker/embedded_worker_registry.h"
@@ -157,7 +158,7 @@ class ServiceWorkerContextTest : public ServiceWorkerContextObserver,
 
  protected:
   TestBrowserThreadBundle browser_thread_bundle_;
-  scoped_ptr<EmbeddedWorkerTestHelper> helper_;
+  std::unique_ptr<EmbeddedWorkerTestHelper> helper_;
   std::vector<NotificationLog> notifications_;
 };
 
@@ -532,31 +533,39 @@ TEST_F(ServiceWorkerContextTest, ProviderHostIterator) {
   // Host1 (provider_id=1): process_id=1, origin1.
   ServiceWorkerProviderHost* host1(new ServiceWorkerProviderHost(
       kRenderProcessId1, MSG_ROUTING_NONE, provider_id++,
-      SERVICE_WORKER_PROVIDER_FOR_WINDOW, context()->AsWeakPtr(), nullptr));
+      SERVICE_WORKER_PROVIDER_FOR_WINDOW,
+      ServiceWorkerProviderHost::FrameSecurityLevel::SECURE,
+      context()->AsWeakPtr(), nullptr));
   host1->SetDocumentUrl(kOrigin1);
 
   // Host2 (provider_id=2): process_id=2, origin2.
   ServiceWorkerProviderHost* host2(new ServiceWorkerProviderHost(
       kRenderProcessId2, MSG_ROUTING_NONE, provider_id++,
-      SERVICE_WORKER_PROVIDER_FOR_WINDOW, context()->AsWeakPtr(), nullptr));
+      SERVICE_WORKER_PROVIDER_FOR_WINDOW,
+      ServiceWorkerProviderHost::FrameSecurityLevel::SECURE,
+      context()->AsWeakPtr(), nullptr));
   host2->SetDocumentUrl(kOrigin2);
 
   // Host3 (provider_id=3): process_id=2, origin1.
   ServiceWorkerProviderHost* host3(new ServiceWorkerProviderHost(
       kRenderProcessId2, MSG_ROUTING_NONE, provider_id++,
-      SERVICE_WORKER_PROVIDER_FOR_WINDOW, context()->AsWeakPtr(), nullptr));
+      SERVICE_WORKER_PROVIDER_FOR_WINDOW,
+      ServiceWorkerProviderHost::FrameSecurityLevel::SECURE,
+      context()->AsWeakPtr(), nullptr));
   host3->SetDocumentUrl(kOrigin1);
 
   // Host4 (provider_id=4): process_id=2, origin2, for ServiceWorker.
   ServiceWorkerProviderHost* host4(new ServiceWorkerProviderHost(
       kRenderProcessId2, MSG_ROUTING_NONE, provider_id++,
-      SERVICE_WORKER_PROVIDER_FOR_CONTROLLER, context()->AsWeakPtr(), nullptr));
+      SERVICE_WORKER_PROVIDER_FOR_CONTROLLER,
+      ServiceWorkerProviderHost::FrameSecurityLevel::SECURE,
+      context()->AsWeakPtr(), nullptr));
   host4->SetDocumentUrl(kOrigin2);
 
-  context()->AddProviderHost(make_scoped_ptr(host1));
-  context()->AddProviderHost(make_scoped_ptr(host2));
-  context()->AddProviderHost(make_scoped_ptr(host3));
-  context()->AddProviderHost(make_scoped_ptr(host4));
+  context()->AddProviderHost(base::WrapUnique(host1));
+  context()->AddProviderHost(base::WrapUnique(host2));
+  context()->AddProviderHost(base::WrapUnique(host3));
+  context()->AddProviderHost(base::WrapUnique(host4));
 
   // Iterate over all provider hosts.
   std::set<ServiceWorkerProviderHost*> results;

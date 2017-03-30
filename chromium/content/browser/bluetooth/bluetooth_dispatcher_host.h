@@ -14,14 +14,11 @@
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/bluetooth/bluetooth_allowed_devices_map.h"
-#include "content/browser/bluetooth/bluetooth_metrics.h"
-#include "content/common/bluetooth/bluetooth_messages.h"
 #include "content/public/browser/bluetooth_chooser.h"
 #include "content/public/browser/browser_message_filter.h"
 #include "device/bluetooth/bluetooth_adapter.h"
-#include "device/bluetooth/bluetooth_gatt_connection.h"
 #include "device/bluetooth/bluetooth_gatt_notify_session.h"
-#include "device/bluetooth/bluetooth_gatt_service.h"
+#include "device/bluetooth/bluetooth_remote_gatt_service.h"
 
 namespace device {
 class BluetoothUUID;
@@ -29,7 +26,10 @@ class BluetoothUUID;
 
 namespace content {
 
+class WebBluetoothServiceImpl;
+
 struct BluetoothScanFilter;
+struct CacheQueryResult;
 
 // Dispatches and sends bluetooth related messages sent to/from a child
 // process BluetoothDispatcher from/to the main browser process.
@@ -55,64 +55,32 @@ class CONTENT_EXPORT BluetoothDispatcherHost final
   void SetBluetoothAdapterForTesting(
       scoped_refptr<device::BluetoothAdapter> mock_adapter);
 
-  // TODO(ortuno): We temporarily make this a public struct so that
-  // both BluetoothDispatcherHost and WebBluetoothServiceImpl can use it,
-  // while we move functions from BluetoothDispatcherHost to
-  // WebBluetoothServiceImpl.
+  // Temporary functions so that WebBluetoothServices can add themselves as
+  // observers of the Bluetooth Adapter without having to get an adapter for
+  // themselves.
+  // TODO(ortuno): Remove once WebBluetoothServiceImpl gets its own adapter.
   // https://crbug.com/508771
-  struct CacheQueryResult {
-    CacheQueryResult();
-    CacheQueryResult(CacheQueryOutcome outcome);
-    ~CacheQueryResult();
-    blink::WebBluetoothError GetWebError() const;
-    device::BluetoothDevice* device = nullptr;
-    device::BluetoothGattService* service = nullptr;
-    device::BluetoothGattCharacteristic* characteristic = nullptr;
-    CacheQueryOutcome outcome = CacheQueryOutcome::SUCCESS;
-  };
-
-  // Queries the platform cache for a characteristic with
-  // |characteristic_instance_id|. Fills in the |outcome| field, and |device|,
-  // |service| and |characteristic| fields if successful.
-  CacheQueryResult QueryCacheForCharacteristic(
-      const url::Origin& origin,
-      const std::string& characteristic_instance_id);
+  void AddAdapterObserver(device::BluetoothAdapter::Observer* observer);
+  void RemoveAdapterObserver(device::BluetoothAdapter::Observer* observer);
 
  protected:
   ~BluetoothDispatcherHost() override;
 
  private:
+  friend class WebBluetoothServiceImpl;
   friend class base::DeleteHelper<BluetoothDispatcherHost>;
   friend struct BrowserThread::DeleteOnThread<BrowserThread::UI>;
 
   struct RequestDeviceSession;
-  struct PrimaryServicesRequest;
-
-  // Map to keep track of connections. Inserting and removing connections
-  // will update the Web Contents for the frame. Upon destruction
-  // the map will clear Web Contents of Bluetooth connections.
-  struct ConnectedDevicesMap {
-    ConnectedDevicesMap(int render_process_id);
-    ~ConnectedDevicesMap();
-    bool HasActiveConnection(const std::string& device_id);
-    void InsertOrReplace(
-        int frame_routing_id,
-        const std::string& device_id,
-        scoped_ptr<device::BluetoothGattConnection> connection);
-    void Remove(int frame_routing_id, const std::string& device_id);
-    void IncrementBluetoothConnectedDeviceCount(int frame_routing_id);
-    void DecrementBluetoothConnectedDeviceCount(int frame_routing_id);
-
-    int render_process_id_;
-    std::unordered_map<std::string, scoped_ptr<device::BluetoothGattConnection>>
-        device_id_to_connection_map_;
-    // Keeps track of which frame is connected to which device so that
-    // we can clean up the WebContents in our destructor.
-    std::set<std::pair<int, std::string>> frame_ids_device_ids_;
-  };
 
   // Set |adapter_| to a BluetoothAdapter instance and register observers,
   // releasing references to previous |adapter_|.
+  //
+  // We currently keep track of observers that used BluetoothDispatcherHost
+  // to register themselves on the adapter and remove them from |adapter_| and
+  // add them to |adapter| when this function is called.
+  // TODO(ortuno): Observers should add/remove themselves to/from the adapter.
+  // http://crbug.com/603291
   void set_adapter(scoped_refptr<device::BluetoothAdapter> adapter);
 
   // Makes sure a BluetoothDiscoverySession is active for |session|, and resets
@@ -130,18 +98,6 @@ class CONTENT_EXPORT BluetoothDispatcherHost final
                    device::BluetoothDevice* device) override;
   void DeviceRemoved(device::BluetoothAdapter* adapter,
                      device::BluetoothDevice* device) override;
-  void GattServicesDiscovered(device::BluetoothAdapter* adapter,
-                              device::BluetoothDevice* device) override;
-  void GattCharacteristicValueChanged(
-      device::BluetoothAdapter* adapter,
-      device::BluetoothGattCharacteristic* characteristic,
-      const std::vector<uint8_t>& value) override;
-
-  // Sends an IPC to the thread informing that a the characteristic's
-  // value changed.
-  void NotifyActiveCharacteristic(int thread_id,
-                                  const std::string& characteristic_instance_id,
-                                  const std::vector<uint8_t>& value);
 
   // IPC Handlers, see definitions in bluetooth_messages.h.
   void OnRequestDevice(
@@ -150,48 +106,6 @@ class CONTENT_EXPORT BluetoothDispatcherHost final
       int frame_routing_id,
       const std::vector<content::BluetoothScanFilter>& filters,
       const std::vector<device::BluetoothUUID>& optional_services);
-  void OnGATTServerConnect(int thread_id,
-                           int request_id,
-                           int frame_routing_id,
-                           const std::string& device_id);
-  void OnGATTServerDisconnect(int thread_id,
-                              int frame_routing_id,
-                              const std::string& device_id);
-  void OnGetPrimaryService(int thread_id,
-                           int request_id,
-                           int frame_routing_id,
-                           const std::string& device_id,
-                           const std::string& service_uuid);
-  void OnGetCharacteristic(int thread_id,
-                           int request_id,
-                           int frame_routing_id,
-                           const std::string& service_instance_id,
-                           const std::string& characteristic_uuid);
-  void OnGetCharacteristics(int thread_id,
-                            int request_id,
-                            int frame_routing_id,
-                            const std::string& service_instance_id,
-                            const std::string& characteristics_uuid);
-  void OnReadValue(int thread_id,
-                   int request_id,
-                   int frame_routing_id,
-                   const std::string& characteristic_instance_id);
-  void OnStartNotifications(int thread_id,
-                            int request_id,
-                            int frame_routing_id,
-                            const std::string& characteristic_instance_id);
-  void OnStopNotifications(int thread_id,
-                           int request_id,
-                           int frame_routing_id,
-                           const std::string& characteristic_instance_id);
-  void OnRegisterCharacteristicObject(
-      int thread_id,
-      int frame_routing_id,
-      const std::string& characteristic_instance_id);
-  void OnUnregisterCharacteristicObject(
-      int thread_id,
-      int frame_routing_id,
-      const std::string& characteristic_instance_id);
 
   // Callbacks for BluetoothDevice::OnRequestDevice.
   // If necessary, the adapter must be obtained before continuing to Impl.
@@ -207,7 +121,7 @@ class CONTENT_EXPORT BluetoothDispatcherHost final
   // Callbacks for BluetoothAdapter::StartDiscoverySession.
   void OnDiscoverySessionStarted(
       int chooser_id,
-      scoped_ptr<device::BluetoothDiscoverySession> discovery_session);
+      std::unique_ptr<device::BluetoothDiscoverySession> discovery_session);
   void OnDiscoverySessionStartedError(int chooser_id);
 
   // BluetoothChooser::EventHandler:
@@ -222,52 +136,6 @@ class CONTENT_EXPORT BluetoothDispatcherHost final
                             BluetoothChooser::Event event,
                             const std::string& device_id);
 
-  // Callbacks for BluetoothDevice::CreateGattConnection.
-  void OnGATTConnectionCreated(
-      int thread_id,
-      int request_id,
-      int frame_routing_id,
-      const std::string& device_id,
-      base::TimeTicks start_time,
-      scoped_ptr<device::BluetoothGattConnection> connection);
-  void OnCreateGATTConnectionError(
-      int thread_id,
-      int request_id,
-      const std::string& device_id,
-      base::TimeTicks start_time,
-      device::BluetoothDevice::ConnectErrorCode error_code);
-
-  // Adds the service to the map of services' instance ids to devices' instance
-  // ids and sends the service to the renderer.
-  void AddToServicesMapAndSendGetPrimaryServiceSuccess(
-      const device::BluetoothGattService& service,
-      int thread_id,
-      int request_id);
-
-  // Callbacks for BluetoothGattCharacteristic::ReadRemoteCharacteristic.
-  void OnCharacteristicValueRead(int thread_id,
-                                 int request_id,
-                                 const std::vector<uint8_t>& value);
-  void OnCharacteristicReadValueError(
-      int thread_id,
-      int request_id,
-      device::BluetoothGattService::GattErrorCode);
-
-  // Callbacks for BluetoothGattCharacteristic::StartNotifySession.
-  void OnStartNotifySessionSuccess(
-      int thread_id,
-      int request_id,
-      scoped_ptr<device::BluetoothGattNotifySession> notify_session);
-  void OnStartNotifySessionFailed(
-      int thread_id,
-      int request_id,
-      device::BluetoothGattService::GattErrorCode error_code);
-
-  // Callback for BluetoothGattNotifySession::Stop.
-  void OnStopNotifySession(int thread_id,
-                           int request_id,
-                           const std::string& characteristic_instance_id);
-
   // Functions to query the platform cache for the bluetooth object.
   // result.outcome == CacheQueryOutcome::SUCCESS if the object was found in the
   // cache. Otherwise result.outcome that can used to record the outcome and
@@ -275,31 +143,10 @@ class CONTENT_EXPORT BluetoothDispatcherHost final
   // One of the possible outcomes is BAD_RENDERER. In this case the outcome
   // was already recorded and since there renderer crashed there is no need to
   // send a response.
-
   // Queries the platform cache for a Device with |device_id| for |origin|.
   // Fills in the |outcome| field and the |device| field if successful.
   CacheQueryResult QueryCacheForDevice(const url::Origin& origin,
                                        const std::string& device_id);
-  // Queries the platform cache for a Service with |service_instance_id|. Fills
-  // in the |outcome| field, and |device| and |service| fields if successful.
-  CacheQueryResult QueryCacheForService(const url::Origin& origin,
-                                        const std::string& service_instance_id);
-
-  // Adds the PrimaryServicesRequest to the vector of pending services requests
-  // for that device.
-  void AddToPendingPrimaryServicesRequest(
-      const std::string& device_address,
-      const PrimaryServicesRequest& request);
-
-  // Returns the origin for the frame with "frame_routing_id" in
-  // render_process_id_.
-  url::Origin GetOrigin(int frame_routing_id);
-
-  // Returns true if the frame has permission to access the characteristic
-  // with |characteristic_instance_id|.
-  bool CanFrameAccessCharacteristicInstance(
-      int frame_routing_id,
-      const std::string& characteristic_instance_id);
 
   int render_process_id_;
 
@@ -311,28 +158,13 @@ class CONTENT_EXPORT BluetoothDispatcherHost final
 
   BluetoothAllowedDevicesMap allowed_devices_map_;
 
-  // Maps to get the object's parent based on it's instanceID
-  // Map of service_instance_id to device_address.
-  std::map<std::string, std::string> service_to_device_;
-  // Map of characteristic_instance_id to service_instance_id.
-  std::map<std::string, std::string> characteristic_to_service_;
-
-  // Map that matches characteristic_instance_id to notify session.
-  // TODO(ortuno): Also key by thread_id once support for web workers,
-  // is added: http://crbug.com/537372
-  std::map<std::string, scoped_ptr<device::BluetoothGattNotifySession>>
-      characteristic_id_to_notify_session_;
-
-  // Map of characteristic_instance_id to a set of thread ids.
-  // A thread_id in the set represents a BluetoothDispatcher that
-  // needs to be notified of changes to the characteristic.
-  std::map<std::string, std::set<int>> active_characteristic_threads_;
-
   // Defines how long to scan for and how long to discover services for.
   int current_delay_time_;
 
   // A BluetoothAdapter instance representing an adapter of the system.
   scoped_refptr<device::BluetoothAdapter> adapter_;
+
+  std::unordered_set<device::BluetoothAdapter::Observer*> adapter_observers_;
 
   // Automatically stops Bluetooth discovery a set amount of time after it was
   // started. We have a single timer for all of Web Bluetooth because it's
@@ -340,14 +172,6 @@ class CONTENT_EXPORT BluetoothDispatcherHost final
   // and because there's no harm in extending the length of a few discovery
   // sessions when other sessions are active.
   base::Timer discovery_session_timer_;
-
-  // Retains BluetoothGattConnection objects to keep connections open.
-  scoped_ptr<ConnectedDevicesMap> connected_devices_map_;
-
-  // Map of device_address's to primary-services requests that need responses
-  // when that device's service discovery completes.
-  std::map<std::string, std::vector<PrimaryServicesRequest>>
-      pending_primary_services_requests_;
 
   // |weak_ptr_on_ui_thread_| provides weak pointers, e.g. for callbacks, and
   // because it exists and has been bound to the UI thread enforces that all

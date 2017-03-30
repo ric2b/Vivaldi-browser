@@ -104,6 +104,8 @@
         'src/EarlGrey/Common/GREYSwizzler.m',
         'src/EarlGrey/Common/GREYVisibilityChecker.h',
         'src/EarlGrey/Common/GREYVisibilityChecker.m',
+        'src/EarlGrey/Core/GREYAutomationSetup.h',
+        'src/EarlGrey/Core/GREYAutomationSetup.m',
         'src/EarlGrey/Core/GREYElementFinder.h',
         'src/EarlGrey/Core/GREYElementFinder.m',
         'src/EarlGrey/Core/GREYElementInteraction.h',
@@ -159,8 +161,6 @@
         'src/EarlGrey/Provider/GREYUIWindowProvider.m',
         'src/EarlGrey/Synchronization/GREYAppStateTracker.h',
         'src/EarlGrey/Synchronization/GREYAppStateTracker.m',
-        'src/EarlGrey/Synchronization/GREYBeaconImageProtocol.h',
-        'src/EarlGrey/Synchronization/GREYBeaconImageProtocol.m',
         'src/EarlGrey/Synchronization/GREYCondition.h',
         'src/EarlGrey/Synchronization/GREYCondition.m',
         'src/EarlGrey/Synchronization/GREYDispatchQueueIdlingResource.h',
@@ -269,6 +269,14 @@
         'GCC_SYMBOLS_PRIVATE_EXTERN': 'NO',
         'USE_HEADERMAP': 'YES',
         'CLANG_ENABLE_OBJC_ARC': 'YES',
+        'CODE_SIGN_IDENTITY[sdk=iphoneos*]': 'iPhone Developer',
+        'BUNDLE_IDENTIFIER': 'com.google.earlgrey.EarlGrey',
+        'INFOPLIST_FILE': 'src/EarlGrey-Info.plist',
+        'DYLIB_INSTALL_NAME_BASE': '@rpath',
+        'OTHER_LDFLAGS': [
+          '-Xlinker', '-rpath', '-Xlinker', '@executable_path/Frameworks',
+          '-Xlinker', '-rpath', '-Xlinker', '@loader_path/Frameworks'
+        ]
       },
       'link_settings': {
         'libraries': [

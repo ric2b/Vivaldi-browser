@@ -19,13 +19,13 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/browser/appcache/appcache_interceptor.h"
 #include "content/browser/appcache/chrome_appcache_service.h"
+#include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/fileapi/browser_file_system_helper.h"
-#include "content/browser/fileapi/chrome_blob_storage_context.h"
 #include "content/browser/loader/resource_request_info_impl.h"
 #include "content/browser/resource_context_impl.h"
 #include "content/browser/service_worker/foreign_fetch_request_handler.h"
@@ -94,7 +94,7 @@ class BlobProtocolHandler : public net::URLRequestJobFactory::ProtocolHandler {
   const scoped_refptr<ChromeBlobStorageContext> blob_storage_context_;
   const scoped_refptr<StreamContext> stream_context_;
   const scoped_refptr<storage::FileSystemContext> file_system_context_;
-  mutable scoped_ptr<storage::BlobProtocolHandler> blob_protocol_handler_;
+  mutable std::unique_ptr<storage::BlobProtocolHandler> blob_protocol_handler_;
   DISALLOW_COPY_AND_ASSIGN(BlobProtocolHandler);
 };
 
@@ -313,7 +313,7 @@ void NormalizeActivePaths(const base::FilePath& storage_root,
 void BlockingGarbageCollect(
     const base::FilePath& storage_root,
     const scoped_refptr<base::TaskRunner>& file_access_runner,
-    scoped_ptr<base::hash_set<base::FilePath> > active_paths) {
+    std::unique_ptr<base::hash_set<base::FilePath>> active_paths) {
   CHECK(storage_root.IsAbsolute());
 
   NormalizeActivePaths(storage_root, active_paths.get());
@@ -469,8 +469,8 @@ StoragePartitionImpl* StoragePartitionImplMap::Get(
   }
   partition->SetMediaURLRequestContext(
       partition_domain.empty() ?
-      browser_context_->GetMediaRequestContext() :
-      browser_context_->GetMediaRequestContextForStoragePartition(
+      browser_context_->CreateMediaRequestContext() :
+      browser_context_->CreateMediaRequestContextForStoragePartition(
           partition->GetPath(), in_memory));
 
   PostCreateInitialization(partition, in_memory);
@@ -533,7 +533,7 @@ void StoragePartitionImplMap::AsyncObliterate(
 }
 
 void StoragePartitionImplMap::GarbageCollect(
-    scoped_ptr<base::hash_set<base::FilePath> > active_paths,
+    std::unique_ptr<base::hash_set<base::FilePath>> active_paths,
     const base::Closure& done) {
   // Include all paths for current StoragePartitions in the active_paths since
   // they cannot be deleted safely.

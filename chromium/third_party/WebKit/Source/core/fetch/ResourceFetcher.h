@@ -96,7 +96,7 @@ public:
     int countPreloads() const { return m_preloads ? m_preloads->size() : 0; }
     void clearPreloads(ClearPreloadsPolicy = ClearAllPreloads);
     void preloadStarted(Resource*);
-    void printPreloadStats();
+    void logPreloadStats();
 
     MHTMLArchive* archive() const { return m_archive.get(); }
     ArchiveResource* createArchive(Resource*);
@@ -105,18 +105,18 @@ public:
     void stopFetching();
     bool isFetching() const;
 
-    void didLoadResource(Resource*);
     bool willFollowRedirect(Resource*, ResourceRequest&, const ResourceResponse&);
-    void didFinishLoading(Resource*, double finishTime, int64_t encodedDataLength);
-    void didFailLoading(const Resource*, const ResourceError&);
-    void didReceiveResponse(const Resource*, const ResourceResponse&);
+    enum DidFinishLoadingReason {
+        DidFinishLoading,
+        DidFinishFirstPartInMultipart
+    };
+    void didFinishLoading(Resource*, double finishTime, int64_t encodedDataLength, DidFinishLoadingReason);
+    void didFailLoading(Resource*, const ResourceError&);
+    void didReceiveResponse(Resource*, const ResourceResponse&);
     void didReceiveData(const Resource*, const char* data, int dataLength, int encodedDataLength);
     void didDownloadData(const Resource*, int dataLength, int encodedDataLength);
     void willStartLoadingResource(Resource*, ResourceLoader*, ResourceRequest&);
     bool defersLoading() const;
-
-    void moveResourceLoaderToNonBlocking(ResourceLoader*);
-    void removeResourceLoader(ResourceLoader*);
 
     enum AccessControlLoggingDecision {
         ShouldLogAccessControlErrors,
@@ -166,6 +166,8 @@ private:
     RevalidationPolicy determineRevalidationPolicy(Resource::Type, const FetchRequest&, Resource* existingResource, bool isStaticData) const;
 
     void moveCachedNonBlockingResourceToBlocking(Resource*, const FetchRequest&);
+    void moveResourceLoaderToNonBlocking(ResourceLoader*);
+    void removeResourceLoader(ResourceLoader*);
 
     void initializeResourceRequest(ResourceRequest&, Resource::Type, FetchRequest::DeferOption);
 

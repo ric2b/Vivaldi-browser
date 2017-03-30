@@ -44,7 +44,7 @@
 #include "content/common/sandbox_win.h"
 #include "sandbox/win/src/process_mitigations.h"
 #include "sandbox/win/src/sandbox_policy.h"
-#include "ui/gfx/win/dpi.h"
+#include "ui/display/win/dpi.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -100,7 +100,8 @@ class PpapiPluginSandboxedProcessLauncherDelegate
       for (const auto& mime_type : info_.mime_types) {
         if (browser_client->IsWin32kLockdownEnabledForMimeType(
                 mime_type.mime_type)) {
-          if (!AddWin32kLockdownPolicy(policy))
+          result = AddWin32kLockdownPolicy(policy, true);
+          if (result != sandbox::SBOX_ALL_OK)
             return false;
           break;
         }
@@ -410,15 +411,15 @@ bool PpapiPluginProcessHost::Init(const PepperPluginInfo& info) {
     cmd_line->AppendSwitch(switches::kDisableVivaldi);
 
   // These switches are forwarded to both plugin and broker pocesses.
-  static const char* kCommonForwardSwitches[] = {
-    switches::kVModule,
-    switches::kDebugVivaldi,
+  static const char* const kCommonForwardSwitches[] = {
+    switches::kVModule
+    , switches::kDebugVivaldi,
   };
   cmd_line->CopySwitchesFrom(browser_command_line, kCommonForwardSwitches,
                              arraysize(kCommonForwardSwitches));
 
   if (!is_broker_) {
-    static const char* kPluginForwardSwitches[] = {
+    static const char* const kPluginForwardSwitches[] = {
       switches::kDisableSeccompFilterSandbox,
 #if defined(OS_MACOSX)
       switches::kEnableSandboxLogging,
@@ -444,8 +445,9 @@ bool PpapiPluginProcessHost::Init(const PepperPluginInfo& info) {
   }
 
 #if defined(OS_WIN)
-  cmd_line->AppendSwitchASCII(switches::kDeviceScaleFactor,
-                              base::DoubleToString(gfx::GetDPIScale()));
+  cmd_line->AppendSwitchASCII(
+      switches::kDeviceScaleFactor,
+      base::DoubleToString(display::win::GetDPIScale()));
 #endif
 
   if (!plugin_launcher.empty())
@@ -468,8 +470,12 @@ void PpapiPluginProcessHost::RequestPluginChannel(Client* client) {
   int renderer_child_id;
   client->GetPpapiChannelInfo(&process_handle, &renderer_child_id);
 
-  base::ProcessId process_id = (process_handle == base::kNullProcessHandle) ?
-      0 : base::GetProcId(process_handle);
+  base::ProcessId process_id = base::kNullProcessId;
+  if (process_handle != base::kNullProcessHandle) {
+    // This channel is not used by the browser itself.
+    process_id = base::GetProcId(process_handle);
+    CHECK_NE(base::kNullProcessId, process_id);
+  }
 
   // We can't send any sync messages from the browser because it might lead to
   // a hang. See the similar code in PluginProcessHost for more description.

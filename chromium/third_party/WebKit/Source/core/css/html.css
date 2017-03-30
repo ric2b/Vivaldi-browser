@@ -290,7 +290,8 @@ td, th {
 }
 
 th {
-    font-weight: bold
+    font-weight: bold;
+    text-align: -internal-center
 }
 
 caption {
@@ -844,14 +845,24 @@ meter {
     height: 1em;
     width: 5em;
     vertical-align: -0.2em;
+    -webkit-user-modify: read-only !important;
 }
 
 meter::-webkit-meter-inner-element {
     -webkit-appearance: inherit;
     box-sizing: inherit;
+    display: none;
     -webkit-user-modify: read-only !important;
     height: 100%;
     width: 100%;
+}
+
+meter::-webkit-meter-inner-element:-internal-shadow-host-has-appearance {
+    display: block;
+}
+
+meter::-internal-fallback:-internal-shadow-host-has-appearance {
+    display: none;
 }
 
 meter::-webkit-meter-bar {
@@ -895,7 +906,6 @@ progress {
 }
 
 progress::-webkit-progress-inner-element {
-    -webkit-appearance: inherit;
     box-sizing: inherit;
     -webkit-user-modify: read-only;
     height: 100%;

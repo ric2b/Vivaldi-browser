@@ -17,6 +17,8 @@
 
 namespace {
 
+const base::char16 kSecurePasswordBullet = 0x2022;
+
 // These are enums from android.text.InputType in Java:
 enum {
   ANDROID_TEXT_INPUTTYPE_TYPE_NULL = 0,
@@ -63,7 +65,26 @@ bool BrowserAccessibilityAndroid::IsNative() const {
 }
 
 void BrowserAccessibilityAndroid::OnLocationChanged() {
-  manager()->NotifyAccessibilityEvent(ui::AX_EVENT_LOCATION_CHANGED, this);
+  manager()->NotifyAccessibilityEvent(
+      BrowserAccessibilityEvent::FromTreeChange,
+      ui::AX_EVENT_LOCATION_CHANGED,
+      this);
+}
+
+base::string16 BrowserAccessibilityAndroid::GetValue() const {
+  base::string16 value = BrowserAccessibility::GetValue();
+
+  // Optionally replace entered password text with bullet characters
+  // based on a user preference.
+  if (IsPassword()) {
+    bool should_expose = static_cast<BrowserAccessibilityManagerAndroid*>(
+        manager())->ShouldExposePasswordText();
+    if (!should_expose) {
+      value = base::string16(value.size(), kSecurePasswordBullet);
+    }
+  }
+
+  return value;
 }
 
 bool BrowserAccessibilityAndroid::PlatformIsLeaf() const {
@@ -1355,8 +1376,12 @@ void BrowserAccessibilityAndroid::OnDataChanged() {
     }
   }
 
-  if (GetRole() == ui::AX_ROLE_ALERT && first_time_)
-    manager()->NotifyAccessibilityEvent(ui::AX_EVENT_ALERT, this);
+  if (GetRole() == ui::AX_ROLE_ALERT && first_time_) {
+    manager()->NotifyAccessibilityEvent(
+        BrowserAccessibilityEvent::FromTreeChange,
+        ui::AX_EVENT_ALERT,
+        this);
+  }
 
   base::string16 live;
   if (GetString16Attribute(
@@ -1376,8 +1401,10 @@ void BrowserAccessibilityAndroid::NotifyLiveRegionUpdate(
   base::string16 text = GetText();
   if (cached_text_ != text) {
     if (!text.empty()) {
-      manager()->NotifyAccessibilityEvent(ui::AX_EVENT_SHOW,
-                                         this);
+      manager()->NotifyAccessibilityEvent(
+          BrowserAccessibilityEvent::FromTreeChange,
+          ui::AX_EVENT_SHOW,
+          this);
     }
     cached_text_ = text;
   }

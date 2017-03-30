@@ -11,22 +11,27 @@
 #include "base/metrics/sparse_histogram.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
+#include "chrome/browser/history/web_history_service_factory.h"
+#include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/common/pref_names.h"
+#include "components/browsing_data_ui/history_notice_utils.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_ui.h"
 
 namespace settings {
 
 ClearBrowsingDataHandler::ClearBrowsingDataHandler(content::WebUI* webui)
-    : remover_(nullptr) {
+    : sync_service_(nullptr),
+      sync_service_observer_(this),
+      remover_(nullptr),
+      should_show_history_footer_(false),
+      weak_ptr_factory_(this) {
   PrefService* prefs = Profile::FromWebUI(webui)->GetPrefs();
   clear_plugin_lso_data_enabled_.Init(prefs::kClearPluginLSODataEnabled, prefs);
   pepper_flash_settings_enabled_.Init(prefs::kPepperFlashSettingsEnabled,
                                       prefs);
-  allow_deleting_browser_history_.Init(
-      prefs::kAllowDeletingBrowserHistory, prefs,
-      base::Bind(&ClearBrowsingDataHandler::OnBrowsingHistoryPrefChanged,
-                 base::Unretained(this)));
+  sync_service_ =
+        ProfileSyncServiceFactory::GetForProfile(Profile::FromWebUI(webui));
 }
 
 ClearBrowsingDataHandler::~ClearBrowsingDataHandler() {
@@ -36,15 +41,39 @@ ClearBrowsingDataHandler::~ClearBrowsingDataHandler() {
 
 void ClearBrowsingDataHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
-      "performClearBrowserData",
-      base::Bind(&ClearBrowsingDataHandler::HandleClearBrowserData,
+      "clearBrowsingData",
+      base::Bind(&ClearBrowsingDataHandler::HandleClearBrowsingData,
+                 base::Unretained(this)));
+
+  web_ui()->RegisterMessageCallback(
+      "initializeClearBrowsingData",
+      base::Bind(&ClearBrowsingDataHandler::HandleInitialize,
                  base::Unretained(this)));
 }
 
-void ClearBrowsingDataHandler::HandleClearBrowserData(
+void ClearBrowsingDataHandler::OnJavascriptAllowed() {
+  PrefService* prefs = Profile::FromWebUI(web_ui())->GetPrefs();
+  allow_deleting_browser_history_.Init(
+      prefs::kAllowDeletingBrowserHistory, prefs,
+      base::Bind(&ClearBrowsingDataHandler::OnBrowsingHistoryPrefChanged,
+                 base::Unretained(this)));
+
+  if (sync_service_)
+    sync_service_observer_.Add(sync_service_);
+}
+
+void ClearBrowsingDataHandler::OnJavascriptDisallowed() {
+  allow_deleting_browser_history_.Destroy();
+  sync_service_observer_.RemoveAll();
+}
+
+void ClearBrowsingDataHandler::HandleClearBrowsingData(
     const base::ListValue* args) {
   // We should never be called when the previous clearing has not yet finished.
   CHECK(!remover_);
+  CHECK_EQ(1U, args->GetSize());
+  CHECK(webui_callback_id_.empty());
+  CHECK(args->GetString(0, &webui_callback_id_));
 
   Profile* profile = Profile::FromWebUI(web_ui());
   PrefService* prefs = profile->GetPrefs();
@@ -135,13 +164,48 @@ void ClearBrowsingDataHandler::HandleClearBrowserData(
 void ClearBrowsingDataHandler::OnBrowsingDataRemoverDone() {
   remover_->RemoveObserver(this);
   remover_ = nullptr;
-  web_ui()->CallJavascriptFunction("SettingsClearBrowserData.doneClearing");
+  ResolveJavascriptCallback(
+      base::StringValue(webui_callback_id_),
+      *base::Value::CreateNullValue());
+  webui_callback_id_.clear();
 }
 
 void ClearBrowsingDataHandler::OnBrowsingHistoryPrefChanged() {
-  web_ui()->CallJavascriptFunction(
-      "SettingsClearBrowserData.setAllowDeletingHistory",
+  CallJavascriptFunction(
+      "cr.webUIListenerCallback",
+      base::StringValue("browsing-history-pref-changed"),
       base::FundamentalValue(*allow_deleting_browser_history_));
+}
+
+void ClearBrowsingDataHandler::HandleInitialize(const base::ListValue* args) {
+  AllowJavascript();
+  OnStateChanged();
+  RefreshHistoryNotice();
+}
+
+void ClearBrowsingDataHandler::OnStateChanged() {
+  CallJavascriptFunction(
+      "cr.webUIListenerCallback",
+      base::StringValue("update-footer"),
+      base::FundamentalValue(sync_service_ && sync_service_->IsSyncActive()),
+      base::FundamentalValue(should_show_history_footer_));
+}
+
+void ClearBrowsingDataHandler::RefreshHistoryNotice() {
+  browsing_data_ui::ShouldShowNoticeAboutOtherFormsOfBrowsingHistory(
+      sync_service_,
+      WebHistoryServiceFactory::GetForProfile(Profile::FromWebUI(web_ui())),
+      base::Bind(&ClearBrowsingDataHandler::UpdateHistoryNotice,
+                 weak_ptr_factory_.GetWeakPtr()));
+}
+
+void ClearBrowsingDataHandler::UpdateHistoryNotice(bool show) {
+  should_show_history_footer_ = show;
+  OnStateChanged();
+
+  UMA_HISTOGRAM_BOOLEAN(
+      "History.ClearBrowsingData.HistoryNoticeShownInFooterWhenUpdated",
+      should_show_history_footer_);
 }
 
 }  // namespace settings

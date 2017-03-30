@@ -129,7 +129,7 @@ public:
     {
         if (!m_resolver->getExecutionContext() || m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
             return;
-        m_resolver->resolve(Response::create(m_resolver->getScriptState()->getExecutionContext(), webResponse));
+        m_resolver->resolve(Response::create(m_resolver->getScriptState(), webResponse));
         m_resolver.clear();
     }
 
@@ -327,7 +327,7 @@ ScriptPromise CacheStorage::matchImpl(ScriptState* scriptState, const Request* r
 
 CacheStorage::CacheStorage(GlobalFetch::ScopedFetcher* fetcher, PassOwnPtr<WebServiceWorkerCacheStorage> webCacheStorage)
     : m_scopedFetcher(fetcher)
-    , m_webCacheStorage(webCacheStorage)
+    , m_webCacheStorage(std::move(webCacheStorage))
 {
 }
 

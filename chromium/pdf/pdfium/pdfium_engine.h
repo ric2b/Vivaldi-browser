@@ -9,12 +9,12 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "pdf/document_loader.h"
 #include "pdf/pdf_engine.h"
@@ -212,7 +212,7 @@ class PDFiumEngine : public PDFEngine,
                      const std::string& password,
                      bool* needs_password);
 
-  // Ask the user for the document password and then continue loading the
+  // Asks the user for the document password and then continue loading the
   // document.
   void GetPasswordAndLoad();
 
@@ -225,17 +225,19 @@ class PDFiumEngine : public PDFEngine,
   void ContinueLoadingDocument(bool has_password,
                                const std::string& password);
 
-  // Finish loading the document and notify the client that the document has
-  // been loaded. This should only be run after |doc_| has been loaded and the
-  // document is fully downloaded. If this has been run once, it will result in
-  // a no-op.
+  // Finishes loading the document. Recalculate the document size if there were
+  // pages that were not previously available.
+  // Also notifies the client that the document has been loaded.
+  // This should only be called after |doc_| has been loaded and the document is
+  // fully downloaded.
+  // If this has been run once, it will not notify the client again.
   void FinishLoadingDocument();
 
   // Loads information about the pages in the document and calculate the
   // document size.
   void LoadPageInfo(bool reload);
 
-  // Calculate which pages should be displayed right now.
+  // Calculates which pages should be displayed right now.
   void CalculateVisiblePages();
 
   // Returns true iff the given page index is visible.  CalculateVisiblePages
@@ -704,7 +706,7 @@ class PDFiumEngine : public PDFEngine,
   int progressive_paint_timeout_;
 
   // Shadow matrix for generating the page shadow bitmap.
-  scoped_ptr<ShadowMatrix> page_shadow_;
+  std::unique_ptr<ShadowMatrix> page_shadow_;
 
   // Set to true if the user is being prompted for their password. Will be set
   // to false after the user finishes getting their password.

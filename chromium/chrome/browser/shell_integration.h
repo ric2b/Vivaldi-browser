@@ -22,48 +22,37 @@ class CommandLine;
 
 namespace shell_integration {
 
-// Sets Chrome as the default browser (only for the current user). Returns
-// false if this operation fails.
+// Sets Chrome as the default browser (only for the current user). Returns false
+// if this operation fails. This does not work on Windows version 8 or higher.
+// Prefer to use the DefaultBrowserWorker class below since it works on all OSs.
 bool SetAsDefaultBrowser();
-
-// Initiates an OS shell flow which (if followed by the user) should set
-// Chrome as the default browser. Returns false if the flow cannot be
-// initialized, if it is not supported (introduced for Windows 8) or if the
-// user cancels the operation. This is a blocking call and requires a FILE
-// thread. If Chrome is already default browser, no interactive dialog will be
-// shown and this method returns true.
-bool SetAsDefaultBrowserInteractive();
 
 // Sets Chrome as the default client application for the given protocol
 // (only for the current user). Returns false if this operation fails.
+// Prefer to use the DefaultProtocolClientWorker class below since it works on
+// all OSs.
 bool SetAsDefaultProtocolClient(const std::string& protocol);
 
-// Initiates an OS shell flow which (if followed by the user) should set
-// Chrome as the default handler for |protocol|. Returns false if the flow
-// cannot be initialized, if it is not supported (introduced for Windows 8)
-// or if the user cancels the operation. This is a blocking call and requires
-// a FILE thread. If Chrome is already default for |protocol|, no interactive
-// dialog will be shown and this method returns true.
-bool SetAsDefaultProtocolClientInteractive(const std::string& protocol);
-
-// Windows 8 and Windows 10 introduced different ways to set the default
-// browser.
+// The different types of permissions required to set a default web client.
 enum DefaultWebClientSetPermission {
   // The browser distribution is not permitted to be made default.
   SET_DEFAULT_NOT_ALLOWED,
   // No special permission or interaction is required to set the default
   // browser. This is used in Linux, Mac and Windows 7 and under.
   SET_DEFAULT_UNATTENDED,
-  // On Windows 8, a browser can be made default only in an interactive flow.
+  // On Windows 8+, a browser can be made default only in an interactive flow.
   SET_DEFAULT_INTERACTIVE,
 };
 
-// Returns requirements for making the running browser the user's default.
-DefaultWebClientSetPermission CanSetAsDefaultBrowser();
+// Returns requirements for making the running browser either the default
+// browser or the default client application for a specific protocols for the
+// current user.
+DefaultWebClientSetPermission GetDefaultWebClientSetPermission();
 
-// Returns requirements for making the running browser the user's default
-// client application for specific protocols.
-DefaultWebClientSetPermission CanSetAsDefaultProtocolClient();
+// Returns true if the running browser can be set as the default browser,
+// whether user interaction is needed or not. Use
+// GetDefaultWebClientSetPermission() if this distinction is important.
+bool CanSetAsDefaultBrowser();
 
 // Returns true if making the running browser the default client for any
 // protocol requires elevated privileges.
@@ -131,43 +120,6 @@ base::CommandLine CommandLineArgsForLauncher(
 // profile.
 void AppendProfileArgs(const base::FilePath& profile_path,
                        base::CommandLine* command_line);
-
-#if defined(OS_WIN)
-// Generates an application user model ID (AppUserModelId) for a given app
-// name and profile path. The returned app id is in the format of
-// "|app_name|[.<profile_id>]". "profile_id" is appended when user override
-// the default value.
-// Note: If the app has an installation specific suffix (e.g. on user-level
-// Chrome installs), |app_name| should already be suffixed, this method will
-// then further suffix it with the profile id as described above.
-base::string16 GetAppModelIdForProfile(const base::string16& app_name,
-                                       const base::FilePath& profile_path);
-
-// Generates an application user model ID (AppUserModelId) for Chromium by
-// calling GetAppModelIdForProfile() with ShellUtil::GetAppId() as app_name.
-base::string16 GetChromiumModelIdForProfile(const base::FilePath& profile_path);
-
-// Get the AppUserModelId for the App List, for the profile in |profile_path|.
-base::string16 GetAppListAppModelIdForProfile(
-    const base::FilePath& profile_path);
-
-// Migrates existing chrome taskbar pins by tagging them with correct app id.
-// see http://crbug.com/28104
-void MigrateTaskbarPins();
-
-// Migrates all shortcuts in |path| which point to |chrome_exe| such that they
-// have the appropriate AppUserModelId. Also clears the legacy dual_mode
-// property from shortcuts with the default chrome app id.
-// Returns the number of shortcuts migrated.
-// This method should not be called prior to Windows 7.
-// This method is only public for the sake of tests and shouldn't be called
-// externally otherwise.
-int MigrateShortcutsInPathInternal(const base::FilePath& chrome_exe,
-                                   const base::FilePath& path);
-
-// Returns the path to the Start Menu shortcut for the given Chrome.
-base::FilePath GetStartMenuShortcut(const base::FilePath& chrome_exe);
-#endif  // defined(OS_WIN)
 
 #if !defined(OS_WIN)
 // TODO(calamity): replace with
@@ -240,7 +192,11 @@ class DefaultWebClientWorker
 
   // Implementation of CheckIsDefault() and SetAsDefault() for subclasses.
   virtual DefaultWebClientState CheckIsDefaultImpl() = 0;
-  virtual void SetAsDefaultImpl() = 0;
+
+  // The callback may be run synchronously or at an arbitrary time later on this
+  // thread.
+  // Note: Subclasses MUST make sure |on_finished_callback| is executed.
+  virtual void SetAsDefaultImpl(const base::Closure& on_finished_callback) = 0;
 
   // Reports the result for the set-as-default operation.
   void ReportSetDefaultResult(DefaultWebClientState state);
@@ -276,7 +232,7 @@ class DefaultBrowserWorker : public DefaultWebClientWorker {
   DefaultWebClientState CheckIsDefaultImpl() override;
 
   // Set Chrome as the default browser.
-  void SetAsDefaultImpl() override;
+  void SetAsDefaultImpl(const base::Closure& on_finished_callback) override;
 
   DISALLOW_COPY_AND_ASSIGN(DefaultBrowserWorker);
 };
@@ -300,7 +256,7 @@ class DefaultProtocolClientWorker : public DefaultWebClientWorker {
   DefaultWebClientState CheckIsDefaultImpl() override;
 
   // Set Chrome as the default handler for this protocol.
-  void SetAsDefaultImpl() override;
+  void SetAsDefaultImpl(const base::Closure& on_finished_callback) override;
 
   std::string protocol_;
 

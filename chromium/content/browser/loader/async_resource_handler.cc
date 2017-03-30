@@ -17,14 +17,15 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
-#include "content/browser/devtools/devtools_netlog_observer.h"
 #include "content/browser/host_zoom_map_impl.h"
+#include "content/browser/loader/netlog_observer.h"
 #include "content/browser/loader/resource_buffer.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/loader/resource_message_filter.h"
 #include "content/browser/loader/resource_request_info_impl.h"
 #include "content/browser/resource_context_impl.h"
 #include "content/common/resource_messages.h"
+#include "content/common/resource_request_completion_status.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
 #include "content/public/common/content_features.h"
@@ -46,7 +47,7 @@ static int kMaxAllocationSize = 1024 * 32;
 // The interval for calls to ReportUploadProgress.
 static int kUploadProgressIntervalMsec = 10;
 
-// Used when kOptimizeIPCForSmallResource is enabled.
+// Used when kOptimizeLoadingIPCForSmallResources is enabled.
 // Small resource typically issues two Read call: one for the content itself
 // and another for getting zero response to detect EOF.
 // Inline these two into the IPC message to avoid allocating an expensive
@@ -74,7 +75,7 @@ void InitializeResourceBufferConstants() {
 
 }  // namespace
 
-// Used when kOptimizeIPCForSmallResource is enabled.
+// Used when kOptimizeLoadingIPCForSmallResources is enabled.
 // The instance hooks the buffer allocation of AsyncResourceHandler, and
 // determine if we should use SharedMemory or should inline the data into
 // the IPC message.
@@ -103,7 +104,8 @@ class AsyncResourceHandler::InliningHelper {
     // fall back to the regular resource loading path in that case.
     if (!inlining_applicable_ ||
         num_allocation_ > kNumLeadingChunk ||
-        !base::FeatureList::IsEnabled(features::kOptimizeIPCForSmallResource)) {
+        !base::FeatureList::IsEnabled(
+            features::kOptimizeLoadingIPCForSmallResources)) {
       return false;
     }
 
@@ -301,7 +303,7 @@ bool AsyncResourceHandler::OnRequestRedirected(
         redirect_info.new_url, request(), info->GetContext(), response);
   }
 
-  DevToolsNetLogObserver::PopulateResponseInfo(request(), response);
+  NetLogObserver::PopulateResponseInfo(request(), response);
   response->head.encoded_data_length = request()->GetTotalReceivedBytes();
   reported_transfer_size_ = 0;
   response->head.request_start = request()->creation_time();
@@ -342,7 +344,7 @@ bool AsyncResourceHandler::OnResponseStarted(ResourceResponse* response,
         request(), info->GetContext(), response, info->filter());
   }
 
-  DevToolsNetLogObserver::PopulateResponseInfo(request(), response);
+  NetLogObserver::PopulateResponseInfo(request(), response);
 
   const HostZoomMapImpl* host_zoom_map =
       static_cast<const HostZoomMapImpl*>(info->filter()->GetHostZoomMap());
@@ -523,7 +525,7 @@ void AsyncResourceHandler::OnResponseCompleted(
     error_code = net::ERR_FAILED;
   }
 
-  ResourceMsg_RequestCompleteData request_complete_data;
+  ResourceRequestCompletionStatus request_complete_data;
   request_complete_data.error_code = error_code;
   request_complete_data.was_ignored_by_handler = was_ignored_by_handler;
   request_complete_data.exists_in_cache = request()->response_info().was_cached;

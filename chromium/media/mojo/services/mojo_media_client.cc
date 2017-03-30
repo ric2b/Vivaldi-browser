@@ -12,6 +12,8 @@ MojoMediaClient::~MojoMediaClient() {}
 
 void MojoMediaClient::Initialize() {}
 
+void MojoMediaClient::WillQuit() {}
+
 std::unique_ptr<AudioDecoder> MojoMediaClient::CreateAudioDecoder(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   return nullptr;
@@ -32,7 +34,7 @@ VideoRendererSink* MojoMediaClient::CreateVideoRendererSink(
 }
 
 std::unique_ptr<CdmFactory> MojoMediaClient::CreateCdmFactory(
-    mojo::shell::mojom::InterfaceProvider* interface_provider) {
+    shell::mojom::InterfaceProvider* interface_provider) {
   return nullptr;
 }
 

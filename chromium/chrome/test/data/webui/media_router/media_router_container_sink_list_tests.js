@@ -82,8 +82,9 @@ cr.define('media_router_container_sink_list', function() {
 
         container.castModeList = test_base.fakeCastModeList;
 
-        // Allow for the media router container to be created and attached.
-        setTimeout(done);
+        // Allow for the media router container to be created, attached, and
+        // listeners registered in an afterNextRender() call.
+        Polymer.RenderStatus.afterNextRender(this, done);
       });
 
       // Tests that text shown for each sink matches their names.
@@ -92,7 +93,8 @@ cr.define('media_router_container_sink_list', function() {
 
         setTimeout(function() {
           var sinkList =
-              container.$['sink-list'].querySelectorAll('paper-item');
+              container.shadowRoot.getElementById('sink-list')
+                  .querySelectorAll('paper-item');
           assertEquals(fakeSinkList.length, sinkList.length);
           for (var i = 0; i < fakeSinkList.length; i++) {
             checkElementText(fakeSinkList[i].name, sinkList[i]);
@@ -119,7 +121,8 @@ cr.define('media_router_container_sink_list', function() {
 
         setTimeout(function() {
           var sinkList =
-              container.$['sink-list'].querySelectorAll('paper-item');
+              container.shadowRoot.getElementById('sink-list')
+                  .querySelectorAll('paper-item');
           assertEquals(2, sinkList.length);
 
           // |sinkList[0]| has sink name only.
@@ -151,7 +154,8 @@ cr.define('media_router_container_sink_list', function() {
 
         setTimeout(function() {
           var sinkList =
-              container.$['sink-list'].querySelectorAll('paper-item');
+              container.shadowRoot.getElementById('sink-list')
+                  .querySelectorAll('paper-item');
           assertEquals(2, sinkList.length);
 
           // |sinkList[0]| has sink name only.
@@ -173,9 +177,11 @@ cr.define('media_router_container_sink_list', function() {
 
         // Set an non-empty sink list.
         container.allSinks = fakeSinkList;
-        checkElementsVisibleWithId(['container-header',
-                                    'sink-list',
-                                    'sink-list-view']);
+        setTimeout(function() {
+          checkElementsVisibleWithId(['container-header',
+                                      'sink-list',
+                                      'sink-list-view']);
+        });
       });
 
       // Tests for expected visible UI when the view is SINK_LIST, and there is
@@ -284,7 +290,8 @@ cr.define('media_router_container_sink_list', function() {
               container.shownCastModeValue_);
           assertFalse(container.userHasSelectedCastMode_);
           var sinkList =
-              container.$['sink-list'].querySelectorAll('paper-item');
+              container.shadowRoot.getElementById('sink-list')
+                  .querySelectorAll('paper-item');
 
           // All sinks are shown in auto mode.
           assertEquals(3, sinkList.length);
@@ -310,7 +317,8 @@ cr.define('media_router_container_sink_list', function() {
             assertFalse(container.userHasSelectedCastMode_);
 
             var sinkList =
-                container.$['sink-list'].querySelectorAll('paper-item');
+                container.shadowRoot.getElementById('sink-list')
+                    .querySelectorAll('paper-item');
             assertEquals(3, sinkList.length);
 
             // When compatible cast modes size is no longer exactly 1, switch
@@ -323,7 +331,8 @@ cr.define('media_router_container_sink_list', function() {
                   container.shownCastModeValue_);
               assertFalse(container.userHasSelectedCastMode_);
               var sinkList =
-                  container.$['sink-list'].querySelectorAll('paper-item');
+                  container.shadowRoot.getElementById('sink-list')
+                      .querySelectorAll('paper-item');
 
               // All sinks are shown in auto mode.
               assertEquals(3, sinkList.length);

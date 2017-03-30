@@ -7,23 +7,24 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <queue>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "third_party/WebKit/public/platform/WebDragData.h"
+#include "third_party/WebKit/public/platform/WebDragOperation.h"
 #include "third_party/WebKit/public/platform/WebInputEventResult.h"
 #include "third_party/WebKit/public/platform/WebPoint.h"
-#include "third_party/WebKit/public/web/WebDragOperation.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebTouchPoint.h"
 
 namespace blink {
-class WebFrame;
+class WebLocalFrame;
 class WebView;
 struct WebContextMenuData;
 }
@@ -36,6 +37,7 @@ namespace test_runner {
 
 class TestInterfaces;
 class WebTestDelegate;
+class WebTestProxyBase;
 
 // Key event location code introduced in DOM Level 3.
 // See also: http://www.w3.org/TR/DOM-Level-3-Events/#events-keyboardevents
@@ -46,27 +48,17 @@ enum KeyLocationCode {
   DOMKeyLocationNumpad        = 0x03
 };
 
-class EventSender : public base::SupportsWeakPtr<EventSender> {
+class EventSender {
  public:
-  explicit EventSender(TestInterfaces*);
+  explicit EventSender(WebTestProxyBase*);
   virtual ~EventSender();
 
   void Reset();
-  void Install(blink::WebFrame*);
-  void SetDelegate(WebTestDelegate*);
-  void SetWebView(blink::WebView*);
+  void Install(blink::WebLocalFrame*);
 
   void SetContextMenuData(const blink::WebContextMenuData&);
 
   void DoDragDrop(const blink::WebDragData&, blink::WebDragOperationsMask);
-
-  void MouseDown(int button_number, int modifiers);
-  void MouseUp(int button_number, int modifiers);
-  void SetMouseButtonState(int button_number, int modifiers);
-
-  void KeyDown(const std::string& code_str,
-               int modifiers,
-               KeyLocationCode location);
 
   void set_send_wheel_gestures(bool send_wheel_gestures) {
     send_wheel_gestures_ = send_wheel_gestures;
@@ -74,6 +66,28 @@ class EventSender : public base::SupportsWeakPtr<EventSender> {
 
  private:
   friend class EventSenderBindings;
+
+  void MouseDown(int button_number, int modifiers);
+  void MouseUp(int button_number, int modifiers);
+  void PointerDown(int button_number,
+                   int modifiers,
+                   blink::WebPointerProperties::PointerType,
+                   int pointerId,
+                   float pressure,
+                   int tiltX,
+                   int tiltY);
+  void PointerUp(int button_number,
+                 int modifiers,
+                 blink::WebPointerProperties::PointerType,
+                 int pointerId,
+                 float pressure,
+                 int tiltX,
+                 int tiltY);
+  void SetMouseButtonState(int button_number, int modifiers);
+
+  void KeyDown(const std::string& code_str,
+               int modifiers,
+               KeyLocationCode location);
 
   struct SavedEvent {
     enum SavedEventType {
@@ -126,11 +140,12 @@ class EventSender : public base::SupportsWeakPtr<EventSender> {
   bool IsFlinging() const;
   void GestureScrollFirstPoint(int x, int y);
 
-  void TouchStart();
-  void TouchMove();
-  void TouchMoveCausingScrollIfUncanceled();
-  void TouchCancel();
-  void TouchEnd();
+  bool GetMovedBeyondSlopRegionArg(gin::Arguments* args);
+  void TouchStart(gin::Arguments* args);
+  void TouchMove(gin::Arguments* args);
+  void TouchCancel(gin::Arguments* args);
+  void TouchEnd(gin::Arguments* args);
+  void NotifyStartOfTouchScroll();
 
   void LeapForward(int milliseconds);
 
@@ -182,8 +197,8 @@ class EventSender : public base::SupportsWeakPtr<EventSender> {
 
   void FinishDragAndDrop(const blink::WebMouseEvent&, blink::WebDragOperation);
 
-  void DoMouseUp(const blink::WebMouseEvent&);
-  void DoMouseMove(const blink::WebMouseEvent&);
+  void DoDragAfterMouseUp(const blink::WebMouseEvent&);
+  void DoDragAfterMouseMove(const blink::WebMouseEvent&);
   void ReplaySavedEvents();
   blink::WebInputEventResult HandleInputEventOnViewOrPopup(
       const blink::WebInputEvent&);
@@ -240,9 +255,11 @@ class EventSender : public base::SupportsWeakPtr<EventSender> {
   int wm_sys_dead_char_;
 #endif
 
-  TestInterfaces* interfaces_;
-  WebTestDelegate* delegate_;
-  blink::WebView* view_;
+  WebTestProxyBase* web_test_proxy_base_;
+  TestInterfaces* interfaces();
+  WebTestDelegate* delegate();
+  const blink::WebView* view() const;
+  blink::WebView* view();
 
   bool send_wheel_gestures_;
   bool force_layout_on_events_;
@@ -255,30 +272,42 @@ class EventSender : public base::SupportsWeakPtr<EventSender> {
   bool touch_cancelable_;
   std::vector<blink::WebTouchPoint> touch_points_;
 
-  scoped_ptr<blink::WebContextMenuData> last_context_menu_data_;
+  std::unique_ptr<blink::WebContextMenuData> last_context_menu_data_;
 
   blink::WebDragData current_drag_data_;
 
   // Location of the touch point that initiated a gesture.
   blink::WebPoint current_gesture_location_;
 
-  // Last pressed mouse button (Left/Right/Middle or None).
-  static blink::WebMouseEvent::Button pressed_button_;
 
-  // A bitwise OR of the WebMouseEvent::*ButtonDown values corresponding to
-  // currently pressed buttons of mouse.
-  static int current_buttons_;
+  // Mouse-like pointer properties.
+  struct PointerState {
+      // Last pressed button (Left/Right/Middle or None).
+      blink::WebMouseEvent::Button pressed_button_;
 
-  static int modifiers_;
+      // A bitwise OR of the WebMouseEvent::*ButtonDown values corresponding to
+      // currently pressed buttons of the pointer (e.g. pen or mouse).
+      int current_buttons_;
+
+      // Location of last mouseMoveTo event of this pointer.
+      blink::WebPoint last_pos_;
+
+      int modifiers_;
+
+      PointerState()
+      : pressed_button_(blink::WebMouseEvent::ButtonNone)
+      , current_buttons_(0)
+      , last_pos_(blink::WebPoint(0, 0))
+      , modifiers_(0) { }
+  };
+  typedef std::unordered_map<int, PointerState> PointerStateMap;
+  PointerStateMap current_pointer_state_;
 
   bool replaying_saved_events_;
 
   std::deque<SavedEvent> mouse_event_queue_;
 
   blink::WebDragOperationsMask current_drag_effects_allowed_;
-
-  // Location of last mouseMoveTo event.
-  static blink::WebPoint last_mouse_pos_;
 
   // Time and place of the last mouse up event.
   double last_click_time_sec_;

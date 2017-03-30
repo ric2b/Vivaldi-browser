@@ -70,10 +70,16 @@
 <translation id="2997147809295888909">Chrome је верификовао да је <ph name="ISSUER" /> издао сертификат овог сајта. Сервер није послао ниједну информацију о транспарентности сертификата.</translation>
 <translation id="3037838751736561277">Google Chrome је у позадинском режиму.</translation>
 <translation id="3047079729301751317">Ако прекинете везу са <ph name="USERNAME" />, обрисаћете историју, обележиваче, подешавања и друге Chrome податке ускладиштене на овом уређају. Подаци сачувани на Google налогу неће бити обрисани и можете њима да управљате на <ph name="GOOGLE_DASHBOARD_LINK" />Google контролној табли<ph name="END_GOOGLE_DASHBOARD_LINK" />.</translation>
+<translation id="3065168410429928842">Картица Chrome</translation>
 <translation id="3080151273017101988">Настави са покретањем апликација у позадини када се Google Chrome затвори</translation>
 <translation id="3089968997497233615">Доступна је нова, безбеднија верзија Google Chrome прегледача.</translation>
 <translation id="3149510190863420837">Chrome апликације</translation>
-<translation id="3197823471738295152">Уређај је ажуриран.</translation>
+<translation id="3251381707915721925">Да бисте подесили које веб-сајтове <ph name="NEW_PROFILE_NAME" /> може да прегледа, можете да конфигуришете ограничења и подешавања ако посетите <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. Ако не промените подразумевана подешавања, <ph name="NEW_PROFILE_NAME" /> може да прегледа све сајтове на вебу.
+
+Да бисте спречили да <ph name="NEW_PROFILE_NAME" /> приступа вашем налогу, обавезно закључајте профил када не користите Chrome. Да бисте то урадили, кликните на име профила у горњем десном углу прегледача и изаберите „Изађи и закључај за децу“.
+<ph name="BEGIN_LINK_2" />Сазнајте више<ph name="END_LINK_2" />
+
+Потражите даља упутства у имејлу на <ph name="ACCOUNT_EMAIL" />.</translation>
 <translation id="3282568296779691940">Пријављивање у Chrome</translation>
 <translation id="3311976847535831054">Овај рачунар више неће добијати ажурирања за 32-битни Google Chrome. Надоградите Google Chrome на 64-битну верзију.</translation>
 <translation id="3360895254066713204">Chrome помоћник</translation>
@@ -213,7 +219,6 @@ Google Chrome не може да врати подешавања.</translation>
 <translation id="7808348361785373670">Уклони из Chrome-а...</translation>
 <translation id="7825851276765848807">Инсталација није успела услед неутврђене грешке. Преузмите Google Chrome поново.</translation>
 <translation id="7890208801193284374">Ако делите рачунар, пријатељи и породица могу засебно да прегледају и да подесе Chrome баш онако како желе.</translation>
-<translation id="8000275528373650868">За Google Chrome је неопходан оперативни систем Windows Vista или Windows XP са SP2 или новија верзија.</translation>
 <translation id="8005540215158006229">Chrome је скоро спреман.</translation>
 <translation id="8008534537613507642">Поново инсталирај Chrome</translation>
 <translation id="8030318113982266900">Ажурирање уређаја на канал <ph name="CHANNEL_NAME" />...</translation>
@@ -235,6 +240,7 @@ Google Chrome не може да врати подешавања.</translation>
 <translation id="8556340503434111824">Доступна је нова верзија Google Chrome прегледача, бржа него икад пре.</translation>
 <translation id="8568392309447938879">Треба да будете пријављени у Chrome да бисте користили апликације. То омогућава Chrome-у да синхронизује апликације, обележиваче, историју, лозинке и друга подешавања на више уређаја.</translation>
 <translation id="8614913330719544658">Google Chrome не реагује. Желите ли да га одмах поново покренете?</translation>
+<translation id="8667808506758191620"><ph name="DEVICE_TYPE" /> је ажуриран.</translation>
 <translation id="8669527147644353129">Google Chrome помоћник</translation>
 <translation id="8679801911857917785">Контролише и страницу која се приказује када покренете Chrome.</translation>
 <translation id="870251953148363156">Ажурирај &amp;Google Chrome</translation>
@@ -243,6 +249,7 @@ Google Chrome не може да врати подешавања.</translation>
 <translation id="8851136666856101339">main</translation>
 <translation id="8862326446509486874">Немате одговарајућа права за инсталацију на нивоу система. Покушајте поново да покренете програм за инсталацију, овога пута као администратор.</translation>
 <translation id="9026991721384951619">Chrome ОС не може да синхронизује податке зато што су подаци за пријављивање на налог застарели.</translation>
+<translation id="9067395829937117663">За Google Chrome је потребан Windows 7 или новија верзија.</translation>
 <translation id="9102715433345326100">Ова датотека је злонамерна, па ју је Chrome блокирао.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Упозорење:<ph name="END_BOLD" /> Google Chrome не може да спречи додатке да снимају историју прегледања. Да бисте онемогућили овај додатак у режиму без архивирања, опозовите избор ове опције.</translation>
 <translation id="911206726377975832">Желите ли да избришете и податке прегледања?</translation>

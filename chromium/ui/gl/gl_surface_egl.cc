@@ -8,12 +8,12 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -39,7 +39,7 @@ extern "C" {
 #include <X11/Xlib.h>
 #define Status int
 }
-#include "ui/base/x/x11_util_internal.h"
+#include "ui/base/x/x11_util_internal.h"  // nogncheck
 #include "ui/gfx/x/x11_switches.h"  // nogncheck
 #endif
 
@@ -176,10 +176,14 @@ EGLDisplay GetPlatformANGLEDisplay(EGLNativeDisplayType native_display,
   }
 
 #if defined(USE_X11) && !defined(OS_CHROMEOS)
-  Visual* visual;
-  ui::ChooseVisualForWindow(&visual, nullptr);
+  std::string visualid_str =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          switches::kX11VisualID);
+  unsigned int visualid = 0;
+  bool succeed = base::StringToUint(visualid_str, &visualid);
+  DCHECK(succeed);
   display_attribs.push_back(EGL_X11_VISUAL_ID_ANGLE);
-  display_attribs.push_back((EGLint)visual->visualid);
+  display_attribs.push_back((EGLint)visualid);
 #endif
 
   display_attribs.push_back(EGL_NONE);
@@ -322,7 +326,7 @@ EGLConfig ChooseConfig(GLSurface::Format format) {
     return config;
   }
 
-  scoped_ptr<EGLConfig[]> matching_configs(new EGLConfig[num_configs]);
+  std::unique_ptr<EGLConfig[]> matching_configs(new EGLConfig[num_configs]);
   if (format == GLSurface::SURFACE_RGB565) {
     config_size = num_configs;
     config_data = matching_configs.get();
@@ -633,7 +637,7 @@ bool NativeViewGLSurfaceEGL::Initialize(GLSurface::Format format) {
 }
 
 bool NativeViewGLSurfaceEGL::Initialize(
-    scoped_ptr<VSyncProvider> sync_provider) {
+    std::unique_ptr<VSyncProvider> sync_provider) {
   DCHECK(!surface_);
 
   if (!GetDisplay()) {
@@ -803,7 +807,7 @@ bool NativeViewGLSurfaceEGL::Resize(const gfx::Size& size,
 
   size_ = size;
 
-  scoped_ptr<ui::ScopedMakeCurrent> scoped_make_current;
+  std::unique_ptr<ui::ScopedMakeCurrent> scoped_make_current;
   GLContext* current_context = GLContext::GetCurrent();
   bool was_current =
       current_context && current_context->IsCurrent(this);
@@ -1024,7 +1028,7 @@ bool PbufferGLSurfaceEGL::Resize(const gfx::Size& size,
   if (size == size_)
     return true;
 
-  scoped_ptr<ui::ScopedMakeCurrent> scoped_make_current;
+  std::unique_ptr<ui::ScopedMakeCurrent> scoped_make_current;
   GLContext* current_context = GLContext::GetCurrent();
   bool was_current =
       current_context && current_context->IsCurrent(this);

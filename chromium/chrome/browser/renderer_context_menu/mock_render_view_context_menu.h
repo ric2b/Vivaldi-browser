@@ -6,35 +6,40 @@
 #define CHROME_BROWSER_RENDERER_CONTEXT_MENU_MOCK_RENDER_VIEW_CONTEXT_MENU_H_
 
 #include <cstddef>
+#include <memory>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "components/renderer_context_menu/render_view_context_menu_proxy.h"
 #include "ui/base/models/simple_menu_model.h"
+#include "ui/gfx/image/image.h"
 
 class PrefService;
 class Profile;
 class RenderViewContextMenuObserver;
 class TestingProfile;
 
-// A mock context menu used in tests. This class overrides virtual methods
-// derived from the RenderViewContextMenuProxy class to monitor calls from the
-// SpellingMenuObserver class.
+// A mock context menu proxy used in tests. This class overrides virtual methods
+// derived from the RenderViewContextMenuProxy class to monitor calls from a
+// MenuObserver class.
 class MockRenderViewContextMenu : public ui::SimpleMenuModel::Delegate,
                                   public RenderViewContextMenuProxy {
  public:
   // A menu item used in this test.
   struct MockMenuItem {
     MockMenuItem();
+    MockMenuItem(const MockMenuItem& other);
     ~MockMenuItem();
+
+    MockMenuItem& operator=(const MockMenuItem& other);
 
     int command_id;
     bool enabled;
     bool checked;
     bool hidden;
     base::string16 title;
+    gfx::Image icon;
   };
 
   explicit MockRenderViewContextMenu(bool incognito);
@@ -60,6 +65,7 @@ class MockRenderViewContextMenu : public ui::SimpleMenuModel::Delegate,
                       bool enabled,
                       bool hidden,
                       const base::string16& title) override;
+  void UpdateMenuIcon(int command_id, const gfx::Image& image) override;
   void AddSpellCheckServiceItem(bool is_checked) override;
   content::RenderViewHost* GetRenderViewHost() const override;
   content::BrowserContext* GetBrowserContext() const override;
@@ -85,12 +91,12 @@ class MockRenderViewContextMenu : public ui::SimpleMenuModel::Delegate,
 
   // A dummy profile used in this test. Call GetPrefs() when a test needs to
   // change this profile and use PrefService methods.
-  scoped_ptr<TestingProfile> original_profile_;
+  std::unique_ptr<TestingProfile> original_profile_;
 
   // Either |original_profile_| or its incognito profile.
   Profile* profile_;
 
-  // A list of menu items added by the SpellingMenuObserver class.
+  // A list of menu items added.
   std::vector<MockMenuItem> items_;
 
   DISALLOW_COPY_AND_ASSIGN(MockRenderViewContextMenu);

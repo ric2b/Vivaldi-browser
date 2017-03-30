@@ -7,6 +7,7 @@
 #ifndef V8TestSpecialOperations_h
 #define V8TestSpecialOperations_h
 
+#include "bindings/core/v8/NodeOrNodeList.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "bindings/core/v8/ToV8.h"
 #include "bindings/core/v8/V8Binding.h"
@@ -23,22 +24,24 @@ class V8TestSpecialOperations {
 public:
     CORE_EXPORT static bool hasInstance(v8::Local<v8::Value>, v8::Isolate*);
     static v8::Local<v8::Object> findInstanceInPrototypeChain(v8::Local<v8::Value>, v8::Isolate*);
-    CORE_EXPORT static v8::Local<v8::FunctionTemplate> domTemplate(v8::Isolate*);
+    CORE_EXPORT static v8::Local<v8::FunctionTemplate> domTemplate(v8::Isolate*, const DOMWrapperWorld&);
     static TestSpecialOperations* toImpl(v8::Local<v8::Object> object)
     {
         return toScriptWrappable(object)->toImpl<TestSpecialOperations>();
     }
     CORE_EXPORT static TestSpecialOperations* toImplWithTypeCheck(v8::Isolate*, v8::Local<v8::Value>);
     CORE_EXPORT static const WrapperTypeInfo wrapperTypeInfo;
-    static void refObject(ScriptWrappable*);
-    static void derefObject(ScriptWrappable*);
+    static void traceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable)
+    {
+        visitor->traceWrappers(scriptWrappable->toImpl<TestSpecialOperations>());
+    }
     template<typename VisitorDispatcher>
     static void trace(VisitorDispatcher visitor, ScriptWrappable* scriptWrappable)
     {
+        visitor->trace(scriptWrappable->toImpl<TestSpecialOperations>());
     }
     static const int internalFieldCount = v8DefaultWrapperInternalFieldCount + 0;
-    static void installConditionallyEnabledProperties(v8::Local<v8::Object>, v8::Isolate*) { }
-    static void preparePrototypeAndInterfaceObject(v8::Local<v8::Context>, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate) { }
+    CORE_EXPORT static void preparePrototypeAndInterfaceObject(v8::Local<v8::Context>, const DOMWrapperWorld&, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate) { }
 };
 
 template <>

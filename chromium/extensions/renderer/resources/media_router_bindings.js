@@ -275,6 +275,20 @@ define('media_router_bindings', [
   };
 
   /**
+   * Called by the provider manager when a sink is found to notify the MR of the
+   * sink's ID. The actual sink will be returned through the normal sink list
+   * update process, so this helps the MR identify the search result in the
+   * list.
+   * @param {string} pseudoSinkId  ID of the pseudo sink that started the
+   *     search.
+   * @param {string} sinkId ID of the newly-found sink.
+   */
+  MediaRouter.prototype.onSearchSinkIdReceived = function(
+      pseudoSinkId, sinkId) {
+    this.service_.onSearchSinkIdReceived(pseudoSinkId, sinkId);
+  };
+
+  /**
    * Called by the provider manager to keep the extension from suspending
    * if it enters a state where suspension is undesirable (e.g. there is an
    * active MediaRoute.)
@@ -339,7 +353,7 @@ define('media_router_bindings', [
       'message': issue.message,
       'default_action': issueActionToMojo_(issue.defaultAction),
       'secondary_actions': secondaryActions,
-      'help_url': issue.helpUrl,
+      'help_page_id': issue.helpPageId,
       'is_blocking': issue.isBlocking
     }));
   };
@@ -409,7 +423,7 @@ define('media_router_bindings', [
    */
   function MediaRouterHandlers() {
     /**
-     * @type {function(!string, !string, !string, !string, !number}
+     * @type {function(!string, !string, !string, !string, !number)}
      */
     this.createRoute = null;
 
@@ -483,6 +497,11 @@ define('media_router_bindings', [
      * @type {function()}
      */
     this.updateMediaSinks = null;
+
+    /**
+     * @type {function(!string, !string, !SinkSearchCriteria): !string}
+     */
+    this.searchSinks = null;
   };
 
   /**
@@ -533,6 +552,7 @@ define('media_router_bindings', [
       'connectRouteByRouteId',
       'enableMdnsDiscovery',
       'updateMediaSinks',
+      'searchSinks',
     ];
     requiredHandlers.forEach(function(nextHandler) {
       if (handlers[nextHandler] === undefined) {
@@ -765,6 +785,32 @@ define('media_router_bindings', [
    */
   MediaRouteProvider.prototype.updateMediaSinks = function(sourceUrn) {
     this.handlers_.updateMediaSinks(sourceUrn);
+  };
+
+  /**
+   * Requests that the provider manager search its providers for a sink matching
+   * |searchCriteria| that is compatible with |sourceUrn|. If a sink is found
+   * that can be used immediately for route creation, its ID is returned.
+   * Otherwise the empty string is returned.
+   *
+   * @param {string} sinkId Sink ID of the pseudo sink generating the request.
+   * @param {string} sourceUrn Media source to be used with the sink.
+   * @param {!SinkSearchCriteria} searchCriteria Search criteria for the route
+   *     providers.
+   * @return {!Promise.<!{sink_id: !string}>} A Promise resolving to either the
+   *     sink ID of the sink found by the search that can be used for route
+   *     creation, or the empty string if no route can be immediately created.
+   */
+  MediaRouteProvider.prototype.searchSinks = function(
+      sinkId, sourceUrn, searchCriteria) {
+    // TODO(btolsch): Remove this check when we no longer expect old extensions
+    // to be missing this API.
+    if (!this.handlers_.searchSinks) {
+      return Promise.resolve({'sink_id': ''});
+    }
+    return Promise.resolve({
+      'sink_id': this.handlers_.searchSinks(sinkId, sourceUrn, searchCriteria)
+    });
   };
 
   mediaRouter = new MediaRouter(connector.bindHandleToProxy(

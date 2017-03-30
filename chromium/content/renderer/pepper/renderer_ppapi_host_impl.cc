@@ -10,8 +10,7 @@
 #include "base/logging.h"
 #include "base/process/process_handle.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
-#include "content/common/sandbox_util.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/renderer/pepper/fullscreen_container.h"
 #include "content/renderer/pepper/host_globals.h"
 #include "content/renderer/pepper/pepper_browser_connection.h"
@@ -23,6 +22,7 @@
 #include "content/renderer/render_view_impl.h"
 #include "content/renderer/render_widget_fullscreen_pepper.h"
 #include "ipc/ipc_message.h"
+#include "ipc/ipc_platform_file.h"
 #include "ppapi/host/ppapi_host.h"
 #include "ppapi/proxy/host_dispatcher.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
@@ -48,7 +48,7 @@ RendererPpapiHostImpl::RendererPpapiHostImpl(
       is_external_plugin_host_(false) {
   // Hook the PpapiHost up to the dispatcher for out-of-process communication.
   ppapi_host_.reset(new ppapi::host::PpapiHost(dispatcher, permissions));
-  ppapi_host_->AddHostFactoryFilter(scoped_ptr<ppapi::host::HostFactory>(
+  ppapi_host_->AddHostFactoryFilter(std::unique_ptr<ppapi::host::HostFactory>(
       new ContentRendererPepperHostFactory(this)));
   dispatcher->AddFilter(ppapi_host_.get());
   is_running_in_process_ = false;
@@ -63,7 +63,7 @@ RendererPpapiHostImpl::RendererPpapiHostImpl(
   in_process_router_.reset(new PepperInProcessRouter(this));
   ppapi_host_.reset(new ppapi::host::PpapiHost(
       in_process_router_->GetRendererToPluginSender(), permissions));
-  ppapi_host_->AddHostFactoryFilter(scoped_ptr<ppapi::host::HostFactory>(
+  ppapi_host_->AddHostFactoryFilter(std::unique_ptr<ppapi::host::HostFactory>(
       new ContentRendererPepperHostFactory(this)));
   is_running_in_process_ = true;
 }
@@ -85,7 +85,7 @@ RendererPpapiHostImpl* RendererPpapiHostImpl::CreateOnModuleForOutOfProcess(
       new RendererPpapiHostImpl(module, dispatcher, permissions);
 
   // Takes ownership of pointer.
-  module->SetRendererPpapiHost(scoped_ptr<RendererPpapiHostImpl>(result));
+  module->SetRendererPpapiHost(std::unique_ptr<RendererPpapiHostImpl>(result));
 
   return result;
 }
@@ -99,7 +99,7 @@ RendererPpapiHostImpl* RendererPpapiHostImpl::CreateOnModuleForInProcess(
       new RendererPpapiHostImpl(module, permissions);
 
   // Takes ownership of pointer.
-  module->SetRendererPpapiHost(scoped_ptr<RendererPpapiHostImpl>(result));
+  module->SetRendererPpapiHost(std::unique_ptr<RendererPpapiHostImpl>(result));
 
   return result;
 }
@@ -117,10 +117,10 @@ RendererPpapiHostImpl* RendererPpapiHostImpl::GetForPPInstance(
   return instance->module()->renderer_ppapi_host();
 }
 
-scoped_ptr<ppapi::thunk::ResourceCreationAPI>
+std::unique_ptr<ppapi::thunk::ResourceCreationAPI>
 RendererPpapiHostImpl::CreateInProcessResourceCreationAPI(
     PepperPluginInstanceImpl* instance) {
-  return scoped_ptr<ppapi::thunk::ResourceCreationAPI>(
+  return std::unique_ptr<ppapi::thunk::ResourceCreationAPI>(
       new PepperInProcessResourceCreation(this, instance));
 }
 
@@ -213,8 +213,10 @@ gfx::Point RendererPpapiHostImpl::PluginPointToRenderFrame(
     // dedicated window.  So, do not offset the point.
     return pt;
   }
-  return gfx::Point(pt.x() + plugin_instance->view_data().rect.point.x,
-                    pt.y() + plugin_instance->view_data().rect.point.y);
+  return gfx::Point((pt.x() + plugin_instance->view_data().rect.point.x) /
+                        viewport_to_dip_scale_,
+                    (pt.y() + plugin_instance->view_data().rect.point.y) /
+                        viewport_to_dip_scale_);
 }
 
 IPC::PlatformFileForTransit RendererPpapiHostImpl::ShareHandleWithRemote(
@@ -225,8 +227,7 @@ IPC::PlatformFileForTransit RendererPpapiHostImpl::ShareHandleWithRemote(
     // Duplicate the file handle for in process mode so this function
     // has the same semantics for both in process mode and out of
     // process mode (i.e., the remote side must cloes the handle).
-    return BrokerGetFileHandleForProcess(
-        handle, base::GetCurrentProcId(), should_close_source);
+    return IPC::GetPlatformFileForTransit(handle, should_close_source);
   }
   return dispatcher_->ShareHandleWithRemote(handle, should_close_source);
 }

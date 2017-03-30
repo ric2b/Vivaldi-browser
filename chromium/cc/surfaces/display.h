@@ -5,10 +5,10 @@
 #ifndef CC_SURFACES_DISPLAY_H_
 #define CC_SURFACES_DISPLAY_H_
 
+#include <memory>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "cc/output/output_surface_client.h"
 #include "cc/output/renderer.h"
 #include "cc/resources/returned_resource.h"
@@ -55,17 +55,19 @@ class CC_SURFACES_EXPORT Display : public DisplaySchedulerClient,
           SurfaceManager* manager,
           SharedBitmapManager* bitmap_manager,
           gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-          const RendererSettings& settings);
+          const RendererSettings& settings,
+          uint32_t compositor_surface_namespace);
   ~Display() override;
 
-  bool Initialize(scoped_ptr<OutputSurface> output_surface,
-                  DisplayScheduler* scheduler);
+  bool Initialize(std::unique_ptr<OutputSurface> output_surface,
+                  base::SingleThreadTaskRunner* task_runner);
 
   // device_scale_factor is used to communicate to the external window system
   // what scale this was rendered at.
   void SetSurfaceId(SurfaceId id, float device_scale_factor);
   void Resize(const gfx::Size& new_size);
   void SetExternalClip(const gfx::Rect& clip);
+  void SetOutputIsSecure(bool secure);
 
   SurfaceId CurrentSurfaceId();
 
@@ -74,7 +76,8 @@ class CC_SURFACES_EXPORT Display : public DisplaySchedulerClient,
 
   // OutputSurfaceClient implementation.
   void CommitVSyncParameters(base::TimeTicks timebase,
-                             base::TimeDelta interval) override;
+                             base::TimeDelta interval) override {}
+  void SetBeginFrameSource(BeginFrameSource* source) override;
   void SetNeedsRedrawRect(const gfx::Rect& damage_rect) override;
   void DidSwapBuffers() override;
   void DidSwapBuffersComplete() override;
@@ -96,28 +99,41 @@ class CC_SURFACES_EXPORT Display : public DisplaySchedulerClient,
   // SurfaceDamageObserver implementation.
   void OnSurfaceDamaged(SurfaceId surface, bool* changed) override;
 
- private:
+ protected:
+  // Virtual for tests.
+  virtual void CreateScheduler(base::SingleThreadTaskRunner* task_runner);
+
   void InitializeRenderer();
   void UpdateRootSurfaceResourcesLocked();
 
   DisplayClient* client_;
-  SurfaceManager* manager_;
+  SurfaceManager* surface_manager_;
   SharedBitmapManager* bitmap_manager_;
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager_;
   RendererSettings settings_;
   SurfaceId current_surface_id_;
+  uint32_t compositor_surface_namespace_;
   gfx::Size current_surface_size_;
   float device_scale_factor_;
   bool swapped_since_resize_;
   gfx::Rect external_clip_;
-  scoped_ptr<OutputSurface> output_surface_;
-  DisplayScheduler* scheduler_;
-  scoped_ptr<ResourceProvider> resource_provider_;
-  scoped_ptr<SurfaceAggregator> aggregator_;
-  scoped_ptr<DirectRenderer> renderer_;
-  scoped_ptr<TextureMailboxDeleter> texture_mailbox_deleter_;
+  bool output_is_secure_ = false;
+
+  std::unique_ptr<OutputSurface> output_surface_;
+  // An internal synthetic BFS. May be null when not used.
+  std::unique_ptr<BeginFrameSource> internal_begin_frame_source_;
+  // The real BFS tied to vsync provided by the BrowserCompositorOutputSurface.
+  BeginFrameSource* vsync_begin_frame_source_;
+  // The current BFS driving the Display/DisplayScheduler.
+  BeginFrameSource* observed_begin_frame_source_;
+  std::unique_ptr<DisplayScheduler> scheduler_;
+  std::unique_ptr<ResourceProvider> resource_provider_;
+  std::unique_ptr<SurfaceAggregator> aggregator_;
+  std::unique_ptr<DirectRenderer> renderer_;
+  std::unique_ptr<TextureMailboxDeleter> texture_mailbox_deleter_;
   std::vector<ui::LatencyInfo> stored_latency_info_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(Display);
 };
 

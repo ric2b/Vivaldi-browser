@@ -9,13 +9,13 @@
 #include <iterator>
 #include <set>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/compiler_specific.h"
-#include "base/containers/hash_tables.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
@@ -187,8 +187,8 @@ bool ValidateSubProtocol(
     std::string* failure_message) {
   size_t iter = 0;
   std::string value;
-  base::hash_set<std::string> requested_set(requested_sub_protocols.begin(),
-                                            requested_sub_protocols.end());
+  std::unordered_set<std::string> requested_set(requested_sub_protocols.begin(),
+                                                requested_sub_protocols.end());
   int count = 0;
   bool has_multiple_protocols = false;
   bool has_invalid_protocol = false;
@@ -288,7 +288,7 @@ bool ValidateExtensions(const HttpResponseHeaders* headers,
 }  // namespace
 
 WebSocketBasicHandshakeStream::WebSocketBasicHandshakeStream(
-    scoped_ptr<ClientSocketHandle> connection,
+    std::unique_ptr<ClientSocketHandle> connection,
     WebSocketStream::ConnectDelegate* connect_delegate,
     bool using_proxy,
     std::vector<std::string> requested_sub_protocols,
@@ -355,7 +355,7 @@ int WebSocketBasicHandshakeStream::SendRequest(
       ComputeSecWebSocketAccept(handshake_challenge);
 
   DCHECK(connect_delegate_);
-  scoped_ptr<WebSocketHandshakeRequestInfo> request(
+  std::unique_ptr<WebSocketHandshakeRequestInfo> request(
       new WebSocketHandshakeRequestInfo(url_, base::Time::Now()));
   request->headers.CopyFrom(enriched_headers);
   connect_delegate_->OnStartOpeningHandshake(std::move(request));
@@ -471,16 +471,14 @@ HttpStream* WebSocketBasicHandshakeStream::RenewStreamForAuth() {
   return nullptr;
 }
 
-scoped_ptr<WebSocketStream> WebSocketBasicHandshakeStream::Upgrade() {
+std::unique_ptr<WebSocketStream> WebSocketBasicHandshakeStream::Upgrade() {
   // The HttpStreamParser object has a pointer to our ClientSocketHandle. Make
   // sure it does not touch it again before it is destroyed.
   state_.DeleteParser();
   WebSocketTransportClientSocketPool::UnlockEndpoint(state_.connection());
-  scoped_ptr<WebSocketStream> basic_stream(
-      new WebSocketBasicStream(state_.ReleaseConnection(),
-                               state_.read_buf(),
-                               sub_protocol_,
-                               extensions_));
+  std::unique_ptr<WebSocketStream> basic_stream(
+      new WebSocketBasicStream(state_.ReleaseConnection(), state_.read_buf(),
+                               sub_protocol_, extensions_));
   DCHECK(extension_params_.get());
   if (extension_params_->deflate_enabled) {
     UMA_HISTOGRAM_ENUMERATION(
@@ -488,9 +486,9 @@ scoped_ptr<WebSocketStream> WebSocketBasicHandshakeStream::Upgrade() {
         extension_params_->deflate_parameters.client_context_take_over_mode(),
         WebSocketDeflater::NUM_CONTEXT_TAKEOVER_MODE_TYPES);
 
-    return scoped_ptr<WebSocketStream>(new WebSocketDeflateStream(
+    return std::unique_ptr<WebSocketStream>(new WebSocketDeflateStream(
         std::move(basic_stream), extension_params_->deflate_parameters,
-        scoped_ptr<WebSocketDeflatePredictor>(
+        std::unique_ptr<WebSocketDeflatePredictor>(
             new WebSocketDeflatePredictorImpl)));
   } else {
     return basic_stream;

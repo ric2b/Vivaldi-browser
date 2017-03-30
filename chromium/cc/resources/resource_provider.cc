@@ -19,7 +19,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/resources/platform_color.h"
@@ -34,6 +34,7 @@
 #include "skia/ext/texture_handle.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
+#include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 #include "third_party/skia/include/gpu/GrTextureProvider.h"
@@ -65,7 +66,7 @@ class IdAllocator {
 
   GLES2Interface* gl_;
   const size_t id_allocation_chunk_size_;
-  scoped_ptr<GLuint[]> ids_;
+  std::unique_ptr<GLuint[]> ids_;
   size_t next_id_index_;
 };
 
@@ -221,7 +222,7 @@ ResourceProvider::Resource::Resource(GLuint texture_id,
       gl_pixel_buffer_id(0),
       gl_upload_query_id(0),
       gl_read_lock_query_id(0),
-      pixels(NULL),
+      pixels(nullptr),
       lock_for_read_count(0),
       imported_count(0),
       exported_count(0),
@@ -233,7 +234,7 @@ ResourceProvider::Resource::Resource(GLuint texture_id,
       read_lock_fences_enabled(false),
       has_shared_bitmap_id(false),
       is_overlay_candidate(false),
-      read_lock_fence(NULL),
+      read_lock_fence(nullptr),
       size(size),
       origin(origin),
       target(target),
@@ -244,8 +245,7 @@ ResourceProvider::Resource::Resource(GLuint texture_id,
       hint(hint),
       type(type),
       format(format),
-      shared_bitmap(NULL),
-      gpu_memory_buffer(NULL) {}
+      shared_bitmap(nullptr) {}
 
 ResourceProvider::Resource::Resource(uint8_t* pixels,
                                      SharedBitmap* bitmap,
@@ -269,7 +269,7 @@ ResourceProvider::Resource::Resource(uint8_t* pixels,
       read_lock_fences_enabled(false),
       has_shared_bitmap_id(!!bitmap),
       is_overlay_candidate(false),
-      read_lock_fence(NULL),
+      read_lock_fence(nullptr),
       size(size),
       origin(origin),
       target(0),
@@ -280,8 +280,7 @@ ResourceProvider::Resource::Resource(uint8_t* pixels,
       hint(TEXTURE_HINT_IMMUTABLE),
       type(RESOURCE_TYPE_BITMAP),
       format(RGBA_8888),
-      shared_bitmap(bitmap),
-      gpu_memory_buffer(NULL) {
+      shared_bitmap(bitmap) {
   DCHECK(origin == DELEGATED || pixels);
   if (bitmap)
     shared_bitmap_id = bitmap->id();
@@ -296,7 +295,7 @@ ResourceProvider::Resource::Resource(const SharedBitmapId& bitmap_id,
       gl_pixel_buffer_id(0),
       gl_upload_query_id(0),
       gl_read_lock_query_id(0),
-      pixels(NULL),
+      pixels(nullptr),
       lock_for_read_count(0),
       imported_count(0),
       exported_count(0),
@@ -308,7 +307,7 @@ ResourceProvider::Resource::Resource(const SharedBitmapId& bitmap_id,
       read_lock_fences_enabled(false),
       has_shared_bitmap_id(true),
       is_overlay_candidate(false),
-      read_lock_fence(NULL),
+      read_lock_fence(nullptr),
       size(size),
       origin(origin),
       target(0),
@@ -320,10 +319,9 @@ ResourceProvider::Resource::Resource(const SharedBitmapId& bitmap_id,
       type(RESOURCE_TYPE_BITMAP),
       format(RGBA_8888),
       shared_bitmap_id(bitmap_id),
-      shared_bitmap(NULL),
-      gpu_memory_buffer(NULL) {}
+      shared_bitmap(nullptr) {}
 
-ResourceProvider::Resource::Resource(const Resource& other) = default;
+ResourceProvider::Resource::Resource(Resource&& other) = default;
 
 void ResourceProvider::Resource::set_mailbox(const TextureMailbox& mailbox) {
   mailbox_ = mailbox;
@@ -383,7 +381,7 @@ ResourceProvider::Child::Child(const Child& other) = default;
 
 ResourceProvider::Child::~Child() {}
 
-scoped_ptr<ResourceProvider> ResourceProvider::Create(
+std::unique_ptr<ResourceProvider> ResourceProvider::Create(
     OutputSurface* output_surface,
     SharedBitmapManager* shared_bitmap_manager,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
@@ -392,7 +390,7 @@ scoped_ptr<ResourceProvider> ResourceProvider::Create(
     size_t id_allocation_chunk_size,
     bool use_gpu_memory_buffer_resources,
     const std::vector<unsigned>& use_image_texture_targets) {
-  scoped_ptr<ResourceProvider> resource_provider(new ResourceProvider(
+  std::unique_ptr<ResourceProvider> resource_provider(new ResourceProvider(
       output_surface, shared_bitmap_manager, gpu_memory_buffer_manager,
       blocking_main_thread_task_runner, highp_threshold_min,
       id_allocation_chunk_size, use_gpu_memory_buffer_resources,
@@ -432,7 +430,7 @@ ResourceProvider::~ResourceProvider() {
 }
 
 bool ResourceProvider::IsResourceFormatSupported(ResourceFormat format) const {
-  ContextProvider::Capabilities caps;
+  gpu::Capabilities caps;
   if (output_surface_->context_provider())
     caps = output_surface_->context_provider()->ContextCapabilities();
 
@@ -444,13 +442,13 @@ bool ResourceProvider::IsResourceFormatSupported(ResourceFormat format) const {
     case LUMINANCE_8:
       return true;
     case BGRA_8888:
-      return caps.gpu.texture_format_bgra8888;
+      return caps.texture_format_bgra8888;
     case ETC1:
-      return caps.gpu.texture_format_etc1;
+      return caps.texture_format_etc1;
     case RED_8:
-      return caps.gpu.texture_rg;
+      return caps.texture_rg;
     case LUMINANCE_F16:
-      return caps.gpu.texture_half_float_linear;
+      return caps.texture_half_float_linear;
   }
 
   NOTREACHED();
@@ -551,7 +549,7 @@ ResourceId ResourceProvider::CreateGLTexture(const gfx::Size& size,
 ResourceId ResourceProvider::CreateBitmap(const gfx::Size& size) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  scoped_ptr<SharedBitmap> bitmap =
+  std::unique_ptr<SharedBitmap> bitmap =
       shared_bitmap_manager_->AllocateSharedBitmap(size);
   uint8_t* pixels = bitmap->pixels();
   DCHECK(pixels);
@@ -586,7 +584,7 @@ ResourceId ResourceProvider::CreateResourceFromIOSurface(
 
 ResourceId ResourceProvider::CreateResourceFromTextureMailbox(
     const TextureMailbox& mailbox,
-    scoped_ptr<SingleReleaseCallbackImpl> release_callback_impl,
+    std::unique_ptr<SingleReleaseCallbackImpl> release_callback_impl,
     bool read_lock_fences_enabled) {
   DCHECK(thread_checker_.CalledOnValidThread());
   // Just store the information. Mailbox will be consumed in LockForRead().
@@ -616,13 +614,14 @@ ResourceId ResourceProvider::CreateResourceFromTextureMailbox(
                  base::Owned(release_callback_impl.release()));
   resource->read_lock_fences_enabled = read_lock_fences_enabled;
   resource->is_overlay_candidate = mailbox.is_overlay_candidate();
+  resource->gpu_memory_buffer_id = mailbox.gpu_memory_buffer_id();
 
   return id;
 }
 
 ResourceId ResourceProvider::CreateResourceFromTextureMailbox(
     const TextureMailbox& mailbox,
-    scoped_ptr<SingleReleaseCallbackImpl> release_callback_impl) {
+    std::unique_ptr<SingleReleaseCallbackImpl> release_callback_impl) {
   return CreateResourceFromTextureMailbox(
       mailbox, std::move(release_callback_impl), false);
 }
@@ -714,17 +713,16 @@ void ResourceProvider::DeleteResourceInternal(ResourceMap::iterator it,
     DCHECK(resource->origin != Resource::EXTERNAL);
     DCHECK_EQ(RESOURCE_TYPE_BITMAP, resource->type);
     delete resource->shared_bitmap;
-    resource->pixels = NULL;
+    resource->pixels = nullptr;
   }
   if (resource->pixels) {
     DCHECK(resource->origin == Resource::INTERNAL);
     delete[] resource->pixels;
-    resource->pixels = NULL;
+    resource->pixels = nullptr;
   }
   if (resource->gpu_memory_buffer) {
     DCHECK(resource->origin == Resource::INTERNAL);
-    delete resource->gpu_memory_buffer;
-    resource->gpu_memory_buffer = NULL;
+    resource->gpu_memory_buffer.reset();
   }
   resources_.erase(it);
 }
@@ -826,9 +824,9 @@ void ResourceProvider::GenerateSyncTokenForResources(
 
 ResourceProvider::Resource* ResourceProvider::InsertResource(
     ResourceId id,
-    const Resource& resource) {
+    Resource resource) {
   std::pair<ResourceMap::iterator, bool> result =
-      resources_.insert(ResourceMap::value_type(id, resource));
+      resources_.insert(ResourceMap::value_type(id, std::move(resource)));
   DCHECK(result.second);
   return &result.first->second;
 }
@@ -868,7 +866,7 @@ const ResourceProvider::Resource* ResourceProvider::LockForRead(ResourceId id) {
 
   if (!resource->pixels && resource->has_shared_bitmap_id &&
       shared_bitmap_manager_) {
-    scoped_ptr<SharedBitmap> bitmap =
+    std::unique_ptr<SharedBitmap> bitmap =
         shared_bitmap_manager_->GetSharedBitmapFromId(
             resource->size, resource->shared_bitmap_id);
     if (bitmap) {
@@ -1000,7 +998,7 @@ ResourceProvider::ScopedWriteLockGL::ScopedWriteLockGL(
   resource_provider_->LazyAllocate(resource_);
   texture_id_ = resource_->gl_id;
   DCHECK(texture_id_);
-  if (resource_->dirty_image)
+  if (resource_->image_id && resource_->dirty_image)
     resource_provider_->BindImageForSampling(resource_);
 }
 
@@ -1050,7 +1048,7 @@ ResourceProvider::ScopedWriteLockGpuMemoryBuffer::
     : resource_provider_(resource_provider),
       resource_(resource_provider->LockForWrite(resource_id)) {
   DCHECK(IsGpuResourceType(resource_->type));
-  gpu_memory_buffer_.reset(resource_->gpu_memory_buffer);
+  gpu_memory_buffer_ = std::move(resource_->gpu_memory_buffer);
   resource_->gpu_memory_buffer = nullptr;
 }
 
@@ -1063,7 +1061,9 @@ ResourceProvider::ScopedWriteLockGpuMemoryBuffer::
 
   DCHECK(!resource_->gpu_memory_buffer);
   resource_provider_->LazyCreate(resource_);
-  resource_->gpu_memory_buffer = gpu_memory_buffer_.release();
+  resource_->gpu_memory_buffer = std::move(gpu_memory_buffer_);
+  if (resource_->gpu_memory_buffer)
+    resource_->gpu_memory_buffer_id = resource_->gpu_memory_buffer->GetId();
   resource_->allocated = true;
   resource_provider_->LazyCreateImage(resource_);
   resource_->dirty_image = true;
@@ -1082,7 +1082,7 @@ ResourceProvider::ScopedWriteLockGpuMemoryBuffer::GetGpuMemoryBuffer() {
     gpu_memory_buffer_ =
         resource_provider_->gpu_memory_buffer_manager_->AllocateGpuMemoryBuffer(
             resource_->size, BufferFormat(resource_->format),
-            gfx::BufferUsage::GPU_READ_CPU_READ_WRITE, 0 /* surface_id */);
+            gfx::BufferUsage::GPU_READ_CPU_READ_WRITE, gpu::kNullSurfaceHandle);
   }
   return gpu_memory_buffer_.get();
 }
@@ -1095,9 +1095,8 @@ ResourceProvider::ScopedWriteLockGr::ScopedWriteLockGr(
       set_sync_token_(false) {
   DCHECK(thread_checker_.CalledOnValidThread());
   resource_provider_->LazyAllocate(resource_);
-  if (resource_->dirty_image) {
+  if (resource_->image_id && resource_->dirty_image)
     resource_provider_->BindImageForSampling(resource_);
-  }
 }
 
 ResourceProvider::ScopedWriteLockGr::~ScopedWriteLockGr() {
@@ -1237,19 +1236,19 @@ void ResourceProvider::Initialize() {
   DCHECK(!texture_id_allocator_);
   DCHECK(!buffer_id_allocator_);
 
-  const ContextProvider::Capabilities& caps =
+  const gpu::Capabilities& caps =
       output_surface_->context_provider()->ContextCapabilities();
 
   DCHECK(IsGpuResourceType(default_resource_type_));
-  use_texture_storage_ext_ = caps.gpu.texture_storage;
-  use_texture_format_bgra_ = caps.gpu.texture_format_bgra8888;
-  use_texture_usage_hint_ = caps.gpu.texture_usage;
-  use_compressed_texture_etc1_ = caps.gpu.texture_format_etc1;
-  yuv_resource_format_ = caps.gpu.texture_rg ? RED_8 : LUMINANCE_8;
+  use_texture_storage_ext_ = caps.texture_storage;
+  use_texture_format_bgra_ = caps.texture_format_bgra8888;
+  use_texture_usage_hint_ = caps.texture_usage;
+  use_compressed_texture_etc1_ = caps.texture_format_etc1;
+  yuv_resource_format_ = caps.texture_rg ? RED_8 : LUMINANCE_8;
   yuv_highbit_resource_format_ = yuv_resource_format_;
-  if (caps.gpu.texture_half_float_linear)
+  if (caps.texture_half_float_linear)
     yuv_highbit_resource_format_ = LUMINANCE_F16;
-  use_sync_query_ = caps.gpu.sync_query;
+  use_sync_query_ = caps.sync_query;
 
   max_texture_size_ = 0;  // Context expects cleared value.
   gl->GetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size_);
@@ -1257,7 +1256,7 @@ void ResourceProvider::Initialize() {
       PlatformColor::BestSupportedTextureFormat(use_texture_format_bgra_);
 
   best_render_buffer_format_ = PlatformColor::BestSupportedTextureFormat(
-      caps.gpu.render_buffer_format_bgra8888);
+      caps.render_buffer_format_bgra8888);
 
   texture_id_allocator_.reset(
       new TextureIdAllocator(gl, id_allocation_chunk_size_));
@@ -1443,6 +1442,7 @@ void ResourceProvider::ReceiveFromChild(
                                            it->mailbox_holder.texture_target));
       resource->read_lock_fences_enabled = it->read_lock_fences_enabled;
       resource->is_overlay_candidate = it->is_overlay_candidate;
+      resource->gpu_memory_buffer_id = it->gpu_memory_buffer_id;
     }
     resource->child_id = child;
     // Don't allocate a texture for a child.
@@ -1568,6 +1568,7 @@ void ResourceProvider::TransferResource(Resource* source,
   resource->filter = source->filter;
   resource->size = source->size;
   resource->read_lock_fences_enabled = source->read_lock_fences_enabled;
+  resource->gpu_memory_buffer_id = source->gpu_memory_buffer_id;
   resource->is_overlay_candidate = source->is_overlay_candidate;
 
   if (source->type == RESOURCE_TYPE_BITMAP) {
@@ -1782,11 +1783,11 @@ void ResourceProvider::LazyAllocate(Resource* resource) {
   gl->BindTexture(resource->target, resource->gl_id);
   if (resource->type == RESOURCE_TYPE_GPU_MEMORY_BUFFER) {
     resource->gpu_memory_buffer =
-        gpu_memory_buffer_manager_
-            ->AllocateGpuMemoryBuffer(size, BufferFormat(format),
-                                      gfx::BufferUsage::GPU_READ_CPU_READ_WRITE,
-                                      0 /* surface_id */)
-            .release();
+        gpu_memory_buffer_manager_->AllocateGpuMemoryBuffer(
+            size, BufferFormat(format),
+            gfx::BufferUsage::GPU_READ_CPU_READ_WRITE, gpu::kNullSurfaceHandle);
+    if (resource->gpu_memory_buffer)
+      resource->gpu_memory_buffer_id = resource->gpu_memory_buffer->GetId();
     LazyCreateImage(resource);
     resource->dirty_image = true;
     resource->is_overlay_candidate = true;
@@ -1801,7 +1802,7 @@ void ResourceProvider::LazyAllocate(Resource* resource) {
     if (format != ETC1) {
       gl->TexImage2D(resource->target, 0, GLInternalFormat(format),
                      size.width(), size.height(), 0, GLDataFormat(format),
-                     GLDataType(format), NULL);
+                     GLDataType(format), nullptr);
     }
   }
 }
@@ -1828,6 +1829,8 @@ void ResourceProvider::LazyCreateImage(Resource* resource) {
     resource->image_id = gl->CreateImageCHROMIUM(
         resource->gpu_memory_buffer->AsClientBuffer(), resource->size.width(),
         resource->size.height(), GLInternalFormat(resource->format));
+    DCHECK(resource->image_id || IsGLContextLost());
+
     resource->SetLocallyUsed();
   }
 }
@@ -1881,14 +1884,18 @@ void ResourceProvider::ValidateResource(ResourceId id) const {
 
 GLES2Interface* ResourceProvider::ContextGL() const {
   ContextProvider* context_provider = output_surface_->context_provider();
-  return context_provider ? context_provider->ContextGL() : NULL;
+  return context_provider ? context_provider->ContextGL() : nullptr;
 }
 
 class GrContext* ResourceProvider::GrContext(bool worker_context) const {
   ContextProvider* context_provider =
       worker_context ? output_surface_->worker_context_provider()
                      : output_surface_->context_provider();
-  return context_provider ? context_provider->GrContext() : NULL;
+  return context_provider ? context_provider->GrContext() : nullptr;
+}
+
+bool ResourceProvider::IsGLContextLost() const {
+  return ContextGL()->GetGraphicsResetStatusKHR() != GL_NO_ERROR;
 }
 
 bool ResourceProvider::OnMemoryDump(

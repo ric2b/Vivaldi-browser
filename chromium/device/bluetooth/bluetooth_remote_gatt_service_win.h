@@ -5,14 +5,14 @@
 #ifndef DEVICE_BLUETOOTH_BLUETOOTH_REMOTE_GATT_SERVICE_WIN_H_
 #define DEVICE_BLUETOOTH_BLUETOOTH_REMOTE_GATT_SERVICE_WIN_H_
 
+#include <memory>
 #include <set>
 
 #include "base/files/file.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner.h"
-#include "device/bluetooth/bluetooth_gatt_service.h"
 #include "device/bluetooth/bluetooth_low_energy_defs_win.h"
+#include "device/bluetooth/bluetooth_remote_gatt_service.h"
 
 namespace device {
 
@@ -21,10 +21,10 @@ class BluetoothDeviceWin;
 class BluetoothRemoteGattCharacteristicWin;
 class BluetoothTaskManagerWin;
 
-// The BluetoothRemoteGattServiceWin class implements BluetoothGattService
+// The BluetoothRemoteGattServiceWin class implements BluetoothRemoteGattService
 // for remote GATT services on Windows 8 and later.
 class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattServiceWin
-    : public BluetoothGattService {
+    : public BluetoothRemoteGattService {
  public:
   BluetoothRemoteGattServiceWin(
       BluetoothDeviceWin* device,
@@ -36,22 +36,16 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattServiceWin
       scoped_refptr<base::SequencedTaskRunner>& ui_task_runner);
   ~BluetoothRemoteGattServiceWin() override;
 
-  // Override BluetoothGattService interfaces.
+  // Override BluetoothRemoteGattService interfaces.
   std::string GetIdentifier() const override;
   BluetoothUUID GetUUID() const override;
-  bool IsLocal() const override;
   bool IsPrimary() const override;
   BluetoothDevice* GetDevice() const override;
-  std::vector<BluetoothGattCharacteristic*> GetCharacteristics() const override;
-  std::vector<BluetoothGattService*> GetIncludedServices() const override;
-  BluetoothGattCharacteristic* GetCharacteristic(
+  std::vector<BluetoothRemoteGattCharacteristic*> GetCharacteristics()
+      const override;
+  std::vector<BluetoothRemoteGattService*> GetIncludedServices() const override;
+  BluetoothRemoteGattCharacteristic* GetCharacteristic(
       const std::string& identifier) const override;
-  bool AddCharacteristic(BluetoothGattCharacteristic* characteristic) override;
-  bool AddIncludedService(BluetoothGattService* service) override;
-  void Register(const base::Closure& callback,
-                const ErrorCallback& error_callback) override;
-  void Unregister(const base::Closure& callback,
-                  const ErrorCallback& error_callback) override;
 
   // Notify |characteristic| discovery complete, |characteristic| is the
   // included characteritic of this service.
@@ -66,7 +60,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattServiceWin
 
  private:
   void OnGetIncludedCharacteristics(
-      scoped_ptr<BTH_LE_GATT_CHARACTERISTIC> characteristics,
+      std::unique_ptr<BTH_LE_GATT_CHARACTERISTIC> characteristics,
       uint16_t num,
       HRESULT hr);
   void UpdateIncludedCharacteristics(
@@ -106,8 +100,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattServiceWin
 
   // The key of GattCharacteristicsMap is the identifier of
   // BluetoothRemoteGattCharacteristicWin instance.
-  typedef std::unordered_map<std::string,
-                             scoped_ptr<BluetoothRemoteGattCharacteristicWin>>
+  typedef std::unordered_map<
+      std::string,
+      std::unique_ptr<BluetoothRemoteGattCharacteristicWin>>
       GattCharacteristicsMap;
   GattCharacteristicsMap included_characteristics_;
 

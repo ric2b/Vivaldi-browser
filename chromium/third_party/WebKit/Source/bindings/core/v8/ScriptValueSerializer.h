@@ -9,11 +9,11 @@
 #include "bindings/core/v8/SerializedScriptValue.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "core/CoreExport.h"
-#include "wtf/ArrayBufferContents.h"
 #include "wtf/HashMap.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
+#include "wtf/typed_arrays/ArrayBufferContents.h"
 #include <v8.h>
 
 namespace blink {
@@ -138,11 +138,12 @@ public:
     void writeArrayBufferView(const DOMArrayBufferView&);
     void doWriteImageData(uint32_t width, uint32_t height, const uint8_t* pixelData, uint32_t pixelDataLength);
     void writeImageData(uint32_t width, uint32_t height, const uint8_t* pixelData, uint32_t pixelDataLength);
-    void writeImageBitmap(uint32_t width, uint32_t height, const uint8_t* pixelData, uint32_t pixelDataLength);
+    void writeImageBitmap(uint32_t width, uint32_t height, uint32_t isOriginClean, const uint8_t* pixelData, uint32_t pixelDataLength);
     void writeRegExp(v8::Local<v8::String> pattern, v8::RegExp::Flags);
     void writeTransferredMessagePort(uint32_t index);
     void writeTransferredArrayBuffer(uint32_t index);
     void writeTransferredImageBitmap(uint32_t index);
+    void writeTransferredOffscreenCanvas(uint32_t index, uint32_t width, uint32_t height, uint32_t id);
     void writeTransferredSharedArrayBuffer(uint32_t index);
     void writeObjectReference(uint32_t reference);
     void writeObject(uint32_t numProperties);
@@ -208,7 +209,7 @@ public:
         JSException
     };
 
-    ScriptValueSerializer(SerializedScriptValueWriter&, MessagePortArray* messagePorts, ArrayBufferArray* arrayBuffers, ImageBitmapArray* imageBitmaps, WebBlobInfoArray*, BlobDataHandleMap& blobDataHandles, v8::TryCatch&, ScriptState*);
+    ScriptValueSerializer(SerializedScriptValueWriter&, const Transferables*, WebBlobInfoArray*, BlobDataHandleMap& blobDataHandles, v8::TryCatch&, ScriptState*);
     v8::Isolate* isolate() { return m_scriptState->isolate(); }
     v8::Local<v8::Context> context() { return m_scriptState->context(); }
 
@@ -365,7 +366,7 @@ protected:
     typedef CollectionState<v8::Set> SetState;
 
     // Functions used by serialization states.
-    virtual StateBase* doSerializeValue(v8::Local<v8::Value>, StateBase* next);
+    virtual StateBase* doSerializeObject(v8::Local<v8::Object>, StateBase* next);
 
 private:
     StateBase* doSerialize(v8::Local<v8::Value>, StateBase* next);
@@ -409,6 +410,7 @@ private:
     StateBase* writeArrayBuffer(v8::Local<v8::Value>, StateBase* next);
     StateBase* writeTransferredArrayBuffer(v8::Local<v8::Value>, uint32_t index, StateBase* next);
     StateBase* writeTransferredImageBitmap(v8::Local<v8::Value>, uint32_t index, StateBase* next);
+    StateBase* writeTransferredOffscreenCanvas(v8::Local<v8::Value>, uint32_t index, StateBase* next);
     StateBase* writeTransferredSharedArrayBuffer(v8::Local<v8::Value>, uint32_t index, StateBase* next);
     static bool shouldSerializeDensely(uint32_t length, uint32_t propertyCount);
 
@@ -431,6 +433,9 @@ protected:
     uint32_t nextObjectReference() const { return m_nextObjectReference; }
 
 private:
+
+    void copyTransferables(const Transferables&);
+
     RefPtr<ScriptState> m_scriptState;
     SerializedScriptValueWriter& m_writer;
     v8::TryCatch& m_tryCatch;
@@ -442,6 +447,7 @@ private:
     ObjectPool m_transferredMessagePorts;
     ObjectPool m_transferredArrayBuffers;
     ObjectPool m_transferredImageBitmaps;
+    ObjectPool m_transferredOffscreenCanvas;
     uint32_t m_nextObjectReference;
     WebBlobInfoArray* m_blobInfo;
     BlobDataHandleMap& m_blobDataHandles;
@@ -462,6 +468,7 @@ public:
     virtual bool tryGetTransferredMessagePort(uint32_t index, v8::Local<v8::Value>*) = 0;
     virtual bool tryGetTransferredArrayBuffer(uint32_t index, v8::Local<v8::Value>*) = 0;
     virtual bool tryGetTransferredImageBitmap(uint32_t index, v8::Local<v8::Value>*) = 0;
+    virtual bool tryGetTransferredOffscreenCanvas(uint32_t index, uint32_t width, uint32_t height, uint32_t id, v8::Local<v8::Value>*) = 0;
     virtual bool tryGetTransferredSharedArrayBuffer(uint32_t index, v8::Local<v8::Value>*) = 0;
     virtual bool newSparseArray(uint32_t length) = 0;
     virtual bool newDenseArray(uint32_t length) = 0;
@@ -539,7 +546,7 @@ private:
     bool readImageData(v8::Local<v8::Value>*);
     bool readImageBitmap(v8::Local<v8::Value>*);
     bool readCompositorProxy(v8::Local<v8::Value>*);
-    PassRefPtr<DOMArrayBuffer> doReadArrayBuffer();
+    DOMArrayBuffer* doReadArrayBuffer();
     bool readArrayBuffer(v8::Local<v8::Value>*);
     bool readArrayBufferView(v8::Local<v8::Value>*, ScriptValueCompositeCreator&);
     bool readRegExp(v8::Local<v8::Value>*);
@@ -610,6 +617,7 @@ public:
     bool tryGetTransferredMessagePort(uint32_t index, v8::Local<v8::Value>*) override;
     bool tryGetTransferredArrayBuffer(uint32_t index, v8::Local<v8::Value>*) override;
     bool tryGetTransferredImageBitmap(uint32_t index, v8::Local<v8::Value>*) override;
+    bool tryGetTransferredOffscreenCanvas(uint32_t index, uint32_t width, uint32_t height, uint32_t id, v8::Local<v8::Value>*) override;
     bool tryGetTransferredSharedArrayBuffer(uint32_t index, v8::Local<v8::Value>*) override;
     bool tryGetObjectFromObjectReference(uint32_t reference, v8::Local<v8::Value>*) override;
     uint32_t objectReferenceCount() override;

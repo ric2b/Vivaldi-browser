@@ -5,12 +5,12 @@
 #ifndef MEDIA_RENDERERS_RENDERER_IMPL_H_
 #define MEDIA_RENDERERS_RENDERER_IMPL_H_
 
+#include <memory>
 #include <vector>
 
 #include "base/cancelable_callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
 #include "base/time/clock.h"
@@ -18,9 +18,11 @@
 #include "base/time/time.h"
 #include "media/base/buffering_state.h"
 #include "media/base/decryptor.h"
+#include "media/base/demuxer_stream.h"
 #include "media/base/media_export.h"
 #include "media/base/pipeline_status.h"
 #include "media/base/renderer.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -42,19 +44,15 @@ class MEDIA_EXPORT RendererImpl : public Renderer {
   // GetMediaTime() runs on the render main thread because it's part of JS sync
   // API.
   RendererImpl(const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-               scoped_ptr<AudioRenderer> audio_renderer,
-               scoped_ptr<VideoRenderer> video_renderer);
+               std::unique_ptr<AudioRenderer> audio_renderer,
+               std::unique_ptr<VideoRenderer> video_renderer);
 
   ~RendererImpl() final;
 
   // Renderer implementation.
   void Initialize(DemuxerStreamProvider* demuxer_stream_provider,
-                  const PipelineStatusCB& init_cb,
-                  const StatisticsCB& statistics_cb,
-                  const BufferingStateCB& buffering_state_cb,
-                  const base::Closure& ended_cb,
-                  const PipelineStatusCB& error_cb,
-                  const base::Closure& waiting_for_decryption_key_cb) final;
+                  RendererClient* client,
+                  const PipelineStatusCB& init_cb) final;
   void SetCdm(CdmContext* cdm_context,
               const CdmAttachedCB& cdm_attached_cb) final;
   void Flush(const base::Closure& flush_cb) final;
@@ -76,6 +74,8 @@ class MEDIA_EXPORT RendererImpl : public Renderer {
   }
 
  private:
+  class RendererClientInternal;
+
   enum State {
     STATE_UNINITIALIZED,
     STATE_INIT_PENDING_CDM,  // Initialization is waiting for the CDM to be set.
@@ -105,7 +105,7 @@ class MEDIA_EXPORT RendererImpl : public Renderer {
   void OnVideoRendererFlushDone();
 
   // Callback executed by filters to update statistics.
-  void OnUpdateStatistics(const PipelineStatistics& stats);
+  void OnStatisticsUpdate(const PipelineStatistics& stats);
 
   // Collection of callback methods and helpers for tracking changes in
   // buffering state and transition from paused/underflow states and playing
@@ -116,20 +116,22 @@ class MEDIA_EXPORT RendererImpl : public Renderer {
   //     and StartPlayback() should be called
   //   - A non-waiting to waiting transition indicates underflow has occurred
   //     and PausePlayback() should be called
-  void OnBufferingStateChanged(BufferingState* buffering_state,
-                               BufferingState new_buffering_state);
+  void OnBufferingStateChange(DemuxerStream::Type type,
+                              BufferingState new_buffering_state);
   bool WaitingForEnoughData() const;
   void PausePlayback();
   void StartPlayback();
 
   // Callbacks executed when a renderer has ended.
-  void OnAudioRendererEnded();
-  void OnVideoRendererEnded();
+  void OnRendererEnded(DemuxerStream::Type type);
   bool PlaybackHasEnded() const;
   void RunEndedCallbackIfNeeded();
 
   // Callback executed when a runtime error happens.
-  void OnError(const DemuxerStream* stream, PipelineStatus error);
+  void OnError(PipelineStatus error);
+  void OnWaitingForDecryptionKey();
+  void OnVideoNaturalSizeChange(const gfx::Size& size);
+  void OnVideoOpacityChange(bool opaque);
 
   State state_;
 
@@ -137,24 +139,20 @@ class MEDIA_EXPORT RendererImpl : public Renderer {
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   DemuxerStreamProvider* demuxer_stream_provider_;
-
-  // Permanent callbacks to notify various renderer states/stats.
-  StatisticsCB statistics_cb_;
-  base::Closure ended_cb_;
-  PipelineStatusCB error_cb_;
-  BufferingStateCB buffering_state_cb_;
-  base::Closure waiting_for_decryption_key_cb_;
+  RendererClient* client_;
 
   // Temporary callback used for Initialize() and Flush().
   PipelineStatusCB init_cb_;
   base::Closure flush_cb_;
 
-  scoped_ptr<AudioRenderer> audio_renderer_;
-  scoped_ptr<VideoRenderer> video_renderer_;
+  std::unique_ptr<RendererClientInternal> audio_renderer_client_;
+  std::unique_ptr<RendererClientInternal> video_renderer_client_;
+  std::unique_ptr<AudioRenderer> audio_renderer_;
+  std::unique_ptr<VideoRenderer> video_renderer_;
 
   // Renderer-provided time source used to control playback.
   TimeSource* time_source_;
-  scoped_ptr<WallClockTimeSource> wall_clock_time_source_;
+  std::unique_ptr<WallClockTimeSource> wall_clock_time_source_;
   bool time_ticking_;
   double playback_rate_;
 

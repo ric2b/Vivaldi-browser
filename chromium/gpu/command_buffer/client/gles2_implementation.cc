@@ -22,7 +22,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
@@ -32,6 +32,7 @@
 #include "gpu/command_buffer/client/gpu_control.h"
 #include "gpu/command_buffer/client/program_info_manager.h"
 #include "gpu/command_buffer/client/query_tracker.h"
+#include "gpu/command_buffer/client/shared_memory_limits.h"
 #include "gpu/command_buffer/client/transfer_buffer.h"
 #include "gpu/command_buffer/client/vertex_array_object_manager.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
@@ -110,7 +111,7 @@ GLES2Implementation::SingleThreadChecker::~SingleThreadChecker() {
 
 GLES2Implementation::GLES2Implementation(
     GLES2CmdHelper* helper,
-    ShareGroup* share_group,
+    scoped_refptr<ShareGroup> share_group,
     TransferBufferInterface* transfer_buffer,
     bool bind_generates_resource,
     bool lose_context_when_out_of_memory,
@@ -133,7 +134,6 @@ GLES2Implementation::GLES2Implementation(
       bound_framebuffer_(0),
       bound_read_framebuffer_(0),
       bound_renderbuffer_(0),
-      bound_valuebuffer_(0),
       current_program_(0),
       bound_array_buffer_(0),
       bound_copy_read_buffer_(0),
@@ -161,7 +161,6 @@ GLES2Implementation::GLES2Implementation(
                     base::SysInfo::AmountOfPhysicalMemory() / 20)
               : 0),
 #endif
-      error_message_callback_(NULL),
       current_trace_stack_(0),
       gpu_control_(gpu_control),
       capabilities_(gpu_control->GetCapabilities()),
@@ -182,7 +181,7 @@ GLES2Implementation::GLES2Implementation(
   });
 
   share_group_ =
-      (share_group ? share_group
+      (share_group ? std::move(share_group)
                    : new ShareGroup(
                          bind_generates_resource,
                          gpu_control_->GetCommandBufferID().GetUnsafeValue()));
@@ -201,6 +200,8 @@ bool GLES2Implementation::Initialize(
   DCHECK_LE(starting_transfer_buffer_size, max_transfer_buffer_size);
   DCHECK_GE(min_transfer_buffer_size, kStartingOffset);
 
+  gpu_control_->SetGpuControlClient(this);
+
   if (!transfer_buffer_->Initialize(
       starting_transfer_buffer_size,
       kStartingOffset,
@@ -214,7 +215,7 @@ bool GLES2Implementation::Initialize(
   mapped_memory_.reset(new MappedMemoryManager(helper_, mapped_memory_limit));
 
   unsigned chunk_size = 2 * 1024 * 1024;
-  if (mapped_memory_limit != kNoLimit) {
+  if (mapped_memory_limit != SharedMemoryLimits::kNoLimit) {
     // Use smaller chunks if the client is very memory conscientious.
     chunk_size = std::min(mapped_memory_limit / 4, chunk_size);
   }
@@ -299,6 +300,10 @@ GLES2Implementation::~GLES2Implementation() {
 
   // Make sure the commands make it the service.
   WaitForCmd();
+
+  // The gpu_control_ outlives this class, so clear the client on it before we
+  // self-destruct.
+  gpu_control_->SetGpuControlClient(nullptr);
 }
 
 GLES2CmdHelper* GLES2Implementation::helper() const {
@@ -319,6 +324,28 @@ IdAllocator* GLES2Implementation::GetIdAllocator(int namespace_id) const {
     return query_id_allocator_.get();
   NOTREACHED();
   return NULL;
+}
+
+void GLES2Implementation::OnGpuControlLostContext() {
+  // This should never occur more than once.
+  DCHECK(!lost_context_callback_run_);
+  lost_context_callback_run_ = true;
+  share_group_->Lose();
+  if (!lost_context_callback_.is_null())
+    lost_context_callback_.Run();
+}
+
+void GLES2Implementation::OnGpuControlLostContextMaybeReentrant() {
+  // Queries for lost context state should immediately reflect reality,
+  // but don't call out to clients yet to avoid them re-entering this
+  // class.
+  share_group_->Lose();
+}
+
+void GLES2Implementation::OnGpuControlErrorMessage(const char* message,
+                                                   int32_t id) {
+  if (!error_message_callback_.is_null())
+    error_message_callback_.Run(message, id);
 }
 
 void* GLES2Implementation::GetResultBuffer() {
@@ -346,7 +373,7 @@ void GLES2Implementation::FreeEverything() {
 }
 
 void GLES2Implementation::RunIfContextNotLost(const base::Closure& callback) {
-  if (!helper_->IsContextLost())
+  if (!lost_context_callback_run_)
     callback.Run();
 }
 
@@ -549,10 +576,10 @@ void GLES2Implementation::SetGLError(
   if (msg) {
     last_error_ = msg;
   }
-  if (error_message_callback_) {
+  if (!error_message_callback_.is_null()) {
     std::string temp(GLES2Util::GetStringError(error)  + " : " +
                      function_name + ": " + (msg ? msg : ""));
-    error_message_callback_->OnErrorMessage(temp.c_str(), 0);
+    error_message_callback_.Run(temp.c_str(), 0);
   }
   error_bits_ |= GLES2Util::GLErrorToErrorBit(error);
 
@@ -3961,11 +3988,6 @@ void GLES2Implementation::GenQueriesEXTHelper(
     GLsizei /* n */, const GLuint* /* queries */) {
 }
 
-void GLES2Implementation::GenValuebuffersCHROMIUMHelper(
-    GLsizei /* n */,
-    const GLuint* /* valuebuffers */) {
-}
-
 void GLES2Implementation::GenSamplersHelper(
     GLsizei /* n */, const GLuint* /* samplers */) {
 }
@@ -4269,35 +4291,6 @@ void GLES2Implementation::BindVertexArrayOESHelper(GLuint array) {
   }
 }
 
-void GLES2Implementation::BindValuebufferCHROMIUMHelper(GLenum target,
-                                                        GLuint valuebuffer) {
-  bool changed = false;
-  switch (target) {
-    case GL_SUBSCRIBED_VALUES_BUFFER_CHROMIUM:
-      if (bound_valuebuffer_ != valuebuffer) {
-        bound_valuebuffer_ = valuebuffer;
-        changed = true;
-      }
-      break;
-    default:
-      changed = true;
-      break;
-  }
-  // TODO(gman): See note #2 above.
-  if (changed) {
-    GetIdHandler(id_namespaces::kValuebuffers)->MarkAsUsedForBind(
-        this, target, valuebuffer,
-        &GLES2Implementation::BindValuebufferCHROMIUMStub);
-  }
-}
-
-void GLES2Implementation::BindValuebufferCHROMIUMStub(GLenum target,
-                                                      GLuint valuebuffer) {
-  helper_->BindValuebufferCHROMIUM(target, valuebuffer);
-  if (share_group_->bind_generates_resource())
-    helper_->CommandBufferHelper::OrderingBarrier();
-}
-
 void GLES2Implementation::UseProgramHelper(GLuint program) {
   if (current_program_ != program) {
     current_program_ = program;
@@ -4453,23 +4446,6 @@ void GLES2Implementation::DeleteVertexArraysOESStub(
   helper_->DeleteVertexArraysOESImmediate(n, arrays);
 }
 
-void GLES2Implementation::DeleteValuebuffersCHROMIUMHelper(
-    GLsizei n,
-    const GLuint* valuebuffers) {
-  if (!GetIdHandler(id_namespaces::kValuebuffers)
-           ->FreeIds(this, n, valuebuffers,
-                     &GLES2Implementation::DeleteValuebuffersCHROMIUMStub)) {
-    SetGLError(GL_INVALID_VALUE, "glDeleteValuebuffersCHROMIUM",
-               "id not created by this context.");
-    return;
-  }
-  for (GLsizei ii = 0; ii < n; ++ii) {
-    if (valuebuffers[ii] == bound_valuebuffer_) {
-      bound_valuebuffer_ = 0;
-    }
-  }
-}
-
 void GLES2Implementation::DeleteSamplersStub(
     GLsizei n, const GLuint* samplers) {
   helper_->DeleteSamplersImmediate(n, samplers);
@@ -4501,12 +4477,6 @@ void GLES2Implementation::DeleteTransformFeedbacksHelper(
         "glDeleteTransformFeedbacks", "id not created by this context.");
     return;
   }
-}
-
-void GLES2Implementation::DeleteValuebuffersCHROMIUMStub(
-    GLsizei n,
-    const GLuint* valuebuffers) {
-  helper_->DeleteValuebuffersCHROMIUMImmediate(n, valuebuffers);
 }
 
 void GLES2Implementation::DisableVertexAttribArray(GLuint index) {
@@ -4673,15 +4643,10 @@ void GLES2Implementation::GetVertexAttribIuiv(
 GLenum GLES2Implementation::GetGraphicsResetStatusKHR() {
   GPU_CLIENT_SINGLE_THREAD_CHECK();
   GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glGetGraphicsResetStatusKHR()");
-  // If we can't make command buffers then the context is lost.
-  if (gpu_control_->IsGpuChannelLost())
+  // If any context (including ourselves) has seen itself become lost,
+  // then it will have told the ShareGroup, so just report its status.
+  if (share_group_->IsLost())
     return GL_UNKNOWN_CONTEXT_RESET_KHR;
-  // Otherwise, check the command buffer if it is lost.
-  if (helper_->IsContextLost()) {
-    // TODO(danakj): We could GetLastState() off the CommandBuffer and return
-    // the actual reason here if we cared to.
-    return GL_UNKNOWN_CONTEXT_RESET_KHR;
-  }
   return GL_NO_ERROR;
 }
 
@@ -4747,7 +4712,8 @@ void GLES2Implementation::ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
                                                   GLboolean is_clipped,
                                                   const GLfloat* clip_rect,
                                                   GLint sorting_context_id,
-                                                  const GLfloat* transform) {
+                                                  const GLfloat* transform,
+                                                  GLuint filter) {
   size_t shm_size = 28 * sizeof(GLfloat);
   ScopedTransferBufferPtr buffer(shm_size, helper_, transfer_buffer_);
   if (!buffer.valid() || buffer.size() < shm_size) {
@@ -4762,7 +4728,7 @@ void GLES2Implementation::ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
   memcpy(mem + 12, transform, 16 * sizeof(GLfloat));
   helper_->ScheduleCALayerCHROMIUM(contents_texture_id, opacity,
                                    background_color, edge_aa_mask, is_clipped,
-                                   sorting_context_id, buffer.shm_id(),
+                                   sorting_context_id, filter, buffer.shm_id(),
                                    buffer.offset());
 }
 
@@ -5417,11 +5383,6 @@ void GLES2Implementation::EndQueryEXT(GLenum target) {
   GPU_CLIENT_SINGLE_THREAD_CHECK();
   GPU_CLIENT_LOG("[" << GetLogPrefix() << "] EndQueryEXT("
                  << GLES2Util::GetStringQueryTarget(target) << ")");
-  // Don't do anything if the context is lost.
-  if (helper_->IsContextLost()) {
-    return;
-  }
-
   if (query_tracker_->EndQuery(target, this))
     CheckGLError();
 }
@@ -5816,6 +5777,16 @@ GLboolean GLES2Implementation::UnmapBufferCHROMIUM(GLuint target) {
 
 uint64_t GLES2Implementation::ShareGroupTracingGUID() const {
   return share_group_->TracingGUID();
+}
+
+void GLES2Implementation::SetErrorMessageCallback(
+    const base::Callback<void(const char*, int32_t)>& callback) {
+  error_message_callback_ = callback;
+}
+
+void GLES2Implementation::SetLostContextCallback(
+    const base::Closure& callback) {
+  lost_context_callback_ = callback;
 }
 
 GLuint64 GLES2Implementation::InsertFenceSyncCHROMIUM() {

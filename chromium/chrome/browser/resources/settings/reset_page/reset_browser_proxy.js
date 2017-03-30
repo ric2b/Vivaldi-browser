@@ -29,6 +29,12 @@ cr.define('settings', function() {
      */
     onShowResetProfileDialog: function() {},
 
+    /**
+     * Shows the settings that are about to be reset and which will be reported
+     * to Google for analysis, in a new tab.
+     */
+    showReportedSettings: function() {},
+
 <if expr="chromeos">
     /**
      * A method to be called when the reset powerwash dialog is shown.
@@ -68,6 +74,20 @@ cr.define('settings', function() {
     /** @override */
     onShowResetProfileDialog: function() {
       chrome.send('onShowResetProfileDialog');
+    },
+
+    /** @override */
+    showReportedSettings: function() {
+      cr.sendWithPromise('getReportedSettings').then(function(settings) {
+        var output = settings.map(function(entry) {
+          return entry.key + ': ' + entry.value.replace(/\n/g, ', ');
+        });
+        var win = window.open('about:blank');
+        var div = win.document.createElement('div');
+        div.textContent = output.join('\n');
+        div.style.whiteSpace = 'pre';
+        win.document.body.appendChild(div);
+      });
     },
 
 <if expr="chromeos">

@@ -24,10 +24,9 @@ WebInspector.SASSSourceMapFactory.prototype = {
         if (!cssModel)
             return Promise.resolve(/** @type {?WebInspector.SourceMap} */(null));
 
-        var headerIds = cssModel.styleSheetIdsForURL(sourceMap.compiledURL());
-        if (!headerIds || !headerIds.length)
+        var header = cssModel.styleSheetHeaders().find(styleSheetHeader => styleSheetHeader.sourceMapURL === sourceMap.url());
+        if (!header)
             return Promise.resolve(/** @type {?WebInspector.SourceMap} */(null));
-        var header = cssModel.styleSheetHeaderForId(headerIds[0]);
 
         /** @type {!Map<string, !WebInspector.SASSSupport.AST>} */
         var models = new Map();
@@ -40,7 +39,7 @@ WebInspector.SASSSourceMapFactory.prototype = {
             promises.push(sassPromise);
         }
         var cssURL = sourceMap.compiledURL();
-        var cssPromise = header.requestContent()
+        var cssPromise = header.originalContentProvider().requestContent()
             .then(text => this._astService.parseCSS(cssURL, text || ""))
             .then(ast => models.set(ast.document.url, ast));
         promises.push(cssPromise);
@@ -68,9 +67,11 @@ WebInspector.SASSSourceMapFactory.prototype = {
          */
         function onNode(cssNode)
         {
+            if (!valid)
+                return;
             if (!(cssNode instanceof WebInspector.SASSSupport.TextNode))
                 return;
-            var entry = sourceMap.findEntry(cssNode.range.endLine, cssNode.range.endColumn);
+            var entry = sourceMap.findEntry(cssNode.range.startLine, cssNode.range.startColumn);
             if (!entry || !entry.sourceURL || typeof entry.sourceLineNumber === "undefined" || typeof entry.sourceColumnNumber === "undefined")
                 return;
             var sassAST = models.get(entry.sourceURL);
@@ -79,10 +80,25 @@ WebInspector.SASSSourceMapFactory.prototype = {
             var sassNode = sassAST.findNodeForPosition(entry.sourceLineNumber, entry.sourceColumnNumber);
             if (!sassNode)
                 return;
-            if (cssNode.parent && (cssNode.parent instanceof WebInspector.SASSSupport.Property) && cssNode === cssNode.parent.name)
-                valid = valid && cssNode.text.trim() === sassNode.text.trim();
+            if (cssNode.parent && (cssNode.parent instanceof WebInspector.SASSSupport.Property) && cssNode === cssNode.parent.name && cssNode.text.trim() !== sassNode.text.trim()) {
+                valid = false;
+                reportError(cssNode, sassNode);
+                return;
+            }
             map.addMapping(cssNode, sassNode);
+        }
+
+        /**
+         * @param {!WebInspector.SASSSupport.TextNode} cssNode
+         * @param {!WebInspector.SASSSupport.TextNode} sassNode
+         */
+        function reportError(cssNode, sassNode)
+        {
+            var text = WebInspector.UIString("LiveSASS failed to start: %s", sourceMap.url());
+            text += WebInspector.UIString("\nSourceMap is misaligned: %s != %s", cssNode.text.trim(), sassNode.text.trim());
+            text += "\ncompiled: " + cssNode.document.url + ":" + (cssNode.range.startLine + 1) + ":" + (cssNode.range.startColumn + 1);
+            text += "\nsource: " + sassNode.document.url + ":" + (sassNode.range.startLine + 1) + ":" + (sassNode.range.startColumn + 1);
+            WebInspector.console.error(text);
         }
     },
 }
-

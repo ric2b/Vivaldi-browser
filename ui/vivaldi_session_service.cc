@@ -82,7 +82,7 @@ VivaldiSessionService::VivaldiSessionService(Profile* profile)
 base::File* VivaldiSessionService::OpenAndWriteHeader(
     const base::FilePath& path) {
   DCHECK(!path.empty());
-  scoped_ptr<base::File> file(new base::File(
+  std::unique_ptr<base::File> file(new base::File(
       path,
       base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE |
       base::File::FLAG_EXCLUSIVE_WRITE | base::File::FLAG_EXCLUSIVE_READ));
@@ -183,7 +183,7 @@ bool VivaldiSessionService::ShouldTrackWindow(Browser* browser,
 }
 
 void VivaldiSessionService::ScheduleCommand(
-    scoped_ptr<sessions::SessionCommand> command) {
+    std::unique_ptr<sessions::SessionCommand> command) {
   DCHECK(command);
   pending_commands_.push_back(command.release());
 }

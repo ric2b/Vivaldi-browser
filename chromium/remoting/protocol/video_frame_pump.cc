@@ -112,11 +112,6 @@ void VideoFramePump::SetSizeCallback(const SizeCallback& size_callback) {
   size_callback_ = size_callback;
 }
 
-webrtc::SharedMemory* VideoFramePump::CreateSharedMemory(size_t size) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  return nullptr;
-}
-
 void VideoFramePump::OnCaptureCompleted(webrtc::DesktopFrame* frame) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
@@ -172,7 +167,7 @@ VideoFramePump::EncodeFrame(VideoEncoder* encoder,
   std::unique_ptr<VideoPacket> packet;
   // If |frame| is non-NULL then let the encoder process it.
   if (frame)
-    packet = encoder->Encode(*frame);
+    packet = encoder->Encode(*frame, 0);
 
   // If |frame| is NULL, or the encoder returned nothing, return an empty
   // packet.

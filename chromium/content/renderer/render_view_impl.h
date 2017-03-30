@@ -10,6 +10,7 @@
 
 #include <deque>
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -17,7 +18,6 @@
 #include "base/gtest_prod_util.h"
 #include "base/id_map.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/process/process.h"
@@ -30,8 +30,8 @@
 #include "content/common/drag_event_source_info.h"
 #include "content/common/edit_command.h"
 #include "content/common/frame_message_enums.h"
-#include "content/common/gpu/client/webgraphicscontext3d_command_buffer_impl.h"
 #include "content/common/navigation_gesture.h"
+#include "content/common/page_message_enums.h"
 #include "content/common/view_message_enums.h"
 #include "content/public/common/page_zoom.h"
 #include "content/public/common/referrer.h"
@@ -45,7 +45,6 @@
 #include "content/renderer/render_widget_owner_delegate.h"
 #include "content/renderer/stats_collection_observer.h"
 #include "ipc/ipc_platform_file.h"
-#include "third_party/WebKit/public/platform/WebGraphicsContext3D.h"
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/web/WebAXObject.h"
@@ -124,7 +123,6 @@ class HistoryController;
 class HistoryEntry;
 class MouseLockDispatcher;
 class PageState;
-class PepperPluginInstanceImpl;
 class RenderViewImplTest;
 class RenderViewObserver;
 class RenderViewTest;
@@ -236,8 +234,9 @@ class CONTENT_EXPORT RenderViewImpl
   // as that is only for changes that aren't initiated by the client.
   void SetZoomLevel(double zoom_level);
 
-  // Indicates whether this page has been focused by the browser.
-  bool has_focus() const { return has_focus_; }
+  double page_zoom_level() {
+    return page_zoom_level_;
+  }
 
   // Sets page-level focus in this view and notifies plugins and Blink's
   // FocusController.
@@ -248,26 +247,7 @@ class CONTENT_EXPORT RenderViewImpl
   // Plugin-related functions --------------------------------------------------
 
 #if defined(ENABLE_PLUGINS)
-  PepperPluginInstanceImpl* focused_pepper_plugin() {
-    return focused_pepper_plugin_;
-  }
-  PepperPluginInstanceImpl* pepper_last_mouse_event_target() {
-    return pepper_last_mouse_event_target_;
-  }
-  void set_pepper_last_mouse_event_target(PepperPluginInstanceImpl* plugin) {
-    pepper_last_mouse_event_target_ = plugin;
-  }
-
-  // Indicates that the given instance has been created.
-  void PepperInstanceCreated(PepperPluginInstanceImpl* instance);
-
-  // Indicates that the given instance is being destroyed. This is called from
-  // the destructor, so it's important that the instance is not dereferenced
-  // from this call.
-  void PepperInstanceDeleted(PepperPluginInstanceImpl* instance);
-
-  // Notification that the given plugin is focused or unfocused.
-  void PepperFocusChanged(PepperPluginInstanceImpl* instance, bool focused);
+  PepperPluginInstanceImpl* GetFocusedPepperPlugin();
 #endif  // ENABLE_PLUGINS
 
   void TransferActiveWheelFlingAnimation(
@@ -319,8 +299,39 @@ class CONTENT_EXPORT RenderViewImpl
   void didHandleGestureEvent(const blink::WebGestureEvent& event,
                              bool event_cancelled) override;
   void onMouseDown(const blink::WebNode& mouse_down_node) override;
-
   void initializeLayerTreeView() override;
+
+  // TODO(lfg): Remove once WebViewClient no longer inherits from
+  // WebWidgetClient.
+  bool allowsBrokenNullLayerTreeView() const override;
+  void closeWidgetSoon() override;
+  void convertViewportToWindow(blink::WebRect* rect) override;
+  void convertWindowToViewport(blink::WebFloatRect* rect) override;
+  void didAutoResize(const blink::WebSize& newSize) override;
+  void didChangeCursor(const blink::WebCursorInfo& info) override;
+  void didInvalidateRect(const blink::WebRect& rect) override;
+  void didMeaningfulLayout(blink::WebMeaningfulLayout layout_type) override;
+  void didOverscroll(const blink::WebFloatSize& overscrollDelta,
+                     const blink::WebFloatSize& accumulatedOverscroll,
+                     const blink::WebFloatPoint& positionInViewport,
+                     const blink::WebFloatSize& velocityInViewport) override;
+  void didUpdateTextOfFocusedElementByNonUserInput() override;
+  void hasTouchEventHandlers(bool has_handlers) override;
+  blink::WebLayerTreeView* layerTreeView() override;
+  void resetInputMethod() override;
+  blink::WebRect rootWindowRect() override;
+  void scheduleAnimation() override;
+  blink::WebScreenInfo screenInfo() override;
+  void setToolTipText(const blink::WebString&,
+                      blink::WebTextDirection hint) override;
+  void setTouchAction(blink::WebTouchAction touchAction) override;
+  void setWindowRect(const blink::WebRect& rect) override;
+  void showImeIfNeeded() override;
+  void showUnhandledTapUIIfNeeded(const blink::WebPoint& tappedPosition,
+                                  const blink::WebNode& tappedNode,
+                                  bool pageChanged) override;
+  blink::WebRect windowRect() override;
+  blink::WebRect windowResizerRect() override;
 
   // blink::WebViewClient implementation --------------------------------------
 
@@ -368,7 +379,7 @@ class CONTENT_EXPORT RenderViewImpl
   void focusedNodeChanged(const blink::WebNode& fromNode,
                           const blink::WebNode& toNode) override;
   void didUpdateLayout() override;
-#if defined(OS_ANDROID) || defined(USE_AURA)
+#if defined(OS_ANDROID)
   bool didTapMultipleTargets(
       const blink::WebSize& inner_viewport_offset,
       const blink::WebRect& touch_rect,
@@ -434,6 +445,7 @@ class CONTENT_EXPORT RenderViewImpl
   void ConvertViewportToWindowViaWidget(blink::WebRect* rect) override;
   gfx::RectF ElementBoundsInWindow(const blink::WebElement& element) override;
   float GetDeviceScaleFactorForTest() const override;
+  bool HasAddedInputHandler() const override;
 
   gfx::Point ConvertWindowPointToViewport(const gfx::Point& point);
 
@@ -472,6 +484,7 @@ class CONTENT_EXPORT RenderViewImpl
   void DidCommitCompositorFrame() override;
   void DidCompletePageScaleAnimation() override;
   void OnDeviceScaleFactorChanged() override;
+  void ResizeWebWidget() override;
 
   RenderViewImpl(CompositorDependencies* compositor_deps,
                  const ViewMsg_New_Params& params);
@@ -568,7 +581,6 @@ class CONTENT_EXPORT RenderViewImpl
       const blink::WebGestureEvent& event) override;
   bool RenderWidgetWillHandleMouseEvent(
       const blink::WebMouseEvent& event) override;
-  void RenderWidgetDidCommitAndDrawCompositorFrame() override;
   void RenderWidgetDidFlushPaint() override;
 
   // Old WebFrameClient implementations ----------------------------------------
@@ -654,7 +666,7 @@ class CONTENT_EXPORT RenderViewImpl
   void OnSetRendererPrefs(const RendererPreferences& renderer_prefs);
   void OnSetWebUIProperty(const std::string& name, const std::string& value);
   void OnSetZoomLevelForLoadingURL(const GURL& url, double zoom_level);
-  void OnSetZoomLevelForView(bool uses_temporary_zoom_level, double level);
+  void OnSuppressDialogsUntilSwapOut();
   void OnThemeChanged();
   void OnUpdateTargetURLAck();
   void OnUpdateWebPreferences(const WebPreferences& prefs);
@@ -674,6 +686,7 @@ class CONTENT_EXPORT RenderViewImpl
 
   // Page message handlers -----------------------------------------------------
   void OnUpdateWindowScreenRect(gfx::Rect window_screen_rect);
+  void OnSetZoomLevel(PageMsg_SetZoomLevel_Command command, double zoom_level);
 
   void ApplyVivaldiSpecificPreferences();
 
@@ -732,13 +745,6 @@ class CONTENT_EXPORT RenderViewImpl
   void set_navigation_gesture(NavigationGesture gesture) {
     navigation_gesture_ = gesture;
   }
-
-  // Platform specific theme preferences if any are updated here.
-#if defined(OS_WIN)
-  void UpdateThemePrefs();
-#else
-  void UpdateThemePrefs() {}
-#endif
 
   void UpdateWebViewWithDeviceScaleFactor();
 
@@ -857,10 +863,16 @@ class CONTENT_EXPORT RenderViewImpl
   TopControlsState top_controls_constraints_;
 #endif
 
-  // Indicates whether this page has been focused/unfocused by the browser.
-  bool has_focus_;
+  // Whether or not Blink's viewport size should be shrunk by the height of the
+  // URL-bar.
+  bool top_controls_shrink_blink_size_;
+
+  // The height of the top controls.
+  float top_controls_height_;
 
   // View ----------------------------------------------------------------------
+
+  blink::WebView* webview_;
 
   // Cache the preferred size of the page in order to prevent sending the IPC
   // when layout() recomputes but doesn't actually change sizes.
@@ -874,6 +886,10 @@ class CONTENT_EXPORT RenderViewImpl
   // scrolled and focused editable node.
   bool has_scrolled_focused_editable_node_into_rect_;
   gfx::Rect rect_for_scrolled_focused_editable_node_;
+
+  // Used to indicate the zoom level to be used during subframe loads, since
+  // they should match page zoom level.
+  double page_zoom_level_;
 
   // Helper objects ------------------------------------------------------------
 
@@ -894,7 +910,7 @@ class CONTENT_EXPORT RenderViewImpl
   // Mouse Lock dispatcher attached to this view.
   MouseLockDispatcher* mouse_lock_dispatcher_;
 
-  scoped_ptr<HistoryController> history_controller_;
+  std::unique_ptr<HistoryController> history_controller_;
 
 #if defined(OS_ANDROID)
   // Android Specific ---------------------------------------------------------
@@ -904,30 +920,11 @@ class CONTENT_EXPORT RenderViewImpl
   size_t expected_content_intent_id_;
 
   // List of click-based content detectors.
-  std::vector<scoped_ptr<ContentDetector>> content_detectors_;
+  std::vector<std::unique_ptr<ContentDetector>> content_detectors_;
 
   // A date/time picker object for date and time related input elements.
-  scoped_ptr<RendererDateTimePicker> date_time_picker_client_;
-#endif
+  std::unique_ptr<RendererDateTimePicker> date_time_picker_client_;
 
-  // Plugins -------------------------------------------------------------------
-#if defined(ENABLE_PLUGINS)
-  typedef std::set<PepperPluginInstanceImpl*> PepperPluginSet;
-  PepperPluginSet active_pepper_instances_;
-
-  // TODO(jam): these belong on RenderFrame, once the browser knows which frame
-  // is focused and sends the IPCs which use these to the correct frame. Until
-  // then, we must store these on RenderView as that's the one place that knows
-  // about all the RenderFrames for a page.
-
-  // Whether or not the focus is on a PPAPI plugin
-  PepperPluginInstanceImpl* focused_pepper_plugin_;
-
-  // The plugin instance that received the last mouse event. It is set to NULL
-  // if the last mouse event went to elements other than Pepper plugins.
-  // |pepper_last_mouse_event_target_| is not owned by this class. We depend on
-  // the RenderFrameImpl to NULL it out when it destructs.
-  PepperPluginInstanceImpl* pepper_last_mouse_event_target_;
 #endif
 
   // Misc ----------------------------------------------------------------------
@@ -937,7 +934,7 @@ class CONTENT_EXPORT RenderViewImpl
   // callback, and the remaining elements are the other file chooser completion
   // still waiting to be run (in order).
   struct PendingFileChooser;
-  std::deque<scoped_ptr<PendingFileChooser>> file_chooser_completions_;
+  std::deque<std::unique_ptr<PendingFileChooser>> file_chooser_completions_;
 
   // The current directory enumeration callback
   std::map<int, blink::WebFileChooserCompletion*> enumeration_completions_;
@@ -957,7 +954,7 @@ class CONTENT_EXPORT RenderViewImpl
   base::ObserverList<RenderViewObserver> observers_;
 
   // Wraps the |webwidget_| as a MouseLockDispatcher::LockTarget interface.
-  scoped_ptr<MouseLockDispatcher::LockTarget> webwidget_mouse_lock_target_;
+  std::unique_ptr<MouseLockDispatcher::LockTarget> webwidget_mouse_lock_target_;
 
   // This field stores drag/drop related info for the event that is currently
   // being handled. If the current event results in starting a drag/drop
@@ -966,10 +963,12 @@ class CONTENT_EXPORT RenderViewImpl
 
   // NOTE: stats_collection_observer_ should be the last members because their
   // constructors call the AddObservers method of RenderViewImpl.
-  scoped_ptr<StatsCollectionObserver> stats_collection_observer_;
+  std::unique_ptr<StatsCollectionObserver> stats_collection_observer_;
 
   typedef std::map<cc::SharedBitmapId, cc::SharedBitmap*> BitmapMap;
   BitmapMap disambiguation_bitmaps_;
+
+  bool has_added_input_handler_;
 
   // ---------------------------------------------------------------------------
   // ADDING NEW DATA? Please see if it fits appropriately in one of the above

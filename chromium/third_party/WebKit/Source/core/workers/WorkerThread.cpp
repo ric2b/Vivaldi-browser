@@ -30,25 +30,24 @@
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/V8GCController.h"
 #include "bindings/core/v8/V8IdleTaskRunner.h"
-#include "bindings/core/v8/V8Initializer.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InspectorTaskRunner.h"
 #include "core/inspector/WorkerThreadDebugger.h"
-#include "core/workers/DedicatedWorkerGlobalScope.h"
+#include "core/origin_trials/OriginTrialContext.h"
+#include "core/workers/WorkerBackingThread.h"
 #include "core/workers/WorkerClients.h"
 #include "core/workers/WorkerReportingProxy.h"
 #include "core/workers/WorkerThreadStartupData.h"
 #include "platform/ThreadSafeFunctional.h"
 #include "platform/WaitableEvent.h"
+#include "platform/WebThreadSupportingGC.h"
 #include "platform/heap/SafePoint.h"
 #include "platform/heap/ThreadState.h"
 #include "platform/weborigin/KURL.h"
-#include "public/platform/Platform.h"
 #include "public/platform/WebScheduler.h"
 #include "public/platform/WebThread.h"
 #include "wtf/Functional.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/WeakPtr.h"
 #include "wtf/text/WTFString.h"
 #include <limits.h>
 
@@ -64,8 +63,7 @@ public:
     void willProcessTask() override
     {
         // No tasks should get executed after we have closed.
-        WorkerGlobalScope* globalScope = m_workerThread->workerGlobalScope();
-        ASSERT_UNUSED(globalScope, !globalScope || !globalScope->isClosing());
+        DCHECK(!m_workerThread->workerGlobalScope() || !m_workerThread->workerGlobalScope()->isClosing());
     }
 
     void didProcessTask() override
@@ -76,7 +74,7 @@ public:
                 scriptController->getRejectedPromises()->processQueue();
             if (globalScope->isClosing()) {
                 m_workerThread->workerReportingProxy().workerGlobalScopeClosed();
-                m_workerThread->shutdown();
+                m_workerThread->terminateFromWorkerThread();
             }
         }
     }
@@ -105,14 +103,14 @@ unsigned WorkerThread::workerThreadCount()
     return workerThreads().size();
 }
 
-void WorkerThread::performTask(PassOwnPtr<ExecutionContextTask> task, bool isInstrumented)
+void WorkerThread::performTask(std::unique_ptr<ExecutionContextTask> task, bool isInstrumented)
 {
-    ASSERT(isCurrentThread());
+    DCHECK(isCurrentThread());
     WorkerGlobalScope* globalScope = workerGlobalScope();
     // If the thread is terminated before it had a chance initialize (see
     // WorkerThread::Initialize()), we mustn't run any of the posted tasks.
     if (!globalScope) {
-        ASSERT(terminated());
+        DCHECK(terminated());
         return;
     }
 
@@ -120,16 +118,15 @@ void WorkerThread::performTask(PassOwnPtr<ExecutionContextTask> task, bool isIns
     task->performTask(globalScope);
 }
 
-PassOwnPtr<CrossThreadClosure> WorkerThread::createWorkerThreadTask(PassOwnPtr<ExecutionContextTask> task, bool isInstrumented)
+std::unique_ptr<CrossThreadClosure> WorkerThread::createWorkerThreadTask(std::unique_ptr<ExecutionContextTask> task, bool isInstrumented)
 {
     if (isInstrumented)
         isInstrumented = !task->taskNameForInstrumentation().isEmpty();
     if (isInstrumented) {
-        // TODO(hiroshige): This doesn't work when called on the main thread.
-        // https://crbug.com/588497
+        DCHECK(isCurrentThread());
         InspectorInstrumentation::asyncTaskScheduled(workerGlobalScope(), "Worker task", task.get());
     }
-    return threadSafeBind(&WorkerThread::performTask, AllowCrossThreadAccess(this), task, isInstrumented);
+    return threadSafeBind(&WorkerThread::performTask, AllowCrossThreadAccess(this), passed(std::move(task)), isInstrumented);
 }
 
 WorkerThread::WorkerThread(PassRefPtr<WorkerLoaderProxy> workerLoaderProxy, WorkerReportingProxy& workerReportingProxy)
@@ -143,11 +140,10 @@ WorkerThread::WorkerThread(PassRefPtr<WorkerLoaderProxy> workerLoaderProxy, Work
     , m_workerLoaderProxy(workerLoaderProxy)
     , m_workerReportingProxy(workerReportingProxy)
     , m_webScheduler(nullptr)
-    , m_isolate(nullptr)
-    , m_shutdownEvent(adoptPtr(new WaitableEvent(
+    , m_terminationEvent(adoptPtr(new WaitableEvent(
         WaitableEvent::ResetPolicy::Manual,
         WaitableEvent::InitialState::NonSignaled)))
-    , m_terminationEvent(adoptPtr(new WaitableEvent(
+    , m_shutdownEvent(adoptPtr(new WaitableEvent(
         WaitableEvent::ResetPolicy::Manual,
         WaitableEvent::InitialState::NonSignaled)))
 {
@@ -158,26 +154,26 @@ WorkerThread::WorkerThread(PassRefPtr<WorkerLoaderProxy> workerLoaderProxy, Work
 WorkerThread::~WorkerThread()
 {
     MutexLocker lock(threadSetMutex());
-    ASSERT(workerThreads().contains(this));
+    DCHECK(workerThreads().contains(this));
     workerThreads().remove(this);
 }
 
 void WorkerThread::start(PassOwnPtr<WorkerThreadStartupData> startupData)
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
 
     if (m_started)
         return;
 
     m_started = true;
-    backingThread().postTask(BLINK_FROM_HERE, threadSafeBind(&WorkerThread::initialize, AllowCrossThreadAccess(this), startupData));
+    workerBackingThread().backingThread().postTask(BLINK_FROM_HERE, threadSafeBind(&WorkerThread::initialize, AllowCrossThreadAccess(this), passed(std::move(startupData))));
 }
 
 PlatformThreadId WorkerThread::platformThreadId()
 {
     if (!m_started)
         return 0;
-    return backingThread().platformThread().threadId();
+    return workerBackingThread().backingThread().platformThread().threadId();
 }
 
 void WorkerThread::initialize(PassOwnPtr<WorkerThreadStartupData> startupData)
@@ -185,9 +181,9 @@ void WorkerThread::initialize(PassOwnPtr<WorkerThreadStartupData> startupData)
     KURL scriptURL = startupData->m_scriptURL;
     String sourceCode = startupData->m_sourceCode;
     WorkerThreadStartMode startMode = startupData->m_startMode;
-    OwnPtr<Vector<char>> cachedMetaData = startupData->m_cachedMetaData.release();
+    OwnPtr<Vector<char>> cachedMetaData = std::move(startupData->m_cachedMetaData);
     V8CacheOptions v8CacheOptions = startupData->m_v8CacheOptions;
-    m_webScheduler = backingThread().platformThread().scheduler();
+    m_webScheduler = workerBackingThread().backingThread().platformThread().scheduler();
 
     {
         MutexLocker lock(m_threadStateMutex);
@@ -195,31 +191,44 @@ void WorkerThread::initialize(PassOwnPtr<WorkerThreadStartupData> startupData)
         // The worker was terminated before the thread had a chance to run.
         if (m_terminated) {
             // Notify the proxy that the WorkerGlobalScope has been disposed of.
-            // This can free this thread object, hence it must not be touched afterwards.
+            // This can free this thread object, hence it must not be touched
+            // afterwards.
             m_workerReportingProxy.workerThreadTerminated();
-            // Notify the main thread that it is safe to deallocate our resources.
-            m_terminationEvent->signal();
+
+            // Notify the main thread that it is safe to deallocate our
+            // resources.
+            m_shutdownEvent->signal();
             return;
         }
 
+        workerBackingThread().attach();
+
+        if (shouldAttachThreadDebugger())
+            V8PerIsolateData::from(isolate())->setThreadDebugger(adoptPtr(new WorkerThreadDebugger(this, isolate())));
         m_microtaskRunner = adoptPtr(new WorkerMicrotaskRunner(this));
-        initializeBackingThread();
-        backingThread().addTaskObserver(m_microtaskRunner.get());
+        workerBackingThread().backingThread().addTaskObserver(m_microtaskRunner.get());
 
-        m_isolate = initializeIsolate();
         // Optimize for memory usage instead of latency for the worker isolate.
-        m_isolate->IsolateInBackgroundNotification();
-        m_workerGlobalScope = createWorkerGlobalScope(startupData);
+        isolate()->IsolateInBackgroundNotification();
+        m_workerGlobalScope = createWorkerGlobalScope(std::move(startupData));
         m_workerGlobalScope->scriptLoaded(sourceCode.length(), cachedMetaData.get() ? cachedMetaData->size() : 0);
-
-        didStartWorkerThread();
 
         // Notify proxy that a new WorkerGlobalScope has been created and started.
         m_workerReportingProxy.workerGlobalScopeStarted(m_workerGlobalScope.get());
 
         WorkerOrWorkletScriptController* scriptController = m_workerGlobalScope->scriptController();
-        if (!scriptController->isExecutionForbidden())
+        if (!scriptController->isExecutionForbidden()) {
             scriptController->initializeContextIfNeeded();
+
+            // If Origin Trials have been registered before the V8 context was ready,
+            // then inject them into the context now
+            ExecutionContext* executionContext = m_workerGlobalScope->getExecutionContext();
+            if (executionContext) {
+                OriginTrialContext* originTrialContext = OriginTrialContext::from(executionContext);
+                if (originTrialContext)
+                    originTrialContext->initializePendingFeatures();
+            }
+        }
     }
 
     if (startMode == PauseWorkerGlobalScopeOnStart)
@@ -227,6 +236,8 @@ void WorkerThread::initialize(PassOwnPtr<WorkerThreadStartupData> startupData)
 
     if (m_workerGlobalScope->scriptController()->isContextInitialized()) {
         m_workerReportingProxy.didInitializeWorkerContext();
+        v8::HandleScope handleScope(isolate());
+        Platform::current()->workerContextCreated(m_workerGlobalScope->scriptController()->context());
     }
 
     CachedMetadataHandler* handler = workerGlobalScope()->createWorkerScriptCachedMetadataHandler(scriptURL, cachedMetaData.get());
@@ -239,7 +250,7 @@ void WorkerThread::initialize(PassOwnPtr<WorkerThreadStartupData> startupData)
 
 void WorkerThread::shutdown()
 {
-    ASSERT(isCurrentThread());
+    DCHECK(isCurrentThread());
     {
         MutexLocker lock(m_threadStateMutex);
         if (m_shutdown)
@@ -252,26 +263,24 @@ void WorkerThread::shutdown()
 
     workerGlobalScope()->dispose();
 
-    // This should be called after the WorkerGlobalScope's disposed (which may
-    // trigger some last-minutes cleanups) and before the thread actually stops.
-    willStopWorkerThread();
-
-    backingThread().removeTaskObserver(m_microtaskRunner.get());
+    workerBackingThread().backingThread().removeTaskObserver(m_microtaskRunner.get());
     postTask(BLINK_FROM_HERE, createSameThreadTask(&WorkerThread::performShutdownTask, this));
 }
 
 void WorkerThread::performShutdownTask()
 {
-    // The below assignment will destroy the context, which will in turn notify messaging proxy.
-    // We cannot let any objects survive past thread exit, because no other thread will run GC or otherwise destroy them.
-    // If Oilpan is enabled, we detach of the context/global scope, with the final heap cleanup below sweeping it out.
+    DCHECK(isCurrentThread());
+
+    // The below assignment will destroy the context, which will in turn notify
+    // messaging proxy. We cannot let any objects survive past thread exit,
+    // because no other thread will run GC or otherwise destroy them. If Oilpan
+    // is enabled, we detach of the context/global scope, with the final heap
+    // cleanup below sweeping it out.
     m_workerGlobalScope->notifyContextDestroyed();
     m_workerGlobalScope = nullptr;
 
-    willDestroyIsolate();
-    shutdownBackingThread();
-    destroyIsolate();
-    m_isolate = nullptr;
+    workerBackingThread().detach();
+    // We must not touch workerBackingThread() from now on.
 
     m_microtaskRunner = nullptr;
 
@@ -279,11 +288,13 @@ void WorkerThread::performShutdownTask()
     // This can free this thread object, hence it must not be touched afterwards.
     workerReportingProxy().workerThreadTerminated();
 
-    m_terminationEvent->signal();
+    m_shutdownEvent->signal();
 }
 
 void WorkerThread::terminate()
 {
+    DCHECK(isMainThread());
+
     // Prevent the deadlock between GC and an attempt to terminate a thread.
     SafePointScope safePointScope(BlinkGC::HeapPointersOnStack);
     terminateInternal();
@@ -291,13 +302,34 @@ void WorkerThread::terminate()
 
 void WorkerThread::terminateAndWait()
 {
+    DCHECK(isMainThread());
     terminate();
-    m_terminationEvent->wait();
+    m_shutdownEvent->wait();
+}
+
+void WorkerThread::terminateAndWaitForAllWorkers()
+{
+    DCHECK(isMainThread());
+
+    // Keep this lock to prevent WorkerThread instances from being destroyed.
+    MutexLocker lock(threadSetMutex());
+    HashSet<WorkerThread*> threads = workerThreads();
+    for (WorkerThread* thread : threads)
+        thread->terminateInternal();
+
+    for (WorkerThread* thread : threads)
+        thread->m_shutdownEvent->wait();
+}
+
+void WorkerThread::terminateFromWorkerThread()
+{
+    DCHECK(isCurrentThread());
+    shutdown();
 }
 
 WorkerGlobalScope* WorkerThread::workerGlobalScope()
 {
-    ASSERT(isCurrentThread());
+    DCHECK(isCurrentThread());
     return m_workerGlobalScope.get();
 }
 
@@ -309,9 +341,10 @@ bool WorkerThread::terminated()
 
 void WorkerThread::terminateInternal()
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
 
-    // Protect against this method, initialize() or termination via the global scope racing each other.
+    // Protect against this method, initialize() or termination via the global
+    // scope racing each other.
     MutexLocker lock(m_threadStateMutex);
 
     // If terminateInternal has already been called, just return.
@@ -320,155 +353,105 @@ void WorkerThread::terminateInternal()
     m_terminated = true;
 
     // Signal the thread to notify that the thread's stopping.
-    if (m_shutdownEvent)
-        m_shutdownEvent->signal();
+    if (m_terminationEvent)
+        m_terminationEvent->signal();
 
-    // If the thread has already initiated shut down, just return.
+    // If the thread has already initiated shutdown, just return.
     if (m_shutdown)
         return;
 
     // If the worker thread was never initialized, don't start another
-    // shutdown, but still wait for the thread to signal when termination has
-    // completed.
+    // shutdown, but still wait for the thread to signal when shutdown has
+    // completed on initialize().
     if (!m_workerGlobalScope)
         return;
 
-    // Ensure that tasks are being handled by thread event loop. If script execution weren't forbidden, a while(1) loop in JS could keep the thread alive forever.
+    // Ensure that tasks are being handled by thread event loop. If script
+    // execution weren't forbidden, a while(1) loop in JS could keep the thread
+    // alive forever.
     m_workerGlobalScope->scriptController()->willScheduleExecutionTermination();
 
-    // Terminating during debugger task may lead to crash due to heavy use of v8 api in debugger.
-    // Any debugger task is guaranteed to finish, so we can postpone termination after task has finished.
-    // Note: m_runningDebuggerTask and m_shouldTerminateV8Execution access must be guarded by the lock.
-    if (m_runningDebuggerTask)
-        m_shouldTerminateV8Execution = true;
-    else
-        terminateV8Execution();
+    if (workerBackingThread().workerScriptCount() == 1) {
+        // This condition is not entirely correct because other scripts
+        // can be being initialized or terminated simuletaneously. Though this
+        // function itself is protected by a mutex, it is possible that
+        // |workerScriptCount()| here is not consistent with that in
+        // |initialize| and |shutdown|.
+        // TODO(yhirano): TerminateExecution should be called more carefully.
+        // https://crbug.com/413518
+        if (m_runningDebuggerTask) {
+            // Terminating during debugger task may lead to crash due to heavy
+            // use of v8 api in debugger. Any debugger task is guaranteed to
+            // finish, so we can postpone termination after task has finished.
+            // Note: m_runningDebuggerTask and m_shouldTerminateV8Execution
+            // access must be guarded by the lock.
+            m_shouldTerminateV8Execution = true;
+        } else {
+            isolate()->TerminateExecution();
+        }
+    }
 
     InspectorInstrumentation::allAsyncTasksCanceled(m_workerGlobalScope.get());
     m_inspectorTaskRunner->kill();
-    backingThread().postTask(BLINK_FROM_HERE, threadSafeBind(&WorkerThread::shutdown, AllowCrossThreadAccess(this)));
+    workerBackingThread().backingThread().postTask(BLINK_FROM_HERE, threadSafeBind(&WorkerThread::shutdown, AllowCrossThreadAccess(this)));
 }
 
-void WorkerThread::didStartWorkerThread()
+v8::Isolate* WorkerThread::isolate()
 {
-    ASSERT(isCurrentThread());
-    Platform::current()->didStartWorkerThread();
-}
-
-void WorkerThread::willStopWorkerThread()
-{
-    ASSERT(isCurrentThread());
-    Platform::current()->willStopWorkerThread();
-}
-
-void WorkerThread::terminateAndWaitForAllWorkers()
-{
-    // Keep this lock to prevent WorkerThread instances from being destroyed.
-    MutexLocker lock(threadSetMutex());
-    HashSet<WorkerThread*> threads = workerThreads();
-    for (WorkerThread* thread : threads)
-        thread->terminateInternal();
-
-    for (WorkerThread* thread : threads)
-        thread->m_terminationEvent->wait();
+    return workerBackingThread().isolate();
 }
 
 bool WorkerThread::isCurrentThread()
 {
-    return m_started && backingThread().isCurrentThread();
+    return m_started && workerBackingThread().backingThread().isCurrentThread();
 }
 
-void WorkerThread::postTask(const WebTraceLocation& location, PassOwnPtr<ExecutionContextTask> task)
+void WorkerThread::postTask(const WebTraceLocation& location, std::unique_ptr<ExecutionContextTask> task)
 {
-    backingThread().postTask(location, createWorkerThreadTask(task, true));
-}
-
-void WorkerThread::initializeBackingThread()
-{
-    ASSERT(isCurrentThread());
-    backingThread().initialize();
-}
-
-void WorkerThread::shutdownBackingThread()
-{
-    ASSERT(isCurrentThread());
-    backingThread().shutdown();
-}
-
-v8::Isolate* WorkerThread::initializeIsolate()
-{
-    ASSERT(isCurrentThread());
-    ASSERT(!m_isolate);
-    v8::Isolate* isolate = V8PerIsolateData::initialize();
-    V8Initializer::initializeWorker(isolate);
-
-    OwnPtr<V8IsolateInterruptor> interruptor = adoptPtr(new V8IsolateInterruptor(isolate));
-    ThreadState::current()->addInterruptor(interruptor.release());
-    ThreadState::current()->registerTraceDOMWrappers(isolate, V8GCController::traceDOMWrappers);
-    if (RuntimeEnabledFeatures::v8IdleTasksEnabled())
-        V8PerIsolateData::enableIdleTasks(isolate, adoptPtr(new V8IdleTaskRunner(m_webScheduler)));
-    V8PerIsolateData::from(isolate)->setThreadDebugger(adoptPtr(new WorkerThreadDebugger(this, isolate)));
-    return isolate;
-}
-
-void WorkerThread::willDestroyIsolate()
-{
-    ASSERT(isCurrentThread());
-    ASSERT(m_isolate);
-    V8PerIsolateData::willBeDestroyed(m_isolate);
-}
-
-void WorkerThread::destroyIsolate()
-{
-    ASSERT(isCurrentThread());
-    V8PerIsolateData::destroy(m_isolate);
-}
-
-void WorkerThread::terminateV8Execution()
-{
-    m_isolate->TerminateExecution();
+    workerBackingThread().backingThread().postTask(location, createWorkerThreadTask(std::move(task), true));
 }
 
 void WorkerThread::runDebuggerTaskDontWait()
 {
-    OwnPtr<CrossThreadClosure> task = m_inspectorTaskRunner->takeNextTask(InspectorTaskRunner::DontWaitForTask);
+    DCHECK(isCurrentThread());
+    std::unique_ptr<CrossThreadClosure> task = m_inspectorTaskRunner->takeNextTask(InspectorTaskRunner::DontWaitForTask);
     if (task)
         (*task)();
 }
 
-void WorkerThread::appendDebuggerTask(PassOwnPtr<CrossThreadClosure> task)
+void WorkerThread::appendDebuggerTask(std::unique_ptr<CrossThreadClosure> task)
 {
     {
         MutexLocker lock(m_threadStateMutex);
         if (m_shutdown)
             return;
     }
-    m_inspectorTaskRunner->appendTask(threadSafeBind(&WorkerThread::runDebuggerTask, AllowCrossThreadAccess(this), task));
+    m_inspectorTaskRunner->appendTask(threadSafeBind(&WorkerThread::runDebuggerTask, AllowCrossThreadAccess(this), passed(std::move(task))));
     {
         MutexLocker lock(m_threadStateMutex);
-        if (m_isolate)
-            m_inspectorTaskRunner->interruptAndRunAllTasksDontWait(m_isolate);
+        if (isolate())
+            m_inspectorTaskRunner->interruptAndRunAllTasksDontWait(isolate());
     }
-    backingThread().postTask(BLINK_FROM_HERE, threadSafeBind(&WorkerThread::runDebuggerTaskDontWait, AllowCrossThreadAccess(this)));
+    workerBackingThread().backingThread().postTask(BLINK_FROM_HERE, threadSafeBind(&WorkerThread::runDebuggerTaskDontWait, AllowCrossThreadAccess(this)));
 }
 
-void WorkerThread::runDebuggerTask(PassOwnPtr<CrossThreadClosure> task)
+void WorkerThread::runDebuggerTask(std::unique_ptr<CrossThreadClosure> task)
 {
-    ASSERT(isCurrentThread());
+    DCHECK(isCurrentThread());
     InspectorTaskRunner::IgnoreInterruptsScope scope(m_inspectorTaskRunner.get());
     {
         MutexLocker lock(m_threadStateMutex);
         m_runningDebuggerTask = true;
     }
-    InspectorInstrumentation::willProcessTask(workerGlobalScope());
+    ThreadDebugger::idleFinished(isolate());
     (*task)();
-    InspectorInstrumentation::didProcessTask(workerGlobalScope());
+    ThreadDebugger::idleStarted(isolate());
     {
         MutexLocker lock(m_threadStateMutex);
         m_runningDebuggerTask = false;
         if (m_shouldTerminateV8Execution) {
             m_shouldTerminateV8Execution = false;
-            terminateV8Execution();
+            isolate()->TerminateExecution();
         }
     }
 }
@@ -476,8 +459,8 @@ void WorkerThread::runDebuggerTask(PassOwnPtr<CrossThreadClosure> task)
 void WorkerThread::startRunningDebuggerTasksOnPause()
 {
     m_pausedInDebugger = true;
-    InspectorInstrumentation::willEnterNestedRunLoop(m_workerGlobalScope.get());
-    OwnPtr<CrossThreadClosure> task;
+    ThreadDebugger::idleStarted(isolate());
+    std::unique_ptr<CrossThreadClosure> task;
     do {
         {
             SafePointScope safePointScope(BlinkGC::HeapPointersOnStack);
@@ -487,7 +470,7 @@ void WorkerThread::startRunningDebuggerTasksOnPause()
             (*task)();
     // Keep waiting until execution is resumed.
     } while (task && m_pausedInDebugger);
-    InspectorInstrumentation::didLeaveNestedRunLoop(m_workerGlobalScope.get());
+    ThreadDebugger::idleFinished(isolate());
 }
 
 void WorkerThread::stopRunningDebuggerTasksOnPause()

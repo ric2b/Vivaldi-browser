@@ -3,6 +3,9 @@
 // found in the LICENSE file.
 
 #include "content/browser/compositor/software_output_device_ozone.h"
+
+#include <memory>
+
 #include "ui/compositor/compositor.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/gfx/vsync_provider.h"
@@ -13,9 +16,9 @@
 namespace content {
 
 // static
-scoped_ptr<SoftwareOutputDeviceOzone> SoftwareOutputDeviceOzone::Create(
+std::unique_ptr<SoftwareOutputDeviceOzone> SoftwareOutputDeviceOzone::Create(
     ui::Compositor* compositor) {
-  scoped_ptr<SoftwareOutputDeviceOzone> result(
+  std::unique_ptr<SoftwareOutputDeviceOzone> result(
       new SoftwareOutputDeviceOzone(compositor));
   if (!result->surface_ozone_)
     return nullptr;

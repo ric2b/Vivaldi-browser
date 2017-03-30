@@ -10,6 +10,7 @@
 #include "content/public/browser/context_factory.h"
 #include "content/shell/browser/shell_browser_context.h"
 #include "ui/base/ime/input_method_initializer.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/views/test/desktop_test_views_delegate.h"
 
 namespace ui {
@@ -24,10 +25,11 @@ ViewsContentClientMainParts::~ViewsContentClientMainParts() {
 }
 
 void ViewsContentClientMainParts::PreMainMessageLoopRun() {
+  ui::MaterialDesignController::Initialize();
   ui::InitializeInputMethodForTesting();
   browser_context_.reset(new content::ShellBrowserContext(false, NULL));
 
-  scoped_ptr<views::TestViewsDelegate> test_views_delegate(
+  std::unique_ptr<views::TestViewsDelegate> test_views_delegate(
       new views::DesktopTestViewsDelegate);
   test_views_delegate->set_context_factory(content::GetContextFactory());
   views_delegate_ = std::move(test_views_delegate);

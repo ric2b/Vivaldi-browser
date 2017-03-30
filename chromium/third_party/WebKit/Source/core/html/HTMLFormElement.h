@@ -30,13 +30,11 @@
 #include "core/html/forms/RadioButtonGroupScope.h"
 #include "core/loader/FormSubmission.h"
 #include "wtf/OwnPtr.h"
-#include "wtf/WeakPtr.h"
 
 namespace blink {
 
 class Event;
 class FormAssociatedElement;
-class GenericEventQueue;
 class HTMLFormControlElement;
 class HTMLFormControlsCollection;
 class HTMLImageElement;
@@ -45,11 +43,11 @@ class RadioNodeListOrElement;
 class CORE_EXPORT HTMLFormElement final : public HTMLElement {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static RawPtr<HTMLFormElement> create(Document&);
+    static HTMLFormElement* create(Document&);
     ~HTMLFormElement() override;
     DECLARE_VIRTUAL_TRACE();
 
-    RawPtr<HTMLFormControlsCollection> elements();
+    HTMLFormControlsCollection* elements();
     void getNamedElements(const AtomicString&, HeapVector<Member<Element>>&);
 
     unsigned length() const;
@@ -67,9 +65,6 @@ public:
     void disassociate(FormAssociatedElement&);
     void associate(HTMLImageElement&);
     void disassociate(HTMLImageElement&);
-#if !ENABLE(OILPAN)
-    WeakPtr<HTMLFormElement> createWeakPtr();
-#endif
     void didAssociateByParser();
 
     void prepareForSubmission(Event*);
@@ -98,19 +93,6 @@ public:
     bool matchesValidityPseudoClasses() const final;
     bool isValidElement() final;
 
-    enum AutocompleteResult {
-        AutocompleteResultSuccess,
-        AutocompleteResultErrorDisabled,
-        AutocompleteResultErrorCancel,
-        AutocompleteResultErrorInvalid,
-    };
-
-    void requestAutocomplete();
-    void finishRequestAutocomplete(AutocompleteResult);
-
-    DEFINE_ATTRIBUTE_EVENT_LISTENER(autocomplete);
-    DEFINE_ATTRIBUTE_EVENT_LISTENER(autocompleteerror);
-
     RadioButtonGroupScope& radioButtonGroupScope() { return m_radioButtonGroupScope; }
 
     const FormAssociatedElement::List& associatedElements() const;
@@ -137,10 +119,10 @@ private:
 
     void copyNonAttributePropertiesFromElement(const Element&) override;
 
-    void submitDialog(RawPtr<FormSubmission>);
+    void submitDialog(FormSubmission*);
     void submit(Event*, bool activateSubmitButton);
 
-    void scheduleFormSubmission(RawPtr<FormSubmission>);
+    void scheduleFormSubmission(FormSubmission*);
 
     void collectAssociatedElements(Node& root, FormAssociatedElement::List&) const;
     void collectImageElements(Node& root, HeapVector<Member<HTMLImageElement>>&);
@@ -168,9 +150,7 @@ private:
     FormAssociatedElement::List m_associatedElements;
     // Do not access m_imageElements directly. Use imageElements() instead.
     HeapVector<Member<HTMLImageElement>> m_imageElements;
-#if !ENABLE(OILPAN)
-    WeakPtrFactory<HTMLFormElement> m_weakPtrFactory;
-#endif
+
     bool m_associatedElementsAreDirty : 1;
     bool m_imageElementsAreDirty : 1;
     bool m_hasElementsAssociatedByParser : 1;
@@ -183,8 +163,6 @@ private:
     bool m_isInResetFunction : 1;
 
     bool m_wasDemoted : 1;
-
-    Member<GenericEventQueue> m_pendingAutocompleteEventsQueue;
 };
 
 } // namespace blink

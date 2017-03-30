@@ -24,7 +24,6 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/HTMLNames.h"
-#include "core/dom/ExceptionCode.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/parser/HTMLParserIdioms.h"
@@ -50,11 +49,11 @@ HTMLProgressElement::~HTMLProgressElement()
 {
 }
 
-RawPtr<HTMLProgressElement> HTMLProgressElement::create(Document& document)
+HTMLProgressElement* HTMLProgressElement::create(Document& document)
 {
-    RawPtr<HTMLProgressElement> progress = new HTMLProgressElement(document);
+    HTMLProgressElement* progress = new HTMLProgressElement(document);
     progress->ensureUserAgentShadowRoot();
-    return progress.release();
+    return progress;
 }
 
 LayoutObject* HTMLProgressElement::createLayoutObject(const ComputedStyle& style)
@@ -71,20 +70,20 @@ LayoutProgress* HTMLProgressElement::layoutProgress() const
 {
     if (layoutObject() && layoutObject()->isProgress())
         return toLayoutProgress(layoutObject());
-
-    LayoutObject* layoutObject = userAgentShadowRoot()->firstChild()->layoutObject();
-    ASSERT_WITH_SECURITY_IMPLICATION(!layoutObject || layoutObject->isProgress());
-    return toLayoutProgress(layoutObject);
+    return nullptr;
 }
 
 void HTMLProgressElement::parseAttribute(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& value)
 {
-    if (name == valueAttr)
+    if (name == valueAttr) {
+        if (oldValue.isNull() != value.isNull())
+            pseudoStateChanged(CSSSelector::PseudoIndeterminate);
         didElementStateChange();
-    else if (name == maxAttr)
+    } else if (name == maxAttr) {
         didElementStateChange();
-    else
+    } else {
         LabelableElement::parseAttribute(name, oldValue, value);
+    }
 }
 
 void HTMLProgressElement::attach(const AttachContext& context)
@@ -139,29 +138,24 @@ bool HTMLProgressElement::isDeterminate() const
 
 void HTMLProgressElement::didElementStateChange()
 {
-    m_value->setWidthPercentage(position() * 100);
-    if (LayoutProgressItem layoutItem = LayoutProgressItem(layoutProgress())) {
-        bool wasDeterminate = layoutItem.isDeterminate();
+    setValueWidthPercentage(position() * 100);
+    if (LayoutProgressItem layoutItem = LayoutProgressItem(layoutProgress()))
         layoutItem.updateFromElement();
-        if (wasDeterminate != isDeterminate())
-            pseudoStateChanged(CSSSelector::PseudoIndeterminate);
-    }
 }
 
 void HTMLProgressElement::didAddUserAgentShadowRoot(ShadowRoot& root)
 {
     ASSERT(!m_value);
 
-    RawPtr<ProgressInnerElement> inner = ProgressInnerElement::create(document());
+    ProgressShadowElement* inner = ProgressShadowElement::create(document());
     inner->setShadowPseudoId(AtomicString("-webkit-progress-inner-element"));
     root.appendChild(inner);
 
-    RawPtr<ProgressBarElement> bar = ProgressBarElement::create(document());
+    ProgressShadowElement* bar = ProgressShadowElement::create(document());
     bar->setShadowPseudoId(AtomicString("-webkit-progress-bar"));
-    RawPtr<ProgressValueElement> value = ProgressValueElement::create(document());
-    m_value = value.get();
+    m_value = ProgressShadowElement::create(document());
     m_value->setShadowPseudoId(AtomicString("-webkit-progress-value"));
-    m_value->setWidthPercentage(HTMLProgressElement::IndeterminatePosition * 100);
+    setValueWidthPercentage(HTMLProgressElement::IndeterminatePosition * 100);
     bar->appendChild(m_value);
 
     inner->appendChild(bar);
@@ -176,6 +170,11 @@ DEFINE_TRACE(HTMLProgressElement)
 {
     visitor->trace(m_value);
     LabelableElement::trace(visitor);
+}
+
+void HTMLProgressElement::setValueWidthPercentage(double width) const
+{
+    m_value->setInlineStyleProperty(CSSPropertyWidth, width, CSSPrimitiveValue::UnitType::Percentage);
 }
 
 } // namespace blink

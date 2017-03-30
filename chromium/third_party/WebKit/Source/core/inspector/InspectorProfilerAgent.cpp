@@ -31,24 +31,12 @@
 
 #include "bindings/core/v8/ScriptCallStack.h"
 #include "bindings/core/v8/V8Binding.h"
-#include "core/frame/UseCounter.h"
-#include "core/inspector/InstrumentingAgents.h"
 #include "platform/v8_inspector/public/V8ProfilerAgent.h"
 
 namespace blink {
 
-namespace ProfilerAgentState {
-static const char profilerEnabled[] = "profilerEnabled";
-}
-
-RawPtr<InspectorProfilerAgent> InspectorProfilerAgent::create(V8ProfilerAgent* agent, Client* client)
-{
-    return new InspectorProfilerAgent(agent, client);
-}
-
-InspectorProfilerAgent::InspectorProfilerAgent(V8ProfilerAgent* agent, Client* client)
+InspectorProfilerAgent::InspectorProfilerAgent(V8ProfilerAgent* agent)
     : InspectorBaseAgent<InspectorProfilerAgent, protocol::Frontend::Profiler>("Profiler")
-    , m_client(client)
     , m_v8ProfilerAgent(agent)
 {
 }
@@ -58,56 +46,31 @@ InspectorProfilerAgent::~InspectorProfilerAgent()
 }
 
 // InspectorBaseAgent overrides.
-void InspectorProfilerAgent::setState(protocol::DictionaryValue* state)
+void InspectorProfilerAgent::init(InstrumentingAgents* instrumentingAgents, protocol::Frontend* baseFrontend, protocol::Dispatcher* dispatcher, protocol::DictionaryValue* state)
 {
-    InspectorBaseAgent::setState(state);
+    InspectorBaseAgent::init(instrumentingAgents, baseFrontend, dispatcher, state);
     m_v8ProfilerAgent->setInspectorState(m_state);
+    m_v8ProfilerAgent->setFrontend(frontend());
 }
 
-void InspectorProfilerAgent::setFrontend(protocol::Frontend* frontend)
-{
-    InspectorBaseAgent::setFrontend(frontend);
-    m_v8ProfilerAgent->setFrontend(protocol::Frontend::Profiler::from(frontend));
-}
-
-void InspectorProfilerAgent::clearFrontend()
+void InspectorProfilerAgent::dispose()
 {
     m_v8ProfilerAgent->clearFrontend();
-    InspectorBaseAgent::clearFrontend();
+    InspectorBaseAgent::dispose();
 }
 
 void InspectorProfilerAgent::restore()
 {
-    if (!m_state->booleanProperty(ProfilerAgentState::profilerEnabled, false))
-        return;
     m_v8ProfilerAgent->restore();
-    ErrorString errorString;
-    enable(&errorString);
-}
-
-// Protocol implementation.
-void InspectorProfilerAgent::consoleProfile(ExecutionContext* context, const String16& title)
-{
-    UseCounter::count(context, UseCounter::DevToolsConsoleProfile);
-    m_v8ProfilerAgent->consoleProfile(title);
-}
-
-void InspectorProfilerAgent::consoleProfileEnd(const String16& title)
-{
-    m_v8ProfilerAgent->consoleProfileEnd(title);
 }
 
 void InspectorProfilerAgent::enable(ErrorString* errorString)
 {
     m_v8ProfilerAgent->enable(errorString);
-    m_state->setBoolean(ProfilerAgentState::profilerEnabled, true);
-    m_instrumentingAgents->setInspectorProfilerAgent(this);
 }
 
 void InspectorProfilerAgent::disable(ErrorString* errorString)
 {
-    m_instrumentingAgents->setInspectorProfilerAgent(nullptr);
-    m_state->setBoolean(ProfilerAgentState::profilerEnabled, false);
     m_v8ProfilerAgent->disable(errorString);
 }
 
@@ -119,35 +82,11 @@ void InspectorProfilerAgent::setSamplingInterval(ErrorString* error, int interva
 void InspectorProfilerAgent::start(ErrorString* error)
 {
     m_v8ProfilerAgent->start(error);
-    if (m_client && error->isEmpty())
-        m_client->profilingStarted();
 }
 
 void InspectorProfilerAgent::stop(ErrorString* errorString, OwnPtr<protocol::Profiler::CPUProfile>* profile)
 {
-    if (m_client)
-        m_client->profilingStopped();
     m_v8ProfilerAgent->stop(errorString, profile);
-}
-
-void InspectorProfilerAgent::willProcessTask()
-{
-    m_v8ProfilerAgent->idleFinished();
-}
-
-void InspectorProfilerAgent::didProcessTask()
-{
-    m_v8ProfilerAgent->idleStarted();
-}
-
-void InspectorProfilerAgent::willEnterNestedRunLoop()
-{
-    m_v8ProfilerAgent->idleStarted();
-}
-
-void InspectorProfilerAgent::didLeaveNestedRunLoop()
-{
-    m_v8ProfilerAgent->idleFinished();
 }
 
 DEFINE_TRACE(InspectorProfilerAgent)

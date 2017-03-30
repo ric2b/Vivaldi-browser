@@ -93,6 +93,12 @@ enum MarkingBehavior {
 enum MapCoordinatesMode {
     IsFixed = 1 << 0,
     UseTransforms = 1 << 1,
+
+    // When walking up the containing block chain, applies a container flip for the first
+    // element found, if any, for which isFlippedBlocksWritingMode is true. This option should
+    // generally be used when mapping a source rect in the "physical coordinates with flipped
+    // block-flow" coordinate space (see LayoutBoxModelObject.h) to one in a physical
+    // destination space.
     ApplyContainerFlip = 1 << 2,
     TraverseDocumentBoundaries = 1 << 3,
 
@@ -269,7 +275,7 @@ public:
 
     LayoutObject* lastLeafChild() const;
 
-    // The following six functions are used when the layout tree hierarchy changes to make sure layers get
+    // The following functions are used when the layout tree hierarchy changes to make sure layers get
     // properly added and removed.  Since containership can be implemented by any subclass, and since a hierarchy
     // can contain a mixture of boxes and other object types, these functions need to be in the base class.
     PaintLayer* enclosingLayer() const;
@@ -277,6 +283,10 @@ public:
     void removeLayers(PaintLayer* parentLayer);
     void moveLayers(PaintLayer* oldParent, PaintLayer* newParent);
     PaintLayer* findNextLayer(PaintLayer* parentLayer, LayoutObject* startPoint, bool checkParent = true);
+
+    // Returns the layer that will paint this object.
+    // If possible, use the faster PaintInvalidationState::paintingLayer() instead.
+    PaintLayer* paintingLayer() const;
 
     // Scrolling is a LayoutBox concept, however some code just cares about recursively scrolling our enclosing ScrollableArea(s).
     bool scrollRectToVisible(
@@ -403,7 +413,7 @@ public:
     // The property nodes are only updated during InUpdatePaintProperties phase
     // of the document lifecycle and shall remain immutable during other phases.
     ObjectPaintProperties* objectPaintProperties() const;
-    void setObjectPaintProperties(PassOwnPtr<ObjectPaintProperties>);
+    ObjectPaintProperties& ensureObjectPaintProperties();
     void clearObjectPaintProperties();
 
 private:
@@ -770,13 +780,16 @@ public:
     virtual LayoutMultiColumnSpannerPlaceholder* spannerPlaceholder() const { return nullptr; }
     bool isColumnSpanAll() const { return style()->getColumnSpan() == ColumnSpanAll && spannerPlaceholder(); }
 
-    // We include isLayoutButton in this check because buttons are implemented
-    // using flex box but should still support first-line|first-letter.
+    // We include isLayoutButton() in this check, because buttons are
+    // implemented using flex box but should still support things like
+    // first-line, first-letter and text-overflow.
     // The flex box and grid specs require that flex box and grid do not
     // support first-line|first-letter, though.
     // TODO(cbiesinger): Remove when buttons are implemented with align-items instead
     // of flex box. crbug.com/226252.
-    bool canHaveFirstLineOrFirstLetterStyle() const { return isLayoutBlockFlow() || isLayoutButton(); }
+    bool behavesLikeBlockContainer() const { return isLayoutBlockFlow() || isLayoutButton(); }
+
+    bool hasFilterOrReflection() const;
 
     // This function returns the containing block of the object.
     // Due to CSS being inconsistent, a containing block can be a relatively
@@ -800,9 +813,9 @@ public:
     //
     // If |ancestor| and |ancestorSkipped| are not null, on return *ancestorSkipped
     // is true if the layoutObject returned is an ancestor of |ancestor|.
-    LayoutObject* container(const LayoutBoxModelObject* ancestor = nullptr, bool* ancestorSkipped = nullptr) const;
+    LayoutObject* container(const LayoutBoxModelObject* ancestor = nullptr, bool* ancestorSkipped = nullptr, bool* filterOrReflectionSkipped = nullptr) const;
     // Finds the container as if this object is fixed-position.
-    LayoutBlock* containerForFixedPosition(const LayoutBoxModelObject* ancestor = nullptr, bool* ancestorSkipped = nullptr) const;
+    LayoutBlock* containerForFixedPosition(const LayoutBoxModelObject* ancestor = nullptr, bool* ancestorSkipped = nullptr, bool* filterOrReflectionSkipped = nullptr) const;
     // Finds the containing block as if this object is absolute-position.
     LayoutBlock* containingBlockForAbsolutePosition() const;
 
@@ -810,8 +823,7 @@ public:
 
     Element* offsetParent() const;
 
-    void markContainerChainForLayout(bool scheduleRelayout = true);
-    void markContainerChainForLayout(SubtreeLayoutScope*);
+    void markContainerChainForLayout(bool scheduleRelayout = true, SubtreeLayoutScope* = nullptr);
     void setNeedsLayout(LayoutInvalidationReasonForTracing, MarkingBehavior = MarkContainerChain, SubtreeLayoutScope* = nullptr);
     void setNeedsLayoutAndFullPaintInvalidation(LayoutInvalidationReasonForTracing, MarkingBehavior = MarkContainerChain, SubtreeLayoutScope* = nullptr);
     void clearNeedsLayout();
@@ -1161,7 +1173,7 @@ public:
     virtual bool mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect&, VisualRectFlags = DefaultVisualRectFlags) const;
 
     // Return the offset to the column in which the specified point (in flow-thread coordinates)
-    // lives. This is used to convert a flow-thread point to a visual point.
+    // lives. This is used to convert a flow-thread point to a point in the containing coordinate space.
     virtual LayoutSize columnOffset(const LayoutPoint&) const { return LayoutSize(); }
 
     virtual unsigned length() const { return 1; }
@@ -1260,10 +1272,6 @@ public:
     //   If TraverseDocumentBoundaries is specified, the input quad is in the space of the local root frame.
     //   Otherwise, the input quad is in the space of the containing frame.
     virtual void mapAncestorToLocal(const LayoutBoxModelObject*, TransformState&, MapCoordinatesFlags = ApplyContainerFlip) const;
-    void mapAbsoluteToLocalPoint(MapCoordinatesFlags flags, TransformState& transformState) const
-    {
-        return mapAncestorToLocal(nullptr, transformState, flags);
-    }
 
     // Pushes state onto LayoutGeometryMap about how to map coordinates from this layoutObject to its container, or ancestorToStopAt (whichever is encountered first).
     // Returns the layoutObject which was mapped to (container or ancestorToStopAt).
@@ -1291,6 +1299,7 @@ public:
 
     // Collects rectangles enclosing visual overflows of the DOM subtree under this object.
     // The rects also cover continuations which may be not in the layout subtree of this object.
+    // TODO(crbug.com/614781): Currently the result rects don't cover list markers and outlines.
     void addElementVisualOverflowRects(Vector<LayoutRect>& rects, const LayoutPoint& additionalOffset) const
     {
         addOutlineRects(rects, additionalOffset, IncludeBlockVisualOverflow);
@@ -1353,16 +1362,15 @@ public:
     bool mayNeedPaintInvalidation() const { return m_bitfields.mayNeedPaintInvalidation(); }
     void setMayNeedPaintInvalidation();
 
+    bool mayNeedPaintInvalidationSubtree() const { return m_bitfields.mayNeedPaintInvalidationSubtree(); }
+    void setMayNeedPaintInvalidationSubtree();
+
     bool shouldInvalidateSelection() const { return m_bitfields.shouldInvalidateSelection(); }
     void setShouldInvalidateSelection();
 
     bool shouldCheckForPaintInvalidation(const PaintInvalidationState& paintInvalidationState) const
     {
-        // Should check for paint invalidation if some ancestor changed location, because this object
-        // may also change paint offset or location in paint invalidation container, even if there is
-        // no paint invalidation flag set.
-        return paintInvalidationState.forcedSubtreeInvalidationWithinContainer()
-            || paintInvalidationState.forcedSubtreeInvalidationRectUpdateWithinContainer()
+        return paintInvalidationState.hasForcedSubtreeInvalidationFlags()
             || shouldCheckForPaintInvalidationRegardlessOfPaintInvalidationState();
     }
 
@@ -1395,6 +1403,8 @@ public:
     void setIsScrollAnchorObject() { m_bitfields.setIsScrollAnchorObject(true); }
     // Clears the IsScrollAnchorObject bit, unless any ScrollAnchor still refers to us.
     void maybeClearIsScrollAnchorObject();
+
+    void clearChildNeedsOverflowRecalcAfterStyleChange() { m_bitfields.setChildNeedsOverflowRecalcAfterStyleChange(false); }
 
 protected:
     enum LayoutObjectType {
@@ -1512,7 +1522,7 @@ protected:
 
     void setPreviousPaintInvalidationRect(const LayoutRect& rect) { m_previousPaintInvalidationRect = rect; }
 
-    virtual PaintInvalidationReason getPaintInvalidationReason(const LayoutBoxModelObject& paintInvalidationContainer,
+    virtual PaintInvalidationReason getPaintInvalidationReason(const PaintInvalidationState&,
         const LayoutRect& oldPaintInvalidationRect, const LayoutPoint& oldPositionFromPaintInvalidationBacking,
         const LayoutRect& newPaintInvalidationRect, const LayoutPoint& newPositionFromPaintInvalidationBacking) const;
 
@@ -1558,8 +1568,11 @@ protected:
     // owned by this object, including the object itself, LayoutText/LayoutInline line boxes, etc.,
     // not including children which will be invalidated normally during invalidateTreeIfNeeded() and
     // parts which are invalidated separately (e.g. scrollbars).
-    // The caller should ensure the enclosing layer has been setNeedsRepaint before calling this function.
+    // The caller should ensure the painting layer has been setNeedsRepaint before calling this function.
     virtual void invalidateDisplayItemClients(const LayoutBoxModelObject& paintInvalidationContainer, PaintInvalidationReason) const;
+
+    // If possible, use the faster paintInvalidationState.paintingLayer().setNeedsRepaint().
+    void setPaintingLayerNeedsRepaint() const;
 
     // Sets enclosing layer needsRepaint, then calls invalidateDisplayItemClients().
     // Should use this version when PaintInvalidationState is available.
@@ -1568,7 +1581,6 @@ protected:
     void setIsBackgroundAttachmentFixedObject(bool);
 
     void clearSelfNeedsOverflowRecalcAfterStyleChange() { m_bitfields.setSelfNeedsOverflowRecalcAfterStyleChange(false); }
-    void clearChildNeedsOverflowRecalcAfterStyleChange() { m_bitfields.setChildNeedsOverflowRecalcAfterStyleChange(false); }
     void setShouldInvalidateOverflowForPaint() { m_bitfields.setShouldInvalidateOverflowForPaint(true); }
     void setEverHadLayout() { m_bitfields.setEverHadLayout(true); }
 
@@ -1606,11 +1618,9 @@ private:
 
     void setNeedsOverflowRecalcAfterStyleChange();
 
-    void markContainerChainForLayout(bool scheduleRelayout, SubtreeLayoutScope*);
-
     // FIXME: This should be 'markContaingBoxChainForOverflowRecalc when we make LayoutBox
     // recomputeOverflow-capable. crbug.com/437012 and crbug.com/434700.
-    inline void markContainingBlocksForOverflowRecalc();
+    inline void markAncestorsForOverflowRecalcIfNeeded();
 
     inline void markAncestorsForPaintInvalidation();
 
@@ -1620,13 +1630,13 @@ private:
 
     void invalidatePaintIncludingNonSelfPaintingLayerDescendantsInternal(const LayoutBoxModelObject& paintInvalidationContainer);
 
-    // The caller should ensure the enclosing layer has been setNeedsRepaint before calling this function.
+    // The caller should ensure the painting layer has been setNeedsRepaint before calling this function.
     void invalidatePaintOfPreviousPaintInvalidationRect(const LayoutBoxModelObject& paintInvalidationContainer, PaintInvalidationReason);
 
     LayoutRect previousSelectionRectForPaintInvalidation() const;
     void setPreviousSelectionRectForPaintInvalidation(const LayoutRect&);
 
-    LayoutObject* containerForAbsolutePosition(const LayoutBoxModelObject* ancestor = nullptr, bool* ancestorSkipped = nullptr) const;
+    LayoutObject* containerForAbsolutePosition(const LayoutBoxModelObject* ancestor = nullptr, bool* ancestorSkipped = nullptr, bool* filterOrReflectionSkipped = nullptr) const;
 
     const LayoutBoxModelObject* enclosingCompositedContainer() const;
 
@@ -1716,6 +1726,7 @@ private:
             , m_shouldInvalidateOverflowForPaint(false)
             , m_childShouldCheckForPaintInvalidation(false)
             , m_mayNeedPaintInvalidation(false)
+            , m_mayNeedPaintInvalidationSubtree(false)
             , m_shouldInvalidateSelection(false)
             , m_neededLayoutBecauseOfChildren(false)
             , m_floating(false)
@@ -1751,7 +1762,7 @@ private:
         {
         }
 
-        // 32 bits have been used in the first word, and 17 in the second.
+        // 32 bits have been used in the first word, and 18 in the second.
 
         // Self needs layout means that this layout object is marked for a full layout.
         // This is the default layout but it is expensive as it recomputes everything.
@@ -1802,6 +1813,7 @@ private:
         ADD_BOOLEAN_BITFIELD(shouldInvalidateOverflowForPaint, ShouldInvalidateOverflowForPaint); // TODO(wangxianzhu): Remove for slimming paint v2.
         ADD_BOOLEAN_BITFIELD(childShouldCheckForPaintInvalidation, ChildShouldCheckForPaintInvalidation);
         ADD_BOOLEAN_BITFIELD(mayNeedPaintInvalidation, MayNeedPaintInvalidation);
+        ADD_BOOLEAN_BITFIELD(mayNeedPaintInvalidationSubtree, MayNeedPaintInvalidationSubtree);
         ADD_BOOLEAN_BITFIELD(shouldInvalidateSelection, ShouldInvalidateSelection); // TODO(wangxianzhu): Remove for slimming paint v2.
         ADD_BOOLEAN_BITFIELD(neededLayoutBecauseOfChildren, NeededLayoutBecauseOfChildren); // TODO(wangxianzhu): Remove for slimming paint v2.
 
@@ -2017,7 +2029,7 @@ inline void LayoutObject::setNeedsLayout(LayoutInvalidationReasonForTracing reas
             "data",
             InspectorLayoutInvalidationTrackingEvent::data(this, reason));
         if (markParents == MarkContainerChain && (!layouter || layouter->root() != this))
-            markContainerChainForLayout(layouter);
+            markContainerChainForLayout(!layouter, layouter);
     }
 }
 
@@ -2054,7 +2066,7 @@ inline void LayoutObject::setChildNeedsLayout(MarkingBehavior markParents, Subtr
     setNormalChildNeedsLayout(true);
     // FIXME: Replace MarkOnlyThis with the SubtreeLayoutScope code path and remove the MarkingBehavior argument entirely.
     if (!alreadyNeededLayout && markParents == MarkContainerChain && (!layouter || layouter->root() != this))
-        markContainerChainForLayout(layouter);
+        markContainerChainForLayout(!layouter, layouter);
 }
 
 inline void LayoutObject::setNeedsPositionedMovementLayout()
@@ -2130,12 +2142,6 @@ inline void makeMatrixRenderable(TransformationMatrix& matrix, bool has3DRenderi
 inline int adjustForAbsoluteZoom(int value, LayoutObject* layoutObject)
 {
     return adjustForAbsoluteZoom(value, layoutObject->style());
-}
-
-inline double adjustDoubleForAbsoluteZoom(double value, LayoutObject& layoutObject)
-{
-    ASSERT(layoutObject.style());
-    return adjustDoubleForAbsoluteZoom(value, *layoutObject.style());
 }
 
 inline LayoutUnit adjustLayoutUnitForAbsoluteZoom(LayoutUnit value, LayoutObject& layoutObject)

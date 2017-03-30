@@ -61,7 +61,7 @@ class WebSocketChannelSyncHelper : public GarbageCollectedFinalized<WebSocketCha
 public:
     static WebSocketChannelSyncHelper* create(PassOwnPtr<WaitableEvent> event)
     {
-        return new WebSocketChannelSyncHelper(event);
+        return new WebSocketChannelSyncHelper(std::move(event));
     }
 
     ~WebSocketChannelSyncHelper()
@@ -95,7 +95,7 @@ public:
 
 private:
     explicit WebSocketChannelSyncHelper(PassOwnPtr<WaitableEvent> event)
-        : m_event(event)
+        : m_event(std::move(event))
         , m_connectRequestResult(false)
     {
     }
@@ -219,14 +219,14 @@ void Peer::sendTextAsCharVector(PassOwnPtr<Vector<char>> data)
 {
     ASSERT(isMainThread());
     if (m_mainWebSocketChannel)
-        m_mainWebSocketChannel->sendTextAsCharVector(data);
+        m_mainWebSocketChannel->sendTextAsCharVector(std::move(data));
 }
 
 void Peer::sendBinaryAsCharVector(PassOwnPtr<Vector<char>> data)
 {
     ASSERT(isMainThread());
     if (m_mainWebSocketChannel)
-        m_mainWebSocketChannel->sendBinaryAsCharVector(data);
+        m_mainWebSocketChannel->sendBinaryAsCharVector(std::move(data));
 }
 
 void Peer::sendBlob(PassRefPtr<BlobDataHandle> blobData)
@@ -295,13 +295,13 @@ static void workerGlobalScopeDidReceiveBinaryMessage(Bridge* bridge, PassOwnPtr<
 {
     ASSERT_UNUSED(context, context->isWorkerGlobalScope());
     if (bridge->client())
-        bridge->client()->didReceiveBinaryMessage(payload);
+        bridge->client()->didReceiveBinaryMessage(std::move(payload));
 }
 
 void Peer::didReceiveBinaryMessage(PassOwnPtr<Vector<char>> payload)
 {
     ASSERT(isMainThread());
-    m_loaderProxy->postTaskToWorkerGlobalScope(createCrossThreadTask(&workerGlobalScopeDidReceiveBinaryMessage, m_bridge, payload));
+    m_loaderProxy->postTaskToWorkerGlobalScope(createCrossThreadTask(&workerGlobalScopeDidReceiveBinaryMessage, m_bridge, passed(std::move(payload))));
 }
 
 static void workerGlobalScopeDidConsumeBufferedAmount(Bridge* bridge, uint64_t consumed, ExecutionContext* context)
@@ -384,7 +384,7 @@ Bridge::~Bridge()
 
 void Bridge::initialize(const String& sourceURL, unsigned lineNumber)
 {
-    if (!waitForMethodCompletion(createCrossThreadTask(&Peer::initialize, m_peer.get(), sourceURL, lineNumber))) {
+    if (!waitForMethodCompletion(createCrossThreadTask(&Peer::initialize, wrapCrossThreadPersistent(m_peer.get()), sourceURL, lineNumber))) {
         // The worker thread has been signalled to shutdown before method completion.
         disconnect();
     }
@@ -395,7 +395,7 @@ bool Bridge::connect(const KURL& url, const String& protocol)
     if (!m_peer)
         return false;
 
-    if (!waitForMethodCompletion(createCrossThreadTask(&Peer::connect, m_peer.get(), url, protocol)))
+    if (!waitForMethodCompletion(createCrossThreadTask(&Peer::connect, wrapCrossThreadPersistent(m_peer.get()), url, protocol)))
         return false;
 
     return m_syncHelper->connectRequestResult();
@@ -408,7 +408,7 @@ void Bridge::send(const CString& message)
     if (message.length())
         memcpy(data->data(), static_cast<const char*>(message.data()), message.length());
 
-    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&Peer::sendTextAsCharVector, m_peer.get(), data.release()));
+    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&Peer::sendTextAsCharVector, wrapCrossThreadPersistent(m_peer.get()), passed(std::move(data))));
 }
 
 void Bridge::send(const DOMArrayBuffer& binaryData, unsigned byteOffset, unsigned byteLength)
@@ -419,25 +419,25 @@ void Bridge::send(const DOMArrayBuffer& binaryData, unsigned byteOffset, unsigne
     if (binaryData.byteLength())
         memcpy(data->data(), static_cast<const char*>(binaryData.data()) + byteOffset, byteLength);
 
-    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&Peer::sendBinaryAsCharVector, m_peer.get(), data.release()));
+    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&Peer::sendBinaryAsCharVector, wrapCrossThreadPersistent(m_peer.get()), passed(std::move(data))));
 }
 
 void Bridge::send(PassRefPtr<BlobDataHandle> data)
 {
     ASSERT(m_peer);
-    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&Peer::sendBlob, m_peer.get(), data));
+    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&Peer::sendBlob, wrapCrossThreadPersistent(m_peer.get()), data));
 }
 
 void Bridge::close(int code, const String& reason)
 {
     ASSERT(m_peer);
-    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&Peer::close, m_peer.get(), code, reason));
+    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&Peer::close, wrapCrossThreadPersistent(m_peer.get()), code, reason));
 }
 
 void Bridge::fail(const String& reason, MessageLevel level, const String& sourceURL, unsigned lineNumber)
 {
     ASSERT(m_peer);
-    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&Peer::fail, m_peer.get(), reason, level, sourceURL, lineNumber));
+    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&Peer::fail, wrapCrossThreadPersistent(m_peer.get()), reason, level, sourceURL, lineNumber));
 }
 
 void Bridge::disconnect()
@@ -445,7 +445,7 @@ void Bridge::disconnect()
     if (!m_peer)
         return;
 
-    waitForMethodCompletion(createCrossThreadTask(&Peer::disconnect, m_peer.get()));
+    waitForMethodCompletion(createCrossThreadTask(&Peer::disconnect, wrapCrossThreadPersistent(m_peer.get())));
     // Here |m_peer| is detached from the main thread and we can delete it.
 
     m_client = nullptr;
@@ -457,12 +457,12 @@ void Bridge::disconnect()
 
 // Caller of this function should hold a reference to the bridge, because this function may call WebSocket::didClose() in the end,
 // which causes the bridge to get disconnected from the WebSocket and deleted if there is no other reference.
-bool Bridge::waitForMethodCompletion(PassOwnPtr<ExecutionContextTask> task)
+bool Bridge::waitForMethodCompletion(std::unique_ptr<ExecutionContextTask> task)
 {
     ASSERT(m_workerGlobalScope);
     ASSERT(m_syncHelper);
 
-    m_loaderProxy->postTaskToLoader(task);
+    m_loaderProxy->postTaskToLoader(std::move(task));
 
     // We wait for the syncHelper event even if a shutdown event is fired.
     // See https://codereview.chromium.org/267323004/#msg43 for why we need to wait this.

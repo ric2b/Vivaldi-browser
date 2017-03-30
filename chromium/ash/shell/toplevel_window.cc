@@ -5,8 +5,9 @@
 #include "ash/shell/toplevel_window.h"
 
 #include "ash/shell.h"
-#include "ash/wm/window_positioner.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/common/window_positioner.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -83,9 +84,8 @@ bool ToplevelWindow::GetSavedWindowPlacement(
     // Initial default bounds.
     bounds->SetRect(10, 150, 300, 300);
   }
-  ash::WindowPositioner::GetBoundsAndShowStateForNewWindow(
-      gfx::Screen::GetScreen(), NULL, is_saved_bounds, *show_state, bounds,
-      show_state);
+  WindowPositioner::GetBoundsAndShowStateForNewWindow(
+      nullptr, is_saved_bounds, *show_state, bounds, show_state);
   return true;
 }
 

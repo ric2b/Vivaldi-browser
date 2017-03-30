@@ -196,7 +196,7 @@ void StyleAdjuster::adjustComputedStyle(ComputedStyle& style, const ComputedStyl
         || style.hasFilterInducingProperty()
         || style.hasBlendMode()
         || style.hasIsolation()
-        || style.position() == FixedPosition
+        || style.hasViewportConstrainedPosition()
         || isInTopLayer(element, style)
         || hasWillChangeThatCreatesStackingContext(style)
         || style.containsPaint()))
@@ -315,10 +315,6 @@ void StyleAdjuster::adjustStyleForHTMLElement(ComputedStyle& style, const Comput
         return;
 
     if (isHTMLTableCellElement(element)) {
-        // FIXME: We shouldn't be overriding start/-webkit-auto like this. Do it in html.css instead.
-        // Table headers with a text-align of -webkit-auto will change the text-align to center.
-        if (element.hasTagName(thTag) && style.textAlign() == TASTART)
-            style.setTextAlign(CENTER);
         if (style.whiteSpace() == KHTML_NOWRAP) {
             // Figure out if we are really nowrapping or if we should just
             // use normal instead. If the width of the cell is fixed, then
@@ -434,6 +430,12 @@ void StyleAdjuster::adjustStyleForDisplay(ComputedStyle& style, const ComputedSt
     if ((style.display() == TABLE_HEADER_GROUP || style.display() == TABLE_ROW_GROUP
         || style.display() == TABLE_FOOTER_GROUP || style.display() == TABLE_ROW)
         && style.position() == RelativePosition)
+        style.setPosition(StaticPosition);
+
+    // Cannot support position: sticky for table columns and column groups because current code is only doing
+    // background painting through columns / column groups
+    if ((style.display() == TABLE_COLUMN_GROUP || style.display() == TABLE_COLUMN)
+        && style.position() == StickyPosition)
         style.setPosition(StaticPosition);
 
     // writing-mode does not apply to table row groups, table column groups, table rows, and table columns.

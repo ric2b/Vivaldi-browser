@@ -2,45 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "gpu/vulkan/tests/native_window.h"
+#include <memory>
+
+#include "gpu/vulkan/tests/basic_vulkan_test.h"
 #include "gpu/vulkan/vulkan_command_buffer.h"
-#include "gpu/vulkan/vulkan_device_queue.h"
 #include "gpu/vulkan/vulkan_render_pass.h"
 #include "gpu/vulkan/vulkan_surface.h"
 #include "gpu/vulkan/vulkan_swap_chain.h"
-#include "testing/gtest/include/gtest/gtest.h"
-#include "ui/gfx/geometry/rect.h"
 
 // This file tests basic vulkan initialization steps.
 
 namespace gpu {
 
-class BasicVulkanTest : public testing::Test {
- public:
-  void SetUp() override {
-    const gfx::Rect kDefaultBounds(10, 10, 100, 100);
-    window_ = CreateNativeWindow(kDefaultBounds);
-    device_queue_.Initialize(
-        VulkanDeviceQueue::GRAPHICS_QUEUE_FLAG |
-        VulkanDeviceQueue::PRESENTATION_SUPPORT_QUEUE_FLAG);
-  }
-
-  void TearDown() override {
-    DestroyNativeWindow(window_);
-    window_ = gfx::kNullAcceleratedWidget;
-    device_queue_.Destroy();
-  }
-
-  gfx::AcceleratedWidget window() const { return window_; }
-  VulkanDeviceQueue* GetDeviceQueue() { return &device_queue_; }
-
- private:
-  VulkanDeviceQueue device_queue_;
-  gfx::AcceleratedWidget window_ = gfx::kNullAcceleratedWidget;
-};
-
 TEST_F(BasicVulkanTest, BasicVulkanSurface) {
-  scoped_ptr<VulkanSurface> surface =
+  std::unique_ptr<VulkanSurface> surface =
       VulkanSurface::CreateViewSurface(window());
   EXPECT_TRUE(surface);
   EXPECT_TRUE(surface->Initialize(GetDeviceQueue(),
@@ -49,7 +24,7 @@ TEST_F(BasicVulkanTest, BasicVulkanSurface) {
 }
 
 TEST_F(BasicVulkanTest, EmptyVulkanSwaps) {
-  scoped_ptr<VulkanSurface> surface =
+  std::unique_ptr<VulkanSurface> surface =
       VulkanSurface::CreateViewSurface(window());
   ASSERT_TRUE(surface);
   ASSERT_TRUE(surface->Initialize(GetDeviceQueue(),
@@ -67,7 +42,7 @@ TEST_F(BasicVulkanTest, EmptyVulkanSwaps) {
 }
 
 TEST_F(BasicVulkanTest, BasicRenderPass) {
-  scoped_ptr<VulkanSurface> surface =
+  std::unique_ptr<VulkanSurface> surface =
       VulkanSurface::CreateViewSurface(window());
   ASSERT_TRUE(surface);
   ASSERT_TRUE(surface->Initialize(GetDeviceQueue(),

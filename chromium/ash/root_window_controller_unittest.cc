@@ -14,9 +14,10 @@
 #include "ash/system/tray/system_tray_delegate.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/display_manager_test_api.h"
+#include "ash/wm/common/window_state.h"
 #include "ash/wm/system_modal_container_layout_manager.h"
 #include "ash/wm/window_properties.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
 #include "ui/aura/client/focus_change_observer.h"
@@ -573,6 +574,36 @@ TEST_F(RootWindowControllerTest, MultipleDisplaysGetWindowForFullscreenMode) {
   EXPECT_EQ(NULL, controllers[1]->GetWindowForFullscreenMode());
 }
 
+// Test that GetRootWindowController() works with multiple displays and
+// child widgets.
+TEST_F(RootWindowControllerTest, GetRootWindowController) {
+  if (!SupportsMultipleDisplays())
+    return;
+  UpdateDisplay("600x600,600x600");
+  Shell::RootWindowControllerList controllers =
+      Shell::GetInstance()->GetAllRootWindowControllers();
+  ASSERT_EQ(2u, controllers.size());
+
+  // Test null.
+  EXPECT_FALSE(GetRootWindowController(nullptr));
+
+  // Test a widget on the first display.
+  Widget* w1 = CreateTestWidget(gfx::Rect(0, 0, 100, 100));
+  EXPECT_EQ(controllers[0],
+            GetRootWindowController(w1->GetNativeWindow()->GetRootWindow()));
+
+  // Test a child widget.
+  Widget* w2 = Widget::CreateWindowWithParentAndBounds(
+      nullptr, w1->GetNativeWindow(), gfx::Rect(0, 0, 100, 100));
+  EXPECT_EQ(controllers[0],
+            GetRootWindowController(w2->GetNativeWindow()->GetRootWindow()));
+
+  // Test a widget on the second display.
+  Widget* w3 = CreateTestWidget(gfx::Rect(600, 0, 100, 100));
+  EXPECT_EQ(controllers[1],
+            GetRootWindowController(w3->GetNativeWindow()->GetRootWindow()));
+}
+
 // Test that user session window can't be focused if user session blocked by
 // some overlapping UI.
 TEST_F(RootWindowControllerTest, FocusBlockedWindow) {
@@ -819,19 +850,22 @@ TEST_F(VirtualKeyboardRootWindowControllerTest, RestoreWorkspaceAfterLogin) {
       root_window->bounds(), 100));
   keyboard_window->Show();
 
-  gfx::Rect before = gfx::Screen::GetScreen()->GetPrimaryDisplay().work_area();
+  gfx::Rect before =
+      display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
 
   // Notify keyboard bounds changing.
   controller->NotifyKeyboardBoundsChanging(keyboard_container->bounds());
 
   if (!keyboard::IsKeyboardOverscrollEnabled()) {
-    gfx::Rect after = gfx::Screen::GetScreen()->GetPrimaryDisplay().work_area();
+    gfx::Rect after =
+        display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
     EXPECT_LT(after, before);
   }
 
   // Mock a login user profile change to reinitialize the keyboard.
   ash::Shell::GetInstance()->OnLoginUserProfilePrepared();
-  EXPECT_EQ(gfx::Screen::GetScreen()->GetPrimaryDisplay().work_area(), before);
+  EXPECT_EQ(display::Screen::GetScreen()->GetPrimaryDisplay().work_area(),
+            before);
 }
 
 // Ensure that system modal dialogs do not block events targeted at the virtual

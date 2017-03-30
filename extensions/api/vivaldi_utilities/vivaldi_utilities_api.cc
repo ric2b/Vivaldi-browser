@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include "base/lazy_instance.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -15,6 +16,7 @@
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -27,13 +29,32 @@
 #include "content/public/browser/web_contents.h"
 #include "url/url_constants.h"
 
-#include <iostream>
-
 namespace extensions {
+
+VivaldiUtilitiesEventRouter::VivaldiUtilitiesEventRouter(Profile* profile)
+    : browser_context_(profile) {
+}
+
+VivaldiUtilitiesEventRouter::~VivaldiUtilitiesEventRouter() {
+}
+
+void VivaldiUtilitiesEventRouter::DispatchEvent(const std::string& event_name,
+                                 std::unique_ptr<base::ListValue> event_args) {
+  EventRouter* event_router = EventRouter::Get(browser_context_);
+  if (event_router) {
+    event_router->BroadcastEvent(base::WrapUnique(
+        new extensions::Event(extensions::events::VIVALDI_EXTENSION_EVENT,
+                              event_name, std::move(event_args))));
+  }
+}
 
 VivaldiUtilitiesAPI::VivaldiUtilitiesAPI(content::BrowserContext *context)
     : browser_context_(context) {
   extensions::AppWindowRegistry::Get(context)->AddObserver(this);
+
+  EventRouter* event_router = EventRouter::Get(browser_context_);
+  event_router->RegisterObserver(
+      this, vivaldi::utilities::OnScroll::kEventName);
 }
 
 VivaldiUtilitiesAPI::~VivaldiUtilitiesAPI() {
@@ -88,12 +109,25 @@ void VivaldiUtilitiesAPI::OnAppWindowRemoved(extensions::AppWindow* app_window) 
   appwindow_id_to_window_id_.erase(app_window->window_key());
 }
 
+void VivaldiUtilitiesAPI::ScrollType(int scrollType) {
+  if (event_router_) {
+    event_router_->DispatchEvent(
+        vivaldi::utilities::OnScroll::kEventName,
+        vivaldi::utilities::OnScroll::Create(scrollType));
+  }
+}
+
+void VivaldiUtilitiesAPI::OnListenerAdded(const EventListenerInfo& details) {
+  event_router_.reset(new VivaldiUtilitiesEventRouter(
+      Profile::FromBrowserContext(browser_context_)));
+  EventRouter::Get(browser_context_)->UnregisterObserver(this);
+}
 
 namespace ClearAllRecentlyClosedSessions =
     vivaldi::utilities::ClearAllRecentlyClosedSessions;
 
 bool UtilitiesIsTabInLastSessionFunction::RunAsync() {
-  scoped_ptr<vivaldi::utilities::IsTabInLastSession::Params> params(
+  std::unique_ptr<vivaldi::utilities::IsTabInLastSession::Params> params(
       vivaldi::utilities::IsTabInLastSession::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -128,7 +162,7 @@ UtilitiesIsTabInLastSessionFunction::UtilitiesIsTabInLastSessionFunction() {}
 UtilitiesIsTabInLastSessionFunction::~UtilitiesIsTabInLastSessionFunction() {}
 
 bool UtilitiesIsUrlValidFunction::RunSync() {
-  scoped_ptr<vivaldi::utilities::IsUrlValid::Params> params(
+  std::unique_ptr<vivaldi::utilities::IsUrlValid::Params> params(
       vivaldi::utilities::IsUrlValid::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -210,7 +244,7 @@ UtilitiesMapFocusAppWindowToWindowIdFunction::~UtilitiesMapFocusAppWindowToWindo
 }
 
 bool UtilitiesMapFocusAppWindowToWindowIdFunction::RunSync() {
-  scoped_ptr<vivaldi::utilities::MapFocusAppWindowToWindowId::Params> params(
+  std::unique_ptr<vivaldi::utilities::MapFocusAppWindowToWindowId::Params> params(
       vivaldi::utilities::MapFocusAppWindowToWindowId::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -218,6 +252,17 @@ bool UtilitiesMapFocusAppWindowToWindowIdFunction::RunSync() {
       VivaldiUtilitiesAPI::GetFactoryInstance()->Get(GetProfile());
 
   api->MapAppWindowIdToWindowId(params->app_window_id, params->window_id);
+
+  return true;
+}
+
+UtilitiesBasicPrintFunction::UtilitiesBasicPrintFunction() {}
+UtilitiesBasicPrintFunction::~UtilitiesBasicPrintFunction() {}
+
+bool UtilitiesBasicPrintFunction::RunAsync() {
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  Browser *browser = chrome::FindAnyBrowser(profile, true);
+  chrome::BasicPrint(browser);
 
   return true;
 }

@@ -61,7 +61,9 @@ void ComponentMigrationHelper::Unregister(
 
 void ComponentMigrationHelper::OnFeatureEnabled(
     const std::string& component_action_id) {
+#if !defined(VIVALDI_BUILD)
   DCHECK(FeatureSwitch::extension_action_redesign()->IsEnabled());
+#endif
   std::vector<ExtensionId> extension_ids =
       GetExtensionIdsForActionId(component_action_id);
   DCHECK(!extension_ids.empty());

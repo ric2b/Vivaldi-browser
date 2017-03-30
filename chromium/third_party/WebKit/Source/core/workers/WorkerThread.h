@@ -32,8 +32,6 @@
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerLoaderProxy.h"
-#include "platform/WebThreadSupportingGC.h"
-#include "platform/weborigin/SecurityOrigin.h"
 #include "wtf/Forward.h"
 #include "wtf/Functional.h"
 #include "wtf/OwnPtr.h"
@@ -44,6 +42,7 @@ namespace blink {
 
 class InspectorTaskRunner;
 class WaitableEvent;
+class WorkerBackingThread;
 class WorkerGlobalScope;
 class WorkerInspectorController;
 class WorkerMicrotaskRunner;
@@ -55,7 +54,10 @@ enum WorkerThreadStartMode {
     PauseWorkerGlobalScopeOnStart
 };
 
-// TODO(sadrul): Rename to WorkerScript.
+// WorkerThread is a kind of WorkerBackingThread client. Each worker mechanism
+// can access the lower thread infrastructure via an implementation of this
+// abstract class. Multiple WorkerThreads can share one WorkerBackingThread.
+// See WorkerBackingThread.h for more details.
 class CORE_EXPORT WorkerThread {
 public:
     virtual ~WorkerThread();
@@ -64,27 +66,23 @@ public:
     void start(PassOwnPtr<WorkerThreadStartupData>);
     void terminate();
 
-    // Returns the thread this worker runs on. Some implementations can create
-    // a new thread on the first call (e.g. shared, dedicated workers), whereas
-    // some implementations can use an existing thread that is already being
-    // used by other workers (e.g.  compositor workers).
-    virtual WebThreadSupportingGC& backingThread() = 0;
-
-    virtual void didStartWorkerThread();
-    virtual void willStopWorkerThread();
-
-    v8::Isolate* isolate() const { return m_isolate; }
-
-    // Can be used to wait for this worker thread to shut down.
-    // (This is signaled on the main thread, so it's assumed to be waited on
-    // the worker context thread)
-    WaitableEvent* shutdownEvent() { return m_shutdownEvent.get(); }
-
-    // Called in shutdown sequence. Internally calls terminate() (or
-    // terminateInternal) and wait (by *blocking* the calling thread) until the
-    // worker(s) is/are shut down.
+    // Called in shutdown sequence on the main thread. Internally calls
+    // terminate() (or terminateInternal) and wait (by *blocking* the calling
+    // thread) until the worker(s) is/are shut down.
     void terminateAndWait();
     static void terminateAndWaitForAllWorkers();
+
+    // Called on the worker thread for WorkerGlobleScope::close().
+    void terminateFromWorkerThread();
+
+    virtual WorkerBackingThread& workerBackingThread() = 0;
+    virtual bool shouldAttachThreadDebugger() const { return true; }
+    v8::Isolate* isolate();
+
+    // Can be used to wait for this worker thread to terminate.
+    // (This is signaled on the main thread, so it's assumed to be waited on
+    // the worker context thread)
+    WaitableEvent* terminationEvent() { return m_terminationEvent.get(); }
 
     bool isCurrentThread();
     WorkerLoaderProxy* workerLoaderProxy() const
@@ -95,15 +93,17 @@ public:
 
     WorkerReportingProxy& workerReportingProxy() const { return m_workerReportingProxy; }
 
-    void postTask(const WebTraceLocation&, PassOwnPtr<ExecutionContextTask>);
-    void appendDebuggerTask(PassOwnPtr<CrossThreadClosure>);
+    void postTask(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>);
+    void appendDebuggerTask(std::unique_ptr<CrossThreadClosure>);
 
-    // Runs only debugger tasks while paused in debugger, called on worker thread.
+    // Runs only debugger tasks while paused in debugger, called on the worker
+    // thread.
     void startRunningDebuggerTasksOnPause();
     void stopRunningDebuggerTasksOnPause();
     bool isRunningDebuggerTasksOnPause() const { return m_pausedInDebugger; }
 
-    // Can be called only on the worker thread, WorkerGlobalScope is not thread safe.
+    // Can be called only on the worker thread, WorkerGlobalScope is not thread
+    // safe.
     WorkerGlobalScope* workerGlobalScope();
 
     // Returns true once one of the terminate* methods is called.
@@ -118,25 +118,14 @@ protected:
     WorkerThread(PassRefPtr<WorkerLoaderProxy>, WorkerReportingProxy&);
 
     // Factory method for creating a new worker context for the thread.
+    // Called on the worker thread.
     virtual WorkerGlobalScope* createWorkerGlobalScope(PassOwnPtr<WorkerThreadStartupData>) = 0;
 
+    // Called on the worker thread.
     virtual void postInitialize() { }
 
-    // Both of these methods are called in the worker thread.
-    virtual void initializeBackingThread();
-    virtual void shutdownBackingThread();
-
-    virtual v8::Isolate* initializeIsolate();
-    virtual void willDestroyIsolate();
-    virtual void destroyIsolate();
-
-    // Can be called either on main or worker thread.
-    virtual void terminateV8Execution();
-
 private:
-    friend class WorkerMicrotaskRunner;
-
-    PassOwnPtr<CrossThreadClosure> createWorkerThreadTask(PassOwnPtr<ExecutionContextTask>, bool isInstrumented);
+    std::unique_ptr<CrossThreadClosure> createWorkerThreadTask(std::unique_ptr<ExecutionContextTask>, bool isInstrumented);
 
     // Called on the main thread.
     void terminateInternal();
@@ -144,9 +133,9 @@ private:
     // Called on the worker thread.
     void initialize(PassOwnPtr<WorkerThreadStartupData>);
     void shutdown();
-    void performTask(PassOwnPtr<ExecutionContextTask>, bool isInstrumented);
+    void performTask(std::unique_ptr<ExecutionContextTask>, bool isInstrumented);
     void performShutdownTask();
-    void runDebuggerTask(PassOwnPtr<CrossThreadClosure>);
+    void runDebuggerTask(std::unique_ptr<CrossThreadClosure>);
     void runDebuggerTaskDontWait();
 
     bool m_started;
@@ -162,18 +151,18 @@ private:
     WorkerReportingProxy& m_workerReportingProxy;
     WebScheduler* m_webScheduler; // Not owned.
 
-    // This lock protects |m_workerGlobalScope|, |m_terminated|, |m_shutdown|, |m_isolate|, |m_runningDebuggerTask|, |m_shouldTerminateV8Execution| and |m_microtaskRunner|.
+    // This lock protects |m_workerGlobalScope|, |m_terminated|, |m_shutdown|,
+    // |m_runningDebuggerTask|, |m_shouldTerminateV8Execution| and
+    // |m_microtaskRunner|.
     Mutex m_threadStateMutex;
 
     Persistent<WorkerGlobalScope> m_workerGlobalScope;
 
-    v8::Isolate* m_isolate;
-
-    // Used to signal thread shutdown.
-    OwnPtr<WaitableEvent> m_shutdownEvent;
-
-    // Used to signal thread termination.
+    // Signaled when the thread starts termination on the main thread.
     OwnPtr<WaitableEvent> m_terminationEvent;
+
+    // Signaled when the thread completes termination on the worker thread.
+    OwnPtr<WaitableEvent> m_shutdownEvent;
 };
 
 } // namespace blink

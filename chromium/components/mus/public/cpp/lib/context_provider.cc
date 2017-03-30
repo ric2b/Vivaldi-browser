@@ -16,9 +16,6 @@ ContextProvider::ContextProvider(
     mojo::ScopedMessagePipeHandle command_buffer_handle)
     : command_buffer_handle_(std::move(command_buffer_handle)),
       context_(nullptr) {
-  // Enabled the CHROMIUM_image extension to use GpuMemoryBuffers. The
-  // implementation of which is used in CommandBufferDriver.
-  capabilities_.gpu.image = true;
 }
 
 bool ContextProvider::BindToCurrentThread() {
@@ -46,14 +43,18 @@ class GrContext* ContextProvider::GrContext() {
 
 void ContextProvider::InvalidateGrContext(uint32_t state) {}
 
-cc::ContextProvider::Capabilities ContextProvider::ContextCapabilities() {
-  return capabilities_;
+gpu::Capabilities ContextProvider::ContextCapabilities() {
+  gpu::Capabilities capabilities;
+  // Enabled the CHROMIUM_image extension to use GpuMemoryBuffers. The
+  // implementation of which is used in CommandBufferDriver.
+  capabilities.image = true;
+  return capabilities;
 }
 
-void ContextProvider::SetupLock() {}
-
 base::Lock* ContextProvider::GetLock() {
-  return &context_lock_;
+  // This context provider is not used on multiple threads.
+  NOTREACHED();
+  return nullptr;
 }
 
 ContextProvider::~ContextProvider() {

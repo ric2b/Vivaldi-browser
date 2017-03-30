@@ -10,7 +10,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 
 namespace cc {
 
@@ -87,5 +87,8 @@ uint64_t TestContextSupport::ShareGroupTracingGUID() const {
   NOTIMPLEMENTED();
   return 0;
 }
+
+void TestContextSupport::SetErrorMessageCallback(
+    const base::Callback<void(const char*, int32_t)>& callback) {}
 
 }  // namespace cc

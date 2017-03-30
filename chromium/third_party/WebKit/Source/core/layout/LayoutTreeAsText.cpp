@@ -191,14 +191,15 @@ void LayoutTreeAsText::writeLayoutObject(TextStream& ts, const LayoutObject& o, 
         // FIXME: Would be better to dump the bounding box x and y rather than the first run's x and y, but that would involve updating
         // many test results.
         const LayoutText& text = toLayoutText(o);
-        IntRect linesBox = text.linesBoundingBox();
+        IntRect linesBox = enclosingIntRect(text.linesBoundingBox());
         r = LayoutRect(IntRect(text.firstRunX(), text.firstRunY(), linesBox.width(), linesBox.height()));
         if (adjustForTableCells && !text.hasTextBoxes())
             adjustForTableCells = false;
     } else if (o.isLayoutInline()) {
         // FIXME: Would be better not to just dump 0, 0 as the x and y here.
         const LayoutInline& inlineFlow = toLayoutInline(o);
-        r = LayoutRect(IntRect(0, 0, inlineFlow.linesBoundingBox().width(), inlineFlow.linesBoundingBox().height()));
+        IntRect linesBox = enclosingIntRect(inlineFlow.linesBoundingBox());
+        r = LayoutRect(IntRect(0, 0, linesBox.width(), linesBox.height()));
         adjustForTableCells = false;
     } else if (o.isTableCell()) {
         // FIXME: Deliberately dump the "inner" box of table cells, since that is what current results reflect.  We'd like
@@ -538,10 +539,10 @@ void write(TextStream& ts, const LayoutObject& o, int indent, LayoutAsTextBehavi
         Widget* widget = toLayoutPart(o).widget();
         if (widget && widget->isFrameView()) {
             FrameView* view = toFrameView(widget);
-            LayoutView* root = view->layoutView();
-            if (root) {
-                root->document().updateLayout();
-                PaintLayer* layer = root->layer();
+            LayoutViewItem rootItem = view->layoutViewItem();
+            if (!rootItem.isNull()) {
+                rootItem.updateStyleAndLayout();
+                PaintLayer* layer = rootItem.layer();
                 if (layer)
                     LayoutTreeAsText::writeLayers(ts, layer, layer, layer->rect(), indent + 1, behavior);
             }
@@ -557,7 +558,8 @@ enum LayerPaintPhase {
 
 static void write(TextStream& ts, PaintLayer& layer,
     const LayoutRect& layerBounds, const LayoutRect& backgroundClipRect, const LayoutRect& clipRect,
-    LayerPaintPhase paintPhase = LayerPaintPhaseAll, int indent = 0, LayoutAsTextBehavior behavior = LayoutAsTextBehaviorNormal)
+    LayerPaintPhase paintPhase = LayerPaintPhaseAll, int indent = 0, LayoutAsTextBehavior behavior = LayoutAsTextBehaviorNormal,
+    const PaintLayer* markedLayer = nullptr)
 {
     IntRect adjustedLayoutBounds = pixelSnappedIntRect(layerBounds);
     IntRect adjustedLayoutBoundsWithScrollbars = adjustedLayoutBounds;
@@ -573,6 +575,9 @@ static void write(TextStream& ts, PaintLayer& layer,
         adjustedLayoutBoundsWithScrollbars.setWidth(layoutView->viewWidth(IncludeScrollbars));
         adjustedLayoutBoundsWithScrollbars.setHeight(layoutView->viewHeight(IncludeScrollbars));
     }
+
+    if (markedLayer)
+        ts << (markedLayer == &layer ? "*" : " ");
 
     writeIndent(ts, indent);
 
@@ -648,7 +653,7 @@ static Vector<PaintLayerStackingNode*> normalFlowListFor(PaintLayerStackingNode*
 }
 
 void LayoutTreeAsText::writeLayers(TextStream& ts, const PaintLayer* rootLayer, PaintLayer* layer,
-    const LayoutRect& paintRect, int indent, LayoutAsTextBehavior behavior)
+    const LayoutRect& paintRect, int indent, LayoutAsTextBehavior behavior, const PaintLayer* markedLayer)
 {
     // Calculate the clip rects we should use.
     LayoutRect layerBounds;
@@ -668,7 +673,7 @@ void LayoutTreeAsText::writeLayers(TextStream& ts, const PaintLayer* rootLayer, 
     Vector<PaintLayerStackingNode*>* negList = layer->stackingNode()->negZOrderList();
     bool paintsBackgroundSeparately = negList && negList->size() > 0;
     if (shouldPaint && paintsBackgroundSeparately)
-        write(ts, *layer, layerBounds, damageRect.rect(), clipRectToApply.rect(), LayerPaintPhaseBackground, indent, behavior);
+        write(ts, *layer, layerBounds, damageRect.rect(), clipRectToApply.rect(), LayerPaintPhaseBackground, indent, behavior, markedLayer);
 
     if (negList) {
         int currIndent = indent;
@@ -678,11 +683,11 @@ void LayoutTreeAsText::writeLayers(TextStream& ts, const PaintLayer* rootLayer, 
             ++currIndent;
         }
         for (unsigned i = 0; i != negList->size(); ++i)
-            writeLayers(ts, rootLayer, negList->at(i)->layer(), paintRect, currIndent, behavior);
+            writeLayers(ts, rootLayer, negList->at(i)->layer(), paintRect, currIndent, behavior, markedLayer);
     }
 
     if (shouldPaint)
-        write(ts, *layer, layerBounds, damageRect.rect(), clipRectToApply.rect(), paintsBackgroundSeparately ? LayerPaintPhaseForeground : LayerPaintPhaseAll, indent, behavior);
+        write(ts, *layer, layerBounds, damageRect.rect(), clipRectToApply.rect(), paintsBackgroundSeparately ? LayerPaintPhaseForeground : LayerPaintPhaseAll, indent, behavior, markedLayer);
 
     Vector<PaintLayerStackingNode*> normalFlowList = normalFlowListFor(layer->stackingNode());
     if (!normalFlowList.isEmpty()) {
@@ -693,7 +698,7 @@ void LayoutTreeAsText::writeLayers(TextStream& ts, const PaintLayer* rootLayer, 
             ++currIndent;
         }
         for (unsigned i = 0; i != normalFlowList.size(); ++i)
-            writeLayers(ts, rootLayer, normalFlowList.at(i)->layer(), paintRect, currIndent, behavior);
+            writeLayers(ts, rootLayer, normalFlowList.at(i)->layer(), paintRect, currIndent, behavior, markedLayer);
     }
 
     if (Vector<PaintLayerStackingNode*>* posList = layer->stackingNode()->posZOrderList()) {
@@ -704,7 +709,7 @@ void LayoutTreeAsText::writeLayers(TextStream& ts, const PaintLayer* rootLayer, 
             ++currIndent;
         }
         for (unsigned i = 0; i != posList->size(); ++i)
-            writeLayers(ts, rootLayer, posList->at(i)->layer(), paintRect, currIndent, behavior);
+            writeLayers(ts, rootLayer, posList->at(i)->layer(), paintRect, currIndent, behavior, markedLayer);
     }
 }
 
@@ -766,22 +771,22 @@ static void writeSelection(TextStream& ts, const LayoutObject* o)
     }
 }
 
-static String externalRepresentation(LayoutBox* layoutObject, LayoutAsTextBehavior behavior)
+static String externalRepresentation(LayoutBox* layoutObject, LayoutAsTextBehavior behavior, const PaintLayer* markedLayer = nullptr)
 {
     TextStream ts;
     if (!layoutObject->hasLayer())
         return ts.release();
 
     PaintLayer* layer = layoutObject->layer();
-    LayoutTreeAsText::writeLayers(ts, layer, layer, layer->rect(), 0, behavior);
+    LayoutTreeAsText::writeLayers(ts, layer, layer, layer->rect(), 0, behavior, markedLayer);
     writeSelection(ts, layoutObject);
     return ts.release();
 }
 
-String externalRepresentation(LocalFrame* frame, LayoutAsTextBehavior behavior)
+String externalRepresentation(LocalFrame* frame, LayoutAsTextBehavior behavior, const PaintLayer* markedLayer)
 {
     if (!(behavior & LayoutAsTextDontUpdateLayout))
-        frame->document()->updateLayout();
+        frame->document()->updateStyleAndLayout();
 
     LayoutObject* layoutObject = frame->contentLayoutObject();
     if (!layoutObject || !layoutObject->isBox())
@@ -793,7 +798,7 @@ String externalRepresentation(LocalFrame* frame, LayoutAsTextBehavior behavior)
         printContext.begin(size.width(), size.height());
     }
 
-    return externalRepresentation(toLayoutBox(layoutObject), behavior);
+    return externalRepresentation(toLayoutBox(layoutObject), behavior, markedLayer);
 }
 
 String externalRepresentation(Element* element, LayoutAsTextBehavior behavior)
@@ -801,7 +806,7 @@ String externalRepresentation(Element* element, LayoutAsTextBehavior behavior)
     // Doesn't support printing mode.
     ASSERT(!(behavior & LayoutAsTextPrintingMode));
     if (!(behavior & LayoutAsTextDontUpdateLayout))
-        element->document().updateLayout();
+        element->document().updateStyleAndLayout();
 
     LayoutObject* layoutObject = element->layoutObject();
     if (!layoutObject || !layoutObject->isBox())
@@ -825,7 +830,7 @@ static void writeCounterValuesFromChildren(TextStream& stream, LayoutObject* par
 
 String counterValueForElement(Element* element)
 {
-    element->document().updateLayout();
+    element->document().updateStyleAndLayout();
     TextStream stream;
     bool isFirstCounter = true;
     // The counter layoutObjects should be children of :before or :after pseudo-elements.
@@ -838,7 +843,7 @@ String counterValueForElement(Element* element)
 
 String markerTextForListItem(Element* element)
 {
-    element->document().updateLayout();
+    element->document().updateStyleAndLayout();
 
     LayoutObject* layoutObject = element->layoutObject();
     if (!layoutObject || !layoutObject->isListItem())

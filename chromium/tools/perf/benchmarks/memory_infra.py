@@ -10,7 +10,6 @@ from telemetry import benchmark
 from telemetry.timeline import tracing_category_filter
 from telemetry.web_perf import timeline_based_measurement
 from telemetry.web_perf.metrics import memory_timeline
-from telemetry.web_perf.metrics import v8_gc_latency
 
 import page_sets
 
@@ -21,6 +20,9 @@ class _MemoryInfra(perf_benchmark.PerfBenchmark):
   This benchmark records data using memory-infra (https://goo.gl/8tGc6O), which
   is part of chrome tracing, and extracts it using timeline-based measurements.
   """
+
+  # Subclasses can override this to use TBMv2 instead of TBMv1.
+  TBM_VERSION = 1
 
   def SetExtraBrowserOptions(self, options):
     options.AppendExtraBrowserArgs([
@@ -37,43 +39,73 @@ class _MemoryInfra(perf_benchmark.PerfBenchmark):
     tbm_options = timeline_based_measurement.Options(
         overhead_level=trace_memory)
     tbm_options.config.enable_android_graphics_memtrack = True
+    if self.TBM_VERSION == 1:
+      # TBMv1 (see telemetry/telemetry/web_perf/metrics/memory_timeline.py
+      # in third_party/catapult).
+      tbm_options.SetLegacyTimelineBasedMetrics((
+          memory_timeline.MemoryTimelineMetric(),
+      ))
+    elif self.TBM_VERSION == 2:
+      # TBMv2 (see tracing/tracing/metrics/system_health/memory_metric.html
+      # in third_party/catapult).
+      tbm_options.SetTimelineBasedMetric('memoryMetric')
+    else:
+      raise Exception('Unrecognized TBM version: %s' % self.TBM_VERSION)
     return tbm_options
 
-  @classmethod
-  def HasTraceRerunDebugOption(cls):
-    return True
 
-  def SetupBenchmarkDefaultTraceRerunOptions(self, tbm_options):
-    tbm_options.SetLegacyTimelineBasedMetrics((
-        memory_timeline.MemoryTimelineMetric(),
-    ))
-
-
-# TODO(bashi): Workaround for http://crbug.com/532075
-# @benchmark.Enabled('android') shouldn't be needed.
-@benchmark.Enabled('android')
+# TODO(crbug.com/606361): Remove benchmark when replaced by the TBMv2 version.
+@benchmark.Disabled('all')
 class MemoryHealthPlan(_MemoryInfra):
   """Timeline based benchmark for the Memory Health Plan."""
-
-  _PREFIX_WHITELIST = ('memory_allocator_', 'memory_android_memtrack_',
-                       'memory_mmaps_', 'process_count_')
-
   page_set = page_sets.MemoryHealthStory
+  options = {'pageset_repeat': 5}
 
   @classmethod
   def Name(cls):
     return 'memory.memory_health_plan'
 
   @classmethod
-  def ValueCanBeAddedPredicate(cls, value, is_first_result):
-    return (value.tir_label in ['foreground', 'background']
-            and any(value.name.startswith(p) for p in cls._PREFIX_WHITELIST))
+  def ShouldDisable(cls, possible_browser):
+    # TODO(crbug.com/586148): Benchmark should not depend on DeskClock app.
+    return not possible_browser.platform.CanLaunchApplication(
+        'com.google.android.deskclock')
+
+
+@benchmark.Enabled('android')
+class TBMv2MemoryBenchmarkTop10Mobile(MemoryHealthPlan):
+  """Timeline based benchmark for the Memory Health Plan based on TBMv2.
+
+  This is a temporary benchmark to compare the new TBMv2 memory metric
+  (memory_metric.html) with the existing TBMv1 one (memory_timeline.py). Once
+  all issues associated with the TBMv2 metric are resolved, all memory
+  benchmarks (including the ones in this file) will switch to use it instead
+  of the TBMv1 metric and this temporary benchmark will be removed. See
+  crbug.com/60361.
+  """
+  TBM_VERSION = 2
 
   @classmethod
-  def ShouldDisable(cls, possible_browser):
-    # Benchmark requires DeskClock app only available on Nexus devices.
-    # See http://crbug.com/546842
-    return 'nexus' not in possible_browser.platform.GetDeviceTypeName().lower()
+  def Name(cls):
+    return 'memory.top_10_mobile_tbmv2'
+
+
+# Benchmark is disabled by default because it takes too long to run.
+@benchmark.Disabled('all')
+class DualBrowserBenchmark(_MemoryInfra):
+  """Measures memory usage while interacting with two different browsers.
+
+  The user story involves going back and forth between doing Google searches
+  on a webview-based browser (a stand in for the Search app), and loading
+  pages on a select browser.
+  """
+  TBM_VERSION = 2
+  page_set = page_sets.DualBrowserStorySet
+  options = {'pageset_repeat': 5}
+
+  @classmethod
+  def Name(cls):
+    return 'memory.dual_browser_test'
 
 
 # TODO(bashi): Workaround for http://crbug.com/532075
@@ -105,50 +137,38 @@ class RendererMemoryBlinkMemoryMobile(_MemoryInfra):
     return bool(cls._RE_RENDERER_VALUES.match(value.name))
 
 
-# Disabled on reference builds because they don't support the new
-# Tracing.requestMemoryDump DevTools API. See http://crbug.com/540022.
-@benchmark.Disabled('reference')
-class MemoryBenchmarkTop10Mobile(_MemoryInfra):
-  """Timeline based benchmark for measuring memory on top 10 mobile sites."""
+class _MemoryV8Benchmark(_MemoryInfra):
+  def CreateTimelineBasedMeasurementOptions(self):
+    v8_categories = [
+        'blink.console', 'renderer.scheduler', 'v8', 'webkit.console']
+    memory_categories = ['blink.console', 'disabled-by-default-memory-infra']
+    category_filter = tracing_category_filter.TracingCategoryFilter(
+        ','.join(['-*'] + v8_categories + memory_categories))
+    options = timeline_based_measurement.Options(category_filter)
+    options.SetTimelineBasedMetric('v8AndMemoryMetrics')
+    return options
 
-  page_set = page_sets.MemoryInfraTop10MobilePageSet
 
-  @classmethod
-  def Name(cls):
-    return 'memory.top_10_mobile'
-
-
-# Disabled on reference builds because they don't support the new
-# Tracing.requestMemoryDump DevTools API.
-# For 'reference' see http://crbug.com/540022.
-# For 'android' see http://crbug.com/579546.
-@benchmark.Disabled('reference', 'android')
-class MemoryLongRunningIdleGmailTBM(_MemoryInfra):
+class MemoryLongRunningIdleGmail(_MemoryV8Benchmark):
   """Use (recorded) real world web sites and measure memory consumption
   of long running idle Gmail page """
   page_set = page_sets.LongRunningIdleGmailPageSet
 
-  def CreateTimelineBasedMeasurementOptions(self):
-    v8_categories = [
-        'blink.console', 'renderer.scheduler', 'v8', 'webkit.console']
-    memory_categories = 'blink.console,disabled-by-default-memory-infra'
-    category_filter = tracing_category_filter.TracingCategoryFilter(
-        memory_categories)
-    for category in v8_categories:
-      category_filter.AddIncludedCategory(category)
-    options = timeline_based_measurement.Options(category_filter)
-    return options
+  @classmethod
+  def Name(cls):
+    return 'memory.long_running_idle_gmail_tbmv2'
 
-  def SetupBenchmarkDefaultTraceRerunOptions(self, tbm_options):
-    tbm_options.SetLegacyTimelineBasedMetrics((
-        v8_gc_latency.V8GCLatency(),
-        memory_timeline.MemoryTimelineMetric(),
-    ))
+  @classmethod
+  def ShouldDisable(cls, possible_browser):
+    return cls.IsSvelte(possible_browser)  # http://crbug.com/611167
+
+
+@benchmark.Disabled('android-webview') # http://crbug.com/612210
+class MemoryLongRunningIdleGmailBackground(_MemoryV8Benchmark):
+  """Use (recorded) real world web sites and measure memory consumption
+  of long running idle Gmail page """
+  page_set = page_sets.LongRunningIdleGmailBackgroundPageSet
 
   @classmethod
   def Name(cls):
-    return 'memory.long_running_idle_gmail_tbm'
-
-  @classmethod
-  def ShouldTearDownStateAfterEachStoryRun(cls):
-    return True
+    return 'memory.long_running_idle_gmail_background_tbmv2'

@@ -49,7 +49,6 @@
 #include "core/html/forms/DateTimeLocalInputType.h"
 #include "core/html/forms/EmailInputType.h"
 #include "core/html/forms/FileInputType.h"
-#include "core/html/forms/FormController.h"
 #include "core/html/forms/HiddenInputType.h"
 #include "core/html/forms/ImageInputType.h"
 #include "core/html/forms/MonthInputType.h"
@@ -106,7 +105,7 @@ static PassOwnPtr<InputTypeFactoryMap> createInputTypeFactoryMap()
     map->add(InputTypeNames::url, URLInputType::create);
     map->add(InputTypeNames::week, WeekInputType::create);
     // No need to register "text" because it is the default type.
-    return map.release();
+    return map;
 }
 
 static const InputTypeFactoryMap* factoryMap()
@@ -140,6 +139,11 @@ InputType::~InputType()
 {
 }
 
+DEFINE_TRACE(InputType)
+{
+    visitor->trace(m_element);
+}
+
 bool InputType::isTextField() const
 {
     return false;
@@ -148,19 +152,6 @@ bool InputType::isTextField() const
 bool InputType::shouldSaveAndRestoreFormControlState() const
 {
     return true;
-}
-
-FormControlState InputType::saveFormControlState() const
-{
-    String currentValue = element().value();
-    if (currentValue == element().defaultValue())
-        return FormControlState();
-    return FormControlState(currentValue);
-}
-
-void InputType::restoreFormControlState(const FormControlState& state)
-{
-    element().setValue(state[0]);
 }
 
 bool InputType::isFormDataAppendable() const
@@ -230,11 +221,6 @@ bool InputType::supportsRequired() const
 }
 
 bool InputType::valueMissing(const String&) const
-{
-    return false;
-}
-
-bool InputType::hasBadInput() const
 {
     return false;
 }
@@ -365,13 +351,13 @@ String InputType::valueMissingText() const
     return locale().queryString(WebLocalizedString::ValidationValueMissing);
 }
 
-std::pair<String, String> InputType::validationMessage() const
+std::pair<String, String> InputType::validationMessage(const InputTypeView& inputTypeView) const
 {
     const String value = element().value();
 
     // The order of the following checks is meaningful. e.g. We'd like to show the
     // badInput message even if the control has other validation errors.
-    if (hasBadInput())
+    if (inputTypeView.hasBadInput())
         return std::make_pair(badInputText(), emptyString());
 
     if (valueMissing(value))
@@ -426,11 +412,6 @@ std::pair<String, String> InputType::validationMessage() const
     return std::make_pair(emptyString(), emptyString());
 }
 
-bool InputType::shouldSubmitImplicitly(Event* event)
-{
-    return event->isKeyboardEvent() && event->type() == EventTypeNames::keypress && toKeyboardEvent(event)->charCode() == '\r';
-}
-
 Decimal InputType::parseToNumber(const String&, const Decimal& defaultValue) const
 {
     ASSERT_NOT_REACHED();
@@ -448,13 +429,6 @@ String InputType::serialize(const Decimal&) const
     return String();
 }
 
-void InputType::dispatchSimulatedClickIfActive(KeyboardEvent* event) const
-{
-    if (element().active())
-        element().dispatchSimulatedClick(event);
-    event->setDefaultHandled();
-}
-
 ChromeClient* InputType::chromeClient() const
 {
     if (FrameHost* host = element().document().frameHost())
@@ -468,11 +442,6 @@ Locale& InputType::locale() const
 }
 
 bool InputType::canSetStringValue() const
-{
-    return true;
-}
-
-bool InputType::hasCustomFocusLogic() const
 {
     return true;
 }
@@ -493,11 +462,6 @@ void InputType::enableSecureTextInput()
 
 void InputType::disableSecureTextInput()
 {
-}
-
-void InputType::accessKeyAction(bool)
-{
-    element().focus(FocusParams(SelectionBehaviorOnFocus::Reset, WebFocusTypeNone, nullptr));
 }
 
 void InputType::countUsage()
@@ -698,21 +662,17 @@ bool InputType::supportsReadOnly() const
     return false;
 }
 
-String InputType::defaultToolTip() const
+String InputType::defaultToolTip(const InputTypeView& inputTypeView) const
 {
     if (element().form() && element().form()->noValidate())
         return String();
-    return validationMessage().first;
+    return validationMessage(inputTypeView).first;
 }
 
 Decimal InputType::findClosestTickMarkValue(const Decimal&)
 {
     ASSERT_NOT_REACHED();
     return Decimal::nan();
-}
-
-void InputType::handleDOMActivateEvent(Event*)
-{
 }
 
 bool InputType::hasLegalLinkAttribute(const QualifiedName&) const
@@ -759,11 +719,6 @@ unsigned InputType::height() const
 unsigned InputType::width() const
 {
     return 0;
-}
-
-TextDirection InputType::computedTextDirection()
-{
-    return element().ensureComputedStyle()->direction();
 }
 
 ColorChooserClient* InputType::colorChooserClient()

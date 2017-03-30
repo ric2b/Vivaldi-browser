@@ -43,6 +43,62 @@ class CompareTaskNamespacePriority {
  private:
   uint16_t category_;
 };
+
+// Helper class for iterating over all dependents of a task.
+class DependentIterator {
+ public:
+  DependentIterator(TaskGraph* graph, const Task* task)
+      : graph_(graph),
+        task_(task),
+        current_index_(static_cast<size_t>(-1)),
+        current_node_(NULL) {
+    ++(*this);
+  }
+
+  TaskGraph::Node& operator->() const {
+    DCHECK_LT(current_index_, graph_->edges.size());
+    DCHECK_EQ(graph_->edges[current_index_].task, task_);
+    DCHECK(current_node_);
+    return *current_node_;
+  }
+
+  TaskGraph::Node& operator*() const {
+    DCHECK_LT(current_index_, graph_->edges.size());
+    DCHECK_EQ(graph_->edges[current_index_].task, task_);
+    DCHECK(current_node_);
+    return *current_node_;
+  }
+
+  // Note: Performance can be improved by keeping edges sorted.
+  DependentIterator& operator++() {
+    // Find next dependency edge for |task_|.
+    do {
+      ++current_index_;
+      if (current_index_ == graph_->edges.size())
+        return *this;
+    } while (graph_->edges[current_index_].task != task_);
+
+    // Now find the node for the dependent of this edge.
+    TaskGraph::Node::Vector::iterator it = std::find_if(
+        graph_->nodes.begin(), graph_->nodes.end(),
+        [this](const TaskGraph::Node& node) {
+          return node.task == graph_->edges[current_index_].dependent;
+        });
+    DCHECK(it != graph_->nodes.end());
+    current_node_ = &(*it);
+
+    return *this;
+  }
+
+  operator bool() const { return current_index_ < graph_->edges.size(); }
+
+ private:
+  TaskGraph* graph_;
+  const Task* task_;
+  size_t current_index_;
+  TaskGraph::Node* current_node_;
+};
+
 }  // namespace
 
 TaskGraphWorkQueue::TaskNamespace::TaskNamespace() {}
@@ -88,6 +144,11 @@ void TaskGraphWorkQueue::ScheduleTasks(NamespaceToken token, TaskGraph* graph) {
         });
     if (old_it != task_namespace.graph.nodes.end()) {
       std::swap(*old_it, task_namespace.graph.nodes.back());
+      // If old task is scheduled to run again and not yet started running,
+      // reset its state to initial state as it has to be inserted in new
+      // |ready_to_run_tasks|, where it gets scheduled.
+      if (node.task->state().IsScheduled())
+        node.task->state().Reset();
       task_namespace.graph.nodes.pop_back();
     }
 
@@ -96,7 +157,7 @@ void TaskGraphWorkQueue::ScheduleTasks(NamespaceToken token, TaskGraph* graph) {
       continue;
 
     // Skip if already finished running task.
-    if (node.task->HasFinishedRunning())
+    if (node.task->state().IsFinished())
       continue;
 
     // Skip if already running.
@@ -107,6 +168,7 @@ void TaskGraphWorkQueue::ScheduleTasks(NamespaceToken token, TaskGraph* graph) {
                     }))
       continue;
 
+    node.task->state().DidSchedule();
     task_namespace.ready_to_run_tasks[node.category].push_back(PrioritizedTask(
         node.task, &task_namespace, node.category, node.priority));
   }
@@ -128,7 +190,7 @@ void TaskGraphWorkQueue::ScheduleTasks(NamespaceToken token, TaskGraph* graph) {
     TaskGraph::Node& node = *it;
 
     // Skip if already finished running task.
-    if (node.task->HasFinishedRunning())
+    if (node.task->state().IsFinished())
       continue;
 
     // Skip if already running.
@@ -142,6 +204,7 @@ void TaskGraphWorkQueue::ScheduleTasks(NamespaceToken token, TaskGraph* graph) {
     DCHECK(std::find(task_namespace.completed_tasks.begin(),
                      task_namespace.completed_tasks.end(),
                      node.task) == task_namespace.completed_tasks.end());
+    node.task->state().DidCancel();
     task_namespace.completed_tasks.push_back(node.task);
   }
 
@@ -202,6 +265,7 @@ TaskGraphWorkQueue::PrioritizedTask TaskGraphWorkQueue::GetNextTaskToRun(
   }
 
   // Add task to |running_tasks|.
+  task.task->state().DidStart();
   task_namespace->running_tasks.push_back(
       std::make_pair(task.category, task.task));
 
@@ -236,6 +300,7 @@ void TaskGraphWorkQueue::CompleteTask(const PrioritizedTask& completed_task) {
           task_namespace->ready_to_run_tasks[dependent_node.category];
 
       bool was_empty = ready_to_run_tasks.empty();
+      dependent_node.task->state().DidSchedule();
       ready_to_run_tasks.push_back(
           PrioritizedTask(dependent_node.task, task_namespace,
                           dependent_node.category, dependent_node.priority));
@@ -270,6 +335,7 @@ void TaskGraphWorkQueue::CompleteTask(const PrioritizedTask& completed_task) {
   }
 
   // Finally add task to |completed_tasks_|.
+  task->state().DidFinish();
   task_namespace->completed_tasks.push_back(task);
 }
 

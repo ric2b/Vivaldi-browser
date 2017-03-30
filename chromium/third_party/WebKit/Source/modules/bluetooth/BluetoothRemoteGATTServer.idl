@@ -7,7 +7,6 @@
 // Implement BluetoothGATTRemoteServer interface: https://crbug.com/476735
 
 [
-    GarbageCollected,
     RuntimeEnabled=WebBluetooth,
 ] interface BluetoothRemoteGATTServer
 {

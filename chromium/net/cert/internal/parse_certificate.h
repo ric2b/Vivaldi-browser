@@ -16,7 +16,6 @@
 
 namespace net {
 
-struct ParsedCertificate;
 struct ParsedTbsCertificate;
 
 // Returns true if the given serial number (CertificateSerialNumber in RFC 5280)
@@ -44,30 +43,59 @@ struct ParsedTbsCertificate;
 //     Note: Non-conforming CAs may issue certificates with serial numbers
 //     that are negative or zero.  Certificate users SHOULD be prepared to
 //     gracefully handle such certificates.
-bool VerifySerialNumber(const der::Input& value) WARN_UNUSED_RESULT;
+NET_EXPORT bool VerifySerialNumber(const der::Input& value) WARN_UNUSED_RESULT;
+
+struct NET_EXPORT ParseCertificateOptions {
+  // If set to true, then parsing will skip checks on the certificate's serial
+  // number. The only requirement will be that the serial number is an INTEGER,
+  // however it is not required to be a valid DER-encoding (i.e. minimal
+  // encoding), nor is it required to be constrained to any particular length.
+  bool allow_invalid_serial_numbers = false;
+};
 
 // Parses a DER-encoded "Certificate" as specified by RFC 5280. Returns true on
-// success and sets the results in |out|.
+// success and sets the results in the |out_*| parameters.
 //
-// Note that on success |out| aliases data from the input |certificate_tlv|.
-// Hence the fields of the ParsedCertificate are only valid as long as
+// Note that on success the out parameters alias data from the input
+// |certificate_tlv|.  Hence the output values are only valid as long as
 // |certificate_tlv| remains valid.
 //
-// On failure |out| has an undefined state. Some of its fields may have been
-// updated during parsing, whereas others may not have been changed.
+// On failure the out parameters have an undefined state. Some of them may have
+// been updated during parsing, whereas others may not have been changed.
 //
-// Refer to the per-field documention of the ParsedCertificate structure for
-// details on what validity checks parsing performs.
-//
+// The out parameters represent each field of the Certificate SEQUENCE:
 //       Certificate  ::=  SEQUENCE  {
-//            tbsCertificate       TBSCertificate,
-//            signatureAlgorithm   AlgorithmIdentifier,
-//            signatureValue       BIT STRING  }
+//
+// The |out_tbs_certificate_tlv| parameter corresponds with "tbsCertificate"
+// from RFC 5280:
+//         tbsCertificate       TBSCertificate,
+//
+// This contains the full (unverified) Tag-Length-Value for a SEQUENCE. No
+// guarantees are made regarding the value of this SEQUENCE.
+// This can be further parsed using ParseTbsCertificate().
+//
+// The |out_signature_algorithm_tlv| parameter corresponds with
+// "signatureAlgorithm" from RFC 5280:
+//         signatureAlgorithm   AlgorithmIdentifier,
+//
+// This contains the full (unverified) Tag-Length-Value for a SEQUENCE. No
+// guarantees are made regarding the value of this SEQUENCE.
+// This can be further parsed using SignatureValue::CreateFromDer().
+//
+// The |out_signature_value| parameter corresponds with "signatureValue" from
+// RFC 5280:
+//         signatureValue       BIT STRING  }
+//
+// Parsing guarantees that this is a valid BIT STRING.
 NET_EXPORT bool ParseCertificate(const der::Input& certificate_tlv,
-                                 ParsedCertificate* out) WARN_UNUSED_RESULT;
+                                 der::Input* out_tbs_certificate_tlv,
+                                 der::Input* out_signature_algorithm_tlv,
+                                 der::BitString* out_signature_value)
+    WARN_UNUSED_RESULT;
 
 // Parses a DER-encoded "TBSCertificate" as specified by RFC 5280. Returns true
-// on success and sets the results in |out|.
+// on success and sets the results in |out|. Certain invalid inputs may
+// be accepted based on the provided |options|.
 //
 // Note that on success |out| aliases data from the input |tbs_tlv|.
 // Hence the fields of the ParsedTbsCertificate are only valid as long as
@@ -95,6 +123,7 @@ NET_EXPORT bool ParseCertificate(const der::Input& certificate_tlv,
 //                                 -- If present, version MUST be v3
 //            }
 NET_EXPORT bool ParseTbsCertificate(const der::Input& tbs_tlv,
+                                    const ParseCertificateOptions& options,
                                     ParsedTbsCertificate* out)
     WARN_UNUSED_RESULT;
 
@@ -104,37 +133,6 @@ enum class CertificateVersion {
   V1,
   V2,
   V3,
-};
-
-// ParsedCertificate contains pointers to the main fields of a DER-encoded RFC
-// 5280 "Certificate".
-//
-// ParsedCertificate is expected to be filled by ParseCertificate(), so
-// subsequent field descriptions are in terms of what ParseCertificate() sets.
-struct NET_EXPORT ParsedCertificate {
-  // Corresponds with "tbsCertificate" from RFC 5280:
-  //         tbsCertificate       TBSCertificate,
-  //
-  // This contains the full (unverified) Tag-Length-Value for a SEQUENCE. No
-  // guarantees are made regarding the value of this SEQUENCE.
-  //
-  // This can be further parsed using ParseTbsCertificate().
-  der::Input tbs_certificate_tlv;
-
-  // Corresponds with "signatureAlgorithm" from RFC 5280:
-  //         signatureAlgorithm   AlgorithmIdentifier,
-  //
-  // This contains the full (unverified) Tag-Length-Value for a SEQUENCE. No
-  // guarantees are made regarding the value of this SEQUENCE.
-  //
-  // This can be further parsed using SignatureValue::CreateFromDer().
-  der::Input signature_algorithm_tlv;
-
-  // Corresponds with "signatureValue" from RFC 5280:
-  //         signatureValue       BIT STRING  }
-  //
-  // Parsing guarantees that this is a valid BIT STRING.
-  der::BitString signature_value;
 };
 
 // ParsedTbsCertificate contains pointers to the main fields of a DER-encoded
@@ -160,7 +158,13 @@ struct NET_EXPORT ParsedTbsCertificate {
   // instance if the serial number was 1000 then this would contain bytes
   // {0x03, 0xE8}.
   //
-  // In addition to being a valid DER-encoded INTEGER, parsing guarantees that
+  // The serial number may or may not be a valid DER-encoded INTEGER:
+  //
+  // If the option |allow_invalid_serial_numbers=true| was used during
+  // parsing, then nothing further can be assumed about these bytes.
+  //
+  // Otherwise if |allow_invalid_serial_numbers=false| then in addition
+  // to being a valid DER-encoded INTEGER, parsing guarantees that
   // the serial number is at most 20 bytes long. Parsing does NOT guarantee
   // that the integer is positive (might be zero or negative).
   der::Input serial_number;

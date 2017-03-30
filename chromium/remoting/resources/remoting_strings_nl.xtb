@@ -34,6 +34,7 @@ Voor meer informatie over privacy bekijk je het Privacybeleid van Google (http:/
 <translation id="1779766957982586368">Venster sluiten</translation>
 <translation id="1841799852846221389">Externe verbindingen voor deze computer uitschakelen…</translation>
 <translation id="189172778771606813">Zijmenu sluiten</translation>
+<translation id="1897488610212723051">Verwijderen</translation>
 <translation id="195619862187186579">Toetsenbordindeling</translation>
 <translation id="1996161829609978754">Chrome downloadt het installatieprogramma voor de Chromoting-host. Zodra het downloaden is voltooid, voer je het installatieprogramma uit voordat je doorgaat.</translation>
 <translation id="2009755455353575666">Verbinding mislukt</translation>
@@ -122,9 +123,6 @@ host</translation>
 <translation id="3950820424414687140">Inloggen</translation>
 <translation id="3989511127559254552">Als je wilt doorgaan, moet je eerst uitgebreide toegangsrechten voor je computer verlenen. Je hoeft dit slechts één keer te doen.</translation>
 <translation id="4006787130661126000">Je moet externe verbindingen inschakelen als je Chrome Remote Desktop wilt gebruiken voor toegang tot deze computer.</translation>
-<translation id="4028465833180158312">• Updates voor gebruikersinterface in Material design.
-• Kennisgeving voor licenties van derden.
-• Weergave van informatie voor externe computers die offline zijn.</translation>
 <translation id="405887016757208221">De externe computer kan de sessie niet initialiseren. Als het probleem blijft optreden, configureer je de host opnieuw.</translation>
 <translation id="4068946408131579958">Alle verbindingen</translation>
 <translation id="409800995205263688">OPMERKING: beleidsinstellingen staan alleen verbindingen tussen computers binnen je netwerk toe.</translation>
@@ -168,6 +166,7 @@ Desktop-host</translation>
 <translation id="4985296110227979402">Je moet eerst je computer instellen voor externe toegang</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (offline)</translation>
 <translation id="5070121137485264635">De externe host vereist dat je op een website van derden wordt geverifieerd. Als je wilt doorgaan, moet je Chrome Remote Desktop aanvullende machtigingen geven om toegang tot dit adres te krijgen:</translation>
+<translation id="507204348399810022">Weet je zeker dat je externe verbindingen met <ph name="HOSTNAME" /> wilt uitschakelen?</translation>
 <translation id="5156271271724754543">Geef dezelfde pincode in beide vakken op.</translation>
 <translation id="5168917394043976756">Zijmenu openen</translation>
 <translation id="5170982930780719864">Ongeldige host-ID.</translation>
@@ -178,7 +177,6 @@ Desktop-host</translation>
 <translation id="533625276787323658">Er is geen computer om verbinding mee te maken</translation>
 <translation id="5363265567587775042">Vraag de gebruiker tot wiens computer je toegang wilt hebben, op <ph name="SHARE" /> te klikken en je de toegangscode te geven.</translation>
 <translation id="5379087427956679853">Met Chrome Remote Desktop kun je je computer veilig delen via internet. Beide gebruikers moeten hiervoor de app Chrome Remote Desktop uitvoeren, die beschikbaar is op <ph name="URL" />.</translation>
-<translation id="5394895745784982830">Voor Mac (OS X 10.6 en hoger)</translation>
 <translation id="5397086374758643919">Verwijderprogramma voor Chrome Remote Desktop-host</translation>
 <translation id="5419185025274123272">Kan de app niet opnieuw instellen. Je kunt nog steeds een foutmelding verzenden.</translation>
 <translation id="544077782045763683">Host is afgesloten.</translation>
@@ -214,6 +212,10 @@ Desktop-host</translation>
 <translation id="6324708100353784493">Je hebt de integratiemodus voor Google Cardboard ingeschakeld. Als je deze modus wilt gebruiken, plaats je je apparaat in een Google Cardboard-viewer.</translation>
 <translation id="6381670701864002291">Iets anders.</translation>
 <translation id="6398765197997659313">Volledig scherm sluiten</translation>
+<translation id="6408143143164565232">• Luisteren naar audio vanaf Windows- of Linux-computers.
+• Ongewenste verbindingen verwijderen door lang op de computernaam te drukken.
+• Soepeler knijpen om te zoomen en scrollen met twee vingers.
+• Nieuw scherm voor Help en feedback.</translation>
 <translation id="6441316101718669559">Bureaubladintegratie wordt niet ondersteund op dit platform. Je kunt de app nog steeds gebruiken, maar de gebruikerservaring is beperkt.</translation>
 <translation id="652218476070540101">De pincode voor deze computer wordt bijgewerkt…</translation>
 <translation id="6527303717912515753">Delen</translation>
@@ -221,6 +223,7 @@ Desktop-host</translation>
 <translation id="6542902059648396432">Een probleem melden…</translation>
 <translation id="6550675742724504774">Opties</translation>
 <translation id="6570205395680337606">De app opnieuw instellen. Al je niet-opgeslagen werk gaat verloren.</translation>
+<translation id="6572345186230665992">Voor Mac (OS X Mavericks 10.9 en hoger)</translation>
 <translation id="6612717000975622067">Ctrl-Alt-Del verzenden</translation>
 <translation id="6640610550128933069">laatst online: <ph name="DATE" /></translation>
 <translation id="6668065415969892472">Je pincode is bijgewerkt.</translation>
@@ -232,7 +235,6 @@ Desktop-host</translation>
 <translation id="6930242544192836755">Duur</translation>
 <translation id="6939719207673461467">Toetsenbord weergeven/verbergen.</translation>
 <translation id="6944854424004126054">Venster herstellen</translation>
-<translation id="6962773374262604195">Voor Windows (XP en hoger)</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942">Weet je zeker dat je externe verbindingen met <ph name="HOSTNAME" /> wilt uitschakelen? Als je van gedachten verandert, moet je naar die computer gaan om de verbindingen weer in te schakelen.</translation>
 <translation id="6998989275928107238">Aan</translation>
@@ -288,6 +290,7 @@ Desktop-host</translation>
 <translation id="8759753423332885148">Meer informatie.</translation>
 <translation id="8791202241915690908">Installatieprogramma voor Chromoting-host downloaden</translation>
 <translation id="894763922177556086">Goed</translation>
+<translation id="895780780740011433">Voor Windows 7 en hoger</translation>
 <translation id="897805526397249209">Als je externe verbindingen met een andere computer mogelijk wilt maken, installeer je Chromoting en klik je op '<ph name="BUTTON_NAME" />'.</translation>
 <translation id="8998327464021325874">Controller voor Chrome Remote Desktop-host</translation>
 <translation id="9016232822027372900">Toch verbinding maken</translation>

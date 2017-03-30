@@ -7,13 +7,13 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
 #include "media/base/data_source.h"
@@ -101,6 +101,8 @@ class MEDIA_BLINK_EXPORT MultibufferDataSource
 
   int64_t GetMemoryUsage() const override;
 
+  GURL GetUrlAfterRedirects() const override;
+
   // DataSource implementation.
   // Called from demuxer thread.
   void Stop() override;
@@ -182,7 +184,7 @@ class MEDIA_BLINK_EXPORT MultibufferDataSource
   blink::WebFrame* frame_;
 
   // A resource reader for the media resource.
-  scoped_ptr<MultiBufferReader> reader_;
+  std::unique_ptr<MultiBufferReader> reader_;
 
   // Callback method from the pipeline for initialization.
   InitializeCB init_cb_;
@@ -190,7 +192,7 @@ class MEDIA_BLINK_EXPORT MultibufferDataSource
   // Read parameters received from the Read() method call. Must be accessed
   // under |lock_|.
   class ReadOperation;
-  scoped_ptr<ReadOperation> read_op_;
+  std::unique_ptr<ReadOperation> read_op_;
 
   // Protects |stop_signal_received_|, |read_op_| and |total_bytes_|.
   base::Lock lock_;

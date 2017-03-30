@@ -55,6 +55,7 @@ Maaaring hindi available ang ilang tampok at hindi mase-save ang mga pagbabago s
 <translation id="2673087257647337101">Halos napapanahon na! Muling ilunsad ang Chromium upang tapusin ang pag-update.</translation>
 <translation id="2685838254101182273">Huminto na sa pag-update ang Chromium at hindi na nito sinusuportahan ang bersyong ito ng iyong operating system.</translation>
 <translation id="2705212601509139398">Ginagamit ng site na ito ang plugin na Chromium Frame na malapit nang hindi suportahan. Paki-uninstall ito at mag-download ng compatible na browser.</translation>
+<translation id="2711502716910134313">Tab ng Chromium</translation>
 <translation id="2770231113462710648">Baguhin ang default na browser sa:</translation>
 <translation id="2801146392936645542">Nakakahamak ang <ph name="FILE_NAME" />, at na-block ito ng Chromium.</translation>
 <translation id="2847479871509788944">Alisin sa Chromium...</translation>
@@ -68,7 +69,6 @@ Maaaring hindi available ang ilang tampok at hindi mase-save ang mga pagbabago s
 <translation id="3130323860337406239">Ginagamit ng Chromium ang iyong mikropono.</translation>
 <translation id="313551035350905294">Nagsa-sign in ka gamit ang isang pinamamahalaang account at ibinibigay mo ang kontrol ng administrator nito sa iyong profile sa Chromium. Permanenteng mauugnay sa <ph name="USER_NAME" /> ang iyong data sa Chromium, gaya ng iyong apps, mga bookmark, kasaysayan, mga password, at iba pang mga setting. Matatanggal mo ang data na ito sa pamamagitan ng Dashboard ng Mga Google Account, ngunit hindi mo maiuugnay ang data na ito sa isa pang account.</translation>
 <translation id="3190315855212034486">Whoa! Nag-crash ang Chromium. Muling ilunsad ngayon?</translation>
-<translation id="3197823471738295152">Napapanahon ang iyong device.</translation>
 <translation id="3244477511402911926">Chromium Notification Center</translation>
 <translation id="3256316712990552818">Kinopya sa Chromium</translation>
 <translation id="3258596308407688501">Hindi makakapag-read at makakapag-write ang Chromium sa direktoryo ng data nito:
@@ -122,6 +122,7 @@ Maaaring hindi available ang ilang tampok at hindi mase-save ang mga pagbabago s
 <translation id="549669000822060376">Mangyaring maghintay habang ini-install ng Chromium ang mga pinakabagong update sa system.</translation>
 <translation id="5563479599352954471">Maghanap sa isang pagpindot lang</translation>
 <translation id="5620765574781326016">Matuto tungkol sa mga paksa sa mga website nang hindi umaalis sa page.</translation>
+<translation id="5634636535844844681">Kailangan ng Chromium ng Windows 7 o mas bago.</translation>
 <translation id="5680901439334282664">mag-sign in sa Chromium</translation>
 <translation id="5772805321386874569">(kinakailangang <ph name="BEGIN_BUTTON" />i-restart<ph name="END_BUTTON" /> ang Chromium)</translation>
 <translation id="5796460469508169315">Halos handa na ang Chromium.</translation>
@@ -181,6 +182,12 @@ Hindi mabawi ng Chromium ang iyong mga setting.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7339898014177206373">Bagong window</translation>
 <translation id="734373864078049451">Makikita dito ang iyong web, mga bookmark at iba pang mga bagay-bagay sa Chromium.</translation>
+<translation id="7344413941077984497">Upang itakda kung aling mga website ang matitingnan ni <ph name="NEW_PROFILE_NAME" />, maaari mong i-configure ang mga paghihigpit at setting sa pamamagitan ng pagbisita sa <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. Kung hindi mo babaguhin ang mga default na setting, maba-browse ni <ph name="NEW_PROFILE_NAME" /> ang lahat ng nasa web.
+
+Upang mapigilan si <ph name="NEW_PROFILE_NAME" /> na ma-access ang iyong account, tiyaking ila-lock mo ang iyong profile kapag hindi ka gumagamit ng Chromium. Upang gawin ito, i-click ang pangalan ng iyong profile sa kanang sulok sa itaas ng browser, at piliin ang "Lumabas at i-childlock."
+<ph name="BEGIN_LINK_2" />Matuto nang higit pa<ph name="END_LINK_2" />
+
+Pakitingnan ang iyong email sa <ph name="ACCOUNT_EMAIL" /> para sa mga karagdagang tagubilin.</translation>
 <translation id="7419987137528340081">Kung gusto mong ihiwalay ang iyong umiiral nang data sa Chromium, maaari kang lumikha ng bagong user ng Chromium para kay <ph name="USER_NAME" />.</translation>
 <translation id="7421823331379285070">Nangangailangan ang Chromium ng Windows XP o mas bago. Maaaring hindi gumana ang ilang tampok.</translation>
 <translation id="7463979740390522693">Chromium - Mga Notification (<ph name="QUANTITY" /> ang hindi pa nababasa)</translation>
@@ -209,6 +216,7 @@ Hindi mabawi ng Chromium ang iyong mga setting.</translation>
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> Ang Mga May-akda ng Chromium. Nakalaan ang lahat ng karapatan.</translation>
 <translation id="8621669128220841554">Nabigo ang pag-install dahil sa hindi natukoy na error. Mangyaring i-download muli ang Chromium.</translation>
 <translation id="8628626585870903697">Hindi isinasama ng Chromium ang PDF viewer na kinakailangan upang gumana ang Preview ng Pag-print.</translation>
+<translation id="8667808506758191620">Napapanahon ang iyong <ph name="DEVICE_TYPE" />.</translation>
 <translation id="8697124171261953979">Kinokontrol din nito kung anong pahina ang ipinapakita kapag sinimulan mo ang Chromium o naghanap mula sa Omnibox.</translation>
 <translation id="8704119203788522458">Ito ang iyong Chromium</translation>
 <translation id="872034308864968620">Hayaang Tumakbo ang Chromium sa Background</translation>
@@ -225,7 +233,6 @@ Hindi mabawi ng Chromium ang iyong mga setting.</translation>
 
 Kapag nag-sign in ka pa rin, isasama sa <ph name="ACCOUNT_EMAIL_NEW" /> ang impormasyon sa Chromium gaya ng mga bookmark, kasaysayan, at iba pang mga setting.</translation>
 <translation id="9013087743919948559">Idagdag sa Chromium</translation>
-<translation id="9013262824292842194">Kinakailangan ng Chromium ang Windows Vista o Windows XP na may SP2 o mas mataas.</translation>
 <translation id="9019929317751753759">Upang mas gawing ligtas ang Chromium, na-disable namin ang sumusunod na extension na hindi nakalista sa <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> na maaaring naidagdag nang hindi mo nalalalaman.</translation>
 <translation id="9022552996538154597">Mag-sign in sa Chromium</translation>
 <translation id="9036189287518468038">App Launcher ng Chromium</translation>

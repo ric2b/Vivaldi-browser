@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_SSL_CERTIFICATE_REPORTING_TEST_UTILS_H_
 #define CHROME_BROWSER_SSL_CERTIFICATE_REPORTING_TEST_UTILS_H_
 
+#include <memory>
 #include <string>
 
 #include "chrome/test/base/in_process_browser_test.h"
@@ -48,7 +49,7 @@ void SetCertReportingOptIn(Browser* browser, OptIn opt_in);
 // be owned by the caller. The mock SSLCertReporter will call
 // |run_loop|'s QuitClosure when a report is sent. It also checks that a
 // report is sent or not sent according to |expect_report|.
-scoped_ptr<SSLCertReporter> SetUpMockSSLCertReporter(
+std::unique_ptr<SSLCertReporter> SetUpMockSSLCertReporter(
     base::RunLoop* run_loop,
     ExpectReport expect_report);
 

@@ -52,7 +52,7 @@ class AVFMediaReaderRunner : public PlatformMediaPipeline {
   IPCDataSource* const data_source_;
 
   dispatch_queue_t reader_queue_;
-  scoped_ptr<AVFMediaReader> reader_;
+  std::unique_ptr<AVFMediaReader> reader_;
 
   bool will_seek_;
 

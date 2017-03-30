@@ -7,7 +7,7 @@
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/views/animation/ink_drop_hover.h"
-#include "ui/views/animation/square_ink_drop_animation.h"
+#include "ui/views/animation/square_ink_drop_ripple.h"
 
 namespace views {
 
@@ -46,16 +46,16 @@ void InkDropHostView::RemoveInkDropLayer(ui::Layer* ink_drop_layer) {
   SetPaintToLayer(false);
 }
 
-scoped_ptr<InkDropAnimation> InkDropHostView::CreateInkDropAnimation() const {
-  scoped_ptr<InkDropAnimation> animation(new SquareInkDropAnimation(
+std::unique_ptr<InkDropRipple> InkDropHostView::CreateInkDropRipple() const {
+  std::unique_ptr<InkDropRipple> ripple(new SquareInkDropRipple(
       CalculateLargeInkDropSize(ink_drop_size_), kInkDropLargeCornerRadius,
       ink_drop_size_, kInkDropSmallCornerRadius, GetInkDropCenter(),
       GetInkDropBaseColor()));
-  return animation;
+  return ripple;
 }
 
-scoped_ptr<InkDropHover> InkDropHostView::CreateInkDropHover() const {
-  scoped_ptr<InkDropHover> hover(
+std::unique_ptr<InkDropHover> InkDropHostView::CreateInkDropHover() const {
+  std::unique_ptr<InkDropHover> hover(
       new InkDropHover(ink_drop_size_, kInkDropSmallCornerRadius,
                        GetInkDropCenter(), GetInkDropBaseColor()));
   hover->set_explode_size(CalculateLargeInkDropSize(ink_drop_size_));

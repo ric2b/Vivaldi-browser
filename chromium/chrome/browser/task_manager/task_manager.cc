@@ -16,7 +16,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/private_working_set_snapshot.h"
@@ -35,6 +35,7 @@
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/user_manager.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
@@ -257,33 +258,27 @@ TaskManagerModel::TaskManagerModel(TaskManager* task_manager)
   AddResourceProvider(
       new task_manager::BrowserProcessResourceProvider(task_manager));
   AddResourceProvider(new task_manager::WebContentsResourceProvider(
-      task_manager,
-      scoped_ptr<WebContentsInformation>(
-          new task_manager::BackgroundInformation())));
+      task_manager, std::unique_ptr<WebContentsInformation>(
+                        new task_manager::BackgroundInformation())));
   AddResourceProvider(new task_manager::WebContentsResourceProvider(
-      task_manager,
-      scoped_ptr<WebContentsInformation>(
-          new task_manager::TabContentsInformation())));
+      task_manager, std::unique_ptr<WebContentsInformation>(
+                        new task_manager::TabContentsInformation())));
 #if defined(ENABLE_PRINT_PREVIEW)
   AddResourceProvider(new task_manager::WebContentsResourceProvider(
-      task_manager,
-      scoped_ptr<WebContentsInformation>(
-          new task_manager::PrintingInformation())));
+      task_manager, std::unique_ptr<WebContentsInformation>(
+                        new task_manager::PrintingInformation())));
 #endif  // ENABLE_PRINT_PREVIEW
   AddResourceProvider(new task_manager::WebContentsResourceProvider(
-      task_manager,
-      scoped_ptr<WebContentsInformation>(
-          new task_manager::PanelInformation())));
+      task_manager, std::unique_ptr<WebContentsInformation>(
+                        new task_manager::PanelInformation())));
   AddResourceProvider(
       new task_manager::ChildProcessResourceProvider(task_manager));
   AddResourceProvider(new task_manager::WebContentsResourceProvider(
-      task_manager,
-      scoped_ptr<WebContentsInformation>(
-          new task_manager::ExtensionInformation())));
+      task_manager, std::unique_ptr<WebContentsInformation>(
+                        new task_manager::ExtensionInformation())));
   AddResourceProvider(new task_manager::WebContentsResourceProvider(
-      task_manager,
-      scoped_ptr<WebContentsInformation>(
-          new task_manager::GuestInformation())));
+      task_manager, std::unique_ptr<WebContentsInformation>(
+                        new task_manager::GuestInformation())));
 #if defined(OS_WIN)
   working_set_snapshot_.reset(new PrivateWorkingSetSnapshot);
   working_set_snapshot_->AddToMonitorList("chrome");
@@ -1513,6 +1508,16 @@ Resource* TaskManagerModel::GetResource(int index) const {
 void TaskManager::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(prefs::kTaskManagerWindowPlacement);
   registry->RegisterDictionaryPref(prefs::kTaskManagerColumnVisibility);
+  registry->RegisterBooleanPref(prefs::kTaskManagerEndProcessEnabled, true);
+}
+
+// static
+bool TaskManager::IsEndProcessEnabled() {
+  if (g_browser_process->local_state()) {
+    return g_browser_process->local_state()->GetBoolean(
+        prefs::kTaskManagerEndProcessEnabled);
+  }
+  return true;
 }
 
 bool TaskManager::IsBrowserProcess(int index) const {
@@ -1560,6 +1565,7 @@ void TaskManager::ModelChanged() {
 
 // static
 TaskManager* TaskManager::GetInstance() {
+  CHECK(!switches::NewTaskManagerEnabled());
   return base::Singleton<TaskManager>::get();
 }
 

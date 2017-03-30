@@ -15,7 +15,7 @@
 #include "mojo/public/cpp/bindings/tests/variant_test_util.h"
 #include "mojo/public/interfaces/bindings/tests/struct_with_traits.mojom.h"
 #include "mojo/public/interfaces/bindings/tests/test_native_types.mojom-blink.h"
-#include "mojo/public/interfaces/bindings/tests/test_native_types.mojom-chromium.h"
+#include "mojo/public/interfaces/bindings/tests/test_native_types.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace mojo {
@@ -55,11 +55,11 @@ void ExpectError(InterfacePtr<T> *proxy, const base::Closure& callback) {
 }
 
 // This implements the generated Chromium variant of RectService.
-class ChromiumRectServiceImpl : public chromium::RectService {
+class ChromiumRectServiceImpl : public RectService {
  public:
   ChromiumRectServiceImpl() {}
 
-  // mojo::test::chromium::RectService:
+  // mojo::test::RectService:
   void AddRect(const RectChromium& r) override {
     if (r.GetArea() > largest_rect_.GetArea())
       largest_rect_ = r;
@@ -103,19 +103,19 @@ class StructTraitsTest : public testing::Test,
   StructTraitsTest() {}
 
  protected:
-  void BindToChromiumService(chromium::RectServiceRequest request) {
+  void BindToChromiumService(RectServiceRequest request) {
     chromium_bindings_.AddBinding(&chromium_service_, std::move(request));
   }
   void BindToChromiumService(blink::RectServiceRequest request) {
     chromium_bindings_.AddBinding(
         &chromium_service_,
-        ConvertInterfaceRequest<chromium::RectService>(std::move(request)));
+        ConvertInterfaceRequest<RectService>(std::move(request)));
   }
 
   void BindToBlinkService(blink::RectServiceRequest request) {
     blink_bindings_.AddBinding(&blink_service_, std::move(request));
   }
-  void BindToBlinkService(chromium::RectServiceRequest request) {
+  void BindToBlinkService(RectServiceRequest request) {
     blink_bindings_.AddBinding(
         &blink_service_,
         ConvertInterfaceRequest<blink::RectService>(std::move(request)));
@@ -136,7 +136,7 @@ class StructTraitsTest : public testing::Test,
   base::MessageLoop loop_;
 
   ChromiumRectServiceImpl chromium_service_;
-  BindingSet<chromium::RectService> chromium_bindings_;
+  BindingSet<RectService> chromium_bindings_;
 
   BlinkRectServiceImpl blink_service_;
   BindingSet<blink::RectService> blink_bindings_;
@@ -147,7 +147,7 @@ class StructTraitsTest : public testing::Test,
 }  // namespace
 
 TEST_F(StructTraitsTest, ChromiumProxyToChromiumService) {
-  chromium::RectServicePtr chromium_proxy;
+  RectServicePtr chromium_proxy;
   BindToChromiumService(GetProxy(&chromium_proxy));
   {
     base::RunLoop loop;
@@ -160,7 +160,7 @@ TEST_F(StructTraitsTest, ChromiumProxyToChromiumService) {
 }
 
 TEST_F(StructTraitsTest, ChromiumToBlinkService) {
-  chromium::RectServicePtr chromium_proxy;
+  RectServicePtr chromium_proxy;
   BindToBlinkService(GetProxy(&chromium_proxy));
   {
     base::RunLoop loop;
@@ -214,6 +214,11 @@ TEST_F(StructTraitsTest, FieldTypes) {
   input.set_uint32(7);
   input.set_uint64(42);
   input.set_string("hello world!");
+  input.get_mutable_string_array().assign({"hello", "world!"});
+  input.get_mutable_struct().value = 42;
+  input.get_mutable_struct_array().resize(2);
+  input.get_mutable_struct_array()[0].value = 1;
+  input.get_mutable_struct_array()[1].value = 2;
 
   base::RunLoop loop;
   TraitsTestServicePtr proxy = GetTraitsTestProxy();
@@ -224,6 +229,9 @@ TEST_F(StructTraitsTest, FieldTypes) {
         EXPECT_EQ(input.get_uint32(), passed.get_uint32());
         EXPECT_EQ(input.get_uint64(), passed.get_uint64());
         EXPECT_EQ(input.get_string(), passed.get_string());
+        EXPECT_EQ(input.get_string_array(), passed.get_string_array());
+        EXPECT_EQ(input.get_struct(), passed.get_struct());
+        EXPECT_EQ(input.get_struct_array(), passed.get_struct_array());
         loop.Quit();
       });
   loop.Run();

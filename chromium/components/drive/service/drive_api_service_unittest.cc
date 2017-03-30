@@ -36,8 +36,7 @@ class TestAuthService : public google_apis::DummyAuthService {
 
 TEST(DriveAPIServiceTest, BatchRequestConfiguratorWithAuthFailure) {
   const GURL test_base_url("http://localhost/");
-  google_apis::DriveApiUrlGenerator url_generator(
-      test_base_url, test_base_url, test_base_url);
+  google_apis::DriveApiUrlGenerator url_generator(test_base_url, test_base_url);
   scoped_refptr<base::TestSimpleTaskRunner> task_runner =
       new base::TestSimpleTaskRunner();
   scoped_refptr<net::TestURLRequestContextGetter> request_context_getter =
@@ -55,7 +54,7 @@ TEST(DriveAPIServiceTest, BatchRequestConfiguratorWithAuthFailure) {
 
   {
     google_apis::DriveApiErrorCode error = google_apis::HTTP_SUCCESS;
-    scoped_ptr<google_apis::FileResource> file_resource;
+    std::unique_ptr<google_apis::FileResource> file_resource;
     configurator.MultipartUploadNewFile(
         "text/plain", 10, "", "title",
         base::FilePath(FILE_PATH_LITERAL("/file")), UploadNewFileOptions(),
@@ -66,7 +65,7 @@ TEST(DriveAPIServiceTest, BatchRequestConfiguratorWithAuthFailure) {
   }
   {
     google_apis::DriveApiErrorCode error = google_apis::HTTP_SUCCESS;
-    scoped_ptr<google_apis::FileResource> file_resource;
+    std::unique_ptr<google_apis::FileResource> file_resource;
     configurator.MultipartUploadExistingFile(
         "text/plain", 10, "resource_id",
         base::FilePath(FILE_PATH_LITERAL("/file")), UploadExistingFileOptions(),

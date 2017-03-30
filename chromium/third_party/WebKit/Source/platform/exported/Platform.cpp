@@ -28,12 +28,13 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "platform/Histogram.h"
 #include "platform/PartitionAllocMemoryDumpProvider.h"
 #include "platform/fonts/FontCacheMemoryDumpProvider.h"
 #include "platform/graphics/CompositorFactory.h"
+#include "platform/heap/BlinkGCMemoryDumpProvider.h"
 #include "platform/heap/GCTaskRunner.h"
 #include "platform/web_memory_dump_provider_adapter.h"
 #include "public/platform/Platform.h"
@@ -91,7 +92,9 @@ void Platform::initialize(Platform* platform)
     WTF::Partitions::initialize(maxObservedSizeFunction);
     WTF::initialize(callOnMainThreadFunction);
 
-    Heap::init();
+    ProcessHeap::init();
+    if (base::ThreadTaskRunnerHandle::IsSet())
+        base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(BlinkGCMemoryDumpProvider::instance(), "BlinkGC", base::ThreadTaskRunnerHandle::Get());
 
     ThreadState::attachMainThread();
 
@@ -99,8 +102,8 @@ void Platform::initialize(Platform* platform)
     if (s_platform->m_mainThread) {
         ASSERT(!s_gcTaskRunner);
         s_gcTaskRunner = new GCTaskRunner(s_platform->m_mainThread);
-        s_platform->registerMemoryDumpProvider(PartitionAllocMemoryDumpProvider::instance(), "PartitionAlloc");
-        s_platform->registerMemoryDumpProvider(FontCacheMemoryDumpProvider::instance(), "FontCaches");
+        base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(PartitionAllocMemoryDumpProvider::instance(), "PartitionAlloc", base::ThreadTaskRunnerHandle::Get());
+        base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(FontCacheMemoryDumpProvider::instance(), "FontCaches", base::ThreadTaskRunnerHandle::Get());
     }
 
     CompositorFactory::initializeDefault();
@@ -112,8 +115,10 @@ void Platform::shutdown()
     CompositorFactory::shutdown();
 
     if (s_platform->m_mainThread) {
-        s_platform->unregisterMemoryDumpProvider(FontCacheMemoryDumpProvider::instance());
-        s_platform->unregisterMemoryDumpProvider(PartitionAllocMemoryDumpProvider::instance());
+        base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(FontCacheMemoryDumpProvider::instance());
+        base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(PartitionAllocMemoryDumpProvider::instance());
+        base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(BlinkGCMemoryDumpProvider::instance());
+
         ASSERT(s_gcTaskRunner);
         delete s_gcTaskRunner;
         s_gcTaskRunner = nullptr;
@@ -123,7 +128,7 @@ void Platform::shutdown()
     // so that the main thread won't get involved in a GC during the shutdown.
     ThreadState::detachMainThread();
 
-    Heap::shutdown();
+    ProcessHeap::shutdown();
 
     WTF::shutdown();
     WTF::Partitions::shutdown();

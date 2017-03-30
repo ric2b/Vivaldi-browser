@@ -135,11 +135,11 @@ class PersonalDataManager : public KeyedService,
 
   // Updates |credit_card| which already exists in the web database. This
   // can only be used on local credit cards.
-  void UpdateCreditCard(const CreditCard& credit_card);
+  virtual void UpdateCreditCard(const CreditCard& credit_card);
 
   // Update a server card. Only the full number and masked/unmasked
   // status can be changed.
-  void UpdateServerCreditCard(const CreditCard& credit_card);
+  virtual void UpdateServerCreditCard(const CreditCard& credit_card);
 
   // Resets the card for |guid| to the masked state.
   void ResetFullServerCard(const std::string& guid);
@@ -149,6 +149,9 @@ class PersonalDataManager : public KeyedService,
 
   // Deletes all server profiles and cards (both masked and unmasked).
   void ClearAllServerData();
+
+  // Sets a server credit card for test.
+  void AddServerCreditCardForTest(std::unique_ptr<CreditCard> credit_card);
 
   // Returns the credit card with the specified |guid|, or NULL if there is
   // no credit card with the specified |guid|.
@@ -216,7 +219,7 @@ class PersonalDataManager : public KeyedService,
   // profile.
   static std::string MergeProfile(
       const AutofillProfile& new_profile,
-      const std::vector<AutofillProfile*>& existing_profiles,
+      std::vector<AutofillProfile*> existing_profiles,
       const std::string& app_locale,
       std::vector<AutofillProfile>* merged_profiles);
 

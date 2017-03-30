@@ -110,6 +110,8 @@ static const CSSPropertyID staticComputableProperties[] = {
     CSSPropertyFontStyle,
     CSSPropertyFontVariant,
     CSSPropertyFontVariantLigatures,
+    CSSPropertyFontVariantCaps,
+    CSSPropertyFontVariantNumeric,
     CSSPropertyFontWeight,
     CSSPropertyHeight,
     CSSPropertyImageOrientation,
@@ -241,6 +243,7 @@ static const CSSPropertyID staticComputableProperties[] = {
     CSSPropertyGridColumnGap,
     CSSPropertyGridRowGap,
     CSSPropertyWebkitHighlight,
+    CSSPropertyHyphens,
     CSSPropertyWebkitHyphenateCharacter,
     CSSPropertyWebkitLineBreak,
     CSSPropertyWebkitLineClamp,
@@ -353,9 +356,6 @@ static const Vector<CSSPropertyID>& computableProperties()
 CSSComputedStyleDeclaration::CSSComputedStyleDeclaration(Node* n, bool allowVisitedStyle, const String& pseudoElementName)
     : m_node(n)
     , m_allowVisitedStyle(allowVisitedStyle)
-#if !ENABLE(OILPAN)
-    , m_refCount(1)
-#endif
 {
     unsigned nameWithoutColonsStart = pseudoElementName[0] == ':' ? (pseudoElementName[1] == ':' ? 2 : 1) : 0;
     m_pseudoElementSpecifier = CSSSelector::pseudoId(CSSSelector::parsePseudoType(
@@ -365,20 +365,6 @@ CSSComputedStyleDeclaration::CSSComputedStyleDeclaration(Node* n, bool allowVisi
 CSSComputedStyleDeclaration::~CSSComputedStyleDeclaration()
 {
 }
-
-#if !ENABLE(OILPAN)
-void CSSComputedStyleDeclaration::ref()
-{
-    ++m_refCount;
-}
-
-void CSSComputedStyleDeclaration::deref()
-{
-    ASSERT(m_refCount);
-    if (!--m_refCount)
-        delete this;
-}
-#endif
 
 String CSSComputedStyleDeclaration::cssText() const
 {
@@ -419,7 +405,7 @@ CSSValue* CSSComputedStyleDeclaration::getFontSizeCSSValuePreferringKeyword() co
     if (!m_node)
         return nullptr;
 
-    m_node->document().updateLayoutIgnorePendingStylesheets();
+    m_node->document().updateStyleAndLayoutIgnorePendingStylesheets();
 
     const ComputedStyle* style = m_node->ensureComputedStyle(m_pseudoElementSpecifier);
     if (!style)
@@ -529,6 +515,12 @@ Node* CSSComputedStyleDeclaration::styledNode() const
 
 CSSValue* CSSComputedStyleDeclaration::getPropertyCSSValue(AtomicString customPropertyName) const
 {
+    Node* styledNode = this->styledNode();
+    if (!styledNode)
+        return nullptr;
+
+    styledNode->document().updateStyleAndLayoutTreeForNode(styledNode);
+
     const ComputedStyle* style = computeComputedStyle();
     if (!style)
         return nullptr;
@@ -548,26 +540,23 @@ CSSValue* CSSComputedStyleDeclaration::getPropertyCSSValue(CSSPropertyID propert
     Node* styledNode = this->styledNode();
     if (!styledNode)
         return nullptr;
-    LayoutObject* layoutObject = styledNode->layoutObject();
-    const ComputedStyle* style;
 
     Document& document = styledNode->document();
-
-    document.updateLayoutTreeForNode(styledNode);
+    document.updateStyleAndLayoutTreeForNode(styledNode);
 
     // The style recalc could have caused the styled node to be discarded or replaced
     // if it was a PseudoElement so we need to update it.
     styledNode = this->styledNode();
-    layoutObject = styledNode->layoutObject();
+    LayoutObject* layoutObject = styledNode->layoutObject();
 
-    style = computeComputedStyle();
+    const ComputedStyle* style = computeComputedStyle();
 
     bool forceFullLayout = isLayoutDependent(propertyID, style, layoutObject)
         || styledNode->isInShadowTree()
-        || (document.ownerElement() && document.ensureStyleResolver().hasViewportDependentMediaQueries());
+        || (document.localOwner() && document.ensureStyleResolver().hasViewportDependentMediaQueries());
 
     if (forceFullLayout) {
-        document.updateLayoutIgnorePendingStylesheetsForNode(styledNode);
+        document.updateStyleAndLayoutIgnorePendingStylesheetsForNode(styledNode);
         styledNode = this->styledNode();
         style = computeComputedStyle();
         layoutObject = styledNode->layoutObject();
@@ -611,7 +600,7 @@ String CSSComputedStyleDeclaration::item(unsigned i) const
 bool CSSComputedStyleDeclaration::cssPropertyMatches(CSSPropertyID propertyID, const CSSValue* propertyValue) const
 {
     if (propertyID == CSSPropertyFontSize && propertyValue->isPrimitiveValue() && m_node) {
-        m_node->document().updateLayoutIgnorePendingStylesheets();
+        m_node->document().updateStyleAndLayoutIgnorePendingStylesheets();
         const ComputedStyle* style = m_node->ensureComputedStyle(m_pseudoElementSpecifier);
         if (style && style->getFontDescription().keywordSize()) {
             CSSValueID sizeValue = cssIdentifierForFontSizeKeyword(style->getFontDescription().keywordSize());

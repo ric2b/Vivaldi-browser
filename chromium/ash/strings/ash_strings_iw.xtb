@@ -26,6 +26,7 @@
 <translation id="1602076796624386989">הפעל נתונים לנייד</translation>
 <translation id="1621499497873603021">הזמן שנותר עד להתרוקנות הסוללה, <ph name="TIME_LEFT" /></translation>
 <translation id="164969095109328410">‏מכשיר Chrome</translation>
+<translation id="1677472565718498478">זמן נותר - <ph name="TIME" /></translation>
 <translation id="1723752762323179280">יוצא מההפעלה</translation>
 <translation id="1747827819627189109">המקלדת שמופיעה במסך מופעלת</translation>
 <translation id="1812696562331527143">‏שיטת הקלט שלך השתנתה ל-‏<ph name="INPUT_METHOD_ID" />*(<ph name="BEGIN_LINK" />צד שלישי<ph name="END_LINK" />)‎.
@@ -92,7 +93,6 @@
 <translation id="3621712662352432595">הגדרות אודיו</translation>
 <translation id="3625258641415618104">צילומי מסך מושבתים</translation>
 <translation id="3626281679859535460">בהירות</translation>
-<translation id="3626637461649818317">‏<ph name="PERCENTAGE" />%‎ נותרו</translation>
 <translation id="3678715477168044796"><ph name="DISPLAY_NAME" />‏: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079">הרזולוציה של <ph name="DISPLAY_NAME" /> שונתה ל-<ph name="RESOLUTION" /></translation>
 <translation id="370649949373421643">‏הפעל Wi-Fi</translation>
@@ -111,13 +111,13 @@
 <translation id="397105322502079400">מחשב...</translation>
 <translation id="3995138139523574647">‏מכשיר עם יציאת USB-C (יציאה ימנית-אחורית)</translation>
 <translation id="4053612967614057854">השבת את המקלדת שמופיעה במסך</translation>
-<translation id="412065659894267608"><ph name="HOUR" /> שעות ו-<ph name="MINUTE" /> דקות עד לטעינה מלאה</translation>
 <translation id="4250680216510889253">לא</translation>
 <translation id="4279490309300973883">שיקוף</translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4421231901400348175">שיתוף השליטה במסך עם <ph name="HELPER_NAME" /> דרך סיוע מרחוק.</translation>
 <translation id="4430019312045809116">עוצמת קול</translation>
 <translation id="4527045527269911712">‏מכשיר ה-Bluetooth ‏"<ph name="DEVICE_NAME" />" מבקש הרשאה לבצע התאמה.</translation>
+<translation id="453661520163887813"><ph name="TIME" /> עד למילוי</translation>
 <translation id="4544944664594876241">מקש הקיצור לנעילת המסך השתנה. השתמש ב-<ph name="NEW_SHORTCUT" /> במקום ב-<ph name="OLD_SHORTCUT" />.</translation>
 <translation id="479989351350248267">Search</translation>
 <translation id="4804818685124855865">נתק</translation>
@@ -129,7 +129,6 @@
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">‏Ctrl‏+Shift+רווח</translation>
 <translation id="5045002648206642691">‏הגדרות Google Drive...</translation>
-<translation id="5102001756192215136">נותרו <ph name="HOUR" /> <ph name="MINUTE" /></translation>
 <translation id="511445211639755999"><ph name="RESOLUTION" />‏, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">מכשירי העברה זמינים</translation>
 <translation id="5222676887888702881">יציאה</translation>
@@ -166,7 +165,6 @@
 <translation id="615957422585914272">הצג מקלדת במסך</translation>
 <translation id="6165508094623778733">למידע נוסף</translation>
 <translation id="6203030746557259519">תצוגה וירטואלית</translation>
-<translation id="6247708409970142803">%<ph name="PERCENTAGE" /></translation>
 <translation id="6248847161401822652">‏לחץ פעמיים על Control Shift Q כדי לצאת.</translation>
 <translation id="6310121235600822547">בוצע סיבוב של <ph name="DISPLAY_NAME" /> אל <ph name="ROTATION" /></translation>
 <translation id="6359806961507272919">‏SMS מאת <ph name="PHONE_NUMBER" /> </translation>
@@ -206,6 +204,7 @@
 <translation id="7510334386202674593">Ctrl+Shift+L</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> אינו תומך ב-<ph name="SPECIFIED_RESOLUTION" />. הרזולוציה שונתה ל-<ph name="FALLBACK_RESOLUTION" /></translation>
 <translation id="7573962313813535744">מצב מעוגן</translation>
+<translation id="7580671184200851182">השמע את אותו אודיו מכל הרמקולים (אודיו מונו)</translation>
 <translation id="7593891976182323525">‏חיפוש או Shift</translation>
 <translation id="7649070708921625228">עזרה</translation>
 <translation id="7692480393933218409">‏טעינת מכשירים מחוברים עם יציאת USB-C</translation>
@@ -224,13 +223,14 @@
 <translation id="8308637677604853869">התפריט הקודם</translation>
 <translation id="8356164830168736643">סגור <ph name="WINDOW_TITLE" /></translation>
 <translation id="8428213095426709021">הגדרות</translation>
-<translation id="8456362689280298700"><ph name="HOUR" />:<ph name="MINUTE" /> עד שמתמלא</translation>
 <translation id="8517041960877371778">ייתכן שה-<ph name="DEVICE_TYPE" /> לא ייטען כשהוא פועל.</translation>
 <translation id="8528322925433439945">נייד ...</translation>
+<translation id="8639760480004882931">שיעור טעינה נותר - <ph name="PERCENTAGE" /></translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">חובר מטען בעל מתח נמוך</translation>
 <translation id="8814190375133053267">Wi-Fi</translation>
 <translation id="882279321799040148">לחץ להצגה</translation>
+<translation id="8825534185036233643">אין תמיכה בשיקוף מסך עם יותר משני מסכים.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8850991929411075241">Search+Esc</translation>
 <translation id="8878886163241303700">מסך מתרחב</translation>

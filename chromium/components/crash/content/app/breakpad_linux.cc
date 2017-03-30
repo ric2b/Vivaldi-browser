@@ -213,7 +213,7 @@ void my_uint64tos(char* output, uint64_t i, unsigned i_len) {
 
 #if !defined(OS_CHROMEOS)
 bool my_isxdigit(char c) {
-  return (c >= '0' && c <= '9') || ((c | 0x20) >= 'a' && (c | 0x20) <= 'f');
+  return base::IsAsciiDigit(c) || ((c | 0x20) >= 'a' && (c | 0x20) <= 'f');
 }
 #endif
 
@@ -603,8 +603,6 @@ bool FinalizeCrashDoneAndroid(bool is_browser_process) {
                       android_build_info->package_version_name());
   __android_log_write(ANDROID_LOG_WARN, kGoogleBreakpad,
                       android_build_info->package_version_code());
-  __android_log_write(ANDROID_LOG_WARN, kGoogleBreakpad,
-                      CHROME_BUILD_ID);
   AndroidLogWriteHorizontalRule();
 
   if (!is_browser_process &&

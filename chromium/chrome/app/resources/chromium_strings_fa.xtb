@@ -53,6 +53,7 @@
 <translation id="2673087257647337101">‏تقریباً به روز است! برای پایان به‌روزرسانی، Chromium را راه‌اندازی مجدد کنید.</translation>
 <translation id="2685838254101182273">‏Chromium دیگر به‌روزرسانی نمی‌شود ودیگر از این نسخه سیستم عامل پشتیبانی نمی‌کند.</translation>
 <translation id="2705212601509139398">‏این سایت از افزایه Chromium Frame استفاده می‌کند که به زودی پشتیبانی از آن متوقف می‌شود. لطفاً آن را حذف نصب کرده و یک مرورگر سازگار بارگیری کنید.</translation>
+<translation id="2711502716910134313">‏برگه Chromium</translation>
 <translation id="2770231113462710648">تغییر مرورگر پیش‌فرض به:</translation>
 <translation id="2801146392936645542">‏<ph name="FILE_NAME" /> مخرب است، و Chromium آن را مسدود کرده است.</translation>
 <translation id="2847479871509788944">‏حذف از Chromium...</translation>
@@ -66,7 +67,6 @@
 <translation id="3130323860337406239">‏Chromium درحال استفاده از میکروفون شما است.</translation>
 <translation id="313551035350905294">‏شما با حساب مدیریت‌شده وارد سیستم می‌شوید و به سرپرست اجازه کنترل نمایه Chromium خود را می‌دهید. داده‌های Chromium، مانند برنامه‌ها، نشانک‌ها، سابقه، گذرواژه‌ها و سایر تنظیمات شما برای همیشه به <ph name="USER_NAME" /> مرتبط می‌شود. شما می‌توانید این داده‌ها را از طریق داشبورد حساب Google خود حذف کنید، اما نمی‌توانید این داده‌ها را با حساب دیگری مربوط کنید.</translation>
 <translation id="3190315855212034486">‏اوه! Chromium خراب شده است. دوباره راه‌اندازی شود؟</translation>
-<translation id="3197823471738295152">دستگاه شما به‌روزرسانی شده است.</translation>
 <translation id="3244477511402911926">‏مرکز اعلان Chromium</translation>
 <translation id="3256316712990552818">‏به Chromium کپی شد</translation>
 <translation id="3258596308407688501">‏Chromium نمی‌تواند مسیر داده‌های خود را بخواند یا در آن بنویسد:
@@ -119,6 +119,7 @@
 <translation id="549669000822060376">‏وقتی Chromium جدیدترین به‌روزرسانی‌های سیستم را نصب می‌کند، لطفاً صبر کنید.</translation>
 <translation id="5563479599352954471">جستجو فقط با یک تماس</translation>
 <translation id="5620765574781326016">بدون اینکه صفحه را ترک کنید، درباره موضوعات در وب‌سایت‌ها اطلاعاتی به دست آورید.</translation>
+<translation id="5634636535844844681">‏Chromium به Windows 7 یا بالاتر نیاز دارد.</translation>
 <translation id="5680901439334282664">‏ورود به سیستم Chromium</translation>
 <translation id="5772805321386874569">‏(Chromium باید <ph name="BEGIN_BUTTON" />راه‌اندازی مجدد<ph name="END_BUTTON" /> شود)</translation>
 <translation id="5796460469508169315">‏Chromium تقریباً آماده است.</translation>
@@ -177,6 +178,12 @@ Chromium قادر به بازیابی تنظیمات شما نیست.</translati
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7339898014177206373">پنجرهٔ جدید</translation>
 <translation id="734373864078049451">‏وب، نشانک‌ها و موارد دیگر Chromium شما در اینجا هستند.</translation>
+<translation id="7344413941077984497">‏برای تنظیم وب‌سایت‌هایی که <ph name="NEW_PROFILE_NAME" /> می‌تواند ببیند، می‌توانید با رفتن به <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" /> محدودیت‌ها و تنظیمات را اعمال کنید. اگر تنظیمات پیش‌فرض را تغییر ندهید، <ph name="NEW_PROFILE_NAME" /> می‌تواند همه محتوای وب را مرور کند.
+
+برای اینکه <ph name="NEW_PROFILE_NAME" /> نتواند به محتوای شما دسترسی داشته باشد، حتماً در زمان‌هایی که از Chromium استفاده نمی‌کنید نمایه‌تان را قفل کنید. برای انجام این کار، روی نام نمایه در گوشه چپ بالای مرورگر کلیک کنید و «خروج و قفل کودک» را انتخاب نمایید.
+<ph name="BEGIN_LINK_2" />بیشتر بدانید<ph name="END_LINK_2" />
+
+برای دستورالعمل‌های بیشتر، لطفاً رایانامه‌تان (<ph name="ACCOUNT_EMAIL" />) را بررسی کنید.</translation>
 <translation id="7419987137528340081">‏اگر ترجیح می‌دهید داده‌های Chromium خود را جدا نگهدارید، می‌توانید برای <ph name="USER_NAME" />، کاربر Chromium جدیدی ایجاد کنید.</translation>
 <translation id="7421823331379285070">‏Chromium به Windows XP یا نسخه بالاتر آن نیاز دارد. برخی از ویژگی‌ها ممکن است کار نکند.</translation>
 <translation id="7463979740390522693">‏Chromium - اعلان‌ها (<ph name="QUANTITY" /> خوانده نشده)</translation>
@@ -205,6 +212,7 @@ Chromium قادر به بازیابی تنظیمات شما نیست.</translati
 <translation id="8586442755830160949">‏حق نسخه‌برداری <ph name="YEAR" /> نویسندگان Chromium. کلیه حقوق محفوظ است.</translation>
 <translation id="8621669128220841554">‏به دلیل خطای نامشخص، نصب ناموفق بود. لطفاً دوباره Chromium را بارگیری کنید.</translation>
 <translation id="8628626585870903697">‏Chromium فاقد نمایشگر PDF است که برای عملکرد پیش‌نمایش چاپ لازم است.</translation>
+<translation id="8667808506758191620"><ph name="DEVICE_TYPE" /> شما به‌ روز است.</translation>
 <translation id="8697124171261953979">‏این برنامه همچنین صفحه‌ای را که هنگام راه‌اندازی Chromium یا جستجو از Omnibox نشان داده می‌شود، کنترل می‌کند.</translation>
 <translation id="8704119203788522458">‏این Chromium شماست</translation>
 <translation id="872034308864968620">‏اجازه به Chromium Run برای اجرا در پس‌زمینه</translation>
@@ -221,7 +229,6 @@ Chromium قادر به بازیابی تنظیمات شما نیست.</translati
 
 ورود به سیستم به هر حال اطلاعات Chromium مانند نشانک‌ها، سابقه، و سایر تنظیمات را در <ph name="ACCOUNT_EMAIL_NEW" /> ادغام می‌کند.</translation>
 <translation id="9013087743919948559">‏افزودن به Chromium</translation>
-<translation id="9013262824292842194">‏Chromium به Windows Vista یا Windows XP دارای SP2 یا بالاتر نیاز دارد.</translation>
 <translation id="9019929317751753759">‏برای ایمن‌تر کردن Chromium، افزونه زیر را که در <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> فهرست نشده است و ممکن است بدون اطلاع شما اضافه شده باشد، غیرفعال کردیم.</translation>
 <translation id="9022552996538154597">‏ورود به سیستم Chromium</translation>
 <translation id="9036189287518468038">‏راه‌انداز برنامه Chromium</translation>

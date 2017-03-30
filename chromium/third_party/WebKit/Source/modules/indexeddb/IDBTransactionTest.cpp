@@ -93,7 +93,7 @@ TEST_F(IDBTransactionTest, EnsureLifetime)
     OwnPtr<MockWebIDBDatabase> backend = MockWebIDBDatabase::create();
     EXPECT_CALL(*backend, close())
         .Times(1);
-    Persistent<IDBDatabase> db = IDBDatabase::create(getExecutionContext(), backend.release(), FakeIDBDatabaseCallbacks::create());
+    Persistent<IDBDatabase> db = IDBDatabase::create(getExecutionContext(), std::move(backend), FakeIDBDatabaseCallbacks::create());
 
     const int64_t transactionId = 1234;
     const HashSet<String> transactionScope = HashSet<String>();
@@ -101,13 +101,13 @@ TEST_F(IDBTransactionTest, EnsureLifetime)
     PersistentHeapHashSet<WeakMember<IDBTransaction>> set;
     set.add(transaction);
 
-    Heap::collectAllGarbage();
+    ThreadHeap::collectAllGarbage();
     EXPECT_EQ(1u, set.size());
 
     Persistent<IDBRequest> request = IDBRequest::create(getScriptState(), IDBAny::createUndefined(), transaction.get());
     deactivateNewTransactions();
 
-    Heap::collectAllGarbage();
+    ThreadHeap::collectAllGarbage();
     EXPECT_EQ(1u, set.size());
 
     // This will generate an abort() call to the back end which is dropped by the fake proxy,
@@ -116,7 +116,7 @@ TEST_F(IDBTransactionTest, EnsureLifetime)
     transaction->onAbort(DOMException::create(AbortError, "Aborted"));
     transaction.clear();
 
-    Heap::collectAllGarbage();
+    ThreadHeap::collectAllGarbage();
     EXPECT_EQ(0u, set.size());
 }
 
@@ -129,24 +129,24 @@ TEST_F(IDBTransactionTest, TransactionFinish)
         .Times(1);
     EXPECT_CALL(*backend, close())
         .Times(1);
-    Persistent<IDBDatabase> db = IDBDatabase::create(getExecutionContext(), backend.release(), FakeIDBDatabaseCallbacks::create());
+    Persistent<IDBDatabase> db = IDBDatabase::create(getExecutionContext(), std::move(backend), FakeIDBDatabaseCallbacks::create());
 
     const HashSet<String> transactionScope = HashSet<String>();
     Persistent<IDBTransaction> transaction = IDBTransaction::create(getScriptState(), transactionId, transactionScope, WebIDBTransactionModeReadOnly, db.get());
     PersistentHeapHashSet<WeakMember<IDBTransaction>> set;
     set.add(transaction);
 
-    Heap::collectAllGarbage();
+    ThreadHeap::collectAllGarbage();
     EXPECT_EQ(1u, set.size());
 
     deactivateNewTransactions();
 
-    Heap::collectAllGarbage();
+    ThreadHeap::collectAllGarbage();
     EXPECT_EQ(1u, set.size());
 
     transaction.clear();
 
-    Heap::collectAllGarbage();
+    ThreadHeap::collectAllGarbage();
     EXPECT_EQ(1u, set.size());
 
     // Stop the context, so events don't get queued (which would keep the transaction alive).
@@ -157,7 +157,7 @@ TEST_F(IDBTransactionTest, TransactionFinish)
     db->onAbort(transactionId, DOMException::create(AbortError, "Aborted"));
 
     // onAbort() should have cleared the transaction's reference to the database.
-    Heap::collectAllGarbage();
+    ThreadHeap::collectAllGarbage();
     EXPECT_EQ(0u, set.size());
 }
 

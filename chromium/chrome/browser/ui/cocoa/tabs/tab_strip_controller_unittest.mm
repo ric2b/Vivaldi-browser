@@ -250,23 +250,31 @@ TEST_F(TabStripControllerTest, CorrectMouseHoverBehavior) {
 
   // Set up mouse event on overlap of tab1 + tab2.
   const CGFloat min_y = NSMinY([tab_strip_.get() frame]) + 1;
+  const CGFloat tab_overlap = [TabStripController tabOverlap];
 
   // Hover over overlap between tab 1 and 2.
-  NSEvent* event =
-      cocoa_test_event_utils::MouseEventAtPoint(NSMakePoint(280, min_y),
-                                                NSMouseMoved, 0);
+  NSRect tab1_frame = [tab1 frame];
+  NSPoint tab_overlap_point =
+      NSMakePoint(NSMaxX(tab1_frame) - tab_overlap / 2, min_y);
+
+  NSEvent* event = cocoa_test_event_utils::MouseEventAtPoint(tab_overlap_point,
+                                                             NSMouseMoved,
+                                                             0);
   [controller_.get() mouseMoved:event];
   EXPECT_EQ(tab2, [controller_ hoveredTab]);
 
   // Hover over tab 1.
-  event = cocoa_test_event_utils::MouseEventAtPoint(NSMakePoint(260, min_y),
-                                                    NSMouseMoved, 0);
+  NSPoint hover_point = NSMakePoint(NSMidX(tab1_frame), min_y);
+  event =
+      cocoa_test_event_utils::MouseEventAtPoint(hover_point, NSMouseMoved, 0);
   [controller_.get() mouseMoved:event];
   EXPECT_EQ(tab1, [controller_ hoveredTab]);
 
   // Hover over tab 2.
-  event = cocoa_test_event_utils::MouseEventAtPoint(NSMakePoint(290, min_y),
-                                                    NSMouseMoved, 0);
+  NSRect tab2_frame = [tab2 frame];
+  hover_point = NSMakePoint(NSMidX(tab2_frame), min_y);
+  event =
+      cocoa_test_event_utils::MouseEventAtPoint(hover_point, NSMouseMoved, 0);
   [controller_.get() mouseMoved:event];
   EXPECT_EQ(tab2, [controller_ hoveredTab]);
 }
@@ -280,12 +288,25 @@ TEST_F(TabStripControllerTest, CorrectTitleAndToolTipTextFromSetTabTitle) {
   TabController* const tabController = [tab controller];
   WebContents* const contents = model_->GetActiveWebContents();
 
+  // For the duration of the test, assume the tab has been hovered. This adds a
+  // subview containing the actual source of the tooltip.
+  [controller_ setHoveredTab:tab];
+  // Note -[NSView hitTest:] takes superview coordinates. Then, find a spot that
+  // is outside the mask image, but inside the tab.
+  NSPoint centerPoint = NSMakePoint(5, NSMidY([tab bounds]));
+  NSPoint hitPoint = [tab convertPoint:centerPoint
+                                toView:[tab_strip_ superview]];
+  NSView* toolTipView = [tab_strip_ hitTest:hitPoint];
+  EXPECT_TRUE(toolTipView);
+  EXPECT_NE(toolTipView, tab);
+
   // Initially, tab title and tooltip text are equivalent.
   EXPECT_EQ(TabAlertState::NONE,
             chrome::GetTabAlertStateForContents(contents));
   [controller_ setTabTitle:tabController withContents:contents];
   NSString* const baseTitle = [tabController title];
   EXPECT_NSEQ(baseTitle, [tabController toolTip]);
+  EXPECT_NSEQ([tabController toolTip], [toolTipView toolTip]);
 
   // Simulate the start of tab video capture.  Tab title remains the same, but
   // the tooltip text should include the following appended: 1) a line break;
@@ -303,6 +324,7 @@ TEST_F(TabStripControllerTest, CorrectTitleAndToolTipTextFromSetTabTitle) {
   [controller_ setTabTitle:tabController withContents:contents];
   EXPECT_NSEQ(baseTitle, [tabController title]);
   NSString* const toolTipText = [tabController toolTip];
+  EXPECT_NSEQ(toolTipText, [toolTipView toolTip]);
   if ([baseTitle length] > 0) {
     EXPECT_TRUE(NSEqualRanges(NSMakeRange(0, [baseTitle length]),
                               [toolTipText rangeOfString:baseTitle]));
@@ -321,6 +343,7 @@ TEST_F(TabStripControllerTest, CorrectTitleAndToolTipTextFromSetTabTitle) {
   [controller_ setTabTitle:tabController withContents:contents];
   EXPECT_NSEQ(baseTitle, [tabController title]);
   EXPECT_NSEQ(baseTitle, [tabController toolTip]);
+  EXPECT_NSEQ(baseTitle, [toolTipView toolTip]);
 }
 
 TEST_F(TabStripControllerTest, TabCloseDuringDrag) {

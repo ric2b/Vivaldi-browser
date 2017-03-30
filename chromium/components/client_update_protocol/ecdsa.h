@@ -7,10 +7,10 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 
 namespace client_update_protocol {
@@ -35,8 +35,8 @@ class Ecdsa {
   // |key_version| must be non-negative. |public_key| is expected to be a
   // DER-encoded ASN.1 SubjectPublicKeyInfo containing an ECDSA public key.
   // Returns a NULL pointer on failure.
-  static scoped_ptr<Ecdsa> Create(int key_version,
-                                  const base::StringPiece& public_key);
+  static std::unique_ptr<Ecdsa> Create(int key_version,
+                                       const base::StringPiece& public_key);
 
   // Generates freshness/authentication data for an outgoing ping.
   // |request_body| contains the body of the ping in UTF-8.  On return,
@@ -51,16 +51,18 @@ class Ecdsa {
 
   // Validates a response given to a ping previously signed with
   // SignRequest(). |response_body| contains the body of the response in
-  // UTF-8. |server_proof| contains the ECDSA signature and observed request
-  // hash, which is passed in the ETag HTTP header. Returns true if the response
-  // is valid and the observed request hash matches the sent hash.  This method
-  // uses internal state that is set by a prior SignRequest() call.
+  // UTF-8. |signature| contains the ECDSA signature and observed request
+  // hash. Returns true if the response is valid and the observed request hash
+  // matches the sent hash.  This method uses internal state that is set by a
+  // prior SignRequest() call.
   bool ValidateResponse(const base::StringPiece& response_body,
-                        const base::StringPiece& server_etag);
+                        const base::StringPiece& signature);
+
+  // Sets the key and nonce that were used to generate a signature that is baked
+  // into a unit test.
+  void OverrideNonceForTesting(int key_version, uint32_t nonce);
 
  private:
-  friend class CupEcdsaTest;
-
   Ecdsa(int key_version, const base::StringPiece& public_key);
 
   // The server keeps multiple signing keys; a version must be sent so that

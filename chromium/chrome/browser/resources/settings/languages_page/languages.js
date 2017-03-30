@@ -63,7 +63,7 @@ SettingsLanguagesSingletonElement = Polymer({
 
   properties: {
     /**
-     * @type {LanguagesModel|undefined}
+     * @type {!LanguagesModel|undefined}
      */
     languages: {
       type: Object,
@@ -77,67 +77,114 @@ SettingsLanguagesSingletonElement = Polymer({
       type: Object,
       notify: true,
     },
+
+    /**
+     * PromiseResolver to be resolved when the singleton has been initialized.
+     * @private {!PromiseResolver}
+     */
+    resolver_: {
+      type: Object,
+      value: function() {
+        return new PromiseResolver();
+      },
+    },
+
+    /** @type {!LanguageSettingsPrivate} */
+    languageSettingsPrivate: Object,
+
+    /** @type {!InputMethodPrivate} */
+    inputMethodPrivate: Object,
   },
 
-  /** @type {!LanguageSettingsPrivate} */
-  languageSettingsPrivate: languageSettings.languageSettingsPrivateApiForTest ||
-      /** @type {!LanguageSettingsPrivate} */(chrome.languageSettingsPrivate),
+  /**
+   * Hash map of supported languages by language codes for fast lookup.
+   * @private {!Map<string, !chrome.languageSettingsPrivate.Language>}
+   */
+  supportedLanguageMap_: new Map(),
 
   /**
-   * Hash map of languages.supportedLanguages using language codes as keys for
-   * fast lookup.
-   * @private {!Object<!chrome.languageSettingsPrivate.Language>}
+   * Hash set of enabled language codes for membership testing.
+   * @private {!Set<string>}
    */
-  supportedLanguageMap_: {},
+  enabledLanguageSet_: new Set(),
 
   /**
-   * Hash map of languages.enabledLanguages using language codes as keys for
-   * fast lookup.
-   * @private {!Object<!LanguageInfo>}
+   * Hash map of supported input methods by ID for fast lookup.
+   * @private {!Map<string, chrome.languageSettingsPrivate.InputMethod>}
    */
-  enabledLanguageMap_: {},
+  supportedInputMethodMap_: new Map(),
+
+  /**
+   * Hash map of input methods supported for each language.
+   * @type {!Map<string, !Array<!chrome.languageSettingsPrivate.InputMethod>>}
+   * @private
+   */
+  languageInputMethods_: new Map(),
 
   observers: [
-    'preferredLanguagesPrefChanged_(prefs.' +
-        preferredLanguagesPrefName + '.value)',
-    'spellCheckDictionariesPrefChanged_(prefs.spellcheck.dictionaries.value.*)',
-    'translateLanguagesPrefChanged_(prefs.translate_blocked_languages.value.*)',
+    'preferredLanguagesPrefChanged_(' +
+        'prefs.' + preferredLanguagesPrefName + '.value, languages)',
+    'spellCheckDictionariesPrefChanged_(' +
+        'prefs.spellcheck.dictionaries.value.*, languages)',
+    'translateLanguagesPrefChanged_(' +
+        'prefs.translate_blocked_languages.value.*, languages)',
+    'prospectiveUILanguageChanged_(' +
+        'prefs.intl.app_locale.value, languages)',
+    // Observe Chrome OS prefs (ignored for non-Chrome OS).
+    'updateRemovableLanguages_(' +
+        'prefs.settings.language.preload_engines.value, ' +
+        'prefs.settings.language.enabled_extension_imes.value, ' +
+        'languages)',
   ],
 
   /** @override */
   created: function() {
-    var languageList;
-    var translateTarget;
+    this.languageSettingsPrivate =
+        languageSettings.languageSettingsPrivateApiForTest ||
+        /** @type {!LanguageSettingsPrivate} */(chrome.languageSettingsPrivate);
 
-    /**
-     * Promise to be resolved when the languages singleton has been initialized.
-     * @type {!Promise}
-     */
-    this.initialized = Promise.all([
-      // Wait until prefs are initialized before creating the model, so we can
-      // include information about enabled languages.
-      CrSettingsPrefs.initialized,
+    this.inputMethodPrivate =
+        languageSettings.inputMethodPrivateApiForTest ||
+        /** @type {!InputMethodPrivate} */(chrome.inputMethodPrivate);
 
-      // Get the language list.
-      new Promise(function(resolve) {
-        this.languageSettingsPrivate.getLanguageList(function(list) {
-          languageList = list;
-          resolve();
-        });
-      }.bind(this)),
+    var promises = [];
 
-      // Get the translate target language.
-      new Promise(function(resolve) {
-        this.languageSettingsPrivate.getTranslateTargetLanguage(
-            function(targetLanguageCode) {
-              translateTarget = targetLanguageCode;
-              resolve();
-            });
-      }.bind(this)),
-    ]).then(function() {
-      this.createModel_(languageList, translateTarget);
-      this.initialized_ = true;
+    // Wait until prefs are initialized before creating the model, so we can
+    // include information about enabled languages.
+    promises[0] = CrSettingsPrefs.initialized;
+
+    // Get the language list.
+    promises[1] = new Promise(function(resolve) {
+      this.languageSettingsPrivate.getLanguageList(resolve);
     }.bind(this));
+
+    // Get the translate target language.
+    promises[2] = new Promise(function(resolve) {
+      this.languageSettingsPrivate.getTranslateTargetLanguage(resolve);
+    }.bind(this));
+
+    if (cr.isChromeOS) {
+      promises[3] = new Promise(function(resolve) {
+        this.languageSettingsPrivate.getInputMethodLists(function(lists) {
+          resolve(lists.componentExtensionImes.concat(
+              lists.thirdPartyExtensionImes));
+        });
+      }.bind(this));
+
+      promises[4] = new Promise(function(resolve) {
+        this.inputMethodPrivate.getCurrentInputMethod(resolve);
+      }.bind(this));
+    }
+
+    Promise.all(promises).then(function(results) {
+      this.createModel_(results[1], results[2], results[3], results[4]);
+      this.resolver_.resolve();
+    }.bind(this));
+
+    if (cr.isChromeOS) {
+      this.inputMethodPrivate.onChanged.addListener(
+          this.onInputMethodChanged_.bind(this));
+    }
   },
 
   /**
@@ -145,20 +192,16 @@ SettingsLanguagesSingletonElement = Polymer({
    * @private
    */
   preferredLanguagesPrefChanged_: function() {
-    if (!this.initialized_)
-      return;
+    var enabledLanguageStates =
+        this.getEnabledLanguageStates_(this.languages.translateTarget);
 
-    var enabledLanguages =
-        this.getEnabledLanguages_(this.languages.translateTarget);
+    // Recreate the enabled language set before updating languages.enabled.
+    this.enabledLanguageSet_.clear();
+    for (var languageState of enabledLanguageStates)
+      this.enabledLanguageSet_.add(languageState.language.code);
 
-    // Reset the enabled language map before updating
-    // languages.enabledLanguages.
-    this.enabledLanguageMap_ = {};
-    for (var i = 0; i < enabledLanguages.length; i++) {
-      var languageInfo = enabledLanguages[i];
-      this.enabledLanguageMap_[languageInfo.language.code] = languageInfo;
-    }
-    this.set('languages.enabledLanguages', enabledLanguages);
+    this.set('languages.enabled', enabledLanguageStates);
+    this.updateRemovableLanguages_();
   },
 
   /**
@@ -166,34 +209,33 @@ SettingsLanguagesSingletonElement = Polymer({
    * @private
    */
   spellCheckDictionariesPrefChanged_: function() {
-    if (!this.initialized_)
-      return;
-
-    var spellCheckMap = this.makeMapFromArray_(/** @type {!Array<string>} */(
+    var spellCheckSet = this.makeSetFromArray_(/** @type {!Array<string>} */(
         this.getPref('spellcheck.dictionaries').value));
-    for (var i = 0; i < this.languages.enabledLanguages.length; i++) {
-      var languageCode = this.languages.enabledLanguages[i].language.code;
-      this.set('languages.enabledLanguages.' + i + '.state.spellCheckEnabled',
-               !!spellCheckMap[languageCode]);
+    for (var i = 0; i < this.languages.enabled.length; i++) {
+      var languageState = this.languages.enabled[i];
+      this.set('languages.enabled.' + i + '.spellCheckEnabled',
+               !!spellCheckSet.has(languageState.language.code));
     }
   },
 
   /** @private */
   translateLanguagesPrefChanged_: function() {
-    if (!this.initialized_)
-      return;
-
     var translateBlockedPref = this.getPref('translate_blocked_languages');
-    var translateBlockedMap = this.makeMapFromArray_(
+    var translateBlockedSet = this.makeSetFromArray_(
         /** @type {!Array<string>} */(translateBlockedPref.value));
 
-    for (var i = 0; i < this.languages.enabledLanguages.length; i++) {
+    for (var i = 0; i < this.languages.enabled.length; i++) {
       var translateCode = this.convertLanguageCodeForTranslate(
-          this.languages.enabledLanguages[i].language.code);
+          this.languages.enabled[i].language.code);
       this.set(
-          'languages.enabledLanguages.' + i + '.state.translateEnabled',
-          !translateBlockedMap[translateCode]);
+          'languages.enabled.' + i + '.translateEnabled',
+          !translateBlockedSet.has(translateCode));
     }
+  },
+
+  /** @private */
+  prospectiveUILanguageChanged_: function() {
+    this.updateRemovableLanguages_();
   },
 
   /**
@@ -202,109 +244,199 @@ SettingsLanguagesSingletonElement = Polymer({
    *     supportedLanguages
    * @param {string} translateTarget Language code of the default translate
    *     target language.
+   * @param {!Array<!chrome.languageSettingsPrivate.InputMethod>|undefined}
+   *     supportedInputMethods Input methods (Chrome OS only).
+   * @param {string|undefined} currentInputMethodId ID of the currently used
+   *     input method (Chrome OS only).
    * @private
    */
-  createModel_: function(supportedLanguages, translateTarget) {
+  createModel_: function(supportedLanguages, translateTarget,
+                         supportedInputMethods, currentInputMethodId) {
     // Populate the hash map of supported languages.
-    for (var i = 0; i < supportedLanguages.length; i++) {
-      var language = supportedLanguages[i];
+    for (var language of supportedLanguages) {
       language.supportsUI = !!language.supportsUI;
       language.supportsTranslate = !!language.supportsTranslate;
       language.supportsSpellcheck = !!language.supportsSpellcheck;
-      this.supportedLanguageMap_[language.code] = language;
+      this.supportedLanguageMap_.set(language.code, language);
     }
 
-    // Create a list of enabled language info from the supported languages.
-    var enabledLanguages = this.getEnabledLanguages_(translateTarget);
-    // Populate the hash map of enabled languages.
-    for (var i = 0; i < enabledLanguages.length; i++) {
-      var languageInfo = enabledLanguages[i];
-      this.enabledLanguageMap_[languageInfo.language.code] = languageInfo;
+    if (supportedInputMethods) {
+      // Populate the hash map of supported input methods.
+      for (var inputMethod of supportedInputMethods) {
+        inputMethod.enabled = !!inputMethod.enabled;
+        // Add the input method to the map of IDs.
+        this.supportedInputMethodMap_.set(inputMethod.id, inputMethod);
+        // Add the input method to the list of input methods for each language
+        // it supports.
+        for (var languageCode of inputMethod.languageCodes) {
+          if (!this.supportedLanguageMap_.has(languageCode))
+            continue;
+          if (!this.languageInputMethods_.has(languageCode))
+            this.languageInputMethods_.set(languageCode, [inputMethod]);
+          else
+            this.languageInputMethods_.get(languageCode).push(inputMethod);
+        }
+      }
+    }
+
+    // Create a list of enabled languages from the supported languages.
+    var enabledLanguageStates = this.getEnabledLanguageStates_(translateTarget);
+    // Populate the hash set of enabled languages.
+    for (var languageState of enabledLanguageStates)
+      this.enabledLanguageSet_.add(languageState.language.code);
+
+    var model = /** @type {!LanguagesModel} */({
+      supported: supportedLanguages,
+      enabled: enabledLanguageStates,
+      translateTarget: translateTarget,
+    });
+    if (cr.isChromeOS) {
+      model.inputMethods = /** @type {!InputMethodsModel} */({
+        supported: supportedInputMethods,
+        enabled: this.getEnabledInputMethods_(),
+        currentId: currentInputMethodId,
+      });
     }
 
     // Initialize the Polymer languages model.
-    this.languages = /** @type {!LanguagesModel} */({
-      supportedLanguages: supportedLanguages,
-      enabledLanguages: enabledLanguages,
-      translateTarget: translateTarget,
-    });
+    this.languages = model;
   },
 
   /**
-   * Returns a list of LanguageInfos for each enabled language in the supported
+   * Returns a list of LanguageStates for each enabled language in the supported
    * languages list.
    * @param {string} translateTarget Language code of the default translate
    *     target language.
-   * @return {!Array<!LanguageInfo>}
+   * @return {!Array<!LanguageState>}
    * @private
    */
-  getEnabledLanguages_: function(translateTarget) {
+  getEnabledLanguageStates_: function(translateTarget) {
     assert(CrSettingsPrefs.isInitialized);
 
     var pref = this.getPref(preferredLanguagesPrefName);
     var enabledLanguageCodes = pref.value.split(',');
-    var enabledLanguages = /** @type {!Array<!LanguageInfo>} */ [];
-
     var spellCheckPref = this.getPref('spellcheck.dictionaries');
-    var spellCheckMap = this.makeMapFromArray_(/** @type {!Array<string>} */(
+    var spellCheckSet = this.makeSetFromArray_(/** @type {!Array<string>} */(
         spellCheckPref.value));
 
     var translateBlockedPref = this.getPref('translate_blocked_languages');
-    var translateBlockedMap = this.makeMapFromArray_(
+    var translateBlockedSet = this.makeSetFromArray_(
         /** @type {!Array<string>} */(translateBlockedPref.value));
 
+    var enabledLanguageStates = [];
     for (var i = 0; i < enabledLanguageCodes.length; i++) {
       var code = enabledLanguageCodes[i];
-      var language = this.supportedLanguageMap_[code];
+      var language = this.supportedLanguageMap_.get(code);
       // Skip unsupported languages.
       if (!language)
         continue;
-      var state = /** @type {LanguageState} */({});
-      state.spellCheckEnabled = !!spellCheckMap[code];
+      var languageState = /** @type {LanguageState} */({});
+      languageState.language = language;
+      languageState.spellCheckEnabled = !!spellCheckSet.has(code);
       // Translate is considered disabled if this language maps to any translate
       // language that is blocked.
       var translateCode = this.convertLanguageCodeForTranslate(code);
-      state.translateEnabled = !!language.supportsTranslate &&
-          !translateBlockedMap[translateCode] &&
+      languageState.translateEnabled = !!language.supportsTranslate &&
+          !translateBlockedSet.has(translateCode) &&
           translateCode != translateTarget;
-      enabledLanguages.push(/** @type {LanguageInfo} */(
-          {language: language, state: state}));
+      enabledLanguageStates.push(languageState);
     }
-    return enabledLanguages;
+    return enabledLanguageStates;
   },
 
   /**
-   * Creates an object whose keys are the elements of the list.
-   * @param {!Array<string>} list
-   * @return {!Object<boolean>}
+   * Returns a list of enabled input methods.
+   * @return {!Array<!chrome.languageSettingsPrivate.InputMethod>}
    * @private
    */
-  makeMapFromArray_: function(list) {
-    var map = {};
-    for (var i = 0; i < list.length; i++)
-      map[list[i]] = true;
-    return map;
+  getEnabledInputMethods_: function() {
+    assert(cr.isChromeOS);
+    assert(CrSettingsPrefs.isInitialized);
+
+    var enabledInputMethodIds =
+        this.getPref('settings.language.preload_engines').value.split(',');
+    enabledInputMethodIds = enabledInputMethodIds.concat(this.getPref(
+        'settings.language.enabled_extension_imes').value.split(','));
+
+    // Return only supported input methods.
+    return enabledInputMethodIds.map(function(id) {
+      return this.supportedInputMethodMap_.get(id);
+    }.bind(this)).filter(function(inputMethod) {
+      return !!inputMethod;
+    });
+  },
+
+  /** @private */
+  updateEnabledInputMethods_: function() {
+    assert(cr.isChromeOS);
+    var enabledInputMethods = this.getEnabledInputMethods_();
+    var enabledInputMethodSet = this.makeSetFromArray_(enabledInputMethods);
+
+    for (var i = 0; i < this.languages.inputMethods.supported.length; i++) {
+      this.set('languages.inputMethods.supported.' + i + '.enabled',
+          enabledInputMethodSet.has(this.languages.inputMethods.supported[i]));
+    }
+    this.set('languages.inputMethods.enabled', enabledInputMethods);
+  },
+
+  /**
+   * Updates the |removable| property of the enabled language states based
+   * on what other languages and input methods are enabled.
+   * @private
+   */
+  updateRemovableLanguages_: function() {
+    assert(this.languages);
+    // TODO(michaelpg): Enabled input methods can affect which languages are
+    // removable, so run updateEnabledInputMethods_ first (if it has been
+    // scheduled).
+    if (cr.isChromeOS)
+      this.updateEnabledInputMethods_();
+
+    for (var i = 0; i < this.languages.enabled.length; i++) {
+      var languageState = this.languages.enabled[i];
+      this.set('languages.enabled.' + i + '.removable',
+          this.canDisableLanguage(languageState.language.code));
+    }
+  },
+
+  /**
+   * Creates a Set from the elements of the array.
+   * @param {!Array<T>} list
+   * @return {!Set<T>}
+   * @template T
+   * @private
+   */
+  makeSetFromArray_: function(list) {
+    var set = new Set();
+    for (var item of list)
+      set.add(item);
+    return set;
   },
 
   // LanguageHelper implementation.
   // TODO(michaelpg): replace duplicate docs with @override once b/24294625
   // is fixed.
 
-<if expr="chromeos or is_win">
+  /** @return {!Promise} */
+  whenReady: function() {
+    return this.resolver_.promise;
+  },
+
   /**
    * Sets the prospective UI language to the chosen language. This won't affect
    * the actual UI language until a restart.
    * @param {string} languageCode
    */
   setUILanguage: function(languageCode) {
+    assert(cr.isChromeOS || cr.isWindows);
     chrome.send('setUILanguage', [languageCode]);
   },
 
   /** Resets the prospective UI language back to the actual UI language. */
   resetUILanguage: function() {
+    assert(cr.isChromeOS || cr.isWindows);
     chrome.send('setUILanguage', [navigator.language]);
   },
-</if>
 
   /**
    * Returns the "prospective" UI language, i.e. the one to be used on next
@@ -322,7 +454,7 @@ SettingsLanguagesSingletonElement = Polymer({
    * @return {boolean} True if the language is enabled.
    */
   isLanguageEnabled: function(languageCode) {
-    return !!this.enabledLanguageMap_[languageCode];
+    return this.enabledLanguageSet_.has(languageCode);
   },
 
   /**
@@ -355,6 +487,19 @@ SettingsLanguagesSingletonElement = Polymer({
     // Remove the language from spell check.
     this.deletePrefListItem('spellcheck.dictionaries', languageCode);
 
+    if (cr.isChromeOS) {
+      var inputMethods = this.languageInputMethods_.get(languageCode) || [];
+      for (var inputMethod of inputMethods) {
+        var supportsOtherEnabledLanguages = inputMethod.languageCodes.some(
+            function(inputMethodLanguageCode) {
+              return inputMethodLanguageCode != languageCode &&
+                  this.isLanguageEnabled(languageCode);
+            }.bind(this));
+        if (!supportsOtherEnabledLanguages)
+          this.removeInputMethod(inputMethod.id);
+      }
+    }
+
     // Remove the language from preferred languages.
     var languageCodes =
         this.getPref(preferredLanguagesPrefName).value.split(',');
@@ -378,10 +523,26 @@ SettingsLanguagesSingletonElement = Polymer({
     }
 
     // Cannot disable the only enabled language.
-    if (this.languages.enabledLanguages.length == 1)
+    if (this.languages.enabled.length == 1)
       return false;
 
-    return true;
+    if (!cr.isChromeOS)
+      return true;
+
+    // If this is the only enabled language that is supported by all enabled
+    // component IMEs, it cannot be disabled because we need those IMEs.
+    var otherInputMethodsEnabled = this.languages.enabled.some(
+        function(languageState) {
+          var otherLanguageCode = languageState.language.code;
+          if (otherLanguageCode == languageCode)
+            return false;
+          var inputMethods = this.languageInputMethods_.get(otherLanguageCode);
+          return inputMethods && inputMethods.some(function(inputMethod) {
+            return this.isComponentIme(inputMethod) &&
+                this.supportedInputMethodMap_.get(inputMethod.id).enabled;
+          }, this);
+        }, this);
+    return otherInputMethodsEnabled;
   },
 
   /**
@@ -410,7 +571,7 @@ SettingsLanguagesSingletonElement = Polymer({
    * @param {boolean} enable
    */
   toggleSpellCheck: function(languageCode, enable) {
-    if (!this.initialized_)
+    if (!this.languages)
       return;
 
     if (enable) {
@@ -445,11 +606,100 @@ SettingsLanguagesSingletonElement = Polymer({
   },
 
   /**
+   * Given a language code, returns just the base language. E.g., converts
+   * 'en-GB' to 'en'.
+   * @param {string} languageCode
+   * @return {string}
+   */
+  getLanguageCodeWithoutRegion: function(languageCode) {
+    // The Norwegian languages fall under the 'no' macrolanguage.
+    if (languageCode == 'nb' || languageCode == 'nn')
+      return 'no';
+
+    // Match the characters before the hyphen.
+    var result = languageCode.match(/^([^-]+)-?/);
+    assert(result.length == 2);
+    return result[1];
+  },
+
+  /**
    * @param {string} languageCode
    * @return {!chrome.languageSettingsPrivate.Language|undefined}
    */
   getLanguage: function(languageCode) {
-    return this.supportedLanguageMap_[languageCode];
+    return this.supportedLanguageMap_.get(languageCode);
+  },
+
+  /**
+   * @param {string} id
+   * @return {!chrome.languageSettingsPrivate.InputMethod|undefined}
+   */
+  getInputMethod: function(id) {
+    assert(cr.isChromeOS);
+    return this.supportedInputMethodMap_.get(id);
+  },
+
+  /** @param {string} id */
+  addInputMethod: function(id) {
+    assert(cr.isChromeOS);
+    if (!this.supportedInputMethodMap_.has(id))
+      return;
+    this.languageSettingsPrivate.addInputMethod(id);
+  },
+
+  /** @param {string} id */
+  removeInputMethod: function(id) {
+    assert(cr.isChromeOS);
+    if (!this.supportedInputMethodMap_.has(id))
+      return;
+    this.languageSettingsPrivate.removeInputMethod(id);
+  },
+
+  /** @param {string} id */
+  setCurrentInputMethod: function(id) {
+    assert(cr.isChromeOS);
+    this.inputMethodPrivate.setCurrentInputMethod(id);
+  },
+
+  /**
+   * param {string} languageCode
+   * @return {!Array<!chrome.languageSettingsPrivate.InputMethod>}
+   */
+  getInputMethodsForLanguage: function(languageCode) {
+    return this.languageInputMethods_.get(languageCode) || [];
+  },
+
+  /**
+   * @param {!chrome.languageSettingsPrivate.InputMethod} inputMethod
+   * @return {boolean}
+   */
+  isComponentIme: function(inputMethod) {
+    assert(cr.isChromeOS);
+    return inputMethod.id.startsWith('_comp_');
+  },
+
+  /** @param {string} id Input method ID. */
+  openInputMethodOptions: function(id) {
+    assert(cr.isChromeOS);
+    this.inputMethodPrivate.openOptionsPage(id);
+  },
+
+  /** @param {string} id New current input method ID. */
+  onInputMethodChanged_: function(id) {
+    assert(cr.isChromeOS);
+    this.set('languages.inputMethods.currentId', id);
+  },
+
+  /** @param {string} id Added input method ID. */
+  onInputMethodAdded_: function(id) {
+    assert(cr.isChromeOS);
+    this.updateEnabledInputMethods_();
+  },
+
+  /** @param {string} id Removed input method ID. */
+  onInputMethodRemoved_: function(id) {
+    assert(cr.isChromeOS);
+    this.updateEnabledInputMethods_();
   },
 });
 })();
@@ -471,16 +721,6 @@ Polymer({
 
   properties: {
     /**
-     * Singleton element created at startup which provides the languages model.
-     * @type {SettingsLanguagesSingletonElement}
-     */
-    singleton_: {
-      type: Object,
-      value: languageSettings.languageSettingsPrivateApiForTest ?
-             undefined : LanguageHelperImpl.getInstance(),
-    },
-
-    /**
      * A reference to the languages model from the singleton, exposed as a
      * read-only property so hosts can bind to it, but not change it.
      * @type {LanguagesModel|undefined}
@@ -493,13 +733,14 @@ Polymer({
   },
 
   ready: function() {
-    this.singleton_.initialized.then(function() {
+    var singleton = /** @type {!SettingsLanguagesSingletonElement} */
+        (LanguageHelperImpl.getInstance());
+    singleton.whenReady().then(function() {
       // Set the 'languages' property to reference the singleton's model.
-      this._setLanguages(this.singleton_.languages);
+      this._setLanguages(singleton.languages);
       // Listen for changes to the singleton's languages property, so we know
       // when to notify hosts of changes to (our reference to) the property.
-      this.listen(
-          this.singleton_, 'languages-changed', 'singletonLanguagesChanged_');
+      this.listen(singleton, 'languages-changed', 'singletonLanguagesChanged_');
     }.bind(this));
   },
 

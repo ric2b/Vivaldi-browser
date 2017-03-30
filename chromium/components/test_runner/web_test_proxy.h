@@ -5,21 +5,22 @@
 #ifndef COMPONENTS_TEST_RUNNER_WEB_TEST_PROXY_H_
 #define COMPONENTS_TEST_RUNNER_WEB_TEST_PROXY_H_
 
+#include <memory>
 #include <string>
 #include <utility>
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "build/build_config.h"
 #include "components/test_runner/test_runner_export.h"
 #include "components/test_runner/web_view_test_client.h"
+#include "components/test_runner/web_widget_test_client.h"
+#include "third_party/WebKit/public/platform/WebDragOperation.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/WebScreenInfo.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/web/WebDOMMessageEvent.h"
-#include "third_party/WebKit/public/web/WebDragOperation.h"
 #include "third_party/WebKit/public/web/WebHistoryCommitType.h"
 #include "third_party/WebKit/public/web/WebNavigationPolicy.h"
 #include "third_party/WebKit/public/web/WebTextDirection.h"
@@ -41,7 +42,11 @@ struct WebWindowFeatures;
 
 namespace test_runner {
 
+class AccessibilityController;
+class EventSender;
 class TestInterfaces;
+class TestRunnerForSpecificView;
+class TextInputController;
 class WebTestDelegate;
 class WebTestInterfaces;
 
@@ -66,18 +71,43 @@ class TEST_RUNNER_EXPORT WebTestProxyBase {
     web_view_ = view;
   }
 
-  void set_view_test_client(scoped_ptr<WebViewTestClient> view_test_client) {
+  void set_view_test_client(
+      std::unique_ptr<WebViewTestClient> view_test_client) {
     DCHECK(view_test_client);
     DCHECK(!view_test_client_);
     view_test_client_ = std::move(view_test_client);
   }
 
-  void SetInterfaces(WebTestInterfaces* interfaces);
-  void SetDelegate(WebTestDelegate* delegate);
+  void set_widget_test_client(
+      std::unique_ptr<WebWidgetTestClient> widget_test_client) {
+    DCHECK(widget_test_client);
+    DCHECK(!widget_test_client_);
+    widget_test_client_ = std::move(widget_test_client);
+  }
 
-  std::string DumpBackForwardLists();
+  WebTestDelegate* delegate() { return delegate_; }
+  void set_delegate(WebTestDelegate* delegate) {
+    DCHECK(delegate);
+    DCHECK(!delegate_);
+    delegate_ = delegate;
+  }
 
-  void LayoutAndPaintAsyncThen(const base::Closure& callback);
+  TestInterfaces* test_interfaces() { return test_interfaces_; }
+  void SetInterfaces(WebTestInterfaces* web_test_interfaces);
+
+  EventSender* event_sender() { return event_sender_.get(); }
+  void SetSendWheelGestures(bool send_gestures);
+
+  AccessibilityController* accessibility_controller() {
+    return accessibility_controller_.get();
+  }
+
+  TestRunnerForSpecificView* view_test_runner() {
+    return view_test_runner_.get();
+  }
+
+  void Reset();
+  void BindTo(blink::WebLocalFrame* frame);
 
   void GetScreenOrientationForTesting(blink::WebScreenInfo&);
 
@@ -86,13 +116,21 @@ class TEST_RUNNER_EXPORT WebTestProxyBase {
   ~WebTestProxyBase();
 
   blink::WebViewClient* view_test_client() { return view_test_client_.get(); }
+  blink::WebWidgetClient* widget_test_client() {
+    return widget_test_client_.get();
+  }
 
  private:
   TestInterfaces* test_interfaces_;
   WebTestDelegate* delegate_;
   blink::WebView* web_view_;
   blink::WebWidget* web_widget_;
-  scoped_ptr<WebViewTestClient> view_test_client_;
+  std::unique_ptr<WebViewTestClient> view_test_client_;
+  std::unique_ptr<WebWidgetTestClient> widget_test_client_;
+  std::unique_ptr<AccessibilityController> accessibility_controller_;
+  std::unique_ptr<EventSender> event_sender_;
+  std::unique_ptr<TextInputController> text_input_controller_;
+  std::unique_ptr<TestRunnerForSpecificView> view_test_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(WebTestProxyBase);
 };
@@ -127,12 +165,37 @@ class WebTestProxy : public Base, public WebTestProxyBase {
   // WebWidgetClient implementation.
   blink::WebScreenInfo screenInfo() override {
     blink::WebScreenInfo info = Base::screenInfo();
-    WebTestProxyBase::GetScreenOrientationForTesting(info);
+    blink::WebScreenInfo test_info = widget_test_client()->screenInfo();
+    if (test_info.orientationType != blink::WebScreenOrientationUndefined) {
+      info.orientationType = test_info.orientationType;
+      info.orientationAngle = test_info.orientationAngle;
+    }
     return info;
   }
+  void scheduleAnimation() override {
+    widget_test_client()->scheduleAnimation();
+  }
+  bool requestPointerLock() override {
+    return widget_test_client()->requestPointerLock();
+  }
+  void requestPointerUnlock() override {
+    widget_test_client()->requestPointerUnlock();
+  }
+  bool isPointerLocked() override {
+    return widget_test_client()->isPointerLocked();
+  }
+  void didFocus() override {
+    widget_test_client()->didFocus();
+    Base::didFocus();
+  }
+  void setToolTipText(const blink::WebString& text,
+                      blink::WebTextDirection hint) override {
+    widget_test_client()->setToolTipText(text, hint);
+    Base::setToolTipText(text, hint);
+  }
+  void resetInputMethod() override { widget_test_client()->resetInputMethod(); }
 
   // WebViewClient implementation.
-  void scheduleAnimation() override { view_test_client()->scheduleAnimation(); }
   void startDragging(blink::WebLocalFrame* frame,
                      const blink::WebDragData& data,
                      blink::WebDragOperationsMask mask,
@@ -168,25 +231,6 @@ class WebTestProxy : public Base, public WebTestProxyBase {
   blink::WebSpeechRecognizer* speechRecognizer() override {
     return view_test_client()->speechRecognizer();
   }
-  bool requestPointerLock() override {
-    return view_test_client()->requestPointerLock();
-  }
-  void requestPointerUnlock() override {
-    view_test_client()->requestPointerUnlock();
-  }
-  bool isPointerLocked() override {
-    return view_test_client()->isPointerLocked();
-  }
-  void didFocus() override {
-    view_test_client()->didFocus();
-    Base::didFocus();
-  }
-  void setToolTipText(const blink::WebString& text,
-                      blink::WebTextDirection hint) override {
-    view_test_client()->setToolTipText(text, hint);
-    Base::setToolTipText(text, hint);
-  }
-  void resetInputMethod() override { view_test_client()->resetInputMethod(); }
   bool runFileChooser(const blink::WebFileChooserParams& params,
                       blink::WebFileChooserCompletion* completion) override {
     return view_test_client()->runFileChooser(params, completion);

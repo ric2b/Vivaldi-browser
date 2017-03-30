@@ -14,6 +14,7 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
+#import "base/mac/foundation_util.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop/message_loop.h"
 #import "chrome/browser/app_controller_mac.h"
@@ -48,8 +49,8 @@
 #include "ui/app_list/search_box_model.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
-#include "ui/gfx/display.h"
-#include "ui/gfx/screen.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 
 namespace gfx {
 class ImageSkia;
@@ -178,7 +179,7 @@ NSRunningApplication* ActiveApplicationNotChrome() {
 
 // Determines which screen edge the dock is aligned to.
 AppListPositioner::ScreenEdge DockLocationInDisplay(
-    const gfx::Display& display) {
+    const display::Display& display) {
   // Assume the dock occupies part of the work area either on the left, right or
   // bottom of the display. Note in the autohide case, it is always 4 pixels.
   const gfx::Rect work_area = display.work_area();
@@ -198,7 +199,7 @@ AppListPositioner::ScreenEdge DockLocationInDisplay(
 // If |display|'s work area is too close to its boundary on |dock_edge|, adjust
 // the work area away from the edge by a constant amount to reduce overlap and
 // ensure the dock icon can still be clicked to dismiss the app list.
-void AdjustWorkAreaForDock(const gfx::Display& display,
+void AdjustWorkAreaForDock(const display::Display& display,
                            AppListPositioner* positioner,
                            AppListPositioner::ScreenEdge dock_edge) {
   const int kAutohideDockThreshold = 10;
@@ -231,10 +232,10 @@ void AdjustWorkAreaForDock(const gfx::Display& display,
 
 void GetAppListWindowOrigins(
     NSWindow* window, NSPoint* target_origin, NSPoint* start_origin) {
-  gfx::Screen* const screen = gfx::Screen::GetScreen();
+  display::Screen* const screen = display::Screen::GetScreen();
   // Ensure y coordinates are flipped back into AppKit's coordinate system.
   bool cursor_is_visible = CGCursorIsVisible();
-  gfx::Display display;
+  display::Display display;
   gfx::Point cursor;
   if (!cursor_is_visible) {
     // If Chrome is the active application, display on the same display as
@@ -265,17 +266,6 @@ void GetAppListWindowOrigins(
                                      start_origin);
 }
 
-AppListServiceMac* GetActiveInstance() {
-  if (app_list::switches::IsMacViewsAppListEnabled()) {
-#if defined(TOOLKIT_VIEWS)
-    // TODO(tapted): Return AppListServiceViewsMac instance.
-#else
-    NOTREACHED();
-#endif
-  }
-  return AppListServiceCocoaMac::GetInstance();
-}
-
 }  // namespace
 
 AppListServiceMac::AppListServiceMac() {
@@ -286,7 +276,7 @@ AppListServiceMac::~AppListServiceMac() {}
 
 // static
 void AppListServiceMac::FindAnchorPoint(const gfx::Size& window_size,
-                                        const gfx::Display& display,
+                                        const display::Display& display,
                                         int primary_display_height,
                                         bool cursor_is_visible,
                                         const gfx::Point& cursor,
@@ -441,7 +431,8 @@ bool AppListServiceMac::IsAppListVisible() const {
 void AppListServiceMac::EnableAppList(Profile* initial_profile,
                                       AppListEnableSource enable_source) {
   AppListServiceImpl::EnableAppList(initial_profile, enable_source);
-  AppController* controller = [NSApp delegate];
+  AppController* controller =
+      base::mac::ObjCCastStrict<AppController>([NSApp delegate]);
   [controller initAppShimMenuController];
 }
 
@@ -510,13 +501,14 @@ void AppListServiceMac::WindowAnimationDidEnd() {
 
 // static
 AppListService* AppListService::Get() {
-  return GetActiveInstance();
+  return AppListServiceCocoaMac::GetInstance();
 }
 
 // static
 void AppListService::InitAll(Profile* initial_profile,
                              const base::FilePath& profile_path) {
-  GetActiveInstance()->InitWithProfilePath(initial_profile, profile_path);
+  AppListServiceCocoaMac::GetInstance()->InitWithProfilePath(initial_profile,
+                                                             profile_path);
 }
 
 @implementation AppListAnimationController
@@ -581,10 +573,9 @@ void AppListService::InitAll(Profile* initial_profile,
 
 - (void)animationDidEnd:(NSAnimation*)animation {
   content::BrowserThread::PostTask(
-      content::BrowserThread::UI,
-      FROM_HERE,
+      content::BrowserThread::UI, FROM_HERE,
       base::Bind(&AppListServiceMac::WindowAnimationDidEnd,
-                 base::Unretained(GetActiveInstance())));
+                 base::Unretained(AppListServiceCocoaMac::GetInstance())));
 }
 
 @end

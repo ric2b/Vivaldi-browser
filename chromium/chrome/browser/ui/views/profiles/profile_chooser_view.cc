@@ -46,6 +46,7 @@
 #include "grit/theme_resources.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/clip_recorder.h"
 #include "ui/gfx/canvas.h"
@@ -64,6 +65,7 @@
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/label_button_border.h"
+#include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/button/menu_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/link.h"
@@ -154,7 +156,8 @@ views::ImageButton* CreateBackButton(views::ButtonListener* listener) {
                         rb->GetImageSkiaNamed(IDR_BACK_P));
   back_button->SetImage(views::ImageButton::STATE_DISABLED,
                         rb->GetImageSkiaNamed(IDR_BACK_D));
-  back_button->SetFocusable(true);
+  back_button->SetFocusForPlatform();
+  back_button->set_request_focus_on_press(true);
   return back_button;
 }
 
@@ -173,7 +176,8 @@ class BackgroundColorHoverButton : public views::LabelButton {
     SetMinSize(gfx::Size(0,
         kButtonHeight + views::kRelatedControlVerticalSpacing));
     SetImage(STATE_NORMAL, icon);
-    SetFocusable(true);
+    SetFocusForPlatform();
+    set_request_focus_on_press(true);
   }
 
   ~BackgroundColorHoverButton() override {}
@@ -622,8 +626,6 @@ void ProfileChooserView::ShowBubble(
     const signin::ManageAccountsParams& manage_accounts_params,
     signin_metrics::AccessPoint access_point,
     views::View* anchor_view,
-    views::BubbleBorder::Arrow arrow,
-    views::BubbleBorder::BubbleAlignment border_alignment,
     Browser* browser) {
   // Don't start creating the view if it would be an empty fast user switcher.
   // It has to happen here to prevent the view system from creating an empty
@@ -641,14 +643,14 @@ void ProfileChooserView::ShowBubble(
     return;
   }
 
-  profile_bubble_ = new ProfileChooserView(
-      anchor_view, arrow, browser, view_mode, tutorial_mode,
-      manage_accounts_params.service_type, access_point);
-  views::BubbleDelegateView::CreateBubble(profile_bubble_);
-  profile_bubble_->set_close_on_deactivate(close_on_deactivate_for_testing_);
-  profile_bubble_->SetAlignment(border_alignment);
-  profile_bubble_->GetWidget()->Show();
+  profile_bubble_ =
+      new ProfileChooserView(anchor_view, browser, view_mode, tutorial_mode,
+                             manage_accounts_params.service_type, access_point);
+  views::Widget* widget =
+      views::BubbleDialogDelegateView::CreateBubble(profile_bubble_);
+  profile_bubble_->SetAlignment(views::BubbleBorder::ALIGN_EDGE_TO_ANCHOR_EDGE);
   profile_bubble_->SetArrowPaintType(views::BubbleBorder::PAINT_NONE);
+  widget->Show();
 }
 
 // static
@@ -663,33 +665,21 @@ void ProfileChooserView::Hide() {
 }
 
 ProfileChooserView::ProfileChooserView(views::View* anchor_view,
-                                       views::BubbleBorder::Arrow arrow,
                                        Browser* browser,
                                        profiles::BubbleViewMode view_mode,
                                        profiles::TutorialMode tutorial_mode,
                                        signin::GAIAServiceType service_type,
                                        signin_metrics::AccessPoint access_point)
-    : BubbleDelegateView(anchor_view, arrow),
+    : BubbleDialogDelegateView(anchor_view, views::BubbleBorder::TOP_RIGHT),
       browser_(browser),
       view_mode_(view_mode),
       tutorial_mode_(tutorial_mode),
       gaia_service_type_(service_type),
       access_point_(access_point) {
-  // Reset the default margins inherited from the BubbleDelegateView.
-  // Add a small bottom inset so that the bubble's rounded corners show up.
-  set_margins(gfx::Insets(0, 0, 1, 0));
+  // The sign in webview will be clipped on the bottom corners without these
+  // margins, see related bug <http://crbug.com/593203>.
+  set_margins(gfx::Insets(0, 0, 2, 0));
   ResetView();
-
-  avatar_menu_.reset(new AvatarMenu(
-      &g_browser_process->profile_manager()->GetProfileAttributesStorage(),
-      this,
-      browser_));
-  avatar_menu_->RebuildMenu();
-
-  ProfileOAuth2TokenService* oauth2_token_service =
-      ProfileOAuth2TokenServiceFactory::GetForProfile(browser_->profile());
-  if (oauth2_token_service)
-    oauth2_token_service->AddObserver(this);
 }
 
 ProfileChooserView::~ProfileChooserView() {
@@ -727,6 +717,18 @@ void ProfileChooserView::ResetView() {
 }
 
 void ProfileChooserView::Init() {
+  set_close_on_deactivate(close_on_deactivate_for_testing_);
+
+  avatar_menu_.reset(new AvatarMenu(
+      &g_browser_process->profile_manager()->GetProfileAttributesStorage(),
+      this, browser_));
+  avatar_menu_->RebuildMenu();
+
+  ProfileOAuth2TokenService* oauth2_token_service =
+      ProfileOAuth2TokenServiceFactory::GetForProfile(browser_->profile());
+  if (oauth2_token_service)
+    oauth2_token_service->AddObserver(this);
+
   // If view mode is PROFILE_CHOOSER but there is an auth error, force
   // ACCOUNT_MANAGEMENT mode.
   if (IsProfileChooser(view_mode_) &&
@@ -746,7 +748,7 @@ void ProfileChooserView::Init() {
 
 void ProfileChooserView::OnNativeThemeChanged(
     const ui::NativeTheme* native_theme) {
-  views::BubbleDelegateView::OnNativeThemeChanged(native_theme);
+  views::BubbleDialogDelegateView::OnNativeThemeChanged(native_theme);
   set_background(views::Background::CreateSolidBackground(
       GetNativeTheme()->GetSystemColor(
           ui::NativeTheme::kColorId_DialogBackground)));
@@ -876,7 +878,8 @@ bool ProfileChooserView::AcceleratorPressed(
     const ui::Accelerator& accelerator) {
   if (accelerator.key_code() != ui::VKEY_DOWN &&
       accelerator.key_code() != ui::VKEY_UP)
-    return BubbleDelegateView::AcceleratorPressed(accelerator);
+    return BubbleDialogDelegateView::AcceleratorPressed(accelerator);
+
   // Move the focus up or down.
   GetFocusManager()->AdvanceFocus(accelerator.key_code() != ui::VKEY_DOWN);
   return true;
@@ -884,6 +887,10 @@ bool ProfileChooserView::AcceleratorPressed(
 
 views::View* ProfileChooserView::GetInitiallyFocusedView() {
   return signin_current_profile_link_;
+}
+
+int ProfileChooserView::GetDialogButtons() const {
+  return ui::DIALOG_BUTTON_NONE;
 }
 
 bool ProfileChooserView::HandleContextMenu(
@@ -1243,11 +1250,12 @@ views::View* ProfileChooserView::CreateTutorialView(
                     views::kButtonHEdgeMarginNew);
 
   // Adds title and close button if needed.
+  const SkColor kTitleAndButtonTextColor = SK_ColorWHITE;
   views::Label* title_label = new views::Label(title_text);
   title_label->SetMultiLine(true);
   title_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   title_label->SetAutoColorReadabilityEnabled(false);
-  title_label->SetEnabledColor(SK_ColorWHITE);
+  title_label->SetEnabledColor(kTitleAndButtonTextColor);
   title_label->SetFontList(ui::ResourceBundle::GetSharedInstance().GetFontList(
       ui::ResourceBundle::MediumFont));
 
@@ -1282,9 +1290,11 @@ views::View* ProfileChooserView::CreateTutorialView(
   // Adds links and buttons.
   bool has_button = !button_text.empty();
   if (has_button) {
-    *button = new views::LabelButton(this, button_text);
-    (*button)->SetHorizontalAlignment(gfx::ALIGN_CENTER);
-    (*button)->SetStyle(views::Button::STYLE_BUTTON);
+    *button = views::MdTextButton::CreateSecondaryUiButton(this, button_text);
+    if (ui::MaterialDesignController::IsSecondaryUiMaterial())
+      (*button)->SetEnabledTextColors(kTitleAndButtonTextColor);
+    else
+      (*button)->SetHorizontalAlignment(gfx::ALIGN_CENTER);
   }
 
   bool has_link = !link_text.empty();
@@ -1292,7 +1302,7 @@ views::View* ProfileChooserView::CreateTutorialView(
     *link = CreateLink(link_text, this);
     (*link)->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     (*link)->SetAutoColorReadabilityEnabled(false);
-    (*link)->SetEnabledColor(SK_ColorWHITE);
+    (*link)->SetEnabledColor(kTitleAndButtonTextColor);
   }
 
   if (stack_button) {
@@ -1395,8 +1405,8 @@ views::View* ProfileChooserView::CreateCurrentProfileView(
             views::LabelButton::STATE_NORMAL,
             gfx::CreateVectorIcon(gfx::VectorIconId::WARNING, 18,
                                   gfx::kChromeIconGrey));
-
-        auth_error_email_button_->SetFocusable(true);
+        auth_error_email_button_->SetFocusForPlatform();
+        auth_error_email_button_->set_request_focus_on_press(true);
         gfx::Insets insets =
             views::LabelButtonAssetBorder::GetDefaultInsetsForStyle(
                 views::Button::STYLE_TEXTBUTTON);

@@ -16,6 +16,7 @@
         '../../skia/skia.gyp:skia',
         '../aura/aura.gyp:aura',
         '../compositor/compositor.gyp:compositor',
+        '../display/display.gyp:display',
         '../events/devices/events_devices.gyp:events_devices',
         '../events/events.gyp:events',
         '../events/events.gyp:events_base',
@@ -91,6 +92,7 @@
         ['use_x11==1', {
           'dependencies': [
             '../../build/linux/system.gyp:x11',
+            '../events/devices/x11/events_devices_x11.gyp:events_devices_x11',
           ],
         }],
       ],

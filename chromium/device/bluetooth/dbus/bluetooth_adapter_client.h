@@ -7,12 +7,12 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/values.h"
 #include "dbus/object_path.h"
@@ -35,10 +35,10 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterClient : public BluezDBusClient {
     // Copy content of |filter| into this filter
     void CopyFrom(const DiscoveryFilter& filter);
 
-    scoped_ptr<std::vector<std::string>> uuids;
-    scoped_ptr<int16_t> rssi;
-    scoped_ptr<uint16_t> pathloss;
-    scoped_ptr<std::string> transport;
+    std::unique_ptr<std::vector<std::string>> uuids;
+    std::unique_ptr<int16_t> rssi;
+    std::unique_ptr<uint16_t> pathloss;
+    std::unique_ptr<std::string> transport;
 
    private:
     DISALLOW_COPY_AND_ASSIGN(DiscoveryFilter);

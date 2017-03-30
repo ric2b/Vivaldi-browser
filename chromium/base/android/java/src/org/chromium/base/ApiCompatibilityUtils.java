@@ -73,6 +73,14 @@ public class ApiCompatibilityUtils {
     }
 
     /**
+     * @return True if the running version of the Android supports elevation. Elevation of a view
+     * determines the visual appearance of its shadow.
+     */
+    public static boolean isElevationSupported() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP;
+    }
+
+    /**
      * @see android.view.View#setLayoutDirection(int)
      */
     public static void setLayoutDirection(View view, int layoutDirection) {
@@ -278,6 +286,17 @@ public class ApiCompatibilityUtils {
         } else {
             activity.finish();
         }
+    }
+
+    /**
+     * Set elevation if supported.
+     */
+    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+    public static boolean setElevation(View view, float elevationValue) {
+        if (!isElevationSupported()) return false;
+
+        view.setElevation(elevationValue);
+        return true;
     }
 
     private static class FinishAndRemoveTaskWithRetry implements Runnable {

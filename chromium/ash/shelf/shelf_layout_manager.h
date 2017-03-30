@@ -10,15 +10,15 @@
 
 #include "ash/ash_export.h"
 #include "ash/session/session_state_observer.h"
-#include "ash/shelf/background_animator.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_types.h"
 #include "ash/shell_observer.h"
 #include "ash/snap_to_pixel_layout_manager.h"
 #include "ash/system/status_area_widget.h"
-#include "ash/wm/dock/docked_window_layout_manager_observer.h"
+#include "ash/wm/common/background_animator.h"
+#include "ash/wm/common/dock/docked_window_layout_manager_observer.h"
+#include "ash/wm/common/workspace/workspace_types.h"
 #include "ash/wm/lock_state_observer.h"
-#include "ash/wm/workspace/workspace_types.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"
@@ -180,22 +180,22 @@ class ASH_EXPORT ShelfLayoutManager
   }
 
   // TODO(msw): Remove these accessors, kept temporarily to simplify changes.
-  void SetAlignment(ShelfAlignment alignment) {
+  void SetAlignment(wm::ShelfAlignment alignment) {
     shelf_->shelf()->SetAlignment(alignment);
   }
-  ShelfAlignment GetAlignment() const { return shelf_->GetAlignment(); }
+  wm::ShelfAlignment GetAlignment() const { return shelf_->GetAlignment(); }
 
   // TODO(harrym|oshima): These templates will be moved to a new Shelf class.
   // A helper function for choosing values specific to a shelf alignment.
   template <typename T>
   T SelectValueForShelfAlignment(T bottom, T left, T right) const {
     switch (GetAlignment()) {
-      case SHELF_ALIGNMENT_BOTTOM:
-      case SHELF_ALIGNMENT_BOTTOM_LOCKED:
+      case wm::SHELF_ALIGNMENT_BOTTOM:
+      case wm::SHELF_ALIGNMENT_BOTTOM_LOCKED:
         return bottom;
-      case SHELF_ALIGNMENT_LEFT:
+      case wm::SHELF_ALIGNMENT_LEFT:
         return left;
-      case SHELF_ALIGNMENT_RIGHT:
+      case wm::SHELF_ALIGNMENT_RIGHT:
         return right;
     }
     NOTREACHED();
@@ -216,6 +216,7 @@ class ASH_EXPORT ShelfLayoutManager
 
  private:
   class AutoHideEventFilter;
+  class RootWindowControllerObserverImpl;
   class UpdateShelfObserver;
   friend class AshPopupAlignmentDelegateTest;
   friend class ash::ScreenAsh;
@@ -238,11 +239,12 @@ class ASH_EXPORT ShelfLayoutManager
   };
 
   struct State {
-    State() : visibility_state(SHELF_VISIBLE),
-              auto_hide_state(SHELF_AUTO_HIDE_HIDDEN),
-              window_state(WORKSPACE_WINDOW_STATE_DEFAULT),
-              is_screen_locked(false),
-              is_adding_user_screen(false) {}
+    State()
+        : visibility_state(SHELF_VISIBLE),
+          auto_hide_state(SHELF_AUTO_HIDE_HIDDEN),
+          window_state(wm::WORKSPACE_WINDOW_STATE_DEFAULT),
+          is_screen_locked(false),
+          is_adding_user_screen(false) {}
 
     // Returns true if the two states are considered equal. As
     // |auto_hide_state| only matters if |visibility_state| is
@@ -259,7 +261,7 @@ class ASH_EXPORT ShelfLayoutManager
 
     ShelfVisibilityState visibility_state;
     ShelfAutoHideState auto_hide_state;
-    WorkspaceWindowState window_state;
+    wm::WorkspaceWindowState window_state;
     bool is_screen_locked;
     bool is_adding_user_screen;
   };
@@ -288,7 +290,7 @@ class ASH_EXPORT ShelfLayoutManager
   void UpdateShelfBackground(BackgroundAnimatorChangeType type);
 
   // Returns how the shelf background is painted.
-  ShelfBackgroundType GetShelfBackgroundType() const;
+  wm::ShelfBackgroundType GetShelfBackgroundType() const;
 
   // Updates the auto hide state immediately.
   void UpdateAutoHideStateNow();
@@ -396,6 +398,9 @@ class ASH_EXPORT ShelfLayoutManager
 
   // The show hide animation duration override or 0 for default.
   int duration_override_in_ms_;
+
+  std::unique_ptr<RootWindowControllerObserverImpl>
+      root_window_controller_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(ShelfLayoutManager);
 };

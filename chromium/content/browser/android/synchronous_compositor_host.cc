@@ -6,18 +6,21 @@
 
 #include <utility>
 
+#include "base/command_line.h"
 #include "base/containers/hash_tables.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/output/compositor_frame_ack.h"
-#include "content/browser/android/in_process/synchronous_compositor_factory_impl.h"
-#include "content/browser/android/in_process/synchronous_compositor_renderer_statics.h"
 #include "content/browser/renderer_host/render_widget_host_view_android.h"
+#include "content/browser/web_contents/web_contents_android.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/android/sync_compositor_messages.h"
+#include "content/common/android/sync_compositor_statics.h"
 #include "content/public/browser/android/synchronous_compositor_client.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/common/content_switches.h"
 #include "ipc/ipc_sender.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -26,6 +29,38 @@
 #include "ui/gfx/skia_util.h"
 
 namespace content {
+
+// static
+void SynchronousCompositor::SetClientForWebContents(
+    WebContents* contents,
+    SynchronousCompositorClient* client) {
+  DCHECK(contents);
+  DCHECK(client);
+  WebContentsAndroid* web_contents_android =
+      static_cast<WebContentsImpl*>(contents)->GetWebContentsAndroid();
+  DCHECK(!web_contents_android->synchronous_compositor_client());
+  web_contents_android->set_synchronous_compositor_client(client);
+}
+
+// static
+std::unique_ptr<SynchronousCompositorHost> SynchronousCompositorHost::Create(
+    RenderWidgetHostViewAndroid* rwhva,
+    WebContents* web_contents) {
+  DCHECK(web_contents);
+  WebContentsAndroid* web_contents_android =
+      static_cast<WebContentsImpl*>(web_contents)->GetWebContentsAndroid();
+  if (!web_contents_android->synchronous_compositor_client())
+    return nullptr;  // Not using sync compositing.
+
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  bool async_input =
+      !command_line->HasSwitch(switches::kSyncInputForSyncCompositor);
+  bool use_in_proc_software_draw =
+      command_line->HasSwitch(switches::kSingleProcess);
+  return base::WrapUnique(new SynchronousCompositorHost(
+      rwhva, web_contents_android->synchronous_compositor_client(), async_input,
+      use_in_proc_software_draw));
+}
 
 SynchronousCompositorHost::SynchronousCompositorHost(
     RenderWidgetHostViewAndroid* rwhva,
@@ -42,8 +77,6 @@ SynchronousCompositorHost::SynchronousCompositorHost(
       use_in_process_zero_copy_software_draw_(use_in_proc_software_draw),
       is_active_(false),
       bytes_limit_(0u),
-      output_surface_id_from_last_draw_(0u),
-      root_scroll_offset_updated_by_browser_(false),
       renderer_param_version_(0u),
       need_animate_scroll_(false),
       need_invalidate_count_(0u),
@@ -62,6 +95,8 @@ SynchronousCompositorHost::~SynchronousCompositorHost() {
 bool SynchronousCompositorHost::OnMessageReceived(const IPC::Message& message) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(SynchronousCompositorHost, message)
+    IPC_MESSAGE_HANDLER(SyncCompositorHostMsg_OutputSurfaceCreated,
+                        OutputSurfaceCreated)
     IPC_MESSAGE_HANDLER(SyncCompositorHostMsg_UpdateState, ProcessCommonParams)
     IPC_MESSAGE_HANDLER(SyncCompositorHostMsg_OverScroll, OnOverScroll)
     IPC_MESSAGE_UNHANDLED(handled = false)
@@ -100,9 +135,6 @@ SynchronousCompositor::Frame SynchronousCompositorHost::DemandDrawHw(
   }
   if (frame.frame) {
     UpdateFrameMetaData(frame.frame->metadata);
-    if (output_surface_id_from_last_draw_ != frame.output_surface_id)
-      returned_resources_.clear();
-    output_surface_id_from_last_draw_ = frame.output_surface_id;
   }
   return frame;
 }
@@ -135,7 +167,7 @@ bool SynchronousCompositorHost::DemandDrawSwInProc(SkCanvas* canvas) {
   PopulateCommonParams(&common_browser_params);
   SyncCompositorCommonRendererParams common_renderer_params;
   bool success = false;
-  scoped_ptr<cc::CompositorFrame> frame(new cc::CompositorFrame);
+  std::unique_ptr<cc::CompositorFrame> frame(new cc::CompositorFrame);
   ScopedSetSkCanvas set_sk_canvas(canvas);
   SyncCompositorDemandDrawSwParams params;  // Unused.
   if (!sender_->Send(new SyncCompositorMsg_DemandDrawSw(
@@ -199,7 +231,7 @@ bool SynchronousCompositorHost::DemandDrawSw(SkCanvas* canvas) {
   if (!software_draw_shm_)
     return false;
 
-  scoped_ptr<cc::CompositorFrame> frame(new cc::CompositorFrame);
+  std::unique_ptr<cc::CompositorFrame> frame(new cc::CompositorFrame);
   SyncCompositorCommonBrowserParams common_browser_params;
   PopulateCommonParams(&common_browser_params);
   SyncCompositorCommonRendererParams common_renderer_params;
@@ -238,7 +270,7 @@ void SynchronousCompositorHost::SetSoftwareDrawSharedMemoryIfNeeded(
       software_draw_shm_->buffer_size == buffer_size)
     return;
   software_draw_shm_.reset();
-  scoped_ptr<SharedMemoryWithSize> software_draw_shm(
+  std::unique_ptr<SharedMemoryWithSize> software_draw_shm(
       new SharedMemoryWithSize(stride, buffer_size));
   {
     TRACE_EVENT1("browser", "AllocateSharedMemory", "buffer_size", buffer_size);
@@ -277,29 +309,18 @@ void SynchronousCompositorHost::SendZeroMemory() {
 void SynchronousCompositorHost::ReturnResources(
     uint32_t output_surface_id,
     const cc::CompositorFrameAck& frame_ack) {
-  // If output_surface_id does not match, then renderer side has switched
-  // to a new OutputSurface, so dropping resources for old OutputSurface
-  // is allowed.
-  if (output_surface_id_from_last_draw_ != output_surface_id)
-    return;
-  returned_resources_.insert(returned_resources_.end(),
-                             frame_ack.resources.begin(),
-                             frame_ack.resources.end());
+  DCHECK(!frame_ack.resources.empty());
+  sender_->Send(new SyncCompositorMsg_ReclaimResources(
+      routing_id_, output_surface_id, frame_ack));
 }
 
 void SynchronousCompositorHost::SetMemoryPolicy(size_t bytes_limit) {
   if (bytes_limit_ == bytes_limit)
     return;
-  size_t current_bytes_limit = bytes_limit_;
-  bytes_limit_ = bytes_limit;
-  SendAsyncCompositorStateIfNeeded();
 
-  if (bytes_limit && !current_bytes_limit) {
-    SynchronousCompositorStreamTextureFactoryImpl::GetInstance()
-        ->CompositorInitializedHardwareDraw();
-  } else if (!bytes_limit && current_bytes_limit) {
-    SynchronousCompositorStreamTextureFactoryImpl::GetInstance()
-        ->CompositorReleasedHardwareDraw();
+  if (sender_->Send(
+          new SyncCompositorMsg_SetMemoryPolicy(routing_id_, bytes_limit))) {
+    bytes_limit_ = bytes_limit;
   }
 }
 
@@ -307,9 +328,9 @@ void SynchronousCompositorHost::DidChangeRootLayerScrollOffset(
     const gfx::ScrollOffset& root_offset) {
   if (root_scroll_offset_ == root_offset)
     return;
-  root_scroll_offset_updated_by_browser_ = true;
   root_scroll_offset_ = root_offset;
-  SendAsyncCompositorStateIfNeeded();
+  sender_->Send(
+      new SyncCompositorMsg_SetScroll(routing_id_, root_scroll_offset_));
 }
 
 void SynchronousCompositorHost::SendAsyncCompositorStateIfNeeded() {
@@ -402,6 +423,13 @@ void SynchronousCompositorHost::BeginFrame(const cc::BeginFrameArgs& args) {
   ProcessCommonParams(common_renderer_params);
 }
 
+void SynchronousCompositorHost::OutputSurfaceCreated() {
+  // New output surface is not aware of state from Browser side. So need to
+  // re-send all browser side state here.
+  sender_->Send(
+      new SyncCompositorMsg_SetMemoryPolicy(routing_id_, bytes_limit_));
+}
+
 void SynchronousCompositorHost::OnOverScroll(
     const SyncCompositorCommonRendererParams& params,
     const DidOverscrollParams& over_scroll_params) {
@@ -412,16 +440,6 @@ void SynchronousCompositorHost::OnOverScroll(
 void SynchronousCompositorHost::PopulateCommonParams(
     SyncCompositorCommonBrowserParams* params) {
   DCHECK(params);
-  DCHECK(params->ack.resources.empty());
-  params->bytes_limit = bytes_limit_;
-  params->output_surface_id_for_returned_resources =
-      output_surface_id_from_last_draw_;
-  params->ack.resources.swap(returned_resources_);
-  if (root_scroll_offset_updated_by_browser_) {
-    params->root_scroll_offset = root_scroll_offset_;
-    params->update_root_scroll_offset = root_scroll_offset_updated_by_browser_;
-    root_scroll_offset_updated_by_browser_ = false;
-  }
   params->begin_frame_source_paused = !is_active_;
 
   weak_ptr_factory_.InvalidateWeakPtrs();

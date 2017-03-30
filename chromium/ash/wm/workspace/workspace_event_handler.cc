@@ -7,8 +7,11 @@
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/shell.h"
 #include "ash/touch/touch_uma.h"
-#include "ash/wm/window_state.h"
-#include "ash/wm/wm_event.h"
+#include "ash/wm/aura/wm_window_aura.h"
+#include "ash/wm/common/window_state.h"
+#include "ash/wm/common/wm_event.h"
+#include "ash/wm/common/wm_window.h"
+#include "ash/wm/window_state_aura.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
 #include "ui/base/hit_test.h"
@@ -39,8 +42,8 @@ void WorkspaceEventHandler::OnMouseEvent(ui::MouseEvent* event) {
     case ui::ET_MOUSE_MOVED: {
       int component =
           target->delegate()->GetNonClientComponent(event->location());
-      multi_window_resize_controller_.Show(target, component,
-                                           event->location());
+      multi_window_resize_controller_.Show(wm::WmWindowAura::Get(target),
+                                           component, event->location());
       break;
     }
     case ui::ET_MOUSE_ENTERED:
@@ -110,10 +113,9 @@ void WorkspaceEventHandler::OnGestureEvent(ui::GestureEvent* event) {
 void WorkspaceEventHandler::HandleVerticalResizeDoubleClick(
     wm::WindowState* target_state,
     ui::MouseEvent* event) {
-  aura::Window* target = target_state->window();
+  wm::WmWindow* target = target_state->window();
   if (event->flags() & ui::EF_IS_DOUBLE_CLICK) {
-    int component =
-        target->delegate()->GetNonClientComponent(event->location());
+    int component = target->GetNonClientComponent(event->location());
     if (component == HTBOTTOM || component == HTTOP) {
       Shell::GetInstance()->metrics()->RecordUserMetricsAction(
           UMA_TOGGLE_SINGLE_AXIS_MAXIMIZE_BORDER_CLICK);

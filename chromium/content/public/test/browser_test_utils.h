@@ -78,17 +78,15 @@ GURL GetFileUrlWithQuery(const base::FilePath& path,
 bool IsLastCommittedEntryOfPageType(WebContents* web_contents,
                                     content::PageType page_type);
 
-// Waits for a load stop for the specified |web_contents|'s controller, if the
-// tab is currently web_contents.  Otherwise returns immediately.  Tests should
-// use WaitForLoadStop instead and check that last navigation succeeds, and
-// this function should only be used if the navigation leads to web_contents
-// being destroyed.
+// Waits for |web_contents| to stop loading.  If |web_contents| is not loading
+// returns immediately.  Tests should use WaitForLoadStop instead and check that
+// last navigation succeeds, and this function should only be used if the
+// navigation leads to web_contents being destroyed.
 void WaitForLoadStopWithoutSuccessCheck(WebContents* web_contents);
 
-// Waits for a load stop for the specified |web_contents|'s controller, if the
-// tab is currently web_contents.  Otherwise returns immediately.  Returns true
-// if the last navigation succeeded (resulted in a committed navigation entry
-// of type PAGE_TYPE_NORMAL).
+// Waits for |web_contents| to stop loading.  If |web_contents| is not loading
+// returns immediately.  Returns true if the last navigation succeeded (resulted
+// in a committed navigation entry of type PAGE_TYPE_NORMAL).
 // TODO(alexmos): tests that use this function to wait for successful
 // navigations should be refactored to do EXPECT_TRUE(WaitForLoadStop()).
 bool WaitForLoadStop(WebContents* web_contents);
@@ -131,6 +129,10 @@ void SimulateMouseWheelEvent(WebContents* web_contents,
 void SimulateGestureScrollSequence(WebContents* web_contents,
                                    const gfx::Point& point,
                                    const gfx::Vector2dF& delta);
+
+void SimulateGestureFlingSequence(WebContents* web_contents,
+                                  const gfx::Point& point,
+                                  const gfx::Vector2dF& velocity);
 
 // Taps the screen at |point|.
 void SimulateTapAt(WebContents* web_contents, const gfx::Point& point);
@@ -205,6 +207,9 @@ bool ExecuteScript(const ToRenderFrameHost& adapter,
 // sets |result| to the value passed to "window.domAutomationController.send" by
 // the executed script. They return true on success, false if the script
 // execution failed or did not evaluate to the expected type.
+bool ExecuteScriptAndExtractDouble(const ToRenderFrameHost& adapter,
+                                   const std::string& script,
+                                   double* result) WARN_UNUSED_RESULT;
 bool ExecuteScriptAndExtractInt(const ToRenderFrameHost& adapter,
                                 const std::string& script,
                                 int* result) WARN_UNUSED_RESULT;
@@ -234,6 +239,10 @@ RenderFrameHost* FrameMatchingPredicate(
 bool FrameMatchesName(const std::string& name, RenderFrameHost* frame);
 bool FrameIsChildOfMainFrame(RenderFrameHost* frame);
 bool FrameHasSourceUrl(const GURL& url, RenderFrameHost* frame);
+
+// Finds the child frame at the specified |index| for |frame| and returns its
+// RenderFrameHost.  Returns nullptr if such child frame does not exist.
+RenderFrameHost* ChildFrameAt(RenderFrameHost* frame, size_t index);
 
 // Executes the WebUI resource test runner injecting each resource ID in
 // |js_resource_ids| prior to executing the tests.
@@ -415,7 +424,7 @@ class WebContentsAddedObserver {
   base::Callback<void(WebContents*)> web_contents_created_callback_;
 
   WebContents* web_contents_;
-  scoped_ptr<RenderViewCreatedObserver> child_observer_;
+  std::unique_ptr<RenderViewCreatedObserver> child_observer_;
   scoped_refptr<MessageLoopRunner> runner_;
 
   DISALLOW_COPY_AND_ASSIGN(WebContentsAddedObserver);
@@ -474,7 +483,7 @@ class MainThreadFrameObserver : public IPC::Listener {
   void Quit();
 
   RenderWidgetHost* render_widget_host_;
-  scoped_ptr<base::RunLoop> run_loop_;
+  std::unique_ptr<base::RunLoop> run_loop_;
   int routing_id_;
 
   DISALLOW_COPY_AND_ASSIGN(MainThreadFrameObserver);

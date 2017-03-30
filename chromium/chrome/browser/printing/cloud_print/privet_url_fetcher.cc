@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <memory>
 
 #include "base/bind.h"
 #include "base/debug/dump_without_crashing.h"
@@ -17,7 +18,7 @@
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/printing/cloud_print/privet_constants.h"
 #include "content/public/browser/browser_thread.h"
@@ -309,7 +310,7 @@ void PrivetURLFetcher::OnURLFetchCompleteParseData(
   }
 
   base::JSONReader json_reader(base::JSON_ALLOW_TRAILING_COMMAS);
-  scoped_ptr<base::Value> value = json_reader.ReadToValue(response_str);
+  std::unique_ptr<base::Value> value = json_reader.ReadToValue(response_str);
   if (!value) {
     delegate_->OnError(this, JSON_PARSE_ERROR);
     return;

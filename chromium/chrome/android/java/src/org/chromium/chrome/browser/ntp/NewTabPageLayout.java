@@ -10,7 +10,9 @@ import android.util.AttributeSet;
 import android.view.View;
 import android.widget.LinearLayout;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeFeatureList;
 
 /**
  * Layout for the new tab page. This positions the page elements in the correct vertical positions.
@@ -26,17 +28,23 @@ public class NewTabPageLayout extends LinearLayout {
     private static final float TOTAL_SPACER_HEIGHT_DP = TOP_SPACER_HEIGHT_DP
             + MIDDLE_SPACER_HEIGHT_DP + BOTTOM_SPACER_HEIGHT_DP;
 
-    private final int mTopSpacerHeight;
-    private final int mMiddleSpacerHeight;
-    private final int mBottomSpacerHeight;
-    private final int mTotalSpacerHeight;
+    private final int mTopSpacerIdealHeight;
+    private final int mMiddleSpacerIdealHeight;
+    private final int mBottomSpacerIdealHeight;
+    private final int mTotalSpacerIdealHeight;
     private final int mMostVisitedLayoutBleed;
+    private final int mPeekingCardHeight;
+    private final int mTabStripHeight;
 
-    private int mParentScrollViewportHeight;
+    private int mParentViewportHeight;
 
-    private View mTopSpacer;
-    private View mMiddleSpacer;
-    private View mBottomSpacer;
+    private boolean mCardsUiEnabled;
+    private View mTopSpacer;  // Spacer above search logo.
+    private View mMiddleSpacer;  // Spacer between toolbar and Most Likely.
+    private View mBottomSpacer;  // Spacer below Most Likely.
+
+    // Separate spacer below Most Likely to add enough space so the user can scroll with Most Likely
+    // at the top of the screen.
     private View mScrollCompensationSpacer;
 
     private LogoView mSearchProviderLogoView;
@@ -50,11 +58,15 @@ public class NewTabPageLayout extends LinearLayout {
         super(context, attrs);
         Resources res = getResources();
         float density = res.getDisplayMetrics().density;
-        mTopSpacerHeight = Math.round(density * TOP_SPACER_HEIGHT_DP);
-        mMiddleSpacerHeight = Math.round(density * MIDDLE_SPACER_HEIGHT_DP);
-        mBottomSpacerHeight = Math.round(density * BOTTOM_SPACER_HEIGHT_DP);
-        mTotalSpacerHeight = Math.round(density * TOTAL_SPACER_HEIGHT_DP);
+        mTopSpacerIdealHeight = Math.round(density * TOP_SPACER_HEIGHT_DP);
+        mMiddleSpacerIdealHeight = Math.round(density * MIDDLE_SPACER_HEIGHT_DP);
+        mBottomSpacerIdealHeight = Math.round(density * BOTTOM_SPACER_HEIGHT_DP);
+        mTotalSpacerIdealHeight = Math.round(density * TOTAL_SPACER_HEIGHT_DP);
         mMostVisitedLayoutBleed = res.getDimensionPixelSize(R.dimen.most_visited_layout_bleed);
+
+        mPeekingCardHeight = getResources()
+                .getDimensionPixelSize(R.dimen.snippets_padding_and_peeking_card_height);
+        mTabStripHeight = getResources().getDimensionPixelSize(R.dimen.tab_strip_height);
     }
 
     @Override
@@ -67,68 +79,106 @@ public class NewTabPageLayout extends LinearLayout {
         mSearchProviderLogoView = (LogoView) findViewById(R.id.search_provider_logo);
         mSearchBoxView = findViewById(R.id.search_box);
         mMostVisitedLayout = (MostVisitedLayout) findViewById(R.id.most_visited_layout);
+        setSearchBoxStyle();
     }
 
     /**
-     * Specifies the height of the scroll viewport for the container view of this View.
+     * Specifies the height of the parent's viewport for the container view of this View.
      *
-     * <p>
      * As this is required in onMeasure, we can not rely on the parent having the proper
      * size set yet and thus must be told explicitly of this size.
      *
-     * @param height The height of the scroll viewport containing this view.
+     * This View takes into account the presence of the tab strip height for tablets.
      */
-    public void setParentScrollViewportHeight(int height) {
-        mParentScrollViewportHeight = height;
+    public void setParentViewportHeight(int height) {
+        mParentViewportHeight = height;
+    }
+
+    /**
+     * Sets whether the cards UI is enabled.
+     * This view assumes that a peeking card will always be present when the cards UI is used.
+     */
+    public void setUseCardsUiEnabled(boolean useCardsUi) {
+        mCardsUiEnabled = useCardsUi;
     }
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        mScrollCompensationSpacer.getLayoutParams().height = 0;
+        mScrollCompensationSpacer.setVisibility(View.GONE);
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-        distributeExtraSpace(mTopSpacer.getMeasuredHeight());
 
-        int minScrollAmountRequired = 0;
-        for (int i = 0; i < getChildCount(); i++) {
-            View child = getChildAt(i);
+        if (getMeasuredHeight() > mParentViewportHeight) {
+            // This layout is bigger than its parent's viewport, so the user will need to scroll
+            // to see all of it. Extra spacing should be added at the bottom so the user can scroll
+            // until Most Visited is at the top.
 
-            MarginLayoutParams layoutParams = (MarginLayoutParams) child.getLayoutParams();
-            if (child.getVisibility() != View.GONE) {
-                minScrollAmountRequired += layoutParams.topMargin;
+            // All the spacers have height 0 since they use weights to set height.
+            assert mTopSpacer.getMeasuredHeight() == 0;
+
+            final int topOfMostVisited = calculateTopOfMostVisited();
+            final int belowTheFoldHeight = getMeasuredHeight() - mParentViewportHeight;
+            if (belowTheFoldHeight < topOfMostVisited) {
+                mScrollCompensationSpacer.getLayoutParams().height =
+                        topOfMostVisited - belowTheFoldHeight;
+
+                if (mCardsUiEnabled) {
+                    // If we have a peeking card, allow that to show at the bottom of the screen.
+                    mScrollCompensationSpacer.getLayoutParams().height -= mPeekingCardHeight;
+                }
+
+                mScrollCompensationSpacer.setVisibility(View.INVISIBLE);
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec);
             }
-
-            if (child.getId() == R.id.most_visited_layout) break;
-
-            if (child.getVisibility() != View.GONE) {
-                minScrollAmountRequired += child.getMeasuredHeight();
-                minScrollAmountRequired += layoutParams.bottomMargin;
-            }
-        }
-
-        int scrollVsHeightDiff = getMeasuredHeight() - mParentScrollViewportHeight;
-        if (getMeasuredHeight() > mParentScrollViewportHeight
-                && scrollVsHeightDiff < minScrollAmountRequired) {
-            mScrollCompensationSpacer.getLayoutParams().height =
-                    minScrollAmountRequired - scrollVsHeightDiff;
-            mScrollCompensationSpacer.setVisibility(View.INVISIBLE);
-
-            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-            distributeExtraSpace(mTopSpacer.getMeasuredHeight());
         } else {
-            mScrollCompensationSpacer.setVisibility(View.GONE);
+            // This layout is smaller than it's parent viewport, redistribute the extra space.
+            if (mCardsUiEnabled) {
+                getLayoutParams().height = Math.max(getMeasuredHeight(),
+                        mParentViewportHeight - mPeekingCardHeight - mTabStripHeight);
+                // Call onMeasure to update mTopScaper's height.
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            }
+            distributeExtraSpace(mTopSpacer.getMeasuredHeight());
         }
 
-        // Make the search box and logo as wide as the most visited items
+        // Make the search box and logo as wide as the most visited items.
         if (mMostVisitedLayout.getVisibility() != GONE) {
-            int mostVisitedWidthSpec = MeasureSpec.makeMeasureSpec(
-                    mMostVisitedLayout.getMeasuredWidth() - mMostVisitedLayoutBleed,
-                    MeasureSpec.EXACTLY);
-            int searchBoxHeight = MeasureSpec.makeMeasureSpec(
-                    mSearchBoxView.getMeasuredHeight(), MeasureSpec.EXACTLY);
-            mSearchBoxView.measure(mostVisitedWidthSpec, searchBoxHeight);
-            int logoHeight = MeasureSpec.makeMeasureSpec(
-                    mSearchProviderLogoView.getMeasuredHeight(), MeasureSpec.EXACTLY);
-            mSearchProviderLogoView.measure(mostVisitedWidthSpec, logoHeight);
+            final int width = mMostVisitedLayout.getMeasuredWidth() - mMostVisitedLayoutBleed;
+            setMeasure(mSearchBoxView, width, mSearchBoxView.getMeasuredHeight());
+            setMeasure(mSearchProviderLogoView, width, mSearchProviderLogoView.getMeasuredHeight());
+        }
+    }
+
+    /**
+     * Calculate the vertical position of Most Visited.
+     * This method does not use mMostVisitedLayout.getTop(), so can be called in onMeasure.
+     */
+    private int calculateTopOfMostVisited() {
+        // Manually add the heights (and margins) of all children above Most Visited.
+        int top = 0;
+        int mostVisitedIndex = indexOfChild(mMostVisitedLayout);
+        for (int i = 0; i < mostVisitedIndex; i++) {
+            View child = getChildAt(i);
+            MarginLayoutParams params = (MarginLayoutParams) child.getLayoutParams();
+
+            if (child.getVisibility() != View.GONE) {
+                top += params.topMargin + child.getMeasuredHeight() + params.bottomMargin;
+            }
+        }
+        top += ((MarginLayoutParams) mMostVisitedLayout.getLayoutParams()).topMargin;
+        return top;
+    }
+
+    /**
+     * Set the search box style. Modify the search box to enable material when snippets or
+     * material design is enabled.
+     */
+    private void setSearchBoxStyle() {
+        if ((ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_SNIPPETS)
+                    || ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_MATERIAL_DESIGN))
+                && ApiCompatibilityUtils.setElevation(mSearchBoxView,
+                           getResources().getDimensionPixelSize(R.dimen.toolbar_elevation))) {
+            // Replace drawable with one that does not contain a border.
+            mSearchBoxView.setBackgroundResource(R.drawable.bg_ntp_search_box_material);
         }
     }
 
@@ -141,31 +191,33 @@ public class NewTabPageLayout extends LinearLayout {
         int middleSpacerHeight;
         int bottomSpacerHeight;
 
-        if (extraHeight < mTotalSpacerHeight) {
-            topSpacerHeight = Math.round(extraHeight
-                    * (TOP_SPACER_HEIGHT_DP / TOTAL_SPACER_HEIGHT_DP));
-            extraHeight -= topSpacerHeight;
-            middleSpacerHeight = Math.round(extraHeight * (MIDDLE_SPACER_HEIGHT_DP
-                    / (MIDDLE_SPACER_HEIGHT_DP + BOTTOM_SPACER_HEIGHT_DP)));
-            extraHeight -= middleSpacerHeight;
-            bottomSpacerHeight = extraHeight;
+        if (extraHeight < mTotalSpacerIdealHeight) {
+            // The spacers will be less than their ideal height, shrink them proportionally.
+            topSpacerHeight =
+                    Math.round(extraHeight * (TOP_SPACER_HEIGHT_DP / TOTAL_SPACER_HEIGHT_DP));
+            middleSpacerHeight =
+                    Math.round(extraHeight * (MIDDLE_SPACER_HEIGHT_DP / TOTAL_SPACER_HEIGHT_DP));
+            bottomSpacerHeight = extraHeight - topSpacerHeight - middleSpacerHeight;
         } else {
-            topSpacerHeight = mTopSpacerHeight;
-            middleSpacerHeight = mMiddleSpacerHeight;
-            bottomSpacerHeight = mBottomSpacerHeight;
-            extraHeight -= mTotalSpacerHeight;
-
             // Distribute remaining space evenly between the top and bottom spacers.
-            topSpacerHeight += (extraHeight + 1) / 2;
-            bottomSpacerHeight += extraHeight / 2;
+            extraHeight -= mTotalSpacerIdealHeight;
+            topSpacerHeight = mTopSpacerIdealHeight + extraHeight / 2;
+            middleSpacerHeight = mMiddleSpacerIdealHeight;
+            bottomSpacerHeight = mBottomSpacerIdealHeight + extraHeight / 2;
         }
 
-        int widthSpec = MeasureSpec.makeMeasureSpec(0, MeasureSpec.EXACTLY);
-        mTopSpacer.measure(widthSpec,
-                MeasureSpec.makeMeasureSpec(topSpacerHeight, MeasureSpec.EXACTLY));
-        mMiddleSpacer.measure(widthSpec,
-                MeasureSpec.makeMeasureSpec(middleSpacerHeight, MeasureSpec.EXACTLY));
-        mBottomSpacer.measure(widthSpec,
-                MeasureSpec.makeMeasureSpec(bottomSpacerHeight, MeasureSpec.EXACTLY));
+        setMeasure(mTopSpacer, 0, topSpacerHeight);
+        setMeasure(mMiddleSpacer, 0, middleSpacerHeight);
+        setMeasure(mBottomSpacer, 0, bottomSpacerHeight);
+    }
+
+
+    /**
+     * Convenience method to call |measure| on the given View with MeasureSpecs converted from the
+     * given dimensions (in pixels) with MeasureSpec.EXACTLY.
+     */
+    private void setMeasure(View view, int widthPx, int heightPx) {
+        view.measure(MeasureSpec.makeMeasureSpec(widthPx, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(heightPx, MeasureSpec.EXACTLY));
     }
 }

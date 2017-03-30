@@ -2,18 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "media/cast/net/rtcp/rtcp_builder.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "media/cast/cast_environment.h"
 #include "media/cast/net/cast_transport_config.h"
 #include "media/cast/net/cast_transport_defines.h"
 #include "media/cast/net/pacing/paced_sender.h"
 #include "media/cast/net/rtcp/receiver_rtcp_event_subscriber.h"
-#include "media/cast/net/rtcp/rtcp_builder.h"
 #include "media/cast/net/rtcp/rtcp_utility.h"
 #include "media/cast/net/rtcp/test_rtcp_packet_builder.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -49,8 +51,7 @@ class RtcpBuilderTest : public ::testing::Test {
   RtcpBuilderTest()
       : rtcp_builder_(new RtcpBuilder(kSendingSsrc)) {}
 
-  void ExpectPacketEQ(scoped_ptr<Packet> golden_packet,
-                      PacketRef packet) {
+  void ExpectPacketEQ(std::unique_ptr<Packet> golden_packet, PacketRef packet) {
     int diffs = 0;
     EXPECT_EQ(golden_packet->size(), packet->data.size());
     if (golden_packet->size() == packet->data.size()) {
@@ -92,7 +93,7 @@ class RtcpBuilderTest : public ::testing::Test {
     return rtcp_builder_->Finish();
   }
 
-  scoped_ptr<RtcpBuilder> rtcp_builder_;
+  std::unique_ptr<RtcpBuilder> rtcp_builder_;
 
   DISALLOW_COPY_AND_ASSIGN(RtcpBuilderTest);
 };
@@ -139,14 +140,16 @@ TEST_F(RtcpBuilderTest, RtcpReceiverReportWithCast) {
   RtcpReportBlock report_block = GetReportBlock();
 
   RtcpCastMessage cast_message(kMediaSsrc);
-  cast_message.ack_frame_id = kAckFrameId;
+  cast_message.ack_frame_id = FrameId::first() + kAckFrameId;
   PacketIdSet missing_packets;
-  cast_message.missing_frames_and_packets[kLostFrameId] = missing_packets;
+  cast_message.missing_frames_and_packets[FrameId::first() + kLostFrameId] =
+      missing_packets;
 
   missing_packets.insert(kLostPacketId1);
   missing_packets.insert(kLostPacketId2);
   missing_packets.insert(kLostPacketId3);
-  cast_message.missing_frames_and_packets[kFrameIdWithLostPackets] =
+  cast_message
+      .missing_frames_and_packets[FrameId::first() + kFrameIdWithLostPackets] =
       missing_packets;
 
   ExpectPacketEQ(p.GetPacket(),
@@ -169,14 +172,16 @@ TEST_F(RtcpBuilderTest, RtcpReceiverReportWithRrtraAndCastMessage) {
   rrtr.ntp_fraction = kNtpLow;
 
   RtcpCastMessage cast_message(kMediaSsrc);
-  cast_message.ack_frame_id = kAckFrameId;
+  cast_message.ack_frame_id = FrameId::first() + kAckFrameId;
   PacketIdSet missing_packets;
-  cast_message.missing_frames_and_packets[kLostFrameId] = missing_packets;
+  cast_message.missing_frames_and_packets[FrameId::first() + kLostFrameId] =
+      missing_packets;
 
   missing_packets.insert(kLostPacketId1);
   missing_packets.insert(kLostPacketId2);
   missing_packets.insert(kLostPacketId3);
-  cast_message.missing_frames_and_packets[kFrameIdWithLostPackets] =
+  cast_message
+      .missing_frames_and_packets[FrameId::first() + kFrameIdWithLostPackets] =
       missing_packets;
 
   ExpectPacketEQ(p.GetPacket(),
@@ -202,14 +207,16 @@ TEST_F(RtcpBuilderTest, RtcpReceiverReportWithRrtrCastMessageAndLog) {
   rrtr.ntp_fraction = kNtpLow;
 
   RtcpCastMessage cast_message(kMediaSsrc);
-  cast_message.ack_frame_id = kAckFrameId;
+  cast_message.ack_frame_id = FrameId::first() + kAckFrameId;
   PacketIdSet missing_packets;
-  cast_message.missing_frames_and_packets[kLostFrameId] = missing_packets;
+  cast_message.missing_frames_and_packets[FrameId::first() + kLostFrameId] =
+      missing_packets;
 
   missing_packets.insert(kLostPacketId1);
   missing_packets.insert(kLostPacketId2);
   missing_packets.insert(kLostPacketId3);
-  cast_message.missing_frames_and_packets[kFrameIdWithLostPackets] =
+  cast_message
+      .missing_frames_and_packets[FrameId::first() + kFrameIdWithLostPackets] =
       missing_packets;
 
   ReceiverRtcpEventSubscriber event_subscriber(500, VIDEO_EVENT);

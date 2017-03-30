@@ -16,13 +16,15 @@
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/shell_window_ids.h"
-#include "ash/switchable_windows.h"
+#include "ash/wm/aura/wm_window_aura.h"
+#include "ash/wm/common/panels/panel_layout_manager.h"
+#include "ash/wm/common/switchable_windows.h"
+#include "ash/wm/common/window_state.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/window_grid.h"
 #include "ash/wm/overview/window_selector_delegate.h"
 #include "ash/wm/overview/window_selector_item.h"
-#include "ash/wm/panels/panel_layout_manager.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/auto_reset.h"
 #include "base/command_line.h"
@@ -35,9 +37,9 @@
 #include "ui/aura/window_observer.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
+#include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
-#include "ui/gfx/screen.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -268,18 +270,17 @@ void WindowSelector::Init(const WindowList& windows) {
        iter != root_windows.end(); iter++) {
     // Observed switchable containers for newly created windows on all root
     // windows.
-    for (size_t i = 0; i < kSwitchableWindowContainerIdsLength; ++i) {
-      aura::Window* container = Shell::GetContainer(*iter,
-          kSwitchableWindowContainerIds[i]);
+    for (size_t i = 0; i < wm::kSwitchableWindowContainerIdsLength; ++i) {
+      aura::Window* container =
+          Shell::GetContainer(*iter, wm::kSwitchableWindowContainerIds[i]);
       container->AddObserver(this);
       observed_windows_.insert(container);
     }
 
     // Hide the callout widgets for panels. It is safe to call this for
     // root windows that don't contain any panel windows.
-    static_cast<PanelLayoutManager*>(
-        Shell::GetContainer(*iter, kShellWindowId_PanelContainer)
-            ->layout_manager())->SetShowCalloutWidgets(false);
+    PanelLayoutManager::Get(wm::WmWindowAura::Get(*iter))
+        ->SetShowCalloutWidgets(false);
 
     std::unique_ptr<WindowGrid> grid(new WindowGrid(*iter, windows, this));
     if (grid->empty())
@@ -318,7 +319,7 @@ void WindowSelector::Init(const WindowList& windows) {
 
   shell->activation_client()->AddObserver(this);
 
-  gfx::Screen::GetScreen()->AddObserver(this);
+  display::Screen::GetScreen()->AddObserver(this);
   shell->metrics()->RecordUserMetricsAction(UMA_WINDOW_OVERVIEW);
   // Send an a11y alert.
   shell->accessibility_delegate()->TriggerAccessibilityAlert(
@@ -339,9 +340,8 @@ void WindowSelector::Shutdown() {
        iter != root_windows.end(); iter++) {
     // Un-hide the callout widgets for panels. It is safe to call this for
     // root_windows that don't contain any panel windows.
-    static_cast<PanelLayoutManager*>(
-        Shell::GetContainer(*iter, kShellWindowId_PanelContainer)
-            ->layout_manager())->SetShowCalloutWidgets(true);
+    PanelLayoutManager::Get(wm::WmWindowAura::Get(*iter))
+        ->SetShowCalloutWidgets(true);
   }
 
   size_t remaining_items = 0;
@@ -382,7 +382,7 @@ void WindowSelector::RemoveAllObservers() {
     window->RemoveObserver(this);
 
   shell->activation_client()->RemoveObserver(this);
-  gfx::Screen::GetScreen()->RemoveObserver(this);
+  display::Screen::GetScreen()->RemoveObserver(this);
   if (restore_focus_window_)
     restore_focus_window_->RemoveObserver(this);
 }
@@ -469,15 +469,14 @@ bool WindowSelector::HandleKeyEvent(views::Textfield* sender,
   return true;
 }
 
-void WindowSelector::OnDisplayAdded(const gfx::Display& display) {
-}
+void WindowSelector::OnDisplayAdded(const display::Display& display) {}
 
-void WindowSelector::OnDisplayRemoved(const gfx::Display& display) {
+void WindowSelector::OnDisplayRemoved(const display::Display& display) {
   // TODO(flackr): Keep window selection active on remaining displays.
   CancelSelection();
 }
 
-void WindowSelector::OnDisplayMetricsChanged(const gfx::Display& display,
+void WindowSelector::OnDisplayMetricsChanged(const display::Display& display,
                                              uint32_t metrics) {
   PositionWindows(/* animate */ false);
   RepositionTextFilterOnDisplayMetricsChange();
@@ -487,8 +486,8 @@ void WindowSelector::OnWindowAdded(aura::Window* new_window) {
   if (!IsSelectable(new_window))
     return;
 
-  for (size_t i = 0; i < kSwitchableWindowContainerIdsLength; ++i) {
-    if (new_window->parent()->id() == kSwitchableWindowContainerIds[i] &&
+  for (size_t i = 0; i < wm::kSwitchableWindowContainerIdsLength; ++i) {
+    if (new_window->parent()->id() == wm::kSwitchableWindowContainerIds[i] &&
         !::wm::GetTransientParent(new_window)) {
       // The new window is in one of the switchable containers, abort overview.
       CancelSelection();

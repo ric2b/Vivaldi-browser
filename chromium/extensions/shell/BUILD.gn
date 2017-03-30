@@ -57,6 +57,7 @@ source_set("app_shell_lib") {
     "//mojo/edk/system",
     "//skia",
     "//third_party/WebKit/public:blink",
+    "//third_party/cld_2:cld2_platform_impl",
     "//ui/base",
     "//ui/base/ime",
     "//v8",
@@ -109,10 +110,6 @@ source_set("app_shell_lib") {
       ]
     }
   }
-
-  if (cld_version == 2) {
-    deps += [ "//third_party/cld_2:cld2_platform_impl" ]
-  }
 }
 
 if (!(is_chromeos && !use_ozone)) {
@@ -125,6 +122,7 @@ if (!(is_chromeos && !use_ozone)) {
     deps = [
       ":app_shell_lib",
       "//build/config/sanitizers:deps",
+      "//build/win:default_exe_manifest",
       "//extensions:shell_and_test_pak",
     ]
 
@@ -134,11 +132,12 @@ if (!(is_chromeos && !use_ozone)) {
     }
 
     if (is_mac) {
-      # TODO(GYP) bug 546894: Fix GN and toolchains to handle spaces here.
-      #output_name = "App Shell"
+      output_name = "App Shell"
+
       # TODO(GYP): Mac bundling. See also content_shell which this is basically
       # a copy-paste of.
       deps += [ ":app_shell_framework" ]
+
       # TODO(GYP): Mac app_shell_helper stuff.
     }
   }
@@ -192,15 +191,11 @@ test("app_shell_unittests") {
     sources += chromeos_sources
   }
 
-  # TODO(GYP): Enable this when //components/nacl GN is done.
-  if (false) {
-    if (use_nacl) {
-      nacl_sources =
-          rebase_path(app_shell_gypi_values.app_shell_unittests_sources_nacl,
-                      ".",
-                      "//extensions/shell")
-      sources += nacl_sources
-    }
+  if (enable_nacl) {
+    sources +=
+        rebase_path(app_shell_gypi_values.app_shell_unittests_sources_nacl,
+                    ".",
+                    "//extensions/shell")
   }
 }
 

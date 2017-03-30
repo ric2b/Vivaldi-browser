@@ -55,9 +55,14 @@ enum SBThreatType {
 
 // Metadata that indicates what kind of URL match this is.
 enum class ThreatPatternType {
-  NONE,          // Pattern type didn't appear in the metadata
-  LANDING,       // The match is a landing page
-  DISTRIBUTION,  // The match is a distribution page
+  NONE = 0,                        // Pattern type didn't appear in the metadata
+  MALWARE_LANDING = 1,             // The match is a malware landing page
+  MALWARE_DISTRIBUTION = 2,        // The match is a malware distribution page
+  SOCIAL_ENGINEERING_ADS = 3,      // The match is a social engineering ads page
+  SOCIAL_ENGINEERING_LANDING = 4,  // The match is a social engineering landing
+                                   // page
+  PHISHING = 5,                    // The match is a phishing page
+  THREAT_PATTERN_TYPE_MAX_VALUE
 };
 
 // Metadata that was returned by a GetFullHash call. This is the parsed version
@@ -96,9 +101,9 @@ struct SBFullHashResult {
   // TODO(shess): Refactor to allow ListType here.
   int list_id;
   ThreatMetadata metadata;
-  // Used only for V4 results. The cache lifetime for this result. The response
-  // must not be cached for more than this duration to avoid false positives.
-  base::TimeDelta cache_duration;
+  // Used only for V4 results. The cache expire time for this result. The
+  // response must not be cached after this time to avoid false positives.
+  base::Time cache_expire_after;
 };
 
 // Caches individual response from GETHASH request.
@@ -127,14 +132,12 @@ extern const char kExtensionBlacklist[];
 extern const char kIPBlacklist[];
 // SafeBrowsing unwanted URL list.
 extern const char kUnwantedUrlList[];
-// SafeBrowsing off-domain inclusion whitelist list name.
-extern const char kInclusionWhitelist[];
 // SafeBrowsing module whitelist list name.
 extern const char kModuleWhitelist[];
 // Blacklisted resource URLs list name.
 extern const char kResourceBlacklist[];
 /// This array must contain all Safe Browsing lists.
-extern const char* kAllLists[11];
+extern const char* kAllLists[10];
 
 enum ListType {
   INVALID = -1,
@@ -156,7 +159,7 @@ enum ListType {
   // See above comment.  Leave 13 available.
   UNWANTEDURL = 14,
   // See above comment.  Leave 15 available.
-  INCLUSIONWHITELIST = 16,
+  // Obsolete INCLUSIONWHITELIST = 16,
   // See above comment.  Leave 17 available.
   MODULEWHITELIST = 18,
   // See above comment. Leave 19 available.

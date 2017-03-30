@@ -15,6 +15,7 @@ import android.view.KeyEvent;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
@@ -116,9 +117,12 @@ public class ContextMenuTest extends DownloadTestBase {
                 "testImage", "/chrome/test/data/android/contextmenu/test_image.png");
     }
 
-    @MediumTest
-    @Feature({"Browser"})
-    @CommandLineFlags.Add(ChromeSwitches.DISABLE_DOCUMENT_MODE)
+    /**
+     * @MediumTest
+     * @Feature({"Browser"})
+     * @CommandLineFlags.Add(ChromeSwitches.DISABLE_DOCUMENT_MODE)
+    */
+    @FlakyTest(message = "http://crbug.com/606939")
     public void testLongPressOnImageLink() throws InterruptedException, TimeoutException {
         checkOpenImageInNewTab(
                 "testImageLink", "/chrome/test/data/android/contextmenu/test_image.png");
@@ -170,10 +174,15 @@ public class ContextMenuTest extends DownloadTestBase {
         Tab tab = getActivity().getActivityTab();
         ContextMenu menu = ContextMenuUtils.openContextMenu(this, tab, "testImage");
         assertNotNull("Context menu was not properly created", menu);
-        assertFalse("Context menu did not have window focus", getActivity().hasWindowFocus());
+        CriteriaHelper.pollUiThread(new Criteria("Context menu did not have window focus") {
+            @Override
+            public boolean isSatisfied() {
+                return !getActivity().hasWindowFocus();
+            }
+        });
 
         getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
-        CriteriaHelper.pollInstrumentationThread(new Criteria("Activity did not regain focus.") {
+        CriteriaHelper.pollUiThread(new Criteria("Activity did not regain focus.") {
             @Override
             public boolean isSatisfied() {
                 return getActivity().hasWindowFocus();
@@ -187,11 +196,16 @@ public class ContextMenuTest extends DownloadTestBase {
         Tab tab = getActivity().getActivityTab();
         ContextMenu menu = ContextMenuUtils.openContextMenu(this, tab, "testImage");
         assertNotNull("Context menu was not properly created", menu);
-        assertFalse("Context menu did not have window focus", getActivity().hasWindowFocus());
+        CriteriaHelper.pollUiThread(new Criteria("Context menu did not have window focus") {
+            @Override
+            public boolean isSatisfied() {
+                return !getActivity().hasWindowFocus();
+            }
+        });
 
         TestTouchUtils.singleClickView(getInstrumentation(), tab.getView(), 0, 0);
 
-        CriteriaHelper.pollInstrumentationThread(new Criteria("Activity did not regain focus.") {
+        CriteriaHelper.pollUiThread(new Criteria("Activity did not regain focus.") {
             @Override
             public boolean isSatisfied() {
                 return getActivity().hasWindowFocus();

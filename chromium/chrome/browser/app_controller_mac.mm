@@ -6,6 +6,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
+#include "app/vivaldi_command_controller.h"
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -1032,11 +1033,6 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer {
   [[SUUpdater sharedUpdater] checkForUpdates:nil];
 }
 
-// Called when the user picks a menu item when there are no key windows, or when
-// there is no foreground browser window. Calls through to the browser object to
-// execute the command. This assumes that the command is supported and doesn't
-// check, otherwise it should have been disabled in the UI in
-// |-validateUserInterfaceItem:|.
 - (void)commandDispatch:(id)sender {
   Profile* lastProfile = [self safeLastProfileForNewWindows];
 
@@ -1470,6 +1466,32 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer {
         [item setAction:@selector(commandDispatch:)];
         break;
     }
+}
+
+// NOTE(espen@vivaldi.com): Support for swipe navigation with no animation. This
+// gets triggered by three finger swipes.
+- (void)swipeWithEvent:(NSEvent*)event {
+  CGFloat deltaX = [event deltaX];
+  unsigned int command = 0;
+  if (deltaX > 0.5) {
+    command = IDC_BACK;
+  } else if (deltaX < -0.5) {
+    command = IDC_FORWARD;
+  }
+  if (command != 0) {
+    Profile* lastProfile = [self safeLastProfileForNewWindows];
+    if (Browser* browser = ActivateBrowser(lastProfile)) {
+      if (chrome::IsCommandEnabled(browser, command)) {
+        chrome::ExecuteCommand(browser, command);
+      }
+    }
+  }
+}
+
+- (void)setVivaldiScrollType:(int)scrollType {
+  // TODO(espen@vivaldi.com). Get rid of app controller wrapper once we sort
+  // of linker problem with component builds.
+  vivaldi::SetVivaldiScrollType(scrollType);
 }
 
 // Conditionally adds the Profile menu to the main menu bar.

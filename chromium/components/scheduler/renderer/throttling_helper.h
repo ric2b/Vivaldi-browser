@@ -30,6 +30,14 @@ class SCHEDULER_EXPORT ThrottlingHelper : public TimeDomain::Observer {
   void OnTimeDomainHasImmediateWork() override;
   void OnTimeDomainHasDelayedWork() override;
 
+  // The purpose of this method is to make sure thottling doesn't conflict with
+  // enabling/disabling the queue for policy reasons.
+  // If |task_queue| is throttled then the ThrottlingHelper remembers the
+  // |enabled| setting.  In addition if |enabled| is false then the queue is
+  // immediatly disabled.  Otherwise if |task_queue| not throttled then
+  // TaskQueue::SetEnabled(enabled) is called.
+  void SetQueueEnabled(TaskQueue* task_queue, bool enabled);
+
   // Increments the throttled refcount and causes |task_queue| to be throttled
   // if its not already throttled.
   void IncreaseThrottleRefCount(TaskQueue* task_queue);
@@ -49,7 +57,16 @@ class SCHEDULER_EXPORT ThrottlingHelper : public TimeDomain::Observer {
   const scoped_refptr<TaskQueue>& task_runner() const { return task_runner_; }
 
  private:
-  using TaskQueueMap = std::map<TaskQueue*, size_t>;
+  struct Metadata {
+    Metadata() : throttling_ref_count(0), enabled(false) {}
+
+    Metadata(size_t ref_count, bool is_enabled)
+        : throttling_ref_count(ref_count), enabled(is_enabled) {}
+
+    size_t throttling_ref_count;
+    bool enabled;
+  };
+  using TaskQueueMap = std::map<TaskQueue*, Metadata>;
 
   void PumpThrottledTasks();
 
@@ -67,7 +84,7 @@ class SCHEDULER_EXPORT ThrottlingHelper : public TimeDomain::Observer {
   RendererSchedulerImpl* renderer_scheduler_;  // NOT OWNED
   base::TickClock* tick_clock_;                // NOT OWNED
   const char* tracing_category_;               // NOT OWNED
-  scoped_ptr<ThrottledTimeDomain> time_domain_;
+  std::unique_ptr<ThrottledTimeDomain> time_domain_;
 
   CancelableClosureHolder suspend_timers_when_backgrounded_closure_;
   base::TimeTicks pending_pump_throttled_tasks_runtime_;

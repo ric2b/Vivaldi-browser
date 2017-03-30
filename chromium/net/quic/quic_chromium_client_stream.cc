@@ -6,7 +6,7 @@
 
 #include "base/callback_helpers.h"
 #include "base/location.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/quic/quic_chromium_client_session.h"
@@ -131,6 +131,27 @@ int QuicChromiumClientStream::WriteStreamData(
   DCHECK(!HasBufferedData());
   // Writes the data, or buffers it.
   WriteOrBufferData(data, fin, nullptr);
+  if (!HasBufferedData()) {
+    return OK;
+  }
+
+  callback_ = callback;
+  return ERR_IO_PENDING;
+}
+
+int QuicChromiumClientStream::WritevStreamData(
+    const std::vector<scoped_refptr<IOBuffer>>& buffers,
+    const std::vector<int>& lengths,
+    bool fin,
+    const CompletionCallback& callback) {
+  // Must not be called when data is buffered.
+  DCHECK(!HasBufferedData());
+  // Writes the data, or buffers it.
+  for (size_t i = 0; i < buffers.size(); ++i) {
+    bool is_fin = fin && (i == buffers.size() - 1);
+    base::StringPiece string_data(buffers[i]->data(), lengths[i]);
+    WriteOrBufferData(string_data, is_fin, nullptr);
+  }
   if (!HasBufferedData()) {
     return OK;
   }

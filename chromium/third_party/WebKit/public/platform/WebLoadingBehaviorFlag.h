@@ -14,13 +14,16 @@ namespace blink {
 // browser process for histogram splitting.
 enum WebLoadingBehaviorFlag {
     WebLoadingBehaviorNone = 0,
+    // Indicates that the page used the document.write evaluator to preload scan for resources inserted via document.write.
     WebLoadingBehaviorDocumentWriteEvaluator = 1 << 0,
+    // Indicates that the page is controlled by a Service Worker.
+    WebLoadingBehaviorServiceWorkerControlled = 1 << 1,
     // Indicates that the page has a synchronous, cross-origin document.written
     // script.
-    WebLoadingBehaviorDocumentWriteBlock = 1 << 1,
+    WebLoadingBehaviorDocumentWriteBlock = 1 << 2,
     // Indicates that the page is a reload and has a synchronous, cross-origin document.written
     // script.
-    WebLoadingBehaviorDocumentWriteBlockReload = 1 << 2,
+    WebLoadingBehaviorDocumentWriteBlockReload = 1 << 3,
 };
 
 } // namespace blink

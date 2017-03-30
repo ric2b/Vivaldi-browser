@@ -37,7 +37,6 @@
 #include "platform/weborigin/KURL.h"
 #include "wtf/Deque.h"
 #include "wtf/HashMap.h"
-#include "wtf/RefCounted.h"
 #include "wtf/text/WTFString.h"
 
 
@@ -55,7 +54,7 @@ class XHRReplayData final
     , public ContextLifecycleObserver {
     USING_GARBAGE_COLLECTED_MIXIN(XHRReplayData);
 public:
-    static RawPtr<XHRReplayData> create(ExecutionContext*, const AtomicString& method, const KURL&, bool async, PassRefPtr<EncodedFormData>, bool includeCredentials);
+    static XHRReplayData* create(ExecutionContext*, const AtomicString& method, const KURL&, bool async, PassRefPtr<EncodedFormData>, bool includeCredentials);
 
     void addHeader(const AtomicString& key, const AtomicString& value);
     const AtomicString& method() const { return m_method; }
@@ -83,7 +82,7 @@ public:
     class ResourceData final : public GarbageCollectedFinalized<ResourceData> {
         friend class NetworkResourcesData;
     public:
-        ResourceData(const String& requestId, const String& loaderId, const KURL&);
+        ResourceData(NetworkResourcesData*, const String& requestId, const String& loaderId, const KURL&);
 
         String requestId() const { return m_requestId; }
         String loaderId() const { return m_loaderId; }
@@ -116,13 +115,13 @@ public:
         void setTextEncodingName(const String& textEncodingName) { m_textEncodingName = textEncodingName; }
 
         TextResourceDecoder* decoder() const { return m_decoder.get(); }
-        void setDecoder(PassOwnPtr<TextResourceDecoder> decoder) { m_decoder = decoder; }
+        void setDecoder(PassOwnPtr<TextResourceDecoder> decoder) { m_decoder = std::move(decoder); }
 
         PassRefPtr<SharedBuffer> buffer() const { return m_buffer; }
         void setBuffer(PassRefPtr<SharedBuffer> buffer) { m_buffer = buffer; }
 
         Resource* cachedResource() const { return m_cachedResource.get(); }
-        void setResource(Resource* cachedResource) { m_cachedResource = cachedResource; }
+        void setResource(Resource*);
 
         XHRReplayData* xhrReplayData() const { return m_xhrReplayData.get(); }
         void setXHRReplayData(XHRReplayData* xhrReplayData) { m_xhrReplayData = xhrReplayData; }
@@ -136,7 +135,9 @@ public:
         size_t dataLength() const;
         void appendData(const char* data, size_t dataLength);
         size_t decodeDataToContent();
+        void clearWeakMembers(Visitor*);
 
+        Member<NetworkResourcesData> m_networkResourcesData;
         String m_requestId;
         String m_loaderId;
         String m_frameId;
@@ -154,11 +155,11 @@ public:
         OwnPtr<TextResourceDecoder> m_decoder;
 
         RefPtr<SharedBuffer> m_buffer;
-        Member<Resource> m_cachedResource;
+        WeakMember<Resource> m_cachedResource;
         RefPtr<BlobDataHandle> m_downloadedFileBlob;
     };
 
-    static RawPtr<NetworkResourcesData> create(size_t totalBufferSize, size_t resourceBufferSize)
+    static NetworkResourcesData* create(size_t totalBufferSize, size_t resourceBufferSize)
     {
         return new NetworkResourcesData(totalBufferSize, resourceBufferSize);
     }
@@ -173,7 +174,6 @@ public:
     void maybeDecodeDataToContent(const String& requestId);
     void addResource(const String& requestId, Resource*);
     ResourceData const* data(const String& requestId);
-    Vector<String> removeResource(Resource*);
     void clear(const String& preservedLoaderId = String());
 
     void setResourcesDataSizeLimits(size_t maximumResourcesContentSize, size_t maximumSingleResourceContentSize);

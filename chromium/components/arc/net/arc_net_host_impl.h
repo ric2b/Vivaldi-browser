@@ -11,12 +11,19 @@
 
 #include "base/files/scoped_file.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "chromeos/network/network_state_handler_observer.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service.h"
 #include "components/arc/common/net.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
+
+namespace base {
+
+class DictionaryValue;
+
+}  // namespace base
 
 namespace arc {
 
@@ -26,46 +33,58 @@ class ArcBridgeService;
 class ArcNetHostImpl : public ArcService,
                        public ArcBridgeService::Observer,
                        public chromeos::NetworkStateHandlerObserver,
-                       public NetHost {
+                       public mojom::NetHost {
  public:
   // The constructor will register an Observer with ArcBridgeService.
   explicit ArcNetHostImpl(ArcBridgeService* arc_bridge_service);
   ~ArcNetHostImpl() override;
 
-  // Called when a GetNetworks call is sent from ARC.
+  // ARC -> Chrome calls:
+
   void GetNetworksDeprecated(
       bool configured_only,
       bool visible_only,
       const GetNetworksDeprecatedCallback& callback) override;
 
-  // Called when a GetNetworks call is sent from ARC.
-  void GetNetworks(GetNetworksRequestType type,
+  void GetNetworks(mojom::GetNetworksRequestType type,
                    const GetNetworksCallback& callback) override;
 
-  // Called when a GetWifiEnabledState call is sent from ARC.
   void GetWifiEnabledState(
       const GetWifiEnabledStateCallback& callback) override;
 
-  // Called when a SetWifiEnabledState call is sent from ARC.
   void SetWifiEnabledState(
       bool is_enabled,
       const SetWifiEnabledStateCallback& callback) override;
 
-  // Called when a StartScan call is sent from ARC.
   void StartScan() override;
+
+  void CreateNetwork(mojom::WifiConfigurationPtr cfg,
+                     const CreateNetworkCallback& callback) override;
+
+  void ForgetNetwork(const mojo::String& guid,
+                     const ForgetNetworkCallback& callback) override;
+
+  void StartConnect(const mojo::String& guid,
+                    const StartConnectCallback& callback) override;
+
+  void StartDisconnect(const mojo::String& guid,
+                       const StartDisconnectCallback& callback) override;
 
   // Overriden from chromeos::NetworkStateHandlerObserver.
   void ScanCompleted(const chromeos::DeviceState* /*unused*/) override;
-
-  // Overriden from chromeos::NetworkStateHandlerObserver.
   void OnShuttingDown() override;
+  void DefaultNetworkChanged(const chromeos::NetworkState* network) override;
+  void GetDefaultNetwork(const GetDefaultNetworkCallback& callback) override;
 
   // Overridden from ArcBridgeService::Observer:
   void OnNetInstanceReady() override;
 
  private:
+  void DefaultNetworkSuccessCallback(const std::string& service_path,
+                                     const base::DictionaryValue& dictionary);
   base::ThreadChecker thread_checker_;
-  mojo::Binding<arc::NetHost> binding_;
+  mojo::Binding<arc::mojom::NetHost> binding_;
+  base::WeakPtrFactory<ArcNetHostImpl> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcNetHostImpl);
 };

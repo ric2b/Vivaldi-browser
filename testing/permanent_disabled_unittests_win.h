@@ -38,6 +38,7 @@
   // Disabled because high performance timing support (contant_tsc)
   // is not detected by chromium on windows WM testers.
   DISABLE(CookieMonsterTest, DeleteAllForHost)
+  DISABLE(CookieMonsterTest, PredicateSeesAllCookies)
 
   DISABLE(KeyboardAccessTest, TestAltMenuKeyboardAccess)
 
@@ -48,6 +49,7 @@
   DISABLE_ALL(MetricsWebContentsObserverTest)
   DISABLE_ALL(DocumentWritePageLoadMetricsObserverTest)
   DISABLE_ALL(FromGWSPageLoadMetricsObserverTest)
+  DISABLE(RenderWidgetUnittest, TouchStartDuringOrOutsideFlingUmaMetrics)
 
   // Fails on tester, works on dev PC; assume it is the timing issue
   DISABLE(NotificationPermissionContextTest, TestDenyInIncognitoAfterDelay)

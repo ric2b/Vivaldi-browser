@@ -9,10 +9,10 @@
 #include "base/lazy_instance.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/output/managed_memory_policy.h"
-#include "gpu/blink/webgraphicscontext3d_impl.h"
 #include "gpu/command_buffer/client/gl_in_process_context.h"
 #include "gpu/command_buffer/client/gles2_implementation.h"
 #include "gpu/command_buffer/client/gles2_lib.h"
+#include "gpu/command_buffer/client/shared_memory_limits.h"
 #include "gpu/skia_bindings/gl_bindings_skia_cmd_buffer.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLInterface.h"
@@ -50,16 +50,23 @@ AwRenderThreadContextProvider::AwRenderThreadContextProvider(
   attributes.samples = 0;
   attributes.sample_buffers = 0;
   attributes.bind_generates_resource = false;
+
+  gpu::SharedMemoryLimits limits;
+  // This context is only used for the display compositor, and there are no
+  // uploads done with it at all. We choose a small transfer buffer limit
+  // here, the minimums match the display compositor context for the android
+  // browser. We don't set the max since we expect the transfer buffer to be
+  // relatively unused.
+  limits.start_transfer_buffer_size = 64 * 1024;
+  limits.min_transfer_buffer_size = 64 * 1024;
+
   context_.reset(gpu::GLInProcessContext::Create(
       service, surface, surface->IsOffscreen(), gfx::kNullAcceleratedWidget,
       surface->GetSize(), nullptr /* share_context */, attributes,
-      gfx::PreferDiscreteGpu, gpu::GLInProcessContextSharedMemoryLimits(),
-      nullptr, nullptr));
+      gfx::PreferDiscreteGpu, limits, nullptr, nullptr));
 
-  context_->SetContextLostCallback(base::Bind(
+  context_->GetImplementation()->SetLostContextCallback(base::Bind(
       &AwRenderThreadContextProvider::OnLostContext, base::Unretained(this)));
-
-  capabilities_.gpu = context_->GetImplementation()->capabilities();
 }
 
 AwRenderThreadContextProvider::~AwRenderThreadContextProvider() {
@@ -75,11 +82,9 @@ bool AwRenderThreadContextProvider::BindToCurrentThread() {
   return true;
 }
 
-cc::ContextProvider::Capabilities
-AwRenderThreadContextProvider::ContextCapabilities() {
+gpu::Capabilities AwRenderThreadContextProvider::ContextCapabilities() {
   DCHECK(main_thread_checker_.CalledOnValidThread());
-
-  return capabilities_;
+  return context_->GetImplementation()->capabilities();
 }
 
 gpu::gles2::GLES2Interface* AwRenderThreadContextProvider::ContextGL() {
@@ -115,11 +120,6 @@ void AwRenderThreadContextProvider::InvalidateGrContext(uint32_t state) {
     gr_context_->resetContext(state);
 }
 
-void AwRenderThreadContextProvider::SetupLock() {
-  // This context provider is not used on multiple threads.
-  NOTREACHED();
-}
-
 base::Lock* AwRenderThreadContextProvider::GetLock() {
   // This context provider is not used on multiple threads.
   NOTREACHED();
@@ -145,7 +145,7 @@ void AwRenderThreadContextProvider::OnLostContext() {
   DCHECK(main_thread_checker_.CalledOnValidThread());
 
   if (!lost_context_callback_.is_null())
-    base::ResetAndReturn(&lost_context_callback_).Run();
+    lost_context_callback_.Run();
   if (gr_context_)
     gr_context_->abandonContext();
 }

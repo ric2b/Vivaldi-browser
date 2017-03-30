@@ -4,6 +4,8 @@
 
 #include "net/quic/crypto/channel_id.h"
 
+#include <memory>
+
 #include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -234,12 +236,12 @@ TEST(ChannelIDTest, VerifyKnownAnswerTest) {
 }
 
 TEST(ChannelIDTest, SignAndVerify) {
-  scoped_ptr<ChannelIDSource> source(
+  std::unique_ptr<ChannelIDSource> source(
       CryptoTestUtils::ChannelIDSourceForTesting());
 
   const string signed_data = "signed data";
   const string hostname = "foo.example.com";
-  scoped_ptr<ChannelIDKey> channel_id_key;
+  std::unique_ptr<ChannelIDKey> channel_id_key;
   QuicAsyncStatus status =
       source->GetChannelIDKey(hostname, &channel_id_key, nullptr);
   ASSERT_EQ(QUIC_SUCCESS, status);
@@ -253,13 +255,13 @@ TEST(ChannelIDTest, SignAndVerify) {
   EXPECT_FALSE(ChannelIDVerifier::Verify("a" + key, signed_data, signature));
   EXPECT_FALSE(ChannelIDVerifier::Verify(key, "a" + signed_data, signature));
 
-  scoped_ptr<char[]> bad_key(new char[key.size()]);
+  std::unique_ptr<char[]> bad_key(new char[key.size()]);
   memcpy(bad_key.get(), key.data(), key.size());
   bad_key[1] ^= 0x80;
   EXPECT_FALSE(ChannelIDVerifier::Verify(string(bad_key.get(), key.size()),
                                          signed_data, signature));
 
-  scoped_ptr<char[]> bad_signature(new char[signature.size()]);
+  std::unique_ptr<char[]> bad_signature(new char[signature.size()]);
   memcpy(bad_signature.get(), signature.data(), signature.size());
   bad_signature[1] ^= 0x80;
   EXPECT_FALSE(ChannelIDVerifier::Verify(

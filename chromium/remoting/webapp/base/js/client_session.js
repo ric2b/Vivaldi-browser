@@ -156,7 +156,8 @@ remoting.ClientSession.State = {
   CONNECTED: 4,
   CLOSED: 5,
   FAILED: 6,
-  MAX_STATE_ENUM: 6,
+  VIDEO_STREAM_STARTED: 7,
+  MAX_STATE_ENUM: 7
 };
 
 /**
@@ -208,13 +209,23 @@ remoting.ClientSession.PerfStats.prototype.videoFrameRate;
 /** @type {number} */
 remoting.ClientSession.PerfStats.prototype.captureLatency;
 /** @type {number} */
+remoting.ClientSession.PerfStats.prototype.maxCaptureLatency;
+/** @type {number} */
 remoting.ClientSession.PerfStats.prototype.encodeLatency;
+/** @type {number} */
+remoting.ClientSession.PerfStats.prototype.maxEncodeLatency;
 /** @type {number} */
 remoting.ClientSession.PerfStats.prototype.decodeLatency;
 /** @type {number} */
+remoting.ClientSession.PerfStats.prototype.maxDecodeLatency;
+/** @type {number} */
 remoting.ClientSession.PerfStats.prototype.renderLatency;
 /** @type {number} */
+remoting.ClientSession.PerfStats.prototype.maxRenderLatency;
+/** @type {number} */
 remoting.ClientSession.PerfStats.prototype.roundtripLatency;
+/** @type {number} */
+remoting.ClientSession.PerfStats.prototype.maxRoundtripLatency;
 
 // Keys for connection statistics.
 remoting.ClientSession.STATS_KEY_VIDEO_BANDWIDTH = 'videoBandwidth';
@@ -371,6 +382,8 @@ remoting.ClientSession.prototype.dropSessionOnSuspend = function(
  */
 remoting.ClientSession.prototype.onFirstFrameReceived = function() {
   this.hasReceivedFrame_ = true;
+  this.logger_.logSessionStateChange(
+    toSessionState(remoting.ClientSession.State.VIDEO_STREAM_STARTED));
 };
 
 /**
@@ -678,6 +691,8 @@ function toSessionState(state) {
       return SessionState.CONNECTION_DROPPED;
     case remoting.ClientSession.State.CONNECTION_CANCELED:
       return SessionState.CONNECTION_CANCELED;
+    case remoting.ClientSession.State.VIDEO_STREAM_STARTED:
+      return SessionState.VIDEO_STREAM_STARTED;
     default:
       throw new Error('Unknown session state : ' + state);
   }

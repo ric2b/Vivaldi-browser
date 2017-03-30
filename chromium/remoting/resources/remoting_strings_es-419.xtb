@@ -34,6 +34,7 @@ Para obtener más información sobre la privacidad, consulta la política de pri
 <translation id="1779766957982586368">Cerrar ventana</translation>
 <translation id="1841799852846221389">Inhabilitando conexiones remotas con esta computadora…</translation>
 <translation id="189172778771606813">Cerrar panel lateral de navegación</translation>
+<translation id="1897488610212723051">Borrar</translation>
 <translation id="195619862187186579">Diseños de teclado</translation>
 <translation id="1996161829609978754">Chrome está descargando el instalador del host de  Chromoting. Cuando termine la descarga, abre el instalador antes de continuar.</translation>
 <translation id="2009755455353575666">Error de conexión</translation>
@@ -122,9 +123,6 @@ Chromoting</translation>
 <translation id="3950820424414687140">Acceder</translation>
 <translation id="3989511127559254552">Para continuar, primero debes extender los permisos de acceso a tu computadora. Solo tienes que hacerlo una vez.</translation>
 <translation id="4006787130661126000">Debes habilitar las conexiones remotas si deseas usar Escritorio remoto de Chrome para acceder a esta computadora.</translation>
-<translation id="4028465833180158312">• Actualizaciones en la interfaz de usuario de material design.
-• Crédito de las licencias de terceros.
-• Se muestra información de computadoras remotas que están sin conexión.</translation>
 <translation id="405887016757208221">La computadora remota no pudo inicializar la sesión. Si el problema persiste, intenta volver a configurar el host.</translation>
 <translation id="4068946408131579958">Todas las conexiones</translation>
 <translation id="409800995205263688">NOTA: La configuración de la política solo permite conexiones entre computadoras que estén dentro de tu red.</translation>
@@ -168,6 +166,7 @@ remoto de Chrome</translation>
 <translation id="4985296110227979402">Para obtener acceso remoto, primero debes configurar la computadora</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (sin conexión)</translation>
 <translation id="5070121137485264635">El host remoto requiere la autenticación de un sitio web de terceros. Para continuar, debes otorgar permisos adicionales al Escritorio remoto de Chrome para acceder a la siguiente dirección:</translation>
+<translation id="507204348399810022">¿Seguro que deseas inhabilitar las conexiones remotas a <ph name="HOSTNAME" />?</translation>
 <translation id="5156271271724754543">Ingresa el mismo PIN en ambos cuadros.</translation>
 <translation id="5168917394043976756">Abrir panel lateral de navegación</translation>
 <translation id="5170982930780719864">ID de host no válido</translation>
@@ -178,7 +177,6 @@ remoto de Chrome</translation>
 <translation id="533625276787323658">No hay ninguna computadora con la cual conectarse</translation>
 <translation id="5363265567587775042">Solicita al usuario a cuya computadora quieres tener acceso que haga clic en "<ph name="SHARE" />" y te envíe el código de acceso correspondiente.</translation>
 <translation id="5379087427956679853">Escritorio remoto de Chrome te permite compartir tu computadora con otro usuario de manera segura en la Web. Tanto tú como el otro usuario deben usar la aplicación Escritorio remoto de Chrome, que está disponible en <ph name="URL" />.</translation>
-<translation id="5394895745784982830">Para Mac (SO X 10.6 y versiones posteriores)</translation>
 <translation id="5397086374758643919">Desinstalador del host del Escritorio remoto de Chrome</translation>
 <translation id="5419185025274123272">No se pudo restablecer la aplicación. Puedes enviar un informe de errores.</translation>
 <translation id="544077782045763683">El host se cerró.</translation>
@@ -214,6 +212,10 @@ remoto de Chrome</translation>
 <translation id="6324708100353784493">Habilitaste el modo de integración de Google Cardboard. Para utilizar este modo, coloca tu dispositivo en un visor compatible con Google Cardboard.</translation>
 <translation id="6381670701864002291">Tengo otro problema.</translation>
 <translation id="6398765197997659313">Salir de pantalla completa</translation>
+<translation id="6408143143164565232">• Escucha audio de computadoras Windows o Linux.
+• Mantén presionado el nombre de la computadora para quitar conexiones no deseadas.
+• Obtén funciones de pellizcar para acercar y desplazamiento con dos dedos más sencillas.
+• Utiliza la nueva pantalla de ayuda y comentarios.</translation>
 <translation id="6441316101718669559">Esta plataforma no admite la integración de escritorio. Puedes usar la aplicación, pero se verá afectada la experiencia del usuario.</translation>
 <translation id="652218476070540101">Se está actualizando el PIN para esta computadora…</translation>
 <translation id="6527303717912515753">Compartir</translation>
@@ -221,6 +223,7 @@ remoto de Chrome</translation>
 <translation id="6542902059648396432">Informar un problema</translation>
 <translation id="6550675742724504774">Opciones</translation>
 <translation id="6570205395680337606">Restablece la aplicación. Perderás todo el trabajo que no se haya guardado.</translation>
+<translation id="6572345186230665992">Para Mac (OS X Mavericks 10.9 y versiones posteriores)</translation>
 <translation id="6612717000975622067">Enviar Ctrl-Alt-Supr</translation>
 <translation id="6640610550128933069">Última vez en línea el <ph name="DATE" /></translation>
 <translation id="6668065415969892472">Se actualizó tu PIN.</translation>
@@ -232,7 +235,6 @@ remoto de Chrome</translation>
 <translation id="6930242544192836755">Duración</translation>
 <translation id="6939719207673461467">Mostrar u ocultar teclado</translation>
 <translation id="6944854424004126054">Restaurar ventana</translation>
-<translation id="6962773374262604195">Para Windows (XP y versiones posteriores)</translation>
 <translation id="6965382102122355670">Aceptar</translation>
 <translation id="6985691951107243942">¿Realmente deseas inhabilitar las conexiones remotas con <ph name="HOSTNAME" />? Si te arrepientes, tendrás que ir a esa computadora para volver a habilitar las conexiones.</translation>
 <translation id="6998989275928107238">Para</translation>
@@ -288,6 +290,7 @@ remoto de Chrome</translation>
 <translation id="8759753423332885148">Más información</translation>
 <translation id="8791202241915690908">Descarga el instalador del host de Chromoting</translation>
 <translation id="894763922177556086">Buena</translation>
+<translation id="895780780740011433">Para Windows 7 y versiones posteriores</translation>
 <translation id="897805526397249209">Para habilitar conexiones remotas con otra computadora, instala allí Chromoting y haz clic en “<ph name="BUTTON_NAME" />”.</translation>
 <translation id="8998327464021325874">Controlador del host del Escritorio remoto de Chrome</translation>
 <translation id="9016232822027372900">Conectar de todos modos</translation>

@@ -64,3 +64,17 @@ WebRtcMediaRecorderTest.MediaRecorderPeerConnection
 
 # https://crbug.com/592320
 SitePerProcessBrowserTest.SubframeGestureEventRouting
+
+# https://crbug.com/603337
+SingleProcessMemoryTracingTest.ManyInterleavedDumps
+SingleProcessMemoryTracingTest.RendererInitiatedSingleDump
+
+# https://crbug.com/608081
+SitePerProcessBrowserTest.NavigateRemoteFrameToBlankAndDataURLs
+SitePerProcessBrowserTest.RFPHDestruction
+
+# https://crbug.com/608117
+WebRtcDataChannelTest.DataChannelGC
+
+# https://crbug.com/611557
+FindRequestManagerTest.RapidFire

@@ -9,7 +9,7 @@
 #include "ipc/ipc_message_utils.h"
 #include "ipc/ipc_param_traits.h"
 #include "ui/events/event.h"
-#include "ui/gfx/ipc/gfx_param_traits.h"
+#include "ui/gfx/ipc/geometry/gfx_param_traits.h"
 
 // Generate param traits size methods.
 #include "ipc/param_traits_size_macros.h"
@@ -114,16 +114,16 @@ namespace IPC {
 #define WRITE_EVENT(T)                     \
   ParamTraits<T>::Write(m, *static_cast<T*>(p.get())); \
   break;
-#define READ_EVENT(T)                                    \
-  {                                                      \
-    scoped_ptr<T> event(new T(type, time_stamp, flags)); \
-    if (!ParamTraits<T>::Read(m, iter, event.get())) {   \
-      p->reset();                                        \
-      return false;                                      \
-    } else {                                             \
-      *p = std::move(event);                             \
-      return true;                                       \
-    }                                                    \
+#define READ_EVENT(T)                                         \
+  {                                                           \
+    std::unique_ptr<T> event(new T(type, time_stamp, flags)); \
+    if (!ParamTraits<T>::Read(m, iter, event.get())) {        \
+      p->reset();                                             \
+      return false;                                           \
+    } else {                                                  \
+      *p = std::move(event);                                  \
+      return true;                                            \
+    }                                                         \
   }
 #define LOG_EVENT(T) return ParamTraits<T>::Log(*static_cast<T*>(p.get()), l);
 

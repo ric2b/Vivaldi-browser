@@ -6,19 +6,21 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/metrics/statistics_recorder.h"
+#include "base/metrics/user_metrics.h"
 #include "base/threading/platform_thread.h"
 #include "components/metrics/client_info.h"
 #include "components/metrics/metrics_log.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_state_manager.h"
+#include "components/metrics/test_enabled_state_provider.h"
 #include "components/metrics/test_metrics_provider.h"
 #include "components/metrics/test_metrics_service_client.h"
 #include "components/prefs/testing_pref_service.h"
@@ -33,8 +35,8 @@ namespace {
 void StoreNoClientInfoBackup(const ClientInfo& /* client_info */) {
 }
 
-scoped_ptr<ClientInfo> ReturnNoBackup() {
-  return scoped_ptr<ClientInfo>();
+std::unique_ptr<ClientInfo> ReturnNoBackup() {
+  return std::unique_ptr<ClientInfo>();
 }
 
 class TestMetricsService : public MetricsService {
@@ -71,14 +73,13 @@ class TestMetricsLog : public MetricsLog {
 
 class MetricsServiceTest : public testing::Test {
  public:
-  MetricsServiceTest() : is_metrics_reporting_enabled_(false) {
+  MetricsServiceTest()
+      : enabled_state_provider_(new TestEnabledStateProvider(false, false)) {
+    base::SetRecordActionTaskRunner(message_loop.task_runner());
     MetricsService::RegisterPrefs(testing_local_state_.registry());
     metrics_state_manager_ = MetricsStateManager::Create(
-        GetLocalState(),
-        base::Bind(&MetricsServiceTest::is_metrics_reporting_enabled,
-                   base::Unretained(this)),
-        base::Bind(&StoreNoClientInfoBackup),
-        base::Bind(&ReturnNoBackup));
+        GetLocalState(), enabled_state_provider_.get(),
+        base::Bind(&StoreNoClientInfoBackup), base::Bind(&ReturnNoBackup));
   }
 
   ~MetricsServiceTest() override {
@@ -94,7 +95,8 @@ class MetricsServiceTest : public testing::Test {
 
   // Sets metrics reporting as enabled for testing.
   void EnableMetricsReporting() {
-    is_metrics_reporting_enabled_ = true;
+    enabled_state_provider_->set_consent(true);
+    enabled_state_provider_->set_enabled(true);
   }
 
   // Waits until base::TimeTicks::Now() no longer equals |value|. This should
@@ -150,14 +152,11 @@ class MetricsServiceTest : public testing::Test {
   }
 
  private:
-  bool is_metrics_reporting_enabled() const {
-    return is_metrics_reporting_enabled_;
-  }
-
-  bool is_metrics_reporting_enabled_;
+  std::unique_ptr<TestEnabledStateProvider> enabled_state_provider_;
   TestingPrefServiceSimple testing_local_state_;
-  scoped_ptr<MetricsStateManager> metrics_state_manager_;
+  std::unique_ptr<MetricsStateManager> metrics_state_manager_;
   base::MessageLoop message_loop;
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(MetricsServiceTest);
 };
@@ -173,12 +172,18 @@ TEST_F(MetricsServiceTest, InitialStabilityLogAfterCleanShutDown) {
       GetMetricsStateManager(), &client, GetLocalState());
 
   TestMetricsProvider* test_provider = new TestMetricsProvider();
-  service.RegisterMetricsProvider(scoped_ptr<MetricsProvider>(test_provider));
+  service.RegisterMetricsProvider(
+      std::unique_ptr<MetricsProvider>(test_provider));
 
   service.InitializeMetricsRecordingState();
+
   // No initial stability log should be generated.
   EXPECT_FALSE(service.log_manager()->has_unsent_logs());
   EXPECT_FALSE(service.log_manager()->has_staged_log());
+
+  // Ensure that HasInitialStabilityMetrics() is always called on providers,
+  // for consistency, even if other conditions already indicate their presence.
+  EXPECT_TRUE(test_provider->has_initial_stability_metrics_called());
 
   // The test provider should not have been called upon to provide initial
   // stability nor regular stability metrics.
@@ -213,7 +218,7 @@ TEST_F(MetricsServiceTest, InitialStabilityLogAtProviderRequest) {
   TestMetricsProvider* test_provider = new TestMetricsProvider();
   test_provider->set_has_initial_stability_metrics(true);
   service.RegisterMetricsProvider(
-      scoped_ptr<MetricsProvider>(test_provider));
+      std::unique_ptr<MetricsProvider>(test_provider));
 
   service.InitializeMetricsRecordingState();
 
@@ -221,6 +226,10 @@ TEST_F(MetricsServiceTest, InitialStabilityLogAtProviderRequest) {
   MetricsLogManager* log_manager = service.log_manager();
   EXPECT_TRUE(log_manager->has_unsent_logs());
   EXPECT_FALSE(log_manager->has_staged_log());
+
+  // Ensure that HasInitialStabilityMetrics() is always called on providers,
+  // for consistency, even if other conditions already indicate their presence.
+  EXPECT_TRUE(test_provider->has_initial_stability_metrics_called());
 
   // The test provider should have been called upon to provide initial
   // stability and regular stability metrics.
@@ -277,13 +286,18 @@ TEST_F(MetricsServiceTest, InitialStabilityLogAfterCrash) {
       GetMetricsStateManager(), &client, GetLocalState());
   // Add a provider.
   TestMetricsProvider* test_provider = new TestMetricsProvider();
-  service.RegisterMetricsProvider(scoped_ptr<MetricsProvider>(test_provider));
+  service.RegisterMetricsProvider(
+      std::unique_ptr<MetricsProvider>(test_provider));
   service.InitializeMetricsRecordingState();
 
   // The initial stability log should be generated and persisted in unsent logs.
   MetricsLogManager* log_manager = service.log_manager();
   EXPECT_TRUE(log_manager->has_unsent_logs());
   EXPECT_FALSE(log_manager->has_staged_log());
+
+  // Ensure that HasInitialStabilityMetrics() is always called on providers,
+  // for consistency, even if other conditions already indicate their presence.
+  EXPECT_TRUE(test_provider->has_initial_stability_metrics_called());
 
   // The test provider should have been called upon to provide initial
   // stability and regular stability metrics.
@@ -328,11 +342,8 @@ TEST_F(MetricsServiceTest, RegisterSyntheticTrial) {
   // Ensure that time has advanced by at least a tick before proceeding.
   WaitUntilTimeChanges(base::TimeTicks::Now());
 
-  service.log_manager_.BeginLoggingWithLog(scoped_ptr<MetricsLog>(
-      new MetricsLog("clientID",
-                     1,
-                     MetricsLog::INITIAL_STABILITY_LOG,
-                     &client,
+  service.log_manager_.BeginLoggingWithLog(std::unique_ptr<MetricsLog>(
+      new MetricsLog("clientID", 1, MetricsLog::INITIAL_STABILITY_LOG, &client,
                      GetLocalState())));
   // Save the time when the log was started (it's okay for this to be greater
   // than the time recorded by the above call since it's used to ensure the
@@ -371,7 +382,7 @@ TEST_F(MetricsServiceTest, RegisterSyntheticTrial) {
   // Start a new log and ensure all three trials appear in it.
   service.log_manager_.FinishCurrentLog();
   service.log_manager_.BeginLoggingWithLog(
-      scoped_ptr<MetricsLog>(new MetricsLog(
+      std::unique_ptr<MetricsLog>(new MetricsLog(
           "clientID", 1, MetricsLog::ONGOING_LOG, &client, GetLocalState())));
   service.GetSyntheticFieldTrialsOlderThan(
       service.log_manager_.current_log()->creation_time(), &synthetic_trials);
@@ -389,7 +400,8 @@ TEST_F(MetricsServiceTest,
       GetMetricsStateManager(), &client, GetLocalState());
 
   TestMetricsProvider* test_provider = new TestMetricsProvider();
-  service.RegisterMetricsProvider(scoped_ptr<MetricsProvider>(test_provider));
+  service.RegisterMetricsProvider(
+      std::unique_ptr<MetricsProvider>(test_provider));
 
   service.InitializeMetricsRecordingState();
   service.Stop();
@@ -403,7 +415,8 @@ TEST_F(MetricsServiceTest, MetricsProvidersInitialized) {
       GetMetricsStateManager(), &client, GetLocalState());
 
   TestMetricsProvider* test_provider = new TestMetricsProvider();
-  service.RegisterMetricsProvider(scoped_ptr<MetricsProvider>(test_provider));
+  service.RegisterMetricsProvider(
+      std::unique_ptr<MetricsProvider>(test_provider));
 
   service.InitializeMetricsRecordingState();
 

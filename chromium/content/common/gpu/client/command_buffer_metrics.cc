@@ -7,6 +7,7 @@
 #include "base/metrics/histogram.h"
 
 namespace content {
+namespace command_buffer_metrics {
 
 namespace {
 
@@ -72,7 +73,7 @@ CommandBufferContextLostReason GetContextLostReason(
   return CONTEXT_LOST_UNKNOWN;
 }
 
-void RecordContextLost(CommandBufferContextType type,
+void RecordContextLost(ContextType type,
                        CommandBufferContextLostReason reason) {
   switch (type) {
     case DISPLAY_COMPOSITOR_ONSCREEN_CONTEXT:
@@ -111,6 +112,10 @@ void RecordContextLost(CommandBufferContextType type,
       UMA_HISTOGRAM_ENUMERATION("GPU.ContextLost.WebGL", reason,
                                 CONTEXT_LOST_REASON_MAX_ENUM);
       break;
+    case MEDIA_CONTEXT:
+      UMA_HISTOGRAM_ENUMERATION("GPU.ContextLost.Media", reason,
+                                CONTEXT_LOST_REASON_MAX_ENUM);
+      break;
     case CONTEXT_TYPE_UNKNOWN:
       UMA_HISTOGRAM_ENUMERATION("GPU.ContextLost.Unknown", reason,
                                 CONTEXT_LOST_REASON_MAX_ENUM);
@@ -120,7 +125,7 @@ void RecordContextLost(CommandBufferContextType type,
 
 }  // anonymous namespace
 
-std::string CommandBufferContextTypeToString(CommandBufferContextType type) {
+std::string ContextTypeToString(ContextType type) {
   switch (type) {
     case OFFSCREEN_CONTEXT_FOR_TESTING:
       return "Context-For-Testing";
@@ -142,17 +147,19 @@ std::string CommandBufferContextTypeToString(CommandBufferContextType type) {
       return "Offscreen-CaptureThread";
     case OFFSCREEN_CONTEXT_FOR_WEBGL:
       return "Offscreen-For-WebGL";
+    case MEDIA_CONTEXT:
+      return "Media";
     default:
       NOTREACHED();
       return "unknown";
   }
 }
 
-void UmaRecordContextInitFailed(CommandBufferContextType type) {
+void UmaRecordContextInitFailed(ContextType type) {
   RecordContextLost(type, CONTEXT_INIT_FAILED);
 }
 
-void UmaRecordContextLost(CommandBufferContextType type,
+void UmaRecordContextLost(ContextType type,
                           gpu::error::Error error,
                           gpu::error::ContextLostReason reason) {
   CommandBufferContextLostReason converted_reason =
@@ -160,4 +167,5 @@ void UmaRecordContextLost(CommandBufferContextType type,
   RecordContextLost(type, converted_reason);
 }
 
+}  // namespace command_buffer_metrics
 }  // namespace content

@@ -34,6 +34,7 @@ component("views") {
     "//skia",
     "//third_party/icu",
     "//ui/accessibility",
+    "//ui/display",
     "//ui/native_theme",
     "//ui/resources",
     "//ui/strings",
@@ -104,6 +105,7 @@ component("views") {
     ]
     deps += [
       "//ui/events/devices",
+      "//ui/events/devices/x11",
       "//ui/events/platform/x11",
       "//ui/gfx/x",
     ]
@@ -138,8 +140,10 @@ component("views") {
       "//ui/events:dom_keycode_converter",
     ]
     libs = [
-      # Required by bridged_native_widget.mm.
-      "QuartzCore.framework",
+      "AppKit.framework",
+      "CoreGraphics.framework",
+      "Foundation.framework",
+      "QuartzCore.framework",  # Required by bridged_native_widget.mm.
     ]
   }
 }
@@ -174,7 +178,10 @@ source_set("test_support_internal") {
     "//ui/gfx/geometry",
   ]
 
-  sources += [ "test/platform_test_helper.h" ]
+  sources += [
+    "test/platform_test_helper.cc",
+    "test/platform_test_helper.h",
+  ]
 
   if (use_aura) {
     sources += gypi_values.views_test_support_aura_sources
@@ -204,7 +211,6 @@ static_library("test_support") {
     ":test_support_internal",
   ]
   sources = [
-    "test/default_platform_test_helper.cc",
     "test/native_widget_factory_desktop.cc",
   ]
 }
@@ -240,10 +246,8 @@ test("views_unittests") {
     "//url",
   ]
 
-  # TODO(thakis): This should be a data_deps on //ui/resources:ui_test_pak, but
-  # that has no effect.  (See similar TODOs elsewhere ui_test.pak is listed)
-  data = [
-    "$root_out_dir/ui_test.pak",
+  data_deps = [
+    "//ui/resources:ui_test_pak_data",
   ]
 
   if (is_win) {
@@ -306,7 +310,9 @@ if (is_mac) {
   test("macviews_interactive_ui_tests") {
     sources = [
       "cocoa/bridged_native_widget_interactive_uitest.mm",
-      "run_all_unittests.cc",
+      "run_all_unittests_main.cc",
+      "views_test_suite.cc",
+      "views_test_suite.h",
       "widget/native_widget_mac_interactive_uitest.mm",
     ]
     deps = [

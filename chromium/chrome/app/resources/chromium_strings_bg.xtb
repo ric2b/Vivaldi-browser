@@ -53,6 +53,7 @@
 <translation id="2673087257647337101">Почти актуален! Стартирайте отново Chromium, за да завършите актуализирането.</translation>
 <translation id="2685838254101182273">Chromium спря да се актуализира и вече не поддържа тази версия на операционната ви система.</translation>
 <translation id="2705212601509139398">Този сайт използва приставката Chromium Frame, чиято поддръжка скоро ще бъде прекратена. Моля, деинсталирайте я и изтеглете съвместим браузър.</translation>
+<translation id="2711502716910134313">Раздел в Chromium</translation>
 <translation id="2770231113462710648">Промяна на браузъра по подразбиране с/ъс:</translation>
 <translation id="2801146392936645542">Файлът „<ph name="FILE_NAME" />“ е злонамерен и е блокиран от Chromium.</translation>
 <translation id="2847479871509788944">Премахване от Chromium...</translation>
@@ -66,7 +67,6 @@
 <translation id="3130323860337406239">Chromium използва микрофона ви.</translation>
 <translation id="313551035350905294">Влизате с управляван профил и давате на администратора му контрол над потребителския си профил в Chromium. Данните ви там, като например приложения, отметки, история, пароли и други настройки, ще се свържат за постоянно с/ъс <ph name="USER_NAME" />. Ще можете да ги изтриете чрез таблото за управление на Google Профили, но няма да сте в състояние да ги свържете с друг профил.</translation>
 <translation id="3190315855212034486">О, не! Chromium претърпя срив. Да се стартира ли отново сега?</translation>
-<translation id="3197823471738295152">Устройството ви е актуално.</translation>
 <translation id="3244477511402911926">Център за известия в Chromium</translation>
 <translation id="3256316712990552818">Копирано в Chromium</translation>
 <translation id="3258596308407688501">Chromium не може да чете и записва в директорията си за данни: <ph name="USER_DATA_DIRECTORY" /></translation>
@@ -118,6 +118,7 @@
 <translation id="549669000822060376">Моля, изчакайте, докато Chromium инсталира най-новите системни актуализации.</translation>
 <translation id="5563479599352954471">Търсене с едно докосване</translation>
 <translation id="5620765574781326016">Научете за темите в уебсайтовете, без да излизате от страницата.</translation>
+<translation id="5634636535844844681">За Chromium се изисква Windows 7 или по-нова версия.</translation>
 <translation id="5680901439334282664">Влезте в Chromium</translation>
 <translation id="5772805321386874569">(изисква <ph name="BEGIN_BUTTON" />рестартиране<ph name="END_BUTTON" /> на Chromium)</translation>
 <translation id="5796460469508169315">Chromium е почти готов.</translation>
@@ -173,6 +174,12 @@
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7339898014177206373">Нов прозорец</translation>
 <translation id="734373864078049451">Тук ще намерите посещаваните от вас места в мрежата, отметките и другите си неща в Chromium.</translation>
+<translation id="7344413941077984497">За да зададете кои уебсайтове може да преглежда <ph name="NEW_PROFILE_NAME" />, посетете <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" /> и конфигурирайте ограничения и настройки. Ако не промените стандартните опции, <ph name="NEW_PROFILE_NAME" /> ще е в състояние да сърфира навсякъде в мрежата.
+
+За да предотвратите достъпа на <ph name="NEW_PROFILE_NAME" /> до профила си, непременно заключвайте потребителския си профил, когато не използвате Chromium. За целта кликнете върху името на потребителския си профил в горния десен ъгъл на браузъра и изберете „Изход и заключване за деца“.
+<ph name="BEGIN_LINK_2" />Научете повече<ph name="END_LINK_2" />
+
+За допълнителни инструкции, моля, проверете електронната си поща на адрес <ph name="ACCOUNT_EMAIL" />.</translation>
 <translation id="7419987137528340081">Ако предпочитате да съхранявате отделно съществуващите си данни в Chromium, можете да създадете в браузъра нов потребител за <ph name="USER_NAME" />.</translation>
 <translation id="7421823331379285070">Chromium изисква Windows XP или по-нова версия. Някои функции може да не работят.</translation>
 <translation id="7463979740390522693">Chromium – Известия (<ph name="QUANTITY" /> непрочетени)</translation>
@@ -201,6 +208,7 @@
 <translation id="8586442755830160949">Авторски права <ph name="YEAR" /> Авторите на Chromium. Всички права запазени.</translation>
 <translation id="8621669128220841554">Инсталирането не бе успешно поради неизвестна грешка. Моля, изтеглете отново Chromium.</translation>
 <translation id="8628626585870903697">Chromium не включва визуализатора на PDF, който се изисква, за да функционира визуализацията за печат.</translation>
+<translation id="8667808506758191620">Устройството ви <ph name="DEVICE_TYPE" /> е актуално.</translation>
 <translation id="8697124171261953979">То също контролира коя страница се показва при стартиране на Chromium или при търсене от полето за всичко.</translation>
 <translation id="8704119203788522458">Това е вашият Chromium</translation>
 <translation id="872034308864968620">Нека Chromium да се изпълнява на заден план</translation>
@@ -217,7 +225,6 @@
 
 В случай че влезете въпреки това, данните в Chromium като отметки, история и други настройки ще се обединят с/ъс <ph name="ACCOUNT_EMAIL_NEW" />.</translation>
 <translation id="9013087743919948559">Добавяне към Chromium</translation>
-<translation id="9013262824292842194">Chromium изисква Windows Vista или Windows XP с SP2 или по-нова версия.</translation>
 <translation id="9019929317751753759">За да направим Chromium по-безопасен, деактивирахме следното разширение, което липсва от <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> и може да е било добавено без ваше знание.</translation>
 <translation id="9022552996538154597">Вход в Chromium</translation>
 <translation id="9036189287518468038">Стартов панел с приложения за Chromium</translation>

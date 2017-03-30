@@ -68,7 +68,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/message_port_types.h"
+#include "content/public/common/mhtml_generation_params.h"
 #include "content/public/common/renderer_preferences.h"
 #include "content/public/common/ssl_status.h"
 #include "jni/AwContents_jni.h"
@@ -173,9 +173,7 @@ AwContents::AwContents(std::unique_ptr<WebContents> web_contents)
     : functor_(nullptr),
       browser_view_renderer_(
           this,
-          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI),
-          base::CommandLine::ForCurrentProcess()->HasSwitch(
-              switches::kDisablePageVisibility)),
+          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI)),
       web_contents_(std::move(web_contents)),
       renderer_manager_key_(GLViewRendererManager::GetInstance()->NullKey()) {
   base::subtle::NoBarrier_AtomicIncrement(&g_instance_count, 1);
@@ -310,16 +308,12 @@ void AwContents::SetAwGLFunctor(AwGLFunctor* functor) {
   if (functor == functor_) {
     return;
   }
-  if (functor_) {
-    functor_->SetBrowserViewRenderer(nullptr);
-  }
   functor_ = functor;
   if (functor_) {
-    browser_view_renderer_.SetRenderThreadManager(
-        functor_->GetRenderThreadManager());
-    functor_->SetBrowserViewRenderer(&browser_view_renderer_);
+    browser_view_renderer_.SetCurrentCompositorFrameConsumer(
+        functor_->GetCompositorFrameConsumer());
   } else {
-    browser_view_renderer_.SetRenderThreadManager(nullptr);
+    browser_view_renderer_.SetCurrentCompositorFrameConsumer(nullptr);
   }
 }
 
@@ -410,7 +404,7 @@ void AwContents::GenerateMHTML(JNIEnv* env,
   j_callback->Reset(env, callback);
   base::FilePath target_path(ConvertJavaStringToUTF8(env, jpath));
   web_contents_->GenerateMHTML(
-      target_path,
+      content::MHTMLGenerationParams(target_path),
       base::Bind(&GenerateMHTMLCallback, base::Owned(j_callback), target_path));
 }
 
@@ -745,10 +739,6 @@ void AwContents::OnReceivedTouchIconUrl(const std::string& url,
 
   Java_AwContents_onReceivedTouchIconUrl(
       env, obj.obj(), ConvertUTF8ToJavaString(env, url).obj(), precomposed);
-}
-
-void AwContents::OnParentDrawConstraintsUpdated() {
-  browser_view_renderer_.OnParentDrawConstraintsUpdated();
 }
 
 void AwContents::PostInvalidate() {
@@ -1250,14 +1240,11 @@ void AwContents::PostMessageToFrame(JNIEnv* env,
                    base::Unretained(AwMessagePortServiceImpl::GetInstance()),
                    j_ports));
   }
-  std::vector<content::TransferredMessagePort> ports(j_ports.size());
-  for (size_t i = 0; i < j_ports.size(); ++i)
-    ports[i].id = j_ports[i];
   content::MessagePortProvider::PostMessageToFrame(web_contents_.get(),
                                                    source_origin,
                                                    j_target_origin,
                                                    j_message,
-                                                   ports);
+                                                   j_ports);
 }
 
 scoped_refptr<AwMessagePortMessageFilter>

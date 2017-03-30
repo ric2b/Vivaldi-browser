@@ -43,6 +43,7 @@ public:
         ~Factory() override {}
 
         CanvasRenderingContext* create(HTMLCanvasElement*, const CanvasContextCreationAttributes&, Document&) override;
+        CanvasRenderingContext* create(ScriptState*, OffscreenCanvas*, const CanvasContextCreationAttributes&) override;
         CanvasRenderingContext::ContextType getContextType() const override { return CanvasRenderingContext::ContextWebgl; }
         void onError(HTMLCanvasElement*, const String& error) override;
     };
@@ -50,20 +51,24 @@ public:
     ~WebGLRenderingContext() override;
 
     CanvasRenderingContext::ContextType getContextType() const override { return CanvasRenderingContext::ContextWebgl; }
+    ImageBitmap* transferToImageBitmap(ExceptionState&) final;
     unsigned version() const override { return 1; }
     String contextName() const override { return "WebGLRenderingContext"; }
     void registerContextExtensions() override;
     void setCanvasGetContextResult(RenderingContext&) final;
+    void setOffscreenCanvasGetContextResult(OffscreenRenderingContext&) final;
 
     EAGERLY_FINALIZE();
     DECLARE_VIRTUAL_TRACE();
 
+    DECLARE_VIRTUAL_TRACE_WRAPPERS();
+
 private:
     WebGLRenderingContext(HTMLCanvasElement*, PassOwnPtr<WebGraphicsContext3DProvider>, const WebGLContextAttributes&);
+    WebGLRenderingContext(OffscreenCanvas*, PassOwnPtr<WebGraphicsContext3DProvider>, const WebGLContextAttributes&);
 
     // Enabled extension objects.
     Member<ANGLEInstancedArrays> m_angleInstancedArrays;
-    Member<CHROMIUMSubscribeUniform> m_chromiumSubscribeUniform;
     Member<EXTBlendMinMax> m_extBlendMinMax;
     Member<EXTDisjointTimerQuery> m_extDisjointTimerQuery;
     Member<EXTFragDepth> m_extFragDepth;

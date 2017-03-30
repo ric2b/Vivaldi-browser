@@ -10,11 +10,10 @@ Polymer({
     /**
      * The name of the icon used as the back button. This is set once, when
      * the |this| is ready.
-     * @private {string}
+     * @private {string|undefined}
      */
     arrowDropIcon_: {
       type: String,
-      value: '',
     },
 
     /**
@@ -27,36 +26,11 @@ Polymer({
     },
 
     /**
-     * Title text for the back button.
-     * @private {string}
-     */
-    backButtonTitle_: {
-      type: String,
-      readOnly: true,
-      value: function() {
-        return loadTimeData.getString('backButtonTitle');
-      },
-    },
-
-    /**
-     * Title text for the close button.
-     * @private {string}
-     */
-    closeButtonTitle_: {
-      type: String,
-      readOnly: true,
-      value: function() {
-        return loadTimeData.getString('closeButtonTitle');
-      },
-    },
-
-    /**
      * The header text to show.
-     * @type {string}
+     * @type {string|undefined}
      */
     headingText: {
       type: String,
-      value: '',
     },
 
     /**
@@ -81,61 +55,62 @@ Polymer({
 
     /**
      * Whether to show the user email in the header.
-     * @type {boolean}
+     * @type {boolean|undefined}
      */
     showEmail: {
       type: Boolean,
-      value: false,
       observer: 'maybeChangeHeaderHeight_',
     },
 
     /**
      * The text to show in the tooltip.
-     * @type {string}
+     * @type {string|undefined}
      */
     tooltip: {
       type: String,
-      value: '',
     },
 
     /**
      * The user email if they are signed in.
-     * @type {string}
+     * @type {string|undefined}
      */
     userEmail: {
       type: String,
-      value: '',
     },
 
     /**
      * The current view that this header should reflect.
-     * @type {?media_router.MediaRouterView}
+     * @type {?media_router.MediaRouterView|undefined}
      */
     view: {
       type: String,
-      value: null,
       observer: 'updateHeaderCursorStyle_',
     },
   },
 
-  listeners: {
-    'focus': 'onFocus_',
+  behaviors: [
+    I18nBehavior,
+  ],
+
+  ready: function() {
+    this.$$('#header').style.height = this.headerWithoutEmailHeight_ + 'px';
   },
 
   attached: function() {
     // isRTL() only works after i18n_template.js runs to set <html dir>.
     // Set the back button icon based on text direction.
-    this.arrowDropIcon_ = isRTL() ? 'arrow-forward' : 'arrow-back';
+    this.arrowDropIcon_ = isRTL() ?
+        'media-router:arrow-forward' : 'media-router:arrow-back';
   },
 
   /**
    * @param {?media_router.MediaRouterView} view The current view.
-   * @return {string} The current arrow-drop-* icon to use.
+   * @return {string} The icon to use.
    * @private
    */
   computeArrowDropIcon_: function(view) {
     return view == media_router.MediaRouterView.CAST_MODE_LIST ?
-        'arrow-drop-up' : 'arrow-drop-down';
+        'media-router:arrow-drop-up' : 'media-router:arrow-drop-down';
   },
 
   /**
@@ -155,18 +130,18 @@ Polymer({
    */
   computeArrowDropTitle_: function(view) {
     return view == media_router.MediaRouterView.CAST_MODE_LIST ?
-        loadTimeData.getString('viewDeviceListButtonTitle') :
-            loadTimeData.getString('viewCastModeListButtonTitle');
+        this.i18n('viewDeviceListButtonTitle') :
+            this.i18n('viewCastModeListButtonTitle');
   },
 
   /**
    * @param {?media_router.MediaRouterView} view The current view.
-   * @return {boolean} Whether or not the back button should be hidden.
+   * @return {boolean} Whether or not the back button should be shown.
    * @private
    */
-  computeBackButtonHidden_: function(view) {
-    return view != media_router.MediaRouterView.ROUTE_DETAILS &&
-        view != media_router.MediaRouterView.FILTER;
+  computeBackButtonShown_: function(view) {
+    return view == media_router.MediaRouterView.ROUTE_DETAILS ||
+        view == media_router.MediaRouterView.FILTER;
   },
 
   /**
@@ -221,15 +196,14 @@ Polymer({
    * @private
    */
   maybeChangeHeaderHeight_: function(newValue, oldValue) {
-    if (!!oldValue == !!newValue) {
+    if (oldValue == newValue)
       return;
-    }
 
     // Ensures conditional templates are stamped.
     this.async(function() {
       var currentHeight = this.offsetHeight;
 
-      this.$$('#header-toolbar').style.height =
+      this.$$('#header').style.height =
           this.showEmail && !this.isEmptyOrWhitespace_(this.userEmail) ?
               this.headerWithEmailHeight_ + 'px' :
                   this.headerWithoutEmailHeight_ + 'px';

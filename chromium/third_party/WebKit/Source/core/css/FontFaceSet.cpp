@@ -125,9 +125,6 @@ FontFaceSet::FontFaceSet(Document& document)
 
 FontFaceSet::~FontFaceSet()
 {
-#if !ENABLE(OILPAN)
-    stop();
-#endif
 }
 
 Document* FontFaceSet::document() const
@@ -487,11 +484,6 @@ void FontFaceSet::FontLoadHistogram::record()
         hadBlankTextHistogram.count(m_status == HadBlankText ? 1 : 0);
         m_status = Reported;
     }
-}
-
-static const char* supplementName()
-{
-    return "FontFaceSet";
 }
 
 FontFaceSet* FontFaceSet::from(Document& document)

@@ -29,9 +29,9 @@
  */
 
 #include "public/web/WebInputEvent.h"
-#include "ui/events/keycodes/keyboard_codes.h"
 
 #include "platform/KeyboardCodes.h"
+#include "wtf/ASCIICType.h"
 #include "wtf/Assertions.h"
 #include "wtf/StringExtras.h"
 #include <ctype.h>
@@ -57,7 +57,7 @@ struct SameSizeAsWebMouseWheelEvent : public SameSizeAsWebMouseEvent {
 };
 
 struct SameSizeAsWebGestureEvent : public SameSizeAsWebInputEvent {
-    int gestureData[12];
+    int gestureData[13];
 };
 
 struct SameSizeAsWebTouchEvent : public SameSizeAsWebInputEvent {
@@ -208,7 +208,7 @@ void WebKeyboardEvent::setKeyIdentifierFromWindowsKeyCode()
 #if OS(WIN)
         keyId = ::vivaldi::setKeyIdentifierWithWinapi(windowsKeyCode);
 #endif
-        snprintf(keyIdentifier, sizeof(keyIdentifier), "U+%04X", toupper(keyId));
+        snprintf(keyIdentifier, sizeof(keyIdentifier), "U+%04X", toASCIIUpper(keyId));
     }
 }
 

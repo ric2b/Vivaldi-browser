@@ -38,7 +38,7 @@
 #include "platform/fonts/VDMXParser.h"
 #include "platform/geometry/FloatRect.h"
 #include "wtf/MathExtras.h"
-#include "wtf/Partitions.h"
+#include "wtf/allocator/Partitions.h"
 #include "wtf/text/CharacterNames.h"
 #include "wtf/text/Unicode.h"
 #include <unicode/unorm.h>
@@ -104,7 +104,6 @@ void SimpleFontData::platformInit()
 
 #if OS(LINUX) || OS(ANDROID)
     // Manually digging up VDMX metrics is only applicable when bytecode hinting using FreeType.
-    // With GDI, the metrics will already have taken this into account (as needed).
     // With DirectWrite or CoreText, no bytecode hinting is ever done.
     // This code should be pushed into FreeType (hinted font metrics).
     static const uint32_t vdmxTag = SkSetFourByteTag('V', 'D', 'M', 'X');
@@ -367,11 +366,6 @@ SimpleFontData::DerivedFontData::~DerivedFontData()
 }
 
 PassRefPtr<SimpleFontData> SimpleFontData::createScaledFontData(const FontDescription& fontDescription, float scaleFactor) const
-{
-    return platformCreateScaledFontData(fontDescription, scaleFactor);
-}
-
-PassRefPtr<SimpleFontData> SimpleFontData::platformCreateScaledFontData(const FontDescription& fontDescription, float scaleFactor) const
 {
     const float scaledSize = lroundf(fontDescription.computedSize() * scaleFactor);
     return SimpleFontData::create(FontPlatformData(m_platformData, scaledSize), isCustomFont() ? CustomFontData::create() : nullptr);

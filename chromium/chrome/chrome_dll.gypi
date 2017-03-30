@@ -124,12 +124,14 @@
             'chrome_features.gyp:chrome_common_features',
             'policy_path_parser',
             '../content/content.gyp:content_app_browser',
+            '../third_party/cld_2/cld_2.gyp:cld_2',
             '<(VIVALDI)/vivaldi_chromium.gyp:*',
           ],
           'conditions': [
             ['OS=="win"', {
               'dependencies': [
                 '<(DEPTH)/chrome_elf/chrome_elf.gyp:chrome_elf',
+                '<(DEPTH)/chrome/chrome.gyp:install_static_util',
                 '<(DEPTH)/components/components.gyp:policy',
               ],
             }],
@@ -272,16 +274,6 @@
                 '../pdf/pdf.gyp:pdf',
               ],
             }],
-            ['cld_version==1', {
-              'dependencies': [
-                '<(DEPTH)/third_party/cld/cld.gyp:cld',
-              ],
-            }],
-            ['cld_version==2', {
-              'dependencies': [
-                '<(DEPTH)/third_party/cld_2/cld_2.gyp:cld_2',
-              ],
-            }],
             ['OS=="mac" and component!="shared_library"', {
               'includes': [ 'chrome_dll_bundle.gypi' ],
             }],
@@ -363,6 +355,7 @@
           'conditions': [
             ['OS=="win"', {
               'dependencies': [
+                '<(DEPTH)/chrome/chrome.gyp:install_static_util',
                 '<(DEPTH)/components/components.gyp:policy',
               ],
               'conditions': [

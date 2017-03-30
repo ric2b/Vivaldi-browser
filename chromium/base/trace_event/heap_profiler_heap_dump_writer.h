@@ -18,18 +18,18 @@
 namespace base {
 namespace trace_event {
 
+class MemoryDumpSessionState;
 class StackFrameDeduplicator;
 class TracedValue;
 class TypeNameDeduplicator;
 
-// Aggregates |bytes_by_context|, recursively breaks down the heap, and returns
-// a traced value with an "entries" array that can be dumped in the trace log,
-// following the format described in https://goo.gl/KY7zVE. The number of
-// entries is kept reasonable because long tails are not included.
+// Aggregates |metrics_by_context|, recursively breaks down the heap, and
+// returns a traced value with an "entries" array that can be dumped in the
+// trace log, following the format described in https://goo.gl/KY7zVE. The
+// number of entries is kept reasonable because long tails are not included.
 BASE_EXPORT std::unique_ptr<TracedValue> ExportHeapDump(
-    const hash_map<AllocationContext, size_t>& bytes_by_context,
-    StackFrameDeduplicator* stack_frame_deduplicator,
-    TypeNameDeduplicator* type_name_deduplicator);
+    const hash_map<AllocationContext, AllocationMetrics>& metrics_by_context,
+    const MemoryDumpSessionState& session_state);
 
 namespace internal {
 
@@ -40,6 +40,7 @@ struct Bucket;
 // An entry in the "entries" array as described in https://goo.gl/KY7zVE.
 struct BASE_EXPORT Entry {
   size_t size;
+  size_t count;
 
   // References a backtrace in the stack frame deduplicator. -1 means empty
   // backtrace (the root of the tree).
@@ -61,11 +62,13 @@ BASE_EXPORT std::unique_ptr<TracedValue> Serialize(const std::set<Entry>& dump);
 // used as a one-shot local instance on the stack.
 class BASE_EXPORT HeapDumpWriter {
  public:
-  // The |StackFrameDeduplicator| and |TypeNameDeduplicator| are not owned. The
-  // heap dump writer assumes exclusive access to them during the lifetime of
-  // the dump writer.
+  // The |stack_frame_deduplicator| and |type_name_deduplicator| are not owned.
+  // The heap dump writer assumes exclusive access to them during the lifetime
+  // of the dump writer. The heap dumps are broken down for allocations bigger
+  // than |breakdown_threshold_bytes|.
   HeapDumpWriter(StackFrameDeduplicator* stack_frame_deduplicator,
-                 TypeNameDeduplicator* type_name_deduplicator);
+                 TypeNameDeduplicator* type_name_deduplicator,
+                 uint32_t breakdown_threshold_bytes);
 
   ~HeapDumpWriter();
 
@@ -74,7 +77,7 @@ class BASE_EXPORT HeapDumpWriter {
   // in the "entries" array. The number of entries is kept reasonable because
   // long tails are not included. Use |Serialize| to convert to a traced value.
   const std::set<Entry>& Summarize(
-      const hash_map<AllocationContext, size_t>& bytes_by_context);
+      const hash_map<AllocationContext, AllocationMetrics>& metrics_by_context);
 
  private:
   // Inserts an |Entry| for |Bucket| into |entries_|. Returns false if the
@@ -95,6 +98,10 @@ class BASE_EXPORT HeapDumpWriter {
   // Helper for converting type names to IDs. Not owned, must outlive this heap
   // dump writer instance.
   TypeNameDeduplicator* const type_name_deduplicator_;
+
+  // Minimum size of an allocation for which an allocation bucket will be
+  // broken down with children.
+  uint32_t breakdown_threshold_bytes_;
 
   DISALLOW_COPY_AND_ASSIGN(HeapDumpWriter);
 };

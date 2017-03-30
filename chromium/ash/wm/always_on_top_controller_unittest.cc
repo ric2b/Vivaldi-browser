@@ -2,14 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/wm/always_on_top_controller.h"
+#include "ash/wm/common/always_on_top_controller.h"
 
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/shell_window_ids.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/wm/workspace/workspace_layout_manager.h"
+#include "ash/wm/aura/wm_window_aura.h"
+#include "ash/wm/common/workspace/workspace_layout_manager.h"
+#include "ash/wm/common/workspace/workspace_layout_manager_delegate.h"
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "ui/keyboard/keyboard_controller.h"
 #include "ui/keyboard/keyboard_switches.h"
 #include "ui/keyboard/keyboard_ui.h"
@@ -35,8 +38,9 @@ class VirtualKeyboardAlwaysOnTopControllerTest : public AshTestBase {
 
 class TestLayoutManager : public WorkspaceLayoutManager {
  public:
-  explicit TestLayoutManager(aura::Window* window)
-      : WorkspaceLayoutManager(window), keyboard_bounds_changed_(false) {}
+  explicit TestLayoutManager(wm::WmWindow* window)
+      : WorkspaceLayoutManager(window, nullptr),
+        keyboard_bounds_changed_(false) {}
 
   ~TestLayoutManager() override {}
 
@@ -61,11 +65,12 @@ TEST_F(VirtualKeyboardAlwaysOnTopControllerTest, NotifyKeyboardBoundsChanged) {
   aura::Window* always_on_top_container =
       Shell::GetContainer(root_window, kShellWindowId_AlwaysOnTopContainer);
   // Install test layout manager.
-  TestLayoutManager* manager = new TestLayoutManager(always_on_top_container);
+  TestLayoutManager* manager =
+      new TestLayoutManager(wm::WmWindowAura::Get(always_on_top_container));
   RootWindowController* controller = Shell::GetPrimaryRootWindowController();
   AlwaysOnTopController* always_on_top_controller =
       controller->always_on_top_controller();
-  always_on_top_controller->SetLayoutManagerForTest(manager);
+  always_on_top_controller->SetLayoutManagerForTest(base::WrapUnique(manager));
   // Activate keyboard. This triggers keyboard listeners to be registered.
   controller->ActivateKeyboard(keyboard_controller);
 

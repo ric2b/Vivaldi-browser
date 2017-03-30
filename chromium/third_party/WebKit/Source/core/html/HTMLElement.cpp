@@ -118,11 +118,13 @@ bool HTMLElement::ieForbidsInsertHTML() const
         || hasTagName(imageTag)
         || hasTagName(imgTag)
         || hasTagName(inputTag)
+        || hasTagName(keygenTag)
         || hasTagName(linkTag)
         || (RuntimeEnabledFeatures::contextMenuEnabled() && hasTagName(menuitemTag))
         || hasTagName(metaTag)
         || hasTagName(paramTag)
         || hasTagName(sourceTag)
+        || hasTagName(trackTag)
         || hasTagName(wbrTag))
         return true;
     return false;
@@ -271,8 +273,6 @@ const AtomicString& HTMLElement::eventNameForAttributeName(const QualifiedName& 
             { onanimationendAttr, EventTypeNames::animationend },
             { onanimationiterationAttr, EventTypeNames::animationiteration },
             { onanimationstartAttr, EventTypeNames::animationstart },
-            { onautocompleteAttr, EventTypeNames::autocomplete },
-            { onautocompleteerrorAttr, EventTypeNames::autocompleteerror },
             { onbeforecopyAttr, EventTypeNames::beforecopy },
             { onbeforecutAttr, EventTypeNames::beforecut },
             { onbeforepasteAttr, EventTypeNames::beforepaste },
@@ -379,9 +379,9 @@ void HTMLElement::parseAttribute(const QualifiedName& name, const AtomicString& 
     }
 }
 
-RawPtr<DocumentFragment> HTMLElement::textToFragment(const String& text, ExceptionState& exceptionState)
+DocumentFragment* HTMLElement::textToFragment(const String& text, ExceptionState& exceptionState)
 {
-    RawPtr<DocumentFragment> fragment = DocumentFragment::create(document());
+    DocumentFragment* fragment = DocumentFragment::create(document());
     unsigned i, length = text.length();
     UChar c = 0;
     for (unsigned start = 0; start < length; ) {
@@ -465,9 +465,9 @@ void HTMLElement::setInnerText(const String& text, ExceptionState& exceptionStat
     }
 
     // Add text nodes and <br> elements.
-    RawPtr<DocumentFragment> fragment = textToFragment(text, exceptionState);
+    DocumentFragment* fragment = textToFragment(text, exceptionState);
     if (!exceptionState.hadException())
-        replaceChildrenWithFragment(this, fragment.release(), exceptionState);
+        replaceChildrenWithFragment(this, fragment, exceptionState);
 }
 
 void HTMLElement::setOuterText(const String& text, ExceptionState& exceptionState)
@@ -487,9 +487,9 @@ void HTMLElement::setOuterText(const String& text, ExceptionState& exceptionStat
         return;
     }
 
-    RawPtr<Node> prev = previousSibling();
-    RawPtr<Node> next = nextSibling();
-    RawPtr<Node> newChild = nullptr;
+    Node* prev = previousSibling();
+    Node* next = nextSibling();
+    Node* newChild = nullptr;
 
     // Convert text to fragment with <br> tags instead of linebreaks if needed.
     if (text.contains('\r') || text.contains('\n'))
@@ -504,14 +504,14 @@ void HTMLElement::setOuterText(const String& text, ExceptionState& exceptionStat
     if (exceptionState.hadException())
         return;
 
-    parent->replaceChild(newChild.release(), this, exceptionState);
+    parent->replaceChild(newChild, this, exceptionState);
 
-    RawPtr<Node> node = next ? next->previousSibling() : nullptr;
+    Node* node = next ? next->previousSibling() : nullptr;
     if (!exceptionState.hadException() && node && node->isTextNode())
-        mergeWithNextTextNode(toText(node.get()), exceptionState);
+        mergeWithNextTextNode(toText(node), exceptionState);
 
     if (!exceptionState.hadException() && prev && prev->isTextNode())
-        mergeWithNextTextNode(toText(prev.get()), exceptionState);
+        mergeWithNextTextNode(toText(prev), exceptionState);
 }
 
 void HTMLElement::applyAlignmentAttributeToStyle(const AtomicString& alignment, MutableStylePropertySet* style)
@@ -736,7 +736,8 @@ TextDirection HTMLElement::directionality(Node** strongDirectionalityTextNode) c
     while (node) {
         // Skip bdi, script, style and text form controls.
         if (equalIgnoringCase(node->nodeName(), "bdi") || isHTMLScriptElement(*node) || isHTMLStyleElement(*node)
-            || (node->isElementNode() && toElement(node)->isTextFormControl())) {
+            || (node->isElementNode() && toElement(node)->isTextFormControl())
+            || (node->isElementNode() && toElement(node)->shadowPseudoId() == "-webkit-input-placeholder")) {
             node = FlatTreeTraversal::nextSkippingChildren(*node, this);
             continue;
         }
@@ -927,12 +928,20 @@ void HTMLElement::addHTMLColorToStyle(MutableStylePropertySet* style, CSSPropert
     if (equalIgnoringCase(colorString, "transparent"))
         return;
 
-    // If the string is a named CSS color or a 3/6-digit hex color, use that.
-    Color parsedColor;
-    if (!parsedColor.setFromString(colorString))
-        parsedColor.setRGB(parseColorStringWithCrazyLegacyRules(colorString));
+    Color color;
 
-    style->setProperty(propertyID, cssValuePool().createColorValue(parsedColor.rgb()));
+    // If the string is a 3/6-digit hex color or a named CSS color, use that. Apply legacy rules otherwise. Note color.setFromString()
+    // accepts 4/8-digit hex color, so restrict its use with length checks here to support legacy HTML attributes.
+
+    bool success = false;
+    if ((colorString.length() == 4 || colorString.length() == 7) && colorString[0] == '#')
+        success = color.setFromString(colorString);
+    if (!success)
+        success = color.setNamedColor(colorString);
+    if (!success)
+        color.setRGB(parseColorStringWithCrazyLegacyRules(colorString));
+
+    style->setProperty(propertyID, cssValuePool().createColorValue(color.rgb()));
 }
 
 bool HTMLElement::isInteractiveContent() const

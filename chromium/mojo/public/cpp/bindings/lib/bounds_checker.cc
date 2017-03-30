@@ -8,7 +8,7 @@
 #include <stdint.h>
 
 #include "base/logging.h"
-#include "mojo/public/cpp/bindings/lib/bindings_serialization.h"
+#include "mojo/public/cpp/bindings/lib/serialization_util.h"
 #include "mojo/public/cpp/system/handle.h"
 
 namespace mojo {
@@ -50,8 +50,8 @@ bool BoundsChecker::ClaimMemory(const void* position, uint32_t num_bytes) {
   return true;
 }
 
-bool BoundsChecker::ClaimHandle(const Handle& encoded_handle) {
-  uint32_t index = encoded_handle.value();
+bool BoundsChecker::ClaimHandle(const Handle_Data& encoded_handle) {
+  uint32_t index = encoded_handle.value;
   if (index == kEncodedInvalidHandleValue)
     return true;
 

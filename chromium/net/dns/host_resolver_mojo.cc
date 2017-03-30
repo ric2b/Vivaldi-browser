@@ -92,6 +92,11 @@ int HostResolverMojo::ResolveFromCache(const RequestInfo& info,
   return ResolveFromCacheInternal(info, CacheKeyForRequest(info), addresses);
 }
 
+void HostResolverMojo::ChangeRequestPriority(RequestHandle req,
+                                             RequestPriority priority) {
+  // Do nothing, since Resolve() discarded the priority anyway.
+}
+
 void HostResolverMojo::CancelRequest(RequestHandle req) {
   DCHECK(thread_checker_.CalledOnValidThread());
   // Deleting the Job closes the HostResolverRequestClient connection,
@@ -114,8 +119,8 @@ int HostResolverMojo::ResolveFromCacheInternal(const RequestInfo& info,
   if (!entry)
     return ERR_DNS_CACHE_MISS;
 
-  *addresses = AddressList::CopyWithPort(entry->addrlist, info.port());
-  return entry->error;
+  *addresses = AddressList::CopyWithPort(entry->addresses(), info.port());
+  return entry->error();
 }
 
 HostResolverMojo::Job::Job(

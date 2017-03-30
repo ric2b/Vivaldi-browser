@@ -15,6 +15,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/win/registry.h"
 #include "base/win/windows_version.h"
 #include "chrome/common/chrome_icon_resources_win.h"
@@ -55,18 +56,17 @@ BrowserDistribution::Type GetCurrentDistributionType() {
 
 BrowserDistribution::BrowserDistribution()
     : type_(CHROME_BROWSER),
-      app_reg_data_(make_scoped_ptr(
+      app_reg_data_(base::WrapUnique(
 #if defined(VIVALDI_BUILD)
           new NonUpdatingAppRegistrationData(L"Software\\Vivaldi")
 #else
           new NonUpdatingAppRegistrationData(L"Software\\Chromium")
 #endif
-          )) {
-}
+          )) {}
 
 BrowserDistribution::BrowserDistribution(
     Type type,
-    scoped_ptr<AppRegistrationData> app_reg_data)
+    std::unique_ptr<AppRegistrationData> app_reg_data)
     : type_(type), app_reg_data_(std::move(app_reg_data)) {}
 
 BrowserDistribution::~BrowserDistribution() {}
@@ -165,24 +165,14 @@ base::string16 BrowserDistribution::GetBaseAppName() {
 }
 
 base::string16 BrowserDistribution::GetDisplayName() {
-  return GetShortcutName(SHORTCUT_CHROME);
+  return GetShortcutName();
 }
 
-base::string16 BrowserDistribution::GetShortcutName(
-    ShortcutType shortcut_type) {
-  switch (shortcut_type) {
-    case SHORTCUT_APP_LAUNCHER:
-      return installer::GetLocalizedString(IDS_APP_LIST_SHORTCUT_NAME_BASE);
-    default:
-      DCHECK_EQ(SHORTCUT_CHROME, shortcut_type);
-      return GetBaseAppName();
-  }
+base::string16 BrowserDistribution::GetShortcutName() {
+  return GetBaseAppName();
 }
 
-int BrowserDistribution::GetIconIndex(ShortcutType shortcut_type) {
-  if (shortcut_type == SHORTCUT_APP_LAUNCHER)
-    return icon_resources::kAppLauncherIndex;
-  DCHECK_EQ(SHORTCUT_CHROME, shortcut_type);
+int BrowserDistribution::GetIconIndex() {
   return icon_resources::kApplicationIndex;
 }
 
@@ -197,7 +187,7 @@ base::string16 BrowserDistribution::GetStartMenuShortcutSubfolder(
       return installer::GetLocalizedString(IDS_APP_SHORTCUTS_SUBDIR_NAME_BASE);
     default:
       DCHECK_EQ(SUBFOLDER_CHROME, subfolder_type);
-      return GetShortcutName(SHORTCUT_CHROME);
+      return GetShortcutName();
   }
 }
 

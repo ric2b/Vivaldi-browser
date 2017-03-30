@@ -4,6 +4,7 @@
 
 #include "chrome/renderer/chrome_content_renderer_client.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/command_line.h"
@@ -35,7 +36,7 @@
 #include "chrome/renderer/banners/app_banner_client.h"
 #include "chrome/renderer/benchmarking_extension.h"
 #include "chrome/renderer/chrome_render_frame_observer.h"
-#include "chrome/renderer/chrome_render_process_observer.h"
+#include "chrome/renderer/chrome_render_thread_observer.h"
 #include "chrome/renderer/chrome_render_view_observer.h"
 #include "chrome/renderer/content_settings_observer.h"
 #include "chrome/renderer/external_extension.h"
@@ -77,7 +78,7 @@
 #include "components/startup_metric_utils/common/startup_metric_messages.h"
 #include "components/version_info/version_info.h"
 #include "components/visitedlink/renderer/visitedlink_slave.h"
-#include "components/web_cache/renderer/web_cache_render_process_observer.h"
+#include "components/web_cache/renderer/web_cache_impl.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
@@ -111,6 +112,7 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/webui/jstemplate_builder.h"
 #include "widevine_cdm_version.h"  // In SHARED_INTERMEDIATE_DIR.
+#include "renderer/vivaldi_render_view_observer.h"
 
 #if !defined(DISABLE_NACL)
 #include "components/nacl/common/nacl_constants.h"
@@ -331,8 +333,8 @@ void ChromeContentRendererClient::RenderThreadStarted() {
   thread->Send(new StartupMetricHostMsg_RecordRendererMainEntryTime(
       main_entry_time_));
 
-  chrome_observer_.reset(new ChromeRenderProcessObserver());
-  web_cache_observer_.reset(new web_cache::WebCacheRenderProcessObserver());
+  chrome_observer_.reset(new ChromeRenderThreadObserver());
+  web_cache_impl_.reset(new web_cache::WebCacheImpl());
 
 #if defined(ENABLE_EXTENSIONS)
   ChromeExtensionsRendererClient::GetInstance()->RenderThreadStarted();
@@ -524,9 +526,8 @@ void ChromeContentRendererClient::RenderViewCreated(
   new PageLoadHistograms(render_view);
 #if defined(ENABLE_PRINTING)
   new printing::PrintWebViewHelper(
-      render_view,
-      scoped_ptr<printing::PrintWebViewHelper::Delegate>(
-          new ChromePrintWebViewHelperDelegate()));
+      render_view, std::unique_ptr<printing::PrintWebViewHelper::Delegate>(
+                       new ChromePrintWebViewHelperDelegate()));
 #endif
 #if defined(ENABLE_SPELLCHECK)
   new SpellCheckProvider(render_view, spellcheck_.get());
@@ -537,9 +538,10 @@ void ChromeContentRendererClient::RenderViewCreated(
   if (command_line->HasSwitch(switches::kInstantProcess))
     new SearchBox(render_view);
 
-  new ChromeRenderViewObserver(render_view, web_cache_observer_.get());
+  new ChromeRenderViewObserver(render_view, web_cache_impl_.get());
 
   new password_manager::CredentialManagerClient(render_view);
+  new vivaldi::VivaldiRenderViewObserver(render_view);
 }
 
 
@@ -783,7 +785,20 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
           break;
         }
 
-        scoped_ptr<content::PluginInstanceThrottler> throttler;
+        std::unique_ptr<content::PluginInstanceThrottler> throttler;
+
+        // Small content filter requires routing through a placeholder.
+        // TODO(groby): Verify this actually only triggers if PPS on.
+        if (ChromePluginPlaceholder::IsSmallContentFilterEnabled()) {
+          // The feature only applies to flash plugins.
+          if (power_saver_info.is_eligible) {
+            placeholder = ChromePluginPlaceholder::CreateDelayedPlugin(
+                render_frame, frame, params, info, identifier, group_name,
+                power_saver_info);
+            break;
+          }
+        }
+
         if (power_saver_info.power_saver_enabled) {
           throttler = PluginInstanceThrottler::Create();
           // PluginPreroller manages its own lifetime.
@@ -1198,8 +1213,8 @@ bool ChromeContentRendererClient::AllowPepperMediaStreamAPI(
 #endif  // !defined(OS_ANDROID)
 }
 
-void ChromeContentRendererClient::AddKeySystems(
-    std::vector<media::KeySystemInfo>* key_systems) {
+void ChromeContentRendererClient::AddSupportedKeySystems(
+    std::vector<std::unique_ptr<::media::KeySystemProperties>>* key_systems) {
   AddChromeKeySystems(key_systems);
 }
 
@@ -1304,10 +1319,10 @@ void ChromeContentRendererClient::RecordRapporURL(const std::string& metric,
   RenderThread::Get()->Send(new ChromeViewHostMsg_RecordRapporURL(metric, url));
 }
 
-scoped_ptr<blink::WebAppBannerClient>
+std::unique_ptr<blink::WebAppBannerClient>
 ChromeContentRendererClient::CreateAppBannerClient(
     content::RenderFrame* render_frame) {
-  return scoped_ptr<blink::WebAppBannerClient>(
+  return std::unique_ptr<blink::WebAppBannerClient>(
       new AppBannerClient(render_frame));
 }
 

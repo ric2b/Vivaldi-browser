@@ -8,12 +8,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <utility>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "cc/blink/cc_blink_export.h"
 #include "cc/layers/layer_client.h"
 #include "third_party/WebKit/public/platform/WebColor.h"
@@ -25,7 +25,7 @@
 #include "third_party/WebKit/public/platform/WebSize.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
-#include "third_party/skia/include/utils/SkMatrix44.h"
+#include "third_party/skia/include/core/SkMatrix44.h"
 
 namespace blink {
 struct WebFloatRect;
@@ -98,7 +98,6 @@ class WebLayerImpl : public blink::WebLayer {
   void setFilters(const cc::FilterOperations& filters) override;
   void setBackgroundFilters(const cc::FilterOperations& filters) override;
   bool hasActiveAnimationForTesting() override;
-  void setForceRenderSurface(bool force) override;
   void setScrollPositionDouble(blink::WebDoublePoint position) override;
   blink::WebDoublePoint scrollPositionDouble() const override;
   void setScrollClipLayer(blink::WebLayer* clip_layer) override;
@@ -118,11 +117,6 @@ class WebLayerImpl : public blink::WebLayer {
   void setTouchEventHandlerRegion(
       const blink::WebVector<blink::WebRect>& region) override;
   blink::WebVector<blink::WebRect> touchEventHandlerRegion() const override;
-  void setFrameTimingRequests(
-      const blink::WebVector<std::pair<int64_t, blink::WebRect>>& requests)
-      override;
-  blink::WebVector<std::pair<int64_t, blink::WebRect>> frameTimingRequests()
-      const override;
   void setIsContainerForFixedPositionLayers(bool is_container) override;
   bool isContainerForFixedPositionLayers() const override;
   void setPositionConstraint(
@@ -136,6 +130,7 @@ class WebLayerImpl : public blink::WebLayer {
   uint64_t elementId() const override;
   void setCompositorMutableProperties(uint32_t properties) override;
   uint32_t compositorMutableProperties() const override;
+  void setHasWillChangeTransformHint(bool has_will_change) override;
 
   void setScrollParent(blink::WebLayer* parent) override;
   void setClipParent(blink::WebLayer* parent) override;

@@ -24,6 +24,7 @@ static const int kFrameIndexStart = 2;
 
 Surface::Surface(SurfaceId id, SurfaceFactory* factory)
     : surface_id_(id),
+      previous_frame_surface_id_(id),
       factory_(factory->AsWeakPtr()),
       frame_index_(kFrameIndexStart),
       destroyed_(false) {}
@@ -41,7 +42,13 @@ Surface::~Surface() {
     draw_callback_.Run(SurfaceDrawStatus::DRAW_SKIPPED);
 }
 
-void Surface::QueueFrame(scoped_ptr<CompositorFrame> frame,
+void Surface::SetPreviousFrameSurface(Surface* surface) {
+  DCHECK(surface);
+  frame_index_ = surface->frame_index() + 1;
+  previous_frame_surface_id_ = surface->surface_id();
+}
+
+void Surface::QueueFrame(std::unique_ptr<CompositorFrame> frame,
                          const DrawCallback& callback) {
   DCHECK(factory_);
   ClearCopyRequests();
@@ -50,7 +57,7 @@ void Surface::QueueFrame(scoped_ptr<CompositorFrame> frame,
     TakeLatencyInfo(&frame->metadata.latency_info);
   }
 
-  scoped_ptr<CompositorFrame> previous_frame = std::move(current_frame_);
+  std::unique_ptr<CompositorFrame> previous_frame = std::move(current_frame_);
   current_frame_ = std::move(frame);
 
   if (current_frame_) {
@@ -63,6 +70,8 @@ void Surface::QueueFrame(scoped_ptr<CompositorFrame> frame,
   if (current_frame_ &&
       !current_frame_->delegated_frame_data->render_pass_list.empty())
     ++frame_index_;
+
+  previous_frame_surface_id_ = surface_id();
 
   std::vector<SurfaceId> new_referenced_surfaces;
   if (current_frame_) {
@@ -95,10 +104,11 @@ void Surface::QueueFrame(scoped_ptr<CompositorFrame> frame,
   }
 }
 
-void Surface::RequestCopyOfOutput(scoped_ptr<CopyOutputRequest> copy_request) {
+void Surface::RequestCopyOfOutput(
+    std::unique_ptr<CopyOutputRequest> copy_request) {
   if (current_frame_ &&
       !current_frame_->delegated_frame_data->render_pass_list.empty()) {
-    std::vector<scoped_ptr<CopyOutputRequest>>& copy_requests =
+    std::vector<std::unique_ptr<CopyOutputRequest>>& copy_requests =
         current_frame_->delegated_frame_data->render_pass_list.back()
             ->copy_requests;
 
@@ -107,7 +117,7 @@ void Surface::RequestCopyOfOutput(scoped_ptr<CopyOutputRequest> copy_request) {
       // source.
       auto to_remove =
           std::remove_if(copy_requests.begin(), copy_requests.end(),
-                         [source](const scoped_ptr<CopyOutputRequest>& x) {
+                         [source](const std::unique_ptr<CopyOutputRequest>& x) {
                            return x->source() == source;
                          });
       copy_requests.erase(to_remove, copy_requests.end());
@@ -119,7 +129,8 @@ void Surface::RequestCopyOfOutput(scoped_ptr<CopyOutputRequest> copy_request) {
 }
 
 void Surface::TakeCopyOutputRequests(
-    std::multimap<RenderPassId, scoped_ptr<CopyOutputRequest>>* copy_requests) {
+    std::multimap<RenderPassId, std::unique_ptr<CopyOutputRequest>>*
+        copy_requests) {
   DCHECK(copy_requests->empty());
   if (current_frame_) {
     for (const auto& render_pass :

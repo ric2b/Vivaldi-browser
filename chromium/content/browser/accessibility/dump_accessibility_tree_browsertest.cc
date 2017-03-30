@@ -102,7 +102,7 @@ class DumpAccessibilityTreeTest : public DumpAccessibilityTestBase {
   }
 
   std::vector<std::string> Dump() override {
-    scoped_ptr<AccessibilityTreeFormatter> formatter(
+    std::unique_ptr<AccessibilityTreeFormatter> formatter(
         CreateAccessibilityTreeFormatter());
     formatter->SetFilters(filters_);
     base::string16 actual_contents_utf16;
@@ -242,6 +242,10 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaControls) {
   RunAriaTest(FILE_PATH_LITERAL("aria-controls.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaCurrent) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-current.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaDefinition) {
@@ -1146,16 +1150,9 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
   RunHtmlTest(FILE_PATH_LITERAL("modal-dialog-opened.html"));
 }
 
-// Flaky on Windows and Mac: crbug.com/593846
-#if defined(OS_WIN) || defined(OS_MACOSX)
-#define MAYBE_AccessibilityModalDialogInIframeClosed \
-    DISABLED_AccessibilityModalDialogInIframeClosed
-#else
-#define MAYBE_AccessibilityModalDialogInIframeClosed \
-    AccessibilityModalDialogInIframeClosed
-#endif
+// Flaky: crbug.com/593846, crbug.com/596514
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
-                       MAYBE_AccessibilityModalDialogInIframeClosed) {
+                       DISABLED_AccessibilityModalDialogInIframeClosed) {
   RunHtmlTest(FILE_PATH_LITERAL("modal-dialog-in-iframe-closed.html"));
 }
 

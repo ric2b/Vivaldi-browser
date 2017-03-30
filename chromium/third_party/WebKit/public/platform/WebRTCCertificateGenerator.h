@@ -53,13 +53,23 @@ public:
         const WebRTCKeyParams&,
         const WebURL&,
         const WebURL& firstPartyForCookies,
-        std::unique_ptr<WebRTCCertificateCallback> observer)
-        = 0;
+        std::unique_ptr<WebRTCCertificateCallback> observer) = 0;
+    virtual void generateCertificateWithExpiration(
+        const WebRTCKeyParams&,
+        const WebURL&,
+        const WebURL& firstPartyForCookies,
+        uint64_t expiresMs,
+        std::unique_ptr<WebRTCCertificateCallback> observer) = 0;
 
     // Determines if the parameters are supported by generateCertificate.
     // For example, if the number of bits of some parameter is too small or too large we
     // may want to reject it for security or performance reasons.
     virtual bool isSupportedKeyParams(const WebRTCKeyParams&) = 0;
+
+    // Creates a certificate from the PEM strings. See also |WebRTCCertificate::toPEM|.
+    virtual std::unique_ptr<WebRTCCertificate> fromPEM(
+        const std::string& pemPrivateKey,
+        const std::string& pemCertificate) = 0;
 };
 
 } // namespace blink

@@ -2,14 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/sessions/session_service.h"
+
 #include <stddef.h>
+
+#include <memory>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -25,7 +28,6 @@
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/sessions/session_service.h"
 #include "chrome/browser/sessions/session_service_test_helper.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/url_constants.h"
@@ -73,6 +75,7 @@ class SessionServiceTest : public BrowserWithTestWindowTest,
     service()->SetWindowBounds(window_id,
                                window_bounds,
                                ui::SHOW_STATE_NORMAL);
+    service()->SetWindowWorkspace(window_id, window_workspace);
   }
 
   // Upon notification, increment the sync_save_count variable
@@ -176,6 +179,8 @@ class SessionServiceTest : public BrowserWithTestWindowTest,
 
   const gfx::Rect window_bounds;
 
+  const std::string window_workspace = "abc";
+
   SessionID window_id;
 
   int sync_save_count_;
@@ -185,7 +190,7 @@ class SessionServiceTest : public BrowserWithTestWindowTest,
   base::FilePath path_;
 
   SessionServiceTestHelper helper_;
-  scoped_ptr<TestingProfileManager> profile_manager_;
+  std::unique_ptr<TestingProfileManager> profile_manager_;
 };
 
 TEST_F(SessionServiceTest, Basic) {
@@ -206,6 +211,7 @@ TEST_F(SessionServiceTest, Basic) {
 
   ASSERT_EQ(1U, windows.size());
   ASSERT_TRUE(window_bounds == windows[0]->bounds);
+  ASSERT_EQ(window_workspace, windows[0]->workspace);
   ASSERT_EQ(0, windows[0]->selected_tab_index);
   ASSERT_EQ(window_id.id(), windows[0]->window_id.id());
   ASSERT_EQ(1U, windows[0]->tabs.size());
@@ -507,6 +513,7 @@ TEST_F(SessionServiceTest, IgnorePopups) {
   service()->SetWindowBounds(window2_id,
                              window_bounds,
                              ui::SHOW_STATE_NORMAL);
+  service()->SetWindowWorkspace(window2_id, window_workspace);
 
   SerializedNavigationEntry nav1 =
       SerializedNavigationEntryTestHelper::CreateNavigation(

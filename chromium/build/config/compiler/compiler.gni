@@ -6,6 +6,7 @@ import("//build/config/android/config.gni")
 import("//build/config/chrome_build.gni")
 import("//build/config/chromecast_build.gni")
 import("//build/config/sanitizers/sanitizers.gni")
+import("//build/toolchain/toolchain.gni")
 
 declare_args() {
   # How many symbols to include in the build. This affects the performance of
@@ -19,6 +20,28 @@ declare_args() {
   # Compile in such a way as to enable profiling of the generated code. For
   # example, don't omit the frame pointer and leave in symbols.
   enable_profiling = false
+
+  # Specify the current PGO phase, only used for the Windows MSVS build. Here's
+  # the different values that can be used:
+  #     0 : Means that PGO is turned off.
+  #     1 : Used during the PGI (instrumentation) phase.
+  #     2 : Used during the PGO (optimization) phase.
+  #
+  # TODO(sebmarchand): Add support for the PGU (update) phase.
+  chrome_pgo_phase = 0
+
+  # Whether or not the official builds should be build with full WPO.
+  full_wpo_on_official = false
+}
+
+declare_args() {
+  # Whether to use the gold linker from binutils instead of lld or bfd.
+  use_gold = !use_lld && !(is_chromecast && is_linux &&
+                           (current_cpu == "arm" || current_cpu == "mipsel")) &&
+             ((is_linux && (current_cpu == "x64" || current_cpu == "x86" ||
+                            current_cpu == "arm")) ||
+              (is_android && (current_cpu == "x86" || current_cpu == "x64" ||
+                              current_cpu == "arm")))
 }
 
 # If it wasn't manually set, set to an appropriate default.
@@ -43,4 +66,9 @@ if (symbol_level == -1) {
   } else {
     symbol_level = 0
   }
+}
+
+# PGO requires full WPO.
+if (chrome_pgo_phase > 0) {
+  full_wpo_on_official = true
 }

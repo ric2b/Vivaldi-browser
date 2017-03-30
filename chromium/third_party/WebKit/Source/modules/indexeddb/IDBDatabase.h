@@ -28,7 +28,7 @@
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptState.h"
-#include "bindings/modules/v8/UnionTypesModules.h"
+#include "bindings/modules/v8/StringOrStringSequenceOrDOMStringList.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "core/dom/DOMStringList.h"
 #include "modules/EventModules.h"
@@ -55,10 +55,9 @@ class ExceptionState;
 class ExecutionContext;
 
 class MODULES_EXPORT IDBDatabase final
-    : public RefCountedGarbageCollectedEventTargetWithInlineData<IDBDatabase>
+    : public EventTargetWithInlineData
     , public ActiveScriptWrappable
     , public ActiveDOMObject {
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(IDBDatabase);
     USING_GARBAGE_COLLECTED_MIXIN(IDBDatabase);
     DEFINE_WRAPPERTYPEINFO();
 public:

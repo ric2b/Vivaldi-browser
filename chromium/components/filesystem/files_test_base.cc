@@ -8,8 +8,8 @@
 
 #include "components/filesystem/public/interfaces/directory.mojom.h"
 #include "components/filesystem/public/interfaces/types.mojom.h"
-#include "mojo/shell/public/cpp/connector.h"
 #include "mojo/util/capture_util.h"
+#include "services/shell/public/cpp/connector.h"
 
 namespace filesystem {
 
@@ -24,11 +24,11 @@ void FilesTestBase::SetUp() {
   connector()->ConnectToInterface("mojo:filesystem", &files_);
 }
 
-void FilesTestBase::GetTemporaryRoot(DirectoryPtr* directory) {
-  FileError error = FileError::FAILED;
+void FilesTestBase::GetTemporaryRoot(mojom::DirectoryPtr* directory) {
+  mojom::FileError error = mojom::FileError::FAILED;
   files()->OpenTempDirectory(GetProxy(directory), mojo::Capture(&error));
   ASSERT_TRUE(files().WaitForIncomingResponse());
-  ASSERT_EQ(FileError::OK, error);
+  ASSERT_EQ(mojom::FileError::OK, error);
 }
 
 }  // namespace filesystem

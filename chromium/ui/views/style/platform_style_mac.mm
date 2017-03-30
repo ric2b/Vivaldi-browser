@@ -4,6 +4,7 @@
 
 #include "ui/views/style/platform_style.h"
 
+#include "base/memory/ptr_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icons.h"
@@ -16,6 +17,11 @@
 #include "ui/views/style/mac/dialog_button_border_mac.h"
 
 namespace views {
+
+const int PlatformStyle::kMinLabelButtonWidth = 32;
+const int PlatformStyle::kMinLabelButtonHeight = 30;
+const bool PlatformStyle::kDefaultLabelButtonHasBoldFont = false;
+const bool PlatformStyle::kTextfieldDragVerticallyDragsToEnd = true;
 
 // static
 gfx::ImageSkia PlatformStyle::CreateComboboxArrow(bool is_enabled,
@@ -33,27 +39,52 @@ gfx::ImageSkia PlatformStyle::CreateComboboxArrow(bool is_enabled,
 }
 
 // static
-scoped_ptr<FocusableBorder> PlatformStyle::CreateComboboxBorder() {
-  return make_scoped_ptr(new FocusableRoundedBorder);
+std::unique_ptr<FocusableBorder> PlatformStyle::CreateComboboxBorder() {
+  return base::WrapUnique(new FocusableRoundedBorder);
 }
 
 // static
-scoped_ptr<Background> PlatformStyle::CreateComboboxBackground() {
-  return make_scoped_ptr(new ComboboxBackgroundMac);
+std::unique_ptr<Background> PlatformStyle::CreateComboboxBackground(
+    int shoulder_width) {
+  return base::WrapUnique(new ComboboxBackgroundMac(shoulder_width));
 }
 
 // static
-scoped_ptr<LabelButtonBorder> PlatformStyle::CreateLabelButtonBorder(
+std::unique_ptr<LabelButtonBorder> PlatformStyle::CreateLabelButtonBorder(
     Button::ButtonStyle style) {
   if (style == Button::STYLE_BUTTON)
-    return make_scoped_ptr(new DialogButtonBorderMac());
+    return base::WrapUnique(new DialogButtonBorderMac());
 
-  return make_scoped_ptr(new LabelButtonAssetBorder(style));
+  return base::WrapUnique(new LabelButtonAssetBorder(style));
 }
 
 // static
-scoped_ptr<ScrollBar> PlatformStyle::CreateScrollBar(bool is_horizontal) {
-  return make_scoped_ptr(new CocoaScrollBar(is_horizontal));
+std::unique_ptr<ScrollBar> PlatformStyle::CreateScrollBar(bool is_horizontal) {
+  return base::WrapUnique(new CocoaScrollBar(is_horizontal));
+}
+
+// static
+SkColor PlatformStyle::TextColorForButton(
+    const ButtonColorByState& color_by_state,
+    const LabelButton& button) {
+  Button::ButtonState state = button.state();
+  if (button.style() == Button::STYLE_BUTTON &&
+      DialogButtonBorderMac::ShouldRenderDefault(button)) {
+    // For convenience, we currently assume Mac wants the color corresponding to
+    // the pressed state for default buttons.
+    state = Button::STATE_PRESSED;
+  }
+  return color_by_state[state];
+}
+
+// static
+void PlatformStyle::ApplyLabelButtonTextStyle(
+    views::Label* label,
+    ButtonColorByState* color_by_state) {
+  const ui::NativeTheme* theme = label->GetNativeTheme();
+  ButtonColorByState& colors = *color_by_state;
+  colors[Button::STATE_PRESSED] =
+      theme->GetSystemColor(ui::NativeTheme::kColorId_ButtonHighlightColor);
 }
 
 }  // namespace views

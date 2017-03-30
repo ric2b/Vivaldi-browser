@@ -86,7 +86,7 @@ class TestPipelineHost : public media::IPCMediaPipelineHost {
   void OnVideoConfigChanged(const media::PlatformVideoConfig& video_config);
 
   DataSourceAdapter data_source_adapter_;
-  scoped_ptr<content::PlatformMediaPipeline> platform_pipeline_;
+  std::unique_ptr<content::PlatformMediaPipeline> platform_pipeline_;
 
   InitializeCB init_cb_;
   media::DemuxerStream::ReadCB read_cb_[media::PLATFORM_MEDIA_DATA_TYPE_COUNT];

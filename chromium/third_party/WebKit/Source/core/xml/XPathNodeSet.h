@@ -34,8 +34,7 @@ namespace blink {
 
 namespace XPath {
 
-// TODO(Oilpan): drop Finalized once Node is on the heap.
-class NodeSet final : public GarbageCollectedFinalized<NodeSet> {
+class NodeSet final : public GarbageCollected<NodeSet> {
 public:
     static NodeSet* create() { return new NodeSet; }
     static NodeSet* create(const NodeSet&);
@@ -49,7 +48,7 @@ public:
     void swap(NodeSet& other) { std::swap(m_isSorted, other.m_isSorted); std::swap(m_subtreesAreDisjoint, other.m_subtreesAreDisjoint); m_nodes.swap(other.m_nodes); }
 
     // NodeSet itself does not verify that nodes in it are unique.
-    void append(RawPtr<Node> node) { m_nodes.append(node); }
+    void append(Node* node) { m_nodes.append(node); }
     void append(const NodeSet& nodeSet) { m_nodes.appendVector(nodeSet.m_nodes); }
 
     // Returns the set's first node in document order, or 0 if the set is empty.

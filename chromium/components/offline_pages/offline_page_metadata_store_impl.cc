@@ -15,7 +15,7 @@
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/leveldb_proto/proto_database_impl.h"
 #include "components/offline_pages/offline_page_item.h"
@@ -144,13 +144,13 @@ void OfflinePageMetadataStoreImpl::LoadContinuation(
 void OfflinePageMetadataStoreImpl::LoadDone(
     const LoadCallback& callback,
     bool success,
-    scoped_ptr<std::vector<OfflinePageEntry>> entries) {
+    std::unique_ptr<std::vector<OfflinePageEntry>> entries) {
   DCHECK(entries);
 
   std::vector<OfflinePageItem> result;
-  scoped_ptr<ProtoDatabase<OfflinePageEntry>::KeyEntryVector> entries_to_update(
-      new ProtoDatabase<OfflinePageEntry>::KeyEntryVector());
-  scoped_ptr<std::vector<std::string>> keys_to_remove(
+  std::unique_ptr<ProtoDatabase<OfflinePageEntry>::KeyEntryVector>
+      entries_to_update(new ProtoDatabase<OfflinePageEntry>::KeyEntryVector());
+  std::unique_ptr<std::vector<std::string>> keys_to_remove(
       new std::vector<std::string>());
 
   LoadStatus status = LOAD_SUCCEEDED;
@@ -174,7 +174,7 @@ void OfflinePageMetadataStoreImpl::LoadDone(
           LOG(ERROR) << "unexpected entry missing bookmark id";
           continue;
         }
-        item.client_id.name_space = offline_pages::BOOKMARK_NAMESPACE;
+        item.client_id.name_space = offline_pages::kBookmarkNamespace;
         item.client_id.id = base::Int64ToString(entry.deprecated_bookmark_id());
 
         OfflinePageEntry upgraded_entry;
@@ -225,9 +225,9 @@ void OfflinePageMetadataStoreImpl::NotifyLoadResult(
 void OfflinePageMetadataStoreImpl::AddOrUpdateOfflinePage(
     const OfflinePageItem& offline_page_item,
     const UpdateCallback& callback) {
-  scoped_ptr<ProtoDatabase<OfflinePageEntry>::KeyEntryVector> entries_to_save(
-      new ProtoDatabase<OfflinePageEntry>::KeyEntryVector());
-  scoped_ptr<std::vector<std::string>> keys_to_remove(
+  std::unique_ptr<ProtoDatabase<OfflinePageEntry>::KeyEntryVector>
+      entries_to_save(new ProtoDatabase<OfflinePageEntry>::KeyEntryVector());
+  std::unique_ptr<std::vector<std::string>> keys_to_remove(
       new std::vector<std::string>());
 
   OfflinePageEntry offline_page_proto;
@@ -243,9 +243,9 @@ void OfflinePageMetadataStoreImpl::AddOrUpdateOfflinePage(
 void OfflinePageMetadataStoreImpl::RemoveOfflinePages(
     const std::vector<int64_t>& offline_ids,
     const UpdateCallback& callback) {
-  scoped_ptr<ProtoDatabase<OfflinePageEntry>::KeyEntryVector> entries_to_save(
-      new ProtoDatabase<OfflinePageEntry>::KeyEntryVector());
-  scoped_ptr<std::vector<std::string>> keys_to_remove(
+  std::unique_ptr<ProtoDatabase<OfflinePageEntry>::KeyEntryVector>
+      entries_to_save(new ProtoDatabase<OfflinePageEntry>::KeyEntryVector());
+  std::unique_ptr<std::vector<std::string>> keys_to_remove(
       new std::vector<std::string>());
 
   for (int64_t id : offline_ids)
@@ -256,8 +256,9 @@ void OfflinePageMetadataStoreImpl::RemoveOfflinePages(
 }
 
 void OfflinePageMetadataStoreImpl::UpdateEntries(
-    scoped_ptr<ProtoDatabase<OfflinePageEntry>::KeyEntryVector> entries_to_save,
-    scoped_ptr<std::vector<std::string>> keys_to_remove,
+    std::unique_ptr<ProtoDatabase<OfflinePageEntry>::KeyEntryVector>
+        entries_to_save,
+    std::unique_ptr<std::vector<std::string>> keys_to_remove,
     const UpdateCallback& callback) {
   if (!database_.get()) {
     // Failing fast here, because DB is not initialized, and there is nothing

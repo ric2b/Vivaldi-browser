@@ -11,7 +11,7 @@
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/common/chrome_utility_messages.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/component_updater/component_updater_service.h"
@@ -19,7 +19,7 @@
 #include "content/public/browser/utility_process_host.h"
 #include "content/public/browser/utility_process_host_client.h"
 #include "courgette/courgette.h"
-#include "courgette/third_party/bsdiff.h"
+#include "courgette/third_party/bsdiff/bsdiff.h"
 #include "ipc/ipc_message_macros.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -30,7 +30,7 @@ class PatchHost : public content::UtilityProcessHostClient {
   PatchHost(base::Callback<void(int result)> callback,
             scoped_refptr<base::SequencedTaskRunner> task_runner);
 
-  void StartProcess(scoped_ptr<IPC::Message> message);
+  void StartProcess(std::unique_ptr<IPC::Message> message);
 
  private:
   ~PatchHost() override;
@@ -54,7 +54,7 @@ PatchHost::PatchHost(base::Callback<void(int result)> callback,
 PatchHost::~PatchHost() {
 }
 
-void PatchHost::StartProcess(scoped_ptr<IPC::Message> message) {
+void PatchHost::StartProcess(std::unique_ptr<IPC::Message> message) {
   // The DeltaUpdateOpPatchHost is not responsible for deleting the
   // UtilityProcessHost object.
   content::UtilityProcessHost* host = content::UtilityProcessHost::Create(
@@ -102,7 +102,7 @@ void ChromeOutOfProcessPatcher::Patch(
     const base::FilePath& output_abs_path,
     base::Callback<void(int result)> callback) {
   host_ = new PatchHost(callback, task_runner);
-  scoped_ptr<IPC::Message> patch_message;
+  std::unique_ptr<IPC::Message> patch_message;
   if (operation == update_client::kBsdiff) {
     patch_message.reset(new ChromeUtilityMsg_PatchFileBsdiff(
         input_abs_path, patch_abs_path, output_abs_path));

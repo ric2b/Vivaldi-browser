@@ -10,9 +10,9 @@
 #include "content/common/media/media_stream_messages.h"
 #include "content/renderer/media/media_stream_dispatcher_eventhandler.h"
 #include "content/renderer/render_thread_impl.h"
-#include "media/audio/audio_parameters.h"
+#include "media/base/audio_parameters.h"
 #include "third_party/WebKit/public/web/WebUserGestureIndicator.h"
-#include "url/gurl.h"
+#include "url/origin.h"
 
 namespace content {
 
@@ -68,13 +68,15 @@ MediaStreamDispatcher::MediaStreamDispatcher(RenderFrame* render_frame)
       next_ipc_id_(0) {
 }
 
-MediaStreamDispatcher::~MediaStreamDispatcher() {}
+MediaStreamDispatcher::~MediaStreamDispatcher() {
+  DCHECK(device_change_subscribers_.empty());
+}
 
 void MediaStreamDispatcher::GenerateStream(
     int request_id,
     const base::WeakPtr<MediaStreamDispatcherEventHandler>& event_handler,
     const StreamControls& controls,
-    const GURL& security_origin) {
+    const url::Origin& security_origin) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DVLOG(1) << "MediaStreamDispatcher::GenerateStream(" << request_id << ")";
 
@@ -135,7 +137,7 @@ void MediaStreamDispatcher::EnumerateDevices(
     int request_id,
     const base::WeakPtr<MediaStreamDispatcherEventHandler>& event_handler,
     MediaStreamType type,
-    const GURL& security_origin) {
+    const url::Origin& security_origin) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(type == MEDIA_DEVICE_AUDIO_CAPTURE ||
          type == MEDIA_DEVICE_VIDEO_CAPTURE ||
@@ -177,7 +179,7 @@ void MediaStreamDispatcher::OpenDevice(
     const base::WeakPtr<MediaStreamDispatcherEventHandler>& event_handler,
     const std::string& device_id,
     MediaStreamType type,
-    const GURL& security_origin) {
+    const url::Origin& security_origin) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DVLOG(1) << "MediaStreamDispatcher::OpenDevice(" << request_id << ")";
 
@@ -209,6 +211,43 @@ void MediaStreamDispatcher::CloseDevice(const std::string& label) {
   Send(new MediaStreamHostMsg_CloseDevice(routing_id(), label));
 }
 
+void MediaStreamDispatcher::SubscribeToDeviceChangeNotifications(
+    const base::WeakPtr<MediaStreamDispatcherEventHandler>& event_handler,
+    const url::Origin& security_origin) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(std::find_if(
+             device_change_subscribers_.begin(),
+             device_change_subscribers_.end(),
+             [&event_handler](
+                 const base::WeakPtr<MediaStreamDispatcherEventHandler>& item) {
+               return event_handler.get() == item.get();
+             }) == device_change_subscribers_.end());
+  DVLOG(1) << "MediaStreamDispatcher::SubscribeToDeviceChangeNotifications";
+
+  if (device_change_subscribers_.empty()) {
+    Send(new MediaStreamHostMsg_SubscribeToDeviceChangeNotifications(
+        routing_id(), security_origin));
+  }
+  device_change_subscribers_.push_back(event_handler);
+}
+
+void MediaStreamDispatcher::CancelDeviceChangeNotifications(
+    const base::WeakPtr<MediaStreamDispatcherEventHandler>& event_handler) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DVLOG(1) << "MediaStreamDispatcher::SubscribeToDeviceChangeNotifications";
+  auto it = std::find_if(
+      device_change_subscribers_.begin(), device_change_subscribers_.end(),
+      [&event_handler](
+          const base::WeakPtr<MediaStreamDispatcherEventHandler>& item) {
+        return event_handler.get() == item.get();
+      });
+  CHECK(it != device_change_subscribers_.end());
+  device_change_subscribers_.erase(it);
+
+  if (device_change_subscribers_.empty())
+    Send(new MediaStreamHostMsg_CancelDeviceChangeNotifications(routing_id()));
+}
+
 void MediaStreamDispatcher::OnDestruct() {
   // Do not self-destruct. UserMediaClientImpl owns |this|.
 }
@@ -237,6 +276,7 @@ bool MediaStreamDispatcher::OnMessageReceived(const IPC::Message& message) {
                         OnDeviceOpened)
     IPC_MESSAGE_HANDLER(MediaStreamMsg_DeviceOpenFailed,
                         OnDeviceOpenFailed)
+    IPC_MESSAGE_HANDLER(MediaStreamMsg_DevicesChanged, OnDevicesChanged)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -312,6 +352,15 @@ void MediaStreamDispatcher::OnDeviceStopped(
   if (stream->handler.get())
     stream->handler->OnDeviceStopped(label, device_info);
 
+  // |it| could have already been invalidated in the function call above. So we
+  // need to check if |label| is still in |label_stream_map_| again.
+  // Note: this is a quick fix to the crash caused by erasing the invalidated
+  // iterator from |label_stream_map_| (crbug.com/616884). Future work needs to
+  // be done to resolve this re-entrancy issue.
+  it = label_stream_map_.find(label);
+  if (it == label_stream_map_.end())
+    return;
+  stream = &it->second;
   if (stream->audio_array.empty() && stream->video_array.empty())
     label_stream_map_.erase(it);
 }
@@ -375,6 +424,14 @@ void MediaStreamDispatcher::OnDeviceOpenFailed(int request_id) {
       requests_.erase(it);
       break;
     }
+  }
+}
+
+void MediaStreamDispatcher::OnDevicesChanged() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  for (auto event_handler : device_change_subscribers_) {
+    DCHECK(event_handler);
+    event_handler->OnDevicesChanged();
   }
 }
 

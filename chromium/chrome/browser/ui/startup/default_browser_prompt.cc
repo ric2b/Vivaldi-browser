@@ -13,7 +13,7 @@
 #include "base/metrics/user_metrics_action.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/version.h"
 #include "build/build_config.h"
@@ -280,8 +280,7 @@ void OnCheckIsDefaultBrowserFinished(
     // default browser.
     ResetCheckDefaultBrowserPref(profile_path);
   } else if (show_prompt && state == shell_integration::NOT_DEFAULT &&
-             shell_integration::CanSetAsDefaultBrowser() !=
-                 shell_integration::SET_DEFAULT_NOT_ALLOWED) {
+             shell_integration::CanSetAsDefaultBrowser()) {
     ShowPrompt();
   }
 }

@@ -4,15 +4,21 @@
 
 #include "components/history/core/browser/web_history_service.h"
 
+#include <memory>
+
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/metrics/histogram.h"
+#include "base/optional.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "components/signin/core/browser/signin_manager.h"
+#include "components/sync_driver/local_device_info_provider_impl.h"
+#include "components/sync_driver/sync_util.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "google_apis/gaia/oauth2_token_service.h"
@@ -23,6 +29,8 @@
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_fetcher_delegate.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "sync/protocol/history_status.pb.h"
+#include "ui/base/device_form_factor.h"
 #include "url/gurl.h"
 
 namespace history {
@@ -47,7 +55,11 @@ const char kHistoryAudioHistoryChangeUrl[] =
 const char kQueryWebAndAppActivityUrl[] =
     "https://history.google.com/history/api/lookup?client=web_app";
 
+const char kQueryOtherFormsOfBrowsingHistoryUrlSuffix[] = "/historystatus";
+
 const char kPostDataMimeType[] = "text/plain";
+
+const char kSyncProtoMimeType[] = "application/octet-stream";
 
 // The maximum number of retries for the URLFetcher requests.
 const size_t kMaxRetries = 1;
@@ -81,6 +93,7 @@ class RequestImpl : public WebHistoryService::Request,
         signin_manager_(signin_manager),
         request_context_(request_context),
         url_(url),
+        post_data_mime_type_(kPostDataMimeType),
         response_code_(0),
         auth_retry_count_(0),
         callback_(callback),
@@ -158,11 +171,11 @@ class RequestImpl : public WebHistoryService::Request,
   }
 
   // Helper for creating a new URLFetcher for the API request.
-  scoped_ptr<net::URLFetcher> CreateUrlFetcher(
+  std::unique_ptr<net::URLFetcher> CreateUrlFetcher(
       const std::string& access_token) {
-    net::URLFetcher::RequestType request_type = post_data_.empty() ?
-        net::URLFetcher::GET : net::URLFetcher::POST;
-    scoped_ptr<net::URLFetcher> fetcher =
+    net::URLFetcher::RequestType request_type = post_data_ ?
+        net::URLFetcher::POST : net::URLFetcher::GET;
+    std::unique_ptr<net::URLFetcher> fetcher =
         net::URLFetcher::Create(url_, request_type, this);
     fetcher->SetRequestContext(request_context_.get());
     fetcher->SetMaxRetriesOn5xx(kMaxRetries);
@@ -171,13 +184,30 @@ class RequestImpl : public WebHistoryService::Request,
     fetcher->AddExtraRequestHeader("Authorization: Bearer " + access_token);
     fetcher->AddExtraRequestHeader("X-Developer-Key: " +
         GaiaUrls::GetInstance()->oauth2_chrome_client_id());
-    if (request_type == net::URLFetcher::POST)
-      fetcher->SetUploadData(kPostDataMimeType, post_data_);
+
+    if (!user_agent_.empty()) {
+      fetcher->AddExtraRequestHeader(
+          std::string(net::HttpRequestHeaders::kUserAgent) +
+          ": " + user_agent_);
+    }
+
+    if (post_data_)
+      fetcher->SetUploadData(post_data_mime_type_, post_data_.value());
     return fetcher;
   }
 
   void SetPostData(const std::string& post_data) override {
+    SetPostDataAndType(post_data, kPostDataMimeType);
+  }
+
+  void SetPostDataAndType(const std::string& post_data,
+                          const std::string& mime_type) override {
     post_data_ = post_data;
+    post_data_mime_type_ = mime_type;
+  }
+
+  void SetUserAgent(const std::string& user_agent) override {
+    user_agent_ = user_agent;
   }
 
   OAuth2TokenService* token_service_;
@@ -188,16 +218,22 @@ class RequestImpl : public WebHistoryService::Request,
   GURL url_;
 
   // POST data to be sent with the request (may be empty).
-  std::string post_data_;
+  base::Optional<std::string> post_data_;
+
+  // MIME type of the post requests. Defaults to text/plain.
+  std::string post_data_mime_type_;
+
+  // The user agent header used with this request.
+  std::string user_agent_;
 
   // The OAuth2 access token request.
-  scoped_ptr<OAuth2TokenService::Request> token_request_;
+  std::unique_ptr<OAuth2TokenService::Request> token_request_;
 
   // The current OAuth2 access token.
   std::string access_token_;
 
   // Handles the actual API requests after the OAuth token is acquired.
-  scoped_ptr<net::URLFetcher> url_fetcher_;
+  std::unique_ptr<net::URLFetcher> url_fetcher_;
 
   // Holds the response code received from the server.
   int response_code_;
@@ -302,6 +338,7 @@ WebHistoryService::~WebHistoryService() {
   STLDeleteElements(&pending_expire_requests_);
   STLDeleteElements(&pending_audio_history_requests_);
   STLDeleteElements(&pending_web_and_app_activity_requests_);
+  STLDeleteElements(&pending_other_forms_of_browsing_history_requests_);
 }
 
 WebHistoryService::Request* WebHistoryService::CreateRequest(
@@ -312,11 +349,11 @@ WebHistoryService::Request* WebHistoryService::CreateRequest(
 }
 
 // static
-scoped_ptr<base::DictionaryValue> WebHistoryService::ReadResponse(
-  WebHistoryService::Request* request) {
-  scoped_ptr<base::DictionaryValue> result;
+std::unique_ptr<base::DictionaryValue> WebHistoryService::ReadResponse(
+    WebHistoryService::Request* request) {
+  std::unique_ptr<base::DictionaryValue> result;
   if (request->GetResponseCode() == net::HTTP_OK) {
-    scoped_ptr<base::Value> value =
+    std::unique_ptr<base::Value> value =
         base::JSONReader::Read(request->GetResponseBody());
     if (value.get() && value.get()->IsType(base::Value::TYPE_DICTIONARY))
       result.reset(static_cast<base::DictionaryValue*>(value.release()));
@@ -326,7 +363,7 @@ scoped_ptr<base::DictionaryValue> WebHistoryService::ReadResponse(
   return result;
 }
 
-scoped_ptr<WebHistoryService::Request> WebHistoryService::QueryHistory(
+std::unique_ptr<WebHistoryService::Request> WebHistoryService::QueryHistory(
     const base::string16& text_query,
     const QueryOptions& options,
     const WebHistoryService::QueryWebHistoryCallback& callback) {
@@ -335,7 +372,7 @@ scoped_ptr<WebHistoryService::Request> WebHistoryService::QueryHistory(
       &WebHistoryService::QueryHistoryCompletionCallback, callback);
 
   GURL url = GetQueryUrl(text_query, options, server_version_info_);
-  scoped_ptr<Request> request(CreateRequest(url, completion_callback));
+  std::unique_ptr<Request> request(CreateRequest(url, completion_callback));
   request->Start();
   return request;
 }
@@ -344,7 +381,7 @@ void WebHistoryService::ExpireHistory(
     const std::vector<ExpireHistoryArgs>& expire_list,
     const ExpireWebHistoryCallback& callback) {
   base::DictionaryValue delete_request;
-  scoped_ptr<base::ListValue> deletions(new base::ListValue);
+  std::unique_ptr<base::ListValue> deletions(new base::ListValue);
   base::Time now = base::Time::Now();
 
   for (const auto& expire : expire_list) {
@@ -381,7 +418,7 @@ void WebHistoryService::ExpireHistory(
                  weak_ptr_factory_.GetWeakPtr(),
                  callback);
 
-  scoped_ptr<Request> request(CreateRequest(url, completion_callback));
+  std::unique_ptr<Request> request(CreateRequest(url, completion_callback));
   request->SetPostData(post_data);
   request->Start();
   pending_expire_requests_.insert(request.release());
@@ -408,7 +445,7 @@ void WebHistoryService::GetAudioHistoryEnabled(
     callback);
 
   GURL url(kHistoryAudioHistoryUrl);
-  scoped_ptr<Request> request(CreateRequest(url, completion_callback));
+  std::unique_ptr<Request> request(CreateRequest(url, completion_callback));
   request->Start();
   pending_audio_history_requests_.insert(request.release());
 }
@@ -423,7 +460,7 @@ void WebHistoryService::SetAudioHistoryEnabled(
                  callback);
 
   GURL url(kHistoryAudioHistoryChangeUrl);
-  scoped_ptr<Request> request(CreateRequest(url, completion_callback));
+  std::unique_ptr<Request> request(CreateRequest(url, completion_callback));
 
   base::DictionaryValue enable_audio_history;
   enable_audio_history.SetBoolean("enable_history_recording",
@@ -441,12 +478,6 @@ size_t WebHistoryService::GetNumberOfPendingAudioHistoryRequests() {
   return pending_audio_history_requests_.size();
 }
 
-bool WebHistoryService::HasOtherFormsOfBrowsingHistory() const {
-  // TODO(msramek): Query history.google.com for existence of other forms of
-  // browsing history. In the meantime, assume that there isn't.
-  return false;
-}
-
 void WebHistoryService::QueryWebAndAppActivity(
     const QueryWebAndAppActivityCallback& callback) {
   // Wrap the original callback into a generic completion callback.
@@ -461,12 +492,52 @@ void WebHistoryService::QueryWebAndAppActivity(
   request->Start();
 }
 
+void WebHistoryService::QueryOtherFormsOfBrowsingHistory(
+    version_info::Channel channel,
+    const QueryOtherFormsOfBrowsingHistoryCallback& callback) {
+  // Wrap the original callback into a generic completion callback.
+  CompletionCallback completion_callback = base::Bind(
+      &WebHistoryService::QueryOtherFormsOfBrowsingHistoryCompletionCallback,
+      weak_ptr_factory_.GetWeakPtr(),
+      callback);
+
+  // Find the Sync request URL.
+  GURL url =
+      GetSyncServiceURL(*base::CommandLine::ForCurrentProcess(), channel);
+  GURL::Replacements replace_path;
+  std::string new_path =
+      url.path() + kQueryOtherFormsOfBrowsingHistoryUrlSuffix;
+  replace_path.SetPathStr(new_path);
+  url = url.ReplaceComponents(replace_path);
+  DCHECK(url.is_valid());
+
+  Request* request = CreateRequest(url, completion_callback);
+
+  // Set the Sync-specific user agent.
+  // TODO(pavely): Refactor LocalDeviceInfoProviderImpl::GetSyncUserAgent()
+  // to a standalone function.
+  browser_sync::LocalDeviceInfoProviderImpl local_device_info_provider_(
+      channel, std::string() /* version (unused) */,
+      ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET);
+  request->SetUserAgent(local_device_info_provider_.GetSyncUserAgent());
+
+  pending_other_forms_of_browsing_history_requests_.insert(request);
+
+  // Set the request protobuf.
+  sync_pb::HistoryStatusRequest request_proto;
+  std::string post_data;
+  request_proto.SerializeToString(&post_data);
+  request->SetPostDataAndType(post_data, kSyncProtoMimeType);
+
+  request->Start();
+}
+
 // static
 void WebHistoryService::QueryHistoryCompletionCallback(
     const WebHistoryService::QueryWebHistoryCallback& callback,
     WebHistoryService::Request* request,
     bool success) {
-  scoped_ptr<base::DictionaryValue> response_value;
+  std::unique_ptr<base::DictionaryValue> response_value;
   if (success)
     response_value = ReadResponse(request);
   callback.Run(request, response_value.get());
@@ -477,9 +548,9 @@ void WebHistoryService::ExpireHistoryCompletionCallback(
     WebHistoryService::Request* request,
     bool success) {
   pending_expire_requests_.erase(request);
-  scoped_ptr<Request> request_ptr(request);
+  std::unique_ptr<Request> request_ptr(request);
 
-  scoped_ptr<base::DictionaryValue> response_value;
+  std::unique_ptr<base::DictionaryValue> response_value;
   if (success) {
     response_value = ReadResponse(request);
     if (response_value)
@@ -493,9 +564,9 @@ void WebHistoryService::AudioHistoryCompletionCallback(
     WebHistoryService::Request* request,
     bool success) {
   pending_audio_history_requests_.erase(request);
-  scoped_ptr<WebHistoryService::Request> request_ptr(request);
+  std::unique_ptr<WebHistoryService::Request> request_ptr(request);
 
-  scoped_ptr<base::DictionaryValue> response_value;
+  std::unique_ptr<base::DictionaryValue> response_value;
   bool enabled_value = false;
   if (success) {
     response_value = ReadResponse(request_ptr.get());
@@ -514,9 +585,9 @@ void WebHistoryService::QueryWebAndAppActivityCompletionCallback(
     WebHistoryService::Request* request,
     bool success) {
   pending_web_and_app_activity_requests_.erase(request);
-  scoped_ptr<Request> request_ptr(request);
+  std::unique_ptr<Request> request_ptr(request);
 
-  scoped_ptr<base::DictionaryValue> response_value;
+  std::unique_ptr<base::DictionaryValue> response_value;
   bool web_and_app_activity_enabled = false;
 
   if (success) {
@@ -528,6 +599,23 @@ void WebHistoryService::QueryWebAndAppActivityCompletionCallback(
   }
 
   callback.Run(web_and_app_activity_enabled);
+}
+
+void WebHistoryService::QueryOtherFormsOfBrowsingHistoryCompletionCallback(
+    const WebHistoryService::QueryOtherFormsOfBrowsingHistoryCallback& callback,
+    WebHistoryService::Request* request,
+    bool success) {
+  pending_other_forms_of_browsing_history_requests_.erase(request);
+  std::unique_ptr<Request> request_ptr(request);
+
+  bool has_other_forms_of_browsing_history = false;
+  if (success && request->GetResponseCode() == net::HTTP_OK) {
+    sync_pb::HistoryStatusResponse history_status;
+    if (history_status.ParseFromString(request->GetResponseBody()))
+      has_other_forms_of_browsing_history = history_status.has_derived_data();
+  }
+
+  callback.Run(has_other_forms_of_browsing_history);
 }
 
 }  // namespace history

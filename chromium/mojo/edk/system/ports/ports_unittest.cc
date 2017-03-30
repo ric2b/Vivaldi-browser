@@ -11,6 +11,7 @@
 #include <sstream>
 
 #include "base/logging.h"
+#include "base/rand_util.h"
 #include "mojo/edk/system/ports/node.h"
 #include "mojo/edk/system/ports/node_delegate.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -73,12 +74,12 @@ struct Task {
   Task(NodeName node_name, ScopedMessage message)
       : node_name(node_name),
         message(std::move(message)),
-        priority(rand()) {
+        priority(base::RandUint64()) {
   }
 
   NodeName node_name;
   ScopedMessage message;
-  int32_t priority;
+  uint64_t priority;
 };
 
 struct TaskComparator {
@@ -122,7 +123,7 @@ int SendStringMessage(Node* node, const PortRef& port, const std::string& s) {
   size_t size = s.size() + 1;
   ScopedMessage message = TestMessage::NewUserMessage(size, 0);
   memcpy(message->mutable_payload_bytes(), s.data(), size);
-  return node->SendMessage(port, &message);
+  return node->SendMessage(port, std::move(message));
 }
 
 int SendStringMessageWithPort(Node* node,
@@ -133,7 +134,7 @@ int SendStringMessageWithPort(Node* node,
   ScopedMessage message = TestMessage::NewUserMessage(size, 1);
   memcpy(message->mutable_payload_bytes(), s.data(), size);
   message->mutable_ports()[0] = sent_port_name;
-  return node->SendMessage(port ,&message);
+  return node->SendMessage(port, std::move(message));
 }
 
 int SendStringMessageWithPort(Node* node,
@@ -719,31 +720,16 @@ TEST_F(PortsTest, SendFailure) {
   EXPECT_EQ(ERROR_PORT_CANNOT_SEND_PEER,
             SendStringMessageWithPort(&node0, A, "nope", B));
 
+  // B should be closed immediately.
+  EXPECT_EQ(ERROR_PORT_UNKNOWN, node0.GetPort(B.name(), &B));
+
   PumpTasks();
 
   // There should have been no messages accepted.
   ScopedMessage message;
   EXPECT_FALSE(node0_delegate.GetSavedMessage(&message));
 
-  // Both A and B should still work.
-
-  EXPECT_EQ(OK, SendStringMessage(&node0, A, "hi"));
-  EXPECT_EQ(OK, SendStringMessage(&node0, B, "hey"));
-
-  PumpTasks();
-
-  ASSERT_TRUE(node0_delegate.GetSavedMessage(&message));
-  EXPECT_EQ(0, strcmp("hi", ToString(message)));
-  ClosePortsInMessage(&node0, message.get());
-
-  ASSERT_TRUE(node0_delegate.GetSavedMessage(&message));
-  EXPECT_EQ(0, strcmp("hey", ToString(message)));
-  ClosePortsInMessage(&node0, message.get());
-
-  PumpTasks();
-
   EXPECT_EQ(OK, node0.ClosePort(A));
-  EXPECT_EQ(OK, node0.ClosePort(B));
 
   PumpTasks();
 
@@ -1303,7 +1289,6 @@ TEST_F(PortsTest, MergePortsWithMovedPeers) {
   EXPECT_TRUE(node0.CanShutdownCleanly(false));
   EXPECT_TRUE(node1.CanShutdownCleanly(false));
 }
-
 
 TEST_F(PortsTest, MergePortsFailsGracefully) {
   // This tests that the system remains in a well-defined state if something

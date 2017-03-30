@@ -3,10 +3,10 @@
 <link rel="import" href="chrome://resources/html/util.html">
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-a11y-keys/iron-a11y-keys.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/image-icons.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/iron-icons.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-selector/iron-selector.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
+<link rel="import" href="chrome://md-settings/i18n_setup.html">
+<link rel="import" href="chrome://md-settings/icons.html">
 <link rel="import" href="chrome://md-settings/people_page/camera.html">
 <link rel="import" href="chrome://md-settings/people_page/change_picture_browser_proxy.html">
 <link rel="import" href="chrome://md-settings/settings_shared_css.html">
@@ -22,24 +22,28 @@
       <div id="availableIcons" class="start">
         <iron-selector id="selector" on-iron-activate="onImageActivate_"
             selected-item="{{selectedItem_}}">
-          <iron-icon id="cameraImage" data-type="camera" icon="image:camera-alt"
-              i18n-values="alt:takePhoto" hidden="[[!cameraPresent_]]">
+          <iron-icon id="cameraImage"
+              data-type$="[[selectionTypesEnum_.CAMERA]]"
+              icon="settings:camera-alt" alt="$i18n{takePhoto}"
+              hidden="[[!cameraPresent_]]">
           </iron-icon>
-          <iron-icon data-type="file" icon="folder"
-              i18n-values="alt:chooseFile">
+          <iron-icon data-type$="[[selectionTypesEnum_.FILE]]"
+              icon="settings:folder" alt="$i18n{chooseFile}">
           </iron-icon>
-          <img id="profileImage" data-type="profile"
-              src="[[profileImageUrl_]]" i18n-values="alt:profilePhotoLoading">
-          <img id="oldImage" data-type="old"
+          <img id="profileImage"
+              data-type$="[[selectionTypesEnum_.PROFILE]]"
+              src="[[profileImageUrl_]]" alt="$i18n{profilePhotoLoading}">
+          <img id="oldImage" data-type$="[[selectionTypesEnum_.OLD]]"
               src="[[oldImageUrl_]]" hidden="[[!oldImageUrl_]]">
           <template is="dom-repeat" items="[[defaultImages_]]">
-            <img data-type="default" data-default-image-index$="[[index]]"
-                src="[[item.url]]" alt="[[item.title]]">
+            <img data-type$="[[selectionTypesEnum_.DEFAULT]]"
+                data-default-image-index$="[[index]]" src="[[item.url]]"
+                alt="[[item.title]]">
           </template>
         </iron-selector>
         <template is="dom-if" if="[[isAuthorCreditShown_(selectedItem_)]]">
           <div id="authorCredit">
-            [[i18n('authorCredit')]]
+            $i18n{authorCredit}
             [[getAuthorName_(selectedItem_, defaultImages_)]]
             <a href="[[getAuthorWebsite_(selectedItem_, defaultImages_)]]"
                 target="_blank">
@@ -49,11 +53,13 @@
         </template>
       </div>
       <div id="previewPane">
-        <img i18n-values="alt:previewAltText" src="[[selectedItem_.src]]"
+        <img alt="$i18n{previewAltText}" src="[[selectedItem_.src]]"
             hidden="[[isPreviewImageHidden_(selectedItem_)]]">
-        <div id="discardControlBar" hidden="[[isDiscardHidden_(selectedItem_)]]">
-          <paper-icon-button id="discardOldImage" tabindex="0" icon="delete"
-              i18n-values="title:discardPhoto" on-tap="onTapDiscardOldImage_">
+        <div id="discardControlBar"
+            hidden="[[isDiscardHidden_(selectedItem_)]]">
+          <paper-icon-button id="discardOldImage" tabindex="0"
+              icon="settings:delete" title="$i18n{discardPhoto}"
+              on-tap="onTapDiscardOldImage_">
           </paper-icon-button>
         </div>
         <settings-camera id="camera"

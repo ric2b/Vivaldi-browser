@@ -24,9 +24,10 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/HTMLNames.h"
-#include "core/dom/ExceptionCode.h"
+#include "core/dom/NodeComputedStyle.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/frame/UseCounter.h"
+#include "core/html/HTMLContentElement.h"
 #include "core/html/HTMLDivElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/layout/LayoutObject.h"
@@ -46,11 +47,11 @@ HTMLMeterElement::~HTMLMeterElement()
 {
 }
 
-RawPtr<HTMLMeterElement> HTMLMeterElement::create(Document& document)
+HTMLMeterElement* HTMLMeterElement::create(Document& document)
 {
-    RawPtr<HTMLMeterElement> meter = new HTMLMeterElement(document);
+    HTMLMeterElement* meter = new HTMLMeterElement(document);
     meter->ensureUserAgentShadowRoot();
-    return meter.release();
+    return meter;
 }
 
 LayoutObject* HTMLMeterElement::createLayoutObject(const ComputedStyle& style)
@@ -193,11 +194,11 @@ void HTMLMeterElement::didAddUserAgentShadowRoot(ShadowRoot& root)
 {
     ASSERT(!m_value);
 
-    RawPtr<HTMLDivElement> inner = HTMLDivElement::create(document());
+    HTMLDivElement* inner = HTMLDivElement::create(document());
     inner->setShadowPseudoId(AtomicString("-webkit-meter-inner-element"));
     root.appendChild(inner);
 
-    RawPtr<HTMLDivElement> bar = HTMLDivElement::create(document());
+    HTMLDivElement* bar = HTMLDivElement::create(document());
     bar->setShadowPseudoId(AtomicString("-webkit-meter-bar"));
 
     m_value = HTMLDivElement::create(document());
@@ -205,6 +206,11 @@ void HTMLMeterElement::didAddUserAgentShadowRoot(ShadowRoot& root)
     bar->appendChild(m_value);
 
     inner->appendChild(bar);
+
+    HTMLDivElement* fallback = HTMLDivElement::create(document());
+    fallback->appendChild(HTMLContentElement::create(document()));
+    fallback->setShadowPseudoId(AtomicString("-internal-fallback"));
+    root.appendChild(fallback);
 }
 
 void HTMLMeterElement::updateValueAppearance(double percentage)
@@ -225,6 +231,12 @@ void HTMLMeterElement::updateValueAppearance(double percentage)
         m_value->setShadowPseudoId(evenLessGoodPseudoId);
         break;
     }
+}
+
+bool HTMLMeterElement::canContainRangeEndPoint() const
+{
+    document().updateStyleAndLayoutTreeForNode(this);
+    return computedStyle() && !computedStyle()->hasAppearance();
 }
 
 DEFINE_TRACE(HTMLMeterElement)

@@ -8,6 +8,7 @@
 
 #include "ash/wm/window_util.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
+#include "chrome/browser/ui/ash/launcher/launcher_controller_helper.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/base/base_window.h"
@@ -24,9 +25,11 @@ AppWindowLauncherItemController::AppWindowLauncherItemController(
 
 AppWindowLauncherItemController::~AppWindowLauncherItemController() {}
 
-void AppWindowLauncherItemController::AddWindow(ui::BaseWindow* window) {
-  windows_.push_front(window);
-  observed_windows_.Add(window->GetNativeWindow());
+void AppWindowLauncherItemController::AddWindow(ui::BaseWindow* app_window) {
+  windows_.push_front(app_window);
+  aura::Window* window = app_window->GetNativeWindow();
+  if (window)
+    observed_windows_.Add(window);
 }
 
 AppWindowLauncherItemController::WindowList::iterator
@@ -37,22 +40,34 @@ AppWindowLauncherItemController::GetFromNativeWindow(aura::Window* window) {
                       });
 }
 
-void AppWindowLauncherItemController::RemoveWindowForNativeWindow(
-    aura::Window* window) {
-  auto iter = GetFromNativeWindow(window);
-  if (iter != windows_.end()) {
-    if (*iter == last_active_window_)
-      last_active_window_ = nullptr;
-    OnWindowRemoved(*iter);
-    windows_.erase(iter);
+void AppWindowLauncherItemController::RemoveWindow(ui::BaseWindow* app_window) {
+  DCHECK(app_window);
+  aura::Window* window = app_window->GetNativeWindow();
+  if (window)
+    observed_windows_.Remove(window);
+  if (app_window == last_active_window_)
+    last_active_window_ = nullptr;
+  auto iter = std::find(windows_.begin(), windows_.end(), app_window);
+  if (iter == windows_.end()) {
+    NOTREACHED();
+    return;
   }
-  observed_windows_.Remove(window);
+  OnWindowRemoved(app_window);
+  windows_.erase(iter);
+}
+
+ui::BaseWindow* AppWindowLauncherItemController::GetAppWindow(
+    aura::Window* window) {
+  const auto iter = GetFromNativeWindow(window);
+  if (iter != windows_.end())
+    return *iter;
+  return nullptr;
 }
 
 void AppWindowLauncherItemController::SetActiveWindow(aura::Window* window) {
-  auto iter = GetFromNativeWindow(window);
-  if (iter != windows_.end())
-    last_active_window_ = *iter;
+  ui::BaseWindow* app_window = GetAppWindow(window);
+  if (app_window)
+    last_active_window_ = app_window;
 }
 
 bool AppWindowLauncherItemController::IsOpen() const {
@@ -123,7 +138,8 @@ AppWindowLauncherItemController::ItemSelected(const ui::Event& event) {
 }
 
 base::string16 AppWindowLauncherItemController::GetTitle() {
-  return GetAppTitle();
+  return LauncherControllerHelper::GetAppTitle(launcher_controller()->profile(),
+                                               app_id());
 }
 
 bool AppWindowLauncherItemController::IsDraggable() {
@@ -132,7 +148,8 @@ bool AppWindowLauncherItemController::IsDraggable() {
 }
 
 bool AppWindowLauncherItemController::CanPin() const {
-  return launcher_controller()->CanPin(app_id());
+  return launcher_controller()->GetPinnable(app_id()) ==
+         AppListControllerDelegate::PIN_EDITABLE;
 }
 
 bool AppWindowLauncherItemController::ShouldShowTooltip() {

@@ -19,6 +19,7 @@
 #include "components/password_manager/core/browser/password_generation_manager.h"
 #include "components/prefs/pref_service.h"
 #include "google_apis/gaia/identity_provider.h"
+#include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/autofill/personal_data_manager_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/web_data_service_factory.h"
@@ -63,11 +64,8 @@ IdentityProvider* AutofillClientIOS::GetIdentityProvider() {
   return identity_provider_.get();
 }
 
-// TODO(dconnelly): [Merge] Does this need a real implementation?
-// http://crbug.com/468326
 rappor::RapporService* AutofillClientIOS::GetRapporService() {
-  NOTIMPLEMENTED();
-  return nullptr;
+  return GetApplicationContext()->GetRapporService();
 }
 
 void AutofillClientIOS::ShowAutofillSettings() {
@@ -76,10 +74,11 @@ void AutofillClientIOS::ShowAutofillSettings() {
 
 void AutofillClientIOS::ShowUnmaskPrompt(
     const CreditCard& card,
+    UnmaskCardReason reason,
     base::WeakPtr<CardUnmaskDelegate> delegate) {
   ios::ChromeBrowserProvider* provider = ios::GetChromeBrowserProvider();
   unmask_controller_.ShowPrompt(
-      provider->CreateCardUnmaskPromptView(&unmask_controller_), card,
+      provider->CreateCardUnmaskPromptView(&unmask_controller_), card, reason,
       delegate);
 }
 
@@ -123,13 +122,6 @@ void AutofillClientIOS::ScanCreditCard(const CreditCardScanCallback& callback) {
   NOTREACHED();
 }
 
-void AutofillClientIOS::ShowRequestAutocompleteDialog(
-    const FormData& form,
-    content::RenderFrameHost* render_frame_host,
-    const ResultCallback& callback) {
-  NOTREACHED();
-}
-
 void AutofillClientIOS::ShowAutofillPopup(
     const gfx::RectF& element_bounds,
     base::i18n::TextDirection text_direction,
@@ -145,10 +137,6 @@ void AutofillClientIOS::HideAutofillPopup() {
 bool AutofillClientIOS::IsAutocompleteEnabled() {
   // For browser, Autocomplete is always enabled as part of Autofill.
   return GetPrefs()->GetBoolean(prefs::kAutofillEnabled);
-}
-
-void AutofillClientIOS::HideRequestAutocompleteDialog() {
-  NOTREACHED();
 }
 
 void AutofillClientIOS::UpdateAutofillPopupDataListValues(

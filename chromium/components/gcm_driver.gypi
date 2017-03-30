@@ -175,6 +175,8 @@
       ],
       'sources': [
         # Note: file list duplicated in GN build.
+        'gcm_driver/instance_id/android/component_jni_registrar.cc',
+        'gcm_driver/instance_id/android/component_jni_registrar.h',
         'gcm_driver/instance_id/instance_id.cc',
         'gcm_driver/instance_id/instance_id.h',
         'gcm_driver/instance_id/instance_id_android.cc',
@@ -186,6 +188,9 @@
       ],
       'conditions': [
         ['OS == "android"', {
+          'dependencies': [
+            'instance_id_driver_jni_headers',
+          ],
           'sources!': [
             'gcm_driver/instance_id/instance_id_impl.cc',
             'gcm_driver/instance_id/instance_id_impl.h',
@@ -209,6 +214,15 @@
         # Note: file list duplicated in GN build.
         'gcm_driver/instance_id/fake_gcm_driver_for_instance_id.cc',
         'gcm_driver/instance_id/fake_gcm_driver_for_instance_id.h',
+        'gcm_driver/instance_id/scoped_use_fake_instance_id_android.cc',
+        'gcm_driver/instance_id/scoped_use_fake_instance_id_android.h',
+      ],
+      'conditions': [
+        ['OS == "android"', {
+          'dependencies': [
+            'instance_id_driver_test_support_jni_headers',
+          ],
+        }],
       ],
     },
     {
@@ -221,6 +235,7 @@
         '../components/components.gyp:leveldb_proto',
         '../crypto/crypto.gyp:crypto',
         '../net/net.gyp:net',
+        '../third_party/boringssl/boringssl.gyp:boringssl',
       ],
       'include_dirs': [
         '..',
@@ -235,28 +250,8 @@
         'gcm_driver/crypto/gcm_key_store.h',
         'gcm_driver/crypto/gcm_message_cryptographer.cc',
         'gcm_driver/crypto/gcm_message_cryptographer.h',
-        'gcm_driver/crypto/gcm_message_cryptographer_nss.cc',
-        'gcm_driver/crypto/gcm_message_cryptographer_openssl.cc',
         'gcm_driver/crypto/p256_key_util.cc',
         'gcm_driver/crypto/p256_key_util.h',
-        'gcm_driver/crypto/p256_key_util_nss.cc',
-        'gcm_driver/crypto/p256_key_util_openssl.cc',
-      ],
-      'conditions': [
-        ['use_openssl==1', {
-          'sources!': [
-            'gcm_driver/crypto/gcm_message_cryptographer_nss.cc',
-            'gcm_driver/crypto/p256_key_util_nss.cc',
-          ],
-          'dependencies': [
-            '../third_party/boringssl/boringssl.gyp:boringssl',
-          ],
-        }, {
-          'sources!': [
-            'gcm_driver/crypto/gcm_message_cryptographer_openssl.cc',
-            'gcm_driver/crypto/p256_key_util_openssl.cc',
-          ],
-        }],
       ],
     },
     {
@@ -300,8 +295,7 @@
           'target_name': 'gcm_driver_java',
           'type': 'none',
           'dependencies': [
-            '../base/base.gyp:base',
-            # TODO(johnme): Fix the layering violation of depending on content/
+            '../base/base.gyp:base_java',
             '../content/content.gyp:content_java',
             '../sync/sync.gyp:sync_java',
           ],
@@ -319,6 +313,55 @@
           ],
           'variables': {
             'jni_gen_package': 'components/gcm_driver',
+          },
+          'includes': [ '../build/jni_generator.gypi' ],
+        },
+        {
+          # GN version: //components/gcm_driver/instance_id/android:instance_id_driver_java
+          'target_name': 'instance_id_driver_java',
+          'type': 'none',
+          'dependencies': [
+            '../base/base.gyp:base_java',
+            '../third_party/android_tools/android_tools.gyp:google_play_services_javalib',
+          ],
+          'variables': {
+            'java_in_dir': 'gcm_driver/instance_id/android/java',
+          },
+          'includes': [ '../build/java.gypi' ],
+        },
+        {
+          # GN version: //components/gcm_driver/instance_id/android:instance_id_driver_test_support_java
+          'target_name': 'instance_id_driver_test_support_java',
+          'type': 'none',
+          'dependencies': [
+            'instance_id_driver_java',
+          ],
+          'variables': {
+            'java_in_dir': 'gcm_driver/instance_id/android/javatests',
+          },
+          'includes': [ '../build/java.gypi' ],
+        },
+        {
+          # GN version: //components/gcm_driver/instance_id/android:jni_headers
+          'target_name': 'instance_id_driver_jni_headers',
+          'type': 'none',
+          'sources': [
+            'gcm_driver/instance_id/android/java/src/org/chromium/components/gcm_driver/instance_id/InstanceIDBridge.java',
+          ],
+          'variables': {
+            'jni_gen_package': 'components/gcm_driver/instance_id',
+          },
+          'includes': [ '../build/jni_generator.gypi' ],
+        },
+        {
+          # GN version: //components/gcm_driver/instance_id/android:test_support_jni_headers
+          'target_name': 'instance_id_driver_test_support_jni_headers',
+          'type': 'none',
+          'sources': [
+            'gcm_driver/instance_id/android/javatests/src/org/chromium/components/gcm_driver/instance_id/FakeInstanceIDWithSubtype.java',
+          ],
+          'variables': {
+            'jni_gen_package': 'components/gcm_driver/instance_id',
           },
           'includes': [ '../build/jni_generator.gypi' ],
         },

@@ -61,6 +61,7 @@ enum SerializationTag {
     ArrayBufferTransferTag = 't', // index:uint32_t -> ArrayBuffer. For ArrayBuffer transfer
     ImageBitmapTag = 'g', // size:uint32_t, data:byte[size] -> ImageBitmap (ref)
     ImageBitmapTransferTag = 'G', // index:uint32_t -> ImageBitmap. For ImageBitmap transfer
+    OffscreenCanvasTransferTag = 'H', // index, width, height, id:uint32_t -> OffscreenCanvas. For OffscreenCanvas transfer
     ArrayBufferViewTag = 'V', // subtag:byte, byteOffset:uint32_t, byteLength:uint32_t -> ArrayBufferView (ref). Consumes an ArrayBuffer from the top of the deserialization stack.
     SharedArrayBufferTransferTag = 'u', // index:uint32_t -> SharedArrayBuffer. For SharedArrayBuffer transfer
     CryptoKeyTag = 'K', // subtag:byte, props, usages:uint32_t, keyDataLength:uint32_t, keyData:byte[keyDataLength]
@@ -72,6 +73,7 @@ enum SerializationTag {
         //                     props = algorithmId:uint32_t, type:uint32_t, modulusLengthBits:uint32_t, publicExponentLength:uint32_t, publicExponent:byte[publicExponentLength], hashId:uint32_t
         //                 If subtag=EcKeyTag:
         //                     props = algorithmId:uint32_t, type:uint32_t, namedCurve:uint32_t
+    RTCCertificateTag = 'k', // length:uint32_t, pemPrivateKey:WebCoreString, pemCertificate:WebCoreString
     ObjectReferenceTag = '^', // ref:uint32_t -> reference table[ref]
     GenerateFreshObjectTag = 'o', // -> empty object allocated an object ID and pushed onto the open stack (ref)
     GenerateFreshSparseArrayTag = 'a', // length:uint32_t -> empty array[length] allocated an object ID and pushed onto the open stack (ref)

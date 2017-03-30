@@ -31,8 +31,6 @@ media::cast::RtcpTimeData CreateRtcpTimeData(base::TimeTicks now) {
   return ret;
 }
 
-}  // namespace
-
 using testing::_;
 
 static const uint32_t kSenderSsrc = 0x10203;
@@ -75,24 +73,20 @@ class FakeRtcpTransport : public PacedPacketSender {
   DISALLOW_COPY_AND_ASSIGN(FakeRtcpTransport);
 };
 
-class RtcpTest : public ::testing::Test {
+}  // namespace
+
+class RtcpTest : public ::testing::Test, public RtcpObserver {
  protected:
   RtcpTest()
       : sender_clock_(new base::SimpleTestTickClock()),
         receiver_clock_(new test::SkewedTickClock(sender_clock_.get())),
         rtp_sender_pacer_(sender_clock_.get()),
         rtp_receiver_pacer_(sender_clock_.get()),
-        rtcp_at_rtp_sender_(
-            base::Bind(&RtcpTest::OnReceivedCastFeedback,
-                       base::Unretained(this)),
-            base::Bind(&RtcpTest::OnMeasuredRoundTripTime,
-                       base::Unretained(this)),
-            base::Bind(&RtcpTest::OnReceivedLogs, base::Unretained(this)),
-            base::Bind(&RtcpTest::OnReceivedPli, base::Unretained(this)),
-            sender_clock_.get(),
-            &rtp_sender_pacer_,
-            kSenderSsrc,
-            kReceiverSsrc),
+        rtcp_at_rtp_sender_(sender_clock_.get(),
+                            &rtp_sender_pacer_,
+                            this,
+                            kSenderSsrc,
+                            kReceiverSsrc),
         rtcp_at_rtp_receiver_(receiver_clock_.get(),
                               kReceiverSsrc,
                               kSenderSsrc),
@@ -108,19 +102,18 @@ class RtcpTest : public ::testing::Test {
 
   ~RtcpTest() override {}
 
-  void OnReceivedCastFeedback(const RtcpCastMessage& cast_message) {
+  // RtcpObserver implementation.
+  void OnReceivedCastMessage(const RtcpCastMessage& cast_message) override {
     last_cast_message_ = cast_message;
   }
-
-  void OnMeasuredRoundTripTime(base::TimeDelta rtt) {
-    current_round_trip_time_ = rtt;
+  void OnReceivedRtt(base::TimeDelta round_trip_time) override {
+    current_round_trip_time_ = round_trip_time;
   }
-
-  void OnReceivedLogs(const RtcpReceiverLogMessage& receiver_logs) {
+  void OnReceivedReceiverLog(const RtcpReceiverLogMessage& logs) override {
     RtcpReceiverLogMessage().swap(last_logs_);
 
     // Make a copy of the logs.
-    for (const RtcpReceiverFrameLogMessage& frame_log_msg : receiver_logs) {
+    for (const RtcpReceiverFrameLogMessage& frame_log_msg : logs) {
       last_logs_.push_back(
           RtcpReceiverFrameLogMessage(frame_log_msg.rtp_timestamp_));
       for (const RtcpReceiverEventLogMessage& event_log_msg :
@@ -134,6 +127,8 @@ class RtcpTest : public ::testing::Test {
       }
     }
   }
+
+  void OnReceivedPli() override { received_pli_ = true; }
 
   PacketRef BuildRtcpPacketFromRtpReceiver(
       const RtcpTimeData& time_data,
@@ -182,10 +177,8 @@ class RtcpTest : public ::testing::Test {
     return builder.Finish();
   }
 
-  void OnReceivedPli() { received_pli_ = true; }
-
-  scoped_ptr<base::SimpleTestTickClock> sender_clock_;
-  scoped_ptr<test::SkewedTickClock> receiver_clock_;
+  std::unique_ptr<base::SimpleTestTickClock> sender_clock_;
+  std::unique_ptr<test::SkewedTickClock> receiver_clock_;
   FakeRtcpTransport rtp_sender_pacer_;
   FakeRtcpTransport rtp_receiver_pacer_;
   SenderRtcpSession rtcp_at_rtp_sender_;
@@ -271,12 +264,19 @@ TEST_F(RtcpTest, RoundTripTimesDeterminedFromReportPingPong) {
 }
 
 TEST_F(RtcpTest, ReportCastFeedback) {
+  // Sender has sent all frames up to and including first+5.
+  rtcp_at_rtp_sender_.WillSendFrame(FrameId::first() + 5);
+
+  // ACK all frames up to and including first+5, except NACK a few in first+1
+  // and first+2.
   RtcpCastMessage cast_message(kSenderSsrc);
-  cast_message.ack_frame_id = 5;
+  cast_message.ack_frame_id = FrameId::first() + 5;
   PacketIdSet missing_packets1 = {3, 4};
-  cast_message.missing_frames_and_packets[1] = missing_packets1;
+  cast_message.missing_frames_and_packets[FrameId::first() + 1] =
+      missing_packets1;
   PacketIdSet missing_packets2 = {5, 6};
-  cast_message.missing_frames_and_packets[2] = missing_packets2;
+  cast_message.missing_frames_and_packets[FrameId::first() + 2] =
+      missing_packets2;
 
   rtp_receiver_pacer_.SendRtcpPacket(
       rtcp_at_rtp_receiver_.local_ssrc(),
@@ -305,8 +305,12 @@ TEST_F(RtcpTest, ReportPli) {
 }
 
 TEST_F(RtcpTest, DropLateRtcpPacket) {
+  // Sender has sent all frames up to and including first+2.
+  rtcp_at_rtp_sender_.WillSendFrame(FrameId::first() + 2);
+
+  // Receiver ACKs first+1.
   RtcpCastMessage cast_message(kSenderSsrc);
-  cast_message.ack_frame_id = 1;
+  cast_message.ack_frame_id = FrameId::first() + 1;
   rtp_receiver_pacer_.SendRtcpPacket(
       rtcp_at_rtp_receiver_.local_ssrc(),
       BuildRtcpPacketFromRtpReceiver(
@@ -314,9 +318,9 @@ TEST_F(RtcpTest, DropLateRtcpPacket) {
           nullptr, base::TimeDelta::FromMilliseconds(kTargetDelayMs), nullptr,
           nullptr));
 
-  // Send a packet with old timestamp
+  // Receiver ACKs first+2, but with a too-old timestamp.
   RtcpCastMessage late_cast_message(kSenderSsrc);
-  late_cast_message.ack_frame_id = 2;
+  late_cast_message.ack_frame_id = FrameId::first() + 2;
   rtp_receiver_pacer_.SendRtcpPacket(
       rtcp_at_rtp_receiver_.local_ssrc(),
       BuildRtcpPacketFromRtpReceiver(
@@ -329,7 +333,7 @@ TEST_F(RtcpTest, DropLateRtcpPacket) {
   EXPECT_EQ(last_cast_message_.target_delay_ms, kTargetDelayMs);
 
   // Re-send with fresh timestamp
-  late_cast_message.ack_frame_id = 2;
+  late_cast_message.ack_frame_id = FrameId::first() + 2;
   rtp_receiver_pacer_.SendRtcpPacket(
       rtcp_at_rtp_receiver_.local_ssrc(),
       BuildRtcpPacketFromRtpReceiver(

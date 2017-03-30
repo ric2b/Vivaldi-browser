@@ -11,13 +11,13 @@
 #include "base/bind_helpers.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/filesystem/public/interfaces/directory.mojom.h"
 #include "components/leveldb/public/interfaces/leveldb.mojom.h"
-#include "components/profile_service/public/interfaces/profile.mojom.h"
 #include "content/browser/dom_storage/dom_storage_area.h"
 #include "content/browser/dom_storage/dom_storage_context_impl.h"
 #include "content/browser/dom_storage/dom_storage_task_runner.h"
@@ -25,9 +25,12 @@
 #include "content/browser/leveldb_wrapper_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/local_storage_usage_info.h"
-#include "content/public/browser/mojo_app_connection.h"
 #include "content/public/browser/session_storage_usage_info.h"
 #include "mojo/common/common_type_converters.h"
+#include "services/shell/public/cpp/connection.h"
+#include "services/shell/public/cpp/connector.h"
+#include "services/user/public/cpp/constants.h"
+#include "services/user/public/interfaces/user_service.mojom.h"
 
 namespace content {
 namespace {
@@ -77,9 +80,11 @@ void GetSessionStorageUsageHelper(
 // for now).
 class DOMStorageContextWrapper::MojoState {
  public:
-  MojoState(const std::string& mojo_user_id, const base::FilePath& subdirectory)
-      : mojo_user_id_(mojo_user_id),
-        subdirectory_(subdirectory),
+  MojoState(shell::Connector* connector, const base::FilePath& subdirectory)
+      : connector_(connector),
+        // TODO(michaeln): Enable writing to disk when db is versioned,
+        // for now using an empty subdirectory to use an in-memory db.
+        // subdirectory_(subdirectory),
         connection_state_(NO_CONNECTION),
         weak_ptr_factory_(this) {}
 
@@ -93,9 +98,18 @@ class DOMStorageContextWrapper::MojoState {
     level_db_wrappers_.erase(origin);
   }
 
+  void OnUserServiceConnectionComplete() {
+    CHECK_EQ(shell::mojom::ConnectResult::SUCCEEDED,
+             user_service_connection_->GetResult());
+  }
+
+  void OnUserServiceConnectionError() {
+    CHECK(false);
+  }
+
   // Part of our asynchronous directory opening called from OpenLocalStorage().
-  void OnDirectoryOpened(filesystem::FileError err);
-  void OnDatabaseOpened(leveldb::DatabaseError status);
+  void OnDirectoryOpened(filesystem::mojom::FileError err);
+  void OnDatabaseOpened(leveldb::mojom::DatabaseError status);
 
   // The (possibly delayed) implementation of OpenLocalStorage(). Can be called
   // directly from that function, or through |on_database_open_callbacks_|.
@@ -104,10 +118,10 @@ class DOMStorageContextWrapper::MojoState {
                         mojom::LevelDBWrapperRequest request);
 
   // Maps between an origin and its prefixed LevelDB view.
-  std::map<url::Origin, scoped_ptr<LevelDBWrapperImpl>> level_db_wrappers_;
+  std::map<url::Origin, std::unique_ptr<LevelDBWrapperImpl>> level_db_wrappers_;
 
-  std::string mojo_user_id_;
-  base::FilePath subdirectory_;
+  shell::Connector* const connector_;
+  const base::FilePath subdirectory_;
 
   enum ConnectionState {
     NO_CONNECTION,
@@ -115,12 +129,13 @@ class DOMStorageContextWrapper::MojoState {
     CONNECTION_FINISHED
   } connection_state_;
 
-  scoped_ptr<MojoAppConnection> profile_app_connection_;
-  profile::ProfileServicePtr profile_service_;
-  filesystem::DirectoryPtr directory_;
+  std::unique_ptr<shell::Connection> user_service_connection_;
 
-  leveldb::LevelDBServicePtr leveldb_service_;
-  leveldb::LevelDBDatabasePtr database_;
+  user_service::mojom::UserServicePtr user_service_;
+  filesystem::mojom::DirectoryPtr directory_;
+
+  leveldb::mojom::LevelDBServicePtr leveldb_service_;
+  leveldb::mojom::LevelDBDatabasePtr database_;
 
   std::vector<base::Closure> on_database_opened_callbacks_;
 
@@ -133,23 +148,29 @@ void DOMStorageContextWrapper::MojoState::OpenLocalStorage(
     mojom::LevelDBWrapperRequest request) {
   // If we don't have a filesystem_connection_, we'll need to establish one.
   if (connection_state_ == NO_CONNECTION) {
-    profile_app_connection_ = MojoAppConnection::Create(
-        mojo_user_id_, "mojo:profile", kBrowserMojoAppUrl);
-
+    CHECK(connector_);
+    user_service_connection_ =
+        connector_->Connect(user_service::kUserServiceName);
     connection_state_ = CONNECTION_IN_PROGRESS;
+    user_service_connection_->AddConnectionCompletedClosure(
+        base::Bind(&MojoState::OnUserServiceConnectionComplete,
+                   weak_ptr_factory_.GetWeakPtr()));
+    user_service_connection_->SetConnectionLostClosure(
+        base::Bind(&MojoState::OnUserServiceConnectionError,
+                   weak_ptr_factory_.GetWeakPtr()));
 
     if (!subdirectory_.empty()) {
       // We were given a subdirectory to write to. Get it and use a disk backed
       // database.
-      profile_app_connection_->GetInterface(&profile_service_);
-      profile_service_->GetSubDirectory(
+      user_service_connection_->GetInterface(&user_service_);
+      user_service_->GetSubDirectory(
           mojo::String::From(subdirectory_.AsUTF8Unsafe()),
           GetProxy(&directory_),
           base::Bind(&MojoState::OnDirectoryOpened,
                      weak_ptr_factory_.GetWeakPtr()));
     } else {
       // We were not given a subdirectory. Use a memory backed database.
-      profile_app_connection_->GetInterface(&leveldb_service_);
+      user_service_connection_->GetInterface(&leveldb_service_);
       leveldb_service_->OpenInMemory(
           GetProxy(&database_),
           base::Bind(&MojoState::OnDatabaseOpened,
@@ -169,17 +190,17 @@ void DOMStorageContextWrapper::MojoState::OpenLocalStorage(
 }
 
 void DOMStorageContextWrapper::MojoState::OnDirectoryOpened(
-    filesystem::FileError err) {
-  if (err != filesystem::FileError::OK) {
+    filesystem::mojom::FileError err) {
+  if (err != filesystem::mojom::FileError::OK) {
     // We failed to open the directory; continue with startup so that we create
     // the |level_db_wrappers_|.
-    OnDatabaseOpened(leveldb::DatabaseError::IO_ERROR);
+    OnDatabaseOpened(leveldb::mojom::DatabaseError::IO_ERROR);
     return;
   }
 
   // Now that we have a directory, connect to the LevelDB service and get our
   // database.
-  profile_app_connection_->GetInterface(&leveldb_service_);
+  user_service_connection_->GetInterface(&leveldb_service_);
 
   leveldb_service_->Open(
       std::move(directory_), "leveldb", GetProxy(&database_),
@@ -187,19 +208,19 @@ void DOMStorageContextWrapper::MojoState::OnDirectoryOpened(
 }
 
 void DOMStorageContextWrapper::MojoState::OnDatabaseOpened(
-    leveldb::DatabaseError status) {
-  if (status != leveldb::DatabaseError::OK) {
+    leveldb::mojom::DatabaseError status) {
+  if (status != leveldb::mojom::DatabaseError::OK) {
     // If we failed to open the database, reset the service object so we pass
     // null pointers to our wrappers.
     database_.reset();
     leveldb_service_.reset();
   }
 
-  // We no longer need the profile service; we've either transferred
+  // We no longer need the user service; we've either transferred
   // |directory_| to the leveldb service, or we got a file error and no more is
   // possible.
   directory_.reset();
-  profile_service_.reset();
+  user_service_.reset();
 
   // |leveldb_| should be known to either be valid or invalid by now. Run our
   // delayed bindings.
@@ -213,15 +234,24 @@ void DOMStorageContextWrapper::MojoState::BindLocalStorage(
     const url::Origin& origin,
     mojom::LevelDBObserverPtr observer,
     mojom::LevelDBWrapperRequest request) {
+  // Delay for a moment after a value is set in anticipation
+  // of other values being set, so changes are batched.
+  const int kCommitDefaultDelaySecs = 5;
+
+  // To avoid excessive IO we apply limits to the amount of data being written
+  // and the frequency of writes.
+  const int kMaxBytesPerHour = kPerStorageAreaQuota;
+  const int kMaxCommitsPerHour = 60;
+
   auto found = level_db_wrappers_.find(origin);
   if (found == level_db_wrappers_.end()) {
-    level_db_wrappers_[origin] = make_scoped_ptr(new LevelDBWrapperImpl(
-        database_.get(),
-        origin.Serialize(),
+    level_db_wrappers_[origin] = base::WrapUnique(new LevelDBWrapperImpl(
+        database_.get(), origin.Serialize(),
         kPerStorageAreaQuota + kPerStorageAreaOverQuotaAllowance,
+        base::TimeDelta::FromSeconds(kCommitDefaultDelaySecs),
+        kMaxBytesPerHour, kMaxCommitsPerHour,
         base::Bind(&MojoState::OnLevelDDWrapperHasNoBindings,
-                   base::Unretained(this),
-                   origin)));
+                   base::Unretained(this), origin)));
     found = level_db_wrappers_.find(origin);
   }
 
@@ -230,14 +260,14 @@ void DOMStorageContextWrapper::MojoState::BindLocalStorage(
 }
 
 DOMStorageContextWrapper::DOMStorageContextWrapper(
-    const std::string& mojo_user_id,
+    shell::Connector* connector,
     const base::FilePath& profile_path,
     const base::FilePath& local_partition_path,
     storage::SpecialStoragePolicy* special_storage_policy) {
   base::FilePath storage_dir;
   if (!profile_path.empty())
     storage_dir = local_partition_path.AppendASCII(kLocalStorageDirectory);
-  mojo_state_.reset(new MojoState(mojo_user_id, storage_dir));
+  mojo_state_.reset(new MojoState(connector, storage_dir));
 
   base::FilePath data_path;
   if (!profile_path.empty())

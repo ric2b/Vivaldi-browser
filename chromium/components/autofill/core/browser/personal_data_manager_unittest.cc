@@ -17,7 +17,7 @@
 #include "base/metrics/field_trial.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_experiments.h"
@@ -28,6 +28,7 @@
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
 #include "components/autofill/core/browser/webdata/autofill_table.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
+#include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/core/common/form_data.h"
@@ -359,6 +360,27 @@ TEST_F(PersonalDataManagerTest, AddProfile) {
   ExpectSameElements(profiles, personal_data_->GetProfiles());
 }
 
+// Test that a new profile has its basic information set.
+TEST_F(PersonalDataManagerTest, AddProfile_BasicInformation) {
+  // Add a profile to the database.
+  AutofillProfile profile(test::GetFullProfile());
+  profile.SetRawInfo(EMAIL_ADDRESS, ASCIIToUTF16("j@s.com"));
+  personal_data_->AddProfile(profile);
+
+  // Reload the database.
+  ResetPersonalDataManager(USER_MODE_NORMAL);
+
+  // Verify the addition.
+  const std::vector<AutofillProfile*>& results = personal_data_->GetProfiles();
+  ASSERT_EQ(1U, results.size());
+  EXPECT_EQ(0, profile.Compare(*results[0]));
+
+  // Make sure the use count and use date were set.
+  EXPECT_EQ(1U, results[0]->use_count());
+  EXPECT_NE(base::Time(), results[0]->use_date());
+  EXPECT_NE(base::Time(), results[0]->modification_date());
+}
+
 TEST_F(PersonalDataManagerTest, DontDuplicateServerProfile) {
   EnableWalletCardImport();
 
@@ -406,7 +428,7 @@ TEST_F(PersonalDataManagerTest, DontDuplicateServerProfile) {
 // Tests that SaveImportedProfile sets the modification date on new profiles.
 TEST_F(PersonalDataManagerTest, SaveImportedProfileSetModificationDate) {
   AutofillProfile profile(test::GetFullProfile());
-  EXPECT_EQ(base::Time(), profile.modification_date());
+  EXPECT_NE(base::Time(), profile.modification_date());
 
   personal_data_->SaveImportedProfile(profile);
   const std::vector<AutofillProfile*>& profiles = personal_data_->GetProfiles();
@@ -528,6 +550,28 @@ TEST_F(PersonalDataManagerTest, AddUpdateRemoveCreditCards) {
   ExpectSameElements(cards, personal_data_->GetCreditCards());
 }
 
+// Test that a new credit card has its basic information set.
+TEST_F(PersonalDataManagerTest, AddCreditCard_BasicInformation) {
+  // Add a credit to the database.
+  CreditCard credit_card(base::GenerateGUID(), "https://www.example.com");
+  test::SetCreditCardInfo(&credit_card, "John Dillinger",
+                          "423456789012" /* Visa */, "01", "2999");
+  personal_data_->AddCreditCard(credit_card);
+
+  // Reload the database.
+  ResetPersonalDataManager(USER_MODE_NORMAL);
+
+  // Verify the addition.
+  const std::vector<CreditCard*>& results = personal_data_->GetCreditCards();
+  ASSERT_EQ(1U, results.size());
+  EXPECT_EQ(0, credit_card.Compare(*results[0]));
+
+  // Make sure the use count and use date were set.
+  EXPECT_EQ(1U, results[0]->use_count());
+  EXPECT_NE(base::Time(), results[0]->use_date());
+  EXPECT_NE(base::Time(), results[0]->modification_date());
+}
+
 TEST_F(PersonalDataManagerTest, UpdateUnverifiedProfilesAndCreditCards) {
   // Start with unverified data.
   AutofillProfile profile(base::GenerateGUID(), "https://www.example.com/");
@@ -562,8 +606,8 @@ TEST_F(PersonalDataManagerTest, UpdateUnverifiedProfilesAndCreditCards) {
   // Try to update with just the origin changed.
   AutofillProfile original_profile(profile);
   CreditCard original_credit_card(credit_card);
-  profile.set_origin("Chrome settings");
-  credit_card.set_origin("Chrome settings");
+  profile.set_origin(kSettingsOrigin);
+  credit_card.set_origin(kSettingsOrigin);
 
   EXPECT_TRUE(profile.IsVerified());
   EXPECT_TRUE(credit_card.IsVerified());
@@ -1876,7 +1920,7 @@ TEST_F(PersonalDataManagerTest, ImportAddressProfiles_InsufficientAddress) {
 TEST_F(PersonalDataManagerTest,
        ImportAddressProfiles_ExistingVerifiedProfileWithConflict) {
   // Start with a verified profile.
-  AutofillProfile profile(base::GenerateGUID(), "Chrome settings");
+  AutofillProfile profile(base::GenerateGUID(), kSettingsOrigin);
   test::SetProfileInfo(&profile, "Marion", "Mitchell", "Morrison",
                        "johnwayne@me.xyz", "Fox", "123 Zoo St.", "unit 5",
                        "Hollywood", "CA", "91601", "US", "12345678910");
@@ -2464,7 +2508,7 @@ TEST_F(PersonalDataManagerTest, ImportCreditCard_SameCardWithSeparators) {
 TEST_F(PersonalDataManagerTest,
        ImportCreditCard_ExistingVerifiedCardWithConflict) {
   // Start with a verified credit card.
-  CreditCard credit_card(base::GenerateGUID(), "Chrome settings");
+  CreditCard credit_card(base::GenerateGUID(), kSettingsOrigin);
   test::SetCreditCardInfo(&credit_card, "Biggie Smalls",
                           "4111 1111 1111 1111" /* Visa */, "01", "2999");
   EXPECT_TRUE(credit_card.IsVerified());
@@ -2654,7 +2698,7 @@ TEST_F(PersonalDataManagerTest, SaveImportedProfileWithVerifiedData) {
 
   AutofillProfile new_verified_profile = profile;
   new_verified_profile.set_guid(base::GenerateGUID());
-  new_verified_profile.set_origin("Chrome settings");
+  new_verified_profile.set_origin(kSettingsOrigin);
   new_verified_profile.SetRawInfo(PHONE_HOME_WHOLE_NUMBER,
                                   ASCIIToUTF16("1 234 567-8910"));
   EXPECT_TRUE(new_verified_profile.IsVerified());
@@ -2676,7 +2720,7 @@ TEST_F(PersonalDataManagerTest, SaveImportedProfileWithVerifiedData) {
 // overwriting existing verified profiles as well.
 TEST_F(PersonalDataManagerTest, SaveImportedProfileWithExistingVerifiedData) {
   // Start with a verified profile.
-  AutofillProfile profile(base::GenerateGUID(), "Chrome settings");
+  AutofillProfile profile(base::GenerateGUID(), kSettingsOrigin);
   test::SetProfileInfo(&profile,
       "Marion", "Mitchell", "Morrison",
       "johnwayne@me.xyz", "Fox", "123 Zoo St.", "unit 5", "Hollywood", "CA",
@@ -2713,7 +2757,7 @@ TEST_F(PersonalDataManagerTest, SaveImportedProfileWithExistingVerifiedData) {
 // Ensure that verified credit cards can be saved via SaveImportedCreditCard.
 TEST_F(PersonalDataManagerTest, SaveImportedCreditCardWithVerifiedData) {
   // Start with a verified credit card.
-  CreditCard credit_card(base::GenerateGUID(), "Chrome settings");
+  CreditCard credit_card(base::GenerateGUID(), kSettingsOrigin);
   test::SetCreditCardInfo(&credit_card,
       "Biggie Smalls", "4111 1111 1111 1111" /* Visa */, "01", "2999");
   EXPECT_TRUE(credit_card.IsVerified());
@@ -2950,7 +2994,7 @@ TEST_F(PersonalDataManagerTest, DefaultCountryCodeIsCached) {
       personal_data_->GetDefaultCountryCodeForNewAddress();
   EXPECT_EQ(2U, default_country.size());
 
-  AutofillProfile moose(base::GenerateGUID(), "Chrome settings");
+  AutofillProfile moose(base::GenerateGUID(), kSettingsOrigin);
   test::SetProfileInfo(&moose, "Moose", "P", "McMahon", "mpm@example.com",
       "", "1 Taiga TKTR", "", "Calgary", "AB", "T2B 2K2",
       "CA", "(800) 555-9000");
@@ -2978,7 +3022,7 @@ TEST_F(PersonalDataManagerTest, DefaultCountryCodeIsCached) {
 }
 
 TEST_F(PersonalDataManagerTest, DefaultCountryCodeComesFromProfiles) {
-  AutofillProfile moose(base::GenerateGUID(), "Chrome settings");
+  AutofillProfile moose(base::GenerateGUID(), kSettingsOrigin);
   test::SetProfileInfo(&moose, "Moose", "P", "McMahon", "mpm@example.com",
       "", "1 Taiga TKTR", "", "Calgary", "AB", "T2B 2K2",
       "CA", "(800) 555-9000");
@@ -2987,11 +3031,11 @@ TEST_F(PersonalDataManagerTest, DefaultCountryCodeComesFromProfiles) {
   EXPECT_EQ("CA", personal_data_->GetDefaultCountryCodeForNewAddress());
 
   // Multiple profiles cast votes.
-  AutofillProfile armadillo(base::GenerateGUID(), "Chrome settings");
+  AutofillProfile armadillo(base::GenerateGUID(), kSettingsOrigin);
   test::SetProfileInfo(&armadillo, "Armin", "Dill", "Oh", "ado@example.com",
       "", "1 Speed Bump", "", "Lubbock", "TX", "77500",
       "MX", "(800) 555-9000");
-  AutofillProfile armadillo2(base::GenerateGUID(), "Chrome settings");
+  AutofillProfile armadillo2(base::GenerateGUID(), kSettingsOrigin);
   test::SetProfileInfo(&armadillo2, "Armin", "Dill", "Oh", "ado@example.com",
       "", "2 Speed Bump", "", "Lubbock", "TX", "77500",
       "MX", "(800) 555-9000");
@@ -3014,7 +3058,7 @@ TEST_F(PersonalDataManagerTest, DefaultCountryCodeComesFromProfiles) {
   personal_data_->RemoveByGUID(armadillo.guid());
   ResetPersonalDataManager(USER_MODE_NORMAL);
   // But unverified profiles can be a tie breaker.
-  armadillo.set_origin("Chrome settings");
+  armadillo.set_origin(kSettingsOrigin);
   personal_data_->AddProfile(armadillo);
   ResetPersonalDataManager(USER_MODE_NORMAL);
   EXPECT_EQ("MX", personal_data_->GetDefaultCountryCodeForNewAddress());
@@ -3022,7 +3066,7 @@ TEST_F(PersonalDataManagerTest, DefaultCountryCodeComesFromProfiles) {
   // Invalid country codes are ignored.
   personal_data_->RemoveByGUID(armadillo.guid());
   personal_data_->RemoveByGUID(moose.guid());
-  AutofillProfile space_invader(base::GenerateGUID(), "Chrome settings");
+  AutofillProfile space_invader(base::GenerateGUID(), kSettingsOrigin);
   test::SetProfileInfo(&space_invader, "Marty", "", "Martian",
       "mm@example.com", "", "1 Flying Object", "", "Valles Marineris", "",
       "", "XX", "");
@@ -3666,18 +3710,24 @@ TEST_F(PersonalDataManagerTest, DedupeCreditCardToSuggest_DifferentCards) {
 }
 
 TEST_F(PersonalDataManagerTest, RecordUseOf) {
+  base::Time creation_time = base::Time::FromTimeT(12345);
+
   AutofillProfile profile(test::GetFullProfile());
-  EXPECT_EQ(0U, profile.use_count());
-  EXPECT_EQ(base::Time(), profile.use_date());
-  EXPECT_EQ(base::Time(), profile.modification_date());
+  profile.set_use_date(creation_time);
+  profile.set_modification_date(creation_time);
+  EXPECT_EQ(1U, profile.use_count());
+  EXPECT_EQ(creation_time, profile.use_date());
+  EXPECT_EQ(creation_time, profile.modification_date());
   personal_data_->AddProfile(profile);
 
   CreditCard credit_card(base::GenerateGUID(), "https://www.example.com");
   test::SetCreditCardInfo(&credit_card, "John Dillinger",
                           "423456789012" /* Visa */, "01", "2999");
-  EXPECT_EQ(0U, credit_card.use_count());
-  EXPECT_EQ(base::Time(), credit_card.use_date());
-  EXPECT_EQ(base::Time(), credit_card.modification_date());
+  credit_card.set_use_date(creation_time);
+  credit_card.set_modification_date(creation_time);
+  EXPECT_EQ(1U, credit_card.use_count());
+  EXPECT_EQ(creation_time, credit_card.use_date());
+  EXPECT_EQ(creation_time, credit_card.modification_date());
   personal_data_->AddCreditCard(credit_card);
 
   EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged())
@@ -3689,18 +3739,18 @@ TEST_F(PersonalDataManagerTest, RecordUseOf) {
       personal_data_->GetProfileByGUID(profile.guid());
   ASSERT_TRUE(added_profile);
   EXPECT_EQ(*added_profile, profile);
-  EXPECT_EQ(0U, added_profile->use_count());
-  EXPECT_EQ(base::Time(), added_profile->use_date());
-  EXPECT_NE(base::Time(), added_profile->modification_date());
+  EXPECT_EQ(1U, added_profile->use_count());
+  EXPECT_EQ(creation_time, added_profile->use_date());
+  EXPECT_NE(creation_time, added_profile->modification_date());
   personal_data_->RecordUseOf(profile);
 
   CreditCard* added_card =
       personal_data_->GetCreditCardByGUID(credit_card.guid());
   ASSERT_TRUE(added_card);
   EXPECT_EQ(*added_card, credit_card);
-  EXPECT_EQ(0U, added_card->use_count());
-  EXPECT_EQ(base::Time(), added_card->use_date());
-  EXPECT_NE(base::Time(), added_card->modification_date());
+  EXPECT_EQ(1U, added_card->use_count());
+  EXPECT_EQ(creation_time, added_card->use_date());
+  EXPECT_NE(creation_time, added_card->modification_date());
   personal_data_->RecordUseOf(credit_card);
 
   EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged())
@@ -3710,15 +3760,15 @@ TEST_F(PersonalDataManagerTest, RecordUseOf) {
   // Verify usage stats are updated.
   added_profile = personal_data_->GetProfileByGUID(profile.guid());
   ASSERT_TRUE(added_profile);
-  EXPECT_EQ(1U, added_profile->use_count());
-  EXPECT_NE(base::Time(), added_profile->use_date());
-  EXPECT_NE(base::Time(), added_profile->modification_date());
+  EXPECT_EQ(2U, added_profile->use_count());
+  EXPECT_NE(creation_time, added_profile->use_date());
+  EXPECT_NE(creation_time, added_profile->modification_date());
 
   added_card = personal_data_->GetCreditCardByGUID(credit_card.guid());
   ASSERT_TRUE(added_card);
-  EXPECT_EQ(1U, added_card->use_count());
-  EXPECT_NE(base::Time(), added_card->use_date());
-  EXPECT_NE(base::Time(), added_card->modification_date());
+  EXPECT_EQ(2U, added_card->use_count());
+  EXPECT_NE(creation_time, added_card->use_date());
+  EXPECT_NE(creation_time, added_card->modification_date());
 }
 
 TEST_F(PersonalDataManagerTest, UpdateServerCreditCardUsageStats) {
@@ -3776,15 +3826,16 @@ TEST_F(PersonalDataManagerTest, UpdateServerCreditCardUsageStats) {
   for (size_t i = 0; i < 3; ++i)
     EXPECT_EQ(0, server_cards[i].Compare(*personal_data_->GetCreditCards()[i]));
 
-  // For an unmasked card, usage data starts out as 1 and Now().
-  EXPECT_EQ(1U, personal_data_->GetCreditCards()[0]->use_count());
+  // For an unmasked card, usage data starts out as 2 because of the unmasking
+  // which is considered a use.
+  EXPECT_EQ(2U, personal_data_->GetCreditCards()[0]->use_count());
   EXPECT_NE(base::Time(), personal_data_->GetCreditCards()[0]->use_date());
 
-  EXPECT_EQ(0U, personal_data_->GetCreditCards()[1]->use_count());
-  EXPECT_EQ(base::Time(), personal_data_->GetCreditCards()[1]->use_date());
+  EXPECT_EQ(1U, personal_data_->GetCreditCards()[1]->use_count());
+  EXPECT_NE(base::Time(), personal_data_->GetCreditCards()[1]->use_date());
 
-  // Having unmasked this card, usage stats should be 1 and Now().
-  EXPECT_EQ(1U, personal_data_->GetCreditCards()[2]->use_count());
+  // Having unmasked this card, usage stats should be 2 and Now().
+  EXPECT_EQ(2U, personal_data_->GetCreditCards()[2]->use_count());
   EXPECT_NE(base::Time(), personal_data_->GetCreditCards()[2]->use_date());
   base::Time initial_use_date = personal_data_->GetCreditCards()[2]->use_date();
 
@@ -3795,13 +3846,13 @@ TEST_F(PersonalDataManagerTest, UpdateServerCreditCardUsageStats) {
   base::MessageLoop::current()->Run();
   ASSERT_EQ(3U, personal_data_->GetCreditCards().size());
 
-  EXPECT_EQ(1U, personal_data_->GetCreditCards()[0]->use_count());
+  EXPECT_EQ(2U, personal_data_->GetCreditCards()[0]->use_count());
   EXPECT_NE(base::Time(), personal_data_->GetCreditCards()[0]->use_date());
 
-  EXPECT_EQ(0U, personal_data_->GetCreditCards()[1]->use_count());
-  EXPECT_EQ(base::Time(), personal_data_->GetCreditCards()[1]->use_date());
+  EXPECT_EQ(1U, personal_data_->GetCreditCards()[1]->use_count());
+  EXPECT_NE(base::Time(), personal_data_->GetCreditCards()[1]->use_date());
 
-  EXPECT_EQ(2U, personal_data_->GetCreditCards()[2]->use_count());
+  EXPECT_EQ(3U, personal_data_->GetCreditCards()[2]->use_count());
   EXPECT_NE(base::Time(), personal_data_->GetCreditCards()[2]->use_date());
   // Time may or may not have elapsed between unmasking and RecordUseOf.
   EXPECT_LE(initial_use_date, personal_data_->GetCreditCards()[2]->use_date());
@@ -3813,7 +3864,7 @@ TEST_F(PersonalDataManagerTest, UpdateServerCreditCardUsageStats) {
       .WillOnce(QuitMainMessageLoop());
   base::MessageLoop::current()->Run();
   ASSERT_EQ(3U, personal_data_->GetCreditCards().size());
-  EXPECT_EQ(1U, personal_data_->GetCreditCards()[1]->use_count());
+  EXPECT_EQ(2U, personal_data_->GetCreditCards()[1]->use_count());
   EXPECT_NE(base::Time(), personal_data_->GetCreditCards()[1]->use_date());
 
   // Upgrading to unmasked retains the usage stats (and increments them).
@@ -3828,7 +3879,7 @@ TEST_F(PersonalDataManagerTest, UpdateServerCreditCardUsageStats) {
       .WillOnce(QuitMainMessageLoop());
   base::MessageLoop::current()->Run();
   ASSERT_EQ(3U, personal_data_->GetCreditCards().size());
-  EXPECT_EQ(2U, personal_data_->GetCreditCards()[1]->use_count());
+  EXPECT_EQ(3U, personal_data_->GetCreditCards()[1]->use_count());
   EXPECT_NE(base::Time(), personal_data_->GetCreditCards()[1]->use_date());
 }
 
@@ -3960,6 +4011,119 @@ TEST_F(PersonalDataManagerTest, SaveImportedProfile) {
       // two profiles being saved.
       {ProfileFields(), {{NAME_FIRST, "Marionette"}}},
 
+      // Test that saving an identical profile except with the middle name
+      // initial instead of the full middle name results in the profiles
+      // getting merged and the full middle name being kept.
+      {ProfileFields(), {{NAME_MIDDLE, "M"}}, {{NAME_MIDDLE, "Mitchell"}}},
+
+      // Test that saving an identical profile except with the full middle name
+      // instead of the middle name initial results in the profiles getting
+      // merged and the full middle name replacing the initial.
+      {{{NAME_MIDDLE, "M"}},
+       {{NAME_MIDDLE, "Mitchell"}},
+       {{NAME_MIDDLE, "Mitchell"}}},
+
+      // Test that saving an identical profile except with no middle name
+      // results in the profiles getting merged and the full middle name being
+      // kept.
+      {ProfileFields(), {{NAME_MIDDLE, ""}}, {{NAME_MIDDLE, "Mitchell"}}},
+
+      // Test that saving an identical profile except with a middle name initial
+      // results in the profiles getting merged and the middle name initial
+      // being saved.
+      {{{NAME_MIDDLE, ""}}, {{NAME_MIDDLE, "M"}}, {{NAME_MIDDLE, "M"}}},
+
+      // Test that saving an identical profile except with a middle name
+      // results in the profiles getting merged and the full middle name being
+      // saved.
+      {{{NAME_MIDDLE, ""}},
+       {{NAME_MIDDLE, "Mitchell"}},
+       {{NAME_MIDDLE, "Mitchell"}}},
+
+      // Test that saving a identical profile except with the full name set
+      // instead of the name parts results in the two profiles being merged and
+      // all the name parts kept and the full name being added.
+      {
+          {
+              {NAME_FIRST, "Marion"},
+              {NAME_MIDDLE, "Mitchell"},
+              {NAME_LAST, "Morrison"},
+              {NAME_FULL, ""},
+          },
+          {
+              {NAME_FIRST, ""},
+              {NAME_MIDDLE, ""},
+              {NAME_LAST, ""},
+              {NAME_FULL, "Marion Mitchell Morrison"},
+          },
+          {
+              {NAME_FIRST, "Marion"},
+              {NAME_MIDDLE, "Mitchell"},
+              {NAME_LAST, "Morrison"},
+              {NAME_FULL, "Marion Mitchell Morrison"},
+          },
+      },
+
+      // Test that saving a identical profile except with the name parts set
+      // instead of the full name results in the two profiles being merged and
+      // the full name being kept and all the name parts being added.
+      {
+          {
+              {NAME_FIRST, ""},
+              {NAME_MIDDLE, ""},
+              {NAME_LAST, ""},
+              {NAME_FULL, "Marion Mitchell Morrison"},
+          },
+          {
+              {NAME_FIRST, "Marion"},
+              {NAME_MIDDLE, "Mitchell"},
+              {NAME_LAST, "Morrison"},
+              {NAME_FULL, ""},
+          },
+          {
+              {NAME_FIRST, "Marion"},
+              {NAME_MIDDLE, "Mitchell"},
+              {NAME_LAST, "Morrison"},
+              {NAME_FULL, "Marion Mitchell Morrison"},
+          },
+      },
+
+      // Test that saving a profile that has only a full name set does not get
+      // merged with a profile with only the name parts set if the names are
+      // different.
+      {
+          {
+              {NAME_FIRST, "Marion"},
+              {NAME_MIDDLE, "Mitchell"},
+              {NAME_LAST, "Morrison"},
+              {NAME_FULL, ""},
+          },
+          {
+              {NAME_FIRST, ""},
+              {NAME_MIDDLE, ""},
+              {NAME_LAST, ""},
+              {NAME_FULL, "John Thompson Smith"},
+          },
+      },
+
+      // Test that saving a profile that has only the name parts set does not
+      // get merged with a profile with only the full name set if the names are
+      // different.
+      {
+          {
+              {NAME_FIRST, ""},
+              {NAME_MIDDLE, ""},
+              {NAME_LAST, ""},
+              {NAME_FULL, "John Thompson Smith"},
+          },
+          {
+              {NAME_FIRST, "Marion"},
+              {NAME_MIDDLE, "Mitchell"},
+              {NAME_LAST, "Morrison"},
+              {NAME_FULL, ""},
+          },
+      },
+
       // Test that saving an identical profile except for the first address line
       // results in two profiles being saved.
       {ProfileFields(), {{ADDRESS_HOME_LINE1, "123 Aquarium St."}}},
@@ -3980,12 +4144,15 @@ TEST_F(PersonalDataManagerTest, SaveImportedProfile) {
 
       // Tests that saving an identical profile except a slightly different
       // postal code results in a merge with the new value kept.
-      {{{ADDRESS_HOME_ZIP, "R2C 0A1"}}, {{ADDRESS_HOME_ZIP, "R2C0A1"}},
-        {{ADDRESS_HOME_ZIP, "R2C0A1"}}},
-      {{{ADDRESS_HOME_ZIP, "R2C0A1"}}, {{ADDRESS_HOME_ZIP, "R2C 0A1"}},
-        {{ADDRESS_HOME_ZIP, "R2C 0A1"}}},
-      {{{ADDRESS_HOME_ZIP, "r2c 0a1"}}, {{ADDRESS_HOME_ZIP, "R2C0A1"}},
-        {{ADDRESS_HOME_ZIP, "R2C0A1"}}},
+      {{{ADDRESS_HOME_ZIP, "R2C 0A1"}},
+       {{ADDRESS_HOME_ZIP, "R2C0A1"}},
+       {{ADDRESS_HOME_ZIP, "R2C0A1"}}},
+      {{{ADDRESS_HOME_ZIP, "R2C0A1"}},
+       {{ADDRESS_HOME_ZIP, "R2C 0A1"}},
+       {{ADDRESS_HOME_ZIP, "R2C 0A1"}}},
+      {{{ADDRESS_HOME_ZIP, "r2c 0a1"}},
+       {{ADDRESS_HOME_ZIP, "R2C0A1"}},
+       {{ADDRESS_HOME_ZIP, "R2C0A1"}}},
 
       // Tests that saving an identical profile plus a new piece of information
       // on the address line 2 results in a merge and that the original empty
@@ -4051,11 +4218,18 @@ TEST_F(PersonalDataManagerTest, SaveImportedProfile) {
        {{ADDRESS_HOME_STATE, "CA"}}},
 
       // Tests that saving an identical profile except that the state is the
-      // full form instead of the abbreviation results in a  merge and that the
+      // full form instead of the abbreviation results in a merge and that the
       // original state gets overwritten.
       {ProfileFields(),
        {{ADDRESS_HOME_STATE, "California"}},
        {{ADDRESS_HOME_STATE, "California"}}},
+
+      // Tests that saving and identical profile except that the company name
+      // has different punctuation and case results in a merge and that the
+      // syntax of the new profile replaces the old one.
+      {{{COMPANY_NAME, "Stark inc"}},
+       {{COMPANY_NAME, "Stark Inc."}},
+       {{COMPANY_NAME, "Stark Inc."}}},
   };
 
   for (TestCase test_case : test_cases) {
@@ -4091,23 +4265,105 @@ TEST_F(PersonalDataManagerTest, SaveImportedProfile) {
     if (test_case.changed_field_values.empty()) {
       EXPECT_EQ(2U, saved_profiles.size());
     } else {
+      EXPECT_EQ(1U, saved_profiles.size());
+
       // Make sure the new information was merged correctly.
       for (ProfileField changed_field : test_case.changed_field_values) {
         EXPECT_EQ(base::UTF8ToUTF16(changed_field.field_value),
                   saved_profiles.front()->GetRawInfo(changed_field.field_type));
       }
-      // Verify that the merged profile's modification and use dates were
-      // updated.
+      // Verify that the merged profile's use count, use date and modification
+      // date were updated.
+      EXPECT_EQ(2U, saved_profiles.front()->use_count());
+      EXPECT_GT(base::TimeDelta::FromMilliseconds(500),
+                base::Time::Now() - saved_profiles.front()->use_date());
       EXPECT_GT(
           base::TimeDelta::FromMilliseconds(500),
           base::Time::Now() - saved_profiles.front()->modification_date());
-      EXPECT_GT(base::TimeDelta::FromMilliseconds(500),
-                base::Time::Now() - saved_profiles.front()->use_date());
     }
 
     // Erase the profiles for the next test.
     ResetProfiles();
   }
+}
+
+// Tests that MergeProfile tries to merge the imported profile into the
+// existing profile in decreasing order of frecency.
+TEST_F(PersonalDataManagerTest, MergeProfile_Frecency) {
+  // Create two very similar profiles except with different company names.
+  AutofillProfile profile1(base::GenerateGUID(), "https://www.example.com");
+  test::SetProfileInfo(&profile1, "Homer", "Jay", "Simpson",
+                       "homer.simpson@abc.com", "SNP", "742 Evergreen Terrace",
+                       "", "Springfield", "IL", "91601", "US", "12345678910");
+  AutofillProfile profile2(base::GenerateGUID(), "https://www.example.com");
+  test::SetProfileInfo(&profile2, "Homer", "Jay", "Simpson",
+                       "homer.simpson@abc.com", "Fox", "742 Evergreen Terrace",
+                       "", "Springfield", "IL", "91601", "US", "12345678910");
+
+  // Give the "Fox" profile a bigger frecency score.
+  profile2.set_use_count(15);
+
+  // Create the |existing_profiles| vector.
+  std::vector<AutofillProfile*> existing_profiles;
+  existing_profiles.push_back(&profile1);
+  existing_profiles.push_back(&profile2);
+
+  // Create a new imported profile with no company name.
+  AutofillProfile imported_profile(base::GenerateGUID(),
+                                   "https://www.example.com");
+  test::SetProfileInfo(&imported_profile, "Homer", "Jay", "Simpson",
+                       "homer.simpson@abc.com", "", "742 Evergreen Terrace", "",
+                       "Springfield", "IL", "91601", "US", "12345678910");
+
+  // Merge the imported profile into the existing profiles.
+  std::vector<AutofillProfile> profiles;
+  std::string guid = personal_data_->MergeProfile(
+      imported_profile, existing_profiles, "US-EN", &profiles);
+
+  // The new profile should be merged into the "fox" profile.
+  EXPECT_EQ(profile2.guid(), guid);
+}
+
+// Tests that MergeProfile produces a merged profile with the expected usage
+// statistics.
+TEST_F(PersonalDataManagerTest, MergeProfile_UsageStats) {
+  // Create an initial profile with a use count of 10, an old use date and an
+  // old modification date of 4 days ago.
+  AutofillProfile profile(base::GenerateGUID(), "https://www.example.com");
+  test::SetProfileInfo(&profile, "Homer", "Jay", "Simpson",
+                       "homer.simpson@abc.com", "SNP", "742 Evergreen Terrace",
+                       "", "Springfield", "IL", "91601", "US", "12345678910");
+  profile.set_use_count(4U);
+  profile.set_use_date(base::Time::Now() - base::TimeDelta::FromDays(4));
+  profile.set_modification_date(base::Time::Now() -
+                                base::TimeDelta::FromDays(4));
+
+  // Create the |existing_profiles| vector.
+  std::vector<AutofillProfile*> existing_profiles;
+  existing_profiles.push_back(&profile);
+
+  // Create a new imported profile that will get merged with the existing one.
+  AutofillProfile imported_profile(base::GenerateGUID(),
+                                   "https://www.example.com");
+  test::SetProfileInfo(&imported_profile, "Homer", "Jay", "Simpson",
+                       "homer.simpson@abc.com", "", "742 Evergreen Terrace", "",
+                       "Springfield", "IL", "91601", "US", "12345678910");
+
+  // Merge the imported profile into the existing profiles.
+  std::vector<AutofillProfile> profiles;
+  std::string guid = personal_data_->MergeProfile(
+      imported_profile, existing_profiles, "US-EN", &profiles);
+
+  // The new profile should be merged into the existing profile.
+  EXPECT_EQ(profile.guid(), guid);
+  // The use count should have been incremented by one.
+  EXPECT_EQ(5U, profile.use_count());
+  // The use date and modification dates should have been set to less than 500
+  // milliseconds ago.
+  EXPECT_GT(base::TimeDelta::FromMilliseconds(500),
+            base::Time::Now() - profile.use_date());
+  EXPECT_GT(base::TimeDelta::FromMilliseconds(500),
+            base::Time::Now() - profile.modification_date());
 }
 
 }  // namespace autofill

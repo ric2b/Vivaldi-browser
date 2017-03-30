@@ -18,17 +18,23 @@ WebInspector.AdvancedSearchView = function()
 
     this._searchPanelElement = this.contentElement.createChild("div", "search-drawer-header");
     this._searchPanelElement.addEventListener("keydown", this._onKeyDown.bind(this), false);
+    this._searchPanelElement.addEventListener("input", this._onInput.bind(this), false);
 
     this._searchResultsElement = this.contentElement.createChild("div");
     this._searchResultsElement.className = "search-results";
 
     this._search = WebInspector.HistoryInput.create();
     this._searchPanelElement.appendChild(this._search);
-    this._search.placeholder = WebInspector.UIString("Enter query, use `file:` to filter by path");
+    this._search.placeholder = WebInspector.UIString("Search all sources (use \"file:\" to filter by path)\u200e");
     this._search.setAttribute("type", "text");
     this._search.classList.add("search-config-search");
     this._search.setAttribute("results", "0");
     this._search.setAttribute("size", 42);
+
+    this._searchPanelElement.createChild("div", "search-icon");
+    this._searchInputClearElement = this._searchPanelElement.createChild("div", "search-cancel-button");
+    this._searchInputClearElement.hidden = true;
+    this._searchInputClearElement.addEventListener("click", this._onSearchInputClear.bind(this), false);
 
     this._ignoreCaseLabel = createCheckboxLabel(WebInspector.UIString("Ignore case"));
     this._ignoreCaseLabel.classList.add("search-config-label");
@@ -99,6 +105,13 @@ WebInspector.AdvancedSearchView.prototype = {
         this._searchMessageElement.textContent = WebInspector.UIString("Indexing\u2026");
         this._progressIndicator.show(this._searchProgressPlaceholderElement);
         this._searchScope.performIndexing(new WebInspector.ProgressProxy(this._progressIndicator, this._onIndexingFinished.bind(this)));
+    },
+
+    _onSearchInputClear: function()
+    {
+        this._search.value = "";
+        this.focus();
+        this._searchInputClearElement.hidden = true;
     },
 
     /**
@@ -283,6 +296,14 @@ WebInspector.AdvancedSearchView.prototype = {
         }
     },
 
+    _onInput: function()
+    {
+        if (this._search.value && this._search.value.length)
+            this._searchInputClearElement.hidden = false;
+        else
+            this._searchInputClearElement.hidden = true;
+    },
+
     _save: function()
     {
         this._advancedSearchConfig.set(this._buildSearchConfig().toPlainObject());
@@ -294,6 +315,8 @@ WebInspector.AdvancedSearchView.prototype = {
         this._search.value = searchConfig.query();
         this._ignoreCaseCheckbox.checked = searchConfig.ignoreCase();
         this._regexCheckbox.checked = searchConfig.isRegex();
+        if (this._search.value && this._search.value.length)
+            this._searchInputClearElement.hidden = false;
     },
 
     _onAction: function()
@@ -307,6 +330,33 @@ WebInspector.AdvancedSearchView.prototype = {
     },
 
     __proto__: WebInspector.VBox.prototype
+}
+
+/**
+ * @param {string} query
+ * @param {string=} filePath
+ * @return {!Promise.<!WebInspector.AdvancedSearchView>}
+ */
+WebInspector.AdvancedSearchView.openSearch = function(query, filePath)
+{
+    /**
+     * @param {?WebInspector.Widget} view
+     * @return {!WebInspector.AdvancedSearchView}
+     */
+    function updateSearchBox(view)
+    {
+        console.assert(view && view instanceof WebInspector.AdvancedSearchView);
+        var searchView = /** @type {!WebInspector.AdvancedSearchView} */(view);
+        if (searchView._search !== searchView.element.window().document.activeElement) {
+            WebInspector.inspectorView.setCurrentPanel(WebInspector.SourcesPanel.instance());
+            var fileMask = filePath ? " file:" + filePath : "";
+            searchView._toggle(query + fileMask);
+            searchView.focus();
+        }
+        return searchView;
+    }
+
+    return WebInspector.inspectorView.showViewInDrawer("sources.search").then(updateSearchBox);
 }
 
 /**
@@ -360,28 +410,12 @@ WebInspector.AdvancedSearchView.ActionDelegate.prototype = {
      */
     _showSearch: function()
     {
-        /**
-         * @param {?WebInspector.Widget} view
-         * @return {!WebInspector.AdvancedSearchView}
-         */
-        function updateSearchBox(view)
-        {
-            console.assert(view && view instanceof WebInspector.AdvancedSearchView);
-            var searchView = /** @type {!WebInspector.AdvancedSearchView} */(view);
-            if (searchView._search !== searchView.element.window().document.activeElement) {
-                WebInspector.inspectorView.setCurrentPanel(WebInspector.SourcesPanel.instance());
-                searchView._toggle(queryCandidate);
-                searchView.focus();
-            }
-            return searchView;
-        }
-
         var selection = WebInspector.inspectorView.element.getDeepSelection();
         var queryCandidate = "";
         if (selection.rangeCount)
             queryCandidate = selection.toString().replace(/\r?\n.*/, "");
-        return WebInspector.inspectorView.showViewInDrawer("sources.search").then(updateSearchBox);
-    }
+        return WebInspector.AdvancedSearchView.openSearch(queryCandidate);
+    },
 }
 
 /**

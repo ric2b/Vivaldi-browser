@@ -41,6 +41,17 @@ namespace blink {
 
 using namespace HTMLNames;
 
+DEFINE_TRACE(BaseCheckableInputType)
+{
+    InputTypeView::trace(visitor);
+    InputType::trace(visitor);
+}
+
+InputTypeView* BaseCheckableInputType::createView()
+{
+    return this;
+}
+
 FormControlState BaseCheckableInputType::saveFormControlState() const
 {
     return FormControlState(element().checked() ? "on" : "off");
@@ -80,10 +91,11 @@ bool BaseCheckableInputType::canSetStringValue() const
     return false;
 }
 
-// FIXME: Could share this with BaseClickableWithKeyInputType and RangeInputType if we had a common base class.
+// FIXME: Could share this with KeyboardClickableInputTypeView and
+// RangeInputType if we had a common base class.
 void BaseCheckableInputType::accessKeyAction(bool sendMouseEvents)
 {
-    InputType::accessKeyAction(sendMouseEvents);
+    InputTypeView::accessKeyAction(sendMouseEvents);
 
     element().dispatchSimulatedClick(0, sendMouseEvents ? SendMouseUpDownEvents : SendNoEvents);
 }

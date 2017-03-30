@@ -34,6 +34,7 @@
 #include "core/events/MessageEvent.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/frame/LocalDOMWindow.h"
+#include "core/origin_trials/OriginTrialContext.h"
 #include "core/workers/SharedWorkerThread.h"
 #include "core/workers/WorkerClients.h"
 #include "wtf/CurrentTime.h"
@@ -52,14 +53,15 @@ SharedWorkerGlobalScope* SharedWorkerGlobalScope::create(const String& name, Sha
 {
     // Note: startupData is finalized on return. After the relevant parts has been
     // passed along to the created 'context'.
-    SharedWorkerGlobalScope* context = new SharedWorkerGlobalScope(name, startupData->m_scriptURL, startupData->m_userAgent, thread, startupData->m_starterOriginPrivilegeData.release(), startupData->m_workerClients.release());
+    SharedWorkerGlobalScope* context = new SharedWorkerGlobalScope(name, startupData->m_scriptURL, startupData->m_userAgent, thread, std::move(startupData->m_starterOriginPrivilegeData), startupData->m_workerClients.release());
     context->applyContentSecurityPolicyFromVector(*startupData->m_contentSecurityPolicyHeaders);
     context->setAddressSpace(startupData->m_addressSpace);
+    OriginTrialContext::addTokens(context, startupData->m_originTrialTokens.get());
     return context;
 }
 
 SharedWorkerGlobalScope::SharedWorkerGlobalScope(const String& name, const KURL& url, const String& userAgent, SharedWorkerThread* thread, PassOwnPtr<SecurityOrigin::PrivilegeData> starterOriginPrivilegeData, WorkerClients* workerClients)
-    : WorkerGlobalScope(url, userAgent, thread, monotonicallyIncreasingTime(), starterOriginPrivilegeData, workerClients)
+    : WorkerGlobalScope(url, userAgent, thread, monotonicallyIncreasingTime(), std::move(starterOriginPrivilegeData), workerClients)
     , m_name(name)
 {
 }

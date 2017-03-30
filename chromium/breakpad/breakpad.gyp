@@ -195,6 +195,8 @@
             'src/common/dwarf_cu_to_module.cc',
             'src/common/dwarf/dwarf2diehandler.cc',
             'src/common/dwarf/dwarf2reader.cc',
+            'src/common/dwarf/elf_reader.cc',
+            'src/common/dwarf/elf_reader.h',
             'src/common/dwarf_line_to_module.cc',
             'src/common/language.cc',
             'src/common/mac/arch_utilities.cc',
@@ -465,6 +467,8 @@
             'src/common/dwarf_cu_to_module.h',
             'src/common/dwarf/dwarf2diehandler.cc',
             'src/common/dwarf/dwarf2reader.cc',
+            'src/common/dwarf/elf_reader.cc',
+            'src/common/dwarf/elf_reader.h',
             'src/common/dwarf_line_to_module.cc',
             'src/common/dwarf_line_to_module.h',
             'src/common/language.cc',
@@ -715,7 +719,6 @@
               'variables': {
                 'test_type': 'gtest',
                 'test_suite_name': '<(_target_name)',
-                'isolate_file': 'breakpad_unittests.isolate',
               },
               'includes': [ '../build/android/test_runner.gypi' ],
               'ldflags!': [

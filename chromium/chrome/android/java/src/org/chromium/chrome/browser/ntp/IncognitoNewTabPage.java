@@ -18,7 +18,6 @@ import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.compositor.layouts.content.InvalidationAwareThumbnailProvider;
 import org.chromium.chrome.browser.help.HelpAndFeedback;
 import org.chromium.chrome.browser.ntp.IncognitoNewTabPageView.IncognitoNewTabPageManager;
-import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.profiles.Profile;
 
 /**
@@ -57,8 +56,7 @@ public class IncognitoNewTabPage implements NativePage, InvalidationAwareThumbna
         mActivity = activity;
 
         mTitle = activity.getResources().getString(R.string.button_new_tab);
-        mBackgroundColor =
-                ApiCompatibilityUtils.getColor(activity.getResources(), R.color.ntp_bg_incognito);
+        mBackgroundColor = NtpColorUtils.getBackgroundColorResource(activity.getResources(), true);
         mThemeColor = ApiCompatibilityUtils.getColor(activity.getResources(),
                 R.color.incognito_primary_color);
 
@@ -69,8 +67,8 @@ public class IncognitoNewTabPage implements NativePage, InvalidationAwareThumbna
 
         TextView newTabIncognitoMessage = (TextView) mIncognitoNewTabPageView.findViewById(
                 R.id.new_tab_incognito_message);
-        newTabIncognitoMessage.setText(activity.getResources().getString(
-                OfflinePageUtils.getStringId(R.string.new_tab_incognito_message)));
+        newTabIncognitoMessage.setText(
+                activity.getResources().getString(R.string.new_tab_incognito_message));
     }
 
     /**

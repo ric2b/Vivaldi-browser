@@ -8,8 +8,9 @@
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/WebCanvasCaptureHandler.h"
-#include "third_party/skia/include/core/SkImage.h"
 #include "wtf/PassRefPtr.h"
+
+class SkImage;
 
 namespace blink {
 
@@ -21,7 +22,7 @@ public:
     void requestFrame();
 
 protected:
-    explicit CanvasDrawListener(const PassOwnPtr<WebCanvasCaptureHandler>);
+    explicit CanvasDrawListener(PassOwnPtr<WebCanvasCaptureHandler>);
 
     bool m_frameCaptureRequested;
     OwnPtr<WebCanvasCaptureHandler> m_handler;

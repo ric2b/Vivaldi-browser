@@ -24,10 +24,9 @@ class Event;
 }
 
 namespace ash {
-// We force at least this many DIPs for any window on the screen.
-const int kMinimumOnScreenArea = 25;
-
 namespace wm {
+
+class WmWindow;
 
 // Utility functions for window activation.
 ASH_EXPORT void ActivateWindow(aura::Window* window);
@@ -52,53 +51,10 @@ ASH_EXPORT bool IsWindowUserPositionable(aura::Window* window);
 // Moves the window to the center of the display.
 ASH_EXPORT void CenterWindow(aura::Window* window);
 
-// Returns the bounds of a left snapped window with default width in parent
-// coordinates.
-ASH_EXPORT gfx::Rect GetDefaultLeftSnappedWindowBoundsInParent(
-    aura::Window* window);
-
-// Returns the bounds of a right snapped window with default width in parent
-// coordinates.
-ASH_EXPORT gfx::Rect GetDefaultRightSnappedWindowBoundsInParent(
-    aura::Window* window);
-
-// Adjusts |bounds| so that the size does not exceed |max_size|.
-ASH_EXPORT void AdjustBoundsSmallerThan(const gfx::Size& max_size,
-                                        gfx::Rect* bounds);
-
-// Move the given bounds inside the given |visible_area| in parent coordinates,
-// including a safety margin given by |kMinimumOnScreenArea|.
-// This also ensures that the top of the bounds is visible.
-ASH_EXPORT void AdjustBoundsToEnsureMinimumWindowVisibility(
-    const gfx::Rect& visible_area,
-    gfx::Rect* bounds);
-
-// Move the given bounds inside the given |visible_area| in parent coordinates,
-// including a safety margin given by |min_width| and |min_height|.
-// This also ensures that the top of the bounds is visible.
-ASH_EXPORT void AdjustBoundsToEnsureWindowVisibility(
-    const gfx::Rect& visible_area,
-    int min_width,
-    int min_height,
-    gfx::Rect* bounds);
-
 // Moves |window| to the root window where the |event| occured if it is not
 // already in the same root window. Returns true if |window| was moved.
 ASH_EXPORT bool MoveWindowToEventRoot(aura::Window* window,
                                       const ui::Event& event);
-
-// Changes the parent of a |child| and all its transient children that are
-// themselves children of |old_parent| to |new_parent|.
-void ReparentChildWithTransientChildren(aura::Window* child,
-                                        aura::Window* old_parent,
-                                        aura::Window* new_parent);
-
-// Changes the parent of all transient children of a |child| to |new_parent|.
-// Does not change parent of the transient children that are not themselves
-// children of |old_parent|.
-void ReparentTransientChildrenOfChild(aura::Window* child,
-                                      aura::Window* old_parent,
-                                      aura::Window* new_parent);
 
 // Snap the window's layer to physical pixel boundary.
 void SnapWindowToPixelBoundary(aura::Window* window);

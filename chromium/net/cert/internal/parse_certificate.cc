@@ -167,7 +167,9 @@ bool VerifySerialNumber(const der::Input& value) {
 }
 
 bool ParseCertificate(const der::Input& certificate_tlv,
-                      ParsedCertificate* out) {
+                      der::Input* out_tbs_certificate_tlv,
+                      der::Input* out_signature_algorithm_tlv,
+                      der::BitString* out_signature_value) {
   der::Parser parser(certificate_tlv);
 
   //   Certificate  ::=  SEQUENCE  {
@@ -176,15 +178,15 @@ bool ParseCertificate(const der::Input& certificate_tlv,
     return false;
 
   //        tbsCertificate       TBSCertificate,
-  if (!ReadSequenceTLV(&certificate_parser, &out->tbs_certificate_tlv))
+  if (!ReadSequenceTLV(&certificate_parser, out_tbs_certificate_tlv))
     return false;
 
   //        signatureAlgorithm   AlgorithmIdentifier,
-  if (!ReadSequenceTLV(&certificate_parser, &out->signature_algorithm_tlv))
+  if (!ReadSequenceTLV(&certificate_parser, out_signature_algorithm_tlv))
     return false;
 
   //        signatureValue       BIT STRING  }
-  if (!certificate_parser.ReadBitString(&out->signature_value))
+  if (!certificate_parser.ReadBitString(out_signature_value))
     return false;
 
   // There isn't an extension point at the end of Certificate.
@@ -216,7 +218,9 @@ bool ParseCertificate(const der::Input& certificate_tlv,
 //        extensions      [3]  EXPLICIT Extensions OPTIONAL
 //                             -- If present, version MUST be v3
 //        }
-bool ParseTbsCertificate(const der::Input& tbs_tlv, ParsedTbsCertificate* out) {
+bool ParseTbsCertificate(const der::Input& tbs_tlv,
+                         const ParseCertificateOptions& options,
+                         ParsedTbsCertificate* out) {
   der::Parser parser(tbs_tlv);
 
   //   Certificate  ::=  SEQUENCE  {
@@ -246,8 +250,10 @@ bool ParseTbsCertificate(const der::Input& tbs_tlv, ParsedTbsCertificate* out) {
   //        serialNumber         CertificateSerialNumber,
   if (!tbs_parser.ReadTag(der::kInteger, &out->serial_number))
     return false;
-  if (!VerifySerialNumber(out->serial_number))
+  if (!options.allow_invalid_serial_numbers &&
+      !VerifySerialNumber(out->serial_number)) {
     return false;
+  }
 
   //        signature            AlgorithmIdentifier,
   if (!ReadSequenceTLV(&tbs_parser, &out->signature_algorithm_tlv))

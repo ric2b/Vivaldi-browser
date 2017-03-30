@@ -70,10 +70,16 @@ Kapag nag-sign in ka pa rin, isasama sa <ph name="ACCOUNT_EMAIL_NEW" /> ang impo
 <translation id="2997147809295888909">Na-verify ng Chrome na ang <ph name="ISSUER" /> ang nagbigay sa certificate ng website na ito. Hindi nagbigay ang server ng anumang impormasyon tungkol sa Certificate Transparency.</translation>
 <translation id="3037838751736561277">Nasa background mode ang Google Chrome.</translation>
 <translation id="3047079729301751317">Iki-clear ng pagdiskonekta kay <ph name="USERNAME" /> ang iyong history, mga bookmark, setting at iba pang data ng Chrome na naka-imbak sa device na ito. Hindi iki-clear ang data na naka-imbak sa iyong Google Account at maaaring pamahalaan sa <ph name="GOOGLE_DASHBOARD_LINK" />Google Dashboard<ph name="END_GOOGLE_DASHBOARD_LINK" />.</translation>
+<translation id="3065168410429928842">Tab ng Chrome</translation>
 <translation id="3080151273017101988">Magpatuloy sa pagpapatakbo ng mga app sa background kapag nakasara ang Google Chrome</translation>
 <translation id="3089968997497233615">May available na bago, mas ligtas na bersyon ng Google Chrome.</translation>
 <translation id="3149510190863420837">Chrome Apps</translation>
-<translation id="3197823471738295152">Napapanahon ang iyong device.</translation>
+<translation id="3251381707915721925">Upang itakda kung aling mga website ang matitingnan ni <ph name="NEW_PROFILE_NAME" />, maaari mong i-configure ang mga paghihigpit at setting sa pamamagitan ng pagbisita sa <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. Kung hindi mo babaguhin ang mga default na setting, maba-browse ni <ph name="NEW_PROFILE_NAME" /> ang lahat ng nasa web.
+
+Upang mapigilan si <ph name="NEW_PROFILE_NAME" /> na ma-access ang iyong account, tiyaking ila-lock mo ang iyong profile kapag hindi ka gumagamit ng Chrome. Upang gawin ito, i-click ang pangalan ng iyong profile sa kanang sulok sa itaas ng browser, at piliin ang "Lumabas at i-childlock."
+<ph name="BEGIN_LINK_2" />Matuto nang higit pa<ph name="END_LINK_2" />
+
+Pakitingnan ang iyong email sa <ph name="ACCOUNT_EMAIL" /> para sa mga karagdagang tagubilin.</translation>
 <translation id="3282568296779691940">Mag-sign in sa Chrome</translation>
 <translation id="3311976847535831054">Hindi na tatanggap ang computer na ito ng mga update sa 32-bit na Google Chrome. Mangyaring mag-upgrade sa 64-bit na Google Chrome.</translation>
 <translation id="3360895254066713204">Chrome Helper</translation>
@@ -213,7 +219,6 @@ Hindi magawang bawiin ng Google Chrome ang iyong mga setting.</translation>
 <translation id="7808348361785373670">Alisin sa Chrome...</translation>
 <translation id="7825851276765848807">Nabigo ang pag-install dahil sa hindi natukoy na error. Paki-download muli ang Google Chrome.</translation>
 <translation id="7890208801193284374">Kung nagpapahiram ka ng computer, ang mga kaibigan at kapamilya ay maaaring mag-browse nang hiwalay at i-set up ang Chrome sa paraang gusto nila.</translation>
-<translation id="8000275528373650868">Kinakailangan ng Google Chrome ang Windows Vista o Windows XP na may SP2 o mas mataas pa.</translation>
 <translation id="8005540215158006229">Halos handa na ang Chrome.</translation>
 <translation id="8008534537613507642">Muling i-install ang Chrome</translation>
 <translation id="8030318113982266900">Ina-update ang iyong device sa <ph name="CHANNEL_NAME" /> na channel...</translation>
@@ -235,6 +240,7 @@ Hindi magawang bawiin ng Google Chrome ang iyong mga setting.</translation>
 <translation id="8556340503434111824">May available na bagong bersyon ng Google Chrome, at mas mabilis ito kaysa sa dati.</translation>
 <translation id="8568392309447938879">Kailangang naka-sign in ka sa Chrome upang makagamit ng mga app. Nagbibigay-daan ito sa Chrome na i-sync ang iyong mga app, bookmark, kasaysayan, password at iba pang mga setting sa mga device.</translation>
 <translation id="8614913330719544658">Hindi gumagana ang Google Chrome. Ilunsad muli ngayon?</translation>
+<translation id="8667808506758191620">Napapanahon ang iyong <ph name="DEVICE_TYPE" />.</translation>
 <translation id="8669527147644353129">Google Chrome Helper</translation>
 <translation id="8679801911857917785">Kinokontrol din nito kung anong pahina ang ipinapakita kapag sinimulan mo ang Chrome.</translation>
 <translation id="870251953148363156">I-update ang &amp;Google Chrome</translation>
@@ -243,6 +249,7 @@ Hindi magawang bawiin ng Google Chrome ang iyong mga setting.</translation>
 <translation id="8851136666856101339">main</translation>
 <translation id="8862326446509486874">Wala kang naaangkop na mga karapatan para sa pag-install sa antas ng system. Subukan muling patakbuhin ang installer bilang Administrator.</translation>
 <translation id="9026991721384951619">Hindi ma-sync ng Chrome OS ang iyong data dahil hindi napapanahon ang mga detalye sa pag-sign in sa iyong account.</translation>
+<translation id="9067395829937117663">Kailangan ng Google Chrome ng Windows 7 o mas bago.</translation>
 <translation id="9102715433345326100">Nakakahamak ang file na ito, at na-block ito ng Chrome.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Babala:<ph name="END_BOLD" /> Hindi mapipigilan ng Google Chrome ang pagtatala ng mga extension ng iyong history sa pagba-browse. Upang i-disable ang extension na ito sa incognito mode, alisin sa pagkakapili ang opsyong ito.
 </translation>

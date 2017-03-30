@@ -75,7 +75,7 @@ class CursorState {
 
 bool CursorManager::last_cursor_visibility_state_ = true;
 
-CursorManager::CursorManager(scoped_ptr<NativeCursorManager> delegate)
+CursorManager::CursorManager(std::unique_ptr<NativeCursorManager> delegate)
     : delegate_(std::move(delegate)),
       cursor_lock_count_(0),
       current_state_(new internal::CursorState),
@@ -85,6 +85,11 @@ CursorManager::CursorManager(scoped_ptr<NativeCursorManager> delegate)
 }
 
 CursorManager::~CursorManager() {
+}
+
+// static
+void CursorManager::ResetCursorVisibilityStateForTest() {
+  last_cursor_visibility_state_ = true;
 }
 
 void CursorManager::SetCursor(gfx::NativeCursor cursor) {
@@ -157,7 +162,7 @@ bool CursorManager::IsMouseEventsEnabled() const {
   return current_state_->mouse_events_enabled();
 }
 
-void CursorManager::SetDisplay(const gfx::Display& display) {
+void CursorManager::SetDisplay(const display::Display& display) {
   delegate_->SetDisplay(display, this);
 }
 

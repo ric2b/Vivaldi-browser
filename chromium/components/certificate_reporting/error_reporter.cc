@@ -5,16 +5,14 @@
 #include "components/certificate_reporting/error_reporter.h"
 
 #include <stddef.h>
+
 #include <set>
 #include <utility>
 
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "components/certificate_reporting/encrypted_cert_logger.pb.h"
-
-#if defined(USE_OPENSSL)
-#include "crypto/aead_openssl.h"
-#endif
-
+#include "crypto/aead.h"
 #include "crypto/curve25519.h"
 #include "crypto/hkdf.h"
 #include "crypto/random.h"
@@ -31,8 +29,6 @@ static const uint8_t kServerPublicKey[] = {
     0x3c, 0x61, 0xa7, 0x96, 0x76, 0x86, 0x91, 0x40, 0x71, 0x39, 0x5f,
     0x31, 0x1a, 0x39, 0x5b, 0x76, 0xb1, 0x6b, 0x3d, 0x6a, 0x2b};
 static const uint32_t kServerPublicKeyVersion = 1;
-
-#if defined(USE_OPENSSL)
 
 static const char kHkdfLabel[] = "certificate report";
 
@@ -101,7 +97,6 @@ bool EncryptSerializedReport(const uint8_t* server_public_key,
       EncryptedCertLoggerRequest::AEAD_ECDH_AES_128_CTR_HMAC_SHA256);
   return true;
 }
-#endif
 
 }  // namespace
 
@@ -112,7 +107,7 @@ ErrorReporter::ErrorReporter(
     : ErrorReporter(upload_url,
                     kServerPublicKey,
                     kServerPublicKeyVersion,
-                    make_scoped_ptr(new net::CertificateReportSender(
+                    base::WrapUnique(new net::CertificateReportSender(
                         request_context,
                         cookies_preference))) {}
 
@@ -120,7 +115,7 @@ ErrorReporter::ErrorReporter(
     const GURL& upload_url,
     const uint8_t server_public_key[/* 32 */],
     const uint32_t server_public_key_version,
-    scoped_ptr<net::CertificateReportSender> certificate_report_sender)
+    std::unique_ptr<net::CertificateReportSender> certificate_report_sender)
     : certificate_report_sender_(std::move(certificate_report_sender)),
       upload_url_(upload_url),
       server_public_key_(server_public_key),
@@ -137,7 +132,6 @@ void ErrorReporter::SendExtendedReportingReport(
     certificate_report_sender_->Send(upload_url_, serialized_report);
   } else {
     DCHECK(IsHttpUploadUrlSupported());
-#if defined(USE_OPENSSL)
     EncryptedCertLoggerRequest encrypted_report;
     if (!EncryptSerializedReport(server_public_key_, server_public_key_version_,
                                  serialized_report, &encrypted_report)) {
@@ -147,20 +141,14 @@ void ErrorReporter::SendExtendedReportingReport(
     std::string serialized_encrypted_report;
     encrypted_report.SerializeToString(&serialized_encrypted_report);
     certificate_report_sender_->Send(upload_url_, serialized_encrypted_report);
-#endif
   }
 }
 
 bool ErrorReporter::IsHttpUploadUrlSupported() {
-#if defined(USE_OPENSSL)
   return true;
-#else
-  return false;
-#endif
 }
 
 // Used only by tests.
-#if defined(USE_OPENSSL)
 bool ErrorReporter::DecryptErrorReport(
     const uint8_t server_private_key[32],
     const EncryptedCertLoggerRequest& encrypted_report,
@@ -182,6 +170,5 @@ bool ErrorReporter::DecryptErrorReport(
   return aead.Open(encrypted_report.encrypted_report(), nonce, std::string(),
                    decrypted_serialized_report);
 }
-#endif
 
 }  // namespace certificate_reporting

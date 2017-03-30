@@ -16,7 +16,6 @@
 #include "base/mac/scoped_nsobject.h"
 #include "base/mac/sdk_forward_declarations.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_piece.h"
 #include "base/synchronization/cancellation_flag.h"
@@ -171,7 +170,7 @@ class AVFMediaDecoder {
   gfx::Size video_coded_size_;
   int bitrate_;
 
-  scoped_ptr<AVFAudioTap> audio_tap_;
+  std::unique_ptr<AVFAudioTap> audio_tap_;
 
   base::TimeDelta last_audio_timestamp_;
   base::TimeDelta last_video_timestamp_;

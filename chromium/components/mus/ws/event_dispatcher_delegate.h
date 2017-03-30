@@ -35,11 +35,17 @@ class EventDispatcherDelegate {
   // ReleaseNativeCapture is invoked if appropriate.
   virtual void OnServerWindowCaptureLost(ServerWindow* window) = 0;
 
+  virtual void OnMouseCursorLocationChanged(const gfx::Point& point) = 0;
+
   // |in_nonclient_area| is true if the event occurred in the non-client area.
   virtual void DispatchInputEventToWindow(ServerWindow* target,
                                           bool in_nonclient_area,
                                           const ui::Event& event,
                                           Accelerator* accelerator) = 0;
+
+  // Called when event dispatch could not find a target. OnAccelerator may still
+  // be called.
+  virtual void OnEventTargetNotFound(const ui::Event& event) = 0;
 
  protected:
   virtual ~EventDispatcherDelegate() {}

@@ -7,13 +7,15 @@
 
 #include <stddef.h>
 
+#include <memory>
+
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/strings/string_piece.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/time/time.h"
 #include "media/audio/audio_io.h"
-#include "media/audio/audio_parameters.h"
+#include "media/base/audio_parameters.h"
 #include "media/base/media_export.h"
 
 namespace media {
@@ -69,7 +71,7 @@ class MEDIA_EXPORT AudioStreamHandler : public base::NonThreadSafe {
       AudioOutputStream::AudioSourceCallback* source);
 
   base::TimeDelta duration_;
-  scoped_ptr<AudioStreamContainer> stream_;
+  std::unique_ptr<AudioStreamContainer> stream_;
 
   DISALLOW_COPY_AND_ASSIGN(AudioStreamHandler);
 };

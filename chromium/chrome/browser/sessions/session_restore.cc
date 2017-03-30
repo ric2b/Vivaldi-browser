@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <list>
+#include <memory>
 #include <set>
 #include <string>
 
@@ -16,7 +17,6 @@
 #include "base/callback.h"
 #include "base/debug/alias.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
@@ -169,9 +169,9 @@ class SessionRestoreImpl : public content::NotificationObserver {
     // Create a browser instance to put the restored tabs in.
     for (std::vector<const sessions::SessionWindow*>::const_iterator i = begin;
          i != end; ++i) {
-      Browser* browser =
-          CreateRestoredBrowser(BrowserTypeForWindowType((*i)->type),
-                                (*i)->bounds, (*i)->show_state, (*i)->app_name);
+      Browser* browser = CreateRestoredBrowser(
+          BrowserTypeForWindowType((*i)->type), (*i)->bounds, (*i)->workspace,
+          (*i)->show_state, (*i)->app_name);
       browsers.push_back(browser);
 
       // Restore and show the browser.
@@ -424,9 +424,9 @@ class SessionRestoreImpl : public content::NotificationObserver {
           show_state = ui::SHOW_STATE_NORMAL;
           has_visible_browser = true;
         }
-        browser =
-            CreateRestoredBrowser(BrowserTypeForWindowType((*i)->type),
-                                  (*i)->bounds, show_state, (*i)->app_name);
+        browser = CreateRestoredBrowser(BrowserTypeForWindowType((*i)->type),
+                                        (*i)->bounds, (*i)->workspace,
+                                        show_state, (*i)->app_name);
 #if defined(OS_CHROMEOS)
         chromeos::BootTimesRecorder::Get()->AddLoginTimeMarker(
             "SessionRestore-CreateRestoredBrowser-End", false);
@@ -634,6 +634,7 @@ class SessionRestoreImpl : public content::NotificationObserver {
 
   Browser* CreateRestoredBrowser(Browser::Type type,
                                  gfx::Rect bounds,
+                                 const std::string& workspace,
                                  ui::WindowShowState show_state,
                                  const std::string& app_name) {
     Browser::CreateParams params(type, profile_);
@@ -645,8 +646,10 @@ class SessionRestoreImpl : public content::NotificationObserver {
       params.initial_bounds = bounds;
     }
     params.initial_show_state = show_state;
+    params.initial_workspace = workspace;
     params.is_session_restore = true;
-    params.is_vivaldi = vivaldi::IsVivaldiRunning();
+    params.is_vivaldi =
+        vivaldi::IsVivaldiRunning() && !vivaldi::IsDebuggingVivaldi();
     return new Browser(params);
   }
 
@@ -735,7 +738,7 @@ class SessionRestoreImpl : public content::NotificationObserver {
   // When asynchronous it's possible for there to be no windows. To make sure
   // Chrome doesn't prematurely exit we register a KeepAlive for the lifetime
   // of this object.
-  scoped_ptr<ScopedKeepAlive> keep_alive_;
+  std::unique_ptr<ScopedKeepAlive> keep_alive_;
 
   // The time we started the restore.
   base::TimeTicks restore_started_;

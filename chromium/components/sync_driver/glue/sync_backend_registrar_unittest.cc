@@ -108,7 +108,7 @@ class SyncBackendRegistrarTest : public testing::Test {
     sync_client_.reset(new RegistrarSyncClient(
         ui_task_runner(), db_task_runner(), file_task_runner()));
     registrar_.reset(new SyncBackendRegistrar(
-        "test", sync_client_.get(), scoped_ptr<base::Thread>(),
+        "test", sync_client_.get(), std::unique_ptr<base::Thread>(),
         ui_task_runner(), db_task_runner(), file_task_runner()));
     sync_thread_ = registrar_->sync_thread();
   }
@@ -157,8 +157,8 @@ class SyncBackendRegistrarTest : public testing::Test {
   base::Thread file_thread_;
 
   syncer::TestUserShare test_user_share_;
-  scoped_ptr<RegistrarSyncClient> sync_client_;
-  scoped_ptr<SyncBackendRegistrar> registrar_;
+  std::unique_ptr<RegistrarSyncClient> sync_client_;
+  std::unique_ptr<SyncBackendRegistrar> registrar_;
 
   base::Thread* sync_thread_;
 };
@@ -201,8 +201,7 @@ TEST_F(SyncBackendRegistrarTest, ConfigureDataTypes) {
 
   // Add.
   const ModelTypeSet types1(BOOKMARKS, NIGORI, AUTOFILL);
-  EXPECT_TRUE(
-      registrar_->ConfigureDataTypes(types1, ModelTypeSet()).Equals(types1));
+  EXPECT_EQ(types1, registrar_->ConfigureDataTypes(types1, ModelTypeSet()));
   {
     syncer::ModelSafeRoutingInfo expected_routing_info;
     expected_routing_info[BOOKMARKS] = syncer::GROUP_NON_BLOCKING;
@@ -211,11 +210,11 @@ TEST_F(SyncBackendRegistrarTest, ConfigureDataTypes) {
     ExpectRoutingInfo(registrar_.get(), expected_routing_info);
   }
   ExpectHasProcessorsForTypes(*registrar_, ModelTypeSet());
-  EXPECT_TRUE(types1.Equals(registrar_->GetLastConfiguredTypes()));
+  EXPECT_EQ(types1, registrar_->GetLastConfiguredTypes());
 
   // Add and remove.
   const ModelTypeSet types2(PREFERENCES, THEMES);
-  EXPECT_TRUE(registrar_->ConfigureDataTypes(types2, types1).Equals(types2));
+  EXPECT_EQ(types2, registrar_->ConfigureDataTypes(types2, types1));
   {
     syncer::ModelSafeRoutingInfo expected_routing_info;
     expected_routing_info[PREFERENCES] = syncer::GROUP_PASSIVE;
@@ -223,13 +222,13 @@ TEST_F(SyncBackendRegistrarTest, ConfigureDataTypes) {
     ExpectRoutingInfo(registrar_.get(), expected_routing_info);
   }
   ExpectHasProcessorsForTypes(*registrar_, ModelTypeSet());
-  EXPECT_TRUE(types2.Equals(registrar_->GetLastConfiguredTypes()));
+  EXPECT_EQ(types2, registrar_->GetLastConfiguredTypes());
 
   // Remove.
   EXPECT_TRUE(registrar_->ConfigureDataTypes(ModelTypeSet(), types2).Empty());
   ExpectRoutingInfo(registrar_.get(), syncer::ModelSafeRoutingInfo());
   ExpectHasProcessorsForTypes(*registrar_, ModelTypeSet());
-  EXPECT_TRUE(ModelTypeSet().Equals(registrar_->GetLastConfiguredTypes()));
+  EXPECT_EQ(ModelTypeSet(), registrar_->GetLastConfiguredTypes());
 }
 
 TEST_F(SyncBackendRegistrarTest, ActivateDeactivateUIDataType) {
@@ -251,8 +250,7 @@ TEST_F(SyncBackendRegistrarTest, ActivateDeactivateUIDataType) {
       .WillRepeatedly(Return(false));
 
   const ModelTypeSet types(BOOKMARKS);
-  EXPECT_TRUE(
-      registrar_->ConfigureDataTypes(types, ModelTypeSet()).Equals(types));
+  EXPECT_EQ(types, registrar_->ConfigureDataTypes(types, ModelTypeSet()));
   registrar_->ActivateDataType(BOOKMARKS, syncer::GROUP_UI,
                              &change_processor_mock,
                              test_user_share_.user_share());
@@ -292,8 +290,7 @@ TEST_F(SyncBackendRegistrarTest, ActivateDeactivateNonUIDataType) {
       .WillRepeatedly(Return(false));
 
   const ModelTypeSet types(AUTOFILL);
-  EXPECT_TRUE(
-      registrar_->ConfigureDataTypes(types, ModelTypeSet()).Equals(types));
+  EXPECT_EQ(types, registrar_->ConfigureDataTypes(types, ModelTypeSet()));
 
   base::WaitableEvent done(false, false);
   db_task_runner()->PostTask(
@@ -308,6 +305,38 @@ TEST_F(SyncBackendRegistrarTest, ActivateDeactivateNonUIDataType) {
 
   // Should do nothing.
   TriggerChanges(registrar_.get(), AUTOFILL);
+}
+
+// Tests that registration and configuration of non-blocking data types is
+// handled correctly in SyncBackendRegistrar.
+TEST_F(SyncBackendRegistrarTest, ConfigureNonBlockingDataType) {
+  registrar_->RegisterNonBlockingType(AUTOFILL);
+  registrar_->RegisterNonBlockingType(BOOKMARKS);
+
+  ExpectRoutingInfo(registrar_.get(), syncer::ModelSafeRoutingInfo());
+  // Simulate that initial sync was already done for AUTOFILL.
+  registrar_->AddRestoredNonBlockingType(AUTOFILL);
+  // It should be added to routing info and set of configured types.
+  EXPECT_EQ(ModelTypeSet(AUTOFILL), registrar_->GetLastConfiguredTypes());
+  {
+    syncer::ModelSafeRoutingInfo expected_routing_info;
+    expected_routing_info[AUTOFILL] = syncer::GROUP_NON_BLOCKING;
+    ExpectRoutingInfo(registrar_.get(), expected_routing_info);
+  }
+
+  // Configure two non-blocking types. Initial sync wasn't done for BOOKMARKS so
+  // it should be included in types to be downloaded.
+  ModelTypeSet types_to_add(AUTOFILL, BOOKMARKS);
+  ModelTypeSet newly_added_types =
+      registrar_->ConfigureDataTypes(types_to_add, ModelTypeSet());
+  EXPECT_EQ(ModelTypeSet(BOOKMARKS), newly_added_types);
+  EXPECT_EQ(types_to_add, registrar_->GetLastConfiguredTypes());
+  {
+    syncer::ModelSafeRoutingInfo expected_routing_info;
+    expected_routing_info[AUTOFILL] = syncer::GROUP_NON_BLOCKING;
+    expected_routing_info[BOOKMARKS] = syncer::GROUP_NON_BLOCKING;
+    ExpectRoutingInfo(registrar_.get(), expected_routing_info);
+  }
 }
 
 class SyncBackendRegistrarShutdownTest : public testing::Test {
@@ -358,7 +387,7 @@ class SyncBackendRegistrarShutdownTest : public testing::Test {
   base::Thread db_thread_;
   base::Thread file_thread_;
 
-  scoped_ptr<RegistrarSyncClient> sync_client_;
+  std::unique_ptr<RegistrarSyncClient> sync_client_;
   base::WaitableEvent db_thread_blocked_;
 
   base::Lock db_thread_lock_;
@@ -377,7 +406,7 @@ class TestRegistrar : public SyncBackendRegistrar {
       SyncBackendRegistrarShutdownTest* test)
       : SyncBackendRegistrar("test",
                              sync_client,
-                             scoped_ptr<base::Thread>(),
+                             std::unique_ptr<base::Thread>(),
                              ui_thread,
                              db_thread,
                              file_thread),
@@ -398,7 +427,7 @@ TEST_F(SyncBackendRegistrarShutdownTest, BlockingShutdown) {
       FROM_HERE, base::Bind(&SyncBackendRegistrarShutdownTest::BlockDBThread,
                             base::Unretained(this)));
 
-  scoped_ptr<TestRegistrar> registrar(
+  std::unique_ptr<TestRegistrar> registrar(
       new TestRegistrar(sync_client_.get(), ui_task_runner(), db_task_runner(),
                         file_task_runner(), this));
   base::Thread* sync_thread = registrar->sync_thread();

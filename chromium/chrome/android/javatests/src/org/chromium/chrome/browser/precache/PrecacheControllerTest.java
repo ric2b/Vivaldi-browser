@@ -7,13 +7,13 @@ package org.chromium.chrome.browser.precache;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences.Editor;
-import android.preference.PreferenceManager;
 import android.test.InstrumentationTestCase;
 import android.test.suitebuilder.annotation.SmallTest;
 
 import com.google.android.gms.gcm.GcmNetworkManager;
 import com.google.android.gms.gcm.Task;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.AdvancedMockContext;
 import org.chromium.base.test.util.Feature;
@@ -71,21 +71,29 @@ public class PrecacheControllerTest extends InstrumentationTestCase {
         public int cancelContinuationCnt = 0;
 
         @Override
-        void scheduleTask(Context context, Task task) {
+        boolean canScheduleTasks(Context context) {
+            return false;
+        }
+
+        @Override
+        boolean scheduleTask(Context context, Task task) {
+            if (!canScheduleTasks(context)) return true;
             if (PrecacheController.PERIODIC_TASK_TAG.equals(task.getTag())) {
                 schedulePeriodicCnt++;
             } else if (PrecacheController.CONTINUATION_TASK_TAG.equals(task.getTag())) {
                 scheduleContinuationCnt++;
             }
+            return true;
         }
 
         @Override
-        void cancelTask(Context context, String tag) {
+        boolean cancelTask(Context context, String tag) {
             if (PrecacheController.PERIODIC_TASK_TAG.equals(tag)) {
                 cancelPeriodicCnt++;
             } else if (PrecacheController.CONTINUATION_TASK_TAG.equals(tag)) {
                 cancelContinuationCnt++;
             }
+            return true;
         }
     }
 
@@ -100,7 +108,7 @@ public class PrecacheControllerTest extends InstrumentationTestCase {
         mPrecacheController.setPrecacheLauncher(mPrecacheLauncher);
         PrecacheController.setTaskScheduler(mPrecacheTaskScheduler);
         RecordHistogram.disableForTests();
-        Editor editor = PreferenceManager.getDefaultSharedPreferences(mContext).edit();
+        Editor editor = ContextUtils.getAppSharedPreferences().edit();
         editor.putBoolean(PrecacheController.PREF_IS_PRECACHING_ENABLED, false);
         editor.apply();
     }
@@ -108,8 +116,7 @@ public class PrecacheControllerTest extends InstrumentationTestCase {
     protected void verifyScheduledAndCanceledCounts(
             int expectedPeriodicScheduled, int expectedContinuationScheduled,
             int expectedPeriodicCanceled, int expectedContinuationCanceled) {
-        // This experimental feature should not run on Chrome Stable.
-        if (!PrecacheController.canScheduleTasks(mContext)) {
+        if (!mPrecacheTaskScheduler.canScheduleTasks(mContext)) {
             expectedPeriodicScheduled = 0;
             expectedContinuationScheduled = 0;
         }
@@ -150,14 +157,14 @@ public class PrecacheControllerTest extends InstrumentationTestCase {
     @Feature({"Precache"})
     public void testStartPrecachingNotEnabled() {
         PrecacheController.setIsPrecachingEnabled(mContext, false);
-        verifyScheduledAndCanceledCounts(0, 0, 1, 1);
+        verifyScheduledAndCanceledCounts(0, 0, 0, 0);
         assertEquals(0, mPrecacheLauncher.startCnt);
         assertTrue(mPrecacheController.precache(PrecacheController.PERIODIC_TASK_TAG)
                         == GcmNetworkManager.RESULT_SUCCESS);
         assertFalse(mPrecacheController.isPrecaching());
         verifyLockCounts(0, 0);
         // All tasks are canceled.
-        verifyScheduledAndCanceledCounts(0, 0, 2, 2);
+        verifyScheduledAndCanceledCounts(0, 0, 1, 1);
         assertEquals(0, mPrecacheLauncher.startCnt);
     }
 
@@ -247,5 +254,23 @@ public class PrecacheControllerTest extends InstrumentationTestCase {
         // No tasks are scheduled or canceled.
         verifyScheduledAndCanceledCounts(0, 0, 0, 0);
         verifyLockCounts(0, 0);
+    }
+
+    @SmallTest
+    @Feature({"Precache"})
+    public void testPrecachingEnabledPreferences() {
+        // Initial enable will schedule a periodic task.
+        PrecacheController.setIsPrecachingEnabled(mContext, true);
+        verifyScheduledAndCanceledCounts(1, 0, 0, 0);
+        // Subsequent enable will not schedule or cancel tasks.
+        PrecacheController.setIsPrecachingEnabled(mContext, true);
+        verifyScheduledAndCanceledCounts(1, 0, 0, 0);
+
+        // Disabling will cancel periodic and one-off tasks.
+        PrecacheController.setIsPrecachingEnabled(mContext, false);
+        verifyScheduledAndCanceledCounts(1, 0, 1, 1);
+        // Subsequent disable will not schedule or cancel tasks.
+        PrecacheController.setIsPrecachingEnabled(mContext, false);
+        verifyScheduledAndCanceledCounts(1, 0, 1, 1);
     }
 }

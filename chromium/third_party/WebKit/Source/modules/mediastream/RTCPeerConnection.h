@@ -62,15 +62,14 @@ class ScriptState;
 class VoidCallback;
 
 class RTCPeerConnection final
-    : public RefCountedGarbageCollectedEventTargetWithInlineData<RTCPeerConnection>
+    : public EventTargetWithInlineData
     , public WebRTCPeerConnectionHandlerClient
     , public ActiveScriptWrappable
     , public ActiveDOMObject {
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(RTCPeerConnection);
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(RTCPeerConnection);
+    USING_PRE_FINALIZER(RTCPeerConnection, dispose);
 public:
-    // TODO(hbos): Create with expired RTCCertificate should fail, see crbug.com/565278.
     static RTCPeerConnection* create(ExecutionContext*, const Dictionary&, const Dictionary&, ExceptionState&);
     ~RTCPeerConnection() override;
 
@@ -161,15 +160,13 @@ public:
         return !m_closed && !m_stopped;
     }
 
-    // Oilpan: need to eagerly finalize m_peerHandler
-    EAGERLY_FINALIZE();
     DECLARE_VIRTUAL_TRACE();
 
 private:
     typedef Function<bool()> BoolFunction;
     class EventWrapper : public GarbageCollectedFinalized<EventWrapper> {
     public:
-        EventWrapper(Event*, PassOwnPtr<BoolFunction>);
+        EventWrapper(Event*, std::unique_ptr<BoolFunction>);
         // Returns true if |m_setupFunction| returns true or it is null.
         // |m_event| will only be fired if setup() returns true;
         bool setup();
@@ -179,13 +176,14 @@ private:
         Member<Event> m_event;
 
     private:
-        OwnPtr<BoolFunction> m_setupFunction;
+        std::unique_ptr<BoolFunction> m_setupFunction;
     };
 
     RTCPeerConnection(ExecutionContext*, RTCConfiguration*, WebMediaConstraints, ExceptionState&);
+    void dispose();
 
     void scheduleDispatchEvent(Event*);
-    void scheduleDispatchEvent(Event*, PassOwnPtr<BoolFunction>);
+    void scheduleDispatchEvent(Event*, std::unique_ptr<BoolFunction>);
     void dispatchScheduledEvent();
     bool hasLocalStreamWithTrackId(const String& trackId);
 

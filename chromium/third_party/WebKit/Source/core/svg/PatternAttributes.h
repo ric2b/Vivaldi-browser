@@ -173,9 +173,8 @@ private:
     bool m_patternContentElementSet : 1;
 };
 
-#if ENABLE(OILPAN)
 // Wrapper object for the PatternAttributes part object.
-class PatternAttributesWrapper : public GarbageCollectedFinalized<PatternAttributesWrapper> {
+class PatternAttributesWrapper : public GarbageCollected<PatternAttributesWrapper> {
 public:
     static PatternAttributesWrapper* create()
     {
@@ -193,7 +192,6 @@ private:
 
     PatternAttributes m_attributes;
 };
-#endif
 
 } // namespace blink
 

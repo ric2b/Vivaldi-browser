@@ -6,6 +6,7 @@
 #define CONTENT_PUBLIC_BROWSER_WEB_DRAG_DEST_DELEGATE_H_
 
 #include "base/strings/string16.h"
+#include "third_party/WebKit/public/platform/WebDragOperation.h"
 
 class GURL;
 
@@ -31,6 +32,13 @@ class WebDragDestDelegate {
   virtual void OnDrop() = 0;
   // This should also clear any state kept about this drag.
   virtual void OnDragLeave() = 0;
+
+  // Vivaldi addition
+  virtual blink::WebDragOperationsMask OnDragEnd(
+      int screen_x,
+      int screen_y,
+      blink::WebDragOperationsMask ops,
+      bool cancelled) = 0;
 
 #if defined(USE_AURA)
   // Called at the start of every drag to supply the data associated with the

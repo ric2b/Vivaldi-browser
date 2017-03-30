@@ -43,13 +43,16 @@
 #include "modules/notifications/NotificationData.h"
 #include "modules/notifications/NotificationOptions.h"
 #include "modules/notifications/NotificationPermissionClient.h"
+#include "modules/notifications/NotificationResourcesLoader.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/UserGestureIndicator.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/WebString.h"
 #include "public/platform/modules/notifications/WebNotificationAction.h"
+#include "public/platform/modules/notifications/WebNotificationConstants.h"
 #include "public/platform/modules/notifications/WebNotificationManager.h"
+#include "wtf/Functional.h"
 
 namespace blink {
 namespace {
@@ -99,7 +102,7 @@ Notification* Notification::create(ExecutionContext* context, const String& titl
         return nullptr;
 
     Notification* notification = new Notification(context, data);
-    notification->scheduleShow();
+    notification->schedulePrepareShow();
     notification->suspendIfNeeded();
 
     return notification;
@@ -121,7 +124,7 @@ Notification::Notification(ExecutionContext* context, const WebNotificationData&
     , m_data(data)
     , m_persistentId(kInvalidPersistentId)
     , m_state(NotificationStateIdle)
-    , m_asyncRunner(AsyncMethodRunner<Notification>::create(this, &Notification::show))
+    , m_prepareShowMethodRunner(AsyncMethodRunner<Notification>::create(this, &Notification::prepareShow))
 {
     ASSERT(notificationManager());
 }
@@ -130,26 +133,35 @@ Notification::~Notification()
 {
 }
 
-void Notification::scheduleShow()
+void Notification::schedulePrepareShow()
 {
     ASSERT(m_state == NotificationStateIdle);
-    ASSERT(!m_asyncRunner->isActive());
+    ASSERT(!m_prepareShowMethodRunner->isActive());
 
-    m_asyncRunner->runAsync();
+    m_prepareShowMethodRunner->runAsync();
 }
 
-void Notification::show()
+void Notification::prepareShow()
 {
     ASSERT(m_state == NotificationStateIdle);
-    if (Notification::checkPermission(getExecutionContext()) != WebNotificationPermissionAllowed) {
+    if (Notification::checkPermission(getExecutionContext()) != mojom::blink::PermissionStatus::GRANTED) {
         dispatchErrorEvent();
         return;
     }
 
+    m_loader = new NotificationResourcesLoader(bind<NotificationResourcesLoader*>(&Notification::didLoadResources, WeakPersistentThisPointer<Notification>(this)));
+    m_loader->start(getExecutionContext(), m_data);
+}
+
+void Notification::didLoadResources(NotificationResourcesLoader* loader)
+{
+    DCHECK_EQ(loader, m_loader.get());
+
     SecurityOrigin* origin = getExecutionContext()->getSecurityOrigin();
     ASSERT(origin);
 
-    notificationManager()->show(WebSecurityOrigin(origin), m_data, this);
+    notificationManager()->show(WebSecurityOrigin(origin), m_data, loader->getResources(), this);
+    m_loader.clear();
 
     m_state = NotificationStateShowing;
 }
@@ -321,14 +333,14 @@ HeapVector<NotificationAction> Notification::actions() const
     return actions;
 }
 
-String Notification::permissionString(WebNotificationPermission permission)
+String Notification::permissionString(mojom::blink::PermissionStatus permission)
 {
     switch (permission) {
-    case WebNotificationPermissionAllowed:
+    case mojom::blink::PermissionStatus::GRANTED:
         return "granted";
-    case WebNotificationPermissionDenied:
+    case mojom::blink::PermissionStatus::DENIED:
         return "denied";
-    case WebNotificationPermissionDefault:
+    case mojom::blink::PermissionStatus::ASK:
         return "default";
     }
 
@@ -341,7 +353,7 @@ String Notification::permission(ExecutionContext* context)
     return permissionString(checkPermission(context));
 }
 
-WebNotificationPermission Notification::checkPermission(ExecutionContext* context)
+mojom::blink::PermissionStatus Notification::checkPermission(ExecutionContext* context)
 {
     SecurityOrigin* origin = context->getSecurityOrigin();
     ASSERT(origin);
@@ -362,11 +374,7 @@ ScriptPromise Notification::requestPermission(ScriptState* scriptState, Notifica
 
 size_t Notification::maxActions()
 {
-    // Returns a fixed number for unit tests, which run without the availability of the Platform object.
-    if (!notificationManager())
-        return 2;
-
-    return notificationManager()->maxActions();
+    return kWebNotificationMaxActions;
 }
 
 DispatchEventResult Notification::dispatchEventInternal(Event* event)
@@ -386,18 +394,22 @@ void Notification::stop()
 
     m_state = NotificationStateClosed;
 
-    m_asyncRunner->stop();
+    m_prepareShowMethodRunner->stop();
+
+    if (m_loader)
+        m_loader->stop();
 }
 
 bool Notification::hasPendingActivity() const
 {
-    return m_state == NotificationStateShowing || m_asyncRunner->isActive();
+    return m_state == NotificationStateShowing || m_prepareShowMethodRunner->isActive() || m_loader;
 }
 
 DEFINE_TRACE(Notification)
 {
-    visitor->trace(m_asyncRunner);
-    RefCountedGarbageCollectedEventTargetWithInlineData<Notification>::trace(visitor);
+    visitor->trace(m_prepareShowMethodRunner);
+    visitor->trace(m_loader);
+    EventTargetWithInlineData::trace(visitor);
     ActiveDOMObject::trace(visitor);
 }
 

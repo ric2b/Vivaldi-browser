@@ -68,12 +68,72 @@ enum WebBluetoothError {
   ENUM_MAX_VALUE = REQUEST_DEVICE_WITHOUT_FRAME,
 };
 
+// Indicates if the function will return a single or multiple
+// GATT objects.
+enum WebBluetoothGATTQueryQuantity {
+  SINGLE,
+  MULTIPLE
+};
+
+struct WebBluetoothRemoteGATTService {
+  string instance_id;
+  string uuid;
+};
+
+struct WebBluetoothRemoteGATTCharacteristic {
+  string instance_id;
+  string uuid;
+  uint32 properties;
+};
+
 // TODO(ortuno): Define Bluetooth Service.
 // https://crbug.com/508771
 
 // Web Bluetooth Interface that Blink can use to perform
 // Bluetooth GATT Operations on Bluetooth Devices.
 interface WebBluetoothService {
+  // Sets the client for this WebBluetoothService. The service will notify the
+  // client of device events e.g. when a Characteristic's value changes or when
+  // a device disconnects.
+  SetClient(associated WebBluetoothServiceClient client);
+
+  // Creates a GATT Connection to a Bluetooth Device with |device_id| if a
+  // connection to the device didn't exist already. If a GATT connection existed
+  // already then this function increases the ref count to keep that connection
+  // alive.
+  RemoteServerConnect(string device_id) => (WebBluetoothError error);
+
+  // If a GATT connection exists for Device with |device_id| then decreases
+  // the ref count for that connection.
+  RemoteServerDisconnect(string device_id);
+
+  // Returns the first GATT Service with |service_uuid| of a Bluetooth Device
+  // with |device_id|.
+  RemoteServerGetPrimaryService(
+    string device_id,
+    string service_uuid) => (
+      WebBluetoothError error,
+      WebBluetoothRemoteGATTService? service);
+
+  // Returns the Characteristics of a GATT Service with |service_instance_id|.
+  // If |quantity| == WebBluetoothGATTQueryQuantity::SINGLE, only one
+  // characteristic will be returned.
+  RemoteServiceGetCharacteristics(
+    string service_instance_id,
+    WebBluetoothGATTQueryQuantity quantity,
+    string? characteristics_uuid) => (
+      WebBluetoothError error,
+      array<WebBluetoothRemoteGATTCharacteristic>? characteristics);
+
+  // Reads the value for characteristic with
+  // |characteristic_instance_id|. If the value is successfully read the
+  // callback will be run with WebBluetoothError::SUCCESS and the
+  // characteristic's value. If the value is not successfully read the
+  // callback with be run with the corresponding error and nullptr for value.
+  RemoteCharacteristicReadValue(
+    string characteristic_instance_id) => (
+    WebBluetoothError error,
+    array<uint8>? value);
 
   // Writes a value to the characteristic with
   // |characteristic_instance_id|. The callback is run with
@@ -83,4 +143,22 @@ interface WebBluetoothService {
     string characteristic_instance_id,
     array<uint8> value) => (WebBluetoothError error);
 
+  // Starts notifications for the characteristic with
+  // |characteristic_instance_id|.
+  RemoteCharacteristicStartNotifications(
+    string characteristic_instance_id) => (WebBluetoothError error);
+
+  // Stops notifications for the characteristic with
+  // |characteristic_instance_id|.
+  RemoteCharacteristicStopNotifications(
+    string characteristic_instance_id) => ();
+};
+
+// Classes should implement this interface and pass an associated pointer
+// bound to them to the WebBluetoothService by using SetClient. Classes
+// that do this will be notified of device events e.g. device disconnection.
+interface WebBluetoothServiceClient {
+  RemoteCharacteristicValueChanged(string characteristic_instance_id,
+                                   array<uint8> value);
+  GattServerDisconnected(string device_id);
 };

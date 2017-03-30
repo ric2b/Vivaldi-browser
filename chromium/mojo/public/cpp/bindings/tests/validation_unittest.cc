@@ -12,7 +12,7 @@
 
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "mojo/message_pump/message_pump_mojo.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "mojo/public/c/system/macros.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
@@ -154,7 +154,7 @@ bool ReadTestCase(const std::string& test,
   message->Initialize(static_cast<uint32_t>(data.size()),
                       false /* zero_initialized */);
   if (!data.empty())
-    memcpy(message->buffer()->Allocate(data.size()), &data[0], data.size());
+    memcpy(message->mutable_data(), &data[0], data.size());
   message->mutable_handles()->resize(num_handles);
 
   return true;
@@ -165,6 +165,7 @@ void RunValidationTests(const std::string& prefix,
   std::vector<std::string> names =
       EnumerateSourceRootRelativeDirectory(GetPath("", ""));
   std::vector<std::string> tests = GetMatchingTests(names, prefix);
+  ASSERT_FALSE(tests.empty());
 
   for (size_t i = 0; i < tests.size(); ++i) {
     Message message;
@@ -196,7 +197,7 @@ class DummyMessageReceiver : public MessageReceiver {
 
 class ValidationTest : public testing::Test {
  public:
-  ValidationTest() : loop_(common::MessagePumpMojo::Create()) {}
+  ValidationTest() {}
 
  protected:
   base::MessageLoop loop_;
@@ -238,7 +239,8 @@ class ValidationIntegrationTest : public ValidationTest {
                         ScopedMessagePipeHandle handle)
         : owner_(owner),
           connector_(std::move(handle),
-                     mojo::internal::Connector::SINGLE_THREADED_SEND) {
+                     mojo::internal::Connector::SINGLE_THREADED_SEND,
+                     base::ThreadTaskRunnerHandle::Get()) {
       connector_.set_enforce_errors_from_incoming_receiver(false);
     }
     ~TestMessageReceiver() override {}

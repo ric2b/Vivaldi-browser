@@ -3,7 +3,6 @@
 //
 #import <Cocoa/Cocoa.h>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/task/cancelable_task_tracker.h"
 
 namespace favicon {
@@ -29,7 +28,7 @@ class FaviconLoaderMac {
   void CancelPendingRequests();
 
  private:
-  scoped_ptr<base::CancelableTaskTracker> cancelable_task_tracker_;
+  std::unique_ptr<base::CancelableTaskTracker> cancelable_task_tracker_;
   favicon::FaviconService* favicon_service_;
   Profile* profile_;
 };

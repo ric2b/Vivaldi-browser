@@ -27,6 +27,10 @@ class View;
 
 namespace message_center {
 
+namespace test {
+class MessagePopupCollectionTest;
+}
+
 class MessagePopupCollection;
 class MessageView;
 class Notification;
@@ -69,7 +73,7 @@ class ToastContentsView : public views::WidgetDelegateView,
   gfx::Point origin() { return origin_; }
   gfx::Rect bounds() { return gfx::Rect(origin_, preferred_size_); }
 
-  const std::string& id() { return id_; }
+  const std::string& id() const { return id_; }
 
   // Overridden from views::View:
   void OnMouseEntered(const ui::MouseEvent& event) override;
@@ -79,11 +83,13 @@ class ToastContentsView : public views::WidgetDelegateView,
   void GetAccessibleState(ui::AXViewState* state) override;
 
  private:
+  friend class test::MessagePopupCollectionTest;
+
   // Overridden from MessageCenterController:
   void ClickOnNotification(const std::string& notification_id) override;
   void RemoveNotification(const std::string& notification_id,
                           bool by_user) override;
-  scoped_ptr<ui::MenuModel> CreateMenuModel(
+  std::unique_ptr<ui::MenuModel> CreateMenuModel(
       const NotifierId& notifier_id,
       const base::string16& display_source) override;
   bool HasClickedListener(const std::string& notification_id) override;
@@ -101,6 +107,9 @@ class ToastContentsView : public views::WidgetDelegateView,
   void WindowClosing() override;
   void OnDisplayChanged() override;
   void OnWorkAreaChanged() override;
+
+  // Recalculates preferred size from underlying view and notifies about it.
+  void UpdatePreferredSize();
 
   // Initialization and update.
   void CreateWidget(gfx::NativeView parent);
@@ -122,8 +131,8 @@ class ToastContentsView : public views::WidgetDelegateView,
   // Id if the corresponding Notification.
   std::string id_;
 
-  scoped_ptr<gfx::SlideAnimation> bounds_animation_;
-  scoped_ptr<gfx::SlideAnimation> fade_animation_;
+  std::unique_ptr<gfx::SlideAnimation> bounds_animation_;
+  std::unique_ptr<gfx::SlideAnimation> fade_animation_;
 
   gfx::Rect animated_bounds_start_;
   gfx::Rect animated_bounds_end_;

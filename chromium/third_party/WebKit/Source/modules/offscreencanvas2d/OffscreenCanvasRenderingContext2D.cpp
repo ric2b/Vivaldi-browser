@@ -4,7 +4,7 @@
 
 #include "modules/offscreencanvas2d/OffscreenCanvasRenderingContext2D.h"
 
-#include "bindings/modules/v8/UnionTypesModules.h"
+#include "bindings/modules/v8/OffscreenCanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContext.h"
 #include "core/frame/ImageBitmap.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/StaticBitmapImage.h"
@@ -19,32 +19,37 @@ OffscreenCanvasRenderingContext2D::~OffscreenCanvasRenderingContext2D()
 }
 
 OffscreenCanvasRenderingContext2D::OffscreenCanvasRenderingContext2D(OffscreenCanvas* canvas, const CanvasContextCreationAttributes& attrs)
-    : OffscreenCanvasRenderingContext(canvas)
+    : CanvasRenderingContext(nullptr, canvas)
     , m_hasAlpha(attrs.alpha())
 {
 }
 
 DEFINE_TRACE(OffscreenCanvasRenderingContext2D)
 {
-    OffscreenCanvasRenderingContext::trace(visitor);
+    CanvasRenderingContext::trace(visitor);
     BaseRenderingContext2D::trace(visitor);
 }
 
 // BaseRenderingContext2D implementation
 bool OffscreenCanvasRenderingContext2D::originClean() const
 {
-    return m_originClean;
+    return getOffscreenCanvas()->originClean();
 }
 
 void OffscreenCanvasRenderingContext2D::setOriginTainted()
 {
-    m_originClean = false;
+    return getOffscreenCanvas()->setOriginTainted();
 }
 
-bool OffscreenCanvasRenderingContext2D::wouldTaintOrigin(CanvasImageSource* source)
+bool OffscreenCanvasRenderingContext2D::wouldTaintOrigin(CanvasImageSource* source, ExecutionContext* executionContext)
 {
-    NOTIMPLEMENTED();
-    return false;
+    if (executionContext->isWorkerGlobalScope()) {
+        // Currently, we only support passing in ImageBitmap as source image in
+        // drawImage() or createPattern() in a OffscreenCanvas2d in worker.
+        ASSERT(source->isImageBitmap());
+    }
+
+    return CanvasRenderingContext::wouldTaintOrigin(source, executionContext->getSecurityOrigin());
 }
 
 int OffscreenCanvasRenderingContext2D::width() const
@@ -81,8 +86,14 @@ ImageBitmap* OffscreenCanvasRenderingContext2D::transferToImageBitmap(ExceptionS
     // TODO: crbug.com/593514 Add support for GPU rendering
     RefPtr<SkImage> skImage = m_imageBuffer->newSkImageSnapshot(PreferNoAcceleration, SnapshotReasonUnknown);
     RefPtr<StaticBitmapImage> image = StaticBitmapImage::create(skImage.release());
+    image->setOriginClean(this->originClean());
     m_imageBuffer.clear(); // "Transfer" means no retained buffer
     return ImageBitmap::create(image.release());
+}
+
+void OffscreenCanvasRenderingContext2D::setOffscreenCanvasGetContextResult(OffscreenRenderingContext& result)
+{
+    result.setOffscreenCanvasRenderingContext2D(this);
 }
 
 bool OffscreenCanvasRenderingContext2D::parseColorOrCurrentColor(Color& color, const String& colorString) const

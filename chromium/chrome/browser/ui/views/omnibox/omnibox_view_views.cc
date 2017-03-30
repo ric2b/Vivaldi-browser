@@ -22,7 +22,6 @@
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_popup_contents_view.h"
-#include "chrome/browser/ui/views/settings_api_bubble_helper_views.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/browser/bookmark_node_data.h"
 #include "components/omnibox/browser/autocomplete_input.h"
@@ -62,6 +61,10 @@
 
 #if defined(OS_WIN)
 #include "chrome/browser/browser_process.h"
+#endif
+
+#if defined(ENABLE_EXTENSIONS)
+#include "chrome/browser/ui/extensions/settings_api_bubble_helpers.h"
 #endif
 
 using bookmarks::BookmarkNodeData;
@@ -271,10 +274,9 @@ base::string16 OmniboxViewViews::GetText() const {
 }
 
 void OmniboxViewViews::SetUserText(const base::string16& text,
-                                   const base::string16& display_text,
                                    bool update_popup) {
   saved_selection_for_focus_change_ = gfx::Range::InvalidRange();
-  OmniboxView::SetUserText(text, display_text, update_popup);
+  OmniboxView::SetUserText(text, update_popup);
 }
 
 void OmniboxViewViews::SetForcedQuery() {
@@ -435,7 +437,7 @@ bool OmniboxViewViews::HandleEarlyTabActions(const ui::KeyEvent& event) {
 }
 
 void OmniboxViewViews::AccessibilitySetValue(const base::string16& new_value) {
-  SetUserText(new_value, new_value, true);
+  SetUserText(new_value, true);
 }
 
 void OmniboxViewViews::UpdateSecurityLevel() {
@@ -602,8 +604,10 @@ void OmniboxViewViews::ShowImeIfNeeded() {
 }
 
 void OmniboxViewViews::OnMatchOpened(AutocompleteMatch::Type match_type) {
+#if defined(ENABLE_EXTENSIONS)
   extensions::MaybeShowExtensionControlledSearchNotification(
       profile_, location_bar_view_->GetWebContents(), match_type);
+#endif
 }
 
 int OmniboxViewViews::GetOmniboxTextLength() const {

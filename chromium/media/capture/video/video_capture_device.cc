@@ -75,6 +75,8 @@ VideoCaptureDevice::Name::Name(const std::string& name,
 }
 #endif
 
+VideoCaptureDevice::Name::Name(const Name& other) = default;
+
 VideoCaptureDevice::Name::~Name() {
 }
 
@@ -137,6 +139,11 @@ VideoCaptureDevice::Client::Buffer::~Buffer() {
 }
 
 VideoCaptureDevice::~VideoCaptureDevice() {
+}
+
+bool VideoCaptureDevice::TakePhoto(const TakePhotoCallback& photo_callback) {
+  NOTIMPLEMENTED();
+  return false;
 }
 
 PowerLineFrequency VideoCaptureDevice::GetPowerLineFrequencyForLocation()

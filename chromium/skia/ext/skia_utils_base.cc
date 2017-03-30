@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "skia/ext/skia_utils_base.h"
+#include "third_party/skia/include/core/SkFontLCDConfig.h"
 
 namespace skia {
 
@@ -40,6 +41,24 @@ bool ReadSkFontIdentity(base::PickleIterator* iter,
   return true;
 }
 
+bool ReadSkFontStyle(base::PickleIterator* iter, SkFontStyle* style) {
+  uint16_t reply_weight;
+  uint16_t reply_width;
+  uint16_t reply_slant;
+
+  if (!iter->ReadUInt16(&reply_weight) ||
+      !iter->ReadUInt16(&reply_width) ||
+      !iter->ReadUInt16(&reply_slant))
+    return false;
+
+  if (style) {
+    *style = SkFontStyle(reply_weight,
+                         reply_width,
+                         static_cast<SkFontStyle::Slant>(reply_slant));
+  }
+  return true;
+}
+
 bool WriteSkString(base::Pickle* pickle, const SkString& str) {
   return pickle->WriteData(str.c_str(), str.size());
 }
@@ -51,28 +70,35 @@ bool WriteSkFontIdentity(base::Pickle* pickle,
          WriteSkString(pickle, identity.fString);
 }
 
+bool WriteSkFontStyle(base::Pickle* pickle, SkFontStyle style) {
+  return pickle->WriteUInt16(style.weight()) &&
+         pickle->WriteUInt16(style.width()) &&
+         pickle->WriteUInt16(style.slant());
+}
+
 SkPixelGeometry ComputeDefaultPixelGeometry() {
-    SkFontHost::LCDOrder order = SkFontHost::GetSubpixelOrder();
-    if (SkFontHost::kNONE_LCDOrder == order) {
-        return kUnknown_SkPixelGeometry;
-    } else {
-        // Bit0 is RGB(0), BGR(1)
-        // Bit1 is H(0), V(1)
-        const SkPixelGeometry gGeo[] = {
-            kRGB_H_SkPixelGeometry,
-            kBGR_H_SkPixelGeometry,
-            kRGB_V_SkPixelGeometry,
-            kBGR_V_SkPixelGeometry,
-        };
-        int index = 0;
-        if (SkFontHost::kBGR_LCDOrder == order) {
-            index |= 1;
-        }
-        if (SkFontHost::kVertical_LCDOrientation == SkFontHost::GetSubpixelOrientation()){
-            index |= 2;
-        }
-        return gGeo[index];
-    }
+  SkFontLCDConfig::LCDOrder order = SkFontLCDConfig::GetSubpixelOrder();
+  if (SkFontLCDConfig::kNONE_LCDOrder == order) {
+    return kUnknown_SkPixelGeometry;
+  }
+
+  // Bit0 is RGB(0), BGR(1)
+  // Bit1 is H(0), V(1)
+  const SkPixelGeometry gGeo[] = {
+    kRGB_H_SkPixelGeometry,
+    kBGR_H_SkPixelGeometry,
+    kRGB_V_SkPixelGeometry,
+    kBGR_V_SkPixelGeometry,
+  };
+  int index = 0;
+  if (SkFontLCDConfig::kBGR_LCDOrder == order) {
+    index |= 1;
+  }
+  if (SkFontLCDConfig::kVertical_LCDOrientation ==
+      SkFontLCDConfig::GetSubpixelOrientation()) {
+    index |= 2;
+  }
+  return gGeo[index];
 }
 
 }  // namespace skia

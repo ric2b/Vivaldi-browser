@@ -5,11 +5,11 @@
 #ifndef CHROME_BROWSER_SEARCH_THUMBNAIL_SOURCE_H_
 #define CHROME_BROWSER_SEARCH_THUMBNAIL_SOURCE_H_
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "content/public/browser/url_data_source.h"
 #include "url/gurl.h"
@@ -21,12 +21,16 @@ namespace base {
 class RefCountedMemory;
 }
 
-namespace thumbnails {
-class ThumbnailService;
+namespace gfx {
+class Image;
 }
 
-namespace suggestions {
+namespace image_fetcher {
 class ImageFetcher;
+}
+
+namespace thumbnails {
+class ThumbnailService;
 }
 
 // ThumbnailSource is the gateway between network-level chrome: requests for
@@ -61,7 +65,7 @@ class ThumbnailSource : public content::URLDataSource {
   void SendFetchedUrlImage(
       const content::URLDataSource::GotDataCallback& callback,
       const GURL& url,
-      const SkBitmap* bitmap);
+      const gfx::Image& image);
 
   // Raw PNG representation of the thumbnail to show when the thumbnail
   // database doesn't have a thumbnail for a webpage.
@@ -71,7 +75,7 @@ class ThumbnailSource : public content::URLDataSource {
   scoped_refptr<thumbnails::ThumbnailService> thumbnail_service_;
 
   // ImageFetcher.
-  scoped_ptr<suggestions::ImageFetcher> image_fetcher_;
+  std::unique_ptr<image_fetcher::ImageFetcher> image_fetcher_;
 
   // Indicate that, when a URL for which we don't have a thumbnail is requested
   // from this source, then Chrome should capture a thumbnail next time it

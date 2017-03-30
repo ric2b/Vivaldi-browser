@@ -22,13 +22,13 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "media/audio/audio_io.h"
-#include "media/audio/audio_parameters.h"
+#include "media/base/audio_parameters.h"
 
 struct pa_context;
 struct pa_operation;
@@ -92,7 +92,7 @@ class PulseAudioOutputStream : public AudioOutputStream {
   AudioSourceCallback* source_callback_;
 
   // Container for retrieving data from AudioSourceCallback::OnMoreData().
-  scoped_ptr<AudioBus> audio_bus_;
+  std::unique_ptr<AudioBus> audio_bus_;
 
   base::ThreadChecker thread_checker_;
 

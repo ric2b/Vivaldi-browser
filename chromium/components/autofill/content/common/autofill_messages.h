@@ -22,7 +22,6 @@
 #include "content/public/common/common_param_traits_macros.h"
 #include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_message_utils.h"
-#include "third_party/WebKit/public/web/WebFormElement.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/ipc/gfx_param_traits.h"
 #include "ui/gfx/ipc/skia/gfx_skia_param_traits.h"
@@ -103,10 +102,6 @@ IPC_STRUCT_TRAITS_BEGIN(autofill::PasswordAndRealm)
   IPC_STRUCT_TRAITS_MEMBER(realm)
 IPC_STRUCT_TRAITS_END()
 
-IPC_ENUM_TRAITS_MAX_VALUE(
-    blink::WebFormElement::AutocompleteResult,
-    blink::WebFormElement::AutocompleteResultErrorInvalid)
-
 // Singly-included section for type definitions.
 #ifndef COMPONENTS_AUTOFILL_CONTENT_COMMON_AUTOFILL_MESSAGES_H_
 #define COMPONENTS_AUTOFILL_CONTENT_COMMON_AUTOFILL_MESSAGES_H_
@@ -119,10 +114,6 @@ using FormsPredictionsMap =
 #endif  // COMPONENTS_AUTOFILL_CONTENT_COMMON_AUTOFILL_MESSAGES_H_
 
 // Autofill messages sent from the browser to the renderer.
-
-// Tells the render frame that a user gesture was observed somewhere in the tab
-// (including in a different frame).
-IPC_MESSAGE_ROUTED0(AutofillMsg_FirstUserGestureObservedInTab)
 
 // Instructs the renderer to fill the active form with the given form data.
 IPC_MESSAGE_ROUTED2(AutofillMsg_FillForm,
@@ -202,15 +193,6 @@ IPC_MESSAGE_ROUTED0(AutofillMsg_UserTriggeredGeneratePassword)
 IPC_MESSAGE_ROUTED1(AutofillMsg_FormNotBlacklisted,
                     autofill::PasswordForm /* form checked */)
 
-// Sent when requestAutocomplete() finishes (either succesfully or with an
-// error). If it was a success, the renderer fills the form that requested
-// autocomplete with the |form_data| values input by the user. |message|
-// is printed to the console if non-empty.
-IPC_MESSAGE_ROUTED3(AutofillMsg_RequestAutocompleteResult,
-                    blink::WebFormElement::AutocompleteResult /* result */,
-                    base::string16 /* message */,
-                    autofill::FormData /* form_data */)
-
 // Sent when Autofill manager gets the query response from the Autofill server
 // and there are fields classified for password generation in the response.
 IPC_MESSAGE_ROUTED1(
@@ -227,9 +209,6 @@ IPC_MESSAGE_ROUTED1(AutofillMsg_AutofillUsernameAndPasswordDataReceived,
 
 // TODO(creis): check in the browser that the renderer actually has permission
 // for the URL to avoid compromised renderers talking to the browser.
-
-// Notification that there has been a user gesture.
-IPC_MESSAGE_ROUTED0(AutofillHostMsg_FirstUserGestureObserved)
 
 // Notification that forms have been seen that are candidates for
 // filling/submitting by the AutofillManager.
@@ -306,10 +285,6 @@ IPC_MESSAGE_ROUTED2(AutofillHostMsg_DidFillAutofillFormData,
                     autofill::FormData /* the form */,
                     base::TimeTicks /* timestamp */)
 
-// Sent when a form receives a request to do interactive autocomplete.
-IPC_MESSAGE_ROUTED1(AutofillHostMsg_RequestAutocomplete,
-                    autofill::FormData /* form_data */)
-
 // Send when a text field is done editing.
 IPC_MESSAGE_ROUTED0(AutofillHostMsg_DidEndTextFieldEditing)
 
@@ -341,7 +316,12 @@ IPC_MESSAGE_ROUTED2(AutofillHostMsg_ShowPasswordEditingPopup,
 // Instructs the browser to hide any password generation popups.
 IPC_MESSAGE_ROUTED0(AutofillHostMsg_HidePasswordGenerationPopup)
 
-// Instructs the browsr that form no longer contains a generated password.
+// Instructs the browser to presave the form with generated password.
+IPC_MESSAGE_ROUTED1(AutofillHostMsg_PresaveGeneratedPassword,
+                    autofill::PasswordForm)
+
+// Instructs the browser that form no longer contains a generated password and
+// the presaved form should be removed.
 IPC_MESSAGE_ROUTED1(AutofillHostMsg_PasswordNoLongerGenerated,
                     autofill::PasswordForm)
 

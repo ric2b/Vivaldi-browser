@@ -32,9 +32,11 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.BuildInfo;
 import org.chromium.base.CommandLineInitUtil;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.TraceEvent;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.AppLinkHandler;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -51,9 +53,10 @@ import org.chromium.chrome.browser.customtabs.SeparateTaskCustomTabActivity;
 import org.chromium.chrome.browser.externalnav.IntentWithGesturesHandler;
 import org.chromium.chrome.browser.firstrun.FirstRunFlowSequencer;
 import org.chromium.chrome.browser.metrics.LaunchMetrics;
+import org.chromium.chrome.browser.metrics.MediaNotificationUma;
 import org.chromium.chrome.browser.metrics.StartupMetrics;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
-import org.chromium.chrome.browser.notifications.NotificationUIManager;
+import org.chromium.chrome.browser.notifications.NotificationPlatformBridge;
 import org.chromium.chrome.browser.partnercustomizations.HomepageManager;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
@@ -205,7 +208,13 @@ public class ChromeLauncherActivity extends Activity
         // The notification settings cog on the flipped side of Notifications and in the Android
         // Settings "App Notifications" view will open us with a specific category.
         if (intent.hasCategory(Notification.INTENT_CATEGORY_NOTIFICATION_PREFERENCES)) {
-            NotificationUIManager.launchNotificationPreferences(this, getIntent());
+            NotificationPlatformBridge.launchNotificationPreferences(this, getIntent());
+            finish();
+            return;
+        }
+
+        if (AppLinkHandler.getInstance((ChromeApplication) getApplication()).handleIncomingIntent(
+                this, intent, mIsCustomTabIntent)) {
             finish();
             return;
         }
@@ -309,7 +318,7 @@ public class ChromeLauncherActivity extends Activity
         }
 
         // Don't reroute Chrome Intents.
-        Context context = ApplicationStatus.getApplicationContext();
+        Context context = ContextUtils.getApplicationContext();
         if (TextUtils.equals(context.getPackageName(),
                 IntentUtils.safeGetStringExtra(intent, Browser.EXTRA_APPLICATION_ID))) {
             return false;
@@ -665,7 +674,7 @@ public class ChromeLauncherActivity extends Activity
                 : Tab.INVALID_TAB_ID;
 
         // Fire an Intent to start a DocumentActivity instance.
-        Context context = ApplicationStatus.getApplicationContext();
+        Context context = ContextUtils.getApplicationContext();
         Intent intent = createLaunchIntent(
                 context, null, loadUrlParams.getUrl(), incognito, parentId);
         setRecentsFlagsOnIntent(intent, Intent.FLAG_ACTIVITY_NEW_DOCUMENT, incognito);
@@ -827,7 +836,7 @@ public class ChromeLauncherActivity extends Activity
     private static boolean relaunchTask(int tabId) {
         if (tabId == Tab.INVALID_TAB_ID) return false;
 
-        Context context = ApplicationStatus.getApplicationContext();
+        Context context = ContextUtils.getApplicationContext();
         ActivityManager manager =
                 (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
         for (AppTask task : manager.getAppTasks()) {
@@ -856,7 +865,7 @@ public class ChromeLauncherActivity extends Activity
     private static int relaunchTask(boolean incognito, String url) {
         if (TextUtils.isEmpty(url)) return Tab.INVALID_TAB_ID;
 
-        Context context = ApplicationStatus.getApplicationContext();
+        Context context = ContextUtils.getApplicationContext();
         ActivityManager manager =
                 (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
         for (AppTask task : manager.getAppTasks()) {
@@ -989,5 +998,6 @@ public class ChromeLauncherActivity extends Activity
             int maskedFlags = intent.getFlags() & flagsOfInterest;
             sIntentFlagsHistogram.record(maskedFlags);
         }
+        MediaNotificationUma.recordClickSource(intent);
     }
 }

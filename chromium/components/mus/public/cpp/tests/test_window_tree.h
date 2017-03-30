@@ -77,6 +77,8 @@ class TestWindowTree : public mojom::WindowTree {
                      const GetWindowTreeCallback& callback) override;
   void SetCapture(uint32_t change_id, uint32_t window_id) override;
   void ReleaseCapture(uint32_t change_id, uint32_t window_id) override;
+  void SetEventObserver(mojom::EventMatcherPtr matcher,
+                        uint32_t observer_id) override;
   void Embed(uint32_t window_id,
              mojom::WindowTreeClientPtr client,
              const EmbedCallback& callback) override;
@@ -90,9 +92,12 @@ class TestWindowTree : public mojom::WindowTree {
   void SetImeVisibility(uint32_t window_id,
                         bool visible,
                         mojo::TextInputStatePtr state) override;
-  void OnWindowInputEventAck(uint32_t event_id, bool handled) override;
+  void OnWindowInputEventAck(uint32_t event_id,
+                             mus::mojom::EventResult result) override;
   void GetWindowManagerClient(
       mojo::AssociatedInterfaceRequest<mojom::WindowManagerClient> internal)
+      override;
+  void GetCursorLocationMemory(const GetCursorLocationMemoryCallback& callback)
       override;
 
   bool got_change_;

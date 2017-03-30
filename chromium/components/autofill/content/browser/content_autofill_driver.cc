@@ -22,6 +22,8 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/site_instance.h"
+#include "content/public/browser/storage_partition.h"
+#include "content/public/common/service_registry.h"
 #include "ipc/ipc_message_macros.h"
 #include "ui/gfx/geometry/size_f.h"
 
@@ -38,12 +40,22 @@ ContentAutofillDriver::ContentAutofillDriver(
                                             client,
                                             app_locale,
                                             enable_download_manager)),
-      autofill_external_delegate_(autofill_manager_.get(), this),
-      request_autocomplete_manager_(this) {
+      autofill_external_delegate_(autofill_manager_.get(), this) {
   autofill_manager_->SetExternalDelegate(&autofill_external_delegate_);
+
+  // ContentAutofillDriver is guaranteed to outlive |render_frame_host|,
+  // as the ContentAutofillDriver instance will be destroyed in
+  // ContentAutofillDriverFactory::RenderFrameDeleted, which is a notification
+  // of |render_frame_host| destruction.
+  render_frame_host->GetServiceRegistry()->AddService(
+      base::Bind(&ContentAutofillDriver::BindRequest, base::Unretained(this)));
 }
 
 ContentAutofillDriver::~ContentAutofillDriver() {}
+
+void ContentAutofillDriver::BindRequest(mojom::AutofillDriverRequest request) {
+  bindings_.AddBinding(this, std::move(request));
+}
 
 bool ContentAutofillDriver::IsOffTheRecord() const {
   return render_frame_host_->GetSiteInstance()
@@ -52,9 +64,9 @@ bool ContentAutofillDriver::IsOffTheRecord() const {
 }
 
 net::URLRequestContextGetter* ContentAutofillDriver::GetURLRequestContext() {
-  return render_frame_host_->GetSiteInstance()
-      ->GetBrowserContext()
-      ->GetRequestContext();
+  return content::BrowserContext::GetDefaultStoragePartition(
+      render_frame_host_->GetSiteInstance()->GetBrowserContext())->
+          GetURLRequestContext();
 }
 
 base::SequencedWorkerPool* ContentAutofillDriver::GetBlockingPool() {
@@ -162,11 +174,14 @@ gfx::RectF ContentAutofillDriver::TransformBoundingBoxToViewportCoordinates(
   return new_box;
 }
 
+// mojom::AutofillDriver:
+void ContentAutofillDriver::FirstUserGestureObserved() {
+  client_->OnFirstUserGestureObserved();
+}
+
 bool ContentAutofillDriver::HandleMessage(const IPC::Message& message) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(ContentAutofillDriver, message)
-  IPC_MESSAGE_FORWARD(AutofillHostMsg_FirstUserGestureObserved, client_,
-                      AutofillClient::OnFirstUserGestureObserved)
   IPC_MESSAGE_FORWARD(AutofillHostMsg_FormsSeen,
                       autofill_manager_.get(),
                       AutofillManager::OnFormsSeen)
@@ -202,9 +217,6 @@ bool ContentAutofillDriver::HandleMessage(const IPC::Message& message) {
   IPC_MESSAGE_FORWARD(AutofillHostMsg_SetDataList,
                       autofill_manager_.get(),
                       AutofillManager::OnSetDataList)
-  IPC_MESSAGE_FORWARD(AutofillHostMsg_RequestAutocomplete,
-                      &request_autocomplete_manager_,
-                      RequestAutocompleteManager::OnRequestAutocomplete)
   IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -221,6 +233,19 @@ void ContentAutofillDriver::SetAutofillManager(
     std::unique_ptr<AutofillManager> manager) {
   autofill_manager_ = std::move(manager);
   autofill_manager_->SetExternalDelegate(&autofill_external_delegate_);
+}
+
+void ContentAutofillDriver::NotifyFirstUserGestureObservedInTab() {
+  ConnectToMojoAutofillAgentIfNeeded();
+  mojo_autofill_agent_->FirstUserGestureObservedInTab();
+}
+
+void ContentAutofillDriver::ConnectToMojoAutofillAgentIfNeeded() {
+  if (mojo_autofill_agent_)
+    return;
+
+  render_frame_host_->GetServiceRegistry()->ConnectToRemoteService(
+      mojo::GetProxy(&mojo_autofill_agent_));
 }
 
 }  // namespace autofill

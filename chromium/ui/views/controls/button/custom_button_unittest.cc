@@ -5,13 +5,14 @@
 #include "ui/views/controls/button/custom_button.h"
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/layout.h"
 #include "ui/base/material_design/material_design_controller.h"
+#include "ui/display/screen.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/test/event_generator.h"
-#include "ui/gfx/screen.h"
 #include "ui/views/animation/ink_drop_delegate.h"
 #include "ui/views/animation/ink_drop_host.h"
 #include "ui/views/animation/test/test_ink_drop_delegate.h"
@@ -85,7 +86,7 @@ class TestCustomButton : public CustomButton, public ButtonListener {
 };
 
 // An InkDropDelegate that keeps track of ink drop visibility.
-class TestInkDropDelegateThatTracksVisibilty : public InkDropDelegate {
+class TestInkDropDelegateThatTracksVisibilty : public TestInkDropDelegate {
  public:
   TestInkDropDelegateThatTracksVisibilty(bool* ink_shown, bool* ink_hidden)
       : ink_shown_(ink_shown), ink_hidden_(ink_hidden) {}
@@ -93,7 +94,8 @@ class TestInkDropDelegateThatTracksVisibilty : public InkDropDelegate {
 
   // InkDropDelegate:
   void OnAction(InkDropState state) override {
-    switch (state) {
+    TestInkDropDelegate::OnAction(state);
+    switch (GetTargetInkDropState()) {
       case InkDropState::ACTION_PENDING:
       case InkDropState::ALTERNATE_ACTION_PENDING:
       case InkDropState::ACTIVATED:
@@ -123,14 +125,14 @@ class TestInkDropDelegateThatTracksVisibilty : public InkDropDelegate {
 // A test Button class that owns a TestInkDropDelegate.
 class TestButtonWithInkDrop : public TestCustomButton {
  public:
-  TestButtonWithInkDrop(scoped_ptr<InkDropDelegate> ink_drop_delegate)
+  TestButtonWithInkDrop(std::unique_ptr<InkDropDelegate> ink_drop_delegate)
       : TestCustomButton(), ink_drop_delegate_(std::move(ink_drop_delegate)) {
     set_ink_drop_delegate(ink_drop_delegate_.get());
   }
   ~TestButtonWithInkDrop() override {}
 
  private:
-  scoped_ptr<views::InkDropDelegate> ink_drop_delegate_;
+  std::unique_ptr<views::InkDropDelegate> ink_drop_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(TestButtonWithInkDrop);
 };
@@ -163,7 +165,8 @@ class CustomButtonTest : public ViewsTestBase {
     ViewsTestBase::TearDown();
   }
 
-  void CreateButtonWithInkDrop(scoped_ptr<InkDropDelegate> ink_drop_delegate) {
+  void CreateButtonWithInkDrop(
+      std::unique_ptr<InkDropDelegate> ink_drop_delegate) {
     delete button_;
     button_ = new TestButtonWithInkDrop(std::move(ink_drop_delegate));
     widget_->SetContentsView(button_);
@@ -177,7 +180,7 @@ class CustomButtonTest : public ViewsTestBase {
   }
 
  private:
-  scoped_ptr<Widget> widget_;
+  std::unique_ptr<Widget> widget_;
   TestCustomButton* button_;
 
   DISALLOW_COPY_AND_ASSIGN(CustomButtonTest);
@@ -390,10 +393,10 @@ TEST_F(CustomButtonTest, AsCustomButton) {
 // Note: Ink drop is not hidden upon release because CustomButton descendants
 // may enter a different ink drop state.
 TEST_F(CustomButtonTest, ButtonClickTogglesInkDrop) {
-  gfx::Point old_cursor = gfx::Screen::GetScreen()->GetCursorScreenPoint();
+  gfx::Point old_cursor = display::Screen::GetScreen()->GetCursorScreenPoint();
   bool ink_shown = false;
   bool ink_hidden = false;
-  CreateButtonWithInkDrop(make_scoped_ptr(
+  CreateButtonWithInkDrop(base::WrapUnique(
       new TestInkDropDelegateThatTracksVisibilty(&ink_shown, &ink_hidden)));
 
   ui::test::EventGenerator generator(GetContext(), widget()->GetNativeWindow());
@@ -409,10 +412,10 @@ TEST_F(CustomButtonTest, ButtonClickTogglesInkDrop) {
 // Tests that pressing a button shows and releasing capture hides ink drop.
 // Releasing capture should also reset PRESSED button state to NORMAL.
 TEST_F(CustomButtonTest, CaptureLossHidesInkDrop) {
-  gfx::Point old_cursor = gfx::Screen::GetScreen()->GetCursorScreenPoint();
+  gfx::Point old_cursor = display::Screen::GetScreen()->GetCursorScreenPoint();
   bool ink_shown = false;
   bool ink_hidden = false;
-  CreateButtonWithInkDrop(make_scoped_ptr(
+  CreateButtonWithInkDrop(base::WrapUnique(
       new TestInkDropDelegateThatTracksVisibilty(&ink_shown, &ink_hidden)));
 
   ui::test::EventGenerator generator(GetContext(), widget()->GetNativeWindow());
@@ -435,7 +438,7 @@ TEST_F(CustomButtonTest, CaptureLossHidesInkDrop) {
 
 TEST_F(CustomButtonTest, HideInkDropWhenShowingContextMenu) {
   TestInkDropDelegate* ink_drop_delegate = new TestInkDropDelegate();
-  CreateButtonWithInkDrop(make_scoped_ptr(ink_drop_delegate));
+  CreateButtonWithInkDrop(base::WrapUnique(ink_drop_delegate));
   TestContextMenuController context_menu_controller;
   button()->set_context_menu_controller(&context_menu_controller);
   button()->set_hide_ink_drop_when_showing_context_menu(true);
@@ -446,12 +449,12 @@ TEST_F(CustomButtonTest, HideInkDropWhenShowingContextMenu) {
   button()->ShowContextMenu(gfx::Point(), ui::MENU_SOURCE_MOUSE);
 
   EXPECT_FALSE(ink_drop_delegate->is_hovered());
-  EXPECT_EQ(InkDropState::HIDDEN, ink_drop_delegate->state());
+  EXPECT_EQ(InkDropState::HIDDEN, ink_drop_delegate->GetTargetInkDropState());
 }
 
 TEST_F(CustomButtonTest, DontHideInkDropWhenShowingContextMenu) {
   TestInkDropDelegate* ink_drop_delegate = new TestInkDropDelegate();
-  CreateButtonWithInkDrop(make_scoped_ptr(ink_drop_delegate));
+  CreateButtonWithInkDrop(base::WrapUnique(ink_drop_delegate));
   TestContextMenuController context_menu_controller;
   button()->set_context_menu_controller(&context_menu_controller);
   button()->set_hide_ink_drop_when_showing_context_menu(false);
@@ -462,12 +465,13 @@ TEST_F(CustomButtonTest, DontHideInkDropWhenShowingContextMenu) {
   button()->ShowContextMenu(gfx::Point(), ui::MENU_SOURCE_MOUSE);
 
   EXPECT_TRUE(ink_drop_delegate->is_hovered());
-  EXPECT_EQ(InkDropState::ACTION_PENDING, ink_drop_delegate->state());
+  EXPECT_EQ(InkDropState::ACTION_PENDING,
+            ink_drop_delegate->GetTargetInkDropState());
 }
 
 TEST_F(CustomButtonTest, InkDropAfterTryingToShowContextMenu) {
   TestInkDropDelegate* ink_drop_delegate = new TestInkDropDelegate();
-  CreateButtonWithInkDrop(make_scoped_ptr(ink_drop_delegate));
+  CreateButtonWithInkDrop(base::WrapUnique(ink_drop_delegate));
   button()->set_context_menu_controller(nullptr);
 
   ink_drop_delegate->SetHovered(true);
@@ -476,7 +480,8 @@ TEST_F(CustomButtonTest, InkDropAfterTryingToShowContextMenu) {
   button()->ShowContextMenu(gfx::Point(), ui::MENU_SOURCE_MOUSE);
 
   EXPECT_TRUE(ink_drop_delegate->is_hovered());
-  EXPECT_EQ(InkDropState::ACTION_PENDING, ink_drop_delegate->state());
+  EXPECT_EQ(InkDropState::ACTION_PENDING,
+            ink_drop_delegate->GetTargetInkDropState());
 }
 
 }  // namespace views

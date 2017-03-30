@@ -11,6 +11,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "content/public/test/browser_test_utils.h"
@@ -18,6 +19,7 @@
 #include "net/cert/x509_certificate.h"
 #include "net/test/cert_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/models/table_model.h"
 #include "ui/views/controls/label.h"
 
 namespace {
@@ -55,6 +57,8 @@ class TestCertificateSelector : public chrome::CertificateSelector {
     canceled_ = canceled;
   }
 
+  using chrome::CertificateSelector::table_model_for_testing;
+
   void set_on_destroy(base::Closure on_destroy) { on_destroy_ = on_destroy; }
 
  private:
@@ -70,11 +74,11 @@ class CertificateSelectorTest : public InProcessBrowserTest {
   void SetUpInProcessBrowserTestFixture() override {
     client_1_ =
         net::ImportCertFromFile(net::GetTestCertsDirectory(), "client_1.pem");
-    ASSERT_NE(nullptr, client_1_);
+    ASSERT_TRUE(client_1_);
 
     client_2_ =
         net::ImportCertFromFile(net::GetTestCertsDirectory(), "client_2.pem");
-    ASSERT_NE(nullptr, client_2_);
+    ASSERT_TRUE(client_2_);
   }
 
   void SetUpOnMainThread() override {
@@ -101,6 +105,27 @@ class CertificateSelectorTest : public InProcessBrowserTest {
 };
 
 }  // namespace
+
+IN_PROC_BROWSER_TEST_F(CertificateSelectorTest, GetRowText) {
+  ui::TableModel* model = selector_->table_model_for_testing();
+  EXPECT_EQ(base::UTF8ToUTF16("Client Cert A"),
+            model->GetText(0, IDS_CERT_SELECTOR_SUBJECT_COLUMN));
+  EXPECT_EQ(base::UTF8ToUTF16("B CA"),
+            model->GetText(0, IDS_CERT_SELECTOR_ISSUER_COLUMN));
+  EXPECT_EQ(base::string16(),
+            model->GetText(0, IDS_CERT_SELECTOR_PROVIDER_COLUMN));
+  EXPECT_EQ(base::UTF8ToUTF16("1000"),
+            model->GetText(0, IDS_CERT_SELECTOR_SERIAL_COLUMN));
+
+  EXPECT_EQ(base::UTF8ToUTF16("Client Cert D"),
+            model->GetText(1, IDS_CERT_SELECTOR_SUBJECT_COLUMN));
+  EXPECT_EQ(base::UTF8ToUTF16("E CA"),
+            model->GetText(1, IDS_CERT_SELECTOR_ISSUER_COLUMN));
+  EXPECT_EQ(base::string16(),
+            model->GetText(1, IDS_CERT_SELECTOR_PROVIDER_COLUMN));
+  EXPECT_EQ(base::UTF8ToUTF16("1002"),
+            model->GetText(1, IDS_CERT_SELECTOR_SERIAL_COLUMN));
+}
 
 IN_PROC_BROWSER_TEST_F(CertificateSelectorTest, GetSelectedCert) {
   EXPECT_EQ(client_1_.get(), selector_->GetSelectedCert());

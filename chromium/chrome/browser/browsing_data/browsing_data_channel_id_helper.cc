@@ -4,13 +4,14 @@
 
 #include "chrome/browser/browsing_data/browsing_data_channel_id_helper.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/url_request/url_request_context.h"

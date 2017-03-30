@@ -33,15 +33,12 @@ namespace blink {
 
 class TemplateContentDocumentFragment final : public DocumentFragment {
 public:
-    static RawPtr<TemplateContentDocumentFragment> create(Document& document, Element* host)
+    static TemplateContentDocumentFragment* create(Document& document, Element* host)
     {
         return new TemplateContentDocumentFragment(document, host);
     }
 
     Element* host() const { return m_host; }
-#if !ENABLE(OILPAN)
-    void clearHost() { m_host = nullptr; }
-#endif
 
     DEFINE_INLINE_VIRTUAL_TRACE()
     {

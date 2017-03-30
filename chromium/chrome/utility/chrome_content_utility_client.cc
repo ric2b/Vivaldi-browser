@@ -17,14 +17,14 @@
 #include "chrome/common/safe_browsing/zip_analyzer_results.h"
 #include "chrome/utility/chrome_content_utility_ipc_whitelist.h"
 #include "chrome/utility/image_decoder_impl.h"
-#include "chrome/utility/safe_json_parser_handler.h"
 #include "chrome/utility/utility_message_handler.h"
+#include "components/safe_json/utility/safe_json_parser_mojo_impl.h"
 #include "content/public/child/image_decoder_utils.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_registry.h"
 #include "content/public/utility/utility_thread.h"
 #include "courgette/courgette.h"
-#include "courgette/third_party/bsdiff.h"
+#include "courgette/third_party/bsdiff/bsdiff.h"
 #include "ipc/ipc_channel.h"
 #include "third_party/zlib/google/zip.h"
 #include "ui/gfx/geometry/size.h"
@@ -128,8 +128,6 @@ ChromeContentUtilityClient::ChromeContentUtilityClient()
 #if defined(OS_WIN)
   handlers_.push_back(new ShellHandler());
 #endif
-
-  handlers_.push_back(new SafeJsonParserHandler());
 }
 
 ChromeContentUtilityClient::~ChromeContentUtilityClient() {
@@ -161,7 +159,6 @@ bool ChromeContentUtilityClient::OnMessageReceived(
                         OnPatchFileBsdiff)
     IPC_MESSAGE_HANDLER(ChromeUtilityMsg_PatchFileCourgette,
                         OnPatchFileCourgette)
-    IPC_MESSAGE_HANDLER(ChromeUtilityMsg_StartupPing, OnStartupPing)
 #if defined(FULL_SAFE_BROWSING)
     IPC_MESSAGE_HANDLER(ChromeUtilityMsg_AnalyzeZipFileForDownloadProtection,
                         OnAnalyzeZipFileForDownloadProtection)
@@ -176,12 +173,20 @@ bool ChromeContentUtilityClient::OnMessageReceived(
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
-  for (Handlers::iterator it = handlers_.begin();
-       !handled && it != handlers_.end(); ++it) {
-    handled = (*it)->OnMessageReceived(message);
+  if (handled)
+    return true;
+
+  for (const auto& handler : handlers_) {
+    // At least one of the utility process handlers adds a new handler to
+    // |handlers_| when it handles a message. This causes any iterator over
+    // |handlers_| to become invalid. Therefore, it is necessary to break the
+    // loop at this point instead of evaluating it as a loop condition (if the
+    // for loop was using iterators explicitly, as originally done).
+    if (handler->OnMessageReceived(message))
+      return true;
   }
 
-  return handled;
+  return false;
 }
 
 void ChromeContentUtilityClient::RegisterMojoServices(
@@ -201,10 +206,11 @@ void ChromeContentUtilityClient::RegisterMojoServices(
   registry->AddService(base::Bind(CreateResourceUsageReporter));
 #endif
   registry->AddService(base::Bind(&CreateImageDecoder));
+  registry->AddService(base::Bind(&safe_json::SafeJsonParserMojoImpl::Create));
 }
 
 void ChromeContentUtilityClient::AddHandler(
-    scoped_ptr<UtilityMessageHandler> handler) {
+    std::unique_ptr<UtilityMessageHandler> handler) {
   handlers_.push_back(std::move(handler));
 }
 
@@ -276,11 +282,6 @@ void ChromeContentUtilityClient::OnPatchFileCourgette(
     Send(new ChromeUtilityHostMsg_PatchFile_Finished(patch_status));
   }
   ReleaseProcessIfNeeded();
-}
-
-void ChromeContentUtilityClient::OnStartupPing() {
-  Send(new ChromeUtilityHostMsg_ProcessStarted);
-  // Don't release the process, we assume further messages are on the way.
 }
 
 #if defined(FULL_SAFE_BROWSING)

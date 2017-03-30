@@ -58,9 +58,6 @@ SmartSessionRestoreTest.CorrectLoadingOrder
 # https://crbug.com/516368
 PushMessagingBrowserTest.PushEventSuccess
 
-# https://crbug.com/519039
-AppViewTest.KillGuestCommunicatingWithWrongAppView
-
 # https://crbug.com/519087
 ExtensionTabsTest.GetAllWindowsAllTypes
 
@@ -144,6 +141,7 @@ HostedAppTest*
 ImageWriterPrivateApiTest.TestWriteFromFile
 InlineInstallPrivateApiTestApp*
 InstallGoodExtensionSettingsWebUITest.showOptions
+ManageProfileUITestAsync.CreateExistingSupervisedUser
 MaterialHistoryBrowserTest*
 MimeHandlerViewTest.Abort
 MimeHandlerViewTest.EmbeddedDataUrlObject
@@ -151,9 +149,15 @@ MultilanguageOptionsWebUI*
 PDFExtensionTest*
 PasswordsPrivateApiTest.RequestPlaintextPassword
 PolicyPref*
+PredictorBrowserTest*
 ProfileWindow*
 PushMessagingBrowserTest.SubscribeWithoutKeySuccessNotificationsGranted
 SubframeTaskBrowserTest.TaskManagerShowsSubframeTasks
 SyncSetupWebUITestAsync.RestoreSyncDataTypes
+WebRtcDisableEncryptionFlagBrowserTest.VerifyEncryption
 WebUIWebView*
+WebrtcEventLogApiTest*
 ZoomControllerBrowserTest.NavigationResetsManualMode
+
+# https://crbug.com/603334
+AppViewTests/AppViewTest.KillGuestCommunicatingWithWrongAppView/*

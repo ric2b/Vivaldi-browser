@@ -460,6 +460,9 @@ Press any key to continue exploring.
   <message name="IDS_FILE_BROWSER_SHARE_BUTTON_LABEL" desc="Menu item label, showing dialog to share the selected file.">
     Share
   </message>
+  <message name="IDS_FILE_BROWSER_SHARE_WITH_ACTION_LABEL" desc="Menu item label, describing the action of sharing/attaching/sending files with the given application.">
+    Share with <ph name="APPLICATION_NAME">$1<ex>GMail</ex></ph>
+  </message>
   <message name="IDS_FILE_BROWSER_TOGGLE_HIDDEN_FILES_COMMAND_LABEL" desc="Label for menu or button with checkmark that toggles visibility of hidden files.">
     Show hidden files
   </message>
@@ -719,6 +722,12 @@ Press any key to continue exploring.
     Save file as
   </message>
 
+  <message name="IDS_FILE_BROWSER_ONE_FILE_SELECTED" desc="One file selected.">
+    1 file selected
+  </message>
+  <message name="IDS_FILE_BROWSER_ONE_DIRECTORY_SELECTED" desc="One directory selected.">
+    1 folder selected
+  </message>
   <message name="IDS_FILE_BROWSER_MANY_FILES_SELECTED" desc="Many files selected.">
     <ph name="SELCTED_FILE_COUNT">$1<ex>13</ex></ph> files selected
   </message>
@@ -1530,6 +1539,9 @@ Press any key to continue exploring.
   <message name="IDS_OOBE_VIRTUAL_KEYBOARD_OPTION" desc="Virtual keyboard option shown on the OOBE screens accessibility menu.">
     On-screen keyboard
   </message>
+  <message name="IDS_OOBE_MONO_AUDIO_OPTION" desc="Mono audio option shown on the OOBE screens accessibility menu.">
+    Play the same audio through all speakers (mono audio)
+  </message>
   <message name="IDS_OOBE_CLOSE_ACCESSIBILITY_MENU" desc="Text to be spoken when focus is set to the close button of accessibility options menu.">
     Close accessibility menu
   </message>
@@ -1631,6 +1643,9 @@ Press any key to continue exploring.
   <message name="IDS_LOGIN_SAML_NOTICE" desc="Text message displayed above SAML portal to early indicate that the user is being redirected to another sign-in provider. This is the version of the string used in the GAIA flow.">
     This sign-in service is hosted by <ph name="SAML_DOMAIN">$1<ex>saml.com</ex></ph>
   </message>
+  <message name="IDS_LOGIN_SAML_NOTICE_WITH_VIDEO" desc="Text message displayed above SAML portal to early indicate that the user is being redirected to another sign-in provider which has requested video media access.">
+    This sign-in service, hosted by <ph name="SAML_DOMAIN">$1<ex>saml.com</ex></ph>, is accessing your camera.
+  </message>
   <message name="IDS_LOGIN_CONFIRM_PASSWORD_TITLE" desc="Title for the confirm password dialog.">
     Please re-enter your password to update your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> profile.
   </message>
@@ -1656,7 +1671,7 @@ Press any key to continue exploring.
     Sign-in failed because your account details could not be retrieved. Please contact your administrator or try again.
   </message>
   <message name="IDS_LOGIN_FATAL_ERROR_NO_PASSWORD" desc="Message to show when the authentication could not be completed because the user's password could not be retrieved.">
-    Sing-in failed. Please contact your administrator or try again.
+    Sign-in failed. Please contact your administrator or try again.
   </message>
   <message name="IDS_LOGIN_FATAL_ERROR_PASSWORD_VERIFICATION" desc="Message to show when the authentication could not be completed because two attempts to verify the user's password failed.">
     Sign-in failed because your password could not be verified. Please contact your administrator or try again.
@@ -2319,6 +2334,9 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_VIRTUAL_KEYBOARD_DESCRIPTION" desc="In the settings tab, the text next to the checkbox for virtual keyboard.">
     Enable on-screen keyboard
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_MONO_AUDIO_DESCRIPTION" desc="In the settings tab, the text next to the checkbox for mono audio output.">
+    Play the same audio through all speakers (mono audio)
   </message>
   <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SHOULD_ALWAYS_SHOW_MENU" desc="In the settings tab, the text next to the checkbox to show the accessibility tray menu regardless of the state of a11y features.">
     Show accessibility options in the system menu
@@ -3660,11 +3678,7 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_ACTIVATE_IME_MENU"
            desc="The label for showing expanded IME menu in the shelf.">
-    Show expanded input options in the shelf.
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_ACTIVATE_IME_MENU_DESCRIPTION"
-           desc="The label for the description of showing input method menu.">
-    For easier switching of input methods and access to more input features: voice input, handwriting and emoji.
+    Show input options in the shelf
   </message>
   <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_THIRD_PARTY_WARNING_TITLE"
            desc="The title showing in the warning dialog when enabling a 3rd party Input Method">
@@ -3688,7 +3702,7 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_SWITCH_INPUT_METHODS_HINT"
            desc="Explanatory message about how to switch input methods">
-    Press Alt+Shift to switch between input methods.
+    Press Ctrl+Shift+Space to switch between input methods.
   </message>
   <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_SELECT_PREVIOUS_INPUT_METHOD_HINT"
            desc="Explanatory message about how to select the previous input method">
@@ -4526,6 +4540,9 @@ Battery full
   <message name="IDS_KEYBOARD_OVERLAY_CLOSE_WINDOW" desc="The text in the keyboard overlay to explain the shortcut.">
     Close window
   </message>
+  <message name="IDS_KEYBOARD_OVERLAY_CONTEXT_MENU" desc="The text in the keyboard overlay to explain the shortcut.">
+    Context menu
+  </message>
   <message name="IDS_KEYBOARD_OVERLAY_COPY" desc="The text in the keyboard overlay to explain the shortcut.">
     Copy
   </message>
@@ -4760,6 +4777,9 @@ Battery full
   <message name="IDS_KEYBOARD_OVERLAY_SCREENSHOT_REGION" desc="The text in the keyboard overlay to explain the shortcut (take a screenshot of the selected region).">
     Screenshot region
   </message>
+  <message name="IDS_KEYBOARD_OVERLAY_SCREENSHOT_WINDOW" desc="The text in the keyboard overlay to explain the shortcut.">
+    Screenshot window
+  </message>
   <message name="IDS_KEYBOARD_OVERLAY_SCROLL_UP_ONE_PAGE" desc="The text in the keyboard overlay to explain the shortcut.">
     Scroll up one page
   </message>
@@ -4780,6 +4800,9 @@ Battery full
   </message>
   <message name="IDS_KEYBOARD_OVERLAY_SIGN_OUT" desc="The text in the keyboard overlay to explain the shortcut.">
     Sign out
+  </message>
+  <message name="IDS_KEYBOARD_OVERLAY_SUSPEND" desc="The text in the keyboard overlay to explain the shortcut.">
+    Suspend
   </message>
   <message name="IDS_KEYBOARD_OVERLAY_SWAP_PRIMARY_MONITOR" desc="The text in the keyboard overlay to explain the shortcut (swap primary monitor).">
     Swap primary monitor
@@ -5779,7 +5802,7 @@ All users must sign out to continue.
     Play, edit, share, get stuff done.
   </message>
   <message name="IDS_FIRST_RUN_APP_LIST_STEP_TEXT_1" desc="First part of message on the first-run tutorial bubble pointing to application list button.">
-    Access all your apps from this handy launcher. Play games, video chat, listen to music, edit documents, or get more apps from the Chrome Web Store.
+    Access all your apps from this handy launcher. Play games, video chat, listen to music, edit documents, or get more apps.
   </message>
   <message name="IDS_FIRST_RUN_APP_LIST_STEP_TEXT_2" desc="Second part of message on the first-run tutorial bubble pointing to application list button. Part of the phrase &quot;Access all your apps from this handy launcher. Play games, video chat, listen to music, edit documents, or get more apps from the Chrome Web Store. It's all here.&quot;">
     It's all here.
@@ -6512,7 +6535,7 @@ All users must sign out to continue.
     Google Play Store
   </message>
   <message name="IDS_ARC_NOTIFICATION_MESSAGE" desc="Description message of the first-run notification that enables Android apps.">
-    Over a million apps and games now avaialble on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>.
+    Over a million apps and games now available on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>.
   </message>
   <message name="IDS_ARC_OPEN_PLAY_STORE_NOTIFICATION_BUTTON" desc="Label for the button in the first-run notification that enables Android apps.">
     Open Play Store
@@ -6526,11 +6549,11 @@ All users must sign out to continue.
   <message name="IDS_ARC_OPT_IN_DIALOG_DESCRIPTION" desc="Description of the opt-in dialog for Android apps.">
     Choose from over a million apps and games on Google Play to install and use on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>.
   </message>
-  <message name="IDS_ARC_OPT_IN_DIALOG_LEGACY" desc="Legacy text of the opt-in dialog for Android apps.">
-    By proceeding, you're agreeing to the <ph name="BEGIN_LINK">&lt;a class="link" href="https://www.google.com/policies/terms/" target="_blank"&gt;</ph>Google Terms of Service<ph name="END_LINK">&lt;/a&gt;</ph> and <ph name="BEGIN_LINK">&lt;a class="link" href="https://www.google.com/policies/privacy/" target="_blank"&gt;</ph>Privacy Policy<ph name="END_LINK">&lt;/a&gt;</ph>.
+  <message name="IDS_ARC_OPT_IN_DIALOG_BUTTON_AGREE" desc="Agree button of the opt-in dialog for Android apps.">
+    Agree
   </message>
-  <message name="IDS_ARC_OPT_IN_DIALOG_BUTTON_GET_STARTED" desc="Get started button of the opt-in dialog for Android apps.">
-    Get Started
+  <message name="IDS_ARC_OPT_IN_DIALOG_BUTTON_CANCEL" desc="Cancel button of the opt-in dialog for Android apps.">
+    Cancel
   </message>
   <message name="IDS_ARC_OPT_IN_DIALOG_BUTTON_RETRY" desc="Retry button of the opt-in dialog for Android apps.">
     Retry
@@ -6541,8 +6564,23 @@ All users must sign out to continue.
   <message name="IDS_ARC_OPT_IN_DIALOG_PROGRESS_ANDROID" desc="Name of Android loading progress of the opt-in dialog for Android apps.">
     This may take up to a minute or so
   </message>
-  <message name="IDS_ARC_OPT_IN_DIALOG_AUTHORIZATION_FAILED" desc="Error message shown in case when auth code is not returned by server.">
-    Athorization failed
+  <message name="IDS_ARC_OPT_IN_DIALOG_AUTHORIZATION_FAILED" desc="Error message shown when an auth code is not returned by server.">
+    Authorization failed
+  </message>
+  <message name="IDS_ARC_OPT_IN_DIALOG_TERMS_OF_SERVICE" desc="Terms of service caption in the opt-in dialog for Android apps.">
+    Terms of Service
+  </message>
+  <message name="IDS_ARC_OPT_IN_DIALOG_METRICS_MANAGED_ENABLED" desc="Message in the opt-in dialog for Android apps in case metrics are managed on the device and on.">
+    This device will automatically send diagnostic and usage data to Google. This <ph name="BEGIN_LINK1">&lt;a href="#" id="settings-link"&gt;</ph>setting<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph> is enforced by your administrator. <ph name="BEGIN_LINK2">&lt;a href="#" id="learn-more-link"&gt;</ph>Learn More<ph name="END_LINK2">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
+  </message>
+  <message name="IDS_ARC_OPT_IN_DIALOG_METRICS_MANAGED_DISABLED" desc="Message in the opt-in dialog for Android apps in case metrics are enabled on the device and off.">
+    Your administrator may choose to send diagnostic and usage data for this device to Google. You may view this <ph name="BEGIN_LINK1">&lt;a href="#" id="settings-link"&gt;</ph>setting<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph> here. <ph name="BEGIN_LINK2">&lt;a href="#" id="learn-more-link"&gt;</ph>Learn More<ph name="END_LINK2">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
+  </message>
+  <message name="IDS_ARC_OPT_IN_DIALOG_METRICS_ENABLED" desc="Message in the opt-in dialog for Android apps in case metrics are already enabled on the device. User has no way to deactivate them using opt-in dialog.">
+    This device will automatically send diagnostic and usage data to Google. You can change this at any time in your device <ph name="BEGIN_LINK1">&lt;a href="#" id="settings-link"&gt;</ph>settings<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>. <ph name="BEGIN_LINK2">&lt;a href="#" id="learn-more-link"&gt;</ph>Learn More<ph name="END_LINK2">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
+  </message>
+  <message name="IDS_ARC_OPT_IN_DIALOG_METRICS_DISABLED" desc="Message in the opt-in dialog for Android apps in case metrics are disabled on the device. User has an option to active them using opt-in dialog">
+    Automatically send diagnostic and usage data to Google. You can change this at any time in your device <ph name="BEGIN_LINK1">&lt;a href="#" id="settings-link"&gt;</ph>settings<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>. <ph name="BEGIN_LINK2">&lt;a href="#" id="learn-more-link"&gt;</ph>Learn More<ph name="END_LINK2">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
   </message>
   <message name="IDS_ARC_SIGN_IN_NETWORK_ERROR" desc="Android sign-in error because of network error">
     Network error
@@ -6564,6 +6602,9 @@ All users must sign out to continue.
   </message>
   <message name="IDS_ARC_SERVER_COMMUNICATION_ERROR" desc="Android sign-in error because of server communication error">
     Server communication error
+  </message>
+  <message name="IDS_ARC_ANDROID_MANAGEMENT_REQUIRED_ERROR" desc="Error message shown when Android management is required for an unmanaged Chrome OS user.">
+    Your organization has not enabled Android Apps for your account. Contact your administrator for more information.
   </message>
   <message name="IDS_FLAGS_ENABLE_IME_MENU_NAME" desc="Name of the about: flag for enabling opt-in IME menu.">
     Enable opt-in IME menu

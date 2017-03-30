@@ -17,14 +17,14 @@
 #include "components/mus/ws/test_change_tracker.h"
 #include "mojo/converters/geometry/geometry_type_converters.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
-#include "mojo/shell/public/cpp/shell_test.h"
+#include "services/shell/public/cpp/shell_test.h"
 
 using mojo::Array;
 using mojo::Callback;
-using mojo::Connection;
+using shell::Connection;
 using mojo::InterfaceRequest;
 using mojo::RectPtr;
-using mojo::ShellClient;
+using shell::ShellClient;
 using mojo::String;
 using mus::mojom::ErrorCode;
 using mus::mojom::EventPtr;
@@ -64,7 +64,7 @@ void EmbedCallbackImpl(base::RunLoop* run_loop,
 
 // -----------------------------------------------------------------------------
 
-bool EmbedUrl(mojo::Connector* connector,
+bool EmbedUrl(shell::Connector* connector,
               WindowTree* tree,
               const String& url,
               Id root_id) {
@@ -330,10 +330,10 @@ class TestWindowTreeClientImpl : public mojom::WindowTreeClient,
     // on Android.
   }
   void OnWindowHierarchyChanged(Id window,
-                                Id new_parent,
                                 Id old_parent,
+                                Id new_parent,
                                 Array<WindowDataPtr> windows) override {
-    tracker()->OnWindowHierarchyChanged(window, new_parent, old_parent,
+    tracker()->OnWindowHierarchyChanged(window, old_parent, new_parent,
                                         std::move(windows));
   }
   void OnWindowReordered(Id window_id,
@@ -357,14 +357,16 @@ class TestWindowTreeClientImpl : public mojom::WindowTreeClient,
   }
   void OnWindowInputEvent(uint32_t event_id,
                           Id window_id,
-                          EventPtr event) override {
+                          EventPtr event,
+                          uint32_t event_observer_id) override {
     // Ack input events to clear the state on the server. These can be received
     // during test startup. X11Window::DispatchEvent sends a synthetic move
     // event to notify of entry.
-    tree()->OnWindowInputEventAck(event_id, true);
+    tree()->OnWindowInputEventAck(event_id, mojom::EventResult::HANDLED);
     // Don't log input events as none of the tests care about them and they
     // may come in at random points.
   }
+  void OnEventObserved(EventPtr event, uint32_t event_observer_id) override {}
   void OnWindowSharedPropertyChanged(uint32_t window,
                                      const String& name,
                                      Array<uint8_t> new_data) override {
@@ -418,11 +420,11 @@ class TestWindowTreeClientImpl : public mojom::WindowTreeClient,
   mojom::WindowTreePtr tree_;
 
   // If non-null we're waiting for OnEmbed() using this RunLoop.
-  scoped_ptr<base::RunLoop> embed_run_loop_;
+  std::unique_ptr<base::RunLoop> embed_run_loop_;
 
   // If non-null we're waiting for a certain number of change notifications to
   // be encountered.
-  scoped_ptr<WaitState> wait_state_;
+  std::unique_ptr<WaitState> wait_state_;
 
   mojo::Binding<WindowTreeClient> binding_;
   Id connection_id_;
@@ -431,9 +433,9 @@ class TestWindowTreeClientImpl : public mojom::WindowTreeClient,
   uint32_t waiting_change_id_;
   bool on_change_completed_result_;
   bool track_root_bounds_changes_;
-  scoped_ptr<base::RunLoop> change_completed_run_loop_;
+  std::unique_ptr<base::RunLoop> change_completed_run_loop_;
 
-  scoped_ptr<mojo::AssociatedBinding<mojom::WindowManager>>
+  std::unique_ptr<mojo::AssociatedBinding<mojom::WindowManager>>
       window_manager_binding_;
   mojom::WindowManagerClientAssociatedPtr window_manager_client_;
 
@@ -444,13 +446,13 @@ class TestWindowTreeClientImpl : public mojom::WindowTreeClient,
 
 // InterfaceFactory for vending TestWindowTreeClientImpls.
 class WindowTreeClientFactory
-    : public mojo::InterfaceFactory<WindowTreeClient> {
+    : public shell::InterfaceFactory<WindowTreeClient> {
  public:
   WindowTreeClientFactory() {}
   ~WindowTreeClientFactory() override {}
 
   // Runs a nested MessageLoop until a new instance has been created.
-  scoped_ptr<TestWindowTreeClientImpl> WaitForInstance() {
+  std::unique_ptr<TestWindowTreeClientImpl> WaitForInstance() {
     if (!client_impl_.get()) {
       DCHECK(!run_loop_);
       run_loop_.reset(new base::RunLoop);
@@ -470,8 +472,8 @@ class WindowTreeClientFactory
       run_loop_->Quit();
   }
 
-  scoped_ptr<TestWindowTreeClientImpl> client_impl_;
-  scoped_ptr<base::RunLoop> run_loop_;
+  std::unique_ptr<TestWindowTreeClientImpl> client_impl_;
+  std::unique_ptr<base::RunLoop> run_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowTreeClientFactory);
 };
@@ -535,13 +537,13 @@ class WindowTreeClientTest : public WindowServerShellTestBase {
     ASSERT_TRUE(wt_client3_.get() != nullptr);
   }
 
-  scoped_ptr<TestWindowTreeClientImpl> WaitForWindowTreeClient() {
+  std::unique_ptr<TestWindowTreeClientImpl> WaitForWindowTreeClient() {
     return client_factory_->WaitForInstance();
   }
 
   // Establishes a new connection by way of Embed() on the specified
   // WindowTree.
-  scoped_ptr<TestWindowTreeClientImpl> EstablishConnectionViaEmbed(
+  std::unique_ptr<TestWindowTreeClientImpl> EstablishConnectionViaEmbed(
       WindowTree* owner,
       Id root_id,
       int* connection_id) {
@@ -549,7 +551,7 @@ class WindowTreeClientTest : public WindowServerShellTestBase {
                                                         connection_id);
   }
 
-  scoped_ptr<TestWindowTreeClientImpl>
+  std::unique_ptr<TestWindowTreeClientImpl>
   EstablishConnectionViaEmbedWithPolicyBitmask(WindowTree* owner,
                                                Id root_id,
                                                int* connection_id) {
@@ -557,7 +559,7 @@ class WindowTreeClientTest : public WindowServerShellTestBase {
       ADD_FAILURE() << "Embed() failed";
       return nullptr;
     }
-    scoped_ptr<TestWindowTreeClientImpl> client =
+    std::unique_ptr<TestWindowTreeClientImpl> client =
         client_factory_->WaitForInstance();
     if (!client.get()) {
       ADD_FAILURE() << "WaitForInstance failed";
@@ -573,7 +575,7 @@ class WindowTreeClientTest : public WindowServerShellTestBase {
   }
 
   // WindowServerShellTestBase:
-  bool AcceptConnection(mojo::Connection* connection) override {
+  bool AcceptConnection(shell::Connection* connection) override {
     connection->AddInterface(client_factory_.get());
     return true;
   }
@@ -619,14 +621,14 @@ class WindowTreeClientTest : public WindowServerShellTestBase {
     WindowServerShellTestBase::TearDown();
   }
 
-  scoped_ptr<TestWindowTreeClientImpl> wt_client1_;
-  scoped_ptr<TestWindowTreeClientImpl> wt_client2_;
-  scoped_ptr<TestWindowTreeClientImpl> wt_client3_;
+  std::unique_ptr<TestWindowTreeClientImpl> wt_client1_;
+  std::unique_ptr<TestWindowTreeClientImpl> wt_client2_;
+  std::unique_ptr<TestWindowTreeClientImpl> wt_client3_;
 
   mojom::WindowTreeHostPtr host_;
 
  private:
-  scoped_ptr<WindowTreeClientFactory> client_factory_;
+  std::unique_ptr<WindowTreeClientFactory> client_factory_;
   int connection_id_1_;
   int connection_id_2_;
   Id root_window_id_;
@@ -962,8 +964,8 @@ TEST_F(WindowTreeClientTest, WindowHierarchyChangedAddingKnownToUnknown) {
     wt_client1_->WaitForChangeCount(1);
     // 2,1 should be IdToString(window_2_11), but window_2_11 is in the id
     // space of client2, not client1.
-    EXPECT_EQ("HierarchyChanged window=2,1 new_parent=null old_parent=" +
-                  IdToString(window_1_1),
+    EXPECT_EQ("HierarchyChanged window=2,1 old_parent=" +
+                  IdToString(window_1_1) + " new_parent=null",
               SingleChangeToDescription(*changes1()));
   }
 
@@ -973,7 +975,7 @@ TEST_F(WindowTreeClientTest, WindowHierarchyChangedAddingKnownToUnknown) {
     ASSERT_TRUE(wt_client2()->AddWindow(window_1_1, window_2_2));
     wt_client1_->WaitForChangeCount(1);
     EXPECT_EQ("HierarchyChanged window=" + IdToString(window_2_2) +
-                  " new_parent=" + IdToString(window_1_1) + " old_parent=null",
+                  " old_parent=null new_parent=" + IdToString(window_1_1),
               SingleChangeToDescription(*changes1()));
     // "window=2,3 parent=2,2]" should be,
     // WindowParentToString(window_2_21, window_2_2), but isn't because of
@@ -1069,7 +1071,7 @@ TEST_F(WindowTreeClientTest, DeleteWindow) {
     ASSERT_TRUE(wt_client2()->AddWindow(window_1_1, window_2_1));
     wt_client1_->WaitForChangeCount(1);
     EXPECT_EQ("HierarchyChanged window=" + IdToString(window_2_1) +
-                  " new_parent=" + IdToString(window_1_1) + " old_parent=null",
+                  " old_parent=null new_parent=" + IdToString(window_1_1),
               SingleChangeToDescription(*changes1()));
   }
 
@@ -1106,7 +1108,7 @@ TEST_F(WindowTreeClientTest, ReuseDeletedWindowId) {
     ASSERT_TRUE(wt_client2()->AddWindow(window_1_1, window_2_1));
     wt_client1_->WaitForChangeCount(1);
     EXPECT_EQ("HierarchyChanged window=" + IdToString(window_2_1) +
-                  " new_parent=" + IdToString(window_1_1) + " old_parent=null",
+                  " old_parent=null new_parent=" + IdToString(window_1_1),
               SingleChangeToDescription(*changes1()));
     EXPECT_EQ("[" + WindowParentToString(window_2_1, window_1_1) + "]",
               ChangeWindowDescription(*changes1()));
@@ -1131,7 +1133,7 @@ TEST_F(WindowTreeClientTest, ReuseDeletedWindowId) {
 
     wt_client1_->WaitForChangeCount(1);
     EXPECT_EQ("HierarchyChanged window=" + IdToString(window_2_1) +
-                  " new_parent=" + IdToString(window_1_1) + " old_parent=null",
+                  " old_parent=null new_parent=" + IdToString(window_1_1),
               SingleChangeToDescription(*changes1()));
     EXPECT_EQ("[" + WindowParentToString(window_2_1, window_1_1) + "]",
               ChangeWindowDescription(*changes1()));
@@ -1361,7 +1363,7 @@ TEST_F(WindowTreeClientTest, EmbedWithSameWindowId2) {
   {
     wt_client1_->WaitForChangeCount(1);
     EXPECT_EQ("HierarchyChanged window=" + IdToString(window_3_1) +
-                  " new_parent=" + IdToString(window_1_1) + " old_parent=null",
+                  " old_parent=null new_parent=" + IdToString(window_1_1),
               SingleChangeToDescription(*changes1()));
   }
 
@@ -1370,7 +1372,7 @@ TEST_F(WindowTreeClientTest, EmbedWithSameWindowId2) {
     changes3()->clear();
 
     // We should get a new connection for the new embedding.
-    scoped_ptr<TestWindowTreeClientImpl> connection4(
+    std::unique_ptr<TestWindowTreeClientImpl> connection4(
         EstablishConnectionViaEmbed(wt1(), window_1_1, nullptr));
     ASSERT_TRUE(connection4.get());
     EXPECT_EQ("[" + WindowParentToString(window_1_1, kNullParentId) + "]",
@@ -1506,6 +1508,9 @@ TEST_F(WindowTreeClientTest, SetWindowVisibilityNotifications) {
   Id window_1_1 = wt_client1()->NewWindow(1);
   ASSERT_TRUE(window_1_1);
   ASSERT_TRUE(wt_client1()->SetWindowVisibility(window_1_1, true));
+  // Setting to the same value should return true.
+  EXPECT_TRUE(wt_client1()->SetWindowVisibility(window_1_1, true));
+
   Id window_1_2 = wt_client1()->NewWindow(2);
   ASSERT_TRUE(window_1_2);
   ASSERT_TRUE(wt_client1()->SetWindowVisibility(window_1_2, true));
@@ -1949,7 +1954,7 @@ TEST_F(WindowTreeClientTest, Ids) {
   const Id window_2_101_in_ws1 = BuildWindowId(connection_id_2(), 1);
   wt_client1()->WaitForChangeCount(1);
   EXPECT_EQ("HierarchyChanged window=" + IdToString(window_2_101_in_ws1) +
-                " new_parent=" + IdToString(window_1_100) + " old_parent=null",
+                " old_parent=null new_parent=" + IdToString(window_1_100),
             SingleChangeToDescription(*changes1()));
   changes1()->clear();
 
@@ -1968,8 +1973,8 @@ TEST_F(WindowTreeClientTest, Ids) {
   ASSERT_TRUE(wt_client1()->WaitForChangeCompleted(12));
   wt_client2()->WaitForChangeCount(1);
   EXPECT_EQ("HierarchyChanged window=" + IdToString(window_2_101) +
-                " new_parent=null old_parent=" +
-                IdToString(window_1_100_in_ws2),
+                " old_parent=" + IdToString(window_1_100_in_ws2) +
+                " new_parent=null",
             SingleChangeToDescription(*changes2()));
 }
 

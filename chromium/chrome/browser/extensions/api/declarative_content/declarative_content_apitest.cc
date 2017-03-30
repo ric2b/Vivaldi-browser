@@ -252,7 +252,8 @@ void DeclarativeContentApiTest::CheckBookmarkEvents(bool match_is_bookmarked) {
   EXPECT_EQ(!match_is_bookmarked, page_action->GetIsVisible(tab_id));
 }
 
-IN_PROC_BROWSER_TEST_F(DeclarativeContentApiTest, Overview) {
+// Disabled due to flake. https://crbug.com/606574.
+IN_PROC_BROWSER_TEST_F(DeclarativeContentApiTest, DISABLED_Overview) {
   ext_dir_.WriteManifest(kDeclarativeContentManifest);
   ext_dir_.WriteFile(
       FILE_PATH_LITERAL("background.js"),
@@ -324,6 +325,55 @@ IN_PROC_BROWSER_TEST_F(DeclarativeContentApiTest, Overview) {
 
   EXPECT_FALSE(page_action->GetIsVisible(tab_id))
       << "Removing the matching element should hide the page action again.";
+}
+
+// Test that adds two rules pointing to single action instance.
+// Regression test for http://crbug.com/574149.
+IN_PROC_BROWSER_TEST_F(DeclarativeContentApiTest, ReusedActionInstance) {
+  ext_dir_.WriteManifest(kDeclarativeContentManifest);
+  ext_dir_.WriteFile(
+      FILE_PATH_LITERAL("background.js"),
+      "var declarative = chrome.declarative;\n"
+      "\n"
+      "var PageStateMatcher = chrome.declarativeContent.PageStateMatcher;\n"
+      "var ShowPageAction = chrome.declarativeContent.ShowPageAction;\n"
+      "var actionInstance = new ShowPageAction();\n"
+      "\n"
+      "var rule1 = {\n"
+      "  conditions: [new PageStateMatcher({\n"
+      "                   pageUrl: {hostPrefix: \"test1\"}})],\n"
+      "  actions: [actionInstance]\n"
+      "};\n"
+      "var rule2 = {\n"
+      "  conditions: [new PageStateMatcher({\n"
+      "                   pageUrl: {hostPrefix: \"test\"}})],\n"
+      "  actions: [actionInstance]\n"
+      "};\n"
+      "\n"
+      "var testEvent = chrome.declarativeContent.onPageChanged;\n"
+      "\n"
+      "testEvent.removeRules(undefined, function() {\n"
+      "  testEvent.addRules([rule1, rule2], function() {\n"
+      "    chrome.test.sendMessage(\"ready\");\n"
+      "  });\n"
+      "});\n");
+  ExtensionTestMessageListener ready("ready", false);
+  const Extension* extension = LoadExtension(ext_dir_.unpacked_path());
+  ASSERT_TRUE(extension);
+  const ExtensionAction* page_action =
+      ExtensionActionManager::Get(browser()->profile())
+          ->GetPageAction(*extension);
+  ASSERT_TRUE(page_action);
+
+  ASSERT_TRUE(ready.WaitUntilSatisfied());
+  content::WebContents* const tab =
+      browser()->tab_strip_model()->GetWebContentsAt(0);
+  const int tab_id = ExtensionTabUtil::GetTabId(tab);
+
+  // This navigation matches both rules.
+  NavigateInRenderer(tab, GURL("http://test1/"));
+
+  EXPECT_TRUE(page_action->GetIsVisible(tab_id));
 }
 
 // Tests that the rules are evaluated at the time they are added or removed.
@@ -699,12 +749,20 @@ class ShowPageActionWithoutPageActionTest : public DeclarativeContentApiTest {
  private:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     DeclarativeContentApiTest::SetUpCommandLine(command_line);
+    // If disabling the redesign, we need to disable Media Router since having
+    // Media Router enabled will result in auto-enabling the redesign and
+    // breaking the test.
+    if (!enable_redesign_) {
+      override_media_router_.reset(new FeatureSwitch::ScopedOverride(
+          FeatureSwitch::media_router(), false));
+    }
     override_toolbar_redesign_.reset(new FeatureSwitch::ScopedOverride(
         FeatureSwitch::extension_action_redesign(), enable_redesign_));
   }
 
   bool enable_redesign_;
   std::unique_ptr<FeatureSwitch::ScopedOverride> override_toolbar_redesign_;
+  std::unique_ptr<FeatureSwitch::ScopedOverride> override_media_router_;
   DISALLOW_COPY_AND_ASSIGN(ShowPageActionWithoutPageActionTest);
 };
 

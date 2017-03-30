@@ -16,6 +16,7 @@
 #include "base/files/scoped_file.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
@@ -23,8 +24,8 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/after_startup_task_utils.h"
 #include "chrome/browser/apps/app_url_redirector.h"
@@ -53,6 +54,7 @@
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings_factory.h"
 #include "chrome/browser/notifications/platform_notification_service_impl.h"
+#include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/permissions/permission_context_base.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/prerender/prerender_final_status.h"
@@ -102,6 +104,7 @@
 #include "chrome/common/pepper_permission_util.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/render_messages.h"
+#include "chrome/common/secure_origin_whitelist.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/installer/util/google_update_settings.h"
@@ -160,12 +163,12 @@
 #include "device/usb/public/interfaces/chooser_service.mojom.h"
 #include "device/usb/public/interfaces/device_manager.mojom.h"
 #include "gin/v8_initializer.h"
-#include "mojo/shell/public/cpp/shell_client.h"
 #include "net/base/mime_util.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_options.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "ppapi/host/ppapi_host.h"
+#include "services/shell/public/cpp/shell_client.h"
 #include "storage/browser/fileapi/external_mount_points.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -206,7 +209,6 @@
 #include "chrome/common/descriptors_android.h"
 #include "components/crash/content/browser/crash_dump_manager_android.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
-#include "components/offline_pages/offline_page_switches.h"
 #include "ui/base/resource/resource_bundle_android.h"
 #elif defined(OS_POSIX)
 #include "chrome/browser/chrome_browser_main_posix.h"
@@ -294,6 +296,8 @@
 #endif
 
 #if defined(ENABLE_WEBRTC)
+#include "chrome/browser/media/audio_debug_recordings_handler.h"
+#include "chrome/browser/media/webrtc_event_log_handler.h"
 #include "chrome/browser/media/webrtc_logging_handler_host.h"
 #endif
 
@@ -311,7 +315,7 @@
 #endif
 
 #if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-#include "media/mojo/services/mojo_media_application_factory.h"
+#include "media/mojo/services/mojo_media_application_factory.h"  // nogncheck
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -660,7 +664,7 @@ float GetDeviceScaleAdjustment() {
 #endif  // defined(OS_ANDROID)
 
 #if defined(ENABLE_EXTENSIONS)
-// By default, JavaScript and images are enabled in guest content.
+// By default, JavaScript, images and autoplay are enabled in guest content.
 void GetGuestViewDefaultContentSettingRules(
     bool incognito,
     RendererContentSettingRules* rules) {
@@ -672,6 +676,12 @@ void GetGuestViewDefaultContentSettingRules(
                                   incognito));
 
   rules->script_rules.push_back(
+      ContentSettingPatternSource(ContentSettingsPattern::Wildcard(),
+                                  ContentSettingsPattern::Wildcard(),
+                                  CONTENT_SETTING_ALLOW,
+                                  std::string(),
+                                  incognito));
+  rules->autoplay_rules.push_back(
       ContentSettingPatternSource(ContentSettingsPattern::Wildcard(),
                                   ContentSettingsPattern::Wildcard(),
                                   CONTENT_SETTING_ALLOW,
@@ -960,8 +970,22 @@ void ChromeContentBrowserClient::RenderProcessWillLaunch(
       new WebRtcLoggingHandlerHost(id, profile,
                                    g_browser_process->webrtc_log_uploader());
   host->AddFilter(webrtc_logging_handler_host);
-  host->SetUserData(host, new base::UserDataAdapter<WebRtcLoggingHandlerHost>(
-      webrtc_logging_handler_host));
+  host->SetUserData(WebRtcLoggingHandlerHost::kWebRtcLoggingHandlerHostKey,
+                    new base::UserDataAdapter<WebRtcLoggingHandlerHost>(
+                        webrtc_logging_handler_host));
+
+  AudioDebugRecordingsHandler* audio_debug_recordings_handler =
+      new AudioDebugRecordingsHandler(profile);
+  host->SetUserData(
+      AudioDebugRecordingsHandler::kAudioDebugRecordingsHandlerKey,
+      new base::UserDataAdapter<AudioDebugRecordingsHandler>(
+          audio_debug_recordings_handler));
+
+  WebRtcEventLogHandler* webrtc_event_log_handler =
+      new WebRtcEventLogHandler(profile);
+  host->SetUserData(WebRtcEventLogHandler::kWebRtcEventLogHandlerKey,
+                    new base::UserDataAdapter<WebRtcEventLogHandler>(
+                        webrtc_event_log_handler));
 #endif
 #if !defined(DISABLE_NACL)
   host->AddFilter(new nacl::NaClHostMessageFilter(
@@ -1415,7 +1439,7 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
     base::CommandLine* command_line,
     int child_process_id) {
 #if defined(OS_MACOSX)
-  scoped_ptr<metrics::ClientInfo> client_info =
+  std::unique_ptr<metrics::ClientInfo> client_info =
       GoogleUpdateSettings::LoadMetricsClientInfo();
   if (client_info) {
     command_line->AppendSwitchASCII(switches::kMetricsClientID,
@@ -1424,7 +1448,7 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
 #elif defined(OS_POSIX)
   if (breakpad::IsCrashReporterEnabled()) {
     std::string switch_value;
-    scoped_ptr<metrics::ClientInfo> client_info =
+    std::unique_ptr<metrics::ClientInfo> client_info =
         GoogleUpdateSettings::LoadMetricsClientInfo();
     if (client_info)
       switch_value = client_info->client_id;
@@ -1634,15 +1658,13 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
 #endif
       switches::kEnableNetBenchmarking,
       switches::kEnableNewBookmarkApps,
-#if defined(OS_ANDROID)
-      switches::kEnableOfflinePagesAsBookmarks,
-#endif
       switches::kEnableWasm,
 #if !defined(DISABLE_NACL)
       switches::kForcePNaClSubzero,
 #endif
       switches::kJavaScriptHarmony,
       switches::kMessageLoopHistogrammer,
+      switches::kOriginTrialPublicKey,
       switches::kPpapiFlashArgs,
       switches::kPpapiFlashPath,
       switches::kPpapiFlashVersion,
@@ -2022,11 +2044,11 @@ ChromeContentBrowserClient::CreateQuotaPermissionContext() {
   return new ChromeQuotaPermissionContext();
 }
 
-scoped_ptr<storage::QuotaEvictionPolicy>
+std::unique_ptr<storage::QuotaEvictionPolicy>
 ChromeContentBrowserClient::GetTemporaryStorageEvictionPolicy(
     content::BrowserContext* context) {
   return SiteEngagementEvictionPolicy::IsEnabled()
-             ? make_scoped_ptr(new SiteEngagementEvictionPolicy(context))
+             ? base::WrapUnique(new SiteEngagementEvictionPolicy(context))
              : nullptr;
 }
 
@@ -2072,7 +2094,7 @@ void ChromeContentBrowserClient::AllowCertificateError(
 
   safe_browsing::SafeBrowsingService* safe_browsing_service =
       g_browser_process->safe_browsing_service();
-  scoped_ptr<SafeBrowsingSSLCertReporter> cert_reporter(
+  std::unique_ptr<SafeBrowsingSSLCertReporter> cert_reporter(
       new SafeBrowsingSSLCertReporter(safe_browsing_service
                                           ? safe_browsing_service->ui_manager()
                                           : nullptr));
@@ -2084,7 +2106,7 @@ void ChromeContentBrowserClient::AllowCertificateError(
 void ChromeContentBrowserClient::SelectClientCertificate(
     content::WebContents* web_contents,
     net::SSLCertRequestInfo* cert_request_info,
-    scoped_ptr<content::ClientCertificateDelegate> delegate) {
+    std::unique_ptr<content::ClientCertificateDelegate> delegate) {
   prerender::PrerenderContents* prerender_contents =
       prerender::PrerenderContents::FromWebContents(web_contents);
   if (prerender_contents) {
@@ -2100,13 +2122,10 @@ void ChromeContentBrowserClient::SelectClientCertificate(
 
   Profile* profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
-  scoped_ptr<base::Value> filter =
+  std::unique_ptr<base::Value> filter =
       HostContentSettingsMapFactory::GetForProfile(profile)->GetWebsiteSetting(
-          requesting_url,
-          requesting_url,
-          CONTENT_SETTINGS_TYPE_AUTO_SELECT_CERTIFICATE,
-          std::string(),
-          NULL);
+          requesting_url, requesting_url,
+          CONTENT_SETTINGS_TYPE_AUTO_SELECT_CERTIFICATE, std::string(), NULL);
 
   if (filter.get()) {
     // Try to automatically select a client certificate.
@@ -2537,6 +2556,17 @@ bool ChromeContentBrowserClient::AllowPepperSocketAPI(
 #endif
 }
 
+bool ChromeContentBrowserClient::IsPepperVpnProviderAPIAllowed(
+    content::BrowserContext* browser_context,
+    const GURL& url) {
+#if defined(ENABLE_PLUGINS) && defined(ENABLE_EXTENSIONS)
+  return ChromeContentBrowserClientPluginsPart::IsPepperVpnProviderAPIAllowed(
+      browser_context, url);
+#else
+  return false;
+#endif
+}
+
 ui::SelectFilePolicy* ChromeContentBrowserClient::CreateSelectFilePolicy(
     WebContents* web_contents) {
   return new ChromeSelectFilePolicy(web_contents);
@@ -2552,6 +2582,11 @@ void ChromeContentBrowserClient::GetAdditionalAllowedSchemesForFileSystem(
     extra_parts_[i]->GetAdditionalAllowedSchemesForFileSystem(
         additional_allowed_schemes);
   }
+}
+
+void ChromeContentBrowserClient::GetSchemesBypassingSecureContextCheckWhitelist(
+    std::set<std::string>* schemes) {
+  return ::GetSchemesBypassingSecureContextCheckWhitelist(schemes);
 }
 
 void ChromeContentBrowserClient::GetURLRequestAutoMountHandlers(
@@ -2695,12 +2730,6 @@ bool ChromeContentBrowserClient::PreSpawnRenderer(
       L"\\\\.\\pipe\\chrome.nacl.*");
   if (result != sandbox::SBOX_ALL_OK)
     return false;
-
-  // Renderers need to send named pipe handles and shared memory
-  // segment handles to NaCl loader processes.
-  result = policy->AddRule(sandbox::TargetPolicy::SUBSYS_HANDLES,
-                           sandbox::TargetPolicy::HANDLES_DUP_ANY,
-                           L"File");
   return result == sandbox::SBOX_ALL_OK;
 }
 
@@ -2777,26 +2806,42 @@ void ChromeContentBrowserClient::RegisterRenderFrameMojoServices(
     content::ServiceRegistry* registry,
     content::RenderFrameHost* render_frame_host) {
   // WebUSB is an experimental web API. It will only work if the experiment
-  // is enabled and WebUSB feature is enabled.
+  // is enabled and WebUSB feature is enabled. It should also not be available
+  // to apps and extensions.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableExperimentalWebPlatformFeatures) &&
-      base::FeatureList::IsEnabled(features::kWebUsb)) {
+      base::FeatureList::IsEnabled(features::kWebUsb)
+#if defined(ENABLE_EXTENSIONS)
+      &&
+      !render_frame_host->GetSiteInstance()->GetSiteURL().SchemeIs(
+          extensions::kExtensionScheme)
+#endif
+          ) {
     registry->AddService(
         base::Bind(&CreateUsbDeviceManager, render_frame_host));
     registry->AddService(
         base::Bind(&CreateWebUsbChooserService, render_frame_host));
   }
 
+  // Register mojo CredentialManager service only for main frame.
+  if (!render_frame_host->GetParent()) {
+    registry->AddService(
+        base::Bind(&ChromePasswordManagerClient::BindCredentialManager,
+                   render_frame_host));
+  }
+
 #if BUILDFLAG(ANDROID_JAVA_UI)
-  ChromeServiceRegistrarAndroid::RegisterRenderFrameMojoServices(registry);
+  ChromeServiceRegistrarAndroid::RegisterRenderFrameMojoServices(
+      registry, render_frame_host);
 #endif
 }
 
 void ChromeContentBrowserClient::RegisterInProcessMojoApplications(
     StaticMojoApplicationMap* apps) {
 #if (ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-  apps->insert(std::make_pair("mojo:media",
-                              base::Bind(&media::CreateMojoMediaApplication)));
+  content::MojoApplicationInfo app_info;
+  app_info.application_factory = base::Bind(&media::CreateMojoMediaApplication);
+  apps->insert(std::make_pair("mojo:media", app_info));
 #endif
 }
 
@@ -2868,7 +2913,7 @@ ChromeContentBrowserClient::CreateThrottlesForNavigation(
   if (handle->IsInMainFrame()) {
     // Redirect some navigations to apps that have registered matching URL
     // handlers ('url_handlers' in the manifest).
-    scoped_ptr<content::NavigationThrottle> url_to_app_throttle =
+    std::unique_ptr<content::NavigationThrottle> url_to_app_throttle =
         AppUrlRedirector::MaybeCreateThrottleFor(handle);
     if (url_to_app_throttle)
       throttles.push_back(std::move(url_to_app_throttle));

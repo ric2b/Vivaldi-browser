@@ -5,6 +5,7 @@
 #include "gpu/ipc/client/gpu_memory_buffer_impl_surface_texture.h"
 
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "gpu/ipc/common/android/surface_texture_manager.h"
 #include "gpu/ipc/common/gpu_memory_buffer_support.h"
@@ -25,6 +26,7 @@ int WindowFormat(gfx::BufferFormat format) {
     case gfx::BufferFormat::DXT5:
     case gfx::BufferFormat::ETC1:
     case gfx::BufferFormat::R_8:
+    case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBX_8888:
     case gfx::BufferFormat::BGRX_8888:
@@ -62,7 +64,7 @@ GpuMemoryBufferImplSurfaceTexture::~GpuMemoryBufferImplSurfaceTexture() {
 }
 
 // static
-scoped_ptr<GpuMemoryBufferImplSurfaceTexture>
+std::unique_ptr<GpuMemoryBufferImplSurfaceTexture>
 GpuMemoryBufferImplSurfaceTexture::CreateFromHandle(
     const gfx::GpuMemoryBufferHandle& handle,
     const gfx::Size& size,
@@ -78,7 +80,7 @@ GpuMemoryBufferImplSurfaceTexture::CreateFromHandle(
   ANativeWindow_setBuffersGeometry(native_window, size.width(), size.height(),
                                    WindowFormat(format));
 
-  return make_scoped_ptr(new GpuMemoryBufferImplSurfaceTexture(
+  return base::WrapUnique(new GpuMemoryBufferImplSurfaceTexture(
       handle.id, size, format, callback, native_window));
 }
 

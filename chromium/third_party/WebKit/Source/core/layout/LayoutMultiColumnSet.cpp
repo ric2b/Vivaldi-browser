@@ -64,10 +64,16 @@ unsigned LayoutMultiColumnSet::fragmentainerGroupIndexAtFlowThreadOffset(LayoutU
     return m_fragmentainerGroups.size() - 1;
 }
 
-const MultiColumnFragmentainerGroup& LayoutMultiColumnSet::fragmentainerGroupAtVisualPoint(const LayoutPoint&) const
+const MultiColumnFragmentainerGroup& LayoutMultiColumnSet::fragmentainerGroupAtVisualPoint(const LayoutPoint& visualPoint) const
 {
-    // FIXME: implement this, once we have support for multiple rows.
-    return m_fragmentainerGroups.first();
+    ASSERT(m_fragmentainerGroups.size() > 0);
+    LayoutUnit blockOffset = isHorizontalWritingMode() ? visualPoint.y() : visualPoint.x();
+    for (unsigned index = 0; index < m_fragmentainerGroups.size(); index++) {
+        const auto& row = m_fragmentainerGroups[index];
+        if (row.logicalTop() + row.logicalHeight() > blockOffset)
+            return row;
+    }
+    return m_fragmentainerGroups.last();
 }
 
 LayoutUnit LayoutMultiColumnSet::pageLogicalHeightForOffset(LayoutUnit offsetInFlowThread) const
@@ -80,7 +86,7 @@ LayoutUnit LayoutMultiColumnSet::pageLogicalHeightForOffset(LayoutUnit offsetInF
         ASSERT(m_fragmentainerGroups.size() == 1);
         return LayoutUnit();
     }
-    if (offsetInFlowThread >= lastRow.logicalTopInFlowThread() + lastRow.logicalHeight() * usedColumnCount()) {
+    if (offsetInFlowThread >= lastRow.logicalTopInFlowThread() + fragmentainerGroupCapacity(lastRow)) {
         // The offset is outside the bounds of the fragmentainer groups that we have established at
         // this point. If we're nested inside another fragmentation context, we need to calculate
         // the height on our own.
@@ -148,7 +154,7 @@ LayoutUnit LayoutMultiColumnSet::nextLogicalTopForUnbreakableContent(LayoutUnit 
     // TODO(mstensho): if we're doubly nested (e.g. multicol in multicol in multicol), we need to
     // look beyond the first row here.
     const MultiColumnFragmentainerGroup& firstRow = firstFragmentainerGroup();
-    LayoutUnit firstRowLogicalBottomInFlowThread = firstRow.logicalTopInFlowThread() + firstRow.logicalHeight() * usedColumnCount();
+    LayoutUnit firstRowLogicalBottomInFlowThread = firstRow.logicalTopInFlowThread() + fragmentainerGroupCapacity(firstRow);
     if (flowThreadOffset >= firstRowLogicalBottomInFlowThread)
         return flowThreadOffset; // We're not in the first row. Give up.
     LayoutUnit newLogicalHeight = enclosingFragmentationContext->fragmentainerLogicalHeightAt(firstRow.blockOffsetInEnclosingFragmentationContext() + firstRow.logicalHeight());
@@ -181,7 +187,7 @@ LayoutMultiColumnSet* LayoutMultiColumnSet::previousSiblingMultiColumnSet() cons
 bool LayoutMultiColumnSet::hasFragmentainerGroupForColumnAt(LayoutUnit offsetInFlowThread, PageBoundaryRule pageBoundaryRule) const
 {
     const MultiColumnFragmentainerGroup& lastRow = lastFragmentainerGroup();
-    LayoutUnit maxLogicalBottomInFlowThread = lastRow.logicalTopInFlowThread() + lastRow.logicalHeight() * usedColumnCount();
+    LayoutUnit maxLogicalBottomInFlowThread = lastRow.logicalTopInFlowThread() + fragmentainerGroupCapacity(lastRow);
     if (pageBoundaryRule == AssociateWithFormerPage)
         return offsetInFlowThread <= maxLogicalBottomInFlowThread;
     return offsetInFlowThread < maxLogicalBottomInFlowThread;
@@ -194,7 +200,7 @@ MultiColumnFragmentainerGroup& LayoutMultiColumnSet::appendNewFragmentainerGroup
         MultiColumnFragmentainerGroup& previousGroup = m_fragmentainerGroups.last();
 
         // This is the flow thread block offset where |previousGroup| ends and |newGroup| takes over.
-        LayoutUnit blockOffsetInFlowThread = previousGroup.logicalTopInFlowThread() + previousGroup.logicalHeight() * usedColumnCount();
+        LayoutUnit blockOffsetInFlowThread = previousGroup.logicalTopInFlowThread() + fragmentainerGroupCapacity(previousGroup);
         previousGroup.setLogicalBottomInFlowThread(blockOffsetInFlowThread);
         newGroup.setLogicalTopInFlowThread(blockOffsetInFlowThread);
         newGroup.setLogicalTop(previousGroup.logicalTop() + previousGroup.logicalHeight());
@@ -271,10 +277,8 @@ bool LayoutMultiColumnSet::heightIsAuto() const
         // even if column-fill isn't 'balance' - in accordance with the spec). Pretending that
         // column-fill is auto also matches the old multicol implementation, which has no support
         // for this property.
-        if (RuntimeEnabledFeatures::columnFillEnabled()) {
-            if (multiColumnBlockFlow()->style()->getColumnFill() == ColumnFillBalance)
-                return true;
-        }
+        if (multiColumnBlockFlow()->style()->getColumnFill() == ColumnFillBalance)
+            return true;
         if (LayoutBox* next = nextSiblingBox()) {
             if (next->isLayoutMultiColumnSpannerPlaceholder()) {
                 // If we're followed by a spanner, we need to balance.
@@ -285,9 +289,9 @@ bool LayoutMultiColumnSet::heightIsAuto() const
     return !flowThread->columnHeightAvailable();
 }
 
-LayoutSize LayoutMultiColumnSet::flowThreadTranslationAtOffset(LayoutUnit blockOffset) const
+LayoutSize LayoutMultiColumnSet::flowThreadTranslationAtOffset(LayoutUnit blockOffset, CoordinateSpaceConversion mode) const
 {
-    return fragmentainerGroupAtFlowThreadOffset(blockOffset).flowThreadTranslationAtOffset(blockOffset);
+    return fragmentainerGroupAtFlowThreadOffset(blockOffset).flowThreadTranslationAtOffset(blockOffset, mode);
 }
 
 LayoutPoint LayoutMultiColumnSet::visualPointToFlowThreadPoint(const LayoutPoint& visualPoint) const
@@ -313,7 +317,7 @@ bool LayoutMultiColumnSet::recalculateColumnHeight()
 
     bool changed = false;
     for (auto& group : m_fragmentainerGroups)
-        changed = group.recalculateColumnHeight() || changed;
+        changed = group.recalculateColumnHeight(*this) || changed;
     m_initialHeightCalculated = true;
     return changed;
 }
@@ -340,6 +344,20 @@ void LayoutMultiColumnSet::endFlow(LayoutUnit offsetInFlowThread)
     // beginFlow()), e.g. if a subtree in the flow thread has to be laid out over again because the
     // initial margin collapsing estimates were wrong.
     m_fragmentainerGroups.last().setLogicalBottomInFlowThread(offsetInFlowThread);
+}
+
+void LayoutMultiColumnSet::styleDidChange(StyleDifference diff, const ComputedStyle* oldStyle)
+{
+    LayoutBlockFlow::styleDidChange(diff, oldStyle);
+
+    // column-rule is specified on the parent (the multicol container) of this object, but it's the
+    // column sets that are in charge of painting them. A column rule is pretty much like any other
+    // box decoration, like borders. We need to say that we have box decorations here, so that the
+    // columnn set is invalidated when it gets laid out. We cannot check here whether the multicol
+    // container actually has a visible column rule or not, because we may not have been inserted
+    // into the tree yet. Painting a column set is cheap anyway, because the only thing it can
+    // paint is the column rule, while actual multicol content is handled by the flow thread.
+    setHasBoxDecorationBackground(true);
 }
 
 void LayoutMultiColumnSet::layout()
@@ -416,8 +434,7 @@ void LayoutMultiColumnSet::addOverflowFromChildren()
         overflowRect.unite(rect);
     }
     addLayoutOverflow(overflowRect);
-    if (!hasOverflowClip())
-        addVisualOverflow(overflowRect);
+    addContentsVisualOverflow(overflowRect);
 }
 
 void LayoutMultiColumnSet::insertedIntoTree()

@@ -7,8 +7,8 @@ package org.chromium.chrome.browser.compositor.bottombar.contextualsearch;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.PanelState;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChangeReason;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchBlacklist.BlacklistReason;
+import org.chromium.chrome.browser.contextualsearch.ContextualSearchHeuristics;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchUma;
-import org.chromium.chrome.browser.contextualsearch.TapSuppressionHeuristics;
 
 /**
  * This class is responsible for all the logging related to Contextual Search.
@@ -46,7 +46,7 @@ public class ContextualSearchPanelMetrics {
     // Used to log how long the panel was open.
     private long mPanelOpenedBeyondPeekTimeNs;
     // The current set of heuristics that should be logged with results seen when the panel closes.
-    private TapSuppressionHeuristics mResultsSeenExperiments;
+    private ContextualSearchHeuristics mResultsSeenExperiments;
 
     /**
      * Log information when the panel's state has changed.
@@ -77,10 +77,10 @@ public class ContextualSearchPanelMetrics {
         boolean isSearchPanelFullyPreloaded = mIsSearchPanelFullyPreloaded;
 
         if (isEndingSearch) {
+            long durationMs = (System.nanoTime() - mFirstPeekTimeNs) / MILLISECONDS_TO_NANOSECONDS;
+            ContextualSearchUma.logPanelViewDurationAction(durationMs);
             if (!mDidSearchInvolvePromo) {
                 // Measure duration only when the promo is not involved.
-                long durationMs =
-                        (System.nanoTime() - mFirstPeekTimeNs) / MILLISECONDS_TO_NANOSECONDS;
                 ContextualSearchUma.logDuration(mWasSearchContentViewSeen, isChained, durationMs);
             }
             if (mIsPromoActive) {
@@ -146,6 +146,8 @@ public class ContextualSearchPanelMetrics {
                 || isFirstExitFromMaximized) {
             ContextualSearchUma.logFirstStateExit(fromState, toState, reasonForLogging);
         }
+        // Log individual user actions so they can be sequenced.
+        ContextualSearchUma.logPanelStateUserAction(toState, reasonForLogging);
 
         // We can now modify the state.
         if (isFirstExitFromPeeking) {
@@ -179,9 +181,6 @@ public class ContextualSearchPanelMetrics {
             mIsSerpNavigation = false;
             mWasSelectionPartOfUrl = false;
         }
-
-        // TODO(manzagop): When the user opts in, we should replay his actions for the current
-        // contextual search for the standard (non promo) UMA histograms.
     }
 
     /**
@@ -276,7 +275,7 @@ public class ContextualSearchPanelMetrics {
      * Sets the experiments to log with results seen.
      * @param resultsSeenExperiments The experiments to log when the panel results are known.
      */
-    public void setResultsSeenExperiments(TapSuppressionHeuristics resultsSeenExperiments) {
+    public void setResultsSeenExperiments(ContextualSearchHeuristics resultsSeenExperiments) {
         mResultsSeenExperiments = resultsSeenExperiments;
     }
 

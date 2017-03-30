@@ -9,7 +9,6 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.Browser;
-import android.test.FlakyTest;
 import android.test.suitebuilder.annotation.LargeTest;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.text.TextUtils;
@@ -21,7 +20,9 @@ import junit.framework.Assert;
 import org.chromium.base.BaseSwitches;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
@@ -253,8 +254,9 @@ public class TabsOpenedFromExternalAppTest extends ChromeTabbedActivityTestBase 
      * Tests that URLs opened from the same external app don't create new tabs.
      * @throws InterruptedException
      */
-    @LargeTest
-    @Feature({"Navigation"})
+    // @LargeTest
+    // @Feature({"Navigation"})
+    @DisabledTest
     public void testNoNewTabForSameApp() throws InterruptedException {
         startMainActivityFromLauncher();
 
@@ -349,8 +351,9 @@ public class TabsOpenedFromExternalAppTest extends ChromeTabbedActivityTestBase 
      * the intent do create new tabs.
      * @throws InterruptedException
      */
-    @LargeTest
-    @Feature({"Navigation"})
+    // @LargeTest
+    // @Feature({"Navigation"})
+    @DisabledTest
     public void testNewTabWithNewTabExtra() throws InterruptedException {
         startMainActivityFromLauncher();
 
@@ -498,9 +501,8 @@ public class TabsOpenedFromExternalAppTest extends ChromeTabbedActivityTestBase 
     /**
      * @LargeTest
      * @Feature({"Navigation"})
-     * Bug 6467101
      */
-    @FlakyTest
+    @FlakyTest(message = "http://crbug.com/6467101")
     public void testNewTabWhenPageEdited() throws InterruptedException, TimeoutException {
         startMainActivityFromLauncher();
 
@@ -546,9 +548,8 @@ public class TabsOpenedFromExternalAppTest extends ChromeTabbedActivityTestBase 
 
     /**
      * Catches regressions for https://crbug.com/495877.
-     * Flakiness reported in https://crbug.com/571030
      */
-    @FlakyTest
+    @FlakyTest(message = "https://crbug.com/571030")
     @MediumTest
     @CommandLineFlags.Add(BaseSwitches.ENABLE_LOW_END_DEVICE_MODE)
     public void testBackgroundSvelteTabIsSelectedAfterClosingExternalTab() throws Exception {

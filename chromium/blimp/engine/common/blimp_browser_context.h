@@ -9,6 +9,7 @@
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
+#include "blimp/engine/app/blimp_metrics_service_client.h"
 #include "blimp/engine/app/blimp_system_url_request_context_getter.h"
 #include "blimp/engine/app/blimp_url_request_context_getter.h"
 #include "content/public/browser/browser_context.h"
@@ -37,13 +38,6 @@ class BlimpBrowserContext : public content::BrowserContext {
       const base::FilePath& partition_path) override;
   base::FilePath GetPath() const override;
   bool IsOffTheRecord() const override;
-  net::URLRequestContextGetter* GetRequestContext() override;
-  net::URLRequestContextGetter* GetMediaRequestContext() override;
-  net::URLRequestContextGetter* GetMediaRequestContextForRenderProcess(
-      int renderer_child_id) override;
-  net::URLRequestContextGetter* GetMediaRequestContextForStoragePartition(
-      const base::FilePath& partition_path,
-      bool in_memory) override;
   content::ResourceContext* GetResourceContext() override;
   content::DownloadManagerDelegate* GetDownloadManagerDelegate() override;
   content::BrowserPluginGuestManager* GetGuestManager() override;
@@ -60,15 +54,31 @@ class BlimpBrowserContext : public content::BrowserContext {
       bool in_memory,
       content::ProtocolHandlerMap* protocol_handlers,
       content::URLRequestInterceptorScopedVector request_interceptors) override;
+  net::URLRequestContextGetter* CreateMediaRequestContext() override;
+  net::URLRequestContextGetter* CreateMediaRequestContextForStoragePartition(
+      const base::FilePath& partition_path,
+      bool in_memory) override;
 
   // Provides a URLRequestContextGetter for system requests (e.g. metrics
   // uploads).
   net::URLRequestContextGetter* GetSystemRequestContextGetter();
 
+  PrefService* GetPrefService() { return pref_service_.get(); }
+
  private:
   // Performs initialization of the BlimpBrowserContext while IO is still
   // allowed on the current thread.
   void InitWhileIOAllowed();
+
+  // Helper function for PrefService initialization.
+  void InitPrefService();
+
+  // Used in metrics initialization to get a PrefService to store logs
+  // temporarily. Must stay alive for lifetime of metrics_service_client_.
+  std::unique_ptr<PrefService> pref_service_;
+
+  // Used for metrics recording and reporting.
+  std::unique_ptr<BlimpMetricsServiceClient> metrics_service_client_;
 
   std::unique_ptr<BlimpResourceContext> resource_context_;
   scoped_refptr<BlimpSystemURLRequestContextGetter> system_context_getter_;

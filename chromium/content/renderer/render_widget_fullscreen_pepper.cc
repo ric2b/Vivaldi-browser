@@ -20,7 +20,6 @@
 #include "skia/ext/platform_canvas.h"
 #include "third_party/WebKit/public/platform/WebCanvas.h"
 #include "third_party/WebKit/public/platform/WebCursorInfo.h"
-#include "third_party/WebKit/public/platform/WebGraphicsContext3D.h"
 #include "third_party/WebKit/public/platform/WebLayer.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
 #include "third_party/WebKit/public/web/WebWidget.h"
@@ -66,36 +65,30 @@ class FullscreenMouseLockDispatcher : public MouseLockDispatcher {
 WebMouseEvent WebMouseEventFromGestureEvent(const WebGestureEvent& gesture) {
   WebMouseEvent mouse;
 
+  // Only convert touch screen gesture events, do not convert
+  // touchpad/mouse wheel gesture events. (crbug.com/620974)
+  if (gesture.sourceDevice != blink::WebGestureDeviceTouchscreen)
+    return mouse;
+
   switch (gesture.type) {
     case WebInputEvent::GestureScrollBegin:
       mouse.type = WebInputEvent::MouseDown;
       break;
-
     case WebInputEvent::GestureScrollUpdate:
       mouse.type = WebInputEvent::MouseMove;
       break;
-
     case WebInputEvent::GestureFlingStart:
-      if (gesture.sourceDevice == blink::WebGestureDeviceTouchscreen) {
-        // A scroll gesture on the touchscreen may end with a GestureScrollEnd
-        // when there is no velocity, or a GestureFlingStart when it has a
-        // velocity. In both cases, it should end the drag that was initiated by
-        // the GestureScrollBegin (and subsequent GestureScrollUpdate) events.
-        mouse.type = WebInputEvent::MouseUp;
-        break;
-      } else {
-        return mouse;
-      }
+      // A scroll gesture on the touchscreen may end with a GestureScrollEnd
+      // when there is no velocity, or a GestureFlingStart when it has a
+      // velocity. In both cases, it should end the drag that was initiated by
+      // the GestureScrollBegin (and subsequent GestureScrollUpdate) events.
+      mouse.type = WebInputEvent::MouseUp;
     case WebInputEvent::GestureScrollEnd:
       mouse.type = WebInputEvent::MouseUp;
       break;
-
     default:
-      break;
+      return mouse;
   }
-
-  if (mouse.type == WebInputEvent::Undefined)
-    return mouse;
 
   mouse.timeStampSeconds = gesture.timeStampSeconds;
   mouse.modifiers = gesture.modifiers | WebInputEvent::LeftButtonDown;
@@ -147,7 +140,7 @@ class PepperWidget : public WebWidget {
   WebSize size() override { return size_; }
 
   void resize(const WebSize& size) override {
-    if (!widget_->plugin())
+    if (!widget_->plugin() || size_ == size)
       return;
 
     size_ = size;

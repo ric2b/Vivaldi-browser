@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/app_mode/startup_app_launcher.h"
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/json/json_file_value_serializer.h"
@@ -14,6 +15,7 @@
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_diagnosis_runner.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
+#include "chrome/browser/chromeos/net/delay_network_call.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/install_tracker.h"
 #include "chrome/browser/extensions/install_tracker_factory.h"
@@ -269,7 +271,8 @@ void StartupAppLauncher::MaybeCheckExtensionUpdate() {
       extensions::ExtensionSystem::Get(profile_)
           ->extension_service()
           ->updater();
-  if (!delegate_->IsNetworkReady() || !updater) {
+  if (!delegate_->IsNetworkReady() || !updater ||
+      PrimaryAppHasPendingUpdate()) {
     MaybeLaunchApp();
     return;
   }
@@ -405,6 +408,12 @@ bool StartupAppLauncher::HasSecondaryApps() const {
   return extensions::KioskModeInfo::HasSecondaryApps(extension);
 }
 
+bool StartupAppLauncher::PrimaryAppHasPendingUpdate() const {
+  return !!extensions::ExtensionSystem::Get(profile_)
+               ->extension_service()
+               ->GetPendingExtensionUpdate(app_id_);
+}
+
 bool StartupAppLauncher::DidPrimaryOrSecondaryAppFailedToInstall(
     bool success,
     const std::string& id) const {
@@ -509,7 +518,10 @@ void StartupAppLauncher::BeginInstall() {
 
 void StartupAppLauncher::MaybeInstallSecondaryApps() {
   if (!AreSecondaryAppsInstalled() && !delegate_->IsNetworkReady()) {
-    OnLaunchFailure(KioskAppLaunchError::UNABLE_TO_INSTALL);
+    DelayNetworkCall(
+        base::TimeDelta::FromMilliseconds(kDefaultNetworkRetryDelayMS),
+        base::Bind(&StartupAppLauncher::MaybeInstallSecondaryApps,
+                   AsWeakPtr()));
     return;
   }
 
@@ -536,11 +548,16 @@ void StartupAppLauncher::MaybeInstallSecondaryApps() {
 
 void StartupAppLauncher::OnReadyToLaunch() {
   ready_to_launch_ = true;
-  UpdateAppData();
+  MaybeUpdateAppData();
   delegate_->OnReadyToLaunch();
 }
 
-void StartupAppLauncher::UpdateAppData() {
+void StartupAppLauncher::MaybeUpdateAppData() {
+  // Skip copying meta data from the current installed primary app when
+  // there is a pending update.
+  if (PrimaryAppHasPendingUpdate())
+    return;
+
   KioskAppManager::Get()->ClearAppData(app_id_);
   KioskAppManager::Get()->UpdateAppDataFromProfile(app_id_, profile_, NULL);
 }

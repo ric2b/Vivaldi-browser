@@ -31,8 +31,6 @@
       'dependencies': [
         '<(DEPTH)/base/base.gyp:base',
         '<(DEPTH)/base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
-        '<(DEPTH)/skia/skia.gyp:skia',
-        '../gfx/gfx.gyp:gfx',
         '../gfx/gfx.gyp:gfx_geometry',
         'dom_keycode_converter',
       ],
@@ -63,29 +61,17 @@
         'keycodes/keyboard_code_conversion_mac.mm',
         'keycodes/keyboard_code_conversion_win.cc',
         'keycodes/keyboard_code_conversion_win.h',
-        'keycodes/keyboard_code_conversion_x.cc',
-        'keycodes/keyboard_code_conversion_x.h',
         'keycodes/keyboard_codes.h',
         'latency_info.cc',
         'latency_info.h',
-        'x/keysym_to_unicode.cc',
-        'x/keysym_to_unicode.h',
       ],
       'export_dependent_settings': [
-        '../../ui/gfx/gfx.gyp:gfx',
+        '../../ui/gfx/gfx.gyp:gfx_geometry',
       ],
       'conditions': [
         ['use_x11==1', {
           'dependencies': [
-            '../../build/linux/system.gyp:x11',
-            '../gfx/x/gfx_x11.gyp:gfx_x11',
-          ],
-        }],
-        ['use_x11==1 or use_xkbcommon==1', {
-          'sources': [
-            'keycodes/keyboard_code_conversion_xkb.cc',
-            'keycodes/keyboard_code_conversion_xkb.h',
-            'keycodes/xkb_keysym.h',
+            'keycodes/events_keycodes.gyp:keycodes_x11',
           ],
         }],
       ],
@@ -98,6 +84,7 @@
         '<(DEPTH)/base/base.gyp:base',
         '<(DEPTH)/base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
         '<(DEPTH)/skia/skia.gyp:skia',
+        '../display/display.gyp:display',
         '../gfx/gfx.gyp:gfx',
         '../gfx/gfx.gyp:gfx_geometry',
         'dom_keycode_converter',
@@ -162,6 +149,8 @@
             '../../build/linux/system.gyp:x11',
             '../gfx/x/gfx_x11.gyp:gfx_x11',
             'devices/events_devices.gyp:events_devices',
+            'devices/x11/events_devices_x11.gyp:events_devices_x11',
+            'keycodes/events_keycodes.gyp:keycodes_x11',
             'x/events_x.gyp:events_x',
           ],
         }],
@@ -242,6 +231,7 @@
       'dependencies': [
         '<(DEPTH)/base/base.gyp:base',
         '<(DEPTH)/base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
+        '../display/display.gyp:display',
         '../gfx/gfx.gyp:gfx',
         '../gfx/gfx.gyp:gfx_geometry',
         'events_base',
@@ -325,6 +315,7 @@
       'dependencies': [
         '<(DEPTH)/base/base.gyp:base',
         '<(DEPTH)/skia/skia.gyp:skia',
+        '../gfx/gfx.gyp:gfx',
         '../gfx/gfx.gyp:gfx_geometry',
         'events',
         'events_base',
@@ -362,13 +353,24 @@
           # The cocoa files don't apply to iOS.
           'sources/': [['exclude', 'cocoa']],
         }],
+        ['use_x11==1', {
+          'dependencies': [
+            'devices/x11/events_devices_x11.gyp:events_devices_x11',
+            'keycodes/events_keycodes.gyp:keycodes_x11',
+          ],
+        }],
+        ['use_x11==1 or ozone_platform_ozonex==1', {
+          'dependencies': [
+            'x/events_x.gyp:events_x',
+          ],
+        }],
         ['use_x11==1 or use_ozone==1', {
           'sources' : [
               'test/device_data_manager_test_api_impl.cc',
             ],
           'dependencies': [
             'devices/events_devices.gyp:events_devices',
-            ],
+          ],
         }, { # else use_x11=1 or use_ozone=1
           'sources' : [
               'test/device_data_manager_test_api_stub.cc',

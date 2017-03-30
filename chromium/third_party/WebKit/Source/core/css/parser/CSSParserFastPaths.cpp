@@ -387,7 +387,7 @@ static bool fastParseColorInternal(RGBA32& rgb, const CharacterType* characters,
     if (length >= 4 && characters[0] == '#')
         return Color::parseHexColor(characters + 1, length - 1, rgb);
 
-    if (quirksMode && length >= 3) {
+    if (quirksMode && (length == 3 || length == 6)) {
         if (Color::parseHexColor(characters, length, rgb))
             return true;
     }
@@ -463,9 +463,9 @@ CSSValue* CSSParserFastPaths::parseColor(const String& string, CSSParserMode par
     return cssValuePool().createColorValue(color);
 }
 
-bool CSSParserFastPaths::isValidKeywordPropertyAndValue(CSSPropertyID propertyId, CSSValueID valueID)
+bool CSSParserFastPaths::isValidKeywordPropertyAndValue(CSSPropertyID propertyId, CSSValueID valueID, CSSParserMode parserMode)
 {
-    if (valueID == CSSValueInvalid)
+    if (valueID == CSSValueInvalid || !isValueAllowedInMode(valueID, parserMode))
         return false;
 
     switch (propertyId) {
@@ -584,7 +584,7 @@ bool CSSParserFastPaths::isValidKeywordPropertyAndValue(CSSPropertyID propertyId
     case CSSPropertyTableLayout: // auto | fixed
         return valueID == CSSValueAuto || valueID == CSSValueFixed;
     case CSSPropertyTextAlign:
-        return (valueID >= CSSValueWebkitAuto && valueID <= CSSValueWebkitMatchParent) || valueID == CSSValueStart || valueID == CSSValueEnd;
+        return (valueID >= CSSValueWebkitAuto && valueID <= CSSValueInternalCenter) || valueID == CSSValueStart || valueID == CSSValueEnd;
     case CSSPropertyTextAlignLast:
         // auto | start | end | left | right | center | justify
         return (valueID >= CSSValueLeft && valueID <= CSSValueJustify) || valueID == CSSValueStart || valueID == CSSValueEnd || valueID == CSSValueAuto;
@@ -643,7 +643,6 @@ bool CSSParserFastPaths::isValidKeywordPropertyAndValue(CSSPropertyID propertyId
     case CSSPropertyWebkitBoxPack:
         return valueID == CSSValueStart || valueID == CSSValueEnd || valueID == CSSValueCenter || valueID == CSSValueJustify;
     case CSSPropertyColumnFill:
-        ASSERT(RuntimeEnabledFeatures::columnFillEnabled());
         return valueID == CSSValueAuto || valueID == CSSValueBalance;
     case CSSPropertyAlignContent:
         // FIXME: Per CSS alignment, this property should accept an optional <overflow-position>. We should share this parsing code with 'justify-self'.
@@ -658,6 +657,8 @@ bool CSSParserFastPaths::isValidKeywordPropertyAndValue(CSSPropertyID propertyId
         return valueID == CSSValueRow || valueID == CSSValueRowReverse || valueID == CSSValueColumn || valueID == CSSValueColumnReverse;
     case CSSPropertyFlexWrap:
         return valueID == CSSValueNowrap || valueID == CSSValueWrap || valueID == CSSValueWrapReverse;
+    case CSSPropertyHyphens:
+        return valueID == CSSValueAuto || valueID == CSSValueNone || valueID == CSSValueManual;
     case CSSPropertyJustifyContent:
         // FIXME: Per CSS alignment, this property should accept an optional <overflow-position>. We should share this parsing code with 'justify-self'.
         return valueID == CSSValueFlexStart || valueID == CSSValueFlexEnd || valueID == CSSValueCenter || valueID == CSSValueSpaceBetween || valueID == CSSValueSpaceAround;
@@ -742,6 +743,7 @@ bool CSSParserFastPaths::isKeywordPropertyID(CSSPropertyID propertyId)
     case CSSPropertyFloat:
     case CSSPropertyFontStyle:
     case CSSPropertyFontStretch:
+    case CSSPropertyHyphens:
     case CSSPropertyImageRendering:
     case CSSPropertyListStylePosition:
     case CSSPropertyListStyleType:
@@ -828,7 +830,7 @@ bool CSSParserFastPaths::isKeywordPropertyID(CSSPropertyID propertyId)
     }
 }
 
-static CSSValue* parseKeywordValue(CSSPropertyID propertyId, const String& string)
+static CSSValue* parseKeywordValue(CSSPropertyID propertyId, const String& string, CSSParserMode parserMode)
 {
     ASSERT(!string.isEmpty());
 
@@ -854,7 +856,7 @@ static CSSValue* parseKeywordValue(CSSPropertyID propertyId, const String& strin
         return cssValuePool().createInheritedValue();
     if (valueID == CSSValueInitial)
         return cssValuePool().createExplicitInitialValue();
-    if (CSSParserFastPaths::isValidKeywordPropertyAndValue(propertyId, valueID))
+    if (CSSParserFastPaths::isValidKeywordPropertyAndValue(propertyId, valueID, parserMode))
         return cssValuePool().createIdentifierValue(valueID);
     return nullptr;
 }
@@ -1027,7 +1029,7 @@ CSSValue* CSSParserFastPaths::maybeParseValue(CSSPropertyID propertyID, const St
         return length;
     if (isColorPropertyID(propertyID))
         return parseColor(string, parserMode);
-    if (CSSValue* keyword = parseKeywordValue(propertyID, string))
+    if (CSSValue* keyword = parseKeywordValue(propertyID, string, parserMode))
         return keyword;
     if (CSSValue* transform = parseSimpleTransform(propertyID, string))
         return transform;

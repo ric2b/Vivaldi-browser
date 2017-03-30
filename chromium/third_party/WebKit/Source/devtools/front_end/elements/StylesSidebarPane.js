@@ -48,6 +48,9 @@ WebInspector.StylesSidebarPane = function()
     this._keyDownBound = this._keyDown.bind(this);
     this._keyUpBound = this._keyUp.bind(this);
 
+     /** @type {!Array<!WebInspector.SectionBlock>} */
+    this._sectionBlocks = [];
+
     WebInspector.targetManager.addModelListener(WebInspector.CSSModel, WebInspector.CSSModel.Events.LayoutEditorChange, this._onLayoutEditorChange, this);
 }
 
@@ -759,48 +762,7 @@ WebInspector.StylePropertiesSection = function(parentPane, matchedStyles, style)
     var closeBrace = this.element.createChild("div", "sidebar-pane-closing-brace");
     closeBrace.textContent = "}";
 
-    if (this.editable) {
-        var items = [];
-        var colorButton = new WebInspector.ToolbarButton(WebInspector.UIString("Add color"), "foreground-color-toolbar-item");
-        colorButton.addEventListener("click", this._onInsertColorPropertyClick.bind(this));
-        items.push(colorButton);
-
-        var backgroundButton = new WebInspector.ToolbarButton(WebInspector.UIString("Add background-color"), "background-color-toolbar-item");
-        backgroundButton.addEventListener("click", this._onInsertBackgroundColorPropertyClick.bind(this));
-        items.push(backgroundButton);
-
-        if (rule) {
-            var newRuleButton = new WebInspector.ToolbarButton(WebInspector.UIString("Insert Style Rule Below"), "add-toolbar-item");
-            newRuleButton.addEventListener("click", this._onNewRuleClick.bind(this));
-            items.push(newRuleButton);
-        }
-
-        var menuButton = new WebInspector.ToolbarButton(WebInspector.UIString("More tools\u2026"), "menu-toolbar-item");
-        items.push(menuButton);
-
-        if (items.length) {
-            var sectionToolbar = new WebInspector.Toolbar("sidebar-pane-section-toolbar", closeBrace);
-
-            for (var i = 0; i < items.length; ++i)
-                sectionToolbar.appendToolbarItem(items[i]);
-
-            items.pop();
-
-            /**
-             * @param {!Array<!WebInspector.ToolbarButton>} items
-             * @param {boolean} value
-             */
-            function setItemsVisibility(items, value)
-            {
-                for (var i = 0; i < items.length; ++i)
-                    items[i].setVisible(value);
-                menuButton.setVisible(!value);
-            }
-            setItemsVisibility(items, false);
-            sectionToolbar.element.addEventListener("mouseenter", setItemsVisibility.bind(null, items, true));
-            sectionToolbar.element.addEventListener("mouseleave", setItemsVisibility.bind(null, items, false));
-        }
-    }
+    this._createHoverMenuToolbar(closeBrace);
 
     this._selectorElement.addEventListener("click", this._handleSelectorClick.bind(this), false);
     this.element.addEventListener("mousedown", this._handleEmptySpaceMouseDown.bind(this), false);
@@ -835,6 +797,66 @@ WebInspector.StylePropertiesSection = function(parentPane, matchedStyles, style)
 }
 
 WebInspector.StylePropertiesSection.prototype = {
+    /**
+     * @param {!Element} container
+     */
+    _createHoverMenuToolbar: function(container)
+    {
+        if (!this.editable)
+            return;
+        var items = [];
+        var colorButton = new WebInspector.ToolbarButton(WebInspector.UIString("Add color"), "foreground-color-toolbar-item");
+        colorButton.addEventListener("click", this._onInsertColorPropertyClick.bind(this));
+        items.push(colorButton);
+
+        var backgroundButton = new WebInspector.ToolbarButton(WebInspector.UIString("Add background-color"), "background-color-toolbar-item");
+        backgroundButton.addEventListener("click", this._onInsertBackgroundColorPropertyClick.bind(this));
+        items.push(backgroundButton);
+
+        var newRuleButton = null;
+        if (this._style.parentRule) {
+            newRuleButton = new WebInspector.ToolbarButton(WebInspector.UIString("Insert Style Rule Below"), "add-toolbar-item");
+            newRuleButton.addEventListener("click", this._onNewRuleClick.bind(this));
+            items.push(newRuleButton);
+        }
+
+        var sectionToolbar = new WebInspector.Toolbar("sidebar-pane-section-toolbar", container);
+        for (var i = 0; i < items.length; ++i)
+            sectionToolbar.appendToolbarItem(items[i]);
+
+        var menuButton = new WebInspector.ToolbarButton(WebInspector.UIString("More tools\u2026"), "menu-toolbar-item");
+        sectionToolbar.appendToolbarItem(menuButton);
+        setItemsVisibility.call(this, items, false);
+        sectionToolbar.element.addEventListener("mouseenter", setItemsVisibility.bind(this, items, true));
+        sectionToolbar.element.addEventListener("mouseleave", setItemsVisibility.bind(this, items, false));
+
+        /**
+         * @param {!Array<!WebInspector.ToolbarButton>} items
+         * @param {boolean} value
+         * @this {WebInspector.StylePropertiesSection}
+         */
+        function setItemsVisibility(items, value)
+        {
+            for (var i = 0; i < items.length; ++i)
+                items[i].setVisible(value);
+            menuButton.setVisible(!value);
+            if (this._isSASSStyle())
+                newRuleButton.setVisible(false);
+        }
+    },
+
+    /**
+     * @return {boolean}
+     */
+    _isSASSStyle: function()
+    {
+        var header = this._style.styleSheetId ? this._style.cssModel().styleSheetHeaderForId(this._style.styleSheetId) : null;
+        if (!header)
+            return false;
+        var sourceMap = header.cssModel().sourceMapForHeader(header);
+        return sourceMap ? sourceMap.editable() : false;
+    },
+
     /**
      * @return {!WebInspector.CSSStyleDeclaration}
      */
@@ -1022,7 +1044,7 @@ WebInspector.StylePropertiesSection.prototype = {
                 mediaContainerElement.insertBefore(decoration, mediaTextElement);
                 decoration.textContent = "@media ";
                 mediaTextElement.textContent = media.text;
-                if (media.parentStyleSheetId) {
+                if (media.styleSheetId) {
                     mediaDataElement.classList.add("editable-media");
                     mediaTextElement.addEventListener("click", this._handleMediaRuleClick.bind(this, media, mediaTextElement), false);
                 }
@@ -1302,6 +1324,9 @@ WebInspector.StylePropertiesSection.prototype = {
             return;
         }
 
+        if (!this.editable || this._isSASSStyle())
+            return;
+
         var config = new WebInspector.InplaceEditor.Config(this._editingMediaCommitted.bind(this, media), this._editingMediaCancelled.bind(this, element), undefined, this._editingMediaBlurHandler.bind(this));
         WebInspector.InplaceEditor.startEditing(element, config);
 
@@ -1377,7 +1402,8 @@ WebInspector.StylePropertiesSection.prototype = {
 
         // This gets deleted in finishOperation(), which is called both on success and failure.
         this._parentPane._userOperation = true;
-        this._parentPane._cssModel.setMediaText(media, newContent, userCallback.bind(this));
+        this._parentPane._cssModel.setMediaText(media.styleSheetId, media.range, newContent)
+            .then(userCallback.bind(this));
     },
 
     _editingMediaTextCommittedForTest: function() { },
@@ -1388,18 +1414,7 @@ WebInspector.StylePropertiesSection.prototype = {
     _handleSelectorClick: function(event)
     {
         if (WebInspector.KeyboardShortcut.eventHasCtrlOrMeta(/** @type {!MouseEvent} */(event)) && this.navigable && event.target.classList.contains("simple-selector")) {
-            var index = event.target._selectorIndex;
-            var cssModel = this._parentPane._cssModel;
-            var rule = this._style.parentRule;
-            var header = cssModel.styleSheetHeaderForId(/** @type {string} */(rule.styleSheetId));
-            if (!header) {
-                event.consume(true);
-                return;
-            }
-            var rawLocation = new WebInspector.CSSLocation(header, rule.lineNumberInSource(index), rule.columnNumberInSource(index));
-            var uiLocation = WebInspector.cssWorkspaceBinding.rawLocationToUILocation(rawLocation);
-            if (uiLocation)
-                WebInspector.Revealer.reveal(uiLocation);
+            this._navigateToSelectorSource(event.target._selectorIndex, true);
             event.consume(true);
             return;
         }
@@ -1407,9 +1422,26 @@ WebInspector.StylePropertiesSection.prototype = {
         event.consume(true);
     },
 
+    /**
+     * @param {number} index
+     * @param {boolean} focus
+     */
+    _navigateToSelectorSource: function(index, focus)
+    {
+        var cssModel = this._parentPane._cssModel;
+        var rule = this._style.parentRule;
+        var header = cssModel.styleSheetHeaderForId(/** @type {string} */(rule.styleSheetId));
+        if (!header)
+            return;
+        var rawLocation = new WebInspector.CSSLocation(header, rule.lineNumberInSource(index), rule.columnNumberInSource(index));
+        var uiLocation = WebInspector.cssWorkspaceBinding.rawLocationToUILocation(rawLocation);
+        if (uiLocation)
+            WebInspector.Revealer.reveal(uiLocation, !focus);
+    },
+
     _startEditingOnMouseEvent: function()
     {
-        if (!this.editable)
+        if (!this.editable || this._isSASSStyle())
             return;
 
         var rule = this._style.parentRule;
@@ -1438,6 +1470,8 @@ WebInspector.StylePropertiesSection.prototype = {
 
         element.getComponentSelection().setBaseAndExtent(element, 0, element, 1);
         this._parentPane.setEditingStyle(true);
+        if (element.classList.contains("simple-selector"))
+            this._navigateToSelectorSource(0, false);
     },
 
     /**
@@ -2272,14 +2306,16 @@ WebInspector.StylePropertyTreeElement.prototype = {
 
     /**
      * @param {!Element} element
+     * @param {boolean=} omitFocus
      */
-    _navigateToSource: function(element)
+    _navigateToSource: function(element, omitFocus)
     {
-        console.assert(this.section().navigable);
+        if (!this.section().navigable)
+            return;
         var propertyNameClicked = element === this.nameElement;
         var uiLocation = WebInspector.cssWorkspaceBinding.propertyUILocation(this.property, propertyNameClicked);
         if (uiLocation)
-            WebInspector.Revealer.reveal(uiLocation);
+            WebInspector.Revealer.reveal(uiLocation, omitFocus);
     },
 
     /**
@@ -2412,6 +2448,7 @@ WebInspector.StylePropertyTreeElement.prototype = {
             this._prompt.addEventListener(WebInspector.TextPrompt.Events.ItemAccepted, applyItemCallback, this);
         }
         var proxyElement = this._prompt.attachAndStartEditing(selectElement, blurListener.bind(this, context));
+        this._navigateToSource(selectElement, true);
 
         proxyElement.addEventListener("keydown", this._editingNameValueKeyDown.bind(this, context), false);
         proxyElement.addEventListener("keypress", this._editingNameValueKeyPress.bind(this, context), false);
@@ -2577,7 +2614,7 @@ WebInspector.StylePropertyTreeElement.prototype = {
         var target = this;
         do {
             target = (moveDirection === "forward" ? target.nextSibling : target.previousSibling);
-        } while(target && target.inherited());
+        } while (target && target.inherited());
 
         return target;
     },
@@ -2828,8 +2865,19 @@ WebInspector.StylesSidebarPane.CSSPropertyPrompt = function(cssCompletions, tree
     this._treeElement = treeElement;
     this._isEditingName = isEditingName;
 
-    if (!isEditingName)
+    if (!isEditingName) {
         this.disableDefaultSuggestionForEmptyInput();
+
+        // If a CSS value is being edited that has a numeric or hex substring, hint that precision modifier shortcuts are available.
+        if (treeElement && treeElement.valueElement) {
+            var cssValueText = treeElement.valueElement.textContent;
+            if (cssValueText.match(/#[\da-f]{3,6}$/i))
+                this.setTitle(WebInspector.UIString("Increment/decrement with mousewheel or up/down keys. %s: R ±1, Shift: G ±1, Alt: B ±1", WebInspector.isMac() ? "Cmd" : "Ctrl"));
+            else if (cssValueText.match(/\d+/))
+                this.setTitle(WebInspector.UIString("Increment/decrement with mousewheel or up/down keys. %s: ±100, Shift: ±10, Alt: ±0.1", WebInspector.isMac() ? "Cmd" : "Ctrl"));
+        }
+
+    }
 }
 
 WebInspector.StylesSidebarPane.CSSPropertyPrompt.prototype = {
@@ -2983,7 +3031,7 @@ WebInspector.StylesSidebarPropertyRenderer = function(rule, node, name, value)
 }
 
 WebInspector.StylesSidebarPropertyRenderer._variableRegex = /(var\(--.*?\))/g;
-WebInspector.StylesSidebarPropertyRenderer._colorRegex = /((?:rgb|hsl)a?\([^)]+\)|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|\b\w+\b(?!-))/g;
+WebInspector.StylesSidebarPropertyRenderer._colorRegex = /((?:rgb|hsl)a?\([^)]+\)|#[0-9a-fA-F]{8}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3,4}|\b\w+\b(?!-))/g;
 WebInspector.StylesSidebarPropertyRenderer._bezierRegex = /((cubic-bezier\([^)]+\))|\b(linear|ease-in-out|ease-in|ease-out|ease)\b)/g;
 
 /**

@@ -5,15 +5,14 @@
 #include "mojo/public/cpp/bindings/lib/router.h"
 
 #include <stdint.h>
+
 #include <utility>
 
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
-#include "base/single_thread_task_runner.h"
+#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
-#include "base/thread_task_runner_handle.h"
 
 namespace mojo {
 namespace internal {
@@ -30,20 +29,25 @@ void DCheckIfInvalid(const base::WeakPtr<Router>& router,
 
 class ResponderThunk : public MessageReceiverWithStatus {
  public:
-  explicit ResponderThunk(const base::WeakPtr<Router>& router)
-      : router_(router), accept_was_invoked_(false),
-        task_runner_(base::ThreadTaskRunnerHandle::Get()) {}
+  explicit ResponderThunk(const base::WeakPtr<Router>& router,
+                          scoped_refptr<base::SingleThreadTaskRunner> runner)
+      : router_(router),
+        accept_was_invoked_(false),
+        task_runner_(std::move(runner)) {}
   ~ResponderThunk() override {
     if (!accept_was_invoked_) {
       // The Mojo application handled a message that was expecting a response
       // but did not send a response.
+      // We raise an error to signal the calling application that an error
+      // condition occurred. Without this the calling application would have no
+      // way of knowing it should stop waiting for a response.
       if (task_runner_->RunsTasksOnCurrentThread()) {
-        if (router_) {
-          // We raise an error to signal the calling application that an error
-          // condition occurred. Without this the calling application would have
-          // no way of knowing it should stop waiting for a response.
+        // Please note that even if this code is run from a different task
+        // runner on the same thread as |task_runner_|, it is okay to directly
+        // call Router::RaiseError(), because it will raise error from the
+        // correct task runner asynchronously.
+        if (router_)
           router_->RaiseError();
-        }
       } else {
         task_runner_->PostTask(FROM_HERE,
                                base::Bind(&Router::RaiseError, router_));
@@ -112,10 +116,13 @@ bool Router::HandleIncomingMessageThunk::Accept(Message* message) {
 
 Router::Router(ScopedMessagePipeHandle message_pipe,
                FilterChain filters,
-               bool expects_sync_requests)
+               bool expects_sync_requests,
+               scoped_refptr<base::SingleThreadTaskRunner> runner)
     : thunk_(this),
       filters_(std::move(filters)),
-      connector_(std::move(message_pipe), Connector::SINGLE_THREADED_SEND),
+      connector_(std::move(message_pipe),
+                 Connector::SINGLE_THREADED_SEND,
+                 std::move(runner)),
       incoming_receiver_(nullptr),
       next_request_id_(0),
       testing_mode_(false),
@@ -146,20 +153,21 @@ bool Router::AcceptWithResponder(Message* message, MessageReceiver* responder) {
   if (request_id == 0)
     request_id = next_request_id_++;
 
+  bool is_sync = message->has_flag(kMessageIsSync);
   message->set_request_id(request_id);
   if (!connector_.Accept(message))
     return false;
 
-  if (!message->has_flag(kMessageIsSync)) {
+  if (!is_sync) {
     // We assume ownership of |responder|.
-    async_responders_[request_id] = make_scoped_ptr(responder);
+    async_responders_[request_id] = base::WrapUnique(responder);
     return true;
   }
 
   bool response_received = false;
-  scoped_ptr<MessageReceiver> sync_responder(responder);
+  std::unique_ptr<MessageReceiver> sync_responder(responder);
   sync_responses_.insert(std::make_pair(
-      request_id, make_scoped_ptr(new SyncResponseInfo(&response_received))));
+      request_id, base::WrapUnique(new SyncResponseInfo(&response_received))));
 
   base::WeakPtr<Router> weak_self = weak_factory_.GetWeakPtr();
   connector_.SyncWatch(&response_received);
@@ -169,7 +177,7 @@ bool Router::AcceptWithResponder(Message* message, MessageReceiver* responder) {
     auto iter = sync_responses_.find(request_id);
     DCHECK_EQ(&response_received, iter->second->response_received);
     if (response_received) {
-      scoped_ptr<Message> response = std::move(iter->second->response);
+      std::unique_ptr<Message> response = std::move(iter->second->response);
       ignore_result(sync_responder->Accept(response.get()));
     }
     sync_responses_.erase(iter);
@@ -192,13 +200,13 @@ bool Router::HandleIncomingMessage(Message* message) {
       connector_.during_sync_handle_watcher_callback();
   if (!message->has_flag(kMessageIsSync) &&
       (during_sync_call || !pending_messages_.empty())) {
-    scoped_ptr<Message> pending_message(new Message);
+    std::unique_ptr<Message> pending_message(new Message);
     message->MoveTo(pending_message.get());
     pending_messages_.push(std::move(pending_message));
 
     if (!pending_task_for_messages_) {
       pending_task_for_messages_ = true;
-      base::MessageLoop::current()->PostTask(
+      connector_.task_runner()->PostTask(
           FROM_HERE, base::Bind(&Router::HandleQueuedMessages,
                                 weak_factory_.GetWeakPtr()));
     }
@@ -215,7 +223,7 @@ void Router::HandleQueuedMessages() {
 
   base::WeakPtr<Router> weak_self = weak_factory_.GetWeakPtr();
   while (!pending_messages_.empty()) {
-    scoped_ptr<Message> message(std::move(pending_messages_.front()));
+    std::unique_ptr<Message> message(std::move(pending_messages_.front()));
     pending_messages_.pop();
 
     bool result = HandleMessageInternal(message.get());
@@ -242,8 +250,8 @@ bool Router::HandleMessageInternal(Message* message) {
     if (!incoming_receiver_)
       return false;
 
-    MessageReceiverWithStatus* responder =
-        new ResponderThunk(weak_factory_.GetWeakPtr());
+    MessageReceiverWithStatus* responder = new ResponderThunk(
+        weak_factory_.GetWeakPtr(), connector_.task_runner());
     bool ok = incoming_receiver_->AcceptWithResponder(message, responder);
     if (!ok)
       delete responder;
@@ -269,7 +277,7 @@ bool Router::HandleMessageInternal(Message* message) {
       DCHECK(testing_mode_);
       return false;
     }
-    scoped_ptr<MessageReceiver> responder = std::move(it->second);
+    std::unique_ptr<MessageReceiver> responder = std::move(it->second);
     async_responders_.erase(it);
     return responder->Accept(message);
   } else {
@@ -294,7 +302,7 @@ void Router::OnConnectionError() {
 
   if (connector_.during_sync_handle_watcher_callback()) {
     // We don't want the error handler to reenter an ongoing sync call.
-    base::MessageLoop::current()->PostTask(
+    connector_.task_runner()->PostTask(
         FROM_HERE,
         base::Bind(&Router::OnConnectionError, weak_factory_.GetWeakPtr()));
     return;

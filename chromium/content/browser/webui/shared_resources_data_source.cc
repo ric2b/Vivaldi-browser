@@ -7,18 +7,21 @@
 #include <stddef.h>
 
 #include "base/containers/hash_tables.h"
+#include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
-#include "base/threading/thread_restrictions.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/url_constants.h"
-#include "net/base/mime_util.h"
 #include "ui/base/layout.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/resources/grit/webui_resources.h"
 #include "ui/resources/grit/webui_resources_map.h"
+
+#if defined(OS_WIN)
+#include "base/strings/utf_string_conversions.h"
+#endif
 
 namespace content {
 
@@ -27,7 +30,7 @@ namespace {
 using ResourcesMap = base::hash_map<std::string, int>;
 
 // TODO(rkc): Once we have a separate source for apps, remove '*/apps/' aliases.
-const char* kPathAliases[][2] = {
+const char* const kPathAliases[][2] = {
     {"../../../third_party/polymer/v1_0/components-chromium/", "polymer/v1_0/"},
     {"../../../third_party/web-animations-js/sources/",
      "polymer/v1_0/web-animations-js/"},
@@ -48,7 +51,7 @@ const ResourcesMap* CreateResourcesMap() {
     const std::string resource_name = kWebuiResources[i].name;
     const int resource_id = kWebuiResources[i].value;
     AddResource(resource_name, resource_id, result);
-    for (const char* (&alias)[2]: kPathAliases) {
+    for (const char* const (&alias)[2] : kPathAliases) {
       if (base::StartsWith(resource_name, alias[0],
                            base::CompareCase::SENSITIVE)) {
         AddResource(alias[1] + resource_name.substr(strlen(alias[0])),
@@ -104,13 +107,45 @@ void SharedResourcesDataSource::StartDataRequest(
 
 std::string SharedResourcesDataSource::GetMimeType(
     const std::string& path) const {
-  // Requests should not block on the disk!  On POSIX this goes to disk.
-  // http://code.google.com/p/chromium/issues/detail?id=59849
+  if (path.empty())
+    return "text/html";
 
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
-  std::string mime_type;
-  net::GetMimeTypeFromFile(base::FilePath().AppendASCII(path), &mime_type);
-  return mime_type;
+#if defined(OS_WIN)
+  base::FilePath file(base::UTF8ToWide(path));
+  std::string extension = base::WideToUTF8(file.FinalExtension()).substr(1);
+#else
+  base::FilePath file(path);
+  std::string extension = file.FinalExtension().substr(1);
+#endif
+
+  if (extension == "html")
+    return "text/html";
+
+  if (extension == "css")
+    return "text/css";
+
+  if (extension == "js")
+    return "application/javascript";
+
+  if (extension == "png")
+    return "image/png";
+
+  if (extension == "gif")
+    return "image/gif";
+
+  if (extension == "svg")
+    return "image/svg+xml";
+
+  if (extension == "woff2")
+    return "application/font-woff2";
+
+  CHECK(false) << path;
+  return "text/plain";
+}
+
+base::MessageLoop* SharedResourcesDataSource::MessageLoopForRequestPath(
+    const std::string& path) const {
+  return nullptr;
 }
 
 std::string

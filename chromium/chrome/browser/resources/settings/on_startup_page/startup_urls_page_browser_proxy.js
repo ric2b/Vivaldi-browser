@@ -2,6 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/**
+ * @typedef {{
+ *   modelIndex: number,
+ *   title: string,
+ *   tooltip: string,
+ *   url: string
+ * }}
+ */
+var StartupPageInfo;
+
 cr.define('settings', function() {
   /** @interface */
   function StartupUrlsPageBrowserProxy() {}
@@ -13,12 +23,24 @@ cr.define('settings', function() {
 
     /**
      * @param {string} url
-     * @return {!PromiseResolver<boolean>} Whether the URL is valid.
+     * @return {!Promise<boolean>} Whether the URL is valid.
      */
     validateStartupPage: assertNotReached,
 
-    /** @param {string} url */
+    /**
+     * @param {string} url
+     * @return {!Promise<boolean>} Whether the URL was actually added, or
+     *     ignored because it was invalid.
+     */
     addStartupPage: assertNotReached,
+
+    /**
+     * @param {number} modelIndex
+     * @param {string} url
+     * @return {!Promise<boolean>} Whether the URL was actually edited, or
+     *     ignored because it was invalid.
+     */
+    editStartupPage: assertNotReached,
 
     /** @param {number} index */
     removeStartupPage: assertNotReached,
@@ -45,15 +67,17 @@ cr.define('settings', function() {
 
     /** @override */
     validateStartupPage: function(url) {
-      var resolver = new PromiseResolver();
-      resolver.promise = url.trim().length == 0 ? Promise.resolve(false) :
-          cr.sendWithPromise('validateStartupPage', url);
-      return resolver;
+      return cr.sendWithPromise('validateStartupPage', url);
     },
 
     /** @override */
     addStartupPage: function(url) {
-      chrome.send('addStartupPage', [url.trim()]);
+      return cr.sendWithPromise('addStartupPage', url);
+    },
+
+    /** @override */
+    editStartupPage: function(modelIndex, url) {
+      return cr.sendWithPromise('editStartupPage', modelIndex, url);
     },
 
     /** @override */

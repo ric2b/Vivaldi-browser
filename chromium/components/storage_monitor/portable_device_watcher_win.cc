@@ -415,7 +415,7 @@ bool EnumerateAttachedDevicesOnBlockingThread(
   if (FAILED(hr))
     return false;
 
-  scoped_ptr<base::char16*[]> pnp_device_ids(
+  std::unique_ptr<base::char16*[]> pnp_device_ids(
       new base::char16*[pnp_device_count]);
   hr = portable_device_mgr->GetDevices(pnp_device_ids.get(), &pnp_device_count);
   if (FAILED(hr))
@@ -480,6 +480,9 @@ PortableDeviceWatcherWin::DeviceStorageObject::DeviceStorageObject(
 
 PortableDeviceWatcherWin::DeviceDetails::DeviceDetails() {
 }
+
+PortableDeviceWatcherWin::DeviceDetails::DeviceDetails(
+    const DeviceDetails& other) = default;
 
 PortableDeviceWatcherWin::DeviceDetails::~DeviceDetails() {
 }

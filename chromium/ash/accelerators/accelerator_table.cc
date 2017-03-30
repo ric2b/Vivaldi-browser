@@ -36,6 +36,8 @@ const AcceleratorData kAcceleratorData[] = {
   { true, ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_CONTROL_DOWN, TAKE_SCREENSHOT },
   { true, ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN,
     TAKE_PARTIAL_SCREENSHOT },
+  { true, ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_ALT_DOWN | ui::EF_CONTROL_DOWN,
+    TAKE_WINDOW_SCREENSHOT },
   { true, ui::VKEY_BRIGHTNESS_DOWN, ui::EF_NONE, BRIGHTNESS_DOWN },
   { true, ui::VKEY_BRIGHTNESS_DOWN, ui::EF_ALT_DOWN, KEYBOARD_BRIGHTNESS_DOWN },
   { true, ui::VKEY_BRIGHTNESS_UP, ui::EF_NONE, BRIGHTNESS_UP },
@@ -45,6 +47,7 @@ const AcceleratorData kAcceleratorData[] = {
   { true, ui::VKEY_BRIGHTNESS_UP, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN,
     MAGNIFY_SCREEN_ZOOM_IN},
   { true, ui::VKEY_L, ui::EF_COMMAND_DOWN, LOCK_SCREEN },
+  { true, ui::VKEY_L, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN, SUSPEND },
   // The lock key on Chrome OS keyboards produces F13 scancodes.
   { true, ui::VKEY_F13, ui::EF_NONE, LOCK_PRESSED },
   { false, ui::VKEY_F13, ui::EF_NONE, LOCK_RELEASED },
@@ -259,7 +262,10 @@ const AcceleratorData kDebugAcceleratorData[] = {
      MAGNIFY_SCREEN_ZOOM_OUT},
     {true, ui::VKEY_BRIGHTNESS_UP, ui::EF_CONTROL_DOWN, MAGNIFY_SCREEN_ZOOM_IN},
     // Extra shortcuts to lock the screen on linux desktop.
-    {true, ui::VKEY_L, ui::EF_ALT_DOWN, LOCK_SCREEN},
+    {true, ui::VKEY_L, ui::EF_ALT_DOWN, LOCK_PRESSED},
+    {false, ui::VKEY_L, ui::EF_ALT_DOWN, LOCK_RELEASED},
+    {true, ui::VKEY_P, ui::EF_ALT_DOWN, POWER_PRESSED},
+    {false, ui::VKEY_P, ui::EF_ALT_DOWN, POWER_RELEASED},
     {true, ui::VKEY_POWER, ui::EF_SHIFT_DOWN, LOCK_PRESSED},
     {false, ui::VKEY_POWER, ui::EF_SHIFT_DOWN, LOCK_RELEASED},
     {true, ui::VKEY_D, ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN,
@@ -326,6 +332,7 @@ const AcceleratorAction kReservedActions[] = {
 #if defined(OS_CHROMEOS)
   POWER_PRESSED,
   POWER_RELEASED,
+  SUSPEND,
 #else
   DUMMY_FOR_RESERVED,
 #endif
@@ -348,6 +355,7 @@ const AcceleratorAction kActionsAllowedAtLoginOrLockScreen[] = {
   SCALE_UI_RESET,
   SHOW_SYSTEM_TRAY_BUBBLE,
   SWITCH_IME,  // Switch to another IME depending on the accelerator.
+  TAKE_WINDOW_SCREENSHOT,
   TAKE_PARTIAL_SCREENSHOT,
   TAKE_SCREENSHOT,
 #if defined(OS_CHROMEOS)
@@ -381,6 +389,9 @@ const size_t kActionsAllowedAtLoginOrLockScreenLength =
 
 const AcceleratorAction kActionsAllowedAtLockScreen[] = {
   EXIT,
+#if defined(OS_CHROMEOS)
+  SUSPEND,
+#endif  // defined(OS_CHROMEOS)
 };
 
 const size_t kActionsAllowedAtLockScreenLength =
@@ -403,6 +414,7 @@ const AcceleratorAction kActionsAllowedAtModalWindow[] = {
   SCALE_UI_RESET,
   SHOW_KEYBOARD_OVERLAY,
   SWITCH_IME,
+  TAKE_WINDOW_SCREENSHOT,
   TAKE_PARTIAL_SCREENSHOT,
   TAKE_SCREENSHOT,
 #if defined(OS_CHROMEOS)
@@ -417,6 +429,7 @@ const AcceleratorAction kActionsAllowedAtModalWindow[] = {
   LOCK_SCREEN,
   POWER_PRESSED,
   POWER_RELEASED,
+  SUSPEND,
   SWAP_PRIMARY_DISPLAY,
   TOGGLE_CAPS_LOCK,
   TOGGLE_MIRROR_MODE,
@@ -443,6 +456,7 @@ const AcceleratorAction kNonrepeatableActions[] = {
     SCALE_UI_UP,
     SCALE_UI_DOWN,
     SCALE_UI_RESET,
+    TAKE_WINDOW_SCREENSHOT,
     TAKE_PARTIAL_SCREENSHOT,
     TAKE_SCREENSHOT,
     TOGGLE_FULLSCREEN,
@@ -453,6 +467,7 @@ const AcceleratorAction kNonrepeatableActions[] = {
     DEBUG_TOGGLE_TOUCH_PAD,
     DEBUG_TOGGLE_TOUCH_SCREEN,
     LOCK_SCREEN,
+    SUSPEND,
 #endif
 };
 
@@ -526,6 +541,7 @@ const AcceleratorAction kActionsKeepingMenuOpen[] = {
     PREVIOUS_IME,
     PRINT_UI_HIERARCHIES,
     SWITCH_IME,
+    TAKE_WINDOW_SCREENSHOT,
     TAKE_PARTIAL_SCREENSHOT,
     TAKE_SCREENSHOT,
 #if defined(OS_CHROMEOS)

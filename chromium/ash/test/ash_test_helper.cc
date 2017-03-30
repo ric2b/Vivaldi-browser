@@ -7,11 +7,13 @@
 #include "ash/accelerators/accelerator_controller.h"
 #include "ash/ash_switches.h"
 #include "ash/display/display_info.h"
+#include "ash/material_design/material_design_controller.h"
 #include "ash/shell.h"
 #include "ash/shell_init_params.h"
 #include "ash/test/ash_test_views_delegate.h"
 #include "ash/test/content/test_shell_content_state.h"
 #include "ash/test/display_manager_test_api.h"
+#include "ash/test/material_design_controller_test_api.h"
 #include "ash/test/shell_test_api.h"
 #include "ash/test/test_screenshot_delegate.h"
 #include "ash/test/test_session_state_delegate.h"
@@ -24,10 +26,13 @@
 #include "ui/aura/test/env_test_helper.h"
 #include "ui/aura/test/event_generator_delegate_aura.h"
 #include "ui/base/ime/input_method_initializer.h"
+#include "ui/base/material_design/material_design_controller.h"
+#include "ui/base/test/material_design_controller_test_api.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/compositor/test/context_factories_for_test.h"
 #include "ui/message_center/message_center.h"
 #include "ui/wm/core/capture_controller.h"
+#include "ui/wm/core/cursor_manager.h"
 
 #if defined(OS_CHROMEOS)
 #include "chromeos/audio/cras_audio_handler.h"
@@ -113,6 +118,15 @@ void AshTestHelper::SetUp(bool start_session) {
   }
   ShellContentState::SetInstance(content_state);
 
+  // Reset the global state for the cursor manager. This includes the
+  // last cursor visibility state, etc.
+  ::wm::CursorManager::ResetCursorVisibilityStateForTest();
+
+  // ContentTestSuiteBase might have already initialized
+  // MaterialDesignController in unit_tests suite.
+  ui::test::MaterialDesignControllerTestAPI::Uninitialize();
+  ui::MaterialDesignController::Initialize();
+  ash::MaterialDesignController::Initialize();
   ShellInitParams init_params;
   init_params.delegate = test_shell_delegate_;
   init_params.context_factory = context_factory;
@@ -138,6 +152,7 @@ void AshTestHelper::SetUp(bool start_session) {
 void AshTestHelper::TearDown() {
   // Tear down the shell.
   Shell::DeleteInstance();
+  test::MaterialDesignControllerTestAPI::Uninitialize();
   ShellContentState::DestroyInstance();
 
   test_screenshot_delegate_ = NULL;
@@ -165,7 +180,7 @@ void AshTestHelper::TearDown() {
   ui::ShutdownInputMethodForTesting();
   zero_duration_mode_.reset();
 
-  CHECK(!wm::ScopedCaptureClient::IsActive());
+  CHECK(!::wm::ScopedCaptureClient::IsActive());
 
   views_delegate_.reset();
 }

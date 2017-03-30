@@ -54,7 +54,7 @@ class VivaldiSettingsApiNotification : public KeyedService,
   ~VivaldiSettingsApiNotification() override;
 
   static void BroadcastEvent(const std::string& eventname,
-                             scoped_ptr<base::ListValue>& args,
+                             std::unique_ptr<base::ListValue>& args,
                              content::BrowserContext* context);
 
   void OnChanged(const std::string& prefs_changed);

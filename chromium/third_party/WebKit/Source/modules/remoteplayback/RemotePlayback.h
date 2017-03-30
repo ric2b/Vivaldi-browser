@@ -5,9 +5,9 @@
 #ifndef RemotePlayback_h
 #define RemotePlayback_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "core/events/EventTarget.h"
-#include "core/frame/DOMWindowProperty.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/modules/remoteplayback/WebRemotePlaybackClient.h"
 #include "public/platform/modules/remoteplayback/WebRemotePlaybackState.h"
@@ -23,16 +23,13 @@ class RemotePlaybackAvailability;
 class ScriptPromiseResolver;
 
 class RemotePlayback final
-    : public RefCountedGarbageCollectedEventTargetWithInlineData<RemotePlayback>
-    , public DOMWindowProperty
+    : public EventTargetWithInlineData
+    , public ActiveScriptWrappable
     , private WebRemotePlaybackClient {
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(RemotePlayback);
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(RemotePlayback);
 public:
     static RemotePlayback* create(HTMLMediaElement&);
-
-    ~RemotePlayback() override;
 
     // EventTarget implementation.
     const WTF::AtomicString& interfaceName() const override;
@@ -42,6 +39,9 @@ public:
     ScriptPromise connect(ScriptState*);
 
     String state() const;
+
+    // ActiveScriptWrappable implementation.
+    bool hasPendingActivity() const final;
 
     DEFINE_ATTRIBUTE_EVENT_LISTENER(statechange);
 

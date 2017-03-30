@@ -4,11 +4,13 @@
 
 #include "components/filesystem/file_system_app.h"
 
+#include <memory>
+
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "mojo/shell/public/cpp/connection.h"
-#include "mojo/shell/public/cpp/connector.h"
+#include "services/shell/public/cpp/connection.h"
+#include "services/shell/public/cpp/connector.h"
 
 #if defined(OS_WIN)
 #include "base/base_paths_win.h"
@@ -37,20 +39,20 @@ FileSystemApp::FileSystemApp() : lock_table_(new LockTable) {}
 
 FileSystemApp::~FileSystemApp() {}
 
-void FileSystemApp::Initialize(mojo::Connector* connector,
-                               const mojo::Identity& identity,
+void FileSystemApp::Initialize(shell::Connector* connector,
+                               const shell::Identity& identity,
                                uint32_t id) {
   tracing_.Initialize(connector, identity.name());
 }
 
-bool FileSystemApp::AcceptConnection(mojo::Connection* connection) {
-  connection->AddInterface<FileSystem>(this);
+bool FileSystemApp::AcceptConnection(shell::Connection* connection) {
+  connection->AddInterface<mojom::FileSystem>(this);
   return true;
 }
 
 // |InterfaceFactory<Files>| implementation:
-void FileSystemApp::Create(mojo::Connection* connection,
-                           mojo::InterfaceRequest<FileSystem> request) {
+void FileSystemApp::Create(shell::Connection* connection,
+                           mojo::InterfaceRequest<mojom::FileSystem> request) {
   new FileSystemImpl(connection, std::move(request), GetUserDataDir(),
                      lock_table_);
 }
@@ -70,7 +72,7 @@ base::FilePath FileSystemApp::GetUserDataDir() {
 #elif defined(OS_ANDROID)
     CHECK(PathService::Get(base::DIR_ANDROID_APP_DATA, &path));
 #elif defined(OS_LINUX)
-    scoped_ptr<base::Environment> env(base::Environment::Create());
+    std::unique_ptr<base::Environment> env(base::Environment::Create());
     path = base::nix::GetXDGDirectory(env.get(),
                                       base::nix::kXdgConfigHomeEnvVar,
                                       base::nix::kDotConfigDir);

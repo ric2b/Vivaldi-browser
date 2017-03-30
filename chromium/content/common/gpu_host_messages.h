@@ -9,7 +9,6 @@
 #include "content/common/content_export.h"
 #include "content/common/establish_channel_params.h"
 #include "gpu/command_buffer/common/sync_token.h"
-#include "gpu/command_buffer/common/value_state.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/ipc/common/gpu_command_buffer_traits.h"
@@ -26,13 +25,6 @@
 #include "ui/gfx/ipc/skia/gfx_skia_param_traits.h"
 #include "url/gurl.h"
 #include "url/ipc/url_param_traits.h"
-
-#if defined(OS_MACOSX)
-#include "content/common/accelerated_surface_buffers_swapped_params_mac.h"
-#include "content/common/buffer_presented_params_mac.h"
-#include "ui/base/cocoa/remote_layer_api.h"
-#include "ui/gfx/mac/io_surface.h"
-#endif
 
 #undef IPC_MESSAGE_EXPORT
 #define IPC_MESSAGE_EXPORT CONTENT_EXPORT
@@ -80,25 +72,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::EstablishChannelParams)
   IPC_STRUCT_TRAITS_MEMBER(allow_real_time_streams)
 IPC_STRUCT_TRAITS_END()
 
-#if defined(OS_MACOSX)
-IPC_STRUCT_TRAITS_BEGIN(content::AcceleratedSurfaceBuffersSwappedParams)
-  IPC_STRUCT_TRAITS_MEMBER(surface_id)
-  // Only one of ca_context_id or io_surface may be non-0.
-  IPC_STRUCT_TRAITS_MEMBER(ca_context_id)
-  IPC_STRUCT_TRAITS_MEMBER(io_surface)
-  IPC_STRUCT_TRAITS_MEMBER(size)
-  IPC_STRUCT_TRAITS_MEMBER(scale_factor)
-  IPC_STRUCT_TRAITS_MEMBER(latency_info)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(content::BufferPresentedParams)
-  // The vsync parameters, to synchronize presentation with the display.
-  IPC_STRUCT_TRAITS_MEMBER(surface_id)
-  IPC_STRUCT_TRAITS_MEMBER(vsync_timebase)
-  IPC_STRUCT_TRAITS_MEMBER(vsync_interval)
-IPC_STRUCT_TRAITS_END()
-#endif
-
 IPC_STRUCT_TRAITS_BEGIN(gpu::GpuPreferences)
   IPC_STRUCT_TRAITS_MEMBER(single_process)
   IPC_STRUCT_TRAITS_MEMBER(in_process_gpu)
@@ -112,6 +85,7 @@ IPC_STRUCT_TRAITS_BEGIN(gpu::GpuPreferences)
 #endif
 #if defined(OS_WIN)
   IPC_STRUCT_TRAITS_MEMBER(enable_accelerated_vpx_decode)
+  IPC_STRUCT_TRAITS_MEMBER(enable_zero_copy_dxgi_video)
 #endif
   IPC_STRUCT_TRAITS_MEMBER(compile_shader_always_succeeds)
   IPC_STRUCT_TRAITS_MEMBER(disable_gl_error_limit)
@@ -127,7 +101,6 @@ IPC_STRUCT_TRAITS_BEGIN(gpu::GpuPreferences)
   IPC_STRUCT_TRAITS_MEMBER(gpu_program_cache_size)
   IPC_STRUCT_TRAITS_MEMBER(disable_gpu_shader_disk_cache)
   IPC_STRUCT_TRAITS_MEMBER(enable_share_group_async_texture_upload)
-  IPC_STRUCT_TRAITS_MEMBER(enable_subscribe_uniform_extension)
   IPC_STRUCT_TRAITS_MEMBER(enable_threaded_texture_mailboxes)
   IPC_STRUCT_TRAITS_MEMBER(gl_shader_interm_output)
   IPC_STRUCT_TRAITS_MEMBER(emulate_shader_precision)
@@ -186,16 +159,12 @@ IPC_MESSAGE_CONTROL0(GpuMsg_CollectGraphicsInfo)
 // Tells the GPU process to report video_memory information for the task manager
 IPC_MESSAGE_CONTROL0(GpuMsg_GetVideoMemoryUsageStats)
 
-#if defined(OS_MACOSX)
-// Tells the GPU process that the browser process has handled the swap
-// buffers or post sub-buffer request.
-IPC_MESSAGE_CONTROL1(AcceleratedSurfaceMsg_BufferPresented,
-                     content::BufferPresentedParams)
-#endif
-
 #if defined(OS_ANDROID)
 // Tells the GPU process to wake up the GPU because we're about to draw.
 IPC_MESSAGE_CONTROL0(GpuMsg_WakeUpGpu)
+
+// Tells the GPU process to release the surface because it's being destroyed.
+IPC_MESSAGE_CONTROL1(GpuMsg_DestroyingVideoSurface, int /* surface_id */)
 #endif
 
 // Tells the GPU process to remove all contexts.
@@ -212,12 +181,6 @@ IPC_MESSAGE_CONTROL0(GpuMsg_DisableWatchdog)
 
 // Tells the GPU process that the browser has seen a GPU switch.
 IPC_MESSAGE_CONTROL0(GpuMsg_GpuSwitched)
-
-// Sends an input event to the gpu service.
-IPC_MESSAGE_CONTROL3(GpuMsg_UpdateValueState,
-                     int,          /* client_id */
-                     unsigned int, /* target */
-                     gpu::ValueState /* valuestate */)
 
 //------------------------------------------------------------------------------
 // GPU Host Messages
@@ -256,17 +219,18 @@ IPC_MESSAGE_CONTROL1(GpuHostMsg_GraphicsInfoCollected,
 IPC_MESSAGE_CONTROL1(GpuHostMsg_VideoMemoryUsageStats,
                      gpu::VideoMemoryUsageStats /* GPU memory stats */)
 
-#if defined(OS_MACOSX)
-// Tells the browser that an accelerated surface has swapped.
-IPC_MESSAGE_CONTROL1(GpuHostMsg_AcceleratedSurfaceBuffersSwapped,
-                     content::AcceleratedSurfaceBuffersSwappedParams)
-#endif
-
 #if defined(OS_WIN)
 IPC_MESSAGE_CONTROL2(GpuHostMsg_AcceleratedSurfaceCreatedChildWindow,
                      gpu::SurfaceHandle /* parent_window */,
                      gpu::SurfaceHandle /* child_window */)
 #endif
+
+#if defined(OS_ANDROID)
+// Response to a GpuMsg_DestroyingVideoSurface message.
+IPC_MESSAGE_CONTROL1(GpuHostMsg_DestroyingVideoSurfaceAck,
+                     int /* surface_id */)
+#endif
+
 
 IPC_MESSAGE_CONTROL1(GpuHostMsg_DidCreateOffscreenContext, GURL /* url */)
 
@@ -280,18 +244,6 @@ IPC_MESSAGE_CONTROL1(GpuHostMsg_DidDestroyOffscreenContext, GURL /* url */)
 // Tells the browser about GPU memory usage statistics for UMA logging.
 IPC_MESSAGE_CONTROL1(GpuHostMsg_GpuMemoryUmaStats,
                      gpu::GPUMemoryUmaStats /* GPU memory UMA stats */)
-
-// Tells the browser that a context has subscribed to a new target and
-// the browser should start sending the corresponding information
-IPC_MESSAGE_CONTROL2(GpuHostMsg_AddSubscription,
-                     int32_t /* client_id */,
-                     unsigned int /* target */)
-
-// Tells the browser that no contexts are subscribed to the target anymore
-// so the browser should stop sending the corresponding information
-IPC_MESSAGE_CONTROL2(GpuHostMsg_RemoveSubscription,
-                     int32_t /* client_id */,
-                     unsigned int /* target */)
 
 // Message from GPU to add a GPU log message to the about:gpu page.
 IPC_MESSAGE_CONTROL3(GpuHostMsg_OnLogMessage,

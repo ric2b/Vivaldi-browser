@@ -14,16 +14,17 @@
 
 namespace blink {
 
+namespace {
+
 namespace HeapProfilerAgentState {
 static const char heapProfilerEnabled[] = "heapProfilerEnabled";
 static const char heapObjectsTrackingEnabled[] = "heapObjectsTrackingEnabled";
 static const char allocationTrackingEnabled[] = "allocationTrackingEnabled";
 #if V8_MAJOR_VERSION >= 5
 static const char samplingHeapProfilerEnabled[] = "samplingHeapProfilerEnabled";
+static const char samplingHeapProfilerInterval[] = "samplingHeapProfilerInterval";
 #endif
 }
-
-namespace {
 
 class HeapSnapshotProgress final : public v8::ActivityControl {
 public:
@@ -103,7 +104,7 @@ v8::Local<v8::Object> objectByHeapObjectId(v8::Isolate* isolate, int id)
     return value.As<v8::Object>();
 }
 
-class InspectableHeapObject final : public V8RuntimeAgent::Inspectable {
+class InspectableHeapObject final : public V8InspectorSession::Inspectable {
 public:
     explicit InspectableHeapObject(int heapObjectId) : m_heapObjectId(heapObjectId) { }
     v8::Local<v8::Value> get(v8::Local<v8::Context> context) override
@@ -138,7 +139,7 @@ public:
             statsDiff->addItem(updateData[i].count);
             statsDiff->addItem(updateData[i].size);
         }
-        m_frontend->heapStatsUpdate(statsDiff.release());
+        m_frontend->heapStatsUpdate(std::move(statsDiff));
         return kContinue;
     }
 
@@ -151,6 +152,7 @@ private:
 V8HeapProfilerAgentImpl::V8HeapProfilerAgentImpl(V8InspectorSessionImpl* session)
     : m_session(session)
     , m_isolate(session->debugger()->isolate())
+    , m_hasTimer(false)
 {
 }
 
@@ -175,7 +177,9 @@ void V8HeapProfilerAgentImpl::restore()
 #if V8_MAJOR_VERSION >= 5
     if (m_state->booleanProperty(HeapProfilerAgentState::samplingHeapProfilerEnabled, false)) {
         ErrorString error;
-        startSampling(&error);
+        double samplingInterval = m_state->numberProperty(HeapProfilerAgentState::samplingHeapProfilerInterval, -1);
+        DCHECK_GE(samplingInterval, 0);
+        startSampling(&error, Maybe<double>(samplingInterval));
     }
 #endif
 }
@@ -256,7 +260,13 @@ void V8HeapProfilerAgentImpl::getObjectByHeapObjectId(ErrorString* error, const 
         *error = "Object is not available";
         return;
     }
-    *result = m_session->runtimeAgent()->wrapObject(heapObject->CreationContext(), heapObject, objectGroup.fromMaybe(""));
+
+    if (!m_session->debugger()->client()->isInspectableHeapObject(heapObject)) {
+        *error = "Object is not available";
+        return;
+    }
+
+    *result = m_session->wrapObject(heapObject->CreationContext(), heapObject, objectGroup.fromMaybe(""));
     if (!result)
         *error = "Object is not available";
 }
@@ -269,13 +279,26 @@ void V8HeapProfilerAgentImpl::addInspectedHeapObject(ErrorString* errorString, c
         *errorString = "Invalid heap snapshot object id";
         return;
     }
-    m_session->runtimeAgent()->addInspectedObject(adoptPtr(new InspectableHeapObject(id)));
+
+    v8::HandleScope handles(m_isolate);
+    v8::Local<v8::Object> heapObject = objectByHeapObjectId(m_isolate, id);
+    if (heapObject.IsEmpty()) {
+        *errorString = "Object is not available";
+        return;
+    }
+
+    if (!m_session->debugger()->client()->isInspectableHeapObject(heapObject)) {
+        *errorString = "Object is not available";
+        return;
+    }
+
+    m_session->addInspectedObject(adoptPtr(new InspectableHeapObject(id)));
 }
 
 void V8HeapProfilerAgentImpl::getHeapObjectId(ErrorString* errorString, const String16& objectId, String16* heapSnapshotObjectId)
 {
     v8::HandleScope handles(m_isolate);
-    v8::Local<v8::Value> value = m_session->runtimeAgent()->findObject(errorString, objectId);
+    v8::Local<v8::Value> value = m_session->findObject(errorString, objectId);
     if (value.IsEmpty() || value->IsUndefined())
         return;
 
@@ -292,19 +315,33 @@ void V8HeapProfilerAgentImpl::requestHeapStatsUpdate()
     m_frontend->lastSeenObjectId(lastSeenObjectId, m_session->debugger()->client()->currentTimeMS());
 }
 
+// static
+void V8HeapProfilerAgentImpl::onTimer(void* data)
+{
+    reinterpret_cast<V8HeapProfilerAgentImpl*>(data)->requestHeapStatsUpdate();
+}
+
 void V8HeapProfilerAgentImpl::startTrackingHeapObjectsInternal(bool trackAllocations)
 {
     m_isolate->GetHeapProfiler()->StartTrackingHeapObjects(trackAllocations);
+    if (!m_hasTimer) {
+        m_hasTimer = true;
+        m_session->debugger()->client()->startRepeatingTimer(0.05, &V8HeapProfilerAgentImpl::onTimer, reinterpret_cast<void*>(this));
+    }
 }
 
 void V8HeapProfilerAgentImpl::stopTrackingHeapObjectsInternal()
 {
+    if (m_hasTimer) {
+        m_session->debugger()->client()->cancelTimer(reinterpret_cast<void*>(this));
+        m_hasTimer = false;
+    }
     m_isolate->GetHeapProfiler()->StopTrackingHeapObjects();
     m_state->setBoolean(HeapProfilerAgentState::heapObjectsTrackingEnabled, false);
     m_state->setBoolean(HeapProfilerAgentState::allocationTrackingEnabled, false);
 }
 
-void V8HeapProfilerAgentImpl::startSampling(ErrorString* errorString)
+void V8HeapProfilerAgentImpl::startSampling(ErrorString* errorString, const Maybe<double>& samplingInterval)
 {
 #if V8_MAJOR_VERSION >= 5
     v8::HeapProfiler* profiler = m_isolate->GetHeapProfiler();
@@ -312,8 +349,15 @@ void V8HeapProfilerAgentImpl::startSampling(ErrorString* errorString)
         *errorString = "Cannot access v8 heap profiler";
         return;
     }
+    const unsigned defaultSamplingInterval = 1 << 15;
+    double samplingIntervalValue = samplingInterval.fromMaybe(defaultSamplingInterval);
+    m_state->setNumber(HeapProfilerAgentState::samplingHeapProfilerInterval, samplingIntervalValue);
     m_state->setBoolean(HeapProfilerAgentState::samplingHeapProfilerEnabled, true);
-    profiler->StartSamplingHeapProfiler();
+#if V8_MAJOR_VERSION * 1000 + V8_MINOR_VERSION >= 5002
+    profiler->StartSamplingHeapProfiler(static_cast<uint64_t>(samplingIntervalValue), 128, v8::HeapProfiler::kSamplingForceGC);
+#else
+    profiler->StartSamplingHeapProfiler(static_cast<uint64_t>(samplingIntervalValue), 128);
+#endif
 #endif
 }
 
@@ -324,18 +368,18 @@ PassOwnPtr<protocol::HeapProfiler::SamplingHeapProfileNode> buildSampingHeapProf
     auto children = protocol::Array<protocol::HeapProfiler::SamplingHeapProfileNode>::create();
     for (const auto* child : node->children)
         children->addItem(buildSampingHeapProfileNode(child));
-    size_t totalSize = 0;
+    size_t selfSize = 0;
     for (const auto& allocation : node->allocations)
-        totalSize += allocation.size * allocation.count;
+        selfSize += allocation.size * allocation.count;
     OwnPtr<protocol::HeapProfiler::SamplingHeapProfileNode> result = protocol::HeapProfiler::SamplingHeapProfileNode::create()
         .setFunctionName(toProtocolString(node->name))
         .setScriptId(String16::number(node->script_id))
         .setUrl(toProtocolString(node->script_name))
         .setLineNumber(node->line_number)
         .setColumnNumber(node->column_number)
-        .setTotalSize(totalSize)
-        .setChildren(children).build();
-    return result.release();
+        .setSelfSize(selfSize)
+        .setChildren(std::move(children)).build();
+    return result;
 }
 } // namespace
 #endif

@@ -36,9 +36,11 @@
 
 namespace {
 
+#if defined(OS_ANDROID)
 // If the site requested larger quota than this threshold, show a different
 // message to the user.
 const int64_t kRequestLargeQuotaThreshold = 5 * 1024 * 1024;
+#endif
 
 // QuotaPermissionRequest ---------------------------------------------
 
@@ -52,17 +54,17 @@ class QuotaPermissionRequest : public PermissionBubbleRequest {
 
   ~QuotaPermissionRequest() override;
 
+ private:
   // PermissionBubbleRequest:
   int GetIconId() const override;
-  base::string16 GetMessageText() const override;
   base::string16 GetMessageTextFragment() const override;
   GURL GetOrigin() const override;
   void PermissionGranted() override;
   void PermissionDenied() override;
   void Cancelled() override;
   void RequestFinished() override;
+  PermissionBubbleType GetPermissionBubbleType() const override;
 
- private:
   scoped_refptr<ChromeQuotaPermissionContext> context_;
   GURL origin_url_;
   int64_t requested_quota_;
@@ -86,14 +88,6 @@ QuotaPermissionRequest::~QuotaPermissionRequest() {}
 int QuotaPermissionRequest::GetIconId() const {
   // TODO(gbillock): get the proper image here
   return IDR_INFOBAR_WARNING;
-}
-
-base::string16 QuotaPermissionRequest::GetMessageText() const {
-  return l10n_util::GetStringFUTF16(
-      (requested_quota_ > kRequestLargeQuotaThreshold
-           ? IDS_REQUEST_LARGE_QUOTA_INFOBAR_QUESTION
-           : IDS_REQUEST_QUOTA_INFOBAR_QUESTION),
-      url_formatter::FormatUrlForSecurityDisplay(origin_url_));
 }
 
 base::string16 QuotaPermissionRequest::GetMessageTextFragment() const {
@@ -129,6 +123,10 @@ void QuotaPermissionRequest::RequestFinished() {
   }
 
   delete this;
+}
+
+PermissionBubbleType QuotaPermissionRequest::GetPermissionBubbleType() const {
+  return PermissionBubbleType::QUOTA;
 }
 
 #if defined(OS_ANDROID)
@@ -175,7 +173,7 @@ void RequestQuotaInfoBarDelegate::Create(
     int64_t requested_quota,
     const content::QuotaPermissionContext::PermissionCallback& callback) {
   infobar_service->AddInfoBar(infobar_service->CreateConfirmInfoBar(
-      scoped_ptr<ConfirmInfoBarDelegate>(new RequestQuotaInfoBarDelegate(
+      std::unique_ptr<ConfirmInfoBarDelegate>(new RequestQuotaInfoBarDelegate(
           context, origin_url, requested_quota, callback))));
 }
 

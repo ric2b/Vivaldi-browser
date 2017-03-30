@@ -7,9 +7,22 @@
 #include "base/logging.h"
 #include "base/mac/scoped_nsobject.h"
 #include "chrome/browser/ui/cocoa/omnibox/omnibox_view_mac.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/gfx/font.h"
+#include "ui/gfx/image/image_skia_util_mac.h"
+#include "ui/gfx/paint_vector_icon.h"
+
+namespace {
+
+// Color values for the Material bubble decoration divider.
+const CGFloat kMaterialDividerAlpha = 38.0;
+const CGFloat kMaterialDividerGrayScale = 0.0;
+const CGFloat kMaterialDividerIncognitoGrayScale = 1.0;
+
+}  // namespace
 
 const CGFloat LocationBarDecoration::kOmittedWidth = 0.0;
+const SkColor LocationBarDecoration::kMaterialDarkModeTextColor = 0xCCFFFFFF;
 
 bool LocationBarDecoration::IsVisible() const {
   return visible_;
@@ -80,6 +93,23 @@ NSPoint LocationBarDecoration::GetBubblePointInFrame(NSRect frame) {
   return frame.origin;
 }
 
+NSImage* LocationBarDecoration::GetMaterialIcon(
+    bool location_bar_is_dark) const {
+  const int kIconSize = 16;
+  gfx::VectorIconId vector_icon_id = GetMaterialVectorIconId();
+  if (vector_icon_id == gfx::VectorIconId::VECTOR_ICON_NONE) {
+    // Return an empty image when the decoration specifies no vector icon, so
+    // that its bubble is positioned correctly (the position is based on the
+    // width of the image; returning nil will mess up the positioning).
+    NSSize icon_size = NSMakeSize(kIconSize, kIconSize);
+    return [[[NSImage alloc] initWithSize:icon_size] autorelease];
+  }
+
+  SkColor vector_icon_color = GetMaterialIconColor(location_bar_is_dark);
+  return NSImageFromImageSkia(
+      gfx::CreateVectorIcon(vector_icon_id, kIconSize, vector_icon_color));
+}
+
 // static
 void LocationBarDecoration::DrawLabel(NSString* label,
                                       NSDictionary* attributes,
@@ -102,4 +132,22 @@ void LocationBarDecoration::DrawAttributedString(NSAttributedString* str,
 NSSize LocationBarDecoration::GetLabelSize(NSString* label,
                                            NSDictionary* attributes) {
   return [label sizeWithAttributes:attributes];
+}
+
+SkColor LocationBarDecoration::GetMaterialIconColor(
+    bool location_bar_is_dark) const {
+  return location_bar_is_dark ? SK_ColorWHITE : gfx::kChromeIconGrey;
+}
+
+NSColor* LocationBarDecoration::GetDividerColor(
+    bool location_bar_is_dark) const {
+  CGFloat gray_scale = location_bar_is_dark ? kMaterialDividerIncognitoGrayScale
+                                            : kMaterialDividerGrayScale;
+  return [NSColor colorWithCalibratedWhite:gray_scale
+                                     alpha:kMaterialDividerAlpha / 255.0];
+}
+
+gfx::VectorIconId LocationBarDecoration::GetMaterialVectorIconId() const {
+  NOTREACHED();
+  return gfx::VectorIconId::VECTOR_ICON_NONE;
 }

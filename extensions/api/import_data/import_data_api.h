@@ -33,7 +33,7 @@ class ProfileSingletonFactory {
   bool profilesRequested;
   static bool instanceFlag;
   static ProfileSingletonFactory *single;
-  scoped_ptr<ImporterList> api_importer_list_;
+  std::unique_ptr<ImporterList> api_importer_list_;
   ProfileSingletonFactory();
 
   DISALLOW_COPY_AND_ASSIGN(ProfileSingletonFactory);
@@ -48,7 +48,7 @@ class ImportDataEventRouter {
 
   // Helper to actually dispatch an event to extension listeners.
   void DispatchEvent(const std::string& event_name,
-                     scoped_ptr<base::ListValue> event_args);
+                     std::unique_ptr<base::ListValue> event_args);
 
  private:
   content::BrowserContext* browser_context_;
@@ -93,7 +93,7 @@ class ImportDataAPI : public importer::ImporterProgressObserver,
   static const bool kServiceIsNULLWhileTesting = true;
 
   // Created lazily upon OnListenerAdded.
-  scoped_ptr<ImportDataEventRouter> event_router_;
+  std::unique_ptr<ImportDataEventRouter> event_router_;
 
   // If non-null it means importing is in progress. ImporterHost takes care
   // of deleting itself when import is complete.

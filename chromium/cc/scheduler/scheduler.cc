@@ -8,6 +8,7 @@
 
 #include "base/auto_reset.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
@@ -26,16 +27,16 @@ const base::TimeDelta kDeadlineFudgeFactor =
     base::TimeDelta::FromMicroseconds(1000);
 }
 
-scoped_ptr<Scheduler> Scheduler::Create(
+std::unique_ptr<Scheduler> Scheduler::Create(
     SchedulerClient* client,
     const SchedulerSettings& settings,
     int layer_tree_host_id,
     base::SingleThreadTaskRunner* task_runner,
     BeginFrameSource* begin_frame_source,
-    scoped_ptr<CompositorTimingHistory> compositor_timing_history) {
-  return make_scoped_ptr(new Scheduler(client, settings, layer_tree_host_id,
-                                       task_runner, begin_frame_source,
-                                       std::move(compositor_timing_history)));
+    std::unique_ptr<CompositorTimingHistory> compositor_timing_history) {
+  return base::WrapUnique(new Scheduler(client, settings, layer_tree_host_id,
+                                        task_runner, begin_frame_source,
+                                        std::move(compositor_timing_history)));
 }
 
 Scheduler::Scheduler(
@@ -44,7 +45,7 @@ Scheduler::Scheduler(
     int layer_tree_host_id,
     base::SingleThreadTaskRunner* task_runner,
     BeginFrameSource* begin_frame_source,
-    scoped_ptr<CompositorTimingHistory> compositor_timing_history)
+    std::unique_ptr<CompositorTimingHistory> compositor_timing_history)
     : settings_(settings),
       client_(client),
       layer_tree_host_id_(layer_tree_host_id),
@@ -289,11 +290,6 @@ bool Scheduler::OnBeginFrameDerivedImpl(const BeginFrameArgs& args) {
   BeginFrameArgs adjusted_args(args);
   adjusted_args.deadline -= EstimatedParentDrawTime();
 
-  // Deliver BeginFrames to children.
-  // TODO(brianderson): Move this responsibility to the DisplayScheduler.
-  if (state_machine_.children_need_begin_frames())
-    client_->SendBeginFramesToChildren(adjusted_args);
-
   if (settings_.using_synchronous_renderer_compositor) {
     BeginImplFrameSynchronous(adjusted_args);
     return true;
@@ -325,11 +321,6 @@ bool Scheduler::OnBeginFrameDerivedImpl(const BeginFrameArgs& args) {
     BeginImplFrameWithDeadline(adjusted_args);
   }
   return true;
-}
-
-void Scheduler::SetChildrenNeedBeginFrames(bool children_need_begin_frames) {
-  state_machine_.SetChildrenNeedBeginFrames(children_need_begin_frames);
-  ProcessScheduledActions();
 }
 
 void Scheduler::SetVideoNeedsBeginFrames(bool video_needs_begin_frames) {
@@ -384,7 +375,7 @@ void Scheduler::BeginRetroFrame() {
         "BeginFrameArgs", begin_retro_frame_args_.front().AsValue());
     begin_retro_frame_args_.pop_front();
     if (begin_frame_source_)
-      begin_frame_source_->DidFinishFrame(begin_retro_frame_args_.size());
+      begin_frame_source_->DidFinishFrame(this, begin_retro_frame_args_.size());
   }
 
   if (begin_retro_frame_args_.empty()) {
@@ -478,15 +469,11 @@ void Scheduler::BeginImplFrameWithDeadline(const BeginFrameArgs& args) {
     TRACE_EVENT_INSTANT0("cc", "SkipBeginImplFrameToReduceLatency",
                          TRACE_EVENT_SCOPE_THREAD);
     if (begin_frame_source_)
-      begin_frame_source_->DidFinishFrame(begin_retro_frame_args_.size());
+      begin_frame_source_->DidFinishFrame(this, begin_retro_frame_args_.size());
     return;
   }
 
   BeginImplFrame(adjusted_args);
-
-  // The deadline will be scheduled in ProcessScheduledActions.
-  state_machine_.OnBeginImplFrameDeadlinePending();
-  ProcessScheduledActions();
 }
 
 void Scheduler::BeginImplFrameSynchronous(const BeginFrameArgs& args) {
@@ -511,7 +498,7 @@ void Scheduler::FinishImplFrame() {
 
   client_->DidFinishImplFrame();
   if (begin_frame_source_)
-    begin_frame_source_->DidFinishFrame(begin_retro_frame_args_.size());
+    begin_frame_source_->DidFinishFrame(this, begin_retro_frame_args_.size());
   begin_impl_frame_tracker_.Finish();
 }
 
@@ -741,31 +728,15 @@ void Scheduler::ProcessScheduledActions() {
   SetupNextBeginFrameIfNeeded();
 }
 
-scoped_ptr<base::trace_event::ConvertableToTraceFormat> Scheduler::AsValue()
-    const {
-  scoped_ptr<base::trace_event::TracedValue> state(
+std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
+Scheduler::AsValue() const {
+  std::unique_ptr<base::trace_event::TracedValue> state(
       new base::trace_event::TracedValue());
-  AsValueInto(state.get());
-  return std::move(state);
-}
-
-void Scheduler::AsValueInto(base::trace_event::TracedValue* state) const {
   base::TimeTicks now = Now();
 
   state->BeginDictionary("state_machine");
-  state_machine_.AsValueInto(state);
+  state_machine_.AsValueInto(state.get());
   state->EndDictionary();
-
-  // Only trace frame sources when explicitly enabled - http://crbug.com/420607
-  bool frame_tracing_enabled = false;
-  TRACE_EVENT_CATEGORY_GROUP_ENABLED(
-      TRACE_DISABLED_BY_DEFAULT("cc.debug.scheduler.frames"),
-      &frame_tracing_enabled);
-  if (frame_tracing_enabled && begin_frame_source_) {
-    state->BeginDictionary("begin_frame_source_");
-    begin_frame_source_->AsValueInto(state);
-    state->EndDictionary();
-  }
 
   state->BeginDictionary("scheduler_state");
   state->SetBoolean("throttle_frame_production_",
@@ -784,7 +755,7 @@ void Scheduler::AsValueInto(base::trace_event::TracedValue* state) const {
                    SchedulerStateMachine::ActionToString(inside_action_));
 
   state->BeginDictionary("begin_impl_frame_args");
-  begin_impl_frame_tracker_.AsValueInto(now, state);
+  begin_impl_frame_tracker_.AsValueInto(now, state.get());
   state->EndDictionary();
 
   state->SetString("begin_impl_frame_deadline_mode_",
@@ -793,8 +764,10 @@ void Scheduler::AsValueInto(base::trace_event::TracedValue* state) const {
   state->EndDictionary();
 
   state->BeginDictionary("compositor_timing_history");
-  compositor_timing_history_->AsValueInto(state);
+  compositor_timing_history_->AsValueInto(state.get());
   state->EndDictionary();
+
+  return std::move(state);
 }
 
 void Scheduler::UpdateCompositorTimingHistoryRecordingEnabled() {

@@ -21,7 +21,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/appcache/appcache.h"
 #include "content/browser/appcache/appcache_database.h"
@@ -82,7 +82,7 @@ void ClearSessionOnlyOrigins(
     AppCacheDatabase* database,
     scoped_refptr<storage::SpecialStoragePolicy> special_storage_policy,
     bool force_keep_session_state) {
-  scoped_ptr<AppCacheDatabase> database_to_delete(database);
+  std::unique_ptr<AppCacheDatabase> database_to_delete(database);
 
   // If saving session state, only delete the database.
   if (force_keep_session_state)
@@ -1734,24 +1734,21 @@ void AppCacheStorageImpl::StoreEvictionTimes(AppCacheGroup* group) {
 
 AppCacheResponseReader* AppCacheStorageImpl::CreateResponseReader(
     const GURL& manifest_url,
-    int64_t group_id,
     int64_t response_id) {
-  return new AppCacheResponseReader(response_id, group_id,
-                                    disk_cache()->GetWeakPtr());
+  return new AppCacheResponseReader(
+      response_id, is_disabled_ ? nullptr : disk_cache()->GetWeakPtr());
 }
 
 AppCacheResponseWriter* AppCacheStorageImpl::CreateResponseWriter(
-    const GURL& manifest_url,
-    int64_t group_id) {
-  return new AppCacheResponseWriter(NewResponseId(), group_id,
-                                    disk_cache()->GetWeakPtr());
+    const GURL& manifest_url) {
+  return new AppCacheResponseWriter(
+      NewResponseId(), is_disabled_ ? nullptr : disk_cache()->GetWeakPtr());
 }
 
 AppCacheResponseMetadataWriter*
-AppCacheStorageImpl::CreateResponseMetadataWriter(int64_t group_id,
-                                                  int64_t response_id) {
-  return new AppCacheResponseMetadataWriter(response_id, group_id,
-                                            disk_cache()->GetWeakPtr());
+AppCacheStorageImpl::CreateResponseMetadataWriter(int64_t response_id) {
+  return new AppCacheResponseMetadataWriter(
+      response_id, is_disabled_ ? nullptr : disk_cache()->GetWeakPtr());
 }
 
 void AppCacheStorageImpl::DoomResponses(
@@ -1816,8 +1813,7 @@ void AppCacheStorageImpl::DeleteOneResponse() {
   DCHECK(is_response_deletion_scheduled_);
   DCHECK(!deletable_response_ids_.empty());
 
-  if (!disk_cache()) {
-    DCHECK(is_disabled_);
+  if (is_disabled_) {
     deletable_response_ids_.clear();
     deleted_response_ids_.clear();
     is_response_deletion_scheduled_ = false;
@@ -1826,7 +1822,7 @@ void AppCacheStorageImpl::DeleteOneResponse() {
 
   // TODO(michaeln): add group_id to DoomEntry args
   int64_t id = deletable_response_ids_.front();
-  int rv = disk_cache_->DoomEntry(
+  int rv = disk_cache()->DoomEntry(
       id, base::Bind(&AppCacheStorageImpl::OnDeletedOneResponse,
                      base::Unretained(this)));
   if (rv != net::ERR_IO_PENDING)
@@ -1905,9 +1901,7 @@ void AppCacheStorageImpl::RunOnePendingSimpleTask() {
 
 AppCacheDiskCache* AppCacheStorageImpl::disk_cache() {
   DCHECK(IsInitTaskComplete());
-
-  if (is_disabled_)
-    return NULL;
+  DCHECK(!is_disabled_);
 
   if (!disk_cache_) {
     int rv = net::OK;

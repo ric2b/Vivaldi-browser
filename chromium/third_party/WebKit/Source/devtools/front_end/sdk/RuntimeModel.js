@@ -55,6 +55,7 @@ WebInspector.RuntimeModel = function(target)
 WebInspector.RuntimeModel.Events = {
     ExecutionContextCreated: "ExecutionContextCreated",
     ExecutionContextDestroyed: "ExecutionContextDestroyed",
+    ExecutionContextChanged: "ExecutionContextChanged"
 }
 
 WebInspector.RuntimeModel._privateScript = "private script";
@@ -67,6 +68,18 @@ WebInspector.RuntimeModel.prototype = {
     executionContexts: function()
     {
         return Object.values(this._executionContextById);
+    },
+
+    /**
+     * @return {?WebInspector.ExecutionContext}
+     */
+    defaultExecutionContext: function()
+    {
+        for (var context of Object.values(this._executionContextById)) {
+            if (context.isDefault)
+                return context;
+        }
+        return null;
     },
 
     /**
@@ -226,6 +239,11 @@ WebInspector.RuntimeModel.prototype = {
     {
         var object = this.createRemoteObject(payload);
 
+        if (hints.copyToClipboard) {
+            this._copyRequested(object);
+            return;
+        }
+
         if (object.isNode()) {
             WebInspector.Revealer.revealPromise(object).then(object.release.bind(object));
             return;
@@ -246,10 +264,37 @@ WebInspector.RuntimeModel.prototype = {
                 return;
             WebInspector.Revealer.reveal(response.location);
         }
-
-        if (hints.copyToClipboard)
-            InspectorFrontendHost.copyText(object.value);
         object.release();
+    },
+
+    /**
+     * @param {!WebInspector.RemoteObject} object
+     */
+    _copyRequested: function(object)
+    {
+        if (!object.objectId) {
+            InspectorFrontendHost.copyText(object.value);
+            return;
+        }
+        object.callFunctionJSON(toStringForClipboard, [ { value : object.subtype } ], InspectorFrontendHost.copyText.bind(InspectorFrontendHost));
+
+        /**
+         * @param {string} subtype
+         * @this {Object}
+         * @suppressReceiverCheck
+         */
+        function toStringForClipboard(subtype)
+        {
+            if (subtype === "node")
+                return this.outerHTML;
+            if (subtype && typeof this === "undefined")
+                return subtype + "";
+            try {
+                return JSON.stringify(this, null, "  ");
+            } catch (e) {
+                return "" + this;
+            }
+        }
     },
 
     __proto__: WebInspector.SDKModel.prototype
@@ -323,6 +368,9 @@ WebInspector.ExecutionContext = function(target, id, name, origin, isDefault, fr
     this.runtimeModel = target.runtimeModel;
     this.debuggerModel = WebInspector.DebuggerModel.fromTarget(target);
     this.frameId = frameId;
+
+    var parsedUrl = origin.asParsedURL();
+    this._label = parsedUrl ? parsedUrl.lastPathComponentWithFragment() : name;
 }
 
 /**
@@ -478,9 +526,34 @@ WebInspector.ExecutionContext.prototype = {
             }
 
             /**
+             * @param {?WebInspector.RemoteObject} object
+             * @return {!Promise<?WebInspector.RemoteObject>}
+             */
+            function extractTarget(object)
+            {
+                if (!object)
+                    return Promise.resolve(/** @type {?WebInspector.RemoteObject} */(null));
+                if (object.type !== "object" || object.subtype !== "proxy")
+                    return Promise.resolve(/** @type {?WebInspector.RemoteObject} */(object));
+                return object.getOwnPropertiesPromise().then(extractTargetFromProperties).then(extractTarget);
+            }
+
+            /**
+             * @param {!{properties: ?Array<!WebInspector.RemoteObjectProperty>, internalProperties: ?Array<!WebInspector.RemoteObjectProperty>}} properties
+             * @return {?WebInspector.RemoteObject}
+             */
+            function extractTargetFromProperties(properties)
+            {
+                var internalProperties = properties.internalProperties || [];
+                var target = internalProperties.find(property => property.name === "[[Target]]");
+                return target ? target.value : null;
+            }
+
+            /**
              * @param {string=} type
+             * @return {!Object}
              * @suppressReceiverCheck
-             * @this {WebInspector.ExecutionContext}
+             * @this {Object}
              */
             function getCompletions(type)
             {
@@ -495,8 +568,8 @@ WebInspector.ExecutionContext.prototype = {
                     object = this;
 
                 var resultSet = {};
-                for (var o = object; o; o = o.__proto__) {
-                    try {
+                try {
+                    for (var o = object; o; o = Object.getPrototypeOf(o)) {
                         if (type === "array" && o === object && ArrayBuffer.isView(o) && o.length > 9999)
                             continue;
                         var names = Object.getOwnPropertyNames(o);
@@ -507,16 +580,27 @@ WebInspector.ExecutionContext.prototype = {
                                 continue;
                             resultSet[names[i]] = true;
                         }
-                    } catch (e) {
                     }
+                } catch (e) {
                 }
                 return resultSet;
             }
 
-            if (result.type === "object" || result.type === "function")
-                result.callFunctionJSON(getCompletions, [WebInspector.RemoteObject.toCallArgument(result.subtype)], receivedPropertyNames.bind(this));
-            else if (result.type === "string" || result.type === "number" || result.type === "boolean")
-                this.evaluate("(" + getCompletions + ")(\"" + result.type + "\")", "completion", false, true, true, false, false, receivedPropertyNamesFromEval.bind(this));
+            /**
+             * @param {?WebInspector.RemoteObject} object
+             * @this {WebInspector.ExecutionContext}
+             */
+            function completionsForObject(object)
+            {
+                if (!object)
+                    receivedPropertyNames.call(this, null);
+                else if (object.type === "object" || object.type === "function")
+                    object.callFunctionJSON(getCompletions, [WebInspector.RemoteObject.toCallArgument(object.subtype)], receivedPropertyNames.bind(this));
+                else if (object.type === "string" || object.type === "number" || object.type === "boolean")
+                    this.evaluate("(" + getCompletions + ")(\"" + result.type + "\")", "completion", false, true, true, false, false, receivedPropertyNamesFromEval.bind(this));
+            }
+
+            extractTarget(result).then(completionsForObject.bind(this));
         }
 
         /**
@@ -527,13 +611,15 @@ WebInspector.ExecutionContext.prototype = {
          */
         function receivedPropertyNamesFromEval(notRelevant, wasThrown, result)
         {
+            this.target().runtimeAgent().releaseObjectGroup("completion");
             if (result && !wasThrown)
-                receivedPropertyNames.call(this, result.value);
+                receivedPropertyNames.call(this, /** @type {!Object} */(result.value));
             else
                 completionsReadyCallback([]);
         }
 
         /**
+         * @param {?Object} propertyNames
          * @this {WebInspector.ExecutionContext}
          */
         function receivedPropertyNames(propertyNames)
@@ -602,6 +688,23 @@ WebInspector.ExecutionContext.prototype = {
             results.push(property.split("\n").join("\\n"));
         }
         completionsReadyCallback(results);
+    },
+
+    /**
+     * @return {string}
+     */
+    label: function()
+    {
+        return this._label;
+    },
+
+    /**
+     * @param {string} label
+     */
+    setLabel: function(label)
+    {
+        this._label = label;
+        this.runtimeModel.dispatchEventToListeners(WebInspector.RuntimeModel.Events.ExecutionContextChanged, this);
     },
 
     __proto__: WebInspector.SDKObject.prototype

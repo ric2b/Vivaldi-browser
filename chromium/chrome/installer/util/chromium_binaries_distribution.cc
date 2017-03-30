@@ -19,16 +19,16 @@ const wchar_t kChromiumBinariesName[] = L"Vivaldi Binaries";
 }  // namespace
 
 ChromiumBinariesDistribution::ChromiumBinariesDistribution()
-    : BrowserDistribution(
-          CHROME_BINARIES,
-          scoped_ptr<AppRegistrationData>(new NonUpdatingAppRegistrationData(
-              base::string16(L"Software\\").append(kChromiumBinariesName)))),
+    : BrowserDistribution(CHROME_BINARIES,
+                          std::unique_ptr<AppRegistrationData>(
+                              new NonUpdatingAppRegistrationData(
+                                  base::string16(L"Software\\")
+                                      .append(kChromiumBinariesName)))),
       browser_distribution_(
-          BrowserDistribution::GetSpecificDistribution(CHROME_BROWSER)) {
-}
+          BrowserDistribution::GetSpecificDistribution(CHROME_BROWSER)) {}
 
 ChromiumBinariesDistribution::ChromiumBinariesDistribution(
-    scoped_ptr<AppRegistrationData> app_reg_data)
+    std::unique_ptr<AppRegistrationData> app_reg_data)
     : BrowserDistribution(CHROME_BINARIES, std::move(app_reg_data)),
       browser_distribution_(
           BrowserDistribution::GetSpecificDistribution(CHROME_BROWSER)) {}
@@ -52,8 +52,7 @@ base::string16 ChromiumBinariesDistribution::GetDisplayName() {
   return kChromiumBinariesName;
 }
 
-base::string16 ChromiumBinariesDistribution::GetShortcutName(
-    ShortcutType shortcut_type) {
+base::string16 ChromiumBinariesDistribution::GetShortcutName() {
   NOTREACHED();
   return base::string16();
 }
@@ -105,7 +104,7 @@ BrowserDistribution::DefaultBrowserControlPolicy
   return DEFAULT_BROWSER_UNSUPPORTED;
 }
 
-int ChromiumBinariesDistribution::GetIconIndex(ShortcutType shortcut_type) {
+int ChromiumBinariesDistribution::GetIconIndex() {
   NOTREACHED();
   return 0;
 }

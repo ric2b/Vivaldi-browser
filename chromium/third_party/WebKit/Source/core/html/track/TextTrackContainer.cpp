@@ -40,11 +40,11 @@ TextTrackContainer::TextTrackContainer(Document& document)
 {
 }
 
-RawPtr<TextTrackContainer> TextTrackContainer::create(Document& document)
+TextTrackContainer* TextTrackContainer::create(Document& document)
 {
-    RawPtr<TextTrackContainer> element = new TextTrackContainer(document);
+    TextTrackContainer* element = new TextTrackContainer(document);
     element->setShadowPseudoId(AtomicString("-webkit-media-text-track-container"));
-    return element.release();
+    return element;
 }
 
 LayoutObject* TextTrackContainer::createLayoutObject(const ComputedStyle&)
@@ -54,7 +54,7 @@ LayoutObject* TextTrackContainer::createLayoutObject(const ComputedStyle&)
 
 void TextTrackContainer::updateDisplay(HTMLMediaElement& mediaElement, ExposingControls exposingControls)
 {
-    if (!mediaElement.closedCaptionsVisible()) {
+    if (!mediaElement.textTracksVisible()) {
         removeChildren();
         return;
     }

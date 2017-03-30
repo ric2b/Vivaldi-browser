@@ -155,9 +155,17 @@ static bool shouldMatchHoverOrActive(const SelectorChecker::SelectorCheckingCont
         return true;
     if (context.isSubSelector)
         return true;
-    if (context.selector->relation() == CSSSelector::SubSelector && context.selector->tagHistory())
+    if (context.element->isLink())
         return true;
-    return context.element->isLink();
+    const CSSSelector* selector = context.selector;
+    while (selector->relation() == CSSSelector::SubSelector && selector->tagHistory()) {
+        selector = selector->tagHistory();
+        if (selector->match() != CSSSelector::PseudoClass)
+            return true;
+        if (selector->getPseudoType() != CSSSelector::PseudoHover && selector->getPseudoType() != CSSSelector::PseudoActive)
+            return true;
+    }
+    return false;
 }
 
 static bool isFirstChild(Element& element)
@@ -367,17 +375,23 @@ SelectorChecker::Match SelectorChecker::matchForRelation(const SelectorCheckingC
                     return SelectorFailsCompletely;
             }
 
+
             if (context.selector->relationIsAffectedByPseudoContent()) {
                 // TODO(kochi): closed mode tree should be handled as well for ::content.
                 for (Element* element = context.element; element; element = element->parentOrShadowHostElement()) {
-                    if (matchForPseudoContent(nextContext, *element, result) == SelectorMatches)
+                    if (matchForPseudoContent(nextContext, *element, result) == SelectorMatches) {
+                        if (context.element->isInShadowTree())
+                            UseCounter::count(context.element->document(), UseCounter::CSSDeepCombinatorAndShadow);
                         return SelectorMatches;
+                    }
                 }
                 return SelectorFailsCompletely;
             }
 
             for (nextContext.element = parentOrV0ShadowHostElement(*context.element); nextContext.element; nextContext.element = parentOrV0ShadowHostElement(*nextContext.element)) {
                 Match match = matchSelector(nextContext, result);
+                if (match == SelectorMatches && context.element->isInShadowTree())
+                    UseCounter::count(context.element->document(), UseCounter::CSSDeepCombinatorAndShadow);
                 if (match == SelectorMatches || match == SelectorFailsCompletely)
                     return match;
                 if (nextSelectorExceedsScope(nextContext))
@@ -397,9 +411,8 @@ SelectorChecker::Match SelectorChecker::matchForRelation(const SelectorCheckingC
         }
 
     case CSSSelector::SubSelector:
-        ASSERT_NOT_REACHED();
+        break;
     }
-
     ASSERT_NOT_REACHED();
     return SelectorFailsCompletely;
 }
@@ -495,11 +508,9 @@ static bool attributeValueMatches(const Attribute& attributeItem, CSSSelector::M
             return false;
         return true;
     default:
-        break;
+        ASSERT_NOT_REACHED();
+        return false;
     }
-
-    ASSERT_NOT_REACHED();
-    return true;
 }
 
 static bool anyAttributeMatches(Element& element, CSSSelector::MatchType match, const CSSSelector& selector)
@@ -582,15 +593,10 @@ bool SelectorChecker::checkOne(const SelectorCheckingContext& context, MatchResu
     case CSSSelector::PseudoElement:
         return checkPseudoElement(context, result);
 
-    case CSSSelector::PagePseudoClass:
-        // FIXME: what?
-        return true;
-    case CSSSelector::Unknown:
-        // FIXME: what?
-        return true;
+    default:
+        ASSERT_NOT_REACHED();
+        return false;
     }
-    ASSERT_NOT_REACHED();
-    return true;
 }
 
 bool SelectorChecker::checkPseudoNot(const SelectorCheckingContext& context, MatchResult& result) const
@@ -823,21 +829,13 @@ bool SelectorChecker::checkPseudoClass(const SelectorCheckingContext& context, M
             return true;
         return element.active();
     case CSSSelector::PseudoEnabled:
-        if (element.isFormControlElement() || isHTMLOptionElement(element) || isHTMLOptGroupElement(element))
-            return !element.isDisabledFormControl();
-        if (isHTMLAnchorElement(element) || isHTMLAreaElement(element))
-            return element.isLink();
-        break;
+        return element.matchesEnabledPseudoClass();
     case CSSSelector::PseudoFullPageMedia:
         return element.document().isMediaDocument();
     case CSSSelector::PseudoDefault:
         return element.matchesDefaultPseudoClass();
     case CSSSelector::PseudoDisabled:
-        // TODO(esprehn): Why not just always return isDisabledFormControl()?
-        // Can it be true for elements not in the list below?
-        if (element.isFormControlElement() || isHTMLOptionElement(element) || isHTMLOptGroupElement(element))
-            return element.isDisabledFormControl();
-        break;
+        return element.isDisabledFormControl();
     case CSSSelector::PseudoReadOnly:
         return element.matchesReadOnlyPseudoClass();
     case CSSSelector::PseudoReadWrite:
@@ -917,7 +915,7 @@ bool SelectorChecker::checkPseudoClass(const SelectorCheckingContext& context, M
             return element == element.document().documentElement();
         return context.scope == &element;
     case CSSSelector::PseudoUnresolved:
-        return element.isUnresolvedCustomElement();
+        return element.isUnresolvedV0CustomElement();
     case CSSSelector::PseudoHost:
     case CSSSelector::PseudoHostContext:
         return checkPseudoHost(context, result);
@@ -925,6 +923,16 @@ bool SelectorChecker::checkPseudoClass(const SelectorCheckingContext& context, M
         return m_isUARule && matchesSpatialNavigationFocusPseudoClass(element);
     case CSSSelector::PseudoListBox:
         return m_isUARule && matchesListBoxPseudoClass(element);
+    case CSSSelector::PseudoHostHasAppearance:
+        if (!m_isUARule)
+            return false;
+        if (ShadowRoot* root = element.containingShadowRoot()) {
+            if (root->type() != ShadowRootType::UserAgent)
+                return false;
+            const ComputedStyle* style = root->host()->computedStyle();
+            return style && style->hasAppearance();
+        }
+        return false;
     case CSSSelector::PseudoWindowInactive:
         if (!context.hasSelectionPseudo)
             return false;
@@ -973,6 +981,12 @@ bool SelectorChecker::checkPseudoElement(const SelectorCheckingContext& context,
                 return root->type() == ShadowRootType::UserAgent && element.shadowPseudoId() == selector.value();
             return false;
         }
+    case CSSSelector::PseudoBlinkInternalElement:
+        if (!m_isUARule)
+            return false;
+        if (ShadowRoot* root = element.containingShadowRoot())
+            return root->type() == ShadowRootType::UserAgent && element.shadowPseudoId() == selector.value();
+        return false;
     case CSSSelector::PseudoSlotted:
         {
             SelectorCheckingContext subContext(context);

@@ -76,6 +76,17 @@ DocumentLifecycle::AllowThrottlingScope::~AllowThrottlingScope()
     s_allowThrottlingCount--;
 }
 
+DocumentLifecycle::DisallowThrottlingScope::DisallowThrottlingScope(DocumentLifecycle& lifecycle)
+{
+    m_savedCount = s_allowThrottlingCount;
+    s_allowThrottlingCount = 0;
+}
+
+DocumentLifecycle::DisallowThrottlingScope::~DisallowThrottlingScope()
+{
+    s_allowThrottlingCount = m_savedCount;
+}
+
 DocumentLifecycle::DocumentLifecycle()
     : m_state(Uninitialized)
     , m_detachCount(0)
@@ -99,8 +110,6 @@ bool DocumentLifecycle::canAdvanceTo(LifecycleState nextState) const
         return nextState == Inactive;
     case Inactive:
         if (nextState == StyleClean)
-            return true;
-        if (nextState == Disposed)
             return true;
         break;
     case VisualUpdatePending:
@@ -221,7 +230,15 @@ bool DocumentLifecycle::canAdvanceTo(LifecycleState nextState) const
             return true;
         break;
     case UpdatePaintPropertiesClean:
-        if (nextState == InPaint && RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+        if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+            break;
+        if (nextState == InPaint)
+            return true;
+        if (nextState == InStyleRecalc)
+            return true;
+        if (nextState == InPreLayout)
+            return true;
+        if (nextState == InCompositingUpdate)
             return true;
         break;
     case InPaint:
@@ -239,11 +256,7 @@ bool DocumentLifecycle::canAdvanceTo(LifecycleState nextState) const
     case Stopping:
         return nextState == Stopped;
     case Stopped:
-        return nextState == Disposed;
-    case Disposed:
-        // FIXME: We can dispose a document multiple times. This seems wrong.
-        // See https://code.google.com/p/chromium/issues/detail?id=301668.
-        return nextState == Disposed;
+        return false;
     }
     return false;
 }
@@ -320,7 +333,6 @@ const char* DocumentLifecycle::stateAsDebugString(const LifecycleState state)
         DEBUG_STRING_CASE(PaintClean);
         DEBUG_STRING_CASE(Stopping);
         DEBUG_STRING_CASE(Stopped);
-        DEBUG_STRING_CASE(Disposed);
     }
 
     ASSERT_NOT_REACHED();

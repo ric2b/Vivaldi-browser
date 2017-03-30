@@ -102,7 +102,7 @@ def method_context(interface, method, is_visible=True):
 
     is_custom_element_callbacks = 'CustomElementCallbacks' in extended_attributes
     if is_custom_element_callbacks:
-        includes.add('core/dom/custom/CustomElementProcessingStack.h')
+        includes.add('core/dom/custom/V0CustomElementProcessingStack.h')
 
     is_raises_exception = 'RaisesException' in extended_attributes
     is_custom_call_prologue = has_extended_attribute_value(method, 'Custom', 'CallPrologue')
@@ -110,9 +110,7 @@ def method_context(interface, method, is_visible=True):
     is_post_message = 'PostMessage' in extended_attributes
     if is_post_message:
         includes.add('bindings/core/v8/SerializedScriptValueFactory.h')
-        includes.add('core/dom/DOMArrayBuffer.h')
-        includes.add('core/dom/MessagePort.h')
-        includes.add('core/frame/ImageBitmap.h')
+        includes.add('bindings/core/v8/Transferables.h')
 
     if 'LenientThis' in extended_attributes:
         raise Exception('[LenientThis] is not supported for operations.')
@@ -285,16 +283,6 @@ def argument_declarations_for_private_script(interface, method):
 ################################################################################
 
 def cpp_value(interface, method, number_of_arguments):
-    def cpp_argument(argument):
-        idl_type = argument.idl_type
-        if idl_type.name == 'EventListener':
-            return argument.name
-        if (idl_type.name in ['NodeFilter', 'NodeFilterOrNull',
-                              'XPathNSResolver', 'XPathNSResolverOrNull']):
-            # FIXME: remove this special case
-            return '%s.release()' % argument.name
-        return argument.name
-
     # Truncate omitted optional arguments
     arguments = method.arguments[:number_of_arguments]
     cpp_arguments = []
@@ -315,7 +303,7 @@ def cpp_value(interface, method, number_of_arguments):
             'ImplementedInPrivateScript' not in method.extended_attributes and
             not method.is_static):
         cpp_arguments.append('*impl')
-    cpp_arguments.extend(cpp_argument(argument) for argument in arguments)
+    cpp_arguments.extend(argument.name for argument in arguments)
 
     if 'ImplementedInPrivateScript' in method.extended_attributes:
         if method.idl_type.name != 'void':
@@ -356,7 +344,6 @@ def v8_set_return_value(interface_name, method, cpp_value, for_main_world=False)
             not idl_type.is_basic_type):
         raise Exception('Private scripts supports only primitive types and DOM wrappers.')
 
-    release = False
     # [CallWith=ScriptState], [RaisesException]
     if use_local_result(method):
         if idl_type.is_explicit_nullable:
@@ -364,10 +351,9 @@ def v8_set_return_value(interface_name, method, cpp_value, for_main_world=False)
             cpp_value = 'result.get()'
         else:
             cpp_value = 'result'
-        release = idl_type.release
 
     script_wrappable = 'impl' if inherits_interface(interface_name, 'Node') else ''
-    return idl_type.v8_set_return_value(cpp_value, extended_attributes, script_wrappable=script_wrappable, release=release, for_main_world=for_main_world, is_static=method.is_static)
+    return idl_type.v8_set_return_value(cpp_value, extended_attributes, script_wrappable=script_wrappable, for_main_world=for_main_world, is_static=method.is_static)
 
 
 def v8_value_to_local_cpp_variadic_value(method, argument, index, return_promise):

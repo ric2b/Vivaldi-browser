@@ -5,9 +5,10 @@
 #ifndef CC_TREES_DAMAGE_TRACKER_H_
 #define CC_TREES_DAMAGE_TRACKER_H_
 
+#include <memory>
 #include <vector>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "cc/base/cc_export.h"
 #include "cc/layers/layer_collections.h"
 #include "ui/gfx/geometry/rect.h"
@@ -29,7 +30,7 @@ class RenderSurfaceImpl;
 // the screen to save GPU computation and bandwidth.
 class CC_EXPORT DamageTracker {
  public:
-  static scoped_ptr<DamageTracker> Create();
+  static std::unique_ptr<DamageTracker> Create();
   ~DamageTracker();
 
   void DidDrawDamagedArea() { current_damage_rect_ = gfx::Rect(); }
@@ -38,7 +39,7 @@ class CC_EXPORT DamageTracker {
   }
   void UpdateDamageTrackingState(
       const LayerImplList& layer_list,
-      int target_surface_layer_id,
+      const RenderSurfaceImpl* target_surface,
       bool target_surface_property_changed_only_from_descendant,
       const gfx::Rect& target_surface_content_rect,
       LayerImpl* target_surface_mask_layer,
@@ -49,8 +50,9 @@ class CC_EXPORT DamageTracker {
  private:
   DamageTracker();
 
-  gfx::Rect TrackDamageFromActiveLayers(const LayerImplList& layer_list,
-                                        int target_surface_layer_id);
+  gfx::Rect TrackDamageFromActiveLayers(
+      const LayerImplList& layer_list,
+      const RenderSurfaceImpl* target_surface);
   gfx::Rect TrackDamageFromSurfaceMask(LayerImpl* target_surface_mask_layer);
   gfx::Rect TrackDamageFromLeftoverRects();
 
@@ -61,15 +63,16 @@ class CC_EXPORT DamageTracker {
   void ExtendDamageForRenderSurface(LayerImpl* layer,
                                     gfx::Rect* target_damage_rect);
 
-  struct RectMapData {
-    RectMapData() : layer_id_(0), mailboxId_(0) {}
-    explicit RectMapData(int layer_id) : layer_id_(layer_id), mailboxId_(0) {}
+  struct LayerRectMapData {
+    LayerRectMapData() : layer_id_(0), mailboxId_(0) {}
+    explicit LayerRectMapData(int layer_id)
+        : layer_id_(layer_id), mailboxId_(0) {}
     void Update(const gfx::Rect& rect, unsigned int mailboxId) {
       mailboxId_ = mailboxId;
       rect_ = rect;
     }
 
-    bool operator < (const RectMapData& other) const {
+    bool operator<(const LayerRectMapData& other) const {
       return layer_id_ < other.layer_id_;
     }
 
@@ -77,11 +80,32 @@ class CC_EXPORT DamageTracker {
     unsigned int mailboxId_;
     gfx::Rect rect_;
   };
-  typedef std::vector<RectMapData> SortedRectMap;
 
-  RectMapData& RectDataForLayer(int layer_id, bool* layer_is_new);
+  struct SurfaceRectMapData {
+    SurfaceRectMapData() : surface_id_(0), mailboxId_(0) {}
+    explicit SurfaceRectMapData(int surface_id)
+        : surface_id_(surface_id), mailboxId_(0) {}
+    void Update(const gfx::Rect& rect, unsigned int mailboxId) {
+      mailboxId_ = mailboxId;
+      rect_ = rect;
+    }
 
-  SortedRectMap rect_history_;
+    bool operator<(const SurfaceRectMapData& other) const {
+      return surface_id_ < other.surface_id_;
+    }
+
+    int surface_id_;
+    unsigned int mailboxId_;
+    gfx::Rect rect_;
+  };
+  typedef std::vector<LayerRectMapData> SortedRectMapForLayers;
+  typedef std::vector<SurfaceRectMapData> SortedRectMapForSurfaces;
+
+  LayerRectMapData& RectDataForLayer(int layer_id, bool* layer_is_new);
+  SurfaceRectMapData& RectDataForSurface(int layer_id, bool* layer_is_new);
+
+  SortedRectMapForLayers rect_history_for_layers_;
+  SortedRectMapForSurfaces rect_history_for_surfaces_;
 
   unsigned int mailboxId_;
   gfx::Rect current_damage_rect_;

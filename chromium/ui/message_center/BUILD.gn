@@ -23,6 +23,7 @@ component("message_center") {
       "//components/url_formatter",
       "//skia",
       "//ui/accessibility",
+      "//ui/display",
       "//ui/events",
       "//ui/gfx",
       "//ui/gfx/geometry",
@@ -82,13 +83,23 @@ component("message_center") {
       deps += [ "//ui/aura" ]
     }
 
+    if (is_mac) {
+      libs = [
+        "AppKit.framework",
+        "Foundation.framework",
+      ]
+    }
+
     # On Mac, toolkit-views builds still use the Cocoa UI. Keep this in sync
     # with message_center_unittests below.
     if (toolkit_views && !is_mac) {
       sources += [
+        "notification_delegate_views.cc",
         "views/bounded_label.cc",
         "views/bounded_label.h",
         "views/constants.h",
+        "views/custom_notification_view.cc",
+        "views/custom_notification_view.h",
         "views/desktop_popup_alignment_delegate.cc",
         "views/desktop_popup_alignment_delegate.h",
         "views/message_bubble_base.cc",
@@ -108,6 +119,8 @@ component("message_center") {
         "views/message_view.h",
         "views/message_view_context_menu_controller.cc",
         "views/message_view_context_menu_controller.h",
+        "views/message_view_factory.cc",
+        "views/message_view_factory.h",
         "views/notification_button.cc",
         "views/notification_button.h",
         "views/notification_progress_bar.cc",
@@ -224,6 +237,7 @@ test("message_center_unittests") {
     if (toolkit_views && !is_mac) {
       sources += [
         "views/bounded_label_unittest.cc",
+        "views/custom_notification_view_unittest.cc",
         "views/message_center_view_unittest.cc",
         "views/message_popup_collection_unittest.cc",
         "views/notification_view_unittest.cc",
@@ -233,6 +247,7 @@ test("message_center_unittests") {
         # Compositor is needed by message_center_view_unittest.cc and for the
         # fonts used by bounded_label_unittest.cc.
         "//ui/compositor",
+        "//ui/display",
         "//ui/views",
         "//ui/views:test_support",
       ]

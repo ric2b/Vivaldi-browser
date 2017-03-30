@@ -26,6 +26,7 @@ include_rules = [
   "+components/google/core/browser",
   "+components/history/core/browser",
   "+components/history/ios/browser",
+  "+components/image_fetcher",
   "+components/infobars/core",
   "+components/invalidation",
   "+components/keyed_service/core",
@@ -35,6 +36,7 @@ include_rules = [
   "+components/metrics",
   "+components/user_prefs",
   "+components/metrics_services_manager",
+  "+components/navigation_metrics",
   "+components/net_log",
   "+components/network_time",
   "+components/ntp_snippets",
@@ -102,5 +104,6 @@ include_rules = [
   # Strings and resources.
   "+components/grit",
   "+components/strings/grit",
+  "+grit/components_strings.h",
   "+ios/chrome/grit",
 ]

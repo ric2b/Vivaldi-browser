@@ -61,6 +61,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 
 #include "base/compiler_specific.h"
@@ -73,7 +74,7 @@
 #include "base/win/scoped_comptr.h"
 #include "base/win/scoped_handle.h"
 #include "media/audio/agc_audio_stream.h"
-#include "media/audio/audio_parameters.h"
+#include "media/base/audio_parameters.h"
 #include "media/base/media_export.h"
 
 namespace media {
@@ -151,7 +152,7 @@ class MEDIA_EXPORT WASAPIAudioInputStream
   uint32_t endpoint_buffer_size_frames_;
 
   // Contains the unique name of the selected endpoint device.
-  // Note that AudioManagerBase::kDefaultDeviceId represents the default
+  // Note that AudioDeviceDescription::kDefaultDeviceId represents the default
   // device role and is not a valid ID as such.
   std::string device_id_;
 
@@ -204,7 +205,7 @@ class MEDIA_EXPORT WASAPIAudioInputStream
 
   // Extra audio bus used for storage of deinterleaved data for the OnData
   // callback.
-  scoped_ptr<media::AudioBus> audio_bus_;
+  std::unique_ptr<media::AudioBus> audio_bus_;
 
   DISALLOW_COPY_AND_ASSIGN(WASAPIAudioInputStream);
 };

@@ -32,20 +32,6 @@ namespace ws {
 namespace test {
 namespace {
 
-class TestWindowManagerFactory : public mojom::WindowManagerFactory {
- public:
-  TestWindowManagerFactory() {}
-  ~TestWindowManagerFactory() override {}
-
-  // mojom::WindowManagerFactory:
-  void CreateWindowManager(
-      mus::mojom::DisplayPtr display,
-      mus::mojom::WindowTreeClientRequest client) override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestWindowManagerFactory);
-};
-
 ClientWindowId ClientWindowIdForFirstRoot(WindowTree* tree) {
   if (tree->roots().empty())
     return ClientWindowId();
@@ -74,10 +60,11 @@ class DisplayTest : public testing::Test {
   int32_t cursor_id_;
   TestPlatformDisplayFactory platform_display_factory_;
   TestWindowServerDelegate window_server_delegate_;
-  scoped_ptr<WindowServer> window_server_;
+  std::unique_ptr<WindowServer> window_server_;
   base::MessageLoop message_loop_;
   TestWindowManagerFactory test_window_manager_factory_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(DisplayTest);
 };
 

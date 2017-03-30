@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "base/base_export.h"
-#include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/task_scheduler/scheduler_lock.h"
@@ -24,25 +23,6 @@ namespace internal {
 // A PriorityQueue holds Sequences of Tasks. This class is thread-safe.
 class BASE_EXPORT PriorityQueue {
  public:
-  // An immutable struct combining a Sequence and the sort key that determines
-  // its position in a PriorityQueue.
-  struct BASE_EXPORT SequenceAndSortKey {
-    // Constructs a null SequenceAndSortKey.
-    SequenceAndSortKey();
-
-    // Constructs a SequenceAndSortKey with the given |sequence| and |sort_key|.
-    SequenceAndSortKey(scoped_refptr<Sequence> sequence,
-                       const SequenceSortKey& sort_key);
-
-    ~SequenceAndSortKey();
-
-    // Returns true if this is a null SequenceAndSortKey.
-    bool is_null() const { return !sequence; }
-
-    const scoped_refptr<Sequence> sequence;
-    const SequenceSortKey sort_key;
-  };
-
   // A Transaction can perform multiple operations atomically on a
   // PriorityQueue. While a Transaction is alive, it is guaranteed that nothing
   // else will access the PriorityQueue.
@@ -56,56 +36,45 @@ class BASE_EXPORT PriorityQueue {
    public:
     ~Transaction();
 
-    // Inserts |sequence_and_sort_key| in the PriorityQueue. Each call to this
-    // method will result in one invocation of the wake up callback when the
-    // Transaction is destroyed.
-    void Push(std::unique_ptr<SequenceAndSortKey> sequence_and_sort_key);
+    // Inserts |sequence| in the PriorityQueue with |sequence_sort_key|.
+    // Note: |sequence_sort_key| is required as a parameter instead of being
+    // extracted from |sequence| in Push() to avoid this Transaction having a
+    // lock interdependency with |sequence|.
+    void Push(scoped_refptr<Sequence> sequence,
+              const SequenceSortKey& sequence_sort_key);
 
-    // Inserts |sequence_and_sort_key| in the PriorityQueue without invoking the
-    // wake up callback.
-    void PushNoWakeUp(
-        std::unique_ptr<SequenceAndSortKey> sequence_and_sort_key);
+    // Returns a reference to the SequenceSortKey representing the priority of
+    // the highest pending task in this PriorityQueue. The reference becomes
+    // invalid the next time that this PriorityQueue is modified.
+    // Cannot be called on an empty PriorityQueue.
+    const SequenceSortKey& PeekSortKey() const;
 
-    // Returns the SequenceAndSortKey with the highest priority or a null
-    // SequenceAndSortKey if the PriorityQueue is empty. The reference becomes
-    // invalid the next time that a Sequence is popped from the PriorityQueue.
-    const SequenceAndSortKey& Peek() const;
+    // Removes and returns the highest priority Sequence in this PriorityQueue.
+    // Cannot be called on an empty PriorityQueue.
+    scoped_refptr<Sequence> PopSequence();
 
-    // Removes the SequenceAndSortKey with the highest priority from the
-    // PriorityQueue. Cannot be called on an empty PriorityQueue.
-    void Pop();
+    // Returns true if the PriorityQueue is empty.
+    bool IsEmpty() const;
 
    private:
     friend class PriorityQueue;
 
     explicit Transaction(PriorityQueue* outer_queue);
 
-    // Holds the lock of |outer_queue_| for most of the lifetime of this
-    // Transaction. Using a scoped_ptr allows the destructor to release the lock
-    // before performing internal operations which have to be done outside of
-    // its scope.
-    std::unique_ptr<AutoSchedulerLock> auto_lock_;
+    // Holds the lock of |outer_queue_| for the lifetime of this Transaction.
+    AutoSchedulerLock auto_lock_;
 
     PriorityQueue* const outer_queue_;
-
-    // Number of times that the wake up callback should be invoked when this
-    // Transaction is destroyed.
-    size_t num_wake_ups_ = 0;
 
     DISALLOW_COPY_AND_ASSIGN(Transaction);
   };
 
-  // |wake_up_callback| is a non-null callback invoked when a Transaction is
-  // done for each call to Push() on the Transaction.
-  explicit PriorityQueue(const Closure& wake_up_callback);
+  PriorityQueue();
 
-  // |wake_up_callback| is a non-null callback invoked when a Transaction is
-  // done for each call to Push() on the Transaction.
   // |predecessor_priority_queue| is a PriorityQueue for which a thread is
   // allowed to have an active Transaction when it creates a Transaction for
   // this PriorityQueue.
-  PriorityQueue(const Closure& wake_up_callback,
-                const PriorityQueue* predecessor_priority_queue);
+  PriorityQueue(const PriorityQueue* predecessor_priority_queue);
 
   ~PriorityQueue();
 
@@ -115,28 +84,19 @@ class BASE_EXPORT PriorityQueue {
   // PriorityQueue.
   std::unique_ptr<Transaction> BeginTransaction();
 
+  const SchedulerLock* container_lock() const { return &container_lock_; }
+
  private:
-  struct SequenceAndSortKeyComparator {
-    bool operator()(const std::unique_ptr<SequenceAndSortKey>& left,
-                    const std::unique_ptr<SequenceAndSortKey>& right) const {
-      return left->sort_key < right->sort_key;
-    }
-  };
-  using ContainerType =
-      std::priority_queue<std::unique_ptr<SequenceAndSortKey>,
-                          std::vector<std::unique_ptr<SequenceAndSortKey>>,
-                          SequenceAndSortKeyComparator>;
+  // A class combining a Sequence and the SequenceSortKey that determines its
+  // position in a PriorityQueue.
+  class SequenceAndSortKey;
+
+  using ContainerType = std::priority_queue<SequenceAndSortKey>;
 
   // Synchronizes access to |container_|.
   SchedulerLock container_lock_;
 
   ContainerType container_;
-
-  const Closure wake_up_callback_;
-
-  // A null SequenceAndSortKey returned by Peek() when the PriorityQueue is
-  // empty.
-  const SequenceAndSortKey empty_sequence_and_sort_key_;
 
   DISALLOW_COPY_AND_ASSIGN(PriorityQueue);
 };

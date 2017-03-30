@@ -12,7 +12,6 @@
 #include "content/common/bluetooth/bluetooth_messages.h"
 #include "content/common/browser_plugin/browser_plugin_messages.h"
 #include "content/common/cache_storage/cache_storage_messages.h"
-#include "content/common/cc_messages.h"
 #include "content/common/clipboard_messages.h"
 #include "content/common/database_messages.h"
 #include "content/common/device_sensors/device_light_messages.h"
@@ -27,7 +26,6 @@
 #include "content/common/fileapi/webblob_messages.h"
 #include "content/common/frame_messages.h"
 #include "content/common/gamepad_messages.h"
-#include "content/common/geofencing_messages.h"
 #include "content/common/gpu_host_messages.h"
 #include "content/common/indexed_db/indexed_db_messages.h"
 #include "content/common/input_messages.h"
@@ -46,7 +44,6 @@
 #include "content/common/memory_messages.h"
 #include "content/common/message_port_messages.h"
 #include "content/common/mime_registry_messages.h"
-#include "content/common/mojo/mojo_messages.h"
 #include "content/common/page_messages.h"
 #include "content/common/pepper_messages.h"
 #include "content/common/platform_notification_messages.h"
@@ -81,6 +78,7 @@
 #include "content/common/dwrite_font_proxy_messages.h"
 #endif  // defined(OS_WIN)
 
+#include "renderer/vivaldi_render_messages.h"
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 #include "content/common/media/media_pipeline_messages.h"
 #endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)

@@ -8,6 +8,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/message_loop/message_loop.h"
 #include "gpu/command_buffer/common/gles2_cmd_format.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
@@ -26,7 +28,7 @@
 #include "gpu/command_buffer/service/shader_manager.h"
 #include "gpu/command_buffer/service/test_helper.h"
 #include "gpu/command_buffer/service/texture_manager.h"
-#include "gpu/command_buffer/service/valuebuffer_manager.h"
+#include "gpu/command_buffer/service/transform_feedback_manager.h"
 #include "gpu/command_buffer/service/vertex_array_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gl/gl_mock.h"
@@ -132,10 +134,6 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool> {
     return group_->program_manager()->GetProgram(client_id);
   }
 
-  Valuebuffer* GetValuebuffer(GLuint client_id) {
-    return group_->valuebuffer_manager()->GetValuebuffer(client_id);
-  }
-
   QueryManager::Query* GetQueryInfo(GLuint client_id) {
     return decoder_->GetQueryManager()->GetQuery(client_id);
   }
@@ -144,9 +142,9 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool> {
     return group_->sampler_manager()->GetSampler(client_id);
   }
 
-  bool GetTransformFeedbackServiceId(
-      GLuint client_id, GLuint* service_id) const {
-    return group_->GetTransformFeedbackServiceId(client_id, service_id);
+  TransformFeedback* GetTransformFeedback(GLuint client_id) {
+    return decoder_->GetTransformFeedbackManager()->GetTransformFeedback(
+        client_id);
   }
 
   bool GetSyncServiceId(GLuint client_id, GLsync* service_id) const {
@@ -163,16 +161,12 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool> {
     return group_->program_manager();
   }
 
-  ValuebufferManager* valuebuffer_manager() {
-    return group_->valuebuffer_manager();
-  }
-
-  ValueStateMap* pending_valuebuffer_state() {
-    return group_->pending_valuebuffer_state();
-  }
-
   FeatureInfo* feature_info() {
     return group_->feature_info();
+  }
+
+  FramebufferCompletenessCache* framebuffer_completeness_cache() const {
+    return group_->framebuffer_completeness_cache();
   }
 
   ImageManager* GetImageManager() { return decoder_->GetImageManager(); }
@@ -517,7 +511,8 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool> {
   static const GLuint kServiceQueryId = 309;
   static const GLuint kServiceVertexArrayId = 310;
   static const GLuint kServiceTransformFeedbackId = 311;
-  static const GLuint kServiceSyncId = 312;
+  static const GLuint kServiceDefaultTransformFeedbackId = 312;
+  static const GLuint kServiceSyncId = 313;
 
   static const int32_t kSharedMemoryId = 401;
   static const size_t kSharedBufferSize = 2048;
@@ -627,11 +622,11 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool> {
   static const char* kOutputVariable1NameESSL3;
 
   // Use StrictMock to make 100% sure we know how GL will be called.
-  scoped_ptr< ::testing::StrictMock< ::gfx::MockGLInterface> > gl_;
+  std::unique_ptr<::testing::StrictMock<::gfx::MockGLInterface>> gl_;
   scoped_refptr<gfx::GLSurfaceStub> surface_;
   scoped_refptr<GLContextMock> context_;
-  scoped_ptr<MockGLES2Decoder> mock_decoder_;
-  scoped_ptr<GLES2Decoder> decoder_;
+  std::unique_ptr<MockGLES2Decoder> mock_decoder_;
+  std::unique_ptr<GLES2Decoder> decoder_;
   MemoryTracker* memory_tracker_;
 
   GLuint client_buffer_id_;
@@ -646,7 +641,6 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool> {
   GLuint client_fragment_shader_id_;
   GLuint client_query_id_;
   GLuint client_vertexarray_id_;
-  GLuint client_valuebuffer_id_;
   GLuint client_transformfeedback_id_;
   GLuint client_sync_id_;
 
@@ -754,7 +748,7 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool> {
 
   void SetupInitStateManualExpectations(bool es3_capable);
 
-  scoped_ptr< ::testing::StrictMock<MockCommandBufferEngine> > engine_;
+  std::unique_ptr<::testing::StrictMock<MockCommandBufferEngine>> engine_;
   GpuPreferences gpu_preferences_;
   scoped_refptr<ContextGroup> group_;
   MockGLStates gl_states_;

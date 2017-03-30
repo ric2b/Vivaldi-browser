@@ -88,7 +88,7 @@ class MockBufferedDataSource : public BufferedDataSource {
         .WillByDefault(Assign(&loading_, false));
 
     // |test_loader_| will be used when Start() is called.
-    loader->test_loader_ = scoped_ptr<WebURLLoader>(url_loader);
+    loader->test_loader_ = std::unique_ptr<WebURLLoader>(url_loader);
     return loader;
   }
 
@@ -211,7 +211,7 @@ class BufferedDataSourceTest : public testing::Test {
   }
 
   void ReceiveData(int size) {
-    scoped_ptr<char[]> data(new char[size]);
+    std::unique_ptr<char[]> data(new char[size]);
     memset(data.get(), 0xA5, size);  // Arbitrary non-zero value.
 
     loader()->didReceiveData(url_loader(), data.get(), size, size);
@@ -299,9 +299,9 @@ class BufferedDataSourceTest : public testing::Test {
   }
   GURL url() { return data_source_->url_; }
 
-  scoped_ptr<MockBufferedDataSource> data_source_;
+  std::unique_ptr<MockBufferedDataSource> data_source_;
 
-  scoped_ptr<TestResponseGenerator> response_generator_;
+  std::unique_ptr<TestResponseGenerator> response_generator_;
   MockWebFrameClient client_;
   WebView* view_;
   WebLocalFrame* frame_;

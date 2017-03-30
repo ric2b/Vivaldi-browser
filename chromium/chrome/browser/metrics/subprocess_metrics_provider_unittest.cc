@@ -85,8 +85,8 @@ class SubprocessMetricsProviderTest : public testing::Test {
         base::GlobalHistogramAllocator::Get();
 
     // Just wrap around the data segment in-use by the global allocator.
-    return base::WrapUnique(new base::PersistentHistogramAllocator(
-        base::WrapUnique(new base::PersistentMemoryAllocator(
+    return WrapUnique(new base::PersistentHistogramAllocator(
+        WrapUnique(new base::PersistentMemoryAllocator(
             const_cast<void*>(global_allocator->data()),
             global_allocator->length(), 0, 0, "", false))));
   }
@@ -97,6 +97,7 @@ class SubprocessMetricsProviderTest : public testing::Test {
     snapshot_manager.StartDeltas();
     provider_.RecordHistogramSnapshots(&snapshot_manager);
     snapshot_manager.FinishDeltas();
+    provider_.OnDidCreateMetricsLog();
     return flattener.GetRecordedDeltaHistogramNames().size();
   }
 

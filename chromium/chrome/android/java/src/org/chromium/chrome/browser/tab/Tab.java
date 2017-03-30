@@ -23,10 +23,12 @@ import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
+import android.view.accessibility.AccessibilityEvent;
 import android.widget.FrameLayout;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.FieldTrialList;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ObserverList.RewindableIterator;
@@ -82,6 +84,7 @@ import org.chromium.chrome.browser.tabmodel.TabModel.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModelImpl;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabReparentingParams;
+import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.components.navigation_interception.InterceptNavigationDelegate;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
@@ -102,6 +105,7 @@ import org.chromium.printing.PrintManagerDelegateImpl;
 import org.chromium.printing.PrintingController;
 import org.chromium.printing.PrintingControllerImpl;
 import org.chromium.ui.WindowOpenDisposition;
+import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.WindowAndroid;
@@ -126,7 +130,7 @@ import java.util.List;
  *    their own native pointer reference, but Tab#destroy() will handle deleting the native
  *    object.
  */
-public final class Tab implements ViewGroup.OnHierarchyChangeListener,
+public class Tab implements ViewGroup.OnHierarchyChangeListener,
         View.OnSystemUiVisibilityChangeListener {
     public static final int INVALID_TAB_ID = -1;
 
@@ -369,6 +373,7 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
     private View mSadTabView;
 
     private final int mDefaultThemeColor;
+    private int mThemeColor;
 
     private ChromeDownloadDelegate mDownloadDelegate;
 
@@ -554,8 +559,16 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
         public void onSSLStateUpdated(Tab tab) {
             PolicyAuditor auditor =
                     ((ChromeApplication) getApplicationContext()).getPolicyAuditor();
-            auditor.notifyCertificateFailure(getWebContents(), getApplicationContext());
+            auditor.notifyCertificateFailure(
+                    PolicyAuditor.nativeGetCertificateFailure(getWebContents()),
+                    getApplicationContext());
             updateFullscreenEnabledState();
+            updateThemeColorIfNeeded();
+        }
+
+        @Override
+        public void onUrlUpdated(Tab tab) {
+            updateThemeColorIfNeeded();
         }
 
         @Override
@@ -626,9 +639,11 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
             mDefaultThemeColor = mIncognito
                     ? ApiCompatibilityUtils.getColor(resources, R.color.incognito_primary_color)
                     : ApiCompatibilityUtils.getColor(resources, R.color.default_primary_color);
+            mThemeColor = calculateThemeColor();
         } else {
             mIdealFaviconSize = 16;
             mDefaultThemeColor = 0;
+            mThemeColor = mDefaultThemeColor;
         }
 
         // Restore data from the TabState, if it existed.
@@ -1047,9 +1062,51 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
      *         security state.
      */
     public int getThemeColor() {
+        return mThemeColor;
+    }
+
+    private int calculateThemeColor() {
+        // Theme color support is currently disabled for tablets.
+        if (DeviceFormFactor.isTablet(getApplicationContext())) return getDefaultThemeColor();
+
         if (isNativePage()) return mNativePage.getThemeColor();
-        if (mWebContentsObserver != null) return mWebContentsObserver.getThemeColor();
-        return mDefaultThemeColor;
+
+        int themeColor = getDefaultThemeColor();
+        if (getWebContents() != null) {
+            themeColor = getWebContents().getThemeColor();
+            if (themeColor != 0 && !ColorUtils.isValidThemeColor(themeColor)) themeColor = 0;
+        }
+
+        // Do not apply the theme color if there are any security issues on the page.
+        int securityLevel = getSecurityLevel();
+        if (securityLevel == ConnectionSecurityLevel.SECURITY_ERROR
+                || securityLevel == ConnectionSecurityLevel.SECURITY_WARNING
+                || securityLevel == ConnectionSecurityLevel.SECURITY_POLICY_WARNING) {
+            themeColor = getDefaultThemeColor();
+        }
+
+        if (isShowingInterstitialPage()) themeColor = getDefaultThemeColor();
+
+        if (themeColor == Color.TRANSPARENT) themeColor = getDefaultThemeColor();
+        if (isIncognito()) themeColor = getDefaultThemeColor();
+
+        // Ensure there is no alpha component to the theme color as that is not supported in the
+        // dependent UI.
+        themeColor |= 0xFF000000;
+        return themeColor;
+    }
+
+    /**
+     * Determines if the theme color has changed and notifies the listeners if it has.
+     */
+    void updateThemeColorIfNeeded() {
+        int themeColor = calculateThemeColor();
+        if (themeColor == mThemeColor) return;
+        mThemeColor = themeColor;
+        RewindableIterator<TabObserver> observers = getTabObservers();
+        while (observers.hasNext()) {
+            observers.next().onDidChangeThemeColor(this, themeColor);
+        }
     }
 
     /**
@@ -1311,12 +1368,8 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
         // Notifying of theme color change before content change because some of
         // the observers depend on the theme information being correct in
         // onContentChanged().
-        for (TabObserver observer : mObservers) {
-            observer.onDidChangeThemeColor(this, mDefaultThemeColor);
-        }
-        for (TabObserver observer : mObservers) {
-            observer.onContentChanged(this);
-        }
+        updateThemeColorIfNeeded();
+        notifyContentChanged();
         destroyNativePageInternal(previousNativePage);
     }
 
@@ -1339,7 +1392,7 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
         if (mNativePage == null) return;
         NativePage previousNativePage = mNativePage;
         mNativePage = null;
-        for (TabObserver observer : mObservers) observer.onContentChanged(this);
+        notifyContentChanged();
         destroyNativePageInternal(previousNativePage);
     }
 
@@ -1748,6 +1801,10 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
             mNativePage = null;
             destroyNativePageInternal(previousNativePage);
 
+            if (mContentViewCore != null) {
+                mContentViewCore.setObscuredByAnotherView(false);
+            }
+
             mContentViewCore = cvc;
             cvc.getContainerView().setOnHierarchyChangeListener(this);
             cvc.getContainerView().setOnSystemUiVisibilityChangeListener(this);
@@ -1795,7 +1852,8 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
             mSwipeRefreshHandler = new SwipeRefreshHandler(mThemedApplicationContext);
             mSwipeRefreshHandler.setContentViewCore(mContentViewCore);
 
-            for (TabObserver observer : mObservers) observer.onContentChanged(this);
+            updateThemeColorIfNeeded();
+            notifyContentChanged();
 
             // For browser tabs, we want to set accessibility focus to the page
             // when it loads. This is not the default behavior for embedded
@@ -1891,7 +1949,7 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
             getContentViewCore().getContainerView().addView(
                     mSadTabView, new FrameLayout.LayoutParams(
                             LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
-            for (TabObserver observer : mObservers) observer.onContentChanged(this);
+            notifyContentChanged();
         }
         FullscreenManager fullscreenManager = getFullscreenManager();
         if (fullscreenManager != null) {
@@ -1905,7 +1963,7 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
     private void removeSadTabIfPresent() {
         if (isShowingSadTab()) {
             getContentViewCore().getContainerView().removeView(mSadTabView);
-            for (TabObserver observer : mObservers) observer.onContentChanged(this);
+            notifyContentChanged();
         }
         mSadTabView = null;
     }
@@ -1916,6 +1974,14 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
     public boolean isShowingSadTab() {
         return mSadTabView != null && getContentViewCore() != null
                 && mSadTabView.getParent() == getContentViewCore().getContainerView();
+    }
+
+    /**
+     * Calls onContentChanged on all TabObservers and updates accessibility visibility.
+     */
+    private void notifyContentChanged() {
+        for (TabObserver observer : mObservers) observer.onContentChanged(this);
+        updateAccessibilityVisibility();
     }
 
     /**
@@ -2444,8 +2510,6 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
         }
 
         destroyNativePageInternal(previousNativePage);
-        mWebContentsObserver.didChangeThemeColor(
-                getWebContents().getThemeColor(mDefaultThemeColor));
         for (TabObserver observer : mObservers) {
             observer.onWebContentsSwapped(this, didStartLoad, didFinishLoad);
         }
@@ -2989,6 +3053,37 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
     }
 
     /**
+     * Update whether or not the current native tab and/or web contents are
+     * currently visible (from an accessibility perspective), or whether
+     * they're obscured by another view.
+     */
+    public void updateAccessibilityVisibility() {
+        View view = getView();
+        if (view != null) {
+            int importantForAccessibility = isObscuredByAnotherViewForAccessibility()
+                    ? View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                    : View.IMPORTANT_FOR_ACCESSIBILITY_YES;
+            if (view.getImportantForAccessibility() != importantForAccessibility) {
+                view.setImportantForAccessibility(importantForAccessibility);
+                view.sendAccessibilityEvent(
+                        AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
+            }
+        }
+
+        ContentViewCore cvc = getContentViewCore();
+        if (cvc != null) {
+            boolean isWebContentObscured = isObscuredByAnotherViewForAccessibility()
+                    || isShowingSadTab();
+            cvc.setObscuredByAnotherView(isWebContentObscured);
+        }
+    }
+
+    private boolean isObscuredByAnotherViewForAccessibility() {
+        ChromeActivity activity = getActivity();
+        return activity != null && activity.isViewObscuringAllTabs();
+    }
+
+    /**
      * Creates a new tab to be loaded lazily. This can be used for tabs opened in the background
      * that should be loaded when switched to. initialize() needs to be called afterwards to
      * complete the second level initialization.
@@ -3046,7 +3141,7 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
             }
         }
 
-        String packageName = ApplicationStatus.getApplicationContext().getPackageName();
+        String packageName = ContextUtils.getApplicationContext().getPackageName();
         Intent intent = new Intent(Intent.ACTION_MAIN);
         intent.putExtra(Browser.EXTRA_APPLICATION_ID, packageName);
         intent.putExtra(TabOpenType.BRING_TAB_TO_FRONT.name(), tabId);
@@ -3127,7 +3222,7 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
      * @return Whether or not the tab was opened by an app other than Chrome.
      */
     public boolean isCreatedForExternalApp() {
-        String packageName = ApplicationStatus.getApplicationContext().getPackageName();
+        String packageName = ContextUtils.getApplicationContext().getPackageName();
         return getLaunchType() == TabLaunchType.FROM_EXTERNAL_APP
                 && !TextUtils.equals(getAppAssociatedWith(), packageName);
     }

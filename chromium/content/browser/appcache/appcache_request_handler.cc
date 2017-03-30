@@ -78,7 +78,7 @@ AppCacheURLRequestJob* AppCacheRequestHandler::MaybeLoadResource(
   found_manifest_url_ = GURL();
   found_network_namespace_ = false;
 
-  scoped_ptr<AppCacheURLRequestJob> job;
+  std::unique_ptr<AppCacheURLRequestJob> job;
   if (is_main_resource())
     job = MaybeLoadMainResource(request, network_delegate);
   else
@@ -113,14 +113,14 @@ AppCacheURLRequestJob* AppCacheRequestHandler::MaybeLoadFallbackForRedirect(
 
   DCHECK(!job_.get());  // our jobs never generate redirects
 
-  scoped_ptr<AppCacheURLRequestJob> job;
+  std::unique_ptr<AppCacheURLRequestJob> job;
   if (found_fallback_entry_.has_response_id()) {
     // 6.9.6, step 4: If this results in a redirect to another origin,
     // get the resource of the fallback entry.
     job = CreateJob(request, network_delegate);
-    DeliverAppCachedResponse(
-        found_fallback_entry_, found_cache_id_, found_group_id_,
-        found_manifest_url_,  true, found_namespace_entry_url_);
+    DeliverAppCachedResponse(found_fallback_entry_, found_cache_id_,
+                             found_manifest_url_, true,
+                             found_namespace_entry_url_);
   } else if (!found_network_namespace_) {
     // 6.9.6, step 6: Fail the resource load.
     job = CreateJob(request, network_delegate);
@@ -170,10 +170,11 @@ AppCacheURLRequestJob* AppCacheRequestHandler::MaybeLoadFallbackForResponse(
 
   // 6.9.6, step 4: If this results in a 4xx or 5xx status code
   // or there were network errors, get the resource of the fallback entry.
-  scoped_ptr<AppCacheURLRequestJob> job = CreateJob(request, network_delegate);
-  DeliverAppCachedResponse(
-      found_fallback_entry_, found_cache_id_, found_group_id_,
-      found_manifest_url_, true, found_namespace_entry_url_);
+  std::unique_ptr<AppCacheURLRequestJob> job =
+      CreateJob(request, network_delegate);
+  DeliverAppCachedResponse(found_fallback_entry_, found_cache_id_,
+                           found_manifest_url_, true,
+                           found_namespace_entry_url_);
   return job.release();
 }
 
@@ -229,7 +230,6 @@ void AppCacheRequestHandler::OnDestructionImminent(AppCacheHost* host) {
 void AppCacheRequestHandler::DeliverAppCachedResponse(
     const AppCacheEntry& entry,
     int64_t cache_id,
-    int64_t group_id,
     const GURL& manifest_url,
     bool is_fallback,
     const GURL& namespace_entry_url) {
@@ -243,8 +243,7 @@ void AppCacheRequestHandler::DeliverAppCachedResponse(
   if (IsResourceTypeFrame(resource_type_) && !namespace_entry_url.is_empty())
     host_->NotifyMainResourceIsNamespaceEntry(namespace_entry_url);
 
-  job_->DeliverAppCachedResponse(manifest_url, group_id, cache_id,
-                                 entry, is_fallback);
+  job_->DeliverAppCachedResponse(manifest_url, cache_id, entry, is_fallback);
 }
 
 void AppCacheRequestHandler::DeliverErrorResponse() {
@@ -277,10 +276,10 @@ void AppCacheRequestHandler::OnPrepareToRestart() {
   job_.reset();
 }
 
-scoped_ptr<AppCacheURLRequestJob> AppCacheRequestHandler::CreateJob(
+std::unique_ptr<AppCacheURLRequestJob> AppCacheRequestHandler::CreateJob(
     net::URLRequest* request,
     net::NetworkDelegate* network_delegate) {
-  scoped_ptr<AppCacheURLRequestJob> job(new AppCacheURLRequestJob(
+  std::unique_ptr<AppCacheURLRequestJob> job(new AppCacheURLRequestJob(
       request, network_delegate, storage(), host_, is_main_resource(),
       base::Bind(&AppCacheRequestHandler::OnPrepareToRestart,
                  base::Unretained(this))));
@@ -290,7 +289,8 @@ scoped_ptr<AppCacheURLRequestJob> AppCacheRequestHandler::CreateJob(
 
 // Main-resource handling ----------------------------------------------
 
-scoped_ptr<AppCacheURLRequestJob> AppCacheRequestHandler::MaybeLoadMainResource(
+std::unique_ptr<AppCacheURLRequestJob>
+AppCacheRequestHandler::MaybeLoadMainResource(
     net::URLRequest* request,
     net::NetworkDelegate* network_delegate) {
   DCHECK(!job_.get());
@@ -314,7 +314,8 @@ scoped_ptr<AppCacheURLRequestJob> AppCacheRequestHandler::MaybeLoadMainResource(
 
   // We may have to wait for our storage query to complete, but
   // this query can also complete syncrhonously.
-  scoped_ptr<AppCacheURLRequestJob> job = CreateJob(request, network_delegate);
+  std::unique_ptr<AppCacheURLRequestJob> job =
+      CreateJob(request, network_delegate);
   storage()->FindResponseForMainRequest(
       request->url(), preferred_manifest_url, this);
   return job;
@@ -382,9 +383,8 @@ void AppCacheRequestHandler::OnMainResponseFound(
 
   if (found_entry_.has_response_id()) {
     DCHECK(!found_fallback_entry_.has_response_id());
-    DeliverAppCachedResponse(
-        found_entry_, found_cache_id_, found_group_id_, found_manifest_url_,
-        false, found_namespace_entry_url_);
+    DeliverAppCachedResponse(found_entry_, found_cache_id_, found_manifest_url_,
+                             false, found_namespace_entry_url_);
   } else {
     DeliverNetworkResponse();
   }
@@ -392,7 +392,8 @@ void AppCacheRequestHandler::OnMainResponseFound(
 
 // Sub-resource handling ----------------------------------------------
 
-scoped_ptr<AppCacheURLRequestJob> AppCacheRequestHandler::MaybeLoadSubResource(
+std::unique_ptr<AppCacheURLRequestJob>
+AppCacheRequestHandler::MaybeLoadSubResource(
     net::URLRequest* request,
     net::NetworkDelegate* network_delegate) {
   DCHECK(!job_.get());
@@ -410,7 +411,8 @@ scoped_ptr<AppCacheURLRequestJob> AppCacheRequestHandler::MaybeLoadSubResource(
     return nullptr;
   }
 
-  scoped_ptr<AppCacheURLRequestJob> job = CreateJob(request, network_delegate);
+  std::unique_ptr<AppCacheURLRequestJob> job =
+      CreateJob(request, network_delegate);
   ContinueMaybeLoadSubResource();
   return job;
 }
@@ -435,9 +437,8 @@ void AppCacheRequestHandler::ContinueMaybeLoadSubResource() {
     found_cache_id_ = cache->cache_id();
     found_group_id_ = cache->owning_group()->group_id();
     found_manifest_url_ = cache->owning_group()->manifest_url();
-    DeliverAppCachedResponse(
-        found_entry_, found_cache_id_, found_group_id_, found_manifest_url_,
-        false, GURL());
+    DeliverAppCachedResponse(found_entry_, found_cache_id_, found_manifest_url_,
+                             false, GURL());
     return;
   }
 

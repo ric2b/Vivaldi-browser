@@ -128,7 +128,7 @@ public:
     void absoluteQuads(Vector<FloatQuad>&) const override;
 
     LayoutRect viewRect() const override;
-    LayoutRect overflowClipRect(const LayoutPoint& location, OverlayScrollbarSizeRelevancy = IgnoreOverlayScrollbarSize) const override;
+    LayoutRect overflowClipRect(const LayoutPoint& location, OverlayScrollbarClipBehavior = IgnoreOverlayScrollbarSize) const override;
 
     bool shouldDoFullPaintInvalidationForNextLayout() const;
     bool doingFullPaintInvalidation() const;
@@ -185,6 +185,7 @@ public:
     void invalidateTreeIfNeeded(const PaintInvalidationState&) final;
 
     LayoutRect visualOverflowRect() const override;
+    LayoutRect localOverflowRectForPaintInvalidation() const override;
 
     // Invalidates paint for the entire view, including composited descendants, but not including child frames.
     // It is very likely you do not want to call this method.

@@ -113,7 +113,7 @@ void LayoutTestDevToolsFrontend::HandleMessageFromDevToolsFrontend(
     const std::string& message) {
   std::string method;
   base::DictionaryValue* dict = nullptr;
-  scoped_ptr<base::Value> parsed_message = base::JSONReader::Read(message);
+  std::unique_ptr<base::Value> parsed_message = base::JSONReader::Read(message);
   if (parsed_message &&
       parsed_message->GetAsDictionary(&dict) &&
       dict->GetString("method", &method) &&
@@ -131,6 +131,17 @@ void LayoutTestDevToolsFrontend::HandleMessageFromDevToolsFrontend(
 void LayoutTestDevToolsFrontend::RenderProcessGone(
     base::TerminationStatus status) {
   BlinkTestController::Get()->DevToolsProcessCrashed();
+}
+
+void LayoutTestDevToolsFrontend::RenderFrameCreated(
+    RenderFrameHost* render_frame_host) {
+  BlinkTestController::Get()->HandleNewRenderFrameHost(render_frame_host);
+}
+
+void LayoutTestDevToolsFrontend::RenderFrameHostChanged(
+    RenderFrameHost* old_host,
+    RenderFrameHost* new_host) {
+  BlinkTestController::Get()->HandleNewRenderFrameHost(new_host);
 }
 
 }  // namespace content

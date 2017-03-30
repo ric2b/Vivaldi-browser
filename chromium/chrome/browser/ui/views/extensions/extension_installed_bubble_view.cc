@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/ui/views/extensions/extension_installed_bubble_view.h"
-
 #include <algorithm>
 #include <string>
 
@@ -11,13 +9,14 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/user_metrics_action.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
-#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
+#include "chrome/browser/ui/extensions/extension_installed_bubble.h"
 #include "chrome/browser/ui/singleton_tabs.h"
+#include "chrome/browser/ui/sync/bubble_sync_promo_delegate.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
+#include "chrome/browser/ui/views/location_bar/location_icon_view.h"
 #include "chrome/browser/ui/views/location_bar/page_action_with_badge_view.h"
 #include "chrome/browser/ui/views/sync/bubble_sync_promo_view.h"
 #include "chrome/browser/ui/views/toolbar/app_menu_button.h"
@@ -31,22 +30,13 @@
 #include "content/public/browser/user_metrics.h"
 #include "extensions/common/extension.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/resource/resource_bundle.h"
-#include "ui/gfx/render_text.h"
-#include "ui/gfx/text_elider.h"
-#include "ui/resources/grit/ui_resources.h"
-#include "ui/views/bubble/bubble_frame_view.h"
-#include "ui/views/controls/button/image_button.h"
-#include "ui/views/controls/image_view.h"
+#include "ui/gfx/image/image_skia_operations.h"
+#include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/link.h"
 #include "ui/views/controls/link_listener.h"
 #include "ui/views/layout/box_layout.h"
-#include "ui/views/layout/fill_layout.h"
-#include "ui/views/layout/grid_layout.h"
 #include "ui/views/layout/layout_constants.h"
-
-#include "app/vivaldi_apptools.h"
 
 using extensions::Extension;
 
@@ -56,106 +46,95 @@ const int kIconSize = 43;
 
 const int kRightColumnWidth = 285;
 
-views::Label* CreateLabel(const base::string16& text,
-                          const gfx::FontList& font) {
-  views::Label* label = new views::Label(text, font);
+views::Label* CreateLabel(const base::string16& text) {
+  views::Label* label = new views::Label(text);
   label->SetMultiLine(true);
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  label->SizeToFit(kRightColumnWidth);
   return label;
 }
 
-class HeadingAndCloseButtonView : public views::View {
+// Provides feedback to the user upon successful installation of an
+// extension. Depending on the type of extension, the Bubble will
+// point to:
+//    OMNIBOX_KEYWORD-> The omnibox.
+//    BROWSER_ACTION -> The browserAction icon in the toolbar.
+//    PAGE_ACTION    -> A preview of the pageAction icon in the location
+//                      bar which is shown while the Bubble is shown.
+//    GENERIC        -> The app menu. This case includes pageActions that don't
+//                      specify a default icon.
+class ExtensionInstalledBubbleView : public BubbleSyncPromoDelegate,
+                                     public views::BubbleDialogDelegateView,
+                                     public views::LinkListener {
  public:
-  HeadingAndCloseButtonView(views::Label* heading, views::LabelButton* close)
-      : heading_(heading), close_(close) {
-    AddChildView(heading_);
-    AddChildView(close_);
-  }
-  ~HeadingAndCloseButtonView() override {}
+  explicit ExtensionInstalledBubbleView(ExtensionInstalledBubble* bubble);
+  ~ExtensionInstalledBubbleView() override;
 
-  void Layout() override {
-    gfx::Size close_size = close_->GetPreferredSize();
-    gfx::Size view_size = size();
+  // Recalculate the anchor position for this bubble.
+  void UpdateAnchorView();
 
-    // Close button is in the upper right and always gets its full desired size.
-    close_->SetBounds(view_size.width() - close_size.width(),
-                      0,
-                      close_size.width(),
-                      close_size.height());
-    // The heading takes up the remaining room (modulo padding).
-    heading_->SetBounds(
-        0,
-        0,
-        view_size.width() - close_size.width() -
-            views::kUnrelatedControlHorizontalSpacing,
-        view_size.height());
-  }
-
-  gfx::Size GetPreferredSize() const override {
-    gfx::Size heading_size = heading_->GetPreferredSize();
-    gfx::Size close_size = close_->GetPreferredSize();
-    return gfx::Size(kRightColumnWidth,
-                     std::max(heading_size.height(), close_size.height()));
-  }
-
-  int GetHeightForWidth(int width) const override {
-    gfx::Size close_size = close_->GetPreferredSize();
-    int heading_width = width - views::kUnrelatedControlHorizontalSpacing -
-        close_size.width();
-    return std::max(heading_->GetHeightForWidth(heading_width),
-                    close_size.height());
-  }
+  void CloseBubble();
 
  private:
-  views::Label* heading_;
-  views::LabelButton* close_;
+  Browser* browser() { return controller_->browser(); }
 
-  DISALLOW_COPY_AND_ASSIGN(HeadingAndCloseButtonView);
+  // views::BubbleDialogDelegateView:
+  base::string16 GetWindowTitle() const override;
+  gfx::ImageSkia GetWindowIcon() override;
+  bool ShouldShowWindowIcon() const override;
+  bool ShouldShowCloseButton() const override;
+  View* CreateFootnoteView() override;
+  int GetDialogButtons() const override;
+  void Init() override;
+
+  // BubbleSyncPromoDelegate:
+  void OnSignInLinkClicked() override;
+
+  // views::LinkListener:
+  void LinkClicked(views::Link* source, int event_flags) override;
+
+  // Gets the size of the icon, capped at kIconSize.
+  gfx::Size GetIconSize() const;
+
+  ExtensionInstalledBubble* controller_;
+
+  // The shortcut to open the manage shortcuts page.
+  views::Link* manage_shortcut_;
+
+  DISALLOW_COPY_AND_ASSIGN(ExtensionInstalledBubbleView);
 };
 
-}  // namespace
-
 ExtensionInstalledBubbleView::ExtensionInstalledBubbleView(
-    ExtensionInstalledBubble* bubble,
-    BubbleReference bubble_reference)
-    : bubble_(bubble),
-      bubble_reference_(bubble_reference),
-      extension_(bubble->extension()),
-      browser_(bubble->browser()),
-      type_(bubble->type()),
-      anchor_position_(bubble->anchor_position()),
-      close_(nullptr),
+    ExtensionInstalledBubble* controller)
+    : BubbleDialogDelegateView(nullptr,
+                               controller->anchor_position() ==
+                                       ExtensionInstalledBubble::ANCHOR_OMNIBOX
+                                   ? views::BubbleBorder::TOP_LEFT
+                                   : views::BubbleBorder::TOP_RIGHT),
+      controller_(controller),
       manage_shortcut_(nullptr) {}
 
 ExtensionInstalledBubbleView::~ExtensionInstalledBubbleView() {}
 
 void ExtensionInstalledBubbleView::UpdateAnchorView() {
-  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser_);
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
 
   views::View* reference_view = nullptr;
-  switch (anchor_position_) {
+  switch (controller_->anchor_position()) {
     case ExtensionInstalledBubble::ANCHOR_BROWSER_ACTION: {
       BrowserActionsContainer* container =
           browser_view->GetToolbarView()->browser_actions();
       // Hitting this DCHECK means |ShouldShow| failed.
       DCHECK(!container->animating());
 
-      reference_view = container->GetViewForId(extension_->id());
-      // If the view is not visible then it is in the chevron, so point the
-      // install bubble to the chevron instead. If this is an incognito window,
-      // both could be invisible.
-      if (!reference_view || !reference_view->visible()) {
-        reference_view = container->chevron();
-        if (!reference_view || !reference_view->visible())
-          reference_view = nullptr;  // fall back to app menu below.
-      }
+      reference_view = container->GetViewForId(controller_->extension()->id());
       break;
     }
     case ExtensionInstalledBubble::ANCHOR_PAGE_ACTION: {
       LocationBarView* location_bar_view = browser_view->GetLocationBarView();
       ExtensionAction* page_action =
-          extensions::ExtensionActionManager::Get(browser_->profile())
-              ->GetPageAction(*extension_);
+          extensions::ExtensionActionManager::Get(browser()->profile())
+              ->GetPageAction(*controller_->extension());
       location_bar_view->SetPreviewEnabledPageAction(page_action,
                                                      true);  // preview_enabled
       reference_view = location_bar_view->GetPageActionView(page_action);
@@ -163,9 +142,7 @@ void ExtensionInstalledBubbleView::UpdateAnchorView() {
       break;
     }
     case ExtensionInstalledBubble::ANCHOR_OMNIBOX: {
-      LocationBarView* location_bar_view = browser_view->GetLocationBarView();
-      reference_view = location_bar_view;
-      DCHECK(reference_view);
+      reference_view = browser_view->GetLocationBarView()->location_icon_view();
       break;
     }
     case ExtensionInstalledBubble::ANCHOR_APP_MENU:
@@ -174,13 +151,47 @@ void ExtensionInstalledBubbleView::UpdateAnchorView() {
   }
 
   // Default case.
-  if (!reference_view)
+  if (!reference_view || !reference_view->visible())
     reference_view = browser_view->GetToolbarView()->app_menu_button();
   SetAnchorView(reference_view);
 }
 
+void ExtensionInstalledBubbleView::CloseBubble() {
+  if (controller_ && controller_->anchor_position() ==
+      ExtensionInstalledBubble::ANCHOR_PAGE_ACTION) {
+    BrowserView* browser_view =
+        BrowserView::GetBrowserViewForBrowser(browser());
+    browser_view->GetLocationBarView()->SetPreviewEnabledPageAction(
+        extensions::ExtensionActionManager::Get(browser()->profile())
+            ->GetPageAction(*controller_->extension()),
+        false);  // preview_enabled
+  }
+  controller_ = nullptr;
+  GetWidget()->Close();
+}
+
+base::string16 ExtensionInstalledBubbleView::GetWindowTitle() const {
+  // Add the heading (for all options).
+  base::string16 extension_name =
+      base::UTF8ToUTF16(controller_->extension()->name());
+  base::i18n::AdjustStringForLocaleDirection(&extension_name);
+  return l10n_util::GetStringFUTF16(IDS_EXTENSION_INSTALLED_HEADING,
+                                    extension_name);
+}
+
+gfx::ImageSkia ExtensionInstalledBubbleView::GetWindowIcon() {
+  const SkBitmap& bitmap = controller_->icon();
+  return gfx::ImageSkiaOperations::CreateResizedImage(
+      gfx::ImageSkia::CreateFrom1xBitmap(bitmap),
+      skia::ImageOperations::RESIZE_BEST, GetIconSize());
+}
+
+bool ExtensionInstalledBubbleView::ShouldShowWindowIcon() const {
+  return true;
+}
+
 views::View* ExtensionInstalledBubbleView::CreateFootnoteView() {
-  if (!(bubble_->options() & ExtensionInstalledBubble::SIGN_IN_PROMO))
+  if (!(controller_->options() & ExtensionInstalledBubble::SIGN_IN_PROMO))
     return nullptr;
 
   return new BubbleSyncPromoView(this,
@@ -188,90 +199,27 @@ views::View* ExtensionInstalledBubbleView::CreateFootnoteView() {
                                  IDS_EXTENSION_INSTALLED_SYNC_PROMO_NEW);
 }
 
-void ExtensionInstalledBubbleView::WindowClosing() {
-  if (anchor_position_ == ExtensionInstalledBubble::ANCHOR_PAGE_ACTION) {
-    BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser_);
-    browser_view->GetLocationBarView()->SetPreviewEnabledPageAction(
-        extensions::ExtensionActionManager::Get(browser_->profile())
-            ->GetPageAction(*extension_),
-        false);  // preview_enabled
-  }
+int ExtensionInstalledBubbleView::GetDialogButtons() const {
+  return ui::DIALOG_BUTTON_NONE;
 }
 
-gfx::Rect ExtensionInstalledBubbleView::GetAnchorRect() const {
-  // For omnibox keyword bubbles, move the arrow to point to the left edge
-  // of the omnibox, just to the right of the icon.
-  if (type_ == ExtensionInstalledBubble::OMNIBOX_KEYWORD) {
-    const LocationBarView* location_bar_view =
-        BrowserView::GetBrowserViewForBrowser(browser_)->GetLocationBarView();
-    return gfx::Rect(location_bar_view->GetOmniboxViewOrigin(),
-                     gfx::Size(0, location_bar_view->omnibox_view()->height()));
-  }
-  return views::BubbleDelegateView::GetAnchorRect();
-}
-
-void ExtensionInstalledBubbleView::OnWidgetClosing(views::Widget* widget) {
-  if (bubble_reference_) {
-    DCHECK_EQ(widget, GetWidget());
-    // A more specific close reason should already be recorded.
-    // This is the catch-all close reason for this bubble.
-    bubble_reference_->CloseBubble(BUBBLE_CLOSE_FOCUS_LOST);
-  }
-}
-
-void ExtensionInstalledBubbleView::OnWidgetActivationChanged(
-    views::Widget* widget,
-    bool active) {
-  if (!active && bubble_reference_ && widget == GetWidget())
-    bubble_reference_->CloseBubble(BUBBLE_CLOSE_FOCUS_LOST);
-}
-
-bool ExtensionInstalledBubbleView::AcceleratorPressed(
-    const ui::Accelerator& accelerator) {
-  if (!close_on_esc() || accelerator.key_code() != ui::VKEY_ESCAPE)
-    return false;
-  DCHECK(bubble_reference_);
-  bool did_close = bubble_reference_->CloseBubble(BUBBLE_CLOSE_USER_DISMISSED);
-  DCHECK(did_close);
+bool ExtensionInstalledBubbleView::ShouldShowCloseButton() const {
   return true;
 }
 
-void ExtensionInstalledBubbleView::OnSignInLinkClicked() {
-  GetWidget()->Close();
-  chrome::ShowBrowserSignin(
-      browser_,
-      signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE);
-}
+void ExtensionInstalledBubbleView::Init() {
+  UpdateAnchorView();
 
-void ExtensionInstalledBubbleView::ButtonPressed(views::Button* sender,
-                                                 const ui::Event& event) {
-  DCHECK_EQ(sender, close_);
-  GetWidget()->Close();
-}
-
-void ExtensionInstalledBubbleView::LinkClicked(views::Link* source,
-                                               int event_flags) {
-  DCHECK_EQ(manage_shortcut_, source);
-  GetWidget()->Close();
-
-  std::string configure_url = chrome::kChromeUIExtensionsURL;
-  configure_url += chrome::kExtensionConfigureCommandsSubPage;
-  chrome::NavigateParams params(
-      chrome::GetSingletonTabNavigateParams(browser_, GURL(configure_url)));
-  chrome::Navigate(&params);
-}
-
-void ExtensionInstalledBubbleView::InitLayout() {
   // The Extension Installed bubble takes on various forms, depending on the
   // type of extension installed. In general, though, they are all similar:
   //
   // -------------------------
-  // |      | Heading    [X] |
-  // | Icon | Info           |
-  // |      | Extra info     |
+  // | Icon | Title      (x) |
+  // |        Info           |
+  // |        Extra info     |
   // -------------------------
   //
-  // Icon and Heading are always shown (as well as the close button).
+  // Icon and Title are always shown (as well as the close button).
   // Info is shown for browser actions, page actions and Omnibox keyword
   // extensions and might list keyboard shorcut for the former two types.
   // Extra info is...
@@ -279,94 +227,125 @@ void ExtensionInstalledBubbleView::InitLayout() {
   //     or a link to configure the keybinding shortcut (if one exists).
   // Extra info can include a promo for signing into sync.
 
-  const ExtensionInstalledBubble& bubble = *bubble_;
-  // The number of rows in the content section of the bubble.
-  int main_content_row_count = 1;
-  if (bubble.options() & ExtensionInstalledBubble::HOW_TO_USE)
-    ++main_content_row_count;
-  if (bubble.options() & ExtensionInstalledBubble::SHOW_KEYBINDING)
-    ++main_content_row_count;
-  if (bubble.options() & ExtensionInstalledBubble::HOW_TO_MANAGE)
-    ++main_content_row_count;
+  std::unique_ptr<views::BoxLayout> layout(
+      new views::BoxLayout(views::BoxLayout::kVertical, 0, 0,
+                           views::kRelatedControlVerticalSpacing));
+  layout->set_minimum_cross_axis_size(kRightColumnWidth);
+  // Indent by the size of the icon.
+  layout->set_inside_border_insets(gfx::Insets(
+      0, GetIconSize().width() + views::kUnrelatedControlHorizontalSpacing, 0,
+      0));
+  layout->set_cross_axis_alignment(
+      views::BoxLayout::CROSS_AXIS_ALIGNMENT_START);
+  SetLayoutManager(layout.release());
 
-  views::GridLayout* layout = new views::GridLayout(this);
-  SetLayoutManager(layout);
+  if (controller_->options() & ExtensionInstalledBubble::HOW_TO_USE)
+    AddChildView(CreateLabel(controller_->GetHowToUseDescription()));
 
-  const int cs_id = 0;
-
-  views::ColumnSet* main_cs = layout->AddColumnSet(cs_id);
-  // Icon column.
-  main_cs->AddColumn(views::GridLayout::CENTER, views::GridLayout::LEADING, 0,
-                     views::GridLayout::USE_PREF, 0, 0);
-  main_cs->AddPaddingColumn(0, views::kUnrelatedControlHorizontalSpacing);
-  // Heading column.
-  main_cs->AddColumn(views::GridLayout::LEADING, views::GridLayout::LEADING, 0,
-                     views::GridLayout::FIXED, kRightColumnWidth, 0);
-
-  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-  const gfx::FontList& font_list = rb.GetFontList(ui::ResourceBundle::BaseFont);
-
-  const SkBitmap& bitmap = bubble.icon();
-  // Add the icon (for all options).
-  // Scale down to 43x43, but allow smaller icons (don't scale up).
-  gfx::Size size(bitmap.width(), bitmap.height());
-  if (size.width() > kIconSize || size.height() > kIconSize)
-    size = gfx::Size(kIconSize, kIconSize);
-  views::ImageView* icon = new views::ImageView();
-  icon->SetImageSize(size);
-  icon->SetImage(gfx::ImageSkia::CreateFrom1xBitmap(bitmap));
-
-  layout->StartRow(0, cs_id);
-  layout->AddView(icon, 1, main_content_row_count);
-
-  // Add the heading (for all options).
-  base::string16 extension_name = base::UTF8ToUTF16(extension_->name());
-  base::i18n::AdjustStringForLocaleDirection(&extension_name);
-  views::Label* heading =
-      CreateLabel(l10n_util::GetStringFUTF16(IDS_EXTENSION_INSTALLED_HEADING,
-                                             extension_name),
-                  rb.GetFontList(ui::ResourceBundle::MediumFont));
-
-  close_ = views::BubbleFrameView::CreateCloseButton(this);
-
-  HeadingAndCloseButtonView* heading_and_close =
-      new HeadingAndCloseButtonView(heading, close_);
-
-  layout->AddView(heading_and_close);
-  layout->AddPaddingRow(0, views::kRelatedControlVerticalSpacing);
-
-  auto add_content_view = [&layout, &cs_id](views::View* view) {
-    layout->StartRow(0, cs_id);
-    // Skip the icon column.
-    layout->SkipColumns(1);
-    layout->AddView(view);
-    layout->AddPaddingRow(0, views::kRelatedControlVerticalSpacing);
-  };
-
-  if (bubble.options() & ExtensionInstalledBubble::HOW_TO_USE) {
-    add_content_view(CreateLabel(bubble.GetHowToUseDescription(), font_list));
-  }
-
-  if (bubble.options() & ExtensionInstalledBubble::SHOW_KEYBINDING) {
+  if (controller_->options() & ExtensionInstalledBubble::SHOW_KEYBINDING) {
     manage_shortcut_ = new views::Link(
         l10n_util::GetStringUTF16(IDS_EXTENSION_INSTALLED_MANAGE_SHORTCUTS));
     manage_shortcut_->set_listener(this);
     manage_shortcut_->SetUnderline(false);
-    add_content_view(manage_shortcut_);
+    AddChildView(manage_shortcut_);
   }
 
-  if (bubble.options() & ExtensionInstalledBubble::HOW_TO_MANAGE) {
-    add_content_view(CreateLabel(
-        l10n_util::GetStringUTF16(IDS_EXTENSION_INSTALLED_MANAGE_INFO),
-        font_list));
+  if (controller_->options() & ExtensionInstalledBubble::HOW_TO_MANAGE) {
+    AddChildView(CreateLabel(
+        l10n_util::GetStringUTF16(IDS_EXTENSION_INSTALLED_MANAGE_INFO)));
   }
 }
 
+void ExtensionInstalledBubbleView::OnSignInLinkClicked() {
+  chrome::ShowBrowserSignin(
+      browser(),
+      signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE);
+  CloseBubble();
+}
+
+void ExtensionInstalledBubbleView::LinkClicked(views::Link* source,
+                                               int event_flags) {
+  DCHECK_EQ(manage_shortcut_, source);
+
+  std::string configure_url = chrome::kChromeUIExtensionsURL;
+  configure_url += chrome::kExtensionConfigureCommandsSubPage;
+  chrome::NavigateParams params(
+      chrome::GetSingletonTabNavigateParams(browser(), GURL(configure_url)));
+  chrome::Navigate(&params);
+  CloseBubble();
+}
+
+gfx::Size ExtensionInstalledBubbleView::GetIconSize() const {
+  const SkBitmap& bitmap = controller_->icon();
+  // Scale down to 43x43, but allow smaller icons (don't scale up).
+  gfx::Size size(bitmap.width(), bitmap.height());
+  return size.width() > kIconSize || size.height() > kIconSize
+             ? gfx::Size(kIconSize, kIconSize)
+             : size;
+}
+
+// NB: This bubble is using the temporarily-deprecated bubble manager interface
+// BubbleUi. Do not copy this pattern.
+class ExtensionInstalledBubbleUi : public BubbleUi,
+                                   public views::WidgetObserver {
+ public:
+  explicit ExtensionInstalledBubbleUi(ExtensionInstalledBubble* bubble);
+  ~ExtensionInstalledBubbleUi() override;
+
+  // BubbleUi:
+  void Show(BubbleReference bubble_reference) override;
+  void Close() override;
+  void UpdateAnchorPosition() override;
+
+  // WidgetObserver:
+  void OnWidgetClosing(views::Widget* widget) override;
+
+ private:
+  ExtensionInstalledBubble* bubble_;
+  ExtensionInstalledBubbleView* bubble_view_;
+
+  DISALLOW_COPY_AND_ASSIGN(ExtensionInstalledBubbleUi);
+};
+
+ExtensionInstalledBubbleUi::ExtensionInstalledBubbleUi(
+    ExtensionInstalledBubble* bubble)
+    : bubble_(bubble), bubble_view_(nullptr) {
+  DCHECK(bubble_);
+}
+
+ExtensionInstalledBubbleUi::~ExtensionInstalledBubbleUi() {
+  if (bubble_view_)
+    bubble_view_->GetWidget()->RemoveObserver(this);
+}
+
+void ExtensionInstalledBubbleUi::Show(BubbleReference /*bubble_reference*/) {
+  bubble_view_ = new ExtensionInstalledBubbleView(bubble_);
+
+  views::BubbleDialogDelegateView::CreateBubble(bubble_view_)->Show();
+  bubble_view_->GetWidget()->AddObserver(this);
+  content::RecordAction(
+      base::UserMetricsAction("Signin_Impression_FromExtensionInstallBubble"));
+}
+
+void ExtensionInstalledBubbleUi::Close() {
+  if (bubble_view_)
+    bubble_view_->CloseBubble();
+}
+
+void ExtensionInstalledBubbleUi::UpdateAnchorPosition() {
+  DCHECK(bubble_view_);
+  bubble_view_->UpdateAnchorView();
+}
+
+void ExtensionInstalledBubbleUi::OnWidgetClosing(views::Widget* widget) {
+  widget->RemoveObserver(this);
+  bubble_view_ = nullptr;
+}
+
+}  // namespace
+
 // Views specific implementation.
 bool ExtensionInstalledBubble::ShouldShow() {
-  if (vivaldi::IsVivaldiRunning()){
-    return false;
-  }
   if (anchor_position() == ANCHOR_BROWSER_ACTION) {
     BrowserActionsContainer* container =
         BrowserView::GetBrowserViewForBrowser(browser())
@@ -377,60 +356,7 @@ bool ExtensionInstalledBubble::ShouldShow() {
   return true;
 }
 
-class ExtensionInstalledBubbleUi : public BubbleUi {
- public:
-  explicit ExtensionInstalledBubbleUi(ExtensionInstalledBubble* bubble);
-  ~ExtensionInstalledBubbleUi() override;
-
- private:
-  // BubbleUi:
-  void Show(BubbleReference bubble_reference) override;
-  void Close() override;
-  void UpdateAnchorPosition() override;
-
-  ExtensionInstalledBubble* bubble_;
-  ExtensionInstalledBubbleView* delegate_view_;
-
-  DISALLOW_COPY_AND_ASSIGN(ExtensionInstalledBubbleUi);
-};
-
 // Implemented here to create the platform specific instance of the BubbleUi.
 std::unique_ptr<BubbleUi> ExtensionInstalledBubble::BuildBubbleUi() {
   return base::WrapUnique(new ExtensionInstalledBubbleUi(this));
-}
-
-ExtensionInstalledBubbleUi::ExtensionInstalledBubbleUi(
-    ExtensionInstalledBubble* bubble)
-    : bubble_(bubble), delegate_view_(nullptr) {
-  DCHECK(bubble_);
-}
-
-ExtensionInstalledBubbleUi::~ExtensionInstalledBubbleUi() {}
-
-void ExtensionInstalledBubbleUi::Show(BubbleReference bubble_reference) {
-  // Owned by widget.
-  delegate_view_ = new ExtensionInstalledBubbleView(bubble_, bubble_reference);
-  delegate_view_->UpdateAnchorView();
-
-  delegate_view_->set_arrow(bubble_->type() == bubble_->OMNIBOX_KEYWORD
-                                ? views::BubbleBorder::TOP_LEFT
-                                : views::BubbleBorder::TOP_RIGHT);
-
-  delegate_view_->InitLayout();
-
-  views::BubbleDelegateView::CreateBubble(delegate_view_)->Show();
-  content::RecordAction(
-      base::UserMetricsAction("Signin_Impression_FromExtensionInstallBubble"));
-}
-
-void ExtensionInstalledBubbleUi::Close() {
-  if (delegate_view_) {
-    delegate_view_->GetWidget()->Close();
-    delegate_view_ = nullptr;
-  }
-}
-
-void ExtensionInstalledBubbleUi::UpdateAnchorPosition() {
-  DCHECK(delegate_view_);
-  delegate_view_->UpdateAnchorView();
 }

@@ -67,23 +67,6 @@ namespace blink {
 // http://www.unicode.org/reports/tr51/proposed.html#Emoji_Script
 static const char* kAndroidColorEmojiLocale = "und-Zsye";
 
-// SkFontMgr requires script-based locale names, like "zh-Hant" and "zh-Hans",
-// instead of "zh-CN" and "zh-TW".
-static CString toSkFontMgrLocale(const String& locale)
-{
-    if (!locale.startsWith("zh", TextCaseInsensitive))
-        return locale.ascii();
-
-    switch (localeToScriptCodeForFontSelection(locale)) {
-    case USCRIPT_SIMPLIFIED_HAN:
-        return "zh-Hans";
-    case USCRIPT_TRADITIONAL_HAN:
-        return "zh-Hant";
-    default:
-        return locale.ascii();
-    }
-}
-
 // This function is called on android or when we are emulating android fonts on linux and the
 // embedder has overriden the default fontManager with WebFontRendering::setSkiaFontMgr.
 // static
@@ -171,25 +154,6 @@ PassRefPtr<SimpleFontData> FontCache::getLastResortFallbackFont(const FontDescri
     return fontDataFromFontPlatformData(fontPlatformData, shouldRetain);
 }
 
-#if OS(WIN) || OS(LINUX)
-static inline SkFontStyle fontStyle(const FontDescription& fontDescription)
-{
-    int width = static_cast<int>(fontDescription.stretch());
-    int weight = (fontDescription.weight() - FontWeight100 + 1) * 100;
-    SkFontStyle::Slant slant = fontDescription.style() == FontStyleItalic
-        ? SkFontStyle::kItalic_Slant
-        : SkFontStyle::kUpright_Slant;
-    return SkFontStyle(weight, width, slant);
-}
-
-static_assert(static_cast<int>(FontStretchUltraCondensed) == static_cast<int>(SkFontStyle::kUltraCondensed_Width),
-    "FontStretchUltraCondensed should map to kUltraCondensed_Width");
-static_assert(static_cast<int>(FontStretchNormal) == static_cast<int>(SkFontStyle::kNormal_Width),
-    "FontStretchNormal should map to kNormal_Width");
-static_assert(static_cast<int>(FontStretchUltraExpanded) == static_cast<int>(SkFontStyle::kUltaExpanded_Width),
-    "FontStretchUltraExpanded should map to kUltaExpanded_Width");
-#endif
-
 PassRefPtr<SkTypeface> FontCache::createTypeface(const FontDescription& fontDescription, const FontFaceCreationParams& creationParams, CString& name)
 {
 #if !OS(WIN) && !OS(ANDROID)
@@ -210,12 +174,6 @@ PassRefPtr<SkTypeface> FontCache::createTypeface(const FontDescription& fontDesc
         name = family.utf8();
     }
 
-    int style = SkTypeface::kNormal;
-    if (fontDescription.weight() >= FontWeight600)
-        style |= SkTypeface::kBold;
-    if (fontDescription.style())
-        style |= SkTypeface::kItalic;
-
 #if OS(WIN)
     if (s_sideloadedFonts) {
         HashMap<String, RefPtr<SkTypeface>>::iterator sideloadedFont =
@@ -223,26 +181,22 @@ PassRefPtr<SkTypeface> FontCache::createTypeface(const FontDescription& fontDesc
         if (sideloadedFont != s_sideloadedFonts->end())
             return sideloadedFont->value;
     }
-
-    if (m_fontManager) {
-        return adoptRef(useDirectWrite()
-            ? m_fontManager->matchFamilyStyle(name.data(), fontStyle(fontDescription))
-            : m_fontManager->legacyCreateTypeface(name.data(), style)
-            );
-    }
 #endif
 
-#if OS(LINUX)
+#if OS(LINUX) || OS(WIN)
     // On linux if the fontManager has been overridden then we should be calling the embedder
     // provided font Manager rather than calling SkTypeface::CreateFromName which may redirect the
     // call to the default font Manager.
+    // On Windows the font manager is always present.
     if (m_fontManager)
-        return adoptRef(m_fontManager->matchFamilyStyle(name.data(), fontStyle(fontDescription)));
+        return adoptRef(m_fontManager->matchFamilyStyle(name.data(), fontDescription.skiaFontStyle()));
 #endif
 
-    // FIXME: Use m_fontManager, SkFontStyle and matchFamilyStyle instead of
-    // CreateFromName on all platforms.
-    return adoptRef(SkTypeface::CreateFromName(name.data(), static_cast<SkTypeface::Style>(style)));
+    // FIXME: Use m_fontManager, matchFamilyStyle instead of
+    // legacyCreateTypeface on all platforms.
+    RefPtr<SkFontMgr> fm = adoptRef(SkFontMgr::RefDefault());
+    return adoptRef(fm->legacyCreateTypeface(name.data(),
+        fontDescription.skiaFontStyle()));
 }
 
 #if !OS(WIN)
@@ -257,10 +211,9 @@ PassOwnPtr<FontPlatformData> FontCache::createFontPlatformData(const FontDescrip
     return adoptPtr(new FontPlatformData(tf,
         name.data(),
         fontSize,
-        (fontDescription.weight() >= FontWeight600 && !tf->isBold()) || fontDescription.isSyntheticBold(),
+        (fontDescription.weight() > 200 + tf->fontStyle().weight()) || fontDescription.isSyntheticBold(),
         ((fontDescription.style() == FontStyleItalic || fontDescription.style() == FontStyleOblique) && !tf->isItalic()) || fontDescription.isSyntheticItalic(),
-        fontDescription.orientation(),
-        fontDescription.useSubpixelPositioning()));
+        fontDescription.orientation()));
 }
 #endif // !OS(WIN)
 

@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.sync;
 
 import android.accounts.Account;
 import android.app.Activity;
-import android.test.FlakyTest;
 import android.test.suitebuilder.annotation.LargeTest;
 
 import org.chromium.base.ActivityState;
@@ -14,6 +13,7 @@ import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.signin.AccountIdProvider;
 import org.chromium.chrome.browser.signin.AccountTrackerService;
@@ -56,20 +56,47 @@ public class SyncTest extends SyncTestBase {
 
         // Signing out should disable sync.
         signOut();
-        SyncTestUtil.verifySyncIsSignedOut(mContext);
+        SyncTestUtil.verifySyncIsSignedOut();
 
         // Signing back in should re-enable sync.
         signIn(account);
         SyncTestUtil.verifySyncIsActiveForAccount(mContext, account);
     }
 
+    @LargeTest
+    @Feature({"Sync"})
+    public void testStopAndClear() throws InterruptedException {
+        setUpTestAccountAndSignInToSync();
+        CriteriaHelper.pollUiThread(
+                new Criteria("Timed out checking that isSignedInOnNative() == true") {
+                    @Override
+                    public boolean isSatisfied() {
+                        return SigninManager.get(mContext).isSignedInOnNative();
+                    }
+                },
+                SyncTestUtil.TIMEOUT_MS, SyncTestUtil.INTERVAL_MS);
+
+        clearServerData();
+
+        // Clearing server data should turn off sync and sign out of chrome.
+        SyncTestUtil.verifySyncIsSignedOut();
+        assertFalse(ChromeSigninController.get(mContext).isSignedIn());
+        CriteriaHelper.pollUiThread(
+                new Criteria("Timed out checking that isSignedInOnNative() == false") {
+                    @Override
+                    public boolean isSatisfied() {
+                        return !SigninManager.get(mContext).isSignedInOnNative();
+                    }
+                },
+                SyncTestUtil.TIMEOUT_MS, SyncTestUtil.INTERVAL_MS);
+    }
+
     /*
      * @FlakyTest
      * @LargeTest
      * @Feature({"Sync"})
-     * BUG = crbug.com/588050, crbug.com/595893
      */
-    @DisabledTest
+    @DisabledTest(message = "crbug.com/588050,crbug.com/595893")
     public void testRename() throws InterruptedException {
         // The two accounts object that would represent the account rename.
         final Account oldAccount = setUpTestAccountAndSignInToSync();
@@ -130,9 +157,8 @@ public class SyncTest extends SyncTestBase {
     /*
      * @LargeTest
      * @Feature({"Sync"})
-     * BUG = crbug.com/594558
      */
-    @FlakyTest
+    @FlakyTest(message = "crbug.com/594558")
     public void testStopAndStartSyncThroughAndroid() throws InterruptedException {
         Account account = setUpTestAccountAndSignInToSync();
         SyncTestUtil.waitForSyncActive();

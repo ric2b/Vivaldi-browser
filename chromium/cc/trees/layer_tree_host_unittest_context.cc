@@ -2,13 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "cc/trees/layer_tree_host.h"
-
 #include <stddef.h>
 #include <stdint.h>
 
+#include "base/memory/ptr_util.h"
 #include "cc/layers/heads_up_display_layer.h"
-#include "cc/layers/io_surface_layer.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/layers/painted_scrollbar_layer.h"
 #include "cc/layers/picture_layer.h"
@@ -35,6 +33,7 @@
 #include "cc/test/test_context_provider.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/test/test_web_graphics_context_3d.h"
+#include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_host_impl.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/single_thread_proxy.h"
@@ -77,18 +76,18 @@ class LayerTreeHostContextTest : public LayerTreeTest {
     context3d_ = NULL;
   }
 
-  virtual scoped_ptr<TestWebGraphicsContext3D> CreateContext3d() {
+  virtual std::unique_ptr<TestWebGraphicsContext3D> CreateContext3d() {
     return TestWebGraphicsContext3D::Create();
   }
 
-  scoped_ptr<FakeOutputSurface> CreateFakeOutputSurface() override {
+  std::unique_ptr<FakeOutputSurface> CreateFakeOutputSurface() override {
     if (times_to_fail_create_) {
       --times_to_fail_create_;
       ExpectCreateToFail();
-      return make_scoped_ptr(new FailureOutputSurface(delegating_renderer()));
+      return base::WrapUnique(new FailureOutputSurface(delegating_renderer()));
     }
 
-    scoped_ptr<TestWebGraphicsContext3D> context3d = CreateContext3d();
+    std::unique_ptr<TestWebGraphicsContext3D> context3d = CreateContext3d();
     base::AutoLock lock(context3d_lock_);
     context3d_ = context3d.get();
 
@@ -189,7 +188,7 @@ class LayerTreeHostContextTestLostContextSucceeds
   }
 
   void CreateAndSetOutputSurface() {
-    scoped_ptr<OutputSurface> surface(
+    std::unique_ptr<OutputSurface> surface(
         LayerTreeHostContextTest::CreateOutputSurface());
     CHECK(surface);
     layer_tree_host()->SetOutputSurface(std::move(surface));
@@ -368,7 +367,7 @@ class LayerTreeHostClientNotVisibleDoesNotCreateOutputSurface
     EndTest();
   }
 
-  scoped_ptr<OutputSurface> CreateOutputSurface() override {
+  std::unique_ptr<OutputSurface> CreateOutputSurface() override {
     EXPECT_TRUE(false);
     return nullptr;
   }
@@ -402,7 +401,7 @@ class LayerTreeHostClientTakeAwayOutputSurface
   }
 
   void CreateAndSetOutputSurface() {
-    scoped_ptr<OutputSurface> surface =
+    std::unique_ptr<OutputSurface> surface =
         LayerTreeHostContextTest::CreateOutputSurface();
     CHECK(surface);
     setos_counter_++;
@@ -412,7 +411,7 @@ class LayerTreeHostClientTakeAwayOutputSurface
   void HideAndReleaseOutputSurface() {
     EXPECT_TRUE(layer_tree_host()->task_runner_provider()->IsMainThread());
     layer_tree_host()->SetVisible(false);
-    scoped_ptr<OutputSurface> surface =
+    std::unique_ptr<OutputSurface> surface =
         layer_tree_host()->ReleaseOutputSurface();
     CHECK(surface);
     MainThreadTaskRunner()->PostTask(
@@ -466,7 +465,7 @@ class MultipleCompositeDoesNotCreateOutputSurface
     layer_tree_host()->Composite(base::TimeTicks::FromInternalValue(2));
   }
 
-  scoped_ptr<OutputSurface> CreateOutputSurface() override {
+  std::unique_ptr<OutputSurface> CreateOutputSurface() override {
     EXPECT_TRUE(false);
     return nullptr;
   }
@@ -505,7 +504,7 @@ class FailedCreateDoesNotCreateExtraOutputSurface
       return;
     ExpectCreateToFail();
     layer_tree_host()->SetOutputSurface(
-        make_scoped_ptr(new FailureOutputSurface(false)));
+        base::WrapUnique(new FailureOutputSurface(false)));
   }
 
   void BeginTest() override {
@@ -647,7 +646,7 @@ class LayerTreeHostContextTestLostContextSucceedsWithContent
 
   void DrawLayersOnThread(LayerTreeHostImpl* host_impl) override {
     FakePictureLayerImpl* picture_impl = static_cast<FakePictureLayerImpl*>(
-        host_impl->active_tree()->root_layer()->children()[0]);
+        host_impl->active_tree()->LayerById(layer_->id()));
     EXPECT_TRUE(picture_impl->HighResTiling()
                     ->TileAt(0, 0)
                     ->draw_info()
@@ -857,10 +856,10 @@ class LayerTreeHostContextTestLayersNotified : public LayerTreeHostContextTest {
 
     root_picture = static_cast<FakePictureLayerImpl*>(
         host_impl->active_tree()->root_layer());
-    child_picture =
-        static_cast<FakePictureLayerImpl*>(root_picture->children()[0]);
-    grandchild_picture =
-        static_cast<FakePictureLayerImpl*>(child_picture->children()[0]);
+    child_picture = static_cast<FakePictureLayerImpl*>(
+        host_impl->active_tree()->LayerById(child_->id()));
+    grandchild_picture = static_cast<FakePictureLayerImpl*>(
+        host_impl->active_tree()->LayerById(grandchild_->id()));
 
     ++num_commits_;
     switch (num_commits_) {
@@ -918,9 +917,9 @@ class LayerTreeHostContextTestDontUseLostResources
     gpu::gles2::GLES2Interface* gl =
         child_output_surface_->context_provider()->ContextGL();
 
-    scoped_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
+    std::unique_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
 
-    scoped_ptr<RenderPass> pass_for_quad = RenderPass::Create();
+    std::unique_ptr<RenderPass> pass_for_quad = RenderPass::Create();
     pass_for_quad->SetNew(
         // AppendOneOfEveryQuadType() makes a RenderPass quad with this id.
         RenderPassId(2, 1),
@@ -928,7 +927,7 @@ class LayerTreeHostContextTestDontUseLostResources
         gfx::Rect(0, 0, 10, 10),
         gfx::Transform());
 
-    scoped_ptr<RenderPass> pass = RenderPass::Create();
+    std::unique_ptr<RenderPass> pass = RenderPass::Create();
     pass->SetNew(RenderPassId(1, 1),
                  gfx::Rect(0, 0, 10, 10),
                  gfx::Rect(0, 0, 10, 10),
@@ -1005,15 +1004,15 @@ class LayerTreeHostContextTestDontUseLostResources
     color_video_frame_ = VideoFrame::CreateColorFrame(
         gfx::Size(4, 4), 0x80, 0x80, 0x80, base::TimeDelta());
     ASSERT_TRUE(color_video_frame_);
-    hw_video_frame_ = VideoFrame::WrapNativeTexture(
-        media::PIXEL_FORMAT_ARGB,
-        gpu::MailboxHolder(mailbox, sync_token, GL_TEXTURE_2D),
+    gpu::MailboxHolder holders[media::VideoFrame::kMaxPlanes] = {
+        gpu::MailboxHolder(mailbox, sync_token, GL_TEXTURE_2D)};
+    hw_video_frame_ = VideoFrame::WrapNativeTextures(
+        media::PIXEL_FORMAT_ARGB, holders,
         media::VideoFrame::ReleaseMailboxCB(), gfx::Size(4, 4),
         gfx::Rect(0, 0, 4, 4), gfx::Size(4, 4), base::TimeDelta());
     ASSERT_TRUE(hw_video_frame_);
-    scaled_hw_video_frame_ = VideoFrame::WrapNativeTexture(
-        media::PIXEL_FORMAT_ARGB,
-        gpu::MailboxHolder(mailbox, sync_token, GL_TEXTURE_2D),
+    scaled_hw_video_frame_ = VideoFrame::WrapNativeTextures(
+        media::PIXEL_FORMAT_ARGB, holders,
         media::VideoFrame::ReleaseMailboxCB(), gfx::Size(4, 4),
         gfx::Rect(0, 0, 3, 2), gfx::Size(4, 4), base::TimeDelta());
     ASSERT_TRUE(scaled_hw_video_frame_);
@@ -1022,20 +1021,14 @@ class LayerTreeHostContextTestDontUseLostResources
     hw_frame_provider_.set_frame(hw_video_frame_);
     scaled_hw_frame_provider_.set_frame(scaled_hw_video_frame_);
 
-    scoped_refptr<IOSurfaceLayer> io_surface = IOSurfaceLayer::Create();
-    io_surface->SetBounds(gfx::Size(10, 10));
-    io_surface->SetIsDrawable(true);
-    io_surface->SetIOSurfaceProperties(1, gfx::Size(10, 10));
-    root->AddChild(io_surface);
-
     // Enable the hud.
     LayerTreeDebugState debug_state;
     debug_state.show_property_changed_rects = true;
     layer_tree_host()->SetDebugState(debug_state);
 
     scoped_refptr<PaintedScrollbarLayer> scrollbar =
-        PaintedScrollbarLayer::Create(scoped_ptr<Scrollbar>(new FakeScrollbar),
-                                      layer->id());
+        PaintedScrollbarLayer::Create(
+            std::unique_ptr<Scrollbar>(new FakeScrollbar), layer->id());
     scrollbar->SetBounds(gfx::Size(10, 10));
     scrollbar->SetIsDrawable(true);
     root->AddChild(scrollbar);
@@ -1069,7 +1062,7 @@ class LayerTreeHostContextTestDontUseLostResources
     return draw_result;
   }
 
-  scoped_ptr<FakeOutputSurface> CreateFakeOutputSurface() override {
+  std::unique_ptr<FakeOutputSurface> CreateFakeOutputSurface() override {
     // This will get called twice:
     // First when we create the initial output surface...
     if (layer_tree_host()->source_frame_number() > 0) {
@@ -1097,9 +1090,9 @@ class LayerTreeHostContextTestDontUseLostResources
   bool lost_context_;
 
   FakeOutputSurfaceClient output_surface_client_;
-  scoped_ptr<FakeOutputSurface> child_output_surface_;
-  scoped_ptr<SharedBitmapManager> shared_bitmap_manager_;
-  scoped_ptr<ResourceProvider> child_resource_provider_;
+  std::unique_ptr<FakeOutputSurface> child_output_surface_;
+  std::unique_ptr<SharedBitmapManager> shared_bitmap_manager_;
+  std::unique_ptr<ResourceProvider> child_resource_provider_;
 
   scoped_refptr<VideoFrame> color_video_frame_;
   scoped_refptr<VideoFrame> hw_video_frame_;
@@ -1228,7 +1221,7 @@ class UIResourceLostTest : public LayerTreeHostContextTest {
 
  protected:
   int time_step_;
-  scoped_ptr<FakeScopedUIResource> ui_resource_;
+  std::unique_ptr<FakeScopedUIResource> ui_resource_;
 
  private:
   void StepCompleteOnMainThreadInternal(int step) {

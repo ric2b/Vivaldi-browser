@@ -55,7 +55,6 @@
 #include "core/loader/WorkerThreadableLoader.h"
 #include "core/workers/WorkerNavigator.h"
 #include "core/workers/WorkerClients.h"
-#include "core/workers/WorkerConsole.h"
 #include "core/workers/WorkerLoaderProxy.h"
 #include "core/workers/WorkerLocation.h"
 #include "core/workers/WorkerNavigator.h"
@@ -88,7 +87,7 @@ WorkerGlobalScope::WorkerGlobalScope(const KURL& url, const String& userAgent, W
 {
     setSecurityOrigin(SecurityOrigin::create(url));
     if (starterOriginPrivilageData)
-        getSecurityOrigin()->transferPrivilegesFrom(starterOriginPrivilageData);
+        getSecurityOrigin()->transferPrivilegesFrom(std::move(starterOriginPrivilageData));
 
     if (m_workerClients)
         m_workerClients->reattachThread();
@@ -96,8 +95,8 @@ WorkerGlobalScope::WorkerGlobalScope(const KURL& url, const String& userAgent, W
 
 WorkerGlobalScope::~WorkerGlobalScope()
 {
-    ASSERT(!m_scriptController);
-    ASSERT(!m_workerInspectorController);
+    DCHECK(!m_scriptController);
+    DCHECK(!m_workerInspectorController);
 }
 
 void WorkerGlobalScope::applyContentSecurityPolicyFromVector(const Vector<CSPHeaderAndType>& headers)
@@ -160,15 +159,9 @@ WorkerLocation* WorkerGlobalScope::location() const
 
 void WorkerGlobalScope::close()
 {
-    // Let current script run to completion, but tell the worker micro task runner to tear down the thread after this task.
+    // Let current script run to completion, but tell the worker micro task
+    // runner to tear down the thread after this task.
     m_closing = true;
-}
-
-WorkerConsole* WorkerGlobalScope::console()
-{
-    if (!m_console)
-        m_console = WorkerConsole::create(this);
-    return m_console.get();
 }
 
 WorkerNavigator* WorkerGlobalScope::navigator() const
@@ -178,14 +171,14 @@ WorkerNavigator* WorkerGlobalScope::navigator() const
     return m_navigator.get();
 }
 
-void WorkerGlobalScope::postTask(const WebTraceLocation& location, PassOwnPtr<ExecutionContextTask> task)
+void WorkerGlobalScope::postTask(const WebTraceLocation& location, std::unique_ptr<ExecutionContextTask> task)
 {
-    thread()->postTask(location, task);
+    thread()->postTask(location, std::move(task));
 }
 
 void WorkerGlobalScope::clearScript()
 {
-    ASSERT(m_scriptController);
+    DCHECK(m_scriptController);
     m_scriptController->dispose();
     m_scriptController.clear();
 }
@@ -200,7 +193,7 @@ void WorkerGlobalScope::clearInspector()
 
 void WorkerGlobalScope::dispose()
 {
-    ASSERT(thread()->isCurrentThread());
+    DCHECK(thread()->isCurrentThread());
     stopActiveDOMObjects();
 
     // Event listeners would keep DOMWrapperWorld objects alive for too long. Also, they have references to JS objects,
@@ -236,8 +229,8 @@ void WorkerGlobalScope::didEvaluateWorkerScript()
 
 void WorkerGlobalScope::importScripts(const Vector<String>& urls, ExceptionState& exceptionState)
 {
-    ASSERT(contentSecurityPolicy());
-    ASSERT(getExecutionContext());
+    DCHECK(contentSecurityPolicy());
+    DCHECK(getExecutionContext());
 
     ExecutionContext& executionContext = *this->getExecutionContext();
 
@@ -300,17 +293,16 @@ void WorkerGlobalScope::reportBlockedScriptExecutionToInspector(const String& di
     InspectorInstrumentation::scriptExecutionBlockedByCSP(this, directiveText);
 }
 
-void WorkerGlobalScope::addConsoleMessage(RawPtr<ConsoleMessage> prpConsoleMessage)
+void WorkerGlobalScope::addConsoleMessage(ConsoleMessage* consoleMessage)
 {
-    ASSERT(isContextThread());
-    ConsoleMessage* consoleMessage = prpConsoleMessage;
+    DCHECK(isContextThread());
     thread()->workerReportingProxy().reportConsoleMessage(consoleMessage);
     addMessageToWorkerConsole(consoleMessage);
 }
 
 void WorkerGlobalScope::addMessageToWorkerConsole(ConsoleMessage* consoleMessage)
 {
-    ASSERT(isContextThread());
+    DCHECK(isContextThread());
     m_messageStorage->reportMessage(this, consoleMessage);
 }
 
@@ -344,20 +336,22 @@ void WorkerGlobalScope::deregisterEventListener(V8AbstractEventListener* eventLi
 
 void WorkerGlobalScope::countFeature(UseCounter::Feature) const
 {
-    // FIXME: How should we count features for shared/service workers?
+    // TODO(nhiroki): How should we count features for shared/service workers?
+    // (http://crbug.com/376039)
 }
 
 void WorkerGlobalScope::countDeprecation(UseCounter::Feature feature) const
 {
-    // FIXME: How should we count features for shared/service workers?
+    // TODO(nhiroki): How should we count features for shared/service workers?
+    // (http://crbug.com/376039)
 
-    ASSERT(isSharedWorkerGlobalScope() || isServiceWorkerGlobalScope() || isCompositorWorkerGlobalScope());
+    DCHECK(isSharedWorkerGlobalScope() || isServiceWorkerGlobalScope() || isCompositorWorkerGlobalScope());
     // For each deprecated feature, send console message at most once
     // per worker lifecycle.
     if (!m_deprecationWarningBits.hasRecordedMeasurement(feature)) {
         m_deprecationWarningBits.recordMeasurement(feature);
-        ASSERT(!Deprecation::deprecationMessage(feature).isEmpty());
-        ASSERT(getExecutionContext());
+        DCHECK(!Deprecation::deprecationMessage(feature).isEmpty());
+        DCHECK(getExecutionContext());
         getExecutionContext()->addConsoleMessage(ConsoleMessage::create(DeprecationMessageSource, WarningMessageLevel, Deprecation::deprecationMessage(feature)));
     }
 }
@@ -414,7 +408,6 @@ v8::Local<v8::Object> WorkerGlobalScope::associateWithWrapper(v8::Isolate*, cons
 
 DEFINE_TRACE(WorkerGlobalScope)
 {
-    visitor->trace(m_console);
     visitor->trace(m_location);
     visitor->trace(m_navigator);
     visitor->trace(m_scriptController);

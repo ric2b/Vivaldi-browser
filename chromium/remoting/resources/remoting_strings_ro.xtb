@@ -34,6 +34,7 @@ Pentru informații privind confidențialitatea, accesați Politica de confidenț
 <translation id="1779766957982586368">Închide fereastra</translation>
 <translation id="1841799852846221389">Se dezactivează conexiunile la distanță pentru acest computer…</translation>
 <translation id="189172778771606813">Închide panoul de navigare</translation>
+<translation id="1897488610212723051">Șterge</translation>
 <translation id="195619862187186579">Aspecte de tastatură</translation>
 <translation id="1996161829609978754">Chrome descarcă programul de instalare a gazdei pentru Chromoting. După ce se descarcă, rulați programul de instalare înainte de a continua.</translation>
 <translation id="2009755455353575666">Nu s-a conectat</translation>
@@ -122,9 +123,6 @@ Chromoting</translation>
 <translation id="3950820424414687140">Conectează-te</translation>
 <translation id="3989511127559254552">Pentru a continua, trebuie să acorzi permisiuni extinse de acces la computer. Acest lucru este necesar o singură dată.</translation>
 <translation id="4006787130661126000">Trebuie să activați conexiunile la distanță dacă doriți să utilizați Desktop la distanță Chrome pentru a accesa acest computer.</translation>
-<translation id="4028465833180158312">• Actualizări ale interfeței de utilizare care folosește designul material.
-• Credite de licențiere terță parte.
-• Informații afișate pentru computerele la distanță care sunt offline.</translation>
 <translation id="405887016757208221">Computerul la distanță nu a putut să inițializeze sesiunea. Dacă problema persistă, încearcă să configurezi gazda din nou.</translation>
 <translation id="4068946408131579958">Toate conexiunile</translation>
 <translation id="409800995205263688">NOTĂ: setările politicii permit conexiuni numai între computerele din rețeaua dvs.</translation>
@@ -168,6 +166,7 @@ la distanță Chrome</translation>
 <translation id="4985296110227979402">Mai întâi, trebuie să configurezi computerul pentru accesul la distanță</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (offline)</translation>
 <translation id="5070121137485264635">Gazda la distanță solicită să vă autentificați pe un site terță parte. Pentru a continua, trebuie să acordați permisiuni suplimentare aplicației Desktop la distanță Chrome pentru a accesa această adresă:</translation>
+<translation id="507204348399810022">Sigur dorești să dezactivezi conexiunile la distanță la <ph name="HOSTNAME" />?</translation>
 <translation id="5156271271724754543">Introduceți același cod PIN în ambele casete.</translation>
 <translation id="5168917394043976756">Deschide panoul de navigare</translation>
 <translation id="5170982930780719864">ID de gazdă nevalid.</translation>
@@ -178,7 +177,6 @@ la distanță Chrome</translation>
 <translation id="533625276787323658">Niciun dispozitiv la care te poți conecta</translation>
 <translation id="5363265567587775042">Roagă utilizatorul al cărui computer dorești să îl accesezi să dea clic pe „<ph name="SHARE" />” și să îți trimită codul de acces.</translation>
 <translation id="5379087427956679853">Cu aplicația Desktop la distanță Chrome, puteți permite accesul în siguranță la computerul dvs. pe web. Ambii utilizatori trebuie să ruleze aplicația Desktop la distanță Chrome, care poate fi găsită la <ph name="URL" />.</translation>
-<translation id="5394895745784982830">Pentru Mac (OS X 10.6 și versiuni ulterioare)</translation>
 <translation id="5397086374758643919">Program de dezinstalare a gazdei pentru Desktop la distanță Chrome</translation>
 <translation id="5419185025274123272">Aplicația nu a putut fi resetată. Poți totuși să trimiți un raport de eroare.</translation>
 <translation id="544077782045763683">Gazda a fost închisă.</translation>
@@ -214,6 +212,10 @@ la distanță Chrome</translation>
 <translation id="6324708100353784493">Ai activat modul de integrare Google Cardboard. Pentru a folosi acest mod, introdu dispozitivul într-un vizualizator compatibil cu Google Cardboard.</translation>
 <translation id="6381670701864002291">Altă problemă.</translation>
 <translation id="6398765197997659313">Ieși din ecranul complet</translation>
+<translation id="6408143143164565232">• Ascultă conținut audio de pe computerele Windows sau Linux.
+• Elimină conexiunile nedorite apăsând lung pe numele computerului.
+• Gestul „ciupește pentru zoom” și derularea cu două degete sunt mai fine.
+• Un nou ecran pentru Ajutor și feedback.</translation>
 <translation id="6441316101718669559">Integrarea desktop nu este compatibilă cu această platformă. Poți să folosești în continuare această aplicație, însă experiența de utilizare va fi inferioară.</translation>
 <translation id="652218476070540101">Se actualizează codul PIN pentru acest computer…</translation>
 <translation id="6527303717912515753">Trimite</translation>
@@ -221,6 +223,7 @@ la distanță Chrome</translation>
 <translation id="6542902059648396432">Raportează o problemă...</translation>
 <translation id="6550675742724504774">Opțiuni</translation>
 <translation id="6570205395680337606">Resetează aplicația. Orice conținut nesalvat se va pierde.</translation>
+<translation id="6572345186230665992">Pentru Mac (OS X Mavericks 10.9 și versiuni ulterioare)</translation>
 <translation id="6612717000975622067">Trimite Ctrl-Alt-Del</translation>
 <translation id="6640610550128933069">ultima conectare online <ph name="DATE" /></translation>
 <translation id="6668065415969892472">Codul PIN a fost actualizat.</translation>
@@ -232,7 +235,6 @@ la distanță Chrome</translation>
 <translation id="6930242544192836755">Durată</translation>
 <translation id="6939719207673461467">Afișați/Ascundeți tastatura.</translation>
 <translation id="6944854424004126054">Restabiliți fereastra</translation>
-<translation id="6962773374262604195">Pentru Windows (XP și versiuni ulterioare)</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942">Sigur doriți să dezactivați conexiunile la distanță la <ph name="HOSTNAME" />? Dacă vă răzgândiți, va trebui să accesați computerul respectiv pentru a reactiva conexiunile.</translation>
 <translation id="6998989275928107238">La</translation>
@@ -288,6 +290,7 @@ la distanță Chrome</translation>
 <translation id="8759753423332885148">Aflați mai multe.</translation>
 <translation id="8791202241915690908">Descarcă programul de instalare gazdă pentru Chromoting</translation>
 <translation id="894763922177556086">Bună</translation>
+<translation id="895780780740011433">Pentru Windows 7 și versiuni ulterioare</translation>
 <translation id="897805526397249209">Pentru a activa conexiunile la distanță pentru un alt computer, instalați Chromoting pe acesta și dați clic pe „<ph name="BUTTON_NAME" />”.</translation>
 <translation id="8998327464021325874">Controler gazdă pentru Desktop la distanță Chrome</translation>
 <translation id="9016232822027372900">Conectați oricum</translation>

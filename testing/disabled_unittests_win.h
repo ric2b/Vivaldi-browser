@@ -14,8 +14,14 @@
   // Flaky on Windows, fails on tester and works on local machine
   //DISABLE(ExtensionSettingsApiTest, ExtensionsSchemas)
 
+  // Seems broken in Vivaldi
+  DISABLE_ALL(ExtensionMessageBubbleViewBrowserTestRedesign)
+
   // Flaky on Windows, fails on tester and works on local machine
   DISABLE(LocalFileSyncServiceTest, LocalChangeObserver)
+
+  // Flaky on Windows
+  DISABLE(NetworkQualityEstimatorTest, TestExternalEstimateProviderMergeEstimates)
 
   //DISABLE(PluginPowerSaverBrowserTest, PluginMarkedEssentialAfterPosterClicked)
 

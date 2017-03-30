@@ -169,7 +169,7 @@ extensions::AppWindow* VivaldiBrowserWindow::GetAppWindow() const {
   }
   if(!app_window){
 
-    scoped_ptr<base::Value> value(base::JSONReader::Read(browser_->ext_data()));
+    std::unique_ptr<base::Value> value(base::JSONReader::Read(browser_->ext_data()));
     base::DictionaryValue* dictionary;
     if (value && value->GetAsDictionary(&dictionary)) {
       std::string windowid;
@@ -346,4 +346,8 @@ void VivaldiBrowserWindow::DestroyBrowser() {
 
 gfx::Size VivaldiBrowserWindow::GetContentsSize() const {
   return gfx::Size();
+}
+
+std::string VivaldiBrowserWindow::GetWorkspace() const {
+  return std::string();
 }

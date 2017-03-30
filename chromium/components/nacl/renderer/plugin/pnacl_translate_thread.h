@@ -8,11 +8,11 @@
 #include <stdint.h>
 
 #include <deque>
+#include <memory>
 #include <vector>
 
 #include "base/files/file.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/synchronization/condition_variable.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/simple_thread.h"
@@ -79,8 +79,8 @@ class PnaclTranslateThread {
   bool started() const { return coordinator_ != NULL; }
 
  private:
-  ppapi::proxy::SerializedHandle GetHandleForSubprocess(
-      base::File* file, int32_t open_flags, base::ProcessId peer_pid);
+  ppapi::proxy::SerializedHandle GetHandleForSubprocess(base::File* file,
+                                                        int32_t open_flags);
 
   // Runs the streaming compilation. Called from the helper thread.
   void DoCompile();
@@ -117,7 +117,7 @@ class PnaclTranslateThread {
   // Callback to run when tasks are completed or an error has occurred.
   pp::CompletionCallback report_translate_finished_;
 
-  scoped_ptr<base::SimpleThread> translate_thread_;
+  std::unique_ptr<base::SimpleThread> translate_thread_;
 
   // Used to guard compiler_subprocess, ld_subprocess,
   // compiler_subprocess_active_, and ld_subprocess_active_
@@ -163,15 +163,11 @@ class PnaclTranslateThread {
   PnaclCoordinator* coordinator_;
 
   // These IPC::SyncChannels can only be used and freed by the parent thread.
-  scoped_ptr<IPC::SyncChannel> compiler_channel_;
-  scoped_ptr<IPC::SyncChannel> ld_channel_;
+  std::unique_ptr<IPC::SyncChannel> compiler_channel_;
+  std::unique_ptr<IPC::SyncChannel> ld_channel_;
   // These IPC::SyncMessageFilters can be used by the child thread.
   scoped_refptr<IPC::SyncMessageFilter> compiler_channel_filter_;
   scoped_refptr<IPC::SyncMessageFilter> ld_channel_filter_;
-  // PIDs of the subprocesses, needed for copying handles to the subprocess
-  // on Windows.  These are used by the child thread.
-  base::ProcessId compiler_channel_peer_pid_;
-  base::ProcessId ld_channel_peer_pid_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PnaclTranslateThread);

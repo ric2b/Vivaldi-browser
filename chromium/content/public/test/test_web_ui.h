@@ -5,9 +5,9 @@
 #ifndef CONTENT_PUBLIC_TEST_TEST_WEB_UI_H_
 #define CONTENT_PUBLIC_TEST_TEST_WEB_UI_H_
 
+#include <memory>
 #include <vector>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/values.h"
 #include "content/public/browser/web_ui.h"
@@ -44,6 +44,7 @@ class TestWebUI : public WebUI {
   void ProcessWebUIMessage(const GURL& source_url,
                            const std::string& message,
                            const base::ListValue& args) override {}
+  bool CanCallJavascript() override;
   void CallJavascriptFunction(const std::string& function_name) override;
   void CallJavascriptFunction(const std::string& function_name,
                               const base::Value& arg1) override;
@@ -79,9 +80,9 @@ class TestWebUI : public WebUI {
 
    private:
     std::string function_name_;
-    scoped_ptr<base::Value> arg1_;
-    scoped_ptr<base::Value> arg2_;
-    scoped_ptr<base::Value> arg3_;
+    std::unique_ptr<base::Value> arg1_;
+    std::unique_ptr<base::Value> arg2_;
+    std::unique_ptr<base::Value> arg3_;
   };
 
   const ScopedVector<CallData>& call_data() const { return call_data_; }

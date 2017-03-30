@@ -6,28 +6,36 @@
     placeholder, for example, "input->%s", "p_%s". The placeholder will be
     substituted with struct field names to refer to the input fields.
     |context| is the name of the serialization context.
+    |input_may_be_temp| indicates whether any input may be temporary obejcts.
+    We need to assign temporary objects to local variables before passing it to
+    Serializer, because it is illegal to pass temporary objects as non-const
+    references.
     This macro is expanded to compute seriailized size for both:
     - user-defined structs: the input is an instance of the corresponding struct
       wrapper class.
     - method parameters/response parameters: the input is a list of
       arguments.
     It declares |size| of type size_t to store the resulting size. #}
-{%- macro get_serialized_size(struct, input_field_pattern, context) -%}
-  size_t size = sizeof(internal::{{struct.name}}_Data);
+{%- macro get_serialized_size(struct, input_field_pattern, context,
+                              input_may_be_temp=False) -%}
+  size_t size = sizeof({{struct|get_qualified_name_for_kind(internal=True)}});
 {%-   for pf in struct.packed.packed_fields_in_ordinal_order if pf.field.kind|is_object_kind %}
 {%-     set name = pf.field.name -%}
 {%-     set kind = pf.field.kind -%}
-{%-     if kind|is_native_only_kind and kind|is_typemapped_kind %}
-  size += mojo::internal::GetSerializedSizeNative_(
-      {{input_field_pattern|format(name)}}, {{context}});
-{%-     elif kind|is_typemapped_kind %}
-  size +=
-      {{kind|get_name_for_kind}}_SerializerTraits_<{{kind|cpp_wrapper_type}}>
-          ::GetSize({{input_field_pattern|format(name)}});
-{%-     elif kind|is_union_kind %}
-  size += GetSerializedSize_({{input_field_pattern|format(name)}}, true, {{context}});
+{%-     set original_input_field = input_field_pattern|format(name) %}
+{%-     set input_field = "in_%s"|format(name) if input_may_be_temp
+                                               else original_input_field %}
+{%-     if input_may_be_temp %}
+  decltype({{original_input_field}}) in_{{name}} = {{original_input_field}};
+{%-     endif %}
+
+{%-     set serializer_type = kind|unmapped_type_for_serializer %}
+{%-     if kind|is_union_kind %}
+  size += mojo::internal::PrepareToSerialize<{{serializer_type}}>(
+      {{input_field}}, true, {{context}});
 {%-     else %}
-  size += GetSerializedSize_({{input_field_pattern|format(name)}}, {{context}});
+  size += mojo::internal::PrepareToSerialize<{{serializer_type}}>(
+      {{input_field}}, {{context}});
 {%-     endif %}
 {%-   endfor %}
 {%- endmacro -%}
@@ -42,44 +50,42 @@
     |output| is the name of the output struct instance.
     |buffer| is the name of the Buffer instance used.
     |context| is the name of the serialization context.
+    |input_may_be_temp|: please see the comments of get_serialized_size.
     This macro is expanded to do serialization for both:
     - user-defined structs: the input is an instance of the corresponding struct
       wrapper class.
     - method parameters/response parameters: the input is a list of
       arguments. #}
 {%- macro serialize(struct, struct_display_name, input_field_pattern, output,
-                    buffer, context) -%}
-  internal::{{struct.name}}_Data* {{output}} =
-      internal::{{struct.name}}_Data::New({{buffer}});
+                    buffer, context, input_may_be_temp=False) -%}
+  auto {{output}} =
+      {{struct|get_qualified_name_for_kind(internal=True)}}::New({{buffer}});
 {%- for pf in struct.packed.packed_fields_in_ordinal_order %}
 {%-   set input_field = input_field_pattern|format(pf.field.name) %}
 {%-   set name = pf.field.name %}
 {%-   set kind = pf.field.kind %}
 {%-   if kind|is_object_kind %}
-{%-     if kind|is_array_kind or
-            (kind|is_native_only_kind and not kind|is_typemapped_kind) %}
+{%-     set serializer_type = kind|unmapped_type_for_serializer %}
+{%-     set original_input_field = input_field_pattern|format(name) %}
+{%-     set input_field = "in_%s"|format(name) if input_may_be_temp
+                                               else original_input_field %}
+{%-     if input_may_be_temp %}
+  decltype({{original_input_field}}) in_{{name}} = {{original_input_field}};
+{%-     endif %}
+
+{%-     if kind|is_array_kind or kind|is_map_kind %}
   const mojo::internal::ArrayValidateParams {{name}}_validate_params(
       {{kind|get_array_validate_params_ctor_args|indent(10)}});
-  mojo::SerializeArray_(std::move({{input_field}}), {{buffer}},
-      &{{output}}->{{name}}.ptr, &{{name}}_validate_params, {{context}});
-{%-     elif kind|is_map_kind %}
-  const mojo::internal::ArrayValidateParams {{name}}_validate_params(
-      {{kind.value_kind|get_map_validate_params_ctor_args|indent(10)}});
-  mojo::SerializeMap_(std::move({{input_field}}), {{buffer}},
-      &{{output}}->{{name}}.ptr, &{{name}}_validate_params, {{context}});
-{%-     elif kind|is_native_only_kind and kind|is_typemapped_kind %}
-  mojo::internal::SerializeNative_(
-      {{input_field}}, {{buffer}}, &{{output}}->{{name}}.ptr, {{context}});
-{%-     elif kind|is_typemapped_kind %}
-  {{kind|get_name_for_kind}}_SerializerTraits_<{{kind|cpp_wrapper_type}}>
-      ::Serialize({{input_field}}, {{buffer}}, &{{output}}->{{name}}.ptr);
+  mojo::internal::Serialize<{{serializer_type}}>(
+      {{input_field}}, {{buffer}}, &{{output}}->{{name}}.ptr,
+      &{{name}}_validate_params, {{context}});
 {%-     elif kind|is_union_kind %}
-  internal::{{kind.name}}_Data* {{name}}_ptr = &{{output}}->{{name}};
-  SerializeUnion_(std::move({{input_field}}), {{buffer}}, &{{name}}_ptr, true,
-                  {{context}});
+  auto {{name}}_ptr = &{{output}}->{{name}};
+  mojo::internal::Serialize<{{serializer_type}}>(
+      {{input_field}}, {{buffer}}, &{{name}}_ptr, true, {{context}});
 {%-     else %}
-  Serialize_(std::move({{input_field}}), {{buffer}}, &{{output}}->{{name}}.ptr,
-             {{context}});
+  mojo::internal::Serialize<{{serializer_type}}>(
+      {{input_field}}, {{buffer}}, &{{output}}->{{name}}.ptr, {{context}});
 {%-     endif %}
 {%-     if not kind|is_nullable_kind %}
   MOJO_INTERNAL_DLOG_SERIALIZATION_WARNING(
@@ -93,11 +99,14 @@
 {%-     endif %}
 {%-   elif kind|is_any_handle_kind or kind|is_interface_kind %}
 {%-     if kind|is_interface_kind %}
-  mojo::internal::InterfacePointerToData(std::move({{input_field}}), &{{output}}->{{name}});
+  mojo::internal::InterfacePointerToData(
+      std::move({{input_field}}), &{{output}}->{{name}}, {{context}});
 {%-     elif kind|is_interface_request_kind %}
-  {{output}}->{{name}} = {{input_field}}.PassMessagePipe().release();
+  {{output}}->{{name}} = ({{context}})->handles.AddHandle(
+      {{input_field}}.PassMessagePipe().release());
 {%-     else %}
-  {{output}}->{{name}} = {{input_field}}.release();
+  {{output}}->{{name}} =
+      ({{context}})->handles.AddHandle({{input_field}}.release());
 {%-     endif %}
 {%-     if not kind|is_nullable_kind %}
   MOJO_INTERNAL_DLOG_SERIALIZATION_WARNING(
@@ -114,10 +123,10 @@
 {%-     if kind|is_associated_interface_kind %}
   mojo::internal::AssociatedInterfacePtrInfoToData(std::move({{input_field}}), &{{output}}->{{name}});
 {%-     else %}
-  {{output}}->{{name}} = mojo::internal::AssociatedInterfaceRequestHelper::PassHandle(&{{input_field}}).release();
+  {{output}}->{{name}} = {{input_field}}.PassHandle().release();
 {%-     endif %}
 {%-   elif kind|is_enum_kind %}
-  {{output}}->{{name}}.value = static_cast<int32_t>({{input_field}});
+  {{output}}->{{name}} = static_cast<int32_t>({{input_field}});
 {%-   else %}
   {{output}}->{{name}} = {{input_field}};
 {%-   endif %}
@@ -126,7 +135,8 @@
 
 {#  Deserializes the specified struct.
     |struct| is the struct definition.
-    |input| is the name of the input struct instance.
+    |input| is the name of the input struct data view. It is expected to be
+    non-null.
     |output_field_pattern| should be a pattern that contains one string
     placeholder, for example, "result->%s", "p_%s". The placeholder will be
     substituted with struct field names to refer to the output fields.
@@ -137,60 +147,19 @@
       struct wrapper class.
     - method parameters/response parameters: the output is a list of
       arguments. #}
-{%- macro deserialize(struct, input, output_field_pattern, context, success) -%}
-  do {
-    // NOTE: The memory backing |{{input}}| may has be smaller than
-    // |sizeof(*{{input}})| if the message comes from an older version.
-{#-   Before deserialize fields introduced at a certain version, we need to add
-      a version check, which makes sure we skip further deserialization if
-      |input| is from an earlier version. |last_checked_version| records the
-      last version that we have added such version check. #}
-{%-   set last_checked_version = 0 %}
+{%- macro deserialize(struct, input, output_field_pattern, success) -%}
 {%-   for pf in struct.packed.packed_fields_in_ordinal_order %}
 {%-     set output_field = output_field_pattern|format(pf.field.name) %}
 {%-     set name = pf.field.name %}
 {%-     set kind = pf.field.kind %}
-{%-     if pf.min_version > last_checked_version %}
-{%-       set last_checked_version = pf.min_version %}
-    if ({{input}}->header_.version < {{pf.min_version}})
-      break;
-{%-     endif %}
-{%-     if kind|is_native_only_kind and kind|is_typemapped_kind %}
-    if (!DeserializeNative_(
-            {{input}}->{{name}}.ptr, &{{output_field}}, {{context}})) {
-      {{success}} = false;
-    }
-{%-     elif kind|is_typemapped_kind %}
-    if (!{{kind|get_name_for_kind}}_SerializerTraits_<{{kind|cpp_wrapper_type}}>
-            ::Deserialize(
-                {{input}}->{{name}}.ptr, &{{output_field}}, {{context}})) {
-      {{success}} = false;
-    }
-{%-     elif kind|is_object_kind %}
-{%-       if kind|is_union_kind %}
-    if (!Deserialize_(&{{input}}->{{name}}, &{{output_field}}, {{context}}))
-      {{success}} = false;
-{%-       else %}
-    if (!Deserialize_({{input}}->{{name}}.ptr, &{{output_field}}, {{context}}))
-      {{success}} = false;
-{%-       endif %}
-{%-     elif kind|is_interface_kind %}
-    mojo::internal::InterfaceDataToPointer(&{{input}}->{{name}}, &{{output_field}});
-{%-     elif kind|is_interface_request_kind %}
-    {{output_field}}.Bind(mojo::MakeScopedHandle(mojo::internal::FetchAndReset(&{{input}}->{{name}})));
-{%-     elif kind|is_any_handle_kind %}
-    {{output_field}}.reset(mojo::internal::FetchAndReset(&{{input}}->{{name}}));
-{%-   elif kind|is_associated_interface_kind %}
-    mojo::internal::AssociatedInterfaceDataToPtrInfo(&{{input}}->{{name}}, &{{output_field}}, ({{context}})->router.get());
-{%-   elif kind|is_associated_interface_request_kind %}
-    mojo::internal::AssociatedInterfaceRequestHelper::SetHandle(
-        &{{output_field}},
-        ({{context}})->router->CreateLocalEndpointHandle(mojo::internal::FetchAndReset(&{{input}}->{{name}})));
-{%-     elif kind|is_enum_kind %}
-    {{output_field}} = static_cast<{{kind|cpp_wrapper_type}}>({{input}}->{{name}}.value);
+{%-     if kind|is_object_kind %}
+  if (!{{input}}.Read{{name|under_to_camel}}(&{{output_field}}))
+    {{success}} = false;
+{%-     elif kind|is_interface_kind or kind|is_any_handle_kind or
+             kind|is_associated_kind %}
+  {{output_field}} = {{input}}.Take{{name|under_to_camel}}();
 {%-     else %}
-    {{output_field}} = {{input}}->{{name}};
+  {{output_field}} = {{input}}.{{name}}();
 {%-     endif %}
 {%-   endfor %}
-  } while (false);
 {%- endmacro %}

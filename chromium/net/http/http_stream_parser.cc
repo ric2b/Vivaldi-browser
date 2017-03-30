@@ -81,12 +81,12 @@ bool HeadersContainMultipleCopiesOfField(const HttpResponseHeaders& headers,
   return false;
 }
 
-scoped_ptr<base::Value> NetLogSendRequestBodyCallback(
+std::unique_ptr<base::Value> NetLogSendRequestBodyCallback(
     uint64_t length,
     bool is_chunked,
     bool did_merge,
     NetLogCaptureMode /* capture_mode */) {
-  scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetInteger("length", static_cast<int>(length));
   dict->SetBoolean("is_chunked", is_chunked);
   dict->SetBoolean("did_merge", did_merge);
@@ -367,6 +367,8 @@ int HttpStreamParser::ReadResponseBody(IOBuffer* buf, int buf_len,
   DCHECK(callback_.is_null());
   DCHECK(!callback.is_null());
   DCHECK_LE(buf_len, kMaxBufSize);
+  // Added to investigate crbug.com/499663.
+  CHECK(buf);
 
   if (io_state_ == STATE_DONE)
     return OK;
@@ -644,6 +646,9 @@ int HttpStreamParser::DoReadHeadersComplete(int result) {
 
 int HttpStreamParser::DoReadBody() {
   io_state_ = STATE_READ_BODY_COMPLETE;
+
+  // Added to investigate crbug.com/499663.
+  CHECK(user_read_buf_.get());
 
   // There may be some data left over from reading the response headers.
   if (read_buf_->offset()) {

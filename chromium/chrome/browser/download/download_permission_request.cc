@@ -23,10 +23,6 @@ int DownloadPermissionRequest::GetIconId() const {
   return IDR_INFOBAR_MULTIPLE_DOWNLOADS;
 }
 
-base::string16 DownloadPermissionRequest::GetMessageText() const {
-  return l10n_util::GetStringUTF16(IDS_MULTI_DOWNLOAD_WARNING);
-}
-
 base::string16 DownloadPermissionRequest::GetMessageTextFragment() const {
   return l10n_util::GetStringUTF16(IDS_MULTI_DOWNLOAD_PERMISSION_FRAGMENT);
 }
@@ -58,4 +54,9 @@ void DownloadPermissionRequest::Cancelled() {
 
 void DownloadPermissionRequest::RequestFinished() {
   delete this;
+}
+
+PermissionBubbleType DownloadPermissionRequest::GetPermissionBubbleType()
+    const {
+  return PermissionBubbleType::DOWNLOAD;
 }

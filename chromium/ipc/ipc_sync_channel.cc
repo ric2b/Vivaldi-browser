@@ -6,16 +6,18 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
 #include <utility>
 
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/synchronization/waitable_event_watcher.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread_local.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "ipc/ipc_channel_factory.h"
 #include "ipc/ipc_logging.h"
@@ -405,38 +407,38 @@ base::WaitableEventWatcher::EventCallback
 }
 
 // static
-scoped_ptr<SyncChannel> SyncChannel::Create(
+std::unique_ptr<SyncChannel> SyncChannel::Create(
     const IPC::ChannelHandle& channel_handle,
     Channel::Mode mode,
     Listener* listener,
     const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner,
     bool create_pipe_now,
     base::WaitableEvent* shutdown_event) {
-  scoped_ptr<SyncChannel> channel =
+  std::unique_ptr<SyncChannel> channel =
       Create(listener, ipc_task_runner, shutdown_event);
   channel->Init(channel_handle, mode, create_pipe_now);
   return channel;
 }
 
 // static
-scoped_ptr<SyncChannel> SyncChannel::Create(
-    scoped_ptr<ChannelFactory> factory,
+std::unique_ptr<SyncChannel> SyncChannel::Create(
+    std::unique_ptr<ChannelFactory> factory,
     Listener* listener,
     const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner,
     bool create_pipe_now,
     base::WaitableEvent* shutdown_event) {
-  scoped_ptr<SyncChannel> channel =
+  std::unique_ptr<SyncChannel> channel =
       Create(listener, ipc_task_runner, shutdown_event);
   channel->Init(std::move(factory), create_pipe_now);
   return channel;
 }
 
 // static
-scoped_ptr<SyncChannel> SyncChannel::Create(
+std::unique_ptr<SyncChannel> SyncChannel::Create(
     Listener* listener,
     const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner,
     WaitableEvent* shutdown_event) {
-  return make_scoped_ptr(
+  return base::WrapUnique(
       new SyncChannel(listener, ipc_task_runner, shutdown_event));
 }
 

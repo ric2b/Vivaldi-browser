@@ -5,7 +5,8 @@
 #ifndef UI_VIEWS_CONTROLS_BUTTON_MD_TEXT_BUTTON_H_
 #define UI_VIEWS_CONTROLS_BUTTON_MD_TEXT_BUTTON_H_
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
 #include "ui/views/animation/button_ink_drop_delegate.h"
 #include "ui/views/controls/button/label_button.h"
 
@@ -26,6 +27,12 @@ class VIEWS_EXPORT MdTextButton : public LabelButton {
   // in MD mode.
   static LabelButton* CreateStandardButton(ButtonListener* listener,
                                            const base::string16& text);
+  // As above, but only creates an MdTextButton if MD is enabled in the
+  // secondary UI (as opposed to just "top chrome"/"primary" UI).
+  static LabelButton* CreateSecondaryUiButton(ButtonListener* listener,
+                                              const base::string16& text);
+  static LabelButton* CreateSecondaryUiBlueButton(ButtonListener* listener,
+                                                  const base::string16& text);
   static MdTextButton* CreateMdButton(ButtonListener* listener,
                                       const base::string16& text);
 
@@ -35,6 +42,7 @@ class VIEWS_EXPORT MdTextButton : public LabelButton {
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
   SkColor GetInkDropBaseColor() const override;
   void SetText(const base::string16& text) override;
+  void UpdateStyleToIndicateDefaultStatus() override;
 
  private:
   MdTextButton(ButtonListener* listener);

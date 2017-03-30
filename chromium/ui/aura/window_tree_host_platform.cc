@@ -10,8 +10,9 @@
 #include "build/build_config.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/compositor/compositor.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/events/event.h"
-#include "ui/gfx/screen.h"
 
 #if defined(OS_ANDROID)
 #include "ui/platform_window/android/platform_window_android.h"
@@ -57,7 +58,7 @@ WindowTreeHostPlatform::WindowTreeHostPlatform()
 }
 
 void WindowTreeHostPlatform::SetPlatformWindow(
-    scoped_ptr<ui::PlatformWindow> window) {
+    std::unique_ptr<ui::PlatformWindow> window) {
   window_ = std::move(window);
 }
 
@@ -125,7 +126,7 @@ void WindowTreeHostPlatform::OnCursorVisibilityChangedNative(bool show) {
 
 void WindowTreeHostPlatform::OnBoundsChanged(const gfx::Rect& new_bounds) {
   float current_scale = compositor()->device_scale_factor();
-  float new_scale = gfx::Screen::GetScreen()
+  float new_scale = display::Screen::GetScreen()
                         ->GetDisplayNearestWindow(window())
                         .device_scale_factor();
   gfx::Rect old_bounds = bounds_;

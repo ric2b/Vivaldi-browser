@@ -39,8 +39,10 @@
 #include "core/loader/FrameLoaderTypes.h"
 #include "core/loader/NavigationPolicy.h"
 #include "platform/heap/Handle.h"
+#include "platform/network/ContentSecurityPolicyParsers.h"
 #include "platform/network/ResourceLoadPriority.h"
 #include "platform/weborigin/Referrer.h"
+#include "public/platform/WebEffectiveConnectionType.h"
 #include "public/platform/WebLoadingBehaviorFlag.h"
 #include "wtf/Forward.h"
 #include "wtf/Vector.h"
@@ -70,7 +72,9 @@ class WebApplicationCacheHostClient;
 class WebCookieJar;
 class WebMediaPlayer;
 class WebMediaPlayerClient;
+class WebMediaPlayerSource;
 class WebMediaSession;
+class WebMediaStream;
 class WebRTCPeerConnectionHandler;
 class WebServiceWorkerProvider;
 class WebSocketHandle;
@@ -89,7 +93,7 @@ public:
 
     virtual void dispatchDidHandleOnloadEvents() = 0;
     virtual void dispatchDidReceiveServerRedirectForProvisionalLoad() = 0;
-    virtual void dispatchDidNavigateWithinPage(HistoryItem*, HistoryCommitType) { }
+    virtual void dispatchDidNavigateWithinPage(HistoryItem*, HistoryCommitType, bool contentInitiated) { }
     virtual void dispatchWillClose() = 0;
     virtual void dispatchDidStartProvisionalLoad(double triggeringEventTime) = 0;
     virtual void dispatchDidReceiveTitle(const String&) = 0;
@@ -131,12 +135,12 @@ public:
     virtual void didDetectXSS(const KURL&, bool didBlockEntirePage) = 0;
     virtual void didDispatchPingLoader(const KURL&) = 0;
 
-    // The given main resource displayed content with certificate errors
-    // with the given URL and security info.
-    virtual void didDisplayContentWithCertificateErrors(const KURL&, const CString& securityInfo, const WebURL& mainResourceUrl, const CString& mainResourceSecurityInfo) = 0;
-    // The given main resource ran content with certificate errors with
-    // the given URL and security info.
-    virtual void didRunContentWithCertificateErrors(const KURL&, const CString& securityInfo, const WebURL& mainResourceUrl, const CString& mainResourceSecurityInfo) = 0;
+    // The frame displayed content with certificate errors with the
+    // given URL and security info.
+    virtual void didDisplayContentWithCertificateErrors(const KURL&, const CString& securityInfo) = 0;
+    // The frame ran content with certificate errors with the given URL
+    // and security info.
+    virtual void didRunContentWithCertificateErrors(const KURL&, const CString& securityInfo) = 0;
 
     // Will be called when |PerformanceTiming| events are updated
     virtual void didChangePerformanceTiming() { }
@@ -167,7 +171,7 @@ public:
     virtual bool canCreatePluginWithoutRenderer(const String& mimeType) const = 0;
     virtual Widget* createPlugin(HTMLPlugInElement*, const KURL&, const Vector<String>&, const Vector<String>&, const String&, bool loadManually, DetachedPluginPolicy) = 0;
 
-    virtual PassOwnPtr<WebMediaPlayer> createWebMediaPlayer(HTMLMediaElement&, const WebURL&, WebMediaPlayerClient*) = 0;
+    virtual PassOwnPtr<WebMediaPlayer> createWebMediaPlayer(HTMLMediaElement&, const WebMediaPlayerSource&, WebMediaPlayerClient*) = 0;
 
     virtual PassOwnPtr<WebMediaSession> createWebMediaSession() = 0;
 
@@ -179,15 +183,12 @@ public:
     virtual void runScriptsAtDocumentElementAvailable() = 0;
     virtual void runScriptsAtDocumentReady(bool documentIsEmpty) = 0;
 
-    virtual v8::Local<v8::Value> createTestInterface(const AtomicString& name) = 0;
-
     virtual void didCreateScriptContext(v8::Local<v8::Context>, int extensionGroup, int worldId) = 0;
     virtual void willReleaseScriptContext(v8::Local<v8::Context>, int worldId) = 0;
     virtual bool allowScriptExtension(const String& extensionName, int extensionGroup, int worldId) = 0;
 
     virtual void didChangeScrollOffset() { }
     virtual void didUpdateCurrentHistoryItem() { }
-    virtual void didRemoveAllPendingStylesheet() { }
 
     virtual bool allowScript(bool enabledPerSettings) { return enabledPerSettings; }
     virtual bool allowScriptFromSource(bool enabledPerSettings, const KURL&) { return enabledPerSettings; }
@@ -196,6 +197,7 @@ public:
     virtual bool allowMedia(const KURL&) { return true; }
     virtual bool allowDisplayingInsecureContent(bool enabledPerSettings, const KURL&) { return enabledPerSettings; }
     virtual bool allowRunningInsecureContent(bool enabledPerSettings, SecurityOrigin*, const KURL&) { return enabledPerSettings; }
+    virtual bool allowAutoplay(bool defaultValue) { return defaultValue; }
 
     // This callback notifies the client that the frame was about to run
     // JavaScript but did not because allowScript returned false. We
@@ -219,13 +221,17 @@ public:
 
     virtual void didChangeSandboxFlags(Frame* childFrame, SandboxFlags) { }
 
+    // Called when a new Content Security Policy is added to the frame's
+    // document.  This can be triggered by handling of HTTP headers, handling
+    // of <meta> element, or by inheriting CSP from the parent (in case of
+    // about:blank).
+    virtual void didAddContentSecurityPolicy(const String& headerValue, ContentSecurityPolicyHeaderType, ContentSecurityPolicyHeaderSource) { }
+
     virtual void didChangeFrameOwnerProperties(HTMLFrameElementBase*) { }
 
     virtual void dispatchWillOpenWebSocket(WebSocketHandle*) { }
 
     virtual void dispatchWillStartUsingPeerConnectionHandler(WebRTCPeerConnectionHandler*) { }
-
-    virtual void didRequestAutocomplete(HTMLFormElement*) = 0;
 
     virtual bool allowWebGL(bool enabledPerSettings) { return enabledPerSettings; }
 
@@ -260,6 +266,9 @@ public:
     virtual void suddenTerminationDisablerChanged(bool present, SuddenTerminationDisablerType) { }
 
     virtual LinkResource* createServiceWorkerLinkResource(HTMLLinkElement*) { return nullptr; }
+
+    // Effective connection type when this frame was loaded.
+    virtual WebEffectiveConnectionType getEffectiveConnectionType() { return WebEffectiveConnectionType::TypeUnknown; }
 
     // VB-6063:
     virtual void extendedProgressEstimateChanged(double progressEstimate, double loaded_bytes, int loaded_elements, int total_elements) {}

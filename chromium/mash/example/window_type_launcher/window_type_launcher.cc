@@ -4,13 +4,15 @@
 
 #include "mash/example/window_type_launcher/window_type_launcher.h"
 
+#include <stdint.h>
+
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "mash/session/public/interfaces/session.mojom.h"
 #include "mojo/converters/geometry/geometry_type_converters.h"
-#include "mojo/shell/public/cpp/connection.h"
-#include "mojo/shell/public/cpp/connector.h"
+#include "services/shell/public/cpp/connection.h"
+#include "services/shell/public/cpp/connector.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/compositor/layer.h"
@@ -38,6 +40,46 @@ SkColor g_colors[] = { SK_ColorRED,
                        SK_ColorGREEN };
 int g_color_index = 0;
 
+// WidgetDelegateView implementation used for new windows.
+class WindowDelegateView : public views::WidgetDelegateView {
+ public:
+  enum Traits {
+    RESIZABLE = 1 << 0,
+    ALWAYS_ON_TOP = 1 << 1,
+    PANEL = 1 << 2,
+  };
+
+  explicit WindowDelegateView(uint32_t traits) : traits_(traits) {}
+  ~WindowDelegateView() override {}
+
+  // Creates and shows a window with the specified traits.
+  static void Create(uint32_t traits) {
+    // Widget destroys itself when closed or mus::Window destroyed.
+    views::Widget* widget = new views::Widget;
+    views::Widget::InitParams params(
+        (traits & PANEL) != 0 ? views::Widget::InitParams::TYPE_PANEL
+                              : views::Widget::InitParams::TYPE_WINDOW);
+    params.keep_on_top = (traits & ALWAYS_ON_TOP) != 0;
+    // WidgetDelegateView deletes itself when Widget is destroyed.
+    params.delegate = new WindowDelegateView(traits);
+    widget->Init(params);
+    widget->Show();
+  }
+
+  // WidgetDelegateView:
+  bool CanMaximize() const override { return true; }
+  bool CanMinimize() const override { return true; }
+  bool CanResize() const override { return (traits_ & RESIZABLE) != 0; }
+  base::string16 GetWindowTitle() const override {
+    return base::ASCIIToUTF16("Window");
+  }
+
+ private:
+  const uint32_t traits_;
+
+  DISALLOW_COPY_AND_ASSIGN(WindowDelegateView);
+};
+
 class ModalWindow : public views::WidgetDelegateView,
                     public views::ButtonListener {
  public:
@@ -53,9 +95,8 @@ class ModalWindow : public views::WidgetDelegateView,
   ~ModalWindow() override {}
 
   static void OpenModalWindow(aura::Window* parent, ui::ModalType modal_type) {
-    views::Widget* widget =
-        views::Widget::CreateWindowWithParent(new ModalWindow(modal_type),
-                                              parent);
+    views::Widget* widget = views::Widget::CreateWindowWithParent(
+        new ModalWindow(modal_type), parent);
     widget->GetNativeView()->SetName("ModalWindow");
     widget->Show();
   }
@@ -84,7 +125,10 @@ class ModalWindow : public views::WidgetDelegateView,
   // Overridden from views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override {
     DCHECK(sender == open_button_);
-    OpenModalWindow(GetWidget()->GetNativeView(), modal_type_);
+    OpenModalWindow(modal_type_ == ui::MODAL_TYPE_SYSTEM
+                        ? nullptr
+                        : GetWidget()->GetNativeView(),
+                    modal_type_);
   }
 
  private:
@@ -165,39 +209,55 @@ class WindowTypeLauncherView : public views::WidgetDelegateView,
                                public views::MenuDelegate,
                                public views::ContextMenuController {
  public:
-  explicit WindowTypeLauncherView(mojo::Connector* connector)
-      : connector_(connector),
-        create_button_(new views::LabelButton(
-            this, base::ASCIIToUTF16("Create Window"))),
-        panel_button_(new views::LabelButton(
-            this, base::ASCIIToUTF16("Create Panel"))),
+  explicit WindowTypeLauncherView(WindowTypeLauncher* window_type_launcher,
+                                  shell::Connector* connector)
+      : window_type_launcher_(window_type_launcher),
+        connector_(connector),
+        create_button_(
+            new views::LabelButton(this, base::ASCIIToUTF16("Create Window"))),
+        always_on_top_button_(new views::LabelButton(
+            this,
+            base::ASCIIToUTF16("Create Always On Top Window"))),
+        panel_button_(
+            new views::LabelButton(this, base::ASCIIToUTF16("Create Panel"))),
         create_nonresizable_button_(new views::LabelButton(
-            this, base::ASCIIToUTF16("Create Non-Resizable Window"))),
-        bubble_button_(new views::LabelButton(
-            this, base::ASCIIToUTF16("Create Pointy Bubble"))),
-        lock_button_(new views::LabelButton(
-            this, base::ASCIIToUTF16("Lock Screen"))),
-        logout_button_(new views::LabelButton(
-            this, base::ASCIIToUTF16("Log Out"))),
-        switch_user_button_(new views::LabelButton(
-            this, base::ASCIIToUTF16("Switch User"))),
-        widgets_button_(new views::LabelButton(
-            this, base::ASCIIToUTF16("Show Example Widgets"))),
+            this,
+            base::ASCIIToUTF16("Create Non-Resizable Window"))),
+        bubble_button_(
+            new views::LabelButton(this,
+                                   base::ASCIIToUTF16("Create Pointy Bubble"))),
+        lock_button_(
+            new views::LabelButton(this, base::ASCIIToUTF16("Lock Screen"))),
+        logout_button_(
+            new views::LabelButton(this, base::ASCIIToUTF16("Log Out"))),
+        switch_user_button_(
+            new views::LabelButton(this, base::ASCIIToUTF16("Switch User"))),
+        widgets_button_(
+            new views::LabelButton(this,
+                                   base::ASCIIToUTF16("Show Example Widgets"))),
         system_modal_button_(new views::LabelButton(
-            this, base::ASCIIToUTF16("Open System Modal Window"))),
+            this,
+            base::ASCIIToUTF16("Open System Modal Window"))),
         window_modal_button_(new views::LabelButton(
-            this, base::ASCIIToUTF16("Open Window Modal Window"))),
+            this,
+            base::ASCIIToUTF16("Open Window Modal Window"))),
         child_modal_button_(new views::LabelButton(
-            this, base::ASCIIToUTF16("Open Child Modal Window"))),
+            this,
+            base::ASCIIToUTF16("Open Child Modal Window"))),
         transient_button_(new views::LabelButton(
-            this, base::ASCIIToUTF16("Open Non-Modal Transient Window"))),
+            this,
+            base::ASCIIToUTF16("Open Non-Modal Transient Window"))),
         examples_button_(new views::LabelButton(
-            this, base::ASCIIToUTF16("Open Views Examples Window"))),
-        show_hide_window_button_(new views::LabelButton(
-            this, base::ASCIIToUTF16("Show/Hide a Window"))),
+            this,
+            base::ASCIIToUTF16("Open Views Examples Window"))),
+        show_hide_window_button_(
+            new views::LabelButton(this,
+                                   base::ASCIIToUTF16("Show/Hide a Window"))),
         show_web_notification_(new views::LabelButton(
-            this, base::ASCIIToUTF16("Show a web/app notification"))) {
+            this,
+            base::ASCIIToUTF16("Show a web/app notification"))) {
     create_button_->SetStyle(views::Button::STYLE_BUTTON);
+    always_on_top_button_->SetStyle(views::Button::STYLE_BUTTON);
     panel_button_->SetStyle(views::Button::STYLE_BUTTON);
     create_nonresizable_button_->SetStyle(views::Button::STYLE_BUTTON);
     bubble_button_->SetStyle(views::Button::STYLE_BUTTON);
@@ -224,6 +284,7 @@ class WindowTypeLauncherView : public views::WidgetDelegateView,
                           0,
                           0);
     AddViewToLayout(layout, create_button_);
+    AddViewToLayout(layout, always_on_top_button_);
     AddViewToLayout(layout, panel_button_);
     AddViewToLayout(layout, create_nonresizable_button_);
     AddViewToLayout(layout, bubble_button_);
@@ -240,7 +301,9 @@ class WindowTypeLauncherView : public views::WidgetDelegateView,
     AddViewToLayout(layout, show_web_notification_);
     set_context_menu_controller(this);
   }
-  ~WindowTypeLauncherView() override {}
+  ~WindowTypeLauncherView() override {
+    window_type_launcher_->RemoveWindow(GetWidget());
+  }
 
  private:
   typedef std::pair<aura::Window*, gfx::Rect> WindowAndBoundsPair;
@@ -271,11 +334,14 @@ class WindowTypeLauncherView : public views::WidgetDelegateView,
   // Overridden from views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override {
     if (sender == create_button_) {
-      NOTIMPLEMENTED();
+      WindowDelegateView::Create(WindowDelegateView::RESIZABLE);
+    } else if (sender == always_on_top_button_) {
+      WindowDelegateView::Create(WindowDelegateView::RESIZABLE |
+                                 WindowDelegateView::ALWAYS_ON_TOP);
     } else if (sender == panel_button_) {
-      NOTIMPLEMENTED();
+      WindowDelegateView::Create(WindowDelegateView::PANEL);
     } else if (sender == create_nonresizable_button_) {
-      NOTIMPLEMENTED();
+      WindowDelegateView::Create(0u);
     } else if (sender == bubble_button_) {
       NOTIMPLEMENTED();
     } else if (sender == lock_button_) {
@@ -294,8 +360,7 @@ class WindowTypeLauncherView : public views::WidgetDelegateView,
       NOTIMPLEMENTED();
     }
     else if (sender == system_modal_button_) {
-      ModalWindow::OpenModalWindow(GetWidget()->GetNativeView(),
-                                   ui::MODAL_TYPE_SYSTEM);
+      ModalWindow::OpenModalWindow(nullptr, ui::MODAL_TYPE_SYSTEM);
     } else if (sender == window_modal_button_) {
       ModalWindow::OpenModalWindow(GetWidget()->GetNativeView(),
                                    ui::MODAL_TYPE_WINDOW);
@@ -344,8 +409,10 @@ class WindowTypeLauncherView : public views::WidgetDelegateView,
     }
   }
 
-  mojo::Connector* connector_;
+  WindowTypeLauncher* window_type_launcher_;
+  shell::Connector* connector_;
   views::LabelButton* create_button_;
+  views::LabelButton* always_on_top_button_;
   views::LabelButton* panel_button_;
   views::LabelButton* create_nonresizable_button_;
   views::LabelButton* bubble_button_;
@@ -370,21 +437,44 @@ class WindowTypeLauncherView : public views::WidgetDelegateView,
 WindowTypeLauncher::WindowTypeLauncher() {}
 WindowTypeLauncher::~WindowTypeLauncher() {}
 
-void WindowTypeLauncher::Initialize(mojo::Connector* connector,
-                                    const mojo::Identity& identity,
-                                    uint32_t id) {
-  aura_init_.reset(new views::AuraInit(connector, "views_mus_resources.pak"));
-
-  views::WindowManagerConnection::Create(connector);
-
-  views::Widget* widget = new views::Widget;
-  views::Widget::InitParams params(views::Widget::InitParams::TYPE_WINDOW);
-  params.delegate = new WindowTypeLauncherView(connector);
-  widget->Init(params);
-  widget->Show();
+void WindowTypeLauncher::RemoveWindow(views::Widget* window) {
+  auto it = std::find(windows_.begin(), windows_.end(), window);
+  DCHECK(it != windows_.end());
+  windows_.erase(it);
+  if (windows_.empty())
+    base::MessageLoop::current()->QuitWhenIdle();
 }
 
-bool WindowTypeLauncher::ShellConnectionLost() {
-  base::MessageLoop::current()->QuitWhenIdle();
-  return false;
+void WindowTypeLauncher::Initialize(shell::Connector* connector,
+                                    const shell::Identity& identity,
+                                    uint32_t id) {
+  connector_ = connector;
+  aura_init_.reset(new views::AuraInit(connector, "views_mus_resources.pak"));
+
+  views::WindowManagerConnection::Create(connector, identity);
+}
+
+bool WindowTypeLauncher::AcceptConnection(shell::Connection* connection) {
+  connection->AddInterface<mash::mojom::Launchable>(this);
+  return true;
+}
+
+void WindowTypeLauncher::Launch(uint32_t what, mash::mojom::LaunchMode how) {
+  bool reuse = how == mash::mojom::LaunchMode::REUSE ||
+               how == mash::mojom::LaunchMode::DEFAULT;
+  if (reuse && !windows_.empty()) {
+    windows_.back()->Activate();
+    return;
+  }
+  views::Widget* window = new views::Widget;
+  views::Widget::InitParams params(views::Widget::InitParams::TYPE_WINDOW);
+  params.delegate = new WindowTypeLauncherView(this, connector_);
+  window->Init(params);
+  window->Show();
+  windows_.push_back(window);
+}
+
+void WindowTypeLauncher::Create(shell::Connection* connection,
+                                mash::mojom::LaunchableRequest request) {
+  bindings_.AddBinding(this, std::move(request));
 }

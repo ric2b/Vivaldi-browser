@@ -11,6 +11,7 @@
 #include "base/callback.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
+#include "base/metrics/histogram.h"
 #include "base/rand_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -73,6 +74,7 @@
 using content::BrowserThread;
 using content::DownloadItem;
 using content::DownloadManager;
+using safe_browsing::DownloadFileType;
 using safe_browsing::DownloadProtectionService;
 
 namespace {
@@ -176,6 +178,16 @@ std::string GetMimeType(const base::FilePath& path) {
   net::GetMimeTypeFromFile(path, &mime_type);
   return mime_type;
 }
+
+// Reason for why danger type is DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE.
+// Used by "Download.DangerousFile.Reason" UMA metric.
+// Do not change the ordering or remove items.
+enum DangerousFileReason {
+  SB_NOT_AVAILABLE = 0,
+  SB_RETURNS_UNKOWN = 1,
+  SB_RETURNS_SAFE = 2,
+  DANGEROUS_FILE_REASON_MAX
+};
 
 }  // namespace
 
@@ -325,7 +337,7 @@ bool ChromeDownloadManagerDelegate::IsDownloadReadyForCompletion(
     // we need to restore the danger state.
     content::DownloadDangerType danger_type = item->GetDangerType();
     if (DownloadItemModel(item).GetDangerLevel() !=
-            download_util::NOT_DANGEROUS &&
+            DownloadFileType::NOT_DANGEROUS &&
         (danger_type == content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS ||
          danger_type ==
              content::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT)) {
@@ -333,6 +345,8 @@ bool ChromeDownloadManagerDelegate::IsDownloadReadyForCompletion(
                << "() SB service disabled. Marking download as DANGEROUS FILE";
       item->OnContentCheckCompleted(
           content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE);
+      UMA_HISTOGRAM_ENUMERATION("Download.DangerousFile.Reason",
+                                SB_NOT_AVAILABLE, DANGEROUS_FILE_REASON_MAX);
       content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
                                        internal_complete_callback);
       return false;
@@ -668,16 +682,23 @@ void ChromeDownloadManagerDelegate::CheckClientDownloadDone(
       case DownloadProtectionService::UNKNOWN:
         // The check failed or was inconclusive.
         if (DownloadItemModel(item).GetDangerLevel() !=
-            download_util::NOT_DANGEROUS)
+            DownloadFileType::NOT_DANGEROUS) {
           danger_type = content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE;
+          UMA_HISTOGRAM_ENUMERATION("Download.DangerousFile.Reason",
+                                    SB_RETURNS_UNKOWN,
+                                    DANGEROUS_FILE_REASON_MAX);
+        }
         break;
       case DownloadProtectionService::SAFE:
         // If this file type require explicit consent, then set the danger type
         // to DANGEROUS_FILE so that the user be required to manually vet
         // whether the download is intended or not.
         if (DownloadItemModel(item).GetDangerLevel() ==
-            download_util::DANGEROUS)
+            DownloadFileType::DANGEROUS) {
           danger_type = content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE;
+          UMA_HISTOGRAM_ENUMERATION("Download.DangerousFile.Reason",
+                                    SB_RETURNS_SAFE, DANGEROUS_FILE_REASON_MAX);
+        }
         break;
       case DownloadProtectionService::DANGEROUS:
         danger_type = content::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT;

@@ -27,7 +27,7 @@ PictureImageLayer::~PictureImageLayer() {
   ClearClient();
 }
 
-scoped_ptr<LayerImpl> PictureImageLayer::CreateLayerImpl(
+std::unique_ptr<LayerImpl> PictureImageLayer::CreateLayerImpl(
     LayerTreeImpl* tree_impl) {
   return PictureImageLayerImpl::Create(tree_impl, id(), is_mask());
 }
@@ -36,7 +36,7 @@ bool PictureImageLayer::HasDrawableContent() const {
   return image_ && PictureLayer::HasDrawableContent();
 }
 
-void PictureImageLayer::SetImage(skia::RefPtr<const SkImage> image) {
+void PictureImageLayer::SetImage(sk_sp<const SkImage> image) {
   // SetImage() currently gets called whenever there is any
   // style change that affects the layer even if that change doesn't
   // affect the actual contents of the image (e.g. a CSS animation).

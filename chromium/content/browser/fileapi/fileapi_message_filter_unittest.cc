@@ -13,16 +13,19 @@
 #include "base/memory/shared_memory.h"
 #include "base/message_loop/message_loop.h"
 #include "base/process/process_handle.h"
+#include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/child_process_security_policy_impl.h"
-#include "content/browser/fileapi/chrome_blob_storage_context.h"
 #include "content/browser/streams/stream_registry.h"
 #include "content/common/fileapi/file_system_messages.h"
 #include "content/common/fileapi/webblob_messages.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/common/common_param_traits.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_file_system_context.h"
 #include "net/base/io_buffer.h"
 #include "storage/browser/blob/blob_storage_context.h"
@@ -35,9 +38,9 @@ namespace content {
 namespace {
 
 const char kFakeBlobInternalUrlSpec[] =
-    "blob:blobinternal%3A///dc83ede4-9bbd-453b-be2e-60fd623fcc93";
+    "blob:blobinternal:///dc83ede4-9bbd-453b-be2e-60fd623fcc93";
 const char kFakeBlobInternalUrlSpec2[] =
-    "blob:blobinternal%3A///d28ae2e7-d233-4dda-9598-d135fe5d403e";
+    "blob:blobinternal:///d28ae2e7-d233-4dda-9598-d135fe5d403e";
 
 const char kFakeContentType[] = "fake/type";
 
@@ -46,7 +49,7 @@ const char kFakeContentType[] = "fake/type";
 class FileAPIMessageFilterTest : public testing::Test {
  public:
   FileAPIMessageFilterTest()
-      : io_browser_thread_(BrowserThread::IO, &message_loop_) {
+      : browser_thread_bundle_(TestBrowserThreadBundle::IO_MAINLOOP) {
   }
 
  protected:
@@ -68,18 +71,17 @@ class FileAPIMessageFilterTest : public testing::Test {
 
     filter_ = new FileAPIMessageFilter(
         0 /* process_id */,
-        browser_context_.GetRequestContext(),
+        BrowserContext::GetDefaultStoragePartition(&browser_context_)->
+            GetURLRequestContext(),
         file_system_context_.get(),
         blob_storage_context_,
         stream_context_);
 
     // Complete initialization.
-    message_loop_.RunUntilIdle();
+    base::MessageLoop::current()->RunUntilIdle();
   }
 
-  base::MessageLoop message_loop_;
-  TestBrowserThread io_browser_thread_;
-
+  TestBrowserThreadBundle browser_thread_bundle_;
   TestBrowserContext browser_context_;
   scoped_refptr<storage::FileSystemContext> file_system_context_;
   StreamContext* stream_context_;
@@ -92,14 +94,15 @@ TEST_F(FileAPIMessageFilterTest, CloseChannelWithInflightRequest) {
   scoped_refptr<FileAPIMessageFilter> filter(
       new FileAPIMessageFilter(
           0 /* process_id */,
-          browser_context_.GetRequestContext(),
+          BrowserContext::GetDefaultStoragePartition(&browser_context_)->
+              GetURLRequestContext(),
           file_system_context_.get(),
           ChromeBlobStorageContext::GetFor(&browser_context_),
           StreamContext::GetFor(&browser_context_)));
   filter->OnChannelConnected(0);
 
   // Complete initialization.
-  message_loop_.RunUntilIdle();
+  base::MessageLoop::current()->RunUntilIdle();
 
   int request_id = 0;
   const GURL kUrl("filesystem:http://example.com/temporary/foo");
@@ -110,21 +113,23 @@ TEST_F(FileAPIMessageFilterTest, CloseChannelWithInflightRequest) {
   filter->OnChannelClosing();
 
   // This shouldn't cause DCHECK failure.
-  message_loop_.RunUntilIdle();
+  base::MessageLoop::current()->RunUntilIdle();
 }
 
 TEST_F(FileAPIMessageFilterTest, MultipleFilters) {
   scoped_refptr<FileAPIMessageFilter> filter1(
       new FileAPIMessageFilter(
           0 /* process_id */,
-          browser_context_.GetRequestContext(),
+          BrowserContext::GetDefaultStoragePartition(&browser_context_)->
+              GetURLRequestContext(),
           file_system_context_.get(),
           ChromeBlobStorageContext::GetFor(&browser_context_),
           StreamContext::GetFor(&browser_context_)));
   scoped_refptr<FileAPIMessageFilter> filter2(
       new FileAPIMessageFilter(
           1 /* process_id */,
-          browser_context_.GetRequestContext(),
+          BrowserContext::GetDefaultStoragePartition(&browser_context_)->
+              GetURLRequestContext(),
           file_system_context_.get(),
           ChromeBlobStorageContext::GetFor(&browser_context_),
           StreamContext::GetFor(&browser_context_)));
@@ -132,7 +137,7 @@ TEST_F(FileAPIMessageFilterTest, MultipleFilters) {
   filter2->OnChannelConnected(1);
 
   // Complete initialization.
-  message_loop_.RunUntilIdle();
+  base::MessageLoop::current()->RunUntilIdle();
 
   int request_id = 0;
   const GURL kUrl("filesystem:http://example.com/temporary/foo");
@@ -143,7 +148,7 @@ TEST_F(FileAPIMessageFilterTest, MultipleFilters) {
   filter2->OnChannelClosing();
 
   // This shouldn't cause DCHECK failure.
-  message_loop_.RunUntilIdle();
+  base::MessageLoop::current()->RunUntilIdle();
 }
 
 TEST_F(FileAPIMessageFilterTest, BuildEmptyStream) {
@@ -179,7 +184,7 @@ TEST_F(FileAPIMessageFilterTest, BuildEmptyStream) {
   EXPECT_EQ(0, bytes_read);
 
   // Run loop to finish transfer.
-  message_loop_.RunUntilIdle();
+  base::MessageLoop::current()->RunUntilIdle();
 
   EXPECT_EQ(Stream::STREAM_COMPLETE,
             stream->ReadRawData(buffer.get(), kBufferSize, &bytes_read));
@@ -209,7 +214,7 @@ TEST_F(FileAPIMessageFilterTest, BuildNonEmptyStream) {
   EXPECT_TRUE(filter_->OnMessageReceived(finish_message));
 
   // Run loop to finish transfer and commit finalize command.
-  message_loop_.RunUntilIdle();
+  base::MessageLoop::current()->RunUntilIdle();
 
   scoped_refptr<net::IOBuffer> buffer(new net::IOBuffer(kFakeData.size()));
   int bytes_read = 0;
@@ -245,7 +250,7 @@ TEST_F(FileAPIMessageFilterTest, BuildStreamWithSharedMemory) {
 
   const std::string kFakeData = "foobarbaz";
 
-  scoped_ptr<base::SharedMemory> shared_memory(new base::SharedMemory);
+  std::unique_ptr<base::SharedMemory> shared_memory(new base::SharedMemory);
   ASSERT_TRUE(shared_memory->CreateAndMapAnonymous(kFakeData.size()));
   memcpy(shared_memory->memory(), kFakeData.data(), kFakeData.size());
   StreamHostMsg_SyncAppendSharedMemory append_message(
@@ -256,7 +261,7 @@ TEST_F(FileAPIMessageFilterTest, BuildStreamWithSharedMemory) {
   EXPECT_TRUE(filter_->OnMessageReceived(finish_message));
 
   // Run loop to finish transfer and commit finalize command.
-  message_loop_.RunUntilIdle();
+  base::MessageLoop::current()->RunUntilIdle();
 
   scoped_refptr<net::IOBuffer> buffer(new net::IOBuffer(kFakeData.size()));
   int bytes_read = 0;

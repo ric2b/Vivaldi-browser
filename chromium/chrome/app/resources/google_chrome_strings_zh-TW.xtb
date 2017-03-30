@@ -66,10 +66,16 @@
 <translation id="2997147809295888909">Chrome 已驗證這個網站的憑證核發者是 <ph name="ISSUER" />。該伺服器未提供任何 Certificate Transparency 資訊。</translation>
 <translation id="3037838751736561277">Google Chrome 正在背景模式中執行。</translation>
 <translation id="3047079729301751317">解除與 <ph name="USERNAME" /> 的連結將會清除此裝置上已儲存的歷史紀錄、書籤、設定和其他 Chrome 資料。不過，這不會清除 Google 帳戶中儲存的資料，您可以在 <ph name="GOOGLE_DASHBOARD_LINK" />Google 資訊主頁<ph name="END_GOOGLE_DASHBOARD_LINK" />管理這些資料。</translation>
+<translation id="3065168410429928842">Chrome 分頁</translation>
 <translation id="3080151273017101988">Google Chrome 關閉時繼續執行背景應用程式</translation>
 <translation id="3089968997497233615">Google Chrome 推出全新版本，安全性更勝以往。</translation>
 <translation id="3149510190863420837">Chrome 應用程式</translation>
-<translation id="3197823471738295152">您的裝置已更新。</translation>
+<translation id="3251381707915721925">如要設定「<ph name="NEW_PROFILE_NAME" />」可瀏覽哪些網站，您可以前往 <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" /> 調整限制與設定。如果您未變更預設設定，「<ph name="NEW_PROFILE_NAME" />」將可瀏覽網路上的所有網站。
+
+如要禁止「<ph name="NEW_PROFILE_NAME" />」存取您的帳戶，當您不使用 Chrome 時，請務必鎖定您的設定檔。方法是按一下瀏覽器右上角的設定檔名稱，然後選取 [結束並執行 Childlock]。
+<ph name="BEGIN_LINK_2" />瞭解詳情<ph name="END_LINK_2" />
+
+如需進一步的操作說明，請登入您的 <ph name="ACCOUNT_EMAIL" /> 帳戶，查看系統寄給您的電子郵件。</translation>
 <translation id="3282568296779691940">登入 Chrome</translation>
 <translation id="3311976847535831054">這台電腦將不會再收到 32 位元的 Google Chrome 更新，請升級至 64 位元的 Google Chrome。</translation>
 <translation id="3360895254066713204">Chrome 小幫手</translation>
@@ -207,7 +213,6 @@ Google Chrome 無法復原您的設定。</translation>
 <translation id="7808348361785373670">從 Chrome 中移除...</translation>
 <translation id="7825851276765848807">不明錯誤導致安裝失敗，請再次下載 Google Chrome。</translation>
 <translation id="7890208801193284374">如果您與親朋好友共用電腦，人人皆可享有獨立的瀏覽空間，依照自己的偏好設定 Chrome。</translation>
-<translation id="8000275528373650868">Google Chrome 支援的作業系統為 Windows Vista 或 Windows XP SP2 以上版本。</translation>
 <translation id="8005540215158006229">Chrome 即將準備就緒。</translation>
 <translation id="8008534537613507642">重新安裝 Chrome</translation>
 <translation id="8030318113982266900">正在將裝置更新至「<ph name="CHANNEL_NAME" />」版...</translation>
@@ -229,6 +234,7 @@ Google Chrome 無法復原您的設定。</translation>
 <translation id="8556340503434111824">Google Chrome 推出全新版本，速度更勝以往。</translation>
 <translation id="8568392309447938879">您必須登入 Chrome 才能使用應用程式。在登入狀態下，Chrome 可同步處理您在多個裝置上的應用程式、書籤、紀錄、密碼和其他設定。</translation>
 <translation id="8614913330719544658">Google Chrome 沒有回應，要立即重新啟動嗎？</translation>
+<translation id="8667808506758191620">您的 <ph name="DEVICE_TYPE" /> 已搭載最新版作業系統。</translation>
 <translation id="8669527147644353129">Google Chrome 小幫手</translation>
 <translation id="8679801911857917785">這個擴充功能也會控管 Chrome 啟動時所顯示的網頁。</translation>
 <translation id="870251953148363156">更新 Google Chrome(&amp;G)</translation>
@@ -237,6 +243,7 @@ Google Chrome 無法復原您的設定。</translation>
 <translation id="8851136666856101339">主要元素</translation>
 <translation id="8862326446509486874">您沒有在系統層級進行安裝的權限，請以管理員的身分執行安裝檔。</translation>
 <translation id="9026991721384951619">您的帳戶登入詳細資料尚未更新，因此 Chrome 作業系統無法同步處理您的資料。</translation>
+<translation id="9067395829937117663">Google Chrome 僅支援 Windows 7 以上版本的作業系統。</translation>
 <translation id="9102715433345326100">這個檔案是惡意軟體，因此已遭到 Chrome 封鎖。</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />警告：<ph name="END_BOLD" />Google Chrome 無法阻止擴充功能記錄您的瀏覽紀錄，如要在無痕模式中停用這個擴充功能，請取消選取這個選項。 </translation>
 <translation id="911206726377975832">您要一併刪除瀏覽資料嗎？</translation>

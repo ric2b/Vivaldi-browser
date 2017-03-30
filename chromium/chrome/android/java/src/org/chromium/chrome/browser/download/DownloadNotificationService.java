@@ -15,10 +15,10 @@ import android.content.SharedPreferences;
 import android.os.Binder;
 import android.os.Build;
 import android.os.IBinder;
-import android.preference.PreferenceManager;
 import android.support.v4.app.NotificationCompat;
 import android.text.TextUtils;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.library_loader.ProcessInitException;
@@ -46,6 +46,7 @@ public class DownloadNotificationService extends Service {
     static final String EXTRA_DOWNLOAD_NOTIFICATION_ID = "DownloadNotificationId";
     static final String EXTRA_DOWNLOAD_GUID = "DownloadGuid";
     static final String EXTRA_DOWNLOAD_FILE_NAME = "DownloadFileName";
+    static final String EXTRA_NOTIFICATION_DISMISSED = "NotificationDismissed";
     static final String ACTION_DOWNLOAD_CANCEL =
             "org.chromium.chrome.browser.download.DOWNLOAD_CANCEL";
     static final String ACTION_DOWNLOAD_PAUSE =
@@ -87,7 +88,7 @@ public class DownloadNotificationService extends Service {
         mContext = getApplicationContext();
         mNotificationManager = (NotificationManager) mContext.getSystemService(
                 Context.NOTIFICATION_SERVICE);
-        mSharedPrefs = PreferenceManager.getDefaultSharedPreferences(mContext);
+        mSharedPrefs = ContextUtils.getAppSharedPreferences();
         parseDownloadSharedPrefs();
         // Because this service is a started service and returns START_STICKY in
         // onStartCommand(), it will be restarted as soon as resources are available
@@ -155,12 +156,13 @@ public class DownloadNotificationService extends Service {
         if (startTime > 0) builder.setWhen(startTime);
         builder.addAction(R.drawable.bookmark_cancel_active,
                 mContext.getResources().getString(R.string.download_notification_cancel_button),
-                buildPendingIntent(ACTION_DOWNLOAD_CANCEL, notificationId, downloadGuid, fileName));
+                buildPendingIntent(ACTION_DOWNLOAD_CANCEL, notificationId, downloadGuid, fileName,
+                        false));
         if (isResumable) {
             builder.addAction(R.drawable.ic_vidcontrol_pause,
                     mContext.getResources().getString(R.string.download_notification_pause_button),
                     buildPendingIntent(ACTION_DOWNLOAD_PAUSE, notificationId, downloadGuid,
-                            fileName));
+                            fileName, false));
         }
         updateNotification(notificationId, builder.build());
     }
@@ -197,8 +199,10 @@ public class DownloadNotificationService extends Service {
                 android.R.drawable.ic_media_pause, entry.fileName,
                 mContext.getResources().getString(R.string.download_notification_paused));
         PendingIntent cancelIntent = buildPendingIntent(ACTION_DOWNLOAD_CANCEL,
-                entry.notificationId, entry.downloadGuid, entry.fileName);
-        builder.setDeleteIntent(cancelIntent);
+                entry.notificationId, entry.downloadGuid, entry.fileName, false);
+        PendingIntent dismissIntent = buildPendingIntent(ACTION_DOWNLOAD_CANCEL,
+                entry.notificationId, entry.downloadGuid, entry.fileName, true);
+        builder.setDeleteIntent(dismissIntent);
         builder.addAction(R.drawable.bookmark_cancel_active,
                 mContext.getResources().getString(R.string.download_notification_cancel_button),
                 cancelIntent);
@@ -207,7 +211,7 @@ public class DownloadNotificationService extends Service {
                     mContext.getResources().getString(
                             R.string.download_notification_resume_button),
                     buildPendingIntent(ACTION_DOWNLOAD_RESUME, entry.notificationId,
-                            entry.downloadGuid, entry.fileName));
+                            entry.downloadGuid, entry.fileName, false));
         }
         updateNotification(entry.notificationId, builder.build());
         // If download is not auto resumable, there is no need to keep it in SharedPreferences.
@@ -269,8 +273,17 @@ public class DownloadNotificationService extends Service {
         }
     }
 
+    /**
+     * Helper method to build a PendingIntent from the provided information.
+     * @param action Download action to perform.
+     * @param notificationId ID of the notification.
+     * @param downloadGuid GUID of the download.
+     * @param fileName Name of the download file.
+     * @param isNotificationDismissed Whether the intent is from dismissing the notification.
+     */
     private PendingIntent buildPendingIntent(
-            String action, int notificationId, String downloadGuid, String fileName) {
+            String action, int notificationId, String downloadGuid, String fileName,
+            boolean isNotificationDismissed) {
         ComponentName component = new ComponentName(
                 mContext.getPackageName(), DownloadBroadcastReceiver.class.getName());
         Intent intent = new Intent(action);
@@ -278,6 +291,7 @@ public class DownloadNotificationService extends Service {
         intent.putExtra(EXTRA_DOWNLOAD_NOTIFICATION_ID, notificationId);
         intent.putExtra(EXTRA_DOWNLOAD_GUID, downloadGuid);
         intent.putExtra(EXTRA_DOWNLOAD_FILE_NAME, fileName);
+        intent.putExtra(EXTRA_NOTIFICATION_DISMISSED, isNotificationDismissed);
         return PendingIntent.getBroadcast(
                 mContext, notificationId, intent, PendingIntent.FLAG_UPDATE_CURRENT);
     }
@@ -337,6 +351,11 @@ public class DownloadNotificationService extends Service {
                 entry == null ? false : entry.canDownloadWhileMetered;
         BrowserParts parts = new EmptyBrowserParts() {
             @Override
+            public boolean shouldStartGpuProcess() {
+                return false;
+            }
+
+            @Override
             public void finishNativeInitialization() {
                 DownloadManagerService service =
                         DownloadManagerService.getDownloadManagerService(getApplicationContext());
@@ -346,7 +365,8 @@ public class DownloadNotificationService extends Service {
                         // SD card, and remove the download ID from the SharedPreferences so we
                         // don't need to restart the browser process. http://crbug.com/579643.
                         cancelNotification(notificationId, guid);
-                        service.cancelDownload(guid);
+                        service.cancelDownload(guid, IntentUtils.safeGetBooleanExtra(
+                                intent, EXTRA_NOTIFICATION_DISMISSED, false));
                         break;
                     case ACTION_DOWNLOAD_PAUSE:
                         service.pauseDownload(guid);

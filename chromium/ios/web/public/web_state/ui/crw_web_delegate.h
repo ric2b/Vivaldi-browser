@@ -65,18 +65,6 @@ typedef void (^SSLErrorCallback)(BOOL);
 // |URL| is launched in an external app.
 - (BOOL)openExternalURL:(const GURL&)URL linkClicked:(BOOL)linkClicked;
 
-// This method is called when a network request has an issue with the SSL
-// connection to present it to the user. The user will decide if the request
-// should continue or not and the callback should be invoked to let the backend
-// know.
-// The callback is safe to call until CRWWebController is closed.
-- (void)presentSSLError:(const net::SSLInfo&)info
-           forSSLStatus:(const web::SSLStatus&)status
-            recoverable:(BOOL)recoverable
-               callback:(SSLErrorCallback)shouldContinue;
-// Asked the delegate to present an error to the user because the
-// CRWWebController cannot verify the URL of the current page.
-- (void)presentSpoofingError;
 // This method is invoked whenever the system believes the URL is about to
 // change, or immediately after any unexpected change of the URL, prior to
 // updating the navigation manager's pending entry.
@@ -155,6 +143,16 @@ typedef void (^SSLErrorCallback)(BOOL);
 
 @optional
 
+// This method is called when a network request has an issue with the SSL
+// connection to present it to the user. The user will decide if the request
+// should continue or not and the callback should be invoked to let the backend
+// know.
+// The callback is safe to call until CRWWebController is closed.
+- (void)presentSSLError:(const net::SSLInfo&)info
+           forSSLStatus:(const web::SSLStatus&)status
+            recoverable:(BOOL)recoverable
+               callback:(SSLErrorCallback)shouldContinue;
+
 // Called to ask CRWWebDelegate if |CRWWebController| should open the given URL.
 // CRWWebDelegate can intercept the request by returning NO and processing URL
 // in own way.
@@ -219,10 +217,6 @@ typedef void (^SSLErrorCallback)(BOOL);
 // NagivationItem.
 - (void)webControllerDidUpdateSSLStatusForCurrentNavigationItem:
     (CRWWebController*)webController;
-
-// Called when CRWWebController did update page load progress.
-- (void)webController:(CRWWebController*)webController
-    didUpdateProgress:(CGFloat)progress;
 
 // Called when web view process has been terminated.
 - (void)webControllerWebProcessDidCrash:(CRWWebController*)webController;

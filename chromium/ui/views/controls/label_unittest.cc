@@ -22,8 +22,12 @@
 using base::ASCIIToUTF16;
 
 namespace views {
+namespace {
 
-typedef ViewsTestBase LabelTest;
+// All text sizing measurements (width and height) should be greater than this.
+const int kMinTextDimension = 4;
+
+using LabelTest = ViewsTestBase;
 
 class LabelFocusTest : public FocusManagerTest {
  public:
@@ -31,7 +35,7 @@ class LabelFocusTest : public FocusManagerTest {
   ~LabelFocusTest() override {}
 
  protected:
-  views::Label* label() { return label_; }
+  Label* label() { return label_; }
 
  private:
   // FocusManagerTest:
@@ -40,11 +44,31 @@ class LabelFocusTest : public FocusManagerTest {
     GetContentsView()->AddChildView(label_);
   }
 
-  views::Label* label_;
+  Label* label_;
 };
 
-// All text sizing measurements (width and height) should be greater than this.
-const int kMinTextDimension = 4;
+class TestLabel : public Label {
+ public:
+  TestLabel() : Label(ASCIIToUTF16("TestLabel")) { SizeToPreferredSize(); }
+
+  int schedule_paint_count() const { return schedule_paint_count_; }
+
+  void SimulatePaint() {
+    gfx::Canvas canvas(bounds().size(), 1.0, false /* is_opaque */);
+    Paint(ui::CanvasPainter(&canvas, 1.f).context());
+  }
+
+  // View:
+  void SchedulePaintInRect(const gfx::Rect& r) override {
+    ++schedule_paint_count_;
+    Label::SchedulePaintInRect(r);
+  }
+
+ private:
+  int schedule_paint_count_ = 0;
+
+  DISALLOW_COPY_AND_ASSIGN(TestLabel);
+};
 
 // A test utility function to set the application default text direction.
 void SetRTL(bool rtl) {
@@ -53,7 +77,22 @@ void SetRTL(bool rtl) {
   EXPECT_EQ(rtl, base::i18n::IsRTL());
 }
 
-TEST_F(LabelTest, FontPropertySymbol) {
+// Returns true if |current| is bigger than |last|. Sets |last| to |current|.
+bool Increased(int current, int* last) {
+  bool increased = current > *last;
+  *last = current;
+  return increased;
+}
+
+}  // namespace
+
+// Crashes on Linux only. http://crbug.com/612406
+#if defined(OS_LINUX)
+#define MAYBE_FontPropertySymbol DISABLED_FontPropertySymbol
+#else
+#define MAYBE_FontPropertySymbol FontPropertySymbol
+#endif
+TEST_F(LabelTest, MAYBE_FontPropertySymbol) {
   Label label;
   std::string font_name("symbol");
   gfx::Font font(font_name, 26);
@@ -376,7 +415,6 @@ TEST_F(LabelTest, PreferredSizeForAllowCharacterBreak) {
 
 TEST_F(LabelTest, MultiLineSizing) {
   Label label;
-  label.SetFocusable(false);
   label.SetText(
       ASCIIToUTF16("A random string\nwith multiple lines\nand returns!"));
   label.SetMultiLine(true);
@@ -461,7 +499,6 @@ TEST_F(LabelTest, MultiLineSizingWithElide) {
   const base::string16 text =
       ASCIIToUTF16("A random string\nwith multiple lines\nand returns!");
   Label label;
-  label.SetFocusable(false);
   label.SetText(text);
   label.SetMultiLine(true);
 
@@ -591,7 +628,8 @@ TEST_F(LabelTest, ResetRenderTextData) {
 
 #if !defined(OS_MACOSX)
 TEST_F(LabelTest, MultilineSupportedRenderText) {
-  scoped_ptr<gfx::RenderText> render_text(gfx::RenderText::CreateInstance());
+  std::unique_ptr<gfx::RenderText> render_text(
+      gfx::RenderText::CreateInstance());
   ASSERT_TRUE(render_text->MultilineSupported());
 
   Label label;
@@ -607,11 +645,41 @@ TEST_F(LabelTest, MultilineSupportedRenderText) {
 }
 #endif
 
+// Ensures SchedulePaint() calls are not made in OnPaint().
+TEST_F(LabelTest, NoSchedulePaintInOnPaint) {
+  TestLabel label;
+
+  // Initialization should schedule at least one paint, but the precise number
+  // doesn't really matter.
+  int count = label.schedule_paint_count();
+  EXPECT_LT(0, count);
+
+  // Painting should never schedule another paint.
+  label.SimulatePaint();
+  EXPECT_EQ(count, label.schedule_paint_count());
+
+  // Test a few things that should schedule paints. Multiple times is OK.
+  label.SetEnabled(false);
+  EXPECT_TRUE(Increased(label.schedule_paint_count(), &count));
+
+  label.SetText(label.text() + ASCIIToUTF16("Changed"));
+  EXPECT_TRUE(Increased(label.schedule_paint_count(), &count));
+
+  label.SizeToPreferredSize();
+  EXPECT_TRUE(Increased(label.schedule_paint_count(), &count));
+
+  label.SetEnabledColor(SK_ColorBLUE);
+  EXPECT_TRUE(Increased(label.schedule_paint_count(), &count));
+
+  label.SimulatePaint();
+  EXPECT_EQ(count, label.schedule_paint_count());  // Unchanged.
+}
+
 TEST_F(LabelFocusTest, FocusBounds) {
   label()->SetText(ASCIIToUTF16("Example"));
   gfx::Size normal_size = label()->GetPreferredSize();
 
-  label()->SetFocusable(true);
+  label()->SetFocusBehavior(View::FocusBehavior::ALWAYS);
   label()->RequestFocus();
   gfx::Size focusable_size = label()->GetPreferredSize();
   // Focusable label requires larger size to paint the focus rectangle.
@@ -648,7 +716,7 @@ TEST_F(LabelFocusTest, FocusBounds) {
 }
 
 TEST_F(LabelFocusTest, EmptyLabel) {
-  label()->SetFocusable(true);
+  label()->SetFocusBehavior(View::FocusBehavior::ALWAYS);
   label()->RequestFocus();
   label()->SizeToPreferredSize();
 

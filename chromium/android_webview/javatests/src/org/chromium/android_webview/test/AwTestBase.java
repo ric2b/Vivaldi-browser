@@ -4,13 +4,13 @@
 
 package org.chromium.android_webview.test;
 
+import static org.chromium.base.test.util.ScalableTimeout.scaleTimeout;
+
 import android.app.Instrumentation;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.os.Build;
 import android.util.Log;
-
-import static org.chromium.base.test.util.ScalableTimeout.scaleTimeout;
 
 import org.chromium.android_webview.AwBrowserContext;
 import org.chromium.android_webview.AwBrowserProcess;
@@ -31,7 +31,6 @@ import org.chromium.content.browser.test.util.CallbackHelper;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.TestCallbackHelperContainer.OnPageFinishedHelper;
-import org.chromium.content.common.ContentSwitches;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.net.test.util.TestWebServer;
 
@@ -64,8 +63,7 @@ import java.util.concurrent.TimeUnit;
                                 arguments = {
                                     @Parameter.Argument(
                                         name = CommandLineFlags.Parameter.ADD_ARG,
-                                        stringArray = {AwSwitches.WEBVIEW_SANDBOXED_RENDERER,
-                                                ContentSwitches.IPC_SYNC_COMPOSITING})
+                                        stringArray = {AwSwitches.WEBVIEW_SANDBOXED_RENDERER})
             })})})
 public class AwTestBase
         extends BaseActivityInstrumentationTestCase<AwTestRunnerActivity> {
@@ -82,8 +80,8 @@ public class AwTestBase
 
     @Override
     protected void setUp() throws Exception {
-        mBrowserContext = new AwBrowserContext(
-                new InMemorySharedPreferences(), getInstrumentation().getTargetContext());
+        Context appContext = getInstrumentation().getTargetContext().getApplicationContext();
+        mBrowserContext = new AwBrowserContext(new InMemorySharedPreferences(), appContext);
 
         super.setUp();
         if (needsBrowserProcessStarted()) {
@@ -92,17 +90,20 @@ public class AwTestBase
     }
 
     protected void startBrowserProcess() throws Exception {
-        final Context context = getActivity();
+        // The activity must be launched in order for proper webview statics to be setup.
+        getActivity();
         getInstrumentation().runOnMainSync(new Runnable() {
             @Override
             public void run() {
-                AwBrowserProcess.start(context);
+                AwBrowserProcess.start();
             }
         });
     }
 
-    /* Override this to return false if the test doesn't want the browser startup sequence to
+    /**
+     * Override this to return false if the test doesn't want the browser startup sequence to
      * be run automatically.
+     * @return Whether the instrumentation test requires the browser process to already be started.
      */
     protected boolean needsBrowserProcessStarted() {
         return true;
@@ -429,11 +430,10 @@ public class AwTestBase
 
         AwSettings awSettings = testDependencyFactory.createAwSettings(getActivity(),
                 supportsLegacyQuirks);
-        testContainerView.initialize(new AwContents(
-                mBrowserContext, testContainerView, testContainerView.getContext(),
-                testContainerView.getInternalAccessDelegate(),
-                testContainerView.getNativeGLDelegate(), awContentsClient,
-                awSettings, testDependencyFactory));
+        testContainerView.initialize(new AwContents(mBrowserContext, testContainerView,
+                testContainerView.getContext(), testContainerView.getInternalAccessDelegate(),
+                testContainerView.getNativeDrawGLFunctorFactory(), awContentsClient, awSettings,
+                testDependencyFactory));
         return testContainerView;
     }
 

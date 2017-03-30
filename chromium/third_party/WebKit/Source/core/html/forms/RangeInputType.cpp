@@ -81,8 +81,20 @@ InputType* RangeInputType::create(HTMLInputElement& element)
 
 RangeInputType::RangeInputType(HTMLInputElement& element)
     : InputType(element)
+    , InputTypeView(element)
     , m_tickMarkValuesDirty(true)
 {
+}
+
+DEFINE_TRACE(RangeInputType)
+{
+    InputTypeView::trace(visitor);
+    InputType::trace(visitor);
+}
+
+InputTypeView* RangeInputType::createView()
+{
+    return this;
 }
 
 void RangeInputType::countUsage()
@@ -267,10 +279,11 @@ String RangeInputType::serialize(const Decimal& value) const
     return serializeForNumberType(value);
 }
 
-// FIXME: Could share this with BaseClickableWithKeyInputType and BaseCheckableInputType if we had a common base class.
+// FIXME: Could share this with KeyboardClickableInputTypeView and
+// BaseCheckableInputType if we had a common base class.
 void RangeInputType::accessKeyAction(bool sendMouseEvents)
 {
-    InputType::accessKeyAction(sendMouseEvents);
+    InputTypeView::accessKeyAction(sendMouseEvents);
 
     element().dispatchSimulatedClick(0, sendMouseEvents ? SendMouseUpDownEvents : SendNoEvents);
 }
@@ -338,9 +351,11 @@ inline Element* RangeInputType::sliderTrackElement() const
 void RangeInputType::listAttributeTargetChanged()
 {
     m_tickMarkValuesDirty = true;
+    if (element().layoutObject())
+        element().layoutObject()->setShouldDoFullPaintInvalidationIncludingNonCompositingDescendants();
     Element* sliderTrackElement = this->sliderTrackElement();
     if (sliderTrackElement->layoutObject())
-        sliderTrackElement->layoutObject()->setNeedsLayoutAndFullPaintInvalidation(LayoutInvalidationReason::AttributeChanged);
+        sliderTrackElement->layoutObject()->setNeedsLayout(LayoutInvalidationReason::AttributeChanged);
 }
 
 static bool decimalCompare(const Decimal& a, const Decimal& b)

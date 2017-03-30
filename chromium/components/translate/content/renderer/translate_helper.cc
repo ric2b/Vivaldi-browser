@@ -13,7 +13,7 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/translate/content/common/translate_messages.h"
 #include "components/translate/content/renderer/renderer_cld_data_provider.h"
 #include "components/translate/content/renderer/renderer_cld_data_provider_factory.h"
@@ -70,12 +70,11 @@ bool g_cld_callback_set = false;
 
 // Obtain a new CLD data provider. Defined as a standalone method for ease of
 // use in constructor initialization list.
-scoped_ptr<translate::RendererCldDataProvider> CreateDataProvider(
+std::unique_ptr<translate::RendererCldDataProvider> CreateDataProvider(
     content::RenderFrameObserver* render_frame_observer) {
   translate::RendererCldUtils::ConfigureDefaultDataProvider();
-  return scoped_ptr<translate::RendererCldDataProvider>(
-      translate::RendererCldDataProviderFactory::Get()
-          ->CreateRendererCldDataProvider(render_frame_observer));
+  return translate::RendererCldDataProviderFactory::Get()
+      ->CreateRendererCldDataProvider(render_frame_observer);
 }
 
 // Returns whether the page associated with |document| is a candidate for
@@ -347,7 +346,7 @@ std::string TranslateHelper::ExecuteScriptAndGetStringResult(
 
   v8::Local<v8::String> v8_str = results[0].As<v8::String>();
   int length = v8_str->Utf8Length() + 1;
-  scoped_ptr<char[]> str(new char[length]);
+  std::unique_ptr<char[]> str(new char[length]);
   v8_str->WriteUtf8(str.get(), length);
   return std::string(str.get());
 }

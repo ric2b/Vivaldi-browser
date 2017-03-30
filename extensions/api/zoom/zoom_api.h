@@ -20,13 +20,13 @@ class ZoomEventRouter : public content::NotificationObserver {
   void DefaultZoomChanged();
   // This method dispatches events to the extension message service.
   void DispatchEvent(const std::string &event_name,
-    scoped_ptr<base::ListValue> event_args);
+    std::unique_ptr<base::ListValue> event_args);
   // content::NotificationObserver implementation.
   void Observe(int type,
    const content::NotificationSource& source,
    const content::NotificationDetails& details) override;
 
-  scoped_ptr<ChromeZoomLevelPrefs::DefaultZoomLevelSubscription>
+  std::unique_ptr<ChromeZoomLevelPrefs::DefaultZoomLevelSubscription>
     default_zoom_level_subscription_;
 
    Profile* profile_;
@@ -59,7 +59,7 @@ class ZoomAPI : public BrowserContextKeyedAPI ,
   }
 
   // Created lazily upon OnListenerAdded.
-  scoped_ptr<ZoomEventRouter> zoom_event_router_;
+  std::unique_ptr<ZoomEventRouter> zoom_event_router_;
 };
 
 

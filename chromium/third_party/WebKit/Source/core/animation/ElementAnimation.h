@@ -31,7 +31,7 @@
 #ifndef ElementAnimation_h
 #define ElementAnimation_h
 
-#include "bindings/core/v8/UnionTypesCore.h"
+#include "bindings/core/v8/EffectModelOrDictionarySequenceOrDictionary.h"
 #include "core/animation/AnimationTimeline.h"
 #include "core/animation/EffectInput.h"
 #include "core/animation/ElementAnimations.h"
@@ -54,17 +54,26 @@ public:
     {
         EffectModel* effect = EffectInput::convert(&element, effectInput, executionContext, exceptionState);
         if (exceptionState.hadException())
-            return 0;
-        return animateInternal(element, effect, TimingInput::convert(duration));
+            return nullptr;
+
+        Timing timing;
+        if (!TimingInput::convert(duration, timing, exceptionState))
+            return nullptr;
+
+        return animateInternal(element, effect, timing);
     }
 
     static Animation* animate(ExecutionContext* executionContext, Element& element, const EffectModelOrDictionarySequenceOrDictionary& effectInput, const KeyframeEffectOptions& options, ExceptionState& exceptionState)
     {
         EffectModel* effect = EffectInput::convert(&element, effectInput, executionContext, exceptionState);
         if (exceptionState.hadException())
-            return 0;
+            return nullptr;
 
-        Animation* animation = animateInternal(element, effect, TimingInput::convert(options, &element.document()));
+        Timing timing;
+        if (!TimingInput::convert(options, timing, &element.document(), exceptionState))
+            return nullptr;
+
+        Animation* animation = animateInternal(element, effect, timing);
         animation->setId(options.id());
         return animation;
     }
@@ -73,7 +82,7 @@ public:
     {
         EffectModel* effect = EffectInput::convert(&element, effectInput, executionContext, exceptionState);
         if (exceptionState.hadException())
-            return 0;
+            return nullptr;
         return animateInternal(element, effect, Timing());
     }
 

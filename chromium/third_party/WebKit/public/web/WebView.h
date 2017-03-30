@@ -33,11 +33,11 @@
 
 #include "../platform/WebColor.h"
 #include "../platform/WebDisplayMode.h"
+#include "../platform/WebDragOperation.h"
 #include "../platform/WebFocusType.h"
 #include "../platform/WebPageVisibilityState.h"
 #include "../platform/WebString.h"
 #include "../platform/WebVector.h"
-#include "WebDragOperation.h"
 #include "WebHistoryCommitType.h"
 #include "WebHistoryItem.h"
 #include "WebWidget.h"
@@ -69,7 +69,7 @@ struct WebPluginAction;
 struct WebPoint;
 struct WebWindowFeatures;
 
-class WebView : public WebWidget {
+class WebView : protected WebWidget {
 public:
     BLINK_EXPORT static const double textSizeMultiplierRatio;
     BLINK_EXPORT static const double minTextSizeMultiplier;
@@ -80,6 +80,47 @@ public:
         InjectStyleInTopFrameOnly
     };
 
+    // WebWidget overrides.
+    using WebWidget::close;
+    using WebWidget::size;
+    using WebWidget::resize;
+    using WebWidget::resizeVisualViewport;
+    using WebWidget::didEnterFullScreen;
+    using WebWidget::didExitFullScreen;
+    using WebWidget::beginFrame;
+    using WebWidget::updateAllLifecyclePhases;
+    using WebWidget::paint;
+    using WebWidget::paintIgnoringCompositing;
+    using WebWidget::layoutAndPaintAsync;
+    using WebWidget::compositeAndReadbackAsync;
+    using WebWidget::themeChanged;
+    using WebWidget::handleInputEvent;
+    using WebWidget::setCursorVisibilityState;
+    using WebWidget::hasTouchEventHandlersAt;
+    using WebWidget::applyViewportDeltas;
+    using WebWidget::mouseCaptureLost;
+    using WebWidget::setFocus;
+    using WebWidget::setComposition;
+    using WebWidget::confirmComposition;
+    using WebWidget::compositionRange;
+    using WebWidget::textInputInfo;
+    using WebWidget::textInputType;
+    using WebWidget::selectionBounds;
+    using WebWidget::selectionTextDirection;
+    using WebWidget::isSelectionAnchorFirst;
+    using WebWidget::caretOrSelectionRange;
+    using WebWidget::setTextDirection;
+    using WebWidget::isAcceleratedCompositingActive;
+    using WebWidget::isWebView;
+    using WebWidget::isPagePopup;
+    using WebWidget::willCloseLayerTreeView;
+    using WebWidget::didAcquirePointerLock;
+    using WebWidget::didNotAcquirePointerLock;
+    using WebWidget::didLosePointerLock;
+    using WebWidget::didChangeWindowResizerRect;
+    using WebWidget::backgroundColor;
+    using WebWidget::pagePopup;
+    using WebWidget::updateTopControlsState;
 
     // Initialization ------------------------------------------------------
 
@@ -209,6 +250,8 @@ public:
     virtual void zoomLimitsChanged(double minimumZoomLevel,
                                    double maximumZoomLevel) = 0;
 
+    virtual void vivaldiSetPinchZoom(float scale, int x, int y) {};
+
     // Helper functions to convert between zoom level and zoom factor.  zoom
     // factor is zoom percent / 100, so 300% = 3.0.
     BLINK_EXPORT static double zoomLevelToZoomFactor(double zoomLevel);
@@ -293,6 +336,14 @@ public:
     // Set and reset the device color profile.
     virtual void setDeviceColorProfile(const WebVector<char>&) = 0;
     virtual void resetDeviceColorProfileForTesting() = 0;
+
+    // Resize the view at the same time as changing the state of the top
+    // controls. If |topControlsShrinkLayout| is true, the embedder shrunk the
+    // WebView size by the top controls height.
+    virtual void resizeWithTopControls(
+        const WebSize&,
+        float topControlsHeight,
+        bool topControlsShrinkLayout) = 0;
 
     // Auto-Resize -----------------------------------------------------------
 
@@ -490,6 +541,10 @@ public:
     // Force the drawing buffer used by webgl contexts to fail so that the webgl
     // context's ability to deal with that failure gracefully can be tested.
     virtual void forceNextDrawingBufferCreationToFail() = 0;
+
+    // TODO(lfg): Remove this once the refactor of WebView/WebWidget is
+    // completed.
+    WebWidget* widget() { return this; }
 
 protected:
     ~WebView() {}

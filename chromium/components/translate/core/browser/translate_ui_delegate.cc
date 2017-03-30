@@ -6,6 +6,7 @@
 
 #include "base/i18n/string_compare.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/string_number_conversions.h"
 #include "components/translate/core/browser/language_state.h"
 #include "components/translate/core/browser/translate_client.h"
 #include "components/translate/core/browser/translate_download_manager.h"
@@ -13,6 +14,7 @@
 #include "components/translate/core/browser/translate_manager.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "components/translate/core/common/translate_constants.h"
+#include "components/variations/variations_associated_data.h"
 #include "third_party/icu/source/i18n/unicode/coll.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -33,10 +35,11 @@ const char kShowErrorUI[] = "Translate.ShowErrorUI";
 // null if unable to find the right collator.
 //
 // TODO(hajimehoshi): Write a test for icu::Collator::createInstance.
-scoped_ptr<icu::Collator> CreateCollator(const std::string& locale) {
+std::unique_ptr<icu::Collator> CreateCollator(const std::string& locale) {
   UErrorCode error = U_ZERO_ERROR;
   icu::Locale loc(locale.c_str());
-  scoped_ptr<icu::Collator> collator(icu::Collator::createInstance(loc, error));
+  std::unique_ptr<icu::Collator> collator(
+      icu::Collator::createInstance(loc, error));
   if (!collator || !U_SUCCESS(error))
     return nullptr;
   collator->setStrength(icu::Collator::PRIMARY);
@@ -66,12 +69,11 @@ TranslateUIDelegate::TranslateUIDelegate(
   // Preparing for the alphabetical order in the locale.
   std::string locale =
       TranslateDownloadManager::GetInstance()->application_locale();
-  scoped_ptr<icu::Collator> collator = CreateCollator(locale);
+  std::unique_ptr<icu::Collator> collator = CreateCollator(locale);
 
   languages_.reserve(language_codes.size());
   for (std::vector<std::string>::const_iterator iter = language_codes.begin();
-       iter != language_codes.end();
-       ++iter) {
+       iter != language_codes.end(); ++iter) {
     std::string language_code = *iter;
 
     base::string16 language_name =
@@ -80,9 +82,8 @@ TranslateUIDelegate::TranslateUIDelegate(
     std::vector<LanguageNamePair>::iterator iter2;
     if (collator) {
       for (iter2 = languages_.begin(); iter2 != languages_.end(); ++iter2) {
-        int result = base::i18n::CompareString16WithCollator(*collator,
-                                                             language_name,
-                                                             iter2->second);
+        int result = base::i18n::CompareString16WithCollator(
+            *collator, language_name, iter2->second);
         if (result == UCOL_LESS)
           break;
       }
@@ -97,8 +98,7 @@ TranslateUIDelegate::TranslateUIDelegate(
     languages_.insert(iter2, LanguageNamePair(language_code, language_name));
   }
   for (std::vector<LanguageNamePair>::const_iterator iter = languages_.begin();
-       iter != languages_.end();
-       ++iter) {
+       iter != languages_.end(); ++iter) {
     std::string language_code = iter->first;
     if (language_code == original_language) {
       original_language_index_ = iter - languages_.begin();
@@ -120,8 +120,8 @@ void TranslateUIDelegate::OnErrorShown(TranslateErrors::Type error_type) {
   if (error_type == TranslateErrors::NONE)
     return;
 
-  UMA_HISTOGRAM_ENUMERATION(
-      kShowErrorUI, error_type, TranslateErrors::TRANSLATE_ERROR_MAX);
+  UMA_HISTOGRAM_ENUMERATION(kShowErrorUI, error_type,
+                            TranslateErrors::TRANSLATE_ERROR_MAX);
 }
 
 const LanguageState& TranslateUIDelegate::GetLanguageState() {
@@ -190,9 +190,9 @@ base::string16 TranslateUIDelegate::GetLanguageNameAt(size_t index) const {
 }
 
 std::string TranslateUIDelegate::GetOriginalLanguageCode() const {
-  return (GetOriginalLanguageIndex() == kNoIndex) ?
-      translate::kUnknownLanguageCode :
-      GetLanguageCodeAt(GetOriginalLanguageIndex());
+  return (GetOriginalLanguageIndex() == kNoIndex)
+             ? translate::kUnknownLanguageCode
+             : GetLanguageCodeAt(GetOriginalLanguageIndex());
 }
 
 std::string TranslateUIDelegate::GetTargetLanguageCode() const {
@@ -204,12 +204,13 @@ std::string TranslateUIDelegate::GetTargetLanguageCode() const {
 void TranslateUIDelegate::Translate() {
   if (!translate_driver_->IsOffTheRecord()) {
     prefs_->ResetTranslationDeniedCount(GetOriginalLanguageCode());
+    prefs_->ResetTranslationIgnoredCount(GetOriginalLanguageCode());
     prefs_->IncrementTranslationAcceptedCount(GetOriginalLanguageCode());
   }
 
   if (translate_manager_) {
-    translate_manager_->TranslatePage(
-        GetOriginalLanguageCode(), GetTargetLanguageCode(), false);
+    translate_manager_->TranslatePage(GetOriginalLanguageCode(),
+                                      GetTargetLanguageCode(), false);
     UMA_HISTOGRAM_BOOLEAN(kPerformTranslate, true);
   }
 }
@@ -222,11 +223,15 @@ void TranslateUIDelegate::RevertTranslation() {
 }
 
 void TranslateUIDelegate::TranslationDeclined(bool explicitly_closed) {
-  if (explicitly_closed && !translate_driver_->IsOffTheRecord()) {
+  if (!translate_driver_->IsOffTheRecord()) {
     const std::string& language = GetOriginalLanguageCode();
-    prefs_->ResetTranslationAcceptedCount(language);
-    prefs_->IncrementTranslationDeniedCount(language);
-    prefs_->UpdateLastDeniedTime(language);
+    if (explicitly_closed) {
+      prefs_->ResetTranslationAcceptedCount(language);
+      prefs_->IncrementTranslationDeniedCount(language);
+      prefs_->UpdateLastDeniedTime(language);
+    } else {
+      prefs_->IncrementTranslationIgnoredCount(language);
+    }
   }
 
   // Remember that the user declined the translation so as to prevent showing a
@@ -251,14 +256,19 @@ bool TranslateUIDelegate::IsLanguageBlocked() {
 void TranslateUIDelegate::SetLanguageBlocked(bool value) {
   if (value) {
     prefs_->BlockLanguage(GetOriginalLanguageCode());
-    if (translate_manager_) {
+    // In the new UI, we will keep showing the translate omnibar icon
+    // even if the language is blocked so in case the user just wants to
+    // translate that page the user can invoke the translate bubble from
+    // the omnibar icon.
+    if (!base::FeatureList::IsEnabled(kTranslateUI2016Q2) &&
+        translate_manager_) {
       translate_manager_->GetLanguageState().SetTranslateEnabled(false);
     }
   } else {
     prefs_->UnblockLanguage(GetOriginalLanguageCode());
   }
 
-  UMA_HISTOGRAM_BOOLEAN(kNeverTranslateLang, true);
+  UMA_HISTOGRAM_BOOLEAN(kNeverTranslateLang, value);
 }
 
 bool TranslateUIDelegate::IsSiteBlacklisted() {
@@ -273,19 +283,48 @@ void TranslateUIDelegate::SetSiteBlacklist(bool value) {
 
   if (value) {
     prefs_->BlacklistSite(host);
-    if (translate_manager_) {
+    // In the new UI, we will keep showing the translate omnibar icon
+    // even if the site is blocked so in case the user just wants to
+    // translate that page the user can invoke the translate bubble from
+    // the omnibar icon.
+    if (!base::FeatureList::IsEnabled(kTranslateUI2016Q2) &&
+        translate_manager_) {
       translate_manager_->GetLanguageState().SetTranslateEnabled(false);
     }
   } else {
     prefs_->RemoveSiteFromBlacklist(host);
   }
 
-  UMA_HISTOGRAM_BOOLEAN(kNeverTranslateSite, true);
+  UMA_HISTOGRAM_BOOLEAN(kNeverTranslateSite, value);
 }
 
 bool TranslateUIDelegate::ShouldAlwaysTranslate() {
   return prefs_->IsLanguagePairWhitelisted(GetOriginalLanguageCode(),
                                            GetTargetLanguageCode());
+}
+
+bool TranslateUIDelegate::ShouldAlwaysTranslateBeCheckedByDefault() {
+  if (ShouldAlwaysTranslate())
+    return true;
+
+  std::map<std::string, std::string> params;
+  if (!variations::GetVariationParams(translate::kTranslateUI2016Q2TrialName,
+                                      &params))
+    return false;
+  int threshold = 0;
+  base::StringToInt(params[translate::kAlwaysTranslateOfferThreshold],
+                    &threshold);
+  if (threshold <= 0)
+    return false;
+
+  // After N clicks on Translate for the same language.
+  // We check for == N instead of >= N because if the user translates with the
+  // "Always do this?" on, then the next time the bubble won't show up.
+  // The only chance the bubble will show up is after the user manually unchecks
+  // "Always do this?". In that case, since it is after user explictly unchecks,
+  // we should show as it as unchecked so we only check == N instead of >= N.
+  return prefs_->GetTranslationAcceptedCount(GetOriginalLanguageCode()) ==
+         threshold;
 }
 
 void TranslateUIDelegate::SetAlwaysTranslate(bool value) {
@@ -296,7 +335,7 @@ void TranslateUIDelegate::SetAlwaysTranslate(bool value) {
   else
     prefs_->RemoveLanguagePairFromWhitelist(original_lang, target_lang);
 
-  UMA_HISTOGRAM_BOOLEAN(kAlwaysTranslateLang, true);
+  UMA_HISTOGRAM_BOOLEAN(kAlwaysTranslateLang, value);
 }
 
 std::string TranslateUIDelegate::GetPageHost() {

@@ -80,9 +80,9 @@ class ChromeUnitTestSuiteInitializer : public testing::EmptyTestEventListener {
 
  private:
   // Client implementations for the content module.
-  scoped_ptr<ChromeContentClient> content_client_;
-  scoped_ptr<ChromeContentBrowserClient> browser_content_client_;
-  scoped_ptr<ChromeContentUtilityClient> utility_content_client_;
+  std::unique_ptr<ChromeContentClient> content_client_;
+  std::unique_ptr<ChromeContentBrowserClient> browser_content_client_;
+  std::unique_ptr<ChromeContentUtilityClient> utility_content_client_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeUnitTestSuiteInitializer);
 };
@@ -132,7 +132,8 @@ void ChromeUnitTestSuite::InitializeProviders() {
       new translate::BrowserCldDataProviderFactory());
   translate::CldDataSource::SetDefault(
       translate::CldDataSource::GetStaticDataSource());
-  component_updater::RegisterPathProvider(chrome::DIR_USER_DATA);
+  component_updater::RegisterPathProvider(chrome::DIR_COMPONENTS,
+                                          chrome::DIR_USER_DATA);
 
 #if defined(OS_CHROMEOS)
   chromeos::RegisterPathProvider();
@@ -160,13 +161,7 @@ void ChromeUnitTestSuite::InitializeResourceBundle() {
   ui::ResourceBundle::InitSharedInstanceWithLocale(
       "en-US", NULL, ui::ResourceBundle::LOAD_COMMON_RESOURCES);
   base::FilePath resources_pack_path;
-#if defined(OS_MACOSX)
-  PathService::Get(base::DIR_MODULE, &resources_pack_path);
-  resources_pack_path =
-      resources_pack_path.Append(FILE_PATH_LITERAL("resources.pak"));
-#else
   PathService::Get(chrome::FILE_RESOURCES_PACK, &resources_pack_path);
-#endif
   ResourceBundle::GetSharedInstance().AddDataPackFromPath(
       resources_pack_path, ui::SCALE_FACTOR_NONE);
 }

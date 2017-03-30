@@ -11,6 +11,7 @@
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/tray/tray_item_view.h"
+#include "ash/wm/common/shelf/wm_shelf_util.h"
 
 #if defined(OS_CHROMEOS)
 #include "ash/system/chromeos/system_clock_observer.h"
@@ -54,7 +55,7 @@ views::View* TrayDate::CreateDefaultViewForTesting(user::LoginStatus status) {
 views::View* TrayDate::CreateTrayView(user::LoginStatus status) {
   CHECK(time_tray_ == NULL);
   ClockLayout clock_layout =
-      system_tray()->shelf_alignment() == SHELF_ALIGNMENT_BOTTOM
+      system_tray()->shelf_alignment() == wm::SHELF_ALIGNMENT_BOTTOM
           ? HORIZONTAL_CLOCK
           : VERTICAL_CLOCK;
   time_tray_ = new tray::TimeView(clock_layout);
@@ -93,10 +94,11 @@ void TrayDate::DestroyDetailedView() {
 void TrayDate::UpdateAfterLoginStatusChange(user::LoginStatus status) {
 }
 
-void TrayDate::UpdateAfterShelfAlignmentChange(ShelfAlignment alignment) {
+void TrayDate::UpdateAfterShelfAlignmentChange(wm::ShelfAlignment alignment) {
   if (time_tray_) {
-    ClockLayout clock_layout =
-        IsHorizontalAlignment(alignment) ? HORIZONTAL_CLOCK : VERTICAL_CLOCK;
+    ClockLayout clock_layout = wm::IsHorizontalAlignment(alignment)
+                                   ? HORIZONTAL_CLOCK
+                                   : VERTICAL_CLOCK;
     time_tray_->UpdateClockLayout(clock_layout);
   }
 }

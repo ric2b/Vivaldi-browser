@@ -7,6 +7,7 @@
 #include <drm_fourcc.h>
 
 #include "base/logging.h"
+#include "third_party/skia/include/core/SkSurface.h"
 #include "ui/ozone/platform/drm/gpu/drm_device.h"
 
 namespace ui {
@@ -103,6 +104,10 @@ uint32_t DrmBuffer::GetHandle() const {
 
 gfx::Size DrmBuffer::GetSize() const {
   return gfx::Size(surface_->width(), surface_->height());
+}
+
+const DrmDevice* DrmBuffer::GetDrmDevice() const {
+  return drm_.get();
 }
 
 bool DrmBuffer::RequiresGlFinish() const {

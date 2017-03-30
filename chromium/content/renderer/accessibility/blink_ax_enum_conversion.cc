@@ -324,7 +324,7 @@ ui::AXRole AXRoleFromBlink(blink::WebAXRole role) {
     case blink::WebAXRoleUserInterfaceTooltip:
       return ui::AX_ROLE_TOOLTIP;
     case blink::WebAXRoleWebArea:
-      return ui::AX_ROLE_WEB_AREA;
+      return ui::AX_ROLE_ROOT_WEB_AREA;
     case blink::WebAXRoleLineBreak:
       return ui::AX_ROLE_LINE_BREAK;
     case blink::WebAXRoleWindow:
@@ -358,6 +358,8 @@ ui::AXEvent AXEventFromBlink(blink::WebAXEvent event) {
       return ui::AX_EVENT_CLICKED;
     case blink::WebAXEventDocumentSelectionChanged:
       return ui::AX_EVENT_DOCUMENT_SELECTION_CHANGED;
+    case blink::WebAXEventExpandedChanged:
+      return ui::AX_EVENT_EXPANDED_CHANGED;
     case blink::WebAXEventFocus:
       return ui::AX_EVENT_FOCUS;
     case blink::WebAXEventHover:
@@ -434,6 +436,31 @@ ui::AXTextStyle AXTextStyleFromBlink(blink::WebAXTextStyle text_style) {
   return static_cast<ui::AXTextStyle>(browser_text_style);
 }
 
+ui::AXAriaCurrentState AXAriaCurrentStateFromBlink(
+    blink::WebAXAriaCurrentState aria_current_state) {
+  switch (aria_current_state) {
+    case blink::WebAXAriaCurrentStateUndefined:
+      return ui::AX_ARIA_CURRENT_STATE_NONE;
+    case blink::WebAXAriaCurrentStateFalse:
+      return ui::AX_ARIA_CURRENT_STATE_FALSE;
+    case blink::WebAXAriaCurrentStateTrue:
+      return ui::AX_ARIA_CURRENT_STATE_TRUE;
+    case blink::WebAXAriaCurrentStatePage:
+      return ui::AX_ARIA_CURRENT_STATE_PAGE;
+    case blink::WebAXAriaCurrentStateStep:
+      return ui::AX_ARIA_CURRENT_STATE_STEP;
+    case blink::WebAXAriaCurrentStateLocation:
+      return ui::AX_ARIA_CURRENT_STATE_LOCATION;
+    case blink::WebAXAriaCurrentStateDate:
+      return ui::AX_ARIA_CURRENT_STATE_DATE;
+    case blink::WebAXAriaCurrentStateTime:
+      return ui::AX_ARIA_CURRENT_STATE_TIME;
+  }
+
+  NOTREACHED();
+  return ui::AX_ARIA_CURRENT_STATE_NONE;
+}
+
 ui::AXInvalidState AXInvalidStateFromBlink(
     blink::WebAXInvalidState invalid_state) {
   switch (invalid_state) {
@@ -449,10 +476,9 @@ ui::AXInvalidState AXInvalidStateFromBlink(
       return ui::AX_INVALID_STATE_GRAMMAR;
     case blink::WebAXInvalidStateOther:
       return ui::AX_INVALID_STATE_OTHER;
-    default:
-      NOTREACHED();
   }
 
+  NOTREACHED();
   return ui::AX_INVALID_STATE_NONE;
 }
 

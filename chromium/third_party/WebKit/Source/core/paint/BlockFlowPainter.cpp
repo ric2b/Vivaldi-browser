@@ -6,13 +6,30 @@
 
 #include "core/layout/FloatingObjects.h"
 #include "core/layout/LayoutBlockFlow.h"
-#include "core/paint/ClipScope.h"
-#include "core/paint/LayoutObjectDrawingRecorder.h"
+#include "core/paint/BlockPainter.h"
+#include "core/paint/LineBoxListPainter.h"
 #include "core/paint/ObjectPainter.h"
 #include "core/paint/PaintInfo.h"
-#include "core/paint/PaintLayer.h"
 
 namespace blink {
+
+void BlockFlowPainter::paintContents(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
+{
+    // Avoid painting descendants of the root element when stylesheets haven't loaded. This eliminates FOUC.
+    // It's ok not to draw, because later on, when all the stylesheets do load, styleResolverMayHaveChanged()
+    // on Document will trigger a full paint invalidation.
+    if (m_layoutBlockFlow.document().didLayoutWithPendingStylesheets() && !m_layoutBlockFlow.isLayoutView())
+        return;
+
+    if (!m_layoutBlockFlow.childrenInline()) {
+        BlockPainter(m_layoutBlockFlow).paintContents(paintInfo, paintOffset);
+        return;
+    }
+    if (shouldPaintDescendantOutlines(paintInfo.phase))
+        ObjectPainter(m_layoutBlockFlow).paintInlineChildrenOutlines(paintInfo, paintOffset);
+    else
+        LineBoxListPainter(m_layoutBlockFlow.lineBoxes()).paint(m_layoutBlockFlow, paintInfo, paintOffset);
+}
 
 void BlockFlowPainter::paintFloats(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
@@ -29,9 +46,6 @@ void BlockFlowPainter::paintFloats(const PaintInfo& paintInfo, const LayoutPoint
             continue;
 
         const LayoutBox* floatingLayoutObject = floatingObject->layoutObject();
-        if (floatingLayoutObject->hasSelfPaintingLayer())
-            continue;
-
         // FIXME: LayoutPoint version of xPositionForFloatIncludingMargin would make this much cleaner.
         LayoutPoint childPoint = m_layoutBlockFlow.flipFloatForWritingModeForChild(
             *floatingObject, LayoutPoint(paintOffset.x()

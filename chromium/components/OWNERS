@@ -24,7 +24,11 @@ per-file browsing_data.gypi=file://components/browsing_data/OWNERS
 
 per-file bubble.gypi=file://components/bubble/OWNERS
 
+per-file cast_certificate.gypi=file://components/cast_certificate/OWNERS
+
 per-file cdm.gypi=file://components/cdm/OWNERS
+
+per-file certificate_transparency.gypi=file://components/certificate_transparency/OWNERS
 
 per-file chrome_apps.gypi=file://components/chrome_apps/OWNERS
 
@@ -54,6 +58,8 @@ per-file devtools_discovery.gypi=file://components/devtools_discovery/OWNERS
 
 per-file devtools_http_handler.gypi=file://components/devtools_http_handler/OWNERS
 
+per-file display_compositor.gypi=file://components/display_compositor/OWNERS
+
 per-file dom_distiller.gypi=file://components/dom_distiller/OWNERS
 per-file dom_distiller_strings.grdp=file://components/dom_distiller/OWNERS
 
@@ -82,6 +88,8 @@ per-file guest_view.gypi=file://components/guest_view/OWNERS
 per-file handoff.gypi=file://components/handoff/OWNERS
 
 per-file history.gypi=file://components/history/OWNERS
+
+per-file image_fetcher.gypi=file://components/image_fetcher/OWNERS
 
 per-file infobars.gypi=file://components/infobars/OWNERS
 
@@ -113,6 +121,8 @@ per-file network_time.gypi=file://components/network_time/OWNERS
 
 per-file ntp_snippets.gypi=file://components/ntp_snippets/OWNERS
 
+per-file ntp_tiles.gypi=file://components/ntp_tiles/OWNERS
+
 per-file offline_pages.gypi=file://components/offline_pages/OWNERS
 
 per-file omnibox.gypi=file://components/omnibox/OWNERS
@@ -120,6 +130,8 @@ per-file omnibox.gypi=file://components/omnibox/OWNERS
 per-file onc.gypi=file://components/onc/OWNERS
 
 per-file open_from_clipboard.gypi=file://components/open_from_clipboard/OWNERS
+
+per-file os_crypt.gypi=file://components/os_crypt/OWNERS
 
 per-file ownership.gypi=file://components/ownership/OWNERS
 

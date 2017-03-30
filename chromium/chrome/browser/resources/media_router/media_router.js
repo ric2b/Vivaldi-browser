@@ -20,7 +20,9 @@ cr.define('media_router', function() {
    * router content, such as the media sink and media route lists.
    */
   function initialize() {
-    media_router.browserApi.requestInitialData();
+    // For non-Mac platforms, request data immediately after initialization.
+    if (!cr.isMac)
+      onRequestInitialData();
 
     container = /** @type {!MediaRouterContainerElement} */
         ($('media-router-container'));
@@ -34,9 +36,10 @@ cr.define('media_router', function() {
     container.addEventListener('back-click', onNavigateToSinkList);
     container.addEventListener('cast-mode-selected', onCastModeSelected);
     container.addEventListener('close-dialog', onCloseDialog);
-    container.addEventListener('close-route-click', onCloseRouteClick);
+    container.addEventListener('close-route', onCloseRoute);
     container.addEventListener('create-route', onCreateRoute);
     container.addEventListener('issue-action-click', onIssueActionClick);
+    container.addEventListener('join-route-click', onJoinRouteClick);
     container.addEventListener('navigate-sink-list-to-details',
                                onNavigateToDetails);
     container.addEventListener('navigate-to-cast-mode-list',
@@ -51,12 +54,32 @@ cr.define('media_router', function() {
     container.addEventListener('report-sink-count', onSinkCountReported);
     container.addEventListener('report-resolved-route',
                                onReportRouteCreationOutcome);
+    container.addEventListener('request-initial-data',
+                               onRequestInitialData);
+    container.addEventListener('search-sinks-and-create-route',
+                               onSearchSinksAndCreateRoute);
     container.addEventListener('show-initial-state', onShowInitialState);
     container.addEventListener('sink-click', onSinkClick);
-    container.addEventListener('start-casting-to-route-click',
-                               onStartCastingToRouteClick);
 
     window.addEventListener('blur', onWindowBlur);
+  }
+
+  /**
+   * Requests that the Media Router searches for a sink with criteria
+   * |event.detail.name|.
+   * @param {!Event} event
+   * Parameters in |event|.detail:
+   *   id - id of the pseudo sink generating the request.
+   *   name - sink search criteria.
+   *   domain - user's current domain.
+   *   selectedCastMode - type of cast mode selected by the user.
+   */
+  function onSearchSinksAndCreateRoute(event) {
+    /** @type {{id: string, domain: string, name: string,
+     *          selectedCastMode: number}} */
+    var detail = event.detail;
+    media_router.browserApi.searchSinksAndCreateRoute(
+        detail.id, detail.name, detail.domain, detail.selectedCastMode);
   }
 
   /**
@@ -190,7 +213,7 @@ cr.define('media_router', function() {
    * Parameters in |event|.detail:
    *   route - The route to close.
    */
-  function onCloseRouteClick(event) {
+  function onCloseRoute(event) {
     /** @type {{route: !media_router.Route}} */
     var detail = event.detail;
     media_router.browserApi.closeRoute(detail.route);
@@ -198,13 +221,14 @@ cr.define('media_router', function() {
 
   /**
    * Starts casting to an existing route.
-   * Called when the user requests to start casting to a media route.
+   * Called when the user requests to start casting to a media route that is
+   * joinable.
    *
    * @param {!Event} event
    * Parameters in |event|.detail:
    *   route - The route to connect to if possible.
    */
-  function onStartCastingToRouteClick(event) {
+  function onJoinRouteClick(event) {
     /** @type {{route: !media_router.Route}} */
     var detail = event.detail;
     media_router.browserApi.joinRoute(detail.route);
@@ -267,6 +291,13 @@ cr.define('media_router', function() {
     /** @type {{outcome: number}} */
     var detail = event.detail;
     media_router.browserApi.reportRouteCreationOutcome(detail.outcome);
+  }
+
+  /**
+   * Requests for initial data to load into the dialog.
+   */
+  function onRequestInitialData() {
+    media_router.browserApi.requestInitialData();
   }
 
   /**

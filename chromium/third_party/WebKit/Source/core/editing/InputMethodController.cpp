@@ -57,7 +57,7 @@ InputMethodController::SelectionOffsetsScope::~SelectionOffsetsScope()
 
 // ----------------------------
 
-RawPtr<InputMethodController> InputMethodController::create(LocalFrame& frame)
+InputMethodController* InputMethodController::create(LocalFrame& frame)
 {
     return new InputMethodController(frame);
 }
@@ -66,10 +66,6 @@ InputMethodController::InputMethodController(LocalFrame& frame)
     : m_frame(&frame)
     , m_isDirty(false)
     , m_hasComposition(false)
-{
-}
-
-InputMethodController::~InputMethodController()
 {
 }
 
@@ -131,7 +127,7 @@ static void dispatchCompositionEndEvent(LocalFrame& frame, const String& text)
     if (!target)
         return;
 
-    RawPtr<CompositionEvent> event =
+    CompositionEvent* event =
         CompositionEvent::create(EventTypeNames::compositionend, frame.domWindow(), text);
     target->dispatchEvent(event);
 }
@@ -172,6 +168,11 @@ bool InputMethodController::confirmComposition(const String& text, ConfirmCompos
 
     clear();
 
+    // TODO(chongz): DOM update should happen before 'compositionend' and along with 'compositionupdate'.
+    // https://crbug.com/575294
+    if (dispatchBeforeInputInsertText(frame().document()->focusedElement(), text) != DispatchEventResult::NotCanceled)
+        return false;
+
     insertTextForConfirmedComposition(text);
 
     return true;
@@ -182,6 +183,10 @@ bool InputMethodController::confirmCompositionOrInsertText(const String& text, C
     if (!hasComposition()) {
         if (!text.length())
             return false;
+
+        if (dispatchBeforeInputInsertText(frame().document()->focusedElement(), text) != DispatchEventResult::NotCanceled)
+            return false;
+
         editor().insertText(text, 0);
         return true;
     }
@@ -234,14 +239,14 @@ void InputMethodController::cancelCompositionIfSelectionIsInvalid()
     frame().chromeClient().didCancelCompositionOnSelectionChange();
 }
 
-void InputMethodController::setComposition(const String& text, const Vector<CompositionUnderline>& underlines, unsigned selectionStart, unsigned selectionEnd)
+void InputMethodController::setComposition(const String& text, const Vector<CompositionUnderline>& underlines, int selectionStart, int selectionEnd)
 {
     Editor::RevealSelectionScope revealSelectionScope(&editor());
 
     // Updates styles before setting selection for composition to prevent
     // inserting the previous composition text into text nodes oddly.
     // See https://bugs.webkit.org/show_bug.cgi?id=46868
-    frame().document()->updateLayoutTree();
+    frame().document()->updateStyleAndLayoutTree();
 
     selectComposition();
 
@@ -264,7 +269,7 @@ void InputMethodController::setComposition(const String& text, const Vector<Comp
         // 3. Canceling the ongoing composition.
         //    Send a compositionend event when function deletes the existing composition node, i.e.
         //    !hasComposition() && test.isEmpty().
-        RawPtr<CompositionEvent> event = nullptr;
+        CompositionEvent* event = nullptr;
         if (!hasComposition()) {
             // We should send a compositionstart event only when the given text is not empty because this
             // function doesn't create a composition node when the text is empty.
@@ -278,14 +283,19 @@ void InputMethodController::setComposition(const String& text, const Vector<Comp
             else
                 event = CompositionEvent::create(EventTypeNames::compositionend, frame().domWindow(), text);
         }
-        if (event.get())
+        if (event) {
+            // TODO(chongz): Support canceling IME composition.
+            // TODO(chongz): Should fire InsertText or DeleteComposedCharacter based on action.
+            if (event->type() == EventTypeNames::compositionupdate)
+                dispatchBeforeInputFromComposition(target, InputEvent::InputType::InsertText, text);
             target->dispatchEvent(event);
+        }
     }
 
     // If text is empty, then delete the old composition here. If text is non-empty, InsertTextCommand::input
     // will delete the old composition with an optimized replace operation.
     if (text.isEmpty()) {
-        ASSERT(frame().document());
+        DCHECK(frame().document());
         TypingCommand::deleteSelection(*frame().document(), TypingCommand::PreventSpellChecking);
     }
 
@@ -293,7 +303,7 @@ void InputMethodController::setComposition(const String& text, const Vector<Comp
 
     if (text.isEmpty())
         return;
-    ASSERT(frame().document());
+    DCHECK(frame().document());
     TypingCommand::insertText(*frame().document(), text, TypingCommand::SelectInsertedText | TypingCommand::PreventSpellChecking, TypingCommand::TextCompositionUpdate);
 
     // Find out what node has the composition now.
@@ -322,10 +332,31 @@ void InputMethodController::setComposition(const String& text, const Vector<Comp
     if (baseNode->layoutObject())
         baseNode->layoutObject()->setShouldDoFullPaintInvalidation();
 
-    unsigned start = std::min(baseOffset + selectionStart, extentOffset);
-    unsigned end = std::min(std::max(start, baseOffset + selectionEnd), extentOffset);
-    RawPtr<Range> selectedRange = Range::create(baseNode->document(), baseNode, start, baseNode, end);
-    frame().selection().setSelectedRange(selectedRange.get(), TextAffinity::Downstream, SelectionDirectionalMode::NonDirectional, NotUserTriggered);
+    // In case of exceeding the left boundary.
+    int selectionOffsetsStart = static_cast<int>(getSelectionOffsets().start());
+    int start = std::max(selectionOffsetsStart + selectionStart, 0);
+    int end = std::max(selectionOffsetsStart + selectionEnd, start);
+
+    Element* rootEditableElement = frame().selection().rootEditableElement();
+    if (!rootEditableElement)
+        return;
+
+    // In case of exceeding the right boundary.
+    // If both |value1| and |value2| exceed right boundary,
+    // PlainTextRange(value1, value2)::createRange() will return a default
+    // value, which is [0,0]. In order to get the correct Position in that case,
+    // we should make sure |value1| is within range at least.
+    const EphemeralRange& startRange = PlainTextRange(0, start).createRange(*rootEditableElement);
+    const EphemeralRange& endRange = PlainTextRange(0, end).createRange(*rootEditableElement);
+
+    // TODO(yabinh): There should be a better way to create |startPosition| and
+    // |endPosition|. But for now, since we can't get |anchorNode| and |offset|,
+    // we can't create the 2 Position objects directly. So we use
+    // PlainTextRange::createRange as a workaround.
+    const Position& startPosition = startRange.endPosition();
+    const Position& endPosition = endRange.endPosition();
+    Range* selectedRange = Range::create(rootEditableElement->document(), startPosition, endPosition);
+    frame().selection().setSelectedRange(selectedRange, TextAffinity::Downstream, SelectionDirectionalMode::NonDirectional, NotUserTriggered);
 
     if (underlines.isEmpty()) {
         frame().document()->markers().addCompositionMarker(m_compositionRange->startPosition(), m_compositionRange->endPosition(), Color::black, false, LayoutTheme::theme().platformDefaultCompositionBackgroundColor());
@@ -384,7 +415,7 @@ EphemeralRange InputMethodController::compositionEphemeralRange() const
     return EphemeralRange(m_compositionRange.get());
 }
 
-RawPtr<Range> InputMethodController::compositionRange() const
+Range* InputMethodController::compositionRange() const
 {
     return hasComposition() ? m_compositionRange : nullptr;
 }
@@ -400,7 +431,7 @@ PlainTextRange InputMethodController::getSelectionOffsets() const
     if (range.isNull())
         return PlainTextRange();
     ContainerNode* editable = frame().selection().rootEditableElementOrTreeScopeRootNode();
-    ASSERT(editable);
+    DCHECK(editable);
     return PlainTextRange::create(*editable, range);
 }
 
@@ -453,6 +484,8 @@ void InputMethodController::extendSelectionAndDelete(int before, int after)
             break;
         ++before;
     } while (frame().selection().start() == frame().selection().end() && before <= static_cast<int>(selectionOffsets.start()));
+    // TODO(chongz): According to spec |data| should be "forward" or "backward".
+    dispatchBeforeInputEditorCommand(frame().document()->focusedElement(), InputEvent::InputType::DeleteContent);
     TypingCommand::deleteSelection(*frame().document());
 }
 

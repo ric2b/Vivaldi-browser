@@ -4,8 +4,9 @@
 
 #include "ui/gl/gl_context.h"
 
+#include <memory>
+
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context_egl.h"
@@ -50,7 +51,7 @@ scoped_refptr<GLContext> GLContext::CreateGLContext(
       return context;
     }
     case kGLImplementationMockGL:
-      return new GLContextStub;
+      return new GLContextStub(share_group);
     default:
       NOTREACHED();
       return nullptr;

@@ -337,7 +337,7 @@ def AddJavaTestOptions(argument_group):
       help=('Comma-separated list of annotations. Exclude tests with these '
             'annotations.'))
   argument_group.add_argument(
-      '--screenshot', dest='screenshot_failures', action='store_true',
+      '--screenshot-directory', dest='screenshot_dir',
       help='Capture screenshots of test failures')
   argument_group.add_argument(
       '--save-perf-json', action='store_true',
@@ -459,6 +459,9 @@ def AddJUnitTestOptions(parser):
   group.add_argument(
       '--sdk-version', dest='sdk_version', type=int,
       help='The Android SDK version.')
+  group.add_argument(
+      '--coverage-dir', dest='coverage_dir',
+      help='Directory to store coverage info.')
   AddCommonOptions(parser)
 
 

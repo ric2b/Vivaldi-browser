@@ -17,8 +17,9 @@
 #include "ash/test/shelf_view_test_api.h"
 #include "ash/test/test_shelf_delegate.h"
 #include "ash/test/test_shell_delegate.h"
+#include "ash/wm/common/window_state.h"
 #include "ash/wm/window_cycle_list.h"
-#include "ash/wm/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/screen_position_client.h"
@@ -27,7 +28,6 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/screen.h"
 
 namespace ash {
 

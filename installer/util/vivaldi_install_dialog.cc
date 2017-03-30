@@ -302,16 +302,42 @@ void VivaldiInstallDialog::InitDialog() {
      register_browser_ ? BST_CHECKED : BST_UNCHECKED, 0);
 }
 
-static int CALLBACK BrowseCallbackProc(
-    HWND hwnd,
-    UINT msg,
-    LPARAM lparam,
-    LPARAM lpdata) {
-  switch (msg)
-  {
-  case BFFM_INITIALIZED:
-    if (lpdata)
-      SendMessage(hwnd, BFFM_SETSELECTION, TRUE, lpdata);
+// Finds the tree view of the SHBrowseForFolder dialog
+static BOOL CALLBACK EnumChildProcFindTreeView(HWND hwnd,
+                                               LPARAM lparam) {
+  HWND* tree_view = (HWND*)lparam;
+  DCHECK(tree_view);
+
+  const int MAX_BUF_SIZE = 80;
+  const wchar_t TREE_VIEW_CLASS_NAME[] = L"SysTreeView32";
+  std::unique_ptr<wchar_t[]> buffer(new wchar_t[MAX_BUF_SIZE]);
+
+  GetClassName(hwnd, buffer.get(), MAX_BUF_SIZE - 1);
+  if (std::wstring(buffer.get()) == TREE_VIEW_CLASS_NAME) {
+    *tree_view = hwnd;
+    return FALSE;
+  }
+  *tree_view = NULL;
+  return TRUE;
+}
+
+static int CALLBACK BrowseCallbackProc(HWND hwnd, UINT msg,
+                                       LPARAM lparam, LPARAM lpdata) {
+  static HWND tree_view = NULL;
+  switch (msg) {
+    case BFFM_INITIALIZED:
+      if (lpdata)
+        SendMessage(hwnd, BFFM_SETSELECTION, TRUE, lpdata);
+      EnumChildWindows(hwnd, EnumChildProcFindTreeView, (LPARAM)&tree_view);
+      break;
+    case BFFM_SELCHANGED:
+      if (IsWindow(tree_view)) {
+        // Make sure the current selection is scrolled into view
+        HTREEITEM item = TreeView_GetSelection(tree_view);
+        if (item)
+          TreeView_EnsureVisible(tree_view, item);
+      }
+      break;
   }
   return 0;
 }
@@ -333,7 +359,7 @@ void VivaldiInstallDialog::ShowBrowseFolderDialog() {
   if (pIDL == NULL)
     return;
 
-  scoped_ptr<wchar_t[]> buffer(new wchar_t[MAX_PATH]);
+  std::unique_ptr<wchar_t[]> buffer(new wchar_t[MAX_PATH]);
   if (!SHGetPathFromIDList(pIDL, buffer.get()) != 0) {
     CoTaskMemFree(pIDL);
     return;
@@ -368,7 +394,8 @@ void VivaldiInstallDialog::OnInstallTypeSelection() {
       IDC_COMBO_INSTALLTYPES));
 
   if (install_type_ == INSTALL_FOR_ALL_USERS ||
-      old_install_type == INSTALL_FOR_ALL_USERS) {
+      (install_type_ == INSTALL_FOR_CURRENT_USER &&
+      old_install_type == INSTALL_FOR_ALL_USERS)) {
     SetDefaultDestinationFolder(); // fixed folder (for now at least)
   }
 
@@ -383,7 +410,7 @@ void VivaldiInstallDialog::OnLanguageSelection() {
     if (len <= 0)
       return;
 
-    scoped_ptr<wchar_t[]> buf(new wchar_t[len + 1]);
+    std::unique_ptr<wchar_t[]> buf(new wchar_t[len + 1]);
     ComboBox_GetLBText(GetDlgItem(hdlg_, IDC_COMBO_LANGUAGE), i, buf.get());
     std::map<const std::wstring, const std::wstring>::iterator it;
     for (it = kLanguages.begin(); it != kLanguages.end(); it++) {
@@ -491,7 +518,7 @@ std::wstring VivaldiInstallDialog::GetInnerFrameEULAResource() {
   // (see the definition of full_exe_path and resource).
   DCHECK(kuint32max > (url_path.size() * 3));
   DWORD count = static_cast<DWORD>(url_path.size() * 3);
-  scoped_ptr<wchar_t[]> url_canon(new wchar_t[count]);
+  std::unique_ptr<wchar_t[]> url_canon(new wchar_t[count]);
   HRESULT hr = ::UrlCanonicalizeW(url_path.c_str(), url_canon.get(),
     &count, URL_ESCAPE_UNSAFE);
   if (SUCCEEDED(hr))
@@ -805,7 +832,7 @@ INT_PTR CALLBACK VivaldiInstallDialog::DlgProc(HWND hdlg,
     case IDOK:
       {
         this_->dlg_result_ = INSTALL_DLG_INSTALL;
-        scoped_ptr<wchar_t[]> buffer(new wchar_t[MAX_PATH]);
+        std::unique_ptr<wchar_t[]> buffer(new wchar_t[MAX_PATH]);
         if (buffer.get()) {
           GetDlgItemText(hdlg, IDC_EDIT_DEST_FOLDER, buffer.get(),
               MAX_PATH - 1);
@@ -835,7 +862,7 @@ INT_PTR CALLBACK VivaldiInstallDialog::DlgProc(HWND hdlg,
       break;
     case IDC_BTN_BROWSE:
       {
-        scoped_ptr<wchar_t[]> buffer(new wchar_t[MAX_PATH]);
+        std::unique_ptr<wchar_t[]> buffer(new wchar_t[MAX_PATH]);
         if (buffer.get()) {
           GetDlgItemText(hdlg, IDC_EDIT_DEST_FOLDER, buffer.get(),
               MAX_PATH - 1);
@@ -861,7 +888,7 @@ INT_PTR CALLBACK VivaldiInstallDialog::DlgProc(HWND hdlg,
     case IDC_EDIT_DEST_FOLDER:
       {
         if (HIWORD(wparam) == EN_CHANGE) {
-          scoped_ptr<wchar_t[]> buffer(new wchar_t[MAX_PATH]);
+          std::unique_ptr<wchar_t[]> buffer(new wchar_t[MAX_PATH]);
           if (buffer.get()) {
             GetDlgItemText(hdlg, IDC_EDIT_DEST_FOLDER,
                 buffer.get(), MAX_PATH - 1);

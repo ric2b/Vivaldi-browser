@@ -30,7 +30,7 @@
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/login/login_state.h"
@@ -42,6 +42,7 @@
 #include "grit/ash_strings.h"
 #include "grit/ui_chromeos_strings.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
+#include "ui/accessibility/ax_view_state.h"
 #include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -55,7 +56,7 @@
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/text_constants.h"
-#include "ui/views/bubble/bubble_delegate.h"
+#include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
@@ -122,12 +123,12 @@ bool PolicyProhibitsUnmanaged() {
 
 // A bubble which displays network info.
 class NetworkStateListDetailedView::InfoBubble
-    : public views::BubbleDelegateView {
+    : public views::BubbleDialogDelegateView {
  public:
   InfoBubble(views::View* anchor,
              views::View* content,
              NetworkStateListDetailedView* detailed_view)
-      : views::BubbleDelegateView(anchor, views::BubbleBorder::TOP_RIGHT),
+      : views::BubbleDialogDelegateView(anchor, views::BubbleBorder::TOP_RIGHT),
         detailed_view_(detailed_view) {
     set_can_activate(false);
     set_parent_window(ash::Shell::GetContainer(
@@ -140,6 +141,9 @@ class NetworkStateListDetailedView::InfoBubble
   ~InfoBubble() override { detailed_view_->OnInfoBubbleDestroyed(); }
 
  private:
+  // BubbleDialogDelegateView:
+  int GetDialogButtons() const override { return ui::DIALOG_BUTTON_NONE; }
+
   // Not owned.
   NetworkStateListDetailedView* detailed_view_;
 
@@ -157,6 +161,8 @@ class ScanningThrobber : public ThrobberView {
     SetPaintToLayer(true);
     layer()->SetFillsBoundsOpaquely(false);
     layer()->SetOpacity(1.0);
+    accessible_name_ = l10n_util::GetStringUTF16(
+        IDS_ASH_STATUS_TRAY_WIFI_SCANNING_MESSAGE);
   }
   ~ScanningThrobber() override {}
 
@@ -169,7 +175,14 @@ class ScanningThrobber : public ThrobberView {
     layer()->SetOpacity(visible ? 1.0 : 0.0);
   }
 
+  void GetAccessibleState(ui::AXViewState* state) override {
+    state->name = accessible_name_;
+    state->role = ui::AX_ROLE_BUSY_INDICATOR;
+  }
+
  private:
+  base::string16 accessible_name_;
+
   DISALLOW_COPY_AND_ASSIGN(ScanningThrobber);
 };
 
@@ -482,6 +495,7 @@ void NetworkStateListDetailedView::CreateHeaderEntry() {
   }
 
   info_icon_ = new InfoIcon(this);
+  info_icon_->SetFocusBehavior(FocusBehavior::ALWAYS);
   info_icon_->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_NETWORK_INFO));
   info_throbber_container->AddChildView(info_icon_);
@@ -558,23 +572,53 @@ void NetworkStateListDetailedView::UpdateHeaderButtons() {
             NetworkTypePattern::WiFi());
     if (scanning != wifi_scanning_) {
       wifi_scanning_ = scanning;
-      if (scanning && list_type_ != LIST_TYPE_VPN) {
-        info_icon_->SetVisible(false);
-        scanning_throbber_->SetVisible(true);
+      if (list_type_ != LIST_TYPE_VPN) {
+        SetScanningStateForThrobberView(true);
+
+        // Start animation on the |scanning_throbber_| indicator.
         scanning_throbber_->Start();
-        scanning_throbber_->SetTooltipText(l10n_util::GetStringUTF16(
-            IDS_ASH_STATUS_TRAY_WIFI_SCANNING_MESSAGE));
+
+        // Since the |scanning_throbber_| view is behind the |info_icon_|
+        // view, the tooltip text for |info_icon_| will be used for both.
+        info_icon_->SetTooltipText(l10n_util::GetStringUTF16(
+          IDS_ASH_STATUS_TRAY_WIFI_SCANNING_MESSAGE));
       } else {
+        SetScanningStateForThrobberView(false);
+
+        // Stop animation on the |scanning_throbber_| indicator.
         scanning_throbber_->Stop();
-        scanning_throbber_->SetVisible(false);
-        scanning_throbber_->SetTooltipText(
+        info_icon_->SetTooltipText(
             l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_NETWORK_INFO));
-        info_icon_->SetVisible(true);
       }
     }
   }
 
   static_cast<views::View*>(footer())->Layout();
+}
+
+void NetworkStateListDetailedView::SetScanningStateForThrobberView(
+    bool is_scanning) {
+  // Hide the network info button if the device is scanning for Wi-Fi networks
+  // and display the WiFi scanning indicator.
+  info_icon_->SetVisible(!is_scanning);
+  scanning_throbber_->SetVisible(is_scanning);
+  // Set the element, network info button or the wifi scanning indicator, as
+  // focusable based on which one is active/visible.
+  // NOTE: As we do not want to lose focus from the network info throbber view,
+  // the order of below operation is important.
+  if (is_scanning) {
+    scanning_throbber_->SetFocusBehavior(FocusBehavior::ALWAYS);
+    info_icon_->SetFocusBehavior(FocusBehavior::NEVER);
+  } else {
+    info_icon_->SetFocusBehavior(FocusBehavior::ALWAYS);
+    scanning_throbber_->SetFocusBehavior(FocusBehavior::NEVER);
+  }
+  // If the Network Info view was in focus while this toggle operation was
+  // being performed then the focus should remain on this view.
+  if (info_icon_->HasFocus() && is_scanning)
+    scanning_throbber_->RequestFocus();
+  else if (scanning_throbber_->HasFocus() && !is_scanning)
+    info_icon_->RequestFocus();
 }
 
 void NetworkStateListDetailedView::UpdateTechnologyButton(
@@ -698,7 +742,7 @@ void NetworkStateListDetailedView::ToggleInfoBubble() {
     return;
 
   info_bubble_ = new InfoBubble(info_icon_, CreateNetworkInfoView(), this);
-  views::BubbleDelegateView::CreateBubble(info_bubble_)->Show();
+  views::BubbleDialogDelegateView::CreateBubble(info_bubble_)->Show();
   info_bubble_->NotifyAccessibilityEvent(ui::AX_EVENT_ALERT, false);
 }
 

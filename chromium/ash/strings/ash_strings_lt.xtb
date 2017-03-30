@@ -26,6 +26,7 @@
 <translation id="1602076796624386989">Įgalinti duomenis mobiliesiems</translation>
 <translation id="1621499497873603021">Laikas, likęs iki akumuliatoriaus išsikrovimo: <ph name="TIME_LEFT" /></translation>
 <translation id="164969095109328410">„Chrome“ įrenginys</translation>
+<translation id="1677472565718498478">Liko <ph name="TIME" /></translation>
 <translation id="1723752762323179280">Išeinama iš sesijos</translation>
 <translation id="1747827819627189109">Ekrano klaviatūra įgalinta</translation>
 <translation id="1812696562331527143">Įvesties metodas pakeistas į <ph name="INPUT_METHOD_ID" />* (<ph name="BEGIN_LINK" />trečioji šalis<ph name="END_LINK" />).
@@ -92,7 +93,6 @@ Jei norite atšaukti, paspauskite paieškos arba antrojo lygio klavišą.</trans
 <translation id="3621712662352432595">Garso nustatymai</translation>
 <translation id="3625258641415618104">Ekrano kopijos išjungtos</translation>
 <translation id="3626281679859535460">Šviesumas</translation>
-<translation id="3626637461649818317">Liko <ph name="PERCENTAGE" /> proc.</translation>
 <translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079"><ph name="DISPLAY_NAME" /> skyra pakeista į <ph name="RESOLUTION" /></translation>
 <translation id="370649949373421643">Įgalinti „Wi-Fi“</translation>
@@ -111,13 +111,13 @@ Jei norite atšaukti, paspauskite paieškos arba antrojo lygio klavišą.</trans
 <translation id="397105322502079400">Skaičiuojama...</translation>
 <translation id="3995138139523574647">USB-C įrenginys (prievadas dešinėje, užpakalinėje dalyje)</translation>
 <translation id="4053612967614057854">Išjungti ekrano klaviatūrą</translation>
-<translation id="412065659894267608"><ph name="HOUR" /> val. <ph name="MINUTE" /> min. iki visiško įkrovimo</translation>
 <translation id="4250680216510889253">Ne</translation>
 <translation id="4279490309300973883">Dubliuojama</translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4421231901400348175"><ph name="HELPER_NAME" /> gali valdyti jūsų ekraną naudodamas (-a) Nuotolinę pagalbą.</translation>
 <translation id="4430019312045809116">Apimtis</translation>
 <translation id="4527045527269911712">„Bluetooth“ įrenginys „<ph name="DEVICE_NAME" />“ prašo leidimo susieti.</translation>
+<translation id="453661520163887813">Liko <ph name="TIME" />, kol bus visiškai įkrautas</translation>
 <translation id="4544944664594876241">Pakeistas ekrano užrakinimo spartusis klavišas. Naudokite <ph name="NEW_SHORTCUT" /> vietoje <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="479989351350248267">ieškoti</translation>
 <translation id="4804818685124855865">Atsijungti</translation>
@@ -129,7 +129,6 @@ Jei norite atšaukti, paspauskite paieškos arba antrojo lygio klavišą.</trans
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">„Ctrl“ + „Shift“ + tarpo klavišas</translation>
 <translation id="5045002648206642691">„Google“ disko nustatymai...</translation>
-<translation id="5102001756192215136">Liko <ph name="HOUR" />.<ph name="MINUTE" /></translation>
 <translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">Pasiekiami perdavimo įrenginiai</translation>
 <translation id="5222676887888702881">Atsijungti</translation>
@@ -166,7 +165,6 @@ Jei norite atšaukti, paspauskite paieškos arba antrojo lygio klavišą.</trans
 <translation id="615957422585914272">Rodyti ekrano klaviatūrą</translation>
 <translation id="6165508094623778733">Sužinokite daugiau</translation>
 <translation id="6203030746557259519">Virtualusis ekranas</translation>
-<translation id="6247708409970142803"><ph name="PERCENTAGE" /> %</translation>
 <translation id="6248847161401822652">Jei norite išeiti, du kartus paspauskite „Control“ + „Shift“ + Q.</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" /> pakeista į <ph name="ROTATION" /></translation>
 <translation id="6359806961507272919">SMS iš <ph name="PHONE_NUMBER" /></translation>
@@ -207,6 +205,7 @@ Jei norite atšaukti, paspauskite „Alt“ + paieškos klavišas arba „Alt“
 <translation id="7510334386202674593">„Ctrl“ + „Shift“ + L</translation>
 <translation id="7561014039265304140">„<ph name="DISPLAY_NAME" />“ nepalaiko <ph name="SPECIFIED_RESOLUTION" />. Skyra pakeista į <ph name="FALLBACK_RESOLUTION" /></translation>
 <translation id="7573962313813535744">Doko režimas</translation>
+<translation id="7580671184200851182">Paleisti tą patį garso įrašą visuose garsiakalbiuose (monofoninio garso įrašas)</translation>
 <translation id="7593891976182323525">Paieškos arba antrojo lygio klavišas</translation>
 <translation id="7649070708921625228">Žinynas</translation>
 <translation id="7692480393933218409">Įkraunami prijungti USB-C įrenginiai</translation>
@@ -225,13 +224,14 @@ Jei norite atšaukti, paspauskite „Alt“ + paieškos klavišas arba „Alt“
 <translation id="8308637677604853869">Ankstesnis meniu</translation>
 <translation id="8356164830168736643">Uždaryti „<ph name="WINDOW_TITLE" />“</translation>
 <translation id="8428213095426709021">Nustatymai</translation>
-<translation id="8456362689280298700"><ph name="HOUR" />.<ph name="MINUTE" /> iki visiško įkrovimo</translation>
 <translation id="8517041960877371778">„<ph name="DEVICE_TYPE" />“ gali nebūti kraunamas, kai yra įjungtas.</translation>
 <translation id="8528322925433439945">Mobilusis...</translation>
+<translation id="8639760480004882931">Liko <ph name="PERCENTAGE" /></translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">Prijungtas mažos galios įkroviklis</translation>
 <translation id="8814190375133053267">WI-Fi</translation>
 <translation id="882279321799040148">Jei norite peržiūrėti, spustelėkite</translation>
+<translation id="8825534185036233643">Negalima bendrinti daugiau nei dviejų ekranų vaizdų.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8850991929411075241">Paieškos klavišas + „Esc“</translation>
 <translation id="8878886163241303700">Išplečiamas ekranas</translation>

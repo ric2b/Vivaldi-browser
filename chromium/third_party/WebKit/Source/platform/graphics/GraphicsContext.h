@@ -158,15 +158,12 @@ public:
     void strokeRect(const FloatRect&, float lineWidth);
 
     void drawPicture(const SkPicture*);
-    void compositePicture(SkPicture*, const FloatRect& dest, const FloatRect& src, SkXfermode::Mode);
+    void compositePicture(PassRefPtr<SkPicture>, const FloatRect& dest, const FloatRect& src, SkXfermode::Mode);
 
-    void drawImage(Image*, const IntRect&, SkXfermode::Mode = SkXfermode::kSrcOver_Mode, RespectImageOrientationEnum = DoNotRespectImageOrientation);
-    void drawImage(Image*, const FloatRect& destRect, const FloatRect& srcRect, SkXfermode::Mode = SkXfermode::kSrcOver_Mode, RespectImageOrientationEnum = DoNotRespectImageOrientation);
-
+    void drawImage(Image*, const FloatRect& destRect, const FloatRect* srcRect = nullptr,
+        SkXfermode::Mode = SkXfermode::kSrcOver_Mode, RespectImageOrientationEnum = DoNotRespectImageOrientation);
     void drawTiledImage(Image*, const FloatRect& destRect, const FloatPoint& srcPoint, const FloatSize& tileSize,
         SkXfermode::Mode = SkXfermode::kSrcOver_Mode, const FloatSize& repeatSpacing = FloatSize());
-    void drawTiledImage(Image*, const IntRect& destRect, const IntPoint& srcPoint, const IntSize& tileSize,
-        SkXfermode::Mode = SkXfermode::kSrcOver_Mode, const IntSize& repeatSpacing = IntSize());
     void drawTiledImage(Image*, const FloatRect& destRect, const FloatRect& srcRect,
         const FloatSize& tileScaleFactor, Image::TileRule hRule = Image::StretchTile, Image::TileRule vRule = Image::StretchTile,
         SkXfermode::Mode = SkXfermode::kSrcOver_Mode);
@@ -204,7 +201,7 @@ public:
     // beginLayer()/endLayer() behaves like save()/restore() for CTM and clip states.
     // Apply SkXfermode::Mode when the layer is composited on the backdrop (i.e. endLayer()).
     void beginLayer(float opacity = 1.0f, SkXfermode::Mode = SkXfermode::kSrcOver_Mode,
-        const FloatRect* = 0, ColorFilter = ColorFilterNone, SkImageFilter* = 0);
+        const FloatRect* = 0, ColorFilter = ColorFilterNone, sk_sp<SkImageFilter> = nullptr);
     void endLayer();
 
     // Instead of being dispatched to the active canvas, draw commands following beginRecording()

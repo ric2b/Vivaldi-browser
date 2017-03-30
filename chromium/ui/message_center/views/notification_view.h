@@ -23,32 +23,21 @@ namespace message_center {
 
 class BoundedLabel;
 class MessageCenter;
-class MessageCenterController;
 class NotificationButton;
 class NotificationProgressBarBase;
-class NotificationView;
 class PaddedButton;
 class ProportionalImageView;
 
 // View that displays all current types of notification (web, basic, image, and
-// list). Future notification types may be handled by other classes, in which
-// case instances of those classes would be returned by the Create() factory
-// method below.
+// list) except the custom notification. Future notification types may be
+// handled by other classes, in which case instances of those classes would be
+// returned by the Create() factory method below.
 class MESSAGE_CENTER_EXPORT NotificationView
     : public MessageView,
-      public views::ViewTargeterDelegate,
-      public MessageViewController {
+      public views::ViewTargeterDelegate {
  public:
-  // Creates appropriate MessageViews for notifications. Those currently are
-  // always NotificationView instances but in the future
-  // may be instances of other classes, with the class depending on the
-  // notification type. A notification is top level if it needs to be rendered
-  // outside the browser window. No custom shadows are created for top level
-  // notifications on Linux with Aura.
-  // |controller| may be NULL, but has to be set before the view is shown.
-  static NotificationView* Create(MessageCenterController* controller,
-                                  const Notification& notification,
-                                  bool top_level);
+  NotificationView(MessageCenterController* controller,
+                   const Notification& notification);
   ~NotificationView() override;
 
   // Overridden from views::View:
@@ -62,22 +51,6 @@ class MESSAGE_CENTER_EXPORT NotificationView
   // Overridden from MessageView:
   void UpdateWithNotification(const Notification& notification) override;
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-  bool IsCloseButtonFocused() override;
-  void RequestFocusOnCloseButton() override;
-  bool IsPinned() override;
-
-  // Overridden from MessageViewController:
-  void ClickOnNotification(const std::string& notification_id) override;
-  void RemoveNotification(const std::string& notification_id,
-                          bool by_user) override;
-
-  void set_controller(MessageCenterController* controller) {
-    controller_ = controller;
-  }
-
- protected:
-  NotificationView(MessageCenterController* controller,
-                   const Notification& notification);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(NotificationViewTest, CreateOrUpdateTest);
@@ -108,7 +81,6 @@ class MESSAGE_CENTER_EXPORT NotificationView
   void CreateOrUpdateIconView(const Notification& notification);
   void CreateOrUpdateImageView(const Notification& notification);
   void CreateOrUpdateActionButtonViews(const Notification& notification);
-  void CreateOrUpdateCloseButtonView(const Notification& notification);
 
   int GetMessageLineLimit(int title_lines, int width) const;
   int GetMessageHeight(int width, int limit) const;
@@ -119,25 +91,22 @@ class MESSAGE_CENTER_EXPORT NotificationView
   // notification.
   base::string16 FormatContextMessage(const Notification& notification) const;
 
-  MessageCenterController* controller_;  // Weak, lives longer then views.
-
   // Describes whether the view should display a hand pointer or not.
   bool clickable_;
 
   // Weak references to NotificationView descendants owned by their parents.
-  views::View* top_view_;
-  BoundedLabel* title_view_;
-  BoundedLabel* message_view_;
-  BoundedLabel* context_message_view_;
-  views::ImageButton* settings_button_view_;
+  views::View* top_view_ = nullptr;
+  BoundedLabel* title_view_ = nullptr;
+  BoundedLabel* message_view_ = nullptr;
+  BoundedLabel* context_message_view_ = nullptr;
+  views::ImageButton* settings_button_view_ = nullptr;
   std::vector<views::View*> item_views_;
-  ProportionalImageView* icon_view_;
-  views::View* bottom_view_;
-  views::View* image_container_;
-  ProportionalImageView* image_view_;
-  NotificationProgressBarBase* progress_bar_view_;
+  ProportionalImageView* icon_view_ = nullptr;
+  views::View* bottom_view_ = nullptr;
+  views::View* image_container_ = nullptr;
+  ProportionalImageView* image_view_ = nullptr;
+  NotificationProgressBarBase* progress_bar_view_ = nullptr;
   std::vector<NotificationButton*> action_buttons_;
-  scoped_ptr<views::ImageButton> close_button_;
   std::vector<views::View*> separators_;
 
   DISALLOW_COPY_AND_ASSIGN(NotificationView);

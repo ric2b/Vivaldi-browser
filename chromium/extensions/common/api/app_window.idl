@@ -283,6 +283,10 @@ namespace app.window {
     // thumbnail generation.
     boolean? thumbnailWindow;
 
+    // (Vivaldi) If true, this window will not use the position cache app
+    // windows usually use but rather the provided dimensions as-is.
+    boolean ? avoidCachedPositions;
+
     // Data to store different members used in Vivaldi
     DOMString? extData;
   };

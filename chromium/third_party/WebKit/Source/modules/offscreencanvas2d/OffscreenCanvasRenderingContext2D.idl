@@ -5,7 +5,6 @@
 // Note: The official spec is WIP at wiki.whatwg.org/wiki/OffscreenCanvas.
 
 [
-    GarbageCollected,
     Exposed=(Window,Worker),
     RuntimeEnabled=ExperimentalCanvasFeatures,
 ] interface OffscreenCanvasRenderingContext2D {
@@ -15,6 +14,9 @@
     // colors and styles
     attribute (DOMString or CanvasGradient or CanvasPattern) strokeStyle; // (default black)
     attribute (DOMString or CanvasGradient or CanvasPattern) fillStyle; // (default black)
+    CanvasGradient createLinearGradient(double x0, double y0, double x1, double y1);
+    [RaisesException] CanvasGradient createRadialGradient(double x0, double y0, double r0, double x1, double y1, double r1);
+    [CallWith=ExecutionContext, RaisesException] CanvasPattern? createPattern(CanvasImageSource image, [TreatNullAs=NullString] DOMString repetitionType);
 
     // CanvasRect interface
     void clearRect(unrestricted double x, unrestricted double y, unrestricted double width, unrestricted double height);
@@ -27,6 +29,11 @@
     void fill(Path2D path, optional CanvasFillRule winding);
     void stroke();
     void stroke(Path2D path);
+
+    // drawing images
+    [CallWith=ExecutionContext, RaisesException] void drawImage(CanvasImageSource image, unrestricted double x, unrestricted double y);
+    [CallWith=ExecutionContext, RaisesException] void drawImage(CanvasImageSource image, unrestricted double x, unrestricted double y, unrestricted double width, unrestricted double height);
+    [CallWith=ExecutionContext, RaisesException] void drawImage(CanvasImageSource image, unrestricted double sx, unrestricted double sy, unrestricted double sw, unrestricted double sh, unrestricted double dx, unrestricted double dy, unrestricted double dw, unrestricted double dh);
 
     // Line caps/joins
     attribute unrestricted double lineWidth; // (default 1)
@@ -56,6 +63,13 @@
     attribute unrestricted double shadowOffsetY;
     attribute unrestricted double shadowBlur;
     attribute DOMString shadowColor;
+
+    // pixel manipulation
+    [RaisesException] ImageData createImageData(ImageData imagedata);
+    [RaisesException] ImageData createImageData(double sw, double sh);
+    [RaisesException] ImageData getImageData(double sx, double sy, double sw, double sh);
+    [RaisesException] void putImageData(ImageData imagedata, double dx, double dy);
+    [RaisesException] void putImageData(ImageData imagedata, double dx, double dy, double dirtyX, double dirtyY, double dirtyWidth, double dirtyHeight);
 };
 
 OffscreenCanvasRenderingContext2D implements CanvasPathMethods;

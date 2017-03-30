@@ -41,22 +41,22 @@
 #include "modules/mediastream/MediaConstraintsImpl.h"
 #include "modules/mediastream/MediaStream.h"
 #include "modules/mediastream/MediaStreamConstraints.h"
-#include "modules/mediastream/MediaTrackConstraintSet.h"
+#include "modules/mediastream/MediaTrackConstraints.h"
 #include "modules/mediastream/UserMediaController.h"
 #include "platform/mediastream/MediaStreamCenter.h"
 #include "platform/mediastream/MediaStreamDescriptor.h"
 
 namespace blink {
 
-static WebMediaConstraints parseOptions(ExecutionContext* context, const BooleanOrMediaTrackConstraintSet& options, MediaErrorState& errorState)
+static WebMediaConstraints parseOptions(ExecutionContext* context, const BooleanOrMediaTrackConstraints& options, MediaErrorState& errorState)
 {
     WebMediaConstraints constraints;
 
     Dictionary constraintsDictionary;
     if (options.isNull()) {
         // Do nothing.
-    } else if (options.isMediaTrackConstraintSet()) {
-        constraints = MediaConstraintsImpl::create(context, options.getAsMediaTrackConstraintSet(), errorState);
+    } else if (options.isMediaTrackConstraints()) {
+        constraints = MediaConstraintsImpl::create(context, options.getAsMediaTrackConstraints(), errorState);
     } else {
         DCHECK(options.isBoolean());
         if (options.getAsBoolean()) {
@@ -168,11 +168,13 @@ void UserMediaRequest::succeed(MediaStreamDescriptor* streamDescriptor)
     MediaStreamTrackVector audioTracks = stream->getAudioTracks();
     for (MediaStreamTrackVector::iterator iter = audioTracks.begin(); iter != audioTracks.end(); ++iter) {
         (*iter)->component()->source()->setConstraints(m_audio);
+        (*iter)->setConstraints(m_audio);
     }
 
     MediaStreamTrackVector videoTracks = stream->getVideoTracks();
     for (MediaStreamTrackVector::iterator iter = videoTracks.begin(); iter != videoTracks.end(); ++iter) {
         (*iter)->component()->source()->setConstraints(m_video);
+        (*iter)->setConstraints(m_video);
     }
 
     m_successCallback->handleEvent(stream);

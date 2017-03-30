@@ -13,13 +13,10 @@
 #include "content/common/service_worker/service_worker_client_info.h"
 #include "content/common/service_worker/service_worker_status_code.h"
 #include "content/common/service_worker/service_worker_types.h"
-#include "content/public/common/message_port_types.h"
 #include "content/public/common/platform_notification_data.h"
 #include "content/public/common/push_event_payload.h"
 #include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_param_traits.h"
-#include "third_party/WebKit/public/platform/WebCircularGeofencingRegion.h"
-#include "third_party/WebKit/public/platform/WebGeofencingEventType.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerError.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerEventResult.h"
 #include "url/gurl.h"
@@ -131,7 +128,7 @@ IPC_STRUCT_TRAITS_END()
 IPC_STRUCT_BEGIN(ServiceWorkerMsg_ExtendableMessageEvent_Params)
   IPC_STRUCT_MEMBER(base::string16, message)
   IPC_STRUCT_MEMBER(url::Origin, source_origin)
-  IPC_STRUCT_MEMBER(std::vector<content::TransferredMessagePort>, message_ports)
+  IPC_STRUCT_MEMBER(std::vector<int>, message_ports)
   IPC_STRUCT_MEMBER(std::vector<int>, new_routing_ids)
   IPC_STRUCT_MEMBER(content::ExtendableMessageEventSource, source)
 IPC_STRUCT_END()
@@ -141,12 +138,9 @@ IPC_STRUCT_BEGIN(ServiceWorkerMsg_MessageToDocument_Params)
   IPC_STRUCT_MEMBER(int, provider_id)
   IPC_STRUCT_MEMBER(content::ServiceWorkerObjectInfo, service_worker_info)
   IPC_STRUCT_MEMBER(base::string16, message)
-  IPC_STRUCT_MEMBER(std::vector<content::TransferredMessagePort>, message_ports)
+  IPC_STRUCT_MEMBER(std::vector<int>, message_ports)
   IPC_STRUCT_MEMBER(std::vector<int>, new_routing_ids)
 IPC_STRUCT_END()
-
-IPC_ENUM_TRAITS_MAX_VALUE(blink::WebGeofencingEventType,
-                          blink::WebGeofencingEventTypeLast)
 
 IPC_STRUCT_TRAITS_BEGIN(content::PushEventPayload)
   IPC_STRUCT_TRAITS_MEMBER(data)
@@ -198,16 +192,7 @@ IPC_MESSAGE_CONTROL5(
     int /* provider_id */,
     base::string16 /* message */,
     url::Origin /* source_origin */,
-    std::vector<content::TransferredMessagePort> /* sent_message_ports */)
-
-// Sends MessageEvent to a service worker (renderer->browser).
-// TODO(nhiroki): Remove this after ExtendableMessageEvent is enabled by
-// default (crbug.com/543198).
-IPC_MESSAGE_CONTROL3(
-    ServiceWorkerHostMsg_DeprecatedPostMessageToWorker,
-    int /* handle_id */,
-    base::string16 /* message */,
-    std::vector<content::TransferredMessagePort> /* sent_message_ports */)
+    std::vector<int> /* sent_message_ports */)
 
 // Informs the browser of a new ServiceWorkerProvider in the child process,
 // |provider_id| is unique within its child process. When this provider is
@@ -217,10 +202,21 @@ IPC_MESSAGE_CONTROL3(
 // MSG_ROUTING_NONE. |provider_type| identifies whether this provider is for
 // Service Worker controllees (documents and Shared Workers) or for controllers
 // (Service Workers).
-IPC_MESSAGE_CONTROL3(ServiceWorkerHostMsg_ProviderCreated,
+//
+// |is_parent_frame_secure| is false if the provider is created for a
+// document whose parent frame is not secure from the point of view of the
+// document; that is, blink::WebFrame::canHaveSecureChild() returns false.
+// This doesn't mean the document is necessarily an insecure context,
+// because the document may have a URL whose scheme is granted an exception
+// that allows bypassing the ancestor secure context check. See the
+// comment in blink::Document::isSecureContextImpl for more details.
+// If the provider is not created for a document, or the document does not have
+// a parent frame, |is_parent_frame_secure| is true.
+IPC_MESSAGE_CONTROL4(ServiceWorkerHostMsg_ProviderCreated,
                      int /* provider_id */,
                      int /* route_id */,
-                     content::ServiceWorkerProviderType /* provider_type */)
+                     content::ServiceWorkerProviderType /* provider_type */,
+                     bool /* is_parent_frame_secure */)
 
 // Informs the browser of a ServiceWorkerProvider being destroyed.
 IPC_MESSAGE_CONTROL1(ServiceWorkerHostMsg_ProviderDestroyed,
@@ -278,9 +274,6 @@ IPC_MESSAGE_ROUTED2(ServiceWorkerHostMsg_NotificationCloseEventFinished,
 IPC_MESSAGE_ROUTED2(ServiceWorkerHostMsg_PushEventFinished,
                     int /* request_id */,
                     blink::WebServiceWorkerEventResult)
-IPC_MESSAGE_ROUTED2(ServiceWorkerHostMsg_GeofencingEventFinished,
-                    int /* request_id */,
-                    blink::WebServiceWorkerEventResult)
 
 // Responds to a Ping from the browser.
 // Routed to the target ServiceWorkerVersion.
@@ -301,7 +294,7 @@ IPC_MESSAGE_ROUTED3(
     ServiceWorkerHostMsg_PostMessageToClient,
     std::string /* uuid */,
     base::string16 /* message */,
-    std::vector<content::TransferredMessagePort> /* sent_message_ports */)
+    std::vector<int> /* sent_message_ports */)
 
 // ServiceWorker -> Browser message to request that the ServiceWorkerStorage
 // cache |data| associated with |url|.
@@ -496,19 +489,6 @@ IPC_MESSAGE_CONTROL3(ServiceWorkerMsg_NotificationCloseEvent,
 IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_PushEvent,
                      int /* request_id */,
                      content::PushEventPayload /* data */)
-IPC_MESSAGE_CONTROL4(ServiceWorkerMsg_GeofencingEvent,
-                     int /* request_id */,
-                     blink::WebGeofencingEventType /* event_type */,
-                     std::string /* region_id */,
-                     blink::WebCircularGeofencingRegion /* region */)
-
-// TODO(nhiroki): Remove this after ExtendableMessageEvent is enabled by
-// default (crbug.com/543198).
-IPC_MESSAGE_CONTROL3(
-    ServiceWorkerMsg_MessageToWorker,
-    base::string16 /* message */,
-    std::vector<content::TransferredMessagePort> /* sent_message_ports */,
-    std::vector<int> /* new_routing_ids */)
 
 IPC_MESSAGE_CONTROL1(ServiceWorkerMsg_DidSkipWaiting,
                      int /* request_id */)

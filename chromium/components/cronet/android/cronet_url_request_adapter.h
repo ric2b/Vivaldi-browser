@@ -6,6 +6,8 @@
 #define COMPONENTS_CRONET_ANDROID_CRONET_URL_REQUEST_ADAPTER_H_
 
 #include <jni.h>
+
+#include <memory>
 #include <string>
 
 #include "base/android/jni_android.h"
@@ -16,7 +18,6 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "net/base/request_priority.h"
 #include "net/url_request/url_request.h"
 #include "url/gurl.h"
@@ -48,11 +49,18 @@ bool CronetUrlRequestAdapterRegisterJni(JNIEnv* env);
 // can be called on any thread.
 class CronetURLRequestAdapter : public net::URLRequest::Delegate {
  public:
+  // Bypasses cache if |jdisable_cache| is true. If context is not set up to
+  // use cache, |jdisable_cache| has no effect. |jdisable_connection_migration|
+  // causes connection migration to be disabled for this request if true. If
+  // global connection migration flag is not enabled,
+  // |jdisable_connection_migration| has no effect.
   CronetURLRequestAdapter(CronetURLRequestContextAdapter* context,
                           JNIEnv* env,
                           jobject jurl_request,
                           const GURL& url,
-                          net::RequestPriority priority);
+                          net::RequestPriority priority,
+                          jboolean jdisable_cache,
+                          jboolean jdisable_connection_migration);
   ~CronetURLRequestAdapter() override;
 
   // Methods called prior to Start are never called on network thread.
@@ -68,13 +76,8 @@ class CronetURLRequestAdapter : public net::URLRequest::Delegate {
                             const base::android::JavaParamRef<jstring>& jname,
                             const base::android::JavaParamRef<jstring>& jvalue);
 
-  // Bypasses cache. If context is not set up to use cache, this call has no
-  // effect.
-  void DisableCache(JNIEnv* env,
-                    const base::android::JavaParamRef<jobject>& jcaller);
-
   // Adds a request body to the request before it starts.
-  void SetUpload(scoped_ptr<net::UploadDataStream> upload);
+  void SetUpload(std::unique_ptr<net::UploadDataStream> upload);
 
   // Starts the request.
   void Start(JNIEnv* env, const base::android::JavaParamRef<jobject>& jcaller);
@@ -117,6 +120,8 @@ class CronetURLRequestAdapter : public net::URLRequest::Delegate {
   void OnResponseStarted(net::URLRequest* request) override;
   void OnReadCompleted(net::URLRequest* request, int bytes_read) override;
 
+  net::URLRequest* GetURLRequestForTesting();
+
  private:
   void StartOnNetworkThread();
   void GetStatusOnNetworkThread(
@@ -145,10 +150,10 @@ class CronetURLRequestAdapter : public net::URLRequest::Delegate {
   std::string initial_method_;
   int load_flags_;
   net::HttpRequestHeaders initial_request_headers_;
-  scoped_ptr<net::UploadDataStream> upload_;
+  std::unique_ptr<net::UploadDataStream> upload_;
 
   scoped_refptr<IOBufferWithByteBuffer> read_buffer_;
-  scoped_ptr<net::URLRequest> url_request_;
+  std::unique_ptr<net::URLRequest> url_request_;
 
   DISALLOW_COPY_AND_ASSIGN(CronetURLRequestAdapter);
 };

@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <memory>
 #include <string>
 
 #include "base/bind.h"
@@ -17,7 +18,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -25,9 +26,9 @@
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/test_timeouts.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "crypto/nss_util.h"
 #include "net/base/elements_upload_data_stream.h"
@@ -44,7 +45,7 @@
 #include "net/url_request/url_request_throttler_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if defined(USE_NSS_VERIFIER)
+#if defined(USE_NSS_CERTS)
 #include "net/cert_net/nss_ocsp.h"
 #endif
 
@@ -155,7 +156,7 @@ class WaitingURLFetcherDelegate : public URLFetcherDelegate {
  private:
   bool did_complete_;
 
-  scoped_ptr<URLFetcherImpl> fetcher_;
+  std::unique_ptr<URLFetcherImpl> fetcher_;
   base::RunLoop run_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(WaitingURLFetcherDelegate);
@@ -172,9 +173,9 @@ class FetcherTestURLRequestContext : public TestURLRequestContext {
     mock_resolver_->rules()->AddRule(hanging_domain, "127.0.0.1");
     // Pass ownership to ContextStorage to ensure correct destruction order.
     context_storage_.set_host_resolver(
-        scoped_ptr<HostResolver>(mock_resolver_));
+        std::unique_ptr<HostResolver>(mock_resolver_));
     context_storage_.set_throttler_manager(
-        make_scoped_ptr(new URLRequestThrottlerManager()));
+        base::WrapUnique(new URLRequestThrottlerManager()));
     Init();
   }
 
@@ -293,7 +294,7 @@ class FetcherTestURLRequestContextGetter : public URLRequestContextGetter {
   scoped_refptr<base::SingleThreadTaskRunner> network_task_runner_;
   const std::string hanging_domain_;
 
-  scoped_ptr<FetcherTestURLRequestContext> context_;
+  std::unique_ptr<FetcherTestURLRequestContext> context_;
   bool shutting_down_;
 
   base::Closure on_destruction_callback_;
@@ -338,13 +339,13 @@ class URLFetcherTest : public testing::Test {
   }
 
   // Callback passed to URLFetcher to create upload stream by some tests.
-  scoped_ptr<UploadDataStream> CreateUploadStream() {
+  std::unique_ptr<UploadDataStream> CreateUploadStream() {
     ++num_upload_streams_created_;
     std::vector<char> buffer(
         kCreateUploadStreamBody,
         kCreateUploadStreamBody + strlen(kCreateUploadStreamBody));
     return ElementsUploadDataStream::CreateWithReader(
-        scoped_ptr<UploadElementReader>(
+        std::unique_ptr<UploadElementReader>(
             new UploadOwnedBytesElementReader(&buffer)),
         0);
   }
@@ -363,7 +364,7 @@ class URLFetcherTest : public testing::Test {
                     bool save_to_temporary_file,
                     const base::FilePath& requested_out_path,
                     bool take_ownership) {
-    scoped_ptr<WaitingURLFetcherDelegate> delegate(
+    std::unique_ptr<WaitingURLFetcherDelegate> delegate(
         new WaitingURLFetcherDelegate());
     delegate->CreateFetcher(
         test_server_->GetURL(std::string(kTestServerFilePrefix) +
@@ -424,14 +425,14 @@ class URLFetcherTest : public testing::Test {
         kDefaultResponsePath));
     ASSERT_TRUE(hanging_url_.is_valid());
 
-#if defined(USE_NSS_VERIFIER)
+#if defined(USE_NSS_CERTS)
     crypto::EnsureNSSInit();
     EnsureNSSHttpIOInit();
 #endif
   }
 
   void TearDown() override {
-#if defined(USE_NSS_VERIFIER)
+#if defined(USE_NSS_CERTS)
     ShutdownNSSHttpIO();
 #endif
   }
@@ -445,9 +446,9 @@ class URLFetcherTest : public testing::Test {
 
   // Network thread for cross-thread tests.  Most threads just use the main
   // thread for network activity.
-  scoped_ptr<base::Thread> network_thread_;
+  std::unique_ptr<base::Thread> network_thread_;
 
-  scoped_ptr<EmbeddedTestServer> test_server_;
+  std::unique_ptr<EmbeddedTestServer> test_server_;
   GURL hanging_url_;
 
   size_t num_upload_streams_created_;

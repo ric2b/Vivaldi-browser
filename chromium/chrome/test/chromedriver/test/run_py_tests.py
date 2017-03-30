@@ -66,22 +66,23 @@ _VERSION_SPECIFIC_FILTER['HEAD'] = [
     # https://code.google.com/p/chromedriver/issues/detail?id=992
     'ChromeDownloadDirTest.testDownloadDirectoryOverridesExistingPreferences',
 ]
+_VERSION_SPECIFIC_FILTER['49'] = [
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1302
+    'ChromeDriverTest.testShadowDomStaleReference',
+]
 
 _OS_SPECIFIC_FILTER = {}
 _OS_SPECIFIC_FILTER['win'] = [
     # https://code.google.com/p/chromedriver/issues/detail?id=299
     'ChromeLogPathCapabilityTest.testChromeLogPath',
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1367
+    'ChromeExtensionsCapabilityTest.testWaitsForExtensionToLoad',
 ]
 _OS_SPECIFIC_FILTER['linux'] = [
     # Xvfb doesn't support maximization.
     'ChromeDriverTest.testWindowMaximize',
-    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1302
-    'ChromeDriverTest.testShadowDomStaleReference',
 ]
-_OS_SPECIFIC_FILTER['mac'] = [
-    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1302
-    'ChromeDriverTest.testShadowDomStaleReference',
-]
+_OS_SPECIFIC_FILTER['mac'] = []
 
 _DESKTOP_NEGATIVE_FILTER = [
     # Desktop doesn't support touch (without --touch-events).
@@ -178,6 +179,10 @@ _ANDROID_NEGATIVE_FILTER['chromedriver_webview_shell'] = (
         # TODO(gmanikpure): re-enable this test when we stop supporting
         # WebView on KitKat.
         'ChromeDriverTest.testGetUrlOnInvalidUrl',
+        # The WebView shell that we test against (on KitKat) does not perform
+        # cross-process navigations.
+        # TODO(samuong): reenable when it does.
+        'ChromeDriverPageLoadTimeoutTest.testPageLoadTimeoutCrossDomain',
     ]
 )
 
@@ -255,13 +260,28 @@ class ChromeDriverBaseTest(unittest.TestCase):
     return False
 
 
-class ChromeDriverTest(ChromeDriverBaseTest):
+class ChromeDriverBaseTestWithWebServer(ChromeDriverBaseTest):
+
+  @staticmethod
+  def GlobalSetUp():
+    ChromeDriverBaseTestWithWebServer._http_server = webserver.WebServer(
+        chrome_paths.GetTestData())
+
+  @staticmethod
+  def GlobalTearDown():
+    ChromeDriverBaseTestWithWebServer._http_server.Shutdown()
+
+  @staticmethod
+  def GetHttpUrlForFile(file_path):
+    return ChromeDriverBaseTestWithWebServer._http_server.GetUrl() + file_path
+
+
+class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
   """End to end tests for ChromeDriver."""
 
   @staticmethod
   def GlobalSetUp():
-    ChromeDriverTest._http_server = webserver.WebServer(
-        chrome_paths.GetTestData())
+    ChromeDriverBaseTestWithWebServer.GlobalSetUp()
     ChromeDriverTest._sync_server = webserver.SyncWebServer()
     if _ANDROID_PACKAGE_KEY:
       ChromeDriverTest._device = device_utils.DeviceUtils.HealthyDevices()[0]
@@ -275,11 +295,7 @@ class ChromeDriverTest(ChromeDriverBaseTest):
   def GlobalTearDown():
     if _ANDROID_PACKAGE_KEY:
       forwarder.Forwarder.UnmapAllDevicePorts(ChromeDriverTest._device)
-    ChromeDriverTest._http_server.Shutdown()
-
-  @staticmethod
-  def GetHttpUrlForFile(file_path):
-    return ChromeDriverTest._http_server.GetUrl() + file_path
+    ChromeDriverBaseTestWithWebServer.GlobalTearDown()
 
   def setUp(self):
     self._driver = self.CreateDriver()
@@ -1243,6 +1259,48 @@ class ChromeDriverTest(ChromeDriverBaseTest):
     self._driver.HandleAlert(True)
 
 
+class ChromeDriverPageLoadTimeoutTest(ChromeDriverBaseTestWithWebServer):
+
+  def _CheckPageLoadTimeout(self, driver, host=None):
+    initial_url = self.GetHttpUrlForFile('/chromedriver/empty.html')
+    driver.Load(initial_url)
+
+    request_received_event = threading.Event()
+    send_response_event = threading.Event()
+    def hang(request):
+      request_received_event.set()
+      # Don't hang infinitely, 10 seconds are enough.
+      send_response_event.wait(10)
+      return {}, 'Hi!'
+
+    try:
+      self._http_server.SetCallbackForPath('/hang', hang)
+      # NB: With a too small timeout chromedriver might not send the
+      # Navigate command at all.
+      driver.SetTimeout('page load', 500) # 500 ms
+      driver.Load(self._http_server.GetUrl(host) + '/hang')
+    except chromedriver.ChromeDriverException as e:
+      self.assertNotEqual(-1, e.message.find('timeout'))
+      # Verify that the browser actually made that request.
+      self.assertTrue(request_received_event.wait(1))
+    finally:
+      send_response_event.set()
+      pass
+
+    self.assertEquals(initial_url, driver.GetCurrentUrl())
+
+  def testPageLoadTimeout(self):
+    self._CheckPageLoadTimeout(self.CreateDriver())
+
+  def testPageLoadTimeoutCrossDomain(self):
+    driver = self.CreateDriver(
+        chrome_switches=['host-resolver-rules=MAP * 127.0.0.1'])
+    # Cross-domain navigation is likely to be a cross-process one. In this case
+    # DevToolsAgentHost behaves quite differently and does not send command
+    # responses if the navigation hangs, so this case deserves a dedicated test.
+    self._CheckPageLoadTimeout(driver, 'foo.bar')
+
+
 class ChromeDriverAndroidTest(ChromeDriverBaseTest):
   """End to end tests for Android-specific tests."""
 
@@ -1589,6 +1647,20 @@ class MobileEmulationCapabilityTest(ChromeDriverBaseTest):
         '});'
         'return div;')
     div.Click()
+    self.assertEquals(1, len(driver.FindElements('tag name', 'br')))
+
+  def testTapElement(self):
+    driver = self.CreateDriver(
+        mobile_emulation = {'deviceName': 'Google Nexus 5'})
+    driver.Load('about:blank')
+    div = driver.ExecuteScript(
+        'document.body.innerHTML = "<div>old</div>";'
+        'var div = document.getElementsByTagName("div")[0];'
+        'div.addEventListener("touchstart", function() {'
+        '  div.innerHTML="new<br>";'
+        '});'
+        'return div;')
+    div.SingleTap()
     self.assertEquals(1, len(driver.FindElements('tag name', 'br')))
 
   def testHasTouchScreen(self):

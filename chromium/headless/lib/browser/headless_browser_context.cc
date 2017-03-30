@@ -36,6 +36,10 @@ class HeadlessResourceContext : public content::ResourceContext {
     url_request_context_getter_ = std::move(url_request_context_getter);
   }
 
+  net::URLRequestContextGetter* url_request_context_getter() {
+    return url_request_context_getter_.get();
+  }
+
  private:
   scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
 
@@ -91,27 +95,6 @@ base::FilePath HeadlessBrowserContext::GetPath() const {
 
 bool HeadlessBrowserContext::IsOffTheRecord() const {
   return false;
-}
-
-net::URLRequestContextGetter* HeadlessBrowserContext::GetRequestContext() {
-  return GetDefaultStoragePartition(this)->GetURLRequestContext();
-}
-
-net::URLRequestContextGetter* HeadlessBrowserContext::GetMediaRequestContext() {
-  return GetRequestContext();
-}
-
-net::URLRequestContextGetter*
-HeadlessBrowserContext::GetMediaRequestContextForRenderProcess(
-    int renderer_child_id) {
-  return GetRequestContext();
-}
-
-net::URLRequestContextGetter*
-HeadlessBrowserContext::GetMediaRequestContextForStoragePartition(
-    const base::FilePath& partition_path,
-    bool in_memory) {
-  return GetRequestContext();
 }
 
 content::ResourceContext* HeadlessBrowserContext::GetResourceContext() {
@@ -174,6 +157,18 @@ HeadlessBrowserContext::CreateRequestContextForStoragePartition(
     bool in_memory,
     content::ProtocolHandlerMap* protocol_handlers,
     content::URLRequestInterceptorScopedVector request_interceptors) {
+  return nullptr;
+}
+
+net::URLRequestContextGetter*
+HeadlessBrowserContext::CreateMediaRequestContext() {
+  return resource_context_->url_request_context_getter();
+}
+
+net::URLRequestContextGetter*
+HeadlessBrowserContext::CreateMediaRequestContextForStoragePartition(
+    const base::FilePath& partition_path,
+    bool in_memory) {
   return nullptr;
 }
 

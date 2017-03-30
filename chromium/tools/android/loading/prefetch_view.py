@@ -52,7 +52,7 @@ class PrefetchSimulationView(object):
     if trace is None:
       return
     requests = trace.request_track.GetEvents()
-    critical_requests_ids = user_lens.CriticalRequests()
+    critical_requests_ids = user_lens.CriticalRequestIds()
     self.postload_msec = user_lens.PostloadTimeMsec()
     self.graph = dependency_graph.RequestDependencyGraph(
         requests, dependencies_lens, node_class=RequestNode)
@@ -154,7 +154,7 @@ class PrefetchSimulationView(object):
     for preload_step_event in preload_step_events:
       preload_event = resource_events.EventFromStep(preload_step_event)
       if preload_event:
-        preloaded_urls.add(preload_event.args['url'])
+        preloaded_urls.add(preload_event.args['data']['url'])
     parser_requests = cls.ParserDiscoverableRequests(
         request, dependencies_lens)
     preloaded_root_requests = filter(

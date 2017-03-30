@@ -10,7 +10,6 @@
 #include "base/logging.h"
 #include "sandbox/win/src/crosscall_server.h"
 #include "sandbox/win/src/filesystem_dispatcher.h"
-#include "sandbox/win/src/handle_dispatcher.h"
 #include "sandbox/win/src/interception.h"
 #include "sandbox/win/src/internal_types.h"
 #include "sandbox/win/src/ipc_tags.h"
@@ -59,14 +58,23 @@ TopLevelDispatcher::TopLevelDispatcher(PolicyBase* policy) : policy_(policy) {
   ipc_targets_[IPC_NTOPENKEY_TAG] = dispatcher;
   registry_dispatcher_.reset(dispatcher);
 
-  dispatcher = new HandleDispatcher(policy_);
-  ipc_targets_[IPC_DUPLICATEHANDLEPROXY_TAG] = dispatcher;
-  handle_dispatcher_.reset(dispatcher);
-
   dispatcher = new ProcessMitigationsWin32KDispatcher(policy_);
   ipc_targets_[IPC_GDI_GDIDLLINITIALIZE_TAG] = dispatcher;
   ipc_targets_[IPC_GDI_GETSTOCKOBJECT_TAG] = dispatcher;
   ipc_targets_[IPC_USER_REGISTERCLASSW_TAG] = dispatcher;
+  ipc_targets_[IPC_USER_ENUMDISPLAYMONITORS_TAG] = dispatcher;
+  ipc_targets_[IPC_USER_ENUMDISPLAYDEVICES_TAG] = dispatcher;
+  ipc_targets_[IPC_USER_GETMONITORINFO_TAG] = dispatcher;
+  ipc_targets_[IPC_GDI_CREATEOPMPROTECTEDOUTPUTS_TAG] = dispatcher;
+  ipc_targets_[IPC_GDI_GETCERTIFICATE_TAG] = dispatcher;
+  ipc_targets_[IPC_GDI_GETCERTIFICATESIZE_TAG] = dispatcher;
+  ipc_targets_[IPC_GDI_DESTROYOPMPROTECTEDOUTPUT_TAG] = dispatcher;
+  ipc_targets_[IPC_GDI_CONFIGUREOPMPROTECTEDOUTPUT_TAG] = dispatcher;
+  ipc_targets_[IPC_GDI_GETOPMINFORMATION_TAG] = dispatcher;
+  ipc_targets_[IPC_GDI_GETOPMRANDOMNUMBER_TAG] = dispatcher;
+  ipc_targets_[IPC_GDI_GETSUGGESTEDOPMPROTECTEDOUTPUTARRAYSIZE_TAG] =
+      dispatcher;
+  ipc_targets_[IPC_GDI_SETOPMSIGNINGKEYANDSEQUENCENUMBERS_TAG] = dispatcher;
   process_mitigations_win32k_dispatcher_.reset(dispatcher);
 }
 

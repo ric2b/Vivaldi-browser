@@ -13,7 +13,7 @@
 
 #include "base/strings/stringprintf.h"
 #include "base/test/test_timeouts.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_manager.h"
 #include "content/browser/compositor/surface_utils.h"
@@ -397,9 +397,10 @@ void TestNavigationManager::DidStartNavigation(NavigationHandle* handle) {
     return;
 
   handle_ = handle;
-  scoped_ptr<NavigationThrottle> throttle(new TestNavigationManagerThrottle(
-      handle_, base::Bind(&TestNavigationManager::OnWillStartRequest,
-                          weak_factory_.GetWeakPtr())));
+  std::unique_ptr<NavigationThrottle> throttle(
+      new TestNavigationManagerThrottle(
+          handle_, base::Bind(&TestNavigationManager::OnWillStartRequest,
+                              weak_factory_.GetWeakPtr())));
   handle_->RegisterThrottleForTesting(std::move(throttle));
 }
 

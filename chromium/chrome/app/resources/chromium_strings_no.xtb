@@ -53,6 +53,7 @@
 <translation id="2673087257647337101">Nå er oppdateringen snart ferdig! Start Chromium på nytt for å fullføre oppdateringen.</translation>
 <translation id="2685838254101182273">Chromium oppdateres ikke lenger og har mistet støtten for denne versjonen av operativsystemet ditt.</translation>
 <translation id="2705212601509139398">Dette nettstedet bruker Chromium Frame-programtillegget. Støtten for dette programtillegget utløper snart, og du bør derfor avinstallere det og laste ned en kompatibel nettleser.</translation>
+<translation id="2711502716910134313">Chromium-fane</translation>
 <translation id="2770231113462710648">Endre standardnettleser til:</translation>
 <translation id="2801146392936645542">Filen <ph name="FILE_NAME" /> er skadelig, og Chromium har blokkert den.</translation>
 <translation id="2847479871509788944">Fjern fra Chromium</translation>
@@ -66,7 +67,6 @@
 <translation id="3130323860337406239">Chromium bruker mikrofonen din.</translation>
 <translation id="313551035350905294">Du er i ferd med å logge deg på med en administrert konto og gir administratoren kontroll over Chromium-profilen din. Chromium-dataene dine, som apper, bokmerker, loggen, passord og andre innstillinger, blir permanent knyttet til <ph name="USER_NAME" />. Du kan slette disse dataene via Google Konto-oversikten, men du kan ikke knytte disse dataene til en annen konto.</translation>
 <translation id="3190315855212034486">Chromium har krasjet. Vil du starte den på nytt nå?</translation>
-<translation id="3197823471738295152">Enheten er oppdatert.</translation>
 <translation id="3244477511402911926">Varselssenter for Chromium</translation>
 <translation id="3256316712990552818">Kopiert til Chromium</translation>
 <translation id="3258596308407688501">Chromium kan ikke lese og skrive til egen datakatalog:
@@ -120,6 +120,7 @@
 <translation id="549669000822060376">Vent mens Chromium installerer de nyeste systemoppdateringene.</translation>
 <translation id="5563479599352954471">Søk med ett trykk</translation>
 <translation id="5620765574781326016">Finn ut mer om emner på nettsteder uten å forlate siden.</translation>
+<translation id="5634636535844844681">Chromium krever Windows 7 eller nyere.</translation>
 <translation id="5680901439334282664">logg på Chromium</translation>
 <translation id="5772805321386874569">(krever at Chromium <ph name="BEGIN_BUTTON" />startes på nytt<ph name="END_BUTTON" />)</translation>
 <translation id="5796460469508169315">Chromium er nesten klar.</translation>
@@ -179,6 +180,12 @@ Chromium kan ikke gjenopprette innstillingen dine.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7339898014177206373">Nytt vindu</translation>
 <translation id="734373864078049451">Her finner du nettinnholdet, bokmerkene og de andre Chromium-tingene dine.</translation>
+<translation id="7344413941077984497">Du kan konfigurere hvilke nettsteder <ph name="NEW_PROFILE_NAME" /> kan se, ved å angi begrensninger og innstillinger her: <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. Hvis du ikke endrer standardinnstillingene, kan <ph name="NEW_PROFILE_NAME" /> surfe på hele nettet.
+
+Hvis du vil hindre <ph name="NEW_PROFILE_NAME" /> i å få tilgang til kontoen din, må du låse profilen din når du ikke bruker Chromium. For å gjøre det, klikk på profilnavnet øverst til høyre i nettleseren og velg «Avslutt og barnelås».
+<ph name="BEGIN_LINK_2" />Finn ut mer<ph name="END_LINK_2" />
+
+Vi har sendt deg (<ph name="ACCOUNT_EMAIL" />) en e-post med nærmere instruksjoner.</translation>
 <translation id="7419987137528340081">Hvis du foretrekker å holde eksisterende Chromium-data separat, kan du opprette en ny Chromium-bruker for <ph name="USER_NAME" />.</translation>
 <translation id="7421823331379285070">Chromium krever Windows XP eller nyere. Enkelte funksjoner vil kanskje ikke fungere.</translation>
 <translation id="7463979740390522693">Chromium – varsler (<ph name="QUANTITY" /> uleste)</translation>
@@ -207,6 +214,7 @@ Chromium kan ikke gjenopprette innstillingen dine.</translation>
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> – The Chromium Authors. Med enerett.</translation>
 <translation id="8621669128220841554">Installeringen mislyktes på grunn av en uspesifisert feil. Last ned Chromium på nytt.</translation>
 <translation id="8628626585870903697">Chromium omfatter ikke PDF-visningsprogrammet som er nødvendig for at «Forhåndsvisning av utskrift» skal fungere.</translation>
+<translation id="8667808506758191620"><ph name="DEVICE_TYPE" />-enheten er oppdatert.</translation>
 <translation id="8697124171261953979">Den styrer også hvilken side som vises når du starter Chromium eller søker fra multifunksjonsfeltet.</translation>
 <translation id="8704119203788522458">Dette er din Chromium</translation>
 <translation id="872034308864968620">La Chromium kjøre i bakgrunnen</translation>
@@ -223,7 +231,6 @@ Chromium kan ikke gjenopprette innstillingen dine.</translation>
 
 Hvis du logger deg på allikevel, blir Chromium-informasjon som bokmerker, loggen og andre innstillinger slått sammen med <ph name="ACCOUNT_EMAIL_NEW" />.</translation>
 <translation id="9013087743919948559">Legg til i Chromium</translation>
-<translation id="9013262824292842194">Chromium krever Windows Vista eller Windows XP med SP2 eller høyere.</translation>
 <translation id="9019929317751753759">For å gjøre Chromium tryggere har vi slått av følgende utvidelse som ikke finnes i <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />, og som kan ha blitt lagt til uten at du vet det.</translation>
 <translation id="9022552996538154597">Logg på Chromium</translation>
 <translation id="9036189287518468038">Chromium-appvelger</translation>

@@ -138,7 +138,7 @@ media_router::Issue TypeConverter<media_router::Issue, IssuePtr>::Convert(
       input->title, input->message,
       media_router::IssueAction(IssueActionTypeFromMojo(input->default_action)),
       actions, input->route_id, IssueSeverityFromMojo(input->severity),
-      input->is_blocking, input->help_url);
+      input->is_blocking, input->help_page_id);
 }
 
 content::PresentationConnectionState PresentationConnectionStateFromMojo(
@@ -183,6 +183,8 @@ media_router::RouteRequestResult::ResultCode RouteRequestResultCodeFromMojo(
       return media_router::RouteRequestResult::OK;
     case RouteRequestResultCode::TIMED_OUT:
       return media_router::RouteRequestResult::TIMED_OUT;
+    case RouteRequestResultCode::ROUTE_NOT_FOUND:
+      return media_router::RouteRequestResult::ROUTE_NOT_FOUND;
     default:
       NOTREACHED() << "Unknown RouteRequestResultCode " << result_code;
       return media_router::RouteRequestResult::UNKNOWN_ERROR;

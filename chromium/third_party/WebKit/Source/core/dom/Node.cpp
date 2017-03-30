@@ -92,9 +92,9 @@
 #include "platform/TraceEvent.h"
 #include "platform/TracedValue.h"
 #include "wtf/HashSet.h"
-#include "wtf/Partitions.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/Vector.h"
+#include "wtf/allocator/Partitions.h"
 #include "wtf/text/CString.h"
 #include "wtf/text/StringBuilder.h"
 
@@ -102,27 +102,13 @@ namespace blink {
 
 using namespace HTMLNames;
 
-struct SameSizeAsNode : NODE_BASE_CLASSES {
+struct SameSizeAsNode : EventTarget {
     uint32_t m_nodeFlags;
     Member<void*> m_willbeMember[4];
     void* m_pointer;
 };
 
 static_assert(sizeof(Node) <= sizeof(SameSizeAsNode), "Node should stay small");
-
-#if !ENABLE(OILPAN)
-void* Node::operator new(size_t size)
-{
-    DCHECK(isMainThread());
-    return partitionAlloc(WTF::Partitions::nodePartition(), size, "blink::Node");
-}
-
-void Node::operator delete(void* ptr)
-{
-    DCHECK(isMainThread());
-    partitionFree(ptr);
-}
-#endif
 
 #if DUMP_NODE_STATISTICS
 using WeakNodeSet = HeapHashSet<WeakMember<Node>>;
@@ -265,11 +251,6 @@ Node::Node(TreeScope* treeScope, ConstructionType type)
     , m_next(nullptr)
 {
     DCHECK(m_treeScope || type == CreateDocument || type == CreateShadowRoot);
-#if !ENABLE(OILPAN)
-    if (m_treeScope)
-        m_treeScope->guardRef();
-#endif
-
 #if !defined(NDEBUG) || (defined(DUMP_NODE_STATISTICS) && DUMP_NODE_STATISTICS)
     trackForDebugging();
 #endif
@@ -278,60 +259,11 @@ Node::Node(TreeScope* treeScope, ConstructionType type)
 
 Node::~Node()
 {
-#if !ENABLE(OILPAN)
-#if DUMP_NODE_STATISTICS
-    liveNodeSet().remove(this);
-#endif
-
-    if (hasRareData())
-        clearRareData();
-
-    RELEASE_ASSERT(!layoutObject());
-
-    if (!isContainerNode())
-        willBeDeletedFromDocument();
-
-    if (m_previous)
-        m_previous->setNextSibling(nullptr);
-    if (m_next)
-        m_next->setPreviousSibling(nullptr);
-
-    if (m_treeScope)
-        m_treeScope->guardDeref();
-
-    if (getFlag(HasWeakReferencesFlag))
-        WeakIdentifierMap<Node>::notifyObjectDestroyed(this);
-
-    // clearEventTargetData() must be always done,
-    // or eventTargetDataMap() may keep a raw pointer to a deleted object.
-    DCHECK(!hasEventTargetData());
-#else
     // With Oilpan, the rare data finalizer also asserts for
     // this condition (we cannot directly access it here.)
     RELEASE_ASSERT(hasRareData() || !layoutObject());
-#endif
-
     InstanceCounters::decrementCounter(InstanceCounters::NodeCounter);
 }
-
-#if !ENABLE(OILPAN)
-// With Oilpan all of this is handled with weak processing of the document.
-void Node::willBeDeletedFromDocument()
-{
-    if (hasEventTargetData())
-        clearEventTargetData();
-
-    if (!isTreeScopeInitialized())
-        return;
-
-    Document& document = this->document();
-
-    if (document.frameHost())
-        document.frameHost()->eventHandlerRegistry().didRemoveAllEventHandlers(*this);
-
-    document.markers().removeMarkers(this);
-}
-#endif
 
 NodeRareData* Node::rareData() const
 {
@@ -355,22 +287,6 @@ NodeRareData& Node::ensureRareData()
     return *rareData();
 }
 
-#if !ENABLE(OILPAN)
-void Node::clearRareData()
-{
-    DCHECK(hasRareData());
-    DCHECK(!transientMutationObserverRegistry() || transientMutationObserverRegistry()->isEmpty());
-
-    LayoutObject* layoutObject = m_data.m_rareData->layoutObject();
-    if (isElementNode())
-        delete static_cast<ElementRareData*>(m_data.m_rareData);
-    else
-        delete static_cast<NodeRareData*>(m_data.m_rareData);
-    m_data.m_layoutObject = layoutObject;
-    clearFlag(HasRareDataFlag);
-}
-#endif
-
 Node* Node::toNode()
 {
     return this;
@@ -391,7 +307,7 @@ void Node::setNodeValue(const String&)
     // By default, setting nodeValue has no effect.
 }
 
-RawPtr<NodeList> Node::childNodes()
+NodeList* Node::childNodes()
 {
     if (isContainerNode())
         return ensureRareData().ensureNodeLists().ensureChildNodeList(toContainerNode(*this));
@@ -464,7 +380,7 @@ Node& Node::treeRoot() const
     return const_cast<Node&>(*node);
 }
 
-RawPtr<Node> Node::insertBefore(RawPtr<Node> newChild, Node* refChild, ExceptionState& exceptionState)
+Node* Node::insertBefore(Node* newChild, Node* refChild, ExceptionState& exceptionState)
 {
     if (isContainerNode())
         return toContainerNode(this)->insertBefore(newChild, refChild, exceptionState);
@@ -473,7 +389,7 @@ RawPtr<Node> Node::insertBefore(RawPtr<Node> newChild, Node* refChild, Exception
     return nullptr;
 }
 
-RawPtr<Node> Node::replaceChild(RawPtr<Node> newChild, RawPtr<Node> oldChild, ExceptionState& exceptionState)
+Node* Node::replaceChild(Node* newChild, Node* oldChild, ExceptionState& exceptionState)
 {
     if (isContainerNode())
         return toContainerNode(this)->replaceChild(newChild, oldChild, exceptionState);
@@ -482,7 +398,7 @@ RawPtr<Node> Node::replaceChild(RawPtr<Node> newChild, RawPtr<Node> oldChild, Ex
     return nullptr;
 }
 
-RawPtr<Node> Node::removeChild(RawPtr<Node> oldChild, ExceptionState& exceptionState)
+Node* Node::removeChild(Node* oldChild, ExceptionState& exceptionState)
 {
     if (isContainerNode())
         return toContainerNode(this)->removeChild(oldChild, exceptionState);
@@ -491,13 +407,103 @@ RawPtr<Node> Node::removeChild(RawPtr<Node> oldChild, ExceptionState& exceptionS
     return nullptr;
 }
 
-RawPtr<Node> Node::appendChild(RawPtr<Node> newChild, ExceptionState& exceptionState)
+Node* Node::appendChild(Node* newChild, ExceptionState& exceptionState)
 {
     if (isContainerNode())
         return toContainerNode(this)->appendChild(newChild, exceptionState);
 
     exceptionState.throwDOMException(HierarchyRequestError, "This node type does not support this method.");
     return nullptr;
+}
+
+static bool isNodeInNodes(const Node* const node, const HeapVector<NodeOrString>& nodes)
+{
+    for (const NodeOrString& nodeOrString : nodes) {
+        if (nodeOrString.isNode() && nodeOrString.getAsNode() == node)
+            return true;
+    }
+    return false;
+}
+
+static Node* findViablePreviousSibling(const Node& node, const HeapVector<NodeOrString>& nodes)
+{
+    for (Node* sibling = node.previousSibling(); sibling; sibling = sibling->previousSibling()) {
+        if (!isNodeInNodes(sibling, nodes))
+            return sibling;
+    }
+    return nullptr;
+}
+
+static Node* findViableNextSibling(const Node& node, const HeapVector<NodeOrString>& nodes)
+{
+    for (Node* sibling = node.nextSibling(); sibling; sibling = sibling->nextSibling()) {
+        if (!isNodeInNodes(sibling, nodes))
+            return sibling;
+    }
+    return nullptr;
+}
+
+static Node* nodeOrStringToNode(const NodeOrString& nodeOrString, Document& document)
+{
+    if (nodeOrString.isNode())
+        return nodeOrString.getAsNode();
+    return Text::create(document, nodeOrString.getAsString());
+}
+
+static Node* convertNodesIntoNode(const HeapVector<NodeOrString>& nodes, Document& document)
+{
+    if (nodes.size() == 1)
+        return nodeOrStringToNode(nodes[0], document);
+
+    Node* fragment = DocumentFragment::create(document);
+    for (const NodeOrString& nodeOrString : nodes)
+        fragment->appendChild(nodeOrStringToNode(nodeOrString, document), ASSERT_NO_EXCEPTION);
+    return fragment;
+}
+
+void Node::prepend(const HeapVector<NodeOrString>& nodes, ExceptionState& exceptionState)
+{
+    Node* node = convertNodesIntoNode(nodes, document());
+    insertBefore(node, firstChild(), exceptionState);
+}
+
+void Node::append(const HeapVector<NodeOrString>& nodes, ExceptionState& exceptionState)
+{
+    Node* node = convertNodesIntoNode(nodes, document());
+    appendChild(node, exceptionState);
+}
+
+void Node::before(const HeapVector<NodeOrString>& nodes, ExceptionState& exceptionState)
+{
+    Node* parent = parentNode();
+    if (!parent)
+        return;
+    Node* viablePreviousSibling = findViablePreviousSibling(*this, nodes);
+    Node* node = convertNodesIntoNode(nodes, document());
+    parent->insertBefore(node, viablePreviousSibling ? viablePreviousSibling->nextSibling() : parent->firstChild(), exceptionState);
+}
+
+void Node::after(const HeapVector<NodeOrString>& nodes, ExceptionState& exceptionState)
+{
+    Node* parent = parentNode();
+    if (!parent)
+        return;
+    Node* viableNextSibling = findViableNextSibling(*this, nodes);
+    Node* node = convertNodesIntoNode(nodes, document());
+    parent->insertBefore(node, viableNextSibling, exceptionState);
+}
+
+void Node::replaceWith(const HeapVector<NodeOrString>& nodes, ExceptionState& exceptionState)
+{
+    Node* parent = parentNode();
+    if (!parent)
+        return;
+    Node* viableNextSibling = findViableNextSibling(*this, nodes);
+    Node* node = convertNodesIntoNode(nodes, document());
+    if (parent == parentNode())
+        parent->replaceChild(node, this, exceptionState);
+    else
+        parent->insertBefore(node, viableNextSibling, exceptionState);
 }
 
 void Node::remove(ExceptionState& exceptionState)
@@ -513,7 +519,7 @@ void Node::normalize()
     // Go through the subtree beneath us, normalizing all nodes. This means that
     // any two adjacent text nodes are merged and any empty text nodes are removed.
 
-    RawPtr<Node> node = this;
+    Node* node = this;
     while (Node* firstChild = node->firstChild())
         node = firstChild;
     while (node) {
@@ -529,13 +535,13 @@ void Node::normalize()
 
 bool Node::isContentEditable(UserSelectAllTreatment treatment) const
 {
-    document().updateLayoutTree();
+    document().updateStyleAndLayoutTree();
     return hasEditableStyle(Editable, treatment);
 }
 
 bool Node::isContentRichlyEditable() const
 {
-    document().updateLayoutTree();
+    document().updateStyleAndLayoutTree();
     return hasEditableStyle(RichlyEditable, UserSelectAllIsAlwaysNonEditable);
 }
 
@@ -548,13 +554,13 @@ bool Node::hasEditableStyle(EditableLevel editableLevel, UserSelectAllTreatment 
     // ContainerNode::setFocus() calls setNeedsStyleRecalc(), so the assertion
     // would fire in the middle of Document::setFocusedNode().
 
-    for (const Node* node = this; node; node = node->parentNode()) {
-        if ((node->isHTMLElement() || node->isDocumentNode()) && node->layoutObject()) {
+    for (const Node& node : NodeTraversal::inclusiveAncestorsOf(*this)) {
+        if ((node.isHTMLElement() || node.isDocumentNode()) && node.layoutObject()) {
             // Elements with user-select: all style are considered atomic
             // therefore non editable.
-            if (nodeIsUserSelectAll(node) && treatment == UserSelectAllIsAlwaysNonEditable)
+            if (nodeIsUserSelectAll(&node) && treatment == UserSelectAllIsAlwaysNonEditable)
                 return false;
-            switch (node->layoutObject()->style()->userModify()) {
+            switch (node.layoutObject()->style()->userModify()) {
             case READ_ONLY:
                 return false;
             case READ_WRITE:
@@ -697,7 +703,7 @@ void Node::markAncestorsWithChildNeedsDistributionRecalc()
     if (RuntimeEnabledFeatures::shadowDOMV1Enabled() && inShadowIncludingDocument() && !document().childNeedsDistributionRecalc()) {
         // TODO(hayato): Support a non-document composed tree.
         // TODO(hayato): Enqueue a task only if a 'slotchange' event listner is registered in the document composed tree.
-        Microtask::enqueueMicrotask(WTF::bind(&Document::updateDistribution, RawPtr<Document>(&document())));
+        Microtask::enqueueMicrotask(WTF::bind(&Document::updateDistribution, &document()));
     }
     for (Node* node = this; node && !node->childNeedsDistributionRecalc(); node = node->parentOrShadowHostNode())
         node->setChildNeedsDistributionRecalc();
@@ -771,7 +777,7 @@ bool Node::isInert() const
     const HTMLDialogElement* dialog = document().activeModalDialog();
     if (dialog && this != document() && (!canParticipateInFlatTree() || !FlatTreeTraversal::containsIncludingPseudoElement(*dialog, *this)))
         return true;
-    return document().ownerElement() && document().ownerElement()->isInert();
+    return document().localOwner() && document().localOwner()->isInert();
 }
 
 unsigned Node::nodeIndex() const
@@ -841,15 +847,6 @@ bool Node::isShadowIncludingInclusiveAncestorOf(const Node* node) const
     }
 
     return false;
-}
-
-Node* Node::retarget(const Node& target) const
-{
-    for (const Node* ancestor = &target; ancestor; ancestor = ancestor->shadowHost()) {
-        if (treeScope() == ancestor->treeScope())
-            return const_cast<Node*>(ancestor);
-    }
-    return nullptr;
 }
 
 bool Node::containsIncludingHostElements(const Node& node) const
@@ -993,6 +990,21 @@ bool Node::canParticipateInFlatTree() const
 bool Node::isSlotOrActiveInsertionPoint() const
 {
     return isHTMLSlotElement(*this) || isActiveInsertionPoint(*this);
+}
+
+AtomicString Node::slotName() const
+{
+    DCHECK(slottable());
+    if (isElementNode())
+        return normalizeSlotName(toElement(*this).fastGetAttribute(HTMLNames::slotAttr));
+    DCHECK(isTextNode());
+    return emptyAtom;
+}
+
+// static
+AtomicString Node::normalizeSlotName(const AtomicString& name)
+{
+    return (name.isNull() || name.isEmpty()) ? emptyAtom : name;
 }
 
 bool Node::isInV1ShadowTree() const
@@ -1345,7 +1357,7 @@ void Node::setTextContent(const String& text)
     case ELEMENT_NODE:
     case DOCUMENT_FRAGMENT_NODE: {
         // FIXME: Merge this logic into replaceChildrenWithText.
-        RawPtr<ContainerNode> container = toContainerNode(this);
+        ContainerNode* container = toContainerNode(this);
 
         // Note: This is an intentional optimization.
         // See crbug.com/352836 also.
@@ -1527,6 +1539,38 @@ String Node::debugNodeName() const
     return nodeName();
 }
 
+static void dumpAttributeDesc(const Node& node, const QualifiedName& name, std::ostream& ostream)
+{
+    if (!node.isElementNode())
+        return;
+    const AtomicString& value = toElement(node).getAttribute(name);
+    if (value.isEmpty())
+        return;
+    ostream << ' ' << name.toString().utf8().data() << '=' << value;
+}
+
+// |std::ostream| version of |Node::showNode|
+std::ostream& operator<<(std::ostream& ostream, const Node& node)
+{
+    // We avoid to print "" by utf8().data().
+    ostream << node.nodeName().utf8().data();
+    if (node.isTextNode())
+        return ostream << " " << node.nodeValue();
+    dumpAttributeDesc(node, HTMLNames::idAttr, ostream);
+    dumpAttributeDesc(node, HTMLNames::classAttr, ostream);
+    dumpAttributeDesc(node, HTMLNames::styleAttr, ostream);
+    return ostream;
+}
+
+std::ostream& operator<<(std::ostream& ostream, const Node* node)
+{
+    if (!node)
+        return ostream << "null";
+    return ostream << *node;
+}
+
+#ifndef NDEBUG
+
 static void appendAttributeDesc(const Node* node, StringBuilder& stringBuilder, const QualifiedName& name, const char* attrDesc)
 {
     if (!node->isElementNode())
@@ -1541,28 +1585,6 @@ static void appendAttributeDesc(const Node* node, StringBuilder& stringBuilder, 
     stringBuilder.append(attr);
     stringBuilder.appendLiteral("\"");
 }
-
-// |std::ostream| version of |Node::showNode|
-std::ostream& operator<<(std::ostream& ostream, const Node& node)
-{
-    ostream << node.nodeName();
-    if (node.isTextNode())
-        return ostream << " " << node.nodeValue();
-    StringBuilder attrs;
-    appendAttributeDesc(&node, attrs, HTMLNames::idAttr, " ID");
-    appendAttributeDesc(&node, attrs, HTMLNames::classAttr, " CLASS");
-    appendAttributeDesc(&node, attrs, HTMLNames::styleAttr, " STYLE");
-    return ostream << attrs.toString();
-}
-
-std::ostream& operator<<(std::ostream& ostream, const Node* node)
-{
-    if (!node)
-        return ostream << "null";
-    return ostream << *node;
-}
-
-#ifndef NDEBUG
 
 void Node::showNode(const char* prefix) const
 {
@@ -1813,7 +1835,7 @@ const AtomicString& Node::interfaceName() const
 
 ExecutionContext* Node::getExecutionContext() const
 {
-    return document().contextDocument().get();
+    return document().contextDocument();
 }
 
 void Node::didMoveToNewDocument(Document& oldDocument)
@@ -1850,29 +1872,21 @@ void Node::didMoveToNewDocument(Document& oldDocument)
     }
 }
 
-bool Node::addEventListenerInternal(const AtomicString& eventType, EventListener* listener, const EventListenerOptions& options)
+void Node::addedEventListener(const AtomicString& eventType, RegisteredEventListener& registeredListener)
 {
-    if (!EventTarget::addEventListenerInternal(eventType, listener, options))
-        return false;
-
+    EventTarget::addedEventListener(eventType, registeredListener);
     document().addListenerTypeIfNeeded(eventType);
     if (FrameHost* frameHost = document().frameHost())
-        frameHost->eventHandlerRegistry().didAddEventHandler(*this, eventType, options);
-
-    return true;
+        frameHost->eventHandlerRegistry().didAddEventHandler(*this, eventType, registeredListener.options());
 }
 
-bool Node::removeEventListenerInternal(const AtomicString& eventType, EventListener* listener, const EventListenerOptions& options)
+void Node::removedEventListener(const AtomicString& eventType, const RegisteredEventListener& registeredListener)
 {
-    if (!EventTarget::removeEventListenerInternal(eventType, listener, options))
-        return false;
-
+    EventTarget::removedEventListener(eventType, registeredListener);
     // FIXME: Notify Document that the listener has vanished. We need to keep track of a number of
     // listeners for each type, not just a bool - see https://bugs.webkit.org/show_bug.cgi?id=33861
     if (FrameHost* frameHost = document().frameHost())
-        frameHost->eventHandlerRegistry().didRemoveEventHandler(*this, eventType, options);
-
-    return true;
+        frameHost->eventHandlerRegistry().didRemoveEventHandler(*this, eventType, registeredListener.options());
 }
 
 void Node::removeAllEventListeners()
@@ -1910,21 +1924,10 @@ EventTargetData& Node::ensureEventTargetData()
         return *eventTargetDataMap().get(this);
     DCHECK(!eventTargetDataMap().contains(this));
     setHasEventTargetData(true);
-    RawPtr<EventTargetData> data = new EventTargetData;
-    EventTargetData* dataPtr = data.get();
-    eventTargetDataMap().set(this, data.release());
-    return *dataPtr;
+    EventTargetData* data = new EventTargetData;
+    eventTargetDataMap().set(this, data);
+    return *data;
 }
-
-#if !ENABLE(OILPAN)
-void Node::clearEventTargetData()
-{
-    eventTargetDataMap().remove(this);
-#if DCHECK_IS_ON()
-    setHasEventTargetData(false);
-#endif
-}
-#endif
 
 HeapVector<Member<MutationObserverRegistration>>* Node::mutationObserverRegistry()
 {
@@ -2005,15 +2008,10 @@ void Node::unregisterMutationObserver(MutationObserverRegistration* registration
     if (index == kNotFound)
         return;
 
-    // Deleting the registration may cause this node to be derefed, so we must make sure the Vector operation completes
-    // before that, in case |this| is destroyed (see MutationObserverRegistration::m_registrationNodeKeepAlive).
     // FIXME: Simplify the registration/transient registration logic to make this understandable by humans.
-    RawPtr<Node> protect(this);
-#if ENABLE(OILPAN)
     // The explicit dispose() is needed to have the registration
     // object unregister itself promptly.
     registration->dispose();
-#endif
     registry->remove(index);
 }
 
@@ -2064,7 +2062,7 @@ void Node::handleLocalEvents(Event& event)
     fireEventListeners(&event);
 }
 
-void Node::dispatchScopedEvent(RawPtr<Event> event)
+void Node::dispatchScopedEvent(Event* event)
 {
     event->setTrusted(true);
     EventDispatcher::dispatchScopedEvent(*this, event->createMediator());
@@ -2090,12 +2088,12 @@ void Node::dispatchSubtreeModifiedEvent()
     dispatchScopedEvent(MutationEvent::create(EventTypeNames::DOMSubtreeModified, true));
 }
 
-DispatchEventResult Node::dispatchDOMActivateEvent(int detail, RawPtr<Event> underlyingEvent)
+DispatchEventResult Node::dispatchDOMActivateEvent(int detail, Event* underlyingEvent)
 {
 #if DCHECK_IS_ON()
     DCHECK(!EventDispatchForbiddenScope::isEventDispatchForbidden());
 #endif
-    RawPtr<UIEvent> event = UIEvent::create(EventTypeNames::DOMActivate, true, true, document().domWindow(), detail);
+    UIEvent* event = UIEvent::create(EventTypeNames::DOMActivate, true, true, document().domWindow(), detail);
     event->setUnderlyingEvent(underlyingEvent);
     dispatchScopedEvent(event);
 
@@ -2107,7 +2105,7 @@ DispatchEventResult Node::dispatchDOMActivateEvent(int detail, RawPtr<Event> und
 DispatchEventResult Node::dispatchMouseEvent(const PlatformMouseEvent& nativeEvent, const AtomicString& eventType,
     int detail, Node* relatedTarget)
 {
-    RawPtr<MouseEvent> event = MouseEvent::create(eventType, document().domWindow(), nativeEvent, detail, relatedTarget);
+    MouseEvent* event = MouseEvent::create(eventType, document().domWindow(), nativeEvent, detail, relatedTarget);
     return dispatchEvent(event);
 }
 
@@ -2161,7 +2159,7 @@ void Node::defaultEventHandler(Event* event)
             // FIXME: We should avoid synchronous layout if possible. We can
             // remove this synchronous layout if we avoid synchronous layout in
             // LayoutTextControlSingleLine::scrollHeight
-            document().updateLayoutIgnorePendingStylesheets();
+            document().updateStyleAndLayoutIgnorePendingStylesheets();
             LayoutObject* layoutObject = this->layoutObject();
             while (layoutObject && (!layoutObject->isBox() || !toLayoutBox(layoutObject)->canBeScrolledAndHasScrollableArea()))
                 layoutObject = layoutObject->parent();
@@ -2215,53 +2213,6 @@ bool Node::willRespondToTouchEvents()
     return hasEventListeners(EventTypeNames::touchstart) || hasEventListeners(EventTypeNames::touchmove) || hasEventListeners(EventTypeNames::touchcancel) || hasEventListeners(EventTypeNames::touchend);
 }
 
-#if !ENABLE(OILPAN)
-// This is here for inlining
-inline void TreeScope::removedLastRefToScope()
-{
-    ASSERT_WITH_SECURITY_IMPLICATION(!deletionHasBegun());
-    if (m_guardRefCount) {
-        // If removing a child removes the last self-only ref, we don't
-        // want the scope to be destructed until after
-        // removeDetachedChildren returns, so we guard ourselves with an
-        // extra self-only ref.
-        guardRef();
-        dispose();
-#if DCHECK_IS_ON()
-        // We need to do this right now since guardDeref() can delete this.
-        rootNode().m_inRemovedLastRefFunction = false;
-#endif
-        guardDeref();
-    } else {
-#if DCHECK_IS_ON()
-        rootNode().m_inRemovedLastRefFunction = false;
-#endif
-#if ENABLE(SECURITY_ASSERT)
-        beginDeletion();
-#endif
-        delete this;
-    }
-}
-
-// It's important not to inline removedLastRef, because we don't want to inline the code to
-// delete a Node at each deref call site.
-void Node::removedLastRef()
-{
-    // An explicit check for Document here is better than a virtual function since it is
-    // faster for non-Document nodes, and because the call to removedLastRef that is inlined
-    // at all deref call sites is smaller if it's a non-virtual function.
-    if (isTreeScope()) {
-        treeScope().removedLastRefToScope();
-        return;
-    }
-
-#if ENABLE(SECURITY_ASSERT)
-    m_deletionHasBegun = true;
-#endif
-    delete this;
-}
-#endif
-
 unsigned Node::connectedSubframeCount() const
 {
     return hasRareData() ? rareData()->connectedSubframeCount() : 0;
@@ -2278,7 +2229,7 @@ void Node::decrementConnectedSubframeCount()
     rareData()->decrementConnectedSubframeCount();
 }
 
-RawPtr<StaticNodeList> Node::getDestinationInsertionPoints()
+StaticNodeList* Node::getDestinationInsertionPoints()
 {
     updateDistribution();
     HeapVector<Member<InsertionPoint>, 8> insertionPoints;
@@ -2296,23 +2247,20 @@ RawPtr<StaticNodeList> Node::getDestinationInsertionPoints()
 
 HTMLSlotElement* Node::assignedSlot() const
 {
-#if DCHECK_IS_ON()
-    DCHECK(!needsDistributionRecalc());
-#endif
-    if (ElementShadow* shadow = parentElementShadow()) {
-        if (shadow->isV1())
-            return shadow->assignedSlotFor(*this);
-    }
+    Element* parent = parentElement();
+    ShadowRoot* root = parent ? parent->youngestShadowRoot() : nullptr;
+    if (root && root->isV1())
+        return root->assignedSlotFor(*this);
     return nullptr;
 }
 
 HTMLSlotElement* Node::assignedSlotForBinding()
 {
     updateDistribution();
-    if (ElementShadow* shadow = parentElementShadow()) {
-        if (shadow->isV1() && shadow->isOpenOrV0())
-            return shadow->assignedSlotFor(*this);
-    }
+    Element* parent = parentElement();
+    ShadowRoot* root = parent ? parent->youngestShadowRoot() : nullptr;
+    if (root && root->type() == ShadowRootType::Open)
+        return root->assignedSlotFor(*this);
     return nullptr;
 }
 
@@ -2355,30 +2303,89 @@ bool Node::isUserActionElementFocused() const
     return document().userActionElements().isFocused(this);
 }
 
+std::ostream& operator<<(std::ostream& os, CustomElementState state)
+{
+    switch (state) {
+    case CustomElementState::Uncustomized: return os << "Uncustomized";
+    case CustomElementState::Undefined: return os << "Undefined";
+    case CustomElementState::Custom: return os << "Custom";
+    default: NOTREACHED();
+    }
+    return os;
+}
+
+CustomElementState Node::getCustomElementState() const
+{
+    return !isCustomElement()
+        ? CustomElementState::Uncustomized
+        : (getFlag(CustomElementCustomFlag) ? CustomElementState::Custom : CustomElementState::Undefined);
+}
+
 void Node::setCustomElementState(CustomElementState newState)
 {
     CustomElementState oldState = getCustomElementState();
 
     switch (newState) {
-    case NotCustomElement:
+    case CustomElementState::Uncustomized:
+        NOTREACHED(); // Everything starts in this state
+        return;
+
+    case CustomElementState::Undefined:
+        DCHECK_EQ(CustomElementState::Uncustomized, oldState);
+        break;
+
+    case CustomElementState::Custom:
+        DCHECK_EQ(CustomElementState::Undefined, oldState);
+        break;
+    }
+
+    DCHECK(isHTMLElement());
+    DCHECK_NE(V0Upgraded, getV0CustomElementState());
+
+    setFlag(CustomElementFlag);
+    if (newState == CustomElementState::Custom)
+        setFlag(CustomElementCustomFlag);
+    DCHECK(newState == getCustomElementState());
+
+    // TODO(kojii): Should fire pseudoStateChanged() when :defined selector is
+    // ready.
+    // toElement(this)->pseudoStateChanged(CSSSelector::PseudoDefined);
+}
+
+void Node::setV0CustomElementState(V0CustomElementState newState)
+{
+    V0CustomElementState oldState = getV0CustomElementState();
+
+    switch (newState) {
+    case V0NotCustomElement:
         ASSERT_NOT_REACHED(); // Everything starts in this state
         return;
 
-    case WaitingForUpgrade:
-        DCHECK_EQ(NotCustomElement, oldState);
+    case V0WaitingForUpgrade:
+        DCHECK_EQ(V0NotCustomElement, oldState);
         break;
 
-    case Upgraded:
-        DCHECK_EQ(WaitingForUpgrade, oldState);
+    case V0Upgraded:
+        DCHECK_EQ(V0WaitingForUpgrade, oldState);
         break;
     }
 
     DCHECK(isHTMLElement() || isSVGElement());
-    setFlag(CustomElementFlag);
-    setFlag(newState == Upgraded, CustomElementUpgradedFlag);
+    DCHECK(CustomElementState::Custom != getCustomElementState());
+    setFlag(V0CustomElementFlag);
+    setFlag(newState == V0Upgraded, V0CustomElementUpgradedFlag);
 
-    if (oldState == NotCustomElement || newState == Upgraded)
+    if (oldState == V0NotCustomElement || newState == V0Upgraded)
         toElement(this)->pseudoStateChanged(CSSSelector::PseudoUnresolved);
+}
+
+void Node::updateAssignmentForInsertedInto(ContainerNode* insertionPoint)
+{
+    if (isShadowHost(insertionPoint)) {
+        ShadowRoot* root = insertionPoint->youngestShadowRoot();
+        if (root && root->isV1())
+            root->assignV1();
+    }
 }
 
 DEFINE_TRACE(Node)
@@ -2393,6 +2400,16 @@ DEFINE_TRACE(Node)
 
     visitor->trace(m_treeScope);
     EventTarget::trace(visitor);
+}
+
+DEFINE_TRACE_WRAPPERS(Node)
+{
+    visitor->traceWrappers(parentOrShadowHostOrTemplateHostNode());
+    visitor->traceWrappers(m_previous);
+    visitor->traceWrappers(m_next);
+    if (hasRareData())
+        visitor->traceWrappers(rareData());
+    EventTarget::traceWrappers(visitor);
 }
 
 unsigned Node::lengthOfContents() const
@@ -2418,16 +2435,11 @@ unsigned Node::lengthOfContents() const
 
 v8::Local<v8::Object> Node::wrap(v8::Isolate* isolate, v8::Local<v8::Object> creationContext)
 {
-    // It's possible that no one except for the new wrapper owns this object at
-    // this moment, so we have to prevent GC to collect this object until the
-    // object gets associated with the wrapper.
-    RawPtr<Node> protect(this);
-
     DCHECK(!DOMDataStore::containsWrapper(this, isolate));
 
     const WrapperTypeInfo* wrapperType = wrapperTypeInfo();
 
-    v8::Local<v8::Object> wrapper = V8DOMWrapper::createWrapper(isolate, creationContext, wrapperType, this);
+    v8::Local<v8::Object> wrapper = V8DOMWrapper::createWrapper(isolate, creationContext, wrapperType);
     if (UNLIKELY(wrapper.IsEmpty()))
         return wrapper;
 

@@ -12,6 +12,7 @@
     'dependencies': [
       '../../../base/base.gyp:base',
       '../../../base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
+      '../../gfx/gfx.gyp:gfx',
     ],
     'defines': [
       'EVENTS_OZONE_IMPLEMENTATION',
@@ -178,6 +179,7 @@
       ['use_xkbcommon==1', {
         'dependencies': [
           '../../../build/linux/system.gyp:xkbcommon',
+          '../keycodes/events_keycodes.gyp:keycodes_xkb',
         ],
         'defines': [
           'USE_XKBCOMMON',
@@ -188,14 +190,11 @@
           ],
         },
         'sources': [
-          'layout/xkb/scoped_xkb.h',
-          'layout/xkb/xkb.h',
           'layout/xkb/xkb_evdev_codes.cc',
           'layout/xkb/xkb_evdev_codes.h',
           'layout/xkb/xkb_key_code_converter.h',
           'layout/xkb/xkb_keyboard_layout_engine.cc',
           'layout/xkb/xkb_keyboard_layout_engine.h',
-          'layout/xkb/xkb_keysym.h',
         ],
       }],
     ],

@@ -13,9 +13,10 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/rand_util.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "crypto/random.h"
 #include "mojo/edk/embedder/embedder.h"
@@ -27,6 +28,7 @@
 #include "mojo/edk/system/data_pipe_consumer_dispatcher.h"
 #include "mojo/edk/system/data_pipe_producer_dispatcher.h"
 #include "mojo/edk/system/handle_signals_state.h"
+#include "mojo/edk/system/message_for_transit.h"
 #include "mojo/edk/system/message_pipe_dispatcher.h"
 #include "mojo/edk/system/platform_handle_dispatcher.h"
 #include "mojo/edk/system/ports/node.h"
@@ -246,6 +248,7 @@ ScopedMessagePipeHandle Core::CreateMessagePipe(
 
 ScopedMessagePipeHandle Core::CreateParentMessagePipe(
     const std::string& token) {
+  RequestContext request_context;
   ports::PortRef port0, port1;
   GetNodeController()->node()->CreatePortPair(&port0, &port1);
   MojoHandle handle = AddDispatcher(
@@ -256,6 +259,7 @@ ScopedMessagePipeHandle Core::CreateParentMessagePipe(
 }
 
 ScopedMessagePipeHandle Core::CreateChildMessagePipe(const std::string& token) {
+  RequestContext request_context;
   ports::PortRef port0, port1;
   GetNodeController()->node()->CreatePortPair(&port0, &port1);
   MojoHandle handle = AddDispatcher(
@@ -271,7 +275,8 @@ MojoResult Core::AsyncWait(MojoHandle handle,
   scoped_refptr<Dispatcher> dispatcher = GetDispatcher(handle);
   DCHECK(dispatcher);
 
-  scoped_ptr<AsyncWaiter> waiter = make_scoped_ptr(new AsyncWaiter(callback));
+  std::unique_ptr<AsyncWaiter> waiter =
+      base::WrapUnique(new AsyncWaiter(callback));
   MojoResult rv = dispatcher->AddAwakable(waiter.get(), signals, 0, nullptr);
   if (rv == MOJO_RESULT_OK)
     ignore_result(waiter.release());
@@ -355,6 +360,76 @@ MojoResult Core::CancelWatch(MojoHandle handle, uintptr_t context) {
   if (!dispatcher)
     return MOJO_RESULT_INVALID_ARGUMENT;
   return dispatcher->CancelWatch(context);
+}
+
+MojoResult Core::AllocMessage(uint32_t num_bytes,
+                              const MojoHandle* handles,
+                              uint32_t num_handles,
+                              MojoAllocMessageFlags flags,
+                              MojoMessageHandle* message) {
+  if (!message)
+    return MOJO_RESULT_INVALID_ARGUMENT;
+
+  if (num_handles == 0) {  // Fast path: no handles.
+    std::unique_ptr<MessageForTransit> msg;
+    MojoResult rv = MessageForTransit::Create(&msg, num_bytes, nullptr, 0);
+    if (rv != MOJO_RESULT_OK)
+      return rv;
+
+    *message = reinterpret_cast<MojoMessageHandle>(msg.release());
+    return MOJO_RESULT_OK;
+  }
+
+  if (!handles)
+    return MOJO_RESULT_INVALID_ARGUMENT;
+
+  if (num_handles > kMaxHandlesPerMessage)
+    return MOJO_RESULT_RESOURCE_EXHAUSTED;
+
+  std::vector<Dispatcher::DispatcherInTransit> dispatchers;
+  {
+    base::AutoLock lock(handles_lock_);
+    MojoResult rv = handles_.BeginTransit(handles, num_handles, &dispatchers);
+    if (rv != MOJO_RESULT_OK) {
+      handles_.CancelTransit(dispatchers);
+      return rv;
+    }
+  }
+  DCHECK_EQ(num_handles, dispatchers.size());
+
+  std::unique_ptr<MessageForTransit> msg;
+  MojoResult rv = MessageForTransit::Create(
+      &msg, num_bytes, dispatchers.data(), num_handles);
+
+  {
+    base::AutoLock lock(handles_lock_);
+    if (rv == MOJO_RESULT_OK) {
+      handles_.CompleteTransitAndClose(dispatchers);
+      *message = reinterpret_cast<MojoMessageHandle>(msg.release());
+    } else {
+      handles_.CancelTransit(dispatchers);
+    }
+  }
+
+  return rv;
+}
+
+MojoResult Core::FreeMessage(MojoMessageHandle message) {
+  if (!message)
+    return MOJO_RESULT_INVALID_ARGUMENT;
+
+  delete reinterpret_cast<MessageForTransit*>(message);
+
+  return MOJO_RESULT_OK;
+}
+
+MojoResult Core::GetMessageBuffer(MojoMessageHandle message, void** buffer) {
+  if (!message)
+    return MOJO_RESULT_INVALID_ARGUMENT;
+
+  *buffer = reinterpret_cast<MessageForTransit*>(message)->mutable_bytes();
+
+  return MOJO_RESULT_OK;
 }
 
 MojoResult Core::CreateWaitSet(MojoHandle* wait_set_handle) {
@@ -472,48 +547,36 @@ MojoResult Core::WriteMessage(MojoHandle message_pipe_handle,
                               const MojoHandle* handles,
                               uint32_t num_handles,
                               MojoWriteMessageFlags flags) {
+  if (num_bytes && !bytes)
+    return MOJO_RESULT_INVALID_ARGUMENT;
+
+  MojoMessageHandle message;
+  MojoResult rv = AllocMessage(num_bytes, handles, num_handles,
+                               MOJO_ALLOC_MESSAGE_FLAG_NONE, &message);
+  if (rv != MOJO_RESULT_OK)
+    return rv;
+
+  if (num_bytes) {
+    void* buffer = nullptr;
+    rv = GetMessageBuffer(message, &buffer);
+    DCHECK_EQ(rv, MOJO_RESULT_OK);
+    memcpy(buffer, bytes, num_bytes);
+  }
+
+  return WriteMessageNew(message_pipe_handle, message, flags);
+}
+
+MojoResult Core::WriteMessageNew(MojoHandle message_pipe_handle,
+                                 MojoMessageHandle message,
+                                 MojoWriteMessageFlags flags) {
   RequestContext request_context;
+  std::unique_ptr<MessageForTransit> message_for_transit(
+      reinterpret_cast<MessageForTransit*>(message));
   auto dispatcher = GetDispatcher(message_pipe_handle);
   if (!dispatcher)
     return MOJO_RESULT_INVALID_ARGUMENT;
 
-  if (num_handles == 0)  // Fast path: no handles.
-    return dispatcher->WriteMessage(bytes, num_bytes, nullptr, 0, flags);
-
-  CHECK(handles);
-
-  if (num_handles > kMaxHandlesPerMessage)
-    return MOJO_RESULT_RESOURCE_EXHAUSTED;
-
-  for (size_t i = 0; i < num_handles; ++i) {
-    if (message_pipe_handle == handles[i])
-      return MOJO_RESULT_BUSY;
-  }
-
-  std::vector<Dispatcher::DispatcherInTransit> dispatchers;
-  {
-    base::AutoLock lock(handles_lock_);
-    MojoResult rv = handles_.BeginTransit(handles, num_handles, &dispatchers);
-    if (rv != MOJO_RESULT_OK) {
-      handles_.CancelTransit(dispatchers);
-      return rv;
-    }
-  }
-  DCHECK_EQ(num_handles, dispatchers.size());
-
-  MojoResult rv = dispatcher->WriteMessage(
-      bytes, num_bytes, dispatchers.data(), num_handles, flags);
-
-  {
-    base::AutoLock lock(handles_lock_);
-    if (rv == MOJO_RESULT_OK) {
-      handles_.CompleteTransitAndClose(dispatchers);
-    } else {
-      handles_.CancelTransit(dispatchers);
-    }
-  }
-
-  return rv;
+  return dispatcher->WriteMessage(std::move(message_for_transit), flags);
 }
 
 MojoResult Core::ReadMessage(MojoHandle message_pipe_handle,
@@ -522,13 +585,45 @@ MojoResult Core::ReadMessage(MojoHandle message_pipe_handle,
                              MojoHandle* handles,
                              uint32_t* num_handles,
                              MojoReadMessageFlags flags) {
-  RequestContext request_context;
   CHECK((!num_handles || !*num_handles || handles) &&
         (!num_bytes || !*num_bytes || bytes));
+  RequestContext request_context;
   auto dispatcher = GetDispatcher(message_pipe_handle);
   if (!dispatcher)
     return MOJO_RESULT_INVALID_ARGUMENT;
-  return dispatcher->ReadMessage(bytes, num_bytes, handles, num_handles, flags);
+  std::unique_ptr<MessageForTransit> message;
+  MojoResult rv =
+      dispatcher->ReadMessage(&message, num_bytes, handles, num_handles, flags,
+                              false /* ignore_num_bytes */);
+  if (rv != MOJO_RESULT_OK)
+    return rv;
+
+  if (message && message->num_bytes())
+    memcpy(bytes, message->bytes(), message->num_bytes());
+
+  return MOJO_RESULT_OK;
+}
+
+MojoResult Core::ReadMessageNew(MojoHandle message_pipe_handle,
+                                MojoMessageHandle* message,
+                                uint32_t* num_bytes,
+                                MojoHandle* handles,
+                                uint32_t* num_handles,
+                                MojoReadMessageFlags flags) {
+  CHECK(message);
+  CHECK(!num_handles || !*num_handles || handles);
+  RequestContext request_context;
+  auto dispatcher = GetDispatcher(message_pipe_handle);
+  if (!dispatcher)
+    return MOJO_RESULT_INVALID_ARGUMENT;
+  std::unique_ptr<MessageForTransit> msg;
+  MojoResult rv =
+      dispatcher->ReadMessage(&msg, num_bytes, handles, num_handles, flags,
+                              true /* ignore_num_bytes */);
+  if (rv != MOJO_RESULT_OK)
+    return rv;
+  *message = reinterpret_cast<MojoMessageHandle>(msg.release());
+  return MOJO_RESULT_OK;
 }
 
 MojoResult Core::FuseMessagePipes(MojoHandle handle0, MojoHandle handle1) {
@@ -761,7 +856,7 @@ MojoResult Core::MapBuffer(MojoHandle buffer_handle,
   if (!dispatcher)
     return MOJO_RESULT_INVALID_ARGUMENT;
 
-  scoped_ptr<PlatformSharedBufferMapping> mapping;
+  std::unique_ptr<PlatformSharedBufferMapping> mapping;
   MojoResult result = dispatcher->MapBuffer(offset, num_bytes, flags, &mapping);
   if (result != MOJO_RESULT_OK)
     return result;
@@ -860,7 +955,7 @@ MojoResult Core::WaitManyInternal(const MojoHandle* handles,
 
 // static
 void Core::PassNodeControllerToIOThread(
-    scoped_ptr<NodeController> node_controller) {
+    std::unique_ptr<NodeController> node_controller) {
   // It's OK to leak this reference. At this point we know the IO loop is still
   // running, and we know the NodeController will observe its eventual
   // destruction. This tells the NodeController to delete itself when that

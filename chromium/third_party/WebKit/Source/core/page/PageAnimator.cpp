@@ -47,6 +47,9 @@ void PageAnimator::serviceScriptedAnimations(double monotonicAnimationStartTime)
         if (document->view()) {
             if (document->view()->shouldThrottleRendering())
                 continue;
+            // Disallow throttling in case any script needs to do a synchronous
+            // lifecycle update in other frames which are throttled.
+            DocumentLifecycle::DisallowThrottlingScope noThrottlingScope(document->lifecycle());
             document->view()->getScrollableArea()->serviceScrollAnimations(monotonicAnimationStartTime);
 
             if (const FrameView::ScrollableAreaSet* animatingScrollableAreas = document->view()->animatingScrollableAreas()) {
@@ -57,17 +60,16 @@ void PageAnimator::serviceScriptedAnimations(double monotonicAnimationStartTime)
                 for (ScrollableArea* scrollableArea : animatingScrollableAreasCopy)
                     scrollableArea->serviceScrollAnimations(monotonicAnimationStartTime);
             }
+            SVGDocumentExtensions::serviceOnAnimationFrame(*document);
         }
-        // TODO(skyostil): These functions should not run for documents without views.
-        SVGDocumentExtensions::serviceOnAnimationFrame(*document, monotonicAnimationStartTime);
+        // TODO(skyostil): This function should not run for documents without views.
+        DocumentLifecycle::DisallowThrottlingScope noThrottlingScope(document->lifecycle());
         document->serviceScriptedAnimations(monotonicAnimationStartTime);
     }
 
-#if ENABLE(OILPAN)
-    // TODO(esprehn): Why is this here? It doesn't make sense to explicitly
-    // clear a stack allocated vector.
+    // Oilpan: This is performance optimization to promptly clear the backing
+    // storage of the vector and reuse it in the next PageAnimator::serviceScriptedAnimations.
     documents.clear();
-#endif
 }
 
 void PageAnimator::scheduleVisualUpdate(LocalFrame* frame)

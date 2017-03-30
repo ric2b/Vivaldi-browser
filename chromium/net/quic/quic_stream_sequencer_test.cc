@@ -4,6 +4,9 @@
 
 #include "net/quic/quic_stream_sequencer.h"
 
+#include <algorithm>
+#include <cstdint>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -49,6 +52,13 @@ class MockStream : public ReliableQuicStream {
   MOCK_METHOD1(Reset, void(QuicRstStreamErrorCode error));
   MOCK_METHOD0(OnCanWrite, void());
   virtual bool IsFlowControlEnabled() const { return true; }
+
+  const IPEndPoint& PeerAddressOfLatestPacket() const override {
+    return peer_address_;
+  }
+
+ protected:
+  IPEndPoint peer_address_ = IPEndPoint(net::test::Any4(), 65535);
 };
 
 namespace {
@@ -69,7 +79,9 @@ class QuicStreamSequencerTest : public ::testing::Test {
 
  protected:
   QuicStreamSequencerTest()
-      : connection_(new MockConnection(&helper_, Perspective::IS_CLIENT)),
+      : connection_(new MockQuicConnection(&helper_,
+                                           &alarm_factory_,
+                                           Perspective::IS_CLIENT)),
         session_(connection_),
         stream_(&session_, 1),
         sequencer_(new QuicStreamSequencer(&stream_, &clock_)) {}
@@ -125,8 +137,8 @@ class QuicStreamSequencerTest : public ::testing::Test {
     QuicStreamFrame frame;
     frame.stream_id = 1;
     frame.offset = byte_offset;
-    frame.frame_buffer = data;
-    frame.frame_length = strlen(data);
+    frame.data_buffer = data;
+    frame.data_length = strlen(data);
     frame.fin = true;
     sequencer_->OnStreamFrame(frame);
   }
@@ -135,8 +147,8 @@ class QuicStreamSequencerTest : public ::testing::Test {
     QuicStreamFrame frame;
     frame.stream_id = 1;
     frame.offset = byte_offset;
-    frame.frame_buffer = data;
-    frame.frame_length = strlen(data);
+    frame.data_buffer = data;
+    frame.data_length = strlen(data);
     frame.fin = false;
     sequencer_->OnStreamFrame(frame);
   }
@@ -145,12 +157,13 @@ class QuicStreamSequencerTest : public ::testing::Test {
     return QuicStreamSequencerPeer::GetNumBufferedBytes(sequencer_.get());
   }
 
-  MockConnectionHelper helper_;
-  MockConnection* connection_;
+  MockQuicConnectionHelper helper_;
+  MockAlarmFactory alarm_factory_;
+  MockQuicConnection* connection_;
   MockClock clock_;
   MockQuicSpdySession session_;
   testing::StrictMock<MockStream> stream_;
-  scoped_ptr<QuicStreamSequencer> sequencer_;
+  std::unique_ptr<QuicStreamSequencer> sequencer_;
 };
 
 // TODO(rch): reorder these tests so they build on each other.
@@ -563,11 +576,8 @@ TEST_F(QuicStreamSequencerTest, DontAcceptOverlappingFrames) {
   sequencer_->OnStreamFrame(frame1);
 
   QuicStreamFrame frame2(kClientDataStreamId1, false, 2, StringPiece("hello"));
-  EXPECT_CALL(stream_, CloseConnectionWithDetails(
-                           FLAGS_quic_consolidate_onstreamframe_errors
-                               ? QUIC_OVERLAPPING_STREAM_DATA
-                               : QUIC_EMPTY_STREAM_FRAME_NO_FIN,
-                           _))
+  EXPECT_CALL(stream_,
+              CloseConnectionWithDetails(QUIC_OVERLAPPING_STREAM_DATA, _))
       .Times(1);
   sequencer_->OnStreamFrame(frame2);
 }

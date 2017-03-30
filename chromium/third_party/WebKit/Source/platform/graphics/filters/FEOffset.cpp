@@ -73,12 +73,15 @@ FloatRect FEOffset::mapRect(const FloatRect& rect, bool forward) const
     return result;
 }
 
-PassRefPtr<SkImageFilter> FEOffset::createImageFilter(SkiaImageFilterBuilder& builder)
+sk_sp<SkImageFilter> FEOffset::createImageFilter()
 {
-    RefPtr<SkImageFilter> input(builder.build(inputEffect(0), operatingColorSpace()));
     Filter* filter = this->getFilter();
     SkImageFilter::CropRect cropRect = getCropRect();
-    return adoptRef(SkOffsetImageFilter::Create(SkFloatToScalar(filter->applyHorizontalScale(m_dx)), SkFloatToScalar(filter->applyVerticalScale(m_dy)), input.get(), &cropRect));
+    return SkOffsetImageFilter::Make(
+        SkFloatToScalar(filter->applyHorizontalScale(m_dx)),
+        SkFloatToScalar(filter->applyVerticalScale(m_dy)),
+        SkiaImageFilterBuilder::build(inputEffect(0), operatingColorSpace()),
+        &cropRect);
 }
 
 TextStream& FEOffset::externalRepresentation(TextStream& ts, int indent) const

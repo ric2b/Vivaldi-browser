@@ -46,6 +46,7 @@ class TestHelper {
   static const GLint kMaxTextureSize = 2048;
   static const GLint kMaxCubeMapTextureSize = 2048;
   static const GLint kMax3DTextureSize = 1024;
+  static const GLint kMaxArrayTextureLayers = 256;
   static const GLint kMaxRectangleTextureSize = 64;
   static const GLint kNumVertexAttribs = 16;
   static const GLint kNumTextureUnits = 8;
@@ -62,6 +63,10 @@ class TestHelper {
   static const GLint kMaxFragmentInputComponents = 60;
   static const GLint kMaxProgramTexelOffset = 7;
   static const GLint kMinProgramTexelOffset = -8;
+
+  static const GLint kMaxTransformFeedbackSeparateAttribs = 4;
+  static const GLint kMaxUniformBufferBindings = 24;
+  static const GLint kUniformBufferOffsetAlignment = 1;
 
   struct AttribInfo {
     const char* name;

@@ -7,11 +7,11 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/power_monitor/power_observer.h"
@@ -155,7 +155,7 @@ class NET_EXPORT URLRequestJob : public base::PowerObserver {
   // This class takes ownership of the returned Filter.
   //
   // The default implementation returns NULL.
-  virtual Filter* SetupFilter() const;
+  virtual std::unique_ptr<Filter> SetupFilter() const;
 
   // Called to determine if this response is a redirect.  Only makes sense
   // for some types of requests.  This method returns true if the response
@@ -431,7 +431,7 @@ class NET_EXPORT URLRequestJob : public base::PowerObserver {
   int64_t postfilter_bytes_read_;
 
   // The data stream filter which is enabled on demand.
-  scoped_ptr<Filter> filter_;
+  std::unique_ptr<Filter> filter_;
 
   // If the filter filled its output buffer, then there is a change that it
   // still has internal data to emit, and this flag is set.

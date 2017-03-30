@@ -53,6 +53,11 @@ const CGFloat kRapidCloseDist = 2.5;
 + (void)drawTabRightEdgeImage;
 @end
 
+@interface TabController(Private)
+// The TabView's close button.
+- (HoverCloseButton*)closeButton;
+@end
+
 namespace {
 
 NSImage* imageForResourceID(int resource_id) {
@@ -590,11 +595,16 @@ CGFloat LineWidthFromContext(CGContextRef context) {
   [self setNeedsDisplayInRect:[titleView_ frame]];
 }
 
+- (SkColor)closeButtonColor {
+  return [[controller_ closeButton] iconColor];
+}
+
 - (void)setState:(NSCellStateValue)state {
   if (state_ == state)
     return;
   state_ = state;
   [self setNeedsDisplay:YES];
+  [closeButton_ setNeedsDisplay:YES];
 }
 
 - (void)setClosing:(BOOL)closing {

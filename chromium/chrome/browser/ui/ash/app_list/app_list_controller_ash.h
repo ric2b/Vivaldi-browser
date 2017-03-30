@@ -10,9 +10,13 @@
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_types.h"
 
+namespace app_list {
+class AppListPresenterImpl;
+}
+
 class AppListControllerDelegateAsh : public AppListControllerDelegate {
  public:
-  AppListControllerDelegateAsh();
+  explicit AppListControllerDelegateAsh(app_list::AppListPresenterImpl*);
   ~AppListControllerDelegateAsh() override;
 
  private:
@@ -20,11 +24,11 @@ class AppListControllerDelegateAsh : public AppListControllerDelegate {
   void DismissView() override;
   gfx::NativeWindow GetAppListWindow() override;
   gfx::Rect GetAppListBounds() override;
-  gfx::ImageSkia GetWindowIcon() override;
-  bool IsAppPinned(const std::string& extension_id) override;
-  void PinApp(const std::string& extension_id) override;
-  void UnpinApp(const std::string& extension_id) override;
-  Pinnable GetPinnable(const std::string& extension_id) override;
+  bool IsAppPinned(const std::string& app_id) override;
+  bool IsAppOpen(const std::string& app_id) const override;
+  void PinApp(const std::string& app_id) override;
+  void UnpinApp(const std::string& app_id) override;
+  Pinnable GetPinnable(const std::string& app_id) override;
   void OnShowChildDialog() override;
   void OnCloseChildDialog() override;
   bool CanDoCreateShortcutsFlow() override;
@@ -47,6 +51,9 @@ class AppListControllerDelegateAsh : public AppListControllerDelegate {
   bool ShouldShowUserIcon() override;
 
   ash::LaunchSource AppListSourceToLaunchSource(AppListSource source);
+
+  // Not owned.
+  app_list::AppListPresenterImpl* app_list_presenter_;
 
   DISALLOW_COPY_AND_ASSIGN(AppListControllerDelegateAsh);
 };

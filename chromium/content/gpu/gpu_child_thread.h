@@ -7,13 +7,13 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <queue>
 #include <string>
 
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/child/child_thread_impl.h"
@@ -34,6 +34,10 @@ class GpuMemoryBufferFactory;
 class SyncPointManager;
 }
 
+namespace media {
+class MediaService;
+}
+
 namespace sandbox {
 class TargetServices;
 }
@@ -41,11 +45,7 @@ class TargetServices;
 namespace content {
 class GpuProcessControlImpl;
 class GpuWatchdogThread;
-class MediaService;
 struct EstablishChannelParams;
-#if defined(OS_MACOSX)
-struct BufferPresentedParams;
-#endif
 
 // The main thread of the GPU child process. There will only ever be one of
 // these per process. It does process initialization and shutdown. It forwards
@@ -64,13 +64,11 @@ class GpuChildThread : public ChildThreadImpl,
                  bool dead_on_arrival,
                  const gpu::GPUInfo& gpu_info,
                  const DeferredMessages& deferred_messages,
-                 gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory,
-                 gpu::SyncPointManager* sync_point_manager);
+                 gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory);
 
   GpuChildThread(const gpu::GpuPreferences& gpu_preferences,
                  const InProcessChildThreadParams& params,
-                 gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory,
-                 gpu::SyncPointManager* sync_point_manager);
+                 gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory);
 
   ~GpuChildThread() override;
 
@@ -89,7 +87,6 @@ class GpuChildThread : public ChildThreadImpl,
 
   // gpu::GpuChannelManagerDelegate implementation.
   void SetActiveURL(const GURL& url) override;
-  void AddSubscription(int32_t client_id, unsigned int target) override;
   void DidCreateOffscreenContext(const GURL& active_url) override;
   void DidDestroyChannel(int client_id) override;
   void DidDestroyOffscreenContext(const GURL& active_url) override;
@@ -97,16 +94,6 @@ class GpuChildThread : public ChildThreadImpl,
                       gpu::error::ContextLostReason reason,
                       const GURL& active_url) override;
   void GpuMemoryUmaStats(const gpu::GPUMemoryUmaStats& params) override;
-  void RemoveSubscription(int32_t client_id, unsigned int target) override;
-#if defined(OS_MACOSX)
-  void SendAcceleratedSurfaceBuffersSwapped(
-      int32_t surface_id,
-      CAContextID ca_context_id,
-      const gfx::ScopedRefCountedIOSurfaceMachPort& io_surface,
-      const gfx::Size& size,
-      float scale_factor,
-      std::vector<ui::LatencyInfo> latency_info) override;
-#endif
 #if defined(OS_WIN)
   void SendAcceleratedSurfaceCreatedChildWindow(
       gpu::SurfaceHandle parent_window,
@@ -129,20 +116,15 @@ class GpuChildThread : public ChildThreadImpl,
   void OnDisableWatchdog();
   void OnGpuSwitched();
 
-#if defined(OS_MACOSX)
-  void OnBufferPresented(const BufferPresentedParams& params);
-#endif
   void OnEstablishChannel(const EstablishChannelParams& params);
   void OnCloseChannel(int32_t client_id);
   void OnLoadedShader(const std::string& shader);
   void OnDestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
                                 int client_id,
                                 const gpu::SyncToken& sync_token);
-  void OnUpdateValueState(int client_id,
-                          unsigned int target,
-                          const gpu::ValueState& state);
 #if defined(OS_ANDROID)
   void OnWakeUpGpu();
+  void OnDestroyingVideoSurface(int surface_id);
 #endif
   void OnLoseAllContexts();
 
@@ -162,12 +144,12 @@ class GpuChildThread : public ChildThreadImpl,
   sandbox::TargetServices* target_services_;
 #endif
 
-  // Non-owning.
-  gpu::SyncPointManager* sync_point_manager_;
+  // Can be null if overridden by ContentGpuClient.
+  std::unique_ptr<gpu::SyncPointManager> owned_sync_point_manager_;
 
-  scoped_ptr<gpu::GpuChannelManager> gpu_channel_manager_;
+  std::unique_ptr<gpu::GpuChannelManager> gpu_channel_manager_;
 
-  scoped_ptr<MediaService> media_service_;
+  std::unique_ptr<media::MediaService> media_service_;
 
   // Information about the GPU, such as device and vendor ID.
   gpu::GPUInfo gpu_info_;
@@ -182,7 +164,7 @@ class GpuChildThread : public ChildThreadImpl,
   gpu::GpuMemoryBufferFactory* const gpu_memory_buffer_factory_;
 
   // Process control for Mojo application hosting.
-  scoped_ptr<GpuProcessControlImpl> process_control_;
+  std::unique_ptr<GpuProcessControlImpl> process_control_;
 
   // Bindings to the mojom::ProcessControl impl.
   mojo::BindingSet<mojom::ProcessControl> process_control_bindings_;

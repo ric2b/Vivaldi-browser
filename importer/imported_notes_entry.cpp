@@ -2,8 +2,9 @@
 
 #include "importer/imported_notes_entry.h"
 
-ImportedNotesEntry::ImportedNotesEntry() {
-}
+ImportedNotesEntry::ImportedNotesEntry() = default;
+
+ImportedNotesEntry::ImportedNotesEntry(const ImportedNotesEntry &) = default;
 
 ImportedNotesEntry::~ImportedNotesEntry() {
 }

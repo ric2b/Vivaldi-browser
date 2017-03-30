@@ -740,7 +740,7 @@ void KeySystemConfigSelector::SelectConfig(
 
   // 7.2-7.4. Implemented by OnSelectConfig().
   // TODO(sandersd): This should be async, ideally not on the main thread.
-  scoped_ptr<SelectionRequest> request(new SelectionRequest());
+  std::unique_ptr<SelectionRequest> request(new SelectionRequest());
   request->key_system = key_system_ascii;
   request->candidate_configurations = candidate_configurations;
   request->security_origin = security_origin;
@@ -751,7 +751,7 @@ void KeySystemConfigSelector::SelectConfig(
 }
 
 void KeySystemConfigSelector::SelectConfigInternal(
-    scoped_ptr<SelectionRequest> request) {
+    std::unique_ptr<SelectionRequest> request) {
   // Continued from requestMediaKeySystemAccess(), step 7.1, from
   // https://w3c.github.io/encrypted-media/#requestmediakeysystemaccess
   //
@@ -817,7 +817,7 @@ void KeySystemConfigSelector::SelectConfigInternal(
 }
 
 void KeySystemConfigSelector::OnPermissionResult(
-    scoped_ptr<SelectionRequest> request,
+    std::unique_ptr<SelectionRequest> request,
     bool is_permission_granted) {
   request->was_permission_requested = true;
   request->is_permission_granted = is_permission_granted;

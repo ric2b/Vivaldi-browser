@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "cc/quads/debug_border_draw_quad.h"
-#include "cc/quads/io_surface_draw_quad.h"
 #include "cc/quads/render_pass_draw_quad.h"
 #include "cc/quads/shared_quad_state.h"
 #include "cc/quads/solid_color_draw_quad.h"
@@ -27,7 +26,7 @@ RenderPass* AddRenderPass(RenderPassList* pass_list,
                           RenderPassId id,
                           const gfx::Rect& output_rect,
                           const gfx::Transform& root_transform) {
-  scoped_ptr<RenderPass> pass(RenderPass::Create());
+  std::unique_ptr<RenderPass> pass(RenderPass::Create());
   pass->SetNew(id, output_rect, output_rect, root_transform);
   RenderPass* saved = pass.get();
   pass_list->push_back(std::move(pass));
@@ -196,7 +195,7 @@ void AddOneOfEveryQuadType(RenderPass* to_pass,
   unsigned target = GL_TEXTURE_2D;
   gpu::Mailbox gpu_mailbox;
   memcpy(gpu_mailbox.name, "Hello world", strlen("Hello world") + 1);
-  scoped_ptr<SingleReleaseCallbackImpl> callback =
+  std::unique_ptr<SingleReleaseCallbackImpl> callback =
       SingleReleaseCallbackImpl::Create(base::Bind(&EmptyReleaseCallback));
   TextureMailbox mailbox(gpu_mailbox, kSyncTokenForMailboxTextureQuad, target);
   ResourceId resource8 = resource_provider->CreateResourceFromTextureMailbox(
@@ -210,12 +209,6 @@ void AddOneOfEveryQuadType(RenderPass* to_pass,
   DebugBorderDrawQuad* debug_border_quad =
       to_pass->CreateAndAppendDrawQuad<DebugBorderDrawQuad>();
   debug_border_quad->SetNew(shared_state, rect, visible_rect, SK_ColorRED, 1);
-
-  IOSurfaceDrawQuad* io_surface_quad =
-      to_pass->CreateAndAppendDrawQuad<IOSurfaceDrawQuad>();
-  io_surface_quad->SetNew(shared_state, rect, opaque_rect, visible_rect,
-                          gfx::Size(50, 50), resource7,
-                          IOSurfaceDrawQuad::FLIPPED);
 
   if (child_pass.layer_id) {
     RenderPassDrawQuad* render_pass_quad =
@@ -247,14 +240,15 @@ void AddOneOfEveryQuadType(RenderPass* to_pass,
       to_pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
   texture_quad->SetNew(shared_state, rect, opaque_rect, visible_rect, resource1,
                        false, gfx::PointF(0.f, 0.f), gfx::PointF(1.f, 1.f),
-                       SK_ColorTRANSPARENT, vertex_opacity, false, false);
+                       SK_ColorTRANSPARENT, vertex_opacity, false, false,
+                       false);
 
   TextureDrawQuad* mailbox_texture_quad =
       to_pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
   mailbox_texture_quad->SetNew(shared_state, rect, opaque_rect, visible_rect,
                                resource8, false, gfx::PointF(0.f, 0.f),
                                gfx::PointF(1.f, 1.f), SK_ColorTRANSPARENT,
-                               vertex_opacity, false, false);
+                               vertex_opacity, false, false, false);
 
   TileDrawQuad* scaled_tile_quad =
       to_pass->CreateAndAppendDrawQuad<TileDrawQuad>();

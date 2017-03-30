@@ -8,10 +8,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "courgette/disassembler.h"
 #include "courgette/label_manager.h"
 #include "courgette/memory_allocator.h"
@@ -50,10 +50,11 @@ class EncodedProgram {
   // (1) The image base can be specified at any time.
   void set_image_base(uint64_t base) { image_base_ = base; }
 
-  // (2) Address tables and indexes defined first.
-  CheckBool DefineLabels(const RVAToLabel& abs32_labels,
-                         const RVAToLabel& rel32_labels) WARN_UNUSED_RESULT;
+  // (2) Address tables and indexes imported first.
 
+  CheckBool ImportLabels(const LabelManager& abs32_label_manager,
+                         const LabelManager& rel32_label_manager)
+      WARN_UNUSED_RESULT;
 
   // (3) Add instructions in the order needed to generate bytes of file.
   // NOTE: If any of these methods ever fail, the EncodedProgram instance
@@ -114,6 +115,14 @@ class EncodedProgram {
   typedef NoThrowBuffer<OP> OPVector;
 
   void DebuggingSummary();
+
+  // Helper for ImportLabels().
+  static CheckBool WriteRvasToList(const LabelManager& label_manager,
+                                   RvaVector* rvas);
+
+  // Helper for ImportLabels().
+  static void FillUnassignedRvaSlots(RvaVector* rvas);
+
   CheckBool GeneratePeRelocations(SinkStream* buffer,
                                   uint8_t type) WARN_UNUSED_RESULT;
   CheckBool GenerateElfRelocations(Elf32_Word pending_elf_relocation_table,
@@ -144,7 +153,7 @@ class EncodedProgram {
 // Deserializes program from a stream set to |*output|. Returns C_OK if
 // successful, otherwise assigns |*output| to null and returns an error status.
 Status ReadEncodedProgram(SourceStreamSet* source,
-                          scoped_ptr<EncodedProgram>* output);
+                          std::unique_ptr<EncodedProgram>* output);
 
 }  // namespace courgette
 

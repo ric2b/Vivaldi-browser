@@ -26,10 +26,14 @@ var sendRequest = sendRequestHandler.sendRequest;
 // modify their behaviour (such as a custom way to handle requests to the
 // API, a custom callback, etc).
 function APIFunctions(namespace) {
-  this.apiFunctions_ = {};
-  this.unavailableApiFunctions_ = {};
+  this.apiFunctions_ = { __proto__: null };
+  this.unavailableApiFunctions_ = { __proto__: null };
   this.namespace = namespace;
 }
+
+APIFunctions.prototype = {
+  __proto__: null,
+};
 
 APIFunctions.prototype.register = function(apiName, apiFunction) {
   this.apiFunctions_[apiName] = apiFunction;
@@ -113,22 +117,6 @@ APIFunctions.prototype.setCustomCallback =
   return this.setHook_(apiName, 'customCallback', customizedFunction);
 };
 
-function CustomBindingsObject() {
-}
-
-CustomBindingsObject.prototype.setSchema = function(schema) {
-  // The functions in the schema are in list form, so we move them into a
-  // dictionary for easier access.
-  var self = this;
-  self.functionSchemas = {};
-  $Array.forEach(schema.functions, function(f) {
-    self.functionSchemas[f.name] = {
-      name: f.name,
-      definition: f
-    }
-  });
-};
-
 // Get the platform from navigator.appVersion.
 function getPlatform() {
   var platforms = [
@@ -184,8 +172,6 @@ function createCustomType(type) {
                 type.id + '.');
   var customType = jsModule[jsModuleName];
   logging.CHECK(customType, jsModuleName + ' must export itself.');
-  customType.prototype = new CustomBindingsObject();
-  customType.prototype.setSchema(type);
   return customType;
 }
 
@@ -194,15 +180,29 @@ var platform = getPlatform();
 function Binding(apiName) {
   this.apiName_ = apiName;
   this.apiFunctions_ = new APIFunctions(apiName);
-  this.customEvent_ = null;
   this.customHooks_ = [];
 };
 
-Binding.create = function(apiName) {
-  return new Binding(apiName);
-};
+$Object.defineProperty(Binding, 'create', {
+  __proto__: null,
+  configurable: false,
+  enumerable: false,
+  value: function(apiName) { return new Binding(apiName); },
+  writable: false,
+});
 
 Binding.prototype = {
+  // Sneaky workaround for Object.prototype getters/setters - our prototype
+  // isn't Object.prototype. SafeBuiltins (e.g. $Object.hasOwnProperty())
+  // should still work.
+  __proto__: null,
+
+  // Forward-declare properties.
+  apiName_: undefined,
+  apiFunctions_: undefined,
+  customEvent_: undefined,
+  customHooks_: undefined,
+
   // The API through which the ${api_name}_custom_bindings.js files customize
   // their API bindings beyond what can be generated.
   //
@@ -235,6 +235,7 @@ Binding.prototype = {
         return;
 
       hook({
+        __proto__: null,
         apiFunctions: this.apiFunctions_,
         schema: schema,
         compiledApi: api
@@ -379,12 +380,11 @@ Binding.prototype = {
           return;
         }
 
-        var apiFunction = {};
+        var apiFunction = { __proto__: null };
         apiFunction.definition = functionDef;
-        var apiFunctionName = schema.namespace + '.' + functionDef.name;
-        apiFunction.name = apiFunctionName;
+        apiFunction.name = schema.namespace + '.' + functionDef.name;
 
-        if (!GetAvailability(apiFunctionName).is_available ||
+        if (!GetAvailability(apiFunction.name).is_available ||
             (checkUnprivileged && !isSchemaAccessAllowed(functionDef))) {
           this.apiFunctions_.registerUnavailable(functionDef.name);
           return;
@@ -422,6 +422,7 @@ Binding.prototype = {
             retval = $Function.apply(this.handleRequest, this, args);
           } else {
             var optArgs = {
+              __proto__: null,
               customCallback: this.customCallback
             };
             retval = sendRequest(this.name, args,
@@ -511,6 +512,8 @@ Binding.prototype = {
             logging.CHECK(type, 'Schema for $ref type ' + ref + ' not found');
             var constructor = createCustomType(type);
             var args = value;
+            logging.DCHECK($Array.isArray(args));
+            $Array.push(args, type);
             // For an object propertyDef, |value| is an array of constructor
             // arguments, but we want to pass the arguments directly (i.e.
             // not as an array), so we have to fake calling |new| on the

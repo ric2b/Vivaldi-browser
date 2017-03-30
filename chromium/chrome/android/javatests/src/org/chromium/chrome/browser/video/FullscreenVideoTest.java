@@ -5,16 +5,16 @@
 package org.chromium.chrome.browser.video;
 
 import android.os.Environment;
-import android.test.FlakyTest;
 import android.view.KeyEvent;
 
-import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.content.browser.test.util.KeyUtils;
 import org.chromium.content.browser.test.util.TestTouchUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 
@@ -46,9 +46,8 @@ public class FullscreenVideoTest extends ChromeActivityTestCaseBase<ChromeActivi
      * exit fullscreen mode without changing its URL.
      *
      * @MediumTest
-     * crbug.com/458368.
      */
-    @FlakyTest
+    @FlakyTest(message = "crbug.com/458368")
     public void testExitFullscreenNotifiesTabObservers() throws InterruptedException {
         EmbeddedTestServer testServer = EmbeddedTestServer.createAndStartFileServer(
                 getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
@@ -63,15 +62,8 @@ public class FullscreenVideoTest extends ChromeActivityTestCaseBase<ChromeActivi
             TestTouchUtils.singleClickView(getInstrumentation(), tab.getView(), 500, 500);
             waitForVideoToEnterFullscreen();
             // Key events have to be dispached on UI thread.
-            ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-                @Override
-                public void run() {
-                    getActivity().dispatchKeyEvent(
-                            new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK));
-                    getActivity().dispatchKeyEvent(
-                            new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK));
-                }
-            });
+            KeyUtils.singleKeyEventActivity(
+                    getInstrumentation(), getActivity(), KeyEvent.KEYCODE_BACK);
 
             waitForTabToExitFullscreen();
             assertEquals("URL mismatch after exiting fullscreen video",

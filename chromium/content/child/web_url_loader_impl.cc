@@ -38,7 +38,6 @@
 #include "content/public/child/fixed_received_data.h"
 #include "content/public/child/request_peer.h"
 #include "content/public/common/browser_side_navigation_policy.h"
-#include "content/public/common/signed_certificate_timestamp_id_and_status.h"
 #include "content/public/common/ssl_status.h"
 #include "net/base/data_url.h"
 #include "net/base/filename_util.h"
@@ -128,6 +127,8 @@ void PopulateURLLoadTiming(const net::LoadTimingInfo& load_timing,
       (load_timing.send_end - kNullTicks).InSecondsF());
   url_timing->setReceiveHeadersEnd(
       (load_timing.receive_headers_end - kNullTicks).InSecondsF());
+  url_timing->setPushStart((load_timing.push_start - kNullTicks).InSecondsF());
+  url_timing->setPushEnd((load_timing.push_end - kNullTicks).InSecondsF());
 }
 
 net::RequestPriority ConvertWebKitPriorityToNetPriority(
@@ -254,32 +255,9 @@ void SetSecurityStyleAndDetails(const GURL& url,
 
   response->setSecurityStyle(securityStyle);
 
-  SignedCertificateTimestampIDStatusList sct_list =
-      ssl_status.signed_certificate_timestamp_ids;
-
-  size_t num_unknown_scts = 0;
-  size_t num_invalid_scts = 0;
-  size_t num_valid_scts = 0;
-
-  SignedCertificateTimestampIDStatusList::iterator iter;
-  for (iter = sct_list.begin(); iter < sct_list.end(); ++iter) {
-    switch (iter->status) {
-      case net::ct::SCT_STATUS_LOG_UNKNOWN:
-        num_unknown_scts++;
-        break;
-      case net::ct::SCT_STATUS_INVALID:
-        num_invalid_scts++;
-        break;
-      case net::ct::SCT_STATUS_OK:
-        num_valid_scts++;
-        break;
-      case net::ct::SCT_STATUS_NONE:
-      case net::ct::SCT_STATUS_MAX:
-        // These enum values do not represent SCTs that are taken into account
-        // for CT compliance calculations, so we ignore them.
-        break;
-    }
-  }
+  size_t num_unknown_scts = ssl_status.num_unknown_scts;
+  size_t num_invalid_scts = ssl_status.num_invalid_scts;
+  size_t num_valid_scts = ssl_status.num_valid_scts;
 
   blink::WebURLResponse::WebSecurityDetails webSecurityDetails(
       WebString::fromUTF8(protocol), WebString::fromUTF8(key_exchange),
@@ -406,6 +384,8 @@ WebURLLoaderImpl::Context::Context(
       request_id_(-1) {}
 
 void WebURLLoaderImpl::Context::Cancel() {
+  TRACE_EVENT_WITH_FLOW0("loading", "WebURLLoaderImpl::Context::Cancel", this,
+                         TRACE_EVENT_FLAG_FLOW_IN);
   if (resource_dispatcher_ && // NULL in unittest.
       request_id_ != -1) {
     resource_dispatcher_->Cancel(request_id_);
@@ -540,6 +520,7 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
   request_info.extra_data = request.getExtraData();
   request_info.report_raw_headers = request.reportRawHeaders();
   request_info.loading_web_task_runner.reset(web_task_runner_->clone());
+  request_info.lofi_state = static_cast<LoFiState>(request.getLoFiState());
 
   scoped_refptr<ResourceRequestBody> request_body =
       GetRequestBodyForWebURLRequest(request).get();
@@ -561,6 +542,8 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
     return;
   }
 
+  TRACE_EVENT_WITH_FLOW0("loading", "WebURLLoaderImpl::Context::Start", this,
+                         TRACE_EVENT_FLAG_FLOW_OUT);
   request_id_ = resource_dispatcher_->StartAsync(
       request_info, request_body.get(),
       base::WrapUnique(new WebURLLoaderImpl::RequestPeerImpl(this)));
@@ -585,6 +568,10 @@ bool WebURLLoaderImpl::Context::OnReceivedRedirect(
     const ResourceResponseInfo& info) {
   if (!client_)
     return false;
+
+  TRACE_EVENT_WITH_FLOW0(
+      "loading", "WebURLLoaderImpl::Context::OnReceivedRedirect",
+      this, TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
 
   WebURLResponse response;
   response.initialize();
@@ -620,6 +607,10 @@ void WebURLLoaderImpl::Context::OnReceivedResponse(
     const ResourceResponseInfo& initial_info) {
   if (!client_)
     return;
+
+  TRACE_EVENT_WITH_FLOW0(
+      "loading", "WebURLLoaderImpl::Context::OnReceivedResponse",
+      this, TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
 
   ResourceResponseInfo info = initial_info;
 
@@ -712,6 +703,10 @@ void WebURLLoaderImpl::Context::OnReceivedData(
   if (!client_)
     return;
 
+  TRACE_EVENT_WITH_FLOW0(
+      "loading", "WebURLLoaderImpl::Context::OnReceivedData",
+      this, TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
+
   if (ftp_listing_delegate_) {
     // The FTP listing delegate will make the appropriate calls to
     // client_->didReceiveData and client_->didReceiveResponse.
@@ -731,8 +726,12 @@ void WebURLLoaderImpl::Context::OnReceivedData(
 
 void WebURLLoaderImpl::Context::OnReceivedCachedMetadata(
     const char* data, int len) {
-  if (client_)
-    client_->didReceiveCachedMetadata(loader_, data, len);
+  if (!client_)
+    return;
+  TRACE_EVENT_WITH_FLOW0(
+      "loading", "WebURLLoaderImpl::Context::OnReceivedCachedMetadata",
+      this, TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
+  client_->didReceiveCachedMetadata(loader_, data, len);
 }
 
 void WebURLLoaderImpl::Context::OnCompletedRequest(
@@ -752,6 +751,10 @@ void WebURLLoaderImpl::Context::OnCompletedRequest(
   body_stream_writer_.reset();
 
   if (client_) {
+    TRACE_EVENT_WITH_FLOW0(
+        "loading", "WebURLLoaderImpl::Context::OnCompletedRequest",
+        this, TRACE_EVENT_FLAG_FLOW_IN);
+
     if (error_code != net::OK) {
       client_->didFail(
           loader_,
@@ -968,6 +971,7 @@ void WebURLLoaderImpl::PopulateURLResponse(const GURL& url,
   extra_data->set_was_fetched_via_proxy(info.was_fetched_via_proxy);
   extra_data->set_proxy_server(info.proxy_server);
   extra_data->set_is_using_lofi(info.is_using_lofi);
+  extra_data->set_effective_connection_type(info.effective_connection_type);
 
   // If there's no received headers end time, don't set load timing.  This is
   // the case for non-HTTP requests, requests that don't go over the wire, and
@@ -1090,6 +1094,7 @@ void WebURLLoaderImpl::loadSynchronously(const WebURLRequest& request,
                                          WebURLResponse& response,
                                          WebURLError& error,
                                          WebData& data) {
+  TRACE_EVENT0("loading", "WebURLLoaderImpl::loadSynchronously");
   SyncLoadResponse sync_load_response;
   context_->Start(request, &sync_load_response);
 
@@ -1115,6 +1120,8 @@ void WebURLLoaderImpl::loadSynchronously(const WebURLRequest& request,
 
 void WebURLLoaderImpl::loadAsynchronously(const WebURLRequest& request,
                                           WebURLLoaderClient* client) {
+  TRACE_EVENT_WITH_FLOW0("loading", "WebURLLoaderImpl::loadAsynchronously",
+                         this, TRACE_EVENT_FLAG_FLOW_OUT);
   DCHECK(!context_->client());
 
   context_->set_client(client);

@@ -19,12 +19,11 @@
 #include "ui/base/hit_test.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/compositor/layer.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/canvas.h"
-#include "ui/gfx/display.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size_conversions.h"
-#include "ui/gfx/screen.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/corewm/tooltip.h"
 #include "ui/views/corewm/tooltip_controller.h"
@@ -401,6 +400,7 @@ void DesktopNativeWidgetAura::InitNativeWidget(
     const Widget::InitParams& params) {
   ownership_ = params.ownership;
   widget_type_ = params.type;
+  name_ = params.name;
 
   NativeWidgetAura::RegisterNativeWidgetForWindow(this, content_window_);
   // Animations on TYPE_WINDOW are handled by the OS. Additionally if we animate
@@ -458,7 +458,7 @@ void DesktopNativeWidgetAura::InitNativeWidget(
   }
   if (!cursor_manager_) {
     cursor_manager_ = new wm::CursorManager(
-        scoped_ptr<wm::NativeCursorManager>(native_cursor_manager_));
+        std::unique_ptr<wm::NativeCursorManager>(native_cursor_manager_));
   }
   native_cursor_manager_->AddHost(host());
   aura::client::SetCursorClient(host_->window(), cursor_manager_);
@@ -675,11 +675,16 @@ gfx::Rect DesktopNativeWidgetAura::GetRestoredBounds() const {
       desktop_window_tree_host_->GetRestoredBounds() : gfx::Rect();
 }
 
+std::string DesktopNativeWidgetAura::GetWorkspace() const {
+  return content_window_ ?
+      desktop_window_tree_host_->GetWorkspace() : std::string();
+}
+
 void DesktopNativeWidgetAura::SetBounds(const gfx::Rect& bounds) {
   if (!content_window_)
     return;
   aura::Window* root = host_->window();
-  gfx::Screen* screen = gfx::Screen::GetScreen();
+  display::Screen* screen = display::Screen::GetScreen();
   gfx::Rect bounds_in_pixels = screen->DIPToScreenRectInWindow(root, bounds);
   desktop_window_tree_host_->AsWindowTreeHost()->SetBounds(bounds_in_pixels);
 }
@@ -946,6 +951,10 @@ void DesktopNativeWidgetAura::RepostNativeEvent(gfx::NativeEvent native_event) {
   OnEvent(native_event);
 }
 
+std::string DesktopNativeWidgetAura::GetName() const {
+  return name_;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // DesktopNativeWidgetAura, aura::WindowDelegate implementation:
 
@@ -1150,6 +1159,11 @@ void DesktopNativeWidgetAura::OnHostResized(const aura::WindowTreeHost* host) {
   if (content_window_container_)
     content_window_container_->SetBounds(new_bounds);
   native_widget_delegate_->OnNativeWidgetSizeChanged(new_bounds.size());
+}
+
+void DesktopNativeWidgetAura::OnHostWorkspaceChanged(
+    const aura::WindowTreeHost* host) {
+  native_widget_delegate_->OnNativeWidgetWorkspaceChanged();
 }
 
 void DesktopNativeWidgetAura::OnHostMoved(const aura::WindowTreeHost* host,

@@ -5,7 +5,8 @@
 #ifndef COMPONENTS_NACL_RENDERER_PPB_NACL_PRIVATE_H_
 #define COMPONENTS_NACL_RENDERER_PPB_NACL_PRIVATE_H_
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
 #include "base/process/process_handle.h"
 #include "ipc/ipc_sync_channel.h"
 #include "ppapi/c/pp_bool.h"
@@ -223,18 +224,18 @@ class PPBNaClPrivate {
    * LaunchSelLdr takes the ownership of the file handle.
    * The |uses_nonsfi_mode| flag indicates whether or not nonsfi-mode should
    * be used with the binary pointed by the url.
-   * |translator_channel| and |process_id| are filled out when launching PNaCl
-   * translator processes.
+   * |translator_channel| is filled out when launching PNaCl translator
+   * processes.
    */
-  static void LaunchSelLdr(PP_Instance instance,
-                           PP_Bool main_service_runtime,
-                           const char* alleged_url,
-                           const struct PP_NaClFileInfo* nexe_file_info,
-                           PP_Bool uses_nonsfi_mode,
-                           PP_NaClAppProcessType process_type,
-                           scoped_ptr<IPC::SyncChannel>* translator_channel,
-                           base::ProcessId* process_id,
-                           struct PP_CompletionCallback callback);
+  static void LaunchSelLdr(
+      PP_Instance instance,
+      PP_Bool main_service_runtime,
+      const char* alleged_url,
+      const struct PP_NaClFileInfo* nexe_file_info,
+      PP_Bool uses_nonsfi_mode,
+      PP_NaClAppProcessType process_type,
+      std::unique_ptr<IPC::SyncChannel>* translator_channel,
+      struct PP_CompletionCallback callback);
   /* Returns a read-only (but executable) file descriptor / file info for
    * a url for pnacl translator tools. Returns an invalid handle on failure.
    */

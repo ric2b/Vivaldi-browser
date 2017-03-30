@@ -116,6 +116,10 @@ GL_FUNCTIONS = [
   'versions': [{ 'name': 'glBindTransformFeedback' }],
   'arguments': 'GLenum target, GLuint id', },
 { 'return_type': 'void',
+  'versions': [{ 'name': 'glBindUniformLocationCHROMIUM',
+                 'extensions': ['GL_CHROMIUM_bind_uniform_location'] }],
+  'arguments': 'GLuint program, GLint location, const char* name' },
+{ 'return_type': 'void',
   'known_as': 'glBindVertexArrayOES',
   'versions': [{ 'name': 'glBindVertexArray',
                  'extensions': ['GL_ARB_vertex_array_object'], },
@@ -1085,7 +1089,8 @@ GL_FUNCTIONS = [
   'arguments': 'GLenum target, GLsizei levels, GLenum internalformat, '
                'GLsizei width, GLsizei height', },
 { 'return_type': 'void',
-  'versions': [{ 'name': 'glTexStorage3D' }],
+  'versions': [{ 'name': 'glTexStorage3D',
+                 'extensions': ['GL_ARB_texture_storage'] }],
   'arguments': 'GLenum target, GLsizei levels, GLenum internalformat, '
                'GLsizei width, GLsizei height, GLsizei depth', },
 { 'return_type': 'void',
@@ -1374,6 +1379,16 @@ EGL_FUNCTIONS = [
   'names': ['eglCreatePixmapSurface'],
   'arguments': 'EGLDisplay dpy, EGLConfig config, EGLNativePixmapType pixmap, '
                'const EGLint* attrib_list', },
+{ 'return_type': 'EGLStreamKHR',
+  'versions': [{ 'name': 'eglCreateStreamKHR',
+                 'extensions': ['EGL_KHR_stream'] }],
+  'arguments': 'EGLDisplay dpy, const EGLint* attrib_list' },
+{ 'return_type': 'EGLBoolean',
+    'versions': [{'name': 'eglCreateStreamProducerD3DTextureNV12ANGLE',
+                  'extensions':
+                      ['EGL_ANGLE_stream_producer_d3d_texture_nv12']}],
+  'arguments':
+      'EGLDisplay dpy, EGLStreamKHR stream, EGLAttrib* attrib_list', },
 { 'return_type': 'EGLSyncKHR',
   'versions': [{ 'name': 'eglCreateSyncKHR',
                  'extensions': [
@@ -1392,6 +1407,10 @@ EGL_FUNCTIONS = [
   'versions': [{ 'name' : 'eglDestroyImageKHR',
                  'extensions': ['EGL_KHR_image_base'] }],
   'arguments': 'EGLDisplay dpy, EGLImageKHR image' },
+{ 'return_type': 'EGLBoolean',
+  'versions': [{ 'name': 'eglDestroyStreamKHR',
+                 'extensions': ['EGL_KHR_stream'] }],
+  'arguments': 'EGLDisplay dpy, EGLStreamKHR stream' },
 { 'return_type': 'EGLBoolean',
   'names': ['eglDestroySurface'],
   'arguments': 'EGLDisplay dpy, EGLSurface surface', },
@@ -1466,6 +1485,18 @@ EGL_FUNCTIONS = [
   'names': ['eglQueryContext'],
   'arguments':
       'EGLDisplay dpy, EGLContext ctx, EGLint attribute, EGLint* value', },
+{ 'return_type': 'EGLBoolean',
+  'versions': [{ 'name': 'eglQueryStreamKHR',
+                 'extensions': ['EGL_KHR_stream'] }],
+  'arguments':
+      'EGLDisplay dpy, EGLStreamKHR stream, EGLenum attribute, '
+      'EGLint* value' },
+{ 'return_type': 'EGLBoolean',
+  'versions': [{ 'name': 'eglQueryStreamu64KHR',
+                 'extensions': ['EGL_KHR_stream'] }],
+  'arguments':
+      'EGLDisplay dpy, EGLStreamKHR stream, EGLenum attribute, '
+      'EGLuint64KHR* value' },
 { 'return_type': 'const char*',
   'names': ['eglQueryString'],
   'arguments': 'EGLDisplay dpy, EGLint name', },
@@ -1483,6 +1514,38 @@ EGL_FUNCTIONS = [
 { 'return_type': 'EGLBoolean',
   'names': ['eglReleaseThread'],
   'arguments': 'void', },
+{ 'return_type': 'EGLBoolean',
+  'versions': [{ 'name': 'eglStreamAttribKHR',
+                 'extensions': ['EGL_KHR_stream'] }],
+  'arguments':
+      'EGLDisplay dpy, EGLStreamKHR stream, EGLenum attribute, EGLint value' },
+{ 'return_type': 'EGLBoolean',
+    'versions': [{ 'name': 'eglStreamConsumerAcquireKHR',
+                   'extensions': ['EGL_KHR_stream_consumer_gltexture']}],
+  'arguments':
+      'EGLDisplay dpy, EGLStreamKHR stream', },
+{ 'return_type': 'EGLBoolean',
+    'versions': [{ 'name': 'eglStreamConsumerGLTextureExternalAttribsNV',
+                   'extensions': ['EGL_NV_stream_consumer_gltexture_yuv']}],
+  'arguments':
+      'EGLDisplay dpy, EGLStreamKHR stream, EGLAttrib* attrib_list', },
+{ 'return_type': 'EGLBoolean',
+    'versions': [{ 'name': 'eglStreamConsumerGLTextureExternalKHR',
+                   'extensions': ['EGL_KHR_stream_consumer_gltexture']}],
+  'arguments':
+      'EGLDisplay dpy, EGLStreamKHR stream', },
+{ 'return_type': 'EGLBoolean',
+    'versions': [{ 'name': 'eglStreamConsumerReleaseKHR',
+                   'extensions': ['EGL_KHR_stream_consumer_gltexture']}],
+  'arguments':
+      'EGLDisplay dpy, EGLStreamKHR stream', },
+{ 'return_type': 'EGLBoolean',
+    'versions': [{ 'name': 'eglStreamPostD3DTextureNV12ANGLE',
+                   'extensions':
+                       ['EGL_ANGLE_stream_producer_d3d_texture_nv12']}],
+  'arguments':
+      'EGLDisplay dpy, EGLStreamKHR stream, void* texture, '
+      'const EGLAttrib* attrib_list', },
 { 'return_type': 'EGLBoolean',
   'names': ['eglSurfaceAttrib'],
   'arguments':
@@ -1842,8 +1905,8 @@ def GenerateHeader(file, functions, set_name,
   file.write(LICENSE_AND_HEADER +
 """
 
-#ifndef UI_GFX_GL_GL_BINDINGS_AUTOGEN_%(name)s_H_
-#define UI_GFX_GL_GL_BINDINGS_AUTOGEN_%(name)s_H_
+#ifndef UI_GL_GL_BINDINGS_AUTOGEN_%(name)s_H_
+#define UI_GL_GL_BINDINGS_AUTOGEN_%(name)s_H_
 
 namespace gfx {
 
@@ -1899,7 +1962,7 @@ class GLContext;
         (func['known_as'], set_name.lower(), func['known_as']))
 
   file.write('\n')
-  file.write('#endif  //  UI_GFX_GL_GL_BINDINGS_AUTOGEN_%s_H_\n' %
+  file.write('#endif  //  UI_GL_GL_BINDINGS_AUTOGEN_%s_H_\n' %
       set_name.upper())
 
 

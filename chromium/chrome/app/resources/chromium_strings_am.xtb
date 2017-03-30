@@ -55,6 +55,7 @@
 <translation id="2673087257647337101">የተዘመነ ለመሆን ጥቂት ብቻ ቀርቷል! ዝማኔውን ለማጠናቀቅ Chromiumን ዳግም ያስጀምሩት።</translation>
 <translation id="2685838254101182273">Chromium ማዘመን አቁሟል፣ እና ከአሁን በኋላ ይህን የስርዓተ ክወናዎን ስሪት አይደግፍም።</translation>
 <translation id="2705212601509139398">ይህ ጣቢያ በቅርቡ የማይደገፍ የሚሆን የChromium ክፈፍ ተሰኪውን እየተጠቀመ ነው። እባክዎ ያራግፉትና ተኳሃኝ አሳሽ ያውርዱ።</translation>
+<translation id="2711502716910134313">የChromium ትር</translation>
 <translation id="2770231113462710648">ነባሪ አሳሽን ወደዚህ ቀይር፦</translation>
 <translation id="2801146392936645542"><ph name="FILE_NAME" /> ተንኮል-አዘል ነው፣ እና Chromium አግዶታል።</translation>
 <translation id="2847479871509788944">ከChromium አስወግድ...</translation>
@@ -68,7 +69,6 @@
 <translation id="3130323860337406239">Chromium ማይክሮፎንዎን እየተጠቀመ ነው።</translation>
 <translation id="313551035350905294">በሚተዳደር መለያ እየገቡ ነው፣ እና አስተዳዳሪው በChromium መገለጫዎ ላይ ቁጥጥር እየሰጡት ነው። እንደ መተግበሪያዎችዎ፣ ዕልባቶችዎ፣ ታሪክዎ፣ የይለፍ ቃላትዎ እና ሌሎች ቅንብሮችዎ ያሉ የChromium ውሂብዎ እስከመጨረሻው ከ<ph name="USER_NAME" /> ጋር የተያያዙ ይሆናሉ። ይህን ውሂብ በGoogle የመለያዎች ዳሽቦርዱ አማካኝነት ሊሰርዙት ይችላሉ፣ ነገር ግን ይህን ውሂብ ከሌላ መለያ ጋር ሊያጎዳኙት አይችሉም።</translation>
 <translation id="3190315855212034486">ኧረ ገዳይ! Chromium ብልሽት አጋጥሞታል። አሁን ዳግም ይጀምር?</translation>
-<translation id="3197823471738295152">መሣሪያዎ የተዘመነ ነው።</translation>
 <translation id="3244477511402911926">የChromium ማሳወቂያ ማዕከል</translation>
 <translation id="3256316712990552818">ወደ Chromium ተቀድቷል</translation>
 <translation id="3258596308407688501">Chromium የውሂብ አቃፊው ላይ ማንበብ እና መጻፍ አይችልም፦
@@ -122,6 +122,7 @@
 <translation id="549669000822060376">Chromium የቅርብ ጊዜዎቹ የስርዓቱ ዝማኔዎችን እስኪጭን ድረስ እባክዎ ይጠብቁ።</translation>
 <translation id="5563479599352954471">በአንዲ ንክኪ ይፈልጉ</translation>
 <translation id="5620765574781326016">ከገጹ ሳይወጡ በድር ጣቢያዎች ላይ ስላሉ ስለርዕሶች ይወቁ</translation>
+<translation id="5634636535844844681">Chromium Windows 7 ወይም ከዚያ በላይ ያስፈልገዋል።</translation>
 <translation id="5680901439334282664">ወደ Chromium ይግቡ</translation>
 <translation id="5772805321386874569">(የChromium <ph name="BEGIN_BUTTON" />ዳግም መጀመር<ph name="END_BUTTON" /> ያስፈልገዋል)</translation>
 <translation id="5796460469508169315">Chromium ዝግጁ ሊሆን ትንሽ ቀርቶታል።</translation>
@@ -181,6 +182,12 @@ Chromium ቅንብሮችዎን ማስመለስ አልቻለም።</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7339898014177206373">አዲሰ መስኮት</translation>
 <translation id="734373864078049451">የእርስዎ ድር፣ ዕልባቶች እና ሌሎች የChromium ነገሮች እዚህ ይኖራሉ።</translation>
+<translation id="7344413941077984497">የትኛዎቹን ድር ጣቢያዎች <ph name="NEW_PROFILE_NAME" /> ማየት እንደሚችል ለማቀናበር <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />ን በመጎብኘት ገደቦችን እና ቅንብሮችን ማወቀር ይችላሉ። ነባሪ ቅንብሮቹን ካልለወጡ <ph name="NEW_PROFILE_NAME" /> በድር ላይ ሁሉንም ነገር ማሰስ ይችላል።
+
+<ph name="NEW_PROFILE_NAME" /> የእርስዎን መለያ እንዳይደርስበት ለመከላከል Chromium በማይጠቀሙበት ጊዜ መለያዎን መቆለፍዎን ያረጋግጡ። ይህን ለማድረግ በአሳሹ ላይኛው ቀኝ ጥግ ላይ የመገለጫ ስምዎን ጠቅ ያድርጉና «ውጣ እና የሕፃን መቆለፊያ»ን ይምረጡ።
+<ph name="BEGIN_LINK_2" />የበለጠ ለመረዳት<ph name="END_LINK_2" />
+
+ለተጨማሪ መመሪያዎች እባክዎ በ<ph name="ACCOUNT_EMAIL" /> ላይ የእርስዎን ኢሜይል ይፈትሹ።</translation>
 <translation id="7419987137528340081">ነባሩ የChromium ውሂብዎን ለይተው ማስቀመጥ ከፈለጉ ለ<ph name="USER_NAME" /> አዲስ የChromium ተጠቃሚ መፍጠር ይችላሉ።</translation>
 <translation id="7421823331379285070">Chromium Windows XP ወይም ከዚያ በኋላ ይፈልጋል። አንዳንድ ባህሪያት ላይሰሩ ይችላሉ።</translation>
 <translation id="7463979740390522693">Chromium - ማሳወቂያዎች (<ph name="QUANTITY" /> ያልተነበቡ)</translation>
@@ -209,6 +216,7 @@ Chromium ቅንብሮችዎን ማስመለስ አልቻለም።</translation>
 <translation id="8586442755830160949">የቅጂ መብት <ph name="YEAR" /> የChromium ደራሲያን። ሁሉም መብቶች የተጠበቁ ናቸው።</translation>
 <translation id="8621669128220841554">ተለይቶ ባልታወቀ ስህተት ምክንያት ጭነት ከሽፏል። እባክዎ Chromiumን እንደገና ያውርዱ።</translation>
 <translation id="8628626585870903697">Chromium የህትመት ቅድመ እይታ እንዲሰራ የሚያስፈልገው የፒ ዲ ኤፍ ማያውን አያካትትም።</translation>
+<translation id="8667808506758191620">የእርስዎ <ph name="DEVICE_TYPE" /> የተዘመነ ነው።</translation>
 <translation id="8697124171261953979">እንዲሁም Chromiumን ሲጀምሩት ወይም ከኦምኒቦክሱ ሆነው ሲፈልጉ የሚታየውን ገጽ ይቆጣጠራል።</translation>
 <translation id="8704119203788522458">ይሄ የእርስዎ Chromium ነው</translation>
 <translation id="872034308864968620">Chromium ጀርባ ላይ ያሂድ</translation>
@@ -225,7 +233,6 @@ Chromium ቅንብሮችዎን ማስመለስ አልቻለም።</translation>
 
 ዝም ብሎ መግባት እንደ ዕልባቶች፣ ታሪክ እና ሌሎች ቅንብሮች ያሉ የChromium መረጃዎችን ከ<ph name="ACCOUNT_EMAIL_NEW" /> ጋር ያዋህዳቸዋል።</translation>
 <translation id="9013087743919948559">ወደ Chromium ያክሉ</translation>
-<translation id="9013262824292842194">Chromium Windows Vista ወይም Windows XP ከSP2 ወይም ከዚያ በላይ ይፈልጋል።</translation>
 <translation id="9019929317751753759">Chromiumን ይበልጥ ደህንነቱ የተጠበቀ እንዲሆን ለማድረግ፣ በ<ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> ውስጥ ያልተዘረዘረውን የሚከተለውን ቅጥያ አሰናክለነዋል እና እርስዎ ሳያውቁት የታከለ ሊሆን ይችላል።</translation>
 <translation id="9022552996538154597">Chromium ውስጥ ይግቡ</translation>
 <translation id="9036189287518468038">Chromium የመተግበሪያ አስጀማሪ</translation>

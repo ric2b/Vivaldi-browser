@@ -18,6 +18,7 @@
 #include "chrome/browser/chromeos/extensions/wallpaper_private_api.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/extensions/extension_constants.h"
@@ -94,6 +95,18 @@ class WallpaperFetcher : public net::URLFetcherDelegate {
 base::LazyInstance<WallpaperFetcher> g_wallpaper_fetcher =
     LAZY_INSTANCE_INITIALIZER;
 
+// Gets the |User| for a given |BrowserContext|. The function will only return
+// valid objects.
+const user_manager::User* GetUserFromBrowserContext(
+    content::BrowserContext* context) {
+  Profile* profile = Profile::FromBrowserContext(context);
+  DCHECK(profile);
+  const user_manager::User* user =
+      chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
+  DCHECK(user);
+  return user;
+}
+
 }  // namespace
 
 WallpaperSetWallpaperFunction::WallpaperSetWallpaperFunction() {
@@ -107,13 +120,12 @@ bool WallpaperSetWallpaperFunction::RunAsync() {
   params_ = set_wallpaper::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params_);
 
-  // Gets account id and user wallpaper files id while at UI thread.
-  const user_manager::User* user =
-      user_manager::UserManager::Get()->GetLoggedInUser();
+  // Gets account id from the caller, ensuring multiprofile compatibility.
+  const user_manager::User* user = GetUserFromBrowserContext(browser_context());
   account_id_ = user->GetAccountId();
   chromeos::WallpaperManager* wallpaper_manager =
       chromeos::WallpaperManager::Get();
-  wallpaper_files_id_ = wallpaper_manager->GetFilesId(*user);
+  wallpaper_files_id_ = wallpaper_manager->GetFilesId(account_id_);
 
   if (params_->details.data) {
     StartDecode(*params_->details.data);
@@ -216,15 +228,17 @@ void WallpaperSetWallpaperFunction::GenerateThumbnail(
 void WallpaperSetWallpaperFunction::ThumbnailGenerated(
     base::RefCountedBytes* original_data,
     base::RefCountedBytes* thumbnail_data) {
-  BinaryValue* original_result = BinaryValue::CreateWithCopiedBuffer(
-      reinterpret_cast<const char*>(original_data->front()),
-      original_data->size());
-  BinaryValue* thumbnail_result = BinaryValue::CreateWithCopiedBuffer(
-      reinterpret_cast<const char*>(thumbnail_data->front()),
-      thumbnail_data->size());
+  std::unique_ptr<BinaryValue> original_result =
+      base::WrapUnique(BinaryValue::CreateWithCopiedBuffer(
+          reinterpret_cast<const char*>(original_data->front()),
+          original_data->size()));
+  std::unique_ptr<BinaryValue> thumbnail_result =
+      base::WrapUnique(BinaryValue::CreateWithCopiedBuffer(
+          reinterpret_cast<const char*>(thumbnail_data->front()),
+          thumbnail_data->size()));
 
   if (params_->details.thumbnail) {
-    SetResult(thumbnail_result);
+    SetResult(thumbnail_result->DeepCopy());
     SendResponse(true);
   }
 
@@ -235,8 +249,8 @@ void WallpaperSetWallpaperFunction::ThumbnailGenerated(
     extensions::EventRouter* event_router =
         extensions::EventRouter::Get(profile);
     std::unique_ptr<base::ListValue> event_args(new base::ListValue());
-    event_args->Append(original_result);
-    event_args->Append(thumbnail_result);
+    event_args->Append(original_result->DeepCopy());
+    event_args->Append(thumbnail_result->DeepCopy());
     event_args->Append(new base::StringValue(
         extensions::api::wallpaper::ToString(params_->details.layout)));
     // Setting wallpaper from right click menu in 'Files' app is a feature that

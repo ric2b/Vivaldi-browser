@@ -30,8 +30,8 @@
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/permissions_data.h"
+#include "media/audio/audio_device_description.h"
 #include "media/audio/audio_manager.h"
-#include "media/audio/audio_manager_base.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -159,8 +159,7 @@ class WebrtcAudioPrivateTest : public AudioWaitingExtensionTest {
       enumeration_event_.Wait();
     } else {
       *id_in_origin = content::GetHMACForMediaDeviceID(
-          resource_context->GetMediaDeviceIDSalt(),
-          origin,
+          resource_context->GetMediaDeviceIDSalt(), url::Origin(origin),
           raw_device_id);
       enumeration_event_.Signal();
     }
@@ -199,9 +198,8 @@ IN_PROC_BROWSER_TEST_F(WebrtcAudioPrivateTest, GetSinks) {
     dict->GetString("sinkId", &sink_id);
 
     std::string expected_id;
-    if (it->unique_id.empty() ||
-        it->unique_id == media::AudioManagerBase::kDefaultDeviceId) {
-      expected_id = media::AudioManagerBase::kDefaultDeviceId;
+    if (media::AudioDeviceDescription::IsDefaultDevice(it->unique_id)) {
+      expected_id = media::AudioDeviceDescription::kDefaultDeviceId;
     } else {
       GetIDInOrigin(profile()->GetResourceContext(),
                     source_url_.GetOrigin(),

@@ -20,7 +20,7 @@
 #include "content/common/media/media_stream_options.h"
 #include "content/renderer/media/media_stream_constraints_util.h"
 #include "content/renderer/media/media_stream_source.h"
-#include "media/audio/audio_parameters.h"
+#include "media/base/audio_parameters.h"
 #include "third_party/webrtc/modules/audio_processing/include/audio_processing.h"
 #include "third_party/webrtc/modules/audio_processing/typing_detection.h"
 
@@ -30,15 +30,15 @@ const char MediaAudioConstraints::kEchoCancellation[] = "echoCancellation";
 const char MediaAudioConstraints::kGoogEchoCancellation[] =
     "googEchoCancellation";
 const char MediaAudioConstraints::kGoogExperimentalEchoCancellation[] =
-    "googEchoCancellation2";
+    "googExperimentalEchoCancellation";
 const char MediaAudioConstraints::kGoogAutoGainControl[] =
     "googAutoGainControl";
 const char MediaAudioConstraints::kGoogExperimentalAutoGainControl[] =
-    "googAutoGainControl2";
+    "googExperimentalAutoGainControl";
 const char MediaAudioConstraints::kGoogNoiseSuppression[] =
     "googNoiseSuppression";
 const char MediaAudioConstraints::kGoogExperimentalNoiseSuppression[] =
-    "googNoiseSuppression2";
+    "googExperimentalNoiseSuppression";
 const char MediaAudioConstraints::kGoogBeamforming[] = "googBeamforming";
 const char MediaAudioConstraints::kGoogArrayGeometry[] = "googArrayGeometry";
 const char MediaAudioConstraints::kGoogHighpassFilter[] = "googHighpassFilter";
@@ -124,15 +124,9 @@ bool ScanConstraintsForBoolean(
     const blink::WebMediaConstraints& constraints,
     blink::BooleanConstraint blink::WebMediaTrackConstraintSet::*picker,
     bool the_default) {
-  const auto& the_field = constraints.basic().*picker;
-  if (the_field.hasExact()) {
-    return the_field.exact();
-  }
-  for (const auto& advanced_constraint : constraints.advanced()) {
-    const auto& the_field = advanced_constraint.*picker;
-    if (the_field.hasExact()) {
-      return the_field.exact();
-    }
+  bool value;
+  if (GetConstraintValueAsBoolean(constraints, picker, &value)) {
+    return value;
   }
   return the_default;
 }
@@ -173,7 +167,10 @@ MediaAudioConstraints::MediaAudioConstraints(
   //   and screen capture.
   // - |kEchoCancellation| is explicitly set to false.
   bool echo_constraint;
-  if (!constraints.basic().mediaStreamSource.isEmpty() ||
+  std::string source_string;
+  if (GetConstraintValueAsString(
+          constraints, &blink::WebMediaTrackConstraintSet::mediaStreamSource,
+          &source_string) ||
       (GetConstraintValueAsBoolean(
            constraints, &blink::WebMediaTrackConstraintSet::echoCancellation,
            &echo_constraint) &&
@@ -191,14 +188,11 @@ bool MediaAudioConstraints::GetEchoCancellationProperty() const {
 
   // If |kEchoCancellation| is specified in the constraints, it will
   // override the value of |kGoogEchoCancellation|.
-  const blink::WebMediaTrackConstraintSet& basic = constraints_.basic();
-  if (basic.echoCancellation.hasExact()) {
-    return basic.echoCancellation.exact();
-  }
-  for (const auto& advanced_constraint : constraints_.advanced()) {
-    if (advanced_constraint.echoCancellation.hasExact()) {
-      return advanced_constraint.echoCancellation.exact();
-    }
+  bool echo_value;
+  if (GetConstraintValueAsBoolean(
+          constraints_, &blink::WebMediaTrackConstraintSet::echoCancellation,
+          &echo_value)) {
+    return echo_value;
   }
   return ScanConstraintsForBoolean(
       constraints_, &blink::WebMediaTrackConstraintSet::googEchoCancellation,
@@ -293,15 +287,11 @@ bool MediaAudioConstraints::GetGoogExperimentalAutoGainControl() const {
 }
 
 std::string MediaAudioConstraints::GetGoogArrayGeometry() const {
-  const auto& the_field = constraints_.basic().googArrayGeometry;
-  if (the_field.hasMandatory()) {
-    return the_field.exact()[0].utf8();
-  }
-  for (const auto& advanced_constraint : constraints_.advanced()) {
-    const auto& the_field = advanced_constraint.googArrayGeometry;
-    if (the_field.hasMandatory()) {
-      return the_field.exact()[0].utf8();
-    }
+  std::string the_value;
+  if (GetConstraintValueAsString(
+          constraints_, &blink::WebMediaTrackConstraintSet::googArrayGeometry,
+          &the_value)) {
+    return the_value;
   }
   return "";
 }
@@ -452,6 +442,8 @@ void GetAecStats(webrtc::EchoCancellation* echo_cancellation,
     stats->echo_return_loss = echo_metrics.echo_return_loss.instant;
     stats->echo_return_loss_enhancement =
         echo_metrics.echo_return_loss_enhancement.instant;
+    stats->aec_divergent_filter_fraction =
+        echo_metrics.divergent_filter_fraction;
   }
 
   int median = 0, std = 0;

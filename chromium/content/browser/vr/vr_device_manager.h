@@ -8,30 +8,31 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <vector>
 
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "content/browser/vr/vr_device.h"
 #include "content/browser/vr/vr_device_provider.h"
 #include "content/common/content_export.h"
-#include "content/common/vr_service.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "third_party/WebKit/public/platform/modules/vr/vr_service.mojom.h"
 
 namespace content {
 
-class VRDeviceManager : public mojom::VRService {
+class VRDeviceManager : public blink::mojom::VRService {
  public:
   ~VRDeviceManager() override;
 
-  static void BindRequest(mojo::InterfaceRequest<mojom::VRService> request);
+  static void BindRequest(
+      mojo::InterfaceRequest<blink::mojom::VRService> request);
 
   // Returns the VRDeviceManager singleton.
   static VRDeviceManager* GetInstance();
 
-  mojo::Array<mojom::VRDeviceInfoPtr> GetVRDevices();
+  mojo::Array<blink::mojom::VRDeviceInfoPtr> GetVRDevices();
   VRDevice* GetDevice(unsigned int index);
 
  private:
@@ -39,13 +40,13 @@ class VRDeviceManager : public mojom::VRService {
 
   VRDeviceManager();
   // Constructor for testing.
-  explicit VRDeviceManager(scoped_ptr<VRDeviceProvider> provider);
+  explicit VRDeviceManager(std::unique_ptr<VRDeviceProvider> provider);
 
   static void SetInstance(VRDeviceManager* service);
   static bool HasInstance();
 
   void InitializeProviders();
-  void RegisterProvider(scoped_ptr<VRDeviceProvider> provider);
+  void RegisterProvider(std::unique_ptr<VRDeviceProvider> provider);
 
   // mojom::VRService implementation
   void GetDevices(const GetDevicesCallback& callback) override;
@@ -65,7 +66,7 @@ class VRDeviceManager : public mojom::VRService {
 
   bool vr_initialized_;
 
-  mojo::BindingSet<mojom::VRService> bindings_;
+  mojo::BindingSet<blink::mojom::VRService> bindings_;
 
   // For testing. If true will not delete self when consumer count reaches 0.
   bool keep_alive_;

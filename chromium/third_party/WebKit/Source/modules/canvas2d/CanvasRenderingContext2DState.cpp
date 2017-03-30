@@ -87,6 +87,7 @@ CanvasRenderingContext2DState::CanvasRenderingContext2DState(const CanvasRenderi
     , m_lineDashOffset(other.m_lineDashOffset)
     , m_unparsedFont(other.m_unparsedFont)
     , m_font(other.m_font)
+    , m_fontForFilter(other.m_fontForFilter)
     , m_unparsedFilter(other.m_unparsedFilter)
     , m_filterValue(other.m_filterValue)
     , m_resolvedFilter(other.m_resolvedFilter)
@@ -112,10 +113,6 @@ CanvasRenderingContext2DState::CanvasRenderingContext2DState(const CanvasRenderi
 
 CanvasRenderingContext2DState::~CanvasRenderingContext2DState()
 {
-#if !ENABLE(OILPAN)
-    if (m_realizedFont)
-        static_cast<CSSFontSelector*>(m_font.getFontSelector())->unregisterForInvalidationCallbacks(this);
-#endif
 }
 
 void CanvasRenderingContext2DState::fontsNeedUpdate(CSSFontSelector* fontSelector)
@@ -126,7 +123,7 @@ void CanvasRenderingContext2DState::fontsNeedUpdate(CSSFontSelector* fontSelecto
     m_font.update(fontSelector);
     // FIXME: We only really need to invalidate the resolved filter if the font
     // update above changed anything and the filter uses font-dependent units.
-    m_resolvedFilter.clear();
+    m_resolvedFilter.reset();
 }
 
 DEFINE_TRACE(CanvasRenderingContext2DState)
@@ -261,17 +258,10 @@ void CanvasRenderingContext2DState::clipPath(const SkPath& path, AntiAliasingMod
 
 void CanvasRenderingContext2DState::setFont(const Font& font, CSSFontSelector* selector)
 {
-#if !ENABLE(OILPAN)
-    if (m_realizedFont)
-        static_cast<CSSFontSelector*>(m_font.getFontSelector())->unregisterForInvalidationCallbacks(this);
-#endif
     m_font = font;
     m_font.update(selector);
     m_realizedFont = true;
     selector->registerForInvalidationCallbacks(this);
-    // FIXME: We only really need to invalidate the resolved filter if it
-    // uses font-relative units.
-    m_resolvedFilter.clear();
 }
 
 const Font& CanvasRenderingContext2DState::font() const
@@ -298,15 +288,19 @@ static void updateFilterReferences(HTMLCanvasElement* canvasElement, CanvasRende
     context->addFilterReferences(filters, canvasElement->document());
 }
 
-SkImageFilter* CanvasRenderingContext2DState::getFilter(Element* styleResolutionHost, const Font& font, IntSize canvasSize, CanvasRenderingContext2D* context) const
+SkImageFilter* CanvasRenderingContext2DState::getFilter(Element* styleResolutionHost, IntSize canvasSize, CanvasRenderingContext2D* context) const
 {
     if (!m_filterValue)
+        return nullptr;
+
+    // StyleResolverState cannot be used in frame-less documents.
+    if (!styleResolutionHost->document().frame())
         return nullptr;
 
     if (!m_resolvedFilter) {
         RefPtr<ComputedStyle> filterStyle = ComputedStyle::create();
         // Must set font in case the filter uses any font-relative units (em, ex)
-        filterStyle->setFont(font);
+        filterStyle->setFont(m_fontForFilter);
 
         StyleResolverState resolverState(styleResolutionHost->document(), styleResolutionHost, filterStyle.get());
         resolverState.setStyle(filterStyle);
@@ -327,9 +321,11 @@ SkImageFilter* CanvasRenderingContext2DState::getFilter(Element* styleResolution
         const double effectiveZoom = 1.0; // Deliberately ignore zoom on the canvas element
         filterEffectBuilder->build(styleResolutionHost, filterStyle->filter(), effectiveZoom, &floatCanvasSize, &fillPaintForFilter, &strokePaintForFilter);
 
-        SkiaImageFilterBuilder imageFilterBuilder;
         FilterEffect* lastEffect = filterEffectBuilder->lastEffect();
-        m_resolvedFilter = imageFilterBuilder.build(lastEffect, ColorSpaceDeviceRGB);
+        if (lastEffect) {
+            lastEffect->determineFilterPrimitiveSubregion();
+        }
+        m_resolvedFilter = SkiaImageFilterBuilder::build(lastEffect, ColorSpaceDeviceRGB);
         if (m_resolvedFilter) {
             updateFilterReferences(toHTMLCanvasElement(styleResolutionHost), context, filterStyle->filter());
             if (lastEffect->originTainted())
@@ -340,16 +336,16 @@ SkImageFilter* CanvasRenderingContext2DState::getFilter(Element* styleResolution
     return m_resolvedFilter.get();
 }
 
-bool CanvasRenderingContext2DState::hasFilter(Element* styleResolutionHost, const Font& font, IntSize canvasSize, CanvasRenderingContext2D* context) const
+bool CanvasRenderingContext2DState::hasFilter(Element* styleResolutionHost, IntSize canvasSize, CanvasRenderingContext2D* context) const
 {
     // Checking for a non-null m_filterValue isn't sufficient, since this value
     // might refer to a non-existent filter.
-    return !!getFilter(styleResolutionHost, font, canvasSize, context);
+    return !!getFilter(styleResolutionHost, canvasSize, context);
 }
 
 void CanvasRenderingContext2DState::clearResolvedFilter() const
 {
-    m_resolvedFilter.clear();
+    m_resolvedFilter.reset();
 }
 
 SkDrawLooper* CanvasRenderingContext2DState::emptyDrawLooper() const
@@ -386,7 +382,7 @@ SkImageFilter* CanvasRenderingContext2DState::shadowOnlyImageFilter() const
 {
     if (!m_shadowOnlyImageFilter) {
         double sigma = skBlurRadiusToSigma(m_shadowBlur);
-        m_shadowOnlyImageFilter = adoptRef(SkDropShadowImageFilter::Create(m_shadowOffset.width(), m_shadowOffset.height(), sigma, sigma, m_shadowColor, SkDropShadowImageFilter::kDrawShadowOnly_ShadowMode));
+        m_shadowOnlyImageFilter = SkDropShadowImageFilter::Make(m_shadowOffset.width(), m_shadowOffset.height(), sigma, sigma, m_shadowColor, SkDropShadowImageFilter::kDrawShadowOnly_ShadowMode, nullptr);
     }
     return m_shadowOnlyImageFilter.get();
 }
@@ -395,7 +391,7 @@ SkImageFilter* CanvasRenderingContext2DState::shadowAndForegroundImageFilter() c
 {
     if (!m_shadowAndForegroundImageFilter) {
         double sigma = skBlurRadiusToSigma(m_shadowBlur);
-        m_shadowAndForegroundImageFilter = adoptRef(SkDropShadowImageFilter::Create(m_shadowOffset.width(), m_shadowOffset.height(), sigma, sigma, m_shadowColor, SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode));
+        m_shadowAndForegroundImageFilter = SkDropShadowImageFilter::Make(m_shadowOffset.width(), m_shadowOffset.height(), sigma, sigma, m_shadowColor, SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode, nullptr);
     }
     return m_shadowAndForegroundImageFilter.get();
 }
@@ -404,8 +400,8 @@ void CanvasRenderingContext2DState::shadowParameterChanged()
 {
     m_shadowOnlyDrawLooper.clear();
     m_shadowAndForegroundDrawLooper.clear();
-    m_shadowOnlyImageFilter.clear();
-    m_shadowAndForegroundImageFilter.clear();
+    m_shadowOnlyImageFilter.reset();
+    m_shadowAndForegroundImageFilter.reset();
 }
 
 void CanvasRenderingContext2DState::setShadowOffsetX(double x)
@@ -435,7 +431,7 @@ void CanvasRenderingContext2DState::setShadowColor(SkColor shadowColor)
 void CanvasRenderingContext2DState::setFilter(CSSValue* filterValue)
 {
     m_filterValue = filterValue;
-    m_resolvedFilter.clear();
+    m_resolvedFilter.reset();
 }
 
 void CanvasRenderingContext2DState::setGlobalComposite(SkXfermode::Mode mode)

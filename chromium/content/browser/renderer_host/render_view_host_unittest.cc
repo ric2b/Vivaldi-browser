@@ -17,6 +17,7 @@
 #include "content/common/view_messages.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/drop_data.h"
 #include "content/public/common/url_constants.h"
@@ -25,7 +26,7 @@
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
 #include "net/base/filename_util.h"
-#include "third_party/WebKit/public/web/WebDragOperation.h"
+#include "third_party/WebKit/public/platform/WebDragOperation.h"
 #include "ui/base/page_transition_types.h"
 
 namespace content {
@@ -84,7 +85,7 @@ TEST_F(RenderViewHostTest, CreateFullscreenWidget) {
 // Ensure we do not grant bindings to a process shared with unprivileged views.
 TEST_F(RenderViewHostTest, DontGrantBindingsToSharedProcess) {
   // Create another view in the same process.
-  scoped_ptr<TestWebContents> new_web_contents(
+  std::unique_ptr<TestWebContents> new_web_contents(
       TestWebContents::Create(browser_context(), rvh()->GetSiteInstance()));
 
   rvh()->AllowBindings(BINDINGS_POLICY_WEB_UI);
@@ -243,16 +244,16 @@ TEST_F(RenderViewHostTest, RoutingIdSane) {
 
 class TestSaveImageFromDataURL : public RenderMessageFilter {
  public:
-  TestSaveImageFromDataURL(
-      BrowserContext* context)
-      : RenderMessageFilter(
-            0,
-            context,
-            context->GetRequestContext(),
-            nullptr,
-            nullptr,
-            nullptr,
-            nullptr) {
+  TestSaveImageFromDataURL(BrowserContext* context)
+      : RenderMessageFilter(0,
+                            context,
+                            BrowserContext::GetDefaultStoragePartition(context)
+                                ->GetURLRequestContext(),
+                            nullptr,
+                            nullptr,
+                            nullptr,
+                            nullptr,
+                            nullptr) {
     Reset();
   }
 

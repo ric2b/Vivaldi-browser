@@ -57,11 +57,9 @@ declare_args() {
 
   enable_plugin_installation = is_win || is_mac
 
-  enable_app_list = !is_ios && !is_android
+  enable_app_list = is_chromeos
 
   enable_supervised_users = !is_ios
-
-  enable_autofill_dialog = !is_ios
 
   enable_remoting = !is_ios && !is_chromecast
 
@@ -120,11 +118,6 @@ declare_args() {
 
 # Additional dependent variables -----------------------------------------------
 
-# Set the version of CLD.
-#   1: (DEPRECATED! See http://crbug.com/528305 for info) Use only CLD1.
-#   2: Use only CLD2.
-cld_version = 2
-
 # Enable the spell checker.
 enable_spellcheck = !is_ios
 
@@ -177,3 +170,6 @@ use_brlapi = is_chromeos
 enable_webvr = is_android
 
 enable_configuration_policy = !is_ios
+
+enable_mac_keystone = is_mac && is_chrome_branded && is_official_build
+enable_mac_crash_collection = is_mac && is_chrome_branded && is_official_build

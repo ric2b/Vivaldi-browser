@@ -68,10 +68,16 @@
 <translation id="2997147809295888909">‏تحقق Chrome من أن <ph name="ISSUER" /> أصدر شهادة موقع الويب هذا. ولم يقدم الخادم أي معلومات لشفافية الشهادة.</translation>
 <translation id="3037838751736561277">‏Google Chrome في وضع الخلفية.</translation>
 <translation id="3047079729301751317">‏سيؤدي قطع اتصال <ph name="USERNAME" /> إلى مسح السجّل والإشارات المرجعية والإعدادات وبيانات Chrome الأخرى المخزنة على هذا الجهاز. لن يتم مسح البيانات المخزنة في حساب Google ويمكن إدارتها على <ph name="GOOGLE_DASHBOARD_LINK" />لوحة تحكم Google<ph name="END_GOOGLE_DASHBOARD_LINK" />.</translation>
+<translation id="3065168410429928842">‏علامة تبويب Chrome</translation>
 <translation id="3080151273017101988">‏استمرار تشغيل تطبيقات الخلفية عند إغلاق Google Chrome</translation>
 <translation id="3089968997497233615">‏يتوفر إصدار جديد وأكثر أمانًا لمتصفح Google Chrome.</translation>
 <translation id="3149510190863420837">‏تطبيقات Chrome</translation>
-<translation id="3197823471738295152">جهازك محدّث.</translation>
+<translation id="3251381707915721925">‏لتعيين مواقع الويب التي يستطيع <ph name="NEW_PROFILE_NAME" /> عرضها، يمكنك تهيئة القيود والإعدادات عن طريق الانتقال إلى <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" />. وفي حالة عدم تغيير الإعدادات الافتراضية، يستطيع <ph name="NEW_PROFILE_NAME" /> تصفح جميع المواقع على الويب.
+
+لمنع <ph name="NEW_PROFILE_NAME" /> من الوصول إلى حسابك، تأكد من قفل ملفك الشخصي عندما لا تستخدم Chrome، ولإجراء ذلك، انقر على اسم ملفك الشخصي في الزاوية العليا اليسرى من المتصفح، وحدد "الخروج وتشغيل وضع القفل للأطفال"
+<ph name="BEGIN_LINK_2" />مزيد من المعلومات<ph name="END_LINK_2" />
+
+يُرجى التحقق من بريدك الإلكتروني على <ph name="ACCOUNT_EMAIL" /> للحصول على مزيد من التعليمات.</translation>
 <translation id="3282568296779691940">‏تسجيل الدخول إلى Chrome</translation>
 <translation id="3311976847535831054">‏لن يتلقى هذا الكمبيوتر تحديثات Google Chrome إصدار 32 بت بعد الآن. الرجاء الترقية إلى Google Chrome إصدار 64 بت.</translation>
 <translation id="3360895254066713204">‏مساعد Chrome</translation>
@@ -209,7 +215,6 @@
 <translation id="7808348361785373670">‏جارٍ الإزالة من Chrome...</translation>
 <translation id="7825851276765848807">‏فشل التثبيت نظرًا لحدوث خطأ غير محدد. الرجاء تنزيل Google Chrome مرة أخرى.</translation>
 <translation id="7890208801193284374">‏إذا كنت تشارك الكمبيوتر مع أصدقائك وعائلتك، فبإمكانهم التصفح على حدة وإعداد Chrome على النحو الذي يريدونه.</translation>
-<translation id="8000275528373650868">‏يتطلب Google Chrome نظام التشغيل Windows Vista أو Windows XP المزود بحزمة الخدمة SP2 أو الأعلى منها.</translation>
 <translation id="8005540215158006229">‏Chrome جاهز تقريبًا.</translation>
 <translation id="8008534537613507642">‏إعادة تثبيت Chrome</translation>
 <translation id="8030318113982266900">جارٍ تحديث جهازك إلى قناة <ph name="CHANNEL_NAME" />...</translation>
@@ -231,6 +236,7 @@
 <translation id="8556340503434111824">‏يتوفر إصدار جديد من Google Chrome، وهو أسرع بكثير من ذي قبل.</translation>
 <translation id="8568392309447938879">‏يلزمك تسجيل الدخول إلى Chrome لتتمكن من استخدام التطبيقات. سيتيح هذا للمتصفح Chrome مزامنة تطبيقاتك والإشارات المرجعية والسجل وكلمات المرور وغير ذلك من الإعدادات عبر الأجهزة.</translation>
 <translation id="8614913330719544658">‏لا يستجيب Google Chrome. هل تريد إعادة التشغيل الآن؟</translation>
+<translation id="8667808506758191620">جهاز <ph name="DEVICE_TYPE" /> مُحدّث.</translation>
 <translation id="8669527147644353129">‏مساعد Google Chrome</translation>
 <translation id="8679801911857917785">‏كما أنها تتحكم في الصفحة التي تظهر عند تشغيل Chrome.</translation>
 <translation id="870251953148363156">‏&amp;تحديث Google Chrome</translation>
@@ -239,6 +245,7 @@
 <translation id="8851136666856101339">main</translation>
 <translation id="8862326446509486874">لا تملك الحقوق الكافية للتثبيت على مستوى النظام. جرّب تشغيل المثبِّت بصفة مشرف.</translation>
 <translation id="9026991721384951619">‏تعذر على نظام التشغيل Chrome مزامنة البيانات نظرًا لأن تفاصيل تسجيل الدخول إلى حسابك قديمة.</translation>
+<translation id="9067395829937117663">‏يتطلب متصفح Google Chrome نظام التشغيل Windows 7 أو إصدارًا أحدث.</translation>
 <translation id="9102715433345326100">‏يُعد الملف برنامجًا ضارًا، وقد أجرى Chrome حظره.</translation>
 <translation id="9107728822479888688">‏<ph name="BEGIN_BOLD" />تحذير:<ph name="END_BOLD" /> لا يستطيع Google Chrome منع الإضافات من تسجيل سجل التصفح الخاص بك. لتعطيل هذا الإضافة في وضع التصفح المتخفي، ألغ تحديد هذا الخيار.</translation>
 <translation id="911206726377975832">هل تريد أيضًا حذف بيانات التصفح؟</translation>

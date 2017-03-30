@@ -4,11 +4,13 @@
 
 #include "chrome/browser/browser_process_impl.h"
 
+#include <memory>
+
 #include "base/command_line.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "base/metrics/user_metrics.h"
 #include "base/run_loop.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/webui/ntp/ntp_resource_cache_factory.h"
@@ -29,6 +31,7 @@ class BrowserProcessImplTest : public ::testing::Test {
         browser_process_impl_(
             new BrowserProcessImpl(base::ThreadTaskRunnerHandle::Get().get(),
                                    command_line_)) {
+    base::SetRecordActionTaskRunner(loop_.task_runner());
     browser_process_impl_->SetApplicationLocale("en");
   }
 
@@ -67,10 +70,10 @@ class BrowserProcessImplTest : public ::testing::Test {
   BrowserProcess* stashed_browser_process_;
   base::MessageLoop loop_;
   content::TestBrowserThread ui_thread_;
-  scoped_ptr<content::TestBrowserThread> file_thread_;
-  scoped_ptr<content::TestBrowserThread> io_thread_;
+  std::unique_ptr<content::TestBrowserThread> file_thread_;
+  std::unique_ptr<content::TestBrowserThread> io_thread_;
   base::CommandLine command_line_;
-  scoped_ptr<BrowserProcessImpl> browser_process_impl_;
+  std::unique_ptr<BrowserProcessImpl> browser_process_impl_;
 };
 
 
@@ -85,7 +88,7 @@ TEST_F(BrowserProcessImplTest, LifeCycle) {
   browser_process_impl()->PreMainMessageLoopRun();
 
   // Force the creation of the NTPResourceCache, to test the destruction order.
-  scoped_ptr<Profile> profile(new TestingProfile);
+  std::unique_ptr<Profile> profile(new TestingProfile);
   NTPResourceCache* cache =
       NTPResourceCacheFactory::GetForProfile(profile.get());
   ASSERT_TRUE(cache);

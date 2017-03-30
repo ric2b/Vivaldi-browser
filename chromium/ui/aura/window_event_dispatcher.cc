@@ -8,7 +8,7 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "ui/aura/client/capture_client.h"
@@ -120,7 +120,7 @@ void WindowEventDispatcher::RepostEvent(const ui::LocatedEvent* event) {
   }
 
   if (held_repostable_event_) {
-    base::MessageLoop::current()->PostNonNestableTask(
+    base::ThreadTaskRunnerHandle::Get()->PostNonNestableTask(
         FROM_HERE, base::Bind(
             base::IgnoreResult(&WindowEventDispatcher::DispatchHeldEvents),
             repost_event_factory_.GetWeakPtr()));
@@ -171,7 +171,7 @@ DispatchDetails WindowEventDispatcher::DispatchMouseExitAtPoint(
 void WindowEventDispatcher::ProcessedTouchEvent(uint32_t unique_event_id,
                                                 Window* window,
                                                 ui::EventResult result) {
-  scoped_ptr<ui::GestureRecognizer::Gestures> gestures(
+  std::unique_ptr<ui::GestureRecognizer::Gestures> gestures(
       ui::GestureRecognizer::Get()->AckTouchEvent(unique_event_id, result,
                                                   window));
   DispatchDetails details = ProcessGestures(window, gestures.get());
@@ -195,7 +195,7 @@ void WindowEventDispatcher::ReleasePointerMoves() {
     // called from a deep stack while another event, in which case dispatching
     // another one may not be safe/expected.  Instead we post a task, that we
     // may cancel if HoldPointerMoves is called again before it executes.
-    base::MessageLoop::current()->PostNonNestableTask(
+    base::ThreadTaskRunnerHandle::Get()->PostNonNestableTask(
         FROM_HERE, base::Bind(
           base::IgnoreResult(&WindowEventDispatcher::DispatchHeldEvents),
           held_event_factory_.GetWeakPtr()));
@@ -505,7 +505,7 @@ ui::EventDispatchDetails WindowEventDispatcher::PostDispatchEvent(
       const ui::TouchEvent& touchevent = *event.AsTouchEvent();
 
       if (!touchevent.synchronous_handling_disabled()) {
-        scoped_ptr<ui::GestureRecognizer::Gestures> gestures;
+        std::unique_ptr<ui::GestureRecognizer::Gestures> gestures;
 
         Window* window = static_cast<Window*>(target);
         gestures.reset(ui::GestureRecognizer::Get()->AckTouchEvent(
@@ -667,7 +667,8 @@ ui::EventDispatchDetails WindowEventDispatcher::DispatchHeldEvents() {
   if (held_repostable_event_) {
     if (held_repostable_event_->type() == ui::ET_MOUSE_PRESSED ||
         held_repostable_event_->type() == ui::ET_TOUCH_PRESSED) {
-      scoped_ptr<ui::LocatedEvent> event = std::move(held_repostable_event_);
+      std::unique_ptr<ui::LocatedEvent> event =
+          std::move(held_repostable_event_);
       dispatching_held_event_ = event.get();
       dispatch_details = OnEventFromSource(event.get());
     } else {
@@ -699,7 +700,7 @@ void WindowEventDispatcher::PostSynthesizeMouseMove() {
   if (synthesize_mouse_move_)
     return;
   synthesize_mouse_move_ = true;
-  base::MessageLoop::current()->PostNonNestableTask(
+  base::ThreadTaskRunnerHandle::Get()->PostNonNestableTask(
       FROM_HERE,
       base::Bind(base::IgnoreResult(
           &WindowEventDispatcher::SynthesizeMouseMoveEvent),

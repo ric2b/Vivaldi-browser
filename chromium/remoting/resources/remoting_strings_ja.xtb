@@ -34,6 +34,7 @@ US英語以外のキーボードを使用しているリモートパソコンで
 <translation id="1779766957982586368">ウィンドウを閉じる</translation>
 <translation id="1841799852846221389">このパソコンのリモート接続を無効にしています...</translation>
 <translation id="189172778771606813">操作パネルを閉じる</translation>
+<translation id="1897488610212723051">削除</translation>
 <translation id="195619862187186579">キーボード配列</translation>
 <translation id="1996161829609978754">Chromoting ホスト インストーラをダウンロードしています。ダウンロードが完了したら、続行する前にインストーラを実行してください。</translation>
 <translation id="2009755455353575666">接続失敗</translation>
@@ -122,9 +123,6 @@ US英語以外のキーボードを使用しているリモートパソコンで
 <translation id="3950820424414687140">ログイン</translation>
 <translation id="3989511127559254552">続行するには、このパソコンに拡張アクセス許可を付与する必要があります。この作業は 1 回だけ必要です。</translation>
 <translation id="4006787130661126000">Chrome リモート デスクトップを使用してこのパソコンにアクセスするには、リモート接続を有効にする必要があります。</translation>
-<translation id="4028465833180158312">• マテリアル デザインのユーザー インターフェースの更新。
-• サードパーティ ライセンスのクレジット。
-• オフラインのリモート パソコンに関する情報の表示。</translation>
 <translation id="405887016757208221">リモート パソコンでセッションを初期化できませんでした。引き続き問題が発生する場合は、ホストを設定し直してみてください。</translation>
 <translation id="4068946408131579958">すべての接続</translation>
 <translation id="409800995205263688">注: ポリシー設定に基づき、接続が許可されるのはこのネットワーク内のパソコン間のみとなります。</translation>
@@ -168,6 +166,7 @@ US英語以外のキーボードを使用しているリモートパソコンで
 <translation id="4985296110227979402">リモート接続に使用するパソコンを最初に設定しておく必要があります</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" />（オフライン）</translation>
 <translation id="5070121137485264635">リモート ホストで、サードパーティ ウェブサイトへの認証が求められています。続行するには、次のアドレスにアクセスできるように Chrome リモート デスクトップに追加の権限を与える必要があります:</translation>
+<translation id="507204348399810022"><ph name="HOSTNAME" /> へのリモート接続を無効にしてもよろしいですか？</translation>
 <translation id="5156271271724754543">両方のボックスに同じ PIN を入力してください。</translation>
 <translation id="5168917394043976756">操作パネルを開く</translation>
 <translation id="5170982930780719864">ホスト ID が無効です。</translation>
@@ -178,7 +177,6 @@ US英語以外のキーボードを使用しているリモートパソコンで
 <translation id="533625276787323658">接続先がありません</translation>
 <translation id="5363265567587775042">接続先のパソコンのユーザーに、[<ph name="SHARE" />] をクリックしてアクセスコードを付与してもらってください。</translation>
 <translation id="5379087427956679853">Chrome リモート デスクトップを使用すると、パソコンをウェブ経由で安全に共有できます。共有するには両方のユーザーが Chrome リモート デスクトップ アプリを実行している必要があります。このアプリは <ph name="URL" /> から入手できます。</translation>
-<translation id="5394895745784982830">Mac 版（OS X 10.6 以上）</translation>
 <translation id="5397086374758643919">Chrome リモート デスクトップ ホストのアンインストーラ</translation>
 <translation id="5419185025274123272">アプリケーションをリセットできませんでした。バグレポートの送信は可能です。</translation>
 <translation id="544077782045763683">ホストはシャットダウンしました。</translation>
@@ -214,6 +212,10 @@ US英語以外のキーボードを使用しているリモートパソコンで
 <translation id="6324708100353784493">Google Cardboard 統合モードを有効にしました。このモードを使用するには、端末を Google Cardboard 対応ビューアに装着してください。</translation>
 <translation id="6381670701864002291">その他の問題。</translation>
 <translation id="6398765197997659313">全画面表示を終了</translation>
+<translation id="6408143143164565232">• Windows や Linux パソコンからの音声を聞き取る。
+• パソコン名を押し続けて不要な接続を削除。
+• ピンチしてズーム、2 本指スクロールの滑らかさが向上。
+• ヘルプとフィードバック画面の更新。</translation>
 <translation id="6441316101718669559">このプラットフォームでデスクトップの統合はサポートされていません。アプリケーションは引き続き使用できますが、ユーザー エクスペリエンスは低下します。</translation>
 <translation id="652218476070540101">このパソコン用の PIN を更新しています...</translation>
 <translation id="6527303717912515753">共有</translation>
@@ -221,6 +223,7 @@ US英語以外のキーボードを使用しているリモートパソコンで
 <translation id="6542902059648396432">問題を報告…</translation>
 <translation id="6550675742724504774">オプション</translation>
 <translation id="6570205395680337606">アプリケーションをリセットします。保存されていない作業は失われます。</translation>
+<translation id="6572345186230665992">Mac 版（OS X Mavericks 10.9 以上）</translation>
 <translation id="6612717000975622067">Ctrl-Alt-Del を送信</translation>
 <translation id="6640610550128933069">前回のインターネット接続日: <ph name="DATE" /></translation>
 <translation id="6668065415969892472">PIN を更新しました。</translation>
@@ -232,7 +235,6 @@ US英語以外のキーボードを使用しているリモートパソコンで
 <translation id="6930242544192836755">接続時間</translation>
 <translation id="6939719207673461467">キーボードを表示/非表示</translation>
 <translation id="6944854424004126054">ウィンドウを元のサイズに戻す</translation>
-<translation id="6962773374262604195">Windows 版（XP 以上）</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942"><ph name="HOSTNAME" /> へのリモート接続を無効にしてもよろしいですか？元に戻す場合は、該当のパソコンにアクセスして接続を再び有効にする必要があります。</translation>
 <translation id="6998989275928107238">接続先</translation>
@@ -265,7 +267,7 @@ US英語以外のキーボードを使用しているリモートパソコンで
 <translation id="8041721485428375115">Chrome リモート デスクトップ ホスト インストーラをダウンロードすると、Google の<ph name="LINK_BEGIN" />利用規約<ph name="LINK_END" />に同意したことになります。</translation>
 <translation id="8073845705237259513">Chrome リモート デスクトップを使用するには、お使いのデバイスに Google アカウントを追加する必要があります。</translation>
 <translation id="80739703311984697">リモート ホストで、サードパーティ ウェブサイトへの認証が求められています。続行するには、次のアドレスにアクセスできるように Chromoting に追加の権限を与える必要があります:</translation>
-<translation id="809687642899217504">マイ パソコン</translation>
+<translation id="809687642899217504">マイ コンピュータ</translation>
 <translation id="811307782653349804">どこからでも自分のパソコンにアクセスできます。</translation>
 <translation id="8116630183974937060">ネットワーク エラーが発生しました。デバイスがインターネットに接続されているか確認して、もう一度お試しください。</translation>
 <translation id="8178433417677596899">リモート テクニカル サポートに最適な、ユーザー同士の画面共有。</translation>
@@ -288,6 +290,7 @@ US英語以外のキーボードを使用しているリモートパソコンで
 <translation id="8759753423332885148">詳細</translation>
 <translation id="8791202241915690908">Chromoting ホスト インストーラのダウンロード</translation>
 <translation id="894763922177556086">良い</translation>
+<translation id="895780780740011433">Windows 版（7 以上）</translation>
 <translation id="897805526397249209">別のパソコンへのリモート接続を有効にするには、対象となるパソコンに Chromoting をインストールし、[<ph name="BUTTON_NAME" />] をクリックしてください。</translation>
 <translation id="8998327464021325874">Chrome リモート デスクトップ ホスト コントローラ</translation>
 <translation id="9016232822027372900">このまま接続する</translation>

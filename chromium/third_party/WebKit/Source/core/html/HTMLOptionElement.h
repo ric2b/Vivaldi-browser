@@ -38,8 +38,8 @@ class ComputedStyle;
 class CORE_EXPORT HTMLOptionElement final : public HTMLElement {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static RawPtr<HTMLOptionElement> create(Document&);
-    static RawPtr<HTMLOptionElement> createForJSConstructor(Document&, const String& data, const AtomicString& value,
+    static HTMLOptionElement* create(Document&);
+    static HTMLOptionElement* createForJSConstructor(Document&, const String& data, const AtomicString& value,
         bool defaultSelected, bool selected, ExceptionState&);
 
     // A text to be shown to users.  The difference from |label()| is |label()|
@@ -92,6 +92,7 @@ private:
 
     bool supportsFocus() const override;
     bool matchesDefaultPseudoClass() const override;
+    bool matchesEnabledPseudoClass() const override;
     void attach(const AttachContext& = AttachContext()) override;
     void detach(const AttachContext& = AttachContext()) override;
     void parseAttribute(const QualifiedName&, const AtomicString&, const AtomicString&) override;

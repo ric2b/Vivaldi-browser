@@ -287,10 +287,10 @@ USB_KEYMAP_DECLARATION {
   USB_KEYMAP(0x07007c, 0x0085, 0x008d, 0xe018, 0xffff, "Copy", COPY),
   USB_KEYMAP(0x07007d, 0x0087, 0x008f, 0xe00a, 0xffff, "Paste", PASTE),
   USB_KEYMAP(0x07007e, 0x0088, 0x0090, 0x0000, 0xffff, "Find", FIND), // Find
-  USB_KEYMAP(0x07007f, 0x0071, 0x0079, 0xe020, 0x004a, "VolumeMute", VOLUME_MUTE),
+  USB_KEYMAP(0x07007f, 0x0071, 0x0079, 0xe020, 0x004a, "AudioVolumeMute", VOLUME_MUTE),
 
-  USB_KEYMAP(0x070080, 0x0073, 0x007b, 0xe030, 0x0048, "VolumeUp", VOLUME_UP),
-  USB_KEYMAP(0x070081, 0x0072, 0x007a, 0xe02e, 0x0049, "VolumeDown", VOLUME_DOWN),
+  USB_KEYMAP(0x070080, 0x0073, 0x007b, 0xe030, 0x0048, "AudioVolumeUp", VOLUME_UP),
+  USB_KEYMAP(0x070081, 0x0072, 0x007a, 0xe02e, 0x0049, "AudioVolumeDown", VOLUME_DOWN),
   //USB_KEYMAP(0x070082, 0x0000, 0x0000, 0x0000, 0xffff, NULL, LOCKING_CAPS_LOCK),
   //USB_KEYMAP(0x070083, 0x0000, 0x0000, 0x0000, 0xffff, NULL, LOCKING_NUM_LOCK),
   //USB_KEYMAP(0x070084, 0x0000, 0x0000, 0x0000, 0xffff, NULL, LOCKING_SCROLL_LOCK),
@@ -423,13 +423,13 @@ USB_KEYMAP_DECLARATION {
   // USB#0700e2: left Alt key (Mac left Option key).
   USB_KEYMAP(0x0700e2, 0x0038, 0x0040, 0x0038, 0x003a, "AltLeft", ALT_LEFT),
   // USB#0700e3: left GUI key, e.g. Windows, Mac Command, ChromeOS Search.
-  USB_KEYMAP(0x0700e3, 0x007d, 0x0085, 0xe05b, 0x0037, "OSLeft", OS_LEFT),
+  USB_KEYMAP(0x0700e3, 0x007d, 0x0085, 0xe05b, 0x0037, "MetaLeft", META_LEFT),
   USB_KEYMAP(0x0700e4, 0x0061, 0x0069, 0xe01d, 0x003e, "ControlRight", CONTROL_RIGHT),
   USB_KEYMAP(0x0700e5, 0x0036, 0x003e, 0x0036, 0x003c, "ShiftRight", SHIFT_RIGHT),
   // USB#0700e6: right Alt key (Mac right Option key).
   USB_KEYMAP(0x0700e6, 0x0064, 0x006c, 0xe038, 0x003d, "AltRight", ALT_RIGHT),
   // USB#0700e7: right GUI key, e.g. Windows, Mac Command, ChromeOS Search.
-  USB_KEYMAP(0x0700e7, 0x007e, 0x0086, 0xe05c, 0x0036, "OSRight", OS_RIGHT),
+  USB_KEYMAP(0x0700e7, 0x007e, 0x0086, 0xe05c, 0x0036, "MetaRight", META_RIGHT),
 
   // USB#0700e8 - #07ffff are reserved
 

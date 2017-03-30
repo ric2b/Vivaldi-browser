@@ -331,7 +331,8 @@ const char kCreateBundle_Help[] =
     "Variables\n"
     "\n"
     "  bundle_root_dir*, bundle_resources_dir*, bundle_executable_dir*,\n"
-    "  bundle_plugins_dir*, deps, data_deps, public_deps, visibility\n"
+    "  bundle_plugins_dir*, deps, data_deps, public_deps, visibility,\n"
+    "  product_type\n"
     "  * = required\n"
     "\n"
     "Example\n"
@@ -378,6 +379,7 @@ const char kCreateBundle_Help[] =
     "      }\n"
     "\n"
     "      create_bundle(\"${app_name}.app\") {\n"
+    "        product_type = \"com.apple.product-type.application\"\n"
     "        deps = [\n"
     "          \":${app_name}_bundle_executable\",\n"
     "          \":${app_name}_bundle_info_plist\",\n"
@@ -654,6 +656,7 @@ const char kStaticLibrary_Help[] =
     "\n"
     "Variables\n"
     "\n"
+    "complete_static_lib\n"
     CONFIG_VALUES_VARS_HELP
     DEPS_VARS
     DEPENDENT_CONFIG_VARS

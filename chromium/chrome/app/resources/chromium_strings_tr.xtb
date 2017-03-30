@@ -53,6 +53,7 @@
 <translation id="2673087257647337101">Neredeyse güncel! Güncelleştirmeyi tamamlamak için Chromium'u yeniden başlatın.</translation>
 <translation id="2685838254101182273">Chromium güncellenmesi durdu ve artık işletim sisteminizin bu sürümünü desteklemiyor.</translation>
 <translation id="2705212601509139398">Bu site, kısa bir süre sonra artık destek verilmeyecek olan Chromium Frame eklentisini kullanıyor. Lütfen bu eklentinin yüklemesini kaldırın ve uyumlu bir tarayıcı indirin.</translation>
+<translation id="2711502716910134313">Chromium Sekmesi</translation>
 <translation id="2770231113462710648">Varsayılan tarayıcıyı şuna dönüştür:</translation>
 <translation id="2801146392936645542"><ph name="FILE_NAME" /> kötü amaçlı ve Chromium tarafından engellendi.</translation>
 <translation id="2847479871509788944">Chromium'dan kaldır...</translation>
@@ -66,7 +67,6 @@
 <translation id="3130323860337406239">Chromium mikrofonunuzu kullanıyor.</translation>
 <translation id="313551035350905294">Yönetilen bir hesapla oturum açıyor ve hesabın yöneticisine Chromium profilinizi denetleme izni veriyorsunuz. Uygulamalarınız, yer işaretleriniz, geçmişiniz, şifreleriniz ve diğer ayarlarınız gibi Chromium verileriniz kalıcı olarak <ph name="USER_NAME" /> ile bağlantılandırılacaktır. İstediğinizde Google Hesapları Hesap Özeti'ni kullanarak bu verileri silebilecek, ancak bu verileri başka bir hesapla ilişkilendiremeyeceksiniz.</translation>
 <translation id="3190315855212034486">Hata! Chromium kilitlendi. Yeniden başlatılsın mı?</translation>
-<translation id="3197823471738295152">Cihazınız güncel.</translation>
 <translation id="3244477511402911926">Chromium Bildirim Merkezi</translation>
 <translation id="3256316712990552818">Chromium'a kopyalandı</translation>
 <translation id="3258596308407688501">Chromium veri dizini üzerinde okuma ve yazma işlemi yapamıyor: <ph name="USER_DATA_DIRECTORY" /></translation>
@@ -118,6 +118,7 @@
 <translation id="549669000822060376">Chromium en son sistem güncellemelerini yüklerken lütfen bekleyin.</translation>
 <translation id="5563479599352954471">Tek dokunmayla ara</translation>
 <translation id="5620765574781326016">Sayfadan ayrılmadan web sitelerindeki konular hakkında bilgi edinin.</translation>
+<translation id="5634636535844844681">Chromium, Windows 7 veya daha sonraki bir sürümü gerektirir.</translation>
 <translation id="5680901439334282664">Chromium'da oturum açın</translation>
 <translation id="5772805321386874569">(Chromium'un <ph name="BEGIN_BUTTON" />yeniden başlatılmasını<ph name="END_BUTTON" /> gerektirir)</translation>
 <translation id="5796460469508169315">Chromium neredeyse hazır.</translation>
@@ -177,6 +178,12 @@ Chromium ayarlarınızı kurtaramıyor.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7339898014177206373">Yeni pencere</translation>
 <translation id="734373864078049451">Web, yer işaretleri ve diğer Chromium bilgileriniz burada bulunur.</translation>
+<translation id="7344413941077984497"><ph name="NEW_PROFILE_NAME" /> kullanıcısının hangi web sitelerini görüntüleyebileceğini ayarlamak için <ph name="BEGIN_LINK_1" /><ph name="DISPLAY_LINK" /><ph name="END_LINK_1" /> bağlantısını ziyaret ederek kısıtlamaları ve ayarları yapılandırabilirsiniz. Varsayılan ayarları değiştirmezseniz <ph name="NEW_PROFILE_NAME" /> web'de bulunan her şeye göz atabilir.
+
+<ph name="NEW_PROFILE_NAME" /> kullanıcısının hesabınıza erişmesini önlemek için Chromium'u kullanmadığınız zamanlarda profilinizi kilitlediğinizden emin olun. Bunu yapmak için tarayıcının sağ üst köşesindeki profil adınızı tıklayıp, "Çıkış ve çocuk kilidi"ni seçin.
+<ph name="BEGIN_LINK_2" />Daha fazla bilgi edinin<ph name="END_LINK_2" />
+
+Daha fazla talimat için lütfen e-postanızı (<ph name="ACCOUNT_EMAIL" />) kontrol edin.</translation>
 <translation id="7419987137528340081">Mevcut Chromium verilerinizi ayrı tutmayı tercih ederseniz, <ph name="USER_NAME" /> için yeni bir Chromium kullanıcısı oluşturabilirsiniz.</translation>
 <translation id="7421823331379285070">Chromium, Windows XP veya sonrasını gerektirir. Bazı özellikler çalışmayabilir.</translation>
 <translation id="7463979740390522693">Chromium - Bildirimler (<ph name="QUANTITY" /> okunmamış)</translation>
@@ -205,6 +212,7 @@ Chromium ayarlarınızı kurtaramıyor.</translation>
 <translation id="8586442755830160949">Telif Hakkı <ph name="YEAR" /> The Chromium Authors. Tüm hakları saklıdır.</translation>
 <translation id="8621669128220841554">Yükleme belirtilmeyen bir hata nedeniyle başarısız oldu. Lütfen Chromium'u tekrar indirin.</translation>
 <translation id="8628626585870903697">Chromium, Baskı Önizleme için gerekli olan PDF görüntüleyiciyi içermez.</translation>
+<translation id="8667808506758191620"><ph name="DEVICE_TYPE" /> cihazınız güncel.</translation>
 <translation id="8697124171261953979">Ayrıca Chromium'u başlattığınızda veya Çok Amaçlı Adres Çubuğu'ndan arama yaptığınızda gösterilecek sayfayı da denetler.</translation>
 <translation id="8704119203788522458">Bu sizin Chromium'unuz</translation>
 <translation id="872034308864968620">Chromium'un Arka Planda Çalışmasına İzin Ver</translation>
@@ -221,7 +229,6 @@ Chromium ayarlarınızı kurtaramıyor.</translation>
 
 Yine de oturum açarsanız, yer işaretleriniz, geçmişiniz ve diğer ayarlarınız gibi Chromium bilgileriniz <ph name="ACCOUNT_EMAIL_NEW" /> ile birleştirilecektir.</translation>
 <translation id="9013087743919948559">Chromium'a ekle</translation>
-<translation id="9013262824292842194">Chromium; Windows Vista veya Windows XP SP2 ya da daha ileri bir sürümü gerektirir.</translation>
 <translation id="9019929317751753759">Chromium'u daha güvenli bir hale getirmek için <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> altında listelenmeyen ve bilginiz dışında eklenmiş olabilecek aşağıdaki uzantıyı devre dışı bıraktık.</translation>
 <translation id="9022552996538154597">Chromium'da oturum aç</translation>
 <translation id="9036189287518468038">Chromium Uygulama Başlatıcı</translation>

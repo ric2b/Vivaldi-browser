@@ -8,7 +8,7 @@
 #include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "net/base/load_flags.h"
 #include "net/base/network_delegate_impl.h"
 #include "net/base/upload_bytes_element_reader.h"
@@ -227,7 +227,7 @@ TEST_F(CertificateReportSenderTest, PendingRequestGetsDeleted) {
 
   EXPECT_EQ(0u, network_delegate_.num_requests());
 
-  scoped_ptr<CertificateReportSender> reporter(new CertificateReportSender(
+  std::unique_ptr<CertificateReportSender> reporter(new CertificateReportSender(
       context(), CertificateReportSender::DO_NOT_SEND_COOKIES));
   reporter->Send(url, kDummyReport);
   reporter.reset();

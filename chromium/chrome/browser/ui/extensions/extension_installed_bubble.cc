@@ -13,7 +13,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/commands/command_service.h"
@@ -32,6 +32,8 @@
 #include "extensions/browser/extension_registry_observer.h"
 #include "extensions/common/feature_switch.h"
 #include "ui/base/l10n/l10n_util.h"
+
+#include "app/vivaldi_apptools.h"
 
 using extensions::Extension;
 
@@ -114,7 +116,7 @@ class ExtensionInstalledBubbleObserver
     // TODO(hcarmona): Investigate having the BubbleManager query the bubble
     // for |ShouldShow|. This is important because the BubbleManager may decide
     // to delay showing the bubble.
-    if (bubble_->ShouldShow()) {
+    if (!vivaldi::IsVivaldiRunning() && bubble_->ShouldShow()) {
       // Must be 2 lines because the manager will take ownership of bubble.
       BubbleManager* manager = bubble_->browser()->GetBubbleManager();
       manager->ShowBubble(std::move(bubble_));

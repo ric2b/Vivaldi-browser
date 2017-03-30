@@ -186,16 +186,6 @@ bool RecordInfo::IsEagerlyFinalized() {
   return is_eagerly_finalized_;
 }
 
-bool RecordInfo::IsGCRefCounted() {
-  if (!IsGCDerived())
-    return false;
-  for (const auto& gc_base : gc_base_names_) {
-    if (Config::IsGCRefCountedBase(gc_base))
-      return true;
-  }
-  return false;
-}
-
 bool RecordInfo::HasDefinition() {
   return record_->hasDefinition();
 }
@@ -584,7 +574,7 @@ Edge* RecordInfo::CreateEdge(const Type* type) {
 
   if (type->isPointerType() || type->isReferenceType()) {
     if (Edge* ptr = CreateEdge(type->getPointeeType().getTypePtrOrNull()))
-      return new RawPtr(ptr, false, type->isReferenceType());
+      return new RawPtr(ptr, type->isReferenceType());
     return 0;
   }
 
@@ -596,12 +586,6 @@ Edge* RecordInfo::CreateEdge(const Type* type) {
   }
 
   TemplateArgs args;
-
-  if (Config::IsRawPtr(info->name()) && info->GetTemplateArgs(1, &args)) {
-    if (Edge* ptr = CreateEdge(args[0]))
-      return new RawPtr(ptr, true, false);
-    return 0;
-  }
 
   if (Config::IsRefPtr(info->name()) && info->GetTemplateArgs(1, &args)) {
     if (Edge* ptr = CreateEdge(args[0]))

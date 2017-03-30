@@ -16,7 +16,8 @@ component("ipc") {
   deps = [
     "//base",
     "//ipc",
-    "//ui/gfx",
+    "//ui/gfx:memory_buffer",
     "//ui/gfx/geometry",
+    "//ui/gfx/range",
   ]
 }

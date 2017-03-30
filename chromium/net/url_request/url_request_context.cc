@@ -6,7 +6,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/debug/alias.h"
-#include "base/debug/stack_trace.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "net/cookies/cookie_store.h"
 #include "net/dns/host_resolver.h"
@@ -35,7 +35,8 @@ URLRequestContext::URLRequestContext()
       sdch_manager_(nullptr),
       network_quality_estimator_(nullptr),
       url_requests_(new std::set<const URLRequest*>),
-      has_known_mismatched_cookie_store_(false) {}
+      has_known_mismatched_cookie_store_(false),
+      enable_brotli_(false) {}
 
 URLRequestContext::~URLRequestContext() {
   AssertNoURLRequests();
@@ -62,6 +63,7 @@ void URLRequestContext::CopyFrom(const URLRequestContext* other) {
   set_sdch_manager(other->sdch_manager_);
   set_http_user_agent_settings(other->http_user_agent_settings_);
   set_network_quality_estimator(other->network_quality_estimator_);
+  set_enable_brotli(other->enable_brotli_);
 }
 
 const HttpNetworkSession::Params* URLRequestContext::GetNetworkSessionParams(
@@ -75,11 +77,11 @@ const HttpNetworkSession::Params* URLRequestContext::GetNetworkSessionParams(
   return &network_session->params();
 }
 
-scoped_ptr<URLRequest> URLRequestContext::CreateRequest(
+std::unique_ptr<URLRequest> URLRequestContext::CreateRequest(
     const GURL& url,
     RequestPriority priority,
     URLRequest::Delegate* delegate) const {
-  return make_scoped_ptr(
+  return base::WrapUnique(
       new URLRequest(url, priority, delegate, this, network_delegate_));
 }
 
@@ -96,13 +98,9 @@ void URLRequestContext::AssertNoURLRequests() const {
     const URLRequest* request = *url_requests_->begin();
     base::strlcpy(url_buf, request->url().spec().c_str(), arraysize(url_buf));
     int load_flags = request->load_flags();
-    base::debug::StackTrace stack_trace(NULL, 0);
-    if (request->stack_trace())
-      stack_trace = *request->stack_trace();
     base::debug::Alias(url_buf);
     base::debug::Alias(&num_requests);
     base::debug::Alias(&load_flags);
-    base::debug::Alias(&stack_trace);
     CHECK(false) << "Leaked " << num_requests << " URLRequest(s). First URL: "
                  << request->url().spec().c_str() << ".";
   }

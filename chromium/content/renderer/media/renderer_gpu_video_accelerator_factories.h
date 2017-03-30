@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/macros.h"
@@ -30,7 +31,6 @@ class GpuMemoryBufferManager;
 
 namespace content {
 class ContextProviderCommandBuffer;
-class WebGraphicsContext3DCommandBufferImpl;
 
 // Glue code to expose functionality needed by media::GpuVideoAccelerator to
 // RenderViewImpl.  This class is entirely an implementation detail of
@@ -46,7 +46,7 @@ class CONTENT_EXPORT RendererGpuVideoAcceleratorFactories
   // Takes a ref on |gpu_channel_host| and tests |context| for loss before each
   // use.  Safe to call from any thread.
   static std::unique_ptr<RendererGpuVideoAcceleratorFactories> Create(
-      gpu::GpuChannelHost* gpu_channel_host,
+      scoped_refptr<gpu::GpuChannelHost> gpu_channel_host,
       const scoped_refptr<base::SingleThreadTaskRunner>&
           main_thread_task_runner,
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
@@ -101,7 +101,7 @@ class CONTENT_EXPORT RendererGpuVideoAcceleratorFactories
 
  private:
   RendererGpuVideoAcceleratorFactories(
-      gpu::GpuChannelHost* gpu_channel_host,
+      scoped_refptr<gpu::GpuChannelHost> gpu_channel_host,
       const scoped_refptr<base::SingleThreadTaskRunner>&
           main_thread_task_runner,
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,

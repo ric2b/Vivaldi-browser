@@ -16,12 +16,18 @@
     'chrome_sync_shell_apk_manifest': '<(SHARED_INTERMEDIATE_DIR)/chrome_sync_shell_apk_manifest/AndroidManifest.xml',
     'chrome_sync_shell_test_apk_manifest': '<(SHARED_INTERMEDIATE_DIR)/chrome_sync_shell_test_apk_manifest/AndroidManifest.xml',
     # This list is shared with GN.
-    # Defines a list of source files should be present in the open-source
-    # chrome-apk but not in the published static_library which is included in the
-    # real chrome for android.
-    'chrome_public_app_native_sources': [
+    # Defines a list of source files should be present in the Chrome app.
+    'chrome_app_native_sources': [
       '../app/android/chrome_main_delegate_android_initializer.cc',
       '../browser/android/chrome_entry_point.cc',
+    ],
+    # This list is only used by GN but kept here to mirror
+    # chrome_app_native_sources.
+    # Defines a list of source files should be present in the Chrome app when
+    # distributed as monochrome.
+    'monochrome_app_native_sources': [
+      '../app/android/chrome_main_delegate_android_initializer.cc',
+      '../browser/android/monochrome_entry_point.cc',
     ],
 
     # This list is shared with GN.
@@ -95,29 +101,18 @@
     },
     {
       # The base library used in both ChromePublic and ChromeSyncShell.
-      'target_name': 'libchrome_public_base',
+      'target_name': 'libchrome_base',
       'type': 'none',
       'dependencies': [
         '../../chrome/chrome.gyp:chrome_android_core',
+        # TODO(yfriedman): move this DEP to chrome_android_core to be shared  
+        # between internal/external.
+         '../../third_party/cld_2/cld_2.gyp:cld2_dynamic',
       ],
       'include_dirs': [
         '../..',
       ],
-      'direct_dependent_settings': {
-        'ldflags': [
-          # Some android targets still depend on --gc-sections to link.
-          # TODO: remove --gc-sections for Debug builds (crbug.com/159847).
-          '-Wl,--gc-sections',
-        ],
-      },
       'conditions': [
-        # TODO(yfriedman): move this DEP to chrome_android_core to be shared
-        # between internal/external.
-        ['cld_version==2', {
-          'dependencies': [
-            '../../third_party/cld_2/cld_2.gyp:cld2_dynamic',
-          ],
-        }],
         # conditions for order_text_section
         # Cygprofile methods need to be linked into the instrumented build.
         ['order_profiling!=0', {
@@ -131,13 +126,13 @@
     },
     {
       # GN: //chrome/android:chrome_public
-      'target_name': 'libchrome_public',
+      'target_name': 'libchrome',
       'type': 'shared_library',
       'sources': [
-        '<@(chrome_public_app_native_sources)',
+        '<@(chrome_app_native_sources)',
       ],
       'dependencies': [
-        'libchrome_public_base',
+        'libchrome_base',
       ],
     },
     {
@@ -148,7 +143,7 @@
         '<@(chrome_sync_shell_app_native_sources)',
       ],
       'dependencies': [
-        'libchrome_public_base',
+        'libchrome_base',
         '../../sync/sync.gyp:sync',
         '../../sync/sync.gyp:test_support_sync_fake_server_android',
       ],
@@ -192,7 +187,7 @@
       'variables': {
         'android_manifest_path': '<(chrome_public_apk_manifest)',
         'apk_name': 'ChromePublic',
-        'native_lib_target': 'libchrome_public',
+        'native_lib_target': 'libchrome',
         'java_in_dir': 'java',
         'resource_dir': '../../chrome/android/java/res_chromium',
         'enable_multidex': 1,
@@ -209,7 +204,7 @@
       'dependencies': [
         'chrome_android_paks_copy',
         'chrome_public_apk_template_resources',
-        'libchrome_public',
+        'libchrome',
         '../chrome.gyp:chrome_java',
       ],
       'includes': [ 'chrome_apk.gypi' ],
@@ -282,7 +277,6 @@
         '../../chrome/chrome.gyp:chrome_java_test_support',
         '../../components/components.gyp:invalidation_javatests',
         '../../components/components.gyp:gcm_driver_java',
-        '../../components/components.gyp:offline_page_feature_enums_java',
         '../../components/components.gyp:offline_page_model_enums_java',
         '../../components/components.gyp:precache_javatests',
         '../../components/components.gyp:security_state_enums_java',

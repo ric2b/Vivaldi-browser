@@ -57,6 +57,7 @@
 #include "third_party/WebKit/public/platform/WebGraphicsContext3DProvider.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayerClient.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayerEncryptedMediaClient.h"
+#include "third_party/WebKit/public/platform/WebMediaPlayerSource.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
@@ -225,7 +226,6 @@ WebMediaPlayerAndroid::WebMediaPlayerAndroid(
   DCHECK(player_manager_);
 
   DCHECK(main_thread_checker_.CalledOnValidThread());
-  stream_texture_factory_->AddObserver(this);
 
   if (delegate_)
     delegate_id_ = delegate_->AddObserver(this);
@@ -283,8 +283,6 @@ WebMediaPlayerAndroid::~WebMediaPlayerAndroid() {
     delegate_->RemoveObserver(delegate_id_);
   }
 
-  stream_texture_factory_->RemoveObserver(this);
-
   if (media_source_delegate_) {
     // Part of |media_source_delegate_| needs to be stopped on the media thread.
     // Wait until |media_source_delegate_| is fully stopped before tearing
@@ -297,8 +295,11 @@ WebMediaPlayerAndroid::~WebMediaPlayerAndroid() {
 }
 
 void WebMediaPlayerAndroid::load(LoadType load_type,
-                                 const blink::WebURL& url,
+                                 const blink::WebMediaPlayerSource& source,
                                  CORSMode cors_mode) {
+  // Only URL or MSE blob URL is supported.
+  DCHECK(source.isURL());
+  blink::WebURL url = source.getAsURL();
   if (!defer_load_cb_.is_null()) {
     defer_load_cb_.Run(base::Bind(&WebMediaPlayerAndroid::DoLoad,
                                   weak_factory_.GetWeakPtr(), load_type, url,
@@ -864,7 +865,7 @@ void WebMediaPlayerAndroid::OnPlaybackComplete() {
   // If the loop attribute is set, timeChanged() will update the current time
   // to 0. It will perform a seek to 0. Issue a command to the player to start
   // playing after seek completes.
-  if (seeking_ && seek_time_ == base::TimeDelta())
+  if (seeking_ && seek_time_.is_zero())
     player_manager_->Start(player_id_);
   else
     playback_completed_ = true;
@@ -1045,6 +1046,7 @@ void WebMediaPlayerAndroid::OnDidExitFullscreen() {
     player_manager_->RequestExternalSurface(player_id_, last_computed_rect_);
 #endif  // defined(VIDEO_HOLE)
   is_fullscreen_ = false;
+  ReallocateVideoFrame();
   client_->repaint();
 }
 
@@ -1205,6 +1207,8 @@ void WebMediaPlayerAndroid::DrawRemotePlaybackText(
 
 void WebMediaPlayerAndroid::ReallocateVideoFrame() {
   DCHECK(main_thread_checker_.CalledOnValidThread());
+
+  if (is_fullscreen_) return;
   if (needs_external_surface_) {
     // VideoFrame::CreateHoleFrame is only defined under VIDEO_HOLE.
 #if defined(VIDEO_HOLE)
@@ -1240,10 +1244,11 @@ void WebMediaPlayerAndroid::ReallocateVideoFrame() {
       gl->VerifySyncTokensCHROMIUM(sync_tokens, arraysize(sync_tokens));
     }
 
-    scoped_refptr<VideoFrame> new_frame = VideoFrame::WrapNativeTexture(
-        media::PIXEL_FORMAT_ARGB,
+    gpu::MailboxHolder holders[media::VideoFrame::kMaxPlanes] = {
         gpu::MailboxHolder(texture_mailbox_, texture_mailbox_sync_token,
-                           texture_target),
+                           texture_target)};
+    scoped_refptr<VideoFrame> new_frame = VideoFrame::WrapNativeTextures(
+        media::PIXEL_FORMAT_ARGB, holders,
         media::BindToCurrentLoop(base::Bind(
             &OnReleaseTexture, stream_texture_factory_, texture_id_ref)),
         natural_size_, gfx::Rect(natural_size_), natural_size_,
@@ -1288,7 +1293,7 @@ bool WebMediaPlayerAndroid::UpdateCurrentFrame(base::TimeTicks deadline_min,
 
 bool WebMediaPlayerAndroid::HasCurrentFrame() {
   base::AutoLock auto_lock(current_frame_lock_);
-  return current_frame_;
+  return static_cast<bool>(current_frame_);
 }
 
 scoped_refptr<media::VideoFrame> WebMediaPlayerAndroid::GetCurrentFrame() {
@@ -1302,21 +1307,6 @@ scoped_refptr<media::VideoFrame> WebMediaPlayerAndroid::GetCurrentFrame() {
 }
 
 void WebMediaPlayerAndroid::PutCurrentFrame() {
-}
-
-void WebMediaPlayerAndroid::ResetStreamTextureProxy() {
-  DCHECK(main_thread_checker_.CalledOnValidThread());
-  // When suppress_deleting_texture_ is true,  OnDidExitFullscreen has already
-  // re-connected surface texture for embedded playback. There is no need to
-  // delete them and create again. In fact, Android gives MediaPlayer erorr
-  // code: what == 1, extra == -19 when Android WebView tries to create, delete
-  // then create the surface textures for a video in quick succession.
-  if (!suppress_deleting_texture_)
-    RemoveSurfaceTextureAndProxy();
-
-  TryCreateStreamTextureProxyIfNeeded();
-  if (needs_establish_peer_ && is_playing_)
-    EstablishSurfaceTexturePeer();
 }
 
 void WebMediaPlayerAndroid::RemoveSurfaceTextureAndProxy() {
@@ -1650,6 +1640,16 @@ void WebMediaPlayerAndroid::enteredFullscreen() {
   SetNeedsEstablishPeer(false);
   is_fullscreen_ = true;
   suppress_deleting_texture_ = false;
+
+  // Create a transparent video frame. Blink will already have made the
+  // background transparent because we returned true from
+  // supportsOverlayFullscreenVideo(). By making the video frame transparent,
+  // as well, everything in the LayerTreeView will be transparent except for
+  // media controls. The video will be on visible on the underlaid surface.
+  if (!fullscreen_frame_)
+    fullscreen_frame_ = VideoFrame::CreateTransparentFrame(gfx::Size(1, 1));
+  SetCurrentFrameInternal(fullscreen_frame_);
+  client_->repaint();
 }
 
 bool WebMediaPlayerAndroid::IsHLSStream() const {

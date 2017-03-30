@@ -20,7 +20,8 @@ Options::Options(int argc, const char** argv)
     : argc(argc),
       argv(argv),
       user_agent(content::BuildUserAgentFromProduct(kProductName)),
-      message_pump(nullptr) {}
+      message_pump(nullptr),
+      single_process_mode(false) {}
 
 Options::Options(const Options& other) = default;
 
@@ -49,6 +50,16 @@ Builder& Builder::SetMessagePump(base::MessagePump* message_pump) {
 
 Builder& Builder::SetProxyServer(const net::HostPortPair& proxy_server) {
   options_.proxy_server = proxy_server;
+  return *this;
+}
+
+Builder& Builder::SetHostResolverRules(const std::string& host_resolver_rules) {
+  options_.host_resolver_rules = host_resolver_rules;
+  return *this;
+}
+
+Builder& Builder::SetSingleProcessMode(bool single_process_mode) {
+  options_.single_process_mode = single_process_mode;
   return *this;
 }
 

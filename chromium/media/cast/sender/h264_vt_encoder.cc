@@ -159,7 +159,7 @@ H264VideoToolboxEncoder::H264VideoToolboxEncoder(
       videotoolbox_glue_(VideoToolboxGlue::Get()),
       video_config_(video_config),
       status_change_cb_(status_change_cb),
-      last_frame_id_(kFirstFrameId - 1),
+      next_frame_id_(FrameId::first()),
       encode_next_frame_as_keyframe_(false),
       power_suspended_(false),
       weak_factory_(this) {
@@ -407,7 +407,7 @@ bool H264VideoToolboxEncoder::EncodeVideoFrame(
 
   // Wrap information we'll need after the frame is encoded in a heap object.
   // We'll get the pointer back from the VideoToolbox completion callback.
-  scoped_ptr<InProgressFrameEncode> request(new InProgressFrameEncode(
+  std::unique_ptr<InProgressFrameEncode> request(new InProgressFrameEncode(
       RtpTimeTicks::FromTimeDelta(video_frame->timestamp(), kVideoFrequency),
       reference_time, frame_encoded_callback));
 
@@ -470,10 +470,10 @@ void H264VideoToolboxEncoder::GenerateKeyFrame() {
   encode_next_frame_as_keyframe_ = true;
 }
 
-scoped_ptr<VideoFrameFactory>
+std::unique_ptr<VideoFrameFactory>
 H264VideoToolboxEncoder::CreateVideoFrameFactory() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return scoped_ptr<VideoFrameFactory>(
+  return std::unique_ptr<VideoFrameFactory>(
       new VideoFrameFactoryImpl::Proxy(video_frame_factory_));
 }
 
@@ -516,7 +516,7 @@ void H264VideoToolboxEncoder::CompressionCallback(void* encoder_opaque,
                                                   VTEncodeInfoFlags info,
                                                   CMSampleBufferRef sbuf) {
   auto encoder = reinterpret_cast<H264VideoToolboxEncoder*>(encoder_opaque);
-  const scoped_ptr<InProgressFrameEncode> request(
+  const std::unique_ptr<InProgressFrameEncode> request(
       reinterpret_cast<InProgressFrameEncode*>(request_opaque));
   bool keyframe = false;
   bool has_frame_data = false;
@@ -543,11 +543,11 @@ void H264VideoToolboxEncoder::CompressionCallback(void* encoder_opaque,
     has_frame_data = true;
   }
 
-  // Increment the encoder-scoped frame id and assign the new value to this
-  // frame. VideoToolbox calls the output callback serially, so this is safe.
-  const uint32_t frame_id = ++encoder->last_frame_id_;
+  // Grab the next frame ID and increment |next_frame_id_| for next time.
+  // VideoToolbox calls the output callback serially, so this is safe.
+  const FrameId frame_id = encoder->next_frame_id_++;
 
-  scoped_ptr<SenderEncodedFrame> encoded_frame(new SenderEncodedFrame());
+  std::unique_ptr<SenderEncodedFrame> encoded_frame(new SenderEncodedFrame());
   encoded_frame->frame_id = frame_id;
   encoded_frame->reference_time = request->reference_time;
   encoded_frame->rtp_timestamp = request->rtp_timestamp;

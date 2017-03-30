@@ -8,6 +8,7 @@
 
 #include <map>
 #include <stack>
+#include <string>
 #include <vector>
 
 #include "base/location.h"
@@ -44,7 +45,7 @@ static const char kMobileBookmarksTag[] = "synced_bookmarks";
 BookmarkChangeProcessor::BookmarkChangeProcessor(
     sync_driver::SyncClient* sync_client,
     BookmarkModelAssociator* model_associator,
-    sync_driver::DataTypeErrorHandler* error_handler)
+    syncer::DataTypeErrorHandler* error_handler)
     : sync_driver::ChangeProcessor(error_handler),
       bookmark_model_(NULL),
       sync_client_(sync_client),
@@ -71,7 +72,7 @@ void BookmarkChangeProcessor::UpdateSyncNodeProperties(
     const BookmarkNode* src,
     BookmarkModel* model,
     syncer::WriteNode* dst,
-    sync_driver::DataTypeErrorHandler* error_handler) {
+    syncer::DataTypeErrorHandler* error_handler) {
   // Set the properties of the item.
   dst->SetIsFolder(src->is_folder());
   dst->SetTitle(base::UTF16ToUTF8(src->GetTitle()));
@@ -241,9 +242,6 @@ void BookmarkChangeProcessor::CreateOrUpdateSyncNode(const BookmarkNode* node) {
     return;
   }
 
-  const BookmarkNode* parent = node->parent();
-  int index = node->parent()->GetIndexOf(node);
-
   int64_t new_version = syncer::syncable::kInvalidTransactionVersion;
   int64_t sync_id = syncer::kInvalidId;
   {
@@ -254,6 +252,8 @@ void BookmarkChangeProcessor::CreateOrUpdateSyncNode(const BookmarkNode* node) {
       UpdateSyncNode(
           node, bookmark_model_, &trans, model_associator_, error_handler());
     } else {
+      const BookmarkNode* parent = node->parent();
+      int index = parent->GetIndexOf(node);
       sync_id = CreateSyncNode(parent,
                                bookmark_model_,
                                index,
@@ -268,10 +268,8 @@ void BookmarkChangeProcessor::CreateOrUpdateSyncNode(const BookmarkNode* node) {
     // PREV_ID/NEXT_ID and thus get a new version. But we only update version
     // of added node here. After switching to ordinals for positioning,
     // PREV_ID/NEXT_ID will be deprecated and siblings will not be updated.
-    UpdateTransactionVersion(
-        new_version,
-        bookmark_model_,
-        std::vector<const BookmarkNode*>(1, parent->GetChild(index)));
+    UpdateTransactionVersion(new_version, bookmark_model_,
+                             std::vector<const BookmarkNode*>(1, node));
   }
 }
 
@@ -301,7 +299,7 @@ int64_t BookmarkChangeProcessor::CreateSyncNode(
     int index,
     syncer::WriteTransaction* trans,
     BookmarkModelAssociator* associator,
-    sync_driver::DataTypeErrorHandler* error_handler) {
+    syncer::DataTypeErrorHandler* error_handler) {
   const BookmarkNode* child = parent->GetChild(index);
   DCHECK(child);
 
@@ -368,7 +366,7 @@ int64_t BookmarkChangeProcessor::UpdateSyncNode(
     BookmarkModel* model,
     syncer::WriteTransaction* trans,
     BookmarkModelAssociator* associator,
-    sync_driver::DataTypeErrorHandler* error_handler) {
+    syncer::DataTypeErrorHandler* error_handler) {
   // Lookup the sync node that's associated with |node|.
   syncer::WriteNode sync_node(trans);
   if (!associator->InitSyncNodeFromChromeId(node->id(), &sync_node)) {
@@ -457,7 +455,14 @@ void BookmarkChangeProcessor::BookmarkNodeFaviconChanged(
     return;
   }
 
-  BookmarkNodeChanged(model, node);
+  // Ignore updates to favicon if model associator doesn't know about this
+  // bookmark node.
+  if (model_associator_->GetSyncIdFromChromeId(node->id()) ==
+      syncer::kInvalidId) {
+    return;
+  }
+
+  CreateOrUpdateSyncNode(node);
 }
 
 void BookmarkChangeProcessor::BookmarkNodeChildrenReordered(
@@ -869,12 +874,12 @@ bool BookmarkChangeProcessor::SetBookmarkFavicon(
 }
 
 // static
-scoped_ptr<BookmarkNode::MetaInfoMap>
+std::unique_ptr<BookmarkNode::MetaInfoMap>
 BookmarkChangeProcessor::GetBookmarkMetaInfo(
     const syncer::BaseNode* sync_node) {
   const sync_pb::BookmarkSpecifics& specifics =
       sync_node->GetBookmarkSpecifics();
-  scoped_ptr<BookmarkNode::MetaInfoMap> meta_info_map(
+  std::unique_ptr<BookmarkNode::MetaInfoMap> meta_info_map(
       new BookmarkNode::MetaInfoMap);
   for (int i = 0; i < specifics.meta_info_size(); ++i) {
     (*meta_info_map)[specifics.meta_info(i).key()] =

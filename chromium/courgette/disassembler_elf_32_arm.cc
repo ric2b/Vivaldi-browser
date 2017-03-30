@@ -4,10 +4,11 @@
 
 #include "courgette/disassembler_elf_32_arm.h"
 
+#include <memory>
+#include <utility>
 #include <vector>
 
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "courgette/assembly_program.h"
 #include "courgette/courgette.h"
 
@@ -299,11 +300,8 @@ CheckBool DisassemblerElf32ARM::TypedRVAARM::ComputeRelativeTarget(
 
 CheckBool DisassemblerElf32ARM::TypedRVAARM::EmitInstruction(
     AssemblyProgram* program,
-    RVA target_rva) {
-  return program->EmitRel32ARM(c_op(),
-                               program->FindOrMakeRel32Label(target_rva),
-                               arm_op_,
-                               op_size());
+    Label* label) {
+  return program->EmitRel32ARM(c_op(), label, arm_op_, op_size());
 }
 
 DisassemblerElf32ARM::DisassemblerElf32ARM(const void* start, size_t length)
@@ -427,7 +425,7 @@ CheckBool DisassemblerElf32ARM::ParseRel32RelocsFromSection(
     // Heuristic discovery of rel32 locations in instruction stream: are the
     // next few bytes the start of an instruction containing a rel32
     // addressing mode?
-    scoped_ptr<TypedRVAARM> rel32_rva;
+    std::unique_ptr<TypedRVAARM> rel32_rva;
     RVA target_rva = 0;
     bool found = false;
 
@@ -505,7 +503,7 @@ CheckBool DisassemblerElf32ARM::ParseRel32RelocsFromSection(
 
     if (found && IsValidTargetRVA(target_rva)) {
       uint16_t op_size = rel32_rva->op_size();
-      rel32_locations_.push_back(rel32_rva.release());
+      rel32_locations_.push_back(std::move(rel32_rva));
 #if COURGETTE_HISTOGRAM_TARGETS
       ++rel32_target_rvas_[target_rva];
 #endif

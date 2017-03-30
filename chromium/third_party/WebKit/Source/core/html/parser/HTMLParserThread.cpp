@@ -87,7 +87,7 @@ HTMLParserThread* HTMLParserThread::shared()
     return s_sharedThread;
 }
 
-void HTMLParserThread::postTask(PassOwnPtr<CrossThreadClosure> closure)
+void HTMLParserThread::postTask(std::unique_ptr<CrossThreadClosure> closure)
 {
     ASSERT(isMainThread());
     if (!m_thread) {
@@ -95,7 +95,7 @@ void HTMLParserThread::postTask(PassOwnPtr<CrossThreadClosure> closure)
         postTask(threadSafeBind(&HTMLParserThread::setupHTMLParserThread, AllowCrossThreadAccess(this)));
     }
 
-    m_thread->postTask(BLINK_FROM_HERE, closure);
+    m_thread->postTask(BLINK_FROM_HERE, std::move(closure));
 }
 
 } // namespace blink

@@ -36,8 +36,7 @@ BoxClipper::BoxClipper(const LayoutBox& box, const PaintInfo& paintInfo, const L
     }
 
     bool isControlClip = m_box.hasControlClip();
-    bool isOverflowOrContainmentClip = (m_box.hasOverflowClip() && !m_box.layer()->isSelfPaintingLayer())
-        || m_box.style()->containsPaint();
+    bool isOverflowOrContainmentClip = (m_box.hasOverflowClip() || box.styleRef().containsPaint()) && !(m_box.hasLayer() && m_box.layer()->isSelfPaintingLayer());
 
     if (!isControlClip && !isOverflowOrContainmentClip)
         return;
@@ -48,8 +47,7 @@ BoxClipper::BoxClipper(const LayoutBox& box, const PaintInfo& paintInfo, const L
     if (hasBorderRadius)
         clipRoundedRect = m_box.style()->getRoundedInnerBorderFor(LayoutRect(accumulatedOffset, m_box.size()));
 
-    // Selection does not affect visual overflow, so this optimization is invalid if selection
-    // is present.
+    // Selection may extend beyond visual overflow, so this optimization is invalid if selection is present.
     if (contentsClipBehavior == SkipContentsClipIfPossible && box.getSelectionState() == SelectionNone) {
         LayoutRect contentsVisualOverflow = m_box.contentsVisualOverflowRect();
         if (contentsVisualOverflow.isEmpty())
@@ -79,7 +77,7 @@ BoxClipper::~BoxClipper()
     if (m_clipType == DisplayItem::UninitializedType)
         return;
 
-    ASSERT(m_box.hasControlClip() || (m_box.hasOverflowClip() && !m_box.layer()->isSelfPaintingLayer()) || m_box.style()->containsPaint());
+    DCHECK(m_box.hasControlClip() || ((m_box.hasOverflowClip() || m_box.style()->containsPaint()) && !(m_box.hasLayer() && m_box.layer()->isSelfPaintingLayer())));
     m_paintInfo.context.getPaintController().endItem<EndClipDisplayItem>(m_box, DisplayItem::clipTypeToEndClipType(m_clipType));
 }
 

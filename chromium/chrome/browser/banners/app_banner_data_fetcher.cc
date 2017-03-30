@@ -27,8 +27,8 @@
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "net/base/load_flags.h"
+#include "third_party/WebKit/public/platform/WebDisplayMode.h"
 #include "third_party/WebKit/public/platform/modules/app_banner/WebAppBannerPromptReply.h"
-#include "ui/gfx/screen.h"
 
 namespace {
 
@@ -115,6 +115,11 @@ void AppBannerDataFetcher::Cancel() {
   if (is_active_) {
     FOR_EACH_OBSERVER(Observer, observer_list_,
                       OnDecidedWhetherToShow(this, false));
+    if (was_canceled_by_page_ && !page_requested_prompt_) {
+      TrackBeforeInstallEvent(
+          BEFORE_INSTALL_EVENT_PROMPT_NOT_CALLED_AFTER_PREVENT_DEFAULT);
+    }
+
     is_active_ = false;
     was_canceled_by_page_ = false;
     page_requested_prompt_ = false;
@@ -188,11 +193,23 @@ void AppBannerDataFetcher::OnBannerPromptReply(
   // Stash the referrer for the case where the banner is redisplayed.
   if (reply == blink::WebAppBannerPromptReply::Cancel &&
       !page_requested_prompt_) {
+    TrackBeforeInstallEvent(BEFORE_INSTALL_EVENT_PREVENT_DEFAULT_CALLED);
     was_canceled_by_page_ = true;
     referrer_ = referrer;
     OutputDeveloperNotShownMessage(web_contents, kRendererRequestCancel,
                                    is_debug_mode_);
     return;
+  }
+
+  // If we haven't yet returned, but either of |was_canceled_by_page_| or
+  // |page_requested_prompt_| is true, the page has requested a delayed showing
+  // of the prompt. Otherwise, the prompt was never canceled by the page.
+  if (was_canceled_by_page_ || page_requested_prompt_) {
+    TrackBeforeInstallEvent(
+        BEFORE_INSTALL_EVENT_PROMPT_CALLED_AFTER_PREVENT_DEFAULT);
+    was_canceled_by_page_ = false;
+  } else {
+    TrackBeforeInstallEvent(BEFORE_INSTALL_EVENT_NO_ACTION);
   }
 
   AppBannerSettingsHelper::RecordMinutesFromFirstVisitToShow(
@@ -202,6 +219,7 @@ void AppBannerDataFetcher::OnBannerPromptReply(
   FOR_EACH_OBSERVER(Observer, observer_list_,
                     OnDecidedWhetherToShow(this, true));
 
+  TrackBeforeInstallEvent(BEFORE_INSTALL_EVENT_COMPLETE);
   ShowBanner(app_icon_.get(), app_title_, referrer);
   is_active_ = false;
 }
@@ -211,7 +229,7 @@ void AppBannerDataFetcher::OnRequestShowAppBanner(
     int request_id) {
   if (was_canceled_by_page_) {
     // Simulate an "OK" from the website to restart the banner display pipeline.
-    was_canceled_by_page_ = false;
+    // Don't reset |was_canceled_by_page_| yet for metrics purposes.
     OnBannerPromptReply(render_frame_host, request_id,
                         blink::WebAppBannerPromptReply::None, referrer_);
   } else {
@@ -403,6 +421,8 @@ void AppBannerDataFetcher::OnAppIconFetched(const SkBitmap& bitmap) {
 
   app_icon_.reset(new SkBitmap(bitmap));
   event_request_id_ = ++gCurrentRequestID;
+
+  TrackBeforeInstallEvent(BEFORE_INSTALL_EVENT_CREATED);
   web_contents->GetMainFrame()->Send(
       new ChromeViewMsg_AppBannerPromptRequest(
         web_contents->GetMainFrame()->GetRoutingID(),
@@ -460,11 +480,23 @@ bool AppBannerDataFetcher::IsManifestValidForWebApp(
                                    is_debug_mode);
     return false;
   }
-  if (manifest.name.is_null() && manifest.short_name.is_null()) {
+  if ((manifest.name.is_null() || manifest.name.string().empty()) &&
+      (manifest.short_name.is_null() || manifest.short_name.string().empty())) {
     OutputDeveloperNotShownMessage(
         web_contents, kManifestMissingNameOrShortName, is_debug_mode);
     return false;
   }
+
+  // TODO(dominickn,mlamouri): when Chrome supports "minimal-ui", it should be
+  // accepted. If we accept it today, it would fallback to "browser" and make
+  // this check moot. See https://crbug.com/604390
+  if (manifest.display != blink::WebDisplayModeStandalone &&
+      manifest.display != blink::WebDisplayModeFullscreen) {
+    OutputDeveloperNotShownMessage(
+        web_contents, kManifestDisplayStandaloneFullscreen, is_debug_mode);
+    return false;
+  }
+
   if (!DoesManifestContainRequiredIcon(manifest)) {
     OutputDeveloperNotShownMessage(web_contents, kManifestMissingSuitableIcon,
                                    is_debug_mode);

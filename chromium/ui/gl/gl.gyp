@@ -74,6 +74,7 @@
         'gl_gl_api_implementation.h',
         'gl_helper.cc',
         'gl_helper.h',
+        'gl_image.cc',
         'gl_image.h',
         'gl_image_memory.cc',
         'gl_image_memory.h',
@@ -147,6 +148,14 @@
             'gl_surface_egl.cc',
             'gl_surface_egl.h',
           ],
+          'direct_dependent_settings': {
+            'defines': [
+              'USE_EGL',
+            ],
+          },
+         'defines': [
+            'USE_EGL',
+          ],
           'include_dirs': [
             '<(DEPTH)/third_party/khronos',
         ],
@@ -174,15 +183,20 @@
             'gl_surface_glx.cc',
             'gl_surface_glx.h',
           ],
-          'all_dependent_settings': {
+          'direct_dependent_settings': {
             'defines': [
               'GL_GLEXT_PROTOTYPES',
+              'USE_GLX',
             ],
           },
+          'defines': [
+            'USE_GLX',
+          ],
           'dependencies': [
             '<(DEPTH)/build/linux/system.gyp:x11',
             '<(DEPTH)/build/linux/system.gyp:xcomposite',
             '<(DEPTH)/build/linux/system.gyp:xext',
+            '<(DEPTH)/ui/base/x/ui_base_x.gyp:ui_base_x',
             '<(DEPTH)/ui/events/platform/events_platform.gyp:events_platform',
             '<(DEPTH)/ui/gfx/x/gfx_x11.gyp:gfx_x11',
           ],
@@ -297,6 +311,7 @@
         '../../testing/gmock.gyp:gmock',
         '../../third_party/khronos/khronos.gyp:khronos_headers',
         'gl',
+        'init/gl_init.gyp:gl_init',
       ],
       'include_dirs': [
         '../..',
@@ -318,6 +333,7 @@
         '<(DEPTH)/testing/gtest.gyp:gtest',
         '../../third_party/khronos/khronos.gyp:khronos_headers',
         'gl',
+        'init/gl_init.gyp:gl_init',
       ],
       'include_dirs': [
         '../..',

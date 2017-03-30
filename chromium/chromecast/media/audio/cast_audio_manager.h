@@ -20,9 +20,11 @@ struct MediaPipelineDeviceParams;
 
 class CastAudioManager : public ::media::AudioManagerBase {
  public:
-  CastAudioManager(::media::AudioLogFactory* audio_log_factory,
-                   MediaPipelineBackendManager* backend_manager);
-  ~CastAudioManager() override;
+  CastAudioManager(
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+      scoped_refptr<base::SingleThreadTaskRunner> worker_task_runner,
+      ::media::AudioLogFactory* audio_log_factory,
+      MediaPipelineBackendManager* backend_manager);
 
   // AudioManager implementation.
   bool HasAudioOutputDevices() override;
@@ -33,10 +35,12 @@ class CastAudioManager : public ::media::AudioManagerBase {
   ::media::AudioParameters GetInputStreamParameters(
       const std::string& device_id) override;
 
-  // This must be called on cast media thread.
-  // See chromecast::media::MediaMessageLoop.
+  // This must be called on audio thread.
   virtual std::unique_ptr<MediaPipelineBackend> CreateMediaPipelineBackend(
       const MediaPipelineDeviceParams& params);
+
+ protected:
+  ~CastAudioManager() override;
 
  private:
   // AudioManagerBase implementation.

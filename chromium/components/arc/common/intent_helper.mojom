@@ -2,18 +2,89 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-module arc;
+module arc.mojom;
+
+import "scale_factor.mojom";
+
+// Describes the type of action to invoke.
+enum ActionType {
+  VIEW,
+  SEND,
+  SEND_MULTIPLE,
+};
+
+// Describes a package that can handle a URL.
+struct UrlHandlerInfo {
+  string name;
+  string package_name;
+  string activity_name;  // A hint for retrieving the package's icon.
+  [MinVersion=4] ActionType action;
+};
+
+// Describes an activity.
+struct ActivityName {
+  string package_name;
+  string activity_name;
+};
+
+// Describes an icon for the activity.
+struct ActivityIcon {
+  ActivityName activity;
+  uint32 width;  // in px
+  uint32 height;  // in px
+  array<uint8> icon;  // in BGRA8888 format
+};
+
+// URL associated with its mime type.
+struct UrlWithMimeType {
+  string url;
+  string mime_type;
+};
 
 // Handles intents from ARC in Chrome.
 interface IntentHelperHost {
+  // Called when icons associated with the package are no longer up to date.
+  [MinVersion=3] OnIconInvalidated@1(string package_name);
+
+  // Opens the downloads directory in the Chrome OS file manager.
+  [MinVersion=5] OnOpenDownloads@2();
+
   // Opens the url with Chrome for Chrome OS.
   OnOpenUrl@0(string url);
 };
 
 // Sends intents to ARC on behalf of Chrome.
 interface IntentHelperInstance {
+  // Handles the URL by sending an ACTION_VIEW intent to the package. The
+  // most suitable activity for the URL within the package will be started.
+  [MinVersion=2] HandleUrl@2(string url, string package_name);
+
+  // Handles the list of URLs by sending a specified intent to the handler.
+  [MinVersion=5] HandleUrlList@7(array<UrlWithMimeType> urls,
+                                 ActivityName activity,
+                                 ActionType action);
+
+  // Deprecated. Use HandleUrlList.
+  [MinVersion=4] HandleUrlListDeprecated@5(array<UrlWithMimeType> urls,
+                                           string package_name,
+                                           ActionType action);
+
   // Establishes full-duplex communication with the host.
   Init@0(IntentHelperHost host_ptr);
+
+  // Requests 48dp * 48dp icons of the |activities| suitable for the
+  // |scale_factor|. An array of icon data will be returned.
+  [MinVersion=3] RequestActivityIcons@4(array<ActivityName> activities,
+                                        ScaleFactor scale_factor)
+      => (array<ActivityIcon> icons);
+
+  // Requests a list of packages that can handle the URL.
+  [MinVersion=2] RequestUrlHandlerList@3(string url)
+      => (array<UrlHandlerInfo> handlers);
+
+  // Requests a list of packages that can handle the list of files.
+  [MinVersion=4] RequestUrlListHandlerList@6(array<UrlWithMimeType> urls)
+      => (array<UrlHandlerInfo> handlers);
 
   // Send an Android broadcast message to the Android package and class
   // specified.  Data can be sent as extras by including a JSON map string which

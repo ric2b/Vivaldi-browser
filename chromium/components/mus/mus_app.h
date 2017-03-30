@@ -7,26 +7,37 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/weak_ptr.h"
+#include "components/mus/public/interfaces/clipboard.mojom.h"
 #include "components/mus/public/interfaces/display.mojom.h"
 #include "components/mus/public/interfaces/gpu.mojom.h"
 #include "components/mus/public/interfaces/user_access_manager.mojom.h"
 #include "components/mus/public/interfaces/window_manager_factory.mojom.h"
+#include "components/mus/public/interfaces/window_server_test.mojom.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "components/mus/public/interfaces/window_tree_host.mojom.h"
 #include "components/mus/ws/platform_display_init_params.h"
 #include "components/mus/ws/user_id.h"
 #include "components/mus/ws/window_server_delegate.h"
-#include "mojo/services/tracing/public/cpp/tracing_impl.h"
-#include "mojo/shell/public/cpp/application_runner.h"
-#include "mojo/shell/public/cpp/interface_factory.h"
-#include "mojo/shell/public/cpp/shell_client.h"
+#include "services/shell/public/cpp/application_runner.h"
+#include "services/shell/public/cpp/interface_factory.h"
+#include "services/shell/public/cpp/shell_client.h"
+#include "services/tracing/public/cpp/tracing_impl.h"
 
-namespace mojo {
+#if defined(USE_OZONE)
+#include "ui/ozone/public/client_native_pixmap_factory.h"
+#endif
+
+namespace gfx {
+class Rect;
+}
+
+namespace shell {
 class Connector;
 }
 
@@ -37,21 +48,24 @@ class PlatformEventSource;
 namespace mus {
 namespace ws {
 class ForwardingWindowManager;
+class PlatformScreen;
 class WindowServer;
 }
 
-class MandolineUIServicesApp
-    : public mojo::ShellClient,
+class MusApp
+    : public shell::ShellClient,
       public ws::WindowServerDelegate,
-      public mojo::InterfaceFactory<mojom::DisplayManager>,
-      public mojo::InterfaceFactory<mojom::UserAccessManager>,
-      public mojo::InterfaceFactory<mojom::WindowManagerFactoryService>,
-      public mojo::InterfaceFactory<mojom::WindowTreeFactory>,
-      public mojo::InterfaceFactory<mojom::WindowTreeHostFactory>,
-      public mojo::InterfaceFactory<mojom::Gpu> {
+      public shell::InterfaceFactory<mojom::Clipboard>,
+      public shell::InterfaceFactory<mojom::DisplayManager>,
+      public shell::InterfaceFactory<mojom::Gpu>,
+      public shell::InterfaceFactory<mojom::UserAccessManager>,
+      public shell::InterfaceFactory<mojom::WindowManagerFactoryService>,
+      public shell::InterfaceFactory<mojom::WindowTreeFactory>,
+      public shell::InterfaceFactory<mojom::WindowTreeHostFactory>,
+      public shell::InterfaceFactory<mojom::WindowServerTest> {
  public:
-  MandolineUIServicesApp();
-  ~MandolineUIServicesApp() override;
+  MusApp();
+  ~MusApp() override;
 
  private:
   // Holds InterfaceRequests received before the first WindowTreeHost Display
@@ -59,61 +73,87 @@ class MandolineUIServicesApp
   struct PendingRequest;
   struct UserState;
 
-  using UserIdToUserState = std::map<ws::UserId, scoped_ptr<UserState>>;
+  using UserIdToUserState = std::map<ws::UserId, std::unique_ptr<UserState>>;
 
-  void InitializeResources(mojo::Connector* connector);
+  void InitializeResources(shell::Connector* connector);
 
   // Returns the user specific state for the user id of |connection|. MusApp
   // owns the return value.
   // TODO(sky): if we allow removal of user ids then we need to close anything
   // associated with the user (all incoming pipes...) on removal.
-  UserState* GetUserState(mojo::Connection* connection);
+  UserState* GetUserState(shell::Connection* connection);
 
-  void AddUserIfNecessary(mojo::Connection* connection);
+  void AddUserIfNecessary(shell::Connection* connection);
 
-  // mojo::ShellClient:
-  void Initialize(mojo::Connector* connector, const mojo::Identity& identity,
+  // shell::ShellClient:
+  void Initialize(shell::Connector* connector,
+                  const shell::Identity& identity,
                   uint32_t id) override;
-  bool AcceptConnection(mojo::Connection* connection) override;
+  bool AcceptConnection(shell::Connection* connection) override;
 
   // WindowServerDelegate:
   void OnFirstDisplayReady() override;
   void OnNoMoreDisplays() override;
+  bool IsTestConfig() const override;
   void CreateDefaultDisplays() override;
 
-  // mojo::InterfaceFactory<mojom::DisplayManager> implementation.
-  void Create(mojo::Connection* connection,
+  // shell::InterfaceFactory<mojom::Clipboard> implementation.
+  void Create(shell::Connection* connection,
+              mojom::ClipboardRequest request) override;
+
+  // shell::InterfaceFactory<mojom::DisplayManager> implementation.
+  void Create(shell::Connection* connection,
               mojom::DisplayManagerRequest request) override;
 
-  // mojo::InterfaceFactory<mojom::UserAccessManager> implementation.
-  void Create(mojo::Connection* connection,
+  // shell::InterfaceFactory<mojom::Gpu> implementation.
+  void Create(shell::Connection* connection,
+              mojom::GpuRequest request) override;
+
+  // shell::InterfaceFactory<mojom::UserAccessManager> implementation.
+  void Create(shell::Connection* connection,
               mojom::UserAccessManagerRequest request) override;
 
-  // mojo::InterfaceFactory<mojom::WindowManagerFactoryService> implementation.
-  void Create(mojo::Connection* connection,
+  // shell::InterfaceFactory<mojom::WindowManagerFactoryService> implementation.
+  void Create(shell::Connection* connection,
               mojom::WindowManagerFactoryServiceRequest request) override;
 
-  // mojo::InterfaceFactory<mojom::WindowTreeFactory>:
-  void Create(mojo::Connection* connection,
+  // shell::InterfaceFactory<mojom::WindowTreeFactory>:
+  void Create(shell::Connection* connection,
               mojom::WindowTreeFactoryRequest request) override;
 
-  // mojo::InterfaceFactory<mojom::WindowTreeHostFactory>:
-  void Create(mojo::Connection* connection,
+  // shell::InterfaceFactory<mojom::WindowTreeHostFactory>:
+  void Create(shell::Connection* connection,
               mojom::WindowTreeHostFactoryRequest request) override;
 
-  // mojo::InterfaceFactory<mojom::Gpu> implementation.
-  void Create(mojo::Connection* connection, mojom::GpuRequest request) override;
+  // shell::InterfaceFactory<mojom::WindowServerTest> implementation.
+  void Create(shell::Connection* connection,
+              mojom::WindowServerTestRequest request) override;
+
+  // Callback for display configuration. |id| is the identifying token for the
+  // configured display that will identify a specific physical display across
+  // configuration changes. |bounds| is the bounds of the display in screen
+  // coordinates.
+  void OnCreatedPhysicalDisplay(int64_t id, const gfx::Rect& bounds);
 
   ws::PlatformDisplayInitParams platform_display_init_params_;
-  scoped_ptr<ws::WindowServer> window_server_;
-  scoped_ptr<ui::PlatformEventSource> event_source_;
+  std::unique_ptr<ws::WindowServer> window_server_;
+  std::unique_ptr<ui::PlatformEventSource> event_source_;
   mojo::TracingImpl tracing_;
-  using PendingRequests = std::vector<scoped_ptr<PendingRequest>>;
+  using PendingRequests = std::vector<std::unique_ptr<PendingRequest>>;
   PendingRequests pending_requests_;
 
   UserIdToUserState user_id_to_user_state_;
 
-  DISALLOW_COPY_AND_ASSIGN(MandolineUIServicesApp);
+  bool test_config_;
+#if defined(USE_OZONE)
+  std::unique_ptr<ui::ClientNativePixmapFactory> client_native_pixmap_factory_;
+#endif
+
+  std::unique_ptr<ws::PlatformScreen> platform_screen_;
+
+  base::WeakPtrFactory<MusApp> weak_ptr_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(MusApp);
 };
 
 }  // namespace mus

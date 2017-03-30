@@ -10,7 +10,6 @@
 #include <string>
 
 #include "base/supports_user_data.h"
-#include "components/autofill/content/browser/request_autocomplete_manager.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "content/public/browser/web_contents_observer.h"
 
@@ -32,6 +31,8 @@ class ContentAutofillDriver;
 class ContentAutofillDriverFactory : public content::WebContentsObserver,
                                      public base::SupportsUserData::Data {
  public:
+  ~ContentAutofillDriverFactory() override;
+
   static void CreateForWebContentsAndDelegate(
       content::WebContents* contents,
       AutofillClient* client,
@@ -66,7 +67,6 @@ class ContentAutofillDriverFactory : public content::WebContentsObserver,
       AutofillClient* client,
       const std::string& app_locale,
       AutofillManager::AutofillDownloadManagerState enable_download_manager);
-  ~ContentAutofillDriverFactory() override;
 
  private:
   AutofillClient* client_;

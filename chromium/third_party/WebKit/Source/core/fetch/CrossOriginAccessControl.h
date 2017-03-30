@@ -57,10 +57,11 @@ public:
 CORE_EXPORT bool isOnAccessControlResponseHeaderWhitelist(const String&);
 
 void updateRequestForAccessControl(ResourceRequest&, SecurityOrigin*, StoredCredentials);
-ResourceRequest createAccessControlPreflightRequest(const ResourceRequest&, SecurityOrigin*);
+CORE_EXPORT ResourceRequest createAccessControlPreflightRequest(const ResourceRequest&, SecurityOrigin*);
 
 bool passesAccessControlCheck(const ResourceResponse&, StoredCredentials, SecurityOrigin*, String& errorDescription, WebURLRequest::RequestContext requestType);
 bool passesPreflightStatusCheck(const ResourceResponse&, String& errorDescription);
+bool passesExternalPreflightCheck(const ResourceResponse&, String& errorDescription);
 CORE_EXPORT void parseAccessControlExposeHeadersAllowList(const String& headerValue, HTTPHeaderSet&);
 
 } // namespace blink

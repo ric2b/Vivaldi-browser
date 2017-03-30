@@ -35,8 +35,6 @@
 #include "platform/heap/Handle.h"
 #include "public/platform/WebDisplayMode.h"
 #include "wtf/Allocator.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
@@ -108,6 +106,7 @@ public:
     void setTextAutosizingWindowSizeOverride(int width, int height, ExceptionState&);
     void setViewportEnabled(bool, ExceptionState&);
     void setViewportMetaEnabled(bool, ExceptionState&);
+    void setViewportStyle(const String& preference, ExceptionState&);
     void setCompositorWorkerEnabled(bool, ExceptionState&);
 
     // FIXME: The following are RuntimeEnabledFeatures and likely

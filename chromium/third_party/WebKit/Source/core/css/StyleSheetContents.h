@@ -26,8 +26,6 @@
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "wtf/HashMap.h"
-#include "wtf/ListHashSet.h"
-#include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 #include "wtf/text/AtomicStringHash.h"
 #include "wtf/text/StringHash.h"
@@ -72,7 +70,8 @@ public:
     void parseString(const String&);
     void parseStringAtPosition(const String&, const TextPosition&);
 
-    bool isCacheable() const;
+    bool isCacheableForResource() const;
+    bool isCacheableForStyleElement() const;
 
     bool isLoading() const;
 
@@ -143,9 +142,9 @@ public:
 
     void removeSheetFromCache(Document*);
 
-    bool isInMemoryCache() const { return m_isInMemoryCache; }
-    void addedToMemoryCache();
-    void removedFromMemoryCache();
+    bool isReferencedFromResource() const { return m_referencedFromResource; }
+    void setReferencedFromResource(CSSStyleSheetResource*);
+    void clearReferencedFromResource();
 
     void setHasMediaQueries();
     bool hasMediaQueries() const { return m_hasMediaQueries; }
@@ -179,11 +178,11 @@ private:
     using PrefixNamespaceURIMap = HashMap<AtomicString, AtomicString>;
     PrefixNamespaceURIMap m_namespaces;
     AtomicString m_defaultNamespace;
+    WeakMember<CSSStyleSheetResource> m_referencedFromResource;
 
     bool m_hasSyntacticallyValidCSSHeader : 1;
     bool m_didLoadErrorOccur : 1;
     bool m_isMutable : 1;
-    bool m_isInMemoryCache : 1;
     bool m_hasFontFaceRule : 1;
     bool m_hasMediaQueries : 1;
     bool m_hasSingleOwnerDocument : 1;

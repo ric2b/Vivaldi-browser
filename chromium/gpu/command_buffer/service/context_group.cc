@@ -11,7 +11,6 @@
 #include <string>
 
 #include "base/command_line.h"
-#include "gpu/command_buffer/common/value_state.h"
 #include "gpu/command_buffer/service/buffer_manager.h"
 #include "gpu/command_buffer/service/framebuffer_manager.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
@@ -23,7 +22,6 @@
 #include "gpu/command_buffer/service/shader_manager.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "gpu/command_buffer/service/transfer_buffer_manager.h"
-#include "gpu/command_buffer/service/valuebuffer_manager.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_version_info.h"
 
@@ -65,8 +63,6 @@ ContextGroup::ContextGroup(
     const scoped_refptr<FramebufferCompletenessCache>&
         framebuffer_completeness_cache,
     const scoped_refptr<FeatureInfo>& feature_info,
-    const scoped_refptr<SubscriptionRefSet>& subscription_ref_set,
-    const scoped_refptr<ValueStateMap>& pending_valuebuffer_state,
     bool bind_generates_resource)
     : gpu_preferences_(gpu_preferences),
       mailbox_manager_(mailbox_manager),
@@ -83,8 +79,6 @@ ContextGroup::ContextGroup(
 #else
       framebuffer_completeness_cache_(framebuffer_completeness_cache),
 #endif
-      subscription_ref_set_(subscription_ref_set),
-      pending_valuebuffer_state_(pending_valuebuffer_state),
       enforce_gl_minimums_(gpu_preferences_.enforce_gl_minimums),
       bind_generates_resource_(bind_generates_resource),
       max_vertex_attribs_(0u),
@@ -101,17 +95,15 @@ ContextGroup::ContextGroup(
       max_fragment_input_components_(0u),
       min_program_texel_offset_(0),
       max_program_texel_offset_(0),
+      max_transform_feedback_separate_attribs_(0u),
+      max_uniform_buffer_bindings_(0u),
+      uniform_buffer_offset_alignment_(1u),
       program_cache_(NULL),
       feature_info_(feature_info) {
   {
+    DCHECK(feature_info_);
     if (!mailbox_manager_.get())
       mailbox_manager_ = new MailboxManagerImpl;
-    if (!subscription_ref_set_.get())
-      subscription_ref_set_ = new SubscriptionRefSet();
-    if (!pending_valuebuffer_state_.get())
-      pending_valuebuffer_state_ = new ValueStateMap();
-    if (!feature_info.get())
-      feature_info_ = new FeatureInfo;
     transfer_buffer_manager_ = new TransferBufferManager(memory_tracker_.get());
   }
 }
@@ -121,8 +113,8 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
                               const DisallowedFeatures& disallowed_features) {
   if (HaveContexts()) {
     if (context_type != feature_info_->context_type()) {
-      LOG(ERROR) << "ContextGroup::Initialize failed because the type of "
-                 << "the context does not fit with the group.";
+      DLOG(ERROR) << "ContextGroup::Initialize failed because the type of "
+                  << "the context does not fit with the group.";
       return false;
     }
     // If we've already initialized the group just add the context.
@@ -134,8 +126,8 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
       AdjustDisallowedFeatures(context_type, disallowed_features);
 
   if (!feature_info_->Initialize(context_type, adjusted_disallowed_features)) {
-    LOG(ERROR) << "ContextGroup::Initialize failed because FeatureInfo "
-               << "initialization failed.";
+    DLOG(ERROR) << "ContextGroup::Initialize failed because FeatureInfo "
+                << "initialization failed.";
     return false;
   }
 
@@ -146,9 +138,9 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
   if (!QueryGLFeature(
       GL_MAX_RENDERBUFFER_SIZE, kMinRenderbufferSize,
       &max_renderbuffer_size)) {
-    LOG(ERROR) << "ContextGroup::Initialize failed because maximum "
-               << "renderbuffer size too small (" << max_renderbuffer_size
-               << ", should be " << kMinRenderbufferSize << ").";
+    DLOG(ERROR) << "ContextGroup::Initialize failed because maximum "
+                << "renderbuffer size too small (" << max_renderbuffer_size
+                << ", should be " << kMinRenderbufferSize << ").";
     return false;
   }
   GLint max_samples = 0;
@@ -176,6 +168,34 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
     DCHECK(max_dual_source_draw_buffers_ >= 1);
   }
 
+  if (feature_info_->gl_version_info().IsES3Capable()) {
+    const GLint kMinTransformFeedbackSeparateAttribs = 4;
+    if (!QueryGLFeatureU(GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS,
+                         kMinTransformFeedbackSeparateAttribs,
+                         &max_transform_feedback_separate_attribs_)) {
+      DLOG(ERROR) << "ContextGroup::Initialize failed because maximum "
+                  << "transform feedback separate attribs is too small ("
+                  << max_transform_feedback_separate_attribs_ << ", should be "
+                  << kMinTransformFeedbackSeparateAttribs << ").";
+      return false;
+    }
+
+    const GLint kMinUniformBufferBindings = 24;
+    if (!QueryGLFeatureU(GL_MAX_UNIFORM_BUFFER_BINDINGS,
+                         kMinUniformBufferBindings,
+                         &max_uniform_buffer_bindings_)) {
+      DLOG(ERROR) << "ContextGroup::Initialize failed because maximum "
+                  << "uniform buffer bindings is too small ("
+                  << max_uniform_buffer_bindings_ << ", should be "
+                  << kMinUniformBufferBindings << ").";
+      return false;
+    }
+
+    // TODO(zmo): Should we check max UNIFORM_BUFFER_OFFSET_ALIGNMENT is 256?
+    GetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT,
+                &uniform_buffer_offset_alignment_);
+  }
+
   buffer_manager_.reset(
       new BufferManager(memory_tracker_.get(), feature_info_.get()));
   framebuffer_manager_.reset(new FramebufferManager(
@@ -186,18 +206,15 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
       feature_info_.get()));
   shader_manager_.reset(new ShaderManager());
   sampler_manager_.reset(new SamplerManager(feature_info_.get()));
-  valuebuffer_manager_.reset(
-      new ValuebufferManager(subscription_ref_set_.get(),
-                             pending_valuebuffer_state_.get()));
 
   // Lookup GL things we need to know.
   const GLint kGLES2RequiredMinimumVertexAttribs = 8u;
   if (!QueryGLFeatureU(
       GL_MAX_VERTEX_ATTRIBS, kGLES2RequiredMinimumVertexAttribs,
       &max_vertex_attribs_)) {
-    LOG(ERROR) << "ContextGroup::Initialize failed because too few "
-               << "vertex attributes supported (" << max_vertex_attribs_
-               << ", should be " << kGLES2RequiredMinimumVertexAttribs << ").";
+    DLOG(ERROR) << "ContextGroup::Initialize failed because too few "
+                << "vertex attributes supported (" << max_vertex_attribs_
+                << ", should be " << kGLES2RequiredMinimumVertexAttribs << ").";
     return false;
   }
 
@@ -205,9 +222,9 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
   if (!QueryGLFeatureU(
       GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, kGLES2RequiredMinimumTextureUnits,
       &max_texture_units_)) {
-    LOG(ERROR) << "ContextGroup::Initialize failed because too few "
-               << "texture units supported (" << max_texture_units_
-               << ", should be " << kGLES2RequiredMinimumTextureUnits << ").";
+    DLOG(ERROR) << "ContextGroup::Initialize failed because too few "
+                << "texture units supported (" << max_texture_units_
+                << ", should be " << kGLES2RequiredMinimumTextureUnits << ").";
     return false;
   }
 
@@ -215,42 +232,53 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
   GLint max_cube_map_texture_size = 0;
   GLint max_rectangle_texture_size = 0;
   GLint max_3d_texture_size = 0;
+  GLint max_array_texture_layers = 0;
 
   const GLint kMinTextureSize = 2048;  // GL actually says 64!?!?
   const GLint kMinCubeMapSize = 256;  // GL actually says 16!?!?
   const GLint kMinRectangleTextureSize = 64;
   const GLint kMin3DTextureSize = 256;
+  const GLint kMinArrayTextureLayers = 256;
 
   if (!QueryGLFeature(GL_MAX_TEXTURE_SIZE, kMinTextureSize,
                       &max_texture_size)) {
-    LOG(ERROR) << "ContextGroup::Initialize failed because maximum "
-               << "2d texture size is too small (" << max_texture_size
-               << ", should be " << kMinTextureSize << ").";
+    DLOG(ERROR) << "ContextGroup::Initialize failed because maximum "
+                << "2d texture size is too small (" << max_texture_size
+                << ", should be " << kMinTextureSize << ").";
     return false;
   }
   if (!QueryGLFeature(GL_MAX_CUBE_MAP_TEXTURE_SIZE, kMinCubeMapSize,
                       &max_cube_map_texture_size)) {
-    LOG(ERROR) << "ContextGroup::Initialize failed because maximum "
-               << "cube texture size is too small ("
-               << max_cube_map_texture_size << ", should be " << kMinCubeMapSize
-               << ").";
+    DLOG(ERROR) << "ContextGroup::Initialize failed because maximum "
+                << "cube texture size is too small ("
+                << max_cube_map_texture_size << ", should be "
+                << kMinCubeMapSize << ").";
     return false;
   }
   if (feature_info_->gl_version_info().IsES3Capable() &&
       !QueryGLFeature(GL_MAX_3D_TEXTURE_SIZE, kMin3DTextureSize,
                       &max_3d_texture_size)) {
-    LOG(ERROR) << "ContextGroup::Initialize failed because maximum "
-               << "3d texture size is too small (" << max_3d_texture_size
-               << ", should be " << kMin3DTextureSize << ").";
+    DLOG(ERROR) << "ContextGroup::Initialize failed because maximum "
+                << "3d texture size is too small (" << max_3d_texture_size
+                << ", should be " << kMin3DTextureSize << ").";
+    return false;
+  }
+  if (feature_info_->gl_version_info().IsES3Capable() &&
+      !QueryGLFeature(GL_MAX_ARRAY_TEXTURE_LAYERS, kMinArrayTextureLayers,
+                      &max_array_texture_layers)) {
+    DLOG(ERROR) << "ContextGroup::Initialize failed because maximum "
+                << "array texture layers is too small ("
+                << max_array_texture_layers
+                << ", should be " << kMinArrayTextureLayers << ").";
     return false;
   }
   if (feature_info_->feature_flags().arb_texture_rectangle &&
       !QueryGLFeature(GL_MAX_RECTANGLE_TEXTURE_SIZE_ARB,
                       kMinRectangleTextureSize, &max_rectangle_texture_size)) {
-    LOG(ERROR) << "ContextGroup::Initialize failed because maximum "
-               << "rectangle texture size is too small ("
-               << max_rectangle_texture_size << ", should be "
-               << kMinRectangleTextureSize << ").";
+    DLOG(ERROR) << "ContextGroup::Initialize failed because maximum "
+                << "rectangle texture size is too small ("
+                << max_rectangle_texture_size << ", should be "
+                << kMinRectangleTextureSize << ").";
     return false;
   }
 
@@ -274,6 +302,7 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
                                             max_cube_map_texture_size,
                                             max_rectangle_texture_size,
                                             max_3d_texture_size,
+                                            max_array_texture_layers,
                                             bind_generates_resource_));
   texture_manager_->set_framebuffer_manager(framebuffer_manager_.get());
 
@@ -281,17 +310,18 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
   const GLint kMinVertexTextureImageUnits = 0;
   if (!QueryGLFeatureU(GL_MAX_TEXTURE_IMAGE_UNITS, kMinTextureImageUnits,
                        &max_texture_image_units_)) {
-    LOG(ERROR) << "ContextGroup::Initialize failed because too few "
-               << "texture image units supported (" << max_texture_image_units_
-               << ", should be " << kMinTextureImageUnits << ").";
+    DLOG(ERROR) << "ContextGroup::Initialize failed because too few "
+                << "texture image units supported ("
+                << max_texture_image_units_
+                << ", should be " << kMinTextureImageUnits << ").";
   }
   if (!QueryGLFeatureU(GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS,
                        kMinVertexTextureImageUnits,
                        &max_vertex_texture_image_units_)) {
-    LOG(ERROR) << "ContextGroup::Initialize failed because too few "
-               << "vertex texture image units supported ("
-               << max_vertex_texture_image_units_ << ", should be "
-               << kMinTextureImageUnits << ").";
+    DLOG(ERROR) << "ContextGroup::Initialize failed because too few "
+                << "vertex texture image units supported ("
+                << max_vertex_texture_image_units_ << ", should be "
+                << kMinTextureImageUnits << ").";
     return false;
   }
 
@@ -318,8 +348,8 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
       !CheckGLFeatureU(kMinVaryingVectors, &max_varying_vectors_) ||
       !CheckGLFeatureU(
       kMinVertexUniformVectors, &max_vertex_uniform_vectors_)) {
-    LOG(ERROR) << "ContextGroup::Initialize failed because too few "
-               << "uniforms or varyings supported.";
+    DLOG(ERROR) << "ContextGroup::Initialize failed because too few "
+                << "uniforms or varyings supported.";
     return false;
   }
 
@@ -354,27 +384,27 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
     if (!QueryGLFeatureU(GL_MAX_VERTEX_OUTPUT_COMPONENTS,
                          kMinVertexOutputComponents,
                          &max_vertex_output_components_)) {
-      LOG(ERROR) << "ContextGroup::Initialize failed because maximum "
-                 << "vertex output components is too small ("
-                 << max_vertex_output_components_ << ", should be "
-                 << kMinVertexOutputComponents << ").";
+      DLOG(ERROR) << "ContextGroup::Initialize failed because maximum "
+                  << "vertex output components is too small ("
+                  << max_vertex_output_components_ << ", should be "
+                  << kMinVertexOutputComponents << ").";
       return false;
     }
     if (!QueryGLFeatureU(GL_MAX_FRAGMENT_INPUT_COMPONENTS,
                          kMinFragmentInputComponents,
                          &max_fragment_input_components_)) {
-      LOG(ERROR) << "ContextGroup::Initialize failed because maximum "
-                 << "fragment input components is too small ("
-                 << max_fragment_input_components_ << ", should be "
-                 << kMinFragmentInputComponents << ").";
+      DLOG(ERROR) << "ContextGroup::Initialize failed because maximum "
+                  << "fragment input components is too small ("
+                  << max_fragment_input_components_ << ", should be "
+                  << kMinFragmentInputComponents << ").";
       return false;
     }
     if (!QueryGLFeature(GL_MAX_PROGRAM_TEXEL_OFFSET, kMin_MaxProgramTexelOffset,
                         &max_program_texel_offset_)) {
-      LOG(ERROR) << "ContextGroup::Initialize failed because maximum "
-                 << "program texel offset is too small ("
-                 << max_program_texel_offset_ << ", should be "
-                 << kMin_MaxProgramTexelOffset << ").";
+      DLOG(ERROR) << "ContextGroup::Initialize failed because maximum "
+                  << "program texel offset is too small ("
+                  << max_program_texel_offset_ << ", should be "
+                  << kMin_MaxProgramTexelOffset << ").";
       return false;
     }
     glGetIntegerv(GL_MIN_PROGRAM_TEXEL_OFFSET, &min_program_texel_offset_);
@@ -383,19 +413,19 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
           std::max(min_program_texel_offset_, kMax_MinProgramTexelOffset);
     }
     if (min_program_texel_offset_ > kMax_MinProgramTexelOffset) {
-      LOG(ERROR) << "ContextGroup::Initialize failed because minimum "
-                 << "program texel offset is too big ("
-                 << min_program_texel_offset_ << ", should be "
-                 << kMax_MinProgramTexelOffset << ").";
+      DLOG(ERROR) << "ContextGroup::Initialize failed because minimum "
+                  << "program texel offset is too big ("
+                  << min_program_texel_offset_ << ", should be "
+                  << kMax_MinProgramTexelOffset << ").";
       return false;
     }
 
     const GLint kES3MinCubeMapSize = 2048;
     if (max_cube_map_texture_size < kES3MinCubeMapSize) {
-      LOG(ERROR) << "ContextGroup::Initialize failed because maximum "
-                 << "cube texture size is too small ("
-                 << max_cube_map_texture_size << ", should be "
-                 << kES3MinCubeMapSize << ").";
+      DLOG(ERROR) << "ContextGroup::Initialize failed because maximum "
+                  << "cube texture size is too small ("
+                  << max_cube_map_texture_size << ", should be "
+                  << kES3MinCubeMapSize << ").";
       return false;
     }
   }
@@ -408,8 +438,8 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
                          feature_info_.get()));
 
   if (!texture_manager_->Initialize()) {
-    LOG(ERROR) << "Context::Group::Initialize failed because texture manager "
-               << "failed to initialize.";
+    DLOG(ERROR) << "Context::Group::Initialize failed because texture manager "
+                << "failed to initialize.";
     return false;
   }
 
@@ -453,8 +483,11 @@ void ContextGroup::Destroy(GLES2Decoder* decoder, bool have_context) {
     return;
   }
 
-  if (buffer_manager_ != NULL) {
-    buffer_manager_->Destroy(have_context);
+  if (buffer_manager_ != nullptr) {
+    if (!have_context) {
+      buffer_manager_->MarkContextLost();
+    }
+    buffer_manager_->Destroy();
     buffer_manager_.reset();
   }
 
@@ -495,11 +528,6 @@ void ContextGroup::Destroy(GLES2Decoder* decoder, bool have_context) {
     sampler_manager_.reset();
   }
 
-  if (valuebuffer_manager_ != NULL) {
-    valuebuffer_manager_->Destroy();
-    valuebuffer_manager_.reset();
-  }
-
   memory_tracker_ = NULL;
 }
 
@@ -519,6 +547,9 @@ void ContextGroup::LoseContexts(error::ContextLostReason reason) {
     if (decoders_[ii].get()) {
       decoders_[ii]->MarkContextLost(reason);
     }
+  }
+  if (buffer_manager_ != nullptr) {
+    buffer_manager_->MarkContextLost();
   }
 }
 

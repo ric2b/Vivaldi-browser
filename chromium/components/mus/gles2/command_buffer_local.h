@@ -35,6 +35,7 @@ class GLSurface;
 }
 
 namespace gpu {
+class GpuControlClient;
 class SyncPointClient;
 }
 
@@ -56,12 +57,12 @@ class CommandBufferLocal : public gpu::CommandBuffer,
                      gfx::AcceleratedWidget widget,
                      const scoped_refptr<GpuState>& gpu_state);
 
+  bool Initialize();
   // Destroy the CommandBufferLocal. The client should not use this class
   // after calling it.
   void Destroy();
 
   // gpu::CommandBuffer implementation:
-  bool Initialize() override;
   gpu::CommandBuffer::State GetLastState() override;
   int32_t GetLastToken() override;
   void Flush(int32_t put_offset) override;
@@ -74,6 +75,7 @@ class CommandBufferLocal : public gpu::CommandBuffer,
   void DestroyTransferBuffer(int32_t id) override;
 
   // gpu::GpuControl implementation:
+  void SetGpuControlClient(gpu::GpuControlClient*) override;
   gpu::Capabilities GetCapabilities() override;
   int32_t CreateImage(ClientBuffer buffer,
                       size_t width,
@@ -86,7 +88,6 @@ class CommandBufferLocal : public gpu::CommandBuffer,
                                      unsigned usage) override;
   void SignalQuery(uint32_t query_id, const base::Closure& callback) override;
   void SetLock(base::Lock*) override;
-  bool IsGpuChannelLost() override;
   void EnsureWorkVisible() override;
   gpu::CommandBufferNamespace GetNamespaceID() const override;
   gpu::CommandBufferId GetCommandBufferID() const override;
@@ -145,11 +146,12 @@ class CommandBufferLocal : public gpu::CommandBuffer,
 
   gfx::AcceleratedWidget widget_;
   scoped_refptr<GpuState> gpu_state_;
-  scoped_ptr<CommandBufferDriver> driver_;
+  std::unique_ptr<CommandBufferDriver> driver_;
   CommandBufferLocalClient* client_;
   scoped_refptr<base::SingleThreadTaskRunner> client_thread_task_runner_;
 
   // Members accessed on the client thread:
+  gpu::GpuControlClient* gpu_control_client_;
   gpu::CommandBuffer::State last_state_;
   mojo::ScopedSharedBufferHandle shared_state_handle_;
   gpu::CommandBufferSharedState* shared_state_;
@@ -159,9 +161,10 @@ class CommandBufferLocal : public gpu::CommandBuffer,
   int32_t next_image_id_;
   uint64_t next_fence_sync_release_;
   uint64_t flushed_fence_sync_release_;
+  bool lost_context_;
 
   // This sync point client is only for out of order Wait on client thread.
-  scoped_ptr<gpu::SyncPointClient> sync_point_client_waiter_;
+  std::unique_ptr<gpu::SyncPointClient> sync_point_client_waiter_;
 
   base::WeakPtr<CommandBufferLocal> weak_ptr_;
 

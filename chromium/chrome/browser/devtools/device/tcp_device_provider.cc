@@ -11,7 +11,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/devtools/device/adb/adb_client_socket.h"
 #include "net/base/net_errors.h"
 #include "net/dns/host_resolver.h"
@@ -24,7 +24,7 @@ const char kBrowserName[] = "Target";
 
 static void RunSocketCallback(
     const AndroidDeviceManager::SocketCallback& callback,
-    scoped_ptr<net::StreamSocket> socket,
+    std::unique_ptr<net::StreamSocket> socket,
     int result) {
   callback.Run(result, std::move(socket));
 }
@@ -52,14 +52,14 @@ class ResolveHostAndOpenSocket final {
       delete this;
       return;
     }
-    scoped_ptr<net::StreamSocket> socket(
-        new net::TCPClientSocket(address_list_, NULL, net::NetLog::Source()));
+    std::unique_ptr<net::StreamSocket> socket(new net::TCPClientSocket(
+        address_list_, NULL, NULL, net::NetLog::Source()));
     socket->Connect(
         base::Bind(&RunSocketCallback, callback_, base::Passed(&socket)));
     delete this;
   }
 
-  scoped_ptr<net::HostResolver> host_resolver_;
+  std::unique_ptr<net::HostResolver> host_resolver_;
   net::AddressList address_list_;
   AdbClientSocket::SocketCallback callback_;
 };

@@ -6,9 +6,10 @@
 
 #include <stddef.h>
 
+#include <memory>
+
 #include "ash/test/ash_test_base.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/notifications/notification.h"
@@ -30,7 +31,12 @@
 #if defined(OS_WIN)
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "ui/aura/test/test_screen.h"
-#include "ui/gfx/screen.h"
+#include "ui/display/screen.h"
+#endif
+
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/login/users/mock_user_manager.h"
+#include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #endif
 
 namespace ash {
@@ -60,13 +66,19 @@ class SigninErrorNotifierTest : public AshTestBase {
         new TestingProfileManager(TestingBrowserProcess::GetGlobal()));
     ASSERT_TRUE(profile_manager_->SetUp());
 
+#if defined(OS_CHROMEOS)
+    mock_user_manager_ = new chromeos::MockUserManager();
+    user_manager_enabler_.reset(
+        new chromeos::ScopedUserManagerEnabler(mock_user_manager_));
+#endif
+
     TestingBrowserProcess::GetGlobal();
     AshTestBase::SetUp();
 
     // Set up screen for Windows.
 #if defined(OS_WIN)
     test_screen_.reset(aura::TestScreen::Create(gfx::Size()));
-    gfx::Screen::SetScreenInstance(test_screen_.get());
+    display::Screen::SetScreenInstance(test_screen_.get());
 #endif
 
     error_controller_ = SigninErrorControllerFactory::GetForProfile(
@@ -77,7 +89,7 @@ class SigninErrorNotifierTest : public AshTestBase {
 
   void TearDown() override {
 #if defined(OS_WIN)
-    gfx::Screen::SetScreenInstance(nullptr);
+    display::Screen::SetScreenInstance(nullptr);
     test_screen_.reset();
 #endif
     profile_manager_.reset();
@@ -96,12 +108,16 @@ class SigninErrorNotifierTest : public AshTestBase {
   }
 
 #if defined(OS_WIN)
-  scoped_ptr<gfx::Screen> test_screen_;
+  std::unique_ptr<display::Screen> test_screen_;
 #endif
-  scoped_ptr<TestingProfileManager> profile_manager_;
-  scoped_ptr<TestingProfile> profile_;
+  std::unique_ptr<TestingProfileManager> profile_manager_;
+  std::unique_ptr<TestingProfile> profile_;
   SigninErrorController* error_controller_;
   NotificationUIManager* notification_ui_manager_;
+#if defined(OS_CHROMEOS)
+  chromeos::MockUserManager* mock_user_manager_;  // Not owned.
+  std::unique_ptr<chromeos::ScopedUserManagerEnabler> user_manager_enabler_;
+#endif
 };
 
 TEST_F(SigninErrorNotifierTest, NoErrorAuthStatusProviders) {

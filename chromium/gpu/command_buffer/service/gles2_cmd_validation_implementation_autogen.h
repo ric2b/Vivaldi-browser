@@ -745,29 +745,25 @@ bool Validators::QueryTargetValidator::IsValid(const GLenum value) const {
   return false;
 };
 
-bool Validators::ReadBufferValidator::IsValid(const GLenum value) const {
-  switch (value) {
-    case GL_NONE:
-    case GL_BACK:
-    case GL_COLOR_ATTACHMENT0:
-    case GL_COLOR_ATTACHMENT1:
-    case GL_COLOR_ATTACHMENT2:
-    case GL_COLOR_ATTACHMENT3:
-    case GL_COLOR_ATTACHMENT4:
-    case GL_COLOR_ATTACHMENT5:
-    case GL_COLOR_ATTACHMENT6:
-    case GL_COLOR_ATTACHMENT7:
-    case GL_COLOR_ATTACHMENT8:
-    case GL_COLOR_ATTACHMENT9:
-    case GL_COLOR_ATTACHMENT10:
-    case GL_COLOR_ATTACHMENT11:
-    case GL_COLOR_ATTACHMENT12:
-    case GL_COLOR_ATTACHMENT13:
-    case GL_COLOR_ATTACHMENT14:
-    case GL_COLOR_ATTACHMENT15:
-      return true;
-  }
-  return false;
+static const GLenum valid_read_buffer_table[] = {
+    GL_NONE,
+    GL_BACK,
+    GL_COLOR_ATTACHMENT0,
+    GL_COLOR_ATTACHMENT1,
+    GL_COLOR_ATTACHMENT2,
+    GL_COLOR_ATTACHMENT3,
+    GL_COLOR_ATTACHMENT4,
+    GL_COLOR_ATTACHMENT5,
+    GL_COLOR_ATTACHMENT6,
+    GL_COLOR_ATTACHMENT7,
+    GL_COLOR_ATTACHMENT8,
+    GL_COLOR_ATTACHMENT9,
+    GL_COLOR_ATTACHMENT10,
+    GL_COLOR_ATTACHMENT11,
+    GL_COLOR_ATTACHMENT12,
+    GL_COLOR_ATTACHMENT13,
+    GL_COLOR_ATTACHMENT14,
+    GL_COLOR_ATTACHMENT15,
 };
 
 static const GLenum valid_read_pixel_format_table[] = {
@@ -945,10 +941,6 @@ bool Validators::StringTypeValidator::IsValid(const GLenum value) const {
       return true;
   }
   return false;
-};
-
-static const GLenum valid_subscription_target_table[] = {
-    GL_MOUSE_POSITION_CHROMIUM,
 };
 
 static const GLbitfield valid_sync_flush_flags_table[] = {
@@ -1331,10 +1323,6 @@ bool Validators::UniformParameterValidator::IsValid(const GLenum value) const {
   return false;
 };
 
-static const GLenum valid_value_buffer_target_table[] = {
-    GL_SUBSCRIBED_VALUES_BUFFER_CHROMIUM,
-};
-
 bool Validators::VertexAttribITypeValidator::IsValid(const GLenum value) const {
   switch (value) {
     case GL_BYTE:
@@ -1401,6 +1389,7 @@ Validators::Validators()
       index_type(valid_index_type_table, arraysize(valid_index_type_table)),
       pixel_store(valid_pixel_store_table, arraysize(valid_pixel_store_table)),
       pixel_type(valid_pixel_type_table, arraysize(valid_pixel_type_table)),
+      read_buffer(valid_read_buffer_table, arraysize(valid_read_buffer_table)),
       read_pixel_format(valid_read_pixel_format_table,
                         arraysize(valid_read_pixel_format_table)),
       read_pixel_type(valid_read_pixel_type_table,
@@ -1414,8 +1403,6 @@ Validators::Validators()
       shader_binary_format(),
       src_blend_factor(valid_src_blend_factor_table,
                        arraysize(valid_src_blend_factor_table)),
-      subscription_target(valid_subscription_target_table,
-                          arraysize(valid_subscription_target_table)),
       sync_flush_flags(valid_sync_flush_flags_table,
                        arraysize(valid_sync_flush_flags_table)),
       texture_bind_target(valid_texture_bind_target_table,
@@ -1449,8 +1436,6 @@ Validators::Validators()
       transform_feedback_bind_target(
           valid_transform_feedback_bind_target_table,
           arraysize(valid_transform_feedback_bind_target_table)),
-      value_buffer_target(valid_value_buffer_target_table,
-                          arraysize(valid_value_buffer_target_table)),
       vertex_attrib_type(valid_vertex_attrib_type_table,
                          arraysize(valid_vertex_attrib_type_table)),
       vertex_attribute(valid_vertex_attribute_table,

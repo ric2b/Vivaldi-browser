@@ -5,10 +5,16 @@
 #include "blimp/engine/renderer/engine_image_serialization_processor.h"
 
 #include <stddef.h>
+#include <set>
+#include <string>
 #include <vector>
 
+#include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "blimp/common/compositor/webp_decoder.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/trace_event/trace_event.h"
+#include "blimp/common/blob_cache/id_util.h"
+#include "blimp/common/proto/blob_cache.pb.h"
 #include "content/public/renderer/render_frame.h"
 #include "third_party/libwebp/webp/encode.h"
 #include "third_party/skia/include/core/SkData.h"
@@ -16,7 +22,22 @@
 #include "third_party/skia/include/core/SkPixelSerializer.h"
 #include "third_party/skia/include/core/SkUnPreMultiply.h"
 
+namespace blimp {
 namespace {
+
+// TODO(nyquist): Add support for changing this from the client.
+static base::LazyInstance<std::set<BlobId>> g_client_cache_contents =
+    LAZY_INSTANCE_INITIALIZER;
+
+SkData* BlobCacheImageMetadataProtoAsSkData(
+    const BlobCacheImageMetadata& proto) {
+  int signed_size = proto.ByteSize();
+  size_t unsigned_size = base::checked_cast<size_t>(signed_size);
+  std::vector<uint8_t> serialized(unsigned_size);
+  proto.SerializeWithCachedSizesToArray(serialized.data());
+  return SkData::NewWithCopy(serialized.data(), serialized.size());
+}
+
 // TODO(nyquist): Make sure encoder does not serialize images more than once.
 // See crbug.com/548434.
 class WebPImageEncoder : public SkPixelSerializer {
@@ -25,13 +46,14 @@ class WebPImageEncoder : public SkPixelSerializer {
   ~WebPImageEncoder() override{};
 
   bool onUseEncodedData(const void* data, size_t len) override {
-    const unsigned char* cast_data = static_cast<const unsigned char*>(data);
-    if (len < 14)
-      return false;
-    return !memcmp(cast_data, "RIFF", 4) && !memcmp(cast_data + 8, "WEBPVP", 6);
+    TRACE_EVENT1("blimp", "WebPImageEncoded::UsingEncodedData",
+                 "OriginalImageSize", len);
+    // Encode all images regardless of their format, including WebP images.
+    return false;
   }
 
   SkData* onEncode(const SkPixmap& pixmap) override {
+    TRACE_EVENT0("blimp", "WebImageEncoder::onEncode");
     // Initialize an empty WebPConfig.
     WebPConfig config;
     if (!WebPConfigInit(&config))
@@ -50,15 +72,38 @@ class WebPImageEncoder : public SkPixelSerializer {
       return nullptr;
     picture.height = pixmap.height();
 
+    const BlobId blob_id = CalculateBlobId(pixmap.addr(), pixmap.getSafeSize());
+    std::string blob_id_hex = BlobIdToString(blob_id);
+
+    // Create proto with all requires information.
+    BlobCacheImageMetadata proto;
+    proto.set_id(blob_id);
+    proto.set_width(pixmap.width());
+    proto.set_height(pixmap.height());
+
+    if (g_client_cache_contents.Get().find(blob_id) !=
+        g_client_cache_contents.Get().end()) {
+      // Found image in client cache, so skip sending decoded payload.
+      SkData* sk_data = BlobCacheImageMetadataProtoAsSkData(proto);
+      TRACE_EVENT1("blimp", "WebPImageEncoder::onEncode ImageFoundInCache",
+                   "EncodedImageSize", sk_data->size());
+      DVLOG(2) << "Sending cached: " << blob_id_hex
+               << " size = " << sk_data->size();
+      return sk_data;
+    }
+
+    DVLOG(2) << "Encoding image color_type=" << pixmap.colorType()
+             << ", alpha_type=" << pixmap.alphaType() << " " << pixmap.width()
+             << "x" << pixmap.height();
+
     // Import picture from raw pixels.
-    DCHECK(pixmap.alphaType() == kPremul_SkAlphaType);
     auto pixel_chars = static_cast<const unsigned char*>(pixmap.addr());
-    if (!PlatformPictureImport(pixel_chars, &picture))
+    if (!PlatformPictureImport(pixel_chars, &picture, pixmap.alphaType()))
       return nullptr;
 
     // Create a buffer for where to store the output data.
-    std::vector<unsigned char> data;
-    picture.custom_ptr = &data;
+    std::vector<unsigned char> encoded_data;
+    picture.custom_ptr = &encoded_data;
 
     // Use our own WebPWriterFunction implementation.
     picture.writer = &WebPImageEncoder::WriteOutput;
@@ -66,11 +111,20 @@ class WebPImageEncoder : public SkPixelSerializer {
     // Setup the configuration for the output WebP picture. This is currently
     // the same as the default configuration for WebP, but since any change in
     // the WebP defaults would invalidate all caches they are hard coded.
+    config.lossless = 0;
     config.quality = 75.0;  // between 0 (smallest file) and 100 (biggest).
-    config.method = 4;  // quality/speed trade-off (0=fast, 6=slower-better).
 
+    // TODO(nyquist): Move image encoding to a different thread when
+    // asynchronous loading of images is possible. The encode work currently
+    // blocks the render thread so we are dropping the method down to 0.
+    // crbug.com/603643.
+    config.method = 0;  // quality/speed trade-off (0=fast, 6=slower-better).
+
+    TRACE_EVENT_BEGIN0("blimp", "WebPImageEncoder::onEncode WebPEncode");
     // Encode the picture using the given configuration.
     bool success = WebPEncode(&config, &picture);
+    TRACE_EVENT_END1("blimp", "WebPImageEncoder::onEncode WebPEncode",
+                     "EncodedImageSize", encoded_data.size());
 
     // Release the memory allocated by WebPPictureImport*(). This does not free
     // the memory used by the picture object itself.
@@ -79,9 +133,16 @@ class WebPImageEncoder : public SkPixelSerializer {
     if (!success)
       return nullptr;
 
-    // Copy WebP data into SkData. |data| is allocated only on the stack, so
-    // it is automatically deleted after this.
-    return SkData::NewWithCopy(&data.front(), data.size());
+    // Did not find item in cache, so add it to client cache representation
+    // and send full item.
+    g_client_cache_contents.Get().insert(blob_id);
+    proto.set_payload(&encoded_data.front(), encoded_data.size());
+
+    // Copy proto into SkData.
+    SkData* sk_data = BlobCacheImageMetadataProtoAsSkData(proto);
+    DVLOG(2) << "Sending image: " << blob_id_hex
+             << " size = " << sk_data->size();
+    return sk_data;
   }
 
  private:
@@ -122,24 +183,29 @@ class WebPImageEncoder : public SkPixelSerializer {
   }
 
   bool PlatformPictureImport(const unsigned char* pixels,
-                             WebPPicture* picture) {
-    // Need to unpremultiply each pixel, each pixel using 4 bytes (RGBA).
-    size_t pixel_count = picture->height * picture->width;
-    std::vector<unsigned char> unpremul_pixels(pixel_count * 4);
-    UnPremultiply(pixels, unpremul_pixels.data(), pixel_count);
-
+                             WebPPicture* picture,
+                             SkAlphaType alphaType) {
     // Each pixel uses 4 bytes (RGBA) which affects the stride per row.
     int row_stride = picture->width * 4;
+    if (alphaType == kPremul_SkAlphaType) {
+      // Need to unpremultiply each pixel, each pixel using 4 bytes (RGBA).
+      size_t pixel_count = picture->height * picture->width;
+      std::vector<unsigned char> unpremul_pixels(pixel_count * 4);
+      UnPremultiply(pixels, unpremul_pixels.data(), pixel_count);
+      if (SK_B32_SHIFT)  // Android
+        return WebPPictureImportRGBA(picture, unpremul_pixels.data(),
+                                     row_stride);
+      return WebPPictureImportBGRA(picture, unpremul_pixels.data(), row_stride);
+    }
 
     if (SK_B32_SHIFT)  // Android
-      return WebPPictureImportRGBA(picture, unpremul_pixels.data(), row_stride);
-    return WebPPictureImportBGRA(picture, unpremul_pixels.data(), row_stride);
+      return WebPPictureImportRGBA(picture, pixels, row_stride);
+    return WebPPictureImportBGRA(picture, pixels, row_stride);
   }
 };
 
 }  // namespace
 
-namespace blimp {
 namespace engine {
 
 EngineImageSerializationProcessor::EngineImageSerializationProcessor(

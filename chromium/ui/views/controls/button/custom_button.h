@@ -5,8 +5,9 @@
 #ifndef UI_VIEWS_CONTROLS_BUTTON_CUSTOM_BUTTON_H_
 #define UI_VIEWS_CONTROLS_BUTTON_CUSTOM_BUTTON_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "ui/events/event_constants.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/animation/throb_animation.h"
@@ -19,8 +20,8 @@ class InkDropDelegate;
 
 // A button with custom rendering. The base of ImageButton and LabelButton.
 // Note that this type of button is not focusable by default and will not be
-// part of the focus chain.  Call SetFocusable(true) to make it part of the
-// focus chain.
+// part of the focus chain, unless in accessibility mode. Call
+// SetFocusForPlatform() to make it part of the focus chain.
 class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
  public:
   // An enum describing the events on which a button should notify its listener.
@@ -59,7 +60,7 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
   int triggerable_event_flags() const { return triggerable_event_flags_; }
 
   // Sets whether |RequestFocus| should be invoked on a mouse press. The default
-  // is true.
+  // is false.
   void set_request_focus_on_press(bool value) {
     request_focus_on_press_ = value;
   }
@@ -106,7 +107,7 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
   void OnDragDone() override;
   void GetAccessibleState(ui::AXViewState* state) override;
   void VisibilityChanged(View* starting_from, bool is_visible) override;
-  scoped_ptr<InkDropHover> CreateInkDropHover() const override;
+  std::unique_ptr<InkDropHover> CreateInkDropHover() const override;
   SkColor GetInkDropBaseColor() const override;
 
   // Overridden from gfx::AnimationDelegate:

@@ -6,13 +6,15 @@
 #define DEVICE_BLUETOOTH_DBUS_FAKE_BLUETOOTH_GATT_DESCRIPTOR_SERVICE_PROVIDER_H_
 
 #include <stdint.h>
-
 #include <string>
 #include <vector>
 
+#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "dbus/object_path.h"
 #include "device/bluetooth/bluetooth_export.h"
+#include "device/bluetooth/bluetooth_local_gatt_service.h"
+#include "device/bluetooth/bluez/bluetooth_local_gatt_service_bluez.h"
 #include "device/bluetooth/dbus/bluetooth_gatt_descriptor_service_provider.h"
 
 namespace bluez {
@@ -25,9 +27,9 @@ class DEVICE_BLUETOOTH_EXPORT FakeBluetoothGattDescriptorServiceProvider
  public:
   FakeBluetoothGattDescriptorServiceProvider(
       const dbus::ObjectPath& object_path,
-      Delegate* delegate,
+      std::unique_ptr<BluetoothGattAttributeValueDelegate> delegate,
       const std::string& uuid,
-      const std::vector<std::string>& permissions,
+      const std::vector<std::string>& flags,
       const dbus::ObjectPath& characteristic_path);
   ~FakeBluetoothGattDescriptorServiceProvider() override;
 
@@ -37,13 +39,20 @@ class DEVICE_BLUETOOTH_EXPORT FakeBluetoothGattDescriptorServiceProvider
   // Methods to simulate value get/set requests issued from a remote device. The
   // methods do nothing, if the associated service was not registered with the
   // GATT manager.
-  void GetValue(const Delegate::ValueCallback& callback,
-                const Delegate::ErrorCallback& error_callback);
-  void SetValue(const std::vector<uint8_t>& value,
-                const base::Closure& callback,
-                const Delegate::ErrorCallback& error_callback);
+  void GetValue(
+      const dbus::ObjectPath& device_path,
+      const device::BluetoothLocalGattService::Delegate::ValueCallback&
+          callback,
+      const device::BluetoothLocalGattService::Delegate::ErrorCallback&
+          error_callback);
+  void SetValue(
+      const dbus::ObjectPath& device_path,
+      const std::vector<uint8_t>& value,
+      const base::Closure& callback,
+      const device::BluetoothLocalGattService::Delegate::ErrorCallback&
+          error_callback);
 
-  const dbus::ObjectPath& object_path() const { return object_path_; }
+  const dbus::ObjectPath& object_path() const override;
   const std::string& uuid() const { return uuid_; }
   const dbus::ObjectPath& characteristic_path() const {
     return characteristic_path_;
@@ -54,13 +63,16 @@ class DEVICE_BLUETOOTH_EXPORT FakeBluetoothGattDescriptorServiceProvider
   dbus::ObjectPath object_path_;
 
   // 128-bit GATT descriptor UUID.
-  std::string uuid_;
+  const std::string uuid_;
+
+  // Permissions for this descriptor.
+  const std::vector<std::string> flags_;
 
   // Object path of the characteristic that this descriptor belongs to.
   dbus::ObjectPath characteristic_path_;
 
   // The delegate that method calls are passed on to.
-  Delegate* delegate_;
+  std::unique_ptr<BluetoothGattAttributeValueDelegate> delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeBluetoothGattDescriptorServiceProvider);
 };

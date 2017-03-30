@@ -11,7 +11,6 @@
 #include "ash/shell.h"
 #include "ash/shell_window_ids.h"
 #include "ash/system/audio/tray_audio.h"
-#include "ash/system/bluetooth/tray_bluetooth.h"
 #include "ash/system/cast/tray_cast.h"
 #include "ash/system/date/tray_date.h"
 #include "ash/system/status_area_widget.h"
@@ -25,16 +24,19 @@
 #include "ash/system/user/tray_user.h"
 #include "ash/system/user/tray_user_separator.h"
 #include "ash/system/web_notification/web_notification_tray.h"
+#include "ash/wm/common/shelf/wm_shelf_util.h"
 #include "base/logging.h"
+#include "base/metrics/histogram.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/timer.h"
 #include "grit/ash_strings.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/layer.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/events/event_constants.h"
 #include "ui/gfx/canvas.h"
-#include "ui/gfx/screen.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/label.h"
@@ -44,6 +46,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "ash/system/chromeos/audio/tray_audio_chromeos.h"
+#include "ash/system/chromeos/bluetooth/tray_bluetooth.h"
 #include "ash/system/chromeos/brightness/tray_brightness.h"
 #include "ash/system/chromeos/enterprise/tray_enterprise.h"
 #include "ash/system/chromeos/network/tray_network.h"
@@ -211,11 +214,6 @@ void SystemTray::CreateItems(SystemTrayDelegate* delegate) {
     AddTrayItem(new TrayAudioWin(this));
   AddTrayItem(new TrayUpdate(this));
   AddTrayItem(tray_date_);
-#elif defined(OS_LINUX)
-  AddTrayItem(tray_accessibility_);
-  AddTrayItem(new TrayBluetooth(this));
-  AddTrayItem(new TrayUpdate(this));
-  AddTrayItem(tray_date_);
 #endif
 
   SetVisible(ash::Shell::GetInstance()->system_tray_delegate()->
@@ -317,14 +315,14 @@ void SystemTray::UpdateAfterLoginStatusChange(user::LoginStatus login_status) {
 
   // Items default to SHELF_ALIGNMENT_BOTTOM. Update them if the initial
   // position of the shelf differs.
-  if (!IsHorizontalAlignment(shelf_alignment()))
+  if (!wm::IsHorizontalAlignment(shelf_alignment()))
     UpdateAfterShelfAlignmentChange(shelf_alignment());
 
   SetVisible(true);
   PreferredSizeChanged();
 }
 
-void SystemTray::UpdateAfterShelfAlignmentChange(ShelfAlignment alignment) {
+void SystemTray::UpdateAfterShelfAlignmentChange(wm::ShelfAlignment alignment) {
   for (SystemTrayItem* item : items_)
     item->UpdateAfterShelfAlignmentChange(alignment);
 }
@@ -364,7 +362,7 @@ bool SystemTray::IsMouseInNotificationBubble() const {
   if (!notification_bubble_)
     return false;
   return notification_bubble_->bubble_view()->GetBoundsInScreen().Contains(
-      gfx::Screen::GetScreen()->GetCursorScreenPoint());
+      display::Screen::GetScreen()->GetCursorScreenPoint());
 }
 
 bool SystemTray::CloseSystemBubble() const {
@@ -417,7 +415,7 @@ base::string16 SystemTray::GetAccessibleNameForTray() {
 
 int SystemTray::GetTrayXOffset(SystemTrayItem* item) const {
   // Don't attempt to align the arrow if the shelf is on the left or right.
-  if (!IsHorizontalAlignment(shelf_alignment()))
+  if (!wm::IsHorizontalAlignment(shelf_alignment()))
     return TrayBubbleView::InitParams::kArrowDefaultOffset;
 
   std::map<SystemTrayItem*, views::View*>::const_iterator it =
@@ -516,6 +514,10 @@ void SystemTray::ShowItems(const std::vector<SystemTrayItem*>& items,
 
     system_bubble_.reset(new SystemBubbleWrapper(bubble));
     system_bubble_->InitView(this, tray_container(), &init_params, persistent);
+
+    // Record metrics for the system menu when the default view is invoked.
+    if (!detailed)
+      RecordSystemMenuMetrics();
   }
   // Save height of default view for creating detailed views directly.
   if (!detailed)
@@ -594,7 +596,7 @@ void SystemTray::UpdateWebNotifications() {
   int height = 0;
   if (bubble_view) {
     gfx::Rect work_area =
-        gfx::Screen::GetScreen()
+        display::Screen::GetScreen()
             ->GetDisplayNearestWindow(bubble_view->GetWidget()->GetNativeView())
             .work_area();
     height =
@@ -611,7 +613,7 @@ base::string16 SystemTray::GetAccessibleTimeString(
       now, hour_type, base::kKeepAmPm);
 }
 
-void SystemTray::SetShelfAlignment(ShelfAlignment alignment) {
+void SystemTray::SetShelfAlignment(wm::ShelfAlignment alignment) {
   if (alignment == shelf_alignment())
     return;
   TrayBackgroundView::SetShelfAlignment(alignment);
@@ -622,6 +624,9 @@ void SystemTray::SetShelfAlignment(ShelfAlignment alignment) {
   if (notification_bubble_) {
     notification_bubble_.reset();
     UpdateNotificationBubble();
+    // UpdateWebNotifications() should be called in UpdateNotificationBubble().
+  } else if (!hide_notifications_) {
+    UpdateWebNotifications();
   }
 }
 
@@ -653,11 +658,10 @@ void SystemTray::HideBubbleWithView(const TrayBubbleView* bubble_view) {
   }
 }
 
-bool SystemTray::ClickedOutsideBubble() {
+void SystemTray::ClickedOutsideBubble() {
   if (!system_bubble_ || system_bubble_->is_persistent())
-    return false;
+    return;
   HideBubbleWithView(system_bubble_->bubble_view());
-  return true;
 }
 
 void SystemTray::BubbleViewDestroyed() {
@@ -712,7 +716,7 @@ bool SystemTray::PerformAction(const ui::Event& event) {
     if (event.IsMouseEvent() || event.type() == ui::ET_GESTURE_TAP) {
       const ui::LocatedEvent& located_event =
           static_cast<const ui::LocatedEvent&>(event);
-      if (IsHorizontalAlignment(shelf_alignment())) {
+      if (wm::IsHorizontalAlignment(shelf_alignment())) {
         gfx::Point point(located_event.x(), 0);
         ConvertPointToWidget(this, &point);
         arrow_offset = point.x();
@@ -730,6 +734,31 @@ void SystemTray::CloseSystemBubbleAndDeactivateSystemTray() {
   if (full_system_tray_menu_) {
     SetDrawBackgroundAsActive(false);
     full_system_tray_menu_ = false;
+  }
+}
+
+void SystemTray::RecordSystemMenuMetrics() {
+  DCHECK(system_bubble_);
+
+  TrayBubbleView* bubble_view = system_bubble_->bubble_view();
+  int num_rows = 0;
+  for (int i = 0; i < bubble_view->child_count(); i++) {
+    // Certain menu rows are attached by default but can set themselves as
+    // invisible (IME is one such example). Count only user-visible rows.
+    if (bubble_view->child_at(i)->visible())
+      num_rows++;
+  }
+  UMA_HISTOGRAM_COUNTS_100("Ash.SystemMenu.Rows", num_rows);
+
+  int work_area_height =
+      display::Screen::GetScreen()
+          ->GetDisplayNearestWindow(bubble_view->GetWidget()->GetNativeView())
+          .work_area()
+          .height();
+  if (work_area_height > 0) {
+    UMA_HISTOGRAM_CUSTOM_COUNTS(
+        "Ash.SystemMenu.PercentageOfWorkAreaHeightCoveredByMenu",
+        100 * bubble_view->height() / work_area_height, 1, 300, 100);
   }
 }
 

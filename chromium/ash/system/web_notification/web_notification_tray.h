@@ -77,11 +77,11 @@ class ASH_EXPORT WebNotificationTray
   void UpdateAfterLoginStatusChange(user::LoginStatus login_status);
 
   // Overridden from TrayBackgroundView.
-  void SetShelfAlignment(ShelfAlignment alignment) override;
+  void SetShelfAlignment(wm::ShelfAlignment alignment) override;
   void AnchorUpdated() override;
   base::string16 GetAccessibleNameForTray() override;
   void HideBubbleWithView(const views::TrayBubbleView* bubble_view) override;
-  bool ClickedOutsideBubble() override;
+  void ClickedOutsideBubble() override;
 
   // Overridden from ActionableView.
   bool PerformAction(const ui::Event& event) override;

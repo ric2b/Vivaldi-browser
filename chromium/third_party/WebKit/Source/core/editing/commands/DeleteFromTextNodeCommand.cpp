@@ -31,20 +31,20 @@
 
 namespace blink {
 
-DeleteFromTextNodeCommand::DeleteFromTextNodeCommand(RawPtr<Text> node, unsigned offset, unsigned count)
+DeleteFromTextNodeCommand::DeleteFromTextNodeCommand(Text* node, unsigned offset, unsigned count)
     : SimpleEditCommand(node->document())
     , m_node(node)
     , m_offset(offset)
     , m_count(count)
 {
-    ASSERT(m_node);
-    ASSERT(m_offset <= m_node->length());
-    ASSERT(m_offset + m_count <= m_node->length());
+    DCHECK(m_node);
+    DCHECK_LE(m_offset, m_node->length());
+    DCHECK_LE(m_offset + m_count, m_node->length());
 }
 
 void DeleteFromTextNodeCommand::doApply(EditingState*)
 {
-    ASSERT(m_node);
+    DCHECK(m_node);
 
     if (!m_node->isContentEditable(Node::UserSelectAllIsAlwaysNonEditable))
         return;
@@ -59,7 +59,7 @@ void DeleteFromTextNodeCommand::doApply(EditingState*)
 
 void DeleteFromTextNodeCommand::doUnapply()
 {
-    ASSERT(m_node);
+    DCHECK(m_node);
 
     if (!m_node->hasEditableStyle())
         return;

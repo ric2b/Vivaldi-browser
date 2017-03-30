@@ -22,7 +22,6 @@
 
 import optparse
 import os
-from os import environ as env
 import plistlib
 import re
 import subprocess
@@ -237,6 +236,11 @@ def _RemoveSparkleKeys(plist):
 
 def Main(argv):
   parser = optparse.OptionParser('%prog [options]')
+  parser.add_option('--plist', dest='plist_path', action='store',
+      type='string', default=None, help='The path of the plist to tweak.')
+  parser.add_option('--output', dest='plist_output', action='store',
+      type='string', default=None, help='If specified, the path to output ' + \
+      'the tweaked plist, rather than overwriting the input.')
   parser.add_option('--breakpad', dest='use_breakpad', action='store',
       type='int', default=False, help='Enable Breakpad [1 or 0]')
   parser.add_option('--breakpad_uploads', dest='breakpad_uploads',
@@ -265,9 +269,12 @@ def Main(argv):
     print >>sys.stderr, parser.get_usage()
     return 1
 
+  if not options.plist_path:
+    print >>sys.stderr, 'No --plist specified.'
+    return 1
+
   # Read the plist into its parsed format.
-  DEST_INFO_PLIST = os.path.join(env['TARGET_BUILD_DIR'], env['INFOPLIST_PATH'])
-  plist = plistlib.readPlist(DEST_INFO_PLIST)
+  plist = plistlib.readPlist(options.plist_path)
 
   # Insert the product version.
   if not _AddVersionKeys(plist, version=options.version, version_source=options.source_version, vivaldi_build=options.vivaldi_build):
@@ -292,8 +299,8 @@ def Main(argv):
   else:
     _RemoveBreakpadKeys(plist)
 
-  # Only add Keystone in Release builds.
-  if options.use_keystone and env['CONFIGURATION'] == 'Release':
+  # Add Keystone if configured to do so.
+  if options.use_keystone:
     if options.bundle_identifier is None:
       print >>sys.stderr, 'Use of Keystone requires the bundle id.'
       return 1
@@ -317,7 +324,11 @@ def Main(argv):
 
   # Info.plist will work perfectly well in any plist format, but traditionally
   # applications use xml1 for this, so convert it to ensure that it's valid.
-  proc = subprocess.Popen(['plutil', '-convert', 'xml1', '-o', DEST_INFO_PLIST,
+  output_path = options.plist_path
+  if options.plist_output is not None:
+    output_path = options.plist_output
+  proc = subprocess.Popen(['plutil', '-convert', 'xml1',
+                           '-o', output_path,
                            temp_info_plist.name])
   proc.wait()
   return proc.returncode

@@ -10,13 +10,20 @@
 /** @typedef {{username: string, profilePath: string}} */
 var SignedInUser;
 
-/** @typedef {{name: string, filePath: string, isSupervised: boolean}} */
+/**
+ * @typedef {{name: string,
+ *            filePath: string,
+ *            isSupervised: boolean,
+ *            custodianUsername: string,
+ *            showConfirmation: boolean}}
+ */
 var ProfileInfo;
 
-/** @typedef {{id: string,
- *             name: string,
- *             iconURL: string,
- *             onCurrentDevice: boolean}}
+/**
+ * @typedef {{id: string,
+ *            name: string,
+ *            iconURL: string,
+ *            onCurrentDevice: boolean}}
  */
 var SupervisedUser;
 
@@ -62,11 +69,13 @@ cr.define('signin', function() {
      * @param {string} profileIconUrl URL of the selected icon of the new
      *     profile.
      * @param {boolean} isSupervised True if the new profile is supervised.
+     * @param {string} supervisedUserId ID of the supervised user to be
+     *     imported.
      * @param {string} custodianProfilePath Profile path of the custodian if
      *     the new profile is supervised.
      */
     createProfile: function(profileName, profileIconUrl, isSupervised,
-        custodianProfilePath) {
+        supervisedUserId, custodianProfilePath) {
       assertNotReached();
     },
 
@@ -90,6 +99,24 @@ cr.define('signin', function() {
      * @param {string} profilePath Profile Path of the user.
      */
     launchUser: function(profilePath) {
+      assertNotReached();
+    },
+
+    /**
+     * Opens the given url in a new tab in the browser instance of the last
+     * active profile. Hyperlinks don't work in the user manager since its
+     * browser instance does not support tabs.
+     * @param {string} url
+     */
+    openUrlInLastActiveProfileBrowser: function(url) {
+      assertNotReached();
+    },
+
+    /**
+     * Switches to the profile with the given path.
+     * @param {string} profilePath Path to the profile to switch to.
+     */
+    switchToProfile: function(profilePath) {
       assertNotReached();
     }
   };
@@ -127,10 +154,10 @@ cr.define('signin', function() {
 
     /** @override */
     createProfile: function(profileName, profileIconUrl, isSupervised,
-        custodianProfilePath) {
+        supervisedUserId, custodianProfilePath) {
       chrome.send('createProfile',
-                  [profileName, profileIconUrl, false, isSupervised, '',
-                   custodianProfilePath]);
+                  [profileName, profileIconUrl, false, isSupervised,
+                   supervisedUserId, custodianProfilePath]);
     },
 
     /** @override */
@@ -146,6 +173,16 @@ cr.define('signin', function() {
     /** @override */
     launchUser: function(profilePath) {
       chrome.send('launchUser', [profilePath]);
+    },
+
+    /** @override */
+    openUrlInLastActiveProfileBrowser: function(url) {
+      chrome.send('openUrlInLastActiveProfileBrowser', [url]);
+    },
+
+    /** @override */
+    switchToProfile: function(profilePath) {
+      chrome.send('switchToProfile', [profilePath]);
     }
   };
 

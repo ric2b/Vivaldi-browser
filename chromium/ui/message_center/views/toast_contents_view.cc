@@ -4,17 +4,18 @@
 
 #include "ui/message_center/views/toast_contents_view.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/compiler_specific.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_view_state.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/animation/slide_animation.h"
-#include "ui/gfx/display.h"
-#include "ui/gfx/screen.h"
 #include "ui/message_center/message_center_style.h"
 #include "ui/message_center/notification.h"
 #include "ui/message_center/views/message_popup_collection.h"
@@ -28,7 +29,7 @@
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 #endif
 
-using gfx::Screen;
+using display::Screen;
 
 namespace message_center {
 namespace {
@@ -77,8 +78,7 @@ void ToastContentsView::SetContents(MessageView* view,
   bool already_has_contents = child_count() > 0;
   RemoveAllChildViews(true);
   AddChildView(view);
-  preferred_size_ = GetToastSizeForView(view);
-  Layout();
+  UpdatePreferredSize();
 
   // If it has the contents already, this invocation means an update of the
   // popup toast, and the new contents should be read through a11y feature.
@@ -93,11 +93,7 @@ void ToastContentsView::UpdateContents(const Notification& notification,
   DCHECK_GT(child_count(), 0);
   MessageView* message_view = static_cast<MessageView*>(child_at(0));
   message_view->UpdateWithNotification(notification);
-  gfx::Size new_size = GetToastSizeForView(message_view);
-  if (preferred_size_ != new_size) {
-    preferred_size_ = new_size;
-    Layout();
-  }
+  UpdatePreferredSize();
   if (a11y_feedback_for_updates)
     NotifyAccessibilityEvent(ui::AX_EVENT_ALERT, false);
 }
@@ -126,23 +122,32 @@ void ToastContentsView::CloseWithAnimation() {
 }
 
 void ToastContentsView::SetBoundsInstantly(gfx::Rect new_bounds) {
-  if (new_bounds == bounds())
+  DCHECK(new_bounds.size().width() <= preferred_size_.width() &&
+         new_bounds.size().height() <= preferred_size_.height())
+      << "we can not display widget bigger than notification";
+
+  if (!GetWidget())
+    return;
+
+  if (new_bounds == GetWidget()->GetWindowBoundsInScreen())
     return;
 
   origin_ = new_bounds.origin();
-  if (!GetWidget())
-    return;
   GetWidget()->SetBounds(new_bounds);
 }
 
 void ToastContentsView::SetBoundsWithAnimation(gfx::Rect new_bounds) {
-  if (new_bounds == bounds())
-    return;
+  DCHECK(new_bounds.size().width() <= preferred_size_.width() &&
+         new_bounds.size().height() <= preferred_size_.height())
+      << "we can not display widget bigger than notification";
 
-  origin_ = new_bounds.origin();
   if (!GetWidget())
     return;
 
+  if (new_bounds == animated_bounds_end_)
+    return;
+
+  origin_ = new_bounds.origin();
   // This picks up the current bounds, so if there was a previous animation
   // half-done, the next one will pick up from the current location.
   // This is the only place that should query current location of the Widget
@@ -288,6 +293,24 @@ gfx::Size ToastContentsView::GetPreferredSize() const {
   return child_count() ? GetToastSizeForView(child_at(0)) : gfx::Size();
 }
 
+void ToastContentsView::UpdatePreferredSize() {
+  DCHECK_GT(child_count(), 0);
+  gfx::Size new_size = GetToastSizeForView(child_at(0));
+  if (preferred_size_ == new_size)
+    return;
+  // Growing notifications instantly can cause notification's to overlap
+  // And shrinking with animation, leaves area, where nothing is drawn
+  const bool change_instantly = preferred_size_.width() > new_size.width() ||
+                                preferred_size_.height() > new_size.height();
+  preferred_size_ = new_size;
+  Layout();
+  if (change_instantly) {
+    SetBoundsInstantly(bounds());
+    return;
+  }
+  SetBoundsWithAnimation(bounds());
+}
+
 void ToastContentsView::GetAccessibleState(ui::AXViewState* state) {
   if (child_count() > 0)
     child_at(0)->GetAccessibleState(state);
@@ -313,9 +336,9 @@ void ToastContentsView::RemoveNotification(
     collection_->RemoveNotification(notification_id, by_user);
 }
 
-scoped_ptr<ui::MenuModel> ToastContentsView::CreateMenuModel(
-      const NotifierId& notifier_id,
-      const base::string16& display_source) {
+std::unique_ptr<ui::MenuModel> ToastContentsView::CreateMenuModel(
+    const NotifierId& notifier_id,
+    const base::string16& display_source) {
   // Should not reach, the context menu should be handled in
   // MessagePopupCollection.
   NOTREACHED();

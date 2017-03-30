@@ -7,7 +7,7 @@
 #include <stdint.h>
 #include <utility>
 
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/child/appcache/appcache_dispatcher.h"
 #include "content/child/appcache/web_application_cache_host_impl.h"
 #include "content/child/request_extra_data.h"
@@ -18,6 +18,7 @@
 #include "content/child/shared_worker_devtools_agent.h"
 #include "content/child/webmessageportchannel_impl.h"
 #include "content/common/worker_messages.h"
+#include "content/renderer/devtools/devtools_agent.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/shared_worker/embedded_shared_worker_content_settings_client_proxy.h"
 #include "ipc/ipc_message_macros.h"
@@ -241,7 +242,8 @@ EmbeddedSharedWorkerStub::createServiceWorkerNetworkProvider(
   // we can observe its requests.
   std::unique_ptr<ServiceWorkerNetworkProvider> provider(
       new ServiceWorkerNetworkProvider(
-          route_id_, SERVICE_WORKER_PROVIDER_FOR_SHARED_WORKER));
+          route_id_, SERVICE_WORKER_PROVIDER_FOR_SHARED_WORKER,
+          true /* is_parent_frame_secure */));
 
   // The provider is kept around for the lifetime of the DataSource
   // and ownership is transferred to the DataSource.
@@ -263,6 +265,11 @@ void EmbeddedSharedWorkerStub::sendDevToolsMessage(
       session_id, call_id, message, state);
 }
 
+blink::WebDevToolsAgentClient::WebKitClientMessageLoop*
+EmbeddedSharedWorkerStub::createDevToolsMessageLoop() {
+  return DevToolsAgent::createMessageLoopWrapper();
+}
+
 void EmbeddedSharedWorkerStub::Shutdown() {
   // WebSharedWorker must be already deleted in the blink side
   // when this is called.
@@ -281,10 +288,8 @@ void EmbeddedSharedWorkerStub::ConnectToChannel(
       new WorkerHostMsg_WorkerConnected(channel->message_port_id(), route_id_));
 }
 
-void EmbeddedSharedWorkerStub::OnConnect(int sent_message_port_id,
+void EmbeddedSharedWorkerStub::OnConnect(int port,
                                          int routing_id) {
-  TransferredMessagePort port;
-  port.id = sent_message_port_id;
   WebMessagePortChannelImpl* channel = new WebMessagePortChannelImpl(
       routing_id, port, base::ThreadTaskRunnerHandle::Get().get());
   if (running_) {

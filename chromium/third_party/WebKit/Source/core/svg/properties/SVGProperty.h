@@ -34,8 +34,6 @@
 #include "core/svg/properties/SVGPropertyInfo.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
@@ -52,11 +50,6 @@ public:
 
     virtual ~SVGPropertyBase()
     {
-#if !ENABLE(OILPAN)
-        // Oilpan: a property can legitimately be swept out along with its list,
-        // hence this cannot be made to hold.
-        ASSERT(!m_ownerList);
-#endif
     }
 
     // FIXME: remove this in WebAnimations transition.

@@ -39,8 +39,12 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
   ~PasswordsPrivateDelegateImpl() override;
 
   // PasswordsPrivateDelegate implementation.
-  void AddObserver(Observer* observer) override;
-  void RemoveObserver(Observer* observer) override;
+  void SendSavedPasswordsList() override;
+  const std::vector<api::passwords_private::PasswordUiEntry>*
+  GetSavedPasswordsList() const override;
+  void SendPasswordExceptionsList() override;
+  const std::vector<api::passwords_private::ExceptionPair>*
+  GetPasswordExceptionsList() const override;
   void RemoveSavedPassword(
       const std::string& origin_url, const std::string& username) override;
   void RemovePasswordException(const std::string& exception_url) override;
@@ -84,8 +88,6 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
   void RequestShowPasswordInternal(const std::string& origin_url,
                                    const std::string& username,
                                    content::WebContents* web_contents);
-  void SendSavedPasswordsList();
-  void SendPasswordExceptionsList();
 
   // Not owned by this class.
   Profile* profile_;
@@ -97,7 +99,7 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
   // observers are added, this delegate can send the current lists without
   // having to request them from |password_manager_presenter_| again.
   std::vector<api::passwords_private::PasswordUiEntry> current_entries_;
-  std::vector<std::string> current_exceptions_;
+  std::vector<api::passwords_private::ExceptionPair> current_exceptions_;
 
   // Whether SetPasswordList and SetPasswordExceptionList have been called, and
   // whether this class has been initialized, meaning both have been called.
@@ -114,9 +116,6 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
   // The WebContents used when invoking this API. Used to fetch the
   // NativeWindow for the window where the API was called.
   content::WebContents* web_contents_;
-
-  // The observers.
-  base::ObserverList<Observer> observers_;
 
   // Map from origin URL and username to the index of |password_list_| at which
   // the corresponding entry resides.

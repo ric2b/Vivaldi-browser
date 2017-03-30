@@ -2,26 +2,33 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/suggestions/image_manager.h"
+
+#include <memory>
 #include <string>
 
 #include "base/files/file_path.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "components/image_fetcher/image_fetcher.h"
+#include "components/image_fetcher/image_fetcher_delegate.h"
 #include "components/leveldb_proto/proto_database.h"
 #include "components/leveldb_proto/testing/fake_db.h"
 #include "components/suggestions/image_encoder.h"
-#include "components/suggestions/image_fetcher.h"
-#include "components/suggestions/image_fetcher_delegate.h"
-#include "components/suggestions/image_manager.h"
 #include "components/suggestions/proto/suggestions.pb.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
 #include "url/gurl.h"
 
 using ::testing::Return;
 using ::testing::StrictMock;
 using ::testing::_;
+
+using image_fetcher::ImageFetcher;
+using image_fetcher::ImageFetcherDelegate;
 
 namespace suggestions {
 
@@ -31,20 +38,18 @@ const char kTestImagePath[] = "files/image_decoding/droids.png";
 const char kInvalidImagePath[] = "files/DOESNOTEXIST";
 
 using leveldb_proto::test::FakeDB;
-using suggestions::ImageData;
-using suggestions::ImageManager;
 
 typedef base::hash_map<std::string, ImageData> EntryMap;
 
 void AddEntry(const ImageData& d, EntryMap* map) { (*map)[d.url()] = d; }
 
-class MockImageFetcher : public suggestions::ImageFetcher {
+class MockImageFetcher : public ImageFetcher {
  public:
   MockImageFetcher() {}
   virtual ~MockImageFetcher() {}
   MOCK_METHOD3(StartOrQueueNetworkRequest,
                void(const GURL&, const GURL&,
-                    base::Callback<void(const GURL&, const SkBitmap*)>));
+                    base::Callback<void(const GURL&, const gfx::Image&)>));
   MOCK_METHOD1(SetImageFetcherDelegate, void(ImageFetcherDelegate*));
 };
 
@@ -112,11 +117,10 @@ class ImageManagerTest : public testing::Test {
   ImageManager* CreateImageManager(FakeDB<ImageData>* fake_db) {
     mock_image_fetcher_ = new StrictMock<MockImageFetcher>();
     EXPECT_CALL(*mock_image_fetcher_, SetImageFetcherDelegate(_));
-    return new ImageManager(
-        scoped_ptr<ImageFetcher>(mock_image_fetcher_),
-        scoped_ptr<leveldb_proto::ProtoDatabase<ImageData>>(fake_db),
-        FakeDB<ImageData>::DirectoryForTestDB(),
-        base::ThreadTaskRunnerHandle::Get());
+    return new ImageManager(base::WrapUnique(mock_image_fetcher_),
+                            base::WrapUnique(fake_db),
+                            FakeDB<ImageData>::DirectoryForTestDB(),
+                            base::ThreadTaskRunnerHandle::Get());
   }
 
   EntryMap db_model_;
@@ -131,7 +135,7 @@ class ImageManagerTest : public testing::Test {
   base::MessageLoop message_loop_;
 
   // Under test.
-  scoped_ptr<ImageManager> image_manager_;
+  std::unique_ptr<ImageManager> image_manager_;
 };
 
 TEST_F(ImageManagerTest, InitializeTest) {
@@ -201,7 +205,7 @@ TEST_F(ImageManagerTest, GetImageForURLNetworkCacheHit) {
   // Expect something in the cache.
   auto encoded_image =
       image_manager_->GetEncodedImageFromCache(GURL(kTestUrl1));
-  EXPECT_NE(nullptr, encoded_image);
+  EXPECT_TRUE(encoded_image);
 
   base::RunLoop run_loop;
   image_manager_->GetImageForURL(GURL(kTestUrl1),

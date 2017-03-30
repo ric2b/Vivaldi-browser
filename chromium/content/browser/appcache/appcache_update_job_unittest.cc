@@ -6,17 +6,19 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
 #include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/appcache/appcache_group.h"
 #include "content/browser/appcache/appcache_host.h"
 #include "content/browser/appcache/appcache_response.h"
@@ -578,12 +580,12 @@ class IOThread : public base::Thread {
   }
 
   void Init() override {
-    scoped_ptr<net::URLRequestJobFactoryImpl> factory(
+    std::unique_ptr<net::URLRequestJobFactoryImpl> factory(
         new net::URLRequestJobFactoryImpl());
     factory->SetProtocolHandler("http",
-                                make_scoped_ptr(new MockHttpServerJobFactory));
+                                base::WrapUnique(new MockHttpServerJobFactory));
     factory->SetProtocolHandler("https",
-                                make_scoped_ptr(new MockHttpServerJobFactory));
+                                base::WrapUnique(new MockHttpServerJobFactory));
     job_factory_ = std::move(factory);
     request_context_.reset(new net::TestURLRequestContext());
     request_context_->set_job_factory(job_factory_.get());
@@ -595,8 +597,8 @@ class IOThread : public base::Thread {
   }
 
  private:
-  scoped_ptr<net::URLRequestJobFactory> job_factory_;
-  scoped_ptr<net::URLRequestContext> request_context_;
+  std::unique_ptr<net::URLRequestJobFactory> job_factory_;
+  std::unique_ptr<net::URLRequestContext> request_context_;
 };
 
 class AppCacheUpdateJobTest : public testing::Test,
@@ -805,7 +807,7 @@ class AppCacheUpdateJobTest : public testing::Test,
     net::URLRequestJobFactoryImpl* new_factory(
         new net::URLRequestJobFactoryImpl);
     new_factory->SetProtocolHandler("http",
-                                    make_scoped_ptr(new RedirectFactory));
+                                    base::WrapUnique(new RedirectFactory));
     io_thread_->SetNewJobFactory(new_factory);
 
     MakeService();
@@ -1007,8 +1009,7 @@ class AppCacheUpdateJobTest : public testing::Test,
 
     // Create response writer to get a response id.
     response_writer_.reset(
-        service_->storage()->CreateResponseWriter(group_->manifest_url(),
-                                                  group_->group_id()));
+        service_->storage()->CreateResponseWriter(group_->manifest_url()));
 
     AppCache* cache = MakeCacheForGroup(1, response_writer_->response_id());
     MockFrontend* frontend1 = MakeMockFrontend();
@@ -1159,8 +1160,7 @@ class AppCacheUpdateJobTest : public testing::Test,
 
     // Create a response writer to get a response id.
     response_writer_.reset(
-        service_->storage()->CreateResponseWriter(group_->manifest_url(),
-                                                  group_->group_id()));
+        service_->storage()->CreateResponseWriter(group_->manifest_url()));
 
     AppCache* cache = MakeCacheForGroup(service_->storage()->NewCacheId(),
                                         response_writer_->response_id());
@@ -1228,8 +1228,7 @@ class AppCacheUpdateJobTest : public testing::Test,
 
     // Give the newest cache an entry that is in storage.
     response_writer_.reset(
-        service_->storage()->CreateResponseWriter(group_->manifest_url(),
-                                                  group_->group_id()));
+        service_->storage()->CreateResponseWriter(group_->manifest_url()));
     cache->AddEntry(MockHttpServer::GetMockUrl("files/explicit1"),
                     AppCacheEntry(AppCacheEntry::EXPLICIT,
                                   response_writer_->response_id()));
@@ -1290,8 +1289,7 @@ class AppCacheUpdateJobTest : public testing::Test,
 
     // Give the newest cache an entry that is in storage.
     response_writer_.reset(
-        service_->storage()->CreateResponseWriter(group_->manifest_url(),
-                                                  group_->group_id()));
+        service_->storage()->CreateResponseWriter(group_->manifest_url()));
     cache->AddEntry(MockHttpServer::GetMockUrl("files/explicit1"),
                     AppCacheEntry(AppCacheEntry::EXPLICIT,
                                   response_writer_->response_id()));
@@ -1350,8 +1348,7 @@ class AppCacheUpdateJobTest : public testing::Test,
 
     // Give the newest cache an entry that is in storage.
     response_writer_.reset(
-        service_->storage()->CreateResponseWriter(group_->manifest_url(),
-                                                  group_->group_id()));
+        service_->storage()->CreateResponseWriter(group_->manifest_url()));
     cache->AddEntry(MockHttpServer::GetMockUrl("files/explicit1"),
                     AppCacheEntry(AppCacheEntry::EXPLICIT,
                                   response_writer_->response_id()));
@@ -1691,7 +1688,7 @@ class AppCacheUpdateJobTest : public testing::Test,
     net::URLRequestJobFactoryImpl* new_factory(
         new net::URLRequestJobFactoryImpl);
     new_factory->SetProtocolHandler(
-        "http", make_scoped_ptr(new RetryRequestTestJobFactory));
+        "http", base::WrapUnique(new RetryRequestTestJobFactory));
     io_thread_->SetNewJobFactory(new_factory);
 
     MakeService();
@@ -1725,7 +1722,7 @@ class AppCacheUpdateJobTest : public testing::Test,
     net::URLRequestJobFactoryImpl* new_factory(
         new net::URLRequestJobFactoryImpl);
     new_factory->SetProtocolHandler(
-        "http", make_scoped_ptr(new RetryRequestTestJobFactory));
+        "http", base::WrapUnique(new RetryRequestTestJobFactory));
     io_thread_->SetNewJobFactory(new_factory);
 
     MakeService();
@@ -1760,7 +1757,7 @@ class AppCacheUpdateJobTest : public testing::Test,
     net::URLRequestJobFactoryImpl* new_factory(
         new net::URLRequestJobFactoryImpl);
     new_factory->SetProtocolHandler(
-        "http", make_scoped_ptr(new RetryRequestTestJobFactory));
+        "http", base::WrapUnique(new RetryRequestTestJobFactory));
     io_thread_->SetNewJobFactory(new_factory);
 
     MakeService();
@@ -1794,7 +1791,7 @@ class AppCacheUpdateJobTest : public testing::Test,
     net::URLRequestJobFactoryImpl* new_factory(
         new net::URLRequestJobFactoryImpl);
     new_factory->SetProtocolHandler(
-        "http", make_scoped_ptr(new RetryRequestTestJobFactory));
+        "http", base::WrapUnique(new RetryRequestTestJobFactory));
     io_thread_->SetNewJobFactory(new_factory);
 
     MakeService();
@@ -1828,7 +1825,7 @@ class AppCacheUpdateJobTest : public testing::Test,
     net::URLRequestJobFactoryImpl* new_factory(
         new net::URLRequestJobFactoryImpl);
     new_factory->SetProtocolHandler(
-        "http", make_scoped_ptr(new RetryRequestTestJobFactory));
+        "http", base::WrapUnique(new RetryRequestTestJobFactory));
     io_thread_->SetNewJobFactory(new_factory);
 
     MakeService();
@@ -2694,7 +2691,7 @@ class AppCacheUpdateJobTest : public testing::Test,
     net::URLRequestJobFactoryImpl* new_factory(
         new net::URLRequestJobFactoryImpl);
     new_factory->SetProtocolHandler(
-        "http", make_scoped_ptr(new IfModifiedSinceJobFactory));
+        "http", base::WrapUnique(new IfModifiedSinceJobFactory));
     io_thread_->SetNewJobFactory(new_factory);
 
     MakeService();
@@ -2766,7 +2763,7 @@ class AppCacheUpdateJobTest : public testing::Test,
     net::URLRequestJobFactoryImpl* new_factory(
         new net::URLRequestJobFactoryImpl);
     new_factory->SetProtocolHandler(
-        "http", make_scoped_ptr(new IfModifiedSinceJobFactory));
+        "http", base::WrapUnique(new IfModifiedSinceJobFactory));
     io_thread_->SetNewJobFactory(new_factory);
 
     MakeService();
@@ -2780,8 +2777,7 @@ class AppCacheUpdateJobTest : public testing::Test,
 
     // Give the newest cache a manifest enry that is in storage.
     response_writer_.reset(
-        service_->storage()->CreateResponseWriter(group_->manifest_url(),
-                                                  group_->group_id()));
+        service_->storage()->CreateResponseWriter(group_->manifest_url()));
 
     AppCache* cache = MakeCacheForGroup(service_->storage()->NewCacheId(),
                                         response_writer_->response_id());
@@ -2830,7 +2826,7 @@ class AppCacheUpdateJobTest : public testing::Test,
     net::URLRequestJobFactoryImpl* new_factory(
         new net::URLRequestJobFactoryImpl);
     new_factory->SetProtocolHandler(
-        "http", make_scoped_ptr(new IfModifiedSinceJobFactory));
+        "http", base::WrapUnique(new IfModifiedSinceJobFactory));
     io_thread_->SetNewJobFactory(new_factory);
 
     MakeService();
@@ -2844,8 +2840,7 @@ class AppCacheUpdateJobTest : public testing::Test,
 
     // Give the newest cache a manifest enry that is in storage.
     response_writer_.reset(
-        service_->storage()->CreateResponseWriter(group_->manifest_url(),
-                                                  group_->group_id()));
+        service_->storage()->CreateResponseWriter(group_->manifest_url()));
 
     AppCache* cache = MakeCacheForGroup(service_->storage()->NewCacheId(),
                                         response_writer_->response_id());
@@ -2894,7 +2889,7 @@ class AppCacheUpdateJobTest : public testing::Test,
     net::URLRequestJobFactoryImpl* new_factory(
         new net::URLRequestJobFactoryImpl);
     new_factory->SetProtocolHandler(
-        "http", make_scoped_ptr(new IfModifiedSinceJobFactory));
+        "http", base::WrapUnique(new IfModifiedSinceJobFactory));
     io_thread_->SetNewJobFactory(new_factory);
 
     MakeService();
@@ -2933,7 +2928,7 @@ class AppCacheUpdateJobTest : public testing::Test,
     net::URLRequestJobFactoryImpl* new_factory(
         new net::URLRequestJobFactoryImpl);
     new_factory->SetProtocolHandler(
-        "http", make_scoped_ptr(new IfModifiedSinceJobFactory));
+        "http", base::WrapUnique(new IfModifiedSinceJobFactory));
     io_thread_->SetNewJobFactory(new_factory);
 
     MakeService();
@@ -3422,14 +3417,14 @@ class AppCacheUpdateJobTest : public testing::Test,
     MANIFEST_WITH_INTERCEPT
   };
 
-  scoped_ptr<IOThread> io_thread_;
+  std::unique_ptr<IOThread> io_thread_;
 
-  scoped_ptr<MockAppCacheService> service_;
+  std::unique_ptr<MockAppCacheService> service_;
   scoped_refptr<AppCacheGroup> group_;
   scoped_refptr<AppCache> protect_newest_cache_;
-  scoped_ptr<base::WaitableEvent> event_;
+  std::unique_ptr<base::WaitableEvent> event_;
 
-  scoped_ptr<AppCacheResponseWriter> response_writer_;
+  std::unique_ptr<AppCacheResponseWriter> response_writer_;
 
   // Hosts used by an async test that need to live until update job finishes.
   // Otherwise, test can put host on the stack instead of here.

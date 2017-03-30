@@ -8,10 +8,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "net/base/net_export.h"
 #include "net/socket/next_proto.h"
 #include "net/spdy/spdy_framer.h"
@@ -68,12 +68,13 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramerVisitorInterface {
   // |data| A buffer containing the data received.
   // |len| The length of the data buffer (at most 2^24 - 1 for SPDY/3,
   // but 2^16 - 1 - 8 for SPDY/4).
-  // When the other side has finished sending data on this stream,
-  // this method will be called with a zero-length buffer.
   virtual void OnStreamFrameData(SpdyStreamId stream_id,
                                  const char* data,
-                                 size_t len,
-                                 bool fin) = 0;
+                                 size_t len) = 0;
+
+  // Called when the other side has finished sending data on this stream.
+  // |stream_id| The stream that was receivin data.
+  virtual void OnStreamEnd(SpdyStreamId stream_id) = 0;
 
   // Called when padding is received (padding length field or padding octets).
   // |stream_id| The stream receiving data.
@@ -179,8 +180,7 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramer
                                 size_t len) override;
   void OnStreamFrameData(SpdyStreamId stream_id,
                          const char* data,
-                         size_t len,
-                         bool fin) override;
+                         size_t len) override;
   void OnStreamEnd(SpdyStreamId stream_id) override;
   void OnStreamPadding(SpdyStreamId stream_id, size_t len) override;
   SpdyHeadersHandlerInterface* OnHeaderFrameStart(
@@ -301,7 +301,7 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramer
     bool fin;
     bool unidirectional;
   };
-  scoped_ptr<ControlFrameFields> control_frame_fields_;
+  std::unique_ptr<ControlFrameFields> control_frame_fields_;
 
   // Collection of fields of a GOAWAY frame that this class needs to buffer.
   struct GoAwayFields {
@@ -309,7 +309,7 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramer
     SpdyGoAwayStatus status;
     std::string debug_data;
   };
-  scoped_ptr<GoAwayFields> goaway_fields_;
+  std::unique_ptr<GoAwayFields> goaway_fields_;
 
   DISALLOW_COPY_AND_ASSIGN(BufferedSpdyFramer);
 };

@@ -25,11 +25,10 @@ public:
 
         CanvasRenderingContext* create(HTMLCanvasElement*, const CanvasContextCreationAttributes&, Document&) override;
         CanvasRenderingContext::ContextType getContextType() const override { return CanvasRenderingContext::ContextImageBitmap; }
-        void onError(HTMLCanvasElement*, const String& error) override { }
     };
 
     // Script API
-    void transferImageBitmap(ImageBitmap*);
+    void transferFromImageBitmap(ImageBitmap*);
 
     // CanvasRenderingContext implementation
     ContextType getContextType() const override { return CanvasRenderingContext::ContextImageBitmap; }

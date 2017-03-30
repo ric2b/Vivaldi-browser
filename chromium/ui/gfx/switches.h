@@ -10,11 +10,7 @@
 
 namespace switches {
 
-GFX_EXPORT extern const char kAllowArbitraryScaleFactorInImageSkia[];
-GFX_EXPORT extern const char kForceDeviceScaleFactor[];
-
 #if defined(OS_WIN)
-GFX_EXPORT extern const char kDisableDirectWrite[];
 GFX_EXPORT extern const char kDisableDirectWriteForUI[];
 #endif
 
